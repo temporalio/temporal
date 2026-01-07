@@ -73,7 +73,11 @@ func (x *SchedulerIdleTask) GetIdleTimeTotal() *durationpb.Duration {
 
 // Buffers actions based on the schedule's specification.
 type GeneratorTask struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Logical clock for immediate task validation. When this task is scheduled
+	// immediately (zero scheduled time), the task is only valid if task_version
+	// matches the component's current task_version.
+	TaskVersion   int64 `protobuf:"varint,1,opt,name=task_version,json=taskVersion,proto3" json:"task_version,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -108,9 +112,20 @@ func (*GeneratorTask) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_rawDescGZIP(), []int{1}
 }
 
+func (x *GeneratorTask) GetTaskVersion() int64 {
+	if x != nil {
+		return x.TaskVersion
+	}
+	return 0
+}
+
 // Processes buffered actions, deciding whether to execute, delay, or discard.
 type InvokerProcessBufferTask struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Logical clock for immediate task validation. When this task is scheduled
+	// immediately (zero scheduled time), the task is only valid if task_version
+	// matches the component's current task_version.
+	TaskVersion   int64 `protobuf:"varint,1,opt,name=task_version,json=taskVersion,proto3" json:"task_version,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -143,6 +158,13 @@ func (x *InvokerProcessBufferTask) ProtoReflect() protoreflect.Message {
 // Deprecated: Use InvokerProcessBufferTask.ProtoReflect.Descriptor instead.
 func (*InvokerProcessBufferTask) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *InvokerProcessBufferTask) GetTaskVersion() int64 {
+	if x != nil {
+		return x.TaskVersion
+	}
+	return 0
 }
 
 // Drives execution of pending buffered actions to completion by starting,
@@ -185,7 +207,11 @@ func (*InvokerExecuteTask) Descriptor() ([]byte, []int) {
 
 // Buffers actions based on a manually-requested backfill.
 type BackfillerTask struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Logical clock for immediate task validation. When this task is scheduled
+	// immediately (zero scheduled time), the task is only valid if task_version
+	// matches the component's current task_version.
+	TaskVersion   int64 `protobuf:"varint,1,opt,name=task_version,json=taskVersion,proto3" json:"task_version,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -220,17 +246,27 @@ func (*BackfillerTask) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_rawDescGZIP(), []int{4}
 }
 
+func (x *BackfillerTask) GetTaskVersion() int64 {
+	if x != nil {
+		return x.TaskVersion
+	}
+	return 0
+}
+
 var File_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto protoreflect.FileDescriptor
 
 const file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_rawDesc = "" +
 	"\n" +
 	"8temporal/server/chasm/lib/scheduler/proto/v1/tasks.proto\x12,temporal.server.chasm.lib.scheduler.proto.v1\x1a\x1egoogle/protobuf/duration.proto\"V\n" +
 	"\x11SchedulerIdleTask\x12A\n" +
-	"\x0fidle_time_total\x18\x01 \x01(\v2\x19.google.protobuf.DurationR\ridleTimeTotal\"\x0f\n" +
-	"\rGeneratorTask\"\x1a\n" +
-	"\x18InvokerProcessBufferTask\"\x14\n" +
-	"\x12InvokerExecuteTask\"\x10\n" +
-	"\x0eBackfillerTaskBGZEgo.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb;schedulerpbb\x06proto3"
+	"\x0fidle_time_total\x18\x01 \x01(\v2\x19.google.protobuf.DurationR\ridleTimeTotal\"2\n" +
+	"\rGeneratorTask\x12!\n" +
+	"\ftask_version\x18\x01 \x01(\x03R\vtaskVersion\"=\n" +
+	"\x18InvokerProcessBufferTask\x12!\n" +
+	"\ftask_version\x18\x01 \x01(\x03R\vtaskVersion\"\x14\n" +
+	"\x12InvokerExecuteTask\"3\n" +
+	"\x0eBackfillerTask\x12!\n" +
+	"\ftask_version\x18\x01 \x01(\x03R\vtaskVersionBGZEgo.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb;schedulerpbb\x06proto3"
 
 var (
 	file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_rawDescOnce sync.Once

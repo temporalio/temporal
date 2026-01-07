@@ -44,17 +44,28 @@ func newTaggedLogger(baseLogger log.Logger, scheduler *Scheduler) log.Logger {
 }
 
 // validateTaskHighWaterMark validates a component's lastProcessedTime against a
-// task timestamp, returning ErrStaleReference for out-of-date tasks.
-func validateTaskHighWaterMark(lastProcessedTime *timestamppb.Timestamp, scheduledAt time.Time) (bool, error) {
-	if lastProcessedTime != nil {
-		hwm := lastProcessedTime.AsTime()
-
-		if hwm.After(scheduledAt) || hwm.Equal(scheduledAt) {
-			return false, nil
-		}
+// task timestamp. A task is valid if its scheduled time is after the high water mark.
+//
+// For immediate tasks (zero scheduled time), validation uses a logical clock
+// comparison: the task's version must match the component's current version.
+// This prevents re-execution of immediate tasks after the component has processed
+// them and incremented its version.
+func validateTaskHighWaterMark(
+	lastProcessedTime *timestamppb.Timestamp,
+	scheduledAt time.Time,
+	componentTaskVersion int64,
+	taskVersion int64,
+) (bool, error) {
+	// Immediate tasks are valid only if their version matches the component's version.
+	if scheduledAt.IsZero() {
+		return componentTaskVersion == taskVersion, nil
 	}
-
-	return true, nil
+	// If lastProcessedTime is not set, all scheduled tasks are valid.
+	if lastProcessedTime == nil || (lastProcessedTime.GetSeconds() == 0 && lastProcessedTime.GetNanos() == 0) {
+		return true, nil
+	}
+	// Scheduled tasks are valid if their time is after the high water mark.
+	return scheduledAt.After(lastProcessedTime.AsTime()), nil
 }
 
 // jsonStringer wraps a proto.Message for lazy JSON serialization. Intended for

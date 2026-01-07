@@ -53,7 +53,7 @@ func (s *schedulerSuite) SetupTest() {
 	s.nodePathEncoder = chasm.DefaultPathEncoder
 
 	s.registry = chasm.NewRegistry(s.logger)
-	err := s.registry.Register(&scheduler.Library{})
+	err := s.registry.Register(newTestLibrary(s.logger, s.specProcessor))
 	s.NoError(err)
 
 	// Register the Core library as well, which we use for Visibility.
@@ -84,8 +84,6 @@ func (s *schedulerSuite) SetupTest() {
 	ctx := s.newMutableContext()
 	s.scheduler = scheduler.NewScheduler(ctx, namespace, namespaceID, scheduleID, defaultSchedule(), nil)
 	s.node.SetRootComponent(s.scheduler)
-	_, err = s.node.CloseTransaction()
-	s.NoError(err)
 
 	// Advance Generator's high water mark to 'now'.
 	generator := s.scheduler.Generator.Get(ctx)
@@ -98,6 +96,17 @@ func (s *schedulerSuite) SetupTest() {
 		Nominal: futureTime,
 	}, nil).MaxTimes(1)
 	s.specProcessor.EXPECT().NextTime(s.scheduler, gomock.Any()).Return(legacyscheduler.GetNextTimeResult{}, nil).AnyTimes()
+
+	// Allow ProcessTimeRange to be called once during setup.
+	s.specProcessor.EXPECT().ProcessTimeRange(
+		gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+	).Return(&scheduler.ProcessedTimeRange{
+		NextWakeupTime: futureTime,
+		LastActionTime: now,
+	}, nil).Times(1)
+
+	_, err = s.node.CloseTransaction()
+	s.NoError(err)
 }
 
 // hasTask returns true if the given task type was added at the end of the

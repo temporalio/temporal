@@ -41,15 +41,29 @@ func addBackfiller(
 		},
 	}
 
-	// Immediately schedule the first backfiller task.
-	ctx.AddTask(backfiller, chasm.TaskAttributes{}, &schedulerpb.BackfillerTask{})
-
 	if scheduler.Backfillers == nil {
 		scheduler.Backfillers = make(chasm.Map[string, *Backfiller])
 	}
 	scheduler.Backfillers[id] = chasm.NewComponentField(ctx, backfiller)
 
+	backfiller.scheduleTask(ctx, chasm.TaskScheduledTimeImmediate)
 	return backfiller
+}
+
+// scheduleTask schedules a BackfillerTask at the given time.
+// The task's version is set to the component's current version for staleness detection.
+func (b *Backfiller) scheduleTask(ctx chasm.MutableContext, scheduledTime time.Time) {
+	ctx.AddTask(b, chasm.TaskAttributes{
+		ScheduledTime: scheduledTime,
+	}, &schedulerpb.BackfillerTask{
+		TaskVersion: b.TaskVersion,
+	})
+}
+
+// incrementTaskVersion advances the component's task version after execution.
+// Called after executing an immediate task to invalidate any stale duplicate tasks.
+func (b *Backfiller) incrementTaskVersion() {
+	b.TaskVersion++
 }
 
 func (b *Backfiller) LifecycleState(ctx chasm.Context) chasm.LifecycleState {

@@ -46,9 +46,14 @@ func (b *BackfillerTaskExecutor) Validate(
 	ctx chasm.Context,
 	backfiller *Backfiller,
 	attrs chasm.TaskAttributes,
-	_ *schedulerpb.BackfillerTask,
+	task *schedulerpb.BackfillerTask,
 ) (bool, error) {
-	return validateTaskHighWaterMark(backfiller.GetLastProcessedTime(), attrs.ScheduledTime)
+	return validateTaskHighWaterMark(
+		backfiller.GetLastProcessedTime(),
+		attrs.ScheduledTime,
+		backfiller.GetTaskVersion(),
+		task.GetTaskVersion(),
+	)
 }
 
 func (b *BackfillerTaskExecutor) Execute(
@@ -57,7 +62,10 @@ func (b *BackfillerTaskExecutor) Execute(
 	_ chasm.TaskAttributes,
 	_ *schedulerpb.BackfillerTask,
 ) error {
-	defer func() { backfiller.Attempt++ }()
+	defer func() {
+		backfiller.Attempt++
+		backfiller.incrementTaskVersion()
+	}()
 
 	scheduler := backfiller.Scheduler.Get(ctx)
 	logger := newTaggedLogger(b.baseLogger, scheduler)
@@ -114,9 +122,7 @@ func (b *BackfillerTaskExecutor) Execute(
 
 func (b *BackfillerTaskExecutor) rescheduleBackfill(ctx chasm.MutableContext, backfiller *Backfiller) {
 	backoffTime := ctx.Now(backfiller).Add(b.backoffDelay(backfiller))
-	ctx.AddTask(backfiller, chasm.TaskAttributes{
-		ScheduledTime: backoffTime,
-	}, &schedulerpb.BackfillerTask{})
+	backfiller.scheduleTask(ctx, backoffTime)
 }
 
 // processBackfill processes a Backfiller's BackfillRequest.

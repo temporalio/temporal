@@ -237,8 +237,10 @@ func (i *Invoker) addTasks(ctx chasm.MutableContext) {
 	// backing off, or are still pending initial processing.
 	if (totalStarts - eligibleStarts) > 0 {
 		ctx.AddTask(i, chasm.TaskAttributes{
-			ScheduledTime: i.processingDeadline(ctx),
-		}, &schedulerpb.InvokerProcessBufferTask{})
+			ScheduledTime: i.processingDeadline(),
+		}, &schedulerpb.InvokerProcessBufferTask{
+			TaskVersion: i.TaskVersion,
+		})
 	}
 
 	// Add an Execute side effect task whenever there are any eligible actions
@@ -248,17 +250,22 @@ func (i *Invoker) addTasks(ctx chasm.MutableContext) {
 	}
 }
 
+// incrementTaskVersion advances the component's task version after execution.
+// Called after executing an immediate task to invalidate any stale duplicate tasks.
+func (i *Invoker) incrementTaskVersion() {
+	i.TaskVersion++
+}
+
 // processingDeadline returns the earliest possible time that the BufferedStarts
 // queue should be processed, taking into account starts that have not yet been
 // attempted, as well as those that are pending backoff to retry. If the buffer
 // is empty, the return value will be Time's zero value.
-func (i *Invoker) processingDeadline(ctx chasm.Context) time.Time {
+func (i *Invoker) processingDeadline() time.Time {
 	var deadline time.Time
 	for _, start := range i.GetBufferedStarts() {
 		if start.GetAttempt() == 0 {
-			// We use a current timestamp instead of TaskScheduledTimeImmediate so that we
-			// can validate the task with only the high watermark and task schedule time.
-			return ctx.Now(i)
+			// Return zero time to schedule an immediate task for unprocessed starts.
+			return chasm.TaskScheduledTimeImmediate
 		}
 		backoff := start.GetBackoffTime().AsTime()
 		if deadline.IsZero() || backoff.Before(deadline) {

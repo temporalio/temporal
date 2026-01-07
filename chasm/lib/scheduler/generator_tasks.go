@@ -46,12 +46,13 @@ func NewGeneratorTaskExecutor(opts GeneratorTaskExecutorOptions) *GeneratorTaskE
 func (g *GeneratorTaskExecutor) Execute(
 	ctx chasm.MutableContext,
 	generator *Generator,
-	_ chasm.TaskAttributes,
+	taskAttrs chasm.TaskAttributes,
 	_ *schedulerpb.GeneratorTask,
 ) error {
+	defer generator.incrementTaskVersion()
+
 	scheduler := generator.Scheduler.Get(ctx)
 	logger := newTaggedLogger(g.baseLogger, scheduler)
-
 	invoker := scheduler.Invoker.Get(ctx)
 
 	// If we have no last processed time, this is a new schedule.
@@ -129,9 +130,7 @@ func (g *GeneratorTaskExecutor) Execute(
 	}
 
 	// Another buffering task is added if we aren't completely out of actions or paused.
-	ctx.AddTask(generator, chasm.TaskAttributes{
-		ScheduledTime: result.NextWakeupTime,
-	}, &schedulerpb.GeneratorTask{})
+	generator.scheduleTask(ctx, result.NextWakeupTime)
 
 	return nil
 }
@@ -186,7 +185,12 @@ func (g *GeneratorTaskExecutor) Validate(
 	ctx chasm.Context,
 	generator *Generator,
 	attrs chasm.TaskAttributes,
-	_ *schedulerpb.GeneratorTask,
+	task *schedulerpb.GeneratorTask,
 ) (bool, error) {
-	return validateTaskHighWaterMark(generator.GetLastProcessedTime(), attrs.ScheduledTime)
+	return validateTaskHighWaterMark(
+		generator.GetLastProcessedTime(),
+		attrs.ScheduledTime,
+		generator.GetTaskVersion(),
+		task.GetTaskVersion(),
+	)
 }

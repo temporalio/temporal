@@ -368,9 +368,14 @@ func (e *InvokerProcessBufferTaskExecutor) Validate(
 	ctx chasm.Context,
 	invoker *Invoker,
 	attrs chasm.TaskAttributes,
-	_ *schedulerpb.InvokerProcessBufferTask,
+	task *schedulerpb.InvokerProcessBufferTask,
 ) (bool, error) {
-	return validateTaskHighWaterMark(invoker.GetLastProcessedTime(), attrs.ScheduledTime)
+	return validateTaskHighWaterMark(
+		invoker.GetLastProcessedTime(),
+		attrs.ScheduledTime,
+		invoker.GetTaskVersion(),
+		task.GetTaskVersion(),
+	)
 }
 
 func (e *InvokerProcessBufferTaskExecutor) Execute(
@@ -379,6 +384,8 @@ func (e *InvokerProcessBufferTaskExecutor) Execute(
 	_ chasm.TaskAttributes,
 	_ *schedulerpb.InvokerProcessBufferTask,
 ) error {
+	defer invoker.incrementTaskVersion()
+
 	scheduler := invoker.Scheduler.Get(ctx)
 
 	// Make sure we have something to start.

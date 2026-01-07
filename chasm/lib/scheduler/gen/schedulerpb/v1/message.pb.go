@@ -133,8 +133,11 @@ type GeneratorState struct {
 	LastProcessedTime *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=last_processed_time,json=lastProcessedTime,proto3" json:"last_processed_time,omitempty"`
 	// A list of upcoming times an action will be triggered.
 	FutureActionTimes []*timestamppb.Timestamp `protobuf:"bytes,4,rep,name=future_action_times,json=futureActionTimes,proto3" json:"future_action_times,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// Logical clock for immediate task validation. Incremented after each
+	// immediate task execution; tasks with mismatched versions are stale.
+	TaskVersion   int64 `protobuf:"varint,5,opt,name=task_version,json=taskVersion,proto3" json:"task_version,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GeneratorState) Reset() {
@@ -181,6 +184,13 @@ func (x *GeneratorState) GetFutureActionTimes() []*timestamppb.Timestamp {
 	return nil
 }
 
+func (x *GeneratorState) GetTaskVersion() int64 {
+	if x != nil {
+		return x.TaskVersion
+	}
+	return 0
+}
+
 // CHASM scheduler's Invoker internal state.
 type InvokerState struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -201,8 +211,11 @@ type InvokerState struct {
 	// Invoker adds to this mapwhen buffered starts are enqueued, and removed
 	// when Invoker processes a completion.
 	RequestIdToWorkflowId map[string]string `protobuf:"bytes,6,rep,name=request_id_to_workflow_id,json=requestIdToWorkflowId,proto3" json:"request_id_to_workflow_id,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	unknownFields         protoimpl.UnknownFields
-	sizeCache             protoimpl.SizeCache
+	// Logical clock for immediate task validation. Incremented after each
+	// immediate task execution; tasks with mismatched versions are stale.
+	TaskVersion   int64 `protobuf:"varint,7,opt,name=task_version,json=taskVersion,proto3" json:"task_version,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *InvokerState) Reset() {
@@ -270,6 +283,13 @@ func (x *InvokerState) GetRequestIdToWorkflowId() map[string]string {
 	return nil
 }
 
+func (x *InvokerState) GetTaskVersion() int64 {
+	if x != nil {
+		return x.TaskVersion
+	}
+	return 0
+}
+
 // CHASM scheduler's Backfiller internal state. Backfill requests are 1:1
 // with Backfiller nodes. Backfiller nodes also handle immediate trigger requests.
 type BackfillerState struct {
@@ -286,7 +306,10 @@ type BackfillerState struct {
 	LastProcessedTime *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=last_processed_time,json=lastProcessedTime,proto3" json:"last_processed_time,omitempty"`
 	// Attempt count, incremented when the buffer is full and the Backfiller
 	// needs to back off before retrying to fill.
-	Attempt       int64 `protobuf:"varint,8,opt,name=attempt,proto3" json:"attempt,omitempty"`
+	Attempt int64 `protobuf:"varint,8,opt,name=attempt,proto3" json:"attempt,omitempty"`
+	// Logical clock for immediate task validation. Incremented after each
+	// immediate task execution; tasks with mismatched versions are stale.
+	TaskVersion   int64 `protobuf:"varint,9,opt,name=task_version,json=taskVersion,proto3" json:"task_version,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -363,6 +386,13 @@ func (x *BackfillerState) GetLastProcessedTime() *timestamppb.Timestamp {
 func (x *BackfillerState) GetAttempt() int64 {
 	if x != nil {
 		return x.Attempt
+	}
+	return 0
+}
+
+func (x *BackfillerState) GetTaskVersion() int64 {
+	if x != nil {
+		return x.TaskVersion
 	}
 	return 0
 }
@@ -451,26 +481,29 @@ const file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_rawDesc = 
 	"\vschedule_id\x18\a \x01(\tR\n" +
 	"scheduleId\x12%\n" +
 	"\x0econflict_token\x18\b \x01(\x03R\rconflictToken\x12\x16\n" +
-	"\x06closed\x18\t \x01(\bR\x06closed\"\xa8\x01\n" +
+	"\x06closed\x18\t \x01(\bR\x06closed\"\xcb\x01\n" +
 	"\x0eGeneratorState\x12J\n" +
 	"\x13last_processed_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x11lastProcessedTime\x12J\n" +
-	"\x13future_action_times\x18\x04 \x03(\v2\x1a.google.protobuf.TimestampR\x11futureActionTimes\"\xc1\x04\n" +
+	"\x13future_action_times\x18\x04 \x03(\v2\x1a.google.protobuf.TimestampR\x11futureActionTimes\x12!\n" +
+	"\ftask_version\x18\x05 \x01(\x03R\vtaskVersion\"\xe4\x04\n" +
 	"\fInvokerState\x12W\n" +
 	"\x0fbuffered_starts\x18\x02 \x03(\v2..temporal.server.api.schedule.v1.BufferedStartR\x0ebufferedStarts\x12T\n" +
 	"\x10cancel_workflows\x18\x03 \x03(\v2).temporal.api.common.v1.WorkflowExecutionR\x0fcancelWorkflows\x12Z\n" +
 	"\x13terminate_workflows\x18\x04 \x03(\v2).temporal.api.common.v1.WorkflowExecutionR\x12terminateWorkflows\x12J\n" +
 	"\x13last_processed_time\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\x11lastProcessedTime\x12\x8f\x01\n" +
-	"\x19request_id_to_workflow_id\x18\x06 \x03(\v2U.temporal.server.chasm.lib.scheduler.proto.v1.InvokerState.RequestIdToWorkflowIdEntryR\x15requestIdToWorkflowId\x1aH\n" +
+	"\x19request_id_to_workflow_id\x18\x06 \x03(\v2U.temporal.server.chasm.lib.scheduler.proto.v1.InvokerState.RequestIdToWorkflowIdEntryR\x15requestIdToWorkflowId\x12!\n" +
+	"\ftask_version\x18\a \x01(\x03R\vtaskVersion\x1aH\n" +
 	"\x1aRequestIdToWorkflowIdEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xdb\x02\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xfe\x02\n" +
 	"\x0fBackfillerState\x12V\n" +
 	"\x10backfill_request\x18\x01 \x01(\v2).temporal.api.schedule.v1.BackfillRequestH\x00R\x0fbackfillRequest\x12^\n" +
 	"\x0ftrigger_request\x18\x02 \x01(\v23.temporal.api.schedule.v1.TriggerImmediatelyRequestH\x00R\x0etriggerRequest\x12\x1f\n" +
 	"\vbackfill_id\x18\x06 \x01(\tR\n" +
 	"backfillId\x12J\n" +
 	"\x13last_processed_time\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\x11lastProcessedTime\x12\x18\n" +
-	"\aattempt\x18\b \x01(\x03R\aattemptB\t\n" +
+	"\aattempt\x18\b \x01(\x03R\aattempt\x12!\n" +
+	"\ftask_version\x18\t \x01(\x03R\vtaskVersionB\t\n" +
 	"\arequest\"\x8d\x01\n" +
 	"\x14LastCompletionResult\x129\n" +
 	"\asuccess\x18\x01 \x01(\v2\x1f.temporal.api.common.v1.PayloadR\asuccess\x12:\n" +
