@@ -9,6 +9,7 @@ import (
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	schedulescommon "go.temporal.io/server/common/schedules"
 	"go.temporal.io/server/common/metrics"
 	queueerrors "go.temporal.io/server/service/history/queues/errors"
 	"go.uber.org/fx"
@@ -194,7 +195,7 @@ func (b *BackfillerTaskExecutor) processTrigger(
 	nowpb := backfiller.GetLastProcessedTime()
 	now := nowpb.AsTime()
 	requestID := generateRequestID(scheduler, backfiller.GetBackfillId(), now, now)
-	workflowID := generateWorkflowID(scheduler.WorkflowID(), now)
+	workflowID := schedulescommon.GenerateWorkflowID(scheduler.WorkflowID(), now)
 	result.BufferedStarts = []*schedulespb.BufferedStart{
 		{
 			NominalTime:   nowpb,
