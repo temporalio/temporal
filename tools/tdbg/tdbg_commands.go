@@ -180,9 +180,21 @@ func newAdminWorkflowCommands(clientFactory ClientFactory, prompterFactory Promp
 					Usage:       "Fully qualified archetype name of the execution",
 					DefaultText: chasm.WorkflowArchetype,
 				},
+				&cli.StringFlag{
+					Name:  FlagVisibilityQuery,
+					Usage: "Visibility query to select workflows",
+				},
+				&cli.StringFlag{
+					Name:  FlagReason,
+					Usage: "Reason for starting the batch job",
+				},
+				&cli.StringFlag{
+					Name:  FlagJobID,
+					Usage: "Optional job ID (auto-generated if not provided)",
+				},
 			},
 			Action: func(c *cli.Context) error {
-				return AdminRefreshWorkflowTasks(c, clientFactory)
+				return adminRefreshWorkflowTasks(c, clientFactory, prompterFactory(c))
 			},
 		},
 		{
