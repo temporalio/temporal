@@ -90,18 +90,18 @@ var TransitionFailed = chasm.NewTransition(
 	},
 )
 
-// EventCancelled is triggered when an operation is completed as cancelled.
-type EventCancelled struct {
+// EventCanceled is triggered when an operation is completed as canceled.
+type EventCanceled struct {
 }
 
-var TransitionCancelled = chasm.NewTransition(
+var TransitionCanceled = chasm.NewTransition(
 	[]nexusoperationpb.OperationStatus{
 		nexusoperationpb.OPERATION_STATUS_SCHEDULED,
 		nexusoperationpb.OPERATION_STATUS_STARTED,
 		nexusoperationpb.OPERATION_STATUS_BACKING_OFF,
 	},
 	nexusoperationpb.OPERATION_STATUS_CANCELED,
-	func(o *Operation, ctx chasm.MutableContext, event EventCancelled) error {
+	func(o *Operation, ctx chasm.MutableContext, event EventCanceled) error {
 		panic("not implemented")
 	},
 )

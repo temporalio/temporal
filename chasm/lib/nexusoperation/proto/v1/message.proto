@@ -22,9 +22,9 @@ enum OperationStatus {
     OPERATION_STATUS_SUCCEEDED = 4;
   // Operation failed either when a start request encounters a non-retryable error or as reported via callback.
     OPERATION_STATUS_FAILED = 5;
-  // Operation completed as cancelled (may have not ever been delivered).
+  // Operation completed as canceled (may have not ever been delivered).
   // This may happen either as a response to a start request or as reported via callback.
-    OPERATION_STATUS_CANCELLED = 6;
+    OPERATION_STATUS_CANCELED = 6;
   // Operation timed out - exceeded the user supplied schedule-to-close timeout.
   // Any attempts to complete the operation in this status will be ignored.
     OPERATION_STATUS_TIMED_OUT = 7;
