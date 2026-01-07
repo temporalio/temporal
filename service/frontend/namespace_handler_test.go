@@ -358,7 +358,7 @@ func (s *namespaceHandlerCommonSuite) TestListNamespace() {
 	}
 }
 
-func (s *namespaceHandlerCommonSuite) TestCapabilities() {
+func (s *namespaceHandlerCommonSuite) TestCapabilitiesAndLimits() {
 	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{
 		Name: "ns",
 	}).Return(
@@ -384,6 +384,9 @@ func (s *namespaceHandlerCommonSuite) TestCapabilities() {
 	s.True(resp.NamespaceInfo.Capabilities.AsyncUpdate)
 	s.True(resp.NamespaceInfo.Capabilities.ReportedProblemsSearchAttribute)
 	s.True(resp.NamespaceInfo.Capabilities.WorkerHeartbeats)
+	s.False(resp.NamespaceInfo.Capabilities.WorkflowPause)
+	s.Equal(int64(2*1024*1024), resp.NamespaceInfo.Limits.BlobSizeLimitError)
+	s.Equal(int64(2*1024*1024), resp.NamespaceInfo.Limits.MemoSizeLimitError)
 
 	// Second call: Override the default value of dynamic configs.
 	s.config.EnableEagerWorkflowStart = dc.GetBoolPropertyFnFilteredByNamespace(false)
@@ -391,6 +394,9 @@ func (s *namespaceHandlerCommonSuite) TestCapabilities() {
 	s.config.EnableUpdateWorkflowExecutionAsyncAccepted = dc.GetBoolPropertyFnFilteredByNamespace(false)
 	s.config.NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute = dc.GetIntPropertyFnFilteredByNamespace(5)
 	s.config.WorkerHeartbeatsEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
+	s.config.WorkflowPauseEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	s.config.BlobSizeLimitError = dc.GetIntPropertyFnFilteredByNamespace(1024)
+	s.config.MemoSizeLimitError = dc.GetIntPropertyFnFilteredByNamespace(512)
 
 	resp, err = s.handler.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
 		Namespace: "ns",
@@ -401,6 +407,9 @@ func (s *namespaceHandlerCommonSuite) TestCapabilities() {
 	s.False(resp.NamespaceInfo.Capabilities.AsyncUpdate)
 	s.True(resp.NamespaceInfo.Capabilities.ReportedProblemsSearchAttribute)
 	s.False(resp.NamespaceInfo.Capabilities.WorkerHeartbeats)
+	s.True(resp.NamespaceInfo.Capabilities.WorkflowPause)
+	s.Equal(int64(1024), resp.NamespaceInfo.Limits.BlobSizeLimitError)
+	s.Equal(int64(512), resp.NamespaceInfo.Limits.MemoSizeLimitError)
 }
 
 func (s *namespaceHandlerCommonSuite) TestRegisterNamespace_WithOneCluster() {

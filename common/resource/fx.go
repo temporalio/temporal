@@ -8,9 +8,11 @@ import (
 	"time"
 
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/client"
+	"go.temporal.io/server/client/admin"
 	"go.temporal.io/server/client/frontend"
 	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/client/matching"
@@ -32,6 +34,8 @@ import (
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/persistence/visibility"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/pingable"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/quotas"
@@ -90,6 +94,7 @@ var Module = fx.Options(
 	fx.Provide(ClientFactoryProvider),
 	fx.Provide(ClientBeanProvider),
 	fx.Provide(FrontendClientProvider),
+	fx.Provide(AdminClientProvider),
 	fx.Provide(GrpcListenerProvider),
 	fx.Provide(RuntimeMetricsReporterProvider),
 	metrics.RuntimeMetricsReporterLifetimeHooksModule,
@@ -101,6 +106,7 @@ var Module = fx.Options(
 	fx.Provide(FrontendHTTPClientCacheProvider),
 	fx.Provide(PersistenceConfigProvider),
 	fx.Provide(health.NewServer),
+	fx.Provide(namespace.NewDefaultReplicationResolverFactory),
 	deadlock.Module,
 	config.Module,
 	testhooks.Module,
@@ -184,12 +190,37 @@ func SearchAttributeManagerProvider(
 		dynamicconfig.ForceSearchAttributesCacheRefreshOnRead.Get(dynamicCollection))
 }
 
+// SearchAttributeValidatorProvider creates a new search attribute validator with the given dependencies. It configures
+// the validator with dynamic config values for key limits, value size limits, total size limits, visibility allowlist,
+// and system search attribute error suppression.
+func SearchAttributeValidatorProvider(
+	saProvider searchattribute.Provider,
+	saMapperProvider searchattribute.MapperProvider,
+	visibilityMgr manager.VisibilityManager,
+	dynamicCollection *dynamicconfig.Collection,
+) *searchattribute.Validator {
+	return searchattribute.NewValidator(
+		saProvider,
+		saMapperProvider,
+		dynamicconfig.SearchAttributesNumberOfKeysLimit.Get(dynamicCollection),
+		dynamicconfig.SearchAttributesSizeOfValueLimit.Get(dynamicCollection),
+		dynamicconfig.SearchAttributesTotalSizeLimit.Get(dynamicCollection),
+		visibilityMgr,
+		visibility.AllowListForValidation(
+			visibilityMgr.GetStoreNames(),
+			dynamicconfig.VisibilityAllowList.Get(dynamicCollection),
+		),
+		dynamicconfig.SuppressErrorSetSystemSearchAttribute.Get(dynamicCollection),
+	)
+}
+
 func NamespaceRegistryProvider(
 	logger log.SnTaggedLogger,
 	metricsHandler metrics.Handler,
 	clusterMetadata cluster.Metadata,
 	metadataManager persistence.MetadataManager,
 	dynamicCollection *dynamicconfig.Collection,
+	replicationResolverFactory namespace.ReplicationResolverFactory,
 ) namespace.Registry {
 	return nsregistry.NewRegistry(
 		metadataManager,
@@ -198,6 +229,7 @@ func NamespaceRegistryProvider(
 		dynamicconfig.ForceSearchAttributesCacheRefreshOnRead.Get(dynamicCollection),
 		metricsHandler,
 		logger,
+		replicationResolverFactory,
 	)
 }
 
@@ -241,6 +273,18 @@ func FrontendClientProvider(clientBean client.Bean) workflowservice.WorkflowServ
 		common.CreateFrontendClientRetryPolicy(),
 		common.IsServiceClientTransientError,
 	)
+}
+
+func AdminClientProvider(clientBean client.Bean, clusterMetadata cluster.Metadata) (adminservice.AdminServiceClient, error) {
+	adminRawClient, err := clientBean.GetRemoteAdminClient(clusterMetadata.GetCurrentClusterName())
+	if err != nil {
+		return nil, err
+	}
+	return admin.NewRetryableClient(
+		adminRawClient,
+		common.CreateFrontendClientRetryPolicy(),
+		common.IsServiceClientTransientError,
+	), nil
 }
 
 func RuntimeMetricsReporterProvider(

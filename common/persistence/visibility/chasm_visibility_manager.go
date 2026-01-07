@@ -28,6 +28,13 @@ func NewChasmVisibilityManager(
 	}
 }
 
+func ChasmVisibilityManagerProvider(
+	registry *chasm.Registry,
+	visibilityMgr manager.VisibilityManager,
+) chasm.VisibilityManager {
+	return NewChasmVisibilityManager(registry, visibilityMgr)
+}
+
 // ListExecutions implements the Engine interface for visibility queries.
 func (e *ChasmVisibilityManager) ListExecutions(
 	ctx context.Context,

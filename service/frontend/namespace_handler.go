@@ -862,6 +862,11 @@ func (d *namespaceHandler) createResponse(
 			AsyncUpdate:                     d.config.EnableUpdateWorkflowExecutionAsyncAccepted(info.Name),
 			ReportedProblemsSearchAttribute: numConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute > 0,
 			WorkerHeartbeats:                d.config.WorkerHeartbeatsEnabled(info.Name),
+			WorkflowPause:                   d.config.WorkflowPauseEnabled(info.Name),
+		},
+		Limits: &namespacepb.NamespaceInfo_Limits{
+			BlobSizeLimitError: int64(d.config.BlobSizeLimitError(info.Name)),
+			MemoSizeLimitError: int64(d.config.MemoSizeLimitError(info.Name)),
 		},
 		SupportsSchedules: d.config.EnableSchedules(info.Name),
 	}

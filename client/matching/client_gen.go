@@ -73,6 +73,26 @@ func (c *clientImpl) CheckTaskQueueUserDataPropagation(
 	return client.CheckTaskQueueUserDataPropagation(ctx, request, opts...)
 }
 
+func (c *clientImpl) CheckTaskQueueVersionMembership(
+	ctx context.Context,
+	request *matchingservice.CheckTaskQueueVersionMembershipRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.CheckTaskQueueVersionMembershipResponse, error) {
+
+	p, err := tqid.NormalPartitionFromRpcName(request.GetTaskQueue(), request.GetNamespaceId(), request.GetTaskQueueType())
+	if err != nil {
+		return nil, err
+	}
+
+	client, err := c.getClientForTaskQueuePartition(p)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.CheckTaskQueueVersionMembership(ctx, request, opts...)
+}
+
 func (c *clientImpl) CreateNexusEndpoint(
 	ctx context.Context,
 	request *matchingservice.CreateNexusEndpointRequest,
@@ -542,6 +562,26 @@ func (c *clientImpl) SyncDeploymentUserData(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return client.SyncDeploymentUserData(ctx, request, opts...)
+}
+
+func (c *clientImpl) UpdateFairnessState(
+	ctx context.Context,
+	request *matchingservice.UpdateFairnessStateRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.UpdateFairnessStateResponse, error) {
+
+	p, err := tqid.NormalPartitionFromRpcName(request.GetTaskQueue(), request.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	if err != nil {
+		return nil, err
+	}
+
+	client, err := c.getClientForTaskQueuePartition(p)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.UpdateFairnessState(ctx, request, opts...)
 }
 
 func (c *clientImpl) UpdateNexusEndpoint(

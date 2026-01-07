@@ -31,7 +31,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -131,13 +130,16 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 			defer ctrl.Finish()
 
 			// Setup namespace
-			ns := namespace.FromPersistentState(&persistencespb.NamespaceDetail{
+			factory := namespace.NewDefaultReplicationResolverFactory()
+			detail := &persistencespb.NamespaceDetail{
 				Info: &persistencespb.NamespaceInfo{
 					Id:   "namespace-id",
 					Name: "namespace-name",
 				},
 				Config: &persistencespb.NamespaceConfig{},
-			})
+			}
+			ns, err := namespace.FromPersistentState(detail, factory(detail))
+			require.NoError(t, err)
 
 			// Setup metrics expectations
 			metricsHandler := metrics.NewMockHandler(ctrl)
@@ -181,7 +183,7 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 			}
 
 			chasmRegistry := chasm.NewRegistry(logger)
-			err := chasmRegistry.Register(&Library{
+			err = chasmRegistry.Register(&Library{
 				InvocationTaskExecutor: executor,
 			})
 			require.NoError(t, err)
@@ -362,11 +364,8 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 	encodedRef := base64.RawURLEncoding.EncodeToString(serializedRef)
 	dummyTime := time.Now().UTC()
 
-	createPayloadBytes := func(data []byte) []byte {
-		p := &commonpb.Payload{Data: data}
-		payloadBytes, err := proto.Marshal(p)
-		require.NoError(t, err)
-		return payloadBytes
+	createPayloadBytes := func(data []byte) *commonpb.Payload {
+		return &commonpb.Payload{Data: data}
 	}
 
 	cases := []struct {
@@ -402,7 +401,8 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 				comp, err := nexusrpc.NewOperationCompletionSuccessful(
 					createPayloadBytes([]byte("result-data")),
 					nexusrpc.OperationCompletionSuccessfulOptions{
-						CloseTime: dummyTime,
+						Serializer: commonnexus.PayloadSerializer,
+						CloseTime:  dummyTime,
 					},
 				)
 				require.NoError(t, err)
@@ -462,7 +462,9 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 			completion: func() nexusrpc.OperationCompletion {
 				comp, err := nexusrpc.NewOperationCompletionSuccessful(
 					createPayloadBytes([]byte("result-data")),
-					nexusrpc.OperationCompletionSuccessfulOptions{},
+					nexusrpc.OperationCompletionSuccessfulOptions{
+						Serializer: commonnexus.PayloadSerializer,
+					},
 				)
 				require.NoError(t, err)
 				return comp
@@ -486,7 +488,9 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 			completion: func() nexusrpc.OperationCompletion {
 				comp, err := nexusrpc.NewOperationCompletionSuccessful(
 					createPayloadBytes([]byte("result-data")),
-					nexusrpc.OperationCompletionSuccessfulOptions{},
+					nexusrpc.OperationCompletionSuccessfulOptions{
+						Serializer: commonnexus.PayloadSerializer,
+					},
 				)
 				require.NoError(t, err)
 				return comp
@@ -506,7 +510,9 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 			completion: func() nexusrpc.OperationCompletion {
 				comp, err := nexusrpc.NewOperationCompletionSuccessful(
 					createPayloadBytes([]byte("result-data")),
-					nexusrpc.OperationCompletionSuccessfulOptions{},
+					nexusrpc.OperationCompletionSuccessfulOptions{
+						Serializer: commonnexus.PayloadSerializer,
+					},
 				)
 				require.NoError(t, err)
 				return comp
@@ -526,7 +532,9 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 			completion: func() nexusrpc.OperationCompletion {
 				comp, err := nexusrpc.NewOperationCompletionSuccessful(
 					createPayloadBytes([]byte("result-data")),
-					nexusrpc.OperationCompletionSuccessfulOptions{},
+					nexusrpc.OperationCompletionSuccessfulOptions{
+						Serializer: commonnexus.PayloadSerializer,
+					},
 				)
 				require.NoError(t, err)
 				return comp
@@ -545,13 +553,16 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 			defer ctrl.Finish()
 
 			// Setup namespace
-			ns := namespace.FromPersistentState(&persistencespb.NamespaceDetail{
+			factory := namespace.NewDefaultReplicationResolverFactory()
+			detail := &persistencespb.NamespaceDetail{
 				Info: &persistencespb.NamespaceInfo{
 					Id:   "namespace-id",
 					Name: "namespace-name",
 				},
 				Config: &persistencespb.NamespaceConfig{},
-			})
+			}
+			ns, err := namespace.FromPersistentState(detail, factory(detail))
+			require.NoError(t, err)
 
 			// Setup history client
 			historyClient := tc.setupHistoryClient(t, ctrl)
@@ -581,7 +592,7 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 			}
 
 			chasmRegistry := chasm.NewRegistry(logger)
-			err := chasmRegistry.Register(&Library{
+			err = chasmRegistry.Register(&Library{
 				InvocationTaskExecutor: executor,
 			})
 			require.NoError(t, err)

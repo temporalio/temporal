@@ -37,7 +37,7 @@ type (
 			targetWorkflowIdentifier definition.WorkflowKey,
 			targetBranchToken []byte,
 			requestID string,
-		) (historyi.MutableState, int64, error)
+		) (historyi.MutableState, RebuildStats, error)
 		RebuildWithCurrentMutableState(
 			ctx context.Context,
 			now time.Time,
@@ -49,7 +49,13 @@ type (
 			targetBranchToken []byte,
 			requestID string,
 			currentMutableState *persistencespb.WorkflowMutableState,
-		) (historyi.MutableState, int64, error)
+		) (historyi.MutableState, RebuildStats, error)
+	}
+
+	RebuildStats struct {
+		HistorySize          int64
+		ExternalPayloadSize  int64
+		ExternalPayloadCount int64
 	}
 
 	StateRebuilderImpl struct {
@@ -60,8 +66,10 @@ type (
 		executionMgr      persistence.ExecutionManager
 		taskRefresher     workflow.TaskRefresher
 
-		rebuiltHistorySize int64
-		logger             log.Logger
+		rebuiltHistorySize          int64
+		rebuiltExternalPayloadSize  int64
+		rebuiltExternalPayloadCount int64
+		logger                      log.Logger
 	}
 
 	HistoryBlobsPaginationItem struct {
@@ -78,14 +86,16 @@ func NewStateRebuilder(
 ) *StateRebuilderImpl {
 
 	return &StateRebuilderImpl{
-		shard:              shard,
-		namespaceRegistry:  shard.GetNamespaceRegistry(),
-		eventsCache:        shard.GetEventsCache(),
-		clusterMetadata:    shard.GetClusterMetadata(),
-		executionMgr:       shard.GetExecutionManager(),
-		taskRefresher:      workflow.NewTaskRefresher(shard),
-		rebuiltHistorySize: 0,
-		logger:             logger,
+		shard:                       shard,
+		namespaceRegistry:           shard.GetNamespaceRegistry(),
+		eventsCache:                 shard.GetEventsCache(),
+		clusterMetadata:             shard.GetClusterMetadata(),
+		executionMgr:                shard.GetExecutionManager(),
+		taskRefresher:               workflow.NewTaskRefresher(shard),
+		rebuiltHistorySize:          0,
+		rebuiltExternalPayloadSize:  0,
+		rebuiltExternalPayloadCount: 0,
+		logger:                      logger,
 	}
 }
 
@@ -99,7 +109,7 @@ func (r *StateRebuilderImpl) Rebuild(
 	targetWorkflowIdentifier definition.WorkflowKey,
 	targetBranchToken []byte,
 	requestID string,
-) (historyi.MutableState, int64, error) {
+) (historyi.MutableState, RebuildStats, error) {
 	rebuiltMutableState, lastTxnId, err := r.buildMutableStateFromEvent(
 		ctx,
 		now,
@@ -112,13 +122,13 @@ func (r *StateRebuilderImpl) Rebuild(
 		requestID,
 	)
 	if err != nil {
-		return nil, 0, err
+		return nil, RebuildStats{}, err
 	}
 
 	// close rebuilt mutable state transaction clearing all generated tasks, etc.
-	_, _, err = rebuiltMutableState.CloseTransactionAsSnapshot(historyi.TransactionPolicyPassive)
+	_, _, err = rebuiltMutableState.CloseTransactionAsSnapshot(ctx, historyi.TransactionPolicyPassive)
 	if err != nil {
-		return nil, 0, err
+		return nil, RebuildStats{}, err
 	}
 
 	rebuiltMutableState.GetExecutionInfo().LastFirstEventTxnId = lastTxnId
@@ -128,10 +138,14 @@ func (r *StateRebuilderImpl) Rebuild(
 	// from the base run. However, RefreshTasks always resets that field and
 	// force regenerates the execution timeout timer task.
 	if err := r.taskRefresher.Refresh(ctx, rebuiltMutableState, false); err != nil {
-		return nil, 0, err
+		return nil, RebuildStats{}, err
 	}
 
-	return rebuiltMutableState, r.rebuiltHistorySize, nil
+	return rebuiltMutableState, RebuildStats{
+		HistorySize:          r.rebuiltHistorySize,
+		ExternalPayloadSize:  r.rebuiltExternalPayloadSize,
+		ExternalPayloadCount: r.rebuiltExternalPayloadCount,
+	}, nil
 }
 
 func (r *StateRebuilderImpl) RebuildWithCurrentMutableState(
@@ -145,7 +159,7 @@ func (r *StateRebuilderImpl) RebuildWithCurrentMutableState(
 	targetBranchToken []byte,
 	requestID string,
 	currentMutableState *persistencespb.WorkflowMutableState,
-) (historyi.MutableState, int64, error) {
+) (historyi.MutableState, RebuildStats, error) {
 	rebuiltMutableState, lastTxnId, err := r.buildMutableStateFromEvent(
 		ctx,
 		now,
@@ -158,13 +172,13 @@ func (r *StateRebuilderImpl) RebuildWithCurrentMutableState(
 		requestID,
 	)
 	if err != nil {
-		return nil, 0, err
+		return nil, RebuildStats{}, err
 	}
 	copyToRebuildMutableState(rebuiltMutableState, currentMutableState)
 	versionHistories := rebuiltMutableState.GetExecutionInfo().GetVersionHistories()
 	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(versionHistories)
 	if err != nil {
-		return nil, 0, err
+		return nil, RebuildStats{}, err
 	}
 	items := versionhistory.CopyVersionHistoryItems(currentVersionHistory.Items)
 
@@ -174,9 +188,9 @@ func (r *StateRebuilderImpl) RebuildWithCurrentMutableState(
 	currentVersionHistory.Items = nil
 
 	// close rebuilt mutable state transaction clearing all generated tasks, etc.
-	_, _, err = rebuiltMutableState.CloseTransactionAsSnapshot(historyi.TransactionPolicyActive)
+	_, _, err = rebuiltMutableState.CloseTransactionAsSnapshot(ctx, historyi.TransactionPolicyActive)
 	if err != nil {
-		return nil, 0, err
+		return nil, RebuildStats{}, err
 	}
 	currentVersionHistory.Items = items
 
@@ -187,10 +201,14 @@ func (r *StateRebuilderImpl) RebuildWithCurrentMutableState(
 	// from the base run. However, RefreshTasks always resets that field and
 	// force regenerates the execution timeout timer task.
 	if err := r.taskRefresher.Refresh(ctx, rebuiltMutableState, false); err != nil {
-		return nil, 0, err
+		return nil, RebuildStats{}, err
 	}
 
-	return rebuiltMutableState, r.rebuiltHistorySize, nil
+	return rebuiltMutableState, RebuildStats{
+		HistorySize:          r.rebuiltHistorySize,
+		ExternalPayloadSize:  r.rebuiltExternalPayloadSize,
+		ExternalPayloadCount: r.rebuiltExternalPayloadCount,
+	}, nil
 }
 
 func copyToRebuildMutableState(
@@ -213,17 +231,18 @@ func (r *StateRebuilderImpl) buildMutableStateFromEvent(
 	targetBranchToken []byte,
 	requestID string,
 ) (historyi.MutableState, int64, error) {
+	namespaceEntry, err := r.namespaceRegistry.GetNamespaceByID(namespace.ID(targetWorkflowIdentifier.NamespaceID))
+	if err != nil {
+		return nil, 0, err
+	}
+
 	iter := collection.NewPagingIterator(r.getPaginationFn(
 		ctx,
 		common.FirstEventID,
 		baseLastEventID+1,
 		baseBranchToken,
+		namespaceEntry.Name().String(),
 	))
-
-	namespaceEntry, err := r.namespaceRegistry.GetNamespaceByID(namespace.ID(targetWorkflowIdentifier.NamespaceID))
-	if err != nil {
-		return nil, 0, err
-	}
 
 	rebuiltMutableState, stateBuilder := r.initializeBuilders(
 		namespaceEntry,
@@ -338,6 +357,7 @@ func (r *StateRebuilderImpl) getPaginationFn(
 	firstEventID int64,
 	nextEventID int64,
 	branchToken []byte,
+	namespaceName string,
 ) collection.PaginationFn[HistoryBlobsPaginationItem] {
 	return func(paginationToken []byte) ([]HistoryBlobsPaginationItem, []byte, error) {
 		resp, err := r.executionMgr.ReadHistoryBranchByBatch(ctx, &persistence.ReadHistoryBranchRequest{
@@ -360,6 +380,16 @@ func (r *StateRebuilderImpl) getPaginationFn(
 				TransactionID: resp.TransactionIDs[i],
 			}
 			paginateItems = append(paginateItems, nextBatch)
+
+			// Calculate and accumulate external payload size and count for this batch of history events
+			if r.shard.GetConfig().ExternalPayloadsEnabled(namespaceName) {
+				externalPayloadSize, externalPayloadCount, err := workflow.CalculateExternalPayloadSize(history.Events)
+				if err != nil {
+					return nil, nil, err
+				}
+				r.rebuiltExternalPayloadSize += externalPayloadSize
+				r.rebuiltExternalPayloadCount += externalPayloadCount
+			}
 		}
 		return paginateItems, resp.NextPageToken, nil
 	}

@@ -51,6 +51,20 @@ func (c *metricClient) CheckTaskQueueUserDataPropagation(
 	return c.client.CheckTaskQueueUserDataPropagation(ctx, request, opts...)
 }
 
+func (c *metricClient) CheckTaskQueueVersionMembership(
+	ctx context.Context,
+	request *matchingservice.CheckTaskQueueVersionMembershipRequest,
+	opts ...grpc.CallOption,
+) (_ *matchingservice.CheckTaskQueueVersionMembershipResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "MatchingClientCheckTaskQueueVersionMembership")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.CheckTaskQueueVersionMembership(ctx, request, opts...)
+}
+
 func (c *metricClient) CreateNexusEndpoint(
 	ctx context.Context,
 	request *matchingservice.CreateNexusEndpointRequest,
@@ -385,6 +399,20 @@ func (c *metricClient) SyncDeploymentUserData(
 	}()
 
 	return c.client.SyncDeploymentUserData(ctx, request, opts...)
+}
+
+func (c *metricClient) UpdateFairnessState(
+	ctx context.Context,
+	request *matchingservice.UpdateFairnessStateRequest,
+	opts ...grpc.CallOption,
+) (_ *matchingservice.UpdateFairnessStateResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "MatchingClientUpdateFairnessState")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.UpdateFairnessState(ctx, request, opts...)
 }
 
 func (c *metricClient) UpdateNexusEndpoint(

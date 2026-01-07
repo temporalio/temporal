@@ -57,6 +57,10 @@ func ScheduleWorkflowTask(
 		return nil
 	}
 
+	if mutableState.IsWorkflowExecutionStatusPaused() {
+		return nil // workflow is paused, do not schedule a workflow task.
+	}
+
 	_, err := mutableState.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
 	if err != nil {
 		return serviceerror.NewInternal("Failed to add workflow task scheduled event.")
