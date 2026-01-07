@@ -290,7 +290,7 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 
 			resendParent := now.After(localVerificationTime) && mutableState.IsTransitionHistoryEnabled() && mutableState.CurrentVersionedTransition() != nil
 
-			// no need for mutable state anymore, release it
+			// no need for mutable state anymore, release workflow lock
 			release(nil)
 
 			_, err := t.historyRawClient.VerifyChildExecutionCompletionRecorded(ctx, &historyservice.VerifyChildExecutionCompletionRecordedRequest{
@@ -435,7 +435,7 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 		childStarted := childWorkflowInfo.StartedEventId != common.EmptyEventID
 		childAbandon := childWorkflowInfo.ParentClosePolicy == enumspb.PARENT_CLOSE_POLICY_ABANDON
 
-		// no need for mutable state anymore, release it
+		// no need for mutable state anymore, release workflow lock
 		release(nil)
 
 		if workflowClosed && !(childStarted && childAbandon) {
