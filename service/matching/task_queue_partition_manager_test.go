@@ -966,11 +966,20 @@ func (s *PartitionManagerTestSuite) describeStatsEventually(
 	}, 2*time.Second, 10*time.Millisecond)
 }
 
-func (s *PartitionManagerTestSuite) TestNoRecentPollerMetric_NewlyLoadedPartition() {
-	// Create a capturing metrics handler
+// testPartitionManagerConfig holds configuration for setting up a partition manager in tests
+type testPartitionManagerConfig struct {
+	loadTime         time.Duration // How long ago partition was loaded
+	withRecentPoller bool          // Whether to register a poller to simulate recent poller activity
+}
+
+// setupPartitionManagerWithCapture creates a partition manager with a capturing metrics handler
+// and returns the manager, capture, and a cleanup function
+func (s *PartitionManagerTestSuite) setupPartitionManagerWithCapture(
+	config testPartitionManagerConfig,
+) (*taskQueuePartitionManagerImpl, *metricstest.Capture, func()) {
+	// Create capturing metrics handler
 	metricsHandler := metricstest.NewCaptureHandler()
 	capture := metricsHandler.StartCapture()
-	defer metricsHandler.StopCapture(capture)
 
 	// Create a new partition manager with the capturing metrics handler
 	f, err := tqid.NewTaskQueueFamily(namespaceID, taskQueueName)
@@ -981,18 +990,49 @@ func (s *PartitionManagerTestSuite) TestNoRecentPollerMetric_NewlyLoadedPartitio
 	pm, err := newTaskQueuePartitionManager(s.partitionMgr.engine, s.partitionMgr.ns, partition, tqConfig, s.partitionMgr.logger, s.partitionMgr.throttledLogger, metricsHandler, s.userDataMgr)
 	s.NoError(err)
 	pm.Start()
-	defer pm.Stop(unloadCauseUnspecified)
 
-	// Simulate partition loaded 1 minute ago (less than 2 minute threshold)
-	pm.loadTime = time.Now().Add(-1 * time.Minute)
+	// Simulate partition loaded at specified time in the past
+	pm.loadTime = time.Now().Add(-config.loadTime)
 
+	// Wait until initialized
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	err = pm.WaitUntilInitialized(ctx)
 	cancel()
 	s.NoError(err)
 
+	// Register a poller if requested
+	if config.withRecentPoller {
+		pollCtx, pollCancel := context.WithTimeout(
+			context.WithValue(context.Background(), identityKey, "test-poller"),
+			100*time.Millisecond,
+		)
+		_, _, _ = pm.PollTask(pollCtx, &pollMetadata{
+			workerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
+				BuildId:       "",
+				UseVersioning: false,
+			},
+		})
+		pollCancel()
+	}
+
+	// Return cleanup function
+	cleanup := func() {
+		metricsHandler.StopCapture(capture)
+		pm.Stop(unloadCauseUnspecified)
+	}
+
+	return pm, capture, cleanup
+}
+
+func (s *PartitionManagerTestSuite) TestNoRecentPollerMetric_NewlyLoadedPartitionWithNoRecentPoller() {
+	pm, capture, cleanup := s.setupPartitionManagerWithCapture(testPartitionManagerConfig{
+		loadTime:         1 * time.Minute,
+		withRecentPoller: false,
+	})
+	defer cleanup()
+
 	// Add a task to trigger the metric check
-	_, _, err = pm.AddTask(context.Background(), addTaskParams{
+	_, _, err := pm.AddTask(context.Background(), addTaskParams{
 		taskInfo: &persistencespb.TaskInfo{
 			NamespaceId: namespaceID,
 			RunId:       "test-run",
@@ -1008,45 +1048,14 @@ func (s *PartitionManagerTestSuite) TestNoRecentPollerMetric_NewlyLoadedPartitio
 }
 
 func (s *PartitionManagerTestSuite) TestNoRecentPollerMetric_NewlyLoadedPartitionWithRecentPollers() {
-	// Create a capturing metrics handler
-	metricsHandler := metricstest.NewCaptureHandler()
-	capture := metricsHandler.StartCapture()
-	defer metricsHandler.StopCapture(capture)
-
-	// Create a new partition manager with the capturing metrics handler
-	f, err := tqid.NewTaskQueueFamily(namespaceID, taskQueueName)
-	s.NoError(err)
-	partition := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition()
-	tqConfig := newTaskQueueConfig(partition.TaskQueue(), s.partitionMgr.engine.config, s.partitionMgr.ns.Name())
-
-	pm, err := newTaskQueuePartitionManager(s.partitionMgr.engine, s.partitionMgr.ns, partition, tqConfig, s.partitionMgr.logger, s.partitionMgr.throttledLogger, metricsHandler, s.userDataMgr)
-	s.NoError(err)
-	pm.Start()
-	defer pm.Stop(unloadCauseUnspecified)
-
-	// Simulate partition loaded 1 minute ago (less than 2 minute threshold)
-	pm.loadTime = time.Now().Add(-1 * time.Minute)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
-	err = pm.WaitUntilInitialized(ctx)
-	cancel()
-	s.NoError(err)
-
-	// Register a poller
-	pollCtx, pollCancel := context.WithTimeout(
-		context.WithValue(context.Background(), identityKey, "test-poller"),
-		100*time.Millisecond,
-	)
-	_, _, _ = pm.PollTask(pollCtx, &pollMetadata{
-		workerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
-			BuildId:       "",
-			UseVersioning: false,
-		},
+	pm, capture, cleanup := s.setupPartitionManagerWithCapture(testPartitionManagerConfig{
+		loadTime:         1 * time.Minute,
+		withRecentPoller: true,
 	})
-	pollCancel()
+	defer cleanup()
 
 	// Add a task to trigger the metric check
-	_, _, err = pm.AddTask(context.Background(), addTaskParams{
+	_, _, err := pm.AddTask(context.Background(), addTaskParams{
 		taskInfo: &persistencespb.TaskInfo{
 			NamespaceId: namespaceID,
 			RunId:       "test-run",
@@ -1061,33 +1070,15 @@ func (s *PartitionManagerTestSuite) TestNoRecentPollerMetric_NewlyLoadedPartitio
 	s.False(exists && len(recordings) > 0, "Metric should not be emitted for newly loaded partition with pollers")
 }
 
-func (s *PartitionManagerTestSuite) TestNoRecentPollerMetric_OldPartitionNoPollers() {
-	// Create a capturing metrics handler
-	metricsHandler := metricstest.NewCaptureHandler()
-	capture := metricsHandler.StartCapture()
-	defer metricsHandler.StopCapture(capture)
-
-	// Create a new partition manager with the capturing metrics handler
-	f, err := tqid.NewTaskQueueFamily(namespaceID, taskQueueName)
-	s.NoError(err)
-	partition := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition()
-	tqConfig := newTaskQueueConfig(partition.TaskQueue(), s.partitionMgr.engine.config, s.partitionMgr.ns.Name())
-
-	pm, err := newTaskQueuePartitionManager(s.partitionMgr.engine, s.partitionMgr.ns, partition, tqConfig, s.partitionMgr.logger, s.partitionMgr.throttledLogger, metricsHandler, s.userDataMgr)
-	s.NoError(err)
-	pm.Start()
-	defer pm.Stop(unloadCauseUnspecified)
-
-	// Simulate partition loaded 3 minutes ago (more than 2 minute threshold)
-	pm.loadTime = time.Now().Add(-3 * time.Minute)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
-	err = pm.WaitUntilInitialized(ctx)
-	cancel()
-	s.NoError(err)
+func (s *PartitionManagerTestSuite) TestNoRecentPollerMetric_OldPartitionWithNoPollers() {
+	pm, capture, cleanup := s.setupPartitionManagerWithCapture(testPartitionManagerConfig{
+		loadTime:         3 * time.Minute,
+		withRecentPoller: false,
+	})
+	defer cleanup()
 
 	// Add a task to trigger the metric check
-	_, _, err = pm.AddTask(context.Background(), addTaskParams{
+	_, _, err := pm.AddTask(context.Background(), addTaskParams{
 		taskInfo: &persistencespb.TaskInfo{
 			NamespaceId: namespaceID,
 			RunId:       "test-run",
@@ -1104,45 +1095,14 @@ func (s *PartitionManagerTestSuite) TestNoRecentPollerMetric_OldPartitionNoPolle
 }
 
 func (s *PartitionManagerTestSuite) TestNoRecentPollerMetric_OldPartitionWithRecentPollers() {
-	// Create a capturing metrics handler
-	metricsHandler := metricstest.NewCaptureHandler()
-	capture := metricsHandler.StartCapture()
-	defer metricsHandler.StopCapture(capture)
-
-	// Create a new partition manager with the capturing metrics handler
-	f, err := tqid.NewTaskQueueFamily(namespaceID, taskQueueName)
-	s.NoError(err)
-	partition := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition()
-	tqConfig := newTaskQueueConfig(partition.TaskQueue(), s.partitionMgr.engine.config, s.partitionMgr.ns.Name())
-
-	pm, err := newTaskQueuePartitionManager(s.partitionMgr.engine, s.partitionMgr.ns, partition, tqConfig, s.partitionMgr.logger, s.partitionMgr.throttledLogger, metricsHandler, s.userDataMgr)
-	s.NoError(err)
-	pm.Start()
-	defer pm.Stop(unloadCauseUnspecified)
-
-	// Simulate partition loaded 3 minutes ago (more than 2 minute threshold)
-	pm.loadTime = time.Now().Add(-3 * time.Minute)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
-	err = pm.WaitUntilInitialized(ctx)
-	cancel()
-	s.NoError(err)
-
-	// Register a poller
-	pollCtx, pollCancel := context.WithTimeout(
-		context.WithValue(context.Background(), identityKey, "test-poller"),
-		100*time.Millisecond,
-	)
-	_, _, _ = pm.PollTask(pollCtx, &pollMetadata{
-		workerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
-			BuildId:       "",
-			UseVersioning: false,
-		},
+	pm, capture, cleanup := s.setupPartitionManagerWithCapture(testPartitionManagerConfig{
+		loadTime:         3 * time.Minute,
+		withRecentPoller: true,
 	})
-	pollCancel()
+	defer cleanup()
 
 	// Add a task to trigger the metric check
-	_, _, err = pm.AddTask(context.Background(), addTaskParams{
+	_, _, err := pm.AddTask(context.Background(), addTaskParams{
 		taskInfo: &persistencespb.TaskInfo{
 			NamespaceId: namespaceID,
 			RunId:       "test-run",
@@ -1151,7 +1111,7 @@ func (s *PartitionManagerTestSuite) TestNoRecentPollerMetric_OldPartitionWithRec
 	})
 	s.NoError(err)
 
-	// Verify metric was NOT emitted because of recent poller
+	// Verify metric was NOT emitted because of recent pollers being present
 	snapshot := capture.Snapshot()
 	recordings, exists := snapshot[metrics.NoRecentPollerTasksPerTaskQueueCounter.Name()]
 	s.False(exists, "No recordings should exist when there are no recent pollers")
