@@ -1064,6 +1064,7 @@ var (
 	DynamicWorkerPoolSchedulerDequeuedTasks = NewCounterDef("dynamic_worker_pool_scheduler_dequeued_tasks")
 	DynamicWorkerPoolSchedulerRejectedTasks = NewCounterDef("dynamic_worker_pool_scheduler_rejected_tasks")
 	PausedActivitiesCounter                 = NewCounterDef("paused_activities")
+	ExternalPayloadUploadSize               = NewBytesHistogramDef("external_payload_upload_size", WithDescription("The histogram of sizes in bytes of uploaded external payloads."))
 
 	// Deadlock detector metrics
 	DDSuspectedDeadlocks                 = NewCounterDef("dd_suspected_deadlocks")
