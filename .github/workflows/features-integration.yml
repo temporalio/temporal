@@ -95,6 +95,19 @@ jobs:
       version-is-repo-ref: false
       docker-image-artifact-name: temporal-server-docker
 
+  feature-tests-go-chasm-scheduler:
+    needs: build-docker-image
+    uses: temporalio/features/.github/workflows/go.yaml@main
+    with:
+      version: __latest_features_docker_image__
+      version-is-repo-ref: false
+      docker-image-artifact-name: temporal-server-docker
+      dynamic-config-values: |
+        history.enableChasm:
+          - value: true
+        history.enableCHASMSchedulerCreation:
+          - value: true
+
   feature-tests-python:
     needs: build-docker-image
     uses: temporalio/features/.github/workflows/python.yaml@main
@@ -124,6 +137,7 @@ jobs:
     needs:
       - feature-tests-ts
       - feature-tests-go
+      - feature-tests-go-chasm-scheduler
       - feature-tests-python
       - feature-tests-java
       - feature-tests-dotnet
