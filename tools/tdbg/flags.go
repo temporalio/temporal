@@ -12,6 +12,8 @@ var (
 	FlagWorkflowIDAlias            = []string{"wid"}
 	FlagRunID                      = "run-id"
 	FlagRunIDAlias                 = []string{"rid"}
+	FlagBusinessID                 = "business-id"
+	FlagBusinessIDAlias            = []string{"bid", FlagWorkflowID, FlagWorkflowIDAlias[0]}
 	FlagArchetype                  = "archetype"
 	FlagNumberOfShards             = "number-of-shards"
 	FlagMinEventID                 = "min-event-id"
