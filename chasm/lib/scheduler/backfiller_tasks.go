@@ -191,6 +191,8 @@ func (b *BackfillerTaskExecutor) processTrigger(
 	nowpb := backfiller.GetLastProcessedTime()
 	now := nowpb.AsTime()
 	requestID := generateRequestID(scheduler, backfiller.GetBackfillId(), now, now)
+	nominalTimeSec := now.Truncate(time.Second)
+	workflowID := fmt.Sprintf("%s-%s", scheduler.WorkflowID(), nominalTimeSec.Format(time.RFC3339))
 	result.BufferedStarts = []*schedulespb.BufferedStart{
 		{
 			NominalTime:   nowpb,
@@ -199,6 +201,7 @@ func (b *BackfillerTaskExecutor) processTrigger(
 			OverlapPolicy: overlapPolicy,
 			Manual:        true,
 			RequestId:     requestID,
+			WorkflowId:    workflowID,
 		},
 	}
 	result.Complete = true

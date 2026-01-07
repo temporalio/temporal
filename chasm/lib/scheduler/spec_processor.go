@@ -120,9 +120,11 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 	for next, err = s.NextTime(scheduler, start); err == nil && (!next.Next.IsZero() && !next.Next.After(end)); next, err = s.NextTime(scheduler, next.Next) {
 		lastAction = next.Next
 
-		if scheduler.Info.UpdateTime.AsTime().After(next.Next) {
+		if scheduler.Info.UpdateTime.AsTime().After(next.Next) && !manual {
 			// If we've received an update that took effect after the LastProcessedTime high
 			// water mark, discard actions that were scheduled to kick off before the update.
+			// Skip this check for manual (backfill) actions since they explicitly request
+			// past times.
 			s.logger.Warn("ProcessBuffer skipped an action due to update time",
 				tag.NewTimeTag("updateTime", scheduler.Info.UpdateTime.AsTime()),
 				tag.NewTimeTag("droppedActionTime", next.Next))
