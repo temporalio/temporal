@@ -23,10 +23,10 @@ func getCommands(
 ) []*cli.Command {
 	return []*cli.Command{
 		{
-			Name:        "workflow",
-			Aliases:     []string{"w"},
-			Usage:       "Run admin operation on workflow",
-			Subcommands: newAdminWorkflowCommands(clientFactory, prompterFactory),
+			Name:        "execution",
+			Aliases:     []string{"e", "w", "workflow"},
+			Usage:       "Run admin operation on an execution (workflow)",
+			Subcommands: newAdminExecutionCommands(clientFactory, prompterFactory),
 		},
 		{
 			Name:        "shard",
@@ -72,7 +72,7 @@ func getCommands(
 	}
 }
 
-func newAdminWorkflowCommands(clientFactory ClientFactory, prompterFactory PrompterFactory) []*cli.Command {
+func newAdminExecutionCommands(clientFactory ClientFactory, prompterFactory PrompterFactory) []*cli.Command {
 	return []*cli.Command{
 		{
 			Name:  "import",
@@ -138,17 +138,17 @@ func newAdminWorkflowCommands(clientFactory ClientFactory, prompterFactory Promp
 		{
 			Name:    "describe",
 			Aliases: []string{"d"},
-			Usage:   "Describe internal information of workflow execution",
+			Usage:   "Describe internal information of Temporal execution",
 			Flags: []cli.Flag{
 				&cli.StringFlag{
-					Name:    FlagWorkflowID,
-					Aliases: FlagWorkflowIDAlias,
-					Usage:   "Workflow ID",
+					Name:    FlagBusinessID,
+					Aliases: FlagBusinessIDAlias,
+					Usage:   "Business ID (Workflow ID)",
 				},
 				&cli.StringFlag{
 					Name:    FlagRunID,
 					Aliases: FlagRunIDAlias,
-					Usage:   "Run ID",
+					Usage:   "Run ID (optional, uses latest if not specified)",
 				},
 				&cli.StringFlag{
 					Name:        FlagArchetype,
@@ -157,7 +157,7 @@ func newAdminWorkflowCommands(clientFactory ClientFactory, prompterFactory Promp
 				},
 			},
 			Action: func(c *cli.Context) error {
-				return AdminDescribeWorkflow(c, clientFactory)
+				return AdminDescribeExecution(c, clientFactory)
 			},
 		},
 		{

@@ -3,6 +3,7 @@ package scheduler
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -19,6 +20,7 @@ import (
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/worker/scheduler"
@@ -68,6 +70,9 @@ const (
 
 	// Field in which the schedule's memo is stored.
 	visibilityMemoFieldInfo = "ScheduleInfo"
+
+	// Maximum number of matching times to return.
+	maxListMatchingTimesCount = 1000
 )
 
 var (
@@ -594,6 +599,44 @@ func cleanSpec(spec *schedulepb.ScheduleSpec) {
 	for _, structured := range spec.ExcludeStructuredCalendar {
 		cleanCal(structured)
 	}
+}
+
+// ListMatchingTimes returns the upcoming times that the schedule will trigger
+// within the given time range.
+func (s *Scheduler) ListMatchingTimes(
+	ctx chasm.Context,
+	req *schedulerpb.ListScheduleMatchingTimesRequest,
+	specBuilder *scheduler.SpecBuilder,
+) (*schedulerpb.ListScheduleMatchingTimesResponse, error) {
+	if s.Closed {
+		return nil, ErrClosed
+	}
+
+	frontendReq := req.FrontendRequest
+	if frontendReq == nil || frontendReq.StartTime == nil || frontendReq.EndTime == nil {
+		return nil, errors.New("missing or invalid query")
+	}
+
+	cspec, err := s.getCompiledSpec(specBuilder)
+	if err != nil {
+		return nil, fmt.Errorf("invalid schedule: %w", err)
+	}
+
+	var out []*timestamppb.Timestamp
+	t1 := timestamp.TimeValue(frontendReq.StartTime)
+	for i := 0; i < maxListMatchingTimesCount; i++ {
+		t1 = cspec.GetNextTime(s.jitterSeed(), t1).Next
+		if t1.IsZero() || t1.After(timestamp.TimeValue(frontendReq.EndTime)) {
+			break
+		}
+		out = append(out, timestamppb.New(t1))
+	}
+
+	return &schedulerpb.ListScheduleMatchingTimesResponse{
+		FrontendResponse: &workflowservice.ListScheduleMatchingTimesResponse{
+			StartTime: out,
+		},
+	}, nil
 }
 
 // Delete marks the Scheduler as closed without an idle timer.
