@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/codec"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
@@ -241,23 +242,37 @@ func AdminImportWorkflow(c *cli.Context, clientFactory ClientFactory) error {
 	return nil
 }
 
-// AdminDescribeWorkflow describe a new workflow execution for admin
-func AdminDescribeWorkflow(c *cli.Context, clientFactory ClientFactory) error {
+// AdminDescribeExecution describes a Temporal execution (CHASM tree or workflow).
+func AdminDescribeExecution(c *cli.Context, clientFactory ClientFactory) error {
 	resp, err := describeMutableState(c, clientFactory)
 	if err != nil {
 		return err
 	}
+	if resp == nil {
+		return errors.New("no mutable state returned")
+	}
 
-	if resp != nil {
-		// nolint:errcheck // assuming that write will succeed.
-		fmt.Fprintln(c.App.Writer, color.GreenString("Cache mutable state:"))
-		if resp.GetCacheMutableState() != nil {
-			prettyPrintJSONObject(c, resp.GetCacheMutableState())
-		}
+	// nolint:errcheck // assuming that write will succeed.
+	fmt.Fprintln(c.App.Writer, color.GreenString("Cache mutable state:"))
+	if resp.GetCacheMutableState() != nil {
+		prettyPrintJSONObject(c, resp.GetCacheMutableState())
+	}
+	if resp.GetDatabaseMutableState() != nil {
 		// nolint:errcheck // assuming that write will succeed.
 		fmt.Fprintln(c.App.Writer, color.GreenString("Database mutable state:"))
 		prettyPrintJSONObject(c, resp.GetDatabaseMutableState())
+	}
 
+	// CHASM executions also print their tree.
+	if len(resp.GetDatabaseMutableState().GetChasmNodes()) > 0 {
+		err := dumpChasmTree(resp, c)
+		if err != nil {
+			// nolint:errcheck // assuming that write will succeed.
+			fmt.Fprintln(c.App.Writer, color.RedString("Unable to dump CHASM tree:"), err)
+		}
+	}
+
+	if resp.GetDatabaseMutableState() != nil {
 		// nolint:errcheck // assuming that write will succeed.
 		fmt.Fprintln(c.App.Writer, color.GreenString("Current branch token:"))
 		versionHistories := resp.GetDatabaseMutableState().GetExecutionInfo().GetVersionHistories()
@@ -276,12 +291,36 @@ func AdminDescribeWorkflow(c *cli.Context, clientFactory ClientFactory) error {
 				prettyPrintJSONObject(c, &currentBranchToken)
 			}
 		}
-
-		// nolint:errcheck // assuming that write will succeed.
-		fmt.Fprintf(c.App.Writer, "History service address: %s\n", resp.GetHistoryAddr())
-		// nolint:errcheck // assuming that write will succeed.
-		fmt.Fprintf(c.App.Writer, "Shard Id: %s\n", resp.GetShardId())
 	}
+
+	// nolint:errcheck // assuming that write will succeed.
+	fmt.Fprintf(c.App.Writer, "History service address: %s\n", resp.GetHistoryAddr())
+	// nolint:errcheck // assuming that write will succeed.
+	fmt.Fprintf(c.App.Writer, "Shard Id: %s\n", resp.GetShardId())
+
+	return nil
+}
+
+func dumpChasmTree(resp *adminservice.DescribeMutableStateResponse, c *cli.Context) error {
+	chasmNodes := resp.GetDatabaseMutableState().GetChasmNodes()
+	if len(chasmNodes) == 0 {
+		return nil
+	}
+
+	logger := log.NewNoopLogger()
+	registry, err := newChasmRegistry(logger)
+	if err != nil {
+		return fmt.Errorf("failed to create CHASM registry: %w", err)
+	}
+
+	decodedNodes, err := decodeChasmNodes(chasmNodes, registry)
+	if err != nil {
+		return fmt.Errorf("failed to decode CHASM nodes: %w", err)
+	}
+
+	fmt.Fprintln(c.App.Writer, color.GreenString("CHASM Tree Nodes:")) // nolint:errcheck // assuming that write will succeed.
+	prettyPrintJSONObject(c, decodedNodes)
+
 	return nil
 }
 
@@ -292,7 +331,7 @@ func describeMutableState(c *cli.Context, clientFactory ClientFactory) (*adminse
 	if err != nil {
 		return nil, err
 	}
-	wid, err := getRequiredOption(c, FlagWorkflowID)
+	bid, err := getRequiredOption(c, FlagBusinessID)
 	if err != nil {
 		return nil, err
 	}
@@ -304,13 +343,13 @@ func describeMutableState(c *cli.Context, clientFactory ClientFactory) (*adminse
 	resp, err := adminClient.DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
 		Namespace: namespace,
 		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: wid,
+			WorkflowId: bid,
 			RunId:      rid,
 		},
 		Archetype: getArchetypeWithDefault(c, chasm.WorkflowArchetype),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("unable to get Workflow Mutable State: %s", err)
+		return nil, fmt.Errorf("unable to get Mutable State: %s", err)
 	}
 	return resp, nil
 }
