@@ -10,6 +10,13 @@ import (
 	"go.temporal.io/server/common/rpc/interceptor"
 )
 
+var ChasmNexusEnabled = dynamicconfig.NewGlobalBoolSetting(
+	"chasm.nexusoperation.enabled",
+	false,
+	`ChasmNexusEnabled is the feature flag that controls whether the legacy HSM-based implementation (when 
+flag is false; default) or the newer CHASM-based implementation of Nexus will be used`,
+)
+
 var RequestTimeout = dynamicconfig.NewDestinationDurationSetting(
 	"chasm.nexusoperation.request.timeout",
 	time.Second*10,
@@ -161,6 +168,7 @@ NexusOperationCancelRequestFailed events. Default true.`,
 
 type Config struct {
 	Enabled                             dynamicconfig.BoolPropertyFn
+	ChasmEnabled                        dynamicconfig.BoolPropertyFn
 	RequestTimeout                      dynamicconfig.DurationPropertyFnWithDestinationFilter
 	MinRequestTimeout                   dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	MaxConcurrentOperations             dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -180,6 +188,7 @@ type Config struct {
 func configProvider(dc *dynamicconfig.Collection) *Config {
 	return &Config{
 		Enabled:                             dynamicconfig.EnableNexus.Get(dc),
+		ChasmEnabled:                        ChasmNexusEnabled.Get(dc),
 		RequestTimeout:                      RequestTimeout.Get(dc),
 		MinRequestTimeout:                   MinRequestTimeout.Get(dc),
 		MaxConcurrentOperations:             MaxConcurrentOperations.Get(dc),
