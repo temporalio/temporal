@@ -279,7 +279,7 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 				return nil, err
 			}
 
-			verifyCompletionRecorded = verifyCompletionRecorded && !ndc.IsTerminatedByResetter(completionEvent)
+			verifyCompletionRecorded = !ndc.IsTerminatedByResetter(completionEvent)
 		}
 
 		if verifyCompletionRecorded {
