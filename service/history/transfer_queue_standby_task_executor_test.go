@@ -850,7 +850,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCloseExecution() {
 	randomErr := errors.New("some random error")
 	s.mockHistoryClient.EXPECT().VerifyChildExecutionCompletionRecorded(gomock.Any(), expectedVerificationWithResendParentRequest).Return(nil, randomErr)
 	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
-	s.True(errors.As(resp.ExecutionErr, &verificationErr))
+	s.ErrorAs(resp.ExecutionErr, &verificationErr)
 	s.Equal(randomErr, verificationErr.Unwrap())
 }
 
@@ -1214,7 +1214,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_P
 	randomErr := errors.New("some random error")
 	s.mockHistoryClient.EXPECT().VerifyFirstWorkflowTaskScheduled(gomock.Any(), gomock.Any()).Return(nil, randomErr)
 	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
-	s.True(errors.As(resp.ExecutionErr, &verificationErr))
+	s.ErrorAs(resp.ExecutionErr, &verificationErr)
 	s.Equal(randomErr, verificationErr.Unwrap())
 
 	s.mockHistoryClient.EXPECT().VerifyFirstWorkflowTaskScheduled(gomock.Any(), gomock.Any()).Return(nil, nil)
