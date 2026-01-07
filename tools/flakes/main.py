@@ -14,17 +14,19 @@ def get_test_contributors(
     find_test_lines_bin: Optional[str] = None,
     commit: str = "HEAD",
     repo_root: Optional[str] = None,
-) -> Dict[str, List[Dict[str, Any]]]:
+) -> tuple[Dict[str, List[Dict[str, Any]]], Optional[str]]:
     """
     Get contributors for a list of test names using the find-test-lines tool.
-    Returns a dict mapping test_path -> list of contributors.
+    Returns a tuple of (dict mapping test_path -> list of contributors, error_message).
+    error_message is None on success, or a string describing the failure.
     """
     if not find_test_lines_bin or not test_names:
-        return {}
+        return {}, None
 
     if not os.path.exists(find_test_lines_bin):
-        print(f"Warning: find-test-lines binary not found at {find_test_lines_bin}", file=sys.stderr)
-        return {}
+        msg = f"find-test-lines binary not found at {find_test_lines_bin}"
+        print(f"Warning: {msg}", file=sys.stderr)
+        return {}, msg
 
     # Write test names to a temp file
     test_paths_file = "out/test_paths.txt"
@@ -64,8 +66,9 @@ def get_test_contributors(
         )
 
         if result.returncode != 0:
-            print(f"Warning: find-test-lines failed: {result.stderr}", file=sys.stderr)
-            return {}
+            msg = f"find-test-lines failed: {result.stderr}"
+            print(f"Warning: {msg}", file=sys.stderr)
+            return {}, msg
 
         # Parse JSON output
         results = json.loads(result.stdout)
@@ -76,17 +79,20 @@ def get_test_contributors(
             if test_path and contributors:
                 contributors_map[test_path] = contributors
 
-        return contributors_map
+        return contributors_map, None
 
     except subprocess.TimeoutExpired:
-        print("Warning: find-test-lines timed out", file=sys.stderr)
-        return {}
+        msg = "find-test-lines timed out"
+        print(f"Warning: {msg}", file=sys.stderr)
+        return {}, msg
     except json.JSONDecodeError as e:
-        print(f"Warning: failed to parse find-test-lines output: {e}", file=sys.stderr)
-        return {}
+        msg = f"failed to parse find-test-lines output: {e}"
+        print(f"Warning: {msg}", file=sys.stderr)
+        return {}, msg
     except Exception as e:
-        print(f"Warning: error running find-test-lines: {e}", file=sys.stderr)
-        return {}
+        msg = f"error running find-test-lines: {e}"
+        print(f"Warning: {msg}", file=sys.stderr)
+        return {}, msg
 
 
 def format_contributors(contributors: List[Dict[str, Any]], max_contributors: int = 5) -> str:
@@ -205,6 +211,7 @@ def process_flaky(
     output_file: str,
     max_links: int = 3,
     contributors_map: Optional[Dict[str, List[Dict[str, Any]]]] = None,
+    contributor_error: Optional[str] = None,
 ) -> List[str]:
     """
     Process flaky test data and write output files.
@@ -281,6 +288,10 @@ def process_flaky(
             slack_lines.append(f"• {item['count']} failures: `{item['name']}` ({contrib_str})\n")
         else:
             slack_lines.append(f"• {item['count']} failures: `{item['name']}`\n")
+
+    # Add error message if contributor lookup failed
+    if contributor_error:
+        slack_lines.append(f"\n_Note: Contributor lookup failed: {contributor_error}_\n")
 
     with open(slack_file, "w") as outfile:
         outfile.writelines(slack_lines)
@@ -544,14 +555,17 @@ def process_json_file(
 
     # Look up contributors if the tool is available
     contributors_map = {}
+    contributor_error = None
     if find_test_lines_bin and test_names:
         print(f"Looking up contributors for {len(test_names)} flaky tests...")
-        contributors_map = get_test_contributors(test_names, find_test_lines_bin, commit)
-        print(f"Found contributors for {len(contributors_map)} tests")
+        contributors_map, contributor_error = get_test_contributors(test_names, find_test_lines_bin, commit)
+        if contributor_error:
+            print(f"Contributor lookup failed: {contributor_error}")
+        else:
+            print(f"Found contributors for {len(contributors_map)} tests")
 
-        # Re-process flaky tests with contributors
-        if contributors_map:
-            process_flaky(data, "out/flaky.txt", max_links, contributors_map)
+        # Re-process flaky tests with contributors (or error message)
+        process_flaky(data, "out/flaky.txt", max_links, contributors_map, contributor_error)
 
     process_tests(data, "(timeout)", "out/timeout.txt", max_links)
     process_tests(data, "(retry 2)", "out/retry.txt", max_links)
