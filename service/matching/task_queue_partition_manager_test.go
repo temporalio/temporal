@@ -983,12 +983,12 @@ func (s *PartitionManagerTestSuite) setupPartitionManagerWithCapture(
 
 	// Create a new partition manager with the capturing metrics handler
 	f, err := tqid.NewTaskQueueFamily(namespaceID, taskQueueName)
-	s.NoError(err)
+	s.Require().NoError(err)
 	partition := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition()
 	tqConfig := newTaskQueueConfig(partition.TaskQueue(), s.partitionMgr.engine.config, s.partitionMgr.ns.Name())
 
 	pm, err := newTaskQueuePartitionManager(s.partitionMgr.engine, s.partitionMgr.ns, partition, tqConfig, s.partitionMgr.logger, s.partitionMgr.throttledLogger, metricsHandler, s.userDataMgr)
-	s.NoError(err)
+	s.Require().NoError(err)
 	pm.Start()
 
 	// Simulate partition loaded at specified time in the past
@@ -1039,7 +1039,7 @@ func (s *PartitionManagerTestSuite) TestNoRecentPollerMetric_NewlyLoadedPartitio
 			WorkflowId:  "test-workflow",
 		},
 	})
-	s.NoError(err)
+	s.Require().NoError(err)
 
 	// Verify metric was NOT emitted for newly loaded partition
 	snapshot := capture.Snapshot()
@@ -1062,7 +1062,7 @@ func (s *PartitionManagerTestSuite) TestNoRecentPollerMetric_NewlyLoadedPartitio
 			WorkflowId:  "test-workflow",
 		},
 	})
-	s.NoError(err)
+	s.Require().NoError(err)
 
 	// Verify metric was NOT emitted for newly loaded partition even with pollers
 	snapshot := capture.Snapshot()
@@ -1085,7 +1085,7 @@ func (s *PartitionManagerTestSuite) TestNoRecentPollerMetric_OldPartitionWithNoP
 			WorkflowId:  "test-workflow",
 		},
 	})
-	s.NoError(err)
+	s.Require().NoError(err)
 
 	// Verify metric WAS emitted for old partition with no pollers
 	snapshot := capture.Snapshot()
@@ -1109,13 +1109,13 @@ func (s *PartitionManagerTestSuite) TestNoRecentPollerMetric_OldPartitionWithRec
 			WorkflowId:  "test-workflow",
 		},
 	})
-	s.NoError(err)
+	s.Require().NoError(err)
 
 	// Verify metric was NOT emitted because of recent pollers being present
 	snapshot := capture.Snapshot()
 	recordings, exists := snapshot[metrics.NoRecentPollerTasksPerTaskQueueCounter.Name()]
 	s.False(exists, "No recordings should exist when there are no recent pollers")
-	s.Equal(len(recordings), 0, "Metric should not be emitted when there are recent pollers")
+	s.Empty(recordings, "Metric should not be emitted when there are recent pollers")
 }
 
 type mockUserDataManager struct {
