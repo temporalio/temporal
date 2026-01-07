@@ -46,7 +46,7 @@ jobs:
 
       - name: Build find-test-lines
         run: |
-          cd .github/actions/find-test-lines
+          cd .github/scripts/find-test-lines
           go build -o find-test-lines .
           echo "Built find-test-lines binary"
 
@@ -99,7 +99,7 @@ jobs:
           REF_NAME: ${{ github.ref_name }}
           SHA: ${{ github.sha }}
           MAX_LINKS_PARAM: ${{ github.event.inputs.max_links || '3' }}
-          FIND_TEST_LINES_BIN: ${{ github.workspace }}/.github/actions/find-test-lines/find-test-lines
+          FIND_TEST_LINES_BIN: ${{ github.workspace }}/.github/scripts/find-test-lines/find-test-lines
         run: |
           set -x
           cd tools/flakes && uv run main.py \
