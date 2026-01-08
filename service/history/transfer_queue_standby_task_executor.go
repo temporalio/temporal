@@ -290,22 +290,30 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 
 			resendParent := now.After(localVerificationTime) && mutableState.IsTransitionHistoryEnabled() && mutableState.CurrentVersionedTransition() != nil
 
+			// Copy needed values from executionInfo before releasing mutable state
+			parentNamespaceID := executionInfo.ParentNamespaceId
+			parentWorkflowID := executionInfo.ParentWorkflowId
+			parentRunID := executionInfo.ParentRunId
+			parentInitiatedID := executionInfo.ParentInitiatedId
+			parentInitiatedVersion := executionInfo.ParentInitiatedVersion
+			parentClock := executionInfo.ParentClock
+
 			// no need for mutable state anymore, release workflow lock
 			release(nil)
 
 			_, err := t.historyRawClient.VerifyChildExecutionCompletionRecorded(ctx, &historyservice.VerifyChildExecutionCompletionRecordedRequest{
-				NamespaceId: executionInfo.ParentNamespaceId,
+				NamespaceId: parentNamespaceID,
 				ParentExecution: &commonpb.WorkflowExecution{
-					WorkflowId: executionInfo.ParentWorkflowId,
-					RunId:      executionInfo.ParentRunId,
+					WorkflowId: parentWorkflowID,
+					RunId:      parentRunID,
 				},
 				ChildExecution: &commonpb.WorkflowExecution{
 					WorkflowId: transferTask.WorkflowID,
 					RunId:      transferTask.RunID,
 				},
-				ParentInitiatedId:      executionInfo.ParentInitiatedId,
-				ParentInitiatedVersion: executionInfo.ParentInitiatedVersion,
-				Clock:                  executionInfo.ParentClock,
+				ParentInitiatedId:      parentInitiatedID,
+				ParentInitiatedVersion: parentInitiatedVersion,
+				Clock:                  parentClock,
 				ResendParent:           resendParent,
 			})
 			switch err.(type) {
@@ -317,9 +325,9 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 				// Returning a non-nil pointer as postActionInfo here to indicate that verification is not done yet.
 				return &verifyCompletionRecordedPostActionInfo{
 					parentWorkflowKey: &definition.WorkflowKey{
-						NamespaceID: executionInfo.ParentNamespaceId,
-						WorkflowID:  executionInfo.ParentWorkflowId,
-						RunID:       executionInfo.ParentRunId,
+						NamespaceID: parentNamespaceID,
+						WorkflowID:  parentWorkflowID,
+						RunID:       parentRunID,
 					},
 				}, nil
 			default:
@@ -435,6 +443,13 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 		childStarted := childWorkflowInfo.StartedEventId != common.EmptyEventID
 		childAbandon := childWorkflowInfo.ParentClosePolicy == enumspb.PARENT_CLOSE_POLICY_ABANDON
 
+		// Copy needed values from childWorkflowInfo before releasing mutable state
+		targetNamespaceID := childWorkflowInfo.NamespaceId
+		targetNamespaceName := namespace.Name(childWorkflowInfo.Namespace)
+		startedWorkflowID := childWorkflowInfo.StartedWorkflowId
+		startedRunID := childWorkflowInfo.StartedRunId
+		childClock := childWorkflowInfo.Clock
+
 		// no need for mutable state anymore, release workflow lock
 		release(nil)
 
@@ -451,12 +466,11 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 			return &struct{}{}, nil
 		}
 
-		targetNamespaceID := childWorkflowInfo.NamespaceId
 		if targetNamespaceID == "" {
 			// This is for backward compatibility.
 			// Old mutable state may not have the target namespace ID set in childWorkflowInfo.
 
-			targetNamespaceEntry, err := t.registry.GetNamespace(namespace.Name(childWorkflowInfo.Namespace))
+			targetNamespaceEntry, err := t.registry.GetNamespace(targetNamespaceName)
 			if err != nil {
 				return nil, err
 			}
@@ -466,10 +480,10 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 		_, err = t.historyRawClient.VerifyFirstWorkflowTaskScheduled(ctx, &historyservice.VerifyFirstWorkflowTaskScheduledRequest{
 			NamespaceId: targetNamespaceID,
 			WorkflowExecution: &commonpb.WorkflowExecution{
-				WorkflowId: childWorkflowInfo.StartedWorkflowId,
-				RunId:      childWorkflowInfo.StartedRunId,
+				WorkflowId: startedWorkflowID,
+				RunId:      startedRunID,
 			},
-			Clock: childWorkflowInfo.Clock,
+			Clock: childClock,
 		})
 		switch err.(type) {
 		case nil, *serviceerror.NamespaceNotFound, *serviceerror.Unimplemented:
