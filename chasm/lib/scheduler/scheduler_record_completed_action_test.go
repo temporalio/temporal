@@ -112,12 +112,27 @@ func TestRecordCompletedAction_MultipleWorkflows(t *testing.T) {
 			invoker := sched.Invoker.Get(ctx)
 			require.Len(t, invoker.BufferedStarts, 2)
 
-			// First workflow should be completed
-			require.NotNil(t, invoker.BufferedStarts[0].Completed)
-			require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_FAILED, invoker.BufferedStarts[0].Completed.Status)
+			// Find workflows by RequestId since applyCompletedRetention reorders
+			// (non-completed first, then completed)
+			var req1Start, req2Start *schedulespb.BufferedStart
+			for _, start := range invoker.BufferedStarts {
+				switch start.RequestId {
+				case "req-1":
+					req1Start = start
+				case "req-2":
+					req2Start = start
+				default:
+				}
+			}
+			require.NotNil(t, req1Start)
+			require.NotNil(t, req2Start)
 
-			// Second workflow should still be running
-			require.Nil(t, invoker.BufferedStarts[1].Completed)
+			// First workflow (req-1) should be completed
+			require.NotNil(t, req1Start.Completed)
+			require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_FAILED, req1Start.Completed.Status)
+
+			// Second workflow (req-2) should still be running
+			require.Nil(t, req2Start.Completed)
 		},
 	}
 
@@ -160,8 +175,19 @@ func TestRecordCompletedAction_UpdatesDesiredTimeOnNextPending(t *testing.T) {
 			invoker := sched.Invoker.Get(ctx)
 			require.Len(t, invoker.BufferedStarts, 2)
 
-			// Second start (pending) should have DesiredTime updated to closeTime
-			require.Equal(t, closeTime.Unix(), invoker.BufferedStarts[1].DesiredTime.AsTime().Unix())
+			// Find the pending start (req-2) by RequestId since applyCompletedRetention reorders
+			// (non-completed first, then completed)
+			var req2Start *schedulespb.BufferedStart
+			for _, start := range invoker.BufferedStarts {
+				if start.RequestId == "req-2" {
+					req2Start = start
+					break
+				}
+			}
+			require.NotNil(t, req2Start)
+
+			// Pending start (req-2) should have DesiredTime updated to closeTime
+			require.Equal(t, closeTime.Unix(), req2Start.DesiredTime.AsTime().Unix())
 		},
 	}
 

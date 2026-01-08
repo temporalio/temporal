@@ -328,7 +328,7 @@ func (s *invokerProcessBufferTaskSuite) runProcessBufferTestCase(c *processBuffe
 
 	// Validate the results
 	// Count BufferedStarts (excluding running ones added from InitialRunningWorkflows)
-	s.Equal(c.ExpectedBufferedStarts+len(c.InitialRunningWorkflows), len(invoker.GetBufferedStarts()))
+	s.Len(invoker.GetBufferedStarts(), c.ExpectedBufferedStarts+len(c.InitialRunningWorkflows))
 
 	// Count running workflows from BufferedStarts (has RunId but no Completed)
 	runningCount := 0
