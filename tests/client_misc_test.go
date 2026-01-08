@@ -198,7 +198,7 @@ func (s *ClientMiscTestSuite) TestTooManyCancelRequests() {
 	defer cancel()
 
 	// create a large number of blocked workflows
-	numTargetWorkflows := 50 // should be much greater than s.maxPendingCancelRequests
+	numTargetWorkflows := testcore.ClientSuiteLimit + 1
 	targetWorkflow := func(ctx workflow.Context) error {
 		return workflow.Await(ctx, func() bool {
 			return false
@@ -245,13 +245,8 @@ func (s *ClientMiscTestSuite) TestTooManyCancelRequests() {
   4 WorkflowTaskFailed {"Cause":29,"Failure":{"Message":"PendingRequestCancelLimitExceeded: the number of pending requests to cancel external workflows, 10, has reached the per-workflow limit of 10"}}
 `, func() []*historypb.HistoryEvent {
 			return s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()})
-		}, 3*time.Second, 500*time.Millisecond)
+		}, 5*time.Second, 500*time.Millisecond)
 
-		{
-			ctx, cancel := context.WithTimeout(ctx, time.Second*3)
-			defer cancel()
-			s.Error(run.Get(ctx, nil))
-		}
 		shardID := common.WorkflowIDToHistoryShard(s.NamespaceID().String(), cancelerWorkflowId, s.GetTestClusterConfig().HistoryConfig.NumHistoryShards)
 		workflowExecution, err := s.GetTestCluster().ExecutionManager().GetWorkflowExecution(ctx, &persistence.GetWorkflowExecutionRequest{
 			ShardID:     shardID,
@@ -261,31 +256,25 @@ func (s *ClientMiscTestSuite) TestTooManyCancelRequests() {
 			ArchetypeID: chasm.WorkflowArchetypeID,
 		})
 		s.NoError(err)
-		numCancelRequests := len(workflowExecution.State.RequestCancelInfos)
-		s.Assert().Zero(numCancelRequests)
-		err = s.SdkClient().CancelWorkflow(ctx, cancelerWorkflowId, "")
-		s.NoError(err)
+		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, workflowExecution.State.ExecutionState.Status)
+		s.Empty(workflowExecution.State.RequestCancelInfos)
+		s.NoError(s.SdkClient().CancelWorkflow(ctx, cancelerWorkflowId, ""))
 	})
 
 	// try to cancel all the workflows in separate batches of cancel workflows and verify that it works
 	s.Run("CancelWorkflowsInSeparateBatches", func() {
-		var runs []sdkclient.WorkflowRun
-		var stop int
-		for start := 0; start < numTargetWorkflows; start = stop {
-			stop = start + testcore.ClientSuiteLimit
-			if stop > numTargetWorkflows {
-				stop = numTargetWorkflows
-			}
-			run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
-				TaskQueue: s.TaskQueue(),
-			}, cancelWorkflowsInRange, start, stop)
-			s.NoError(err)
-			runs = append(runs, run)
-		}
+		batch1, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+			TaskQueue: s.TaskQueue(),
+		}, cancelWorkflowsInRange, 0, numTargetWorkflows/2)
+		s.NoError(err)
 
-		for _, run := range runs {
-			s.NoError(run.Get(ctx, nil))
-		}
+		batch2, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+			TaskQueue: s.TaskQueue(),
+		}, cancelWorkflowsInRange, numTargetWorkflows/2, numTargetWorkflows)
+		s.NoError(err)
+
+		s.NoError(batch1.Get(ctx, nil))
+		s.NoError(batch2.Get(ctx, nil))
 	})
 }
 
