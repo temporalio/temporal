@@ -1080,6 +1080,19 @@ func (s *scheduleFunctionalSuiteBase) TestUpdateIntervalTakesEffect() {
 	s.NoError(err)
 	s.cleanup(sid)
 
+	// Verify FutureActionTimes reflects the 300s interval.
+	describeResp, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+	})
+	s.NoError(err)
+	s.GreaterOrEqual(len(describeResp.Info.FutureActionTimes), 2, "expected at least 2 future action times")
+	// With a 300s interval, consecutive future action times should be ~300s apart.
+	firstTime := describeResp.Info.FutureActionTimes[0].AsTime()
+	secondTime := describeResp.Info.FutureActionTimes[1].AsTime()
+	intervalBefore := secondTime.Sub(firstTime)
+	s.InDelta(300, intervalBefore.Seconds(), 1, "expected ~300s between future action times before update")
+
 	// Update the interval to be very short (1s).
 	schedule.Spec.Interval[0].Interval = durationpb.New(1 * time.Second)
 	_, err = s.FrontendClient().UpdateSchedule(ctx, &workflowservice.UpdateScheduleRequest{
@@ -1090,6 +1103,19 @@ func (s *scheduleFunctionalSuiteBase) TestUpdateIntervalTakesEffect() {
 		RequestId:  uuid.NewString(),
 	})
 	s.NoError(err)
+
+	// Verify FutureActionTimes now reflects the 1s interval.
+	describeResp, err = s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+	})
+	s.NoError(err)
+	s.GreaterOrEqual(len(describeResp.Info.FutureActionTimes), 2, "expected at least 2 future action times after update")
+	// With a 1s interval, consecutive future action times should be ~1s apart.
+	firstTimeAfter := describeResp.Info.FutureActionTimes[0].AsTime()
+	secondTimeAfter := describeResp.Info.FutureActionTimes[1].AsTime()
+	intervalAfter := secondTimeAfter.Sub(firstTimeAfter)
+	s.InDelta(1, intervalAfter.Seconds(), 0.1, "expected ~1s between future action times after update")
 
 	// After updating to 1s interval, we should see runs start within a few seconds.
 	s.Eventually(
