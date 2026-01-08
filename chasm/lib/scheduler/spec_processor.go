@@ -1,7 +1,6 @@
 package scheduler
 
 import (
-	"fmt"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -141,14 +140,13 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 			continue
 		}
 
-		nominalTimeSec := next.Nominal.Truncate(time.Second)
 		bufferedStarts = append(bufferedStarts, &schedulespb.BufferedStart{
 			NominalTime:   timestamppb.New(next.Nominal),
 			ActualTime:    timestamppb.New(next.Next),
 			OverlapPolicy: overlapPolicy,
 			Manual:        manual,
 			RequestId:     generateRequestID(scheduler, backfillID, next.Nominal, next.Next),
-			WorkflowId:    fmt.Sprintf("%s-%s", workflowID, nominalTimeSec.Format(time.RFC3339)),
+			WorkflowId:    generateWorkflowID(workflowID, next.Nominal),
 		})
 
 		if limit != nil {
