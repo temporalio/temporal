@@ -5,7 +5,7 @@
 ARG ALPINE_TAG=3.23.2
 
 # Stage 1: Build all admin tool binaries
-FROM golang:1.24-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 RUN apk add --no-cache \
     make \
