@@ -5,7 +5,9 @@ package queues
 import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -200,6 +202,7 @@ func NewRateLimitedScheduler(
 	rateLimiter SchedulerRateLimiter,
 	timeSource clock.TimeSource,
 	chasmRegistry *chasm.Registry,
+	clusterMetadata cluster.Metadata,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 ) Scheduler {
@@ -218,12 +221,17 @@ func NewRateLimitedScheduler(
 	}
 
 	taskQuotaRequestFn := func(e Executable) quotas.Request {
-		namespaceName, err := namespaceRegistry.GetNamespaceName(namespace.ID(e.GetNamespaceID()))
-		if err != nil {
-			namespaceName = namespace.EmptyName
+		namespaceName := namespace.EmptyName.String()
+		ns, err := namespaceRegistry.GetNamespaceByID(namespace.ID(e.GetNamespaceID()))
+		if err == nil && ns != nil {
+			namespaceName = ns.Name().String()
+		}
+		if ns.ActiveInCluster(clusterMetadata.GetCurrentClusterName()) {
+			return quotas.NewRequest(e.GetType().String(), taskSchedulerToken, namespaceName, e.GetPriority().CallerType(), 0, "")
+		} else {
+			return quotas.NewRequest(e.GetType().String(), taskSchedulerToken, namespaceName, headers.CallerTypePreemptable, 0, "")
 		}
 
-		return quotas.NewRequest(e.GetType().String(), taskSchedulerToken, namespaceName.String(), e.GetPriority().CallerType(), 0, "")
 	}
 	taskMetricsTagsFn := func(e Executable) []metrics.Tag {
 		return append(

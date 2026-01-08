@@ -94,6 +94,7 @@ func (f *timerQueueFactory) CreateQueue(
 			f.SchedulerRateLimiter,
 			f.TimeSource,
 			f.ChasmRegistry,
+			f.ClusterMetadata,
 			logger,
 			metricsHandler,
 		)
