@@ -3397,6 +3397,14 @@ func (s *mutableStateSuite) TestCloseTransactionUpdateTransition() {
 				namespaceEntry.FailoverVersion(),
 			).Return(cluster.TestCurrentClusterName).AnyTimes()
 			s.mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+			s.mockEventsCache.EXPECT().GetEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&historypb.HistoryEvent{
+				EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
+				Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{
+					ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{
+						ActivityType: &commonpb.ActivityType{Name: "test-activity"},
+					},
+				},
+			}, nil).AnyTimes()
 			var expectedTransitionHistory []*persistencespb.VersionedTransition
 			if s.mutableState.executionInfo.TransitionHistory == nil {
 				expectedTransitionHistory = transitionhistory.CopyVersionedTransitions(s.mutableState.executionInfo.PreviousTransitionHistory)
@@ -3899,6 +3907,14 @@ func (s *mutableStateSuite) TestCloseTransactionHandleUnknownVersionedTransition
 				namespaceEntry.FailoverVersion(),
 			).Return(cluster.TestCurrentClusterName).AnyTimes()
 			s.mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+			s.mockEventsCache.EXPECT().GetEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&historypb.HistoryEvent{
+				EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
+				Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{
+					ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{
+						ActivityType: &commonpb.ActivityType{Name: "test-activity"},
+					},
+				},
+			}, nil).AnyTimes()
 
 			s.NotNil(s.mutableState.executionInfo.TransitionHistory)
 			execInfo, err := tc.txFunc(s.mutableState)
