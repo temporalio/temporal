@@ -1,6 +1,9 @@
 # Azure Pipeline Dockerfile for Temporal Admin Tools
 # Multi-stage build: compiles Go binaries and creates final image
 
+# Global build arguments (must be before any FROM)
+ARG ALPINE_TAG=3.23.2
+
 # Stage 1: Build all admin tool binaries
 FROM golang:1.24-alpine AS builder
 
@@ -27,7 +30,7 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -o /temporal-elastics
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -o /tdbg ./cmd/tools/tdbg
 
 # Stage 2: Create the final image
-ARG ALPINE_TAG=3.23.2
+ARG ALPINE_TAG
 FROM alpine:${ALPINE_TAG}
 
 RUN apk add --no-cache \

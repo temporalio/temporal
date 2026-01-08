@@ -1,6 +1,9 @@
 # Azure Pipeline Dockerfile for Temporal Server
 # Multi-stage build: compiles Go binaries and creates final image
 
+# Global build arguments (must be before any FROM)
+ARG ALPINE_TAG=3.23.2
+
 # Stage 1: Build the server binary
 FROM golang:1.24-alpine AS builder
 
@@ -24,7 +27,7 @@ ARG TARGETARCH=amd64
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -o /temporal-server ./cmd/server
 
 # Stage 2: Create the final image
-ARG ALPINE_TAG=3.23.2
+ARG ALPINE_TAG
 FROM alpine:${ALPINE_TAG}
 
 RUN apk add --no-cache \
