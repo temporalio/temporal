@@ -370,7 +370,10 @@ func (e *InvokerProcessBufferTaskExecutor) Validate(
 	attrs chasm.TaskAttributes,
 	_ *schedulerpb.InvokerProcessBufferTask,
 ) (bool, error) {
-	return validateTaskHighWaterMark(invoker.GetLastProcessedTime(), attrs.ScheduledTime)
+	return validateTaskHighWaterMark(
+		invoker.GetLastProcessedTime(),
+		attrs.ScheduledTime,
+	)
 }
 
 func (e *InvokerProcessBufferTaskExecutor) Execute(
