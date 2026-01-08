@@ -420,8 +420,10 @@ type PollActivityTaskQueueResponse struct {
 	PollerScalingDecision       *v14.PollerScalingDecision `protobuf:"bytes,17,opt,name=poller_scaling_decision,json=pollerScalingDecision,proto3" json:"poller_scaling_decision,omitempty"`
 	Priority                    *v11.Priority              `protobuf:"bytes,18,opt,name=priority,proto3" json:"priority,omitempty"`
 	RetryPolicy                 *v11.RetryPolicy           `protobuf:"bytes,19,opt,name=retry_policy,json=retryPolicy,proto3" json:"retry_policy,omitempty"`
-	unknownFields               protoimpl.UnknownFields
-	sizeCache                   protoimpl.SizeCache
+	// ID of the activity run (applicable for standalone activities only)
+	ActivityRunId string `protobuf:"bytes,20,opt,name=activity_run_id,json=activityRunId,proto3" json:"activity_run_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *PollActivityTaskQueueResponse) Reset() {
@@ -585,6 +587,13 @@ func (x *PollActivityTaskQueueResponse) GetRetryPolicy() *v11.RetryPolicy {
 		return x.RetryPolicy
 	}
 	return nil
+}
+
+func (x *PollActivityTaskQueueResponse) GetActivityRunId() string {
+	if x != nil {
+		return x.ActivityRunId
+	}
+	return ""
 }
 
 type AddWorkflowTaskRequest struct {
@@ -5356,7 +5365,7 @@ const file_temporal_server_api_matchingservice_v1_request_response_proto_rawDesc
 	"\x10forwarded_source\x18\x04 \x01(\tR\x0fforwardedSource\x12V\n" +
 	"\n" +
 	"conditions\x18\x05 \x01(\v26.temporal.server.api.matchingservice.v1.PollConditionsR\n" +
-	"conditions\"\x98\n" +
+	"conditions\"\xc0\n" +
 	"\n" +
 	"\x1dPollActivityTaskQueueResponse\x12\x1d\n" +
 	"\n" +
@@ -5380,7 +5389,8 @@ const file_temporal_server_api_matchingservice_v1_request_response_proto_rawDesc
 	"\x06header\x18\x10 \x01(\v2\x1e.temporal.api.common.v1.HeaderR\x06header\x12h\n" +
 	"\x17poller_scaling_decision\x18\x11 \x01(\v20.temporal.api.taskqueue.v1.PollerScalingDecisionR\x15pollerScalingDecision\x12<\n" +
 	"\bpriority\x18\x12 \x01(\v2 .temporal.api.common.v1.PriorityR\bpriority\x12F\n" +
-	"\fretry_policy\x18\x13 \x01(\v2#.temporal.api.common.v1.RetryPolicyR\vretryPolicy\"\x9d\x05\n" +
+	"\fretry_policy\x18\x13 \x01(\v2#.temporal.api.common.v1.RetryPolicyR\vretryPolicy\x12&\n" +
+	"\x0factivity_run_id\x18\x14 \x01(\tR\ractivityRunId\"\x9d\x05\n" +
 	"\x16AddWorkflowTaskRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12G\n" +
 	"\texecution\x18\x02 \x01(\v2).temporal.api.common.v1.WorkflowExecutionR\texecution\x12C\n" +

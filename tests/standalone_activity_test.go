@@ -234,6 +234,63 @@ func (s *standaloneActivityTestSuite) TestIDConflictPolicy() {
 	})
 }
 
+func (s *standaloneActivityTestSuite) TestPollActivityTaskQueue() {
+	t := s.T()
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+
+	activityID := testcore.RandomizeStr(t.Name())
+	taskQueue := testcore.RandomizeStr(t.Name())
+
+	startToCloseTimeout := durationpb.New(1 * time.Minute)
+	scheduleToCloseTimeout := durationpb.New(2 * time.Minute)
+	heartbeatTimeout := durationpb.New(20 * time.Second)
+	priority := &commonpb.Priority{
+		FairnessKey: "test-key",
+	}
+
+	startResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+		Namespace:    s.Namespace().String(),
+		ActivityId:   activityID,
+		ActivityType: s.tv.ActivityType(),
+		Identity:     s.tv.WorkerIdentity(),
+		Input:        defaultInput,
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: taskQueue,
+		},
+		StartToCloseTimeout:    startToCloseTimeout,
+		ScheduleToCloseTimeout: scheduleToCloseTimeout,
+		HeartbeatTimeout:       heartbeatTimeout,
+		RequestId:              s.tv.RequestID(),
+		Priority:               priority,
+		Header:                 defaultHeader,
+	})
+	require.NoError(t, err)
+
+	pollTaskResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+		Namespace: s.Namespace().String(),
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: taskQueue,
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+		Identity: s.tv.WorkerIdentity(),
+	})
+	require.NoError(t, err)
+	require.Equal(t, activityID, pollTaskResp.GetActivityId())
+	protorequire.ProtoEqual(t, s.tv.ActivityType(), pollTaskResp.GetActivityType())
+	require.Equal(t, startResp.GetRunId(), pollTaskResp.GetActivityRunId())
+	protorequire.ProtoEqual(t, defaultInput, pollTaskResp.GetInput())
+	require.False(t, pollTaskResp.GetStartedTime().AsTime().IsZero())
+	require.False(t, pollTaskResp.GetScheduledTime().AsTime().IsZero())
+	require.EqualValues(t, 1, pollTaskResp.Attempt)
+	protorequire.ProtoEqual(t, startToCloseTimeout, pollTaskResp.GetStartToCloseTimeout())
+	protorequire.ProtoEqual(t, scheduleToCloseTimeout, pollTaskResp.GetScheduleToCloseTimeout())
+	protorequire.ProtoEqual(t, heartbeatTimeout, pollTaskResp.GetHeartbeatTimeout())
+	protorequire.ProtoEqual(t, priority, pollTaskResp.GetPriority())
+	protorequire.ProtoEqual(t, defaultHeader, pollTaskResp.GetHeader())
+	require.NotNil(t, pollTaskResp.TaskToken)
+}
+
 func (s *standaloneActivityTestSuite) TestActivityCompleted() {
 	t := s.T()
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
