@@ -17,7 +17,6 @@ Apply these patterns when reviewing PRs or suggesting code changes.
 - Don't use `Impl` suffix for implementations
 - Don't put underscore after `Test` in test names: `TestRetry` not `Test_Retry`
 - Avoid stuttering: don't use `ActivityStatus` in package `activity`, just `Status`
-- Don't group type declarations with `type ( ... )` - it breaks generated docs
 - Use `ok` boolean pattern instead of nil checks where idiomatic
 
 ## 3. Test Suite Correctness
