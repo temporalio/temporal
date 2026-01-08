@@ -257,7 +257,7 @@ func (s *ClientMiscTestSuite) TestTooManyCancelRequests() {
 		})
 		s.NoError(err)
 		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, workflowExecution.State.ExecutionState.Status)
-		s.Zero(len(workflowExecution.State.RequestCancelInfos))
+		s.Empty(workflowExecution.State.RequestCancelInfos)
 		s.NoError(s.SdkClient().CancelWorkflow(ctx, cancelerWorkflowId, ""))
 	})
 
