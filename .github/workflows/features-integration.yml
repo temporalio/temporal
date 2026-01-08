@@ -103,6 +103,8 @@ jobs:
       version-is-repo-ref: false
       docker-image-artifact-name: temporal-server-docker
       dynamic-config-values: |
+        history.enableTransitionHistory:
+          - value: true
         history.enableChasm:
           - value: true
         history.enableCHASMSchedulerCreation:
