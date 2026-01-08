@@ -2560,7 +2560,7 @@ that task will be sent to DLQ.`,
 		"ReplicationStreamSenderLivenessMultiplier is the multiplier of liveness check interval on stream sender",
 	)
 	EnableHistoryReplicationRateLimiter = NewNamespaceBoolSetting(
-		"history.ReplicationStreamSenderLivenessMultiplier",
+		"history.EnableHistoryReplicationRateLimiter",
 		false,
 		"EnableHistoryReplicationRateLimiter is the feature flag to enable rate limiter on history event replication",
 	)
