@@ -168,7 +168,8 @@ NexusOperationCancelRequestFailed events. Default true.`,
 
 type Config struct {
 	Enabled                             dynamicconfig.BoolPropertyFn
-	ChasmEnabled                        dynamicconfig.BoolPropertyFn
+	ChasmEnabled                        dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	ChasmNexusEnabled                   dynamicconfig.BoolPropertyFn
 	RequestTimeout                      dynamicconfig.DurationPropertyFnWithDestinationFilter
 	MinRequestTimeout                   dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	MaxConcurrentOperations             dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -188,7 +189,8 @@ type Config struct {
 func configProvider(dc *dynamicconfig.Collection) *Config {
 	return &Config{
 		Enabled:                             dynamicconfig.EnableNexus.Get(dc),
-		ChasmEnabled:                        ChasmNexusEnabled.Get(dc),
+		ChasmEnabled:                        dynamicconfig.EnableChasm.Get(dc),
+		ChasmNexusEnabled:                   ChasmNexusEnabled.Get(dc),
 		RequestTimeout:                      RequestTimeout.Get(dc),
 		MinRequestTimeout:                   MinRequestTimeout.Get(dc),
 		MaxConcurrentOperations:             MaxConcurrentOperations.Get(dc),
