@@ -1,0 +1,74 @@
+# Temporal Server CI/CD Pipeline
+# Go-based Temporal Server
+
+variables:
+  major: 1
+  minor: 0
+  patch: $[counter(variables['Build.SourceBranchName'], 0)]
+  globalPatch: $[counter('globalPatch', 0)]
+
+  # Container Registry Configuration
+  ACR_RESOURCE_GROUP: sprintRG
+  AZURE_CONTAINER_REGISTRY: sprintregistry
+  ACR_ENDPOINT: "sprintregistry.azurecr.io"
+
+  # Server Configuration
+  IMAGE_NAME: "temporal-server"
+  DOCKERFILE_PATH: "docker/azure-server.Dockerfile"
+  GO_VERSION: "1.24"
+
+trigger:
+  branches:
+    include:
+      - main
+      - develop
+  paths:
+    include:
+      - cmd/server/**
+      - service/**
+      - common/**
+      - api/**
+      - go.mod
+      - go.sum
+      - docker/azure-server.Dockerfile
+      - .azure-pipelines/server-cicd.yaml
+      - .azure-pipelines/templates/*
+
+pr:
+  branches:
+    include:
+      - main
+      - develop
+  paths:
+    include:
+      - cmd/server/**
+      - service/**
+      - common/**
+      - api/**
+      - go.mod
+      - go.sum
+      - docker/azure-server.Dockerfile
+      - .azure-pipelines/server-cicd.yaml
+
+stages:
+  - stage: Version
+    displayName: "Versioning"
+    condition: ne(variables['Build.Reason'], 'PullRequest')
+    jobs:
+      - template: templates/version.yml
+
+  - stage: Build
+    displayName: "Build Temporal Server Image"
+    dependsOn: Version
+    condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
+    jobs:
+      - template: templates/docker-build-template.yml
+        parameters:
+          jobCondition: succeeded()
+          CONTAINER_NAME: $(IMAGE_NAME)
+          DOCKERFILE_PATH: $(DOCKERFILE_PATH)
+          AZURE_CONTAINER_REGISTRY: $(AZURE_CONTAINER_REGISTRY)
+          TAG_PREFIX: "server-"
+          BUILD_ARGS: |
+            --build-arg BUILD_VERSION=$(Build.BuildNumber)
+            --build-arg TARGETARCH=amd64
