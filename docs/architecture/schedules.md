@@ -189,15 +189,14 @@ flowchart TD
 The Invoker component is responsible for driving buffered starts to execution, managing backoffs, failures, and retries. Invoker centralizes where service calls are made within the Scheduler, and handles starting, cancelling, and terminating actions/workflows. Much of the Invoker's execution state is set on, and scoped to, individual `BufferedStart` structs; each buffered start has its own attempt count and backoff time. 
 
 #### State
-- `BufferedStarts`: Invoker manages the scheduler's buffered starts/actions. The Invoker function `EnqueueBufferedStarts` is used to schedule an action for execution by adding it to this list, setting `Attempt` to `0`. Once added to the list, the `ProcessBufferTask` will evaluate the schedule's overlap policy, as well as other scheduler state, before bumping `Attempt` to `1`, which makes it eligible for `ExecuteTask` to drive to completion.
+- `BufferedStarts`: Invoker manages the scheduler's buffered starts/actions through their entire lifecycle (see *BufferedStart Lifecycle* below). The Invoker function `EnqueueBufferedStarts` is used to schedule an action for execution by adding it to this list, setting `Attempt` to `0`. Once added to the list, the `ProcessBufferTask` will evaluate the schedule's overlap policy, as well as other scheduler state, before bumping `Attempt` to `1`, which makes it eligible for `ExecuteTask` to drive to completion. Entries remain in `BufferedStarts` after starting (with `RunId` set) and after completion (with `Completed` set), providing computed views for running workflows and recent actions.
 	- Each `BufferedStart` entry is itself stateful, maintaining its own `Attempt` and `BackoffTime`. Only once `Attempt` is past `0` will it be eligible for execution (see [`getEligibleBufferedStarts`](https://github.com/temporalio/temporal/blob/85635674d7c55a8679b715b118aaf14c973266eb/chasm/lib/scheduler/invoker.go#L276)).
 - `CancelWorkflows`: Workflows that will be cancelled due to overlap policy. The `ProcessBufferTask` adds to this list, and the `ExecuteTask` consumes the list.
 - `TerminateWorkflows`: Similar to `CancelWorkflows`.
 - `LastProcessedTime`: A high water mark used to evaluate when to fire tasks that are pending a retry after execution failure.
-- `RequestIdToWorkflowId`: A map from the request ID used with `StartWorkflowExecution` to the `WorfklowId` it was used to start. Used when processing workflow completion callbacks, which provide the completed workflow's originating `RequestId`.
 
 #### Tasks
-`ProcessBufferTask`: The final step in the scheduler where a potential action can be dropped, as it determines which actions will become eligible for execution via the `ExecuteTask`. `ProcessBufferTask` itself does not make *any* service calls to determine the state of running workflows, and instead relies on the cached view of `Scheduler.Info.RunningWorkflows`, which is updated through `ExecuteTask` and completion callbacks, discussed below.
+`ProcessBufferTask`: The final step in the scheduler where a potential action can be dropped, as it determines which actions will become eligible for execution via the `ExecuteTask`. `ProcessBufferTask` itself does not make *any* service calls to determine the state of running workflows, and instead relies on the computed view of running workflows derived from `BufferedStarts` (entries with `RunId` set but not yet completed), which is updated through `ExecuteTask` and completion callbacks, discussed below.
 
 ```mermaid
 flowchart TD
@@ -283,8 +282,59 @@ flowchart TD
 
 *Figure: `ExecuteTask`'s decision tree (trivial branches omitted).*
 
-#### Notes
-* At the time of writing, `RunningWorkflows` and `RecentActions` are distinct fields (on the Scheduler's `Info` block), but it is likely their functionality will be merged into `BufferedStarts`.
+### BufferedStart Lifecycle
+
+The `BufferedStart` struct is the central data structure for tracking scheduled actions through their entire lifecycle. Each action progresses through distinct states, from initial buffering, through execution, to completion. The Invoker maintains a queue of `BufferedStart` entries, where each entry tracks its own state independently.
+
+The `Attempt` field encodes the current state: `0` for newly enqueued (pending processing), `-1` for deferred (processed but waiting on overlap policy, e.g., `BUFFER_ONE` with a running workflow), and `≥1` for ready/retrying execution. When a workflow completes, deferred entries are reset to `0` so the overlap policy can be re-evaluated.
+
+```mermaid
+stateDiagram-v2
+    direction LR
+
+    [*] --> Pending: EnqueueBufferedStarts
+    Pending --> Deferred: ProcessBufferTask (overlap)
+    Pending --> Ready: ProcessBufferTask
+    Deferred --> Pending: Workflow completes
+    Ready --> Started: ExecuteTask succeeds
+    Ready --> Retrying: ExecuteTask fails
+    Retrying --> Started: ExecuteTask succeeds
+    Retrying --> Dropped: Max attempts exceeded
+    Started --> Completed: Nexus completion callback
+    Completed --> [*]: Retention applied
+    Dropped --> [*]
+
+    note right of Pending: Attempt = 0
+    note right of Deferred: Attempt = -1
+    note right of Ready: Attempt = 1
+    note right of Retrying: Attempt > 1\nBackoffTime set
+    note right of Started: RunId set
+    note right of Completed: ExecutionResult set
+```
+
+*Figure: State transitions of a `BufferedStart` entry.*
+
+#### State
+As a `BufferedStart` progresses through its lifecycle, different fields become populated:
+
+| Field | Pending | Deferred | Ready/Retrying | Started | Completed |
+|-------|:-------:|:--------:|:--------------:|:-------:|:---------:|
+| `NominalTime` | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `ActualTime` | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `RequestId` | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `WorkflowId` | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Attempt` | 0 | -1 | ≥1 | ≥1 | ≥1 |
+| `BackoffTime` | - | - | (on retry) | - | - |
+| `RunId` | - | - | - | ✓ | ✓ |
+| `StartTime` | - | - | - | ✓ | ✓ |
+| `Completed` | - | - | - | - | ✓ |
+
+#### Computed Views
+The `BufferedStarts` queue allows scheduler to compute the following `Info` block fields on demand (during a `Describe` call):
+
+- `RunningWorkflows`: Entries where `RunId` is set but `Completed` is nil.
+- `RecentActions`: Entries where `RunId` is set (includes both running and completed).
+
 
 ### Completion Callbacks
 
@@ -293,12 +343,12 @@ In order to determine when an action started by a schedule has completed, Schedu
 The completion handler has several responsibilities:
 - Records the completed action's payloads (success/failure) to the scheduler's `LastCompletionResult`.
 - Enacts the schedule's pause-on-failure policy.
-- Prunes stateful data about the in-flight attempt (`BufferedStarts`, the `RequestIdToWorkflowId` map).
+- Marks the corresponding `BufferedStart` entry as completed by setting its `Completed` field with the execution result.
 - Records the action's close time, to measure the latency between "last action completed" and "next action started" when multiple starts are buffered sequentially and pending execution.
-- Updates the Scheduler's metadata, including `RecentActions` and `RunningWorkflows`.
+- Applies retention to keep only the most recent completed actions in `BufferedStarts`.
 - Schedules another `ProcessBufferTask`, as a completion may make a buffered start eligible for execution.
 
-Nexus completion callbacks are the only way that Scheduler can find out about an action's completion (there is no additional synchronous path). When the Invoker's `ProcessBufferTask` evaluates running workflow status, the cached `Scheduler.Info.RunningWorkflows` view (updated by the completion callbacks) is used instead of making additional describe calls. 
+Nexus completion callbacks are the only way that Scheduler can find out about an action's completion (there is no additional synchronous path). When the Invoker's `ProcessBufferTask` evaluates running workflow status, the computed view of running workflows (derived from `BufferedStarts` entries with `RunId` set but not completed) is used instead of making additional describe calls. 
 
 ### Specification Processor
 
