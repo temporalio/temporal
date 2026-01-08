@@ -1,6 +1,7 @@
 package nexusoperation
 
 import (
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 )
@@ -13,7 +14,7 @@ var TransitionScheduled = chasm.NewTransition(
 	[]nexusoperationpb.OperationStatus{nexusoperationpb.OPERATION_STATUS_UNSPECIFIED},
 	nexusoperationpb.OPERATION_STATUS_SCHEDULED,
 	func(o *Operation, ctx chasm.MutableContext, event EventScheduled) error {
-		panic("not implemented")
+		return serviceerror.NewUnimplemented("unimplemented")
 	},
 )
 
@@ -25,7 +26,7 @@ var TransitionAttemptFailed = chasm.NewTransition(
 	[]nexusoperationpb.OperationStatus{nexusoperationpb.OPERATION_STATUS_SCHEDULED},
 	nexusoperationpb.OPERATION_STATUS_BACKING_OFF,
 	func(o *Operation, ctx chasm.MutableContext, event EventAttemptFailed) error {
-		panic("not implemented")
+		return serviceerror.NewUnimplemented("unimplemented")
 	},
 )
 
@@ -38,7 +39,7 @@ var TransitionRescheduled = chasm.NewTransition(
 	[]nexusoperationpb.OperationStatus{nexusoperationpb.OPERATION_STATUS_BACKING_OFF},
 	nexusoperationpb.OPERATION_STATUS_SCHEDULED,
 	func(o *Operation, ctx chasm.MutableContext, event EventRescheduled) error {
-		panic("not implemented")
+		return serviceerror.NewUnimplemented("unimplemented")
 	},
 )
 
@@ -54,7 +55,7 @@ var TransitionStarted = chasm.NewTransition(
 	},
 	nexusoperationpb.OPERATION_STATUS_STARTED,
 	func(o *Operation, ctx chasm.MutableContext, event EventStarted) error {
-		panic("not implemented")
+		return serviceerror.NewUnimplemented("unimplemented")
 	},
 )
 
@@ -70,7 +71,7 @@ var TransitionSucceeded = chasm.NewTransition(
 	},
 	nexusoperationpb.OPERATION_STATUS_SUCCEEDED,
 	func(o *Operation, ctx chasm.MutableContext, event EventSucceeded) error {
-		panic("not implemented")
+		return serviceerror.NewUnimplemented("unimplemented")
 	},
 )
 
@@ -86,7 +87,7 @@ var TransitionFailed = chasm.NewTransition(
 	},
 	nexusoperationpb.OPERATION_STATUS_FAILED,
 	func(o *Operation, ctx chasm.MutableContext, event EventFailed) error {
-		panic("not implemented")
+		return serviceerror.NewUnimplemented("unimplemented")
 	},
 )
 
@@ -102,7 +103,7 @@ var TransitionCanceled = chasm.NewTransition(
 	},
 	nexusoperationpb.OPERATION_STATUS_CANCELED,
 	func(o *Operation, ctx chasm.MutableContext, event EventCanceled) error {
-		panic("not implemented")
+		return serviceerror.NewUnimplemented("unimplemented")
 	},
 )
 
@@ -118,6 +119,6 @@ var TransitionTimedOut = chasm.NewTransition(
 	},
 	nexusoperationpb.OPERATION_STATUS_TIMED_OUT,
 	func(o *Operation, ctx chasm.MutableContext, event EventTimedOut) error {
-		panic("not implemented")
+		return serviceerror.NewUnimplemented("unimplemented")
 	},
 )

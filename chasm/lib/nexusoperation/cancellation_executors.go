@@ -3,6 +3,7 @@ package nexusoperation
 import (
 	"context"
 
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"go.temporal.io/server/common/log"
@@ -40,7 +41,7 @@ func (e *CancellationTaskExecutor) Validate(
 	attrs chasm.TaskAttributes,
 	task *nexusoperationpb.CancellationTask,
 ) (bool, error) {
-	panic("implement me")
+	return false, serviceerror.NewUnimplemented("unimplemented")
 }
 
 func (e *CancellationTaskExecutor) Execute(
@@ -49,7 +50,7 @@ func (e *CancellationTaskExecutor) Execute(
 	attrs chasm.TaskAttributes,
 	task *nexusoperationpb.CancellationTask,
 ) error {
-	panic("implement me")
+	return serviceerror.NewUnimplemented("unimplemented")
 }
 
 type CancellationBackoffTaskExecutor struct {
@@ -73,7 +74,7 @@ func (e *CancellationBackoffTaskExecutor) Validate(
 	attrs chasm.TaskAttributes,
 	task *nexusoperationpb.CancellationBackoffTask,
 ) (bool, error) {
-	panic("implement me")
+	return false, serviceerror.NewUnimplemented("unimplemented")
 }
 
 func (e *CancellationBackoffTaskExecutor) Execute(
@@ -82,5 +83,5 @@ func (e *CancellationBackoffTaskExecutor) Execute(
 	attrs chasm.TaskAttributes,
 	task *nexusoperationpb.CancellationBackoffTask,
 ) error {
-	panic("implement me")
+	return serviceerror.NewUnimplemented("unimplemented")
 }

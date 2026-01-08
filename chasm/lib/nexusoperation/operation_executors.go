@@ -3,6 +3,7 @@ package nexusoperation
 import (
 	"context"
 
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"go.temporal.io/server/common/log"
@@ -41,7 +42,7 @@ func (e *OperationInvocationTaskExecutor) Validate(
 	attrs chasm.TaskAttributes,
 	task *nexusoperationpb.InvocationTask,
 ) (bool, error) {
-	panic("implement me")
+	return false, serviceerror.NewUnimplemented("unimplemented")
 }
 
 func (e *OperationInvocationTaskExecutor) Execute(
@@ -50,7 +51,7 @@ func (e *OperationInvocationTaskExecutor) Execute(
 	attrs chasm.TaskAttributes,
 	task *nexusoperationpb.InvocationTask,
 ) error {
-	panic("implement me")
+	return serviceerror.NewUnimplemented("unimplemented")
 }
 
 type OperationBackoffTaskExecutor struct {
@@ -74,7 +75,7 @@ func (e *OperationBackoffTaskExecutor) Validate(
 	attrs chasm.TaskAttributes,
 	task *nexusoperationpb.InvocationBackoffTask,
 ) (bool, error) {
-	panic("implement me")
+	return false, serviceerror.NewUnimplemented("unimplemented")
 }
 
 func (e *OperationBackoffTaskExecutor) Execute(
@@ -83,7 +84,7 @@ func (e *OperationBackoffTaskExecutor) Execute(
 	attrs chasm.TaskAttributes,
 	task *nexusoperationpb.InvocationBackoffTask,
 ) error {
-	panic("implement me")
+	return serviceerror.NewUnimplemented("unimplemented")
 }
 
 type OperationTimeoutTaskExecutor struct {
@@ -107,7 +108,7 @@ func (e *OperationTimeoutTaskExecutor) Validate(
 	attrs chasm.TaskAttributes,
 	task *nexusoperationpb.InvocationTimeoutTask,
 ) (bool, error) {
-	panic("implement me")
+	return false, serviceerror.NewUnimplemented("unimplemented")
 }
 
 func (e *OperationTimeoutTaskExecutor) Execute(
@@ -116,5 +117,5 @@ func (e *OperationTimeoutTaskExecutor) Execute(
 	attrs chasm.TaskAttributes,
 	task *nexusoperationpb.InvocationTimeoutTask,
 ) error {
-	panic("implement me")
+	return serviceerror.NewUnimplemented("unimplemented")
 }

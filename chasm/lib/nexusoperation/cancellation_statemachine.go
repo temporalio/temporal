@@ -1,6 +1,7 @@
 package nexusoperation
 
 import (
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 )
@@ -14,7 +15,7 @@ var TransitionCancellationScheduled = chasm.NewTransition(
 	[]nexusoperationpb.CancellationStatus{nexusoperationpb.CANCELLATION_STATUS_UNSPECIFIED},
 	nexusoperationpb.CANCELLATION_STATUS_SCHEDULED,
 	func(c *Cancellation, ctx chasm.MutableContext, event EventCancellationScheduled) error {
-		panic("not implemented")
+		return serviceerror.NewUnimplemented("unimplemented")
 	},
 )
 
@@ -27,7 +28,7 @@ var TransitionCancellationRescheduled = chasm.NewTransition(
 	[]nexusoperationpb.CancellationStatus{nexusoperationpb.CANCELLATION_STATUS_BACKING_OFF},
 	nexusoperationpb.CANCELLATION_STATUS_SCHEDULED,
 	func(c *Cancellation, ctx chasm.MutableContext, event EventCancellationRescheduled) error {
-		panic("not implemented")
+		return serviceerror.NewUnimplemented("unimplemented")
 	},
 )
 
@@ -39,7 +40,7 @@ var TransitionCancellationAttemptFailed = chasm.NewTransition(
 	[]nexusoperationpb.CancellationStatus{nexusoperationpb.CANCELLATION_STATUS_SCHEDULED},
 	nexusoperationpb.CANCELLATION_STATUS_BACKING_OFF,
 	func(c *Cancellation, ctx chasm.MutableContext, event EventCancellationAttemptFailed) error {
-		panic("not implemented")
+		return serviceerror.NewUnimplemented("unimplemented")
 	},
 )
 
@@ -56,7 +57,7 @@ var TransitionCancellationFailed = chasm.NewTransition(
 	},
 	nexusoperationpb.CANCELLATION_STATUS_FAILED,
 	func(c *Cancellation, ctx chasm.MutableContext, event EventCancellationFailed) error {
-		panic("not implemented")
+		return serviceerror.NewUnimplemented("unimplemented")
 	},
 )
 
@@ -68,6 +69,6 @@ var TransitionCancellationSucceeded = chasm.NewTransition(
 	[]nexusoperationpb.CancellationStatus{nexusoperationpb.CANCELLATION_STATUS_SCHEDULED},
 	nexusoperationpb.CANCELLATION_STATUS_SUCCEEDED,
 	func(c *Cancellation, ctx chasm.MutableContext, event EventCancellationSucceeded) error {
-		panic("not implemented")
+		return serviceerror.NewUnimplemented("unimplemented")
 	},
 )
