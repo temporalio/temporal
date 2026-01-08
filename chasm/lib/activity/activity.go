@@ -220,8 +220,10 @@ func (a *Activity) PopulateRecordStartedResponse(ctx chasm.Context, key chasm.Ex
 	response.Attempt = attempt.GetCount()
 	response.Priority = a.GetPriority()
 	response.RetryPolicy = a.GetRetryPolicy()
+	response.ActivityRunId = key.RunID
 	response.ScheduledEvent = &historypb.HistoryEvent{
 		EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
+		EventTime: a.GetScheduleTime(),
 		Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{
 			ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{
 				ActivityId:             key.BusinessID,
@@ -656,7 +658,7 @@ func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) (*apiactivitypb
 	}
 
 	sa := &commonpb.SearchAttributes{
-		IndexedFields: a.Visibility.Get(ctx).GetSearchAttributes(ctx),
+		IndexedFields: a.Visibility.Get(ctx).CustomSearchAttributes(ctx),
 	}
 
 	info := &apiactivitypb.ActivityExecutionInfo{

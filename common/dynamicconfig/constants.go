@@ -981,6 +981,11 @@ so forwarding by endpoint ID will not work out of the box.`,
 		true,
 		`FrontendEnableBatcher enables batcher-related RPCs in the frontend`,
 	)
+	FrontendMaxConcurrentAdminBatchOperationPerNamespace = NewNamespaceIntSetting(
+		"frontend.MaxConcurrentAdminBatchOperationPerNamespace",
+		1,
+		`FrontendMaxConcurrentAdminBatchOperationPerNamespace is the max concurrent admin batch operation job count per namespace`,
+	)
 
 	FrontendEnableUpdateWorkflowExecution = NewNamespaceBoolSetting(
 		"frontend.enableUpdateWorkflowExecution",
@@ -1331,14 +1336,16 @@ a decision to scale down the number of pollers will be issued`,
 		`MatchingPollerScalingDecisionsPerSecond is the maximum number of scaling decisions that will be issued per
 second per poller by one physical queue manager`,
 	)
-	MatchingUseNewMatcher = NewTaskQueueBoolSetting(
+	MatchingUseNewMatcher = NewTaskQueueTypedSettingWithConverter(
 		"matching.useNewMatcher",
-		false,
+		ConvertGradualChange(false),
+		StaticGradualChange(false),
 		`Use priority-enabled TaskMatcher`,
 	)
-	MatchingEnableFairness = NewTaskQueueBoolSetting(
+	MatchingEnableFairness = NewTaskQueueTypedSettingWithConverter(
 		"matching.enableFairness",
-		false,
+		ConvertGradualChange(false),
+		StaticGradualChange(false),
 		`Enable fairness for task dispatching. Implies matching.useNewMatcher.`,
 	)
 	MatchingEnableMigration = NewTaskQueueBoolSetting(
@@ -1377,6 +1384,11 @@ second per poller by one physical queue manager`,
 		`MatchingEnableWorkerPluginMetrics controls whether to export worker plugin metrics.
 The metric has 2 dimensions: namespace_id and plugin_name. Disabled by default as this is
 an optional feature and also requires a metrics collection system that can handle higher cardinalities.`,
+	)
+	MatchingAutoEnableV2 = NewTaskQueueBoolSetting(
+		"matching.autoEnableV2",
+		false,
+		`MatchingAutoEnableV2 automatically enables fairness when a fairness or priority key is seen`,
 	)
 
 	// Worker registry settings
