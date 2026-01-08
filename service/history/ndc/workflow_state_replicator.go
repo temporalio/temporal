@@ -221,33 +221,11 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 	if versionedTransition.StateAttributes == nil {
 		return serviceerror.NewInvalidArgument("both snapshot and mutation are nil")
 	}
-	var mutation *replicationspb.SyncWorkflowStateMutationAttributes
-	var snapshot *replicationspb.SyncWorkflowStateSnapshotAttributes
-	switch artifactType := versionedTransition.StateAttributes.(type) {
-	case *replicationspb.VersionedTransitionArtifact_SyncWorkflowStateSnapshotAttributes:
-		snapshot = versionedTransition.GetSyncWorkflowStateSnapshotAttributes()
-	case *replicationspb.VersionedTransitionArtifact_SyncWorkflowStateMutationAttributes:
-		mutation = versionedTransition.GetSyncWorkflowStateMutationAttributes()
-	default:
-		return serviceerror.NewInvalidArgumentf("unknown artifact type %T", artifactType)
-	}
 
-	if versionedTransition.IsFirstSync {
-		// this is the first replication task for this workflow
-		// TODO: Handle reset case to reduce the amount of history events write
-		err := r.handleFirstReplicationTask(ctx, archetypeID, versionedTransition, sourceClusterName)
-		if !errors.Is(err, consts.ErrDuplicate) {
-			// if ErrDuplicate is returned from creation, it means the workflow is already existed, continue to apply mutation
-			return err
-		}
+	_, snapshot, executionState, executionInfo, err := parseVersionedTransitionAttributes(versionedTransition)
+	if err != nil {
+		return err
 	}
-
-	executionState, executionInfo := func() (*persistencespb.WorkflowExecutionState, *persistencespb.WorkflowExecutionInfo) {
-		if snapshot != nil {
-			return snapshot.State.ExecutionState, snapshot.State.ExecutionInfo
-		}
-		return mutation.StateMutation.ExecutionState, mutation.StateMutation.ExecutionInfo
-	}()
 
 	namespaceID := namespace.ID(executionInfo.GetNamespaceId())
 	wid := executionInfo.GetWorkflowId()
@@ -274,6 +252,14 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 		}
 		releaseFn(retError)
 	}()
+	if versionedTransition.IsFirstSync {
+		// this is the first replication task for this workflow
+		// TODO: Handle reset case to reduce the amount of history events write
+		continueProcess, err := r.handleFirstReplicationTask(ctx, archetypeID, wfCtx, versionedTransition, sourceClusterName)
+		if err != nil || !continueProcess {
+			return err
+		}
+	}
 
 	ms, err := wfCtx.LoadMutableState(ctx, r.shardContext)
 	switch err.(type) {
@@ -352,55 +338,84 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 	}
 }
 
-func (r *WorkflowStateReplicatorImpl) handleFirstReplicationTask(
-	ctx context.Context,
-	archetypeID chasm.ArchetypeID,
+func parseVersionedTransitionAttributes(
 	versionedTransition *replicationspb.VersionedTransitionArtifact,
-	sourceClusterName string,
-) (retErr error) {
-	var mutation *replicationspb.SyncWorkflowStateMutationAttributes
-	var snapshot *replicationspb.SyncWorkflowStateSnapshotAttributes
+) (
+	mutation *replicationspb.SyncWorkflowStateMutationAttributes,
+	snapshot *replicationspb.SyncWorkflowStateSnapshotAttributes,
+	executionState *persistencespb.WorkflowExecutionState,
+	executionInfo *persistencespb.WorkflowExecutionInfo,
+	err error,
+) {
 	switch artifactType := versionedTransition.StateAttributes.(type) {
 	case *replicationspb.VersionedTransitionArtifact_SyncWorkflowStateSnapshotAttributes:
 		snapshot = versionedTransition.GetSyncWorkflowStateSnapshotAttributes()
+		executionState = snapshot.State.ExecutionState
+		executionInfo = snapshot.State.ExecutionInfo
 	case *replicationspb.VersionedTransitionArtifact_SyncWorkflowStateMutationAttributes:
 		mutation = versionedTransition.GetSyncWorkflowStateMutationAttributes()
+		executionState = mutation.StateMutation.ExecutionState
+		executionInfo = mutation.StateMutation.ExecutionInfo
 	default:
-		return serviceerror.NewInvalidArgumentf("unknown artifact type %T", artifactType)
+		err = serviceerror.NewInvalidArgumentf("unknown artifact type %T", artifactType)
 	}
-	executionState, executionInfo := func() (*persistencespb.WorkflowExecutionState, *persistencespb.WorkflowExecutionInfo) {
-		if snapshot != nil {
-			return snapshot.State.ExecutionState, snapshot.State.ExecutionInfo
-		}
-		return mutation.StateMutation.ExecutionState, mutation.StateMutation.ExecutionInfo
-	}()
+	return
+}
 
-	wfCtx, releaseFn, err := r.workflowCache.GetOrCreateChasmExecution(
-		ctx,
-		r.shardContext,
-		namespace.ID(executionInfo.NamespaceId),
-		&commonpb.WorkflowExecution{
-			WorkflowId: executionInfo.WorkflowId,
-			RunId:      executionState.RunId,
-		},
-		archetypeID,
-		locks.PriorityHigh,
-	)
+func (r *WorkflowStateReplicatorImpl) handleFirstReplicationTask(
+	ctx context.Context,
+	archetypeID chasm.ArchetypeID,
+	wfCtx historyi.WorkflowContext,
+	versionedTransition *replicationspb.VersionedTransitionArtifact,
+	sourceClusterName string,
+) (continueProcess bool, retErr error) {
+	mutation, snapshot, executionState, executionInfo, err := parseVersionedTransitionAttributes(versionedTransition)
 	if err != nil {
-		return err
+		return false, err
 	}
-	defer func() {
-		if rec := recover(); rec != nil {
-			releaseFn(errPanic)
-			panic(rec) //nolint:forbidigo
-		}
-		releaseFn(retErr)
-	}()
 
+	// Separate logic based on whether there's a new run
+	if versionedTransition.NewRunInfo == nil {
+		return r.handleFirstReplicationTaskWithoutNewRun(
+			ctx,
+			archetypeID,
+			wfCtx,
+			executionInfo,
+			executionState,
+			mutation,
+			snapshot,
+			versionedTransition,
+			sourceClusterName,
+		)
+	}
+
+	return r.handleFirstReplicationTaskWithNewRun(
+		ctx,
+		archetypeID,
+		wfCtx,
+		executionInfo,
+		executionState,
+		versionedTransition,
+		sourceClusterName,
+	)
+}
+
+func (r *WorkflowStateReplicatorImpl) handleFirstReplicationTaskWithoutNewRun(
+	ctx context.Context,
+	archetypeID chasm.ArchetypeID,
+	wfCtx historyi.WorkflowContext,
+	executionInfo *persistencespb.WorkflowExecutionInfo,
+	executionState *persistencespb.WorkflowExecutionState,
+	mutation *replicationspb.SyncWorkflowStateMutationAttributes,
+	snapshot *replicationspb.SyncWorkflowStateSnapshotAttributes,
+	versionedTransition *replicationspb.VersionedTransitionArtifact,
+	sourceClusterName string,
+) (continueProcess bool, retErr error) {
 	nsEntry, err := r.namespaceRegistry.GetNamespaceByID(namespace.ID(executionInfo.NamespaceId))
 	if err != nil {
-		return err
+		return false, err
 	}
+
 	localMutableState := workflow.NewMutableState(
 		r.shardContext,
 		r.shardContext.GetEventsCache(),
@@ -413,7 +428,7 @@ func (r *WorkflowStateReplicatorImpl) handleFirstReplicationTask(
 	if archetypeID == chasm.WorkflowArchetypeID {
 		err = localMutableState.SetHistoryTree(executionInfo.WorkflowExecutionTimeout, executionInfo.WorkflowRunTimeout, executionState.RunId)
 		if err != nil {
-			return err
+			return false, err
 		}
 	}
 
@@ -430,14 +445,11 @@ func (r *WorkflowStateReplicatorImpl) handleFirstReplicationTask(
 		true,
 	)
 	if err != nil {
-		return err
+		return false, err
 	}
 
-	shouldCleanup := true
 	defer func() {
-		if shouldCleanup {
-			r.deleteNewBranchWhenError(ctx, newBranchToken, retErr)
-		}
+		r.deleteNewBranchWhenError(ctx, newBranchToken, retErr)
 	}()
 
 	if mutation != nil {
@@ -446,13 +458,14 @@ func (r *WorkflowStateReplicatorImpl) handleFirstReplicationTask(
 		err = localMutableState.ApplySnapshot(snapshot.State)
 	}
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	err = r.taskRefresher.Refresh(ctx, localMutableState, false)
 	if err != nil {
-		return err
+		return false, err
 	}
+
 	err = r.transactionMgr.CreateWorkflow(
 		ctx,
 		archetypeID,
@@ -460,28 +473,163 @@ func (r *WorkflowStateReplicatorImpl) handleFirstReplicationTask(
 			r.clusterMetadata,
 			wfCtx,
 			localMutableState,
-			releaseFn,
+			wcache.NoopReleaseFn,
 		),
 	)
+	if errors.Is(err, consts.ErrDuplicate) {
+		return true, nil
+	}
+
+	return false, err
+}
+
+func (r *WorkflowStateReplicatorImpl) handleFirstReplicationTaskWithNewRun(
+	ctx context.Context,
+	archetypeID chasm.ArchetypeID,
+	wfCtx historyi.WorkflowContext,
+	executionInfo *persistencespb.WorkflowExecutionInfo,
+	executionState *persistencespb.WorkflowExecutionState,
+	versionedTransition *replicationspb.VersionedTransitionArtifact,
+	sourceClusterName string,
+) (continueProcess bool, retErr error) {
+	nsEntry, err := r.namespaceRegistry.GetNamespaceByID(namespace.ID(executionInfo.NamespaceId))
 	if err != nil {
-		return err
+		return false, err
 	}
-	releaseFn(nil)
-	shouldCleanup = false
 
-	if versionedTransition.NewRunInfo != nil {
-		return r.createNewRunWorkflow(
-			ctx,
-			namespace.ID(executionInfo.NamespaceId),
-			executionInfo.WorkflowId,
-			archetypeID,
-			versionedTransition.NewRunInfo,
+	// Build current run's mutable state with first batch of history events
+	localMutableState := workflow.NewMutableState(
+		r.shardContext,
+		r.shardContext.GetEventsCache(),
+		r.logger,
+		nsEntry,
+		executionInfo.WorkflowId,
+		executionState.RunId,
+		timestamp.TimeValue(executionState.StartTime),
+	)
+	if archetypeID == chasm.WorkflowArchetypeID {
+		err = localMutableState.SetHistoryTree(executionInfo.WorkflowExecutionTimeout, executionInfo.WorkflowRunTimeout, executionState.RunId)
+		if err != nil {
+			return false, err
+		}
+	}
+	// Get first batch of history events
+	firstEventsBatch, err := r.getFirstHistoryEventsBatch(
+		ctx,
+		namespace.ID(executionInfo.NamespaceId),
+		executionInfo.WorkflowId,
+		executionState.RunId,
+		versionedTransition,
+		sourceClusterName,
+	)
+	if err != nil {
+		return false, err
+	}
+
+	// Apply the first batch to build mutable state
+	newRunStateBuilder := workflow.NewMutableStateRebuilder(r.shardContext, r.logger, localMutableState)
+	_, err = newRunStateBuilder.ApplyEvents(
+		ctx,
+		namespace.ID(executionInfo.NamespaceId),
+		uuid.NewString(),
+		&commonpb.WorkflowExecution{
+			WorkflowId: executionInfo.WorkflowId,
+			RunId:      executionState.RunId,
+		},
+		firstEventsBatch,
+		nil,
+		"",
+	)
+	if err != nil {
+		return false, err
+	}
+
+	localMutableState.InitTransitionHistory()
+
+	// Try to create this current run workflow
+	err = r.transactionMgr.CreateWorkflow(
+		ctx,
+		archetypeID,
+		NewWorkflow(
+			r.clusterMetadata,
+			wfCtx,
 			localMutableState,
-			true,
-		)
+			wcache.NoopReleaseFn,
+		),
+	)
+
+	// If creation succeeds or workflow already exists, continue with handleExistingWorkflow
+	if err == nil || errors.Is(err, consts.ErrDuplicate) {
+		return true, nil
 	}
 
-	return nil
+	// Other errors should be returned
+	return false, err
+}
+
+// getFirstHistoryEventsBatch retrieves the first batch of history events
+// It first checks versionedTransition's EventBatch, and if the first event is event 1, uses that batch.
+// Otherwise, it retrieves the first batch from the remote cluster.
+func (r *WorkflowStateReplicatorImpl) getFirstHistoryEventsBatch(
+	ctx context.Context,
+	namespaceID namespace.ID,
+	workflowID string,
+	runID string,
+	versionedTransition *replicationspb.VersionedTransitionArtifact,
+	sourceClusterName string,
+) ([][]*historypb.HistoryEvent, error) {
+	// Check if EventBatches contains the first event
+	if len(versionedTransition.EventBatches) > 0 {
+		// Deserialize the first batch
+		firstBatchBlob := versionedTransition.EventBatches[0]
+		events, err := r.historySerializer.DeserializeEvents(firstBatchBlob)
+		if err != nil {
+			return nil, err
+		}
+
+		// Check if the first event is event ID 1
+		if len(events) > 0 && events[0].EventId == 1 {
+			return [][]*historypb.HistoryEvent{events}, nil
+		}
+	}
+
+	// Need to retrieve first batch from remote cluster
+	adminClient, err := r.shardContext.GetRemoteAdminClient(sourceClusterName)
+	if err != nil {
+		return nil, err
+	}
+
+	response, err := adminClient.GetWorkflowExecutionRawHistoryV2(ctx, &adminservice.GetWorkflowExecutionRawHistoryV2Request{
+		NamespaceId: namespaceID.String(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      runID,
+		},
+		StartEventId:      1,
+		StartEventVersion: 0,
+		EndEventId:        2, // Get only the first batch
+		EndEventVersion:   0,
+		MaximumPageSize:   1,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	if len(response.HistoryBatches) == 0 {
+		return nil, serviceerror.NewInternal("no history batches returned from remote cluster")
+	}
+
+	// Deserialize the first batch from remote
+	var result [][]*historypb.HistoryEvent
+	for _, blob := range response.HistoryBatches {
+		events, err := r.historySerializer.DeserializeEvents(blob)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, events)
+	}
+
+	return result, nil
 }
 
 func (r *WorkflowStateReplicatorImpl) deleteNewBranchWhenError(

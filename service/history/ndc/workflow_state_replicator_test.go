@@ -1572,17 +1572,6 @@ func (s *workflowReplicatorSuite) Test_handleFirstReplicationTask_WithSnapshot_S
 	}
 
 	mockWeCtx := historyi.NewMockWorkflowContext(s.controller)
-	s.mockWorkflowCache.EXPECT().GetOrCreateChasmExecution(
-		gomock.Any(),
-		s.mockShard,
-		namespace.ID(namespaceID),
-		&commonpb.WorkflowExecution{
-			WorkflowId: s.workflowID,
-			RunId:      s.runID,
-		},
-		chasm.WorkflowArchetypeID,
-		locks.PriorityHigh,
-	).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespace.NewNamespaceForTest(
 		&persistencespb.NamespaceInfo{Name: "test-namespace"},
@@ -1611,13 +1600,15 @@ func (s *workflowReplicatorSuite) Test_handleFirstReplicationTask_WithSnapshot_S
 		return nil
 	})
 
-	err := workflowStateReplicator.handleFirstReplicationTask(
+	continueProcess, err := workflowStateReplicator.handleFirstReplicationTask(
 		context.Background(),
 		chasm.WorkflowArchetypeID,
+		mockWeCtx,
 		versionedTransitionArtifact,
 		"test-cluster",
 	)
 	s.NoError(err)
+	s.False(continueProcess)
 }
 
 func (s *workflowReplicatorSuite) Test_handleFirstReplicationTask_WithMutation_Success() {
@@ -1659,17 +1650,6 @@ func (s *workflowReplicatorSuite) Test_handleFirstReplicationTask_WithMutation_S
 	}
 
 	mockWeCtx := historyi.NewMockWorkflowContext(s.controller)
-	s.mockWorkflowCache.EXPECT().GetOrCreateChasmExecution(
-		gomock.Any(),
-		s.mockShard,
-		namespace.ID(namespaceID),
-		&commonpb.WorkflowExecution{
-			WorkflowId: s.workflowID,
-			RunId:      s.runID,
-		},
-		chasm.WorkflowArchetypeID,
-		locks.PriorityHigh,
-	).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespace.NewNamespaceForTest(
 		&persistencespb.NamespaceInfo{Name: "test-namespace"},
@@ -1693,13 +1673,15 @@ func (s *workflowReplicatorSuite) Test_handleFirstReplicationTask_WithMutation_S
 		gomock.AssignableToTypeOf(&WorkflowImpl{}),
 	).Return(nil)
 
-	err := workflowStateReplicator.handleFirstReplicationTask(
+	continueProcess, err := workflowStateReplicator.handleFirstReplicationTask(
 		context.Background(),
 		chasm.WorkflowArchetypeID,
+		mockWeCtx,
 		versionedTransitionArtifact,
 		"test-cluster",
 	)
 	s.NoError(err)
+	s.False(continueProcess)
 }
 
 func (s *workflowReplicatorSuite) Test_handleFirstReplicationTask_InvalidArtifactType_Error() {
@@ -1713,15 +1695,18 @@ func (s *workflowReplicatorSuite) Test_handleFirstReplicationTask_InvalidArtifac
 	)
 
 	versionedTransitionArtifact := &replicationspb.VersionedTransitionArtifact{}
+	mockWeCtx := historyi.NewMockWorkflowContext(s.controller)
 
-	err := workflowStateReplicator.handleFirstReplicationTask(
+	continueProcess, err := workflowStateReplicator.handleFirstReplicationTask(
 		context.Background(),
 		chasm.WorkflowArchetypeID,
+		mockWeCtx,
 		versionedTransitionArtifact,
 		"test-cluster",
 	)
 	s.Error(err)
 	s.Contains(err.Error(), "unknown artifact type")
+	s.False(continueProcess)
 }
 
 func (s *workflowReplicatorSuite) Test_handleFirstReplicationTask_CreateWorkflowFails_BranchCleanup() {
@@ -1763,17 +1748,6 @@ func (s *workflowReplicatorSuite) Test_handleFirstReplicationTask_CreateWorkflow
 	}
 
 	mockWeCtx := historyi.NewMockWorkflowContext(s.controller)
-	s.mockWorkflowCache.EXPECT().GetOrCreateChasmExecution(
-		gomock.Any(),
-		s.mockShard,
-		namespace.ID(namespaceID),
-		&commonpb.WorkflowExecution{
-			WorkflowId: s.workflowID,
-			RunId:      s.runID,
-		},
-		chasm.WorkflowArchetypeID,
-		locks.PriorityHigh,
-	).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespace.NewNamespaceForTest(
 		&persistencespb.NamespaceInfo{Name: "test-namespace"},
@@ -1798,14 +1772,16 @@ func (s *workflowReplicatorSuite) Test_handleFirstReplicationTask_CreateWorkflow
 		gomock.AssignableToTypeOf(&WorkflowImpl{}),
 	).Return(expectedErr)
 
-	err := workflowStateReplicator.handleFirstReplicationTask(
+	continueProcess, err := workflowStateReplicator.handleFirstReplicationTask(
 		context.Background(),
 		chasm.WorkflowArchetypeID,
+		mockWeCtx,
 		versionedTransitionArtifact,
 		"test-cluster",
 	)
 	s.Error(err)
 	s.Equal(expectedErr, err)
+	s.False(continueProcess)
 }
 
 func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_CreateNewBranch() {
