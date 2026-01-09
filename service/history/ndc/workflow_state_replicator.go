@@ -582,14 +582,14 @@ func (r *WorkflowStateReplicatorImpl) getFirstHistoryEventsBatch(
 	if len(versionedTransition.EventBatches) > 0 {
 		// Deserialize the first batch
 		firstBatchBlob := versionedTransition.EventBatches[0]
-		events, err := r.historySerializer.DeserializeEvents(firstBatchBlob)
+		historyEvents, err := r.historySerializer.DeserializeEvents(firstBatchBlob)
 		if err != nil {
 			return nil, err
 		}
 
 		// Check if the first event is event ID 1
-		if len(events) > 0 && events[0].EventId == 1 {
-			return [][]*historypb.HistoryEvent{events}, nil
+		if len(historyEvents) > 0 && historyEvents[0].EventId == 1 {
+			return [][]*historypb.HistoryEvent{historyEvents}, nil
 		}
 	}
 
@@ -622,11 +622,16 @@ func (r *WorkflowStateReplicatorImpl) getFirstHistoryEventsBatch(
 	// Deserialize the first batch from remote
 	var result [][]*historypb.HistoryEvent
 	for _, blob := range response.HistoryBatches {
-		events, err := r.historySerializer.DeserializeEvents(blob)
+		historyEvents, err := r.historySerializer.DeserializeEvents(blob)
 		if err != nil {
 			return nil, err
 		}
-		result = append(result, events)
+		result = append(result, historyEvents)
+	}
+
+	// Validate that the first event starts from event ID 1
+	if len(result) == 0 || len(result[0]) == 0 || result[0][0].EventId != 1 {
+		return nil, serviceerror.NewInternal("first history event batch from remote cluster does not start from event ID 1")
 	}
 
 	return result, nil
