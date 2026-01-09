@@ -1,0 +1,8 @@
+{
+  "CurrVersion": "1.14",
+  "MinCompatibleVersion": "0.1",
+  "Description": "add TemporalExternalPayloadSizeBytes and TemporalExternalPayloadCount builtin search attributes",
+  "SchemaUpdateCqlFiles": [
+    "add_external_payload_size_and_count_search_attributes.sql"
+  ]
+}
