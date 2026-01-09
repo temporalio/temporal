@@ -1959,7 +1959,7 @@ func (s *standaloneActivityTestSuite) TestListActivityExecutions() {
 			NextPageToken: resp.GetNextPageToken(),
 		})
 		require.NoError(t, err)
-		require.Nil(t, resp.GetExecutions())
+		require.Empty(t, resp.GetExecutions())
 		require.Nil(t, resp.GetNextPageToken())
 	})
 }
