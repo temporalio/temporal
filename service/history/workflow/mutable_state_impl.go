@@ -6961,8 +6961,6 @@ func (ms *MutableStateImpl) setMetaDataMap(
 
 		// TODO: To set activity_type/activity_task_queue metadata, the history gRPC handler should
 		// set the relevant activity information on the metadata context before calling mutable state.
-	case chasm.SchedulerArchetypeID:
-		fallthrough
 	default:
 		// No metadata to set for other archetype types
 	}
