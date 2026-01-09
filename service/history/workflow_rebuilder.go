@@ -161,7 +161,7 @@ func (r *workflowRebuilderImpl) replayResetWorkflow(
 	requestID string,
 	mutableState *persistencespb.WorkflowMutableState,
 ) (historyi.MutableState, error) {
-	rebuildMutableState, rebuildHistorySize, err := ndc.NewStateRebuilder(r.shard, r.logger).RebuildWithCurrentMutableState(
+	rebuildMutableState, rebuildStats, err := ndc.NewStateRebuilder(r.shard, r.logger).RebuildWithCurrentMutableState(
 		ctx,
 		r.shard.GetTimeSource().Now(),
 		workflowKey,
@@ -180,7 +180,9 @@ func (r *workflowRebuilderImpl) replayResetWorkflow(
 	// note: this is an admin API, for operator to recover a corrupted mutable state, so state transition count
 	// should remain the same, the -= 1 exists here since later CloseTransactionAsSnapshot will += 1 to state transition count
 	rebuildMutableState.GetExecutionInfo().StateTransitionCount = stateTransitionCount - 1
-	rebuildMutableState.AddHistorySize(rebuildHistorySize)
+	rebuildMutableState.AddHistorySize(rebuildStats.HistorySize)
+	rebuildMutableState.AddExternalPayloadSize(rebuildStats.ExternalPayloadSize)
+	rebuildMutableState.AddExternalPayloadCount(rebuildStats.ExternalPayloadCount)
 	rebuildMutableState.SetUpdateCondition(rebuildMutableState.GetNextEventID(), dbRecordVersion)
 	return rebuildMutableState, nil
 }

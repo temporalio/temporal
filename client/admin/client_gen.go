@@ -419,6 +419,16 @@ func (c *clientImpl) ResendReplicationTasks(
 	return c.client.ResendReplicationTasks(ctx, request, opts...)
 }
 
+func (c *clientImpl) StartAdminBatchOperation(
+	ctx context.Context,
+	request *adminservice.StartAdminBatchOperationRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.StartAdminBatchOperationResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.StartAdminBatchOperation(ctx, request, opts...)
+}
+
 func (c *clientImpl) SyncWorkflowState(
 	ctx context.Context,
 	request *adminservice.SyncWorkflowStateRequest,

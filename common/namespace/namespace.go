@@ -255,6 +255,11 @@ func (ns *Namespace) ReplicationPolicy() ReplicationPolicy {
 	return ReplicationPolicyOneCluster
 }
 
+// GetReplicationResolver return the replication resolover
+func (ns *Namespace) GetReplicationResolver() ReplicationResolver {
+	return ns.replicationResolver
+}
+
 func (ns *Namespace) GetCustomData(key string) string {
 	if ns.info.Data == nil {
 		return ""
