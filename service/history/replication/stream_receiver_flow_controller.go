@@ -11,7 +11,8 @@ type (
 
 	// FlowControlSignal holds signals to make flow control decision, more signalsProvider can be added here i.e. total persistence rps, cpu usage etc.
 	FlowControlSignal struct {
-		taskTrackingCount int
+		taskTrackingCount   int
+		schedulerQueueCount int64
 	}
 	ReceiverFlowController interface {
 		GetFlowControlInfo(priority enumsspb.TaskPriority) enumsspb.ReplicationFlowControlCommand
@@ -31,7 +32,9 @@ func NewReceiverFlowControl(signals map[enumsspb.TaskPriority]FlowControlSignalP
 
 func (s *streamReceiverFlowControllerImpl) GetFlowControlInfo(priority enumsspb.TaskPriority) enumsspb.ReplicationFlowControlCommand {
 	if signal, ok := s.signalsProvider[priority]; ok {
-		if signal().taskTrackingCount > s.config.ReplicationReceiverMaxOutstandingTaskCount() {
+		signalData := signal()
+		totalOutstanding := signalData.taskTrackingCount + int(signalData.schedulerQueueCount)
+		if totalOutstanding > s.config.ReplicationReceiverMaxOutstandingTaskCount() {
 			return enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE
 		}
 	}

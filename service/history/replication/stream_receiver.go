@@ -80,13 +80,23 @@ func NewStreamReceiver(
 	lowPriorityTaskTracker := NewExecutableTaskTracker(logger, processToolBox.MetricsHandler)
 	taskTrackerMap := make(map[enumsspb.TaskPriority]FlowControlSignalProvider)
 	taskTrackerMap[enumsspb.TASK_PRIORITY_HIGH] = func() *FlowControlSignal {
+		schedulerQueueCount := int64(0)
+		if schedulerWithCount, ok := processToolBox.HighPriorityTaskScheduler.(interface{ PendingTaskCount() int64 }); ok {
+			schedulerQueueCount = schedulerWithCount.PendingTaskCount()
+		}
 		return &FlowControlSignal{
-			taskTrackingCount: highPriorityTaskTracker.Size(),
+			taskTrackingCount:   highPriorityTaskTracker.Size(),
+			schedulerQueueCount: schedulerQueueCount,
 		}
 	}
 	taskTrackerMap[enumsspb.TASK_PRIORITY_LOW] = func() *FlowControlSignal {
+		schedulerQueueCount := int64(0)
+		if schedulerWithCount, ok := processToolBox.LowPriorityTaskScheduler.(interface{ PendingTaskCount() int64 }); ok {
+			schedulerQueueCount = schedulerWithCount.PendingTaskCount()
+		}
 		return &FlowControlSignal{
-			taskTrackingCount: lowPriorityTaskTracker.Size(),
+			taskTrackingCount:   lowPriorityTaskTracker.Size(),
+			schedulerQueueCount: schedulerQueueCount,
 		}
 	}
 	return &StreamReceiverImpl{

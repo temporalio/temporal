@@ -339,3 +339,21 @@ LoopDrainQueues:
 func (s *SequentialScheduler[T]) isStopped() bool {
 	return atomic.LoadInt32(&s.status) == common.DaemonStatusStopped
 }
+
+// PendingTaskCount returns the approximate number of tasks pending in the scheduler.
+// This includes tasks in the queue channel and tasks in the per-queue task queues.
+func (s *SequentialScheduler[T]) PendingTaskCount() int {
+	// Count tasks in queueChan
+	queueChanCount := len(s.queueChan)
+
+	// Count tasks in all queues
+	queueCount := 0
+	iter := s.queues.Iter()
+	defer iter.Close()
+	for entry := range iter.Entries() {
+		queue := entry.Value.(SequentialTaskQueue[T])
+		queueCount += queue.Len()
+	}
+
+	return queueChanCount + queueCount
+}

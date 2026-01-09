@@ -403,3 +403,17 @@ DrainLoop:
 func (s *InterleavedWeightedRoundRobinScheduler[T, K]) isStopped() bool {
 	return atomic.LoadInt32(&s.status) == common.DaemonStatusStopped
 }
+
+// PendingTaskCount returns the approximate number of tasks pending in the scheduler.
+// This includes tasks that are in the weighted channels but haven't been dispatched to the underlying scheduler yet,
+// plus tasks in the underlying scheduler if it supports PendingTaskCount.
+func (s *InterleavedWeightedRoundRobinScheduler[T, K]) PendingTaskCount() int64 {
+	count := atomic.LoadInt64(&s.numInflightTask)
+
+	// Try to get pending count from underlying scheduler if it's a SequentialScheduler
+	if seqScheduler, ok := s.fifoScheduler.(interface{ PendingTaskCount() int }); ok {
+		count += int64(seqScheduler.PendingTaskCount())
+	}
+
+	return count
+}
