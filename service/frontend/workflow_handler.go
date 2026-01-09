@@ -3623,10 +3623,6 @@ func (wh *WorkflowHandler) ListWorkerDeployments(ctx context.Context, request *w
 
 	workerDeployments := make([]*workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary, 0, len(resp))
 	for _, d := range resp {
-		if d == nil {
-			// Skip nil entries that result from corrupted memos
-			continue
-		}
 		workerDeployments = append(workerDeployments, &workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary{
 			Name:                  d.GetName(),
 			CreateTime:            d.GetCreateTime(),
