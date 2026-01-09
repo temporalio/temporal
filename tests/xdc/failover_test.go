@@ -990,6 +990,8 @@ func (s *FunctionalClustersTestSuite) TestResetWorkflowFailover() {
 	s.NoError(err)
 	s.True(workflowComplete)
 
+	s.waitForClusterSynced()
+
 	getHistoryReq := &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace: namespace,
 		Execution: &commonpb.WorkflowExecution{
