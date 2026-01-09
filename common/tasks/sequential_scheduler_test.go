@@ -206,6 +206,77 @@ func (s *sequentialSchedulerSuite) TestStartStopWorkers() {
 	processor.shutdownWG.Wait()
 }
 
+func (s *sequentialSchedulerSuite) TestPendingTaskCount() {
+	// Create a scheduler with multiple queue capacity to allow multiple queues to be buffered
+	hashFn := func(key interface{}) uint32 {
+		return uint32(key.(int))
+	}
+	// Track submission order to assign queue IDs
+	submissionIndex := 0
+	factory := func(task *MockTask) SequentialTaskQueue[*MockTask] {
+		idx := submissionIndex
+		submissionIndex++
+
+		// Assign queue IDs: first 3 tasks to queue 1, next 2 to queue 2, last 4 to queue 3
+		var queueID int
+		if idx < 3 {
+			queueID = 1
+		} else if idx < 5 {
+			queueID = 2
+		} else {
+			queueID = 3
+		}
+		return newTestSequentialTaskQueue[*MockTask](queueID, 100)
+	}
+	scheduler := NewSequentialScheduler[*MockTask](
+		&SequentialSchedulerOptions{
+			QueueSize: 10, // Large enough to buffer multiple queues
+			WorkerCount: func(_ func(int)) (v int, cancel func()) {
+				return 0, func() {} // No workers to prevent task processing
+			},
+		},
+		hashFn,
+		factory,
+		log.NewNoopLogger(),
+	)
+	scheduler.Start()
+	defer scheduler.Stop()
+
+	// Submit tasks to different queues
+	// Queue 1: 3 tasks
+	// Queue 2: 2 tasks
+	// Queue 3: 4 tasks
+	// Total: 9 tasks across 3 queues
+	numTasks := 9
+	tasks := make([]*MockTask, numTasks)
+	for i := 0; i < numTasks; i++ {
+		tasks[i] = NewMockTask(s.controller)
+		tasks[i].EXPECT().RetryPolicy().Return(s.retryPolicy).AnyTimes()
+		// Tasks will be aborted when we manually drain or when scheduler stops
+		tasks[i].EXPECT().Abort().Times(1)
+	}
+
+	// Submit all tasks
+	for i := 0; i < numTasks; i++ {
+		scheduler.Submit(tasks[i])
+	}
+
+	// Verify PendingTaskCount returns the number of tasks
+	pendingCount := scheduler.PendingTaskCount()
+	s.Equal(numTasks, pendingCount)
+
+	// Manually drain all queues before stopping (drainTasks only drains from queueChan)
+	// This ensures all tasks are aborted as expected
+	iter := scheduler.queues.Iter()
+	defer iter.Close()
+	for entry := range iter.Entries() {
+		queue := entry.Value.(SequentialTaskQueue[*MockTask])
+		for !queue.IsEmpty() {
+			queue.Remove().Abort()
+		}
+	}
+}
+
 func (s *sequentialSchedulerSuite) newTestProcessor() *SequentialScheduler[*MockTask] {
 	hashFn := func(key interface{}) uint32 {
 		return 1
