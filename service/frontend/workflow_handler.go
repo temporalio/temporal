@@ -1182,6 +1182,7 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 		WorkflowExecution:           matchingResponse.WorkflowExecution,
 		ActivityId:                  matchingResponse.ActivityId,
 		ActivityType:                matchingResponse.ActivityType,
+		ActivityRunId:               matchingResponse.ActivityRunId,
 		Input:                       matchingResponse.Input,
 		ScheduledTime:               matchingResponse.ScheduledTime,
 		ScheduleToCloseTimeout:      matchingResponse.ScheduleToCloseTimeout,

@@ -346,6 +346,8 @@ message RecordActivityTaskStartedResponse {
     temporal.api.common.v1.Priority priority = 10;
     temporal.api.common.v1.RetryPolicy retry_policy = 11;
     int64 start_version = 12;
+    // ID of the activity run (applicable for standalone activities only)
+    string activity_run_id = 13;
 }
 
 message RespondWorkflowTaskCompletedRequest {

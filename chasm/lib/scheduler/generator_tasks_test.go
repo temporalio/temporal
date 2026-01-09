@@ -83,10 +83,12 @@ func (s *generatorTasksSuite) TestExecuteBufferTask_Basic() {
 	newHighWatermark := generator.LastProcessedTime.AsTime()
 	s.True(newHighWatermark.After(highWatermark))
 
-	// Ensure we scheduled an immediate physical pure task on the tree.
+	// Ensure we scheduled a physical side-effect task on the tree at immediate time.
+	// The InvokerExecuteTask is a side-effect task that starts workflows.
+	// The InvokerProcessBufferTask (pure) executes inline during CloseTransaction.
 	_, err = s.node.CloseTransaction()
 	s.NoError(err)
-	s.True(s.hasTask(&tasks.ChasmTaskPure{}, chasm.TaskScheduledTimeImmediate))
+	s.True(s.hasTask(&tasks.ChasmTask{}, chasm.TaskScheduledTimeImmediate))
 }
 
 func (s *generatorTasksSuite) TestUpdateFutureActionTimes_UnlimitedActions() {

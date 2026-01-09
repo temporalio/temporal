@@ -1036,6 +1036,70 @@ func (s *scheduleFunctionalSuiteBase) TestListSchedulesReturnsWorkflowStatus() {
 	s.assertSameRecentActions(descResp, listResp)
 }
 
+func (s *scheduleFunctionalSuiteBase) TestUpdateIntervalTakesEffect() {
+	sid := "sched-test-update-interval"
+	wid := "sched-test-update-interval-wf"
+	wt := "sched-test-update-interval-wt"
+
+	var runs int32
+	workflowFn := func(ctx workflow.Context) error {
+		workflow.SideEffect(ctx, func(ctx workflow.Context) any {
+			atomic.AddInt32(&runs, 1)
+			return 0
+		})
+		return nil
+	}
+	s.worker.RegisterWorkflowWithOptions(workflowFn, workflow.RegisterOptions{Name: wt})
+
+	// Create schedule with a long interval (300s) - won't fire for 5 minutes.
+	schedule := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
+				{Interval: durationpb.New(300 * time.Second)},
+			},
+		},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   wid,
+					WorkflowType: &commonpb.WorkflowType{Name: wt},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				},
+			},
+		},
+	}
+
+	ctx := s.newContext()
+	_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   "test",
+		RequestId:  uuid.NewString(),
+	})
+	s.NoError(err)
+	s.cleanup(sid)
+
+	// Update the interval to be very short (1s).
+	schedule.Spec.Interval[0].Interval = durationpb.New(1 * time.Second)
+	_, err = s.FrontendClient().UpdateSchedule(ctx, &workflowservice.UpdateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   "test",
+		RequestId:  uuid.NewString(),
+	})
+	s.NoError(err)
+
+	// After updating to 1s interval, we should see runs start within a few seconds.
+	s.Eventually(
+		func() bool { return atomic.LoadInt32(&runs) >= 2 },
+		10*time.Second,
+		500*time.Millisecond,
+		"expected at least 2 runs within 10s after updating interval to 1s",
+	)
+}
+
 func (s *scheduleFunctionalSuiteBase) TestListScheduleMatchingTimes() {
 	sid := "sched-test-list-matching-times"
 
