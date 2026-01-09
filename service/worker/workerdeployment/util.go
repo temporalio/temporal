@@ -146,13 +146,16 @@ func validateVersionWfParams(fieldName string, field string, maxIDLengthLimit in
 	return nil
 }
 
-func DecodeWorkerDeploymentMemo(memo *commonpb.Memo) *deploymentspb.WorkerDeploymentWorkflowMemo {
+func DecodeWorkerDeploymentMemo(memo *commonpb.Memo) (*deploymentspb.WorkerDeploymentWorkflowMemo, error) {
+	if memo == nil || memo.Fields == nil {
+		return nil, errors.New("decoding WorkerDeploymentMemo failed: Memo or it's fields are nil")
+	}
 	var workerDeploymentWorkflowMemo deploymentspb.WorkerDeploymentWorkflowMemo
 	err := sdk.PreferProtoDataConverter.FromPayload(memo.Fields[WorkerDeploymentMemoField], &workerDeploymentWorkflowMemo)
 	if err != nil {
-		return nil
+		return nil, err
 	}
-	return &workerDeploymentWorkflowMemo
+	return &workerDeploymentWorkflowMemo, nil
 }
 
 func getSafeDurationConfig(ctx workflow.Context, id string, unsafeGetter func() any, defaultValue time.Duration) (time.Duration, error) {
