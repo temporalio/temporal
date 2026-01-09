@@ -141,6 +141,7 @@ func newTaskQueuePartitionManager(
 func (pm *taskQueuePartitionManagerImpl) initialize() (retErr error) {
 	defer func() { pm.defaultQueueFuture.SetIfNotReady(nil, retErr) }()
 	unload := func(bool) {
+		// note this is a dynamic config subscription callback so it runs in a new goroutine
 		pm.unloadFromEngine(unloadCauseConfigChange)
 	}
 
