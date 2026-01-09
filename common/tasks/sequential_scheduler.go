@@ -348,7 +348,10 @@ func (s *SequentialScheduler[T]) PendingTaskCount() int {
 	iter := s.queues.Iter()
 	defer iter.Close()
 	for entry := range iter.Entries() {
-		queue := entry.Value.(SequentialTaskQueue[T])
+		queue, ok := entry.Value.(SequentialTaskQueue[T])
+		if !ok {
+			continue
+		}
 		taskCount += queue.Len()
 	}
 
