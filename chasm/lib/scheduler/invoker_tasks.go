@@ -325,6 +325,10 @@ func (e *InvokerExecuteTaskExecutor) startWorkflows(
 			continue
 		}
 
+		// Clone start before concurrent access. The clone will have RunId/StartTime
+		// set by startWorkflow, then copied back to the original in recordExecuteResult.
+		start = common.CloneProto(start)
+
 		// Run all starts concurrently.
 		newCtx := ctx.Clone()
 		wg.Go(func() {
@@ -586,7 +590,9 @@ func (e *InvokerExecuteTaskExecutor) startWorkflow(
 	}
 	actualStartTime := time.Now()
 
-	// Set RunId and StartTime on the BufferedStart for recordExecuteResult.
+	// Set metadata on the cloned start. The clone was created in startWorkflows
+	// before spawning this goroutine, and will be copied back to the Invoker's
+	// BufferedStarts in recordExecuteResult.
 	start.RunId = result.RunId
 	start.StartTime = timestamppb.New(actualStartTime)
 

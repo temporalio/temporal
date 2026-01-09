@@ -173,7 +173,6 @@ func (i *Invoker) recordExecuteResult(ctx chasm.MutableContext, result *executeR
 	// Update BufferedStarts with results.
 	for _, start := range i.GetBufferedStarts() {
 		if completedStart, ok := completed[start.RequestId]; ok {
-			// Copy RunId and StartTime from the result.
 			start.RunId = completedStart.GetRunId()
 			start.StartTime = completedStart.GetStartTime()
 		}
