@@ -329,7 +329,8 @@ func TestMetadataContextIsolation(t *testing.T) {
 		parentCtx := AddMetadataContext(context.Background())
 		ContextMetadataSet(parentCtx, "key", "parent-value")
 
-		childCtx := context.WithValue(parentCtx, "other-key", "other-value")
+		type testContextKey string
+		childCtx := context.WithValue(parentCtx, testContextKey("other-key"), "other-value")
 
 		// Child can still access parent's metadata context
 		value, ok := ContextMetadataGet(childCtx, "key")
