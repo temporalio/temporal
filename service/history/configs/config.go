@@ -212,6 +212,8 @@ type Config struct {
 	ParentClosePolicyThreshold dynamicconfig.IntPropertyFnWithNamespaceFilter
 	// total number of parentClosePolicy system workflows
 	NumParentClosePolicySystemWorkflows dynamicconfig.IntPropertyFn
+	// EnableParentClosePolicyTransferTasks enables dedicated transfer tasks for parent close policy
+	EnableParentClosePolicyTransferTasks dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	// Size limit related settings
 	BlobSizeLimitError                        dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -600,12 +602,13 @@ func NewConfig(
 
 		// history client: client/history/client.go set the client timeout 30s
 		// TODO: Return this value to the client: go.temporal.io/server/issues/294
-		LongPollExpirationInterval:          dynamicconfig.HistoryLongPollExpirationInterval.Get(dc),
-		EventEncodingType:                   dynamicconfig.DefaultEventEncoding.Get(dc),
-		EnableParentClosePolicy:             dynamicconfig.EnableParentClosePolicy.Get(dc),
-		NumParentClosePolicySystemWorkflows: dynamicconfig.NumParentClosePolicySystemWorkflows.Get(dc),
-		EnableParentClosePolicyWorker:       dynamicconfig.EnableParentClosePolicyWorker.Get(dc),
-		ParentClosePolicyThreshold:          dynamicconfig.ParentClosePolicyThreshold.Get(dc),
+		LongPollExpirationInterval:           dynamicconfig.HistoryLongPollExpirationInterval.Get(dc),
+		EventEncodingType:                    dynamicconfig.DefaultEventEncoding.Get(dc),
+		EnableParentClosePolicy:              dynamicconfig.EnableParentClosePolicy.Get(dc),
+		NumParentClosePolicySystemWorkflows:  dynamicconfig.NumParentClosePolicySystemWorkflows.Get(dc),
+		EnableParentClosePolicyWorker:        dynamicconfig.EnableParentClosePolicyWorker.Get(dc),
+		ParentClosePolicyThreshold:           dynamicconfig.ParentClosePolicyThreshold.Get(dc),
+		EnableParentClosePolicyTransferTasks: dynamicconfig.EnableParentClosePolicyTransferTasks.Get(dc),
 
 		BlobSizeLimitError:                        dynamicconfig.BlobSizeLimitError.Get(dc),
 		BlobSizeLimitWarn:                         dynamicconfig.BlobSizeLimitWarn.Get(dc),

@@ -142,6 +142,8 @@ func (t *transferQueueActiveTaskExecutor) Execute(
 		err = t.processDeleteExecutionTask(ctx, task)
 	case *tasks.ChasmTask:
 		err = t.executeChasmSideEffectTransferTask(ctx, task)
+	case *tasks.ParentClosePolicyTask:
+		err = t.processParentClosePolicyTask(ctx, task)
 	default:
 		err = errUnknownTransferTask
 	}
@@ -453,6 +455,11 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 	if isParentTerminatedDueToReset && executionInfo.GetResetRunId() != "" && allowResetWithPendingChildren {
 		// TODO (Chetan): update this condition as new reset policies/cases are added.
 		shouldSkipParentClosePolicy = true // only skip if the parent is reset and we are using the new flow.
+	}
+	// Skip if ParentClosePolicyTask tasks were generated for this workflow's children.
+	// See processParentClosePolicyTask() for task handler details.
+	if task.ChildPolicyTasksGenerated {
+		shouldSkipParentClosePolicy = true
 	}
 	if !shouldSkipParentClosePolicy {
 		if err := t.processParentClosePolicy(
@@ -1916,6 +1923,113 @@ func (t *transferQueueActiveTaskExecutor) applyParentClosePolicy(
 
 	default:
 		return serviceerror.NewInternal(fmt.Sprintf("unknown parent close policy: %v", childInfo.ParentClosePolicy))
+	}
+}
+
+func (t *transferQueueActiveTaskExecutor) processParentClosePolicyTask(
+	ctx context.Context,
+	task *tasks.ParentClosePolicyTask,
+) (retError error) {
+	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
+	defer cancel()
+
+	weContext, release, err := getWorkflowExecutionContextForTask(ctx, t.shardContext, t.cache, task)
+	if err != nil {
+		return err
+	}
+	defer func() { release(retError) }()
+
+	mutableState, err := loadMutableStateForTransferTask(ctx, t.shardContext, weContext, task, t.metricHandler, t.logger)
+	if err != nil {
+		return err
+	}
+	if mutableState == nil || mutableState.IsWorkflowExecutionRunning() {
+		return nil
+	}
+
+	closeVersion, err := mutableState.GetCloseVersion()
+	if err != nil {
+		return err
+	}
+	if err = CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), closeVersion, task.Version, task); err != nil {
+		return err
+	}
+
+	return t.applyParentClosePolicyToChild(ctx, task)
+}
+
+func (t *transferQueueActiveTaskExecutor) applyParentClosePolicyToChild(
+	ctx context.Context,
+	task *tasks.ParentClosePolicyTask,
+) error {
+	scope := t.metricHandler.WithTags(metrics.OperationTag(metrics.TransferActiveTaskParentClosePolicyScope))
+
+	switch task.ParentClosePolicy {
+	case enumspb.PARENT_CLOSE_POLICY_ABANDON:
+		// This shouldn't happen as we don't generate tasks for ABANDON policy, but handle it gracefully.
+		return nil
+
+	case enumspb.PARENT_CLOSE_POLICY_TERMINATE:
+		_, err := t.historyRawClient.TerminateWorkflowExecution(ctx, &historyservice.TerminateWorkflowExecutionRequest{
+			NamespaceId: task.TargetNamespaceID,
+			TerminateRequest: &workflowservice.TerminateWorkflowExecutionRequest{
+				WorkflowExecution: &commonpb.WorkflowExecution{
+					WorkflowId: task.TargetWorkflowID,
+				},
+				FirstExecutionRunId: task.TargetRunID,
+				Reason:              "by parent close policy",
+				Identity:            consts.IdentityHistoryService,
+			},
+			ExternalWorkflowExecution: &commonpb.WorkflowExecution{
+				WorkflowId: task.WorkflowID,
+				RunId:      task.RunID,
+			},
+			ChildWorkflowOnly: true,
+		})
+		if err != nil {
+			switch err.(type) {
+			case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
+				// If child execution or namespace is deleted there is nothing to close.
+				return nil
+			default:
+				metrics.ParentClosePolicyProcessorFailures.With(scope).Record(1)
+				return err
+			}
+		}
+		metrics.ParentClosePolicyProcessorSuccess.With(scope).Record(1)
+		return nil
+
+	case enumspb.PARENT_CLOSE_POLICY_REQUEST_CANCEL:
+		_, err := t.historyRawClient.RequestCancelWorkflowExecution(ctx, &historyservice.RequestCancelWorkflowExecutionRequest{
+			NamespaceId: task.TargetNamespaceID,
+			CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{
+				WorkflowExecution: &commonpb.WorkflowExecution{
+					WorkflowId: task.TargetWorkflowID,
+				},
+				FirstExecutionRunId: task.TargetRunID,
+				Identity:            consts.IdentityHistoryService,
+			},
+			ExternalWorkflowExecution: &commonpb.WorkflowExecution{
+				WorkflowId: task.WorkflowID,
+				RunId:      task.RunID,
+			},
+			ChildWorkflowOnly: true,
+		})
+		if err != nil {
+			switch err.(type) {
+			case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
+				// If child execution or namespace is deleted there is nothing to close.
+				return nil
+			default:
+				metrics.ParentClosePolicyProcessorFailures.With(scope).Record(1)
+				return err
+			}
+		}
+		metrics.ParentClosePolicyProcessorSuccess.With(scope).Record(1)
+		return nil
+
+	default:
+		return serviceerror.NewInternal(fmt.Sprintf("unknown parent close policy: %v", task.ParentClosePolicy))
 	}
 }
 

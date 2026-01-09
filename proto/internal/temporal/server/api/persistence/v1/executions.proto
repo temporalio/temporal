@@ -342,12 +342,23 @@ message TransferTaskInfo {
         // can_skip_visibility_archival is set to true when we can guarantee that visibility records will be archived
         // by some other task, so this task doesn't need to worry about it.
         bool can_skip_visibility_archival = 1;
+        // child_policy_tasks_generated indicates that ParentClosePolicyTask tasks were generated
+        // for this workflow's children. When true, processCloseExecution should skip
+        // the legacy parent close policy processing to avoid duplicate work.
+        bool child_policy_tasks_generated = 2;
+    }
+    message ParentClosePolicyTaskDetails {
+        // parent_close_policy is the policy to apply to the child workflow.
+        temporal.api.enums.v1.ParentClosePolicy parent_close_policy = 1;
     }
     oneof task_details {
         CloseExecutionTaskDetails close_execution_task_details = 16;
 
         // If the task addresses a CHASM component, this field will be set.
         ChasmTaskInfo chasm_task_info = 18;
+
+        // If the task is a parent close policy task, this field will be set.
+        ParentClosePolicyTaskDetails parent_close_policy_task_details = 19;
     }
     // Stamp represents the "version" of the entity's internal state for which the transfer task was created.
     // It increases monotonically when the entity's options are modified.

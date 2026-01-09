@@ -237,6 +237,7 @@ func TestTaskGeneratorImpl_GenerateWorkflowCloseTasks(t *testing.T) {
 				ArchivalProcessorArchiveDelay: func() time.Duration {
 					return p.ArchivalProcessorArchiveDelay
 				},
+				EnableParentClosePolicyTransferTasks: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 			}
 			closeTime := time.Unix(0, 0)
 			var allTasks []tasks.Task
@@ -916,4 +917,166 @@ func TestTaskGeneratorImpl_GenerateDirtySubStateMachineTasks_TrimsTimersForDelet
 
 	require.Empty(t, genTasks)
 	require.Empty(t, ms.GetExecutionInfo().StateMachineTimers) // Timer should be trimmed
+}
+
+func TestTaskGeneratorImpl_GenerateParentClosePolicyTasks(t *testing.T) {
+	testCases := []struct {
+		name                              string
+		featureEnabled                    bool
+		parentClosePolicy                 enumspb.ParentClosePolicy
+		workflowStatus                    enumspb.WorkflowExecutionStatus
+		resetRunID                        string
+		allowResetWithPendingChildren     bool
+		expectedParentClosePolicyTasksGen bool
+		expectedChildPolicyTasksGenerated bool
+	}{
+		{
+			name:                              "feature disabled - no tasks generated",
+			featureEnabled:                    false,
+			parentClosePolicy:                 enumspb.PARENT_CLOSE_POLICY_TERMINATE,
+			workflowStatus:                    enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			expectedParentClosePolicyTasksGen: false,
+			expectedChildPolicyTasksGenerated: false,
+		},
+		{
+			name:                              "feature enabled - terminate policy - generates task",
+			featureEnabled:                    true,
+			parentClosePolicy:                 enumspb.PARENT_CLOSE_POLICY_TERMINATE,
+			workflowStatus:                    enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			expectedParentClosePolicyTasksGen: true,
+			expectedChildPolicyTasksGenerated: true,
+		},
+		{
+			name:                              "feature enabled - request cancel policy - generates task",
+			featureEnabled:                    true,
+			parentClosePolicy:                 enumspb.PARENT_CLOSE_POLICY_REQUEST_CANCEL,
+			workflowStatus:                    enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			expectedParentClosePolicyTasksGen: true,
+			expectedChildPolicyTasksGenerated: true,
+		},
+		{
+			name:                              "feature enabled - abandon policy - no task generated",
+			featureEnabled:                    true,
+			parentClosePolicy:                 enumspb.PARENT_CLOSE_POLICY_ABANDON,
+			workflowStatus:                    enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			expectedParentClosePolicyTasksGen: false,
+			expectedChildPolicyTasksGenerated: false,
+		},
+		{
+			name:                              "feature enabled - reset workflow with pending children allowed - no task",
+			featureEnabled:                    true,
+			parentClosePolicy:                 enumspb.PARENT_CLOSE_POLICY_TERMINATE,
+			workflowStatus:                    enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+			resetRunID:                        uuid.NewString(),
+			allowResetWithPendingChildren:     true,
+			expectedParentClosePolicyTasksGen: false,
+			expectedChildPolicyTasksGenerated: false,
+		},
+		{
+			name:                              "feature enabled - reset workflow with pending children not allowed - generates task",
+			featureEnabled:                    true,
+			parentClosePolicy:                 enumspb.PARENT_CLOSE_POLICY_TERMINATE,
+			workflowStatus:                    enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+			resetRunID:                        uuid.NewString(),
+			allowResetWithPendingChildren:     false,
+			expectedParentClosePolicyTasksGen: true,
+			expectedChildPolicyTasksGenerated: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			namespaceID := tests.NamespaceID
+			namespaceName := tests.Namespace
+			namespaceEntry := tests.GlobalNamespaceEntry
+
+			mockNamespaceRegistry := namespace.NewMockRegistry(ctrl)
+			mockNamespaceRegistry.EXPECT().GetNamespaceByID(namespaceID).Return(namespaceEntry, nil).AnyTimes()
+
+			mockMutableState := historyi.NewMockMutableState(ctrl)
+
+			executionInfo := &persistencespb.WorkflowExecutionInfo{
+				NamespaceId: namespaceID.String(),
+				WorkflowId:  tests.WorkflowID,
+				ResetRunId:  tc.resetRunID,
+			}
+			executionState := &persistencespb.WorkflowExecutionState{
+				Status: tc.workflowStatus,
+				RunId:  tests.RunID,
+			}
+
+			childNamespaceID := uuid.NewString()
+			childWorkflowID := "child-workflow-id"
+			childRunID := uuid.NewString()
+			pendingChildren := map[int64]*persistencespb.ChildExecutionInfo{
+				1: {
+					NamespaceId:       childNamespaceID,
+					StartedWorkflowId: childWorkflowID,
+					StartedRunId:      childRunID,
+					ParentClosePolicy: tc.parentClosePolicy,
+				},
+			}
+
+			mockMutableState.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
+			mockMutableState.EXPECT().GetExecutionState().Return(executionState).AnyTimes()
+			mockMutableState.EXPECT().GetWorkflowKey().Return(definition.NewWorkflowKey(
+				namespaceID.String(),
+				tests.WorkflowID,
+				tests.RunID,
+			)).AnyTimes()
+			mockMutableState.EXPECT().GetPendingChildExecutionInfos().Return(pendingChildren).AnyTimes()
+			mockMutableState.EXPECT().GetNamespaceEntry().Return(namespaceEntry).AnyTimes()
+
+			var genTasks []tasks.Task
+			mockMutableState.EXPECT().AddTasks(gomock.Any()).DoAndReturn(func(ts ...tasks.Task) {
+				genTasks = append(genTasks, ts...)
+			}).AnyTimes()
+
+			cfg := &configs.Config{
+				EnableParentClosePolicyTransferTasks: func(ns string) bool {
+					return tc.featureEnabled && ns == namespaceName.String()
+				},
+				AllowResetWithPendingChildren: func(ns string) bool {
+					return tc.allowResetWithPendingChildren
+				},
+			}
+
+			taskGenerator := NewTaskGenerator(
+				mockNamespaceRegistry,
+				mockMutableState,
+				cfg,
+				archiver.NewMockArchivalMetadata(ctrl),
+				log.NewTestLogger(),
+			)
+
+			var closeTasks []tasks.Task
+			childPolicyTasksGenerated, err := taskGenerator.generateParentClosePolicyTasks(1, &closeTasks)
+			require.NoError(t, err)
+			require.Equal(t, tc.expectedChildPolicyTasksGenerated, childPolicyTasksGenerated)
+
+			var parentClosePolicyTaskCount int
+			for _, task := range closeTasks {
+				if _, ok := task.(*tasks.ParentClosePolicyTask); ok {
+					parentClosePolicyTaskCount++
+				}
+			}
+
+			if tc.expectedParentClosePolicyTasksGen {
+				require.Equal(t, 1, parentClosePolicyTaskCount)
+				parentClosePolicyTask := closeTasks[0].(*tasks.ParentClosePolicyTask)
+				require.Equal(t, namespaceID.String(), parentClosePolicyTask.NamespaceID)
+				require.Equal(t, tests.WorkflowID, parentClosePolicyTask.WorkflowID)
+				require.Equal(t, tests.RunID, parentClosePolicyTask.RunID)
+				require.Equal(t, childNamespaceID, parentClosePolicyTask.TargetNamespaceID)
+				require.Equal(t, childWorkflowID, parentClosePolicyTask.TargetWorkflowID)
+				require.Equal(t, childRunID, parentClosePolicyTask.TargetRunID)
+				require.Equal(t, tc.parentClosePolicy, parentClosePolicyTask.ParentClosePolicy)
+			} else {
+				require.Equal(t, 0, parentClosePolicyTaskCount)
+			}
+		})
+	}
 }
