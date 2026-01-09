@@ -228,10 +228,9 @@ func NewRateLimitedScheduler(
 		}
 		if ns.ActiveInCluster(clusterMetadata.GetCurrentClusterName()) {
 			return quotas.NewRequest(e.GetType().String(), taskSchedulerToken, namespaceName, e.GetPriority().CallerType(), 0, "")
-		} else {
-			return quotas.NewRequest(e.GetType().String(), taskSchedulerToken, namespaceName, headers.CallerTypePreemptable, 0, "")
 		}
-
+		// Use the lowest priority for standby tasks
+		return quotas.NewRequest(e.GetType().String(), taskSchedulerToken, namespaceName, headers.CallerTypePreemptable, 0, "")
 	}
 	taskMetricsTagsFn := func(e Executable) []metrics.Tag {
 		return append(
