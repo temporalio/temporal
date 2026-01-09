@@ -96,6 +96,13 @@ func (d *VersionWorkflowRunner) listenToSignals(ctx workflow.Context) {
 	forceCANSignalChannel := workflow.GetSignalChannel(ctx, ForceCANSignalName)
 	drainageStatusSignalChannel := workflow.GetSignalChannel(ctx, SyncDrainageSignalName)
 
+	// Version gate the new reactivation signal to avoid NDEs
+	reactivateSignalVersion := workflow.GetVersion(ctx, "add-reactivation-signal", workflow.DefaultVersion, 1)
+	var reactivateSignalChannel workflow.ReceiveChannel
+	if reactivateSignalVersion >= 1 {
+		reactivateSignalChannel = workflow.GetSignalChannel(ctx, ReactivateVersionSignalName)
+	}
+
 	d.signalHandler.signalSelector.AddReceive(forceCANSignalChannel, func(c workflow.ReceiveChannel, more bool) {
 		d.signalHandler.processingSignals++
 		defer func() { d.signalHandler.processingSignals-- }()
@@ -132,6 +139,36 @@ func (d *VersionWorkflowRunner) listenToSignals(ctx workflow.Context) {
 		}
 		d.syncSummary(ctx)
 	})
+
+	// Add reactivation signal handler only if version >= 1
+	if reactivateSignalChannel != nil {
+		d.signalHandler.signalSelector.AddReceive(reactivateSignalChannel, func(c workflow.ReceiveChannel, more bool) {
+			d.signalHandler.processingSignals++
+			defer func() { d.signalHandler.processingSignals-- }()
+
+			c.Receive(ctx, nil) // No payload needed
+
+			// Only reactivate if DRAINED or INACTIVE
+			if d.VersionState.Status == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED ||
+				d.VersionState.Status == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE {
+
+				// Set up drainage info for monitoring
+				d.VersionState.DrainageInfo = &deploymentpb.VersionDrainageInfo{
+					Status:          enumspb.VERSION_DRAINAGE_STATUS_DRAINING,
+					LastChangedTime: timestamppb.New(workflow.Now(ctx)),
+					LastCheckedTime: timestamppb.New(workflow.Now(ctx)),
+				}
+
+				d.deleteVersion = false // Clear deletion flag if set
+
+				// Use existing function to update status and sync to task queues
+				d.updateVersionStatusAfterDrainageStatusChange(ctx, enumspb.VERSION_DRAINAGE_STATUS_DRAINING)
+
+				d.setStateChanged() // Trigger CaN
+			}
+		})
+	}
+
 	// Keep waiting for signals, when it's time to CaN the main goroutine will exit.
 	for {
 		d.signalHandler.signalSelector.Select(ctx)
