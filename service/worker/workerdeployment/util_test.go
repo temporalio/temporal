@@ -188,6 +188,7 @@ func TestDecodeWorkerDeploymentMemoTolerateUnknownFields(t *testing.T) {
 	require.Equal(t, "test-deployment", result.DeploymentName)
 	require.NotNil(t, result.CreateTime)
 	require.NotNil(t, result.RoutingConfig)
+	//nolint:staticcheck // SA1019: worker versioning v0.31
 	require.Equal(t, "test-deployment.build-1", result.RoutingConfig.CurrentVersion)
 
 }
