@@ -150,13 +150,13 @@ func GenerateVersionWorkflowID(deploymentName string, buildID string) string {
 	return worker_versioning.WorkerDeploymentVersionWorkflowIDPrefix + worker_versioning.WorkerDeploymentVersionDelimiter + versionString
 }
 
-func DecodeWorkerDeploymentMemo(memo *commonpb.Memo) *deploymentspb.WorkerDeploymentWorkflowMemo {
+func DecodeWorkerDeploymentMemo(memo *commonpb.Memo) (*deploymentspb.WorkerDeploymentWorkflowMemo, error) {
 	var workerDeploymentWorkflowMemo deploymentspb.WorkerDeploymentWorkflowMemo
 	err := sdk.PreferProtoDataConverter.FromPayload(memo.Fields[WorkerDeploymentMemoField], &workerDeploymentWorkflowMemo)
 	if err != nil {
-		return nil
+		return nil, err
 	}
-	return &workerDeploymentWorkflowMemo
+	return &workerDeploymentWorkflowMemo, nil
 }
 
 func getSafeDurationConfig(ctx workflow.Context, id string, unsafeGetter func() time.Duration, defaultValue time.Duration) (time.Duration, error) {
