@@ -151,6 +151,9 @@ func GenerateVersionWorkflowID(deploymentName string, buildID string) string {
 }
 
 func DecodeWorkerDeploymentMemo(memo *commonpb.Memo) (*deploymentspb.WorkerDeploymentWorkflowMemo, error) {
+	if memo == nil || memo.Fields == nil {
+		return nil, errors.New("Decoding WorkerDeploymentMemo failed: Memo or it's fields are nil.")
+	}
 	var workerDeploymentWorkflowMemo deploymentspb.WorkerDeploymentWorkflowMemo
 	err := sdk.PreferProtoDataConverter.FromPayload(memo.Fields[WorkerDeploymentMemoField], &workerDeploymentWorkflowMemo)
 	if err != nil {
