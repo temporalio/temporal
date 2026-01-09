@@ -110,15 +110,15 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 	// then the lease is released without an error, i.e. workflow context and mutable state are NOT cleared.
 	releaseLeaseWithError := true
 
-	namespaceEntry, err := api.GetActiveNamespace(handler.shardContext, namespace.ID(req.GetNamespaceId()))
-	if err != nil {
-		return nil, err
-	}
-
 	request := req.CompleteRequest
 	token, err0 := handler.tokenSerializer.Deserialize(request.TaskToken)
 	if err0 != nil {
 		return nil, consts.ErrDeserializingToken
+	}
+
+	namespaceEntry, err := api.GetActiveNamespace(handler.shardContext, namespace.ID(req.GetNamespaceId()), token.WorkflowId)
+	if err != nil {
+		return nil, err
 	}
 
 	workflowLease, err := handler.workflowConsistencyChecker.GetWorkflowLeaseWithConsistencyCheck(
@@ -193,6 +193,13 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		// Mutable state wasn't changed yet and doesn't have to be cleared.
 		releaseLeaseWithError = false
 		return nil, serviceerror.NewNotFound("Workflow task not found.")
+	}
+
+	// We don't accept the request to create a new workflow task if the workflow is paused.
+	if ms.IsWorkflowExecutionStatusPaused() && request.GetForceCreateNewWorkflowTask() {
+		// Mutable state wasn't changed yet and doesn't have to be cleared.
+		releaseLeaseWithError = false
+		return nil, serviceerror.NewFailedPrecondition("Workflow is paused and force create new workflow task is not allowed.")
 	}
 
 	behavior := request.GetVersioningBehavior()
@@ -577,6 +584,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 				nil,
 				workflowLease.GetContext().UpdateRegistry(ctx),
 				false,
+				nil,
 			)
 			if err != nil {
 				return nil, err
@@ -701,6 +709,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			nil,
 			workflowLease.GetContext().UpdateRegistry(ctx),
 			false,
+			nil,
 		)
 		if err != nil {
 			return nil, err

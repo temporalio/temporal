@@ -109,6 +109,7 @@ func executionExistsOnSource(
 		currentCluster,
 		registry,
 		workflowKey.GetNamespaceID(),
+		workflowKey.GetWorkflowID(),
 	)
 	if err != nil {
 		return true
@@ -244,13 +245,14 @@ func getSourceClusterName(
 	currentCluster string,
 	registry namespace.Registry,
 	namespaceID string,
+	workflowID string,
 ) (string, error) {
 	namespaceEntry, err := registry.GetNamespaceByID(namespace.ID(namespaceID))
 	if err != nil {
 		return "", err
 	}
 
-	remoteClusterName := namespaceEntry.ActiveClusterName()
+	remoteClusterName := namespaceEntry.ActiveClusterName(workflowID)
 	if remoteClusterName == currentCluster {
 		// namespace has turned active, retry the task
 		return "", errors.New("namespace becomes active when processing task as standby")

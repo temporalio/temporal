@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/dgryski/go-farm"
@@ -22,21 +21,19 @@ import (
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
-	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/worker_versioning"
-	"go.temporal.io/server/service/history/consts"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -111,7 +108,7 @@ type Client interface {
 	UpdateVersionMetadata(
 		ctx context.Context,
 		namespaceEntry *namespace.Namespace,
-		version string,
+		version *deploymentpb.WorkerDeploymentVersion,
 		upsertEntries map[string]*commonpb.Payload,
 		removeEntries []string,
 		identity string,
@@ -124,6 +121,7 @@ type Client interface {
 	) (*workflowservice.SetWorkerDeploymentManagerResponse, error)
 
 	// Used internally by the Worker Deployment Version workflow in its StartWorkerDeployment Activity
+	// Deprecated.
 	StartWorkerDeployment(
 		ctx context.Context,
 		namespaceEntry *namespace.Namespace,
@@ -150,17 +148,6 @@ type Client interface {
 		identity string,
 		requestID string,
 	) (*deploymentspb.SyncVersionStateResponse, error)
-
-	// Used internally by the Worker Deployment workflow in its DeleteVersion Activity
-	DeleteVersionFromWorkerDeployment(
-		ctx context.Context,
-		namespaceEntry *namespace.Namespace,
-		deploymentName, version string,
-		identity string,
-		requestID string,
-		skipDrainage bool,
-		asyncPropagation bool,
-	) error
 
 	// Used internally by the Drainage workflow (child of Worker Deployment Version workflow)
 	// in its GetVersionDrainageStatus Activity
@@ -189,6 +176,8 @@ type Client interface {
 
 type ErrRegister struct{ error }
 
+var retryPolicy = backoff.NewExponentialRetryPolicy(100 * time.Millisecond).WithExpirationInterval(1 * time.Minute)
+
 // ClientImpl implements Client
 type ClientImpl struct {
 	logger                           log.Logger
@@ -200,6 +189,7 @@ type ClientImpl struct {
 	maxTaskQueuesInDeploymentVersion dynamicconfig.IntPropertyFnWithNamespaceFilter
 	maxDeployments                   dynamicconfig.IntPropertyFnWithNamespaceFilter
 	testHooks                        testhooks.TestHooks
+	metricsHandler                   metrics.Handler
 }
 
 func (d *ClientImpl) SetManager(
@@ -214,7 +204,7 @@ func (d *ClientImpl) SetManager(
 		newManagerID = request.GetManagerIdentity()
 	}
 	//revive:disable-next-line:defer
-	defer d.record("SetManager", &retErr, newManagerID, request.GetIdentity())()
+	defer d.convertAndRecordError("SetManager", request.GetDeploymentName(), &retErr, newManagerID, request.GetIdentity())()
 
 	// validating params
 	err := validateVersionWfParams(worker_versioning.WorkerDeploymentNameFieldName, request.GetDeploymentName(), d.maxIDLengthLimit())
@@ -232,8 +222,9 @@ func (d *ClientImpl) SetManager(
 		return nil, err
 	}
 
-	outcome, err := d.update(
+	outcome, err := updateWorkflow(
 		ctx,
+		d.historyClient,
 		namespaceEntry,
 		GenerateDeploymentWorkflowID(request.GetDeploymentName()),
 		&updatepb.Request{
@@ -264,10 +255,6 @@ func (d *ClientImpl) SetManager(
 	}
 
 	success := outcome.GetSuccess()
-	if success == nil {
-		return nil, serviceerror.NewInternal("outcome missing success and failure")
-	}
-
 	if err := sdk.PreferProtoDataConverter.FromPayloads(success, &res); err != nil {
 		return nil, err
 	}
@@ -279,7 +266,8 @@ func (d *ClientImpl) SetManager(
 
 var _ Client = (*ClientImpl)(nil)
 
-var errRetry = errors.New("retry update")
+var errUpdateInProgress = errors.New("update in progress")
+var errWorkflowHistoryTooLong = errors.New("workflow history too long")
 
 func (d *ClientImpl) RegisterTaskQueueWorker(
 	ctx context.Context,
@@ -290,7 +278,7 @@ func (d *ClientImpl) RegisterTaskQueueWorker(
 	identity string,
 ) (retErr error) {
 	//revive:disable-next-line:defer
-	defer d.record("RegisterTaskQueueWorker", &retErr, taskQueueName, taskQueueType, identity)()
+	defer d.convertAndRecordError("RegisterTaskQueueWorker", deploymentName, &retErr, taskQueueName, taskQueueType, identity)()
 
 	// Creating request ID out of build ID + TQ name + TQ type. Many updates may come from multiple
 	// matching partitions, we do not want them to create new update requests.
@@ -369,7 +357,7 @@ func (d *ClientImpl) DescribeVersion(
 	buildID := v.GetBuildId()
 
 	//revive:disable-next-line:defer
-	defer d.record("DescribeVersion", &retErr, deploymentName, buildID)()
+	defer d.convertAndRecordError("DescribeVersion", deploymentName, &retErr, buildID)()
 
 	// validate deployment name
 	if err = validateVersionWfParams(worker_versioning.WorkerDeploymentNameFieldName, deploymentName, d.maxIDLengthLimit()); err != nil {
@@ -394,7 +382,8 @@ func (d *ClientImpl) DescribeVersion(
 		},
 	}
 
-	res, err := d.historyClient.QueryWorkflow(ctx, req)
+	res, err := d.queryWorkflowWithRetry(ctx, req)
+
 	if err != nil {
 		var notFound *serviceerror.NotFound
 		if errors.As(err, &notFound) {
@@ -431,22 +420,27 @@ func (d *ClientImpl) DescribeVersion(
 	return versionInfo, tqInfos, nil
 }
 
+func (d *ClientImpl) queryWorkflowWithRetry(ctx context.Context, req *historyservice.QueryWorkflowRequest) (*historyservice.QueryWorkflowResponse, error) {
+	var res *historyservice.QueryWorkflowResponse
+	var err error
+	err = backoff.ThrottleRetryContext(ctx, func(ctx context.Context) error {
+		res, err = d.historyClient.QueryWorkflow(ctx, req)
+		return err
+	}, retryPolicy, isRetryableQueryError)
+	return res, err
+}
+
 func (d *ClientImpl) UpdateVersionMetadata(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
-	version string,
+	version *deploymentpb.WorkerDeploymentVersion,
 	upsertEntries map[string]*commonpb.Payload,
 	removeEntries []string,
 	identity string,
 ) (_ *deploymentpb.VersionMetadata, retErr error) {
 	//revive:disable-next-line:defer
-	defer d.record("UpdateVersionMetadata", &retErr, namespaceEntry.Name(), version, upsertEntries, removeEntries, identity)()
+	defer d.convertAndRecordError("UpdateVersionMetadata", version.GetDeploymentName(), &retErr, namespaceEntry.Name(), version.GetBuildId(), upsertEntries, removeEntries, identity)()
 	requestID := uuid.NewString()
-
-	versionObj, err := worker_versioning.WorkerDeploymentVersionFromStringV31(version)
-	if err != nil {
-		return nil, serviceerror.NewInvalidArgument("invalid version string: " + err.Error())
-	}
 
 	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.UpdateVersionMetadataArgs{
 		UpsertEntries: upsertEntries,
@@ -457,8 +451,8 @@ func (d *ClientImpl) UpdateVersionMetadata(
 		return nil, err
 	}
 
-	workflowID := GenerateVersionWorkflowID(versionObj.GetDeploymentName(), versionObj.GetBuildId())
-	outcome, err := d.update(ctx, namespaceEntry, workflowID, &updatepb.Request{
+	workflowID := GenerateVersionWorkflowID(version.GetDeploymentName(), version.GetBuildId())
+	outcome, err := updateWorkflow(ctx, d.historyClient, namespaceEntry, workflowID, &updatepb.Request{
 		Input: &updatepb.Input{Name: UpdateVersionMetadata, Args: updatePayload},
 		Meta:  &updatepb.Meta{UpdateId: requestID, Identity: identity},
 	})
@@ -467,14 +461,7 @@ func (d *ClientImpl) UpdateVersionMetadata(
 	}
 
 	if failure := outcome.GetFailure(); failure != nil {
-		if failure.GetApplicationFailureInfo().GetType() == errVersionDeleted {
-			return nil, serviceerror.NewNotFoundf(ErrWorkerDeploymentVersionNotFound, versionObj.GetBuildId(), versionObj.GetDeploymentName())
-		}
 		return nil, serviceerror.NewInternal(failure.Message)
-	}
-	success := outcome.GetSuccess()
-	if success == nil {
-		return nil, serviceerror.NewInternal("outcome missing success and failure")
 	}
 
 	var res deploymentspb.UpdateVersionMetadataResponse
@@ -491,7 +478,7 @@ func (d *ClientImpl) DescribeWorkerDeployment(
 	deploymentName string,
 ) (_ *deploymentpb.WorkerDeploymentInfo, conflictToken []byte, retErr error) {
 	//revive:disable-next-line:defer
-	defer d.record("DescribeWorkerDeployment", &retErr, deploymentName)()
+	defer d.convertAndRecordError("DescribeWorkerDeployment", deploymentName, &retErr)()
 
 	// validating params
 	err := validateVersionWfParams(worker_versioning.WorkerDeploymentNameFieldName, deploymentName, d.maxIDLengthLimit())
@@ -512,7 +499,7 @@ func (d *ClientImpl) DescribeWorkerDeployment(
 		},
 	}
 
-	res, err := d.historyClient.QueryWorkflow(ctx, req)
+	res, err := d.queryWorkflowWithRetry(ctx, req)
 	if err != nil {
 		var notFound *serviceerror.NotFound
 		if errors.As(err, &notFound) {
@@ -582,7 +569,7 @@ func (d *ClientImpl) ListWorkerDeployments(
 	nextPageToken []byte,
 ) (_ []*deploymentspb.WorkerDeploymentSummary, _ []byte, retError error) {
 	//revive:disable-next-line:defer
-	defer d.record("ListWorkerDeployments", &retError)()
+	defer d.convertAndRecordError("ListWorkerDeployments", "", &retError)()
 
 	query := WorkerDeploymentVisibilityBaseListQuery
 
@@ -608,7 +595,11 @@ func (d *ClientImpl) ListWorkerDeployments(
 	for i, ex := range persistenceResp.Executions {
 		var workerDeploymentInfo *deploymentspb.WorkerDeploymentWorkflowMemo
 		if ex.GetMemo() != nil {
-			workerDeploymentInfo = DecodeWorkerDeploymentMemo(ex.GetMemo())
+			workerDeploymentInfo, err = DecodeWorkerDeploymentMemo(ex.GetMemo())
+			if err != nil {
+				d.logger.Error("unable to decode worker deployment memo", tag.Error(err), tag.WorkflowNamespace(namespaceEntry.Name().String()), tag.WorkflowID(ex.GetExecution().GetWorkflowId()))
+				continue
+			}
 		} else {
 			// There is a race condition where the Deployment workflow exists, but has not yet
 			// upserted the memo. If that is the case, we handle it here.
@@ -643,7 +634,7 @@ func (d *ClientImpl) SetCurrentVersion(
 	allowNoPollers bool,
 ) (_ *deploymentspb.SetCurrentVersionResponse, retErr error) {
 	//revive:disable-next-line:defer
-	defer d.record("SetCurrentVersion", &retErr, namespaceEntry.Name(), version, identity)()
+	defer d.convertAndRecordError("SetCurrentVersion", deploymentName, &retErr, namespaceEntry.Name(), version, identity)()
 
 	versionObj, err := worker_versioning.WorkerDeploymentVersionFromStringV31(version)
 	if err != nil {
@@ -694,8 +685,9 @@ func (d *ClientImpl) SetCurrentVersion(
 		}
 	} else {
 		// we *don't* want to start the Worker Deployment workflow; it should be started by a poller
-		outcome, err = d.update(
+		outcome, err = updateWorkflow(
 			ctx,
+			d.historyClient,
 			namespaceEntry,
 			GenerateDeploymentWorkflowID(deploymentName),
 			&updatepb.Request{
@@ -728,10 +720,6 @@ func (d *ClientImpl) SetCurrentVersion(
 	}
 
 	success := outcome.GetSuccess()
-	if success == nil {
-		return nil, serviceerror.NewInternal("outcome missing success and failure")
-	}
-
 	if err := sdk.PreferProtoDataConverter.FromPayloads(success, &res); err != nil {
 		return nil, err
 	}
@@ -751,7 +739,7 @@ func (d *ClientImpl) SetRampingVersion(
 	allowNoPollers bool,
 ) (_ *deploymentspb.SetRampingVersionResponse, retErr error) {
 	//revive:disable-next-line:defer
-	defer d.record("SetRampingVersion", &retErr, namespaceEntry.Name(), version, percentage, identity)()
+	defer d.convertAndRecordError("SetRampingVersion", deploymentName, &retErr, namespaceEntry.Name(), version, percentage, identity)()
 
 	var err error
 	var versionObj *deploymentspb.WorkerDeploymentVersion
@@ -808,8 +796,9 @@ func (d *ClientImpl) SetRampingVersion(
 			return nil, err
 		}
 	} else {
-		outcome, err = d.update(
+		outcome, err = updateWorkflow(
 			ctx,
+			d.historyClient,
 			namespaceEntry,
 			workflowID,
 			&updatepb.Request{
@@ -845,10 +834,6 @@ func (d *ClientImpl) SetRampingVersion(
 	}
 
 	success := outcome.GetSuccess()
-	if success == nil {
-		return nil, serviceerror.NewInternal("outcome missing success and failure")
-	}
-
 	if err := sdk.PreferProtoDataConverter.FromPayloads(success, &res); err != nil {
 		return nil, err
 	}
@@ -870,7 +855,7 @@ func (d *ClientImpl) DeleteWorkerDeploymentVersion(
 	buildId := v.GetBuildId()
 
 	//revive:disable-next-line:defer
-	defer d.record("DeleteWorkerDeploymentVersion", &retErr, namespaceEntry.Name(), deploymentName, buildId)()
+	defer d.convertAndRecordError("DeleteWorkerDeploymentVersion", deploymentName, &retErr, namespaceEntry.Name(), buildId)()
 	requestID := uuid.NewString()
 
 	if identity == "" {
@@ -896,8 +881,9 @@ func (d *ClientImpl) DeleteWorkerDeploymentVersion(
 
 	workflowID := GenerateDeploymentWorkflowID(deploymentName)
 
-	outcome, err := d.update(
+	outcome, err := updateWorkflow(
 		ctx,
+		d.historyClient,
 		namespaceEntry,
 		workflowID,
 		&updatepb.Request{
@@ -919,11 +905,6 @@ func (d *ClientImpl) DeleteWorkerDeploymentVersion(
 		}
 		return serviceerror.NewInternal(failure.Message)
 	}
-
-	success := outcome.GetSuccess()
-	if success == nil {
-		return serviceerror.NewInternal("outcome missing success and failure")
-	}
 	return nil
 }
 
@@ -934,7 +915,7 @@ func (d *ClientImpl) DeleteWorkerDeployment(
 	identity string,
 ) (retErr error) {
 	//revive:disable-next-line:defer
-	defer d.record("DeleteWorkerDeployment", &retErr, namespaceEntry.Name(), deploymentName, identity)()
+	defer d.convertAndRecordError("DeleteWorkerDeployment", deploymentName, &retErr, namespaceEntry.Name(), identity)()
 
 	// validating params
 	err := validateVersionWfParams(worker_versioning.WorkerDeploymentNameFieldName, deploymentName, d.maxIDLengthLimit())
@@ -956,8 +937,9 @@ func (d *ClientImpl) DeleteWorkerDeployment(
 	}
 	workflowID := GenerateDeploymentWorkflowID(deploymentName)
 
-	outcome, err := d.update(
+	outcome, err := updateWorkflow(
 		ctx,
+		d.historyClient,
 		namespaceEntry,
 		workflowID,
 		&updatepb.Request{
@@ -976,12 +958,6 @@ func (d *ClientImpl) DeleteWorkerDeployment(
 	if failure := outcome.GetFailure(); failure != nil {
 		return serviceerror.NewInternal(failure.Message)
 	}
-
-	success := outcome.GetSuccess()
-	if success == nil {
-		return serviceerror.NewInternal("outcome missing success and failure")
-	}
-
 	return nil
 }
 
@@ -993,7 +969,7 @@ func (d *ClientImpl) StartWorkerDeployment(
 	requestID string,
 ) (retErr error) {
 	//revive:disable-next-line:defer
-	defer d.record("StartWorkerDeployment", &retErr, namespaceEntry.Name(), deploymentName, identity)()
+	defer d.convertAndRecordError("StartWorkerDeployment", deploymentName, &retErr, namespaceEntry.Name(), identity)()
 
 	workflowID := GenerateDeploymentWorkflowID(deploymentName)
 
@@ -1006,7 +982,7 @@ func (d *ClientImpl) StartWorkerDeployment(
 		return err
 	}
 
-	startReq := d.makeStartRequest(requestID, workflowID, identity, WorkerDeploymentWorkflowType, namespaceEntry, nil, input)
+	startReq := makeStartRequest(requestID, workflowID, identity, WorkerDeploymentWorkflowType, namespaceEntry, nil, input)
 
 	historyStartReq := &historyservice.StartWorkflowExecutionRequest{
 		NamespaceId:  namespaceEntry.ID().String(),
@@ -1025,7 +1001,7 @@ func (d *ClientImpl) StartWorkerDeploymentVersion(
 	requestID string,
 ) (retErr error) {
 	//revive:disable-next-line:defer
-	defer d.record("StartWorkerDeploymentVersion", &retErr, namespaceEntry.Name(), deploymentName, identity)()
+	defer d.convertAndRecordError("StartWorkerDeploymentVersion", deploymentName, &retErr, namespaceEntry.Name(), identity)()
 
 	err := validateVersionWfParams(worker_versioning.WorkerDeploymentNameFieldName, deploymentName, d.maxIDLengthLimit())
 	if err != nil {
@@ -1041,7 +1017,7 @@ func (d *ClientImpl) StartWorkerDeploymentVersion(
 	if err != nil {
 		return err
 	}
-	startReq := d.makeStartRequest(requestID, workflowID, identity, WorkerDeploymentVersionWorkflowType, namespaceEntry, nil, input)
+	startReq := makeStartRequest(requestID, workflowID, identity, WorkerDeploymentVersionWorkflowType, namespaceEntry, nil, input)
 
 	historyStartReq := &historyservice.StartWorkflowExecutionRequest{
 		NamespaceId:  namespaceEntry.ID().String(),
@@ -1061,7 +1037,7 @@ func (d *ClientImpl) SyncVersionWorkflowFromWorkerDeployment(
 	requestID string,
 ) (_ *deploymentspb.SyncVersionStateResponse, retErr error) {
 	//revive:disable-next-line:defer
-	defer d.record("SyncVersionWorkflowFromWorkerDeployment", &retErr, namespaceEntry.Name(), deploymentName, version, args, identity)()
+	defer d.convertAndRecordError("SyncVersionWorkflowFromWorkerDeployment", deploymentName, &retErr, namespaceEntry.Name(), version, args, identity)()
 
 	versionObj, err := worker_versioning.WorkerDeploymentVersionFromStringV31(version)
 	if err != nil {
@@ -1076,8 +1052,9 @@ func (d *ClientImpl) SyncVersionWorkflowFromWorkerDeployment(
 	workflowID := GenerateVersionWorkflowID(deploymentName, versionObj.GetBuildId())
 
 	// updates an already existing deployment version workflow.
-	outcome, err := d.update(
+	outcome, err := updateWorkflow(
 		ctx,
+		d.historyClient,
 		namespaceEntry,
 		workflowID,
 		&updatepb.Request{
@@ -1102,120 +1079,11 @@ func (d *ClientImpl) SyncVersionWorkflowFromWorkerDeployment(
 	}
 
 	success := outcome.GetSuccess()
-	if success == nil {
-		return nil, serviceerror.NewInternal("outcome missing success and failure")
-	}
-
 	var res deploymentspb.SyncVersionStateResponse
 	if err := sdk.PreferProtoDataConverter.FromPayloads(success, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
-}
-
-func (d *ClientImpl) DeleteVersionFromWorkerDeployment(
-	ctx context.Context,
-	namespaceEntry *namespace.Namespace,
-	deploymentName, version string,
-	identity string,
-	requestID string,
-	skipDrainage bool,
-	asyncPropagation bool,
-) (retErr error) {
-	//revive:disable-next-line:defer
-	defer d.record("DeleteVersionFromWorkerDeployment", &retErr, namespaceEntry.Name(), deploymentName, version, identity, skipDrainage)()
-
-	versionObj, err := worker_versioning.WorkerDeploymentVersionFromStringV31(version)
-	if err != nil {
-		return err
-	}
-
-	workflowID := GenerateVersionWorkflowID(deploymentName, versionObj.GetBuildId())
-	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.DeleteVersionArgs{
-		Identity:         identity,
-		Version:          version,
-		SkipDrainage:     skipDrainage,
-		AsyncPropagation: asyncPropagation,
-	})
-	if err != nil {
-		return err
-	}
-
-	outcome, err := d.update(
-		ctx,
-		namespaceEntry,
-		workflowID,
-		&updatepb.Request{
-			Input: &updatepb.Input{Name: DeleteVersion, Args: updatePayload},
-			Meta:  &updatepb.Meta{UpdateId: requestID, Identity: identity},
-		},
-	)
-	if err != nil {
-		return err
-	}
-
-	if failure := outcome.GetFailure(); failure != nil {
-		if strings.Contains(failure.Message, errVersionIsDrainingSuffix) {
-			return temporal.NewNonRetryableApplicationError(fmt.Sprintf(ErrVersionIsDraining, worker_versioning.WorkerDeploymentVersionToStringV32(versionObj)), errFailedPrecondition, nil) // non-retryable error to stop multiple activity attempts
-		} else if strings.Contains(failure.Message, errVersionHasPollersSuffix) {
-			return temporal.NewNonRetryableApplicationError(fmt.Sprintf(ErrVersionHasPollers, worker_versioning.WorkerDeploymentVersionToStringV32(versionObj)), errFailedPrecondition, nil) // non-retryable error to stop multiple activity attempts
-		}
-		return serviceerror.NewInternal(failure.Message)
-	}
-
-	success := outcome.GetSuccess()
-	if success == nil {
-		return serviceerror.NewInternal("outcome missing success and failure")
-	}
-	return nil
-}
-
-// update updates an already existing deployment version/deployment workflow.
-func (d *ClientImpl) update(
-	ctx context.Context,
-	namespaceEntry *namespace.Namespace,
-	workflowID string,
-	updateRequest *updatepb.Request,
-) (*updatepb.Outcome, error) {
-
-	updateReq := &historyservice.UpdateWorkflowExecutionRequest{
-		NamespaceId: namespaceEntry.ID().String(),
-		Request: &workflowservice.UpdateWorkflowExecutionRequest{
-			Namespace: namespaceEntry.Name().String(),
-			WorkflowExecution: &commonpb.WorkflowExecution{
-				WorkflowId: workflowID,
-			},
-			Request:    updateRequest,
-			WaitPolicy: &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED},
-		},
-	}
-
-	policy := backoff.NewExponentialRetryPolicy(100 * time.Millisecond)
-
-	var outcome *updatepb.Outcome
-	err := backoff.ThrottleRetryContext(ctx, func(ctx context.Context) error {
-		// historyClient retries internally on retryable rpc errors, we just have to retry on
-		// successful but un-completed responses.
-		res, err := d.historyClient.UpdateWorkflowExecution(ctx, updateReq)
-		if err != nil {
-			return err
-		}
-
-		if res.GetResponse() == nil {
-			return serviceerror.NewInternal("failed to update workflow with workflowID: " + workflowID)
-		}
-
-		stage := res.GetResponse().GetStage()
-		if stage != enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED {
-			// update not completed, try again
-			return errRetry
-		}
-
-		outcome = res.GetResponse().GetOutcome()
-		return nil
-	}, policy, isRetryableUpdateError)
-
-	return outcome, err
 }
 
 func (d *ClientImpl) updateWithStartWorkerDeployment(
@@ -1266,8 +1134,9 @@ func (d *ClientImpl) updateWithStartWorkerDeployment(
 		return nil, err
 	}
 
-	return d.updateWithStart(
+	return updateWorkflowWithStart(
 		ctx,
+		d.historyClient,
 		namespaceEntry,
 		WorkerDeploymentWorkflowType,
 		workflowID,
@@ -1293,6 +1162,7 @@ func (d *ClientImpl) countWorkerDeployments(
 			Query:       query,
 		},
 	)
+	metrics.WorkerDeploymentVersionVisibilityQueryCount.With(d.metricsHandler).Record(1, metrics.OperationTag("countWorkerDeployments"))
 	if err != nil {
 		return 0, err
 	}
@@ -1322,8 +1192,9 @@ func (d *ClientImpl) updateWithStartWorkerDeploymentVersion(
 		return nil, err
 	}
 
-	return d.updateWithStart(
+	return updateWorkflowWithStart(
 		ctx,
+		d.historyClient,
 		namespaceEntry,
 		WorkerDeploymentVersionWorkflowType,
 		workflowID,
@@ -1335,117 +1206,7 @@ func (d *ClientImpl) updateWithStartWorkerDeploymentVersion(
 	)
 }
 
-func (d *ClientImpl) updateWithStart(
-	ctx context.Context,
-	namespaceEntry *namespace.Namespace,
-	workflowType string,
-	workflowID string,
-	memo *commonpb.Memo,
-	input *commonpb.Payloads,
-	updateRequest *updatepb.Request,
-	identity string,
-	requestID string,
-) (*updatepb.Outcome, error) {
-	// Start workflow execution, if it hasn't already
-	startReq := d.makeStartRequest(requestID, workflowID, identity, workflowType, namespaceEntry, memo, input)
-
-	updateReq := &workflowservice.UpdateWorkflowExecutionRequest{
-		Namespace: namespaceEntry.Name().String(),
-		WorkflowExecution: &commonpb.WorkflowExecution{
-			WorkflowId: workflowID,
-		},
-		Request:    updateRequest,
-		WaitPolicy: &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED},
-	}
-
-	// This is an atomic operation; if one operation fails, both will.
-	multiOpReq := &historyservice.ExecuteMultiOperationRequest{
-		NamespaceId: namespaceEntry.ID().String(),
-		WorkflowId:  workflowID,
-		Operations: []*historyservice.ExecuteMultiOperationRequest_Operation{
-			{
-				Operation: &historyservice.ExecuteMultiOperationRequest_Operation_StartWorkflow{
-					StartWorkflow: &historyservice.StartWorkflowExecutionRequest{
-						NamespaceId:  namespaceEntry.ID().String(),
-						StartRequest: startReq,
-					},
-				},
-			},
-			{
-				Operation: &historyservice.ExecuteMultiOperationRequest_Operation_UpdateWorkflow{
-					UpdateWorkflow: &historyservice.UpdateWorkflowExecutionRequest{
-						NamespaceId: namespaceEntry.ID().String(),
-						Request:     updateReq,
-					},
-				},
-			},
-		},
-	}
-
-	policy := backoff.NewExponentialRetryPolicy(100 * time.Millisecond)
-	var outcome *updatepb.Outcome
-
-	err := backoff.ThrottleRetryContext(ctx, func(ctx context.Context) error {
-		// historyClient retries internally on retryable rpc errors, we just have to retry on
-		// successful but un-completed responses.
-		res, err := d.historyClient.ExecuteMultiOperation(ctx, multiOpReq)
-		if err != nil {
-			return err
-		}
-
-		// we should get exactly one of each of these
-		var startRes *historyservice.StartWorkflowExecutionResponse
-		var updateRes *workflowservice.UpdateWorkflowExecutionResponse
-		for _, response := range res.Responses {
-			if sr := response.GetStartWorkflow(); sr != nil {
-				startRes = sr
-			} else if ur := response.GetUpdateWorkflow().GetResponse(); ur != nil {
-				updateRes = ur
-			}
-		}
-		if startRes == nil {
-			return serviceerror.NewInternal("failed to start deployment workflow")
-		} else if updateRes == nil {
-			return serviceerror.NewInternal("failed to update deployment workflow")
-		}
-
-		if updateRes.Stage != enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED {
-			// update not completed, try again
-			return errRetry
-		}
-
-		outcome = updateRes.GetOutcome()
-		return nil
-	}, policy, isRetryableUpdateError)
-
-	return outcome, err
-}
-
-func isRetryableUpdateError(err error) bool {
-	if errors.Is(err, errRetry) || err.Error() == consts.ErrWorkflowClosing.Error() {
-		return true
-	}
-
-	// All updates that are admitted as the workflow is closing due to CaN are considered retryable.
-	// The ErrWorkflowClosing could be nested.
-	var errMultiOps *serviceerror.MultiOperationExecution
-	if errors.As(err, &errMultiOps) {
-		for _, e := range errMultiOps.OperationErrors() {
-			if e.Error() == consts.ErrWorkflowClosing.Error() {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-func (d *ClientImpl) buildSearchAttributes() *commonpb.SearchAttributes {
-	sa := &commonpb.SearchAttributes{}
-	searchattribute.AddSearchAttribute(&sa, sadefs.TemporalNamespaceDivision, payload.EncodeString(WorkerDeploymentNamespaceDivision))
-	return sa
-}
-
-func (d *ClientImpl) record(operation string, retErr *error, args ...any) func() {
+func (d *ClientImpl) convertAndRecordError(operation string, deploymentName string, retErr *error, args ...any) func() {
 	start := time.Now()
 	return func() {
 		elapsed := time.Since(start)
@@ -1453,24 +1214,59 @@ func (d *ClientImpl) record(operation string, retErr *error, args ...any) func()
 		// TODO: add metrics recording here
 
 		if *retErr != nil {
-			if isFailedPrecondition(*retErr) {
-				d.logger.Debug("deployment client failure due to a failed precondition",
+			if isFailedPreconditionOrNotFound(*retErr) {
+				d.logger.Debug("deployment client failure due to a failed precondition or not found error",
 					tag.Error(*retErr),
 					tag.Operation(operation),
+					tag.Deployment(deploymentName),
 					tag.NewDurationTag("elapsed", elapsed),
 					tag.NewAnyTag("args", args),
 				)
 			} else {
-				d.logger.Error("deployment client error",
-					tag.Error(*retErr),
-					tag.Operation(operation),
-					tag.NewDurationTag("elapsed", elapsed),
-					tag.NewAnyTag("args", args),
-				)
+				if isRetryableUpdateError(*retErr) || isRetryableQueryError(*retErr) {
+					d.logger.Debug("deployment client throttling due to retryable error",
+						tag.Error(*retErr),
+						tag.Operation(operation),
+						tag.Deployment(deploymentName),
+						tag.NewDurationTag("elapsed", elapsed),
+						tag.NewAnyTag("args", args),
+					)
+					var errResourceExhausted *serviceerror.ResourceExhausted
+					if !errors.As(*retErr, &errResourceExhausted) || errResourceExhausted.Cause != enumspb.RESOURCE_EXHAUSTED_CAUSE_WORKER_DEPLOYMENT_LIMITS {
+						// if it's not a deployment limits error, we don't want to expose the underlying cause to the user
+						*retErr = &serviceerror.ResourceExhausted{
+							Message: fmt.Sprintf(ErrTooManyRequests, deploymentName),
+							Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+							// These errors are caused by workflow throughput limits, so BUSY_WORKFLOW is the most appropriate cause.
+							// This cause is not sent back to the user.
+							Cause: enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW,
+						}
+					}
+				} else if errors.Is(*retErr, context.DeadlineExceeded) ||
+					errors.Is(*retErr, context.Canceled) ||
+					common.IsContextDeadlineExceededErr(*retErr) ||
+					common.IsContextCanceledErr(*retErr) {
+					d.logger.Debug("deployment client timeout or cancellation",
+						tag.Error(*retErr),
+						tag.Operation(operation),
+						tag.Deployment(deploymentName),
+						tag.NewDurationTag("elapsed", elapsed),
+						tag.NewAnyTag("args", args),
+					)
+				} else {
+					d.logger.Error("deployment client unexpected error",
+						tag.Error(*retErr),
+						tag.Operation(operation),
+						tag.Deployment(deploymentName),
+						tag.NewDurationTag("elapsed", elapsed),
+						tag.NewAnyTag("args", args),
+					)
+				}
 			}
 		} else {
 			d.logger.Debug("deployment client success",
 				tag.Operation(operation),
+				tag.Deployment(deploymentName),
 				tag.NewDurationTag("elapsed", elapsed),
 				tag.NewAnyTag("args", args),
 			)
@@ -1622,6 +1418,7 @@ func (d *ClientImpl) deploymentStateToDeploymentInfo(deploymentName string, stat
 			CurrentSinceTime:     v.GetCurrentSinceTime(),
 			RampingSinceTime:     v.GetRampingSinceTime(),
 			FirstActivationTime:  v.GetFirstActivationTime(),
+			LastCurrentTime:      v.GetLastCurrentTime(),
 			LastDeactivationTime: v.GetLastDeactivationTime(),
 			Status:               v.GetStatus(),
 		})
@@ -1645,6 +1442,7 @@ func (d *ClientImpl) GetVersionDrainageStatus(
 		Query:       makeDeploymentQuery(worker_versioning.ExternalWorkerDeploymentVersionToString(worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(version))),
 	}
 	countResponse, err := d.visibilityManager.CountWorkflowExecutions(ctx, &countRequest)
+	metrics.WorkerDeploymentVersionVisibilityQueryCount.With(d.metricsHandler).Record(1, metrics.OperationTag("GetVersionDrainageStatus"))
 	if err != nil {
 		return enumspb.VERSION_DRAINAGE_STATUS_UNSPECIFIED, err
 	}
@@ -1856,26 +1654,5 @@ func (d *ClientImpl) makeVersionWorkflowArgs(
 			Metadata:          nil,
 			SyncBatchSize:     d.getSyncBatchSize(),
 		},
-	}
-}
-
-func (d *ClientImpl) makeStartRequest(
-	requestID, workflowID, identity, workflowType string,
-	namespaceEntry *namespace.Namespace,
-	memo *commonpb.Memo,
-	input *commonpb.Payloads,
-) *workflowservice.StartWorkflowExecutionRequest {
-	return &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                requestID,
-		Namespace:                namespaceEntry.Name().String(),
-		WorkflowId:               workflowID,
-		WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
-		TaskQueue:                &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
-		Input:                    input,
-		WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
-		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
-		SearchAttributes:         d.buildSearchAttributes(),
-		Memo:                     memo,
-		Identity:                 identity,
 	}
 }

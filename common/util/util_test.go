@@ -46,6 +46,58 @@ func TestRepeatSlice(t *testing.T) {
 	})
 }
 
+func TestGetOrSetNew_ReturnsExisting(t *testing.T) {
+	val := 42
+	m := map[string]*int{"key": &val}
+
+	result := GetOrSetNew(m, "key")
+	require.Equal(t, &val, result)
+	require.Equal(t, 42, *result)
+}
+
+func TestGetOrSetNew_CreatesNew(t *testing.T) {
+	m := make(map[string]*int)
+
+	result := GetOrSetNew(m, "newkey")
+	require.NotNil(t, result)
+	require.Equal(t, 0, *result) // zero value for int
+	require.Contains(t, m, "newkey")
+	require.Equal(t, result, m["newkey"])
+}
+
+func TestGetOrSetNew_ReturnsSame(t *testing.T) {
+	m := make(map[string]*int)
+
+	*GetOrSetNew(m, "key") = 123
+	require.Equal(t, 123, *GetOrSetNew(m, "key"))
+}
+
+func TestGetOrSetMap_ReturnsExisting(t *testing.T) {
+	inner := map[int]string{1: "one"}
+	m := map[string]map[int]string{"key": inner}
+
+	result := GetOrSetMap(m, "key")
+	require.Equal(t, inner, result)
+	require.Equal(t, "one", result[1])
+}
+
+func TestGetOrSetMap_CreatesNew(t *testing.T) {
+	m := make(map[string]map[int]string)
+
+	result := GetOrSetMap(m, "newkey")
+	require.NotNil(t, result)
+	require.Empty(t, result)
+	require.Contains(t, m, "newkey")
+	require.Equal(t, result, m["newkey"])
+}
+
+func TestGetOrSetMap_ReturnsSame(t *testing.T) {
+	m := make(map[string]map[int]string)
+
+	GetOrSetMap(m, "key")[1] = "value"
+	require.Equal(t, "value", m["key"][1])
+}
+
 func TestMapSlice(t *testing.T) {
 	t.Run("when given nil as slice should return nil", func(t *testing.T) {
 		ys := MapSlice(nil, func(x int) uint32 { return uint32(x) })

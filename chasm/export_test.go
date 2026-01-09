@@ -29,10 +29,6 @@ func (r *Registry) TaskOf(taskGoType reflect.Type) (*RegistrableTask, bool) {
 	return r.taskOf(taskGoType)
 }
 
-func (r *Registry) TaskByID(id uint32) (*RegistrableTask, bool) {
-	return r.taskByID(id)
-}
-
 func (rc RegistrableComponent) FqType() string {
 	return rc.fqType()
 }

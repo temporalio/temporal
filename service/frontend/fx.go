@@ -7,7 +7,8 @@ import (
 	"github.com/gorilla/mux"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/chasm"
-	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	"go.temporal.io/server/chasm/lib/activity"
+	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
@@ -42,7 +43,6 @@ import (
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/frontend/configs"
 	"go.temporal.io/server/service/history/tasks"
-	"go.temporal.io/server/service/worker/deployment"
 	"go.temporal.io/server/service/worker/scheduler"
 	"go.temporal.io/server/service/worker/workerdeployment"
 	"go.uber.org/fx"
@@ -63,7 +63,6 @@ type (
 var Module = fx.Options(
 	resource.Module,
 	scheduler.Module,
-	deployment.Module,
 	workerdeployment.Module,
 	// Note that with this approach routes may be registered in arbitrary order.
 	// This is okay because our routes don't have overlapping matches.
@@ -76,6 +75,8 @@ var Module = fx.Options(
 	fx.Provide(ConfigProvider),
 	fx.Provide(NamespaceLogInterceptorProvider),
 	fx.Provide(NamespaceHandoverInterceptorProvider),
+	fx.Provide(interceptor.NewBusinessIDExtractor),
+	fx.Provide(BusinessIDInterceptorProvider),
 	fx.Provide(RedirectionInterceptorProvider),
 	fx.Provide(ErrorHandlerProvider),
 	fx.Provide(TelemetryInterceptorProvider),
@@ -113,6 +114,9 @@ var Module = fx.Options(
 	fx.Invoke(EndpointRegistryLifetimeHooks),
 	fx.Provide(schedulerpb.NewSchedulerServiceLayeredClient),
 	nexusfrontend.Module,
+	activity.FrontendModule,
+	fx.Provide(visibility.ChasmVisibilityManagerProvider),
+	fx.Provide(chasm.ChasmVisibilityInterceptorProvider),
 )
 
 func NewServiceProvider(
@@ -163,6 +167,7 @@ func AuthorizationInterceptorProvider(
 	authorizer authorization.Authorizer,
 	claimMapper authorization.ClaimMapper,
 	audienceGetter authorization.JWTAudienceMapper,
+	dc *dynamicconfig.Collection,
 ) *authorization.Interceptor {
 	return authorization.NewInterceptor(
 		claimMapper,
@@ -174,6 +179,7 @@ func AuthorizationInterceptorProvider(
 		cfg.Global.Authorization.AuthHeaderName,
 		cfg.Global.Authorization.AuthExtraHeaderName,
 		serviceConfig.ExposeAuthorizerErrors,
+		dynamicconfig.EnableCrossNamespaceCommands.Get(dc),
 	)
 }
 
@@ -201,6 +207,7 @@ func GrpcServerOptionsProvider(
 	namespaceCountLimiterInterceptor *interceptor.ConcurrentRequestLimitInterceptor,
 	namespaceValidatorInterceptor *interceptor.NamespaceValidatorInterceptor,
 	namespaceHandoverInterceptor *interceptor.NamespaceHandoverInterceptor,
+	businessIDInterceptor *interceptor.BusinessIDInterceptor,
 	redirectionInterceptor *interceptor.Redirection,
 	telemetryInterceptor *interceptor.TelemetryInterceptor,
 	retryableInterceptor *interceptor.RetryableInterceptor,
@@ -213,6 +220,7 @@ func GrpcServerOptionsProvider(
 	authInterceptor *authorization.Interceptor,
 	maskInternalErrorDetailsInterceptor *interceptor.MaskInternalErrorDetailsInterceptor,
 	slowRequestLoggerInterceptor *interceptor.SlowRequestLoggerInterceptor,
+	chasmRequestVisibilityInterceptor *chasm.ChasmVisibilityInterceptor,
 	customInterceptors []grpc.UnaryServerInterceptor,
 	customStreamInterceptors []grpc.StreamServerInterceptor,
 	metricsHandler metrics.Handler,
@@ -255,6 +263,8 @@ func GrpcServerOptionsProvider(
 		// Handover interceptor has to above redirection because the request will route to the correct cluster after handover completed.
 		// And retry cannot be performed before customInterceptors.
 		namespaceHandoverInterceptor.Intercept,
+		// BusinessID interceptor extracts business ID and adds it to context for use by redirection policy
+		businessIDInterceptor.Intercept,
 		redirectionInterceptor.Intercept,
 		// Telemetry interceptor must be after redirection to ensure metrics are recorded in the correct cluster
 		telemetryInterceptor.UnaryIntercept,
@@ -266,6 +276,7 @@ func GrpcServerOptionsProvider(
 		sdkVersionInterceptor.Intercept,
 		callerInfoInterceptor.Intercept,
 		slowRequestLoggerInterceptor.Intercept,
+		chasmRequestVisibilityInterceptor.Intercept,
 	}
 	if len(customInterceptors) > 0 {
 		// TODO: Deprecate WithChainedFrontendGrpcInterceptors and provide a inner custom interceptor
@@ -351,6 +362,18 @@ func RedirectionInterceptorProvider(
 		metricsHandler,
 		timeSource,
 		clusterMetadata,
+	)
+}
+
+func BusinessIDInterceptorProvider(
+	extractor interceptor.BusinessIDExtractor,
+	logger log.Logger,
+) *interceptor.BusinessIDInterceptor {
+	return interceptor.NewBusinessIDInterceptor(
+		[]interceptor.BusinessIDExtractorFunc{
+			interceptor.WorkflowServiceExtractor(extractor),
+		},
+		logger,
 	)
 }
 
@@ -736,6 +759,7 @@ func HandlerProvider(
 	versionChecker *VersionChecker,
 	namespaceReplicationQueue FEReplicatorNamespaceReplicationQueue,
 	visibilityMgr manager.VisibilityManager,
+	chasmVisibilityMgr chasm.VisibilityManager,
 	logger log.SnTaggedLogger,
 	throttledLogger log.ThrottledLogger,
 	persistenceExecutionManager persistence.ExecutionManager,
@@ -744,7 +768,6 @@ func HandlerProvider(
 	clientBean client.Bean,
 	historyClient resource.HistoryClient,
 	matchingClient resource.MatchingClient,
-	deploymentStoreClient deployment.DeploymentStoreClient,
 	workerDeploymentStoreClient workerdeployment.Client,
 	schedulerClient schedulerpb.SchedulerServiceClient,
 	archiverProvider provider.ArchiverProvider,
@@ -760,6 +783,8 @@ func HandlerProvider(
 	membershipMonitor membership.Monitor,
 	healthInterceptor *interceptor.HealthInterceptor,
 	scheduleSpecBuilder *scheduler.SpecBuilder,
+	activityHandler activity.FrontendHandler,
+	registry *chasm.Registry,
 ) Handler {
 	wfHandler := NewWorkflowHandler(
 		serviceConfig,
@@ -772,7 +797,6 @@ func HandlerProvider(
 		persistenceMetadataManager,
 		historyClient,
 		matchingClient,
-		deploymentStoreClient,
 		workerDeploymentStoreClient,
 		schedulerClient,
 		archiverProvider,
@@ -788,6 +812,8 @@ func HandlerProvider(
 		healthInterceptor,
 		scheduleSpecBuilder,
 		httpEnabled(cfg, serviceName),
+		activityHandler,
+		registry,
 	)
 	return wfHandler
 }

@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"time"
 
@@ -26,7 +25,7 @@ func main() {
 	build1 := "1.0"
 	v1 := worker.WorkerDeploymentVersion{
 		DeploymentName: deploymentName,
-		BuildId:        build1,
+		BuildID:        build1,
 	}
 	w1 := worker.New(c, "hello-world", worker.Options{
 		DeploymentOptions: worker.DeploymentOptions{
@@ -56,12 +55,12 @@ func main() {
 
 	err = w1.Start()
 	if err != nil {
-		log.Fatalln("Unable to start worker", err)
+		log.Fatalf("Unable to start worker: %v", err)
 	}
 
 	err = w2.Start()
 	if err != nil {
-		log.Fatalln("Unable to start worker", err)
+		log.Fatalf("Unable to start worker: %v", err)
 	}
 
 	// Wait for the workers to register the version.
@@ -79,7 +78,7 @@ func main() {
 		Identity:           identity,
 	})
 	if err != nil {
-		log.Fatalln("Unable to set deployment manager", err)
+		log.Fatalf("Unable to set deployment manager: %v", err)
 	}
 
 	// Update version metadata
@@ -92,7 +91,7 @@ func main() {
 		},
 	})
 	if err != nil {
-		log.Fatalln("Unable to update version metadata", err)
+		log.Fatalf("Unable to update version metadata: %v", err)
 	}
 
 	// Set ramping version to 1.0
@@ -102,7 +101,7 @@ func main() {
 		Identity:   identity,
 	})
 	if err != nil {
-		log.Fatalln("Unable to set ramping version", err)
+		log.Fatalf("Unable to set ramping version: %v", err)
 	}
 	verifyDeployment(dHandle, "", build1, 1, client.WorkerDeploymentVersionDrainageStatusUnspecified)
 
@@ -113,7 +112,7 @@ func main() {
 		Identity:   identity,
 	})
 	if err != nil {
-		log.Fatalln("Unable to set ramping version to zero", err)
+		log.Fatalf("Unable to set ramping version to zero: %v", err)
 	}
 	verifyDeployment(dHandle, "", "", 0, client.WorkerDeploymentVersionDrainageStatusDraining)
 
@@ -124,7 +123,7 @@ func main() {
 		Identity:                identity,
 	})
 	if err != nil {
-		log.Fatalln("Unable to set current version", err)
+		log.Fatalf("Unable to set current version: %v", err)
 	}
 	verifyDeployment(dHandle, build1, "", 0, client.WorkerDeploymentVersionDrainageStatusUnspecified)
 
@@ -136,7 +135,7 @@ func main() {
 		Identity:                identity,
 	})
 	if err != nil {
-		log.Fatalln("Unable to set ramping version", err)
+		log.Fatalf("Unable to set ramping version: %v", err)
 	}
 	verifyDeployment(dHandle, build1, "", 20, client.WorkerDeploymentVersionDrainageStatusUnspecified)
 
@@ -147,7 +146,7 @@ func main() {
 		Identity:                identity,
 	})
 	if err != nil {
-		log.Fatalln("Unable to set current version", err)
+		log.Fatalf("Unable to set current version: %v", err)
 	}
 	verifyDeployment(dHandle, "", "", 0, client.WorkerDeploymentVersionDrainageStatusDraining)
 
@@ -165,7 +164,7 @@ func main() {
 		Identity:                identity,
 	})
 	if err != nil {
-		log.Fatalln("Unable to set current version", err)
+		log.Fatalf("Unable to set current version: %v", err)
 	}
 
 	// Set current version to "__unversioned__" again so that version 1.0 can start draining. This replicates the
@@ -176,7 +175,7 @@ func main() {
 		Identity:                identity,
 	})
 	if err != nil {
-		log.Fatalln("Unable to set current version", err)
+		log.Fatalf("Unable to set current version: %v", err)
 	}
 
 	// Waiting for the version 1.0 to become drained.
@@ -198,7 +197,7 @@ func main() {
 		Identity:     identity,
 	})
 	if err != nil {
-		log.Fatalln("Unable to delete version", err)
+		log.Fatalf("Unable to delete version: %v", err)
 	}
 
 	// Delete the deployment
@@ -207,7 +206,7 @@ func main() {
 		Identity: identity,
 	})
 	if err != nil {
-		log.Fatalln("Unable to delete deployment", err)
+		log.Fatalf("Unable to delete deployment: %v", err)
 	}
 
 }
@@ -221,34 +220,34 @@ func verifyDeployment(dHandle client.WorkerDeploymentHandle,
 ) {
 	describeResponse, err := dHandle.Describe(context.Background(), client.WorkerDeploymentDescribeOptions{})
 	if err != nil {
-		log.Fatalln("Unable to describe deployment", err)
+		log.Fatalf("Unable to describe deployment: %v", err)
 	}
 	if cv := describeResponse.Info.RoutingConfig.CurrentVersion; cv != nil {
-		if cv.BuildId != expectedCurrentVersionBuildId {
-			log.Fatalln(fmt.Sprintf("Current version build id is %s not %s", cv.BuildId, expectedCurrentVersionBuildId))
+		if cv.BuildID != expectedCurrentVersionBuildId {
+			log.Fatalf("Current version build id is %s not %s", cv.BuildID, expectedCurrentVersionBuildId)
 		}
 	} else {
 		if expectedCurrentVersionBuildId != "" {
-			log.Fatalln("Current version is empty, expected build id ", expectedCurrentVersionBuildId)
+			log.Fatalf("Current version is empty, expected build id %s", expectedCurrentVersionBuildId)
 		}
 	}
 
 	if rv := describeResponse.Info.RoutingConfig.RampingVersion; rv != nil {
-		if rv.BuildId != expectedRampingVersionBuildId {
-			log.Fatalln(fmt.Sprintf("Ramping version build id is %s not %s", rv.BuildId, expectedRampingVersionBuildId))
+		if rv.BuildID != expectedRampingVersionBuildId {
+			log.Fatalf("Ramping version build id is %s not %s", rv.BuildID, expectedRampingVersionBuildId)
 		}
 	} else {
 		if expectedRampingVersionBuildId != "" {
-			log.Fatalln("Ramping version is empty, expected build id ", expectedRampingVersionBuildId)
+			log.Fatalf("Ramping version is empty, expected build id %s", expectedRampingVersionBuildId)
 		}
 	}
 
 	if rp := describeResponse.Info.RoutingConfig.RampingVersionPercentage; rp != expectedRampPercentage {
-		log.Fatalln(fmt.Sprintf("Ramping percent is %v, expected %v", rp, expectedRampPercentage))
+		log.Fatalf("Ramping percent is %v, expected %v", rp, expectedRampPercentage)
 	}
 
 	if ds := describeResponse.Info.VersionSummaries[0].DrainageStatus; ds != expectedDrainageStatus {
-		log.Fatalln(fmt.Sprintf("Drainage status is %v, not %v", drainageStatusString(ds), drainageStatusString(expectedDrainageStatus)))
+		log.Fatalf("Drainage status is %v, not %v", drainageStatusString(ds), drainageStatusString(expectedDrainageStatus))
 	}
 }
 

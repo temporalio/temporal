@@ -273,3 +273,46 @@ func (c *SchedulerServiceLayeredClient) DescribeSchedule(
 	}
 	return backoff.ThrottleRetryContextWithReturn(ctx, call, c.retryPolicy, common.IsServiceClientTransientError)
 }
+func (c *SchedulerServiceLayeredClient) callListScheduleMatchingTimesNoRetry(
+	ctx context.Context,
+	request *ListScheduleMatchingTimesRequest,
+	opts ...grpc.CallOption,
+) (*ListScheduleMatchingTimesResponse, error) {
+	var response *ListScheduleMatchingTimesResponse
+	var err error
+	startTime := time.Now().UTC()
+	// the caller is a namespace, hence the tag below.
+	caller := headers.GetCallerInfo(ctx).CallerName
+	metricsHandler := c.metricsHandler.WithTags(
+		metrics.OperationTag("SchedulerService.ListScheduleMatchingTimes"),
+		metrics.NamespaceTag(caller),
+		metrics.ServiceRoleTag(metrics.HistoryRoleTagValue),
+	)
+	metrics.ClientRequests.With(metricsHandler).Record(1)
+	defer func() {
+		if err != nil {
+			metrics.ClientFailures.With(metricsHandler).Record(1, metrics.ServiceErrorTypeTag(err))
+		}
+		metrics.ClientLatency.With(metricsHandler).Record(time.Since(startTime))
+	}()
+	shardID := common.WorkflowIDToHistoryShard(request.GetNamespaceId(), request.GetFrontendRequest().GetScheduleId(), c.numShards)
+	op := func(ctx context.Context, client SchedulerServiceClient) error {
+		var err error
+		ctx, cancel := context.WithTimeout(ctx, history.DefaultTimeout)
+		defer cancel()
+		response, err = client.ListScheduleMatchingTimes(ctx, request, opts...)
+		return err
+	}
+	err = c.redirector.Execute(ctx, shardID, op)
+	return response, err
+}
+func (c *SchedulerServiceLayeredClient) ListScheduleMatchingTimes(
+	ctx context.Context,
+	request *ListScheduleMatchingTimesRequest,
+	opts ...grpc.CallOption,
+) (*ListScheduleMatchingTimesResponse, error) {
+	call := func(ctx context.Context) (*ListScheduleMatchingTimesResponse, error) {
+		return c.callListScheduleMatchingTimesNoRetry(ctx, request, opts...)
+	}
+	return backoff.ThrottleRetryContextWithReturn(ctx, call, c.retryPolicy, common.IsServiceClientTransientError)
+}

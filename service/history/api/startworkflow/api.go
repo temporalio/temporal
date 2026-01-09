@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
@@ -23,6 +24,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -53,11 +55,13 @@ type Starter struct {
 	metricsHandler             metrics.Handler
 	shardContext               historyi.ShardContext
 	workflowConsistencyChecker api.WorkflowConsistencyChecker
+	matchingClient             matchingservice.MatchingServiceClient
 	tokenSerializer            *tasktoken.Serializer
 	request                    *historyservice.StartWorkflowExecutionRequest
 	namespace                  *namespace.Namespace
 	createOrUpdateLeaseFn      api.CreateOrUpdateLeaseFunc
 	enableRequestIdRefLinks    dynamicconfig.BoolPropertyFn
+	versionMembershipCache     worker_versioning.VersionMembershipCache
 }
 
 // creationParams is a container for all information obtained from creating the uncommitted execution.
@@ -85,9 +89,11 @@ func NewStarter(
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	tokenSerializer *tasktoken.Serializer,
 	request *historyservice.StartWorkflowExecutionRequest,
+	matchingClient matchingservice.MatchingServiceClient,
+	versionMembershipCache worker_versioning.VersionMembershipCache,
 	createLeaseFn api.CreateOrUpdateLeaseFunc,
 ) (*Starter, error) {
-	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(request.GetNamespaceId()))
+	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(request.GetNamespaceId()), request.StartRequest.WorkflowId)
 	if err != nil {
 		return nil, err
 	}
@@ -97,11 +103,13 @@ func NewStarter(
 		metricsHandler:             nil,
 		shardContext:               shardContext,
 		workflowConsistencyChecker: workflowConsistencyChecker,
+		matchingClient:             matchingClient,
 		tokenSerializer:            tokenSerializer,
 		request:                    request,
 		namespace:                  namespaceEntry,
 		createOrUpdateLeaseFn:      createLeaseFn,
 		enableRequestIdRefLinks:    shardContext.GetConfig().EnableRequestIdRefLinks,
+		versionMembershipCache:     versionMembershipCache,
 	}, nil
 }
 
@@ -126,6 +134,12 @@ func (s *Starter) prepare(ctx context.Context) error {
 	)
 
 	err := api.ValidateStartWorkflowExecutionRequest(ctx, request, s.shardContext, s.namespace, "StartWorkflowExecution")
+	if err != nil {
+		return err
+	}
+
+	// Validation for versioning override, if any.
+	err = worker_versioning.ValidateVersioningOverride(ctx, request.GetVersioningOverride(), s.matchingClient, s.versionMembershipCache, request.GetTaskQueue().GetName(), enumspb.TASK_QUEUE_TYPE_WORKFLOW, s.namespace.ID().String())
 	if err != nil {
 		return err
 	}
@@ -176,7 +190,7 @@ func (s *Starter) Invoke(
 		return nil, StartErr, err
 	}
 
-	creationParams, err := s.prepareNewWorkflow(request.GetWorkflowId())
+	creationParams, err := s.prepareNewWorkflow(ctx, request.GetWorkflowId())
 	if err != nil {
 		return nil, StartErr, err
 	}
@@ -230,7 +244,7 @@ func (s *Starter) lockCurrentWorkflowExecution(
 
 // prepareNewWorkflow creates a new workflow context, and closes its mutable state transaction as snapshot.
 // It returns the creationContext which can later be used to insert into the executions table.
-func (s *Starter) prepareNewWorkflow(workflowID string) (*creationParams, error) {
+func (s *Starter) prepareNewWorkflow(ctx context.Context, workflowID string) (*creationParams, error) {
 	runID := primitives.NewUUID().String()
 	mutableState, err := api.NewWorkflowWithSignal(
 		s.shardContext,
@@ -258,6 +272,7 @@ func (s *Starter) prepareNewWorkflow(workflowID string) (*creationParams, error)
 		)
 	}
 	workflowSnapshot, eventBatches, err := mutableState.CloseTransactionAsSnapshot(
+		ctx,
 		historyi.TransactionPolicyActive,
 	)
 	if err != nil {

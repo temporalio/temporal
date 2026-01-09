@@ -305,6 +305,7 @@ func (c *ContextImpl) ConflictResolveWorkflowExecution(
 	}()
 
 	resetWorkflow, resetWorkflowEventsSeq, err := resetMutableState.CloseTransactionAsSnapshot(
+		ctx,
 		resetWorkflowTransactionPolicy,
 	)
 	if err != nil {
@@ -322,6 +323,7 @@ func (c *ContextImpl) ConflictResolveWorkflowExecution(
 		}()
 
 		newWorkflow, newWorkflowEventsSeq, err = newMutableState.CloseTransactionAsSnapshot(
+			ctx,
 			*newWorkflowTransactionPolicy,
 		)
 		if err != nil {
@@ -340,6 +342,7 @@ func (c *ContextImpl) ConflictResolveWorkflowExecution(
 		}()
 
 		currentWorkflow, currentWorkflowEventsSeq, err = currentMutableState.CloseTransactionAsMutation(
+			ctx,
 			*currentTransactionPolicy,
 		)
 		if err != nil {
@@ -536,6 +539,7 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 	}
 
 	updateWorkflow, updateWorkflowEventsSeq, err := c.MutableState.CloseTransactionAsMutation(
+		ctx,
 		updateWorkflowTransactionPolicy,
 	)
 	if err != nil {
@@ -552,6 +556,7 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 		}()
 
 		newWorkflow, newWorkflowEventsSeq, err = newMutableState.CloseTransactionAsSnapshot(
+			ctx,
 			*newWorkflowTransactionPolicy,
 		)
 		if err != nil {
@@ -641,6 +646,7 @@ func (c *ContextImpl) SubmitClosedWorkflowSnapshot(
 	}()
 
 	resetWorkflowSnapshot, resetWorkflowEventsSeq, err := c.MutableState.CloseTransactionAsSnapshot(
+		ctx,
 		transactionPolicy,
 	)
 	if err != nil {
@@ -880,7 +886,7 @@ func (c *ContextImpl) ReapplyEvents(
 		return err
 	}
 
-	activeCluster := namespaceEntry.ActiveClusterName()
+	activeCluster := namespaceEntry.ActiveClusterName(workflowID)
 	if activeCluster == shardContext.GetClusterMetadata().GetCurrentClusterName() {
 		engine, err := shardContext.GetEngine(ctx)
 		if err != nil {

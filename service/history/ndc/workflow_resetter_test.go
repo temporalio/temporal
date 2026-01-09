@@ -190,6 +190,7 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentTerminated() {
 		}},
 	}}
 	resetMutableState.EXPECT().CloseTransactionAsSnapshot(
+		context.Background(),
 		historyi.TransactionPolicyActive,
 	).Return(resetSnapshot, resetEventsSeq, nil)
 
@@ -230,7 +231,7 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentNotTerminated() {
 	currentEventsSeq := []*persistence.WorkflowEvents{{}}
 	currentMutableState.EXPECT().GetCurrentVersion().Return(int64(0)).AnyTimes()
 	currentMutableState.EXPECT().IsWorkflow().Return(true).AnyTimes()
-	currentMutableState.EXPECT().CloseTransactionAsMutation(historyi.TransactionPolicyActive).Return(currentMutation, currentEventsSeq, nil)
+	currentMutableState.EXPECT().CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive).Return(currentMutation, currentEventsSeq, nil)
 
 	resetWorkflow := NewMockWorkflow(s.controller)
 	resetReleaseCalled := false
@@ -255,6 +256,7 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentNotTerminated() {
 		}},
 	}}
 	resetMutableState.EXPECT().CloseTransactionAsSnapshot(
+		context.Background(),
 		historyi.TransactionPolicyActive,
 	).Return(resetSnapshot, resetEventsSeq, nil)
 
@@ -286,7 +288,11 @@ func (s *workflowResetterSuite) TestReplayResetWorkflow() {
 
 	resetBranchToken := []byte("some random reset branch token")
 	resetRequestID := uuid.NewString()
-	resetHistorySize := int64(4411)
+	resetStats := RebuildStats{
+		HistorySize:          4411,
+		ExternalPayloadSize:  1234,
+		ExternalPayloadCount: 56,
+	}
 	resetMutableState := historyi.NewMockMutableState(s.controller)
 
 	s.mockExecutionMgr.EXPECT().ForkHistoryBranch(gomock.Any(), gomock.Any()).Return(
@@ -311,13 +317,15 @@ func (s *workflowResetterSuite) TestReplayResetWorkflow() {
 		),
 		resetBranchToken,
 		resetRequestID,
-	).Return(resetMutableState, resetHistorySize, nil)
+	).Return(resetMutableState, resetStats, nil)
 	resetMutableState.EXPECT().SetBaseWorkflow(
 		s.baseRunID,
 		baseRebuildLastEventID,
 		baseRebuildLastEventVersion,
 	)
-	resetMutableState.EXPECT().AddHistorySize(resetHistorySize)
+	resetMutableState.EXPECT().AddHistorySize(resetStats.HistorySize)
+	resetMutableState.EXPECT().AddExternalPayloadSize(resetStats.ExternalPayloadSize)
+	resetMutableState.EXPECT().AddExternalPayloadCount(resetStats.ExternalPayloadCount)
 
 	resetWorkflow, err := s.workflowResetter.replayResetWorkflow(
 		ctx,
@@ -388,6 +396,7 @@ func (s *workflowResetterSuite) TestFailWorkflowTask_WorkflowTaskScheduled() {
 		nil,
 		nil,
 		true,
+		nil,
 	).Return(&historypb.HistoryEvent{}, workflowTaskStart, nil)
 	mutableState.EXPECT().AddWorkflowTaskFailedEvent(
 		workflowTaskStart,
@@ -1472,7 +1481,11 @@ func (s *workflowResetterSuite) TestWorkflowRestartAfterExecutionTimeout() {
 
 	resetBranchToken := []byte("some random reset branch token")
 	resetRequestID := uuid.NewString()
-	resetHistorySize := int64(4411)
+	resetStats := RebuildStats{
+		HistorySize:          4411,
+		ExternalPayloadSize:  1234,
+		ExternalPayloadCount: 56,
+	}
 	resetMutableState := historyi.NewMockMutableState(s.controller)
 	executionInfos := make(map[int64]*persistencespb.ChildExecutionInfo)
 
@@ -1500,10 +1513,12 @@ func (s *workflowResetterSuite) TestWorkflowRestartAfterExecutionTimeout() {
 		definition.NewWorkflowKey(s.namespaceID.String(), s.workflowID, s.resetRunID),
 		resetBranchToken,
 		resetRequestID,
-	).Return(resetMutableState, resetHistorySize, nil)
+	).Return(resetMutableState, resetStats, nil)
 
 	resetMutableState.EXPECT().SetBaseWorkflow(s.baseRunID, baseRebuildLastEventID, baseRebuildLastEventVersion)
-	resetMutableState.EXPECT().AddHistorySize(resetHistorySize)
+	resetMutableState.EXPECT().AddHistorySize(resetStats.HistorySize)
+	resetMutableState.EXPECT().AddExternalPayloadSize(resetStats.ExternalPayloadSize)
+	resetMutableState.EXPECT().AddExternalPayloadCount(resetStats.ExternalPayloadCount)
 	resetMutableState.EXPECT().GetCurrentVersion().Return(resetWorkflowVersion).AnyTimes()
 	resetMutableState.EXPECT().UpdateCurrentVersion(resetWorkflowVersion, false).Return(nil).AnyTimes()
 	resetMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
@@ -1536,6 +1551,7 @@ func (s *workflowResetterSuite) TestWorkflowRestartAfterExecutionTimeout() {
 		nil,
 		nil,
 		true,
+		nil,
 	).Return(&historypb.HistoryEvent{}, workflowTaskStart, nil)
 
 	resetMutableState.EXPECT().AddWorkflowTaskFailedEvent(
