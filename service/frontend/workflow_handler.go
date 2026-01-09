@@ -3621,16 +3621,20 @@ func (wh *WorkflowHandler) ListWorkerDeployments(ctx context.Context, request *w
 		return nil, err
 	}
 
-	workerDeployments := make([]*workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary, len(resp))
-	for i, d := range resp {
-		workerDeployments[i] = &workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary{
-			Name:                  d.Name,
-			CreateTime:            d.CreateTime,
-			RoutingConfig:         d.RoutingConfig,
-			LatestVersionSummary:  d.LatestVersionSummary,
-			RampingVersionSummary: d.RampingVersionSummary,
-			CurrentVersionSummary: d.CurrentVersionSummary,
+	workerDeployments := make([]*workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary, 0, len(resp))
+	for _, d := range resp {
+		if d == nil {
+			// Skip nil entries that result from corrupted memos
+			continue
 		}
+		workerDeployments = append(workerDeployments, &workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary{
+			Name:                  d.GetName(),
+			CreateTime:            d.GetCreateTime(),
+			RoutingConfig:         d.GetRoutingConfig(),
+			LatestVersionSummary:  d.GetLatestVersionSummary(),
+			RampingVersionSummary: d.GetRampingVersionSummary(),
+			CurrentVersionSummary: d.GetCurrentVersionSummary(),
+		})
 	}
 
 	return &workflowservice.ListWorkerDeploymentsResponse{
