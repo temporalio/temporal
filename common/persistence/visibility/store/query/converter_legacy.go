@@ -244,7 +244,7 @@ func (c *ConverterLegacy) convertSelect(sel *sqlparser.Select) (*QueryParamsLega
 		if err != nil {
 			return nil, wrapConverterError("unable to convert 'order by' column name", err)
 		}
-		fieldSort := elastic.NewFieldSort(colName)
+		fieldSort := elastic.NewFieldSort(colName).Missing("_last")
 		if orderByExpr.Direction == sqlparser.DescScr {
 			fieldSort = fieldSort.Desc()
 		}

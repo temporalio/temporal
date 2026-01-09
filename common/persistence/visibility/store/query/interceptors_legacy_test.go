@@ -60,7 +60,7 @@ func TestNameInterceptor(t *testing.T) {
 	}
 	//nolint:staticcheck
 	actualSorterJson, _ := json.Marshal(actualSorterMaps)
-	require.JSONEq(t, `[{"StartTime1":{"order":"asc"}}]`, string(actualSorterJson))
+	require.JSONEq(t, `[{"StartTime1":{"missing":"_last","order":"asc"}}]`, string(actualSorterJson))
 
 	_, err = c.ConvertWhereOrderBy("error='Running' order by StartTime")
 	require.Error(t, err)
