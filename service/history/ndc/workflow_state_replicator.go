@@ -1130,7 +1130,7 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 			isNewBranch = false
 
 			localMutableState.GetExecutionInfo().ExecutionStats.HistorySize += int64(len(historyBlob.rawHistory.Data))
-			if r.shardContext.GetConfig().ExternalPayloadsEnabled(nsName.String()) {
+			if r.shardContext.GetConfig().ExternalPayloadsEnabled(nsName) {
 				externalPayloadSize, externalPayloadCount, err := workflow.CalculateExternalPayloadSize(events)
 				if err != nil {
 					return err
