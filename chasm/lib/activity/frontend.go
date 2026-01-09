@@ -170,6 +170,11 @@ func (h *frontendHandler) ListActivityExecutions(
 		return nil, serviceerror.NewUnavailable(StandaloneActivityDisabledError)
 	}
 
+	pageSize := req.GetPageSize()
+	if maxPageSize := int32(h.config.VisibilityMaxPageSize(req.GetNamespace())); pageSize <= 0 || pageSize > maxPageSize {
+		pageSize = maxPageSize
+	}
+
 	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
 	if err != nil {
 		return nil, err
@@ -178,7 +183,7 @@ func (h *frontendHandler) ListActivityExecutions(
 	resp, err := chasm.ListExecutions[*Activity, *emptypb.Empty](ctx, &chasm.ListExecutionsRequest{
 		NamespaceID:   namespaceID.String(),
 		NamespaceName: req.GetNamespace(),
-		PageSize:      int(req.GetPageSize()),
+		PageSize:      int(pageSize),
 		NextPageToken: req.GetNextPageToken(),
 		Query:         req.GetQuery(),
 	})

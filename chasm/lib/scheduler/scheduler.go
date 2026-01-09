@@ -3,6 +3,7 @@ package scheduler
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -19,6 +20,7 @@ import (
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/worker/scheduler"
@@ -68,6 +70,9 @@ const (
 
 	// Field in which the schedule's memo is stored.
 	visibilityMemoFieldInfo = "ScheduleInfo"
+
+	// Maximum number of matching times to return.
+	maxListMatchingTimesCount = 1000
 )
 
 var (
@@ -156,8 +161,8 @@ func CreateScheduler(
 
 	// Update visibility with custom attributes.
 	visibility := sched.Visibility.Get(ctx)
-	visibility.SetSearchAttributes(ctx, req.FrontendRequest.GetSearchAttributes().GetIndexedFields())
-	visibility.SetMemo(ctx, req.FrontendRequest.GetMemo().GetFields())
+	visibility.MergeCustomSearchAttributes(ctx, req.FrontendRequest.GetSearchAttributes().GetIndexedFields())
+	visibility.MergeCustomMemo(ctx, req.FrontendRequest.GetMemo().GetFields())
 
 	return sched, &schedulerpb.CreateScheduleResponse{
 		FrontendResponse: &workflowservice.CreateScheduleResponse{
@@ -180,11 +185,10 @@ func (s *Scheduler) NewRangeBackfiller(
 	ctx chasm.MutableContext,
 	request *schedulepb.BackfillRequest,
 ) *Backfiller {
-	backfiller := newBackfiller(ctx, s)
+	backfiller := addBackfiller(ctx, s)
 	backfiller.Request = &schedulerpb.BackfillerState_BackfillRequest{
 		BackfillRequest: request,
 	}
-	s.Backfillers[backfiller.BackfillId] = chasm.NewComponentField(ctx, backfiller)
 	return backfiller
 }
 
@@ -194,11 +198,10 @@ func (s *Scheduler) NewImmediateBackfiller(
 	ctx chasm.MutableContext,
 	request *schedulepb.TriggerImmediatelyRequest,
 ) *Backfiller {
-	backfiller := newBackfiller(ctx, s)
+	backfiller := addBackfiller(ctx, s)
 	backfiller.Request = &schedulerpb.BackfillerState_TriggerRequest{
 		TriggerRequest: request,
 	}
-	s.Backfillers[backfiller.BackfillId] = chasm.NewComponentField(ctx, backfiller)
 	return backfiller
 }
 
@@ -544,7 +547,7 @@ func (s *Scheduler) Describe(
 	}
 
 	visibility := s.Visibility.Get(ctx)
-	memo := visibility.GetMemo(ctx)
+	memo := visibility.CustomMemo(ctx)
 	delete(memo, visibilityMemoFieldInfo) // We don't need to return a redundant info block.
 
 	if s.Schedule.GetPolicies().GetOverlapPolicy() == enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED {
@@ -564,7 +567,7 @@ func (s *Scheduler) Describe(
 			Info:             common.CloneProto(s.Info),
 			ConflictToken:    s.generateConflictToken(),
 			Memo:             &commonpb.Memo{Fields: memo},
-			SearchAttributes: &commonpb.SearchAttributes{IndexedFields: visibility.GetSearchAttributes(ctx)},
+			SearchAttributes: &commonpb.SearchAttributes{IndexedFields: visibility.CustomSearchAttributes(ctx)},
 		},
 	}, nil
 }
@@ -596,6 +599,44 @@ func cleanSpec(spec *schedulepb.ScheduleSpec) {
 	for _, structured := range spec.ExcludeStructuredCalendar {
 		cleanCal(structured)
 	}
+}
+
+// ListMatchingTimes returns the upcoming times that the schedule will trigger
+// within the given time range.
+func (s *Scheduler) ListMatchingTimes(
+	ctx chasm.Context,
+	req *schedulerpb.ListScheduleMatchingTimesRequest,
+	specBuilder *scheduler.SpecBuilder,
+) (*schedulerpb.ListScheduleMatchingTimesResponse, error) {
+	if s.Closed {
+		return nil, ErrClosed
+	}
+
+	frontendReq := req.FrontendRequest
+	if frontendReq == nil || frontendReq.StartTime == nil || frontendReq.EndTime == nil {
+		return nil, errors.New("missing or invalid query")
+	}
+
+	cspec, err := s.getCompiledSpec(specBuilder)
+	if err != nil {
+		return nil, fmt.Errorf("invalid schedule: %w", err)
+	}
+
+	var out []*timestamppb.Timestamp
+	t1 := timestamp.TimeValue(frontendReq.StartTime)
+	for i := 0; i < maxListMatchingTimesCount; i++ {
+		t1 = cspec.GetNextTime(s.jitterSeed(), t1).Next
+		if t1.IsZero() || t1.After(timestamp.TimeValue(frontendReq.EndTime)) {
+			break
+		}
+		out = append(out, timestamppb.New(t1))
+	}
+
+	return &schedulerpb.ListScheduleMatchingTimesResponse{
+		FrontendResponse: &workflowservice.ListScheduleMatchingTimesResponse{
+			StartTime: out,
+		},
+	}, nil
 }
 
 // Delete marks the Scheduler as closed without an idle timer.
@@ -631,7 +672,7 @@ func (s *Scheduler) Update(
 
 		// Preserve the old custom memo in the new Visibility component.
 		oldVisibility := s.Visibility.Get(ctx)
-		oldMemo := oldVisibility.GetMemo(ctx)
+		oldMemo := oldVisibility.CustomMemo(ctx)
 
 		visibility := chasm.NewVisibilityWithData(ctx, req.FrontendRequest.GetSearchAttributes().GetIndexedFields(), oldMemo)
 		s.Visibility = chasm.NewComponentField(ctx, visibility)

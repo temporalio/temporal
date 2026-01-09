@@ -64,7 +64,8 @@ type (
 	// UserDataUpdateFunc accepts the current user data for a task queue and returns the updated user data, a boolean
 	// indicating whether this data should be replicated, and an error.
 	// Extra care should be taken to avoid mutating the current user data to avoid keeping uncommitted data in memory.
-	UserDataUpdateFunc func(*persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error)
+	UserDataUpdateFunc   func(*persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error)
+	UserDataOnChangeFunc func(to *persistencespb.VersionedTaskQueueUserData)
 
 	// userDataManager is responsible for fetching and keeping user data up-to-date in-memory
 	// for a given TQ partition.
@@ -76,7 +77,7 @@ type (
 	userDataManagerImpl struct {
 		lock              sync.Mutex
 		onFatalErr        func(unloadCause)
-		onUserDataChanged func() // if set, call this in new goroutine when user data changes
+		onUserDataChanged UserDataOnChangeFunc // if set, call this in new goroutine when user data changes
 		partition         tqid.Partition
 		userData          *persistencespb.VersionedTaskQueueUserData
 		userDataChanged   chan struct{}
@@ -111,7 +112,7 @@ func newUserDataManager(
 	store persistence.TaskManager,
 	matchingClient matchingservice.MatchingServiceClient,
 	onFatalErr func(unloadCause),
-	onUserDataChanged func(),
+	onUserDataChanged UserDataOnChangeFunc,
 	partition tqid.Partition,
 	config *taskQueueConfig,
 	logger log.Logger,
@@ -181,16 +182,14 @@ func (m *userDataManagerImpl) setUserDataLocked(userData *persistencespb.Version
 	close(m.userDataChanged)
 	m.userDataChanged = make(chan struct{})
 	if m.onUserDataChanged != nil {
-		go m.onUserDataChanged()
+		go m.onUserDataChanged(m.userData)
 	}
 }
 
-// Sets user data enabled/disabled and marks the future ready (if it's not ready yet).
-// userDataState controls whether GetUserData return an error, and which.
+// setUserDataState sets user data enabled/disabled and marks the future ready (if it's not ready yet).
+// userDataState controls whether GetUserData return an error, and which error.
 // futureError is the error to set on the ready future. If this is non-nil, the task queue will
 // be unloaded.
-// Note that this must only be called from a single goroutine since the Ready/Set sequence is
-// potentially racy otherwise.
 func (m *userDataManagerImpl) setUserDataState(userDataState userDataState, futureError error) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
@@ -201,9 +200,7 @@ func (m *userDataManagerImpl) setUserDataState(userDataState userDataState, futu
 		m.userDataChanged = make(chan struct{})
 	}
 
-	if !m.userDataReady.Ready() {
-		m.userDataReady.Set(struct{}{}, futureError)
-	}
+	_ = m.userDataReady.SetIfNotReady(struct{}{}, futureError)
 }
 
 func (m *userDataManagerImpl) loadUserData(ctx context.Context) error {
@@ -219,6 +216,7 @@ func (m *userDataManagerImpl) loadUserData(ctx context.Context) error {
 	for ctx.Err() == nil {
 		if err = m.refreshUserDataFromDB(ctx); errors.Is(err, errUserDataVersionMismatch) {
 			m.onFatalErr(unloadCauseConflict)
+			return err
 		}
 		util.InterruptibleSleep(ctx, backoff.Jitter(m.config.GetUserDataRefresh(), 0.2))
 	}

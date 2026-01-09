@@ -6,24 +6,27 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/log"
+	legacyscheduler "go.temporal.io/server/service/worker/scheduler"
 )
 
 type handler struct {
 	schedulerpb.UnimplementedSchedulerServiceServer
 
-	logger log.Logger
+	logger      log.Logger
+	specBuilder *legacyscheduler.SpecBuilder
 }
 
-func newHandler(logger log.Logger) *handler {
+func newHandler(logger log.Logger, specBuilder *legacyscheduler.SpecBuilder) *handler {
 	return &handler{
-		logger: logger,
+		logger:      logger,
+		specBuilder: specBuilder,
 	}
 }
 
 func (h *handler) CreateSchedule(ctx context.Context, req *schedulerpb.CreateScheduleRequest) (resp *schedulerpb.CreateScheduleResponse, err error) {
 	defer log.CapturePanic(h.logger, &err)
 
-	resp, _, _, err = chasm.NewExecution(
+	result, err := chasm.NewExecution(
 		ctx,
 		chasm.ExecutionKey{
 			NamespaceID: req.NamespaceId,
@@ -33,7 +36,7 @@ func (h *handler) CreateSchedule(ctx context.Context, req *schedulerpb.CreateSch
 		req,
 		chasm.WithRequestID(req.FrontendRequest.RequestId),
 	)
-	return resp, err
+	return result.Output, err
 }
 
 func (h *handler) UpdateSchedule(ctx context.Context, req *schedulerpb.UpdateScheduleRequest) (resp *schedulerpb.UpdateScheduleResponse, err error) {
@@ -99,6 +102,24 @@ func (h *handler) DescribeSchedule(ctx context.Context, req *schedulerpb.Describ
 			},
 		),
 		(*Scheduler).Describe,
+		req,
+	)
+}
+
+func (h *handler) ListScheduleMatchingTimes(ctx context.Context, req *schedulerpb.ListScheduleMatchingTimesRequest) (resp *schedulerpb.ListScheduleMatchingTimesResponse, err error) {
+	defer log.CapturePanic(h.logger, &err)
+
+	return chasm.ReadComponent(
+		ctx,
+		chasm.NewComponentRef[*Scheduler](
+			chasm.ExecutionKey{
+				NamespaceID: req.NamespaceId,
+				BusinessID:  req.FrontendRequest.ScheduleId,
+			},
+		),
+		func(s *Scheduler, ctx chasm.Context, req *schedulerpb.ListScheduleMatchingTimesRequest) (*schedulerpb.ListScheduleMatchingTimesResponse, error) {
+			return s.ListMatchingTimes(ctx, req, h.specBuilder)
+		},
 		req,
 	)
 }

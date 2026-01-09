@@ -64,7 +64,6 @@ jobs:
           # Upload-artifact has no good way to flatten paths, so we need to move the compose file
           # to avoid some disgustingly long inner path inside the artifact zip.
           cp ./develop/docker-compose/docker-compose.yml /tmp/docker-compose.yml
-          echo -n "${{env.IMAGE_SHA_TAG}}" > /tmp/image_sha_tag
 
       - name: Upload Docker artifact
         uses: actions/upload-artifact@v4
@@ -74,7 +73,7 @@ jobs:
             /tmp/temporal-server.tar
             /tmp/temporal-admin-tools.tar
             /tmp/image_tag
-            /tmp/docker-compose.yml 
+            /tmp/docker-compose.yml
 
           retention-days: 7
 
@@ -95,6 +94,21 @@ jobs:
       version: __latest_features_docker_image__
       version-is-repo-ref: false
       docker-image-artifact-name: temporal-server-docker
+
+  feature-tests-go-chasm-scheduler:
+    needs: build-docker-image
+    uses: temporalio/features/.github/workflows/go.yaml@main
+    with:
+      version: __latest_features_docker_image__
+      version-is-repo-ref: false
+      docker-image-artifact-name: temporal-server-docker
+      dynamic-config-values: |
+        history.enableTransitionHistory:
+          - value: true
+        history.enableChasm:
+          - value: true
+        history.enableCHASMSchedulerCreation:
+          - value: true
 
   feature-tests-python:
     needs: build-docker-image
@@ -125,6 +139,7 @@ jobs:
     needs:
       - feature-tests-ts
       - feature-tests-go
+      - feature-tests-go-chasm-scheduler
       - feature-tests-python
       - feature-tests-java
       - feature-tests-dotnet

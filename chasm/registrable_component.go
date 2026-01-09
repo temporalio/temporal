@@ -6,6 +6,7 @@ import (
 
 	"github.com/dgryski/go-farm"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 )
 
 type (
@@ -67,6 +68,37 @@ func WithShardingFn(
 	}
 }
 
+// WithBusinessIDAlias allows specifying the business ID alias of the component.
+// This option must be specified if the archetype uses the Visibility component.
+func WithBusinessIDAlias(
+	alias string,
+) RegistrableComponentOption {
+	return func(rc *RegistrableComponent) {
+		if rc.searchAttributesMapper == nil {
+			rc.searchAttributesMapper = &VisibilitySearchAttributesMapper{
+				aliasToField:       make(map[string]string),
+				fieldToAlias:       make(map[string]string),
+				saTypeMap:          make(map[string]enumspb.IndexedValueType),
+				systemAliasToField: make(map[string]string),
+			}
+		}
+		if rc.searchAttributesMapper.systemAliasToField == nil {
+			rc.searchAttributesMapper.systemAliasToField = make(map[string]string)
+		}
+		if _, ok := rc.searchAttributesMapper.aliasToField[alias]; ok {
+			//nolint:forbidigo
+			panic(fmt.Sprintf("registrable component validation error: business ID alias %q is already defined as a search attribute", alias))
+		}
+		if _, ok := rc.searchAttributesMapper.systemAliasToField[alias]; ok {
+			//nolint:forbidigo
+			panic(fmt.Sprintf("registrable component validation error: business ID alias %q is already defined as a system search attribute", alias))
+		}
+		rc.searchAttributesMapper.systemAliasToField[alias] = sadefs.WorkflowID
+		rc.searchAttributesMapper.fieldToAlias[sadefs.WorkflowID] = alias
+		rc.searchAttributesMapper.saTypeMap[sadefs.WorkflowID] = enumspb.INDEXED_VALUE_TYPE_KEYWORD
+	}
+}
+
 func WithSearchAttributes(
 	searchAttributes ...SearchAttribute,
 ) RegistrableComponentOption {
@@ -74,10 +106,14 @@ func WithSearchAttributes(
 		if len(searchAttributes) == 0 {
 			return
 		}
-		rc.searchAttributesMapper = &VisibilitySearchAttributesMapper{
-			aliasToField: make(map[string]string, len(searchAttributes)),
-			fieldToAlias: make(map[string]string, len(searchAttributes)),
-			saTypeMap:    make(map[string]enumspb.IndexedValueType, len(searchAttributes)),
+
+		if rc.searchAttributesMapper == nil {
+			rc.searchAttributesMapper = &VisibilitySearchAttributesMapper{
+				aliasToField:       make(map[string]string, len(searchAttributes)),
+				fieldToAlias:       make(map[string]string, len(searchAttributes)),
+				saTypeMap:          make(map[string]enumspb.IndexedValueType, len(searchAttributes)),
+				systemAliasToField: make(map[string]string),
+			}
 		}
 
 		for _, sa := range searchAttributes {
@@ -85,6 +121,15 @@ func WithSearchAttributes(
 			field := sa.definition().field
 			valueType := sa.definition().valueType
 
+			if sadefs.IsSystem(alias) || sadefs.IsReserved(alias) {
+				//nolint:forbidigo
+				panic(fmt.Sprintf("registrable component validation error: CHASM search attribute alias %q is a system or reserved search attribute", alias))
+			}
+
+			if _, ok := rc.searchAttributesMapper.systemAliasToField[alias]; ok {
+				//nolint:forbidigo
+				panic(fmt.Sprintf("registrable component validation error: CHASM search attribute alias %q is already defined as a system search attribute alias", alias))
+			}
 			if _, ok := rc.searchAttributesMapper.aliasToField[alias]; ok {
 				//nolint:forbidigo
 				panic(fmt.Sprintf("registrable component validation error: search attribute alias %q is already defined", alias))
@@ -118,6 +163,21 @@ func (rc *RegistrableComponent) registerToLibrary(
 // SearchAttributesMapper returns the search attributes mapper for this component.
 func (rc *RegistrableComponent) SearchAttributesMapper() *VisibilitySearchAttributesMapper {
 	return rc.searchAttributesMapper
+}
+
+// hasBusinessIDAlias returns true if the component has a businessID alias configured
+// via WithBusinessIDAlias option.
+func (rc *RegistrableComponent) hasBusinessIDAlias() bool {
+	if rc.searchAttributesMapper == nil {
+		return false
+	}
+	_, ok := rc.searchAttributesMapper.fieldToAlias[sadefs.WorkflowID]
+	return ok
+}
+
+// GoType returns the reflect.Type of the component's Go struct.
+func (rc *RegistrableComponent) GoType() reflect.Type {
+	return rc.goType
 }
 
 // fqType returns the fully qualified name of the component, which is a combination of
