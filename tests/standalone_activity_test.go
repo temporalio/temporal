@@ -1945,7 +1945,7 @@ func (s *standaloneActivityTestSuite) TestListActivityExecutions() {
 		resp, err := s.FrontendClient().ListActivityExecutions(ctx, &workflowservice.ListActivityExecutionsRequest{
 			Namespace:     s.Namespace().String(),
 			PageSize:      2,
-			Query:         fmt.Sprintf("ActivityType = '%s'", activityType),
+			Query:         fmt.Sprintf("ActivityType = '%s'", testActivityType),
 			NextPageToken: resp.GetNextPageToken(),
 		})
 		require.NoError(t, err)
@@ -1955,7 +1955,7 @@ func (s *standaloneActivityTestSuite) TestListActivityExecutions() {
 		resp, err = s.FrontendClient().ListActivityExecutions(ctx, &workflowservice.ListActivityExecutionsRequest{
 			Namespace:     s.Namespace().String(),
 			PageSize:      2,
-			Query:         fmt.Sprintf("ActivityType = '%s'", activityType),
+			Query:         fmt.Sprintf("ActivityType = '%s'", testActivityType),
 			NextPageToken: resp.GetNextPageToken(),
 		})
 		require.NoError(t, err)
