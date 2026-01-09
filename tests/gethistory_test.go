@@ -532,12 +532,11 @@ func (s *RawHistorySuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 		return responseInner.RawHistory, responseInner.NextPageToken
 	}
 
-	serializer := serialization.NewSerializer()
 	convertBlob := func(blobs []*commonpb.DataBlob) []*historypb.HistoryEvent {
 		events := []*historypb.HistoryEvent{}
 		for _, blob := range blobs {
 			s.True(blob.GetEncodingType() == enumspb.ENCODING_TYPE_PROTO3)
-			blobEvents, err := serializer.DeserializeEvents(&commonpb.DataBlob{
+			blobEvents, err := serialization.DefaultDecoder.DeserializeEvents(&commonpb.DataBlob{
 				EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 				Data:         blob.Data,
 			})

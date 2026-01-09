@@ -44,7 +44,7 @@ type (
 
 		ShardManager      p.ShardManager
 		ExecutionManager  p.ExecutionManager
-		historyBranchUtil p.HistoryBranchUtil
+		HistoryBranchUtil p.HistoryBranchUtil
 		Logger            log.Logger
 
 		Ctx    context.Context
@@ -57,7 +57,6 @@ func NewExecutionMutableStateSuite(
 	shardStore p.ShardStore,
 	executionStore p.ExecutionStore,
 	serializer serialization.Serializer,
-	historyBranchUtil p.HistoryBranchUtil,
 	logger log.Logger,
 ) *ExecutionMutableStateSuite {
 	return &ExecutionMutableStateSuite{
@@ -75,7 +74,7 @@ func NewExecutionMutableStateSuite(
 			dynamicconfig.GetIntPropertyFn(4*1024*1024),
 			dynamicconfig.GetBoolPropertyFn(false),
 		),
-		historyBranchUtil: historyBranchUtil,
+		HistoryBranchUtil: p.NewHistoryBranchUtil(serializer),
 		Logger:            logger,
 	}
 }
@@ -198,7 +197,7 @@ func (s *ExecutionMutableStateSuite) TestCreate_Reuse() {
 	)
 
 	newRunID := uuid.New().String()
-	newBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, newRunID, s.historyBranchUtil)
+	newBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, newRunID, s.HistoryBranchUtil)
 	newSnapshot, newEvents := RandomSnapshot(
 		s.T(),
 		s.NamespaceID,
@@ -331,7 +330,7 @@ func (s *ExecutionMutableStateSuite) TestCreate_Zombie() {
 	)
 
 	newRunID := uuid.New().String()
-	newBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, newRunID, s.historyBranchUtil)
+	newBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, newRunID, s.HistoryBranchUtil)
 	newSnapshot, newEvents := RandomSnapshot(
 		s.T(),
 		s.NamespaceID,
@@ -411,7 +410,7 @@ func (s *ExecutionMutableStateSuite) TestCreate_ClosedWorkflow_Bypass() {
 	)
 
 	newRunID := uuid.New().String()
-	newBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, newRunID, s.historyBranchUtil)
+	newBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, newRunID, s.HistoryBranchUtil)
 	newSnapshot, newEvents := RandomSnapshot(
 		s.T(),
 		s.NamespaceID,
@@ -454,7 +453,7 @@ func (s *ExecutionMutableStateSuite) TestCreate_ClosedWorkflow_UpdateCurrent() {
 	)
 
 	newRunID := uuid.New().String()
-	newBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, newRunID, s.historyBranchUtil)
+	newBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, newRunID, s.HistoryBranchUtil)
 	newSnapshot, newEvents := RandomSnapshot(
 		s.T(),
 		s.NamespaceID,
@@ -577,7 +576,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_CurrentConflict() {
 	// Mutation for a different run of the same workflowID
 	// not related to the workflow created above
 	newRunID := uuid.New().String()
-	newBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, newRunID, s.historyBranchUtil)
+	newBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, newRunID, s.HistoryBranchUtil)
 	currentMutation, currentEvents := RandomMutation(
 		s.T(),
 		s.NamespaceID,
@@ -673,7 +672,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_WithNew() {
 	)
 
 	newRunID := uuid.New().String()
-	newBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, newRunID, s.historyBranchUtil)
+	newBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, newRunID, s.HistoryBranchUtil)
 	newSnapshot, newEvents := RandomSnapshot(
 		s.T(),
 		s.NamespaceID,
@@ -716,7 +715,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_Zombie() {
 	)
 
 	zombieRunID := uuid.New().String()
-	zombieBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, zombieRunID, s.historyBranchUtil)
+	zombieBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, zombieRunID, s.HistoryBranchUtil)
 	zombieSnapshot, zombieEvents1 := RandomSnapshot(
 		s.T(),
 		s.NamespaceID,
@@ -823,7 +822,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_Zombie_Conflict() {
 	)
 
 	zombieRunID := uuid.New().String()
-	zombieBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, zombieRunID, s.historyBranchUtil)
+	zombieBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, zombieRunID, s.HistoryBranchUtil)
 	zombieSnapshot, zombieEvents1 := RandomSnapshot(
 		s.T(),
 		s.NamespaceID,
@@ -890,7 +889,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_Zombie_WithNew() {
 		rand.Int63(),
 	)
 	zombieRunID := uuid.New().String()
-	zombieBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, zombieRunID, s.historyBranchUtil)
+	zombieBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, zombieRunID, s.HistoryBranchUtil)
 	zombieSnapshot, zombieEvents1 := RandomSnapshot(
 		s.T(),
 		s.NamespaceID,
@@ -931,7 +930,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_Zombie_WithNew() {
 		zombieBranchToken,
 	)
 	newRunID := uuid.New().String()
-	newBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, newRunID, s.historyBranchUtil)
+	newBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, newRunID, s.HistoryBranchUtil)
 	newZombieSnapshot, newEvents3 := RandomSnapshot(
 		s.T(),
 		s.NamespaceID,
@@ -1016,7 +1015,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_ClosedWorkflow_IsNonCurrent() {
 
 	// make current workflow to a different run
 	currentRunID := uuid.New().String()
-	currentBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, currentRunID, s.historyBranchUtil)
+	currentBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, currentRunID, s.HistoryBranchUtil)
 	currentSnapshot, currentEvents := RandomSnapshot(
 		s.T(),
 		s.NamespaceID,
@@ -1088,7 +1087,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent() {
 	)
 
 	baseRunID := uuid.New().String()
-	baseBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, baseRunID, s.historyBranchUtil)
+	baseBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, baseRunID, s.HistoryBranchUtil)
 	baseSnapshot, baseEvents := RandomSnapshot(
 		s.T(),
 		s.NamespaceID,
@@ -1173,7 +1172,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_Current
 	)
 
 	baseRunID := uuid.New().String()
-	baseBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, baseRunID, s.historyBranchUtil)
+	baseBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, baseRunID, s.HistoryBranchUtil)
 	baseSnapshot, baseEvents := RandomSnapshot(
 		s.T(),
 		s.NamespaceID,
@@ -1214,7 +1213,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_Current
 		baseBranchToken,
 	)
 	currentRunID := uuid.New().String()
-	currentBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, currentRunID, s.historyBranchUtil)
+	currentBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, currentRunID, s.HistoryBranchUtil)
 	currentMutation, currentEvents := RandomMutation(
 		s.T(),
 		s.NamespaceID,
@@ -1259,7 +1258,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_Conflic
 	)
 
 	baseRunID := uuid.New().String()
-	baseBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, baseRunID, s.historyBranchUtil)
+	baseBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, baseRunID, s.HistoryBranchUtil)
 	baseSnapshot, baseEvents := RandomSnapshot(
 		s.T(),
 		s.NamespaceID,
@@ -1343,7 +1342,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_Conflic
 	)
 
 	baseRunID := uuid.New().String()
-	baseBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, baseRunID, s.historyBranchUtil)
+	baseBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, baseRunID, s.HistoryBranchUtil)
 	baseSnapshot, baseEvents := RandomSnapshot(
 		s.T(),
 		s.NamespaceID,
@@ -1427,7 +1426,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_WithNew
 	)
 
 	baseRunID := uuid.New().String()
-	baseBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, baseRunID, s.historyBranchUtil)
+	baseBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, baseRunID, s.HistoryBranchUtil)
 	baseSnapshot, baseEvents := RandomSnapshot(
 		s.T(),
 		s.NamespaceID,
@@ -1468,7 +1467,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_WithNew
 		baseBranchToken,
 	)
 	newRunID := uuid.New().String()
-	newBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, newRunID, s.historyBranchUtil)
+	newBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, newRunID, s.HistoryBranchUtil)
 	newSnapshot, newEvents := RandomSnapshot(
 		s.T(),
 		s.NamespaceID,
@@ -1674,7 +1673,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_ResetCurrent_CurrentCon
 		rand.Int63(),
 	)
 	baseRunID := uuid.New().String()
-	baseBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, baseRunID, s.historyBranchUtil)
+	baseBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, baseRunID, s.HistoryBranchUtil)
 	baseSnapshot, baseEvents := RandomSnapshot(
 		s.T(),
 		s.NamespaceID,
@@ -1799,7 +1798,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_ResetCurrent_WithNew() 
 		branchToken,
 	)
 	newRunID := uuid.New().String()
-	newBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, newRunID, s.historyBranchUtil)
+	newBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, newRunID, s.HistoryBranchUtil)
 	newSnapshot, newEvents := RandomSnapshot(
 		s.T(),
 		s.NamespaceID,
@@ -1844,7 +1843,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_Zombie() {
 		rand.Int63(),
 	)
 	baseRunID := uuid.New().String()
-	baseBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, baseRunID, s.historyBranchUtil)
+	baseBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, baseRunID, s.HistoryBranchUtil)
 	baseSnapshot, baseEvents := RandomSnapshot(
 		s.T(),
 		s.NamespaceID,
@@ -1956,7 +1955,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_Zombie_Conflict() {
 		rand.Int63(),
 	)
 	baseRunID := uuid.New().String()
-	baseBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, baseRunID, s.historyBranchUtil)
+	baseBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, baseRunID, s.HistoryBranchUtil)
 	baseSnapshot, baseEvents := RandomSnapshot(
 		s.T(),
 		s.NamespaceID,
@@ -2026,7 +2025,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_Zombie_WithNew() {
 		rand.Int63(),
 	)
 	baseRunID := uuid.New().String()
-	baseBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, baseRunID, s.historyBranchUtil)
+	baseBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, baseRunID, s.HistoryBranchUtil)
 	baseSnapshot, baseEvents := RandomSnapshot(
 		s.T(),
 		s.NamespaceID,
@@ -2067,7 +2066,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_Zombie_WithNew() {
 		baseBranchToken,
 	)
 	newRunID := uuid.New().String()
-	newBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, newRunID, s.historyBranchUtil)
+	newBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, newRunID, s.HistoryBranchUtil)
 	newSnapshot, newEvents := RandomSnapshot(
 		s.T(),
 		s.NamespaceID,
@@ -2105,7 +2104,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_Zombie_WithNew() {
 }
 
 func (s *ExecutionMutableStateSuite) TestSet_NotExists() {
-	branchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, s.RunID, s.historyBranchUtil)
+	branchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, s.RunID, s.HistoryBranchUtil)
 	setSnapshot, _ := RandomSnapshot(
 		s.T(),
 		s.NamespaceID,
@@ -2265,7 +2264,7 @@ func (s *ExecutionMutableStateSuite) TestDeleteCurrent_IsCurrent() {
 }
 
 func (s *ExecutionMutableStateSuite) TestDeleteCurrent_NotCurrent() {
-	branchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, s.RunID, s.historyBranchUtil)
+	branchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, s.RunID, s.HistoryBranchUtil)
 	newSnapshot, newEvents := RandomSnapshot(
 		s.T(),
 		s.NamespaceID,
@@ -2317,7 +2316,7 @@ func (s *ExecutionMutableStateSuite) TestDeleteCurrent_NotCurrent() {
 }
 
 func (s *ExecutionMutableStateSuite) TestDelete_Exists() {
-	branchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, s.RunID, s.historyBranchUtil)
+	branchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, s.RunID, s.HistoryBranchUtil)
 	newSnapshot, newEvents := RandomSnapshot(
 		s.T(),
 		s.NamespaceID,
@@ -2377,7 +2376,7 @@ func (s *ExecutionMutableStateSuite) CreateWorkflow(
 	status enumspb.WorkflowExecutionStatus,
 	dbRecordVersion int64,
 ) ([]byte, *p.WorkflowSnapshot, []*p.WorkflowEvents) {
-	branchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, s.RunID, s.historyBranchUtil)
+	branchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, s.RunID, s.HistoryBranchUtil)
 	snapshot, events := RandomSnapshot(
 		s.T(),
 		s.NamespaceID,

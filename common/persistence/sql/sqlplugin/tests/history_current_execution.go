@@ -323,7 +323,7 @@ func (s *historyCurrentExecutionSuite) newRandomCurrentExecutionRow(
 			},
 		},
 	}
-	executionStateBlob, _ := serialization.WorkflowExecutionStateToBlob(executionState)
+	executionStateBlob, _ := serialization.NewSerializer().WorkflowExecutionStateToBlob(executionState)
 	return sqlplugin.CurrentExecutionsRow{
 		ShardID:          shardID,
 		NamespaceID:      namespaceID,
