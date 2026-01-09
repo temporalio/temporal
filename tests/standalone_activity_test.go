@@ -1771,7 +1771,7 @@ func (s *standaloneActivityTestSuite) TestListActivityExecutions() {
 	startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
 	runID := startResp.RunId
 
-	verifyListQuery := func(t *testing.T, query string) {
+	verifyListQuery := func(t *testing.T, query string, pageSize int32) {
 		t.Helper()
 		var resp *workflowservice.ListActivityExecutionsResponse
 		s.Eventually(
@@ -1779,7 +1779,7 @@ func (s *standaloneActivityTestSuite) TestListActivityExecutions() {
 				var err error
 				resp, err = s.FrontendClient().ListActivityExecutions(ctx, &workflowservice.ListActivityExecutionsRequest{
 					Namespace: s.Namespace().String(),
-					PageSize:  10,
+					PageSize:  pageSize,
 					Query:     query,
 				})
 				return err == nil && len(resp.GetExecutions()) >= 1
@@ -1803,23 +1803,23 @@ func (s *standaloneActivityTestSuite) TestListActivityExecutions() {
 	}
 
 	t.Run("QueryByActivityId", func(t *testing.T) {
-		verifyListQuery(t, fmt.Sprintf("ActivityId = '%s'", activityID))
+		verifyListQuery(t, fmt.Sprintf("ActivityId = '%s'", activityID), 10)
 	})
 
 	t.Run("QueryByActivityType", func(t *testing.T) {
-		verifyListQuery(t, fmt.Sprintf("ActivityType = '%s'", activityType))
+		verifyListQuery(t, fmt.Sprintf("ActivityType = '%s'", activityType), 10)
 	})
 
 	t.Run("QueryByActivityStatus", func(t *testing.T) {
-		verifyListQuery(t, fmt.Sprintf("ActivityStatus = 'Running' AND ActivityType = '%s'", activityType))
+		verifyListQuery(t, fmt.Sprintf("ActivityStatus = 'Running' AND ActivityType = '%s'", activityType), 10)
 	})
 
 	t.Run("QueryByTaskQueue", func(t *testing.T) {
-		verifyListQuery(t, fmt.Sprintf("ActivityTaskQueue = '%s' AND ActivityType = '%s'", taskQueue, activityType))
+		verifyListQuery(t, fmt.Sprintf("ActivityTaskQueue = '%s' AND ActivityType = '%s'", taskQueue, activityType), 10)
 	})
 
 	t.Run("QueryByMultipleFields", func(t *testing.T) {
-		verifyListQuery(t, fmt.Sprintf("ActivityId = '%s' AND ActivityType = '%s'", activityID, activityType))
+		verifyListQuery(t, fmt.Sprintf("ActivityId = '%s' AND ActivityType = '%s'", activityID, activityType), 10)
 	})
 
 	t.Run("QueryByCustomSearchAttribute", func(t *testing.T) {
@@ -1894,6 +1894,73 @@ func (s *standaloneActivityTestSuite) TestListActivityExecutions() {
 			Query:     "",
 		})
 		s.ErrorAs(err, new(*serviceerror.NamespaceNotFound))
+	})
+
+	t.Run("ZeroPageSizeDefaultsToConfigMax", func(t *testing.T) {
+		verifyListQuery(t, fmt.Sprintf("ActivityId = '%s'", activityID), 0)
+	})
+
+	t.Run("ExceededPageSizeIsCapped", func(t *testing.T) {
+		s.OverrideDynamicConfig(
+			dynamicconfig.FrontendVisibilityMaxPageSize,
+			1,
+		)
+
+		testActivityType := testcore.RandomizeStr(t.Name())
+
+		// Start multiple activities of the same type
+		for i := 0; i < 2; i++ {
+			_, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+				Namespace:           s.Namespace().String(),
+				ActivityId:          testcore.RandomizeStr(t.Name()),
+				ActivityType:        &commonpb.ActivityType{Name: testActivityType},
+				Identity:            s.tv.WorkerIdentity(),
+				StartToCloseTimeout: durationpb.New(10 * time.Second),
+				TaskQueue: &taskqueuepb.TaskQueue{
+					Name: taskQueue,
+				},
+				RequestId: s.tv.RequestID(),
+			})
+			require.NoError(t, err)
+		}
+
+		// Await first page. Use pageSize > FrontendVisibilityMaxPageSize
+		var resp *workflowservice.ListActivityExecutionsResponse
+		s.Eventually(
+			func() bool {
+				var err error
+				resp, err = s.FrontendClient().ListActivityExecutions(ctx, &workflowservice.ListActivityExecutionsRequest{
+					Namespace: s.Namespace().String(),
+					PageSize:  2,
+					Query:     fmt.Sprintf("ActivityType = '%s'", testActivityType),
+				})
+				return err == nil && len(resp.GetExecutions()) >= 1
+			},
+			testcore.WaitForESToSettle,
+			100*time.Millisecond,
+		)
+		require.Len(t, resp.GetExecutions(), 1)
+
+		// Get next page. Use pageSize > FrontendVisibilityMaxPageSize
+		resp, err := s.FrontendClient().ListActivityExecutions(ctx, &workflowservice.ListActivityExecutionsRequest{
+			Namespace:     s.Namespace().String(),
+			PageSize:      2,
+			Query:         fmt.Sprintf("ActivityType = '%s'", activityType),
+			NextPageToken: resp.GetNextPageToken(),
+		})
+		require.NoError(t, err)
+		require.Len(t, resp.GetExecutions(), 1)
+
+		// Ensure no more results
+		resp, err = s.FrontendClient().ListActivityExecutions(ctx, &workflowservice.ListActivityExecutionsRequest{
+			Namespace:     s.Namespace().String(),
+			PageSize:      2,
+			Query:         fmt.Sprintf("ActivityType = '%s'", activityType),
+			NextPageToken: resp.GetNextPageToken(),
+		})
+		require.NoError(t, err)
+		require.Nil(t, resp.GetExecutions())
+		require.Nil(t, resp.GetNextPageToken())
 	})
 }
 
