@@ -341,19 +341,16 @@ func (s *SequentialScheduler[T]) isStopped() bool {
 }
 
 // PendingTaskCount returns the approximate number of tasks pending in the scheduler.
-// This includes tasks in the queue channel and tasks in the per-queue task queues.
+// This includes tasks in all per-queue task queues.
 func (s *SequentialScheduler[T]) PendingTaskCount() int {
-	// Count tasks in queueChan
-	queueChanCount := len(s.queueChan)
-
 	// Count tasks in all queues
-	queueCount := 0
+	taskCount := 0
 	iter := s.queues.Iter()
 	defer iter.Close()
 	for entry := range iter.Entries() {
 		queue := entry.Value.(SequentialTaskQueue[T])
-		queueCount += queue.Len()
+		taskCount += queue.Len()
 	}
 
-	return queueChanCount + queueCount
+	return taskCount
 }
