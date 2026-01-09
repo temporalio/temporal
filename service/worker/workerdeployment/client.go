@@ -595,8 +595,8 @@ func (d *ClientImpl) ListWorkerDeployments(
 		return nil, nil, err
 	}
 
-	workerDeploymentSummaries := make([]*deploymentspb.WorkerDeploymentSummary, len(persistenceResp.Executions))
-	for i, ex := range persistenceResp.Executions {
+	workerDeploymentSummaries := make([]*deploymentspb.WorkerDeploymentSummary, 0, len(persistenceResp.Executions))
+	for _, ex := range persistenceResp.Executions {
 		var workerDeploymentInfo *deploymentspb.WorkerDeploymentWorkflowMemo
 		if ex.GetMemo() != nil {
 			workerDeploymentInfo = DecodeWorkerDeploymentMemo(ex.GetMemo())
@@ -610,14 +610,14 @@ func (d *ClientImpl) ListWorkerDeployments(
 			}
 		}
 
-		workerDeploymentSummaries[i] = &deploymentspb.WorkerDeploymentSummary{
+		workerDeploymentSummaries = append(workerDeploymentSummaries, &deploymentspb.WorkerDeploymentSummary{
 			Name:                  workerDeploymentInfo.DeploymentName,
 			CreateTime:            workerDeploymentInfo.CreateTime,
 			RoutingConfig:         workerDeploymentInfo.RoutingConfig,
 			LatestVersionSummary:  workerDeploymentInfo.LatestVersionSummary,
 			RampingVersionSummary: workerDeploymentInfo.RampingVersionSummary,
 			CurrentVersionSummary: workerDeploymentInfo.CurrentVersionSummary,
-		}
+		})
 	}
 
 	return workerDeploymentSummaries, persistenceResp.NextPageToken, nil

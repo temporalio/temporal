@@ -133,7 +133,7 @@ func validateVersionWfParams(fieldName string, field string, maxIDLengthLimit in
 
 func DecodeWorkerDeploymentMemo(memo *commonpb.Memo) *deploymentspb.WorkerDeploymentWorkflowMemo {
 	var workerDeploymentWorkflowMemo deploymentspb.WorkerDeploymentWorkflowMemo
-	err := sdk.PreferProtoDataConverter.FromPayload(memo.Fields[WorkerDeploymentMemoField], &workerDeploymentWorkflowMemo)
+	err := sdk.LenientFromPayloadProtoConverter(memo.Fields[WorkerDeploymentMemoField], &workerDeploymentWorkflowMemo)
 	if err != nil {
 		return nil
 	}
