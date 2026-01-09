@@ -401,6 +401,20 @@ func (c *metricClient) SyncDeploymentUserData(
 	return c.client.SyncDeploymentUserData(ctx, request, opts...)
 }
 
+func (c *metricClient) UpdateFairnessState(
+	ctx context.Context,
+	request *matchingservice.UpdateFairnessStateRequest,
+	opts ...grpc.CallOption,
+) (_ *matchingservice.UpdateFairnessStateResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "MatchingClientUpdateFairnessState")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.UpdateFairnessState(ctx, request, opts...)
+}
+
 func (c *metricClient) UpdateNexusEndpoint(
 	ctx context.Context,
 	request *matchingservice.UpdateNexusEndpointRequest,

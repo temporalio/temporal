@@ -3260,3 +3260,114 @@ func (this *ForceUnloadTaskQueuePartitionResponse) Equal(that interface{}) bool 
 
 	return proto.Equal(this, that1)
 }
+
+// Marshal an object of type StartAdminBatchOperationRequest to the protobuf v3 wire format
+func (val *StartAdminBatchOperationRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type StartAdminBatchOperationRequest from the protobuf v3 wire format
+func (val *StartAdminBatchOperationRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *StartAdminBatchOperationRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two StartAdminBatchOperationRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *StartAdminBatchOperationRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *StartAdminBatchOperationRequest
+	switch t := that.(type) {
+	case *StartAdminBatchOperationRequest:
+		that1 = t
+	case StartAdminBatchOperationRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type StartAdminBatchOperationResponse to the protobuf v3 wire format
+func (val *StartAdminBatchOperationResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type StartAdminBatchOperationResponse from the protobuf v3 wire format
+func (val *StartAdminBatchOperationResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *StartAdminBatchOperationResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two StartAdminBatchOperationResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *StartAdminBatchOperationResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *StartAdminBatchOperationResponse
+	switch t := that.(type) {
+	case *StartAdminBatchOperationResponse:
+		that1 = t
+	case StartAdminBatchOperationResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type BatchOperationRefreshTasks to the protobuf v3 wire format
+func (val *BatchOperationRefreshTasks) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type BatchOperationRefreshTasks from the protobuf v3 wire format
+func (val *BatchOperationRefreshTasks) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *BatchOperationRefreshTasks) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two BatchOperationRefreshTasks values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *BatchOperationRefreshTasks) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *BatchOperationRefreshTasks
+	switch t := that.(type) {
+	case *BatchOperationRefreshTasks:
+		that1 = t
+	case BatchOperationRefreshTasks:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}

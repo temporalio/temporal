@@ -370,7 +370,10 @@ func (e *InvokerProcessBufferTaskExecutor) Validate(
 	attrs chasm.TaskAttributes,
 	_ *schedulerpb.InvokerProcessBufferTask,
 ) (bool, error) {
-	return validateTaskHighWaterMark(invoker.GetLastProcessedTime(), attrs.ScheduledTime)
+	return validateTaskHighWaterMark(
+		invoker.GetLastProcessedTime(),
+		attrs.ScheduledTime,
+	)
 }
 
 func (e *InvokerProcessBufferTaskExecutor) Execute(
@@ -445,7 +448,7 @@ func (e *InvokerProcessBufferTaskExecutor) processBuffer(
 			continue
 		}
 
-		if ctx.Now(invoker).After(e.startWorkflowDeadline(scheduler, start)) {
+		if ctx.Now(invoker).After(e.startWorkflowDeadline(ctx, scheduler, start)) {
 			// Drop expired starts.
 			result.missedCatchupWindow++
 			result.discardStarts = append(result.discardStarts, start)
@@ -495,19 +498,23 @@ func (e *InvokerExecuteTaskExecutor) applyBackoff(start *schedulespb.BufferedSta
 // should be started, instead of dropped. The deadline puts an upper bound on
 // the number of retry attempts per buffered start.
 func (e *InvokerProcessBufferTaskExecutor) startWorkflowDeadline(
+	ctx chasm.Context,
 	scheduler *Scheduler,
 	start *schedulespb.BufferedStart,
 ) time.Time {
 	var timeout time.Duration
+
 	if start.Manual {
-		// For manual starts, use a default static value, as the catchup window doesn't apply.
-		timeout = manualStartExecutionDeadline
-	} else {
-		// Set request deadline based on the schedule's catchup window, which is the
-		// latest time that it's acceptable to start this workflow.
-		tweakables := e.config.Tweakables(scheduler.Namespace)
-		timeout = catchupWindow(scheduler, tweakables)
+		// For manual starts, use a default value in the future, as the catchup window
+		// doesn't apply. Manual starts may only time out through max attempt count,
+		// not deadline.
+		return ctx.Now(scheduler).Add(time.Hour)
 	}
+
+	// Set request deadline based on the schedule's catchup window, which is the
+	// latest time that it's acceptable to start this workflow.
+	tweakables := e.config.Tweakables(scheduler.Namespace)
+	timeout = catchupWindow(scheduler, tweakables)
 
 	timeout = max(timeout, startWorkflowMinDeadline)
 

@@ -132,11 +132,11 @@ func validateVersionWfParams(fieldName string, field string, maxIDLengthLimit in
 // GenerateDeploymentWorkflowID is a helper that generates a system accepted
 // workflowID which are used in our Worker Deployment workflows
 func GenerateDeploymentWorkflowID(deploymentName string) string {
-	return worker_versioning.WorkerDeploymentWorkflowIDPrefix + worker_versioning.WorkerDeploymentVersionWorkflowIDDelimeter + deploymentName
+	return worker_versioning.WorkerDeploymentWorkflowIDPrefix + worker_versioning.WorkerDeploymentVersionDelimiter + deploymentName
 }
 
 func GetDeploymentNameFromWorkflowID(workflowID string) string {
-	_, deploymentName, _ := strings.Cut(workflowID, worker_versioning.WorkerDeploymentVersionWorkflowIDDelimeter)
+	_, deploymentName, _ := strings.Cut(workflowID, worker_versioning.WorkerDeploymentVersionDelimiter)
 	return deploymentName
 }
 
@@ -147,7 +147,7 @@ func GenerateVersionWorkflowID(deploymentName string, buildID string) string {
 		DeploymentName: deploymentName,
 		BuildId:        buildID,
 	})
-	return worker_versioning.WorkerDeploymentVersionWorkflowIDPrefix + worker_versioning.WorkerDeploymentVersionWorkflowIDDelimeter + versionString
+	return worker_versioning.WorkerDeploymentVersionWorkflowIDPrefix + worker_versioning.WorkerDeploymentVersionDelimiter + versionString
 }
 
 func DecodeWorkerDeploymentMemo(memo *commonpb.Memo) *deploymentspb.WorkerDeploymentWorkflowMemo {

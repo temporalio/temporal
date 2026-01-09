@@ -175,6 +175,11 @@ func (rc *RegistrableComponent) hasBusinessIDAlias() bool {
 	return ok
 }
 
+// GoType returns the reflect.Type of the component's Go struct.
+func (rc *RegistrableComponent) GoType() reflect.Type {
+	return rc.goType
+}
+
 // fqType returns the fully qualified name of the component, which is a combination of
 // the library name and the component type. This is used to uniquely identify
 // the component in the registry.
