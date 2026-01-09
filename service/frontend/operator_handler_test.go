@@ -529,8 +529,8 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributesElasticsearch() {
 					"CustomKeywordField": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 				},
 			},
-			expectedErrMsg: "",
-		},
+			// Expect the formatted error message
+			expectedErrMsg: fmt.Sprintf(errSearchAttributeAlreadyExistsMessage, "CustomKeywordField")},
 		{
 			name: "success: mix new and already exists search attributes",
 			request: &operatorservice.AddSearchAttributesRequest{
@@ -539,12 +539,9 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributesElasticsearch() {
 					"CustomKeywordField": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 				},
 			},
-			passValidation: true,
-			customAttributesToAdd: map[string]enumspb.IndexedValueType{
-				"CustomAttr": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-			},
-			expectedErrMsg: "",
-		},
+			passValidation:        false,
+			customAttributesToAdd: nil,
+			expectedErrMsg:        fmt.Sprintf(errSearchAttributeAlreadyExistsMessage, "CustomKeywordField")},
 
 		{
 			name: "fail: cannot add elasticsearch schema",
@@ -646,7 +643,7 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributesSQL() {
 			expectedErrMsg:              "",
 		},
 		{
-			name: "success: search attribute already exists",
+			name: "fail: search attribute already exists",
 			request: &operatorservice.AddSearchAttributesRequest{
 				SearchAttributes: map[string]enumspb.IndexedValueType{
 					"CustomKeywordField": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
@@ -654,7 +651,8 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributesSQL() {
 				Namespace: testNamespace,
 			},
 			describeNamespaceCalled: true,
-			expectedErrMsg:          "",
+			// expect the formatted error message
+			expectedErrMsg: fmt.Sprintf(errSearchAttributeAlreadyExistsMessage, "CustomKeywordField"),
 		},
 		{
 			name: "success: mix new and already exists search attributes",
@@ -665,11 +663,10 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributesSQL() {
 				},
 				Namespace: testNamespace,
 			},
-			customSearchAttributesToAdd: []string{"CustomAttr"},
+			customSearchAttributesToAdd: nil,
 			describeNamespaceCalled:     true,
-			updateNamespaceCalled:       true,
-			expectedErrMsg:              "",
-		},
+			updateNamespaceCalled:       false,
+			expectedErrMsg:              fmt.Sprintf(errSearchAttributeAlreadyExistsMessage, "CustomKeywordField")},
 
 		{
 			name: "fail: cannot get frontend client",
