@@ -6,18 +6,19 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/proxy"
+	"go.temporal.io/server/common/metrics"
 )
 
 // CalculateExternalPayloadSize calculates the total size and count of all external payloads in the given history events.
-func CalculateExternalPayloadSize(events []*historypb.HistoryEvent) (size int64, count int64, err error) {
+func CalculateExternalPayloadSize(events []*historypb.HistoryEvent, metricsHandler metrics.Handler) (size int64, count int64, err error) {
 	var totalSize int64
 	var totalCount int64
-
 	visitor := func(vpc *proxy.VisitPayloadsContext, payloads []*commonpb.Payload) ([]*commonpb.Payload, error) {
 		for _, p := range payloads {
 			totalCount += int64(len(p.ExternalPayloads))
 			for _, extPayload := range p.ExternalPayloads {
 				totalSize += extPayload.SizeBytes
+				metricsHandler.Histogram(metrics.ExternalPayloadUploadSize.Name(), metrics.Bytes).Record(int64(extPayload.SizeBytes))
 			}
 		}
 		return payloads, nil
@@ -32,6 +33,5 @@ func CalculateExternalPayloadSize(events []*historypb.HistoryEvent) (size int64,
 			return 0, 0, err
 		}
 	}
-
 	return totalSize, totalCount, nil
 }

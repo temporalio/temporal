@@ -7678,7 +7678,7 @@ func (ms *MutableStateImpl) closeTransactionPrepareEvents(
 
 		// Calculate and add the external payload size and count for this batch
 		if ms.config.ExternalPayloadsEnabled(ms.GetNamespaceEntry().Name().String()) {
-			externalPayloadSize, externalPayloadCount, err := CalculateExternalPayloadSize(eventBatch)
+			externalPayloadSize, externalPayloadCount, err := CalculateExternalPayloadSize(eventBatch, ms.metricsHandler)
 			if err != nil {
 				return nil, nil, nil, false, err
 			}
