@@ -88,14 +88,10 @@ func NewScheduler(
 	input *schedulepb.Schedule,
 	patch *schedulepb.SchedulePatch,
 ) *Scheduler {
-	var zero time.Time
-
 	sched := &Scheduler{
 		SchedulerState: &schedulerpb.SchedulerState{
-			Schedule: input,
-			Info: &schedulepb.ScheduleInfo{
-				UpdateTime: timestamppb.New(zero),
-			},
+			Schedule:      input,
+			Info:          &schedulepb.ScheduleInfo{},
 			Namespace:     namespace,
 			NamespaceId:   namespaceID,
 			ScheduleId:    scheduleID,
@@ -107,6 +103,7 @@ func NewScheduler(
 	}
 	sched.setNullableFields()
 	sched.Info.CreateTime = timestamppb.New(ctx.Now(sched))
+	sched.Info.UpdateTime = sched.Info.CreateTime
 
 	invoker := NewInvoker(ctx)
 	sched.Invoker = chasm.NewComponentField(ctx, invoker)
