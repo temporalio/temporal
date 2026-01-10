@@ -119,3 +119,12 @@ func (s *RateLimitedScheduler[T]) allow(task T) bool {
 	// in shadow mode, only emit metrics, but don't actually throttle
 	return s.options.EnableShadowMode
 }
+
+// PendingTaskCount returns the approximate number of tasks pending in the underlying scheduler.
+// This delegates to the underlying scheduler if it supports PendingTaskCount.
+func (s *RateLimitedScheduler[T]) PendingTaskCount() int64 {
+	if schedulerWithCount, ok := s.scheduler.(interface{ PendingTaskCount() int64 }); ok {
+		return schedulerWithCount.PendingTaskCount()
+	}
+	return 0
+}
