@@ -1498,12 +1498,12 @@ See DynamicRateLimitingParams comments for more details.`,
 		false,
 		`HistoryCacheSizeBasedLimit if true, size of the history cache will be limited by HistoryCacheMaxSizeBytes
 and HistoryCacheHostLevelMaxSizeBytes. Otherwise, entry count in the history cache will be limited by
-HistoryCacheMaxSize and HistoryCacheHostLevelMaxSize.`,
+HistoryCacheMaxSize and HistoryCacheHostLevelMaxSize. Requires service restart to take effect.`,
 	)
 	HistoryCacheTTL = NewGlobalDurationSetting(
 		"history.cacheTTL",
 		time.Hour,
-		`HistoryCacheTTL is TTL of history cache`,
+		`HistoryCacheTTL is TTL of history cache. Requires service restart to take effect.`,
 	)
 	HistoryCacheNonUserContextLockTimeout = NewGlobalDurationSetting(
 		"history.cacheNonUserContextLockTimeout",
@@ -1514,18 +1514,20 @@ will wait on workflow lock acquisition. Requires service restart to take effect.
 	HistoryCacheHostLevelMaxSize = NewGlobalIntSetting(
 		"history.hostLevelCacheMaxSize",
 		128000,
-		`HistoryCacheHostLevelMaxSize is the maximum number of entries in the host level history cache`,
+		`HistoryCacheHostLevelMaxSize is the maximum number of entries in the host level history cache.
+Requires service restart to take effect.`,
 	)
 	HistoryCacheHostLevelMaxSizeBytes = NewGlobalIntSetting(
 		"history.hostLevelCacheMaxSizeBytes",
 		256000*4*1024,
 		`HistoryCacheHostLevelMaxSizeBytes is the maximum size of the host level history cache. This is only used if
-HistoryCacheSizeBasedLimit is set to true.`,
+HistoryCacheSizeBasedLimit is set to true. Requires service restart to take effect.`,
 	)
 	HistoryCacheBackgroundEvict = NewGlobalTypedSetting(
 		"history.cacheBackgroundEvict",
 		DefaultHistoryCacheBackgroundEvictSettings,
-		`HistoryCacheBackgroundEvict configures background processing to purge expired entries from the history cache.`,
+		`HistoryCacheBackgroundEvict configures background processing to purge expired entries from the history cache.
+Requires service restart to take effect.`,
 	)
 	EnableWorkflowExecutionTimeoutTimer = NewGlobalBoolSetting(
 		"history.enableWorkflowExecutionTimeoutTimer",
@@ -1570,22 +1572,22 @@ This can help reduce effects of shard movement.`,
 	EventsCacheMaxSizeBytes = NewGlobalIntSetting(
 		"history.eventsCacheMaxSizeBytes",
 		512*1024,
-		`EventsCacheMaxSizeBytes is max size of the shard level events cache in bytes`,
+		`EventsCacheMaxSizeBytes is max size of the shard level events cache in bytes. Requires service restart to take effect.`,
 	)
 	EventsHostLevelCacheMaxSizeBytes = NewGlobalIntSetting(
 		"history.eventsHostLevelCacheMaxSizeBytes",
 		512*512*1024,
-		`EventsHostLevelCacheMaxSizeBytes is max size of the host level events cache in bytes`,
+		`EventsHostLevelCacheMaxSizeBytes is max size of the host level events cache in bytes. Requires service restart to take effect.`,
 	)
 	EventsCacheTTL = NewGlobalDurationSetting(
 		"history.eventsCacheTTL",
 		time.Hour,
-		`EventsCacheTTL is TTL of events cache`,
+		`EventsCacheTTL is TTL of events cache. Requires service restart to take effect.`,
 	)
 	EnableHostLevelEventsCache = NewGlobalBoolSetting(
 		"history.enableHostLevelEventsCache",
 		false,
-		`EnableHostLevelEventsCache controls if the events cache is host level`,
+		`EnableHostLevelEventsCache controls if the events cache is host level. Requires service restart to take effect.`,
 	)
 	AcquireShardInterval = NewGlobalDurationSetting(
 		"history.acquireShardInterval",
