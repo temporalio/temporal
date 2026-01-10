@@ -184,6 +184,16 @@ config as the other services.`,
 		false,
 		`EnableActivityEagerExecution indicates if activity eager execution is enabled per namespace`,
 	)
+	NamespaceMinRetentionGlobal = NewGlobalDurationSetting(
+		"system.namespaceMinRetentionGlobal",
+		24*time.Hour,
+		`NamespaceMinRetentionGlobal is the minimum retention duration for global namespaces.`,
+	)
+	NamespaceMinRetentionLocal = NewGlobalDurationSetting(
+		"system.namespaceMinRetentionLocal",
+		time.Hour,
+		`NamespaceMinRetentionLocal is the minimum retention duration for local namespaces.`,
+	)
 	EnableActivityRetryStampIncrement = NewGlobalBoolSetting(
 		"system.enableActivityRetryStampIncrement",
 		false,
