@@ -187,12 +187,12 @@ config as the other services.`,
 	NamespaceMinRetentionGlobal = NewGlobalDurationSetting(
 		"system.namespaceMinRetentionGlobal",
 		24*time.Hour,
-		`NamespaceMinRetentionGlobal is the minimum retention duration for global namespaces.`,
+		`NamespaceMinRetentionGlobal is the minimum retention duration for global namespaces. This value should only be lowered for testing purposes.`,
 	)
 	NamespaceMinRetentionLocal = NewGlobalDurationSetting(
 		"system.namespaceMinRetentionLocal",
 		time.Hour,
-		`NamespaceMinRetentionLocal is the minimum retention duration for local namespaces.`,
+		`NamespaceMinRetentionLocal is the minimum retention duration for local namespaces. This value should only be lowered for testing purposes.`,
 	)
 	EnableActivityRetryStampIncrement = NewGlobalBoolSetting(
 		"system.enableActivityRetryStampIncrement",
