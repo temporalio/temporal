@@ -88,6 +88,7 @@ func (s *ExecutionMutableStateSuite) TearDownSuite() {
 
 func (s *ExecutionMutableStateSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
+	s.ProtoAssertions = protorequire.New(s.T())
 	s.Ctx, s.Cancel = context.WithTimeout(context.Background(), 30*time.Second*debug.TimeoutMultiplier)
 
 	s.ShardID++

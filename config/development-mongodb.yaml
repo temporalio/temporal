@@ -1,0 +1,122 @@
+log:
+  stdout: true
+  level: info
+
+persistence:
+  defaultStore: mongodb-default
+  visibilityStore: mongodb-visibility
+  numHistoryShards: 1
+  datastores:
+    mongodb-default:
+      customDataStoreConfig:
+        name: mongodb
+        indexName: temporal
+        options:
+          type: persistence
+      mongodb:
+        hosts: ["localhost:27017"]
+        user: temporal
+        password: temporal
+        authSource: admin
+        databaseName: temporal
+        replicaSet: rs0
+        maxConns: 50
+    mongodb-visibility:
+      customDataStoreConfig:
+        name: mongodb
+        indexName: temporal_visibility
+        options:
+          type: visibility
+      mongodb:
+        hosts: ["localhost:27017"]
+        user: temporal
+        password: temporal
+        authSource: admin
+        databaseName: temporal
+        replicaSet: rs0
+        maxConns: 20
+
+global:
+  membership:
+    maxJoinDuration: 30s
+    broadcastAddress: "127.0.0.1"
+  pprof:
+    port: 7936
+  metrics:
+    prometheus:
+      framework: tally
+      timerType: histogram
+      listenAddress: "127.0.0.1:8000"
+
+services:
+  frontend:
+    rpc:
+      grpcPort: 7233
+      membershipPort: 6933
+      bindOnLocalHost: true
+      httpPort: 7243
+
+  matching:
+    rpc:
+      grpcPort: 7235
+      membershipPort: 6935
+      bindOnLocalHost: true
+
+  history:
+    rpc:
+      grpcPort: 7234
+      membershipPort: 6934
+      bindOnLocalHost: true
+
+  worker:
+    rpc:
+      grpcPort: 7239
+      membershipPort: 6939
+      bindOnLocalHost: true
+
+clusterMetadata:
+  enableGlobalNamespace: false
+  failoverVersionIncrement: 10
+  masterClusterName: "active"
+  currentClusterName: "active"
+  clusterInformation:
+    active:
+      enabled: true
+      initialFailoverVersion: 1
+      rpcName: "frontend"
+      rpcAddress: "localhost:7233"
+      httpAddress: "localhost:7243"
+
+dcRedirectionPolicy:
+  policy: noop
+
+archival:
+  history:
+    state: enabled
+    enableRead: true
+    provider:
+      filestore:
+        fileMode: "0666"
+        dirMode: "0766"
+      gstorage:
+        credentialsPath: "/tmp/gcloud/keyfile.json"
+  visibility:
+    state: enabled
+    enableRead: true
+    provider:
+      filestore:
+        fileMode: "0666"
+        dirMode: "0766"
+
+namespaceDefaults:
+  archival:
+    history:
+      state: "disabled"
+      URI: "file:///tmp/temporal_archival/development"
+    visibility:
+      state: "disabled"
+      URI: "file:///tmp/temporal_vis_archival/development"
+
+dynamicConfigClient:
+  filepath: "config/dynamicconfig/development-sql.yaml"
+  pollInterval: 10s

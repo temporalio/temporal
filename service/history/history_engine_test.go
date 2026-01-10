@@ -430,8 +430,8 @@ func (s *engineSuite) TestGetMutableStateLongPoll_CurrentBranchChanged() {
 	s.Equal(int64(4), response0.GetNextEventId())
 
 	// long poll, new event happen before long poll timeout
-	go asyncBranchTokenUpdate(time.Second)
 	start := time.Now().UTC()
+	go asyncBranchTokenUpdate(time.Second)
 	response1, err := s.historyEngine.GetMutableState(ctx, &historyservice.GetMutableStateRequest{
 		NamespaceId:         tests.NamespaceID.String(),
 		Execution:           execution,

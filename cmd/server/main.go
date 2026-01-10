@@ -18,9 +18,13 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence/mongodb"
 	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"      // needed to load mysql plugin
 	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql" // needed to load postgresql plugin
 	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"     // needed to load sqlite plugin
+	"go.temporal.io/server/common/persistence/visibility"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/temporal"
 )
 
@@ -230,7 +234,25 @@ func buildCLI() *cli.App {
 					return cli.Exit(fmt.Sprintf("Unable to instantiate audience mapper: %v.", err), 1)
 				}
 
-				s, err := temporal.NewServer(
+				var (
+					customVisibilityFactory visibility.VisibilityStoreFactory
+					metricsHandler          metrics.Handler
+				)
+				visStoreCfg := cfg.Persistence.GetVisibilityStoreConfig()
+				if visStoreCfg.MongoDB != nil {
+					metricsHandler, err = metrics.MetricsHandlerFromConfig(logger, cfg.Global.Metrics)
+					if err != nil {
+						return cli.Exit(fmt.Sprintf("Unable to create metrics handler for visibility factory: %v", err), 1)
+					}
+					metricsHandler = metricsHandler.WithTags(metrics.ServiceNameTag(primitives.ServerService))
+					mongoFactory, err := mongodb.NewFactory(*visStoreCfg.MongoDB, cfg.ClusterMetadata.CurrentClusterName, logger, metricsHandler)
+					if err != nil {
+						return cli.Exit(fmt.Sprintf("Unable to create Mongo visibility factory: %v", err), 1)
+					}
+					customVisibilityFactory = mongoFactory
+				}
+
+				serverOptions := []temporal.ServerOption{
 					temporal.ForServices(services),
 					temporal.WithConfig(cfg),
 					temporal.WithDynamicConfigClient(dynamicConfigClient),
@@ -243,7 +265,17 @@ func buildCLI() *cli.App {
 					temporal.WithAudienceGetter(func(cfg *config.Config) authorization.JWTAudienceMapper {
 						return audienceMapper
 					}),
-				)
+				}
+
+				if customVisibilityFactory != nil {
+					serverOptions = append(serverOptions, temporal.WithCustomVisibilityStoreFactory(customVisibilityFactory))
+				}
+
+				if metricsHandler != nil {
+					serverOptions = append(serverOptions, temporal.WithCustomMetricsHandler(metricsHandler))
+				}
+
+				s, err := temporal.NewServer(serverOptions...)
 				if err != nil {
 					return cli.Exit(fmt.Sprintf("Unable to create server. Error: %v.", err), 1)
 				}

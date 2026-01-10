@@ -619,8 +619,11 @@ func (s *FairnessSuite) countTasksByDrainingActive(ctx context.Context, tv *test
 		if err != nil {
 			return 0, 0, err
 		}
-		for _, versionInfoInternal := range res.VersionsInfoInternal {
+		s.T().Logf("DEBUG: countTasksByDrainingActive partition=%d tp=%v versions=%d", i, tp, len(res.VersionsInfoInternal))
+		for buildID, versionInfoInternal := range res.VersionsInfoInternal {
+			s.T().Logf("DEBUG: countTasksByDrainingActive buildId=%q statusCount=%d", buildID, len(versionInfoInternal.PhysicalTaskQueueInfo.InternalTaskQueueStatus))
 			for _, st := range versionInfoInternal.PhysicalTaskQueueInfo.InternalTaskQueueStatus {
+				s.T().Logf("DEBUG: countTasksByDrainingActive draining=%v count=%d", st.Draining, st.ApproximateBacklogCount)
 				if st.Draining {
 					tasksOnDraining += st.ApproximateBacklogCount
 				} else {

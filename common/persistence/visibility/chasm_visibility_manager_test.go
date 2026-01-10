@@ -1,4 +1,4 @@
-package visibility
+package visibility_test
 
 import (
 	"context"
@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
+	visibilitypkg "go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/proto"
@@ -27,7 +28,7 @@ type (
 
 		registry          *chasm.Registry
 		visibilityManager *manager.MockVisibilityManager
-		visibilityMgr     *ChasmVisibilityManager
+		visibilityMgr     *visibilitypkg.ChasmVisibilityManager
 	}
 
 	// Test component for mocking CHASM components in visibility tests
@@ -92,7 +93,7 @@ func (s *ChasmVisibilityManagerSuite) SetupTest() {
 
 	s.visibilityManager = manager.NewMockVisibilityManager(s.controller)
 
-	s.visibilityMgr = NewChasmVisibilityManager(
+	s.visibilityMgr = visibilitypkg.NewChasmVisibilityManager(
 		s.registry,
 		s.visibilityManager,
 	)

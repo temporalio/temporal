@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"strings"
 	"testing"
 	"time"
 
@@ -170,7 +171,20 @@ func (f *defaultPersistenceTestBaseFactory) NewTestBase(options *persistencetest
 		options.SchemaDir = ops.SchemaDir
 		options.ConnectAttributes = ops.ConnectAttributes
 	case config.StoreTypeNoSQL:
-		// noop for now
+		switch cliFlags.persistenceDriver {
+		case "mongodb":
+			options.NoSQLDBPluginName = "mongodb"
+			if options.MongoDBConfig == nil {
+				opts := persistencetests.GetMongoDBTestClusterOption()
+				cfgCopy := *opts.MongoDBConfig
+				options.MongoDBConfig = &cfgCopy
+			}
+		case "cassandra", "":
+			options.NoSQLDBPluginName = "cassandra"
+		default:
+			//nolint:forbidigo // test code
+			panic(fmt.Sprintf("unknown nosql store driver: %v", cliFlags.persistenceDriver))
+		}
 	default:
 		//nolint:forbidigo // test code
 		panic(fmt.Sprintf("unknown store type: %v", options.StoreType))
@@ -247,7 +261,32 @@ func newClusterWithPersistenceTestBaseFactory(t *testing.T, clusterConfig *TestC
 		esClient  esclient.Client
 		saTypeMap searchattribute.NameTypeMap
 	)
-	if !UseSQLVisibility() {
+	logger.Info(
+		"persistence selection",
+		tag.NewStringTag("store-type", cliFlags.persistenceType),
+		tag.NewStringTag("driver", cliFlags.persistenceDriver),
+	)
+	switch {
+	case UseMongoPersistence():
+		saTypeMap = searchattribute.TestNameTypeMap()
+		clusterConfig.ESConfig = nil
+		storeConfig := pConfig.DataStores[pConfig.VisibilityStore]
+		var storeKeys []string
+		for k := range pConfig.DataStores {
+			storeKeys = append(storeKeys, k)
+		}
+		logger.Info(
+			"Mongo persistence config",
+			tag.NewStringTag("default-store", pConfig.DefaultStore),
+			tag.NewStringTag("visibility-store", pConfig.VisibilityStore),
+			tag.NewStringTag("datastores", strings.Join(storeKeys, ",")),
+		)
+		if storeConfig.MongoDB != nil {
+			indexName = storeConfig.MongoDB.DatabaseName
+		} else if defaultStore := pConfig.DataStores[pConfig.DefaultStore]; defaultStore.MongoDB != nil {
+			indexName = defaultStore.MongoDB.DatabaseName
+		}
+	case !UseSQLVisibility():
 		saTypeMap = searchattribute.TestEsNameTypeMap()
 		clusterConfig.ESConfig = &esclient.Config{
 			Indices: map[string]string{
@@ -274,7 +313,7 @@ func newClusterWithPersistenceTestBaseFactory(t *testing.T, clusterConfig *TestC
 		if err != nil {
 			return nil, err
 		}
-	} else {
+	default:
 		saTypeMap = searchattribute.TestNameTypeMap()
 		clusterConfig.ESConfig = nil
 		storeConfig := pConfig.DataStores[pConfig.VisibilityStore]

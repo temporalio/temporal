@@ -1352,6 +1352,10 @@ var (
 	PersistenceSQLOpenConn                 = NewGaugeDef("persistence_sql_open_conn")
 	PersistenceSQLIdleConn                 = NewGaugeDef("persistence_sql_idle_conn")
 	PersistenceSQLInUse                    = NewGaugeDef("persistence_sql_in_use")
+	PersistenceMongoTransactionsStarted    = NewCounterDef("persistence_mongo_transactions_started")
+	PersistenceMongoTransactionsFailed     = NewCounterDef("persistence_mongo_transactions_failed")
+	PersistenceMongoSessionsInProgress     = NewGaugeDef("persistence_mongo_sessions_in_progress")
+	PersistenceMongoMaxPoolSize            = NewGaugeDef("persistence_mongo_max_pool_size")
 
 	// Common service base metrics
 	RestartCount            = NewCounterDef("restarts")
