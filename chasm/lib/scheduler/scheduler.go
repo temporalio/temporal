@@ -561,10 +561,16 @@ func (s *Scheduler) Describe(
 	schedule := common.CloneProto(s.Schedule)
 	cleanSpec(schedule.Spec)
 
+	generator := s.Generator.Get(ctx)
+	invoker := s.Invoker.Get(ctx)
+	info := common.CloneProto(s.Info)
+	info.FutureActionTimes = generator.FutureActionTimes
+	info.BufferSize = int64(len(invoker.GetBufferedStarts()))
+
 	return &schedulerpb.DescribeScheduleResponse{
 		FrontendResponse: &workflowservice.DescribeScheduleResponse{
 			Schedule:         schedule,
-			Info:             common.CloneProto(s.Info),
+			Info:             info,
 			ConflictToken:    s.generateConflictToken(),
 			Memo:             &commonpb.Memo{Fields: memo},
 			SearchAttributes: &commonpb.SearchAttributes{IndexedFields: visibility.CustomSearchAttributes(ctx)},
