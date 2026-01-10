@@ -194,7 +194,11 @@ func (e *ChasmEngine) UpdateWithNewExecution(
 	}
 
 	// Execution doesn't exist, create it
-	return e.NewExecution(ctx, executionRef, newFn, opts...)
+	result, err := e.NewExecution(ctx, executionRef, newFn, opts...)
+	if err != nil {
+		return chasm.ExecutionKey{}, nil, err
+	}
+	return result.ExecutionKey, result.NewExecutionRef, nil
 }
 
 // UpdateComponent applies updateFn to the component identified by the supplied component reference,

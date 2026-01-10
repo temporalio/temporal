@@ -6,7 +6,11 @@ Today, activity cancellation requires users to enable activity heartbeat. This i
 
 ## Solution
 
-Use the worker's nexus queue as a control channel to push cancellation notifications directly to workers.
+Use a dedicated **Worker Control Nexus service** as a control channel to push cancellation notifications directly to workers. This is separate from:
+- **Worker heartbeat** (`RecordWorkerHeartbeat`): Unidirectional RPC, fast, fire-and-forget
+- **Nexus operations** (`PollNexusTaskQueue`): For handling incoming Nexus operation requests
+
+The Worker Control service provides long-polling for pushed control tasks (cancellations, config updates, etc.).
 
 ### Architecture
 
@@ -15,14 +19,14 @@ Use the worker's nexus queue as a control channel to push cancellation notificat
 │         History Shard           │     │    Matching     │     │     Worker      │
 │                                 │     │                 │     │                 │
 │ ActivityInfo.WorkerNexusQueueId │     │                 │     │ PollNexusTask   │
-│                                 │     │                 │◄────│ (heartbeat)     │
+│                                 │     │                 │◄────│ (control endpt) │
 │ Cancel Request                  │     │                 │     │                 │
 │       │                         │     │                 │     │                 │
 │       ▼                         │     │                 │     │                 │
 │ ┌───────────────────┐           │     │                 │     │                 │
 │ │ Outbound Queue    │           │     │                 │     │                 │
-│ │ (persisted task)  │───────────┼────►│ Sync-match ─────┼────►│ Cancel Task     │
-│ │                   │           │     │                 │     │                 │
+│ │ (persisted task)  │───────────┼────►│ Sync-match ─────┼────►│ StartOperation  │
+│ │                   │           │     │                 │     │ (cancel_activity│
 │ │ [retry on fail]   │◄──────────┼─────│ (error/timeout) │     │                 │
 │ └───────────────────┘           │     │                 │     │                 │
 └─────────────────────────────────┘     └─────────────────┘     └─────────────────┘
@@ -37,9 +41,13 @@ Use the worker's nexus queue as a control channel to push cancellation notificat
 | 1 | History | On `RecordActivityTaskStarted`, store `WorkerNexusQueueId` in `ActivityInfo` |
 | 2 | History | On activity cancel request, generate `ActivityCancelNotificationTask` (persisted in outbound queue) |
 | 3 | History | Outbound executor calls `AddWorkerControlTask` to matching |
-| 4 | Matching | Sync-match: if worker polling → deliver cancel task in response |
+| 4 | Matching | Sync-match: if worker polling control endpoint → deliver as `StartOperationRequest` |
 | 5 | Matching | If no worker polling → return error → history retries with backoff |
-| 6 | Worker | Receives cancel task → SDK cancels the running activity |
+| 6 | Worker | Receives `StartOperationRequest` with `operation=cancel_activity` → SDK cancels the activity |
+
+**Note:** Worker heartbeat (`RecordWorkerHeartbeat`) and worker control are separate:
+- Heartbeat: Unidirectional RPC, fast, fire-and-forget
+- Control: Nexus operations via `PollNexusTaskQueue` on worker-specific endpoint
 
 ### API
 
@@ -56,9 +64,15 @@ message ActivityInfo {
 
 #### 2. Worker Control Task
 
-A new task type for the worker nexus queue supporting multiple control operations.
+A batched request containing multiple control tasks. This allows efficient delivery when
+multiple activities on the same worker need cancellation (e.g., workflow cancelled with 10 activities).
 
 ```protobuf
+// Container for batched control tasks - one Nexus operation can deliver multiple tasks
+message WorkerControlPayload {
+    repeated WorkerControlTask tasks = 1;
+}
+
 message WorkerControlTask {
     string task_id = 1;  // For deduplication
     oneof task {
@@ -77,14 +91,42 @@ message CancelActivityTask {
 }
 ```
 
-#### 3. Enhanced PollNexusTaskQueue Response
+#### 3. Worker Control via Nexus Operations
+
+Worker control uses existing **Nexus operation infrastructure** - no new RPC needed:
+
+- Worker polls `PollNexusTaskQueue` on their control endpoint
+- Control tasks arrive as `StartOperationRequest` with specific operation names
+- Payload contains the control task data
+
+```
+Queue: /temporal-sys/worker-commands/{namespace}/{worker_grouping_key}
+
+StartOperationRequest:
+  service = "temporal.worker.control"
+  operation = "execute"
+  payload = serialized WorkerControlPayload (contains batch of tasks)
+```
+
+**Payload structure:**
 
 ```protobuf
-message PollNexusTaskQueueResponse {
-    // ... existing fields ...
-    repeated WorkerControlTask control_tasks = 10;
+WorkerControlPayload {
+    tasks: [
+        WorkerControlTask { cancel_activity: CancelActivityTask{...} },
+        WorkerControlTask { cancel_activity: CancelActivityTask{...} },
+        // ... more tasks in batch
+    ]
 }
 ```
+
+This batched approach efficiently handles scenarios like workflow cancellation
+where multiple activities on the same worker need to be cancelled simultaneously.
+
+**Benefits:**
+- Uses existing `PollNexusTaskQueue` infrastructure
+- No new RPC definition needed
+- Follows existing Nexus patterns (see [api#622](https://github.com/temporalio/api/pull/622))
 
 #### 4. Matching Service API
 
@@ -102,7 +144,7 @@ message AddWorkerControlTaskRequest {
 The worker nexus queue is identified by the `WorkerInstanceKey` from worker heartbeat:
 
 ```
-Queue Name Format: /__worker_control/{namespace_id}/{worker_instance_key}
+Queue Name Format: /temporal-sys/worker-commands/{namespace}/{worker_grouping_key}
 ```
 
 This queue is:
@@ -173,10 +215,10 @@ This infrastructure enables:
 ## Implementation Milestones
 
 1. **M1:** Add `worker_nexus_queue_id` to ActivityInfo and populate on task start
-2. **M2:** Implement `WorkerControlTask` proto and matching API
-3. **M3:** Generate cancel notification tasks on activity cancellation
-4. **M4:** Extend `PollNexusTaskQueue` to return control tasks
-5. **M5:** SDK integration for processing control tasks
+2. **M2:** Implement control task protos (`CancelActivityTask`, etc.)
+3. **M3:** Implement matching API for worker control endpoint dispatch
+4. **M4:** Generate cancel notification tasks on activity cancellation
+5. **M5:** SDK integration for handling control operations via `StartOperationRequest`
 6. **M6:** Metrics and observability
 
 ---
@@ -308,7 +350,6 @@ message WorkerControlTask {
 }
 
 message CancelActivityTask {
-    // namespace_id comes from AddWorkerControlTaskRequest
     temporal.api.common.v1.WorkflowExecution workflow_execution = 1;
     int64 scheduled_event_id = 2;
     string activity_id = 3;
@@ -323,6 +364,17 @@ message DrainWorkerTask {
     google.protobuf.Duration drain_timeout = 1;
     string reason = 2;
 }
+```
+
+```
+// Worker Control uses existing Nexus StartOperationRequest
+// Queue: /temporal-sys/worker-commands/{namespace}/{worker_grouping_key}
+// Worker polls via PollNexusTaskQueue, receives StartOperationRequest
+
+StartOperationRequest:
+  service = "temporal.worker.control"
+  operation = "cancel_activity" | "update_config" | "drain_worker"
+  payload = serialized proto (CancelActivityTask, UpdateConfigTask, etc.)
 ```
 
 ```protobuf
