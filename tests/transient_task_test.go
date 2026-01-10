@@ -134,7 +134,7 @@ func (s *TransientTaskSuite) TestTransientWorkflowTaskHistorySize() {
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
 		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
-		WorkflowTaskTimeout: durationpb.New(2 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(4 * time.Second), // use a higher timeout as this test uses large payloads.
 		Identity:            identity,
 	}
 
