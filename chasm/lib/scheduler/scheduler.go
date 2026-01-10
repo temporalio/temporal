@@ -541,6 +541,7 @@ func (s *Scheduler) isActionCompleted(workflowID string) bool {
 func (s *Scheduler) Describe(
 	ctx chasm.Context,
 	req *schedulerpb.DescribeScheduleRequest,
+	specBuilder *scheduler.SpecBuilder,
 ) (*schedulerpb.DescribeScheduleResponse, error) {
 	if s.Closed {
 		return nil, ErrClosed
@@ -561,10 +562,21 @@ func (s *Scheduler) Describe(
 	schedule := common.CloneProto(s.Schedule)
 	cleanSpec(schedule.Spec)
 
+	generator := s.Generator.Get(ctx)
+	if generator.GetFutureActionTimes() == nil {
+		// FutureActionTimes is populated asynchronously by the GeneratorTask. If a
+		// newly-created schedule is described before the task executes, this field may be
+		// nil. In that case, compute it on-demand.
+		generator.UpdateFutureActionTimes(ctx, specBuilder)
+	}
+
+	infoCopy := common.CloneProto(s.Info)
+	infoCopy.FutureActionTimes = generator.GetFutureActionTimes()
+
 	return &schedulerpb.DescribeScheduleResponse{
 		FrontendResponse: &workflowservice.DescribeScheduleResponse{
 			Schedule:         schedule,
-			Info:             common.CloneProto(s.Info),
+			Info:             infoCopy,
 			ConflictToken:    s.generateConflictToken(),
 			Memo:             &commonpb.Memo{Fields: memo},
 			SearchAttributes: &commonpb.SearchAttributes{IndexedFields: visibility.CustomSearchAttributes(ctx)},
