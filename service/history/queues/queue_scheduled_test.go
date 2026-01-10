@@ -98,6 +98,7 @@ func (s *scheduledQueueSuite) SetupTest() {
 		rateLimiter,
 		s.mockShard.GetTimeSource(),
 		s.mockShard.ChasmRegistry(),
+		s.mockShard.GetClusterMetadata(),
 		logger,
 		metrics.NoopMetricsHandler,
 	)

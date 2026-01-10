@@ -90,6 +90,7 @@ func (f *transferQueueFactory) CreateQueue(
 			f.SchedulerRateLimiter,
 			f.TimeSource,
 			f.ChasmRegistry,
+			f.ClusterMetadata,
 			logger,
 			metricsHandler,
 		)

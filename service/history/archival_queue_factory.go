@@ -138,6 +138,7 @@ func (f *archivalQueueFactory) newScheduledQueue(shard historyi.ShardContext, ex
 			f.SchedulerRateLimiter,
 			f.TimeSource,
 			f.ChasmRegistry,
+			f.ClusterMetadata,
 			logger,
 			metricsHandler,
 		)
