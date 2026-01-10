@@ -186,7 +186,7 @@ func (e *InvokerExecuteTaskExecutor) Execute(
 	ictx := e.newInvokerTaskExecutorContext(ctx, scheduler)
 	result = result.Append(e.terminateWorkflows(ictx, logger, scheduler, invoker.GetTerminateWorkflows()))
 	result = result.Append(e.cancelWorkflows(ictx, logger, scheduler, invoker.GetCancelWorkflows()))
-	sres, startResults := e.startWorkflows(ictx, logger, scheduler, invoker.getEligibleBufferedStarts(), lastCompletionState, callback)
+	sres, startResults := e.startWorkflows(ictx, logger, scheduler, invoker, lastCompletionState, callback)
 	result = result.Append(sres)
 
 	// Record action results on the Invoker (internal state), as well as the
@@ -198,7 +198,7 @@ func (e *InvokerExecuteTaskExecutor) Execute(
 			s := i.Scheduler.Get(ctx)
 
 			i.recordExecuteResult(ctx, &result)
-			s.recordActionResult(&schedulerActionResult{starts: startResults})
+			s.recordActionResult(&schedulerActionResult{actionCount: int64(len(startResults))})
 
 			return nil, nil
 		},
@@ -300,7 +300,7 @@ func (e *InvokerExecuteTaskExecutor) startWorkflows(
 	ctx invokerTaskExecutorContext,
 	logger log.Logger,
 	scheduler *Scheduler,
-	starts []*schedulespb.BufferedStart,
+	invoker *Invoker,
 	lastCompletionState *schedulerpb.LastCompletionResult,
 	callback *commonpb.Callback,
 ) (result executeResult, startResults []*schedulepb.ScheduleActionResult) {
@@ -310,7 +310,7 @@ func (e *InvokerExecuteTaskExecutor) startWorkflows(
 	var wg sync.WaitGroup
 	var resultMutex sync.Mutex
 
-	for _, start := range starts {
+	for _, start := range invoker.getEligibleBufferedStarts() {
 		// Starts that haven't been executed yet will remain in `BufferedStarts`,
 		// without change, so another ExecuteTask will be immediately created to continue
 		// processing in a new task.
@@ -318,12 +318,16 @@ func (e *InvokerExecuteTaskExecutor) startWorkflows(
 			break
 		}
 
-		// Check if this start is already in RecentActions. If so, we crashed
-		// after starting a workflow, but before recording the result.
-		if scheduler.isActionCompleted(start.WorkflowId) {
-			logger.Info("skipping already-completed workflow", tag.WorkflowID(start.WorkflowId))
+		// Check if this start is already started. If so, we crashed after
+		// starting a workflow, but before recording the result.
+		if invoker.isWorkflowStarted(start.WorkflowId) {
+			logger.Info("skipping already-started workflow", tag.WorkflowID(start.WorkflowId))
 			continue
 		}
+
+		// Clone start before concurrent access. The clone will have RunId/StartTime
+		// set by startWorkflow, then copied back to the original in recordExecuteResult.
+		start = common.CloneProto(start)
 
 		// Run all starts concurrently.
 		newCtx := ctx.Clone()
@@ -413,7 +417,8 @@ func (e *InvokerProcessBufferTaskExecutor) processBuffer(
 	invoker *Invoker,
 	scheduler *Scheduler,
 ) (result processBufferResult) {
-	isRunning := len(scheduler.Info.RunningWorkflows) > 0
+	runningWorkflows := invoker.runningWorkflowExecutions()
+	isRunning := len(runningWorkflows) > 0
 
 	// Processing completely ignores any BufferedStart that's already executing/backing off.
 	pendingBufferedStarts := util.FilterSlice(invoker.GetBufferedStarts(), func(start *schedulespb.BufferedStart) bool {
@@ -467,9 +472,9 @@ func (e *InvokerProcessBufferTaskExecutor) processBuffer(
 
 	// Terminate overrides cancel if both are requested.
 	if action.NeedTerminate {
-		result.terminateWorkflows = scheduler.GetInfo().GetRunningWorkflows()
+		result.terminateWorkflows = runningWorkflows
 	} else if action.NeedCancel {
-		result.cancelWorkflows = scheduler.GetInfo().GetRunningWorkflows()
+		result.cancelWorkflows = runningWorkflows
 	}
 
 	return
@@ -584,6 +589,12 @@ func (e *InvokerExecuteTaskExecutor) startWorkflow(
 		return nil, err
 	}
 	actualStartTime := time.Now()
+
+	// Set metadata on the cloned start. The clone was created in startWorkflows
+	// before spawning this goroutine, and will be copied back to the Invoker's
+	// BufferedStarts in recordExecuteResult.
+	start.RunId = result.RunId
+	start.StartTime = timestamppb.New(actualStartTime)
 
 	// Record time taken from action eligible to workflow started.
 	if !start.Manual {
