@@ -283,6 +283,7 @@ func (s *scheduleFunctionalSuiteBase) TestBasics() {
 	s.EqualValues(0, describeResp.Info.OverlapSkipped)
 	s.GreaterOrEqual(len(describeResp.Info.RunningWorkflows), 0)
 	s.GreaterOrEqual(len(describeResp.Info.RecentActions), 2)
+	s.NotEmpty(describeResp.Info.FutureActionTimes, "FutureActionTimes should not be empty")
 	action0 := describeResp.Info.RecentActions[0]
 	s.WithinRange(action0.ScheduleTime.AsTime(), createTime, time.Now())
 	s.True(action0.ScheduleTime.AsTime().UnixNano()%int64(5*time.Second) == 0)
