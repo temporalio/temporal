@@ -10,10 +10,12 @@ import (
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/softassert"
 )
 
 const (
@@ -365,12 +367,14 @@ const (
 type (
 	MutableStateStore struct {
 		Session gocql.Session
+		logger  log.Logger
 	}
 )
 
-func NewMutableStateStore(session gocql.Session) *MutableStateStore {
+func NewMutableStateStore(session gocql.Session, logger log.Logger) *MutableStateStore {
 	return &MutableStateStore{
 		Session: session,
+		logger:  logger,
 	}
 }
 
@@ -388,7 +392,7 @@ func (d *MutableStateStore) CreateWorkflowExecution(
 	runID := newWorkflow.RunID
 
 	var requestCurrentRunID string
-	currentRecordRunID := getCurrentRecordRunID(request.ArchetypeID)
+	currentRecordRunID := d.getCurrentRecordRunID(request.ArchetypeID)
 
 	switch request.Mode {
 	case p.CreateWorkflowModeBypassCurrent:
@@ -604,7 +608,7 @@ func (d *MutableStateStore) UpdateWorkflowExecution(
 	runID := updateWorkflow.RunID
 	shardID := request.ShardID
 
-	currentRecordRunID := getCurrentRecordRunID(request.ArchetypeID)
+	currentRecordRunID := d.getCurrentRecordRunID(request.ArchetypeID)
 
 	switch request.Mode {
 	case p.UpdateWorkflowModeIgnoreCurrent:
@@ -756,7 +760,7 @@ func (d *MutableStateStore) ConflictResolveWorkflowExecution(
 		startTime = timestamp.TimeValuePtr(currentWorkflow.ExecutionState.StartTime)
 	}
 
-	currentRecordRunID := getCurrentRecordRunID(request.ArchetypeID)
+	currentRecordRunID := d.getCurrentRecordRunID(request.ArchetypeID)
 
 	switch request.Mode {
 	case p.ConflictResolveWorkflowModeBypassCurrent:
@@ -939,7 +943,7 @@ func (d *MutableStateStore) DeleteCurrentWorkflowExecution(
 		rowTypeExecution,
 		request.NamespaceID,
 		request.WorkflowID,
-		getCurrentRecordRunID(request.ArchetypeID),
+		d.getCurrentRecordRunID(request.ArchetypeID),
 		defaultVisibilityTimestamp,
 		rowTypeExecutionTaskID,
 		request.RunID,
@@ -958,7 +962,7 @@ func (d *MutableStateStore) GetCurrentExecution(
 		rowTypeExecution,
 		request.NamespaceID,
 		request.WorkflowID,
-		getCurrentRecordRunID(request.ArchetypeID),
+		d.getCurrentRecordRunID(request.ArchetypeID),
 		defaultVisibilityTimestamp,
 		rowTypeExecutionTaskID,
 	).WithContext(ctx)
@@ -1081,6 +1085,24 @@ func (d *MutableStateStore) ListConcreteExecutions(
 		response.NextPageToken = iter.PageState()
 	}
 	return response, nil
+}
+
+func (d *MutableStateStore) getCurrentRecordRunID(
+	archetypeID chasm.ArchetypeID,
+) string {
+	if !softassert.That(
+		d.logger,
+		archetypeID != chasm.UnspecifiedArchetypeID,
+		"ArchetypeID not specified, defaulting to Workflow.",
+	) {
+		return permanentRunID
+	}
+
+	if archetypeID == chasm.WorkflowArchetypeID {
+		return permanentRunID
+	}
+
+	return gocql.ArchetypeIDToUUID(archetypeID)
 }
 
 func mutableStateFromRow(

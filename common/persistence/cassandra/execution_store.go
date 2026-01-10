@@ -88,7 +88,7 @@ var _ p.ExecutionStore = (*ExecutionStore)(nil)
 func NewExecutionStore(session gocql.Session, logger log.Logger) *ExecutionStore {
 	return &ExecutionStore{
 		HistoryStore:          NewHistoryStore(session),
-		MutableStateStore:     NewMutableStateStore(session),
+		MutableStateStore:     NewMutableStateStore(session, logger),
 		MutableStateTaskStore: NewMutableStateTaskStore(session, logger),
 	}
 }

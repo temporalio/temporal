@@ -4,7 +4,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/convert"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
@@ -1141,14 +1140,4 @@ func createHistoryEventBatchBlob(
 	}
 
 	return eventBatch
-}
-
-func getCurrentRecordRunID(
-	archetypeID chasm.ArchetypeID,
-) string {
-	if archetypeID == chasm.WorkflowArchetypeID || archetypeID == 0 {
-		return permanentRunID
-	}
-
-	return gocql.ArchetypeIDToUUID(archetypeID)
 }
