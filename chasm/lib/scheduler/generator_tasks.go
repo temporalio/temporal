@@ -93,6 +93,14 @@ func (g *GeneratorTaskExecutor) Execute(
 			fmt.Sprintf("failed to process a time range: %s", err.Error()))
 	}
 
+	// Emit metrics and update state for any dropped actions.
+	if result.DroppedCount > 0 {
+		logger.Warn("Buffer overrun, dropping actions",
+			tag.NewInt64("dropped-count", result.DroppedCount))
+		g.metricsHandler.Counter(metrics.ScheduleBufferOverruns.Name()).Record(result.DroppedCount)
+		scheduler.Info.BufferDropped += result.DroppedCount
+	}
+
 	// Enqueue newly-generated buffered starts.
 	if len(result.BufferedStarts) > 0 {
 		invoker.EnqueueBufferedStarts(ctx, result.BufferedStarts)
