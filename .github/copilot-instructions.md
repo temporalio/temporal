@@ -67,6 +67,6 @@ Apply these patterns when reviewing PRs or suggesting code changes.
 ## 8. Concurrency and Safety
 
 - Use `atomic.Value` for concurrent access, not regular variables
-- Don't do IO while holding locks - use immediate tasks instead
+- Don't do IO while holding locks - use side effect tasks
 - Clone data before releasing locks if it might be modified
 - Use `sync.Mutex` over `sync.RWMutex` when you only read once before writing
