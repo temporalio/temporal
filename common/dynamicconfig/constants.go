@@ -2295,6 +2295,12 @@ the number of children greater than or equal to this threshold`,
 		1000,
 		`NumParentClosePolicySystemWorkflows is key for number of parentClosePolicy system workflows running in total`,
 	)
+	EnableParentClosePolicyTransferTasks = NewNamespaceBoolSetting(
+		"history.enableParentClosePolicyTransferTasks",
+		false,
+		`EnableParentClosePolicyTransferTasks enables the use of dedicated transfer tasks for parent close policy
+instead of processing children inline in CloseExecutionTask or delegating to system worker`,
+	)
 	HistoryThrottledLogRPS = NewGlobalIntSetting(
 		"history.throttledLogRPS",
 		4,

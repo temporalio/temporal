@@ -76,6 +76,8 @@ func GetTransferTaskEventID(
 		eventID = task.InitiatedEventID
 	case *ResetWorkflowTask:
 		eventID = common.FirstEventID
+	case *ParentClosePolicyTask:
+		eventID = common.FirstEventID
 	case *ChasmTask:
 		return getChasmTaskEventID()
 	case *FakeTask:

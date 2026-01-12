@@ -197,11 +197,20 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 	var closeTasks []tasks.Task
 
 	if !skipCloseTransferTask {
+		childPolicyTasksGenerated := false
+
+		// Generate parent close policy tasks for children if feature is enabled
+		childPolicyTasksGenerated, err = r.generateParentClosePolicyTasks(closeVersion, &closeTasks)
+		if err != nil {
+			return err
+		}
+
 		closeExecutionTask := &tasks.CloseExecutionTask{
 			// TaskID, Visiblitytimestamp is set by shard
-			WorkflowKey:      r.mutableState.GetWorkflowKey(),
-			Version:          closeVersion,
-			DeleteAfterClose: deleteAfterClose,
+			WorkflowKey:               r.mutableState.GetWorkflowKey(),
+			Version:                   closeVersion,
+			DeleteAfterClose:          deleteAfterClose,
+			ChildPolicyTasksGenerated: childPolicyTasksGenerated,
 		}
 		closeTasks = append(closeTasks, closeExecutionTask)
 	} else {
@@ -265,6 +274,69 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 	r.mutableState.AddTasks(closeTasks...)
 
 	return nil
+}
+
+// generateParentClosePolicyTasks generates ParentClosePolicyTask tasks for each child workflow
+// if its parent close policy is not ABANDON and if the feature flag is enabled.
+// Returns whether any tasks were generated and any error encountered.
+func (r *TaskGeneratorImpl) generateParentClosePolicyTasks(
+	closeVersion int64,
+	closeTasks *[]tasks.Task,
+) (bool, error) {
+	executionInfo := r.mutableState.GetExecutionInfo()
+	executionState := r.mutableState.GetExecutionState()
+
+	namespaceEntry, err := r.namespaceRegistry.GetNamespaceByID(namespace.ID(executionInfo.NamespaceId))
+	switch err.(type) {
+	case nil:
+		// continue
+	case *serviceerror.NamespaceNotFound:
+		// namespace not found, skip generating parent close policy tasks
+		return false, nil
+	default:
+		return false, err
+	}
+
+	namespaceName := namespaceEntry.Name().String()
+
+	// Check if the feature is enabled for this namespace
+	if !r.config.EnableParentClosePolicyTransferTasks(namespaceName) {
+		return false, nil
+	}
+
+	// Skip parent close policy tasks if workflow was reset.
+	// Children should be kept around to reconnect with the new reset run.
+	// This mirrors the logic in processCloseExecution in transfer_queue_active_task_executor.go.
+	if executionState.Status == enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED &&
+		executionInfo.GetResetRunId() != "" &&
+		r.config.AllowResetWithPendingChildren(namespaceName) {
+		return false, nil
+	}
+
+	children := r.mutableState.GetPendingChildExecutionInfos()
+	if len(children) == 0 {
+		return false, nil
+	}
+
+	tasksGenerated := false
+	for _, childInfo := range children {
+		if childInfo.ParentClosePolicy == enumspb.PARENT_CLOSE_POLICY_ABANDON {
+			continue
+		}
+
+		// Generate a task for this child
+		*closeTasks = append(*closeTasks, &tasks.ParentClosePolicyTask{
+			WorkflowKey:       r.mutableState.GetWorkflowKey(),
+			Version:           closeVersion,
+			TargetNamespaceID: childInfo.GetNamespaceId(),
+			TargetWorkflowID:  childInfo.GetStartedWorkflowId(),
+			TargetRunID:       childInfo.GetStartedRunId(),
+			ParentClosePolicy: childInfo.ParentClosePolicy,
+		})
+		tasksGenerated = true
+	}
+
+	return tasksGenerated, nil
 }
 
 // getRetention returns the retention period for this task generator's workflow execution.

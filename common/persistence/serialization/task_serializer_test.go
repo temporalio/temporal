@@ -158,6 +158,46 @@ func (s *taskSerializerSuite) TestTransferCloseTask() {
 	s.assertEqualTasks(closeTask)
 }
 
+func (s *taskSerializerSuite) TestTransferCloseTaskWithChildPolicyTasksGenerated() {
+	closeTask := &tasks.CloseExecutionTask{
+		WorkflowKey:               s.workflowKey,
+		VisibilityTimestamp:       time.Unix(0, rand.Int63()).UTC(),
+		TaskID:                    rand.Int63(),
+		Version:                   rand.Int63(),
+		DeleteAfterClose:          true,
+		ChildPolicyTasksGenerated: true,
+	}
+	s.assertEqualTasks(closeTask)
+}
+
+func (s *taskSerializerSuite) TestTransferParentClosePolicyTask() {
+	parentClosePolicyTask := &tasks.ParentClosePolicyTask{
+		WorkflowKey:         s.workflowKey,
+		VisibilityTimestamp: time.Unix(0, rand.Int63()).UTC(),
+		TaskID:              rand.Int63(),
+		Version:             rand.Int63(),
+		TargetNamespaceID:   uuid.New().String(),
+		TargetWorkflowID:    uuid.New().String(),
+		TargetRunID:         uuid.New().String(),
+		ParentClosePolicy:   enumspb.PARENT_CLOSE_POLICY_TERMINATE,
+	}
+	s.assertEqualTasks(parentClosePolicyTask)
+}
+
+func (s *taskSerializerSuite) TestTransferParentClosePolicyTaskRequestCancel() {
+	parentClosePolicyTask := &tasks.ParentClosePolicyTask{
+		WorkflowKey:         s.workflowKey,
+		VisibilityTimestamp: time.Unix(0, rand.Int63()).UTC(),
+		TaskID:              rand.Int63(),
+		Version:             rand.Int63(),
+		TargetNamespaceID:   uuid.New().String(),
+		TargetWorkflowID:    uuid.New().String(),
+		TargetRunID:         uuid.New().String(),
+		ParentClosePolicy:   enumspb.PARENT_CLOSE_POLICY_REQUEST_CANCEL,
+	}
+	s.assertEqualTasks(parentClosePolicyTask)
+}
+
 func (s *taskSerializerSuite) TestTransferResetTask() {
 	resetTask := &tasks.ResetWorkflowTask{
 		WorkflowKey:         s.workflowKey,

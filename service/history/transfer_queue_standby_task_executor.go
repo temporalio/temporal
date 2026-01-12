@@ -108,6 +108,8 @@ func (t *transferQueueStandbyTaskExecutor) Execute(
 		err = t.processDeleteExecutionTask(ctx, task, false)
 	case *tasks.ChasmTask:
 		err = t.executeChasmSideEffectTransferTask(ctx, task)
+	case *tasks.ParentClosePolicyTask:
+		err = t.processParentClosePolicyTask(ctx, task)
 	default:
 		err = errUnknownTransferTask
 	}
@@ -246,6 +248,115 @@ func (t *transferQueueStandbyTaskExecutor) processWorkflowTask(
 			t.pushWorkflowTask,
 		),
 	)
+}
+
+func (t *transferQueueStandbyTaskExecutor) processParentClosePolicyTask(
+	ctx context.Context,
+	task *tasks.ParentClosePolicyTask,
+) error {
+	// For parent close policy tasks, we need to verify that the child workflow
+	// has been terminated/cancelled.
+	processTaskIfClosed := true
+	actionFn := func(ctx context.Context, wfContext historyi.WorkflowContext, mutableState historyi.MutableState) (interface{}, error) {
+		if mutableState.IsWorkflowExecutionRunning() {
+			// This can happen if workflow is reset.
+			return nil, nil
+		}
+
+		closeVersion, err := mutableState.GetCloseVersion()
+		if err != nil {
+			return nil, err
+		}
+		if err = CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), closeVersion, task.Version, task); err != nil {
+			return nil, err
+		}
+
+		// For ABANDON policy, task shouldn't be generated, but handle gracefully.
+		if task.ParentClosePolicy == enumspb.PARENT_CLOSE_POLICY_ABANDON {
+			return nil, nil
+		}
+
+		return t.verifyChildPolicyApplied(ctx, task)
+	}
+
+	return t.processTransfer(
+		ctx,
+		processTaskIfClosed,
+		task,
+		actionFn,
+		getStandbyPostActionFn(
+			task,
+			t.getCurrentTime,
+			t.config.StandbyTaskMissingEventsDiscardDelay(task.GetType()),
+			t.checkChildWorkflowStillExistsOnSourceBeforeDiscard,
+		),
+	)
+}
+
+type verifyChildPolicyAppliedPostActionInfo struct {
+	childWorkflowKey *definition.WorkflowKey
+}
+
+// verifyChildPolicyApplied verifies that the child workflow has been terminated/cancelled
+// as expected by the parent close policy.
+func (t *transferQueueStandbyTaskExecutor) verifyChildPolicyApplied(
+	ctx context.Context,
+	task *tasks.ParentClosePolicyTask,
+) (interface{}, error) {
+	resp, err := t.historyRawClient.DescribeMutableState(ctx, &historyservice.DescribeMutableStateRequest{
+		NamespaceId: task.TargetNamespaceID,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: task.TargetWorkflowID,
+		},
+	})
+
+	switch err.(type) {
+	case nil:
+		return t.checkChildWorkflowStatus(resp, task)
+	case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
+		// Child workflow or namespace not found locally. Check source cluster to distinguish
+		// between "deleted" (policy applied) vs "not replicated yet" (replication lag).
+		return &verifyChildPolicyAppliedPostActionInfo{
+			childWorkflowKey: &definition.WorkflowKey{
+				NamespaceID: task.TargetNamespaceID,
+				WorkflowID:  task.TargetWorkflowID,
+			},
+		}, nil
+	case *serviceerror.Unimplemented:
+		return nil, nil
+	default:
+		return &verificationErr{
+			msg: "Failed to verify child execution policy applied",
+			err: err,
+		}, nil
+	}
+}
+
+func (t *transferQueueStandbyTaskExecutor) checkChildWorkflowStatus(
+	resp *historyservice.DescribeMutableStateResponse,
+	task *tasks.ParentClosePolicyTask,
+) (interface{}, error) {
+	execState := resp.GetDatabaseMutableState().GetExecutionState()
+	if execState == nil {
+		return nil, nil
+	}
+
+	status := execState.GetStatus()
+
+	if task.ParentClosePolicy == enumspb.PARENT_CLOSE_POLICY_TERMINATE &&
+		status == enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED {
+		return nil, nil
+	}
+	if task.ParentClosePolicy == enumspb.PARENT_CLOSE_POLICY_REQUEST_CANCEL &&
+		status == enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED {
+		return nil, nil
+	}
+
+	if status == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+		return &struct{}{}, nil
+	}
+
+	return nil, nil
 }
 
 func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
@@ -664,5 +775,37 @@ func (t *transferQueueStandbyTaskExecutor) checkParentWorkflowStillExistOnSource
 	) {
 		return standbyTransferTaskPostActionTaskDiscarded(ctx, taskInfo, nil, logger)
 	}
+	return standbyTransferTaskPostActionTaskDiscarded(ctx, taskInfo, postActionInfo, logger)
+}
+
+func (t *transferQueueStandbyTaskExecutor) checkChildWorkflowStillExistsOnSourceBeforeDiscard(
+	ctx context.Context,
+	taskInfo tasks.Task,
+	postActionInfo interface{},
+	logger log.Logger,
+) error {
+	if postActionInfo == nil {
+		return nil
+	}
+	childPolicyInfo, ok := postActionInfo.(*verifyChildPolicyAppliedPostActionInfo)
+	if !ok || childPolicyInfo.childWorkflowKey == nil {
+		// Not a child policy verification, use default discard behavior.
+		return standbyTransferTaskPostActionTaskDiscarded(ctx, taskInfo, postActionInfo, logger)
+	}
+
+	if !executionExistsOnSource(
+		ctx,
+		*childPolicyInfo.childWorkflowKey,
+		chasm.WorkflowArchetypeID,
+		logger,
+		t.clusterName,
+		t.clientBean,
+		t.shardContext.GetNamespaceRegistry(),
+		t.shardContext.ChasmRegistry(),
+	) {
+		// Child doesn't exist on source either, discard task.
+		return standbyTransferTaskPostActionTaskDiscarded(ctx, taskInfo, nil, logger)
+	}
+	// Child exists on source but not locally, retry verification.
 	return standbyTransferTaskPostActionTaskDiscarded(ctx, taskInfo, postActionInfo, logger)
 }

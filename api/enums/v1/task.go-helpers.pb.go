@@ -57,6 +57,7 @@ var (
 		"ReplicationSyncVersionedTransition": 31,
 		"ChasmPure":                          32,
 		"Chasm":                              33,
+		"TransferParentClosePolicy":          34,
 	}
 )
 
