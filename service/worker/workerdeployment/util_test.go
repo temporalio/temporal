@@ -158,12 +158,12 @@ func (d *deploymentWorkflowClientSuite) TestValidateVersionWfParams() {
 
 func TestDecodeWorkerDeploymentMemoTolerateUnknownFields(t *testing.T) {
 	t.Parallel()
-	decodeAndValidateMemo(t, "memotestdata/memo_with_last_current_time.json", "test-deployment", "build-1")
+	decodeAndValidateMemo(t, "testdata/memo_with_last_current_time.json", "test-deployment", "build-1")
 }
 
 func TestDecodeWorkerDeploymentMemoTolerateMissingFields(t *testing.T) {
 	t.Parallel()
-	decodeAndValidateMemo(t, "memotestdata/memo_without_last_current_time.json", "test-deployment", "build-1")
+	decodeAndValidateMemo(t, "testdata/memo_without_last_current_time.json", "test-deployment", "build-1")
 }
 
 func decodeAndValidateMemo(t *testing.T, filePath, deploymentName, buildID string) {
