@@ -796,7 +796,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCloseExecution() {
 	})
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespace.ID(parentNamespaceID)).Return(tests.GlobalParentNamespaceEntry, nil).AnyTimes()
-	s.clientBean.EXPECT().GetRemoteAdminClient(tests.GlobalChildNamespaceEntry.ActiveClusterName()).Return(s.mockRemoteAdminClient, nil).AnyTimes()
+	s.clientBean.EXPECT().GetRemoteAdminClient(tests.GlobalChildNamespaceEntry.ActiveClusterName(parentExecution.WorkflowId)).Return(s.mockRemoteAdminClient, nil).AnyTimes()
 	s.mockRemoteAdminClient.EXPECT().DescribeMutableState(gomock.Any(), protomock.Eq(&adminservice.DescribeMutableStateRequest{
 		Namespace:       tests.ParentNamespace.String(),
 		Execution:       parentExecution,
@@ -847,9 +847,11 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCloseExecution() {
 	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.Equal(consts.ErrTaskDiscarded, resp.ExecutionErr)
 
-	s.mockHistoryClient.EXPECT().VerifyChildExecutionCompletionRecorded(gomock.Any(), expectedVerificationWithResendParentRequest).Return(nil, errors.New("some random error"))
+	randomErr := errors.New("some random error")
+	s.mockHistoryClient.EXPECT().VerifyChildExecutionCompletionRecorded(gomock.Any(), expectedVerificationWithResendParentRequest).Return(nil, randomErr)
 	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
-	s.Equal(consts.ErrTaskDiscarded, resp.ExecutionErr)
+	s.ErrorAs(resp.ExecutionErr, &verificationErr)
+	s.Equal(randomErr, verificationErr.Unwrap())
 }
 
 func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCancelExecution_Pending() {
@@ -1209,9 +1211,11 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_P
 	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.Equal(consts.ErrTaskDiscarded, resp.ExecutionErr)
 
-	s.mockHistoryClient.EXPECT().VerifyFirstWorkflowTaskScheduled(gomock.Any(), gomock.Any()).Return(nil, errors.New("some random error"))
+	randomErr := errors.New("some random error")
+	s.mockHistoryClient.EXPECT().VerifyFirstWorkflowTaskScheduled(gomock.Any(), gomock.Any()).Return(nil, randomErr)
 	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
-	s.Equal(consts.ErrTaskDiscarded, resp.ExecutionErr)
+	s.ErrorAs(resp.ExecutionErr, &verificationErr)
+	s.Equal(randomErr, verificationErr.Unwrap())
 
 	s.mockHistoryClient.EXPECT().VerifyFirstWorkflowTaskScheduled(gomock.Any(), gomock.Any()).Return(nil, nil)
 	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
@@ -1310,7 +1314,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) createPersistenceMutableState(
 		lastEventID, lastEventVersion,
 	))
 	s.NoError(err)
-	return workflow.TestCloneToProto(ms)
+	return workflow.TestCloneToProto(context.Background(), ms)
 }
 
 func (s *transferQueueStandbyTaskExecutorSuite) newTaskExecutable(

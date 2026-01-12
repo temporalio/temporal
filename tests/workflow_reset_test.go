@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	batchpb "go.temporal.io/api/batch/v1"
 	commandpb "go.temporal.io/api/command/v1"
@@ -18,6 +20,8 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/server/api/adminservice/v1"
+	deploymentspb "go.temporal.io/server/api/deployment/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/tests/testcore"
@@ -30,6 +34,16 @@ type WorkflowResetSuite struct {
 	testcore.FunctionalTestBase
 }
 
+// versioningConfig contains configuration for setting up versioned pollers.
+type versioningConfig struct {
+	// Required indicates whether a versioned poller should be started for a particular test.
+	Required bool
+	// DeploymentName is the deployment name for versioning.
+	DeploymentName string
+	// BuildID is the build ID for versioning.
+	BuildID string
+}
+
 func TestWorkflowResetTestSuite(t *testing.T) {
 	t.Parallel()
 	suite.Run(t, new(WorkflowResetSuite))
@@ -39,7 +53,7 @@ func TestWorkflowResetTestSuite(t *testing.T) {
 func (s *WorkflowResetSuite) TestNoBaseCurrentRunning() {
 	workflowID := "test-reset" + uuid.NewString()
 	ctx := testcore.NewContext()
-	runs := s.setupRuns(ctx, workflowID, 1, true)
+	runs := s.setupRuns(ctx, workflowID, 1, true, versioningConfig{})
 	currentRunID := runs[0]
 
 	// Reset the current run (i.e don't give an explicit runID)
@@ -68,7 +82,7 @@ func (s *WorkflowResetSuite) TestNoBaseCurrentRunning() {
 func (s *WorkflowResetSuite) TestNoBaseCurrentClosed() {
 	workflowID := "test-reset" + uuid.NewString()
 	ctx := testcore.NewContext()
-	runs := s.setupRuns(ctx, workflowID, 1, false)
+	runs := s.setupRuns(ctx, workflowID, 1, false, versioningConfig{})
 	currentRunID := runs[0]
 
 	// Reset the current run (i.e don't give an explicit runID)
@@ -97,7 +111,7 @@ func (s *WorkflowResetSuite) TestNoBaseCurrentClosed() {
 func (s *WorkflowResetSuite) TestSameBaseCurrentRunning() {
 	workflowID := "test-reset" + uuid.NewString()
 	ctx := testcore.NewContext()
-	runs := s.setupRuns(ctx, workflowID, 1, true)
+	runs := s.setupRuns(ctx, workflowID, 1, true, versioningConfig{})
 	baseRunID := runs[0]
 	currentRunID := runs[0]
 
@@ -111,7 +125,7 @@ func (s *WorkflowResetSuite) TestSameBaseCurrentRunning() {
 func (s *WorkflowResetSuite) TestSameBaseCurrentClosed() {
 	workflowID := "test-reset" + uuid.NewString()
 	ctx := testcore.NewContext()
-	runs := s.setupRuns(ctx, workflowID, 1, false)
+	runs := s.setupRuns(ctx, workflowID, 1, false, versioningConfig{})
 	baseRunID := runs[0]
 	currentRunID := runs[0]
 
@@ -124,7 +138,7 @@ func (s *WorkflowResetSuite) TestSameBaseCurrentClosed() {
 func (s *WorkflowResetSuite) TestDifferentBaseCurrentRunning() {
 	workflowID := "test-reset" + uuid.NewString()
 	ctx := testcore.NewContext()
-	runs := s.setupRuns(ctx, workflowID, 2, true)
+	runs := s.setupRuns(ctx, workflowID, 2, true, versioningConfig{})
 	baseRunID := runs[0]
 	currentRunID := runs[1]
 
@@ -137,7 +151,7 @@ func (s *WorkflowResetSuite) TestDifferentBaseCurrentRunning() {
 func (s *WorkflowResetSuite) TestDifferentBaseCurrentClosed() {
 	workflowID := "test-reset" + uuid.NewString()
 	ctx := testcore.NewContext()
-	runs := s.setupRuns(ctx, workflowID, 2, false)
+	runs := s.setupRuns(ctx, workflowID, 2, false, versioningConfig{})
 	baseRunID := runs[0]
 	currentRunID := runs[1]
 
@@ -150,7 +164,7 @@ func (s *WorkflowResetSuite) TestDifferentBaseCurrentClosed() {
 func (s *WorkflowResetSuite) TestRepeatedResets() {
 	workflowID := "test-reset" + uuid.NewString()
 	ctx := testcore.NewContext()
-	runs := s.setupRuns(ctx, workflowID, 2, false)
+	runs := s.setupRuns(ctx, workflowID, 2, false, versioningConfig{})
 	baseRunID := runs[0]
 	currentRunID := runs[1]
 
@@ -168,7 +182,7 @@ func (s *WorkflowResetSuite) TestRepeatedResets() {
 func (s *WorkflowResetSuite) TestWithMoreClosedRuns() {
 	workflowID := "test-reset" + uuid.NewString()
 	ctx := testcore.NewContext()
-	runs := s.setupRuns(ctx, workflowID, 5, false)
+	runs := s.setupRuns(ctx, workflowID, 5, false, versioningConfig{})
 	baseRunID := runs[0]
 	currentRunID := runs[4]
 	noChangeRuns := runs[1:4]
@@ -187,7 +201,7 @@ func (s *WorkflowResetSuite) TestWithMoreClosedRuns() {
 func (s *WorkflowResetSuite) TestOriginalExecutionRunId() {
 	workflowID := "test-reset" + uuid.NewString()
 	ctx := testcore.NewContext()
-	runs := s.setupRuns(ctx, workflowID, 1, true)
+	runs := s.setupRuns(ctx, workflowID, 1, true, versioningConfig{})
 	baseRunID := runs[0]
 	// Reset the current run repeatedly. Verify that each time the new run points to the original baseRunID
 	for i := 0; i < 5; i++ {
@@ -206,7 +220,16 @@ func (s *WorkflowResetSuite) TestOriginalExecutionRunId() {
 func (s *WorkflowResetSuite) TestResetWorkflowWithOptionsUpdate() {
 	workflowID := "test-reset" + uuid.NewString()
 	ctx := testcore.NewContext()
-	runs := s.setupRuns(ctx, workflowID, 1, true)
+	deploymentName := "testing"
+	buildID := "v.123"
+
+	// Setup runs with versioning enabled so that the version is present in the task queue before the
+	// versioning override is set.
+	runs := s.setupRuns(ctx, workflowID, 1, true, versioningConfig{
+		Required:       true,
+		DeploymentName: deploymentName,
+		BuildID:        buildID,
+	})
 	currentRunID := runs[0]
 
 	override := &workflowpb.VersioningOverride{
@@ -214,8 +237,8 @@ func (s *WorkflowResetSuite) TestResetWorkflowWithOptionsUpdate() {
 			Pinned: &workflowpb.VersioningOverride_PinnedOverride{
 				Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
 				Version: &deploymentpb.WorkerDeploymentVersion{
-					DeploymentName: "testing",
-					BuildId:        "v.123",
+					DeploymentName: deploymentName,
+					BuildId:        buildID,
 				},
 			},
 		},
@@ -266,21 +289,25 @@ func (s *WorkflowResetSuite) TestResetWorkflowWithOptionsUpdate() {
 	s.NoError(err)
 
 	// TODO (Carly): remove deprecated values from verification once we stop populating them
-	override.Behavior = enumspb.VERSIONING_BEHAVIOR_PINNED //nolint:staticcheck
-	override.PinnedVersion = "testing.v.123"               //nolint:staticcheck
+	override.Behavior = enumspb.VERSIONING_BEHAVIOR_PINNED  //nolint:staticcheck
+	override.PinnedVersion = deploymentName + "." + buildID //nolint:staticcheck
 	s.ProtoEqual(override, info.WorkflowExecutionInfo.GetVersioningInfo().GetVersioningOverride())
 }
 
 // Test batch reset operation with version update as post reset operation
 func (s *WorkflowResetSuite) TestBatchResetWithOptionsUpdate() {
 	ctx := testcore.NewContext()
+	deploymentName := "batch-testing"
+	buildID := "v.456"
 
 	// Create 2 workflows for batch reset
 	workflowID1 := "test-batch-reset-1-" + uuid.NewString()
 	workflowID2 := "test-batch-reset-2-" + uuid.NewString()
 
-	runs1 := s.setupRuns(ctx, workflowID1, 1, true)
-	runs2 := s.setupRuns(ctx, workflowID2, 1, true)
+	// Setup runs
+	versioningConfig := versioningConfig{Required: true, DeploymentName: deploymentName, BuildID: buildID}
+	runs1 := s.setupRuns(ctx, workflowID1, 1, true, versioningConfig)
+	runs2 := s.setupRuns(ctx, workflowID2, 1, true, versioningConfig)
 
 	// Create versioning override for post-reset operations
 	override := &workflowpb.VersioningOverride{
@@ -288,8 +315,8 @@ func (s *WorkflowResetSuite) TestBatchResetWithOptionsUpdate() {
 			Pinned: &workflowpb.VersioningOverride_PinnedOverride{
 				Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
 				Version: &deploymentpb.WorkerDeploymentVersion{
-					DeploymentName: "batch-testing",
-					BuildId:        "v.456",
+					DeploymentName: deploymentName,
+					BuildId:        buildID,
 				},
 			},
 		},
@@ -378,8 +405,8 @@ func (s *WorkflowResetSuite) TestBatchResetWithOptionsUpdate() {
 				Pinned: &workflowpb.VersioningOverride_PinnedOverride{
 					Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
 					Version: &deploymentpb.WorkerDeploymentVersion{
-						DeploymentName: "batch-testing",
-						BuildId:        "v.456",
+						DeploymentName: deploymentName,
+						BuildId:        buildID,
 					},
 				},
 			},
@@ -441,18 +468,24 @@ func (s *WorkflowResetSuite) assertResetWorkflowLink(ctx context.Context, workfl
 }
 
 // helper method to setup the test run in the required configuration. It creates a total of n runs. If isCurrentRunning is true then the last run is kept open.
-func (s *WorkflowResetSuite) setupRuns(ctx context.Context, workflowID string, n int, isCurrentRunning bool) []string {
+func (s *WorkflowResetSuite) setupRuns(ctx context.Context, workflowID string, n int, isCurrentRunning bool, versioningConfig versioningConfig) []string {
+	taskQueueName := testcore.RandomizeStr(s.T().Name())
+
+	// If versioning is requested, start a versioned poller and validate version membership
+	if versioningConfig.Required {
+		s.startVersionedPollerAndValidate(ctx, taskQueueName, versioningConfig.DeploymentName, versioningConfig.BuildID)
+	}
+
 	runs := []string{}
 	for i := 0; i < n-1; i++ {
-		runs = append(runs, s.prepareSingleRun(ctx, workflowID, false))
+		runs = append(runs, s.prepareSingleRun(ctx, workflowID, taskQueueName, false))
 	}
-	runs = append(runs, s.prepareSingleRun(ctx, workflowID, isCurrentRunning))
+	runs = append(runs, s.prepareSingleRun(ctx, workflowID, taskQueueName, isCurrentRunning))
 	return runs
 }
 
-func (s *WorkflowResetSuite) prepareSingleRun(ctx context.Context, workflowID string, isRunning bool) string {
+func (s *WorkflowResetSuite) prepareSingleRun(ctx context.Context, workflowID string, taskQueueName string, isRunning bool) string {
 	identity := "worker-identity"
-	taskQueueName := testcore.RandomizeStr(s.T().Name())
 	taskQueue := &taskqueuepb.TaskQueue{
 		Name: taskQueueName,
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
@@ -523,6 +556,54 @@ func (s *WorkflowResetSuite) prepareSingleRun(ctx context.Context, workflowID st
 	})
 	s.NoError(err)
 	return run.GetRunID()
+}
+
+// startVersionedPollerAndValidate starts a versioned poller for the given task queue
+// and validates that the version is present in the task queue via matching RPC.
+func (s *WorkflowResetSuite) startVersionedPollerAndValidate(
+	ctx context.Context,
+	taskQueueName string,
+	deploymentName string,
+	buildID string,
+) {
+	taskQueue := &taskqueuepb.TaskQueue{
+		Name: taskQueueName,
+		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+	}
+
+	// Start versioned poller in background
+	go func() {
+		_, _ = s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: taskQueue,
+			Identity:  "versioned-poller",
+			DeploymentOptions: &deploymentpb.WorkerDeploymentOptions{
+				DeploymentName:       deploymentName,
+				BuildId:              buildID,
+				WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_VERSIONED,
+			},
+		})
+	}()
+
+	// Validate version is present via matching RPC
+	version := &deploymentspb.WorkerDeploymentVersion{
+		DeploymentName: deploymentName,
+		BuildId:        buildID,
+	}
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := require.New(t)
+		resp, err := s.GetTestCluster().MatchingClient().CheckTaskQueueVersionMembership(
+			ctx,
+			&matchingservice.CheckTaskQueueVersionMembershipRequest{
+				NamespaceId:   s.NamespaceID().String(),
+				TaskQueue:     taskQueueName,
+				TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+				Version:       version,
+			},
+		)
+		a.NoError(err)
+		a.True(resp.GetIsMember())
+	}, 10*time.Second, 100*time.Millisecond)
 }
 
 // getLatestRunsForWorkflows gets the latest run IDs for the given workflow IDs

@@ -89,6 +89,7 @@ type Config struct {
 	// size limit system protection
 	BlobSizeLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter
 	BlobSizeLimitWarn  dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MemoSizeLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter
 
 	ThrottledLogRPS dynamicconfig.IntPropertyFn
 
@@ -173,12 +174,12 @@ type Config struct {
 	// Batch operation dynamic configs
 	MaxConcurrentBatchOperation     dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxExecutionCountBatchOperation dynamicconfig.IntPropertyFnWithNamespaceFilter
+	// Admin Batch operation dynamic config
+	MaxConcurrentAdminBatchOperation dynamicconfig.IntPropertyFnWithNamespaceFilter
 
 	EnableUpdateWorkflowExecution                              dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableUpdateWorkflowExecutionAsyncAccepted                 dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute dynamicconfig.IntPropertyFnWithNamespaceFilter
-
-	EnableExecuteMultiOperation dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	EnableWorkerVersioningData     dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableWorkerVersioningWorkflow dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -297,6 +298,7 @@ func NewConfig(
 		DisableListVisibilityByFilter:            dynamicconfig.DisableListVisibilityByFilter.Get(dc),
 		BlobSizeLimitError:                       dynamicconfig.BlobSizeLimitError.Get(dc),
 		BlobSizeLimitWarn:                        dynamicconfig.BlobSizeLimitWarn.Get(dc),
+		MemoSizeLimitError:                       dynamicconfig.MemoSizeLimitError.Get(dc),
 		ThrottledLogRPS:                          dynamicconfig.FrontendThrottledLogRPS.Get(dc),
 		ShutdownDrainDuration:                    dynamicconfig.FrontendShutdownDrainDuration.Get(dc),
 		ShutdownFailHealthCheckDuration:          dynamicconfig.FrontendShutdownFailHealthCheckDuration.Get(dc),
@@ -335,11 +337,10 @@ func NewConfig(
 		EnableDeployments:        dynamicconfig.EnableDeployments.Get(dc),
 		EnableDeploymentVersions: dynamicconfig.EnableDeploymentVersions.Get(dc),
 
-		EnableBatcher:                   dynamicconfig.FrontendEnableBatcher.Get(dc),
-		MaxConcurrentBatchOperation:     dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace.Get(dc),
-		MaxExecutionCountBatchOperation: dynamicconfig.FrontendMaxExecutionCountBatchOperationPerNamespace.Get(dc),
-
-		EnableExecuteMultiOperation: dynamicconfig.FrontendEnableExecuteMultiOperation.Get(dc),
+		EnableBatcher:                    dynamicconfig.FrontendEnableBatcher.Get(dc),
+		MaxConcurrentBatchOperation:      dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace.Get(dc),
+		MaxExecutionCountBatchOperation:  dynamicconfig.FrontendMaxExecutionCountBatchOperationPerNamespace.Get(dc),
+		MaxConcurrentAdminBatchOperation: dynamicconfig.FrontendMaxConcurrentAdminBatchOperationPerNamespace.Get(dc),
 
 		EnableUpdateWorkflowExecution:                              dynamicconfig.FrontendEnableUpdateWorkflowExecution.Get(dc),
 		EnableUpdateWorkflowExecutionAsyncAccepted:                 dynamicconfig.FrontendEnableUpdateWorkflowExecutionAsyncAccepted.Get(dc),

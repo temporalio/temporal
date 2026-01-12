@@ -192,6 +192,15 @@ func (s *redirectionInterceptorSuite) TestGlobalAPI() {
 		"UpdateTaskQueueConfig":                 {},
 		"FetchWorkerConfig":                     {},
 		"UpdateWorkerConfig":                    {},
+
+		"StartActivityExecution":         {},
+		"CountActivityExecutions":        {},
+		"ListActivityExecutions":         {},
+		"DescribeActivityExecution":      {},
+		"PollActivityExecution":          {},
+		"RequestCancelActivityExecution": {},
+		"TerminateActivityExecution":     {},
+		"DeleteActivityExecution":        {},
 	}, apis)
 }
 
@@ -210,6 +219,7 @@ func (s *redirectionInterceptorSuite) TestAPIResultMapping() {
 	for api, respAllocFn := range globalAPIResponses {
 		actualAPIs[api] = reflect.TypeOf(respAllocFn())
 	}
+
 	s.Equal(expectedAPIs, actualAPIs)
 }
 

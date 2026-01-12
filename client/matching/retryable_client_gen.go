@@ -506,6 +506,21 @@ func (c *retryableClient) SyncDeploymentUserData(
 	return resp, err
 }
 
+func (c *retryableClient) UpdateFairnessState(
+	ctx context.Context,
+	request *matchingservice.UpdateFairnessStateRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.UpdateFairnessStateResponse, error) {
+	var resp *matchingservice.UpdateFairnessStateResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.UpdateFairnessState(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) UpdateNexusEndpoint(
 	ctx context.Context,
 	request *matchingservice.UpdateNexusEndpointRequest,

@@ -49,8 +49,21 @@ message DeploymentVersionData {
 }
 
 // Information that a TQ should know about a particular Deployment Version. This info is not part of
-// RoutingConfig and hence not protected by the revision number.
+// RoutingConfig and hence not protected by the routing config revision number.
+// As of Workflow Version `VersionDataRevisionNumber`, version specific data has its own revision
+// number, which makes async propagations safer and allows async registration.
 message WorkerDeploymentVersionData {
+    // Incremented everytime version data changes. Updates with lower revision number than what is
+    // already in the TQ will be ignored to avoid stale writes.
+    int64 revision_number = 1;
+    // Last update time. Used for garbage collecting deleted versions from TQ user data.
+    google.protobuf.Timestamp update_time = 2;
+    // In order to protect against deletes being overwritten by delayed stale writes, we can't
+    // immediately delete the version data from task queues. instead, we mark them as deleted while
+    // keeping the revision number.
+    // Old enough deleted versions are GCed based on update_time.
+    bool deleted = 3;
+
     temporal.api.enums.v1.WorkerDeploymentVersionStatus status = 6;
 }
 
@@ -78,6 +91,11 @@ message VersionLocalState {
 
     // Timestamp when this version first became current or ramping.
     google.protobuf.Timestamp first_activation_time = 12;
+
+    // Timestamp when this version last became current.
+    // Can be used to determine whether a version has ever been Current.
+    google.protobuf.Timestamp last_current_time = 16;
+
     // Timestamp when this version last stopped being current or ramping.
     google.protobuf.Timestamp last_deactivation_time = 13;
 
@@ -99,7 +117,10 @@ message VersionLocalState {
     // Arbitrary user-provided metadata attached to this version.
     temporal.api.deployment.v1.VersionMetadata metadata = 8;
 
-    bool started_deployment_workflow = 9;
+  // Deployment workflow should always be running before starting the version workflow.
+  // We should not start the deployment workflow. If we cannot find the deployment workflow when signaling, it means a bug and we should fix it.
+  // Deprecated.
+  bool started_deployment_workflow = 9 [deprecated = true];
 
     // Key: Task Queue Name
     map<string, TaskQueueFamilyData> task_queue_families = 10;
@@ -114,6 +135,10 @@ message VersionLocalState {
 
     // Status of the Worker Deployment Version.
     temporal.api.enums.v1.WorkerDeploymentVersionStatus status = 14;
+
+    // Incremented everytime version data synced to TQ changes. Updates with lower revision number
+    // than what is already in the TQ will be ignored to avoid stale writes during async operations.
+    int64 revision_number = 15;
 }
 
 // Data specific to a task queue, from the perspective of a worker deployment version.
@@ -178,6 +203,11 @@ message WorkerDeploymentVersionSummary {
 
     // Timestamp when this version first became current or ramping.
     google.protobuf.Timestamp first_activation_time = 8;
+
+    // Timestamp when this version last became current.
+    // Can be used to determine whether a version has ever been Current.
+    google.protobuf.Timestamp last_current_time = 11;
+
     // Timestamp when this version last stopped being current or ramping.
     google.protobuf.Timestamp last_deactivation_time = 9;
 
@@ -473,166 +503,4 @@ message WorkerDeploymentSummary {
     temporal.api.deployment.v1.WorkerDeploymentInfo.WorkerDeploymentVersionSummary latest_version_summary = 4;
     temporal.api.deployment.v1.WorkerDeploymentInfo.WorkerDeploymentVersionSummary current_version_summary = 5;
     temporal.api.deployment.v1.WorkerDeploymentInfo.WorkerDeploymentVersionSummary ramping_version_summary = 6;
-}
-
-// Used as Worker Deployment Version workflow activity input:
-message AddVersionToWorkerDeploymentRequest {
-    string deployment_name = 1;
-    AddVersionUpdateArgs update_args = 2;
-    string request_id = 3;
-}
-
-// Used as Worker Deployment Version workflow activity output:
-message AddVersionToWorkerDeploymentResponse {
-}
-
-//////////////////////////////////////////////////////////////////////////
-// Below this line are the messages for the pre-release Deployment APIs //
-//////////////////////////////////////////////////////////////////////////
-// Data for each deployment+task queue pair. This is stored in each deployment (for each task
-// queue), and synced to task queue user data (for each deployment).
-message TaskQueueData {
-    google.protobuf.Timestamp first_poller_time = 1;
-    google.protobuf.Timestamp last_became_current_time = 2;
-}
-
-message DeploymentLocalState {
-    temporal.api.deployment.v1.Deployment deployment = 1;
-    map<string, TaskQueueFamilyData> task_queue_families = 2;
-
-    bool is_current = 3;
-    google.protobuf.Timestamp last_became_current_time = 6;
-
-    google.protobuf.Timestamp create_time = 4;
-    map<string, temporal.api.common.v1.Payload> metadata = 5;
-
-    bool started_series_workflow = 7;
-
-    message TaskQueueFamilyData {
-        // Key: enums.TaskQueueType, Value: TaskQueueData
-        // All fields in TaskQueueData are valid except last_became_current_time, the source of
-        // truth for that is the value at the root of DeploymentLocalState.
-        map<int32, TaskQueueData> task_queues = 1;
-    }
-}
-
-// used as deployment workflow input:
-message DeploymentWorkflowArgs {
-    string namespace_name = 1;
-    string namespace_id = 2;
-    DeploymentLocalState state = 3;
-}
-
-// used as deployment series workflow input:
-message DeploymentSeriesWorkflowArgs {
-    string namespace_name = 1;
-    string namespace_id = 2;
-    string series_name = 3;
-    SeriesLocalState state = 4;
-}
-
-message SeriesLocalState {
-    string current_build_id = 1;
-    google.protobuf.Timestamp current_changed_time = 2;
-}
-
-// used as deployment workflow update input:
-message RegisterWorkerInDeploymentArgs {
-    string task_queue_name = 1;
-    temporal.api.enums.v1.TaskQueueType task_queue_type = 2;
-    google.protobuf.Timestamp first_poller_time = 3;
-    int32 max_task_queues = 4;
-}
-
-// used as deployment series workflow update input (sent from series workflow):
-message SyncDeploymentStateArgs {
-    SetCurrent set_current = 1;
-    // currently, update_metadata will only be set if set_current.last_became_current_time is
-    // present. this could change in the future.
-    temporal.api.deployment.v1.UpdateDeploymentMetadata update_metadata = 2;
-
-    message SetCurrent {
-        // If last_became_current_time is present, then set the deployment's
-        // last_became_current_time to it and set is_current true. If it's missing,
-        // set is_current false.
-        google.protobuf.Timestamp last_became_current_time = 1;
-    }
-}
-
-// used as deployment series workflow update response (sent from series workflow):
-message SyncDeploymentStateResponse {
-    DeploymentLocalState deployment_local_state = 1;
-}
-
-// used as deployment workflow query response:
-message QueryDescribeDeploymentResponse {
-    DeploymentLocalState deployment_local_state = 1;
-}
-
-// used as deployment workflow memo:
-message DeploymentWorkflowMemo {
-    temporal.api.deployment.v1.Deployment deployment = 1;
-    google.protobuf.Timestamp create_time = 2;
-    bool is_current_deployment = 3;
-}
-
-// used as deployment workflow activity input:
-message StartDeploymentSeriesRequest {
-    string series_name = 1;
-    string request_id = 2;
-}
-
-// used as deployment workflow activity input:
-message SyncUserDataRequest {
-    temporal.api.deployment.v1.Deployment deployment = 1;
-    repeated SyncUserData sync= 2;
-
-    message SyncUserData {
-        string name = 1;
-        temporal.api.enums.v1.TaskQueueType type = 2;
-        TaskQueueData data = 3;
-    }
-}
-
-// used as deployment workflow activity output:
-message SyncUserDataResponse {
-    map<string, int64> task_queue_max_versions = 1;
-}
-
-// used as deployment workflow activity input:
-message CheckUserDataPropagationRequest {
-    map<string, int64> task_queue_max_versions = 1;
-}
-
-// used as deployment series workflow update input:
-message SetCurrentDeploymentArgs {
-    string identity = 1;
-    string build_id = 2;
-    temporal.api.deployment.v1.UpdateDeploymentMetadata update_metadata = 3;
-    string request_id = 4;
-}
-
-// used as deployment series update response:
-message SetCurrentDeploymentResponse {
-    DeploymentLocalState current_deployment_state = 1;
-    DeploymentLocalState previous_deployment_state = 2;
-}
-
-// used as deployment series activity input:
-message SyncDeploymentStateActivityArgs {
-    temporal.api.deployment.v1.Deployment deployment = 1;
-    SyncDeploymentStateArgs args = 2;
-    string request_id = 3;
-}
-
-// used as deployment series activity result:
-message SyncDeploymentStateActivityResult {
-    DeploymentLocalState state = 1;
-}
-
-// used as deployment series workflow memo:
-message DeploymentSeriesWorkflowMemo {
-    string series_name = 1;
-    string current_build_id = 2;
-    google.protobuf.Timestamp current_changed_time = 3;
 }

@@ -348,6 +348,21 @@ func (d *matcherData) MatchTaskImmediately(task *internalTask) (canSyncMatch, go
 	return true, false
 }
 
+func (d *matcherData) MatchPollerImmediately(poller *waitingPoller) *matchResult {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+
+	poller.initMatch(d)
+	d.pollers.Add(poller)
+	d.findAndWakeMatches()
+	// don't wait, check if match() picked this one already
+	if poller.matchResult != nil {
+		return poller.matchResult
+	}
+	d.pollers.Remove(poller)
+	return nil
+}
+
 func (d *matcherData) ReprocessTasks(pred func(*internalTask) bool) []*internalTask {
 	d.lock.Lock()
 	defer d.lock.Unlock()
@@ -386,6 +401,11 @@ func (d *matcherData) findMatch(allowForwarding bool) (*internalTask, *waitingPo
 			} else if poller.isTaskForwarder && !allowForwarding {
 				continue
 			} else if poller.isTaskValidator && task.forwardCtx != nil {
+				continue
+			} else if mp := poller.minPriority(); mp > 0 && task.effectivePriority > mp {
+				// Note the ">" above: "min" priority is a numeric max.
+				// Also note: this condition will be false for draining tasks since we artifically boost
+				// their priority above "1". that's inaccurate but it's just a temporary situation.
 				continue
 			}
 

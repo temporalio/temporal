@@ -3,6 +3,7 @@ package matching
 import (
 	"context"
 	"errors"
+	"math"
 	"sync"
 	"time"
 
@@ -12,20 +13,29 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	deploymentspb "go.temporal.io/server/api/deployment/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/quotas"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
+
+var errDefaultQueueNotInit = serviceerror.NewInternal("defaultQueue is not initializaed")
 
 const (
 	defaultTaskDispatchRPS    = 100000.0
@@ -49,9 +59,6 @@ type (
 		partition tqid.Partition
 		ns        *namespace.Namespace
 		config    *taskQueueConfig
-		// this is the default (unversioned) DB queue. As of now, some of the matters related to the whole TQ partition
-		// is delegated to the defaultQueue.
-		defaultQueue physicalTaskQueueManager
 		// used for non-sticky versioned queues (one for each version)
 		versionedQueues     map[PhysicalTaskQueueVersion]physicalTaskQueueManager
 		versionedQueuesLock sync.RWMutex // locks mutation of versionedQueues
@@ -63,11 +70,21 @@ type (
 		// TODO(stephanos): move cache out of partition manager
 		cache cache.Cache // non-nil for root-partition
 
+		autoEnableRateLimiter quotas.RateLimiter
+		fairnessState         enumsspb.FairnessState // Set once on initialization and read only after
+		defaultQueueFuture    *future.FutureImpl[physicalTaskQueueManager]
+		initCtx               context.Context
+		initCancel            func()
+
 		cancelNewMatcherSub func()
 		cancelFairnessSub   func()
 
 		// rateLimitManager is used to manage the rate limit for task queues.
 		rateLimitManager *rateLimitManager
+
+		// loadTime tracks when this partition manager was started, used to prevent
+		// false positives in the no-recent-poller metric for newly loaded queues
+		loadTime time.Time
 	}
 )
 
@@ -96,18 +113,21 @@ func newTaskQueuePartitionManager(
 		tqConfig,
 		partition.TaskQueue().TaskType())
 	pm := &taskQueuePartitionManagerImpl{
-		engine:           e,
-		partition:        partition,
-		ns:               ns,
-		config:           tqConfig,
-		logger:           logger,
-		throttledLogger:  throttledLogger,
-		matchingClient:   e.matchingRawClient,
-		metricsHandler:   metricsHandler,
-		versionedQueues:  make(map[PhysicalTaskQueueVersion]physicalTaskQueueManager),
-		userDataManager:  userDataManager,
-		rateLimitManager: rateLimitManager,
+		engine:                e,
+		partition:             partition,
+		ns:                    ns,
+		config:                tqConfig,
+		logger:                logger,
+		throttledLogger:       throttledLogger,
+		matchingClient:        e.matchingRawClient,
+		metricsHandler:        metricsHandler,
+		versionedQueues:       make(map[PhysicalTaskQueueVersion]physicalTaskQueueManager),
+		userDataManager:       userDataManager,
+		rateLimitManager:      rateLimitManager,
+		defaultQueueFuture:    future.NewFuture[physicalTaskQueueManager](),
+		autoEnableRateLimiter: quotas.NewRateLimiter(1.0/60, 1),
 	}
+	pm.initCtx, pm.initCancel = context.WithCancel(context.Background())
 
 	if pm.partition.IsRoot() {
 		pm.cache = cache.New(10000, &cache.Options{
@@ -115,32 +135,79 @@ func newTaskQueuePartitionManager(
 		)
 	}
 
+	return pm, nil
+}
+
+func (pm *taskQueuePartitionManagerImpl) initialize() (retErr error) {
+	defer func() { pm.defaultQueueFuture.SetIfNotReady(nil, retErr) }()
 	unload := func(bool) {
 		pm.unloadFromEngine(unloadCauseConfigChange)
 	}
 
-	var fairness bool
-	fairness, pm.cancelFairnessSub = tqConfig.EnableFairnessSub(unload)
-	// Fairness is disabled for sticky queues for now so that we can still use TTLs.
-	tqConfig.EnableFairness = fairness && partition.Kind() != enumspb.TASK_QUEUE_KIND_STICKY
-	if fairness {
-		tqConfig.NewMatcher = true
-	} else {
-		tqConfig.NewMatcher, pm.cancelNewMatcherSub = tqConfig.NewMatcherSub(unload)
+	err := pm.userDataManager.WaitUntilInitialized(pm.initCtx)
+	if err != nil {
+		return err
+	}
+	data, _, err := pm.getPerTypeUserData()
+	if err != nil {
+		return err
 	}
 
-	defaultQ, err := newPhysicalTaskQueueManager(pm, UnversionedQueueKey(partition))
-	if err != nil {
-		return nil, err
+	pm.fairnessState = data.GetFairnessState()
+	switch {
+	case !pm.config.AutoEnableV2() || pm.fairnessState == enumsspb.FAIRNESS_STATE_UNSPECIFIED:
+		var fairness bool
+		changeKey := pm.partition.GradualChangeKey()
+		fairness, pm.cancelFairnessSub = dynamicconfig.SubscribeGradualChange(
+			pm.config.EnableFairnessSub, changeKey, unload, pm.engine.timeSource)
+		// Fairness is disabled for sticky queues for now so that we can still use TTLs.
+		pm.config.EnableFairness = fairness && pm.partition.Kind() != enumspb.TASK_QUEUE_KIND_STICKY
+		if fairness {
+			pm.config.NewMatcher = true
+		} else {
+			pm.config.NewMatcher, pm.cancelNewMatcherSub = dynamicconfig.SubscribeGradualChange(
+				pm.config.NewMatcherSub, changeKey, unload, pm.engine.timeSource)
+		}
+	case pm.fairnessState == enumsspb.FAIRNESS_STATE_V0:
+		pm.config.NewMatcher = false
+		pm.config.EnableFairness = false
+	case pm.fairnessState == enumsspb.FAIRNESS_STATE_V1:
+		pm.config.NewMatcher = true
+		pm.config.EnableFairness = false
+	case pm.fairnessState == enumsspb.FAIRNESS_STATE_V2:
+		pm.config.NewMatcher = true
+		if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
+			pm.config.EnableFairness = false
+		} else {
+			pm.config.EnableFairness = true
+		}
+	default:
+		return serviceerror.NewInternal("Unknown FairnessState in UserData")
 	}
-	pm.defaultQueue = defaultQ
-	return pm, nil
+
+	defaultQ, err := newPhysicalTaskQueueManager(pm, UnversionedQueueKey(pm.partition))
+	if err != nil {
+		return err
+	}
+	pm.defaultQueueFuture.Set(defaultQ, nil)
+	defaultQ.Start()
+	return nil
+}
+
+func (pm *taskQueuePartitionManagerImpl) defaultQueue() physicalTaskQueueManager {
+	queue, err := pm.defaultQueueFuture.GetIfReady()
+	if err != nil {
+		softassert.Fail(pm.logger, "defaultQueue used but not initialized or initialization failed", tag.Error(err))
+	}
+	return queue
 }
 
 func (pm *taskQueuePartitionManagerImpl) Start() {
+	pm.loadTime = time.Now()
 	pm.engine.updateTaskQueuePartitionGauge(pm.Namespace(), pm.partition, 1)
 	pm.userDataManager.Start()
-	pm.defaultQueue.Start()
+	//nolint:errcheck
+	go pm.initialize()
 }
 
 func (pm *taskQueuePartitionManagerImpl) GetRateLimitManager() *rateLimitManager {
@@ -150,8 +217,11 @@ func (pm *taskQueuePartitionManagerImpl) GetRateLimitManager() *rateLimitManager
 // Stop does not unload the partition from matching engine. It is intended to be called by matching engine when
 // unloading the partition. For stopping and unloading a partition call unloadFromEngine instead.
 func (pm *taskQueuePartitionManagerImpl) Stop(unloadCause unloadCause) {
-	pm.versionedQueuesLock.Lock()
-	defer pm.versionedQueuesLock.Unlock()
+	pm.initCancel()
+	queue, err := pm.defaultQueueFuture.Get(context.Background())
+	if err == nil {
+		queue.Stop(unloadCause)
+	}
 
 	if pm.cancelFairnessSub != nil {
 		pm.cancelFairnessSub()
@@ -160,11 +230,12 @@ func (pm *taskQueuePartitionManagerImpl) Stop(unloadCause unloadCause) {
 		pm.cancelNewMatcherSub()
 	}
 
+	pm.versionedQueuesLock.Lock()
 	// First, stop all queues to wrap up ongoing operations.
 	for _, vq := range pm.versionedQueues {
 		vq.Stop(unloadCause)
 	}
-	pm.defaultQueue.Stop(unloadCause)
+	pm.versionedQueuesLock.Unlock()
 
 	// Then, stop user data manager to wrap up any reads/writes.
 	pm.userDataManager.Stop()
@@ -180,15 +251,49 @@ func (pm *taskQueuePartitionManagerImpl) Namespace() *namespace.Namespace {
 }
 
 func (pm *taskQueuePartitionManagerImpl) MarkAlive() {
-	pm.defaultQueue.MarkAlive()
+	dbq := pm.defaultQueue()
+	if dbq != nil {
+		dbq.MarkAlive()
+	}
 }
 
 func (pm *taskQueuePartitionManagerImpl) WaitUntilInitialized(ctx context.Context) error {
-	err := pm.userDataManager.WaitUntilInitialized(ctx)
+	queue, err := pm.defaultQueueFuture.Get(ctx)
 	if err != nil {
 		return err
 	}
-	return pm.defaultQueue.WaitUntilInitialized(ctx)
+	return queue.WaitUntilInitialized(ctx)
+}
+
+func (pm *taskQueuePartitionManagerImpl) autoEnableIfNeeded(ctx context.Context, params addTaskParams) {
+	if pm.fairnessState != enumsspb.FAIRNESS_STATE_UNSPECIFIED {
+		return
+	}
+	if params.taskInfo.Priority.GetFairnessKey() == "" {
+		if params.taskInfo.Priority.GetPriorityKey() == int32(0) {
+			return
+		}
+		// Do not auto enable if we only see priority and we're using new matcher already
+		if pm.config.NewMatcher {
+			return
+		}
+	}
+	if !pm.Partition().IsRoot() || pm.Partition().Kind() == enumspb.TASK_QUEUE_KIND_STICKY || !pm.config.AutoEnableV2() {
+		return
+	}
+	if !pm.autoEnableRateLimiter.Allow() {
+		return
+	}
+	req := &matchingservice.UpdateFairnessStateRequest{
+		NamespaceId:   pm.Namespace().ID().String(),
+		TaskQueue:     pm.Partition().RpcName(),
+		TaskQueueType: pm.Partition().TaskType(),
+		FairnessState: enumsspb.FAIRNESS_STATE_V2,
+	}
+	_, err := pm.matchingClient.UpdateFairnessState(ctx, req)
+	if err != nil {
+		pm.logger.Error("could not update userdata for autoenable", tag.Error(err))
+	}
 }
 
 func (pm *taskQueuePartitionManagerImpl) AddTask(
@@ -197,14 +302,16 @@ func (pm *taskQueuePartitionManagerImpl) AddTask(
 ) (buildId string, syncMatched bool, err error) {
 	var spoolQueue, syncMatchQueue physicalTaskQueueManager
 	directive := params.taskInfo.GetVersionDirective()
+
+	pm.autoEnableIfNeeded(ctx, params)
 	// spoolQueue will be nil iff task is forwarded.
 reredirectTask:
-	spoolQueue, syncMatchQueue, _, taskDispatchRevisionNumber, err := pm.getPhysicalQueuesForAdd(ctx, directive, params.forwardInfo, params.taskInfo.GetRunId(), params.taskInfo.GetWorkflowId(), false)
+	spoolQueue, syncMatchQueue, _, taskDispatchRevisionNumber, targetVersion, err := pm.getPhysicalQueuesForAdd(ctx, directive, params.forwardInfo, params.taskInfo.GetRunId(), params.taskInfo.GetWorkflowId(), false)
 	if err != nil {
 		return "", false, err
 	}
 
-	syncMatchTask := newInternalTaskForSyncMatch(params.taskInfo, params.forwardInfo, taskDispatchRevisionNumber)
+	syncMatchTask := newInternalTaskForSyncMatch(params.taskInfo, params.forwardInfo, taskDispatchRevisionNumber, targetVersion)
 	pm.config.setDefaultPriority(syncMatchTask)
 	if spoolQueue != nil && spoolQueue.QueueKey().Version().BuildId() != syncMatchQueue.QueueKey().Version().BuildId() {
 		// Task is not forwarded and build ID is different on the two queues -> redirect rule is being applied.
@@ -214,14 +321,23 @@ reredirectTask:
 		}
 	}
 
-	if pm.defaultQueue != syncMatchQueue {
+	dbq := pm.defaultQueue()
+	if dbq == nil {
+		return "", false, errDefaultQueueNotInit
+	}
+	if dbq != syncMatchQueue {
 		// default queue should stay alive even if requests go to other queues
-		pm.defaultQueue.MarkAlive()
+		dbq.MarkAlive()
 	}
 
-	if pm.partition.IsRoot() && !pm.HasAnyPollerAfter(time.Now().Add(-noPollerThreshold)) {
-		// Only checks recent pollers in the root partition
-		pm.metricsHandler.Counter(metrics.NoRecentPollerTasksPerTaskQueueCounter.Name()).Record(1)
+	if pm.partition.IsRoot() {
+		// Only emit the no-recent-poller metric if BOTH conditions are met:
+		// 1. Partition has been loaded for more than noPollerThreshold (2 minutes)
+		// 2. No pollers have polled in the last noPollerThreshold (2 minutes)
+		// This prevents false positives for newly loaded partitions that haven't had time to receive pollers yet.
+		if time.Since(pm.loadTime) > noPollerThreshold && !pm.HasAnyPollerAfter(time.Now().Add(-noPollerThreshold)) {
+			pm.metricsHandler.Counter(metrics.NoRecentPollerTasksPerTaskQueueCounter.Name()).Record(1)
+		}
 	}
 
 	isActive, err := pm.isActiveInCluster()
@@ -284,7 +400,10 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 	pollMetadata *pollMetadata,
 ) (*internalTask, bool, error) {
 	var err error
-	dbq := pm.defaultQueue
+	dbq := pm.defaultQueue()
+	if dbq == nil {
+		return nil, false, errDefaultQueueNotInit
+	}
 	versionSetUsed := false
 	deployment, err := worker_versioning.DeploymentFromCapabilities(pollMetadata.workerVersionCapabilities, pollMetadata.deploymentOptions)
 	if err != nil {
@@ -296,7 +415,7 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 			// TODO: reject poller of old sticky queue if newer version exist
 		} else {
 			// default queue should stay alive even if requests go to other queues
-			pm.defaultQueue.MarkAlive()
+			dbq.MarkAlive()
 			dbq, err = pm.getVersionedQueue(ctx, "", "", deployment, true)
 
 			if err != nil {
@@ -338,7 +457,7 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 			versionSetUsed = true
 		} else {
 			// default queue should stay alive even if requests go to other queues
-			pm.defaultQueue.MarkAlive()
+			dbq.MarkAlive()
 
 			var versionSet string
 			if versioningData.GetVersionSets() != nil {
@@ -386,12 +505,38 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 	pm.rateLimitManager.InjectWorkerRPS(pollMetadata)
 
 	task, err := dbq.PollTask(ctx, pollMetadata)
-
 	if task != nil {
-		task.pollerScalingDecision = dbq.MakePollerScalingDecision(pollMetadata.localPollStartTime)
+		task.pollerScalingDecision = dbq.MakePollerScalingDecision(ctx, pollMetadata.localPollStartTime)
 	}
 
 	return task, versionSetUsed, err
+}
+
+// GetPhysicalQueueAdjustedStats retrieves task queue stats for the given physical queue.
+// Returns nil if stats cannot be retrieved or are not available.
+func (pm *taskQueuePartitionManagerImpl) GetPhysicalQueueAdjustedStats(
+	ctx context.Context,
+	physicalQueue physicalTaskQueueManager,
+) *taskqueuepb.TaskQueueStats {
+	// buildID would be empty for either the unversioned queue or when using v3 worker-versioning.
+	buildID := physicalQueue.QueueKey().Version().BuildId()
+
+	// Check if the queue is versioned queue using v3 worker-versioning
+	deployment := physicalQueue.QueueKey().Version().Deployment()
+	if deployment != nil {
+		buildID = worker_versioning.ExternalWorkerDeploymentVersionToString(worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(deployment))
+	}
+
+	partitionInfo, err := pm.Describe(ctx, map[string]bool{buildID: true}, false, true, false, false)
+	if err != nil {
+		return nil
+	}
+
+	info, ok := partitionInfo.GetVersionsInfoInternal()[buildID]
+	if !ok || info.GetPhysicalTaskQueueInfo().GetTaskQueueStats() == nil {
+		return nil
+	}
+	return info.GetPhysicalTaskQueueInfo().GetTaskQueueStats()
 }
 
 // TODO(pri): old matcher cleanup
@@ -410,7 +555,7 @@ func (pm *taskQueuePartitionManagerImpl) ProcessSpooledTask(
 	}
 	// Redirect and re-resolve if we're blocked in matcher and user data changes.
 	for {
-		newBacklogQueue, syncMatchQueue, userDataChanged, taskDispatchRevisionNumber, err := pm.getPhysicalQueuesForAdd(ctx,
+		newBacklogQueue, syncMatchQueue, userDataChanged, taskDispatchRevisionNumber, targetVersion, err := pm.getPhysicalQueuesForAdd(ctx,
 			directive,
 			nil,
 			taskInfo.GetRunId(),
@@ -419,6 +564,8 @@ func (pm *taskQueuePartitionManagerImpl) ProcessSpooledTask(
 		if err != nil {
 			return err
 		}
+
+		task.targetWorkerDeploymentVersion = targetVersion
 
 		// Update the task dispatch revision number on the task since the routingConfig of the partition
 		// may have changed after the task was spooled.
@@ -469,7 +616,7 @@ func (pm *taskQueuePartitionManagerImpl) AddSpooledTask(
 		// construct directive based on the build ID of the spool queue
 		directive = worker_versioning.MakeBuildIdDirective(assignedBuildId)
 	}
-	newBacklogQueue, syncMatchQueue, _, taskDispatchRevisionNumber, err := pm.getPhysicalQueuesForAdd(
+	newBacklogQueue, syncMatchQueue, _, taskDispatchRevisionNumber, targetVersion, err := pm.getPhysicalQueuesForAdd(
 		ctx,
 		directive,
 		nil,
@@ -480,6 +627,8 @@ func (pm *taskQueuePartitionManagerImpl) AddSpooledTask(
 	if err != nil {
 		return err
 	}
+
+	task.targetWorkerDeploymentVersion = targetVersion
 
 	// Update the task dispatch revision number on the task since the routingConfig of the partition
 	// may have changed after the task was spooled.
@@ -520,7 +669,7 @@ func (pm *taskQueuePartitionManagerImpl) DispatchQueryTask(
 	request *matchingservice.QueryWorkflowRequest,
 ) (*matchingservice.QueryWorkflowResponse, error) {
 reredirectTask:
-	_, syncMatchQueue, _, _, err := pm.getPhysicalQueuesForAdd(ctx,
+	_, syncMatchQueue, _, _, _, err := pm.getPhysicalQueuesForAdd(ctx,
 		request.VersionDirective,
 		// We do not pass forwardInfo because we want the parent partition to make fresh versioning decision. Note that
 		// forwarded Query/Nexus task requests do not expire rapidly in contrast to forwarded activity/workflow tasks
@@ -536,9 +685,13 @@ reredirectTask:
 		return nil, err
 	}
 
-	if pm.defaultQueue != syncMatchQueue {
+	dbq := pm.defaultQueue()
+	if dbq == nil {
+		return nil, errDefaultQueueNotInit
+	}
+	if dbq != syncMatchQueue {
 		// default queue should stay alive even if requests go to other queues
-		pm.defaultQueue.MarkAlive()
+		dbq.MarkAlive()
 	}
 
 	res, err := syncMatchQueue.DispatchQueryTask(ctx, taskID, request)
@@ -555,7 +708,7 @@ func (pm *taskQueuePartitionManagerImpl) DispatchNexusTask(
 	request *matchingservice.DispatchNexusTaskRequest,
 ) (*matchingservice.DispatchNexusTaskResponse, error) {
 reredirectTask:
-	_, syncMatchQueue, _, _, err := pm.getPhysicalQueuesForAdd(ctx,
+	_, syncMatchQueue, _, _, _, err := pm.getPhysicalQueuesForAdd(ctx,
 		worker_versioning.MakeUseAssignmentRulesDirective(),
 		// We do not pass forwardInfo because we want the parent partition to make fresh versioning decision. Note that
 		// forwarded Query/Nexus task requests do not expire rapidly in contrast to forwarded activity/workflow tasks
@@ -570,9 +723,13 @@ reredirectTask:
 		return nil, err
 	}
 
-	if pm.defaultQueue != syncMatchQueue {
+	dbq := pm.defaultQueue()
+	if dbq == nil {
+		return nil, errDefaultQueueNotInit
+	}
+	if dbq != syncMatchQueue {
 		// default queue should stay alive even if requests go to other queues
-		pm.defaultQueue.MarkAlive()
+		dbq.MarkAlive()
 	}
 
 	res, err := syncMatchQueue.DispatchNexusTask(ctx, taskId, request)
@@ -593,7 +750,11 @@ func (pm *taskQueuePartitionManagerImpl) GetConfig() *taskQueueConfig {
 
 // GetAllPollerInfo returns all pollers that polled from this taskqueue in last few minutes
 func (pm *taskQueuePartitionManagerImpl) GetAllPollerInfo() []*taskqueuepb.PollerInfo {
-	ret := pm.defaultQueue.GetAllPollerInfo()
+	dbq := pm.defaultQueue()
+	var ret []*taskqueuepb.PollerInfo
+	if dbq != nil {
+		ret = dbq.GetAllPollerInfo()
+	}
 	pm.versionedQueuesLock.RLock()
 	defer pm.versionedQueuesLock.RUnlock()
 	for _, vq := range pm.versionedQueues {
@@ -610,7 +771,8 @@ func (pm *taskQueuePartitionManagerImpl) GetAllPollerInfo() []*taskqueuepb.Polle
 }
 
 func (pm *taskQueuePartitionManagerImpl) HasAnyPollerAfter(accessTime time.Time) bool {
-	if pm.defaultQueue.HasPollerAfter(accessTime) {
+	dbq := pm.defaultQueue()
+	if dbq != nil && dbq.HasPollerAfter(accessTime) {
 		return true
 	}
 	pm.versionedQueuesLock.RLock()
@@ -625,7 +787,11 @@ func (pm *taskQueuePartitionManagerImpl) HasAnyPollerAfter(accessTime time.Time)
 
 func (pm *taskQueuePartitionManagerImpl) HasPollerAfter(buildId string, accessTime time.Time) bool {
 	if buildId == "" {
-		return pm.defaultQueue.HasPollerAfter(accessTime)
+		dbq := pm.defaultQueue()
+		if dbq != nil && dbq.HasPollerAfter(accessTime) {
+			return true
+		}
+		return false
 	}
 	pm.versionedQueuesLock.RLock()
 	// TODO: support v3 versioning
@@ -643,8 +809,13 @@ func (pm *taskQueuePartitionManagerImpl) LegacyDescribeTaskQueue(includeTaskQueu
 			Pollers: pm.GetAllPollerInfo(),
 		},
 	}
+	dbq := pm.defaultQueue()
+	if dbq == nil {
+		return nil, errDefaultQueueNotInit
+	}
 	if includeTaskQueueStatus {
-		resp.DescResponse.TaskQueueStatus = pm.defaultQueue.LegacyDescribeTaskQueue(true).DescResponse.TaskQueueStatus
+		//nolint:staticcheck // SA1019: [cleanup-wv-3.1]
+		resp.DescResponse.TaskQueueStatus = dbq.LegacyDescribeTaskQueue(true).DescResponse.TaskQueueStatus
 	}
 	if pm.partition.Kind() != enumspb.TASK_QUEUE_KIND_STICKY {
 		perTypeUserData, _, err := pm.getPerTypeUserData()
@@ -698,12 +869,18 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 
 	for b := range buildIds {
 		if b == "" {
-			versions[pm.defaultQueue.QueueKey().Version()] = true
+			dbq := pm.defaultQueue()
+			if dbq == nil {
+				return nil, errDefaultQueueNotInit
+			}
+			versions[dbq.QueueKey().Version()] = true
 		} else {
 			found := false
 			for k := range pm.versionedQueues {
-				// Storing the versioned queue if the buildID is a v2 based buildID or a versionID representing a worker-deployment version.
-				if k.BuildId() == b || worker_versioning.ExternalWorkerDeploymentVersionToString(worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(k.Deployment())) == b {
+				// Storing the versioned queue if the buildID is a v2 based buildID or a versionID representing a worker-deployment version (which could be v31 or v32)
+				if k.BuildId() == b ||
+					worker_versioning.ExternalWorkerDeploymentVersionToString(worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(k.Deployment())) == b ||
+					worker_versioning.ExternalWorkerDeploymentVersionToStringV31(worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(k.Deployment())) == b {
 					versions[k] = true
 					found = true
 					break
@@ -727,6 +904,57 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 
 	pm.versionedQueuesLock.RUnlock()
 
+	var unversionedStatsByPriority map[int32]*taskqueuepb.TaskQueueStats
+	var currentVersion *deploymentspb.WorkerDeploymentVersion
+	var rampingVersion *deploymentspb.WorkerDeploymentVersion
+	var rampPercentage float32
+	var currentExists bool
+	var rampingExists bool
+	var isRamping bool
+	var unversionedCurrentShareByPriority map[int32]*taskqueuepb.TaskQueueStats
+	var unversionedRampingShareByPriority map[int32]*taskqueuepb.TaskQueueStats
+
+	if reportStats {
+		// Consider the default/unversioned queue. For current/ramping deployment versions, tasks are backlogged
+		// here, so we include this queue's stats if the version to describe is a current/ramping version.
+		dbq := pm.defaultQueue()
+		if dbq == nil {
+			return nil, errDefaultQueueNotInit
+		}
+		unversionedStatsByPriority = dbq.GetStatsByPriority()
+
+		userData, _, err := pm.GetUserDataManager().GetUserData()
+		if err != nil {
+			return nil, err
+		}
+		perType := userData.GetData().GetPerType()[int32(pm.Partition().TaskType())]
+		deploymentData := perType.GetDeploymentData()
+
+		currentVersion, _, _, rampingVersion, isRamping, rampPercentage, _, _ =
+			worker_versioning.CalculateTaskQueueVersioningInfo(deploymentData)
+
+		// Technically, one could have a current version of "unversioned" which shall make currentExists false according
+		// to the current logic. However, as of now, the user cannot query the stats of the "unversioned" version so this
+		// logic is fine. In other words, this logic is used to only attribute the unversioned backlog to the current version
+		// when current version is NOT "unversioned".
+		//
+		// When the ramping version is "unversioned", isRamping is true which shall make the attribution logic work as expected.
+		currentExists = currentVersion != nil
+		rampingExists = isRamping && rampPercentage > 0
+
+		// Split the unversioned queue's stats per priority so TaskQueueStatsByPriorityKey can
+		// be adjusted consistently with TaskQueueStats.
+		unversionedCurrentShareByPriority = map[int32]*taskqueuepb.TaskQueueStats{}
+		unversionedRampingShareByPriority = map[int32]*taskqueuepb.TaskQueueStats{}
+		if rampingExists {
+			unversionedCurrentShareByPriority, unversionedRampingShareByPriority =
+				splitStatsByPriorityByRampPercentage(unversionedStatsByPriority, rampPercentage)
+		} else if currentExists {
+			// If there exist no ramping version, weattribute the entire unversioned backlog to the current version.
+			unversionedCurrentShareByPriority = cloneStatsByPriority(unversionedStatsByPriority)
+		}
+	}
+
 	versionsInfo := make(map[string]*taskqueuespb.TaskQueueVersionInfoInternal, 0)
 	for v := range versions {
 		vInfo := &taskqueuespb.TaskQueueVersionInfoInternal{
@@ -740,6 +968,7 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 		if v.Deployment() != nil {
 			buildID = v.Deployment().BuildId
 		}
+
 		physicalQueue, err := pm.getPhysicalQueue(ctx, buildID, v.Deployment())
 		if err != nil {
 			return nil, err
@@ -748,8 +977,50 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 			vInfo.PhysicalTaskQueueInfo.Pollers = physicalQueue.GetAllPollerInfo()
 		}
 		if reportStats {
-			vInfo.PhysicalTaskQueueInfo.TaskQueueStatsByPriorityKey = physicalQueue.GetStatsByPriority()
-			vInfo.PhysicalTaskQueueInfo.TaskQueueStats = aggregateStats(vInfo.PhysicalTaskQueueInfo.TaskQueueStatsByPriorityKey)
+			physicalStatsByPriority := physicalQueue.GetStatsByPriority()
+
+			// Clone the physical queue's stats by priority so we can adjust (either add, subtract) them based on the
+			// attribution model defined below.
+			adjustedStatsByPriority := cloneStatsByPriority(physicalStatsByPriority)
+
+			// Attribution model (applied per-priority):
+			// - If current and/or ramping deployment versions exist, we first "give away" a portion of the
+			//   unversioned queue's per-priority stats.
+			//
+			// Depending on the version described, we have the following options:
+			// - For the unversioned version itself, subtract the given-away portion (so we don't double count).
+			// - For current/ramping versions, add their share on top of their physical queue stats.
+			deploymentVersion := worker_versioning.DeploymentVersionFromDeployment(v.Deployment())
+
+			isUnversionedDescribe := deploymentVersion == nil
+			isCurrentDescribe := deploymentVersion.GetDeploymentName() == currentVersion.GetDeploymentName() &&
+				deploymentVersion.GetBuildId() == currentVersion.GetBuildId()
+
+			// "Ramping to unversioned" is represented by "rampingExists==true AND rampingVersion==nil".
+			// In that case, the ramp share should remain attributed to the unversioned queue stats and
+			// there is no separate versioned queue to merge that share into.
+			isRampingToUnversioned := rampingExists && rampingVersion == nil
+			isRampingDescribe := deploymentVersion.GetDeploymentName() == rampingVersion.GetDeploymentName() &&
+				deploymentVersion.GetBuildId() == rampingVersion.GetBuildId()
+
+			if isUnversionedDescribe {
+				// Reduce unversioned stats by any shares attributed to versioned queues.
+				if currentExists {
+					subtractStatsByPriority(adjustedStatsByPriority, unversionedCurrentShareByPriority)
+				}
+				// Only subtract the ramping share when ramping is to a versioned deployment. If ramping is to
+				// unversioned, that share should remain part of the unversioned queue stats.
+				if rampingExists && !isRampingToUnversioned {
+					subtractStatsByPriority(adjustedStatsByPriority, unversionedRampingShareByPriority)
+				}
+			} else if isCurrentDescribe && currentExists {
+				mergeStatsByPriority(adjustedStatsByPriority, unversionedCurrentShareByPriority)
+			} else if isRampingDescribe && rampingExists {
+				mergeStatsByPriority(adjustedStatsByPriority, unversionedRampingShareByPriority)
+			}
+
+			vInfo.PhysicalTaskQueueInfo.TaskQueueStatsByPriorityKey = adjustedStatsByPriority
+			vInfo.PhysicalTaskQueueInfo.TaskQueueStats = aggregateStats(adjustedStatsByPriority)
 		}
 		if internalTaskQueueStatus {
 			vInfo.PhysicalTaskQueueInfo.InternalTaskQueueStatus = physicalQueue.GetInternalTaskQueueStatus()
@@ -771,6 +1042,159 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 	return &matchingservice.DescribeTaskQueuePartitionResponse{
 		VersionsInfoInternal: versionsInfo,
 	}, nil
+}
+
+func cloneTaskQueueStats(in *taskqueuepb.TaskQueueStats) *taskqueuepb.TaskQueueStats {
+	if in == nil {
+		return &taskqueuepb.TaskQueueStats{ApproximateBacklogAge: durationpb.New(0)}
+	}
+	age := in.GetApproximateBacklogAge()
+	if age == nil {
+		age = durationpb.New(0)
+	}
+	return &taskqueuepb.TaskQueueStats{
+		ApproximateBacklogCount: in.GetApproximateBacklogCount(),
+		ApproximateBacklogAge:   durationpb.New(age.AsDuration()),
+		TasksAddRate:            in.GetTasksAddRate(),
+		TasksDispatchRate:       in.GetTasksDispatchRate(),
+	}
+}
+
+func cloneStatsByPriority(in map[int32]*taskqueuepb.TaskQueueStats) map[int32]*taskqueuepb.TaskQueueStats {
+	out := make(map[int32]*taskqueuepb.TaskQueueStats, len(in))
+	for pri, s := range in {
+		out[pri] = cloneTaskQueueStats(s)
+	}
+	return out
+}
+
+// splitTaskQueueStatsByRampPercentage splits a task queue stats record into "current" and "ramping" shares.
+// This split is applied independently per priority bucket (see splitStatsByPriorityByRampPercentage).
+func splitTaskQueueStatsByRampPercentage(
+	in *taskqueuepb.TaskQueueStats,
+	rampPct float32,
+) (currentShare *taskqueuepb.TaskQueueStats, rampShare *taskqueuepb.TaskQueueStats) {
+	if in == nil {
+		in = &taskqueuepb.TaskQueueStats{ApproximateBacklogAge: durationpb.New(0)}
+	}
+
+	total := in.GetApproximateBacklogCount()
+	// We intentionally bias towards over-attribution ("safe side"):
+	// compute both shares with ceil. This can result in currentCount+rampCount > total.
+	rampCount := int64(math.Ceil(float64(total) * float64(rampPct) / 100.0))
+	currentCount := int64(math.Ceil(float64(total) * float64(100.0-rampPct) / 100.0))
+
+	// Just being defensive here; should never happen.
+	if rampCount < 0 {
+		rampCount = 0
+	}
+	if currentCount < 0 {
+		currentCount = 0
+	}
+
+	rampAddRate := in.GetTasksAddRate() * rampPct / 100
+	rampDispatchRate := in.GetTasksDispatchRate() * rampPct / 100
+
+	age := in.GetApproximateBacklogAge()
+	if age == nil {
+		age = durationpb.New(0)
+	}
+
+	// Rather than splitting the backlog age, we set it to the oldest backlog age for both the current and the ramping shares.
+	currentAge := durationpb.New(age.AsDuration())
+	rampAge := durationpb.New(age.AsDuration())
+	if currentCount == 0 {
+		currentAge = durationpb.New(0)
+	}
+	if rampCount == 0 {
+		rampAge = durationpb.New(0)
+	}
+
+	currentShare = &taskqueuepb.TaskQueueStats{
+		ApproximateBacklogCount: currentCount,
+		ApproximateBacklogAge:   currentAge,
+		TasksAddRate:            in.GetTasksAddRate() - rampAddRate,
+		TasksDispatchRate:       in.GetTasksDispatchRate() - rampDispatchRate,
+	}
+	rampShare = &taskqueuepb.TaskQueueStats{
+		ApproximateBacklogCount: rampCount,
+		ApproximateBacklogAge:   rampAge,
+		TasksAddRate:            rampAddRate,
+		TasksDispatchRate:       rampDispatchRate,
+	}
+	return currentShare, rampShare
+}
+
+// splitStatsByPriorityByRampPercentage splits each priority bucket independently by ramp percentage.
+// This is required so that TaskQueueStatsByPriorityKey aligns with TaskQueueStats (which is derived from it).
+func splitStatsByPriorityByRampPercentage(
+	statsByPriority map[int32]*taskqueuepb.TaskQueueStats,
+	rampPct float32,
+) (currentShareByPriority, rampShareByPriority map[int32]*taskqueuepb.TaskQueueStats) {
+	currentShareByPriority = make(map[int32]*taskqueuepb.TaskQueueStats, len(statsByPriority))
+	rampShareByPriority = make(map[int32]*taskqueuepb.TaskQueueStats, len(statsByPriority))
+	for pri, s := range statsByPriority {
+		current, ramp := splitTaskQueueStatsByRampPercentage(s, rampPct)
+		currentShareByPriority[pri] = current
+		rampShareByPriority[pri] = ramp
+	}
+	return currentShareByPriority, rampShareByPriority
+}
+
+func ensureStatsWithAge(stats map[int32]*taskqueuepb.TaskQueueStats, pri int32) {
+	if _, ok := stats[pri]; !ok {
+		stats[pri] = &taskqueuepb.TaskQueueStats{ApproximateBacklogAge: durationpb.New(0)}
+		return
+	}
+	if stats[pri].GetApproximateBacklogAge() == nil {
+		stats[pri].ApproximateBacklogAge = durationpb.New(0)
+	}
+}
+
+func mergeStatsByPriority(into, from map[int32]*taskqueuepb.TaskQueueStats) {
+	if len(from) == 0 {
+		return
+	}
+	for pri, s := range from {
+		if s == nil {
+			continue
+		}
+		ensureStatsWithAge(into, pri)
+		// mergeStats requires non-nil ApproximateBacklogAge on both inputs.
+		s = cloneTaskQueueStats(s)
+		mergeStats(into[pri], s)
+	}
+}
+
+func subtractStats(into *taskqueuepb.TaskQueueStats, sub *taskqueuepb.TaskQueueStats) {
+	if into == nil || sub == nil {
+		return
+	}
+	into.ApproximateBacklogCount = max(0, into.GetApproximateBacklogCount()-sub.GetApproximateBacklogCount())
+	into.TasksAddRate = max(0, into.GetTasksAddRate()-sub.GetTasksAddRate())
+	into.TasksDispatchRate = max(0, into.GetTasksDispatchRate()-sub.GetTasksDispatchRate())
+
+	// Rather than splitting the backlog age, we set it to the oldest backlog age for both the current and the ramping shares.
+	// However, if the backlog count is zero, we set the backlog age to zero.
+	if into.GetApproximateBacklogCount() == 0 || into.GetApproximateBacklogAge() == nil {
+		into.ApproximateBacklogAge = durationpb.New(0)
+	}
+}
+
+func subtractStatsByPriority(into, sub map[int32]*taskqueuepb.TaskQueueStats) {
+	if len(sub) == 0 || len(into) == 0 {
+		return
+	}
+	for pri, s := range sub {
+		if s == nil {
+			continue
+		}
+		existing, ok := into[pri]
+		if !ok || existing == nil {
+			continue
+		}
+		subtractStats(existing, s)
+	}
 }
 
 func (pm *taskQueuePartitionManagerImpl) Partition() tqid.Partition {
@@ -840,8 +1264,9 @@ func (pm *taskQueuePartitionManagerImpl) unloadPhysicalQueue(unloadedDbq physica
 	version := unloadedDbq.QueueKey().Version()
 
 	if !version.IsVersioned() {
+		dbq := pm.defaultQueue()
 		// this is the default queue, unload the whole partition if it is not healthy
-		if pm.defaultQueue == unloadedDbq {
+		if dbq != nil && dbq == unloadedDbq {
 			pm.unloadFromEngine(unloadCause)
 		}
 		return
@@ -865,7 +1290,11 @@ func (pm *taskQueuePartitionManagerImpl) unloadFromEngine(unloadCause unloadCaus
 
 func (pm *taskQueuePartitionManagerImpl) getPhysicalQueue(ctx context.Context, buildId string, deployment *deploymentpb.Deployment) (physicalTaskQueueManager, error) {
 	if buildId == "" {
-		return pm.defaultQueue, nil
+		dbq := pm.defaultQueue()
+		if dbq == nil {
+			return nil, errDefaultQueueNotInit
+		}
+		return dbq, nil
 	}
 
 	return pm.getVersionedQueue(ctx, "", buildId, deployment, true)
@@ -1008,7 +1437,14 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 	runId string,
 	workflowId string,
 	isQuery bool,
-) (spoolQueue physicalTaskQueueManager, syncMatchQueue physicalTaskQueueManager, userDataChanged <-chan struct{}, rcRevisionNumber int64, err error) {
+) (
+	spoolQueue physicalTaskQueueManager,
+	syncMatchQueue physicalTaskQueueManager,
+	userDataChanged <-chan struct{},
+	rcRevisionNumber int64,
+	targetVersion *deploymentspb.WorkerDeploymentVersion,
+	err error,
+) {
 	// Note: Revision number mechanics are only involved if the dynamic config, UseRevisionNumberForWorkerVersioning, is enabled.
 	// Represents the revision number used by the task and is max(taskDirectiveRevisionNumber, routingConfigRevisionNumber) for the task.
 	var taskDispatchRevisionNumber, targetDeploymentRevisionNumber int64
@@ -1018,26 +1454,35 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 
 	perTypeUserData, userDataChanged, err := pm.getPerTypeUserData()
 	if err != nil {
-		return nil, nil, nil, 0, err
+		return nil, nil, nil, 0, nil, err
 	}
 	deploymentData := perTypeUserData.GetDeploymentData()
 	taskDirectiveRevisionNumber := directive.GetRevisionNumber()
 
+	dbq := pm.defaultQueue()
+	if dbq == nil {
+		return nil, nil, nil, 0, nil, errDefaultQueueNotInit
+	}
+
+	current, currentRevisionNumber, _, ramping, _, rampingPercentage, rampingRevisionNumber, _ := worker_versioning.CalculateTaskQueueVersioningInfo(deploymentData)
+	targetDeploymentVersion, targetDeploymentRevisionNumber := worker_versioning.FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(current, currentRevisionNumber, ramping, rampingPercentage, rampingRevisionNumber, workflowId)
+	targetDeployment := worker_versioning.DeploymentFromDeploymentVersion(targetDeploymentVersion)
+
 	if wfBehavior == enumspb.VERSIONING_BEHAVIOR_PINNED {
 		if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
 			// TODO (shahab): we can verify the passed deployment matches the last poller's deployment
-			return pm.defaultQueue, pm.defaultQueue, userDataChanged, 0, nil
+			return dbq, dbq, userDataChanged, 0, targetDeploymentVersion, nil
 		}
 
 		err = worker_versioning.ValidateDeployment(deployment)
 		if err != nil {
-			return nil, nil, nil, 0, err
+			return nil, nil, nil, 0, nil, err
 		}
 
 		// Preventing Query tasks from being dispatched to a drained version with no workers
 		if isQuery {
 			if err := pm.checkQueryBlackholed(deploymentData, deployment); err != nil {
-				return nil, nil, nil, 0, err
+				return nil, nil, nil, 0, nil, err
 			}
 		}
 
@@ -1056,22 +1501,18 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 		if !isIndependentPinnedActivity {
 			pinnedQueue, err := pm.getVersionedQueue(ctx, "", "", deployment, true)
 			if err != nil {
-				return nil, nil, nil, 0, err // TODO (Shivam): Please add the comment in the proto to explain that pinned tasks and sticky tasks get 0 for the rev number.
+				return nil, nil, nil, 0, nil, err // TODO (Shivam): Please add the comment in the proto to explain that pinned tasks and sticky tasks get 0 for the rev number.
 			}
 			if forwardInfo == nil {
 				// Task is not forwarded, so it can be spooled if sync match fails.
 				// Spool queue and sync match queue is the same for pinned workflows.
-				return pinnedQueue, pinnedQueue, userDataChanged, 0, nil
+				return pinnedQueue, pinnedQueue, userDataChanged, 0, targetDeploymentVersion, nil
 			} else {
 				// Forwarded from child partition - only do sync match.
-				return nil, pinnedQueue, userDataChanged, 0, nil
+				return nil, pinnedQueue, userDataChanged, 0, targetDeploymentVersion, nil
 			}
 		}
 	}
-
-	current, currentRevisionNumber, _, ramping, _, rampingPercentage, rampingRevisionNumber, _ := worker_versioning.CalculateTaskQueueVersioningInfo(deploymentData)
-	targetDeploymentVersion, targetDeploymentRevisionNumber := worker_versioning.FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(current, currentRevisionNumber, ramping, rampingPercentage, rampingRevisionNumber, workflowId)
-	targetDeployment := worker_versioning.DeploymentFromDeploymentVersion(targetDeploymentVersion)
 
 	var targetDeploymentQueue physicalTaskQueueManager
 	if directive.GetAssignedBuildId() == "" && targetDeployment != nil {
@@ -1079,25 +1520,29 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 			if !deployment.Equal(targetDeployment) {
 				// Current deployment has changed, so the workflow should move to a normal queue to
 				// get redirected to the new deployment.
-				return nil, nil, nil, 0, serviceerrors.NewStickyWorkerUnavailable()
+				return nil, nil, nil, 0, nil, serviceerrors.NewStickyWorkerUnavailable()
 			}
 
 			// TODO (shahab): we can verify the passed deployment matches the last poller's deployment
-			return pm.defaultQueue, pm.defaultQueue, userDataChanged, 0, nil
+			return dbq, dbq, userDataChanged, 0, targetDeploymentVersion, nil
 		}
 
 		var err error
 		targetDeploymentQueue, taskDispatchRevisionNumber, err = pm.chooseTargetQueueByFlag(
 			ctx, deployment, targetDeployment, targetDeploymentRevisionNumber, taskDirectiveRevisionNumber,
 		)
+		if err != nil {
+			return nil, nil, nil, 0, nil, err
+		}
+		targetDeploymentVersion = worker_versioning.DeploymentVersionFromDeployment(targetDeploymentQueue.QueueKey().Version().Deployment())
 
 		if forwardInfo == nil {
 			// Task is not forwarded, so it can be spooled if sync match fails.
 			// Unpinned tasks are spooled in default queue
-			return pm.defaultQueue, targetDeploymentQueue, userDataChanged, taskDispatchRevisionNumber, err
+			return dbq, targetDeploymentQueue, userDataChanged, taskDispatchRevisionNumber, targetDeploymentVersion, err
 		} else {
 			// Forwarded from child partition - only do sync match.
-			return nil, targetDeploymentQueue, userDataChanged, taskDispatchRevisionNumber, err
+			return nil, targetDeploymentQueue, userDataChanged, taskDispatchRevisionNumber, targetDeploymentVersion, err
 		}
 	}
 
@@ -1105,7 +1550,7 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 		// Forwarded from child partition - only do sync match.
 		// No need to calculate build ID, just dispatch based on source partition's instructions.
 		if forwardInfo.DispatchVersionSet == "" && forwardInfo.DispatchBuildId == "" {
-			syncMatchQueue = pm.defaultQueue
+			syncMatchQueue = dbq
 		} else {
 			syncMatchQueue, err = pm.getVersionedQueue(
 				ctx,
@@ -1115,18 +1560,18 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 				true,
 			)
 		}
-		return nil, syncMatchQueue, nil, taskDispatchRevisionNumber, err
+		return nil, syncMatchQueue, nil, taskDispatchRevisionNumber, targetDeploymentVersion, err
 	}
 
 	if directive.GetBuildId() == nil {
 		// The task belongs to an unversioned execution. Keep using unversioned. But also return
 		// userDataChanged so if current deployment is set, the task redirects to that deployment.
-		return pm.defaultQueue, pm.defaultQueue, userDataChanged, taskDispatchRevisionNumber, nil
+		return dbq, dbq, userDataChanged, taskDispatchRevisionNumber, targetDeploymentVersion, nil
 	}
 
 	userData, userDataChanged, err := pm.userDataManager.GetUserData()
 	if err != nil {
-		return nil, nil, nil, 0, err
+		return nil, nil, nil, 0, nil, err
 	}
 
 	data := userData.GetData().GetVersioningData()
@@ -1142,7 +1587,7 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 		if buildId == "" {
 			versionSet, err = pm.getVersionSetForAdd(directive, data)
 			if err != nil {
-				return nil, nil, nil, 0, err
+				return nil, nil, nil, 0, nil, err
 			}
 		}
 	case *taskqueuespb.TaskVersionDirective_AssignedBuildId:
@@ -1152,7 +1597,7 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 		if len(data.GetVersionSets()) > 0 {
 			versionSet, err = pm.getVersionSetForAdd(directive, data)
 			if err != nil {
-				return nil, nil, nil, 0, err
+				return nil, nil, nil, 0, nil, err
 			}
 		}
 		if versionSet == "" {
@@ -1172,36 +1617,39 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 		// TODO: [cleanup-old-wv]
 		_, err = checkVersionForStickyAdd(data, directive.GetAssignedBuildId())
 		if err != nil {
-			return nil, nil, nil, 0, err
+			return nil, nil, nil, 0, nil, err
 		}
 		if buildId != redirectBuildId {
 			// redirect rule added for buildId, kick task back to normal queue
 			// TODO (shahab): support V3 in here
-			return nil, nil, nil, 0, serviceerrors.NewStickyWorkerUnavailable()
+			return nil, nil, nil, 0, nil, serviceerrors.NewStickyWorkerUnavailable()
 		}
 		// sticky queues only use default queue
-		return pm.defaultQueue, pm.defaultQueue, userDataChanged, 0, nil
+		return dbq, dbq, userDataChanged, 0, targetDeploymentVersion, nil
 	}
 
 	if versionSet != "" {
-		spoolQueue = pm.defaultQueue
+		spoolQueue = pm.defaultQueue()
+		if spoolQueue == nil {
+			return nil, nil, nil, 0, nil, errDefaultQueueNotInit
+		}
 		syncMatchQueue, err = pm.getVersionedQueue(ctx, versionSet, "", nil, true)
 		if err != nil {
-			return nil, nil, nil, 0, err
+			return nil, nil, nil, 0, nil, err
 		}
 	} else {
 		syncMatchQueue, err = pm.getPhysicalQueue(ctx, redirectBuildId, nil)
 		if err != nil {
-			return nil, nil, nil, 0, err
+			return nil, nil, nil, 0, nil, err
 		}
 		// redirect rules are not applied when spooling a task. They'll be applied when dispatching the spool task.
 		spoolQueue, err = pm.getPhysicalQueue(ctx, buildId, nil)
 		if err != nil {
-			return nil, nil, nil, 0, err
+			return nil, nil, nil, 0, nil, err
 		}
 	}
 
-	return spoolQueue, syncMatchQueue, userDataChanged, taskDispatchRevisionNumber, err
+	return spoolQueue, syncMatchQueue, userDataChanged, taskDispatchRevisionNumber, targetDeploymentVersion, err
 }
 
 // chooseTargetQueueByFlag picks the target queue and dispatch revision number.
@@ -1303,9 +1751,24 @@ func (pm *taskQueuePartitionManagerImpl) getPerTypeUserData() (*persistencespb.T
 	return perType, userDataChanged, nil
 }
 
-func (pm *taskQueuePartitionManagerImpl) userDataChanged() {
+func (pm *taskQueuePartitionManagerImpl) userDataChanged(to *persistencespb.VersionedTaskQueueUserData) {
 	// Update rateLimits if any change is userData.
 	pm.rateLimitManager.UserDataChanged()
+
+	// Do not use defaultQueue() because that treats
+	// not being ready as an error, which is expected during bringup here.
+	defaultQ, err := pm.defaultQueueFuture.GetIfReady()
+	// Initialization error or not ready yet
+	if err != nil {
+		return
+	}
+
+	taskType := int32(pm.Partition().TaskType())
+	if to.GetData().GetPerType()[taskType].GetFairnessState() != pm.fairnessState {
+		pm.logger.Debug("unloading partitionManager due to change in FairnessState")
+		pm.unloadFromEngine(unloadCauseConfigChange)
+		return
+	}
 
 	// Notify all queues so they can re-evaluate their backlog.
 	pm.versionedQueuesLock.RLock()
@@ -1315,5 +1778,5 @@ func (pm *taskQueuePartitionManagerImpl) userDataChanged() {
 	pm.versionedQueuesLock.RUnlock()
 
 	// Do this one in this goroutine.
-	pm.defaultQueue.UserDataChanged()
+	defaultQ.UserDataChanged()
 }

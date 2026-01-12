@@ -1,0 +1,27 @@
+name: Docker Build (PR)
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-docker:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Build binaries
+        uses: ./.github/actions/build-binaries
+        with:
+          snapshot: true
+
+      - name: Build Docker images
+        uses: ./.github/actions/build-docker-images
+        with:
+          push: false
+          tag-latest: false

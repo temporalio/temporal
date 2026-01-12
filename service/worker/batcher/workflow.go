@@ -6,15 +6,14 @@ import (
 	"time"
 
 	batchpb "go.temporal.io/api/batch/v1"
-	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 	batchspb "go.temporal.io/server/api/batch/v1"
 	"go.temporal.io/server/common/searchattribute/sadefs"
-	"go.temporal.io/server/common/worker_versioning"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -59,6 +58,13 @@ var (
 		sadefs.ExecutionStatus,
 		int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING),
 	)
+
+	OpenAdminBatchOperationQuery = fmt.Sprintf("%s = '%s' AND %s = %d",
+		sadefs.TemporalNamespaceDivision,
+		AdminNamespaceDivision,
+		sadefs.ExecutionStatus,
+		int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING),
+	)
 )
 
 type (
@@ -76,7 +82,7 @@ type (
 
 	task struct {
 		// the workflow execution to process
-		execution *commonpb.WorkflowExecution
+		executionInfo *workflowpb.WorkflowExecutionInfo
 		// the number of attempts to process the workflow execution
 		attempts int
 		// reference to the page this task belongs to (for tracking page completion)
@@ -186,7 +192,8 @@ func ValidateBatchOperation(params *workflowservice.StartBatchOperationRequest) 
 		if op.UpdateWorkflowOptionsOperation.GetUpdateMask() == nil {
 			return errors.New("must provide UpdateMask")
 		}
-		return worker_versioning.ValidateVersioningOverride(op.UpdateWorkflowOptionsOperation.GetWorkflowExecutionOptions().GetVersioningOverride())
+		// Validation for Versioning Override, if present, happens in history.
+		return nil
 	case *workflowservice.StartBatchOperationRequest_CancellationOperation,
 		*workflowservice.StartBatchOperationRequest_TerminationOperation,
 		*workflowservice.StartBatchOperationRequest_DeletionOperation:

@@ -123,7 +123,7 @@ func (t *ForwarderTestSuite) TestForwardWorkflowTask_WithBuildId() {
 	).Return(&matchingservice.AddWorkflowTaskResponse{}, nil)
 
 	taskInfo := randomTaskInfo()
-	task := newInternalTaskForSyncMatch(taskInfo.Data, nil, 0)
+	task := newInternalTaskForSyncMatch(taskInfo.Data, nil, 0, nil)
 	t.NoError(t.fwdr.ForwardTask(context.Background(), task))
 	t.NotNil(request)
 	t.Equal(mustParent(t.partition, 20).RpcName(), request.TaskQueue.GetName())
@@ -258,7 +258,9 @@ func (t *ForwarderTestSuite) TestForwardPollWorkflowTaskQueue() {
 	pollerID := uuid.NewString()
 	ctx := context.WithValue(context.Background(), pollerIDKey, pollerID)
 	ctx = context.WithValue(ctx, identityKey, "id1")
-	resp := &matchingservice.PollWorkflowTaskQueueResponse{}
+	resp := &matchingservice.PollWorkflowTaskQueueResponse{
+		TaskToken: []byte("token1"),
+	}
 
 	var request *matchingservice.PollWorkflowTaskQueueRequest
 	t.client.EXPECT().PollWorkflowTaskQueue(gomock.Any(), gomock.Any(), gomock.Any()).Do(
@@ -286,7 +288,9 @@ func (t *ForwarderTestSuite) TestForwardPollForActivity() {
 	pollerID := uuid.NewString()
 	ctx := context.WithValue(context.Background(), pollerIDKey, pollerID)
 	ctx = context.WithValue(ctx, identityKey, "id1")
-	resp := &matchingservice.PollActivityTaskQueueResponse{}
+	resp := &matchingservice.PollActivityTaskQueueResponse{
+		TaskToken: []byte("token1"),
+	}
 
 	var request *matchingservice.PollActivityTaskQueueRequest
 	t.client.EXPECT().PollActivityTaskQueue(gomock.Any(), gomock.Any(), gomock.Any()).Do(

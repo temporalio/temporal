@@ -1,0 +1,62 @@
+name: Build and Publish
+
+on:
+  push:
+    branches:
+      - main
+      - cloud/*
+      - feature/*
+      - release/*
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-push-docker:
+    runs-on: ubuntu-latest
+    # Only push for main, cloud, release branches (not feature)
+    if: |
+      github.ref == 'refs/heads/main' ||
+      startsWith(github.ref, 'refs/heads/cloud/') ||
+      startsWith(github.ref, 'refs/heads/release/')
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+
+      - name: Build binaries
+        uses: ./.github/actions/build-binaries
+        with:
+          snapshot: true
+
+      - name: Build and push Docker images
+        uses: ./.github/actions/build-docker-images
+        with:
+          push: true
+          tag-latest: ${{ github.ref == 'refs/heads/main' }}
+          dockerhub-username: ${{ secrets.DOCKERHUB_USERNAME }}
+          dockerhub-token: ${{ secrets.DOCKERHUB_TOKEN }}
+
+  # For feature branches, just build (no push)
+  build-docker-feature:
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/heads/feature/')
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+
+      - name: Build binaries
+        uses: ./.github/actions/build-binaries
+        with:
+          snapshot: true
+
+      - name: Build Docker images
+        uses: ./.github/actions/build-docker-images
+        with:
+          push: false
+          tag-latest: false

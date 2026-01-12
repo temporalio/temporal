@@ -105,7 +105,7 @@ func (c *mutationTestCase) Run(t *testing.T) {
 		addWorkflowExecutionSignaled(t, i, ms)
 	}
 
-	_, workflowEvents, err := ms.CloseTransactionAsMutation(c.transactionPolicy)
+	_, workflowEvents, err := ms.CloseTransactionAsMutation(context.Background(), c.transactionPolicy)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,6 +137,7 @@ func (c *mutationTestCase) startWFT(
 		nil,
 		nil,
 		false,
+		nil,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -449,6 +450,7 @@ func TestGetNexusCompletion(t *testing.T) {
 				nil,
 				nil,
 				false,
+				nil,
 			)
 			require.NoError(t, err)
 			_, err = ms.AddWorkflowTaskCompletedEvent(workflowTask, &workflowservice.RespondWorkflowTaskCompletedRequest{
