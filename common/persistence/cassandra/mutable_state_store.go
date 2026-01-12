@@ -368,13 +368,15 @@ type (
 	MutableStateStore struct {
 		Session    gocql.Session
 		serializer serialization.Serializer
+		logger     log.Logger
 	}
 )
 
-func NewMutableStateStore(session gocql.Session, serializer serialization.Serializer) *MutableStateStore {
+func NewMutableStateStore(session gocql.Session, serializer serialization.Serializer, logger log.Logger) *MutableStateStore {
 	return &MutableStateStore{
 		Session:    session,
 		serializer: serializer,
+		logger:     logger,
 	}
 }
 
