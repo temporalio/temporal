@@ -46,9 +46,9 @@ func NewFactory(
 	cfg config.SQL,
 	r resolver.ServiceResolver,
 	clusterName string,
-	serializer serialization.Serializer,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
+	serializer serialization.Serializer,
 ) *Factory {
 	return &Factory{
 		cfg:         cfg,

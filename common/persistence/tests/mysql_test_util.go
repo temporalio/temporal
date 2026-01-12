@@ -59,9 +59,9 @@ func setUpMySQLTest(t *testing.T) (MySQLTestData, func()) {
 		*testData.Cfg,
 		resolver.NewNoopResolver(),
 		testMySQLClusterName,
-		serialization.NewSerializer(),
 		testData.Logger,
 		mh,
+		serialization.NewSerializer(),
 	)
 
 	tearDown := func() {

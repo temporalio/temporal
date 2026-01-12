@@ -58,9 +58,9 @@ func setUpPostgreSQLTest(t *testing.T, pluginName string) (PostgreSQLTestData, f
 		*testData.Cfg,
 		resolver.NewNoopResolver(),
 		testPostgreSQLClusterName,
-		serialization.NewSerializer(),
 		testData.Logger,
 		mh,
+		serialization.NewSerializer(),
 	)
 
 	tearDown := func() {

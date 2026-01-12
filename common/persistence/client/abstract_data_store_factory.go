@@ -5,6 +5,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/resolver"
 )
 
@@ -14,11 +15,12 @@ type (
 	// of the Temporal core.
 	AbstractDataStoreFactory interface {
 		NewFactory(
-			cfg config.CustomDatastoreConfig,
+			cfg *config.Persistence,
 			r resolver.ServiceResolver,
 			clusterName string,
 			logger log.Logger,
 			metricsHandler metrics.Handler,
+			serializer serialization.Serializer,
 		) persistence.DataStoreFactory
 	}
 )

@@ -194,11 +194,11 @@ func DataStoreFactoryProvider(
 	case defaultStoreCfg.Cassandra != nil:
 		dataStoreFactory = cassandra.NewFactory(*defaultStoreCfg.Cassandra, r, string(clusterName), logger, metricsHandler, serializer)
 	case defaultStoreCfg.SQL != nil:
-		dataStoreFactory = sql.NewFactory(*defaultStoreCfg.SQL, r, string(clusterName), serializer, logger, metricsHandler)
+		dataStoreFactory = sql.NewFactory(*defaultStoreCfg.SQL, r, string(clusterName), logger, metricsHandler, serializer)
 	case defaultStoreCfg.CustomDataStoreConfig != nil:
-		dataStoreFactory = abstractDataStoreFactory.NewFactory(*defaultStoreCfg.CustomDataStoreConfig, r, string(clusterName), logger, metricsHandler)
+		dataStoreFactory = abstractDataStoreFactory.NewFactory(cfg, r, string(clusterName), logger, metricsHandler, serializer)
 	default:
-		logger.Fatal("invalid config: one of cassandra or sql params must be specified for default data store")
+		logger.Fatal("invalid config: one of cassandra, sql, or custom datastore params must be specified")
 	}
 
 	if defaultStoreCfg.FaultInjection != nil {
