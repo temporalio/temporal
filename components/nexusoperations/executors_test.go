@@ -625,6 +625,98 @@ func TestProcessTimeoutTask(t *testing.T) {
 	}, backend.Events[0].GetNexusOperationTimedOutEventAttributes())
 }
 
+func TestProcessScheduleToStartTimeoutTask(t *testing.T) {
+	reg := newRegistry(t)
+	backend := &hsmtest.NodeBackend{}
+	node := newOperationNode(t, backend, mustNewScheduledEvent(time.Now(), time.Hour))
+	env := fakeEnv{node}
+
+	require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{}))
+
+	err := reg.ExecuteTimerTask(
+		env,
+		node,
+		nexusoperations.ScheduleToStartTimeoutTask{},
+	)
+	require.NoError(t, err)
+	op, err := hsm.MachineData[nexusoperations.Operation](node)
+	require.NoError(t, err)
+	require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_TIMED_OUT, op.State())
+	require.Equal(t, 1, len(backend.Events))
+	require.Equal(t, enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT, backend.Events[0].EventType)
+	protorequire.ProtoEqual(t, &historypb.NexusOperationTimedOutEventAttributes{
+		ScheduledEventId: 1,
+		RequestId:        op.RequestId,
+		Failure: &failurepb.Failure{
+			Message: "nexus operation completed unsuccessfully",
+			FailureInfo: &failurepb.Failure_NexusOperationExecutionFailureInfo{
+				NexusOperationExecutionFailureInfo: &failurepb.NexusOperationFailureInfo{
+					ScheduledEventId: 1,
+					Endpoint:         "endpoint",
+					Service:          "service",
+					Operation:        "operation",
+				},
+			},
+			Cause: &failurepb.Failure{
+				Message: "operation timed out before starting",
+				FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
+					TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+						TimeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
+					},
+				},
+			},
+		},
+	}, backend.Events[0].GetNexusOperationTimedOutEventAttributes())
+}
+
+func TestProcessStartToCloseTimeoutTask(t *testing.T) {
+	reg := newRegistry(t)
+	backend := &hsmtest.NodeBackend{}
+	node := newOperationNode(t, backend, mustNewScheduledEvent(time.Now(), time.Hour))
+	env := fakeEnv{node}
+
+	require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{}))
+
+	// Transition to STARTED state first
+	err := hsm.MachineTransition(node, func(op nexusoperations.Operation) (hsm.TransitionOutput, error) {
+		return nexusoperations.TransitionStarted.Apply(op, nexusoperations.EventStarted{
+			Node: node,
+			Time: time.Now(),
+			Attributes: &historypb.NexusOperationStartedEventAttributes{
+				OperationToken: "test-token",
+			},
+		})
+	})
+	require.NoError(t, err)
+
+	// Now execute the start-to-close timeout
+	err = reg.ExecuteTimerTask(
+		env,
+		node,
+		nexusoperations.StartToCloseTimeoutTask{},
+	)
+	require.NoError(t, err)
+	op, err := hsm.MachineData[nexusoperations.Operation](node)
+	require.NoError(t, err)
+	require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_TIMED_OUT, op.State())
+	// Should have TIMED_OUT event (STARTED event is not added by the transition)
+	require.Equal(t, 1, len(backend.Events))
+	require.Equal(t, enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT, backend.Events[0].EventType)
+	// Verify timeout type and message
+	timedOutAttrs := backend.Events[0].GetNexusOperationTimedOutEventAttributes()
+	require.Equal(t, int64(1), timedOutAttrs.ScheduledEventId)
+	require.Equal(t, op.RequestId, timedOutAttrs.RequestId)
+	require.NotNil(t, timedOutAttrs.Failure)
+	require.Equal(t, "nexus operation completed unsuccessfully", timedOutAttrs.Failure.Message)
+	require.NotNil(t, timedOutAttrs.Failure.Cause)
+	require.Equal(t, "operation timed out after starting", timedOutAttrs.Failure.Cause.Message)
+	require.Equal(t, enumspb.TIMEOUT_TYPE_START_TO_CLOSE, timedOutAttrs.Failure.Cause.GetTimeoutFailureInfo().TimeoutType)
+	// Verify operation token is present in failure info
+	nexusFailureInfo := timedOutAttrs.Failure.GetNexusOperationExecutionFailureInfo()
+	require.NotNil(t, nexusFailureInfo)
+	require.Equal(t, "test-token", nexusFailureInfo.OperationToken)
+}
+
 func TestProcessCancelationTask(t *testing.T) {
 	cases := []struct {
 		name                  string

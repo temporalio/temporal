@@ -74,6 +74,18 @@ func RegisterExecutor(
 	); err != nil {
 		return err
 	}
+	if err := hsm.RegisterTimerExecutor(
+		registry,
+		exec.executeScheduleToStartTimeoutTask,
+	); err != nil {
+		return err
+	}
+	if err := hsm.RegisterTimerExecutor(
+		registry,
+		exec.executeStartToCloseTimeoutTask,
+	); err != nil {
+		return err
+	}
 	if err := hsm.RegisterImmediateExecutor(
 		registry,
 		exec.executeCancelationTask,
@@ -534,6 +546,74 @@ func (e taskExecutor) recordOperationTimeout(node *hsm.Node) error {
 							FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
 								TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
 									TimeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+								},
+							},
+						},
+					),
+					ScheduledEventId: eventID,
+					RequestId:        op.RequestId,
+				},
+			}
+		})
+
+		return TransitionTimedOut.Apply(op, EventTimedOut{
+			Node: node,
+		})
+	})
+}
+
+func (e taskExecutor) executeScheduleToStartTimeoutTask(env hsm.Environment, node *hsm.Node, task ScheduleToStartTimeoutTask) error {
+	return hsm.MachineTransition(node, func(op Operation) (hsm.TransitionOutput, error) {
+		eventID, err := hsm.EventIDFromToken(op.ScheduledEventToken)
+		if err != nil {
+			return hsm.TransitionOutput{}, err
+		}
+		node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT, func(e *historypb.HistoryEvent) {
+			// nolint:revive // We must mutate here even if the linter doesn't like it.
+			e.Attributes = &historypb.HistoryEvent_NexusOperationTimedOutEventAttributes{
+				NexusOperationTimedOutEventAttributes: &historypb.NexusOperationTimedOutEventAttributes{
+					Failure: nexusOperationFailure(
+						op,
+						eventID,
+						&failurepb.Failure{
+							Message: "operation timed out before starting",
+							FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
+								TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+									TimeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
+								},
+							},
+						},
+					),
+					ScheduledEventId: eventID,
+					RequestId:        op.RequestId,
+				},
+			}
+		})
+
+		return TransitionTimedOut.Apply(op, EventTimedOut{
+			Node: node,
+		})
+	})
+}
+
+func (e taskExecutor) executeStartToCloseTimeoutTask(env hsm.Environment, node *hsm.Node, task StartToCloseTimeoutTask) error {
+	return hsm.MachineTransition(node, func(op Operation) (hsm.TransitionOutput, error) {
+		eventID, err := hsm.EventIDFromToken(op.ScheduledEventToken)
+		if err != nil {
+			return hsm.TransitionOutput{}, err
+		}
+		node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT, func(e *historypb.HistoryEvent) {
+			// nolint:revive // We must mutate here even if the linter doesn't like it.
+			e.Attributes = &historypb.HistoryEvent_NexusOperationTimedOutEventAttributes{
+				NexusOperationTimedOutEventAttributes: &historypb.NexusOperationTimedOutEventAttributes{
+					Failure: nexusOperationFailure(
+						op,
+						eventID,
+						&failurepb.Failure{
+							Message: "operation timed out after starting",
+							FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
+								TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+									TimeoutType: enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 								},
 							},
 						},

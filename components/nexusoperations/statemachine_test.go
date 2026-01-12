@@ -31,7 +31,7 @@ func TestAddChild(t *testing.T) {
 			assertTasks: func(t *testing.T, tasks []hsm.Task) {
 				require.Equal(t, 2, len(tasks))
 				require.Equal(t, nexusoperations.TaskTypeInvocation, tasks[0].Type())
-				require.Equal(t, nexusoperations.TaskTypeTimeout, tasks[1].Type())
+				require.Equal(t, nexusoperations.TaskTypeScheduleToCloseTimeout, tasks[1].Type())
 			},
 		},
 		{
@@ -86,57 +86,216 @@ func TestAddChild(t *testing.T) {
 	}
 }
 
-func TestRegenerateTasks(t *testing.T) {
+func TestAddChildWithNewTimeouts(t *testing.T) {
 	cases := []struct {
-		name        string
-		timeout     time.Duration
-		state       enumsspb.NexusOperationState
-		assertTasks func(t *testing.T, tasks []hsm.Task)
+		name                   string
+		scheduleToCloseTimeout time.Duration
+		scheduleToStartTimeout time.Duration
+		startToCloseTimeout    time.Duration
+		assertTasks            func(t *testing.T, tasks []hsm.Task)
 	}{
 		{
-			name:    "scheduled | with timeout",
-			timeout: time.Hour,
-			state:   enumsspb.NEXUS_OPERATION_STATE_SCHEDULED,
+			name:                   "with all timeouts",
+			scheduleToCloseTimeout: time.Hour,
+			scheduleToStartTimeout: 30 * time.Minute,
+			startToCloseTimeout:    45 * time.Minute,
+			assertTasks: func(t *testing.T, tasks []hsm.Task) {
+				// Should have Invocation, ScheduleToClose, and ScheduleToStart tasks
+				require.Equal(t, 3, len(tasks))
+				require.Equal(t, nexusoperations.TaskTypeInvocation, tasks[0].Type())
+				require.Equal(t, nexusoperations.TaskTypeScheduleToCloseTimeout, tasks[1].Type())
+				require.Equal(t, nexusoperations.TaskTypeScheduleToStartTimeout, tasks[2].Type())
+			},
+		},
+		{
+			name:                   "with schedule-to-start only",
+			scheduleToCloseTimeout: 0,
+			scheduleToStartTimeout: 30 * time.Minute,
+			startToCloseTimeout:    0,
 			assertTasks: func(t *testing.T, tasks []hsm.Task) {
 				require.Equal(t, 2, len(tasks))
 				require.Equal(t, nexusoperations.TaskTypeInvocation, tasks[0].Type())
-				require.Equal(t, tasks[0].(nexusoperations.InvocationTask).EndpointName, "endpoint")
-				require.Equal(t, nexusoperations.TaskTypeTimeout, tasks[1].Type())
+				require.Equal(t, nexusoperations.TaskTypeScheduleToStartTimeout, tasks[1].Type())
 			},
 		},
 		{
-			name:    "scheduled | without timeout",
-			timeout: 0,
-			state:   enumsspb.NEXUS_OPERATION_STATE_SCHEDULED,
-			assertTasks: func(t *testing.T, tasks []hsm.Task) {
-				require.Equal(t, 1, len(tasks))
-				require.Equal(t, nexusoperations.TaskTypeInvocation, tasks[0].Type())
-			},
-		},
-		{
-			name:    "backing off | with timeout",
-			timeout: time.Hour,
-			state:   enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF,
+			name:                   "without new timeouts",
+			scheduleToCloseTimeout: time.Hour,
+			scheduleToStartTimeout: 0,
+			startToCloseTimeout:    0,
 			assertTasks: func(t *testing.T, tasks []hsm.Task) {
 				require.Equal(t, 2, len(tasks))
-				require.Equal(t, nexusoperations.TaskTypeBackoff, tasks[0].Type())
-				require.Equal(t, nexusoperations.TaskTypeTimeout, tasks[1].Type())
-			},
-		},
-		{
-			name:    "backing off | without timeout",
-			timeout: 0,
-			state:   enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF,
-			assertTasks: func(t *testing.T, tasks []hsm.Task) {
-				require.Equal(t, 1, len(tasks))
-				require.Equal(t, nexusoperations.TaskTypeBackoff, tasks[0].Type())
+				require.Equal(t, nexusoperations.TaskTypeInvocation, tasks[0].Type())
+				require.Equal(t, nexusoperations.TaskTypeScheduleToCloseTimeout, tasks[1].Type())
 			},
 		},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			node := newOperationNode(t, &hsmtest.NodeBackend{}, mustNewScheduledEvent(time.Now(), tc.timeout))
+			root := newRoot(t, &hsmtest.NodeBackend{})
+			schedTime := timestamppb.Now()
+			event := &historypb.HistoryEvent{
+				EventTime: schedTime,
+				Attributes: &historypb.HistoryEvent_NexusOperationScheduledEventAttributes{
+					NexusOperationScheduledEventAttributes: &historypb.NexusOperationScheduledEventAttributes{
+						EndpointId:             "endpoint-id",
+						Endpoint:               "endpoint",
+						Service:                "service",
+						Operation:              "operation",
+						RequestId:              "request-id",
+						ScheduleToCloseTimeout: durationpb.New(tc.scheduleToCloseTimeout),
+						ScheduleToStartTimeout: durationpb.New(tc.scheduleToStartTimeout),
+						StartToCloseTimeout:    durationpb.New(tc.startToCloseTimeout),
+					},
+				},
+			}
+			child, err := nexusoperations.AddChild(root, "test-id", event, []byte("token"))
+			require.NoError(t, err)
+			opLog, err := root.OpLog()
+			require.NoError(t, err)
+			require.Equal(t, 1, len(opLog))
+			transitionOp, ok := opLog[0].(hsm.TransitionOperation)
+			require.True(t, ok)
+			tc.assertTasks(t, transitionOp.Output.Tasks)
+
+			op, err := hsm.MachineData[nexusoperations.Operation](child)
+			require.NoError(t, err)
+			require.Equal(t, tc.scheduleToCloseTimeout, op.ScheduleToCloseTimeout.AsDuration())
+			require.Equal(t, tc.scheduleToStartTimeout, op.ScheduleToStartTimeout.AsDuration())
+			require.Equal(t, tc.startToCloseTimeout, op.StartToCloseTimeout.AsDuration())
+		})
+	}
+}
+
+func TestTransitionStartedEmitsStartToCloseTimeout(t *testing.T) {
+	root := newRoot(t, &hsmtest.NodeBackend{})
+	schedTime := timestamppb.Now()
+	event := &historypb.HistoryEvent{
+		EventTime: schedTime,
+		Attributes: &historypb.HistoryEvent_NexusOperationScheduledEventAttributes{
+			NexusOperationScheduledEventAttributes: &historypb.NexusOperationScheduledEventAttributes{
+				EndpointId:             "endpoint-id",
+				Endpoint:               "endpoint",
+				Service:                "service",
+				Operation:              "operation",
+				RequestId:              "request-id",
+				ScheduleToCloseTimeout: durationpb.New(time.Hour),
+				StartToCloseTimeout:    durationpb.New(30 * time.Minute),
+			},
+		},
+	}
+	child, err := nexusoperations.AddChild(root, "test-id", event, []byte("token"))
+	require.NoError(t, err)
+
+	// Transition to STARTED state
+	err = hsm.MachineTransition(child, func(op nexusoperations.Operation) (hsm.TransitionOutput, error) {
+		return nexusoperations.TransitionStarted.Apply(op, nexusoperations.EventStarted{
+			Node: child,
+			Time: time.Now(),
+			Attributes: &historypb.NexusOperationStartedEventAttributes{
+				OperationToken: "test-token",
+			},
+		})
+	})
+	require.NoError(t, err)
+
+	opLog, err := root.OpLog()
+	require.NoError(t, err)
+	// Should have 2 operations: initial AddChild transition and TransitionStarted
+	require.Equal(t, 2, len(opLog))
+
+	// Check the TransitionStarted output
+	transitionOp, ok := opLog[1].(hsm.TransitionOperation)
+	require.True(t, ok)
+	// Should have StartToCloseTimeout task
+	require.Equal(t, 1, len(transitionOp.Output.Tasks))
+	require.Equal(t, nexusoperations.TaskTypeStartToCloseTimeout, transitionOp.Output.Tasks[0].Type())
+}
+
+func TestRegenerateTasks(t *testing.T) {
+	cases := []struct {
+		name                   string
+		scheduleToCloseTimeout time.Duration
+		startToCloseTimeout    time.Duration
+		state                  enumsspb.NexusOperationState
+		assertTasks            func(t *testing.T, tasks []hsm.Task)
+	}{
+		{
+			name:                   "scheduled | with timeout",
+			scheduleToCloseTimeout: time.Hour,
+			state:                  enumsspb.NEXUS_OPERATION_STATE_SCHEDULED,
+			assertTasks: func(t *testing.T, tasks []hsm.Task) {
+				require.Equal(t, 2, len(tasks))
+				require.Equal(t, nexusoperations.TaskTypeInvocation, tasks[0].Type())
+				require.Equal(t, tasks[0].(nexusoperations.InvocationTask).EndpointName, "endpoint")
+				require.Equal(t, nexusoperations.TaskTypeScheduleToCloseTimeout, tasks[1].Type())
+			},
+		},
+		{
+			name:  "scheduled | without timeout",
+			state: enumsspb.NEXUS_OPERATION_STATE_SCHEDULED,
+			assertTasks: func(t *testing.T, tasks []hsm.Task) {
+				require.Equal(t, 1, len(tasks))
+				require.Equal(t, nexusoperations.TaskTypeInvocation, tasks[0].Type())
+			},
+		},
+		{
+			name:                   "backing off | with timeout",
+			scheduleToCloseTimeout: time.Hour,
+			state:                  enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF,
+			assertTasks: func(t *testing.T, tasks []hsm.Task) {
+				require.Equal(t, 2, len(tasks))
+				require.Equal(t, nexusoperations.TaskTypeBackoff, tasks[0].Type())
+				require.Equal(t, nexusoperations.TaskTypeScheduleToCloseTimeout, tasks[1].Type())
+			},
+		},
+		{
+			name:  "backing off | without timeout",
+			state: enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF,
+			assertTasks: func(t *testing.T, tasks []hsm.Task) {
+				require.Equal(t, 1, len(tasks))
+				require.Equal(t, nexusoperations.TaskTypeBackoff, tasks[0].Type())
+			},
+		},
+		{
+			name:                "started | with start to close timeout",
+			startToCloseTimeout: 15 * time.Minute,
+			state:               enumsspb.NEXUS_OPERATION_STATE_STARTED,
+			assertTasks: func(t *testing.T, tasks []hsm.Task) {
+				require.Equal(t, 1, len(tasks))
+				require.Equal(t, nexusoperations.TaskTypeStartToCloseTimeout, tasks[0].Type())
+			},
+		},
+		{
+			name:  "started | without start to close timeout",
+			state: enumsspb.NEXUS_OPERATION_STATE_STARTED,
+			assertTasks: func(t *testing.T, tasks []hsm.Task) {
+				require.Equal(t, 0, len(tasks))
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			schedTime := time.Now()
+			event := &historypb.HistoryEvent{
+				EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
+				EventId:   1,
+				EventTime: timestamppb.New(schedTime),
+				Attributes: &historypb.HistoryEvent_NexusOperationScheduledEventAttributes{
+					NexusOperationScheduledEventAttributes: &historypb.NexusOperationScheduledEventAttributes{
+						EndpointId:             "endpoint-id",
+						Endpoint:               "endpoint",
+						Service:                "service",
+						Operation:              "operation",
+						RequestId:              "request-id",
+						ScheduleToCloseTimeout: durationpb.New(tc.scheduleToCloseTimeout),
+						StartToCloseTimeout:    durationpb.New(tc.startToCloseTimeout),
+					},
+				},
+			}
+			node := newOperationNode(t, &hsmtest.NodeBackend{}, event)
 
 			if tc.state == enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF {
 				require.NoError(t, hsm.MachineTransition(node, func(op nexusoperations.Operation) (hsm.TransitionOutput, error) {
@@ -145,6 +304,16 @@ func TestRegenerateTasks(t *testing.T) {
 						Failure:     &failurepb.Failure{Message: "test"},
 						Node:        node,
 						RetryPolicy: backoff.NewExponentialRetryPolicy(time.Second),
+					})
+				}))
+			} else if tc.state == enumsspb.NEXUS_OPERATION_STATE_STARTED {
+				require.NoError(t, hsm.MachineTransition(node, func(op nexusoperations.Operation) (hsm.TransitionOutput, error) {
+					return nexusoperations.TransitionStarted.Apply(op, nexusoperations.EventStarted{
+						Time: time.Now(),
+						Node: node,
+						Attributes: &historypb.NexusOperationStartedEventAttributes{
+							OperationToken: "operation-token",
+						},
 					})
 				}))
 			}
