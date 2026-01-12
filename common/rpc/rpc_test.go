@@ -4,43 +4,16 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives"
-	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-type RPCFactorySuite struct {
-	suite.Suite
-	*require.Assertions
-	controller *gomock.Controller
-
-	mockMonitor         *membership.MockMonitor
-	mockHistoryResolver *membership.MockServiceResolver
-}
-
-func TestRPCFactorySuite(t *testing.T) {
-	suite.Run(t, new(RPCFactorySuite))
-}
-
-func (s *RPCFactorySuite) SetupTest() {
-	s.Assertions = require.New(s.T())
-	s.controller = gomock.NewController(s.T())
-
-	s.mockMonitor = membership.NewMockMonitor(s.controller)
-	s.mockHistoryResolver = membership.NewMockServiceResolver(s.controller)
-}
-
-func (s *RPCFactorySuite) TearDownTest() {
-	s.controller.Finish()
-}
-
-func (s *RPCFactorySuite) TestHandleMembershipChangeEvictsConnections() {
+func TestHandleMembershipChangeEvictsConnections(t *testing.T) {
 	// When hosts are removed from the membership ring, their cached
 	// gRPC connections should be evicted from the cache.
 
@@ -77,9 +50,9 @@ func (s *RPCFactorySuite) TestHandleMembershipChangeEvictsConnections() {
 	factory.CreateHistoryGRPCConnection(host3)
 
 	// Verify all connections are cached
-	s.NotNil(factory.interNodeGrpcConnections.Get(host1))
-	s.NotNil(factory.interNodeGrpcConnections.Get(host2))
-	s.NotNil(factory.interNodeGrpcConnections.Get(host3))
+	require.NotNil(t, factory.interNodeGrpcConnections.Get(host1))
+	require.NotNil(t, factory.interNodeGrpcConnections.Get(host2))
+	require.NotNil(t, factory.interNodeGrpcConnections.Get(host3))
 
 	// Simulate membership change - host1 and host2 removed
 	event := &membership.ChangedEvent{
@@ -92,7 +65,7 @@ func (s *RPCFactorySuite) TestHandleMembershipChangeEvictsConnections() {
 	factory.HandleMembershipChange(event)
 
 	// host1 and host2 should be evicted, host3 should remain
-	s.Nil(factory.interNodeGrpcConnections.Get(host1), "removed host should be evicted")
-	s.Nil(factory.interNodeGrpcConnections.Get(host2), "removed host should be evicted")
-	s.NotNil(factory.interNodeGrpcConnections.Get(host3), "unaffected host should remain")
+	require.Nil(t, factory.interNodeGrpcConnections.Get(host1), "removed host should be evicted")
+	require.Nil(t, factory.interNodeGrpcConnections.Get(host2), "removed host should be evicted")
+	require.NotNil(t, factory.interNodeGrpcConnections.Get(host3), "unaffected host should remain")
 }

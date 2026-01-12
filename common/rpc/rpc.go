@@ -364,10 +364,6 @@ func (d *RPCFactory) HandleMembershipChange(event *membership.ChangedEvent) {
 		return
 	}
 
-	// Evict connections for removed hosts (they're actually gone)
-	// Note: We intentionally don't evict on HostsChanged because that only means
-	// labels changed (e.g., host entered draining state) - the host is still running
-	// and the connection is still valid.
 	for _, host := range event.HostsRemoved {
 		address := host.GetAddress()
 		d.logger.Info("Evicting cached gRPC connection for removed host", tag.Address(address))

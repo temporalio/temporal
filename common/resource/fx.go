@@ -122,7 +122,7 @@ var DefaultOptions = fx.Options(
 	fx.Provide(ThrottledLoggerProvider),
 	fx.Provide(SdkClientFactoryProvider),
 	fx.Provide(DCRedirectionPolicyProvider),
-	RPCFactoryLifetimeHooksModule,
+	fx.Invoke(RPCFactoryLifetimeHooks),
 )
 
 func DefaultSnTaggedLoggerProvider(logger log.Logger, sn primitives.ServiceName) log.SnTaggedLogger {
@@ -437,10 +437,6 @@ func FrontendHTTPClientCacheProvider(
 ) *cluster.FrontendHTTPClientCache {
 	return cluster.NewFrontendHTTPClientCache(metadata, tlsConfigProvider)
 }
-
-var RPCFactoryLifetimeHooksModule = fx.Options(
-	fx.Invoke(RPCFactoryLifetimeHooks),
-)
 
 func RPCFactoryLifetimeHooks(
 	lc fx.Lifecycle,
