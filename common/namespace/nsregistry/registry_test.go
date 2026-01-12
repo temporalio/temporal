@@ -1029,3 +1029,287 @@ func (s *registrySuite) TestRefreshSingleCacheKeyById() {
 	s.NoError(err)
 	s.Equal(nsV2.Namespace.FailoverVersion, ns.FailoverVersion(namespace.EmptyBusinessID))
 }
+
+type (
+	searchAttributeMappingsSuite struct {
+		suite.Suite
+		*require.Assertions
+
+		controller             *gomock.Controller
+		metadataManager        *persistence.MockMetadataManager
+		clusterMetadataManager *persistence.MockClusterMetadataManager
+		logger                 log.Logger
+		currentClusterName     string
+		visibilityIndexName    string
+	}
+)
+
+func TestSearchAttributeMappingsSuite(t *testing.T) {
+	s := new(searchAttributeMappingsSuite)
+	suite.Run(t, s)
+}
+
+func (s *searchAttributeMappingsSuite) SetupTest() {
+	s.Assertions = require.New(s.T())
+	s.controller = gomock.NewController(s.T())
+	s.metadataManager = persistence.NewMockMetadataManager(s.controller)
+	s.clusterMetadataManager = persistence.NewMockClusterMetadataManager(s.controller)
+	s.logger = log.NewTestLogger()
+	s.currentClusterName = "test-cluster"
+	s.visibilityIndexName = "test-visibility-index"
+}
+
+func (s *searchAttributeMappingsSuite) TearDownTest() {
+	s.controller.Finish()
+}
+
+func (s *searchAttributeMappingsSuite) TestInitializeSearchAttributeMappings_Success() {
+	// Setup cluster metadata with custom search attributes
+	customSearchAttrs := map[string]enumspb.IndexedValueType{
+		"Text01":               enumspb.INDEXED_VALUE_TYPE_TEXT,
+		"Keyword01":            enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		"Int01":                enumspb.INDEXED_VALUE_TYPE_INT,
+		"NonPreallocatedField": enumspb.INDEXED_VALUE_TYPE_TEXT,
+	}
+
+	clusterMetadata := &persistence.GetClusterMetadataResponse{
+		ClusterMetadata: &persistencespb.ClusterMetadata{
+			IndexSearchAttributes: map[string]*persistencespb.IndexSearchAttributes{
+				s.visibilityIndexName: {
+					CustomSearchAttributes: customSearchAttrs,
+				},
+			},
+		},
+	}
+
+	// Setup namespace with no existing mappings
+	ns1 := &persistence.GetNamespaceResponse{
+		Namespace: &persistencespb.NamespaceDetail{
+			Info: &persistencespb.NamespaceInfo{
+				Id:    namespace.NewID().String(),
+				Name:  "test-namespace-1",
+				State: enumspb.NAMESPACE_STATE_REGISTERED,
+			},
+			Config: &persistencespb.NamespaceConfig{
+				Retention:                    timestamp.DurationFromDays(1),
+				CustomSearchAttributeAliases: nil,
+			},
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+				ActiveClusterName: s.currentClusterName,
+				Clusters:          []string{s.currentClusterName},
+			},
+		},
+		NotificationVersion: 1,
+	}
+
+	s.clusterMetadataManager.EXPECT().
+		GetClusterMetadata(gomock.Any(), &persistence.GetClusterMetadataRequest{
+			ClusterName: s.currentClusterName,
+		}).
+		Return(clusterMetadata, nil).
+		Times(1)
+
+	s.metadataManager.EXPECT().
+		ListNamespaces(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ interface{}, req *persistence.ListNamespacesRequest) (*persistence.ListNamespacesResponse, error) {
+			return &persistence.ListNamespacesResponse{
+				Namespaces: []*persistence.GetNamespaceResponse{ns1},
+			}, nil
+		}).
+		Times(1)
+
+	s.metadataManager.EXPECT().
+		UpdateNamespace(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ interface{}, req *persistence.UpdateNamespaceRequest) error {
+			// Verify that only non-preallocated field gets identity mapping
+			s.NotNil(req.Namespace.Config.CustomSearchAttributeAliases)
+			s.Equal("NonPreallocatedField", req.Namespace.Config.CustomSearchAttributeAliases["NonPreallocatedField"])
+			s.Len(req.Namespace.Config.CustomSearchAttributeAliases, 1)
+			return nil
+		}).
+		Times(1)
+
+	err := nsregistry.InitializeSearchAttributeMappings(
+		s.T().Context(),
+		s.metadataManager,
+		s.clusterMetadataManager,
+		s.currentClusterName,
+		s.visibilityIndexName,
+		s.logger,
+	)
+
+	s.NoError(err)
+}
+
+func (s *searchAttributeMappingsSuite) TestInitializeSearchAttributeMappings_MultipleNamespaces() {
+	customSearchAttrs := map[string]enumspb.IndexedValueType{
+		"Field1": enumspb.INDEXED_VALUE_TYPE_TEXT,
+		"Field2": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+	}
+
+	clusterMetadata := &persistence.GetClusterMetadataResponse{
+		ClusterMetadata: &persistencespb.ClusterMetadata{
+			IndexSearchAttributes: map[string]*persistencespb.IndexSearchAttributes{
+				s.visibilityIndexName: {
+					CustomSearchAttributes: customSearchAttrs,
+				},
+			},
+		},
+	}
+
+	ns1 := &persistence.GetNamespaceResponse{
+		Namespace: &persistencespb.NamespaceDetail{
+			Info: &persistencespb.NamespaceInfo{
+				Id:    namespace.NewID().String(),
+				Name:  "namespace-1",
+				State: enumspb.NAMESPACE_STATE_REGISTERED,
+			},
+			Config: &persistencespb.NamespaceConfig{
+				Retention:                    timestamp.DurationFromDays(1),
+				CustomSearchAttributeAliases: nil,
+			},
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+				ActiveClusterName: s.currentClusterName,
+				Clusters:          []string{s.currentClusterName},
+			},
+		},
+		NotificationVersion: 1,
+	}
+
+	ns2 := &persistence.GetNamespaceResponse{
+		Namespace: &persistencespb.NamespaceDetail{
+			Info: &persistencespb.NamespaceInfo{
+				Id:    namespace.NewID().String(),
+				Name:  "namespace-2",
+				State: enumspb.NAMESPACE_STATE_REGISTERED,
+			},
+			Config: &persistencespb.NamespaceConfig{
+				Retention:                    timestamp.DurationFromDays(1),
+				CustomSearchAttributeAliases: nil,
+			},
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+				ActiveClusterName: s.currentClusterName,
+				Clusters:          []string{s.currentClusterName},
+			},
+		},
+		NotificationVersion: 1,
+	}
+
+	s.clusterMetadataManager.EXPECT().
+		GetClusterMetadata(gomock.Any(), gomock.Any()).
+		Return(clusterMetadata, nil).
+		Times(1)
+
+	s.metadataManager.EXPECT().
+		ListNamespaces(gomock.Any(), gomock.Any()).
+		Return(&persistence.ListNamespacesResponse{
+			Namespaces: []*persistence.GetNamespaceResponse{ns1, ns2},
+		}, nil).
+		Times(1)
+
+	s.metadataManager.EXPECT().
+		UpdateNamespace(gomock.Any(), gomock.Any()).
+		Times(2) // Once for each namespace
+
+	err := nsregistry.InitializeSearchAttributeMappings(
+		s.T().Context(),
+		s.metadataManager,
+		s.clusterMetadataManager,
+		s.currentClusterName,
+		s.visibilityIndexName,
+		s.logger,
+	)
+
+	s.NoError(err)
+}
+
+func (s *searchAttributeMappingsSuite) TestInitializeSearchAttributeMappings_Pagination() {
+	customSearchAttrs := map[string]enumspb.IndexedValueType{
+		"Field1": enumspb.INDEXED_VALUE_TYPE_TEXT,
+	}
+
+	clusterMetadata := &persistence.GetClusterMetadataResponse{
+		ClusterMetadata: &persistencespb.ClusterMetadata{
+			IndexSearchAttributes: map[string]*persistencespb.IndexSearchAttributes{
+				s.visibilityIndexName: {
+					CustomSearchAttributes: customSearchAttrs,
+				},
+			},
+		},
+	}
+
+	ns1 := &persistence.GetNamespaceResponse{
+		Namespace: &persistencespb.NamespaceDetail{
+			Info: &persistencespb.NamespaceInfo{
+				Id:    namespace.NewID().String(),
+				Name:  "namespace-1",
+				State: enumspb.NAMESPACE_STATE_REGISTERED,
+			},
+			Config: &persistencespb.NamespaceConfig{
+				Retention:                    timestamp.DurationFromDays(1),
+				CustomSearchAttributeAliases: nil,
+			},
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+				ActiveClusterName: s.currentClusterName,
+				Clusters:          []string{s.currentClusterName},
+			},
+		},
+		NotificationVersion: 1,
+	}
+
+	ns2 := &persistence.GetNamespaceResponse{
+		Namespace: &persistencespb.NamespaceDetail{
+			Info: &persistencespb.NamespaceInfo{
+				Id:    namespace.NewID().String(),
+				Name:  "namespace-2",
+				State: enumspb.NAMESPACE_STATE_REGISTERED,
+			},
+			Config: &persistencespb.NamespaceConfig{
+				Retention:                    timestamp.DurationFromDays(1),
+				CustomSearchAttributeAliases: nil,
+			},
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+				ActiveClusterName: s.currentClusterName,
+				Clusters:          []string{s.currentClusterName},
+			},
+		},
+		NotificationVersion: 1,
+	}
+
+	s.clusterMetadataManager.EXPECT().
+		GetClusterMetadata(gomock.Any(), gomock.Any()).
+		Return(clusterMetadata, nil).
+		Times(1)
+
+	// First page
+	s.metadataManager.EXPECT().
+		ListNamespaces(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ interface{}, req *persistence.ListNamespacesRequest) (*persistence.ListNamespacesResponse, error) {
+			if len(req.NextPageToken) == 0 {
+				return &persistence.ListNamespacesResponse{
+					Namespaces:    []*persistence.GetNamespaceResponse{ns1},
+					NextPageToken: []byte("page2"),
+				}, nil
+			}
+			return &persistence.ListNamespacesResponse{
+				Namespaces:    []*persistence.GetNamespaceResponse{ns2},
+				NextPageToken: nil,
+			}, nil
+		}).
+		Times(2)
+
+	s.metadataManager.EXPECT().
+		UpdateNamespace(gomock.Any(), gomock.Any()).
+		Times(2) // Once for each namespace
+
+	err := nsregistry.InitializeSearchAttributeMappings(
+		s.T().Context(),
+		s.metadataManager,
+		s.clusterMetadataManager,
+		s.currentClusterName,
+		s.visibilityIndexName,
+		s.logger,
+	)
+
+	s.NoError(err)
+}
