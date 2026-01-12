@@ -142,7 +142,7 @@ for signal / start / signal with start API if namespace is not active`,
 	)
 	EnableCrossNamespaceCommands = NewGlobalBoolSetting(
 		"system.enableCrossNamespaceCommands",
-		true,
+		false,
 		`EnableCrossNamespaceCommands is the key to enable commands for external namespaces`,
 	)
 	ClusterMetadataRefreshInterval = NewGlobalDurationSetting(
@@ -1310,7 +1310,7 @@ these log lines can be noisy, we want to be able to turn on and sample selective
 	MatchingMaxVersionsInTaskQueue = NewNamespaceIntSetting(
 		"matching.maxVersionsInTaskQueue",
 		200,
-		`MatchingMaxVersionsInTaskQueue represents the maximum number of versions that can be registered in a single task queue. 
+		`MatchingMaxVersionsInTaskQueue represents the maximum number of versions that can be registered in a single task queue.
  Should be larger than MatchingMaxVersionsInDeployment because a task queue can be in versions spanning across more than one deployments.`,
 	)
 	MatchingMaxTaskQueuesInDeploymentVersion = NewNamespaceIntSetting(
