@@ -155,7 +155,7 @@ func DecodeWorkerDeploymentMemo(memo *commonpb.Memo) (*deploymentspb.WorkerDeplo
 		return nil, errors.New("decoding WorkerDeploymentMemo failed: Memo or it's fields are nil")
 	}
 	var workerDeploymentWorkflowMemo deploymentspb.WorkerDeploymentWorkflowMemo
-	err := sdk.PreferProtoDataConverterAllowUnknownJSONFields.FromPayload(memo.Fields[WorkerDeploymentMemoField], &workerDeploymentWorkflowMemo)
+	err := sdk.PreferProtoDataConverter.FromPayload(memo.Fields[WorkerDeploymentMemoField], &workerDeploymentWorkflowMemo)
 	if err != nil {
 		return nil, err
 	}
