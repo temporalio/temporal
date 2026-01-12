@@ -110,7 +110,7 @@ message WorkflowExecutionInfo {
     // Used by the TemporalReportedProblems search attribute to track continuous failure count.
     // (-- api-linter: core::0140::prepositions=disabled
     //     aip.dev/not-precedent: "since" is needed here. --)
-    int32 workflow_task_attempts_since_last_success = 110;
+    int32 workflow_task_attempts_since_last_success = 111;
 
     bool cancel_requested = 29;
     string cancel_request_id = 32;
