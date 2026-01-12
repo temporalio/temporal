@@ -587,10 +587,10 @@ func CheckEventBlobSizeLimit(
 	runID string,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
-	blobSizeViolationOperationTag tag.ZapTag,
+	operation string,
 ) error {
 
-	metrics.EventBlobSize.With(metricsHandler).Record(int64(actualSize))
+	metrics.EventBlobSize.With(metricsHandler).Record(int64(actualSize), metrics.OperationTag(operation))
 	if actualSize > warnLimit {
 		if logger != nil {
 			logger.Warn("Blob data size exceeds the warning limit.",
@@ -598,10 +598,11 @@ func CheckEventBlobSizeLimit(
 				tag.WorkflowID(workflowID),       // TODO: this should be entity ID and we need an archetype too.
 				tag.WorkflowRunID(runID),         // TODO: not necessarily a workflow run ID, fix the tag.
 				tag.WorkflowSize(int64(actualSize)),
-				blobSizeViolationOperationTag)
+				tag.BlobSizeViolationOperation(operation))
 		}
 
 		if actualSize > errorLimit {
+			metrics.BlobSizeError.With(metricsHandler).Record(1, metrics.OperationTag(operation))
 			return ErrBlobSizeExceedsLimit
 		}
 	}
