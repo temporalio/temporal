@@ -1,6 +1,9 @@
 package tests
 
-import "go.temporal.io/server/chasm"
+import (
+	"github.com/nexus-rpc/sdk-go/nexus"
+	"go.temporal.io/server/chasm"
+)
 
 type (
 	library struct {
@@ -12,6 +15,14 @@ var Library = &library{}
 
 func (l *library) Name() string {
 	return "tests"
+}
+
+func (l *library) NexusServices() []*nexus.Service {
+	return []*nexus.Service{NewTestServiceNexusService()}
+}
+
+func (l *library) NexusServiceProcessors() []*chasm.NexusServiceProcessor {
+	return []*chasm.NexusServiceProcessor{NewTestServiceNexusServiceProcessor()}
 }
 
 func (l *library) Components() []*chasm.RegistrableComponent {

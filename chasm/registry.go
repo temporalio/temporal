@@ -3,10 +3,12 @@ package chasm
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"reflect"
 	"regexp"
 	"strings"
 
+	"github.com/nexus-rpc/sdk-go/nexus"
 	"go.temporal.io/server/common/log"
 	"google.golang.org/grpc"
 )
@@ -27,20 +29,25 @@ type (
 		taskFqnByID  map[uint32]string                 // task type ID -> fully qualified type name
 		taskByGoType map[reflect.Type]*RegistrableTask // task go type -> task
 
+		nexusServices          map[string]*nexus.Service // service name -> nexus service
+		NexusEndpointProcessor *NexusEndpointProcessor
+
 		logger log.Logger
 	}
 )
 
 func NewRegistry(logger log.Logger) *Registry {
 	return &Registry{
-		libraries:         make(map[string]Library),
-		componentByType:   make(map[string]*RegistrableComponent),
-		componentFqnByID:  make(map[uint32]string),
-		componentByGoType: make(map[reflect.Type]*RegistrableComponent),
-		taskByType:        make(map[string]*RegistrableTask),
-		taskFqnByID:       make(map[uint32]string),
-		taskByGoType:      make(map[reflect.Type]*RegistrableTask),
-		logger:            logger,
+		libraries:              make(map[string]Library),
+		componentByType:        make(map[string]*RegistrableComponent),
+		componentFqnByID:       make(map[uint32]string),
+		componentByGoType:      make(map[reflect.Type]*RegistrableComponent),
+		taskByType:             make(map[string]*RegistrableTask),
+		taskFqnByID:            make(map[uint32]string),
+		taskByGoType:           make(map[reflect.Type]*RegistrableTask),
+		nexusServices:          make(map[string]*nexus.Service),
+		NexusEndpointProcessor: NewNexusEndpointProcessor(),
+		logger:                 logger,
 	}
 }
 
@@ -63,6 +70,19 @@ func (r *Registry) Register(lib Library) error {
 			return err
 		}
 	}
+
+	for _, svc := range lib.NexusServices() {
+		if err := r.registerNexusService(svc); err != nil {
+			return err
+		}
+	}
+
+	for _, svc := range lib.NexusServiceProcessors() {
+		if err := r.NexusEndpointProcessor.RegisterServiceProcessor(svc); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -307,4 +327,20 @@ func (r *Registry) warnUnmanagedFields(fqn string, rc *RegistrableComponent) {
 			fqn,
 			strings.Join(unmanagedFields, "\n\t")))
 	}
+}
+
+func (r *Registry) registerNexusService(svc *nexus.Service) error {
+	if _, ok := r.nexusServices[svc.Name]; ok {
+		return fmt.Errorf("nexus service %s is already registered", svc.Name)
+	}
+	r.nexusServices[svc.Name] = svc
+	return nil
+}
+
+// NexusServices returns all registered Nexus services.
+func (r *Registry) NexusServices() map[string]*nexus.Service {
+	// Return a copy to prevent external modification
+	services := make(map[string]*nexus.Service, len(r.nexusServices))
+	maps.Copy(services, r.nexusServices)
+	return services
 }
