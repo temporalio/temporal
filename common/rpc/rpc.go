@@ -93,15 +93,7 @@ func NewFactory(
 	}
 	f.grpcListener = sync.OnceValue(f.createGRPCListener)
 	f.localFrontendClient = sync.OnceValues(f.createLocalFrontendHTTPClient)
-	f.interNodeGrpcConnections = cache.NewSimple(&cache.SimpleOptions{
-		RemovedFunc: func(val interface{}) {
-			if conn, ok := val.(*grpc.ClientConn); ok {
-				if err := conn.Close(); err != nil {
-					f.logger.Warn("Failed to close evicted gRPC connection", tag.Error(err))
-				}
-			}
-		},
-	})
+	f.interNodeGrpcConnections = cache.NewSimple(nil)
 	return f
 }
 
@@ -372,8 +364,13 @@ func (d *RPCFactory) HandleMembershipChange(event *membership.ChangedEvent) {
 
 	for _, host := range event.HostsRemoved {
 		address := host.GetAddress()
-		d.logger.Info("Evicting cached gRPC connection for removed host", tag.Address(address))
-		d.interNodeGrpcConnections.Delete(address)
+		if conn, ok := d.interNodeGrpcConnections.Get(address).(*grpc.ClientConn); ok {
+			d.logger.Info("Closing cached gRPC connection for removed host", tag.Address(address))
+			if err := conn.Close(); err != nil {
+				d.logger.Warn("Failed to close gRPC connection", tag.Address(address), tag.Error(err))
+			}
+			d.interNodeGrpcConnections.Delete(address)
+		}
 	}
 }
 
