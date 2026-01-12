@@ -405,7 +405,7 @@ func (s *ChasmTestSuite) TestCountExecutions_GroupBy() {
 					Query:         "GROUP BY `PayloadExecutionStatus`",
 				},
 			)
-			return err == nil && countResp != nil && countResp.Count > 0
+			return err == nil && countResp != nil && countResp.Count >= 5
 		},
 		testcore.WaitForESToSettle,
 		100*time.Millisecond,
