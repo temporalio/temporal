@@ -30,6 +30,8 @@ import (
 
 var _ common.RPCFactory = (*RPCFactory)(nil)
 
+const membershipListenerName = "internode-grpc-connection-cache"
+
 // RPCFactory is an implementation of common.RPCFactory interface
 type RPCFactory struct {
 	config         *config.Config
@@ -297,8 +299,6 @@ func (d *RPCFactory) GetTLSConfigProvider() encryption.TLSConfigProvider {
 	return d.tlsFactory
 }
 
-const membershipListenerName = "internode-grpc-connection-cache"
-
 // StartMembershipListener starts listening for membership changes to evict stale
 // gRPC connections from the cache. This should be called when the service starts.
 func (d *RPCFactory) StartMembershipListener() {
@@ -308,8 +308,9 @@ func (d *RPCFactory) StartMembershipListener() {
 
 	d.membershipListenerStop = make(chan struct{})
 
-	// Listen for membership changes in History service
+	go d.listenForMembershipChanges(primitives.FrontendService)
 	go d.listenForMembershipChanges(primitives.HistoryService)
+	go d.listenForMembershipChanges(primitives.MatchingService)
 }
 
 // StopMembershipListener stops the membership listener goroutines.
@@ -320,9 +321,14 @@ func (d *RPCFactory) StopMembershipListener() {
 
 	close(d.membershipListenerStop)
 
-	// Remove listeners from resolvers
 	if d.monitor != nil {
+		if resolver, err := d.monitor.GetResolver(primitives.FrontendService); err == nil {
+			_ = resolver.RemoveListener(membershipListenerName)
+		}
 		if resolver, err := d.monitor.GetResolver(primitives.HistoryService); err == nil {
+			_ = resolver.RemoveListener(membershipListenerName)
+		}
+		if resolver, err := d.monitor.GetResolver(primitives.MatchingService); err == nil {
 			_ = resolver.RemoveListener(membershipListenerName)
 		}
 	}
