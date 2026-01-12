@@ -15,7 +15,7 @@ type (
 	// of the Temporal core.
 	AbstractDataStoreFactory interface {
 		NewFactory(
-			cfg *config.Persistence,
+			cfg config.CustomDatastoreConfig,
 			r resolver.ServiceResolver,
 			clusterName string,
 			logger log.Logger,
