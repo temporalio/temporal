@@ -10,6 +10,7 @@ Apply these patterns when reviewing PRs or suggesting code changes.
 - Question randomness in tests - test explicitly what you want
 - Don't add assertions for things you can assume work (e.g., "You are not testing TerminateWorkflowExecution here, you can assume it works")
 - Remove redundant nil checks after you just set a value
+- Do not export anything that doesn't need to be exported
 
 ## 2. Go Naming Conventions
 
