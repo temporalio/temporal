@@ -158,9 +158,16 @@ func (d *deploymentWorkflowClientSuite) TestValidateVersionWfParams() {
 
 func TestDecodeWorkerDeploymentMemoTolerateUnknownFields(t *testing.T) {
 	t.Parallel()
+	decodeAndValidateMemo(t, "memotestdata/memo_with_last_current_time.json", "test-deployment", "build-1")
+}
 
-	// Read the static JSON payload that contains unknown fields (e.g., lastCurrentTime)
-	jsonData, err := os.ReadFile("memotestdata/memo_with_unknown_fields.json")
+func TestDecodeWorkerDeploymentMemoTolerateMissingFields(t *testing.T) {
+	t.Parallel()
+	decodeAndValidateMemo(t, "memotestdata/memo_without_last_current_time.json", "test-deployment", "build-1")
+}
+
+func decodeAndValidateMemo(t *testing.T, filePath, deploymentName, buildId string) {
+	jsonData, err := os.ReadFile(filePath)
 	require.NoError(t, err)
 
 	// Create a payload with json/protobuf encoding (matching SDK's ProtoJSONPayloadConverter)
@@ -185,12 +192,11 @@ func TestDecodeWorkerDeploymentMemoTolerateUnknownFields(t *testing.T) {
 	require.NotNil(t, result)
 
 	// Verify known fields are decoded correctly
-	require.Equal(t, "test-deployment", result.DeploymentName)
+	require.Equal(t, deploymentName, result.DeploymentName)
 	require.NotNil(t, result.CreateTime)
 	require.NotNil(t, result.RoutingConfig)
-	//nolint:staticcheck // SA1019: worker versioning v0.31
-	require.Equal(t, "test-deployment.build-1", result.RoutingConfig.CurrentVersion)
-
+	require.Equal(t, deploymentName, result.RoutingConfig.GetCurrentDeploymentVersion().GetDeploymentName())
+	require.Equal(t, buildId, result.RoutingConfig.GetCurrentDeploymentVersion().GetBuildId())
 }
 
 //nolint:revive
