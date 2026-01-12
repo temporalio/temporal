@@ -166,7 +166,7 @@ func TestDecodeWorkerDeploymentMemoTolerateMissingFields(t *testing.T) {
 	decodeAndValidateMemo(t, "memotestdata/memo_without_last_current_time.json", "test-deployment", "build-1")
 }
 
-func decodeAndValidateMemo(t *testing.T, filePath, deploymentName, buildId string) {
+func decodeAndValidateMemo(t *testing.T, filePath, deploymentName, buildID string) {
 	jsonData, err := os.ReadFile(filePath)
 	require.NoError(t, err)
 
@@ -196,7 +196,7 @@ func decodeAndValidateMemo(t *testing.T, filePath, deploymentName, buildId strin
 	require.NotNil(t, result.CreateTime)
 	require.NotNil(t, result.RoutingConfig)
 	require.Equal(t, deploymentName, result.RoutingConfig.GetCurrentDeploymentVersion().GetDeploymentName())
-	require.Equal(t, buildId, result.RoutingConfig.GetCurrentDeploymentVersion().GetBuildId())
+	require.Equal(t, buildID, result.RoutingConfig.GetCurrentDeploymentVersion().GetBuildId())
 }
 
 //nolint:revive
