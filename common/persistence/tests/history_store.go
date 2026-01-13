@@ -55,19 +55,19 @@ func NewHistoryEventsSuite(
 	store p.ExecutionStore,
 	logger log.Logger,
 ) *HistoryEventsSuite {
-	eventSerializer := serialization.NewSerializer()
+	serializer := serialization.NewSerializer()
 	return &HistoryEventsSuite{
 		Assertions:      require.New(t),
 		ProtoAssertions: protorequire.New(t),
 		store: p.NewExecutionManager(
 			store,
-			eventSerializer,
+			serializer,
 			nil,
 			logger,
 			dynamicconfig.GetIntPropertyFn(4*1024*1024),
 			dynamicconfig.GetBoolPropertyFn(false),
 		),
-		serializer: eventSerializer,
+		serializer: serializer,
 		logger:     logger,
 	}
 }

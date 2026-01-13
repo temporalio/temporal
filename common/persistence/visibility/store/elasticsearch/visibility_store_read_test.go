@@ -261,7 +261,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2() {
 		SearchAfter: nil,
 		PageSize:    testPageSize,
 		Sorter: []elastic.Sorter{
-			elastic.NewFieldSort(sadefs.WorkflowID).Asc(),
+			elastic.NewFieldSort(sadefs.WorkflowID).Asc().Missing("_last"),
 			elastic.NewFieldSort(sadefs.RunID).Desc(),
 		},
 	}, p)
@@ -355,7 +355,7 @@ func (s *ESVisibilitySuite) Test_convertQueryLegacy() {
 	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query, nil, chasm.UnspecifiedArchetypeID)
 	s.NoError(err)
 	s.Equal(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":{"term":{"WorkflowId":"wid"}}}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
-	s.Equal(`[{"StartTime":{"order":"desc"}}]`, s.sorterToJSON(queryParams.Sorter))
+	s.JSONEq(`[{"StartTime":{"missing":"_last","order":"desc"}}]`, s.sorterToJSON(queryParams.Sorter))
 
 	query = `WorkflowId = 'wid' and CloseTime is null`
 	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query, nil, chasm.UnspecifiedArchetypeID)
@@ -373,7 +373,7 @@ func (s *ESVisibilitySuite) Test_convertQueryLegacy() {
 	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query, nil, chasm.UnspecifiedArchetypeID)
 	s.NoError(err)
 	s.Equal(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"must_not":{"exists":{"field":"CloseTime"}}}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
-	s.Equal(`[{"CloseTime":{"order":"desc"}}]`, s.sorterToJSON(queryParams.Sorter))
+	s.JSONEq(`[{"CloseTime":{"missing":"_last","order":"desc"}}]`, s.sorterToJSON(queryParams.Sorter))
 
 	query = `StartTime = "2018-06-07T15:04:05.123456789-08:00"`
 	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query, nil, chasm.UnspecifiedArchetypeID)
@@ -409,13 +409,13 @@ func (s *ESVisibilitySuite) Test_convertQueryLegacy() {
 	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query, nil, chasm.UnspecifiedArchetypeID)
 	s.NoError(err)
 	s.Equal(`{"bool":{"filter":{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
-	s.Equal(`[{"ExecutionTime":{"order":"asc"}}]`, s.sorterToJSON(queryParams.Sorter))
+	s.JSONEq(`[{"ExecutionTime":{"missing":"_last","order":"asc"}}]`, s.sorterToJSON(queryParams.Sorter))
 
 	query = `order by StartTime desc, CloseTime asc`
 	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query, nil, chasm.UnspecifiedArchetypeID)
 	s.NoError(err)
 	s.Equal(`{"bool":{"filter":{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
-	s.Equal(`[{"StartTime":{"order":"desc"}},{"CloseTime":{"order":"asc"}}]`, s.sorterToJSON(queryParams.Sorter))
+	s.JSONEq(`[{"StartTime":{"missing":"_last","order":"desc"}},{"CloseTime":{"missing":"_last","order":"asc"}}]`, s.sorterToJSON(queryParams.Sorter))
 
 	query = `order by CustomTextField desc`
 	_, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query, nil, chasm.UnspecifiedArchetypeID)
@@ -427,7 +427,7 @@ func (s *ESVisibilitySuite) Test_convertQueryLegacy() {
 	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query, nil, chasm.UnspecifiedArchetypeID)
 	s.NoError(err)
 	s.Equal(`{"bool":{"filter":{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
-	s.Equal(`[{"CustomIntField":{"order":"asc"}}]`, s.sorterToJSON(queryParams.Sorter))
+	s.JSONEq(`[{"CustomIntField":{"missing":"_last","order":"asc"}}]`, s.sorterToJSON(queryParams.Sorter))
 
 	query = `ExecutionTime < "unable to parse"`
 	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query, nil, chasm.UnspecifiedArchetypeID)
@@ -479,13 +479,13 @@ func (s *ESVisibilitySuite) Test_convertQueryLegacy_Mapper() {
 	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query, nil, chasm.UnspecifiedArchetypeID)
 	s.NoError(err)
 	s.Equal(`{"bool":{"filter":{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
-	s.Equal(`[{"ExecutionTime":{"order":"asc"}}]`, s.sorterToJSON(queryParams.Sorter))
+	s.JSONEq(`[{"ExecutionTime":{"missing":"_last","order":"asc"}}]`, s.sorterToJSON(queryParams.Sorter))
 
 	query = `order by AliasForCustomKeywordField asc`
 	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query, nil, chasm.UnspecifiedArchetypeID)
 	s.NoError(err)
 	s.Equal(`{"bool":{"filter":{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
-	s.Equal(`[{"CustomKeywordField":{"order":"asc"}}]`, s.sorterToJSON(queryParams.Sorter))
+	s.JSONEq(`[{"CustomKeywordField":{"missing":"_last","order":"asc"}}]`, s.sorterToJSON(queryParams.Sorter))
 
 	query = `order by CustomKeywordField asc`
 	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query, nil, chasm.UnspecifiedArchetypeID)
@@ -519,7 +519,7 @@ func (s *ESVisibilitySuite) Test_convertQueryLegacy_Mapper_Error() {
 	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query, nil, chasm.UnspecifiedArchetypeID)
 	s.NoError(err)
 	s.Equal(`{"bool":{"filter":{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
-	s.Equal(`[{"ExecutionTime":{"order":"asc"}}]`, s.sorterToJSON(queryParams.Sorter))
+	s.JSONEq(`[{"ExecutionTime":{"missing":"_last","order":"asc"}}]`, s.sorterToJSON(queryParams.Sorter))
 
 	s.visibilityStore.searchAttributesMapperProvider = nil
 }
@@ -571,7 +571,7 @@ func (s *ESVisibilitySuite) Test_convertQuery() {
 						elastic.NewTermQuery(sadefs.WorkflowID, "wid"),
 					),
 				),
-				Sorter:  []elastic.Sorter{elastic.NewFieldSort(sadefs.WorkflowID)},
+				Sorter:  []elastic.Sorter{elastic.NewFieldSort(sadefs.WorkflowID).Missing("_last")},
 				GroupBy: []string{},
 			},
 		},
@@ -609,7 +609,7 @@ func (s *ESVisibilitySuite) Test_convertQuery() {
 							MinimumNumberShouldMatch(1),
 					),
 				),
-				Sorter:  []elastic.Sorter{elastic.NewFieldSort("CustomKeywordField")},
+				Sorter:  []elastic.Sorter{elastic.NewFieldSort("CustomKeywordField").Missing("_last")},
 				GroupBy: []string{},
 			},
 		},
@@ -1957,7 +1957,7 @@ func (s *ESVisibilitySuite) Test_convertQueryLegacy_ChasmMapper() {
 	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, queryStr, chasmMapper, chasm.UnspecifiedArchetypeID)
 	s.NoError(err)
 	s.JSONEq(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":{"match":{"TemporalBool01":{"query":true}}}}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
-	s.JSONEq(`[{"TemporalKeyword01":{"order":"asc"}}]`, s.sorterToJSON(queryParams.Sorter))
+	s.JSONEq(`[{"TemporalKeyword01":{"missing":"_last","order":"asc"}}]`, s.sorterToJSON(queryParams.Sorter))
 
 	queryStr = `ChasmStatus = 'active' and WorkflowId = 'wid'`
 	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, queryStr, chasmMapper, chasm.UnspecifiedArchetypeID)
@@ -2051,7 +2051,7 @@ func (s *ESVisibilitySuite) Test_convertQuery_ChasmMapper() {
 						elastic.NewTermQuery("TemporalBool01", true),
 					),
 				),
-				Sorter:  []elastic.Sorter{elastic.NewFieldSort("TemporalKeyword01")},
+				Sorter:  []elastic.Sorter{elastic.NewFieldSort("TemporalKeyword01").Missing("_last")},
 				GroupBy: []string{},
 			},
 		},
@@ -2166,7 +2166,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2_ChasmMapper() {
 		SearchAfter: nil,
 		PageSize:    testPageSize,
 		Sorter: []elastic.Sorter{
-			elastic.NewFieldSort("TemporalKeyword01").Asc(),
+			elastic.NewFieldSort("TemporalKeyword01").Asc().Missing("_last"),
 			elastic.NewFieldSort(sadefs.RunID).Desc(),
 		},
 	}, p)

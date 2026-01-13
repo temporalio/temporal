@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/dgryski/go-farm"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
@@ -24,12 +25,17 @@ import (
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/replication/eventhandler"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tasks"
 	"go.uber.org/fx"
 )
 
 type (
 	ClusterChannelKey struct {
 		ClusterName string
+	}
+	TaskSerializer interface {
+		SerializeReplicationTask(task tasks.Task) (*persistencespb.ReplicationTaskInfo, error)
+		DeserializeReplicationTask(replicationTask *persistencespb.ReplicationTaskInfo) (tasks.Task, error)
 	}
 )
 
@@ -42,6 +48,9 @@ var Module = fx.Provide(
 	ClientSchedulerRateLimiterProvider,
 	ServerSchedulerRateLimiterProvider,
 	PersistenceRateLimiterProvider,
+	func(serializer serialization.Serializer) TaskSerializer {
+		return serializer
+	},
 	replicationTaskConverterFactoryProvider,
 	replicationTaskExecutorProvider,
 	fx.Annotated{
@@ -89,6 +98,7 @@ func eagerNamespaceRefresherProvider(
 
 func replicationTaskConverterFactoryProvider(
 	config *configs.Config,
+	replicationTaskSerializer TaskSerializer,
 ) SourceTaskConverterProvider {
 	return func(
 		historyEngine historyi.Engine,
@@ -100,6 +110,7 @@ func replicationTaskConverterFactoryProvider(
 			historyEngine,
 			shardContext.GetNamespaceRegistry(),
 			serializer,
+			replicationTaskSerializer,
 			config)
 	}
 }
@@ -364,10 +375,10 @@ func eventImporterProvider(
 
 func dlqWriterAdapterProvider(
 	dlqWriter *queues.DLQWriter,
-	taskSerializer serialization.Serializer,
+	replicationTaskSerializer TaskSerializer,
 	clusterMetadata cluster.Metadata,
 ) *DLQWriterAdapter {
-	return NewDLQWriterAdapter(dlqWriter, taskSerializer, clusterMetadata.GetCurrentClusterName())
+	return NewDLQWriterAdapter(dlqWriter, replicationTaskSerializer, clusterMetadata.GetCurrentClusterName())
 }
 
 func historyEventsHandlerProvider(

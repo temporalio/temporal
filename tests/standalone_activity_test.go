@@ -1767,18 +1767,18 @@ func (s *standaloneActivityTestSuite) TestStartToCloseTimeout() {
 	require.NoError(t, err)
 
 	// First poll: activity has not started yet
-	describeResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+	describeResp1, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
 		Namespace:  s.Namespace().String(),
 		ActivityId: activityID,
 		RunId:      startResp.RunId,
 	})
 	require.NoError(t, err)
-	require.NotNil(t, describeResp)
-	require.NotNil(t, describeResp.GetInfo())
-	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING, describeResp.GetInfo().GetStatus(),
-		"expected Running but is %s", describeResp.GetInfo().GetStatus())
-	require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, describeResp.GetInfo().GetRunState(),
-		"expected Scheduled but is %s", describeResp.GetInfo().GetRunState())
+	require.NotNil(t, describeResp1)
+	require.NotNil(t, describeResp1.GetInfo())
+	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING, describeResp1.GetInfo().GetStatus(),
+		"expected Running but is %s", describeResp1.GetInfo().GetStatus())
+	require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, describeResp1.GetInfo().GetRunState(),
+		"expected Scheduled but is %s", describeResp1.GetInfo().GetRunState())
 
 	// Worker poll to start the activity
 	pollTaskResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
@@ -1793,50 +1793,52 @@ func (s *standaloneActivityTestSuite) TestStartToCloseTimeout() {
 	require.NotEmpty(t, pollTaskResp.TaskToken)
 
 	// Second poll: activity has started
-	describeResp, err = s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+	describeResp2, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
 		Namespace:     s.Namespace().String(),
 		ActivityId:    activityID,
 		RunId:         startResp.RunId,
-		LongPollToken: describeResp.LongPollToken,
+		LongPollToken: describeResp1.LongPollToken,
 	})
 	require.NoError(t, err)
-	require.NotNil(t, describeResp)
-	require.NotNil(t, describeResp.GetInfo())
-	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING, describeResp.GetInfo().GetStatus(),
-		"expected Running but is %s", describeResp.GetInfo().GetStatus())
-	require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, describeResp.GetInfo().GetRunState(),
-		"expected Started but is %s", describeResp.GetInfo().GetRunState())
+	require.NotNil(t, describeResp2)
+	require.NotNil(t, describeResp2.GetInfo())
+	require.Greater(t, describeResp2.GetInfo().GetStateTransitionCount(), describeResp1.GetInfo().GetStateTransitionCount())
+	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING, describeResp2.GetInfo().GetStatus(),
+		"expected Running but is %s", describeResp2.GetInfo().GetStatus())
+	require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, describeResp2.GetInfo().GetRunState(),
+		"expected Started but is %s", describeResp2.GetInfo().GetRunState())
 
 	// Third poll: activity has timed out
-	describeResp, err = s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+	describeResp3, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
 		Namespace:      s.Namespace().String(),
 		ActivityId:     activityID,
 		RunId:          startResp.RunId,
 		IncludeOutcome: true,
-		LongPollToken:  describeResp.LongPollToken,
+		LongPollToken:  describeResp2.LongPollToken,
 	})
 
 	require.NoError(t, err)
-	require.NotNil(t, describeResp)
-	require.NotNil(t, describeResp.GetInfo())
+	require.NotNil(t, describeResp3)
+	require.NotNil(t, describeResp3.GetInfo())
+	require.Greater(t, describeResp3.GetInfo().GetStateTransitionCount(), describeResp2.GetInfo().GetStateTransitionCount())
 
 	// The activity has timed out due to StartToClose. This is an attempt failure, therefore the
 	// failure should be in ActivityExecutionInfo.LastFailure as well as set as the outcome failure.
-	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, describeResp.GetInfo().GetStatus(),
-		"expected TimedOut but is %s", describeResp.GetInfo().GetStatus())
-	require.Greater(t, describeResp.GetInfo().GetExecutionDuration().AsDuration(), time.Duration(0))
-	require.False(t, describeResp.GetInfo().GetCloseTime().AsTime().IsZero())
-	failure := describeResp.GetInfo().GetLastFailure()
+	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, describeResp3.GetInfo().GetStatus(),
+		"expected TimedOut but is %s", describeResp3.GetInfo().GetStatus())
+	require.Greater(t, describeResp3.GetInfo().GetExecutionDuration().AsDuration(), time.Duration(0))
+	require.False(t, describeResp3.GetInfo().GetCloseTime().AsTime().IsZero())
+	failure := describeResp3.GetInfo().GetLastFailure()
 	require.NotNil(t, failure)
 	timeoutFailure := failure.GetTimeoutFailureInfo()
 	require.NotNil(t, timeoutFailure)
 	require.Equal(t, enumspb.TIMEOUT_TYPE_START_TO_CLOSE, timeoutFailure.GetTimeoutType(),
 		"expected StartToCloseTimeout but is %s", timeoutFailure.GetTimeoutType())
 
-	require.NotNil(t, describeResp.GetOutcome().GetFailure())
-	protorequire.ProtoEqual(t, failure, describeResp.GetOutcome().GetFailure())
-	require.Equal(t, enumspb.TIMEOUT_TYPE_START_TO_CLOSE, describeResp.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType(),
-		"expected StartToCloseTimeout but is %s", describeResp.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType())
+	require.NotNil(t, describeResp3.GetOutcome().GetFailure())
+	protorequire.ProtoEqual(t, failure, describeResp3.GetOutcome().GetFailure())
+	require.Equal(t, enumspb.TIMEOUT_TYPE_START_TO_CLOSE, describeResp3.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType(),
+		"expected StartToCloseTimeout but is %s", describeResp3.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType())
 }
 
 // TestScheduleToStartTimeout tests that a schedule-to-start timeout is recorded after the activity is
