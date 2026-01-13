@@ -196,16 +196,23 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 	}
 
 	header := nexus.Header(args.header)
+	var opTimeout time.Duration
 	callTimeout := e.Config.RequestTimeout(ns.Name().String(), task.EndpointName)
-	if args.scheduleToCloseTimeout > 0 {
-		opTimeout := args.scheduleToCloseTimeout - time.Since(args.scheduledTime)
+	// Adjust timeout based on remaining operation timeouts.
+	// StartToClose takes precedence over ScheduleToClose since it is already capped by it.
+	if args.startToCloseTimeout > 0 {
+		opTimeout = args.startToCloseTimeout - time.Since(args.scheduledTime)
 		callTimeout = min(callTimeout, opTimeout)
-		if opTimeoutHeader := header.Get(nexus.HeaderOperationTimeout); opTimeoutHeader == "" {
-			if header == nil {
-				header = make(nexus.Header, 1)
-			}
-			header[nexus.HeaderOperationTimeout] = opTimeout.String()
+	} else if args.scheduleToCloseTimeout > 0 {
+		opTimeout = args.scheduleToCloseTimeout - time.Since(args.scheduledTime)
+		callTimeout = min(callTimeout, opTimeout)
+	}
+	// Set the operation timeout header if not already set.
+	if opTimeoutHeader := header.Get(nexus.HeaderOperationTimeout); opTimeout > 0 && opTimeoutHeader == "" {
+		if header == nil {
+			header = make(nexus.Header, 1)
 		}
+		header[nexus.HeaderOperationTimeout] = commonnexus.FormatDuration(opTimeout)
 	}
 
 	callCtx, cancel := context.WithTimeout(ctx, callTimeout)
@@ -323,6 +330,7 @@ type startArgs struct {
 	endpointID               string
 	scheduledTime            time.Time
 	scheduleToCloseTimeout   time.Duration
+	startToCloseTimeout      time.Duration
 	header                   map[string]string
 	payload                  *commonpb.Payload
 	nexusLink                nexus.Link
@@ -347,15 +355,17 @@ func (e taskExecutor) loadOperationArgs(
 		args.service = operation.Service
 		args.operation = operation.Operation
 		args.requestID = operation.RequestId
+		args.scheduleToCloseTimeout = operation.ScheduleToCloseTimeout.AsDuration()
+		args.startToCloseTimeout = operation.StartToCloseTimeout.AsDuration()
 		eventToken = operation.ScheduledEventToken
 		event, err := node.LoadHistoryEvent(ctx, eventToken)
 		if err != nil {
 			return nil
 		}
 		args.scheduledTime = event.EventTime.AsTime()
-		args.scheduleToCloseTimeout = event.GetNexusOperationScheduledEventAttributes().GetScheduleToCloseTimeout().AsDuration()
-		args.payload = event.GetNexusOperationScheduledEventAttributes().GetInput()
-		args.header = event.GetNexusOperationScheduledEventAttributes().GetNexusHeader()
+		attrs := event.GetNexusOperationScheduledEventAttributes()
+		args.payload = attrs.GetInput()
+		args.header = attrs.GetNexusHeader()
 		args.nexusLink = ConvertLinkWorkflowEventToNexusLink(&commonpb.Link_WorkflowEvent{
 			Namespace:  ns.Name().String(),
 			WorkflowId: ref.WorkflowKey.WorkflowID,
@@ -653,7 +663,12 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 	}
 
 	callTimeout := e.Config.RequestTimeout(ns.Name().String(), task.EndpointName)
-	if args.scheduleToCloseTimeout > 0 {
+	// Adjust timeout based on remaining operation timeouts.
+	// StartToClose takes precedence over ScheduleToClose since it is already capped by it.
+	if args.startToCloseTimeout > 0 {
+		opTimeout := args.startToCloseTimeout - time.Since(args.scheduledTime)
+		callTimeout = min(callTimeout, opTimeout)
+	} else if args.scheduleToCloseTimeout > 0 {
 		opTimeout := args.scheduleToCloseTimeout - time.Since(args.scheduledTime)
 		callTimeout = min(callTimeout, opTimeout)
 	}
@@ -732,6 +747,7 @@ type cancelArgs struct {
 	service, operation, token, endpointID, endpointName, requestID string
 	scheduledTime                                                  time.Time
 	scheduleToCloseTimeout                                         time.Duration
+	startToCloseTimeout                                            time.Duration
 	scheduledEventID                                               int64
 	headers                                                        map[string]string
 }
@@ -757,6 +773,7 @@ func (e taskExecutor) loadArgsForCancelation(ctx context.Context, env hsm.Enviro
 		args.requestID = op.RequestId
 		args.scheduledTime = op.ScheduledTime.AsTime()
 		args.scheduleToCloseTimeout = op.ScheduleToCloseTimeout.AsDuration()
+		args.startToCloseTimeout = op.StartToCloseTimeout.AsDuration()
 		args.scheduledEventID, err = hsm.EventIDFromToken(op.ScheduledEventToken)
 		if err != nil {
 			return err

@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/server/service/history/hsm/hsmtest"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 var endpointEntry = &persistencespb.NexusEndpointEntry{
@@ -84,6 +85,7 @@ func TestProcessInvocationTask(t *testing.T) {
 		checkOutcome               func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent)
 		requestTimeout             time.Duration
 		schedToCloseTimeout        time.Duration
+		startToCloseTimeout        time.Duration
 		destinationDown            bool
 	}{
 		{
@@ -145,8 +147,9 @@ func TestProcessInvocationTask(t *testing.T) {
 			name:                "sync start",
 			requestTimeout:      time.Hour,
 			schedToCloseTimeout: time.Hour,
-			header:              nexus.Header{nexus.HeaderOperationTimeout: time.Microsecond.String()}, // to test this value is ignored when ScheduleToCloseTimeout is set
-			destinationDown:     false,
+			// To test this value is ignored when ScheduleToCloseTimeout is set (but still set on the header).
+			header:          nexus.Header{nexus.HeaderOperationTimeout: commonnexus.FormatDuration(time.Millisecond)},
+			destinationDown: false,
 			onStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
 				// Also use this test case to check the input and options provided.
 				if service != "service" {
@@ -160,6 +163,9 @@ func TestProcessInvocationTask(t *testing.T) {
 				}
 				if options.CallbackURL != "http://localhost/callback" {
 					return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid callback URL")
+				}
+				if options.Header.Get(nexus.HeaderOperationTimeout) != "1ms" {
+					return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid operation timeout header: %s", options.Header.Get(nexus.HeaderOperationTimeout))
 				}
 				var v string
 				if err := input.Consume(&v); err != nil || v != "input" {
@@ -315,6 +321,31 @@ func TestProcessInvocationTask(t *testing.T) {
 			destinationDown:       true,
 			expectedMetricOutcome: "request-timeout",
 			onStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
+				opTimeout, err := time.ParseDuration(options.Header.Get(nexus.HeaderOperationTimeout))
+				if err != nil || opTimeout > 10*time.Millisecond {
+					return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid operation timeout header: %s", options.Header.Get(nexus.HeaderOperationTimeout))
+				}
+				time.Sleep(time.Millisecond * 100) //nolint:forbidigo // Allow time.Sleep for timeout tests
+				return &nexus.HandlerStartOperationResultAsync{OperationToken: "op-token"}, nil
+			},
+			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
+				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF, op.State())
+				require.NotNil(t, op.LastAttemptFailure.GetApplicationFailureInfo())
+				require.Regexp(t, "request timed out", op.LastAttemptFailure.Message)
+				require.Equal(t, 0, len(events))
+			},
+		},
+		{
+			name:                  "invocation timeout by StartToCloseTimeout",
+			requestTimeout:        time.Hour,
+			startToCloseTimeout:   10 * time.Millisecond,
+			destinationDown:       true,
+			expectedMetricOutcome: "request-timeout",
+			onStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
+				opTimeout, err := time.ParseDuration(options.Header.Get(nexus.HeaderOperationTimeout))
+				if err != nil || opTimeout > 10*time.Millisecond {
+					return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid operation timeout header: %s", options.Header.Get(nexus.HeaderOperationTimeout))
+				}
 				time.Sleep(time.Millisecond * 100) //nolint:forbidigo // Allow time.Sleep for timeout tests
 				return &nexus.HandlerStartOperationResultAsync{OperationToken: "op-token"}, nil
 			},
@@ -436,7 +467,10 @@ func TestProcessInvocationTask(t *testing.T) {
 			nexustest.NewNexusServer(t, listenAddr, h)
 
 			reg := newRegistry(t)
-			event := mustNewScheduledEvent(time.Now(), tc.schedToCloseTimeout)
+			event := mustNewScheduledEvent(time.Now(), &historypb.NexusOperationScheduledEventAttributes{
+				ScheduleToCloseTimeout: durationpb.New(tc.schedToCloseTimeout),
+				StartToCloseTimeout:    durationpb.New(tc.startToCloseTimeout),
+			})
 			if tc.eventHasNoEndpointID {
 				event.GetNexusOperationScheduledEventAttributes().EndpointId = ""
 			}
@@ -555,7 +589,9 @@ func TestProcessInvocationTask(t *testing.T) {
 func TestProcessBackoffTask(t *testing.T) {
 	reg := newRegistry(t)
 	backend := &hsmtest.NodeBackend{}
-	node := newOperationNode(t, backend, mustNewScheduledEvent(time.Now(), time.Hour))
+	node := newOperationNode(t, backend, mustNewScheduledEvent(time.Now(), &historypb.NexusOperationScheduledEventAttributes{
+		ScheduleToCloseTimeout: durationpb.New(time.Hour),
+	}))
 	env := fakeEnv{node}
 
 	require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{}))
@@ -584,7 +620,9 @@ func TestProcessBackoffTask(t *testing.T) {
 func TestProcessTimeoutTask(t *testing.T) {
 	reg := newRegistry(t)
 	backend := &hsmtest.NodeBackend{}
-	node := newOperationNode(t, backend, mustNewScheduledEvent(time.Now(), time.Hour))
+	node := newOperationNode(t, backend, mustNewScheduledEvent(time.Now(), &historypb.NexusOperationScheduledEventAttributes{
+		ScheduleToCloseTimeout: durationpb.New(time.Hour),
+	}))
 	env := fakeEnv{node}
 
 	require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{}))
@@ -628,7 +666,9 @@ func TestProcessTimeoutTask(t *testing.T) {
 func TestProcessScheduleToStartTimeoutTask(t *testing.T) {
 	reg := newRegistry(t)
 	backend := &hsmtest.NodeBackend{}
-	node := newOperationNode(t, backend, mustNewScheduledEvent(time.Now(), time.Hour))
+	node := newOperationNode(t, backend, mustNewScheduledEvent(time.Now(), &historypb.NexusOperationScheduledEventAttributes{
+		ScheduleToCloseTimeout: durationpb.New(time.Hour),
+	}))
 	env := fakeEnv{node}
 
 	require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{}))
@@ -672,7 +712,9 @@ func TestProcessScheduleToStartTimeoutTask(t *testing.T) {
 func TestProcessStartToCloseTimeoutTask(t *testing.T) {
 	reg := newRegistry(t)
 	backend := &hsmtest.NodeBackend{}
-	node := newOperationNode(t, backend, mustNewScheduledEvent(time.Now(), time.Hour))
+	node := newOperationNode(t, backend, mustNewScheduledEvent(time.Now(), &historypb.NexusOperationScheduledEventAttributes{
+		ScheduleToCloseTimeout: durationpb.New(time.Hour),
+	}))
 	env := fakeEnv{node}
 
 	require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{}))
@@ -726,6 +768,7 @@ func TestProcessCancelationTask(t *testing.T) {
 		checkOutcome          func(t *testing.T, op nexusoperations.Cancelation)
 		requestTimeout        time.Duration
 		schedToCloseTimeout   time.Duration
+		startToCloseTimeout   time.Duration
 		destinationDown       bool
 		header                map[string]string
 	}{
@@ -808,9 +851,22 @@ func TestProcessCancelationTask(t *testing.T) {
 			},
 		},
 		{
-			name:                  "operation timeout",
+			name:                  "operation timeout by ScheduleToCloseTimeout",
 			requestTimeout:        time.Hour,
 			schedToCloseTimeout:   time.Microsecond,
+			destinationDown:       false,
+			onCancelOperation:     nil, // This should not be called if the operation has timed out.
+			expectedMetricOutcome: "operation-timeout",
+			checkOutcome: func(t *testing.T, c nexusoperations.Cancelation) {
+				require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_FAILED, c.State())
+				require.NotNil(t, c.LastAttemptFailure.GetApplicationFailureInfo())
+				require.Regexp(t, nexusoperations.ErrOperationTimeoutBelowMin.Error(), c.LastAttemptFailure.Message)
+			},
+		},
+		{
+			name:                  "operation timeout by StartToCloseTimeout",
+			requestTimeout:        time.Hour,
+			startToCloseTimeout:   time.Microsecond,
 			destinationDown:       false,
 			onCancelOperation:     nil, // This should not be called if the operation has timed out.
 			expectedMetricOutcome: "operation-timeout",
@@ -844,7 +900,10 @@ func TestProcessCancelationTask(t *testing.T) {
 			nexustest.NewNexusServer(t, listenAddr, h)
 
 			reg := newRegistry(t)
-			event := mustNewScheduledEvent(time.Now(), tc.schedToCloseTimeout)
+			event := mustNewScheduledEvent(time.Now(), &historypb.NexusOperationScheduledEventAttributes{
+				ScheduleToCloseTimeout: durationpb.New(tc.schedToCloseTimeout),
+				StartToCloseTimeout:    durationpb.New(tc.startToCloseTimeout),
+			})
 			if tc.header != nil {
 				event.GetNexusOperationScheduledEventAttributes().NexusHeader = tc.header
 			}
@@ -958,7 +1017,9 @@ func TestProcessCancelationTask_OperationCompleted(t *testing.T) {
 
 	reg := newRegistry(t)
 	backend := &hsmtest.NodeBackend{}
-	node := newOperationNode(t, backend, mustNewScheduledEvent(time.Now(), time.Hour))
+	node := newOperationNode(t, backend, mustNewScheduledEvent(time.Now(), &historypb.NexusOperationScheduledEventAttributes{
+		ScheduleToCloseTimeout: durationpb.New(time.Hour),
+	}))
 	op, err := hsm.MachineData[nexusoperations.Operation](node)
 	require.NoError(t, err)
 	_, err = nexusoperations.TransitionStarted.Apply(op, nexusoperations.EventStarted{
@@ -1017,7 +1078,9 @@ func TestProcessCancelationTask_OperationCompleted(t *testing.T) {
 func TestProcessCancelationBackoffTask(t *testing.T) {
 	reg := newRegistry(t)
 	backend := &hsmtest.NodeBackend{}
-	node := newOperationNode(t, backend, mustNewScheduledEvent(time.Now(), time.Hour))
+	node := newOperationNode(t, backend, mustNewScheduledEvent(time.Now(), &historypb.NexusOperationScheduledEventAttributes{
+		ScheduleToCloseTimeout: durationpb.New(time.Hour),
+	}))
 	op, err := hsm.MachineData[nexusoperations.Operation](node)
 	require.NoError(t, err)
 	_, err = nexusoperations.TransitionStarted.Apply(op, nexusoperations.EventStarted{

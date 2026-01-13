@@ -328,7 +328,9 @@ func TestRegenerateTasks(t *testing.T) {
 }
 
 func TestRetry(t *testing.T) {
-	node := newOperationNode(t, &hsmtest.NodeBackend{}, mustNewScheduledEvent(time.Now(), time.Minute))
+	node := newOperationNode(t, &hsmtest.NodeBackend{}, mustNewScheduledEvent(time.Now(), &historypb.NexusOperationScheduledEventAttributes{
+		ScheduleToCloseTimeout: durationpb.New(time.Minute),
+	}))
 	// Reset any outputs generated from nexusoperations.AddChild, we tested those already.
 	node.ClearTransactionState()
 	require.NoError(t, hsm.MachineTransition(node, func(op nexusoperations.Operation) (hsm.TransitionOutput, error) {
@@ -452,7 +454,9 @@ func TestCompleteFromAttempt(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			node := newOperationNode(t, &hsmtest.NodeBackend{}, mustNewScheduledEvent(time.Now(), time.Minute))
+			node := newOperationNode(t, &hsmtest.NodeBackend{}, mustNewScheduledEvent(time.Now(), &historypb.NexusOperationScheduledEventAttributes{
+				ScheduleToCloseTimeout: durationpb.New(time.Minute),
+			}))
 			// Reset any outputs generated from nexusoperations.AddChild, we tested those already.
 			node.ClearTransactionState()
 			require.NoError(t, hsm.MachineTransition(node, func(op nexusoperations.Operation) (hsm.TransitionOutput, error) {
@@ -479,13 +483,17 @@ func TestCompleteExternally(t *testing.T) {
 		{
 			name: "scheduled",
 			fn: func(t *testing.T) *hsm.Node {
-				return newOperationNode(t, &hsmtest.NodeBackend{}, mustNewScheduledEvent(time.Now(), time.Minute))
+				return newOperationNode(t, &hsmtest.NodeBackend{}, mustNewScheduledEvent(time.Now(), &historypb.NexusOperationScheduledEventAttributes{
+					ScheduleToCloseTimeout: durationpb.New(time.Minute),
+				}))
 			},
 		},
 		{
 			name: "backing off",
 			fn: func(t *testing.T) *hsm.Node {
-				node := newOperationNode(t, &hsmtest.NodeBackend{}, mustNewScheduledEvent(time.Now(), time.Minute))
+				node := newOperationNode(t, &hsmtest.NodeBackend{}, mustNewScheduledEvent(time.Now(), &historypb.NexusOperationScheduledEventAttributes{
+					ScheduleToCloseTimeout: durationpb.New(time.Minute),
+				}))
 				require.NoError(t, hsm.MachineTransition(node, func(op nexusoperations.Operation) (hsm.TransitionOutput, error) {
 					return nexusoperations.TransitionAttemptFailed.Apply(op, nexusoperations.EventAttemptFailed{
 						Node:        node,
@@ -500,7 +508,9 @@ func TestCompleteExternally(t *testing.T) {
 		{
 			name: "started",
 			fn: func(t *testing.T) *hsm.Node {
-				node := newOperationNode(t, &hsmtest.NodeBackend{}, mustNewScheduledEvent(time.Now(), time.Minute))
+				node := newOperationNode(t, &hsmtest.NodeBackend{}, mustNewScheduledEvent(time.Now(), &historypb.NexusOperationScheduledEventAttributes{
+					ScheduleToCloseTimeout: durationpb.New(time.Minute),
+				}))
 				require.NoError(t, hsm.MachineTransition(node, func(op nexusoperations.Operation) (hsm.TransitionOutput, error) {
 					return nexusoperations.TransitionStarted.Apply(op, nexusoperations.EventStarted{
 						Node: node,
@@ -590,7 +600,9 @@ func TestCompleteExternally(t *testing.T) {
 
 func TestCancel(t *testing.T) {
 	backend := &hsmtest.NodeBackend{}
-	root := newOperationNode(t, backend, mustNewScheduledEvent(time.Now(), time.Hour))
+	root := newOperationNode(t, backend, mustNewScheduledEvent(time.Now(), &historypb.NexusOperationScheduledEventAttributes{
+		ScheduleToCloseTimeout: durationpb.New(time.Hour),
+	}))
 	op, err := hsm.MachineData[nexusoperations.Operation](root)
 	require.NoError(t, err)
 	_, err = nexusoperations.TransitionStarted.Apply(op, nexusoperations.EventStarted{
@@ -613,7 +625,9 @@ func TestCancel(t *testing.T) {
 
 func TestCancelationValidTransitions(t *testing.T) {
 	// Setup
-	root := newOperationNode(t, &hsmtest.NodeBackend{}, mustNewScheduledEvent(time.Now(), time.Hour))
+	root := newOperationNode(t, &hsmtest.NodeBackend{}, mustNewScheduledEvent(time.Now(), &historypb.NexusOperationScheduledEventAttributes{
+		ScheduleToCloseTimeout: durationpb.New(time.Hour),
+	}))
 	// We don't support cancel before started. Mark the operation as started.
 	require.NoError(t, hsm.MachineTransition(root, func(op nexusoperations.Operation) (hsm.TransitionOutput, error) {
 		return nexusoperations.TransitionStarted.Apply(op, nexusoperations.EventStarted{
@@ -722,7 +736,7 @@ func TestCancelationValidTransitions(t *testing.T) {
 func TestCancelationBeforeStarted(t *testing.T) {
 	// Setup
 	backend := &hsmtest.NodeBackend{}
-	root := newOperationNode(t, backend, mustNewScheduledEvent(time.Now(), 0))
+	root := newOperationNode(t, backend, mustNewScheduledEvent(time.Now(), nil))
 	require.NoError(t, hsm.MachineTransition(root, func(op nexusoperations.Operation) (hsm.TransitionOutput, error) {
 		return op.Cancel(root, time.Now(), 0)
 	}))
