@@ -6439,10 +6439,11 @@ func (wh *WorkflowHandler) RecordWorkerHeartbeat(
 	}
 
 	// Call CHASM worker handler if worker state tracking is enabled
-	if wh.config.EnableWorkerStateTracking(request.GetNamespace()) {
+	if wh.config.EnableWorkerStateTracking(request.GetNamespace()) && len(request.GetWorkerHeartbeat()) > 0 {
 		_, err = wh.workerClient.RecordHeartbeat(ctx, &workerstatepb.RecordHeartbeatRequest{
-			NamespaceId:     namespaceID.String(),
-			FrontendRequest: request,
+			NamespaceId:       namespaceID.String(),
+			FrontendRequest:   request,
+			WorkerInstanceKey: request.GetWorkerHeartbeat()[0].GetWorkerInstanceKey(),
 		})
 		if err != nil {
 			return nil, err
