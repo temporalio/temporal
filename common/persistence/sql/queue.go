@@ -9,6 +9,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 )
 
@@ -24,9 +25,10 @@ func newQueue(
 	db sqlplugin.DB,
 	logger log.Logger,
 	queueType persistence.QueueType,
+	serializer serialization.Serializer,
 ) (persistence.Queue, error) {
 	queue := &sqlQueue{
-		SqlStore:  NewSqlStore(db, logger),
+		SqlStore:  NewSQLStore(db, logger, serializer),
 		queueType: queueType,
 		logger:    logger,
 	}
