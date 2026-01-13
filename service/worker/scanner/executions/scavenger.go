@@ -63,6 +63,7 @@ func NewScavenger(
 	numHistoryShards int32,
 	perHostQPS dynamicconfig.IntPropertyFn,
 	perShardQPS dynamicconfig.IntPropertyFn,
+	defaultRateLimiter quotas.RateLimiter,
 	executionDataDurationBuffer dynamicconfig.DurationPropertyFn,
 	executionTaskWorker dynamicconfig.IntPropertyFn,
 	enableHistoryEventIDValidator dynamicconfig.BoolPropertyFn,
@@ -86,9 +87,11 @@ func NewScavenger(
 			metricsHandler,
 			metrics.ExecutionsScavengerScope,
 		),
-		rateLimiter: quotas.NewDefaultOutgoingRateLimiter(
-			func() float64 { return float64(perHostQPS()) },
-		),
+		rateLimiter: quotas.NewMultiRateLimiter([]quotas.RateLimiter{
+			quotas.NewDefaultOutgoingRateLimiter(
+				func() float64 { return float64(perHostQPS()) },
+			), defaultRateLimiter,
+		}),
 		perShardQPS:                   perShardQPS,
 		executionDataDurationBuffer:   executionDataDurationBuffer,
 		enableHistoryEventIDValidator: enableHistoryEventIDValidator,

@@ -2822,6 +2822,36 @@ Should be at least WorkerESProcessorFlushInterval+<time to process request>.`,
 		1,
 		`ExecutionScannerPerShardQPS is the maximum rate of calls per shard from executions.Scanner`,
 	)
+	HistoryScannerPerHostQPS = NewGlobalIntSetting(
+		"worker.historyScannerPerHostQPS",
+		10,
+		`HistoryScannerPerHostQPS is the maximum rate of calls per host from history.Scanner`,
+	)
+	HistoryScannerPerShardQPS = NewGlobalIntSetting(
+		"worker.historyScannerPerShardQPS",
+		10,
+		`HistoryScannerPerShardQPS is the maximum rate of calls per shard from history.Scanner`,
+	)
+	TaskQueueScannerPerHostQPS = NewGlobalIntSetting(
+		"worker.taskQueueScannerPerHostQPS",
+		10,
+		`TaskQueueScannerPerHostQPS is the maximum rate of calls per host from taskqueue.Scanner`,
+	)
+	TaskQueueScannerPerShardQPS = NewGlobalIntSetting(
+		"worker.taskQueueScannerPerShardQPS",
+		10,
+		`TaskQueueScannerPerShardQPS is the maximum rate of calls per shard from taskqueue.Scanner`,
+	)
+	BuildIdScavengerPerHostQPS = NewGlobalIntSetting(
+		"worker.buildIdScavengerPerHostQPS",
+		10,
+		`BuildIdScavengerPerHostQPS is the maximum rate of calls per host from buildid.Scavenger`,
+	)
+	BuildIdScavengerPerShardQPS = NewGlobalIntSetting(
+		"worker.buildIdScavengerPerShardQPS",
+		10,
+		`BuildIdScavengerPerShardQPS is the maximum rate of calls per shard from buildid.Scavenger`,
+	)
 	ExecutionDataDurationBuffer = NewGlobalDurationSetting(
 		"worker.executionDataDurationBuffer",
 		time.Hour*24*90,

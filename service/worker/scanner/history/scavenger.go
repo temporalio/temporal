@@ -8,6 +8,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/activity"
+
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -83,7 +84,8 @@ const (
 func NewScavenger(
 	numShards int32,
 	db persistence.ExecutionManager,
-	rps int,
+	perHostQPS dynamicconfig.IntPropertyFn,
+	defaultRateLimiter quotas.RateLimiter,
 	client historyservice.HistoryServiceClient,
 	adminClient adminservice.AdminServiceClient,
 	registry namespace.Registry,
@@ -101,9 +103,12 @@ func NewScavenger(
 		client:      client,
 		adminClient: adminClient,
 		registry:    registry,
-		rateLimiter: quotas.NewDefaultOutgoingRateLimiter(
-			func() float64 { return float64(rps) },
-		),
+		rateLimiter: quotas.NewMultiRateLimiter([]quotas.RateLimiter{
+			quotas.NewDefaultOutgoingRateLimiter(
+				func() float64 { return float64(perHostQPS()) },
+			),
+			defaultRateLimiter,
+		}),
 		historyDataMinAge:           historyDataMinAge,
 		executionDataDurationBuffer: executionDataDurationBuffer,
 		enableRetentionVerification: enableRetentionVerification,

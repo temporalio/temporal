@@ -10,6 +10,7 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -25,6 +26,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/service/worker/scanner/build_ids"
 )
@@ -58,6 +60,12 @@ type (
 		ExecutionScannerPerHostQPS dynamicconfig.IntPropertyFn
 		// ExecutionScannerPerShardQPS the max rate of calls to scan execution data per shard
 		ExecutionScannerPerShardQPS dynamicconfig.IntPropertyFn
+		// HistoryScannerPerHostQPS the max rate of calls to scan history data per host
+		HistoryScannerPerHostQPS dynamicconfig.IntPropertyFn
+		// TaskQueueScannerPerHostQPS the max rate of calls to scan task queue data per host
+		TaskQueueScannerPerHostQPS dynamicconfig.IntPropertyFn
+		// BuildIdScavengerPerHostQPS the max rate of calls to scan build id data per host
+		BuildIdScavengerPerHostQPS dynamicconfig.IntPropertyFn
 		// ExecutionDataDurationBuffer is the data TTL duration buffer of execution data
 		ExecutionDataDurationBuffer dynamicconfig.DurationPropertyFn
 		// ExecutionScannerWorkerCount is the execution scavenger task worker number
@@ -79,6 +87,7 @@ type (
 		logger             log.Logger
 		sdkClientFactory   sdk.ClientFactory
 		metricsHandler     metrics.Handler
+		rateLimiter        quotas.RateLimiter
 		executionManager   persistence.ExecutionManager
 		taskManager        persistence.TaskManager
 		visibilityManager  manager.VisibilityManager
@@ -121,6 +130,7 @@ func New(
 	registry namespace.Registry,
 	currentClusterName string,
 	hostInfo membership.HostInfo,
+	rateLimiter quotas.RateLimiter,
 ) *Scanner {
 	return &Scanner{
 		context: scannerContext{
@@ -138,6 +148,7 @@ func New(
 			namespaceRegistry:  registry,
 			currentClusterName: currentClusterName,
 			hostInfo:           hostInfo,
+			rateLimiter:        rateLimiter,
 		},
 	}
 }
@@ -193,6 +204,8 @@ func (s *Scanner) Start() error {
 			s.context.currentClusterName,
 			s.context.cfg.RemovableBuildIdDurationSinceDefault,
 			s.context.cfg.BuildIdScavengerVisibilityRPS,
+			s.context.cfg.BuildIdScavengerPerHostQPS,
+			s.context.rateLimiter,
 		)
 
 		work := s.context.sdkClientFactory.NewWorker(s.context.sdkClientFactory.GetSystemClient(), build_ids.BuildIdScavengerTaskQueueName, workerOpts)

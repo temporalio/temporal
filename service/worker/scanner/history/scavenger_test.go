@@ -10,6 +10,10 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/adminservicemock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -25,10 +29,8 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/testing/protomock"
-	"go.uber.org/mock/gomock"
-	"google.golang.org/protobuf/types/known/durationpb"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -72,16 +74,14 @@ func (s *ScavengerTestSuite) SetupTest() {
 	s.logger = log.NewTestLogger()
 	s.metricHandler = metrics.NoopMetricsHandler
 	s.numShards = 512
-	s.createTestScavenger(100)
+	s.createTestScavenger(100, 100, 100)
 }
 
 func (s *ScavengerTestSuite) TearDownTest() {
 	s.controller.Finish()
 }
 
-func (s *ScavengerTestSuite) createTestScavenger(
-	rps int,
-) {
+func (s *ScavengerTestSuite) createTestScavenger(perHostQPS, perShardQPS, maxQPS int) {
 	s.controller = gomock.NewController(s.T())
 	s.mockExecutionManager = persistence.NewMockExecutionManager(s.controller)
 	s.mockHistoryClient = historyservicemock.NewMockHistoryServiceClient(s.controller)
@@ -90,10 +90,18 @@ func (s *ScavengerTestSuite) createTestScavenger(
 	dataAge := dynamicconfig.GetDurationPropertyFn(time.Hour)
 	executionDataAge := dynamicconfig.GetDurationPropertyFn(time.Second)
 	enableRetentionVerification := dynamicconfig.GetBoolPropertyFn(true)
+	reservation := quotas.NewMockReservation(s.controller)
+	reservation.EXPECT().OK().Return(true).AnyTimes()
+	reservation.EXPECT().DelayFrom(gomock.Any()).Return(0 * time.Second).AnyTimes()
+	rateLimiter := quotas.NewMockRateLimiter(s.controller)
+	rateLimiter.EXPECT().ReserveN(gomock.Any(), gomock.Any()).Return(reservation).AnyTimes()
+	rateLimiter.EXPECT().Wait(gomock.Any()).AnyTimes()
+
 	s.scavenger = NewScavenger(
 		s.numShards,
 		s.mockExecutionManager,
-		rps,
+		dynamicconfig.GetIntPropertyFn(perHostQPS),
+		rateLimiter,
 		s.mockHistoryClient,
 		s.mockAdminClient,
 		s.mockRegistry,
