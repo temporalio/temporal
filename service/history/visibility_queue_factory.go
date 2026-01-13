@@ -48,7 +48,10 @@ func NewVisibilityQueueFactory(
 				params.NamespaceRegistry,
 				params.Logger,
 			),
-			HostPriorityAssigner: queues.NewPriorityAssigner(),
+			HostPriorityAssigner: queues.NewPriorityAssigner(
+				params.NamespaceRegistry,
+				params.ClusterMetadata.GetCurrentClusterName(),
+			),
 			HostReaderRateLimiter: queues.NewReaderPriorityRateLimiter(
 				NewHostRateLimiterRateFn(
 					params.Config.VisibilityProcessorMaxPollHostRPS,
@@ -81,7 +84,6 @@ func (f *visibilityQueueFactory) CreateQueue(
 			f.SchedulerRateLimiter,
 			f.TimeSource,
 			f.ChasmRegistry,
-			f.ClusterMetadata,
 			logger,
 			metricsHandler,
 		)
