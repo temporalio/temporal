@@ -4987,7 +4987,7 @@ func (s *mutableStateSuite) TestCloseTransactionGenerateCHASMRetentionTask_NonWo
 	updatedExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
 	updatedExecutionState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
 	updatedExecutionState.LastUpdateVersionedTransition = &persistencespb.VersionedTransition{
-		NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(),
+		NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(s.mutableState.executionInfo.WorkflowId),
 		TransitionCount:          currentTransitionCount + 1,
 	}
 
