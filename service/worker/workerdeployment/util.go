@@ -358,6 +358,9 @@ func isRetryableQueryError(err error) bool {
 }
 
 func isRetryableUpdateError(err error) bool {
+	if err == nil {
+		return false
+	}
 	if errors.Is(err, errUpdateInProgress) || errors.Is(err, errWorkflowHistoryTooLong) ||
 		err.Error() == consts.ErrWorkflowClosing.Error() || err.Error() == update2.AbortedByServerErr.Error() {
 		return true
@@ -382,6 +385,9 @@ func isRetryableUpdateError(err error) bool {
 	var errMultiOps *serviceerror.MultiOperationExecution
 	if errors.As(err, &errMultiOps) {
 		for _, e := range errMultiOps.OperationErrors() {
+			if e == nil {
+				continue
+			}
 			if errors.As(e, &errResourceExhausted) &&
 				(errResourceExhausted.Cause == enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT ||
 					errResourceExhausted.Cause == enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW) {
