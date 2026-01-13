@@ -620,21 +620,17 @@ func (r *WorkflowStateReplicatorImpl) getFirstHistoryEventsBatch(
 	}
 
 	// Deserialize the first batch from remote
-	var result [][]*historypb.HistoryEvent
-	for _, blob := range response.HistoryBatches {
-		historyEvents, err := r.historySerializer.DeserializeEvents(blob)
-		if err != nil {
-			return nil, err
-		}
-		result = append(result, historyEvents)
+	historyEvents, err := r.historySerializer.DeserializeEvents(response.HistoryBatches[0])
+	if err != nil {
+		return nil, err
 	}
 
 	// Validate that the first event starts from event ID 1
-	if len(result) == 0 || len(result[0]) == 0 || result[0][0].EventId != 1 {
+	if len(historyEvents) == 0 || historyEvents[0].EventId != 1 {
 		return nil, serviceerror.NewInternal("first history event batch from remote cluster does not start from event ID 1")
 	}
 
-	return result, nil
+	return [][]*historypb.HistoryEvent{historyEvents}, nil
 }
 
 func (r *WorkflowStateReplicatorImpl) deleteNewBranchWhenError(
