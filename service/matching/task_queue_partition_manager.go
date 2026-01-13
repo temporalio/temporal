@@ -196,6 +196,7 @@ func (pm *taskQueuePartitionManagerImpl) initialize() (retErr error) {
 	}
 	pm.defaultQueueFuture.Set(defaultQ, nil)
 	defaultQ.Start()
+	pm.goroGroup.Go(pm.updateEphemeralData)
 	return nil
 }
 
@@ -211,7 +212,6 @@ func (pm *taskQueuePartitionManagerImpl) Start() {
 	pm.loadTime = time.Now()
 	pm.engine.updateTaskQueuePartitionGauge(pm.Namespace(), pm.partition, 1)
 	pm.userDataManager.Start()
-	pm.goroGroup.Go(pm.updateEphemeralData)
 	//nolint:errcheck
 	go pm.initialize()
 }
