@@ -8,7 +8,6 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
-	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
@@ -130,25 +129,9 @@ func validateVersionWfParams(fieldName string, field string, maxIDLengthLimit in
 	return worker_versioning.ValidateDeploymentVersionFields(fieldName, field, maxIDLengthLimit)
 }
 
-// GenerateDeploymentWorkflowID is a helper that generates a system accepted
-// workflowID which are used in our Worker Deployment workflows
-func GenerateDeploymentWorkflowID(deploymentName string) string {
-	return worker_versioning.WorkerDeploymentWorkflowIDPrefix + worker_versioning.WorkerDeploymentVersionDelimiter + deploymentName
-}
-
 func GetDeploymentNameFromWorkflowID(workflowID string) string {
 	_, deploymentName, _ := strings.Cut(workflowID, worker_versioning.WorkerDeploymentVersionDelimiter)
 	return deploymentName
-}
-
-// GenerateVersionWorkflowID is a helper that generates a system accepted
-// workflowID which are used in our Worker Deployment Version workflows
-func GenerateVersionWorkflowID(deploymentName string, buildID string) string {
-	versionString := worker_versioning.ExternalWorkerDeploymentVersionToString(&deploymentpb.WorkerDeploymentVersion{
-		DeploymentName: deploymentName,
-		BuildId:        buildID,
-	})
-	return worker_versioning.WorkerDeploymentVersionWorkflowIDPrefix + worker_versioning.WorkerDeploymentVersionDelimiter + versionString
 }
 
 func DecodeWorkerDeploymentMemo(memo *commonpb.Memo) *deploymentspb.WorkerDeploymentWorkflowMemo {
