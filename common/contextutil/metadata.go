@@ -31,7 +31,7 @@ func getMetadataContext(ctx context.Context) *metadataContext {
 }
 
 // AddMetadataContext adds a metadata context to the given context.
-func AddMetadataContext(ctx context.Context) context.Context {
+func WithMetadataContext(ctx context.Context) context.Context {
 	metadataCtx := &metadataContext{
 		Metadata: make(map[string]any),
 	}
