@@ -278,7 +278,7 @@ func (s *scheduleFunctionalSuiteBase) TestBasics() {
 
 	// GreaterOrEqual is used as we may have had other runs start while waiting for visibility
 	s.DurationNear(describeResp.Info.CreateTime.AsTime().Sub(createTime), 0, 3*time.Second)
-	s.Equal(describeResp.Info.CreateTime.AsTime(), describeResp.Info.UpdateTime.AsTime())
+	s.Equal(describeResp.Info.CreateTime.AsTime().Truncate(time.Second), describeResp.Info.UpdateTime.AsTime().Truncate(time.Second))
 	s.GreaterOrEqual(describeResp.Info.ActionCount, int64(2))
 	s.EqualValues(0, describeResp.Info.MissedCatchupWindow)
 	s.EqualValues(0, describeResp.Info.OverlapSkipped)

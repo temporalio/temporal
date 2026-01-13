@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	schedulepb "go.temporal.io/api/schedule/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler"
@@ -85,6 +86,10 @@ func (s *schedulerSuite) SetupTest() {
 	s.scheduler = scheduler.NewScheduler(ctx, namespace, namespaceID, scheduleID, defaultSchedule(), nil)
 	s.node.SetRootComponent(s.scheduler)
 
+	// Set UpdateTime to an early time so tests can freely manipulate LastProcessedTime.
+	// Tests that need to verify UpdateTime behavior can override this.
+	s.scheduler.Info.UpdateTime = timestamppb.New(time.Unix(0, 0))
+
 	// Advance Generator's high water mark to 'now'.
 	generator := s.scheduler.Generator.Get(ctx)
 	generator.LastProcessedTime = timestamppb.New(now)
@@ -127,6 +132,14 @@ func (s *schedulerSuite) hasTask(task any, visibilityTime time.Time) bool {
 
 func (s *schedulerSuite) newMutableContext() chasm.MutableContext {
 	return chasm.NewMutableContext(context.Background(), s.node)
+}
+
+// newSchedulerForTest creates a new scheduler with UpdateTime set to an early time
+// so tests can freely manipulate time ranges.
+func (s *schedulerSuite) newSchedulerForTest(ctx chasm.MutableContext, schedule *schedulepb.Schedule) *scheduler.Scheduler {
+	sched := scheduler.NewScheduler(ctx, namespace, namespaceID, scheduleID, schedule, nil)
+	sched.Info.UpdateTime = timestamppb.New(time.Unix(0, 0))
+	return sched
 }
 
 func (s *schedulerSuite) newEngineContext() context.Context {
