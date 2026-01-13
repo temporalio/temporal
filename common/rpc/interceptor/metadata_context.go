@@ -21,6 +21,6 @@ func (m *MetadataContextInterceptor) Intercept(
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
 ) (interface{}, error) {
-	ctx = contextutil.AddMetadataContext(ctx)
+	ctx = contextutil.WithMetadataContext(ctx)
 	return handler(ctx, req)
 }

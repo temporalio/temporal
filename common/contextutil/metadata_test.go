@@ -12,7 +12,7 @@ import (
 func TestAddMetadataContext(t *testing.T) {
 	t.Run("adds metadata context to empty context", func(t *testing.T) {
 		ctx := context.Background()
-		ctx = AddMetadataContext(ctx)
+		ctx = WithMetadataContext(ctx)
 
 		metadataCtx := getMetadataContext(ctx)
 		require.NotNil(t, metadataCtx)
@@ -22,7 +22,7 @@ func TestAddMetadataContext(t *testing.T) {
 
 	t.Run("returns new context with metadata", func(t *testing.T) {
 		ctx := context.Background()
-		ctxWithMetadata := AddMetadataContext(ctx)
+		ctxWithMetadata := WithMetadataContext(ctx)
 
 		assert.NotEqual(t, ctx, ctxWithMetadata)
 		assert.Nil(t, getMetadataContext(ctx))
@@ -32,7 +32,7 @@ func TestAddMetadataContext(t *testing.T) {
 
 func TestContextMetadataSet(t *testing.T) {
 	t.Run("sets string value successfully", func(t *testing.T) {
-		ctx := AddMetadataContext(context.Background())
+		ctx := WithMetadataContext(context.Background())
 
 		success := ContextMetadataSet(ctx, "key1", "value1")
 		assert.True(t, success)
@@ -43,7 +43,7 @@ func TestContextMetadataSet(t *testing.T) {
 	})
 
 	t.Run("sets multiple values successfully", func(t *testing.T) {
-		ctx := AddMetadataContext(context.Background())
+		ctx := WithMetadataContext(context.Background())
 
 		ContextMetadataSet(ctx, "key1", "value1")
 		ContextMetadataSet(ctx, "key2", 42)
@@ -57,7 +57,7 @@ func TestContextMetadataSet(t *testing.T) {
 	})
 
 	t.Run("overwrites existing value", func(t *testing.T) {
-		ctx := AddMetadataContext(context.Background())
+		ctx := WithMetadataContext(context.Background())
 
 		ContextMetadataSet(ctx, "key1", "value1")
 		ContextMetadataSet(ctx, "key1", "value2")
@@ -75,7 +75,7 @@ func TestContextMetadataSet(t *testing.T) {
 	})
 
 	t.Run("supports various value types", func(t *testing.T) {
-		ctx := AddMetadataContext(context.Background())
+		ctx := WithMetadataContext(context.Background())
 
 		type customStruct struct {
 			Field string
@@ -110,7 +110,7 @@ func TestContextMetadataSet(t *testing.T) {
 
 func TestContextMetadataGet(t *testing.T) {
 	t.Run("retrieves existing value", func(t *testing.T) {
-		ctx := AddMetadataContext(context.Background())
+		ctx := WithMetadataContext(context.Background())
 		ContextMetadataSet(ctx, "key1", "value1")
 
 		value, ok := ContextMetadataGet(ctx, "key1")
@@ -119,7 +119,7 @@ func TestContextMetadataGet(t *testing.T) {
 	})
 
 	t.Run("returns false for non-existent key", func(t *testing.T) {
-		ctx := AddMetadataContext(context.Background())
+		ctx := WithMetadataContext(context.Background())
 
 		value, ok := ContextMetadataGet(ctx, "nonexistent")
 		assert.False(t, ok)
@@ -135,7 +135,7 @@ func TestContextMetadataGet(t *testing.T) {
 	})
 
 	t.Run("retrieves nil value correctly", func(t *testing.T) {
-		ctx := AddMetadataContext(context.Background())
+		ctx := WithMetadataContext(context.Background())
 		ContextMetadataSet(ctx, "nilKey", nil)
 
 		value, ok := ContextMetadataGet(ctx, "nilKey")
@@ -144,7 +144,7 @@ func TestContextMetadataGet(t *testing.T) {
 	})
 
 	t.Run("retrieves various value types", func(t *testing.T) {
-		ctx := AddMetadataContext(context.Background())
+		ctx := WithMetadataContext(context.Background())
 
 		ContextMetadataSet(ctx, "string", "test")
 		ContextMetadataSet(ctx, "int", 42)
@@ -172,7 +172,7 @@ func TestGetMetadataContext(t *testing.T) {
 	})
 
 	t.Run("returns metadata context when present", func(t *testing.T) {
-		ctx := AddMetadataContext(context.Background())
+		ctx := WithMetadataContext(context.Background())
 		metadataCtx := getMetadataContext(ctx)
 		assert.NotNil(t, metadataCtx)
 	})
@@ -186,7 +186,7 @@ func TestGetMetadataContext(t *testing.T) {
 
 func TestMetadataContextConcurrency(t *testing.T) {
 	t.Run("concurrent set operations are safe", func(t *testing.T) {
-		ctx := AddMetadataContext(context.Background())
+		ctx := WithMetadataContext(context.Background())
 
 		var wg sync.WaitGroup
 		numGoroutines := 100
@@ -213,7 +213,7 @@ func TestMetadataContextConcurrency(t *testing.T) {
 	})
 
 	t.Run("concurrent get and set operations are safe", func(t *testing.T) {
-		ctx := AddMetadataContext(context.Background())
+		ctx := WithMetadataContext(context.Background())
 		ContextMetadataSet(ctx, "counter", 0)
 
 		var wg sync.WaitGroup
@@ -252,7 +252,7 @@ func TestMetadataContextConcurrency(t *testing.T) {
 	})
 
 	t.Run("concurrent operations on different keys are safe", func(t *testing.T) {
-		ctx := AddMetadataContext(context.Background())
+		ctx := WithMetadataContext(context.Background())
 
 		var wg sync.WaitGroup
 		numGoroutines := 50
@@ -286,7 +286,7 @@ func TestMetadataContextConcurrency(t *testing.T) {
 func TestMetadataContextWithContextCancellation(t *testing.T) {
 	t.Run("metadata survives context cancellation", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
-		ctx = AddMetadataContext(ctx)
+		ctx = WithMetadataContext(ctx)
 
 		ContextMetadataSet(ctx, "key1", "value1")
 
@@ -310,8 +310,8 @@ func TestMetadataContextWithContextCancellation(t *testing.T) {
 
 func TestMetadataContextIsolation(t *testing.T) {
 	t.Run("contexts with different metadata are isolated", func(t *testing.T) {
-		ctx1 := AddMetadataContext(context.Background())
-		ctx2 := AddMetadataContext(context.Background())
+		ctx1 := WithMetadataContext(context.Background())
+		ctx2 := WithMetadataContext(context.Background())
 
 		ContextMetadataSet(ctx1, "key", "value1")
 		ContextMetadataSet(ctx2, "key", "value2")
@@ -326,7 +326,7 @@ func TestMetadataContextIsolation(t *testing.T) {
 	})
 
 	t.Run("child context does not inherit parent metadata", func(t *testing.T) {
-		parentCtx := AddMetadataContext(context.Background())
+		parentCtx := WithMetadataContext(context.Background())
 		ContextMetadataSet(parentCtx, "key", "parent-value")
 
 		type testContextKey string
@@ -345,10 +345,10 @@ func TestMetadataContextIsolation(t *testing.T) {
 	})
 
 	t.Run("adding metadata context twice creates new isolated context", func(t *testing.T) {
-		ctx1 := AddMetadataContext(context.Background())
+		ctx1 := WithMetadataContext(context.Background())
 		ContextMetadataSet(ctx1, "key", "value1")
 
-		ctx2 := AddMetadataContext(ctx1)
+		ctx2 := WithMetadataContext(ctx1)
 		ContextMetadataSet(ctx2, "key", "value2")
 
 		value1, ok1 := ContextMetadataGet(ctx1, "key")
