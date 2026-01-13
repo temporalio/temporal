@@ -82,7 +82,7 @@ sequenceDiagram
 - `LastProcessedTime`: Generator advances this high water mark whenever it has finished buffering all actions up to that point in time. This also includes when periods of time are skipped over, such as when the schedule is updated (all actions prior to update time are discarded), or when an action's schedule latency would exceed the schedule's catchup window.
 
 #### Tasks
-`GeneratorTask`: Drives the automated actions loop. When a schedule is first created (or updated), a `GeneratorTask` is scheduled for immediate execution. `GeneratorTask` will reschedule itself for subsequent execution at the point in time where the next automated action is scheduled to fire. If the schedule has completed (by exceeding its lifetime, or action count), `GeneratorTask` won't reschedule itself, and will instead schedule the Scheduler's `IdleTask` to apply a TTL the schedule's lifetime.
+`GeneratorTask`: Drives the automated actions loop. When a schedule is first created (or updated), a `GeneratorTask` is scheduled for immediate execution. `GeneratorTask` will reschedule itself for subsequent execution at the point in time where the next automated action is scheduled to fire. If the schedule has completed (by exceeding its lifetime, or action count), `GeneratorTask` won't reschedule itself, and will instead schedule the Scheduler's `IdleTask`. The idle task keeps the schedule open for a retention period before closing it, ensuring the schedule doesn't immediately disappear after completion.
 
 `GeneratorTask`'s primary responsibility is to call `EnqueueBufferedStarts` on the `Invoker`, handing off actions for execution (see also *Specification Processor* in this document):
 
@@ -120,12 +120,14 @@ flowchart TD
 
 *Figure: `GeneratorTask`'s decision tree for buffering starts (trivial branches omitted).*
 
+Note that when the schedule is paused, `GeneratorTask` finishes without rescheduling itself. Whenever the schedule is updated (including being resumed from a paused state), a new `GeneratorTask` is scheduled for immediate execution, restarting the loop.
+
 #### Notes
 - At time of writing, `FutureActionTimes` is also maintained in Generator's state. This field is a cached view of speculated action times, and is returned as part of describe responses, but is not involved in actual start time calculations, action buffering, or even as assured guarantees of execution (e.g., a listed time may be dropped for having missed catchup window).
 
 ### Backfiller (Manual Actions)
 
-A Backfiller component is created for every backfill requested through the API (including "trigger immediately" requests). Similar to the `GeneratorTask`, the `BackfillerTask` is responsible for driving a backfill to completion by enqueueing buffered actions into the Invoker. Each backfiller acts as a distinct buffer per backfill request, and will avoid [monopolizing the Invoker's shared `BufferedStarts` field](https://github.com/temporalio/temporal/blob/main/chasm/lib/scheduler/backfiller_tasks.go#L230-L231), instead backing off and retrying while waiting for the buffer to drain. 
+A Backfiller component is created for every backfill requested through the API (including "trigger immediately" requests). Similar to the `GeneratorTask`, the `BackfillerTask` is responsible for driving a backfill to completion by enqueueing buffered actions into the Invoker. Each backfiller acts as a distinct buffer per backfill request, and will avoid [monopolizing the Invoker's shared `BufferedStarts` field](https://github.com/temporalio/temporal/blob/658b80da2ed66355fe78650788ac33814ffd1561/chasm/lib/scheduler/backfiller_tasks.go#L233-L234), instead backing off and retrying while waiting for the buffer to drain. 
 
 The Backfiller component fits into the scheduler sequence diagram similarly to the Generator:
 
@@ -196,7 +198,7 @@ The Invoker component is responsible for driving buffered starts to execution, m
 - `LastProcessedTime`: A high water mark used to evaluate when to fire tasks that are pending a retry after execution failure.
 
 #### Tasks
-`ProcessBufferTask`: The final step in the scheduler where a potential action can be dropped, as it determines which actions will become eligible for execution via the `ExecuteTask`. `ProcessBufferTask` itself does not make *any* service calls to determine the state of running workflows, and instead relies on the computed view of running workflows derived from `BufferedStarts` (entries with `RunId` set but not yet completed), which is updated through `ExecuteTask` and completion callbacks, discussed below.
+`ProcessBufferTask`: Evaluates overlap policies and determines which buffered starts will become eligible for execution via the `ExecuteTask`. This is the step where actions may be discarded (e.g., `BUFFER_ONE` policy with a running workflow) or deferred (waiting for a running workflow to complete). `ProcessBufferTask` itself does not make *any* service calls to determine the state of running workflows, and instead relies on the computed view of running workflows derived from `BufferedStarts` (entries with `RunId` set but not yet completed), which is updated through `ExecuteTask` and completion callbacks, discussed below.
 
 ```mermaid
 flowchart TD
