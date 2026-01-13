@@ -46,7 +46,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
         with:
-          persist-credentials: true
+          persist-credentials: false
           token: ${{ steps.generate_token.outputs.token }}
           ref: ${{ github.event.inputs.branch }}
           fetch-depth: 0
@@ -192,7 +192,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
         with:
-          persist-credentials: true
+          persist-credentials: false
           token: ${{ steps.generate_token.outputs.token }}
           ref: main
 
