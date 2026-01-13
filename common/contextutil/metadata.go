@@ -65,3 +65,21 @@ func ContextMetadataGet(ctx context.Context, key string) (any, bool) {
 	value, ok := metadataCtx.Metadata[key]
 	return value, ok
 }
+
+// ContextMetadataGetAll retrieves all metadata from the context as a map copy.
+func ContextMetadataGetAll(ctx context.Context) map[string]any {
+	metadataCtx := getMetadataContext(ctx)
+	if metadataCtx == nil {
+		return nil
+	}
+
+	metadataCtx.Lock()
+	defer metadataCtx.Unlock()
+
+	// Return a copy to prevent external modifications
+	result := make(map[string]any, len(metadataCtx.Metadata))
+	for k, v := range metadataCtx.Metadata {
+		result[k] = v
+	}
+	return result
+}

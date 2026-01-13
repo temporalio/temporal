@@ -163,6 +163,47 @@ func TestContextMetadataGet(t *testing.T) {
 	})
 }
 
+func TestContextMetadataGetAll(t *testing.T) {
+	t.Run("retrieves all metadata", func(t *testing.T) {
+		ctx := WithMetadataContext(context.Background())
+		ContextMetadataSet(ctx, "key1", "value1")
+		ContextMetadataSet(ctx, "key2", 42)
+
+		allMetadata := ContextMetadataGetAll(ctx)
+		assert.NotNil(t, allMetadata)
+		assert.Len(t, allMetadata, 2)
+		assert.Equal(t, "value1", allMetadata["key1"])
+		assert.Equal(t, 42, allMetadata["key2"])
+	})
+
+	t.Run("returns nil when context has no metadata", func(t *testing.T) {
+		ctx := context.Background()
+
+		allMetadata := ContextMetadataGetAll(ctx)
+		assert.Nil(t, allMetadata)
+	})
+
+	t.Run("returns empty map when no metadata set", func(t *testing.T) {
+		ctx := WithMetadataContext(context.Background())
+
+		allMetadata := ContextMetadataGetAll(ctx)
+		assert.NotNil(t, allMetadata)
+		assert.Empty(t, allMetadata)
+	})
+
+	t.Run("returned map is a copy", func(t *testing.T) {
+		ctx := WithMetadataContext(context.Background())
+		ContextMetadataSet(ctx, "key1", "value1")
+
+		allMetadata := ContextMetadataGetAll(ctx)
+		allMetadata["key2"] = "value2"
+
+		// Original should not be affected
+		_, ok := ContextMetadataGet(ctx, "key2")
+		assert.False(t, ok)
+	})
+}
+
 func TestGetMetadataContext(t *testing.T) {
 	t.Run("returns nil for context without metadata", func(t *testing.T) {
 		ctx := context.Background()
