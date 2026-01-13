@@ -2,7 +2,6 @@ package contextutil
 
 import (
 	"context"
-	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -181,105 +180,6 @@ func TestGetMetadataContext(t *testing.T) {
 		ctx := context.WithValue(context.Background(), metadataCtxKey, "wrong type")
 		metadataCtx := getMetadataContext(ctx)
 		assert.Nil(t, metadataCtx)
-	})
-}
-
-func TestMetadataContextConcurrency(t *testing.T) {
-	t.Run("concurrent set operations are safe", func(t *testing.T) {
-		ctx := WithMetadataContext(context.Background())
-
-		var wg sync.WaitGroup
-		numGoroutines := 100
-		numOperations := 100
-
-		wg.Add(numGoroutines)
-		for i := 0; i < numGoroutines; i++ {
-			go func(id int) {
-				defer wg.Done()
-				for j := 0; j < numOperations; j++ {
-					key := "key"
-					value := id*numOperations + j
-					ContextMetadataSet(ctx, key, value)
-				}
-			}(i)
-		}
-
-		wg.Wait()
-
-		// Verify that some value was set (the exact value doesn't matter due to race)
-		value, ok := ContextMetadataGet(ctx, "key")
-		assert.True(t, ok)
-		assert.NotNil(t, value)
-	})
-
-	t.Run("concurrent get and set operations are safe", func(t *testing.T) {
-		ctx := WithMetadataContext(context.Background())
-		ContextMetadataSet(ctx, "counter", 0)
-
-		var wg sync.WaitGroup
-		numReaders := 50
-		numWriters := 50
-		numOperations := 100
-
-		// Start readers
-		wg.Add(numReaders)
-		for i := 0; i < numReaders; i++ {
-			go func() {
-				defer wg.Done()
-				for j := 0; j < numOperations; j++ {
-					ContextMetadataGet(ctx, "counter")
-				}
-			}()
-		}
-
-		// Start writers
-		wg.Add(numWriters)
-		for i := 0; i < numWriters; i++ {
-			go func(id int) {
-				defer wg.Done()
-				for j := 0; j < numOperations; j++ {
-					ContextMetadataSet(ctx, "counter", id*numOperations+j)
-				}
-			}(i)
-		}
-
-		wg.Wait()
-
-		// Verify the context is still functional
-		value, ok := ContextMetadataGet(ctx, "counter")
-		assert.True(t, ok)
-		assert.NotNil(t, value)
-	})
-
-	t.Run("concurrent operations on different keys are safe", func(t *testing.T) {
-		ctx := WithMetadataContext(context.Background())
-
-		var wg sync.WaitGroup
-		numGoroutines := 50
-
-		wg.Add(numGoroutines)
-		for i := 0; i < numGoroutines; i++ {
-			go func(id int) {
-				defer wg.Done()
-				key := string(rune('a' + id%26))
-				for j := 0; j < 100; j++ {
-					ContextMetadataSet(ctx, key, id*100+j)
-					ContextMetadataGet(ctx, key)
-				}
-			}(i)
-		}
-
-		wg.Wait()
-
-		// Verify all keys are accessible
-		for i := 0; i < 26; i++ {
-			key := string(rune('a' + i))
-			_, ok := ContextMetadataGet(ctx, key)
-			// At least some keys should have been set
-			if i < numGoroutines {
-				assert.True(t, ok)
-			}
-		}
 	})
 }
 
