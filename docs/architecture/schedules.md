@@ -79,7 +79,7 @@ sequenceDiagram
 *Figure: A high-level sequence diagram of how scheduler kicks off actions on interval.* 
 
 #### State
-- `LastProcessedTime`: Generator maintains advances this high water mark whenever it has finished buffering all actions up to that point in time. This also includes when periods of time are skipped over, such as when the schedule is updated (all actions prior to update time are discarded), or when an action's schedule latency would exceed the schedule's catchup window.
+- `LastProcessedTime`: Generator advances this high water mark whenever it has finished buffering all actions up to that point in time. This also includes when periods of time are skipped over, such as when the schedule is updated (all actions prior to update time are discarded), or when an action's schedule latency would exceed the schedule's catchup window.
 
 #### Tasks
 `GeneratorTask`: Drives the automated actions loop. When a schedule is first created (or updated), a `GeneratorTask` is scheduled for immediate execution. `GeneratorTask` will reschedule itself for subsequent execution at the point in time where the next automated action is scheduled to fire. If the schedule has completed (by exceeding its lifetime, or action count), `GeneratorTask` won't reschedule itself, and will instead schedule the Scheduler's `IdleTask` to apply a TTL the schedule's lifetime.
