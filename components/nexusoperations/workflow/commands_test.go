@@ -404,7 +404,7 @@ func TestHandleScheduleCommand(t *testing.T) {
 		require.ErrorAs(t, err, &failWFTErr)
 		require.False(t, failWFTErr.TerminateWorkflow)
 		require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES, failWFTErr.Cause)
-		require.Equal(t, 0, len(tcx.history.Events))
+		require.Empty(t, tcx.history.Events)
 	})
 
 	t.Run("invalid start-to-close timeout", func(t *testing.T) {
@@ -423,7 +423,7 @@ func TestHandleScheduleCommand(t *testing.T) {
 		require.ErrorAs(t, err, &failWFTErr)
 		require.False(t, failWFTErr.TerminateWorkflow)
 		require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES, failWFTErr.Cause)
-		require.Equal(t, 0, len(tcx.history.Events))
+		require.Empty(t, tcx.history.Events)
 	})
 
 	t.Run("schedule-to-start timeout trimmed to schedule-to-close timeout", func(t *testing.T) {
@@ -440,7 +440,7 @@ func TestHandleScheduleCommand(t *testing.T) {
 			},
 		})
 		require.NoError(t, err)
-		require.Equal(t, 1, len(tcx.history.Events))
+		require.Len(t, tcx.history.Events, 1)
 		eAttrs := tcx.history.Events[0].GetNexusOperationScheduledEventAttributes()
 		require.Equal(t, 30*time.Minute, eAttrs.ScheduleToStartTimeout.AsDuration())
 		require.Equal(t, 30*time.Minute, eAttrs.ScheduleToCloseTimeout.AsDuration())
@@ -460,7 +460,7 @@ func TestHandleScheduleCommand(t *testing.T) {
 			},
 		})
 		require.NoError(t, err)
-		require.Equal(t, 1, len(tcx.history.Events))
+		require.Len(t, tcx.history.Events, 1)
 		eAttrs := tcx.history.Events[0].GetNexusOperationScheduledEventAttributes()
 		require.Equal(t, 30*time.Minute, eAttrs.StartToCloseTimeout.AsDuration())
 		require.Equal(t, 30*time.Minute, eAttrs.ScheduleToCloseTimeout.AsDuration())
@@ -481,7 +481,7 @@ func TestHandleScheduleCommand(t *testing.T) {
 			},
 		})
 		require.NoError(t, err)
-		require.Equal(t, 1, len(tcx.history.Events))
+		require.Len(t, tcx.history.Events, 1)
 		eAttrs := tcx.history.Events[0].GetNexusOperationScheduledEventAttributes()
 		require.Equal(t, 30*time.Minute, eAttrs.ScheduleToStartTimeout.AsDuration())
 		require.Equal(t, 30*time.Minute, eAttrs.StartToCloseTimeout.AsDuration())
@@ -503,7 +503,7 @@ func TestHandleScheduleCommand(t *testing.T) {
 			},
 		})
 		require.NoError(t, err)
-		require.Equal(t, 1, len(tcx.history.Events))
+		require.Len(t, tcx.history.Events, 1)
 		eAttrs := tcx.history.Events[0].GetNexusOperationScheduledEventAttributes()
 		require.Equal(t, 20*time.Minute, eAttrs.ScheduleToStartTimeout.AsDuration())
 		require.Equal(t, 30*time.Minute, eAttrs.StartToCloseTimeout.AsDuration())

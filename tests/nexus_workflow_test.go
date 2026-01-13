@@ -2781,7 +2781,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationScheduleToCloseTimeout() {
 	timedOutEventIdx := slices.IndexFunc(pollResp.History.Events, func(e *historypb.HistoryEvent) bool {
 		return e.GetNexusOperationTimedOutEventAttributes() != nil
 	})
-	s.Greater(timedOutEventIdx, 0)
+	s.Positive(timedOutEventIdx)
 	timedOutEvent := pollResp.History.Events[timedOutEventIdx]
 	s.Equal(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
 		timedOutEvent.GetNexusOperationTimedOutEventAttributes().GetFailure().GetCause().GetTimeoutFailureInfo().GetTimeoutType())
@@ -2878,7 +2878,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationScheduleToStartTimeout() {
 	timedOutEventIdx := slices.IndexFunc(pollResp.History.Events, func(e *historypb.HistoryEvent) bool {
 		return e.GetNexusOperationTimedOutEventAttributes() != nil
 	})
-	s.Greater(timedOutEventIdx, 0)
+	s.Positive(timedOutEventIdx)
 	timedOutEvent := pollResp.History.Events[timedOutEventIdx]
 	s.Equal(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 		timedOutEvent.GetNexusOperationTimedOutEventAttributes().GetFailure().GetCause().GetTimeoutFailureInfo().GetTimeoutType())
@@ -2984,7 +2984,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationStartToCloseTimeout() {
 	startedEventIdx := slices.IndexFunc(pollResp.History.Events, func(e *historypb.HistoryEvent) bool {
 		return e.GetNexusOperationStartedEventAttributes() != nil
 	})
-	s.Greater(startedEventIdx, 0)
+	s.Positive(startedEventIdx)
 
 	// Respond to acknowledge the started event
 	_, err = s.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
@@ -3008,7 +3008,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationStartToCloseTimeout() {
 	timedOutEventIdx := slices.IndexFunc(pollResp.History.Events, func(e *historypb.HistoryEvent) bool {
 		return e.GetNexusOperationTimedOutEventAttributes() != nil
 	})
-	s.Greater(timedOutEventIdx, 0)
+	s.Positive(timedOutEventIdx)
 	timedOutEvent := pollResp.History.Events[timedOutEventIdx]
 	s.Equal(enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 		timedOutEvent.GetNexusOperationTimedOutEventAttributes().GetFailure().GetCause().GetTimeoutFailureInfo().GetTimeoutType())

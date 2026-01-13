@@ -101,7 +101,7 @@ func TestAddChildWithNewTimeouts(t *testing.T) {
 			startToCloseTimeout:    45 * time.Minute,
 			assertTasks: func(t *testing.T, tasks []hsm.Task) {
 				// Should have Invocation, ScheduleToClose, and ScheduleToStart tasks
-				require.Equal(t, 3, len(tasks))
+				require.Len(t, tasks, 3)
 				require.Equal(t, nexusoperations.TaskTypeInvocation, tasks[0].Type())
 				require.Equal(t, nexusoperations.TaskTypeScheduleToCloseTimeout, tasks[1].Type())
 				require.Equal(t, nexusoperations.TaskTypeScheduleToStartTimeout, tasks[2].Type())
@@ -113,7 +113,7 @@ func TestAddChildWithNewTimeouts(t *testing.T) {
 			scheduleToStartTimeout: 30 * time.Minute,
 			startToCloseTimeout:    0,
 			assertTasks: func(t *testing.T, tasks []hsm.Task) {
-				require.Equal(t, 2, len(tasks))
+				require.Len(t, tasks, 2)
 				require.Equal(t, nexusoperations.TaskTypeInvocation, tasks[0].Type())
 				require.Equal(t, nexusoperations.TaskTypeScheduleToStartTimeout, tasks[1].Type())
 			},
@@ -124,7 +124,7 @@ func TestAddChildWithNewTimeouts(t *testing.T) {
 			scheduleToStartTimeout: 0,
 			startToCloseTimeout:    0,
 			assertTasks: func(t *testing.T, tasks []hsm.Task) {
-				require.Equal(t, 2, len(tasks))
+				require.Len(t, tasks, 2)
 				require.Equal(t, nexusoperations.TaskTypeInvocation, tasks[0].Type())
 				require.Equal(t, nexusoperations.TaskTypeScheduleToCloseTimeout, tasks[1].Type())
 			},
@@ -154,7 +154,7 @@ func TestAddChildWithNewTimeouts(t *testing.T) {
 			require.NoError(t, err)
 			opLog, err := root.OpLog()
 			require.NoError(t, err)
-			require.Equal(t, 1, len(opLog))
+			require.Len(t, opLog, 1)
 			transitionOp, ok := opLog[0].(hsm.TransitionOperation)
 			require.True(t, ok)
 			tc.assertTasks(t, transitionOp.Output.Tasks)
@@ -203,13 +203,13 @@ func TestTransitionStartedEmitsStartToCloseTimeout(t *testing.T) {
 	opLog, err := root.OpLog()
 	require.NoError(t, err)
 	// Should have 2 operations: initial AddChild transition and TransitionStarted
-	require.Equal(t, 2, len(opLog))
+	require.Len(t, opLog, 2)
 
 	// Check the TransitionStarted output
 	transitionOp, ok := opLog[1].(hsm.TransitionOperation)
 	require.True(t, ok)
 	// Should have StartToCloseTimeout task
-	require.Equal(t, 1, len(transitionOp.Output.Tasks))
+	require.Len(t, transitionOp.Output.Tasks, 1)
 	require.Equal(t, nexusoperations.TaskTypeStartToCloseTimeout, transitionOp.Output.Tasks[0].Type())
 }
 
@@ -263,7 +263,7 @@ func TestRegenerateTasks(t *testing.T) {
 			startToCloseTimeout: 15 * time.Minute,
 			state:               enumsspb.NEXUS_OPERATION_STATE_STARTED,
 			assertTasks: func(t *testing.T, tasks []hsm.Task) {
-				require.Equal(t, 1, len(tasks))
+				require.Len(t, tasks, 1)
 				require.Equal(t, nexusoperations.TaskTypeStartToCloseTimeout, tasks[0].Type())
 			},
 		},
@@ -271,7 +271,7 @@ func TestRegenerateTasks(t *testing.T) {
 			name:  "started | without start to close timeout",
 			state: enumsspb.NEXUS_OPERATION_STATE_STARTED,
 			assertTasks: func(t *testing.T, tasks []hsm.Task) {
-				require.Equal(t, 0, len(tasks))
+				require.Empty(t, tasks)
 			},
 		},
 	}

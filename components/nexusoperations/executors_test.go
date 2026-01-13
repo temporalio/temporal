@@ -332,7 +332,7 @@ func TestProcessInvocationTask(t *testing.T) {
 				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF, op.State())
 				require.NotNil(t, op.LastAttemptFailure.GetApplicationFailureInfo())
 				require.Regexp(t, "request timed out", op.LastAttemptFailure.Message)
-				require.Equal(t, 0, len(events))
+				require.Empty(t, events)
 			},
 		},
 		{
@@ -682,7 +682,7 @@ func TestProcessScheduleToStartTimeoutTask(t *testing.T) {
 	op, err := hsm.MachineData[nexusoperations.Operation](node)
 	require.NoError(t, err)
 	require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_TIMED_OUT, op.State())
-	require.Equal(t, 1, len(backend.Events))
+	require.Len(t, backend.Events, 1)
 	require.Equal(t, enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT, backend.Events[0].EventType)
 	protorequire.ProtoEqual(t, &historypb.NexusOperationTimedOutEventAttributes{
 		ScheduledEventId: 1,
@@ -742,7 +742,7 @@ func TestProcessStartToCloseTimeoutTask(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_TIMED_OUT, op.State())
 	// Should have TIMED_OUT event (STARTED event is not added by the transition)
-	require.Equal(t, 1, len(backend.Events))
+	require.Len(t, backend.Events, 1)
 	require.Equal(t, enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT, backend.Events[0].EventType)
 	// Verify timeout type and message
 	timedOutAttrs := backend.Events[0].GetNexusOperationTimedOutEventAttributes()
