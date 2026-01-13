@@ -47,11 +47,9 @@ type (
 	}
 
 	TaskQueueExpectations struct {
-		BacklogCount     int
-		MaxExtraTasks    int
-		ExpectedAddRate  bool
-		ExpectedDispatch bool
-		CachedEnabled    bool
+		BacklogCount  int
+		MaxExtraTasks int
+		CachedEnabled bool
 	}
 
 	// TaskQueueExpectationsByType maps task queue types to their expectations
@@ -134,13 +132,14 @@ func (s *TaskQueueStatsSuite) TestAddMultipleTasks_MultiplePartitions_ValidateSt
 	// Enqueue all workflows.
 	total := s.enqueueWorkflows(2, tqName)
 
+	// Verify workflow add rate
+	s.validateRates(tqName, enumspb.TASK_QUEUE_TYPE_WORKFLOW, true, false)
+
 	// Expect at least *one* of the workflow/activity tasks to be in the stats.
 	expectations := TaskQueueExpectations{
-		BacklogCount:     1,     // ie at least one task in the backlog
-		MaxExtraTasks:    total, // ie at most all tasks can be in the backlog
-		ExpectedAddRate:  true,
-		ExpectedDispatch: true,
-		CachedEnabled:    true,
+		BacklogCount:  1,     // ie at least one task in the backlog
+		MaxExtraTasks: total, // ie at most all tasks can be in the backlog
+		CachedEnabled: true,
 	}
 
 	// Enqueue 1 activity set, to make sure the workflow backlog has some tasks.
@@ -155,6 +154,9 @@ func (s *TaskQueueStatsSuite) TestAddMultipleTasks_MultiplePartitions_ValidateSt
 
 	// Poll 2 activities, ie 1 per version, to make sure the activity backlog has some tasks.
 	s.pollActivities(2, tqName)
+
+	// Verify activity dispatch rate
+	s.validateRates(tqName, enumspb.TASK_QUEUE_TYPE_ACTIVITY, false, true)
 
 	// Expect the activity backlog to be non-empty now.
 	// This query will cache the stats for the remainder of the test.
@@ -208,11 +210,12 @@ func (s *TaskQueueStatsSuite) currentVersionAbsorbsUnversionedBacklogNoRamping(n
 	unversionedWorkflowCount := 10 * numPartitions
 	s.startUnversionedWorkflows(unversionedWorkflowCount, tqName)
 
+	// Verify workflow add rate
+	s.validateRates(tqName, enumspb.TASK_QUEUE_TYPE_WORKFLOW, true, false)
+
 	currentStatsExpectation := TaskQueueExpectations{
-		BacklogCount:     unversionedWorkflowCount,
-		MaxExtraTasks:    0,
-		ExpectedAddRate:  true,
-		ExpectedDispatch: false,
+		BacklogCount:  unversionedWorkflowCount,
+		MaxExtraTasks: 0,
 	}
 
 	s.EventuallyWithT(func(c *assert.CollectT) {
@@ -245,11 +248,12 @@ func (s *TaskQueueStatsSuite) currentVersionAbsorbsUnversionedBacklogNoRamping(n
 	activitesToSchedule := 10 * numPartitions
 	s.completeWorkflowTasksAndScheduleActivities(tqName, deploymentName, currentBuildID, activitesToSchedule)
 
+	// Verify activity add rate
+	s.validateRates(tqName, enumspb.TASK_QUEUE_TYPE_ACTIVITY, true, false)
+
 	activityStatsExpectation := TaskQueueExpectations{
-		BacklogCount:     activitesToSchedule,
-		MaxExtraTasks:    0,
-		ExpectedAddRate:  true,
-		ExpectedDispatch: false,
+		BacklogCount:  activitesToSchedule,
+		MaxExtraTasks: 0,
 	}
 
 	s.EventuallyWithT(func(c *assert.CollectT) {
@@ -337,17 +341,16 @@ func (s *TaskQueueStatsSuite) currentAbsorbsUnversionedBacklogWhenRampingToUnver
 	unversionedWorkflowCount := 10 * numPartitions
 	s.startUnversionedWorkflows(unversionedWorkflowCount, tqName)
 
+	// Verify workflow add rate
+	s.validateRates(tqName, enumspb.TASK_QUEUE_TYPE_WORKFLOW, true, false)
+
 	currentExpectation := TaskQueueExpectations{
-		BacklogCount:     unversionedWorkflowCount * (100 - rampPercentage) / 100,
-		MaxExtraTasks:    0,
-		ExpectedAddRate:  true,
-		ExpectedDispatch: false,
+		BacklogCount:  unversionedWorkflowCount * (100 - rampPercentage) / 100,
+		MaxExtraTasks: 0,
 	}
 	legacyExpectation := TaskQueueExpectations{
-		BacklogCount:     unversionedWorkflowCount,
-		MaxExtraTasks:    0,
-		ExpectedAddRate:  true,
-		ExpectedDispatch: false,
+		BacklogCount:  unversionedWorkflowCount,
+		MaxExtraTasks: 0,
 	}
 
 	s.EventuallyWithT(func(c *assert.CollectT) {
@@ -420,17 +423,16 @@ func (s *TaskQueueStatsSuite) rampingAbsorbsUnversionedBacklogWhenCurrentIsUnver
 	unversionedWorkflowCount := 10 * numPartitions
 	s.startUnversionedWorkflows(unversionedWorkflowCount, tqName)
 
+	// Verify workflow add rate
+	s.validateRates(tqName, enumspb.TASK_QUEUE_TYPE_WORKFLOW, true, false)
+
 	rampingExpectation := TaskQueueExpectations{
-		BacklogCount:     unversionedWorkflowCount * rampPercentage / 100,
-		MaxExtraTasks:    0,
-		ExpectedAddRate:  true,
-		ExpectedDispatch: false,
+		BacklogCount:  unversionedWorkflowCount * rampPercentage / 100,
+		MaxExtraTasks: 0,
 	}
 	legacyExpectation := TaskQueueExpectations{
-		BacklogCount:     unversionedWorkflowCount,
-		MaxExtraTasks:    0,
-		ExpectedAddRate:  true,
-		ExpectedDispatch: false,
+		BacklogCount:  unversionedWorkflowCount,
+		MaxExtraTasks: 0,
 	}
 
 	s.EventuallyWithT(func(c *assert.CollectT) {
@@ -489,23 +491,20 @@ func (s *TaskQueueStatsSuite) rampingAndCurrentAbsorbsUnversionedBacklog(numPart
 	unversionedWorkflowCount := 10 * numPartitions
 	s.startUnversionedWorkflows(unversionedWorkflowCount, tqName)
 
+	// Verify workflow add rate
+	s.validateRates(tqName, enumspb.TASK_QUEUE_TYPE_WORKFLOW, true, false)
+
 	currentExpectation := TaskQueueExpectations{
-		BacklogCount:     unversionedWorkflowCount * (100 - rampPercentage) / 100,
-		MaxExtraTasks:    0,
-		ExpectedAddRate:  true,
-		ExpectedDispatch: false,
+		BacklogCount:  unversionedWorkflowCount * (100 - rampPercentage) / 100,
+		MaxExtraTasks: 0,
 	}
 	rampingExpectation := TaskQueueExpectations{
-		BacklogCount:     unversionedWorkflowCount * rampPercentage / 100,
-		MaxExtraTasks:    0,
-		ExpectedAddRate:  true,
-		ExpectedDispatch: false,
+		BacklogCount:  unversionedWorkflowCount * rampPercentage / 100,
+		MaxExtraTasks: 0,
 	}
 	legacyExpectation := TaskQueueExpectations{
-		BacklogCount:     unversionedWorkflowCount,
-		MaxExtraTasks:    0,
-		ExpectedAddRate:  true,
-		ExpectedDispatch: false,
+		BacklogCount:  unversionedWorkflowCount,
+		MaxExtraTasks: 0,
 	}
 
 	// Currently only testing the following API's:
@@ -576,22 +575,21 @@ func (s *TaskQueueStatsSuite) rampingAndCurrentAbsorbsUnversionedBacklog(numPart
 		},
 	)
 
+	// Verify activity add rate
+	s.validateRates(tqName, enumspb.TASK_QUEUE_TYPE_ACTIVITY, true, false)
+
 	// It is important to note that the expected values here are theoretical values based on the ramp percentage. In other words, 70% of the unversioned backlog
 	// may not be scheduled on the current version by matching since it makes it's decision based on the workflowID of the workflow. However, when the number of workflows
 	// to schedule is high, the expected value of workflows scheduled on the current version will be close to the theoretical value. Here, we shall just be verifying if
 	// the theoretical statistics that are being reported are correct.
 	activitiesOnCurrentVersionExpectation := TaskQueueExpectations{
-		BacklogCount:     unversionedWorkflowCount * (100 - rampPercentage) / 100,
-		MaxExtraTasks:    0,
-		ExpectedAddRate:  true,
-		ExpectedDispatch: false,
+		BacklogCount:  unversionedWorkflowCount * (100 - rampPercentage) / 100,
+		MaxExtraTasks: 0,
 	}
 
 	activitiesOnRampingVersionExpectation := TaskQueueExpectations{
-		BacklogCount:     unversionedWorkflowCount * rampPercentage / 100,
-		MaxExtraTasks:    0,
-		ExpectedAddRate:  true,
-		ExpectedDispatch: false,
+		BacklogCount:  unversionedWorkflowCount * rampPercentage / 100,
+		MaxExtraTasks: 0,
 	}
 
 	s.EventuallyWithT(func(c *assert.CollectT) {
@@ -671,17 +669,16 @@ func (s *TaskQueueStatsSuite) inactiveVersionDoesNotAbsorbUnversionedBacklog(num
 	pinnedWorkflows := 10 * numPartitions
 	s.startPinnedWorkflows(pinnedWorkflows, tqName, deploymentName, inactiveBuildID)
 
+	// Verify workflow add rate
+	s.validateRates(tqName, enumspb.TASK_QUEUE_TYPE_WORKFLOW, true, false)
+
 	currentExpectation := TaskQueueExpectations{
-		BacklogCount:     unversionedWorkflows,
-		MaxExtraTasks:    0,
-		ExpectedAddRate:  true,
-		ExpectedDispatch: false,
+		BacklogCount:  unversionedWorkflows,
+		MaxExtraTasks: 0,
 	}
 	inactiveExpectation := TaskQueueExpectations{
-		BacklogCount:     pinnedWorkflows,
-		MaxExtraTasks:    0,
-		ExpectedAddRate:  true,
-		ExpectedDispatch: false,
+		BacklogCount:  pinnedWorkflows,
+		MaxExtraTasks: 0,
 	}
 
 	// Currently only testing the following API's:
@@ -741,24 +738,22 @@ func (s *TaskQueueStatsSuite) inactiveVersionDoesNotAbsorbUnversionedBacklog(num
 		},
 	)
 
+	// Verify workflow dispatch rate and activity add rate
+	s.validateRates(tqName, enumspb.TASK_QUEUE_TYPE_WORKFLOW, true, true)
+	s.validateRates(tqName, enumspb.TASK_QUEUE_TYPE_ACTIVITY, true, false)
+
 	// Validate activity backlogs
 	currentActivityExpectation := TaskQueueExpectations{
-		BacklogCount:     unversionedWorkflows,
-		MaxExtraTasks:    0,
-		ExpectedAddRate:  true,
-		ExpectedDispatch: false,
+		BacklogCount:  unversionedWorkflows,
+		MaxExtraTasks: 0,
 	}
 	inactiveActivityExpectation := TaskQueueExpectations{
-		BacklogCount:     pinnedWorkflows,
-		MaxExtraTasks:    0,
-		ExpectedAddRate:  true,
-		ExpectedDispatch: false,
+		BacklogCount:  pinnedWorkflows,
+		MaxExtraTasks: 0,
 	}
 	workflowTaskQueueEmptyExpectation := TaskQueueExpectations{
-		BacklogCount:     0,
-		MaxExtraTasks:    0,
-		ExpectedAddRate:  true,
-		ExpectedDispatch: true, // Since workflow tasks were dispatched
+		BacklogCount:  0,
+		MaxExtraTasks: 0,
 	}
 
 	s.EventuallyWithT(func(c *assert.CollectT) {
@@ -854,16 +849,12 @@ func (s *TaskQueueStatsSuite) publishConsumeWorkflowTasksValidateStats(sets int,
 	// verify both workflow and activity backlogs are empty
 	expectations := TaskQueueExpectationsByType{
 		enumspb.TASK_QUEUE_TYPE_WORKFLOW: {
-			BacklogCount:     0,
-			MaxExtraTasks:    0,
-			ExpectedAddRate:  false,
-			ExpectedDispatch: false,
+			BacklogCount:  0,
+			MaxExtraTasks: 0,
 		},
 		enumspb.TASK_QUEUE_TYPE_ACTIVITY: {
-			BacklogCount:     0,
-			MaxExtraTasks:    0,
-			ExpectedAddRate:  false,
-			ExpectedDispatch: false,
+			BacklogCount:  0,
+			MaxExtraTasks: 0,
 		},
 	}
 
@@ -879,12 +870,15 @@ func (s *TaskQueueStatsSuite) publishConsumeWorkflowTasksValidateStats(sets int,
 	// enqueue workflows
 	total := s.enqueueWorkflows(sets, tqName)
 
+	// verify workflow add rate
+	if sets > 0 {
+		s.validateRates(tqName, enumspb.TASK_QUEUE_TYPE_WORKFLOW, true, false)
+	}
+
 	// verify workflow backlog is not empty, activity backlog is empty
 	expectations[enumspb.TASK_QUEUE_TYPE_WORKFLOW] = TaskQueueExpectations{
-		BacklogCount:     total,
-		MaxExtraTasks:    maxExtraTasksAllowed,
-		ExpectedAddRate:  sets > 0,
-		ExpectedDispatch: false,
+		BacklogCount:  total,
+		MaxExtraTasks: maxExtraTasksAllowed,
 	}
 
 	s.validateAllTaskQueueStats(tqName, expectations, singlePartition)
@@ -893,18 +887,20 @@ func (s *TaskQueueStatsSuite) publishConsumeWorkflowTasksValidateStats(sets int,
 	totalAct := s.enqueueActivitiesForEachWorkflow(sets, tqName)
 	s.EqualValues(total, totalAct, "should have enqueued the same number of activities as workflows")
 
+	// verify workflow dispatch rate and activity add rate
+	if sets > 0 {
+		s.validateRates(tqName, enumspb.TASK_QUEUE_TYPE_WORKFLOW, false, true)
+		s.validateRates(tqName, enumspb.TASK_QUEUE_TYPE_ACTIVITY, true, false)
+	}
+
 	// verify workflow backlog is empty, activity backlog is not
 	expectations[enumspb.TASK_QUEUE_TYPE_WORKFLOW] = TaskQueueExpectations{
-		BacklogCount:     0,
-		MaxExtraTasks:    maxExtraTasksAllowed,
-		ExpectedAddRate:  sets > 0,
-		ExpectedDispatch: sets > 0,
+		BacklogCount:  0,
+		MaxExtraTasks: maxExtraTasksAllowed,
 	}
 	expectations[enumspb.TASK_QUEUE_TYPE_ACTIVITY] = TaskQueueExpectations{
-		BacklogCount:     total,
-		MaxExtraTasks:    maxExtraTasksAllowed,
-		ExpectedAddRate:  sets > 0,
-		ExpectedDispatch: false,
+		BacklogCount:  total,
+		MaxExtraTasks: maxExtraTasksAllowed,
 	}
 
 	s.validateAllTaskQueueStats(tqName, expectations, singlePartition)
@@ -912,12 +908,19 @@ func (s *TaskQueueStatsSuite) publishConsumeWorkflowTasksValidateStats(sets int,
 	// poll all activity tasks
 	s.pollActivities(total, tqName)
 
+	// verify activity dispatch rate
+	if sets > 0 {
+		s.validateRates(tqName, enumspb.TASK_QUEUE_TYPE_ACTIVITY, false, true)
+	}
+
 	// verify both workflow and activity backlogs are empty
+	expectations[enumspb.TASK_QUEUE_TYPE_WORKFLOW] = TaskQueueExpectations{
+		BacklogCount:  0,
+		MaxExtraTasks: maxExtraTasksAllowed,
+	}
 	expectations[enumspb.TASK_QUEUE_TYPE_ACTIVITY] = TaskQueueExpectations{
-		BacklogCount:     0,
-		MaxExtraTasks:    maxExtraTasksAllowed,
-		ExpectedAddRate:  sets > 0,
-		ExpectedDispatch: sets > 0,
+		BacklogCount:  0,
+		MaxExtraTasks: maxExtraTasksAllowed,
 	}
 
 	s.validateAllTaskQueueStats(tqName, expectations, singlePartition)
@@ -936,7 +939,7 @@ func (s *TaskQueueStatsSuite) startUnversionedWorkflows(count int, tqName string
 		WorkflowIdReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 	}
 
-	for i := 0; i < count; i++ {
+	for range count {
 		request.WorkflowId = uuid.NewString() // starting "count" different Unversioned workflows.
 		_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 		s.NoError(err)
@@ -967,7 +970,7 @@ func (s *TaskQueueStatsSuite) startPinnedWorkflows(count int, tqName string, dep
 			},
 		},
 	}
-	for i := 0; i < count; i++ {
+	for range count {
 		request.WorkflowId = uuid.NewString() // starting "n" different Pinned workflows.
 		_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 		s.NoError(err)
@@ -1190,9 +1193,9 @@ func (s *TaskQueueStatsSuite) enqueueWorkflows(sets int, tqName string) int {
 	deploymentOpts := s.deploymentOptions(tqName)
 
 	var total int
-	for version := 0; version < 2; version++ { // 0=unversioned, 1=versioned
+	for version := range 2 { // 0=unversioned, 1=versioned
 		for priority := 0; priority <= maxPriority; priority++ {
-			for i := 0; i < sets; i++ {
+			for range sets {
 				wt := "functional-workflow-multiple-tasks"
 				workflowType := &commonpb.WorkflowType{Name: wt}
 
@@ -1389,6 +1392,45 @@ func (s *TaskQueueStatsSuite) validateAllTaskQueueStats(
 	for tqType, expectation := range expectations {
 		s.validateTaskQueueStatsByType(tqName, tqType, expectation, singlePartition)
 	}
+}
+
+// validateRates verifies TasksAddRate and/or TasksDispatchRate in a dedicated EventuallyWithT block.
+// This should be called immediately after the relevant operation (enqueue for add rate, poll for dispatch rate)
+// to ensure the rate is checked while still fresh (before the 30-second sliding window decays).
+func (s *TaskQueueStatsSuite) validateRates(
+	tqName string,
+	tqType enumspb.TaskQueueType,
+	expectAddRate bool,
+	expectDispatchRate bool,
+) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	req := &workflowservice.DescribeTaskQueueRequest{
+		Namespace:     s.Namespace().String(),
+		TaskQueue:     &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		TaskQueueType: tqType,
+		ReportStats:   true,
+	}
+
+	s.EventuallyWithT(func(c *assert.CollectT) {
+		a := require.New(c)
+		label := "validateRates[" + tqType.String() + "]"
+
+		resp, err := s.FrontendClient().DescribeTaskQueue(ctx, req)
+		a.NoError(err)
+		a.NotNil(resp)
+		a.NotNil(resp.Stats)
+
+		if expectAddRate {
+			a.Greater(resp.Stats.TasksAddRate, float32(0),
+				"%s: TasksAddRate should be > 0, got %f", label, resp.Stats.TasksAddRate)
+		}
+		if expectDispatchRate {
+			a.Greater(resp.Stats.TasksDispatchRate, float32(0),
+				"%s: TasksDispatchRate should be > 0, got %f", label, resp.Stats.TasksDispatchRate)
+		}
+	}, 5*time.Second, 100*time.Millisecond)
 }
 
 func (s *TaskQueueStatsSuite) validateTaskQueueStatsByType(
@@ -1607,14 +1649,6 @@ func validateTaskQueueStatsStrict(
 	a.Equal(stats.ApproximateBacklogCount == 0, stats.ApproximateBacklogAge.AsDuration() == time.Duration(0),
 		"%s: ApproximateBacklogAge should be 0 when ApproximateBacklogCount is 0, got %s",
 		label, stats.ApproximateBacklogAge.AsDuration())
-
-	a.Equal(expectation.ExpectedAddRate, stats.TasksAddRate > 0,
-		"%s: TasksAddRate should be greater than 0 when ExpectedAddRate is true, got %f",
-		label, stats.TasksAddRate)
-
-	a.Equal(expectation.ExpectedDispatch, stats.TasksDispatchRate > 0,
-		"%s: TasksDispatchRate should be greater than 0 when ExpectedDispatch is true, got %f",
-		label, stats.TasksDispatchRate)
 }
 
 func validateTaskQueueStats(
@@ -1637,14 +1671,6 @@ func validateTaskQueueStats(
 	a.Equal(stats.ApproximateBacklogCount == 0, stats.ApproximateBacklogAge.AsDuration() == time.Duration(0),
 		"%s: ApproximateBacklogAge should be 0 when ApproximateBacklogCount is 0, got %s",
 		label, stats.ApproximateBacklogAge.AsDuration())
-
-	a.Equal(expectation.ExpectedAddRate, stats.TasksAddRate > 0,
-		"%s: TasksAddRate should be greater than 0 when ExpectedAddRate is true, got %f",
-		label, stats.TasksAddRate)
-
-	a.Equal(expectation.ExpectedDispatch, stats.TasksDispatchRate > 0,
-		"%s: TasksDispatchRate should be greater than 0 when ExpectedDispatch is true, got %f",
-		label, stats.TasksDispatchRate)
 }
 
 // TODO: Remove this once older stats tests are refactored to use the createDeploymentOptions function.
