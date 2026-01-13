@@ -23,8 +23,8 @@ const (
 )
 
 var (
-	visibilityComponentTypeID = generateTypeID(visibilityComponentType)
-	visibilityTaskTypeID      = generateTypeID(visibilityTaskType)
+	visibilityComponentTypeID = GenerateTypeID(visibilityComponentType)
+	visibilityTaskTypeID      = GenerateTypeID(visibilityTaskType)
 )
 
 // VisibilitySearchAttributesProvider if implemented by the root Component,
