@@ -30,8 +30,8 @@ func NewPriorityAssigner(nsRegistry namespace.Registry, currentClusterName strin
 }
 
 func (a *priorityAssignerImpl) Assign(executable Executable) tasks.Priority {
-	ns, _ := a.nsRegistry.GetNamespaceByID(namespace.ID(executable.GetNamespaceID()))
-	if ns != nil {
+	ns, err := a.nsRegistry.GetNamespaceByID(namespace.ID(executable.GetNamespaceID()))
+	if ns != nil && err == nil {
 		// Use lowest priority level for standby task processing
 		if !ns.ActiveInCluster(a.currentClusterName) {
 			return tasks.PriorityPreemptable
