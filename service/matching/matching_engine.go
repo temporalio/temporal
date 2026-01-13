@@ -213,6 +213,7 @@ func NewEngine(
 	saProvider searchattribute.Provider,
 	saMapperProvider searchattribute.MapperProvider,
 	rateLimiter TaskDispatchRateLimiter,
+	historySerializer serialization.Serializer,
 ) Engine {
 	scopedMetricsHandler := metricsHandler.WithTags(metrics.OperationTag(metrics.MatchingEngineScope))
 	e := &matchingEngineImpl{
@@ -223,7 +224,7 @@ func NewEngine(
 		matchingRawClient:             matchingRawClient,
 		tokenSerializer:               tasktoken.NewSerializer(),
 		workerDeploymentClient:        workerDeploymentClient,
-		historySerializer:             serialization.NewSerializer(),
+		historySerializer:             historySerializer,
 		logger:                        log.With(logger, tag.ComponentMatchingEngine),
 		throttledLogger:               log.With(throttledLogger, tag.ComponentMatchingEngine),
 		namespaceRegistry:             namespaceRegistry,
@@ -427,7 +428,7 @@ func (e *matchingEngineImpl) getTaskQueuePartitionManager(
 	tqConfig.loadCause = loadCause
 	logger, throttledLogger, metricsHandler := e.loggerAndMetricsForPartition(namespaceEntry, partition, tqConfig)
 	onFatalErr := func(cause unloadCause) { newPM.unloadFromEngine(cause) }
-	onUserDataChanged := func() { newPM.userDataChanged() }
+	onUserDataChanged := func(to *persistencespb.VersionedTaskQueueUserData) { newPM.userDataChanged(to) }
 	onEphemeralDataChanged := func(data *taskqueuespb.EphemeralData) { newPM.ephemeralDataChanged(data) }
 	userDataManager := newUserDataManager(
 		e.taskManager,
@@ -2956,6 +2957,7 @@ func (e *matchingEngineImpl) createPollActivityTaskQueueResponse(
 	return &matchingservice.PollActivityTaskQueueResponse{
 		ActivityId:                  attributes.ActivityId,
 		ActivityType:                attributes.ActivityType,
+		ActivityRunId:               historyResponse.GetActivityRunId(),
 		Header:                      attributes.Header,
 		Input:                       attributes.Input,
 		WorkflowExecution:           task.workflowExecution(),
@@ -3280,6 +3282,46 @@ func (e *matchingEngineImpl) UpdateTaskQueueConfig(
 	return &matchingservice.UpdateTaskQueueConfigResponse{
 		UpdatedTaskqueueConfig: userData.GetData().GetPerType()[int32(taskQueueType)].GetConfig(),
 	}, nil
+}
+
+func (e *matchingEngineImpl) UpdateFairnessState(
+	ctx context.Context,
+	req *matchingservice.UpdateFairnessStateRequest,
+) (*matchingservice.UpdateFairnessStateResponse, error) {
+	partition, err := tqid.NormalPartitionFromRpcName(req.GetTaskQueue(), req.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	if err != nil {
+		return nil, err
+	}
+
+	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, true, loadCauseOtherWrite)
+	if err != nil {
+		return nil, err
+	}
+
+	updateFn := func(old *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
+		data := old
+		if data != nil {
+			data = common.CloneProto(old)
+		} else {
+			data = &persistencespb.TaskQueueUserData{}
+		}
+		if data.PerType == nil {
+			data.PerType = make(map[int32]*persistencespb.TaskQueueTypeUserData)
+		}
+		typ := int32(req.GetTaskQueueType())
+		perType := data.PerType[typ]
+		if perType == nil {
+			data.PerType[typ] = &persistencespb.TaskQueueTypeUserData{}
+			perType = data.PerType[typ]
+		}
+		perType.FairnessState = req.FairnessState
+		return data, true, nil
+	}
+	_, err = pm.GetUserDataManager().UpdateUserData(ctx, UserDataUpdateOptions{Source: "Matching auto enable"}, updateFn)
+	if err != nil {
+		return nil, err
+	}
+	return &matchingservice.UpdateFairnessStateResponse{}, nil
 }
 
 // migrateOldFormatVersions moves versions present in the given deployment from the

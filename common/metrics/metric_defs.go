@@ -648,13 +648,17 @@ var (
 	TlsCertsExpiring                         = NewGaugeDef("certificates_expiring")
 	ServiceAuthorizationLatency              = NewTimerDef("service_authorization_latency")
 	EventBlobSize                            = NewBytesHistogramDef("event_blob_size")
-	HeaderSize                               = NewBytesHistogramDef("header_size", WithDescription("The size of the header in bytes passed to the server by the client. This metric is experimental and can be removed in the future."))
-	LockRequests                             = NewCounterDef("lock_requests")
-	LockLatency                              = NewTimerDef("lock_latency")
-	SemaphoreRequests                        = NewCounterDef("semaphore_requests")
-	SemaphoreFailures                        = NewCounterDef("semaphore_failures")
-	SemaphoreLatency                         = NewTimerDef("semaphore_latency")
-	ClientRequests                           = NewCounterDef(
+	BlobSizeError                            = NewCounterDef(
+		"blob_size_error",
+		WithDescription("The number of requests that failed due to blob size exceeding limits configured with BlobSizeLimitError and MemoSizeLimitError."),
+	)
+	HeaderSize        = NewBytesHistogramDef("header_size", WithDescription("The size of the header in bytes passed to the server by the client. This metric is experimental and can be removed in the future."))
+	LockRequests      = NewCounterDef("lock_requests")
+	LockLatency       = NewTimerDef("lock_latency")
+	SemaphoreRequests = NewCounterDef("semaphore_requests")
+	SemaphoreFailures = NewCounterDef("semaphore_failures")
+	SemaphoreLatency  = NewTimerDef("semaphore_latency")
+	ClientRequests    = NewCounterDef(
 		"client_requests",
 		WithDescription("The number of requests sent by the client to an individual service, keyed by `service_role` and `operation`."),
 	)

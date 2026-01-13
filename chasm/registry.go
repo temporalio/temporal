@@ -112,6 +112,11 @@ func (r *Registry) ComponentIDFor(componentInstance any) (uint32, bool) {
 	return rc.componentID, true
 }
 
+// TaskByID returns the registrable task for a given task type ID.
+func (r *Registry) TaskByID(id uint32) (*RegistrableTask, bool) {
+	return r.taskByID(id)
+}
+
 // TaskFqnByID converts task type ID to fully qualified task type name.
 // This method should only be used by CHASM framework internal code,
 // NOT CHASM library developers.

@@ -893,7 +893,7 @@ func (s *chasmEngineSuite) TestPollComponent_StaleState() {
 	s.Error(err)
 	var unavailable *serviceerror.Unavailable
 	s.ErrorAs(err, &unavailable)
-	s.Equal("please retry", unavailable.Message)
+	s.Equal("stale state, please retry", unavailable.Message)
 }
 
 func (s *chasmEngineSuite) TestCloseTime_ReturnsNonZeroWhenCompleted() {
@@ -934,6 +934,57 @@ func (s *chasmEngineSuite) TestCloseTime_ReturnsNonZeroWhenCompleted() {
 			closeTime := ctx.ExecutionCloseTime()
 			s.False(closeTime.IsZero(), "CloseTime should be non-zero when component is completed")
 			s.Equal(expectedCloseTime.Unix(), closeTime.Unix(), "CloseTime should match the expected close time")
+			return nil
+		},
+	)
+	s.NoError(err)
+}
+
+func (s *chasmEngineSuite) TestStateTransitionCount() {
+	tv := testvars.New(s.T())
+	tv = tv.WithRunID(tv.Any().RunID())
+
+	ref := chasm.NewComponentRef[*testComponent](
+		chasm.ExecutionKey{
+			NamespaceID: string(tests.NamespaceID),
+			BusinessID:  tv.WorkflowID(),
+			RunID:       tv.RunID(),
+		},
+	)
+
+	initialCount := int64(5)
+	state := s.buildPersistenceMutableState(
+		ref.ExecutionKey,
+		&persistencespb.ActivityInfo{ActivityId: ""},
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		nil,
+	)
+	state.ExecutionInfo.StateTransitionCount = initialCount
+
+	s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(&persistence.GetWorkflowExecutionResponse{State: state}, nil).Times(1)
+	s.mockExecutionManager.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(tests.UpdateWorkflowExecutionResponse, nil).Times(1)
+	s.mockEngine.EXPECT().NotifyChasmExecution(ref.ExecutionKey, gomock.Any()).Return().Times(1)
+
+	_, err := s.engine.UpdateComponent(
+		context.Background(),
+		ref,
+		func(ctx chasm.MutableContext, component chasm.Component) error {
+			tc, ok := component.(*testComponent)
+			s.True(ok)
+			tc.ActivityInfo.ActivityId = tv.ActivityID()
+			return nil
+		},
+	)
+	s.NoError(err)
+
+	err = s.engine.ReadComponent(
+		context.Background(),
+		ref,
+		func(ctx chasm.Context, component chasm.Component) error {
+			s.Equal(initialCount+1, ctx.StateTransitionCount())
 			return nil
 		},
 	)
@@ -1007,9 +1058,8 @@ func (s *chasmEngineSuite) serializeComponentState(
 }
 
 const (
-	testComponentPausedSAName   = "PausedSA"
-	testComponentPausedMemoName = "PausedMemo"
-	testTransitionCount         = 10
+	testComponentPausedSAName = "PausedSA"
+	testTransitionCount       = 10
 )
 
 var (

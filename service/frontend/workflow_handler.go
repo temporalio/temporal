@@ -1066,7 +1066,7 @@ func (wh *WorkflowHandler) RespondWorkflowTaskFailed(
 		taskToken.GetRunId(),
 		wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.throttledLogger,
-		tag.BlobSizeViolationOperation("RespondWorkflowTaskFailed"),
+		"RespondWorkflowTaskFailed",
 	); err != nil {
 		serverFailure := failure.NewServerFailure(common.FailureReasonFailureExceedsLimit, true)
 		serverFailure.Cause = failure.Truncate(request.Failure, sizeLimitWarn)
@@ -1182,6 +1182,7 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 		WorkflowExecution:           matchingResponse.WorkflowExecution,
 		ActivityId:                  matchingResponse.ActivityId,
 		ActivityType:                matchingResponse.ActivityType,
+		ActivityRunId:               matchingResponse.ActivityRunId,
 		Input:                       matchingResponse.Input,
 		ScheduledTime:               matchingResponse.ScheduledTime,
 		ScheduleToCloseTimeout:      matchingResponse.ScheduleToCloseTimeout,
@@ -1240,7 +1241,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeat(ctx context.Context, requ
 		taskToken.GetRunId(),
 		wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.throttledLogger,
-		tag.BlobSizeViolationOperation("RecordActivityTaskHeartbeat"),
+		"RecordActivityTaskHeartbeat",
 	); err != nil {
 		// heartbeat details exceed size limit, we would fail the activity immediately with explicit error reason
 		failRequest := &workflowservice.RespondActivityTaskFailedRequest{
@@ -1353,7 +1354,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatById(ctx context.Context, 
 		taskToken.GetRunId(),
 		wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.throttledLogger,
-		tag.BlobSizeViolationOperation("RecordActivityTaskHeartbeatById"),
+		"RecordActivityTaskHeartbeatById",
 	); err != nil {
 		// heartbeat details exceed size limit, we would fail the activity immediately with explicit error reason
 		failRequest := &workflowservice.RespondActivityTaskFailedRequest{
@@ -1437,7 +1438,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompleted(
 		taskToken.GetRunId(),
 		wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.throttledLogger,
-		tag.BlobSizeViolationOperation("RespondActivityTaskCompleted"),
+		"RespondActivityTaskCompleted",
 	); err != nil {
 		// result exceeds blob size limit, we would record it as failure
 		failRequest := &workflowservice.RespondActivityTaskFailedRequest{
@@ -1548,7 +1549,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedById(ctx context.Context,
 		runID,
 		wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.throttledLogger,
-		tag.BlobSizeViolationOperation("RespondActivityTaskCompletedById"),
+		"RespondActivityTaskCompletedById",
 	); err != nil {
 		// result exceeds blob size limit, we would record it as failure
 		failRequest := &workflowservice.RespondActivityTaskFailedRequest{
@@ -1636,7 +1637,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(
 			taskToken.GetRunId(),
 			wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 			wh.throttledLogger,
-			tag.BlobSizeViolationOperation("RespondActivityTaskFailed"),
+			"RespondActivityTaskFailed",
 		); err != nil {
 			// heartbeat details exceed size limit, we would fail the activity immediately with explicit error reason
 			response.Failures = append(response.Failures, failure.NewServerFailure(common.FailureReasonHeartbeatExceedsLimit, true))
@@ -1655,7 +1656,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(
 		taskToken.GetRunId(),
 		wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.throttledLogger,
-		tag.BlobSizeViolationOperation("RespondActivityTaskFailed"),
+		"RespondActivityTaskFailed",
 	); err != nil {
 		serverFailure := failure.NewServerFailure(common.FailureReasonFailureExceedsLimit, true)
 		serverFailure.Cause = failure.Truncate(request.Failure, sizeLimitWarn)
@@ -1759,7 +1760,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedById(ctx context.Context, re
 			runID,
 			wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 			wh.throttledLogger,
-			tag.BlobSizeViolationOperation("RespondActivityTaskFailedById"),
+			"RespondActivityTaskFailedById",
 		); err != nil {
 			// heartbeat details exceed size limit, we would fail the activity immediately with explicit error reason
 			response.Failures = append(response.Failures, failure.NewServerFailure(common.FailureReasonHeartbeatExceedsLimit, true))
@@ -1778,7 +1779,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedById(ctx context.Context, re
 		runID,
 		wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.throttledLogger,
-		tag.BlobSizeViolationOperation("RespondActivityTaskFailedById"),
+		"RespondActivityTaskFailedById",
 	); err != nil {
 		serverFailure := failure.NewServerFailure(common.FailureReasonFailureExceedsLimit, true)
 		serverFailure.Cause = failure.Truncate(request.Failure, sizeLimitWarn)
@@ -1846,7 +1847,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceled(ctx context.Context, requ
 		taskToken.GetRunId(),
 		wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.throttledLogger,
-		tag.BlobSizeViolationOperation("RespondActivityTaskCanceled"),
+		"RespondActivityTaskCanceled",
 	); err != nil {
 		// details exceeds blob size limit, we would record it as failure
 		failRequest := &workflowservice.RespondActivityTaskFailedRequest{
@@ -1956,7 +1957,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceledById(ctx context.Context, 
 		runID,
 		wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.throttledLogger,
-		tag.BlobSizeViolationOperation("RespondActivityTaskCanceledById"),
+		"RespondActivityTaskCanceledById",
 	); err != nil {
 		// details exceeds blob size limit, we would record it as failure
 		failRequest := &workflowservice.RespondActivityTaskFailedRequest{
@@ -2070,7 +2071,7 @@ func (wh *WorkflowHandler) SignalWorkflowExecution(ctx context.Context, request 
 		request.GetWorkflowExecution().GetRunId(),
 		wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.throttledLogger,
-		tag.BlobSizeViolationOperation("SignalWorkflowExecution"),
+		"SignalWorkflowExecution",
 	); err != nil {
 		return nil, err
 	}
@@ -2744,7 +2745,7 @@ func (wh *WorkflowHandler) RespondQueryTaskCompleted(
 		"",
 		wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.throttledLogger,
-		tag.BlobSizeViolationOperation("RespondQueryTaskCompleted"),
+		"RespondQueryTaskCompleted",
 	); err != nil {
 		request = &workflowservice.RespondQueryTaskCompletedRequest{
 			TaskToken:     request.TaskToken,
@@ -2892,7 +2893,7 @@ func (wh *WorkflowHandler) QueryWorkflow(ctx context.Context, request *workflows
 		request.GetExecution().GetRunId(),
 		wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.throttledLogger,
-		tag.BlobSizeViolationOperation("QueryWorkflow")); err != nil {
+		"QueryWorkflow"); err != nil {
 		return nil, err
 	}
 
@@ -3186,7 +3187,7 @@ func (wh *WorkflowHandler) createScheduleCHASM(
 			"", // don't have runid yet
 			wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 			wh.throttledLogger,
-			tag.BlobSizeViolationOperation("CreateSchedule"),
+			"CreateSchedule",
 		); err != nil {
 			return nil, err
 		}
@@ -4100,7 +4101,7 @@ func (wh *WorkflowHandler) updateScheduleWorkflow(
 		"", // don't have runid yet
 		wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.throttledLogger,
-		tag.BlobSizeViolationOperation("UpdateSchedule"),
+		"UpdateSchedule",
 	); err != nil {
 		return nil, err
 	}
@@ -4177,7 +4178,7 @@ func (wh *WorkflowHandler) PatchSchedule(
 		"", // don't have runid yet
 		wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.throttledLogger,
-		tag.BlobSizeViolationOperation("PatchSchedule"),
+		"PatchSchedule",
 	); err != nil {
 		return nil, err
 	}
@@ -4257,6 +4258,34 @@ func (wh *WorkflowHandler) ListScheduleMatchingTimes(ctx context.Context, reques
 		return nil, errSchedulesNotAllowed
 	}
 
+	// Prefer CHASM scheduler if enabled.
+	if wh.chasmSchedulerEnabled(ctx, request.Namespace) {
+		resp, err := wh.listScheduleMatchingTimesCHASM(ctx, request)
+		if err == nil {
+			return resp, nil
+		}
+		var notFoundErr *serviceerror.NotFound
+		if !errors.As(err, &notFoundErr) {
+			return nil, err
+		}
+	}
+	return wh.listScheduleMatchingTimesWorkflow(ctx, request)
+}
+
+func (wh *WorkflowHandler) listScheduleMatchingTimesCHASM(ctx context.Context, request *workflowservice.ListScheduleMatchingTimesRequest) (*workflowservice.ListScheduleMatchingTimesResponse, error) {
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	res, err := wh.schedulerClient.ListScheduleMatchingTimes(ctx, &schedulerpb.ListScheduleMatchingTimesRequest{
+		FrontendRequest: request,
+		NamespaceId:     namespaceID.String(),
+	})
+	return res.GetFrontendResponse(), err
+}
+
+func (wh *WorkflowHandler) listScheduleMatchingTimesWorkflow(ctx context.Context, request *workflowservice.ListScheduleMatchingTimesRequest) (*workflowservice.ListScheduleMatchingTimesResponse, error) {
 	workflowID := scheduler.WorkflowIDPrefix + request.ScheduleId
 
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
@@ -4280,7 +4309,7 @@ func (wh *WorkflowHandler) ListScheduleMatchingTimes(ctx context.Context, reques
 		"",
 		wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.throttledLogger,
-		tag.BlobSizeViolationOperation("ListScheduleMatchingTimes")); err != nil {
+		"ListScheduleMatchingTimes"); err != nil {
 		return nil, err
 	}
 

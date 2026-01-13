@@ -47,6 +47,7 @@ type (
 		rateLimiter    quotas.RateLimiter
 		metricsHandler metrics.Handler
 		logger         log.Logger
+		serializer     serialization.Serializer
 		isInTest       bool
 		// only clean up history branches that older than this age
 		// Our history archiver delete mutable state, and then upload history to blob store and then delete history.
@@ -93,8 +94,8 @@ func NewScavenger(
 	enableRetentionVerification dynamicconfig.BoolPropertyFn,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
+	serializer serialization.Serializer,
 ) *Scavenger {
-
 	return &Scavenger{
 		numShards:   numShards,
 		db:          db,
@@ -109,8 +110,8 @@ func NewScavenger(
 		enableRetentionVerification: enableRetentionVerification,
 		metricsHandler:              metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryScavengerScope)),
 		logger:                      logger,
-
-		hbd: hbd,
+		serializer:                  serializer,
+		hbd:                         hbd,
 	}
 }
 
@@ -227,7 +228,7 @@ func (s *Scavenger) filterTask(
 	}
 	shardID := common.WorkflowIDToHistoryShard(namespaceID, workflowID, s.numShards)
 
-	branchToken, err := serialization.HistoryBranchToBlob(branch.BranchInfo)
+	branchToken, err := s.serializer.HistoryBranchToBlob(branch.BranchInfo)
 	if err != nil {
 		s.logger.Error("unable to serialize the history branch token", tag.DetailInfo(branch.Info), tag.Error(err))
 		metrics.HistoryScavengerErrorCount.With(s.metricsHandler).Record(1)
