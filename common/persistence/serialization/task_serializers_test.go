@@ -27,8 +27,8 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		workflowKey    definition.WorkflowKey
-		taskSerializer *TaskSerializer
+		workflowKey definition.WorkflowKey
+		serializer  Serializer
 	}
 )
 
@@ -52,7 +52,7 @@ func (s *taskSerializerSuite) SetupTest() {
 		"random workflow ID",
 		"random run ID",
 	)
-	s.taskSerializer = NewTaskSerializer()
+	s.serializer = NewSerializer()
 }
 
 func (s *taskSerializerSuite) TearDownTest() {
@@ -491,9 +491,9 @@ func (s *taskSerializerSuite) TestStateMachineOutboundTask() {
 	s.Assert().Equal(tasks.CategoryOutbound, task.GetCategory())
 	s.Assert().Equal(enumsspb.TASK_TYPE_STATE_MACHINE_OUTBOUND, task.GetType())
 
-	blob, err := s.taskSerializer.SerializeTask(task)
+	blob, err := s.serializer.SerializeTask(task)
 	s.NoError(err)
-	deserializedTaskIface, err := s.taskSerializer.DeserializeTask(task.GetCategory(), blob)
+	deserializedTaskIface, err := s.serializer.DeserializeTask(task.GetCategory(), blob)
 	deserializedTask := deserializedTaskIface.(*tasks.StateMachineOutboundTask)
 	s.NoError(err)
 
@@ -542,9 +542,9 @@ func (s *taskSerializerSuite) TestStateMachineTimerTask() {
 	s.Assert().Equal(tasks.CategoryTimer, task.GetCategory())
 	s.Assert().Equal(enumsspb.TASK_TYPE_STATE_MACHINE_TIMER, task.GetType())
 
-	blob, err := s.taskSerializer.SerializeTask(task)
+	blob, err := s.serializer.SerializeTask(task)
 	s.NoError(err)
-	deserializedTaskIface, err := s.taskSerializer.DeserializeTask(task.GetCategory(), blob)
+	deserializedTaskIface, err := s.serializer.DeserializeTask(task.GetCategory(), blob)
 	deserializedTask := deserializedTaskIface.(*tasks.StateMachineTimerTask)
 	s.NoError(err)
 
@@ -556,9 +556,9 @@ func (s *taskSerializerSuite) assertEqualTasksWithOpts(
 	cmpFunc func(task, deserializedTask tasks.Task),
 	opts ...cmp.Option,
 ) {
-	blob, err := s.taskSerializer.SerializeTask(task)
+	blob, err := s.serializer.SerializeTask(task)
 	s.NoError(err)
-	deserializedTask, err := s.taskSerializer.DeserializeTask(task.GetCategory(), blob)
+	deserializedTask, err := s.serializer.DeserializeTask(task.GetCategory(), blob)
 	s.NoError(err)
 	s.Empty(cmp.Diff(task, deserializedTask, opts...))
 	if cmpFunc != nil {
@@ -569,9 +569,9 @@ func (s *taskSerializerSuite) assertEqualTasksWithOpts(
 func (s *taskSerializerSuite) assertEqualTasks(
 	task tasks.Task,
 ) {
-	blob, err := s.taskSerializer.SerializeTask(task)
+	blob, err := s.serializer.SerializeTask(task)
 	s.NoError(err)
-	deserializedTask, err := s.taskSerializer.DeserializeTask(task.GetCategory(), blob)
+	deserializedTask, err := s.serializer.DeserializeTask(task.GetCategory(), blob)
 	s.NoError(err)
 
 	// Find all top-level protobuf fields and compare them, then unset them, as their

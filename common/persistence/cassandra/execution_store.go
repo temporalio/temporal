@@ -7,6 +7,7 @@ import (
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
+	"go.temporal.io/server/common/persistence/serialization"
 )
 
 // Guidelines for creating new special UUID constants
@@ -85,11 +86,11 @@ type (
 
 var _ p.ExecutionStore = (*ExecutionStore)(nil)
 
-func NewExecutionStore(session gocql.Session, logger log.Logger) *ExecutionStore {
+func NewExecutionStore(session gocql.Session, serializer serialization.Serializer, logger log.Logger) *ExecutionStore {
 	return &ExecutionStore{
-		HistoryStore:          NewHistoryStore(session),
-		MutableStateStore:     NewMutableStateStore(session, logger),
-		MutableStateTaskStore: NewMutableStateTaskStore(session, logger),
+		HistoryStore:          NewHistoryStore(session, serializer),
+		MutableStateStore:     NewMutableStateStore(session, serializer, logger),
+		MutableStateTaskStore: NewMutableStateTaskStore(session, serializer),
 	}
 }
 
