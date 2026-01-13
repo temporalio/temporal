@@ -138,6 +138,19 @@ func (r *workflowRebuilderImpl) getRebuildSpecFromMutableState(
 	}
 
 	mutableState := resp.State
+
+	// Validate that this is a workflow execution
+	// RebuildMutableState only supports workflow executions
+	if rootNode, ok := mutableState.ChasmNodes[""]; ok {
+		if componentAttrs := rootNode.GetMetadata().GetComponentAttributes(); componentAttrs != nil {
+			archetypeID := chasm.ArchetypeID(componentAttrs.TypeId)
+			if archetypeID != chasm.WorkflowArchetypeID && archetypeID != chasm.UnspecifiedArchetypeID {
+				return nil, serviceerror.NewInvalidArgument(
+					"RebuildMutableState only supports workflow executions, not other archetype types")
+			}
+		}
+	}
+
 	versionHistories := mutableState.ExecutionInfo.VersionHistories
 	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(versionHistories)
 	if err != nil {
