@@ -121,7 +121,7 @@ flowchart TD
 *Figure: `GeneratorTask`'s decision tree for buffering starts (trivial branches omitted).*
 
 #### Notes
-- At time of writing, `FutureActionTimes` is also maintained in Generator's state. This field is a cached view of speculated action times, and is returned as part of describe responses, but is not involved in actual start time calculations, action buffering, or even as assured guarantees of execution (e.g., a listed time may be dropped from having missed catchup window).
+- At time of writing, `FutureActionTimes` is also maintained in Generator's state. This field is a cached view of speculated action times, and is returned as part of describe responses, but is not involved in actual start time calculations, action buffering, or even as assured guarantees of execution (e.g., a listed time may be dropped for having missed catchup window).
 
 ### Backfiller (Manual Actions)
 
