@@ -5,6 +5,7 @@ import (
 	workerstatepb "go.temporal.io/server/chasm/lib/worker/gen/workerpb/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"google.golang.org/grpc"
 )
 
@@ -19,10 +20,12 @@ func NewLibrary(
 	logger log.Logger,
 	config *Config,
 	metricsHandler metrics.Handler,
+	historyClient HistoryClient,
+	namespaceRegistry namespace.Registry,
 ) *Library {
 	return &Library{
 		handler:                 newHandler(metricsHandler),
-		leaseExpiryTaskExecutor: NewLeaseExpiryTaskExecutor(logger),
+		leaseExpiryTaskExecutor: NewLeaseExpiryTaskExecutor(logger, metricsHandler, historyClient, namespaceRegistry),
 	}
 }
 

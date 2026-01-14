@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
 	workerstatepb "go.temporal.io/server/chasm/lib/worker/gen/workerpb/v1"
 	"go.temporal.io/server/common"
@@ -19,9 +20,15 @@ func Register(
 	return registry.Register(library)
 }
 
+// HistoryClientProvider wraps the generated history client to implement HistoryClient interface.
+func HistoryClientProvider(client historyservice.HistoryServiceClient) HistoryClient {
+	return client
+}
+
 var HistoryModule = fx.Module(
 	"worker-history",
 	fx.Provide(ConfigProvider),
+	fx.Provide(HistoryClientProvider),
 	fx.Provide(NewLibrary),
 	fx.Invoke(Register),
 )

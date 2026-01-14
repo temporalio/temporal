@@ -958,6 +958,8 @@ var (
 	BufferedEventsSize                    = NewBytesHistogramDef("buffered_events_size")
 	ChasmTotalSize                        = NewBytesHistogramDef("chasm_total_size")
 	ChasmWorkerCreated                    = NewCounterDef("chasm_worker_created", WithDescription("Number of new CHASM worker entities created."))
+	ChasmWorkerActivitiesRescheduled      = NewCounterDef("chasm_worker_activities_rescheduled", WithDescription("Number of activities rescheduled due to worker lease expiry."))
+	ChasmWorkerRescheduleErrors           = NewCounterDef("chasm_worker_reschedule_errors", WithDescription("Number of activity reschedule errors."))
 	ActivityInfoCount                     = NewDimensionlessHistogramDef("activity_info_count")
 	TimerInfoCount                        = NewDimensionlessHistogramDef("timer_info_count")
 	ChildInfoCount                        = NewDimensionlessHistogramDef("child_info_count")

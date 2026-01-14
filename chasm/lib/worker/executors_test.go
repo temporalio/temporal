@@ -16,7 +16,8 @@ import (
 // Note: The underlying isLeaseExpiryTaskValid logic is a Worker method;
 // these tests verify the executor wiring and logging behavior.
 func TestLeaseExpiryTaskExecutor_Validate(t *testing.T) {
-	executor := NewLeaseExpiryTaskExecutor(log.NewNoopLogger())
+	// Validate doesn't use historyClient or namespaceRegistry, so passing nil is fine
+	executor := NewLeaseExpiryTaskExecutor(log.NewNoopLogger(), nil, nil, nil)
 
 	t.Run("ValidTask", func(t *testing.T) {
 		leaseExpiry := time.Now().Add(1 * time.Minute)

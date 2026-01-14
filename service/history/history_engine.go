@@ -61,6 +61,7 @@ import (
 	"go.temporal.io/server/service/history/api/refreshworkflow"
 	"go.temporal.io/server/service/history/api/removesignalmutablestate"
 	replicationapi "go.temporal.io/server/service/history/api/replication"
+	"go.temporal.io/server/service/history/api/forcerescheduleactivity"
 	"go.temporal.io/server/service/history/api/replicationadmin"
 	"go.temporal.io/server/service/history/api/requestcancelworkflow"
 	"go.temporal.io/server/service/history/api/resetactivity"
@@ -1108,6 +1109,13 @@ func (e *historyEngineImpl) ResetActivity(
 	request *historyservice.ResetActivityRequest,
 ) (*historyservice.ResetActivityResponse, error) {
 	return resetactivity.Invoke(ctx, request, e.shardContext, e.workflowConsistencyChecker)
+}
+
+func (e *historyEngineImpl) ForceRescheduleActivity(
+	ctx context.Context,
+	request *historyservice.ForceRescheduleActivityRequest,
+) (*historyservice.ForceRescheduleActivityResponse, error) {
+	return forcerescheduleactivity.Invoke(ctx, request, e.shardContext, e.workflowConsistencyChecker)
 }
 
 func (e *historyEngineImpl) PauseWorkflowExecution(

@@ -5555,6 +5555,80 @@ func (this *ResetActivityResponse) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
+// Marshal an object of type ForceRescheduleActivityRequest to the protobuf v3 wire format
+func (val *ForceRescheduleActivityRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type ForceRescheduleActivityRequest from the protobuf v3 wire format
+func (val *ForceRescheduleActivityRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *ForceRescheduleActivityRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two ForceRescheduleActivityRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *ForceRescheduleActivityRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *ForceRescheduleActivityRequest
+	switch t := that.(type) {
+	case *ForceRescheduleActivityRequest:
+		that1 = t
+	case ForceRescheduleActivityRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type ForceRescheduleActivityResponse to the protobuf v3 wire format
+func (val *ForceRescheduleActivityResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type ForceRescheduleActivityResponse from the protobuf v3 wire format
+func (val *ForceRescheduleActivityResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *ForceRescheduleActivityResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two ForceRescheduleActivityResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *ForceRescheduleActivityResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *ForceRescheduleActivityResponse
+	switch t := that.(type) {
+	case *ForceRescheduleActivityResponse:
+		that1 = t
+	case ForceRescheduleActivityResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
 // Marshal an object of type UpdateWorkflowExecutionOptionsRequest to the protobuf v3 wire format
 func (val *UpdateWorkflowExecutionOptionsRequest) Marshal() ([]byte, error) {
 	return proto.Marshal(val)

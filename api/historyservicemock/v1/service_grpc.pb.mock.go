@@ -303,6 +303,26 @@ func (mr *MockHistoryServiceClientMockRecorder) ForceDeleteWorkflowExecution(ctx
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ForceDeleteWorkflowExecution", reflect.TypeOf((*MockHistoryServiceClient)(nil).ForceDeleteWorkflowExecution), varargs...)
 }
 
+// ForceRescheduleActivity mocks base method.
+func (m *MockHistoryServiceClient) ForceRescheduleActivity(ctx context.Context, in *historyservice.ForceRescheduleActivityRequest, opts ...grpc.CallOption) (*historyservice.ForceRescheduleActivityResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "ForceRescheduleActivity", varargs...)
+	ret0, _ := ret[0].(*historyservice.ForceRescheduleActivityResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ForceRescheduleActivity indicates an expected call of ForceRescheduleActivity.
+func (mr *MockHistoryServiceClientMockRecorder) ForceRescheduleActivity(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ForceRescheduleActivity", reflect.TypeOf((*MockHistoryServiceClient)(nil).ForceRescheduleActivity), varargs...)
+}
+
 // GenerateLastHistoryReplicationTasks mocks base method.
 func (m *MockHistoryServiceClient) GenerateLastHistoryReplicationTasks(ctx context.Context, in *historyservice.GenerateLastHistoryReplicationTasksRequest, opts ...grpc.CallOption) (*historyservice.GenerateLastHistoryReplicationTasksResponse, error) {
 	m.ctrl.T.Helper()
@@ -1878,6 +1898,21 @@ func (m *MockHistoryServiceServer) ForceDeleteWorkflowExecution(arg0 context.Con
 func (mr *MockHistoryServiceServerMockRecorder) ForceDeleteWorkflowExecution(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ForceDeleteWorkflowExecution", reflect.TypeOf((*MockHistoryServiceServer)(nil).ForceDeleteWorkflowExecution), arg0, arg1)
+}
+
+// ForceRescheduleActivity mocks base method.
+func (m *MockHistoryServiceServer) ForceRescheduleActivity(arg0 context.Context, arg1 *historyservice.ForceRescheduleActivityRequest) (*historyservice.ForceRescheduleActivityResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ForceRescheduleActivity", arg0, arg1)
+	ret0, _ := ret[0].(*historyservice.ForceRescheduleActivityResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ForceRescheduleActivity indicates an expected call of ForceRescheduleActivity.
+func (mr *MockHistoryServiceServerMockRecorder) ForceRescheduleActivity(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ForceRescheduleActivity", reflect.TypeOf((*MockHistoryServiceServer)(nil).ForceRescheduleActivity), arg0, arg1)
 }
 
 // GenerateLastHistoryReplicationTasks mocks base method.
