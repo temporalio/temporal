@@ -41,8 +41,6 @@ type PauseWorkflowExecutionSuite struct {
 	activityCompletedOnce sync.Once
 
 	activityShouldSucceed atomic.Bool
-	failingActivityFn     func(ctx context.Context) (string, error)
-	workflowWithFailingActivityFn func(ctx workflow.Context) (string, error)
 }
 
 func TestPauseWorkflowExecutionSuite(t *testing.T) {
@@ -108,36 +106,37 @@ func (s *PauseWorkflowExecutionSuite) SetupTest() {
 
 	// Setup for TestPauseWorkflowAndActivity
 	s.activityShouldSucceed.Store(false)
+	s.Worker().RegisterWorkflow(s.workflowWithFailingActivity)
+	s.Worker().RegisterActivity(s.failingActivity)
+}
 
-	s.failingActivityFn = func(ctx context.Context) (string, error) {
-		if s.activityShouldSucceed.Load() {
-			return "activity-completed", nil
-		}
-		return "", errors.New("activity-failure")
+// failingActivity is an activity that fails until activityShouldSucceed is set to true.
+func (s *PauseWorkflowExecutionSuite) failingActivity(ctx context.Context) (string, error) {
+	if s.activityShouldSucceed.Load() {
+		return "activity-completed", nil
+	}
+	return "", errors.New("activity-failure")
+}
+
+// workflowWithFailingActivity is a workflow that executes the failing activity.
+func (s *PauseWorkflowExecutionSuite) workflowWithFailingActivity(ctx workflow.Context) (string, error) {
+	ao := workflow.ActivityOptions{
+		ActivityID:             "failing-activity",
+		StartToCloseTimeout:    5 * time.Second,
+		ScheduleToCloseTimeout: 10 * time.Second,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval:    1 * time.Second,
+			BackoffCoefficient: 1,
+		},
+	}
+	ctx = workflow.WithActivityOptions(ctx, ao)
+
+	var activityResult string
+	if err := workflow.ExecuteActivity(ctx, s.failingActivity).Get(ctx, &activityResult); err != nil {
+		return "", err
 	}
 
-	s.workflowWithFailingActivityFn = func(ctx workflow.Context) (string, error) {
-		ao := workflow.ActivityOptions{
-			ActivityID:             "failing-activity",
-			StartToCloseTimeout:    5 * time.Second,
-			ScheduleToCloseTimeout: 10 * time.Second,
-			RetryPolicy: &temporal.RetryPolicy{
-				InitialInterval:    1 * time.Second,
-				BackoffCoefficient: 1,
-			},
-		}
-		ctx = workflow.WithActivityOptions(ctx, ao)
-
-		var activityResult string
-		if err := workflow.ExecuteActivity(ctx, s.failingActivityFn).Get(ctx, &activityResult); err != nil {
-			return "", err
-		}
-
-		return activityResult, nil
-	}
-
-	s.Worker().RegisterWorkflow(s.workflowWithFailingActivityFn)
-	s.Worker().RegisterActivity(s.failingActivityFn)
+	return activityResult, nil
 }
 
 // TestPauseUnpauseWorkflowExecution tests that the pause and unpause workflow execution APIs work as expected.
@@ -258,7 +257,7 @@ func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowAndActivity() {
 	// Reset the activity success flag for this test
 	s.activityShouldSucceed.Store(false)
 
-	// This matches the activity ID defined in SetupTest for workflowWithFailingActivityFn
+	// This matches the activity ID defined in workflowWithFailingActivity
 	activityID := "failing-activity"
 
 	workflowOptions := sdkclient.StartWorkflowOptions{
@@ -266,7 +265,7 @@ func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowAndActivity() {
 		TaskQueue: s.TaskQueue(),
 	}
 
-	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, s.workflowWithFailingActivityFn)
+	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, s.workflowWithFailingActivity)
 	s.NoError(err)
 	workflowID := workflowRun.GetID()
 	runID := workflowRun.GetRunID()

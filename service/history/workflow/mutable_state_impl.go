@@ -2999,12 +2999,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionPausedEvent(event *historypb.H
 		ms.workflowTaskManager.UpdateWorkflowTask(ms.GetPendingWorkflowTask())
 	}
 
-	// Update TemporalPauseInfo search attribute to include workflow pause info
-	if err := ms.updatePauseInfoSearchAttribute(); err != nil {
-		return err
-	}
-
-	return nil
+	return ms.updatePauseInfoSearchAttribute()
 }
 
 func (ms *MutableStateImpl) AddWorkflowExecutionUnpausedEvent(
@@ -3065,13 +3060,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUnpausedEvent(event *historypb
 	// Update approximate size of the mutable state.
 	ms.approximateSize -= pauseInfoSize
 
-	// Update TemporalPauseInfo search attribute to remove workflow pause info
-	// Activity pause info is preserved if activities are still paused
-	if err := ms.updatePauseInfoSearchAttribute(); err != nil {
-		return err
-	}
-
-	return nil
+	return ms.updatePauseInfoSearchAttribute()
 }
 
 func (ms *MutableStateImpl) addCompletionCallbacks(
@@ -6356,45 +6345,34 @@ func (ms *MutableStateImpl) UpdateActivity(scheduledEventId int64, updater histo
 	return nil
 }
 
-func (ms *MutableStateImpl) buildWorkflowPauseInfoEntries() []string {
-	if ms.executionInfo.PauseInfo == nil {
-		return []string{}
+func (ms *MutableStateImpl) buildTemporalPauseInfoEntries() []string {
+	var entries []string
+
+	// Add workflow pause entries if workflow is paused
+	if ms.executionInfo.PauseInfo != nil {
+		entries = append(entries, "Workflow:Paused")
+		if reason := ms.executionInfo.PauseInfo.Reason; reason != "" {
+			entries = append(entries, fmt.Sprintf("Reason:%s", reason))
+		}
 	}
 
-	entries := []string{"Workflow:Paused"}
+	// Add activity pause entries for paused activities
+	pausedActivityTypes := make(map[string]struct{})
+	for _, ai := range ms.GetPendingActivityInfos() {
+		if ai.Paused {
+			pausedActivityTypes[ai.ActivityType.Name] = struct{}{}
+		}
+	}
 
-	if reason := ms.executionInfo.PauseInfo.Reason; reason != "" {
-		entries = append(entries, fmt.Sprintf("Reason:%s", reason))
+	for activityType := range pausedActivityTypes {
+		entries = append(entries, fmt.Sprintf("property:activityType=%s", activityType))
 	}
 
 	return entries
 }
 
-func (ms *MutableStateImpl) buildActivityPauseInfoEntries() []string {
-	pausedInfoMap := make(map[string]struct{})
-
-	for _, ai := range ms.GetPendingActivityInfos() {
-		if !ai.Paused {
-			continue
-		}
-		pausedInfoMap[ai.ActivityType.Name] = struct{}{}
-	}
-
-	pausedInfo := make([]string, 0, len(pausedInfoMap))
-	for activityType := range pausedInfoMap {
-		pausedInfo = append(pausedInfo, fmt.Sprintf("property:activityType=%s", activityType))
-	}
-
-	return pausedInfo
-}
-
 func (ms *MutableStateImpl) updatePauseInfoSearchAttribute() error {
-	activityEntries := ms.buildActivityPauseInfoEntries()
-	workflowEntries := ms.buildWorkflowPauseInfoEntries()
-
-	allEntries := make([]string, 0, len(activityEntries)+len(workflowEntries))
-	allEntries = append(allEntries, workflowEntries...)
-	allEntries = append(allEntries, activityEntries...)
+	allEntries := ms.buildTemporalPauseInfoEntries()
 
 	pauseInfoPayload, err := searchattribute.EncodeValue(allEntries, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST)
 	if err != nil {
@@ -6407,7 +6385,7 @@ func (ms *MutableStateImpl) updatePauseInfoSearchAttribute() error {
 	}
 
 	if proto.Equal(exeInfo.SearchAttributes[sadefs.TemporalPauseInfo], pauseInfoPayload) {
-		return nil
+		return nil // unchanged
 	}
 
 	ms.updateSearchAttributes(map[string]*commonpb.Payload{sadefs.TemporalPauseInfo: pauseInfoPayload})
