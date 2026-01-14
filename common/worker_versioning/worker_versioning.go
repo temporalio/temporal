@@ -546,8 +546,8 @@ func validatePinnedVersionInTaskQueue(ctx context.Context,
 			return nil
 		}
 		return serviceerror.NewFailedPrecondition(
-			fmt.Sprintf("Pinned version '%s:%s' is not present in workflow's task queue '%s'",
-				pinnedVersion.GetDeploymentName(), pinnedVersion.GetBuildId(), tq),
+			fmt.Sprintf("Pinned version '%s:%s' is not present in task queue '%s' of type '%s'",
+				pinnedVersion.GetDeploymentName(), pinnedVersion.GetBuildId(), tq, tqType),
 		)
 	}
 
@@ -572,8 +572,8 @@ func validatePinnedVersionInTaskQueue(ctx context.Context,
 	)
 	if !resp.GetIsMember() {
 		return serviceerror.NewFailedPrecondition(
-			fmt.Sprintf("Pinned version '%s:%s' is not present in workflow's task queue '%s'",
-				pinnedVersion.GetDeploymentName(), pinnedVersion.GetBuildId(), tq),
+			fmt.Sprintf("Pinned version '%s:%s' is not present in task queue '%s' of type '%s'",
+				pinnedVersion.GetDeploymentName(), pinnedVersion.GetBuildId(), tq, tqType),
 		)
 	}
 	return nil

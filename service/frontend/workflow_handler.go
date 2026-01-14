@@ -4968,8 +4968,8 @@ func (wh *WorkflowHandler) StartBatchOperation(
 	case *workflowservice.StartBatchOperationRequest_UpdateWorkflowOptionsOperation:
 		input.BatchType = enumspb.BATCH_OPERATION_TYPE_UPDATE_EXECUTION_OPTIONS
 		identity = op.UpdateWorkflowOptionsOperation.GetIdentity()
-		// TODO (Shivam): Verify if this is the correct way to handle these errors.
-		input.NonRetryableErrors = append(input.NonRetryableErrors, "Pinned version is not present in the task queue")
+		// Mark pinned version not found errors as non-retryable.
+		input.NonRetryableErrors = append(input.NonRetryableErrors, "is not present in task queue")
 	case *workflowservice.StartBatchOperationRequest_UnpauseActivitiesOperation:
 		input.BatchType = enumspb.BATCH_OPERATION_TYPE_UNPAUSE_ACTIVITY
 		identity = op.UnpauseActivitiesOperation.GetIdentity()

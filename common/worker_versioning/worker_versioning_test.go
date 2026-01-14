@@ -734,6 +734,19 @@ func TestValidateVersioningOverride(t *testing.T) {
 		BuildId:        "test-build-id",
 	}
 
+	// Helper function to generate the expected error message for pinned version errors
+	getPinnedVersionErrorMsg := func(version *deploymentpb.WorkerDeploymentVersion, taskQueue string, taskQueueType enumspb.TaskQueueType) string {
+		tqTypeStr := "Workflow"
+		switch taskQueueType {
+		case enumspb.TASK_QUEUE_TYPE_ACTIVITY:
+			tqTypeStr = "Activity"
+		case enumspb.TASK_QUEUE_TYPE_NEXUS:
+			tqTypeStr = "Nexus"
+		}
+		return fmt.Sprintf("Pinned version '%s:%s' is not present in task queue '%s' of type '%s'",
+			version.DeploymentName, version.BuildId, taskQueue, tqTypeStr)
+	}
+
 	tests := []struct {
 		name          string
 		override      *workflowpb.VersioningOverride
@@ -795,9 +808,8 @@ func TestValidateVersioningOverride(t *testing.T) {
 			setupMock: func(m *matchingservicemock.MockMatchingServiceClient) {
 				m.EXPECT().CheckTaskQueueVersionMembership(gomock.Any(), gomock.Any()).Times(0) // No RPC call expected!
 			},
-			expectError: true,
-			errorContains: fmt.Sprintf("Pinned version '%s:%s' is not present in workflow's task queue '%s'",
-				testVersion.DeploymentName, testVersion.BuildId, testTaskQueue),
+			expectError:   true,
+			errorContains: getPinnedVersionErrorMsg(testVersion, testTaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW),
 		},
 		{
 			name:          "v0.32: Pinned override, cache hit for different task queue type does not apply",
@@ -842,9 +854,8 @@ func TestValidateVersioningOverride(t *testing.T) {
 					IsMember: false,
 				}, nil)
 			},
-			expectError: true,
-			errorContains: fmt.Sprintf("Pinned version '%s:%s' is not present in workflow's task queue '%s'",
-				testVersion.DeploymentName, testVersion.BuildId, testTaskQueue),
+			expectError:   true,
+			errorContains: getPinnedVersionErrorMsg(testVersion, testTaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW),
 		},
 		{
 			name: "v0.32: Pinned override, with cache miss, calls RPC and caches true",
@@ -957,9 +968,8 @@ func TestValidateVersioningOverride(t *testing.T) {
 			setupMock: func(m *matchingservicemock.MockMatchingServiceClient) {
 				m.EXPECT().CheckTaskQueueVersionMembership(gomock.Any(), gomock.Any()).Times(0)
 			},
-			expectError: true,
-			errorContains: fmt.Sprintf("Pinned version '%s:%s' is not present in workflow's task queue '%s'",
-				testVersion.DeploymentName, testVersion.BuildId, testTaskQueue),
+			expectError:   true,
+			errorContains: getPinnedVersionErrorMsg(testVersion, testTaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW),
 		},
 		{
 			name: "v0.31: PINNED behavior with pinned_version, cache miss, calls RPC and caches false",
@@ -976,9 +986,8 @@ func TestValidateVersioningOverride(t *testing.T) {
 					IsMember: false,
 				}, nil)
 			},
-			expectError: true,
-			errorContains: fmt.Sprintf("Pinned version '%s:%s' is not present in workflow's task queue '%s'",
-				testVersion.DeploymentName, testVersion.BuildId, testTaskQueue),
+			expectError:   true,
+			errorContains: getPinnedVersionErrorMsg(testVersion, testTaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW),
 		},
 		{
 			name: "v0.31: PINNED behavior with pinned_version, cache miss, calls RPC and caches true",

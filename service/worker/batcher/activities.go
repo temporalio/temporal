@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"slices"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -608,7 +608,15 @@ func (a *activities) handleTaskResult(
 	if err != nil {
 		metrics.BatcherProcessorFailures.With(metricsHandler).Record(1)
 		logger.Error("Failed to process batch operation task", tag.Error(err))
-		nonRetryable := slices.Contains(batchOperation.NonRetryableErrors, err.Error())
+		// Check if error is non-retryable by checking if the error message contains
+		// any of the non-retryable error strings
+		nonRetryable := false
+		for _, nonRetryableErr := range batchOperation.NonRetryableErrors {
+			if strings.Contains(err.Error(), nonRetryableErr) {
+				nonRetryable = true
+				break
+			}
+		}
 		if nonRetryable || task.attempts > int(batchOperation.AttemptsOnRetryableError) {
 			respCh <- taskResponse{err: err, page: task.page}
 		} else {
