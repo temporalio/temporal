@@ -6,6 +6,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.uber.org/fx"
 	"google.golang.org/grpc"
 )
 
@@ -16,16 +17,23 @@ type Library struct {
 	leaseExpiryTaskExecutor *LeaseExpiryTaskExecutor
 }
 
-func NewLibrary(
-	logger log.Logger,
-	config *Config,
-	metricsHandler metrics.Handler,
-	historyClient HistoryClient,
-	namespaceRegistry namespace.Registry,
-) *Library {
+// LibraryParams defines dependencies for NewLibrary.
+// HistoryClient and NamespaceRegistry are optional - only available in history service.
+// When nil, activity rescheduling on lease expiry is disabled.
+type LibraryParams struct {
+	fx.In
+
+	Logger            log.Logger
+	Config            *Config
+	MetricsHandler    metrics.Handler
+	HistoryClient     HistoryClient     `optional:"true"`
+	NamespaceRegistry namespace.Registry `optional:"true"`
+}
+
+func NewLibrary(params LibraryParams) *Library {
 	return &Library{
-		handler:                 newHandler(metricsHandler),
-		leaseExpiryTaskExecutor: NewLeaseExpiryTaskExecutor(logger, metricsHandler, historyClient, namespaceRegistry),
+		handler:                 newHandler(params.MetricsHandler),
+		leaseExpiryTaskExecutor: NewLeaseExpiryTaskExecutor(params.Logger, params.MetricsHandler, params.HistoryClient, params.NamespaceRegistry),
 	}
 }
 

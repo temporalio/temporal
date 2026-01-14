@@ -21,16 +21,26 @@ func Register(
 }
 
 // HistoryClientProvider wraps the generated history client to implement HistoryClient interface.
+// Only used in history service where HistoryServiceClient is available.
 func HistoryClientProvider(client historyservice.HistoryServiceClient) HistoryClient {
 	return client
 }
 
-var HistoryModule = fx.Module(
-	"worker-history",
+// Module is the shared module for all services (frontend, history, etc.).
+// Provides library registration for tdbg and archetypeID conversion.
+// HistoryClient is optional and only available in history service.
+var Module = fx.Module(
+	"worker",
 	fx.Provide(ConfigProvider),
-	fx.Provide(HistoryClientProvider),
 	fx.Provide(NewLibrary),
 	fx.Invoke(Register),
+)
+
+// HistoryModule extends the base module with history-specific providers.
+// Use this in history service to enable activity rescheduling.
+var HistoryModule = fx.Module(
+	"worker-history",
+	fx.Provide(HistoryClientProvider),
 )
 
 func NewWorkerServiceClient(
