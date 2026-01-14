@@ -134,6 +134,32 @@ func (t *TransactionImpl) ConflictResolveWorkflowExecution(
 		NotifyWorkflowSnapshotTasks(engine, resetWorkflowSnapshot)
 		NotifyWorkflowSnapshotTasks(engine, newWorkflowSnapshot)
 		NotifyWorkflowMutationTasks(engine, currentWorkflowMutation)
+
+		if len(resetWorkflowSnapshot.ChasmNodes) > 0 {
+			engine.NotifyChasmExecution(chasm.ExecutionKey{
+				NamespaceID: resetWorkflowSnapshot.ExecutionInfo.NamespaceId,
+				BusinessID:  resetWorkflowSnapshot.ExecutionInfo.WorkflowId,
+				RunID:       resetWorkflowSnapshot.ExecutionState.RunId,
+			}, nil)
+		}
+
+		if newWorkflowSnapshot != nil && len(newWorkflowSnapshot.ChasmNodes) > 0 {
+			engine.NotifyChasmExecution(chasm.ExecutionKey{
+				NamespaceID: newWorkflowSnapshot.ExecutionInfo.NamespaceId,
+				BusinessID:  newWorkflowSnapshot.ExecutionInfo.WorkflowId,
+				RunID:       newWorkflowSnapshot.ExecutionState.RunId,
+			}, nil)
+		}
+
+		if currentWorkflowMutation != nil &&
+			(len(currentWorkflowMutation.UpsertChasmNodes) > 0 ||
+				len(currentWorkflowMutation.DeleteChasmNodes) > 0) {
+			engine.NotifyChasmExecution(chasm.ExecutionKey{
+				NamespaceID: currentWorkflowMutation.ExecutionInfo.NamespaceId,
+				BusinessID:  currentWorkflowMutation.ExecutionInfo.WorkflowId,
+				RunID:       currentWorkflowMutation.ExecutionState.RunId,
+			}, nil)
+		}
 	}
 	if err != nil {
 		return 0, 0, 0, err
