@@ -95,6 +95,8 @@ message PollActivityTaskQueueResponse {
     temporal.api.taskqueue.v1.PollerScalingDecision poller_scaling_decision = 17;
     temporal.api.common.v1.Priority priority = 18;
     temporal.api.common.v1.RetryPolicy retry_policy = 19;
+    // ID of the activity run (applicable for standalone activities only)
+    string activity_run_id = 20;
 }
 
 message AddWorkflowTaskRequest {

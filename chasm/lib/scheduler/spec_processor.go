@@ -1,7 +1,6 @@
 package scheduler
 
 import (
-	"fmt"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -120,9 +119,11 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 	for next, err = s.NextTime(scheduler, start); err == nil && (!next.Next.IsZero() && !next.Next.After(end)); next, err = s.NextTime(scheduler, next.Next) {
 		lastAction = next.Next
 
-		if scheduler.Info.UpdateTime.AsTime().After(next.Next) {
+		if scheduler.Info.UpdateTime.AsTime().After(next.Next) && !manual {
 			// If we've received an update that took effect after the LastProcessedTime high
 			// water mark, discard actions that were scheduled to kick off before the update.
+			// Skip this check for manual (backfill) actions since they explicitly request
+			// past times.
 			s.logger.Warn("ProcessBuffer skipped an action due to update time",
 				tag.NewTimeTag("updateTime", scheduler.Info.UpdateTime.AsTime()),
 				tag.NewTimeTag("droppedActionTime", next.Next))
@@ -139,14 +140,13 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 			continue
 		}
 
-		nominalTimeSec := next.Nominal.Truncate(time.Second)
 		bufferedStarts = append(bufferedStarts, &schedulespb.BufferedStart{
 			NominalTime:   timestamppb.New(next.Nominal),
 			ActualTime:    timestamppb.New(next.Next),
 			OverlapPolicy: overlapPolicy,
 			Manual:        manual,
 			RequestId:     generateRequestID(scheduler, backfillID, next.Nominal, next.Next),
-			WorkflowId:    fmt.Sprintf("%s-%s", workflowID, nominalTimeSec.Format(time.RFC3339)),
+			WorkflowId:    generateWorkflowID(workflowID, next.Nominal),
 		})
 
 		if limit != nil {

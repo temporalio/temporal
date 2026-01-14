@@ -13,8 +13,12 @@ import (
 	"go.temporal.io/server/chasm/lib/scheduler"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/testing/testvars"
+	legacyscheduler "go.temporal.io/server/service/worker/scheduler"
+	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -72,17 +76,61 @@ func defaultConfig() *scheduler.Config {
 	}
 }
 
+func newTestLibrary(logger log.Logger, specProcessor scheduler.SpecProcessor) *scheduler.Library {
+	config := defaultConfig()
+	invokerOpts := scheduler.InvokerTaskExecutorOptions{
+		Config:         config,
+		MetricsHandler: metrics.NoopMetricsHandler,
+		BaseLogger:     logger,
+		SpecProcessor:  specProcessor,
+	}
+	return scheduler.NewLibrary(
+		nil,
+		scheduler.NewSchedulerIdleTaskExecutor(scheduler.SchedulerIdleTaskExecutorOptions{
+			Config: config,
+		}),
+		scheduler.NewGeneratorTaskExecutor(scheduler.GeneratorTaskExecutorOptions{
+			Config:         config,
+			MetricsHandler: metrics.NoopMetricsHandler,
+			BaseLogger:     logger,
+			SpecProcessor:  specProcessor,
+		}),
+		scheduler.NewInvokerExecuteTaskExecutor(invokerOpts),
+		scheduler.NewInvokerProcessBufferTaskExecutor(invokerOpts),
+		scheduler.NewBackfillerTaskExecutor(scheduler.BackfillerTaskExecutorOptions{
+			Config:         config,
+			MetricsHandler: metrics.NoopMetricsHandler,
+			BaseLogger:     logger,
+			SpecProcessor:  specProcessor,
+		}),
+	)
+}
+
 func setupSchedulerForTest(t *testing.T) (*scheduler.Scheduler, chasm.MutableContext, *chasm.Node) {
 	nodeBackend := &chasm.MockNodeBackend{}
 	logger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
 	nodePathEncoder := chasm.DefaultPathEncoder
+
+	// Create mock spec processor with default expectations for setup.
+	ctrl := gomock.NewController(t)
+	specProcessor := scheduler.NewMockSpecProcessor(ctrl)
+	specProcessor.EXPECT().ProcessTimeRange(
+		gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+	).Return(&scheduler.ProcessedTimeRange{
+		NextWakeupTime: time.Now().Add(time.Hour),
+		LastActionTime: time.Now(),
+	}, nil).AnyTimes()
+	specProcessor.EXPECT().NextTime(gomock.Any(), gomock.Any()).Return(legacyscheduler.GetNextTimeResult{
+		Next:    time.Now().Add(time.Hour),
+		Nominal: time.Now().Add(time.Hour),
+	}, nil).AnyTimes()
 
 	registry := chasm.NewRegistry(logger)
 	err := registry.Register(&chasm.CoreLibrary{})
 	if err != nil {
 		t.Fatalf("failed to register core library: %v", err)
 	}
-	err = registry.Register(&scheduler.Library{})
+	err = registry.Register(newTestLibrary(logger, specProcessor))
 	if err != nil {
 		t.Fatalf("failed to register scheduler library: %v", err)
 	}

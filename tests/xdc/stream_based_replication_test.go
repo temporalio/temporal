@@ -297,17 +297,16 @@ func (s *streamBasedReplicationTestSuite) assertHistoryEvents(
 		AnyTimes()
 	mockClientBean.EXPECT().GetRemoteAdminClient("cluster2").Return(s.clusters[1].AdminClient(), nil).AnyTimes()
 
-	serializer := serialization.NewSerializer()
 	cluster1Fetcher := eventhandler.NewHistoryPaginatedFetcher(
 		nil,
 		mockClientBean,
-		serializer,
+		s.serializer,
 		s.logger,
 	)
 	cluster2Fetcher := eventhandler.NewHistoryPaginatedFetcher(
 		nil,
 		mockClientBean,
-		serializer,
+		s.serializer,
 		s.logger,
 	)
 	iterator1 := cluster1Fetcher.GetSingleWorkflowHistoryPaginatedIteratorExclusive(

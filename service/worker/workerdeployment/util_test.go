@@ -1,12 +1,14 @@
 package workerdeployment
 
 import (
+	"os"
 	"strings"
 	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservicemock/v1"
@@ -152,6 +154,49 @@ func (d *deploymentWorkflowClientSuite) TestValidateVersionWfParams() {
 		d.ErrorAs(err, &invalidArgument)
 		d.Equal(test.ExpectedError.Error(), err.Error())
 	}
+}
+
+func TestDecodeWorkerDeploymentMemoTolerateUnknownFields(t *testing.T) {
+	t.Parallel()
+	decodeAndValidateMemo(t, "testdata/memo_with_last_current_time.json", "test-deployment", "build-1")
+}
+
+func TestDecodeWorkerDeploymentMemoTolerateMissingFields(t *testing.T) {
+	t.Parallel()
+	decodeAndValidateMemo(t, "testdata/memo_without_last_current_time.json", "test-deployment", "build-1")
+}
+
+func decodeAndValidateMemo(t *testing.T, filePath, deploymentName, buildID string) {
+	jsonData, err := os.ReadFile(filePath)
+	require.NoError(t, err)
+
+	// Create a payload with json/protobuf encoding (matching SDK's ProtoJSONPayloadConverter)
+	payload := &commonpb.Payload{
+		Metadata: map[string][]byte{
+			"encoding":    []byte("json/protobuf"),
+			"messageType": []byte("temporal.server.api.deployment.v1.WorkerDeploymentWorkflowMemo"),
+		},
+		Data: jsonData,
+	}
+
+	// Create a memo with the payload
+	memo := &commonpb.Memo{
+		Fields: map[string]*commonpb.Payload{
+			WorkerDeploymentMemoField: payload,
+		},
+	}
+
+	// Decode should succeed even if the payload contains unknown fields
+	result, err := DecodeWorkerDeploymentMemo(memo)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	// Verify known fields are decoded correctly
+	require.Equal(t, deploymentName, result.DeploymentName)
+	require.NotNil(t, result.CreateTime)
+	require.NotNil(t, result.RoutingConfig)
+	require.Equal(t, deploymentName, result.RoutingConfig.GetCurrentDeploymentVersion().GetDeploymentName())
+	require.Equal(t, buildID, result.RoutingConfig.GetCurrentDeploymentVersion().GetBuildId())
 }
 
 //nolint:revive
