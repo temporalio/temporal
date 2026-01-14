@@ -359,8 +359,8 @@ func (s *ContextImpl) GetQueueState(
 		return nil, false
 	}
 	// need to make a deep copy, in case UpdateReplicationQueueReaderState does a partial update
-	blob, _ := serialization.QueueStateToBlob(queueState)
-	queueState, _ = serialization.QueueStateFromBlob(blob)
+	blob, _ := s.payloadSerializer.QueueStateToBlob(queueState)
+	queueState, _ = s.payloadSerializer.QueueStateFromBlob(blob)
 	return queueState, ok
 }
 
@@ -1175,7 +1175,7 @@ func (s *ContextImpl) renewRangeLocked(isStealing bool) error {
 	// before calling this method.
 	s.taskKeyManager.drainTaskRequests()
 
-	updatedShardInfo := trimShardInfo(s.config, s.clusterMetadata.GetAllClusterInfo(), copyShardInfo(s.shardInfo))
+	updatedShardInfo := trimShardInfo(s.config, s.clusterMetadata.GetAllClusterInfo(), s.copyShardInfo(s.shardInfo))
 	updatedShardInfo.RangeId++
 	if isStealing {
 		updatedShardInfo.StolenSinceRenew++
@@ -1206,7 +1206,7 @@ func (s *ContextImpl) renewRangeLocked(isStealing bool) error {
 		tag.PreviousShardRangeID(s.shardInfo.RangeId),
 	)
 
-	s.shardInfo = trimShardInfo(s.config, s.clusterMetadata.GetAllClusterInfo(), copyShardInfo(updatedShardInfo))
+	s.shardInfo = trimShardInfo(s.config, s.clusterMetadata.GetAllClusterInfo(), s.copyShardInfo(updatedShardInfo))
 	s.taskKeyManager.setRangeID(s.shardInfo.RangeId)
 
 	return nil
@@ -1263,7 +1263,7 @@ func (s *ContextImpl) updateShardInfo(
 	s.lastUpdated = now
 	s.tasksCompletedSinceLastUpdate = 0
 
-	updatedShardInfo := trimShardInfo(s.config, s.clusterMetadata.GetAllClusterInfo(), copyShardInfo(s.shardInfo))
+	updatedShardInfo := trimShardInfo(s.config, s.clusterMetadata.GetAllClusterInfo(), s.copyShardInfo(s.shardInfo))
 	request := &persistence.UpdateShardRequest{
 		ShardInfo:       updatedShardInfo,
 		PreviousRangeID: s.shardInfo.GetRangeId(),
@@ -1296,7 +1296,7 @@ func (s *ContextImpl) emitShardInfoMetricsLogs() {
 	s.rLock()
 	defer s.rUnlock()
 
-	queueStates := trimShardInfo(s.config, s.clusterMetadata.GetAllClusterInfo(), copyShardInfo(s.shardInfo)).QueueStates
+	queueStates := trimShardInfo(s.config, s.clusterMetadata.GetAllClusterInfo(), s.copyShardInfo(s.shardInfo)).QueueStates
 	emitShardLagLog := s.config.EmitShardLagLog()
 
 	metricsHandler := s.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.ShardInfoScope))
@@ -1809,7 +1809,7 @@ func (s *ContextImpl) loadShardMetadata(ownershipChanged *bool) error {
 		return err
 	}
 	*ownershipChanged = resp.ShardInfo.Owner != s.owner
-	shardInfo := trimShardInfo(s.config, s.clusterMetadata.GetAllClusterInfo(), copyShardInfo(resp.ShardInfo))
+	shardInfo := trimShardInfo(s.config, s.clusterMetadata.GetAllClusterInfo(), s.copyShardInfo(resp.ShardInfo))
 	shardInfo.Owner = s.owner
 
 	// initialize the cluster current time to be the same as ack level
@@ -2163,12 +2163,12 @@ func (s *ContextImpl) initLastUpdatesTime() {
 }
 
 // TODO: why do we need a deep copy here?
-func copyShardInfo(shardInfo *persistencespb.ShardInfo) *persistencespb.ShardInfo {
+func (s *ContextImpl) copyShardInfo(shardInfo *persistencespb.ShardInfo) *persistencespb.ShardInfo {
 	// need to ser/de to make a deep copy of queue state
 	queueStates := make(map[int32]*persistencespb.QueueState, len(shardInfo.QueueStates))
 	for k, v := range shardInfo.QueueStates {
-		blob, _ := serialization.QueueStateToBlob(v)
-		queueState, _ := serialization.QueueStateFromBlob(blob)
+		blob, _ := s.payloadSerializer.QueueStateToBlob(v)
+		queueState, _ := s.payloadSerializer.QueueStateFromBlob(blob)
 		queueStates[k] = queueState
 	}
 

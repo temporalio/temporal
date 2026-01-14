@@ -13,7 +13,6 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -237,7 +236,7 @@ func ValidateStart(
 		"",
 		handlerWithCommandTag,
 		throttledLogger,
-		tag.BlobSizeViolationOperation(operation),
+		operation,
 	); err != nil {
 		return err
 	}
@@ -252,7 +251,7 @@ func ValidateStart(
 		"",
 		handlerWithCommandTag,
 		throttledLogger,
-		tag.BlobSizeViolationOperation(operation),
+		operation,
 	); err != nil {
 		return common.ErrMemoSizeExceedsLimit
 	}

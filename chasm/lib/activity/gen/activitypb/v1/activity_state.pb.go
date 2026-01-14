@@ -34,32 +34,31 @@ type ActivityExecutionStatus int32
 
 const (
 	ACTIVITY_EXECUTION_STATUS_UNSPECIFIED ActivityExecutionStatus = 0
-	// The activity is not in a terminal status. This does not necessarily mean that there is a currently running
-	// attempt. The activity may be backing off between attempts or waiting for a worker to pick it up.
-	ACTIVITY_EXECUTION_STATUS_SCHEDULED        ActivityExecutionStatus = 1
-	ACTIVITY_EXECUTION_STATUS_STARTED          ActivityExecutionStatus = 2
+	// The activity has been scheduled, but a worker has not accepted the task for the current
+	// attempt. The activity may be backing off between attempts or waiting for a worker to pick it
+	// up.
+	ACTIVITY_EXECUTION_STATUS_SCHEDULED ActivityExecutionStatus = 1
+	// A worker has accepted a task for the current attempt.
+	ACTIVITY_EXECUTION_STATUS_STARTED ActivityExecutionStatus = 2
+	// A caller has requested cancellation of the activity.
 	ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED ActivityExecutionStatus = 3
-	// Left as placeholders for when we add pause.
-	// // PAUSED means activity is paused on the server, and is not running in the worker
-	// ACTIVITY_EXECUTION_STATUS_PAUSED = 4;
-	// // PAUSE_REQUESTED means activity is currently running on the worker, but paused on the server
-	// ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED = 5;
 	// The activity completed successfully.
 	ACTIVITY_EXECUTION_STATUS_COMPLETED ActivityExecutionStatus = 4
 	// The activity completed with failure.
 	ACTIVITY_EXECUTION_STATUS_FAILED ActivityExecutionStatus = 5
 	// The activity completed as canceled.
-	// Requesting to cancel an activity does not automatically transition the activity to canceled status. If the
-	// activity has a currently running attempt, the activity will only transition to canceled status if the current
-	// attempt is unsuccessful.
-	// TODO: Clarify what happens if there are no more allowed retries after the current attempt.
+	// Requesting to cancel an activity does not automatically transition the activity to canceled status. If the worker
+	// responds to cancel the activity after requesting cancellation, the status will transition to cancelled. If the
+	// activity completes, fails, times out or terminates after cancel is requested and before the worker responds with
+	// cancelled. The activity will be stay in the terminal non-cancelled status.
 	ACTIVITY_EXECUTION_STATUS_CANCELED ActivityExecutionStatus = 6
 	// The activity was terminated. Termination does not reach the worker and the activity code cannot react to it.
 	// A terminated activity may have a running attempt and will be requested to be canceled by the server when it
 	// heartbeats.
 	ACTIVITY_EXECUTION_STATUS_TERMINATED ActivityExecutionStatus = 7
-	// The activity has timed out by reaching the specified shedule-to-start or schedule-to-close timeouts.
-	// TODO: Clarify if there are other conditions where the activity can end up in timed out status.
+	// The activity has timed out by reaching the specified schedule-to-start or schedule-to-close timeouts.
+	// Additionally, after all retries are exhausted for start-to-close or heartbeat timeouts, the activity will also
+	// transition to timed out status.
 	ACTIVITY_EXECUTION_STATUS_TIMED_OUT ActivityExecutionStatus = 8
 )
 
@@ -417,8 +416,8 @@ func (x *ActivityTerminateState) GetRequestId() string {
 type ActivityAttemptState struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The attempt this activity is currently on.
-	// Incremented each time a new attempt is started.
-	// TODO: Confirm if this is on scheduled or started.
+	// Incremented each time a new attempt is scheduled. A newly created activity will immediately be scheduled, and
+	// the count is set to 1.
 	Count int32 `protobuf:"varint,1,opt,name=count,proto3" json:"count,omitempty"`
 	// Time from the last attempt failure to the next activity retry.
 	// If the activity is currently running, this represents the next retry interval in case the attempt fails.
