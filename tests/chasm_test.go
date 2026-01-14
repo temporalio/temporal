@@ -504,7 +504,6 @@ func (s *ChasmTestSuite) TestListWorkflowExecutions() {
 
 func (s *ChasmTestSuite) TestPayloadStoreForceDelete() {
 	tv := testvars.New(s.T())
-
 	ctx, cancel := context.WithTimeout(s.chasmContext, chasmTestTimeout)
 	defer cancel()
 
@@ -592,7 +591,6 @@ func (s *ChasmTestSuite) TestPayloadStoreForceDelete() {
 
 func (s *ChasmTestSuite) TestListExecutions_ExecutionStatusAsAlias() {
 	tv := testvars.New(s.T())
-
 	ctx, cancel := context.WithTimeout(s.chasmContext, chasmTestTimeout)
 	defer cancel()
 
@@ -719,4 +717,35 @@ func (s *ChasmTestSuite) TestTaskQueuePreallocatedSearchAttribute() {
 	s.Equal(tests.DefaultPayloadStoreTaskQueue, taskQueueVal)
 }
 
+func (s *ChasmTestSuite) TestMutableStateRebuilder() {
+	tv := testvars.New(s.T())
+	ctx, cancel := context.WithTimeout(s.chasmContext, chasmTestTimeout)
+	defer cancel()
+
+	storeID := tv.Any().String()
+	_, err := tests.NewPayloadStoreHandler(
+		ctx,
+		tests.NewPayloadStoreRequest{
+			NamespaceID: s.NamespaceID(),
+			StoreID:     storeID,
+			NamespaceID:      s.NamespaceID(),
+			StoreID:          storeID,
+			IDReusePolicy:    chasm.BusinessIDReusePolicyRejectDuplicate,
+			IDConflictPolicy: chasm.BusinessIDConflictPolicyFail,
+		},
+
+	s.Equal(archetypeID, chasm.ArchetypeID(archetypeID))
+
+	// payloadStore archetype is not the workflow archetype, should fail the rebuild.
+	archetype, ok := s.FunctionalTestBase.GetTestCluster().Host().GetCHASMRegistry().ComponentFqnByID(archetypeID)
+	s.NotEqual(archetype, chasm.WorkflowArchetype, "Archetype should not be the workflow archetype")
+
+	_, err = s.AdminClient().RebuildMutableState(testcore.NewContext(), &adminservice.RebuildMutableStateRequest{
+		Namespace: s.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: storeID,
+		},
+	})
+	s.Error(err, "RebuildMutableState should fail for non-workflow executions")
+}
 // TODO: More tests here...

@@ -68,10 +68,6 @@ func (r *workflowRebuilderImpl) rebuild(
 ) (retError error) {
 
 	wfCache := r.workflowConsistencyChecker.GetWorkflowCache()
-	rebuildSpec, err := r.getRebuildSpecFromMutableState(ctx, &workflowKey)
-	if err != nil {
-		return err
-	}
 	wfContext, releaseFn, err := wfCache.GetOrCreateWorkflowExecution(
 		ctx,
 		r.shard,
@@ -86,9 +82,15 @@ func (r *workflowRebuilderImpl) rebuild(
 		return err
 	}
 	defer func() {
-		releaseFn(retError)
 		wfContext.Clear()
+		releaseFn(retError)
 	}()
+
+	// maki: mutable state of this wfContext might be changed btw reading and locking?
+	rebuildSpec, err := r.getRebuildSpecFromMutableState(ctx, &workflowKey)
+	if err != nil {
+		return err
+	}
 	rebuildMutableState, err := r.replayResetWorkflow(
 		ctx,
 		workflowKey,
@@ -102,6 +104,27 @@ func (r *workflowRebuilderImpl) rebuild(
 		return err
 	}
 	return r.overwriteToDB(ctx, rebuildMutableState)
+}
+
+func (r *workflowRebuilderImpl) rebuildableCheck(
+	mutableState *persistencespb.WorkflowMutableState,
+) error {
+	// backward compatibility: old workflow format
+	if len(mutableState.ChasmNodes) == 0 {
+		r.logger.Info("rebuild: backward compatibility: old workflow format")
+		return nil
+	}
+	if rootNode, ok := mutableState.ChasmNodes[""]; ok {
+		if componentAttrs := rootNode.GetMetadata().GetComponentAttributes(); componentAttrs != nil {
+			archetypeID := chasm.ArchetypeID(componentAttrs.TypeId)
+			if archetypeID == chasm.WorkflowArchetypeID {
+				r.logger.Info("rebuild: workflow archetype found")
+				return nil
+			}
+		}
+	}
+	return serviceerror.NewInvalidArgument(
+		"Rebuild only supports workflow executions, not other archetype types")
 }
 
 func (r *workflowRebuilderImpl) getRebuildSpecFromMutableState(
@@ -138,6 +161,11 @@ func (r *workflowRebuilderImpl) getRebuildSpecFromMutableState(
 	}
 
 	mutableState := resp.State
+	err = r.rebuildableCheck(mutableState)
+	if err != nil {
+		return nil, err
+	}
+
 	versionHistories := mutableState.ExecutionInfo.VersionHistories
 	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(versionHistories)
 	if err != nil {
