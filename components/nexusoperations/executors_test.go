@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/sdk/converter"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -498,14 +499,14 @@ func TestProcessInvocationTask(t *testing.T) {
 			if tc.expectedMetricOutcome != "" {
 				counter := metrics.NewMockCounterIface(ctrl)
 				timer := metrics.NewMockTimerIface(ctrl)
-				metricsHandler.EXPECT().Counter(nexusoperations.OutboundRequestCounter.Name()).Return(counter)
+				metricsHandler.EXPECT().Counter(chasmnexus.OutboundRequestCounter.Name()).Return(counter)
 				counter.EXPECT().Record(int64(1),
 					metrics.NamespaceTag("ns-name"),
 					metrics.DestinationTag("endpoint"),
 					metrics.NexusMethodTag("StartOperation"),
 					metrics.OutcomeTag(tc.expectedMetricOutcome),
 					metrics.FailureSourceTag("_unknown_"))
-				metricsHandler.EXPECT().Timer(nexusoperations.OutboundRequestLatency.Name()).Return(timer)
+				metricsHandler.EXPECT().Timer(chasmnexus.OutboundRequestLatency.Name()).Return(timer)
 				timer.EXPECT().Record(gomock.Any(),
 					metrics.NamespaceTag("ns-name"),
 					metrics.DestinationTag("endpoint"),
@@ -933,14 +934,14 @@ func TestProcessCancelationTask(t *testing.T) {
 			if tc.expectedMetricOutcome != "" {
 				counter := metrics.NewMockCounterIface(ctrl)
 				timer := metrics.NewMockTimerIface(ctrl)
-				metricsHandler.EXPECT().Counter(nexusoperations.OutboundRequestCounter.Name()).Return(counter)
+				metricsHandler.EXPECT().Counter(chasmnexus.OutboundRequestCounter.Name()).Return(counter)
 				counter.EXPECT().Record(int64(1),
 					metrics.NamespaceTag("ns-name"),
 					metrics.DestinationTag("endpoint"),
 					metrics.NexusMethodTag("CancelOperation"),
 					metrics.OutcomeTag(tc.expectedMetricOutcome),
 					metrics.FailureSourceTag("_unknown_"))
-				metricsHandler.EXPECT().Timer(nexusoperations.OutboundRequestLatency.Name()).Return(timer)
+				metricsHandler.EXPECT().Timer(chasmnexus.OutboundRequestLatency.Name()).Return(timer)
 				timer.EXPECT().Record(gomock.Any(),
 					metrics.NamespaceTag("ns-name"),
 					metrics.DestinationTag("endpoint"),

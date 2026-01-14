@@ -1,31 +1,37 @@
-package nexusoperations
+package nexusoperation
 
 import (
 	"strings"
 	"time"
 
-	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/rpc/interceptor"
 )
 
+var ChasmNexusEnabled = dynamicconfig.NewGlobalBoolSetting(
+	"chasm.nexusoperation.enabled",
+	false,
+	`ChasmNexusEnabled is the feature flag that controls whether the legacy HSM-based implementation (when 
+flag is false; default) or the newer CHASM-based implementation of Nexus will be used`,
+)
+
 var RequestTimeout = dynamicconfig.NewDestinationDurationSetting(
-	"component.nexusoperations.request.timeout",
+	"chasm.nexusoperation.request.timeout",
 	time.Second*10,
 	`RequestTimeout is the timeout for making a single nexus start or cancel request.`,
 )
 
 var MinRequestTimeout = dynamicconfig.NewNamespaceDurationSetting(
-	"component.nexusoperations.limit.request.timeout.min",
+	"chasm.nexusoperation.limit.request.timeout.min",
 	time.Millisecond*1500,
 	`MinRequestTimeout is the minimum time remaining for a request to complete for the server to make
 RPCs. If the remaining request timeout is less than this value, a non-retryable timeout error will be returned.`,
 )
 
 var MinDispatchTaskTimeout = dynamicconfig.NewNamespaceDurationSetting(
-	"component.nexusoperations.limit.dispatch.task.timeout.min",
+	"chasm.nexusoperation.limit.dispatch.task.timeout.min",
 	time.Second,
 	`MinDispatchTaskTimeout is the minimum time remaining for a request to be dispatched to the handler worker.
 If the remaining request timeout is less than this value, a timeout error will be returned. Working in conjunction with
@@ -33,7 +39,7 @@ MinRequestTimeout, both configs help ensure that the server has enough time to c
 )
 
 var MaxConcurrentOperations = dynamicconfig.NewNamespaceIntSetting(
-	"component.nexusoperations.limit.operation.concurrency",
+	"chasm.nexusoperation.limit.operation.concurrency",
 	// Temporary limit due to a persistence limitation, this will be increased when we change persistence to accept
 	// partial sub state machine updates.
 	30,
@@ -42,7 +48,7 @@ Once the limit is reached, ScheduleNexusOperation commands will be rejected.`,
 )
 
 var MaxServiceNameLength = dynamicconfig.NewNamespaceIntSetting(
-	"component.nexusoperations.limit.service.name.length",
+	"chasm.nexusoperation.limit.service.name.length",
 	1000,
 	`MaxServiceNameLength limits the maximum allowed length for a Nexus Service name.
 ScheduleNexusOperation commands with a service name that exceeds this limit will be rejected.
@@ -50,7 +56,7 @@ Uses Go's len() function to determine the length.`,
 )
 
 var MaxOperationNameLength = dynamicconfig.NewNamespaceIntSetting(
-	"component.nexusoperations.limit.operation.name.length",
+	"chasm.nexusoperation.limit.operation.name.length",
 	1000,
 	`MaxOperationNameLength limits the maximum allowed length for a Nexus Operation name.
 ScheduleNexusOperation commands with an operation name that exceeds this limit will be rejected.
@@ -58,7 +64,7 @@ Uses Go's len() function to determine the length.`,
 )
 
 var MaxOperationTokenLength = dynamicconfig.NewNamespaceIntSetting(
-	"component.nexusoperations.limit.operation.token.length",
+	"chasm.nexusoperation.limit.operation.token.length",
 	4096,
 	`Limits the maximum allowed length for a Nexus Operation token. Tokens returned via start responses or via async
 completions that exceed this limit will be rejected. Uses Go's len() function to determine the length.
@@ -67,7 +73,7 @@ use as the token.`,
 )
 
 var MaxOperationHeaderSize = dynamicconfig.NewNamespaceIntSetting(
-	"component.nexusoperations.limit.header.size",
+	"chasm.nexusoperation.limit.header.size",
 	8192,
 	`The maximum allowed header size for a Nexus Operation.
 ScheduleNexusOperation commands with a "nexus_header" field that exceeds this limit will be rejected.
@@ -75,7 +81,7 @@ Uses Go's len() function on header keys and values to determine the total size.`
 )
 
 var UseSystemCallbackURL = dynamicconfig.NewGlobalBoolSetting(
-	"component.nexusoperations.useSystemCallbackURL",
+	"chasm.nexusoperation.useSystemCallbackURL",
 	false,
 	`UseSystemCallbackURL is a global feature toggle that controls how the executor generates
 	callback URLs for worker targets in Nexus Operations.When set to true,
@@ -88,7 +94,7 @@ var UseSystemCallbackURL = dynamicconfig.NewGlobalBoolSetting(
 )
 
 var DisallowedOperationHeaders = dynamicconfig.NewGlobalTypedSettingWithConverter(
-	"component.nexusoperations.disallowedHeaders",
+	"chasm.nexusoperation.disallowedHeaders",
 	func(in any) ([]string, error) {
 		keys, err := dynamicconfig.ConvertStructure[[]string](nil)(in)
 		if err != nil {
@@ -113,7 +119,7 @@ rejected.`,
 )
 
 var MaxOperationScheduleToCloseTimeout = dynamicconfig.NewNamespaceDurationSetting(
-	"component.nexusoperations.limit.scheduleToCloseTimeout",
+	"chasm.nexusoperation.limit.scheduleToCloseTimeout",
 	0,
 	`MaxOperationScheduleToCloseTimeout limits the maximum allowed duration of a Nexus Operation. ScheduleOperation
 commands that specify no schedule-to-close timeout or a longer timeout than permitted will have their
@@ -121,7 +127,7 @@ schedule-to-close timeout capped to this value. 0 implies no limit.`,
 )
 
 var CallbackURLTemplate = dynamicconfig.NewGlobalStringSetting(
-	"component.nexusoperations.callback.endpoint.template",
+	"chasm.nexusoperation.callback.endpoint.template",
 	"unset",
 	`Controls the template for generating callback URLs included in Nexus operation requests, which are used to deliver asynchronous completion.
 The template can be used to interpolate the {{.NamepaceName}} and {{.NamespaceID}} parameters to construct a publicly accessible URL.
@@ -129,20 +135,20 @@ Must be set in order to use Nexus Operations.`,
 )
 
 var RetryPolicyInitialInterval = dynamicconfig.NewGlobalDurationSetting(
-	"component.nexusoperations.retryPolicy.initialInterval",
+	"chasm.nexusoperation.retryPolicy.initialInterval",
 	time.Second,
 	`The initial backoff interval between every nexus StartOperation or CancelOperation request for a given operation.`,
 )
 
 var RetryPolicyMaximumInterval = dynamicconfig.NewGlobalDurationSetting(
-	"component.nexusoperations.retryPolicy.maxInterval",
+	"chasm.nexusoperation.retryPolicy.maxInterval",
 	time.Hour,
 	`The maximum backoff interval between every nexus StartOperation or CancelOperation request for a given operation.`,
 )
 
 var MetricTagConfiguration = dynamicconfig.NewGlobalTypedSetting(
-	"component.nexusoperations.metrics.tags",
-	chasmnexus.NexusMetricTagConfig{},
+	"chasm.nexusoperation.metrics.tags",
+	NexusMetricTagConfig{},
 	`Controls which metric tags are included with Nexus operation metrics. This configuration supports:
 1. Service name tag - adds the Nexus service name as a metric dimension (IncludeServiceTag)
 2. Operation name tag - adds the Nexus operation name as a metric dimension (IncludeOperationTag)
@@ -154,7 +160,7 @@ requirements and query complexity. Consider the cardinality impact when enabling
 )
 
 var RecordCancelRequestCompletionEvents = dynamicconfig.NewGlobalBoolSetting(
-	"component.nexusoperations.recordCancelRequestCompletionEvents",
+	"chasm.nexusoperation.recordCancelRequestCompletionEvents",
 	true,
 	`Boolean flag to control whether to record NexusOperationCancelRequestCompleted and
 NexusOperationCancelRequestFailed events. Default true.`,
@@ -162,6 +168,8 @@ NexusOperationCancelRequestFailed events. Default true.`,
 
 type Config struct {
 	Enabled                             dynamicconfig.BoolPropertyFn
+	ChasmEnabled                        dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	ChasmNexusEnabled                   dynamicconfig.BoolPropertyFn
 	RequestTimeout                      dynamicconfig.DurationPropertyFnWithDestinationFilter
 	MinRequestTimeout                   dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	MaxConcurrentOperations             dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -178,9 +186,11 @@ type Config struct {
 	RetryPolicy                         func() backoff.RetryPolicy
 }
 
-func ConfigProvider(dc *dynamicconfig.Collection) *Config {
+func configProvider(dc *dynamicconfig.Collection) *Config {
 	return &Config{
 		Enabled:                             dynamicconfig.EnableNexus.Get(dc),
+		ChasmEnabled:                        dynamicconfig.EnableChasm.Get(dc),
+		ChasmNexusEnabled:                   ChasmNexusEnabled.Get(dc),
 		RequestTimeout:                      RequestTimeout.Get(dc),
 		MinRequestTimeout:                   MinRequestTimeout.Get(dc),
 		MaxConcurrentOperations:             MaxConcurrentOperations.Get(dc),

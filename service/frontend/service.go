@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
+	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -196,7 +197,7 @@ type Config struct {
 	MaxNexusOperationTokenLength   dynamicconfig.IntPropertyFnWithNamespaceFilter
 	NexusRequestHeadersBlacklist   dynamicconfig.TypedPropertyFn[*regexp.Regexp]
 	NexusForwardRequestUseEndpoint dynamicconfig.BoolPropertyFn
-	NexusOperationsMetricTagConfig dynamicconfig.TypedPropertyFn[nexusoperations.NexusMetricTagConfig]
+	NexusOperationsMetricTagConfig dynamicconfig.TypedPropertyFn[chasmnexus.NexusMetricTagConfig]
 
 	LinkMaxSize        dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxLinksPerRequest dynamicconfig.IntPropertyFnWithNamespaceFilter
