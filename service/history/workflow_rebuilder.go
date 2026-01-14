@@ -104,6 +104,31 @@ func (r *workflowRebuilderImpl) rebuild(
 	return r.overwriteToDB(ctx, rebuildMutableState)
 }
 
+// maki: two options (todo: comment to be deleted)
+// option1: check with/after spec is fetched to avoid repetitive mutable state loading (code simple)
+// option2: check before spec is fetched for have quick return
+// this is admin method for a problematic object, option-1 should be fine
+func (r *workflowRebuilderImpl) rebuildableCheck(
+	mutableState *persistencespb.WorkflowMutableState,
+) error {
+	nonRebuildableErr := serviceerror.NewInvalidArgument(
+		"RebuildMutableState only supports workflow executions, not other archetype types")
+
+	// workflow type: no/empty ChasmNodes or workflowType in root Chasm node identified as ""
+	if len(mutableState.ChasmNodes) == 0 {
+		return nonRebuildableErr
+	}
+	if rootNode, ok := mutableState.ChasmNodes[""]; ok {
+		if componentAttrs := rootNode.GetMetadata().GetComponentAttributes(); componentAttrs != nil {
+			archetypeID := chasm.ArchetypeID(componentAttrs.TypeId)
+			if archetypeID != chasm.WorkflowArchetypeID && archetypeID != chasm.UnspecifiedArchetypeID {
+				return nonRebuildableErr
+			}
+		}
+	}
+	return nil
+}
+
 func (r *workflowRebuilderImpl) getRebuildSpecFromMutableState(
 	ctx context.Context,
 	workflowKey *definition.WorkflowKey,
@@ -138,6 +163,11 @@ func (r *workflowRebuilderImpl) getRebuildSpecFromMutableState(
 	}
 
 	mutableState := resp.State
+	err = r.rebuildableCheck(mutableState)
+	if err != nil {
+		return nil, err
+	}
+
 	versionHistories := mutableState.ExecutionInfo.VersionHistories
 	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(versionHistories)
 	if err != nil {
