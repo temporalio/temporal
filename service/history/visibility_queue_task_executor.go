@@ -513,7 +513,6 @@ func (t *visibilityQueueTaskExecutor) getVisibilityRequestBase(
 		},
 		WorkflowTypeName: executionInfo.WorkflowTypeName,
 		StartTime:        startTime,
-		Status:           mutableState.GetExecutionState().GetStatus(),
 		ExecutionTime:    executionTime,
 		TaskID:           task.GetTaskID(),
 		ShardID:          t.shardContext.GetShardID(),

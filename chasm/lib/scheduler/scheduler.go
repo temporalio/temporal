@@ -81,6 +81,13 @@ var (
 	ErrUnprocessable         = serviceerror.NewInternal("unprocessable schedule")
 )
 
+var (
+	StatusSearchAttribute = chasm.NewSearchAttributeKeyword("ExecutionStatus", chasm.SearchAttributeFieldLowCardinalityKeyword01)
+
+	executionStatusRunning   = "Running"
+	executionStatusCompleted = "Completed"
+)
+
 // NewScheduler returns an initialized CHASM scheduler root component.
 func NewScheduler(
 	ctx chasm.MutableContext,
@@ -735,7 +742,13 @@ func (s *Scheduler) validateConflictToken(token []byte) bool {
 
 // SearchAttributes returns the Temporal-managed key values for visibility.
 func (s *Scheduler) SearchAttributes(chasm.Context) []chasm.SearchAttributeKeyValue {
+	executionStatus := executionStatusRunning
+	if s.Closed {
+		executionStatus = executionStatusCompleted
+	}
+
 	return []chasm.SearchAttributeKeyValue{
+		StatusSearchAttribute.Value(executionStatus),
 		chasm.SearchAttributeTemporalSchedulePaused.Value(s.Schedule.GetState().GetPaused()),
 	}
 }
