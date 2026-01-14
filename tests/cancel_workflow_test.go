@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/tests/testcore"
@@ -123,6 +124,7 @@ func (s *CancelWorkflowSuite) TestExternalRequestCancelWorkflowExecution() {
 }
 
 func (s *CancelWorkflowSuite) TestRequestCancelWorkflowCommandExecution_TargetRunning() {
+	s.OverrideDynamicConfig(dynamicconfig.EnableCrossNamespaceCommands, true) // explicitly enable cross namespace commands for this test
 	id := "functional-cancel-workflow-command-target-running-test"
 	wt := "functional-cancel-workflow-command-target-running-test-type"
 	tl := "functional-cancel-workflow-command-target-running-test-taskqueue"
@@ -258,6 +260,7 @@ func (s *CancelWorkflowSuite) TestRequestCancelWorkflowCommandExecution_TargetRu
 }
 
 func (s *CancelWorkflowSuite) TestRequestCancelWorkflowCommandExecution_TargetFinished() {
+	s.OverrideDynamicConfig(dynamicconfig.EnableCrossNamespaceCommands, true) // explicitly enable cross namespace commands for this test
 	id := "functional-cancel-workflow-command-target-finished-test"
 	wt := "functional-cancel-workflow-command-target-finished-test-type"
 	tl := "functional-cancel-workflow-command-target-finished-test-taskqueue"
@@ -389,6 +392,7 @@ func (s *CancelWorkflowSuite) TestRequestCancelWorkflowCommandExecution_TargetFi
 }
 
 func (s *CancelWorkflowSuite) TestRequestCancelWorkflowCommandExecution_TargetNotFound() {
+	s.OverrideDynamicConfig(dynamicconfig.EnableCrossNamespaceCommands, true) // explicitly enable cross namespace commands for this test
 	id := "functional-cancel-workflow-command-target-not-found-test"
 	wt := "functional-cancel-workflow-command-target-not-found-test-type"
 	tl := "functional-cancel-workflow-command-target-not-found-test-taskqueue"

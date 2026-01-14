@@ -11,6 +11,13 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+// generateWorkflowID generates a deterministic workflow ID for a buffered
+// action by combining the base workflow ID with the truncated nominal time.
+func generateWorkflowID(baseWorkflowID string, nominalTime time.Time) string {
+	nominalTimeSec := nominalTime.Truncate(time.Second)
+	return fmt.Sprintf("%s-%s", baseWorkflowID, nominalTimeSec.Format(time.RFC3339))
+}
+
 // generateRequestID generates a deterministic request ID for a buffered action's
 // time. The request ID is deterministic because the jittered actual time (as
 // well as the spec's nominal time) is, in turn, also deterministic.
@@ -44,17 +51,22 @@ func newTaggedLogger(baseLogger log.Logger, scheduler *Scheduler) log.Logger {
 }
 
 // validateTaskHighWaterMark validates a component's lastProcessedTime against a
-// task timestamp, returning ErrStaleReference for out-of-date tasks.
-func validateTaskHighWaterMark(lastProcessedTime *timestamppb.Timestamp, scheduledAt time.Time) (bool, error) {
-	if lastProcessedTime != nil {
-		hwm := lastProcessedTime.AsTime()
-
-		if hwm.After(scheduledAt) || hwm.Equal(scheduledAt) {
-			return false, nil
-		}
+// task timestamp. A task is valid if its scheduled time is after the high water mark.
+// Immediate tasks (zero scheduled time) are always valid since they execute inline.
+func validateTaskHighWaterMark(
+	lastProcessedTime *timestamppb.Timestamp,
+	scheduledAt time.Time,
+) (bool, error) {
+	// Immediate tasks are always valid - they execute inline during the transaction.
+	if scheduledAt.IsZero() {
+		return true, nil
 	}
-
-	return true, nil
+	// If lastProcessedTime is not set, all scheduled tasks are valid.
+	if lastProcessedTime == nil || (lastProcessedTime.GetSeconds() == 0 && lastProcessedTime.GetNanos() == 0) {
+		return true, nil
+	}
+	// Scheduled tasks are valid if their time is after the high water mark.
+	return scheduledAt.After(lastProcessedTime.AsTime()), nil
 }
 
 // jsonStringer wraps a proto.Message for lazy JSON serialization. Intended for

@@ -106,6 +106,8 @@ var (
 			}
 			if item.missing_first {
 				fs.Missing("_first")
+			} else {
+				fs.Missing("_last")
 			}
 			ret = append(ret, fs)
 		}
@@ -749,7 +751,7 @@ func (s *VisibilityStore) convertQuery(
 				sqlparser.String(orderByExpr),
 			)
 		}
-		fieldSort := elastic.NewFieldSort(colName.FieldName)
+		fieldSort := elastic.NewFieldSort(colName.FieldName).Missing("_last")
 		if orderByExpr.Direction == sqlparser.DescScr {
 			fieldSort = fieldSort.Desc()
 		}

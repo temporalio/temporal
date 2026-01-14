@@ -191,6 +191,7 @@ func (s *TestBase) Setup(clusterMetadataConfig *cluster.Config) {
 	s.DefaultTestCluster.SetupTestDatabase()
 
 	cfg := s.DefaultTestCluster.Config()
+	serializer := serialization.NewSerializer()
 	dataStoreFactory := client.DataStoreFactoryProvider(
 		client.ClusterName(clusterName),
 		resolver.NewNoopResolver(),
@@ -199,6 +200,7 @@ func (s *TestBase) Setup(clusterMetadataConfig *cluster.Config) {
 		s.Logger,
 		metrics.NoopMetricsHandler,
 		s.TracerProvider,
+		serializer,
 	)
 	factory := client.NewFactory(
 		dataStoreFactory,
@@ -206,7 +208,7 @@ func (s *TestBase) Setup(clusterMetadataConfig *cluster.Config) {
 		s.PersistenceRateLimiter,
 		quotas.NoopRequestRateLimiter,
 		quotas.NoopRequestRateLimiter,
-		serialization.NewSerializer(),
+		serializer,
 		nil,
 		clusterName,
 		metrics.NoopMetricsHandler,

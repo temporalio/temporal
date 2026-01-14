@@ -1,7 +1,10 @@
 package gocql
 
 import (
+	"encoding/binary"
+
 	"github.com/gocql/gocql"
+	"go.temporal.io/server/chasm"
 )
 
 func UUIDToString(
@@ -19,4 +22,12 @@ func UUIDsToStringSlice(
 		results[i] = uuid.String()
 	}
 	return results
+}
+
+func ArchetypeIDToUUID(
+	archetypeID chasm.ArchetypeID,
+) string {
+	var uuid gocql.UUID
+	binary.BigEndian.PutUint32(uuid[12:], archetypeID)
+	return uuid.String()
 }

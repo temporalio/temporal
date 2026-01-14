@@ -1,0 +1,27 @@
+{
+  "deploymentName": "test-deployment",
+  "createTime": "2024-01-01T00:00:00Z",
+  "routingConfig": {
+    "currentDeploymentVersion": {
+      "deploymentName": "test-deployment",
+      "buildId": "build-1"
+    }
+  },
+  "latestVersionSummary": {
+    "deploymentVersion": {
+      "deploymentName": "test-deployment",
+      "buildId": "build-1"
+    },
+    "createTime": "2024-01-01T00:00:00Z",
+    "lastCurrentTime": "2024-01-02T00:00:00Z"
+  },
+  "currentVersionSummary": {
+    "deploymentVersion": {
+      "deploymentName": "test-deployment",
+      "buildId": "build-1"
+    },
+    "createTime": "2024-01-01T00:00:00Z",
+    "lastCurrentTime": "2024-01-02T00:00:00Z"
+  }
+}
+

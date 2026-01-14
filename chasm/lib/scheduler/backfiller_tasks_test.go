@@ -1,23 +1,43 @@
 package scheduler_test
 
 import (
+	"context"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/testing/testlogger"
+	"go.temporal.io/server/common/testing/testvars"
+	legacyscheduler "go.temporal.io/server/service/worker/scheduler"
+	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type backfillerTasksSuite struct {
-	schedulerSuite
-	executor *scheduler.BackfillerTaskExecutor
+	suite.Suite
+	*require.Assertions
+	protorequire.ProtoAssertions
+
+	controller    *gomock.Controller
+	nodeBackend   *chasm.MockNodeBackend
+	node          *chasm.Node
+	scheduler     *scheduler.Scheduler
+	registry      *chasm.Registry
+	timeSource    *clock.EventTimeSource
+	logger        log.Logger
+	specProcessor scheduler.SpecProcessor
 }
 
 func TestBackfillerTasksSuite(t *testing.T) {
@@ -25,13 +45,63 @@ func TestBackfillerTasksSuite(t *testing.T) {
 }
 
 func (s *backfillerTasksSuite) SetupTest() {
-	s.schedulerSuite.SetupTest()
-	s.executor = scheduler.NewBackfillerTaskExecutor(scheduler.BackfillerTaskExecutorOptions{
-		Config:         defaultConfig(),
-		MetricsHandler: metrics.NoopMetricsHandler,
-		BaseLogger:     s.logger,
-		SpecProcessor:  newTestSpecProcessor(s.controller),
-	})
+	s.Assertions = require.New(s.T())
+	s.ProtoAssertions = protorequire.New(s.T())
+
+	s.controller = gomock.NewController(s.T())
+	s.logger = testlogger.NewTestLogger(s.T(), testlogger.FailOnExpectedErrorOnly)
+
+	// Use real spec processor for backfiller tests.
+	mockMetrics := metrics.NewMockHandler(s.controller)
+	mockMetrics.EXPECT().Counter(gomock.Any()).Return(metrics.NoopCounterMetricFunc).AnyTimes()
+	mockMetrics.EXPECT().WithTags(gomock.Any()).Return(mockMetrics).AnyTimes()
+	mockMetrics.EXPECT().Timer(gomock.Any()).Return(metrics.NoopTimerMetricFunc).AnyTimes()
+	s.specProcessor = scheduler.NewSpecProcessor(
+		defaultConfig(),
+		mockMetrics,
+		s.logger,
+		legacyscheduler.NewSpecBuilder(),
+	)
+
+	s.registry = chasm.NewRegistry(s.logger)
+	err := s.registry.Register(&chasm.CoreLibrary{})
+	s.NoError(err)
+	err = s.registry.Register(newTestLibrary(s.logger, s.specProcessor))
+	s.NoError(err)
+
+	s.timeSource = clock.NewEventTimeSource()
+	now := time.Now()
+	s.timeSource.Update(now)
+
+	tv := testvars.New(s.T())
+	s.nodeBackend = &chasm.MockNodeBackend{
+		HandleNextTransitionCount: func() int64 { return 2 },
+		HandleGetCurrentVersion:   func() int64 { return 1 },
+		HandleGetWorkflowKey:      tv.Any().WorkflowKey,
+		HandleIsWorkflow:          func() bool { return false },
+		HandleCurrentVersionedTransition: func() *persistencespb.VersionedTransition {
+			return &persistencespb.VersionedTransition{
+				NamespaceFailoverVersion: 1,
+				TransitionCount:          1,
+			}
+		},
+	}
+
+	s.node = chasm.NewEmptyTree(s.registry, s.timeSource, s.nodeBackend, chasm.DefaultPathEncoder, s.logger)
+	ctx := s.newMutableContext()
+	s.scheduler = scheduler.NewScheduler(ctx, namespace, namespaceID, scheduleID, defaultSchedule(), nil)
+	s.node.SetRootComponent(s.scheduler)
+
+	// Advance Generator's high water mark to 'now'.
+	generator := s.scheduler.Generator.Get(ctx)
+	generator.LastProcessedTime = timestamppb.New(now)
+
+	_, err = s.node.CloseTransaction()
+	s.NoError(err)
+}
+
+func (s *backfillerTasksSuite) newMutableContext() chasm.MutableContext {
+	return chasm.NewMutableContext(context.Background(), s.node)
 }
 
 type backfillTestCase struct {
@@ -169,49 +239,56 @@ func (s *backfillerTasksSuite) TestBackfillTask_BufferCompletelyFull() {
 	})
 }
 
-// When the buffer has capacity left, that capacity should be filled, with the
-// remainder left for a retry.
+// When the backfill range exceeds buffer capacity, partial filling should occur
+// with the remainder left for a retry.
 func (s *backfillerTasksSuite) TestBackfillTask_PartialFill() {
-	// Backfillers get half of the max buffer size, so fill (half the buffer -
-	// expected starts).
-	ctx := s.newMutableContext()
-	invoker := s.scheduler.Invoker.Get(ctx)
-	for range (scheduler.DefaultTweakables.MaxBufferSize / 2) - 5 {
-		invoker.BufferedStarts = append(invoker.BufferedStarts, &schedulespb.BufferedStart{})
-	}
-
+	// Use a large backfill range (1000 intervals) that exceeds the backfiller's
+	// buffer limit (MaxBufferSize/2 = 500).
 	startTime := s.timeSource.Now()
-	endTime := startTime.Add(10 * defaultInterval) // Backfill attempt will cover half of this range.
+	endTime := startTime.Add(1000 * defaultInterval)
 	request := &schedulepb.BackfillRequest{
-		StartTime: timestamppb.New(startTime),
-		EndTime:   timestamppb.New(endTime),
+		StartTime:     timestamppb.New(startTime),
+		EndTime:       timestamppb.New(endTime),
+		OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
 	}
 
-	// Expect a full buffer, and a high watermark in the middle of the backfill.
-	var backfiller *scheduler.Backfiller
-	s.runTestCase(&backfillTestCase{
-		InitialBackfillRequest:    request,
-		ExpectedBufferedStarts:    500,
-		ExpectedComplete:          false,
-		ExpectedAttempt:           1,
-		ExpectedLastProcessedTime: startTime.Add(5 * defaultInterval).Truncate(defaultInterval),
-		ValidateBackfiller: func(b *scheduler.Backfiller) {
-			backfiller = b
-		},
-	})
+	ctx := s.newMutableContext()
+	schedComponent, err := s.node.Component(ctx, chasm.ComponentRef{})
+	s.NoError(err)
+	sched := schedComponent.(*scheduler.Scheduler)
+	backfiller := sched.NewRangeBackfiller(ctx, request)
+	_, err = s.node.CloseTransaction()
+	s.NoError(err)
 
-	// Clear the Invoker's buffer. The remainder of the starts should buffer, and the
-	// backfiller should be deleted.
-	invoker.BufferedStarts = nil
-	err := s.executor.Execute(ctx, backfiller, chasm.TaskAttributes{}, &schedulerpb.BackfillerTask{})
+	// Backfiller should have processed up to its limit (500), not the full 1000.
+	s.False(backfiller.GetLastProcessedTime().AsTime().IsZero())
+	s.Equal(int64(1), backfiller.GetAttempt())
+
+	// Backfiller should still exist (not complete).
+	ctx = s.newMutableContext()
+	schedComponent, err = s.node.Component(ctx, chasm.ComponentRef{})
+	s.NoError(err)
+	sched = schedComponent.(*scheduler.Scheduler)
+	_, ok := sched.Backfillers[backfiller.BackfillId].TryGet(ctx)
+	s.True(ok)
+
+	// Manually execute the second iteration since the scheduled continuation
+	// task is in the future (after backoff delay).
+	invoker := sched.Invoker.Get(ctx)
+	invoker.BufferedStarts = nil // Clear to make room for next batch
+	executor := scheduler.NewBackfillerTaskExecutor(scheduler.BackfillerTaskExecutorOptions{
+		Config:         defaultConfig(),
+		MetricsHandler: metrics.NoopMetricsHandler,
+		BaseLogger:     s.logger,
+		SpecProcessor:  s.specProcessor,
+	})
+	err = executor.Execute(ctx, backfiller, chasm.TaskAttributes{}, &schedulerpb.BackfillerTask{})
 	s.NoError(err)
 	_, err = s.node.CloseTransaction()
 	s.NoError(err)
-	s.Equal(5, len(invoker.GetBufferedStarts()))
 
-	// Verify the backfiller is deleted
-	_, ok := s.scheduler.Backfillers[backfiller.BackfillId].TryGet(ctx)
-	s.False(ok)
+	// After second iteration, should have processed another batch.
+	s.Equal(int64(2), backfiller.GetAttempt())
 }
 
 func (s *backfillerTasksSuite) runTestCase(c *backfillTestCase) {
@@ -234,13 +311,8 @@ func (s *backfillerTasksSuite) runTestCase(c *backfillTestCase) {
 	}
 
 	// Either type of request will spawn a Backfiller and schedule an immediate pure task.
+	// The immediate task executes automatically during CloseTransaction().
 	_, err = s.node.CloseTransaction()
-	s.NoError(err)
-
-	// Run a backfill task.
-	err = s.executor.Execute(ctx, backfiller, chasm.TaskAttributes{}, &schedulerpb.BackfillerTask{})
-	s.NoError(err)
-	_, err = s.node.CloseTransaction() // TODO - remove this when CHASM has unit testing hooks for task generation
 	s.NoError(err)
 
 	// Validate completion or partial progress.

@@ -9,6 +9,14 @@ import (
 	schedulespb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 )
 
+func TestGenerateWorkflowID(t *testing.T) {
+	baseWorkflowID := "my-workflow"
+	nominalTime := time.Date(2024, 6, 15, 10, 30, 45, 123456789, time.UTC)
+
+	actual := generateWorkflowID(baseWorkflowID, nominalTime)
+	require.Equal(t, "my-workflow-2024-06-15T10:30:45Z", actual)
+}
+
 func TestGenerateRequestID(t *testing.T) {
 	scheduler := &Scheduler{
 		SchedulerState: &schedulespb.SchedulerState{

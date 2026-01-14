@@ -54,6 +54,8 @@ func AddChild(node *hsm.Node, id string, event *historypb.HistoryEvent, eventTok
 			Operation:              attrs.Operation,
 			ScheduledTime:          event.EventTime,
 			ScheduleToCloseTimeout: attrs.ScheduleToCloseTimeout,
+			ScheduleToStartTimeout: attrs.ScheduleToStartTimeout,
+			StartToCloseTimeout:    attrs.StartToCloseTimeout,
 			RequestId:              attrs.RequestId,
 			State:                  enumsspb.NEXUS_OPERATION_STATE_UNSPECIFIED,
 			ScheduledEventToken:    eventToken,
@@ -137,10 +139,34 @@ func (o Operation) transitionTasks() ([]hsm.Task, error) {
 
 // creationTasks returns tasks that are emitted when the machine is created.
 func (o Operation) creationTasks() ([]hsm.Task, error) {
+	var tasks []hsm.Task
+
 	if o.ScheduleToCloseTimeout.AsDuration() != 0 {
-		return []hsm.Task{TimeoutTask{deadline: o.ScheduledTime.AsTime().Add(o.ScheduleToCloseTimeout.AsDuration())}}, nil
+		tasks = append(tasks, TimeoutTask{
+			deadline: o.ScheduledTime.AsTime().Add(o.ScheduleToCloseTimeout.AsDuration()),
+		})
 	}
-	return nil, nil
+
+	if o.ScheduleToStartTimeout.AsDuration() != 0 {
+		tasks = append(tasks, ScheduleToStartTimeoutTask{
+			deadline: o.ScheduledTime.AsTime().Add(o.ScheduleToStartTimeout.AsDuration()),
+		})
+	}
+
+	return tasks, nil
+}
+
+// startToCloseTimeoutTask returns the StartToCloseTimeout task if the timeout is set.
+// This task is created when an operation transitions to the STARTED state.
+func (o Operation) startToCloseTimeoutTask() []hsm.Task {
+	if o.StartedTime.AsTime().IsZero() || o.StartToCloseTimeout.AsDuration() == 0 {
+		return nil
+	}
+	return []hsm.Task{
+		StartToCloseTimeoutTask{
+			deadline: o.StartedTime.AsTime().Add(o.StartToCloseTimeout.AsDuration()),
+		},
+	}
 }
 
 func (o Operation) RegenerateTasks(node *hsm.Node) ([]hsm.Task, error) {
@@ -152,7 +178,7 @@ func (o Operation) RegenerateTasks(node *hsm.Node) ([]hsm.Task, error) {
 	if err != nil {
 		return nil, err
 	}
-	return append(transitionTasks, creationTasks...), nil
+	return append(append(transitionTasks, creationTasks...), o.startToCloseTimeoutTask()...), nil
 }
 
 func (o Operation) output() (hsm.TransitionOutput, error) {
@@ -347,6 +373,8 @@ var TransitionStarted = hsm.NewTransition(
 			op.OperationToken = event.Attributes.OperationId //nolint:staticcheck // SA1019 this field might be set in older histories.
 		}
 
+		op.StartedTime = timestamppb.New(event.Time)
+
 		// If cancelation is requested already, schedule sending the cancelation request.
 		child, err := op.CancelationNode(event.Node)
 		if err != nil {
@@ -360,7 +388,16 @@ var TransitionStarted = hsm.NewTransition(
 				})
 			})
 		}
-		return op.output()
+
+		output, err := op.output()
+		if err != nil {
+			return output, err
+		}
+
+		// Schedule start-to-close timeout task if configured
+		output.Tasks = append(output.Tasks, op.startToCloseTimeoutTask()...)
+
+		return output, nil
 	},
 )
 

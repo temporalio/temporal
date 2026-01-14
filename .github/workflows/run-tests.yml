@@ -427,6 +427,7 @@ jobs:
           - cass_es
           - cass_es8
           - cass_os2
+          - cass_os3
           - sqlite
           - mysql8
           - postgres12
@@ -452,6 +453,10 @@ jobs:
             persistence_type: nosql
             persistence_driver: cassandra
             containers: [cassandra, opensearch2]
+          - name: cass_os3
+            persistence_type: nosql
+            persistence_driver: cassandra
+            containers: [cassandra, opensearch3]
           - name: sqlite
             persistence_type: sql
             persistence_driver: sqlite
@@ -604,7 +609,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        name: [cass_es, cass_es8, cass_os2, mysql8, postgres12, postgres12_pgx]
+        name: [cass_es, cass_es8, cass_os2, cass_os3, mysql8, postgres12, postgres12_pgx]
         include:
           - name: cass_es
             persistence_type: nosql
@@ -624,6 +629,10 @@ jobs:
             persistence_type: nosql
             persistence_driver: cassandra
             containers: [cassandra, opensearch2]
+          - name: cass_os3
+            persistence_type: nosql
+            persistence_driver: cassandra
+            containers: [cassandra, opensearch3]
           - name: mysql8
             persistence_type: sql
             persistence_driver: mysql8
@@ -766,6 +775,7 @@ jobs:
           - cass_es
           - cass_es8
           - cass_os2
+          - cass_os3
           - mysql8
           - postgres12
           - postgres12_pgx
@@ -788,6 +798,10 @@ jobs:
             persistence_type: nosql
             persistence_driver: cassandra
             containers: [cassandra, opensearch2]
+          - name: cass_os3
+            persistence_type: nosql
+            persistence_driver: cassandra
+            containers: [cassandra, opensearch3]
           - name: mysql8
             persistence_type: sql
             persistence_driver: mysql8

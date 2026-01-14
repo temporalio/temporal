@@ -48,7 +48,10 @@ func (b *BackfillerTaskExecutor) Validate(
 	attrs chasm.TaskAttributes,
 	_ *schedulerpb.BackfillerTask,
 ) (bool, error) {
-	return validateTaskHighWaterMark(backfiller.GetLastProcessedTime(), attrs.ScheduledTime)
+	return validateTaskHighWaterMark(
+		backfiller.GetLastProcessedTime(),
+		attrs.ScheduledTime,
+	)
 }
 
 func (b *BackfillerTaskExecutor) Execute(
@@ -114,9 +117,7 @@ func (b *BackfillerTaskExecutor) Execute(
 
 func (b *BackfillerTaskExecutor) rescheduleBackfill(ctx chasm.MutableContext, backfiller *Backfiller) {
 	backoffTime := ctx.Now(backfiller).Add(b.backoffDelay(backfiller))
-	ctx.AddTask(backfiller, chasm.TaskAttributes{
-		ScheduledTime: backoffTime,
-	}, &schedulerpb.BackfillerTask{})
+	backfiller.scheduleTask(ctx, backoffTime)
 }
 
 // processBackfill processes a Backfiller's BackfillRequest.
@@ -190,6 +191,7 @@ func (b *BackfillerTaskExecutor) processTrigger(
 	nowpb := backfiller.GetLastProcessedTime()
 	now := nowpb.AsTime()
 	requestID := generateRequestID(scheduler, backfiller.GetBackfillId(), now, now)
+	workflowID := generateWorkflowID(scheduler.WorkflowID(), now)
 	result.BufferedStarts = []*schedulespb.BufferedStart{
 		{
 			NominalTime:   nowpb,
@@ -198,6 +200,7 @@ func (b *BackfillerTaskExecutor) processTrigger(
 			OverlapPolicy: overlapPolicy,
 			Manual:        true,
 			RequestId:     requestID,
+			WorkflowId:    workflowID,
 		},
 	}
 	result.Complete = true

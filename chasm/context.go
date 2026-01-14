@@ -17,6 +17,8 @@ type Context interface {
 	Now(Component) time.Time
 	// ExecutionKey returns the execution key for the execution the context is operating on.
 	ExecutionKey() ExecutionKey
+	// StateTransitionCount returns the number of create/update transactions in the history of this execution.
+	StateTransitionCount() int64
 	// ExecutionCloseTime returns the time when the execution was closed. An execution is closed when its root component reaches a terminal
 	// state in its lifecycle. If the component is still running (not yet closed), it returns a zero time.Time value.
 	ExecutionCloseTime() time.Time
@@ -107,6 +109,10 @@ func (c *immutableCtx) Now(component Component) time.Time {
 
 func (c *immutableCtx) ExecutionKey() ExecutionKey {
 	return c.executionKey
+}
+
+func (c *immutableCtx) StateTransitionCount() int64 {
+	return c.root.backend.GetExecutionInfo().GetStateTransitionCount()
 }
 
 func (c *immutableCtx) getContext() context.Context {

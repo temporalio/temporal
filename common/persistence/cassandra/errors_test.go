@@ -178,7 +178,7 @@ func (s *cassandraErrorsSuite) TestExtractCurrentWorkflowConflictError_Failed() 
 	runID, _ := uuid.Parse(permanentRunID)
 	currentRunID := uuid.New()
 
-	err := extractCurrentWorkflowConflictError(map[string]interface{}{}, uuid.New().String())
+	err := extractCurrentWorkflowConflictError(map[string]interface{}{}, permanentRunID, uuid.New().String())
 	s.NoError(err)
 
 	t := rowTypeShard
@@ -186,7 +186,7 @@ func (s *cassandraErrorsSuite) TestExtractCurrentWorkflowConflictError_Failed() 
 		"type":           &t,
 		"run_id":         gocql.UUID(runID),
 		"current_run_id": gocql.UUID(currentRunID),
-	}, uuid.New().String())
+	}, permanentRunID, uuid.New().String())
 	s.NoError(err)
 
 	t = rowTypeExecution
@@ -194,7 +194,7 @@ func (s *cassandraErrorsSuite) TestExtractCurrentWorkflowConflictError_Failed() 
 		"type":           &t,
 		"run_id":         gocql.UUID([16]byte{}),
 		"current_run_id": gocql.UUID(currentRunID),
-	}, uuid.New().String())
+	}, permanentRunID, uuid.New().String())
 	s.NoError(err)
 
 	t = rowTypeExecution
@@ -202,7 +202,7 @@ func (s *cassandraErrorsSuite) TestExtractCurrentWorkflowConflictError_Failed() 
 		"type":           &t,
 		"run_id":         gocql.UUID(runID),
 		"current_run_id": gocql.UUID(currentRunID),
-	}, currentRunID.String())
+	}, permanentRunID, currentRunID.String())
 	s.NoError(err)
 }
 
@@ -228,7 +228,7 @@ func (s *cassandraErrorsSuite) TestExtractCurrentWorkflowConflictError_Success()
 			},
 		},
 	}
-	blob, err := serialization.WorkflowExecutionStateToBlob(workflowState)
+	blob, err := serialization.NewSerializer().WorkflowExecutionStateToBlob(workflowState)
 	lastWriteVersion := rand.Int63()
 	s.NoError(err)
 	t := rowTypeExecution
@@ -241,7 +241,7 @@ func (s *cassandraErrorsSuite) TestExtractCurrentWorkflowConflictError_Success()
 		"workflow_last_write_version": lastWriteVersion,
 	}
 
-	err = extractCurrentWorkflowConflictError(record, uuid.New().String())
+	err = extractCurrentWorkflowConflictError(record, permanentRunID, uuid.New().String())
 	if err, ok := err.(*p.CurrentWorkflowConditionFailedError); ok {
 		err.Msg = ""
 	}

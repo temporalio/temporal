@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/transitionhistory"
@@ -383,7 +384,10 @@ func (r *StateRebuilderImpl) getPaginationFn(
 
 			// Calculate and accumulate external payload size and count for this batch of history events
 			if r.shard.GetConfig().ExternalPayloadsEnabled(namespaceName) {
-				externalPayloadSize, externalPayloadCount, err := workflow.CalculateExternalPayloadSize(history.Events)
+				externalPayloadSize, externalPayloadCount, err := workflow.CalculateExternalPayloadSize(
+					history.Events,
+					metrics.NoopMetricsHandler, // don't record metrics since those are not new uploads
+				)
 				if err != nil {
 					return nil, nil, err
 				}

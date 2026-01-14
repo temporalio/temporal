@@ -16,11 +16,14 @@ import (
 )
 
 const (
-	TaskTypeTimeout            = "nexusoperations.Timeout"
 	TaskTypeInvocation         = "nexusoperations.Invocation"
 	TaskTypeBackoff            = "nexusoperations.Backoff"
 	TaskTypeCancelation        = "nexusoperations.Cancelation"
 	TaskTypeCancelationBackoff = "nexusoperations.CancelationBackoff"
+	// NOTE: the name `Timeout` is used for backward compatibility with existing persisted tasks and predates the addition of more flexible timeout types.
+	TaskTypeScheduleToCloseTimeout = "nexusoperations.Timeout"
+	TaskTypeScheduleToStartTimeout = "nexusoperations.ScheduleToStartTimeout"
+	TaskTypeStartToCloseTimeout    = "nexusoperations.StartToCloseTimeout"
 )
 
 var errSerializationCast = errors.New("cannot serialize HSM task. unable to cast to expected type")
@@ -32,7 +35,7 @@ type TimeoutTask struct {
 var _ hsm.Task = TimeoutTask{}
 
 func (TimeoutTask) Type() string {
-	return TaskTypeTimeout
+	return TaskTypeScheduleToCloseTimeout
 }
 
 func (t TimeoutTask) Deadline() time.Time {
@@ -235,8 +238,112 @@ func (CancelationBackoffTaskSerializer) Serialize(hsm.Task) ([]byte, error) {
 	return nil, nil
 }
 
+type ScheduleToStartTimeoutTask struct {
+	deadline time.Time
+}
+
+var _ hsm.Task = ScheduleToStartTimeoutTask{}
+
+func (ScheduleToStartTimeoutTask) Type() string {
+	return TaskTypeScheduleToStartTimeout
+}
+
+func (t ScheduleToStartTimeoutTask) Deadline() time.Time {
+	return t.deadline
+}
+
+func (ScheduleToStartTimeoutTask) Destination() string {
+	return ""
+}
+
+// Validate checks if the schedule-to-start timeout task is still valid.
+// Only valid if operation is still in SCHEDULED or BACKING_OFF state.
+func (t ScheduleToStartTimeoutTask) Validate(ref *persistencespb.StateMachineRef, node *hsm.Node) error {
+	if err := node.CheckRunning(); err != nil {
+		return err
+	}
+	op, err := hsm.MachineData[Operation](node)
+	if err != nil {
+		return err
+	}
+	// Only timeout if we haven't started yet
+	switch op.State() {
+	case enumsspb.NEXUS_OPERATION_STATE_SCHEDULED,
+		enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF:
+		return nil
+	default:
+		// Already started or completed, timeout not applicable
+		return fmt.Errorf(
+			"%w: %w: cannot apply schedule-to-start timeout to machine in state %v",
+			consts.ErrStaleReference,
+			hsm.ErrInvalidTransition,
+			op.State(),
+		)
+	}
+}
+
+type ScheduleToStartTimeoutTaskSerializer struct{}
+
+func (ScheduleToStartTimeoutTaskSerializer) Deserialize(data []byte, attrs hsm.TaskAttributes) (hsm.Task, error) {
+	return ScheduleToStartTimeoutTask{deadline: attrs.Deadline}, nil
+}
+
+func (ScheduleToStartTimeoutTaskSerializer) Serialize(hsm.Task) ([]byte, error) {
+	return nil, nil
+}
+
+type StartToCloseTimeoutTask struct {
+	deadline time.Time
+}
+
+var _ hsm.Task = StartToCloseTimeoutTask{}
+
+func (StartToCloseTimeoutTask) Type() string {
+	return TaskTypeStartToCloseTimeout
+}
+
+func (t StartToCloseTimeoutTask) Deadline() time.Time {
+	return t.deadline
+}
+
+func (StartToCloseTimeoutTask) Destination() string {
+	return ""
+}
+
+// Validate checks if the start-to-close timeout task is still valid.
+// Only valid if operation is in STARTED state.
+func (t StartToCloseTimeoutTask) Validate(ref *persistencespb.StateMachineRef, node *hsm.Node) error {
+	if err := node.CheckRunning(); err != nil {
+		return err
+	}
+	op, err := hsm.MachineData[Operation](node)
+	if err != nil {
+		return err
+	}
+	// Only timeout if we're in started state
+	if op.State() != enumsspb.NEXUS_OPERATION_STATE_STARTED {
+		return fmt.Errorf(
+			"%w: %w: cannot apply start-to-close timeout to machine in state %v",
+			consts.ErrStaleReference,
+			hsm.ErrInvalidTransition,
+			op.State(),
+		)
+	}
+	return nil
+}
+
+type StartToCloseTimeoutTaskSerializer struct{}
+
+func (StartToCloseTimeoutTaskSerializer) Deserialize(data []byte, attrs hsm.TaskAttributes) (hsm.Task, error) {
+	return StartToCloseTimeoutTask{deadline: attrs.Deadline}, nil
+}
+
+func (StartToCloseTimeoutTaskSerializer) Serialize(hsm.Task) ([]byte, error) {
+	return nil, nil
+}
+
 func RegisterTaskSerializers(reg *hsm.Registry) error {
-	if err := reg.RegisterTaskSerializer(TaskTypeTimeout, TimeoutTaskSerializer{}); err != nil {
+	if err := reg.RegisterTaskSerializer(TaskTypeScheduleToCloseTimeout, TimeoutTaskSerializer{}); err != nil {
 		return err
 	}
 	if err := reg.RegisterTaskSerializer(TaskTypeInvocation, InvocationTaskSerializer{}); err != nil {
@@ -251,5 +358,8 @@ func RegisterTaskSerializers(reg *hsm.Registry) error {
 	if err := reg.RegisterTaskSerializer(TaskTypeCancelationBackoff, CancelationBackoffTaskSerializer{}); err != nil { // nolint:revive
 		return err
 	}
-	return nil
+	if err := reg.RegisterTaskSerializer(TaskTypeScheduleToStartTimeout, ScheduleToStartTimeoutTaskSerializer{}); err != nil {
+		return err
+	}
+	return reg.RegisterTaskSerializer(TaskTypeStartToCloseTimeout, StartToCloseTimeoutTaskSerializer{})
 }

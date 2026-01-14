@@ -88,6 +88,11 @@ func (i *Invoker) recordProcessBufferResult(ctx chasm.MutableContext, result *pr
 		// Starts ready for execution are set to their first attempt.
 		if ready[start.RequestId] && start.Attempt < 1 {
 			start.Attempt = 1
+		} else if start.Attempt == 0 {
+			// Start was processed but deferred (e.g., BUFFER_ONE policy with running workflow).
+			// Mark as deferred (-1) to distinguish from newly-enqueued starts. This prevents
+			// processingDeadline() from scheduling an immediate task for deferred starts.
+			start.Attempt = -1
 		}
 
 		starts = append(starts, start)
@@ -99,7 +104,15 @@ func (i *Invoker) recordProcessBufferResult(ctx chasm.MutableContext, result *pr
 	i.TerminateWorkflows = append(i.GetTerminateWorkflows(), result.terminateWorkflows...)
 	i.LastProcessedTime = timestamppb.New(ctx.Now(i))
 
-	i.addTasks(ctx)
+	// Only schedule new tasks if this processBuffer call actually did something.
+	// This prevents duplicate task scheduling when multiple ProcessBuffer tasks
+	// run in the same transaction (e.g., from multiple backfillers).
+	if len(result.startWorkflows) > 0 ||
+		len(result.discardStarts) > 0 ||
+		len(result.cancelWorkflows) > 0 ||
+		len(result.terminateWorkflows) > 0 {
+		i.addTasks(ctx)
+	}
 }
 
 type executeResult struct {
@@ -209,6 +222,15 @@ func (i *Invoker) recordCompletedAction(
 		i.BufferedStarts = slices.Delete(i.BufferedStarts, idx, idx+1)
 	}
 
+	// Re-enable deferred starts (Attempt == -1) so they can be re-processed by
+	// ProcessBuffer now that a workflow has completed. This allows the overlap
+	// policy to be re-evaluated.
+	for _, start := range i.BufferedStarts {
+		if start.Attempt == -1 {
+			start.Attempt = 0
+		}
+	}
+
 	// Update DesiredTime on the first pending start for metrics. DesiredTime is used
 	// to drive action latency between buffered starts (the time it takes between
 	// completing one start and kicking off the next). We set that on the first start
@@ -237,7 +259,7 @@ func (i *Invoker) addTasks(ctx chasm.MutableContext) {
 	// backing off, or are still pending initial processing.
 	if (totalStarts - eligibleStarts) > 0 {
 		ctx.AddTask(i, chasm.TaskAttributes{
-			ScheduledTime: i.processingDeadline(ctx),
+			ScheduledTime: i.processingDeadline(),
 		}, &schedulerpb.InvokerProcessBufferTask{})
 	}
 
@@ -252,13 +274,12 @@ func (i *Invoker) addTasks(ctx chasm.MutableContext) {
 // queue should be processed, taking into account starts that have not yet been
 // attempted, as well as those that are pending backoff to retry. If the buffer
 // is empty, the return value will be Time's zero value.
-func (i *Invoker) processingDeadline(ctx chasm.Context) time.Time {
+func (i *Invoker) processingDeadline() time.Time {
 	var deadline time.Time
 	for _, start := range i.GetBufferedStarts() {
 		if start.GetAttempt() == 0 {
-			// We use a current timestamp instead of TaskScheduledTimeImmediate so that we
-			// can validate the task with only the high watermark and task schedule time.
-			return ctx.Now(i)
+			// Return zero time to schedule an immediate task for unprocessed starts.
+			return chasm.TaskScheduledTimeImmediate
 		}
 		backoff := start.GetBackoffTime().AsTime()
 		if deadline.IsZero() || backoff.Before(deadline) {

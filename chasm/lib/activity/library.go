@@ -10,17 +10,27 @@ type componentOnlyLibrary struct {
 	chasm.UnimplementedLibrary
 }
 
+const (
+	libraryName   = "activity"
+	componentName = "activity"
+)
+
+var (
+	ArchetypeID = chasm.GenerateTypeID(chasm.FullyQualifiedName(libraryName, componentName))
+)
+
 func newComponentOnlyLibrary() *componentOnlyLibrary {
 	return &componentOnlyLibrary{}
 }
 
 func (l *componentOnlyLibrary) Name() string {
-	return "activity"
+	return libraryName
 }
 
 func (l *componentOnlyLibrary) Components() []*chasm.RegistrableComponent {
 	return []*chasm.RegistrableComponent{
-		chasm.NewRegistrableComponent[*Activity]("activity",
+		chasm.NewRegistrableComponent[*Activity](
+			componentName,
 			chasm.WithSearchAttributes(
 				TypeSearchAttribute,
 				StatusSearchAttribute,

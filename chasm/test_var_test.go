@@ -13,23 +13,23 @@ const (
 )
 
 var (
-	testComponentFQN      = fullyQualifiedName(testLibraryName, testComponentName)
-	testSubComponent1FQN  = fullyQualifiedName(testLibraryName, testSubComponent1Name)
-	testSubComponent11FQN = fullyQualifiedName(testLibraryName, testSubComponent11Name)
-	testSubComponent2FQN  = fullyQualifiedName(testLibraryName, testSubComponent2Name)
+	testComponentFQN      = FullyQualifiedName(testLibraryName, testComponentName)
+	testSubComponent1FQN  = FullyQualifiedName(testLibraryName, testSubComponent1Name)
+	testSubComponent11FQN = FullyQualifiedName(testLibraryName, testSubComponent11Name)
+	testSubComponent2FQN  = FullyQualifiedName(testLibraryName, testSubComponent2Name)
 
-	testSideEffectTaskFQN         = fullyQualifiedName(testLibraryName, testSideEffectTaskName)
-	testOutboundSideEffectTaskFQN = fullyQualifiedName(testLibraryName, testOutboundSideEffectTaskName)
-	testPureTaskFQN               = fullyQualifiedName(testLibraryName, testPureTaskName)
+	testSideEffectTaskFQN         = FullyQualifiedName(testLibraryName, testSideEffectTaskName)
+	testOutboundSideEffectTaskFQN = FullyQualifiedName(testLibraryName, testOutboundSideEffectTaskName)
+	testPureTaskFQN               = FullyQualifiedName(testLibraryName, testPureTaskName)
 )
 
 var (
-	testComponentTypeID      = generateTypeID(testComponentFQN)
-	testSubComponent1TypeID  = generateTypeID(testSubComponent1FQN)
-	testSubComponent11TypeID = generateTypeID(testSubComponent11FQN)
-	testSubComponent2TypeID  = generateTypeID(testSubComponent2FQN)
+	testComponentTypeID      = GenerateTypeID(testComponentFQN)
+	testSubComponent1TypeID  = GenerateTypeID(testSubComponent1FQN)
+	testSubComponent11TypeID = GenerateTypeID(testSubComponent11FQN)
+	testSubComponent2TypeID  = GenerateTypeID(testSubComponent2FQN)
 
-	testSideEffectTaskTypeID         = generateTypeID(testSideEffectTaskFQN)
-	testOutboundSideEffectTaskTypeID = generateTypeID(testOutboundSideEffectTaskFQN)
-	testPureTaskTypeID               = generateTypeID(testPureTaskFQN)
+	testSideEffectTaskTypeID         = GenerateTypeID(testSideEffectTaskFQN)
+	testOutboundSideEffectTaskTypeID = GenerateTypeID(testOutboundSideEffectTaskFQN)
+	testPureTaskTypeID               = GenerateTypeID(testPureTaskFQN)
 )

@@ -48,6 +48,7 @@ func newConflictRecord() map[string]interface{} {
 func convertErrors(
 	conflictRecord map[string]interface{},
 	conflictIter gocql.Iter,
+	currentRecordRunID string,
 	requestShardID int32,
 	requestRangeID int64,
 	requestCurrentRunID string,
@@ -57,6 +58,7 @@ func convertErrors(
 	conflictRecords := []map[string]interface{}{conflictRecord}
 	errors := extractErrors(
 		conflictRecord,
+		currentRecordRunID,
 		requestShardID,
 		requestRangeID,
 		requestCurrentRunID,
@@ -73,6 +75,7 @@ func convertErrors(
 		conflictRecords = append(conflictRecords, conflictRecord)
 		errors = append(errors, extractErrors(
 			conflictRecord,
+			currentRecordRunID,
 			requestShardID,
 			requestRangeID,
 			requestCurrentRunID,
@@ -102,6 +105,7 @@ func convertErrors(
 
 func extractErrors(
 	conflictRecord map[string]interface{},
+	currentRecordRunID string,
 	requestShardID int32,
 	requestRangeID int64,
 	requestCurrentRunID string,
@@ -119,6 +123,7 @@ func extractErrors(
 
 	if err := extractCurrentWorkflowConflictError(
 		conflictRecord,
+		currentRecordRunID,
 		requestCurrentRunID,
 	); err != nil {
 		errors = append(errors, err)
@@ -184,6 +189,7 @@ func extractShardOwnershipLostError(
 
 func extractCurrentWorkflowConflictError(
 	conflictRecord map[string]interface{},
+	currentRecordRunID string,
 	requestCurrentRunID string,
 ) error {
 	rowType, ok := conflictRecord["type"].(*int)
@@ -194,7 +200,7 @@ func extractCurrentWorkflowConflictError(
 	if *rowType != rowTypeExecution {
 		return nil
 	}
-	if runID := gocql.UUIDToString(conflictRecord["run_id"]); runID != permanentRunID {
+	if runID := gocql.UUIDToString(conflictRecord["run_id"]); runID != currentRecordRunID {
 		return nil
 	}
 
@@ -203,7 +209,7 @@ func extractCurrentWorkflowConflictError(
 		binary, _ := conflictRecord["execution_state"].([]byte)
 		encoding, _ := conflictRecord["execution_state_encoding"].(string)
 		executionState := &persistencespb.WorkflowExecutionState{}
-		if state, err := serialization.WorkflowExecutionStateFromBlob(p.NewDataBlob(binary, encoding)); err == nil {
+		if state, err := serialization.DefaultDecoder.WorkflowExecutionStateFromBlob(p.NewDataBlob(binary, encoding)); err == nil {
 			executionState = state
 		}
 		// if err != nil, this means execution state cannot be parsed, just use default values

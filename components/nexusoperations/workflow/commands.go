@@ -100,6 +100,22 @@ func (ch *commandHandler) HandleScheduleCommand(
 		}
 	}
 
+	if err := timestamp.ValidateAndCapProtoDuration(attrs.ScheduleToStartTimeout); err != nil {
+		return workflow.FailWorkflowTaskError{
+			Cause: enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
+			Message: fmt.Sprintf(
+				"ScheduleNexusOperationCommandAttributes.ScheduleToStartTimeout is invalid: %v", err),
+		}
+	}
+
+	if err := timestamp.ValidateAndCapProtoDuration(attrs.StartToCloseTimeout); err != nil {
+		return workflow.FailWorkflowTaskError{
+			Cause: enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
+			Message: fmt.Sprintf(
+				"ScheduleNexusOperationCommandAttributes.StartToCloseTimeout is invalid: %v", err),
+		}
+	}
+
 	if !validator.IsValidPayloadSize(attrs.Input.Size()) {
 		return workflow.FailWorkflowTaskError{
 			Cause:             enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
@@ -152,6 +168,19 @@ func (ch *commandHandler) HandleScheduleCommand(
 		attrs.ScheduleToCloseTimeout = durationpb.New(maxTimeout)
 	}
 
+	// Trim secondary timeouts to the primary timeout.
+	scheduleToCloseTimeout := attrs.ScheduleToCloseTimeout.AsDuration()
+	scheduleToStartTimeout := attrs.ScheduleToStartTimeout.AsDuration()
+	startToCloseTimeout := attrs.StartToCloseTimeout.AsDuration()
+
+	if scheduleToCloseTimeout > 0 && scheduleToStartTimeout > 0 && scheduleToStartTimeout > scheduleToCloseTimeout {
+		attrs.ScheduleToStartTimeout = attrs.ScheduleToCloseTimeout
+	}
+
+	if scheduleToCloseTimeout > 0 && startToCloseTimeout > 0 && startToCloseTimeout > scheduleToCloseTimeout {
+		attrs.StartToCloseTimeout = attrs.ScheduleToCloseTimeout
+	}
+
 	event := ms.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED, func(he *historypb.HistoryEvent) {
 		he.Attributes = &historypb.HistoryEvent_NexusOperationScheduledEventAttributes{
 			NexusOperationScheduledEventAttributes: &historypb.NexusOperationScheduledEventAttributes{
@@ -161,6 +190,8 @@ func (ch *commandHandler) HandleScheduleCommand(
 				Operation:                    attrs.Operation,
 				Input:                        attrs.Input,
 				ScheduleToCloseTimeout:       attrs.ScheduleToCloseTimeout,
+				ScheduleToStartTimeout:       attrs.ScheduleToStartTimeout,
+				StartToCloseTimeout:          attrs.StartToCloseTimeout,
 				NexusHeader:                  lowerCaseHeader,
 				RequestId:                    uuid.NewString(),
 				WorkflowTaskCompletedEventId: workflowTaskCompletedEventID,

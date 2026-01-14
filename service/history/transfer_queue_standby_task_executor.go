@@ -29,7 +29,7 @@ import (
 )
 
 const (
-	recordChildCompletionVerificationFailedMsg = "Failed to verify child execution completion recoreded"
+	recordChildCompletionVerificationFailedMsg = "Failed to verify child execution completion recorded"
 )
 
 type (
@@ -279,7 +279,7 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 				return nil, err
 			}
 
-			verifyCompletionRecorded = verifyCompletionRecorded && !ndc.IsTerminatedByResetter(completionEvent)
+			verifyCompletionRecorded = !ndc.IsTerminatedByResetter(completionEvent)
 		}
 
 		if verifyCompletionRecorded {
@@ -320,14 +320,12 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 				}, nil
 			default:
 				// Case 3: Verification itself failed.
-				// NOTE: Returning an error as postActionInfo here so that post action can decide whether to retry or not.
-				// Post action will propagate the error to upper layer to backoff and emit metrics properly if retry is needed.
-				// NOTE: Wrapping the error as a verification error to prevent mutable state from being cleared and reloaded upon retry.
-				// That's unnecessary as the error is in the target workflow, not this workflow.
-				return &verificationErr{
+				// NOTE: Wrapping the error as a verification error to prevent mutable state from being cleared and reloaded upon retry,
+				// which is unnecessary as the error is in the target workflow, not this workflow.
+				return nil, &verificationErr{
 					msg: recordChildCompletionVerificationFailedMsg,
 					err: err,
-				}, nil
+				}
 			}
 		}
 		return nil, nil
@@ -471,19 +469,17 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 			// Case 1: Target workflow is in the desired state.
 			return nil, nil
 		case *serviceerror.NotFound, *serviceerror.WorkflowNotReady:
-			// Case 2:Ttarget workflow is not in the desired state.
+			// Case 2: Target workflow is not in the desired state.
 			// Return a non-nil pointer as postActionInfo here to indicate that verification is not done yet.
 			return &struct{}{}, nil
 		default:
 			// Case 3: Verification itself failed.
-			// NOTE: Returning an error as postActionInfo here so that post action can decide whether to retry or not.
-			// Post action will propagate the error to upper layer to backoff and emit metrics properly if retry is needed.
-			// NOTE: Wrapping the error as a verification error to prevent mutable state from being cleared and reloaded upon retry.
-			// That's unnecessary as the error is in the target workflow, not this workflow.
-			return &verificationErr{
+			// NOTE: Wrapping the error as a verification error to prevent mutable state from being cleared and reloaded upon retry,
+			// which is unnecessary as the error is in the target workflow, not this workflow.
+			return nil, &verificationErr{
 				msg: recordChildCompletionVerificationFailedMsg,
 				err: err,
-			}, nil
+			}
 		}
 	}
 
@@ -651,14 +647,14 @@ func (t *transferQueueStandbyTaskExecutor) checkParentWorkflowStillExistOnSource
 	if postActionInfo == nil {
 		return nil
 	}
-	pushActivityInfo, ok := postActionInfo.(*verifyCompletionRecordedPostActionInfo)
-	if !ok || pushActivityInfo.parentWorkflowKey == nil {
+	verifyCompletionInfo, ok := postActionInfo.(*verifyCompletionRecordedPostActionInfo)
+	if !ok || verifyCompletionInfo.parentWorkflowKey == nil {
 		return standbyTransferTaskPostActionTaskDiscarded(ctx, taskInfo, postActionInfo, logger)
 	}
 
 	if !executionExistsOnSource(
 		ctx,
-		*pushActivityInfo.parentWorkflowKey,
+		*verifyCompletionInfo.parentWorkflowKey,
 		getTaskArchetypeID(taskInfo),
 		logger,
 		t.clusterName,

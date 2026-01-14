@@ -1,6 +1,8 @@
 package scheduler
 
 import (
+	"time"
+
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 )
@@ -25,8 +27,8 @@ func NewGenerator(ctx chasm.MutableContext) *Generator {
 		},
 	}
 
-	// Kick off initial generator run.
-	ctx.AddTask(generator, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{})
+	// Kick off initial generator run as an immediate task.
+	generator.Generate(ctx)
 
 	return generator
 }
@@ -34,7 +36,14 @@ func NewGenerator(ctx chasm.MutableContext) *Generator {
 // Generate immediately kicks off a new GeneratorTask. Used after updating the
 // schedule specification.
 func (g *Generator) Generate(ctx chasm.MutableContext) {
-	ctx.AddTask(g, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{})
+	g.scheduleTask(ctx, chasm.TaskScheduledTimeImmediate)
+}
+
+// scheduleTask schedules a GeneratorTask at the given time.
+func (g *Generator) scheduleTask(ctx chasm.MutableContext, scheduledTime time.Time) {
+	ctx.AddTask(g, chasm.TaskAttributes{
+		ScheduledTime: scheduledTime,
+	}, &schedulerpb.GeneratorTask{})
 }
 
 func (g *Generator) LifecycleState(ctx chasm.Context) chasm.LifecycleState {

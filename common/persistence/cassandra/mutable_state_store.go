@@ -9,10 +9,13 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/softassert"
 )
 
 const (
@@ -363,13 +366,17 @@ const (
 
 type (
 	MutableStateStore struct {
-		Session gocql.Session
+		Session    gocql.Session
+		serializer serialization.Serializer
+		logger     log.Logger
 	}
 )
 
-func NewMutableStateStore(session gocql.Session) *MutableStateStore {
+func NewMutableStateStore(session gocql.Session, serializer serialization.Serializer, logger log.Logger) *MutableStateStore {
 	return &MutableStateStore{
-		Session: session,
+		Session:    session,
+		serializer: serializer,
+		logger:     logger,
 	}
 }
 
@@ -387,6 +394,7 @@ func (d *MutableStateStore) CreateWorkflowExecution(
 	runID := newWorkflow.RunID
 
 	var requestCurrentRunID string
+	currentRecordRunID := d.getCurrentRecordRunID(request.ArchetypeID)
 
 	switch request.Mode {
 	case p.CreateWorkflowModeBypassCurrent:
@@ -403,7 +411,7 @@ func (d *MutableStateStore) CreateWorkflowExecution(
 			rowTypeExecution,
 			namespaceID,
 			workflowID,
-			permanentRunID,
+			currentRecordRunID,
 			defaultVisibilityTimestamp,
 			rowTypeExecutionTaskID,
 			request.PreviousRunID,
@@ -419,7 +427,7 @@ func (d *MutableStateStore) CreateWorkflowExecution(
 			rowTypeExecution,
 			namespaceID,
 			workflowID,
-			permanentRunID,
+			currentRecordRunID,
 			defaultVisibilityTimestamp,
 			rowTypeExecutionTaskID,
 			runID,
@@ -467,6 +475,7 @@ func (d *MutableStateStore) CreateWorkflowExecution(
 		return nil, convertErrors(
 			conflictRecord,
 			conflictIter,
+			currentRecordRunID,
 			shardID,
 			request.RangeID,
 			requestCurrentRunID,
@@ -601,6 +610,8 @@ func (d *MutableStateStore) UpdateWorkflowExecution(
 	runID := updateWorkflow.RunID
 	shardID := request.ShardID
 
+	currentRecordRunID := d.getCurrentRecordRunID(request.ArchetypeID)
+
 	switch request.Mode {
 	case p.UpdateWorkflowModeIgnoreCurrent:
 		// noop
@@ -611,6 +622,7 @@ func (d *MutableStateStore) UpdateWorkflowExecution(
 			request.ShardID,
 			namespaceID,
 			workflowID,
+			request.ArchetypeID,
 			runID,
 			timestamp.TimeValuePtr(updateWorkflow.ExecutionState.StartTime),
 		); err != nil {
@@ -638,7 +650,7 @@ func (d *MutableStateStore) UpdateWorkflowExecution(
 				rowTypeExecution,
 				newNamespaceID,
 				newWorkflowID,
-				permanentRunID,
+				currentRecordRunID,
 				defaultVisibilityTimestamp,
 				rowTypeExecutionTaskID,
 				runID,
@@ -648,7 +660,7 @@ func (d *MutableStateStore) UpdateWorkflowExecution(
 			lastWriteVersion := updateWorkflow.LastWriteVersion
 
 			// TODO: double encoding execution state? already in updateWorkflow.ExecutionStateBlob
-			executionStateDatablob, err := serialization.WorkflowExecutionStateToBlob(updateWorkflow.ExecutionState)
+			executionStateDatablob, err := d.serializer.WorkflowExecutionStateToBlob(updateWorkflow.ExecutionState)
 			if err != nil {
 				return err
 			}
@@ -663,7 +675,7 @@ func (d *MutableStateStore) UpdateWorkflowExecution(
 				rowTypeExecution,
 				namespaceID,
 				workflowID,
-				permanentRunID,
+				currentRecordRunID,
 				defaultVisibilityTimestamp,
 				rowTypeExecutionTaskID,
 				runID,
@@ -712,6 +724,7 @@ func (d *MutableStateStore) UpdateWorkflowExecution(
 		return convertErrors(
 			conflictRecord,
 			conflictIter,
+			currentRecordRunID,
 			request.ShardID,
 			request.RangeID,
 			updateWorkflow.ExecutionState.RunId,
@@ -749,6 +762,8 @@ func (d *MutableStateStore) ConflictResolveWorkflowExecution(
 		startTime = timestamp.TimeValuePtr(currentWorkflow.ExecutionState.StartTime)
 	}
 
+	currentRecordRunID := d.getCurrentRecordRunID(request.ArchetypeID)
+
 	switch request.Mode {
 	case p.ConflictResolveWorkflowModeBypassCurrent:
 		if err := d.assertNotCurrentExecution(
@@ -756,6 +771,7 @@ func (d *MutableStateStore) ConflictResolveWorkflowExecution(
 			shardID,
 			namespaceID,
 			workflowID,
+			request.ArchetypeID,
 			resetWorkflow.ExecutionState.RunId,
 			startTime,
 		); err != nil {
@@ -789,7 +805,7 @@ func (d *MutableStateStore) ConflictResolveWorkflowExecution(
 			rowTypeExecution,
 			namespaceID,
 			workflowID,
-			permanentRunID,
+			currentRecordRunID,
 			defaultVisibilityTimestamp,
 			rowTypeExecutionTaskID,
 			currentRunID,
@@ -856,6 +872,7 @@ func (d *MutableStateStore) ConflictResolveWorkflowExecution(
 		return convertErrors(
 			conflictRecord,
 			conflictIter,
+			currentRecordRunID,
 			request.ShardID,
 			request.RangeID,
 			currentRunID,
@@ -870,6 +887,7 @@ func (d *MutableStateStore) assertNotCurrentExecution(
 	shardID int32,
 	namespaceID string,
 	workflowID string,
+	archetypeID chasm.ArchetypeID,
 	runID string,
 	startTime *time.Time,
 ) error {
@@ -878,6 +896,7 @@ func (d *MutableStateStore) assertNotCurrentExecution(
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
+		ArchetypeID: archetypeID,
 	}); err != nil {
 		if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
 			// allow bypassing no current record
@@ -926,7 +945,7 @@ func (d *MutableStateStore) DeleteCurrentWorkflowExecution(
 		rowTypeExecution,
 		request.NamespaceID,
 		request.WorkflowID,
-		permanentRunID,
+		d.getCurrentRecordRunID(request.ArchetypeID),
 		defaultVisibilityTimestamp,
 		rowTypeExecutionTaskID,
 		request.RunID,
@@ -945,7 +964,7 @@ func (d *MutableStateStore) GetCurrentExecution(
 		rowTypeExecution,
 		request.NamespaceID,
 		request.WorkflowID,
-		permanentRunID,
+		d.getCurrentRecordRunID(request.ArchetypeID),
 		defaultVisibilityTimestamp,
 		rowTypeExecutionTaskID,
 	).WithContext(ctx)
@@ -962,7 +981,7 @@ func (d *MutableStateStore) GetCurrentExecution(
 	}
 
 	// TODO: fix blob ExecutionState in storage should not be a blob.
-	executionState, err := serialization.WorkflowExecutionStateFromBlob(executionStateBlob)
+	executionState, err := d.serializer.WorkflowExecutionStateFromBlob(executionStateBlob)
 	if err != nil {
 		return nil, err
 	}
@@ -1019,9 +1038,10 @@ func (d *MutableStateStore) SetWorkflowExecution(
 		return convertErrors(
 			conflictRecord,
 			conflictIter,
+			"", // SetWorkflowExecution does not update current record
 			request.ShardID,
 			request.RangeID,
-			"",
+			"", // SetWorkflowExecution does not update current record
 			executionCASConditions,
 		)
 	}
@@ -1042,24 +1062,49 @@ func (d *MutableStateStore) ListConcreteExecutions(
 	response := &p.InternalListConcreteExecutionsResponse{}
 	result := make(map[string]interface{})
 	for iter.MapScan(result) {
-		runID := gocql.UUIDToString(result["run_id"])
-		if runID == permanentRunID {
-			result = make(map[string]interface{})
-			continue
-		}
-		if _, ok := result["execution"]; ok {
+		if execution, ok := result["execution"]; ok {
+			executionBytes, ok := execution.([]byte)
+			if !ok {
+				return nil, newPersistedTypeMismatchError("execution", "", executionBytes, result)
+			}
+
+			if len(executionBytes) == 0 {
+				// current record has no value in execution column.
+				result = make(map[string]interface{})
+				continue
+			}
+
 			state, err := mutableStateFromRow(result)
 			if err != nil {
 				return nil, err
 			}
 			response.States = append(response.States, state)
 		}
+
 		result = make(map[string]interface{})
 	}
 	if len(iter.PageState()) > 0 {
 		response.NextPageToken = iter.PageState()
 	}
 	return response, nil
+}
+
+func (d *MutableStateStore) getCurrentRecordRunID(
+	archetypeID chasm.ArchetypeID,
+) string {
+	if !softassert.That(
+		d.logger,
+		archetypeID != chasm.UnspecifiedArchetypeID,
+		"ArchetypeID not specified, defaulting to Workflow.",
+	) {
+		return permanentRunID
+	}
+
+	if archetypeID == chasm.WorkflowArchetypeID {
+		return permanentRunID
+	}
+
+	return gocql.ArchetypeIDToUUID(archetypeID)
 }
 
 func mutableStateFromRow(

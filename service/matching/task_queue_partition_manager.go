@@ -81,6 +81,10 @@ type (
 
 		// rateLimitManager is used to manage the rate limit for task queues.
 		rateLimitManager *rateLimitManager
+
+		// loadTime tracks when this partition manager was started, used to prevent
+		// false positives in the no-recent-poller metric for newly loaded queues
+		loadTime time.Time
 	}
 )
 
@@ -199,6 +203,7 @@ func (pm *taskQueuePartitionManagerImpl) defaultQueue() physicalTaskQueueManager
 }
 
 func (pm *taskQueuePartitionManagerImpl) Start() {
+	pm.loadTime = time.Now()
 	pm.engine.updateTaskQueuePartitionGauge(pm.Namespace(), pm.partition, 1)
 	pm.userDataManager.Start()
 	//nolint:errcheck
@@ -325,9 +330,14 @@ reredirectTask:
 		dbq.MarkAlive()
 	}
 
-	if pm.partition.IsRoot() && !pm.HasAnyPollerAfter(time.Now().Add(-noPollerThreshold)) {
-		// Only checks recent pollers in the root partition
-		pm.metricsHandler.Counter(metrics.NoRecentPollerTasksPerTaskQueueCounter.Name()).Record(1)
+	if pm.partition.IsRoot() {
+		// Only emit the no-recent-poller metric if BOTH conditions are met:
+		// 1. Partition has been loaded for more than noPollerThreshold (2 minutes)
+		// 2. No pollers have polled in the last noPollerThreshold (2 minutes)
+		// This prevents false positives for newly loaded partitions that haven't had time to receive pollers yet.
+		if time.Since(pm.loadTime) > noPollerThreshold && !pm.HasAnyPollerAfter(time.Now().Add(-noPollerThreshold)) {
+			pm.metricsHandler.Counter(metrics.NoRecentPollerTasksPerTaskQueueCounter.Name()).Record(1)
+		}
 	}
 
 	isActive, err := pm.isActiveInCluster()

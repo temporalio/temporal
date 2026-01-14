@@ -8,10 +8,11 @@ import (
 
 // MockContext is a mock implementation of [Context].
 type MockContext struct {
-	HandleExecutionKey       func() ExecutionKey
-	HandleNow                func(component Component) time.Time
-	HandleRef                func(component Component) ([]byte, error)
-	HandleExecutionCloseTime func() time.Time
+	HandleExecutionKey         func() ExecutionKey
+	HandleNow                  func(component Component) time.Time
+	HandleRef                  func(component Component) ([]byte, error)
+	HandleExecutionCloseTime   func() time.Time
+	HandleStateTransitionCount func() int64
 }
 
 func (c *MockContext) getContext() context.Context {
@@ -48,6 +49,13 @@ func (c *MockContext) ExecutionCloseTime() time.Time {
 		return c.HandleExecutionCloseTime()
 	}
 	return time.Time{}
+}
+
+func (c *MockContext) StateTransitionCount() int64 {
+	if c.HandleStateTransitionCount != nil {
+		return c.HandleStateTransitionCount()
+	}
+	return 0
 }
 
 // MockMutableContext is a mock implementation of [MutableContext] that records added tasks for inspection in
