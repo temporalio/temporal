@@ -32,6 +32,8 @@ message TaskInfo {
     // Stamp field allows to differentiate between different instances of the same task
     int32 stamp = 9;
     temporal.api.common.v1.Priority priority = 10;
+    // Reference to any chasm component associated with this task
+    bytes component_ref = 11;
 }
 
 // task_queue column

@@ -63,7 +63,7 @@ func newStateMachineEnvTestContext(t *testing.T, enableTransitionHistory bool) *
 	s.controller = gomock.NewController(t)
 	config := tests.NewDynamicConfig()
 	config.EnableTransitionHistory = func() bool { return enableTransitionHistory }
-	s.version = s.namespaceEntry.FailoverVersion()
+	s.version = s.namespaceEntry.FailoverVersion(namespace.EmptyBusinessID)
 
 	s.mockShard = shard.NewTestContextWithTimeSource(
 		s.controller,
@@ -259,7 +259,7 @@ func TestValidateStateMachineRef(t *testing.T) {
 			t.Parallel()
 			s := newStateMachineEnvTestContext(t, tc.enableTransitionHistory)
 			mutableState := s.prepareMutableStateWithTriggeredNexusCompletionCallback()
-			snapshot, _, err := mutableState.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
+			snapshot, _, err := mutableState.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
 			require.NoError(t, err)
 			task := snapshot.Tasks[tasks.CategoryOutbound][0]
 			exec := stateMachineEnvironment{
@@ -374,9 +374,9 @@ func TestAccess(t *testing.T) {
 			s := newStateMachineEnvTestContext(t, true)
 			mutableState := s.prepareMutableStateWithTriggeredNexusCompletionCallback()
 			mutableState.GetExecutionState().State = tc.workflowState
-			snapshot, _, err := mutableState.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
+			snapshot, _, err := mutableState.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
 			require.NoError(t, err)
-			persistenceMutableState := workflow.TestCloneToProto(mutableState)
+			persistenceMutableState := workflow.TestCloneToProto(context.Background(), mutableState)
 			em := s.mockShard.GetExecutionManager().(*persistence.MockExecutionManager)
 			em.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 			em.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil).Times(tc.expectedSetRequests)
@@ -404,7 +404,7 @@ func (s *taskExecutorTestContext) prepareMutableStateWithReadyNexusCompletionCal
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.NewString(),
 	}
-	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.mockShard.GetLogger(), s.namespaceEntry.FailoverVersion(), execution.GetWorkflowId(), execution.GetRunId())
+	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.mockShard.GetLogger(), s.namespaceEntry.FailoverVersion(execution.GetWorkflowId()), execution.GetWorkflowId(), execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{

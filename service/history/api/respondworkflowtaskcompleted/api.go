@@ -195,6 +195,13 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		return nil, serviceerror.NewNotFound("Workflow task not found.")
 	}
 
+	// We don't accept the request to create a new workflow task if the workflow is paused.
+	if ms.IsWorkflowExecutionStatusPaused() && request.GetForceCreateNewWorkflowTask() {
+		// Mutable state wasn't changed yet and doesn't have to be cleared.
+		releaseLeaseWithError = false
+		return nil, serviceerror.NewFailedPrecondition("Workflow is paused and force create new workflow task is not allowed.")
+	}
+
 	behavior := request.GetVersioningBehavior()
 	deployment := worker_versioning.DeploymentFromDeploymentVersion(worker_versioning.DeploymentVersionFromOptions(request.GetDeploymentOptions()))
 	//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
@@ -577,6 +584,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 				nil,
 				workflowLease.GetContext().UpdateRegistry(ctx),
 				false,
+				nil,
 			)
 			if err != nil {
 				return nil, err
@@ -701,6 +709,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			nil,
 			workflowLease.GetContext().UpdateRegistry(ctx),
 			false,
+			nil,
 		)
 		if err != nil {
 			return nil, err
@@ -947,7 +956,7 @@ func (handler *WorkflowTaskCompletedHandler) handleBufferedQueries(
 			runID,
 			scope,
 			handler.throttledLogger,
-			tag.BlobSizeViolationOperation("ConsistentQuery"),
+			"ConsistentQuery",
 		); err != nil {
 			handler.logger.Info("failing query because query result size is too large",
 				tag.WorkflowNamespace(namespaceName.String()),

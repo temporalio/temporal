@@ -138,7 +138,7 @@ func (s *VerifyFirstWorkflowTaskScheduledSuite) TestVerifyFirstWorkflowTaskSched
 	)
 	s.NoError(err)
 
-	wfMs := workflow.TestCloneToProto(ms)
+	wfMs := workflow.TestCloneToProto(context.Background(), ms)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
 
@@ -171,7 +171,7 @@ func (s *VerifyFirstWorkflowTaskScheduledSuite) TestVerifyFirstWorkflowTaskSched
 	)
 	s.NoError(err)
 
-	wfMs := workflow.TestCloneToProto(ms)
+	wfMs := workflow.TestCloneToProto(context.Background(), ms)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
 
@@ -198,7 +198,7 @@ func (s *VerifyFirstWorkflowTaskScheduledSuite) TestVerifyFirstWorkflowTaskSched
 		25*time.Second, 20*time.Second, 200*time.Second, nil, "identity")
 	_, _ = ms.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
 
-	wfMs := workflow.TestCloneToProto(ms)
+	wfMs := workflow.TestCloneToProto(context.Background(), ms)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
 
@@ -237,6 +237,7 @@ func (s *VerifyFirstWorkflowTaskScheduledSuite) TestVerifyFirstWorkflowTaskSched
 		nil,
 		nil,
 		false,
+		nil,
 	)
 	wt.StartedEventID = workflowTasksStartEvent.GetEventId()
 
@@ -248,7 +249,7 @@ func (s *VerifyFirstWorkflowTaskScheduledSuite) TestVerifyFirstWorkflowTaskSched
 		&workflowservice.RespondWorkflowTaskCompletedRequest{Identity: "some random identity"}, defaultWorkflowTaskCompletionLimits)
 	ms.FlushBufferedEvents()
 
-	wfMs := workflow.TestCloneToProto(ms)
+	wfMs := workflow.TestCloneToProto(context.Background(), ms)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
 

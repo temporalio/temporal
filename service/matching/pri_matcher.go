@@ -478,7 +478,7 @@ func (tm *priTaskMatcher) poll(
 	defer func() {
 		// TODO(pri): can we consolidate all the metrics code below?
 		if pollMetadata.forwardedFrom == "" {
-			// Only recording for original polls
+			// Only recording for original polls (i.e. on child if forwarded)
 			metrics.PollLatencyPerTaskQueue.With(tm.metricsHandler).Record(
 				time.Since(start),
 				metrics.StringTag("forwarded", strconv.FormatBool(pollWasForwarded)),
@@ -487,39 +487,51 @@ func (tm *priTaskMatcher) poll(
 		}
 	}()
 
-	ctxs := []context.Context{ctx, tm.tqCtx}
 	poller := &waitingPoller{
 		startTime:    start,
 		queryOnly:    queryOnly,
 		forwardCtx:   ctx,
 		pollMetadata: pollMetadata,
 	}
-	res := tm.data.EnqueuePollerAndWait(ctxs, poller)
 
-	if res.ctxErr != nil {
+	var res *matchResult
+	if pollMetadata.conditions.GetNoWait() {
+		res = tm.data.MatchPollerImmediately(poller)
+	} else {
+		ctxs := []context.Context{ctx, tm.tqCtx}
+		res = tm.data.EnqueuePollerAndWait(ctxs, poller)
+	}
+
+	if res == nil {
+		return nil, errNoTasks // only possible for MatchPollerImmediately
+	} else if res.ctxErr != nil {
 		if res.ctxErrIdx == 0 {
 			metrics.PollTimeoutPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
 		}
 		return nil, errNoTasks
 	}
+
 	if !softassert.That(tm.logger, res.task != nil, "expected task from match") {
 		return nil, errInternalMatchError
 	}
 
 	task := res.task
-	pollWasForwarded = task.isStarted()
+	pollWasForwarded = task.isStarted() // true if this poll was forwarded _from_ this matcher
 	priority = task.getPriority().GetPriorityKey()
 
-	if !task.isQuery() {
-		if task.isSyncMatchTask() {
+	if !pollWasForwarded {
+		// Only record these metrics on the parent for forwarded polls
+		if !task.isQuery() {
+			if task.isSyncMatchTask() {
+				metrics.PollSuccessWithSyncPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
+			}
+			metrics.PollSuccessPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
+		} else {
 			metrics.PollSuccessWithSyncPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
+			metrics.PollSuccessPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
 		}
-		metrics.PollSuccessPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
-	} else {
-		metrics.PollSuccessWithSyncPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
-		metrics.PollSuccessPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
+		tm.emitForwardedSourceStats(task.isForwarded(), pollMetadata.forwardedFrom)
 	}
-	tm.emitForwardedSourceStats(task.isForwarded(), pollMetadata.forwardedFrom, pollWasForwarded)
 
 	return task, nil
 }
@@ -531,14 +543,7 @@ func (tm *priTaskMatcher) isForwardingAllowed() bool {
 func (tm *priTaskMatcher) emitForwardedSourceStats(
 	isTaskForwarded bool,
 	pollForwardedSource string,
-	forwardedPoll bool,
 ) {
-	if forwardedPoll {
-		// This means we forwarded the poll to another partition. Skipping this to prevent duplicate emits.
-		// Only the partition in which the match happened should emit this metric.
-		return
-	}
-
 	isPollForwarded := len(pollForwardedSource) > 0
 	switch {
 	case isTaskForwarded && isPollForwarded:
@@ -557,4 +562,11 @@ func getInvalidTaskTag(task *internalTask) metrics.Tag {
 		return metrics.TaskExpireStageMemoryTag
 	}
 	return metrics.TaskInvalidTag
+}
+
+func (p *waitingPoller) minPriority() priorityKey {
+	if p.pollMetadata == nil || p.pollMetadata.conditions == nil {
+		return 0
+	}
+	return priorityKey(p.pollMetadata.conditions.MinPriority)
 }

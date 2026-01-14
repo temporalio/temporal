@@ -1,6 +1,7 @@
 package history
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"math"
@@ -150,6 +151,7 @@ var (
 	errWorkflowExecutionNotSet = serviceerror.NewInvalidArgument("WorkflowExecution not set on request.")
 	errTaskQueueNotSet         = serviceerror.NewInvalidArgument("Task queue not set.")
 	errWorkflowIDNotSet        = serviceerror.NewInvalidArgument("WorkflowId is not set on request.")
+	errBusinessIDNotSet        = serviceerror.NewInvalidArgument("Business ID is not set on request.")
 	errRunIDNotValid           = serviceerror.NewInvalidArgument("RunId is not valid UUID.")
 	errSourceClusterNotSet     = serviceerror.NewInvalidArgument("Source Cluster not set on request.")
 	errShardIDNotSet           = serviceerror.NewInvalidArgument("ShardId not set on request.")
@@ -1767,9 +1769,10 @@ func (h *Handler) ReapplyEvents(ctx context.Context, request *historyservice.Rea
 	}
 
 	// deserialize history event object
+	eventsBlob := request.GetRequest().GetEvents()
 	historyEvents, err := h.payloadSerializer.DeserializeEvents(&commonpb.DataBlob{
-		EncodingType: enumspb.ENCODING_TYPE_PROTO3,
-		Data:         request.GetRequest().GetEvents().GetData(),
+		EncodingType: cmp.Or(eventsBlob.GetEncodingType(), enumspb.ENCODING_TYPE_PROTO3),
+		Data:         eventsBlob.GetData(),
 	})
 	if err != nil {
 		return nil, h.convertError(err)
@@ -2100,7 +2103,7 @@ func (h *Handler) StreamWorkflowReplicationMessages(
 			engine,
 			shardContext,
 			clientClusterName,
-			serialization.NewSerializer(),
+			h.payloadSerializer,
 		),
 		clientClusterName,
 		clientShardCount,
@@ -2435,9 +2438,10 @@ func (h *Handler) convertError(err error) error {
 }
 
 func validateTaskToken(taskToken *tokenspb.Task) error {
-	if taskToken.GetWorkflowId() == "" {
-		return errWorkflowIDNotSet
+	if len(taskToken.GetComponentRef()) == 0 && taskToken.GetWorkflowId() == "" {
+		return errBusinessIDNotSet
 	}
+
 	return nil
 }
 

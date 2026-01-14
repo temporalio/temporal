@@ -44,6 +44,7 @@ type (
 		Logger                 log.Logger
 		ClientFactory          sdk.ClientFactory
 		MatchingClient         resource.MatchingClient
+		HistoryClient          resource.HistoryClient
 		WorkerDeploymentClient Client
 	}
 
@@ -65,6 +66,7 @@ func ClientProvider(
 	visibilityManager manager.VisibilityManager,
 	dc *dynamicconfig.Collection,
 	testHooks testhooks.TestHooks,
+	metricsHandler metrics.Handler,
 ) Client {
 	return &ClientImpl{
 		logger:                           logger,
@@ -76,6 +78,7 @@ func ClientProvider(
 		maxTaskQueuesInDeploymentVersion: dynamicconfig.MatchingMaxTaskQueuesInDeploymentVersion.Get(dc),
 		maxDeployments:                   dynamicconfig.MatchingMaxDeployments.Get(dc),
 		testHooks:                        testHooks,
+		metricsHandler:                   metricsHandler,
 	}
 }
 
@@ -123,16 +126,14 @@ func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Na
 	registry.RegisterWorkflowWithOptions(deploymentWorkflow, workflow.RegisterOptions{Name: WorkerDeploymentWorkflowType})
 
 	versionActivities := &VersionActivities{
-		namespace:        ns,
-		deploymentClient: s.activityDeps.WorkerDeploymentClient,
-		matchingClient:   s.activityDeps.MatchingClient,
+		activityDeps: s.activityDeps,
+		namespace:    ns,
 	}
 	registry.RegisterActivity(versionActivities)
 
 	activities := &Activities{
-		namespace:        ns,
-		deploymentClient: s.activityDeps.WorkerDeploymentClient,
-		matchingClient:   s.activityDeps.MatchingClient,
+		activityDeps: s.activityDeps,
+		namespace:    ns,
 	}
 	registry.RegisterActivity(activities)
 	return nil

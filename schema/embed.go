@@ -58,7 +58,7 @@ func ElasticsearchClusterSettings() (string, error) {
 
 // ElasticsearchIndexTemplate returns the embedded index template for Elasticsearch v7 (latest version)
 func ElasticsearchIndexTemplate() (string, error) {
-	data, err := assets.ReadFile("elasticsearch/visibility/versioned/v12/index_template_v7.json")
+	data, err := assets.ReadFile("elasticsearch/visibility/versioned/v13/index_template_v7.json")
 	if err != nil {
 		return "", err
 	}

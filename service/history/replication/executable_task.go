@@ -23,7 +23,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/softassert"
@@ -80,6 +79,7 @@ type (
 		GetNamespaceInfo(
 			ctx context.Context,
 			namespaceID string,
+			businessID string,
 		) (string, bool, error)
 		SyncState(
 			ctx context.Context,
@@ -526,7 +526,7 @@ func (e *ExecutableTaskImpl) BackFillEvents(
 		if err != nil {
 			return serviceerror.NewInternalf("failed to get new run history when backfill: %v", err)
 		}
-		events, err := e.EventSerializer.DeserializeEvents(batch.RawEventBatch)
+		events, err := e.Serializer.DeserializeEvents(batch.RawEventBatch)
 		if err != nil {
 			return serviceerror.NewInternalf("failed to deserailize run history events when backfill: %v", err)
 		}
@@ -570,7 +570,7 @@ func (e *ExecutableTaskImpl) BackFillEvents(
 		if err != nil {
 			return err
 		}
-		events, err := e.EventSerializer.DeserializeEvents(batch.RawEventBatch)
+		events, err := e.Serializer.DeserializeEvents(batch.RawEventBatch)
 		if err != nil {
 			return err
 		}
@@ -661,6 +661,20 @@ func (e *ExecutableTaskImpl) SyncState(
 			logger.Info("Dropped replication task as source mutable state has buffered events.", tag.Error(err))
 			return false, nil
 		}
+		var notFoundErr *serviceerror.NotFound
+		if errors.As(err, &notFoundErr) {
+			logger.Error(
+				"workflow not found in source cluster, proceed to cleanup")
+			// workflow is not found in source cluster, cleanup workflow in target cluster
+			return false, e.DeleteWorkflow(
+				ctx,
+				definition.NewWorkflowKey(
+					syncStateErr.NamespaceId,
+					syncStateErr.WorkflowId,
+					syncStateErr.RunId,
+				),
+			)
+		}
 		var failedPreconditionErr *serviceerror.FailedPrecondition
 		if !errors.As(err, &failedPreconditionErr) {
 			return false, err
@@ -677,7 +691,7 @@ func (e *ExecutableTaskImpl) SyncState(
 
 		tasksToAdd := make([]*adminservice.AddTasksRequest_Task, 0, len(taskEquivalents))
 		for _, taskEquivalent := range taskEquivalents {
-			blob, err := serialization.ReplicationTaskInfoToBlob(taskEquivalent)
+			blob, err := e.Serializer.ReplicationTaskInfoToBlob(taskEquivalent)
 			if err != nil {
 				return false, err
 			}
@@ -742,11 +756,12 @@ func (e *ExecutableTaskImpl) DeleteWorkflow(
 func (e *ExecutableTaskImpl) GetNamespaceInfo(
 	ctx context.Context,
 	namespaceID string,
+	businessID string,
 ) (string, bool, error) {
 	namespaceEntry, err := e.NamespaceCache.GetNamespaceByID(namespace.ID(namespaceID))
 	switch err.(type) {
 	case nil:
-		if e.replicationTask.VersionedTransition != nil && e.replicationTask.VersionedTransition.NamespaceFailoverVersion > namespaceEntry.FailoverVersion() {
+		if e.replicationTask.VersionedTransition != nil && e.replicationTask.VersionedTransition.NamespaceFailoverVersion > namespaceEntry.FailoverVersion(businessID) {
 			_, err = e.ProcessToolBox.EagerNamespaceRefresher.SyncNamespaceFromSourceCluster(ctx, namespace.ID(namespaceID), e.sourceClusterName)
 			if err != nil {
 				return "", false, err
@@ -766,8 +781,9 @@ func (e *ExecutableTaskImpl) GetNamespaceInfo(
 		return "", false, err
 	}
 	// need to make sure ns in cache is up-to-date
-	if e.replicationTask.VersionedTransition != nil && namespaceEntry.FailoverVersion() < e.replicationTask.VersionedTransition.NamespaceFailoverVersion {
-		return "", false, serviceerror.NewInternalf("cannot process task because namespace failover version is not up to date after sync, task version: %v, namespace version: %v", e.replicationTask.VersionedTransition.NamespaceFailoverVersion, namespaceEntry.FailoverVersion())
+	if e.replicationTask.VersionedTransition != nil && namespaceEntry.FailoverVersion(businessID) < e.replicationTask.VersionedTransition.NamespaceFailoverVersion {
+		return "", false, serviceerror.NewInternalf("cannot process task because namespace failover version is not up to date after sync, task version: %v, namespace version: %v",
+			e.replicationTask.VersionedTransition.NamespaceFailoverVersion, namespaceEntry.FailoverVersion(businessID))
 	}
 
 	e.namespace.Store(namespaceEntry.Name())
@@ -776,7 +792,7 @@ func (e *ExecutableTaskImpl) GetNamespaceInfo(
 	}
 	shouldProcessTask := false
 FilterLoop:
-	for _, targetCluster := range namespaceEntry.ClusterNames() {
+	for _, targetCluster := range namespaceEntry.ClusterNames(businessID) {
 		if e.ClusterMetadata.GetCurrentClusterName() == targetCluster {
 			shouldProcessTask = true
 			break FilterLoop

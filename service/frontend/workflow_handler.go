@@ -33,7 +33,10 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
-	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/activity"
+	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
+	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/client/frontend"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
@@ -98,12 +101,6 @@ var (
 )
 
 const (
-	errTooManySetCurrentVersionRequests = "Too many SetWorkerDeploymentCurrentVersion requests have been issued in rapid succession. Please throttle the request rate to avoid exceeding Worker Deployment resource limits."
-	errTooManySetRampingVersionRequests = "Too many SetWorkerDeploymentRampingVersion requests have been issued in rapid succession. Please throttle the request rate to avoid exceeding Worker Deployment resource limits."
-	errTooManyDeleteDeploymentRequests  = "Too many DeleteWorkerDeployment requests have been issued in rapid succession. Please throttle the request rate to avoid exceeding Worker Deployment resource limits."
-	errTooManyDeleteVersionRequests     = "Too many DeleteWorkerDeploymentVersion requests have been issued in rapid succession. Please throttle the request rate to avoid exceeding Worker Deployment resource limits."
-	errTooManyVersionMetadataRequests   = "Too many UpdateWorkerDeploymentVersionMetadata requests have been issued in rapid succession. Please throttle the request rate to avoid exceeding Worker Deployment resource limits."
-
 	maxReasonLength              = 1000 // Maximum length for the reason field in RateLimitUpdate configurations.
 	defaultUserTerminateReason   = "terminated by user via frontend"
 	defaultUserTerminateIdentity = "frontend-service"
@@ -112,7 +109,9 @@ const (
 type (
 	// WorkflowHandler - gRPC handler interface for workflowservice
 	WorkflowHandler struct {
-		workflowservice.UnimplementedWorkflowServiceServer
+		workflowservice.UnsafeWorkflowServiceServer
+		activity.FrontendHandler
+
 		status int32
 
 		tokenSerializer                 *tasktoken.Serializer
@@ -144,6 +143,7 @@ type (
 		scheduleSpecBuilder             *scheduler.SpecBuilder
 		outstandingPollers              collection.SyncMap[string, collection.SyncMap[string, context.CancelFunc]]
 		httpEnabled                     bool
+		registry                        *chasm.Registry
 	}
 )
 
@@ -174,8 +174,11 @@ func NewWorkflowHandler(
 	healthInterceptor *interceptor.HealthInterceptor,
 	scheduleSpecBuilder *scheduler.SpecBuilder,
 	httpEnabled bool,
+	activityHandler activity.FrontendHandler,
+	registry *chasm.Registry,
 ) *WorkflowHandler {
 	handler := &WorkflowHandler{
+		FrontendHandler: activityHandler,
 		status:          common.DaemonStatusInitialized,
 		config:          config,
 		tokenSerializer: tasktoken.NewSerializer(),
@@ -227,6 +230,7 @@ func NewWorkflowHandler(
 		scheduleSpecBuilder: scheduleSpecBuilder,
 		outstandingPollers:  collection.NewSyncMap[string, collection.SyncMap[string, context.CancelFunc]](),
 		httpEnabled:         httpEnabled,
+		registry:            registry,
 	}
 
 	return handler
@@ -490,11 +494,6 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 		return nil, err
 	}
 
-	// Validate versioning override, if present.
-	if err := worker_versioning.ValidateVersioningOverride(request.GetVersioningOverride()); err != nil {
-		return nil, err
-	}
-
 	enums.SetDefaultWorkflowIdReusePolicy(&request.WorkflowIdReusePolicy)
 	enums.SetDefaultWorkflowIdConflictPolicy(&request.WorkflowIdConflictPolicy, enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL)
 
@@ -566,10 +565,6 @@ func (wh *WorkflowHandler) ExecuteMultiOperation(
 		return nil, err
 	}
 
-	if !wh.config.EnableExecuteMultiOperation(request.Namespace) {
-		return nil, errMultiOperationAPINotAllowed
-	}
-
 	// as a temporary limitation, the only allowed list of operations is exactly [Start, Update]
 	if len(request.Operations) != 2 {
 		return nil, errMultiOpNotStartAndUpdate
@@ -615,7 +610,7 @@ func (wh *WorkflowHandler) convertToHistoryMultiOperationRequest(
 	errs := make([]error, len(request.Operations))
 
 	for i, op := range request.Operations {
-		convertedOp, opWorkflowID, err := wh.convertToHistoryMultiOperationItem(namespaceID, op)
+		convertedOp, opWorkflowID, err := wh.convertToHistoryMultiOperationItem(namespaceID, namespace.Name(request.Namespace), op)
 		if err != nil {
 			hasError = true
 		} else {
@@ -647,12 +642,16 @@ func (wh *WorkflowHandler) convertToHistoryMultiOperationRequest(
 
 func (wh *WorkflowHandler) convertToHistoryMultiOperationItem(
 	namespaceID namespace.ID,
+	namespaceName namespace.Name,
 	op *workflowservice.ExecuteMultiOperationRequest_Operation,
 ) (*historyservice.ExecuteMultiOperationRequest_Operation, string, error) {
 	var workflowId string
 	var opReq *historyservice.ExecuteMultiOperationRequest_Operation
 
 	if startReq := op.GetStartWorkflow(); startReq != nil {
+		if startReq.Namespace != "" && startReq.Namespace != namespaceName.String() {
+			return nil, "", errMultiOpNamespaceMismatch
+		}
 		var err error
 		if startReq, err = wh.prepareStartWorkflowRequest(startReq); err != nil {
 			return nil, "", err
@@ -680,6 +679,9 @@ func (wh *WorkflowHandler) convertToHistoryMultiOperationItem(
 			},
 		}
 	} else if updateReq := op.GetUpdateWorkflow(); updateReq != nil {
+		if updateReq.Namespace != "" && updateReq.Namespace != namespaceName.String() {
+			return nil, "", errMultiOpNamespaceMismatch
+		}
 		if err := wh.prepareUpdateWorkflowRequest(updateReq); err != nil {
 			return nil, "", err
 		}
@@ -1064,7 +1066,7 @@ func (wh *WorkflowHandler) RespondWorkflowTaskFailed(
 		taskToken.GetRunId(),
 		wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.throttledLogger,
-		tag.BlobSizeViolationOperation("RespondWorkflowTaskFailed"),
+		"RespondWorkflowTaskFailed",
 	); err != nil {
 		serverFailure := failure.NewServerFailure(common.FailureReasonFailureExceedsLimit, true)
 		serverFailure.Cause = failure.Truncate(request.Failure, sizeLimitWarn)
@@ -1180,6 +1182,7 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 		WorkflowExecution:           matchingResponse.WorkflowExecution,
 		ActivityId:                  matchingResponse.ActivityId,
 		ActivityType:                matchingResponse.ActivityType,
+		ActivityRunId:               matchingResponse.ActivityRunId,
 		Input:                       matchingResponse.Input,
 		ScheduledTime:               matchingResponse.ScheduledTime,
 		ScheduleToCloseTimeout:      matchingResponse.ScheduleToCloseTimeout,
@@ -1220,6 +1223,11 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeat(ctx context.Context, requ
 	if err != nil {
 		return nil, err
 	}
+	namespaceName := namespaceEntry.Name().String()
+
+	if len(taskToken.GetComponentRef()) > 0 && !wh.IsStandaloneActivityEnabled(namespaceName) {
+		return nil, serviceerror.NewUnavailable(activity.StandaloneActivityDisabledError)
+	}
 
 	sizeLimitError := wh.config.BlobSizeLimitError(namespaceEntry.Name().String())
 	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespaceEntry.Name().String())
@@ -1233,7 +1241,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeat(ctx context.Context, requ
 		taskToken.GetRunId(),
 		wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.throttledLogger,
-		tag.BlobSizeViolationOperation("RecordActivityTaskHeartbeat"),
+		"RecordActivityTaskHeartbeat",
 	); err != nil {
 		// heartbeat details exceed size limit, we would fail the activity immediately with explicit error reason
 		failRequest := &workflowservice.RespondActivityTaskFailedRequest{
@@ -1287,11 +1295,28 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatById(ctx context.Context, 
 	runID := request.GetRunId() // runID is optional so can be empty
 	activityID := request.GetActivityId()
 
-	if workflowID == "" {
-		return nil, errWorkflowIDNotSet
-	}
 	if activityID == "" {
 		return nil, errActivityIDNotSet
+	}
+
+	// If workflowID is empty, it means the activity is a standalone activity and we need to set the component ref.
+	// Else this should be a validation error.
+	var componentRef []byte
+	if workflowID == "" {
+		if !wh.IsStandaloneActivityEnabled(request.GetNamespace()) {
+			return nil, errWorkflowIDNotSet
+		}
+
+		ref := chasm.NewComponentRef[*activity.Activity](chasm.ExecutionKey{
+			NamespaceID: namespaceID.String(),
+			BusinessID:  activityID,
+			RunID:       runID,
+		})
+
+		componentRef, err = ref.Serialize(wh.registry)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	taskToken := tasktoken.NewActivityTaskToken(
@@ -1305,6 +1330,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatById(ctx context.Context, 
 		nil,
 		common.EmptyVersion,
 		common.EmptyVersion,
+		componentRef,
 	)
 	token, err := wh.tokenSerializer.Serialize(taskToken)
 	if err != nil {
@@ -1328,7 +1354,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatById(ctx context.Context, 
 		taskToken.GetRunId(),
 		wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.throttledLogger,
-		tag.BlobSizeViolationOperation("RecordActivityTaskHeartbeatById"),
+		"RecordActivityTaskHeartbeatById",
 	); err != nil {
 		// heartbeat details exceed size limit, we would fail the activity immediately with explicit error reason
 		failRequest := &workflowservice.RespondActivityTaskFailedRequest{
@@ -1390,13 +1416,18 @@ func (wh *WorkflowHandler) RespondActivityTaskCompleted(
 	if err != nil {
 		return nil, err
 	}
+	namespaceName := namespaceEntry.Name().String()
+
+	if len(taskToken.GetComponentRef()) > 0 && !wh.IsStandaloneActivityEnabled(namespaceName) {
+		return nil, serviceerror.NewUnavailable(activity.StandaloneActivityDisabledError)
+	}
 
 	if len(request.GetIdentity()) > wh.config.MaxIDLengthLimit() {
 		return nil, errIdentityTooLong
 	}
 
-	sizeLimitError := wh.config.BlobSizeLimitError(namespaceEntry.Name().String())
-	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespaceEntry.Name().String())
+	sizeLimitError := wh.config.BlobSizeLimitError(namespaceName)
+	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespaceName)
 
 	if err := common.CheckEventBlobSizeLimit(
 		request.GetResult().Size(),
@@ -1407,7 +1438,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompleted(
 		taskToken.GetRunId(),
 		wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.throttledLogger,
-		tag.BlobSizeViolationOperation("RespondActivityTaskCompleted"),
+		"RespondActivityTaskCompleted",
 	); err != nil {
 		// result exceeds blob size limit, we would record it as failure
 		failRequest := &workflowservice.RespondActivityTaskFailedRequest{
@@ -1455,15 +1486,32 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedById(ctx context.Context,
 	runID := request.GetRunId() // runID is optional so can be empty
 	activityID := request.GetActivityId()
 
-	if workflowID == "" {
-		return nil, errWorkflowIDNotSet
-	}
 	if activityID == "" {
 		return nil, errActivityIDNotSet
 	}
 
 	if len(request.GetIdentity()) > wh.config.MaxIDLengthLimit() {
 		return nil, errIdentityTooLong
+	}
+
+	// If workflowID is empty, it means the activity is a standalone activity and we need to set the component ref.
+	// Else this should be a validation error.
+	var componentRef []byte
+	if workflowID == "" {
+		if !wh.IsStandaloneActivityEnabled(request.GetNamespace()) {
+			return nil, errWorkflowIDNotSet
+		}
+
+		ref := chasm.NewComponentRef[*activity.Activity](chasm.ExecutionKey{
+			NamespaceID: namespaceID.String(),
+			BusinessID:  activityID,
+			RunID:       runID,
+		})
+
+		componentRef, err = ref.Serialize(wh.registry)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	taskToken := tasktoken.NewActivityTaskToken(
@@ -1477,6 +1525,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedById(ctx context.Context,
 		nil,
 		common.EmptyVersion,
 		common.EmptyVersion,
+		componentRef,
 	)
 	token, err := wh.tokenSerializer.Serialize(taskToken)
 	if err != nil {
@@ -1500,7 +1549,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedById(ctx context.Context,
 		runID,
 		wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.throttledLogger,
-		tag.BlobSizeViolationOperation("RespondActivityTaskCompletedById"),
+		"RespondActivityTaskCompletedById",
 	); err != nil {
 		// result exceeds blob size limit, we would record it as failure
 		failRequest := &workflowservice.RespondActivityTaskFailedRequest{
@@ -1559,6 +1608,11 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(
 	if err != nil {
 		return nil, err
 	}
+	namespaceName := namespaceEntry.Name().String()
+
+	if len(taskToken.GetComponentRef()) > 0 && !wh.IsStandaloneActivityEnabled(namespaceName) {
+		return nil, serviceerror.NewUnavailable(activity.StandaloneActivityDisabledError)
+	}
 
 	if request.GetFailure() != nil && request.GetFailure().GetApplicationFailureInfo() == nil {
 		return nil, errFailureMustHaveApplicationFailureInfo
@@ -1568,8 +1622,8 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(
 		return nil, errIdentityTooLong
 	}
 
-	sizeLimitError := wh.config.BlobSizeLimitError(namespaceEntry.Name().String())
-	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespaceEntry.Name().String())
+	sizeLimitError := wh.config.BlobSizeLimitError(namespaceName)
+	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespaceName)
 
 	response := workflowservice.RespondActivityTaskFailedResponse{}
 
@@ -1583,7 +1637,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(
 			taskToken.GetRunId(),
 			wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 			wh.throttledLogger,
-			tag.BlobSizeViolationOperation("RespondActivityTaskFailed"),
+			"RespondActivityTaskFailed",
 		); err != nil {
 			// heartbeat details exceed size limit, we would fail the activity immediately with explicit error reason
 			response.Failures = append(response.Failures, failure.NewServerFailure(common.FailureReasonHeartbeatExceedsLimit, true))
@@ -1602,7 +1656,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(
 		taskToken.GetRunId(),
 		wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.throttledLogger,
-		tag.BlobSizeViolationOperation("RespondActivityTaskFailed"),
+		"RespondActivityTaskFailed",
 	); err != nil {
 		serverFailure := failure.NewServerFailure(common.FailureReasonFailureExceedsLimit, true)
 		serverFailure.Cause = failure.Truncate(request.Failure, sizeLimitWarn)
@@ -1641,14 +1695,31 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedById(ctx context.Context, re
 	runID := request.GetRunId() // runID is optional so can be empty
 	activityID := request.GetActivityId()
 
-	if workflowID == "" {
-		return nil, errWorkflowIDNotSet
-	}
 	if activityID == "" {
 		return nil, errActivityIDNotSet
 	}
 	if len(request.GetIdentity()) > wh.config.MaxIDLengthLimit() {
 		return nil, errIdentityTooLong
+	}
+
+	// If workflowID is empty, it means the activity is a standalone activity and we need to set the component ref.
+	// Else this should be a validation error.
+	var componentRef []byte
+	if workflowID == "" {
+		if !wh.IsStandaloneActivityEnabled(request.GetNamespace()) {
+			return nil, errWorkflowIDNotSet
+		}
+
+		ref := chasm.NewComponentRef[*activity.Activity](chasm.ExecutionKey{
+			NamespaceID: namespaceID.String(),
+			BusinessID:  activityID,
+			RunID:       runID,
+		})
+
+		componentRef, err = ref.Serialize(wh.registry)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	taskToken := tasktoken.NewActivityTaskToken(
@@ -1662,6 +1733,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedById(ctx context.Context, re
 		nil,
 		common.EmptyVersion,
 		common.EmptyVersion,
+		componentRef,
 	)
 	token, err := wh.tokenSerializer.Serialize(taskToken)
 	if err != nil {
@@ -1688,7 +1760,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedById(ctx context.Context, re
 			runID,
 			wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 			wh.throttledLogger,
-			tag.BlobSizeViolationOperation("RespondActivityTaskFailedById"),
+			"RespondActivityTaskFailedById",
 		); err != nil {
 			// heartbeat details exceed size limit, we would fail the activity immediately with explicit error reason
 			response.Failures = append(response.Failures, failure.NewServerFailure(common.FailureReasonHeartbeatExceedsLimit, true))
@@ -1707,7 +1779,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedById(ctx context.Context, re
 		runID,
 		wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.throttledLogger,
-		tag.BlobSizeViolationOperation("RespondActivityTaskFailedById"),
+		"RespondActivityTaskFailedById",
 	); err != nil {
 		serverFailure := failure.NewServerFailure(common.FailureReasonFailureExceedsLimit, true)
 		serverFailure.Cause = failure.Truncate(request.Failure, sizeLimitWarn)
@@ -1753,13 +1825,18 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceled(ctx context.Context, requ
 	if err != nil {
 		return nil, err
 	}
+	namespaceName := namespaceEntry.Name().String()
+
+	if len(taskToken.GetComponentRef()) > 0 && !wh.IsStandaloneActivityEnabled(namespaceName) {
+		return nil, serviceerror.NewUnavailable(activity.StandaloneActivityDisabledError)
+	}
 
 	if len(request.GetIdentity()) > wh.config.MaxIDLengthLimit() {
 		return nil, errIdentityTooLong
 	}
 
-	sizeLimitError := wh.config.BlobSizeLimitError(namespaceEntry.Name().String())
-	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespaceEntry.Name().String())
+	sizeLimitError := wh.config.BlobSizeLimitError(namespaceName)
+	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespaceName)
 
 	if err := common.CheckEventBlobSizeLimit(
 		request.GetDetails().Size(),
@@ -1770,7 +1847,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceled(ctx context.Context, requ
 		taskToken.GetRunId(),
 		wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.throttledLogger,
-		tag.BlobSizeViolationOperation("RespondActivityTaskCanceled"),
+		"RespondActivityTaskCanceled",
 	); err != nil {
 		// details exceeds blob size limit, we would record it as failure
 		failRequest := &workflowservice.RespondActivityTaskFailedRequest{
@@ -1818,14 +1895,31 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceledById(ctx context.Context, 
 	runID := request.GetRunId() // runID is optional so can be empty
 	activityID := request.GetActivityId()
 
-	if workflowID == "" {
-		return nil, errWorkflowIDNotSet
-	}
 	if activityID == "" {
 		return nil, errActivityIDNotSet
 	}
 	if len(request.GetIdentity()) > wh.config.MaxIDLengthLimit() {
 		return nil, errIdentityTooLong
+	}
+
+	// If workflowID is empty, it means the activity is a standalone activity and we need to set the component ref.
+	// Else this should be a validation error.
+	var componentRef []byte
+	if workflowID == "" {
+		if !wh.IsStandaloneActivityEnabled(request.GetNamespace()) {
+			return nil, errWorkflowIDNotSet
+		}
+
+		ref := chasm.NewComponentRef[*activity.Activity](chasm.ExecutionKey{
+			NamespaceID: namespaceID.String(),
+			BusinessID:  activityID,
+			RunID:       runID,
+		})
+
+		componentRef, err = ref.Serialize(wh.registry)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	taskToken := tasktoken.NewActivityTaskToken(
@@ -1839,6 +1933,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceledById(ctx context.Context, 
 		nil,
 		common.EmptyVersion,
 		common.EmptyVersion,
+		componentRef,
 	)
 	token, err := wh.tokenSerializer.Serialize(taskToken)
 	if err != nil {
@@ -1862,7 +1957,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceledById(ctx context.Context, 
 		runID,
 		wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.throttledLogger,
-		tag.BlobSizeViolationOperation("RespondActivityTaskCanceledById"),
+		"RespondActivityTaskCanceledById",
 	); err != nil {
 		// details exceeds blob size limit, we would record it as failure
 		failRequest := &workflowservice.RespondActivityTaskFailedRequest{
@@ -1976,7 +2071,7 @@ func (wh *WorkflowHandler) SignalWorkflowExecution(ctx context.Context, request 
 		request.GetWorkflowExecution().GetRunId(),
 		wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.throttledLogger,
-		tag.BlobSizeViolationOperation("SignalWorkflowExecution"),
+		"SignalWorkflowExecution",
 	); err != nil {
 		return nil, err
 	}
@@ -2088,10 +2183,6 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 	if err != nil {
 		return nil, err
 	}
-	// Validate versioning override, if present.
-	if err := worker_versioning.ValidateVersioningOverride(request.GetVersioningOverride()); err != nil {
-		return nil, err
-	}
 
 	resp, err := wh.historyClient.SignalWithStartWorkflowExecution(ctx, &historyservice.SignalWithStartWorkflowExecutionRequest{
 		NamespaceId:            namespaceID.String(),
@@ -2127,10 +2218,6 @@ func (wh *WorkflowHandler) ResetWorkflowExecution(ctx context.Context, request *
 		return nil, err
 	}
 
-	if err := validatePostResetOperationInputs(request.GetPostResetOperations()); err != nil {
-		return nil, err
-	}
-
 	enums.SetDefaultResetReapplyType(&request.ResetReapplyType)
 	if _, validType := enumspb.ResetReapplyType_name[int32(request.GetResetReapplyType())]; !validType {
 		return nil, serviceerror.NewInternalf("unknown reset reapply type: %v", request.GetResetReapplyType())
@@ -2150,22 +2237,6 @@ func (wh *WorkflowHandler) ResetWorkflowExecution(ctx context.Context, request *
 	}
 
 	return &workflowservice.ResetWorkflowExecutionResponse{RunId: resp.GetRunId()}, nil
-}
-
-// validatePostResetOperationInputs validates the optional post reset operation inputs.
-func validatePostResetOperationInputs(postResetOperations []*workflowpb.PostResetOperation) error {
-	for _, operation := range postResetOperations {
-		switch op := operation.GetVariant().(type) {
-		case *workflowpb.PostResetOperation_UpdateWorkflowOptions_:
-			opts := op.UpdateWorkflowOptions.GetWorkflowExecutionOptions()
-			if err := worker_versioning.ValidateVersioningOverride(opts.GetVersioningOverride()); err != nil {
-				return err
-			}
-		default:
-			return serviceerror.NewInvalidArgumentf("unsupported post reset operation: %T", op)
-		}
-	}
-	return nil
 }
 
 // TerminateWorkflowExecution terminates an existing workflow execution by recording WorkflowExecutionTerminated event
@@ -2674,7 +2745,7 @@ func (wh *WorkflowHandler) RespondQueryTaskCompleted(
 		"",
 		wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.throttledLogger,
-		tag.BlobSizeViolationOperation("RespondQueryTaskCompleted"),
+		"RespondQueryTaskCompleted",
 	); err != nil {
 		request = &workflowservice.RespondQueryTaskCompletedRequest{
 			TaskToken:     request.TaskToken,
@@ -2744,7 +2815,7 @@ func (wh *WorkflowHandler) ShutdownWorker(ctx context.Context, request *workflow
 	}
 
 	// route heartbeat to the matching service
-	if request.WorkerHeartbeat != nil {
+	if request.WorkerHeartbeat != nil && wh.config.WorkerHeartbeatsEnabled(request.GetNamespace()) {
 		heartbeats := []*workerpb.WorkerHeartbeat{request.WorkerHeartbeat}
 		_, err = wh.matchingClient.RecordWorkerHeartbeat(ctx, &matchingservice.RecordWorkerHeartbeatRequest{
 			NamespaceId: namespaceId.String(),
@@ -2822,7 +2893,7 @@ func (wh *WorkflowHandler) QueryWorkflow(ctx context.Context, request *workflows
 		request.GetExecution().GetRunId(),
 		wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.throttledLogger,
-		tag.BlobSizeViolationOperation("QueryWorkflow")); err != nil {
+		"QueryWorkflow"); err != nil {
 		return nil, err
 	}
 
@@ -3116,7 +3187,7 @@ func (wh *WorkflowHandler) createScheduleCHASM(
 			"", // don't have runid yet
 			wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 			wh.throttledLogger,
-			tag.BlobSizeViolationOperation("CreateSchedule"),
+			"CreateSchedule",
 		); err != nil {
 			return nil, err
 		}
@@ -3444,9 +3515,6 @@ func (wh *WorkflowHandler) SetWorkerDeploymentCurrentVersion(ctx context.Context
 
 	resp, err := wh.workerDeploymentClient.SetCurrentVersion(ctx, namespaceEntry, request.DeploymentName, versionStr, request.Identity, request.IgnoreMissingTaskQueues, request.GetConflictToken(), request.GetAllowNoPollers())
 	if err != nil {
-		if common.IsResourceExhausted(err) {
-			return nil, serviceerror.NewResourceExhaustedf(enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW, errTooManySetCurrentVersionRequests)
-		}
 		return nil, err
 	}
 
@@ -3508,9 +3576,6 @@ func (wh *WorkflowHandler) SetWorkerDeploymentRampingVersion(ctx context.Context
 
 	resp, err := wh.workerDeploymentClient.SetRampingVersion(ctx, namespaceEntry, request.DeploymentName, versionStr, request.GetPercentage(), request.GetIdentity(), request.IgnoreMissingTaskQueues, request.GetConflictToken(), request.GetAllowNoPollers())
 	if err != nil {
-		if common.IsResourceExhausted(err) {
-			return nil, serviceerror.NewResourceExhaustedf(enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW, errTooManySetRampingVersionRequests)
-		}
 		return nil, err
 	}
 
@@ -3634,9 +3699,6 @@ func (wh *WorkflowHandler) DeleteWorkerDeployment(ctx context.Context, request *
 
 	err = wh.workerDeploymentClient.DeleteWorkerDeployment(ctx, namespaceEntry, request.DeploymentName, request.Identity)
 	if err != nil {
-		if common.IsResourceExhausted(err) {
-			return nil, serviceerror.NewResourceExhaustedf(enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW, errTooManyDeleteDeploymentRequests)
-		}
 		return nil, err
 	}
 
@@ -3663,9 +3725,6 @@ func (wh *WorkflowHandler) DeleteWorkerDeploymentVersion(ctx context.Context, re
 
 	err = wh.workerDeploymentClient.DeleteWorkerDeploymentVersion(ctx, namespaceEntry, versionStr, request.SkipDrainage, request.Identity)
 	if err != nil {
-		if common.IsResourceExhausted(err) {
-			return nil, serviceerror.NewResourceExhaustedf(enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW, errTooManyDeleteVersionRequests)
-		}
 		return nil, err
 	}
 
@@ -3688,18 +3747,15 @@ func (wh *WorkflowHandler) UpdateWorkerDeploymentVersionMetadata(ctx context.Con
 		return nil, err
 	}
 
-	//nolint:staticcheck // SA1019: worker versioning v0.31
-	versionStr := request.GetVersion()
-	if request.GetDeploymentVersion() != nil {
-		versionStr = worker_versioning.ExternalWorkerDeploymentVersionToStringV31(request.GetDeploymentVersion())
+	version := request.GetDeploymentVersion()
+	if version == nil {
+		//nolint:staticcheck // SA1019: worker versioning v0.31
+		version = worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(request.GetVersion())
 	}
 
 	identity := uuid.NewString()
-	updatedMetadata, err := wh.workerDeploymentClient.UpdateVersionMetadata(ctx, namespaceEntry, versionStr, request.UpsertEntries, request.RemoveEntries, identity)
+	updatedMetadata, err := wh.workerDeploymentClient.UpdateVersionMetadata(ctx, namespaceEntry, version, request.UpsertEntries, request.RemoveEntries, identity)
 	if err != nil {
-		if common.IsResourceExhausted(err) {
-			return nil, serviceerror.NewResourceExhaustedf(enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW, errTooManyVersionMetadataRequests)
-		}
 		return nil, err
 	}
 
@@ -4045,7 +4101,7 @@ func (wh *WorkflowHandler) updateScheduleWorkflow(
 		"", // don't have runid yet
 		wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.throttledLogger,
-		tag.BlobSizeViolationOperation("UpdateSchedule"),
+		"UpdateSchedule",
 	); err != nil {
 		return nil, err
 	}
@@ -4122,7 +4178,7 @@ func (wh *WorkflowHandler) PatchSchedule(
 		"", // don't have runid yet
 		wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.throttledLogger,
-		tag.BlobSizeViolationOperation("PatchSchedule"),
+		"PatchSchedule",
 	); err != nil {
 		return nil, err
 	}
@@ -4202,6 +4258,34 @@ func (wh *WorkflowHandler) ListScheduleMatchingTimes(ctx context.Context, reques
 		return nil, errSchedulesNotAllowed
 	}
 
+	// Prefer CHASM scheduler if enabled.
+	if wh.chasmSchedulerEnabled(ctx, request.Namespace) {
+		resp, err := wh.listScheduleMatchingTimesCHASM(ctx, request)
+		if err == nil {
+			return resp, nil
+		}
+		var notFoundErr *serviceerror.NotFound
+		if !errors.As(err, &notFoundErr) {
+			return nil, err
+		}
+	}
+	return wh.listScheduleMatchingTimesWorkflow(ctx, request)
+}
+
+func (wh *WorkflowHandler) listScheduleMatchingTimesCHASM(ctx context.Context, request *workflowservice.ListScheduleMatchingTimesRequest) (*workflowservice.ListScheduleMatchingTimesResponse, error) {
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	res, err := wh.schedulerClient.ListScheduleMatchingTimes(ctx, &schedulerpb.ListScheduleMatchingTimesRequest{
+		FrontendRequest: request,
+		NamespaceId:     namespaceID.String(),
+	})
+	return res.GetFrontendResponse(), err
+}
+
+func (wh *WorkflowHandler) listScheduleMatchingTimesWorkflow(ctx context.Context, request *workflowservice.ListScheduleMatchingTimesRequest) (*workflowservice.ListScheduleMatchingTimesResponse, error) {
 	workflowID := scheduler.WorkflowIDPrefix + request.ScheduleId
 
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
@@ -4225,7 +4309,7 @@ func (wh *WorkflowHandler) ListScheduleMatchingTimes(ctx context.Context, reques
 		"",
 		wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.throttledLogger,
-		tag.BlobSizeViolationOperation("ListScheduleMatchingTimes")); err != nil {
+		"ListScheduleMatchingTimes"); err != nil {
 		return nil, err
 	}
 
@@ -4372,6 +4456,72 @@ func (wh *WorkflowHandler) ListSchedules(
 		query = scheduler.VisibilityBaseListQuery
 	}
 
+	if wh.chasmSchedulerEnabled(ctx, namespaceName.String()) {
+		// CHASM ListSchedules will include schedules created in the V1/workflow stack.
+		return wh.listSchedulesChasm(ctx, request, namespaceName, namespaceID, query)
+	}
+	return wh.listSchedulesWorkflow(ctx, request, namespaceName, namespaceID, query)
+}
+
+func (wh *WorkflowHandler) listSchedulesChasm(
+	ctx context.Context,
+	request *workflowservice.ListSchedulesRequest,
+	namespaceName namespace.Name,
+	namespaceID namespace.ID,
+	query string,
+) (_ *workflowservice.ListSchedulesResponse, retError error) {
+	resp, err := chasm.ListExecutions[*chasmscheduler.Scheduler, *schedulepb.ScheduleListInfo](ctx, &chasm.ListExecutionsRequest{
+		NamespaceID:   namespaceID.String(),
+		PageSize:      int(request.GetMaximumPageSize()),
+		NextPageToken: request.NextPageToken,
+		Query:         query,
+		NamespaceName: namespaceName.String(),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	schedules := make([]*schedulepb.ScheduleListEntry, len(resp.Executions))
+	for i, ex := range resp.Executions {
+		// Schedules returned may have either a Memo (V1) or a ChasmMemo (V2) containing
+		// the ScheduleListInfo. Both must be handled, as migration means a mix of
+		// versions can be returned.
+		listInfo := ex.ChasmMemo // V2
+		customMemo := ex.Memo
+		if listInfo.GetSpec() == nil {
+			listInfo = wh.decodeScheduleListInfo(customMemo) // V1
+			wh.cleanScheduleMemo(customMemo)
+		} else {
+			scheduler.CleanSpec(listInfo.Spec) // done as part of decodeScheduleListInfo for V1
+		}
+
+		workflowID := ex.BusinessID
+		scheduleID := strings.TrimPrefix(workflowID, scheduler.WorkflowIDPrefix) // needed for V1 schedules, not CHASM
+
+		schedules[i] = &schedulepb.ScheduleListEntry{
+			ScheduleId: scheduleID,
+			Memo:       customMemo,
+			// cleanScheduleSearchAttributes is only needed for V1 schedules
+			SearchAttributes: wh.cleanScheduleSearchAttributes(&commonpb.SearchAttributes{
+				IndexedFields: ex.CustomSearchAttributes,
+			}),
+			Info: listInfo,
+		}
+	}
+
+	return &workflowservice.ListSchedulesResponse{
+		Schedules:     schedules,
+		NextPageToken: resp.NextPageToken,
+	}, nil
+}
+
+func (wh *WorkflowHandler) listSchedulesWorkflow(
+	ctx context.Context,
+	request *workflowservice.ListSchedulesRequest,
+	namespaceName namespace.Name,
+	namespaceID namespace.ID,
+	query string,
+) (_ *workflowservice.ListSchedulesResponse, retError error) {
 	persistenceResp, err := wh.visibilityMgr.ListWorkflowExecutions(
 		ctx,
 		&manager.ListWorkflowExecutionsRequestV2{
@@ -4818,6 +4968,8 @@ func (wh *WorkflowHandler) StartBatchOperation(
 	case *workflowservice.StartBatchOperationRequest_UpdateWorkflowOptionsOperation:
 		input.BatchType = enumspb.BATCH_OPERATION_TYPE_UPDATE_EXECUTION_OPTIONS
 		identity = op.UpdateWorkflowOptionsOperation.GetIdentity()
+		// TODO (Shivam): Verify if this is the correct way to handle these errors.
+		input.NonRetryableErrors = append(input.NonRetryableErrors, "Pinned version is not present in the task queue")
 	case *workflowservice.StartBatchOperationRequest_UnpauseActivitiesOperation:
 		input.BatchType = enumspb.BATCH_OPERATION_TYPE_UNPAUSE_ACTIVITY
 		identity = op.UnpauseActivitiesOperation.GetIdentity()
@@ -5159,7 +5311,7 @@ func (wh *WorkflowHandler) PollNexusTaskQueue(ctx context.Context, request *work
 	}
 
 	// route heartbeat to the matching service
-	if len(request.WorkerHeartbeat) > 0 {
+	if len(request.WorkerHeartbeat) > 0 && wh.config.WorkerHeartbeatsEnabled(request.GetNamespace()) {
 		workerHeartbeat := request.WorkerHeartbeat
 		request.WorkerHeartbeat = nil // Clear the field to avoid sending it to matching service.
 
@@ -5999,9 +6151,6 @@ func (wh *WorkflowHandler) UpdateWorkflowExecutionOptions(
 	if err != nil {
 		return nil, err
 	}
-	if err := worker_versioning.ValidateVersioningOverride(opts.GetVersioningOverride()); err != nil {
-		return nil, err
-	}
 
 	response, err := wh.historyClient.UpdateWorkflowExecutionOptions(ctx, &historyservice.UpdateWorkflowExecutionOptionsRequest{
 		NamespaceId:   namespaceID.String(),
@@ -6268,7 +6417,7 @@ func (wh *WorkflowHandler) RecordWorkerHeartbeat(
 	ctx context.Context, request *workflowservice.RecordWorkerHeartbeatRequest,
 ) (*workflowservice.RecordWorkerHeartbeatResponse, error) {
 	if !wh.config.WorkerHeartbeatsEnabled(request.GetNamespace()) {
-		return nil, serviceerror.NewUnimplemented("method RecordWorkerHeartbeat not supported")
+		return &workflowservice.RecordWorkerHeartbeatResponse{}, nil
 	}
 	namespaceName := namespace.Name(request.GetNamespace())
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
@@ -6421,6 +6570,10 @@ func (wh *WorkflowHandler) DescribeWorker(ctx context.Context, request *workflow
 	return &workflowservice.DescribeWorkerResponse{
 		WorkerInfo: resp.GetWorkerInfo(),
 	}, nil
+}
+
+func (wh *WorkflowHandler) TriggerWorkflowRule(context.Context, *workflowservice.TriggerWorkflowRuleRequest) (*workflowservice.TriggerWorkflowRuleResponse, error) {
+	return nil, serviceerror.NewUnimplemented("method TriggerWorkflowRule not supported")
 }
 
 // PauseWorkflowExecution pauses a workflow execution.

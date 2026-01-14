@@ -39,14 +39,16 @@ type (
 		EnableDeploymentVersions             dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		UseRevisionNumberForWorkerVersioning dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		MaxTaskQueuesInDeployment            dynamicconfig.IntPropertyFnWithNamespaceFilter
+		MaxVersionsInTaskQueue               dynamicconfig.IntPropertyFnWithNamespaceFilter
 		MaxIDLengthLimit                     dynamicconfig.IntPropertyFn
 
 		// task queue configuration
 
 		RangeSize                                int64
-		NewMatcherSub                            dynamicconfig.TypedSubscribableWithTaskQueueFilter[bool]
-		EnableFairnessSub                        dynamicconfig.TypedSubscribableWithTaskQueueFilter[bool]
+		NewMatcherSub                            dynamicconfig.TypedSubscribableWithTaskQueueFilter[dynamicconfig.GradualChange[bool]]
+		EnableFairnessSub                        dynamicconfig.TypedSubscribableWithTaskQueueFilter[dynamicconfig.GradualChange[bool]]
 		EnableMigration                          dynamicconfig.BoolPropertyFnWithTaskQueueFilter
+		AutoEnableV2                             dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 		GetTasksBatchSize                        dynamicconfig.IntPropertyFnWithTaskQueueFilter
 		GetTasksReloadAt                         dynamicconfig.IntPropertyFnWithTaskQueueFilter
 		UpdateAckInterval                        dynamicconfig.DurationPropertyFnWithTaskQueueFilter
@@ -58,6 +60,11 @@ type (
 		BreakdownMetricsByPartition              dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 		BreakdownMetricsByBuildID                dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 		EnableWorkerPluginMetrics                dynamicconfig.BoolPropertyFn
+		WorkerRegistryNumBuckets                 dynamicconfig.IntPropertyFn
+		WorkerRegistryEntryTTL                   dynamicconfig.DurationPropertyFn
+		WorkerRegistryMinEvictAge                dynamicconfig.DurationPropertyFn
+		WorkerRegistryMaxEntries                 dynamicconfig.IntPropertyFn
+		WorkerRegistryEvictionInterval           dynamicconfig.DurationPropertyFn
 		ForwarderMaxOutstandingPolls             dynamicconfig.IntPropertyFnWithTaskQueueFilter
 		ForwarderMaxOutstandingTasks             dynamicconfig.IntPropertyFnWithTaskQueueFilter
 		ForwarderMaxRatePerSecond                dynamicconfig.FloatPropertyFnWithTaskQueueFilter
@@ -145,10 +152,11 @@ type (
 		BacklogTaskForwardTimeout  func() time.Duration
 		RangeSize                  int64
 		NewMatcher                 bool
-		NewMatcherSub              func(func(bool)) (bool, func())
+		NewMatcherSub              func(func(dynamicconfig.GradualChange[bool])) (dynamicconfig.GradualChange[bool], func())
 		EnableFairness             bool
-		EnableFairnessSub          func(func(bool)) (bool, func())
+		EnableFairnessSub          func(func(dynamicconfig.GradualChange[bool])) (dynamicconfig.GradualChange[bool], func())
 		EnableMigration            func() bool
+		AutoEnableV2               func() bool
 		GetTasksBatchSize          func() int
 		GetTasksReloadAt           func() int
 		UpdateAckInterval          func() time.Duration
@@ -184,6 +192,7 @@ type (
 
 		// TTL for cache holding TaskQueueInfoByBuildID
 		TaskQueueInfoByBuildIdTTL func() time.Duration
+		MaxVersionsInTaskQueue    func() int
 
 		// Rate limiting
 		RateLimiterRefreshInterval    time.Duration
@@ -253,12 +262,14 @@ func NewConfig(
 		EnableDeploymentVersions:                 dynamicconfig.EnableDeploymentVersions.Get(dc),
 		UseRevisionNumberForWorkerVersioning:     dynamicconfig.UseRevisionNumberForWorkerVersioning.Get(dc),
 		MaxTaskQueuesInDeployment:                dynamicconfig.MatchingMaxTaskQueuesInDeployment.Get(dc),
+		MaxVersionsInTaskQueue:                   dynamicconfig.MatchingMaxVersionsInTaskQueue.Get(dc),
 		RPS:                                      dynamicconfig.MatchingRPS.Get(dc),
 		OperatorRPSRatio:                         dynamicconfig.OperatorRPSRatio.Get(dc),
 		RangeSize:                                100000,
 		NewMatcherSub:                            dynamicconfig.MatchingUseNewMatcher.Subscribe(dc),
 		EnableFairnessSub:                        dynamicconfig.MatchingEnableFairness.Subscribe(dc),
 		EnableMigration:                          dynamicconfig.MatchingEnableMigration.Get(dc),
+		AutoEnableV2:                             dynamicconfig.MatchingAutoEnableV2.Get(dc),
 		GetTasksBatchSize:                        dynamicconfig.MatchingGetTasksBatchSize.Get(dc),
 		GetTasksReloadAt:                         dynamicconfig.MatchingGetTasksReloadAt.Get(dc),
 		UpdateAckInterval:                        dynamicconfig.MatchingUpdateAckInterval.Get(dc),
@@ -278,6 +289,11 @@ func NewConfig(
 		BreakdownMetricsByPartition:              dynamicconfig.MetricsBreakdownByPartition.Get(dc),
 		BreakdownMetricsByBuildID:                dynamicconfig.MetricsBreakdownByBuildID.Get(dc),
 		EnableWorkerPluginMetrics:                dynamicconfig.MatchingEnableWorkerPluginMetrics.Get(dc),
+		WorkerRegistryNumBuckets:                 dynamicconfig.MatchingWorkerRegistryNumBuckets.Get(dc),
+		WorkerRegistryEntryTTL:                   dynamicconfig.MatchingWorkerRegistryEntryTTL.Get(dc),
+		WorkerRegistryMinEvictAge:                dynamicconfig.MatchingWorkerRegistryMinEvictAge.Get(dc),
+		WorkerRegistryMaxEntries:                 dynamicconfig.MatchingWorkerRegistryMaxEntries.Get(dc),
+		WorkerRegistryEvictionInterval:           dynamicconfig.MatchingWorkerRegistryEvictionInterval.Get(dc),
 		ForwarderMaxOutstandingPolls:             dynamicconfig.MatchingForwarderMaxOutstandingPolls.Get(dc),
 		ForwarderMaxOutstandingTasks:             dynamicconfig.MatchingForwarderMaxOutstandingTasks.Get(dc),
 		ForwarderMaxRatePerSecond:                dynamicconfig.MatchingForwarderMaxRatePerSecond.Get(dc),
@@ -346,14 +362,17 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 
 	return &taskQueueConfig{
 		RangeSize: config.RangeSize,
-		NewMatcherSub: func(cb func(bool)) (bool, func()) {
+		NewMatcherSub: func(cb func(dynamicconfig.GradualChange[bool])) (dynamicconfig.GradualChange[bool], func()) {
 			return config.NewMatcherSub(ns.String(), taskQueueName, taskType, cb)
 		},
-		EnableFairnessSub: func(cb func(bool)) (bool, func()) {
+		EnableFairnessSub: func(cb func(dynamicconfig.GradualChange[bool])) (dynamicconfig.GradualChange[bool], func()) {
 			return config.EnableFairnessSub(ns.String(), taskQueueName, taskType, cb)
 		},
 		EnableMigration: func() bool {
 			return config.EnableMigration(ns.String(), taskQueueName, taskType)
+		},
+		AutoEnableV2: func() bool {
+			return config.AutoEnableV2(ns.String(), taskQueueName, taskType)
 		},
 		GetTasksBatchSize: func() int {
 			return config.GetTasksBatchSize(ns.String(), taskQueueName, taskType)
@@ -475,6 +494,7 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		FairnessCounter: func() counter.CounterParams {
 			return config.FairnessCounter(ns.String(), taskQueueName, taskType)
 		},
+		MaxVersionsInTaskQueue: func() int { return config.MaxVersionsInTaskQueue(ns.String()) },
 	}
 }
 

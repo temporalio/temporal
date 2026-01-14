@@ -75,12 +75,12 @@ func (s *taskRefresherSuite) SetupTest() {
 	s.mockShard.Resource.ClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 	s.mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockShard.Resource.ClusterMetadata.EXPECT().GetClusterID().Return(int64(1)).AnyTimes()
-	s.mockShard.Resource.ClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, s.namespaceEntry.FailoverVersion()).Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockShard.Resource.ClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, s.namespaceEntry.FailoverVersion(tests.WorkflowID)).Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mutableState = TestGlobalMutableState(
 		s.mockShard,
 		s.mockShard.GetEventsCache(),
 		s.mockShard.GetLogger(),
-		s.namespaceEntry.FailoverVersion(),
+		s.namespaceEntry.FailoverVersion(tests.WorkflowID),
 		tests.WorkflowID,
 		tests.RunID,
 	)
@@ -460,6 +460,50 @@ func (s *taskRefresherSuite) TestRefreshWorkflowTaskTasks() {
 	}
 }
 
+// This test asserts that the workflow tasks tasks are not refreshed when the workflow status is paused.
+func (s *taskRefresherSuite) TestRefreshWorkflowTaskTasks_WhenPaused() {
+	mutableStateRecord := &persistencespb.WorkflowMutableState{
+		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+			NamespaceId: tests.NamespaceID.String(),
+			WorkflowId:  tests.WorkflowID,
+			VersionHistories: &historyspb.VersionHistories{
+				Histories: []*historyspb.VersionHistory{
+					{
+						BranchToken: []byte("branchToken"),
+						Items: []*historyspb.VersionHistoryItem{
+							{EventId: 3, Version: common.EmptyVersion},
+						},
+					},
+				},
+			},
+			WorkflowTaskScheduledEventId: 2,
+			WorkflowTaskScheduledTime:    timestamppb.Now(),
+			WorkflowTaskAttempt:          1,
+			WorkflowTaskType:             enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
+		},
+		ExecutionState: &persistencespb.WorkflowExecutionState{
+			RunId:  tests.RunID,
+			State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			Status: enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED, // Workflow is paused
+		},
+		NextEventId: int64(3),
+	}
+
+	mutableState, err := NewMutableStateFromDB(
+		s.mockShard,
+		s.mockShard.GetEventsCache(),
+		log.NewTestLogger(),
+		tests.LocalNamespaceEntry,
+		mutableStateRecord,
+		101,
+	)
+	s.NoError(err)
+
+	// No task generator calls expected since workflow is paused
+	err = s.taskRefresher.refreshWorkflowTaskTasks(mutableState, s.mockTaskGenerator, EmptyVersionedTransition)
+	s.NoError(err)
+}
+
 func (s *taskRefresherSuite) TestRefreshActivityTasks() {
 	branchToken := []byte("branchToken")
 	mutableStateRecord := &persistencespb.WorkflowMutableState{
@@ -612,6 +656,81 @@ func (s *taskRefresherSuite) TestRefreshActivityTasks() {
 		})
 	}
 
+}
+
+// This test asserts that the activity tasks are not refreshed when the workflow status is paused.
+func (s *taskRefresherSuite) TestRefreshActivityTasks_WhenPaused() {
+	branchToken := []byte("branchToken")
+	mutableStateRecord := &persistencespb.WorkflowMutableState{
+		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+			NamespaceId: tests.NamespaceID.String(),
+			WorkflowId:  tests.WorkflowID,
+			VersionHistories: &historyspb.VersionHistories{
+				Histories: []*historyspb.VersionHistory{
+					{
+						BranchToken: branchToken,
+						Items: []*historyspb.VersionHistoryItem{
+							{EventId: 10, Version: common.EmptyVersion},
+						},
+					},
+				},
+			},
+		},
+		ExecutionState: &persistencespb.WorkflowExecutionState{
+			RunId:  tests.RunID,
+			State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			Status: enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED, // Workflow is paused
+		},
+		NextEventId: int64(11),
+		ActivityInfos: map[int64]*persistencespb.ActivityInfo{
+			5: {
+				ActivityId:             "5",
+				ScheduledEventId:       5,
+				ScheduledEventBatchId:  4,
+				Version:                common.EmptyVersion,
+				ScheduledTime:          timestamppb.Now(),
+				StartedEventId:         common.EmptyEventID,
+				TimerTaskStatus:        TimerTaskStatusCreatedScheduleToStart,
+				ScheduleToStartTimeout: durationpb.New(10 * time.Second),
+				StartToCloseTimeout:    durationpb.New(10 * time.Second),
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{
+					TransitionCount:          4,
+					NamespaceFailoverVersion: common.EmptyVersion,
+				},
+			},
+			6: {
+				ActivityId:             "6",
+				ScheduledEventId:       6,
+				ScheduledEventBatchId:  4,
+				Version:                common.EmptyVersion,
+				ScheduledTime:          timestamppb.Now(),
+				StartedTime:            timestamppb.New(time.Now().Add(time.Second)),
+				StartedEventId:         8,
+				RequestId:              uuid.NewString(),
+				TimerTaskStatus:        TimerTaskStatusCreatedStartToClose,
+				ScheduleToStartTimeout: durationpb.New(10 * time.Second),
+				StartToCloseTimeout:    durationpb.New(10 * time.Second),
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{
+					TransitionCount:          5,
+					NamespaceFailoverVersion: common.EmptyVersion,
+				},
+			},
+		},
+	}
+
+	mutableState, err := NewMutableStateFromDB(
+		s.mockShard,
+		s.mockShard.GetEventsCache(),
+		log.NewTestLogger(),
+		tests.LocalNamespaceEntry,
+		mutableStateRecord,
+		10,
+	)
+	s.NoError(err)
+
+	// No task generator calls expected since workflow is paused
+	err = s.taskRefresher.refreshTasksForActivity(context.Background(), mutableState, s.mockTaskGenerator, EmptyVersionedTransition)
+	s.NoError(err)
 }
 
 func (s *taskRefresherSuite) TestRefreshUserTimer() {
@@ -1249,7 +1368,7 @@ func (s *taskRefresherSuite) TestRefreshSubStateMachineTasks() {
 	s.NoError(err)
 
 	versionedTransition := &persistencespb.VersionedTransition{
-		NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(),
+		NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(tests.WorkflowID),
 		TransitionCount:          3,
 	}
 	s.mutableState.GetExecutionInfo().TransitionHistory = []*persistencespb.VersionedTransition{
@@ -1291,7 +1410,7 @@ func (s *taskRefresherSuite) TestRefreshSubStateMachineTasks() {
 	err = s.taskRefresher.refreshTasksForSubStateMachines(
 		s.mutableState,
 		&persistencespb.VersionedTransition{
-			NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(),
+			NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(tests.WorkflowID),
 			TransitionCount:          4,
 		},
 	)
@@ -1305,7 +1424,7 @@ func (s *taskRefresherSuite) TestRefreshSubStateMachineTasks() {
 	err = s.taskRefresher.refreshTasksForSubStateMachines(
 		s.mutableState,
 		&persistencespb.VersionedTransition{
-			NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(),
+			NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(tests.WorkflowID),
 			TransitionCount:          5,
 		},
 	)

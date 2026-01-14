@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"reflect"
 	"regexp"
 	"strconv"
@@ -21,6 +22,21 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"google.golang.org/protobuf/proto"
 )
+
+var envKeysForUserName = []string{
+	"USER",
+	"LOGNAME",
+	"HOME",
+}
+
+func getCurrentUserFromEnv() string {
+	for _, n := range envKeysForUserName {
+		if len(os.Getenv(n)) > 0 {
+			return os.Getenv(n)
+		}
+	}
+	return "unknown"
+}
 
 func prettyPrintJSONObject(c *cli.Context, o interface{}) {
 	var b []byte

@@ -64,6 +64,8 @@ type (
 		Key() PartitionKey
 		// RoutingKey returns the string that should be used to find the owner of a task queue partition.
 		RoutingKey() string
+		// GradualChangeKey returns an identifier that can be used with gradual changes.
+		GradualChangeKey() []byte
 	}
 
 	// NormalPartition is used to distribute load of a TaskQueue in multiple Matching instances. A normal partition is
@@ -284,6 +286,11 @@ func (s *StickyPartition) RoutingKey() string {
 	return fmt.Sprintf("%s:%s:%d", s.NamespaceId(), s.RpcName(), s.TaskType())
 }
 
+func (s *StickyPartition) GradualChangeKey() []byte {
+	key := fmt.Sprintf("%s:%s:%d", s.NamespaceId(), s.RpcName(), s.TaskType())
+	return []byte(key)
+}
+
 func (p *NormalPartition) TaskQueue() *TaskQueue {
 	return p.taskQueue
 }
@@ -341,6 +348,11 @@ func (p *NormalPartition) Key() PartitionKey {
 
 func (p *NormalPartition) RoutingKey() string {
 	return fmt.Sprintf("%s:%s:%d", p.NamespaceId(), p.RpcName(), p.TaskType())
+}
+
+func (p *NormalPartition) GradualChangeKey() []byte {
+	key := fmt.Sprintf("%s:%s:%d", p.NamespaceId(), p.RpcName(), p.TaskType())
+	return []byte(key)
 }
 
 // parseRpcName takes the rpc name of a task queue partition and returns a ParseTaskQueuePartition.

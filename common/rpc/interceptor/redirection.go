@@ -137,6 +137,15 @@ var (
 		"UpdateTaskQueueConfig": func() any { return &workflowservice.UpdateTaskQueueConfigResponse{} },
 		"FetchWorkerConfig":     func() any { return &workflowservice.FetchWorkerConfigResponse{} },
 		"UpdateWorkerConfig":    func() any { return &workflowservice.UpdateWorkerConfigResponse{} },
+
+		"StartActivityExecution":         func() any { return &workflowservice.StartActivityExecutionResponse{} },
+		"CountActivityExecutions":        func() any { return &workflowservice.CountActivityExecutionsResponse{} },
+		"ListActivityExecutions":         func() any { return &workflowservice.ListActivityExecutionsResponse{} },
+		"DescribeActivityExecution":      func() any { return &workflowservice.DescribeActivityExecutionResponse{} },
+		"PollActivityExecution":          func() any { return &workflowservice.PollActivityExecutionResponse{} },
+		"RequestCancelActivityExecution": func() any { return &workflowservice.RequestCancelActivityExecutionResponse{} },
+		"TerminateActivityExecution":     func() any { return &workflowservice.TerminateActivityExecutionResponse{} },
+		"DeleteActivityExecution":        func() any { return &workflowservice.DeleteActivityExecutionResponse{} },
 	}
 )
 
@@ -250,7 +259,7 @@ func (i *Redirection) handleRedirectAPIInvocation(
 		i.AfterCall(scope, startTime, clusterName, namespaceName.String(), retError)
 	}()
 
-	err = i.redirectionPolicy.WithNamespaceRedirect(ctx, namespaceName, methodName, func(targetDC string) error {
+	err = i.redirectionPolicy.WithNamespaceRedirect(ctx, namespaceName, methodName, req, func(targetDC string) error {
 		clusterName = targetDC
 		if targetDC == i.currentClusterName {
 			resp, err = handler(ctx, req)

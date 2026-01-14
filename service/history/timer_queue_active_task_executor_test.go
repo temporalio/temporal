@@ -97,7 +97,7 @@ func (s *timerQueueActiveTaskExecutorSuite) SetupTest() {
 
 	s.namespaceID = tests.NamespaceID
 	s.namespaceEntry = tests.GlobalNamespaceEntry
-	s.version = s.namespaceEntry.FailoverVersion()
+	s.version = s.namespaceEntry.FailoverVersion(namespace.EmptyBusinessID)
 	s.now = time.Now().UTC()
 	s.timeSource = clock.NewEventTimeSource().Update(s.now)
 
@@ -2236,7 +2236,7 @@ func (s *timerQueueActiveTaskExecutorSuite) createPersistenceMutableState(
 		lastEventID, lastEventVersion,
 	))
 	s.NoError(err)
-	return workflow.TestCloneToProto(ms)
+	return workflow.TestCloneToProto(context.Background(), ms)
 }
 
 func (s *timerQueueActiveTaskExecutorSuite) getMutableStateFromCache(

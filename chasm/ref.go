@@ -7,9 +7,11 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 )
 
-var (
-	defaultShardingFn = func(key ExecutionKey) string { return key.NamespaceID + "_" + key.BusinessID }
-)
+// ErrMalformedComponentRef is returned when component ref bytes cannot be deserialized.
+var ErrMalformedComponentRef = serviceerror.NewInvalidArgument("malformed component ref")
+
+// ErrInvalidComponentRef is returned when component ref bytes deserialize to an invalid component ref.
+var ErrInvalidComponentRef = serviceerror.NewInvalidArgument("invalid component ref")
 
 // ExecutionKey uniquely identifies a CHASM execution in the system.
 type ExecutionKey struct {
@@ -81,26 +83,6 @@ func (r *ComponentRef) ArchetypeID(
 	return r.archetypeID, nil
 }
 
-// ShardingKey returns the sharding key used for determining the shardID of the run
-// that contains the referenced component.
-// TODO: remove this method and ShardingKey concept, we don't need this functionality.
-func (r *ComponentRef) ShardingKey(
-	registry *Registry,
-) (string, error) {
-
-	archetypeID, err := r.ArchetypeID(registry)
-	if err != nil {
-		return "", err
-	}
-
-	rc, ok := registry.ComponentByID(archetypeID)
-	if !ok {
-		return "", serviceerror.NewInternalf("unknown chasm component type id: %d", archetypeID)
-	}
-
-	return rc.shardingFn(r.ExecutionKey), nil
-}
-
 func (r *ComponentRef) Serialize(
 	registry *Registry,
 ) ([]byte, error) {
@@ -128,12 +110,19 @@ func (r *ComponentRef) Serialize(
 // DeserializeComponentRef deserializes a byte slice into a ComponentRef.
 // Provides caller the access to information including ExecutionKey, Archetype, and ShardingKey.
 func DeserializeComponentRef(data []byte) (ComponentRef, error) {
+	if len(data) == 0 {
+		return ComponentRef{}, ErrInvalidComponentRef
+	}
 	var pRef persistencespb.ChasmComponentRef
 	if err := pRef.Unmarshal(data); err != nil {
-		return ComponentRef{}, err
+		return ComponentRef{}, ErrMalformedComponentRef
 	}
 
-	return ProtoRefToComponentRef(&pRef), nil
+	ref := ProtoRefToComponentRef(&pRef)
+	if ref.BusinessID == "" || ref.NamespaceID == "" {
+		return ComponentRef{}, ErrInvalidComponentRef
+	}
+	return ref, nil
 }
 
 // ProtoRefToComponentRef converts a persistence ChasmComponentRef reference to a

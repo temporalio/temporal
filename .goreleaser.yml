@@ -1,18 +1,25 @@
+# GoReleaser v2 configuration
+version: 2
+
 before:
   hooks:
     - go mod download
 
+snapshot:
+  version_template: "{{ .Version }}-SNAPSHOT-{{ .ShortCommit }}"
+
 archives:
   - id: default
-    builds:
+    ids:
       - temporal-server
       - temporal-cassandra-tool
       - temporal-sql-tool
       - temporal-elasticsearch-tool
+      - tdbg
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     format_overrides:
       - goos: windows
-        format: zip
+        formats: [zip]
     files:
       - ./config/*
 
@@ -79,11 +86,11 @@ builds:
       - arm64
 
 checksum:
-  name_template: 'checksums.txt'
+  name_template: "checksums.txt"
   algorithm: sha256
 
 changelog:
-  skip: true
+  disable: true
 
 announce:
-  skip: "true"
+  skip: true

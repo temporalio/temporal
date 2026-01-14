@@ -102,7 +102,7 @@ func (e *ExecutableHistoryTask) Execute() error {
 	namespaceName, apply, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
 		context.Background(),
 		callerInfo,
-	), e.NamespaceID)
+	), e.NamespaceID, e.WorkflowID)
 	if nsError != nil {
 		return nsError
 	} else if !apply {
@@ -152,7 +152,7 @@ func (e *ExecutableHistoryTask) HandleErr(err error) error {
 		namespaceName, _, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
 			context.Background(),
 			callerInfo,
-		), e.NamespaceID)
+		), e.NamespaceID, e.WorkflowID)
 		if nsError != nil {
 			return err
 		}
@@ -192,7 +192,7 @@ func (e *ExecutableHistoryTask) MarkPoisonPill() error {
 	if e.ReplicationTask().GetRawTaskInfo() == nil {
 		eventBatches := [][]*historypb.HistoryEvent{}
 		for _, eventsBlob := range e.eventsBlobs {
-			events, err := e.EventSerializer.DeserializeEvents(eventsBlob)
+			events, err := e.Serializer.DeserializeEvents(eventsBlob)
 			if err != nil {
 				e.Logger.Error("unable to enqueue history replication task to DLQ, ser/de error",
 					tag.ShardID(shardContext.GetShardID()),
@@ -256,7 +256,7 @@ func (e *ExecutableHistoryTask) getDeserializedEvents() (_ [][]*historypb.Histor
 
 	eventBatches := [][]*historypb.HistoryEvent{}
 	for _, eventsBlob := range e.eventsBlobs {
-		events, err := e.EventSerializer.DeserializeEvents(eventsBlob)
+		events, err := e.Serializer.DeserializeEvents(eventsBlob)
 		if err != nil {
 			e.Logger.Error("unable to deserialize history events",
 				tag.WorkflowNamespaceID(e.NamespaceID),
@@ -270,7 +270,7 @@ func (e *ExecutableHistoryTask) getDeserializedEvents() (_ [][]*historypb.Histor
 		eventBatches = append(eventBatches, events)
 	}
 
-	newRunEvents, err := e.EventSerializer.DeserializeEvents(e.newRunEventsBlob)
+	newRunEvents, err := e.Serializer.DeserializeEvents(e.newRunEventsBlob)
 	if err != nil {
 		e.Logger.Error("unable to deserialize new run history events",
 			tag.WorkflowNamespaceID(e.NamespaceID),

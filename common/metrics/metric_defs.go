@@ -43,6 +43,7 @@ const (
 
 	MutableStateCacheTypeTagValue                     = "mutablestate"
 	EventsCacheTypeTagValue                           = "events"
+	VersionMembershipCacheTypeTagValue                = "version_membership"
 	NexusEndpointRegistryReadThroughCacheTypeTagValue = "nexus_endpoint_registry_readthrough"
 
 	InvalidHistoryURITagValue    = "invalid_history_uri"
@@ -339,6 +340,8 @@ const (
 	HistoryRespondActivityTaskFailedScope = "RespondActivityTaskFailed"
 	// HistoryRespondActivityTaskCanceledScope tracks RespondActivityTaskCanceled API calls received by service
 	HistoryRespondActivityTaskCanceledScope = "RespondActivityTaskCanceled"
+	// ActivityTerminatedScope tracks TerminateActivityExecution API calls received by service
+	ActivityTerminatedScope = "ActivityTerminated"
 	// HistoryGetWorkflowExecutionHistoryScope is the metric scope for non-long-poll frontend.GetWorkflowExecutionHistory
 	HistoryGetWorkflowExecutionHistoryScope = "GetWorkflowExecutionHistory"
 	// HistoryPollWorkflowExecutionHistoryScope is the metric scope for long poll case of frontend.GetWorkflowExecutionHistory
@@ -448,6 +451,10 @@ const (
 	OperationMemoryScheduledQueueProcessorScope = "MemoryScheduledQueueProcessor"
 	// OperationOutboundQueueProcessorScope is a scope for the outbound queue processor.
 	OperationOutboundQueueProcessorScope = "OutboundQueueProcessor"
+	// VersionMembershipCacheGetScope is the scope used by version membership cache
+	VersionMembershipCacheGetScope = "VersionMembershipCacheGet"
+	// VersionMembershipCachePutScope is the scope used by version membership cache
+	VersionMembershipCachePutScope = "VersionMembershipCachePut"
 )
 
 // Matching Scope
@@ -641,13 +648,17 @@ var (
 	TlsCertsExpiring                         = NewGaugeDef("certificates_expiring")
 	ServiceAuthorizationLatency              = NewTimerDef("service_authorization_latency")
 	EventBlobSize                            = NewBytesHistogramDef("event_blob_size")
-	HeaderSize                               = NewBytesHistogramDef("header_size", WithDescription("The size of the header in bytes passed to the server by the client. This metric is experimental and can be removed in the future."))
-	LockRequests                             = NewCounterDef("lock_requests")
-	LockLatency                              = NewTimerDef("lock_latency")
-	SemaphoreRequests                        = NewCounterDef("semaphore_requests")
-	SemaphoreFailures                        = NewCounterDef("semaphore_failures")
-	SemaphoreLatency                         = NewTimerDef("semaphore_latency")
-	ClientRequests                           = NewCounterDef(
+	BlobSizeError                            = NewCounterDef(
+		"blob_size_error",
+		WithDescription("The number of requests that failed due to blob size exceeding limits configured with BlobSizeLimitError and MemoSizeLimitError."),
+	)
+	HeaderSize        = NewBytesHistogramDef("header_size", WithDescription("The size of the header in bytes passed to the server by the client. This metric is experimental and can be removed in the future."))
+	LockRequests      = NewCounterDef("lock_requests")
+	LockLatency       = NewTimerDef("lock_latency")
+	SemaphoreRequests = NewCounterDef("semaphore_requests")
+	SemaphoreFailures = NewCounterDef("semaphore_failures")
+	SemaphoreLatency  = NewTimerDef("semaphore_latency")
+	ClientRequests    = NewCounterDef(
 		"client_requests",
 		WithDescription("The number of requests sent by the client to an individual service, keyed by `service_role` and `operation`."),
 	)
@@ -861,7 +872,8 @@ var (
 	ActivitySuccess                                      = NewCounterDef("activity_success", WithDescription("Number of activities that succeeded (doesn't include retries)."))
 	ActivityFail                                         = NewCounterDef("activity_fail", WithDescription("Number of activities that failed and won't be retried anymore."))
 	ActivityTaskFail                                     = NewCounterDef("activity_task_fail", WithDescription("Number of activity task failures (includes retries)."))
-	ActivityCancel                                       = NewCounterDef("activity_cancel")
+	ActivityCancel                                       = NewCounterDef("activity_cancel", WithDescription("Number of activities that are cancelled."))
+	ActivityTerminate                                    = NewCounterDef("activity_terminate", WithDescription("Number of activities that are terminated."))
 	ActivityTaskTimeout                                  = NewCounterDef("activity_task_timeout", WithDescription("Number of activity task timeouts (including retries)."))
 	ActivityTimeout                                      = NewCounterDef("activity_timeout", WithDescription("Number of terminal activity timeouts."))
 	ActivityPayloadSize                                  = NewCounterDef("activity_payload_size", WithDescription("Size of activity payloads in bytes."))
@@ -878,7 +890,6 @@ var (
 	WorkflowExecutionUpdateRequestRateLimited            = NewCounterDef("workflow_update_request_rate_limited")
 	WorkflowExecutionUpdateTooMany                       = NewCounterDef("workflow_update_request_too_many")
 	WorkflowExecutionUpdateAborted                       = NewCounterDef("workflow_update_aborted")
-	WorkflowExecutionUpdateContinueAsNewSuggestions      = NewCounterDef("workflow_update_continue_as_new_suggestions")
 	WorkflowExecutionUpdateSentToWorker                  = NewCounterDef("workflow_update_sent_to_worker")
 	WorkflowExecutionUpdateSentToWorkerAgain             = NewCounterDef("workflow_update_sent_to_worker_again")
 	WorkflowExecutionUpdateWaitStageAccepted             = NewCounterDef("workflow_update_wait_stage_accepted")
@@ -1053,6 +1064,7 @@ var (
 	DynamicWorkerPoolSchedulerDequeuedTasks = NewCounterDef("dynamic_worker_pool_scheduler_dequeued_tasks")
 	DynamicWorkerPoolSchedulerRejectedTasks = NewCounterDef("dynamic_worker_pool_scheduler_rejected_tasks")
 	PausedActivitiesCounter                 = NewCounterDef("paused_activities")
+	ExternalPayloadUploadSize               = NewBytesHistogramDef("external_payload_upload_size", WithDescription("The histogram of sizes in bytes of uploaded external payloads."))
 
 	// Deadlock detector metrics
 	DDSuspectedDeadlocks                 = NewCounterDef("dd_suspected_deadlocks")
@@ -1287,6 +1299,12 @@ var (
 	WorkerDeploymentVersionVisibilityQueryCount       = NewCounterDef("worker_deployment_version_visibility_query_count")
 	WorkerDeploymentVersioningOverrideCounter         = NewCounterDef("worker_deployment_versioning_override_count")
 	StartDeploymentTransitionCounter                  = NewCounterDef("start_deployment_transition_count")
+	VersioningDataPropagationLatency                  = NewTimerDef("versioning_data_propagation_latency")
+	SlowVersioningDataPropagationCounter              = NewCounterDef("slow_versioning_data_propagation")
+
+	// Continue-as-new
+	WorkflowContinueAsNewCount        = NewCounterDef("workflow_continue_as_new_count")
+	WorkflowSuggestContinueAsNewCount = NewCounterDef("workflow_suggest_continue_as_new_count")
 
 	WorkflowResetCount        = NewCounterDef("workflow_reset_count")
 	WorkflowQuerySuccessCount = NewCounterDef("workflow_query_success_count")
