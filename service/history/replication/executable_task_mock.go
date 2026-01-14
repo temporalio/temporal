@@ -169,6 +169,18 @@ func (mr *MockExecutableTaskMockRecorder) IsRetryableError(err any) *gomock.Call
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsRetryableError", reflect.TypeOf((*MockExecutableTask)(nil).IsRetryableError), err)
 }
 
+// MarkExecutionStart mocks base method.
+func (m *MockExecutableTask) MarkExecutionStart() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "MarkExecutionStart")
+}
+
+// MarkExecutionStart indicates an expected call of MarkExecutionStart.
+func (mr *MockExecutableTaskMockRecorder) MarkExecutionStart() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkExecutionStart", reflect.TypeOf((*MockExecutableTask)(nil).MarkExecutionStart))
+}
+
 // MarkPoisonPill mocks base method.
 func (m *MockExecutableTask) MarkPoisonPill() error {
 	m.ctrl.T.Helper()

@@ -79,6 +79,7 @@ func (e *ExecutableWorkflowStateTask) Execute() error {
 	if e.TerminalState() {
 		return nil
 	}
+	e.ExecutableTask.MarkExecutionStart()
 
 	callerInfo := getReplicaitonCallerInfo(e.GetPriority())
 	namespaceName, apply, err := e.GetNamespaceInfo(headers.SetCallerInfo(
