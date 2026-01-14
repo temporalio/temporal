@@ -111,22 +111,20 @@ func (r *workflowRebuilderImpl) rebuild(
 func (r *workflowRebuilderImpl) rebuildableCheck(
 	mutableState *persistencespb.WorkflowMutableState,
 ) error {
-	nonRebuildableErr := serviceerror.NewInvalidArgument(
-		"RebuildMutableState only supports workflow executions, not other archetype types")
-
-	// workflow type: no/empty ChasmNodes or workflowType in root Chasm node identified as ""
+	// backward compatibility: old workflow format
 	if len(mutableState.ChasmNodes) == 0 {
-		return nonRebuildableErr
+		return nil
 	}
 	if rootNode, ok := mutableState.ChasmNodes[""]; ok {
 		if componentAttrs := rootNode.GetMetadata().GetComponentAttributes(); componentAttrs != nil {
 			archetypeID := chasm.ArchetypeID(componentAttrs.TypeId)
-			if archetypeID != chasm.WorkflowArchetypeID && archetypeID != chasm.UnspecifiedArchetypeID {
-				return nonRebuildableErr
+			if archetypeID == chasm.WorkflowArchetypeID {
+				return nil
 			}
 		}
 	}
-	return nil
+	return serviceerror.NewInvalidArgument(
+		"Rebuild only supports workflow executions, not other archetype types")
 }
 
 func (r *workflowRebuilderImpl) getRebuildSpecFromMutableState(
