@@ -1062,10 +1062,13 @@ func (d *namespaceHandler) validateRetentionDuration(retention *durationpb.Durat
 		return errInvalidRetentionPeriod
 	}
 
-	minRetention := d.config.NamespaceMinRetentionLocal()
+	var minRetention time.Duration
 	if isGlobalNamespace {
 		minRetention = d.config.NamespaceMinRetentionGlobal()
+	} else {
+		minRetention = d.config.NamespaceMinRetentionLocal()
 	}
+
 	if timestamp.DurationValue(retention) < minRetention {
 		return errInvalidRetentionPeriod
 	}
