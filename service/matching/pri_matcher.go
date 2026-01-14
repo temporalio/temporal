@@ -41,8 +41,7 @@ type priTaskMatcher struct {
 	rateLimitManager *rateLimitManager
 	metricsHandler   metrics.Handler // namespace metric scope
 	logger           log.Logger
-	numPartitions    func() int // number of task queue partitions
-	markAlive        func()     // function to mark the physical task queue alive
+	markAlive        func() // function to mark the physical task queue alive
 
 	priorityBacklogForwarders *goro.KeyedSet[remotePriorityBacklog]
 }
@@ -113,7 +112,6 @@ func newPriTaskMatcher(
 		client:                    client,
 		validator:                 validator,
 		rateLimitManager:          rateLimitManager,
-		numPartitions:             config.NumReadPartitions,
 		markAlive:                 markAlive,
 		priorityBacklogForwarders: goro.NewKeyedSet[remotePriorityBacklog](tqCtx),
 	}
