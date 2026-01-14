@@ -2,7 +2,7 @@
 // plugins:
 // 	protoc-gen-go
 // 	protoc
-// source: temporal/server/chasm/lib/nexusoperation/proto/v1/message.proto
+// source: temporal/server/chasm/lib/nexusoperation/proto/v1/operation.proto
 
 package nexusoperationpb
 
@@ -102,11 +102,11 @@ func (x OperationStatus) String() string {
 }
 
 func (OperationStatus) Descriptor() protoreflect.EnumDescriptor {
-	return file_temporal_server_chasm_lib_nexusoperation_proto_v1_message_proto_enumTypes[0].Descriptor()
+	return file_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto_enumTypes[0].Descriptor()
 }
 
 func (OperationStatus) Type() protoreflect.EnumType {
-	return &file_temporal_server_chasm_lib_nexusoperation_proto_v1_message_proto_enumTypes[0]
+	return &file_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto_enumTypes[0]
 }
 
 func (x OperationStatus) Number() protoreflect.EnumNumber {
@@ -115,7 +115,7 @@ func (x OperationStatus) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use OperationStatus.Descriptor instead.
 func (OperationStatus) EnumDescriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_nexusoperation_proto_v1_message_proto_rawDescGZIP(), []int{0}
+	return file_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto_rawDescGZIP(), []int{0}
 }
 
 type CancellationStatus int32
@@ -188,11 +188,11 @@ func (x CancellationStatus) String() string {
 }
 
 func (CancellationStatus) Descriptor() protoreflect.EnumDescriptor {
-	return file_temporal_server_chasm_lib_nexusoperation_proto_v1_message_proto_enumTypes[1].Descriptor()
+	return file_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto_enumTypes[1].Descriptor()
 }
 
 func (CancellationStatus) Type() protoreflect.EnumType {
-	return &file_temporal_server_chasm_lib_nexusoperation_proto_v1_message_proto_enumTypes[1]
+	return &file_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto_enumTypes[1]
 }
 
 func (x CancellationStatus) Number() protoreflect.EnumNumber {
@@ -201,7 +201,7 @@ func (x CancellationStatus) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use CancellationStatus.Descriptor instead.
 func (CancellationStatus) EnumDescriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_nexusoperation_proto_v1_message_proto_rawDescGZIP(), []int{1}
+	return file_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto_rawDescGZIP(), []int{1}
 }
 
 type OperationState struct {
@@ -213,7 +213,7 @@ type OperationState struct {
 
 func (x *OperationState) Reset() {
 	*x = OperationState{}
-	mi := &file_temporal_server_chasm_lib_nexusoperation_proto_v1_message_proto_msgTypes[0]
+	mi := &file_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -225,7 +225,7 @@ func (x *OperationState) String() string {
 func (*OperationState) ProtoMessage() {}
 
 func (x *OperationState) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_nexusoperation_proto_v1_message_proto_msgTypes[0]
+	mi := &file_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -238,7 +238,7 @@ func (x *OperationState) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OperationState.ProtoReflect.Descriptor instead.
 func (*OperationState) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_nexusoperation_proto_v1_message_proto_rawDescGZIP(), []int{0}
+	return file_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *OperationState) GetStatus() OperationStatus {
@@ -257,7 +257,7 @@ type CancellationState struct {
 
 func (x *CancellationState) Reset() {
 	*x = CancellationState{}
-	mi := &file_temporal_server_chasm_lib_nexusoperation_proto_v1_message_proto_msgTypes[1]
+	mi := &file_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -269,7 +269,7 @@ func (x *CancellationState) String() string {
 func (*CancellationState) ProtoMessage() {}
 
 func (x *CancellationState) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_nexusoperation_proto_v1_message_proto_msgTypes[1]
+	mi := &file_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -282,7 +282,7 @@ func (x *CancellationState) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancellationState.ProtoReflect.Descriptor instead.
 func (*CancellationState) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_nexusoperation_proto_v1_message_proto_rawDescGZIP(), []int{1}
+	return file_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *CancellationState) GetStatus() CancellationStatus {
@@ -292,11 +292,11 @@ func (x *CancellationState) GetStatus() CancellationStatus {
 	return CANCELLATION_STATUS_UNSPECIFIED
 }
 
-var File_temporal_server_chasm_lib_nexusoperation_proto_v1_message_proto protoreflect.FileDescriptor
+var File_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto protoreflect.FileDescriptor
 
-const file_temporal_server_chasm_lib_nexusoperation_proto_v1_message_proto_rawDesc = "" +
+const file_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto_rawDesc = "" +
 	"\n" +
-	"?temporal/server/chasm/lib/nexusoperation/proto/v1/message.proto\x121temporal.server.chasm.lib.nexusoperation.proto.v1\"l\n" +
+	"Atemporal/server/chasm/lib/nexusoperation/proto/v1/operation.proto\x121temporal.server.chasm.lib.nexusoperation.proto.v1\"l\n" +
 	"\x0eOperationState\x12Z\n" +
 	"\x06status\x18\x01 \x01(\x0e2B.temporal.server.chasm.lib.nexusoperation.proto.v1.OperationStatusR\x06status\"r\n" +
 	"\x11CancellationState\x12]\n" +
@@ -320,26 +320,26 @@ const file_temporal_server_chasm_lib_nexusoperation_proto_v1_message_proto_rawDe
 	"\x1bCANCELLATION_STATUS_BLOCKED\x10\x06BVZTgo.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb;nexusoperationpbb\x06proto3"
 
 var (
-	file_temporal_server_chasm_lib_nexusoperation_proto_v1_message_proto_rawDescOnce sync.Once
-	file_temporal_server_chasm_lib_nexusoperation_proto_v1_message_proto_rawDescData []byte
+	file_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto_rawDescOnce sync.Once
+	file_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto_rawDescData []byte
 )
 
-func file_temporal_server_chasm_lib_nexusoperation_proto_v1_message_proto_rawDescGZIP() []byte {
-	file_temporal_server_chasm_lib_nexusoperation_proto_v1_message_proto_rawDescOnce.Do(func() {
-		file_temporal_server_chasm_lib_nexusoperation_proto_v1_message_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_chasm_lib_nexusoperation_proto_v1_message_proto_rawDesc), len(file_temporal_server_chasm_lib_nexusoperation_proto_v1_message_proto_rawDesc)))
+func file_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto_rawDescGZIP() []byte {
+	file_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto_rawDescOnce.Do(func() {
+		file_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto_rawDesc), len(file_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto_rawDesc)))
 	})
-	return file_temporal_server_chasm_lib_nexusoperation_proto_v1_message_proto_rawDescData
+	return file_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto_rawDescData
 }
 
-var file_temporal_server_chasm_lib_nexusoperation_proto_v1_message_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_temporal_server_chasm_lib_nexusoperation_proto_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
-var file_temporal_server_chasm_lib_nexusoperation_proto_v1_message_proto_goTypes = []any{
+var file_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
+var file_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto_goTypes = []any{
 	(OperationStatus)(0),      // 0: temporal.server.chasm.lib.nexusoperation.proto.v1.OperationStatus
 	(CancellationStatus)(0),   // 1: temporal.server.chasm.lib.nexusoperation.proto.v1.CancellationStatus
 	(*OperationState)(nil),    // 2: temporal.server.chasm.lib.nexusoperation.proto.v1.OperationState
 	(*CancellationState)(nil), // 3: temporal.server.chasm.lib.nexusoperation.proto.v1.CancellationState
 }
-var file_temporal_server_chasm_lib_nexusoperation_proto_v1_message_proto_depIdxs = []int32{
+var file_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto_depIdxs = []int32{
 	0, // 0: temporal.server.chasm.lib.nexusoperation.proto.v1.OperationState.status:type_name -> temporal.server.chasm.lib.nexusoperation.proto.v1.OperationStatus
 	1, // 1: temporal.server.chasm.lib.nexusoperation.proto.v1.CancellationState.status:type_name -> temporal.server.chasm.lib.nexusoperation.proto.v1.CancellationStatus
 	2, // [2:2] is the sub-list for method output_type
@@ -349,27 +349,27 @@ var file_temporal_server_chasm_lib_nexusoperation_proto_v1_message_proto_depIdxs
 	0, // [0:2] is the sub-list for field type_name
 }
 
-func init() { file_temporal_server_chasm_lib_nexusoperation_proto_v1_message_proto_init() }
-func file_temporal_server_chasm_lib_nexusoperation_proto_v1_message_proto_init() {
-	if File_temporal_server_chasm_lib_nexusoperation_proto_v1_message_proto != nil {
+func init() { file_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto_init() }
+func file_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto_init() {
+	if File_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto != nil {
 		return
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_chasm_lib_nexusoperation_proto_v1_message_proto_rawDesc), len(file_temporal_server_chasm_lib_nexusoperation_proto_v1_message_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto_rawDesc), len(file_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto_rawDesc)),
 			NumEnums:      2,
 			NumMessages:   2,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
-		GoTypes:           file_temporal_server_chasm_lib_nexusoperation_proto_v1_message_proto_goTypes,
-		DependencyIndexes: file_temporal_server_chasm_lib_nexusoperation_proto_v1_message_proto_depIdxs,
-		EnumInfos:         file_temporal_server_chasm_lib_nexusoperation_proto_v1_message_proto_enumTypes,
-		MessageInfos:      file_temporal_server_chasm_lib_nexusoperation_proto_v1_message_proto_msgTypes,
+		GoTypes:           file_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto_goTypes,
+		DependencyIndexes: file_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto_depIdxs,
+		EnumInfos:         file_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto_enumTypes,
+		MessageInfos:      file_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto_msgTypes,
 	}.Build()
-	File_temporal_server_chasm_lib_nexusoperation_proto_v1_message_proto = out.File
-	file_temporal_server_chasm_lib_nexusoperation_proto_v1_message_proto_goTypes = nil
-	file_temporal_server_chasm_lib_nexusoperation_proto_v1_message_proto_depIdxs = nil
+	File_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto = out.File
+	file_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto_goTypes = nil
+	file_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto_depIdxs = nil
 }

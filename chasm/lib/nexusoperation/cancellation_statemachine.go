@@ -11,7 +11,7 @@ import (
 type EventCancellationScheduled struct {
 }
 
-var TransitionCancellationScheduled = chasm.NewTransition(
+var transitionCancellationScheduled = chasm.NewTransition(
 	[]nexusoperationpb.CancellationStatus{nexusoperationpb.CANCELLATION_STATUS_UNSPECIFIED},
 	nexusoperationpb.CANCELLATION_STATUS_SCHEDULED,
 	func(c *Cancellation, ctx chasm.MutableContext, event EventCancellationScheduled) error {
@@ -24,7 +24,7 @@ var TransitionCancellationScheduled = chasm.NewTransition(
 type EventCancellationRescheduled struct {
 }
 
-var TransitionCancellationRescheduled = chasm.NewTransition(
+var transitionCancellationRescheduled = chasm.NewTransition(
 	[]nexusoperationpb.CancellationStatus{nexusoperationpb.CANCELLATION_STATUS_BACKING_OFF},
 	nexusoperationpb.CANCELLATION_STATUS_SCHEDULED,
 	func(c *Cancellation, ctx chasm.MutableContext, event EventCancellationRescheduled) error {
@@ -36,7 +36,7 @@ var TransitionCancellationRescheduled = chasm.NewTransition(
 type EventCancellationAttemptFailed struct {
 }
 
-var TransitionCancellationAttemptFailed = chasm.NewTransition(
+var transitionCancellationAttemptFailed = chasm.NewTransition(
 	[]nexusoperationpb.CancellationStatus{nexusoperationpb.CANCELLATION_STATUS_SCHEDULED},
 	nexusoperationpb.CANCELLATION_STATUS_BACKING_OFF,
 	func(c *Cancellation, ctx chasm.MutableContext, event EventCancellationAttemptFailed) error {
@@ -48,7 +48,7 @@ var TransitionCancellationAttemptFailed = chasm.NewTransition(
 type EventCancellationFailed struct {
 }
 
-var TransitionCancellationFailed = chasm.NewTransition(
+var transitionCancellationFailed = chasm.NewTransition(
 	[]nexusoperationpb.CancellationStatus{
 		// We can immediately transition to failed to since we don't know how to send a cancellation request for an
 		// unstarted operation.
@@ -65,7 +65,7 @@ var TransitionCancellationFailed = chasm.NewTransition(
 type EventCancellationSucceeded struct {
 }
 
-var TransitionCancellationSucceeded = chasm.NewTransition(
+var transitionCancellationSucceeded = chasm.NewTransition(
 	[]nexusoperationpb.CancellationStatus{nexusoperationpb.CANCELLATION_STATUS_SCHEDULED},
 	nexusoperationpb.CANCELLATION_STATUS_SUCCEEDED,
 	func(c *Cancellation, ctx chasm.MutableContext, event EventCancellationSucceeded) error {

@@ -10,7 +10,7 @@ import (
 type EventScheduled struct {
 }
 
-var TransitionScheduled = chasm.NewTransition(
+var transitionScheduled = chasm.NewTransition(
 	[]nexusoperationpb.OperationStatus{nexusoperationpb.OPERATION_STATUS_UNSPECIFIED},
 	nexusoperationpb.OPERATION_STATUS_SCHEDULED,
 	func(o *Operation, ctx chasm.MutableContext, event EventScheduled) error {
@@ -22,7 +22,7 @@ var TransitionScheduled = chasm.NewTransition(
 type EventAttemptFailed struct {
 }
 
-var TransitionAttemptFailed = chasm.NewTransition(
+var transitionAttemptFailed = chasm.NewTransition(
 	[]nexusoperationpb.OperationStatus{nexusoperationpb.OPERATION_STATUS_SCHEDULED},
 	nexusoperationpb.OPERATION_STATUS_BACKING_OFF,
 	func(o *Operation, ctx chasm.MutableContext, event EventAttemptFailed) error {
@@ -35,7 +35,7 @@ var TransitionAttemptFailed = chasm.NewTransition(
 type EventRescheduled struct {
 }
 
-var TransitionRescheduled = chasm.NewTransition(
+var transitionRescheduled = chasm.NewTransition(
 	[]nexusoperationpb.OperationStatus{nexusoperationpb.OPERATION_STATUS_BACKING_OFF},
 	nexusoperationpb.OPERATION_STATUS_SCHEDULED,
 	func(o *Operation, ctx chasm.MutableContext, event EventRescheduled) error {
@@ -48,7 +48,7 @@ var TransitionRescheduled = chasm.NewTransition(
 type EventStarted struct {
 }
 
-var TransitionStarted = chasm.NewTransition(
+var transitionStarted = chasm.NewTransition(
 	[]nexusoperationpb.OperationStatus{
 		nexusoperationpb.OPERATION_STATUS_SCHEDULED,
 		nexusoperationpb.OPERATION_STATUS_BACKING_OFF,
@@ -63,7 +63,7 @@ var TransitionStarted = chasm.NewTransition(
 type EventSucceeded struct {
 }
 
-var TransitionSucceeded = chasm.NewTransition(
+var transitionSucceeded = chasm.NewTransition(
 	[]nexusoperationpb.OperationStatus{
 		nexusoperationpb.OPERATION_STATUS_SCHEDULED,
 		nexusoperationpb.OPERATION_STATUS_STARTED,
@@ -79,7 +79,7 @@ var TransitionSucceeded = chasm.NewTransition(
 type EventFailed struct {
 }
 
-var TransitionFailed = chasm.NewTransition(
+var transitionFailed = chasm.NewTransition(
 	[]nexusoperationpb.OperationStatus{
 		nexusoperationpb.OPERATION_STATUS_SCHEDULED,
 		nexusoperationpb.OPERATION_STATUS_STARTED,
@@ -95,7 +95,7 @@ var TransitionFailed = chasm.NewTransition(
 type EventCanceled struct {
 }
 
-var TransitionCanceled = chasm.NewTransition(
+var transitionCanceled = chasm.NewTransition(
 	[]nexusoperationpb.OperationStatus{
 		nexusoperationpb.OPERATION_STATUS_SCHEDULED,
 		nexusoperationpb.OPERATION_STATUS_STARTED,
@@ -111,7 +111,7 @@ var TransitionCanceled = chasm.NewTransition(
 type EventTimedOut struct {
 }
 
-var TransitionTimedOut = chasm.NewTransition(
+var transitionTimedOut = chasm.NewTransition(
 	[]nexusoperationpb.OperationStatus{
 		nexusoperationpb.OPERATION_STATUS_SCHEDULED,
 		nexusoperationpb.OPERATION_STATUS_STARTED,
