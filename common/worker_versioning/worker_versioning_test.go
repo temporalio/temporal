@@ -742,6 +742,8 @@ func TestValidateVersioningOverride(t *testing.T) {
 			tqTypeStr = "Activity"
 		case enumspb.TASK_QUEUE_TYPE_NEXUS:
 			tqTypeStr = "Nexus"
+		default:
+			tqTypeStr = "Workflow"
 		}
 		return fmt.Sprintf("Pinned version '%s:%s' is not present in task queue '%s' of type '%s'",
 			version.DeploymentName, version.BuildId, taskQueue, tqTypeStr)
