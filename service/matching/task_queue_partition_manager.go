@@ -1091,7 +1091,7 @@ func (pm *taskQueuePartitionManagerImpl) updateEphemeralDataIteration(prevBacklo
 
 	dbq := pm.defaultQueue()
 	if dbq == nil {
-		return prevBacklogPriority // not initialized yet, try next iteration
+		return prevBacklogPriority // shouldn't happen, we only start after initialization
 	}
 	setLevels(PhysicalTaskQueueVersion{}, dbq)
 
