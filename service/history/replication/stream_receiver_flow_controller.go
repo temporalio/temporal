@@ -13,8 +13,8 @@ type (
 
 	// FlowControlSignal holds signals to make flow control decision, more signalsProvider can be added here i.e. total persistence rps, cpu usage etc.
 	FlowControlSignal struct {
-		taskTrackingCount       int
-		slowSubmissionTimestamp time.Time
+		taskTrackingCount  int
+		lastSlowSubmission time.Time
 	}
 	ReceiverFlowController interface {
 		GetFlowControlInfo(priority enumsspb.TaskPriority) enumsspb.ReplicationFlowControlCommand
@@ -42,7 +42,7 @@ func (s *streamReceiverFlowControllerImpl) GetFlowControlInfo(priority enumsspb.
 
 		now := time.Now()
 		slowSubmissionWindow := now.Add(-s.config.ReplicationReceiverSlowSubmissionWindow())
-		if signalData.slowSubmissionTimestamp.After(slowSubmissionWindow) {
+		if signalData.lastSlowSubmission.After(slowSubmissionWindow) {
 			return enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE
 		}
 	}

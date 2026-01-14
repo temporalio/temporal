@@ -105,14 +105,14 @@ func NewStreamReceiver(
 	taskTrackerMap := make(map[enumsspb.TaskPriority]FlowControlSignalProvider)
 	taskTrackerMap[enumsspb.TASK_PRIORITY_HIGH] = func() *FlowControlSignal {
 		return &FlowControlSignal{
-			taskTrackingCount:       highPriorityTaskTracker.Size(),
-			slowSubmissionTimestamp: receiver.getSlowSubmissionTimestamp(enumsspb.TASK_PRIORITY_HIGH),
+			taskTrackingCount:  highPriorityTaskTracker.Size(),
+			lastSlowSubmission: receiver.getLastSlowSubmissionTimestamp(enumsspb.TASK_PRIORITY_HIGH),
 		}
 	}
 	taskTrackerMap[enumsspb.TASK_PRIORITY_LOW] = func() *FlowControlSignal {
 		return &FlowControlSignal{
-			taskTrackingCount:       lowPriorityTaskTracker.Size(),
-			slowSubmissionTimestamp: receiver.getSlowSubmissionTimestamp(enumsspb.TASK_PRIORITY_LOW),
+			taskTrackingCount:  lowPriorityTaskTracker.Size(),
+			lastSlowSubmission: receiver.getLastSlowSubmissionTimestamp(enumsspb.TASK_PRIORITY_LOW),
 		}
 	}
 	receiver.flowController = NewReceiverFlowControl(taskTrackerMap, processToolBox.Config)
@@ -383,19 +383,19 @@ func (r *StreamReceiverImpl) processMessages(
 	return nil
 }
 
-func (r *StreamReceiverImpl) getSlowSubmissionTimestamp(priority enumsspb.TaskPriority) time.Time {
+func (r *StreamReceiverImpl) getLastSlowSubmissionTimestamp(priority enumsspb.TaskPriority) time.Time {
 	r.slowSubmissionMu.RLock()
 	defer r.slowSubmissionMu.RUnlock()
-	if timestamp, ok := r.slowSubmissionTimestamps[priority]; ok {
-		return timestamp
+	if ts, ok := r.slowSubmissionTimestamps[priority]; ok {
+		return ts
 	}
 	return time.Time{}
 }
 
-func (r *StreamReceiverImpl) recordSlowSubmission(priority enumsspb.TaskPriority, timestamp time.Time) {
+func (r *StreamReceiverImpl) recordSlowSubmission(priority enumsspb.TaskPriority, ts time.Time) {
 	r.slowSubmissionMu.Lock()
 	defer r.slowSubmissionMu.Unlock()
-	r.slowSubmissionTimestamps[priority] = timestamp
+	r.slowSubmissionTimestamps[priority] = ts
 }
 
 func (r *StreamReceiverImpl) getTaskTracker(priority enumsspb.TaskPriority) (ExecutableTaskTracker, error) {

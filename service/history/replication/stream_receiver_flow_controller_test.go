@@ -24,15 +24,15 @@ type (
 func (f *flowControlTestSuite) SetupTest() {
 	lowPrioritySignal := func() *FlowControlSignal {
 		return &FlowControlSignal{
-			taskTrackingCount:       5,
-			slowSubmissionTimestamp: time.Time{}, // zero time means no slow submission
+			taskTrackingCount:  5,
+			lastSlowSubmission: time.Time{}, // zero time means no slow submission
 		}
 	}
 
 	highPrioritySignal := func() *FlowControlSignal {
 		return &FlowControlSignal{
-			taskTrackingCount:       150,
-			slowSubmissionTimestamp: time.Time{}, // zero time means no slow submission
+			taskTrackingCount:  150,
+			lastSlowSubmission: time.Time{}, // zero time means no slow submission
 		}
 	}
 
@@ -81,8 +81,8 @@ func (f *flowControlTestSuite) TestUnknownPriority() {
 func (f *flowControlTestSuite) TestBoundaryCondition() {
 	boundarySignal := func() *FlowControlSignal {
 		return &FlowControlSignal{
-			taskTrackingCount:       f.maxOutStandingTasks,
-			slowSubmissionTimestamp: time.Time{},
+			taskTrackingCount:  f.maxOutStandingTasks,
+			lastSlowSubmission: time.Time{},
 		}
 	}
 
@@ -98,8 +98,8 @@ func (f *flowControlTestSuite) TestBoundaryCondition() {
 
 	boundarySignal = func() *FlowControlSignal {
 		return &FlowControlSignal{
-			taskTrackingCount:       f.maxOutStandingTasks + 1,
-			slowSubmissionTimestamp: time.Time{},
+			taskTrackingCount:  f.maxOutStandingTasks + 1,
+			lastSlowSubmission: time.Time{},
 		}
 	}
 
@@ -121,8 +121,8 @@ func (f *flowControlTestSuite) TestSubmitLatency() {
 	// Test that slow submission timestamp within window triggers pause
 	signalWithSlowSubmit := func() *FlowControlSignal {
 		return &FlowControlSignal{
-			taskTrackingCount:       10,
-			slowSubmissionTimestamp: now.Add(-slowSubmissionWindow / 2), // slow submission detected recently
+			taskTrackingCount:  10,
+			lastSlowSubmission: now.Add(-slowSubmissionWindow / 2), // slow submission detected recently
 		}
 	}
 
@@ -139,8 +139,8 @@ func (f *flowControlTestSuite) TestSubmitLatency() {
 	// Test that no slow submission (zero time) doesn't trigger pause
 	signalWithNoSlowSubmit := func() *FlowControlSignal {
 		return &FlowControlSignal{
-			taskTrackingCount:       10,
-			slowSubmissionTimestamp: time.Time{}, // no slow submission detected
+			taskTrackingCount:  10,
+			lastSlowSubmission: time.Time{}, // no slow submission detected
 		}
 	}
 
@@ -157,8 +157,8 @@ func (f *flowControlTestSuite) TestSubmitLatency() {
 	// Test that slow submission outside window doesn't trigger pause
 	signalWithStaleSlowSubmit := func() *FlowControlSignal {
 		return &FlowControlSignal{
-			taskTrackingCount:       10,
-			slowSubmissionTimestamp: now.Add(-slowSubmissionWindow - time.Second), // slow submission detected outside window
+			taskTrackingCount:  10,
+			lastSlowSubmission: now.Add(-slowSubmissionWindow - time.Second), // slow submission detected outside window
 		}
 	}
 
@@ -176,8 +176,8 @@ func (f *flowControlTestSuite) TestSubmitLatency() {
 	// Both within limits - should resume
 	signalBothWithinLimits := func() *FlowControlSignal {
 		return &FlowControlSignal{
-			taskTrackingCount:       30,
-			slowSubmissionTimestamp: time.Time{},
+			taskTrackingCount:  30,
+			lastSlowSubmission: time.Time{},
 		}
 	}
 
@@ -194,8 +194,8 @@ func (f *flowControlTestSuite) TestSubmitLatency() {
 	// Task tracking count exceeds limit - should pause (even though no slow submission)
 	signalTaskTrackingExceeds := func() *FlowControlSignal {
 		return &FlowControlSignal{
-			taskTrackingCount:       f.maxOutStandingTasks + 1,
-			slowSubmissionTimestamp: time.Time{},
+			taskTrackingCount:  f.maxOutStandingTasks + 1,
+			lastSlowSubmission: time.Time{},
 		}
 	}
 
