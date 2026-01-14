@@ -68,10 +68,6 @@ func (r *workflowRebuilderImpl) rebuild(
 ) (retError error) {
 
 	wfCache := r.workflowConsistencyChecker.GetWorkflowCache()
-	rebuildSpec, err := r.getRebuildSpecFromMutableState(ctx, &workflowKey)
-	if err != nil {
-		return err
-	}
 	wfContext, releaseFn, err := wfCache.GetOrCreateWorkflowExecution(
 		ctx,
 		r.shard,
@@ -86,9 +82,15 @@ func (r *workflowRebuilderImpl) rebuild(
 		return err
 	}
 	defer func() {
-		releaseFn(retError)
 		wfContext.Clear()
+		releaseFn(retError)
 	}()
+
+	// maki: mutable state of this wfContext might be changed btw reading and locking?
+	rebuildSpec, err := r.getRebuildSpecFromMutableState(ctx, &workflowKey)
+	if err != nil {
+		return err
+	}
 	rebuildMutableState, err := r.replayResetWorkflow(
 		ctx,
 		workflowKey,
