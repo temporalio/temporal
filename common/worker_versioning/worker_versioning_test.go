@@ -2,6 +2,7 @@ package worker_versioning
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"sync"
 	"testing"
@@ -794,8 +795,9 @@ func TestValidateVersioningOverride(t *testing.T) {
 			setupMock: func(m *matchingservicemock.MockMatchingServiceClient) {
 				m.EXPECT().CheckTaskQueueVersionMembership(gomock.Any(), gomock.Any()).Times(0) // No RPC call expected!
 			},
-			expectError:   true,
-			errorContains: "Pinned version is not present in the task queue",
+			expectError: true,
+			errorContains: fmt.Sprintf("Pinned version '%s:%s' is not present in workflow's task queue '%s'",
+				testVersion.DeploymentName, testVersion.BuildId, testTaskQueue),
 		},
 		{
 			name:          "v0.32: Pinned override, cache hit for different task queue type does not apply",
@@ -840,8 +842,9 @@ func TestValidateVersioningOverride(t *testing.T) {
 					IsMember: false,
 				}, nil)
 			},
-			expectError:   true,
-			errorContains: "Pinned version is not present in the task queue",
+			expectError: true,
+			errorContains: fmt.Sprintf("Pinned version '%s:%s' is not present in workflow's task queue '%s'",
+				testVersion.DeploymentName, testVersion.BuildId, testTaskQueue),
 		},
 		{
 			name: "v0.32: Pinned override, with cache miss, calls RPC and caches true",
@@ -954,8 +957,9 @@ func TestValidateVersioningOverride(t *testing.T) {
 			setupMock: func(m *matchingservicemock.MockMatchingServiceClient) {
 				m.EXPECT().CheckTaskQueueVersionMembership(gomock.Any(), gomock.Any()).Times(0)
 			},
-			expectError:   true,
-			errorContains: "Pinned version is not present in the task queue",
+			expectError: true,
+			errorContains: fmt.Sprintf("Pinned version '%s:%s' is not present in workflow's task queue '%s'",
+				testVersion.DeploymentName, testVersion.BuildId, testTaskQueue),
 		},
 		{
 			name: "v0.31: PINNED behavior with pinned_version, cache miss, calls RPC and caches false",
@@ -972,8 +976,9 @@ func TestValidateVersioningOverride(t *testing.T) {
 					IsMember: false,
 				}, nil)
 			},
-			expectError:   true,
-			errorContains: "Pinned version is not present in the task queue",
+			expectError: true,
+			errorContains: fmt.Sprintf("Pinned version '%s:%s' is not present in workflow's task queue '%s'",
+				testVersion.DeploymentName, testVersion.BuildId, testTaskQueue),
 		},
 		{
 			name: "v0.31: PINNED behavior with pinned_version, cache miss, calls RPC and caches true",
