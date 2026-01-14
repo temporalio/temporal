@@ -31,6 +31,7 @@ import (
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -1131,7 +1132,10 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 
 			localMutableState.GetExecutionInfo().ExecutionStats.HistorySize += int64(len(historyBlob.rawHistory.Data))
 			if r.shardContext.GetConfig().ExternalPayloadsEnabled(nsName) {
-				externalPayloadSize, externalPayloadCount, err := workflow.CalculateExternalPayloadSize(events)
+				externalPayloadSize, externalPayloadCount, err := workflow.CalculateExternalPayloadSize(
+					events,
+					metrics.NoopMetricsHandler, // don't record metrics since those are not new uploads
+				)
 				if err != nil {
 					return err
 				}
@@ -1199,7 +1203,10 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 		startEventVersion = events[len(events)-1].Version
 		localMutableState.GetExecutionInfo().ExecutionStats.HistorySize += int64(len(eventBlobs[i].Data))
 		if r.shardContext.GetConfig().ExternalPayloadsEnabled(localMutableState.GetNamespaceEntry().Name().String()) {
-			externalPayloadSize, externalPayloadCount, err := workflow.CalculateExternalPayloadSize(events)
+			externalPayloadSize, externalPayloadCount, err := workflow.CalculateExternalPayloadSize(
+				events,
+				metrics.NoopMetricsHandler, // don't record metrics since those are not new uploads
+			)
 			if err != nil {
 				return newBranchToken, err
 			}

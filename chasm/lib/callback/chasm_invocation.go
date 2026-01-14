@@ -82,13 +82,13 @@ func (c chasmInvocation) Invoke(
 
 	request, err := c.getHistoryRequest(decodedRef)
 	if err != nil {
-		return invocationResultFail{logInternalError(e.logger, "failed to build history request: %v", err)}
+		return invocationResultFail{logInternalError(e.logger, "failed to build history request", err)}
 	}
 
 	// RPC to History for cross-shard completion delivery.
 	_, err = e.historyClient.CompleteNexusOperationChasm(ctx, request)
 	if err != nil {
-		msg := logInternalError(e.logger, "failed to complete Nexus operation: %v", err)
+		msg := logInternalError(e.logger, "failed to complete Nexus operation", err)
 		if isRetryableRPCResponse(err) {
 			return invocationResultRetry{err: msg}
 		}

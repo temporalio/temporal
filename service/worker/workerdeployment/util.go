@@ -382,6 +382,9 @@ func isRetryableUpdateError(err error) bool {
 	var errMultiOps *serviceerror.MultiOperationExecution
 	if errors.As(err, &errMultiOps) {
 		for _, e := range errMultiOps.OperationErrors() {
+			if e == nil {
+				continue
+			}
 			if errors.As(e, &errResourceExhausted) &&
 				(errResourceExhausted.Cause == enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT ||
 					errResourceExhausted.Cause == enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW) {

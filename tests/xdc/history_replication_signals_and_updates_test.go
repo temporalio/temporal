@@ -683,14 +683,13 @@ func (c *hrsuTestCluster) executeHistoryReplicationTasksUntil(
 }
 
 func (s *hrsuTestSuite) executeHistoryReplicationTask(task *hrsuTestExecutableTask) []*historypb.HistoryEvent {
-	serializer := serialization.NewSerializer()
 	trackableTask := (*task).TrackableExecutableTask
 	err := trackableTask.Execute()
 	s.NoError(err)
 	task.result <- err
 	attrs := (*task).replicationTask.GetHistoryTaskAttributes()
 	s.NotNil(attrs)
-	events, err := serializer.DeserializeEvents(attrs.Events)
+	events, err := serialization.DefaultDecoder.DeserializeEvents(attrs.Events)
 	s.NoError(err)
 	return events
 }
