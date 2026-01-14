@@ -624,7 +624,7 @@ func (s *FunctionalTestBase) RunTestWithMatchingBehavior(subtest func()) {
 						if forcePollForward {
 							s.InjectHook(testhooks.MatchingLBForceReadPartition, 5)
 						} else {
-							s.InjectHook(testhooks.MatchingLBForceReadPartition, 1)
+							s.InjectHook(testhooks.MatchingLBForceReadPartition, 0)
 						}
 						if forceAsync {
 							s.InjectHook(testhooks.MatchingDisableSyncMatch, true)
