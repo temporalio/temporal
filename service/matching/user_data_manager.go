@@ -593,7 +593,9 @@ func (m *userDataManagerImpl) HandleGetUserDataRequest(
 		} else if err != nil {
 			return nil, err
 		}
-		if userData.GetVersion() > lastVersion || ephData.GetVersion() > lastEphVersion {
+		newUserData := userData.GetVersion() > lastVersion
+		newEphData := ephData.GetVersion() > lastEphVersion
+		if newUserData || newEphData {
 			m.logger.Info("returning user data",
 				tag.NewBoolTag("long-poll", req.WaitNewData),
 				tag.NewInt64("request-known-version", lastVersion),
@@ -601,10 +603,14 @@ func (m *userDataManagerImpl) HandleGetUserDataRequest(
 				tag.NewInt64("request-eph-data-version", lastEphVersion),
 				tag.NewInt64("eph-data-version", ephData.GetVersion()),
 			)
-			return &matchingservice.GetTaskQueueUserDataResponse{
-				UserData:      userData,
-				EphemeralData: ephData,
-			}, nil
+			var res matchingservice.GetTaskQueueUserDataResponse
+			if newUserData {
+				res.UserData = userData
+			}
+			if newEphData {
+				res.EphemeralData = ephData
+			}
+			return &res, nil
 		} else if userData != nil && userData.Version < lastVersion && m.store != nil {
 			// When m.store == nil it means this is a non-owner partition, so it is possible
 			// for the requested version to be greater than the known version if there are
