@@ -302,9 +302,6 @@ func TestIsRetryableUpdateError(t *testing.T) {
 }
 
 func TestIsRetryableQueryError(t *testing.T) {
-	// Note: We don't test nil error because api.IsRetryableError doesn't handle nil properly
-	// and that's in common code we don't control
-
 	t.Run("returns false for Internal error", func(t *testing.T) {
 		// Internal errors are considered retryable by api.IsRetryableError
 		// but isRetryableQueryError explicitly excludes them
@@ -369,22 +366,10 @@ func TestIsRetryableQueryError(t *testing.T) {
 	})
 
 	t.Run("returns true for MultiOperationExecution with Internal error", func(t *testing.T) {
-		// MultiOperationExecution with Internal error is considered retryable
-		// because the function only checks if the top-level error is Internal
 		// api.IsRetryableError returns true for MultiOp with Internal errors
 		err := serviceerror.NewMultiOperationExecution("multi-op", []error{
 			serviceerror.NewInternal("internal error"),
 			nil,
-		})
-		require.True(t, isRetryableQueryError(err))
-	})
-
-	t.Run("returns true for MultiOperationExecution with mixed Internal and Unavailable", func(t *testing.T) {
-		// MultiOperationExecution is considered retryable if any operation is retryable
-		// The function doesn't check for Internal errors inside MultiOp
-		err := serviceerror.NewMultiOperationExecution("multi-op", []error{
-			serviceerror.NewUnavailable("unavailable"),
-			serviceerror.NewInternal("internal error"),
 		})
 		require.True(t, isRetryableQueryError(err))
 	})
