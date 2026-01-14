@@ -2578,6 +2578,11 @@ that task will be sent to DLQ.`,
 		true,
 		`ReplicationEnableRateLimit is the feature flag to enable replication global rate limiter`,
 	)
+	ReplicationEnableRateLimitShadowMode = NewGlobalBoolSetting(
+		"history.ReplicationEnableRateLimitShadowMode",
+		false,
+		`ReplicationEnableRateLimitShadowMode enables shadow mode for replication rate limiter (emit metrics only, no throttling)`,
+	)
 	ReplicationStreamSenderErrorRetryWait = NewGlobalDurationSetting(
 		"history.ReplicationStreamSenderErrorRetryWait",
 		1*time.Second,
