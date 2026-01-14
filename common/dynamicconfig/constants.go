@@ -2541,6 +2541,16 @@ that task will be sent to DLQ.`,
 		500,
 		`Maximum number of outstanding tasks allowed for a single shard in the stream receiver`,
 	)
+	ReplicationReceiverSlowSubmissionLatencyThreshold = NewGlobalDurationSetting(
+		"history.ReplicationReceiverSubmissionLatencyThreshold",
+		1*time.Second,
+		`Scheduler latency threshold for recording slow scheduler submission`,
+	)
+	ReplicationReceiverSlowSubmissionWindow = NewGlobalDurationSetting(
+		"history.ReplicationReceiverSlowSubmissionWindow",
+		5*time.Second,
+		`Time window within which a slow submission will pause replication flow control`,
+	)
 	ReplicationResendMaxBatchCount = NewGlobalIntSetting(
 		"history.ReplicationResendMaxBatchCount",
 		10,
