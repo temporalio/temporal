@@ -318,7 +318,7 @@ func (tm *priTaskMatcher) forwardPolls(
 		_ = stop()
 		if err == nil {
 			tm.data.FinishMatchAfterPollForward(poller, task)
-		} else if errors.Is(err, errNoTasks) {
+		} else if ft == priorityBacklogPollForwarder && errors.Is(err, errNoTasks) {
 			// There are no tasks of the priority we're looking for on the target. This goroutine
 			// will probably get canceled as soon as ephemeral data updates. In the meantime, wait.
 			// Re-enqueue but don't disable other forwarders for this poll.
