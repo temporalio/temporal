@@ -4557,6 +4557,116 @@ func (wh *WorkflowHandler) listSchedulesWorkflow(
 	}, nil
 }
 
+func (wh *WorkflowHandler) CountSchedules(
+	ctx context.Context,
+	request *workflowservice.CountSchedulesRequest,
+) (_ *workflowservice.CountSchedulesResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if !wh.config.EnableSchedules(request.Namespace) {
+		return nil, errSchedulesNotAllowed
+	}
+
+	namespaceName := namespace.Name(request.GetNamespace())
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
+	if err != nil {
+		return nil, err
+	}
+
+	if wh.config.DisableListVisibilityByFilter(namespaceName.String()) {
+		return nil, errListNotAllowed
+	}
+
+	// Build query with base filter (same as ListSchedules)
+	query := scheduler.VisibilityBaseListQuery
+	if strings.TrimSpace(request.Query) != "" {
+		saNameType, err := wh.saProvider.GetSearchAttributes(wh.visibilityMgr.GetIndexName(), false)
+		if err != nil {
+			return nil, serviceerror.NewUnavailablef(errUnableToGetSearchAttributesMessage, err)
+		}
+		if err := scheduler.ValidateVisibilityQuery(
+			namespaceName,
+			saNameType,
+			wh.saMapperProvider,
+			wh.config.VisibilityEnableUnifiedQueryConverter,
+			request.Query,
+		); err != nil {
+			return nil, err
+		}
+		query = fmt.Sprintf("%s AND (%s)", scheduler.VisibilityBaseListQuery, request.Query)
+	}
+
+	// Route to CHASM or V1 based on config (same pattern as ListSchedules)
+	if wh.chasmSchedulerEnabled(ctx, namespaceName.String()) {
+		return wh.countSchedulesChasm(ctx, namespaceID, namespaceName, query)
+	}
+	return wh.countSchedulesWorkflow(ctx, namespaceID, namespaceName, query)
+}
+
+// countSchedulesChasm counts schedules using CHASM APIs
+func (wh *WorkflowHandler) countSchedulesChasm(
+	ctx context.Context,
+	namespaceID namespace.ID,
+	namespaceName namespace.Name,
+	query string,
+) (*workflowservice.CountSchedulesResponse, error) {
+	resp, err := chasm.CountExecutions[*chasmscheduler.Scheduler](ctx, &chasm.CountExecutionsRequest{
+		NamespaceID:   namespaceID.String(),
+		NamespaceName: namespaceName.String(),
+		Query:         query,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	groups := make([]*workflowservice.CountSchedulesResponse_AggregationGroup, 0, len(resp.Groups))
+	for _, g := range resp.Groups {
+		groups = append(groups, &workflowservice.CountSchedulesResponse_AggregationGroup{
+			GroupValues: g.Values,
+			Count:       g.Count,
+		})
+	}
+
+	return &workflowservice.CountSchedulesResponse{
+		Count:  resp.Count,
+		Groups: groups,
+	}, nil
+}
+
+// countSchedulesWorkflow counts schedules using direct visibility query (V1 path)
+func (wh *WorkflowHandler) countSchedulesWorkflow(
+	ctx context.Context,
+	namespaceID namespace.ID,
+	namespaceName namespace.Name,
+	query string,
+) (*workflowservice.CountSchedulesResponse, error) {
+	persistenceResp, err := wh.visibilityMgr.CountWorkflowExecutions(ctx, &manager.CountWorkflowExecutionsRequest{
+		NamespaceID: namespaceID,
+		Namespace:   namespaceName,
+		Query:       query,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	groups := make([]*workflowservice.CountSchedulesResponse_AggregationGroup, 0, len(persistenceResp.Groups))
+	for _, g := range persistenceResp.Groups {
+		groups = append(groups, &workflowservice.CountSchedulesResponse_AggregationGroup{
+			GroupValues: g.GroupValues,
+			Count:       g.Count,
+		})
+	}
+
+	return &workflowservice.CountSchedulesResponse{
+		Count:  persistenceResp.Count,
+		Groups: groups,
+	}, nil
+}
+
 func (wh *WorkflowHandler) UpdateWorkflowExecution(
 	ctx context.Context,
 	request *workflowservice.UpdateWorkflowExecutionRequest,
