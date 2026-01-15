@@ -18,14 +18,20 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// DefaultDecoder is here for convenience to skip the need to create a new Serializer when only decodig is needed.
-// It does not need an encoding type; as it will use the one defined in the DataBlob.
-var r Serializer = &serializerImpl{encodingType: enumspb.ENCODING_TYPE_UNSPECIFIED}
-var DefaultDecoder Decoder = r
+var (
+	// DefaultDecoder is here for convenience to skip the need to create a new Serializer when only decoding is needed.
+	// It does not need an encoding type; as it will use the one defined in the DataBlob.
+	defaultSerializer Serializer = &serializerImpl{encodingType: enumspb.ENCODING_TYPE_UNSPECIFIED}
+	DefaultDecoder    Decoder    = defaultSerializer
+
+	// proto3Encoder always encodes as proto3, used by EnsureProto3Encoding.
+	proto3Encoder Encoder = &serializerImpl{encodingType: enumspb.ENCODING_TYPE_PROTO3}
+)
 
 type (
 	// Encoder is used to encode objects to DataBlobs.
 	Encoder interface {
+		EncodingType() enumspb.EncodingType
 		SerializeEvents(batch []*historypb.HistoryEvent) (*commonpb.DataBlob, error)
 		SerializeEvent(event *historypb.HistoryEvent) (*commonpb.DataBlob, error)
 		SerializeClusterMetadata(icm *persistencespb.ClusterMetadata) (*commonpb.DataBlob, error)
@@ -133,7 +139,11 @@ type (
 )
 
 func NewSerializer() Serializer {
-	return &serializerImpl{encodingType: enumspb.ENCODING_TYPE_PROTO3}
+	return &serializerImpl{encodingType: EncodingTypeFromEnv()}
+}
+
+func (t *serializerImpl) EncodingType() enumspb.EncodingType {
+	return t.encodingType
 }
 
 func (t *serializerImpl) SerializeTask(
@@ -665,4 +675,26 @@ func (t *serializerImpl) QueueStateToBlob(info *persistencespb.QueueState) (*com
 func (t *serializerImpl) QueueStateFromBlob(data *commonpb.DataBlob) (*persistencespb.QueueState, error) {
 	result := &persistencespb.QueueState{}
 	return result, Decode(data, result)
+}
+
+// ReencodeEventBlobsAsProto3 re-encodes event blobs as proto3 if the serializer uses a different encoding.
+// In production (proto3 encoding), this returns the input unchanged.
+func ReencodeEventBlobsAsProto3(serializer Serializer, blobs []*commonpb.DataBlob) ([]*commonpb.DataBlob, error) {
+	if serializer.EncodingType() == enumspb.ENCODING_TYPE_PROTO3 || len(blobs) == 0 {
+		return blobs, nil
+	}
+
+	// Re-encode all blobs as proto3.
+	result := make([]*commonpb.DataBlob, len(blobs))
+	for i, blob := range blobs {
+		events, err := serializer.DeserializeEvents(blob)
+		if err != nil {
+			return nil, err
+		}
+		result[i], err = proto3Encoder.SerializeEvents(events)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return result, nil
 }
