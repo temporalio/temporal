@@ -321,7 +321,7 @@ func NewMutableState(
 		approximateSize:              0,
 		chasmNodeSizes:               make(map[string]int),
 		totalTombstones:              0,
-		currentVersion:               namespaceEntry.FailoverVersion(),
+		currentVersion:               namespaceEntry.FailoverVersion(workflowID),
 		bufferEventsInDB:             nil,
 		stateInDB:                    enumsspb.WORKFLOW_EXECUTION_STATE_VOID,
 		nextEventIDInDB:              common.FirstEventID,
@@ -2998,7 +2998,8 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionPausedEvent(event *historypb.H
 		ms.executionInfo.WorkflowTaskStamp += 1
 		ms.workflowTaskManager.UpdateWorkflowTask(ms.GetPendingWorkflowTask())
 	}
-	return nil
+
+	return ms.updatePauseInfoSearchAttribute()
 }
 
 func (ms *MutableStateImpl) AddWorkflowExecutionUnpausedEvent(
@@ -3058,7 +3059,8 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUnpausedEvent(event *historypb
 
 	// Update approximate size of the mutable state.
 	ms.approximateSize -= pauseInfoSize
-	return nil
+
+	return ms.updatePauseInfoSearchAttribute()
 }
 
 func (ms *MutableStateImpl) addCompletionCallbacks(
@@ -6236,10 +6238,13 @@ func (ms *MutableStateImpl) RetryActivity(
 		return retryState, nil
 	}
 
-	ms.updateActivityInfoForRetries(ai,
+	err := ms.updateActivityInfoForRetries(ai,
 		now.Add(retryBackoff),
 		ai.Attempt+1,
 		activityFailure)
+	if err != nil {
+		return enumspb.RETRY_STATE_INTERNAL_SERVER_ERROR, err
+	}
 
 	if err := ms.taskGenerator.GenerateActivityRetryTasks(ai); err != nil {
 		return enumspb.RETRY_STATE_INTERNAL_SERVER_ERROR, err
@@ -6260,10 +6265,13 @@ func (ms *MutableStateImpl) RegenerateActivityRetryTask(ai *persistencespb.Activ
 		nextScheduledTime = GetNextScheduledTime(ai)
 	}
 
-	ms.updateActivityInfoForRetries(ai,
+	err := ms.updateActivityInfoForRetries(ai,
 		nextScheduledTime,
 		ai.Attempt,
 		nil)
+	if err != nil {
+		return err
+	}
 
 	return ms.taskGenerator.GenerateActivityRetryTasks(ai)
 }
@@ -6273,20 +6281,16 @@ func (ms *MutableStateImpl) updateActivityInfoForRetries(
 	nextScheduledTime time.Time,
 	nextAttempt int32,
 	activityFailure *failurepb.Failure,
-) {
-	_ = ms.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, mutableState historyi.MutableState) error {
-		mutableStateImpl, ok := mutableState.(*MutableStateImpl)
-		if ok {
-			isActivityRetryStampIncrementEnabled := ms.config.EnableActivityRetryStampIncrement()
-			ai = UpdateActivityInfoForRetries(
-				activityInfo,
-				mutableStateImpl.GetCurrentVersion(),
-				nextAttempt,
-				mutableStateImpl.truncateRetryableActivityFailure(activityFailure),
-				timestamppb.New(nextScheduledTime),
-				isActivityRetryStampIncrementEnabled,
-			)
-		}
+) error {
+	return ms.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ historyi.MutableState) error {
+		UpdateActivityInfoForRetries(
+			activityInfo,
+			ms.GetCurrentVersion(),
+			nextAttempt,
+			ms.truncateRetryableActivityFailure(activityFailure),
+			timestamppb.New(nextScheduledTime),
+			ms.config.EnableActivityRetryStampIncrement(),
+		)
 		return nil
 	})
 }
@@ -6343,21 +6347,36 @@ func (ms *MutableStateImpl) UpdateActivity(scheduledEventId int64, updater histo
 	return nil
 }
 
-func (ms *MutableStateImpl) updatePauseInfoSearchAttribute() error {
-	pausedInfoMap := make(map[string]struct{})
+func (ms *MutableStateImpl) buildTemporalPauseInfoEntries() []string {
+	var entries []string
 
-	for _, ai := range ms.GetPendingActivityInfos() {
-		if !ai.Paused {
-			continue
+	// Add workflow pause entries if workflow is paused
+	if ms.executionInfo.PauseInfo != nil {
+		entries = append(entries, fmt.Sprintf("Workflow:%s", ms.GetWorkflowKey().WorkflowID))
+		if reason := ms.executionInfo.PauseInfo.Reason; reason != "" {
+			entries = append(entries, fmt.Sprintf("Reason:%s", reason))
 		}
-		pausedInfoMap[ai.ActivityType.Name] = struct{}{}
-	}
-	pausedInfo := make([]string, 0, len(pausedInfoMap))
-	for activityType := range pausedInfoMap {
-		pausedInfo = append(pausedInfo, fmt.Sprintf("property:activityType=%s", activityType))
 	}
 
-	pauseInfoPayload, err := searchattribute.EncodeValue(pausedInfo, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST)
+	// Add activity pause entries for paused activities
+	pausedActivityTypes := make(map[string]struct{})
+	for _, ai := range ms.GetPendingActivityInfos() {
+		if ai.Paused {
+			pausedActivityTypes[ai.ActivityType.Name] = struct{}{}
+		}
+	}
+
+	for activityType := range pausedActivityTypes {
+		entries = append(entries, fmt.Sprintf("property:activityType=%s", activityType))
+	}
+
+	return entries
+}
+
+func (ms *MutableStateImpl) updatePauseInfoSearchAttribute() error {
+	allEntries := ms.buildTemporalPauseInfoEntries()
+
+	pauseInfoPayload, err := searchattribute.EncodeValue(allEntries, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST)
 	if err != nil {
 		return err
 	}
@@ -6793,7 +6812,7 @@ func (ms *MutableStateImpl) StartTransaction(
 		return false, err
 	}
 	ms.namespaceEntry = namespaceEntry
-	if err := ms.UpdateCurrentVersion(namespaceEntry.FailoverVersion(), false); err != nil {
+	if err := ms.UpdateCurrentVersion(namespaceEntry.FailoverVersion(ms.executionInfo.WorkflowId), false); err != nil {
 		return false, err
 	}
 
@@ -7678,7 +7697,7 @@ func (ms *MutableStateImpl) closeTransactionPrepareEvents(
 
 		// Calculate and add the external payload size and count for this batch
 		if ms.config.ExternalPayloadsEnabled(ms.GetNamespaceEntry().Name().String()) {
-			externalPayloadSize, externalPayloadCount, err := CalculateExternalPayloadSize(eventBatch)
+			externalPayloadSize, externalPayloadCount, err := CalculateExternalPayloadSize(eventBatch, ms.metricsHandler)
 			if err != nil {
 				return nil, nil, nil, false, err
 			}
@@ -7909,7 +7928,7 @@ func (ms *MutableStateImpl) startTransactionHandleNamespaceMigration(
 	}
 
 	// local namespace -> global namespace && with started workflow task
-	if lastWriteVersion == common.EmptyVersion && namespaceEntry.FailoverVersion() > common.EmptyVersion && ms.HasStartedWorkflowTask() {
+	if lastWriteVersion == common.EmptyVersion && namespaceEntry.FailoverVersion(ms.executionInfo.WorkflowId) > common.EmptyVersion && ms.HasStartedWorkflowTask() {
 		localNamespaceMutation := namespace.WithPretendLocalNamespace(
 			ms.clusterMetadata.GetCurrentClusterName(),
 		)

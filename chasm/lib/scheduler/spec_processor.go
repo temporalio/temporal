@@ -51,6 +51,10 @@ type (
 		NextWakeupTime time.Time
 		LastActionTime time.Time
 		BufferedStarts []*schedulespb.BufferedStart
+		// DroppedCount is the number of actions that would have been buffered but
+		// were dropped due to the limit being reached. Only populated when a limit
+		// is provided.
+		DroppedCount int64
 	}
 )
 
@@ -116,6 +120,8 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 	var next legacyscheduler.GetNextTimeResult
 	var err error
 	var bufferedStarts []*schedulespb.BufferedStart
+	var droppedCount int64
+	limitReached := false
 	for next, err = s.NextTime(scheduler, start); err == nil && (!next.Next.IsZero() && !next.Next.After(end)); next, err = s.NextTime(scheduler, next.Next) {
 		lastAction = next.Next
 
@@ -140,6 +146,10 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 			continue
 		}
 
+		if limitReached {
+			droppedCount++
+			continue
+		}
 		bufferedStarts = append(bufferedStarts, &schedulespb.BufferedStart{
 			NominalTime:   timestamppb.New(next.Nominal),
 			ActualTime:    timestamppb.New(next.Next),
@@ -151,7 +161,12 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 
 		if limit != nil {
 			if (*limit)--; *limit <= 0 {
-				break
+				// For manual (backfill) actions, break immediately so the caller
+				// can retry later. For automated actions, continue to count dropped.
+				if manual {
+					break
+				}
+				limitReached = true
 			}
 		}
 	}

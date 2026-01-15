@@ -90,7 +90,7 @@ func (rt *RegistrableTask) registerToLibrary(
 	rt.library = library
 
 	fqn := rt.fqType()
-	rt.taskTypeID = generateTypeID(fqn)
+	rt.taskTypeID = GenerateTypeID(fqn)
 	return fqn, rt.taskTypeID, nil
 }
 
@@ -107,5 +107,5 @@ func (rt *RegistrableTask) fqType() string {
 		// this should never happen because the task is only accessible from the library.
 		panic("task is not registered to a library")
 	}
-	return fullyQualifiedName(rt.library.Name(), rt.taskType)
+	return FullyQualifiedName(rt.library.Name(), rt.taskType)
 }
