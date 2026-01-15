@@ -105,7 +105,7 @@ func (lb *defaultLoadBalancer) PickReadPartition(
 		partitionCount = lb.nReadPartitions(string(namespaceName), taskQueue.Name(), taskQueue.TaskType())
 	}
 
-	if n, ok := testhooks.Get[int](lb.testHooks, testhooks.MatchingLBForceWritePartition); ok {
+	if n, ok := testhooks.Get[int](lb.testHooks, testhooks.MatchingLBForceReadPartition); ok {
 		return tqlb.forceReadPartition(partitionCount, n)
 	}
 
