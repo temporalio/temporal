@@ -278,7 +278,7 @@ func (c *ContextImpl) CreateWorkflowExecution(
 	if err != nil {
 		return err
 	}
-	NotifyWorkflowSnapshotTasks(engine, newWorkflow)
+	NotifyOnExecutionSnapshot(engine, newWorkflow)
 	emitStateTransitionCount(c.metricsHandler, shardContext.GetClusterMetadata(), newMutableState)
 
 	return nil
