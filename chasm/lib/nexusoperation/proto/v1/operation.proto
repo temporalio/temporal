@@ -1,0 +1,52 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.nexusoperation.proto.v1;
+
+option go_package = "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb;nexusoperationpb";
+
+message OperationState {
+  OperationStatus status = 1;
+}
+
+enum OperationStatus {
+  // Default value, unspecified status.
+    OPERATION_STATUS_UNSPECIFIED = 0;
+  // Operation is in the queue waiting to be executed or is currently executing.
+    OPERATION_STATUS_SCHEDULED = 1;
+  // Operation has failed with a retryable error and is backing off before the next attempt.
+    OPERATION_STATUS_BACKING_OFF = 2;
+  // Operation was started and will complete asynchronously.
+    OPERATION_STATUS_STARTED = 3;
+  // Operation succeeded.
+  // This may happen either as a response to a start request or as reported via callback.
+    OPERATION_STATUS_SUCCEEDED = 4;
+  // Operation failed either when a start request encounters a non-retryable error or as reported via callback.
+    OPERATION_STATUS_FAILED = 5;
+  // Operation completed as canceled (may have not ever been delivered).
+  // This may happen either as a response to a start request or as reported via callback.
+    OPERATION_STATUS_CANCELED = 6;
+  // Operation timed out - exceeded the user supplied schedule-to-close timeout.
+  // Any attempts to complete the operation in this status will be ignored.
+    OPERATION_STATUS_TIMED_OUT = 7;
+}
+
+message CancellationState {
+  CancellationStatus status = 1;
+}
+
+enum CancellationStatus {
+  // Default value, unspecified status.
+    CANCELLATION_STATUS_UNSPECIFIED = 0;
+  // Cancellation request is in the queue waiting to be executed or is currently executing.
+    CANCELLATION_STATUS_SCHEDULED = 1;
+  // Cancellation request has failed with a retryable error and is backing off before the next attempt.
+    CANCELLATION_STATUS_BACKING_OFF = 2;
+  // Cancellation request succeeded.
+    CANCELLATION_STATUS_SUCCEEDED = 3;
+  // Cancellation request failed with a non-retryable error.
+    CANCELLATION_STATUS_FAILED = 4;
+  // The associated operation timed out - exceeded the user supplied schedule-to-close timeout.
+    CANCELLATION_STATUS_TIMED_OUT = 5;
+  // Cancellation request is blocked (eg: by circuit breaker).
+    CANCELLATION_STATUS_BLOCKED = 6;
+}

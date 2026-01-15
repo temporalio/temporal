@@ -13,19 +13,22 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 )
 
 // TODO: Rename all SQL Managers to Stores
 type SqlStore struct {
-	DB     sqlplugin.DB
-	logger log.Logger
+	DB         sqlplugin.DB
+	logger     log.Logger
+	serializer serialization.Serializer
 }
 
-func NewSqlStore(db sqlplugin.DB, logger log.Logger) SqlStore {
+func NewSQLStore(db sqlplugin.DB, logger log.Logger, serializer serialization.Serializer) SqlStore {
 	return SqlStore{
-		DB:     db,
-		logger: logger,
+		DB:         db,
+		logger:     logger,
+		serializer: serializer,
 	}
 }
 

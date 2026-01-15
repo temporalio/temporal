@@ -20,7 +20,6 @@ type (
 
 		ephemeral     bool
 		singleCluster bool
-		shardingFn    func(ExecutionKey) string
 
 		searchAttributesMapper *VisibilitySearchAttributesMapper
 	}
@@ -35,7 +34,6 @@ func NewRegistrableComponent[C Component](
 	rc := &RegistrableComponent{
 		componentType: componentType,
 		goType:        reflect.TypeFor[C](),
-		shardingFn:    defaultShardingFn,
 	}
 	for _, opt := range opts {
 		opt(rc)
@@ -53,18 +51,6 @@ func WithEphemeral() RegistrableComponentOption {
 func WithSingleCluster() RegistrableComponentOption {
 	return func(rc *RegistrableComponent) {
 		rc.singleCluster = true
-	}
-}
-
-// WithShardingFn allows specifying a custom sharding key function for the component.
-// TODO: remove WithShardingFn, we don't need this functionality.
-func WithShardingFn(
-	shardingFn func(ExecutionKey) string,
-) RegistrableComponentOption {
-	return func(rc *RegistrableComponent) {
-		if shardingFn != nil {
-			rc.shardingFn = shardingFn
-		}
 	}
 }
 
@@ -156,13 +142,20 @@ func (rc *RegistrableComponent) registerToLibrary(
 	rc.library = library
 
 	fqn := rc.fqType()
-	rc.componentID = generateTypeID(fqn)
+	rc.componentID = GenerateTypeID(fqn)
 	return fqn, rc.componentID, nil
 }
 
 // SearchAttributesMapper returns the search attributes mapper for this component.
 func (rc *RegistrableComponent) SearchAttributesMapper() *VisibilitySearchAttributesMapper {
 	return rc.searchAttributesMapper
+}
+
+// GenerateTypeID generates a unique 32-bit identifier from a fully qualified name (FQN).
+// The generated ID is used to uniquely identify components and tasks within the CHASM framework. The same FQN will
+// always produce the same ID.
+func GenerateTypeID(fqn string) uint32 {
+	return farm.Fingerprint32([]byte(fqn))
 }
 
 // hasBusinessIDAlias returns true if the component has a businessID alias configured
@@ -188,9 +181,5 @@ func (rc *RegistrableComponent) fqType() string {
 		// this should never happen because the component is only accessible from the library.
 		panic("component is not registered to a library")
 	}
-	return fullyQualifiedName(rc.library.Name(), rc.componentType)
-}
-
-func generateTypeID(fqn string) uint32 {
-	return farm.Fingerprint32([]byte(fqn))
+	return FullyQualifiedName(rc.library.Name(), rc.componentType)
 }
