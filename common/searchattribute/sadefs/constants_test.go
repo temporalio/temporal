@@ -111,7 +111,6 @@ func TestIsChasmSystem(t *testing.T) {
 	require.True(t, IsChasmSystem(RunID))
 	require.True(t, IsChasmSystem(StartTime))
 	require.True(t, IsChasmSystem(CloseTime))
-	require.True(t, IsChasmSystem(WorkflowType))
 	require.True(t, IsChasmSystem(ExecutionTime))
 	require.True(t, IsChasmSystem(HistoryLength))
 	require.True(t, IsChasmSystem(HistorySizeBytes))

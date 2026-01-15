@@ -194,17 +194,12 @@ var (
 	chasmSystemSearchAttributes = map[string]struct{}{
 		WorkflowID:           {},
 		RunID:                {},
-		WorkflowType:         {},
 		StartTime:            {},
 		ExecutionTime:        {},
 		CloseTime:            {},
 		HistoryLength:        {},
 		HistorySizeBytes:     {},
 		StateTransitionCount: {},
-		ParentWorkflowID:     {},
-		ParentRunID:          {},
-		RootWorkflowID:       {},
-		RootRunID:            {},
 	}
 
 	sqlDbSystemNameToColName = map[string]string{

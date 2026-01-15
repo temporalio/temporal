@@ -402,7 +402,7 @@ func (s *ChasmTestSuite) TestCountExecutions_GroupBy() {
 				&chasm.CountExecutionsRequest{
 					NamespaceID:   string(s.NamespaceID()),
 					NamespaceName: s.Namespace().String(),
-					Query:         "GROUP BY `PayloadExecutionStatus`",
+					Query:         "GROUP BY `ExecutionStatus`",
 				},
 			)
 			return err == nil && countResp != nil && countResp.Count >= 5
@@ -640,11 +640,6 @@ func (s *ChasmTestSuite) TestListExecutions_ExecutionStatusAsAlias() {
 	s.True(ok)
 	s.Equal("Running", executionStatus)
 
-	// Verify the PayloadExecutionStatus (different alias, different field) is also returned
-	payloadExecutionStatus, ok := chasm.GetValue(visRecord.ChasmSearchAttributes, tests.PayloadExecutionStatusSearchAttribute)
-	s.True(ok)
-	s.Equal("Running", payloadExecutionStatus)
-
 	// Close the store and verify the status changes
 	_, err = tests.ClosePayloadStoreHandler(
 		ctx,
@@ -694,7 +689,7 @@ func (s *ChasmTestSuite) TestTaskQueuePreallocatedSearchAttribute() {
 	s.True(ok)
 
 	// Query using TaskQueue as a CHASM preallocated search attribute
-	visQuery := fmt.Sprintf("TemporalNamespaceDivision = '%d' AND TaskQueue = '%s'", archetypeID, tests.DefaultPayloadStoreTaskQueue)
+	visQuery := fmt.Sprintf("TemporalNamespaceDivision = '%d' AND TaskQueue = '%s' AND PayloadStoreId = '%s'", archetypeID, tests.DefaultPayloadStoreTaskQueue, storeID)
 
 	var visRecord *chasm.ExecutionInfo[*testspb.TestPayloadStore]
 	s.Eventually(
