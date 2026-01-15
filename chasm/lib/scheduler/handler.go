@@ -101,7 +101,9 @@ func (h *handler) DescribeSchedule(ctx context.Context, req *schedulerpb.Describ
 				BusinessID:  req.FrontendRequest.ScheduleId,
 			},
 		),
-		(*Scheduler).Describe,
+		func(s *Scheduler, ctx chasm.Context, req *schedulerpb.DescribeScheduleRequest) (*schedulerpb.DescribeScheduleResponse, error) {
+			return s.Describe(ctx, req, h.specBuilder)
+		},
 		req,
 	)
 }

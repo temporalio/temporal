@@ -78,6 +78,7 @@ func defaultConfig() *scheduler.Config {
 
 func newTestLibrary(logger log.Logger, specProcessor scheduler.SpecProcessor) *scheduler.Library {
 	config := defaultConfig()
+	specBuilder := legacyscheduler.NewSpecBuilder()
 	invokerOpts := scheduler.InvokerTaskExecutorOptions{
 		Config:         config,
 		MetricsHandler: metrics.NoopMetricsHandler,
@@ -94,6 +95,7 @@ func newTestLibrary(logger log.Logger, specProcessor scheduler.SpecProcessor) *s
 			MetricsHandler: metrics.NoopMetricsHandler,
 			BaseLogger:     logger,
 			SpecProcessor:  specProcessor,
+			SpecBuilder:    specBuilder,
 		}),
 		scheduler.NewInvokerExecuteTaskExecutor(invokerOpts),
 		scheduler.NewInvokerProcessBufferTaskExecutor(invokerOpts),
