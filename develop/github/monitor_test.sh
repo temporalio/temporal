@@ -20,14 +20,9 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Start monitor
-bash "$SCRIPT_DIR/memory_monitor.sh" /tmp/memory_snapshot.txt &
+"$SCRIPT_DIR/memory_monitor.sh" /tmp/memory_snapshot.txt &
 MONITOR_PID=$!
+trap 'kill "$MONITOR_PID" 2>/dev/null' EXIT
 
 # Run command
 "$@"
-CMD_EXIT=$?
-
-# Cleanup
-kill "$MONITOR_PID" 2>/dev/null || true
-
-exit "$CMD_EXIT"
