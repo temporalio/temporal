@@ -34,7 +34,7 @@ func (cp *connPool) Allocate(
 	cfg *config.SQL,
 	resolver resolver.ServiceResolver,
 	logger log.Logger,
-	create func(cfg *config.SQL, resolver resolver.ServiceResolver, logger log.Logger) (*sqlx.DB, error),
+	create func(*config.SQL, resolver.ServiceResolver, log.Logger) (*sqlx.DB, error),
 ) (db *sqlx.DB, err error) {
 	cp.mu.Lock()
 	defer cp.mu.Unlock()
