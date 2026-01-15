@@ -215,14 +215,14 @@ func (r *WorkflowStateReplicatorImpl) SyncWorkflowState(
 func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 	ctx context.Context,
 	archetypeID chasm.ArchetypeID,
-	versionedTransition *replicationspb.VersionedTransitionArtifact,
+	versionedTransitionArtifact *replicationspb.VersionedTransitionArtifact,
 	sourceClusterName string,
 ) (retError error) {
-	if versionedTransition.StateAttributes == nil {
+	if versionedTransitionArtifact.StateAttributes == nil {
 		return serviceerror.NewInvalidArgument("both snapshot and mutation are nil")
 	}
 
-	_, snapshot, executionState, executionInfo, err := parseVersionedTransitionAttributes(versionedTransition)
+	_, snapshot, executionState, executionInfo, err := parseVersionedTransitionAttributes(versionedTransitionArtifact)
 	if err != nil {
 		return err
 	}
@@ -252,10 +252,10 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 		}
 		releaseFn(retError)
 	}()
-	if versionedTransition.IsFirstSync {
+	if versionedTransitionArtifact.IsFirstSync {
 		// this is the first replication task for this workflow
 		// TODO: Handle reset case to reduce the amount of history events write
-		continueProcess, err := r.handleFirstReplicationTask(ctx, archetypeID, wfCtx, versionedTransition, sourceClusterName)
+		continueProcess, err := r.handleFirstReplicationTask(ctx, archetypeID, wfCtx, versionedTransitionArtifact, sourceClusterName)
 		if err != nil || !continueProcess {
 			return err
 		}
@@ -264,7 +264,7 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 	ms, err := wfCtx.LoadMutableState(ctx, r.shardContext)
 	switch err.(type) {
 	case *serviceerror.NotFound:
-		return r.applySnapshot(ctx, namespaceID, wid, rid, archetypeID, wfCtx, releaseFn, nil, versionedTransition, sourceClusterName)
+		return r.applySnapshot(ctx, namespaceID, wid, rid, archetypeID, wfCtx, releaseFn, nil, versionedTransitionArtifact, sourceClusterName)
 	case nil:
 		localTransitionHistory := ms.GetExecutionInfo().TransitionHistory
 		if len(localTransitionHistory) == 0 {
@@ -307,11 +307,11 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 			if localLastWriteVersion > sourceLastWriteVersion {
 				// local is newer, try backfill events
 				releaseFn(nil)
-				return r.backFillEvents(ctx, namespaceID, wid, rid, executionInfo.VersionHistories, versionedTransition.EventBatches, versionedTransition.NewRunInfo, sourceClusterName, transitionhistory.LastVersionedTransition(sourceTransitionHistory))
+				return r.backFillEvents(ctx, namespaceID, wid, rid, executionInfo.VersionHistories, versionedTransitionArtifact.EventBatches, versionedTransitionArtifact.NewRunInfo, sourceClusterName, transitionhistory.LastVersionedTransition(sourceTransitionHistory))
 			}
 			if localLastWriteVersion < sourceLastWriteVersion ||
 				localLastHistoryItem.GetEventId() <= sourceLastHistoryItem.EventId {
-				return r.applySnapshot(ctx, namespaceID, wid, rid, archetypeID, wfCtx, releaseFn, ms, versionedTransition, sourceClusterName)
+				return r.applySnapshot(ctx, namespaceID, wid, rid, archetypeID, wfCtx, releaseFn, ms, versionedTransitionArtifact, sourceClusterName)
 			}
 			return consts.ErrDuplicate
 		}
@@ -324,12 +324,12 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 		case errors.Is(err, consts.ErrStaleState):
 			// local is stale, try to apply mutable state update
 			if snapshot != nil {
-				return r.applySnapshot(ctx, namespaceID, wid, rid, archetypeID, wfCtx, releaseFn, ms, versionedTransition, sourceClusterName)
+				return r.applySnapshot(ctx, namespaceID, wid, rid, archetypeID, wfCtx, releaseFn, ms, versionedTransitionArtifact, sourceClusterName)
 			}
-			return r.applyMutation(ctx, namespaceID, wid, rid, archetypeID, wfCtx, ms, releaseFn, versionedTransition, sourceClusterName)
+			return r.applyMutation(ctx, namespaceID, wid, rid, archetypeID, wfCtx, ms, releaseFn, versionedTransitionArtifact, sourceClusterName)
 		case errors.Is(err, consts.ErrStaleReference):
 			releaseFn(nil)
-			return r.backFillEvents(ctx, namespaceID, wid, rid, executionInfo.VersionHistories, versionedTransition.EventBatches, versionedTransition.NewRunInfo, sourceClusterName, transitionhistory.LastVersionedTransition(sourceTransitionHistory))
+			return r.backFillEvents(ctx, namespaceID, wid, rid, executionInfo.VersionHistories, versionedTransitionArtifact.EventBatches, versionedTransitionArtifact.NewRunInfo, sourceClusterName, transitionhistory.LastVersionedTransition(sourceTransitionHistory))
 		default:
 			return err
 		}
@@ -492,6 +492,9 @@ func (r *WorkflowStateReplicatorImpl) handleFirstReplicationTaskWithNewRun(
 	versionedTransition *replicationspb.VersionedTransitionArtifact,
 	sourceClusterName string,
 ) (continueProcess bool, retErr error) {
+	if archetypeID != chasm.WorkflowArchetypeID {
+		return false, serviceerror.NewInvalidArgument("Non worklfow should not have new run")
+	}
 	nsEntry, err := r.namespaceRegistry.GetNamespaceByID(namespace.ID(executionInfo.NamespaceId))
 	if err != nil {
 		return false, err
@@ -507,12 +510,12 @@ func (r *WorkflowStateReplicatorImpl) handleFirstReplicationTaskWithNewRun(
 		executionState.RunId,
 		timestamp.TimeValue(executionState.StartTime),
 	)
-	if archetypeID == chasm.WorkflowArchetypeID {
-		err = localMutableState.SetHistoryTree(executionInfo.WorkflowExecutionTimeout, executionInfo.WorkflowRunTimeout, executionState.RunId)
-		if err != nil {
-			return false, err
-		}
+
+	err = localMutableState.SetHistoryTree(executionInfo.WorkflowExecutionTimeout, executionInfo.WorkflowRunTimeout, executionState.RunId)
+	if err != nil {
+		return false, err
 	}
+
 	// Get first batch of history events
 	firstEventsBatch, err := r.getFirstHistoryEventsBatch(
 		ctx,
