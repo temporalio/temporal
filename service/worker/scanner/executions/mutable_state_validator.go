@@ -52,18 +52,6 @@ func (v *mutableStateValidator) Validate(
 	ctx context.Context,
 	mutableState *MutableState,
 ) ([]MutableStateValidationResult, error) {
-
-	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(
-		mutableState.GetExecutionInfo().GetVersionHistories(),
-	)
-	if err != nil {
-		return nil, err
-	}
-	lastItem, err := versionhistory.GetLastVersionHistoryItem(currentVersionHistory)
-	if err != nil {
-		return nil, err
-	}
-
 	var results []MutableStateValidationResult
 
 	// First， to check if the data is expired on retention time.
@@ -78,6 +66,22 @@ func (v *mutableStateValidator) Validate(
 		// Skip all validation if the data is expired.
 		results = append(results, *retentionResult)
 		return results, nil
+	}
+
+	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(
+		mutableState.GetExecutionInfo().GetVersionHistories(),
+	)
+	if err != nil {
+		return nil, err
+	}
+	if versionhistory.IsEmptyVersionHistory(currentVersionHistory) {
+		// CHASM executions has empty version history and remaining validations do not apply.
+		return results, nil
+	}
+
+	lastItem, err := versionhistory.GetLastVersionHistoryItem(currentVersionHistory)
+	if err != nil {
+		return nil, err
 	}
 
 	results = append(results, v.validateActivity(
