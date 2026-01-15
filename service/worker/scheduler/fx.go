@@ -5,7 +5,6 @@ import (
 	"math"
 	"time"
 
-	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
@@ -35,7 +34,7 @@ var VisibilityBaseListQuery = fmt.Sprintf(
 	NamespaceDivision,
 	chasm.SchedulerArchetypeID,
 	sadefs.ExecutionStatus,
-	enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String(),
+	"Running",
 )
 
 type (

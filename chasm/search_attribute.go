@@ -56,6 +56,7 @@ var (
 	SearchAttributeFieldKeywordList01 = newSearchAttributeFieldKeywordList(1)
 	SearchAttributeFieldKeywordList02 = newSearchAttributeFieldKeywordList(2)
 
+	SearchAttributeTaskQueue                            = newSearchAttributeKeywordByField(sadefs.TaskQueue)
 	SearchAttributeTemporalChangeVersion                = newSearchAttributeKeywordListByField(sadefs.TemporalChangeVersion)
 	SearchAttributeBinaryChecksums                      = newSearchAttributeKeywordListByField(sadefs.BinaryChecksums)
 	SearchAttributeBuildIds                             = newSearchAttributeKeywordListByField(sadefs.BuildIds)
