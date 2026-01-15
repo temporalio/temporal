@@ -619,8 +619,6 @@ func buildPendingNexusOperationInfo(
 		OperationToken:          op.OperationToken,
 		ScheduledEventId:        scheduledEventID,
 		ScheduleToCloseTimeout:  op.ScheduleToCloseTimeout,
-		ScheduleToStartTimeout:  op.ScheduleToStartTimeout,
-		StartToCloseTimeout:     op.StartToCloseTimeout,
 		ScheduledTime:           op.ScheduledTime,
 		State:                   state,
 		Attempt:                 op.Attempt,
