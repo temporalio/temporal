@@ -151,7 +151,7 @@ sequenceDiagram
 #### State
 - `LastProcessedTime`: Similar to Generator, Backfiller maintains a high water mark that is advanced whenever the backfill makes progress. The high water mark is set to the point in time within the backfill request's specified time range that has been processed, and is therefore moved whenever buffered starts are enqueued.
 - `Request`: Backfillers are 1:1 with backfill requests, and embed the original request within their state.
-- `BackfillId`: Every backfiller is assigned a random UUID open creation.
+- `BackfillId`: Every backfiller is assigned a random UUID upon creation.
 
 #### Tasks
 `BackfillerTask`: Drives the backfill to completion. Whenever a Backfiller is created, a `BackfillerTask` is scheduled for immediate execution. If the backfill cannot be completed in a single execution (too many actions to comfortably buffer at a time), the `BackfillerTask` will be rescheduled with an exponential backoff for later retry (unlimited retries). Once the backfill is completely filled, the Backfiller deletes its own component without rescheduling a task.
