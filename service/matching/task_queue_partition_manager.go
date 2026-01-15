@@ -1727,23 +1727,24 @@ func (pm *taskQueuePartitionManagerImpl) checkQueryBlackholed(
 	// Forwarding (polls/tasks/queries) moves “up” the partition tree, so the root is the convergence point.
 	// Checking non-root partitions can incorrectly conclude “no pollers” simply because the pollers are on
 	// a different partition and have not been forwarded here (yet), leading to false blackhole errors.
-	if pm.partition.IsRoot() {
-		// Check old format
-		for _, versionData := range deploymentData.GetVersions() {
-			if versionData.GetVersion() != nil && worker_versioning.DeploymentVersionFromDeployment(deployment).Equal(versionData.GetVersion()) {
-				if versionData.GetStatus() == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED && len(pm.GetAllPollerInfo()) == 0 {
-					versionStr := worker_versioning.ExternalWorkerDeploymentVersionToString(worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(deployment))
-					return serviceerror.NewFailedPreconditionf(ErrBlackholedQuery, versionStr, versionStr)
-				}
+	if !pm.partition.IsRoot() {
+		return nil
+	}
+	// Check old format
+	for _, versionData := range deploymentData.GetVersions() {
+		if versionData.GetVersion() != nil && worker_versioning.DeploymentVersionFromDeployment(deployment).Equal(versionData.GetVersion()) {
+			if versionData.GetStatus() == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED && len(pm.GetAllPollerInfo()) == 0 {
+				versionStr := worker_versioning.ExternalWorkerDeploymentVersionToString(worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(deployment))
+				return serviceerror.NewFailedPreconditionf(ErrBlackholedQuery, versionStr, versionStr)
 			}
 		}
+	}
 
-		// Check new format
-		if workerDeploymentData, ok := deploymentData.GetDeploymentsData()[deployment.GetSeriesName()]; ok {
-			if workerDeploymentData.GetVersions() != nil && workerDeploymentData.GetVersions()[deployment.GetBuildId()] != nil &&
-				workerDeploymentData.GetVersions()[deployment.GetBuildId()].GetStatus() == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED && len(pm.GetAllPollerInfo()) == 0 {
-				return serviceerror.NewFailedPreconditionf(ErrBlackholedQuery, deployment.GetBuildId(), deployment.GetBuildId())
-			}
+	// Check new format
+	if workerDeploymentData, ok := deploymentData.GetDeploymentsData()[deployment.GetSeriesName()]; ok {
+		if workerDeploymentData.GetVersions() != nil && workerDeploymentData.GetVersions()[deployment.GetBuildId()] != nil &&
+			workerDeploymentData.GetVersions()[deployment.GetBuildId()].GetStatus() == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED && len(pm.GetAllPollerInfo()) == 0 {
+			return serviceerror.NewFailedPreconditionf(ErrBlackholedQuery, deployment.GetBuildId(), deployment.GetBuildId())
 		}
 	}
 
