@@ -47,6 +47,9 @@ func (s *registrySuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.controller = gomock.NewController(s.T())
 	s.regPersistence = nsregistry.NewMockPersistence(s.controller)
+	// Return ErrWatchNotSupported to use polling fallback in all tests.
+	s.regPersistence.EXPECT().WatchNamespaces(gomock.Any()).
+		Return(nil, persistence.ErrWatchNotSupported).AnyTimes()
 	s.registry = nsregistry.NewRegistry(
 		s.regPersistence,
 		true,
