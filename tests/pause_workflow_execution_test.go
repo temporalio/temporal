@@ -3,6 +3,7 @@ package tests
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -767,7 +768,7 @@ func (s *PauseWorkflowExecutionSuite) assertWorkflowIsPaused(ctx context.Context
 			var pauseInfoEntries []string
 			err = payload.Decode(pauseInfoPayload, &pauseInfoEntries)
 			require.NoError(t, err)
-			assert.Contains(t, pauseInfoEntries, "Workflow:Paused", "Should contain workflow pause marker")
+			assert.Contains(t, pauseInfoEntries, fmt.Sprintf("Workflow:%s", workflowID), "Should contain workflow ID")
 			assert.Contains(t, pauseInfoEntries, "Reason:"+s.pauseReason, "Should contain pause reason")
 		}
 	}

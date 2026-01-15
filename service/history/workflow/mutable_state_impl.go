@@ -6350,7 +6350,7 @@ func (ms *MutableStateImpl) buildTemporalPauseInfoEntries() []string {
 
 	// Add workflow pause entries if workflow is paused
 	if ms.executionInfo.PauseInfo != nil {
-		entries = append(entries, "Workflow:Paused")
+		entries = append(entries, fmt.Sprintf("Workflow:%s", ms.GetWorkflowKey().WorkflowID))
 		if reason := ms.executionInfo.PauseInfo.Reason; reason != "" {
 			entries = append(entries, fmt.Sprintf("Reason:%s", reason))
 		}
