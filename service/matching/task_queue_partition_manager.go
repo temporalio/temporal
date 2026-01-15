@@ -1723,8 +1723,10 @@ func (pm *taskQueuePartitionManagerImpl) checkQueryBlackholed(
 	deployment *deploymentpb.Deployment,
 ) error {
 
-	// Only check this if it's the root partition since poller and task forwarding would eventually complete on the root
-	// partition
+	// Only perform this check on the root partition.
+	// Forwarding (polls/tasks/queries) moves “up” the partition tree, so the root is the convergence point.
+	// Checking non-root partitions can incorrectly conclude “no pollers” simply because the pollers are on
+	// a different partition and have not been forwarded here (yet), leading to false blackhole errors.
 	if pm.partition.IsRoot() {
 		// Check old format
 		for _, versionData := range deploymentData.GetVersions() {
