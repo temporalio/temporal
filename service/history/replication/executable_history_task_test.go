@@ -252,6 +252,7 @@ func (s *executableHistoryTaskSuite) TestExecute_Err() {
 }
 
 func (s *executableHistoryTaskSuite) TestHandleErr_Resend_Success() {
+	s.executableTask.EXPECT().NamespaceName().Return("test-namespace").AnyTimes()
 	s.executableTask.EXPECT().TerminalState().Return(false)
 	s.executableTask.EXPECT().MarkExecutionStart()
 	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID, gomock.Any()).Return(
@@ -291,6 +292,7 @@ func (s *executableHistoryTaskSuite) TestHandleErr_Resend_Success() {
 }
 
 func (s *executableHistoryTaskSuite) TestHandleErr_Resend_Error() {
+	s.executableTask.EXPECT().NamespaceName().Return("test-namespace").AnyTimes()
 	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID, gomock.Any()).Return(
 		uuid.NewString(), true, nil,
 	).AnyTimes()
@@ -310,6 +312,7 @@ func (s *executableHistoryTaskSuite) TestHandleErr_Resend_Error() {
 }
 
 func (s *executableHistoryTaskSuite) TestHandleErr_Other() {
+	s.executableTask.EXPECT().NamespaceName().Return("test-namespace").AnyTimes()
 	err := errors.New("OwO")
 	s.Equal(err, s.task.HandleErr(err))
 

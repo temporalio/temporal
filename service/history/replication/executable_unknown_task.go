@@ -64,6 +64,12 @@ func (e *ExecutableUnknownTask) Execute() error {
 }
 
 func (e *ExecutableUnknownTask) HandleErr(err error) error {
+	metrics.ReplicationTasksErrorByType.With(e.MetricsHandler).Record(
+		1,
+		metrics.OperationTag(metrics.UnknownTaskScope),
+		metrics.NamespaceUnknownTag(),
+		metrics.ServiceErrorTypeTag(err),
+	)
 	return err
 }
 

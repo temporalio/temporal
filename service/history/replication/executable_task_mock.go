@@ -219,6 +219,20 @@ func (mr *MockExecutableTaskMockRecorder) Nack(err any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Nack", reflect.TypeOf((*MockExecutableTask)(nil).Nack), err)
 }
 
+// NamespaceName mocks base method.
+func (m *MockExecutableTask) NamespaceName() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NamespaceName")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// NamespaceName indicates an expected call of NamespaceName.
+func (mr *MockExecutableTaskMockRecorder) NamespaceName() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NamespaceName", reflect.TypeOf((*MockExecutableTask)(nil).NamespaceName))
+}
+
 // ReplicationTask mocks base method.
 func (m *MockExecutableTask) ReplicationTask() *repication.ReplicationTask {
 	m.ctrl.T.Helper()

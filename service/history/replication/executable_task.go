@@ -101,6 +101,7 @@ type (
 		MarkTaskDuplicated()
 		MarkExecutionStart()
 		GetPriority() enumsspb.TaskPriority
+		NamespaceName() string
 	}
 	ExecutableTaskImpl struct {
 		ProcessToolBox
@@ -291,6 +292,14 @@ func (e *ExecutableTaskImpl) GetPriority() enumsspb.TaskPriority {
 	return e.taskPriority
 }
 
+func (e *ExecutableTaskImpl) NamespaceName() string {
+	item := e.namespace.Load()
+	if item != nil {
+		return item.(namespace.Name).String()
+	}
+	return ""
+}
+
 func (e *ExecutableTaskImpl) emitFinishMetrics(
 	now time.Time,
 ) {
@@ -324,16 +333,24 @@ func (e *ExecutableTaskImpl) emitFinishMetrics(
 		metrics.OperationTag(e.metricsTag),
 		nsTag,
 	)
-	if processingLatency > 5*time.Second {
+	if processingLatency > 10*time.Second {
+		shardContext, err := e.ShardController.GetShardByNamespaceWorkflow(
+			namespace.ID(e.replicationTask.RawTaskInfo.NamespaceId),
+			e.replicationTask.RawTaskInfo.WorkflowId,
+		)
+		if err != nil {
+			return
+		}
 		e.Logger.Warn(fmt.Sprintf(
 			"replication task latency is too long: queue=%.2fs processing=%.2fs",
 			queueLatency.Seconds(),
 			processingLatency.Seconds(),
 		),
-			tag.WorkflowNamespaceID(e.replicationTask.RawTaskInfo.NamespaceId),
+			tag.WorkflowNamespace(e.NamespaceName()),
 			tag.WorkflowID(e.replicationTask.RawTaskInfo.WorkflowId),
 			tag.WorkflowRunID(e.replicationTask.RawTaskInfo.RunId),
 			tag.ReplicationTask(e.replicationTask.GetRawTaskInfo()),
+			tag.ShardID(shardContext.GetShardID()),
 		)
 	}
 
@@ -351,7 +368,12 @@ func (e *ExecutableTaskImpl) emitFinishMetrics(
 		metrics.SourceClusterTag(e.sourceClusterName),
 	)
 
-	// TODO consider emit attempt metrics
+	// Emit task attempt count
+	metrics.ReplicationTasksAttempt.With(e.MetricsHandler).Record(
+		int64(e.Attempt()),
+		metrics.OperationTag(e.metricsTag),
+		nsTag,
+	)
 }
 
 func (e *ExecutableTaskImpl) Resend(

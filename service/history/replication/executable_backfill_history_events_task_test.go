@@ -237,6 +237,7 @@ func (s *executableBackfillHistoryEventsTaskSuite) TestExecute_Err() {
 }
 
 func (s *executableBackfillHistoryEventsTaskSuite) TestHandleErr_Resend_Success() {
+	s.executableTask.EXPECT().NamespaceName().Return("test-namespace").AnyTimes()
 	s.executableTask.EXPECT().TerminalState().Return(false)
 	s.executableTask.EXPECT().MarkExecutionStart()
 	s.executableTask.EXPECT().ReplicationTask().Times(1).Return(s.replicationTask)
@@ -274,6 +275,7 @@ func (s *executableBackfillHistoryEventsTaskSuite) TestHandleErr_Resend_Success(
 }
 
 func (s *executableBackfillHistoryEventsTaskSuite) TestHandleErr_Resend_Error() {
+	s.executableTask.EXPECT().NamespaceName().Return("test-namespace").AnyTimes()
 	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID, gomock.Any()).Return(
 		uuid.NewString(), true, nil,
 	).AnyTimes()
