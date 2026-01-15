@@ -266,7 +266,7 @@ func testQueueInsertFails(ctx context.Context, t *testing.T, baseDB sqlplugin.DB
 		txRollbackErr: ErrTxRollbackFailed,
 	}
 	logger := &logRecorder{Logger: log.NewTestLogger()}
-	q := persistencesql.NewQueueV2(db, logger)
+	q := persistencesql.NewQueueV2(db, logger, serialization.NewSerializer())
 	_, err := q.CreateQueue(ctx, &persistence.InternalCreateQueueRequest{
 		QueueType: queueType,
 		QueueName: queueName,
@@ -288,7 +288,7 @@ func testCommitTxFails(ctx context.Context, t *testing.T, baseDB sqlplugin.DB) {
 		txCommitErr: ErrTxCommitFailed,
 	}
 	logger := &logRecorder{Logger: log.NewTestLogger()}
-	q := persistencesql.NewQueueV2(db, logger)
+	q := persistencesql.NewQueueV2(db, logger, serialization.NewSerializer())
 	_, err := q.CreateQueue(ctx, &persistence.InternalCreateQueueRequest{
 		QueueType: queueType,
 		QueueName: queueName,
@@ -308,7 +308,7 @@ func testBeginTxFails(ctx context.Context, t *testing.T, baseDB sqlplugin.DB) {
 		txBeginErr: ErrTxBeginFailed,
 	}
 	logger := &logRecorder{Logger: log.NewTestLogger()}
-	q := persistencesql.NewQueueV2(db, logger)
+	q := persistencesql.NewQueueV2(db, logger, serialization.NewSerializer())
 	_, err := q.CreateQueue(ctx, &persistence.InternalCreateQueueRequest{
 		QueueType: queueType,
 		QueueName: queueName,
@@ -329,7 +329,7 @@ func testGetLastMessageIDFails(ctx context.Context, t *testing.T, baseDB sqlplug
 		txRollbackErr:       ErrTxRollbackFailed,
 	}
 	logger := &logRecorder{Logger: log.NewTestLogger()}
-	q := persistencesql.NewQueueV2(db, logger)
+	q := persistencesql.NewQueueV2(db, logger, serialization.NewSerializer())
 	_, err := q.CreateQueue(ctx, &persistence.InternalCreateQueueRequest{
 		QueueType: queueType,
 		QueueName: queueName,
@@ -349,7 +349,7 @@ func testRangeSelectFromQueueV2MessagesFails(ctx context.Context, t *testing.T, 
 		rangeSelectError: ErrRangeSelectFailed,
 	}
 	logger := &logRecorder{Logger: log.NewTestLogger()}
-	q := persistencesql.NewQueueV2(db, logger)
+	q := persistencesql.NewQueueV2(db, logger, serialization.NewSerializer())
 	_, err := q.CreateQueue(ctx, &persistence.InternalCreateQueueRequest{
 		QueueType: queueType,
 		QueueName: queueName,
@@ -373,7 +373,7 @@ func testInsertIntoQueueV2MetadataFails(ctx context.Context, t *testing.T, baseD
 		insertMetadataError: ErrInsertMetadataFailed,
 	}
 	logger := &logRecorder{Logger: log.NewTestLogger()}
-	q := persistencesql.NewQueueV2(db, logger)
+	q := persistencesql.NewQueueV2(db, logger, serialization.NewSerializer())
 	_, err := q.CreateQueue(ctx, &persistence.InternalCreateQueueRequest{
 		QueueType: queueType,
 		QueueName: queueName,
@@ -386,7 +386,7 @@ func testGetPartitionFailsForRangeDelete(ctx context.Context, t *testing.T, base
 	queueType := persistence.QueueTypeHistoryNormal
 	queueName := "test-queue-" + t.Name()
 	logger := &logRecorder{Logger: log.NewTestLogger()}
-	q := persistencesql.NewQueueV2(baseDB, logger)
+	q := persistencesql.NewQueueV2(baseDB, logger, serialization.NewSerializer())
 	queuePB := persistencespb.Queue{
 		Partitions: map[int32]*persistencespb.QueuePartition{
 			0: {},
@@ -419,7 +419,7 @@ func testGetLastMessageIDForDeleteFails(ctx context.Context, t *testing.T, baseD
 		getLastMessageIdErr: ErrGetLastMessageIdFailed,
 	}
 	logger := &logRecorder{Logger: log.NewTestLogger()}
-	q := persistencesql.NewQueueV2(db, logger)
+	q := persistencesql.NewQueueV2(db, logger, serialization.NewSerializer())
 	_, err := q.CreateQueue(ctx, &persistence.InternalCreateQueueRequest{
 		QueueType: queueType,
 		QueueName: queueName,
@@ -442,7 +442,7 @@ func testRangeDeleteMessagesFails(ctx context.Context, t *testing.T, baseDB sqlp
 		rangeDeleteError: ErrRangeDeleteFailed,
 	}
 	logger := &logRecorder{Logger: log.NewTestLogger()}
-	q := persistencesql.NewQueueV2(db, logger)
+	q := persistencesql.NewQueueV2(db, logger, serialization.NewSerializer())
 	_, err := q.CreateQueue(ctx, &persistence.InternalCreateQueueRequest{
 		QueueType: queueType,
 		QueueName: queueName,
@@ -466,7 +466,7 @@ func testUpdateMetadataFails(ctx context.Context, t *testing.T, baseDB sqlplugin
 		updateMetadataError: ErrUpdateMetadataFailed,
 	}
 	logger := &logRecorder{Logger: log.NewTestLogger()}
-	q := persistencesql.NewQueueV2(db, logger)
+	q := persistencesql.NewQueueV2(db, logger, serialization.NewSerializer())
 	_, err := q.CreateQueue(ctx, &persistence.InternalCreateQueueRequest{
 		QueueType: queueType,
 		QueueName: queueName,
@@ -490,7 +490,7 @@ func testSelectMetadataFails(ctx context.Context, t *testing.T, baseDB sqlplugin
 		selectMetadataError: ErrSelectMetadataFailed,
 	}
 	logger := &logRecorder{Logger: log.NewTestLogger()}
-	q := persistencesql.NewQueueV2(db, logger)
+	q := persistencesql.NewQueueV2(db, logger, serialization.NewSerializer())
 	_, err := q.ReadMessages(ctx, &persistence.InternalReadMessagesRequest{
 		QueueType: queueType,
 		QueueName: queueName,
@@ -514,7 +514,7 @@ func testInvalidMetadataPayload(ctx context.Context, t *testing.T, baseDB sqlplu
 	queueType := persistence.QueueTypeHistoryNormal
 	queueName := "test-queue-" + t.Name()
 	logger := &logRecorder{Logger: log.NewTestLogger()}
-	q := persistencesql.NewQueueV2(baseDB, logger)
+	q := persistencesql.NewQueueV2(baseDB, logger, serialization.NewSerializer())
 
 	row := sqlplugin.QueueV2MetadataRow{
 		QueueType:        queueType,
@@ -537,7 +537,7 @@ func testInvalidMetadataEncoding(ctx context.Context, t *testing.T, baseDB sqlpl
 	queueType := persistence.QueueTypeHistoryNormal
 	queueName := "test-queue-" + t.Name()
 	logger := &logRecorder{Logger: log.NewTestLogger()}
-	q := persistencesql.NewQueueV2(baseDB, logger)
+	q := persistencesql.NewQueueV2(baseDB, logger, serialization.NewSerializer())
 
 	row := sqlplugin.QueueV2MetadataRow{
 		QueueType:        queueType,
@@ -569,7 +569,7 @@ func testInvalidMetadataEncoding(ctx context.Context, t *testing.T, baseDB sqlpl
 func testRangeDeleteActuallyDeletes(ctx context.Context, t *testing.T, db sqlplugin.DB) {
 	queueKey := persistencetest.GetQueueKey(t)
 	queueType := persistence.QueueTypeHistoryNormal
-	q := persistencesql.NewQueueV2(db, log.NewTestLogger())
+	q := persistencesql.NewQueueV2(db, log.NewTestLogger(), serialization.NewSerializer())
 	_, err := q.CreateQueue(ctx, &persistence.InternalCreateQueueRequest{
 		QueueType: queueType,
 		QueueName: queueKey.GetQueueName(),
@@ -616,7 +616,7 @@ func testSelectNameFromQueueV2MetadataFails(ctx context.Context, t *testing.T, b
 		selectQueueNamesError: ErrSelectQueueNames,
 	}
 	logger := &logRecorder{Logger: log.NewTestLogger()}
-	q := persistencesql.NewQueueV2(db, logger)
+	q := persistencesql.NewQueueV2(db, logger, serialization.NewSerializer())
 	_, err := q.ListQueues(ctx, &persistence.InternalListQueuesRequest{
 		QueueType:     queueType,
 		PageSize:      10,
@@ -629,7 +629,7 @@ func testSelectNameFromQueueV2MetadataFails(ctx context.Context, t *testing.T, b
 func testSelectNameFromQueueV2NegativeToken(ctx context.Context, t *testing.T, baseDB sqlplugin.DB) {
 	queueType := persistence.QueueTypeHistoryDLQ
 	logger := &logRecorder{Logger: log.NewTestLogger()}
-	q := persistencesql.NewQueueV2(baseDB, logger)
+	q := persistencesql.NewQueueV2(baseDB, logger, serialization.NewSerializer())
 	_, err := q.ListQueues(ctx, &persistence.InternalListQueuesRequest{
 		QueueType:     queueType,
 		PageSize:      1,
@@ -644,7 +644,7 @@ func testListQueuesGetPartitionFails(ctx context.Context, t *testing.T, baseDB s
 	queueType := persistence.QueueV2Type(4)
 	queueName := "test-queue-" + t.Name()
 	logger := &logRecorder{Logger: log.NewTestLogger()}
-	q := persistencesql.NewQueueV2(baseDB, logger)
+	q := persistencesql.NewQueueV2(baseDB, logger, serialization.NewSerializer())
 	queuePB := persistencespb.Queue{
 		Partitions: map[int32]*persistencespb.QueuePartition{
 			0: {},
@@ -679,7 +679,7 @@ func testListQueueFailsToGetLastMessageID(ctx context.Context, t *testing.T, bas
 		getLastMessageIdErr: ErrGetLastMessageIdFailed,
 	}
 	logger := &logRecorder{Logger: log.NewTestLogger()}
-	q := persistencesql.NewQueueV2(db, logger)
+	q := persistencesql.NewQueueV2(db, logger, serialization.NewSerializer())
 	_, err := q.CreateQueue(ctx, &persistence.InternalCreateQueueRequest{
 		QueueType: queueType,
 		QueueName: queueName,
@@ -697,7 +697,7 @@ func testListQueueFailsToExtractQueueMetadata(ctx context.Context, t *testing.T,
 	// Using a different QueueType to prevent this test from failing because of queues created in previous tests.
 	queueType := persistence.QueueV2Type(6)
 	queueName := "test-queue-" + t.Name()
-	q := persistencesql.NewQueueV2(baseDB, log.NewTestLogger())
+	q := persistencesql.NewQueueV2(baseDB, log.NewTestLogger(), serialization.NewSerializer())
 	row := sqlplugin.QueueV2MetadataRow{
 		QueueType:        queueType,
 		QueueName:        queueName,

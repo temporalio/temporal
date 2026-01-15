@@ -684,7 +684,7 @@ func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) (*apiactivitypb
 		ScheduleToCloseTimeout:  a.GetScheduleToCloseTimeout(),
 		ScheduleToStartTimeout:  a.GetScheduleToStartTimeout(),
 		StartToCloseTimeout:     a.GetStartToCloseTimeout(),
-		StateTransitionCount:    a.Visibility.Get(ctx).Data.TransitionCount,
+		StateTransitionCount:    ctx.StateTransitionCount(),
 		// TODO(saa-preview): StateSizeBytes?
 		SearchAttributes: sa,
 		Status:           status,

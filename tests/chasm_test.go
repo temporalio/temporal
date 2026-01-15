@@ -402,10 +402,10 @@ func (s *ChasmTestSuite) TestCountExecutions_GroupBy() {
 				&chasm.CountExecutionsRequest{
 					NamespaceID:   string(s.NamespaceID()),
 					NamespaceName: s.Namespace().String(),
-					Query:         "GROUP BY `PayloadExecutionStatus`",
+					Query:         "GROUP BY `ExecutionStatus`",
 				},
 			)
-			return err == nil && countResp != nil && countResp.Count > 0
+			return err == nil && countResp != nil && countResp.Count >= 5
 		},
 		testcore.WaitForESToSettle,
 		100*time.Millisecond,
@@ -588,6 +588,135 @@ func (s *ChasmTestSuite) TestPayloadStoreForceDelete() {
 		testcore.WaitForESToSettle,
 		100*time.Millisecond,
 	)
+}
+
+func (s *ChasmTestSuite) TestListExecutions_ExecutionStatusAsAlias() {
+	tv := testvars.New(s.T())
+
+	ctx, cancel := context.WithTimeout(s.chasmContext, chasmTestTimeout)
+	defer cancel()
+
+	storeID := tv.Any().String()
+	_, err := tests.NewPayloadStoreHandler(
+		ctx,
+		tests.NewPayloadStoreRequest{
+			NamespaceID: s.NamespaceID(),
+			StoreID:     storeID,
+		},
+	)
+	s.NoError(err)
+
+	archetypeID, ok := s.FunctionalTestBase.GetTestCluster().Host().GetCHASMRegistry().ComponentIDFor(&tests.PayloadStore{})
+	s.True(ok)
+
+	// Query using "ExecutionStatus" as a CHASM alias (which maps to TemporalKeyword03)
+	// This tests that CHASM components can use "ExecutionStatus" as an alias for their own search attribute
+	visQuery := fmt.Sprintf("TemporalNamespaceDivision = '%d' AND ExecutionStatus = 'Running' AND PayloadStoreId = '%s'", archetypeID, storeID)
+
+	var visRecord *chasm.ExecutionInfo[*testspb.TestPayloadStore]
+	s.Eventually(
+		func() bool {
+			resp, err := chasm.ListExecutions[*tests.PayloadStore, *testspb.TestPayloadStore](ctx, &chasm.ListExecutionsRequest{
+				NamespaceID:   string(s.NamespaceID()),
+				NamespaceName: string(s.Namespace()),
+				PageSize:      10,
+				Query:         visQuery,
+			})
+			s.NoError(err)
+			if len(resp.Executions) != 1 {
+				return false
+			}
+
+			visRecord = resp.Executions[0]
+			return true
+		},
+		testcore.WaitForESToSettle,
+		100*time.Millisecond,
+	)
+	s.Equal(storeID, visRecord.BusinessID)
+
+	// Verify the ExecutionStatus CHASM search attribute is correctly returned
+	executionStatus, ok := chasm.GetValue(visRecord.ChasmSearchAttributes, tests.ExecutionStatusSearchAttribute)
+	s.True(ok)
+	s.Equal("Running", executionStatus)
+
+	// Close the store and verify the status changes
+	_, err = tests.ClosePayloadStoreHandler(
+		ctx,
+		tests.ClosePayloadStoreRequest{
+			NamespaceID: s.NamespaceID(),
+			StoreID:     storeID,
+		},
+	)
+	s.NoError(err)
+
+	// Query for Completed status using ExecutionStatus as CHASM alias
+	visQueryCompleted := fmt.Sprintf("TemporalNamespaceDivision = '%d' AND ExecutionStatus = 'Completed'", archetypeID)
+	s.Eventually(
+		func() bool {
+			resp, err := chasm.ListExecutions[*tests.PayloadStore, *testspb.TestPayloadStore](ctx, &chasm.ListExecutionsRequest{
+				NamespaceID:   string(s.NamespaceID()),
+				NamespaceName: string(s.Namespace()),
+				PageSize:      10,
+				Query:         visQueryCompleted + fmt.Sprintf(" AND PayloadStoreId = '%s'", storeID),
+			})
+			s.NoError(err)
+			return len(resp.Executions) == 1
+		},
+		testcore.WaitForESToSettle,
+		100*time.Millisecond,
+	)
+}
+
+func (s *ChasmTestSuite) TestTaskQueuePreallocatedSearchAttribute() {
+	tv := testvars.New(s.T())
+
+	ctx, cancel := context.WithTimeout(s.chasmContext, chasmTestTimeout)
+	defer cancel()
+
+	storeID := tv.Any().String()
+
+	_, err := tests.NewPayloadStoreHandler(
+		ctx,
+		tests.NewPayloadStoreRequest{
+			NamespaceID: s.NamespaceID(),
+			StoreID:     storeID,
+		},
+	)
+	s.NoError(err)
+
+	archetypeID, ok := s.FunctionalTestBase.GetTestCluster().Host().GetCHASMRegistry().ComponentIDFor(&tests.PayloadStore{})
+	s.True(ok)
+
+	// Query using TaskQueue as a CHASM preallocated search attribute
+	visQuery := fmt.Sprintf("TemporalNamespaceDivision = '%d' AND TaskQueue = '%s' AND PayloadStoreId = '%s'", archetypeID, tests.DefaultPayloadStoreTaskQueue, storeID)
+
+	var visRecord *chasm.ExecutionInfo[*testspb.TestPayloadStore]
+	s.Eventually(
+		func() bool {
+			resp, err := chasm.ListExecutions[*tests.PayloadStore, *testspb.TestPayloadStore](ctx, &chasm.ListExecutionsRequest{
+				NamespaceID:   string(s.NamespaceID()),
+				NamespaceName: string(s.Namespace()),
+				PageSize:      10,
+				Query:         visQuery,
+			})
+			s.NoError(err)
+			if len(resp.Executions) != 1 {
+				return false
+			}
+
+			visRecord = resp.Executions[0]
+			return true
+		},
+		testcore.WaitForESToSettle,
+		100*time.Millisecond,
+	)
+	s.Equal(storeID, visRecord.BusinessID)
+
+	// Verify TaskQueue is returned as a CHASM search attribute
+	taskQueueVal, ok := chasm.GetValue(visRecord.ChasmSearchAttributes, chasm.SearchAttributeTaskQueue)
+	s.True(ok)
+	s.Equal(tests.DefaultPayloadStoreTaskQueue, taskQueueVal)
 }
 
 // TODO: More tests here...

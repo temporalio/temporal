@@ -14,16 +14,14 @@ import "temporal/api/taskqueue/v1/message.proto";
 
 enum ActivityExecutionStatus {
     ACTIVITY_EXECUTION_STATUS_UNSPECIFIED = 0;
-    // The activity is not in a terminal status. This does not necessarily mean that there is a currently running
-    // attempt. The activity may be backing off between attempts or waiting for a worker to pick it up.
+    // The activity has been scheduled, but a worker has not accepted the task for the current
+    // attempt. The activity may be backing off between attempts or waiting for a worker to pick it
+    // up.
     ACTIVITY_EXECUTION_STATUS_SCHEDULED = 1;
+    // A worker has accepted a task for the current attempt.
     ACTIVITY_EXECUTION_STATUS_STARTED = 2;
+    // A caller has requested cancellation of the activity.
     ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED = 3;
-    // Left as placeholders for when we add pause.
-    // // PAUSED means activity is paused on the server, and is not running in the worker
-    // ACTIVITY_EXECUTION_STATUS_PAUSED = 4;
-    // // PAUSE_REQUESTED means activity is currently running on the worker, but paused on the server
-    // ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED = 5;
     // The activity completed successfully.
     ACTIVITY_EXECUTION_STATUS_COMPLETED = 4;
     // The activity completed with failure.
@@ -45,14 +43,6 @@ enum ActivityExecutionStatus {
 }
 
 message ActivityState {
-    // === Should be covered by CHASM
-    // Unique identifier of this activity within its namespace along with run ID (below).
-    // string activity_id = 1;
-    // string run_id = 2;
-    // Incremented each time the activity's state is mutated in persistence.
-    // int64 state_transition_count = 22; TODO: we would need this if we had conflict resolution functionality.
-    // === END Should be covered by CHASM
-
     // The type of the activity, a string that maps to a registered activity on a worker.
     temporal.api.common.v1.ActivityType activity_type = 1;
 

@@ -142,7 +142,7 @@ for signal / start / signal with start API if namespace is not active`,
 	)
 	EnableCrossNamespaceCommands = NewGlobalBoolSetting(
 		"system.enableCrossNamespaceCommands",
-		true,
+		false,
 		`EnableCrossNamespaceCommands is the key to enable commands for external namespaces`,
 	)
 	ClusterMetadataRefreshInterval = NewGlobalDurationSetting(
@@ -183,6 +183,16 @@ config as the other services.`,
 		"system.enableActivityEagerExecution",
 		false,
 		`EnableActivityEagerExecution indicates if activity eager execution is enabled per namespace`,
+	)
+	NamespaceMinRetentionGlobal = NewGlobalDurationSetting(
+		"system.namespaceMinRetentionGlobal",
+		24*time.Hour,
+		`Minimum retention duration for global namespaces. This value should only be lowered for testing purposes.`,
+	)
+	NamespaceMinRetentionLocal = NewGlobalDurationSetting(
+		"system.namespaceMinRetentionLocal",
+		time.Hour,
+		`Minimum retention duration for local namespaces. This value should only be lowered for testing purposes.`,
 	)
 	EnableActivityRetryStampIncrement = NewGlobalBoolSetting(
 		"system.enableActivityRetryStampIncrement",
@@ -1243,11 +1253,24 @@ This can help reduce effects of task queue movement.`,
 		5*time.Minute,
 		`MatchingGetUserDataRefresh is how often the user data owner refreshes data from persistence.`,
 	)
+	MatchingEphemeralDataUpdateInterval = NewTaskQueueDurationSetting(
+		"matching.ephemeralDataUpdateInterval",
+		5*time.Second,
+		`How often to update ephemeral data (e.g. backlog size for forwarding sticky polls).
+Set to zero to disable ephemeral data updates.`,
+	)
+	MatchingPriorityBacklogForwarding = NewTaskQueueBoolSetting(
+		"matching.priorityBacklogForwarding",
+		true,
+		`Whether to forward polls to partitions with higher-priority backlog.`,
+	)
 	MatchingBacklogNegligibleAge = NewTaskQueueDurationSetting(
 		"matching.backlogNegligibleAge",
 		5*time.Second,
-		`MatchingBacklogNegligibleAge if the head of backlog gets older than this we stop sync match and
-forwarding to ensure more equal dispatch order among partitions.`,
+		`MatchingBacklogNegligibleAge is a threshold for negligible vs significant backlogs:
+If the head of the backlog is older than this, then we stop sync match and forwarding to ensure
+more equal dispatch order among partitions. We also forward sticky polls to partitions with
+higher-priority backlog.`,
 	)
 	MatchingMaxWaitForPollerBeforeFwd = NewTaskQueueDurationSetting(
 		"matching.maxWaitForPollerBeforeFwd",
@@ -1310,7 +1333,7 @@ these log lines can be noisy, we want to be able to turn on and sample selective
 	MatchingMaxVersionsInTaskQueue = NewNamespaceIntSetting(
 		"matching.maxVersionsInTaskQueue",
 		200,
-		`MatchingMaxVersionsInTaskQueue represents the maximum number of versions that can be registered in a single task queue. 
+		`MatchingMaxVersionsInTaskQueue represents the maximum number of versions that can be registered in a single task queue.
  Should be larger than MatchingMaxVersionsInDeployment because a task queue can be in versions spanning across more than one deployments.`,
 	)
 	MatchingMaxTaskQueuesInDeploymentVersion = NewNamespaceIntSetting(
@@ -1498,12 +1521,12 @@ See DynamicRateLimitingParams comments for more details.`,
 		false,
 		`HistoryCacheSizeBasedLimit if true, size of the history cache will be limited by HistoryCacheMaxSizeBytes
 and HistoryCacheHostLevelMaxSizeBytes. Otherwise, entry count in the history cache will be limited by
-HistoryCacheMaxSize and HistoryCacheHostLevelMaxSize.`,
+HistoryCacheMaxSize and HistoryCacheHostLevelMaxSize. Requires service restart to take effect.`,
 	)
 	HistoryCacheTTL = NewGlobalDurationSetting(
 		"history.cacheTTL",
 		time.Hour,
-		`HistoryCacheTTL is TTL of history cache`,
+		`HistoryCacheTTL is TTL of history cache. Requires service restart to take effect.`,
 	)
 	HistoryCacheNonUserContextLockTimeout = NewGlobalDurationSetting(
 		"history.cacheNonUserContextLockTimeout",
@@ -1514,18 +1537,20 @@ will wait on workflow lock acquisition. Requires service restart to take effect.
 	HistoryCacheHostLevelMaxSize = NewGlobalIntSetting(
 		"history.hostLevelCacheMaxSize",
 		128000,
-		`HistoryCacheHostLevelMaxSize is the maximum number of entries in the host level history cache`,
+		`HistoryCacheHostLevelMaxSize is the maximum number of entries in the host level history cache.
+Requires service restart to take effect.`,
 	)
 	HistoryCacheHostLevelMaxSizeBytes = NewGlobalIntSetting(
 		"history.hostLevelCacheMaxSizeBytes",
 		256000*4*1024,
 		`HistoryCacheHostLevelMaxSizeBytes is the maximum size of the host level history cache. This is only used if
-HistoryCacheSizeBasedLimit is set to true.`,
+HistoryCacheSizeBasedLimit is set to true. Requires service restart to take effect.`,
 	)
 	HistoryCacheBackgroundEvict = NewGlobalTypedSetting(
 		"history.cacheBackgroundEvict",
 		DefaultHistoryCacheBackgroundEvictSettings,
-		`HistoryCacheBackgroundEvict configures background processing to purge expired entries from the history cache.`,
+		`HistoryCacheBackgroundEvict configures background processing to purge expired entries from the history cache.
+Requires service restart to take effect.`,
 	)
 	EnableWorkflowExecutionTimeoutTimer = NewGlobalBoolSetting(
 		"history.enableWorkflowExecutionTimeoutTimer",
@@ -1570,22 +1595,22 @@ This can help reduce effects of shard movement.`,
 	EventsCacheMaxSizeBytes = NewGlobalIntSetting(
 		"history.eventsCacheMaxSizeBytes",
 		512*1024,
-		`EventsCacheMaxSizeBytes is max size of the shard level events cache in bytes`,
+		`EventsCacheMaxSizeBytes is max size of the shard level events cache in bytes. Requires service restart to take effect.`,
 	)
 	EventsHostLevelCacheMaxSizeBytes = NewGlobalIntSetting(
 		"history.eventsHostLevelCacheMaxSizeBytes",
 		512*512*1024,
-		`EventsHostLevelCacheMaxSizeBytes is max size of the host level events cache in bytes`,
+		`EventsHostLevelCacheMaxSizeBytes is max size of the host level events cache in bytes. Requires service restart to take effect.`,
 	)
 	EventsCacheTTL = NewGlobalDurationSetting(
 		"history.eventsCacheTTL",
 		time.Hour,
-		`EventsCacheTTL is TTL of events cache`,
+		`EventsCacheTTL is TTL of events cache. Requires service restart to take effect.`,
 	)
 	EnableHostLevelEventsCache = NewGlobalBoolSetting(
 		"history.enableHostLevelEventsCache",
 		false,
-		`EnableHostLevelEventsCache controls if the events cache is host level`,
+		`EnableHostLevelEventsCache controls if the events cache is host level. Requires service restart to take effect.`,
 	)
 	AcquireShardInterval = NewGlobalDurationSetting(
 		"history.acquireShardInterval",
@@ -2575,6 +2600,11 @@ that task will be sent to DLQ.`,
 		"history.ReplicationEnableRateLimit",
 		true,
 		`ReplicationEnableRateLimit is the feature flag to enable replication global rate limiter`,
+	)
+	ReplicationEnableRateLimitShadowMode = NewGlobalBoolSetting(
+		"history.ReplicationEnableRateLimitShadowMode",
+		false,
+		`ReplicationEnableRateLimitShadowMode enables shadow mode for replication rate limiter (emit metrics only, no throttling)`,
 	)
 	ReplicationStreamSenderErrorRetryWait = NewGlobalDurationSetting(
 		"history.ReplicationStreamSenderErrorRetryWait",

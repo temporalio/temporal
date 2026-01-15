@@ -105,3 +105,22 @@ func TestIsCustomSearchAttributeFieldName(t *testing.T) {
 	require.True(t, IsPreallocatedCSAFieldName("Text45", enumspb.INDEXED_VALUE_TYPE_TEXT))
 	require.True(t, IsPreallocatedCSAFieldName("KeywordList45", enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST))
 }
+
+func TestIsChasmSystem(t *testing.T) {
+	require.True(t, IsChasmSystem(WorkflowID))
+	require.True(t, IsChasmSystem(RunID))
+	require.True(t, IsChasmSystem(StartTime))
+	require.True(t, IsChasmSystem(CloseTime))
+	require.True(t, IsChasmSystem(ExecutionTime))
+	require.True(t, IsChasmSystem(HistoryLength))
+	require.True(t, IsChasmSystem(HistorySizeBytes))
+	require.True(t, IsChasmSystem(StateTransitionCount))
+
+	require.False(t, IsChasmSystem(ExecutionStatus))
+	require.False(t, IsChasmSystem(TaskQueue))
+
+	require.False(t, IsChasmSystem(TemporalChangeVersion))
+	require.False(t, IsChasmSystem(BinaryChecksums))
+
+	require.False(t, IsChasmSystem("NonExistent"))
+}

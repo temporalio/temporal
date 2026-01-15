@@ -47,6 +47,9 @@ func (s *registrySuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.controller = gomock.NewController(s.T())
 	s.regPersistence = nsregistry.NewMockPersistence(s.controller)
+	// Return ErrWatchNotSupported to use polling fallback in all tests.
+	s.regPersistence.EXPECT().WatchNamespaces(gomock.Any()).
+		Return(nil, persistence.ErrWatchNotSupported).AnyTimes()
 	s.registry = nsregistry.NewRegistry(
 		s.regPersistence,
 		true,
@@ -59,7 +62,6 @@ func (s *registrySuite) SetupTest() {
 }
 
 func (s *registrySuite) TearDownTest() {
-	s.registry.Stop()
 	s.controller.Finish()
 }
 
@@ -831,6 +833,7 @@ func (s *registrySuite) TestNamespaceRename() {
 	}).MinTimes(1)
 
 	s.registry.Start()
+	defer s.registry.Stop()
 	// Register callback to detect when the rename is applied
 	refreshCompletedCh := make(chan struct{})
 	s.registry.RegisterStateChangeCallback("test", func(ns *namespace.Namespace, deletedFromDb bool) {
@@ -838,7 +841,6 @@ func (s *registrySuite) TestNamespaceRename() {
 			close(refreshCompletedCh)
 		}
 	})
-	defer s.registry.Stop()
 
 	// Verify original name works before rename
 	ns, err := s.registry.GetNamespace("original-name")
@@ -1013,7 +1015,7 @@ func (s *registrySuite) TestRefreshSingleCacheKeyById() {
 	}).Return(&nsV1, nil).Times(1)
 	ns, err := s.registry.GetNamespaceByID(id)
 	s.NoError(err)
-	s.Equal(nsV1.Namespace.FailoverVersion, ns.FailoverVersion())
+	s.Equal(nsV1.Namespace.FailoverVersion, ns.FailoverVersion(namespace.EmptyBusinessID))
 
 	s.regPersistence.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{
 		ID: id.String(),
@@ -1021,9 +1023,9 @@ func (s *registrySuite) TestRefreshSingleCacheKeyById() {
 
 	ns, err = s.registry.RefreshNamespaceById(id)
 	s.NoError(err)
-	s.Equal(nsV2.Namespace.FailoverVersion, ns.FailoverVersion())
+	s.Equal(nsV2.Namespace.FailoverVersion, ns.FailoverVersion(namespace.EmptyBusinessID))
 
 	ns, err = s.registry.GetNamespaceByID(id)
 	s.NoError(err)
-	s.Equal(nsV2.Namespace.FailoverVersion, ns.FailoverVersion())
+	s.Equal(nsV2.Namespace.FailoverVersion, ns.FailoverVersion(namespace.EmptyBusinessID))
 }

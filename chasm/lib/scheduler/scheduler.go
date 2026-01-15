@@ -449,6 +449,7 @@ func (s *Scheduler) HandleNexusCompletion(
 func (s *Scheduler) Describe(
 	ctx chasm.Context,
 	req *schedulerpb.DescribeScheduleRequest,
+	specBuilder *scheduler.SpecBuilder,
 ) (*schedulerpb.DescribeScheduleResponse, error) {
 	if s.Closed {
 		return nil, ErrClosed
@@ -469,11 +470,20 @@ func (s *Scheduler) Describe(
 	schedule := common.CloneProto(s.Schedule)
 	cleanSpec(schedule.Spec)
 
+	generator := s.Generator.Get(ctx)
+	if generator.GetFutureActionTimes() == nil {
+		// FutureActionTimes is populated asynchronously by the GeneratorTask. If a
+		// newly-created schedule is described before the task executes, this field may be
+		// nil. In that case, compute it on-demand.
+		generator.UpdateFutureActionTimes(ctx, specBuilder)
+	}
+
 	// Populate computed views from Invoker's BufferedStarts.
 	invoker := s.Invoker.Get(ctx)
 	info := common.CloneProto(s.Info)
 	info.RunningWorkflows = invoker.runningWorkflowExecutions()
 	info.RecentActions = invoker.recentActions()
+	info.FutureActionTimes = generator.GetFutureActionTimes()
 
 	return &schedulerpb.DescribeScheduleResponse{
 		FrontendResponse: &workflowservice.DescribeScheduleResponse{
