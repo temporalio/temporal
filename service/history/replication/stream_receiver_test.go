@@ -478,7 +478,7 @@ func (s *streamReceiverSuite) TestGetTaskScheduler() {
 				s.Error(err)
 			} else {
 				s.NoError(err)
-				s.Equal(priority, tt.expected, "Expected scheduler to match")
+				s.Equal(tt.expected, priority, "Expected scheduler to match")
 			}
 		})
 	}
