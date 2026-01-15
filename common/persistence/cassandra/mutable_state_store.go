@@ -366,15 +366,17 @@ const (
 
 type (
 	MutableStateStore struct {
-		Session gocql.Session
-		logger  log.Logger
+		Session    gocql.Session
+		serializer serialization.Serializer
+		logger     log.Logger
 	}
 )
 
-func NewMutableStateStore(session gocql.Session, logger log.Logger) *MutableStateStore {
+func NewMutableStateStore(session gocql.Session, serializer serialization.Serializer, logger log.Logger) *MutableStateStore {
 	return &MutableStateStore{
-		Session: session,
-		logger:  logger,
+		Session:    session,
+		serializer: serializer,
+		logger:     logger,
 	}
 }
 
@@ -658,7 +660,7 @@ func (d *MutableStateStore) UpdateWorkflowExecution(
 			lastWriteVersion := updateWorkflow.LastWriteVersion
 
 			// TODO: double encoding execution state? already in updateWorkflow.ExecutionStateBlob
-			executionStateDatablob, err := serialization.WorkflowExecutionStateToBlob(updateWorkflow.ExecutionState)
+			executionStateDatablob, err := d.serializer.WorkflowExecutionStateToBlob(updateWorkflow.ExecutionState)
 			if err != nil {
 				return err
 			}
@@ -979,7 +981,7 @@ func (d *MutableStateStore) GetCurrentExecution(
 	}
 
 	// TODO: fix blob ExecutionState in storage should not be a blob.
-	executionState, err := serialization.WorkflowExecutionStateFromBlob(executionStateBlob)
+	executionState, err := d.serializer.WorkflowExecutionStateFromBlob(executionStateBlob)
 	if err != nil {
 		return nil, err
 	}

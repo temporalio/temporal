@@ -261,8 +261,10 @@ const (
 	PersistenceDeleteNamespaceByNameScope = "DeleteNamespaceByName"
 	// PersistenceListNamespacesScope tracks ListNamespaces calls made by service to persistence layer
 	PersistenceListNamespacesScope = "ListNamespaces"
-	// PersistenceGetMetadataScope tracks DeleteNamespaceByName calls made by service to persistence layer
+	// PersistenceGetMetadataScope tracks GetMetadata calls made by service to persistence layer
 	PersistenceGetMetadataScope = "GetMetadata"
+	// PersistenceWatchNamespacesScope tracks WatchNamespaces calls made by service to persistence layer
+	PersistenceWatchNamespacesScope = "WatchNamespaces"
 	// PersistenceGetNexusEndpointScope tracks GetNexusEndpoint calls made by service to persistence layer
 	PersistenceGetNexusEndpointScope = "GetNexusEndpoint"
 	// PersistenceListNexusEndpointsScope tracks ListNexusEndpoint calls made by service to persistence layer
@@ -1064,6 +1066,7 @@ var (
 	DynamicWorkerPoolSchedulerDequeuedTasks = NewCounterDef("dynamic_worker_pool_scheduler_dequeued_tasks")
 	DynamicWorkerPoolSchedulerRejectedTasks = NewCounterDef("dynamic_worker_pool_scheduler_rejected_tasks")
 	PausedActivitiesCounter                 = NewCounterDef("paused_activities")
+	ExternalPayloadUploadSize               = NewBytesHistogramDef("external_payload_upload_size", WithDescription("The histogram of sizes in bytes of uploaded external payloads."))
 
 	// Deadlock detector metrics
 	DDSuspectedDeadlocks                 = NewCounterDef("dd_suspected_deadlocks")
@@ -1074,6 +1077,13 @@ var (
 	DDShardLockLatency                   = NewTimerDef("dd_shard_lock_latency")
 	DDShardIOSemaphoreLatency            = NewTimerDef("dd_shard_io_semaphore_latency")
 	DDNamespaceRegistryLockLatency       = NewTimerDef("dd_namespace_registry_lock_latency")
+
+	// Namespace registry watch metrics
+	NamespaceRegistryWatchReconnections = NewCounterDef("namespace_registry_watch_reconnections")
+	NamespaceRegistryWatchStartFailures = NewCounterDef("namespace_registry_watch_start_failures")
+	NamespaceRegistrySlowCallbacks      = NewCounterDef("namespace_registry_slow_callbacks")
+	NamespaceRegistryRefreshFailures    = NewCounterDef("namespace_registry_refresh_failures")
+	NamespaceRegistryRefreshLatency     = NewTimerDef("namespace_registry_refresh_latency")
 
 	// Matching
 	MatchingClientForwardedCounter                    = NewCounterDef("forwarded")

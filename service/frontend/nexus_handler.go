@@ -20,6 +20,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/cluster"
@@ -32,7 +33,6 @@ import (
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/rpc/interceptor"
-	"go.temporal.io/server/components/nexusoperations"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -80,7 +80,7 @@ type operationContext struct {
 	redirectionInterceptor        *interceptor.Redirection
 	forwardingEnabledForNamespace dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	headersBlacklist              dynamicconfig.TypedPropertyFn[*regexp.Regexp]
-	metricTagConfig               dynamicconfig.TypedPropertyFn[nexusoperations.NexusMetricTagConfig]
+	metricTagConfig               dynamicconfig.TypedPropertyFn[chasmnexus.NexusMetricTagConfig]
 	cleanupFunctions              []func(map[string]string, error)
 }
 
@@ -322,7 +322,7 @@ type nexusHandler struct {
 	payloadSizeLimit              dynamicconfig.IntPropertyFnWithNamespaceFilter
 	headersBlacklist              dynamicconfig.TypedPropertyFn[*regexp.Regexp]
 	useForwardByEndpoint          dynamicconfig.BoolPropertyFn
-	metricTagConfig               dynamicconfig.TypedPropertyFn[nexusoperations.NexusMetricTagConfig]
+	metricTagConfig               dynamicconfig.TypedPropertyFn[chasmnexus.NexusMetricTagConfig]
 	httpTraceProvider             commonnexus.HTTPClientTraceProvider
 }
 

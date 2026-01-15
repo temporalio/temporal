@@ -35,8 +35,12 @@ func (UnimplementedLibrary) Tasks() []*RegistrableTask {
 func (UnimplementedLibrary) RegisterServices(_ *grpc.Server) {
 }
 
-func (UnimplementedLibrary) mustEmbedUnimplementedLibrary() {}
-
-func fullyQualifiedName(libName, name string) string {
+// FullyQualifiedName creates a fully qualified name (FQN) by combining a library name
+// and a component or task name. The FQN is used to uniquely identify components and
+// tasks within the CHASM framework.
+// The format of the returned FQN is: "libName.name"
+func FullyQualifiedName(libName, name string) string {
 	return libName + "." + name
 }
+
+func (UnimplementedLibrary) mustEmbedUnimplementedLibrary() {}

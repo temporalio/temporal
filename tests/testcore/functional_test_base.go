@@ -609,17 +609,22 @@ func (s *FunctionalTestBase) RunTestWithMatchingBehavior(subtest func()) {
 
 				s.Run(
 					name, func() {
-						if forceTaskForward {
-							s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 13)
-							s.InjectHook(testhooks.MatchingLBForceWritePartition, 11)
-						} else {
-							s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
-						}
-						if forcePollForward {
+						if forceTaskForward || forcePollForward {
 							s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 13)
-							s.InjectHook(testhooks.MatchingLBForceReadPartition, 5)
+							s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 13)
 						} else {
 							s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+							s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
+						}
+						if forceTaskForward {
+							s.InjectHook(testhooks.MatchingLBForceWritePartition, 11)
+						} else {
+							s.InjectHook(testhooks.MatchingLBForceWritePartition, 0)
+						}
+						if forcePollForward {
+							s.InjectHook(testhooks.MatchingLBForceReadPartition, 5)
+						} else {
+							s.InjectHook(testhooks.MatchingLBForceReadPartition, 0)
 						}
 						if forceAsync {
 							s.InjectHook(testhooks.MatchingDisableSyncMatch, true)

@@ -184,6 +184,16 @@ config as the other services.`,
 		false,
 		`EnableActivityEagerExecution indicates if activity eager execution is enabled per namespace`,
 	)
+	NamespaceMinRetentionGlobal = NewGlobalDurationSetting(
+		"system.namespaceMinRetentionGlobal",
+		24*time.Hour,
+		`Minimum retention duration for global namespaces. This value should only be lowered for testing purposes.`,
+	)
+	NamespaceMinRetentionLocal = NewGlobalDurationSetting(
+		"system.namespaceMinRetentionLocal",
+		time.Hour,
+		`Minimum retention duration for local namespaces. This value should only be lowered for testing purposes.`,
+	)
 	EnableActivityRetryStampIncrement = NewGlobalBoolSetting(
 		"system.enableActivityRetryStampIncrement",
 		false,
@@ -2577,6 +2587,11 @@ that task will be sent to DLQ.`,
 		"history.ReplicationEnableRateLimit",
 		true,
 		`ReplicationEnableRateLimit is the feature flag to enable replication global rate limiter`,
+	)
+	ReplicationEnableRateLimitShadowMode = NewGlobalBoolSetting(
+		"history.ReplicationEnableRateLimitShadowMode",
+		false,
+		`ReplicationEnableRateLimitShadowMode enables shadow mode for replication rate limiter (emit metrics only, no throttling)`,
 	)
 	ReplicationStreamSenderErrorRetryWait = NewGlobalDurationSetting(
 		"history.ReplicationStreamSenderErrorRetryWait",

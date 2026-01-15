@@ -97,7 +97,7 @@ func (s *timerQueueActiveTaskExecutorSuite) SetupTest() {
 
 	s.namespaceID = tests.NamespaceID
 	s.namespaceEntry = tests.GlobalNamespaceEntry
-	s.version = s.namespaceEntry.FailoverVersion()
+	s.version = s.namespaceEntry.FailoverVersion(namespace.EmptyBusinessID)
 	s.now = time.Now().UTC()
 	s.timeSource = clock.NewEventTimeSource().Update(s.now)
 
@@ -723,7 +723,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_RetryPoli
 	s.Equal(scheduledEvent.GetEventId(), activityInfo.ScheduledEventId)
 	s.Equal(common.EmptyEventID, activityInfo.StartedEventId)
 	// only a schedule to start timer will be created, apart from the retry timer
-	s.Equal(int32(workflow.TimerTaskStatusCreatedScheduleToStart), activityInfo.TimerTaskStatus)
+	s.Equal(int32(workflow.TimerTaskStatusCreatedScheduleToStart|workflow.TimerTaskStatusCreatedHeartbeat), activityInfo.TimerTaskStatus)
 }
 
 func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_RetryPolicy_RetryTimeout() {
