@@ -227,7 +227,7 @@ func (s *scheduleFunctionalSuiteBase) TestBasics() {
 	for i, fat := range describeRespAfterCreate.Info.FutureActionTimes {
 		s.True(fat.AsTime().After(createTime) || fat.AsTime().Equal(createTime),
 			"FutureActionTimes[%d] should be >= createTime", i)
-		s.Equal(0, fat.AsTime().UnixNano()%int64(5*time.Second),
+		s.Equal(int64(0), fat.AsTime().UnixNano()%int64(5*time.Second),
 			"FutureActionTimes[%d] should be aligned to 5-second intervals", i)
 	}
 
