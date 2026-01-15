@@ -112,9 +112,8 @@ func (r *workflowRebuilderImpl) rebuild(
 func (r *workflowRebuilderImpl) rebuildableCheck(
 	mutableState *persistencespb.WorkflowMutableState,
 ) error {
-
 	// check1: only workflow archetype is supported
-	var checkErr error = serviceerror.NewInvalidArgument("Rebuild only supports workflow executions, not other archetype types")
+	checkErr := serviceerror.NewInvalidArgument("Rebuild only supports workflow executions, not other archetype types")
 	if len(mutableState.ChasmNodes) == 0 {
 		checkErr = nil
 	} else {
@@ -133,9 +132,15 @@ func (r *workflowRebuilderImpl) rebuildableCheck(
 	}
 
 	// check2: check if the current version history is empty
+	if mutableState.ExecutionInfo == nil || mutableState.ExecutionInfo.VersionHistories == nil {
+		return serviceerror.NewInvalidArgument("version histories is nil, cannot be rebuilt")
+	}
 	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(mutableState.ExecutionInfo.VersionHistories)
 	if err != nil {
 		return err
+	}
+	if currentVersionHistory == nil {
+		return serviceerror.NewInvalidArgument("current version history is nil, cannot be rebuilt")
 	}
 	checkErr = serviceerror.NewInvalidArgument("current version history is empty, cannot be rebuilt")
 	if versionhistory.IsEmptyVersionHistory(currentVersionHistory) {

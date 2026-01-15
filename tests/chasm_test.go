@@ -726,18 +726,20 @@ func (s *ChasmTestSuite) TestMutableStateRebuilder() {
 	_, err := tests.NewPayloadStoreHandler(
 		ctx,
 		tests.NewPayloadStoreRequest{
-			NamespaceID: s.NamespaceID(),
-			StoreID:     storeID,
 			NamespaceID:      s.NamespaceID(),
 			StoreID:          storeID,
 			IDReusePolicy:    chasm.BusinessIDReusePolicyRejectDuplicate,
 			IDConflictPolicy: chasm.BusinessIDConflictPolicyFail,
 		},
+	)
+	s.NoError(err)
 
+	archetypeID, ok := s.FunctionalTestBase.GetTestCluster().Host().GetCHASMRegistry().ComponentIDFor(&tests.PayloadStore{})
+	s.True(ok)
 	s.Equal(archetypeID, chasm.ArchetypeID(archetypeID))
 
 	// payloadStore archetype is not the workflow archetype, should fail the rebuild.
-	archetype, ok := s.FunctionalTestBase.GetTestCluster().Host().GetCHASMRegistry().ComponentFqnByID(archetypeID)
+	archetype, _ := s.FunctionalTestBase.GetTestCluster().Host().GetCHASMRegistry().ComponentFqnByID(archetypeID)
 	s.NotEqual(archetype, chasm.WorkflowArchetype, "Archetype should not be the workflow archetype")
 
 	_, err = s.AdminClient().RebuildMutableState(testcore.NewContext(), &adminservice.RebuildMutableStateRequest{
@@ -748,4 +750,5 @@ func (s *ChasmTestSuite) TestMutableStateRebuilder() {
 	})
 	s.Error(err, "RebuildMutableState should fail for non-workflow executions")
 }
+
 // TODO: More tests here...

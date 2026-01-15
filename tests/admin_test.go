@@ -18,11 +18,9 @@ import (
 	"go.temporal.io/server/tests/testcore"
 )
 
-// AdminChasmTestSuite tests admin operations with CHASM enabled
 type AdminTestSuite struct {
 	testcore.FunctionalTestBase
 	testContext context.Context
-	// enableUnifiedQueryConverter bool
 }
 
 func TestAdminTestSuite(t *testing.T) {
@@ -36,9 +34,8 @@ func (s *AdminTestSuite) SetupSuite() {
 	s.testContext = context.Background()
 }
 
-// workflow related test cases
 func (s *AdminTestSuite) TestAdminRebuildMutableState_ChasmDisabled() {
-	rebuildMutableState_Workflow_Helper(s.testContext, &s.FunctionalTestBase, false)
+	rebuildMutableStateWorkflowHelper(s.testContext, &s.FunctionalTestBase, false)
 }
 
 func (s *AdminTestSuite) TestAdminRebuildMutableState_ChasmEnabled() {
@@ -49,11 +46,11 @@ func (s *AdminTestSuite) TestAdminRebuildMutableState_ChasmEnabled() {
 	s.NotEmpty(configValues, "EnableChasm config should be set")
 	configValue, _ := configValues[0].Value.(bool)
 	s.True(configValue, "EnableChasm config should be true")
-	rebuildMutableState_Workflow_Helper(s.testContext, &s.FunctionalTestBase, true)
+	rebuildMutableStateWorkflowHelper(s.testContext, &s.FunctionalTestBase, true)
 }
 
 // common test helper
-func rebuildMutableState_Workflow_Helper(ctx context.Context, s *testcore.FunctionalTestBase, testWithChasm bool) {
+func rebuildMutableStateWorkflowHelper(ctx context.Context, s *testcore.FunctionalTestBase, testWithChasm bool) {
 	workflowFn := func(ctx workflow.Context) error {
 		var randomUUID string
 		err := workflow.SideEffect(
@@ -103,12 +100,8 @@ func rebuildMutableState_Workflow_Helper(ctx context.Context, s *testcore.Functi
 		})
 		s.NoError(err)
 		if response1.DatabaseMutableState.ExecutionInfo.StateTransitionCount == 3 {
-			// Note: ChasmNodes may be empty even with CHASM enabled if using suite-level namespace
-			// that was created before the config override. This is acceptable - the rebuild
-			// operation should work for both old format workflows (empty ChasmNodes) and
-			// new CHASM workflows. The unit tests in workflow_rebuilder_test.go fully cover
-			// the archetype checking logic.
-
+			// Note: ChasmNodes may be empty even with CHASM enabled, so we only check if the rebuild can be performed,
+			// and not checking whether it is rebuildable because ChasmNodes are present.
 			if testWithChasm {
 				s.T().Logf("CHASM is enabled and workflow has ChasmNodes (new format)")
 				// s.NotEmpty(response1.DatabaseMutableState.ChasmNodes, "CHASM-enabled workflows should have ChasmNodes")
