@@ -142,7 +142,7 @@ func (o Operation) creationTasks() ([]hsm.Task, error) {
 	var tasks []hsm.Task
 
 	if o.ScheduleToCloseTimeout.AsDuration() != 0 {
-		tasks = append(tasks, TimeoutTask{
+		tasks = append(tasks, ScheduleToCloseTimeoutTask{
 			deadline: o.ScheduledTime.AsTime().Add(o.ScheduleToCloseTimeout.AsDuration()),
 		})
 	}
