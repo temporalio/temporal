@@ -64,7 +64,7 @@ func (v *mutableStateValidator) Validate(
 
 	if versionhistory.IsEmptyVersionHistory(currentVersionHistory) {
 		// CHASM executions have empty version history and remaining validations do not apply.
-		// TODO: CHASM executions should through rentention validation below as well after
+		// TODO: CHASM executions should through retention validation below as well after
 		// handleFailures() logic is updated to be able to delete non-workflow executions as well.
 		return results, nil
 	}
