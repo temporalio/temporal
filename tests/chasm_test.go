@@ -611,7 +611,7 @@ func (s *ChasmTestSuite) TestListExecutions_ExecutionStatusAsAlias() {
 
 	// Query using "ExecutionStatus" as a CHASM alias (which maps to TemporalKeyword03)
 	// This tests that CHASM components can use "ExecutionStatus" as an alias for their own search attribute
-	visQuery := fmt.Sprintf("TemporalNamespaceDivision = '%d' AND ExecutionStatus = 'Running'", archetypeID)
+	visQuery := fmt.Sprintf("TemporalNamespaceDivision = '%d' AND ExecutionStatus = 'Running' AND PayloadStoreId = '%s'", archetypeID, storeID)
 
 	var visRecord *chasm.ExecutionInfo[*testspb.TestPayloadStore]
 	s.Eventually(

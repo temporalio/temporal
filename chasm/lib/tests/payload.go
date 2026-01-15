@@ -16,18 +16,17 @@ const (
 )
 
 const (
-	TestScheduleID                = "TestScheduleID"
-	PayloadTotalCountSAAlias      = "PayloadTotalCount"
-	PayloadTotalSizeSAAlias       = "PayloadTotalSize"
-	PayloadExecutionStatusSAAlias = "PayloadExecutionStatus"
-	ExecutionStatusSAAlias        = "ExecutionStatus"
-	DefaultPayloadStoreTaskQueue  = "payload-store-task-queue"
+	TestScheduleID               = "TestScheduleID"
+	PayloadTotalCountSAAlias     = "PayloadTotalCount"
+	PayloadTotalSizeSAAlias      = "PayloadTotalSize"
+	ExecutionStatusSAAlias       = "ExecutionStatus"
+	DefaultPayloadStoreTaskQueue = "payload-store-task-queue"
 )
 
 var (
 	PayloadTotalCountSearchAttribute = chasm.NewSearchAttributeInt(PayloadTotalCountSAAlias, chasm.SearchAttributeFieldInt01)
 	PayloadTotalSizeSearchAttribute  = chasm.NewSearchAttributeInt(PayloadTotalSizeSAAlias, chasm.SearchAttributeFieldInt02)
-	ExecutionStatusSearchAttribute   = chasm.NewSearchAttributeKeyword(ExecutionStatusSAAlias, chasm.SearchAttributeFieldKeyword03)
+	ExecutionStatusSearchAttribute   = chasm.NewSearchAttributeKeyword(ExecutionStatusSAAlias, chasm.SearchAttributeFieldLowCardinalityKeyword01)
 
 	_ chasm.VisibilitySearchAttributesProvider = (*PayloadStore)(nil)
 	_ chasm.VisibilityMemoProvider             = (*PayloadStore)(nil)
