@@ -482,7 +482,7 @@ func (s *ChasmVisibilityManagerSuite) TestListExecutions_WithTaskQueueSearchAttr
 	execution := response.Executions[0]
 	s.NotNil(execution.ChasmSearchAttributes)
 	// Verify TaskQueue is in the CHASM search attributes using GetValue with the preallocated search attribute
-	taskQueueVal, ok := chasm.GetValue(execution.ChasmSearchAttributes, chasm.SearchAttributeTaskQueue)
+	taskQueueVal, ok := chasm.SearchAttributeValue(execution.ChasmSearchAttributes, chasm.SearchAttributeTaskQueue)
 	s.True(ok)
 	s.Equal(expectedTaskQueue, taskQueueVal)
 }

@@ -259,10 +259,10 @@ func (s *ChasmTestSuite) TestListExecutions() {
 	s.Equal(0, int(totalCount))
 	totalSize := visRecord.ChasmMemo.TotalSize
 	s.Equal(0, int(totalSize))
-	totalCountSA, ok := chasm.GetValue(visRecord.ChasmSearchAttributes, tests.PayloadTotalCountSearchAttribute)
+	totalCountSA, ok := chasm.SearchAttributeValue(visRecord.ChasmSearchAttributes, tests.PayloadTotalCountSearchAttribute)
 	s.True(ok)
 	s.Equal(0, int(totalCountSA))
-	totalSizeSA, ok := chasm.GetValue(visRecord.ChasmSearchAttributes, tests.PayloadTotalSizeSearchAttribute)
+	totalSizeSA, ok := chasm.SearchAttributeValue(visRecord.ChasmSearchAttributes, tests.PayloadTotalSizeSearchAttribute)
 	s.True(ok)
 	s.Equal(0, int(totalSizeSA))
 	var scheduledByID string
@@ -636,7 +636,7 @@ func (s *ChasmTestSuite) TestListExecutions_ExecutionStatusAsAlias() {
 	s.Equal(storeID, visRecord.BusinessID)
 
 	// Verify the ExecutionStatus CHASM search attribute is correctly returned
-	executionStatus, ok := chasm.GetValue(visRecord.ChasmSearchAttributes, tests.ExecutionStatusSearchAttribute)
+	executionStatus, ok := chasm.SearchAttributeValue(visRecord.ChasmSearchAttributes, tests.ExecutionStatusSearchAttribute)
 	s.True(ok)
 	s.Equal("Running", executionStatus)
 
@@ -714,7 +714,7 @@ func (s *ChasmTestSuite) TestTaskQueuePreallocatedSearchAttribute() {
 	s.Equal(storeID, visRecord.BusinessID)
 
 	// Verify TaskQueue is returned as a CHASM search attribute
-	taskQueueVal, ok := chasm.GetValue(visRecord.ChasmSearchAttributes, chasm.SearchAttributeTaskQueue)
+	taskQueueVal, ok := chasm.SearchAttributeValue(visRecord.ChasmSearchAttributes, chasm.SearchAttributeTaskQueue)
 	s.True(ok)
 	s.Equal(tests.DefaultPayloadStoreTaskQueue, taskQueueVal)
 }

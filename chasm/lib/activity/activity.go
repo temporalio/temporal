@@ -31,16 +31,11 @@ const (
 	// WorkflowTypeTag is a required workflow tag for standalone activities to ensure consistent
 	// metric labeling between workflows and activities.
 	WorkflowTypeTag = "__temporal_standalone_activity__"
-
-	TypeSAAlias      = "ActivityType"
-	StatusSAAlias    = "ActivityStatus"
-	TaskQueueSAAlias = "ActivityTaskQueue"
 )
 
 var (
-	TypeSearchAttribute      = chasm.NewSearchAttributeKeyword(TypeSAAlias, chasm.SearchAttributeFieldKeyword01)
-	StatusSearchAttribute    = chasm.NewSearchAttributeKeyword(StatusSAAlias, chasm.SearchAttributeFieldLowCardinalityKeyword01)
-	TaskQueueSearchAttribute = chasm.NewSearchAttributeKeyword(TaskQueueSAAlias, chasm.SearchAttributeFieldKeyword02)
+	TypeSearchAttribute   = chasm.NewSearchAttributeKeyword("ActivityType", chasm.SearchAttributeFieldKeyword01)
+	StatusSearchAttribute = chasm.NewSearchAttributeKeyword("ExecutionStatus", chasm.SearchAttributeFieldLowCardinalityKeyword01)
 )
 
 var _ chasm.VisibilitySearchAttributesProvider = (*Activity)(nil)
@@ -69,9 +64,8 @@ type Activity struct {
 	// Pointer to an implementation of the "store". For a workflow activity this would be a parent
 	// pointer back to the workflow. For a standalone activity this is nil (Activity itself
 	// implements the ActivityStore interface).
-	// TODO(saa-preview): revisit a standalone activity pointing to itself once we handle storing it more efficiently.
 	// TODO(saa-preview): figure out better naming.
-	Store chasm.Field[ActivityStore]
+	Store chasm.ParentPtr[ActivityStore]
 }
 
 // WithToken wraps a request with its deserialized task token.
@@ -920,6 +914,6 @@ func (a *Activity) SearchAttributes(_ chasm.Context) []chasm.SearchAttributeKeyV
 	return []chasm.SearchAttributeKeyValue{
 		TypeSearchAttribute.Value(a.GetActivityType().GetName()),
 		StatusSearchAttribute.Value(InternalStatusToAPIStatus(a.GetStatus()).String()),
-		TaskQueueSearchAttribute.Value(a.GetTaskQueue().GetName()),
+		chasm.SearchAttributeTaskQueue.Value(a.GetTaskQueue().GetName()),
 	}
 }

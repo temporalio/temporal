@@ -2399,12 +2399,12 @@ func (s *standaloneActivityTestSuite) TestListActivityExecutions() {
 		verifyListQuery(t, fmt.Sprintf("ActivityType = '%s'", activityType), 10)
 	})
 
-	t.Run("QueryByActivityStatus", func(t *testing.T) {
-		verifyListQuery(t, fmt.Sprintf("ActivityStatus = 'Running' AND ActivityType = '%s'", activityType), 10)
+	t.Run("QueryByExecutionStatus", func(t *testing.T) {
+		verifyListQuery(t, fmt.Sprintf("ExecutionStatus = 'Running' AND ActivityType = '%s'", activityType), 10)
 	})
 
 	t.Run("QueryByTaskQueue", func(t *testing.T) {
-		verifyListQuery(t, fmt.Sprintf("ActivityTaskQueue = '%s' AND ActivityType = '%s'", taskQueue, activityType), 10)
+		verifyListQuery(t, fmt.Sprintf("TaskQueue = '%s' AND ActivityType = '%s'", taskQueue, activityType), 10)
 	})
 
 	t.Run("QueryByMultipleFields", func(t *testing.T) {
@@ -2585,15 +2585,15 @@ func (s *standaloneActivityTestSuite) TestCountActivityExecutions() {
 		verifyCountQuery(t, fmt.Sprintf("ActivityType = '%s'", activityType), 1)
 	})
 
-	t.Run("CountByActivityStatus", func(t *testing.T) {
-		verifyCountQuery(t, fmt.Sprintf("ActivityStatus = 'Running' AND ActivityType = '%s'", activityType), 1)
+	t.Run("CountByExecutionStatus", func(t *testing.T) {
+		verifyCountQuery(t, fmt.Sprintf("ExecutionStatus = 'Running' AND ActivityType = '%s'", activityType), 1)
 	})
 
 	t.Run("CountByTaskQueue", func(t *testing.T) {
-		verifyCountQuery(t, fmt.Sprintf("ActivityTaskQueue = '%s' AND ActivityType = '%s'", s.tv.TaskQueue().GetName(), activityType), 1)
+		verifyCountQuery(t, fmt.Sprintf("TaskQueue = '%s' AND ActivityType = '%s'", s.tv.TaskQueue().GetName(), activityType), 1)
 	})
 
-	t.Run("GroupByActivityStatus", func(t *testing.T) {
+	t.Run("GroupByExecutionStatus", func(t *testing.T) {
 		groupByType := &commonpb.ActivityType{Name: "count-groupby-test-type"}
 		taskQueue := s.tv.TaskQueue().GetName()
 
@@ -2604,7 +2604,7 @@ func (s *standaloneActivityTestSuite) TestCountActivityExecutions() {
 			require.NotEmpty(t, resp.GetRunId())
 		}
 
-		query := fmt.Sprintf("ActivityType = '%s' GROUP BY ActivityStatus", groupByType.Name)
+		query := fmt.Sprintf("ActivityType = '%s' GROUP BY ExecutionStatus", groupByType.Name)
 		var resp *workflowservice.CountActivityExecutionsResponse
 		s.Eventually(
 			func() bool {
