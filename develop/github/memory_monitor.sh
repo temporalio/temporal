@@ -35,9 +35,11 @@ write_snapshot() {
   fi
 
   # Get processes with >=1% memory, format as "name (MB)"
-  local top_procs="$(ps -eo %mem,rss,comm --sort=-%mem | awk 'NR>1 && $1>=1.0 {printf "%s (%dMB), ", $3, $2/1024}' | sed 's/, $//')"
+  local top_procs
+  top_procs="$(ps -eo %mem,rss,comm --sort=-%mem | awk 'NR>1 && $1>=1.0 {printf "%s (%dMB), ", $3, $2/1024}' | sed 's/, $//')"
 
-  local timestamp="$(date '+%H:%M:%S')"
+  local timestamp
+  timestamp="$(date '+%H:%M:%S')"
 
   # Append to history
   echo "$timestamp $pct $memused_mb $goroutines $top_procs" >> "$HISTORY_FILE"
