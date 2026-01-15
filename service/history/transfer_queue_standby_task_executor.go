@@ -127,7 +127,7 @@ func (t *transferQueueStandbyTaskExecutor) executeChasmSideEffectTransferTask(
 		ctx context.Context,
 		wfContext historyi.WorkflowContext,
 		ms historyi.MutableState,
-		release historyi.ReleaseWorkflowContextFunc,
+		_ historyi.ReleaseWorkflowContextFunc,
 	) (any, error) {
 		return validateChasmSideEffectTask(
 			ctx,
@@ -155,7 +155,7 @@ func (t *transferQueueStandbyTaskExecutor) processActivityTask(
 	transferTask *tasks.ActivityTask,
 ) error {
 	processTaskIfClosed := false
-	actionFn := func(_ context.Context, wfContext historyi.WorkflowContext, mutableState historyi.MutableState, release historyi.ReleaseWorkflowContextFunc) (interface{}, error) {
+	actionFn := func(_ context.Context, wfContext historyi.WorkflowContext, mutableState historyi.MutableState, _ historyi.ReleaseWorkflowContextFunc) (interface{}, error) {
 		activityInfo, ok := mutableState.GetActivityInfo(transferTask.ScheduledEventID)
 		if !ok {
 			return nil, nil
@@ -199,7 +199,7 @@ func (t *transferQueueStandbyTaskExecutor) processWorkflowTask(
 	ctx context.Context,
 	transferTask *tasks.WorkflowTask,
 ) error {
-	actionFn := func(_ context.Context, wfContext historyi.WorkflowContext, mutableState historyi.MutableState, release historyi.ReleaseWorkflowContextFunc) (interface{}, error) {
+	actionFn := func(_ context.Context, wfContext historyi.WorkflowContext, mutableState historyi.MutableState, _ historyi.ReleaseWorkflowContextFunc) (interface{}, error) {
 		wtInfo := mutableState.GetWorkflowTaskByID(transferTask.ScheduledEventID)
 		if wtInfo == nil {
 			return nil, nil
@@ -362,7 +362,7 @@ func (t *transferQueueStandbyTaskExecutor) processCancelExecution(
 	transferTask *tasks.CancelExecutionTask,
 ) error {
 	processTaskIfClosed := false
-	actionFn := func(_ context.Context, wfContext historyi.WorkflowContext, mutableState historyi.MutableState, release historyi.ReleaseWorkflowContextFunc) (interface{}, error) {
+	actionFn := func(_ context.Context, wfContext historyi.WorkflowContext, mutableState historyi.MutableState, _ historyi.ReleaseWorkflowContextFunc) (interface{}, error) {
 		requestCancelInfo, ok := mutableState.GetRequestCancelInfo(transferTask.InitiatedEventID)
 		if !ok {
 			return nil, nil
@@ -395,7 +395,7 @@ func (t *transferQueueStandbyTaskExecutor) processSignalExecution(
 	transferTask *tasks.SignalExecutionTask,
 ) error {
 	processTaskIfClosed := false
-	actionFn := func(_ context.Context, wfContext historyi.WorkflowContext, mutableState historyi.MutableState, release historyi.ReleaseWorkflowContextFunc) (interface{}, error) {
+	actionFn := func(_ context.Context, wfContext historyi.WorkflowContext, mutableState historyi.MutableState, _ historyi.ReleaseWorkflowContextFunc) (interface{}, error) {
 		signalInfo, ok := mutableState.GetSignalInfo(transferTask.InitiatedEventID)
 		if !ok {
 			return nil, nil
@@ -444,10 +444,10 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 		childAbandon := childWorkflowInfo.ParentClosePolicy == enumspb.PARENT_CLOSE_POLICY_ABANDON
 
 		// Copy needed values from childWorkflowInfo before releasing mutable state
-		targetNamespaceID := childWorkflowInfo.NamespaceId
-		targetNamespaceName := namespace.Name(childWorkflowInfo.Namespace)
-		startedWorkflowID := childWorkflowInfo.StartedWorkflowId
-		startedRunID := childWorkflowInfo.StartedRunId
+		childTargetNamespaceID := childWorkflowInfo.NamespaceId
+		childTargetNamespaceName := namespace.Name(childWorkflowInfo.Namespace)
+		childStartedWorkflowID := childWorkflowInfo.StartedWorkflowId
+		childStartedRunID := childWorkflowInfo.StartedRunId
 		childClock := childWorkflowInfo.Clock
 
 		// no need for mutable state anymore, release workflow lock
@@ -466,22 +466,22 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 			return &struct{}{}, nil
 		}
 
-		if targetNamespaceID == "" {
+		if childTargetNamespaceID == "" {
 			// This is for backward compatibility.
 			// Old mutable state may not have the target namespace ID set in childWorkflowInfo.
 
-			targetNamespaceEntry, err := t.registry.GetNamespace(targetNamespaceName)
+			targetNamespaceEntry, err := t.registry.GetNamespace(childTargetNamespaceName)
 			if err != nil {
 				return nil, err
 			}
-			targetNamespaceID = targetNamespaceEntry.ID().String()
+			childTargetNamespaceID = targetNamespaceEntry.ID().String()
 		}
 
 		_, err = t.historyRawClient.VerifyFirstWorkflowTaskScheduled(ctx, &historyservice.VerifyFirstWorkflowTaskScheduledRequest{
-			NamespaceId: targetNamespaceID,
+			NamespaceId: childTargetNamespaceID,
 			WorkflowExecution: &commonpb.WorkflowExecution{
-				WorkflowId: startedWorkflowID,
-				RunId:      startedRunID,
+				WorkflowId: childStartedWorkflowID,
+				RunId:      childStartedRunID,
 			},
 			Clock: childClock,
 		})
