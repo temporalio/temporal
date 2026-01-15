@@ -200,6 +200,15 @@ func (p *visibilityManagerImpl) convertToChasmExecutionInfo(
 		return nil, err
 	}
 
+	// If TaskQueue is registered in the mapper, populate it from the execution's TaskQueue field.
+	// TaskQueue is a preallocated search attribute that maps to the system column.
+	if chasmAliasedSAs == nil {
+		chasmAliasedSAs = make(map[string]chasm.VisibilityValue)
+	}
+	if _, err := mapper.Field(sadefs.TaskQueue); err == nil && exec.TaskQueue != "" {
+		chasmAliasedSAs[sadefs.TaskQueue] = chasm.VisibilityValueString(exec.TaskQueue)
+	}
+
 	customAliasedSAs, err := searchattribute.AliasFields(
 		p.searchAttributesMapperProvider,
 		customSAs,

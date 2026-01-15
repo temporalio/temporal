@@ -22,6 +22,8 @@ func (l *library) Components() []*chasm.RegistrableComponent {
 				PayloadTotalCountSearchAttribute,
 				PayloadTotalSizeSearchAttribute,
 				PayloadExecutionStatusSearchAttribute,
+				ExecutionStatusSearchAttribute,
+				chasm.SearchAttributeTaskQueue,
 			),
 		),
 	}

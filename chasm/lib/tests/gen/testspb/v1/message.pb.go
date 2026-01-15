@@ -30,6 +30,7 @@ type TestPayloadStore struct {
 	// (-- api-linter: core::0142::time-field-type=disabled --)
 	ExpirationTimes map[string]*timestamppb.Timestamp `protobuf:"bytes,3,rep,name=expiration_times,json=expirationTimes,proto3" json:"expiration_times,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	Closed          bool                              `protobuf:"varint,4,opt,name=closed,proto3" json:"closed,omitempty"`
+	TaskQueue       string                            `protobuf:"bytes,5,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -90,6 +91,13 @@ func (x *TestPayloadStore) GetClosed() bool {
 		return x.Closed
 	}
 	return false
+}
+
+func (x *TestPayloadStore) GetTaskQueue() string {
+	if x != nil {
+		return x.TaskQueue
+	}
+	return ""
 }
 
 type TestPayloadTTLPureTask struct {
@@ -184,14 +192,16 @@ var File_temporal_server_chasm_lib_tests_proto_v1_message_proto protoreflect.Fil
 
 const file_temporal_server_chasm_lib_tests_proto_v1_message_proto_rawDesc = "" +
 	"\n" +
-	"6temporal/server/chasm/lib/tests/proto/v1/message.proto\x12(temporal.server.chasm.lib.tests.proto.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xc6\x02\n" +
+	"6temporal/server/chasm/lib/tests/proto/v1/message.proto\x12(temporal.server.chasm.lib.tests.proto.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xe5\x02\n" +
 	"\x10TestPayloadStore\x12\x1f\n" +
 	"\vtotal_count\x18\x01 \x01(\x03R\n" +
 	"totalCount\x12\x1d\n" +
 	"\n" +
 	"total_size\x18\x02 \x01(\x03R\ttotalSize\x12z\n" +
 	"\x10expiration_times\x18\x03 \x03(\v2O.temporal.server.chasm.lib.tests.proto.v1.TestPayloadStore.ExpirationTimesEntryR\x0fexpirationTimes\x12\x16\n" +
-	"\x06closed\x18\x04 \x01(\bR\x06closed\x1a^\n" +
+	"\x06closed\x18\x04 \x01(\bR\x06closed\x12\x1d\n" +
+	"\n" +
+	"task_queue\x18\x05 \x01(\tR\ttaskQueue\x1a^\n" +
 	"\x14ExpirationTimesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x120\n" +
 	"\x05value\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x05value:\x028\x01\"9\n" +
