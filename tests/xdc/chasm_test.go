@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/suite"
-	"go.temporal.io/api/common/v1"
+	commonpb "go.temporal.io/api/common/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
@@ -100,7 +100,7 @@ func (s *ChasmSuite) TestRetentionTimer() {
 
 	describeExecutionRequest := &adminservice.DescribeMutableStateRequest{
 		Namespace: nsName,
-		Execution: &common.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: storeID,
 		},
 		Archetype: archetype,
@@ -135,7 +135,7 @@ func (s *ChasmSuite) TestRetentionTimer() {
 	}, 10*time.Second, 100*time.Millisecond)
 
 	// Wait for ns registry refresh
-	time.Sleep(2 * testcore.NamespaceCacheRefreshInterval)
+	time.Sleep(2 * testcore.NamespaceCacheRefreshInterval) //nolint:forbidigo
 
 	// Close the execution and validate it's deleted on both clusters.
 	_, err = tests.ClosePayloadStoreHandler(
@@ -147,12 +147,9 @@ func (s *ChasmSuite) TestRetentionTimer() {
 	)
 	s.NoError(err)
 
-	// Wait for retention period
-	time.Sleep(retention)
-
 	for _, cluster := range []*testcore.TestCluster{s.clusters[0], s.clusters[1]} {
 		s.Eventually(func() bool {
-			// Wait for replication and retention timer task processing
+			// Wait for replication, retention period, and retention timer task processing.
 			_, err = cluster.AdminClient().DescribeMutableState(testcore.NewContext(), describeExecutionRequest)
 			return errors.As(err, new(*serviceerror.NotFound))
 		}, 10*time.Second, 100*time.Millisecond)
