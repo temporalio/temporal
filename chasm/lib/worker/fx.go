@@ -1,7 +1,6 @@
 package worker
 
 import (
-	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
 	workerstatepb "go.temporal.io/server/chasm/lib/worker/gen/workerpb/v1"
 	"go.temporal.io/server/common"
@@ -10,6 +9,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/resource"
 	"go.uber.org/fx"
 )
 
@@ -20,9 +20,9 @@ func Register(
 	return registry.Register(library)
 }
 
-// HistoryClientProvider wraps the generated history client to implement HistoryClient interface.
-// Only used in history service where HistoryServiceClient is available.
-func HistoryClientProvider(client historyservice.HistoryServiceClient) HistoryClient {
+// HistoryClientProvider wraps the resource.HistoryClient to implement HistoryClient interface.
+// Only used in history service where HistoryClient is available.
+func HistoryClientProvider(client resource.HistoryClient) HistoryClient {
 	return client
 }
 
