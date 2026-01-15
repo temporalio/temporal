@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/chasm"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -400,6 +401,7 @@ type Service struct {
 	visibilityManager manager.VisibilityManager
 	server            *grpc.Server
 	httpAPIServer     *HTTPAPIServer
+	chasmRegistry     *chasm.Registry
 
 	logger            log.Logger
 	grpcListener      net.Listener
@@ -421,6 +423,7 @@ func NewService(
 	grpcListener net.Listener,
 	metricsHandler metrics.Handler,
 	membershipMonitor membership.Monitor,
+	chasmRegistry *chasm.Registry,
 ) *Service {
 	return &Service{
 		config:            serviceConfig,
@@ -436,6 +439,7 @@ func NewService(
 		grpcListener:      grpcListener,
 		metricsHandler:    metricsHandler,
 		membershipMonitor: membershipMonitor,
+		chasmRegistry:     chasmRegistry,
 	}
 }
 
@@ -447,6 +451,7 @@ func (s *Service) Start() {
 	workflowservice.RegisterWorkflowServiceServer(s.server, s.handler)
 	adminservice.RegisterAdminServiceServer(s.server, s.adminHandler)
 	operatorservice.RegisterOperatorServiceServer(s.server, s.operatorHandler)
+	s.chasmRegistry.RegisterServices(s.server)
 
 	reflection.Register(s.server)
 

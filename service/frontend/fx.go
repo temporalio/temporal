@@ -133,6 +133,7 @@ func NewServiceProvider(
 	grpcListener net.Listener,
 	metricsHandler metrics.Handler,
 	membershipMonitor membership.Monitor,
+	chasmRegistry *chasm.Registry,
 ) *Service {
 	return NewService(
 		serviceConfig,
@@ -148,6 +149,7 @@ func NewServiceProvider(
 		grpcListener,
 		metricsHandler,
 		membershipMonitor,
+		chasmRegistry,
 	)
 }
 
