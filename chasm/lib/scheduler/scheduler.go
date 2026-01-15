@@ -61,6 +61,13 @@ var (
 	_ (chasm.VisibilityMemoProvider)             = (*Scheduler)(nil)
 )
 
+var (
+	executionStatusRunning   = "Running"
+	executionStatusCompleted = "Completed"
+)
+
+var executionStatusSearchAttribute = chasm.NewSearchAttributeKeyword("ExecutionStatus", chasm.SearchAttributeFieldLowCardinalityKeyword01)
+
 const (
 	// How many recent actions to keep on the Info.RecentActions list.
 	recentActionCount = 10
@@ -657,9 +664,17 @@ func (s *Scheduler) validateConflictToken(token []byte) bool {
 	return bytes.Equal(current, token)
 }
 
+func (s *Scheduler) executionStatus() string {
+	if s.Closed {
+		return executionStatusCompleted
+	}
+	return executionStatusRunning
+}
+
 // SearchAttributes returns the Temporal-managed key values for visibility.
 func (s *Scheduler) SearchAttributes(chasm.Context) []chasm.SearchAttributeKeyValue {
 	return []chasm.SearchAttributeKeyValue{
+		executionStatusSearchAttribute.Value(s.executionStatus()),
 		chasm.SearchAttributeTemporalSchedulePaused.Value(s.Schedule.GetState().GetPaused()),
 	}
 }
