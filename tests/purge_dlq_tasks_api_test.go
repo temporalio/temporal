@@ -62,7 +62,7 @@ func (q *faultyDLQ) DeleteTasks(
 }
 
 func (s *PurgeDLQTasksSuite) SetupSuite() {
-	s.FunctionalTestBase.SetupSuiteWithCluster(
+	s.SetupSuiteWithCluster(
 		testcore.WithFxOptionsForService(primitives.HistoryService,
 			fx.Decorate(func(manager persistence.HistoryTaskQueueManager) persistence.HistoryTaskQueueManager {
 				s.dlq = &faultyDLQ{HistoryTaskQueueManager: manager}
@@ -180,7 +180,7 @@ func (s *PurgeDLQTasksSuite) TestPurgeDLQTasks() {
 			})
 			s.NoError(err)
 			s.Len(readRawTasksResponse.Tasks, 1)
-			s.Assert().Equal(int64(persistence.FirstQueueMessageID+2), readRawTasksResponse.Tasks[0].MessageMetadata.ID)
+			s.Equal(int64(persistence.FirstQueueMessageID+2), readRawTasksResponse.Tasks[0].MessageMetadata.ID)
 		})
 	}
 }

@@ -142,7 +142,7 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WhileRunning() {
 
 	description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 	s.NoError(err)
-	s.Equal(1, len(description.PendingActivities))
+	s.Len(description.PendingActivities, 1)
 	s.True(description.PendingActivities[0].Paused)
 
 	// wait long enough for activity to retry if pause is not working
@@ -153,7 +153,7 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WhileRunning() {
 	// make sure activity is not completed, and was not retried
 	description, err = s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 	s.NoError(err)
-	s.Equal(1, len(description.PendingActivities))
+	s.Len(description.PendingActivities, 1)
 	s.True(description.PendingActivities[0].Paused)
 	s.Equal(int32(2), description.PendingActivities[0].Attempt)
 	s.NotNil(description.PendingActivities[0].LastFailure)
@@ -262,7 +262,7 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_IncreaseAttemptsO
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
 		require.NotNil(t, description)
-		require.Equal(t, 1, len(description.PendingActivities))
+		require.Len(t, description.PendingActivities, 1)
 		require.True(t, description.PendingActivities[0].Paused)
 		require.Equal(t, int32(2), description.PendingActivities[0].Attempt)
 		require.NotNil(t, description.PendingActivities[0].LastFailure)
@@ -341,7 +341,7 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WhileWaiting() {
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
-		require.Equal(t, 1, len(description.PendingActivities))
+		require.Len(t, description.PendingActivities, 1)
 		require.Equal(t, int32(1), startedActivityCount.Load())
 	}, 5*time.Second, 100*time.Millisecond)
 
@@ -367,7 +367,7 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WhileWaiting() {
 	// make sure activity is not completed, and was not retried
 	description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 	s.NoError(err)
-	s.Equal(1, len(description.PendingActivities))
+	s.Len(description.PendingActivities, 1)
 	s.True(description.PendingActivities[0].Paused)
 	s.Equal(int32(2), description.PendingActivities[0].Attempt)
 	s.NotNil(description.PendingActivities[0].PauseInfo)
@@ -545,7 +545,7 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WithReset() {
 		require.Len(t, description.GetPendingActivities(), 1)
 		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_PAUSED, description.PendingActivities[0].State)
 		// also verify that the number of attempts was not reset
-		require.True(t, description.PendingActivities[0].Attempt > 1)
+		require.Greater(t, description.PendingActivities[0].Attempt, 1)
 	}, 5*time.Second, 100*time.Millisecond)
 
 	activityWasReset = true

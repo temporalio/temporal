@@ -132,7 +132,7 @@ func (s *ActivityApiUpdateClientTestSuite) TestActivityUpdateApi_ChangeRetryInte
 
 	description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 	s.NoError(err)
-	s.Equal(1, len(description.PendingActivities))
+	s.Len(description.PendingActivities, 1)
 
 	activityUpdated <- struct{}{}
 
@@ -215,10 +215,10 @@ func (s *ActivityApiUpdateClientTestSuite) TestActivityUpdateApi_ChangeScheduleT
 	var out string
 	err = workflowRun.Get(ctx, &out)
 	var activityError *temporal.ActivityError
-	s.True(errors.As(err, &activityError))
+	s.ErrorAs(err, &activityError)
 	s.Equal(enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE, activityError.RetryState())
 	var timeoutError *temporal.TimeoutError
-	s.True(errors.As(activityError.Unwrap(), &timeoutError))
+	s.ErrorAs(activityError.Unwrap(), &timeoutError)
 	s.Equal(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, timeoutError.TimeoutType())
 	s.Equal(int32(1), startedActivityCount.Load())
 }
@@ -375,7 +375,7 @@ func (s *ActivityApiUpdateClientTestSuite) TestActivityUpdateApi_ResetDefaultOpt
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
-		require.Equal(t, 1, len(description.PendingActivities))
+		require.Len(t, description.PendingActivities, 1)
 		require.Equal(t, int32(1000), description.PendingActivities[0].GetActivityOptions().GetRetryPolicy().GetMaximumAttempts())
 	}, 3*time.Second, 200*time.Millisecond)
 
@@ -391,7 +391,7 @@ func (s *ActivityApiUpdateClientTestSuite) TestActivityUpdateApi_ResetDefaultOpt
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
-		require.Equal(t, 1, len(description.PendingActivities))
+		require.Len(t, description.PendingActivities, 1)
 		require.Equal(t, int32(defaultMaximumAttempts), description.PendingActivities[0].GetActivityOptions().GetRetryPolicy().GetMaximumAttempts())
 	}, 3*time.Second, 200*time.Millisecond)
 

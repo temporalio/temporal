@@ -105,7 +105,7 @@ func (s *VersioningIntegSuite) SetupSuite() {
 		// matching so they're a good condidate.
 		dynamicconfig.MatchingUseNewMatcher.Key(): true,
 	}
-	s.FunctionalTestBase.SetupSuiteWithCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
+	s.SetupSuiteWithCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 }
 
 func (s *VersioningIntegSuite) TestVersionRuleConflictToken() {
@@ -222,7 +222,7 @@ func (s *VersioningIntegSuite) TestAssignmentRuleDelete() {
 	// success
 	cT = s.deleteAssignmentRule(ctx, tq, 0, cT, true)
 	res := s.getVersioningRules(ctx, tq)
-	s.Equal(1, len(res.GetAssignmentRules()))
+	s.Len(res.GetAssignmentRules(), 1)
 
 	// failure due to requirement that once a fully-ramped rule exists, at least one must always exist
 	s.deleteAssignmentRule(ctx, tq, 0, cT, false)
@@ -233,7 +233,7 @@ func (s *VersioningIntegSuite) TestAssignmentRuleDelete() {
 
 	// delete again, success
 	s.deleteAssignmentRule(ctx, tq, 0, cT, true)
-	s.Equal(1, len(res.GetAssignmentRules()))
+	s.Len(res.GetAssignmentRules(), 1)
 
 }
 
@@ -250,7 +250,7 @@ func (s *VersioningIntegSuite) TestRedirectRuleInsert() {
 	res := s.getVersioningRules(ctx, tq)
 	rulesMap := mkRedirectRulesMap(res.GetCompatibleRedirectRules())
 	s.Contains(rulesMap, "1")
-	s.Equal(rulesMap["1"], "0")
+	s.Equal("0", rulesMap["1"])
 
 	// failure due to cycle
 	s.insertRedirectRule(ctx, tq, "0", "1", cT, false)
@@ -274,7 +274,7 @@ func (s *VersioningIntegSuite) TestRedirectRuleReplace() {
 	res := s.getVersioningRules(ctx, tq)
 	rulesMap := mkRedirectRulesMap(res.GetCompatibleRedirectRules())
 	s.Contains(rulesMap, "1")
-	s.Equal(rulesMap["1"], "2")
+	s.Equal("2", rulesMap["1"])
 
 	// failure due to source not found
 	s.replaceRedirectRule(ctx, tq, "10", "3", cT, false)
@@ -297,7 +297,7 @@ func (s *VersioningIntegSuite) TestRedirectRuleDelete() {
 	// success
 	cT = s.deleteRedirectRule(ctx, tq, "1", cT, true)
 	res := s.getVersioningRules(ctx, tq)
-	s.Equal(1, len(res.GetCompatibleRedirectRules()))
+	s.Len(res.GetCompatibleRedirectRules(), 1)
 
 	// failure due to source not found
 	s.deleteRedirectRule(ctx, tq, "1", cT, false)
@@ -321,8 +321,8 @@ func (s *VersioningIntegSuite) TestCommitBuildID() {
 	// no recent poller + force --> success
 	cT = s.commitBuildId(ctx, tq, "1", true, cT, true)
 	res := s.getVersioningRules(ctx, tq)
-	s.Equal(1, len(res.GetAssignmentRules()))
-	s.Equal(0, len(res.GetCompatibleRedirectRules()))
+	s.Len(res.GetAssignmentRules(), 1)
+	s.Empty(res.GetCompatibleRedirectRules())
 	s.Equal("1", res.GetAssignmentRules()[0].GetRule().GetTargetBuildId())
 	s.Equal(float32(100), res.GetAssignmentRules()[0].GetRule().GetPercentageRamp().GetRampPercentage())
 
@@ -338,8 +338,8 @@ func (s *VersioningIntegSuite) TestCommitBuildID() {
 	s.registerWorkflowAndPollVersionedTaskQueue(tq, "2", true)
 	s.commitBuildId(ctx, tq, "2", false, cT, true)
 	res = s.getVersioningRules(ctx, tq)
-	s.Equal(1, len(res.GetAssignmentRules()))
-	s.Equal(0, len(res.GetCompatibleRedirectRules()))
+	s.Len(res.GetAssignmentRules(), 1)
+	s.Empty(res.GetCompatibleRedirectRules())
 	s.Equal("2", res.GetAssignmentRules()[0].GetRule().GetTargetBuildId())
 	s.Equal(float32(100), res.GetAssignmentRules()[0].GetRule().GetPercentageRamp().GetRampPercentage())
 }
@@ -605,8 +605,8 @@ func (s *VersioningIntegSuite) TestDispatchNewWorkflowWithRamp() {
 	}
 
 	// both builds should've got executions
-	s.Greater(counter["done v1!"], 0)
-	s.Greater(counter["done v2!"], 0)
+	s.Positive(counter["done v1!"])
+	s.Positive(counter["done v2!"])
 	s.Equal(50, counter["done v1!"]+counter["done v2!"])
 }
 
@@ -681,7 +681,7 @@ func (s *VersioningIntegSuite) workflowStaysInBuildId() {
 
 	dw, err := s.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
 	s.NoError(err)
-	s.Equal(1, len(dw.GetPendingActivities()))
+	s.Len(dw.GetPendingActivities(), 1)
 	s.NotNil(dw.GetPendingActivities()[0].GetUseWorkflowBuildId())
 
 	close(rulesUpdated)
@@ -763,7 +763,7 @@ func (s *VersioningIntegSuite) unversionedWorkflowStaysUnversioned() {
 
 	dw, err := s.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
 	s.NoError(err)
-	s.Equal(1, len(dw.GetPendingActivities()))
+	s.Len(dw.GetPendingActivities(), 1)
 	s.Nil(dw.GetPendingActivities()[0].GetAssignedBuildId())
 	close(rulesUpdated)
 
@@ -1068,7 +1068,7 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSpooled(versione
 				s.Equal(wfV1, dw.GetWorkflowExecutionInfo().GetAssignedBuildId())
 				s.Equal(wfV1, dw.GetWorkflowExecutionInfo().GetMostRecentWorkerVersionStamp().GetBuildId())
 			} else {
-				s.Equal("", dw.GetWorkflowExecutionInfo().GetAssignedBuildId())
+				s.Empty(dw.GetWorkflowExecutionInfo().GetAssignedBuildId())
 				s.False(dw.GetWorkflowExecutionInfo().GetMostRecentWorkerVersionStamp().GetUseVersioning())
 			}
 			return v1 == dw.GetPendingActivities()[0].GetLastIndependentlyAssignedBuildId()
@@ -1104,7 +1104,7 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSpooled(versione
 		func() bool {
 			dw, err := s.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
 			s.NoError(err)
-			s.Equal(1, len(dw.GetPendingActivities()))
+			s.Len(dw.GetPendingActivities(), 1)
 			return v2 == dw.GetPendingActivities()[0].GetLastIndependentlyAssignedBuildId()
 		},
 		10*time.Second,
@@ -1143,7 +1143,7 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSpooled(versione
 		func() bool {
 			dw, err := s.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
 			s.NoError(err)
-			s.Equal(1, len(dw.GetPendingActivities()))
+			s.Len(dw.GetPendingActivities(), 1)
 			return v3 == dw.GetPendingActivities()[0].GetLastIndependentlyAssignedBuildId()
 		},
 		10*time.Second,
@@ -1275,7 +1275,7 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSyncMatch(versio
 				s.Equal(wfV1, dw.GetWorkflowExecutionInfo().GetAssignedBuildId())
 				s.Equal(wfV1, dw.GetWorkflowExecutionInfo().GetMostRecentWorkerVersionStamp().GetBuildId())
 			} else {
-				s.Equal("", dw.GetWorkflowExecutionInfo().GetAssignedBuildId())
+				s.Empty(dw.GetWorkflowExecutionInfo().GetAssignedBuildId())
 				s.False(dw.GetWorkflowExecutionInfo().GetMostRecentWorkerVersionStamp().GetUseVersioning())
 			}
 			return v1 == dw.GetPendingActivities()[0].GetLastIndependentlyAssignedBuildId()
@@ -1316,7 +1316,7 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSyncMatch(versio
 		func() bool {
 			dw, err := s.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
 			s.NoError(err)
-			s.Equal(1, len(dw.GetPendingActivities()))
+			s.Len(dw.GetPendingActivities(), 1)
 			return v2 == dw.GetPendingActivities()[0].GetLastIndependentlyAssignedBuildId()
 		},
 		10*time.Second,
@@ -2227,7 +2227,7 @@ func (s *VersioningIntegSuite) TestRedirectWithConcurrentActivities() {
 				s.NoError(err)
 				res = append(res, activityVersion)
 				// The output of a newer build ID should never be sent to a wf worker of an older build ID
-				s.Assert().GreaterOrEqual(wfVersion, activityVersion)
+				s.GreaterOrEqual(wfVersion, activityVersion)
 				// TODO: uncomment this check once workflow.GetInfo(wfCtx).GetCurrentBuildID() returns correct value
 				// based on last started task build ID, not last completed task build ID.
 				// s.Assert().GreaterOrEqual(workflow.GetInfo(wfCtx).GetCurrentBuildID(), activityVersion)
@@ -2283,7 +2283,7 @@ func (s *VersioningIntegSuite) TestRedirectWithConcurrentActivities() {
 	var maxStartedTimestamp time.Time
 	for wh.HasNext() {
 		he, err := wh.Next()
-		s.Nil(err)
+		s.NoError(err)
 		var taskStartedStamp *commonpb.WorkerVersionStamp
 		var taskRedirectCounter int64
 		var buildId string
@@ -2481,7 +2481,7 @@ func (s *VersioningIntegSuite) TestDispatchActivityEager() {
 		},
 	})
 	s.Require().NoError(err)
-	s.Require().Equal(1, len(completionResponse.ActivityTasks))
+	s.Require().Len(completionResponse.ActivityTasks, 1)
 	s.Require().Equal("compatible", completionResponse.ActivityTasks[0].ActivityId)
 }
 
@@ -3999,7 +3999,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_Reachabil
 			Namespace: s.Namespace().String(),
 			Query:     queryARunning,
 		})
-		s.Nil(err)
+		s.NoError(err)
 		return resp.GetCount() > 0
 	}, 5*time.Second, 50*time.Millisecond)
 
@@ -4067,7 +4067,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_BasicReac
 			Namespace: s.Namespace().String(),
 			Query:     queryARunning,
 		})
-		s.Nil(err)
+		s.NoError(err)
 		return resp.GetCount() > 0
 	}, 3*time.Second, 50*time.Millisecond)
 
@@ -4126,9 +4126,9 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Unversioned() {
 		})
 		s.NoError(err)
 		s.NotNil(resp)
-		s.Assert().Equal(1, len(resp.GetVersionsInfo()), "should be 1 because only default/unversioned queue")
+		s.Len(resp.GetVersionsInfo(), 1, "should be 1 because only default/unversioned queue")
 		versionInfo := resp.GetVersionsInfo()[""]
-		s.Assert().Equal(enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, versionInfo.GetTaskReachability())
+		s.Equal(enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, versionInfo.GetTaskReachability())
 		var pollersInfo []*taskqueuepb.PollerInfo
 		for _, t := range versionInfo.GetTypesInfo() {
 			pollersInfo = append(pollersInfo, t.GetPollers()...)
@@ -4176,9 +4176,9 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_ReportFlags() {
 		})
 		s.NoError(err)
 		s.NotNil(resp)
-		s.Assert().Equal(1, len(resp.GetVersionsInfo()), "should be 1 because only default/unversioned queue")
+		s.Len(resp.GetVersionsInfo(), 1, "should be 1 because only default/unversioned queue")
 		versionInfo := resp.GetVersionsInfo()[""]
-		s.Assert().Equal(enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, versionInfo.GetTaskReachability())
+		s.Equal(enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, versionInfo.GetTaskReachability())
 		var pollersInfo []*taskqueuepb.PollerInfo
 		for _, t := range versionInfo.GetTypesInfo() {
 			pollersInfo = append(pollersInfo, t.GetPollers()...)
@@ -4204,11 +4204,11 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_ReportFlags() {
 	})
 	s.NoError(err)
 	s.NotNil(resp)
-	s.Assert().Equal(1, len(resp.GetVersionsInfo()), "should be 1 because only default/unversioned queue")
+	s.Len(resp.GetVersionsInfo(), 1, "should be 1 because only default/unversioned queue")
 	versionInfo := resp.GetVersionsInfo()[""]
-	s.Assert().Equal(enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, versionInfo.GetTaskReachability())
+	s.Equal(enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, versionInfo.GetTaskReachability())
 	for _, t := range versionInfo.GetTypesInfo() {
-		s.Zero(len(t.GetPollers()), "poller info should not be reported")
+		s.Empty(t.GetPollers(), "poller info should not be reported")
 	}
 
 	// ask for pollers only
@@ -4222,11 +4222,11 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_ReportFlags() {
 	})
 	s.NoError(err)
 	s.NotNil(resp)
-	s.Assert().Equal(1, len(resp.GetVersionsInfo()), "should be 1 because only default/unversioned queue")
+	s.Len(resp.GetVersionsInfo(), 1, "should be 1 because only default/unversioned queue")
 	versionInfo = resp.GetVersionsInfo()[""]
-	s.Assert().Equal(enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, versionInfo.GetTaskReachability())
+	s.Equal(enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, versionInfo.GetTaskReachability())
 	for _, t := range versionInfo.GetTypesInfo() {
-		s.Equal(1, len(t.GetPollers()), "only one poller info should be reported")
+		s.Len(t.GetPollers(), 1, "only one poller info should be reported")
 	}
 }
 
@@ -4447,7 +4447,7 @@ func (s *VersioningIntegSuite) insertAssignmentRule(
 	if expectSuccess {
 		s.NoError(err)
 		s.NotNil(res)
-		s.Assert().Equal(newBuildId, res.GetAssignmentRules()[idx].GetRule().GetTargetBuildId())
+		s.Equal(newBuildId, res.GetAssignmentRules()[idx].GetRule().GetTargetBuildId())
 		return res.GetConflictToken()
 	} else {
 		s.Error(err)
@@ -4477,7 +4477,7 @@ func (s *VersioningIntegSuite) replaceAssignmentRule(
 	if expectSuccess {
 		s.NoError(err)
 		s.NotNil(res)
-		s.Assert().Equal(newBuildId, res.GetAssignmentRules()[idx].GetRule().GetTargetBuildId())
+		s.Equal(newBuildId, res.GetAssignmentRules()[idx].GetRule().GetTargetBuildId())
 		return res.GetConflictToken()
 	} else {
 		s.Error(err)
@@ -4523,7 +4523,7 @@ func (s *VersioningIntegSuite) deleteAssignmentRule(
 				break
 			}
 		}
-		s.Assert().False(found)
+		s.False(found)
 		return res.GetConflictToken()
 	} else {
 		s.Error(err)
@@ -4560,7 +4560,7 @@ func (s *VersioningIntegSuite) insertRedirectRule(
 				break
 			}
 		}
-		s.Assert().True(found)
+		s.True(found)
 		return res.GetConflictToken()
 	} else {
 		s.Error(err)
@@ -4597,7 +4597,7 @@ func (s *VersioningIntegSuite) replaceRedirectRule(
 				break
 			}
 		}
-		s.Assert().True(found)
+		s.True(found)
 		return res.GetConflictToken()
 	} else {
 		s.Error(err)
@@ -4631,7 +4631,7 @@ func (s *VersioningIntegSuite) deleteRedirectRule(
 				break
 			}
 		}
-		s.Assert().False(found)
+		s.False(found)
 		return res.GetConflictToken()
 	} else {
 		s.Error(err)
@@ -4662,7 +4662,7 @@ func (s *VersioningIntegSuite) commitBuildId(
 		// 1. Adds a fully-ramped assignment rule for the target Build ID at the end of the list.
 		endIdx := len(res.GetAssignmentRules()) - 1
 		addedRule := res.GetAssignmentRules()[endIdx].GetRule()
-		s.Assert().Equal(targetBuildId, addedRule.GetTargetBuildId())
+		s.Equal(targetBuildId, addedRule.GetTargetBuildId())
 		s.Assert().Equal(float32(100), addedRule.GetPercentageRamp().GetRampPercentage())
 
 		foundOtherAssignmentRuleForTarget := false
@@ -4676,9 +4676,9 @@ func (s *VersioningIntegSuite) commitBuildId(
 			}
 		}
 		// 2. Removes all previously added assignment rules to the given target Build ID (if any).
-		s.Assert().False(foundOtherAssignmentRuleForTarget)
+		s.False(foundOtherAssignmentRuleForTarget)
 		// 3. Removes any fully-ramped assignment rule for other Build IDs.
-		s.Assert().False(foundFullyRampedAssignmentRuleForOtherTarget)
+		s.False(foundFullyRampedAssignmentRuleForOtherTarget)
 		return res.GetConflictToken()
 	} else {
 		s.Error(err)
@@ -4723,8 +4723,8 @@ func (s *VersioningIntegSuite) getBuildIdReachability(
 	s.NotNil(resp)
 	for buildId, vi := range resp.GetVersionsInfo() {
 		expected, ok := expectedReachability[buildId]
-		s.Assert().True(ok, "build id %s was not expected", buildId)
-		s.Assert().Equal(expected, vi.GetTaskReachability(), "build id %s has unexpected reachability", buildId)
+		s.True(ok, "build id %s was not expected", buildId)
+		s.Equal(expected, vi.GetTaskReachability(), "build id %s has unexpected reachability", buildId)
 	}
 }
 
@@ -5036,12 +5036,12 @@ func (s *VersioningIntegSuite) validateWorkflowBuildIds(
 		if expectedStampBuildId != "" {
 			s.NotNil(dw.GetWorkflowExecutionInfo().GetMostRecentWorkerVersionStamp().GetBuildId())
 			s.False(dw.GetWorkflowExecutionInfo().GetMostRecentWorkerVersionStamp().GetUseVersioning())
-			s.Equal(2+len(extraSearchAttrBuildIds), len(searchAttr))
+			s.Len(searchAttr, 2+len(extraSearchAttrBuildIds))
 			s.Equal(worker_versioning.UnversionedSearchAttribute, searchAttr[0])
 			s.True(strings.HasPrefix(searchAttr[1], worker_versioning.UnversionedSearchAttribute))
 		} else {
 			s.Nil(dw.GetWorkflowExecutionInfo().GetMostRecentWorkerVersionStamp())
-			s.Equal(0, len(searchAttr))
+			s.Empty(searchAttr)
 		}
 	} else {
 		if expectedStampBuildId != "" {
@@ -5052,16 +5052,16 @@ func (s *VersioningIntegSuite) validateWorkflowBuildIds(
 		}
 		if newVersioning {
 			s.Equal(expectedBuildId, dw.GetWorkflowExecutionInfo().GetAssignedBuildId())
-			s.Equal(2+len(extraSearchAttrBuildIds), len(searchAttr))
+			s.Len(searchAttr, 2+len(extraSearchAttrBuildIds))
 			s.Equal(worker_versioning.AssignedBuildIdSearchAttribute(expectedBuildId), searchAttr[0])
 			s.Contains(searchAttr, worker_versioning.VersionedBuildIdSearchAttribute(expectedBuildId))
 		} else {
-			s.Equal("", dw.GetWorkflowExecutionInfo().GetAssignedBuildId())
+			s.Empty(dw.GetWorkflowExecutionInfo().GetAssignedBuildId())
 			if expectedStampBuildId != "" {
-				s.Equal(1+len(extraSearchAttrBuildIds), len(searchAttr))
+				s.Len(searchAttr, 1+len(extraSearchAttrBuildIds))
 				s.Contains(searchAttr, worker_versioning.VersionedBuildIdSearchAttribute(expectedBuildId))
 			} else {
-				s.Equal(0, len(searchAttr))
+				s.Empty(searchAttr)
 			}
 		}
 	}
@@ -5086,7 +5086,7 @@ func (s *VersioningIntegSuite) validateWorkflowEventsVersionStamps(
 	checkedInheritedBuildId := false
 	for wh.HasNext() {
 		he, err := wh.Next()
-		s.Nil(err)
+		s.NoError(err)
 		if !checkedInheritedBuildId {
 			// first event
 			checkedInheritedBuildId = true

@@ -154,7 +154,7 @@ func (s *FunctionalClustersTestSuite) TestSimpleWorkflowFailover() {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
-			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
+			s.NoError(binary.Write(buf, binary.LittleEndian, activityCounter))
 
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
@@ -710,7 +710,7 @@ func (s *FunctionalClustersTestSuite) TestStartWorkflowExecution_Failover_Workfl
 	s.logger.Info("PollAndProcessWorkflowTask 2", tag.Error(err))
 	s.NoError(err)
 	s.Equal(1, workflowCompleteTimes)
-	s.Equal(2, len(executions))
+	s.Len(executions, 2)
 	s.Equal(executions[1].GetRunId(), we.GetRunId())
 }
 
@@ -748,7 +748,7 @@ func (s *FunctionalClustersTestSuite) TestTerminateFailover() {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
-			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
+			s.NoError(binary.Write(buf, binary.LittleEndian, activityCounter))
 
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
@@ -1064,7 +1064,7 @@ func (s *FunctionalClustersTestSuite) TestContinueAsNewFailover() {
 			previousRunID = task.WorkflowExecution.GetRunId()
 			continueAsNewCounter++
 			buf := new(bytes.Buffer)
-			s.Nil(binary.Write(buf, binary.LittleEndian, continueAsNewCounter))
+			s.NoError(binary.Write(buf, binary.LittleEndian, continueAsNewCounter))
 
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
@@ -2070,7 +2070,7 @@ func (s *FunctionalClustersTestSuite) TestActivityHeartbeatFailover() {
 	dweResponse, err := client1.DescribeWorkflowExecution(testcore.NewContext(), workflowID, "")
 	s.NoError(err)
 	pendingActivities := dweResponse.GetPendingActivities()
-	s.Equal(1, len(pendingActivities))
+	s.Len(pendingActivities, 1)
 	s.Equal(enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, pendingActivities[0].GetState())
 	heartbeatPayload := pendingActivities[0].GetHeartbeatDetails()
 	var heartbeatValue int
@@ -2248,7 +2248,7 @@ func (s *FunctionalClustersTestSuite) TestLocalNamespaceMigration() {
 	run6, err := client0.ExecuteWorkflow(testCtx, workflowOptions, wfWithBufferedEvents)
 	s.NoError(err)
 	s.NotNil(run6)
-	s.True(run6.GetRunID() != "")
+	s.NotEmpty(run6.GetRunID())
 
 	workflowOptions2 := sdkclient.StartWorkflowOptions{
 		ID:        workflowID7,
@@ -2261,7 +2261,7 @@ func (s *FunctionalClustersTestSuite) TestLocalNamespaceMigration() {
 	run7, err := client0.ExecuteWorkflow(testCtx, workflowOptions2, wfWithBufferedEvents2)
 	s.NoError(err)
 	s.NotNil(run7)
-	s.True(run7.GetRunID() != "")
+	s.NotEmpty(run7.GetRunID())
 
 	// block until first workflow task started
 	select {
@@ -2380,7 +2380,7 @@ func (s *FunctionalClustersTestSuite) TestLocalNamespaceMigration() {
 	})
 	s.NoError(err)
 	s.True(nsResp2.IsGlobalNamespace)
-	s.Equal(2, len(nsResp2.ReplicationConfig.Clusters))
+	s.Len(nsResp2.ReplicationConfig.Clusters, 2)
 	s.Equal(s.clusters[1].ClusterName(), nsResp2.ReplicationConfig.ActiveClusterName)
 
 	// verify all wf in ns is now available in cluster2
@@ -2434,7 +2434,7 @@ func (s *FunctionalClustersTestSuite) TestLocalNamespaceMigration() {
 			},
 		)
 		s.NoError(err)
-		s.True(len(listWorkflowResp.GetExecutions()) > 0)
+		s.NotEmpty(listWorkflowResp.GetExecutions())
 	}
 	verify(workflowID, run1.GetRunID())
 	verify(workflowID2, run2.GetRunID())

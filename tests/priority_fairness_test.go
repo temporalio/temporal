@@ -46,7 +46,7 @@ func (s *PrioritySuite) SetupSuite() {
 		dynamicconfig.MatchingGetTasksBatchSize.Key(): 20,
 		dynamicconfig.MatchingGetTasksReloadAt.Key():  5,
 	}
-	s.FunctionalTestBase.SetupSuiteWithCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
+	s.SetupSuiteWithCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 }
 
 func (s *PrioritySuite) TestPriority_Activity_Basic() {
@@ -273,7 +273,7 @@ func (s *FairnessSuite) SetupSuite() {
 		dynamicConfigOverrides[dynamicconfig.MatchingUseNewMatcher.Key()] = true
 		dynamicConfigOverrides[dynamicconfig.MatchingEnableFairness.Key()] = true
 	}
-	s.FunctionalTestBase.SetupSuiteWithCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
+	s.SetupSuiteWithCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 }
 
 func (s *FairnessSuite) TriggerAutoEnable(tv *testvars.TestVars) {

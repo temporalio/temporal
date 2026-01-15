@@ -182,7 +182,7 @@ func (s *xdcBaseSuite) waitForClusterConnected(
 
 		shard := resp.Shards[0]
 		require.NotNil(c, shard)
-		require.Greater(c, shard.MaxReplicationTaskId, int64(0))
+		require.Positive(c, shard.MaxReplicationTaskId)
 		require.NotNil(c, shard.ShardLocalTime)
 		require.WithinRange(c, shard.ShardLocalTime.AsTime(), s.startTime, time.Now())
 		require.NotNil(c, shard.RemoteClusters)

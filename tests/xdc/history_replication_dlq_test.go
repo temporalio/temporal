@@ -650,7 +650,7 @@ func (t *testExecutableTaskConverter) Convert(
 // This is run only when streaming is enabled for replication.
 func (t *testExecutableTask) Execute() error {
 	err := t.execute()
-	t.replicationTaskExecutorParams.executedTasks <- t.replicationTask
+	t.executedTasks <- t.replicationTask
 	return err
 }
 

@@ -90,7 +90,7 @@ func (s *WorkflowVisibilityTestSuite) TestVisibility() {
 			HistoryEventFilterType: historyEventFilterType,
 			NextPageToken:          nextToken,
 		})
-		s.Nil(historyErr)
+		s.NoError(historyErr)
 		if len(historyResponse.NextPageToken) == 0 {
 			break
 		}

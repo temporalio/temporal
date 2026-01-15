@@ -198,7 +198,7 @@ func (s *WorkerRegistryTestSuite) TestWorkerRegistry_ListWorkers() {
 		})
 		s.NoError(err)
 		s.NotNil(resp)
-		s.Len(resp.GetWorkersInfo(), 0)
+		s.Empty(resp.GetWorkersInfo())
 	}
 }
 

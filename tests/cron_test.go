@@ -239,7 +239,7 @@ func (s *CronTestSuite) TestCronWorkflow() {
 		}},
 	})
 	s.NoError(err)
-	s.Equal(1, len(resp.GetExecutions()))
+	s.Len(resp.GetExecutions(), 1)
 	executionInfo := resp.GetExecutions()[0]
 	s.Equal(targetBackoffDuration, executionInfo.GetExecutionTime().AsTime().Sub(executionInfo.GetStartTime().AsTime()))
 
@@ -249,8 +249,8 @@ func (s *CronTestSuite) TestCronWorkflow() {
 	// Make sure the cron workflow start running at a proper time, in this case 3 seconds after the
 	// startWorkflowExecution request
 	backoffDuration := time.Now().UTC().Sub(startWorkflowTS)
-	s.True(backoffDuration > targetBackoffDuration)
-	s.True(backoffDuration < targetBackoffDuration+backoffDurationTolerance)
+	s.Greater(backoffDuration, targetBackoffDuration)
+	s.Less(backoffDuration, targetBackoffDuration+backoffDurationTolerance)
 
 	_, err = poller.PollAndProcessWorkflowTask()
 	s.NoError(err)
@@ -258,7 +258,7 @@ func (s *CronTestSuite) TestCronWorkflow() {
 	_, err = poller.PollAndProcessWorkflowTask()
 	s.NoError(err)
 
-	s.Equal(3, len(executions))
+	s.Len(executions, 3)
 
 	_, terminateErr := s.FrontendClient().TerminateWorkflowExecution(testcore.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
 		Namespace: s.Namespace().String(),
@@ -384,38 +384,38 @@ func (s *CronTestClientSuite) TestCronWorkflowCompletionStates() {
 		switch iteration {
 		case 1:
 			s.False(workflow.HasLastCompletionResult(ctx))
-			s.Nil(workflow.GetLastError(ctx))
+			s.NoError(workflow.GetLastError(ctx))
 			return "pass", nil
 
 		case 2:
 			s.True(workflow.HasLastCompletionResult(ctx))
 			s.NoError(workflow.GetLastCompletionResult(ctx, &lcr))
-			s.Equal(lcr, "pass")
-			s.Nil(workflow.GetLastError(ctx))
+			s.Equal("pass", lcr)
+			s.NoError(workflow.GetLastError(ctx))
 			return "", errors.New("second error") //nolint:err113
 
 		case 3:
 			s.True(workflow.HasLastCompletionResult(ctx))
 			s.NoError(workflow.GetLastCompletionResult(ctx, &lcr))
-			s.Equal(lcr, "pass")
-			s.NotNil(workflow.GetLastError(ctx))
-			s.Equal(workflow.GetLastError(ctx).Error(), "second error")
+			s.Equal("pass", lcr)
+			s.Error(workflow.GetLastError(ctx))
+			s.Equal("second error", workflow.GetLastError(ctx).Error())
 			s.NoError(workflow.Sleep(ctx, 10*time.Second)) // cause wft timeout
 			panic("should have been timed out on server already")
 
 		case 4:
 			s.True(workflow.HasLastCompletionResult(ctx))
 			s.NoError(workflow.GetLastCompletionResult(ctx, &lcr))
-			s.Equal(lcr, "pass")
-			s.NotNil(workflow.GetLastError(ctx))
-			s.Equal(workflow.GetLastError(ctx).Error(), "workflow timeout (type: StartToClose)")
+			s.Equal("pass", lcr)
+			s.Error(workflow.GetLastError(ctx))
+			s.Equal("workflow timeout (type: StartToClose)", workflow.GetLastError(ctx).Error())
 			return "pass again", nil
 
 		case 5:
 			s.True(workflow.HasLastCompletionResult(ctx))
 			s.NoError(workflow.GetLastCompletionResult(ctx, &lcr))
-			s.Equal(lcr, "pass again")
-			s.Nil(workflow.GetLastError(ctx))
+			s.Equal("pass again", lcr)
+			s.NoError(workflow.GetLastError(ctx))
 			return "final pass", nil
 		}
 
@@ -457,7 +457,7 @@ func (s *CronTestClientSuite) TestCronWorkflowCompletionStates() {
 	s.DurationNear(attrs1.FirstWorkflowTaskBackoff.AsDuration(), targetBackoffDuration, tolerance)
 
 	// wait for first run
-	s.Equal(<-wfCh, 1)
+	s.Equal(1, <-wfCh)
 	s.DurationNear(time.Since(ts), targetBackoffDuration, tolerance)
 	ts = time.Now()
 
@@ -479,24 +479,24 @@ func (s *CronTestClientSuite) TestCronWorkflowCompletionStates() {
 	s.DurationNear(attrs2.FirstWorkflowTaskBackoff.AsDuration(), targetBackoffDuration, tolerance)
 
 	// wait for second run
-	s.Equal(<-wfCh, 2)
+	s.Equal(2, <-wfCh)
 	s.DurationNear(time.Since(ts), targetBackoffDuration, tolerance)
 	ts = time.Now()
 
 	// don't bother checking started events for subsequent runs, we covered the important parts already
 
 	// wait for third run
-	s.Equal(<-wfCh, 3)
+	s.Equal(3, <-wfCh)
 	s.DurationNear(time.Since(ts), targetBackoffDuration, tolerance)
 	ts = time.Now()
 
 	// wait for fourth run (third one waits for timeout after 5s, so will run after 6s)
-	s.Equal(<-wfCh, 4)
+	s.Equal(4, <-wfCh)
 	s.DurationNear(time.Since(ts), 2*targetBackoffDuration, tolerance)
 	ts = time.Now()
 
 	// wait for fifth run
-	s.Equal(<-wfCh, 5)
+	s.Equal(5, <-wfCh)
 	s.DurationNear(time.Since(ts), targetBackoffDuration, tolerance)
 
 	// let fifth run finish and sixth get scheduled

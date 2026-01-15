@@ -58,7 +58,7 @@ func (s *WorkflowUpdateBaseSuite) sendUpdateInternal(
 		// It is important to do assert here (before writing to channel which doesn't have readers yet)
 		// to fail fast without trying to process update in wtHandler.
 		if requireNoError {
-			require.NoError(s.T(), updateErr)
+			s.Require().NoError(updateErr)
 		}
 		updateResultCh <- updateResponseErr{response: updateResp, err: updateErr}
 	}()

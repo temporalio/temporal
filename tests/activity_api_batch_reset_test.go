@@ -59,12 +59,12 @@ func (s *ActivityApiBatchResetClientTestSuite) TestActivityBatchReset_Success() 
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun1.GetID(), workflowRun1.GetRunID())
 		require.NoError(t, err)
 		require.Len(t, description.GetPendingActivities(), 1)
-		require.Greater(t, internalWorkflow.startedActivityCount.Load(), int32(0))
+		require.Positive(t, internalWorkflow.startedActivityCount.Load())
 
 		description, err = s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun2.GetID(), workflowRun2.GetRunID())
 		require.NoError(t, err)
 		require.Len(t, description.GetPendingActivities(), 1)
-		require.Greater(t, internalWorkflow.startedActivityCount.Load(), int32(0))
+		require.Positive(t, internalWorkflow.startedActivityCount.Load())
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// pause activities in both workflows
@@ -111,7 +111,7 @@ func (s *ActivityApiBatchResetClientTestSuite) TestActivityBatchReset_Success() 
 		require.NoError(t, err)
 		require.NotNil(t, listResp)
 		require.Len(t, listResp.GetExecutions(), 2)
-		require.Greater(t, internalWorkflow.startedActivityCount.Load(), int32(0))
+		require.Positive(t, internalWorkflow.startedActivityCount.Load())
 	}, 5*time.Second, 500*time.Millisecond)
 
 	// reset the activities in both workflows with batch reset
@@ -135,13 +135,13 @@ func (s *ActivityApiBatchResetClientTestSuite) TestActivityBatchReset_Success() 
 		require.NoError(t, err)
 		require.Len(t, description.PendingActivities, 1)
 		require.True(t, description.PendingActivities[0].Paused)
-		require.Equal(t, description.PendingActivities[0].Attempt, int32(1))
+		require.Equal(t, int32(1), description.PendingActivities[0].Attempt)
 
 		description, err = s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun2.GetID(), workflowRun2.GetRunID())
 		require.NoError(t, err)
 		require.Len(t, description.PendingActivities, 1)
 		require.True(t, description.PendingActivities[0].Paused)
-		require.Equal(t, description.PendingActivities[0].Attempt, int32(1))
+		require.Equal(t, int32(1), description.PendingActivities[0].Attempt)
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// let activities succeed
@@ -187,12 +187,12 @@ func (s *ActivityApiBatchResetClientTestSuite) TestActivityBatchReset_Success_Pr
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun1.GetID(), workflowRun1.GetRunID())
 		require.NoError(t, err)
 		require.Len(t, description.GetPendingActivities(), 1)
-		require.Greater(t, internalWorkflow.startedActivityCount.Load(), int32(0))
+		require.Positive(t, internalWorkflow.startedActivityCount.Load())
 
 		description, err = s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun2.GetID(), workflowRun2.GetRunID())
 		require.NoError(t, err)
 		require.Len(t, description.GetPendingActivities(), 1)
-		require.Greater(t, internalWorkflow.startedActivityCount.Load(), int32(0))
+		require.Positive(t, internalWorkflow.startedActivityCount.Load())
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// pause activities in both workflows
@@ -239,7 +239,7 @@ func (s *ActivityApiBatchResetClientTestSuite) TestActivityBatchReset_Success_Pr
 		require.NoError(t, err)
 		require.NotNil(t, listResp)
 		require.Len(t, listResp.GetExecutions(), 2)
-		require.Greater(t, internalWorkflow.startedActivityCount.Load(), int32(0))
+		require.Positive(t, internalWorkflow.startedActivityCount.Load())
 	}, 5*time.Second, 500*time.Millisecond)
 
 	// reset the activities in both workflows with batch reset
@@ -263,13 +263,13 @@ func (s *ActivityApiBatchResetClientTestSuite) TestActivityBatchReset_Success_Pr
 		require.NoError(t, err)
 		require.Len(t, description.PendingActivities, 1)
 		require.True(t, description.PendingActivities[0].Paused)
-		require.Equal(t, description.PendingActivities[0].Attempt, int32(1))
+		require.Equal(t, int32(1), description.PendingActivities[0].Attempt)
 
 		description, err = s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun2.GetID(), workflowRun2.GetRunID())
 		require.NoError(t, err)
 		require.Len(t, description.PendingActivities, 1)
 		require.True(t, description.PendingActivities[0].Paused)
-		require.Equal(t, description.PendingActivities[0].Attempt, int32(1))
+		require.Equal(t, int32(1), description.PendingActivities[0].Attempt)
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// let activities succeed
@@ -315,12 +315,12 @@ func (s *ActivityApiBatchResetClientTestSuite) TestActivityBatchReset_DontResetA
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun1.GetID(), workflowRun1.GetRunID())
 		require.NoError(t, err)
 		require.Len(t, description.GetPendingActivities(), 1)
-		require.Greater(t, internalWorkflow.startedActivityCount.Load(), int32(0))
+		require.Positive(t, internalWorkflow.startedActivityCount.Load())
 
 		description, err = s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun2.GetID(), workflowRun2.GetRunID())
 		require.NoError(t, err)
 		require.Len(t, description.GetPendingActivities(), 1)
-		require.Greater(t, internalWorkflow.startedActivityCount.Load(), int32(0))
+		require.Positive(t, internalWorkflow.startedActivityCount.Load())
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// pause activities in both workflows
@@ -367,7 +367,7 @@ func (s *ActivityApiBatchResetClientTestSuite) TestActivityBatchReset_DontResetA
 		require.NoError(t, err)
 		require.NotNil(t, listResp)
 		require.Len(t, listResp.GetExecutions(), 2)
-		require.Greater(t, internalWorkflow.startedActivityCount.Load(), int32(0))
+		require.Positive(t, internalWorkflow.startedActivityCount.Load())
 	}, 5*time.Second, 500*time.Millisecond)
 
 	// reset the activities in both workflows with batch reset
@@ -391,12 +391,12 @@ func (s *ActivityApiBatchResetClientTestSuite) TestActivityBatchReset_DontResetA
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun1.GetID(), workflowRun1.GetRunID())
 		require.NoError(t, err)
 		require.Len(t, description.PendingActivities, 1)
-		require.NotEqual(t, description.PendingActivities[0].Attempt, int32(1))
+		require.NotEqual(t, int32(1), description.PendingActivities[0].Attempt)
 
 		description, err = s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun2.GetID(), workflowRun2.GetRunID())
 		require.NoError(t, err)
 		require.Len(t, description.PendingActivities, 1)
-		require.NotEqual(t, description.PendingActivities[0].Attempt, int32(1))
+		require.NotEqual(t, int32(1), description.PendingActivities[0].Attempt)
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// let activities succeed

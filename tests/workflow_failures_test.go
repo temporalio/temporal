@@ -173,7 +173,7 @@ func (s *WorkflowFailuresTestSuite) TestWorkflowTaskFailed() {
 		if !activityScheduled {
 			activityScheduled = true
 			buf := new(bytes.Buffer)
-			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
+			s.NoError(binary.Write(buf, binary.LittleEndian, activityData))
 
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
@@ -316,7 +316,7 @@ func (s *WorkflowFailuresTestSuite) TestWorkflowTaskFailed() {
 	lastWorkflowTaskStartedEvent := events[25]
 	s.Equal(lastWorkflowTaskTime, lastWorkflowTaskStartedEvent.GetEventTime().AsTime())
 	wfCompletedEvent := events[27]
-	s.True(wfCompletedEvent.GetEventTime().AsTime().Sub(lastWorkflowTaskTime) >= time.Second)
+	s.GreaterOrEqual(wfCompletedEvent.GetEventTime().AsTime().Sub(lastWorkflowTaskTime), time.Second)
 }
 
 func (s *WorkflowFailuresTestSuite) TestRespondWorkflowTaskCompleted_ReturnsErrorIfInvalidArgument() {

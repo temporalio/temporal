@@ -187,7 +187,7 @@ func (s *UpdateWorkflowSuite) TestEmptySpeculativeWorkflowTask_AcceptComplete() 
 			s.NoError(err)
 			s.NotNil(res.NewTask)
 			updateResult := <-updateResultCh
-			s.EqualValues("success-result-of-"+tv.UpdateID(), testcore.DecodeString(s.T(), updateResult.GetOutcome().GetSuccess()))
+			s.Equal("success-result-of-"+tv.UpdateID(), testcore.DecodeString(s.T(), updateResult.GetOutcome().GetSuccess()))
 			s.EqualValues(0, res.NewTask.ResetHistoryEventId)
 
 			// Test non-blocking poll
@@ -195,7 +195,7 @@ func (s *UpdateWorkflowSuite) TestEmptySpeculativeWorkflowTask_AcceptComplete() 
 				pollUpdateResp, err := s.pollUpdate(tv, waitPolicy)
 				s.NoError(err)
 				s.Equal(enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, pollUpdateResp.Stage)
-				s.EqualValues("success-result-of-"+tv.UpdateID(), testcore.DecodeString(s.T(), pollUpdateResp.Outcome.GetSuccess()))
+				s.Equal("success-result-of-"+tv.UpdateID(), testcore.DecodeString(s.T(), pollUpdateResp.Outcome.GetSuccess()))
 				// Even if tv doesn't have RunID, it should be returned as part of UpdateRef.
 				s.Equal(runID, pollUpdateResp.UpdateRef.GetWorkflowExecution().RunId)
 			}
@@ -320,7 +320,7 @@ func (s *UpdateWorkflowSuite) TestNotEmptySpeculativeWorkflowTask_AcceptComplete
 			s.NoError(err)
 			s.NotNil(res)
 			updateResult := <-updateResultCh
-			s.EqualValues("success-result-of-"+tv.UpdateID(), testcore.DecodeString(s.T(), updateResult.GetOutcome().GetSuccess()))
+			s.Equal("success-result-of-"+tv.UpdateID(), testcore.DecodeString(s.T(), updateResult.GetOutcome().GetSuccess()))
 			s.EqualValues(0, res.NewTask.ResetHistoryEventId)
 
 			s.Equal(2, wtHandlerCalls)
@@ -421,7 +421,7 @@ func (s *UpdateWorkflowSuite) TestFirstNormalScheduledWorkflowTask_AcceptComplet
 			s.NotNil(res)
 
 			updateResult := <-updateResultCh
-			s.EqualValues("success-result-of-"+tv.UpdateID(), testcore.DecodeString(s.T(), updateResult.GetOutcome().GetSuccess()))
+			s.Equal("success-result-of-"+tv.UpdateID(), testcore.DecodeString(s.T(), updateResult.GetOutcome().GetSuccess()))
 			s.EqualValues(0, res.NewTask.ResetHistoryEventId)
 
 			s.Equal(1, wtHandlerCalls)
@@ -493,7 +493,7 @@ func (s *UpdateWorkflowSuite) TestNormalScheduledWorkflowTask_AcceptComplete() {
 				case 1:
 					return nil, nil
 				case 2:
-					s.Require().True(len(task.Messages) > 0, "Task has no messages", task)
+					s.Require().NotEmpty(task.Messages, "Task has no messages", task)
 					updRequestMsg := task.Messages[0]
 					updRequest := protoutils.UnmarshalAny[*updatepb.Request](s.T(), updRequestMsg.GetBody())
 
@@ -535,7 +535,7 @@ func (s *UpdateWorkflowSuite) TestNormalScheduledWorkflowTask_AcceptComplete() {
 			s.NotNil(res)
 
 			updateResult := <-updateResultCh
-			s.EqualValues("success-result-of-"+tv.UpdateID(), testcore.DecodeString(s.T(), updateResult.GetOutcome().GetSuccess()))
+			s.Equal("success-result-of-"+tv.UpdateID(), testcore.DecodeString(s.T(), updateResult.GetOutcome().GetSuccess()))
 			s.EqualValues(0, res.NewTask.ResetHistoryEventId)
 
 			s.Equal(2, wtHandlerCalls)
@@ -886,7 +886,7 @@ func (s *UpdateWorkflowSuite) TestCompletedWorkflow() {
 		// Send same Update request again, receiving the same Update result.
 		updateResultCh = s.sendUpdateNoError(tv)
 		updateResult2 := <-updateResultCh
-		s.EqualValues(updateResult1, updateResult2)
+		s.Equal(updateResult1, updateResult2)
 	})
 
 	s.Run("receive update failure from accepted Update", func() {
@@ -1381,7 +1381,7 @@ func (s *UpdateWorkflowSuite) TestStickySpeculativeWorkflowTask_AcceptComplete()
 			time.Sleep(500 * time.Millisecond) //nolint:forbidigo
 			updateResult := <-s.sendUpdateNoError(s.useRunID(tv, tc.useRunID, runID))
 
-			s.EqualValues("success-result-of-"+tv.UpdateID(), testcore.DecodeString(s.T(), updateResult.GetOutcome().GetSuccess()))
+			s.Equal("success-result-of-"+tv.UpdateID(), testcore.DecodeString(s.T(), updateResult.GetOutcome().GetSuccess()))
 
 			s.EqualHistoryEvents(`
 			  1 WorkflowExecutionStarted
@@ -1479,7 +1479,7 @@ func (s *UpdateWorkflowSuite) TestStickySpeculativeWorkflowTask_AcceptComplete_S
 	s.NoError(err)
 	s.NotNil(res)
 	updateResult := <-updateResultCh
-	s.EqualValues("success-result-of-"+tv.UpdateID(), testcore.DecodeString(s.T(), updateResult.GetOutcome().GetSuccess()))
+	s.Equal("success-result-of-"+tv.UpdateID(), testcore.DecodeString(s.T(), updateResult.GetOutcome().GetSuccess()))
 	s.EqualValues(0, res.NewTask.ResetHistoryEventId)
 
 	s.Equal(2, wtHandlerCalls)
@@ -1956,7 +1956,7 @@ func (s *UpdateWorkflowSuite) Test1stAccept_2ndAccept_2ndComplete_1stComplete() 
 	s.NoError(err)
 	s.NotNil(res)
 	updateResult2 := <-updateResultCh2
-	s.EqualValues("success-result-of-"+tv2.UpdateID(), testcore.DecodeString(s.T(), updateResult2.GetOutcome().GetSuccess()))
+	s.Equal("success-result-of-"+tv2.UpdateID(), testcore.DecodeString(s.T(), updateResult2.GetOutcome().GetSuccess()))
 	s.EqualValues(0, res.NewTask.ResetHistoryEventId)
 
 	err = poller.PollAndProcessActivityTask(false)
@@ -1968,7 +1968,7 @@ func (s *UpdateWorkflowSuite) Test1stAccept_2ndAccept_2ndComplete_1stComplete() 
 	s.NotNil(res)
 	updateResult1 := <-updateResultCh1
 	s.Equal(enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, updateResult1.Stage)
-	s.EqualValues("success-result-of-"+tv1.UpdateID(), testcore.DecodeString(s.T(), updateResult1.GetOutcome().GetSuccess()))
+	s.Equal("success-result-of-"+tv1.UpdateID(), testcore.DecodeString(s.T(), updateResult1.GetOutcome().GetSuccess()))
 	s.EqualValues(0, res.NewTask.ResetHistoryEventId)
 
 	s.Equal(4, wtHandlerCalls)
@@ -2133,7 +2133,7 @@ func (s *UpdateWorkflowSuite) Test1stAccept_2ndReject_1stComplete() {
 	s.NoError(err)
 	s.NotNil(res)
 	updateResult1 := <-updateResultCh1
-	s.EqualValues("success-result-of-"+tv1.UpdateID(), testcore.DecodeString(s.T(), updateResult1.GetOutcome().GetSuccess()))
+	s.Equal("success-result-of-"+tv1.UpdateID(), testcore.DecodeString(s.T(), updateResult1.GetOutcome().GetSuccess()))
 	s.EqualValues(0, res.NewTask.ResetHistoryEventId)
 
 	s.Equal(3, wtHandlerCalls)
@@ -2670,7 +2670,7 @@ func (s *UpdateWorkflowSuite) TestSpeculativeWorkflowTask_StartToCloseTimeout() 
 	s.NoError(err)
 	updateResp := res.NewTask
 	updateResult := <-updateResultCh
-	s.EqualValues("success-result-of-"+tv.UpdateID(), testcore.DecodeString(s.T(), updateResult.GetOutcome().GetSuccess()))
+	s.Equal("success-result-of-"+tv.UpdateID(), testcore.DecodeString(s.T(), updateResult.GetOutcome().GetSuccess()))
 	s.EqualValues(0, updateResp.ResetHistoryEventId)
 	s.Nil(updateResp.GetWorkflowTask())
 
@@ -3227,7 +3227,7 @@ func (s *UpdateWorkflowSuite) TestCompleteWorkflow_AbortUpdates() {
 				}
 				if expectedUpdateErr != "" {
 					s.Error(updateResult.err, tc.description)
-					s.Equal(updateResult.err.Error(), expectedUpdateErr)
+					s.Equal(expectedUpdateErr, updateResult.err.Error())
 				} else {
 					s.NoError(updateResult.err, tc.description)
 				}
@@ -3641,7 +3641,7 @@ func (s *UpdateWorkflowSuite) TestFirstNormalWorkflowTask_UpdateResurrectedAfter
 
 	// Client receives resurrected Update outcome.
 	updateResult := <-updateResultCh
-	s.EqualValues("success-result-of-"+tv.UpdateID(), testcore.DecodeString(s.T(), updateResult.GetOutcome().GetSuccess()))
+	s.Equal("success-result-of-"+tv.UpdateID(), testcore.DecodeString(s.T(), updateResult.GetOutcome().GetSuccess()))
 
 	// Signal to create new WFT which shouldn't get any updates.
 	err = s.SendSignal(s.Namespace().String(), tv.WorkflowExecution(), tv.Any().String(), tv.Any().Payloads(), tv.Any().String())
@@ -3742,8 +3742,8 @@ func (s *UpdateWorkflowSuite) TestScheduledSpeculativeWorkflowTask_DeduplicateID
 	updateResp := res.NewTask
 	updateResult := <-updateResultCh
 	updateResult2 := <-updateResultCh2
-	s.EqualValues("success-result-of-"+tv.UpdateID(), testcore.DecodeString(s.T(), updateResult.GetOutcome().GetSuccess()))
-	s.EqualValues("success-result-of-"+tv.UpdateID(), testcore.DecodeString(s.T(), updateResult2.GetOutcome().GetSuccess()))
+	s.Equal("success-result-of-"+tv.UpdateID(), testcore.DecodeString(s.T(), updateResult.GetOutcome().GetSuccess()))
+	s.Equal("success-result-of-"+tv.UpdateID(), testcore.DecodeString(s.T(), updateResult2.GetOutcome().GetSuccess()))
 	s.EqualValues(0, updateResp.ResetHistoryEventId)
 
 	s.Equal(2, wtHandlerCalls)
@@ -3834,11 +3834,11 @@ func (s *UpdateWorkflowSuite) TestStartedSpeculativeWorkflowTask_DeduplicateID()
 	s.NoError(err)
 	s.NotNil(res)
 	updateResult := <-updateResultCh
-	s.EqualValues("success-result-of-"+tv.UpdateID(), testcore.DecodeString(s.T(), updateResult.GetOutcome().GetSuccess()))
+	s.Equal("success-result-of-"+tv.UpdateID(), testcore.DecodeString(s.T(), updateResult.GetOutcome().GetSuccess()))
 	s.EqualValues(0, res.NewTask.ResetHistoryEventId)
 
 	updateResult2 := <-updateResultCh2
-	s.EqualValues("success-result-of-"+tv.UpdateID(), testcore.DecodeString(s.T(), updateResult2.GetOutcome().GetSuccess()))
+	s.Equal("success-result-of-"+tv.UpdateID(), testcore.DecodeString(s.T(), updateResult2.GetOutcome().GetSuccess()))
 
 	s.Equal(2, wtHandlerCalls)
 	s.Equal(2, msgHandlerCalls)
@@ -3946,7 +3946,7 @@ func (s *UpdateWorkflowSuite) TestCompletedSpeculativeWorkflowTask_DeduplicateID
 			_, err = poller.PollAndProcessWorkflowTask()
 			s.NoError(err)
 			updateResult := <-updateResultCh
-			s.EqualValues("success-result-of-"+tv.UpdateID(), testcore.DecodeString(s.T(), updateResult.GetOutcome().GetSuccess()))
+			s.Equal("success-result-of-"+tv.UpdateID(), testcore.DecodeString(s.T(), updateResult.GetOutcome().GetSuccess()))
 
 			if tc.CloseShard {
 				// Close shard to make sure that for completed updates deduplication works even after shard reload.
@@ -3967,7 +3967,7 @@ func (s *UpdateWorkflowSuite) TestCompletedSpeculativeWorkflowTask_DeduplicateID
 			s.NoError(err)
 			s.Nil(pollResponse.Messages, "there must be no new WT")
 
-			s.EqualValues(
+			s.Equal(
 				"success-result-of-"+tv.UpdateID(),
 				testcore.DecodeString(s.T(), updateResult2.GetOutcome().GetSuccess()),
 				"results of the first update must be available")
@@ -4500,7 +4500,7 @@ func (s *UpdateWorkflowSuite) TestSpeculativeWorkflowTask_WorkerSkippedProcessin
 	s.NoError(err)
 	s.NotNil(update2Resp)
 	update2Result := <-update2ResultCh
-	s.EqualValues("success-result-of-"+tv2.UpdateID(), testcore.DecodeString(s.T(), update2Result.GetOutcome().GetSuccess()))
+	s.Equal("success-result-of-"+tv2.UpdateID(), testcore.DecodeString(s.T(), update2Result.GetOutcome().GetSuccess()))
 
 	s.Equal(3, wtHandlerCalls)
 	s.Equal(3, msgHandlerCalls)
@@ -4686,7 +4686,7 @@ func (s *UpdateWorkflowSuite) TestSpeculativeWorkflowTask_QueryFailureClearsWFCo
 	s.NoError(err)
 	updateResp := res.NewTask
 	updateResult := <-updateResultCh
-	s.EqualValues("success-result-of-"+tv.UpdateID(), testcore.DecodeString(s.T(), updateResult.GetOutcome().GetSuccess()))
+	s.Equal("success-result-of-"+tv.UpdateID(), testcore.DecodeString(s.T(), updateResult.GetOutcome().GetSuccess()))
 	s.EqualValues(0, updateResp.ResetHistoryEventId)
 
 	s.Equal(2, wtHandlerCalls)
@@ -4800,7 +4800,7 @@ func (s *UpdateWorkflowSuite) TestWaitAccepted_GotCompleted() {
 	updateResult := <-updateResultCh
 	// but Update was accepted and completed on the same WFT, and outcome was returned.
 	s.Equal(enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, updateResult.GetStage())
-	s.EqualValues("success-result-of-"+tv.UpdateID(), testcore.DecodeString(s.T(), updateResult.GetOutcome().GetSuccess()))
+	s.Equal("success-result-of-"+tv.UpdateID(), testcore.DecodeString(s.T(), updateResult.GetOutcome().GetSuccess()))
 
 	s.EqualHistoryEvents(`
 	1 WorkflowExecutionStarted
@@ -4989,12 +4989,12 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 				s.Len(resp.Responses, 2)
 
 				startRes := resp.Responses[0].Response.(*workflowservice.ExecuteMultiOperationResponse_Response_StartWorkflow).StartWorkflow
-				s.NotZero(startRes.RunId)
+				s.NotEmpty(startRes.RunId)
 
 				updateRes := resp.Responses[1].Response.(*workflowservice.ExecuteMultiOperationResponse_Response_UpdateWorkflow).UpdateWorkflow
 				if updateReq.WaitPolicy.LifecycleStage == enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED {
 					s.NotNil(updateRes.Outcome)
-					s.NotZero(updateRes.Outcome.String())
+					s.NotEmpty(updateRes.Outcome.String())
 				}
 			}
 
@@ -5047,12 +5047,12 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 					startResp := uwsRes.response.Responses[0].GetStartWorkflow()
 					updateRep := uwsRes.response.Responses[1].GetUpdateWorkflow()
 					requireStartedAndRunning(s.T(), startResp)
-					s.EqualValues("success-result-of-"+tv.UpdateID(), testcore.DecodeString(s.T(), updateRep.GetOutcome().GetSuccess()))
+					s.Equal("success-result-of-"+tv.UpdateID(), testcore.DecodeString(s.T(), updateRep.GetOutcome().GetSuccess()))
 
 					// poll update to ensure same outcome is returned
 					pollRes, err := s.pollUpdate(tv,
 						&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
-					s.Nil(err)
+					s.NoError(err)
 					s.Equal(updateRep.Outcome.String(), pollRes.Outcome.String())
 
 					s.EqualHistoryEvents(`
@@ -5137,12 +5137,12 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 				startResp := uwsRes.response.Responses[0].GetStartWorkflow()
 				updateRep := uwsRes.response.Responses[1].GetUpdateWorkflow()
 				requireNotStartedButRunning(s.T(), startResp)
-				s.EqualValues("success-result-of-"+tv.UpdateID(), testcore.DecodeString(s.T(), updateRep.GetOutcome().GetSuccess()))
+				s.Equal("success-result-of-"+tv.UpdateID(), testcore.DecodeString(s.T(), updateRep.GetOutcome().GetSuccess()))
 
 				// poll update to ensure same outcome is returned
 				pollRes, err := s.pollUpdate(tv,
 					&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
-				s.Nil(err)
+				s.NoError(err)
 				s.Equal(updateRep.Outcome.String(), pollRes.Outcome.String())
 
 				s.EqualHistoryEvents(`
@@ -5237,7 +5237,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 				updateRep := uwsRes.response.Responses[1].GetUpdateWorkflow()
 				requireStartedAndRunning(s.T(), startResp)
 				s.Equal(startResp.RunId, updateRep.UpdateRef.GetWorkflowExecution().RunId)
-				s.EqualValues("success-result-of-"+tv.UpdateID(), testcore.DecodeString(s.T(), updateRep.GetOutcome().GetSuccess()))
+				s.Equal("success-result-of-"+tv.UpdateID(), testcore.DecodeString(s.T(), updateRep.GetOutcome().GetSuccess()))
 
 				// ensure workflow was terminated
 				descResp, err := s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(),
@@ -5251,7 +5251,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 				// poll update to ensure same outcome is returned
 				pollRes, err := s.pollUpdate(tv,
 					&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
-				s.Nil(err)
+				s.NoError(err)
 				s.Equal(updateRep.Outcome.String(), pollRes.Outcome.String())
 			})
 
@@ -5280,7 +5280,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 				updateRep1 := uwsRes1.response.Responses[1].GetUpdateWorkflow()
 				s.True(startResp1.Started)
 				s.Equal(startResp1.RunId, updateRep1.UpdateRef.GetWorkflowExecution().RunId)
-				s.Equal(updateRep1.Stage, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED)
+				s.Equal(enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, updateRep1.Stage)
 
 				// 2nd update-with-start: attaches to update instead of terminating workflow
 				uwsCh2 := sendUpdateWithStart(testcore.NewContext(), startReq, updateReq)
@@ -5291,7 +5291,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 				updateRep2 := uwsRes2.response.Responses[1].GetUpdateWorkflow()
 				s.False(startResp2.Started)
 				s.Equal(startResp2.RunId, startResp1.RunId) // no termination
-				s.Equal(updateRep2.Stage, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED)
+				s.Equal(enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, updateRep2.Stage)
 			})
 		})
 
@@ -5356,7 +5356,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 					// poll update to ensure same outcome is returned
 					pollRes, err := s.pollUpdate(tv,
 						&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
-					s.Nil(err)
+					s.NoError(err)
 					s.Equal(uwsRes1.response.Responses[1].GetUpdateWorkflow().Outcome.String(), pollRes.Outcome.String())
 				})
 			}
@@ -5449,7 +5449,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 			startResp := uwsRes.response.Responses[0].GetStartWorkflow()
 			updateRep := uwsRes.response.Responses[1].GetUpdateWorkflow()
 			requireStartedAndRunning(s.T(), startResp)
-			s.EqualValues("success-result-of-"+tv.UpdateID(), testcore.DecodeString(s.T(), updateRep.GetOutcome().GetSuccess()))
+			s.Equal("success-result-of-"+tv.UpdateID(), testcore.DecodeString(s.T(), updateRep.GetOutcome().GetSuccess()))
 
 			// ensure terminated workflow is not locked by update-with-start
 			err = s.SendSignal(s.Namespace().String(), &commonpb.WorkflowExecution{
@@ -5461,7 +5461,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 			// poll update to ensure same outcome is returned
 			pollRes, err := s.pollUpdate(tv,
 				&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
-			s.Nil(err)
+			s.NoError(err)
 			s.Equal(updateRep.Outcome.String(), pollRes.Outcome.String())
 		})
 
@@ -5548,9 +5548,9 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 					startResp := uwsRes.response.Responses[0].GetStartWorkflow()
 					updateRep := uwsRes.response.Responses[1].GetUpdateWorkflow()
 					s.False(startResp.Started)
-					s.Equal(startResp.Status, enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED)
+					s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, startResp.Status)
 					// TODO: check startResp.Running
-					s.EqualValues("success-result-of-"+tv.UpdateID(), testcore.DecodeString(s.T(), updateRep.GetOutcome().GetSuccess()))
+					s.Equal("success-result-of-"+tv.UpdateID(), testcore.DecodeString(s.T(), updateRep.GetOutcome().GetSuccess()))
 				})
 			}
 		})

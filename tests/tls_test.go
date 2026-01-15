@@ -24,11 +24,11 @@ func TestTLSFunctionalSuite(t *testing.T) {
 }
 
 func (s *TLSFunctionalSuite) SetupSuite() {
-	s.FunctionalTestBase.SetupSuiteWithCluster(testcore.WithMTLS())
+	s.SetupSuiteWithCluster(testcore.WithMTLS())
 }
 
 func (s *TLSFunctionalSuite) TearDownSuite() {
-	s.FunctionalTestBase.TearDownCluster()
+	s.TearDownCluster()
 }
 
 func (s *TLSFunctionalSuite) TestGRPCMTLS() {

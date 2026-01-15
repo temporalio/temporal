@@ -3,7 +3,6 @@ package tests
 import (
 	"context"
 	"errors"
-	"fmt"
 	"testing"
 	"time"
 
@@ -239,8 +238,7 @@ func (s *UpdateWorkflowSdkSuite) TestContinueAsNewAfterUpdateAdmitted() {
 	s.Worker().RegisterWorkflow(workflowFn2)
 	s.Worker().RegisterActivity(sendUpdateActivityFn)
 
-	var firstRun sdkclient.WorkflowRun
-	firstRun = s.startWorkflow(rootCtx, tv, workflowFn1)
+	var firstRun = s.startWorkflow(rootCtx, tv, workflowFn1)
 	var secondRunID string
 	s.Eventually(func() bool {
 		resp, err := s.pollUpdate(rootCtx, tv, &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
@@ -377,7 +375,7 @@ func (s *UpdateWorkflowSdkSuite) updateWorkflowWaitAdmitted(ctx context.Context,
 		var notFoundErr *serviceerror.NotFound
 		s.ErrorAs(err, &notFoundErr) // poll beat send in race
 		return false
-	}, 5*time.Second, 100*time.Millisecond, fmt.Sprintf("update %s did not reach Admitted stage", tv.UpdateID()))
+	}, 5*time.Second, 100*time.Millisecond, "update %s did not reach Admitted stage", tv.UpdateID())
 }
 
 func (s *UpdateWorkflowSdkSuite) updateWorkflowWaitAccepted(ctx context.Context, tv *testvars.TestVars, arg string) (sdkclient.WorkflowUpdateHandle, error) {

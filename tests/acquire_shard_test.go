@@ -34,7 +34,7 @@ func (s *AcquireShardSuiteBase) SetupSuite() {
 func (s *AcquireShardSuiteBase) TearDownSuite() {
 	// we need to wait for all components to start before we can safely tear down
 	time.Sleep(time.Second * 5) //nolint:forbidigo
-	s.FunctionalTestBase.TearDownCluster()
+	s.TearDownCluster()
 }
 
 // newLogRecorder creates a new log recorder. It records all the logs to the given channel.
@@ -83,7 +83,7 @@ func (r *logRecorder) record(msg string, tags ...tag.Tag) {
 		tags: tags,
 	}:
 	default:
-		r.Logger.Warn("failed to deliver log message to listener: " + msg)
+		r.Warn("failed to deliver log message to listener: " + msg)
 	}
 }
 
@@ -103,7 +103,7 @@ func TestAcquireShard_OwnershipLostErrorSuite(t *testing.T) {
 // SetupSuite reads the shard ownership lost error fault injection config from the testdata folder.
 func (s *OwnershipLostErrorSuite) SetupSuite() {
 	s.AcquireShardSuiteBase.SetupSuite()
-	s.FunctionalTestBase.SetupSuiteWithCluster(
+	s.SetupSuiteWithCluster(
 		testcore.WithNumHistoryShards(1),
 		testcore.WithFaultInjectionConfig((&config.FaultInjection{}).
 			WithError(config.ShardStoreName, "UpdateShard", "ShardOwnershipLost", 1.0),
@@ -156,7 +156,7 @@ func TestAcquireShard_DeadlineExceededErrorSuite(t *testing.T) {
 // SetupSuite reads the deadline exceeded error targeted fault injection config from the test data folder.
 func (s *DeadlineExceededErrorSuite) SetupSuite() {
 	s.AcquireShardSuiteBase.SetupSuite()
-	s.FunctionalTestBase.SetupSuiteWithCluster(
+	s.SetupSuiteWithCluster(
 		testcore.WithNumHistoryShards(1),
 		testcore.WithFaultInjectionConfig((&config.FaultInjection{}).
 			WithError(config.ShardStoreName, "UpdateShard", "DeadlineExceeded", 1.0),
@@ -211,7 +211,7 @@ func TestAcquireShard_EventualSuccess(t *testing.T) {
 // the next call to return a successful response.
 func (s *EventualSuccessSuite) SetupSuite() {
 	s.AcquireShardSuiteBase.SetupSuite()
-	s.FunctionalTestBase.SetupSuiteWithCluster(
+	s.SetupSuiteWithCluster(
 		testcore.WithNumHistoryShards(1),
 		testcore.WithFaultInjectionConfig((&config.FaultInjection{}).
 			WithError(config.ShardStoreName, "UpdateShard", "DeadlineExceeded", 0.5).

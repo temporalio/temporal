@@ -70,7 +70,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_Sticky() {
 	s.NoError(err)
 
 	s.NotNil(workflowRun)
-	s.True(workflowRun.GetRunID() != "")
+	s.NotEmpty(workflowRun.GetRunID())
 
 	queryResult, err := s.SdkClient().QueryWorkflow(ctx, id, "", "test", "test")
 	s.NoError(err)
@@ -120,7 +120,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 	s.NoError(err)
 
 	s.NotNil(workflowRun)
-	s.True(workflowRun.GetRunID() != "")
+	s.NotEmpty(workflowRun.GetRunID())
 
 	err = s.SdkClient().SignalWorkflow(ctx, id, "", "test", "pause")
 	s.NoError(err)
@@ -231,7 +231,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_QueryBeforeStart() {
 	s.NoError(err)
 
 	s.NotNil(workflowRun)
-	s.True(workflowRun.GetRunID() != "")
+	s.NotEmpty(workflowRun.GetRunID())
 
 	wg := sync.WaitGroup{}
 	wg.Add(1)
@@ -249,14 +249,12 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_QueryBeforeStart() {
 		// verify query sees all signals before it
 		s.Equal("started", queryResultStr)
 
-		s.True(endTime.Sub(startTime) > time.Second)
+		s.Greater(endTime.Sub(startTime), time.Second)
 	}()
 
 	// delay 2s to start worker, this will block query for 2s
 	time.Sleep(time.Second * 2) //nolint:forbidigo
-	var queryWorker worker.Worker
-
-	queryWorker = worker.New(s.SdkClient(), s.TaskQueue(), worker.Options{})
+	var queryWorker = worker.New(s.SdkClient(), s.TaskQueue(), worker.Options{})
 	queryWorker.RegisterWorkflow(workflowFn)
 	err = queryWorker.Start()
 	s.NoError(err)
@@ -296,7 +294,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_QueryFailedWorkflowTask() {
 	s.NoError(err)
 
 	s.NotNil(workflowRun)
-	s.True(workflowRun.GetRunID() != "")
+	s.NotEmpty(workflowRun.GetRunID())
 
 	s.Eventually(func() bool {
 		// wait for workflow task to fail 3 times
@@ -324,7 +322,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_ClosedWithoutWorkflowTaskStarted(
 	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
 	s.NoError(err)
 	s.NotNil(workflowRun)
-	s.True(workflowRun.GetRunID() != "")
+	s.NotEmpty(workflowRun.GetRunID())
 
 	err = s.SdkClient().TerminateWorkflow(ctx, id, "", "terminating to make sure query fails")
 	s.NoError(err)

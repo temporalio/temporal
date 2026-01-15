@@ -124,7 +124,7 @@ func (s *Versioning3Suite) SetupSuite() {
 		// matching so they're a good condidate.
 		dynamicconfig.MatchingUseNewMatcher.Key(): true,
 	}
-	s.FunctionalTestBase.SetupSuiteWithCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
+	s.SetupSuiteWithCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 }
 
 func (s *Versioning3Suite) TestPinnedTask_NoProperPoller() {
@@ -897,7 +897,7 @@ func (s *Versioning3Suite) TestUnpinnedWorkflow_SuccessfulUpdate_TransitionsToNe
 		})
 
 	updateResult := <-updateResultCh
-	s.EqualValues("success-result-of-"+tv2.UpdateID(), testcore.DecodeString(s.T(), updateResult.GetOutcome().GetSuccess()))
+	s.Equal("success-result-of-"+tv2.UpdateID(), testcore.DecodeString(s.T(), updateResult.GetOutcome().GetSuccess()))
 
 	// Verify that events from the speculative task are written to the history since the update was accepted
 	events := s.GetHistory(s.Namespace().String(), execution)
@@ -918,7 +918,7 @@ func (s *Versioning3Suite) TestUnpinnedWorkflow_SuccessfulUpdate_TransitionsToNe
 		Namespace: s.Namespace().String(),
 		Execution: execution,
 	})
-	s.Nil(err)
+	s.NoError(err)
 	s.NotNil(describeCall)
 
 	// Since the poller accepted the update, the Worker Deployment Version that completed the last workflow task
@@ -1343,8 +1343,8 @@ func (s *Versioning3Suite) testUnpinnedWorkflowWithRamp(toUnversioned bool) {
 	}
 
 	// both versions should've got executions
-	s.Greater(counter["v1"], 0)
-	s.Greater(counter["v2"], 0)
+	s.Positive(counter["v1"])
+	s.Positive(counter["v2"])
 	s.Equal(numTests, counter["v1"]+counter["v2"])
 }
 
@@ -3791,7 +3791,7 @@ func (s *Versioning3Suite) Name() string {
 		fullName[len(fullName)-21:],
 		farm.Fingerprint32([]byte(fullName)),
 	)
-	return strings.Replace(short, ".", "|", -1)
+	return strings.ReplaceAll(short, ".", "|")
 }
 
 // pollWftAndHandle can be used in sync and async mode. For async mode pass the async channel. It
@@ -4199,7 +4199,7 @@ func (s *Versioning3Suite) validateBacklogCount(
 		})
 		s.NoError(err)
 		s.NotNil(resp)
-		s.Equal(1, len(resp.GetVersionsInfo()), "should be 1 because only default/unversioned queue")
+		s.Len(resp.GetVersionsInfo(), 1, "should be 1 because only default/unversioned queue")
 		versionInfo := resp.GetVersionsInfo()[""]
 		typeInfo, ok := versionInfo.GetTypesInfo()[int32(tqType)]
 		s.True(ok)
@@ -4231,8 +4231,8 @@ func (s *Versioning3Suite) verifyVersioningSAs(
 			Query:     query,
 		})
 		a := assert.New(t)
-		a.Nil(err)
-		a.Greater(len(resp.GetExecutions()), 0)
+		a.NoError(err)
+		a.NotEmpty(resp.GetExecutions())
 		if a.NotEmpty(resp.GetExecutions()) {
 			w := resp.GetExecutions()[0]
 			if behavior == vbPinned {

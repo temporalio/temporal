@@ -103,11 +103,11 @@ func (s *WorkflowTaskReportedProblemsReplicationSuite) getWFTFailure(admin admin
 		},
 		Archetype: chasm.WorkflowArchetype,
 	})
-	require.NoError(s.T(), err)
-	require.NotNil(s.T(), resp)
-	require.NotNil(s.T(), resp.DatabaseMutableState)
-	require.NotNil(s.T(), resp.DatabaseMutableState.ExecutionInfo)
-	require.NotNil(s.T(), resp.DatabaseMutableState.ExecutionInfo.LastWorkflowTaskFailure)
+	s.Require().NoError(err)
+	s.Require().NotNil(resp)
+	s.Require().NotNil(resp.DatabaseMutableState)
+	s.Require().NotNil(resp.DatabaseMutableState.ExecutionInfo)
+	s.Require().NotNil(resp.DatabaseMutableState.ExecutionInfo.LastWorkflowTaskFailure)
 	switch i := resp.DatabaseMutableState.ExecutionInfo.GetLastWorkflowTaskFailure().(type) {
 	case *persistencespb.WorkflowExecutionInfo_LastWorkflowTaskFailureCause:
 		return "WorkflowTaskFailed", fmt.Sprintf("WorkflowTaskFailedCause%s", i.LastWorkflowTaskFailureCause.String()), nil

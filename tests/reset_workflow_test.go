@@ -83,7 +83,7 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflow() {
 			// Schedule 3 activities on first workflow task
 			isFirstTaskProcessed = true
 			buf := new(bytes.Buffer)
-			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
+			s.NoError(binary.Write(buf, binary.LittleEndian, activityData))
 
 			var scheduleActivityCommands []*commandpb.Command
 			for i := 1; i <= activityCount; i++ {
@@ -531,7 +531,7 @@ func (t *resetTest) reset(eventId int64) string {
 func (t *resetTest) run() {
 	t.totalSignals = 2
 	t.totalUpdates = 2
-	runID := t.WorkflowUpdateBaseSuite.startWorkflow(t.tv)
+	runID := t.startWorkflow(t.tv)
 
 	poller := &testcore.TaskPoller{
 		Client:              t.FrontendClient(),

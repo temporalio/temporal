@@ -118,7 +118,7 @@ func (e *noopExecutor) shouldExecute(task tasks.Task) bool {
 // SetupSuite creates the test cluster and registers the executorWrapper with the history service.
 func (s *AddTasksSuite) SetupSuite() {
 	// Set up the test cluster and register our executable wrapper.
-	s.FunctionalTestBase.SetupSuiteWithCluster(testcore.WithFxOptionsForService(
+	s.SetupSuiteWithCluster(testcore.WithFxOptionsForService(
 		primitives.HistoryService,
 		fx.Provide(
 			func() queues.ExecutorWrapper {

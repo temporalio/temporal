@@ -5,7 +5,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"strconv"
-	"strings"
 	"testing"
 	"time"
 
@@ -66,7 +65,7 @@ func (s *SignalWorkflowTestSuite) TestSignalWorkflow() {
 		Identity:   identity,
 		Header:     header,
 	})
-	s.NotNil(err0)
+	s.Error(err0)
 	s.IsType(&serviceerror.NotFound{}, err0)
 
 	// Start workflow execution
@@ -97,7 +96,7 @@ func (s *SignalWorkflowTestSuite) TestSignalWorkflow() {
 		if !activityScheduled {
 			activityScheduled = true
 			buf := new(bytes.Buffer)
-			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
+			s.NoError(binary.Write(buf, binary.LittleEndian, activityData))
 
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
@@ -174,7 +173,7 @@ func (s *SignalWorkflowTestSuite) TestSignalWorkflow() {
 	s.NoError(err)
 
 	s.False(workflowComplete)
-	s.True(signalEvent != nil)
+	s.NotNil(signalEvent)
 	s.Equal(signalName, signalEvent.GetWorkflowExecutionSignaledEventAttributes().SignalName)
 	s.ProtoEqual(signalInput, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Input)
 	s.Equal(identity, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Identity)
@@ -200,7 +199,7 @@ func (s *SignalWorkflowTestSuite) TestSignalWorkflow() {
 	s.NoError(err)
 
 	s.False(workflowComplete)
-	s.True(signalEvent != nil)
+	s.NotNil(signalEvent)
 	s.Equal(signalName, signalEvent.GetWorkflowExecutionSignaledEventAttributes().SignalName)
 	s.ProtoEqual(signalInput, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Input)
 	s.Equal(identity, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Identity)
@@ -228,7 +227,7 @@ func (s *SignalWorkflowTestSuite) TestSignalWorkflow() {
 		Input:      nil,
 		Identity:   identity,
 	})
-	s.NotNil(err)
+	s.Error(err)
 	s.IsType(&serviceerror.NotFound{}, err)
 }
 
@@ -271,7 +270,7 @@ func (s *SignalWorkflowTestSuite) TestSignalWorkflow_DuplicateRequest() {
 		if !activityScheduled {
 			activityScheduled = true
 			buf := new(bytes.Buffer)
-			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
+			s.NoError(binary.Write(buf, binary.LittleEndian, activityData))
 
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
@@ -352,7 +351,7 @@ func (s *SignalWorkflowTestSuite) TestSignalWorkflow_DuplicateRequest() {
 	s.NoError(err)
 
 	s.False(workflowComplete)
-	s.True(signalEvent != nil)
+	s.NotNil(signalEvent)
 	s.Equal(signalName, signalEvent.GetWorkflowExecutionSignaledEventAttributes().SignalName)
 	s.ProtoEqual(signalInput, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Input)
 	s.Equal(identity, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Identity)
@@ -368,7 +367,7 @@ func (s *SignalWorkflowTestSuite) TestSignalWorkflow_DuplicateRequest() {
 	s.NoError(err)
 
 	s.False(workflowComplete)
-	s.True(signalEvent != nil)
+	s.NotNil(signalEvent)
 	s.Equal(0, numOfSignaledEvent)
 }
 
@@ -426,7 +425,7 @@ func (s *SignalWorkflowTestSuite) TestSignalExternalWorkflowCommand() {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
-			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
+			s.NoError(binary.Write(buf, binary.LittleEndian, activityCounter))
 
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
@@ -481,7 +480,7 @@ func (s *SignalWorkflowTestSuite) TestSignalExternalWorkflowCommand() {
 		if externalActivityCounter < externalActivityCount {
 			externalActivityCounter++
 			buf := new(bytes.Buffer)
-			s.Nil(binary.Write(buf, binary.LittleEndian, externalActivityCounter))
+			s.NoError(binary.Write(buf, binary.LittleEndian, externalActivityCounter))
 
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
@@ -662,7 +661,7 @@ func (s *SignalWorkflowTestSuite) TestSignalWorkflow_Cron_NoWorkflowTaskCreated(
 	_, err = poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
-	s.True(workflowTaskDelay > time.Second*2)
+	s.Greater(workflowTaskDelay, time.Second*2)
 }
 
 func (s *SignalWorkflowTestSuite) TestSignalWorkflow_WorkflowCloseAttempted() {
@@ -715,7 +714,7 @@ func (s *SignalWorkflowTestSuite) TestSignalWorkflow_WorkflowCloseAttempted() {
 				RequestId:  uuid.NewString(),
 			})
 			s.Error(err)
-			s.Error(consts.ErrWorkflowClosing, err)
+			s.ErrorIs(consts.ErrWorkflowClosing, err)
 		}
 
 		attemptCount++
@@ -797,7 +796,7 @@ func (s *SignalWorkflowTestSuite) TestSignalExternalWorkflowCommand_WithoutRunID
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
-			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
+			s.NoError(binary.Write(buf, binary.LittleEndian, activityCounter))
 
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
@@ -851,7 +850,7 @@ func (s *SignalWorkflowTestSuite) TestSignalExternalWorkflowCommand_WithoutRunID
 		if externalActivityCounter < externalActivityCount {
 			externalActivityCounter++
 			buf := new(bytes.Buffer)
-			s.Nil(binary.Write(buf, binary.LittleEndian, externalActivityCounter))
+			s.NoError(binary.Write(buf, binary.LittleEndian, externalActivityCounter))
 
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
@@ -953,7 +952,7 @@ CheckHistoryLoopForSignalSent:
 	s.NoError(err)
 
 	s.False(workflowComplete)
-	s.True(signalEvent != nil)
+	s.NotNil(signalEvent)
 	s.Equal(signalName, signalEvent.GetWorkflowExecutionSignaledEventAttributes().SignalName)
 	s.ProtoEqual(signalInput, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Input)
 	s.Equal("history-service", signalEvent.GetWorkflowExecutionSignaledEventAttributes().Identity)
@@ -994,7 +993,7 @@ func (s *SignalWorkflowTestSuite) TestSignalExternalWorkflowCommand_UnKnownTarge
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
-			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
+			s.NoError(binary.Write(buf, binary.LittleEndian, activityCounter))
 
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
@@ -1116,7 +1115,7 @@ func (s *SignalWorkflowTestSuite) TestSignalExternalWorkflowCommand_SignalSelf()
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
-			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
+			s.NoError(binary.Write(buf, binary.LittleEndian, activityCounter))
 
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
@@ -1248,7 +1247,7 @@ func (s *SignalWorkflowTestSuite) TestSignalWithStartWorkflow() {
 		if !activityScheduled {
 			activityScheduled = true
 			buf := new(bytes.Buffer)
-			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
+			s.NoError(binary.Write(buf, binary.LittleEndian, activityData))
 
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
@@ -1348,7 +1347,7 @@ func (s *SignalWorkflowTestSuite) TestSignalWithStartWorkflow() {
 	s.NoError(err)
 
 	s.False(workflowComplete)
-	s.True(signalEvent != nil)
+	s.NotNil(signalEvent)
 	s.Equal(signalName, signalEvent.GetWorkflowExecutionSignaledEventAttributes().SignalName)
 	s.ProtoEqual(signalInput, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Input)
 	s.Equal(identity, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Identity)
@@ -1385,11 +1384,11 @@ func (s *SignalWorkflowTestSuite) TestSignalWithStartWorkflow() {
 	s.NoError(err)
 
 	s.False(workflowComplete)
-	s.True(signalEvent != nil)
+	s.NotNil(signalEvent)
 	s.Equal(signalName, signalEvent.GetWorkflowExecutionSignaledEventAttributes().SignalName)
 	s.ProtoEqual(signalInput, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Input)
 	s.Equal(identity, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Identity)
-	s.True(startedEvent != nil)
+	s.NotNil(startedEvent)
 	s.ProtoEqual(header, startedEvent.GetWorkflowExecutionStartedEventAttributes().Header)
 
 	// Send signal to not existed workflow
@@ -1411,7 +1410,7 @@ func (s *SignalWorkflowTestSuite) TestSignalWithStartWorkflow() {
 	s.NoError(err)
 
 	s.False(workflowComplete)
-	s.True(signalEvent != nil)
+	s.NotNil(signalEvent)
 	s.Equal(signalName, signalEvent.GetWorkflowExecutionSignaledEventAttributes().SignalName)
 	s.ProtoEqual(signalInput, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Input)
 	s.Equal(identity, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Identity)
@@ -1476,7 +1475,7 @@ func (s *SignalWorkflowTestSuite) TestSignalWithStartWorkflow() {
 	}
 	listClosedResp, err := s.FrontendClient().ListClosedWorkflowExecutions(testcore.NewContext(), listClosedRequest)
 	s.NoError(err)
-	s.Equal(1, len(listClosedResp.Executions))
+	s.Len(listClosedResp.Executions, 1)
 }
 
 func (s *SignalWorkflowTestSuite) TestSignalWithStartWorkflow_ResolveIDDeduplication() {
@@ -1519,7 +1518,7 @@ func (s *SignalWorkflowTestSuite) TestSignalWithStartWorkflow_ResolveIDDeduplica
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
-			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
+			s.NoError(binary.Write(buf, binary.LittleEndian, activityCounter))
 
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
@@ -1590,7 +1589,7 @@ func (s *SignalWorkflowTestSuite) TestSignalWithStartWorkflow_ResolveIDDeduplica
 	resp, err := s.FrontendClient().SignalWithStartWorkflowExecution(ctx, sRequest)
 	s.Nil(resp)
 	s.Error(err)
-	s.True(strings.Contains(err.Error(), "reject duplicate workflow Id"))
+	s.Contains(err.Error(), "reject duplicate workflow Id")
 	s.IsType(&serviceerror.WorkflowExecutionAlreadyStarted{}, err)
 
 	// test WorkflowIdReusePolicy: AllowDuplicateFailedOnly
@@ -1599,7 +1598,7 @@ func (s *SignalWorkflowTestSuite) TestSignalWithStartWorkflow_ResolveIDDeduplica
 	resp, err = s.FrontendClient().SignalWithStartWorkflowExecution(ctx, sRequest)
 	s.Nil(resp)
 	s.Error(err)
-	s.True(strings.Contains(err.Error(), "allow duplicate workflow Id if last run failed"))
+	s.Contains(err.Error(), "allow duplicate workflow Id if last run failed")
 	s.IsType(&serviceerror.WorkflowExecutionAlreadyStarted{}, err)
 
 	// test WorkflowIdReusePolicy: AllowDuplicate

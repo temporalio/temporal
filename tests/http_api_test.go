@@ -426,7 +426,7 @@ func (s *HttpApiTestSuite) TestHTTPAPI_OperatorService_ListSearchAttributes() {
 	// we just check that a few defaults exist. We don't want to check for all
 	// of them as that's brittle and will break the tests if we ever add a new type
 	s.Require().Contains(searchAttrsResp.CustomAttributes, "CustomIntField")
-	s.Require().Equal(searchAttrsResp.CustomAttributes["CustomIntField"], "INDEXED_VALUE_TYPE_INT")
+	s.Require().Equal("INDEXED_VALUE_TYPE_INT", searchAttrsResp.CustomAttributes["CustomIntField"])
 }
 
 func (s *HttpApiTestSuite) TestHTTPAPI_Serves_OpenAPIv2_Docs() {

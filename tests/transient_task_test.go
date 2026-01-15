@@ -165,7 +165,7 @@ func (s *TransientTaskSuite) TestTransientWorkflowTaskHistorySize() {
 	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		// find workflow task started event
 		event := task.History.Events[len(task.History.Events)-1]
-		s.Equal(event.GetEventType(), enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED)
+		s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED, event.GetEventType())
 		attrs := event.GetWorkflowTaskStartedEventAttributes()
 		s.Logger.Info("wtHandler", tag.Counter(stage))
 

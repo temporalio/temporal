@@ -88,7 +88,7 @@ func (s *AdvancedVisibilitySuite) SetupSuite() {
 		// Enable the unified query converter
 		dynamicconfig.VisibilityEnableUnifiedQueryConverter.Key(): s.enableUnifiedQueryConverter,
 	}
-	s.FunctionalTestBase.SetupSuiteWithCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
+	s.SetupSuiteWithCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 
 	if !testcore.UseSQLVisibility() {
 		// To ensure that Elasticsearch won't return more than defaultPageSize documents,
@@ -154,13 +154,13 @@ func (s *AdvancedVisibilitySuite) TestListOpenWorkflow() {
 	s.NotNil(openExecution)
 	s.Equal(we.GetRunId(), openExecution.GetExecution().GetRunId())
 
-	s.Equal(1, len(openExecution.GetSearchAttributes().GetIndexedFields()))
+	s.Len(openExecution.GetSearchAttributes().GetIndexedFields(), 1)
 	attrPayloadFromResponse, attrExist := openExecution.GetSearchAttributes().GetIndexedFields()[testSearchAttributeKey]
 	s.True(attrExist)
 	s.Equal(attrPayload.GetData(), attrPayloadFromResponse.GetData())
 	attrType, typeSet := attrPayloadFromResponse.GetMetadata()[sadefs.MetadataType]
 	s.True(typeSet)
-	s.True(len(attrType) > 0)
+	s.NotEmpty(attrType)
 }
 
 func (s *AdvancedVisibilitySuite) TestListWorkflow() {
@@ -290,14 +290,14 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_SearchAttribute() {
 	descResp, err := s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), descRequest)
 	s.NoError(err)
 	// Add one for BuildIds={unversioned}
-	s.Equal(len(searchAttributes.GetIndexedFields())+1, len(descResp.WorkflowExecutionInfo.GetSearchAttributes().GetIndexedFields()))
+	s.Len(descResp.WorkflowExecutionInfo.GetSearchAttributes().GetIndexedFields(), len(searchAttributes.GetIndexedFields())+1)
 	for attrName, expectedPayload := range searchAttributes.GetIndexedFields() {
 		respAttr, ok := descResp.WorkflowExecutionInfo.GetSearchAttributes().GetIndexedFields()[attrName]
 		s.True(ok)
 		s.Equal(expectedPayload.GetData(), respAttr.GetData())
 		attrType, typeSet := respAttr.GetMetadata()[sadefs.MetadataType]
 		s.True(typeSet)
-		s.True(len(attrType) > 0)
+		s.NotEmpty(attrType)
 	}
 }
 
@@ -378,7 +378,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_OrQuery() {
 	}
 	s.NotNil(openExecution)
 	s.Equal(we1.GetRunId(), openExecution.GetExecution().GetRunId())
-	s.True(!openExecution.GetExecutionTime().AsTime().Before(openExecution.GetStartTime().AsTime()))
+	s.False(openExecution.GetExecutionTime().AsTime().Before(openExecution.GetStartTime().AsTime()))
 	searchValBytes := openExecution.SearchAttributes.GetIndexedFields()[key]
 	var searchVal int
 	_ = payload.Decode(searchValBytes, &searchVal)
@@ -397,7 +397,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_OrQuery() {
 		}
 		time.Sleep(waitTimeInMs * time.Millisecond) //nolint:forbidigo
 	}
-	s.Equal(2, len(openExecutions))
+	s.Len(openExecutions, 2)
 	e1 := openExecutions[0]
 	e2 := openExecutions[1]
 	if e1.GetExecution().GetRunId() != we1.GetRunId() {
@@ -422,7 +422,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_OrQuery() {
 		}
 		time.Sleep(waitTimeInMs * time.Millisecond) //nolint:forbidigo
 	}
-	s.Equal(2, len(openExecutions))
+	s.Len(openExecutions, 2)
 	e1 = openExecutions[0]
 	e2 = openExecutions[1]
 	s.Equal(we3.GetRunId(), e1.GetExecution().GetRunId())
@@ -468,7 +468,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_KeywordQuery() {
 	)
 	s.NotNil(openExecution)
 	s.Equal(we1.GetRunId(), openExecution.GetExecution().GetRunId())
-	s.True(!openExecution.GetExecutionTime().AsTime().Before(openExecution.GetStartTime().AsTime()))
+	s.False(openExecution.GetExecutionTime().AsTime().Before(openExecution.GetStartTime().AsTime()))
 	saPayload := openExecution.SearchAttributes.GetIndexedFields()["CustomKeywordField"]
 	var saValue string
 	err = payload.Decode(saPayload, &saValue)
@@ -483,7 +483,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_KeywordQuery() {
 	}
 	resp, err := s.FrontendClient().ListWorkflowExecutions(testcore.NewContext(), listRequest)
 	s.NoError(err)
-	s.Len(resp.GetExecutions(), 0)
+	s.Empty(resp.GetExecutions())
 
 	// Inordered match on Keyword (not supported)
 	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
@@ -493,7 +493,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_KeywordQuery() {
 	}
 	resp, err = s.FrontendClient().ListWorkflowExecutions(testcore.NewContext(), listRequest)
 	s.NoError(err)
-	s.Len(resp.GetExecutions(), 0)
+	s.Empty(resp.GetExecutions())
 
 	// Prefix search
 	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
@@ -518,7 +518,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_KeywordQuery() {
 	}
 	resp, err = s.FrontendClient().ListWorkflowExecutions(testcore.NewContext(), listRequest)
 	s.NoError(err)
-	s.Len(resp.GetExecutions(), 0)
+	s.Empty(resp.GetExecutions())
 }
 
 func (s *AdvancedVisibilitySuite) TestListWorkflow_StringQuery() {
@@ -556,7 +556,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_StringQuery() {
 	}
 	s.NotNil(openExecution)
 	s.Equal(we1.GetRunId(), openExecution.GetExecution().GetRunId())
-	s.True(!openExecution.GetExecutionTime().AsTime().Before(openExecution.GetStartTime().AsTime()))
+	s.False(openExecution.GetExecutionTime().AsTime().Before(openExecution.GetStartTime().AsTime()))
 	saPayload := openExecution.SearchAttributes.GetIndexedFields()["CustomTextField"]
 	var saValue string
 	err = payload.Decode(saPayload, &saValue)
@@ -620,13 +620,13 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_MaxWindowSize() {
 		time.Sleep(waitTimeInMs * time.Millisecond) //nolint:forbidigo
 	}
 	s.NotNil(listResp)
-	s.True(len(listResp.GetNextPageToken()) != 0)
+	s.NotEmpty(listResp.GetNextPageToken())
 
 	// the last request
 	listRequest.NextPageToken = listResp.GetNextPageToken()
 	resp, err := s.FrontendClient().ListWorkflowExecutions(testcore.NewContext(), listRequest)
 	s.NoError(err)
-	s.True(len(resp.GetExecutions()) == 0)
+	s.Empty(resp.GetExecutions())
 	s.Nil(resp.GetNextPageToken())
 }
 
@@ -759,7 +759,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_OrderBy() {
 		listRequest.NextPageToken = resp.GetNextPageToken()
 		resp, err = s.FrontendClient().ListWorkflowExecutions(ctx, listRequest) // last page
 		s.NoError(err)
-		s.Equal(1, len(resp.GetExecutions()))
+		s.Len(resp.GetExecutions(), 1)
 	}
 
 	// order by CustomIntField desc
@@ -825,7 +825,7 @@ func (s *AdvancedVisibilitySuite) testListWorkflowHelper(
 	}
 	s.NotNil(openExecutions)
 	s.NotNil(nextPageToken)
-	s.True(len(nextPageToken) > 0)
+	s.NotEmpty(nextPageToken)
 
 	// test last page
 	listRequest.NextPageToken = nextPageToken
@@ -866,7 +866,7 @@ func (s *AdvancedVisibilitySuite) testHelperForReadOnce(expectedRunID string, qu
 	}
 	s.NotNil(openExecution)
 	s.Equal(expectedRunID, openExecution.GetExecution().GetRunId())
-	s.True(!openExecution.GetExecutionTime().AsTime().Before(openExecution.GetStartTime().AsTime()))
+	s.False(openExecution.GetExecutionTime().AsTime().Before(openExecution.GetStartTime().AsTime()))
 	if openExecution.SearchAttributes != nil && len(openExecution.SearchAttributes.GetIndexedFields()) > 0 {
 		searchValBytes := openExecution.SearchAttributes.GetIndexedFields()[testSearchAttributeKey]
 		var searchVal string
@@ -958,7 +958,7 @@ func (s *AdvancedVisibilitySuite) TestCountGroupByWorkflow() {
 		time.Sleep(waitTimeInMs * time.Millisecond) //nolint:forbidigo
 	}
 	s.Equal(int64(numWorkflows), resp.GetCount())
-	s.Equal(2, len(resp.Groups))
+	s.Len(resp.Groups, 2)
 
 	runningStatusPayload, _ := searchattribute.EncodeValue(
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String(),
@@ -1119,7 +1119,7 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 	s.NotNil(newTask.WorkflowTask)
 	s.Equal(int64(3), newTask.WorkflowTask.GetPreviousStartedEventId())
 	s.Equal(int64(7), newTask.WorkflowTask.GetStartedEventId())
-	s.Equal(4, len(newTask.WorkflowTask.History.Events))
+	s.Len(newTask.WorkflowTask.History.Events, 4)
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED, newTask.WorkflowTask.History.Events[0].GetEventType())
 	s.Equal(enumspb.EVENT_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES, newTask.WorkflowTask.History.Events[1].GetEventType())
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED, newTask.WorkflowTask.History.Events[2].GetEventType())
@@ -1165,7 +1165,7 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 	newTask = res.NewTask
 	s.NotNil(newTask)
 	s.NotNil(newTask.WorkflowTask)
-	s.Equal(4, len(newTask.WorkflowTask.History.Events))
+	s.Len(newTask.WorkflowTask.History.Events, 4)
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED, newTask.WorkflowTask.History.Events[0].GetEventType())
 	s.Equal(enumspb.EVENT_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES, newTask.WorkflowTask.History.Events[1].GetEventType())
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED, newTask.WorkflowTask.History.Events[2].GetEventType())
@@ -1187,7 +1187,7 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 	newTask = res.NewTask
 	s.NotNil(newTask)
 	s.NotNil(newTask.WorkflowTask)
-	s.Equal(4, len(newTask.WorkflowTask.History.Events))
+	s.Len(newTask.WorkflowTask.History.Events, 4)
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED, newTask.WorkflowTask.History.Events[0].GetEventType())
 	s.Equal(enumspb.EVENT_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES, newTask.WorkflowTask.History.Events[1].GetEventType())
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED, newTask.WorkflowTask.History.Events[2].GetEventType())
@@ -1254,9 +1254,8 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 		},
 		nil,
 	)
-	s.Equal(
-		len(expectedSearchAttributes.GetIndexedFields()),
-		len(descResp.WorkflowExecutionInfo.GetSearchAttributes().GetIndexedFields()),
+	s.Len(
+		descResp.WorkflowExecutionInfo.GetSearchAttributes().GetIndexedFields(), len(expectedSearchAttributes.GetIndexedFields()),
 	)
 	for attrName, expectedPayload := range expectedSearchAttributes.GetIndexedFields() {
 		respAttr, ok := descResp.WorkflowExecutionInfo.GetSearchAttributes().GetIndexedFields()[attrName]
@@ -1264,7 +1263,7 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 		s.Equal(expectedPayload.GetData(), respAttr.GetData())
 		attrType, typeSet := respAttr.GetMetadata()[searchattribute.MetadataType]
 		s.True(typeSet)
-		s.True(len(attrType) > 0)
+		s.NotEmpty(attrType)
 	}
 
 	// process close workflow task and assert search attributes is correct after workflow is closed
@@ -1291,9 +1290,8 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 	descResp, err = s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), descRequest)
 	s.NoError(err)
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, descResp.WorkflowExecutionInfo.Status)
-	s.Equal(
-		len(expectedSearchAttributes.GetIndexedFields()),
-		len(descResp.WorkflowExecutionInfo.GetSearchAttributes().GetIndexedFields()),
+	s.Len(
+		descResp.WorkflowExecutionInfo.GetSearchAttributes().GetIndexedFields(), len(expectedSearchAttributes.GetIndexedFields()),
 	)
 	for attrName, expectedPayload := range expectedSearchAttributes.GetIndexedFields() {
 		respAttr, ok := descResp.WorkflowExecutionInfo.GetSearchAttributes().GetIndexedFields()[attrName]
@@ -1301,7 +1299,7 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 		s.Equal(expectedPayload.GetData(), respAttr.GetData())
 		attrType, typeSet := respAttr.GetMetadata()[searchattribute.MetadataType]
 		s.True(typeSet)
-		s.True(len(attrType) > 0)
+		s.NotEmpty(attrType)
 	}
 }
 
@@ -1407,7 +1405,7 @@ func (s *AdvancedVisibilitySuite) TestModifyWorkflowExecutionProperties() {
 	s.NotNil(newTask.WorkflowTask)
 	s.Equal(int64(3), newTask.WorkflowTask.GetPreviousStartedEventId())
 	s.Equal(int64(7), newTask.WorkflowTask.GetStartedEventId())
-	s.Equal(4, len(newTask.WorkflowTask.History.Events))
+	s.Len(newTask.WorkflowTask.History.Events, 4)
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED, newTask.WorkflowTask.History.Events[0].GetEventType())
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_PROPERTIES_MODIFIED, newTask.WorkflowTask.History.Events[1].GetEventType())
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED, newTask.WorkflowTask.History.Events[2].GetEventType())
@@ -1453,7 +1451,7 @@ func (s *AdvancedVisibilitySuite) TestModifyWorkflowExecutionProperties() {
 	newTask = res.NewTask
 	s.NotNil(newTask)
 	s.NotNil(newTask.WorkflowTask)
-	s.Equal(4, len(newTask.WorkflowTask.History.Events))
+	s.Len(newTask.WorkflowTask.History.Events, 4)
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED, newTask.WorkflowTask.History.Events[0].GetEventType())
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_PROPERTIES_MODIFIED, newTask.WorkflowTask.History.Events[1].GetEventType())
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED, newTask.WorkflowTask.History.Events[2].GetEventType())
@@ -1764,7 +1762,7 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_UnversionedWor
 	pollRequest := &workflowservice.PollWorkflowTaskQueueRequest{Namespace: s.Namespace().String(), TaskQueue: request.TaskQueue, Identity: id}
 	task, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, pollRequest)
 	s.NoError(err)
-	s.Greater(len(task.TaskToken), 0)
+	s.NotEmpty(task.TaskToken)
 	_, err = s.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Namespace:          s.Namespace().String(),
 		Identity:           id,
@@ -1784,7 +1782,7 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_UnversionedWor
 
 	task, err = s.FrontendClient().PollWorkflowTaskQueue(ctx, pollRequest)
 	s.NoError(err)
-	s.Greater(len(task.TaskToken), 0)
+	s.NotEmpty(task.TaskToken)
 	_, err = s.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Namespace:          s.Namespace().String(),
 		Identity:           id,
@@ -1811,7 +1809,7 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_UnversionedWor
 
 	task, err = s.FrontendClient().PollWorkflowTaskQueue(ctx, pollRequest)
 	s.NoError(err)
-	s.Greater(len(task.TaskToken), 0)
+	s.NotEmpty(task.TaskToken)
 
 	buildIDs = s.getBuildIds(ctx, task.WorkflowExecution)
 	s.Equal([]string{}, buildIDs)
@@ -2466,7 +2464,7 @@ func (s *AdvancedVisibilitySuite) TestBuildIdScavenger_DeletesUnusedBuildId() {
 		TaskQueue: tq,
 	})
 	s.Require().NoError(err)
-	s.Require().Equal(1, len(compatibility.Sets))
+	s.Require().Len(compatibility.Sets, 1)
 	s.Require().Equal([]string{buildIdv1}, compatibility.Sets[0].BuildIDs)
 	// Make sure the build ID was removed from the build ID->task queue mapping
 	res, err := s.SdkClient().WorkflowService().GetWorkerTaskReachability(ctx, &workflowservice.GetWorkerTaskReachabilityRequest{
@@ -2474,7 +2472,7 @@ func (s *AdvancedVisibilitySuite) TestBuildIdScavenger_DeletesUnusedBuildId() {
 		BuildIds:  []string{buildIdv0},
 	})
 	s.Require().NoError(err)
-	s.Require().Equal(0, len(res.BuildIdReachability[0].TaskQueueReachability))
+	s.Require().Empty(res.BuildIdReachability[0].TaskQueueReachability)
 }
 
 func (s *AdvancedVisibilitySuite) TestScheduleListingWithSearchAttributes() {

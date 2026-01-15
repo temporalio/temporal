@@ -201,7 +201,7 @@ func (s *NexusStateReplicationSuite) TestNexusOperationEventsReplicated() {
 	s.Eventually(func() bool {
 		describeRes, err := sdkClient1.DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
 		s.NoError(err)
-		s.Equal(1, len(describeRes.PendingNexusOperations))
+		s.Len(describeRes.PendingNexusOperations, 1)
 		op := describeRes.PendingNexusOperations[0]
 		return op.State == enumspb.PENDING_NEXUS_OPERATION_STATE_STARTED
 	}, time.Second*20, time.Millisecond*100)
@@ -360,7 +360,7 @@ func (s *NexusStateReplicationSuite) TestNexusOperationCancelationReplicated() {
 	s.Eventually(func() bool {
 		describeRes, err := sdkClient0.DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
 		s.NoError(err)
-		s.Equal(1, len(describeRes.PendingNexusOperations))
+		s.Len(describeRes.PendingNexusOperations, 1)
 		op := describeRes.PendingNexusOperations[0]
 		fmt.Println(op.CancellationInfo)
 		s.NotNil(op.CancellationInfo)
@@ -591,7 +591,7 @@ func (s *NexusStateReplicationSuite) TestNexusOperationBufferedCompletionReplica
 			break
 		}
 	}
-	s.Greater(scheduledEventID, int64(0))
+	s.Positive(scheduledEventID)
 
 	// Allow operation to complete synchronously during next retry attempt
 	allowCompletion.Store(true)

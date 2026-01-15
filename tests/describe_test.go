@@ -74,7 +74,7 @@ func (s *DescribeTestSuite) TestDescribeWorkflowExecution() {
 	s.Equal(int64(2), wfInfo.HistoryLength) // WorkflowStarted, WorkflowTaskScheduled
 	s.Equal(wfInfo.GetStartTime(), wfInfo.GetExecutionTime())
 	s.Equal(tq, wfInfo.TaskQueue)
-	s.Greater(wfInfo.GetHistorySizeBytes(), int64(0))
+	s.Positive(wfInfo.GetHistorySizeBytes())
 	s.Empty(wfInfo.GetParentNamespaceId())
 	s.Nil(wfInfo.GetParentExecution())
 	s.NotNil(wfInfo.GetRootExecution())
@@ -157,7 +157,7 @@ func (s *DescribeTestSuite) TestDescribeWorkflowExecution() {
 	s.Nil(wfInfo.CloseTime)
 	s.Nil(wfInfo.ExecutionDuration)
 	s.Equal(int64(5), wfInfo.HistoryLength) // WorkflowTaskStarted, WorkflowTaskCompleted, ActivityScheduled
-	s.Equal(1, len(dweResponse.PendingActivities))
+	s.Len(dweResponse.PendingActivities, 1)
 	s.Equal("test-activity-type", dweResponse.PendingActivities[0].ActivityType.GetName())
 	s.True(timestamp.TimeValue(dweResponse.PendingActivities[0].GetLastHeartbeatTime()).IsZero())
 
@@ -169,7 +169,7 @@ func (s *DescribeTestSuite) TestDescribeWorkflowExecution() {
 	wfInfo = dweResponse.WorkflowExecutionInfo
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, wfInfo.GetStatus())
 	s.Equal(int64(8), wfInfo.HistoryLength) // ActivityTaskStarted, ActivityTaskCompleted, WorkflowTaskScheduled
-	s.Equal(0, len(dweResponse.PendingActivities))
+	s.Empty(dweResponse.PendingActivities)
 
 	// Process signal in workflow
 	_, err = poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory)
@@ -222,7 +222,7 @@ func (s *DescribeTestSuite) TestDescribeTaskQueue() {
 		if !activityScheduled {
 			activityScheduled = true
 			buf := new(bytes.Buffer)
-			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
+			s.NoError(binary.Write(buf, binary.LittleEndian, activityData))
 
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
@@ -288,7 +288,7 @@ func (s *DescribeTestSuite) TestDescribeTaskQueue() {
 	pollerInfos = testDescribeTaskQueue(s.Namespace().String(), tq, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 	s.Empty(pollerInfos)
 	pollerInfos = testDescribeTaskQueue(s.Namespace().String(), tq, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-	s.Equal(1, len(pollerInfos))
+	s.Len(pollerInfos, 1)
 	s.Equal(identity, pollerInfos[0].GetIdentity())
 	s.True(pollerInfos[0].GetLastAccessTime().AsTime().After(before))
 	s.NotEmpty(pollerInfos[0].GetLastAccessTime())
@@ -296,12 +296,12 @@ func (s *DescribeTestSuite) TestDescribeTaskQueue() {
 	errActivity := poller.PollAndProcessActivityTask(false)
 	s.NoError(errActivity)
 	pollerInfos = testDescribeTaskQueue(s.Namespace().String(), tq, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
-	s.Equal(1, len(pollerInfos))
+	s.Len(pollerInfos, 1)
 	s.Equal(identity, pollerInfos[0].GetIdentity())
 	s.True(pollerInfos[0].GetLastAccessTime().AsTime().After(before))
 	s.NotEmpty(pollerInfos[0].GetLastAccessTime())
 	pollerInfos = testDescribeTaskQueue(s.Namespace().String(), tq, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-	s.Equal(1, len(pollerInfos))
+	s.Len(pollerInfos, 1)
 	s.Equal(identity, pollerInfos[0].GetIdentity())
 	s.True(pollerInfos[0].GetLastAccessTime().AsTime().After(before))
 	s.NotEmpty(pollerInfos[0].GetLastAccessTime())

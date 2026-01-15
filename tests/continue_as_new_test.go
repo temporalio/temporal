@@ -89,7 +89,7 @@ func (s *ContinueAsNewTestSuite) TestContinueAsNewWorkflow() {
 			previousRunID = currentRunID
 			continueAsNewCounter++
 			buf := new(bytes.Buffer)
-			s.Nil(binary.Write(buf, binary.LittleEndian, continueAsNewCounter))
+			s.NoError(binary.Write(buf, binary.LittleEndian, continueAsNewCounter))
 
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
@@ -204,7 +204,7 @@ func (s *ContinueAsNewTestSuite) TestContinueAsNewRunTimeout() {
 		if continueAsNewCounter < continueAsNewCount {
 			continueAsNewCounter++
 			buf := new(bytes.Buffer)
-			s.Nil(binary.Write(buf, binary.LittleEndian, continueAsNewCounter))
+			s.NoError(binary.Write(buf, binary.LittleEndian, continueAsNewCounter))
 
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
@@ -435,18 +435,18 @@ func (s *ContinueAsNewTestSuite) TestWorkflowContinueAsNewTaskID() {
 	_, err := poller.PollAndProcessWorkflowTask()
 	s.NoError(err)
 	events := s.GetHistory(s.Namespace().String(), executions[0])
-	s.True(len(events) != 0)
+	s.NotEmpty(events)
 	for _, event := range events {
-		s.True(event.GetTaskId() > minTaskID)
+		s.Greater(event.GetTaskId(), minTaskID)
 		minTaskID = event.GetTaskId()
 	}
 
 	_, err = poller.PollAndProcessWorkflowTask()
 	s.NoError(err)
 	events = s.GetHistory(s.Namespace().String(), executions[1])
-	s.True(len(events) != 0)
+	s.NotEmpty(events)
 	for _, event := range events {
-		s.True(event.GetTaskId() > minTaskID)
+		s.Greater(event.GetTaskId(), minTaskID)
 		minTaskID = event.GetTaskId()
 	}
 }
@@ -517,7 +517,7 @@ func (w *ParentWithChildContinueAsNew) workflow(task *workflowservice.PollWorkfl
 		if w.continueAsNewCounter < w.continueAsNewCount {
 			w.continueAsNewCounter++
 			buf := new(bytes.Buffer)
-			w.suite.Nil(binary.Write(buf, binary.LittleEndian, w.continueAsNewCounter))
+			w.suite.NoError(binary.Write(buf, binary.LittleEndian, w.continueAsNewCounter))
 
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
@@ -546,7 +546,7 @@ func (w *ParentWithChildContinueAsNew) workflow(task *workflowservice.PollWorkfl
 			w.suite.Logger.Info("Starting child execution")
 			w.childExecutionStarted = true
 			buf := new(bytes.Buffer)
-			w.suite.Nil(binary.Write(buf, binary.LittleEndian, w.childData))
+			w.suite.NoError(binary.Write(buf, binary.LittleEndian, w.childData))
 
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION,

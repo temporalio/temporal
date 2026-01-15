@@ -48,7 +48,7 @@ func TestChasmTestSuite(t *testing.T) {
 }
 
 func (s *ChasmTestSuite) SetupSuite() {
-	s.FunctionalTestBase.SetupSuiteWithCluster(
+	s.SetupSuiteWithCluster(
 		testcore.WithDynamicConfigOverrides(map[dynamicconfig.Key]any{
 			dynamicconfig.EnableChasm.Key():                           true,
 			dynamicconfig.VisibilityEnableUnifiedQueryConverter.Key(): s.enableUnifiedQueryConverter,

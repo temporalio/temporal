@@ -874,7 +874,7 @@ func (s *WorkflowTestSuite) TestTerminateWorkflow() {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
-			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
+			s.NoError(binary.Write(buf, binary.LittleEndian, activityCounter))
 
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
@@ -1082,7 +1082,7 @@ func (s *WorkflowTestSuite) TestSequentialWorkflow() {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
-			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
+			s.NoError(binary.Write(buf, binary.LittleEndian, activityCounter))
 
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
@@ -1110,7 +1110,7 @@ func (s *WorkflowTestSuite) TestSequentialWorkflow() {
 
 	expectedActivity := int32(1)
 	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
-		s.EqualValues(tv.WorkflowID(), task.WorkflowExecution.WorkflowId)
+		s.Equal(tv.WorkflowID(), task.WorkflowExecution.WorkflowId)
 		s.Equal(tv.ActivityType().Name, task.ActivityType.Name)
 		s.Equal(tv.WithActivityIDNumber(int(expectedActivity)).ActivityID(), task.ActivityId)
 		s.Equal(expectedActivity, s.DecodePayloadsByteSliceInt32(task.Input))
@@ -1209,7 +1209,7 @@ func (s *WorkflowTestSuite) TestCompleteWorkflowTaskAndCreateNewOne() {
 
 	s.Equal(int64(3), newTask.WorkflowTask.GetPreviousStartedEventId())
 	s.Equal(int64(7), newTask.WorkflowTask.GetStartedEventId())
-	s.Equal(4, len(newTask.WorkflowTask.History.Events))
+	s.Len(newTask.WorkflowTask.History.Events, 4)
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED, newTask.WorkflowTask.History.Events[0].GetEventType())
 	s.Equal(enumspb.EVENT_TYPE_MARKER_RECORDED, newTask.WorkflowTask.History.Events[1].GetEventType())
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED, newTask.WorkflowTask.History.Events[2].GetEventType())
@@ -1243,7 +1243,7 @@ func (s *WorkflowTestSuite) TestWorkflowTaskAndActivityTaskTimeoutsWorkflow() {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
-			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
+			s.NoError(binary.Write(buf, binary.LittleEndian, activityCounter))
 
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
@@ -1272,7 +1272,7 @@ func (s *WorkflowTestSuite) TestWorkflowTaskAndActivityTaskTimeoutsWorkflow() {
 	}
 
 	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
-		s.EqualValues(tv.WorkflowID(), task.WorkflowExecution.WorkflowId)
+		s.Equal(tv.WorkflowID(), task.WorkflowExecution.WorkflowId)
 		s.Equal(tv.ActivityType().Name, task.ActivityType.Name)
 		s.Logger.Info("Activity ID", tag.WorkflowActivityID(task.ActivityId))
 		return payloads.EncodeString("Activity Result"), false, nil
@@ -1429,21 +1429,22 @@ func (s *WorkflowTestSuite) TestWorkflowRetry() {
 	// Check run id links
 	for i := 0; i < maximumAttempts; i++ {
 		events := s.GetHistory(s.Namespace().String(), executions[i])
-		if i == 0 {
+		switch i {
+		case 0:
 			s.EqualHistoryEvents(fmt.Sprintf(`
   1 WorkflowExecutionStarted {"ContinuedExecutionRunId":""}
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
   4 WorkflowTaskCompleted
   5 WorkflowExecutionFailed {"NewExecutionRunId":"%s"}`, executions[i+1].RunId), events)
-		} else if i == maximumAttempts-1 {
+		case maximumAttempts - 1:
 			s.EqualHistoryEvents(fmt.Sprintf(`
   1 WorkflowExecutionStarted {"ContinuedExecutionRunId":"%s"}
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
   4 WorkflowTaskCompleted
   5 WorkflowExecutionCompleted {"NewExecutionRunId":""}`, executions[i-1].RunId), events)
-		} else {
+		default:
 			s.EqualHistoryEvents(fmt.Sprintf(`
   1 WorkflowExecutionStarted {"ContinuedExecutionRunId":"%s"}
   2 WorkflowTaskScheduled
@@ -1686,13 +1687,13 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_Invalid_DeploymentSearchA
 func requireNotStartedButRunning(t *testing.T, resp *workflowservice.StartWorkflowExecutionResponse) {
 	t.Helper()
 	require.False(t, resp.Started)
-	require.Equalf(t, resp.Status, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+	require.Equalf(t, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, resp.Status,
 		"Expected workflow to be running, but got %s", resp.Status)
 }
 
 func requireStartedAndRunning(t *testing.T, resp *workflowservice.StartWorkflowExecutionResponse) {
 	t.Helper()
 	require.True(t, resp.Started)
-	require.Equalf(t, resp.Status, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+	require.Equalf(t, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, resp.Status,
 		"Expected workflow to be running, but got %s", resp.Status)
 }

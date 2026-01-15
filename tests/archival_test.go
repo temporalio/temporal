@@ -57,7 +57,7 @@ func (s *ArchivalSuite) SetupSuite() {
 		dynamicconfig.ArchivalProcessorArchiveDelay.Key(): time.Duration(0),
 	}
 
-	s.FunctionalTestBase.SetupSuiteWithCluster(
+	s.SetupSuiteWithCluster(
 		testcore.WithDynamicConfigOverrides(dynamicConfigOverrides),
 		testcore.WithArchivalEnabled(),
 	)
@@ -76,7 +76,7 @@ func (s *ArchivalSuite) SetupSuite() {
 
 func (s *ArchivalSuite) TearDownSuite() {
 	s.Require().NoError(s.MarkNamespaceAsDeleted(s.archivalNamespace))
-	s.FunctionalTestBase.TearDownCluster()
+	s.TearDownCluster()
 }
 
 func (s *ArchivalSuite) TestArchival_TimerQueueProcessor() {
@@ -322,7 +322,7 @@ func (s *ArchivalSuite) startAndFinishWorkflow(
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
-			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
+			s.NoError(binary.Write(buf, binary.LittleEndian, activityCounter))
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{

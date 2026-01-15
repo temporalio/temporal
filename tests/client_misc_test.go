@@ -440,7 +440,7 @@ func (s *ClientMiscTestSuite) TestStickyAutoReset() {
 	s.NotNil(resp)
 	for _, p := range resp.Pollers {
 		s.NotNil(p.LastAccessTime)
-		s.Greater(time.Now().Sub(p.LastAccessTime.AsTime()), time.Second*10)
+		s.Greater(time.Since(p.LastAccessTime.AsTime()), time.Second*10)
 	}
 
 	startTime := time.Now()
@@ -467,13 +467,13 @@ func (s *ClientMiscTestSuite) TestStickyAutoReset() {
 	})
 
 	// should be able to get the task without having to wait until sticky timeout (5s)
-	pollLatency := time.Now().Sub(startTime)
+	pollLatency := time.Since(startTime)
 	s.Less(pollLatency, time.Second*4)
 
 	s.NoError(err)
 	s.NotNil(task)
 	s.NotNil(task.History)
-	s.True(len(task.History.Events) > 0)
+	s.NotEmpty(task.History.Events)
 	s.Equal(int64(1), task.History.Events[0].EventId)
 }
 
@@ -576,7 +576,7 @@ func (s *ClientMiscTestSuite) TestWorkflowCanBeCompletedDespiteAdmittedUpdate() 
 	// s.NoError(err)
 	// s.Equal("my-update-result", updateResult)
 
-	s.HistoryRequire.EqualHistoryEvents(`
+	s.EqualHistoryEvents(`
 	1 WorkflowExecutionStarted
 	2 WorkflowTaskScheduled
 	3 WorkflowTaskStarted
@@ -668,7 +668,7 @@ func (s *ClientMiscTestSuite) Test_FinishWorkflowWithDeferredCommands() {
 	s.NoError(err)
 
 	s.NotNil(workflowRun)
-	s.True(workflowRun.GetRunID() != "")
+	s.NotEmpty(workflowRun.GetRunID())
 
 	err = workflowRun.Get(ctx, nil)
 	s.NoError(err)
@@ -753,7 +753,7 @@ func (s *ClientMiscTestSuite) TestInvalidCommandAttribute() {
 	s.NoError(err)
 
 	s.NotNil(workflowRun)
-	s.True(workflowRun.GetRunID() != "")
+	s.NotEmpty(workflowRun.GetRunID())
 
 	// wait until workflow close (it will be timeout)
 	err = workflowRun.Get(ctx, nil)
@@ -771,10 +771,10 @@ func (s *ClientMiscTestSuite) TestInvalidCommandAttribute() {
 	s.assertHistory(id, workflowRun.GetRunID(), expectedHistory)
 
 	// assert workflow task retried 3 times
-	s.Equal(3, len(startedTime))
+	s.Len(startedTime, 3)
 
-	s.True(startedTime[1].Sub(startedTime[0]) < time.Second)   // retry immediately
-	s.True(startedTime[2].Sub(startedTime[1]) > time.Second*3) // retry after WorkflowTaskTimeout
+	s.Less(startedTime[1].Sub(startedTime[0]), time.Second)      // retry immediately
+	s.Greater(startedTime[2].Sub(startedTime[1]), time.Second*3) // retry after WorkflowTaskTimeout
 }
 
 func (s *ClientMiscTestSuite) Test_BufferedQuery() {
@@ -820,7 +820,7 @@ func (s *ClientMiscTestSuite) Test_BufferedQuery() {
 	s.NoError(err)
 
 	s.NotNil(workflowRun)
-	s.True(workflowRun.GetRunID() != "")
+	s.NotEmpty(workflowRun.GetRunID())
 
 	// wait until first wf task started
 	wfStarted.Wait()
@@ -837,7 +837,7 @@ func (s *ClientMiscTestSuite) Test_BufferedQuery() {
 			},
 			Archetype: chasm.WorkflowArchetype,
 		})
-		s.Assert().NoError(err)
+		s.NoError(err)
 	}()
 
 	// this query will be buffered in mutable state because workflow task is in-flight.
@@ -928,7 +928,7 @@ func (s *ClientMiscTestSuite) TestBufferedSignalCausesUnhandledCommandAndSchedul
 	s.NoError(err)
 
 	s.NotNil(workflowRun)
-	s.True(workflowRun.GetRunID() != "")
+	s.NotEmpty(workflowRun.GetRunID())
 	tv = tv.WithRunID(workflowRun.GetRunID())
 
 	// block until first workflow task started
@@ -943,7 +943,7 @@ func (s *ClientMiscTestSuite) TestBufferedSignalCausesUnhandledCommandAndSchedul
 	s.NoError(err) // if new workflow task is not correctly dispatched, it would cause timeout error here
 	s.Equal("signal-value", receivedSig)
 
-	s.HistoryRequire.EqualHistoryEvents(`
+	s.EqualHistoryEvents(`
 	1 WorkflowExecutionStarted
 	2 WorkflowTaskScheduled
 	3 WorkflowTaskStarted

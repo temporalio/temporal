@@ -164,7 +164,7 @@ func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_CRUD() {
 	})
 	s.NoError(err)
 	s.NotNil(nsResp)
-	s.Len(nsResp.Rules, 0)
+	s.Empty(nsResp.Rules)
 
 	// create a rule
 	ruleID1 := "pause-activity-rule-1"
@@ -268,7 +268,7 @@ func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_CRUD() {
 		})
 		require.NoError(t, err)
 		require.NotNil(t, nsResp)
-		require.Len(t, nsResp.Rules, 0)
+		require.Empty(t, nsResp.Rules)
 	}, 5*time.Second, 200*time.Millisecond)
 }
 
@@ -326,7 +326,7 @@ func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_RetryActivity() {
 	// make sure activity pause info is set
 	description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 	s.NoError(err)
-	s.Equal(1, len(description.PendingActivities))
+	s.Len(description.PendingActivities, 1)
 	s.True(description.PendingActivities[0].Paused)
 	s.NotNil(description.PendingActivities[0].PauseInfo)
 	rule := description.PendingActivities[0].PauseInfo.GetRule()
@@ -351,7 +351,7 @@ func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_RetryActivity() {
 		})
 		require.NoError(t, err)
 		require.NotNil(t, nsResp)
-		require.Len(t, nsResp.Rules, 0)
+		require.Empty(t, nsResp.Rules)
 	}, 5*time.Second, 200*time.Millisecond)
 
 	// Let namespace config propagate.
@@ -462,7 +462,7 @@ func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_RetryTask() {
 	// make sure activity pause info is set
 	description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 	s.NoError(err)
-	s.Equal(1, len(description.PendingActivities))
+	s.Len(description.PendingActivities, 1)
 	s.True(description.PendingActivities[0].Paused)
 	s.NotNil(description.PendingActivities[0].PauseInfo)
 	rule := description.PendingActivities[0].PauseInfo.GetRule()
@@ -487,7 +487,7 @@ func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_RetryTask() {
 		})
 		require.NoError(t, err)
 		require.NotNil(t, nsResp)
-		require.Len(t, nsResp.Rules, 0)
+		require.Empty(t, nsResp.Rules)
 	}, 5*time.Second, 200*time.Millisecond)
 
 	// Let namespace config propagate.
@@ -590,7 +590,7 @@ func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_PrePause() {
 	// make sure activity pause info is set
 	description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 	s.NoError(err)
-	s.Equal(1, len(description.PendingActivities))
+	s.Len(description.PendingActivities, 1)
 	s.True(description.PendingActivities[0].Paused)
 	s.NotNil(description.PendingActivities[0].PauseInfo)
 	s.Equal(ruleID, description.PendingActivities[0].PauseInfo.GetRule().GetRuleId())
@@ -610,7 +610,7 @@ func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_PrePause() {
 		})
 		require.NoError(t, err)
 		require.NotNil(t, nsResp)
-		require.Len(t, nsResp.Rules, 0)
+		require.Empty(t, nsResp.Rules)
 	}, 5*time.Second, 200*time.Millisecond)
 
 	// 8. Let namespace config changes propagate to the history service.

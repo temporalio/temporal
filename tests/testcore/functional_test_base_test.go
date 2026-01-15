@@ -23,7 +23,7 @@ func TestFunctionalTestBaseSuite(t *testing.T) {
 }
 
 func (s *FunctionalTestBaseSuite) SetupSuite() {
-	s.FunctionalTestBase.SetupSuiteWithCluster(
+	s.SetupSuiteWithCluster(
 		WithFxOptionsForService(primitives.FrontendService, fx.Populate(&s.frontendServiceName)),
 		WithFxOptionsForService(primitives.MatchingService, fx.Populate(&s.matchingServiceName)),
 		WithFxOptionsForService(primitives.HistoryService, fx.Populate(&s.historyServiceName)),
@@ -32,7 +32,7 @@ func (s *FunctionalTestBaseSuite) SetupSuite() {
 }
 
 func (s *FunctionalTestBaseSuite) TearDownSuite() {
-	s.FunctionalTestBase.TearDownCluster()
+	s.TearDownCluster()
 }
 
 func (s *FunctionalTestBaseSuite) SetupTest() {

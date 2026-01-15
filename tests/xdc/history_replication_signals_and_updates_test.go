@@ -269,7 +269,7 @@ func (s *hrsuTestSuite) TestConflictResolutionReappliesSignals() {
 
 	// Cluster2 sends the reapplied signal to cluster1, bringing the cluster histories into agreement.
 	t.cluster1.executeHistoryReplicationTasksUntil(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED)
-	s.EqualValues(t.cluster1.getHistory(ctx), t.cluster2.getHistory(ctx))
+	s.Equal(t.cluster1.getHistory(ctx), t.cluster2.getHistory(ctx))
 }
 
 // TestConflictResolutionReappliesUpdates creates a split-brain scenario in which both clusters believe they are active.
@@ -312,7 +312,7 @@ func (s *hrsuTestSuite) TestConflictResolutionReappliesUpdates() {
 
 	// Cluster2 sends the reapplied update to cluster1, bringing the cluster histories into agreement.
 	t.cluster1.executeHistoryReplicationTasksUntil(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED)
-	s.EqualValues(t.cluster1.getHistory(ctx), t.cluster2.getHistory(ctx))
+	s.Equal(t.cluster1.getHistory(ctx), t.cluster2.getHistory(ctx))
 
 	s.NoError(t.cluster2.pollAndCompleteUpdate(cluster2UpdateId))
 	s.EqualHistoryEvents(fmt.Sprintf(`
@@ -777,13 +777,14 @@ func (c *hrsuTestCluster) sendUpdateAndWaitUntilStage(ctx context.Context, updat
 
 	// Blocks until the update request causes a WFT to be dispatched; then sends the update acceptance message
 	// required for the update request to return.
-	if stage == sdkclient.WorkflowUpdateStageCompleted {
+	switch stage {
+	case sdkclient.WorkflowUpdateStageCompleted:
 		err := c.pollAndAcceptCompleteUpdate(updateId)
 		c.t.s.NoError(err)
-	} else if stage == sdkclient.WorkflowUpdateStageAccepted {
+	case sdkclient.WorkflowUpdateStageAccepted:
 		err := c.pollAndAcceptUpdate()
 		c.t.s.NoError(err)
-	} else {
+	default:
 		c.t.s.FailNow("invalid stage", stage)
 	}
 
@@ -1164,7 +1165,7 @@ func (s *hrsuTestSuite) TestConflictResolutionGetResult() {
 
 	// Cluster2 sends the reapplied signal to cluster1, bringing the cluster histories into agreement.
 	t.cluster1.executeHistoryReplicationTasksUntil(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED)
-	s.EqualValues(t.cluster1.getHistory(ctx), t.cluster2.getHistory(ctx))
+	s.Equal(t.cluster1.getHistory(ctx), t.cluster2.getHistory(ctx))
 
 	// Complete the workflow in cluster2. This will cause the workflow result to be sent to cluste1.
 	task, err := t.cluster2.testCluster.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
@@ -1187,7 +1188,7 @@ func (s *hrsuTestSuite) TestConflictResolutionGetResult() {
 	s.Require().NoError(err)
 
 	t.cluster1.executeHistoryReplicationTasksUntil(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED)
-	s.EqualValues(t.cluster1.getHistory(ctx), t.cluster2.getHistory(ctx))
+	s.Equal(t.cluster1.getHistory(ctx), t.cluster2.getHistory(ctx))
 
 	// Make sure we can get the workflow result after the conflict resolution (CurrentBranchChange).
 	event := <-workflowResultCh
