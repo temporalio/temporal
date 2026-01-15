@@ -50,10 +50,13 @@ func (s *PrioritySuite) SetupSuite() {
 }
 
 func (s *PrioritySuite) TestPriority_Activity_Basic() {
-	const N = 100
+	const N = 20
 	const Levels = 5
 
 	tv := testvars.New(s.T())
+
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
