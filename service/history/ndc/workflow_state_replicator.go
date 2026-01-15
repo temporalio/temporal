@@ -494,7 +494,7 @@ func (r *WorkflowStateReplicatorImpl) handleFirstReplicationTaskWithNewRun(
 	sourceClusterName string,
 ) (continueProcess bool, retErr error) {
 	if archetypeID != chasm.WorkflowArchetypeID {
-		return false, serviceerror.NewInvalidArgument("Non worklfow should not have new run")
+		return false, serviceerror.NewInvalidArgument("Non workflow should not have new run")
 	}
 	nsEntry, err := r.namespaceRegistry.GetNamespaceByID(namespace.ID(executionInfo.NamespaceId))
 	if err != nil {
