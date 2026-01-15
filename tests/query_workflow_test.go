@@ -234,23 +234,30 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_QueryBeforeStart() {
 	s.NotEmpty(workflowRun.GetRunID())
 
 	wg := sync.WaitGroup{}
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-
+	wg.Go(func() {
 		startTime := time.Now()
 		queryResult, err := s.SdkClient().QueryWorkflow(ctx, id, "", "test")
 		endTime := time.Now()
-		s.NoError(err)
+		if err != nil {
+			s.T().Errorf("QueryWorkflow failed: %v", err)
+			return
+		}
 		var queryResultStr string
 		err = queryResult.Get(&queryResultStr)
-		s.NoError(err)
+		if err != nil {
+			s.T().Errorf("queryResult.Get failed: %v", err)
+			return
+		}
 
 		// verify query sees all signals before it
-		s.Equal("started", queryResultStr)
+		if queryResultStr != "started" {
+			s.T().Errorf("Expected query result 'started', got %q", queryResultStr)
+		}
 
-		s.Greater(endTime.Sub(startTime), time.Second)
-	}()
+		if endTime.Sub(startTime) <= time.Second {
+			s.T().Errorf("Expected duration > 1s, got %v", endTime.Sub(startTime))
+		}
+	})
 
 	// delay 2s to start worker, this will block query for 2s
 	time.Sleep(time.Second * 2) //nolint:forbidigo

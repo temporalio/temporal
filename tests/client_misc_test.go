@@ -837,7 +837,9 @@ func (s *ClientMiscTestSuite) Test_BufferedQuery() {
 			},
 			Archetype: chasm.WorkflowArchetype,
 		})
-		s.NoError(err)
+		if err != nil {
+			s.T().Errorf("DescribeMutableState failed: %v", err)
+		}
 	}()
 
 	// this query will be buffered in mutable state because workflow task is in-flight.

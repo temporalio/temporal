@@ -57,8 +57,8 @@ func (s *WorkflowUpdateBaseSuite) sendUpdateInternal(
 		updateResp, updateErr := s.FrontendClient().UpdateWorkflowExecution(ctx, s.updateWorkflowRequest(tv, waitPolicy))
 		// It is important to do assert here (before writing to channel which doesn't have readers yet)
 		// to fail fast without trying to process update in wtHandler.
-		if requireNoError {
-			s.Require().NoError(updateErr)
+		if requireNoError && updateErr != nil {
+			s.T().Errorf("Update failed: %v", updateErr)
 		}
 		updateResultCh <- updateResponseErr{response: updateResp, err: updateErr}
 	}()

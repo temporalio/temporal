@@ -593,6 +593,7 @@ func (s *ActivityTestSuite) TestActivityRetry() {
 			err = errors.New("bad-luck-please-retry") //nolint:err113
 		case 1:
 			err = temporal.NewNonRetryableApplicationError("bad-bug", "", nil)
+		default:
 		}
 		activityExecutedCount++
 		return nil, false, err
@@ -1170,6 +1171,7 @@ func (s *ActivityClientTestSuite) TestActivityHeartbeatDetailsDuringRetry() {
 		case 1:
 			time.Sleep(activityTimeout / 2)     //nolint:forbidigo
 			err = errors.New("retryable-error") //nolint:err113
+		default:
 		}
 
 		if activityExecutedCount > 0 {

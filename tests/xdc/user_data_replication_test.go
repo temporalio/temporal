@@ -303,7 +303,7 @@ func (s *UserDataReplicationTestSuite) TestUserDataIsReplicatedFromActiveToPassi
 		if perType := response.GetUserData().GetData().GetPerType(); a.NotNil(perType) {
 			for tqType := 1; tqType <= 3; tqType++ {
 				data := perType[int32(tqType)].GetDeploymentData()
-				if a.Len(data.GetVersions(), 1) {
+				if a.Len(data.GetVersions(), 1) { //nolint:staticcheck // deprecated
 					a.True(data.GetVersions()[0].Equal(expectedVersionData))
 				}
 			}
@@ -335,7 +335,7 @@ func (s *UserDataReplicationTestSuite) TestUserDataIsReplicatedFromActiveToPassi
 		if perType := response.GetUserData().GetData().GetPerType(); a.NotNil(perType) {
 			for tqType := 1; tqType <= 3; tqType++ {
 				data := perType[int32(tqType)].GetDeploymentData()
-				if a.Len(data.GetVersions(), 1) {
+				if a.Len(data.GetVersions(), 1) { //nolint:staticcheck // deprecated
 					a.True(data.GetVersions()[0].Equal(expectedVersionData))
 				}
 			}

@@ -4986,15 +4986,21 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 				})
 
 			if err == nil {
-				s.Len(resp.Responses, 2)
-
-				startRes := resp.Responses[0].Response.(*workflowservice.ExecuteMultiOperationResponse_Response_StartWorkflow).StartWorkflow
-				s.NotEmpty(startRes.RunId)
-
-				updateRes := resp.Responses[1].Response.(*workflowservice.ExecuteMultiOperationResponse_Response_UpdateWorkflow).UpdateWorkflow
-				if updateReq.WaitPolicy.LifecycleStage == enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED {
-					s.NotNil(updateRes.Outcome)
-					s.NotEmpty(updateRes.Outcome.String())
+				if len(resp.Responses) != 2 {
+					s.T().Errorf("expected 2 responses, got %d", len(resp.Responses))
+				} else {
+					startRes := resp.Responses[0].Response.(*workflowservice.ExecuteMultiOperationResponse_Response_StartWorkflow).StartWorkflow
+					if startRes.RunId == "" {
+						s.T().Errorf("expected non-empty RunId")
+					}
+					if updateReq.WaitPolicy.LifecycleStage == enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED {
+						updateRes := resp.Responses[1].Response.(*workflowservice.ExecuteMultiOperationResponse_Response_UpdateWorkflow).UpdateWorkflow
+						if updateRes.Outcome == nil {
+							s.T().Errorf("expected non-nil Outcome")
+						} else if updateRes.Outcome.String() == "" {
+							s.T().Errorf("expected non-empty Outcome")
+						}
+					}
 				}
 			}
 

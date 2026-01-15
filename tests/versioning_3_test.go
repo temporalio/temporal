@@ -4199,7 +4199,7 @@ func (s *Versioning3Suite) validateBacklogCount(
 		})
 		s.NoError(err)
 		s.NotNil(resp)
-		s.Len(resp.GetVersionsInfo(), 1, "should be 1 because only default/unversioned queue")
+		s.Len(resp.GetVersionsInfo(), 1, "should be 1 because only default/unversioned queue") //nolint:staticcheck // deprecated
 		versionInfo := resp.GetVersionsInfo()[""]
 		typeInfo, ok := versionInfo.GetTypesInfo()[int32(tqType)]
 		s.True(ok)
