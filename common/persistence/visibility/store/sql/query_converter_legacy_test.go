@@ -825,8 +825,9 @@ func (s *queryConverterSuite) TestParseSQLVal() {
 			name:  "valid string",
 			input: "'foo'",
 			args: map[string]any{
-				"saName": "AliasForKeyword01",
-				"saType": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+				"saName":      "AliasForKeyword01",
+				"saFieldName": "Keyword01",
+				"saType":      enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 			},
 			retValue: "foo",
 			err:      nil,
@@ -835,8 +836,9 @@ func (s *queryConverterSuite) TestParseSQLVal() {
 			name:  "valid integer",
 			input: "123",
 			args: map[string]any{
-				"saName": "AliasForInt01",
-				"saType": enumspb.INDEXED_VALUE_TYPE_INT,
+				"saName":      "AliasForInt01",
+				"saFieldName": "Int01",
+				"saType":      enumspb.INDEXED_VALUE_TYPE_INT,
 			},
 			retValue: int64(123),
 			err:      nil,
@@ -845,8 +847,9 @@ func (s *queryConverterSuite) TestParseSQLVal() {
 			name:  "valid float",
 			input: "1.230",
 			args: map[string]any{
-				"saName": "AliasForDouble01",
-				"saType": enumspb.INDEXED_VALUE_TYPE_DOUBLE,
+				"saName":      "AliasForDouble01",
+				"saFieldName": "Double01",
+				"saType":      enumspb.INDEXED_VALUE_TYPE_DOUBLE,
 			},
 			retValue: float64(1.23),
 			err:      nil,
@@ -855,8 +858,9 @@ func (s *queryConverterSuite) TestParseSQLVal() {
 			name:  "valid datetime",
 			input: fmt.Sprintf("'%s'", dt.Format(time.RFC3339Nano)),
 			args: map[string]any{
-				"saName": "AliasForDatetime01",
-				"saType": enumspb.INDEXED_VALUE_TYPE_DATETIME,
+				"saName":      "AliasForDatetime01",
+				"saFieldName": "Datetime01",
+				"saType":      enumspb.INDEXED_VALUE_TYPE_DATETIME,
 			},
 			retValue: dt.Format(s.queryConverter.getDatetimeFormat()),
 			err:      nil,
@@ -865,8 +869,9 @@ func (s *queryConverterSuite) TestParseSQLVal() {
 			name:  "invalid datetime",
 			input: fmt.Sprintf("'%s'", dt.String()),
 			args: map[string]any{
-				"saName": "AliasForDatetime01",
-				"saType": enumspb.INDEXED_VALUE_TYPE_DATETIME,
+				"saName":      "AliasForDatetime01",
+				"saFieldName": "Datetime01",
+				"saType":      enumspb.INDEXED_VALUE_TYPE_DATETIME,
 			},
 			retValue: nil,
 			err: query.NewConverterError(
@@ -876,31 +881,34 @@ func (s *queryConverterSuite) TestParseSQLVal() {
 			),
 		},
 		{
-			name:  "valid ExecutionStatus keyword",
+			name:  "valid ExecutionStatus keyword (system)",
 			input: "'Running'",
 			args: map[string]any{
-				"saName": "ExecutionStatus",
-				"saType": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+				"saName":      "ExecutionStatus",
+				"saFieldName": "ExecutionStatus", // System ExecutionStatus uses field name = alias
+				"saType":      enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 			},
 			retValue: int64(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING),
 			err:      nil,
 		},
 		{
-			name:  "valid ExecutionStatus code",
+			name:  "valid ExecutionStatus code (system)",
 			input: "1",
 			args: map[string]any{
-				"saName": "ExecutionStatus",
-				"saType": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+				"saName":      "ExecutionStatus",
+				"saFieldName": "ExecutionStatus", // System ExecutionStatus uses field name = alias
+				"saType":      enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 			},
 			retValue: int64(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING),
 			err:      nil,
 		},
 		{
-			name:  "invalid ExecutionStatus keyword",
+			name:  "invalid ExecutionStatus keyword (system)",
 			input: "'Foo'",
 			args: map[string]any{
-				"saName": "ExecutionStatus",
-				"saType": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+				"saName":      "ExecutionStatus",
+				"saFieldName": "ExecutionStatus", // System ExecutionStatus uses field name = alias
+				"saType":      enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 			},
 			retValue: nil,
 			err: query.NewConverterError(
@@ -910,11 +918,23 @@ func (s *queryConverterSuite) TestParseSQLVal() {
 			),
 		},
 		{
+			name:  "valid ExecutionStatus alias (CHASM)",
+			input: "'CustomStatus'",
+			args: map[string]any{
+				"saName":      "ExecutionStatus",
+				"saFieldName": "TemporalLowCardinalityKeyword01", // CHASM alias maps to different field
+				"saType":      enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+			},
+			retValue: "CustomStatus", // No validation against enum, just returns the string
+			err:      nil,
+		},
+		{
 			name:  "valid ExecutionDuration day suffix",
 			input: "'10d'",
 			args: map[string]any{
-				"saName": "ExecutionDuration",
-				"saType": enumspb.INDEXED_VALUE_TYPE_INT,
+				"saName":      "ExecutionDuration",
+				"saFieldName": "ExecutionDuration",
+				"saType":      enumspb.INDEXED_VALUE_TYPE_INT,
 			},
 			retValue: int64(10 * 24 * time.Hour),
 			err:      nil,
@@ -923,8 +943,9 @@ func (s *queryConverterSuite) TestParseSQLVal() {
 			name:  "valid ExecutionDuration hour suffix",
 			input: "'10h'",
 			args: map[string]any{
-				"saName": "ExecutionDuration",
-				"saType": enumspb.INDEXED_VALUE_TYPE_INT,
+				"saName":      "ExecutionDuration",
+				"saFieldName": "ExecutionDuration",
+				"saType":      enumspb.INDEXED_VALUE_TYPE_INT,
 			},
 			retValue: int64(10 * time.Hour),
 			err:      nil,
@@ -933,8 +954,9 @@ func (s *queryConverterSuite) TestParseSQLVal() {
 			name:  "valid ExecutionDuration string nanos",
 			input: "'100'",
 			args: map[string]any{
-				"saName": "ExecutionDuration",
-				"saType": enumspb.INDEXED_VALUE_TYPE_INT,
+				"saName":      "ExecutionDuration",
+				"saFieldName": "ExecutionDuration",
+				"saType":      enumspb.INDEXED_VALUE_TYPE_INT,
 			},
 			retValue: int64(100),
 			err:      nil,
@@ -943,8 +965,9 @@ func (s *queryConverterSuite) TestParseSQLVal() {
 			name:  "valid ExecutionDuration int nanos",
 			input: "100",
 			args: map[string]any{
-				"saName": "ExecutionDuration",
-				"saType": enumspb.INDEXED_VALUE_TYPE_INT,
+				"saName":      "ExecutionDuration",
+				"saFieldName": "ExecutionDuration",
+				"saType":      enumspb.INDEXED_VALUE_TYPE_INT,
 			},
 			retValue: int64(100),
 			err:      nil,
@@ -953,8 +976,9 @@ func (s *queryConverterSuite) TestParseSQLVal() {
 			name:  "invalid ExecutionDuration",
 			input: "'100q'",
 			args: map[string]any{
-				"saName": "ExecutionDuration",
-				"saType": enumspb.INDEXED_VALUE_TYPE_INT,
+				"saName":      "ExecutionDuration",
+				"saFieldName": "ExecutionDuration",
+				"saType":      enumspb.INDEXED_VALUE_TYPE_INT,
 			},
 			retValue: nil,
 			err: query.NewConverterError(
@@ -964,8 +988,9 @@ func (s *queryConverterSuite) TestParseSQLVal() {
 			name:  "invalid ExecutionDuration out of bounds",
 			input: "'10000000h'",
 			args: map[string]any{
-				"saName": "ExecutionDuration",
-				"saType": enumspb.INDEXED_VALUE_TYPE_INT,
+				"saName":      "ExecutionDuration",
+				"saFieldName": "ExecutionDuration",
+				"saType":      enumspb.INDEXED_VALUE_TYPE_INT,
 			},
 			retValue: nil,
 			err: query.NewConverterError(
@@ -982,6 +1007,7 @@ func (s *queryConverterSuite) TestParseSQLVal() {
 			value, err := s.queryConverter.parseSQLVal(
 				expr.(*sqlparser.SQLVal),
 				tc.args["saName"].(string),
+				tc.args["saFieldName"].(string),
 				tc.args["saType"].(enumspb.IndexedValueType),
 			)
 			if tc.err == nil {
