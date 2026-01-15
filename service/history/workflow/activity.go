@@ -67,7 +67,7 @@ func UpdateActivityInfoForRetries(
 	failure *failurepb.Failure,
 	nextScheduledTime *timestamppb.Timestamp,
 	isActivityRetryStampIncrementEnabled bool,
-) *persistencespb.ActivityInfo {
+) {
 	previousAttempt := ai.Attempt
 	ai.Attempt = attempt
 	ai.Version = version
@@ -76,7 +76,8 @@ func UpdateActivityInfoForRetries(
 	ai.StartVersion = common.EmptyVersion
 	ai.RequestId = ""
 	ai.StartedTime = nil
-	ai.TimerTaskStatus = TimerTaskStatusNone
+	// Mark per-attempt timers for recreation.
+	ai.TimerTaskStatus ^= TimerTaskStatusCreatedHeartbeat | TimerTaskStatusCreatedStartToClose | TimerTaskStatusCreatedScheduleToStart
 	ai.RetryLastWorkerIdentity = ai.StartedIdentity
 	ai.RetryLastFailure = failure
 	// this flag means the user resets the activity with "--reset-heartbeat" flag
@@ -93,8 +94,6 @@ func UpdateActivityInfoForRetries(
 	if isActivityRetryStampIncrementEnabled && attempt > previousAttempt {
 		ai.Stamp++
 	}
-
-	return ai
 }
 
 func GetPendingActivityInfo(

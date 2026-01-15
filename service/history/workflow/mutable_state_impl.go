@@ -6238,10 +6238,13 @@ func (ms *MutableStateImpl) RetryActivity(
 		return retryState, nil
 	}
 
-	ms.updateActivityInfoForRetries(ai,
+	err := ms.updateActivityInfoForRetries(ai,
 		now.Add(retryBackoff),
 		ai.Attempt+1,
 		activityFailure)
+	if err != nil {
+		return enumspb.RETRY_STATE_INTERNAL_SERVER_ERROR, err
+	}
 
 	if err := ms.taskGenerator.GenerateActivityRetryTasks(ai); err != nil {
 		return enumspb.RETRY_STATE_INTERNAL_SERVER_ERROR, err
@@ -6262,10 +6265,13 @@ func (ms *MutableStateImpl) RegenerateActivityRetryTask(ai *persistencespb.Activ
 		nextScheduledTime = GetNextScheduledTime(ai)
 	}
 
-	ms.updateActivityInfoForRetries(ai,
+	err := ms.updateActivityInfoForRetries(ai,
 		nextScheduledTime,
 		ai.Attempt,
 		nil)
+	if err != nil {
+		return err
+	}
 
 	return ms.taskGenerator.GenerateActivityRetryTasks(ai)
 }
@@ -6275,20 +6281,16 @@ func (ms *MutableStateImpl) updateActivityInfoForRetries(
 	nextScheduledTime time.Time,
 	nextAttempt int32,
 	activityFailure *failurepb.Failure,
-) {
-	_ = ms.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, mutableState historyi.MutableState) error {
-		mutableStateImpl, ok := mutableState.(*MutableStateImpl)
-		if ok {
-			isActivityRetryStampIncrementEnabled := ms.config.EnableActivityRetryStampIncrement()
-			ai = UpdateActivityInfoForRetries(
-				activityInfo,
-				mutableStateImpl.GetCurrentVersion(),
-				nextAttempt,
-				mutableStateImpl.truncateRetryableActivityFailure(activityFailure),
-				timestamppb.New(nextScheduledTime),
-				isActivityRetryStampIncrementEnabled,
-			)
-		}
+) error {
+	return ms.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ historyi.MutableState) error {
+		UpdateActivityInfoForRetries(
+			activityInfo,
+			ms.GetCurrentVersion(),
+			nextAttempt,
+			ms.truncateRetryableActivityFailure(activityFailure),
+			timestamppb.New(nextScheduledTime),
+			ms.config.EnableActivityRetryStampIncrement(),
+		)
 		return nil
 	})
 }

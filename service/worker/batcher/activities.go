@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -28,6 +29,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/sdk"
+	"go.temporal.io/server/common/worker_versioning"
 	workercommon "go.temporal.io/server/service/worker/common"
 	"golang.org/x/time/rate"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
@@ -596,6 +598,24 @@ func (a *activities) startTaskProcessor(
 	}
 }
 
+// isNonRetryableError determines if an error should not be retried based on the operation type
+func isNonRetryableError(err error, batchType enumspb.BatchOperationType) bool {
+	if err == nil {
+		return false
+	}
+
+	errMsg := err.Error()
+
+	// Operation-specific non-retryable errors
+	switch batchType {
+	case enumspb.BATCH_OPERATION_TYPE_UPDATE_EXECUTION_OPTIONS:
+		// Pinned version that is not present in a task queue error is non-retryable for workflow options updates
+		return strings.Contains(errMsg, worker_versioning.ErrPinnedVersionNotInTaskQueueSubstring)
+	default:
+		return false
+	}
+}
+
 func (a *activities) handleTaskResult(
 	batchOperation *batchspb.BatchOperationInput,
 	task task,
@@ -608,7 +628,11 @@ func (a *activities) handleTaskResult(
 	if err != nil {
 		metrics.BatcherProcessorFailures.With(metricsHandler).Record(1)
 		logger.Error("Failed to process batch operation task", tag.Error(err))
-		nonRetryable := slices.Contains(batchOperation.NonRetryableErrors, err.Error())
+
+		// Check operation-specific non-retryable errors first, then check the list of non-retryable errors from frontend.
+		nonRetryable := isNonRetryableError(err, batchOperation.BatchType) ||
+			slices.Contains(batchOperation.NonRetryableErrors, err.Error())
+
 		if nonRetryable || task.attempts > int(batchOperation.AttemptsOnRetryableError) {
 			respCh <- taskResponse{err: err, page: task.page}
 		} else {
