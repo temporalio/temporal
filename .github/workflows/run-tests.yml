@@ -614,15 +614,13 @@ jobs:
       fail-fast: false
       matrix:
         name:
-          [
-            cass_es,
-            cass_es8,
-            cass_os2,
-            cass_os3,
-            mysql8,
-            postgres12,
-            postgres12_pgx,
-          ]
+          - cass_es
+          - cass_es8
+          - cass_os2
+          - cass_os3
+          - mysql8
+          - postgres12
+          - postgres12_pgx
         include:
           - name: cass_es
             persistence_type: nosql
