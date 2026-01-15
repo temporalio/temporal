@@ -73,11 +73,18 @@ func (e *LeaseExpiryTaskExecutor) Execute(
 	task *workerstatepb.LeaseExpiryTask,
 ) error {
 	workerID := worker.workerID()
-	e.logger.Info("Worker lease expired, marking as inactive and rescheduling activities",
-		workerIDTag(workerID))
 
-	// Get activities to reschedule before transitioning to inactive
-	activities := worker.GetWorkerHeartbeat().GetActivityInfo().GetRunningActivities()
+	// Debug: log heartbeat state
+	heartbeat := worker.GetWorkerHeartbeat()
+	activityInfo := heartbeat.GetActivityInfo()
+	activities := activityInfo.GetRunningActivities()
+
+	e.logger.Info("Worker lease expired, marking as inactive and rescheduling activities",
+		workerIDTag(workerID),
+		tag.NewBoolTag("has_heartbeat", heartbeat != nil),
+		tag.NewBoolTag("has_activity_info", activityInfo != nil),
+		tag.NewInt("activity_count", len(activities)))
+
 	namespaceID := ctx.ExecutionKey().NamespaceID
 
 	// Transition to inactive state
@@ -88,6 +95,9 @@ func (e *LeaseExpiryTaskExecutor) Execute(
 	// Reschedule activities (best effort, don't fail the task)
 	if len(activities) > 0 {
 		e.rescheduleActivities(namespaceID, workerID, activities)
+	} else {
+		e.logger.Info("No activities to reschedule for expired worker",
+			workerIDTag(workerID))
 	}
 
 	return nil

@@ -32,7 +32,7 @@ type LibraryParams struct {
 
 func NewLibrary(params LibraryParams) *Library {
 	return &Library{
-		handler:                 newHandler(params.MetricsHandler),
+		handler:                 newHandler(params.MetricsHandler, params.Logger),
 		leaseExpiryTaskExecutor: NewLeaseExpiryTaskExecutor(params.Logger, params.MetricsHandler, params.HistoryClient, params.NamespaceRegistry),
 	}
 }

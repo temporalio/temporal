@@ -20,9 +20,9 @@ func Register(
 	return registry.Register(library)
 }
 
-// HistoryClientProvider wraps the resource.HistoryClient to implement HistoryClient interface.
+// ChasmHistoryClientProvider wraps the resource.HistoryClient to implement our HistoryClient interface.
 // Only used in history service where HistoryClient is available.
-func HistoryClientProvider(client resource.HistoryClient) HistoryClient {
+func ChasmHistoryClientProvider(client resource.HistoryClient) HistoryClient {
 	return client
 }
 
@@ -40,7 +40,7 @@ var Module = fx.Module(
 // Use this in history service to enable activity rescheduling.
 var HistoryModule = fx.Module(
 	"worker-history",
-	fx.Provide(HistoryClientProvider),
+	fx.Provide(ChasmHistoryClientProvider),
 )
 
 func NewWorkerServiceClient(
