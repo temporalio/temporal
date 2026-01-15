@@ -6,7 +6,6 @@ Apply these patterns when reviewing PRs or suggesting code changes.
 
 - Remove code that doesn't add value to tests or implementation
 - Don't add unnecessary activities/complexity in tests - test only what you need
-- Avoid redundant checks for atomic operations (e.g., "reset is atomic, no need for eventually")
 - Question randomness in tests - test explicitly what you want
 - Don't add assertions for things you can assume work (e.g., "You are not testing TerminateWorkflowExecution here, you can assume it works")
 - Remove redundant nil checks after you just set a value
@@ -31,18 +30,18 @@ Apply these patterns when reviewing PRs or suggesting code changes.
 
 ## 4. Inline Code / Avoid Abstractions
 
-- Repeat strings instead of adding constants for single use: "nit: I would just repeat the string instead of adding a layer of indirection"
+- Repeat strings instead of adding constants for single use
 - Inline struct field assignments when possible
 - Avoid unnecessary wrapper types and generic structs
 - Don't add dependencies for 5 lines of code - "just write 5 lines of code instead of adding more dependency bloat"
 - Don't create testsuite-level helpers that can't be safely used in subtests
-- Prefer explicit code over reflection: "It would be easier to follow without all of the reflection"
+- Prefer explicit code over reflection
 
 ## 5. Proper Error Handling
 
 - Use standard error types (`InvalidArgument`, `NotFound`, `FailedPrecondition`) over custom error types
 - Mark errors as non-retryable when task shouldn't retry in queue
-- Always provide context with errors: `fmt.Errorf("context: %w", err)`
+- Wrap errors with context when there's something interesting or informative to add, e.g. `fmt.Errorf("multi-operation part 2: %w", err)`
 - Use early returns over nested if/else blocks
 - Don't panic in library code - return errors and let caller decide
 - Validate early in handlers, not deep in business logic
@@ -62,12 +61,12 @@ Apply these patterns when reviewing PRs or suggesting code changes.
 - Use proper field names: `request_id` not `requestId`, `schedule_time` not `scheduledTime`
 - Don't expose internal concepts in user-facing errors: "LowCardinalityKeyword is not a user facing concept"
 - Accept event attributes structs instead of growing function signatures
-- Use `map[string]Empty` over `[]string` when you might add metadata later
 - Prefer enums over int/string for well-known values
 
 ## 8. Concurrency and Safety
 
-- Use `atomic.Value` for concurrent access, not regular variables
+- Prefer immutable data patterns (for normal structs and especially proto messages) to avoid data races and synchronization
+- Default to `sync.Mutex` for synchronization; atomics are an advanced tool for specific patterns or performance concerns
+- Prefer `sync.Mutex` over `sync.RWMutex` almost always, except when reads are much more common than writes (>1000×) or readers hold the lock for significant time
 - Don't do IO while holding locks - use side effect tasks
 - Clone data before releasing locks if it might be modified
-- Use `sync.Mutex` over `sync.RWMutex` when you only read once before writing
