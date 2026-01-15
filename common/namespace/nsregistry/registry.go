@@ -120,7 +120,7 @@ type (
 		logger                  log.Logger
 		refreshInterval         dynamicconfig.DurationPropertyFn
 
-		// nsMapsLock protects nameToID and idToNamespace
+		// nsMapsLock protects nameToID, idToNamespace, and stateChangedDuringReadthrough
 		nsMapsLock    sync.RWMutex
 		nameToID      map[namespace.Name]namespace.ID
 		idToNamespace map[namespace.ID]*namespace.Namespace
@@ -224,7 +224,7 @@ func (r *registry) Start() {
 	}
 
 	if err := r.refresher.Err(); !errors.Is(err, persistence.ErrWatchNotSupported) {
-		// Watch failed to start for a reason other than ErrWatchNotSupported. Abort.
+		// Watch failed to start for a reason other than ErrWatchNotSupported
 		metrics.NamespaceRegistryWatchStartFailures.With(r.metricsHandler).Record(1)
 		r.logger.Warn("Unable to start namespace watch - falling back to polling", tag.Error(err))
 	} else {
@@ -235,10 +235,7 @@ func (r *registry) Start() {
 	if err := r.refreshNamespaces(ctx); err != nil {
 		r.logger.Fatal("Unable to initialize namespace registry", tag.Error(err))
 	}
-	r.refresher = goro.NewHandle(ctx).Go(
-		func(ctx context.Context) error {
-			return r.runPollingLoop(ctx)
-		})
+	r.refresher = goro.NewHandle(ctx).Go(r.runPollingLoop)
 }
 
 // Stop the background refresh of Namespace data
@@ -308,9 +305,9 @@ func (r *registry) RegisterStateChangeCallback(key any, cb namespace.StateChange
 
 	r.stateChangeCallbacks.Store(key, namespace.StateChangeCallbackFn(callbackWithTiming))
 
-	r.nsMapsLock.Lock()
+	r.nsMapsLock.RLock()
 	allNamespaces := expmaps.Values(r.idToNamespace)
-	r.nsMapsLock.Unlock()
+	r.nsMapsLock.RUnlock()
 
 	// call once for each namespace already in the registry
 	for _, ns := range allNamespaces {
@@ -407,7 +404,7 @@ func (r *registry) GetCustomSearchAttributesMapper(name namespace.Name) (namespa
 // watchLoop processes namespace watch events and handles restarts on failure.
 // It returns when the context is cancelled or the watch channel is closed.
 func (r *registry) watchLoop(ctx context.Context, watchCh <-chan *persistence.NamespaceWatchEvent) {
-	r.logger.Info("Starting watch loop")
+	r.logger.Info("Starting namespace registry loop")
 	for {
 		select {
 		case <-ctx.Done():
@@ -417,8 +414,9 @@ func (r *registry) watchLoop(ctx context.Context, watchCh <-chan *persistence.Na
 			if ok {
 				if event.Err == nil {
 					err = r.processWatchEvent(event)
+				} else {
+					err = event.Err
 				}
-				err = errors.Join(err, event.Err)
 			}
 
 			if !ok || err != nil {
@@ -434,8 +432,7 @@ func (r *registry) watchLoop(ctx context.Context, watchCh <-chan *persistence.Na
 // On initial startup (initialWatch=true), retries are limited to avoid blocking server startup indefinitely.
 // On reconnection after a previous success (initialWatch=false), retries continue indefinitely.
 func watchStartRetryPolicy(initialWatch bool) backoff.RetryPolicy {
-	policy := backoff.
-		NewExponentialRetryPolicy(CacheRefreshFailureRetryInterval)
+	policy := backoff.NewExponentialRetryPolicy(CacheRefreshFailureRetryInterval)
 	if initialWatch {
 		return policy.WithMaximumAttempts(startWatchMaxAttempts)
 	}
@@ -532,7 +529,6 @@ func (r *registry) startWatch(ctx context.Context, initialWatch bool) (watchStar
 // Used as fallback when namespace watches are not supported.
 func (r *registry) runPollingLoop(ctx context.Context) error {
 	timer := time.NewTimer(r.refreshInterval())
-	defer timer.Stop()
 
 	for {
 		select {

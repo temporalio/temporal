@@ -1082,6 +1082,7 @@ type (
 		LastKnownTableVersion int64
 		ID                    string
 	}
+
 	NamespaceWatchEventType int
 
 	NamespaceWatchEvent struct {

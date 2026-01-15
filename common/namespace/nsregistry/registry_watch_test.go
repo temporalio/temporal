@@ -112,7 +112,6 @@ func (s *registryWatchSuite) SetupTest() {
 func (s *registryWatchSuite) TearDownTest() {
 	s.registry.Stop()
 	s.captureHandler.StopCapture(s.capture)
-	s.controller.Finish()
 }
 
 func (s *registryWatchSuite) newRegistry() namespace.Registry {
