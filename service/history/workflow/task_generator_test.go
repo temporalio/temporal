@@ -520,7 +520,7 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 			},
 			MachineTransitionCount: 1,
 		},
-		Type: nexusoperations.TaskTypeScheduleToCloseTimeout,
+		Type: nexusoperations.TaskTypeTimeout,
 		Data: nil,
 	}, timers[1].Infos[0])
 }
