@@ -72,7 +72,7 @@ CREATE TABLE current_chasm_executions(
 	status INT NOT NULL,
 	start_time TIMESTAMP NULL,
 	last_write_version BIGINT NOT NULL,
-	-- `data` contains the WorkflowExecutionState (same as in `executions.state` above)
+	-- `data` contains the ExecutionState (same as in `executions.state` above)
 	data MEDIUMBLOB NOT NULL,
 	data_encoding VARCHAR(16) NOT NULL DEFAULT '',
 	PRIMARY KEY (shard_id, namespace_id, business_id, archetype_id)

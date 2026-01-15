@@ -6,6 +6,7 @@ import (
 
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
+	"go.temporal.io/server/common/softassert"
 )
 
 const (
@@ -274,6 +275,10 @@ func (pdb *db) InsertIntoCurrentExecutions(
 	ctx context.Context,
 	row *sqlplugin.CurrentExecutionsRow,
 ) (sql.Result, error) {
+	if err := pdb.assertArchetypeIDSpecified(row.ArchetypeID); err != nil {
+		return nil, err
+	}
+
 	if row.ArchetypeID == chasm.WorkflowArchetypeID {
 		return pdb.NamedExecContext(ctx,
 			createCurrentExecutionQuery,
@@ -292,6 +297,10 @@ func (pdb *db) UpdateCurrentExecutions(
 	ctx context.Context,
 	row *sqlplugin.CurrentExecutionsRow,
 ) (sql.Result, error) {
+	if err := pdb.assertArchetypeIDSpecified(row.ArchetypeID); err != nil {
+		return nil, err
+	}
+
 	if row.ArchetypeID == chasm.WorkflowArchetypeID {
 		return pdb.NamedExecContext(ctx,
 			updateCurrentExecutionsQuery,
@@ -312,6 +321,10 @@ func (pdb *db) SelectFromCurrentExecutions(
 ) (*sqlplugin.CurrentExecutionsRow, error) {
 	var row sqlplugin.CurrentExecutionsRow
 	var err error
+
+	if err := pdb.assertArchetypeIDSpecified(filter.ArchetypeID); err != nil {
+		return nil, err
+	}
 
 	if filter.ArchetypeID == chasm.WorkflowArchetypeID {
 		err = pdb.GetContext(ctx,
@@ -341,6 +354,10 @@ func (pdb *db) DeleteFromCurrentExecutions(
 	ctx context.Context,
 	filter sqlplugin.CurrentExecutionsFilter,
 ) (sql.Result, error) {
+	if err := pdb.assertArchetypeIDSpecified(filter.ArchetypeID); err != nil {
+		return nil, err
+	}
+
 	if filter.ArchetypeID == chasm.WorkflowArchetypeID {
 		return pdb.ExecContext(ctx,
 			deleteCurrentExecutionQuery,
@@ -368,6 +385,10 @@ func (pdb *db) LockCurrentExecutions(
 ) (*sqlplugin.CurrentExecutionsRow, error) {
 	var row sqlplugin.CurrentExecutionsRow
 	var err error
+
+	if err := pdb.assertArchetypeIDSpecified(filter.ArchetypeID); err != nil {
+		return nil, err
+	}
 
 	if filter.ArchetypeID == chasm.WorkflowArchetypeID {
 		err = pdb.GetContext(ctx,
@@ -398,6 +419,10 @@ func (pdb *db) LockCurrentExecutionsJoinExecutions(
 	ctx context.Context,
 	filter sqlplugin.CurrentExecutionsFilter,
 ) (rows []sqlplugin.CurrentExecutionsRow, err error) {
+
+	if err := pdb.assertArchetypeIDSpecified(filter.ArchetypeID); err != nil {
+		return nil, err
+	}
 
 	if filter.ArchetypeID == chasm.WorkflowArchetypeID {
 		err = pdb.SelectContext(ctx,
@@ -895,4 +920,11 @@ func (pdb *db) RangeDeleteFromVisibilityTasks(
 		filter.InclusiveMinTaskID,
 		filter.ExclusiveMaxTaskID,
 	)
+}
+
+func (pdb *db) assertArchetypeIDSpecified(archetypeID chasm.ArchetypeID) error {
+	if archetypeID == chasm.UnspecifiedArchetypeID {
+		return softassert.UnexpectedInternalErr(pdb.logger, "ArchetypeID not specified", nil)
+	}
+	return nil
 }

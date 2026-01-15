@@ -6,6 +6,7 @@ import (
 
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
+	"go.temporal.io/server/common/softassert"
 )
 
 const (
@@ -274,6 +275,10 @@ func (mdb *db) InsertIntoCurrentExecutions(
 	ctx context.Context,
 	row *sqlplugin.CurrentExecutionsRow,
 ) (sql.Result, error) {
+	if err := mdb.assertArchetypeIDSpecified(row.ArchetypeID); err != nil {
+		return nil, err
+	}
+
 	if row.ArchetypeID == chasm.WorkflowArchetypeID {
 		return mdb.conn.NamedExecContext(ctx,
 			createCurrentExecutionQuery,
@@ -292,6 +297,10 @@ func (mdb *db) UpdateCurrentExecutions(
 	ctx context.Context,
 	row *sqlplugin.CurrentExecutionsRow,
 ) (sql.Result, error) {
+	if err := mdb.assertArchetypeIDSpecified(row.ArchetypeID); err != nil {
+		return nil, err
+	}
+
 	if row.ArchetypeID == chasm.WorkflowArchetypeID {
 		return mdb.conn.NamedExecContext(ctx,
 			updateCurrentExecutionsQuery,
@@ -312,6 +321,10 @@ func (mdb *db) SelectFromCurrentExecutions(
 ) (*sqlplugin.CurrentExecutionsRow, error) {
 	var row sqlplugin.CurrentExecutionsRow
 	var err error
+
+	if err := mdb.assertArchetypeIDSpecified(filter.ArchetypeID); err != nil {
+		return nil, err
+	}
 
 	if filter.ArchetypeID == chasm.WorkflowArchetypeID {
 		err = mdb.conn.GetContext(ctx,
@@ -341,6 +354,10 @@ func (mdb *db) DeleteFromCurrentExecutions(
 	ctx context.Context,
 	filter sqlplugin.CurrentExecutionsFilter,
 ) (sql.Result, error) {
+	if err := mdb.assertArchetypeIDSpecified(filter.ArchetypeID); err != nil {
+		return nil, err
+	}
+
 	if filter.ArchetypeID == chasm.WorkflowArchetypeID {
 		return mdb.conn.ExecContext(ctx,
 			deleteCurrentExecutionQuery,
@@ -368,6 +385,10 @@ func (mdb *db) LockCurrentExecutions(
 ) (*sqlplugin.CurrentExecutionsRow, error) {
 	var row sqlplugin.CurrentExecutionsRow
 	var err error
+
+	if err := mdb.assertArchetypeIDSpecified(filter.ArchetypeID); err != nil {
+		return nil, err
+	}
 
 	if filter.ArchetypeID == chasm.WorkflowArchetypeID {
 		err = mdb.conn.GetContext(ctx,
@@ -398,6 +419,10 @@ func (mdb *db) LockCurrentExecutionsJoinExecutions(
 	ctx context.Context,
 	filter sqlplugin.CurrentExecutionsFilter,
 ) (rows []sqlplugin.CurrentExecutionsRow, err error) {
+	if err := mdb.assertArchetypeIDSpecified(filter.ArchetypeID); err != nil {
+		return nil, err
+	}
+
 	if filter.ArchetypeID == chasm.WorkflowArchetypeID {
 		err = mdb.conn.SelectContext(ctx,
 			&rows,
@@ -892,4 +917,11 @@ func (mdb *db) RangeDeleteFromVisibilityTasks(
 		filter.InclusiveMinTaskID,
 		filter.ExclusiveMaxTaskID,
 	)
+}
+
+func (mdb *db) assertArchetypeIDSpecified(archetypeID chasm.ArchetypeID) error {
+	if archetypeID == chasm.UnspecifiedArchetypeID {
+		return softassert.UnexpectedInternalErr(mdb.logger, "ArchetypeID not specified", nil)
+	}
+	return nil
 }
