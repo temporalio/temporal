@@ -427,6 +427,7 @@ jobs:
           - cass_es
           - cass_es8
           - cass_os2
+          - cass_os3
           - sqlite
           - mysql8
           - postgres12
@@ -452,6 +453,10 @@ jobs:
             persistence_type: nosql
             persistence_driver: cassandra
             containers: [cassandra, opensearch2]
+          - name: cass_os3
+            persistence_type: nosql
+            persistence_driver: cassandra
+            containers: [cassandra, opensearch3]
           - name: sqlite
             persistence_type: sql
             persistence_driver: sqlite
@@ -524,11 +529,15 @@ jobs:
       - name: Run functional test
         if: ${{ inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
         timeout-minutes: ${{ fromJSON(needs.set-up-single-test.outputs.github_timeout) }} # make sure this is larger than the test timeout in the Makefile
-        run: make functional-test-coverage
+        run: ./develop/github/monitor_test.sh make functional-test-coverage
         env:
           TEST_ARGS: ${{ needs.set-up-single-test.outputs.single_test_args }}
           TEMPORAL_TEST_OTEL_OUTPUT: ${{ github.workspace }}/.testoutput
           TEMPORAL_OTEL_DEBUG: true
+
+      - name: Print memory snapshot
+        if: always()
+        run: if [ -f /tmp/memory_snapshot.txt ]; then cat /tmp/memory_snapshot.txt; fi
 
       - name: Generate crash report
         if: failure()
@@ -604,7 +613,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        name: [cass_es, cass_es8, cass_os2, mysql8, postgres12, postgres12_pgx]
+        name:
+          - cass_es
+          - cass_es8
+          - cass_os2
+          - cass_os3
+          - mysql8
+          - postgres12
+          - postgres12_pgx
         include:
           - name: cass_es
             persistence_type: nosql
@@ -624,6 +640,10 @@ jobs:
             persistence_type: nosql
             persistence_driver: cassandra
             containers: [cassandra, opensearch2]
+          - name: cass_os3
+            persistence_type: nosql
+            persistence_driver: cassandra
+            containers: [cassandra, opensearch3]
           - name: mysql8
             persistence_type: sql
             persistence_driver: mysql8
@@ -684,10 +704,14 @@ jobs:
 
       - name: Run functional test xdc
         timeout-minutes: 35 # update this to TEST_TIMEOUT+5 if you update the Makefile
-        run: make functional-test-xdc-coverage
+        run: ./develop/github/monitor_test.sh make functional-test-xdc-coverage
         env:
           TEMPORAL_TEST_OTEL_OUTPUT: ${{ github.workspace }}/.testoutput
           TEMPORAL_OTEL_DEBUG: true
+
+      - name: Print memory snapshot
+        if: always()
+        run: if [ -f /tmp/memory_snapshot.txt ]; then cat /tmp/memory_snapshot.txt; fi
 
       - name: Generate crash report
         if: failure()
@@ -766,6 +790,7 @@ jobs:
           - cass_es
           - cass_es8
           - cass_os2
+          - cass_os3
           - mysql8
           - postgres12
           - postgres12_pgx
@@ -788,6 +813,10 @@ jobs:
             persistence_type: nosql
             persistence_driver: cassandra
             containers: [cassandra, opensearch2]
+          - name: cass_os3
+            persistence_type: nosql
+            persistence_driver: cassandra
+            containers: [cassandra, opensearch3]
           - name: mysql8
             persistence_type: sql
             persistence_driver: mysql8
@@ -845,10 +874,14 @@ jobs:
 
       - name: Run functional test ndc
         timeout-minutes: 15
-        run: make functional-test-ndc-coverage
+        run: ./develop/github/monitor_test.sh make functional-test-ndc-coverage
         env:
           TEMPORAL_TEST_OTEL_OUTPUT: ${{ github.workspace }}/.testoutput
           TEMPORAL_OTEL_DEBUG: true
+
+      - name: Print memory snapshot
+        if: always()
+        run: if [ -f /tmp/memory_snapshot.txt ]; then cat /tmp/memory_snapshot.txt; fi
 
       - name: Generate crash report
         if: failure()
@@ -949,7 +982,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version-file: 'go.mod'
+          go-version-file: "go.mod"
           cache: true
 
       - name: Send Slack notification

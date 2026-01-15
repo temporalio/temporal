@@ -589,7 +589,7 @@ func (m *executionManagerImpl) SerializeWorkflowMutation( // unexport
 	input *WorkflowMutation,
 ) (*InternalWorkflowMutation, error) {
 
-	tasks, err := serializeTasks(m.serializer, input.Tasks)
+	serializedTasks, err := serializeTasks(m.serializer, input.Tasks)
 	if err != nil {
 		return nil, err
 	}
@@ -626,7 +626,7 @@ func (m *executionManagerImpl) SerializeWorkflowMutation( // unexport
 		ExecutionInfo:  input.ExecutionInfo,
 		ExecutionState: input.ExecutionState,
 
-		Tasks: tasks,
+		Tasks: serializedTasks,
 
 		Condition:       input.Condition,
 		DBRecordVersion: input.DBRecordVersion,
@@ -710,8 +710,7 @@ func (m *executionManagerImpl) SerializeWorkflowMutation( // unexport
 func (m *executionManagerImpl) SerializeWorkflowSnapshot( // unexport
 	input *WorkflowSnapshot,
 ) (*InternalWorkflowSnapshot, error) {
-
-	tasks, err := serializeTasks(m.serializer, input.Tasks)
+	serializedTasks, err := serializeTasks(m.serializer, input.Tasks)
 	if err != nil {
 		return nil, err
 	}
@@ -732,7 +731,7 @@ func (m *executionManagerImpl) SerializeWorkflowSnapshot( // unexport
 		ExecutionState:     input.ExecutionState,
 		SignalRequestedIDs: make(map[string]struct{}),
 
-		Tasks: tasks,
+		Tasks: serializedTasks,
 
 		Condition:       input.Condition,
 		DBRecordVersion: input.DBRecordVersion,
@@ -897,7 +896,7 @@ func (m *executionManagerImpl) AddHistoryTasks(
 	ctx context.Context,
 	input *AddHistoryTasksRequest,
 ) error {
-	tasks, err := serializeTasks(m.serializer, input.Tasks)
+	serializedTasks, err := serializeTasks(m.serializer, input.Tasks)
 	if err != nil {
 		return err
 	}
@@ -911,7 +910,7 @@ func (m *executionManagerImpl) AddHistoryTasks(
 		WorkflowID:  input.WorkflowID,
 		ArchetypeID: archetypeID,
 
-		Tasks: tasks,
+		Tasks: serializedTasks,
 	})
 }
 

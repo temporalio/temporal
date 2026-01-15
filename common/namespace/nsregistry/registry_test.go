@@ -47,6 +47,9 @@ func (s *registrySuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.controller = gomock.NewController(s.T())
 	s.regPersistence = nsregistry.NewMockPersistence(s.controller)
+	// Return ErrWatchNotSupported to use polling fallback in all tests.
+	s.regPersistence.EXPECT().WatchNamespaces(gomock.Any()).
+		Return(nil, persistence.ErrWatchNotSupported).AnyTimes()
 	s.registry = nsregistry.NewRegistry(
 		s.regPersistence,
 		true,
@@ -1013,7 +1016,7 @@ func (s *registrySuite) TestRefreshSingleCacheKeyById() {
 	}).Return(&nsV1, nil).Times(1)
 	ns, err := s.registry.GetNamespaceByID(id)
 	s.NoError(err)
-	s.Equal(nsV1.Namespace.FailoverVersion, ns.FailoverVersion())
+	s.Equal(nsV1.Namespace.FailoverVersion, ns.FailoverVersion(namespace.EmptyBusinessID))
 
 	s.regPersistence.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{
 		ID: id.String(),
@@ -1021,9 +1024,9 @@ func (s *registrySuite) TestRefreshSingleCacheKeyById() {
 
 	ns, err = s.registry.RefreshNamespaceById(id)
 	s.NoError(err)
-	s.Equal(nsV2.Namespace.FailoverVersion, ns.FailoverVersion())
+	s.Equal(nsV2.Namespace.FailoverVersion, ns.FailoverVersion(namespace.EmptyBusinessID))
 
 	ns, err = s.registry.GetNamespaceByID(id)
 	s.NoError(err)
-	s.Equal(nsV2.Namespace.FailoverVersion, ns.FailoverVersion())
+	s.Equal(nsV2.Namespace.FailoverVersion, ns.FailoverVersion(namespace.EmptyBusinessID))
 }

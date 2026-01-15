@@ -261,8 +261,10 @@ const (
 	PersistenceDeleteNamespaceByNameScope = "DeleteNamespaceByName"
 	// PersistenceListNamespacesScope tracks ListNamespaces calls made by service to persistence layer
 	PersistenceListNamespacesScope = "ListNamespaces"
-	// PersistenceGetMetadataScope tracks DeleteNamespaceByName calls made by service to persistence layer
+	// PersistenceGetMetadataScope tracks GetMetadata calls made by service to persistence layer
 	PersistenceGetMetadataScope = "GetMetadata"
+	// PersistenceWatchNamespacesScope tracks WatchNamespaces calls made by service to persistence layer
+	PersistenceWatchNamespacesScope = "WatchNamespaces"
 	// PersistenceGetNexusEndpointScope tracks GetNexusEndpoint calls made by service to persistence layer
 	PersistenceGetNexusEndpointScope = "GetNexusEndpoint"
 	// PersistenceListNexusEndpointsScope tracks ListNexusEndpoint calls made by service to persistence layer
@@ -648,13 +650,17 @@ var (
 	TlsCertsExpiring                         = NewGaugeDef("certificates_expiring")
 	ServiceAuthorizationLatency              = NewTimerDef("service_authorization_latency")
 	EventBlobSize                            = NewBytesHistogramDef("event_blob_size")
-	HeaderSize                               = NewBytesHistogramDef("header_size", WithDescription("The size of the header in bytes passed to the server by the client. This metric is experimental and can be removed in the future."))
-	LockRequests                             = NewCounterDef("lock_requests")
-	LockLatency                              = NewTimerDef("lock_latency")
-	SemaphoreRequests                        = NewCounterDef("semaphore_requests")
-	SemaphoreFailures                        = NewCounterDef("semaphore_failures")
-	SemaphoreLatency                         = NewTimerDef("semaphore_latency")
-	ClientRequests                           = NewCounterDef(
+	BlobSizeError                            = NewCounterDef(
+		"blob_size_error",
+		WithDescription("The number of requests that failed due to blob size exceeding limits configured with BlobSizeLimitError and MemoSizeLimitError."),
+	)
+	HeaderSize        = NewBytesHistogramDef("header_size", WithDescription("The size of the header in bytes passed to the server by the client. This metric is experimental and can be removed in the future."))
+	LockRequests      = NewCounterDef("lock_requests")
+	LockLatency       = NewTimerDef("lock_latency")
+	SemaphoreRequests = NewCounterDef("semaphore_requests")
+	SemaphoreFailures = NewCounterDef("semaphore_failures")
+	SemaphoreLatency  = NewTimerDef("semaphore_latency")
+	ClientRequests    = NewCounterDef(
 		"client_requests",
 		WithDescription("The number of requests sent by the client to an individual service, keyed by `service_role` and `operation`."),
 	)
@@ -1060,6 +1066,7 @@ var (
 	DynamicWorkerPoolSchedulerDequeuedTasks = NewCounterDef("dynamic_worker_pool_scheduler_dequeued_tasks")
 	DynamicWorkerPoolSchedulerRejectedTasks = NewCounterDef("dynamic_worker_pool_scheduler_rejected_tasks")
 	PausedActivitiesCounter                 = NewCounterDef("paused_activities")
+	ExternalPayloadUploadSize               = NewBytesHistogramDef("external_payload_upload_size", WithDescription("The histogram of sizes in bytes of uploaded external payloads."))
 
 	// Deadlock detector metrics
 	DDSuspectedDeadlocks                 = NewCounterDef("dd_suspected_deadlocks")
@@ -1070,6 +1077,13 @@ var (
 	DDShardLockLatency                   = NewTimerDef("dd_shard_lock_latency")
 	DDShardIOSemaphoreLatency            = NewTimerDef("dd_shard_io_semaphore_latency")
 	DDNamespaceRegistryLockLatency       = NewTimerDef("dd_namespace_registry_lock_latency")
+
+	// Namespace registry watch metrics
+	NamespaceRegistryWatchReconnections = NewCounterDef("namespace_registry_watch_reconnections")
+	NamespaceRegistryWatchStartFailures = NewCounterDef("namespace_registry_watch_start_failures")
+	NamespaceRegistrySlowCallbacks      = NewCounterDef("namespace_registry_slow_callbacks")
+	NamespaceRegistryRefreshFailures    = NewCounterDef("namespace_registry_refresh_failures")
+	NamespaceRegistryRefreshLatency     = NewTimerDef("namespace_registry_refresh_latency")
 
 	// Matching
 	MatchingClientForwardedCounter                    = NewCounterDef("forwarded")

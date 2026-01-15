@@ -3,6 +3,7 @@ package tests
 import (
 	"context"
 	gosql "database/sql"
+	"math"
 	"os"
 	"path"
 	"testing"
@@ -10,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -94,6 +96,7 @@ func TestSQLiteExecutionMutableStateStoreSuite(t *testing.T) {
 		testSQLiteClusterName,
 		logger,
 		metrics.NoopMetricsHandler,
+		serialization.NewSerializer(),
 	)
 	shardStore, err := factory.NewShardStore()
 	if err != nil {
@@ -112,7 +115,6 @@ func TestSQLiteExecutionMutableStateStoreSuite(t *testing.T) {
 		shardStore,
 		executionStore,
 		serialization.NewSerializer(),
-		&persistence.HistoryBranchUtilImpl{},
 		logger,
 	)
 	suite.Run(t, s)
@@ -127,6 +129,7 @@ func TestSQLiteExecutionMutableStateTaskStoreSuite(t *testing.T) {
 		testSQLiteClusterName,
 		logger,
 		metrics.NoopMetricsHandler,
+		serialization.NewSerializer(),
 	)
 	shardStore, err := factory.NewShardStore()
 	if err != nil {
@@ -159,6 +162,7 @@ func TestSQLiteHistoryStoreSuite(t *testing.T) {
 		testSQLiteClusterName,
 		logger,
 		metrics.NoopMetricsHandler,
+		serialization.NewSerializer(),
 	)
 	store, err := factory.NewExecutionStore()
 	if err != nil {
@@ -181,6 +185,7 @@ func TestSQLiteTaskQueueSuite(t *testing.T) {
 		testSQLiteClusterName,
 		logger,
 		metrics.NoopMetricsHandler,
+		serialization.NewSerializer(),
 	)
 	taskQueueStore, err := factory.NewTaskStore()
 	if err != nil {
@@ -203,6 +208,7 @@ func TestSQLiteFairTaskQueueSuite(t *testing.T) {
 		testSQLiteClusterName,
 		logger,
 		metrics.NoopMetricsHandler,
+		serialization.NewSerializer(),
 	)
 	taskQueueStore, err := factory.NewFairTaskStore()
 	if err != nil {
@@ -225,6 +231,7 @@ func TestSQLiteTaskQueueTaskSuite(t *testing.T) {
 		testSQLiteClusterName,
 		logger,
 		metrics.NoopMetricsHandler,
+		serialization.NewSerializer(),
 	)
 	taskQueueStore, err := factory.NewTaskStore()
 	if err != nil {
@@ -247,6 +254,7 @@ func TestSQLiteTaskQueueFairTaskSuite(t *testing.T) {
 		testSQLiteClusterName,
 		logger,
 		metrics.NoopMetricsHandler,
+		serialization.NewSerializer(),
 	)
 	taskQueueStore, err := factory.NewFairTaskStore()
 	if err != nil {
@@ -269,6 +277,7 @@ func TestSQLiteTaskQueueUserDataSuite(t *testing.T) {
 		testSQLiteClusterName,
 		logger,
 		metrics.NoopMetricsHandler,
+		serialization.NewSerializer(),
 	)
 	taskQueueStore, err := factory.NewTaskStore()
 	if err != nil {
@@ -295,6 +304,7 @@ func TestSQLiteFileExecutionMutableStateStoreSuite(t *testing.T) {
 		testSQLiteClusterName,
 		logger,
 		metrics.NoopMetricsHandler,
+		serialization.NewSerializer(),
 	)
 	shardStore, err := factory.NewShardStore()
 	if err != nil {
@@ -313,7 +323,6 @@ func TestSQLiteFileExecutionMutableStateStoreSuite(t *testing.T) {
 		shardStore,
 		executionStore,
 		serialization.NewSerializer(),
-		&persistence.HistoryBranchUtilImpl{},
 		logger,
 	)
 	suite.Run(t, s)
@@ -332,6 +341,7 @@ func TestSQLiteFileExecutionMutableStateTaskStoreSuite(t *testing.T) {
 		testSQLiteClusterName,
 		logger,
 		metrics.NoopMetricsHandler,
+		serialization.NewSerializer(),
 	)
 	shardStore, err := factory.NewShardStore()
 	if err != nil {
@@ -368,6 +378,7 @@ func TestSQLiteFileHistoryStoreSuite(t *testing.T) {
 		testSQLiteClusterName,
 		logger,
 		metrics.NoopMetricsHandler,
+		serialization.NewSerializer(),
 	)
 	store, err := factory.NewExecutionStore()
 	if err != nil {
@@ -394,6 +405,7 @@ func TestSQLiteFileTaskQueueSuite(t *testing.T) {
 		testSQLiteClusterName,
 		logger,
 		metrics.NoopMetricsHandler,
+		serialization.NewSerializer(),
 	)
 	taskQueueStore, err := factory.NewTaskStore()
 	if err != nil {
@@ -420,6 +432,7 @@ func TestSQLiteFileFairTaskQueueSuite(t *testing.T) {
 		testSQLiteClusterName,
 		logger,
 		metrics.NoopMetricsHandler,
+		serialization.NewSerializer(),
 	)
 	taskQueueStore, err := factory.NewFairTaskStore()
 	if err != nil {
@@ -446,6 +459,7 @@ func TestSQLiteFileTaskQueueTaskSuite(t *testing.T) {
 		testSQLiteClusterName,
 		logger,
 		metrics.NoopMetricsHandler,
+		serialization.NewSerializer(),
 	)
 	taskQueueStore, err := factory.NewTaskStore()
 	if err != nil {
@@ -472,6 +486,7 @@ func TestSQLiteFileTaskQueueFairTaskSuite(t *testing.T) {
 		testSQLiteClusterName,
 		logger,
 		metrics.NoopMetricsHandler,
+		serialization.NewSerializer(),
 	)
 	taskQueueStore, err := factory.NewFairTaskStore()
 	if err != nil {
@@ -498,6 +513,7 @@ func TestSQLiteFileTaskQueueUserDataSuite(t *testing.T) {
 		testSQLiteClusterName,
 		logger,
 		metrics.NoopMetricsHandler,
+		serialization.NewSerializer(),
 	)
 	taskQueueStore, err := factory.NewTaskStore()
 	if err != nil {
@@ -727,7 +743,21 @@ func TestSQLiteHistoryCurrentExecutionSuite(t *testing.T) {
 		_ = store.Close()
 	}()
 
-	s := sqltests.NewHistoryCurrentExecutionSuite(t, store)
+	s := sqltests.NewHistoryCurrentExecutionSuite(t, store, chasm.WorkflowArchetypeID)
+	suite.Run(t, s)
+}
+
+func TestSQLiteHistoryCurrentChasmExecutionSuite(t *testing.T) {
+	cfg := NewSQLiteMemoryConfig()
+	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
+	if err != nil {
+		t.Fatalf("unable to create SQLite DB: %v", err)
+	}
+	defer func() {
+		_ = store.Close()
+	}()
+
+	s := sqltests.NewHistoryCurrentExecutionSuite(t, store, math.MaxUint32)
 	suite.Run(t, s)
 }
 
@@ -948,7 +978,9 @@ func TestSQLiteFileNamespaceSuite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer os.Remove(cfg.DatabaseName)
+	defer func() {
+		_ = os.Remove(cfg.DatabaseName)
+	}()
 
 	s := sqltests.NewNamespaceSuite(t, store)
 	suite.Run(t, s)
@@ -961,7 +993,9 @@ func TestSQLiteFileQueueMessageSuite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer os.Remove(cfg.DatabaseName)
+	defer func() {
+		_ = os.Remove(cfg.DatabaseName)
+	}()
 
 	s := sqltests.NewQueueMessageSuite(t, store)
 	suite.Run(t, s)
@@ -974,7 +1008,9 @@ func TestSQLiteFileQueueMetadataSuite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer os.Remove(cfg.DatabaseName)
+	defer func() {
+		_ = os.Remove(cfg.DatabaseName)
+	}()
 
 	s := sqltests.NewQueueMetadataSuite(t, store)
 	suite.Run(t, s)
@@ -987,7 +1023,9 @@ func TestSQLiteFileMatchingTaskSuite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer os.Remove(cfg.DatabaseName)
+	defer func() {
+		_ = os.Remove(cfg.DatabaseName)
+	}()
 
 	s := sqltests.NewMatchingTaskSuite(t, store)
 	suite.Run(t, s)
@@ -1000,7 +1038,9 @@ func TestSQLiteFileMatchingTaskQueueSuite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer os.Remove(cfg.DatabaseName)
+	defer func() {
+		_ = os.Remove(cfg.DatabaseName)
+	}()
 
 	s := sqltests.NewMatchingTaskQueueSuite(t, store, sqlplugin.MatchingTaskVersion1)
 	suite.Run(t, s)
@@ -1013,7 +1053,9 @@ func TestSQLiteFileMatchingTaskQueueV2Suite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer os.Remove(cfg.DatabaseName)
+	defer func() {
+		_ = os.Remove(cfg.DatabaseName)
+	}()
 
 	s := sqltests.NewMatchingTaskQueueSuite(t, store, sqlplugin.MatchingTaskVersion2)
 	suite.Run(t, s)
@@ -1026,7 +1068,9 @@ func TestSQLiteFileHistoryShardSuite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer os.Remove(cfg.DatabaseName)
+	defer func() {
+		_ = os.Remove(cfg.DatabaseName)
+	}()
 
 	s := sqltests.NewHistoryShardSuite(t, store)
 	suite.Run(t, s)
@@ -1039,7 +1083,9 @@ func TestSQLiteFileHistoryNodeSuite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer os.Remove(cfg.DatabaseName)
+	defer func() {
+		_ = os.Remove(cfg.DatabaseName)
+	}()
 
 	s := sqltests.NewHistoryNodeSuite(t, store)
 	suite.Run(t, s)
@@ -1052,7 +1098,9 @@ func TestSQLiteFileHistoryTreeSuite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer os.Remove(cfg.DatabaseName)
+	defer func() {
+		_ = os.Remove(cfg.DatabaseName)
+	}()
 
 	s := sqltests.NewHistoryTreeSuite(t, store)
 	suite.Run(t, s)
@@ -1065,9 +1113,26 @@ func TestSQLiteFileHistoryCurrentExecutionSuite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer os.Remove(cfg.DatabaseName)
+	defer func() {
+		_ = os.Remove(cfg.DatabaseName)
+	}()
 
-	s := sqltests.NewHistoryCurrentExecutionSuite(t, store)
+	s := sqltests.NewHistoryCurrentExecutionSuite(t, store, chasm.WorkflowArchetypeID)
+	suite.Run(t, s)
+}
+
+func TestSQLiteFileHistoryCurrentChasmExecutionSuite(t *testing.T) {
+	cfg := NewSQLiteFileConfig()
+	SetupSQLiteDatabase(t, cfg)
+	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
+	if err != nil {
+		t.Fatalf("unable to create SQLite DB: %v", err)
+	}
+	defer func() {
+		_ = os.Remove(cfg.DatabaseName)
+	}()
+
+	s := sqltests.NewHistoryCurrentExecutionSuite(t, store, math.MaxUint32)
 	suite.Run(t, s)
 }
 
@@ -1078,7 +1143,9 @@ func TestSQLiteFileHistoryExecutionSuite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer os.Remove(cfg.DatabaseName)
+	defer func() {
+		_ = os.Remove(cfg.DatabaseName)
+	}()
 
 	s := sqltests.NewHistoryExecutionSuite(t, store)
 	suite.Run(t, s)
@@ -1091,7 +1158,9 @@ func TestSQLiteFileHistoryTransferTaskSuite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer os.Remove(cfg.DatabaseName)
+	defer func() {
+		_ = os.Remove(cfg.DatabaseName)
+	}()
 
 	s := sqltests.NewHistoryTransferTaskSuite(t, store)
 	suite.Run(t, s)
@@ -1104,7 +1173,9 @@ func TestSQLiteFileHistoryTimerTaskSuite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer os.Remove(cfg.DatabaseName)
+	defer func() {
+		_ = os.Remove(cfg.DatabaseName)
+	}()
 
 	s := sqltests.NewHistoryTimerTaskSuite(t, store)
 	suite.Run(t, s)
@@ -1117,7 +1188,9 @@ func TestSQLiteFileHistoryReplicationTaskSuite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer os.Remove(cfg.DatabaseName)
+	defer func() {
+		_ = os.Remove(cfg.DatabaseName)
+	}()
 
 	s := sqltests.NewHistoryReplicationTaskSuite(t, store)
 	suite.Run(t, s)
@@ -1130,7 +1203,9 @@ func TestSQLiteFileHistoryVisibilityTaskSuite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer os.Remove(cfg.DatabaseName)
+	defer func() {
+		_ = os.Remove(cfg.DatabaseName)
+	}()
 
 	s := sqltests.NewHistoryVisibilityTaskSuite(t, store)
 	suite.Run(t, s)
@@ -1143,7 +1218,9 @@ func TestSQLiteFileHistoryReplicationDLQTaskSuite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer os.Remove(cfg.DatabaseName)
+	defer func() {
+		_ = os.Remove(cfg.DatabaseName)
+	}()
 
 	s := sqltests.NewHistoryReplicationDLQTaskSuite(t, store)
 	suite.Run(t, s)
@@ -1156,7 +1233,9 @@ func TestSQLiteFileHistoryExecutionBufferSuite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer os.Remove(cfg.DatabaseName)
+	defer func() {
+		_ = os.Remove(cfg.DatabaseName)
+	}()
 
 	s := sqltests.NewHistoryExecutionBufferSuite(t, store)
 	suite.Run(t, s)
@@ -1169,7 +1248,9 @@ func TestSQLiteFileHistoryExecutionActivitySuite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer os.Remove(cfg.DatabaseName)
+	defer func() {
+		_ = os.Remove(cfg.DatabaseName)
+	}()
 
 	s := sqltests.NewHistoryExecutionActivitySuite(t, store)
 	suite.Run(t, s)
@@ -1182,7 +1263,9 @@ func TestSQLiteFileHistoryExecutionChildWorkflowSuite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer os.Remove(cfg.DatabaseName)
+	defer func() {
+		_ = os.Remove(cfg.DatabaseName)
+	}()
 
 	s := sqltests.NewHistoryExecutionChildWorkflowSuite(t, store)
 	suite.Run(t, s)
@@ -1195,7 +1278,9 @@ func TestSQLiteFileHistoryExecutionTimerSuite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer os.Remove(cfg.DatabaseName)
+	defer func() {
+		_ = os.Remove(cfg.DatabaseName)
+	}()
 
 	s := sqltests.NewHistoryExecutionTimerSuite(t, store)
 	suite.Run(t, s)
@@ -1208,7 +1293,9 @@ func TestSQLiteFileHistoryExecutionChasmSuite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer os.Remove(cfg.DatabaseName)
+	defer func() {
+		_ = os.Remove(cfg.DatabaseName)
+	}()
 
 	s := sqltests.NewHistoryExecutionChasmSuite(t, store)
 	suite.Run(t, s)
@@ -1221,7 +1308,9 @@ func TestSQLiteFileHistoryExecutionRequestCancelSuite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer os.Remove(cfg.DatabaseName)
+	defer func() {
+		_ = os.Remove(cfg.DatabaseName)
+	}()
 
 	s := sqltests.NewHistoryExecutionRequestCancelSuite(t, store)
 	suite.Run(t, s)
@@ -1234,7 +1323,9 @@ func TestSQLiteFileHistoryExecutionSignalSuite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer os.Remove(cfg.DatabaseName)
+	defer func() {
+		_ = os.Remove(cfg.DatabaseName)
+	}()
 
 	s := sqltests.NewHistoryExecutionSignalSuite(t, store)
 	suite.Run(t, s)
@@ -1247,7 +1338,9 @@ func TestSQLiteFileHistoryExecutionSignalRequestSuite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer os.Remove(cfg.DatabaseName)
+	defer func() {
+		_ = os.Remove(cfg.DatabaseName)
+	}()
 
 	s := sqltests.NewHistoryExecutionSignalRequestSuite(t, store)
 	suite.Run(t, s)
@@ -1260,7 +1353,9 @@ func TestSQLiteFileVisibilitySuite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer os.Remove(cfg.DatabaseName)
+	defer func() {
+		_ = os.Remove(cfg.DatabaseName)
+	}()
 
 	s := sqltests.NewVisibilitySuite(t, store)
 	suite.Run(t, s)
@@ -1276,6 +1371,7 @@ func TestSQLiteQueueV2(t *testing.T) {
 		testSQLiteClusterName,
 		logger,
 		metrics.NoopMetricsHandler,
+		serialization.NewSerializer(),
 	)
 	t.Cleanup(func() {
 		factory.Close()
@@ -1294,6 +1390,7 @@ func TestSQLiteNexusEndpointPersistence(t *testing.T) {
 		testSQLiteClusterName,
 		logger,
 		metrics.NoopMetricsHandler,
+		serialization.NewSerializer(),
 	)
 	t.Cleanup(func() {
 		factory.Close()
