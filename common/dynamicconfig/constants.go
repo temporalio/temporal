@@ -1249,6 +1249,11 @@ This can help reduce effects of task queue movement.`,
 		`How often to update ephemeral data (e.g. backlog size for forwarding sticky polls).
 Set to zero to disable ephemeral data updates.`,
 	)
+	MatchingPriorityBacklogForwarding = NewTaskQueueBoolSetting(
+		"matching.priorityBacklogForwarding",
+		true,
+		`Whether to forward polls to partitions with higher-priority backlog.`,
+	)
 	MatchingBacklogNegligibleAge = NewTaskQueueDurationSetting(
 		"matching.backlogNegligibleAge",
 		5*time.Second,

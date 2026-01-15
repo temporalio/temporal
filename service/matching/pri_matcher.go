@@ -1,6 +1,7 @@
 package matching
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"strconv"
@@ -288,6 +289,12 @@ func (tm *priTaskMatcher) forwardPolls(
 	forwarderTask := newPollForwarderTask(effectivePriority, ft)
 	ctxs := []context.Context{ctx} // ctx should be equal to or child of tm.tqCtx
 	for ctx.Err() == nil {
+		if ft == priorityBacklogPollForwarder && !tm.config.PriorityBacklogForwarding() {
+			// if this feature has been disabled, just wait
+			_ = util.InterruptibleSleep(ctx, time.Minute)
+			continue
+		}
+
 		res := tm.data.EnqueueTaskAndWait(ctxs, forwarderTask)
 		if res.ctxErr != nil {
 			return // task queue closing
@@ -532,6 +539,11 @@ func (tm *priTaskMatcher) ReprocessAllTasks() {
 }
 
 func (tm *priTaskMatcher) UpdateRemotePriorityBacklogs(backlogs remotePriorityBacklogSet) {
+	if !tm.config.PriorityBacklogForwarding() {
+		// if this feature is disabled, stop all forwarders
+		backlogs = nil
+	}
+
 	// note that only sticky queues get here (for now).
 	// we want to set up poll forwarders for these levels to send polls to normal partitions
 	// if they have backlog at higher priority than our backlog.
