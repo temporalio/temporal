@@ -75,7 +75,10 @@ func (b *BackfillerTaskExecutor) Execute(
 		return err
 	}
 	if limit <= 0 {
-		// Fire a timer task to retry after backoff.
+		// Buffer is full, back off and retry later. Unlike the generator, the
+		// backfiller doesn't drop actions - it will retry after backoff.
+		logger.Debug("Buffer full, backing off backfill",
+			tag.NewStringTag("backfill-id", backfiller.GetBackfillId()))
 		b.rescheduleBackfill(ctx, backfiller)
 		return nil
 	}
@@ -230,6 +233,7 @@ func (b *BackfillerTaskExecutor) allowedBufferedStarts(
 	// Prevents a division by 0.
 	backfillerCount = max(1, backfillerCount)
 
-	// Give half the available buffer to backfillers, distributed evenly.
-	return max(0, ((tweakables.MaxBufferSize/2)/backfillerCount)-len(invoker.GetBufferedStarts())), nil
+	// Give half the available buffer to backfillers, distributed evenly, minus
+	// Generator reserve space.
+	return max(0, ((tweakables.MaxBufferSize/2)/backfillerCount)-len(invoker.GetBufferedStarts())-tweakables.GeneratorBufferReserveSize), nil
 }
