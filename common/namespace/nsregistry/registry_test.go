@@ -62,7 +62,6 @@ func (s *registrySuite) SetupTest() {
 }
 
 func (s *registrySuite) TearDownTest() {
-	s.registry.Stop()
 	s.controller.Finish()
 }
 
@@ -834,6 +833,7 @@ func (s *registrySuite) TestNamespaceRename() {
 	}).MinTimes(1)
 
 	s.registry.Start()
+	defer s.registry.Stop()
 	// Register callback to detect when the rename is applied
 	refreshCompletedCh := make(chan struct{})
 	s.registry.RegisterStateChangeCallback("test", func(ns *namespace.Namespace, deletedFromDb bool) {
@@ -841,7 +841,6 @@ func (s *registrySuite) TestNamespaceRename() {
 			close(refreshCompletedCh)
 		}
 	})
-	defer s.registry.Stop()
 
 	// Verify original name works before rename
 	ns, err := s.registry.GetNamespace("original-name")

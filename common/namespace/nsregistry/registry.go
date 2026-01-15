@@ -28,7 +28,6 @@ import (
 	"errors"
 	"fmt"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
@@ -61,13 +60,6 @@ const (
 	startWatchMaxAttempts = 10
 	// Metrics and logs are emitted for callbacks that take longer than slowCallbackDuration
 	slowCallbackDuration = 250 * time.Millisecond
-)
-
-const (
-	stopped int32 = iota
-	starting
-	running
-	stopping
 )
 
 var (
@@ -111,7 +103,6 @@ type (
 	}
 
 	registry struct {
-		status                  int32
 		refresher               *goro.Handle
 		persistence             Persistence
 		globalNamespacesEnabled bool
@@ -200,17 +191,13 @@ func (r *registry) RefreshNamespaceById(id namespace.ID) (*namespace.Namespace, 
 	return ns, nil
 }
 
-// Start initializes the namespace registry and begins background refresh.
-// It first attempts to establish a watch on namespace changes. If watches are supported,
-// events are processed as they arrive. If not supported, falls back to periodic polling.
+// Start initializes the namespace registry and begins background refresh. Should only be invoked by fx lifecycle hook.
+// Should not be called multiple times or concurrently with Stop().
 //
-// Start blocks until the initial namespace refresh completes. The initial refresh must succeed or the function will fatal.
+// It first attempts to establish a watch on namespace changes. If watches are supported, events are processed as they
+// arrive. If not supported, falls back to periodic polling. Start blocks until the initial namespace refresh completes.
+// The initial refresh must succeed or the function will fatal.
 func (r *registry) Start() {
-	if !atomic.CompareAndSwapInt32(&r.status, stopped, starting) {
-		return
-	}
-	defer atomic.StoreInt32(&r.status, running)
-
 	ctx := headers.SetCallerInfo(
 		context.Background(),
 		headers.SystemBackgroundHighCallerInfo,
@@ -238,12 +225,9 @@ func (r *registry) Start() {
 	r.refresher = goro.NewHandle(ctx).Go(r.runPollingLoop)
 }
 
-// Stop the background refresh of Namespace data
+// Stop ends background refresh. Should only be invoked by fx lifecycle hook.
+// Should not be called multiple times or concurrently with Start().
 func (r *registry) Stop() {
-	if !atomic.CompareAndSwapInt32(&r.status, running, stopping) {
-		return
-	}
-	defer atomic.StoreInt32(&r.status, stopped)
 	// refresher may be nil if watch failed to start and we're shutting down.
 	if r.refresher != nil {
 		r.refresher.Cancel()
