@@ -20,6 +20,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/future"
@@ -1063,11 +1064,17 @@ func (pm *taskQueuePartitionManagerImpl) updateEphemeralData(ctx context.Context
 	var prevBacklogPriority map[PhysicalTaskQueueVersion]int64
 
 	for {
+		interval := pm.config.EphemeralDataUpdateInterval()
+		if interval == 0 {
+			_ = util.InterruptibleSleep(ctx, time.Minute)
+			continue
+		}
+
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 
-		case <-time.After(pm.config.EphemeralDataUpdateInterval()):
+		case <-time.After(backoff.Jitter(interval, 0.05)):
 			prevBacklogPriority = pm.updateEphemeralDataIteration(prevBacklogPriority)
 		}
 	}

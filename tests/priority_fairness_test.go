@@ -348,7 +348,7 @@ func (s *PrioritySuite) TestStickyInteraction_SinglePartition() {
 	// the ephemeral data mechanism is asynchronous, so wait a little while for it to kick in.
 	// there's no way to check if this is done yet without actually polling, which would mess
 	// up the results, so just sleep.
-	time.Sleep(2 * shortTime) // nolint:forbidigo
+	time.Sleep(3 * shortTime) // nolint:forbidigo
 
 	// now poll the sticky queue. we should get the high priority tasks from the normal queue
 	// then the normal-priority from sticky, then the low priority from normal.

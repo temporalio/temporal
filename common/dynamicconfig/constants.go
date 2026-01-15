@@ -1246,7 +1246,8 @@ This can help reduce effects of task queue movement.`,
 	MatchingEphemeralDataUpdateInterval = NewTaskQueueDurationSetting(
 		"matching.ephemeralDataUpdateInterval",
 		5*time.Second,
-		`How often to update ephemeral data (e.g. backlog size for forwarding sticky polls).`,
+		`How often to update ephemeral data (e.g. backlog size for forwarding sticky polls).
+Set to zero to disable ephemeral data updates.`,
 	)
 	MatchingBacklogNegligibleAge = NewTaskQueueDurationSetting(
 		"matching.backlogNegligibleAge",

@@ -324,7 +324,8 @@ func (tm *priTaskMatcher) forwardPolls(
 			// Re-enqueue but don't disable other forwarders for this poll.
 			tm.data.ReenqueuePollerIfNotMatched(poller)
 			// 4× to allow for a few rounds plus propagation.
-			_ = util.InterruptibleSleep(ctx, 4*tm.config.EphemeralDataUpdateInterval())
+			interval := cmp.Or(tm.config.EphemeralDataUpdateInterval(), time.Minute)
+			_ = util.InterruptibleSleep(ctx, 4*interval)
 		} else {
 			// Re-enqueue to let it match again, if it hasn't gotten a context timeout already.
 			poller.forwardCtx = nil // disable forwarding next time
