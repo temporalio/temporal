@@ -51,8 +51,8 @@ CREATE TABLE executions_visibility (
   TemporalWorkflowVersioningBehavior VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>"$.TemporalWorkflowVersioningBehavior"),
   TemporalWorkerDeployment           VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>"$.TemporalWorkerDeployment"),
   TemporalUsedWorkerDeploymentVersions JSON GENERATED ALWAYS AS (search_attributes->'$.TemporalUsedWorkerDeploymentVersions'),
-  TemporalExternalPayloadSizeBytes BIGINT GENERATED ALWAYS AS (search_attributes->>"$.TemporalExternalPayloadSizeBytes"),
-  TemporalExternalPayloadCount BIGINT GENERATED ALWAYS AS (search_attributes->>"$.TemporalExternalPayloadCount"),
+  TemporalExternalPayloadSizeBytes BIGINT GENERATED ALWAYS AS (search_attributes->"$.TemporalExternalPayloadSizeBytes"),
+  TemporalExternalPayloadCount BIGINT GENERATED ALWAYS AS (search_attributes->"$.TemporalExternalPayloadCount"),
   PRIMARY KEY (namespace_id, run_id)
 );
 

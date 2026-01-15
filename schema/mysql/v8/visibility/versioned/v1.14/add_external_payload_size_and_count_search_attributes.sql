@@ -1,10 +1,10 @@
 ALTER TABLE executions_visibility
 ADD COLUMN TemporalExternalPayloadSizeBytes BIGINT 
-GENERATED ALWAYS AS (search_attributes->>"$.TemporalExternalPayloadSizeBytes");
+GENERATED ALWAYS AS (search_attributes->"$.TemporalExternalPayloadSizeBytes");
 
 ALTER TABLE executions_visibility
 ADD COLUMN TemporalExternalPayloadCount BIGINT 
-GENERATED ALWAYS AS (search_attributes->>"$.TemporalExternalPayloadCount");
+GENERATED ALWAYS AS (search_attributes->"$.TemporalExternalPayloadCount");
 
 CREATE INDEX by_temporal_external_payload_size_bytes 
 ON executions_visibility (
