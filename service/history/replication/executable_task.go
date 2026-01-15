@@ -317,41 +317,44 @@ func (e *ExecutableTaskImpl) emitFinishMetrics(
 		nsTag = metrics.NamespaceTag(item.(namespace.Name).String())
 	}
 
-	// Queue latency: time from task creation to execution start
-	queueLatency := e.taskExecuteStartTime.Sub(e.taskReceivedTime)
-	metrics.ReplicationTaskQueueLatency.With(e.MetricsHandler).Record(
-		queueLatency,
-		metrics.OperationTag(e.metricsTag),
-		nsTag,
-		metrics.SourceClusterTag(e.sourceClusterName),
-	)
+	// Only emit queue/processing latency metrics if execution actually started
+	if !e.taskExecuteStartTime.IsZero() {
+		// Queue latency: time from task creation to execution start
+		queueLatency := e.taskExecuteStartTime.Sub(e.taskReceivedTime)
+		metrics.ReplicationTaskQueueLatency.With(e.MetricsHandler).Record(
+			queueLatency,
+			metrics.OperationTag(e.metricsTag),
+			nsTag,
+			metrics.SourceClusterTag(e.sourceClusterName),
+		)
 
-	// Processing latency: time from execution start to ACK/NACK
-	processingLatency := now.Sub(e.taskExecuteStartTime)
-	metrics.ReplicationTaskProcessingLatency.With(e.MetricsHandler).Record(
-		processingLatency,
-		metrics.OperationTag(e.metricsTag),
-		nsTag,
-	)
-	if processingLatency > 10*time.Second && e.replicationTask != nil && e.replicationTask.RawTaskInfo != nil {
-		shardContext, err := e.ShardController.GetShardByNamespaceWorkflow(
-			namespace.ID(e.replicationTask.RawTaskInfo.NamespaceId),
-			e.replicationTask.RawTaskInfo.WorkflowId,
+		// Processing latency: time from execution start to ACK/NACK
+		processingLatency := now.Sub(e.taskExecuteStartTime)
+		metrics.ReplicationTaskProcessingLatency.With(e.MetricsHandler).Record(
+			processingLatency,
+			metrics.OperationTag(e.metricsTag),
+			nsTag,
 		)
-		if err != nil {
-			return
+		if processingLatency > 10*time.Second && e.replicationTask != nil && e.replicationTask.RawTaskInfo != nil {
+			shardContext, err := e.ShardController.GetShardByNamespaceWorkflow(
+				namespace.ID(e.replicationTask.RawTaskInfo.NamespaceId),
+				e.replicationTask.RawTaskInfo.WorkflowId,
+			)
+			if err != nil {
+				return
+			}
+			e.Logger.Warn(fmt.Sprintf(
+				"replication task latency is too long: queue=%.2fs processing=%.2fs",
+				queueLatency.Seconds(),
+				processingLatency.Seconds(),
+			),
+				tag.WorkflowNamespace(e.NamespaceName()),
+				tag.WorkflowID(e.replicationTask.RawTaskInfo.WorkflowId),
+				tag.WorkflowRunID(e.replicationTask.RawTaskInfo.RunId),
+				tag.ReplicationTask(e.replicationTask.GetRawTaskInfo()),
+				tag.ShardID(shardContext.GetShardID()),
+			)
 		}
-		e.Logger.Warn(fmt.Sprintf(
-			"replication task latency is too long: queue=%.2fs processing=%.2fs",
-			queueLatency.Seconds(),
-			processingLatency.Seconds(),
-		),
-			tag.WorkflowNamespace(e.NamespaceName()),
-			tag.WorkflowID(e.replicationTask.RawTaskInfo.WorkflowId),
-			tag.WorkflowRunID(e.replicationTask.RawTaskInfo.RunId),
-			tag.ReplicationTask(e.replicationTask.GetRawTaskInfo()),
-			tag.ShardID(shardContext.GetShardID()),
-		)
 	}
 
 	replicationLatency := now.Sub(e.taskCreationTime)
