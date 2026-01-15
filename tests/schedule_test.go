@@ -222,12 +222,12 @@ func (s *scheduleFunctionalSuiteBase) TestBasics() {
 		ScheduleId: sid,
 	})
 	s.NoError(err)
-	s.Greater(len(describeRespAfterCreate.Info.FutureActionTimes), 0, "FutureActionTimes should be set immediately after create")
+	s.NotEmpty(describeRespAfterCreate.Info.FutureActionTimes, "FutureActionTimes should be set immediately after create")
 	// FutureActionTimes should be in the future (after createTime) and aligned to 5-second intervals
 	for i, fat := range describeRespAfterCreate.Info.FutureActionTimes {
 		s.True(fat.AsTime().After(createTime) || fat.AsTime().Equal(createTime),
 			"FutureActionTimes[%d] should be >= createTime", i)
-		s.True(fat.AsTime().UnixNano()%int64(5*time.Second) == 0,
+		s.Equal(fat.AsTime().UnixNano()%int64(5*time.Second), 0,
 			"FutureActionTimes[%d] should be aligned to 5-second intervals", i)
 	}
 
