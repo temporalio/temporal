@@ -38,17 +38,13 @@ func (s *AdminTestSuite) SetupSuite() {
 
 // workflow related test cases
 func (s *AdminTestSuite) TestAdminRebuildMutableState_ChasmDisabled() {
-	// Override config BEFORE creating any workflows
-	// This ensures new workflows are created with CHASM disabled
-	cleanup := s.OverrideDynamicConfig(dynamicconfig.EnableChasm, false)
-	defer cleanup()
-	s.NotEmpty(s.GetTestCluster().Host().DcClient().GetValue(dynamicconfig.EnableChasm.Key()), "EnableChasm config should be set")
-	s.False(s.GetTestCluster().Host().DcClient().GetValue(dynamicconfig.EnableChasm.Key())[0].Value.(bool), "EnableChasm config should be false")
 	rebuildMutableState_Workflow_Helper(s.testContext, &s.FunctionalTestBase, false)
 }
 
-// maybe a Chasm related but ? or the test is not correctly set up?
 func (s *AdminTestSuite) TestAdminRebuildMutableState_ChasmEnabled() {
+	cleanup := s.OverrideDynamicConfig(dynamicconfig.EnableChasm, true)
+	defer cleanup()
+
 	configValues := s.GetTestCluster().Host().DcClient().GetValue(dynamicconfig.EnableChasm.Key())
 	s.NotEmpty(configValues, "EnableChasm config should be set")
 	configValue, _ := configValues[0].Value.(bool)

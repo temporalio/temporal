@@ -86,7 +86,6 @@ func (r *workflowRebuilderImpl) rebuild(
 		releaseFn(retError)
 	}()
 
-	// maki: mutable state of this wfContext might be changed btw reading and locking?
 	rebuildSpec, err := r.getRebuildSpecFromMutableState(ctx, &workflowKey)
 	if err != nil {
 		return err
@@ -106,25 +105,45 @@ func (r *workflowRebuilderImpl) rebuild(
 	return r.overwriteToDB(ctx, rebuildMutableState)
 }
 
+// rebuildableCheck checks if the mutable state is rebuildable
+// error:
+//   - serviceerror.NewInvalidArgument: if the mutable state is not rebuildable
+//   - other errors: e.g. internal error that fails to get the current version history
 func (r *workflowRebuilderImpl) rebuildableCheck(
 	mutableState *persistencespb.WorkflowMutableState,
 ) error {
-	// backward compatibility: old workflow format
+
+	// check1: only workflow archetype is supported
+	var checkErr error = serviceerror.NewInvalidArgument("Rebuild only supports workflow executions, not other archetype types")
 	if len(mutableState.ChasmNodes) == 0 {
-		r.logger.Info("rebuild: backward compatibility: old workflow format")
-		return nil
-	}
-	if rootNode, ok := mutableState.ChasmNodes[""]; ok {
-		if componentAttrs := rootNode.GetMetadata().GetComponentAttributes(); componentAttrs != nil {
-			archetypeID := chasm.ArchetypeID(componentAttrs.TypeId)
-			if archetypeID == chasm.WorkflowArchetypeID {
-				r.logger.Info("rebuild: workflow archetype found")
-				return nil
+		checkErr = nil
+	} else {
+		if rootNode, ok := mutableState.ChasmNodes[""]; ok {
+			if componentAttrs := rootNode.GetMetadata().GetComponentAttributes(); componentAttrs != nil {
+				archetypeID := chasm.ArchetypeID(componentAttrs.TypeId)
+				if archetypeID == chasm.WorkflowArchetypeID {
+					r.logger.Info("rebuild: workflow archetype found")
+					checkErr = nil
+				}
 			}
 		}
 	}
-	return serviceerror.NewInvalidArgument(
-		"Rebuild only supports workflow executions, not other archetype types")
+	if checkErr != nil {
+		return checkErr
+	}
+
+	// check2: check if the current version history is empty
+	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(mutableState.ExecutionInfo.VersionHistories)
+	if err != nil {
+		return err
+	}
+	checkErr = serviceerror.NewInvalidArgument("current version history is empty, cannot be rebuilt")
+	if versionhistory.IsEmptyVersionHistory(currentVersionHistory) {
+		return checkErr
+	}
+
+	// passing all the checks, return nil
+	return nil
 }
 
 func (r *workflowRebuilderImpl) getRebuildSpecFromMutableState(
