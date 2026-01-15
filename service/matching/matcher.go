@@ -39,7 +39,6 @@ type TaskMatcher struct {
 
 	fwdr                   *Forwarder
 	metricsHandler         metrics.Handler // namespace metric scope
-	numPartitions          func() int      // number of task queue partitions
 	backlogTasksCreateTime map[int64]int   // task creation time (unix nanos) -> number of tasks with that time
 	backlogTasksLock       sync.Mutex
 	lastPoller             atomic.Int64 // unix nanos of most recent poll start time
@@ -62,7 +61,6 @@ func newTaskMatcher(config *taskQueueConfig, fwdr *Forwarder, metricsHandler met
 		taskC:                  make(chan *internalTask),
 		queryTaskC:             make(chan *internalTask),
 		closeC:                 make(chan struct{}),
-		numPartitions:          config.NumReadPartitions,
 		backlogTasksCreateTime: make(map[int64]int),
 	}
 }

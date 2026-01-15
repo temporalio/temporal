@@ -1,10 +1,6 @@
 package backoff
 
-import (
-	"math/rand"
-)
-
-const fullCoefficient float64 = 1
+import "math/rand"
 
 // FullJitter return random number from 0 to input, inclusive, exclusive
 func FullJitter[T ~int64 | ~int | ~int32 | ~float64 | ~float32](input T) T {
