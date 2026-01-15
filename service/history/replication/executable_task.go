@@ -333,7 +333,7 @@ func (e *ExecutableTaskImpl) emitFinishMetrics(
 		metrics.OperationTag(e.metricsTag),
 		nsTag,
 	)
-	if processingLatency > 10*time.Second {
+	if processingLatency > 10*time.Second && e.replicationTask != nil && e.replicationTask.RawTaskInfo != nil {
 		shardContext, err := e.ShardController.GetShardByNamespaceWorkflow(
 			namespace.ID(e.replicationTask.RawTaskInfo.NamespaceId),
 			e.replicationTask.RawTaskInfo.WorkflowId,
