@@ -134,8 +134,6 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexusrpc.C
 	}
 	if r.HTTPRequest.Header != nil {
 		rCtx.originalHeaders = r.HTTPRequest.Header.Clone()
-	} else {
-		rCtx.originalHeaders = http.Header{}
 	}
 	ctx = rCtx.augmentContext(ctx, r.HTTPRequest.Header)
 	defer rCtx.capturePanicAndRecordMetrics(&ctx, &retErr)
