@@ -23,7 +23,6 @@
 package tasks
 
 import (
-	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -147,14 +146,45 @@ func (s *WorkflowQueueScheduler[T]) HasQueue(key any) bool {
 }
 
 // Submit adds a task to its workflow's queue. This is a blocking call
-// that retries until the task is successfully submitted.
+// that blocks until the task is successfully submitted or the scheduler stops.
 func (s *WorkflowQueueScheduler[T]) Submit(task T) {
-	for !s.TrySubmit(task) {
-		if s.isStopped() {
-			task.Abort()
-			return
-		}
-		runtime.Gosched() // Yield to let workers make progress
+	// Fast path: try non-blocking submit first
+	if s.TrySubmit(task) {
+		return
+	}
+
+	// Slow path: need to block until dispatch channel has space
+	key := s.queueKeyFn(task)
+
+	s.mu.Lock()
+
+	// Check stopped state while holding lock
+	if s.isStopped() {
+		s.mu.Unlock()
+		task.Abort()
+		return
+	}
+
+	// Re-check if queue was created while we were waiting for the lock
+	if tasks, exists := s.queues[key]; exists {
+		s.queues[key] = append(tasks, task)
+		s.mu.Unlock()
+		return
+	}
+
+	// Create queue while holding lock to ensure other submitters for the same
+	// workflow will see it and append to it rather than trying to dispatch
+	s.queues[key] = []T{task}
+	s.mu.Unlock()
+
+	// Block on dispatch channel outside the lock.
+	// Other goroutines submitting tasks for the same workflow will see the queue
+	// exists and append to it. drainTasks will clean up if shutdown occurs.
+	select {
+	case s.dispatchChan <- key:
+		// Successfully dispatched - worker will process the queue
+	case <-s.shutdownChan:
+		// Scheduler stopped while waiting - drainTasks will abort queued tasks
 	}
 }
 
