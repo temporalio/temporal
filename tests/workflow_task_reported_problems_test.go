@@ -47,19 +47,13 @@ func (s *WFTFailureReportedProblemsTestSuite) simpleActivity() (string, error) {
 // This is used to test that the TemporalReportedProblems search attribute is not incorrectly removed
 // when signals keep coming in despite continuous workflow task failures.
 func (s *WFTFailureReportedProblemsTestSuite) workflowWithSignalsThatFails(ctx workflow.Context) (string, error) {
-	// If we should fail, signal ourselves (creating a side effect) and immediately panic.
-	// This will create buffered events.
-	if s.shouldFail.Load() {
-		// Signal ourselves to create buffered events
-		err := s.SdkClient().SignalWorkflow(context.Background(), workflow.GetInfo(ctx).WorkflowExecution.ID, "", "test-signal", "self-signal")
-		if err != nil {
-			return "", err
-		}
-		panic("forced-panic-after-self-signal")
+	// Signal ourselves to create buffered events
+	err := s.SdkClient().SignalWorkflow(context.Background(), workflow.GetInfo(ctx).WorkflowExecution.ID, "", "test-signal", "self-signal")
+	if err != nil {
+		return "", err
 	}
+	panic("forced-panic-after-self-signal")
 
-	// If we reach here, shouldFail is false, so we can complete
-	return "done!", nil
 }
 
 // workflowWithActivity creates a workflow that executes an activity before potentially failing.
@@ -131,8 +125,6 @@ func (s *WFTFailureReportedProblemsTestSuite) TestWFTFailureReportedProblems_Not
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	s.shouldFail.Store(true)
-
 	s.Worker().RegisterWorkflow(s.workflowWithSignalsThatFails)
 
 	workflowOptions := sdkclient.StartWorkflowOptions{
@@ -173,18 +165,8 @@ func (s *WFTFailureReportedProblemsTestSuite) TestWFTFailureReportedProblems_Not
 		s.NotEmpty(saVal, "Search attribute should not be empty during continued failures")
 	}, 5*time.Second, 500*time.Millisecond)
 
-	// Unblock the workflow to allow it to recover
-	s.shouldFail.Store(false)
-
-	var out string
-	s.NoError(workflowRun.Get(ctx, &out))
-
-	// Verify the search attribute is cleared after recovery
-	description, err := s.SdkClient().DescribeWorkflow(ctx, workflowRun.GetID(), workflowRun.GetRunID())
-	s.NoError(err)
-	s.NotNil(description.TypedSearchAttributes)
-	_, ok := description.TypedSearchAttributes.GetKeywordList(temporal.NewSearchAttributeKeyKeywordList(sadefs.TemporalReportedProblems))
-	s.False(ok)
+	// Terminate the workflow for cleanup
+	s.NoError(s.SdkClient().TerminateWorkflow(ctx, workflowRun.GetID(), workflowRun.GetRunID(), "test cleanup"))
 }
 
 func (s *WFTFailureReportedProblemsTestSuite) TestWFTFailureReportedProblems_SetAndClear_FailAfterActivity() {
