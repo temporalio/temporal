@@ -18,7 +18,16 @@ type WorkflowTaskInfo struct {
 	WorkflowTaskTimeout time.Duration
 	// This is only needed to communicate task queue used after AddWorkflowTaskScheduledEvent.
 	TaskQueue *taskqueuepb.TaskQueue
-	Attempt   int32
+
+	// Attempt is the number of attempts for this workflow task.
+	Attempt int32
+	// AttemptsSinceLastSuccess is the number of attempts since the last successful workflow task.
+	// This is used by the `TemporalReportedProblems` search attribute to check latest WFT failure count,
+	// this will only differ from attempts above when the previous workflow tasks failed and there was a
+	// buffered event (like a signal or activity finishing) applied to the workflow which causes the
+	// new workflow task to have an attempt of 1 again.
+	AttemptsSinceLastSuccess int32
+
 	// Scheduled and Started timestamps are useful for transient workflow task: when transient workflow task finally completes,
 	// use these Timestamp to create scheduled/started events.
 	// Also used for recording latency metrics

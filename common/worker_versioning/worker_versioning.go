@@ -40,6 +40,11 @@ const (
 	UnversionedSearchAttribute = buildIdSearchAttributePrefixUnversioned
 	UnversionedVersionId       = "__unversioned__"
 
+	// ErrPinnedVersionNotInTaskQueueSubstring is the key substring used to identify
+	// when a pinned version is not present in a task queue. This is used for error
+	// classification in batch operations.
+	ErrPinnedVersionNotInTaskQueueSubstring = "is not present in task queue"
+
 	// WorkerDeploymentVersionIdDelimiterV31 will be deleted once we stop supporting v31 version string fields
 	// in external and internal APIs. Until then, both delimiters are banned in deployment name. All
 	// deprecated version string fields in APIs keep using the old delimiter. Workflow SA uses new delimiter.
@@ -54,6 +59,24 @@ const (
 	WorkerDeploymentNameFieldName                = "WorkerDeploymentName"
 	WorkerDeploymentBuildIDFieldName             = "BuildID"
 )
+
+// FormatPinnedVersionNotInTaskQueueError formats the error message when a pinned version
+// is not present in a task queue.
+func FormatPinnedVersionNotInTaskQueueError(deploymentName, buildID, taskQueue string, taskQueueType enumspb.TaskQueueType) string {
+	var tqType string
+	switch taskQueueType {
+	case enumspb.TASK_QUEUE_TYPE_WORKFLOW:
+		tqType = "Workflow"
+	case enumspb.TASK_QUEUE_TYPE_ACTIVITY:
+		tqType = "Activity"
+	case enumspb.TASK_QUEUE_TYPE_NEXUS:
+		tqType = "Nexus"
+	default:
+		tqType = "Unknown"
+	}
+	return fmt.Sprintf("Pinned version '%s:%s' %s '%s' of type '%s'",
+		deploymentName, buildID, ErrPinnedVersionNotInTaskQueueSubstring, taskQueue, tqType)
+}
 
 // PinnedBuildIdSearchAttribute creates the pinned search attribute for the BuildIds list, used as a visibility optimization.
 // For pinned workflows using WorkerDeployment APIs (ms.GetEffectiveVersioningBehavior() == PINNED &&
@@ -546,7 +569,7 @@ func validatePinnedVersionInTaskQueue(ctx context.Context,
 			return nil
 		}
 		return serviceerror.NewFailedPrecondition(
-			"Pinned version is not present in the task queue",
+			FormatPinnedVersionNotInTaskQueueError(pinnedVersion.GetDeploymentName(), pinnedVersion.GetBuildId(), tq, tqType),
 		)
 	}
 
@@ -571,7 +594,7 @@ func validatePinnedVersionInTaskQueue(ctx context.Context,
 	)
 	if !resp.GetIsMember() {
 		return serviceerror.NewFailedPrecondition(
-			"Pinned version is not present in the task queue",
+			FormatPinnedVersionNotInTaskQueueError(pinnedVersion.GetDeploymentName(), pinnedVersion.GetBuildId(), tq, tqType),
 		)
 	}
 	return nil

@@ -97,9 +97,11 @@ func (s *invokerExecuteTaskSuite) TestExecuteTask_Basic() {
 			RunId: "run-id",
 		}, nil)
 
+	// After execution, both BufferedStarts are kept (with RunId set).
+	// They become "running" workflows.
 	s.runExecuteTestCase(&executeTestCase{
 		InitialBufferedStarts:    bufferedStarts,
-		ExpectedBufferedStarts:   0,
+		ExpectedBufferedStarts:   2, // kept after starting
 		ExpectedRunningWorkflows: 2,
 		ExpectedActionCount:      2,
 	})
@@ -150,17 +152,25 @@ func (s *invokerExecuteTaskSuite) TestExecuteTask_RetryableFailure() {
 			RunId: "run-id",
 		}, nil)
 
+	// After execution:
+	// - Failed start stays in buffer with backoff (pending)
+	// - Successful start stays in buffer with RunId set (running)
 	s.runExecuteTestCase(&executeTestCase{
 		InitialBufferedStarts:    bufferedStarts,
-		ExpectedBufferedStarts:   1,
+		ExpectedBufferedStarts:   2, // both kept: 1 failed (backoff) + 1 running
 		ExpectedRunningWorkflows: 1,
 		ExpectedActionCount:      1,
 		ValidateInvoker: func(invoker *scheduler.Invoker) {
-			// The failed start should have had a backoff applied.
-			failedStart := invoker.BufferedStarts[0]
-			backoffTime := failedStart.BackoffTime.AsTime()
-			s.True(backoffTime.After(s.timeSource.Now()))
-			s.Equal(int64(2), failedStart.Attempt)
+			// Find the failed start (no RunId, has backoff)
+			for _, start := range invoker.BufferedStarts {
+				if start.GetRunId() == "" {
+					backoffTime := start.BackoffTime.AsTime()
+					s.True(backoffTime.After(s.timeSource.Now()))
+					s.Equal(int64(2), start.Attempt)
+					return
+				}
+			}
+			s.Fail("expected to find failed start with backoff")
 		},
 	})
 }
@@ -313,10 +323,11 @@ func (s *invokerExecuteTaskSuite) TestExecuteTask_ExceedsMaxActionsPerExecution(
 			RunId: "run-id",
 		}, nil)
 
+	// All BufferedStarts are kept: maxStarts get RunId set (running), the rest stay pending.
 	s.runExecuteTestCase(&executeTestCase{
 		InitialBufferedStarts:    bufferedStarts,
-		ExpectedBufferedStarts:   maxStarts,
-		ExpectedRunningWorkflows: maxStarts,
+		ExpectedBufferedStarts:   maxStarts * 2, // all kept: started + pending
+		ExpectedRunningWorkflows: maxStarts,     // only started ones
 		ExpectedActionCount:      int64(maxStarts),
 	})
 }
@@ -325,11 +336,21 @@ func (s *invokerExecuteTaskSuite) runExecuteTestCase(c *executeTestCase) {
 	ctx := s.newMutableContext()
 	invoker := s.scheduler.Invoker.Get(ctx)
 
-	// Set up initial state
+	// Set up initial state. Note: InitialRunningWorkflows is now represented by
+	// BufferedStarts that have RunId set but no Completed field.
 	invoker.BufferedStarts = c.InitialBufferedStarts
 	invoker.CancelWorkflows = c.InitialCancelWorkflows
 	invoker.TerminateWorkflows = c.InitialTerminateWorkflows
-	s.scheduler.Info.RunningWorkflows = c.InitialRunningWorkflows
+
+	// Add initial running workflows as BufferedStarts with RunId set
+	for _, wf := range c.InitialRunningWorkflows {
+		invoker.BufferedStarts = append(invoker.BufferedStarts, &schedulespb.BufferedStart{
+			RequestId:  wf.WorkflowId + "-req",
+			WorkflowId: wf.WorkflowId,
+			RunId:      wf.RunId,
+			Attempt:    1,
+		})
+	}
 
 	// Set LastProcessedTime to current time to ensure time checks pass
 	invoker.LastProcessedTime = timestamppb.New(s.timeSource.Now())
@@ -346,9 +367,19 @@ func (s *invokerExecuteTaskSuite) runExecuteTestCase(c *executeTestCase) {
 	_, err = s.node.CloseTransaction()
 	s.NoError(err)
 
-	// Validate the results
+	// Validate the results.
+	// BufferedStarts now includes both pending and running starts (they're kept after starting).
 	s.Equal(c.ExpectedBufferedStarts, len(invoker.GetBufferedStarts()))
-	s.Equal(c.ExpectedRunningWorkflows, len(s.scheduler.Info.RunningWorkflows))
+
+	// Count running workflows from BufferedStarts (has RunId but no Completed)
+	runningCount := 0
+	for _, start := range invoker.GetBufferedStarts() {
+		if start.GetRunId() != "" && start.GetCompleted() == nil {
+			runningCount++
+		}
+	}
+	s.Equal(c.ExpectedRunningWorkflows, runningCount)
+
 	s.Equal(c.ExpectedTerminateWorkflows, len(invoker.TerminateWorkflows))
 	s.Equal(c.ExpectedCancelWorkflows, len(invoker.CancelWorkflows))
 	s.Equal(c.ExpectedActionCount, s.scheduler.Info.ActionCount)

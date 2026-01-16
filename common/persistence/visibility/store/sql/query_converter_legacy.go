@@ -478,7 +478,7 @@ func (c *QueryConverterLegacy) convertValueExpr(
 	expr := *exprRef
 	switch e := expr.(type) {
 	case *sqlparser.SQLVal:
-		value, err := c.parseSQLVal(e, name, saType)
+		value, err := c.parseSQLVal(e, name, saFieldName, saType)
 		if err != nil {
 			return err
 		}
@@ -540,11 +540,12 @@ func (c *QueryConverterLegacy) convertValueExpr(
 // parseSQLVal handles values for specific search attributes.
 // Returns a string, an int64 or a float64 if there are no errors.
 // For datetime, converts to UTC.
-// For execution status, converts string to enum value.
+// For execution status, converts string to enum value (only for system ExecutionStatus field).
 // For execution duration, converts to nanoseconds.
 func (c *QueryConverterLegacy) parseSQLVal(
 	expr *sqlparser.SQLVal,
 	saName string,
+	saFieldName string,
 	saType enumspb.IndexedValueType,
 ) (any, error) {
 	// Using expr.Val instead of sqlparser.String(expr) because the latter escapes chars using MySQL
@@ -587,7 +588,7 @@ func (c *QueryConverterLegacy) parseSQLVal(
 		return tm.UTC().Format(c.getDatetimeFormat()), nil
 	}
 
-	if saName == sadefs.ExecutionStatus {
+	if saFieldName == sadefs.ExecutionStatus {
 		var status int64
 		switch v := value.(type) {
 		case int64:
@@ -613,7 +614,7 @@ func (c *QueryConverterLegacy) parseSQLVal(
 		return status, nil
 	}
 
-	if saName == sadefs.ExecutionDuration {
+	if saFieldName == sadefs.ExecutionDuration {
 		if durationStr, isString := value.(string); isString {
 			duration, err := query.ParseExecutionDurationStr(durationStr)
 			if err != nil {

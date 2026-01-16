@@ -28,26 +28,26 @@ const (
 
 var errSerializationCast = errors.New("cannot serialize HSM task. unable to cast to expected type")
 
-type TimeoutTask struct {
+type ScheduleToCloseTimeoutTask struct {
 	deadline time.Time
 }
 
-var _ hsm.Task = TimeoutTask{}
+var _ hsm.Task = ScheduleToCloseTimeoutTask{}
 
-func (TimeoutTask) Type() string {
+func (ScheduleToCloseTimeoutTask) Type() string {
 	return TaskTypeScheduleToCloseTimeout
 }
 
-func (t TimeoutTask) Deadline() time.Time {
+func (t ScheduleToCloseTimeoutTask) Deadline() time.Time {
 	return t.deadline
 }
 
-func (TimeoutTask) Destination() string {
+func (ScheduleToCloseTimeoutTask) Destination() string {
 	return ""
 }
 
 // Validate checks if the timeout task is still valid to execute for the given node state.
-func (t TimeoutTask) Validate(ref *persistencespb.StateMachineRef, node *hsm.Node) error {
+func (t ScheduleToCloseTimeoutTask) Validate(ref *persistencespb.StateMachineRef, node *hsm.Node) error {
 	if err := node.CheckRunning(); err != nil {
 		return err
 	}
@@ -69,7 +69,7 @@ func (t TimeoutTask) Validate(ref *persistencespb.StateMachineRef, node *hsm.Nod
 type TimeoutTaskSerializer struct{}
 
 func (TimeoutTaskSerializer) Deserialize(data []byte, attrs hsm.TaskAttributes) (hsm.Task, error) {
-	return TimeoutTask{deadline: attrs.Deadline}, nil
+	return ScheduleToCloseTimeoutTask{deadline: attrs.Deadline}, nil
 }
 
 func (TimeoutTaskSerializer) Serialize(hsm.Task) ([]byte, error) {

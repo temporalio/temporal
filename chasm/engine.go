@@ -4,6 +4,8 @@ package chasm
 
 import (
 	"context"
+
+	"go.temporal.io/server/common/log"
 )
 
 // NoValue is a sentinel type representing no value.
@@ -183,7 +185,9 @@ func NewExecution[C Component, I any, O any](
 	result, err := engineFromContext(ctx).NewExecution(
 		ctx,
 		NewComponentRef[C](key),
-		func(ctx MutableContext) (Component, error) {
+		func(ctx MutableContext) (_ Component, retErr error) {
+			defer log.CapturePanic(ctx.Logger(), &retErr)
+
 			var c C
 			var err error
 			c, output, err = newFn(ctx, input)
@@ -218,13 +222,17 @@ func UpdateWithNewExecution[C Component, I any, O1 any, O2 any](
 	executionKey, serializedRef, err := engineFromContext(ctx).UpdateWithNewExecution(
 		ctx,
 		NewComponentRef[C](key),
-		func(ctx MutableContext) (Component, error) {
+		func(ctx MutableContext) (_ Component, retErr error) {
+			defer log.CapturePanic(ctx.Logger(), &retErr)
+
 			var c C
 			var err error
 			c, output1, err = newFn(ctx, input)
 			return c, err
 		},
-		func(ctx MutableContext, c Component) error {
+		func(ctx MutableContext, c Component) (retErr error) {
+			defer log.CapturePanic(ctx.Logger(), &retErr)
+
 			var err error
 			output2, err = updateFn(c.(C), ctx, input)
 			return err
@@ -262,7 +270,9 @@ func UpdateComponent[C any, R []byte | ComponentRef, I any, O any](
 	newSerializedRef, err := engineFromContext(ctx).UpdateComponent(
 		ctx,
 		ref,
-		func(ctx MutableContext, c Component) error {
+		func(ctx MutableContext, c Component) (retErr error) {
+			defer log.CapturePanic(ctx.Logger(), &retErr)
+
 			var err error
 			output, err = updateFn(c.(C), ctx, input)
 			return err
@@ -295,7 +305,9 @@ func ReadComponent[C any, R []byte | ComponentRef, I any, O any](
 	err = engineFromContext(ctx).ReadComponent(
 		ctx,
 		ref,
-		func(ctx Context, c Component) error {
+		func(ctx Context, c Component) (retErr error) {
+			defer log.CapturePanic(ctx.Logger(), &retErr)
+
 			var err error
 			output, err = readFn(c.(C), ctx, input)
 			return err
@@ -330,7 +342,9 @@ func PollComponent[C any, R []byte | ComponentRef, I any, O any](
 	newSerializedRef, err := engineFromContext(ctx).PollComponent(
 		ctx,
 		ref,
-		func(ctx Context, c Component) (bool, error) {
+		func(ctx Context, c Component) (_ bool, retErr error) {
+			defer log.CapturePanic(ctx.Logger(), &retErr)
+
 			out, satisfied, err := monotonicPredicate(c.(C), ctx, input)
 			if satisfied {
 				output = out

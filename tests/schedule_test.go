@@ -216,6 +216,21 @@ func (s *scheduleFunctionalSuiteBase) TestBasics() {
 	s.NoError(err)
 	s.cleanup(sid)
 
+	// describe immediately after create and verify FutureActionTimes
+	describeRespAfterCreate, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+	})
+	s.NoError(err)
+	s.NotEmpty(describeRespAfterCreate.Info.FutureActionTimes, "FutureActionTimes should be set immediately after create")
+	// FutureActionTimes should be in the future (after createTime) and aligned to 5-second intervals
+	for i, fat := range describeRespAfterCreate.Info.FutureActionTimes {
+		s.True(fat.AsTime().After(createTime) || fat.AsTime().Equal(createTime),
+			"FutureActionTimes[%d] should be >= createTime", i)
+		s.Equal(int64(0), fat.AsTime().UnixNano()%int64(5*time.Second),
+			"FutureActionTimes[%d] should be aligned to 5-second intervals", i)
+	}
+
 	// sleep until we see two runs, plus a bit more to ensure that the second run has completed
 	s.Eventually(func() bool { return atomic.LoadInt32(&runs) == 2 }, 15*time.Second, 500*time.Millisecond)
 	time.Sleep(2 * time.Second) //nolint:forbidigo

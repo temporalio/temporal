@@ -132,6 +132,9 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexusrpc.C
 		),
 		requestStartTime: startTime,
 	}
+	if r.HTTPRequest.Header != nil {
+		rCtx.originalHeaders = r.HTTPRequest.Header.Clone()
+	}
 	ctx = rCtx.augmentContext(ctx, r.HTTPRequest.Header)
 	defer rCtx.capturePanicAndRecordMetrics(&ctx, &retErr)
 	if r.HTTPRequest.URL.Path != commonnexus.PathCompletionCallbackNoIdentifier {
@@ -289,7 +292,6 @@ func (h *completionHandler) forwardCompleteOperation(ctx context.Context, r *nex
 			return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
 		}
 		c := &nexusrpc.OperationCompletionUnsuccessful{
-			Header:         httpHeaderToNexusHeader(r.HTTPRequest.Header),
 			State:          r.State,
 			OperationToken: r.OperationToken,
 			StartTime:      r.StartTime,
@@ -305,8 +307,9 @@ func (h *completionHandler) forwardCompleteOperation(ctx context.Context, r *nex
 		return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid operation state: %q", r.State)
 	}
 
-	if r.HTTPRequest.Header != nil {
-		forwardReq.Header = r.HTTPRequest.Header.Clone()
+	forwardReq.Header = rCtx.originalHeaders
+	if forwardReq.Header == nil {
+		forwardReq.Header = make(http.Header, 1)
 	}
 	forwardReq.Header.Set(interceptor.DCRedirectionApiHeaderName, "true")
 
@@ -396,6 +399,7 @@ type requestContext struct {
 	requestStartTime              time.Time
 	outcomeTag                    metrics.Tag
 	forwarded                     bool
+	originalHeaders               http.Header
 }
 
 func (c *requestContext) augmentContext(ctx context.Context, header http.Header) context.Context {

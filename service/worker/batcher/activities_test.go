@@ -493,6 +493,65 @@ func (s *activitiesSuite) TestProcessAdminTask_RefreshWorkflowTasks_Error() {
 	s.Equal(expectedErr, err)
 }
 
+func (s *activitiesSuite) TestIsNonRetryableError() {
+	tests := []struct {
+		name      string
+		err       error
+		batchType enumspb.BatchOperationType
+		want      bool
+	}{
+		{
+			name:      "nil error returns false",
+			err:       nil,
+			batchType: enumspb.BATCH_OPERATION_TYPE_UPDATE_EXECUTION_OPTIONS,
+			want:      false,
+		},
+		{
+			name:      "pinned version error for UPDATE_EXECUTION_OPTIONS returns true",
+			err:       errors.New("Pinned version 'deployment-foo:build-123' is not present in task queue 'my-queue' of type 'Workflow'"),
+			batchType: enumspb.BATCH_OPERATION_TYPE_UPDATE_EXECUTION_OPTIONS,
+			want:      true,
+		},
+		{
+			name:      "pinned version error with different format for UPDATE_EXECUTION_OPTIONS returns true",
+			err:       errors.New("Pinned version 'prod:v2.0.1' is not present in task queue 'activity-queue' of type 'Activity'"),
+			batchType: enumspb.BATCH_OPERATION_TYPE_UPDATE_EXECUTION_OPTIONS,
+			want:      true,
+		},
+		{
+			name:      "error containing substring for UPDATE_EXECUTION_OPTIONS returns true",
+			err:       fmt.Errorf("Some prefix: %s suffix", "is not present in task queue"),
+			batchType: enumspb.BATCH_OPERATION_TYPE_UPDATE_EXECUTION_OPTIONS,
+			want:      true,
+		},
+		{
+			name:      "unrelated error for UPDATE_EXECUTION_OPTIONS returns false",
+			err:       errors.New("some other error that doesn't match"),
+			batchType: enumspb.BATCH_OPERATION_TYPE_UPDATE_EXECUTION_OPTIONS,
+			want:      false,
+		},
+		{
+			name:      "pinned version error for different operation type returns false",
+			err:       errors.New("Pinned version 'deployment-foo:build-123' is not present in task queue 'my-queue' of type 'Workflow'"),
+			batchType: enumspb.BATCH_OPERATION_TYPE_TERMINATE,
+			want:      false,
+		},
+		{
+			name:      "pinned version error for SIGNAL operation returns false",
+			err:       errors.New("Pinned version 'deployment-foo:build-123' is not present in task queue 'my-queue' of type 'Workflow'"),
+			batchType: enumspb.BATCH_OPERATION_TYPE_SIGNAL,
+			want:      false,
+		},
+	}
+
+	for _, tt := range tests {
+		s.Run(tt.name, func() {
+			got := isNonRetryableError(tt.err, tt.batchType)
+			s.Equal(tt.want, got)
+		})
+	}
+}
+
 func (s *activitiesSuite) TestProcessAdminTask_UnknownOperation() {
 	ctx := context.Background()
 

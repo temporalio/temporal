@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -15,7 +16,8 @@ type (
 	MetricTagsFn[T Task]   func(T) []metrics.Tag
 
 	RateLimitedSchedulerOptions struct {
-		EnableShadowMode bool
+		Enabled          dynamicconfig.BoolPropertyFn
+		EnableShadowMode dynamicconfig.BoolPropertyFn
 	}
 
 	RateLimitedScheduler[T Task] struct {
@@ -79,6 +81,9 @@ func (s *RateLimitedScheduler[T]) Stop() {
 }
 
 func (s *RateLimitedScheduler[T]) wait(task T) {
+	if !s.options.Enabled() {
+		return
+	}
 	now := s.timeSource.Now()
 	reservation := s.rateLimiter.Reserve(
 		s.timeSource.Now(),
@@ -98,7 +103,7 @@ func (s *RateLimitedScheduler[T]) wait(task T) {
 	}
 
 	metrics.TaskSchedulerThrottled.With(s.metricsHandler).Record(1, s.metricTagsFn(task)...)
-	if s.options.EnableShadowMode {
+	if s.options.EnableShadowMode() {
 		// in shadow mode, only emit metrics, but don't actually throttle
 		return
 	}
@@ -107,6 +112,9 @@ func (s *RateLimitedScheduler[T]) wait(task T) {
 }
 
 func (s *RateLimitedScheduler[T]) allow(task T) bool {
+	if !s.options.Enabled() {
+		return true
+	}
 	if allow := s.rateLimiter.Allow(
 		s.timeSource.Now(),
 		s.quotaRequestFn(task),
@@ -117,5 +125,5 @@ func (s *RateLimitedScheduler[T]) allow(task T) bool {
 	metrics.TaskSchedulerThrottled.With(s.metricsHandler).Record(1, s.metricTagsFn(task)...)
 
 	// in shadow mode, only emit metrics, but don't actually throttle
-	return s.options.EnableShadowMode
+	return s.options.EnableShadowMode()
 }

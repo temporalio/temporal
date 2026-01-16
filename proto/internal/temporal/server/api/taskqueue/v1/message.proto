@@ -116,3 +116,29 @@ message TaskForwardInfo {
     // Deprecated. [cleanup-old-wv]
     string dispatch_version_set = 5;
 }
+
+// EphemeralData is data that we want to propagate among task queue partitions, but is not persisted.
+// Ephemeral data is propagated alongside "task queue user data", but while user data applies to a
+// task queue family (all queues with the same name, across types), ephemeral data applies only to
+// one type at a time.
+message EphemeralData {
+    message ByVersion {
+        // Key for this data. Data for the unversioned queue has no version field present.
+        // All following fields are data associated with this versioned queue.
+        temporal.server.api.deployment.v1.WorkerDeploymentVersion version = 1;
+
+        // This is a bit field of priority levels that have "significant" backlog (defined by
+        // the server configuration). Priority key k corresponds to 1<<k.
+        int64 backlog_priority_levels = 2;
+    }
+    message ByPartition {
+        int32 partition = 1;
+        repeated ByVersion version = 2;
+    }
+    repeated ByPartition partition = 1;
+}
+
+message VersionedEphemeralData {
+    EphemeralData data = 1;
+    int64 version = 2;
+}

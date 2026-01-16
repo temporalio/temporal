@@ -316,9 +316,16 @@ func (h *Handler) RecordActivityTaskHeartbeat(ctx context.Context, request *hist
 	if err0 != nil {
 		return nil, h.convertError(err0)
 	}
-	workflowID := taskToken.GetWorkflowId()
+	businessID := taskToken.GetWorkflowId()
+	if businessID == "" {
+		ref, err := chasm.DeserializeComponentRef(taskToken.GetComponentRef())
+		if err != nil {
+			return nil, err
+		}
+		businessID = ref.BusinessID
+	}
 
-	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, businessID)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -341,12 +348,20 @@ func (h *Handler) RecordActivityTaskStarted(ctx context.Context, request *histor
 
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	workflowExecution := request.WorkflowExecution
-	workflowID := workflowExecution.GetWorkflowId()
+	businessID := workflowExecution.GetWorkflowId()
+	if businessID == "" {
+		ref, err := chasm.DeserializeComponentRef(request.GetComponentRef())
+		if err != nil {
+			return nil, err
+		}
+		businessID = ref.BusinessID
+	}
+
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, businessID)
 	if request.GetNamespaceId() == "" {
 		return nil, h.convertError(errNamespaceNotSet)
 	}
 
-	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -426,9 +441,16 @@ func (h *Handler) RespondActivityTaskCompleted(ctx context.Context, request *his
 	if err0 != nil {
 		return nil, h.convertError(err0)
 	}
-	workflowID := taskToken.GetWorkflowId()
+	businessID := taskToken.GetWorkflowId()
+	if businessID == "" {
+		ref, err := chasm.DeserializeComponentRef(taskToken.GetComponentRef())
+		if err != nil {
+			return nil, err
+		}
+		businessID = ref.BusinessID
+	}
 
-	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, businessID)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -464,9 +486,16 @@ func (h *Handler) RespondActivityTaskFailed(ctx context.Context, request *histor
 	if err0 != nil {
 		return nil, h.convertError(err0)
 	}
-	workflowID := taskToken.GetWorkflowId()
+	businessID := taskToken.GetWorkflowId()
+	if businessID == "" {
+		ref, err := chasm.DeserializeComponentRef(taskToken.GetComponentRef())
+		if err != nil {
+			return nil, err
+		}
+		businessID = ref.BusinessID
+	}
 
-	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, businessID)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -502,9 +531,16 @@ func (h *Handler) RespondActivityTaskCanceled(ctx context.Context, request *hist
 	if err0 != nil {
 		return nil, h.convertError(err0)
 	}
-	workflowID := taskToken.GetWorkflowId()
+	businessID := taskToken.GetWorkflowId()
+	if businessID == "" {
+		ref, err := chasm.DeserializeComponentRef(taskToken.GetComponentRef())
+		if err != nil {
+			return nil, err
+		}
+		businessID = ref.BusinessID
+	}
 
-	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, businessID)
 	if err != nil {
 		return nil, h.convertError(err)
 	}

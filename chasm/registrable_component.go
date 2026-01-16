@@ -107,9 +107,13 @@ func WithSearchAttributes(
 			field := sa.definition().field
 			valueType := sa.definition().valueType
 
-			if sadefs.IsSystem(alias) || sadefs.IsReserved(alias) {
+			if sadefs.IsChasmSystem(alias) {
 				//nolint:forbidigo
-				panic(fmt.Sprintf("registrable component validation error: CHASM search attribute alias %q is a system or reserved search attribute", alias))
+				panic(fmt.Sprintf("registrable component validation error: CHASM search attribute alias %q is a CHASM system search attribute", alias))
+			}
+			if !sadefs.IsSystem(alias) && sadefs.IsReserved(alias) {
+				//nolint:forbidigo
+				panic(fmt.Sprintf("registrable component validation error: CHASM search attribute alias %q is a reserved search attribute", alias))
 			}
 
 			if _, ok := rc.searchAttributesMapper.systemAliasToField[alias]; ok {

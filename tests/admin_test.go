@@ -13,12 +13,15 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
 )
 
 type AdminTestSuite struct {
 	testcore.FunctionalTestBase
+	testContext context.Context
 }
 
 func TestAdminTestSuite(t *testing.T) {
@@ -26,13 +29,35 @@ func TestAdminTestSuite(t *testing.T) {
 	suite.Run(t, new(AdminTestSuite))
 }
 
-func (s *AdminTestSuite) TestAdminRebuildMutableState() {
+func (s *AdminTestSuite) SetupSuite() {
+	// Call parent setup to initialize the test cluster
+	s.FunctionalTestBase.SetupSuite()
+	s.testContext = context.Background()
+}
 
+func (s *AdminTestSuite) TestAdminRebuildMutableState_ChasmDisabled() {
+	rebuildMutableStateWorkflowHelper(s, false)
+}
+
+func (s *AdminTestSuite) TestAdminRebuildMutableState_ChasmEnabled() {
+	cleanup := s.OverrideDynamicConfig(dynamicconfig.EnableChasm, true)
+	defer cleanup()
+
+	configValues := s.GetTestCluster().Host().DcClient().GetValue(dynamicconfig.EnableChasm.Key())
+	s.NotEmpty(configValues, "EnableChasm config should be set")
+	configValue, _ := configValues[0].Value.(bool)
+	s.True(configValue, "EnableChasm config should be true")
+	rebuildMutableStateWorkflowHelper(s, true)
+}
+
+// common test helper
+func rebuildMutableStateWorkflowHelper(s *AdminTestSuite, testWithChasm bool) {
+	tv := testvars.New(s.T())
 	workflowFn := func(ctx workflow.Context) error {
 		var randomUUID string
 		err := workflow.SideEffect(
 			ctx,
-			func(workflow.Context) interface{} { return uuid.New().String() },
+			func(workflow.Context) any { return uuid.New().String() },
 		).Get(&randomUUID)
 		s.NoError(err)
 
@@ -42,16 +67,16 @@ func (s *AdminTestSuite) TestAdminRebuildMutableState() {
 
 	s.Worker().RegisterWorkflow(workflowFn)
 
-	workflowID := "functional-admin-rebuild-mutable-state-test"
+	workflowID := tv.Any().String()
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:                 workflowID,
 		TaskQueue:          s.TaskQueue(),
 		WorkflowRunTimeout: 20 * time.Second,
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(s.testContext, 30*time.Second)
 	defer cancel()
 
-	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
+	workflowRun, err := s.SdkClient().ExecuteWorkflow(s.testContext, workflowOptions, workflowFn)
 	s.NoError(err)
 	runID := workflowRun.GetRunID()
 
@@ -77,6 +102,11 @@ func (s *AdminTestSuite) TestAdminRebuildMutableState() {
 		})
 		s.NoError(err)
 		if response1.DatabaseMutableState.ExecutionInfo.StateTransitionCount == 3 {
+			// Note: ChasmNodes may be empty even with CHASM enabled, so we only check if the rebuild can be performed,
+			// and not checking whether it is rebuildable because ChasmNodes are present.
+			if !testWithChasm {
+				s.Empty(response1.DatabaseMutableState.ChasmNodes, "CHASM-disabled workflows should not have ChasmNodes")
+			}
 			break
 		}
 		time.Sleep(20 * time.Millisecond) //nolint:forbidigo

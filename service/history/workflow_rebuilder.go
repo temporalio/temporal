@@ -68,10 +68,6 @@ func (r *workflowRebuilderImpl) rebuild(
 ) (retError error) {
 
 	wfCache := r.workflowConsistencyChecker.GetWorkflowCache()
-	rebuildSpec, err := r.getRebuildSpecFromMutableState(ctx, &workflowKey)
-	if err != nil {
-		return err
-	}
 	wfContext, releaseFn, err := wfCache.GetOrCreateWorkflowExecution(
 		ctx,
 		r.shard,
@@ -86,9 +82,14 @@ func (r *workflowRebuilderImpl) rebuild(
 		return err
 	}
 	defer func() {
-		releaseFn(retError)
 		wfContext.Clear()
+		releaseFn(retError)
 	}()
+
+	rebuildSpec, err := r.getRebuildSpecFromMutableState(ctx, &workflowKey)
+	if err != nil {
+		return err
+	}
 	rebuildMutableState, err := r.replayResetWorkflow(
 		ctx,
 		workflowKey,
@@ -102,6 +103,49 @@ func (r *workflowRebuilderImpl) rebuild(
 		return err
 	}
 	return r.overwriteToDB(ctx, rebuildMutableState)
+}
+
+// rebuildableCheck checks if the mutable state is rebuildable
+// error:
+//   - serviceerror.NewInvalidArgument: if the mutable state is not rebuildable
+//   - other errors: e.g. internal error that fails to get the current version history
+func (r *workflowRebuilderImpl) rebuildableCheck(
+	mutableState *persistencespb.WorkflowMutableState,
+) error {
+	// check1: only workflow archetype is supported
+	checkErr := serviceerror.NewInvalidArgument("Rebuild only supports workflow executions, not other archetype types")
+	if len(mutableState.ChasmNodes) == 0 {
+		checkErr = nil
+	} else {
+		if rootNode, ok := mutableState.ChasmNodes[""]; ok {
+			if componentAttrs := rootNode.GetMetadata().GetComponentAttributes(); componentAttrs != nil {
+				archetypeID := chasm.ArchetypeID(componentAttrs.TypeId)
+				if archetypeID == chasm.WorkflowArchetypeID {
+					r.logger.Info("rebuild: workflow archetype found")
+					checkErr = nil
+				}
+			}
+		}
+	}
+	if checkErr != nil {
+		return checkErr
+	}
+
+	// check2: check if the current version history is empty
+	checkErr = serviceerror.NewInvalidArgument("version histories is nil, cannot be rebuilt")
+	if mutableState.ExecutionInfo == nil || mutableState.ExecutionInfo.VersionHistories == nil {
+		return checkErr
+	}
+	isEmpty, err := versionhistory.IsCurrentVersionHistoryEmpty(mutableState.ExecutionInfo.VersionHistories)
+	if err != nil {
+		return err
+	}
+	if isEmpty {
+		return checkErr
+	}
+
+	// passing all the checks, return nil
+	return nil
 }
 
 func (r *workflowRebuilderImpl) getRebuildSpecFromMutableState(
@@ -138,6 +182,11 @@ func (r *workflowRebuilderImpl) getRebuildSpecFromMutableState(
 	}
 
 	mutableState := resp.State
+	err = r.rebuildableCheck(mutableState)
+	if err != nil {
+		return nil, err
+	}
+
 	versionHistories := mutableState.ExecutionInfo.VersionHistories
 	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(versionHistories)
 	if err != nil {

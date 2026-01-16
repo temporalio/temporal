@@ -66,19 +66,22 @@ type (
 		pollerScalingDecision *taskqueuepb.PollerScalingDecision
 		recycleToken          func(*internalTask)
 		removeFromMatcher     atomic.Pointer[func()]
-
+		// taskDispatchRevisionNumber represents the revision number used by the task and is
+		// max(taskDirectiveRevisionNumber, routingConfigRevisionNumber) for the task.
+		taskDispatchRevisionNumber    int64
 		targetWorkerDeploymentVersion *deploymentspb.WorkerDeploymentVersion
 
-		// These fields are for use by matcherData:
+		// The following fields are for use by priMatcher/matcherData:
 		waitableMatchResult
 		forwardCtx context.Context // non-nil for sync match task only
 		// effectivePriority is initialized from an explicit task priority if present, or the
 		// default for the task queue. It can also be the special pollForwarderPriority (higher
 		// than normal priorities) to indicate the poll forwarder. In some other cases (e.g.
 		// migration) it may be adjusted from the explicit task priority.
+		// The scale of effectivePriority is 10× the normal scale to allow inserting forwards
+		// in between priority levels.
 		effectivePriority priorityKey
-		// taskDispatchRevisionNumber represents the revision number used by the task and is max(taskDirectiveRevisionNumber, routingConfigRevisionNumber) for the task.
-		taskDispatchRevisionNumber int64
+		pollForwarderType pollForwarderType
 	}
 
 	// taskResponse is used to report the result of either a match with a local poller,
@@ -121,20 +124,21 @@ func newInternalTaskForSyncMatch(
 		redirectInfo = forwardInfo.GetRedirectInfo()
 	}
 	return &internalTask{
-		taskDispatchRevisionNumber: taskDispatchRevisionNumber,
 		event: &genericTaskInfo{
 			AllocatedTaskInfo: &persistencespb.AllocatedTaskInfo{
 				Data:   info,
 				TaskId: syncMatchTaskId,
 			},
 		},
-		forwardInfo:       forwardInfo,
-		source:            source,
-		redirectInfo:      redirectInfo,
-		responseC:         make(chan taskResponse, 1),
-		effectivePriority: priorityKey(info.GetPriority().GetPriorityKey()),
+		forwardInfo:  forwardInfo,
+		source:       source,
+		redirectInfo: redirectInfo,
+		responseC:    make(chan taskResponse, 1),
 
+		taskDispatchRevisionNumber:    taskDispatchRevisionNumber,
 		targetWorkerDeploymentVersion: targetVersion,
+
+		effectivePriority: effectivePriorityFactor * priorityKey(info.GetPriority().GetPriorityKey()),
 	}
 }
 
@@ -148,7 +152,7 @@ func newInternalTaskFromBacklog(
 			completionFunc:    completionFunc,
 		},
 		source:            enumsspb.TASK_SOURCE_DB_BACKLOG,
-		effectivePriority: priorityKey(info.GetData().GetPriority().GetPriorityKey()),
+		effectivePriority: effectivePriorityFactor * priorityKey(info.GetData().GetPriority().GetPriorityKey()),
 	}
 }
 
@@ -164,7 +168,7 @@ func newInternalQueryTask(
 		forwardInfo:       request.GetForwardInfo(),
 		responseC:         make(chan taskResponse, 1),
 		source:            enumsspb.TASK_SOURCE_HISTORY,
-		effectivePriority: priorityKey(request.GetPriority().GetPriorityKey()),
+		effectivePriority: effectivePriorityFactor * priorityKey(request.GetPriority().GetPriorityKey()),
 	}
 }
 
@@ -191,12 +195,12 @@ func newInternalStartedTask(info *startedTaskInfo) *internalTask {
 	return &internalTask{started: info}
 }
 
-func newPollForwarderTask() *internalTask {
-	return &internalTask{effectivePriority: pollForwarderPriority}
+func newPollForwarderTask(p priorityKey, t pollForwarderType) *internalTask {
+	return &internalTask{effectivePriority: p, pollForwarderType: t}
 }
 
 func (task *internalTask) isPollForwarder() bool {
-	return task.effectivePriority == pollForwarderPriority
+	return task.pollForwarderType != notPollForwarder
 }
 
 // isQuery returns true if the underlying task is a query task

@@ -173,12 +173,13 @@ func (ch *commandHandler) HandleScheduleCommand(
 	scheduleToStartTimeout := attrs.ScheduleToStartTimeout.AsDuration()
 	startToCloseTimeout := attrs.StartToCloseTimeout.AsDuration()
 
-	if scheduleToCloseTimeout > 0 && scheduleToStartTimeout > 0 && scheduleToStartTimeout > scheduleToCloseTimeout {
-		attrs.ScheduleToStartTimeout = attrs.ScheduleToCloseTimeout
-	}
-
-	if scheduleToCloseTimeout > 0 && startToCloseTimeout > 0 && startToCloseTimeout > scheduleToCloseTimeout {
-		attrs.StartToCloseTimeout = attrs.ScheduleToCloseTimeout
+	if scheduleToCloseTimeout > 0 {
+		if scheduleToStartTimeout > scheduleToCloseTimeout {
+			attrs.ScheduleToStartTimeout = attrs.ScheduleToCloseTimeout
+		}
+		if startToCloseTimeout > scheduleToCloseTimeout {
+			attrs.StartToCloseTimeout = attrs.ScheduleToCloseTimeout
+		}
 	}
 
 	event := ms.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED, func(he *historypb.HistoryEvent) {

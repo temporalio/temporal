@@ -32,9 +32,18 @@ import (
 	"go.uber.org/fx"
 )
 
-var ErrOperationTimeoutBelowMin = errors.New("remaining operation timeout is less than required minimum")
+type operationTimeoutBelowMinError struct {
+	timeoutType enumspb.TimeoutType
+}
+
+func (o *operationTimeoutBelowMinError) Error() string {
+	return fmt.Sprintf("not enough time to execute another request before %s timeout", o.timeoutType.String())
+}
+
 var ErrInvalidOperationToken = errors.New("invalid operation token")
 var errRequestTimedOut = errors.New("request timed out")
+
+const maxDuration = time.Duration(1<<63 - 1)
 
 // ClientProvider provides a nexus client for a given endpoint.
 type ClientProvider func(ctx context.Context, namespaceID string, entry *persistencespb.NexusEndpointEntry, service string) (*nexusrpc.HTTPClient, error)
@@ -71,7 +80,7 @@ func RegisterExecutor(
 	}
 	if err := hsm.RegisterTimerExecutor(
 		registry,
-		exec.executeTimeoutTask,
+		exec.executeScheduleToCloseTimeoutTask,
 	); err != nil {
 		return err
 	}
@@ -196,20 +205,29 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 		return fmt.Errorf("%w: %w", queueserrors.NewUnprocessableTaskError("failed to generate a callback token"), err)
 	}
 
-	header := nexus.Header(args.header)
-	var opTimeout time.Duration
 	callTimeout := e.Config.RequestTimeout(ns.Name().String(), task.EndpointName)
+	var timeoutType enumspb.TimeoutType
 	// Adjust timeout based on remaining operation timeouts.
-	// StartToClose takes precedence over ScheduleToClose since it is already capped by it.
-	if args.startToCloseTimeout > 0 {
-		opTimeout = args.startToCloseTimeout - time.Since(args.scheduledTime)
-		callTimeout = min(callTimeout, opTimeout)
+	// ScheduleToStart takes precedence over ScheduleToClose since it is already capped by it.
+	if args.scheduleToStartTimeout > 0 {
+		callTimeout = min(callTimeout, args.scheduleToStartTimeout-time.Since(args.scheduledTime))
+		timeoutType = enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START
 	} else if args.scheduleToCloseTimeout > 0 {
-		opTimeout = args.scheduleToCloseTimeout - time.Since(args.scheduledTime)
-		callTimeout = min(callTimeout, opTimeout)
+		callTimeout = min(callTimeout, args.scheduleToCloseTimeout-time.Since(args.scheduledTime))
+		timeoutType = enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE
 	}
+	// Inform the handler of the operation timeout via header.
+	// StartToClose takes precedence over ScheduleToClose since it is already capped by it.
+	opTimeout := maxDuration
+	if args.startToCloseTimeout > 0 {
+		opTimeout = args.startToCloseTimeout
+	}
+	if args.scheduleToCloseTimeout > 0 {
+		opTimeout = min(args.scheduleToCloseTimeout-time.Since(args.scheduledTime), opTimeout)
+	}
+	header := nexus.Header(args.header)
 	// Set the operation timeout header if not already set.
-	if opTimeoutHeader := header.Get(nexus.HeaderOperationTimeout); opTimeout > 0 && opTimeoutHeader == "" {
+	if opTimeoutHeader := header.Get(nexus.HeaderOperationTimeout); opTimeout != maxDuration && opTimeoutHeader == "" {
 		if header == nil {
 			header = make(nexus.Header, 1)
 		}
@@ -253,7 +271,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 	var rawResult *nexusrpc.ClientStartOperationResponse[*nexus.LazyValue]
 	var callErr error
 	if callTimeout < e.Config.MinRequestTimeout(ns.Name().String()) {
-		callErr = ErrOperationTimeoutBelowMin
+		callErr = &operationTimeoutBelowMinError{timeoutType: timeoutType}
 	} else {
 		rawResult, callErr = client.StartOperation(callCtx, args.operation, args.payload, nexus.StartOperationOptions{
 			Header:      header,
@@ -330,6 +348,7 @@ type startArgs struct {
 	endpointName             string
 	endpointID               string
 	scheduledTime            time.Time
+	scheduleToStartTimeout   time.Duration
 	scheduleToCloseTimeout   time.Duration
 	startToCloseTimeout      time.Duration
 	header                   map[string]string
@@ -357,6 +376,7 @@ func (e taskExecutor) loadOperationArgs(
 		args.operation = operation.Operation
 		args.requestID = operation.RequestId
 		args.scheduleToCloseTimeout = operation.ScheduleToCloseTimeout.AsDuration()
+		args.scheduleToStartTimeout = operation.ScheduleToStartTimeout.AsDuration()
 		args.startToCloseTimeout = operation.StartToCloseTimeout.AsDuration()
 		eventToken = operation.ScheduledEventToken
 		event, err := node.LoadHistoryEvent(ctx, eventToken)
@@ -459,6 +479,7 @@ func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref h
 func (e taskExecutor) handleStartOperationError(env hsm.Environment, node *hsm.Node, operation Operation, callErr error) error {
 	var handlerErr *nexus.HandlerError
 	var opFailedErr *nexus.OperationError
+	var opTimeoutBelowMinErr *operationTimeoutBelowMinError
 
 	switch {
 	case errors.As(callErr, &opFailedErr):
@@ -475,9 +496,9 @@ func (e taskExecutor) handleStartOperationError(env hsm.Environment, node *hsm.N
 		// Following practices from workflow task completion payload size limit enforcement, we do not retry this
 		// operation if the response's operation token is too large.
 		return handleNonRetryableStartOperationError(node, operation, callErr)
-	case errors.Is(callErr, ErrOperationTimeoutBelowMin):
+	case errors.As(callErr, &opTimeoutBelowMinErr):
 		// Not enough time to execute another request, resolve the operation with a timeout.
-		return e.recordOperationTimeout(node)
+		return e.recordOperationTimeout(node, opTimeoutBelowMinErr.timeoutType)
 	case errors.Is(callErr, context.DeadlineExceeded) || errors.Is(callErr, context.Canceled):
 		// If timed out, we don't leak internal info to the user
 		callErr = errRequestTimedOut
@@ -535,11 +556,19 @@ func (e taskExecutor) executeBackoffTask(env hsm.Environment, node *hsm.Node, ta
 	})
 }
 
-func (e taskExecutor) executeTimeoutTask(env hsm.Environment, node *hsm.Node, task TimeoutTask) error {
-	return e.recordOperationTimeout(node)
+func (e taskExecutor) executeScheduleToCloseTimeoutTask(env hsm.Environment, node *hsm.Node, task ScheduleToCloseTimeoutTask) error {
+	return e.recordOperationTimeout(node, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE)
 }
 
-func (e taskExecutor) recordOperationTimeout(node *hsm.Node) error {
+func (e taskExecutor) executeScheduleToStartTimeoutTask(env hsm.Environment, node *hsm.Node, task ScheduleToStartTimeoutTask) error {
+	return e.recordOperationTimeout(node, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START)
+}
+
+func (e taskExecutor) executeStartToCloseTimeoutTask(env hsm.Environment, node *hsm.Node, task StartToCloseTimeoutTask) error {
+	return e.recordOperationTimeout(node, enumspb.TIMEOUT_TYPE_START_TO_CLOSE)
+}
+
+func (e taskExecutor) recordOperationTimeout(node *hsm.Node, timeoutType enumspb.TimeoutType) error {
 	return hsm.MachineTransition(node, func(op Operation) (hsm.TransitionOutput, error) {
 		eventID, err := hsm.EventIDFromToken(op.ScheduledEventToken)
 		if err != nil {
@@ -556,75 +585,7 @@ func (e taskExecutor) recordOperationTimeout(node *hsm.Node) error {
 							Message: "operation timed out",
 							FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
 								TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
-									TimeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
-								},
-							},
-						},
-					),
-					ScheduledEventId: eventID,
-					RequestId:        op.RequestId,
-				},
-			}
-		})
-
-		return TransitionTimedOut.Apply(op, EventTimedOut{
-			Node: node,
-		})
-	})
-}
-
-func (e taskExecutor) executeScheduleToStartTimeoutTask(env hsm.Environment, node *hsm.Node, task ScheduleToStartTimeoutTask) error {
-	return hsm.MachineTransition(node, func(op Operation) (hsm.TransitionOutput, error) {
-		eventID, err := hsm.EventIDFromToken(op.ScheduledEventToken)
-		if err != nil {
-			return hsm.TransitionOutput{}, err
-		}
-		node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT, func(e *historypb.HistoryEvent) {
-			// nolint:revive // We must mutate here even if the linter doesn't like it.
-			e.Attributes = &historypb.HistoryEvent_NexusOperationTimedOutEventAttributes{
-				NexusOperationTimedOutEventAttributes: &historypb.NexusOperationTimedOutEventAttributes{
-					Failure: nexusOperationFailure(
-						op,
-						eventID,
-						&failurepb.Failure{
-							Message: "operation timed out before starting",
-							FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
-								TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
-									TimeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
-								},
-							},
-						},
-					),
-					ScheduledEventId: eventID,
-					RequestId:        op.RequestId,
-				},
-			}
-		})
-
-		return TransitionTimedOut.Apply(op, EventTimedOut{
-			Node: node,
-		})
-	})
-}
-
-func (e taskExecutor) executeStartToCloseTimeoutTask(env hsm.Environment, node *hsm.Node, task StartToCloseTimeoutTask) error {
-	return hsm.MachineTransition(node, func(op Operation) (hsm.TransitionOutput, error) {
-		eventID, err := hsm.EventIDFromToken(op.ScheduledEventToken)
-		if err != nil {
-			return hsm.TransitionOutput{}, err
-		}
-		node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT, func(e *historypb.HistoryEvent) {
-			// nolint:revive // We must mutate here even if the linter doesn't like it.
-			e.Attributes = &historypb.HistoryEvent_NexusOperationTimedOutEventAttributes{
-				NexusOperationTimedOutEventAttributes: &historypb.NexusOperationTimedOutEventAttributes{
-					Failure: nexusOperationFailure(
-						op,
-						eventID,
-						&failurepb.Failure{
-							Message: "operation timed out after starting",
-							FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
-								TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
-									TimeoutType: enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
+									TimeoutType: timeoutType,
 								},
 							},
 						},
@@ -664,14 +625,15 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 	}
 
 	callTimeout := e.Config.RequestTimeout(ns.Name().String(), task.EndpointName)
+	var timeoutType enumspb.TimeoutType
 	// Adjust timeout based on remaining operation timeouts.
-	// StartToClose takes precedence over ScheduleToClose since it is already capped by it.
 	if args.startToCloseTimeout > 0 {
-		opTimeout := args.startToCloseTimeout - time.Since(args.scheduledTime)
-		callTimeout = min(callTimeout, opTimeout)
-	} else if args.scheduleToCloseTimeout > 0 {
-		opTimeout := args.scheduleToCloseTimeout - time.Since(args.scheduledTime)
-		callTimeout = min(callTimeout, opTimeout)
+		callTimeout = min(callTimeout, args.startToCloseTimeout-time.Since(args.startedTime))
+		timeoutType = enumspb.TIMEOUT_TYPE_START_TO_CLOSE
+	}
+	if args.scheduleToCloseTimeout > 0 {
+		callTimeout = min(callTimeout, args.scheduleToCloseTimeout-time.Since(args.scheduledTime))
+		timeoutType = enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE
 	}
 	callCtx, cancel := context.WithTimeout(ctx, callTimeout)
 	defer cancel()
@@ -713,7 +675,7 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 	var callErr error
 	startTime := time.Now()
 	if callTimeout < e.Config.MinRequestTimeout(ns.Name().String()) {
-		callErr = ErrOperationTimeoutBelowMin
+		callErr = &operationTimeoutBelowMinError{timeoutType: timeoutType}
 	} else {
 		callErr = handle.Cancel(callCtx, nexus.CancelOperationOptions{Header: nexus.Header(args.headers)})
 	}
@@ -747,8 +709,9 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 type cancelArgs struct {
 	service, operation, token, endpointID, endpointName, requestID string
 	scheduledTime                                                  time.Time
-	scheduleToCloseTimeout                                         time.Duration
+	startedTime                                                    time.Time
 	startToCloseTimeout                                            time.Duration
+	scheduleToCloseTimeout                                         time.Duration
 	scheduledEventID                                               int64
 	headers                                                        map[string]string
 }
@@ -773,6 +736,7 @@ func (e taskExecutor) loadArgsForCancelation(ctx context.Context, env hsm.Enviro
 		args.endpointName = op.Endpoint
 		args.requestID = op.RequestId
 		args.scheduledTime = op.ScheduledTime.AsTime()
+		args.startedTime = op.StartedTime.AsTime()
 		args.scheduleToCloseTimeout = op.ScheduleToCloseTimeout.AsDuration()
 		args.startToCloseTimeout = op.StartToCloseTimeout.AsDuration()
 		args.scheduledEventID, err = hsm.EventIDFromToken(op.ScheduledEventToken)
@@ -797,7 +761,8 @@ func (e taskExecutor) saveCancelationResult(ctx context.Context, env hsm.Environ
 		return hsm.MachineTransition(n, func(c Cancelation) (hsm.TransitionOutput, error) {
 			if callErr != nil {
 				var handlerErr *nexus.HandlerError
-				isRetryable := !errors.Is(callErr, ErrOperationTimeoutBelowMin) && (!errors.As(callErr, &handlerErr) || handlerErr.Retryable())
+				var opTimeoutBelowMinErr *operationTimeoutBelowMinError
+				isRetryable := !errors.As(callErr, &opTimeoutBelowMinErr) && (!errors.As(callErr, &handlerErr) || handlerErr.Retryable())
 				failure, err := callErrToFailure(callErr, isRetryable)
 				if err != nil {
 					return hsm.TransitionOutput{}, err
@@ -900,7 +865,8 @@ func startCallOutcomeTag(callCtx context.Context, result *nexusrpc.ClientStartOp
 	var opFailedError *nexus.OperationError
 
 	if callErr != nil {
-		if errors.Is(callErr, ErrOperationTimeoutBelowMin) {
+		var opTimeoutBelowMinErr *operationTimeoutBelowMinError
+		if errors.As(callErr, &opTimeoutBelowMinErr) {
 			return "operation-timeout"
 		}
 		if callCtx.Err() != nil {
@@ -922,7 +888,8 @@ func startCallOutcomeTag(callCtx context.Context, result *nexusrpc.ClientStartOp
 func cancelCallOutcomeTag(callCtx context.Context, callErr error) string {
 	var handlerErr *nexus.HandlerError
 	if callErr != nil {
-		if errors.Is(callErr, ErrOperationTimeoutBelowMin) {
+		var opTimeoutBelowMinErr *operationTimeoutBelowMinError
+		if errors.As(callErr, &opTimeoutBelowMinErr) {
 			return "operation-timeout"
 		}
 		if callCtx.Err() != nil {
@@ -951,10 +918,8 @@ func isDestinationDown(err error) bool {
 	if errors.Is(err, ErrInvalidOperationToken) {
 		return false
 	}
-	if errors.Is(err, ErrOperationTimeoutBelowMin) {
-		return false
-	}
-	return true
+	var opTimeoutBelowMinErr *operationTimeoutBelowMinError
+	return !errors.As(err, &opTimeoutBelowMinErr)
 }
 
 func callErrToFailure(callErr error, retryable bool) (*failurepb.Failure, error) {
