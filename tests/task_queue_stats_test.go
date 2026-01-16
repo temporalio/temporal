@@ -828,8 +828,7 @@ func (s *TaskQueueStatsSuite) inactiveVersionDoesNotAbsorbUnversionedBacklog(num
 	}, 10*time.Second, 200*time.Millisecond)
 }
 
-// requireWDVTaskQueueStatsRelaxed is a relaxed version of requireWDVTaskQueueStatsStrict
-// that allows for over-counting in multi-partition ramping scenarios.
+// requireWDVTaskQueueStatsRelaxed asserts task queue statistics by allowing for over-counting in multi-partition ramping scenarios.
 // The production code intentionally uses math.Ceil for both ramping and current percentage
 // calculations across partitions, which can result in slight over-counting.
 func (s *TaskQueueStatsSuite) requireWDVTaskQueueStatsRelaxed(
