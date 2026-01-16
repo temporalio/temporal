@@ -157,7 +157,7 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 			ActualTime:    timestamppb.New(next.Next),
 			OverlapPolicy: overlapPolicy,
 			Manual:        manual,
-			RequestId:     generateRequestID(scheduler, backfillID, next.Nominal, next.Next),
+			RequestId:  generateRequestID(scheduler, backfillID, next.Nominal, next.Next),
 			WorkflowId: schedulescommon.GenerateWorkflowID(workflowID, next.Nominal),
 		})
 
