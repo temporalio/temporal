@@ -1766,6 +1766,22 @@ If value less or equal to 0, will fall back to HistoryPersistenceNamespaceMaxQPS
 		time.Hour,
 		`TaskSchedulerInactiveChannelDeletionDelay the time delay before a namespace's' channel is removed from the scheduler`,
 	)
+	TaskSchedulerEnableWorkflowQueueScheduler = NewGlobalBoolSetting(
+		"history.taskSchedulerEnableWorkflowQueueScheduler",
+		false,
+		`TaskSchedulerEnableWorkflowQueueScheduler enables the workflow-aware sequential scheduler
+that processes contended workflows sequentially to avoid busy workflow errors`,
+	)
+	TaskSchedulerWorkflowQueueSchedulerQueueSize = NewGlobalIntSetting(
+		"history.taskSchedulerWorkflowQueueSchedulerQueueSize",
+		1000,
+		`TaskSchedulerWorkflowQueueSchedulerQueueSize is the buffer size for the workflow queue scheduler's dispatch channel`,
+	)
+	TaskSchedulerWorkflowQueueSchedulerWorkerCount = NewGlobalIntSetting(
+		"history.taskSchedulerWorkflowQueueSchedulerWorkerCount",
+		128,
+		`TaskSchedulerWorkflowQueueSchedulerWorkerCount is the number of workers for the workflow queue scheduler`,
+	)
 
 	TimerTaskBatchSize = NewGlobalIntSetting(
 		"history.timerTaskBatchSize",

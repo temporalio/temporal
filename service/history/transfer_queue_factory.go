@@ -93,6 +93,17 @@ func (f *transferQueueFactory) CreateQueue(
 		metricsHandler,
 	)
 
+	// Wrap with WorkflowAwareScheduler for handling contended workflows
+	shardScheduler = queues.NewWorkflowAwareScheduler(
+		shardScheduler,
+		queues.WorkflowAwareSchedulerOptions{
+			EnableSequentialScheduler:        f.Config.TaskSchedulerEnableWorkflowQueueScheduler,
+			SequentialSchedulerQueueSize:     f.Config.TaskSchedulerWorkflowQueueSchedulerQueueSize,
+			SequentialSchedulerWorkerCount:   f.Config.TaskSchedulerWorkflowQueueSchedulerWorkerCount,
+		},
+		logger,
+	)
+
 	rescheduler := queues.NewRescheduler(
 		shardScheduler,
 		shardContext.GetTimeSource(),
