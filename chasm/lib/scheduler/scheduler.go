@@ -5,7 +5,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"slices"
 	"strings"
 	"time"
 
@@ -16,6 +15,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common"
@@ -309,10 +309,12 @@ func (s *Scheduler) updateConflictToken() {
 // An event here is the schedule getting created or updated, or an action. This
 // value is used for calculating the retention time (how long an idle schedule
 // lives after becoming idle).
-func (s *Scheduler) getLastEventTime() time.Time {
+func (s *Scheduler) getLastEventTime(ctx chasm.Context) time.Time {
 	var lastEvent time.Time
-	if len(s.Info.RecentActions) > 0 {
-		lastEvent = s.Info.RecentActions[len(s.Info.RecentActions)-1].GetActualTime().AsTime()
+	invoker := s.Invoker.Get(ctx)
+	recentActions := invoker.recentActions()
+	if len(recentActions) > 0 {
+		lastEvent = recentActions[len(recentActions)-1].GetActualTime().AsTime()
 	}
 	lastEvent = util.MaxTime(lastEvent, s.Info.GetCreateTime().AsTime())
 	lastEvent = util.MaxTime(lastEvent, s.Info.GetUpdateTime().AsTime())
@@ -335,7 +337,7 @@ func (s *Scheduler) getIdleExpiration(
 		return time.Time{}, false
 	}
 
-	return s.getLastEventTime().Add(idleTime), true
+	return s.getLastEventTime(ctx).Add(idleTime), true
 }
 
 func (s *Scheduler) hasMoreAllowAllBackfills(ctx chasm.Context) bool {
@@ -362,48 +364,15 @@ func (s *Scheduler) hasMoreAllowAllBackfills(ctx chasm.Context) bool {
 type schedulerActionResult struct {
 	overlapSkipped      int64
 	missedCatchupWindow int64
-	starts              []*schedulepb.ScheduleActionResult
+	actionCount         int64
 }
 
-// recordActionResult updates the Scheduler's customer-facing metadata with execution results.
+// recordActionResult updates the Scheduler's customer-facing metrics.
+// RunningWorkflows and RecentActions are computed from BufferedStarts.
 func (s *Scheduler) recordActionResult(result *schedulerActionResult) {
-	s.Info.ActionCount += int64(len(result.starts))
+	s.Info.ActionCount += result.actionCount
 	s.Info.OverlapSkipped += result.overlapSkipped
 	s.Info.MissedCatchupWindow += result.missedCatchupWindow
-
-	// Filter any actions being recorded that may have already been recorded/completed.
-	newActions := util.FilterSlice(result.starts, func(incoming *schedulepb.ScheduleActionResult) bool {
-		wid := incoming.StartWorkflowResult.WorkflowId
-		recentIdx := slices.IndexFunc(s.Info.RecentActions, func(existing *schedulepb.ScheduleActionResult) bool {
-			recorded := existing.StartWorkflowResult.WorkflowId == wid
-			return recorded
-		})
-
-		return recentIdx < 0
-	})
-	if len(newActions) > 0 {
-		s.Info.RecentActions = util.SliceTail(append(s.Info.RecentActions, newActions...), recentActionCount)
-	}
-
-	// Update RunningWorkflows.
-	for _, start := range result.starts {
-		completed := start.StartWorkflowStatus >= enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
-
-		if !completed {
-			// Add running workflows to the list (duplicates are acceptable for ALLOW_ALL policy)
-			s.Info.RunningWorkflows = append(s.Info.RunningWorkflows, start.StartWorkflowResult)
-		} else {
-			// Remove completed workflows by WorkflowId+RunId
-			wid := start.StartWorkflowResult.WorkflowId
-			rid := start.StartWorkflowResult.RunId
-			runningIdx := slices.IndexFunc(s.Info.RunningWorkflows, func(wfe *commonpb.WorkflowExecution) bool {
-				return wfe.WorkflowId == wid && wfe.RunId == rid
-			})
-			if runningIdx >= 0 {
-				s.Info.RunningWorkflows = slices.Delete(s.Info.RunningWorkflows, runningIdx, runningIdx+1)
-			}
-		}
-	}
 }
 
 var _ chasm.NexusCompletionHandler = &Scheduler{}
@@ -427,7 +396,7 @@ func (s *Scheduler) HandleNexusCompletion(
 ) error {
 	invoker := s.Invoker.Get(ctx)
 
-	workflowID := invoker.WorkflowID(info.RequestId)
+	workflowID := invoker.runningWorkflowID(info.RequestId)
 	if workflowID == "" {
 		// If the request ID was removed, the request must have already been processed;
 		// fast-succeed.
@@ -466,75 +435,14 @@ func (s *Scheduler) HandleNexusCompletion(
 		)
 	}
 
-	// Record the completed action in the Invoker to queue off any
-	// sequentially-buffered starts. This also updates BufferedStarts.
-	scheduleTime := invoker.recordCompletedAction(ctx, info.CloseTime.AsTime(), info.RequestId)
-
-	// Record the completed action into Scheduler's metadata. This updates
-	// RecentActions and RunningWorkflows.
-	s.recordCompletedAction(scheduleTime, workflowID, wfStatus)
+	// Record the completed action in the Invoker.
+	completed := &schedulespb.CompletedResult{
+		Status:    wfStatus,
+		CloseTime: info.CloseTime,
+	}
+	invoker.recordCompletedAction(ctx, completed, info.RequestId)
 
 	return nil
-}
-
-// recordCompletedAction ensures that the given action is recorded in
-// RecentActions and cleaned up from other state.
-func (s *Scheduler) recordCompletedAction(
-	scheduleTime time.Time,
-	workflowID string,
-	workflowStatus enumspb.WorkflowExecutionStatus,
-) {
-	// Clear out closed workflows from RunningWorkflows.
-	s.Info.RunningWorkflows = slices.DeleteFunc(s.Info.RunningWorkflows, func(wf *commonpb.WorkflowExecution) bool {
-		// We don't evaluate RunId here, since the action may have retried.
-		return wf.WorkflowId == workflowID
-	})
-
-	// Update the RecentActions entry's status.
-	idx := slices.IndexFunc(s.Info.RecentActions, func(action *schedulepb.ScheduleActionResult) bool {
-		return action.StartWorkflowResult.WorkflowId == workflowID
-	})
-
-	if idx >= 0 {
-		s.Info.RecentActions[idx].StartWorkflowStatus = workflowStatus
-	} else {
-		// If we didn't find an entry in RecentActions, add one.
-		if scheduleTime.IsZero() {
-			// We're completing a workflow that wasn't in BufferedStarts, RunningWorkflows,
-			// or RecentActions, but *did* have a request ID entry. That shouldn't be possible.
-			//
-			// TODO - softassert here when we have a logger wired into CHASM. Skip recording
-			// the action for now.
-			return
-		}
-
-		actionResult := &schedulepb.ScheduleActionResult{
-			ScheduleTime: timestamppb.New(scheduleTime),
-			ActualTime:   timestamppb.New(scheduleTime), // best guess, as we're recording complete before start was recorded
-			StartWorkflowResult: &commonpb.WorkflowExecution{
-				WorkflowId: workflowID,
-			},
-		}
-
-		s.Info.RecentActions = util.SliceTail(
-			append(s.Info.RecentActions, actionResult), recentActionCount)
-	}
-}
-
-// isActionCompleted returns true for when the given action has already been
-// recorded as complete in the Scheduler's state. Side effect tasks should use
-// this function to determine if a started action was marked as completed before
-// the action was even marked as started.
-func (s *Scheduler) isActionCompleted(workflowID string) bool {
-	for _, action := range s.Info.RecentActions {
-		if action.StartWorkflowResult.WorkflowId == workflowID {
-			return true
-		}
-	}
-
-	// A workflow could have completed and subsequently truncated from RecentActions,
-	// but we don't care about that case.
-	return false
 }
 
 // Describe returns the current state of the Scheduler for DescribeSchedule requests.
@@ -570,13 +478,17 @@ func (s *Scheduler) Describe(
 		generator.UpdateFutureActionTimes(ctx, specBuilder)
 	}
 
-	infoCopy := common.CloneProto(s.Info)
-	infoCopy.FutureActionTimes = generator.GetFutureActionTimes()
+	// Populate computed views from Invoker's BufferedStarts.
+	invoker := s.Invoker.Get(ctx)
+	info := common.CloneProto(s.Info)
+	info.RunningWorkflows = invoker.runningWorkflowExecutions()
+	info.RecentActions = invoker.recentActions()
+	info.FutureActionTimes = generator.GetFutureActionTimes()
 
 	return &schedulerpb.DescribeScheduleResponse{
 		FrontendResponse: &workflowservice.DescribeScheduleResponse{
 			Schedule:         schedule,
-			Info:             infoCopy,
+			Info:             info,
 			ConflictToken:    s.generateConflictToken(),
 			Memo:             &commonpb.Memo{Fields: memo},
 			SearchAttributes: &commonpb.SearchAttributes{IndexedFields: visibility.CustomSearchAttributes(ctx)},
@@ -775,13 +687,14 @@ func (s *Scheduler) ListInfo(
 	spec.StructuredCalendar = util.SliceHead(spec.StructuredCalendar, listInfoSpecFieldLimit)
 
 	generator := s.Generator.Get(ctx)
+	invoker := s.Invoker.Get(ctx)
 
 	return &schedulepb.ScheduleListInfo{
 		Spec:              spec,
 		WorkflowType:      s.Schedule.Action.GetStartWorkflow().GetWorkflowType(),
 		Notes:             s.Schedule.State.Notes,
 		Paused:            s.Schedule.State.Paused,
-		RecentActions:     util.SliceTail(s.Info.RecentActions, recentActionCount),
+		RecentActions:     invoker.recentActions(),
 		FutureActionTimes: generator.FutureActionTimes,
 	}
 }

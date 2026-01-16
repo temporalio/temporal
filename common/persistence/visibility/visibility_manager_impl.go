@@ -200,6 +200,13 @@ func (p *visibilityManagerImpl) convertToChasmExecutionInfo(
 		return nil, err
 	}
 
+	if chasmAliasedSAs == nil {
+		chasmAliasedSAs = make(map[string]chasm.VisibilityValue)
+	}
+	if exec.TaskQueue != "" {
+		chasmAliasedSAs[sadefs.TaskQueue] = chasm.VisibilityValueString(exec.TaskQueue)
+	}
+
 	customAliasedSAs, err := searchattribute.AliasFields(
 		p.searchAttributesMapperProvider,
 		customSAs,

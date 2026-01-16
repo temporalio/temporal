@@ -3,7 +3,9 @@ package matching
 import (
 	"context"
 	"errors"
+	"maps"
 	"math"
+	"math/bits"
 	"sync"
 	"time"
 
@@ -18,9 +20,11 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/future"
+	"go.temporal.io/server/common/goro"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -30,6 +34,7 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/common/tqid"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -43,7 +48,6 @@ const (
 )
 
 type (
-
 	// Represents a single partition of a (user-level) Task Queue in memory state. Under the hood, each Task Queue
 	// partition is made of one or more DB-level queues. There is always a default DB queue. For
 	// versioned TQs, there is an additional DB queue for each Build ID.
@@ -69,6 +73,8 @@ type (
 		metricsHandler      metrics.Handler // namespace/taskqueue tagged metric scope
 		// TODO(stephanos): move cache out of partition manager
 		cache cache.Cache // non-nil for root-partition
+
+		goroGroup goro.Group
 
 		autoEnableRateLimiter quotas.RateLimiter
 		fairnessState         enumsspb.FairnessState // Set once on initialization and read only after
@@ -191,6 +197,7 @@ func (pm *taskQueuePartitionManagerImpl) initialize() (retErr error) {
 	}
 	pm.defaultQueueFuture.Set(defaultQ, nil)
 	defaultQ.Start()
+	pm.goroGroup.Go(pm.updateEphemeralData)
 	return nil
 }
 
@@ -208,10 +215,6 @@ func (pm *taskQueuePartitionManagerImpl) Start() {
 	pm.userDataManager.Start()
 	//nolint:errcheck
 	go pm.initialize()
-}
-
-func (pm *taskQueuePartitionManagerImpl) GetRateLimitManager() *rateLimitManager {
-	return pm.rateLimitManager
 }
 
 // Stop does not unload the partition from matching engine. It is intended to be called by matching engine when
@@ -244,6 +247,12 @@ func (pm *taskQueuePartitionManagerImpl) Stop(unloadCause unloadCause) {
 	pm.rateLimitManager.Stop()
 
 	pm.engine.updateTaskQueuePartitionGauge(pm.Namespace(), pm.partition, -1)
+
+	pm.goroGroup.Cancel()
+}
+
+func (pm *taskQueuePartitionManagerImpl) GetRateLimitManager() *rateLimitManager {
+	return pm.rateLimitManager
 }
 
 func (pm *taskQueuePartitionManagerImpl) Namespace() *namespace.Namespace {
@@ -921,7 +930,7 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 		if dbq == nil {
 			return nil, errDefaultQueueNotInit
 		}
-		unversionedStatsByPriority = dbq.GetStatsByPriority()
+		unversionedStatsByPriority = dbq.GetStatsByPriority(true)
 
 		userData, _, err := pm.GetUserDataManager().GetUserData()
 		if err != nil {
@@ -955,7 +964,7 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 		}
 	}
 
-	versionsInfo := make(map[string]*taskqueuespb.TaskQueueVersionInfoInternal, 0)
+	versionsInfo := make(map[string]*taskqueuespb.TaskQueueVersionInfoInternal, len(versions))
 	for v := range versions {
 		vInfo := &taskqueuespb.TaskQueueVersionInfoInternal{
 			PhysicalTaskQueueInfo: &taskqueuespb.PhysicalTaskQueueInfo{},
@@ -977,7 +986,7 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 			vInfo.PhysicalTaskQueueInfo.Pollers = physicalQueue.GetAllPollerInfo()
 		}
 		if reportStats {
-			physicalStatsByPriority := physicalQueue.GetStatsByPriority()
+			physicalStatsByPriority := physicalQueue.GetStatsByPriority(true)
 
 			// Clone the physical queue's stats by priority so we can adjust (either add, subtract) them based on the
 			// attribution model defined below.
@@ -1042,6 +1051,117 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 	return &matchingservice.DescribeTaskQueuePartitionResponse{
 		VersionsInfoInternal: versionsInfo,
 	}, nil
+}
+
+func (pm *taskQueuePartitionManagerImpl) updateEphemeralData(ctx context.Context) error {
+	// for now, this only applies to normal workflow task queues, only with new matcher
+	if pm.partition.Kind() != enumspb.TASK_QUEUE_KIND_NORMAL ||
+		pm.partition.TaskType() != enumspb.TASK_QUEUE_TYPE_WORKFLOW ||
+		!pm.config.NewMatcher {
+		return nil
+	}
+
+	var prevBacklogPriority map[PhysicalTaskQueueVersion]int64
+
+	for {
+		interval := pm.config.EphemeralDataUpdateInterval()
+		if interval == 0 {
+			_ = util.InterruptibleSleep(ctx, time.Minute)
+			continue
+		}
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+
+		case <-time.After(backoff.Jitter(interval, 0.05)):
+			prevBacklogPriority = pm.updateEphemeralDataIteration(prevBacklogPriority)
+		}
+	}
+}
+
+func (pm *taskQueuePartitionManagerImpl) updateEphemeralDataIteration(prevBacklogPriority map[PhysicalTaskQueueVersion]int64) map[PhysicalTaskQueueVersion]int64 {
+	negligibleAge := pm.config.BacklogNegligibleAge()
+	backlogPriority := make(map[PhysicalTaskQueueVersion]int64)
+
+	setLevels := func(vk PhysicalTaskQueueVersion, vq physicalTaskQueueManager) {
+		var levels int64
+		for key, stats := range vq.GetStatsByPriority(false) {
+			if key < 64 && stats.ApproximateBacklogAge.AsDuration() > negligibleAge {
+				levels = levels | 1<<key
+			}
+		}
+		if levels != 0 {
+			backlogPriority[vk] = levels
+		}
+	}
+
+	dbq := pm.defaultQueue()
+	if dbq == nil {
+		return prevBacklogPriority // shouldn't happen, we only start after initialization
+	}
+	setLevels(PhysicalTaskQueueVersion{}, dbq)
+
+	pm.versionedQueuesLock.RLock()
+	for vk, vq := range pm.versionedQueues {
+		if vk.buildId == "" || vk.deploymentSeriesName == "" {
+			continue // v3 only
+		}
+		setLevels(vk, vq)
+	}
+	pm.versionedQueuesLock.RUnlock()
+
+	if maps.Equal(backlogPriority, prevBacklogPriority) {
+		return prevBacklogPriority
+	}
+
+	pm.userDataManager.LocalBacklogPriorityChanged(backlogPriority)
+	return backlogPriority
+}
+
+func (pm *taskQueuePartitionManagerImpl) ephemeralDataChanged(data *taskqueuespb.EphemeralData) {
+	// for now, only sticky partitions act on ephemeral data, normal partitions ignore it.
+	if pm.partition.Kind() != enumspb.TASK_QUEUE_KIND_STICKY {
+		return
+	}
+
+	// transpose map to more useful form
+	updates := make(map[PhysicalTaskQueueVersion]remotePriorityBacklogSet) // version -> {partition id, max level w/backlog}
+
+	for _, part := range data.GetPartition() {
+		for _, verData := range part.GetVersion() {
+			versionKey := PhysicalTaskQueueVersion{
+				buildId:              verData.Version.GetBuildId(),
+				deploymentSeriesName: verData.Version.GetDeploymentName(),
+			}
+			byVersion := util.GetOrSetMap(updates, versionKey)
+			levels := uint64(verData.BacklogPriorityLevels)
+			for pri := bits.TrailingZeros64(levels); pri != 64; pri = bits.TrailingZeros64(levels) {
+				levels &^= 1 << pri
+				backlogKey := remotePriorityBacklog{
+					partition: part.Partition,
+					priority:  priorityKey(pri),
+				}
+				byVersion[backlogKey] = struct{}{}
+			}
+		}
+	}
+
+	update := func(key PhysicalTaskQueueVersion, pqm physicalTaskQueueManager) {
+		pqm.UpdateRemotePriorityBacklogs(updates[key])
+	}
+
+	dbq := pm.defaultQueue()
+	if dbq != nil {
+		update(PhysicalTaskQueueVersion{}, dbq)
+	}
+
+	pm.versionedQueuesLock.RLock()
+	defer pm.versionedQueuesLock.RUnlock()
+
+	for key, pqm := range pm.versionedQueues {
+		update(key, pqm)
+	}
 }
 
 func cloneTaskQueueStats(in *taskqueuepb.TaskQueueStats) *taskqueuepb.TaskQueueStats {

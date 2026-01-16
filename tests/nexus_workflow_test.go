@@ -3012,7 +3012,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationStartToCloseTimeout() {
 	timedOutEvent := pollResp.History.Events[timedOutEventIdx]
 	s.Equal(enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 		timedOutEvent.GetNexusOperationTimedOutEventAttributes().GetFailure().GetCause().GetTimeoutFailureInfo().GetTimeoutType())
-	s.Contains(timedOutEvent.GetNexusOperationTimedOutEventAttributes().GetFailure().GetCause().GetMessage(), "after starting")
+	s.Contains(timedOutEvent.GetNexusOperationTimedOutEventAttributes().GetFailure().GetCause().GetMessage(), "operation timed out")
 
 	// Complete the workflow
 	_, err = s.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{

@@ -78,7 +78,7 @@ func (s *generatorTasksSuite) TestExecuteBufferTask_Basic() {
 
 	// Validate RequestId -> WorkflowId mapping
 	for _, start := range invoker.BufferedStarts {
-		s.Equal(start.WorkflowId, invoker.WorkflowID(start.RequestId))
+		s.Equal(start.WorkflowId, invoker.RunningWorkflowID(start.RequestId))
 	}
 
 	// Generator's high water mark should have advanced.
