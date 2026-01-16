@@ -348,7 +348,7 @@ func (h *Handler) RecordActivityTaskStarted(ctx context.Context, request *histor
 
 	namespaceID := namespace.ID(request.GetNamespaceId())
 
-	h.logger.Info("RecordActivityTaskStarted: Namespace ID" + string(namespaceID))
+	h.logger.Error("RecordActivityTaskStarted: Namespace ID" + string(namespaceID))
 
 	workflowExecution := request.WorkflowExecution
 	businessID := workflowExecution.GetWorkflowId()
@@ -360,20 +360,20 @@ func (h *Handler) RecordActivityTaskStarted(ctx context.Context, request *histor
 		}
 		businessID = ref.BusinessID
 
-		h.logger.Info("RecordActivityTaskStarted: Standalone Business ID " + businessID)
+		h.logger.Error("RecordActivityTaskStarted: Standalone Business ID " + businessID)
 	}
-
-	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, businessID)
-
-	h.logger.Info("RecordActivityTaskStarted: shardContext " + string(shardContext.GetShardID()) + ", " + shardContext.GetOwner())
 
 	if request.GetNamespaceId() == "" {
 		return nil, h.convertError(errNamespaceNotSet)
 	}
 
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, businessID)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
+
+	h.logger.Error("RecordActivityTaskStarted: shardContext " + string(shardContext.GetShardID()) + ", " + shardContext.GetOwner())
+
 	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
