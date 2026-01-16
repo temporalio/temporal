@@ -53,7 +53,6 @@ type (
 		recvSignalChan          chan struct{}
 
 		slowSubmissionMu         sync.RWMutex
-		slowSubmissionTimers     map[enumsspb.TaskPriority]*time.Timer
 		slowSubmissionTimestamps map[enumsspb.TaskPriority]time.Time
 	}
 )
@@ -101,7 +100,6 @@ func NewStreamReceiver(
 		taskConverter:            taskConverter,
 		receiverMode:             ReceiverModeUnset,
 		slowSubmissionTimestamps: make(map[enumsspb.TaskPriority]time.Time),
-		slowSubmissionTimers:     make(map[enumsspb.TaskPriority]*time.Timer),
 		recvSignalChan:           make(chan struct{}, 1),
 	}
 	taskTrackerMap := make(map[enumsspb.TaskPriority]FlowControlSignalProvider)
@@ -375,23 +373,15 @@ func (r *StreamReceiverImpl) processMessages(
 			if err != nil {
 				return err
 			}
-			timer := r.startSlowSubmissionTimer(schedulerPriority, submissionThreshold)
+			start := time.Now()
 			scheduler.Submit(task)
-			timer.Stop()
+			end := time.Now()
+			if end.Sub(start) > submissionThreshold {
+				r.recordSlowSubmission(schedulerPriority, end)
+			}
 		}
 	}
 	return nil
-}
-
-func (r *StreamReceiverImpl) startSlowSubmissionTimer(priority enumsspb.TaskPriority, submissionThreshold time.Duration) *time.Timer {
-	if timer, ok := r.slowSubmissionTimers[priority]; ok {
-		timer.Reset(submissionThreshold)
-	} else {
-		r.slowSubmissionTimers[priority] = time.AfterFunc(submissionThreshold, func() {
-			r.recordSlowSubmission(priority)
-		})
-	}
-	return r.slowSubmissionTimers[priority]
 }
 
 func (r *StreamReceiverImpl) getLastSlowSubmissionTimestamp(priority enumsspb.TaskPriority) time.Time {
@@ -403,10 +393,10 @@ func (r *StreamReceiverImpl) getLastSlowSubmissionTimestamp(priority enumsspb.Ta
 	return time.Time{}
 }
 
-func (r *StreamReceiverImpl) recordSlowSubmission(priority enumsspb.TaskPriority) {
+func (r *StreamReceiverImpl) recordSlowSubmission(priority enumsspb.TaskPriority, ts time.Time) {
 	r.slowSubmissionMu.Lock()
 	defer r.slowSubmissionMu.Unlock()
-	r.slowSubmissionTimestamps[priority] = time.Now()
+	r.slowSubmissionTimestamps[priority] = ts
 }
 
 func (r *StreamReceiverImpl) getTaskTracker(priority enumsspb.TaskPriority) (ExecutableTaskTracker, error) {
