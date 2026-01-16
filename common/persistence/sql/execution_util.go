@@ -10,6 +10,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -577,9 +578,13 @@ func lockCurrentExecutionIfExists(
 	shardID int32,
 	namespaceID primitives.UUID,
 	workflowID string,
+	archetypeID chasm.ArchetypeID,
 ) (*sqlplugin.CurrentExecutionsRow, error) {
 	rows, err := tx.LockCurrentExecutionsJoinExecutions(ctx, sqlplugin.CurrentExecutionsFilter{
-		ShardID: shardID, NamespaceID: namespaceID, WorkflowID: workflowID,
+		ShardID:     shardID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+		ArchetypeID: archetypeID,
 	})
 	if err != nil {
 		if err != sql.ErrNoRows {
@@ -939,12 +944,14 @@ func assertNotCurrentExecution(
 	namespaceID primitives.UUID,
 	workflowID string,
 	runID primitives.UUID,
+	archetypeID chasm.ArchetypeID,
 	serializer serialization.Serializer,
 ) error {
 	currentRow, err := tx.LockCurrentExecutions(ctx, sqlplugin.CurrentExecutionsFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
+		ArchetypeID: archetypeID,
 	})
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -992,6 +999,7 @@ func assertRunIDAndUpdateCurrentExecution(
 		row.ShardID,
 		row.NamespaceID,
 		row.WorkflowID,
+		row.ArchetypeID,
 		assertFn,
 	); err != nil {
 		return err
@@ -1006,6 +1014,7 @@ func assertCurrentExecution(
 	shardID int32,
 	namespaceID primitives.UUID,
 	workflowID string,
+	archetypeID chasm.ArchetypeID,
 	assertFn func(currentRow *sqlplugin.CurrentExecutionsRow) error,
 ) error {
 
@@ -1013,6 +1022,7 @@ func assertCurrentExecution(
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
+		ArchetypeID: archetypeID,
 	})
 	if err != nil {
 		return serviceerror.NewUnavailablef("assertCurrentExecution failed. Unable to load current record. Error: %v", err)

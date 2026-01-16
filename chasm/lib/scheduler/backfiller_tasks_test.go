@@ -335,7 +335,7 @@ func (s *backfillerTasksSuite) runTestCase(c *backfillTestCase) {
 
 	// Validate RequestId -> WorkflowId mapping
 	for _, start := range invoker.GetBufferedStarts() {
-		s.Equal(start.WorkflowId, invoker.WorkflowID(start.RequestId))
+		s.Equal(start.WorkflowId, invoker.RunningWorkflowID(start.RequestId))
 	}
 
 	// Callbacks.

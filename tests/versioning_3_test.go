@@ -73,7 +73,7 @@ const (
 )
 
 type Versioning3Suite struct {
-	WorkflowUpdateBaseSuite
+	testcore.FunctionalTestBase
 	useV32                    bool
 	deploymentWorkflowVersion workerdeployment.DeploymentWorkflowVersion
 	useRevisionNumbers        bool
@@ -854,7 +854,7 @@ func (s *Versioning3Suite) TestUnpinnedWorkflow_SuccessfulUpdate_TransitionsToNe
 	s.setCurrentDeployment(tv2)
 
 	// Send update
-	updateResultCh := s.sendUpdateNoError(tv2)
+	updateResultCh := sendUpdateNoError(s, tv2)
 
 	// Process update in workflow
 	s.pollWftAndHandle(tv2, false, nil,
@@ -940,7 +940,7 @@ func (s *Versioning3Suite) TestUnpinnedWorkflow_FailedUpdate_DoesNotTransitionTo
 	s.setCurrentDeployment(tv2)
 
 	// Send update
-	updateResultCh := s.sendUpdateNoError(tv2)
+	updateResultCh := sendUpdateNoError(s, tv2)
 
 	// Process update in workflow
 	s.pollWftAndHandle(tv2, false, nil,
@@ -1003,11 +1003,6 @@ func (s *Versioning3Suite) TestUnpinnedWorkflow_FailedUpdate_DoesNotTransitionTo
 	// Since the poller rejected the update, the Worker Deployment Version that completed the last workflow task
 	// of this workflow execution should not have changed.
 	s.verifyWorkflowVersioning(s.Assertions, tv1, vbUnpinned, tv1.Deployment(), nil, nil)
-}
-
-func (s *Versioning3Suite) sendUpdateNoError(tv *testvars.TestVars) <-chan *workflowservice.UpdateWorkflowExecutionResponse {
-	s.T().Helper()
-	return s.sendUpdateNoErrorInternal(tv, nil)
 }
 
 func (s *Versioning3Suite) TestUnpinnedWorkflowWithRamp_ToVersioned() {
@@ -2423,7 +2418,7 @@ func (s *Versioning3Suite) testPinnedCaNUpgradeOnCaN(normalTask, speculativeTask
 		if normalTask {
 			s.triggerNormalWFT(ctx, tv1, execution)
 		} else if speculativeTask {
-			updateResultCh = s.sendUpdateNoError(tv1)
+			updateResultCh = sendUpdateNoError(s, tv1)
 		} else if transientTask {
 			s.triggerTransientWFT(ctx, tv1, execution)
 		}

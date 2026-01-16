@@ -96,6 +96,8 @@ type Config struct {
 
 	// Namespace specific config
 	EnableNamespaceNotActiveAutoForwarding dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	NamespaceMinRetentionLocal             dynamicconfig.DurationPropertyFn
+	NamespaceMinRetentionGlobal            dynamicconfig.DurationPropertyFn
 
 	SearchAttributesNumberOfKeysLimit dynamicconfig.IntPropertyFnWithNamespaceFilter
 	SearchAttributesSizeOfValueLimit  dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -304,6 +306,8 @@ func NewConfig(
 		ShutdownDrainDuration:                    dynamicconfig.FrontendShutdownDrainDuration.Get(dc),
 		ShutdownFailHealthCheckDuration:          dynamicconfig.FrontendShutdownFailHealthCheckDuration.Get(dc),
 		EnableNamespaceNotActiveAutoForwarding:   dynamicconfig.EnableNamespaceNotActiveAutoForwarding.Get(dc),
+		NamespaceMinRetentionLocal:               dynamicconfig.NamespaceMinRetentionLocal.Get(dc),
+		NamespaceMinRetentionGlobal:              dynamicconfig.NamespaceMinRetentionGlobal.Get(dc),
 		SearchAttributesNumberOfKeysLimit:        dynamicconfig.SearchAttributesNumberOfKeysLimit.Get(dc),
 		SearchAttributesSizeOfValueLimit:         dynamicconfig.SearchAttributesSizeOfValueLimit.Get(dc),
 		SearchAttributesTotalSizeLimit:           dynamicconfig.SearchAttributesTotalSizeLimit.Get(dc),

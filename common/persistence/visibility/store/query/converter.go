@@ -570,7 +570,7 @@ func (c *QueryConverter[ExprT]) parseValueExpr(
 ) (any, error) {
 	switch e := expr.(type) {
 	case *sqlparser.SQLVal:
-		value, err := c.parseSQLVal(e, saName, saType)
+		value, err := c.parseSQLVal(e, saName, saFieldName, saType)
 		if err != nil {
 			return nil, err
 		}
@@ -614,11 +614,12 @@ func (c *QueryConverter[ExprT]) parseValueExpr(
 // parseSQLVal handles values for specific search attributes.
 // Returns a string, an int64 or a float64 if there are no errors.
 // For datetime, converts to UTC.
-// For execution status, converts string to enum value.
+// For execution status, converts string to enum value (only for system ExecutionStatus field).
 // For execution duration, converts to nanoseconds.
 func (c *QueryConverter[ExprT]) parseSQLVal(
 	expr *sqlparser.SQLVal,
 	saName string,
+	saFieldName string,
 	saType enumspb.IndexedValueType,
 ) (any, error) {
 	// Using expr.Val instead of sqlparser.String(expr) because the latter escapes chars using MySQL
@@ -639,7 +640,7 @@ func (c *QueryConverter[ExprT]) parseSQLVal(
 		)
 	}
 
-	switch saName {
+	switch saFieldName {
 	case sadefs.ExecutionStatus:
 		return parseExecutionStatusValue(value)
 	case sadefs.ExecutionDuration:
