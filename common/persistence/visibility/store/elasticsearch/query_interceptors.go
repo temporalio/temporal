@@ -22,6 +22,7 @@ type (
 		searchAttributesMapperProvider searchattribute.MapperProvider
 		seenNamespaceDivision          bool
 		chasmMapper                    *chasm.VisibilitySearchAttributesMapper
+		archetypeID                    chasm.ArchetypeID
 	}
 
 	valuesInterceptor struct {
@@ -36,6 +37,7 @@ func NewNameInterceptor(
 	saTypeMap searchattribute.NameTypeMap,
 	searchAttributesMapperProvider searchattribute.MapperProvider,
 	chasmMapper *chasm.VisibilitySearchAttributesMapper,
+	archetypeID chasm.ArchetypeID,
 ) *nameInterceptor {
 	return &nameInterceptor{
 		namespace:                      namespaceName,
@@ -43,6 +45,7 @@ func NewNameInterceptor(
 		searchAttributesMapperProvider: searchAttributesMapperProvider,
 		seenNamespaceDivision:          false,
 		chasmMapper:                    chasmMapper,
+		archetypeID:                    archetypeID,
 	}
 }
 
@@ -68,7 +71,12 @@ func (ni *nameInterceptor) Name(name string, usage query.FieldNameUsage) (string
 	fieldName, fieldType, err := query.ResolveSearchAttributeAlias(name, ni.namespace, mapper,
 		ni.searchAttributesTypeMap, ni.chasmMapper)
 	if err != nil {
-		return "", err
+		// Check for special aliases that require archetypeID context.
+		if ni.archetypeID != chasm.SchedulerArchetypeID || name != "TemporalSystemExecutionStatus" {
+			return "", err
+		}
+		fieldName = sadefs.ExecutionStatus
+		fieldType, _ = ni.searchAttributesTypeMap.GetType(fieldName)
 	}
 
 	switch usage {
