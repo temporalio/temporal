@@ -308,6 +308,9 @@ func (h *completionHandler) forwardCompleteOperation(ctx context.Context, r *nex
 	}
 
 	forwardReq.Header = rCtx.originalHeaders
+	if forwardReq.Header == nil {
+		forwardReq.Header = make(http.Header, 1)
+	}
 	forwardReq.Header.Set(interceptor.DCRedirectionApiHeaderName, "true")
 
 	resp, err := client.Do(forwardReq)
