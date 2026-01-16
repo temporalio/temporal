@@ -525,6 +525,17 @@ func (s *FairnessSuite) Test_Activity_Basic() {
 		s.NoError(err)
 	}
 
+	s.Eventually(func() bool {
+		resp, err := s.AdminClient().GetTaskQueueTasks(ctx, &adminservice.GetTaskQueueTasksRequest{
+			Namespace:     s.Namespace().String(),
+			TaskQueue:     tv.TaskQueue().Name,
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			BatchSize:     Workflows,
+			MinPass:       1,
+		})
+		return err == nil && len(resp.GetTasks()) == Workflows
+	}, 10*time.Second, 100*time.Millisecond)
+
 	// process workflow tasks
 	for range Workflows {
 		_, err := s.TaskPoller().PollAndHandleWorkflowTask(
@@ -565,6 +576,17 @@ func (s *FairnessSuite) Test_Activity_Basic() {
 		)
 		s.NoError(err)
 	}
+
+	s.Eventually(func() bool {
+		resp, err := s.AdminClient().GetTaskQueueTasks(ctx, &adminservice.GetTaskQueueTasksRequest{
+			Namespace:     s.Namespace().String(),
+			TaskQueue:     tv.TaskQueue().Name,
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+			BatchSize:     Workflows * Tasks,
+			MinPass:       1,
+		})
+		return err == nil && len(resp.GetTasks()) == Workflows*Tasks
+	}, 10*time.Second, 100*time.Millisecond)
 
 	// process activity tasks
 	var runs []int
