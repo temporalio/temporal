@@ -56,6 +56,11 @@ type (
 	TaskQueueExpectationsByType map[enumspb.TaskQueueType]TaskQueueExpectations
 )
 
+func shortRandomizedName(prefix string) string {
+	// Keep names short because they get embedded (and base64-encoded) into internal persisted task_queue_id strings
+	return fmt.Sprintf("%s-%s", prefix, uuid.NewString()[:8])
+}
+
 // TODO(pri): remove once the classic matcher is removed
 func TestTaskQueueStats_Classic_Suite(t *testing.T) {
 	t.Parallel()
@@ -126,7 +131,7 @@ func (s *TaskQueueStatsSuite) TestAddMultipleTasks_MultiplePartitions_ValidateSt
 	s.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
 	s.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Hour) // using a long TTL to verify caching
 
-	tqName := testcore.RandomizeStr("backlog-counter-task-queue")
+	tqName := shortRandomizedName("backlog-counter-task-queue")
 	s.createDeploymentInTaskQueue(tqName)
 
 	// Enqueue all workflows.
@@ -193,9 +198,9 @@ func (s *TaskQueueStatsSuite) currentVersionAbsorbsUnversionedBacklogNoRamping(n
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	tqName := testcore.RandomizeStr("tq-current-absorbs-unversioned")
-	deploymentName := testcore.RandomizeStr("deployment")
-	currentBuildID := testcore.RandomizeStr("current-build-id")
+	tqName := shortRandomizedName("tq-current-absorbs-unversioned")
+	deploymentName := shortRandomizedName("deployment")
+	currentBuildID := shortRandomizedName("current-build-id")
 
 	// Register this version in the task queue
 	pollerCtx, cancelPoller := context.WithCancel(testcore.NewContext())
@@ -327,9 +332,9 @@ func (s *TaskQueueStatsSuite) currentAbsorbsUnversionedBacklogWhenRampingToUnver
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	tqName := testcore.RandomizeStr("ramping-unversioned")
-	deploymentName := testcore.RandomizeStr("deployment")
-	currentBuildID := testcore.RandomizeStr(tqName + "-current-build-id")
+	tqName := shortRandomizedName("ramping-unversioned")
+	deploymentName := shortRandomizedName("deployment")
+	currentBuildID := shortRandomizedName(tqName + "-current-build-id")
 
 	pollCtx, cancelPoll := context.WithCancel(ctx)
 	s.createVersionsInTaskQueue(pollCtx, tqName, deploymentName, currentBuildID)
@@ -410,9 +415,9 @@ func (s *TaskQueueStatsSuite) rampingAbsorbsUnversionedBacklogWhenCurrentIsUnver
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	tqName := testcore.RandomizeStr("tq-ramping-from-unversioned")
-	deploymentName := testcore.RandomizeStr(tqName + "-deployment")
-	rampingBuildID := testcore.RandomizeStr(tqName + "-ramping-build-id")
+	tqName := shortRandomizedName("tq-ramping-from-unversioned")
+	deploymentName := shortRandomizedName(tqName + "-deployment")
+	rampingBuildID := shortRandomizedName(tqName + "-ramping-build-id")
 
 	pollCtx, cancelPoll := context.WithCancel(ctx)
 	s.createVersionsInTaskQueue(pollCtx, tqName, deploymentName, rampingBuildID)
@@ -478,10 +483,10 @@ func (s *TaskQueueStatsSuite) rampingAndCurrentAbsorbsUnversionedBacklog(numPart
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 
-	tqName := testcore.RandomizeStr("tq-ramping-and-current")
-	deploymentName := testcore.RandomizeStr(tqName + "-deployment")
-	currentBuildID := testcore.RandomizeStr(tqName + "-current-build-id")
-	rampingBuildID := testcore.RandomizeStr(tqName + "-ramping-build-id")
+	tqName := shortRandomizedName("tq-ramping-and-current")
+	deploymentName := shortRandomizedName("deployment")
+	currentBuildID := shortRandomizedName("current-build-id")
+	rampingBuildID := shortRandomizedName("ramping-build-id")
 
 	pollCtx, cancelPoll := context.WithCancel(ctx)
 	s.createVersionsInTaskQueue(pollCtx, tqName, deploymentName, currentBuildID)
@@ -658,10 +663,10 @@ func (s *TaskQueueStatsSuite) inactiveVersionDoesNotAbsorbUnversionedBacklog(num
 	s.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
 	s.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond) // zero means no TTL
 
-	tqName := testcore.RandomizeStr("inactive-version")
-	deploymentName := testcore.RandomizeStr(tqName + "-deployment")
-	currentBuildID := testcore.RandomizeStr(tqName + "-current-build-id")
-	inactiveBuildID := testcore.RandomizeStr(tqName + "-inactive-build-id")
+	tqName := shortRandomizedName("inactive-version")
+	deploymentName := shortRandomizedName(tqName + "-deployment")
+	currentBuildID := shortRandomizedName(tqName + "-current-build-id")
+	inactiveBuildID := shortRandomizedName(tqName + "-inactive-build-id")
 
 	pollCtx, cancelPoll := context.WithCancel(testcore.NewContext())
 
@@ -879,7 +884,7 @@ func (s *TaskQueueStatsSuite) requireLegacyTaskQueueStatsRelaxed(
 
 // Publishes versioned and unversioned entities; with one entity per priority (plus default priority). Multiplied by `sets`.
 func (s *TaskQueueStatsSuite) publishConsumeWorkflowTasksValidateStats(sets int, singlePartition bool) {
-	tqName := testcore.RandomizeStr("backlog-counter-task-queue")
+	tqName := shortRandomizedName("backlog-counter-task-queue")
 	s.createDeploymentInTaskQueue(tqName)
 
 	// verify both workflow and activity backlogs are empty
