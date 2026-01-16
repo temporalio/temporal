@@ -692,16 +692,13 @@ func (e *ChasmEngine) handleReusePolicy(
 func (e *ChasmEngine) getShardContext(
 	ref chasm.ComponentRef,
 ) (historyi.ShardContext, error) {
-	shardingKey, err := ref.ShardingKey(e.registry)
-	if err != nil {
-		return nil, err
-	}
-	shardID := common.ShardingKeyToShard(
-		shardingKey,
-		e.config.NumberOfShards,
+	return e.shardController.GetShardByID(
+		common.WorkflowIDToHistoryShard(
+			ref.NamespaceID,
+			ref.BusinessID,
+			e.config.NumberOfShards,
+		),
 	)
-
-	return e.shardController.GetShardByID(shardID)
 }
 
 // getExecutionLease returns shard context and mutable state for the chasm execution, with the lock

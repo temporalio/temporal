@@ -20,7 +20,6 @@ type (
 
 		ephemeral     bool
 		singleCluster bool
-		shardingFn    func(ExecutionKey) string
 
 		searchAttributesMapper *VisibilitySearchAttributesMapper
 	}
@@ -35,7 +34,6 @@ func NewRegistrableComponent[C Component](
 	rc := &RegistrableComponent{
 		componentType: componentType,
 		goType:        reflect.TypeFor[C](),
-		shardingFn:    defaultShardingFn,
 	}
 	for _, opt := range opts {
 		opt(rc)
@@ -53,18 +51,6 @@ func WithEphemeral() RegistrableComponentOption {
 func WithSingleCluster() RegistrableComponentOption {
 	return func(rc *RegistrableComponent) {
 		rc.singleCluster = true
-	}
-}
-
-// WithShardingFn allows specifying a custom sharding key function for the component.
-// TODO: remove WithShardingFn, we don't need this functionality.
-func WithShardingFn(
-	shardingFn func(ExecutionKey) string,
-) RegistrableComponentOption {
-	return func(rc *RegistrableComponent) {
-		if shardingFn != nil {
-			rc.shardingFn = shardingFn
-		}
 	}
 }
 
@@ -121,9 +107,13 @@ func WithSearchAttributes(
 			field := sa.definition().field
 			valueType := sa.definition().valueType
 
-			if sadefs.IsSystem(alias) || sadefs.IsReserved(alias) {
+			if sadefs.IsChasmSystem(alias) {
 				//nolint:forbidigo
-				panic(fmt.Sprintf("registrable component validation error: CHASM search attribute alias %q is a system or reserved search attribute", alias))
+				panic(fmt.Sprintf("registrable component validation error: CHASM search attribute alias %q is a CHASM system search attribute", alias))
+			}
+			if !sadefs.IsSystem(alias) && sadefs.IsReserved(alias) {
+				//nolint:forbidigo
+				panic(fmt.Sprintf("registrable component validation error: CHASM search attribute alias %q is a reserved search attribute", alias))
 			}
 
 			if _, ok := rc.searchAttributesMapper.systemAliasToField[alias]; ok {

@@ -90,6 +90,7 @@ func (m *workflowTaskStateMachine) ApplyWorkflowTaskScheduledEvent(
 		WorkflowTaskTimeout:         startToCloseTimeout.AsDuration(),
 		TaskQueue:                   taskQueue,
 		Attempt:                     attempt,
+		AttemptsSinceLastSuccess:    m.ms.executionInfo.WorkflowTaskAttemptsSinceLastSuccess,
 		ScheduledTime:               scheduledTime.AsTime(),
 		StartedTime:                 time.Time{},
 		OriginalScheduledTime:       originalScheduledTimestamp.AsTime(),
@@ -150,6 +151,7 @@ func (m *workflowTaskStateMachine) ApplyTransientWorkflowTaskScheduled() (*histo
 		// failed/timed out workflow task and fail/timeout clears sticky task queue.
 		TaskQueue:                   m.ms.CurrentTaskQueue(),
 		Attempt:                     m.ms.GetExecutionInfo().WorkflowTaskAttempt,
+		AttemptsSinceLastSuccess:    m.ms.GetExecutionInfo().WorkflowTaskAttemptsSinceLastSuccess,
 		ScheduledTime:               timestamppb.New(m.ms.timeSource.Now()).AsTime(),
 		StartedTime:                 time.Unix(0, 0).UTC(),
 		Type:                        enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
@@ -206,6 +208,7 @@ func (m *workflowTaskStateMachine) ApplyWorkflowTaskStartedEvent(
 		RequestID:                   requestID,
 		WorkflowTaskTimeout:         workflowTask.WorkflowTaskTimeout,
 		Attempt:                     workflowTask.Attempt,
+		AttemptsSinceLastSuccess:    workflowTask.AttemptsSinceLastSuccess,
 		StartedTime:                 startedTime,
 		ScheduledTime:               workflowTask.ScheduledTime,
 		TaskQueue:                   workflowTask.TaskQueue,
@@ -965,6 +968,18 @@ func (m *workflowTaskStateMachine) failWorkflowTask(
 		m.ms.ClearStickyTaskQueue()
 	}
 
+	newAttemptsSinceLastSuccess := m.ms.executionInfo.WorkflowTaskAttemptsSinceLastSuccess
+	newAttempt := int32(1)
+	if incrementAttempt {
+		// Increment the failure counter for this WFT failure
+		newAttemptsSinceLastSuccess = m.ms.executionInfo.WorkflowTaskAttemptsSinceLastSuccess + 1
+		// Also increment Attempt for transient workflow task tracking
+		newAttempt = m.ms.executionInfo.WorkflowTaskAttempt + 1
+		if m.ms.config.EnableWorkflowTaskStampIncrementOnFailure() {
+			m.ms.executionInfo.WorkflowTaskStamp += 1
+		}
+	}
+
 	failWorkflowTaskInfo := &historyi.WorkflowTaskInfo{
 		Version:                     common.EmptyVersion,
 		ScheduledEventID:            common.EmptyEventID,
@@ -973,8 +988,9 @@ func (m *workflowTaskStateMachine) failWorkflowTask(
 		WorkflowTaskTimeout:         time.Duration(0),
 		StartedTime:                 time.Unix(0, 0).UTC(),
 		TaskQueue:                   nil,
+		Attempt:                     newAttempt,
+		AttemptsSinceLastSuccess:    newAttemptsSinceLastSuccess,
 		OriginalScheduledTime:       time.Unix(0, 0).UTC(),
-		Attempt:                     1,
 		Type:                        enumsspb.WORKFLOW_TASK_TYPE_UNSPECIFIED,
 		SuggestContinueAsNew:        false,
 		SuggestContinueAsNewReasons: nil,
@@ -982,18 +998,11 @@ func (m *workflowTaskStateMachine) failWorkflowTask(
 		// need to retain Build ID of failed WF task to compare it with the build ID of next attempt
 		BuildId: m.ms.executionInfo.WorkflowTaskBuildId,
 	}
-	if incrementAttempt {
-		failWorkflowTaskInfo.Attempt = m.ms.executionInfo.WorkflowTaskAttempt + 1
-		failWorkflowTaskInfo.ScheduledTime = m.ms.timeSource.Now().UTC()
-		if m.ms.config.EnableWorkflowTaskStampIncrementOnFailure() {
-			m.ms.executionInfo.WorkflowTaskStamp += 1
-		}
-	}
 	m.retainWorkflowTaskBuildIdInfo(failWorkflowTaskInfo)
 	m.UpdateWorkflowTask(failWorkflowTaskInfo)
 
 	consecutiveFailuresRequired := m.ms.config.NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute(m.ms.GetNamespaceEntry().Name().String())
-	if consecutiveFailuresRequired > 0 && failWorkflowTaskInfo.Attempt >= int32(consecutiveFailuresRequired) {
+	if consecutiveFailuresRequired > 0 && failWorkflowTaskInfo.AttemptsSinceLastSuccess >= int32(consecutiveFailuresRequired) {
 		if err := m.ms.UpdateReportedProblemsSearchAttribute(); err != nil {
 			return err
 		}
@@ -1059,6 +1068,7 @@ func (m *workflowTaskStateMachine) UpdateWorkflowTask(
 	m.ms.executionInfo.WorkflowTaskRequestId = workflowTask.RequestID
 	m.ms.executionInfo.WorkflowTaskTimeout = durationpb.New(workflowTask.WorkflowTaskTimeout)
 	m.ms.executionInfo.WorkflowTaskAttempt = workflowTask.Attempt
+	m.ms.executionInfo.WorkflowTaskAttemptsSinceLastSuccess = workflowTask.AttemptsSinceLastSuccess
 	if !workflowTask.StartedTime.IsZero() {
 		m.ms.executionInfo.WorkflowTaskStartedTime = timestamppb.New(workflowTask.StartedTime)
 	}
@@ -1186,6 +1196,7 @@ func (m *workflowTaskStateMachine) getWorkflowTaskInfo() *historyi.WorkflowTaskI
 		RequestID:                   m.ms.executionInfo.WorkflowTaskRequestId,
 		WorkflowTaskTimeout:         m.ms.executionInfo.WorkflowTaskTimeout.AsDuration(),
 		Attempt:                     m.ms.executionInfo.WorkflowTaskAttempt,
+		AttemptsSinceLastSuccess:    m.ms.executionInfo.WorkflowTaskAttemptsSinceLastSuccess,
 		StartedTime:                 m.ms.executionInfo.WorkflowTaskStartedTime.AsTime(),
 		ScheduledTime:               m.ms.executionInfo.WorkflowTaskScheduledTime.AsTime(),
 		TaskQueue:                   m.ms.CurrentTaskQueue(),

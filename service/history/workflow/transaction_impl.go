@@ -76,7 +76,7 @@ func (t *TransactionImpl) CreateWorkflowExecution(
 		isWorkflow,
 	)
 	if persistence.OperationPossiblySucceeded(err) {
-		NotifyWorkflowSnapshotTasks(engine, newWorkflowSnapshot)
+		NotifyOnExecutionSnapshot(engine, newWorkflowSnapshot)
 	}
 	if err != nil {
 		return 0, err
@@ -131,9 +131,9 @@ func (t *TransactionImpl) ConflictResolveWorkflowExecution(
 		isWorkflow,
 	)
 	if persistence.OperationPossiblySucceeded(err) {
-		NotifyWorkflowSnapshotTasks(engine, resetWorkflowSnapshot)
-		NotifyWorkflowSnapshotTasks(engine, newWorkflowSnapshot)
-		NotifyWorkflowMutationTasks(engine, currentWorkflowMutation)
+		NotifyOnExecutionSnapshot(engine, resetWorkflowSnapshot)
+		NotifyOnExecutionSnapshot(engine, newWorkflowSnapshot)
+		NotifyOnExecutionMutation(engine, currentWorkflowMutation)
 	}
 	if err != nil {
 		return 0, 0, 0, err
@@ -195,29 +195,8 @@ func (t *TransactionImpl) UpdateWorkflowExecution(
 		isWorkflow,
 	)
 	if persistence.OperationPossiblySucceeded(err) {
-		NotifyWorkflowMutationTasks(engine, currentWorkflowMutation)
-		NotifyWorkflowSnapshotTasks(engine, newWorkflowSnapshot)
-
-		// TODO(dan): there is no test coverage for on-delete or on-create CHASM notifications.
-
-		// Notify for current workflow if it has CHASM updates
-		if len(currentWorkflowMutation.UpsertChasmNodes) > 0 ||
-			len(currentWorkflowMutation.DeleteChasmNodes) > 0 {
-			engine.NotifyChasmExecution(chasm.ExecutionKey{
-				NamespaceID: currentWorkflowMutation.ExecutionInfo.NamespaceId,
-				BusinessID:  currentWorkflowMutation.ExecutionInfo.WorkflowId,
-				RunID:       currentWorkflowMutation.ExecutionState.RunId,
-			}, nil)
-		}
-
-		// Notify for new workflow if it has CHASM nodes
-		if newWorkflowSnapshot != nil && len(newWorkflowSnapshot.ChasmNodes) > 0 {
-			engine.NotifyChasmExecution(chasm.ExecutionKey{
-				NamespaceID: newWorkflowSnapshot.ExecutionInfo.NamespaceId,
-				BusinessID:  newWorkflowSnapshot.ExecutionInfo.WorkflowId,
-				RunID:       newWorkflowSnapshot.ExecutionState.RunId,
-			}, nil)
-		}
+		NotifyOnExecutionMutation(engine, currentWorkflowMutation)
+		NotifyOnExecutionSnapshot(engine, newWorkflowSnapshot)
 	}
 	if err != nil {
 		return 0, 0, err
@@ -254,7 +233,7 @@ func (t *TransactionImpl) SetWorkflowExecution(
 		SetWorkflowSnapshot: *workflowSnapshot,
 	})
 	if persistence.OperationPossiblySucceeded(err) {
-		NotifyWorkflowSnapshotTasks(engine, workflowSnapshot)
+		NotifyOnExecutionSnapshot(engine, workflowSnapshot)
 	}
 	if err != nil {
 		return err
@@ -602,7 +581,7 @@ func setWorkflowExecution(
 	return resp, nil
 }
 
-func NotifyWorkflowSnapshotTasks(
+func NotifyOnExecutionSnapshot(
 	engine historyi.Engine,
 	workflowSnapshot *persistence.WorkflowSnapshot,
 ) {
@@ -610,9 +589,16 @@ func NotifyWorkflowSnapshotTasks(
 		return
 	}
 	engine.NotifyNewTasks(workflowSnapshot.Tasks)
+	if len(workflowSnapshot.ChasmNodes) > 0 {
+		engine.NotifyChasmExecution(chasm.ExecutionKey{
+			NamespaceID: workflowSnapshot.ExecutionInfo.NamespaceId,
+			BusinessID:  workflowSnapshot.ExecutionInfo.WorkflowId,
+			RunID:       workflowSnapshot.ExecutionState.RunId,
+		}, nil)
+	}
 }
 
-func NotifyWorkflowMutationTasks(
+func NotifyOnExecutionMutation(
 	engine historyi.Engine,
 	workflowMutation *persistence.WorkflowMutation,
 ) {
@@ -620,6 +606,14 @@ func NotifyWorkflowMutationTasks(
 		return
 	}
 	engine.NotifyNewTasks(workflowMutation.Tasks)
+	if len(workflowMutation.UpsertChasmNodes) > 0 ||
+		len(workflowMutation.DeleteChasmNodes) > 0 {
+		engine.NotifyChasmExecution(chasm.ExecutionKey{
+			NamespaceID: workflowMutation.ExecutionInfo.NamespaceId,
+			BusinessID:  workflowMutation.ExecutionInfo.WorkflowId,
+			RunID:       workflowMutation.ExecutionState.RunId,
+		}, nil)
+	}
 }
 
 func NotifyNewHistorySnapshotEvent(

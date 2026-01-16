@@ -24,6 +24,10 @@ const (
 	junitReportFlag       = "--junitfile="
 	crashReportNameFlag   = "--crashreportname="
 	gotestsumPathFlag     = "--gotestsum-path="
+
+	// fullRerunThreshold is the number of test failures above which we do a full
+	// rerun instead of retrying only the failed tests.
+	fullRerunThreshold = 20
 )
 
 const (
@@ -244,11 +248,11 @@ func (r *runner) runTests(ctx context.Context, args []string) {
 			log.Fatalf("tests failed but no failures have been detected, not rerunning tests")
 		}
 
-		// Rerun all tests from previous attempt if there's more than 10 failures in a single suite.
-		if len(failures) > 10 && a < r.maxAttempts {
+		// Rerun all tests from previous attempt if there are too many failures in a single suite.
+		if len(failures) > fullRerunThreshold && a < r.maxAttempts {
 			log.Printf(
 				"number of failures exceeds configured threshold (%d/%d) for narrowing down tests to retry, retrying with previous attempt's args",
-				len(failures), 10)
+				len(failures), fullRerunThreshold)
 			continue
 		}
 		args = stripRunFromArgs(args)

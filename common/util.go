@@ -383,20 +383,14 @@ func ErrorHash(err error) string {
 }
 
 // WorkflowIDToHistoryShard is used to map namespaceID-workflowID pair to a shardID.
+// TODO: rename to BusinessIDToHistoryShard.
 func WorkflowIDToHistoryShard(
 	namespaceID string,
 	workflowID string,
 	numberOfShards int32,
 ) int32 {
-	return ShardingKeyToShard(namespaceID+"_"+workflowID, numberOfShards)
-}
-
-// ShardingKeyToShard is used to map a sharding key to a shardID.
-func ShardingKeyToShard(
-	shardingKey string,
-	numberOfShards int32,
-) int32 {
-	hash := farm.Fingerprint32([]byte(shardingKey))
+	idBytes := []byte(namespaceID + "_" + workflowID)
+	hash := farm.Fingerprint32(idBytes)
 	return int32(hash%uint32(numberOfShards)) + 1 // ShardID starts with 1
 }
 

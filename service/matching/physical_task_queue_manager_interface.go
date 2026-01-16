@@ -48,7 +48,7 @@ type (
 		HasPollerAfter(accessTime time.Time) bool
 		// LegacyDescribeTaskQueue returns pollers info and legacy TaskQueueStatus for this physical queue
 		LegacyDescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse
-		GetStatsByPriority() map[int32]*taskqueuepb.TaskQueueStats
+		GetStatsByPriority(includeRates bool) map[int32]*taskqueuepb.TaskQueueStats
 		GetInternalTaskQueueStatus() []*taskqueuespb.InternalTaskQueueStatus
 		UnloadFromPartitionManager(unloadCause)
 		QueueKey() *PhysicalTaskQueueKey
@@ -57,5 +57,6 @@ type (
 		MakePollerScalingDecision(ctx context.Context, pollStartTime time.Time) *taskqueuepb.PollerScalingDecision
 		// GetFairnessWeightOverrides returns current fairness weight overrides for this queue.
 		GetFairnessWeightOverrides() fairnessWeightOverrides
+		UpdateRemotePriorityBacklogs(remotePriorityBacklogSet)
 	}
 )

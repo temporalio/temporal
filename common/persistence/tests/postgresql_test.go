@@ -1,9 +1,11 @@
 package tests
 
 import (
+	"math"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
@@ -326,7 +328,7 @@ func (p *PostgreSQLSuite) TestPostgreSQLHistoryShardSuite() {
 	SetupPostgreSQLSchema(p.T(), cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
-		p.T().Fatalf("unable to create MySQL DB: %v", err)
+		p.T().Fatalf("unable to create PostgreSQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
@@ -343,7 +345,7 @@ func (p *PostgreSQLSuite) TestPostgreSQLHistoryNodeSuite() {
 	SetupPostgreSQLSchema(p.T(), cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
-		p.T().Fatalf("unable to create MySQL DB: %v", err)
+		p.T().Fatalf("unable to create PostgreSQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
@@ -360,7 +362,7 @@ func (p *PostgreSQLSuite) TestPostgreSQLHistoryTreeSuite() {
 	SetupPostgreSQLSchema(p.T(), cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
-		p.T().Fatalf("unable to create MySQL DB: %v", err)
+		p.T().Fatalf("unable to create PostgreSQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
@@ -377,14 +379,31 @@ func (p *PostgreSQLSuite) TestPostgreSQLHistoryCurrentExecutionSuite() {
 	SetupPostgreSQLSchema(p.T(), cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
-		p.T().Fatalf("unable to create MySQL DB: %v", err)
+		p.T().Fatalf("unable to create PostgreSQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
 		TearDownPostgreSQLDatabase(p.T(), cfg)
 	}()
 
-	s := sqltests.NewHistoryCurrentExecutionSuite(p.T(), store)
+	s := sqltests.NewHistoryCurrentExecutionSuite(p.T(), store, chasm.WorkflowArchetypeID)
+	suite.Run(p.T(), s)
+}
+
+func (p *PostgreSQLSuite) TestPostgreSQLHistoryCurrentChasmExecutionSuite() {
+	cfg := NewPostgreSQLConfig(p.pluginName)
+	SetupPostgreSQLDatabase(p.T(), cfg)
+	SetupPostgreSQLSchema(p.T(), cfg)
+	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
+	if err != nil {
+		p.T().Fatalf("unable to create PostgreSQL DB: %v", err)
+	}
+	defer func() {
+		_ = store.Close()
+		TearDownPostgreSQLDatabase(p.T(), cfg)
+	}()
+
+	s := sqltests.NewHistoryCurrentExecutionSuite(p.T(), store, math.MaxUint32)
 	suite.Run(p.T(), s)
 }
 
@@ -394,7 +413,7 @@ func (p *PostgreSQLSuite) TestPostgreSQLHistoryExecutionSuite() {
 	SetupPostgreSQLSchema(p.T(), cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
-		p.T().Fatalf("unable to create MySQL DB: %v", err)
+		p.T().Fatalf("unable to create PostgreSQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
@@ -411,7 +430,7 @@ func (p *PostgreSQLSuite) TestPostgreSQLHistoryTransferTaskSuite() {
 	SetupPostgreSQLSchema(p.T(), cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
-		p.T().Fatalf("unable to create MySQL DB: %v", err)
+		p.T().Fatalf("unable to create PostgreSQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
@@ -428,7 +447,7 @@ func (p *PostgreSQLSuite) TestPostgreSQLHistoryTimerTaskSuite() {
 	SetupPostgreSQLSchema(p.T(), cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
-		p.T().Fatalf("unable to create MySQL DB: %v", err)
+		p.T().Fatalf("unable to create PostgreSQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
@@ -445,7 +464,7 @@ func (p *PostgreSQLSuite) TestPostgreSQLHistoryReplicationTaskSuite() {
 	SetupPostgreSQLSchema(p.T(), cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
-		p.T().Fatalf("unable to create MySQL DB: %v", err)
+		p.T().Fatalf("unable to create PostgreSQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
@@ -462,7 +481,7 @@ func (p *PostgreSQLSuite) TestPostgreSQLHistoryVisibilityTaskSuite() {
 	SetupPostgreSQLSchema(p.T(), cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
-		p.T().Fatalf("unable to create MySQL DB: %v", err)
+		p.T().Fatalf("unable to create PostgreSQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
@@ -479,7 +498,7 @@ func (p *PostgreSQLSuite) TestPostgreSQLHistoryReplicationDLQTaskSuite() {
 	SetupPostgreSQLSchema(p.T(), cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
-		p.T().Fatalf("unable to create MySQL DB: %v", err)
+		p.T().Fatalf("unable to create PostgreSQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
@@ -496,7 +515,7 @@ func (p *PostgreSQLSuite) TestPostgreSQLHistoryExecutionBufferSuite() {
 	SetupPostgreSQLSchema(p.T(), cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
-		p.T().Fatalf("unable to create MySQL DB: %v", err)
+		p.T().Fatalf("unable to create PostgreSQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
@@ -513,7 +532,7 @@ func (p *PostgreSQLSuite) TestPostgreSQLHistoryExecutionActivitySuite() {
 	SetupPostgreSQLSchema(p.T(), cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
-		p.T().Fatalf("unable to create MySQL DB: %v", err)
+		p.T().Fatalf("unable to create PostgreSQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
@@ -530,7 +549,7 @@ func (p *PostgreSQLSuite) TestPostgreSQLHistoryExecutionChildWorkflowSuite() {
 	SetupPostgreSQLSchema(p.T(), cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
-		p.T().Fatalf("unable to create MySQL DB: %v", err)
+		p.T().Fatalf("unable to create PostgreSQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
@@ -547,7 +566,7 @@ func (p *PostgreSQLSuite) TestPostgreSQLHistoryExecutionTimerSuite() {
 	SetupPostgreSQLSchema(p.T(), cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
-		p.T().Fatalf("unable to create MySQL DB: %v", err)
+		p.T().Fatalf("unable to create PostgreSQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
@@ -582,7 +601,7 @@ func (p *PostgreSQLSuite) TestPostgreSQLHistoryExecutionRequestCancelSuite() {
 	SetupPostgreSQLSchema(p.T(), cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
-		p.T().Fatalf("unable to create MySQL DB: %v", err)
+		p.T().Fatalf("unable to create PostgreSQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
@@ -599,7 +618,7 @@ func (p *PostgreSQLSuite) TestPostgreSQLHistoryExecutionSignalSuite() {
 	SetupPostgreSQLSchema(p.T(), cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
-		p.T().Fatalf("unable to create MySQL DB: %v", err)
+		p.T().Fatalf("unable to create PostgreSQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
@@ -616,7 +635,7 @@ func (p *PostgreSQLSuite) TestPostgreSQLHistoryExecutionSignalRequestSuite() {
 	SetupPostgreSQLSchema(p.T(), cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
-		p.T().Fatalf("unable to create MySQL DB: %v", err)
+		p.T().Fatalf("unable to create PostgreSQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
@@ -633,7 +652,7 @@ func (p *PostgreSQLSuite) TestPostgreSQLVisibilitySuite() {
 	SetupPostgreSQLSchema(p.T(), cfg)
 	store, err := sql.NewSQLDB(sqlplugin.DbKindVisibility, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
-		p.T().Fatalf("unable to create MySQL DB: %v", err)
+		p.T().Fatalf("unable to create PostgreSQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()

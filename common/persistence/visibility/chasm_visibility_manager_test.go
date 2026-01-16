@@ -395,3 +395,94 @@ func (s *ChasmVisibilityManagerSuite) TestCountExecutions_VisibilityManagerError
 	s.Nil(response)
 	s.Equal(errTestVisibilityError, err)
 }
+
+// visibilityTestComponentWithTaskQueue is a test component that uses TaskQueue as a preallocated search attribute.
+type visibilityTestComponentWithTaskQueue struct {
+	chasm.UnimplementedComponent
+	Data *persistencespb.WorkflowExecutionState
+}
+
+func (tc *visibilityTestComponentWithTaskQueue) LifecycleState(_ chasm.Context) chasm.LifecycleState {
+	return chasm.LifecycleStateRunning
+}
+
+func (s *ChasmVisibilityManagerSuite) TestListExecutions_WithTaskQueueSearchAttribute() {
+	ctrl := gomock.NewController(s.T())
+	defer ctrl.Finish()
+
+	library := chasm.NewMockLibrary(ctrl)
+	library.EXPECT().Name().Return("TaskQueueTestLibrary").AnyTimes()
+	library.EXPECT().Components().Return([]*chasm.RegistrableComponent{
+		chasm.NewRegistrableComponent[*visibilityTestComponentWithTaskQueue](
+			"TaskQueueComponent",
+			chasm.WithSearchAttributes(
+				chasm.SearchAttributeTaskQueue,
+			),
+		),
+	}).AnyTimes()
+	library.EXPECT().Tasks().Return(nil).AnyTimes()
+
+	registry := chasm.NewRegistry(log.NewNoopLogger())
+	err := registry.Register(library)
+	s.NoError(err)
+
+	visibilityMgr := manager.NewMockVisibilityManager(ctrl)
+	chasmVisMgr := NewChasmVisibilityManager(registry, visibilityMgr)
+
+	ctx := context.Background()
+	query := "TaskQueue = 'my-task-queue'"
+	pageSize := 10
+
+	archetypeID, ok := registry.ArchetypeIDOf(reflect.TypeFor[*visibilityTestComponentWithTaskQueue]())
+	s.True(ok)
+
+	expectedTaskQueue := "my-task-queue"
+	chasmSearchAttributes := chasm.NewSearchAttributesMap(map[string]chasm.VisibilityValue{
+		"TaskQueue": chasm.VisibilityValueString(expectedTaskQueue),
+	})
+
+	expectedResponse := &chasm.ListExecutionsResponse[*commonpb.Payload]{
+		Executions: []*chasm.ExecutionInfo[*commonpb.Payload]{
+			{
+				BusinessID:            testBusinessID,
+				RunID:                 testRunID,
+				StartTime:             testComponentStartTime,
+				CloseTime:             testComponentCloseTime,
+				ChasmSearchAttributes: chasmSearchAttributes,
+			},
+		},
+		NextPageToken: nil,
+	}
+
+	visibilityMgr.EXPECT().
+		ListChasmExecutions(ctx, gomock.Any()).
+		DoAndReturn(func(_ context.Context, req *manager.ListChasmExecutionsRequest) (*chasm.ListExecutionsResponse[*commonpb.Payload], error) {
+			s.Equal(archetypeID, req.ArchetypeID)
+			return expectedResponse, nil
+		})
+
+	// Call ListExecutions
+	request := &chasm.ListExecutionsRequest{
+		NamespaceID:   string(testChasmNamespaceID),
+		NamespaceName: string(testChasmNamespace),
+		Query:         query,
+		PageSize:      pageSize,
+	}
+
+	response, err := chasmVisMgr.ListExecutions(
+		ctx,
+		reflect.TypeFor[*visibilityTestComponentWithTaskQueue](),
+		request,
+	)
+
+	s.NoError(err)
+	s.NotNil(response)
+	s.Len(response.Executions, 1)
+
+	execution := response.Executions[0]
+	s.NotNil(execution.ChasmSearchAttributes)
+	// Verify TaskQueue is in the CHASM search attributes using GetValue with the preallocated search attribute
+	taskQueueVal, ok := chasm.SearchAttributeValue(execution.ChasmSearchAttributes, chasm.SearchAttributeTaskQueue)
+	s.True(ok)
+	s.Equal(expectedTaskQueue, taskQueueVal)
+}

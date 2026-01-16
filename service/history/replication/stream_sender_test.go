@@ -1049,7 +1049,7 @@ func (s *streamSenderSuite) TestRecvEventLoop_RpcError_ShouldReturnStreamError()
 }
 
 func (s *streamSenderSuite) TestLivenessMonitor() {
-
+	s.streamSender.recvSignalChan <- struct{}{}
 	livenessMonitor(
 		s.streamSender.recvSignalChan,
 		dynamicconfig.GetDurationPropertyFn(time.Second),

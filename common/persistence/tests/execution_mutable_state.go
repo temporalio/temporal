@@ -2451,10 +2451,6 @@ func (s *ExecutionMutableStateSuite) TestListConcreteExecutions() {
 }
 
 func (s *ExecutionMutableStateSuite) TestArchetypeSeparateIDSpace() {
-	if !strings.HasPrefix(s.T().Name(), "TestCassandra") {
-		s.T().Skip("SeparateID space is only implemented by cassandra persistence")
-	}
-
 	// Create workflow execution.
 	workflowBranchToken, workflowSnapshot, _ := s.CreateWorkflow(
 		rand.Int63(),

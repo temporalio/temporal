@@ -3,7 +3,6 @@ package activity
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	errordetailspb "go.temporal.io/api/errordetails/v1"
@@ -58,12 +57,12 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 
 	reusePolicy, ok := businessIDReusePolicyMap[frontendReq.GetIdReusePolicy()]
 	if !ok {
-		return nil, serviceerror.NewFailedPrecondition(fmt.Sprintf("unsupported ID reuse policy: %v", frontendReq.GetIdReusePolicy()))
+		return nil, serviceerror.NewInvalidArgumentf("unsupported ID reuse policy: %v", frontendReq.GetIdReusePolicy())
 	}
 
 	conflictPolicy, ok := businessIDConflictPolicyMap[frontendReq.GetIdConflictPolicy()]
 	if !ok {
-		return nil, serviceerror.NewFailedPrecondition(fmt.Sprintf("unsupported ID conflict policy: %v", frontendReq.GetIdConflictPolicy()))
+		return nil, serviceerror.NewInvalidArgumentf("unsupported ID conflict policy: %v", frontendReq.GetIdConflictPolicy())
 	}
 
 	result, err := chasm.NewExecution(

@@ -7,6 +7,7 @@ import (
 
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
 )
@@ -161,6 +162,18 @@ func (v PhysicalTaskQueueVersion) Deployment() *deploymentpb.Deployment {
 		return &deploymentpb.Deployment{
 			SeriesName: v.deploymentSeriesName,
 			BuildId:    v.buildId,
+		}
+	}
+	return nil
+}
+
+// WorkerDeploymentVersionS returns the internal server api WorkerDeploymentVersion
+// (different from the public api WorkerDeploymentVersion).
+func (v PhysicalTaskQueueVersion) WorkerDeploymentVersionS() *deploymentspb.WorkerDeploymentVersion {
+	if len(v.deploymentSeriesName) > 0 {
+		return &deploymentspb.WorkerDeploymentVersion{
+			BuildId:        v.buildId,
+			DeploymentName: v.deploymentSeriesName,
 		}
 	}
 	return nil

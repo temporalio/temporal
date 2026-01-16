@@ -745,6 +745,15 @@ func (p *metadataRateLimitedPersistenceClient) InitializeSystemNamespaces(
 	return p.persistence.InitializeSystemNamespaces(ctx, currentClusterName)
 }
 
+func (p *metadataRateLimitedPersistenceClient) WatchNamespaces(
+	ctx context.Context,
+) (<-chan *NamespaceWatchEvent, error) {
+	if err := allow(ctx, "WatchNamespaces", CallerSegmentMissing, p.systemRateLimiter, p.namespaceRateLimiter, p.shardRateLimiter); err != nil {
+		return nil, err
+	}
+	return p.persistence.WatchNamespaces(ctx)
+}
+
 func (p *metadataRateLimitedPersistenceClient) Close() {
 	p.persistence.Close()
 }

@@ -57,14 +57,14 @@ func (p *plugin) CreateDB(
 	dbKind sqlplugin.DbKind,
 	cfg *config.SQL,
 	r resolver.ServiceResolver,
-	_ log.Logger,
+	logger log.Logger,
 	_ metrics.Handler,
 ) (sqlplugin.GenericDB, error) {
-	conn, err := p.connPool.Allocate(cfg, r, p.createDBConnection)
+	conn, err := p.connPool.Allocate(cfg, r, logger, p.createDBConnection)
 	if err != nil {
 		return nil, err
 	}
-	db := newDB(dbKind, cfg.DatabaseName, conn, nil)
+	db := newDB(dbKind, cfg.DatabaseName, conn, nil, logger)
 	db.OnClose(func() { p.connPool.Close(cfg) }) // remove reference
 	return db, nil
 }
@@ -76,6 +76,7 @@ func (p *plugin) CreateDB(
 func (p *plugin) createDBConnection(
 	cfg *config.SQL,
 	_ resolver.ServiceResolver,
+	logger log.Logger,
 ) (*sqlx.DB, error) {
 	dsn, err := buildDSN(cfg)
 	if err != nil {
@@ -104,12 +105,12 @@ func (p *plugin) createDBConnection(
 	switch {
 	case cfg.ConnectAttributes["mode"] == "memory":
 		// creates temporary DB overlay in order to configure database and schemas
-		if err := p.setupSQLiteDatabase(cfg, db); err != nil {
+		if err := p.setupSQLiteDatabase(cfg, db, logger); err != nil {
 			_ = db.Close()
 			return nil, err
 		}
 	case cfg.ConnectAttributes["setup"] == "true": // file mode, optional setting to setup the schema
-		if err := p.setupSQLiteDatabase(cfg, db); err != nil && !isTableExistsError(err) { // benign error indicating tables already exist
+		if err := p.setupSQLiteDatabase(cfg, db, logger); err != nil && !isTableExistsError(err) { // benign error indicating tables already exist
 			_ = db.Close()
 			return nil, err
 		}
@@ -118,8 +119,8 @@ func (p *plugin) createDBConnection(
 	return db, nil
 }
 
-func (p *plugin) setupSQLiteDatabase(cfg *config.SQL, conn *sqlx.DB) error {
-	db := newDB(sqlplugin.DbKindUnknown, cfg.DatabaseName, conn, nil)
+func (p *plugin) setupSQLiteDatabase(cfg *config.SQL, conn *sqlx.DB, logger log.Logger) error {
+	db := newDB(sqlplugin.DbKindUnknown, cfg.DatabaseName, conn, nil, logger)
 	defer func() { _ = db.Close() }()
 
 	err := db.CreateDatabase(cfg.DatabaseName)

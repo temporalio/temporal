@@ -50,8 +50,8 @@ func (p ParentPtr[T]) Get(chasmContext Context) T {
 func (p ParentPtr[T]) TryGet(chasmContext Context) (T, bool) {
 	var nilT T
 	if p.Internal.currentNode == nil {
-		// nolint:forbidigo // Panic is intended here for framework error handling.
-		panic(serviceerror.NewInternal("parent pointer not initialized yet"))
+		// ParentPtr not initialized
+		return nilT, false
 	}
 
 	parent := p.Internal.currentNode.parent

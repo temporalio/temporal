@@ -656,6 +656,61 @@ func TestFindDeploymentVersionForWorkflowID_PartialRamp(t *testing.T) {
 	}
 }
 
+func TestFormatPinnedVersionNotInTaskQueueError(t *testing.T) {
+	tests := []struct {
+		name           string
+		deploymentName string
+		buildID        string
+		taskQueue      string
+		taskQueueType  enumspb.TaskQueueType
+		expectedMsg    string
+	}{
+		{
+			name:           "Workflow task queue type",
+			deploymentName: "test-deployment",
+			buildID:        "build-123",
+			taskQueue:      "my-task-queue",
+			taskQueueType:  enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			expectedMsg:    "Pinned version 'test-deployment:build-123' is not present in task queue 'my-task-queue' of type 'Workflow'",
+		},
+		{
+			name:           "Activity task queue type",
+			deploymentName: "prod-deployment",
+			buildID:        "v2.0.1",
+			taskQueue:      "activity-queue",
+			taskQueueType:  enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+			expectedMsg:    "Pinned version 'prod-deployment:v2.0.1' is not present in task queue 'activity-queue' of type 'Activity'",
+		},
+		{
+			name:           "Nexus task queue type",
+			deploymentName: "nexus-deployment",
+			buildID:        "nexus-build",
+			taskQueue:      "nexus-queue",
+			taskQueueType:  enumspb.TASK_QUEUE_TYPE_NEXUS,
+			expectedMsg:    "Pinned version 'nexus-deployment:nexus-build' is not present in task queue 'nexus-queue' of type 'Nexus'",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := FormatPinnedVersionNotInTaskQueueError(
+				tt.deploymentName,
+				tt.buildID,
+				tt.taskQueue,
+				tt.taskQueueType,
+			)
+
+			// Check that the formatted message matches expected
+			assert.Equal(t, tt.expectedMsg, result)
+
+			// Verify that the message contains the key substring that we check for.
+			// This is used for error classification in batch operations.
+			assert.Contains(t, result, ErrPinnedVersionNotInTaskQueueSubstring,
+				"Error message should contain the expected substring constant")
+		})
+	}
+}
+
 func TestWorkerDeploymentVersionFromStringV32(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -733,6 +788,11 @@ func TestValidateVersioningOverride(t *testing.T) {
 		BuildId:        "test-build-id",
 	}
 
+	// Helper function to generate the expected error message for pinned version errors
+	getPinnedVersionErrorMsg := func(version *deploymentpb.WorkerDeploymentVersion, taskQueue string, taskQueueType enumspb.TaskQueueType) string {
+		return FormatPinnedVersionNotInTaskQueueError(version.DeploymentName, version.BuildId, taskQueue, taskQueueType)
+	}
+
 	tests := []struct {
 		name          string
 		override      *workflowpb.VersioningOverride
@@ -795,7 +855,7 @@ func TestValidateVersioningOverride(t *testing.T) {
 				m.EXPECT().CheckTaskQueueVersionMembership(gomock.Any(), gomock.Any()).Times(0) // No RPC call expected!
 			},
 			expectError:   true,
-			errorContains: "Pinned version is not present in the task queue",
+			errorContains: getPinnedVersionErrorMsg(testVersion, testTaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW),
 		},
 		{
 			name:          "v0.32: Pinned override, cache hit for different task queue type does not apply",
@@ -841,7 +901,7 @@ func TestValidateVersioningOverride(t *testing.T) {
 				}, nil)
 			},
 			expectError:   true,
-			errorContains: "Pinned version is not present in the task queue",
+			errorContains: getPinnedVersionErrorMsg(testVersion, testTaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW),
 		},
 		{
 			name: "v0.32: Pinned override, with cache miss, calls RPC and caches true",
@@ -955,7 +1015,7 @@ func TestValidateVersioningOverride(t *testing.T) {
 				m.EXPECT().CheckTaskQueueVersionMembership(gomock.Any(), gomock.Any()).Times(0)
 			},
 			expectError:   true,
-			errorContains: "Pinned version is not present in the task queue",
+			errorContains: getPinnedVersionErrorMsg(testVersion, testTaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW),
 		},
 		{
 			name: "v0.31: PINNED behavior with pinned_version, cache miss, calls RPC and caches false",
@@ -973,7 +1033,7 @@ func TestValidateVersioningOverride(t *testing.T) {
 				}, nil)
 			},
 			expectError:   true,
-			errorContains: "Pinned version is not present in the task queue",
+			errorContains: getPinnedVersionErrorMsg(testVersion, testTaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW),
 		},
 		{
 			name: "v0.31: PINNED behavior with pinned_version, cache miss, calls RPC and caches true",

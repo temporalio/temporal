@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	queueerrors "go.temporal.io/server/service/history/queues/errors"
 	"go.temporal.io/server/service/history/tasks"
+	legacyscheduler "go.temporal.io/server/service/worker/scheduler"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -31,6 +32,7 @@ func (s *generatorTasksSuite) SetupTest() {
 		MetricsHandler: metrics.NoopMetricsHandler,
 		BaseLogger:     s.logger,
 		SpecProcessor:  s.specProcessor,
+		SpecBuilder:    legacyscheduler.NewSpecBuilder(),
 	})
 }
 
@@ -76,7 +78,7 @@ func (s *generatorTasksSuite) TestExecuteBufferTask_Basic() {
 
 	// Validate RequestId -> WorkflowId mapping
 	for _, start := range invoker.BufferedStarts {
-		s.Equal(start.WorkflowId, invoker.WorkflowID(start.RequestId))
+		s.Equal(start.WorkflowId, invoker.RunningWorkflowID(start.RequestId))
 	}
 
 	// Generator's high water mark should have advanced.

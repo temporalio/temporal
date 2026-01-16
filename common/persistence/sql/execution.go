@@ -98,6 +98,7 @@ func (m *sqlExecutionStore) createWorkflowExecutionTx(
 		shardID,
 		namespaceID,
 		workflowID,
+		request.ArchetypeID,
 	); err != nil {
 		return nil, err
 	}
@@ -181,6 +182,7 @@ func (m *sqlExecutionStore) createWorkflowExecutionTx(
 		NamespaceID:      namespaceID,
 		WorkflowID:       workflowID,
 		RunID:            runID,
+		ArchetypeID:      request.ArchetypeID,
 		CreateRequestID:  newWorkflow.ExecutionState.CreateRequestId,
 		State:            newWorkflow.ExecutionState.State,
 		Status:           newWorkflow.ExecutionState.Status,
@@ -381,6 +383,7 @@ func (m *sqlExecutionStore) updateWorkflowExecutionTx(
 			namespaceID,
 			workflowID,
 			runID,
+			request.ArchetypeID,
 			m.serializer,
 		); err != nil {
 			return err
@@ -391,6 +394,7 @@ func (m *sqlExecutionStore) updateWorkflowExecutionTx(
 			ShardID:     shardID,
 			NamespaceID: namespaceID,
 			WorkflowID:  workflowID,
+			ArchetypeID: request.ArchetypeID,
 			StartTime:   nil,
 		}
 
@@ -492,6 +496,7 @@ func (m *sqlExecutionStore) conflictResolveWorkflowExecutionTx(
 			namespaceID,
 			workflowID,
 			primitives.MustParseUUID(resetWorkflow.ExecutionState.RunId),
+			request.ArchetypeID,
 			m.serializer,
 		); err != nil {
 			return err
@@ -516,6 +521,7 @@ func (m *sqlExecutionStore) conflictResolveWorkflowExecutionTx(
 			NamespaceID:      namespaceID,
 			WorkflowID:       workflowID,
 			RunID:            runID,
+			ArchetypeID:      request.ArchetypeID,
 			CreateRequestID:  createRequestID,
 			State:            state,
 			Status:           status,
@@ -667,6 +673,7 @@ func (m *sqlExecutionStore) DeleteCurrentWorkflowExecution(
 		NamespaceID: namespaceID,
 		WorkflowID:  request.WorkflowID,
 		RunID:       runID,
+		ArchetypeID: request.ArchetypeID,
 	})
 	return err
 }
@@ -679,6 +686,7 @@ func (m *sqlExecutionStore) GetCurrentExecution(
 		ShardID:     request.ShardID,
 		NamespaceID: primitives.MustParseUUID(request.NamespaceID),
 		WorkflowID:  request.WorkflowID,
+		ArchetypeID: request.ArchetypeID,
 	})
 	if err != nil {
 		if err == sql.ErrNoRows {

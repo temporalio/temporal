@@ -157,6 +157,7 @@ func (s *chasmEngineSuite) TestNewExecution_BrandNew() {
 			return tests.CreateWorkflowExecutionResponse, nil
 		},
 	).Times(1)
+	s.mockEngine.EXPECT().NotifyChasmExecution(gomock.Any(), gomock.Any()).Return().Times(1)
 
 	result, err := s.engine.NewExecution(
 		context.Background(),
@@ -251,6 +252,7 @@ func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_AllowDuplicate() {
 			return tests.CreateWorkflowExecutionResponse, nil
 		},
 	).Times(1)
+	s.mockEngine.EXPECT().NotifyChasmExecution(gomock.Any(), gomock.Any()).Return().Times(1)
 
 	result, err := s.engine.NewExecution(
 		context.Background(),
@@ -306,6 +308,7 @@ func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_FailedOnly_Success() {
 			return tests.CreateWorkflowExecutionResponse, nil
 		},
 	).Times(1)
+	s.mockEngine.EXPECT().NotifyChasmExecution(gomock.Any(), gomock.Any()).Return().Times(1)
 
 	result, err := s.engine.NewExecution(
 		context.Background(),

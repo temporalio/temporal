@@ -66,7 +66,7 @@ func (p *plugin) CreateDB(
 	}
 	needsRefresh := p.driver.IsConnNeedsRefreshError
 	handle := sqlplugin.NewDatabaseHandle(dbKind, connect, needsRefresh, logger, metricsHandler, clock.NewRealTimeSource())
-	db := newDB(dbKind, cfg.DatabaseName, p.driver, handle, nil)
+	db := newDB(dbKind, cfg.DatabaseName, p.driver, handle, nil, logger)
 	return db, nil
 }
 

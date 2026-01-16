@@ -508,6 +508,7 @@ func (s *streamReceiverSuite) TestRecvEventLoop_Panic_Captured() {
 }
 
 func (s *streamReceiverSuite) TestLivenessMonitor() {
+	s.streamReceiver.recvSignalChan <- struct{}{}
 	livenessMonitor(
 		s.streamReceiver.recvSignalChan,
 		dynamicconfig.GetDurationPropertyFn(time.Second),
