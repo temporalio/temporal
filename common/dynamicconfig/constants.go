@@ -1769,8 +1769,8 @@ If value less or equal to 0, will fall back to HistoryPersistenceNamespaceMaxQPS
 	TaskSchedulerEnableWorkflowQueueScheduler = NewGlobalBoolSetting(
 		"history.taskSchedulerEnableWorkflowQueueScheduler",
 		false,
-		`TaskSchedulerEnableWorkflowQueueScheduler enables the workflow-aware sequential scheduler
-that processes contended workflows sequentially to avoid busy workflow errors`,
+		`TaskSchedulerEnableWorkflowQueueScheduler enables the workflow queue scheduler
+that processes tasks for contended workflows sequentially to avoid busy workflow errors`,
 	)
 	TaskSchedulerWorkflowQueueSchedulerQueueSize = NewGlobalIntSetting(
 		"history.taskSchedulerWorkflowQueueSchedulerQueueSize",

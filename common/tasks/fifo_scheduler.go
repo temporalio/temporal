@@ -125,7 +125,7 @@ func (f *FIFOScheduler[T]) updateWorkerCount(targetWorkerNum int) {
 	}
 
 	if targetWorkerNum < 0 {
-		f.logger.Error("Target worker pool size is negative. Please fix the dynamic config.", tag.Key("worker-pool-size"), tag.Value(targetWorkerNum))
+		f.logger.Error("Target worker pool size is negative. Ignoring the change.", tag.Key("worker-pool-size"), tag.Value(targetWorkerNum))
 		return
 	}
 

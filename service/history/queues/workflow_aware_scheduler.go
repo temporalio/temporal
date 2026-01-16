@@ -79,14 +79,9 @@ func NewWorkflowAwareScheduler(
 	options WorkflowAwareSchedulerOptions,
 	logger log.Logger,
 ) *WorkflowAwareScheduler {
-	queueSize := 1000 // default
-	if options.WorkflowQueueSchedulerQueueSize != nil {
-		queueSize = options.WorkflowQueueSchedulerQueueSize()
-	}
-
 	workflowQueueScheduler := tasks.NewWorkflowQueueScheduler[Executable](
 		&tasks.WorkflowQueueSchedulerOptions{
-			QueueSize:   queueSize,
+			QueueSize:   options.WorkflowQueueSchedulerQueueSize(),
 			WorkerCount: options.WorkflowQueueSchedulerWorkerCount,
 		},
 		executableQueueKeyFn,
@@ -104,7 +99,7 @@ func NewWorkflowAwareScheduler(
 func (s *WorkflowAwareScheduler) Start() {
 	s.baseScheduler.Start()
 	// Always start the WorkflowQueueScheduler regardless of current config.
-	// The isWorkflowQueueSchedulerEnabled() check gates task routing, so an idle
+	// The EnableWorkflowQueueScheduler check gates task routing, so an idle
 	// scheduler has minimal overhead. This ensures if the dynamic config changes
 	// from disabled to enabled, tasks will be processed correctly.
 	s.workflowQueueScheduler.Start()
@@ -139,7 +134,7 @@ func (s *WorkflowAwareScheduler) TrySubmit(executable Executable) bool {
 // It routes a task to the WorkflowQueueScheduler when it encounters a busy workflow error.
 // Returns true if the task was handled (either submitted to WorkflowQueueScheduler or rescheduled).
 func (s *WorkflowAwareScheduler) HandleBusyWorkflow(executable Executable) bool {
-	if !s.isWorkflowQueueSchedulerEnabled() {
+	if !s.options.EnableWorkflowQueueScheduler() {
 		// WorkflowQueueScheduler not enabled, let caller handle it
 		return false
 	}
@@ -154,7 +149,7 @@ func (s *WorkflowAwareScheduler) HandleBusyWorkflow(executable Executable) bool 
 
 // HasWorkflowQueue returns true if the workflow has an active queue in the WorkflowQueueScheduler.
 func (s *WorkflowAwareScheduler) HasWorkflowQueue(executable Executable) bool {
-	if !s.isWorkflowQueueSchedulerEnabled() {
+	if !s.options.EnableWorkflowQueueScheduler() {
 		return false
 	}
 	key := getWorkflowKey(executable)
@@ -162,15 +157,11 @@ func (s *WorkflowAwareScheduler) HasWorkflowQueue(executable Executable) bool {
 }
 
 func (s *WorkflowAwareScheduler) shouldRouteToWorkflowQueueScheduler(executable Executable) bool {
-	if !s.isWorkflowQueueSchedulerEnabled() {
+	if !s.options.EnableWorkflowQueueScheduler() {
 		return false
 	}
 	key := getWorkflowKey(executable)
 	return s.workflowQueueScheduler.HasQueue(key)
-}
-
-func (s *WorkflowAwareScheduler) isWorkflowQueueSchedulerEnabled() bool {
-	return s.options.EnableWorkflowQueueScheduler != nil && s.options.EnableWorkflowQueueScheduler()
 }
 
 // getWorkflowKey extracts the workflow key from an executable for queue lookups.
