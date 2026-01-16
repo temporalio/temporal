@@ -166,12 +166,12 @@ type OperationCompletionUnsuccessfulOptions struct {
 	// A [FailureConverter] to convert a [Failure] instance to and from an [error]. Defaults to
 	// [DefaultFailureConverter].
 	//
-	// NOTE: To call server versions <= 0.4.0, use a FailureConverter that unwraps the error cause if message is not
+	// NOTE: To call server versions <= 1.31.0, use a FailureConverter that unwraps the error cause if message is not
 	// present.
 	FailureConverter nexus.FailureConverter
 	// OperationID is the unique ID for this operation. Used when a completion callback is received before a started response.
 	//
-	// Deprecated: Use OperatonToken instead.
+	// Deprecated: Use OperationToken instead.
 	OperationID string
 	// OperationToken is the unique token for this operation. Used when a completion callback is received before a
 	// started response.

@@ -782,7 +782,11 @@ func (ms *MutableStateImpl) GetNexusCompletion(
 			return nil, err
 		}
 		return nexusrpc.NewOperationCompletionUnsuccessful(
-			&nexus.OperationError{State: nexus.OperationStateFailed, Cause: &nexus.FailureError{Failure: f}},
+			&nexus.OperationError{
+				State:           nexus.OperationStateFailed,
+				Cause:           &nexus.FailureError{Failure: f},
+				OriginalFailure: &f,
+			},
 			nexusrpc.OperationCompletionUnsuccessfulOptions{
 				StartTime: ms.executionState.GetStartTime().AsTime(),
 				CloseTime: ce.GetEventTime().AsTime(),
@@ -802,8 +806,9 @@ func (ms *MutableStateImpl) GetNexusCompletion(
 		}
 		return nexusrpc.NewOperationCompletionUnsuccessful(
 			&nexus.OperationError{
-				State: nexus.OperationStateCanceled,
-				Cause: &nexus.FailureError{Failure: f},
+				State:           nexus.OperationStateCanceled,
+				Cause:           &nexus.FailureError{Failure: f},
+				OriginalFailure: &f,
 			},
 			nexusrpc.OperationCompletionUnsuccessfulOptions{
 				StartTime: ms.executionState.GetStartTime().AsTime(),
@@ -821,7 +826,11 @@ func (ms *MutableStateImpl) GetNexusCompletion(
 			return nil, err
 		}
 		return nexusrpc.NewOperationCompletionUnsuccessful(
-			&nexus.OperationError{State: nexus.OperationStateFailed, Cause: &nexus.FailureError{Failure: f}},
+			&nexus.OperationError{
+				State:           nexus.OperationStateFailed,
+				Cause:           &nexus.FailureError{Failure: f},
+				OriginalFailure: &f,
+			},
 			nexusrpc.OperationCompletionUnsuccessfulOptions{
 				StartTime: ms.executionState.GetStartTime().AsTime(),
 				CloseTime: ce.GetEventTime().AsTime(),
@@ -842,8 +851,9 @@ func (ms *MutableStateImpl) GetNexusCompletion(
 		}
 		return nexusrpc.NewOperationCompletionUnsuccessful(
 			&nexus.OperationError{
-				State: nexus.OperationStateFailed,
-				Cause: &nexus.FailureError{Failure: f},
+				State:           nexus.OperationStateFailed,
+				Cause:           &nexus.FailureError{Failure: f},
+				OriginalFailure: &f,
 			},
 			nexusrpc.OperationCompletionUnsuccessfulOptions{
 				StartTime: ms.executionState.GetStartTime().AsTime(),

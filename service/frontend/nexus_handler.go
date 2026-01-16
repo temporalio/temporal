@@ -507,6 +507,21 @@ func (h *nexusHandler) StartOperation(
 				},
 			}
 			return nil, err
+
+		case *nexuspb.StartOperationResponse_Failure:
+			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("failure"))
+			nf, err := commonnexus.APIFailureToNexusFailure(t.Failure)
+			if err != nil {
+				oc.logger.Error("error converting Temporal failure to Nexus failure", tag.Error(err), tag.Operation(operation), tag.WorkflowNamespace(oc.namespaceName))
+				return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
+			}
+			oe, err := nexus.DefaultFailureConverter().FailureToError(nf)
+			if err != nil {
+				oc.logger.Error("error converting Nexus failure to Nexus OperationError", tag.Error(err), tag.Operation(operation), tag.WorkflowNamespace(oc.namespaceName))
+				return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
+			}
+			oc.nexusContext.setFailureSource(commonnexus.FailureSourceWorker)
+			return nil, oe
 		}
 	}
 	// This is the worker's fault.
