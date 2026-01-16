@@ -379,14 +379,13 @@ func (c *HTTPClient) defaultErrorFromResponse(response *http.Response, body []by
 }
 
 func (c *HTTPClient) bestEffortHandlerErrorFromResponse(response *http.Response, body []byte) error {
-	// TODO: support old servers
 	failure, err := c.failureFromResponse(response, body)
 	if err != nil {
 		return c.defaultErrorFromResponse(response, body, nil)
 	}
 	convErr, err := c.options.FailureConverter.FailureToError(failure)
 	if err != nil {
-		return fmt.Errorf("failed to convert Failure to error: %w", err)
+		return newUnexpectedResponseError(fmt.Sprintf("failed to convert Failure to error: %s", err.Error()), response, body)
 	}
 	if _, ok := convErr.(*nexus.HandlerError); !ok {
 		convErr = c.defaultErrorFromResponse(response, body, convErr)

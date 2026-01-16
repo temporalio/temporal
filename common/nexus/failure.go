@@ -85,10 +85,18 @@ func APIFailureToNexusFailure(failure *failurepb.Failure) (nexus.Failure, error)
 	data, err := protojson.Marshal(failure)
 	failure.Message = message
 	failure.StackTrace = stackTrace
-
 	if err != nil {
 		return nexus.Failure{}, err
 	}
+
+	var cause nexus.Failure
+	if failure.GetCause() != nil {
+		cause, err = APIFailureToNexusFailure(failure.GetCause())
+		if err != nil {
+			return nexus.Failure{}, err
+		}
+	}
+
 	return nexus.Failure{
 		Message:    failure.GetMessage(),
 		StackTrace: failure.GetStackTrace(),
@@ -96,6 +104,7 @@ func APIFailureToNexusFailure(failure *failurepb.Failure) (nexus.Failure, error)
 			"type": failureTypeString,
 		},
 		Details: data,
+		Cause:   &cause,
 	}, nil
 }
 
@@ -206,7 +215,7 @@ func NexusFailureToAPIFailure(f nexus.Failure) (*failurepb.Failure, error) {
 	return apiFailure, nil
 }
 
-func OperationErrorToTemporalFailure(opErr *nexus.OperationError, retryable bool) (*failurepb.Failure, error) {
+func OperationErrorToTemporalFailure(opErr *nexus.OperationError) (*failurepb.Failure, error) {
 	var nexusFailure nexus.Failure
 	var failureErr *nexus.FailureError
 	ok := errors.As(opErr.Cause, &failureErr)
@@ -249,7 +258,7 @@ func OperationErrorToTemporalFailure(opErr *nexus.OperationError, retryable bool
 		return nil, err
 	}
 	if f.GetApplicationFailureInfo() != nil {
-		f.GetApplicationFailureInfo().NonRetryable = !retryable
+		f.GetApplicationFailureInfo().NonRetryable = true
 	}
 	return f, nil
 }
