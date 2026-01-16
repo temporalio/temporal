@@ -5538,7 +5538,7 @@ func (*BatchOperationDelete) Descriptor() ([]byte, []int) {
 
 type BatchOperationReplicate struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// target clusters cannot be empty
+	// if target_clusters is empty, replicates to all configured remote clusters.
 	TargetClusters []string `protobuf:"bytes,1,rep,name=target_clusters,json=targetClusters,proto3" json:"target_clusters,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache

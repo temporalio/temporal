@@ -651,7 +651,7 @@ message BatchOperationDelete {
 }
 
 message BatchOperationReplicate {
-  // target clusters cannot be empty
+  // if target_clusters is empty, replicates to all configured remote clusters.
   repeated string target_clusters = 1;
 }
 

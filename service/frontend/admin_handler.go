@@ -1697,13 +1697,10 @@ func validateAdminBatchOperation(params *adminservice.StartAdminBatchOperationRe
 	switch op := params.GetOperation().(type) {
 	case *adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation,
 		*adminservice.StartAdminBatchOperationRequest_DeleteOperation,
-		*adminservice.StartAdminBatchOperationRequest_RebuildOperation:
+		*adminservice.StartAdminBatchOperationRequest_RebuildOperation,
+		*adminservice.StartAdminBatchOperationRequest_ReplicateOperation:
 		// no additional validation needed
-		return nil
-	case *adminservice.StartAdminBatchOperationRequest_ReplicateOperation:
-		if len(op.ReplicateOperation.GetTargetClusters()) == 0 {
-			return serviceerror.NewInvalidArgument("target clusters are not set on request")
-		}
+		// Note: empty target clusters in ReplicateOperation means replicate to all configured remote clusters
 		return nil
 	default:
 		return serviceerror.NewInvalidArgumentf("not supported admin batch type: %T", op)

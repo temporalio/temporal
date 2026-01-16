@@ -960,9 +960,6 @@ func adminReplicateWorkflow(c *cli.Context, clientFactory ClientFactory, prompte
 	if c.IsSet(FlagVisibilityQuery) && c.IsSet(FlagWorkflowID) && c.IsSet(FlagRunID) {
 		return errors.New("setting parameter visibility query with workflow ID and run ID is not allowed")
 	}
-	if !c.IsSet(FlagTargetCluster) {
-		return errors.New("target clusters are not set")
-	}
 	if c.IsSet(FlagVisibilityQuery) && !c.IsSet(FlagWorkflowID) && !c.IsSet(FlagRunID) {
 		return AdminBatchReplicateWorkflow(c, clientFactory, prompter)
 	}
@@ -1046,8 +1043,15 @@ func AdminBatchReplicateWorkflow(c *cli.Context, clientFactory ClientFactory, pr
 		return fmt.Errorf("unable to count workflow executions: %w", err)
 	}
 
-	msg := fmt.Sprintf("Will replicate %d execution(s) matching query %q in namespace %q. Continue Y/N?",
-		countResp.GetCount(), query, nsName)
+	var clusterMsg string
+	if len(targetClusters) == 0 {
+		clusterMsg = "all configured remote clusters"
+	} else {
+		clusterMsg = fmt.Sprintf("clusters: %v", targetClusters)
+	}
+
+	msg := fmt.Sprintf("Will replicate %d execution(s) matching query %q in namespace %q to %s. Continue Y/N?",
+		countResp.GetCount(), query, nsName, clusterMsg)
 	prompter.Prompt(msg)
 
 	_, err = adminClient.StartAdminBatchOperation(ctx, &adminservice.StartAdminBatchOperationRequest{

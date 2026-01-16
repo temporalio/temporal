@@ -50,25 +50,37 @@ func (s *AdminBatchReplicateTestSuite) createWorkflow(ctx context.Context, workf
 	return workflowRun
 }
 
-func (s *AdminBatchReplicateTestSuite) TestStartAdminBatchOperation_Replicate_InvalidArgument_NoClusters() {
+func (s *AdminBatchReplicateTestSuite) TestStartAdminBatchOperation_Replicate_Success_EmptyClusters() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// Request without clusters should fail
-	_, err := s.AdminClient().StartAdminBatchOperation(ctx, &adminservice.StartAdminBatchOperationRequest{
+	s.Worker().RegisterWorkflow(s.simpleWorkflow)
+
+	// Create workflow
+	workflowRun := s.createWorkflow(ctx, s.simpleWorkflow)
+
+	// Wait for workflow to complete
+	var out string
+	err := workflowRun.Get(ctx, &out)
+	s.NoError(err)
+
+	// Request without clusters should succeed (means replicate to all configured remote clusters)
+	resp, err := s.AdminClient().StartAdminBatchOperation(ctx, &adminservice.StartAdminBatchOperationRequest{
 		Namespace: s.Namespace().String(),
 		JobId:     uuid.NewString(),
-		Reason:    "test",
+		Reason:    "test replicate to all clusters",
 		Identity:  "test-identity",
 		Executions: []*commonpb.WorkflowExecution{
-			{WorkflowId: "test-wf-id", RunId: "test-run-id"},
+			{WorkflowId: workflowRun.GetID(), RunId: workflowRun.GetRunID()},
 		},
 		Operation: &adminservice.StartAdminBatchOperationRequest_ReplicateOperation{
-			ReplicateOperation: &adminservice.BatchOperationReplicate{},
+			ReplicateOperation: &adminservice.BatchOperationReplicate{
+				// Empty TargetClusters means replicate to all configured remote clusters
+			},
 		},
 	})
-	s.Error(err)
-	s.Equal(codes.InvalidArgument, serviceerror.ToStatus(err).Code())
+	s.NoError(err)
+	s.NotNil(resp)
 }
 
 func (s *AdminBatchReplicateTestSuite) TestStartAdminBatchOperation_Replicate_InvalidArgument_NoNamespace() {

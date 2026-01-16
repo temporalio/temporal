@@ -75,6 +75,7 @@ func (p *Prompter) Prompt(msg string) {
 	}
 	textLower := strings.ToLower(strings.TrimSpace(text))
 	if textLower != "y" && textLower != "yes" {
+		_, _ = p.writer.Write([]byte("Operation aborted.\n"))
 		p.exiter(1)
 	}
 }

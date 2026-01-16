@@ -67,7 +67,7 @@ func TestPrompter(t *testing.T) {
 			autoConfirm:       false,
 			response:          "n\n",
 			expectedExitCodes: []int{1},
-			expectedPrompt:    "test prompt [y/N]: ",
+			expectedPrompt:    "test prompt [y/N]: Operation aborted.\n",
 		},
 		// Test for error scenario in the writer component.
 		{
