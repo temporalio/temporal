@@ -5,6 +5,7 @@ import (
 	"context"
 	"time"
 
+	"go.temporal.io/api/serviceerror"
 	workerpb "go.temporal.io/api/worker/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
@@ -29,6 +30,7 @@ type RescheduleErrorType string
 const (
 	RescheduleErrorRetry     RescheduleErrorType = "retry"
 	RescheduleErrorPermanent RescheduleErrorType = "permanent"
+	RescheduleErrorSkipped   RescheduleErrorType = "skipped" // workflow/activity no longer exists
 )
 
 // workerIDTag returns a log tag for the worker ID.
@@ -125,6 +127,24 @@ func (e *LeaseExpiryTaskExecutor) rescheduleActivities(
 	}
 }
 
+// isNonRetryableRescheduleError checks if an error from ForceRescheduleActivity
+// indicates a permanent condition that should not be retried.
+func isNonRetryableRescheduleError(err error) bool {
+	// Workflow or activity no longer exists - nothing to reschedule
+	if _, ok := err.(*serviceerror.NotFound); ok {
+		return true
+	}
+	// Workflow already completed - activity cannot be rescheduled
+	if _, ok := err.(*serviceerror.FailedPrecondition); ok {
+		return true
+	}
+	// Invalid request - won't succeed on retry
+	if _, ok := err.(*serviceerror.InvalidArgument); ok {
+		return true
+	}
+	return false
+}
+
 // rescheduleActivity attempts to reschedule a single activity with retries.
 func (e *LeaseExpiryTaskExecutor) rescheduleActivity(
 	namespaceID string,
@@ -148,6 +168,18 @@ func (e *LeaseExpiryTaskExecutor) rescheduleActivity(
 				workerIDTag(workerID),
 				tag.WorkflowID(activity.GetWorkflowId()),
 				tag.ActivityID(activity.GetActivityId()))
+			return
+		}
+
+		// Don't retry permanent errors
+		if isNonRetryableRescheduleError(err) {
+			metrics.ChasmWorkerRescheduleErrors.With(e.metricsHandler).Record(1,
+				metrics.StringTag("error_type", string(RescheduleErrorSkipped)))
+			e.logger.Info("Activity reschedule skipped (workflow/activity no longer exists)",
+				workerIDTag(workerID),
+				tag.WorkflowID(activity.GetWorkflowId()),
+				tag.ActivityID(activity.GetActivityId()),
+				tag.Error(err))
 			return
 		}
 

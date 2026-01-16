@@ -224,6 +224,18 @@ func (t *timerQueueActiveTaskExecutor) executeActivityTimeoutTask(
 	updateMutableState := false
 	scheduleWorkflowTask := false
 
+	// PROTOTYPE: Skip heartbeat timeout processing entirely.
+	// Don't clear the status bit so no new heartbeat timer gets scheduled.
+	if task.TimeoutType == enumspb.TIMEOUT_TYPE_HEARTBEAT {
+		t.logger.Info("Prototype: Ignoring heartbeat timeout (no reschedule)",
+			tag.WorkflowID(mutableState.GetExecutionInfo().WorkflowId),
+			tag.WorkflowRunID(mutableState.GetExecutionState().GetRunId()),
+			tag.WorkflowNamespaceID(mutableState.GetExecutionInfo().NamespaceId),
+		)
+		release(nil)
+		return nil
+	}
+
 	// Need to clear activity heartbeat timer task mask for new activity timer task creation.
 	// NOTE: LastHeartbeatTimeoutVisibilityInSeconds is for deduping heartbeat timer creation as it's possible
 	// one heartbeat task was persisted multiple times with different taskIDs due to the retry logic
@@ -288,17 +300,6 @@ func (t *timerQueueActiveTaskExecutor) processSingleActivityTimeoutTask(
 		shouldScheduleWorkflowTask: false,
 	}
 
-	// PROTOTYPE: blindly ignore heartbeat timeouts - we're only measuring the persistence overhead of heartbeat timers.
-	if timerSequenceID.TimerType == enumspb.TIMEOUT_TYPE_HEARTBEAT {
-		t.logger.Info("Prototype: Ignoring heartbeat timeout",
-			tag.WorkflowID(mutableState.GetExecutionInfo().WorkflowId),
-			tag.WorkflowRunID(mutableState.GetExecutionState().GetRunId()),
-			tag.WorkflowNamespaceID(mutableState.GetExecutionInfo().NamespaceId),
-			tag.ActivityID(ai.ActivityId),
-			tag.Attempt(ai.Attempt),
-		)
-		return result, nil
-	}
 
 	if timerSequenceID.Attempt < ai.Attempt {
 		//  The RetryActivity call below could update activity attempt, in which case we do not want to apply a timeout for the previous attempt.

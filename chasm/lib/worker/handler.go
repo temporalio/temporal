@@ -9,7 +9,6 @@ import (
 	"go.temporal.io/server/chasm"
 	workerstatepb "go.temporal.io/server/chasm/lib/worker/gen/workerpb/v1"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 )
 
@@ -34,17 +33,6 @@ func (h *handler) RecordHeartbeat(ctx context.Context, req *workerstatepb.Record
 	}
 
 	workerHeartbeat := frontendReq.GetWorkerHeartbeat()[0]
-
-	// Debug: log incoming heartbeat info
-	activityInfo := workerHeartbeat.GetActivityInfo()
-	activityCount := 0
-	if activityInfo != nil {
-		activityCount = len(activityInfo.GetRunningActivities())
-	}
-	h.logger.Debug("Received worker heartbeat",
-		tag.NewStringTag("worker_instance_key", workerHeartbeat.GetWorkerInstanceKey()),
-		tag.NewBoolTag("has_activity_info", activityInfo != nil),
-		tag.NewInt("activity_count", activityCount))
 
 	executionKey := chasm.ExecutionKey{
 		NamespaceID: req.NamespaceId,
