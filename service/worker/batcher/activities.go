@@ -671,6 +671,47 @@ func (a *activities) processAdminTask(
 				})
 				return err
 			})
+	case *adminservice.StartAdminBatchOperationRequest_RebuildOperation:
+		return processTask(ctx, limiter, task,
+			func(executionInfo *workflowpb.WorkflowExecutionInfo) error {
+				_, err := a.HistoryClient.RebuildMutableState(ctx, &historyservice.RebuildMutableStateRequest{
+					NamespaceId: batchOperation.NamespaceId,
+					Execution:   executionInfo.Execution,
+				})
+				return err
+			})
+	case *adminservice.StartAdminBatchOperationRequest_DeleteOperation:
+		return processTask(ctx, limiter, task,
+			func(executionInfo *workflowpb.WorkflowExecutionInfo) error {
+				archetypeID, err := workercommon.ArchetypeIDFromExecutionInfo(executionInfo)
+				if err != nil {
+					return fmt.Errorf("archetypeID extraction error: %w", err)
+				}
+				_, err = a.HistoryClient.ForceDeleteWorkflowExecution(ctx, &historyservice.ForceDeleteWorkflowExecutionRequest{
+					NamespaceId: batchOperation.NamespaceId,
+					ArchetypeId: uint32(archetypeID),
+					Request: &adminservice.DeleteWorkflowExecutionRequest{
+						Namespace: adminReq.Namespace,
+						Execution: executionInfo.Execution,
+					},
+				})
+				return err
+			})
+	case *adminservice.StartAdminBatchOperationRequest_ReplicateOperation:
+		return processTask(ctx, limiter, task,
+			func(executionInfo *workflowpb.WorkflowExecutionInfo) error {
+				archetypeID, err := workercommon.ArchetypeIDFromExecutionInfo(executionInfo)
+				if err != nil {
+					return fmt.Errorf("archetypeID extraction error: %w", err)
+				}
+				_, err = a.HistoryClient.GenerateLastHistoryReplicationTasks(ctx, &historyservice.GenerateLastHistoryReplicationTasksRequest{
+					NamespaceId:    batchOperation.NamespaceId,
+					Execution:      executionInfo.Execution,
+					TargetClusters: adminReq.GetReplicateOperation().GetTargetClusters(),
+					ArchetypeId:    uint32(archetypeID),
+				})
+				return err
+			})
 	default:
 		return fmt.Errorf("unknown admin batch type: %T", adminReq.Operation)
 	}

@@ -212,9 +212,21 @@ func newAdminExecutionCommands(clientFactory ClientFactory, prompterFactory Prom
 					Aliases: FlagRunIDAlias,
 					Usage:   "Run ID",
 				},
+				&cli.StringFlag{
+					Name:  FlagVisibilityQuery,
+					Usage: "Visibility query to select workflows for batch rebuild",
+				},
+				&cli.StringFlag{
+					Name:  FlagReason,
+					Usage: "Reason for starting the batch job",
+				},
+				&cli.StringFlag{
+					Name:  FlagJobID,
+					Usage: "Optional job ID (auto-generated if not provided)",
+				},
 			},
 			Action: func(c *cli.Context) error {
-				return AdminRebuildMutableState(c, clientFactory)
+				return adminRebuildMutableState(c, clientFactory, prompterFactory(c))
 			},
 		},
 		{
@@ -237,9 +249,25 @@ func newAdminExecutionCommands(clientFactory ClientFactory, prompterFactory Prom
 					Usage:       "Fully qualified archetype name of the execution",
 					DefaultText: chasm.WorkflowArchetype,
 				},
+				&cli.StringFlag{
+					Name:  FlagVisibilityQuery,
+					Usage: "Visibility query to select workflows for batch replication",
+				},
+				&cli.StringFlag{
+					Name:  FlagReason,
+					Usage: "Reason for starting the batch job",
+				},
+				&cli.StringFlag{
+					Name:  FlagJobID,
+					Usage: "Optional job ID (auto-generated if not provided)",
+				},
+				&cli.StringSliceFlag{
+					Name:  FlagTargetCluster,
+					Usage: "Target clusters to replicate to (can be specified multiple times). If not specified, replicates to all configured remote clusters.",
+				},
 			},
 			Action: func(c *cli.Context) error {
-				return AdminReplicateWorkflow(c, clientFactory)
+				return adminReplicateWorkflow(c, clientFactory, prompterFactory(c))
 			},
 		},
 		{
@@ -262,9 +290,21 @@ func newAdminExecutionCommands(clientFactory ClientFactory, prompterFactory Prom
 					Usage:       "Fully qualified archetype name of the execution",
 					DefaultText: chasm.WorkflowArchetype,
 				},
+				&cli.StringFlag{
+					Name:  FlagVisibilityQuery,
+					Usage: "Visibility query to select workflows for batch deletion",
+				},
+				&cli.StringFlag{
+					Name:  FlagReason,
+					Usage: "Reason for starting the batch job",
+				},
+				&cli.StringFlag{
+					Name:  FlagJobID,
+					Usage: "Optional job ID (auto-generated if not provided)",
+				},
 			},
 			Action: func(c *cli.Context) error {
-				return AdminDeleteWorkflow(c, clientFactory, prompterFactory(c))
+				return adminDeleteWorkflow(c, clientFactory, prompterFactory(c))
 			},
 		},
 	}

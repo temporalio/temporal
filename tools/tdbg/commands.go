@@ -352,6 +352,16 @@ func describeMutableState(c *cli.Context, clientFactory ClientFactory) (*adminse
 	return resp, nil
 }
 
+func adminDeleteWorkflow(c *cli.Context, clientFactory ClientFactory, prompter *Prompter) error {
+	if c.IsSet(FlagVisibilityQuery) && c.IsSet(FlagWorkflowID) && c.IsSet(FlagRunID) {
+		return errors.New("setting parameter visibility query with workflow ID and run ID is not allowed")
+	}
+	if c.IsSet(FlagVisibilityQuery) && !c.IsSet(FlagWorkflowID) && !c.IsSet(FlagRunID) {
+		return AdminBatchDeleteWorkflow(c, clientFactory, prompter)
+	}
+	return AdminDeleteWorkflow(c, clientFactory, prompter)
+}
+
 // AdminDeleteWorkflow force deletes a workflow's mutable state (both concrete and current), history, and visibility
 // records as long as it's possible.
 // It should only be used as a troubleshooting tool since no additional check will be done before the deletion.
@@ -401,6 +411,66 @@ func AdminDeleteWorkflow(c *cli.Context, clientFactory ClientFactory, prompter *
 	// nolint:errcheck // assuming that write will succeed.
 	fmt.Fprintln(c.App.Writer, "Workflow execution deleted.")
 
+	return nil
+}
+
+// AdminBatchDeleteWorkflow starts a batch job to delete multiple workflows
+func AdminBatchDeleteWorkflow(c *cli.Context, clientFactory ClientFactory, prompter *Prompter) error {
+	adminClient := clientFactory.AdminClient(c)
+	workflowClient := clientFactory.WorkflowClient(c)
+
+	nsName, err := getRequiredOption(c, FlagNamespace)
+	if err != nil {
+		return err
+	}
+
+	query, err := getRequiredOption(c, FlagVisibilityQuery)
+	if err != nil {
+		return err
+	}
+
+	reason, err := getRequiredOption(c, FlagReason)
+	if err != nil {
+		return err
+	}
+
+	jobID := c.String(FlagJobID)
+	if jobID == "" {
+		jobID = fmt.Sprintf("batch-delete-%d", time.Now().UnixNano())
+	}
+
+	ctx, cancel := newContext(c)
+	defer cancel()
+
+	// Count workflows matching the query to confirm with user
+	countResp, err := workflowClient.CountWorkflowExecutions(ctx, &workflowservice.CountWorkflowExecutionsRequest{
+		Namespace: nsName,
+		Query:     query,
+	})
+	if err != nil {
+		return fmt.Errorf("unable to count workflow executions: %w", err)
+	}
+
+	msg := fmt.Sprintf("Will FORCE DELETE %d execution(s) matching query %q in namespace %q. This operation cannot be undone. Continue Y/N?",
+		countResp.GetCount(), query, nsName)
+	prompter.Prompt(msg)
+
+	_, err = adminClient.StartAdminBatchOperation(ctx, &adminservice.StartAdminBatchOperationRequest{
+		Namespace:       nsName,
+		VisibilityQuery: query,
+		JobId:           jobID,
+		Reason:          reason,
+		Identity:        getCurrentUserFromEnv(),
+		Operation: &adminservice.StartAdminBatchOperationRequest_DeleteOperation{
+			DeleteOperation: &adminservice.BatchOperationDelete{},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("unable to start batch delete workflow: %w", err)
+	}
+
+	// nolint:errcheck // assuming that write will succeed.
+	fmt.Fprintf(c.App.Writer, "Batch Delete Workflow started successfully for Job ID: %s\n", jobID)
 	return nil
 }
 
@@ -783,6 +853,16 @@ func AdminBatchRefreshWorkflowTasks(c *cli.Context, clientFactory ClientFactory,
 	return nil
 }
 
+func adminRebuildMutableState(c *cli.Context, clientFactory ClientFactory, prompter *Prompter) error {
+	if c.IsSet(FlagVisibilityQuery) && c.IsSet(FlagWorkflowID) && c.IsSet(FlagRunID) {
+		return errors.New("setting parameter visibility query with workflow ID and run ID is not allowed")
+	}
+	if c.IsSet(FlagVisibilityQuery) && !c.IsSet(FlagWorkflowID) && !c.IsSet(FlagRunID) {
+		return AdminBatchRebuildMutableState(c, clientFactory, prompter)
+	}
+	return AdminRebuildMutableState(c, clientFactory)
+}
+
 // AdminRebuildMutableState rebuild a workflow mutable state using persisted history events
 func AdminRebuildMutableState(c *cli.Context, clientFactory ClientFactory) error {
 	adminClient := clientFactory.AdminClient(c)
@@ -814,6 +894,79 @@ func AdminRebuildMutableState(c *cli.Context, clientFactory ClientFactory) error
 		fmt.Fprintln(c.App.Writer, "rebuild mutable state succeeded.")
 	}
 	return nil
+}
+
+// AdminBatchRebuildMutableState starts a batch job to rebuild mutable states for multiple workflows
+func AdminBatchRebuildMutableState(c *cli.Context, clientFactory ClientFactory, prompter *Prompter) error {
+	adminClient := clientFactory.AdminClient(c)
+	workflowClient := clientFactory.WorkflowClient(c)
+
+	nsName, err := getRequiredOption(c, FlagNamespace)
+	if err != nil {
+		return err
+	}
+
+	query, err := getRequiredOption(c, FlagVisibilityQuery)
+	if err != nil {
+		return err
+	}
+
+	reason, err := getRequiredOption(c, FlagReason)
+	if err != nil {
+		return err
+	}
+
+	jobID := c.String(FlagJobID)
+	if jobID == "" {
+		jobID = fmt.Sprintf("batch-rebuild-%d", time.Now().UnixNano())
+	}
+
+	ctx, cancel := newContext(c)
+	defer cancel()
+
+	// Count workflows matching the query to confirm with user
+	countResp, err := workflowClient.CountWorkflowExecutions(ctx, &workflowservice.CountWorkflowExecutionsRequest{
+		Namespace: nsName,
+		Query:     query,
+	})
+	if err != nil {
+		return fmt.Errorf("unable to count workflow executions: %w", err)
+	}
+
+	msg := fmt.Sprintf("Will rebuild mutable states for %d execution(s) matching query %q in namespace %q. Continue Y/N?",
+		countResp.GetCount(), query, nsName)
+	prompter.Prompt(msg)
+
+	_, err = adminClient.StartAdminBatchOperation(ctx, &adminservice.StartAdminBatchOperationRequest{
+		Namespace:       nsName,
+		VisibilityQuery: query,
+		JobId:           jobID,
+		Reason:          reason,
+		Identity:        getCurrentUserFromEnv(),
+		Operation: &adminservice.StartAdminBatchOperationRequest_RebuildOperation{
+			RebuildOperation: &adminservice.BatchOperationRebuild{},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("unable to start batch rebuild mutable state: %w", err)
+	}
+
+	// nolint:errcheck // assuming that write will succeed.
+	fmt.Fprintf(c.App.Writer, "Batch Rebuild Mutable State started successfully for Job ID: %s\n", jobID)
+	return nil
+}
+
+func adminReplicateWorkflow(c *cli.Context, clientFactory ClientFactory, prompter *Prompter) error {
+	if c.IsSet(FlagVisibilityQuery) && c.IsSet(FlagWorkflowID) && c.IsSet(FlagRunID) {
+		return errors.New("setting parameter visibility query with workflow ID and run ID is not allowed")
+	}
+	if !c.IsSet(FlagTargetCluster) {
+		return errors.New("target clusters are not set")
+	}
+	if c.IsSet(FlagVisibilityQuery) && !c.IsSet(FlagWorkflowID) && !c.IsSet(FlagRunID) {
+		return AdminBatchReplicateWorkflow(c, clientFactory, prompter)
+	}
+	return AdminReplicateWorkflow(c, clientFactory)
 }
 
 // AdminReplicateWorkflow force replicates a workflow by generating replication tasks
@@ -851,5 +1004,69 @@ func AdminReplicateWorkflow(
 
 	// nolint:errcheck // assuming that write will succeed.
 	fmt.Fprintln(c.App.Writer, "Replication tasks generated successfully.")
+	return nil
+}
+
+// AdminBatchReplicateWorkflow starts a batch job to replicate multiple workflows
+func AdminBatchReplicateWorkflow(c *cli.Context, clientFactory ClientFactory, prompter *Prompter) error {
+	adminClient := clientFactory.AdminClient(c)
+	workflowClient := clientFactory.WorkflowClient(c)
+
+	nsName, err := getRequiredOption(c, FlagNamespace)
+	if err != nil {
+		return err
+	}
+
+	query, err := getRequiredOption(c, FlagVisibilityQuery)
+	if err != nil {
+		return err
+	}
+
+	reason, err := getRequiredOption(c, FlagReason)
+	if err != nil {
+		return err
+	}
+
+	jobID := c.String(FlagJobID)
+	if jobID == "" {
+		jobID = fmt.Sprintf("batch-replicate-%d", time.Now().UnixNano())
+	}
+
+	targetClusters := c.StringSlice(FlagTargetCluster)
+
+	ctx, cancel := newContext(c)
+	defer cancel()
+
+	// Count workflows matching the query to confirm with user
+	countResp, err := workflowClient.CountWorkflowExecutions(ctx, &workflowservice.CountWorkflowExecutionsRequest{
+		Namespace: nsName,
+		Query:     query,
+	})
+	if err != nil {
+		return fmt.Errorf("unable to count workflow executions: %w", err)
+	}
+
+	msg := fmt.Sprintf("Will replicate %d execution(s) matching query %q in namespace %q. Continue Y/N?",
+		countResp.GetCount(), query, nsName)
+	prompter.Prompt(msg)
+
+	_, err = adminClient.StartAdminBatchOperation(ctx, &adminservice.StartAdminBatchOperationRequest{
+		Namespace:       nsName,
+		VisibilityQuery: query,
+		JobId:           jobID,
+		Reason:          reason,
+		Identity:        getCurrentUserFromEnv(),
+		Operation: &adminservice.StartAdminBatchOperationRequest_ReplicateOperation{
+			ReplicateOperation: &adminservice.BatchOperationReplicate{
+				TargetClusters: targetClusters,
+			},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("unable to start batch replicate workflow: %w", err)
+	}
+
+	// nolint:errcheck // assuming that write will succeed.
+	fmt.Fprintf(c.App.Writer, "Batch Replicate Workflow started successfully for Job ID: %s\n", jobID)
 	return nil
 }

@@ -580,3 +580,216 @@ func (s *activitiesSuite) TestProcessAdminTask_UnknownOperation() {
 	s.Require().Error(err)
 	s.Contains(err.Error(), "unknown admin batch type")
 }
+
+func (s *activitiesSuite) TestProcessAdminTask_RebuildMutableState() {
+	ctx := context.Background()
+	mockHistoryClient := historyservicemock.NewMockHistoryServiceClient(s.controller)
+
+	a := &activities{
+		activityDeps: activityDeps{
+			HistoryClient: mockHistoryClient,
+		},
+	}
+
+	namespaceID := "test-namespace-id"
+	workflowID := "test-workflow-id"
+	runID := "test-run-id"
+
+	batchOperation := &batchspb.BatchOperationInput{
+		NamespaceId: namespaceID,
+		AdminRequest: &adminservice.StartAdminBatchOperationRequest{
+			Namespace: "test-namespace",
+			Identity:  "test-identity",
+			Operation: &adminservice.StartAdminBatchOperationRequest_RebuildOperation{
+				RebuildOperation: &adminservice.BatchOperationRebuild{},
+			},
+		},
+	}
+
+	testTask := task{
+		executionInfo: &workflowpb.WorkflowExecutionInfo{
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: workflowID,
+				RunId:      runID,
+			},
+		},
+	}
+
+	limiter := rate.NewLimiter(rate.Limit(100), 1)
+
+	// Expect RebuildMutableState to be called with correct parameters
+	mockHistoryClient.EXPECT().RebuildMutableState(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, req *historyservice.RebuildMutableStateRequest, _ ...interface{}) (*historyservice.RebuildMutableStateResponse, error) {
+			s.Equal(namespaceID, req.NamespaceId)
+			s.Equal(workflowID, req.Execution.WorkflowId)
+			s.Equal(runID, req.Execution.RunId)
+			return &historyservice.RebuildMutableStateResponse{}, nil
+		})
+
+	err := a.processAdminTask(ctx, batchOperation, testTask, limiter)
+	s.NoError(err)
+}
+
+func (s *activitiesSuite) TestProcessAdminTask_DeleteWorkflowExecution() {
+	ctx := context.Background()
+	mockHistoryClient := historyservicemock.NewMockHistoryServiceClient(s.controller)
+
+	a := &activities{
+		activityDeps: activityDeps{
+			HistoryClient: mockHistoryClient,
+		},
+	}
+
+	namespaceID := "test-namespace-id"
+	namespaceName := "test-namespace"
+	workflowID := "test-workflow-id"
+	runID := "test-run-id"
+
+	batchOperation := &batchspb.BatchOperationInput{
+		NamespaceId: namespaceID,
+		AdminRequest: &adminservice.StartAdminBatchOperationRequest{
+			Namespace: namespaceName,
+			Identity:  "test-identity",
+			Operation: &adminservice.StartAdminBatchOperationRequest_DeleteOperation{
+				DeleteOperation: &adminservice.BatchOperationDelete{},
+			},
+		},
+	}
+
+	testTask := task{
+		executionInfo: &workflowpb.WorkflowExecutionInfo{
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: workflowID,
+				RunId:      runID,
+			},
+		},
+	}
+
+	limiter := rate.NewLimiter(rate.Limit(100), 1)
+
+	// Expect ForceDeleteWorkflowExecution to be called with correct parameters
+	mockHistoryClient.EXPECT().ForceDeleteWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, req *historyservice.ForceDeleteWorkflowExecutionRequest, _ ...interface{}) (*historyservice.ForceDeleteWorkflowExecutionResponse, error) {
+			s.Equal(namespaceID, req.NamespaceId)
+			s.NotZero(req.ArchetypeId) // WorkflowArchetypeID is computed dynamically
+			s.Equal(namespaceName, req.Request.Namespace)
+			s.Equal(workflowID, req.Request.Execution.WorkflowId)
+			s.Equal(runID, req.Request.Execution.RunId)
+			return &historyservice.ForceDeleteWorkflowExecutionResponse{
+				Response: &adminservice.DeleteWorkflowExecutionResponse{},
+			}, nil
+		})
+
+	err := a.processAdminTask(ctx, batchOperation, testTask, limiter)
+	s.NoError(err)
+}
+
+func (s *activitiesSuite) TestProcessAdminTask_ReplicateWorkflow() {
+	ctx := context.Background()
+	mockHistoryClient := historyservicemock.NewMockHistoryServiceClient(s.controller)
+
+	a := &activities{
+		activityDeps: activityDeps{
+			HistoryClient: mockHistoryClient,
+		},
+	}
+
+	namespaceID := "test-namespace-id"
+	namespaceName := "test-namespace"
+	workflowID := "test-workflow-id"
+	runID := "test-run-id"
+	targetClusters := []string{"cluster1", "cluster2"}
+
+	batchOperation := &batchspb.BatchOperationInput{
+		NamespaceId: namespaceID,
+		AdminRequest: &adminservice.StartAdminBatchOperationRequest{
+			Namespace: namespaceName,
+			Identity:  "test-identity",
+			Operation: &adminservice.StartAdminBatchOperationRequest_ReplicateOperation{
+				ReplicateOperation: &adminservice.BatchOperationReplicate{
+					TargetClusters: targetClusters,
+				},
+			},
+		},
+	}
+
+	testTask := task{
+		executionInfo: &workflowpb.WorkflowExecutionInfo{
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: workflowID,
+				RunId:      runID,
+			},
+		},
+	}
+
+	limiter := rate.NewLimiter(rate.Limit(100), 1)
+
+	// Expect GenerateLastHistoryReplicationTasks to be called with correct parameters
+	mockHistoryClient.EXPECT().GenerateLastHistoryReplicationTasks(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, req *historyservice.GenerateLastHistoryReplicationTasksRequest, _ ...interface{}) (*historyservice.GenerateLastHistoryReplicationTasksResponse, error) {
+			s.Equal(namespaceID, req.NamespaceId)
+			s.NotZero(req.ArchetypeId) // WorkflowArchetypeID is computed dynamically
+			s.Equal(workflowID, req.Execution.WorkflowId)
+			s.Equal(runID, req.Execution.RunId)
+			s.Equal(targetClusters, req.TargetClusters)
+			return &historyservice.GenerateLastHistoryReplicationTasksResponse{
+				StateTransitionCount: 10,
+				HistoryLength:        100,
+			}, nil
+		})
+
+	err := a.processAdminTask(ctx, batchOperation, testTask, limiter)
+	s.NoError(err)
+}
+
+func (s *activitiesSuite) TestProcessAdminTask_ReplicateWorkflow_EmptyTargetClusters() {
+	ctx := context.Background()
+	mockHistoryClient := historyservicemock.NewMockHistoryServiceClient(s.controller)
+
+	a := &activities{
+		activityDeps: activityDeps{
+			HistoryClient: mockHistoryClient,
+		},
+	}
+
+	namespaceID := "test-namespace-id"
+	workflowID := "test-workflow-id"
+	runID := "test-run-id"
+
+	batchOperation := &batchspb.BatchOperationInput{
+		NamespaceId: namespaceID,
+		AdminRequest: &adminservice.StartAdminBatchOperationRequest{
+			Namespace: "test-namespace",
+			Operation: &adminservice.StartAdminBatchOperationRequest_ReplicateOperation{
+				ReplicateOperation: &adminservice.BatchOperationReplicate{
+					// Empty target_clusters means replicate to all configured remote clusters
+				},
+			},
+		},
+	}
+
+	testTask := task{
+		executionInfo: &workflowpb.WorkflowExecutionInfo{
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: workflowID,
+				RunId:      runID,
+			},
+		},
+	}
+
+	limiter := rate.NewLimiter(rate.Limit(100), 1)
+
+	// Expect GenerateLastHistoryReplicationTasks to be called with empty target clusters
+	mockHistoryClient.EXPECT().GenerateLastHistoryReplicationTasks(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, req *historyservice.GenerateLastHistoryReplicationTasksRequest, _ ...interface{}) (*historyservice.GenerateLastHistoryReplicationTasksResponse, error) {
+			s.Equal(namespaceID, req.NamespaceId)
+			s.Empty(req.TargetClusters) // Should be empty when not specified
+			return &historyservice.GenerateLastHistoryReplicationTasksResponse{
+				StateTransitionCount: 10,
+				HistoryLength:        100,
+			}, nil
+		})
+
+	err := a.processAdminTask(ctx, batchOperation, testTask, limiter)
+	s.NoError(err)
+}

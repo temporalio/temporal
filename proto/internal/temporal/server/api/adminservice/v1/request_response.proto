@@ -631,6 +631,11 @@ message StartAdminBatchOperationRequest {
   // The admin batch operation to perform.
   oneof operation {
     BatchOperationRefreshTasks refresh_tasks_operation = 10;
+
+    // Add admin batch delete, replicate and rebuild
+    BatchOperationDelete delete_operation = 11;
+    BatchOperationReplicate replicate_operation = 12;
+    BatchOperationRebuild rebuild_operation = 13;
   }
 }
 
@@ -640,4 +645,15 @@ message StartAdminBatchOperationResponse {
 // BatchOperationRefreshTasks refreshes tasks for batch executions.
 // This regenerates all pending tasks for each execution.
 message BatchOperationRefreshTasks {
+}
+
+message BatchOperationDelete {
+}
+
+message BatchOperationReplicate {
+  // target clusters cannot be empty
+  repeated string target_clusters = 1;
+}
+
+message BatchOperationRebuild {
 }

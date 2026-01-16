@@ -3371,3 +3371,114 @@ func (this *BatchOperationRefreshTasks) Equal(that interface{}) bool {
 
 	return proto.Equal(this, that1)
 }
+
+// Marshal an object of type BatchOperationDelete to the protobuf v3 wire format
+func (val *BatchOperationDelete) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type BatchOperationDelete from the protobuf v3 wire format
+func (val *BatchOperationDelete) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *BatchOperationDelete) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two BatchOperationDelete values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *BatchOperationDelete) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *BatchOperationDelete
+	switch t := that.(type) {
+	case *BatchOperationDelete:
+		that1 = t
+	case BatchOperationDelete:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type BatchOperationReplicate to the protobuf v3 wire format
+func (val *BatchOperationReplicate) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type BatchOperationReplicate from the protobuf v3 wire format
+func (val *BatchOperationReplicate) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *BatchOperationReplicate) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two BatchOperationReplicate values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *BatchOperationReplicate) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *BatchOperationReplicate
+	switch t := that.(type) {
+	case *BatchOperationReplicate:
+		that1 = t
+	case BatchOperationReplicate:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type BatchOperationRebuild to the protobuf v3 wire format
+func (val *BatchOperationRebuild) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type BatchOperationRebuild from the protobuf v3 wire format
+func (val *BatchOperationRebuild) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *BatchOperationRebuild) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two BatchOperationRebuild values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *BatchOperationRebuild) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *BatchOperationRebuild
+	switch t := that.(type) {
+	case *BatchOperationRebuild:
+		that1 = t
+	case BatchOperationRebuild:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}

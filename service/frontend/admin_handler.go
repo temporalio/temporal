@@ -1623,6 +1623,12 @@ func (adh *AdminHandler) StartAdminBatchOperation(
 	switch op := request.Operation.(type) {
 	case *adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation:
 		batchTypeMemo = "refresh_tasks"
+	case *adminservice.StartAdminBatchOperationRequest_DeleteOperation:
+		batchTypeMemo = "delete"
+	case *adminservice.StartAdminBatchOperationRequest_ReplicateOperation:
+		batchTypeMemo = "replicate"
+	case *adminservice.StartAdminBatchOperationRequest_RebuildOperation:
+		batchTypeMemo = "rebuild"
 	default:
 		return nil, serviceerror.NewInvalidArgumentf("The operation type %T is not supported", op)
 	}
@@ -1689,8 +1695,15 @@ func validateAdminBatchOperation(params *adminservice.StartAdminBatchOperationRe
 	}
 
 	switch op := params.GetOperation().(type) {
-	case *adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation:
-		// No additional validation needed
+	case *adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation,
+		*adminservice.StartAdminBatchOperationRequest_DeleteOperation,
+		*adminservice.StartAdminBatchOperationRequest_RebuildOperation:
+		// no additional validation needed
+		return nil
+	case *adminservice.StartAdminBatchOperationRequest_ReplicateOperation:
+		if len(op.ReplicateOperation.GetTargetClusters()) == 0 {
+			return serviceerror.NewInvalidArgument("target clusters are not set on request")
+		}
 		return nil
 	default:
 		return serviceerror.NewInvalidArgumentf("not supported admin batch type: %T", op)
