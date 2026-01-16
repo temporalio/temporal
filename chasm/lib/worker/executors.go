@@ -81,7 +81,7 @@ func (e *LeaseExpiryTaskExecutor) Execute(
 	activityInfo := heartbeat.GetActivityInfo()
 	activities := activityInfo.GetRunningActivities()
 
-	e.logger.Info("Worker lease expired, marking as inactive and rescheduling activities",
+	e.logger.Info("worker_chasm: Worker lease expired, marking as inactive and rescheduling activities",
 		workerIDTag(workerID),
 		tag.NewBoolTag("has_heartbeat", heartbeat != nil),
 		tag.NewBoolTag("has_activity_info", activityInfo != nil),
@@ -98,7 +98,7 @@ func (e *LeaseExpiryTaskExecutor) Execute(
 	if len(activities) > 0 {
 		e.rescheduleActivities(namespaceID, workerID, activities)
 	} else {
-		e.logger.Info("No activities to reschedule for expired worker",
+		e.logger.Info("worker_chasm: No activities to reschedule for expired worker",
 			workerIDTag(workerID))
 	}
 
@@ -112,13 +112,13 @@ func (e *LeaseExpiryTaskExecutor) rescheduleActivities(
 	activities []*workerpb.ActivityBinding,
 ) {
 	if e.historyClient == nil {
-		e.logger.Warn("History client not configured, skipping activity rescheduling",
+		e.logger.Warn("worker_chasm: History client not configured, skipping activity rescheduling",
 			workerIDTag(workerID),
 			tag.NewInt("activity_count", len(activities)))
 		return
 	}
 
-	e.logger.Info("Rescheduling activities for dead worker",
+	e.logger.Info("worker_chasm: Rescheduling activities for dead worker",
 		workerIDTag(workerID),
 		tag.NewInt("activity_count", len(activities)))
 
@@ -151,7 +151,7 @@ func (e *LeaseExpiryTaskExecutor) rescheduleActivity(
 	workerID string,
 	activity *workerpb.ActivityBinding,
 ) {
-	e.logger.Info("Attempting to reschedule activity",
+	e.logger.Info("worker_chasm: Attempting to reschedule activity",
 		workerIDTag(workerID),
 		tag.WorkflowID(activity.GetWorkflowId()),
 		tag.WorkflowRunID(activity.GetRunId()),
@@ -170,7 +170,7 @@ func (e *LeaseExpiryTaskExecutor) rescheduleActivity(
 
 		if err == nil {
 			metrics.ChasmWorkerActivitiesRescheduled.With(e.metricsHandler).Record(1)
-			e.logger.Info("Activity rescheduled successfully",
+			e.logger.Info("worker_chasm: Activity rescheduled successfully",
 				workerIDTag(workerID),
 				tag.WorkflowID(activity.GetWorkflowId()),
 				tag.ActivityID(activity.GetActivityId()))
@@ -181,7 +181,7 @@ func (e *LeaseExpiryTaskExecutor) rescheduleActivity(
 		if isNonRetryableRescheduleError(err) {
 			metrics.ChasmWorkerRescheduleErrors.With(e.metricsHandler).Record(1,
 				metrics.StringTag("error_type", string(RescheduleErrorSkipped)))
-			e.logger.Info("Activity reschedule skipped (workflow/activity no longer exists)",
+			e.logger.Info("worker_chasm: Activity reschedule skipped (workflow/activity no longer exists)",
 				workerIDTag(workerID),
 				tag.WorkflowID(activity.GetWorkflowId()),
 				tag.ActivityID(activity.GetActivityId()),
@@ -190,7 +190,7 @@ func (e *LeaseExpiryTaskExecutor) rescheduleActivity(
 		}
 
 		lastErr = err
-		e.logger.Warn("Failed to reschedule activity, retrying",
+		e.logger.Warn("worker_chasm: Failed to reschedule activity, retrying",
 			workerIDTag(workerID),
 			tag.WorkflowID(activity.GetWorkflowId()),
 			tag.ActivityID(activity.GetActivityId()),
@@ -204,7 +204,7 @@ func (e *LeaseExpiryTaskExecutor) rescheduleActivity(
 	// Exhausted retries - permanent failure
 	metrics.ChasmWorkerRescheduleErrors.With(e.metricsHandler).Record(1,
 		metrics.StringTag("error_type", string(RescheduleErrorPermanent)))
-	e.logger.Error("Failed to reschedule activity after retries",
+	e.logger.Error("worker_chasm: Failed to reschedule activity after retries",
 		workerIDTag(workerID),
 		tag.WorkflowID(activity.GetWorkflowId()),
 		tag.ActivityID(activity.GetActivityId()),
@@ -220,7 +220,7 @@ func (e *LeaseExpiryTaskExecutor) Validate(
 ) (bool, error) {
 	valid, reason := worker.isLeaseExpiryTaskValid(attrs)
 	if !valid && reason != "" {
-		e.logger.Error(reason, workerIDTag(worker.workerID()))
+		e.logger.Error("worker_chasm: "+reason, workerIDTag(worker.workerID()))
 	}
 	return valid, nil
 }
