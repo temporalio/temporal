@@ -16,8 +16,8 @@ import (
 // as backfills may generate buffered actions that overlap with both
 // automatically-buffered actions, as well as other requested backfills.
 func GenerateRequestID(
-	namespaceId string,
-	scheduleId string,
+	namespaceID string,
+	scheduleID string,
 	conflictToken int64,
 	backfillID string,
 	nominal time.Time,
@@ -29,8 +29,8 @@ func GenerateRequestID(
 	return fmt.Sprintf(
 		"sched-%s-%s-%s-%d-%d-%d",
 		backfillID,
-		namespaceId,
-		scheduleId,
+		namespaceID,
+		scheduleID,
 		conflictToken,
 		nominal.UnixMilli(),
 		actual.UnixMilli(),
