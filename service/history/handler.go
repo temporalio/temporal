@@ -347,17 +347,26 @@ func (h *Handler) RecordActivityTaskStarted(ctx context.Context, request *histor
 	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
 
 	namespaceID := namespace.ID(request.GetNamespaceId())
+
+	h.logger.Info("RecordActivityTaskStarted: Namespace ID" + string(namespaceID))
+
 	workflowExecution := request.WorkflowExecution
 	businessID := workflowExecution.GetWorkflowId()
+	h.logger.Info("RecordActivityTaskStarted: Workflow ID" + businessID)
 	if businessID == "" {
 		ref, err := chasm.DeserializeComponentRef(request.GetComponentRef())
 		if err != nil {
 			return nil, err
 		}
 		businessID = ref.BusinessID
+
+		h.logger.Info("RecordActivityTaskStarted: Standalone Business ID " + businessID)
 	}
 
 	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, businessID)
+
+	h.logger.Info("RecordActivityTaskStarted: shardContext " + string(shardContext.GetShardID()) + ", " + shardContext.GetOwner())
+
 	if request.GetNamespaceId() == "" {
 		return nil, h.convertError(errNamespaceNotSet)
 	}
