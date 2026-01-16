@@ -10,6 +10,10 @@ import (
 func (wt *WorkflowTags) extractFromMatchingServiceServerMessage(message any) []tag.Tag {
 	switch r := message.(type) {
 	case *matchingservice.AddActivityTaskRequest:
+		// For standalone activities, Execution may be nil (component_ref is used instead)
+		if r.GetExecution() == nil {
+			return nil
+		}
 		return []tag.Tag{
 			tag.WorkflowID(r.GetExecution().GetWorkflowId()),
 			tag.WorkflowRunID(r.GetExecution().GetRunId()),
@@ -110,6 +114,9 @@ func (wt *WorkflowTags) extractFromMatchingServiceServerMessage(message any) []t
 	case *matchingservice.PollActivityTaskQueueRequest:
 		return nil
 	case *matchingservice.PollActivityTaskQueueResponse:
+		if r.GetWorkflowExecution() == nil {
+			return nil
+		}
 		return []tag.Tag{
 			tag.WorkflowID(r.GetWorkflowExecution().GetWorkflowId()),
 			tag.WorkflowRunID(r.GetWorkflowExecution().GetRunId()),

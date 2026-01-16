@@ -371,6 +371,9 @@ func (h *Handler) RecordActivityTaskStarted(ctx context.Context, request *histor
 	if err != nil {
 		return nil, h.convertError(err)
 	}
+	if shardContext == nil {
+		return nil, h.convertError(serviceerror.NewUnavailable("shard context is nil"))
+	}
 
 	h.logger.Error("RecordActivityTaskStarted: shardContext " + string(shardContext.GetShardID()) + ", " + shardContext.GetOwner())
 
