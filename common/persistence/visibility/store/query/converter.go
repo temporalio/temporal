@@ -545,6 +545,8 @@ func (c *QueryConverter[ExprT]) resolveSearchAttributeAlias(
 	if strings.TrimPrefix(alias, sadefs.ReservedPrefix) == sadefs.ScheduleID {
 		fieldName = sadefs.WorkflowID
 	} else if c.archetypeID == chasm.SchedulerArchetypeID && alias == "TemporalSystemExecutionStatus" {
+		// To support querying Workflow based schedulers and CHASM based schedulers, we need to translate
+		// TemporalSystemExecutionStatus as an alias to the system search attribute ExecutionStatus.
 		fieldName = "ExecutionStatus"
 	} else if strings.HasPrefix(fieldName, sadefs.ReservedPrefix) {
 		fieldName = fieldName[len(sadefs.ReservedPrefix):]

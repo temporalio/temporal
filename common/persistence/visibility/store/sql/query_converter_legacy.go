@@ -453,6 +453,8 @@ func (c *QueryConverterLegacy) convertColName(exprRef *sqlparser.Expr) (*saColNa
 				saAlias,
 			)
 		}
+		// To support querying Workflow based schedulers and CHASM based schedulers, we need to translate
+		// TemporalSystemExecutionStatus as an alias to the system search attribute ExecutionStatus.
 		saFieldName = sadefs.ExecutionStatus
 		saType, _ = c.saTypeMap.GetType(saFieldName)
 	}
