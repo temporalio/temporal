@@ -63,12 +63,12 @@ func shortRandomizedName(prefix string) string {
 
 // TODO(pri): remove once the classic matcher is removed
 func TestTaskQueueStats_Classic_Suite(t *testing.T) {
-	t.Parallel()
+	// t.Parallel()
 	suite.Run(t, &TaskQueueStatsSuite{usePriMatcher: false})
 }
 
 func TestTaskQueueStats_Pri_Suite(t *testing.T) {
-	t.Parallel()
+	// t.Parallel()
 	suite.Run(t, &TaskQueueStatsSuite{usePriMatcher: true})
 }
 
