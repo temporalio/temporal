@@ -48,6 +48,11 @@ func NewTimerQueueFactory(
 					ActiveNamespaceWeights:         params.Config.TimerProcessorSchedulerActiveRoundRobinWeights,
 					StandbyNamespaceWeights:        params.Config.TimerProcessorSchedulerStandbyRoundRobinWeights,
 					InactiveNamespaceDeletionDelay: params.Config.TaskSchedulerInactiveChannelDeletionDelay,
+					WorkflowAwareSchedulerOptions: queues.WorkflowAwareSchedulerOptions{
+						EnableWorkflowQueueScheduler:      params.Config.TaskSchedulerEnableWorkflowQueueScheduler,
+						WorkflowQueueSchedulerQueueSize:   params.Config.TaskSchedulerWorkflowQueueSchedulerQueueSize,
+						WorkflowQueueSchedulerWorkerCount: params.Config.TaskSchedulerWorkflowQueueSchedulerWorkerCount,
+					},
 				},
 				params.NamespaceRegistry,
 				params.Logger,
@@ -95,17 +100,6 @@ func (f *timerQueueFactory) CreateQueue(
 		f.ChasmRegistry,
 		logger,
 		metricsHandler,
-	)
-
-	// Wrap with WorkflowAwareScheduler for handling contended workflows
-	shardScheduler = queues.NewWorkflowAwareScheduler(
-		shardScheduler,
-		queues.WorkflowAwareSchedulerOptions{
-			EnableSequentialScheduler:        f.Config.TaskSchedulerEnableWorkflowQueueScheduler,
-			SequentialSchedulerQueueSize:     f.Config.TaskSchedulerWorkflowQueueSchedulerQueueSize,
-			SequentialSchedulerWorkerCount:   f.Config.TaskSchedulerWorkflowQueueSchedulerWorkerCount,
-		},
-		logger,
 	)
 
 	rescheduler := queues.NewRescheduler(

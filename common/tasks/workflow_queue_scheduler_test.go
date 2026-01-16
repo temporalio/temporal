@@ -304,7 +304,7 @@ func (s *workflowQueueSchedulerSuite) TestTrySubmit_ChannelFull() {
 	result2 := scheduler.TrySubmit(&testTaskWithID{MockTask: mockTask2, workflowID: 2})
 	s.False(result2)
 
-	// The task should NOT be in a queue (was removed)
+	// The task should NOT be in a queue (was not added)
 	s.False(scheduler.HasQueue(2))
 
 	// Clean up - stop will drain remaining tasks
@@ -451,10 +451,7 @@ func (s *workflowQueueSchedulerSuite) TestWorkerScaling_DynamicScaleUp() {
 			QueueSize:   100,
 			WorkerCount: workerCountFn,
 		},
-		func(key interface{}) uint32 { return uint32(key.(int)) },
-		func(task *MockTask) SequentialTaskQueue[*MockTask] {
-			return newTestSequentialTaskQueue[*MockTask](1, 1000)
-		},
+		func(task *MockTask) any { return 1 }, // Simple key function
 		log.NewNoopLogger(),
 	)
 	scheduler.Start()
@@ -537,7 +534,7 @@ func (s *workflowQueueSchedulerSuite) TestHasQueue() {
 	// Wait until task is actually executing
 	<-executingCh
 
-	// Note: Queue may or may not exist at this point because popNextTask
+	// Note: Queue may or may not exist at this point because popTask
 	// removes the queue if it becomes empty. Since we only submitted one task,
 	// the queue is removed when the task is popped.
 	// This is expected behavior - the queue exists only while tasks are waiting.
@@ -895,12 +892,6 @@ func (s *workflowQueueSchedulerSuite) TestDrainTasks_ConcurrentAdditions() {
 // =============================================================================
 
 func (s *workflowQueueSchedulerSuite) newScheduler(workerCount, queueSize int) *WorkflowQueueScheduler[*MockTask] {
-	hashFn := func(key interface{}) uint32 {
-		return 1 // All tasks to same bucket
-	}
-	factory := func(task *MockTask) SequentialTaskQueue[*MockTask] {
-		return newTestSequentialTaskQueue[*MockTask](1, 1000)
-	}
 	return NewWorkflowQueueScheduler[*MockTask](
 		&WorkflowQueueSchedulerOptions{
 			QueueSize: queueSize,
@@ -908,22 +899,12 @@ func (s *workflowQueueSchedulerSuite) newScheduler(workerCount, queueSize int) *
 				return workerCount, func() {}
 			},
 		},
-		hashFn,
-		factory,
+		func(task *MockTask) any { return 1 }, // All tasks to same key
 		log.NewNoopLogger(),
 	)
 }
 
 func (s *workflowQueueSchedulerSuite) newSchedulerWithWorkflowID(workerCount, queueSize int) *WorkflowQueueScheduler[*testTaskWithID] {
-	hashFn := func(key interface{}) uint32 {
-		return uint32(key.(int))
-	}
-	factory := func(task *testTaskWithID) SequentialTaskQueue[*testTaskWithID] {
-		return &testWorkflowTaskQueue{
-			id:    task.workflowID,
-			tasks: make(chan *testTaskWithID, 10000),
-		}
-	}
 	return NewWorkflowQueueScheduler[*testTaskWithID](
 		&WorkflowQueueSchedulerOptions{
 			QueueSize: queueSize,
@@ -931,39 +912,7 @@ func (s *workflowQueueSchedulerSuite) newSchedulerWithWorkflowID(workerCount, qu
 				return workerCount, func() {}
 			},
 		},
-		hashFn,
-		factory,
+		func(task *testTaskWithID) any { return task.workflowID }, // Key by workflow ID
 		log.NewNoopLogger(),
 	)
-}
-
-// testWorkflowTaskQueue is a task queue keyed by workflow ID
-type testWorkflowTaskQueue struct {
-	id    int
-	tasks chan *testTaskWithID
-}
-
-func (q *testWorkflowTaskQueue) ID() interface{} {
-	return q.id
-}
-
-func (q *testWorkflowTaskQueue) Add(task *testTaskWithID) {
-	q.tasks <- task
-}
-
-func (q *testWorkflowTaskQueue) Remove() *testTaskWithID {
-	select {
-	case t := <-q.tasks:
-		return t
-	default:
-		return nil
-	}
-}
-
-func (q *testWorkflowTaskQueue) IsEmpty() bool {
-	return len(q.tasks) == 0
-}
-
-func (q *testWorkflowTaskQueue) Len() int {
-	return len(q.tasks)
 }

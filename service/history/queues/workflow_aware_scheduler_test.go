@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/tasks"
 	"go.uber.org/mock/gomock"
 )
 
@@ -40,9 +41,8 @@ type (
 		*require.Assertions
 		suite.Suite
 
-		controller    *gomock.Controller
-		baseScheduler *MockScheduler
-		logger        log.Logger
+		controller *gomock.Controller
+		logger     log.Logger
 	}
 )
 
@@ -54,7 +54,6 @@ func TestWorkflowAwareSchedulerSuite(t *testing.T) {
 func (s *workflowAwareSchedulerSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.controller = gomock.NewController(s.T())
-	s.baseScheduler = NewMockScheduler(s.controller)
 	s.logger = log.NewNoopLogger()
 }
 
@@ -62,31 +61,38 @@ func (s *workflowAwareSchedulerSuite) TearDownTest() {
 	s.controller.Finish()
 }
 
+func (s *workflowAwareSchedulerSuite) createMockBaseScheduler() *tasks.MockScheduler[Executable] {
+	return tasks.NewMockScheduler[Executable](s.controller)
+}
+
 // =============================================================================
 // Constructor Tests
 // =============================================================================
 
 func (s *workflowAwareSchedulerSuite) TestNewWorkflowAwareScheduler_DefaultQueueSize() {
+	mockBaseScheduler := s.createMockBaseScheduler()
 	scheduler := NewWorkflowAwareScheduler(
-		s.baseScheduler,
+		mockBaseScheduler,
 		WorkflowAwareSchedulerOptions{
-			EnableSequentialScheduler:      nil,
-			SequentialSchedulerQueueSize:   nil, // nil should use default
-			SequentialSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 1, func() {} },
+			EnableWorkflowQueueScheduler:      nil,
+			WorkflowQueueSchedulerQueueSize:   nil, // nil should use default
+			WorkflowQueueSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 1, func() {} },
 		},
 		s.logger,
 	)
 	s.NotNil(scheduler)
-	s.NotNil(scheduler.sequentialScheduler)
+	s.NotNil(scheduler.workflowQueueScheduler)
+	s.NotNil(scheduler.baseScheduler)
 }
 
 func (s *workflowAwareSchedulerSuite) TestNewWorkflowAwareScheduler_CustomQueueSize() {
+	mockBaseScheduler := s.createMockBaseScheduler()
 	scheduler := NewWorkflowAwareScheduler(
-		s.baseScheduler,
+		mockBaseScheduler,
 		WorkflowAwareSchedulerOptions{
-			EnableSequentialScheduler:      func() bool { return true },
-			SequentialSchedulerQueueSize:   func() int { return 500 },
-			SequentialSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 2, func() {} },
+			EnableWorkflowQueueScheduler:      func() bool { return true },
+			WorkflowQueueSchedulerQueueSize:   func() int { return 500 },
+			WorkflowQueueSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 2, func() {} },
 		},
 		s.logger,
 	)
@@ -98,15 +104,15 @@ func (s *workflowAwareSchedulerSuite) TestNewWorkflowAwareScheduler_CustomQueueS
 // =============================================================================
 
 func (s *workflowAwareSchedulerSuite) TestStart_WithSequentialSchedulerEnabled() {
-	s.baseScheduler.EXPECT().Start().Times(1)
-	s.baseScheduler.EXPECT().Stop().Times(1)
-
+	mockBaseScheduler := s.createMockBaseScheduler()
+	mockBaseScheduler.EXPECT().Start().Times(1)
+	mockBaseScheduler.EXPECT().Stop().Times(1)
 	scheduler := NewWorkflowAwareScheduler(
-		s.baseScheduler,
+		mockBaseScheduler,
 		WorkflowAwareSchedulerOptions{
-			EnableSequentialScheduler:      func() bool { return true },
-			SequentialSchedulerQueueSize:   func() int { return 100 },
-			SequentialSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 1, func() {} },
+			EnableWorkflowQueueScheduler:      func() bool { return true },
+			WorkflowQueueSchedulerQueueSize:   func() int { return 100 },
+			WorkflowQueueSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 1, func() {} },
 		},
 		s.logger,
 	)
@@ -115,17 +121,17 @@ func (s *workflowAwareSchedulerSuite) TestStart_WithSequentialSchedulerEnabled()
 }
 
 func (s *workflowAwareSchedulerSuite) TestStart_AlwaysStartsSequentialScheduler() {
-	// Even when EnableSequentialScheduler returns false, the sequential scheduler
+	// Even when EnableWorkflowQueueScheduler returns false, the WorkflowQueueScheduler
 	// is always started to handle dynamic config changes from disabled to enabled.
-	s.baseScheduler.EXPECT().Start().Times(1)
-	s.baseScheduler.EXPECT().Stop().Times(1)
-
+	mockBaseScheduler := s.createMockBaseScheduler()
+	mockBaseScheduler.EXPECT().Start().Times(1)
+	mockBaseScheduler.EXPECT().Stop().Times(1)
 	scheduler := NewWorkflowAwareScheduler(
-		s.baseScheduler,
+		mockBaseScheduler,
 		WorkflowAwareSchedulerOptions{
-			EnableSequentialScheduler:      func() bool { return false },
-			SequentialSchedulerQueueSize:   func() int { return 100 },
-			SequentialSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 1, func() {} },
+			EnableWorkflowQueueScheduler:      func() bool { return false },
+			WorkflowQueueSchedulerQueueSize:   func() int { return 100 },
+			WorkflowQueueSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 1, func() {} },
 		},
 		s.logger,
 	)
@@ -134,15 +140,15 @@ func (s *workflowAwareSchedulerSuite) TestStart_AlwaysStartsSequentialScheduler(
 }
 
 func (s *workflowAwareSchedulerSuite) TestStop_StopsBothSchedulers() {
-	s.baseScheduler.EXPECT().Start().Times(1)
-	s.baseScheduler.EXPECT().Stop().Times(1)
-
+	mockBaseScheduler := s.createMockBaseScheduler()
+	mockBaseScheduler.EXPECT().Start().Times(1)
+	mockBaseScheduler.EXPECT().Stop().Times(1)
 	scheduler := NewWorkflowAwareScheduler(
-		s.baseScheduler,
+		mockBaseScheduler,
 		WorkflowAwareSchedulerOptions{
-			EnableSequentialScheduler:      func() bool { return true },
-			SequentialSchedulerQueueSize:   func() int { return 100 },
-			SequentialSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 1, func() {} },
+			EnableWorkflowQueueScheduler:      func() bool { return true },
+			WorkflowQueueSchedulerQueueSize:   func() int { return 100 },
+			WorkflowQueueSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 1, func() {} },
 		},
 		s.logger,
 	)
@@ -154,57 +160,63 @@ func (s *workflowAwareSchedulerSuite) TestStop_StopsBothSchedulers() {
 // Submit Tests
 // =============================================================================
 
-func (s *workflowAwareSchedulerSuite) TestSubmit_RoutesToBaseWhenSequentialDisabled() {
-	mockExec := NewMockExecutable(s.controller)
-	s.baseScheduler.EXPECT().Submit(mockExec).Times(1)
+func (s *workflowAwareSchedulerSuite) TestSubmit_DelegatesToBaseWhenSequentialDisabled() {
+	mockBaseScheduler := s.createMockBaseScheduler()
+	mockExec := s.createMockExecutable("ns1", "wf1", "run1")
+
+	mockBaseScheduler.EXPECT().Start().Times(1)
+	mockBaseScheduler.EXPECT().Stop().Times(1)
+	mockBaseScheduler.EXPECT().Submit(mockExec).Times(1)
 
 	scheduler := NewWorkflowAwareScheduler(
-		s.baseScheduler,
+		mockBaseScheduler,
 		WorkflowAwareSchedulerOptions{
-			EnableSequentialScheduler:      func() bool { return false },
-			SequentialSchedulerQueueSize:   func() int { return 100 },
-			SequentialSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 1, func() {} },
-		},
-		s.logger,
-	)
-	scheduler.Submit(mockExec)
-}
-
-func (s *workflowAwareSchedulerSuite) TestSubmit_RoutesToBaseWhenNoActiveQueue() {
-	mockExec := NewMockExecutable(s.controller)
-	mockExec.EXPECT().GetNamespaceID().Return("ns1").AnyTimes()
-	mockExec.EXPECT().GetWorkflowID().Return("wf1").AnyTimes()
-	mockExec.EXPECT().GetRunID().Return("run1").AnyTimes()
-	s.baseScheduler.EXPECT().Submit(mockExec).Times(1)
-	s.baseScheduler.EXPECT().Start().Times(1)
-	s.baseScheduler.EXPECT().Stop().Times(1)
-
-	scheduler := NewWorkflowAwareScheduler(
-		s.baseScheduler,
-		WorkflowAwareSchedulerOptions{
-			EnableSequentialScheduler:      func() bool { return true },
-			SequentialSchedulerQueueSize:   func() int { return 100 },
-			SequentialSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 1, func() {} },
+			EnableWorkflowQueueScheduler:      func() bool { return false },
+			WorkflowQueueSchedulerQueueSize:   func() int { return 100 },
+			WorkflowQueueSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 1, func() {} },
 		},
 		s.logger,
 	)
 	scheduler.Start()
 	defer scheduler.Stop()
 
-	// No active queue, should route to base
+	scheduler.Submit(mockExec)
+}
+
+func (s *workflowAwareSchedulerSuite) TestSubmit_RoutesToBaseWhenNoActiveQueue() {
+	mockBaseScheduler := s.createMockBaseScheduler()
+	mockExec := s.createMockExecutable("ns1", "wf1", "run1")
+
+	mockBaseScheduler.EXPECT().Start().Times(1)
+	mockBaseScheduler.EXPECT().Stop().Times(1)
+	mockBaseScheduler.EXPECT().Submit(mockExec).Times(1)
+
+	scheduler := NewWorkflowAwareScheduler(
+		mockBaseScheduler,
+		WorkflowAwareSchedulerOptions{
+			EnableWorkflowQueueScheduler:      func() bool { return true },
+			WorkflowQueueSchedulerQueueSize:   func() int { return 100 },
+			WorkflowQueueSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 1, func() {} },
+		},
+		s.logger,
+	)
+	scheduler.Start()
+	defer scheduler.Stop()
+
 	scheduler.Submit(mockExec)
 }
 
 func (s *workflowAwareSchedulerSuite) TestSubmit_RoutesToSequentialWhenActiveQueue() {
-	s.baseScheduler.EXPECT().Start().Times(1)
-	s.baseScheduler.EXPECT().Stop().Times(1)
+	mockBaseScheduler := s.createMockBaseScheduler()
+	mockBaseScheduler.EXPECT().Start().Times(1)
+	mockBaseScheduler.EXPECT().Stop().Times(1)
 
 	scheduler := NewWorkflowAwareScheduler(
-		s.baseScheduler,
+		mockBaseScheduler,
 		WorkflowAwareSchedulerOptions{
-			EnableSequentialScheduler:      func() bool { return true },
-			SequentialSchedulerQueueSize:   func() int { return 100 },
-			SequentialSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 1, func() {} },
+			EnableWorkflowQueueScheduler:      func() bool { return true },
+			WorkflowQueueSchedulerQueueSize:   func() int { return 100 },
+			WorkflowQueueSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 1, func() {} },
 		},
 		s.logger,
 	)
@@ -225,7 +237,7 @@ func (s *workflowAwareSchedulerSuite) TestSubmit_RoutesToSequentialWhenActiveQue
 	}).Times(1)
 	mockExec1.EXPECT().Ack().Times(1)
 
-	// First, route to sequential scheduler via HandleBusyWorkflow
+	// First, route to WorkflowQueueScheduler via HandleBusyWorkflow
 	s.True(scheduler.HandleBusyWorkflow(mockExec1))
 
 	// Wait for execution to start
@@ -262,37 +274,43 @@ func (s *workflowAwareSchedulerSuite) TestSubmit_RoutesToSequentialWhenActiveQue
 // TrySubmit Tests
 // =============================================================================
 
-func (s *workflowAwareSchedulerSuite) TestTrySubmit_RoutesToBaseWhenSequentialDisabled() {
-	mockExec := NewMockExecutable(s.controller)
-	s.baseScheduler.EXPECT().TrySubmit(mockExec).Return(true).Times(1)
+func (s *workflowAwareSchedulerSuite) TestTrySubmit_DelegatesToBaseWhenSequentialDisabled() {
+	mockBaseScheduler := s.createMockBaseScheduler()
+	mockExec := s.createMockExecutable("ns1", "wf1", "run1")
+
+	mockBaseScheduler.EXPECT().Start().Times(1)
+	mockBaseScheduler.EXPECT().Stop().Times(1)
+	mockBaseScheduler.EXPECT().TrySubmit(mockExec).Return(true).Times(1)
 
 	scheduler := NewWorkflowAwareScheduler(
-		s.baseScheduler,
+		mockBaseScheduler,
 		WorkflowAwareSchedulerOptions{
-			EnableSequentialScheduler:      func() bool { return false },
-			SequentialSchedulerQueueSize:   func() int { return 100 },
-			SequentialSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 1, func() {} },
+			EnableWorkflowQueueScheduler:      func() bool { return false },
+			WorkflowQueueSchedulerQueueSize:   func() int { return 100 },
+			WorkflowQueueSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 1, func() {} },
 		},
 		s.logger,
 	)
+	scheduler.Start()
+	defer scheduler.Stop()
+
 	s.True(scheduler.TrySubmit(mockExec))
 }
 
 func (s *workflowAwareSchedulerSuite) TestTrySubmit_RoutesToBaseWhenNoActiveQueue() {
-	mockExec := NewMockExecutable(s.controller)
-	mockExec.EXPECT().GetNamespaceID().Return("ns1").AnyTimes()
-	mockExec.EXPECT().GetWorkflowID().Return("wf1").AnyTimes()
-	mockExec.EXPECT().GetRunID().Return("run1").AnyTimes()
-	s.baseScheduler.EXPECT().TrySubmit(mockExec).Return(true).Times(1)
-	s.baseScheduler.EXPECT().Start().Times(1)
-	s.baseScheduler.EXPECT().Stop().Times(1)
+	mockBaseScheduler := s.createMockBaseScheduler()
+	mockExec := s.createMockExecutable("ns1", "wf1", "run1")
+
+	mockBaseScheduler.EXPECT().Start().Times(1)
+	mockBaseScheduler.EXPECT().Stop().Times(1)
+	mockBaseScheduler.EXPECT().TrySubmit(mockExec).Return(true).Times(1)
 
 	scheduler := NewWorkflowAwareScheduler(
-		s.baseScheduler,
+		mockBaseScheduler,
 		WorkflowAwareSchedulerOptions{
-			EnableSequentialScheduler:      func() bool { return true },
-			SequentialSchedulerQueueSize:   func() int { return 100 },
-			SequentialSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 1, func() {} },
+			EnableWorkflowQueueScheduler:      func() bool { return true },
+			WorkflowQueueSchedulerQueueSize:   func() int { return 100 },
+			WorkflowQueueSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 1, func() {} },
 		},
 		s.logger,
 	)
@@ -305,15 +323,16 @@ func (s *workflowAwareSchedulerSuite) TestTrySubmit_RoutesToBaseWhenNoActiveQueu
 func (s *workflowAwareSchedulerSuite) TestTrySubmit_AddsToExistingQueueSuccessfully() {
 	// When TrySubmit is called for a workflow with an active queue,
 	// it should route to sequential and add to the existing queue (returning true)
-	s.baseScheduler.EXPECT().Start().Times(1)
-	s.baseScheduler.EXPECT().Stop().Times(1)
+	mockBaseScheduler := s.createMockBaseScheduler()
+	mockBaseScheduler.EXPECT().Start().Times(1)
+	mockBaseScheduler.EXPECT().Stop().Times(1)
 
 	scheduler := NewWorkflowAwareScheduler(
-		s.baseScheduler,
+		mockBaseScheduler,
 		WorkflowAwareSchedulerOptions{
-			EnableSequentialScheduler:      func() bool { return true },
-			SequentialSchedulerQueueSize:   func() int { return 100 },
-			SequentialSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 1, func() {} },
+			EnableWorkflowQueueScheduler:      func() bool { return true },
+			WorkflowQueueSchedulerQueueSize:   func() int { return 100 },
+			WorkflowQueueSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 1, func() {} },
 		},
 		s.logger,
 	)
@@ -358,37 +377,19 @@ func (s *workflowAwareSchedulerSuite) TestTrySubmit_AddsToExistingQueueSuccessfu
 }
 
 // =============================================================================
-// TaskChannelKeyFn Tests
-// =============================================================================
-
-func (s *workflowAwareSchedulerSuite) TestTaskChannelKeyFn_DelegatesToBase() {
-	expectedFn := func(e Executable) TaskChannelKey {
-		return TaskChannelKey{NamespaceID: "test"}
-	}
-	s.baseScheduler.EXPECT().TaskChannelKeyFn().Return(expectedFn).Times(1)
-
-	scheduler := NewWorkflowAwareScheduler(
-		s.baseScheduler,
-		WorkflowAwareSchedulerOptions{},
-		s.logger,
-	)
-	fn := scheduler.TaskChannelKeyFn()
-	s.NotNil(fn)
-}
-
-// =============================================================================
 // HandleBusyWorkflow Tests
 // =============================================================================
 
 func (s *workflowAwareSchedulerSuite) TestHandleBusyWorkflow_ReturnsFalseWhenDisabled() {
+	mockBaseScheduler := s.createMockBaseScheduler()
 	mockExec := NewMockExecutable(s.controller)
 
 	scheduler := NewWorkflowAwareScheduler(
-		s.baseScheduler,
+		mockBaseScheduler,
 		WorkflowAwareSchedulerOptions{
-			EnableSequentialScheduler:      func() bool { return false },
-			SequentialSchedulerQueueSize:   func() int { return 100 },
-			SequentialSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 1, func() {} },
+			EnableWorkflowQueueScheduler:      func() bool { return false },
+			WorkflowQueueSchedulerQueueSize:   func() int { return 100 },
+			WorkflowQueueSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 1, func() {} },
 		},
 		s.logger,
 	)
@@ -396,15 +397,16 @@ func (s *workflowAwareSchedulerSuite) TestHandleBusyWorkflow_ReturnsFalseWhenDis
 }
 
 func (s *workflowAwareSchedulerSuite) TestHandleBusyWorkflow_SubmitsToSequential() {
-	s.baseScheduler.EXPECT().Start().Times(1)
-	s.baseScheduler.EXPECT().Stop().Times(1)
+	mockBaseScheduler := s.createMockBaseScheduler()
+	mockBaseScheduler.EXPECT().Start().Times(1)
+	mockBaseScheduler.EXPECT().Stop().Times(1)
 
 	scheduler := NewWorkflowAwareScheduler(
-		s.baseScheduler,
+		mockBaseScheduler,
 		WorkflowAwareSchedulerOptions{
-			EnableSequentialScheduler:      func() bool { return true },
-			SequentialSchedulerQueueSize:   func() int { return 100 },
-			SequentialSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 1, func() {} },
+			EnableWorkflowQueueScheduler:      func() bool { return true },
+			WorkflowQueueSchedulerQueueSize:   func() int { return 100 },
+			WorkflowQueueSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 1, func() {} },
 		},
 		s.logger,
 	)
@@ -421,16 +423,17 @@ func (s *workflowAwareSchedulerSuite) TestHandleBusyWorkflow_SubmitsToSequential
 }
 
 func (s *workflowAwareSchedulerSuite) TestHandleBusyWorkflow_ReschedulesWhenFull() {
-	s.baseScheduler.EXPECT().Start().Times(1)
-	s.baseScheduler.EXPECT().Stop().Times(1)
+	mockBaseScheduler := s.createMockBaseScheduler()
+	mockBaseScheduler.EXPECT().Start().Times(1)
+	mockBaseScheduler.EXPECT().Stop().Times(1)
 
 	// Use very small queue size
 	scheduler := NewWorkflowAwareScheduler(
-		s.baseScheduler,
+		mockBaseScheduler,
 		WorkflowAwareSchedulerOptions{
-			EnableSequentialScheduler:      func() bool { return true },
-			SequentialSchedulerQueueSize:   func() int { return 1 },
-			SequentialSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 0, func() {} }, // 0 workers
+			EnableWorkflowQueueScheduler:      func() bool { return true },
+			WorkflowQueueSchedulerQueueSize:   func() int { return 1 },
+			WorkflowQueueSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 0, func() {} }, // 0 workers
 		},
 		s.logger,
 	)
@@ -454,14 +457,15 @@ func (s *workflowAwareSchedulerSuite) TestHandleBusyWorkflow_ReschedulesWhenFull
 // =============================================================================
 
 func (s *workflowAwareSchedulerSuite) TestHasWorkflowQueue_ReturnsFalseWhenDisabled() {
+	mockBaseScheduler := s.createMockBaseScheduler()
 	mockExec := NewMockExecutable(s.controller)
 
 	scheduler := NewWorkflowAwareScheduler(
-		s.baseScheduler,
+		mockBaseScheduler,
 		WorkflowAwareSchedulerOptions{
-			EnableSequentialScheduler:      func() bool { return false },
-			SequentialSchedulerQueueSize:   func() int { return 100 },
-			SequentialSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 1, func() {} },
+			EnableWorkflowQueueScheduler:      func() bool { return false },
+			WorkflowQueueSchedulerQueueSize:   func() int { return 100 },
+			WorkflowQueueSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 1, func() {} },
 		},
 		s.logger,
 	)
@@ -469,15 +473,16 @@ func (s *workflowAwareSchedulerSuite) TestHasWorkflowQueue_ReturnsFalseWhenDisab
 }
 
 func (s *workflowAwareSchedulerSuite) TestHasWorkflowQueue_ReturnsFalseWhenNoQueue() {
-	s.baseScheduler.EXPECT().Start().Times(1)
-	s.baseScheduler.EXPECT().Stop().Times(1)
+	mockBaseScheduler := s.createMockBaseScheduler()
+	mockBaseScheduler.EXPECT().Start().Times(1)
+	mockBaseScheduler.EXPECT().Stop().Times(1)
 
 	scheduler := NewWorkflowAwareScheduler(
-		s.baseScheduler,
+		mockBaseScheduler,
 		WorkflowAwareSchedulerOptions{
-			EnableSequentialScheduler:      func() bool { return true },
-			SequentialSchedulerQueueSize:   func() int { return 100 },
-			SequentialSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 1, func() {} },
+			EnableWorkflowQueueScheduler:      func() bool { return true },
+			WorkflowQueueSchedulerQueueSize:   func() int { return 100 },
+			WorkflowQueueSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 1, func() {} },
 		},
 		s.logger,
 	)
@@ -489,15 +494,16 @@ func (s *workflowAwareSchedulerSuite) TestHasWorkflowQueue_ReturnsFalseWhenNoQue
 }
 
 func (s *workflowAwareSchedulerSuite) TestHasWorkflowQueue_ReturnsTrueWhenQueueExists() {
-	s.baseScheduler.EXPECT().Start().Times(1)
-	s.baseScheduler.EXPECT().Stop().Times(1)
+	mockBaseScheduler := s.createMockBaseScheduler()
+	mockBaseScheduler.EXPECT().Start().Times(1)
+	mockBaseScheduler.EXPECT().Stop().Times(1)
 
 	scheduler := NewWorkflowAwareScheduler(
-		s.baseScheduler,
+		mockBaseScheduler,
 		WorkflowAwareSchedulerOptions{
-			EnableSequentialScheduler:      func() bool { return true },
-			SequentialSchedulerQueueSize:   func() int { return 100 },
-			SequentialSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 1, func() {} },
+			EnableWorkflowQueueScheduler:      func() bool { return true },
+			WorkflowQueueSchedulerQueueSize:   func() int { return 100 },
+			WorkflowQueueSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 1, func() {} },
 		},
 		s.logger,
 	)
@@ -556,27 +562,11 @@ func (s *workflowAwareSchedulerSuite) TestGetWorkflowKey() {
 	s.Equal("run1", key.RunID)
 }
 
-func (s *workflowAwareSchedulerSuite) TestWorkflowKeyHashFn() {
-	key1 := definition.NewWorkflowKey("ns1", "wf1", "run1")
-	key2 := definition.NewWorkflowKey("ns1", "wf1", "run1")
-	key3 := definition.NewWorkflowKey("ns2", "wf2", "run2")
-
-	// Same keys should produce same hash
-	s.Equal(workflowKeyHashFn(key1), workflowKeyHashFn(key2))
-
-	// Different keys should produce different hash (with high probability)
-	s.NotEqual(workflowKeyHashFn(key1), workflowKeyHashFn(key3))
-
-	// Invalid key type should return 0
-	s.Equal(uint32(0), workflowKeyHashFn("invalid"))
-}
-
-func (s *workflowAwareSchedulerSuite) TestWorkflowTaskQueueFactory() {
+func (s *workflowAwareSchedulerSuite) TestExecutableQueueKeyFn() {
 	mockExec := s.createMockExecutable("ns1", "wf1", "run1")
 
-	queue := workflowTaskQueueFactory(mockExec)
-	s.NotNil(queue)
-	s.Equal(definition.NewWorkflowKey("ns1", "wf1", "run1"), queue.ID())
+	key := executableQueueKeyFn(mockExec)
+	s.Equal(definition.NewWorkflowKey("ns1", "wf1", "run1"), key)
 }
 
 // =============================================================================
@@ -584,16 +574,18 @@ func (s *workflowAwareSchedulerSuite) TestWorkflowTaskQueueFactory() {
 // =============================================================================
 
 func (s *workflowAwareSchedulerSuite) TestConcurrentSubmit() {
-	s.baseScheduler.EXPECT().Start().Times(1)
-	s.baseScheduler.EXPECT().Stop().Times(1)
-	s.baseScheduler.EXPECT().Submit(gomock.Any()).AnyTimes()
+	mockBaseScheduler := s.createMockBaseScheduler()
+	mockBaseScheduler.EXPECT().Start().Times(1)
+	mockBaseScheduler.EXPECT().Stop().Times(1)
+	// All tasks should be routed to base scheduler (no active queue)
+	mockBaseScheduler.EXPECT().Submit(gomock.Any()).AnyTimes()
 
 	scheduler := NewWorkflowAwareScheduler(
-		s.baseScheduler,
+		mockBaseScheduler,
 		WorkflowAwareSchedulerOptions{
-			EnableSequentialScheduler:      func() bool { return true },
-			SequentialSchedulerQueueSize:   func() int { return 1000 },
-			SequentialSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 4, func() {} },
+			EnableWorkflowQueueScheduler:      func() bool { return true },
+			WorkflowQueueSchedulerQueueSize:   func() int { return 1000 },
+			WorkflowQueueSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 4, func() {} },
 		},
 		s.logger,
 	)
@@ -616,18 +608,20 @@ func (s *workflowAwareSchedulerSuite) TestConcurrentSubmit() {
 	}
 
 	wg.Wait()
+	time.Sleep(200 * time.Millisecond) // Give time for tasks to complete
 }
 
 func (s *workflowAwareSchedulerSuite) TestConcurrentHandleBusyWorkflow() {
-	s.baseScheduler.EXPECT().Start().Times(1)
-	s.baseScheduler.EXPECT().Stop().Times(1)
+	mockBaseScheduler := s.createMockBaseScheduler()
+	mockBaseScheduler.EXPECT().Start().Times(1)
+	mockBaseScheduler.EXPECT().Stop().Times(1)
 
 	scheduler := NewWorkflowAwareScheduler(
-		s.baseScheduler,
+		mockBaseScheduler,
 		WorkflowAwareSchedulerOptions{
-			EnableSequentialScheduler:      func() bool { return true },
-			SequentialSchedulerQueueSize:   func() int { return 1000 },
-			SequentialSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 4, func() {} },
+			EnableWorkflowQueueScheduler:      func() bool { return true },
+			WorkflowQueueSchedulerQueueSize:   func() int { return 1000 },
+			WorkflowQueueSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 4, func() {} },
 		},
 		s.logger,
 	)
@@ -659,19 +653,25 @@ func (s *workflowAwareSchedulerSuite) TestConcurrentHandleBusyWorkflow() {
 // =============================================================================
 
 func (s *workflowAwareSchedulerSuite) TestNilEnableOption() {
-	s.baseScheduler.EXPECT().Submit(gomock.Any()).Times(1)
+	mockBaseScheduler := s.createMockBaseScheduler()
+	mockExec := s.createMockExecutable("ns1", "wf1", "run1")
+
+	mockBaseScheduler.EXPECT().Start().Times(1)
+	mockBaseScheduler.EXPECT().Stop().Times(1)
+	mockBaseScheduler.EXPECT().Submit(mockExec).Times(1)
 
 	scheduler := NewWorkflowAwareScheduler(
-		s.baseScheduler,
+		mockBaseScheduler,
 		WorkflowAwareSchedulerOptions{
-			EnableSequentialScheduler:      nil, // nil option
-			SequentialSchedulerQueueSize:   func() int { return 100 },
-			SequentialSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 1, func() {} },
+			EnableWorkflowQueueScheduler:      nil, // nil option
+			WorkflowQueueSchedulerQueueSize:   func() int { return 100 },
+			WorkflowQueueSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 1, func() {} },
 		},
 		s.logger,
 	)
+	scheduler.Start()
+	defer scheduler.Stop()
 
-	mockExec := NewMockExecutable(s.controller)
 	scheduler.Submit(mockExec)
 }
 

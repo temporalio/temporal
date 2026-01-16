@@ -23,13 +23,13 @@
 package tasks
 
 import (
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
-	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -41,11 +41,13 @@ type (
 	// WorkflowQueueSchedulerOptions contains configuration for the WorkflowQueueScheduler.
 	WorkflowQueueSchedulerOptions struct {
 		// QueueSize is the buffer size for the dispatch channel.
-		// Should be large enough to handle normal load without blocking.
 		QueueSize int
 		// WorkerCount is the number of worker goroutines.
 		WorkerCount dynamicconfig.TypedSubscribable[int]
 	}
+
+	// QueueKeyFn extracts a workflow key from a task for queue routing.
+	QueueKeyFn[T Task] func(T) any
 
 	// WorkflowQueueScheduler is a scheduler that ensures sequential task execution
 	// per workflow. It creates queues only for workflows that are routed to it
@@ -55,45 +57,45 @@ type (
 	// - Tasks for the same workflow are executed sequentially
 	// - Each workflow queue is processed by at most one worker at a time
 	// - Queues are created on-demand and cleaned up when empty
-	// - TrySubmit is non-blocking for integration with other schedulers
-	// - Only dispatches to queueChan when a NEW queue is created (like SequentialScheduler)
+	// - Queue existence in the map indicates it's being processed
 	WorkflowQueueScheduler[T Task] struct {
 		status       int32
 		shutdownChan chan struct{}
 		shutdownWG   sync.WaitGroup
 
-		workerLock       sync.Mutex
-		workerShutdownCh []chan struct{}
+		options    *WorkflowQueueSchedulerOptions
+		queueKeyFn QueueKeyFn[T]
+		logger     log.Logger
 
+		// mu protects queues map and queue contents
+		mu     sync.RWMutex
+		queues map[any][]T
+
+		// dispatchChan carries workflow keys for workers to process
+		dispatchChan chan any
+
+		// Worker management
+		workerLock                      sync.Mutex
+		workerShutdownCh                []chan struct{}
 		workerCountSubscriptionCancelFn func()
-
-		options      *WorkflowQueueSchedulerOptions
-		queueFactory SequentialTaskQueueFactory[T]
-		logger       log.Logger
-
-		// queues maps workflow key -> task queue
-		queues collection.ConcurrentTxMap
-		// queueChan carries queue IDs for dispatch (only sent once per queue lifecycle)
-		queueChan chan interface{}
 	}
 )
 
 // NewWorkflowQueueScheduler creates a new WorkflowQueueScheduler.
 func NewWorkflowQueueScheduler[T Task](
 	options *WorkflowQueueSchedulerOptions,
-	taskQueueHashFn collection.HashFunc,
-	taskQueueFactory SequentialTaskQueueFactory[T],
+	queueKeyFn QueueKeyFn[T],
 	logger log.Logger,
 ) *WorkflowQueueScheduler[T] {
 	return &WorkflowQueueScheduler[T]{
 		status:       common.DaemonStatusInitialized,
 		shutdownChan: make(chan struct{}),
 		options:      options,
-		queueFactory: taskQueueFactory,
+		queueKeyFn:   queueKeyFn,
 		logger:       logger,
 
-		queues:    collection.NewShardedConcurrentTxMap(1024, taskQueueHashFn),
-		queueChan: make(chan interface{}, options.QueueSize),
+		queues:       make(map[any][]T),
+		dispatchChan: make(chan any, options.QueueSize),
 	}
 }
 
@@ -125,7 +127,6 @@ func (s *WorkflowQueueScheduler[T]) Stop() {
 	close(s.shutdownChan)
 	s.workerCountSubscriptionCancelFn()
 	s.updateWorkerCount(0)
-	// must be called after the close of the shutdownChan
 	s.drainTasks()
 
 	go func() {
@@ -138,122 +139,62 @@ func (s *WorkflowQueueScheduler[T]) Stop() {
 
 // HasQueue returns true if a queue exists for the given workflow key.
 // This is used by other schedulers to check if they should route tasks here.
-func (s *WorkflowQueueScheduler[T]) HasQueue(key interface{}) bool {
-	return s.queues.Contains(key)
+func (s *WorkflowQueueScheduler[T]) HasQueue(key any) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	_, exists := s.queues[key]
+	return exists
 }
 
-// Submit adds a task to its workflow's queue and dispatches for processing.
-// This is a blocking call if the dispatch channel is full.
-// Only dispatches to queueChan when a NEW queue is created.
+// Submit adds a task to its workflow's queue. This is a blocking call
+// that retries until the task is successfully submitted.
 func (s *WorkflowQueueScheduler[T]) Submit(task T) {
-	queueID, isNewQueue := s.addTaskToQueue(task)
-
-	// Only dispatch if this is a new queue (queue was just created)
-	// If queue already existed, it's already been dispatched and a worker is processing it
-	if !isNewQueue {
+	for !s.TrySubmit(task) {
 		if s.isStopped() {
-			s.drainTasks()
+			task.Abort()
+			return
 		}
-		return
-	}
-
-	// Need to dispatch this new queue
-	select {
-	case <-s.shutdownChan:
-		// Task is already in the queue - drainTasks will abort it.
-		// Don't call task.Abort() here to avoid double abort.
-		s.drainTasks()
-	case s.queueChan <- queueID:
-		if s.isStopped() {
-			s.drainTasks()
-		}
+		runtime.Gosched() // Yield to let workers make progress
 	}
 }
 
 // TrySubmit adds a task to its workflow's queue and attempts non-blocking dispatch.
-// Returns true if the task was added successfully, false if the channel is full
+// Returns true if the task was added successfully, false if the dispatch channel is full
 // when trying to dispatch a new queue.
-// This is used for integration with other schedulers that may want to fall back
-// to rescheduling if this scheduler is overloaded.
 func (s *WorkflowQueueScheduler[T]) TrySubmit(task T) bool {
-	queueID, isNewQueue := s.addTaskToQueue(task)
-
-	// If queue already existed, task was added to it - success
-	// The queue is already dispatched and being processed
-	if !isNewQueue {
-		if s.isStopped() {
-			s.drainTasks()
-		}
+	// Fast path: check if stopped before acquiring lock
+	if s.isStopped() {
+		task.Abort()
 		return true
 	}
 
-	// New queue - need to dispatch it
+	key := s.queueKeyFn(task)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Double-check stopped state while holding lock to prevent race with drainTasks.
+	// This ensures that if drainTasks has completed, we don't add tasks that will never be processed.
+	if s.isStopped() {
+		task.Abort()
+		return true
+	}
+
+	// If queue exists, a worker is processing it - just add task
+	if tasks, exists := s.queues[key]; exists {
+		s.queues[key] = append(tasks, task)
+		return true
+	}
+
+	// New queue - try to dispatch first, then create
 	select {
-	case s.queueChan <- queueID:
-		if s.isStopped() {
-			s.drainTasks()
-		}
+	case s.dispatchChan <- key:
+		s.queues[key] = []T{task}
 		return true
 	default:
-		// Channel is full. Check if we can safely remove our queue.
-		// Only remove if the queue contains just our task (Len <= 1).
-		// If other tasks were added concurrently, we must dispatch the queue.
-		deleted := s.queues.RemoveIf(queueID, func(k, v interface{}) bool {
-			return v.(SequentialTaskQueue[T]).Len() <= 1
-		})
-		if deleted {
-			// Only our task was in the queue, removed successfully.
-			// Return false so the caller can handle the task (e.g., reschedule).
-			return false
-		}
-		// Other tasks were added concurrently - we must dispatch to process them.
-		// Fall back to blocking dispatch. This only happens in the rare case
-		// where: (1) channel is full, AND (2) another task was added
-		// concurrently. In this edge case, blocking is acceptable to ensure
-		// no tasks are orphaned.
-		select {
-		case <-s.shutdownChan:
-			// Scheduler is stopping - drainTasks will abort all tasks including ours.
-			// Return true since task is being handled (aborted is valid handling during shutdown).
-			s.drainTasks()
-			return true
-		case s.queueChan <- queueID:
-			if s.isStopped() {
-				s.drainTasks()
-			}
-			return true
-		}
+		// Channel full - don't create queue, return false
+		return false
 	}
-}
-
-// addTaskToQueue adds a task to its workflow's queue.
-// Returns the queue ID and whether the queue was newly created.
-//
-// Implementation note: We pre-add the task to the new queue before calling PutOrDo.
-// This ensures atomicity - if we added after PutOrDo, a worker could pop from
-// the empty queue and remove it before we add the task.
-//
-// When the key already exists, the pre-added queue is discarded (a minor allocation
-// cost) and the task is added to the existing queue via the callback. This tradeoff
-// is acceptable to maintain the atomic guarantee.
-func (s *WorkflowQueueScheduler[T]) addTaskToQueue(task T) (interface{}, bool) {
-	queue := s.queueFactory(task)
-	queue.Add(task) // Pre-add for atomicity (see comment above)
-
-	_, existed, err := s.queues.PutOrDo(
-		queue.ID(),
-		queue,
-		func(key interface{}, value interface{}) error {
-			// Key exists: add task to existing queue (pre-added queue will be discarded)
-			value.(SequentialTaskQueue[T]).Add(task)
-			return nil
-		},
-	)
-	if err != nil {
-		panic("Error is not expected as the evaluation function returns nil")
-	}
-
-	return queue.ID(), !existed
 }
 
 func (s *WorkflowQueueScheduler[T]) updateWorkerCount(targetWorkerNum int) {
@@ -285,7 +226,7 @@ func (s *WorkflowQueueScheduler[T]) updateWorkerCount(targetWorkerNum int) {
 }
 
 func (s *WorkflowQueueScheduler[T]) startWorkers(count int) {
-	for i := 0; i < count; i++ {
+	for range count {
 		shutdownCh := make(chan struct{})
 		s.workerShutdownCh = append(s.workerShutdownCh, shutdownCh)
 
@@ -309,70 +250,49 @@ func (s *WorkflowQueueScheduler[T]) worker(workerShutdownCh <-chan struct{}) {
 	for {
 		select {
 		case <-s.shutdownChan:
-			s.drainTasks()
 			return
 		case <-workerShutdownCh:
 			return
-		case queueID := <-s.queueChan:
-			s.processQueue(queueID, workerShutdownCh)
+		case key := <-s.dispatchChan:
+			s.processQueue(key)
 		}
 	}
 }
 
 // processQueue processes all tasks in the queue for the given workflow.
-// The worker owns the queue until it's empty or the worker shuts down.
-func (s *WorkflowQueueScheduler[T]) processQueue(queueID interface{}, workerShutdownCh <-chan struct{}) {
-	// Process all tasks in the queue
+// The worker owns the queue until it's empty.
+func (s *WorkflowQueueScheduler[T]) processQueue(key any) {
 	for {
-		select {
-		case <-s.shutdownChan:
-			s.drainTasks()
+		if s.isStopped() {
 			return
-		case <-workerShutdownCh:
-			// Worker is shutting down (scale-down), re-dispatch the queue
-			// so another worker can pick it up.
-			// Check if scheduler is already stopped first.
-			if s.isStopped() {
-				s.drainTasks()
-				return
-			}
-			// Use select with shutdownChan to avoid deadlock if scheduler stops
-			// while we're waiting for channel space.
-			select {
-			case <-s.shutdownChan:
-				// Scheduler is stopping - don't re-dispatch, drainTasks will handle it
-				s.drainTasks()
-			case s.queueChan <- queueID:
-				// Successfully re-dispatched to another worker
-			}
-			return
-		default:
-			task := s.popNextTask(queueID)
-			// Check for zero value since T is a generic type
-			var zero T
-			if any(task) == any(zero) {
-				// Queue is empty and removed, we're done
-				return
-			}
-			s.executeTask(task)
 		}
+
+		task, ok := s.popTask(key)
+		if !ok {
+			return
+		}
+
+		s.executeTask(task)
 	}
 }
 
-// popNextTask atomically removes and returns the next task from the queue.
-// If the queue becomes empty after removing the task, the queue is also removed from the map.
-// Returns the zero value of T if the queue doesn't exist or is empty.
-func (s *WorkflowQueueScheduler[T]) popNextTask(queueID interface{}) T {
-	var task T
-	s.queues.RemoveIf(queueID, func(key interface{}, value interface{}) bool {
-		queue := value.(SequentialTaskQueue[T])
-		if !queue.IsEmpty() {
-			task = queue.Remove()
-			return queue.IsEmpty() // Remove from map only if now empty
-		}
-		return true // Queue is empty, remove it
-	})
-	return task
+// popTask removes and returns the next task from the queue.
+// If the queue becomes empty, it's deleted from the map.
+// Returns false if there are no more tasks.
+func (s *WorkflowQueueScheduler[T]) popTask(key any) (T, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var zero T
+	tasks, exists := s.queues[key]
+	if !exists || len(tasks) == 0 {
+		delete(s.queues, key)
+		return zero, false
+	}
+
+	task := tasks[0]
+	s.queues[key] = tasks[1:]
+	return task, true
 }
 
 func (s *WorkflowQueueScheduler[T]) executeTask(task T) {
@@ -386,7 +306,7 @@ func (s *WorkflowQueueScheduler[T]) executeTask(task T) {
 		defer func() {
 			if executePanic != nil {
 				retErr = executePanic
-				shouldRetry = false // do not retry if panic
+				shouldRetry = false
 			}
 		}()
 		defer log.CapturePanic(s.logger, &executePanic)
@@ -419,74 +339,21 @@ func (s *WorkflowQueueScheduler[T]) drainTasks() {
 LoopDrainChannel:
 	for {
 		select {
-		case queueID := <-s.queueChan:
-			// Drain the queue with retry loop to handle concurrent additions
-		LoopDrainSingleQueue:
-			for {
-				queueVal, ok := s.queues.Get(queueID)
-				if !ok {
-					break LoopDrainSingleQueue
-				}
-				queue := queueVal.(SequentialTaskQueue[T])
-				for !queue.IsEmpty() {
-					task := queue.Remove()
-					// Check for zero value since T is a generic type
-					var zero T
-					if any(task) != any(zero) {
-						task.Abort()
-					}
-				}
-				// Try to remove queue only if still empty
-				deleted := s.queues.RemoveIf(queueID, func(key interface{}, value interface{}) bool {
-					return value.(SequentialTaskQueue[T]).IsEmpty()
-				})
-				if deleted {
-					break LoopDrainSingleQueue
-				}
-				// If not deleted, new tasks were added - continue draining
-			}
+		case <-s.dispatchChan:
 		default:
 			break LoopDrainChannel
 		}
 	}
 
-	// Drain any remaining queues not in the channel
-	// Use a loop to handle concurrent additions during iteration
-	for {
-		var remainingQueueIDs []interface{}
-		iter := s.queues.Iter()
-		for entry := range iter.Entries() {
-			remainingQueueIDs = append(remainingQueueIDs, entry.Key)
-		}
-		iter.Close()
+	// Drain all queues
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-		if len(remainingQueueIDs) == 0 {
-			break
+	for key, tasks := range s.queues {
+		for _, task := range tasks {
+			task.Abort()
 		}
-
-		for _, queueID := range remainingQueueIDs {
-			// Drain each queue with the same retry pattern
-			for {
-				queueVal, ok := s.queues.Get(queueID)
-				if !ok {
-					break
-				}
-				queue := queueVal.(SequentialTaskQueue[T])
-				for !queue.IsEmpty() {
-					task := queue.Remove()
-					var zero T
-					if any(task) != any(zero) {
-						task.Abort()
-					}
-				}
-				deleted := s.queues.RemoveIf(queueID, func(key interface{}, value interface{}) bool {
-					return value.(SequentialTaskQueue[T]).IsEmpty()
-				})
-				if deleted {
-					break
-				}
-			}
-		}
+		delete(s.queues, key)
 	}
 }
 

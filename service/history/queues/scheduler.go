@@ -51,6 +51,9 @@ type (
 		ActiveNamespaceWeights         dynamicconfig.MapPropertyFnWithNamespaceFilter
 		StandbyNamespaceWeights        dynamicconfig.MapPropertyFnWithNamespaceFilter
 		InactiveNamespaceDeletionDelay dynamicconfig.DurationPropertyFn
+
+		// WorkflowAwareSchedulerOptions contains options for sequential per-workflow scheduling
+		WorkflowAwareSchedulerOptions
 	}
 
 	RateLimitedSchedulerOptions struct {
@@ -66,6 +69,10 @@ type (
 		taskChannelKeyFn      TaskChannelKeyFn
 		channelWeightFn       ChannelWeightFn
 		channelWeightUpdateCh chan struct{}
+
+		// workflowAwareScheduler holds a reference to the workflow-aware scheduler
+		// for handling busy workflow errors
+		workflowAwareScheduler *WorkflowAwareScheduler
 	}
 
 	rateLimitedSchedulerImpl struct {
@@ -128,6 +135,19 @@ func NewScheduler(
 		WorkerCount: options.WorkerCount,
 	}
 
+	// Create the base FIFO scheduler
+	fifoScheduler := tasks.NewFIFOScheduler[Executable](
+		fifoSchedulerOptions,
+		logger,
+	)
+
+	// Wrap the FIFO scheduler with WorkflowAwareScheduler for sequential per-workflow processing
+	workflowAwareScheduler := NewWorkflowAwareScheduler(
+		fifoScheduler,
+		options.WorkflowAwareSchedulerOptions,
+		logger,
+	)
+
 	scheduler = tasks.NewInterleavedWeightedRoundRobinScheduler(
 		tasks.InterleavedWeightedRoundRobinSchedulerOptions[Executable, TaskChannelKey]{
 			TaskChannelKeyFn:             taskChannelKeyFn,
@@ -135,19 +155,17 @@ func NewScheduler(
 			ChannelWeightUpdateCh:        channelWeightUpdateCh,
 			InactiveChannelDeletionDelay: options.InactiveNamespaceDeletionDelay,
 		},
-		tasks.Scheduler[Executable](tasks.NewFIFOScheduler[Executable](
-			fifoSchedulerOptions,
-			logger,
-		)),
+		workflowAwareScheduler,
 		logger,
 	)
 
 	return &schedulerImpl{
-		Scheduler:             scheduler,
-		namespaceRegistry:     namespaceRegistry,
-		taskChannelKeyFn:      taskChannelKeyFn,
-		channelWeightFn:       channelWeightFn,
-		channelWeightUpdateCh: channelWeightUpdateCh,
+		Scheduler:              scheduler,
+		namespaceRegistry:      namespaceRegistry,
+		taskChannelKeyFn:       taskChannelKeyFn,
+		channelWeightFn:        channelWeightFn,
+		channelWeightUpdateCh:  channelWeightUpdateCh,
+		workflowAwareScheduler: workflowAwareScheduler,
 	}
 }
 
@@ -180,6 +198,16 @@ func (s *schedulerImpl) Stop() {
 
 func (s *schedulerImpl) TaskChannelKeyFn() TaskChannelKeyFn {
 	return s.taskChannelKeyFn
+}
+
+// HandleBusyWorkflow implements BusyWorkflowHandler by delegating to the
+// underlying WorkflowAwareScheduler. This is called when a task encounters
+// a busy workflow error and needs to be routed to the sequential scheduler.
+func (s *schedulerImpl) HandleBusyWorkflow(executable Executable) bool {
+	if s.workflowAwareScheduler == nil {
+		return false
+	}
+	return s.workflowAwareScheduler.HandleBusyWorkflow(executable)
 }
 
 // CommonSchedulerWrapper is an adapter that converts a common [task.Scheduler] to a [Scheduler] with an injectable
