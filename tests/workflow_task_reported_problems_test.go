@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	historypb "go.temporal.io/api/history/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
@@ -147,12 +148,29 @@ func (s *WFTFailureReportedProblemsTestSuite) TestWFTFailureReportedProblems_Not
 		require.Contains(t, saVal, "cause=WorkflowTaskFailedCauseWorkflowWorkerUnhandledFailure")
 	}, 20*time.Second, 500*time.Millisecond)
 
-	// Wait for a second failing task to see the repeated pattern:
-	// task started -> failed -> signal -> task started -> failed
+	// Validate the workflow history shows the repeating pattern:
+	// signal -> task scheduled -> task started -> task failed
+	// This demonstrates that signals are being buffered between workflow task failures.
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		execution, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
-		require.NoError(t, err)
-		require.GreaterOrEqual(t, execution.PendingWorkflowTask.Attempt, int32(2))
+		var events []*historypb.HistoryEvent
+		iter := s.SdkClient().GetWorkflowHistory(ctx, workflowRun.GetID(), workflowRun.GetRunID(), false, 0)
+		for iter.HasNext() {
+			event, err := iter.Next()
+			require.NoError(t, err)
+			events = append(events, event)
+		}
+
+		// Validate the expected pattern structure showing repeated cycles of task failures and signals
+		s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskFailed
+  5 WorkflowExecutionSignaled
+  6 WorkflowTaskScheduled
+  7 WorkflowTaskStarted
+  8 WorkflowTaskFailed
+  9 WorkflowExecutionSignaled`, events[:9])
 	}, 10*time.Second, 500*time.Millisecond)
 
 	// Verify the search attribute persists even as the workflow continues to fail and create buffered events
