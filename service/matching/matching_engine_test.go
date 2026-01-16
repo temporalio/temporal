@@ -2989,10 +2989,12 @@ func (s *matchingEngineSuite) TaskQueueMetricValidator(capture *metricstest.Capt
 
 func (s *matchingEngineSuite) PhysicalQueueMetricValidator(capture *metricstest.Capture, physicalTaskQueueLength int, physicalTaskQueueCounter float64) {
 	// checks the metrics according to the values passed in the parameters
-	snapshot := capture.Snapshot()
-	physicalTaskQueueRecordings := snapshot[metrics.LoadedPhysicalTaskQueueGauge.Name()]
-	s.Len(physicalTaskQueueRecordings, physicalTaskQueueLength)
-	s.Equal(physicalTaskQueueCounter, physicalTaskQueueRecordings[physicalTaskQueueLength-1].Value.(float64))
+	s.Eventually(func() bool {
+		snapshot := capture.Snapshot()
+		physicalTaskQueueRecordings := snapshot[metrics.LoadedPhysicalTaskQueueGauge.Name()]
+		return len(physicalTaskQueueRecordings) == physicalTaskQueueLength &&
+			physicalTaskQueueCounter == physicalTaskQueueRecordings[physicalTaskQueueLength-1].Value.(float64)
+	}, 5*time.Second, 100*time.Millisecond)
 }
 
 func (s *matchingEngineSuite) TestUpdateTaskQueuePartitionGauge_RootPartitionWorkflowType() {
