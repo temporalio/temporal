@@ -132,6 +132,11 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexusrpc.C
 		),
 		requestStartTime: startTime,
 	}
+	if r.HTTPRequest.Header != nil {
+		rCtx.originalHeaders = r.HTTPRequest.Header.Clone()
+	} else {
+		rCtx.originalHeaders = http.Header{}
+	}
 	ctx = rCtx.augmentContext(ctx, r.HTTPRequest.Header)
 	defer rCtx.capturePanicAndRecordMetrics(&ctx, &retErr)
 	if r.HTTPRequest.URL.Path != commonnexus.PathCompletionCallbackNoIdentifier {
@@ -278,6 +283,7 @@ func (h *completionHandler) forwardCompleteOperation(ctx context.Context, r *nex
 			h.Logger.Error("failed to construct forwarding HTTP request", tag.Operation(apiName), tag.WorkflowNamespace(rCtx.namespace.Name().String()), tag.Error(err))
 			return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
 		}
+		forwardReq.Header = rCtx.originalHeaders
 	case nexus.OperationStateFailed, nexus.OperationStateCanceled:
 		// For unsuccessful operations, the Nexus framework reads and closes the original request body to deserialize
 		// the failure, so we must construct a new completion to forward.
@@ -289,7 +295,7 @@ func (h *completionHandler) forwardCompleteOperation(ctx context.Context, r *nex
 			return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
 		}
 		c := &nexusrpc.OperationCompletionUnsuccessful{
-			Header:         httpHeaderToNexusHeader(r.HTTPRequest.Header),
+			Header:         httpHeaderToNexusHeader(rCtx.originalHeaders),
 			State:          r.State,
 			OperationToken: r.OperationToken,
 			StartTime:      r.StartTime,
@@ -305,9 +311,6 @@ func (h *completionHandler) forwardCompleteOperation(ctx context.Context, r *nex
 		return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid operation state: %q", r.State)
 	}
 
-	if r.HTTPRequest.Header != nil {
-		forwardReq.Header = r.HTTPRequest.Header.Clone()
-	}
 	forwardReq.Header.Set(interceptor.DCRedirectionApiHeaderName, "true")
 
 	resp, err := client.Do(forwardReq)
@@ -396,6 +399,7 @@ type requestContext struct {
 	requestStartTime              time.Time
 	outcomeTag                    metrics.Tag
 	forwarded                     bool
+	originalHeaders               http.Header
 }
 
 func (c *requestContext) augmentContext(ctx context.Context, header http.Header) context.Context {
