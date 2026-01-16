@@ -26,9 +26,19 @@ const (
 	NamespaceDivision = "TemporalScheduler"
 )
 
-// VisibilityBaseListQuery will select schedules handled by both V1 scheduler and
-// V2 CHASM scheduler.
-var VisibilityBaseListQuery = fmt.Sprintf(
+// VisibilityListQueryV1 selects only V1 scheduler workflows.
+// Used by listSchedulesWorkflow which calls ListWorkflowExecutions without archetype ID.
+var VisibilityListQueryV1 = fmt.Sprintf(
+	"%s = '%s' AND %s = 'Running'",
+	sadefs.TemporalNamespaceDivision,
+	NamespaceDivision,
+	sadefs.ExecutionStatus,
+)
+
+// VisibilityListQueryChasm selects both V1 scheduler and CHASM scheduler.
+// Used by listSchedulesChasm which calls chasm.ListExecutions with archetype ID set,
+// allowing TemporalSystemExecutionStatus to be translated to ExecutionStatus.
+var VisibilityListQueryChasm = fmt.Sprintf(
 	"((%s = '%s' AND TemporalSystemExecutionStatus = 'Running') OR (%s = '%d' AND ExecutionStatus = 'Running'))",
 	sadefs.TemporalNamespaceDivision,
 	NamespaceDivision,
