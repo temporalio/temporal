@@ -211,8 +211,9 @@ func (ns *Namespace) ConfigVersion() int64 {
 }
 
 // FailoverVersion return the namespace failover version
-func (ns *Namespace) FailoverVersion() int64 {
-	return ns.replicationResolver.FailoverVersion(EmptyBusinessID)
+func (ns *Namespace) FailoverVersion(businessID string) int64 {
+	return ns.replicationResolver.FailoverVersion(businessID)
+
 }
 
 // IsGlobalNamespace returns whether the namespace is a global namespace.
@@ -252,6 +253,11 @@ func (ns *Namespace) ReplicationPolicy() ReplicationPolicy {
 		return ReplicationPolicyMultiCluster
 	}
 	return ReplicationPolicyOneCluster
+}
+
+// GetReplicationResolver return the replication resolover
+func (ns *Namespace) GetReplicationResolver() ReplicationResolver {
+	return ns.replicationResolver
 }
 
 func (ns *Namespace) GetCustomData(key string) string {

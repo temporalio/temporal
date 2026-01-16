@@ -1350,8 +1350,7 @@ func (n *Node) AddTask(
 	task any,
 ) {
 	rt, ok := n.registry.taskFor(task)
-	// TODO: remove the task type check after scheduler unit tests are fixed.
-	if ok && rt.isPureTask && taskAttributes.IsImmediate() && rt.fqType() == "TestLibrary.test_pure_task" {
+	if ok && rt.isPureTask && taskAttributes.IsImmediate() {
 		// Those tasks will be executed in the current transaction.
 		n.immediatePureTasks[component] = append(n.immediatePureTasks[component], taskWithAttributes{
 			task:       task,
@@ -1425,7 +1424,6 @@ func (n *Node) executeImmediatePureTasks() error {
 	var err error
 
 	for len(n.immediatePureTasks) != 0 {
-
 		// Create a map in case more immediate pure tasks get
 		// added while existing ones are executed.
 		immediatePureTasks := n.immediatePureTasks
@@ -1433,7 +1431,6 @@ func (n *Node) executeImmediatePureTasks() error {
 
 		for component, pureTasks := range immediatePureTasks {
 			for _, task := range pureTasks {
-
 				if syncStructure {
 					if err := n.syncSubComponents(); err != nil {
 						return err
@@ -1767,7 +1764,7 @@ func (n *Node) validateTask(
 	validateContext Context,
 	taskAttributes TaskAttributes,
 	taskInstance any,
-) (bool, error) {
+) (_ bool, retErr error) {
 	registableTask, ok := n.registry.taskFor(taskInstance)
 	if !ok {
 		return false, softassert.UnexpectedInternalErr(
@@ -1787,6 +1784,8 @@ func (n *Node) validateTask(
 			return false, err
 		}
 	}
+
+	defer log.CapturePanic(n.logger, &retErr)
 
 	retValues := registableTask.validateFn.Call([]reflect.Value{
 		reflect.ValueOf(validateContext),
@@ -2848,7 +2847,7 @@ func (n *Node) ExecutePureTask(
 	baseCtx context.Context,
 	taskAttributes TaskAttributes,
 	taskInstance any,
-) (bool, error) {
+) (_ bool, retErr error) {
 	registrableTask, ok := n.registry.taskFor(taskInstance)
 	if !ok {
 		return false, fmt.Errorf("unknown task type for task instance goType '%s'", reflect.TypeOf(taskInstance).Name())
@@ -2880,6 +2879,8 @@ func (n *Node) ExecutePureTask(
 	if err != nil {
 		return false, err
 	}
+
+	defer log.CapturePanic(n.logger, &retErr)
 
 	result := registrableTask.executeFn.Call([]reflect.Value{
 		reflect.ValueOf(executionContext),
@@ -3071,6 +3072,8 @@ func (n *Node) ExecuteSideEffectTask(
 
 	ctx = newContextWithOperationIntent(ctx, OperationIntentProgress)
 
+	defer log.CapturePanic(n.logger, &retErr)
+
 	result := registrableTask.executeFn.Call([]reflect.Value{
 		reflect.ValueOf(ctx),
 		reflect.ValueOf(ref),
@@ -3125,6 +3128,9 @@ func makeValidationFn(
 		if err != nil {
 			return err
 		}
+
+		// Side effect's task validator is invoked inside the task executor,
+		// so the panic wrapper ExecuteSideEffectTask() will cover this case.
 
 		// Call the TaskValidator interface.
 		result := registrableTask.validateFn.Call([]reflect.Value{
