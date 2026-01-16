@@ -43,12 +43,6 @@ func (s *WFTFailureReportedProblemsTestSuite) simpleActivity() (string, error) {
 	return "done!", nil
 }
 
-// signalWorkflowActivity sends a signal to the specified workflow.
-// This is used by workflows to signal themselves, creating buffered events.
-func (s *WFTFailureReportedProblemsTestSuite) signalWorkflowActivity(workflowID, runID string) error {
-	return s.SdkClient().SignalWorkflow(context.Background(), workflowID, runID, "test-signal", "self-signal")
-}
-
 // workflowWithSignalsThatFails creates a workflow that listens for signals and fails on each workflow task.
 // This is used to test that the TemporalReportedProblems search attribute is not incorrectly removed
 // when signals keep coming in despite continuous workflow task failures.
@@ -56,11 +50,8 @@ func (s *WFTFailureReportedProblemsTestSuite) workflowWithSignalsThatFails(ctx w
 	// If we should fail, signal ourselves (creating a side effect) and immediately panic.
 	// This will create buffered events.
 	if s.shouldFail.Load() {
-		// Signal ourselves via activity to create buffered events
-		info := workflow.GetInfo(ctx)
-		err := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
-			StartToCloseTimeout: 5 * time.Second,
-		}), s.signalWorkflowActivity, info.WorkflowExecution.ID, info.WorkflowExecution.RunID).Get(ctx, nil)
+		// Signal ourselves to create buffered events
+		err := s.SdkClient().SignalWorkflow(context.Background(), workflow.GetInfo(ctx).WorkflowExecution.ID, "", "test-signal", "self-signal")
 		if err != nil {
 			return "", err
 		}
@@ -143,7 +134,6 @@ func (s *WFTFailureReportedProblemsTestSuite) TestWFTFailureReportedProblems_Not
 	s.shouldFail.Store(true)
 
 	s.Worker().RegisterWorkflow(s.workflowWithSignalsThatFails)
-	s.Worker().RegisterActivity(s.signalWorkflowActivity)
 
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:        testcore.RandomizeStr("wf_id-" + s.T().Name()),
