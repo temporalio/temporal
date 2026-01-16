@@ -8638,15 +8638,16 @@ func (ms *MutableStateImpl) syncExecutionInfo(current *persistencespb.WorkflowEx
 	var workflowTaskVersionUpdated bool
 	if transitionhistory.Compare(current.WorkflowTaskLastUpdateVersionedTransition, incoming.WorkflowTaskLastUpdateVersionedTransition) != 0 {
 		ms.workflowTaskManager.UpdateWorkflowTask(&historyi.WorkflowTaskInfo{
-			Version:             incoming.WorkflowTaskVersion,
-			ScheduledEventID:    incoming.WorkflowTaskScheduledEventId,
-			StartedEventID:      incoming.WorkflowTaskStartedEventId,
-			RequestID:           incoming.WorkflowTaskRequestId,
-			WorkflowTaskTimeout: incoming.WorkflowTaskTimeout.AsDuration(),
-			Attempt:             incoming.WorkflowTaskAttempt,
-			Stamp:               incoming.WorkflowTaskStamp,
-			StartedTime:         incoming.WorkflowTaskStartedTime.AsTime(),
-			ScheduledTime:       incoming.WorkflowTaskScheduledTime.AsTime(),
+			Version:                  incoming.WorkflowTaskVersion,
+			ScheduledEventID:         incoming.WorkflowTaskScheduledEventId,
+			StartedEventID:           incoming.WorkflowTaskStartedEventId,
+			RequestID:                incoming.WorkflowTaskRequestId,
+			WorkflowTaskTimeout:      incoming.WorkflowTaskTimeout.AsDuration(),
+			Attempt:                  incoming.WorkflowTaskAttempt,
+			AttemptsSinceLastSuccess: incoming.WorkflowTaskAttemptsSinceLastSuccess,
+			Stamp:                    incoming.WorkflowTaskStamp,
+			StartedTime:              incoming.WorkflowTaskStartedTime.AsTime(),
+			ScheduledTime:            incoming.WorkflowTaskScheduledTime.AsTime(),
 
 			OriginalScheduledTime: incoming.WorkflowTaskOriginalScheduledTime.AsTime(),
 			Type:                  incoming.WorkflowTaskType,
