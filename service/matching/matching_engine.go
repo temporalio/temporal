@@ -302,7 +302,11 @@ func (e *matchingEngineImpl) listenerKey() string {
 
 func (e *matchingEngineImpl) watchMembership() {
 	self := e.hostInfoProvider.HostInfo().Identity()
-	rc := e.matchingRawClient.(matching.RoutingMatchingClient)
+	rc, ok := e.matchingRawClient.(matching.RoutingMatchingClient)
+	if !ok {
+		e.logger.Warn("watchMembership found non-routing matching client")
+		return // this should only happen in unit tests
+	}
 	ownedByOther := func(p tqid.Partition) bool {
 		addr, err := rc.Route(p)
 		// don't take action on lookup error

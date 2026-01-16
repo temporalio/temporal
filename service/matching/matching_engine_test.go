@@ -2918,18 +2918,41 @@ func (s *matchingEngineSuite) TestDemotedMatch() {
 	task.finish(nil, true)
 }
 
+type mockRoutingMatchingClient struct {
+	*matchingservicemock.MockMatchingServiceClient
+	sr membership.ServiceResolver
+}
+
+func (m mockRoutingMatchingClient) Route(p tqid.Partition) (string, error) {
+	key, n := p.RoutingKey(0)
+	hosts := m.sr.LookupN(key, n+1)
+	if len(hosts) == 0 {
+		return "", membership.ErrInsufficientHosts
+	}
+	return hosts[n%len(hosts)].GetAddress(), nil
+}
+
 func (s *matchingEngineSuite) TestUnloadOnMembershipChange() {
 	// need to create a new engine for this test to customize mockServiceResolver
 	s.mockServiceResolver = membership.NewMockServiceResolver(s.controller)
 	s.mockServiceResolver.EXPECT().AddListener(gomock.Any(), gomock.Any()).AnyTimes()
 	s.mockServiceResolver.EXPECT().RemoveListener(gomock.Any()).AnyTimes()
 
+	// add Route to MockMatchingServiceClient
+	routingClient := mockRoutingMatchingClient{
+		MockMatchingServiceClient: s.mockMatchingClient,
+		sr:                        s.mockServiceResolver,
+	}
+
 	self := s.mockHostInfoProvider.HostInfo()
 	other := membership.NewHostInfoFromAddress("other")
 
 	config := s.newConfig()
 	config.MembershipUnloadDelay = dynamicconfig.GetDurationPropertyFn(10 * time.Millisecond)
-	e := s.newMatchingEngine(config, s.classicTaskManager, s.fairTaskManager)
+
+	e := newMatchingEngine(config, s.classicTaskManager, s.fairTaskManager, s.mockHistoryClient,
+		s.logger, s.mockNamespaceCache, routingClient, s.mockVisibilityManager,
+		s.mockHostInfoProvider, s.mockServiceResolver, s.mockNexusEndpointManager)
 	e.Start()
 	defer e.Stop()
 
