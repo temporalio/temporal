@@ -281,7 +281,6 @@ func (h *completionHandler) forwardCompleteOperation(ctx context.Context, r *nex
 			h.Logger.Error("failed to construct forwarding HTTP request", tag.Operation(apiName), tag.WorkflowNamespace(rCtx.namespace.Name().String()), tag.Error(err))
 			return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
 		}
-		forwardReq.Header = rCtx.originalHeaders
 	case nexus.OperationStateFailed, nexus.OperationStateCanceled:
 		// For unsuccessful operations, the Nexus framework reads and closes the original request body to deserialize
 		// the failure, so we must construct a new completion to forward.
@@ -293,7 +292,6 @@ func (h *completionHandler) forwardCompleteOperation(ctx context.Context, r *nex
 			return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
 		}
 		c := &nexusrpc.OperationCompletionUnsuccessful{
-			Header:         httpHeaderToNexusHeader(rCtx.originalHeaders),
 			State:          r.State,
 			OperationToken: r.OperationToken,
 			StartTime:      r.StartTime,
@@ -309,6 +307,7 @@ func (h *completionHandler) forwardCompleteOperation(ctx context.Context, r *nex
 		return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid operation state: %q", r.State)
 	}
 
+	forwardReq.Header = rCtx.originalHeaders
 	forwardReq.Header.Set(interceptor.DCRedirectionApiHeaderName, "true")
 
 	resp, err := client.Do(forwardReq)
