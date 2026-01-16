@@ -191,6 +191,20 @@ func (c *metricClient) ForceDeleteWorkflowExecution(
 	return c.client.ForceDeleteWorkflowExecution(ctx, request, opts...)
 }
 
+func (c *metricClient) ForceRescheduleActivity(
+	ctx context.Context,
+	request *historyservice.ForceRescheduleActivityRequest,
+	opts ...grpc.CallOption,
+) (_ *historyservice.ForceRescheduleActivityResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "HistoryClientForceRescheduleActivity")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.ForceRescheduleActivity(ctx, request, opts...)
+}
+
 func (c *metricClient) GenerateLastHistoryReplicationTasks(
 	ctx context.Context,
 	request *historyservice.GenerateLastHistoryReplicationTasksRequest,

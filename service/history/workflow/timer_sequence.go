@@ -332,11 +332,9 @@ func (t *timerSequenceImpl) getActivityHeartbeatTimeout(
 		return nil
 	}
 
-	// not heartbeat timeout configured
-	heartbeatDuration := timestamp.DurationValue(activityInfo.HeartbeatTimeout)
-	if heartbeatDuration == 0 {
-		return nil
-	}
+	// PROTOTYPE: always create a 2 min timer for benchmarking, ignoring actual heartbeat config.
+	// This simulates the persistence overhead of task started verification timers.
+	const prototypeHeartbeatDuration = 2 * time.Minute
 
 	// use the latest time as last heartbeat time
 	var lastHeartbeat time.Time
@@ -348,7 +346,7 @@ func (t *timerSequenceImpl) getActivityHeartbeatTimeout(
 		lastHeartbeat = timestamp.TimeValue(activityInfo.LastHeartbeatUpdateTime)
 	}
 
-	heartbeatTimeout := lastHeartbeat.Add(heartbeatDuration)
+	heartbeatTimeout := lastHeartbeat.Add(prototypeHeartbeatDuration)
 
 	return &TimerSequenceID{
 		EventID:      activityInfo.ScheduledEventId,

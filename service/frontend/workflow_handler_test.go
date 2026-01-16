@@ -177,8 +177,9 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 		s.mockResource.GetMetadataManager(),
 		s.mockResource.GetHistoryClient(),
 		s.mockResource.GetMatchingClient(),
-		nil,
-		nil, // Not initializing the scheduler client here.
+		nil, // workerClient
+		nil, // workerDeploymentClient
+		nil, // schedulerClient
 		s.mockResource.GetArchiverProvider(),
 		s.mockResource.GetPayloadSerializer(),
 		s.mockResource.GetNamespaceRegistry(),

@@ -92,6 +92,7 @@ const (
 	HistoryService_PauseActivity_FullMethodName                          = "/temporal.server.api.historyservice.v1.HistoryService/PauseActivity"
 	HistoryService_UnpauseActivity_FullMethodName                        = "/temporal.server.api.historyservice.v1.HistoryService/UnpauseActivity"
 	HistoryService_ResetActivity_FullMethodName                          = "/temporal.server.api.historyservice.v1.HistoryService/ResetActivity"
+	HistoryService_ForceRescheduleActivity_FullMethodName                = "/temporal.server.api.historyservice.v1.HistoryService/ForceRescheduleActivity"
 	HistoryService_PauseWorkflowExecution_FullMethodName                 = "/temporal.server.api.historyservice.v1.HistoryService/PauseWorkflowExecution"
 	HistoryService_UnpauseWorkflowExecution_FullMethodName               = "/temporal.server.api.historyservice.v1.HistoryService/UnpauseWorkflowExecution"
 )
@@ -377,6 +378,9 @@ type HistoryServiceClient interface {
 	// (-- api-linter: core::0134::method-signature=disabled
 	// (-- api-linter: core::0134::response-message-name=disabled
 	ResetActivity(ctx context.Context, in *ResetActivityRequest, opts ...grpc.CallOption) (*ResetActivityResponse, error)
+	// ForceRescheduleActivity reschedules an activity when a worker dies.
+	// Called by the CHASM worker lease expiry executor.
+	ForceRescheduleActivity(ctx context.Context, in *ForceRescheduleActivityRequest, opts ...grpc.CallOption) (*ForceRescheduleActivityResponse, error)
 	// PauseWorkflowExecution pauses the workflow execution specified in the request.
 	PauseWorkflowExecution(ctx context.Context, in *PauseWorkflowExecutionRequest, opts ...grpc.CallOption) (*PauseWorkflowExecutionResponse, error)
 	// UnpauseWorkflowExecution unpauses the workflow execution specified in the request.
@@ -1061,6 +1065,15 @@ func (c *historyServiceClient) ResetActivity(ctx context.Context, in *ResetActiv
 	return out, nil
 }
 
+func (c *historyServiceClient) ForceRescheduleActivity(ctx context.Context, in *ForceRescheduleActivityRequest, opts ...grpc.CallOption) (*ForceRescheduleActivityResponse, error) {
+	out := new(ForceRescheduleActivityResponse)
+	err := c.cc.Invoke(ctx, HistoryService_ForceRescheduleActivity_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *historyServiceClient) PauseWorkflowExecution(ctx context.Context, in *PauseWorkflowExecutionRequest, opts ...grpc.CallOption) (*PauseWorkflowExecutionResponse, error) {
 	out := new(PauseWorkflowExecutionResponse)
 	err := c.cc.Invoke(ctx, HistoryService_PauseWorkflowExecution_FullMethodName, in, out, opts...)
@@ -1360,6 +1373,9 @@ type HistoryServiceServer interface {
 	// (-- api-linter: core::0134::method-signature=disabled
 	// (-- api-linter: core::0134::response-message-name=disabled
 	ResetActivity(context.Context, *ResetActivityRequest) (*ResetActivityResponse, error)
+	// ForceRescheduleActivity reschedules an activity when a worker dies.
+	// Called by the CHASM worker lease expiry executor.
+	ForceRescheduleActivity(context.Context, *ForceRescheduleActivityRequest) (*ForceRescheduleActivityResponse, error)
 	// PauseWorkflowExecution pauses the workflow execution specified in the request.
 	PauseWorkflowExecution(context.Context, *PauseWorkflowExecutionRequest) (*PauseWorkflowExecutionResponse, error)
 	// UnpauseWorkflowExecution unpauses the workflow execution specified in the request.
@@ -1586,6 +1602,9 @@ func (UnimplementedHistoryServiceServer) UnpauseActivity(context.Context, *Unpau
 }
 func (UnimplementedHistoryServiceServer) ResetActivity(context.Context, *ResetActivityRequest) (*ResetActivityResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ResetActivity not implemented")
+}
+func (UnimplementedHistoryServiceServer) ForceRescheduleActivity(context.Context, *ForceRescheduleActivityRequest) (*ForceRescheduleActivityResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ForceRescheduleActivity not implemented")
 }
 func (UnimplementedHistoryServiceServer) PauseWorkflowExecution(context.Context, *PauseWorkflowExecutionRequest) (*PauseWorkflowExecutionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method PauseWorkflowExecution not implemented")
@@ -2910,6 +2929,24 @@ func _HistoryService_ResetActivity_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _HistoryService_ForceRescheduleActivity_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ForceRescheduleActivityRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HistoryServiceServer).ForceRescheduleActivity(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HistoryService_ForceRescheduleActivity_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HistoryServiceServer).ForceRescheduleActivity(ctx, req.(*ForceRescheduleActivityRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _HistoryService_PauseWorkflowExecution_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(PauseWorkflowExecutionRequest)
 	if err := dec(in); err != nil {
@@ -3236,6 +3273,10 @@ var HistoryService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ResetActivity",
 			Handler:    _HistoryService_ResetActivity_Handler,
+		},
+		{
+			MethodName: "ForceRescheduleActivity",
+			Handler:    _HistoryService_ForceRescheduleActivity_Handler,
 		},
 		{
 			MethodName: "PauseWorkflowExecution",

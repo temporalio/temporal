@@ -422,6 +422,11 @@ service HistoryService {
     rpc ResetActivity (ResetActivityRequest) returns (ResetActivityResponse) {
     }
 
+    // ForceRescheduleActivity reschedules an activity when a worker dies.
+    // Called by the CHASM worker lease expiry executor.
+    rpc ForceRescheduleActivity (ForceRescheduleActivityRequest) returns (ForceRescheduleActivityResponse) {
+    }
+
     // PauseWorkflowExecution pauses the workflow execution specified in the request.
     rpc PauseWorkflowExecution (PauseWorkflowExecutionRequest) returns (PauseWorkflowExecutionResponse) {
     }

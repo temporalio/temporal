@@ -1335,6 +1335,20 @@ message ResetActivityRequest {
 message ResetActivityResponse {
 }
 
+// ForceRescheduleActivityRequest is used to reschedule an activity when a worker dies.
+// This is called by the CHASM worker lease expiry executor.
+message ForceRescheduleActivityRequest {
+    option (routing).workflow_id = "workflow_id";
+
+    string namespace_id = 1;
+    string workflow_id = 2;
+    string run_id = 3;
+    string activity_id = 4;
+}
+
+message ForceRescheduleActivityResponse {
+}
+
 // (-- api-linter: core::0134::request-mask-required=disabled
 // (-- api-linter: core::0134::request-resource-required=disabled
 message UpdateWorkflowExecutionOptionsRequest {
