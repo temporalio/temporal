@@ -336,13 +336,6 @@ func (e *ExecutableTaskImpl) emitFinishMetrics(
 			nsTag,
 		)
 		if processingLatency > 10*time.Second && e.replicationTask != nil && e.replicationTask.RawTaskInfo != nil {
-			shardContext, err := e.ShardController.GetShardByNamespaceWorkflow(
-				namespace.ID(e.replicationTask.RawTaskInfo.NamespaceId),
-				e.replicationTask.RawTaskInfo.WorkflowId,
-			)
-			if err != nil {
-				return
-			}
 			e.Logger.Warn(fmt.Sprintf(
 				"replication task latency is too long: queue=%.2fs processing=%.2fs",
 				queueLatency.Seconds(),
@@ -352,7 +345,7 @@ func (e *ExecutableTaskImpl) emitFinishMetrics(
 				tag.WorkflowID(e.replicationTask.RawTaskInfo.WorkflowId),
 				tag.WorkflowRunID(e.replicationTask.RawTaskInfo.RunId),
 				tag.ReplicationTask(e.replicationTask.GetRawTaskInfo()),
-				tag.ShardID(shardContext.GetShardID()),
+				tag.ShardID(e.Config.GetShardID(namespace.ID(e.replicationTask.RawTaskInfo.NamespaceId), e.replicationTask.RawTaskInfo.WorkflowId)),
 			)
 		}
 	}
