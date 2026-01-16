@@ -76,7 +76,7 @@ func (e *ExecutableSyncHSMTask) Execute() error {
 	if e.TerminalState() {
 		return nil
 	}
-	e.ExecutableTask.MarkExecutionStart()
+	e.MarkExecutionStart()
 
 	callerInfo := getReplicaitonCallerInfo(e.GetPriority())
 	namespaceName, apply, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(

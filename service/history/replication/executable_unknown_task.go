@@ -57,7 +57,7 @@ func (e *ExecutableUnknownTask) QueueID() interface{} {
 }
 
 func (e *ExecutableUnknownTask) Execute() error {
-	e.ExecutableTask.MarkExecutionStart()
+	e.MarkExecutionStart()
 	return serviceerror.NewInvalidArgument(
 		fmt.Sprintf("unknown task, ID: %v, task: %v", e.TaskID(), e.task),
 	)

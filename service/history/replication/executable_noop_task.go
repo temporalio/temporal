@@ -48,7 +48,7 @@ func (e *ExecutableNoopTask) QueueID() interface{} {
 }
 
 func (e *ExecutableNoopTask) Execute() error {
-	e.ExecutableTask.MarkExecutionStart()
+	e.MarkExecutionStart()
 	return nil
 }
 
