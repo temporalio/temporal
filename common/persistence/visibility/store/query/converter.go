@@ -544,6 +544,8 @@ func (c *QueryConverter[ExprT]) resolveSearchAttributeAlias(
 	// Fourth, check for special aliases or adding/removing the `Temporal` prefix.
 	if strings.TrimPrefix(alias, sadefs.ReservedPrefix) == sadefs.ScheduleID {
 		fieldName = sadefs.WorkflowID
+	} else if c.archetypeID == chasm.SchedulerArchetypeID && alias == "TemporalSystemExecutionStatus" {
+		fieldName = "ExecutionStatus"
 	} else if strings.HasPrefix(fieldName, sadefs.ReservedPrefix) {
 		fieldName = fieldName[len(sadefs.ReservedPrefix):]
 	} else {

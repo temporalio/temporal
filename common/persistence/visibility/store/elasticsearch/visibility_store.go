@@ -781,7 +781,7 @@ func (s *VisibilityStore) convertQueryLegacy(
 	if err != nil {
 		return nil, serviceerror.NewUnavailablef("unable to read search attribute types: %v", err)
 	}
-	nameInterceptor := NewNameInterceptor(namespace, saTypeMap, s.searchAttributesMapperProvider, chasmMapper)
+	nameInterceptor := NewNameInterceptor(namespace, saTypeMap, s.searchAttributesMapperProvider, chasmMapper, archetypeID)
 	queryConverter := NewQueryConverterLegacy(
 		nameInterceptor,
 		NewValuesInterceptor(namespace, saTypeMap, chasmMapper),
