@@ -132,18 +132,15 @@ func (r *workflowRebuilderImpl) rebuildableCheck(
 	}
 
 	// check2: check if the current version history is empty
+	checkErr = serviceerror.NewInvalidArgument("version histories is nil, cannot be rebuilt")
 	if mutableState.ExecutionInfo == nil || mutableState.ExecutionInfo.VersionHistories == nil {
-		return serviceerror.NewInvalidArgument("version histories is nil, cannot be rebuilt")
+		return checkErr
 	}
-	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(mutableState.ExecutionInfo.VersionHistories)
+	isEmpty, err := versionhistory.IsCurrentVersionHistoryEmpty(mutableState.ExecutionInfo.VersionHistories)
 	if err != nil {
 		return err
 	}
-	if currentVersionHistory == nil {
-		return serviceerror.NewInvalidArgument("current version history is nil, cannot be rebuilt")
-	}
-	checkErr = serviceerror.NewInvalidArgument("current version history is empty, cannot be rebuilt")
-	if versionhistory.IsEmptyVersionHistory(currentVersionHistory) {
+	if isEmpty {
 		return checkErr
 	}
 
