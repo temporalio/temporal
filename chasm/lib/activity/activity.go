@@ -209,7 +209,6 @@ func (a *Activity) PopulateRecordStartedResponse(
 	namespace string,
 	response *historyservice.RecordActivityTaskStartedResponse,
 ) error {
-	response.WorkflowNamespace = namespace
 	lastHeartbeat, _ := a.LastHeartbeat.TryGet(ctx)
 	if lastHeartbeat != nil {
 		response.HeartbeatDetails = lastHeartbeat.GetDetails()
