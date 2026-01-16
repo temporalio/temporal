@@ -36,7 +36,7 @@ type clientImpl struct {
 	metricsHandler  metrics.Handler
 	logger          log.Logger
 	loadBalancer    LoadBalancer
-	spreadRouting   dynamicconfig.IntPropertyFn
+	spreadRouting   dynamicconfig.TypedPropertyFn[dynamicconfig.GradualChange[int]]
 }
 
 // NewClient creates a new history service gRPC client
@@ -47,7 +47,7 @@ func NewClient(
 	metricsHandler metrics.Handler,
 	logger log.Logger,
 	lb LoadBalancer,
-	spreadRouting dynamicconfig.IntPropertyFn,
+	spreadRouting dynamicconfig.TypedPropertyFn[dynamicconfig.GradualChange[int]],
 ) matchingservice.MatchingServiceClient {
 	return &clientImpl{
 		timeout:         timeout,
@@ -214,8 +214,8 @@ func (c *clientImpl) createLongPollContext(parent context.Context) (context.Cont
 }
 
 func (c *clientImpl) Route(p tqid.Partition) (string, error) {
-	nsName := p.NamespaceId() // FIXME: convert id to name
-	spread := c.spreadRouting(nsName, p.TaskQueue().Name(), p.TaskQueue().TaskType())
+	spreadChange := c.spreadRouting()
+	spread := spreadChange.Value(p.GradualChangeKey(), time.Now())
 	key, n := p.RoutingKey(spread)
 	addr, err := c.clients.Lookup(key, n)
 	if err != nil {

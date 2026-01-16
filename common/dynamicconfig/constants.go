@@ -1447,9 +1447,10 @@ all namespaces. When exceeded, the oldest entries (older than MinEvictAge) are e
 		`MatchingWorkerRegistryEvictionInterval is how often the worker registry runs background eviction
 to remove expired entries. Should be shorter than EntryTTL for timely cleanup. Lower values mean faster cleanup but more CPU overhead.`,
 	)
-	MatchingSpreadRoutingBatchSize = NewGlobalIntSetting(
+	MatchingSpreadRoutingBatchSize = NewGlobalTypedSettingWithConverter(
 		"matching.spreadRoutingBatchSize",
-		0,
+		ConvertGradualChange[int](0),
+		StaticGradualChange[int](0),
 		`If non-zero, try to spread task queue partitions across matching nodes better, using the given batch size.`,
 	)
 
