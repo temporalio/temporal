@@ -151,6 +151,12 @@ func (e *LeaseExpiryTaskExecutor) rescheduleActivity(
 	workerID string,
 	activity *workerpb.ActivityBinding,
 ) {
+	e.logger.Info("Attempting to reschedule activity",
+		workerIDTag(workerID),
+		tag.WorkflowID(activity.GetWorkflowId()),
+		tag.WorkflowRunID(activity.GetRunId()),
+		tag.ActivityID(activity.GetActivityId()))
+
 	var lastErr error
 	for attempt := 1; attempt <= maxRescheduleRetries; attempt++ {
 		ctx, cancel := context.WithTimeout(context.Background(), rescheduleTimeout)
@@ -164,7 +170,7 @@ func (e *LeaseExpiryTaskExecutor) rescheduleActivity(
 
 		if err == nil {
 			metrics.ChasmWorkerActivitiesRescheduled.With(e.metricsHandler).Record(1)
-			e.logger.Debug("Activity rescheduled successfully",
+			e.logger.Info("Activity rescheduled successfully",
 				workerIDTag(workerID),
 				tag.WorkflowID(activity.GetWorkflowId()),
 				tag.ActivityID(activity.GetActivityId()))
