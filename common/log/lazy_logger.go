@@ -7,6 +7,7 @@ import (
 )
 
 var _ Logger = (*lazyLogger)(nil)
+var _ WithLogger = (*lazyLogger)(nil)
 
 type (
 	lazyLogger struct {
@@ -57,6 +58,11 @@ func (l *lazyLogger) Panic(msg string, tags ...tag.Tag) {
 func (l *lazyLogger) Fatal(msg string, tags ...tag.Tag) {
 	l.once.Do(l.tagLogger)
 	l.logger.Fatal(msg, tags...)
+}
+
+func (l *lazyLogger) With(tags ...tag.Tag) Logger {
+	l.once.Do(l.tagLogger)
+	return With(l.logger, tags...)
 }
 
 func (l *lazyLogger) tagLogger() {

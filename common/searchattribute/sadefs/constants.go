@@ -188,6 +188,20 @@ var (
 		VisibilityTaskKey: {},
 	}
 
+	// chasmSystemSearchAttributes are system search attributes used by CHASM internally
+	// and cannot be used as CHASM search attribute aliases. These correspond to fields
+	// in chasm.ExecutionInfo.
+	chasmSystemSearchAttributes = map[string]struct{}{
+		WorkflowID:           {},
+		RunID:                {},
+		StartTime:            {},
+		ExecutionTime:        {},
+		CloseTime:            {},
+		HistoryLength:        {},
+		HistorySizeBytes:     {},
+		StateTransitionCount: {},
+	}
+
 	sqlDbSystemNameToColName = map[string]string{
 		NamespaceID:          "namespace_id",
 		WorkflowID:           "workflow_id",
@@ -279,6 +293,12 @@ func IsMappable(name string) bool {
 		return false
 	}
 	return true
+}
+
+// IsChasmSystem returns true if name is a system search attribute used by CHASM
+func IsChasmSystem(name string) bool {
+	_, ok := chasmSystemSearchAttributes[name]
+	return ok
 }
 
 // GetSqlDbColName maps system and reserved search attributes to column names for SQL tables.
