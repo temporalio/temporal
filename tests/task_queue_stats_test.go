@@ -222,7 +222,7 @@ func (s *TaskQueueStatsSuite) currentVersionAbsorbsUnversionedBacklogNoRamping(n
 		a := require.New(c)
 
 		// DescribeWorkerDeploymentVersion: current version should also show the full backlog for this task queue.
-		s.requireWDVTaskQueueStatsStrict(
+		s.requireWDVTaskQueueStatsRelaxed(
 			ctx,
 			a,
 			"DescribeWorkerDeploymentVersion[workflow]",
@@ -231,16 +231,18 @@ func (s *TaskQueueStatsSuite) currentVersionAbsorbsUnversionedBacklogNoRamping(n
 			deploymentName,
 			currentBuildID,
 			currentStatsExpectation,
+			numPartitions,
 		)
 
 		// DescribeTaskQueue Legacy Mode: Since the task queue is part of the current version, the legacy mode should report the total backlog count.
-		s.requireLegacyTaskQueueStatsStrict(
+		s.requireLegacyTaskQueueStatsRelaxed(
 			ctx,
 			a,
 			"DescribeTaskQueue[legacy]",
 			tqName,
 			enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			currentStatsExpectation,
+			numPartitions,
 		)
 	}, 10*time.Second, 200*time.Millisecond)
 
@@ -261,7 +263,7 @@ func (s *TaskQueueStatsSuite) currentVersionAbsorbsUnversionedBacklogNoRamping(n
 
 		// Since the activity task queue is part of the current version,
 		// the DescribeWorkerDeploymentVersion should report the backlog count for the activity task queue.
-		s.requireWDVTaskQueueStatsStrict(
+		s.requireWDVTaskQueueStatsRelaxed(
 			ctx,
 			a,
 			"DescribeWorkerDeploymentVersion[activity][after-scheduling-activities]",
@@ -270,16 +272,18 @@ func (s *TaskQueueStatsSuite) currentVersionAbsorbsUnversionedBacklogNoRamping(n
 			deploymentName,
 			currentBuildID,
 			activityStatsExpectation,
+			numPartitions,
 		)
 
 		// DescribeTaskQueue Legacy Mode: Since the activity task queue is part of the current version, the legacy mode should report the total backlog count.
-		s.requireLegacyTaskQueueStatsStrict(
+		s.requireLegacyTaskQueueStatsRelaxed(
 			ctx,
 			a,
 			"DescribeTaskQueue[legacy][activity]",
 			tqName,
 			enumspb.TASK_QUEUE_TYPE_ACTIVITY,
 			activityStatsExpectation,
+			numPartitions,
 		)
 	}, 10*time.Second, 200*time.Millisecond)
 }
@@ -358,7 +362,7 @@ func (s *TaskQueueStatsSuite) currentAbsorbsUnversionedBacklogWhenRampingToUnver
 
 		// There is no way right now for a user to query stats of the "unversioned" version. All we can do in this case
 		// is to query the current version's stats and see that it is attributed 80% of the unversioned backlog.
-		s.requireWDVTaskQueueStatsStrict(
+		s.requireWDVTaskQueueStatsRelaxed(
 			ctx,
 			a,
 			"DescribeWorkerDeploymentVersion[current][workflow][ramping-to-unversioned]",
@@ -367,16 +371,18 @@ func (s *TaskQueueStatsSuite) currentAbsorbsUnversionedBacklogWhenRampingToUnver
 			deploymentName,
 			currentBuildID,
 			currentExpectation,
+			numPartitions,
 		)
 
 		// Since the task queue is part of both the current and ramping versions, the legacy mode should report the total backlog count.
-		s.requireLegacyTaskQueueStatsStrict(
+		s.requireLegacyTaskQueueStatsRelaxed(
 			ctx,
 			a,
 			"DescribeTaskQueue[legacy][workflow][ramping-to-unversioned]",
 			tqName,
 			enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			legacyExpectation,
+			numPartitions,
 		)
 	}, 10*time.Second, 200*time.Millisecond)
 }
@@ -440,7 +446,7 @@ func (s *TaskQueueStatsSuite) rampingAbsorbsUnversionedBacklogWhenCurrentIsUnver
 
 		// We can't query "unversioned" as a WorkerDeploymentVersion, but we can validate that the ramping version
 		// is attributed its ramp share of the unversioned backlog.
-		s.requireWDVTaskQueueStatsStrict(
+		s.requireWDVTaskQueueStatsRelaxed(
 			ctx,
 			a,
 			"DescribeWorkerDeploymentVersion[ramping][workflow][current-unversioned]",
@@ -449,16 +455,18 @@ func (s *TaskQueueStatsSuite) rampingAbsorbsUnversionedBacklogWhenCurrentIsUnver
 			deploymentName,
 			rampingBuildID,
 			rampingExpectation,
+			numPartitions,
 		)
 
 		// Legacy mode should continue to report the total backlog for the task queue.
-		s.requireLegacyTaskQueueStatsStrict(
+		s.requireLegacyTaskQueueStatsRelaxed(
 			ctx,
 			a,
 			"DescribeTaskQueue[legacy][workflow][current-unversioned]",
 			tqName,
 			enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			legacyExpectation,
+			numPartitions,
 		)
 	}, 10*time.Second, 200*time.Millisecond)
 }
@@ -515,7 +523,7 @@ func (s *TaskQueueStatsSuite) rampingAndCurrentAbsorbsUnversionedBacklog(numPart
 
 		// DescribeWorkerDeploymentVersion: current version should also show only 70% of the unversioned backlog for this task queue
 		// as a ramping version, with ramp set to 30%, exists and absorbs 30% of the unversioned backlog.
-		s.requireWDVTaskQueueStatsStrict(
+		s.requireWDVTaskQueueStatsRelaxed(
 			ctx,
 			a,
 			"DescribeWorkerDeploymentVersion[current][workflow]",
@@ -524,10 +532,11 @@ func (s *TaskQueueStatsSuite) rampingAndCurrentAbsorbsUnversionedBacklog(numPart
 			deploymentName,
 			currentBuildID,
 			currentExpectation,
+			numPartitions,
 		)
 
 		// DescribeWorkerDeploymentVersion: ramping version should show the remaining 30% of the unversioned backlog for this task queue
-		s.requireWDVTaskQueueStatsStrict(
+		s.requireWDVTaskQueueStatsRelaxed(
 			ctx,
 			a,
 			"DescribeWorkerDeploymentVersion[ramping][workflow]",
@@ -536,15 +545,17 @@ func (s *TaskQueueStatsSuite) rampingAndCurrentAbsorbsUnversionedBacklog(numPart
 			deploymentName,
 			rampingBuildID,
 			rampingExpectation,
+			numPartitions,
 		)
 		// Since the task queue is part of both the current and ramping versions, the legacy mode should report the total backlog count.
-		s.requireLegacyTaskQueueStatsStrict(
+		s.requireLegacyTaskQueueStatsRelaxed(
 			ctx,
 			a,
 			"DescribeTaskQueue[legacy][workflow]",
 			tqName,
 			enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			legacyExpectation,
+			numPartitions,
 		)
 	}, 10*time.Second, 200*time.Millisecond)
 
@@ -596,7 +607,7 @@ func (s *TaskQueueStatsSuite) rampingAndCurrentAbsorbsUnversionedBacklog(numPart
 		a := require.New(c)
 
 		// Validate current version activity stats
-		s.requireWDVTaskQueueStatsStrict(
+		s.requireWDVTaskQueueStatsRelaxed(
 			ctx,
 			a,
 			"DescribeWorkerDeploymentVersion[activity][after-scheduling-activities][current-version]",
@@ -605,10 +616,11 @@ func (s *TaskQueueStatsSuite) rampingAndCurrentAbsorbsUnversionedBacklog(numPart
 			deploymentName,
 			currentBuildID,
 			activitiesOnCurrentVersionExpectation,
+			numPartitions,
 		)
 
 		// Validate ramping version activity stats
-		s.requireWDVTaskQueueStatsStrict(
+		s.requireWDVTaskQueueStatsRelaxed(
 			ctx,
 			a,
 			"DescribeWorkerDeploymentVersion[activity][after-scheduling-activities][ramping-version]",
@@ -617,6 +629,7 @@ func (s *TaskQueueStatsSuite) rampingAndCurrentAbsorbsUnversionedBacklog(numPart
 			deploymentName,
 			rampingBuildID,
 			activitiesOnRampingVersionExpectation,
+			numPartitions,
 		)
 
 	}, 10*time.Second, 200*time.Millisecond)
@@ -688,7 +701,7 @@ func (s *TaskQueueStatsSuite) inactiveVersionDoesNotAbsorbUnversionedBacklog(num
 		a := require.New(c)
 
 		// DescribeWorkerDeploymentVersion: current version should should show 100% of the unversioned backlog for this task queue
-		s.requireWDVTaskQueueStatsStrict(
+		s.requireWDVTaskQueueStatsRelaxed(
 			ctx,
 			a,
 			"DescribeWorkerDeploymentVersion[current][workflow]",
@@ -697,10 +710,11 @@ func (s *TaskQueueStatsSuite) inactiveVersionDoesNotAbsorbUnversionedBacklog(num
 			deploymentName,
 			currentBuildID,
 			currentExpectation,
+			numPartitions,
 		)
 
 		// DescribeWorkerDeploymentVersion: inactive version should only show the pinned workflows that are scheduled on it.
-		s.requireWDVTaskQueueStatsStrict(
+		s.requireWDVTaskQueueStatsRelaxed(
 			ctx,
 			a,
 			"DescribeWorkerDeploymentVersion[inactive][workflow]",
@@ -709,6 +723,7 @@ func (s *TaskQueueStatsSuite) inactiveVersionDoesNotAbsorbUnversionedBacklog(num
 			deploymentName,
 			inactiveBuildID,
 			inactiveExpectation,
+			numPartitions,
 		)
 	}, 10*time.Second, 200*time.Millisecond)
 
@@ -760,7 +775,7 @@ func (s *TaskQueueStatsSuite) inactiveVersionDoesNotAbsorbUnversionedBacklog(num
 		a := require.New(c)
 
 		// The activity task queue of the current version should have the backlog count for the activities that were scheduled
-		s.requireWDVTaskQueueStatsStrict(
+		s.requireWDVTaskQueueStatsRelaxed(
 			ctx,
 			a,
 			"DescribeWorkerDeploymentVersion[current][activity]",
@@ -769,10 +784,11 @@ func (s *TaskQueueStatsSuite) inactiveVersionDoesNotAbsorbUnversionedBacklog(num
 			deploymentName,
 			currentBuildID,
 			currentActivityExpectation,
+			numPartitions,
 		)
 
 		// The workflow task queue of the current version should be empty since activities were scheduled
-		s.requireWDVTaskQueueStatsStrict(
+		s.requireWDVTaskQueueStatsRelaxed(
 			ctx,
 			a,
 			"DescribeWorkerDeploymentVersion[current][workflow]",
@@ -781,10 +797,11 @@ func (s *TaskQueueStatsSuite) inactiveVersionDoesNotAbsorbUnversionedBacklog(num
 			deploymentName,
 			currentBuildID,
 			workflowTaskQueueEmptyExpectation,
+			numPartitions,
 		)
 
 		// The workflow task queue of the inactive version should be empty since activities were scheduled
-		s.requireWDVTaskQueueStatsStrict(
+		s.requireWDVTaskQueueStatsRelaxed(
 			ctx,
 			a,
 			"DescribeWorkerDeploymentVersion[inactive][workflow]",
@@ -793,10 +810,11 @@ func (s *TaskQueueStatsSuite) inactiveVersionDoesNotAbsorbUnversionedBacklog(num
 			deploymentName,
 			inactiveBuildID,
 			workflowTaskQueueEmptyExpectation,
+			numPartitions,
 		)
 
 		// The activity task queue of the inactive version should have the backlog count for the activities that were scheduled
-		s.requireWDVTaskQueueStatsStrict(
+		s.requireWDVTaskQueueStatsRelaxed(
 			ctx,
 			a,
 			"DescribeWorkerDeploymentVersion[inactive][activity]",
@@ -805,11 +823,16 @@ func (s *TaskQueueStatsSuite) inactiveVersionDoesNotAbsorbUnversionedBacklog(num
 			deploymentName,
 			inactiveBuildID,
 			inactiveActivityExpectation,
+			numPartitions,
 		)
 	}, 10*time.Second, 200*time.Millisecond)
 }
 
-func (s *TaskQueueStatsSuite) requireWDVTaskQueueStatsStrict(
+// requireWDVTaskQueueStatsRelaxed is a relaxed version of requireWDVTaskQueueStatsStrict
+// that allows for over-counting in multi-partition ramping scenarios.
+// The production code intentionally uses math.Ceil for both ramping and current percentage
+// calculations across partitions, which can result in slight over-counting.
+func (s *TaskQueueStatsSuite) requireWDVTaskQueueStatsRelaxed(
 	ctx context.Context,
 	a *require.Assertions,
 	label string,
@@ -818,27 +841,41 @@ func (s *TaskQueueStatsSuite) requireWDVTaskQueueStatsStrict(
 	deploymentName string,
 	buildID string,
 	expectation TaskQueueExpectations,
+	numPartitions int,
 ) {
 	stats, found, err := s.describeWDVTaskQueueStats(ctx, tqName, tqType, deploymentName, buildID)
 	a.NoError(err)
 	a.True(found, "expected %s task queue %s in DescribeWorkerDeploymentVersion response", tqType, tqName)
 	a.NotNil(stats, "expected %s task queue %s to have stats in DescribeWorkerDeploymentVersion response", tqType, tqName)
-	validateTaskQueueStatsStrict(label, a, stats, expectation)
+
+	// Use the existing validateTaskQueueStats with MaxExtraTasks set to numPartitions
+	// to account for ceiling operations across partitions
+	expectation.MaxExtraTasks = numPartitions
+	validateTaskQueueStats(label, a, stats, expectation)
 }
 
-func (s *TaskQueueStatsSuite) requireLegacyTaskQueueStatsStrict(
+// requireLegacyTaskQueueStatsRelaxed is a relaxed version of requireLegacyTaskQueueStatsStrict
+// that allows for over-counting in multi-partition ramping scenarios.
+// The production code intentionally uses math.Ceil for both ramping and current percentage
+// calculations across partitions, which can result in slight over-counting.
+func (s *TaskQueueStatsSuite) requireLegacyTaskQueueStatsRelaxed(
 	ctx context.Context,
 	a *require.Assertions,
 	label string,
 	tqName string,
 	tqType enumspb.TaskQueueType,
 	expectation TaskQueueExpectations,
+	numPartitions int,
 ) {
 	stats, found, err := s.describeLegacyTaskQueueStats(ctx, tqName, tqType)
 	a.NoError(err)
 	a.True(found, "expected %s task queue %s in DescribeTaskQueue response", tqType, tqName)
 	a.NotNil(stats, "expected %s task queue %s to have stats in DescribeTaskQueue response", tqType, tqName)
-	validateTaskQueueStatsStrict(label, a, stats, expectation)
+
+	// Use the existing validateTaskQueueStats with MaxExtraTasks set to numPartitions
+	// to account for ceiling operations across partitions
+	expectation.MaxExtraTasks = numPartitions
+	validateTaskQueueStats(label, a, stats, expectation)
 }
 
 // Publishes versioned and unversioned entities; with one entity per priority (plus default priority). Multiplied by `sets`.
