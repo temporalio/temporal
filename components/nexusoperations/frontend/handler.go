@@ -306,7 +306,7 @@ func (h *completionHandler) forwardCompleteOperation(ctx context.Context, r *nex
 		return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid operation state: %q", r.State)
 	}
 
-	if forwardReq.Header != nil {
+	if forwardReq.Header == nil {
 		forwardReq.Header = make(http.Header)
 	}
 	forwardReq.Header.Set(interceptor.DCRedirectionApiHeaderName, "true")
