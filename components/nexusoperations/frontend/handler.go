@@ -274,6 +274,7 @@ func (h *completionHandler) forwardCompleteOperation(ctx context.Context, r *nex
 		// For successful operations, the Nexus framework streams the result as a LazyValue, so we can reuse the
 		// incoming request body.
 		forwardReq, err = http.NewRequestWithContext(ctx, r.HTTPRequest.Method, forwardURL, r.HTTPRequest.Body)
+		forwardReq.Header = r.HTTPRequest.Header.Clone()
 		if err != nil {
 			h.Logger.Error("failed to construct forwarding HTTP request", tag.Operation(apiName), tag.WorkflowNamespace(rCtx.namespace.Name().String()), tag.Error(err))
 			return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
@@ -305,8 +306,8 @@ func (h *completionHandler) forwardCompleteOperation(ctx context.Context, r *nex
 		return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid operation state: %q", r.State)
 	}
 
-	if r.HTTPRequest.Header != nil {
-		forwardReq.Header = r.HTTPRequest.Header.Clone()
+	if forwardReq.Header != nil {
+		forwardReq.Header = make(http.Header)
 	}
 	forwardReq.Header.Set(interceptor.DCRedirectionApiHeaderName, "true")
 
