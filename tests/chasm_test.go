@@ -504,7 +504,6 @@ func (s *ChasmTestSuite) TestListWorkflowExecutions() {
 
 func (s *ChasmTestSuite) TestPayloadStoreForceDelete() {
 	tv := testvars.New(s.T())
-
 	ctx, cancel := context.WithTimeout(s.chasmContext, chasmTestTimeout)
 	defer cancel()
 
@@ -592,7 +591,6 @@ func (s *ChasmTestSuite) TestPayloadStoreForceDelete() {
 
 func (s *ChasmTestSuite) TestListExecutions_ExecutionStatusAsAlias() {
 	tv := testvars.New(s.T())
-
 	ctx, cancel := context.WithTimeout(s.chasmContext, chasmTestTimeout)
 	defer cancel()
 
@@ -717,6 +715,66 @@ func (s *ChasmTestSuite) TestTaskQueuePreallocatedSearchAttribute() {
 	taskQueueVal, ok := chasm.SearchAttributeValue(visRecord.ChasmSearchAttributes, chasm.SearchAttributeTaskQueue)
 	s.True(ok)
 	s.Equal(tests.DefaultPayloadStoreTaskQueue, taskQueueVal)
+}
+
+func (s *ChasmTestSuite) TestMutableStateRebuilder() {
+	tv := testvars.New(s.T())
+	ctx, cancel := context.WithTimeout(s.chasmContext, chasmTestTimeout)
+	defer cancel()
+
+	storeID := tv.Any().String()
+	_, err := tests.NewPayloadStoreHandler(
+		ctx,
+		tests.NewPayloadStoreRequest{
+			NamespaceID:      s.NamespaceID(),
+			StoreID:          storeID,
+			IDReusePolicy:    chasm.BusinessIDReusePolicyRejectDuplicate,
+			IDConflictPolicy: chasm.BusinessIDConflictPolicyFail,
+		},
+	)
+	s.NoError(err)
+
+	// wait for the payload store to be created
+	archetypeID, ok := s.FunctionalTestBase.GetTestCluster().Host().GetCHASMRegistry().ComponentIDFor(&tests.PayloadStore{})
+	s.True(ok)
+	s.Equal(archetypeID, chasm.ArchetypeID(archetypeID))
+	visQuery := fmt.Sprintf("TemporalNamespaceDivision = '%d' AND WorkflowId = '%s'", archetypeID, storeID)
+	var visRecord *chasm.ExecutionInfo[*testspb.TestPayloadStore]
+	var runID string
+	s.Eventually(
+		func() bool {
+			resp, err := chasm.ListExecutions[*tests.PayloadStore, *testspb.TestPayloadStore](ctx, &chasm.ListExecutionsRequest{
+				NamespaceID:   string(s.NamespaceID()),
+				NamespaceName: string(s.Namespace()),
+				PageSize:      10,
+				Query:         visQuery,
+			})
+			s.NoError(err)
+			if len(resp.Executions) != 1 {
+				return false
+			}
+
+			visRecord = resp.Executions[0]
+			runID = visRecord.RunID
+			return true
+		},
+		testcore.WaitForESToSettle,
+		100*time.Millisecond,
+	)
+	s.Equal(storeID, visRecord.BusinessID)
+
+	// payloadStore archetype is not the workflow archetype, should fail the rebuild.
+	archetype, _ := s.FunctionalTestBase.GetTestCluster().Host().GetCHASMRegistry().ComponentFqnByID(archetypeID)
+	s.NotEqual(archetype, chasm.WorkflowArchetype, "Archetype should not be the workflow archetype")
+
+	_, err = s.AdminClient().RebuildMutableState(testcore.NewContext(), &adminservice.RebuildMutableStateRequest{
+		Namespace: s.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: storeID,
+			RunId:      runID,
+		},
+	})
+	s.ErrorAs(err, new(*serviceerror.InvalidArgument))
 }
 
 // TODO: More tests here...
