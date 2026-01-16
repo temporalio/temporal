@@ -951,6 +951,27 @@ func (m *executionManagerImpl) readHistoryBranch(
 			return historyEvents, historyEventBatches, transactionIDs, nil, dataSize, softassert.UnexpectedDataLoss(m.logger, dataLossMsg, errNonContiguousEventID, dataLossTags(errNonContiguousEventID)...)
 		}
 
+		if request.MaxEventID != common.EmptyEventID && lastEvent.GetEventId() >= request.MaxEventID {
+			filteredEvents := make([]*historypb.HistoryEvent, 0, len(events))
+			for _, event := range events {
+				if event.GetEventId() < request.MaxEventID {
+					filteredEvents = append(filteredEvents, event)
+				}
+			}
+			events = filteredEvents
+
+			if byBatch {
+				if len(events) > 0 {
+					historyEventBatches = append(historyEventBatches, &historypb.History{Events: events})
+				}
+			} else {
+				historyEvents = append(historyEvents, events...)
+			}
+
+			// We reached MaxEventID, so we are done.
+			return historyEvents, historyEventBatches, transactionIDs, nil, dataSize, nil
+		}
+
 		if byBatch {
 			historyEventBatches = append(historyEventBatches, &historypb.History{Events: events})
 		} else {

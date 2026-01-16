@@ -1,12 +1,15 @@
+# DISABLED: This workflow requires upstream Temporal secrets (TEMPORAL_CICD_APP_ID)
+# We use docker-build-push.yml instead for our own Docker Hub publishing.
 name: 'Trigger Docker image build'
 
 on:
-  push:
-    branches:
-      - main
-      - cloud/*
-      - feature/*
-      - release/*
+  workflow_dispatch: # Disabled automatic trigger
+  # push:
+  #   branches:
+  #     - main
+  #     - cloud/*
+  #     - feature/*
+  #     - release/*
 
 jobs:
   trigger:

@@ -278,6 +278,8 @@ type (
 		Cassandra *Cassandra `yaml:"cassandra"`
 		// SQL contains the config for a SQL based datastore
 		SQL *SQL `yaml:"sql"`
+		// MongoDB contains the config for a MongoDB datastore
+		MongoDB *MongoDB `yaml:"mongodb"`
 		// Custom contains the config for custom datastore implementation
 		CustomDataStoreConfig *CustomDatastoreConfig `yaml:"customDatastore"`
 		// ElasticSearch contains the config for a ElasticSearch datastore
@@ -427,9 +429,48 @@ type (
 		// EXPERIMENTAL - TaskScanPartitions is the number of partitions to sequentially scan during ListTaskQueue operations.
 		// This is used for in a sharded sql database such as Vitess for heavy task workloads to minimize scatter gather.
 		// The default value for this param is 1, and should not be configured without a thorough understanding of what this does.
+		// TaskScanPartitions is the number of partitions to sequentially scan during ListTaskQueue operations.
+		// This is used for in a sharded sql database such as Vitess for heavy task workloads to minimize scatter gather.
+		// The default value for this param is 1, and should not be configured without a thorough understanding of what this does.
 		TaskScanPartitions int `yaml:"taskScanPartitions"`
 		// TLS is the configuration for TLS connections
 		TLS *auth.TLS `yaml:"tls"`
+	}
+
+	// MongoDB contains the configuration for connecting to MongoDB cluster
+	MongoDB struct {
+		// Hosts is a list of MongoDB hosts (for replica set or sharded cluster)
+		// Format: ["host1:port1", "host2:port2", ...]
+		Hosts []string `yaml:"hosts" validate:"min=1"`
+		// User is the MongoDB user used for authentication
+		User string `yaml:"user"`
+		// Password is the MongoDB password used for authentication
+		Password string `yaml:"password"`
+		// AuthSource is the database used for authentication.
+		// If empty, the MongoDB driver default is used.
+		AuthSource string `yaml:"authSource"`
+		// DatabaseName is the name of the MongoDB database to use
+		DatabaseName string `yaml:"databaseName" validate:"min=1"`
+		// MaxConns is the max number of connections in the connection pool
+		MaxConns int `yaml:"maxConns"`
+		// MinConns is the minimum number of idle connections kept in the pool
+		MinConns int `yaml:"minConns"`
+		// MaxConnecting controls how many concurrent connections may be establishing
+		MaxConnecting int `yaml:"maxConnecting"`
+		// ConnectTimeout is the timeout for establishing connections
+		ConnectTimeout time.Duration `yaml:"connectTimeout"`
+		// ConnIdleTime is the maximum idle time before a connection is closed
+		ConnIdleTime time.Duration `yaml:"connIdleTime"`
+		// TLS is the configuration for TLS connections
+		TLS *auth.TLS `yaml:"tls"`
+		// ReplicaSet is the name of the replica set (enables transactions)
+		ReplicaSet string `yaml:"replicaSet"`
+		// ReadPreference defines how reads are distributed across replica set members
+		// Options: primary, primaryPreferred, secondary, secondaryPreferred, nearest
+		ReadPreference string `yaml:"readPreference"`
+		// WriteConcern defines the level of acknowledgment requested from MongoDB
+		// Options: majority, w1, w2, w3, etc.
+		WriteConcern string `yaml:"writeConcern"`
 	}
 
 	// CustomDatastoreConfig is the configuration for connecting to a custom datastore that is not supported by temporal core

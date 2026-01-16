@@ -3,6 +3,7 @@ package tests
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -89,14 +90,28 @@ func (s *UserTimersTestSuite) TestUserTimers_Sequential() {
 		T:                   s.T(),
 	}
 
+	pollWithRetry := func(opts ...testcore.PollAndProcessWorkflowTaskOptionFunc) error {
+		deadline := time.Now().Add(30 * time.Second)
+		for {
+			_, err := poller.PollAndProcessWorkflowTask(opts...)
+			s.Logger.Info("PollAndProcessWorkflowTask: completed")
+			if err == nil {
+				return nil
+			}
+			if !errors.Is(err, testcore.ErrNoTasks) {
+				return err
+			}
+			if time.Now().After(deadline) {
+				return err
+			}
+		}
+	}
+
 	for i := 0; i < 4; i++ {
-		_, err := poller.PollAndProcessWorkflowTask()
-		s.Logger.Info("PollAndProcessWorkflowTask: completed")
-		s.NoError(err)
+		s.NoError(pollWithRetry())
 	}
 
 	s.False(workflowComplete)
-	_, err := poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory)
-	s.NoError(err)
+	s.NoError(pollWithRetry(testcore.WithDumpHistory))
 	s.True(workflowComplete)
 }

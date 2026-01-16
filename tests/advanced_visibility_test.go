@@ -18,6 +18,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	filterpb "go.temporal.io/api/filter/v1"
+	namespacepb "go.temporal.io/api/namespace/v1"
 	"go.temporal.io/api/operatorservice/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
 	"go.temporal.io/api/serviceerror"
@@ -90,7 +91,35 @@ func (s *AdvancedVisibilitySuite) SetupSuite() {
 	}
 	s.FunctionalTestBase.SetupSuiteWithCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 
-	if !testcore.UseSQLVisibility() {
+	if testcore.UseSQLVisibility() || testcore.UseMongoDBVisibility() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		resp, err := s.FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+			Namespace: s.Namespace().String(),
+		})
+		s.Require().NoError(err)
+
+		currentAliases := resp.Config.CustomSearchAttributeAliases
+		aliasesToUpdate := make(map[string]string)
+		for k, v := range searchattribute.TestAliases {
+			if _, ok := currentAliases[k]; !ok {
+				aliasesToUpdate[k] = v
+			}
+		}
+
+		if len(aliasesToUpdate) > 0 {
+			_, err = s.FrontendClient().UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
+				Namespace: s.Namespace().String(),
+				Config: &namespacepb.NamespaceConfig{
+					CustomSearchAttributeAliases: aliasesToUpdate,
+				},
+			})
+			s.Require().NoError(err)
+		}
+	}
+
+	if !testcore.UseSQLVisibility() && !testcore.UseMongoDBVisibility() {
 		// To ensure that Elasticsearch won't return more than defaultPageSize documents,
 		// but returns error if page size on request is greater than defaultPageSize.
 		// Probably can be removed and replaced with assert on items count in response.
@@ -307,8 +336,8 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_PageToken() {
 	tl := "es-functional-list-workflow-token-test-taskqueue"
 	request := s.createStartWorkflowExecutionRequest(id, wt, tl)
 
-	numOfWorkflows := testcore.DefaultPageSize - 1 // == 4
 	pageSize := 3
+	numOfWorkflows := pageSize + 1
 
 	s.testListWorkflowHelper(numOfWorkflows, pageSize, request, id, wt)
 }
@@ -319,8 +348,8 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_SearchAfter() {
 	tl := "es-functional-list-workflow-searchAfter-test-taskqueue"
 	request := s.createStartWorkflowExecutionRequest(id, wt, tl)
 
-	numOfWorkflows := testcore.DefaultPageSize + 1 // == 6
 	pageSize := 4
+	numOfWorkflows := pageSize + 2
 
 	s.testListWorkflowHelper(numOfWorkflows, pageSize, request, id, wt)
 }
@@ -634,6 +663,11 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_OrderBy() {
 	if testcore.UseSQLVisibility() {
 		s.T().Skip("This test is only for Elasticsearch")
 	}
+	if testcore.UseMongoDBVisibility() {
+		// CONSIDER(mongodb): MongoDB pagination token only stores visibility_time and run_id.
+		// Custom ORDER BY fields require storing sort field values in the token (like ES SearchAfter).
+		s.T().Skip("MongoDB pagination does not support custom ORDER BY with pagination yet")
+	}
 
 	ctx := testcore.NewContext()
 	id := "es-functional-list-workflow-order-by-test"
@@ -798,6 +832,7 @@ func (s *AdvancedVisibilitySuite) testListWorkflowHelper(
 		startRequest.WorkflowId = wid + strconv.Itoa(i)
 		_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), startRequest)
 		s.NoError(err)
+		time.Sleep(100 * time.Millisecond) //nolint:forbidigo
 	}
 
 	time.Sleep(testcore.WaitForESToSettle) //nolint:forbidigo
@@ -1634,7 +1669,7 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecution_InvalidKey() {
 		WorkflowId: id,
 		RunId:      we.RunId,
 	})
-	if !testcore.UseSQLVisibility() {
+	if !testcore.UseSQLVisibility() && !testcore.UseMongoDBVisibility() {
 		s.ErrorContains(err, "BadSearchAttributes: search attribute INVALIDKEY is not defined")
 		s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted

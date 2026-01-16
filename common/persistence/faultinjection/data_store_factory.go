@@ -1,8 +1,16 @@
 package faultinjection
 
 import (
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/visibility"
+	"go.temporal.io/server/common/persistence/visibility/store"
+	"go.temporal.io/server/common/resolver"
+	"go.temporal.io/server/common/searchattribute"
 )
 
 type (
@@ -19,6 +27,7 @@ type (
 		queueV2            persistence.QueueV2
 		clusterMDStore     persistence.ClusterMetadataStore
 		nexusEndpointStore persistence.NexusEndpointStore
+		visibilityStore    store.VisibilityStore
 	}
 )
 
@@ -196,3 +205,42 @@ func (d *FaultInjectionDataStoreFactory) NewNexusEndpointStore() (persistence.Ne
 	}
 	return d.nexusEndpointStore, nil
 }
+
+func (d *FaultInjectionDataStoreFactory) NewVisibilityStore(
+	cfg config.CustomDatastoreConfig,
+	saProvider searchattribute.Provider,
+	saMapperProvider searchattribute.MapperProvider,
+	nsRegistry namespace.Registry,
+	chasmRegistry *chasm.Registry,
+	r resolver.ServiceResolver,
+	logger log.Logger,
+	metricsHandler metrics.Handler,
+) (store.VisibilityStore, error) {
+	baseFactory, ok := d.baseFactory.(visibility.VisibilityStoreFactory)
+	if !ok {
+		return nil, nil
+	}
+	if d.visibilityStore != nil {
+		return d.visibilityStore, nil
+	}
+
+	visStore, err := baseFactory.NewVisibilityStore(
+		cfg,
+		saProvider,
+		saMapperProvider,
+		nsRegistry,
+		chasmRegistry,
+		r,
+		logger,
+		metricsHandler,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	d.visibilityStore = visStore
+
+	return d.visibilityStore, nil
+}
+
+var _ visibility.VisibilityStoreFactory = (*FaultInjectionDataStoreFactory)(nil)

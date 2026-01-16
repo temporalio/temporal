@@ -1,6 +1,7 @@
 package client
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -26,6 +27,9 @@ func NewCLIClient(config *Config, logger log.Logger) (CLIClient, error) {
 }
 
 func NewFunctionalTestsClient(config *Config, logger log.Logger) (IntegrationTestsClient, error) {
+	if config == nil {
+		return nil, errors.New("elasticsearch config is nil")
+	}
 	switch config.Version {
 	case "v8", "v7", "":
 		return newClient(config, nil, logger)

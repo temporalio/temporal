@@ -3,6 +3,9 @@ global:
   scrape_interval: 5s
   scrape_timeout: 5s
 
+rule_files:
+  - mongodb-alerts.yml
+
 scrape_configs:
   - job_name: services
     metrics_path: /metrics

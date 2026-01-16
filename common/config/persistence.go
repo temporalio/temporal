@@ -58,9 +58,11 @@ func (c *Persistence) Validate() error {
 	if c.SecondaryVisibilityStore != "" {
 		isAnyCustom := c.DataStores[c.VisibilityStore].CustomDataStoreConfig != nil ||
 			c.DataStores[c.SecondaryVisibilityStore].CustomDataStoreConfig != nil
+		isAnyMongo := c.DataStores[c.VisibilityStore].MongoDB != nil ||
+			c.DataStores[c.SecondaryVisibilityStore].MongoDB != nil
 		isPrimaryEs := c.DataStores[c.VisibilityStore].Elasticsearch != nil
 		isSecondaryEs := c.DataStores[c.SecondaryVisibilityStore].Elasticsearch != nil
-		if !isAnyCustom && isPrimaryEs != isSecondaryEs {
+		if !isAnyCustom && !isAnyMongo && isPrimaryEs != isSecondaryEs {
 			return fmt.Errorf(
 				"%w: cannot set visibilityStore and secondaryVisibilityStore with different datastore types",
 				ErrPersistenceConfig)
@@ -108,7 +110,9 @@ func (c *Persistence) IsSQLVisibilityStore() bool {
 
 func (c *Persistence) IsCustomVisibilityStore() bool {
 	return c.GetVisibilityStoreConfig().CustomDataStoreConfig != nil ||
-		c.GetSecondaryVisibilityStoreConfig().CustomDataStoreConfig != nil
+		c.GetVisibilityStoreConfig().MongoDB != nil ||
+		c.GetSecondaryVisibilityStoreConfig().CustomDataStoreConfig != nil ||
+		c.GetSecondaryVisibilityStoreConfig().MongoDB != nil
 }
 
 func (c *Persistence) GetVisibilityStoreConfig() DataStore {
@@ -141,6 +145,8 @@ func (ds *DataStore) GetIndexName() string {
 		return ds.Cassandra.Keyspace
 	case ds.Elasticsearch != nil:
 		return ds.Elasticsearch.GetVisibilityIndex()
+	case ds.MongoDB != nil:
+		return ds.MongoDB.DatabaseName
 	case ds.CustomDataStoreConfig != nil:
 		return ds.CustomDataStoreConfig.IndexName
 	default:
@@ -157,6 +163,9 @@ func (ds *DataStore) Validate() error {
 	if ds.Cassandra != nil {
 		storeConfigCount++
 	}
+	if ds.MongoDB != nil {
+		storeConfigCount++
+	}
 	if ds.CustomDataStoreConfig != nil {
 		storeConfigCount++
 	}
@@ -166,7 +175,7 @@ func (ds *DataStore) Validate() error {
 	if storeConfigCount != 1 {
 		return errors.New(
 			"must provide config for one and only one datastore: " +
-				"elasticsearch, cassandra, sql or custom store",
+				"elasticsearch, cassandra, sql, mongodb or custom store",
 		)
 	}
 

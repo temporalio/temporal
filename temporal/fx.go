@@ -104,9 +104,10 @@ type (
 		ServiceNames    resource.ServiceNames
 		NamespaceLogger resource.NamespaceLogger
 
-		ServiceResolver        resolver.ServiceResolver
-		CustomDataStoreFactory persistenceClient.AbstractDataStoreFactory
-		CustomVisibilityStore  visibility.VisibilityStoreFactory
+		ServiceResolver               resolver.ServiceResolver
+		CustomDataStoreFactory        persistenceClient.AbstractDataStoreFactory
+		CustomVisibilityStore         visibility.VisibilityStoreFactory
+		CustomVisibilityStoreForGraph visibility.VisibilityStoreFactory `name:"customVisibilityStore" optional:"true"`
 
 		SearchAttributesMapper     searchattribute.Mapper
 		CustomFrontendInterceptors []grpc.UnaryServerInterceptor
@@ -125,6 +126,13 @@ type (
 	}
 )
 
+type visibilityStoreFactoryOut struct {
+	fx.Out
+
+	Default  visibility.VisibilityStoreFactory `name:"defaultVisibilityStore" optional:"true"`
+	Fallback visibility.VisibilityStoreFactory `name:"customVisibilityStoreFallback" optional:"true"`
+}
+
 var (
 	TopLevelModule = fx.Options(
 		fx.Provide(
@@ -132,6 +140,7 @@ var (
 			ServerOptionsProvider,
 			resource.ArchivalMetadataProvider,
 			TaskCategoryRegistryProvider,
+			visibilityStoreFactoryProvider,
 			PersistenceFactoryProvider,
 			HistoryServiceProvider,
 			MatchingServiceProvider,
@@ -139,6 +148,21 @@ var (
 			InternalFrontendServiceProvider,
 			WorkerServiceProvider,
 			ApplyClusterMetadataConfigProvider,
+		),
+		fx.Decorate(
+			fx.Annotate(
+				func(
+					custom visibility.VisibilityStoreFactory,
+					fallback visibility.VisibilityStoreFactory,
+				) visibility.VisibilityStoreFactory {
+					if custom != nil {
+						return custom
+					}
+					return fallback
+				},
+				fx.ParamTags(`name:"customVisibilityStore" optional:"true"`, `name:"customVisibilityStoreFallback" optional:"true"`),
+				fx.ResultTags(`name:"customVisibilityStore"`),
+			),
 		),
 		dynamicconfig.Module,
 		pprof.Module,
@@ -286,9 +310,10 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		ServiceHosts:    so.hostsByService,
 		NamespaceLogger: so.namespaceLogger,
 
-		ServiceResolver:        so.persistenceServiceResolver,
-		CustomDataStoreFactory: so.customDataStoreFactory,
-		CustomVisibilityStore:  so.customVisibilityStoreFactory,
+		ServiceResolver:               so.persistenceServiceResolver,
+		CustomDataStoreFactory:        so.customDataStoreFactory,
+		CustomVisibilityStore:         so.customVisibilityStoreFactory,
+		CustomVisibilityStoreForGraph: so.customVisibilityStoreFactory,
 
 		SearchAttributesMapper:     so.searchAttributesMapper,
 		CustomFrontendInterceptors: so.customFrontendInterceptors,
@@ -341,30 +366,31 @@ type (
 	ServiceProviderParamsCommon struct {
 		fx.In
 
-		Cfg                        *config.Config
-		ServiceNames               resource.ServiceNames
-		Logger                     log.Logger
-		NamespaceLogger            resource.NamespaceLogger
-		DynamicConfigClient        dynamicconfig.Client
-		MetricsHandler             metrics.Handler
-		EsClient                   esclient.Client
-		TlsConfigProvider          encryption.TLSConfigProvider
-		PersistenceConfig          config.Persistence
-		ClusterMetadata            *cluster.Config
-		ClientFactoryProvider      client.FactoryProvider
-		AudienceGetter             authorization.JWTAudienceMapper
-		PersistenceServiceResolver resolver.ServiceResolver
-		PersistenceFactoryProvider persistenceClient.FactoryProviderFn
-		SearchAttributesMapper     searchattribute.Mapper
-		CustomFrontendInterceptors []grpc.UnaryServerInterceptor
-		Authorizer                 authorization.Authorizer
-		ClaimMapper                authorization.ClaimMapper
-		DataStoreFactory           persistenceClient.AbstractDataStoreFactory
-		VisibilityStoreFactory     visibility.VisibilityStoreFactory
-		SpanExporters              []otelsdktrace.SpanExporter
-		InstanceID                 resource.InstanceID                     `optional:"true"`
-		StaticServiceHosts         map[primitives.ServiceName]static.Hosts `optional:"true"`
-		TaskCategoryRegistry       tasks.TaskCategoryRegistry
+		Cfg                           *config.Config
+		ServiceNames                  resource.ServiceNames
+		Logger                        log.Logger
+		NamespaceLogger               resource.NamespaceLogger
+		DynamicConfigClient           dynamicconfig.Client
+		MetricsHandler                metrics.Handler
+		EsClient                      esclient.Client
+		TLSConfigProvider             encryption.TLSConfigProvider
+		PersistenceConfig             config.Persistence
+		ClusterMetadata               *cluster.Config
+		ClientFactoryProvider         client.FactoryProvider
+		AudienceGetter                authorization.JWTAudienceMapper
+		PersistenceServiceResolver    resolver.ServiceResolver
+		PersistenceFactoryProvider    persistenceClient.FactoryProviderFn
+		SearchAttributesMapper        searchattribute.Mapper
+		CustomFrontendInterceptors    []grpc.UnaryServerInterceptor
+		Authorizer                    authorization.Authorizer
+		ClaimMapper                   authorization.ClaimMapper
+		DataStoreFactory              persistenceClient.AbstractDataStoreFactory
+		VisibilityStoreFactory        visibility.VisibilityStoreFactory `name:"customVisibilityStore" optional:"true"`
+		DefaultVisibilityStoreFactory visibility.VisibilityStoreFactory `name:"defaultVisibilityStore" optional:"true"`
+		SpanExporters                 []otelsdktrace.SpanExporter
+		InstanceID                    resource.InstanceID                     `optional:"true"`
+		StaticServiceHosts            map[primitives.ServiceName]static.Hosts `optional:"true"`
+		TaskCategoryRegistry          tasks.TaskCategoryRegistry
 	}
 )
 
@@ -396,7 +422,10 @@ func (params ServiceProviderParamsCommon) GetCommonServiceOptions(serviceName pr
 				return params.DataStoreFactory
 			},
 			func() visibility.VisibilityStoreFactory {
-				return params.VisibilityStoreFactory
+				if params.VisibilityStoreFactory != nil {
+					return params.VisibilityStoreFactory
+				}
+				return params.DefaultVisibilityStoreFactory
 			},
 			func() client.FactoryProvider {
 				return params.ClientFactoryProvider
@@ -417,7 +446,7 @@ func (params ServiceProviderParamsCommon) GetCommonServiceOptions(serviceName pr
 				return params.ClaimMapper
 			},
 			func() encryption.TLSConfigProvider {
-				return params.TlsConfigProvider
+				return params.TLSConfigProvider
 			},
 			func() dynamicconfig.Client {
 				return params.DynamicConfigClient
@@ -459,6 +488,19 @@ func TaskCategoryRegistryProvider(archivalMetadata archiver.ArchivalMetadata) ta
 		registry.AddCategory(tasks.CategoryArchival)
 	}
 	return registry
+}
+
+func visibilityStoreFactoryProvider(
+	dataStoreFactory persistence.DataStoreFactory,
+) visibilityStoreFactoryOut {
+	factory, ok := dataStoreFactory.(visibility.VisibilityStoreFactory)
+	if !ok || factory == nil {
+		return visibilityStoreFactoryOut{}
+	}
+	return visibilityStoreFactoryOut{
+		Default:  factory,
+		Fallback: factory,
+	}
 }
 
 func NewService(app *fx.App, serviceName primitives.ServiceName, logger log.Logger) ServicesGroupOut {
@@ -645,7 +687,7 @@ func ApplyClusterMetadataConfigProvider(
 	}
 	indexSearchAttributes := make(map[string]*persistencespb.IndexSearchAttributes)
 	for _, ds := range visDataStores {
-		if ds.SQL != nil || ds.CustomDataStoreConfig != nil {
+		if ds.SQL != nil || ds.CustomDataStoreConfig != nil || ds.MongoDB != nil {
 			indexSearchAttributes[ds.GetIndexName()] = sadefs.GetDBIndexSearchAttributes(visCSAOverride)
 		}
 	}

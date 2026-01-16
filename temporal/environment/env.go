@@ -36,6 +36,12 @@ const (
 	postgresSeedsEnv    = "POSTGRES_SEEDS"
 	postgresPortEnv     = "POSTGRES_PORT"
 	postgresDefaultPort = 5432
+
+	mongodbSeedsEnv          = "MONGODB_SEEDS"
+	mongodbPortEnv           = "MONGODB_PORT"
+	mongodbReplicaSetEnv     = "MONGODB_REPLICA_SET"
+	mongodbDefaultPort       = 27017
+	mongodbDefaultReplicaSet = "rs0"
 )
 
 func lookupLocalhostIP(domain string) string {
@@ -162,4 +168,36 @@ func GetPostgreSQLPort() int {
 		panic(fmt.Sprintf("error getting env %v", postgresPortEnv))
 	}
 	return p
+}
+
+// GetMongoDBAddress return the MongoDB address.
+func GetMongoDBAddress() string {
+	addr := os.Getenv(mongodbSeedsEnv)
+	if addr == "" {
+		addr = GetLocalhostIP()
+	}
+	return addr
+}
+
+// GetMongoDBPort return the MongoDB port.
+func GetMongoDBPort() int {
+	port := os.Getenv(mongodbPortEnv)
+	if port == "" {
+		return mongodbDefaultPort
+	}
+	p, err := strconv.Atoi(port)
+	if err != nil {
+		//nolint:forbidigo // used in test code only
+		panic(fmt.Sprintf("error getting env %v", mongodbPortEnv))
+	}
+	return p
+}
+
+// GetMongoDBReplicaSet returns the replica set name for MongoDB connections.
+func GetMongoDBReplicaSet() string {
+	rs := os.Getenv(mongodbReplicaSetEnv)
+	if rs == "" {
+		rs = mongodbDefaultReplicaSet
+	}
+	return rs
 }
