@@ -49,10 +49,12 @@ func (s *WFTFailureReportedProblemsTestSuite) signalWorkflowActivity(workflowID,
 	return s.SdkClient().SignalWorkflow(context.Background(), workflowID, runID, "test-signal", "self-signal")
 }
 
-// workflowWithSignalsThatFails creates a workflow that fails on each workflow task while shouldFail is true.
+// workflowWithSignalsThatFails creates a workflow that listens for signals and fails on each workflow task.
 // This is used to test that the TemporalReportedProblems search attribute is not incorrectly removed
 // when signals keep coming in despite continuous workflow task failures.
 func (s *WFTFailureReportedProblemsTestSuite) workflowWithSignalsThatFails(ctx workflow.Context) (string, error) {
+	// If we should fail, signal ourselves (creating a side effect) and immediately panic.
+	// This will create buffered events.
 	if s.shouldFail.Load() {
 		// Signal ourselves via activity to create buffered events
 		info := workflow.GetInfo(ctx)
@@ -151,7 +153,7 @@ func (s *WFTFailureReportedProblemsTestSuite) TestWFTFailureReportedProblems_Not
 	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, s.workflowWithSignalsThatFails)
 	s.NoError(err)
 
-	// The workflow will signal itself via activity and panic on each WFT, creating buffered events naturally.
+	// The workflow will signal itself and panic on each WFT, creating buffered events naturally.
 	// Wait for the search attribute to be set due to consecutive failures
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := s.SdkClient().DescribeWorkflow(ctx, workflowRun.GetID(), workflowRun.GetRunID())
