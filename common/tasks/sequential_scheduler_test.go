@@ -305,8 +305,7 @@ assertionsLabel:
 		"All tasks that returned true from TrySubmit must be processed")
 
 	// At least some succeeded (system functional)
-	s.Greater(successCount, int64(0),
-		"At least some TrySubmit calls should succeed")
+	s.Positive(successCount, "At least some TrySubmit calls should succeed")
 
 	// Log the results - failure count may be 0 if all tasks are added to the same queue
 	s.T().Logf("TrySubmit Results: %d succeeded, %d failed, %d processed (success rate: %.1f%%)",
