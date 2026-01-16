@@ -85,7 +85,6 @@ func TestLegacyToCHASM_BasicState(t *testing.T) {
 
 	// Verify invoker state
 	require.NotNil(t, v2.Invoker)
-	require.NotNil(t, v2.Invoker.RequestIdToWorkflowId)
 }
 
 func TestCHASMToLegacy_BasicState(t *testing.T) {
@@ -103,8 +102,7 @@ func TestCHASMToLegacy_BasicState(t *testing.T) {
 			LastProcessedTime: timestamppb.New(now),
 		},
 		Invoker: &schedulerpb.InvokerState{
-			BufferedStarts:        []*schedulespb.BufferedStart{},
-			RequestIdToWorkflowId: map[string]string{},
+			BufferedStarts: []*schedulespb.BufferedStart{},
 		},
 	}
 	migrationTime := time.Now().UTC()
@@ -154,8 +152,8 @@ func TestLegacyToCHASM_BufferedStarts(t *testing.T) {
 		require.Nil(t, start.BackoffTime, "backoff_time should be nil")
 	}
 
-	// Verify RequestIdToWorkflowId map is populated
-	require.Len(t, v2.Invoker.RequestIdToWorkflowId, 2)
+	// Verify buffered starts preserved
+	require.Len(t, v2.Invoker.BufferedStarts, 2)
 }
 
 func TestCHASMToLegacy_BufferedStarts(t *testing.T) {
@@ -184,7 +182,6 @@ func TestCHASMToLegacy_BufferedStarts(t *testing.T) {
 					BackoffTime:   timestamppb.New(now.Add(time.Minute)),
 				},
 			},
-			RequestIdToWorkflowId: map[string]string{"req-1": "wf-1"},
 		},
 	}
 
@@ -249,9 +246,7 @@ func TestCHASMToLegacy_Backfillers(t *testing.T) {
 		Generator: &schedulerpb.GeneratorState{
 			LastProcessedTime: timestamppb.New(now),
 		},
-		Invoker: &schedulerpb.InvokerState{
-			RequestIdToWorkflowId: map[string]string{},
-		},
+		Invoker: &schedulerpb.InvokerState{},
 		Backfillers: map[string]*schedulerpb.BackfillerState{
 			"bf-1": {
 				BackfillId: "bf-1",
@@ -319,9 +314,7 @@ func TestCHASMToLegacy_LastCompletionResult(t *testing.T) {
 		Generator: &schedulerpb.GeneratorState{
 			LastProcessedTime: timestamppb.New(now),
 		},
-		Invoker: &schedulerpb.InvokerState{
-			RequestIdToWorkflowId: map[string]string{},
-		},
+		Invoker: &schedulerpb.InvokerState{},
 		LastCompletionResult: &schedulerpb.LastCompletionResult{
 			Success: &commonpb.Payload{Data: []byte("success-data")},
 			Failure: &failurepb.Failure{Message: "failure-msg"},
@@ -407,19 +400,36 @@ func TestLegacyToCHASM_RecentActionsAndRunningWorkflows(t *testing.T) {
 	v2, err := LegacyToCHASM(v1, now)
 	require.NoError(t, err)
 
-	// Verify RecentActions are preserved
+	// In V2, RecentActions and RunningWorkflows are computed from BufferedStarts, not stored in Info
 	require.NotNil(t, v2.Scheduler.Info)
-	require.Len(t, v2.Scheduler.Info.RecentActions, 2)
-	require.Equal(t, "wf-1", v2.Scheduler.Info.RecentActions[0].StartWorkflowResult.WorkflowId)
-	require.Equal(t, "run-1", v2.Scheduler.Info.RecentActions[0].StartWorkflowResult.RunId)
-	require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, v2.Scheduler.Info.RecentActions[0].StartWorkflowStatus)
+	require.Nil(t, v2.Scheduler.Info.RecentActions)
+	require.Nil(t, v2.Scheduler.Info.RunningWorkflows)
 
-	// Verify RunningWorkflows are preserved
-	require.Len(t, v2.Scheduler.Info.RunningWorkflows, 2)
-	require.Equal(t, "wf-2", v2.Scheduler.Info.RunningWorkflows[0].WorkflowId)
-	require.Equal(t, "run-2", v2.Scheduler.Info.RunningWorkflows[0].RunId)
-	require.Equal(t, "wf-3", v2.Scheduler.Info.RunningWorkflows[1].WorkflowId)
-	require.Equal(t, "run-3", v2.Scheduler.Info.RunningWorkflows[1].RunId)
+	// Verify BufferedStarts contains converted RecentActions and RunningWorkflows
+	bufferedStarts := v2.Invoker.GetBufferedStarts()
+	require.GreaterOrEqual(t, len(bufferedStarts), 4) // 2 recent actions + 2 running workflows
+
+	// Find completed workflow (wf-1) in BufferedStarts
+	var completedStart *schedulespb.BufferedStart
+	for _, start := range bufferedStarts {
+		if start.GetWorkflowId() == "wf-1" && start.GetRunId() == "run-1" {
+			completedStart = start
+			break
+		}
+	}
+	require.NotNil(t, completedStart, "completed workflow wf-1 should be in BufferedStarts")
+	require.NotNil(t, completedStart.Completed, "wf-1 should have Completed field set")
+	require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, completedStart.Completed.Status)
+
+	// Find running workflows (wf-2, wf-3) in BufferedStarts
+	runningCount := 0
+	for _, start := range bufferedStarts {
+		if (start.GetWorkflowId() == "wf-2" || start.GetWorkflowId() == "wf-3") &&
+			start.GetRunId() != "" && start.GetCompleted() == nil {
+			runningCount++
+		}
+	}
+	require.Equal(t, 2, runningCount, "both running workflows should be in BufferedStarts without Completed field")
 }
 
 func TestCHASMToLegacy_RecentActionsAndRunningWorkflows(t *testing.T) {
@@ -433,51 +443,58 @@ func TestCHASMToLegacy_RecentActionsAndRunningWorkflows(t *testing.T) {
 			ConflictToken: 1,
 			Info: &schedulepb.ScheduleInfo{
 				ActionCount: 5,
-				RecentActions: []*schedulepb.ScheduleActionResult{
-					{
-						ScheduleTime: timestamppb.New(now.Add(-10 * time.Minute)),
-						ActualTime:   timestamppb.New(now.Add(-10 * time.Minute)),
-						StartWorkflowResult: &commonpb.WorkflowExecution{
-							WorkflowId: "chasm-wf-1",
-							RunId:      "chasm-run-1",
-						},
-						StartWorkflowStatus: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
-					},
-					{
-						ScheduleTime: timestamppb.New(now.Add(-5 * time.Minute)),
-						ActualTime:   timestamppb.New(now.Add(-5 * time.Minute)),
-						StartWorkflowResult: &commonpb.WorkflowExecution{
-							WorkflowId: "chasm-wf-2",
-							RunId:      "chasm-run-2",
-						},
-						StartWorkflowStatus: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-					},
-				},
-				RunningWorkflows: []*commonpb.WorkflowExecution{
-					{WorkflowId: "chasm-wf-2", RunId: "chasm-run-2"},
-					{WorkflowId: "chasm-wf-3", RunId: "chasm-run-3"},
-				},
 			},
 		},
 		Generator: &schedulerpb.GeneratorState{
 			LastProcessedTime: timestamppb.New(now),
 		},
 		Invoker: &schedulerpb.InvokerState{
-			RequestIdToWorkflowId: map[string]string{},
+			BufferedStarts: []*schedulespb.BufferedStart{
+				// Completed workflow
+				{
+					NominalTime: timestamppb.New(now.Add(-10 * time.Minute)),
+					ActualTime:  timestamppb.New(now.Add(-10 * time.Minute)),
+					StartTime:   timestamppb.New(now.Add(-10 * time.Minute)),
+					WorkflowId:  "chasm-wf-1",
+					RunId:       "chasm-run-1",
+					Completed: &schedulespb.CompletedResult{
+						Status:    enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+						CloseTime: timestamppb.New(now.Add(-9 * time.Minute)),
+					},
+				},
+				// Running workflow
+				{
+					NominalTime: timestamppb.New(now.Add(-5 * time.Minute)),
+					ActualTime:  timestamppb.New(now.Add(-5 * time.Minute)),
+					StartTime:   timestamppb.New(now.Add(-5 * time.Minute)),
+					WorkflowId:  "chasm-wf-2",
+					RunId:       "chasm-run-2",
+					Completed:   nil, // Still running
+				},
+				// Another running workflow
+				{
+					NominalTime: timestamppb.New(now.Add(-3 * time.Minute)),
+					ActualTime:  timestamppb.New(now.Add(-3 * time.Minute)),
+					StartTime:   timestamppb.New(now.Add(-3 * time.Minute)),
+					WorkflowId:  "chasm-wf-3",
+					RunId:       "chasm-run-3",
+					Completed:   nil, // Still running
+				},
+			},
 		},
 	}
 
 	v1, err := CHASMToLegacy(v2, now)
 	require.NoError(t, err)
 
-	// Verify RecentActions are preserved
+	// Verify RecentActions are preserved (only completed workflows)
 	require.NotNil(t, v1.Info)
-	require.Len(t, v1.Info.RecentActions, 2)
+	require.Len(t, v1.Info.RecentActions, 1)
 	require.Equal(t, "chasm-wf-1", v1.Info.RecentActions[0].StartWorkflowResult.WorkflowId)
 	require.Equal(t, "chasm-run-1", v1.Info.RecentActions[0].StartWorkflowResult.RunId)
 	require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, v1.Info.RecentActions[0].StartWorkflowStatus)
 
-	// Verify RunningWorkflows are preserved
+	// Verify RunningWorkflows are preserved (workflows with RunId but no Completed)
 	require.Len(t, v1.Info.RunningWorkflows, 2)
 	require.Equal(t, "chasm-wf-2", v1.Info.RunningWorkflows[0].WorkflowId)
 	require.Equal(t, "chasm-run-2", v1.Info.RunningWorkflows[0].RunId)
