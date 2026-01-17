@@ -763,6 +763,10 @@ func (e *ChasmEngine) getExecutionLease(
 	if err != nil {
 		return nil, nil, err
 	}
+	var notFound *serviceerror.NotFound
+	if errors.As(err, &notFound) {
+		err = serviceerror.NewNotFound("execution not found")
+	}
 
 	if predicateErr != nil {
 		executionLease.GetReleaseFn()(nil)
