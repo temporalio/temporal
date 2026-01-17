@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/server/service/worker/scheduler"
 	"go.temporal.io/server/service/worker/workerdeployment"
 	"go.uber.org/fx"
+	"google.golang.org/grpc"
 )
 
 var Module = fx.Options(
@@ -82,6 +83,7 @@ var Module = fx.Options(
 			logger,
 		)
 	}),
+	fx.Provide(ServerProvider),
 	fx.Provide(NewService),
 	fx.Provide(fx.Annotate(NewWorkerManager, fx.ParamTags(workercommon.WorkerComponentTag))),
 	fx.Provide(NewPerNamespaceWorkerManager),
@@ -172,4 +174,8 @@ func VisibilityManagerProvider(
 
 func ServiceLifetimeHooks(lc fx.Lifecycle, svc *Service) {
 	lc.Append(fx.StartStopHook(svc.Start, svc.Stop))
+}
+
+func ServerProvider() *grpc.Server {
+	return grpc.NewServer()
 }

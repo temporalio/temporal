@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"net"
 
 	"go.temporal.io/api/serviceerror"
 	sdkworker "go.temporal.io/sdk/worker"
@@ -25,7 +26,13 @@ import (
 	"go.temporal.io/server/service/worker/parentclosepolicy"
 	"go.temporal.io/server/service/worker/replicator"
 	"go.temporal.io/server/service/worker/scanner"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/health"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/reflection"
 )
+
+const serviceName = "temporal.api.workflowservice.v1.WorkerService"
 
 type (
 	// Service represents the temporal-worker service. This service hosts all background processing needed for temporal cluster:
@@ -58,6 +65,10 @@ type (
 		scanner                          *scanner.Scanner
 		matchingClient                   matchingservice.MatchingServiceClient
 		namespaceReplicationTaskExecutor nsreplication.TaskExecutor
+
+		server       *grpc.Server
+		grpcListener net.Listener
+		healthServer *health.Server
 	}
 
 	// Config contains all the service config for worker
@@ -114,6 +125,9 @@ func NewService(
 	matchingClient resource.MatchingClient,
 	namespaceReplicationTaskExecutor nsreplication.TaskExecutor,
 	serializer serialization.Serializer,
+	server *grpc.Server,
+	grpcListener net.Listener,
+	healthServer *health.Server,
 ) (*Service, error) {
 	workerServiceResolver, err := membershipMonitor.GetResolver(primitives.WorkerService)
 	if err != nil {
@@ -143,6 +157,10 @@ func NewService(
 		perNamespaceWorkerManager:        perNamespaceWorkerManager,
 		matchingClient:                   matchingClient,
 		namespaceReplicationTaskExecutor: namespaceReplicationTaskExecutor,
+
+		server:       server,
+		grpcListener: grpcListener,
+		healthServer: healthServer,
 	}
 	if err := s.initScanner(serializer); err != nil {
 		return nil, err
@@ -241,6 +259,18 @@ func (s *Service) Start() {
 		s.workerServiceResolver,
 	)
 
+	healthpb.RegisterHealthServer(s.server, s.healthServer)
+	s.healthServer.SetServingStatus(serviceName, healthpb.HealthCheckResponse_SERVING)
+
+	reflection.Register(s.server)
+
+	go func() {
+		s.logger.Info("Starting to serve on worker listener")
+		if err := s.server.Serve(s.grpcListener); err != nil {
+			s.logger.Fatal("Failed to serve on worker listener", tag.Error(err))
+		}
+	}()
+
 	s.logger.Info(
 		"worker service started",
 		tag.ComponentWorker,
@@ -250,10 +280,14 @@ func (s *Service) Start() {
 
 // Stop is called to stop the service
 func (s *Service) Stop() {
+	s.healthServer.SetServingStatus(serviceName, healthpb.HealthCheckResponse_NOT_SERVING)
+
 	s.scanner.Stop()
 	s.perNamespaceWorkerManager.Stop()
 	s.workerManager.Stop()
 	s.visibilityManager.Close()
+
+	s.server.GracefulStop()
 
 	s.logger.Info(
 		"worker service stopped",
