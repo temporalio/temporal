@@ -228,6 +228,9 @@ func (c *clientImpl) getClientForTaskQueuePartition(
 	partition tqid.Partition,
 ) (matchingservice.MatchingServiceClient, error) {
 	addr, err := c.Route(partition)
+	if err != nil {
+		return nil, err
+	}
 	client, err := c.clients.GetClientForClientKey(addr)
 	if err != nil {
 		return nil, err

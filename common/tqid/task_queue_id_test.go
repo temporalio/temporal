@@ -250,7 +250,7 @@ func TestBatching(t *testing.T) {
 	for i, p := range ps {
 		keys[i], ns[i] = p.RoutingKey(3)
 	}
-	assert.Equal(t, ns, []int{0, 1, 2, 0, 1})
+	assert.Equal(t, []int{0, 1, 2, 0, 1}, ns)
 	assert.Equal(t, keys[0], keys[1])
 	assert.Equal(t, keys[0], keys[2])
 	assert.Equal(t, keys[3], keys[4])
