@@ -289,6 +289,10 @@ func (c *TemporalImpl) FrontendGRPCAddress() string {
 	return c.hostsByProtocolByService[grpcProtocol][primitives.FrontendService].All[0]
 }
 
+func (c *TemporalImpl) WorkerGRPCAddress() string {
+	return c.hostsByProtocolByService[grpcProtocol][primitives.WorkerService].All[0]
+}
+
 func (c *TemporalImpl) AdminClient() adminservice.AdminServiceClient {
 	return c.adminClient
 }
