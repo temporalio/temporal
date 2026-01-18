@@ -520,6 +520,25 @@ type (
 		Endpoint         *string `yaml:"endpoint"`
 		S3ForcePathStyle bool    `yaml:"s3ForcePathStyle"`
 		LogLevel         uint    `yaml:"logLevel"`
+
+		// Possible options for CredentialProvider include:
+		//   1) static (fill out Static Credential Provider)
+		//   2) environment
+		//      a) AccessKeyID from either AWS_ACCESS_KEY_ID or AWS_ACCESS_KEY environment variable
+		//      b) SecretAccessKey from either AWS_SECRET_ACCESS_KEY or AWS_SECRET_KEY environment variable
+		//   3) aws-sdk-default (default if not specified)
+		//      a) Follows aws-go-sdk default credential resolution for session.NewSession
+		CredentialProvider string                      `yaml:"credentialProvider"`
+		Static             S3StaticCredentialProvider `yaml:"static"`
+	}
+
+	// S3StaticCredentialProvider represents static AWS credentials for S3 archiver
+	S3StaticCredentialProvider struct {
+		AccessKeyID     string `yaml:"accessKeyID"`
+		SecretAccessKey string `yaml:"secretAccessKey"`
+
+		// Token only required for temporary security credentials retrieved via STS. Otherwise, this is optional.
+		Token string `yaml:"token"`
 	}
 
 	// PublicClient is the config for internal nodes (history/matching/worker) connecting to
