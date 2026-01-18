@@ -8,6 +8,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	schedulescommon "go.temporal.io/server/common/schedules"
 	legacyscheduler "go.temporal.io/server/service/worker/scheduler"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -155,8 +156,14 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 			ActualTime:    timestamppb.New(next.Next),
 			OverlapPolicy: overlapPolicy,
 			Manual:        manual,
-			RequestId:     generateRequestID(scheduler, backfillID, next.Nominal, next.Next),
-			WorkflowId:    generateWorkflowID(workflowID, next.Nominal),
+			RequestId: schedulescommon.GenerateRequestID(
+				scheduler.NamespaceId,
+				scheduler.ScheduleId,
+				scheduler.ConflictToken,
+				backfillID,
+				next.Nominal,
+				next.Next),
+			WorkflowId: schedulescommon.GenerateWorkflowID(workflowID, next.Nominal),
 		})
 
 		if limit != nil {

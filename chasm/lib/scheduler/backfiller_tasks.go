@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	schedulescommon "go.temporal.io/server/common/schedules"
 	queueerrors "go.temporal.io/server/service/history/queues/errors"
 	"go.uber.org/fx"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -193,8 +194,15 @@ func (b *BackfillerTaskExecutor) processTrigger(
 	// time determinism.
 	nowpb := backfiller.GetLastProcessedTime()
 	now := nowpb.AsTime()
-	requestID := generateRequestID(scheduler, backfiller.GetBackfillId(), now, now)
-	workflowID := generateWorkflowID(scheduler.WorkflowID(), now)
+	requestID := schedulescommon.GenerateRequestID(
+		scheduler.NamespaceId,
+		scheduler.ScheduleId,
+		scheduler.ConflictToken,
+		backfiller.GetBackfillId(),
+		now,
+		now,
+	)
+	workflowID := schedulescommon.GenerateWorkflowID(scheduler.WorkflowID(), now)
 	result.BufferedStarts = []*schedulespb.BufferedStart{
 		{
 			NominalTime:   nowpb,
