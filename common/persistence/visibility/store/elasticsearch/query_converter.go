@@ -28,15 +28,33 @@ func (c *queryConverter) BuildNotExpr(expr elastic.Query) (elastic.Query, error)
 	if expr == nil {
 		return nil, nil
 	}
-	return elastic.NewBoolQuery().MustNot(expr), nil
+	if bq, ok := expr.(*boolQuery); ok && len(bq.shouldClauses) > 0 {
+		// !(a || b) == !a && !b
+		ret := newBoolQuery()
+		ret.mustNotClauses = bq.shouldClauses
+		return ret, nil
+	}
+	return newBoolQuery().MustNot(expr), nil
 }
 
 func (c *queryConverter) BuildAndExpr(exprs ...elastic.Query) (elastic.Query, error) {
+	var reusableBoolQuery *boolQuery
 	validExprs := make([]elastic.Query, 0, len(exprs))
 	for _, e := range exprs {
-		if e != nil {
-			validExprs = append(validExprs, e)
+		if e == nil {
+			continue
 		}
+		if bq, ok := e.(*boolQuery); !ok || len(bq.filterClauses)+len(bq.mustNotClauses) == 0 {
+			validExprs = append(validExprs, e)
+		} else if reusableBoolQuery == nil {
+			reusableBoolQuery = bq
+		} else {
+			reusableBoolQuery.Filter(bq.filterClauses...).MustNot(bq.mustNotClauses...)
+		}
+	}
+	if reusableBoolQuery != nil {
+		reusableBoolQuery.Filter(validExprs...)
+		return reusableBoolQuery, nil
 	}
 	if len(validExprs) == 0 {
 		return nil, nil
@@ -44,15 +62,27 @@ func (c *queryConverter) BuildAndExpr(exprs ...elastic.Query) (elastic.Query, er
 	if len(validExprs) == 1 {
 		return validExprs[0], nil
 	}
-	return elastic.NewBoolQuery().Filter(validExprs...), nil
+	return newBoolQuery().Filter(validExprs...), nil
 }
 
 func (c *queryConverter) BuildOrExpr(exprs ...elastic.Query) (elastic.Query, error) {
+	var reusableBoolQuery *boolQuery
 	validExprs := make([]elastic.Query, 0, len(exprs))
 	for _, e := range exprs {
-		if e != nil {
-			validExprs = append(validExprs, e)
+		if e == nil {
+			continue
 		}
+		if bq, ok := e.(*boolQuery); !ok || len(bq.shouldClauses) == 0 {
+			validExprs = append(validExprs, e)
+		} else if reusableBoolQuery == nil {
+			reusableBoolQuery = bq
+		} else {
+			reusableBoolQuery.Should(bq.shouldClauses...)
+		}
+	}
+	if reusableBoolQuery != nil {
+		reusableBoolQuery.Should(validExprs...)
+		return reusableBoolQuery, nil
 	}
 	if len(validExprs) == 0 {
 		return nil, nil
@@ -60,7 +90,7 @@ func (c *queryConverter) BuildOrExpr(exprs ...elastic.Query) (elastic.Query, err
 	if len(validExprs) == 1 {
 		return validExprs[0], nil
 	}
-	return elastic.NewBoolQuery().Should(validExprs...).MinimumNumberShouldMatch(1), nil
+	return newBoolQuery().Should(validExprs...).MinimumNumberShouldMatch(1), nil
 }
 
 func (c *queryConverter) ConvertComparisonExpr(
@@ -140,7 +170,7 @@ func (c *queryConverter) ConvertTextComparisonExpr(
 	case sqlparser.EqualStr:
 		return elastic.NewMatchQuery(colName, value), nil
 	case sqlparser.NotEqualStr:
-		return elastic.NewBoolQuery().MustNot(elastic.NewMatchQuery(colName, value)), nil
+		return newBoolQuery().MustNot(elastic.NewMatchQuery(colName, value)), nil
 	default:
 		return nil, query.NewOperatorNotSupportedError(col.Alias, col.ValueType, operator)
 	}
@@ -156,7 +186,7 @@ func (c *queryConverter) ConvertRangeExpr(
 	case sqlparser.BetweenStr:
 		return elastic.NewRangeQuery(colName).Gte(from).Lte(to), nil
 	case sqlparser.NotBetweenStr:
-		return elastic.NewBoolQuery().MustNot(elastic.NewRangeQuery(colName).Gte(from).Lte(to)), nil
+		return newBoolQuery().MustNot(elastic.NewRangeQuery(colName).Gte(from).Lte(to)), nil
 	default:
 		// This should be impossible since the query parser only calls this function with one of those
 		// operators strings.
@@ -175,7 +205,7 @@ func (c *queryConverter) ConvertIsExpr(
 	colName := col.FieldName
 	switch operator {
 	case sqlparser.IsNullStr:
-		return elastic.NewBoolQuery().MustNot(elastic.NewExistsQuery(colName)), nil
+		return newBoolQuery().MustNot(elastic.NewExistsQuery(colName)), nil
 	case sqlparser.IsNotNullStr:
 		return elastic.NewExistsQuery(colName), nil
 	default:
