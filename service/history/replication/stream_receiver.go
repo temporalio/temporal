@@ -5,6 +5,7 @@ package replication
 import (
 	"context"
 	"fmt"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -50,6 +51,9 @@ type (
 		receiverMode            ReceiverMode
 		flowController          ReceiverFlowController
 		recvSignalChan          chan struct{}
+
+		slowSubmissionMu         sync.RWMutex
+		slowSubmissionTimestamps map[enumsspb.TaskPriority]time.Time
 	}
 )
 
@@ -78,18 +82,7 @@ func NewStreamReceiver(
 	)
 	highPriorityTaskTracker := NewExecutableTaskTracker(logger, processToolBox.MetricsHandler)
 	lowPriorityTaskTracker := NewExecutableTaskTracker(logger, processToolBox.MetricsHandler)
-	taskTrackerMap := make(map[enumsspb.TaskPriority]FlowControlSignalProvider)
-	taskTrackerMap[enumsspb.TASK_PRIORITY_HIGH] = func() *FlowControlSignal {
-		return &FlowControlSignal{
-			taskTrackingCount: highPriorityTaskTracker.Size(),
-		}
-	}
-	taskTrackerMap[enumsspb.TASK_PRIORITY_LOW] = func() *FlowControlSignal {
-		return &FlowControlSignal{
-			taskTrackingCount: lowPriorityTaskTracker.Size(),
-		}
-	}
-	return &StreamReceiverImpl{
+	receiver := &StreamReceiverImpl{
 		ProcessToolBox: processToolBox,
 
 		status:                  common.DaemonStatusInitialized,
@@ -104,11 +97,26 @@ func NewStreamReceiver(
 			clientShardKey,
 			serverShardKey,
 		),
-		taskConverter:  taskConverter,
-		receiverMode:   ReceiverModeUnset,
-		flowController: NewReceiverFlowControl(taskTrackerMap, processToolBox.Config),
-		recvSignalChan: make(chan struct{}, 1),
+		taskConverter:            taskConverter,
+		receiverMode:             ReceiverModeUnset,
+		slowSubmissionTimestamps: make(map[enumsspb.TaskPriority]time.Time),
+		recvSignalChan:           make(chan struct{}, 1),
 	}
+	taskTrackerMap := make(map[enumsspb.TaskPriority]FlowControlSignalProvider)
+	taskTrackerMap[enumsspb.TASK_PRIORITY_HIGH] = func() *FlowControlSignal {
+		return &FlowControlSignal{
+			taskTrackingCount:  highPriorityTaskTracker.Size(),
+			lastSlowSubmission: receiver.getLastSlowSubmissionTimestamp(enumsspb.TASK_PRIORITY_HIGH),
+		}
+	}
+	taskTrackerMap[enumsspb.TASK_PRIORITY_LOW] = func() *FlowControlSignal {
+		return &FlowControlSignal{
+			taskTrackingCount:  lowPriorityTaskTracker.Size(),
+			lastSlowSubmission: receiver.getLastSlowSubmissionTimestamp(enumsspb.TASK_PRIORITY_LOW),
+		}
+	}
+	receiver.flowController = NewReceiverFlowControl(taskTrackerMap, processToolBox.Config)
+	return receiver
 }
 
 // Start starts the processor
@@ -323,40 +331,72 @@ func (r *StreamReceiverImpl) processMessages(
 		if streamResp.Err != nil {
 			return streamResp.Err
 		}
-		if err := r.validateAndSetReceiverMode(streamResp.Resp.GetMessages().Priority); err != nil {
+
+		messages := streamResp.Resp.GetMessages()
+		priority := messages.Priority
+
+		if err := r.validateAndSetReceiverMode(priority); err != nil {
 			// sender mode changed, exit loop and let stream reconnect to retry
 			return NewStreamError("ReplicationTask wrong receiver mode", err)
 		}
 
-		if err = ValidateTasksHaveSamePriority(streamResp.Resp.GetMessages().Priority, streamResp.Resp.GetMessages().ReplicationTasks...); err != nil {
+		if err = ValidateTasksHaveSamePriority(priority, messages.ReplicationTasks...); err != nil {
 			// This should not happen because source side is sending task 1 by 1. Validate here just in case.
 			return NewStreamError("ReplicationTask priority check failed", err)
 		}
+
 		convertedTasks := r.taskConverter.Convert(
 			clusterName,
 			r.clientShardKey,
 			r.serverShardKey,
-			streamResp.Resp.GetMessages().ReplicationTasks...,
+			messages.ReplicationTasks...,
 		)
-		exclusiveHighWatermark := streamResp.Resp.GetMessages().ExclusiveHighWatermark
-		exclusiveHighWatermarkTime := timestamp.TimeValue(streamResp.Resp.GetMessages().ExclusiveHighWatermarkTime)
-		taskTracker, err := r.getTaskTracker(streamResp.Resp.GetMessages().Priority)
+		exclusiveHighWatermark := messages.ExclusiveHighWatermark
+		exclusiveHighWatermarkTime := timestamp.TimeValue(messages.ExclusiveHighWatermarkTime)
+		taskTracker, err := r.getTaskTracker(priority)
 		if err != nil {
 			// Todo: Change to write Tasks to DLQ. As resend task will not help here
 			return NewStreamError("ReplicationTask wrong priority", err)
 		}
+
+		submissionThreshold := r.Config.ReplicationReceiverSlowSubmissionLatencyThreshold()
+
 		for _, task := range taskTracker.TrackTasks(WatermarkInfo{
 			Watermark: exclusiveHighWatermark,
 			Timestamp: exclusiveHighWatermarkTime,
 		}, convertedTasks...) {
-			scheduler, err := r.getTaskScheduler(streamResp.Resp.GetMessages().Priority, task)
+			schedulerPriority, err := r.getTaskSchedulerPriority(priority, task)
 			if err != nil {
 				return err
 			}
+			scheduler, err := r.getTaskScheduler(schedulerPriority)
+			if err != nil {
+				return err
+			}
+			start := time.Now()
 			scheduler.Submit(task)
+			end := time.Now()
+			if end.Sub(start) > submissionThreshold {
+				r.recordSlowSubmission(schedulerPriority, end)
+			}
 		}
 	}
 	return nil
+}
+
+func (r *StreamReceiverImpl) getLastSlowSubmissionTimestamp(priority enumsspb.TaskPriority) time.Time {
+	r.slowSubmissionMu.RLock()
+	defer r.slowSubmissionMu.RUnlock()
+	if ts, ok := r.slowSubmissionTimestamps[priority]; ok {
+		return ts
+	}
+	return time.Time{}
+}
+
+func (r *StreamReceiverImpl) recordSlowSubmission(priority enumsspb.TaskPriority, ts time.Time) {
+	r.slowSubmissionMu.Lock()
+	defer r.slowSubmissionMu.Unlock()
+	r.slowSubmissionTimestamps[priority] = ts
 }
 
 func (r *StreamReceiverImpl) getTaskTracker(priority enumsspb.TaskPriority) (ExecutableTaskTracker, error) {
@@ -370,23 +410,32 @@ func (r *StreamReceiverImpl) getTaskTracker(priority enumsspb.TaskPriority) (Exe
 	}
 }
 
-func (r *StreamReceiverImpl) getTaskScheduler(priority enumsspb.TaskPriority, task TrackableExecutableTask) (ctasks.Scheduler[TrackableExecutableTask], error) {
+func (r *StreamReceiverImpl) getTaskSchedulerPriority(priority enumsspb.TaskPriority, task TrackableExecutableTask) (enumsspb.TaskPriority, error) {
 	switch priority {
 	case enumsspb.TASK_PRIORITY_UNSPECIFIED:
 		switch task.(type) {
 		case *ExecutableWorkflowStateTask:
-			// this is an optimization for workflow state task. The low priority task scheduler is grouping task by workflow ID.
+			// This is an optimization for workflow state task. The low priority task scheduler is grouping task by workflow ID.
 			// When multiple runs of task come in, we can serialize them in the low priority task scheduler. As long as we use a single tracker,
 			// the task ACK is guaranteed to be in order.(i.e. no task will be lost)
-			return r.ProcessToolBox.LowPriorityTaskScheduler, nil
+			return enumsspb.TASK_PRIORITY_LOW, nil
 		}
-		return r.ProcessToolBox.HighPriorityTaskScheduler, nil
+		return enumsspb.TASK_PRIORITY_HIGH, nil
+	case enumsspb.TASK_PRIORITY_HIGH, enumsspb.TASK_PRIORITY_LOW:
+		return priority, nil
+	default:
+		return 0, serviceerror.NewInvalidArgumentf("Unknown task priority: %v", priority)
+	}
+}
+
+func (r *StreamReceiverImpl) getTaskScheduler(priority enumsspb.TaskPriority) (ctasks.Scheduler[TrackableExecutableTask], error) {
+	switch priority {
 	case enumsspb.TASK_PRIORITY_HIGH:
 		return r.ProcessToolBox.HighPriorityTaskScheduler, nil
 	case enumsspb.TASK_PRIORITY_LOW:
 		return r.ProcessToolBox.LowPriorityTaskScheduler, nil
 	default:
-		return nil, serviceerror.NewInvalidArgumentf("Unknown task priority: %v", priority)
+		return nil, serviceerror.NewInvalidArgumentf("Unknown task scheduler priority: %v", priority)
 	}
 }
 
