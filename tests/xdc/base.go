@@ -101,6 +101,7 @@ func (s *xdcBaseSuite) setupSuite(opts ...testcore.TestClusterOption) {
 	s.dynamicConfigOverrides[dynamicconfig.VisibilityProcessorMaxPollInterval.Key()] = time.Second * 3
 	s.dynamicConfigOverrides[dynamicconfig.OutboundProcessorMaxPollInterval.Key()] = time.Second * 3
 
+	persistenceDefaults := testcore.GetPersistenceTestDefaults()
 	clusterConfigs := []*testcore.TestClusterConfig{
 		{
 			ClusterMetadata: cluster.Config{
@@ -110,6 +111,7 @@ func (s *xdcBaseSuite) setupSuite(opts ...testcore.TestClusterOption) {
 			HistoryConfig: testcore.HistoryConfig{
 				NumHistoryShards: cmp.Or(params.NumHistoryShards, 1),
 			},
+			Persistence: persistenceDefaults,
 		},
 		{
 			ClusterMetadata: cluster.Config{
@@ -119,6 +121,7 @@ func (s *xdcBaseSuite) setupSuite(opts ...testcore.TestClusterOption) {
 			HistoryConfig: testcore.HistoryConfig{
 				NumHistoryShards: cmp.Or(params.NumHistoryShards, 1),
 			},
+			Persistence: persistenceDefaults,
 		},
 	}
 
@@ -131,7 +134,7 @@ func (s *xdcBaseSuite) setupSuite(opts ...testcore.TestClusterOption) {
 		clusterConfigs[clusterIndex].ClusterMetadata.MasterClusterName = clusterName
 		clusterConfigs[clusterIndex].ClusterMetadata.CurrentClusterName = clusterName
 		clusterConfigs[clusterIndex].ClusterMetadata.EnableGlobalNamespace = true
-		clusterConfigs[clusterIndex].Persistence.DBName = "func_tests_" + clusterName
+		clusterConfigs[clusterIndex].Persistence.DBName += "_" + clusterName
 		clusterConfigs[clusterIndex].ClusterMetadata.ClusterInformation = map[string]cluster.ClusterInformation{
 			clusterName: {
 				Enabled:                true,

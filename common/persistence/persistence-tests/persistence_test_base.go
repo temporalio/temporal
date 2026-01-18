@@ -1,6 +1,7 @@
 package persistencetests
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"math/rand"
@@ -61,7 +62,24 @@ type (
 		FaultInjection    *config.FaultInjection
 		Logger            log.Logger `yaml:"-"`
 	}
+)
 
+// ApplyDefaults copies database configuration from src, preserving any non-zero values already set.
+func (o *TestBaseOptions) ApplyDefaults(src *TestBaseOptions) {
+	o.StoreType = cmp.Or(o.StoreType, src.StoreType)
+	o.SQLDBPluginName = cmp.Or(o.SQLDBPluginName, src.SQLDBPluginName)
+	o.DBName = cmp.Or(o.DBName, src.DBName)
+	o.DBUsername = cmp.Or(o.DBUsername, src.DBUsername)
+	o.DBPassword = cmp.Or(o.DBPassword, src.DBPassword)
+	o.DBHost = cmp.Or(o.DBHost, src.DBHost)
+	o.DBPort = cmp.Or(o.DBPort, src.DBPort)
+	o.SchemaDir = cmp.Or(o.SchemaDir, src.SchemaDir)
+	if o.ConnectAttributes == nil {
+		o.ConnectAttributes = src.ConnectAttributes
+	}
+}
+
+type (
 	// TestBase wraps the base setup needed to create workflows over persistence layer.
 	TestBase struct {
 		suite.Suite
@@ -119,9 +137,6 @@ func NewTestClusterForCassandra(options *TestBaseOptions, logger log.Logger) *ca
 
 // NewTestBaseWithSQL returns a new persistence test base backed by SQL
 func NewTestBaseWithSQL(options *TestBaseOptions) *TestBase {
-	if options.DBName == "" {
-		options.DBName = "test_" + GenerateRandomDBName(3)
-	}
 	logger := options.Logger
 	if logger == nil {
 		logger = log.NewTestLogger()
