@@ -1370,3 +1370,80 @@ func (s *scheduleFunctionalSuiteBase) cleanup(sid string) {
 		})
 	})
 }
+
+func (s *scheduleFunctionalSuiteBase) TestCountSchedules() {
+	// Create multiple schedules with different paused states
+	sidPrefix := "sched-test-count-"
+	wid := "sched-test-count-wf"
+	wt := "sched-test-count-wt"
+
+	// Create 3 schedules: 2 active, 1 paused
+	for i := range 3 {
+		sid := fmt.Sprintf("%s%d", sidPrefix, i)
+		paused := i == 2 // Third schedule is paused
+
+		schedule := &schedulepb.Schedule{
+			Spec: &schedulepb.ScheduleSpec{
+				Interval: []*schedulepb.IntervalSpec{
+					{Interval: durationpb.New(1 * time.Hour)},
+				},
+			},
+			Action: &schedulepb.ScheduleAction{
+				Action: &schedulepb.ScheduleAction_StartWorkflow{
+					StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+						WorkflowId:   fmt.Sprintf("%s-%d", wid, i),
+						WorkflowType: &commonpb.WorkflowType{Name: wt},
+						TaskQueue:    &taskqueuepb.TaskQueue{Name: s.taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+					},
+				},
+			},
+			State: &schedulepb.ScheduleState{
+				Paused: paused,
+			},
+		}
+
+		_, err := s.FrontendClient().CreateSchedule(s.newContext(), &workflowservice.CreateScheduleRequest{
+			Namespace:  s.Namespace().String(),
+			ScheduleId: sid,
+			Schedule:   schedule,
+			Identity:   "test",
+			RequestId:  uuid.NewString(),
+		})
+		s.NoError(err)
+		s.cleanup(sid)
+	}
+
+	// Wait for schedules to appear in visibility
+	s.Eventually(func() bool {
+		countResp, err := s.FrontendClient().CountSchedules(s.newContext(), &workflowservice.CountSchedulesRequest{
+			Namespace: s.Namespace().String(),
+		})
+		if err != nil {
+			return false
+		}
+		return countResp.Count >= 3
+	}, 15*time.Second, 1*time.Second)
+
+	// Test basic count (all schedules)
+	countResp, err := s.FrontendClient().CountSchedules(s.newContext(), &workflowservice.CountSchedulesRequest{
+		Namespace: s.Namespace().String(),
+	})
+	s.NoError(err)
+	s.GreaterOrEqual(countResp.Count, int64(3), "Expected at least 3 schedules")
+
+	// Test count with query filter for paused schedules
+	countResp, err = s.FrontendClient().CountSchedules(s.newContext(), &workflowservice.CountSchedulesRequest{
+		Namespace: s.Namespace().String(),
+		Query:     fmt.Sprintf("%s = true", sadefs.TemporalSchedulePaused),
+	})
+	s.NoError(err)
+	s.GreaterOrEqual(countResp.Count, int64(1), "Expected at least 1 paused schedule")
+
+	// Test count with query filter for non-paused schedules
+	countResp, err = s.FrontendClient().CountSchedules(s.newContext(), &workflowservice.CountSchedulesRequest{
+		Namespace: s.Namespace().String(),
+		Query:     fmt.Sprintf("%s = false", sadefs.TemporalSchedulePaused),
+	})
+	s.NoError(err)
+	s.GreaterOrEqual(countResp.Count, int64(2), "Expected at least 2 non-paused schedules")
+}
