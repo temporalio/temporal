@@ -30,6 +30,7 @@ import (
 	"sync"
 	"time"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cache"
@@ -44,6 +45,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/pingable"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	expmaps "golang.org/x/exp/maps"
 )
 
@@ -881,4 +883,115 @@ func namespaceStateChanged(old *namespace.Namespace, new *namespace.Namespace) b
 		// TODO: Refactor to use ns.ActiveInCluster() api
 		old.ActiveClusterName(namespace.EmptyBusinessID) != new.ActiveClusterName(namespace.EmptyBusinessID) ||
 		old.ReplicationState() != new.ReplicationState()
+}
+
+// InitializeSearchAttributeMappings initializes namespace search attribute mappings
+// for Elasticsearch visibility stores. This creates identity mappings for existing
+// custom search attributes in the cluster metadata.
+func InitializeSearchAttributeMappings(
+	ctx context.Context,
+	metadataManager persistence.MetadataManager,
+	clusterMetadataManager persistence.ClusterMetadataManager,
+	currentClusterName string,
+	visibilityIndexName string,
+	logger log.Logger,
+) error {
+	// Fetch the latest cluster metadata with updated index search attributes
+	clusterMetadataResponse, err := clusterMetadataManager.GetClusterMetadata(
+		ctx,
+		&persistence.GetClusterMetadataRequest{ClusterName: currentClusterName},
+	)
+	if err != nil {
+		return fmt.Errorf("failed to fetch cluster metadata: %w", err)
+	}
+
+	indexSearchAttrs := clusterMetadataResponse.IndexSearchAttributes[visibilityIndexName]
+	if indexSearchAttrs == nil || len(indexSearchAttrs.CustomSearchAttributes) == 0 {
+		return nil
+	}
+
+	// List all namespaces
+	request := &persistence.ListNamespacesRequest{
+		PageSize:       CacheRefreshPageSize,
+		IncludeDeleted: false,
+	}
+
+	for {
+		response, err := metadataManager.ListNamespaces(ctx, request)
+		if err != nil {
+			return fmt.Errorf("failed to list namespaces: %w", err)
+		}
+
+		for _, nsDetail := range response.Namespaces {
+			if err := updateSingleNamespaceSearchAttributeMappings(
+				ctx,
+				metadataManager,
+				nsDetail,
+				indexSearchAttrs.CustomSearchAttributes,
+				logger,
+			); err != nil {
+				logger.Warn("Failed to update namespace search attribute mappings",
+					tag.WorkflowNamespace(nsDetail.Namespace.Info.Name),
+					tag.Error(err))
+				// Continue with other namespaces
+			}
+		}
+
+		if len(response.NextPageToken) == 0 {
+			break
+		}
+		request.NextPageToken = response.NextPageToken
+	}
+
+	return nil
+}
+
+func updateSingleNamespaceSearchAttributeMappings(
+	ctx context.Context,
+	metadataManager persistence.MetadataManager,
+	nsDetail *persistence.GetNamespaceResponse,
+	clusterCustomSearchAttributes map[string]enumspb.IndexedValueType,
+	logger log.Logger,
+) error {
+	fieldToAliasMap := nsDetail.Namespace.Config.CustomSearchAttributeAliases
+	if fieldToAliasMap == nil {
+		fieldToAliasMap = make(map[string]string)
+	}
+
+	needsUpdate := false
+	upsertFieldToAliasMap := make(map[string]string)
+	for fieldName, fieldType := range clusterCustomSearchAttributes {
+		if sadefs.IsPreallocatedCSAFieldName(fieldName, fieldType) {
+			continue
+		}
+		if _, ok := fieldToAliasMap[fieldName]; ok {
+			continue
+		}
+		if _, ok := upsertFieldToAliasMap[fieldName]; ok {
+			continue
+		}
+		upsertFieldToAliasMap[fieldName] = fieldName
+		needsUpdate = true
+	}
+
+	if !needsUpdate {
+		return nil
+	}
+
+	// Update the namespace with new mappings
+	nsDetail.Namespace.Config.CustomSearchAttributeAliases = upsertFieldToAliasMap
+	err := metadataManager.UpdateNamespace(ctx, &persistence.UpdateNamespaceRequest{
+		Namespace:           nsDetail.Namespace,
+		IsGlobalNamespace:   nsDetail.IsGlobalNamespace,
+		NotificationVersion: nsDetail.NotificationVersion,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to update namespace: %w", err)
+	}
+
+	logger.Info("Created identity mappings for namespace search attributes",
+		tag.WorkflowNamespace(nsDetail.Namespace.Info.Name),
+		tag.Number(int64(len(upsertFieldToAliasMap))))
+
+	return nil
 }

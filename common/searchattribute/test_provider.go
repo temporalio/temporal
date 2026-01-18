@@ -25,13 +25,23 @@ var _ Provider = (*TestProvider)(nil)
 var _ Mapper = (*TestMapper)(nil)
 
 var (
+	// esCustomSearchAttributes includes both preallocated field names (for allocation)
+	// and custom field names (for testing existing mappings). The preallocated fields
+	// like Keyword01 are mapped to aliases like CustomKeywordField via TestAliases.
 	esCustomSearchAttributes = map[string]enumspb.IndexedValueType{
-		"CustomIntField":      enumspb.INDEXED_VALUE_TYPE_INT,
-		"CustomTextField":     enumspb.INDEXED_VALUE_TYPE_TEXT,
-		"CustomKeywordField":  enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		"CustomDatetimeField": enumspb.INDEXED_VALUE_TYPE_DATETIME,
-		"CustomDoubleField":   enumspb.INDEXED_VALUE_TYPE_DOUBLE,
-		"CustomBoolField":     enumspb.INDEXED_VALUE_TYPE_BOOL,
+		// Preallocated fields (these are what ES indexes actually use)
+		"Int01":      enumspb.INDEXED_VALUE_TYPE_INT,
+		"Int02":      enumspb.INDEXED_VALUE_TYPE_INT,
+		"Text01":     enumspb.INDEXED_VALUE_TYPE_TEXT,
+		"Text02":     enumspb.INDEXED_VALUE_TYPE_TEXT,
+		"Keyword01":  enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		"Keyword02":  enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		"Datetime01": enumspb.INDEXED_VALUE_TYPE_DATETIME,
+		"Datetime02": enumspb.INDEXED_VALUE_TYPE_DATETIME,
+		"Double01":   enumspb.INDEXED_VALUE_TYPE_DOUBLE,
+		"Double02":   enumspb.INDEXED_VALUE_TYPE_DOUBLE,
+		"Bool01":     enumspb.INDEXED_VALUE_TYPE_BOOL,
+		"Bool02":     enumspb.INDEXED_VALUE_TYPE_BOOL,
 	}
 
 	// default custom search attributes definition for SQL databases
@@ -143,7 +153,7 @@ func NewNoopMapper() Mapper {
 }
 
 func NewTestMapperProvider(customMapper Mapper) MapperProvider {
-	return NewMapperProvider(customMapper, nil, NewTestProvider(), false)
+	return NewMapperProvider(customMapper, nil, NewTestProvider(), false, func() bool { return true })
 }
 
 func NewNameTypeMapStub(attributes map[string]enumspb.IndexedValueType) NameTypeMap {
