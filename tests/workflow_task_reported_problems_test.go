@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	historypb "go.temporal.io/api/history/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
@@ -47,19 +48,13 @@ func (s *WFTFailureReportedProblemsTestSuite) simpleActivity() (string, error) {
 // This is used to test that the TemporalReportedProblems search attribute is not incorrectly removed
 // when signals keep coming in despite continuous workflow task failures.
 func (s *WFTFailureReportedProblemsTestSuite) workflowWithSignalsThatFails(ctx workflow.Context) (string, error) {
-	// If we should fail, signal ourselves (creating a side effect) and immediately panic.
-	// This will create buffered.
-	if s.shouldFail.Load() {
-		// Signal ourselves to create buffered events
-		err := s.SdkClient().SignalWorkflow(context.Background(), workflow.GetInfo(ctx).WorkflowExecution.ID, "", "test-signal", "self-signal")
-		if err != nil {
-			return "", err
-		}
-		panic("forced-panic-after-self-signal")
+	// Signal ourselves to create buffered events
+	err := s.SdkClient().SignalWorkflow(context.Background(), workflow.GetInfo(ctx).WorkflowExecution.ID, "", "test-signal", "self-signal")
+	if err != nil {
+		return "", err
 	}
+	panic("forced-panic-after-self-signal")
 
-	// If we reach here, shouldFail is false, so we can complete
-	return "done!", nil
 }
 
 // workflowWithActivity creates a workflow that executes an activity before potentially failing.
@@ -131,8 +126,6 @@ func (s *WFTFailureReportedProblemsTestSuite) TestWFTFailureReportedProblems_Not
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	s.shouldFail.Store(true)
-
 	s.Worker().RegisterWorkflow(s.workflowWithSignalsThatFails)
 
 	workflowOptions := sdkclient.StartWorkflowOptions{
@@ -155,6 +148,31 @@ func (s *WFTFailureReportedProblemsTestSuite) TestWFTFailureReportedProblems_Not
 		require.Contains(t, saVal, "cause=WorkflowTaskFailedCauseWorkflowWorkerUnhandledFailure")
 	}, 20*time.Second, 500*time.Millisecond)
 
+	// Validate the workflow history shows the repeating pattern:
+	// signal -> task scheduled -> task started -> task failed
+	// This demonstrates that signals are being buffered between workflow task failures.
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		var events []*historypb.HistoryEvent
+		iter := s.SdkClient().GetWorkflowHistory(ctx, workflowRun.GetID(), workflowRun.GetRunID(), false, 0)
+		for iter.HasNext() {
+			event, err := iter.Next()
+			require.NoError(t, err)
+			events = append(events, event)
+		}
+
+		// Validate the expected pattern structure showing repeated cycles of task failures and signals
+		s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskFailed
+  5 WorkflowExecutionSignaled
+  6 WorkflowTaskScheduled
+  7 WorkflowTaskStarted
+  8 WorkflowTaskFailed
+  9 WorkflowExecutionSignaled`, events[:9])
+	}, 10*time.Second, 500*time.Millisecond)
+
 	// Verify the search attribute persists even as the workflow continues to fail and create buffered events
 	// This is the key part of the test - buffered events should not cause the search attribute to be cleared
 	s.EventuallyWithT(func(t *assert.CollectT) {
@@ -166,8 +184,7 @@ func (s *WFTFailureReportedProblemsTestSuite) TestWFTFailureReportedProblems_Not
 	}, 5*time.Second, 500*time.Millisecond)
 
 	// Terminate the workflow for cleanup
-	err = s.SdkClient().TerminateWorkflow(ctx, workflowRun.GetID(), workflowRun.GetRunID(), "test cleanup")
-	s.NoError(err)
+	s.NoError(s.SdkClient().TerminateWorkflow(ctx, workflowRun.GetID(), workflowRun.GetRunID(), "test cleanup"))
 }
 
 func (s *WFTFailureReportedProblemsTestSuite) TestWFTFailureReportedProblems_SetAndClear_FailAfterActivity() {
