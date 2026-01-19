@@ -129,16 +129,14 @@ func (s *WorkflowAwareScheduler) TrySubmit(executable Executable) bool {
 		if s.workflowQueueScheduler.TrySubmit(executable) {
 			return true
 		}
-		// WorkflowQueueScheduler is full, reschedule the task
-		executable.Reschedule()
-		return true // Return true because we've handled the task (via reschedule)
+		// WorkflowQueueScheduler is full, fall through to base scheduler.
 	}
 	return s.baseScheduler.TrySubmit(executable)
 }
 
 // HandleBusyWorkflow implements BusyWorkflowHandler.
 // It routes a task to the WorkflowQueueScheduler when it encounters a busy workflow error.
-// Returns true if the task was handled (either submitted to WorkflowQueueScheduler or rescheduled).
+// Returns true if the task was handled (submitted to a scheduler), false if caller should handle it.
 func (s *WorkflowAwareScheduler) HandleBusyWorkflow(executable Executable) bool {
 	if !s.options.EnableWorkflowQueueScheduler() {
 		// WorkflowQueueScheduler not enabled, let caller handle it
@@ -148,9 +146,8 @@ func (s *WorkflowAwareScheduler) HandleBusyWorkflow(executable Executable) bool 
 	if s.workflowQueueScheduler.TrySubmit(executable) {
 		return true
 	}
-	// WorkflowQueueScheduler is full, reschedule the task
-	executable.Reschedule()
-	return true
+	// WorkflowQueueScheduler is full, fall back to base scheduler.
+	return s.baseScheduler.TrySubmit(executable)
 }
 
 // HasWorkflowQueue returns true if the workflow has an active queue in the WorkflowQueueScheduler.

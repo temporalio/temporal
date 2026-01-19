@@ -383,7 +383,7 @@ func (s *workflowAwareSchedulerSuite) TestHandleBusyWorkflow_SubmitsToWorkflowQu
 	time.Sleep(50 * time.Millisecond) // Give time for task to complete
 }
 
-func (s *workflowAwareSchedulerSuite) TestHandleBusyWorkflow_ReschedulesWhenFull() {
+func (s *workflowAwareSchedulerSuite) TestHandleBusyWorkflow_FallsBackToBaseSchedulerWhenFull() {
 	mockBaseScheduler := s.createMockBaseScheduler()
 	mockBaseScheduler.EXPECT().Start().Times(1)
 	mockBaseScheduler.EXPECT().Stop().Times(1)
@@ -409,9 +409,9 @@ func (s *workflowAwareSchedulerSuite) TestHandleBusyWorkflow_ReschedulesWhenFull
 	mockExec1.EXPECT().Abort().MaxTimes(1)
 	s.True(scheduler.HandleBusyWorkflow(mockExec1))
 
-	// Second task should be rescheduled
+	// Second task should fall back to base scheduler
 	mockExec2 := s.createMockExecutable("ns1", "wf2", "run2")
-	mockExec2.EXPECT().Reschedule().Times(1)
+	mockBaseScheduler.EXPECT().TrySubmit(mockExec2).Return(true).Times(1)
 	s.True(scheduler.HandleBusyWorkflow(mockExec2))
 }
 
@@ -567,15 +567,15 @@ func (s *workflowAwareSchedulerSuite) TestConcurrentSubmit() {
 	numTasks := 100
 	wg.Add(numTasks)
 
-	for i := 0; i < numTasks; i++ {
-		go func(idx int) {
+	for range numTasks {
+		go func() {
 			defer wg.Done()
 			mockExec := NewMockExecutable(s.controller)
 			mockExec.EXPECT().GetNamespaceID().Return("ns1").AnyTimes()
 			mockExec.EXPECT().GetWorkflowID().Return("wf1").AnyTimes()
 			mockExec.EXPECT().GetRunID().Return("run1").AnyTimes()
 			scheduler.Submit(mockExec)
-		}(i)
+		}()
 	}
 
 	wg.Wait()
@@ -605,8 +605,8 @@ func (s *workflowAwareSchedulerSuite) TestConcurrentHandleBusyWorkflow() {
 	numTasks := 50
 	wg.Add(numTasks)
 
-	for i := 0; i < numTasks; i++ {
-		go func(idx int) {
+	for range numTasks {
+		go func() {
 			defer wg.Done()
 			mockExec := s.createMockExecutable("ns1", "wf1", "run1")
 			mockExec.EXPECT().RetryPolicy().Return(backoff.NewExponentialRetryPolicy(time.Millisecond)).AnyTimes()
@@ -614,7 +614,7 @@ func (s *workflowAwareSchedulerSuite) TestConcurrentHandleBusyWorkflow() {
 			mockExec.EXPECT().Ack().MaxTimes(1)
 			mockExec.EXPECT().Abort().MaxTimes(1)
 			scheduler.HandleBusyWorkflow(mockExec)
-		}(i)
+		}()
 	}
 
 	wg.Wait()
