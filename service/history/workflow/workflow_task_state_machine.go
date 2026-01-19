@@ -1341,11 +1341,10 @@ func (m *workflowTaskStateMachine) emitWorkflowTaskAttemptStats(
 	namespaceName := m.ms.GetNamespaceEntry().Name().String()
 	metrics.WorkflowTaskAttempt.With(m.ms.metricsHandler).
 		Record(int64(attempt), metrics.NamespaceTag(namespaceName))
-	if attempt >= int32(m.ms.shard.GetConfig().WorkflowTaskCriticalAttempts()) {
+	threshold := int32(m.ms.shard.GetConfig().WorkflowTaskCriticalAttempts())
+	if attempt >= threshold {
 		m.ms.shard.GetThrottledLogger().Warn(
-			fmt.Sprintf(
-				"Workflow task attempt %d exceeds critical threshold (%d)",
-				attempt, m.ms.shard.GetConfig().WorkflowTaskCriticalAttempts()),
+			fmt.Sprintf("Workflow task attempt %d exceeds critical threshold (%d)", attempt, threshold),
 			tag.WorkflowNamespace(namespaceName),
 			tag.WorkflowID(m.ms.GetExecutionInfo().WorkflowId),
 			tag.WorkflowRunID(m.ms.GetExecutionState().RunId),
