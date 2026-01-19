@@ -38,6 +38,13 @@ import (
 
 var _ Scheduler[Task] = (*WorkflowQueueScheduler[Task])(nil)
 
+const (
+	// defaultTasksPerBatch is the default number of tasks to process from a queue
+	// before yielding to allow other queues to be processed. This prevents starvation
+	// when one workflow has many tasks while others are waiting.
+	defaultTasksPerBatch = 10
+)
+
 type (
 	// WorkflowQueueSchedulerOptions contains configuration for the WorkflowQueueScheduler.
 	WorkflowQueueSchedulerOptions struct {
@@ -45,6 +52,10 @@ type (
 		QueueSize int
 		// WorkerCount is the number of worker goroutines.
 		WorkerCount dynamicconfig.TypedSubscribable[int]
+		// TasksPerBatch is the maximum number of tasks to process from a single queue
+		// before re-dispatching to allow other queues to be processed. This prevents
+		// starvation when one workflow has many pending tasks. Default is 10.
+		TasksPerBatch int
 	}
 
 	// QueueKeyFn extracts a workflow key from a task for queue routing.
@@ -101,9 +112,16 @@ func NewWorkflowQueueScheduler[T Task](
 	metricsHandler metrics.Handler,
 	timeSource clock.TimeSource,
 ) *WorkflowQueueScheduler[T] {
+	tasksPerBatch := options.TasksPerBatch
+	if tasksPerBatch <= 0 {
+		tasksPerBatch = defaultTasksPerBatch
+	}
+	opts := *options
+	opts.TasksPerBatch = tasksPerBatch
+
 	s := &WorkflowQueueScheduler[T]{
 		shutdownChan:   make(chan struct{}),
-		options:        options,
+		options:        &opts,
 		queueKeyFn:     queueKeyFn,
 		logger:         logger,
 		metricsHandler: metricsHandler,
@@ -319,9 +337,12 @@ func (s *WorkflowQueueScheduler[T]) worker(workerShutdownCh <-chan struct{}) {
 	}
 }
 
-// processQueue processes all tasks in the queue for the given workflow.
-// The worker owns the queue until it's empty.
+// processQueue processes tasks from the queue for the given workflow.
+// To prevent starvation of other workflows, it processes at most TasksPerBatch
+// tasks before re-dispatching the queue if more tasks remain.
 func (s *WorkflowQueueScheduler[T]) processQueue(key any) {
+	tasksProcessed := 0
+
 	for {
 		if s.isStopped() {
 			return
@@ -346,6 +367,20 @@ func (s *WorkflowQueueScheduler[T]) processQueue(key any) {
 		metrics.WorkflowQueueSchedulerQueueWaitTime.With(s.metricsHandler).Record(queueWaitTime)
 
 		s.executeTask(entry.task, entry.submitTime)
+		tasksProcessed++
+
+		// If we've processed a batch and the queue still has tasks,
+		// re-dispatch to allow other workflows to be processed (prevent starvation)
+		if !queueDeleted && tasksProcessed >= s.options.TasksPerBatch {
+			select {
+			case s.dispatchChan <- key:
+				// Successfully re-dispatched, let other queues get a turn
+				return
+			default:
+				// Channel full, continue processing this queue
+				tasksProcessed = 0
+			}
+		}
 	}
 }
 

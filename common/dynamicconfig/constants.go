@@ -1775,7 +1775,8 @@ that processes tasks for contended workflows sequentially to avoid busy workflow
 	TaskSchedulerWorkflowQueueSchedulerQueueSize = NewGlobalIntSetting(
 		"history.taskSchedulerWorkflowQueueSchedulerQueueSize",
 		1000,
-		`TaskSchedulerWorkflowQueueSchedulerQueueSize is the buffer size for the workflow queue scheduler's dispatch channel`,
+		`TaskSchedulerWorkflowQueueSchedulerQueueSize is the buffer size for the workflow queue scheduler's dispatch channel.
+Changes to this value require a restart to take effect.`,
 	)
 	TaskSchedulerWorkflowQueueSchedulerWorkerCount = NewGlobalIntSetting(
 		"history.taskSchedulerWorkflowQueueSchedulerWorkerCount",

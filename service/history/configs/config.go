@@ -111,17 +111,20 @@ type Config struct {
 	TaskDLQInternalErrors          dynamicconfig.BoolPropertyFn
 	TaskDLQErrorPattern            dynamicconfig.StringPropertyFn
 
-	TaskSchedulerEnableRateLimiter                   dynamicconfig.BoolPropertyFn
-	TaskSchedulerEnableRateLimiterShadowMode         dynamicconfig.BoolPropertyFn
-	TaskSchedulerRateLimiterStartupDelay             dynamicconfig.DurationPropertyFn
-	TaskSchedulerGlobalMaxQPS                        dynamicconfig.IntPropertyFn
-	TaskSchedulerMaxQPS                              dynamicconfig.IntPropertyFn
-	TaskSchedulerGlobalNamespaceMaxQPS               dynamicconfig.IntPropertyFnWithNamespaceFilter
-	TaskSchedulerNamespaceMaxQPS                     dynamicconfig.IntPropertyFnWithNamespaceFilter
-	TaskSchedulerInactiveChannelDeletionDelay        dynamicconfig.DurationPropertyFn
-	TaskSchedulerEnableWorkflowQueueScheduler        dynamicconfig.BoolPropertyFn
-	TaskSchedulerWorkflowQueueSchedulerQueueSize     dynamicconfig.IntPropertyFn
-	TaskSchedulerWorkflowQueueSchedulerWorkerCount   dynamicconfig.TypedSubscribable[int]
+	TaskSchedulerEnableRateLimiter            dynamicconfig.BoolPropertyFn
+	TaskSchedulerEnableRateLimiterShadowMode  dynamicconfig.BoolPropertyFn
+	TaskSchedulerRateLimiterStartupDelay      dynamicconfig.DurationPropertyFn
+	TaskSchedulerGlobalMaxQPS                 dynamicconfig.IntPropertyFn
+	TaskSchedulerMaxQPS                       dynamicconfig.IntPropertyFn
+	TaskSchedulerGlobalNamespaceMaxQPS        dynamicconfig.IntPropertyFnWithNamespaceFilter
+	TaskSchedulerNamespaceMaxQPS              dynamicconfig.IntPropertyFnWithNamespaceFilter
+	TaskSchedulerInactiveChannelDeletionDelay dynamicconfig.DurationPropertyFn
+
+	// WorkflowQueueScheduler settings for sequential per-workflow task processing
+	TaskSchedulerEnableWorkflowQueueScheduler dynamicconfig.BoolPropertyFn
+	// TaskSchedulerWorkflowQueueSchedulerQueueSize requires restart to take effect
+	TaskSchedulerWorkflowQueueSchedulerQueueSize   dynamicconfig.IntPropertyFn
+	TaskSchedulerWorkflowQueueSchedulerWorkerCount dynamicconfig.TypedSubscribable[int]
 
 	// TimerQueueProcessor settings
 	TimerTaskBatchSize                               dynamicconfig.IntPropertyFn
@@ -507,16 +510,16 @@ func NewConfig(
 		TaskDLQInternalErrors:          dynamicconfig.HistoryTaskDLQInternalErrors.Get(dc),
 		TaskDLQErrorPattern:            dynamicconfig.HistoryTaskDLQErrorPattern.Get(dc),
 
-		TaskSchedulerEnableRateLimiter:                dynamicconfig.TaskSchedulerEnableRateLimiter.Get(dc),
-		TaskSchedulerEnableRateLimiterShadowMode:      dynamicconfig.TaskSchedulerEnableRateLimiterShadowMode.Get(dc),
-		TaskSchedulerRateLimiterStartupDelay:          dynamicconfig.TaskSchedulerRateLimiterStartupDelay.Get(dc),
-		TaskSchedulerGlobalMaxQPS:                     dynamicconfig.TaskSchedulerGlobalMaxQPS.Get(dc),
-		TaskSchedulerMaxQPS:                           dynamicconfig.TaskSchedulerMaxQPS.Get(dc),
-		TaskSchedulerNamespaceMaxQPS:                  dynamicconfig.TaskSchedulerNamespaceMaxQPS.Get(dc),
-		TaskSchedulerGlobalNamespaceMaxQPS:            dynamicconfig.TaskSchedulerGlobalNamespaceMaxQPS.Get(dc),
-		TaskSchedulerInactiveChannelDeletionDelay:     dynamicconfig.TaskSchedulerInactiveChannelDeletionDelay.Get(dc),
-		TaskSchedulerEnableWorkflowQueueScheduler:     dynamicconfig.TaskSchedulerEnableWorkflowQueueScheduler.Get(dc),
-		TaskSchedulerWorkflowQueueSchedulerQueueSize:  dynamicconfig.TaskSchedulerWorkflowQueueSchedulerQueueSize.Get(dc),
+		TaskSchedulerEnableRateLimiter:                 dynamicconfig.TaskSchedulerEnableRateLimiter.Get(dc),
+		TaskSchedulerEnableRateLimiterShadowMode:       dynamicconfig.TaskSchedulerEnableRateLimiterShadowMode.Get(dc),
+		TaskSchedulerRateLimiterStartupDelay:           dynamicconfig.TaskSchedulerRateLimiterStartupDelay.Get(dc),
+		TaskSchedulerGlobalMaxQPS:                      dynamicconfig.TaskSchedulerGlobalMaxQPS.Get(dc),
+		TaskSchedulerMaxQPS:                            dynamicconfig.TaskSchedulerMaxQPS.Get(dc),
+		TaskSchedulerNamespaceMaxQPS:                   dynamicconfig.TaskSchedulerNamespaceMaxQPS.Get(dc),
+		TaskSchedulerGlobalNamespaceMaxQPS:             dynamicconfig.TaskSchedulerGlobalNamespaceMaxQPS.Get(dc),
+		TaskSchedulerInactiveChannelDeletionDelay:      dynamicconfig.TaskSchedulerInactiveChannelDeletionDelay.Get(dc),
+		TaskSchedulerEnableWorkflowQueueScheduler:      dynamicconfig.TaskSchedulerEnableWorkflowQueueScheduler.Get(dc),
+		TaskSchedulerWorkflowQueueSchedulerQueueSize:   dynamicconfig.TaskSchedulerWorkflowQueueSchedulerQueueSize.Get(dc),
 		TaskSchedulerWorkflowQueueSchedulerWorkerCount: dynamicconfig.TaskSchedulerWorkflowQueueSchedulerWorkerCount.Subscribe(dc),
 
 		TimerTaskBatchSize:                               dynamicconfig.TimerTaskBatchSize.Get(dc),
