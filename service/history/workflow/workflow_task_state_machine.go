@@ -4,6 +4,7 @@ package workflow
 
 import (
 	"cmp"
+	"fmt"
 	"math"
 	"slices"
 	"time"
@@ -1341,7 +1342,10 @@ func (m *workflowTaskStateMachine) emitWorkflowTaskAttemptStats(
 	metrics.WorkflowTaskAttempt.With(m.ms.metricsHandler).
 		Record(int64(attempt), metrics.NamespaceTag(namespaceName))
 	if attempt >= int32(m.ms.shard.GetConfig().WorkflowTaskCriticalAttempts()) {
-		m.ms.shard.GetThrottledLogger().Warn("Critical attempts processing workflow task",
+		m.ms.shard.GetThrottledLogger().Warn(
+			fmt.Sprintf(
+				"Workflow task attempt %d exceeds critical threshold (%d)",
+				attempt, m.ms.shard.GetConfig().WorkflowTaskCriticalAttempts()),
 			tag.WorkflowNamespace(namespaceName),
 			tag.WorkflowID(m.ms.GetExecutionInfo().WorkflowId),
 			tag.WorkflowRunID(m.ms.GetExecutionState().RunId),
