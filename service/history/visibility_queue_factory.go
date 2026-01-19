@@ -52,6 +52,8 @@ func NewVisibilityQueueFactory(
 				},
 				params.NamespaceRegistry,
 				params.Logger,
+				params.MetricsHandler,
+				params.TimeSource,
 			),
 			HostPriorityAssigner: queues.NewPriorityAssigner(),
 			HostReaderRateLimiter: queues.NewReaderPriorityRateLimiter(

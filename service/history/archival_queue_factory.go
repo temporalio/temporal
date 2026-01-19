@@ -81,6 +81,8 @@ func newHostScheduler(params ArchivalQueueFactoryParams) queues.Scheduler {
 		},
 		params.NamespaceRegistry,
 		params.Logger,
+		params.MetricsHandler,
+		params.TimeSource,
 	)
 }
 

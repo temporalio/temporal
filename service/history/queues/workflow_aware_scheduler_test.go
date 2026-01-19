@@ -30,8 +30,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/tasks"
 	"go.uber.org/mock/gomock"
 )
@@ -79,6 +81,8 @@ func (s *workflowAwareSchedulerSuite) TestNewWorkflowAwareScheduler_DefaultQueue
 			WorkflowQueueSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 1, func() {} },
 		},
 		s.logger,
+		metrics.NoopMetricsHandler,
+		clock.NewRealTimeSource(),
 	)
 	s.NotNil(scheduler)
 	s.NotNil(scheduler.workflowQueueScheduler)
@@ -95,6 +99,8 @@ func (s *workflowAwareSchedulerSuite) TestNewWorkflowAwareScheduler_CustomQueueS
 			WorkflowQueueSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 2, func() {} },
 		},
 		s.logger,
+		metrics.NoopMetricsHandler,
+		clock.NewRealTimeSource(),
 	)
 	s.NotNil(scheduler)
 }
@@ -162,6 +168,8 @@ func (s *workflowAwareSchedulerSuite) TestSubmit_RoutesToWorkflowQueueSchedulerW
 			WorkflowQueueSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 1, func() {} },
 		},
 		s.logger,
+		metrics.NoopMetricsHandler,
+		clock.NewRealTimeSource(),
 	)
 	scheduler.Start()
 	defer scheduler.Stop()
@@ -233,6 +241,8 @@ func (s *workflowAwareSchedulerSuite) TestTrySubmit_DelegatesToBaseWhenWorkflowQ
 			WorkflowQueueSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 1, func() {} },
 		},
 		s.logger,
+		metrics.NoopMetricsHandler,
+		clock.NewRealTimeSource(),
 	)
 	scheduler.Start()
 	defer scheduler.Stop()
@@ -256,6 +266,8 @@ func (s *workflowAwareSchedulerSuite) TestTrySubmit_RoutesToBaseWhenNoActiveQueu
 			WorkflowQueueSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 1, func() {} },
 		},
 		s.logger,
+		metrics.NoopMetricsHandler,
+		clock.NewRealTimeSource(),
 	)
 	scheduler.Start()
 	defer scheduler.Stop()
@@ -278,6 +290,8 @@ func (s *workflowAwareSchedulerSuite) TestTrySubmit_AddsToExistingQueueSuccessfu
 			WorkflowQueueSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 1, func() {} },
 		},
 		s.logger,
+		metrics.NoopMetricsHandler,
+		clock.NewRealTimeSource(),
 	)
 	scheduler.Start()
 	defer scheduler.Stop()
@@ -335,6 +349,8 @@ func (s *workflowAwareSchedulerSuite) TestHandleBusyWorkflow_ReturnsFalseWhenDis
 			WorkflowQueueSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 1, func() {} },
 		},
 		s.logger,
+		metrics.NoopMetricsHandler,
+		clock.NewRealTimeSource(),
 	)
 	s.False(scheduler.HandleBusyWorkflow(mockExec))
 }
@@ -352,6 +368,8 @@ func (s *workflowAwareSchedulerSuite) TestHandleBusyWorkflow_SubmitsToWorkflowQu
 			WorkflowQueueSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 1, func() {} },
 		},
 		s.logger,
+		metrics.NoopMetricsHandler,
+		clock.NewRealTimeSource(),
 	)
 	scheduler.Start()
 	defer scheduler.Stop()
@@ -379,6 +397,8 @@ func (s *workflowAwareSchedulerSuite) TestHandleBusyWorkflow_ReschedulesWhenFull
 			WorkflowQueueSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 0, func() {} }, // 0 workers
 		},
 		s.logger,
+		metrics.NoopMetricsHandler,
+		clock.NewRealTimeSource(),
 	)
 	scheduler.Start()
 	defer scheduler.Stop()
@@ -411,6 +431,8 @@ func (s *workflowAwareSchedulerSuite) TestHasWorkflowQueue_ReturnsFalseWhenDisab
 			WorkflowQueueSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 1, func() {} },
 		},
 		s.logger,
+		metrics.NoopMetricsHandler,
+		clock.NewRealTimeSource(),
 	)
 	s.False(scheduler.HasWorkflowQueue(mockExec))
 }
@@ -428,6 +450,8 @@ func (s *workflowAwareSchedulerSuite) TestHasWorkflowQueue_ReturnsFalseWhenNoQue
 			WorkflowQueueSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 1, func() {} },
 		},
 		s.logger,
+		metrics.NoopMetricsHandler,
+		clock.NewRealTimeSource(),
 	)
 	scheduler.Start()
 	defer scheduler.Stop()
@@ -449,6 +473,8 @@ func (s *workflowAwareSchedulerSuite) TestHasWorkflowQueue_ReturnsTrueWhenQueueE
 			WorkflowQueueSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 1, func() {} },
 		},
 		s.logger,
+		metrics.NoopMetricsHandler,
+		clock.NewRealTimeSource(),
 	)
 	scheduler.Start()
 	defer scheduler.Stop()
@@ -531,6 +557,8 @@ func (s *workflowAwareSchedulerSuite) TestConcurrentSubmit() {
 			WorkflowQueueSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 4, func() {} },
 		},
 		s.logger,
+		metrics.NoopMetricsHandler,
+		clock.NewRealTimeSource(),
 	)
 	scheduler.Start()
 	defer scheduler.Stop()
@@ -567,6 +595,8 @@ func (s *workflowAwareSchedulerSuite) TestConcurrentHandleBusyWorkflow() {
 			WorkflowQueueSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 4, func() {} },
 		},
 		s.logger,
+		metrics.NoopMetricsHandler,
+		clock.NewRealTimeSource(),
 	)
 	scheduler.Start()
 	defer scheduler.Stop()
@@ -624,6 +654,8 @@ func (s *workflowAwareSchedulerSuite) createSchedulerWithMock(enabled bool) (*Wo
 		mockBaseScheduler,
 		s.defaultSchedulerOptions(enabled),
 		s.logger,
+		metrics.NoopMetricsHandler,
+		clock.NewRealTimeSource(),
 	)
 	return scheduler, mockBaseScheduler
 }

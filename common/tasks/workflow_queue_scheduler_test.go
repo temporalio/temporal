@@ -10,7 +10,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.uber.org/mock/gomock"
 )
 
@@ -453,6 +455,8 @@ func (s *workflowQueueSchedulerSuite) TestWorkerScaling_DynamicScaleUp() {
 		},
 		func(task *MockTask) any { return 1 }, // Simple key function
 		log.NewNoopLogger(),
+		metrics.NoopMetricsHandler,
+		clock.NewRealTimeSource(),
 	)
 	scheduler.Start()
 	defer scheduler.Stop()
@@ -901,6 +905,8 @@ func (s *workflowQueueSchedulerSuite) newScheduler(workerCount, queueSize int) *
 		},
 		func(task *MockTask) any { return 1 }, // All tasks to same key
 		log.NewNoopLogger(),
+		metrics.NoopMetricsHandler,
+		clock.NewRealTimeSource(),
 	)
 }
 
@@ -914,5 +920,7 @@ func (s *workflowQueueSchedulerSuite) newSchedulerWithWorkflowID(workerCount, qu
 		},
 		func(task *testTaskWithID) any { return task.workflowID }, // Key by workflow ID
 		log.NewNoopLogger(),
+		metrics.NoopMetricsHandler,
+		clock.NewRealTimeSource(),
 	)
 }

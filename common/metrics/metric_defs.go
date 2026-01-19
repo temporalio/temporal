@@ -1065,6 +1065,19 @@ var (
 	DynamicWorkerPoolSchedulerEnqueuedTasks = NewCounterDef("dynamic_worker_pool_scheduler_enqueued_tasks")
 	DynamicWorkerPoolSchedulerDequeuedTasks = NewCounterDef("dynamic_worker_pool_scheduler_dequeued_tasks")
 	DynamicWorkerPoolSchedulerRejectedTasks = NewCounterDef("dynamic_worker_pool_scheduler_rejected_tasks")
+
+	// WorkflowQueueScheduler metrics
+	WorkflowQueueSchedulerQueueCount        = NewGaugeDef("workflow_queue_scheduler_queue_count")
+	WorkflowQueueSchedulerPendingTasks      = NewGaugeDef("workflow_queue_scheduler_pending_tasks")
+	WorkflowQueueSchedulerActiveWorkers     = NewGaugeDef("workflow_queue_scheduler_active_workers")
+	WorkflowQueueSchedulerTasksSubmitted    = NewCounterDef("workflow_queue_scheduler_tasks_submitted")
+	WorkflowQueueSchedulerTasksCompleted    = NewCounterDef("workflow_queue_scheduler_tasks_completed")
+	WorkflowQueueSchedulerTasksFailed       = NewCounterDef("workflow_queue_scheduler_tasks_failed")
+	WorkflowQueueSchedulerTasksAborted      = NewCounterDef("workflow_queue_scheduler_tasks_aborted")
+	WorkflowQueueSchedulerSubmitRejected    = NewCounterDef("workflow_queue_scheduler_submit_rejected")
+	WorkflowQueueSchedulerTaskLatency       = NewTimerDef("workflow_queue_scheduler_task_latency")
+	WorkflowQueueSchedulerQueueWaitTime     = NewTimerDef("workflow_queue_scheduler_queue_wait_time")
+
 	PausedActivitiesCounter                 = NewCounterDef("paused_activities")
 	ExternalPayloadUploadSize               = NewBytesHistogramDef("external_payload_upload_size", WithDescription("The histogram of sizes in bytes of uploaded external payloads."))
 

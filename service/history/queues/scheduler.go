@@ -87,6 +87,8 @@ func NewScheduler(
 	options SchedulerOptions,
 	namespaceRegistry namespace.Registry,
 	logger log.Logger,
+	metricsHandler metrics.Handler,
+	timeSource clock.TimeSource,
 ) Scheduler {
 	var scheduler tasks.Scheduler[Executable]
 
@@ -146,6 +148,8 @@ func NewScheduler(
 		fifoScheduler,
 		options.WorkflowAwareSchedulerOptions,
 		logger,
+		metricsHandler,
+		timeSource,
 	)
 
 	scheduler = tasks.NewInterleavedWeightedRoundRobinScheduler(

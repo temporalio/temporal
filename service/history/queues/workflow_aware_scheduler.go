@@ -23,9 +23,11 @@
 package queues
 
 import (
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/tasks"
 )
 
@@ -78,6 +80,8 @@ func NewWorkflowAwareScheduler(
 	baseScheduler tasks.Scheduler[Executable],
 	options WorkflowAwareSchedulerOptions,
 	logger log.Logger,
+	metricsHandler metrics.Handler,
+	timeSource clock.TimeSource,
 ) *WorkflowAwareScheduler {
 	workflowQueueScheduler := tasks.NewWorkflowQueueScheduler[Executable](
 		&tasks.WorkflowQueueSchedulerOptions{
@@ -86,13 +90,15 @@ func NewWorkflowAwareScheduler(
 		},
 		executableQueueKeyFn,
 		logger,
+		metricsHandler,
+		timeSource,
 	)
 
 	return &WorkflowAwareScheduler{
-		baseScheduler:       baseScheduler,
+		baseScheduler:          baseScheduler,
 		workflowQueueScheduler: workflowQueueScheduler,
-		options:             options,
-		logger:              logger,
+		options:                options,
+		logger:                 logger,
 	}
 }
 
