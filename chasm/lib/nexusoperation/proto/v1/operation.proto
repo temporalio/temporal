@@ -2,6 +2,9 @@ syntax = "proto3";
 
 package temporal.server.chasm.lib.nexusoperation.proto.v1;
 
+import "google/protobuf/timestamp.proto";
+import "temporal/api/failure/v1/message.proto";
+
 option go_package = "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb;nexusoperationpb";
 
 message OperationState {
@@ -31,7 +34,27 @@ enum OperationStatus {
 }
 
 message CancellationState {
+  // Current status of the cancellation request.
   CancellationStatus status = 1;
+
+  // The time when cancellation was requested.
+  google.protobuf.Timestamp requested_time = 2;
+
+  // The number of attempts made to deliver the cancel operation request.
+  // This number represents a minimum bound since the attempt is incremented after the request completes.
+  int32 attempt = 3;
+
+  // The time when the last attempt completed.
+  google.protobuf.Timestamp last_attempt_complete_time = 4;
+
+  // The last attempt's failure, if any.
+  temporal.api.failure.v1.Failure last_attempt_failure = 5;
+
+  // The time when the next attempt is scheduled (only set when in BACKING_OFF state).
+  google.protobuf.Timestamp next_attempt_schedule_time = 6;
+
+  // The event ID of the NEXUS_OPERATION_CANCEL_REQUESTED event for this cancellation.
+  int64 requested_event_id = 7;
 }
 
 enum CancellationStatus {
