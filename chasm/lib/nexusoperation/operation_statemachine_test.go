@@ -170,10 +170,8 @@ func TestTransitionAttemptFailed(t *testing.T) {
 
 			// Verify retry interval is within expected range (due to jitter)
 			actualInterval := operation.NextAttemptScheduleTime.AsTime().Sub(defaultTime)
-			require.True(t, actualInterval >= tc.minRetryInterval,
-				"retry interval %v should be >= %v", actualInterval, tc.minRetryInterval)
-			require.True(t, actualInterval <= tc.maxRetryInterval,
-				"retry interval %v should be <= %v", actualInterval, tc.maxRetryInterval)
+			require.GreaterOrEqual(t, actualInterval, tc.minRetryInterval, "retry interval %v should be >= %v", actualInterval, tc.minRetryInterval)
+			require.LessOrEqual(t, actualInterval, tc.maxRetryInterval, "retry interval %v should be <= %v", actualInterval, tc.maxRetryInterval)
 
 			// Verify backoff task
 			require.Len(t, ctx.Tasks, 1)
