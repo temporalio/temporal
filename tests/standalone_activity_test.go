@@ -242,6 +242,7 @@ func (s *standaloneActivityTestSuite) TestPollActivityTaskQueue() {
 
 	activityID := testcore.RandomizeStr(t.Name())
 	taskQueue := testcore.RandomizeStr(t.Name())
+	namespace := s.Namespace().String()
 
 	startToCloseTimeout := durationpb.New(1 * time.Minute)
 	scheduleToCloseTimeout := durationpb.New(2 * time.Minute)
@@ -251,7 +252,7 @@ func (s *standaloneActivityTestSuite) TestPollActivityTaskQueue() {
 	}
 
 	startResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
-		Namespace:    s.Namespace().String(),
+		Namespace:    namespace,
 		ActivityId:   activityID,
 		ActivityType: s.tv.ActivityType(),
 		Identity:     s.tv.WorkerIdentity(),
@@ -269,7 +270,7 @@ func (s *standaloneActivityTestSuite) TestPollActivityTaskQueue() {
 	require.NoError(t, err)
 
 	pollTaskResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
-		Namespace: s.Namespace().String(),
+		Namespace: namespace,
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: taskQueue,
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
@@ -278,6 +279,7 @@ func (s *standaloneActivityTestSuite) TestPollActivityTaskQueue() {
 	})
 	require.NoError(t, err)
 	require.Equal(t, activityID, pollTaskResp.GetActivityId())
+	require.Equal(t, namespace, pollTaskResp.GetWorkflowNamespace())
 	protorequire.ProtoEqual(t, s.tv.ActivityType(), pollTaskResp.GetActivityType())
 	require.Equal(t, startResp.GetRunId(), pollTaskResp.GetActivityRunId())
 	protorequire.ProtoEqual(t, defaultInput, pollTaskResp.GetInput())
@@ -1767,18 +1769,18 @@ func (s *standaloneActivityTestSuite) TestStartToCloseTimeout() {
 	require.NoError(t, err)
 
 	// First poll: activity has not started yet
-	describeResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+	describeResp1, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
 		Namespace:  s.Namespace().String(),
 		ActivityId: activityID,
 		RunId:      startResp.RunId,
 	})
 	require.NoError(t, err)
-	require.NotNil(t, describeResp)
-	require.NotNil(t, describeResp.GetInfo())
-	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING, describeResp.GetInfo().GetStatus(),
-		"expected Running but is %s", describeResp.GetInfo().GetStatus())
-	require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, describeResp.GetInfo().GetRunState(),
-		"expected Scheduled but is %s", describeResp.GetInfo().GetRunState())
+	require.NotNil(t, describeResp1)
+	require.NotNil(t, describeResp1.GetInfo())
+	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING, describeResp1.GetInfo().GetStatus(),
+		"expected Running but is %s", describeResp1.GetInfo().GetStatus())
+	require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, describeResp1.GetInfo().GetRunState(),
+		"expected Scheduled but is %s", describeResp1.GetInfo().GetRunState())
 
 	// Worker poll to start the activity
 	pollTaskResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
@@ -1793,50 +1795,52 @@ func (s *standaloneActivityTestSuite) TestStartToCloseTimeout() {
 	require.NotEmpty(t, pollTaskResp.TaskToken)
 
 	// Second poll: activity has started
-	describeResp, err = s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+	describeResp2, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
 		Namespace:     s.Namespace().String(),
 		ActivityId:    activityID,
 		RunId:         startResp.RunId,
-		LongPollToken: describeResp.LongPollToken,
+		LongPollToken: describeResp1.LongPollToken,
 	})
 	require.NoError(t, err)
-	require.NotNil(t, describeResp)
-	require.NotNil(t, describeResp.GetInfo())
-	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING, describeResp.GetInfo().GetStatus(),
-		"expected Running but is %s", describeResp.GetInfo().GetStatus())
-	require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, describeResp.GetInfo().GetRunState(),
-		"expected Started but is %s", describeResp.GetInfo().GetRunState())
+	require.NotNil(t, describeResp2)
+	require.NotNil(t, describeResp2.GetInfo())
+	require.Greater(t, describeResp2.GetInfo().GetStateTransitionCount(), describeResp1.GetInfo().GetStateTransitionCount())
+	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING, describeResp2.GetInfo().GetStatus(),
+		"expected Running but is %s", describeResp2.GetInfo().GetStatus())
+	require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, describeResp2.GetInfo().GetRunState(),
+		"expected Started but is %s", describeResp2.GetInfo().GetRunState())
 
 	// Third poll: activity has timed out
-	describeResp, err = s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+	describeResp3, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
 		Namespace:      s.Namespace().String(),
 		ActivityId:     activityID,
 		RunId:          startResp.RunId,
 		IncludeOutcome: true,
-		LongPollToken:  describeResp.LongPollToken,
+		LongPollToken:  describeResp2.LongPollToken,
 	})
 
 	require.NoError(t, err)
-	require.NotNil(t, describeResp)
-	require.NotNil(t, describeResp.GetInfo())
+	require.NotNil(t, describeResp3)
+	require.NotNil(t, describeResp3.GetInfo())
+	require.Greater(t, describeResp3.GetInfo().GetStateTransitionCount(), describeResp2.GetInfo().GetStateTransitionCount())
 
 	// The activity has timed out due to StartToClose. This is an attempt failure, therefore the
 	// failure should be in ActivityExecutionInfo.LastFailure as well as set as the outcome failure.
-	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, describeResp.GetInfo().GetStatus(),
-		"expected TimedOut but is %s", describeResp.GetInfo().GetStatus())
-	require.Greater(t, describeResp.GetInfo().GetExecutionDuration().AsDuration(), time.Duration(0))
-	require.False(t, describeResp.GetInfo().GetCloseTime().AsTime().IsZero())
-	failure := describeResp.GetInfo().GetLastFailure()
+	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, describeResp3.GetInfo().GetStatus(),
+		"expected TimedOut but is %s", describeResp3.GetInfo().GetStatus())
+	require.Greater(t, describeResp3.GetInfo().GetExecutionDuration().AsDuration(), time.Duration(0))
+	require.False(t, describeResp3.GetInfo().GetCloseTime().AsTime().IsZero())
+	failure := describeResp3.GetInfo().GetLastFailure()
 	require.NotNil(t, failure)
 	timeoutFailure := failure.GetTimeoutFailureInfo()
 	require.NotNil(t, timeoutFailure)
 	require.Equal(t, enumspb.TIMEOUT_TYPE_START_TO_CLOSE, timeoutFailure.GetTimeoutType(),
 		"expected StartToCloseTimeout but is %s", timeoutFailure.GetTimeoutType())
 
-	require.NotNil(t, describeResp.GetOutcome().GetFailure())
-	protorequire.ProtoEqual(t, failure, describeResp.GetOutcome().GetFailure())
-	require.Equal(t, enumspb.TIMEOUT_TYPE_START_TO_CLOSE, describeResp.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType(),
-		"expected StartToCloseTimeout but is %s", describeResp.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType())
+	require.NotNil(t, describeResp3.GetOutcome().GetFailure())
+	protorequire.ProtoEqual(t, failure, describeResp3.GetOutcome().GetFailure())
+	require.Equal(t, enumspb.TIMEOUT_TYPE_START_TO_CLOSE, describeResp3.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType(),
+		"expected StartToCloseTimeout but is %s", describeResp3.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType())
 }
 
 // TestScheduleToStartTimeout tests that a schedule-to-start timeout is recorded after the activity is
@@ -2397,12 +2401,12 @@ func (s *standaloneActivityTestSuite) TestListActivityExecutions() {
 		verifyListQuery(t, fmt.Sprintf("ActivityType = '%s'", activityType), 10)
 	})
 
-	t.Run("QueryByActivityStatus", func(t *testing.T) {
-		verifyListQuery(t, fmt.Sprintf("ActivityStatus = 'Running' AND ActivityType = '%s'", activityType), 10)
+	t.Run("QueryByExecutionStatus", func(t *testing.T) {
+		verifyListQuery(t, fmt.Sprintf("ExecutionStatus = 'Running' AND ActivityType = '%s'", activityType), 10)
 	})
 
 	t.Run("QueryByTaskQueue", func(t *testing.T) {
-		verifyListQuery(t, fmt.Sprintf("ActivityTaskQueue = '%s' AND ActivityType = '%s'", taskQueue, activityType), 10)
+		verifyListQuery(t, fmt.Sprintf("TaskQueue = '%s' AND ActivityType = '%s'", taskQueue, activityType), 10)
 	})
 
 	t.Run("QueryByMultipleFields", func(t *testing.T) {
@@ -2583,15 +2587,15 @@ func (s *standaloneActivityTestSuite) TestCountActivityExecutions() {
 		verifyCountQuery(t, fmt.Sprintf("ActivityType = '%s'", activityType), 1)
 	})
 
-	t.Run("CountByActivityStatus", func(t *testing.T) {
-		verifyCountQuery(t, fmt.Sprintf("ActivityStatus = 'Running' AND ActivityType = '%s'", activityType), 1)
+	t.Run("CountByExecutionStatus", func(t *testing.T) {
+		verifyCountQuery(t, fmt.Sprintf("ExecutionStatus = 'Running' AND ActivityType = '%s'", activityType), 1)
 	})
 
 	t.Run("CountByTaskQueue", func(t *testing.T) {
-		verifyCountQuery(t, fmt.Sprintf("ActivityTaskQueue = '%s' AND ActivityType = '%s'", s.tv.TaskQueue().GetName(), activityType), 1)
+		verifyCountQuery(t, fmt.Sprintf("TaskQueue = '%s' AND ActivityType = '%s'", s.tv.TaskQueue().GetName(), activityType), 1)
 	})
 
-	t.Run("GroupByActivityStatus", func(t *testing.T) {
+	t.Run("GroupByExecutionStatus", func(t *testing.T) {
 		groupByType := &commonpb.ActivityType{Name: "count-groupby-test-type"}
 		taskQueue := s.tv.TaskQueue().GetName()
 
@@ -2602,7 +2606,7 @@ func (s *standaloneActivityTestSuite) TestCountActivityExecutions() {
 			require.NotEmpty(t, resp.GetRunId())
 		}
 
-		query := fmt.Sprintf("ActivityType = '%s' GROUP BY ActivityStatus", groupByType.Name)
+		query := fmt.Sprintf("ActivityType = '%s' GROUP BY ExecutionStatus", groupByType.Name)
 		var resp *workflowservice.CountActivityExecutionsResponse
 		s.Eventually(
 			func() bool {

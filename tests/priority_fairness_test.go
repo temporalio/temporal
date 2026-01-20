@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"strings"
 	"testing"
 	"time"
 
@@ -49,7 +50,7 @@ func (s *PrioritySuite) SetupSuite() {
 	s.FunctionalTestBase.SetupSuiteWithCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 }
 
-func (s *PrioritySuite) TestPriority_Activity_Basic() {
+func (s *PrioritySuite) TestActivity_Basic() {
 	const N = 100
 	const Levels = 5
 
@@ -225,6 +226,164 @@ func (s *PrioritySuite) TestSubqueue_Migration() {
 	}
 }
 
+func (s *PrioritySuite) TestStickyInteraction_SinglePartition() {
+	const N = 10
+
+	tv := testvars.New(s.T())
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	// one partition for now:
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
+	// set these to make the mechanism react faster for the test:
+	shortTime := 20 * time.Millisecond
+	s.OverrideDynamicConfig(dynamicconfig.MatchingBacklogNegligibleAge, shortTime)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingEphemeralDataUpdateInterval, shortTime)
+
+	describeSticky := func() (*adminservice.DescribeTaskQueuePartitionResponse, error) {
+		return s.AdminClient().DescribeTaskQueuePartition(ctx, &adminservice.DescribeTaskQueuePartitionRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+				TaskQueue:     tv.TaskQueue().Name,
+				TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+				PartitionId:   &taskqueuespb.TaskQueuePartition_StickyName{StickyName: tv.StickyTaskQueue().Name},
+			},
+			BuildIds: &taskqueuepb.TaskQueueVersionSelection{Unversioned: true},
+		})
+	}
+
+	// poll sticky queue once, otherwise it won't be used
+	s.T().Log("polling sticky to load")
+	stickyPoller := s.TaskPoller().PollWorkflowTask(&workflowservice.PollWorkflowTaskQueueRequest{
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name:       tv.StickyTaskQueue().Name,
+			Kind:       enumspb.TASK_QUEUE_KIND_STICKY,
+			NormalName: tv.TaskQueue().Name,
+		},
+	})
+	stickyCtx, stickyCancel := context.WithCancel(ctx)
+	go stickyPoller.HandleTask(tv, taskpoller.DrainWorkflowTask, taskpoller.WithContext(stickyCtx)) // nolint:errcheck
+	// wait for poll to reach matching service and load the queue
+	s.EventuallyWithT(func(c *assert.CollectT) {
+		res, err := describeSticky()
+		require.NoError(c, err)
+		require.NotEmpty(c, res.VersionsInfoInternal[""].GetPhysicalTaskQueueInfo().GetPollers())
+	}, 5*time.Second, 10*time.Millisecond)
+	// cancel as soon as it's registered
+	s.T().Log("canceling sticky poll")
+	stickyCancel()
+	// wait for cancel to propagate
+	time.Sleep(100 * time.Millisecond) // nolint:forbidigo // there's no way to wait for this
+
+	// create some wfts at default priority
+	s.T().Log("creating wfts on normal")
+	for wfidx := range N {
+		_, err := s.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+			Namespace:    s.Namespace().String(),
+			WorkflowId:   fmt.Sprintf("wf%d", wfidx),
+			WorkflowType: tv.WorkflowType(),
+			TaskQueue:    tv.TaskQueue(),
+		})
+		s.NoError(err)
+	}
+
+	// process initial tasks on normal queue
+	s.T().Log("processing wfts")
+	for range N {
+		_, err := s.TaskPoller().PollAndHandleWorkflowTask(
+			tv,
+			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+				return &workflowservice.RespondWorkflowTaskCompletedRequest{
+					Commands: []*commandpb.Command{&commandpb.Command{
+						CommandType: enumspb.COMMAND_TYPE_START_TIMER,
+						Attributes: &commandpb.Command_StartTimerCommandAttributes{
+							StartTimerCommandAttributes: &commandpb.StartTimerCommandAttributes{
+								TimerId:            uuid.NewString(),
+								StartToFireTimeout: durationpb.New(time.Millisecond),
+							},
+						},
+					}},
+					StickyAttributes: &taskqueuepb.StickyExecutionAttributes{
+						WorkerTaskQueue:        tv.StickyTaskQueue(),
+						ScheduleToStartTimeout: durationpb.New(10 * time.Second),
+					},
+				}, nil
+			},
+			taskpoller.WithContext(ctx),
+		)
+		s.NoError(err)
+	}
+
+	// after 1 millisecond, we should have N tasks queued on the sticky queue at normal priority
+	s.T().Log("checking sticky backlog")
+	s.EventuallyWithT(func(c *assert.CollectT) {
+		res, err := describeSticky()
+		require.NoError(c, err)
+		require.EqualValues(c, N, res.VersionsInfoInternal[""].PhysicalTaskQueueInfo.TaskQueueStats.ApproximateBacklogCount)
+	}, 5*time.Second, 10*time.Millisecond)
+
+	// create N more workflows at high priority and N at lower
+	s.T().Log("creating high/low wfts on normal")
+	for wfidx := range N {
+		_, err := s.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+			Namespace:    s.Namespace().String(),
+			WorkflowId:   fmt.Sprintf("highpri%d", wfidx),
+			WorkflowType: tv.WorkflowType(),
+			TaskQueue:    tv.TaskQueue(),
+			Priority:     &commonpb.Priority{PriorityKey: 1},
+		})
+		s.NoError(err)
+		_, err = s.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+			Namespace:    s.Namespace().String(),
+			WorkflowId:   fmt.Sprintf("lowpri%d", wfidx),
+			WorkflowType: tv.WorkflowType(),
+			TaskQueue:    tv.TaskQueue(),
+			Priority:     &commonpb.Priority{PriorityKey: 5},
+		})
+		s.NoError(err)
+	}
+
+	// the ephemeral data mechanism is asynchronous, so wait a little while for it to kick in.
+	// there's no way to check if this is done yet without actually polling, which would mess
+	// up the results, so just sleep.
+	time.Sleep(3 * shortTime) // nolint:forbidigo
+
+	// now poll the sticky queue. we should get the high priority tasks from the normal queue
+	// then the normal-priority from sticky, then the low priority from normal.
+	s.T().Log("polling sticky")
+	var receivedOrder []string
+	for range 3 * N {
+		_, _ = stickyPoller.HandleTask(
+			tv,
+			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+				wfid := task.WorkflowExecution.WorkflowId
+				s.T().Log("task for wf", wfid)
+				receivedOrder = append(receivedOrder, wfid)
+				return nil, nil
+			},
+			taskpoller.WithContext(ctx),
+		)
+	}
+
+	// validate the order
+	var priorityOrder []int
+	for _, wfid := range receivedOrder {
+		if strings.HasPrefix(wfid, "highpri") {
+			priorityOrder = append(priorityOrder, 1)
+		} else if strings.HasPrefix(wfid, "lowpri") {
+			priorityOrder = append(priorityOrder, 3)
+		} else {
+			priorityOrder = append(priorityOrder, 2) // default priority (wf*)
+		}
+	}
+
+	w := wrongorderness(priorityOrder)
+	s.T().Log("wrongorderness:", w)
+	s.Less(w, 0.1, "tasks should mostly arrive in priority order (high, default, low)")
+}
+
 func wrongorderness(vs []int) float64 {
 	l := len(vs)
 	wrong := 0
@@ -341,7 +500,7 @@ func (s *FairnessSuite) TriggerAutoEnable(tv *testvars.TestVars) {
 	cancel()
 }
 
-func (s *FairnessSuite) TestFairness_Activity_Basic() {
+func (s *FairnessSuite) Test_Activity_Basic() {
 	const Workflows = 15
 	const Tasks = 15
 	const Keys = 10
@@ -632,22 +791,22 @@ func (s *FairnessSuite) countTasksByDrainingActive(ctx context.Context, tv *test
 	return
 }
 
-func (s *FairnessSuite) TestFairness_Migration_FromClassic() {
+func (s *FairnessSuite) TestMigration_FromClassic() {
 	// classic->fair, fair->pri. fair metadata will be created on transition.
 	s.testMigration(false, false)
 }
 
-func (s *FairnessSuite) TestFairness_Migration_FromPri() {
+func (s *FairnessSuite) TestMigration_FromPri() {
 	// pri->fair, fair->pri. fair metadata will be created before transition.
 	s.testMigration(true, false)
 }
 
-func (s *FairnessSuite) TestFairness_Migration_FromFair() {
+func (s *FairnessSuite) TestMigration_FromFair() {
 	// fair->pri, pri->fair. fair metadata will be created first.
 	s.testMigration(true, true)
 }
 
-func (s *FairnessSuite) TestFairness_UpdateWorkflowExecutionOptions_InvalidatesPendingTask() {
+func (s *FairnessSuite) TestUpdateWorkflowExecutionOptions_InvalidatesPendingTask() {
 	if s.doAutoEnable {
 		s.T().Skip("flaky with autoenable")
 	}

@@ -269,6 +269,42 @@ func (s *RegistryTestSuite) TestRegistry_RegisterComponents_Error() {
 		})
 	})
 
+	s.Run("ExecutionStatus alias is allowed for CHASM components", func() {
+		s.Require().NotPanics(func() {
+			chasm.NewRegistrableComponent[*chasm.MockComponent](
+				"Component1",
+				chasm.WithSearchAttributes(
+					chasm.NewSearchAttributeKeyword("ExecutionStatus", chasm.SearchAttributeFieldLowCardinalityKeyword01),
+				),
+			)
+		})
+	})
+
+	s.Run("TaskQueue preallocated search attribute is allowed", func() {
+		s.Require().NotPanics(func() {
+			chasm.NewRegistrableComponent[*chasm.MockComponent](
+				"Component1",
+				chasm.WithSearchAttributes(
+					chasm.SearchAttributeTaskQueue,
+				),
+			)
+		})
+	})
+
+	s.Run("CHASM system search attribute alias panics", func() {
+		s.Require().PanicsWithValue(
+			"registrable component validation error: CHASM search attribute alias \"WorkflowId\" is a CHASM system search attribute",
+			func() {
+				chasm.NewRegistrableComponent[*chasm.MockComponent](
+					"Component1",
+					chasm.WithSearchAttributes(
+						chasm.NewSearchAttributeKeyword("WorkflowId", chasm.SearchAttributeFieldKeyword01),
+					),
+				)
+			},
+		)
+	})
+
 	s.Run("component with Visibility field must have businessID alias", func() {
 		lib.EXPECT().Components().Return([]*chasm.RegistrableComponent{
 			chasm.NewRegistrableComponent[*testComponentWithVisibility]("ComponentWithVis"),

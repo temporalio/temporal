@@ -105,6 +105,12 @@ message WorkflowExecutionInfo {
     // It increases monotonically when the workflow's options are modified.
     // It is used to check if a workflow task is still relevant to the corresponding workflow state machine.
     int32 workflow_task_stamp = 109;
+    // AttemptsSinceLastSuccess tracks the number of workflow task attempts since the last successful workflow task.
+    // This is carried over when buffered events are applied after workflow task failures.
+    // Used by the TemporalReportedProblems search attribute to track continuous failure count.
+    // (-- api-linter: core::0140::prepositions=disabled
+    //     aip.dev/not-precedent: "since" is needed here. --)
+    int32 workflow_task_attempts_since_last_success = 111;
 
     bool cancel_requested = 29;
     string cancel_request_id = 32;

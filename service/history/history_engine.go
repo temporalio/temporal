@@ -130,7 +130,7 @@ type (
 		persistenceVisibilityMgr   manager.VisibilityManager
 		searchAttributesValidator  *searchattribute.Validator
 		workflowDeleteManager      deletemanager.DeleteManager
-		eventSerializer            serialization.Serializer
+		serializer                 serialization.Serializer
 		workflowConsistencyChecker api.WorkflowConsistencyChecker
 		chasmEngine                chasm.Engine
 		versionChecker             headers.VersionChecker
@@ -158,7 +158,7 @@ func NewEngineWithShardContext(
 	rawMatchingClient matchingservice.MatchingServiceClient,
 	workflowCache wcache.Cache,
 	replicationProgressCache replication.ProgressCache,
-	eventSerializer serialization.Serializer,
+	serializer serialization.Serializer,
 	queueProcessorFactories []QueueFactory,
 	replicationTaskFetcherFactory replication.TaskFetcherFactory,
 	replicationTaskExecutorProvider replication.TaskExecutorProvider,
@@ -212,7 +212,7 @@ func NewEngineWithShardContext(
 		rawMatchingClient:          rawMatchingClient,
 		persistenceVisibilityMgr:   persistenceVisibilityMgr,
 		workflowDeleteManager:      workflowDeleteManager,
-		eventSerializer:            eventSerializer,
+		serializer:                 serializer,
 		workflowConsistencyChecker: workflowConsistencyChecker,
 		versionChecker:             headers.NewDefaultVersionChecker(),
 		tracer:                     tracerProvider.Tracer(consts.LibraryName),
@@ -249,7 +249,7 @@ func NewEngineWithShardContext(
 			shard,
 			workflowCache,
 			historyEngImpl.eventsReapplier,
-			eventSerializer,
+			serializer,
 			logger,
 		)
 		historyEngImpl.nDCHistoryImporter = ndc.NewHistoryImporter(
@@ -266,7 +266,7 @@ func NewEngineWithShardContext(
 			shard,
 			workflowCache,
 			historyEngImpl.eventsReapplier,
-			eventSerializer,
+			serializer,
 			persistenceRateLimiter,
 			logger,
 		)
@@ -315,7 +315,7 @@ func NewEngineWithShardContext(
 		workflowCache,
 		workflowDeleteManager,
 		clientBean,
-		eventSerializer,
+		serializer,
 		replicationTaskFetcherFactory,
 		replicationTaskExecutorProvider,
 		dlqWriter,
@@ -790,7 +790,7 @@ func (e *historyEngineImpl) ImportWorkflowExecution(
 	ctx context.Context,
 	request *historyservice.ImportWorkflowExecutionRequest,
 ) (*historyservice.ImportWorkflowExecutionResponse, error) {
-	historyEvents, err := ndc.DeserializeBlobs(e.eventSerializer, request.HistoryBatches)
+	historyEvents, err := ndc.DeserializeBlobs(e.serializer, request.HistoryBatches)
 	if err != nil {
 		return nil, err
 	}
@@ -1047,7 +1047,7 @@ func (e *historyEngineImpl) AddTasks(
 	return addtasks.Invoke(
 		ctx,
 		e.shardContext,
-		e.eventSerializer,
+		e.serializer,
 		int(e.config.NumberOfShards),
 		request,
 		e.taskCategoryRegistry,

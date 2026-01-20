@@ -34,16 +34,14 @@ type ActivityExecutionStatus int32
 
 const (
 	ACTIVITY_EXECUTION_STATUS_UNSPECIFIED ActivityExecutionStatus = 0
-	// The activity is not in a terminal status. This does not necessarily mean that there is a currently running
-	// attempt. The activity may be backing off between attempts or waiting for a worker to pick it up.
-	ACTIVITY_EXECUTION_STATUS_SCHEDULED        ActivityExecutionStatus = 1
-	ACTIVITY_EXECUTION_STATUS_STARTED          ActivityExecutionStatus = 2
+	// The activity has been scheduled, but a worker has not accepted the task for the current
+	// attempt. The activity may be backing off between attempts or waiting for a worker to pick it
+	// up.
+	ACTIVITY_EXECUTION_STATUS_SCHEDULED ActivityExecutionStatus = 1
+	// A worker has accepted a task for the current attempt.
+	ACTIVITY_EXECUTION_STATUS_STARTED ActivityExecutionStatus = 2
+	// A caller has requested cancellation of the activity.
 	ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED ActivityExecutionStatus = 3
-	// Left as placeholders for when we add pause.
-	// // PAUSED means activity is paused on the server, and is not running in the worker
-	// ACTIVITY_EXECUTION_STATUS_PAUSED = 4;
-	// // PAUSE_REQUESTED means activity is currently running on the worker, but paused on the server
-	// ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED = 5;
 	// The activity completed successfully.
 	ACTIVITY_EXECUTION_STATUS_COMPLETED ActivityExecutionStatus = 4
 	// The activity completed with failure.

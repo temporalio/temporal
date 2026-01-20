@@ -194,7 +194,7 @@ func (s *temporalSerializerSuite) TestDeserializeStrippedEvents() {
 	// 3. Unknown encoding type
 	s.Run("UnknownEncodingType", func() {
 		_, err := s.serializer.DeserializeStrippedEvents(&commonpb.DataBlob{
-			EncodingType: enumspb.ENCODING_TYPE_JSON, // Not handled by our switch
+			EncodingType: enumspb.ENCODING_TYPE_UNSPECIFIED,
 			Data:         []byte("irrelevant-data"),
 		})
 		s.Error(err)

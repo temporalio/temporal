@@ -63,7 +63,7 @@ func newStateMachineEnvTestContext(t *testing.T, enableTransitionHistory bool) *
 	s.controller = gomock.NewController(t)
 	config := tests.NewDynamicConfig()
 	config.EnableTransitionHistory = func() bool { return enableTransitionHistory }
-	s.version = s.namespaceEntry.FailoverVersion()
+	s.version = s.namespaceEntry.FailoverVersion(namespace.EmptyBusinessID)
 
 	s.mockShard = shard.NewTestContextWithTimeSource(
 		s.controller,
@@ -404,7 +404,7 @@ func (s *taskExecutorTestContext) prepareMutableStateWithReadyNexusCompletionCal
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.NewString(),
 	}
-	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.mockShard.GetLogger(), s.namespaceEntry.FailoverVersion(), execution.GetWorkflowId(), execution.GetRunId())
+	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.mockShard.GetLogger(), s.namespaceEntry.FailoverVersion(execution.GetWorkflowId()), execution.GetWorkflowId(), execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
