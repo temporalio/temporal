@@ -203,6 +203,7 @@ func (f *outboundQueueFactory) CreateQueue(
 		scheduler = queues.NewRateLimitedScheduler(
 			f.hostScheduler,
 			queues.RateLimitedSchedulerOptions{
+				Enabled:          f.Config.TaskSchedulerEnableRateLimiter,
 				EnableShadowMode: f.Config.TaskSchedulerEnableRateLimiterShadowMode,
 				StartupDelay:     f.Config.TaskSchedulerRateLimiterStartupDelay,
 			},
