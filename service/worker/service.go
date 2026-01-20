@@ -222,9 +222,6 @@ func (s *Service) Start() {
 
 	metrics.RestartCount.With(s.metricsHandler).Record(1)
 
-	s.clusterMetadata.Start()
-	s.namespaceRegistry.Start()
-
 	s.membershipMonitor.Start()
 
 	s.ensureSystemNamespaceExists(context.TODO())
@@ -256,8 +253,6 @@ func (s *Service) Stop() {
 	s.scanner.Stop()
 	s.perNamespaceWorkerManager.Stop()
 	s.workerManager.Stop()
-	s.namespaceRegistry.Stop()
-	s.clusterMetadata.Stop()
 	s.visibilityManager.Close()
 
 	s.logger.Info(
