@@ -112,6 +112,11 @@ type (
 		// executionState and executionStatus and trigger retention timers.
 		// We could consider extending the force terminate concept to sub-components as well.
 		terminated bool
+
+		// When detached is true, this component ignores parent lifecycle validation.
+		// Detached components can continue operating, accepting writes and executing
+		// tasks, even when their parent is closed/terminated.
+		detached bool
 	}
 
 	// nodeBase is a set of dependencies and states shared by all nodes in a CHASM tree.
@@ -414,11 +419,9 @@ func (n *Node) Component(
 			fmt.Errorf("%s", reflect.TypeOf(node.value).String()))
 	}
 
-	// Access check always begins on the target node's parent, and ignored for nodes
-	// without ancestors.
-	if node.parent != nil {
-		err := node.parent.validateAccess(validationContext)
-		if err != nil {
+	// Access check on ancestors only. Detached nodes skip ancestor validation.
+	if !node.detached && node.parent != nil {
+		if err := node.parent.validateAccess(validationContext); err != nil {
 			return nil, err
 		}
 	}
@@ -449,9 +452,8 @@ func (n *Node) validateAccess(ctx Context) error {
 		return nil
 	}
 
-	// TODO - check if this is a detached node, operations are always allowed.
-
-	if n.parent != nil {
+	// Detached nodes skip parent/ancestor validation but still check own lifecycle.
+	if !n.detached && n.parent != nil {
 		err := n.parent.validateAccess(ctx)
 		if err != nil {
 			return err
@@ -683,6 +685,9 @@ func (n *Node) setSerializedNode(
 		n.serializedNode = serializedNode
 		n.setValueState(valueStateNeedDeserialize)
 		n.encodedPath = &encodedPath
+		if componentAttr := serializedNode.GetMetadata().GetComponentAttributes(); componentAttr != nil {
+			n.detached = componentAttr.Detached
+		}
 		return n
 	}
 
@@ -739,7 +744,9 @@ func (n *Node) serializeComponentNode() error {
 		}
 
 		n.serializedNode.Data = blob
-		n.serializedNode.GetMetadata().GetComponentAttributes().TypeId = rc.componentID
+		componentAttr := n.serializedNode.GetMetadata().GetComponentAttributes()
+		componentAttr.TypeId = rc.componentID
+		componentAttr.Detached = n.detached
 		n.updateLastUpdateVersionedTransition()
 		n.setValueState(valueStateSynced)
 
@@ -1014,6 +1021,14 @@ func (n *Node) syncSubField(
 			}
 
 			childNode.setValueState(valueStateNeedSyncStructure)
+
+			// Set detached flag from field option or component type registration.
+			childNode.detached = internal.detached
+			if !childNode.detached {
+				if rc, ok := n.registry.componentFor(fieldValue); ok {
+					childNode.detached = rc.IsDetached()
+				}
+			}
 		case fieldTypeData:
 			if err = assertStructPointer(reflect.TypeOf(fieldValue)); err != nil {
 				return
@@ -1773,9 +1788,8 @@ func (n *Node) validateTask(
 			fmt.Errorf("%s", reflect.TypeOf(taskInstance).Name()))
 	}
 
-	// TODO: visibility component should be an (implicitly) detached component.
-	// Remove this special case when detached node is implemented.
-	if registableTask.taskTypeID != visibilityTaskTypeID && n.parent != nil {
+	// Validate access on ancestors only. Detached nodes skip ancestor validation.
+	if !n.detached && n.parent != nil {
 		err := n.parent.validateAccess(validateContext)
 		if errors.Is(err, errAccessCheckFailed) {
 			return false, nil
