@@ -60,10 +60,10 @@ print_pprof_analysis() {
   echo "--- Go Heap Profile ---"
   if fetch_pprof "heap" "$heap_file"; then
     echo "=== inuse_space (what's currently held) ==="
-    analyze_heap "$heap_file" "inuse_space" 60
+    analyze_heap "$heap_file" "inuse_space" 30
     echo ""
     echo "=== alloc_space (total allocations) ==="
-    analyze_heap "$heap_file" "alloc_space" 60
+    analyze_heap "$heap_file" "alloc_space" 30
     echo ""
     echo "=== alloc_objects (total objects allocated) ==="
     analyze_heap "$heap_file" "alloc_objects" 30
