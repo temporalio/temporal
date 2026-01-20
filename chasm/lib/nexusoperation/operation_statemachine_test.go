@@ -14,7 +14,7 @@ import (
 )
 
 var (
-	defaultTime                = time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
+	defaultTime                   = time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
 	defaultScheduleToCloseTimeout = 10 * time.Minute
 )
 
@@ -103,12 +103,12 @@ func TestTransitionScheduled(t *testing.T) {
 
 func TestTransitionAttemptFailed(t *testing.T) {
 	testCases := []struct {
-		name                    string
-		startingAttemptCount    int32
-		expectedAttempt         int32
-		minRetryInterval        time.Duration
-		maxRetryInterval        time.Duration
-		retryPolicy             backoff.RetryPolicy
+		name                 string
+		startingAttemptCount int32
+		expectedAttempt      int32
+		minRetryInterval     time.Duration
+		maxRetryInterval     time.Duration
+		retryPolicy          backoff.RetryPolicy
 	}{
 		{
 			name:                 "first retry",
@@ -214,11 +214,11 @@ func TestTransitionRescheduled(t *testing.T) {
 
 func TestTransitionStarted(t *testing.T) {
 	testCases := []struct {
-		name                string
-		startStatus         nexusoperationpb.OperationStatus
-		startingAttempt     int32
-		expectedAttempt     int32
-		operationToken      string
+		name            string
+		startStatus     nexusoperationpb.OperationStatus
+		startingAttempt int32
+		expectedAttempt int32
+		operationToken  string
 	}{
 		{
 			name:            "started from scheduled",
