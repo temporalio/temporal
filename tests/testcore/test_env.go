@@ -1,7 +1,7 @@
 package testcore
 
 import (
-	"maps"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -30,18 +30,22 @@ type testEnv struct {
 
 	Logger log.Logger
 
-	cluster       *TestCluster
-	dynamicConfig map[dynamicconfig.Key]any
-	nsName        namespace.Name
-	taskPoller    *taskpoller.TaskPoller
-	t             *testing.T
+	cluster    *TestCluster
+	nsName     namespace.Name
+	taskPoller *taskpoller.TaskPoller
+	t          *testing.T
 }
 
 type TestOption func(*testOptions)
 
 type testOptions struct {
-	dedicatedCluster bool
-	dynamicConfig    map[dynamicconfig.Key]any
+	dedicatedCluster      bool
+	dynamicConfigSettings []dynamicConfigOverride
+}
+
+type dynamicConfigOverride struct {
+	setting dynamicconfig.GenericSetting
+	value   any
 }
 
 // WithDedicatedCluster requests a dedicated (non-shared) cluster for the test.
@@ -52,15 +56,18 @@ func WithDedicatedCluster() TestOption {
 	}
 }
 
-// WithDynamicConfig adds dynamic config overrides for the test.
-// This implies WithDedicatedCluster.
-func WithDynamicConfig(dc map[dynamicconfig.Key]any) TestOption {
+// WithDynamicConfig overrides a dynamic config setting for the test.
+// For settings that can be namespace-scoped, a namespace constraint is applied.
+// For all others that require a dedicated cluster, this implies `WithDedicatedCluster`.
+func WithDynamicConfig(setting dynamicconfig.GenericSetting, value any) TestOption {
 	return func(o *testOptions) {
-		o.dedicatedCluster = true
-		if o.dynamicConfig == nil {
-			o.dynamicConfig = make(map[dynamicconfig.Key]any)
+		if err := setting.Validate(value); err != nil {
+			panic(fmt.Sprintf("invalid value for setting %s: %v", setting.Key(), err))
 		}
-		maps.Copy(o.dynamicConfig, dc)
+		if !canBeNamespaceScoped(setting.Precedence()) {
+			o.dedicatedCluster = true
+		}
+		o.dynamicConfigSettings = append(o.dynamicConfigSettings, dynamicConfigOverride{setting: setting, value: value})
 	}
 }
 
@@ -74,7 +81,16 @@ func NewEnv(t *testing.T, opts ...TestOption) *testEnv {
 		opt(&options)
 	}
 
-	base := testClusterPool.get(t, options.dedicatedCluster, options.dynamicConfig)
+	// For dedicated clusters, pass all dynamic config settings at cluster creation.
+	var startupConfig map[dynamicconfig.Key]any
+	if options.dedicatedCluster && len(options.dynamicConfigSettings) > 0 {
+		startupConfig = make(map[dynamicconfig.Key]any, len(options.dynamicConfigSettings))
+		for _, override := range options.dynamicConfigSettings {
+			startupConfig[override.setting.Key()] = override.value
+		}
+	}
+
+	base := testClusterPool.get(t, options.dedicatedCluster, startupConfig)
 	cluster := base.GetTestCluster()
 
 	// Create a dedicated namespace for the test to help with test isolation.
@@ -89,28 +105,75 @@ func NewEnv(t *testing.T, opts ...TestOption) *testEnv {
 		t.Fatalf("Failed to register namespace: %v", err)
 	}
 
-	return &testEnv{
+	env := &testEnv{
 		FunctionalTestBase: base,
 		Assertions:         require.New(t),
 		HistoryRequire:     historyrequire.New(t),
 		cluster:            cluster,
-		dynamicConfig:      options.dynamicConfig,
 		nsName:             ns,
 		Logger:             base.Logger,
 		taskPoller:         taskpoller.New(t, cluster.FrontendClient(), ns.String()),
 		t:                  t,
 	}
+
+	// For shared clusters, apply all dynamic config settings as overrides.
+	if !options.dedicatedCluster && len(options.dynamicConfigSettings) > 0 {
+		for _, override := range options.dynamicConfigSettings {
+			env.OverrideDynamicConfig(override.setting, override.value)
+		}
+	}
+
+	return env
 }
 
 // Use test env-specific namespace here for test isolation.
-func (s *testEnv) Namespace() namespace.Name {
-	return s.nsName
+func (e *testEnv) Namespace() namespace.Name {
+	return e.nsName
 }
 
-func (s *testEnv) TaskPoller() *taskpoller.TaskPoller {
-	return s.taskPoller
+func (e *testEnv) TaskPoller() *taskpoller.TaskPoller {
+	return e.taskPoller
 }
 
-func (s *testEnv) T() *testing.T {
-	return s.t
+func (e *testEnv) T() *testing.T {
+	return e.t
+}
+
+// OverrideDynamicConfig overrides a dynamic config setting for the duration of this test.
+// For settings that can be namespace-scoped, a namespace constraint is applied.
+// All others cannot be applied to a shared cluster and require `WithDedicatedCluster`.
+func (e *testEnv) OverrideDynamicConfig(setting dynamicconfig.GenericSetting, value any) (cleanup func()) {
+	if e.FunctionalTestBase.isShared {
+		if !canBeNamespaceScoped(setting.Precedence()) {
+			e.t.Fatalf("OverrideDynamicConfig for setting %s (precedence %v) cannot be called on a shared cluster; use testcore.WithDedicatedCluster()", setting.Key(), setting.Precedence())
+		}
+
+		// Wrap value with namespace constraint for test isolation on shared clusters.
+		ns := e.nsName.String()
+		if cvs, ok := value.([]dynamicconfig.ConstrainedValue); ok {
+			result := make([]dynamicconfig.ConstrainedValue, len(cvs))
+			for i, cv := range cvs {
+				cv.Constraints.Namespace = ns
+				result[i] = cv
+			}
+			value = result
+		} else {
+			value = []dynamicconfig.ConstrainedValue{{
+				Constraints: dynamicconfig.Constraints{Namespace: ns},
+				Value:       value,
+			}}
+		}
+	}
+	return e.cluster.host.overrideDynamicConfig(e.t, setting.Key(), value)
+}
+
+func canBeNamespaceScoped(p dynamicconfig.Precedence) bool {
+	switch p {
+	case dynamicconfig.PrecedenceNamespace,
+		dynamicconfig.PrecedenceTaskQueue,
+		dynamicconfig.PrecedenceDestination:
+		return true
+	default:
+		return false
+	}
 }

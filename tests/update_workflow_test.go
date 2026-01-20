@@ -4964,10 +4964,10 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 
 	t.Run("ContinueAsNew_Suggestion", func(t *testing.T) {
 		// setup CAN suggestion to be at 2nd Update
-		s := testcore.NewEnv(t, testcore.WithDynamicConfig(map[dynamicconfig.Key]any{
-			dynamicconfig.WorkflowExecutionMaxTotalUpdates.Key():                              3,
-			dynamicconfig.WorkflowExecutionMaxTotalUpdatesSuggestContinueAsNewThreshold.Key(): 0.5,
-		}))
+		s := testcore.NewEnv(t,
+			testcore.WithDynamicConfig(dynamicconfig.WorkflowExecutionMaxTotalUpdates, 3),
+			testcore.WithDynamicConfig(dynamicconfig.WorkflowExecutionMaxTotalUpdatesSuggestContinueAsNewThreshold, 0.5),
+		)
 
 		// start workflow
 		tv := testvars.New(s.T())
@@ -5818,9 +5818,9 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 
 		t.Run("return update rate limit error", func(t *testing.T) {
 			// lower maximum total number of updates for testing purposes
-			s := testcore.NewEnv(t, testcore.WithDynamicConfig(map[dynamicconfig.Key]any{
-				dynamicconfig.WorkflowExecutionMaxTotalUpdates.Key(): 1,
-			}))
+			s := testcore.NewEnv(t,
+				testcore.WithDynamicConfig(dynamicconfig.WorkflowExecutionMaxTotalUpdates, 1),
+			)
 
 			ctx := testcore.NewContext()
 			tv := testvars.New(t)
