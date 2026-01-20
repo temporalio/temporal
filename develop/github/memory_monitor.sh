@@ -78,7 +78,7 @@ print_pprof_analysis() {
   fi
 }
 
-write_snapshot() {
+snapshot() {
   local memtotal_kb memavail_kb memused_kb memused_mb pct
   memtotal_kb="$(awk '/MemTotal/ {print $2}' /proc/meminfo)"
   memavail_kb="$(awk '/MemAvailable/ {print $2}' /proc/meminfo)"
@@ -114,6 +114,7 @@ write_snapshot() {
     HEAP_PRINTED=true
   fi
 
+  # Write snapshot to disk.
   {
     echo "Memory snapshot at $(date '+%Y-%m-%d %H:%M:%S')"
     echo ""
@@ -129,8 +130,8 @@ write_snapshot() {
   } > "$SNAPSHOT_FILE"
 }
 
-# Take snapshots every 30s until killed
+# Take snapshots every 30s until killed.
 while true; do
-  write_snapshot
+  snapshot
   sleep 30
 done
