@@ -10,15 +10,15 @@ import (
 var ExecutionInfoEncodingModule = fx.Options(
 	fx.Provide(func(
 		dynamicCollection *dynamicconfig.Collection,
-	) EnableExecutionInfoNewJSONEncoding {
-		return EnableExecutionInfoNewJSONEncoding(dynamicconfig.WorkerEnableMigrationExecutionInfoNewJSONEncoding.Get(dynamicCollection)())
+	) enableExecutionInfoNewJSONEncoding {
+		return enableExecutionInfoNewJSONEncoding(dynamicconfig.WorkerEnableMigrationExecutionInfoNewJSONEncoding.Get(dynamicCollection)())
 	}),
-	fx.Populate(ExecutionInfoNewJSONEncodingEnabled),
+	fx.Populate(&executionInfoNewJSONEncodingEnabled),
 )
 
-type EnableExecutionInfoNewJSONEncoding bool
+type enableExecutionInfoNewJSONEncoding bool
 
-var ExecutionInfoNewJSONEncodingEnabled EnableExecutionInfoNewJSONEncoding
+var executionInfoNewJSONEncodingEnabled enableExecutionInfoNewJSONEncoding
 
 type ExecutionInfo struct {
 	executionInfoNewJSON
@@ -38,7 +38,7 @@ type executionInfoLegacyJSON struct {
 }
 
 func (e *ExecutionInfo) MarshalJSON() ([]byte, error) {
-	if ExecutionInfoNewJSONEncodingEnabled {
+	if executionInfoNewJSONEncodingEnabled {
 		return json.Marshal(e.executionInfoNewJSON)
 	}
 
@@ -50,7 +50,7 @@ func (e *ExecutionInfo) MarshalJSON() ([]byte, error) {
 }
 
 func (e *ExecutionInfo) UnmarshalJSON(data []byte) error {
-	if ExecutionInfoNewJSONEncodingEnabled {
+	if executionInfoNewJSONEncodingEnabled {
 		return json.Unmarshal(data, &e.executionInfoNewJSON)
 	}
 
