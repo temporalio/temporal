@@ -94,12 +94,9 @@ write_snapshot() {
   local timestamp
   timestamp="$(date '+%H:%M:%S')"
 
-  # Append to history.
-  local row="$timestamp $pct $memused_mb $goroutines $top_procs"
-  echo "$row" >> "$HISTORY_FILE"
-
-  # Print to stdout (with descriptors) to preserve the information in case of a crash.
-  echo "$timestamp used=${pct}% mem=${memused_mb}MB goroutines=${goroutines} procs=[${top_procs}]"
+  # stdout preserves info in CI logs in case of crash; history file is used for snapshot.
+  printf "%s used=%s%% mem=%sMB goroutines=%s procs=[%s]\n" \
+    "$timestamp" "$pct" "$memused_mb" "$goroutines" "$top_procs" | tee -a "$HISTORY_FILE"
 
   # If memory threshold was reached, print Go heap details. But only once per run.
   if [[ "$pct" -ge "$HIGH_MEMORY_THRESHOLD" ]] && [[ "$HEAP_PRINTED" == "false" ]]; then
@@ -114,11 +111,7 @@ write_snapshot() {
   {
     echo "Memory snapshot at $(date '+%Y-%m-%d %H:%M:%S')"
     echo ""
-    echo "Time      Used(%)  Used(MB)  Goroutines  Top Processes"
-    echo "---------------------------------------------------------------"
-    while read -r t p mb g procs; do
-      printf "%-10s %3s%%     %5s   %7s     %s\n" "$t" "$p" "$mb" "$g" "$procs"
-    done < "$HISTORY_FILE"
+    cat "$HISTORY_FILE"
     echo ""
     echo "--- Top Processes ---"
     ps -eo pid,%mem,rss:10,comm --sort=-%mem | head -20
@@ -126,8 +119,8 @@ write_snapshot() {
     echo "--- Memory Summary ---"
     free -m
     echo ""
+    print_pprof_analysis
   } > "$SNAPSHOT_FILE"
-  print_pprof_analysis >> "$SNAPSHOT_FILE"
 }
 
 # Take snapshots every 30s until killed
