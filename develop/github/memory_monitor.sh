@@ -40,6 +40,7 @@ analyze_heap() {
   local profile_file="$1"
   local mode="$2"
   local lines="${3:-40}"
+
   go tool pprof -top "-${mode}" "$profile_file" 2>/dev/null | head -"$lines" || true
 }
 
@@ -47,7 +48,8 @@ analyze_heap() {
 get_goroutine_count() {
   local tmp_file
   tmp_file="$(mktemp)"
-  trap "rm -f '$tmp_file'" RETURN
+  trap 'rm -f "$tmp_file"' RETURN
+
   local count="?"
   if curl -s --max-time 5 "http://${PPROF_HOST}/debug/pprof/goroutine?debug=1" -o "$tmp_file" 2>/dev/null; then
     count="$(head -1 "$tmp_file" | grep -o '[0-9]*' || echo '?')"
@@ -59,7 +61,7 @@ get_goroutine_count() {
 print_pprof_analysis() {
   local heap_file
   heap_file="$(mktemp)"
-  trap "rm -f '$heap_file'" RETURN
+  trap 'rm -f "$heap_file"' RETURN
 
   echo "--- Go Heap Profile ---"
   if fetch_pprof "heap" "$heap_file"; then
