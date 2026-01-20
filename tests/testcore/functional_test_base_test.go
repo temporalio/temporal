@@ -3,9 +3,11 @@ package testcore
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/service/worker"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -58,9 +60,6 @@ func (s *FunctionalTestBaseSuite) TestWithFxOptionsForService() {
 
 func (s *FunctionalTestBaseSuite) TestWorkerServiceHealthCheck() {
 	// This test verifies that the worker service exposes a working gRPC health check endpoint.
-	// The health check service name matches the one defined in service/worker/service.go.
-	const workerServiceHealthCheckName = "temporal.api.workflowservice.v1.WorkerService"
-
 	conn, err := grpc.NewClient(
 		s.WorkerGRPCAddress(),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
@@ -69,9 +68,14 @@ func (s *FunctionalTestBaseSuite) TestWorkerServiceHealthCheck() {
 	defer func() { _ = conn.Close() }()
 
 	healthClient := healthpb.NewHealthClient(conn)
-	resp, err := healthClient.Check(context.Background(), &healthpb.HealthCheckRequest{
-		Service: workerServiceHealthCheckName,
-	})
-	s.NoError(err)
-	s.Equal(healthpb.HealthCheckResponse_SERVING, resp.Status)
+	s.Eventually(
+		func() bool {
+			resp, err := healthClient.Check(context.Background(), &healthpb.HealthCheckRequest{
+				Service: worker.ServiceName,
+			})
+			return err == nil && resp.Status == healthpb.HealthCheckResponse_SERVING
+		},
+		10*time.Second,
+		100*time.Millisecond,
+	)
 }

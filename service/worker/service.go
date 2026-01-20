@@ -32,7 +32,8 @@ import (
 	"google.golang.org/grpc/reflection"
 )
 
-const serviceName = "temporal.api.workflowservice.v1.WorkerService"
+// ServiceName is the name used for the worker service health check.
+const ServiceName = "temporal.api.workflowservice.v1.WorkerService"
 
 type (
 	// Service represents the temporal-worker service. This service hosts all background processing needed for temporal cluster:
@@ -260,7 +261,7 @@ func (s *Service) Start() {
 	)
 
 	healthpb.RegisterHealthServer(s.server, s.healthServer)
-	s.healthServer.SetServingStatus(serviceName, healthpb.HealthCheckResponse_SERVING)
+	s.healthServer.SetServingStatus(ServiceName, healthpb.HealthCheckResponse_SERVING)
 
 	reflection.Register(s.server)
 
@@ -280,7 +281,7 @@ func (s *Service) Start() {
 
 // Stop is called to stop the service
 func (s *Service) Stop() {
-	s.healthServer.SetServingStatus(serviceName, healthpb.HealthCheckResponse_NOT_SERVING)
+	s.healthServer.SetServingStatus(ServiceName, healthpb.HealthCheckResponse_NOT_SERVING)
 
 	s.scanner.Stop()
 	s.perNamespaceWorkerManager.Stop()
