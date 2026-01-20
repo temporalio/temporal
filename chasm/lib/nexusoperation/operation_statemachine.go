@@ -4,7 +4,6 @@ import (
 	"time"
 
 	failurepb "go.temporal.io/api/failure/v1"
-	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"go.temporal.io/server/common/backoff"
@@ -40,13 +39,35 @@ var transitionScheduled = chasm.NewTransition(
 
 // EventAttemptFailed is triggered when an invocation attempt is failed with a retryable error.
 type EventAttemptFailed struct {
+	Time        time.Time
+	Failure     *failurepb.Failure
+	RetryPolicy backoff.RetryPolicy
 }
 
 var transitionAttemptFailed = chasm.NewTransition(
 	[]nexusoperationpb.OperationStatus{nexusoperationpb.OPERATION_STATUS_SCHEDULED},
 	nexusoperationpb.OPERATION_STATUS_BACKING_OFF,
 	func(o *Operation, ctx chasm.MutableContext, event EventAttemptFailed) error {
-		return serviceerror.NewUnimplemented("unimplemented")
+		// Record the attempt
+		o.Attempt++
+		o.LastAttemptCompleteTime = timestamppb.New(event.Time)
+		o.LastAttemptFailure = event.Failure
+
+		// Compute next retry delay
+		// Use 0 for elapsed time as we don't limit the retry by time (for now)
+		// The last argument (error) is ignored
+		nextDelay := event.RetryPolicy.ComputeNextDelay(0, int(o.Attempt), nil)
+		nextAttemptScheduleTime := event.Time.Add(nextDelay)
+		o.NextAttemptScheduleTime = timestamppb.New(nextAttemptScheduleTime)
+
+		// Emit a backoff task to retry after the delay
+		ctx.AddTask(o, chasm.TaskAttributes{
+			ScheduledTime: nextAttemptScheduleTime,
+		}, &nexusoperationpb.InvocationBackoffTask{
+			Attempt: o.Attempt,
+		})
+
+		return nil
 	},
 )
 
@@ -59,13 +80,20 @@ var transitionRescheduled = chasm.NewTransition(
 	[]nexusoperationpb.OperationStatus{nexusoperationpb.OPERATION_STATUS_BACKING_OFF},
 	nexusoperationpb.OPERATION_STATUS_SCHEDULED,
 	func(o *Operation, ctx chasm.MutableContext, event EventRescheduled) error {
-		return serviceerror.NewUnimplemented("unimplemented")
+		// Emit a new invocation task for the retry attempt
+		ctx.AddTask(o, chasm.TaskAttributes{}, &nexusoperationpb.InvocationTask{
+			Attempt: o.Attempt,
+		})
+
+		return nil
 	},
 )
 
 // EventStarted is triggered when an invocation attempt succeeds and the handler indicates that it started an
 // asynchronous operation.
 type EventStarted struct {
+	Time           time.Time
+	OperationToken string
 }
 
 var transitionStarted = chasm.NewTransition(
@@ -75,7 +103,15 @@ var transitionStarted = chasm.NewTransition(
 	},
 	nexusoperationpb.OPERATION_STATUS_STARTED,
 	func(o *Operation, ctx chasm.MutableContext, event EventStarted) error {
-		return serviceerror.NewUnimplemented("unimplemented")
+		// Record the attempt as successful
+		o.Attempt++
+		o.LastAttemptCompleteTime = timestamppb.New(event.Time)
+		o.LastAttemptFailure = nil
+
+		// Store the operation token for async completion
+		o.OperationToken = event.OperationToken
+
+		return nil
 	},
 )
 
@@ -91,7 +127,9 @@ var transitionSucceeded = chasm.NewTransition(
 	},
 	nexusoperationpb.OPERATION_STATUS_SUCCEEDED,
 	func(o *Operation, ctx chasm.MutableContext, event EventSucceeded) error {
-		return serviceerror.NewUnimplemented("unimplemented")
+		// Terminal state - no tasks to emit
+		// The component will be deleted after this transition
+		return nil
 	},
 )
 
@@ -107,7 +145,10 @@ var transitionFailed = chasm.NewTransition(
 	},
 	nexusoperationpb.OPERATION_STATUS_FAILED,
 	func(o *Operation, ctx chasm.MutableContext, event EventFailed) error {
-		return serviceerror.NewUnimplemented("unimplemented")
+		// Terminal state - no tasks to emit
+		// Not recording the last attempt information here since the state machine
+		// will be deleted immediately after this transition
+		return nil
 	},
 )
 
@@ -123,7 +164,9 @@ var transitionCanceled = chasm.NewTransition(
 	},
 	nexusoperationpb.OPERATION_STATUS_CANCELED,
 	func(o *Operation, ctx chasm.MutableContext, event EventCanceled) error {
-		return serviceerror.NewUnimplemented("unimplemented")
+		// Terminal state - no tasks to emit
+		// The component will be deleted after this transition
+		return nil
 	},
 )
 
@@ -139,6 +182,8 @@ var transitionTimedOut = chasm.NewTransition(
 	},
 	nexusoperationpb.OPERATION_STATUS_TIMED_OUT,
 	func(o *Operation, ctx chasm.MutableContext, event EventTimedOut) error {
-		return serviceerror.NewUnimplemented("unimplemented")
+		// Terminal state - no tasks to emit
+		// The component will be deleted after this transition
+		return nil
 	},
 )
