@@ -46,16 +46,21 @@ analyze_heap() {
 
 # Get goroutine count from pprof
 get_goroutine_count() {
+  local tmp_file
+  tmp_file="$(mktemp)"
+  trap "rm -f '$tmp_file'" RETURN
   local count="?"
-  if curl -s --max-time 5 "http://${PPROF_HOST}/debug/pprof/goroutine?debug=1" -o /tmp/goroutine.out 2>/dev/null; then
-    count="$(head -1 /tmp/goroutine.out | grep -o '[0-9]*' || echo '?')"
+  if curl -s --max-time 5 "http://${PPROF_HOST}/debug/pprof/goroutine?debug=1" -o "$tmp_file" 2>/dev/null; then
+    count="$(head -1 "$tmp_file" | grep -o '[0-9]*' || echo '?')"
   fi
   echo "$count"
 }
 
 # Print pprof heap analysis to stdout
 print_pprof_analysis() {
-  local heap_file="/tmp/heap.out"
+  local heap_file
+  heap_file="$(mktemp)"
+  trap "rm -f '$heap_file'" RETURN
 
   echo "--- Go Heap Profile ---"
   if fetch_pprof "heap" "$heap_file"; then
