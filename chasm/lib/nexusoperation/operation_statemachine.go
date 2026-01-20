@@ -1,9 +1,14 @@
 package nexusoperation
 
 import (
+	"time"
+
+	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
+	"go.temporal.io/server/common/backoff"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // EventScheduled is triggered when the operation is meant to be scheduled - immediately after initialization.
@@ -14,7 +19,22 @@ var transitionScheduled = chasm.NewTransition(
 	[]nexusoperationpb.OperationStatus{nexusoperationpb.OPERATION_STATUS_UNSPECIFIED},
 	nexusoperationpb.OPERATION_STATUS_SCHEDULED,
 	func(o *Operation, ctx chasm.MutableContext, event EventScheduled) error {
-		return serviceerror.NewUnimplemented("unimplemented")
+		// Emit an invocation task to start the operation
+		ctx.AddTask(o, chasm.TaskAttributes{}, &nexusoperationpb.InvocationTask{
+			Attempt: o.Attempt,
+		})
+
+		// Emit a schedule-to-close timeout task if configured
+		if o.ScheduleToCloseTimeout != nil && o.ScheduleToCloseTimeout.AsDuration() != 0 {
+			deadline := o.ScheduledTime.AsTime().Add(o.ScheduleToCloseTimeout.AsDuration())
+			ctx.AddTask(o, chasm.TaskAttributes{
+				ScheduledTime: deadline,
+			}, &nexusoperationpb.InvocationTimeoutTask{
+				Attempt: o.Attempt,
+			})
+		}
+
+		return nil
 	},
 )
 
