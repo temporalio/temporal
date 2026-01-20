@@ -144,14 +144,24 @@ func (s *SequentialScheduler[T]) Submit(task T) {
 func (s *SequentialScheduler[T]) TrySubmit(task T) bool {
 	// Try to acquire lock with timeout to prevent concurrent TrySubmit race condition
 	lockCh := make(chan struct{}, 1)
+	unlockCh := make(chan struct{})
 	go func() {
 		s.trySubmitLock.Lock()
-		lockCh <- struct{}{}
+		defer s.trySubmitLock.Unlock()
+		select {
+		case lockCh <- struct{}{}:
+			// Successfully notified main goroutine
+			<-unlockCh // Wait for signal to unlock
+		case <-unlockCh:
+			// Main goroutine timed out, just unlock and exit
+		}
 	}()
+
+	defer close(unlockCh) // Always signal goroutine when we're done
 
 	select {
 	case <-lockCh:
-		defer s.trySubmitLock.Unlock()
+		// Lock acquired, proceed with submission
 	case <-time.After(trySubmitLockTimeout):
 		return false
 	}

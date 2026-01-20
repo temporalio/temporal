@@ -207,6 +207,54 @@ func (s *sequentialSchedulerSuite) TestStartStopWorkers() {
 	processor.shutdownWG.Wait()
 }
 
+func (s *sequentialSchedulerSuite) TestTrySubmitLockLeak() {
+	scheduler := s.newTestProcessor()
+	scheduler.Start()
+	defer scheduler.Stop()
+
+	// Manually acquire the lock to force timeout on first TrySubmit
+	scheduler.trySubmitLock.Lock()
+
+	// Create a task
+	mockTask1 := NewMockTask(s.controller)
+	mockTask1.EXPECT().RetryPolicy().Return(s.retryPolicy).AnyTimes()
+
+	// Try to submit - this will timeout after 200ms
+	go func() {
+		result := scheduler.TrySubmit(mockTask1)
+		s.False(result, "First TrySubmit should timeout and return false")
+	}()
+
+	// Wait for timeout + a bit more to ensure the spawned goroutine acquires the lock
+	time.Sleep(300 * time.Millisecond)
+
+	// Release the lock - but the spawned goroutine from TrySubmit has already acquired it
+	scheduler.trySubmitLock.Unlock()
+
+	// Give the orphaned goroutine time to acquire the lock
+	time.Sleep(100 * time.Millisecond)
+
+	// Now try another TrySubmit - if there's a lock leak, this will also timeout
+	mockTask2 := NewMockTask(s.controller)
+	mockTask2.EXPECT().RetryPolicy().Return(s.retryPolicy).AnyTimes()
+	mockTask2.EXPECT().Execute().Return(nil).MaxTimes(1)
+	mockTask2.EXPECT().Ack().MaxTimes(1)
+
+	start := time.Now()
+	result := scheduler.TrySubmit(mockTask2)
+	elapsed := time.Since(start)
+
+	// If there's a lock leak, this will timeout (200ms+)
+	// If the lock is properly released, this should succeed quickly (<50ms)
+	s.T().Logf("Second TrySubmit took %v, result=%v", elapsed, result)
+
+	if elapsed > 150*time.Millisecond {
+		s.Fail("Lock leak detected: second TrySubmit timed out, indicating the lock was never released by the orphaned goroutine")
+	} else {
+		s.True(result, "Second TrySubmit should succeed if lock is properly managed")
+	}
+}
+
 func (s *sequentialSchedulerSuite) TestTrySubmitConcurrent() {
 	// Use a custom scheduler with QueueSize=1 to force contention
 	scheduler := s.newTestProcessorWithQueueSize(1)
