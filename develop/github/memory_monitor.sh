@@ -33,10 +33,10 @@ fetch_pprof() {
   curl -s --max-time 10 "http://${PPROF_HOST}/debug/pprof/${profile_type}" -o "$output_file" 2>/dev/null
 }
 
-# Analyze a heap profile with go tool pprof
-# Usage: analyze_heap <profile_file> <mode> <lines>
+# Print heap analysis from `go tool pprof`.
+# Usage: print_heap_analysis <profile_file> <mode> <lines>
 # mode: inuse_space, alloc_space, inuse_objects, alloc_objects
-analyze_heap() {
+print_heap_analysis() {
   local profile_file="$1"
   local mode="$2"
   local lines="${3:-40}"
@@ -44,8 +44,8 @@ analyze_heap() {
   go tool pprof -top "-${mode}" "$profile_file" 2>/dev/null | head -"$lines" || true
 }
 
-# Get goroutine count from pprof
-get_goroutine_count() {
+# Get goroutine count from pprof.
+print_goroutine_count() {
   local tmp_file
   tmp_file="$(mktemp)"
   trap 'rm -f "$tmp_file"' RETURN
@@ -57,22 +57,22 @@ get_goroutine_count() {
   echo "$count"
 }
 
-# Print pprof heap analysis to stdout
+# Print pprof heap analysis.
 print_pprof_analysis() {
-  local heap_file
-  heap_file="$(mktemp)"
-  trap 'rm -f "$heap_file"' RETURN
+  local tmp_file
+  tmp_file="$(mktemp)"
+  trap 'rm -f "$tmp_file"' RETURN
 
   echo "--- Go Heap Profile ---"
-  if fetch_pprof "heap" "$heap_file"; then
+  if fetch_pprof "heap" "$tmp_file"; then
     echo "=== inuse_space (what's currently held) ==="
-    analyze_heap "$heap_file" "inuse_space" 30
+    print_heap_analysis "$tmp_file" "inuse_space" 30
     echo ""
     echo "=== alloc_space (total allocations) ==="
-    analyze_heap "$heap_file" "alloc_space" 30
+    print_heap_analysis "$tmp_file" "alloc_space" 30
     echo ""
     echo "=== alloc_objects (total objects allocated) ==="
-    analyze_heap "$heap_file" "alloc_objects" 30
+    print_heap_analysis "$tmp_file" "alloc_objects" 30
   else
     echo "(pprof endpoint not available)"
   fi
@@ -87,7 +87,7 @@ write_snapshot() {
   pct=$(( memused_kb * 100 / memtotal_kb ))
 
   local goroutines
-  goroutines="$(get_goroutine_count)"
+  goroutines="$(print_goroutine_count)"
 
   # Get processes with >=1% memory, format as "name (MB)"
   local top_procs
