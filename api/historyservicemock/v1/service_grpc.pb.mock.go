@@ -303,6 +303,26 @@ func (mr *MockHistoryServiceClientMockRecorder) ForceDeleteWorkflowExecution(ctx
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ForceDeleteWorkflowExecution", reflect.TypeOf((*MockHistoryServiceClient)(nil).ForceDeleteWorkflowExecution), varargs...)
 }
 
+// ForceWorkflowTaskTimeout mocks base method.
+func (m *MockHistoryServiceClient) ForceWorkflowTaskTimeout(ctx context.Context, in *historyservice.ForceWorkflowTaskTimeoutRequest, opts ...grpc.CallOption) (*historyservice.ForceWorkflowTaskTimeoutResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "ForceWorkflowTaskTimeout", varargs...)
+	ret0, _ := ret[0].(*historyservice.ForceWorkflowTaskTimeoutResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ForceWorkflowTaskTimeout indicates an expected call of ForceWorkflowTaskTimeout.
+func (mr *MockHistoryServiceClientMockRecorder) ForceWorkflowTaskTimeout(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ForceWorkflowTaskTimeout", reflect.TypeOf((*MockHistoryServiceClient)(nil).ForceWorkflowTaskTimeout), varargs...)
+}
+
 // GenerateLastHistoryReplicationTasks mocks base method.
 func (m *MockHistoryServiceClient) GenerateLastHistoryReplicationTasks(ctx context.Context, in *historyservice.GenerateLastHistoryReplicationTasksRequest, opts ...grpc.CallOption) (*historyservice.GenerateLastHistoryReplicationTasksResponse, error) {
 	m.ctrl.T.Helper()
@@ -1878,6 +1898,21 @@ func (m *MockHistoryServiceServer) ForceDeleteWorkflowExecution(arg0 context.Con
 func (mr *MockHistoryServiceServerMockRecorder) ForceDeleteWorkflowExecution(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ForceDeleteWorkflowExecution", reflect.TypeOf((*MockHistoryServiceServer)(nil).ForceDeleteWorkflowExecution), arg0, arg1)
+}
+
+// ForceWorkflowTaskTimeout mocks base method.
+func (m *MockHistoryServiceServer) ForceWorkflowTaskTimeout(arg0 context.Context, arg1 *historyservice.ForceWorkflowTaskTimeoutRequest) (*historyservice.ForceWorkflowTaskTimeoutResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ForceWorkflowTaskTimeout", arg0, arg1)
+	ret0, _ := ret[0].(*historyservice.ForceWorkflowTaskTimeoutResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ForceWorkflowTaskTimeout indicates an expected call of ForceWorkflowTaskTimeout.
+func (mr *MockHistoryServiceServerMockRecorder) ForceWorkflowTaskTimeout(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ForceWorkflowTaskTimeout", reflect.TypeOf((*MockHistoryServiceServer)(nil).ForceWorkflowTaskTimeout), arg0, arg1)
 }
 
 // GenerateLastHistoryReplicationTasks mocks base method.

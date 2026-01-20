@@ -5776,3 +5776,77 @@ func (this *UnpauseWorkflowExecutionResponse) Equal(that interface{}) bool {
 
 	return proto.Equal(this, that1)
 }
+
+// Marshal an object of type ForceWorkflowTaskTimeoutRequest to the protobuf v3 wire format
+func (val *ForceWorkflowTaskTimeoutRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type ForceWorkflowTaskTimeoutRequest from the protobuf v3 wire format
+func (val *ForceWorkflowTaskTimeoutRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *ForceWorkflowTaskTimeoutRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two ForceWorkflowTaskTimeoutRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *ForceWorkflowTaskTimeoutRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *ForceWorkflowTaskTimeoutRequest
+	switch t := that.(type) {
+	case *ForceWorkflowTaskTimeoutRequest:
+		that1 = t
+	case ForceWorkflowTaskTimeoutRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type ForceWorkflowTaskTimeoutResponse to the protobuf v3 wire format
+func (val *ForceWorkflowTaskTimeoutResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type ForceWorkflowTaskTimeoutResponse from the protobuf v3 wire format
+func (val *ForceWorkflowTaskTimeoutResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *ForceWorkflowTaskTimeoutResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two ForceWorkflowTaskTimeoutResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *ForceWorkflowTaskTimeoutResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *ForceWorkflowTaskTimeoutResponse
+	switch t := that.(type) {
+	case *ForceWorkflowTaskTimeoutResponse:
+		that1 = t
+	case ForceWorkflowTaskTimeoutResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}

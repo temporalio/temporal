@@ -2714,3 +2714,36 @@ func (h *Handler) UnpauseWorkflowExecution(ctx context.Context, request *history
 
 	return unpauseResp, nil
 }
+
+func (h *Handler) ForceWorkflowTaskTimeout(
+	ctx context.Context,
+	request *historyservice.ForceWorkflowTaskTimeoutRequest,
+) (_ *historyservice.ForceWorkflowTaskTimeoutResponse, retError error) {
+	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
+
+	if h.isStopped() {
+		return nil, errShuttingDown
+	}
+
+	namespaceID := namespace.ID(request.GetNamespaceId())
+	if namespaceID == "" {
+		return nil, h.convertError(errNamespaceNotSet)
+	}
+
+	workflowID := request.GetWorkflowExecution().GetWorkflowId()
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	resp, err := engine.ForceWorkflowTaskTimeout(ctx, request)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	return resp, nil
+}

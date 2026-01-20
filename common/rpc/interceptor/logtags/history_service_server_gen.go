@@ -87,6 +87,13 @@ func (wt *WorkflowTags) extractFromHistoryServiceServerMessage(message any) []ta
 		}
 	case *historyservice.ForceDeleteWorkflowExecutionResponse:
 		return nil
+	case *historyservice.ForceWorkflowTaskTimeoutRequest:
+		return []tag.Tag{
+			tag.WorkflowID(r.GetWorkflowExecution().GetWorkflowId()),
+			tag.WorkflowRunID(r.GetWorkflowExecution().GetRunId()),
+		}
+	case *historyservice.ForceWorkflowTaskTimeoutResponse:
+		return nil
 	case *historyservice.GenerateLastHistoryReplicationTasksRequest:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetExecution().GetWorkflowId()),

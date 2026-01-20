@@ -429,4 +429,9 @@ service HistoryService {
     // UnpauseWorkflowExecution unpauses the workflow execution specified in the request.
     rpc UnpauseWorkflowExecution (UnpauseWorkflowExecutionRequest) returns (UnpauseWorkflowExecutionResponse) {
     }
+
+    // ForceWorkflowTaskTimeout forces a workflow task to timeout immediately.
+    // This is used by tests to avoid waiting for actual timeout durations.
+    rpc ForceWorkflowTaskTimeout (ForceWorkflowTaskTimeoutRequest) returns (ForceWorkflowTaskTimeoutResponse) {
+    }
 }

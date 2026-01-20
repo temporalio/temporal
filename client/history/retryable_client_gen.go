@@ -206,6 +206,21 @@ func (c *retryableClient) ForceDeleteWorkflowExecution(
 	return resp, err
 }
 
+func (c *retryableClient) ForceWorkflowTaskTimeout(
+	ctx context.Context,
+	request *historyservice.ForceWorkflowTaskTimeoutRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.ForceWorkflowTaskTimeoutResponse, error) {
+	var resp *historyservice.ForceWorkflowTaskTimeoutResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.ForceWorkflowTaskTimeout(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) GenerateLastHistoryReplicationTasks(
 	ctx context.Context,
 	request *historyservice.GenerateLastHistoryReplicationTasksRequest,

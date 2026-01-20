@@ -1370,3 +1370,18 @@ message UnpauseWorkflowExecutionRequest {
 }
 
 message UnpauseWorkflowExecutionResponse { }
+
+// ForceWorkflowTaskTimeoutRequest is used by tests to force a workflow task timeout
+// without waiting for the actual timeout duration.
+message ForceWorkflowTaskTimeoutRequest {
+    option (routing).workflow_id = "workflow_execution.workflow_id";
+
+    string namespace_id = 1;
+    temporal.api.common.v1.WorkflowExecution workflow_execution = 2;
+    // The type of timeout to force:
+    // - TIMEOUT_TYPE_SCHEDULE_TO_START: WT scheduled but not yet started
+    // - TIMEOUT_TYPE_START_TO_CLOSE: WT started but not yet completed
+    temporal.api.enums.v1.TimeoutType timeout_type = 3;
+}
+
+message ForceWorkflowTaskTimeoutResponse { }

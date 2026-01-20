@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/service/history/api/deleteworkflow"
 	"go.temporal.io/server/service/history/api/describemutablestate"
 	"go.temporal.io/server/service/history/api/describeworkflow"
+	"go.temporal.io/server/service/history/api/forceworkflowtasktimeout"
 	"go.temporal.io/server/service/history/api/getworkflowexecutionhistory"
 	"go.temporal.io/server/service/history/api/getworkflowexecutionhistoryreverse"
 	"go.temporal.io/server/service/history/api/getworkflowexecutionrawhistory"
@@ -1122,4 +1123,11 @@ func (e *historyEngineImpl) UnpauseWorkflowExecution(
 	req *historyservice.UnpauseWorkflowExecutionRequest,
 ) (resp *historyservice.UnpauseWorkflowExecutionResponse, retError error) {
 	return unpauseworkflow.Invoke(ctx, req, e.shardContext, e.workflowConsistencyChecker)
+}
+
+func (e *historyEngineImpl) ForceWorkflowTaskTimeout(
+	ctx context.Context,
+	req *historyservice.ForceWorkflowTaskTimeoutRequest,
+) (resp *historyservice.ForceWorkflowTaskTimeoutResponse, retError error) {
+	return forceworkflowtasktimeout.Invoke(ctx, req, e.shardContext, e.workflowConsistencyChecker)
 }

@@ -191,6 +191,20 @@ func (c *metricClient) ForceDeleteWorkflowExecution(
 	return c.client.ForceDeleteWorkflowExecution(ctx, request, opts...)
 }
 
+func (c *metricClient) ForceWorkflowTaskTimeout(
+	ctx context.Context,
+	request *historyservice.ForceWorkflowTaskTimeoutRequest,
+	opts ...grpc.CallOption,
+) (_ *historyservice.ForceWorkflowTaskTimeoutResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "HistoryClientForceWorkflowTaskTimeout")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.ForceWorkflowTaskTimeout(ctx, request, opts...)
+}
+
 func (c *metricClient) GenerateLastHistoryReplicationTasks(
 	ctx context.Context,
 	request *historyservice.GenerateLastHistoryReplicationTasksRequest,
