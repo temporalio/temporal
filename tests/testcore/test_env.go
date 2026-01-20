@@ -143,7 +143,7 @@ func (e *testEnv) T() *testing.T {
 // For settings that can be namespace-scoped, a namespace constraint is applied.
 // All others cannot be applied to a shared cluster and require `WithDedicatedCluster`.
 func (e *testEnv) OverrideDynamicConfig(setting dynamicconfig.GenericSetting, value any) (cleanup func()) {
-	if e.FunctionalTestBase.isShared {
+	if e.isShared {
 		if !canBeNamespaceScoped(setting.Precedence()) {
 			e.t.Fatalf("OverrideDynamicConfig for setting %s (precedence %v) cannot be called on a shared cluster; use testcore.WithDedicatedCluster()", setting.Key(), setting.Precedence())
 		}
