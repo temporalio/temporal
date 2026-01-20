@@ -219,20 +219,26 @@ func (s *sequentialSchedulerSuite) TestTrySubmitLockLeak() {
 	mockTask1 := NewMockTask(s.controller)
 	mockTask1.EXPECT().RetryPolicy().Return(s.retryPolicy).AnyTimes()
 
+	// Track whether first TrySubmit completed
+	var firstTrySubmitDone atomic.Bool
+	var firstTrySubmitResult atomic.Bool
+
 	// Try to submit - this will timeout after 200ms
 	go func() {
 		result := scheduler.TrySubmit(mockTask1)
-		s.False(result, "First TrySubmit should timeout and return false")
+		firstTrySubmitResult.Store(result)
+		firstTrySubmitDone.Store(true)
 	}()
 
-	// Wait for timeout + a bit more to ensure the spawned goroutine acquires the lock
-	time.Sleep(300 * time.Millisecond)
+	// Wait for the first TrySubmit to timeout and the spawned goroutine to acquire the lock
+	s.Require().Eventually(func() bool {
+		return firstTrySubmitDone.Load()
+	}, 500*time.Millisecond, 10*time.Millisecond, "First TrySubmit should timeout")
 
-	// Release the lock - but the spawned goroutine from TrySubmit has already acquired it
+	s.Require().False(firstTrySubmitResult.Load(), "First TrySubmit should return false on timeout")
+
+	// Release the lock - the spawned goroutine from TrySubmit should have already been signaled to unlock
 	scheduler.trySubmitLock.Unlock()
-
-	// Give the orphaned goroutine time to acquire the lock
-	time.Sleep(100 * time.Millisecond)
 
 	// Now try another TrySubmit - if there's a lock leak, this will also timeout
 	mockTask2 := NewMockTask(s.controller)
@@ -240,19 +246,35 @@ func (s *sequentialSchedulerSuite) TestTrySubmitLockLeak() {
 	mockTask2.EXPECT().Execute().Return(nil).MaxTimes(1)
 	mockTask2.EXPECT().Ack().MaxTimes(1)
 
-	start := time.Now()
-	result := scheduler.TrySubmit(mockTask2)
-	elapsed := time.Since(start)
+	// Track second TrySubmit result
+	var secondTrySubmitDone atomic.Bool
+	var secondTrySubmitResult atomic.Bool
+	var secondTrySubmitElapsed atomic.Int64
+
+	go func() {
+		start := time.Now()
+		result := scheduler.TrySubmit(mockTask2)
+		elapsed := time.Since(start)
+		secondTrySubmitResult.Store(result)
+		secondTrySubmitElapsed.Store(int64(elapsed))
+		secondTrySubmitDone.Store(true)
+	}()
+
+	// Wait for second TrySubmit to complete
+	s.Require().Eventually(func() bool {
+		return secondTrySubmitDone.Load()
+	}, 500*time.Millisecond, 10*time.Millisecond, "Second TrySubmit should complete")
+
+	elapsed := time.Duration(secondTrySubmitElapsed.Load())
+	result := secondTrySubmitResult.Load()
+
+	s.T().Logf("Second TrySubmit took %v, result=%v", elapsed, result)
 
 	// If there's a lock leak, this will timeout (200ms+)
 	// If the lock is properly released, this should succeed quickly (<50ms)
-	s.T().Logf("Second TrySubmit took %v, result=%v", elapsed, result)
-
-	if elapsed > 150*time.Millisecond {
-		s.Fail("Lock leak detected: second TrySubmit timed out, indicating the lock was never released by the orphaned goroutine")
-	} else {
-		s.True(result, "Second TrySubmit should succeed if lock is properly managed")
-	}
+	s.Less(elapsed, 150*time.Millisecond,
+		"Second TrySubmit should complete quickly, not timeout (would indicate lock leak)")
+	s.True(result, "Second TrySubmit should succeed if lock is properly managed")
 }
 
 func (s *sequentialSchedulerSuite) TestTrySubmitConcurrent() {
