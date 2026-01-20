@@ -26,6 +26,7 @@ import (
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/archiver"
+	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
@@ -105,9 +106,11 @@ type (
 		ServiceNames    resource.ServiceNames
 		NamespaceLogger resource.NamespaceLogger
 
-		ServiceResolver        resolver.ServiceResolver
-		CustomDataStoreFactory persistenceClient.AbstractDataStoreFactory
-		CustomVisibilityStore  visibility.VisibilityStoreFactory
+		ServiceResolver                 resolver.ServiceResolver
+		CustomDataStoreFactory          persistenceClient.AbstractDataStoreFactory
+		CustomVisibilityStore           visibility.VisibilityStoreFactory
+		CustomHistoryArchiverFactory    provider.CustomHistoryArchiverFactory
+		CustomVisibilityArchiverFactory provider.CustomVisibilityArchiverFactory
 
 		SearchAttributesMapper     searchattribute.Mapper
 		CustomFrontendInterceptors []grpc.UnaryServerInterceptor
@@ -289,9 +292,11 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		ServiceHosts:    so.hostsByService,
 		NamespaceLogger: so.namespaceLogger,
 
-		ServiceResolver:        so.persistenceServiceResolver,
-		CustomDataStoreFactory: so.customDataStoreFactory,
-		CustomVisibilityStore:  so.customVisibilityStoreFactory,
+		ServiceResolver:                 so.persistenceServiceResolver,
+		CustomDataStoreFactory:          so.customDataStoreFactory,
+		CustomVisibilityStore:           so.customVisibilityStoreFactory,
+		CustomHistoryArchiverFactory:    so.customHistoryArchiverFactory,
+		CustomVisibilityArchiverFactory: so.customVisibilityArchiverFactory,
 
 		SearchAttributesMapper:     so.searchAttributesMapper,
 		CustomFrontendInterceptors: so.customFrontendInterceptors,
@@ -344,30 +349,32 @@ type (
 	ServiceProviderParamsCommon struct {
 		fx.In
 
-		Cfg                        *config.Config
-		ServiceNames               resource.ServiceNames
-		Logger                     log.Logger
-		NamespaceLogger            resource.NamespaceLogger
-		DynamicConfigClient        dynamicconfig.Client
-		MetricsHandler             metrics.Handler
-		EsClient                   esclient.Client
-		TlsConfigProvider          encryption.TLSConfigProvider
-		PersistenceConfig          config.Persistence
-		ClusterMetadata            *cluster.Config
-		ClientFactoryProvider      client.FactoryProvider
-		AudienceGetter             authorization.JWTAudienceMapper
-		PersistenceServiceResolver resolver.ServiceResolver
-		PersistenceFactoryProvider persistenceClient.FactoryProviderFn
-		SearchAttributesMapper     searchattribute.Mapper
-		CustomFrontendInterceptors []grpc.UnaryServerInterceptor
-		Authorizer                 authorization.Authorizer
-		ClaimMapper                authorization.ClaimMapper
-		DataStoreFactory           persistenceClient.AbstractDataStoreFactory
-		VisibilityStoreFactory     visibility.VisibilityStoreFactory
-		SpanExporters              []otelsdktrace.SpanExporter
-		InstanceID                 resource.InstanceID                     `optional:"true"`
-		StaticServiceHosts         map[primitives.ServiceName]static.Hosts `optional:"true"`
-		TaskCategoryRegistry       tasks.TaskCategoryRegistry
+		Cfg                             *config.Config
+		ServiceNames                    resource.ServiceNames
+		Logger                          log.Logger
+		NamespaceLogger                 resource.NamespaceLogger
+		DynamicConfigClient             dynamicconfig.Client
+		MetricsHandler                  metrics.Handler
+		EsClient                        esclient.Client
+		TlsConfigProvider               encryption.TLSConfigProvider
+		PersistenceConfig               config.Persistence
+		ClusterMetadata                 *cluster.Config
+		ClientFactoryProvider           client.FactoryProvider
+		AudienceGetter                  authorization.JWTAudienceMapper
+		PersistenceServiceResolver      resolver.ServiceResolver
+		PersistenceFactoryProvider      persistenceClient.FactoryProviderFn
+		SearchAttributesMapper          searchattribute.Mapper
+		CustomFrontendInterceptors      []grpc.UnaryServerInterceptor
+		Authorizer                      authorization.Authorizer
+		ClaimMapper                     authorization.ClaimMapper
+		DataStoreFactory                persistenceClient.AbstractDataStoreFactory
+		VisibilityStoreFactory          visibility.VisibilityStoreFactory
+		CustomHistoryArchiverFactory    provider.CustomHistoryArchiverFactory
+		CustomVisibilityArchiverFactory provider.CustomVisibilityArchiverFactory
+		SpanExporters                   []otelsdktrace.SpanExporter
+		InstanceID                      resource.InstanceID                     `optional:"true"`
+		StaticServiceHosts              map[primitives.ServiceName]static.Hosts `optional:"true"`
+		TaskCategoryRegistry            tasks.TaskCategoryRegistry
 	}
 )
 
@@ -400,6 +407,12 @@ func (params ServiceProviderParamsCommon) GetCommonServiceOptions(serviceName pr
 			},
 			func() visibility.VisibilityStoreFactory {
 				return params.VisibilityStoreFactory
+			},
+			func() provider.CustomHistoryArchiverFactory {
+				return params.CustomHistoryArchiverFactory
+			},
+			func() provider.CustomVisibilityArchiverFactory {
+				return params.CustomVisibilityArchiverFactory
 			},
 			func() client.FactoryProvider {
 				return params.ClientFactoryProvider
