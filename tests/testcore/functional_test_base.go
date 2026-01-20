@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
+	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc"
@@ -85,6 +86,11 @@ type (
 
 		// TODO (alex): replace with v2
 		taskPoller *taskpoller.TaskPoller
+
+		// isShared indicates whether this cluster is shared between multiple tests.
+		// Certain operations (e.g. InjectHook, CloseShard) are not safe on shared clusters
+		// and will panic if called.
+		isShared bool
 	}
 	// TestClusterParams contains the variables which are used to configure test cluster via the TestClusterOption type.
 	TestClusterParams struct {
@@ -94,6 +100,7 @@ type (
 		EnableMTLS             bool
 		FaultInjectionConfig   *config.FaultInjection
 		NumHistoryShards       int32
+		SharedCluster          bool
 	}
 	TestClusterOption func(params *TestClusterParams)
 )
@@ -153,6 +160,12 @@ func WithFaultInjectionConfig(cfg *config.FaultInjection) TestClusterOption {
 func WithNumHistoryShards(n int32) TestClusterOption {
 	return func(params *TestClusterParams) {
 		params.NumHistoryShards = n
+	}
+}
+
+func WithSharedCluster() TestClusterOption {
+	return func(params *TestClusterParams) {
+		params.SharedCluster = true
 	}
 }
 
@@ -228,6 +241,12 @@ func (s *FunctionalTestBase) TearDownSuite() {
 }
 
 func (s *FunctionalTestBase) SetupSuiteWithCluster(options ...TestClusterOption) {
+	// Acquire a slot from the dedicated test cluster pool.
+	testClusterPool.dedicated.acquireSlot(s.T())
+	s.setupCluster(options...)
+}
+
+func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 	params := ApplyTestClusterOptions(options)
 
 	// NOTE: A suite might set its own logger. Example: AcquireShardSuiteBase.
@@ -252,6 +271,13 @@ func (s *FunctionalTestBase) SetupSuiteWithCluster(options ...TestClusterOption)
 		EnableMetricsCapture:   true,
 		EnableArchival:         params.ArchivalEnabled,
 		EnableMTLS:             params.EnableMTLS,
+	}
+
+	// Apply configuration for shared clusters.
+	if params.SharedCluster {
+		// Use file-based SQLite for shared clusters to support parallel test access.
+		s.testClusterConfig.Persistence = *persistencetests.GetSQLiteFileTestClusterOption()
+		s.isShared = true
 	}
 
 	// Initialize the OTEL collector if OTEL is enabled.
@@ -572,11 +598,32 @@ func (s *FunctionalTestBase) DurationNear(value, target, tolerance time.Duration
 // will automatically be reverted at the end of the test (using t.Cleanup). The cleanup
 // function is also returned if you want to revert the change before the end of the test.
 func (s *FunctionalTestBase) OverrideDynamicConfig(setting dynamicconfig.GenericSetting, value any) (cleanup func()) {
+	if s.isShared {
+		// Technically this doesn't always require a dedicated cluster since some dynamic configs can be applied to only
+		// a particular namespace; however, for now let's assume it does in order to avoid tricky flaky tests.
+		s.T().Fatalf("OverrideDynamicConfig cannot be called on a shared cluster; use testcore.WithDedicatedCluster()")
+	}
 	return s.testCluster.host.overrideDynamicConfig(s.T(), setting.Key(), value)
 }
 
 func (s *FunctionalTestBase) InjectHook(key testhooks.Key, value any) (cleanup func()) {
+	if s.isShared {
+		s.T().Fatalf("InjectHook cannot be called on a shared cluster; use testcore.WithDedicatedCluster()")
+	}
 	return s.testCluster.host.injectHook(s.T(), key, value)
+}
+
+// CloseShard closes the shard that contains the given workflow.
+// This is a cluster-global operation and cannot be called on shared clusters.
+func (s *FunctionalTestBase) CloseShard(namespaceID string, workflowID string) {
+	if s.isShared {
+		s.T().Fatalf("CloseShard cannot be called on a shared cluster; use testcore.WithDedicatedCluster()")
+	}
+	shardID := common.WorkflowIDToHistoryShard(namespaceID, workflowID, s.testClusterConfig.HistoryConfig.NumHistoryShards)
+	_, err := s.AdminClient().CloseShard(NewContext(), &adminservice.CloseShardRequest{
+		ShardId: shardID,
+	})
+	s.Require().NoError(err)
 }
 
 func (s *FunctionalTestBase) GetNamespaceID(namespace string) string {
