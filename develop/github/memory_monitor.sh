@@ -17,13 +17,12 @@ fi
 
 SNAPSHOT_FILE="$1"
 HISTORY_FILE="/tmp/memory_history.txt"
-HEAP_PRINTED_FLAG="/tmp/heap_details_printed.flag"
 HIGH_MEMORY_THRESHOLD=95
 PPROF_HOST="${PPROF_HOST:-localhost:7000}"
+HEAP_PRINTED=false
 
-# Clear history and flag on start
+# Clear history on start
 : > "$HISTORY_FILE"
-rm -f "$HEAP_PRINTED_FLAG"
 
 # Fetch a pprof profile and save to file
 # Usage: fetch_pprof <profile_type> <output_file>
@@ -103,13 +102,13 @@ write_snapshot() {
   echo "$timestamp used=${pct}% mem=${memused_mb}MB goroutines=${goroutines} procs=[${top_procs}]"
 
   # If memory threshold was reached, print Go heap details. But only once per run.
-  if [[ "$pct" -ge "$HIGH_MEMORY_THRESHOLD" ]] && [[ ! -f "$HEAP_PRINTED_FLAG" ]]; then
+  if [[ "$pct" -ge "$HIGH_MEMORY_THRESHOLD" ]] && [[ "$HEAP_PRINTED" == "false" ]]; then
     echo ""
     echo "=== HIGH MEMORY WARNING: ${pct}% used (threshold: ${HIGH_MEMORY_THRESHOLD}%) ==="
     print_pprof_analysis
     echo "=== END HIGH MEMORY WARNING ==="
     echo ""
-    touch "$HEAP_PRINTED_FLAG"
+    HEAP_PRINTED=true
   fi
 
   {
