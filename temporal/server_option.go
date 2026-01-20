@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"go.temporal.io/server/client"
+	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -151,6 +152,20 @@ func WithCustomDataStoreFactory(customFactory persistenceclient.AbstractDataStor
 func WithCustomVisibilityStoreFactory(customFactory visibility.VisibilityStoreFactory) ServerOption {
 	return applyFunc(func(s *serverOptions) {
 		s.customVisibilityStoreFactory = customFactory
+	})
+}
+
+// WithCustomHistoryArchiverFactory sets a custom history archiver factory.
+func WithCustomHistoryArchiverFactory(factory provider.CustomHistoryArchiverFactory) ServerOption {
+	return applyFunc(func(s *serverOptions) {
+		s.customHistoryArchiverFactory = factory
+	})
+}
+
+// WithCustomVisibilityArchiverFactory sets a custom visibility archiver factory.
+func WithCustomVisibilityArchiverFactory(factory provider.CustomVisibilityArchiverFactory) ServerOption {
+	return applyFunc(func(s *serverOptions) {
+		s.customVisibilityArchiverFactory = factory
 	})
 }
 

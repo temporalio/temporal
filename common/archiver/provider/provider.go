@@ -31,11 +31,49 @@ type (
 		GetVisibilityArchiver(scheme string) (archiver.VisibilityArchiver, error)
 	}
 
+	// NewCustomHistoryArchiverParams provides dependencies for constructing a history archiver.
+	NewCustomHistoryArchiverParams struct {
+		Scheme           string
+		ExecutionManager persistence.ExecutionManager
+		Logger           log.Logger
+		MetricsHandler   metrics.Handler
+		Configs          map[string]any
+	}
+
+	// NewCustomVisibilityArchiverParams provides dependencies for constructing a visibility archiver.
+	NewCustomVisibilityArchiverParams struct {
+		Scheme         string
+		Logger         log.Logger
+		MetricsHandler metrics.Handler
+		Configs        map[string]any
+	}
+
+	// CustomHistoryArchiverFactory constructs a history archiver for the given scheme.
+	// Return ErrUnknownScheme to fall back to the default implementation.
+	// If a non-nil archiver is returned, it takes precedence over built-in schemes.
+	CustomHistoryArchiverFactory interface {
+		NewCustomHistoryArchiver(NewCustomHistoryArchiverParams) (archiver.HistoryArchiver, error)
+	}
+
+	// CustomVisibilityArchiverFactory constructs a visibility archiver for the given scheme.
+	// Return ErrUnknownScheme to fall back to the default implementation.
+	// If a non-nil archiver is returned, it takes precedence over built-in schemes.
+	CustomVisibilityArchiverFactory interface {
+		NewCustomVisibilityArchiver(NewCustomVisibilityArchiverParams) (archiver.VisibilityArchiver, error)
+	}
+
+	CustomHistoryArchiverFactoryFunc func(NewCustomHistoryArchiverParams) (archiver.HistoryArchiver, error)
+
+	CustomVisibilityArchiverFactoryFunc func(NewCustomVisibilityArchiverParams) (archiver.VisibilityArchiver, error)
+
 	archiverProvider struct {
 		sync.RWMutex
 
 		historyArchiverConfigs    *config.HistoryArchiverProvider
 		visibilityArchiverConfigs *config.VisibilityArchiverProvider
+
+		customHistoryArchiverFactory    CustomHistoryArchiverFactory
+		customVisibilityArchiverFactory CustomVisibilityArchiverFactory
 
 		executionManager persistence.ExecutionManager
 		logger           log.Logger
@@ -47,6 +85,18 @@ type (
 	}
 )
 
+func (f CustomHistoryArchiverFactoryFunc) NewCustomHistoryArchiver(
+	params NewCustomHistoryArchiverParams,
+) (archiver.HistoryArchiver, error) {
+	return f(params)
+}
+
+func (f CustomVisibilityArchiverFactoryFunc) NewCustomVisibilityArchiver(
+	params NewCustomVisibilityArchiverParams,
+) (archiver.VisibilityArchiver, error) {
+	return f(params)
+}
+
 // NewArchiverProvider returns a new Archiver provider
 func NewArchiverProvider(
 	historyArchiverConfigs *config.HistoryArchiverProvider,
@@ -55,14 +105,36 @@ func NewArchiverProvider(
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 ) ArchiverProvider {
+	return NewArchiverProviderWithFactories(
+		historyArchiverConfigs,
+		visibilityArchiverConfigs,
+		nil,
+		nil,
+		executionManager,
+		logger,
+		metricsHandler,
+	)
+}
+
+func NewArchiverProviderWithFactories(
+	historyArchiverConfigs *config.HistoryArchiverProvider,
+	visibilityArchiverConfigs *config.VisibilityArchiverProvider,
+	customHistoryArchiverFactory CustomHistoryArchiverFactory,
+	customVisibilityArchiverFactory CustomVisibilityArchiverFactory,
+	executionManager persistence.ExecutionManager,
+	logger log.Logger,
+	metricsHandler metrics.Handler,
+) ArchiverProvider {
 	return &archiverProvider{
-		historyArchiverConfigs:    historyArchiverConfigs,
-		visibilityArchiverConfigs: visibilityArchiverConfigs,
-		executionManager:          executionManager,
-		logger:                    logger,
-		metricsHandler:            metricsHandler,
-		historyArchivers:          make(map[string]archiver.HistoryArchiver),
-		visibilityArchivers:       make(map[string]archiver.VisibilityArchiver),
+		historyArchiverConfigs:          historyArchiverConfigs,
+		visibilityArchiverConfigs:       visibilityArchiverConfigs,
+		executionManager:                executionManager,
+		logger:                          logger,
+		metricsHandler:                  metricsHandler,
+		customHistoryArchiverFactory:    customHistoryArchiverFactory,
+		customVisibilityArchiverFactory: customVisibilityArchiverFactory,
+		historyArchivers:                make(map[string]archiver.HistoryArchiver),
+		visibilityArchivers:             make(map[string]archiver.VisibilityArchiver),
 	}
 }
 
@@ -74,27 +146,46 @@ func (p *archiverProvider) GetHistoryArchiver(scheme string) (historyArchiver ar
 	}
 	p.RUnlock()
 
-	switch scheme {
-	case filestore.URIScheme:
-		if p.historyArchiverConfigs.Filestore == nil {
-			return nil, ErrArchiverConfigNotFound
+	if p.customHistoryArchiverFactory != nil {
+		var customConfigs map[string]any
+		if p.historyArchiverConfigs != nil {
+			customConfigs = p.historyArchiverConfigs.CustomStores[scheme]
 		}
-		historyArchiver, err = filestore.NewHistoryArchiver(p.executionManager, p.logger, p.metricsHandler, p.historyArchiverConfigs.Filestore)
-
-	case gcloud.URIScheme:
-		if p.historyArchiverConfigs.Gstorage == nil {
-			return nil, ErrArchiverConfigNotFound
+		historyArchiver, err = p.customHistoryArchiverFactory.NewCustomHistoryArchiver(NewCustomHistoryArchiverParams{
+			Scheme:           scheme,
+			ExecutionManager: p.executionManager,
+			Logger:           p.logger,
+			MetricsHandler:   p.metricsHandler,
+			Configs:          customConfigs,
+		})
+		if err != nil && !errors.Is(err, ErrUnknownScheme) {
+			return nil, err
 		}
+	}
 
-		historyArchiver, err = gcloud.NewHistoryArchiver(p.executionManager, p.logger, p.metricsHandler, p.historyArchiverConfigs.Gstorage)
+	if historyArchiver == nil {
+		switch scheme {
+		case filestore.URIScheme:
+			if p.historyArchiverConfigs.Filestore == nil {
+				return nil, ErrArchiverConfigNotFound
+			}
+			historyArchiver, err = filestore.NewHistoryArchiver(p.executionManager, p.logger, p.metricsHandler, p.historyArchiverConfigs.Filestore)
 
-	case s3store.URIScheme:
-		if p.historyArchiverConfigs.S3store == nil {
-			return nil, ErrArchiverConfigNotFound
+		case gcloud.URIScheme:
+			if p.historyArchiverConfigs.Gstorage == nil {
+				return nil, ErrArchiverConfigNotFound
+			}
+
+			historyArchiver, err = gcloud.NewHistoryArchiver(p.executionManager, p.logger, p.metricsHandler, p.historyArchiverConfigs.Gstorage)
+
+		case s3store.URIScheme:
+			if p.historyArchiverConfigs.S3store == nil {
+				return nil, ErrArchiverConfigNotFound
+			}
+			historyArchiver, err = s3store.NewHistoryArchiver(p.executionManager, p.logger, p.metricsHandler, p.historyArchiverConfigs.S3store)
+		default:
+			return nil, ErrUnknownScheme
 		}
-		historyArchiver, err = s3store.NewHistoryArchiver(p.executionManager, p.logger, p.metricsHandler, p.historyArchiverConfigs.S3store)
-	default:
-		return nil, ErrUnknownScheme
 	}
 
 	if err != nil {
@@ -121,25 +212,43 @@ func (p *archiverProvider) GetVisibilityArchiver(scheme string) (archiver.Visibi
 	var visibilityArchiver archiver.VisibilityArchiver
 	var err error
 
-	switch scheme {
-	case filestore.URIScheme:
-		if p.visibilityArchiverConfigs.Filestore == nil {
-			return nil, ErrArchiverConfigNotFound
+	if p.customVisibilityArchiverFactory != nil {
+		var customConfigs map[string]any
+		if p.visibilityArchiverConfigs != nil {
+			customConfigs = p.visibilityArchiverConfigs.CustomStores[scheme]
 		}
-		visibilityArchiver, err = filestore.NewVisibilityArchiver(p.logger, p.metricsHandler, p.visibilityArchiverConfigs.Filestore)
-	case s3store.URIScheme:
-		if p.visibilityArchiverConfigs.S3store == nil {
-			return nil, ErrArchiverConfigNotFound
+		visibilityArchiver, err = p.customVisibilityArchiverFactory.NewCustomVisibilityArchiver(NewCustomVisibilityArchiverParams{
+			Scheme:         scheme,
+			Logger:         p.logger,
+			MetricsHandler: p.metricsHandler,
+			Configs:        customConfigs,
+		})
+		if err != nil && !errors.Is(err, ErrUnknownScheme) {
+			return nil, err
 		}
-		visibilityArchiver, err = s3store.NewVisibilityArchiver(p.logger, p.metricsHandler, p.visibilityArchiverConfigs.S3store)
-	case gcloud.URIScheme:
-		if p.visibilityArchiverConfigs.Gstorage == nil {
-			return nil, ErrArchiverConfigNotFound
-		}
-		visibilityArchiver, err = gcloud.NewVisibilityArchiver(p.logger, p.metricsHandler, p.visibilityArchiverConfigs.Gstorage)
+	}
 
-	default:
-		return nil, ErrUnknownScheme
+	if visibilityArchiver == nil {
+		switch scheme {
+		case filestore.URIScheme:
+			if p.visibilityArchiverConfigs.Filestore == nil {
+				return nil, ErrArchiverConfigNotFound
+			}
+			visibilityArchiver, err = filestore.NewVisibilityArchiver(p.logger, p.metricsHandler, p.visibilityArchiverConfigs.Filestore)
+		case s3store.URIScheme:
+			if p.visibilityArchiverConfigs.S3store == nil {
+				return nil, ErrArchiverConfigNotFound
+			}
+			visibilityArchiver, err = s3store.NewVisibilityArchiver(p.logger, p.metricsHandler, p.visibilityArchiverConfigs.S3store)
+		case gcloud.URIScheme:
+			if p.visibilityArchiverConfigs.Gstorage == nil {
+				return nil, ErrArchiverConfigNotFound
+			}
+			visibilityArchiver, err = gcloud.NewVisibilityArchiver(p.logger, p.metricsHandler, p.visibilityArchiverConfigs.Gstorage)
+
+		default:
+			return nil, ErrUnknownScheme
+		}
 	}
 	if err != nil {
 		return nil, err
