@@ -20,7 +20,8 @@ type Engine interface {
 		func(MutableContext) (Component, error),
 		...TransitionOption,
 	) (EngineNewExecutionResult, error)
-	UpdateWithNewExecution(
+
+	UpdateWithStartExecution(
 		context.Context,
 		ComponentRef,
 		func(MutableContext) (Component, error),
@@ -78,7 +79,7 @@ type TransitionOptions struct {
 type TransitionOption func(*TransitionOptions)
 
 // NewExecutionResult contains the outcome of creating a new execution via [NewExecution]
-// or [UpdateWithNewExecution].
+// or [UpdateWithStartExecution].
 //
 // This struct provides information about whether a new execution was actually created,
 // along with identifiers needed to reference the execution in subsequent operations.
@@ -121,7 +122,7 @@ func WithSpeculative() TransitionOption {
 
 // WithBusinessIDPolicy sets the businessID reuse and conflict policy
 // used in the transition when creating a new execution.
-// This option only applies to NewExecution() and UpdateWithNewExecution().
+// This option only applies to StartExecution() and UpdateWithStartExecution().
 func WithBusinessIDPolicy(
 	reusePolicy BusinessIDReusePolicy,
 	conflictPolicy BusinessIDConflictPolicy,
@@ -133,7 +134,7 @@ func WithBusinessIDPolicy(
 }
 
 // WithRequestID sets the requestID used when creating a new execution.
-// This option only applies to NewExecution() and UpdateWithNewExecution().
+// This option only applies to StartExecution() and UpdateWithStartExecution().
 func WithRequestID(
 	requestID string,
 ) TransitionOption {
@@ -209,7 +210,7 @@ func NewExecution[C Component, I any, O any](
 	}, nil
 }
 
-func UpdateWithNewExecution[C Component, I any, O1 any, O2 any](
+func UpdateWithStartExecution[C Component, I any, O1 any, O2 any](
 	ctx context.Context,
 	key ExecutionKey,
 	newFn func(MutableContext, I) (C, O1, error),
@@ -219,7 +220,7 @@ func UpdateWithNewExecution[C Component, I any, O1 any, O2 any](
 ) (O1, O2, ExecutionKey, []byte, error) {
 	var output1 O1
 	var output2 O2
-	executionKey, serializedRef, err := engineFromContext(ctx).UpdateWithNewExecution(
+	executionKey, serializedRef, err := engineFromContext(ctx).UpdateWithStartExecution(
 		ctx,
 		NewComponentRef[C](key),
 		func(ctx MutableContext) (_ Component, retErr error) {
