@@ -98,11 +98,15 @@ write_snapshot() {
   printf "%s used=%s%% mem=%sMB goroutines=%s procs=[%s]\n" \
     "$timestamp" "$pct" "$memused_mb" "$goroutines" "$top_procs" | tee -a "$HISTORY_FILE"
 
-  # If memory threshold was reached, print Go heap details. But only once per run.
+  # Collect pprof analysis once per tick.
+  local pprof_output
+  pprof_output="$(print_pprof_analysis)"
+
+  # If memory threshold was reached, print Go heap details to stdout. But only once per run.
   if [[ "$pct" -ge "$HIGH_MEMORY_THRESHOLD" ]] && [[ "$HEAP_PRINTED" == "false" ]]; then
     echo ""
     echo "=== HIGH MEMORY WARNING: ${pct}% used (threshold: ${HIGH_MEMORY_THRESHOLD}%) ==="
-    print_pprof_analysis
+    echo "$pprof_output"
     echo "=== END HIGH MEMORY WARNING ==="
     echo ""
     HEAP_PRINTED=true
@@ -119,7 +123,7 @@ write_snapshot() {
     echo "--- Memory Summary ---"
     free -m
     echo ""
-    print_pprof_analysis
+    echo "$pprof_output"
   } > "$SNAPSHOT_FILE"
 }
 
