@@ -46,7 +46,7 @@ func TestTransitionScheduled(t *testing.T) {
 			scheduleToCloseTimeout: defaultScheduleToCloseTimeout,
 			expectedTasks: []chasm.MockTask{
 				{Payload: &nexusoperationpb.InvocationTask{}},
-				{Payload: &nexusoperationpb.InvocationTimeoutTask{}},
+				{Payload: &nexusoperationpb.ScheduleToCloseTimeoutTask{}},
 			},
 		},
 		{
@@ -88,9 +88,9 @@ func TestTransitionScheduled(t *testing.T) {
 					require.True(t, ok, "expected InvocationTask at index %d", i)
 					require.Equal(t, int32(0), invTask.Attempt)
 					require.Empty(t, actualTask.Attributes.ScheduledTime)
-				case *nexusoperationpb.InvocationTimeoutTask:
-					timeoutTask, ok := actualTask.Payload.(*nexusoperationpb.InvocationTimeoutTask)
-					require.True(t, ok, "expected InvocationTimeoutTask at index %d", i)
+				case *nexusoperationpb.ScheduleToCloseTimeoutTask:
+					timeoutTask, ok := actualTask.Payload.(*nexusoperationpb.ScheduleToCloseTimeoutTask)
+					require.True(t, ok, "expected ScheduleToCloseTimeoutTask at index %d", i)
 					require.Equal(t, int32(0), timeoutTask.Attempt)
 					require.Equal(t, defaultTime.Add(tc.scheduleToCloseTimeout), actualTask.Attributes.ScheduledTime)
 				default:
