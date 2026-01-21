@@ -256,8 +256,6 @@ func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
 	// Apply override state if provided during force-CaN
 	if d.overrideState != nil {
 		nextArgs.VersionState = d.overrideState
-	} else {
-		nextArgs.VersionState = d.VersionState
 	}
 	return workflow.NewContinueAsNewError(ctx, WorkerDeploymentVersionWorkflowType, nextArgs)
 }
