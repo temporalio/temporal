@@ -33,6 +33,8 @@ type (
 		individualTaskHandler func(task TrackableExecutableTask)
 		logger                log.Logger
 		metricsHandler        metrics.Handler
+		// schedulerEnqueueTime tracks when this task was enqueued in the scheduler
+		schedulerEnqueueTime time.Time
 	}
 
 	batchState int
@@ -131,6 +133,27 @@ func (w *batchedTask) State() ctasks.State {
 
 func (w *batchedTask) ReplicationTask() *replicationspb.ReplicationTask {
 	return w.batchedTask.ReplicationTask()
+}
+
+// SetSchedulerEnqueueTime implements SchedulerTimestampedTask interface
+func (w *batchedTask) SetSchedulerEnqueueTime(t time.Time) {
+	w.schedulerEnqueueTime = t
+}
+
+// GetSchedulerEnqueueTime implements SchedulerTimestampedTask interface
+// Returns the enqueue time of the first individual task if this batchedTask's
+// enqueue time is not set (which happens when the task is wrapped after Submit).
+func (w *batchedTask) GetSchedulerEnqueueTime() time.Time {
+	if !w.schedulerEnqueueTime.IsZero() {
+		return w.schedulerEnqueueTime
+	}
+	// Delegate to the first individual task's enqueue time
+	if len(w.individualTasks) > 0 {
+		if timestamped, ok := w.individualTasks[0].(interface{ GetSchedulerEnqueueTime() time.Time }); ok {
+			return timestamped.GetSchedulerEnqueueTime()
+		}
+	}
+	return time.Time{}
 }
 
 func (w *batchedTask) callIndividual(f func(task TrackableExecutableTask)) {

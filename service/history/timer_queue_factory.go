@@ -51,6 +51,7 @@ func NewTimerQueueFactory(
 				},
 				params.NamespaceRegistry,
 				params.Logger,
+				params.MetricsHandler,
 			),
 			HostPriorityAssigner: queues.NewPriorityAssigner(
 				params.NamespaceRegistry,

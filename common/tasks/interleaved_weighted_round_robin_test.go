@@ -75,6 +75,8 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) SetupTest() {
 		},
 		Scheduler[*testTask](s.mockFIFOScheduler),
 		logger,
+		nil,
+		nil,
 	)
 	s.scheduler.ts = s.ts
 }
@@ -452,6 +454,8 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestInactiveChannelDeletio
 		},
 		Scheduler[*testTask](s.mockFIFOScheduler),
 		log.NewTestLogger(),
+		nil,
+		nil,
 	)
 	s.scheduler.ts = s.ts
 	s.mockFIFOScheduler.EXPECT().Start()
@@ -528,6 +532,8 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestInactiveChannelDeletio
 		},
 		Scheduler[*testTask](s.mockFIFOScheduler),
 		log.NewTestLogger(),
+		nil,
+		nil,
 	)
 	s.mockFIFOScheduler.EXPECT().Start()
 	s.scheduler.Start()

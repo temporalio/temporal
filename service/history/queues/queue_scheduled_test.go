@@ -86,6 +86,7 @@ func (s *scheduledQueueSuite) SetupTest() {
 		},
 		s.mockShard.GetNamespaceRegistry(),
 		logger,
+		metrics.NoopMetricsHandler,
 	)
 	scheduler = NewRateLimitedScheduler(
 		scheduler,

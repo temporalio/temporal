@@ -855,7 +855,39 @@ var (
 		WithDescription("A histogram across history shards for the number of in-memory pending history tasks."),
 	)
 	TaskSchedulerThrottled    = NewCounterDef("task_scheduler_throttled")
-	QueueScheduleLatency      = NewTimerDef("queue_latency_schedule") // latency for scheduling 100 tasks in one task channel
+	SchedulerActiveWorkers = NewGaugeDef(
+		"scheduler_active_workers",
+		WithDescription("Number of active workers processing tasks in the scheduler."),
+	)
+	SchedulerBusyWorkers = NewGaugeDef(
+		"scheduler_busy_workers",
+		WithDescription("Number of workers currently executing a task."),
+	)
+	SchedulerAssignedWorkers = NewGaugeDef(
+		"scheduler_assigned_workers",
+		WithDescription("Number of workers currently assigned to a task queue."),
+	)
+	SchedulerQueueDepth = NewGaugeDef(
+		"scheduler_queue_depth",
+		WithDescription("Number of tasks waiting in the scheduler queue."),
+	)
+	SchedulerActiveQueues = NewGaugeDef(
+		"scheduler_active_queues",
+		WithDescription("Number of active task queues (for sequential and IWRR schedulers)."),
+	)
+	SchedulerQueueLatency = NewTimerDef(
+		"scheduler_queue_latency",
+		WithDescription("Time a task spent waiting in the scheduler queue before execution."),
+	)
+	SchedulerTasksSubmitted = NewCounterDef(
+		"scheduler_tasks_submitted",
+		WithDescription("Total number of tasks submitted to the scheduler."),
+	)
+	SchedulerTasksCompleted = NewCounterDef(
+		"scheduler_tasks_completed",
+		WithDescription("Total number of tasks completed by the scheduler."),
+	)
+	QueueScheduleLatency = NewTimerDef("queue_latency_schedule") // latency for scheduling 100 tasks in one task channel
 	QueueReaderCountHistogram = NewDimensionlessHistogramDef("queue_reader_count")
 	QueueSliceCountHistogram  = NewDimensionlessHistogramDef("queue_slice_count")
 	QueueActionCounter        = NewCounterDef("queue_actions")

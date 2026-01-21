@@ -102,6 +102,9 @@ type (
 		MarkExecutionStart()
 		GetPriority() enumsspb.TaskPriority
 		NamespaceName() string
+		// SchedulerTimestampedTask methods for queue latency tracking
+		SetSchedulerEnqueueTime(time.Time)
+		GetSchedulerEnqueueTime() time.Time
 	}
 	ExecutableTaskImpl struct {
 		ProcessToolBox
@@ -123,6 +126,7 @@ type (
 		markPoisonPillAttempts int
 		isDuplicated           bool
 		taskExecuteStartTime   time.Time
+		schedulerEnqueueTime   time.Time
 	}
 )
 
@@ -298,6 +302,18 @@ func (e *ExecutableTaskImpl) NamespaceName() string {
 		return item.(namespace.Name).String()
 	}
 	return ""
+}
+
+// SetSchedulerEnqueueTime implements SchedulerTimestampedTask interface
+// to enable queue wait latency tracking in schedulers.
+func (e *ExecutableTaskImpl) SetSchedulerEnqueueTime(t time.Time) {
+	e.schedulerEnqueueTime = t
+}
+
+// GetSchedulerEnqueueTime implements SchedulerTimestampedTask interface
+// to enable queue wait latency tracking in schedulers.
+func (e *ExecutableTaskImpl) GetSchedulerEnqueueTime() time.Time {
+	return e.schedulerEnqueueTime
 }
 
 func (e *ExecutableTaskImpl) emitFinishMetrics(
