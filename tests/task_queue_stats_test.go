@@ -57,19 +57,14 @@ type (
 	TaskQueueExpectationsByType map[enumspb.TaskQueueType]TaskQueueExpectations
 )
 
-func shortRandomizedName(prefix string) string {
-	// Keep names short because they get embedded (and base64-encoded) into internal persisted task_queue_id strings
-	return fmt.Sprintf("%s-%s", prefix, uuid.NewString()[:8])
-}
-
 // TODO(pri): remove once the classic matcher is removed
 func TestTaskQueueStats_Classic_Suite(t *testing.T) {
-	// t.Parallel()
+	t.Parallel()
 	suite.Run(t, &TaskQueueStatsSuite{usePriMatcher: false})
 }
 
 func TestTaskQueueStats_Pri_Suite(t *testing.T) {
-	// t.Parallel()
+	t.Parallel()
 	suite.Run(t, &TaskQueueStatsSuite{usePriMatcher: true})
 }
 
