@@ -7,6 +7,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/common/enums"
+	"go.temporal.io/server/common/primitives"
 )
 
 const (
@@ -57,6 +58,23 @@ func NormalizeAndValidate(
 	maxIDLengthLimit int,
 ) error {
 	return normalizeAndValidate(taskQueue, defaultName, maxIDLengthLimit, true)
+}
+
+// NormalizeAndValidateUserDefined is especially used for user-defined task queues,
+// so that users cannot start any internal workflows.
+func NormalizeAndValidateUserDefined(
+	taskQueue *taskqueuepb.TaskQueue,
+	defaultName string,
+	maxIDLengthLimit int,
+) error {
+	if err := normalizeAndValidate(taskQueue, defaultName, maxIDLengthLimit, false); err != nil {
+		return err
+	}
+	if primitives.IsInternalTaskQueueForUserNs(taskQueue.GetName()) {
+		return serviceerror.NewInvalidArgumentf(
+			"cannot use a temporal-system internal task queue %v", taskQueue.GetName())
+	}
+	return nil
 }
 
 func normalizeAndValidate(

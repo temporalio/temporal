@@ -5,8 +5,11 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/server/common/primitives"
 )
 
 func TestNormalizeAndValidate(t *testing.T) {
@@ -140,6 +143,88 @@ func TestNormalizeAndValidate(t *testing.T) {
 
 			if tt.taskQueue != nil && tt.taskQueue.GetName() == "" && tt.defaultVal != "" {
 				assert.Equal(t, tt.defaultVal, tt.taskQueue.GetName())
+			}
+		})
+	}
+}
+
+func TestNormalizeAndValidateUserDefined(t *testing.T) {
+	tests := []struct {
+		name             string
+		taskQueue        *taskqueuepb.TaskQueue
+		maxIDLengthLimit int
+		expectError      bool
+		expectedKind     enumspb.TaskQueueKind
+	}{
+		{
+			name:             "User defined task queue - valid",
+			taskQueue:        &taskqueuepb.TaskQueue{Name: "my-custom-task-queue"},
+			maxIDLengthLimit: 100,
+			expectError:      false,
+			expectedKind:     enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+		{
+			name:             "Internal task queue - PerNSWorkerTaskQueue should be blocked",
+			taskQueue:        &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
+			maxIDLengthLimit: 100,
+			expectError:      true,
+			expectedKind:     enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+		{
+			name:             "Other internal task queues should be allowed",
+			taskQueue:        &taskqueuepb.TaskQueue{Name: primitives.DefaultWorkerTaskQueue},
+			maxIDLengthLimit: 100,
+			expectError:      false,
+			expectedKind:     enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+		{
+			name:             "Nil task queue",
+			taskQueue:        nil,
+			maxIDLengthLimit: 100,
+			expectError:      true,
+			expectedKind:     enumspb.TASK_QUEUE_KIND_UNSPECIFIED,
+		},
+		{
+			name:             "Empty name without default",
+			taskQueue:        &taskqueuepb.TaskQueue{},
+			maxIDLengthLimit: 100,
+			expectError:      true,
+			expectedKind:     enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+		{
+			name:             "Name exceeds max length",
+			taskQueue:        &taskqueuepb.TaskQueue{Name: strings.Repeat("a", 101)},
+			maxIDLengthLimit: 100,
+			expectError:      true,
+			expectedKind:     enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+		{
+			name:             "Reserved prefix is allowed for partitions",
+			taskQueue:        &taskqueuepb.TaskQueue{Name: reservedTaskQueuePrefix + "name"},
+			maxIDLengthLimit: 100,
+			expectError:      false,
+			expectedKind:     enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+		{
+			name:             "Valid sticky queue",
+			taskQueue:        &taskqueuepb.TaskQueue{Name: "sticky", Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: "normal"},
+			maxIDLengthLimit: 100,
+			expectError:      false,
+			expectedKind:     enumspb.TASK_QUEUE_KIND_STICKY,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := NormalizeAndValidateUserDefined(tt.taskQueue, "" /* defaultVal */, tt.maxIDLengthLimit)
+
+			if tt.expectError {
+				require.Error(t, err)
+				var invalidArgument *serviceerror.InvalidArgument
+				assert.ErrorAs(t, err, &invalidArgument)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, tt.expectedKind, tt.taskQueue.GetKind())
 			}
 		})
 	}
