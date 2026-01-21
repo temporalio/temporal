@@ -26,6 +26,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
@@ -62,16 +63,17 @@ type (
 	}
 
 	WorkflowStateReplicatorImpl struct {
-		shardContext           historyi.ShardContext
-		namespaceRegistry      namespace.Registry
-		workflowCache          wcache.Cache
-		clusterMetadata        cluster.Metadata
-		executionMgr           persistence.ExecutionManager
-		historySerializer      serialization.Serializer
-		transactionMgr         TransactionManager
-		persistenceRateLimiter quotas.RequestRateLimiter
-		logger                 log.Logger
-		taskRefresher          workflow.TaskRefresher
+		shardContext                 historyi.ShardContext
+		namespaceRegistry            namespace.Registry
+		workflowCache                wcache.Cache
+		clusterMetadata              cluster.Metadata
+		executionMgr                 persistence.ExecutionManager
+		historySerializer            serialization.Serializer
+		transactionMgr               TransactionManager
+		persistenceRateLimiter       quotas.RequestRateLimiter
+		enablePersistenceRateLimiter dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		logger                       log.Logger
+		taskRefresher                workflow.TaskRefresher
 	}
 )
 
@@ -86,16 +88,17 @@ func NewWorkflowStateReplicator(
 
 	logger = log.With(logger, tag.ComponentWorkflowStateReplicator)
 	return &WorkflowStateReplicatorImpl{
-		shardContext:           shardContext,
-		namespaceRegistry:      shardContext.GetNamespaceRegistry(),
-		workflowCache:          workflowCache,
-		clusterMetadata:        shardContext.GetClusterMetadata(),
-		executionMgr:           shardContext.GetExecutionManager(),
-		historySerializer:      eventSerializer,
-		transactionMgr:         NewTransactionManager(shardContext, workflowCache, eventsReapplier, logger, false),
-		persistenceRateLimiter: persistenceRateLimiter,
-		logger:                 logger,
-		taskRefresher:          workflow.NewTaskRefresher(shardContext),
+		shardContext:                 shardContext,
+		namespaceRegistry:            shardContext.GetNamespaceRegistry(),
+		workflowCache:                workflowCache,
+		clusterMetadata:              shardContext.GetClusterMetadata(),
+		executionMgr:                 shardContext.GetExecutionManager(),
+		historySerializer:            eventSerializer,
+		transactionMgr:               NewTransactionManager(shardContext, workflowCache, eventsReapplier, logger, false),
+		persistenceRateLimiter:       persistenceRateLimiter,
+		enablePersistenceRateLimiter: shardContext.GetConfig().EnableHistoryReplicationRateLimiter,
+		logger:                       logger,
+		taskRefresher:                workflow.NewTaskRefresher(shardContext),
 	}
 }
 
@@ -1041,15 +1044,22 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 		historyEvents = append(historyEvents, events)
 	}
 
-	nsName, err := r.namespaceRegistry.GetNamespaceName(namespaceID)
-	if err != nil {
-		nsName = namespace.EmptyName
+	nsName := namespace.EmptyName.String()
+	ns, err := r.namespaceRegistry.GetNamespaceByID(namespaceID)
+	if err == nil && ns != nil {
+		nsName = ns.Name().String()
+	}
+	// In standby cluster, use a background low priority which is higher than the standby task processing
+	callerType := headers.CallerTypeBackgroundLow
+	if ns.ActiveInCluster(r.clusterMetadata.GetCurrentClusterName()) {
+		// In active cluster, use lowest priority to minimize the impact to live traffic
+		callerType = headers.CallerTypePreemptable
 	}
 	quotaRequest := quotas.NewRequest(
 		"AppendRawHistoryNodes",
 		1,
-		nsName.String(),
-		headers.CallerTypePreemptable,
+		nsName,
+		callerType,
 		0,
 		"",
 	)
@@ -1093,9 +1103,12 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 				localMutableState.AddReapplyCandidateEvent(event)
 				r.addEventToCache(localMutableState.GetWorkflowKey(), event)
 			}
-			if err := r.persistenceRateLimiter.Wait(ctx, quotaRequest); err != nil {
-				return err
+			if r.enablePersistenceRateLimiter(nsName) {
+				if err := r.persistenceRateLimiter.Wait(ctx, quotaRequest); err != nil {
+					return err
+				}
 			}
+
 			_, err = r.executionMgr.AppendRawHistoryNodes(ctx, &persistence.AppendRawHistoryNodesRequest{
 				ShardID:           r.shardContext.GetShardID(),
 				IsNewBranch:       isNewBranch,
@@ -1150,8 +1163,10 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 			localMutableState.AddReapplyCandidateEvent(event)
 			r.addEventToCache(localMutableState.GetWorkflowKey(), event)
 		}
-		if err := r.persistenceRateLimiter.Wait(ctx, quotaRequest); err != nil {
-			return newBranchToken, err
+		if r.enablePersistenceRateLimiter(nsName) {
+			if err := r.persistenceRateLimiter.Wait(ctx, quotaRequest); err != nil {
+				return newBranchToken, err
+			}
 		}
 		_, err = r.executionMgr.AppendRawHistoryNodes(ctx, &persistence.AppendRawHistoryNodesRequest{
 			ShardID:           r.shardContext.GetShardID(),
@@ -1516,17 +1531,25 @@ func (r *WorkflowStateReplicatorImpl) backfillHistory(
 		return err
 	}
 
-	nsName, err := r.namespaceRegistry.GetNamespaceName(namespaceID)
-	if err != nil {
-		nsName = namespace.EmptyName
+	nsName := namespace.EmptyName.String()
+	ns, err := r.namespaceRegistry.GetNamespaceByID(namespaceID)
+	if err == nil && ns != nil {
+		nsName = ns.Name().String()
+	}
+	// In standby cluster, use a background low priority which is higher than the standby task processing
+	callerType := headers.CallerTypeBackgroundLow
+	if ns.ActiveInCluster(r.clusterMetadata.GetCurrentClusterName()) {
+		// In active cluster, use lowest priority to minimize the impact to live traffic
+		callerType = headers.CallerTypePreemptable
 	}
 	quotaRequest := quotas.NewRequest(
 		"AppendRawHistoryNodes",
 		1,
-		nsName.String(),
-		headers.CallerTypePreemptable,
+		nsName,
+		callerType,
 		0,
-		"")
+		"",
+	)
 
 	prevTxnID := common.EmptyEventTaskID
 	var prevBranchID string
@@ -1608,8 +1631,10 @@ BackfillLoop:
 			return err
 		}
 
-		if err := r.persistenceRateLimiter.Wait(ctx, quotaRequest); err != nil {
-			return err
+		if r.enablePersistenceRateLimiter(nsName) {
+			if err := r.persistenceRateLimiter.Wait(ctx, quotaRequest); err != nil {
+				return err
+			}
 		}
 		_, err = r.executionMgr.AppendRawHistoryNodes(ctx, &persistence.AppendRawHistoryNodesRequest{
 			ShardID:           r.shardContext.GetShardID(),
