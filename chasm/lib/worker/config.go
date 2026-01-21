@@ -5,9 +5,11 @@ import (
 )
 
 type Config struct {
-	// Future configs can be added here.
+	EnableActivityRescheduling dynamicconfig.BoolPropertyFnWithNamespaceFilter
 }
 
 func ConfigProvider(dc *dynamicconfig.Collection) *Config {
-	return &Config{}
+	return &Config{
+		EnableActivityRescheduling: dynamicconfig.EnableWorkerActivityRescheduling.Get(dc),
+	}
 }

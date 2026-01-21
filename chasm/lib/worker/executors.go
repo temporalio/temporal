@@ -47,6 +47,7 @@ type HistoryClient interface {
 // LeaseExpiryTaskExecutor handles lease expiry events.
 type LeaseExpiryTaskExecutor struct {
 	logger            log.Logger
+	config            *Config
 	metricsHandler    metrics.Handler
 	historyClient     HistoryClient
 	namespaceRegistry namespace.Registry
@@ -54,12 +55,14 @@ type LeaseExpiryTaskExecutor struct {
 
 func NewLeaseExpiryTaskExecutor(
 	logger log.Logger,
+	config *Config,
 	metricsHandler metrics.Handler,
 	historyClient HistoryClient,
 	namespaceRegistry namespace.Registry,
 ) *LeaseExpiryTaskExecutor {
 	return &LeaseExpiryTaskExecutor{
 		logger:            logger,
+		config:            config,
 		metricsHandler:    metricsHandler,
 		historyClient:     historyClient,
 		namespaceRegistry: namespaceRegistry,
@@ -96,7 +99,14 @@ func (e *LeaseExpiryTaskExecutor) Execute(
 
 	// Reschedule activities (best effort, don't fail the task)
 	if len(activities) > 0 {
-		e.rescheduleActivities(namespaceID, workerID, activities)
+		// Check if activity rescheduling is enabled
+		if !e.config.EnableActivityRescheduling(namespaceID) {
+			e.logger.Info("worker_chasm: Activity rescheduling disabled by config, skipping",
+				workerIDTag(workerID),
+				tag.NewInt("activity_count", len(activities)))
+		} else {
+			e.rescheduleActivities(namespaceID, workerID, activities)
+		}
 	} else {
 		e.logger.Info("worker_chasm: No activities to reschedule for expired worker",
 			workerIDTag(workerID))

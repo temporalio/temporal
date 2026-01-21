@@ -3017,6 +3017,12 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		`EnableWorkerStateTracking enables CHASM-based worker state tracking. When enabled, worker heartbeats are persisted to history for durable liveness tracking.`,
 	)
 
+	EnableWorkerActivityRescheduling = NewNamespaceBoolSetting(
+		"history.enableWorkerActivityRescheduling",
+		true,
+		`EnableWorkerActivityRescheduling enables automatic activity rescheduling when worker lease expires. When disabled, activities are not rescheduled but worker entities are still cleaned up.`,
+	)
+
 	ListWorkersEnabled = NewNamespaceBoolSetting(
 		"frontend.ListWorkersEnabled",
 		true,
