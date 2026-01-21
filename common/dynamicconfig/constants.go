@@ -2988,11 +2988,6 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		false,
 		`WorkerEnableHistoryRateLimiter decides whether to generate migration tasks with history length rate limiter.`,
 	)
-	WorkerEnableMigrationExecutionInfoNewJSONEncoding = NewGlobalBoolSetting(
-		"worker.enableMigrationExecutionInfoNewJSONEncoding",
-		false,
-		`If set to true the execution info in the migration workflow will be encoded using "business_id" instead of "workflow_id"`,
-	)
 	MaxUserMetadataSummarySize = NewNamespaceIntSetting(
 		"limit.userMetadataSummarySize",
 		400,

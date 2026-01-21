@@ -54,7 +54,6 @@ type (
 var Module = fx.Options(
 	fx.Provide(NewResult),
 	fx.Provide(workflowVerifierProvider),
-	ExecutionInfoEncodingModule,
 )
 
 func NewResult(params initParams) fxResult {

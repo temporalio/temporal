@@ -7,12 +7,11 @@ import (
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/sdk/converter"
-	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/chasm"
 )
 
-func TestExecutionInfo_Marshal_NewJSONDisabled(t *testing.T) {
-	executionInfoNewJSONEncodingEnabled = false
+func TestExecutionInfo_Marshal(t *testing.T) {
+	t.Parallel()
 
 	// OSS v1.29 uses *commonpb.WorkflowExecution,
 	// so validate the encoded data can still be decoded to the old definition.
@@ -67,64 +66,8 @@ func TestExecutionInfo_Marshal_NewJSONDisabled(t *testing.T) {
 	}
 }
 
-func TestExecutionInfo_Marshal_NewJSONEnabled(t *testing.T) {
-	executionInfoNewJSONEncodingEnabled = true
-
-	// cloud/v1.30.0-148 uses *replicationspb.MigrationExecutionInfo,
-	// so validate the encoded data can still be decoded to the old definition.
-	// i.e. we can downgrade to cloud/v1.30.0-148.
-	executionInfo := &ExecutionInfo{
-		executionInfoNewJSON: executionInfoNewJSON{
-			BusinessID:  "business-id-1",
-			RunID:       "run-id-1",
-			ArchetypeID: chasm.WorkflowArchetypeID,
-		},
-	}
-
-	encoded, err := json.Marshal(executionInfo)
-	require.NoError(t, err)
-
-	var migrationExecutionInfo *replicationspb.MigrationExecutionInfo
-	err = json.Unmarshal(encoded, &migrationExecutionInfo)
-	require.NoError(t, err)
-	require.Equal(t, executionInfo.BusinessID, migrationExecutionInfo.BusinessId)
-	require.Equal(t, executionInfo.RunID, migrationExecutionInfo.RunId)
-
-	// ExecutionInfo is not directly used as activity input/output,
-	// instead, it's used as a field in another struct.
-	// Test that case and do encoding/decoding with an actual SDK data coverter.
-	listResponse := &listWorkflowsResponse{
-		Executions: []*ExecutionInfo{
-			executionInfo,
-			{
-				executionInfoNewJSON: executionInfoNewJSON{
-					BusinessID:  "business-id-2",
-					RunID:       "run-id-2",
-					ArchetypeID: chasm.WorkflowArchetypeID,
-				},
-			},
-		},
-		NextPageToken: []byte("next-page-token"),
-	}
-	dataConverter := converter.GetDefaultDataConverter()
-	payload, err := dataConverter.ToPayload(listResponse)
-	require.NoError(t, err)
-
-	listResponseLegacy := struct {
-		Executions    []*replicationspb.MigrationExecutionInfo
-		NextPageToken []byte
-	}{}
-	err = dataConverter.FromPayload(payload, &listResponseLegacy)
-	require.NoError(t, err)
-	require.Equal(t, listResponse.NextPageToken, listResponseLegacy.NextPageToken)
-	for idx := 0; idx != len(listResponse.Executions); idx++ {
-		require.Equal(t, listResponse.Executions[idx].BusinessID, listResponseLegacy.Executions[idx].BusinessId)
-		require.Equal(t, listResponse.Executions[idx].RunID, listResponseLegacy.Executions[idx].RunId)
-	}
-}
-
-func TestExecutionInfo_Unmarshal_NewJSONDisabled(t *testing.T) {
-	executionInfoNewJSONEncodingEnabled = false
+func TestExecutionInfo_Unmarshal(t *testing.T) {
+	t.Parallel()
 
 	// OSS v1.29 uses *commonpb.WorkflowExecution,
 	// so validate the encoded data can be decoded to the new definition.
@@ -170,58 +113,6 @@ func TestExecutionInfo_Unmarshal_NewJSONDisabled(t *testing.T) {
 	require.Equal(t, listResponseLegacy.NextPageToken, listResponse.NextPageToken)
 	for idx := 0; idx != len(listResponse.Executions); idx++ {
 		require.Equal(t, listResponseLegacy.Executions[idx].WorkflowId, listResponse.Executions[idx].BusinessID)
-		require.Equal(t, listResponseLegacy.Executions[idx].RunId, listResponse.Executions[idx].RunID)
-	}
-}
-
-func TestExecutionInfo_Unmarshal_NewJSONEnabled(t *testing.T) {
-	executionInfoNewJSONEncodingEnabled = true
-
-	// cloud/v1.30.0-148 uses *replicationspb.MigrationExecutionInfo,
-	// so validate the encoded data can be decoded to the new definition.
-	// i.e. we can upgrade from cloud/v1.30.0-148.
-	migrationExecutionInfo := &replicationspb.MigrationExecutionInfo{
-		BusinessId:  "business-id-1",
-		RunId:       "run-id-1",
-		ArchetypeId: chasm.WorkflowArchetypeID,
-	}
-	encoded, err := json.Marshal(migrationExecutionInfo)
-	require.NoError(t, err)
-
-	var executionInfo *ExecutionInfo
-	err = json.Unmarshal(encoded, &executionInfo)
-	require.NoError(t, err)
-	require.Equal(t, migrationExecutionInfo.BusinessId, executionInfo.BusinessID)
-	require.Equal(t, migrationExecutionInfo.RunId, executionInfo.RunID)
-
-	// ExecutionInfo is not directly used as activity input/output,
-	// instead, it's used as a field in another struct.
-	// Test that case and do encoding/decoding with an actual SDK data coverter.
-	listResponseLegacy := struct {
-		Executions    []*replicationspb.MigrationExecutionInfo
-		NextPageToken []byte
-	}{
-		Executions: []*replicationspb.MigrationExecutionInfo{
-			migrationExecutionInfo,
-			{
-				BusinessId:  "business-id-2",
-				RunId:       "run-id-2",
-				ArchetypeId: chasm.WorkflowArchetypeID,
-			},
-		},
-		NextPageToken: []byte("next-page-token"),
-	}
-
-	dataConverter := converter.GetDefaultDataConverter()
-	payload, err := dataConverter.ToPayload(listResponseLegacy)
-	require.NoError(t, err)
-
-	var listResponse listWorkflowsResponse
-	err = dataConverter.FromPayload(payload, &listResponse)
-	require.NoError(t, err)
-	require.Equal(t, listResponseLegacy.NextPageToken, listResponse.NextPageToken)
-	for idx := 0; idx != len(listResponse.Executions); idx++ {
-		require.Equal(t, listResponseLegacy.Executions[idx].BusinessId, listResponse.Executions[idx].BusinessID)
 		require.Equal(t, listResponseLegacy.Executions[idx].RunId, listResponse.Executions[idx].RunID)
 	}
 }

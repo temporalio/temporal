@@ -2,25 +2,7 @@ package migration
 
 import (
 	"encoding/json"
-
-	"go.temporal.io/server/common/dynamicconfig"
-	"go.uber.org/fx"
 )
-
-var ExecutionInfoEncodingModule = fx.Options(
-	fx.Provide(func(
-		dynamicCollection *dynamicconfig.Collection,
-	) enableExecutionInfoNewJSONEncoding {
-		return enableExecutionInfoNewJSONEncoding(dynamicconfig.WorkerEnableMigrationExecutionInfoNewJSONEncoding.Get(dynamicCollection)())
-	}),
-	fx.Populate(&executionInfoNewJSONEncodingEnabled),
-)
-
-type enableExecutionInfoNewJSONEncoding bool
-
-// executionInfoNewJSONEncodingEnabled can be removed in v1.31 when both released OSS and cloud version
-// support decoding "businessID".
-var executionInfoNewJSONEncodingEnabled enableExecutionInfoNewJSONEncoding
 
 type ExecutionInfo struct {
 	executionInfoNewJSON
@@ -40,10 +22,6 @@ type executionInfoLegacyJSON struct {
 }
 
 func (e *ExecutionInfo) MarshalJSON() ([]byte, error) {
-	if executionInfoNewJSONEncodingEnabled {
-		return json.Marshal(e.executionInfoNewJSON)
-	}
-
 	return json.Marshal(executionInfoLegacyJSON{
 		WorkflowID:  e.BusinessID,
 		RunID:       e.RunID,
@@ -52,10 +30,6 @@ func (e *ExecutionInfo) MarshalJSON() ([]byte, error) {
 }
 
 func (e *ExecutionInfo) UnmarshalJSON(data []byte) error {
-	if executionInfoNewJSONEncodingEnabled {
-		return json.Unmarshal(data, &e.executionInfoNewJSON)
-	}
-
 	// For forward compatibility, support both workflow_id and business_id here.
 	// Then in v1.31, we can always encode using "business_id" and also support downgrade.
 	var legacy executionInfoLegacyJSON
