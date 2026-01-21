@@ -68,19 +68,15 @@ const (
 
 var (
 	execution1 = &ExecutionInfo{
-		executionInfoNewJSON: executionInfoNewJSON{
-			BusinessID:  "workflow1",
-			RunID:       "run1",
-			ArchetypeID: chasm.WorkflowArchetypeID,
-		},
+		BusinessID:  "workflow1",
+		RunID:       "run1",
+		ArchetypeID: chasm.WorkflowArchetypeID,
 	}
 
 	execution2 = &ExecutionInfo{
-		executionInfoNewJSON: executionInfoNewJSON{
-			BusinessID:  "workflow2",
-			RunID:       "run2",
-			ArchetypeID: chasm.UnspecifiedArchetypeID,
-		},
+		BusinessID:  "workflow2",
+		RunID:       "run2",
+		ArchetypeID: chasm.UnspecifiedArchetypeID,
 	}
 
 	completeState = &historyservice.DescribeMutableStateResponse{
