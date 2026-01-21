@@ -41,10 +41,10 @@ type (
 		logger log.Logger
 
 		// Metrics fields
-		metricsHandler        metrics.Handler
-		metricTagsFn          MetricTagsFn[T]
-		timeSource            clock.TimeSource
-		assignedWorkerCount   int64
+		metricsHandler      metrics.Handler
+		metricTagsFn        MetricTagsFn[T]
+		timeSource          clock.TimeSource
+		assignedWorkerCount int64
 	}
 )
 
@@ -67,9 +67,9 @@ func NewSequentialScheduler[T Task](
 		queueChan:    make(chan SequentialTaskQueue[T], options.QueueSize),
 		queues:       collection.NewShardedConcurrentTxMap(1024, taskQueueHashFn),
 
-		metricsHandler:      metricsHandler,
-		metricTagsFn:        metricTagsFn,
-		timeSource:          clock.NewRealTimeSource(),
+		metricsHandler: metricsHandler,
+		metricTagsFn:   metricTagsFn,
+		timeSource:     clock.NewRealTimeSource(),
 	}
 }
 

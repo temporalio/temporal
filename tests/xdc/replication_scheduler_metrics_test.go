@@ -108,11 +108,10 @@ func (s *replicationSchedulerMetricsTestSuite) TestSchedulerMetricsUnderLoad() {
 	// Start concurrent workflow generators
 	var wg sync.WaitGroup
 	for i := 0; i < numConcurrentUsers; i++ {
-		wg.Add(1)
-		go func(workerID int) {
-			defer wg.Done()
+		workerID := i
+		wg.Go(func() {
 			s.runWorkflowGenerator(ctx, sdkClient, taskQueueName, workerID, done, &workflowsStarted, &workflowsCompleted, &workflowErrors)
-		}(i)
+		})
 	}
 
 	// Metrics collection loop
@@ -216,7 +215,7 @@ func (s *replicationSchedulerMetricsTestSuite) runWorkflowGenerator(
 			completed.Add(1)
 
 			// Small delay to avoid overwhelming the system
-			time.Sleep(10 * time.Millisecond)
+			time.Sleep(10 * time.Millisecond) //nolint:forbidigo
 		}
 	}
 }
@@ -315,6 +314,6 @@ func (s *replicationSchedulerMetricsTestSuite) verifySchedulerMetrics(snapshot m
 	}
 
 	s.T().Logf("\nTotal replication scheduler tasks: submitted=%d, completed=%d", totalSubmitted, totalCompleted)
-	s.Greater(totalSubmitted, int64(0), "should have submitted some replication tasks")
-	s.Greater(totalCompleted, int64(0), "should have completed some replication tasks")
+	s.Positive(totalSubmitted, "should have submitted some replication tasks")
+	s.Positive(totalCompleted, "should have completed some replication tasks")
 }

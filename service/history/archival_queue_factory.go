@@ -76,7 +76,7 @@ func newHostScheduler(params ArchivalQueueFactoryParams) queues.Scheduler {
 		},
 		params.NamespaceRegistry,
 		params.Logger,
-		params.MetricsHandler,
+		nil, // metrics disabled for archival queue
 	)
 }
 

@@ -854,7 +854,7 @@ var (
 		"pending_tasks",
 		WithDescription("A histogram across history shards for the number of in-memory pending history tasks."),
 	)
-	TaskSchedulerThrottled    = NewCounterDef("task_scheduler_throttled")
+	TaskSchedulerThrottled = NewCounterDef("task_scheduler_throttled")
 	SchedulerActiveWorkers = NewGaugeDef(
 		"scheduler_active_workers",
 		WithDescription("Number of active workers processing tasks in the scheduler."),
@@ -887,7 +887,7 @@ var (
 		"scheduler_tasks_completed",
 		WithDescription("Total number of tasks completed by the scheduler."),
 	)
-	QueueScheduleLatency = NewTimerDef("queue_latency_schedule") // latency for scheduling 100 tasks in one task channel
+	QueueScheduleLatency      = NewTimerDef("queue_latency_schedule") // latency for scheduling 100 tasks in one task channel
 	QueueReaderCountHistogram = NewDimensionlessHistogramDef("queue_reader_count")
 	QueueSliceCountHistogram  = NewDimensionlessHistogramDef("queue_slice_count")
 	QueueActionCounter        = NewCounterDef("queue_actions")

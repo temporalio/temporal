@@ -478,4 +478,3 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) recordQueueLatency(task T
 		}
 	}
 }
-

@@ -11,6 +11,7 @@ package tasks
 
 import (
 	reflect "reflect"
+	time "time"
 
 	gomock "go.uber.org/mock/gomock"
 )
@@ -87,4 +88,54 @@ func (m *MockScheduler[T]) TrySubmit(task T) bool {
 func (mr *MockSchedulerMockRecorder[T]) TrySubmit(task any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TrySubmit", reflect.TypeOf((*MockScheduler[T])(nil).TrySubmit), task)
+}
+
+// MockSchedulerTimestampedTask is a mock of SchedulerTimestampedTask interface.
+type MockSchedulerTimestampedTask struct {
+	ctrl     *gomock.Controller
+	recorder *MockSchedulerTimestampedTaskMockRecorder
+	isgomock struct{}
+}
+
+// MockSchedulerTimestampedTaskMockRecorder is the mock recorder for MockSchedulerTimestampedTask.
+type MockSchedulerTimestampedTaskMockRecorder struct {
+	mock *MockSchedulerTimestampedTask
+}
+
+// NewMockSchedulerTimestampedTask creates a new mock instance.
+func NewMockSchedulerTimestampedTask(ctrl *gomock.Controller) *MockSchedulerTimestampedTask {
+	mock := &MockSchedulerTimestampedTask{ctrl: ctrl}
+	mock.recorder = &MockSchedulerTimestampedTaskMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockSchedulerTimestampedTask) EXPECT() *MockSchedulerTimestampedTaskMockRecorder {
+	return m.recorder
+}
+
+// GetSchedulerEnqueueTime mocks base method.
+func (m *MockSchedulerTimestampedTask) GetSchedulerEnqueueTime() time.Time {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetSchedulerEnqueueTime")
+	ret0, _ := ret[0].(time.Time)
+	return ret0
+}
+
+// GetSchedulerEnqueueTime indicates an expected call of GetSchedulerEnqueueTime.
+func (mr *MockSchedulerTimestampedTaskMockRecorder) GetSchedulerEnqueueTime() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSchedulerEnqueueTime", reflect.TypeOf((*MockSchedulerTimestampedTask)(nil).GetSchedulerEnqueueTime))
+}
+
+// SetSchedulerEnqueueTime mocks base method.
+func (m *MockSchedulerTimestampedTask) SetSchedulerEnqueueTime(arg0 time.Time) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetSchedulerEnqueueTime", arg0)
+}
+
+// SetSchedulerEnqueueTime indicates an expected call of SetSchedulerEnqueueTime.
+func (mr *MockSchedulerTimestampedTaskMockRecorder) SetSchedulerEnqueueTime(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetSchedulerEnqueueTime", reflect.TypeOf((*MockSchedulerTimestampedTask)(nil).SetSchedulerEnqueueTime), arg0)
 }
