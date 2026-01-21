@@ -133,6 +133,7 @@ func (s *ESVisibilitySuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockMetricsHandler = metrics.NewMockHandler(s.controller)
 	s.mockMetricsHandler.EXPECT().WithTags(metrics.OperationTag(metrics.ElasticsearchVisibility)).Return(s.mockMetricsHandler).AnyTimes()
+	s.mockMetricsHandler.EXPECT().WithTags(metrics.NamespaceTag(testNamespace.String())).Return(s.mockMetricsHandler).AnyTimes()
 	s.mockProcessor = NewMockProcessor(s.controller)
 	s.mockESClient = client.NewMockClient(s.controller)
 	s.mockSearchAttributesMapperProvider = searchattribute.NewMockMapperProvider(s.controller)
@@ -168,6 +169,7 @@ func (s *ESVisibilitySuite) SetupTest() {
 		enableManualPagination:         visibilityEnableManualPagination,
 		enableUnifiedQueryConverter:    visibilityEnableUnifiedQueryConverter,
 		metricsHandler:                 s.mockMetricsHandler,
+		logger:                         log.NewNoopLogger(),
 	}
 
 	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(testNamespace).
@@ -251,7 +253,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2() {
 	// test custom sort
 	request.Query = `Order bY WorkflowId`
 	boolQuery = elastic.NewBoolQuery().Filter(matchNamespaceQuery, namespaceDivisionIsNull)
-	s.mockMetricsHandler.EXPECT().WithTags(metrics.NamespaceTag(request.Namespace.String())).Return(s.mockMetricsHandler)
+	s.mockMetricsHandler.EXPECT().WithTags(metrics.NamespaceTag(request.Namespace.String())).Return(s.mockMetricsHandler).AnyTimes()
 	s.mockMetricsHandler.EXPECT().Counter(metrics.ElasticsearchCustomOrderByClauseCount.Name()).Return(metrics.NoopCounterMetricFunc)
 	p, err = s.visibilityStore.BuildSearchParametersV2(request, s.visibilityStore.GetListFieldSorter)
 	s.NoError(err)
@@ -1600,6 +1602,7 @@ func (s *ESVisibilitySuite) TestProcessPageToken() {
 				disableOrderByClause:           dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 				enableManualPagination:         dynamicconfig.GetBoolPropertyFnFilteredByNamespace(tc.manualPagination),
 				metricsHandler:                 s.mockMetricsHandler,
+				logger:                         log.NewNoopLogger(),
 			}
 			params := &client.SearchParameters{
 				Index:  testIndex,
@@ -2147,7 +2150,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2_ChasmMapper() {
 		matchNamespaceQuery,
 		elastic.NewBoolQuery().Filter(namespaceDivisionIsNull, filterQuery),
 	)
-	s.mockMetricsHandler.EXPECT().WithTags(metrics.NamespaceTag(request.Namespace.String())).Return(s.mockMetricsHandler)
+	s.mockMetricsHandler.EXPECT().WithTags(metrics.NamespaceTag(request.Namespace.String())).Return(s.mockMetricsHandler).AnyTimes()
 	s.mockMetricsHandler.EXPECT().Counter(metrics.ElasticsearchCustomOrderByClauseCount.Name()).Return(metrics.NoopCounterMetricFunc)
 	p, err = s.visibilityStore.BuildChasmSearchParameters(
 		&manager.ListChasmExecutionsRequest{
@@ -2308,6 +2311,8 @@ func (s *ESVisibilitySuite) TestValuesInterceptor_ChasmMapper() {
 		testNamespace,
 		searchattribute.TestEsNameTypeMap(),
 		chasmMapper,
+		metrics.NoopMetricsHandler,
+		log.NewNoopLogger(),
 	)
 
 	values, err := vi.Values("ChasmCompleted", "TemporalBool01", true)
