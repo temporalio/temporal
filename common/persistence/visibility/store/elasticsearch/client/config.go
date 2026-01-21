@@ -31,10 +31,11 @@ type (
 		EnableSniff                  bool                      `yaml:"enableSniff"`
 		EnableHealthcheck            bool                      `yaml:"enableHealthcheck"`
 		TLS                          *auth.TLS                 `yaml:"tls"`
+		// DisableGzip disables gzip compression for Elasticsearch requests.
+		// Useful in test/development environments where ES runs locally.
+		DisableGzip bool `yaml:"disableGzip"`
 		// httpClient is the awsHttpClient to be used for creating esClient.
 		httpClient *http.Client
-		// disableGzip disables gzip compression for Elasticsearch requests.
-		disableGzip bool
 	}
 
 	// ESAWSRequestSigningConfig represents configuration for signing ES requests to AWS
@@ -89,12 +90,6 @@ func (cfg *Config) GetHttpClient() *http.Client {
 		return nil
 	}
 	return cfg.httpClient
-}
-
-// SetDisableGzip is for testing purposes only.
-// It lowers memory and CPU usage significantly.
-func (cfg *Config) SetDisableGzip() {
-	cfg.disableGzip = true
 }
 
 func (cfg *Config) Validate() error {
