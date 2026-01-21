@@ -21,6 +21,7 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
@@ -301,24 +302,36 @@ func (h *Handler) IsActivityTaskValid(ctx context.Context, request *historyservi
 func (h *Handler) RecordActivityTaskHeartbeat(ctx context.Context, request *historyservice.RecordActivityTaskHeartbeatRequest) (_ *historyservice.RecordActivityTaskHeartbeatResponse, retError error) {
 	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
 
+	taskToken, err := h.tokenSerializer.Deserialize(request.GetHeartbeatRequest().GetTaskToken())
+	if err != nil {
+		return nil, consts.ErrDeserializingToken
+	}
+
+	if err := validateTaskToken(taskToken); err != nil {
+		return nil, h.convertError(err)
+	}
+
+	// Handle as standalone activity if token has component ref.
+	if componentRef := taskToken.GetComponentRef(); len(componentRef) > 0 {
+		response, _, err := chasm.UpdateComponent(
+			ctx,
+			componentRef,
+			(*activity.Activity).RecordHeartbeat,
+			activity.WithToken[*historyservice.RecordActivityTaskHeartbeatRequest]{
+				Token:   taskToken,
+				Request: request,
+			},
+		)
+		return response, h.convertError(err)
+	}
+
+	// Handle worklow activity (mutable state backed implementation).
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	if namespaceID == "" {
 		return nil, h.convertError(errNamespaceNotSet)
 	}
 
-	heartbeatRequest := request.HeartbeatRequest
-	taskToken, err0 := h.tokenSerializer.Deserialize(heartbeatRequest.TaskToken)
-	if err0 != nil {
-		return nil, consts.ErrDeserializingToken
-	}
-
-	err0 = validateTaskToken(taskToken)
-	if err0 != nil {
-		return nil, h.convertError(err0)
-	}
-	workflowID := taskToken.GetWorkflowId()
-
-	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, taskToken.GetWorkflowId())
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -339,14 +352,27 @@ func (h *Handler) RecordActivityTaskHeartbeat(ctx context.Context, request *hist
 func (h *Handler) RecordActivityTaskStarted(ctx context.Context, request *historyservice.RecordActivityTaskStartedRequest) (_ *historyservice.RecordActivityTaskStartedResponse, retError error) {
 	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
 
+	// Handle as standalone activity if request has component ref.
+	if activityRefProto := request.GetComponentRef(); len(activityRefProto) > 0 {
+		response, _, err := chasm.UpdateComponent(
+			ctx,
+			activityRefProto,
+			(*activity.Activity).HandleStarted,
+			request,
+		)
+		if err != nil {
+			return nil, err
+		}
+		return response, nil
+	}
+
+	// Handle worklow activity (mutable state backed implementation).
 	namespaceID := namespace.ID(request.GetNamespaceId())
-	workflowExecution := request.WorkflowExecution
-	workflowID := workflowExecution.GetWorkflowId()
-	if request.GetNamespaceId() == "" {
+	if namespaceID == "" {
 		return nil, h.convertError(errNamespaceNotSet)
 	}
 
-	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, request.GetWorkflowExecution().GetWorkflowId())
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -411,24 +437,49 @@ func (h *Handler) RecordWorkflowTaskStarted(ctx context.Context, request *histor
 func (h *Handler) RespondActivityTaskCompleted(ctx context.Context, request *historyservice.RespondActivityTaskCompletedRequest) (_ *historyservice.RespondActivityTaskCompletedResponse, retError error) {
 	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
 
+	taskToken, err := h.tokenSerializer.Deserialize(request.CompleteRequest.GetTaskToken())
+	if err != nil {
+		return nil, consts.ErrDeserializingToken
+	}
+
+	if err := validateTaskToken(taskToken); err != nil {
+		return nil, h.convertError(err)
+	}
+
+	// Handle standalone activity if component ref is present in the token.
+	if componentRef := taskToken.GetComponentRef(); len(componentRef) > 0 {
+		namespaceName, err := h.namespaceRegistry.GetNamespaceName(namespace.ID(request.GetNamespaceId()))
+		if err != nil {
+			return nil, err
+		}
+
+		response, _, err := chasm.UpdateComponent(
+			ctx,
+			componentRef,
+			(*activity.Activity).HandleCompleted,
+			activity.RespondCompletedEvent{
+				Request: request,
+				Token:   taskToken,
+				MetricsHandlerBuilderParams: activity.MetricsHandlerBuilderParams{
+					Handler:                     h.metricsHandler,
+					NamespaceName:               namespaceName.String(),
+					BreakdownMetricsByTaskQueue: h.config.BreakdownMetricsByTaskQueue,
+				},
+			},
+		)
+		if err != nil {
+			return nil, err
+		}
+		return response, nil
+	}
+
+	// Handle worklow activity (mutable state backed implementation).
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	if namespaceID == "" {
 		return nil, h.convertError(errNamespaceNotSet)
 	}
 
-	completeRequest := request.CompleteRequest
-	taskToken, err0 := h.tokenSerializer.Deserialize(completeRequest.TaskToken)
-	if err0 != nil {
-		return nil, consts.ErrDeserializingToken
-	}
-
-	err0 = validateTaskToken(taskToken)
-	if err0 != nil {
-		return nil, h.convertError(err0)
-	}
-	workflowID := taskToken.GetWorkflowId()
-
-	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, taskToken.GetWorkflowId())
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -449,24 +500,49 @@ func (h *Handler) RespondActivityTaskCompleted(ctx context.Context, request *his
 func (h *Handler) RespondActivityTaskFailed(ctx context.Context, request *historyservice.RespondActivityTaskFailedRequest) (_ *historyservice.RespondActivityTaskFailedResponse, retError error) {
 	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
 
+	taskToken, err := h.tokenSerializer.Deserialize(request.FailedRequest.GetTaskToken())
+	if err != nil {
+		return nil, consts.ErrDeserializingToken
+	}
+
+	if err := validateTaskToken(taskToken); err != nil {
+		return nil, h.convertError(err)
+	}
+
+	// Handle standalone activity if component ref is present in the token.
+	if componentRef := taskToken.GetComponentRef(); len(componentRef) > 0 {
+		namespaceName, err := h.namespaceRegistry.GetNamespaceName(namespace.ID(request.GetNamespaceId()))
+		if err != nil {
+			return nil, err
+		}
+
+		response, _, err := chasm.UpdateComponent(
+			ctx,
+			componentRef,
+			(*activity.Activity).HandleFailed,
+			activity.RespondFailedEvent{
+				Request: request,
+				Token:   taskToken,
+				MetricsHandlerBuilderParams: activity.MetricsHandlerBuilderParams{
+					Handler:                     h.metricsHandler,
+					NamespaceName:               namespaceName.String(),
+					BreakdownMetricsByTaskQueue: h.config.BreakdownMetricsByTaskQueue,
+				},
+			},
+		)
+		if err != nil {
+			return nil, err
+		}
+		return response, nil
+	}
+
+	// Handle worklow activity (mutable state backed implementation).
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	if namespaceID == "" {
 		return nil, h.convertError(errNamespaceNotSet)
 	}
 
-	failRequest := request.FailedRequest
-	taskToken, err0 := h.tokenSerializer.Deserialize(failRequest.TaskToken)
-	if err0 != nil {
-		return nil, consts.ErrDeserializingToken
-	}
-
-	err0 = validateTaskToken(taskToken)
-	if err0 != nil {
-		return nil, h.convertError(err0)
-	}
-	workflowID := taskToken.GetWorkflowId()
-
-	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, taskToken.GetWorkflowId())
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -487,24 +563,49 @@ func (h *Handler) RespondActivityTaskFailed(ctx context.Context, request *histor
 func (h *Handler) RespondActivityTaskCanceled(ctx context.Context, request *historyservice.RespondActivityTaskCanceledRequest) (_ *historyservice.RespondActivityTaskCanceledResponse, retError error) {
 	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
 
+	taskToken, err := h.tokenSerializer.Deserialize(request.CancelRequest.GetTaskToken())
+	if err != nil {
+		return nil, consts.ErrDeserializingToken
+	}
+
+	if err := validateTaskToken(taskToken); err != nil {
+		return nil, h.convertError(err)
+	}
+
+	// Handle standalone activity if component ref is present in the token.
+	if componentRef := taskToken.GetComponentRef(); len(componentRef) > 0 {
+		namespaceName, err := h.namespaceRegistry.GetNamespaceName(namespace.ID(request.GetNamespaceId()))
+		if err != nil {
+			return nil, err
+		}
+
+		response, _, err := chasm.UpdateComponent(
+			ctx,
+			componentRef,
+			(*activity.Activity).HandleCanceled,
+			activity.RespondCancelledEvent{
+				Request: request,
+				Token:   taskToken,
+				MetricsHandlerBuilderParams: activity.MetricsHandlerBuilderParams{
+					Handler:                     h.metricsHandler,
+					NamespaceName:               namespaceName.String(),
+					BreakdownMetricsByTaskQueue: h.config.BreakdownMetricsByTaskQueue,
+				},
+			},
+		)
+		if err != nil {
+			return nil, err
+		}
+		return response, nil
+	}
+
+	// Handle worklow activity (mutable state backed implementation).
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	if namespaceID == "" {
 		return nil, h.convertError(errNamespaceNotSet)
 	}
 
-	cancelRequest := request.CancelRequest
-	taskToken, err0 := h.tokenSerializer.Deserialize(cancelRequest.TaskToken)
-	if err0 != nil {
-		return nil, consts.ErrDeserializingToken
-	}
-
-	err0 = validateTaskToken(taskToken)
-	if err0 != nil {
-		return nil, h.convertError(err0)
-	}
-	workflowID := taskToken.GetWorkflowId()
-
-	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, taskToken.GetWorkflowId())
 	if err != nil {
 		return nil, h.convertError(err)
 	}

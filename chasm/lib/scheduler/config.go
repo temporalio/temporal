@@ -12,6 +12,7 @@ type (
 		DefaultCatchupWindow              time.Duration // Default for catchup window
 		MinCatchupWindow                  time.Duration // Minimum for catchup window
 		MaxBufferSize                     int           // MaxBufferSize limits the number of buffered actions pending execution in total
+		GeneratorBufferReserveSize        int           // Minimum number of spaces in `BufferedStarts` reserved for automated actions.
 		CanceledTerminatedCountAsFailures bool          // Whether cancelled+terminated count for pause-on-failure
 		RecentActionCount                 int           // Number of recent actions taken (workflow execution results) recorded in the ScheduleInfo metadata.
 		MaxActionsPerExecution            int           // Limits the number of actions (startWorkflow, terminate/cancel) taken by ExecuteTask in a single iteration
@@ -54,6 +55,7 @@ var (
 		DefaultCatchupWindow:              365 * 24 * time.Hour,
 		MinCatchupWindow:                  10 * time.Second,
 		MaxBufferSize:                     1000,
+		GeneratorBufferReserveSize:        50,
 		CanceledTerminatedCountAsFailures: false,
 		RecentActionCount:                 10,
 		MaxActionsPerExecution:            5,

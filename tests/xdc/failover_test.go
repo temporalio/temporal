@@ -2062,8 +2062,6 @@ func (s *FunctionalClustersTestSuite) TestActivityHeartbeatFailover() {
 	worker0.Stop() // stop worker0 so cluster0 won't make any progress
 	s.failover(namespace, 0, s.clusters[1].ClusterName(), 2)
 
-	s.waitForClusterSynced()
-
 	// Make sure the heartbeat details are sent to cluster2 even when the activity at cluster1
 	// has heartbeat timeout. Also make sure the information is recorded when the activity state
 	// is "Scheduled"

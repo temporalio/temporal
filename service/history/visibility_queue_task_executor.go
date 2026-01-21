@@ -421,8 +421,16 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 	if err != nil {
 		return err
 	}
+
+	var chasmTaskQueue string
 	if chasmSAProvider, ok := rootComponent.(chasm.VisibilitySearchAttributesProvider); ok {
 		for _, chasmSA := range chasmSAProvider.SearchAttributes(visTaskContext) {
+			if chasmSA.Field == sadefs.TaskQueue {
+				if strVal, ok := chasmSA.Value.Value().(string); ok {
+					chasmTaskQueue = strVal
+				}
+				continue
+			}
 			searchattributes[chasmSA.Field] = chasmSA.Value.MustEncode()
 		}
 	}
@@ -458,6 +466,11 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 
 	// We reuse the TemporalNamespaceDivision column to store the string representation of ArchetypeID.
 	requestBase.SearchAttributes.IndexedFields[sadefs.TemporalNamespaceDivision] = payload.EncodeString(strconv.FormatUint(uint64(tree.ArchetypeID()), 10))
+
+	// Override TaskQueue if provided by CHASM search attributes.
+	if chasmTaskQueue != "" {
+		requestBase.TaskQueue = chasmTaskQueue
+	}
 
 	if mutableState.IsWorkflowExecutionRunning() {
 		release(nil)
