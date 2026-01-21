@@ -36,7 +36,7 @@ func TestReplicationSchedulerMetricsTestSuite(t *testing.T) {
 func (s *replicationSchedulerMetricsTestSuite) SetupSuite() {
 	s.dynamicConfigOverrides = map[dynamicconfig.Key]any{
 		dynamicconfig.EnableReplicationStream.Key():       true,
-		dynamicconfig.EnableReplicationTaskBatching.Key(): true,
+		dynamicconfig.EnableReplicationTaskBatching.Key(): false,
 	}
 	s.logger = log.NewTestLogger()
 	s.setupSuite()
