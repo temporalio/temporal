@@ -421,8 +421,6 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) isStopped() bool {
 	return atomic.LoadInt32(&s.status) == common.DaemonStatusStopped
 }
 
-// Metrics helper methods
-
 func (s *InterleavedWeightedRoundRobinScheduler[T, K]) exportMetricsLoop() {
 	defer s.shutdownWG.Done()
 
