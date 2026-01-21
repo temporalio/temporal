@@ -242,6 +242,7 @@ func (s *standaloneActivityTestSuite) TestPollActivityTaskQueue() {
 
 	activityID := testcore.RandomizeStr(t.Name())
 	taskQueue := testcore.RandomizeStr(t.Name())
+	namespace := s.Namespace().String()
 
 	startToCloseTimeout := durationpb.New(1 * time.Minute)
 	scheduleToCloseTimeout := durationpb.New(2 * time.Minute)
@@ -251,7 +252,7 @@ func (s *standaloneActivityTestSuite) TestPollActivityTaskQueue() {
 	}
 
 	startResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
-		Namespace:    s.Namespace().String(),
+		Namespace:    namespace,
 		ActivityId:   activityID,
 		ActivityType: s.tv.ActivityType(),
 		Identity:     s.tv.WorkerIdentity(),
@@ -269,7 +270,7 @@ func (s *standaloneActivityTestSuite) TestPollActivityTaskQueue() {
 	require.NoError(t, err)
 
 	pollTaskResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
-		Namespace: s.Namespace().String(),
+		Namespace: namespace,
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: taskQueue,
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
@@ -278,6 +279,7 @@ func (s *standaloneActivityTestSuite) TestPollActivityTaskQueue() {
 	})
 	require.NoError(t, err)
 	require.Equal(t, activityID, pollTaskResp.GetActivityId())
+	require.Equal(t, namespace, pollTaskResp.GetWorkflowNamespace())
 	protorequire.ProtoEqual(t, s.tv.ActivityType(), pollTaskResp.GetActivityType())
 	require.Equal(t, startResp.GetRunId(), pollTaskResp.GetActivityRunId())
 	protorequire.ProtoEqual(t, defaultInput, pollTaskResp.GetInput())

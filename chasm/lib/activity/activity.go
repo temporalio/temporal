@@ -42,7 +42,7 @@ var _ chasm.VisibilitySearchAttributesProvider = (*Activity)(nil)
 
 type ActivityStore interface {
 	// PopulateRecordStartedResponse populates the response for RecordActivityTaskStarted
-	PopulateRecordStartedResponse(ctx chasm.Context, key chasm.ExecutionKey, response *historyservice.RecordActivityTaskStartedResponse) error
+	PopulateRecordStartedResponse(ctx chasm.Context, key chasm.ExecutionKey, namespace string, response *historyservice.RecordActivityTaskStartedResponse) error
 
 	// RecordCompleted applies the provided function to record activity completion
 	RecordCompleted(ctx chasm.MutableContext, applyFn func(ctx chasm.MutableContext) error) error
@@ -198,12 +198,17 @@ func (a *Activity) HandleStarted(ctx chasm.MutableContext, request *historyservi
 		return nil, err
 	}
 	response := &historyservice.RecordActivityTaskStartedResponse{}
-	err := a.StoreOrSelf(ctx).PopulateRecordStartedResponse(ctx, ctx.ExecutionKey(), response)
+	err := a.StoreOrSelf(ctx).PopulateRecordStartedResponse(ctx, ctx.ExecutionKey(), request.GetPollRequest().GetNamespace(), response)
 	return response, err
 }
 
 // PopulateRecordStartedResponse populates the response for HandleStarted.
-func (a *Activity) PopulateRecordStartedResponse(ctx chasm.Context, key chasm.ExecutionKey, response *historyservice.RecordActivityTaskStartedResponse) error {
+func (a *Activity) PopulateRecordStartedResponse(
+	ctx chasm.Context,
+	key chasm.ExecutionKey,
+	namespace string,
+	response *historyservice.RecordActivityTaskStartedResponse,
+) error {
 	lastHeartbeat, _ := a.LastHeartbeat.TryGet(ctx)
 	if lastHeartbeat != nil {
 		response.HeartbeatDetails = lastHeartbeat.GetDetails()
@@ -215,6 +220,7 @@ func (a *Activity) PopulateRecordStartedResponse(ctx chasm.Context, key chasm.Ex
 	response.Priority = a.GetPriority()
 	response.RetryPolicy = a.GetRetryPolicy()
 	response.ActivityRunId = key.RunID
+	response.WorkflowNamespace = namespace
 	response.ScheduledEvent = &historypb.HistoryEvent{
 		EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
 		EventTime: a.GetScheduleTime(),

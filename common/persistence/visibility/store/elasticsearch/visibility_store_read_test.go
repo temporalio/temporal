@@ -2265,6 +2265,7 @@ func (s *ESVisibilitySuite) TestNameInterceptor_ChasmMapper() {
 		searchattribute.TestEsNameTypeMap(),
 		s.mockSearchAttributesMapperProvider,
 		chasmMapper,
+		chasm.UnspecifiedArchetypeID,
 	)
 
 	fieldName, err := ni.Name("ChasmCompleted", query.FieldNameFilter)

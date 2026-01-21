@@ -46,7 +46,7 @@ func newClient(cfg *Config, httpClient *http.Client, logger log.Logger) (*client
 		elastic.SetRetrier(elastic.NewBackoffRetrier(elastic.NewExponentialBackoff(128*time.Millisecond, 513*time.Millisecond))),
 		// Critical to ensure decode of int64 won't lose precision.
 		elastic.SetDecoder(&elastic.NumberDecoder{}),
-		elastic.SetGzip(true),
+		elastic.SetGzip(!cfg.DisableGzip),
 	}
 
 	options = append(options, getLoggerOptions(cfg.LogLevel, logger)...)
