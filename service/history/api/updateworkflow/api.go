@@ -281,6 +281,7 @@ func (u *Updater) addWorkflowTaskToMatching(ctx context.Context) error {
 		TaskQueue:              u.taskQueue,
 		ScheduledEventId:       u.scheduledEventID,
 		ScheduleToStartTimeout: durationpb.New(u.scheduleToStartTimeout),
+		Speculative:            true,
 		Clock:                  clock,
 		VersionDirective:       u.directive,
 		Priority:               u.priority,
