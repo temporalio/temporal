@@ -5264,7 +5264,7 @@ func (s *Versioning3Suite) TestMaxVersionsInTaskQueue() {
 
 	// Pre-populate the task queue with maxVersions different deployment versions
 	// Each version will be in a separate deployment to ensure they count toward the limit
-	for i := 0; i < maxVersions; i++ {
+	for i := 0; i <= maxVersions; i++ {
 		tvVersion := tv.WithDeploymentSeriesNumber(i).WithBuildIDNumber(i)
 		upsertVersions := make(map[string]*deploymentspb.WorkerDeploymentVersionData)
 		upsertVersions[tvVersion.BuildID()] = &deploymentspb.WorkerDeploymentVersionData{
@@ -5286,7 +5286,7 @@ func (s *Versioning3Suite) TestMaxVersionsInTaskQueue() {
 
 	// Now try to poll with a new version from a new deployment
 	// This should fail with RESOURCE_EXHAUSTED_CAUSE_WORKER_DEPLOYMENT_LIMITS
-	tvNewVersion := tv.WithDeploymentSeriesNumber(maxVersions).WithBuildIDNumber(maxVersions)
+	tvNewVersion := tv.WithDeploymentSeriesNumber(999).WithBuildIDNumber(999)
 
 	pollCtx, pollCancel := context.WithTimeout(ctx, 10*time.Second)
 	defer pollCancel()
