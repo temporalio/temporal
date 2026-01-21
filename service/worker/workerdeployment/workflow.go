@@ -391,7 +391,7 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 
 	// Apply override state if provided during force-CaN
 	if d.overrideState != nil {
-		d.WorkerDeploymentWorkflowArgs.State = d.overrideState
+		d.State = d.overrideState
 	}
 	return workflow.NewContinueAsNewError(ctx, WorkerDeploymentWorkflowType, d.WorkerDeploymentWorkflowArgs)
 }
