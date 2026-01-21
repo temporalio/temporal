@@ -154,3 +154,65 @@ func TestIsEqual(t *testing.T) {
 	b, _ = Encode("foo")
 	s.False(isEqual(a, b))
 }
+
+func TestFilterNilSearchAttributes(t *testing.T) {
+	s := assert.New(t)
+
+	// nil input returns nil
+	result := FilterNilSearchAttributes(nil)
+	s.Nil(result)
+
+	// empty SearchAttributes returns itself
+	emptySA := &commonpb.SearchAttributes{IndexedFields: map[string]*commonpb.Payload{}}
+	result = FilterNilSearchAttributes(emptySA)
+	s.Equal(emptySA, result)
+
+	// SearchAttributes with only valid values returns filtered copy
+	validPayload := EncodeString("value")
+	saNonNil := &commonpb.SearchAttributes{
+		IndexedFields: map[string]*commonpb.Payload{
+			"key1": validPayload,
+		},
+	}
+	result = FilterNilSearchAttributes(saNonNil)
+	s.NotNil(result)
+	s.Len(result.IndexedFields, 1)
+	s.Equal(validPayload, result.IndexedFields["key1"])
+
+	// SearchAttributes with nil values filters them out
+	nilPayloadVal, _ := Encode(nil)
+	saMixed := &commonpb.SearchAttributes{
+		IndexedFields: map[string]*commonpb.Payload{
+			"valid":  validPayload,
+			"nilVal": nilPayloadVal,
+		},
+	}
+	result = FilterNilSearchAttributes(saMixed)
+	s.NotNil(result)
+	s.Len(result.IndexedFields, 1)
+	s.Equal(validPayload, result.IndexedFields["valid"])
+	s.Nil(result.IndexedFields["nilVal"])
+
+	// SearchAttributes with empty slice values filters them out
+	emptySlicePayloadVal, _ := Encode([]string{})
+	saEmptySlice := &commonpb.SearchAttributes{
+		IndexedFields: map[string]*commonpb.Payload{
+			"valid":      validPayload,
+			"emptySlice": emptySlicePayloadVal,
+		},
+	}
+	result = FilterNilSearchAttributes(saEmptySlice)
+	s.NotNil(result)
+	s.Len(result.IndexedFields, 1)
+	s.Equal(validPayload, result.IndexedFields["valid"])
+
+	// SearchAttributes with all nil/empty values returns nil
+	saAllNil := &commonpb.SearchAttributes{
+		IndexedFields: map[string]*commonpb.Payload{
+			"nil1": nilPayloadVal,
+			"nil2": emptySlicePayloadVal,
+		},
+	}
+	result = FilterNilSearchAttributes(saAllNil)
+	s.Nil(result)
+}
