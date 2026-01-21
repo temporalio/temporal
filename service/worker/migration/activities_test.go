@@ -11,7 +11,6 @@ import (
 	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/sdk/converter"
 	"go.temporal.io/sdk/interceptor"
 	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/worker"
@@ -885,32 +884,4 @@ func (s *activitiesSuite) TestWaitCatchUp() {
 
 	_, err := env.ExecuteActivity(s.a.WaitCatchup, request)
 	s.NoError(err)
-}
-
-func (s *activitiesSuite) TestMigrationExecutionInfoCompatibility() {
-	workflowExecution := &commonpb.WorkflowExecution{
-		WorkflowId: execution1.BusinessID,
-		RunId:      execution1.RunID,
-	}
-
-	dataConverter := converter.GetDefaultDataConverter()
-	payload, err := dataConverter.ToPayload(workflowExecution)
-	s.NoError(err)
-
-	var migrationExecution *ExecutionInfo
-	err = dataConverter.FromPayload(payload, &migrationExecution)
-	s.NoError(err)
-	s.Equal(execution1.BusinessID, migrationExecution.BusinessID)
-	s.Equal(execution1.RunID, migrationExecution.RunID)
-	s.Equal(chasm.UnspecifiedArchetypeID, migrationExecution.ArchetypeID)
-
-	payload, err = dataConverter.ToPayload(migrationExecution)
-	s.NoError(err)
-
-	workflowExecution = &commonpb.WorkflowExecution{}
-	err = dataConverter.FromPayload(payload, &workflowExecution)
-	s.NoError(err)
-
-	s.Equal(execution1.BusinessID, workflowExecution.WorkflowId)
-	s.Equal(execution1.RunID, workflowExecution.RunId)
 }

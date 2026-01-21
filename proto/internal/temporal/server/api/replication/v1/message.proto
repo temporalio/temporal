@@ -257,6 +257,8 @@ message VersionedTransitionArtifact {
     bool is_force_replication = 7;
 }
 
+// MigrationExecutionInfo is only used in unit tests for validation compatibility.
+// Remove it after v1.30 is released.
 message MigrationExecutionInfo {
     // The proto json name of this field needs to be "workflowId",
     // to be backward compatibility with commonpb.WorkflowExecution,
