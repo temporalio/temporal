@@ -198,23 +198,21 @@ func (f *outboundQueueFactory) CreateQueue(
 
 	currentClusterName := f.ClusterMetadata.GetCurrentClusterName()
 
-	scheduler := f.hostScheduler
-	if f.Config.TaskSchedulerEnableRateLimiter() {
-		scheduler = queues.NewRateLimitedScheduler(
-			f.hostScheduler,
-			queues.RateLimitedSchedulerOptions{
-				EnableShadowMode: f.Config.TaskSchedulerEnableRateLimiterShadowMode,
-				StartupDelay:     f.Config.TaskSchedulerRateLimiterStartupDelay,
-			},
-			currentClusterName,
-			f.NamespaceRegistry,
-			f.SchedulerRateLimiter,
-			f.TimeSource,
-			f.ChasmRegistry,
-			logger,
-			metricsHandler,
-		)
-	}
+	scheduler := queues.NewRateLimitedScheduler(
+		f.hostScheduler,
+		queues.RateLimitedSchedulerOptions{
+			Enabled:          f.Config.TaskSchedulerEnableRateLimiter,
+			EnableShadowMode: f.Config.TaskSchedulerEnableRateLimiterShadowMode,
+			StartupDelay:     f.Config.TaskSchedulerRateLimiterStartupDelay,
+		},
+		currentClusterName,
+		f.NamespaceRegistry,
+		f.SchedulerRateLimiter,
+		f.TimeSource,
+		f.ChasmRegistry,
+		logger,
+		metricsHandler,
+	)
 
 	rescheduler := queues.NewRescheduler(
 		scheduler,

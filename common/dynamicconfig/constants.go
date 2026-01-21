@@ -1253,11 +1253,24 @@ This can help reduce effects of task queue movement.`,
 		5*time.Minute,
 		`MatchingGetUserDataRefresh is how often the user data owner refreshes data from persistence.`,
 	)
+	MatchingEphemeralDataUpdateInterval = NewTaskQueueDurationSetting(
+		"matching.ephemeralDataUpdateInterval",
+		5*time.Second,
+		`How often to update ephemeral data (e.g. backlog size for forwarding sticky polls).
+Set to zero to disable ephemeral data updates.`,
+	)
+	MatchingPriorityBacklogForwarding = NewTaskQueueBoolSetting(
+		"matching.priorityBacklogForwarding",
+		true,
+		`Whether to forward polls to partitions with higher-priority backlog.`,
+	)
 	MatchingBacklogNegligibleAge = NewTaskQueueDurationSetting(
 		"matching.backlogNegligibleAge",
 		5*time.Second,
-		`MatchingBacklogNegligibleAge if the head of backlog gets older than this we stop sync match and
-forwarding to ensure more equal dispatch order among partitions.`,
+		`MatchingBacklogNegligibleAge is a threshold for negligible vs significant backlogs:
+If the head of the backlog is older than this, then we stop sync match and forwarding to ensure
+more equal dispatch order among partitions. We also forward sticky polls to partitions with
+higher-priority backlog.`,
 	)
 	MatchingMaxWaitForPollerBeforeFwd = NewTaskQueueDurationSetting(
 		"matching.maxWaitForPollerBeforeFwd",
@@ -2583,10 +2596,20 @@ that task will be sent to DLQ.`,
 		10,
 		"ReplicationStreamSenderLivenessMultiplier is the multiplier of liveness check interval on stream sender",
 	)
+	EnableHistoryReplicationRateLimiter = NewNamespaceBoolSetting(
+		"history.EnableHistoryReplicationRateLimiter",
+		false,
+		"EnableHistoryReplicationRateLimiter is the feature flag to enable rate limiter on history event replication",
+	)
 	ReplicationEnableRateLimit = NewGlobalBoolSetting(
 		"history.ReplicationEnableRateLimit",
 		true,
 		`ReplicationEnableRateLimit is the feature flag to enable replication global rate limiter`,
+	)
+	ReplicationEnableRateLimitShadowMode = NewGlobalBoolSetting(
+		"history.ReplicationEnableRateLimitShadowMode",
+		false,
+		`ReplicationEnableRateLimitShadowMode enables shadow mode for replication rate limiter (emit metrics only, no throttling)`,
 	)
 	ReplicationStreamSenderErrorRetryWait = NewGlobalDurationSetting(
 		"history.ReplicationStreamSenderErrorRetryWait",

@@ -206,6 +206,7 @@ func newPhysicalTaskQueueManager(
 			config,
 			queue.partition,
 			fwdr,
+			pqMgr.matchingClient,
 			pqMgr.taskValidator,
 			pqMgr.logger,
 			newFairMetricsHandler(taggedMetricsHandler),
@@ -244,6 +245,7 @@ func newPhysicalTaskQueueManager(
 			config,
 			queue.partition,
 			fwdr,
+			pqMgr.matchingClient,
 			pqMgr.taskValidator,
 			pqMgr.logger,
 			newPriMetricsHandler(taggedMetricsHandler),
@@ -605,7 +607,7 @@ func (c *physicalTaskQueueManagerImpl) LegacyDescribeTaskQueue(includeTaskQueueS
 	return response
 }
 
-func (c *physicalTaskQueueManagerImpl) GetStatsByPriority() map[int32]*taskqueuepb.TaskQueueStats {
+func (c *physicalTaskQueueManagerImpl) GetStatsByPriority(includeRates bool) map[int32]*taskqueuepb.TaskQueueStats {
 	stats := c.backlogMgr.BacklogStatsByPriority()
 
 	if m := c.drainBacklogMgr.Load(); m != nil {
@@ -615,15 +617,17 @@ func (c *physicalTaskQueueManagerImpl) GetStatsByPriority() map[int32]*taskqueue
 		}
 	}
 
-	c.taskTrackerLock.RLock()
-	defer c.taskTrackerLock.RUnlock()
+	if includeRates {
+		c.taskTrackerLock.RLock()
+		for pri, tt := range c.tasksAdded {
+			util.GetOrSetNew(stats, int32(pri)).TasksAddRate = tt.rate()
+		}
+		for pri, tt := range c.tasksDispatched {
+			util.GetOrSetNew(stats, int32(pri)).TasksDispatchRate = tt.rate()
+		}
+		c.taskTrackerLock.RUnlock()
+	}
 
-	for pri, tt := range c.tasksAdded {
-		util.GetOrSetNew(stats, int32(pri)).TasksAddRate = tt.rate()
-	}
-	for pri, tt := range c.tasksDispatched {
-		util.GetOrSetNew(stats, int32(pri)).TasksDispatchRate = tt.rate()
-	}
 	return stats
 }
 
@@ -716,7 +720,8 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 	}
 
 	limit := c.config.MaxVersionsInTaskQueue()
-	if worker_versioning.CountDeploymentVersions(deploymentData) >= limit {
+	// Using > instead of >= to give the Deployment a chance to delete some old versions if MatchingMaxVersionsInDeployment is also reached.
+	if worker_versioning.CountDeploymentVersions(deploymentData) > limit {
 		// Before retrying the error, hold the poller for some time so it does not retry immediately
 		// Parallel polls are already serialized using the lock.
 		time.Sleep(backoff)
@@ -842,6 +847,12 @@ func (c *physicalTaskQueueManagerImpl) makePollerScalingDecisionImpl(
 	}
 	return &taskqueuepb.PollerScalingDecision{
 		PollRequestDeltaSuggestion: delta,
+	}
+}
+
+func (c *physicalTaskQueueManagerImpl) UpdateRemotePriorityBacklogs(backlogs remotePriorityBacklogSet) {
+	if c.priMatcher != nil {
+		c.priMatcher.UpdateRemotePriorityBacklogs(backlogs)
 	}
 }
 

@@ -30,6 +30,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/events"
@@ -93,6 +94,7 @@ func (s *workflowReplicatorSuite) SetupTest() {
 	s.NoError(err)
 	s.mockShard.SetStateMachineRegistry(reg)
 	s.mockShard.Resource.ClusterMetadata.EXPECT().GetClusterID().Return(int64(1)).AnyTimes()
+	s.mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return("test-cluster").AnyTimes()
 
 	s.mockExecutionManager = s.mockShard.Resource.ExecutionMgr
 	s.mockNamespaceCache = s.mockShard.Resource.NamespaceCache
@@ -1125,6 +1127,7 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_W
 		ExecutionStats: &persistencespb.ExecutionStats{
 			HistorySize: 100,
 		},
+		LastFirstEventTxnId: 0,
 	}).AnyTimes()
 	mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: s.runID,
@@ -1152,8 +1155,14 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_W
 	mockShard.EXPECT().GetShardID().Return(int32(0)).AnyTimes()
 	mockShard.EXPECT().GetConfig().Return(s.mockShard.GetConfig()).AnyTimes()
 	s.workflowStateReplicator.shardContext = mockShard
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespace.NewNamespaceForTest(
+		&persistencespb.NamespaceInfo{Name: "test-namespace"},
+		nil,
+		false,
+		nil,
+		int64(100),
+	), nil).AnyTimes()
 	nsName := namespace.Name("test-namespace")
-	s.mockNamespaceCache.EXPECT().GetNamespaceName(namespace.ID(namespaceID)).Return(nsName, nil).AnyTimes()
 	mockMutableState.EXPECT().GetNamespaceEntry().Return(namespace.NewLocalNamespaceForTest(
 		&persistencespb.NamespaceInfo{Id: namespaceID, Name: nsName.String()},
 		&persistencespb.NamespaceConfig{},
@@ -1279,8 +1288,9 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_W
 	s.NoError(err)
 	mockMutableState := historyi.NewMockMutableState(s.controller)
 	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
-		VersionHistories: localVersionHistories,
-		ExecutionStats:   &persistencespb.ExecutionStats{HistorySize: 0},
+		VersionHistories:    localVersionHistories,
+		ExecutionStats:      &persistencespb.ExecutionStats{HistorySize: 0},
+		LastFirstEventTxnId: 0,
 	}).AnyTimes()
 	mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: s.runID,
@@ -1308,8 +1318,14 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_W
 	mockShard.EXPECT().GetShardID().Return(int32(0)).AnyTimes()
 	mockShard.EXPECT().GetConfig().Return(s.mockShard.GetConfig()).AnyTimes()
 	s.workflowStateReplicator.shardContext = mockShard
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespace.NewNamespaceForTest(
+		&persistencespb.NamespaceInfo{Name: "test-namespace"},
+		nil,
+		false,
+		nil,
+		int64(100),
+	), nil).AnyTimes()
 	nsName := namespace.Name("test-namespace")
-	s.mockNamespaceCache.EXPECT().GetNamespaceName(namespace.ID(namespaceID)).Return(nsName, nil).AnyTimes()
 	mockMutableState.EXPECT().GetNamespaceEntry().Return(namespace.NewLocalNamespaceForTest(
 		&persistencespb.NamespaceInfo{Id: namespaceID, Name: nsName.String()},
 		&persistencespb.NamespaceConfig{},
@@ -1464,6 +1480,7 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_W
 		ExecutionStats: &persistencespb.ExecutionStats{
 			HistorySize: 100,
 		},
+		LastFirstEventTxnId: 0,
 	}).AnyTimes()
 	mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: s.runID,
@@ -1489,8 +1506,14 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_W
 	mockShard.EXPECT().GetShardID().Return(int32(0)).AnyTimes()
 	mockShard.EXPECT().GetConfig().Return(s.mockShard.GetConfig()).AnyTimes()
 	s.workflowStateReplicator.shardContext = mockShard
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespace.NewNamespaceForTest(
+		&persistencespb.NamespaceInfo{Name: "test-namespace"},
+		nil,
+		false,
+		nil,
+		int64(100),
+	), nil).AnyTimes()
 	nsName := namespace.Name("test-namespace")
-	s.mockNamespaceCache.EXPECT().GetNamespaceName(namespace.ID(namespaceID)).Return(nsName, nil).AnyTimes()
 	mockMutableState.EXPECT().GetNamespaceEntry().Return(namespace.NewLocalNamespaceForTest(
 		&persistencespb.NamespaceInfo{Id: namespaceID, Name: nsName.String()},
 		&persistencespb.NamespaceConfig{},
@@ -1558,6 +1581,257 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_W
 		[]*commonpb.DataBlob{blobs},
 		false)
 	s.ErrorIs(err, ErrEventSlicesNotConsecutive)
+}
+
+func (s *workflowReplicatorSuite) Test_handleFirstReplicationTask_WithSnapshot_Success() {
+	workflowStateReplicator := NewWorkflowStateReplicator(
+		s.mockShard,
+		s.mockWorkflowCache,
+		nil,
+		serialization.NewSerializer(),
+		quotas.NoopRequestRateLimiter,
+		s.logger,
+	)
+	mockTransactionManager := NewMockTransactionManager(s.controller)
+	mockTaskRefresher := workflow.NewMockTaskRefresher(s.controller)
+	workflowStateReplicator.transactionMgr = mockTransactionManager
+	workflowStateReplicator.taskRefresher = mockTaskRefresher
+
+	namespaceID := uuid.NewString()
+	versionHistories := versionhistory.NewVersionHistories(&historyspb.VersionHistory{})
+	versionedTransitionArtifact := &replicationspb.VersionedTransitionArtifact{
+		StateAttributes: &replicationspb.VersionedTransitionArtifact_SyncWorkflowStateSnapshotAttributes{
+			SyncWorkflowStateSnapshotAttributes: &replicationspb.SyncWorkflowStateSnapshotAttributes{
+				State: &persistencespb.WorkflowMutableState{
+					ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+						WorkflowId:               s.workflowID,
+						NamespaceId:              namespaceID,
+						VersionHistories:         versionHistories,
+						WorkflowExecutionTimeout: timestamp.DurationPtr(time.Hour),
+						WorkflowRunTimeout:       timestamp.DurationPtr(time.Hour),
+					},
+					ExecutionState: &persistencespb.WorkflowExecutionState{
+						RunId:     s.runID,
+						State:     enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+						Status:    enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+						StartTime: timestamp.TimePtr(s.now),
+					},
+				},
+			},
+		},
+	}
+
+	mockWeCtx := historyi.NewMockWorkflowContext(s.controller)
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespace.NewNamespaceForTest(
+		&persistencespb.NamespaceInfo{Name: "test-namespace"},
+		nil,
+		false,
+		nil,
+		int64(100),
+	), nil)
+	s.mockNamespaceCache.EXPECT().GetNamespaceName(namespace.ID(namespaceID)).Return(namespace.Name("test-namespace"), nil).AnyTimes()
+
+	s.mockRemoteAdminClient.EXPECT().GetWorkflowExecutionRawHistoryV2(gomock.Any(), gomock.Any()).Return(
+		&adminservice.GetWorkflowExecutionRawHistoryV2Response{},
+		nil,
+	).AnyTimes()
+
+	mockTaskRefresher.EXPECT().Refresh(gomock.Any(), gomock.Any(), false).Return(nil)
+
+	mockTransactionManager.EXPECT().CreateWorkflow(
+		gomock.Any(),
+		chasm.WorkflowArchetypeID,
+		gomock.AssignableToTypeOf(&WorkflowImpl{}),
+	).DoAndReturn(func(ctx context.Context, _ chasm.ArchetypeID, wf Workflow) error {
+		localMutableState := wf.GetMutableState()
+		s.Equal(s.workflowID, localMutableState.GetExecutionInfo().WorkflowId)
+		s.Equal(s.runID, localMutableState.GetExecutionState().RunId)
+		return nil
+	})
+
+	continueProcess, err := workflowStateReplicator.handleFirstReplicationTask(
+		context.Background(),
+		chasm.WorkflowArchetypeID,
+		mockWeCtx,
+		versionedTransitionArtifact,
+		"test-cluster",
+	)
+	s.NoError(err)
+	s.False(continueProcess)
+}
+
+func (s *workflowReplicatorSuite) Test_handleFirstReplicationTask_WithMutation_Success() {
+	workflowStateReplicator := NewWorkflowStateReplicator(
+		s.mockShard,
+		s.mockWorkflowCache,
+		nil,
+		serialization.NewSerializer(),
+		quotas.NoopRequestRateLimiter,
+		s.logger,
+	)
+	mockTransactionManager := NewMockTransactionManager(s.controller)
+	mockTaskRefresher := workflow.NewMockTaskRefresher(s.controller)
+	workflowStateReplicator.transactionMgr = mockTransactionManager
+	workflowStateReplicator.taskRefresher = mockTaskRefresher
+
+	namespaceID := uuid.NewString()
+	versionHistories := versionhistory.NewVersionHistories(&historyspb.VersionHistory{})
+	versionedTransitionArtifact := &replicationspb.VersionedTransitionArtifact{
+		StateAttributes: &replicationspb.VersionedTransitionArtifact_SyncWorkflowStateMutationAttributes{
+			SyncWorkflowStateMutationAttributes: &replicationspb.SyncWorkflowStateMutationAttributes{
+				StateMutation: &persistencespb.WorkflowMutableStateMutation{
+					ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+						WorkflowId:               s.workflowID,
+						NamespaceId:              namespaceID,
+						VersionHistories:         versionHistories,
+						WorkflowExecutionTimeout: timestamp.DurationPtr(time.Hour),
+						WorkflowRunTimeout:       timestamp.DurationPtr(time.Hour),
+					},
+					ExecutionState: &persistencespb.WorkflowExecutionState{
+						RunId:     s.runID,
+						State:     enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+						Status:    enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+						StartTime: timestamp.TimePtr(s.now),
+					},
+				},
+			},
+		},
+	}
+
+	mockWeCtx := historyi.NewMockWorkflowContext(s.controller)
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespace.NewNamespaceForTest(
+		&persistencespb.NamespaceInfo{Name: "test-namespace"},
+		nil,
+		false,
+		nil,
+		int64(100),
+	), nil)
+	s.mockNamespaceCache.EXPECT().GetNamespaceName(namespace.ID(namespaceID)).Return(namespace.Name("test-namespace"), nil).AnyTimes()
+
+	s.mockRemoteAdminClient.EXPECT().GetWorkflowExecutionRawHistoryV2(gomock.Any(), gomock.Any()).Return(
+		&adminservice.GetWorkflowExecutionRawHistoryV2Response{},
+		nil,
+	).AnyTimes()
+
+	mockTaskRefresher.EXPECT().Refresh(gomock.Any(), gomock.Any(), false).Return(nil)
+
+	mockTransactionManager.EXPECT().CreateWorkflow(
+		gomock.Any(),
+		chasm.WorkflowArchetypeID,
+		gomock.AssignableToTypeOf(&WorkflowImpl{}),
+	).Return(nil)
+
+	continueProcess, err := workflowStateReplicator.handleFirstReplicationTask(
+		context.Background(),
+		chasm.WorkflowArchetypeID,
+		mockWeCtx,
+		versionedTransitionArtifact,
+		"test-cluster",
+	)
+	s.NoError(err)
+	s.False(continueProcess)
+}
+
+func (s *workflowReplicatorSuite) Test_handleFirstReplicationTask_InvalidArtifactType_Error() {
+	workflowStateReplicator := NewWorkflowStateReplicator(
+		s.mockShard,
+		s.mockWorkflowCache,
+		nil,
+		serialization.NewSerializer(),
+		quotas.NoopRequestRateLimiter,
+		s.logger,
+	)
+
+	versionedTransitionArtifact := &replicationspb.VersionedTransitionArtifact{}
+	mockWeCtx := historyi.NewMockWorkflowContext(s.controller)
+
+	continueProcess, err := workflowStateReplicator.handleFirstReplicationTask(
+		context.Background(),
+		chasm.WorkflowArchetypeID,
+		mockWeCtx,
+		versionedTransitionArtifact,
+		"test-cluster",
+	)
+	s.Error(err)
+	s.Contains(err.Error(), "unknown artifact type")
+	s.False(continueProcess)
+}
+
+func (s *workflowReplicatorSuite) Test_handleFirstReplicationTask_CreateWorkflowFails_BranchCleanup() {
+	workflowStateReplicator := NewWorkflowStateReplicator(
+		s.mockShard,
+		s.mockWorkflowCache,
+		nil,
+		serialization.NewSerializer(),
+		quotas.NoopRequestRateLimiter,
+		s.logger,
+	)
+	mockTransactionManager := NewMockTransactionManager(s.controller)
+	mockTaskRefresher := workflow.NewMockTaskRefresher(s.controller)
+	workflowStateReplicator.transactionMgr = mockTransactionManager
+	workflowStateReplicator.taskRefresher = mockTaskRefresher
+
+	namespaceID := uuid.NewString()
+	versionHistories := versionhistory.NewVersionHistories(&historyspb.VersionHistory{})
+	versionedTransitionArtifact := &replicationspb.VersionedTransitionArtifact{
+		StateAttributes: &replicationspb.VersionedTransitionArtifact_SyncWorkflowStateSnapshotAttributes{
+			SyncWorkflowStateSnapshotAttributes: &replicationspb.SyncWorkflowStateSnapshotAttributes{
+				State: &persistencespb.WorkflowMutableState{
+					ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+						WorkflowId:               s.workflowID,
+						NamespaceId:              namespaceID,
+						VersionHistories:         versionHistories,
+						WorkflowExecutionTimeout: timestamp.DurationPtr(time.Hour),
+						WorkflowRunTimeout:       timestamp.DurationPtr(time.Hour),
+					},
+					ExecutionState: &persistencespb.WorkflowExecutionState{
+						RunId:     s.runID,
+						State:     enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+						Status:    enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+						StartTime: timestamp.TimePtr(s.now),
+					},
+				},
+			},
+		},
+	}
+
+	mockWeCtx := historyi.NewMockWorkflowContext(s.controller)
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespace.NewNamespaceForTest(
+		&persistencespb.NamespaceInfo{Name: "test-namespace"},
+		nil,
+		false,
+		nil,
+		int64(100),
+	), nil)
+	s.mockNamespaceCache.EXPECT().GetNamespaceName(namespace.ID(namespaceID)).Return(namespace.Name("test-namespace"), nil).AnyTimes()
+
+	s.mockRemoteAdminClient.EXPECT().GetWorkflowExecutionRawHistoryV2(gomock.Any(), gomock.Any()).Return(
+		&adminservice.GetWorkflowExecutionRawHistoryV2Response{},
+		nil,
+	).AnyTimes()
+
+	mockTaskRefresher.EXPECT().Refresh(gomock.Any(), gomock.Any(), false).Return(nil)
+
+	expectedErr := serviceerror.NewInternal("create workflow failed")
+	mockTransactionManager.EXPECT().CreateWorkflow(
+		gomock.Any(),
+		chasm.WorkflowArchetypeID,
+		gomock.AssignableToTypeOf(&WorkflowImpl{}),
+	).Return(expectedErr)
+
+	continueProcess, err := workflowStateReplicator.handleFirstReplicationTask(
+		context.Background(),
+		chasm.WorkflowArchetypeID,
+		mockWeCtx,
+		versionedTransitionArtifact,
+		"test-cluster",
+	)
+	s.Error(err)
+	s.Equal(expectedErr, err)
+	s.False(continueProcess)
 }
 
 func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_CreateNewBranch() {
@@ -1718,8 +1992,9 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_E
 	}
 	mockMutableState := historyi.NewMockMutableState(s.controller)
 	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
-		VersionHistories: localVersionHistories,
-		ExecutionStats:   executionStats,
+		VersionHistories:    localVersionHistories,
+		ExecutionStats:      executionStats,
+		LastFirstEventTxnId: 0,
 	}).AnyTimes()
 	mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: s.runID,
@@ -1733,6 +2008,13 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_E
 
 	nsName := namespace.Name("test-namespace")
 	s.mockNamespaceCache.EXPECT().GetNamespaceName(namespace.ID(namespaceID)).Return(nsName, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespace.NewNamespaceForTest(
+		&persistencespb.NamespaceInfo{Name: nsName.String()},
+		nil,
+		false,
+		nil,
+		int64(100),
+	), nil).AnyTimes()
 	mockMutableState.EXPECT().GetNamespaceEntry().Return(namespace.NewLocalNamespaceForTest(
 		&persistencespb.NamespaceInfo{Id: namespaceID, Name: nsName.String()},
 		&persistencespb.NamespaceConfig{},

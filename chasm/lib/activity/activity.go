@@ -31,23 +31,18 @@ const (
 	// WorkflowTypeTag is a required workflow tag for standalone activities to ensure consistent
 	// metric labeling between workflows and activities.
 	WorkflowTypeTag = "__temporal_standalone_activity__"
-
-	TypeSAAlias      = "ActivityType"
-	StatusSAAlias    = "ActivityStatus"
-	TaskQueueSAAlias = "ActivityTaskQueue"
 )
 
 var (
-	TypeSearchAttribute      = chasm.NewSearchAttributeKeyword(TypeSAAlias, chasm.SearchAttributeFieldKeyword01)
-	StatusSearchAttribute    = chasm.NewSearchAttributeKeyword(StatusSAAlias, chasm.SearchAttributeFieldLowCardinalityKeyword01)
-	TaskQueueSearchAttribute = chasm.NewSearchAttributeKeyword(TaskQueueSAAlias, chasm.SearchAttributeFieldKeyword02)
+	TypeSearchAttribute   = chasm.NewSearchAttributeKeyword("ActivityType", chasm.SearchAttributeFieldKeyword01)
+	StatusSearchAttribute = chasm.NewSearchAttributeKeyword("ExecutionStatus", chasm.SearchAttributeFieldLowCardinalityKeyword01)
 )
 
 var _ chasm.VisibilitySearchAttributesProvider = (*Activity)(nil)
 
 type ActivityStore interface {
 	// PopulateRecordStartedResponse populates the response for RecordActivityTaskStarted
-	PopulateRecordStartedResponse(ctx chasm.Context, key chasm.ExecutionKey, response *historyservice.RecordActivityTaskStartedResponse) error
+	PopulateRecordStartedResponse(ctx chasm.Context, key chasm.ExecutionKey, namespace string, response *historyservice.RecordActivityTaskStartedResponse) error
 
 	// RecordCompleted applies the provided function to record activity completion
 	RecordCompleted(ctx chasm.MutableContext, applyFn func(ctx chasm.MutableContext) error) error
@@ -69,9 +64,8 @@ type Activity struct {
 	// Pointer to an implementation of the "store". For a workflow activity this would be a parent
 	// pointer back to the workflow. For a standalone activity this is nil (Activity itself
 	// implements the ActivityStore interface).
-	// TODO(saa-preview): revisit a standalone activity pointing to itself once we handle storing it more efficiently.
 	// TODO(saa-preview): figure out better naming.
-	Store chasm.Field[ActivityStore]
+	Store chasm.ParentPtr[ActivityStore]
 }
 
 // WithToken wraps a request with its deserialized task token.
@@ -204,12 +198,17 @@ func (a *Activity) HandleStarted(ctx chasm.MutableContext, request *historyservi
 		return nil, err
 	}
 	response := &historyservice.RecordActivityTaskStartedResponse{}
-	err := a.StoreOrSelf(ctx).PopulateRecordStartedResponse(ctx, ctx.ExecutionKey(), response)
+	err := a.StoreOrSelf(ctx).PopulateRecordStartedResponse(ctx, ctx.ExecutionKey(), request.GetPollRequest().GetNamespace(), response)
 	return response, err
 }
 
 // PopulateRecordStartedResponse populates the response for HandleStarted.
-func (a *Activity) PopulateRecordStartedResponse(ctx chasm.Context, key chasm.ExecutionKey, response *historyservice.RecordActivityTaskStartedResponse) error {
+func (a *Activity) PopulateRecordStartedResponse(
+	ctx chasm.Context,
+	key chasm.ExecutionKey,
+	namespace string,
+	response *historyservice.RecordActivityTaskStartedResponse,
+) error {
 	lastHeartbeat, _ := a.LastHeartbeat.TryGet(ctx)
 	if lastHeartbeat != nil {
 		response.HeartbeatDetails = lastHeartbeat.GetDetails()
@@ -221,6 +220,7 @@ func (a *Activity) PopulateRecordStartedResponse(ctx chasm.Context, key chasm.Ex
 	response.Priority = a.GetPriority()
 	response.RetryPolicy = a.GetRetryPolicy()
 	response.ActivityRunId = key.RunID
+	response.WorkflowNamespace = namespace
 	response.ScheduledEvent = &historypb.HistoryEvent{
 		EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
 		EventTime: a.GetScheduleTime(),
@@ -920,6 +920,6 @@ func (a *Activity) SearchAttributes(_ chasm.Context) []chasm.SearchAttributeKeyV
 	return []chasm.SearchAttributeKeyValue{
 		TypeSearchAttribute.Value(a.GetActivityType().GetName()),
 		StatusSearchAttribute.Value(InternalStatusToAPIStatus(a.GetStatus()).String()),
-		TaskQueueSearchAttribute.Value(a.GetTaskQueue().GetName()),
+		chasm.SearchAttributeTaskQueue.Value(a.GetTaskQueue().GetName()),
 	}
 }

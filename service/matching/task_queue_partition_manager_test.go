@@ -1213,6 +1213,10 @@ func (m *mockUserDataManager) CheckTaskQueueUserDataPropagation(ctx context.Cont
 	panic("unused")
 }
 
+func (m *mockUserDataManager) LocalBacklogPriorityChanged(map[PhysicalTaskQueueVersion]int64) {
+	panic("unused")
+}
+
 func (m *mockUserDataManager) updateVersioningData(data *persistencespb.VersioningData) {
 	m.Lock()
 	defer m.Unlock()
