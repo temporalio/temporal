@@ -531,6 +531,7 @@ jobs:
         timeout-minutes: ${{ fromJSON(needs.set-up-single-test.outputs.github_timeout) }} # make sure this is larger than the test timeout in the Makefile
         run: ./develop/github/monitor_test.sh make functional-test-coverage
         env:
+          TIMEOUT_MINUTES: ${{ needs.set-up-single-test.outputs.github_timeout }}
           TEST_ARGS: ${{ needs.set-up-single-test.outputs.single_test_args }}
           TEMPORAL_TEST_OTEL_OUTPUT: ${{ github.workspace }}/.testoutput
           TEMPORAL_OTEL_DEBUG: true
@@ -706,6 +707,7 @@ jobs:
         timeout-minutes: 35 # update this to TEST_TIMEOUT+5 if you update the Makefile
         run: ./develop/github/monitor_test.sh make functional-test-xdc-coverage
         env:
+          TIMEOUT_MINUTES: 35
           TEMPORAL_TEST_OTEL_OUTPUT: ${{ github.workspace }}/.testoutput
           TEMPORAL_OTEL_DEBUG: true
 
@@ -876,6 +878,7 @@ jobs:
         timeout-minutes: 15
         run: ./develop/github/monitor_test.sh make functional-test-ndc-coverage
         env:
+          TIMEOUT_MINUTES: 15
           TEMPORAL_TEST_OTEL_OUTPUT: ${{ github.workspace }}/.testoutput
           TEMPORAL_OTEL_DEBUG: true
 
