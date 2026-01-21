@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/sdk/converter"
-	repicationspb "go.temporal.io/server/api/replication/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/chasm"
 )
 
@@ -70,7 +70,7 @@ func TestExecutionInfo_Marshal_NewJSONDisabled(t *testing.T) {
 func TestExecutionInfo_Marshal_NewJSONEnabled(t *testing.T) {
 	executionInfoNewJSONEncodingEnabled = true
 
-	// cloud/v1.30.0-148 uses *repicationspb.MigrationExecutionInfo,
+	// cloud/v1.30.0-148 uses *replicationspb.MigrationExecutionInfo,
 	// so validate the encoded data can still be decoded to the old definition.
 	// i.e. we can downgrade to cloud/v1.30.0-148.
 	executionInfo := &ExecutionInfo{
@@ -84,7 +84,7 @@ func TestExecutionInfo_Marshal_NewJSONEnabled(t *testing.T) {
 	encoded, err := json.Marshal(executionInfo)
 	require.NoError(t, err)
 
-	var migrationExecutionInfo *repicationspb.MigrationExecutionInfo
+	var migrationExecutionInfo *replicationspb.MigrationExecutionInfo
 	err = json.Unmarshal(encoded, &migrationExecutionInfo)
 	require.NoError(t, err)
 	require.Equal(t, executionInfo.BusinessID, migrationExecutionInfo.BusinessId)
@@ -111,7 +111,7 @@ func TestExecutionInfo_Marshal_NewJSONEnabled(t *testing.T) {
 	require.NoError(t, err)
 
 	listResponseLegacy := struct {
-		Executions    []*repicationspb.MigrationExecutionInfo
+		Executions    []*replicationspb.MigrationExecutionInfo
 		NextPageToken []byte
 	}{}
 	err = dataConverter.FromPayload(payload, &listResponseLegacy)
@@ -177,10 +177,10 @@ func TestExecutionInfo_Unmarshal_NewJSONDisabled(t *testing.T) {
 func TestExecutionInfo_Unmarshal_NewJSONEnabled(t *testing.T) {
 	executionInfoNewJSONEncodingEnabled = true
 
-	// cloud/v1.30.0-148 uses *repicationspb.MigrationExecutionInfo,
+	// cloud/v1.30.0-148 uses *replicationspb.MigrationExecutionInfo,
 	// so validate the encoded data can be decoded to the new definition.
 	// i.e. we can upgrade from cloud/v1.30.0-148.
-	migrationExecutionInfo := &repicationspb.MigrationExecutionInfo{
+	migrationExecutionInfo := &replicationspb.MigrationExecutionInfo{
 		BusinessId:  "business-id-1",
 		RunId:       "run-id-1",
 		ArchetypeId: chasm.WorkflowArchetypeID,
@@ -198,10 +198,10 @@ func TestExecutionInfo_Unmarshal_NewJSONEnabled(t *testing.T) {
 	// instead, it's used as a field in another struct.
 	// Test that case and do encoding/decoding with an actual SDK data coverter.
 	listResponseLegacy := struct {
-		Executions    []*repicationspb.MigrationExecutionInfo
+		Executions    []*replicationspb.MigrationExecutionInfo
 		NextPageToken []byte
 	}{
-		Executions: []*repicationspb.MigrationExecutionInfo{
+		Executions: []*replicationspb.MigrationExecutionInfo{
 			migrationExecutionInfo,
 			{
 				BusinessId:  "business-id-2",
