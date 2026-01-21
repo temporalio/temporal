@@ -7,10 +7,12 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/client"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -176,6 +178,10 @@ func ServiceLifetimeHooks(lc fx.Lifecycle, svc *Service) {
 	lc.Append(fx.StartStopHook(svc.Start, svc.Stop))
 }
 
-func ServerProvider() *grpc.Server {
-	return grpc.NewServer()
+func ServerProvider(rpcFactory common.RPCFactory, logger log.Logger) *grpc.Server {
+	opts, err := rpcFactory.GetInternodeGRPCServerOptions()
+	if err != nil {
+		logger.Fatal("Failed to get gRPC server options", tag.Error(err))
+	}
+	return grpc.NewServer(opts...)
 }
