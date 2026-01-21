@@ -157,6 +157,7 @@ func (s *chasmEngineSuite) TestNewExecution_BrandNew() {
 			return tests.CreateWorkflowExecutionResponse, nil
 		},
 	).Times(1)
+	s.mockEngine.EXPECT().NotifyChasmExecution(gomock.Any(), gomock.Any()).Return().Times(1)
 
 	result, err := s.engine.NewExecution(
 		context.Background(),
@@ -251,6 +252,7 @@ func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_AllowDuplicate() {
 			return tests.CreateWorkflowExecutionResponse, nil
 		},
 	).Times(1)
+	s.mockEngine.EXPECT().NotifyChasmExecution(gomock.Any(), gomock.Any()).Return().Times(1)
 
 	result, err := s.engine.NewExecution(
 		context.Background(),
@@ -306,6 +308,7 @@ func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_FailedOnly_Success() {
 			return tests.CreateWorkflowExecutionResponse, nil
 		},
 	).Times(1)
+	s.mockEngine.EXPECT().NotifyChasmExecution(gomock.Any(), gomock.Any()).Return().Times(1)
 
 	result, err := s.engine.NewExecution(
 		context.Background(),
@@ -549,7 +552,7 @@ func (s *chasmEngineSuite) currentRunConditionFailedErr(
 		RunID:            tv.RunID(),
 		State:            state,
 		Status:           status,
-		LastWriteVersion: s.namespaceEntry.FailoverVersion() - 1,
+		LastWriteVersion: s.namespaceEntry.FailoverVersion(tv.WorkflowID()) - 1,
 	}
 }
 
@@ -873,7 +876,7 @@ func (s *chasmEngineSuite) TestPollComponent_StaleState() {
 		RunId:       executionKey.RunID,
 		ArchetypeId: uint32(testComponentTypeID),
 		ExecutionVersionedTransition: &persistencespb.VersionedTransition{
-			NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion() + 1, // ahead of persisted state
+			NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(executionKey.BusinessID) + 1, // ahead of persisted state
 			TransitionCount:          testTransitionCount,
 		},
 	}
@@ -1013,7 +1016,7 @@ func (s *chasmEngineSuite) buildPersistenceMutableState(
 			},
 			TransitionHistory: []*persistencespb.VersionedTransition{
 				{
-					NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(),
+					NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(key.BusinessID),
 					TransitionCount:          testTransitionCount,
 				},
 			},
@@ -1030,11 +1033,11 @@ func (s *chasmEngineSuite) buildPersistenceMutableState(
 			"": {
 				Metadata: &persistencespb.ChasmNodeMetadata{
 					InitialVersionedTransition: &persistencespb.VersionedTransition{
-						NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(),
+						NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(key.BusinessID),
 						TransitionCount:          1,
 					},
 					LastUpdateVersionedTransition: &persistencespb.VersionedTransition{
-						NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(),
+						NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(key.BusinessID),
 						TransitionCount:          testTransitionCount,
 					},
 					Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{

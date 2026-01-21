@@ -1,10 +1,12 @@
 package tests
 
 import (
+	"math"
 	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
@@ -388,7 +390,24 @@ func TestMySQLHistoryCurrentExecutionSuite(t *testing.T) {
 		TearDownMySQLDatabase(t, cfg)
 	}()
 
-	s := sqltests.NewHistoryCurrentExecutionSuite(t, store)
+	s := sqltests.NewHistoryCurrentExecutionSuite(t, store, chasm.WorkflowArchetypeID)
+	suite.Run(t, s)
+}
+
+func TestMySQLHistoryCurrentChasmExecutionSuite(t *testing.T) {
+	cfg := NewMySQLConfig()
+	SetupMySQLDatabase(t, cfg)
+	SetupMySQLSchema(t, cfg)
+	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
+	if err != nil {
+		t.Fatalf("unable to create MySQL DB: %v", err)
+	}
+	defer func() {
+		_ = store.Close()
+		TearDownMySQLDatabase(t, cfg)
+	}()
+
+	s := sqltests.NewHistoryCurrentExecutionSuite(t, store, math.MaxUint32)
 	suite.Run(t, s)
 }
 

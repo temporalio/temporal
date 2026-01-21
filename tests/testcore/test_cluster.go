@@ -259,6 +259,7 @@ func newClusterWithPersistenceTestBaseFactory(t *testing.T, clusterConfig *TestC
 			},
 			Version: environment.GetESVersion(),
 		}
+		clusterConfig.ESConfig.SetDisableGzip() // lowers memory and CPU usage significantly
 
 		err := setupIndex(clusterConfig.ESConfig, logger)
 		if err != nil {

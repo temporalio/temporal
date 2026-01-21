@@ -107,7 +107,7 @@ func (d *namespaceHandler) RegisterNamespace(
 		}
 	}
 
-	if err := validateRetentionDuration(
+	if err := d.validateRetentionDuration(
 		registerRequest.WorkflowExecutionRetentionPeriod,
 		registerRequest.IsGlobalNamespace,
 	); err != nil {
@@ -441,7 +441,7 @@ func (d *namespaceHandler) UpdateNamespace(
 			configurationChanged = true
 
 			config.Retention = updatedConfig.GetWorkflowExecutionRetentionTtl()
-			if err := validateRetentionDuration(
+			if err := d.validateRetentionDuration(
 				config.Retention,
 				isGlobalNamespace,
 			); err != nil {
@@ -1057,16 +1057,19 @@ func (d *namespaceHandler) maybeUpdateFailoverHistory(
 }
 
 // validateRetentionDuration ensures that retention duration can't be set below a sane minimum.
-func validateRetentionDuration(retention *durationpb.Duration, isGlobalNamespace bool) error {
+func (d *namespaceHandler) validateRetentionDuration(retention *durationpb.Duration, isGlobalNamespace bool) error {
 	if err := timestamp.ValidateAndCapProtoDuration(retention); err != nil {
 		return errInvalidRetentionPeriod
 	}
 
-	min := namespace.MinRetentionLocal
+	var minRetention time.Duration
 	if isGlobalNamespace {
-		min = namespace.MinRetentionGlobal
+		minRetention = d.config.NamespaceMinRetentionGlobal()
+	} else {
+		minRetention = d.config.NamespaceMinRetentionLocal()
 	}
-	if timestamp.DurationValue(retention) < min {
+
+	if timestamp.DurationValue(retention) < minRetention {
 		return errInvalidRetentionPeriod
 	}
 	return nil

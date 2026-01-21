@@ -193,9 +193,9 @@ func (h *frontendHandler) ListActivityExecutions(
 
 	executions := make([]*apiactivitypb.ActivityExecutionListInfo, 0, len(resp.Executions))
 	for _, exec := range resp.Executions {
-		activityType, _ := chasm.GetValue(exec.ChasmSearchAttributes, TypeSearchAttribute)
-		taskQueue, _ := chasm.GetValue(exec.ChasmSearchAttributes, TaskQueueSearchAttribute)
-		statusStr, _ := chasm.GetValue(exec.ChasmSearchAttributes, StatusSearchAttribute)
+		activityType, _ := chasm.SearchAttributeValue(exec.ChasmSearchAttributes, TypeSearchAttribute)
+		taskQueue, _ := chasm.SearchAttributeValue(exec.ChasmSearchAttributes, chasm.SearchAttributeTaskQueue)
+		statusStr, _ := chasm.SearchAttributeValue(exec.ChasmSearchAttributes, StatusSearchAttribute)
 		status, _ := enumspb.ActivityExecutionStatusFromString(statusStr)
 
 		info := &apiactivitypb.ActivityExecutionListInfo{

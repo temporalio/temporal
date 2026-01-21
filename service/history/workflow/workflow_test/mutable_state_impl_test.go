@@ -208,7 +208,7 @@ func createMutableState(t *testing.T, nsEntry *namespace.Namespace, cfg *configs
 
 	clusterMetadata := shardContext.Resource.ClusterMetadata
 	clusterMetadata.EXPECT().ClusterNameForFailoverVersion(nsEntry.IsGlobalNamespace(),
-		nsEntry.FailoverVersion()).Return(cluster.TestCurrentClusterName).AnyTimes()
+		nsEntry.FailoverVersion(tests.WorkflowID)).Return(cluster.TestCurrentClusterName).AnyTimes()
 	clusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	clusterMetadata.EXPECT().GetClusterID().Return(int64(1)).AnyTimes()
 
