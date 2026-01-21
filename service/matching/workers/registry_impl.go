@@ -78,14 +78,13 @@ func newBucket() *bucket {
 }
 
 // upsertHeartbeats inserts or refreshes a WorkerHeartbeat under the given namespace.
-// Returns the net change in entry count (positive for new entries, negative for removals).
+// Returns the count of added and removed entries separately.
 // Workers with WORKER_STATUS_SHUTDOWN are immediately removed from the registry.
-func (b *bucket) upsertHeartbeats(nsID namespace.ID, heartbeats []*workerpb.WorkerHeartbeat) int64 {
+func (b *bucket) upsertHeartbeats(nsID namespace.ID, heartbeats []*workerpb.WorkerHeartbeat) (added int64, removed int64) {
 	now := time.Now()
 
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	var delta int64
 
 	mp, ok := b.namespaces[nsID]
 	if !ok {
@@ -101,7 +100,7 @@ func (b *bucket) upsertHeartbeats(nsID namespace.ID, heartbeats []*workerpb.Work
 			if e, exists := mp[key]; exists {
 				b.order.Remove(e.elem)
 				delete(mp, key)
-				delta--
+				removed++
 			}
 			continue
 		}
@@ -119,11 +118,11 @@ func (b *bucket) upsertHeartbeats(nsID namespace.ID, heartbeats []*workerpb.Work
 			}
 			e.elem = b.order.PushBack(e)
 			mp[key] = e
-			delta++
+			added++
 		}
 	}
 
-	return delta
+	return added, removed
 }
 
 // filterWorkers returns all WorkerHeartbeats in a namespace
@@ -246,8 +245,14 @@ func (m *registryImpl) getBucket(nsID namespace.ID) *bucket {
 // New entries increment the global counter.
 func (m *registryImpl) upsertHeartbeats(nsID namespace.ID, heartbeats []*workerpb.WorkerHeartbeat) {
 	b := m.getBucket(nsID)
-	delta := b.upsertHeartbeats(nsID, heartbeats)
-	m.total.Add(delta)
+	added, removed := b.upsertHeartbeats(nsID, heartbeats)
+	m.total.Add(added - removed)
+	if added > 0 {
+		metrics.WorkerRegistryWorkersAdded.With(m.metricsHandler).Record(added)
+	}
+	if removed > 0 {
+		metrics.WorkerRegistryWorkersRemoved.With(m.metricsHandler).Record(removed)
+	}
 	m.recordUtilizationMetric()
 }
 
@@ -336,6 +341,7 @@ func (m *registryImpl) evictByTTL() {
 	}
 	if removed > 0 {
 		m.total.Add(-removed)
+		metrics.WorkerRegistryWorkersRemoved.With(m.metricsHandler).Record(removed)
 	}
 }
 
@@ -359,6 +365,7 @@ func (m *registryImpl) evictByCapacity() {
 			if b.evictByCapacity(threshold) {
 				removedAny = true
 				m.total.Add(-1)
+				metrics.WorkerRegistryWorkersRemoved.With(m.metricsHandler).Record(1)
 			}
 		}
 
@@ -382,6 +389,16 @@ func (m *registryImpl) Stop() {
 func (m *registryImpl) RecordWorkerHeartbeats(nsID namespace.ID, nsName namespace.Name, workerHeartbeat []*workerpb.WorkerHeartbeat) {
 	m.upsertHeartbeats(nsID, workerHeartbeat)
 	m.recordPluginMetric(nsName, workerHeartbeat)
+	m.recordActivitySlotsMetric(workerHeartbeat)
+}
+
+// recordActivitySlotsMetric records the distribution of activity slots in use across workers.
+func (m *registryImpl) recordActivitySlotsMetric(heartbeats []*workerpb.WorkerHeartbeat) {
+	for _, hb := range heartbeats {
+		if hb.ActivityTaskSlotsInfo != nil {
+			metrics.WorkerRegistryActivitySlotsUsed.With(m.metricsHandler).Record(int64(hb.ActivityTaskSlotsInfo.CurrentUsedSlots))
+		}
+	}
 }
 
 func (m *registryImpl) ListWorkers(nsID namespace.ID, params ListWorkersParams) (ListWorkersResponse, error) {
