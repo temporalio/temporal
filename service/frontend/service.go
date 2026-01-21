@@ -220,14 +220,16 @@ type Config struct {
 	WorkflowRulesAPIsEnabled     dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	MaxWorkflowRulesPerNamespace dynamicconfig.IntPropertyFnWithNamespaceFilter
 
-	WorkerHeartbeatsEnabled   dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	ListWorkersEnabled        dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	WorkerCommandsEnabled     dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	WorkflowPauseEnabled      dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	StandaloneActivityEnabled dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	WorkerHeartbeatsEnabled dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	ListWorkersEnabled      dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	WorkerCommandsEnabled   dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	WorkflowPauseEnabled    dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	HTTPAllowedHosts   dynamicconfig.TypedPropertyFn[*regexp.Regexp]
 	AllowedExperiments dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]string]
+
+	// CHASM archetypes
+	Activity *activity.Config
 }
 
 // IsExperimentAllowed checks if an experiment is enabled for a given namespace in the dynamic config.
@@ -384,10 +386,11 @@ func NewConfig(
 		ListWorkersEnabled:             dynamicconfig.ListWorkersEnabled.Get(dc),
 		WorkerCommandsEnabled:          dynamicconfig.WorkerCommandsEnabled.Get(dc),
 		WorkflowPauseEnabled:           dynamicconfig.WorkflowPauseEnabled.Get(dc),
-		StandaloneActivityEnabled:      activity.Enabled.Get(dc),
 
 		HTTPAllowedHosts:   dynamicconfig.FrontendHTTPAllowedHosts.Get(dc),
 		AllowedExperiments: dynamicconfig.FrontendAllowedExperiments.Get(dc),
+
+		Activity: activity.ConfigProvider(dc),
 	}
 }
 
