@@ -1712,6 +1712,14 @@ func (pm *taskQueuePartitionManagerImpl) checkQueryBlackholed(
 	deploymentData *persistencespb.DeploymentData,
 	deployment *deploymentpb.Deployment,
 ) error {
+
+	// Only perform this check on the root partition.
+	// Forwarding (polls/tasks/queries) moves “up” the partition tree, so the root is the convergence point.
+	// Checking non-root partitions can incorrectly conclude “no pollers” simply because the pollers are on
+	// a different partition and have not been forwarded here (yet), leading to false blackhole errors.
+	if !pm.partition.IsRoot() {
+		return nil
+	}
 	// Check old format
 	for _, versionData := range deploymentData.GetVersions() {
 		if versionData.GetVersion() != nil && worker_versioning.DeploymentVersionFromDeployment(deployment).Equal(versionData.GetVersion()) {
@@ -1729,6 +1737,7 @@ func (pm *taskQueuePartitionManagerImpl) checkQueryBlackholed(
 			return serviceerror.NewFailedPreconditionf(ErrBlackholedQuery, deployment.GetBuildId(), deployment.GetBuildId())
 		}
 	}
+
 	return nil
 }
 
