@@ -1132,56 +1132,49 @@ func (s *Versioning3Suite) testWorkflowRetry(behavior workflow.VersioningBehavio
 
 	if retryOfCaN {
 		// wait for first run to continue-as-new
-		s.Eventually(func() bool {
+		s.EventuallyWithT(func(t *assert.CollectT) {
 			desc, err := s.SdkClient().DescribeWorkflow(ctx, wfIDOfRetryingWF, run0.GetRunID())
-			s.NoError(err)
-			if err != nil {
-				return false
+			if !assert.NoError(t, err) {
+				return
 			}
-			return desc.Status == enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW
-		}, 5*time.Second, 1*time.Millisecond)
+			assert.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW, desc.Status)
+		}, 5*time.Second, 100*time.Millisecond)
 	}
 
 	// wait for workflow to progress on v1 (activity completed and waiting for signal)
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, wfIDOfRetryingWF, "")
-		s.NoError(err)
-		if err != nil {
-			return false
+		if !assert.NoError(t, err) {
+			return
 		}
 		// Check if workflow is running on v1
-		return desc.GetWorkflowExecutionInfo().GetVersioningInfo().GetDeploymentVersion().GetBuildId() == tv1.BuildID()
-	}, 5*time.Second, 1*time.Millisecond)
+		assert.Equal(t, tv1.BuildID(), desc.GetWorkflowExecutionInfo().GetVersioningInfo().GetDeploymentVersion().GetBuildId())
+	}, 5*time.Second, 100*time.Millisecond)
 
 	// get run ID of first run of the workflow before it fails
 	if retryOfChild {
 		wfIDOfRetryingWF = childWorkflowID
 		// Wait for child workflow to be created
-		s.Eventually(func() bool {
+		s.EventuallyWithT(func(t *assert.CollectT) {
 			desc, err := s.SdkClient().DescribeWorkflow(ctx, wfIDOfRetryingWF, "")
-			s.NoError(err)
-			if err != nil {
-				return false
+			if !assert.NoError(t, err) {
+				return
 			}
 			runIDBeforeRetry = desc.WorkflowExecution.RunID
-			return true
-		}, 5*time.Second, 1*time.Millisecond)
+		}, 5*time.Second, 100*time.Millisecond)
 	} else if retryOfCaN {
 		// get the next run in the continue-as-new chain
-		s.Eventually(func() bool {
+		s.EventuallyWithT(func(t *assert.CollectT) {
 			continuedAsNewRunResp, err := s.SdkClient().DescribeWorkflow(ctx, wfIDOfRetryingWF, "")
-			s.NoError(err)
-			if err != nil {
-				return false
+			if !assert.NoError(t, err) {
+				return
 			}
 			caNRunID := continuedAsNewRunResp.WorkflowExecution.RunID
 			// confirm that it's a new run
-			if caNRunID != run0.GetRunID() {
+			if assert.NotEqual(t, run0.GetRunID(), caNRunID) {
 				runIDBeforeRetry = caNRunID
-				return true
 			}
-			return false
-		}, 5*time.Second, 1*time.Millisecond)
+		}, 5*time.Second, 100*time.Millisecond)
 	}
 
 	// Set v2 to current and propagate to all task queue partitions
@@ -1192,55 +1185,51 @@ func (s *Versioning3Suite) testWorkflowRetry(behavior workflow.VersioningBehavio
 	s.NoError(s.SdkClient().SignalWorkflow(ctx, wfIDOfRetryingWF, runIDBeforeRetry, "currentVersionChanged", nil))
 
 	// wait for run that will retry to fail
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		desc, err := s.SdkClient().DescribeWorkflow(ctx, wfIDOfRetryingWF, runIDBeforeRetry)
-		s.NoError(err)
-		if err != nil {
-			return false
+		if !assert.NoError(t, err) {
+			return
 		}
-		return desc.Status == enumspb.WORKFLOW_EXECUTION_STATUS_FAILED
-	}, 5*time.Second, 1*time.Millisecond)
+		assert.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_FAILED, desc.Status)
+	}, 5*time.Second, 100*time.Millisecond)
 
 	// get the execution info of the next run in the retry chain, wait for next run to start
 	var secondRunID string
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		secondRunResp, err := s.SdkClient().DescribeWorkflow(ctx, wfIDOfRetryingWF, "")
-		s.NoError(err)
-		if err != nil {
-			return false
+		if !assert.NoError(t, err) {
+			return
 		}
 		secondRunID = secondRunResp.WorkflowExecution.RunID
 		// confirm that it's a new run
-		if secondRunID != runIDBeforeRetry {
-			return true
-		}
-		return false
-	}, 5*time.Second, 1*time.Millisecond)
+		assert.NotEqual(t, runIDBeforeRetry, secondRunID)
+	}, 5*time.Second, 100*time.Millisecond)
 
 	// confirm that the second run eventually gets auto-upgrade behavior and runs on version 2 (no inherit)
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		secondRunResp, err := s.SdkClient().DescribeWorkflowExecution(ctx, wfIDOfRetryingWF, secondRunID)
-		s.NoError(err)
+		if !assert.NoError(t, err) {
+			return
+		}
 		switch behavior {
 		case workflow.VersioningBehaviorPinned:
-			if secondRunResp.GetWorkflowExecutionInfo().GetVersioningInfo().GetBehavior() != enumspb.VERSIONING_BEHAVIOR_PINNED {
-				return false
+			if !assert.Equal(t, enumspb.VERSIONING_BEHAVIOR_PINNED, secondRunResp.GetWorkflowExecutionInfo().GetVersioningInfo().GetBehavior()) {
+				return
 			}
 		case workflow.VersioningBehaviorAutoUpgrade:
-			if secondRunResp.GetWorkflowExecutionInfo().GetVersioningInfo().GetBehavior() != enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE {
-				return false
+			if !assert.Equal(t, enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE, secondRunResp.GetWorkflowExecutionInfo().GetVersioningInfo().GetBehavior()) {
+				return
 			}
 		default:
 		}
 		switch expectInherit {
 		case true:
-			return secondRunResp.GetWorkflowExecutionInfo().GetVersioningInfo().GetDeploymentVersion().GetBuildId() == tv1.BuildID()
+			assert.Equal(t, tv1.BuildID(), secondRunResp.GetWorkflowExecutionInfo().GetVersioningInfo().GetDeploymentVersion().GetBuildId())
 		case false:
-			return secondRunResp.GetWorkflowExecutionInfo().GetVersioningInfo().GetDeploymentVersion().GetBuildId() == tv2.BuildID()
+			assert.Equal(t, tv2.BuildID(), secondRunResp.GetWorkflowExecutionInfo().GetVersioningInfo().GetDeploymentVersion().GetBuildId())
 		default:
 		}
-		return true
-	}, 5*time.Second, 1*time.Millisecond)
+	}, 5*time.Second, 100*time.Millisecond)
 }
 
 func (s *Versioning3Suite) testUnpinnedWorkflowWithRamp(toUnversioned bool) {
