@@ -106,7 +106,7 @@ func (e *OperationTimeoutTaskExecutor) Validate(
 	ctx chasm.Context,
 	op *Operation,
 	attrs chasm.TaskAttributes,
-	task *nexusoperationpb.InvocationTimeoutTask,
+	task *nexusoperationpb.ScheduleToCloseTimeoutTask,
 ) (bool, error) {
 	return false, serviceerror.NewUnimplemented("unimplemented")
 }
@@ -115,7 +115,7 @@ func (e *OperationTimeoutTaskExecutor) Execute(
 	ctx chasm.MutableContext,
 	op *Operation,
 	attrs chasm.TaskAttributes,
-	task *nexusoperationpb.InvocationTimeoutTask,
+	task *nexusoperationpb.ScheduleToCloseTimeoutTask,
 ) error {
 	return serviceerror.NewUnimplemented("unimplemented")
 }

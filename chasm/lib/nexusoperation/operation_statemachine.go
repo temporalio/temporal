@@ -28,7 +28,7 @@ var transitionScheduled = chasm.NewTransition(
 			deadline := o.ScheduledTime.AsTime().Add(o.ScheduleToCloseTimeout.AsDuration())
 			ctx.AddTask(o, chasm.TaskAttributes{
 				ScheduledTime: deadline,
-			}, &nexusoperationpb.InvocationTimeoutTask{
+			}, &nexusoperationpb.ScheduleToCloseTimeoutTask{
 				Attempt: o.Attempt,
 			})
 		}
