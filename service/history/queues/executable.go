@@ -361,6 +361,8 @@ func (e *executableImpl) Execute() (retErr error) {
 		// namespace did a failover,
 		// reset task attempt since the execution logic used will change
 		e.resetAttempt()
+		// reset task priority since it changes between active/standby
+		e.priority = e.priorityAssigner.Assign(e)
 	}
 	e.lastActiveness = resp.ExecutedAsActive
 
