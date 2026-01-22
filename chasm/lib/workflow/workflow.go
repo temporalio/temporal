@@ -4,11 +4,15 @@ import (
 	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/callback"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
+	"go.temporal.io/server/chasm/lib/nexusoperation"
+	"go.temporal.io/server/chasm/lib/workflow/command"
 	"go.temporal.io/server/common/nexus/nexusrpc"
+	"go.temporal.io/server/common/softassert"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -25,15 +29,35 @@ type Workflow struct {
 
 	// Callbacks map is used to store the callbacks for the workflow.
 	Callbacks chasm.Map[string, *callback.Callback]
+
+	// Operations map is used to store the nexus operations for the workflow.
+	Operations chasm.Map[string, *nexusoperation.Operation]
+
+	// commandRegistry is an in-memory reference to the command handler registry.
+	// This is not persisted.
+	commandRegistry *command.Registry
 }
 
 func NewWorkflow(
-	_ chasm.MutableContext,
+	ctx chasm.MutableContext,
 	msPointer chasm.MSPointer,
 ) *Workflow {
+	lib, ok := ctx.Library(chasm.WorkflowLibraryName)
+	softassert.That(ctx.Logger(), ok, "workflow library not found")
+	wfLib, ok := lib.(*Library)
+	softassert.That(ctx.Logger(), ok, "workflow library not found")
 	return &Workflow{
-		MSPointer: msPointer,
+		MSPointer:       msPointer,
+		commandRegistry: wfLib.CommandRegistry(),
 	}
+}
+
+// Handler returns the command handler for a given command type.
+func (w *Workflow) Handler(t enumspb.CommandType) (command.Handler, bool) {
+	if w.commandRegistry == nil {
+		return nil, false
+	}
+	return w.commandRegistry.Handler(t)
 }
 
 func (w *Workflow) LifecycleState(

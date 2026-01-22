@@ -26,6 +26,8 @@ type Context interface {
 	ExecutionCloseTime() time.Time
 	// Logger returns a logger tagged with execution key and other chasm framework internal information.
 	Logger() log.Logger
+	// Library returns a registered library by name.
+	Library(name string) (Library, bool)
 
 	// Intent() OperationIntent
 	// ComponentOptions(Component) []ComponentOption
@@ -126,6 +128,10 @@ func (c *immutableCtx) ExecutionCloseTime() time.Time {
 
 func (c *immutableCtx) Logger() log.Logger {
 	return c.root.logger
+}
+
+func (c *immutableCtx) Library(name string) (Library, bool) {
+	return c.root.registry.Library(name)
 }
 
 func (c *immutableCtx) structuredRef(component Component) (ComponentRef, error) {

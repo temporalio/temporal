@@ -73,6 +73,12 @@ func (r *Registry) RegisterServices(server *grpc.Server) {
 	}
 }
 
+// Library returns a registered library by name.
+func (r *Registry) Library(name string) (Library, bool) {
+	lib, ok := r.libraries[name]
+	return lib, ok
+}
+
 // ComponentFqnByID converts component type ID to fully qualified component type name.
 // This method should only be used by CHASM framework internal code,
 // NOT CHASM library developers.

@@ -20,6 +20,9 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/chasm"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
+	chasmcommand "go.temporal.io/server/chasm/lib/workflow/command"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/collection"
@@ -317,14 +320,39 @@ func (handler *workflowTaskCompletedHandler) handleCommand(
 		return nil, handler.handleCommandProtocolMessage(ctx, command.GetProtocolMessageCommandAttributes(), msgs)
 
 	default:
-		// Nexus command handlers are registered in /components/nexusoperations/workflow/commands.go
-		ch, ok := handler.commandHandlerRegistry.Handler(command.GetCommandType())
-		if !ok {
-			return nil, serviceerror.NewInvalidArgumentf("Unknown command type: %v", command.GetCommandType())
+		var commandHandler chasmcommand.Handler
+		var chasmCtx chasm.MutableContext
+
+		if handler.mutableState.ChasmEnabled() {
+			// Use CHASM command handler from the Workflow component.
+			var wf *chasmworkflow.Workflow
+			wf, chasmCtx, err = handler.mutableState.ChasmWorkflowComponent(ctx)
+			if err != nil {
+				return nil, err
+			}
+
+			var ok bool
+			commandHandler, ok = wf.Handler(command.GetCommandType())
+			if !ok {
+				return nil, serviceerror.NewInvalidArgumentf("Unknown command type: %v", command.GetCommandType())
+			}
+		} else {
+			// Use HSM command handler.
+			legacyHandler, ok := handler.commandHandlerRegistry.Handler(command.GetCommandType())
+			if !ok {
+				return nil, serviceerror.NewInvalidArgumentf("Unknown command type: %v", command.GetCommandType())
+			}
+
+			// Wrap HSM command handler to match CHASM command handler signature.
+			commandHandler = func(_ chasm.MutableContext, ms chasmcommand.Backend, v chasmcommand.Validator, id int64, cmd *commandpb.Command) error {
+				return legacyHandler(ctx, ms.(historyi.MutableState), v, id, cmd)
+			}
 		}
+
+		// Invoke command handler.
 		validator := commandValidator{sizeChecker: handler.sizeLimitChecker, commandType: command.GetCommandType()}
-		err := ch(ctx, handler.mutableState, validator, handler.workflowTaskCompletedID, command)
-		var failWFTErr workflow.FailWorkflowTaskError
+		err = commandHandler(chasmCtx, handler.mutableState, validator, handler.workflowTaskCompletedID, command)
+		var failWFTErr chasmcommand.FailWorkflowTaskError
 		if errors.As(err, &failWFTErr) {
 			if failWFTErr.TerminateWorkflow {
 				return nil, handler.terminateWorkflow(failWFTErr.Cause, failWFTErr)
@@ -1505,7 +1533,7 @@ func (c *workflowTaskFailedCause) Message() string {
 	return fmt.Sprintf("%v: %v", c.failedCause, c.causeErr.Error())
 }
 
-// commandValidator implements [workflow.CommandValidator] for use in registered command handlers.
+// commandValidator implements [chasmcommand.Validator] for use in registered command handlers.
 type commandValidator struct {
 	sizeChecker *workflowSizeChecker
 	commandType enumspb.CommandType

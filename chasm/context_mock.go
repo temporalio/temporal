@@ -16,6 +16,7 @@ type MockContext struct {
 	HandleRef                  func(component Component) ([]byte, error)
 	HandleExecutionCloseTime   func() time.Time
 	HandleStateTransitionCount func() int64
+	HandleLibrary              func(name string) (Library, bool)
 }
 
 func (c *MockContext) getContext() context.Context {
@@ -68,6 +69,13 @@ func (c *MockContext) Logger() log.Logger {
 		tag.WorkflowID(executionKey.BusinessID),
 		tag.WorkflowRunID(executionKey.RunID),
 	)
+}
+
+func (c *MockContext) Library(name string) (Library, bool) {
+	if c.HandleLibrary != nil {
+		return c.HandleLibrary(name)
+	}
+	return nil, false
 }
 
 // MockMutableContext is a mock implementation of [MutableContext] that records added tasks for inspection in
