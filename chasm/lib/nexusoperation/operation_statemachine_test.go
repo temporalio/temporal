@@ -202,6 +202,9 @@ func TestTransitionRescheduled(t *testing.T) {
 	require.Equal(t, nexusoperationpb.OPERATION_STATUS_SCHEDULED, operation.Status)
 	require.Equal(t, int32(2), operation.Attempt)
 
+	// Verify NextAttemptScheduleTime was cleared
+	require.Nil(t, operation.NextAttemptScheduleTime)
+
 	// Verify invocation task
 	require.Len(t, ctx.Tasks, 1)
 	invTask, ok := ctx.Tasks[0].Payload.(*nexusoperationpb.InvocationTask)
@@ -245,6 +248,11 @@ func TestTransitionStarted(t *testing.T) {
 			operation.Status = tc.startStatus
 			operation.Attempt = tc.startingAttempt
 
+			// Set NextAttemptScheduleTime if starting from BACKING_OFF to verify it gets cleared
+			if tc.startStatus == nexusoperationpb.OPERATION_STATUS_BACKING_OFF {
+				operation.NextAttemptScheduleTime = timestamppb.New(defaultTime.Add(time.Minute))
+			}
+
 			event := EventStarted{
 				OperationToken: tc.operationToken,
 			}
@@ -257,6 +265,9 @@ func TestTransitionStarted(t *testing.T) {
 			require.Equal(t, tc.operationToken, operation.OperationToken)
 			require.Equal(t, defaultTime, operation.LastAttemptCompleteTime.AsTime())
 			require.Nil(t, operation.LastAttemptFailure)
+
+			// Verify NextAttemptScheduleTime is cleared when leaving BACKING_OFF
+			require.Nil(t, operation.NextAttemptScheduleTime)
 
 			// No tasks should be emitted
 			require.Empty(t, ctx.Tasks)

@@ -79,6 +79,9 @@ var transitionRescheduled = chasm.NewTransition(
 	[]nexusoperationpb.OperationStatus{nexusoperationpb.OPERATION_STATUS_BACKING_OFF},
 	nexusoperationpb.OPERATION_STATUS_SCHEDULED,
 	func(o *Operation, ctx chasm.MutableContext, event EventRescheduled) error {
+		// Clear the next attempt schedule time
+		o.NextAttemptScheduleTime = nil
+
 		// Emit a new invocation task for the retry attempt
 		ctx.AddTask(o, chasm.TaskAttributes{}, &nexusoperationpb.InvocationTask{
 			Attempt: o.Attempt,
@@ -107,6 +110,10 @@ var transitionStarted = chasm.NewTransition(
 		o.Attempt++
 		o.LastAttemptCompleteTime = timestamppb.New(currentTime)
 		o.LastAttemptFailure = nil
+
+		// Clear the next attempt schedule time when leaving BACKING_OFF state
+		// This field is only valid in BACKING_OFF state
+		o.NextAttemptScheduleTime = nil
 
 		// Store the operation token for async completion
 		o.OperationToken = event.OperationToken
