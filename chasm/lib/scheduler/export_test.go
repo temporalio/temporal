@@ -3,7 +3,7 @@ package scheduler
 import (
 	"time"
 
-	enumspb "go.temporal.io/api/enums/v1"
+	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm"
 )
 
@@ -11,9 +11,13 @@ import (
 
 func (s *Scheduler) RecordCompletedAction(
 	ctx chasm.MutableContext,
-	scheduleTime time.Time,
-	workflowID string,
-	workflowStatus enumspb.WorkflowExecutionStatus,
-) {
-	s.recordCompletedAction(scheduleTime, workflowID, workflowStatus)
+	completed *schedulespb.CompletedResult,
+	requestID string,
+) time.Time {
+	invoker := s.Invoker.Get(ctx)
+	return invoker.recordCompletedAction(ctx, completed, requestID)
+}
+
+func (i *Invoker) RunningWorkflowID(requestID string) string {
+	return i.runningWorkflowID(requestID)
 }

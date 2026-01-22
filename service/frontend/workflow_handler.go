@@ -1226,7 +1226,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeat(ctx context.Context, requ
 	namespaceName := namespaceEntry.Name().String()
 
 	if len(taskToken.GetComponentRef()) > 0 && !wh.IsStandaloneActivityEnabled(namespaceName) {
-		return nil, serviceerror.NewUnavailable(activity.StandaloneActivityDisabledError)
+		return nil, activity.ErrStandaloneActivityDisabled
 	}
 
 	sizeLimitError := wh.config.BlobSizeLimitError(namespaceEntry.Name().String())
@@ -1419,7 +1419,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompleted(
 	namespaceName := namespaceEntry.Name().String()
 
 	if len(taskToken.GetComponentRef()) > 0 && !wh.IsStandaloneActivityEnabled(namespaceName) {
-		return nil, serviceerror.NewUnavailable(activity.StandaloneActivityDisabledError)
+		return nil, activity.ErrStandaloneActivityDisabled
 	}
 
 	if len(request.GetIdentity()) > wh.config.MaxIDLengthLimit() {
@@ -1611,7 +1611,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(
 	namespaceName := namespaceEntry.Name().String()
 
 	if len(taskToken.GetComponentRef()) > 0 && !wh.IsStandaloneActivityEnabled(namespaceName) {
-		return nil, serviceerror.NewUnavailable(activity.StandaloneActivityDisabledError)
+		return nil, activity.ErrStandaloneActivityDisabled
 	}
 
 	if request.GetFailure() != nil && request.GetFailure().GetApplicationFailureInfo() == nil {
@@ -1828,7 +1828,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceled(ctx context.Context, requ
 	namespaceName := namespaceEntry.Name().String()
 
 	if len(taskToken.GetComponentRef()) > 0 && !wh.IsStandaloneActivityEnabled(namespaceName) {
-		return nil, serviceerror.NewUnavailable(activity.StandaloneActivityDisabledError)
+		return nil, activity.ErrStandaloneActivityDisabled
 	}
 
 	if len(request.GetIdentity()) > wh.config.MaxIDLengthLimit() {
@@ -4436,7 +4436,17 @@ func (wh *WorkflowHandler) ListSchedules(
 		return nil, errListNotAllowed
 	}
 
-	query := ""
+	chasmEnabled := wh.chasmSchedulerEnabled(ctx, namespaceName.String())
+
+	// Use different base queries based on code path:
+	// - CHASM path uses TemporalSystemExecutionStatus (translated via archetype ID)
+	// - V1 path uses ExecutionStatus directly (no archetype ID available)
+	baseQuery := scheduler.VisibilityListQueryV1
+	if chasmEnabled {
+		baseQuery = scheduler.VisibilityListQueryChasm
+	}
+
+	query := baseQuery
 	if strings.TrimSpace(request.Query) != "" {
 		saNameType, err := wh.saProvider.GetSearchAttributes(wh.visibilityMgr.GetIndexName(), false)
 		if err != nil {
@@ -4451,12 +4461,10 @@ func (wh *WorkflowHandler) ListSchedules(
 		); err != nil {
 			return nil, err
 		}
-		query = fmt.Sprintf("%s AND (%s)", scheduler.VisibilityBaseListQuery, request.Query)
-	} else {
-		query = scheduler.VisibilityBaseListQuery
+		query = fmt.Sprintf("%s AND (%s)", baseQuery, request.Query)
 	}
 
-	if wh.chasmSchedulerEnabled(ctx, namespaceName.String()) {
+	if chasmEnabled {
 		// CHASM ListSchedules will include schedules created in the V1/workflow stack.
 		return wh.listSchedulesChasm(ctx, request, namespaceName, namespaceID, query)
 	}

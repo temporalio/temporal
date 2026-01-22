@@ -1516,26 +1516,28 @@ func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment_SetCurrentVersion()
 	secondVersion := tv.WithBuildIDNumber(2)
 
 	version1CreateTime := timestamppb.Now()
-	go s.pollFromDeployment(ctx, firstVersion)
+	// Start poller with cancellable context for deterministic control
+	pollerCtx, pollerCancel := context.WithCancel(ctx)
+	defer pollerCancel()
+	go s.pollFromDeployment(pollerCtx, firstVersion)
 
-	// No current deployment version set.
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := require.New(t)
+	// Wait for version to be created deterministically
+	s.ensureCreateVersionInDeployment(firstVersion)
 
-		resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
-			Namespace:      s.Namespace().String(),
-			DeploymentName: tv.DeploymentSeries(),
-		})
-		a.NoError(err)
-		a.Equal(worker_versioning.UnversionedVersionId, resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetCurrentVersion()) //nolint:staticcheck // SA1019: old worker versioning
-		a.Nil(resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetCurrentDeploymentVersion())
-	}, time.Second*10, time.Millisecond*1000)
+	// Verify no current deployment version is set initially
+	resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+		Namespace:      s.Namespace().String(),
+		DeploymentName: tv.DeploymentSeries(),
+	})
+	s.NoError(err)
+	s.Equal(worker_versioning.UnversionedVersionId, resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetCurrentVersion()) //nolint:staticcheck // SA1019: old worker versioning
+	s.Nil(resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetCurrentDeploymentVersion())
 
 	// Set first version as current version
 	firstVersionCurrentUpdateTime := timestamppb.Now()
 	s.setCurrentVersion(ctx, firstVersion, true, "")
 
-	resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+	resp, err = s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
 		Namespace:      s.Namespace().String(),
 		DeploymentName: tv.DeploymentSeries(),
 	})
@@ -1568,7 +1570,10 @@ func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment_SetCurrentVersion()
 
 	// Set a new second version and set it as the current version
 	version2CreateTime := timestamppb.Now()
-	go s.pollFromDeployment(ctx, secondVersion)
+	// Start second poller with cancellable context
+	poller2Ctx, poller2Cancel := context.WithCancel(ctx)
+	defer poller2Cancel()
+	go s.pollFromDeployment(poller2Ctx, secondVersion)
 	secondVersionCurrentUpdateTime := timestamppb.Now()
 	s.setCurrentVersion(ctx, secondVersion, true, "")
 
@@ -3138,7 +3143,10 @@ func (s *WorkerDeploymentSuite) TestDeleteWorkerDeployment_ValidDelete() {
 	tv1 := testvars.New(s).WithBuildIDNumber(1)
 
 	// Start deployment workflow 1 and wait for the deployment version to exist
-	s.startVersionWorkflow(ctx, tv1)
+	// Use a cancellable context so we can stop the poller before checking pollers disappeared
+	pollerCtx, pollerCancel := context.WithCancel(ctx)
+	defer pollerCancel()
+	s.startVersionWorkflow(pollerCtx, tv1)
 
 	// Signal the first version to be drained. Only do this in tests.
 	versionWorkflowID := workerdeployment.GenerateVersionWorkflowID(tv1.DeploymentSeries(), tv1.BuildID())
@@ -3165,6 +3173,9 @@ func (s *WorkerDeploymentSuite) TestDeleteWorkerDeployment_ValidDelete() {
 
 	err = s.SendSignal(s.Namespace().String(), workflowExecution, workerdeployment.SyncDrainageSignalName, signalPayload, tv1.ClientIdentity())
 	s.Nil(err)
+
+	// Stop the poller so it doesn't keep polling
+	pollerCancel()
 
 	// Wait for pollers going away
 	s.EventuallyWithT(func(t *assert.CollectT) {

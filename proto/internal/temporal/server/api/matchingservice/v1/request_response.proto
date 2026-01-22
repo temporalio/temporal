@@ -336,8 +336,10 @@ message GetTaskQueueUserDataRequest {
     // If the requester has no data, it should set this to 0.
     // This value must not be set to a negative number (note that our linter suggests avoiding uint64).
     int64 last_known_user_data_version = 3;
-    // If set and last_known_user_data_version is the current version, block until new data is
-    // available (or timeout).
+    // Same for ephemeral data.
+    int64 last_known_ephemeral_data_version = 7;
+    // If set and last_known_{user_data,ephemeral_data}_version is the current version,
+    // block until new data is available (or timeout).
     bool wait_new_data = 4;
     // If set, do not load task queue if unloaded. (Returns FailedPrecondition error in that case.)
     bool only_if_loaded = 6;
@@ -348,6 +350,7 @@ message GetTaskQueueUserDataResponse {
     // Versioned user data, set if the task queue has user data and the request's last_known_user_data_version is less
     // than the version cached in the root partition.
     temporal.server.api.persistence.v1.VersionedTaskQueueUserData user_data = 2;
+    temporal.server.api.taskqueue.v1.VersionedEphemeralData ephemeral_data = 3;
 }
 
 message SyncDeploymentUserDataRequest {

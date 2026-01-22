@@ -73,7 +73,7 @@ const (
 )
 
 type Versioning3Suite struct {
-	WorkflowUpdateBaseSuite
+	testcore.FunctionalTestBase
 	useV32                    bool
 	deploymentWorkflowVersion workerdeployment.DeploymentWorkflowVersion
 	useRevisionNumbers        bool
@@ -854,7 +854,7 @@ func (s *Versioning3Suite) TestUnpinnedWorkflow_SuccessfulUpdate_TransitionsToNe
 	s.setCurrentDeployment(tv2)
 
 	// Send update
-	updateResultCh := s.sendUpdateNoError(tv2)
+	updateResultCh := sendUpdateNoError(s, tv2)
 
 	// Process update in workflow
 	s.pollWftAndHandle(tv2, false, nil,
@@ -940,7 +940,7 @@ func (s *Versioning3Suite) TestUnpinnedWorkflow_FailedUpdate_DoesNotTransitionTo
 	s.setCurrentDeployment(tv2)
 
 	// Send update
-	updateResultCh := s.sendUpdateNoError(tv2)
+	updateResultCh := sendUpdateNoError(s, tv2)
 
 	// Process update in workflow
 	s.pollWftAndHandle(tv2, false, nil,
@@ -1003,11 +1003,6 @@ func (s *Versioning3Suite) TestUnpinnedWorkflow_FailedUpdate_DoesNotTransitionTo
 	// Since the poller rejected the update, the Worker Deployment Version that completed the last workflow task
 	// of this workflow execution should not have changed.
 	s.verifyWorkflowVersioning(s.Assertions, tv1, vbUnpinned, tv1.Deployment(), nil, nil)
-}
-
-func (s *Versioning3Suite) sendUpdateNoError(tv *testvars.TestVars) <-chan *workflowservice.UpdateWorkflowExecutionResponse {
-	s.T().Helper()
-	return s.sendUpdateNoErrorInternal(tv, nil)
 }
 
 func (s *Versioning3Suite) TestUnpinnedWorkflowWithRamp_ToVersioned() {
@@ -2423,7 +2418,7 @@ func (s *Versioning3Suite) testPinnedCaNUpgradeOnCaN(normalTask, speculativeTask
 		if normalTask {
 			s.triggerNormalWFT(ctx, tv1, execution)
 		} else if speculativeTask {
-			updateResultCh = s.sendUpdateNoError(tv1)
+			updateResultCh = sendUpdateNoError(s, tv1)
 		} else if transientTask {
 			s.triggerTransientWFT(ctx, tv1, execution)
 		}
@@ -5264,7 +5259,7 @@ func (s *Versioning3Suite) TestMaxVersionsInTaskQueue() {
 
 	// Pre-populate the task queue with maxVersions different deployment versions
 	// Each version will be in a separate deployment to ensure they count toward the limit
-	for i := 0; i < maxVersions; i++ {
+	for i := 0; i <= maxVersions; i++ {
 		tvVersion := tv.WithDeploymentSeriesNumber(i).WithBuildIDNumber(i)
 		upsertVersions := make(map[string]*deploymentspb.WorkerDeploymentVersionData)
 		upsertVersions[tvVersion.BuildID()] = &deploymentspb.WorkerDeploymentVersionData{
@@ -5286,7 +5281,7 @@ func (s *Versioning3Suite) TestMaxVersionsInTaskQueue() {
 
 	// Now try to poll with a new version from a new deployment
 	// This should fail with RESOURCE_EXHAUSTED_CAUSE_WORKER_DEPLOYMENT_LIMITS
-	tvNewVersion := tv.WithDeploymentSeriesNumber(maxVersions).WithBuildIDNumber(maxVersions)
+	tvNewVersion := tv.WithDeploymentSeriesNumber(999).WithBuildIDNumber(999)
 
 	pollCtx, pollCancel := context.WithTimeout(ctx, 10*time.Second)
 	defer pollCancel()
