@@ -266,8 +266,8 @@ func convertRunningWorkflowsToBufferedStarts(
 			StartTime:   timestamppb.New(migrationTime),
 			WorkflowId: wf.WorkflowId,
 			RunId:      wf.RunId,
-			// RequestId is used as the Nexus callback request ID when attaching
-			// completion callbacks to running workflows after migration.
+			// RequestId will be used with AttachRequestID to register Nexus
+			// callbacks for tracking workflow completion after migration.
 			RequestId: schedulescommon.GenerateRequestID(
 				namespaceID,
 				scheduleID,
