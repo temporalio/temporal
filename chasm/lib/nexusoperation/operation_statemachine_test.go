@@ -231,7 +231,7 @@ func TestTransitionStarted(t *testing.T) {
 			name:            "started from backing off",
 			startStatus:     nexusoperationpb.OPERATION_STATUS_BACKING_OFF,
 			startingAttempt: 3,
-			expectedAttempt: 4,
+			expectedAttempt: 3, // Attempt should not increment when coming from BACKING_OFF
 			operationToken:  "test-token-retry",
 		},
 	}
@@ -255,6 +255,7 @@ func TestTransitionStarted(t *testing.T) {
 
 			event := EventStarted{
 				OperationToken: tc.operationToken,
+				FromBackingOff: tc.startStatus == nexusoperationpb.OPERATION_STATUS_BACKING_OFF,
 			}
 
 			err := transitionStarted.Apply(operation, ctx, event)

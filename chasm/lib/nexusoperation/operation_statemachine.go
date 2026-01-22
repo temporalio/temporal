@@ -95,6 +95,9 @@ var transitionRescheduled = chasm.NewTransition(
 // asynchronous operation.
 type EventStarted struct {
 	OperationToken string
+	// FromBackingOff indicates whether this transition is from BACKING_OFF state
+	// Used to avoid double-counting attempts
+	FromBackingOff bool
 }
 
 var transitionStarted = chasm.NewTransition(
@@ -106,8 +109,11 @@ var transitionStarted = chasm.NewTransition(
 	func(o *Operation, ctx chasm.MutableContext, event EventStarted) error {
 		currentTime := ctx.Now(o)
 
-		// Record the attempt as successful
-		o.Attempt++
+		// Only increment attempt when NOT coming from BACKING_OFF state
+		// When coming from BACKING_OFF, the attempt was already incremented by transitionAttemptFailed
+		if !event.FromBackingOff {
+			o.Attempt++
+		}
 		o.LastAttemptCompleteTime = timestamppb.New(currentTime)
 		o.LastAttemptFailure = nil
 
