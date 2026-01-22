@@ -13,7 +13,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 )
 
@@ -77,9 +76,10 @@ func Invoke(
 		histories := executionInfo.GetVersionHistories().GetHistories()
 		branchTokens = make([][]byte, 0, len(histories))
 		for _, versionHistory := range histories {
-			if !versionhistory.IsEmptyVersionHistory(versionHistory) {
-				// non-workflows has empty version history and empty branch token
-				branchTokens = append(branchTokens, versionHistory.GetBranchToken())
+			branchToken := versionHistory.GetBranchToken()
+			if len(branchToken) != 0 {
+				// non-workflow executions have empty version history and empty branch token
+				branchTokens = append(branchTokens, branchToken)
 			}
 		}
 	}
