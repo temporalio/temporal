@@ -23,6 +23,7 @@ import (
 	"go.temporal.io/server/chasm"
 	chasmcallback "go.temporal.io/server/chasm/lib/callback"
 	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
+	chasmworker "go.temporal.io/server/chasm/lib/worker"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/archiver"
@@ -153,6 +154,7 @@ var (
 	ChasmLibraryOptions = fx.Options(
 		chasm.Module,
 		chasmworkflow.Module,
+		chasmworker.Module,
 		chasmscheduler.Module,
 		chasmcallback.Module,
 	)
@@ -1041,7 +1043,8 @@ var ServiceTracingModule = fx.Options(
 					return nil
 				}
 				return err
-			}})
+			},
+		})
 		return tp
 	}),
 	// Haven't had use for baggage propagation yet

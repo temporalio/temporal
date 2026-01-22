@@ -2718,6 +2718,35 @@ func (h *Handler) ResetActivity(
 	return response, nil
 }
 
+// ForceRescheduleActivity reschedules an activity when a worker dies.
+// Called by the CHASM worker lease expiry executor.
+func (h *Handler) ForceRescheduleActivity(
+	ctx context.Context, request *historyservice.ForceRescheduleActivityRequest,
+) (response *historyservice.ForceRescheduleActivityResponse, retError error) {
+	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
+
+	namespaceID := namespace.ID(request.GetNamespaceId())
+	workflowID := request.GetWorkflowId()
+	if request.GetNamespaceId() == "" {
+		return nil, h.convertError(errNamespaceNotSet)
+	}
+
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	response, err = engine.ForceRescheduleActivity(ctx, request)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	return response, nil
+}
+
 // PauseWorkflowExecution is used to pause a running workflow execution. This results in
 // WorkflowExecutionPaused event recorded in the history.
 func (h *Handler) PauseWorkflowExecution(ctx context.Context, request *historyservice.PauseWorkflowExecutionRequest) (_ *historyservice.PauseWorkflowExecutionResponse, retError error) {

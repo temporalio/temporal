@@ -96,6 +96,7 @@ type (
 		PauseActivity(ctx context.Context, request *historyservice.PauseActivityRequest) (*historyservice.PauseActivityResponse, error)
 		UnpauseActivity(ctx context.Context, request *historyservice.UnpauseActivityRequest) (*historyservice.UnpauseActivityResponse, error)
 		ResetActivity(ctx context.Context, request *historyservice.ResetActivityRequest) (*historyservice.ResetActivityResponse, error)
+		ForceRescheduleActivity(ctx context.Context, request *historyservice.ForceRescheduleActivityRequest) (*historyservice.ForceRescheduleActivityResponse, error)
 		PauseWorkflowExecution(ctx context.Context, request *historyservice.PauseWorkflowExecutionRequest) (*historyservice.PauseWorkflowExecutionResponse, error)
 		UnpauseWorkflowExecution(ctx context.Context, request *historyservice.UnpauseWorkflowExecutionRequest) (*historyservice.UnpauseWorkflowExecutionResponse, error)
 

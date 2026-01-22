@@ -224,6 +224,24 @@ func (t *timerQueueActiveTaskExecutor) executeActivityTimeoutTask(
 	updateMutableState := false
 	scheduleWorkflowTask := false
 
+	// PROTOTYPE: Skip heartbeat timeout processing (don't fail the activity).
+	// BUT we MUST clear the timer status bit so other timers (Start-To-Close) can be created.
+	if task.TimeoutType == enumspb.TIMEOUT_TYPE_HEARTBEAT {
+		ai, heartbeatTimeoutVis, ok := mutableState.GetActivityInfoWithTimerHeartbeat(task.EventID)
+		if ok && queues.IsTimeExpired(task, task.GetVisibilityTime(), heartbeatTimeoutVis) {
+			// Clear the heartbeat timer status bit so future timer generation can proceed
+			if err := mutableState.UpdateActivityTaskStatusWithTimerHeartbeat(
+				ai.ScheduledEventId, ai.TimerTaskStatus&^workflow.TimerTaskStatusCreatedHeartbeat, nil); err != nil {
+				return err
+			}
+			// Persist the change and generate any pending timers (like Start-To-Close)
+			return t.updateWorkflowExecution(ctx, weContext, mutableState, false)
+		}
+		// Timer already processed or activity not found - just return
+		release(nil)
+		return nil
+	}
+
 	// Need to clear activity heartbeat timer task mask for new activity timer task creation.
 	// NOTE: LastHeartbeatTimeoutVisibilityInSeconds is for deduping heartbeat timer creation as it's possible
 	// one heartbeat task was persisted multiple times with different taskIDs due to the retry logic
@@ -287,6 +305,7 @@ func (t *timerQueueActiveTaskExecutor) processSingleActivityTimeoutTask(
 		shouldUpdateMutableState:   false,
 		shouldScheduleWorkflowTask: false,
 	}
+
 
 	if timerSequenceID.Attempt < ai.Attempt {
 		//  The RetryActivity call below could update activity attempt, in which case we do not want to apply a timeout for the previous attempt.
