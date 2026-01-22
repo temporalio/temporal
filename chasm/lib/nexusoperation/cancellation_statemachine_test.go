@@ -164,9 +164,9 @@ func TestTransitionCancellationAttemptFailed(t *testing.T) {
 			// Verify next attempt schedule time was set with backoff (accounting for jitter)
 			require.NotNil(t, cancellation.NextAttemptScheduleTime)
 			actualInterval := cancellation.NextAttemptScheduleTime.AsTime().Sub(defaultCancellationTime)
-			require.True(t, actualInterval >= tc.minRetryInterval,
+			require.GreaterOrEqual(t, actualInterval, tc.minRetryInterval,
 				"retry interval %v should be >= %v", actualInterval, tc.minRetryInterval)
-			require.True(t, actualInterval <= tc.maxRetryInterval,
+			require.LessOrEqual(t, actualInterval, tc.maxRetryInterval,
 				"retry interval %v should be <= %v", actualInterval, tc.maxRetryInterval)
 
 			// Verify CancellationBackoffTask was emitted
