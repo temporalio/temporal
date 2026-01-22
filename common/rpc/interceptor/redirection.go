@@ -251,7 +251,7 @@ func (i *Redirection) handleRedirectAPIInvocation(
 	namespaceName namespace.Name,
 ) (_ any, retError error) {
 	var resp any
-	var clusterName string
+	var clusterName = i.currentClusterName
 	var err error
 
 	scope, startTime := i.BeforeCall(dcRedirectionMetricsPrefix + methodName)
@@ -293,13 +293,17 @@ func (i *Redirection) AfterCall(
 	namespaceName string,
 	retError error,
 ) {
-	metricsHandler = metricsHandler.WithTags(metrics.TargetClusterTag(clusterName))
-	metrics.ClientRedirectionLatency.With(metricsHandler).Record(i.timeSource.Now().Sub(startTime))
-	metricsHandler = metricsHandler.WithTags(metrics.NamespaceTag(namespaceName))
-	metrics.ClientRedirectionRequests.With(metricsHandler).Record(1)
-	if retError != nil {
-		metrics.ClientRedirectionFailures.With(metricsHandler).Record(1,
-			metrics.ServiceErrorTypeTag(retError))
+	// Only emit redirection metrics when actual cross-cluster redirection occurred
+	isActualRedirection := clusterName != i.currentClusterName
+	if isActualRedirection {
+		metricsHandler = metricsHandler.WithTags(metrics.TargetClusterTag(clusterName))
+		metrics.ClientRedirectionLatency.With(metricsHandler).Record(i.timeSource.Now().Sub(startTime))
+		metricsHandler = metricsHandler.WithTags(metrics.NamespaceTag(namespaceName))
+		metrics.ClientRedirectionRequests.With(metricsHandler).Record(1)
+		if retError != nil {
+			metrics.ClientRedirectionFailures.With(metricsHandler).Record(1,
+				metrics.ServiceErrorTypeTag(retError))
+		}
 	}
 }
 
