@@ -124,6 +124,8 @@ var transitionStarted = chasm.NewTransition(
 		// Store the operation token for async completion
 		o.OperationToken = event.OperationToken
 
+		// TODO: emit a cancellation task if a start-to-close timeout is configured
+
 		return nil
 	},
 )
