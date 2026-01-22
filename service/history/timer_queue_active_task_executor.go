@@ -224,14 +224,20 @@ func (t *timerQueueActiveTaskExecutor) executeActivityTimeoutTask(
 	updateMutableState := false
 	scheduleWorkflowTask := false
 
-	// PROTOTYPE: Skip heartbeat timeout processing entirely.
-	// Don't clear the status bit so no new heartbeat timer gets scheduled.
+	// PROTOTYPE: Skip heartbeat timeout processing (don't fail the activity).
+	// BUT we MUST clear the timer status bit so other timers (Start-To-Close) can be created.
 	if task.TimeoutType == enumspb.TIMEOUT_TYPE_HEARTBEAT {
-		t.logger.Info("Prototype: Ignoring heartbeat timeout (no reschedule)",
-			tag.WorkflowID(mutableState.GetExecutionInfo().WorkflowId),
-			tag.WorkflowRunID(mutableState.GetExecutionState().GetRunId()),
-			tag.WorkflowNamespaceID(mutableState.GetExecutionInfo().NamespaceId),
-		)
+		ai, heartbeatTimeoutVis, ok := mutableState.GetActivityInfoWithTimerHeartbeat(task.EventID)
+		if ok && queues.IsTimeExpired(task, task.GetVisibilityTime(), heartbeatTimeoutVis) {
+			// Clear the heartbeat timer status bit so future timer generation can proceed
+			if err := mutableState.UpdateActivityTaskStatusWithTimerHeartbeat(
+				ai.ScheduledEventId, ai.TimerTaskStatus&^workflow.TimerTaskStatusCreatedHeartbeat, nil); err != nil {
+				return err
+			}
+			// Persist the change and generate any pending timers (like Start-To-Close)
+			return t.updateWorkflowExecution(ctx, weContext, mutableState, false)
+		}
+		// Timer already processed or activity not found - just return
 		release(nil)
 		return nil
 	}
