@@ -1,6 +1,7 @@
 package activity
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 	"time"
@@ -22,6 +23,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payload"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tqid"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -195,6 +197,9 @@ func (a *Activity) HandleStarted(ctx chasm.MutableContext, request *historyservi
 	*historyservice.RecordActivityTaskStartedResponse, error,
 ) {
 	if err := TransitionStarted.Apply(a, ctx, request); err != nil {
+		if errors.Is(err, chasm.ErrInvalidTransition) {
+			return nil, serviceerrors.NewObsoleteMatchingTask(err.Error())
+		}
 		return nil, err
 	}
 	response := &historyservice.RecordActivityTaskStartedResponse{}
