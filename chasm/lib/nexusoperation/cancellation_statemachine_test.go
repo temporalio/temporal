@@ -41,9 +41,7 @@ func TestTransitionCancellationScheduled(t *testing.T) {
 	ctx := newTestCancellationContext()
 	cancellation := newTestCancellation()
 
-	event := EventCancellationScheduled{
-		Time: defaultCancellationTime,
-	}
+	event := EventCancellationScheduled{}
 
 	err := transitionCancellationScheduled.Apply(cancellation, ctx, event)
 	require.NoError(t, err)
@@ -69,9 +67,7 @@ func TestTransitionCancellationScheduled_InvalidFromState(t *testing.T) {
 	cancellation := newTestCancellation()
 	cancellation.Status = nexusoperationpb.CANCELLATION_STATUS_SCHEDULED // Invalid from state
 
-	event := EventCancellationScheduled{
-		Time: defaultCancellationTime,
-	}
+	event := EventCancellationScheduled{}
 
 	err := transitionCancellationScheduled.Apply(cancellation, ctx, event)
 	require.Error(t, err)
@@ -144,7 +140,6 @@ func TestTransitionCancellationAttemptFailed(t *testing.T) {
 			retryPolicy := backoff.NewExponentialRetryPolicy(time.Second)
 
 			event := EventCancellationAttemptFailed{
-				Time:        defaultCancellationTime,
 				Failure:     failure,
 				RetryPolicy: retryPolicy,
 			}
@@ -201,7 +196,6 @@ func TestTransitionCancellationAttemptFailed_ClearsLastFailure(t *testing.T) {
 	retryPolicy := backoff.NewExponentialRetryPolicy(time.Second)
 
 	event := EventCancellationAttemptFailed{
-		Time:        defaultCancellationTime,
 		Failure:     newFailure,
 		RetryPolicy: retryPolicy,
 	}
@@ -241,7 +235,6 @@ func TestTransitionCancellationFailed(t *testing.T) {
 			}
 
 			event := EventCancellationFailed{
-				Time:    defaultCancellationTime,
 				Failure: failure,
 			}
 
@@ -278,7 +271,7 @@ func TestTransitionCancellationFailed_InvalidFromState(t *testing.T) {
 	}
 
 	event := EventCancellationFailed{
-		Time:    defaultCancellationTime,
+
 		Failure: failure,
 	}
 
@@ -293,9 +286,7 @@ func TestTransitionCancellationSucceeded(t *testing.T) {
 	cancellation.Status = nexusoperationpb.CANCELLATION_STATUS_SCHEDULED
 	cancellation.Attempt = 2
 
-	event := EventCancellationSucceeded{
-		Time: defaultCancellationTime,
-	}
+	event := EventCancellationSucceeded{}
 
 	err := transitionCancellationSucceeded.Apply(cancellation, ctx, event)
 	require.NoError(t, err)
@@ -322,9 +313,7 @@ func TestTransitionCancellationSucceeded_InvalidFromState(t *testing.T) {
 	cancellation := newTestCancellation()
 	cancellation.Status = nexusoperationpb.CANCELLATION_STATUS_UNSPECIFIED // Invalid from state
 
-	event := EventCancellationSucceeded{
-		Time: defaultCancellationTime,
-	}
+	event := EventCancellationSucceeded{}
 
 	err := transitionCancellationSucceeded.Apply(cancellation, ctx, event)
 	require.Error(t, err)
@@ -349,7 +338,7 @@ func TestTransitionCancellationScheduled_StateValidation(t *testing.T) {
 			cancellation := newTestCancellation()
 			cancellation.Status = status
 
-			event := EventCancellationScheduled{Time: defaultCancellationTime}
+			event := EventCancellationScheduled{}
 			err := transitionCancellationScheduled.Apply(cancellation, ctx, event)
 
 			if status == nexusoperationpb.CANCELLATION_STATUS_UNSPECIFIED {
@@ -410,7 +399,6 @@ func TestTransitionCancellationAttemptFailed_StateValidation(t *testing.T) {
 			cancellation.Status = status
 
 			event := EventCancellationAttemptFailed{
-				Time:        defaultCancellationTime,
 				Failure:     &failurepb.Failure{Message: "error"},
 				RetryPolicy: backoff.NewExponentialRetryPolicy(time.Second),
 			}
@@ -443,7 +431,7 @@ func TestTransitionCancellationSucceeded_StateValidation(t *testing.T) {
 			cancellation := newTestCancellation()
 			cancellation.Status = status
 
-			event := EventCancellationSucceeded{Time: defaultCancellationTime}
+			event := EventCancellationSucceeded{}
 			err := transitionCancellationSucceeded.Apply(cancellation, ctx, event)
 
 			if status == nexusoperationpb.CANCELLATION_STATUS_SCHEDULED {
@@ -469,7 +457,7 @@ func TestTransitionCancellationFailed_MultipleFromStates(t *testing.T) {
 			cancellation.Status = fromStatus
 
 			event := EventCancellationFailed{
-				Time:    defaultCancellationTime,
+
 				Failure: &failurepb.Failure{Message: "error"},
 			}
 
