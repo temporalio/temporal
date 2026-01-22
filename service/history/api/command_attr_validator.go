@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/priorities"
 	"go.temporal.io/server/common/retrypolicy"
@@ -530,6 +531,10 @@ func (v *CommandAttrValidator) ValidateStartChildExecutionAttributes(
 	if attributes.TaskQueue == nil {
 		attributes.TaskQueue = &taskqueuepb.TaskQueue{
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		}
+	} else {
+		if err := primitives.CheckInternalPerNsTaskQueueAllowed(parentInfo.TaskQueue, attributes.TaskQueue.Name); err != nil {
+			return failedCause, err
 		}
 	}
 	if err := tqid.NormalizeAndValidate(attributes.TaskQueue, parentInfo.TaskQueue, v.maxIDLengthLimit); err != nil {

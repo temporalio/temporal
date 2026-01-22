@@ -452,6 +452,9 @@ func (handler *workflowTaskCompletedHandler) handleCommandScheduleActivity(
 			)
 		},
 	); err != nil || handler.stopProcessing {
+		if err != nil {
+			handler.logger.Info("Invalid activity schedule attributes", tag.Error(err))
+		}
 		return nil, nil, err
 	}
 

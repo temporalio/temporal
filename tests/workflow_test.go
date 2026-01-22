@@ -1709,7 +1709,7 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_Invalid_DeploymentSearchA
 
 func (s *WorkflowTestSuite) TestStartWorkflowExecution_InternalTaskQueue() {
 	tv := testvars.New(s.T())
-	errorMessageKeyword := "a temporal-system internal task queue"
+	errorMessageKeyword := "per-ns-tq"
 
 	// Test StartWorkflowExecution with internal task queue
 	s.Run("StartWorkflowExecution_PerNSWorkerTaskQueue", func() {
