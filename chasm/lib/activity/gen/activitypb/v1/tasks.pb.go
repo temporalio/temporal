@@ -24,8 +24,8 @@ const (
 
 type ActivityDispatchTask struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The current attempt number for this activity execution. Used for task validation.
-	Attempt       int32 `protobuf:"varint,1,opt,name=attempt,proto3" json:"attempt,omitempty"`
+	// The current stamp for this activity execution. Used for task validation. See also [ActivityAttemptState].
+	Stamp         int32 `protobuf:"varint,1,opt,name=stamp,proto3" json:"stamp,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -60,17 +60,17 @@ func (*ActivityDispatchTask) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *ActivityDispatchTask) GetAttempt() int32 {
+func (x *ActivityDispatchTask) GetStamp() int32 {
 	if x != nil {
-		return x.Attempt
+		return x.Stamp
 	}
 	return 0
 }
 
 type ScheduleToStartTimeoutTask struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The current attempt number for this activity execution. Used for task validation.
-	Attempt       int32 `protobuf:"varint,1,opt,name=attempt,proto3" json:"attempt,omitempty"`
+	// The current stamp for this activity execution. Used for task validation. See also [ActivityAttemptState].
+	Stamp         int32 `protobuf:"varint,1,opt,name=stamp,proto3" json:"stamp,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -105,9 +105,9 @@ func (*ScheduleToStartTimeoutTask) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *ScheduleToStartTimeoutTask) GetAttempt() int32 {
+func (x *ScheduleToStartTimeoutTask) GetStamp() int32 {
 	if x != nil {
-		return x.Attempt
+		return x.Stamp
 	}
 	return 0
 }
@@ -150,8 +150,8 @@ func (*ScheduleToCloseTimeoutTask) Descriptor() ([]byte, []int) {
 
 type StartToCloseTimeoutTask struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The current attempt number for this activity execution. Used for task validation.
-	Attempt       int32 `protobuf:"varint,1,opt,name=attempt,proto3" json:"attempt,omitempty"`
+	// The current stamp for this activity execution. Used for task validation. See also [ActivityAttemptState].
+	Stamp         int32 `protobuf:"varint,1,opt,name=stamp,proto3" json:"stamp,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -186,9 +186,9 @@ func (*StartToCloseTimeoutTask) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *StartToCloseTimeoutTask) GetAttempt() int32 {
+func (x *StartToCloseTimeoutTask) GetStamp() int32 {
 	if x != nil {
-		return x.Attempt
+		return x.Stamp
 	}
 	return 0
 }
@@ -196,8 +196,8 @@ func (x *StartToCloseTimeoutTask) GetAttempt() int32 {
 // HeartbeatTimeoutTask is a pure task that enforces heartbeat timeouts.
 type HeartbeatTimeoutTask struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The current attempt number for this activity execution. Used for task validation.
-	Attempt       int32 `protobuf:"varint,1,opt,name=attempt,proto3" json:"attempt,omitempty"`
+	// The current stamp for this activity execution. Used for task validation. See also [ActivityAttemptState].
+	Stamp         int32 `protobuf:"varint,1,opt,name=stamp,proto3" json:"stamp,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -232,9 +232,9 @@ func (*HeartbeatTimeoutTask) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_rawDescGZIP(), []int{4}
 }
 
-func (x *HeartbeatTimeoutTask) GetAttempt() int32 {
+func (x *HeartbeatTimeoutTask) GetStamp() int32 {
 	if x != nil {
-		return x.Attempt
+		return x.Stamp
 	}
 	return 0
 }
@@ -243,16 +243,16 @@ var File_temporal_server_chasm_lib_activity_proto_v1_tasks_proto protoreflect.Fi
 
 const file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_rawDesc = "" +
 	"\n" +
-	"7temporal/server/chasm/lib/activity/proto/v1/tasks.proto\x12+temporal.server.chasm.lib.activity.proto.v1\"0\n" +
-	"\x14ActivityDispatchTask\x12\x18\n" +
-	"\aattempt\x18\x01 \x01(\x05R\aattempt\"6\n" +
-	"\x1aScheduleToStartTimeoutTask\x12\x18\n" +
-	"\aattempt\x18\x01 \x01(\x05R\aattempt\"\x1c\n" +
-	"\x1aScheduleToCloseTimeoutTask\"3\n" +
-	"\x17StartToCloseTimeoutTask\x12\x18\n" +
-	"\aattempt\x18\x01 \x01(\x05R\aattempt\"0\n" +
-	"\x14HeartbeatTimeoutTask\x12\x18\n" +
-	"\aattempt\x18\x01 \x01(\x05R\aattemptBDZBgo.temporal.io/server/chasm/lib/activity/gen/activitypb;activitypbb\x06proto3"
+	"7temporal/server/chasm/lib/activity/proto/v1/tasks.proto\x12+temporal.server.chasm.lib.activity.proto.v1\",\n" +
+	"\x14ActivityDispatchTask\x12\x14\n" +
+	"\x05stamp\x18\x01 \x01(\x05R\x05stamp\"2\n" +
+	"\x1aScheduleToStartTimeoutTask\x12\x14\n" +
+	"\x05stamp\x18\x01 \x01(\x05R\x05stamp\"\x1c\n" +
+	"\x1aScheduleToCloseTimeoutTask\"/\n" +
+	"\x17StartToCloseTimeoutTask\x12\x14\n" +
+	"\x05stamp\x18\x01 \x01(\x05R\x05stamp\",\n" +
+	"\x14HeartbeatTimeoutTask\x12\x14\n" +
+	"\x05stamp\x18\x01 \x01(\x05R\x05stampBDZBgo.temporal.io/server/chasm/lib/activity/gen/activitypb;activitypbb\x06proto3"
 
 var (
 	file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_rawDescOnce sync.Once
