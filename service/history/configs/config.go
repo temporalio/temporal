@@ -299,6 +299,7 @@ type Config struct {
 	ReplicationReceiverMaxOutstandingTaskCount          dynamicconfig.IntPropertyFn
 	ReplicationReceiverSlowSubmissionLatencyThreshold   dynamicconfig.DurationPropertyFn
 	ReplicationReceiverSlowSubmissionWindow             dynamicconfig.DurationPropertyFn
+	EnableReplicationReceiverSlowSubmissionFlowControl  dynamicconfig.BoolPropertyFn
 	ReplicationResendMaxBatchCount                      dynamicconfig.IntPropertyFn
 	ReplicationProgressCacheMaxSize                     dynamicconfig.IntPropertyFn
 	ReplicationProgressCacheTTL                         dynamicconfig.DurationPropertyFn
@@ -586,6 +587,7 @@ func NewConfig(
 		ReplicationReceiverMaxOutstandingTaskCount:          dynamicconfig.ReplicationReceiverMaxOutstandingTaskCount.Get(dc),
 		ReplicationReceiverSlowSubmissionLatencyThreshold:   dynamicconfig.ReplicationReceiverSlowSubmissionLatencyThreshold.Get(dc),
 		ReplicationReceiverSlowSubmissionWindow:             dynamicconfig.ReplicationReceiverSlowSubmissionWindow.Get(dc),
+		EnableReplicationReceiverSlowSubmissionFlowControl:  dynamicconfig.EnableReplicationReceiverSlowSubmissionFlowControl.Get(dc),
 		ReplicationResendMaxBatchCount:                      dynamicconfig.ReplicationResendMaxBatchCount.Get(dc),
 		ReplicationProgressCacheMaxSize:                     dynamicconfig.ReplicationProgressCacheMaxSize.Get(dc),
 		ReplicationProgressCacheTTL:                         dynamicconfig.ReplicationProgressCacheTTL.Get(dc),

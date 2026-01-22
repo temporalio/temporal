@@ -40,10 +40,12 @@ func (s *streamReceiverFlowControllerImpl) GetFlowControlInfo(priority enumsspb.
 			return enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE
 		}
 
-		now := time.Now()
-		slowSubmissionWindow := now.Add(-s.config.ReplicationReceiverSlowSubmissionWindow())
-		if signalData.lastSlowSubmission.After(slowSubmissionWindow) {
-			return enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE
+		if s.config.EnableReplicationReceiverSlowSubmissionFlowControl() {
+			now := time.Now()
+			slowSubmissionWindow := now.Add(-s.config.ReplicationReceiverSlowSubmissionWindow())
+			if signalData.lastSlowSubmission.After(slowSubmissionWindow) {
+				return enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE
+			}
 		}
 	}
 	return enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_RESUME

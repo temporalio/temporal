@@ -51,6 +51,9 @@ func (f *flowControlTestSuite) SetupTest() {
 	f.config.ReplicationReceiverSlowSubmissionWindow = func() time.Duration {
 		return 5 * time.Second
 	}
+	f.config.EnableReplicationReceiverSlowSubmissionFlowControl = func() bool {
+		return false
+	}
 	f.controller = NewReceiverFlowControl(signals, f.config)
 	f.maxOutStandingTasks = f.config.ReplicationReceiverMaxOutstandingTaskCount()
 }
@@ -115,6 +118,9 @@ func (f *flowControlTestSuite) TestBoundaryCondition() {
 }
 
 func (f *flowControlTestSuite) TestSubmitLatency() {
+	f.config.EnableReplicationReceiverSlowSubmissionFlowControl = func() bool {
+		return true
+	}
 	slowSubmissionWindow := f.config.ReplicationReceiverSlowSubmissionWindow()
 	now := time.Now()
 

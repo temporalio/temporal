@@ -2576,6 +2576,11 @@ that task will be sent to DLQ.`,
 		10*time.Second,
 		`Time window within which a slow submission will pause replication flow control`,
 	)
+	EnableReplicationReceiverSlowSubmissionFlowControl = NewGlobalBoolSetting(
+		"history.EnableReplicationReceiverSlowSubmissionFlowControl",
+		false,
+		`Enable slow submission flow control check in replication receiver`,
+	)
 	ReplicationResendMaxBatchCount = NewGlobalIntSetting(
 		"history.ReplicationResendMaxBatchCount",
 		10,
