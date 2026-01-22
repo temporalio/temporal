@@ -1412,6 +1412,6 @@ func (s *ScheduleCHASMFunctionalSuite) TestCreateScheduleAlreadyExists() {
 	s.Error(err)
 
 	var alreadyExists *serviceerror.AlreadyExists
-	s.True(errors.As(err, &alreadyExists), "expected AlreadyExists error, got: %v", err)
+	s.ErrorAs(err, &alreadyExists)
 	s.Contains(err.Error(), sid)
 }
