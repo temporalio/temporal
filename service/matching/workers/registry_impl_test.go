@@ -615,8 +615,8 @@ func TestActivitySlotsMetric(t *testing.T) {
 	snapshot := capture.Snapshot()
 	activitySlotsMetrics := snapshot["worker_registry_activity_slots_used"]
 	assert.Len(t, activitySlotsMetrics, 2, "should have activity slots metric for workers with slots info")
-	assert.Equal(t, float64(5), activitySlotsMetrics[0].Value, "should record 5 slots for worker1")
-	assert.Equal(t, float64(10), activitySlotsMetrics[1].Value, "should record 10 slots for worker2")
+	assert.InDelta(t, float64(5), activitySlotsMetrics[0].Value, 0.0001, "should record 5 slots for worker1")
+	assert.InDelta(t, float64(10), activitySlotsMetrics[1].Value, 0.0001, "should record 10 slots for worker2")
 }
 
 // TestPluginMetricsExported verifies that plugin metrics are correctly recorded
