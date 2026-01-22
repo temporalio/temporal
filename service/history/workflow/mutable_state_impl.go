@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/enums"
@@ -6973,10 +6974,34 @@ type closeTransactionResult struct {
 	chasmNodesMutation chasm.NodesMutation
 }
 
+func (ms *MutableStateImpl) setMetaDataMap(
+	ctx context.Context,
+) {
+	switch ms.chasmTree.ArchetypeID() {
+	case chasm.WorkflowArchetypeID, chasm.UnspecifiedArchetypeID:
+		// Set workflow type
+		if wfType := ms.GetWorkflowType(); wfType != nil && wfType.GetName() != "" {
+			contextutil.ContextMetadataSet(ctx, "workflow-type", wfType.GetName())
+		}
+
+		// Set workflow task queue
+		if ms.executionInfo != nil && ms.executionInfo.TaskQueue != "" {
+			contextutil.ContextMetadataSet(ctx, "workflow-task-queue", ms.executionInfo.TaskQueue)
+		}
+
+		// TODO: To set activity_type/activity_task_queue metadata, the history gRPC handler should
+		// set the relevant activity information on the metadata context before calling mutable state.
+	default:
+		// No metadata to set for other archetype types
+	}
+}
+
 func (ms *MutableStateImpl) closeTransaction(
-	ctx context.Context, // TODO Attach metadata map to context based on mutable state archetype
+	ctx context.Context,
 	transactionPolicy historyi.TransactionPolicy,
 ) (closeTransactionResult, error) {
+	ms.setMetaDataMap(ctx)
+
 	if err := ms.closeTransactionWithPolicyCheck(
 		transactionPolicy,
 	); err != nil {

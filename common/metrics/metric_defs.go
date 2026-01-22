@@ -1160,6 +1160,18 @@ var (
 		"worker_registry_capacity_utilization",
 		WithDescription("Tracks the ratio of total entries to maxItems."),
 	)
+	WorkerRegistryWorkersAdded = NewCounterDef(
+		"worker_registry_workers_added",
+		WithDescription("Count of new workers registered in the worker registry."),
+	)
+	WorkerRegistryWorkersRemoved = NewCounterDef(
+		"worker_registry_workers_removed",
+		WithDescription("Count of workers removed from the worker registry."),
+	)
+	WorkerRegistryActivitySlotsUsed = NewDimensionlessHistogramDef(
+		"worker_registry_activity_slots_used",
+		WithDescription("Number of activity slots in use per worker."),
+	)
 	// ----------------------------------------------------------------------------------------------------------------
 	// Matching service: Metrics to understand plugin adoption.
 	WorkerPluginNameMetric = NewGaugeDef(
