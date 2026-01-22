@@ -164,7 +164,9 @@ func processActivityOptionsUpdate(
 	}
 
 	// validate the updated options
-	adjustedOptions, err := adjustActivityOptions(validator, namespaceID, ai.ActivityId, ai.ActivityType, mergeInto)
+	workflowTaskQueue := mutableState.CurrentTaskQueue()
+	adjustedOptions, err := adjustActivityOptions(
+		validator, namespaceID, ai.ActivityId, ai.ActivityType, mergeInto, workflowTaskQueue)
 	if err != nil {
 		return nil, err
 	}
@@ -282,6 +284,7 @@ func adjustActivityOptions(
 	activityID string,
 	activityType *commonpb.ActivityType,
 	ao *activitypb.ActivityOptions,
+	workflowTaskQueue *taskqueuepb.TaskQueue,
 ) (*activitypb.ActivityOptions, error) {
 	attributes := &commandpb.ScheduleActivityTaskCommandAttributes{
 		TaskQueue:              ao.TaskQueue,
@@ -293,7 +296,8 @@ func adjustActivityOptions(
 		ActivityType:           activityType,
 	}
 
-	_, err := validator.ValidateActivityScheduleAttributes(namespace.ID(namespaceID), attributes, nil)
+	_, err := validator.ValidateActivityScheduleAttributes(
+		namespace.ID(namespaceID), attributes, nil, workflowTaskQueue)
 	if err != nil {
 		return nil, err
 	}

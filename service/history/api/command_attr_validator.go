@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/priorities"
 	"go.temporal.io/server/common/retrypolicy"
@@ -76,6 +77,7 @@ func (v *CommandAttrValidator) ValidateActivityScheduleAttributes(
 	namespaceID namespace.ID,
 	attributes *commandpb.ScheduleActivityTaskCommandAttributes,
 	runTimeout *durationpb.Duration,
+	workflowTaskQueue *taskqueuepb.TaskQueue,
 ) (enumspb.WorkflowTaskFailedCause, error) {
 	const failedCause = enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_ACTIVITY_ATTRIBUTES
 
@@ -106,6 +108,10 @@ func (v *CommandAttrValidator) ValidateActivityScheduleAttributes(
 		StartToCloseTimeout:    attributes.GetStartToCloseTimeout(),
 		HeartbeatTimeout:       attributes.GetHeartbeatTimeout(),
 		RetryPolicy:            attributes.RetryPolicy,
+	}
+
+	if err := primitives.CheckInternalPerNsTaskQueueAllowed(workflowTaskQueue.Name, attributes.TaskQueue.Name); err != nil {
+		return failedCause, err
 	}
 
 	err := activity.ValidateAndNormalizeActivityAttributes(
@@ -530,6 +536,10 @@ func (v *CommandAttrValidator) ValidateStartChildExecutionAttributes(
 	if attributes.TaskQueue == nil {
 		attributes.TaskQueue = &taskqueuepb.TaskQueue{
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		}
+	} else {
+		if err := primitives.CheckInternalPerNsTaskQueueAllowed(parentInfo.TaskQueue, attributes.TaskQueue.Name); err != nil {
+			return failedCause, err
 		}
 	}
 	if err := tqid.NormalizeAndValidate(attributes.TaskQueue, parentInfo.TaskQueue, v.maxIDLengthLimit); err != nil {

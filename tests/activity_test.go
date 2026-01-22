@@ -31,6 +31,8 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/tests/testcore"
@@ -1480,4 +1482,83 @@ func (s *ActivityTestSuite) mockWorkflowWithErrorActivity(activityInfo chan<- ac
 	w.RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{Name: workflowType})
 	w.RegisterActivity(mockErrorActivity)
 	return w, wf
+}
+
+func (s *ActivityTestSuite) TestActivityScheduleToInternalTaskQueue_Blocked() {
+	id := testcore.RandomizeStr(s.T().Name())
+	wt := "test-activity-schedule-to-internal-taskqueue-type"
+	tl := "test-activity-schedule-to-internal-taskqueue-taskqueue"
+	identity := "worker1"
+
+	workflowType := &commonpb.WorkflowType{Name: wt}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+
+	request := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.NewString(),
+		Namespace:           s.Namespace().String(),
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+		Identity:            identity,
+	}
+
+	we, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	s.NoError(err)
+
+	// workflow logic: try to schedule an activity on internal task queue
+	tv := testvars.New(s.T()).WithTaskQueue(tl)
+	activityScheduled := false
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		if !activityScheduled {
+			activityScheduled = true
+			commands := []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{
+					ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+						ActivityId:   "1",
+						ActivityType: &commonpb.ActivityType{Name: "test-activity"},
+						TaskQueue: &taskqueuepb.TaskQueue{
+							Name: primitives.PerNSWorkerTaskQueue,
+							Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+						},
+						ScheduleToCloseTimeout: durationpb.New(10 * time.Second),
+					},
+				},
+			}}
+			return &workflowservice.RespondWorkflowTaskCompletedRequest{
+				Commands: commands,
+			}, nil
+		}
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
+	}
+
+	poller := taskpoller.New(s.T(), s.FrontendClient(), s.Namespace().String())
+
+	// poll workflow task
+	_, err = poller.PollAndHandleWorkflowTask(tv, wtHandler)
+	s.Error(err, "Expected error when scheduling activity on internal task queue")
+	var invalidArgument *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArgument)
+	s.Contains(err.Error(), "internal per-ns-worker")
+
+	// Verify workflow task failed
+	historyEvents := s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{
+		WorkflowId: id,
+		RunId:      we.RunId,
+	})
+
+	var foundTaskFailed bool
+	for _, event := range historyEvents {
+		if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED {
+			foundTaskFailed = true
+			attrs := event.GetWorkflowTaskFailedEventAttributes()
+			s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_ACTIVITY_ATTRIBUTES, attrs.GetCause())
+			s.Contains(attrs.GetFailure().GetMessage(), "cannot use internal per-ns-worker task queues")
+			break
+		}
+	}
+	s.True(foundTaskFailed, "WorkflowTaskFailed event should be recorded")
 }

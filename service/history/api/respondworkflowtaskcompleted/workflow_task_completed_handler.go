@@ -443,12 +443,16 @@ func (handler *workflowTaskCompletedHandler) handleCommandScheduleActivity(
 		}
 	}
 
+	// todo, maki:
+	// try to understand sticky queue, and if this impacts our check
+	workflowTaskQueue := handler.mutableState.CurrentTaskQueue()
 	if err := handler.validateCommandAttr(
 		func() (enumspb.WorkflowTaskFailedCause, error) {
 			return handler.attrValidator.ValidateActivityScheduleAttributes(
 				namespaceID,
 				attr,
 				executionInfo.WorkflowRunTimeout,
+				workflowTaskQueue,
 			)
 		},
 	); err != nil || handler.stopProcessing {

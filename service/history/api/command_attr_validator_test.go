@@ -13,6 +13,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -730,5 +731,152 @@ func (s *commandAttrValidatorSuite) TestValidateCommandSequence_InvalidTerminalC
 		))
 		s.Error(err)
 		s.IsType(&serviceerror.InvalidArgument{}, err)
+	}
+}
+
+func (s *commandAttrValidatorSuite) TestValidateActivityScheduleAttributes_InternalTaskQueue() {
+	testCases := []struct {
+		name              string
+		workflowTaskQueue string
+		activityTaskQueue string
+		expectError       bool
+		errorMessage      string
+	}{
+		{
+			name:              "internal workflow task queue with non-internal activity task queue is allowed",
+			workflowTaskQueue: primitives.PerNSWorkerTaskQueue,
+			activityTaskQueue: "user-activity-task-queue",
+			expectError:       false,
+		},
+		{
+			name:              "internal workflow task queue with internal activity task queue is allowed",
+			workflowTaskQueue: primitives.PerNSWorkerTaskQueue,
+			activityTaskQueue: primitives.PerNSWorkerTaskQueue,
+			expectError:       false,
+		},
+		{
+			name:              "non-internal workflow task queue with non-internal activity task queue is allowed",
+			workflowTaskQueue: "user-workflow-task-queue",
+			activityTaskQueue: "user-activity-task-queue",
+			expectError:       false,
+		},
+		{
+			name:              "non-internal workflow task queue with internal activity task queue is not allowed",
+			workflowTaskQueue: "user-workflow-task-queue",
+			activityTaskQueue: primitives.PerNSWorkerTaskQueue,
+			expectError:       true,
+		},
+	}
+
+	for _, tt := range testCases {
+		s.Run(tt.name, func() {
+			attributes := &commandpb.ScheduleActivityTaskCommandAttributes{
+				ActivityId: "test-activity-id",
+				ActivityType: &commonpb.ActivityType{
+					Name: "test-activity-type",
+				},
+				TaskQueue: &taskqueuepb.TaskQueue{
+					Name: tt.activityTaskQueue,
+				},
+				ScheduleToCloseTimeout: durationpb.New(time.Minute),
+			}
+
+			workflowTaskQueue := &taskqueuepb.TaskQueue{
+				Name: tt.workflowTaskQueue,
+			}
+
+			fc, err := s.validator.ValidateActivityScheduleAttributes(
+				s.testNamespaceID,
+				attributes,
+				nil, // runTimeout
+				workflowTaskQueue,
+			)
+
+			if tt.expectError {
+				s.Error(err)
+				var invalidArgument *serviceerror.InvalidArgument
+				s.ErrorAs(err, &invalidArgument)
+				s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_ACTIVITY_ATTRIBUTES, fc)
+			} else {
+				s.NoError(err)
+				s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, fc)
+			}
+		})
+	}
+}
+
+func (s *commandAttrValidatorSuite) TestValidateStartChildExecutionAttributes_InternalTaskQueue() {
+	testCases := []struct {
+		name            string
+		parentTaskQueue string
+		childTaskQueue  string
+		expectError     bool
+	}{
+		{
+			name:            "internal parent task queue with non-internal child task queue is allowed",
+			parentTaskQueue: primitives.PerNSWorkerTaskQueue,
+			childTaskQueue:  "user-child-task-queue",
+			expectError:     false,
+		},
+		{
+			name:            "internal parent task queue with empty child task queue is allowed",
+			parentTaskQueue: primitives.PerNSWorkerTaskQueue,
+			childTaskQueue:  "",
+			expectError:     false,
+		},
+		{
+			name:            "internal parent task queue with internal child task queue is allowed",
+			parentTaskQueue: primitives.PerNSWorkerTaskQueue,
+			childTaskQueue:  primitives.PerNSWorkerTaskQueue,
+			expectError:     false,
+		},
+		{
+			name:            "non-internal parent task queue with non-internal child task queue is allowed",
+			parentTaskQueue: "user-parent-task-queue",
+			childTaskQueue:  "user-child-task-queue",
+			expectError:     false,
+		},
+		{
+			name:            "non-internal parent task queue with internal child task queue is not allowed",
+			parentTaskQueue: "user-parent-task-queue",
+			childTaskQueue:  primitives.PerNSWorkerTaskQueue,
+			expectError:     true,
+		},
+	}
+
+	for _, tt := range testCases {
+		s.Run(tt.name, func() {
+			parentInfo := &persistencespb.WorkflowExecutionInfo{
+				TaskQueue:        tt.parentTaskQueue,
+				WorkflowId:       "test-parent-wf-id",
+				WorkflowTypeName: "test-parent-wf-type",
+			}
+			attributes := &commandpb.StartChildWorkflowExecutionCommandAttributes{
+				WorkflowId: "test-child-wf-id",
+				WorkflowType: &commonpb.WorkflowType{
+					Name: "test-child-wf-type",
+				},
+				TaskQueue: &taskqueuepb.TaskQueue{
+					Name: tt.childTaskQueue,
+				},
+				Namespace: "test-ns",
+			}
+			_, err := s.validator.ValidateStartChildExecutionAttributes(
+				s.testNamespaceID,
+				s.testNamespaceID,
+				namespace.Name("test-ns"),
+				attributes,
+				parentInfo,
+				dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Second),
+			)
+
+			if tt.expectError {
+				s.Error(err)
+				var invalidArgument *serviceerror.InvalidArgument
+				s.ErrorAs(err, &invalidArgument)
+			} else {
+				s.NoError(err)
+			}
+		})
 	}
 }
