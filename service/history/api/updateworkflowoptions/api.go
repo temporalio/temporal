@@ -4,15 +4,19 @@ import (
 	"context"
 
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/util"
+	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
+	"go.temporal.io/server/service/history/workflow"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
@@ -22,6 +26,8 @@ func Invoke(
 	request *historyservice.UpdateWorkflowExecutionOptionsRequest,
 	shardCtx historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
+	matchingClient matchingservice.MatchingServiceClient,
+	versionMembershipCache worker_versioning.VersionMembershipCache,
 ) (*historyservice.UpdateWorkflowExecutionOptionsResponse, error) {
 	req := request.GetUpdateRequest()
 	ns, err := api.GetActiveNamespace(shardCtx, namespace.ID(request.GetNamespaceId()), req.GetWorkflowExecution().GetWorkflowId())
@@ -46,7 +52,34 @@ func Invoke(
 				return nil, consts.ErrWorkflowCompleted
 			}
 
-			mergedOpts, hasChanges, err := MergeAndApply(mutableState, req.GetWorkflowExecutionOptions(), req.GetUpdateMask(), req.GetIdentity())
+			// If the requested override is pinned and omitted optional pinned version, fill in the current pinned version if it exists,
+			// or error if no pinned version exists.
+			// Clone the requested options to avoid mutating the original request but only do the cloning work if needed.
+			requestedOptions := req.GetWorkflowExecutionOptions()
+			if requestedOptions.GetVersioningOverride().GetPinned().GetBehavior() != workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_UNSPECIFIED &&
+				requestedOptions.GetVersioningOverride().GetPinned().GetVersion() == nil {
+				currentVersion := worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(workflow.GetEffectiveDeployment(mutableState.GetExecutionInfo().GetVersioningInfo()))
+				if effectiveBevior := workflow.GetEffectiveVersioningBehavior(mutableState.GetExecutionInfo().GetVersioningInfo()); effectiveBevior != enumspb.VERSIONING_BEHAVIOR_PINNED {
+					return nil, serviceerror.NewFailedPreconditionf("must specify a specific pinned override version because workflow with id %v has behavior %s and is not yet pinned to any version",
+						mutableState.GetExecutionInfo().GetWorkflowId(),
+						effectiveBevior.String(),
+					)
+				}
+				var ok bool
+				requestedOptions, ok = proto.Clone(requestedOptions).(*workflowpb.WorkflowExecutionOptions)
+				if !ok { // this will never happen, but linter wants me to check the casting, so do it just in case
+					return nil, serviceerror.NewInternalf("failed to copy workflow options to workflow options: %+v", requestedOptions)
+				}
+				requestedOptions.GetVersioningOverride().GetPinned().Version = currentVersion
+			}
+
+			// Validate versioning override, if any.
+			err = worker_versioning.ValidateVersioningOverride(ctx, requestedOptions.GetVersioningOverride(), matchingClient, versionMembershipCache, mutableState.GetExecutionInfo().GetTaskQueue(), enumspb.TASK_QUEUE_TYPE_WORKFLOW, ns.ID().String())
+			if err != nil {
+				return nil, err
+			}
+
+			mergedOpts, hasChanges, err := MergeAndApply(mutableState, requestedOptions, req.GetUpdateMask(), req.GetIdentity())
 			if err != nil {
 				return nil, err
 			}

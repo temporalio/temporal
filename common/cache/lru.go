@@ -144,8 +144,10 @@ func NewWithMetrics(maxSize int, opts *Options, handler metrics.Handler) Stoppab
 	if opts == nil {
 		opts = &Options{}
 	}
-	if opts.BackgroundEvict == nil {
-		opts.BackgroundEvict = func() dynamicconfig.CacheBackgroundEvictSettings {
+
+	backgroundEvict := opts.BackgroundEvict
+	if backgroundEvict == nil {
+		backgroundEvict = func() dynamicconfig.CacheBackgroundEvictSettings {
 			return dynamicconfig.CacheBackgroundEvictSettings{
 				Enabled: false,
 			}
@@ -170,7 +172,7 @@ func NewWithMetrics(maxSize int, opts *Options, handler metrics.Handler) Stoppab
 		onEvict:         opts.OnEvict,
 		timeSource:      timeSource,
 		metricsHandler:  handler,
-		backgroundEvict: opts.BackgroundEvict,
+		backgroundEvict: backgroundEvict,
 	}
 	if c.backgroundEvict().Enabled {
 		c.loops.Go(c.bgEvictLoop)

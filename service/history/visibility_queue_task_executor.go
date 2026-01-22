@@ -405,7 +405,7 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 
 	searchattributes := make(map[string]*commonpb.Payload)
 
-	aliasedCustomSearchAttributes := visComponent.GetSearchAttributes(visTaskContext)
+	aliasedCustomSearchAttributes := visComponent.CustomSearchAttributes(visTaskContext)
 	for alias, value := range aliasedCustomSearchAttributes {
 		fieldName, err := customSaMapper.GetFieldName(alias, namespaceEntry.Name().String())
 		if err != nil {
@@ -421,14 +421,22 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 	if err != nil {
 		return err
 	}
+
+	var chasmTaskQueue string
 	if chasmSAProvider, ok := rootComponent.(chasm.VisibilitySearchAttributesProvider); ok {
 		for _, chasmSA := range chasmSAProvider.SearchAttributes(visTaskContext) {
+			if chasmSA.Field == sadefs.TaskQueue {
+				if strVal, ok := chasmSA.Value.Value().(string); ok {
+					chasmTaskQueue = strVal
+				}
+				continue
+			}
 			searchattributes[chasmSA.Field] = chasmSA.Value.MustEncode()
 		}
 	}
 
 	combinedMemo := make(map[string]*commonpb.Payload, 2)
-	userMemoMap := visComponent.GetMemo(visTaskContext)
+	userMemoMap := visComponent.CustomMemo(visTaskContext)
 	if len(userMemoMap) > 0 {
 		userMemoProto := &commonpb.Memo{Fields: userMemoMap}
 		userMemoPayload, err := payload.Encode(userMemoProto)
@@ -458,6 +466,11 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 
 	// We reuse the TemporalNamespaceDivision column to store the string representation of ArchetypeID.
 	requestBase.SearchAttributes.IndexedFields[sadefs.TemporalNamespaceDivision] = payload.EncodeString(strconv.FormatUint(uint64(tree.ArchetypeID()), 10))
+
+	// Override TaskQueue if provided by CHASM search attributes.
+	if chasmTaskQueue != "" {
+		requestBase.TaskQueue = chasmTaskQueue
+	}
 
 	if mutableState.IsWorkflowExecutionRunning() {
 		release(nil)

@@ -111,7 +111,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) SetupTest() {
 	s.config.EnableWorkflowTaskStampIncrementOnFailure = func() bool { return true }
 	s.namespaceEntry = tests.GlobalStandbyNamespaceEntry
 	s.namespaceID = s.namespaceEntry.ID()
-	s.version = s.namespaceEntry.FailoverVersion()
+	s.version = s.namespaceEntry.FailoverVersion(namespace.EmptyBusinessID)
 	s.clusterName = cluster.TestAlternativeClusterName
 	s.now = time.Now().UTC()
 	s.timeSource = clock.NewEventTimeSource().Update(s.now)
@@ -2236,7 +2236,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) createPersistenceMutableState(
 		lastEventID, lastEventVersion,
 	))
 	s.NoError(err)
-	return workflow.TestCloneToProto(ms)
+	return workflow.TestCloneToProto(context.Background(), ms)
 }
 
 func (s *timerQueueStandbyTaskExecutorSuite) newTaskExecutable(

@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	queueerrors "go.temporal.io/server/service/history/queues/errors"
 	"go.temporal.io/server/service/history/tasks"
+	legacyscheduler "go.temporal.io/server/service/worker/scheduler"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -31,6 +32,7 @@ func (s *generatorTasksSuite) SetupTest() {
 		MetricsHandler: metrics.NoopMetricsHandler,
 		BaseLogger:     s.logger,
 		SpecProcessor:  s.specProcessor,
+		SpecBuilder:    legacyscheduler.NewSpecBuilder(),
 	})
 }
 
@@ -76,17 +78,19 @@ func (s *generatorTasksSuite) TestExecuteBufferTask_Basic() {
 
 	// Validate RequestId -> WorkflowId mapping
 	for _, start := range invoker.BufferedStarts {
-		s.Equal(start.WorkflowId, invoker.WorkflowID(start.RequestId))
+		s.Equal(start.WorkflowId, invoker.RunningWorkflowID(start.RequestId))
 	}
 
 	// Generator's high water mark should have advanced.
 	newHighWatermark := generator.LastProcessedTime.AsTime()
 	s.True(newHighWatermark.After(highWatermark))
 
-	// Ensure we scheduled an immediate physical pure task on the tree.
+	// Ensure we scheduled a physical side-effect task on the tree at immediate time.
+	// The InvokerExecuteTask is a side-effect task that starts workflows.
+	// The InvokerProcessBufferTask (pure) executes inline during CloseTransaction.
 	_, err = s.node.CloseTransaction()
 	s.NoError(err)
-	s.True(s.hasTask(&tasks.ChasmTaskPure{}, chasm.TaskScheduledTimeImmediate))
+	s.True(s.hasTask(&tasks.ChasmTask{}, chasm.TaskScheduledTimeImmediate))
 }
 
 func (s *generatorTasksSuite) TestUpdateFutureActionTimes_UnlimitedActions() {

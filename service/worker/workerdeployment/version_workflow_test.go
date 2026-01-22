@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/workflow"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
@@ -552,7 +553,9 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_FailsWhenDraining() {
 			OnAccept: func() {},
 			OnComplete: func(result interface{}, err error) {
 				s.Require().Error(err, "delete version should fail when version is draining")
-				s.Contains(err.Error(), ErrVersionIsDraining)
+				var applicationError *temporal.ApplicationError
+				s.Require().ErrorAs(err, &applicationError)
+				s.Equal(errVersionIsDraining, applicationError.Type())
 			},
 		}, deleteArgs)
 	}, 1*time.Millisecond)
@@ -683,7 +686,9 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_FailsWithActivePollers() {
 			OnAccept: func() {},
 			OnComplete: func(result interface{}, err error) {
 				s.Require().Error(err, "delete version should fail when version has active pollers")
-				s.Contains(err.Error(), ErrVersionHasPollers)
+				var applicationError *temporal.ApplicationError
+				s.Require().ErrorAs(err, &applicationError)
+				s.Equal(errVersionHasPollers, applicationError.Type())
 			},
 		}, deleteArgs)
 	}, 1*time.Millisecond)

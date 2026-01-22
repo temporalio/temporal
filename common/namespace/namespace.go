@@ -186,18 +186,18 @@ func (ns *Namespace) ReplicationState() enumspb.ReplicationState {
 // ActiveClusterName observes the name of the cluster that is currently active
 // for this namspace.
 func (ns *Namespace) ActiveClusterName(businessID string) string {
-	return ns.replicationResolver.ActiveClusterName()
+	return ns.replicationResolver.ActiveClusterName(businessID)
 }
 
 // ClusterNames observes the names of the clusters to which this namespace is
 // replicated.
-func (ns *Namespace) ClusterNames() []string {
-	return ns.replicationResolver.ClusterNames()
+func (ns *Namespace) ClusterNames(businessID string) []string {
+	return ns.replicationResolver.ClusterNames(businessID)
 }
 
 // IsOnCluster returns true is namespace is registered on cluster otherwise false.
 func (ns *Namespace) IsOnCluster(clusterName string) bool {
-	for _, cluster := range ns.ClusterNames() {
+	for _, cluster := range ns.ClusterNames(EmptyBusinessID) {
 		if cluster == clusterName {
 			return true
 		}
@@ -211,8 +211,9 @@ func (ns *Namespace) ConfigVersion() int64 {
 }
 
 // FailoverVersion return the namespace failover version
-func (ns *Namespace) FailoverVersion() int64 {
-	return ns.replicationResolver.FailoverVersion()
+func (ns *Namespace) FailoverVersion(businessID string) int64 {
+	return ns.replicationResolver.FailoverVersion(businessID)
+
 }
 
 // IsGlobalNamespace returns whether the namespace is a global namespace.
@@ -248,10 +249,15 @@ func (ns *Namespace) ReplicationPolicy() ReplicationPolicy {
 	// frontend guarantee that the clusters always contains the active
 	// namespace, so if the # of clusters is 1 then we do not need to send out
 	// any events for replication
-	if ns.replicationResolver.IsGlobalNamespace() && len(ns.ClusterNames()) > 1 {
+	if ns.replicationResolver.IsGlobalNamespace() && len(ns.ClusterNames(EmptyBusinessID)) > 1 {
 		return ReplicationPolicyMultiCluster
 	}
 	return ReplicationPolicyOneCluster
+}
+
+// GetReplicationResolver return the replication resolover
+func (ns *Namespace) GetReplicationResolver() ReplicationResolver {
+	return ns.replicationResolver
 }
 
 func (ns *Namespace) GetCustomData(key string) string {

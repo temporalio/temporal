@@ -67,11 +67,6 @@ func TestPhysicalTaskQueueManager_Fair_TestSuite(t *testing.T) {
 
 func (s *PhysicalTaskQueueManagerTestSuite) SetupTest() {
 	s.config = defaultTestConfig()
-	if s.fairness {
-		useFairness(s.config)
-	} else if s.newMatcher {
-		useNewMatcher(s.config)
-	}
 	s.controller = gomock.NewController(s.T())
 	logger := testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
 
@@ -85,15 +80,22 @@ func (s *PhysicalTaskQueueManagerTestSuite) SetupTest() {
 	prtn := s.physicalTaskQueueKey.Partition()
 	tqConfig := newTaskQueueConfig(prtn.TaskQueue(), engine.config, nsName)
 	onFatalErr := func(unloadCause) { s.T().Fatal("user data manager called onFatalErr") }
-	udMgr := newUserDataManager(engine.taskManager, engine.matchingRawClient, onFatalErr, nil, prtn, tqConfig, engine.logger, engine.namespaceRegistry)
+	udMgr := newUserDataManager(engine.taskManager, engine.matchingRawClient, onFatalErr, nil, nil, prtn, tqConfig, engine.logger, engine.namespaceRegistry)
 
 	prtnMgr, err := newTaskQueuePartitionManager(engine, ns, prtn, tqConfig, engine.logger, nil, metrics.NoopMetricsHandler, udMgr)
 	s.NoError(err)
 	engine.partitions[prtn.Key()] = prtnMgr
 
+	if s.fairness {
+		prtnMgr.config.NewMatcher = true
+		prtnMgr.config.EnableFairness = true
+	} else if s.newMatcher {
+		prtnMgr.config.NewMatcher = true
+	}
+
 	s.tqMgr, err = newPhysicalTaskQueueManager(prtnMgr, s.physicalTaskQueueKey)
 	s.NoError(err)
-	prtnMgr.defaultQueue = s.tqMgr
+	prtnMgr.defaultQueueFuture.Set(s.tqMgr, nil)
 }
 
 /*
@@ -334,13 +336,17 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestAddTaskStandby() {
 	s.tqMgr.namespaceRegistry = mockNamespaceCache
 
 	s.tqMgr.Start()
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	err := s.tqMgr.WaitUntilInitialized(ctx)
+	s.Require().NoError(err)
 	defer s.tqMgr.Stop(unloadCauseShuttingDown)
+	cancel()
 
 	// stop taskWriter so that we can check if there's any call to it
 	// otherwise the task persist process is async and hard to test
 	s.tqMgr.tqCtxCancel()
 
-	err := s.tqMgr.SpoolTask(&persistencespb.TaskInfo{
+	err = s.tqMgr.SpoolTask(&persistencespb.TaskInfo{
 		CreateTime: timestamp.TimePtr(time.Now().UTC()),
 	})
 	s.Equal(errShutdown, err) // task writer was stopped above

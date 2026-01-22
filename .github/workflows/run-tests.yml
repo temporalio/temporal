@@ -108,7 +108,7 @@ jobs:
           cat "$GITHUB_OUTPUT"
 
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
@@ -139,13 +139,13 @@ jobs:
     name: Pre-build for cache
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
         with:
           go-version-file: "go.mod"
@@ -181,7 +181,7 @@ jobs:
     needs: pre-build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -189,7 +189,7 @@ jobs:
           # buf-breaking tries to compare HEAD against merge base so we need to be able to find it
           fetch-depth: 100
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
         with:
           go-version-file: "go.mod"
@@ -229,12 +229,12 @@ jobs:
     needs: [pre-build, set-up-single-test]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: "go.mod"
           cache: false # do our own caching
@@ -285,11 +285,12 @@ jobs:
 
       - name: Upload test results to Codecov
         if: ${{ !cancelled() }}
-        uses: codecov/test-results-action@v1
+        uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           directory: ./.testoutput
           flags: unit-test
+          report_type: test_results
 
       - name: Upload test results to GitHub
         # Can't pin to major because the action linter doesn't recognize the include-hidden-files flag.
@@ -319,7 +320,7 @@ jobs:
     needs: [pre-build, set-up-single-test]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
@@ -334,7 +335,7 @@ jobs:
             postgresql
           down-flags: -v
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: "go.mod"
           cache: false # do our own caching
@@ -381,11 +382,12 @@ jobs:
 
       - name: Upload test results to Codecov
         if: ${{ !cancelled() }}
-        uses: codecov/test-results-action@v1
+        uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           directory: ./.testoutput
           flags: integration-test
+          report_type: test_results
 
       - name: Upload test results to GitHub
         # Can't pin to major because the action linter doesn't recognize the include-hidden-files flag.
@@ -427,6 +429,7 @@ jobs:
           - cass_es
           - cass_es8
           - cass_os2
+          - cass_os3
           - sqlite
           - mysql8
           - postgres12
@@ -452,6 +455,10 @@ jobs:
             persistence_type: nosql
             persistence_driver: cassandra
             containers: [cassandra, opensearch2]
+          - name: cass_os3
+            persistence_type: nosql
+            persistence_driver: cassandra
+            containers: [cassandra, opensearch3]
           - name: sqlite
             persistence_type: sql
             persistence_driver: sqlite
@@ -481,7 +488,7 @@ jobs:
         with:
           key: docker-${{ runner.os }}${{ runner.arch }}-${{ hashFiles(env.DOCKER_COMPOSE_FILE) }}
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         if: ${{ inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -495,7 +502,7 @@ jobs:
           services: "${{ join(matrix.containers, '\n') }}"
           down-flags: -v
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         if: ${{ inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
         with:
           go-version-file: "go.mod"
@@ -524,11 +531,15 @@ jobs:
       - name: Run functional test
         if: ${{ inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
         timeout-minutes: ${{ fromJSON(needs.set-up-single-test.outputs.github_timeout) }} # make sure this is larger than the test timeout in the Makefile
-        run: make functional-test-coverage
+        run: ./develop/github/monitor_test.sh make functional-test-coverage
         env:
           TEST_ARGS: ${{ needs.set-up-single-test.outputs.single_test_args }}
           TEMPORAL_TEST_OTEL_OUTPUT: ${{ github.workspace }}/.testoutput
           TEMPORAL_OTEL_DEBUG: true
+
+      - name: Print memory snapshot
+        if: always()
+        run: if [ -f /tmp/memory_snapshot.txt ]; then cat /tmp/memory_snapshot.txt; fi
 
       - name: Generate crash report
         if: failure()
@@ -556,11 +567,12 @@ jobs:
 
       - name: Upload test results to Codecov
         if: ${{ !cancelled() }}
-        uses: codecov/test-results-action@v1
+        uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           directory: ./.testoutput
           flags: functional-test
+          report_type: test_results
 
       - name: Upload test results to GitHub
         # Can't pin to major because the action linter doesn't recognize the include-hidden-files flag.
@@ -604,7 +616,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        name: [cass_es, cass_es8, cass_os2, mysql8, postgres12, postgres12_pgx]
+        name:
+          - cass_es
+          - cass_es8
+          - cass_os2
+          - cass_os3
+          - mysql8
+          - postgres12
+          - postgres12_pgx
         include:
           - name: cass_es
             persistence_type: nosql
@@ -624,6 +643,10 @@ jobs:
             persistence_type: nosql
             persistence_driver: cassandra
             containers: [cassandra, opensearch2]
+          - name: cass_os3
+            persistence_type: nosql
+            persistence_driver: cassandra
+            containers: [cassandra, opensearch3]
           - name: mysql8
             persistence_type: sql
             persistence_driver: mysql8
@@ -645,7 +668,7 @@ jobs:
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
       TEST_PARALLEL_FLAGS: ${{ matrix.parallel_flags }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
@@ -665,7 +688,7 @@ jobs:
           services: "${{ join(matrix.containers, '\n') }}"
           down-flags: -v
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: "go.mod"
           cache: false # do our own caching
@@ -684,10 +707,14 @@ jobs:
 
       - name: Run functional test xdc
         timeout-minutes: 35 # update this to TEST_TIMEOUT+5 if you update the Makefile
-        run: make functional-test-xdc-coverage
+        run: ./develop/github/monitor_test.sh make functional-test-xdc-coverage
         env:
           TEMPORAL_TEST_OTEL_OUTPUT: ${{ github.workspace }}/.testoutput
           TEMPORAL_OTEL_DEBUG: true
+
+      - name: Print memory snapshot
+        if: always()
+        run: if [ -f /tmp/memory_snapshot.txt ]; then cat /tmp/memory_snapshot.txt; fi
 
       - name: Generate crash report
         if: failure()
@@ -715,11 +742,12 @@ jobs:
 
       - name: Upload test results to Codecov
         if: ${{ !cancelled() }}
-        uses: codecov/test-results-action@v1
+        uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           directory: ./.testoutput
           flags: functional-test-xdc
+          report_type: test_results
 
       - name: Upload test results to GitHub
         # Can't pin to major because the action linter doesn't recognize the include-hidden-files flag.
@@ -766,6 +794,7 @@ jobs:
           - cass_es
           - cass_es8
           - cass_os2
+          - cass_os3
           - mysql8
           - postgres12
           - postgres12_pgx
@@ -788,6 +817,10 @@ jobs:
             persistence_type: nosql
             persistence_driver: cassandra
             containers: [cassandra, opensearch2]
+          - name: cass_os3
+            persistence_type: nosql
+            persistence_driver: cassandra
+            containers: [cassandra, opensearch3]
           - name: mysql8
             persistence_type: sql
             persistence_driver: mysql8
@@ -806,7 +839,7 @@ jobs:
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
       ES_VERSION: ${{ matrix.es_version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
@@ -826,7 +859,7 @@ jobs:
           services: "${{ join(matrix.containers, '\n') }}"
           down-flags: -v
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: "go.mod"
           cache: false # do our own caching
@@ -845,10 +878,14 @@ jobs:
 
       - name: Run functional test ndc
         timeout-minutes: 15
-        run: make functional-test-ndc-coverage
+        run: ./develop/github/monitor_test.sh make functional-test-ndc-coverage
         env:
           TEMPORAL_TEST_OTEL_OUTPUT: ${{ github.workspace }}/.testoutput
           TEMPORAL_OTEL_DEBUG: true
+
+      - name: Print memory snapshot
+        if: always()
+        run: if [ -f /tmp/memory_snapshot.txt ]; then cat /tmp/memory_snapshot.txt; fi
 
       - name: Generate crash report
         if: failure()
@@ -866,11 +903,12 @@ jobs:
 
       - name: Upload test results to Codecov
         if: ${{ !cancelled() }}
-        uses: codecov/test-results-action@v1
+        uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           directory: ./.testoutput
           flags: functional-test-ndc
+          report_type: test_results
 
       - name: Upload test results to GitHub
         # Can't pin to major because the action linter doesn't recognize the include-hidden-files flag.
@@ -930,3 +968,33 @@ jobs:
               exit 1
             fi
           fi
+
+  notify-failure:
+    name: Notify Slack on Failure
+    if: |
+      always() &&
+      github.ref == 'refs/heads/main' &&
+      needs.test-status.result == 'failure'
+    needs: test-status
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: "go.mod"
+          cache: true
+
+      - name: Send Slack notification
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          go run ./cmd/tools/ci-notify \
+            --run-id "${{ github.run_id }}" \
+            --slack-webhook "$SLACK_WEBHOOK"

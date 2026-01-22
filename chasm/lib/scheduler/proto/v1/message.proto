@@ -58,11 +58,7 @@ message InvokerState {
     // present time).
     google.protobuf.Timestamp last_processed_time = 5;
 
-    // A map keyed by the request ID, mapping to the workflow ID started as part
-    // of that request. Used to map received Nexus callbacks back to workflows.
-    // Invoker adds to this mapwhen buffered starts are enqueued, and removed
-    // when Invoker processes a completion.
-    map<string, string> request_id_to_workflow_id = 6;
+    reserved 6;
 }
 
 // CHASM scheduler's Backfiller internal state. Backfill requests are 1:1

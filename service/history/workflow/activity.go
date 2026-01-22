@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow/matcher"
@@ -59,15 +60,6 @@ func GetActivityState(ai *persistencespb.ActivityInfo) enumspb.PendingActivitySt
 	return enumspb.PENDING_ACTIVITY_STATE_SCHEDULED
 }
 
-func makeBackoffAlgorithm(requestedDelay *time.Duration) BackoffCalculatorAlgorithmFunc {
-	return func(duration *durationpb.Duration, coefficient float64, currentAttempt int32) time.Duration {
-		if requestedDelay != nil {
-			return *requestedDelay
-		}
-		return ExponentialBackoffAlgorithm(duration, coefficient, currentAttempt)
-	}
-}
-
 func UpdateActivityInfoForRetries(
 	ai *persistencespb.ActivityInfo,
 	version int64,
@@ -75,7 +67,7 @@ func UpdateActivityInfoForRetries(
 	failure *failurepb.Failure,
 	nextScheduledTime *timestamppb.Timestamp,
 	isActivityRetryStampIncrementEnabled bool,
-) *persistencespb.ActivityInfo {
+) {
 	previousAttempt := ai.Attempt
 	ai.Attempt = attempt
 	ai.Version = version
@@ -84,7 +76,8 @@ func UpdateActivityInfoForRetries(
 	ai.StartVersion = common.EmptyVersion
 	ai.RequestId = ""
 	ai.StartedTime = nil
-	ai.TimerTaskStatus = TimerTaskStatusNone
+	// Mark per-attempt timers for recreation.
+	ai.TimerTaskStatus &^= TimerTaskStatusCreatedHeartbeat | TimerTaskStatusCreatedStartToClose | TimerTaskStatusCreatedScheduleToStart
 	ai.RetryLastWorkerIdentity = ai.StartedIdentity
 	ai.RetryLastFailure = failure
 	// this flag means the user resets the activity with "--reset-heartbeat" flag
@@ -101,8 +94,6 @@ func UpdateActivityInfoForRetries(
 	if isActivityRetryStampIncrementEnabled && attempt > previousAttempt {
 		ai.Stamp++
 	}
-
-	return ai
 }
 
 func GetPendingActivityInfo(
@@ -145,7 +136,7 @@ func GetPendingActivityInfo(
 				// in this case activity is at least scheduled
 				p.NextAttemptScheduleTime = nil
 				// we rely on the fact that ExponentialBackoffAlgorithm is deterministic, and  there's no random jitter
-				interval := ExponentialBackoffAlgorithm(ai.RetryInitialInterval, ai.RetryBackoffCoefficient, p.Attempt)
+				interval := backoff.ExponentialBackoffAlgorithm(ai.RetryInitialInterval, ai.RetryBackoffCoefficient, p.Attempt)
 				p.CurrentRetryInterval = durationpb.New(interval)
 			}
 		}
@@ -247,7 +238,7 @@ func GetNextScheduledTime(ai *persistencespb.ActivityInfo) time.Time {
 	nextScheduledTime := ai.ScheduledTime.AsTime()
 	if ai.Attempt > 1 {
 		// calculate new schedule time
-		interval := ExponentialBackoffAlgorithm(ai.RetryInitialInterval, ai.RetryBackoffCoefficient, ai.Attempt)
+		interval := backoff.ExponentialBackoffAlgorithm(ai.RetryInitialInterval, ai.RetryBackoffCoefficient, ai.Attempt)
 
 		if ai.RetryMaximumInterval.AsDuration() != 0 && (interval <= 0 || interval > ai.RetryMaximumInterval.AsDuration()) {
 			interval = ai.RetryMaximumInterval.AsDuration()

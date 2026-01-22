@@ -108,6 +108,7 @@ func (f *priForwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 				VersionDirective:       task.event.Data.GetVersionDirective(),
 				Stamp:                  task.event.Data.GetStamp(),
 				Priority:               task.event.Data.GetPriority(),
+				ComponentRef:           task.event.Data.GetComponentRef(),
 			},
 		)
 	default:
@@ -181,6 +182,7 @@ func (f *priForwarder) ForwardNexusTask(ctx context.Context, task *internalTask)
 }
 
 // ForwardPoll forwards a poll request to parent task queue partition if it exist
+// TODO(pri): remove this and update tests to call ForwardPollWithTarget directly
 func (f *priForwarder) ForwardPoll(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, error) {
 	degree := f.cfg.ForwarderMaxChildrenPerNode()
 	target, err := f.partition.ParentPartition(degree)
@@ -188,68 +190,88 @@ func (f *priForwarder) ForwardPoll(ctx context.Context, pollMetadata *pollMetada
 		return nil, err
 	}
 
+	return ForwardPollWithTarget(ctx, pollMetadata, f.client, f.partition, target)
+}
+
+// ForwardPollWithTarget forwards a poll request to another partition
+func ForwardPollWithTarget(
+	ctx context.Context,
+	pollMetadata *pollMetadata,
+	client matchingservice.MatchingServiceClient,
+	source tqid.Partition,
+	target *tqid.NormalPartition,
+) (*internalTask, error) {
 	pollerID, _ := ctx.Value(pollerIDKey).(string) // nolint:revive
 	identity, _ := ctx.Value(identityKey).(string) // nolint:revive
 
 	// nolint:exhaustive // there's a default clause
-	switch f.partition.TaskType() {
+	switch target.TaskType() {
 	case enumspb.TASK_QUEUE_TYPE_WORKFLOW:
-		resp, err := f.client.PollWorkflowTaskQueue(ctx, &matchingservice.PollWorkflowTaskQueueRequest{
-			NamespaceId: f.partition.TaskQueue().NamespaceId(),
+		resp, err := client.PollWorkflowTaskQueue(ctx, &matchingservice.PollWorkflowTaskQueueRequest{
+			NamespaceId: target.TaskQueue().NamespaceId(),
 			PollerId:    pollerID,
 			PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
 				TaskQueue: &taskqueuepb.TaskQueue{
 					Name: target.RpcName(),
-					Kind: f.partition.Kind(),
+					Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 				},
 				Identity:                  identity,
 				WorkerVersionCapabilities: pollMetadata.workerVersionCapabilities,
 				DeploymentOptions:         pollMetadata.deploymentOptions,
 			},
-			ForwardedSource: f.partition.RpcName(),
+			ForwardedSource: source.RpcName(),
+			Conditions:      pollMetadata.conditions,
 		})
 		if err != nil {
 			return nil, err
+		} else if resp.TaskToken == nil {
+			return nil, errNoTasks
 		}
 		return newInternalStartedTask(&startedTaskInfo{workflowTaskInfo: resp}), nil
 	case enumspb.TASK_QUEUE_TYPE_ACTIVITY:
-		resp, err := f.client.PollActivityTaskQueue(ctx, &matchingservice.PollActivityTaskQueueRequest{
-			NamespaceId: f.partition.TaskQueue().NamespaceId(),
+		resp, err := client.PollActivityTaskQueue(ctx, &matchingservice.PollActivityTaskQueueRequest{
+			NamespaceId: target.TaskQueue().NamespaceId(),
 			PollerId:    pollerID,
 			PollRequest: &workflowservice.PollActivityTaskQueueRequest{
 				TaskQueue: &taskqueuepb.TaskQueue{
 					Name: target.RpcName(),
-					Kind: f.partition.Kind(),
+					Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 				},
 				Identity:                  identity,
 				TaskQueueMetadata:         pollMetadata.taskQueueMetadata,
 				WorkerVersionCapabilities: pollMetadata.workerVersionCapabilities,
 				DeploymentOptions:         pollMetadata.deploymentOptions,
 			},
-			ForwardedSource: f.partition.RpcName(),
+			ForwardedSource: source.RpcName(),
+			Conditions:      pollMetadata.conditions,
 		})
 		if err != nil {
 			return nil, err
+		} else if resp.TaskToken == nil {
+			return nil, errNoTasks
 		}
 		return newInternalStartedTask(&startedTaskInfo{activityTaskInfo: resp}), nil
 	case enumspb.TASK_QUEUE_TYPE_NEXUS:
-		resp, err := f.client.PollNexusTaskQueue(ctx, &matchingservice.PollNexusTaskQueueRequest{
-			NamespaceId: f.partition.TaskQueue().NamespaceId(),
+		resp, err := client.PollNexusTaskQueue(ctx, &matchingservice.PollNexusTaskQueueRequest{
+			NamespaceId: target.TaskQueue().NamespaceId(),
 			PollerId:    pollerID,
 			Request: &workflowservice.PollNexusTaskQueueRequest{
 				TaskQueue: &taskqueuepb.TaskQueue{
 					Name: target.RpcName(),
-					Kind: f.partition.Kind(),
+					Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 				},
 				Identity:                  identity,
 				WorkerVersionCapabilities: pollMetadata.workerVersionCapabilities,
 				DeploymentOptions:         pollMetadata.deploymentOptions,
 				// Namespace is ignored here.
 			},
-			ForwardedSource: f.partition.RpcName(),
+			ForwardedSource: source.RpcName(),
+			Conditions:      pollMetadata.conditions,
 		})
 		if err != nil {
 			return nil, err
+		} else if resp.Response == nil {
+			return nil, errNoTasks
 		}
 		return newInternalStartedTask(&startedTaskInfo{nexusTaskInfo: resp}), nil
 	default:

@@ -23,6 +23,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -77,6 +78,7 @@ func TestGetHistoryFunctionalSuite(t *testing.T) {
 func (s *GetHistoryFunctionalSuite) SetupSuite() {
 	dynamicConfigOverrides := map[dynamicconfig.Key]any{
 		dynamicconfig.EnableTransitionHistory.Key(): s.EnableTransitionHistory,
+		dynamicconfig.ExternalPayloadsEnabled.Key(): true,
 	}
 	s.FunctionalTestBase.SetupSuiteWithCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 }
@@ -530,12 +532,11 @@ func (s *RawHistorySuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 		return responseInner.RawHistory, responseInner.NextPageToken
 	}
 
-	serializer := serialization.NewSerializer()
 	convertBlob := func(blobs []*commonpb.DataBlob) []*historypb.HistoryEvent {
 		events := []*historypb.HistoryEvent{}
 		for _, blob := range blobs {
 			s.True(blob.GetEncodingType() == enumspb.ENCODING_TYPE_PROTO3)
-			blobEvents, err := serializer.DeserializeEvents(&commonpb.DataBlob{
+			blobEvents, err := serialization.DefaultDecoder.DeserializeEvents(&commonpb.DataBlob{
 				EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 				Data:         blob.Data,
 			})
@@ -814,4 +815,73 @@ func (s *RawHistoryClientSuite) getHistoryReverse(namespace string, execution *c
 	}
 
 	return events
+}
+
+func (s *GetHistoryFunctionalSuite) TestGetWorkflowExecutionHistory_ExternalPayloadStats() {
+	tv := testvars.New(s.T())
+
+	workflowExternalPayloadSize := int64(1024)
+	workflowInputPayload := &commonpb.Payloads{
+		Payloads: []*commonpb.Payload{{
+			ExternalPayloads: []*commonpb.Payload_ExternalPayloadDetails{
+				{SizeBytes: workflowExternalPayloadSize},
+			},
+		}},
+	}
+
+	activityExternalPayloadSize := int64(2048)
+	activityInputPayload := &commonpb.Payloads{
+		Payloads: []*commonpb.Payload{{
+			ExternalPayloads: []*commonpb.Payload_ExternalPayloadDetails{
+				{SizeBytes: activityExternalPayloadSize},
+			},
+		}},
+	}
+
+	we, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.NewString(),
+		Namespace:           s.Namespace().String(),
+		WorkflowId:          tv.WorkflowID(),
+		WorkflowType:        tv.WorkflowType(),
+		TaskQueue:           tv.TaskQueue(),
+		Input:               workflowInputPayload,
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
+		Identity:            tv.WorkerIdentity(),
+	})
+	s.NoError(err)
+
+	// Process first workflow task (schedules activity)
+	_, err = s.TaskPoller().PollAndHandleWorkflowTask(tv,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			return &workflowservice.RespondWorkflowTaskCompletedRequest{
+				Commands: []*commandpb.Command{{
+					CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+					Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{
+						ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+							ActivityId:             "activity1",
+							ActivityType:           &commonpb.ActivityType{Name: "TestActivity"},
+							TaskQueue:              tv.TaskQueue(),
+							Input:                  activityInputPayload,
+							ScheduleToCloseTimeout: durationpb.New(100 * time.Second),
+							ScheduleToStartTimeout: durationpb.New(100 * time.Second),
+							StartToCloseTimeout:    durationpb.New(50 * time.Second),
+							HeartbeatTimeout:       durationpb.New(5 * time.Second),
+						},
+					},
+				}},
+			}, nil
+		})
+	s.NoError(err)
+
+	descResp, err := s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: s.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: tv.WorkflowID(),
+			RunId:      we.GetRunId(),
+		},
+	})
+	s.NoError(err)
+	s.Equal(int64(2), descResp.WorkflowExecutionInfo.ExternalPayloadCount)
+	s.Equal(workflowExternalPayloadSize+activityExternalPayloadSize, descResp.WorkflowExecutionInfo.ExternalPayloadSizeBytes)
 }

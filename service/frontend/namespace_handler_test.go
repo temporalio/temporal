@@ -384,6 +384,8 @@ func (s *namespaceHandlerCommonSuite) TestCapabilitiesAndLimits() {
 	s.True(resp.NamespaceInfo.Capabilities.AsyncUpdate)
 	s.True(resp.NamespaceInfo.Capabilities.ReportedProblemsSearchAttribute)
 	s.True(resp.NamespaceInfo.Capabilities.WorkerHeartbeats)
+	s.False(resp.NamespaceInfo.Capabilities.WorkflowPause)
+	s.False(resp.NamespaceInfo.Capabilities.StandaloneActivities)
 	s.Equal(int64(2*1024*1024), resp.NamespaceInfo.Limits.BlobSizeLimitError)
 	s.Equal(int64(2*1024*1024), resp.NamespaceInfo.Limits.MemoSizeLimitError)
 
@@ -393,6 +395,8 @@ func (s *namespaceHandlerCommonSuite) TestCapabilitiesAndLimits() {
 	s.config.EnableUpdateWorkflowExecutionAsyncAccepted = dc.GetBoolPropertyFnFilteredByNamespace(false)
 	s.config.NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute = dc.GetIntPropertyFnFilteredByNamespace(5)
 	s.config.WorkerHeartbeatsEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
+	s.config.WorkflowPauseEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	s.config.Activity.Enabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
 	s.config.BlobSizeLimitError = dc.GetIntPropertyFnFilteredByNamespace(1024)
 	s.config.MemoSizeLimitError = dc.GetIntPropertyFnFilteredByNamespace(512)
 
@@ -405,6 +409,8 @@ func (s *namespaceHandlerCommonSuite) TestCapabilitiesAndLimits() {
 	s.False(resp.NamespaceInfo.Capabilities.AsyncUpdate)
 	s.True(resp.NamespaceInfo.Capabilities.ReportedProblemsSearchAttribute)
 	s.False(resp.NamespaceInfo.Capabilities.WorkerHeartbeats)
+	s.True(resp.NamespaceInfo.Capabilities.WorkflowPause)
+	s.True(resp.NamespaceInfo.Capabilities.StandaloneActivities)
 	s.Equal(int64(1024), resp.NamespaceInfo.Limits.BlobSizeLimitError)
 	s.Equal(int64(512), resp.NamespaceInfo.Limits.MemoSizeLimitError)
 }

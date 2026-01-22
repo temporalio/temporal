@@ -563,7 +563,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) createStartedWorkflow(tv *testvars.T
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, request *persistence.GetWorkflowExecutionRequest) (*persistence.GetWorkflowExecutionResponse, error) {
-			return &persistence.GetWorkflowExecutionResponse{State: workflow.TestCloneToProto(ms)}, nil
+			return &persistence.GetWorkflowExecutionResponse{State: workflow.TestCloneToProto(ctx, ms)}, nil
 		}).AnyTimes()
 
 	// Create WF context in the cache and load MS for it.
@@ -602,6 +602,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) createSentUpdate(tv *testvars.TestVa
 		nil,
 		nil,
 		false,
+		nil,
 	)
 	taskToken := &tokenspb.Task{
 		Attempt:          1,
@@ -680,6 +681,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) createPausedWorkflowWithWFT(tv *test
 		nil,
 		nil,
 		false,
+		nil,
 	)
 	_, _ = ms.AddWorkflowTaskCompletedEvent(wt, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Identity: tv.Any().String(),
@@ -696,6 +698,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) createPausedWorkflowWithWFT(tv *test
 		nil,
 		nil,
 		false,
+		nil,
 	)
 	taskToken := &tokenspb.Task{
 		Attempt:          1,
@@ -715,7 +718,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) createPausedWorkflowWithWFT(tv *test
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, request *persistence.GetWorkflowExecutionRequest) (*persistence.GetWorkflowExecutionResponse, error) {
-			return &persistence.GetWorkflowExecutionResponse{State: workflow.TestCloneToProto(ms)}, nil
+			return &persistence.GetWorkflowExecutionResponse{State: workflow.TestCloneToProto(context.Background(), ms)}, nil
 		}).AnyTimes()
 
 	wfContext, release, err := s.workflowCache.GetOrCreateWorkflowExecution(

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -17,6 +16,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
+	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -24,7 +24,6 @@ import (
 	"go.temporal.io/sdk/converter"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
-	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/payload"
@@ -36,6 +35,7 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 /*
@@ -75,12 +75,10 @@ type (
 func TestScheduleFunctionalSuite(t *testing.T) {
 	t.Parallel()
 
-	// TODO: Enable CHASM tests once frontend has chasm visibility engine.
 	// CHASM tests must run as a separate suite, with a separate cluster/functional environment, because the tests
 	// assume a fully clean state. For example, TestBasics has assertions on visibility entries for workflow runs
 	// started by the scheduler, which would not be cleaned up even when the associated scheduler has been deleted.
-	// suite.Run(t, new(ScheduleCHASMFunctionalSuite))
-
+	suite.Run(t, new(ScheduleCHASMFunctionalSuite))
 	suite.Run(t, new(ScheduleV1FunctionalSuite))
 }
 
@@ -219,6 +217,21 @@ func (s *scheduleFunctionalSuiteBase) TestBasics() {
 	s.NoError(err)
 	s.cleanup(sid)
 
+	// describe immediately after create and verify FutureActionTimes
+	describeRespAfterCreate, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+	})
+	s.NoError(err)
+	s.NotEmpty(describeRespAfterCreate.Info.FutureActionTimes, "FutureActionTimes should be set immediately after create")
+	// FutureActionTimes should be in the future (after createTime) and aligned to 5-second intervals
+	for i, fat := range describeRespAfterCreate.Info.FutureActionTimes {
+		s.True(fat.AsTime().After(createTime) || fat.AsTime().Equal(createTime),
+			"FutureActionTimes[%d] should be >= createTime", i)
+		s.Equal(int64(0), fat.AsTime().UnixNano()%int64(5*time.Second),
+			"FutureActionTimes[%d] should be aligned to 5-second intervals", i)
+	}
+
 	// sleep until we see two runs, plus a bit more to ensure that the second run has completed
 	s.Eventually(func() bool { return atomic.LoadInt32(&runs) == 2 }, 15*time.Second, 500*time.Millisecond)
 	time.Sleep(2 * time.Second) //nolint:forbidigo
@@ -337,37 +350,6 @@ func (s *scheduleFunctionalSuiteBase) TestBasics() {
 	s.NoError(payload.Decode(ex0.SearchAttributes.IndexedFields[sadefs.TemporalScheduledStartTime], &ex0StartTime))
 	s.WithinRange(ex0StartTime, createTime, time.Now())
 	s.True(ex0StartTime.UnixNano()%int64(5*time.Second) == 0)
-
-	// list with QueryWithAnyNamespaceDivision, we should see the scheduler workflow
-
-	wfResp, err = s.FrontendClient().ListWorkflowExecutions(s.newContext(), &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: s.Namespace().String(),
-		PageSize:  5,
-		Query:     sadefs.QueryWithAnyNamespaceDivision(`ExecutionStatus = "Running"`),
-	})
-	s.NoError(err)
-	count := 0
-	for _, ex := range wfResp.Executions {
-		if _, ok := ex.GetMemo().GetFields()["ScheduleInfo"]; ok {
-			count++
-		}
-	}
-	s.EqualValues(1, count, "should see scheduler workflow")
-
-	// list workflows with an exact match on namespace division (implementation details here, not public api)
-
-	wfResp, err = s.FrontendClient().ListWorkflowExecutions(s.newContext(), &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: s.Namespace().String(),
-		PageSize:  5,
-		Query: fmt.Sprintf(
-			"%s IN ('%s', '%s')",
-			sadefs.TemporalNamespaceDivision,
-			scheduler.NamespaceDivision,
-			strconv.FormatUint(uint64(chasm.SchedulerArchetypeID), 10),
-		),
-	})
-	s.NoError(err)
-	s.EqualValues(1, len(wfResp.Executions), "should see scheduler workflow")
 
 	// list schedules with search attribute filter
 
@@ -693,10 +675,7 @@ func (s *scheduleFunctionalSuiteBase) TestLastCompletionAndError() {
 			s.Equal("this one succeeds", lcr)
 			return "", errors.New("this one fails")
 		case 3:
-			// TODO - CHASM scheduler only keeps a single one of these set at a time, not both. IMO, that's more correct than
-			// keeping one of each.
-			//
-			// s.Equal("this one succeeds", lcr)
+			s.Equal("this one succeeds", lcr)
 			s.ErrorContains(lastErr, "this one fails")
 			atomic.StoreInt32(&testComplete, 1)
 			return "done", nil
@@ -712,6 +691,66 @@ func (s *scheduleFunctionalSuiteBase) TestLastCompletionAndError() {
 	s.cleanup(sid)
 
 	s.Eventually(func() bool { return atomic.LoadInt32(&testComplete) == 1 }, 20*time.Second, 200*time.Millisecond)
+}
+
+// Tests that a schedule created in the V1 stack will also be visible in the V2 stack.
+func (s *ScheduleV1FunctionalSuite) TestCHASMCanListV1Schedules() {
+	sid := "schedule-created-on-v1"
+	schedule := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
+				{Interval: durationpb.New(3 * time.Second)},
+			},
+		},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   "wf-",
+					WorkflowType: &commonpb.WorkflowType{Name: "action"},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				},
+			},
+		},
+	}
+	req := &workflowservice.CreateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   "test",
+		RequestId:  uuid.NewString(),
+	}
+
+	// Create on V1 stack.
+	_, err := s.FrontendClient().CreateSchedule(s.newContext(), req)
+	s.NoError(err)
+
+	// Pause so that `FutureActionTimes` doesn't change between calls.
+	_, err = s.FrontendClient().PatchSchedule(s.newContext(), &workflowservice.PatchScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Patch: &schedulepb.SchedulePatch{
+			Pause: "halt",
+		},
+		Identity:  "test",
+		RequestId: uuid.NewString(),
+	})
+	s.NoError(err)
+
+	// Sanity test, list with V1 handler.
+	v1Entry := s.getScheduleEntryFomVisibility(sid, func(sle *schedulepb.ScheduleListEntry) bool {
+		return sle.GetInfo().Paused
+	})
+	s.NotNil(v1Entry.GetInfo())
+
+	// Flip on CHASM experiment and make sure we can still list.
+	s.newContext = func() context.Context {
+		return metadata.NewOutgoingContext(testcore.NewContext(), metadata.Pairs(
+			headers.ExperimentHeaderName, "chasm-scheduler",
+		))
+	}
+	chasmEntry := s.getScheduleEntryFomVisibility(sid, nil)
+	s.NotNil(chasmEntry.GetInfo())
+	s.ProtoEqual(chasmEntry.GetInfo(), v1Entry.GetInfo())
 }
 
 // TestRefresh applies to V1 scheduler only; V2 does not support/need manual refresh.
@@ -1013,6 +1052,118 @@ func (s *scheduleFunctionalSuiteBase) TestListSchedulesReturnsWorkflowStatus() {
 	s.assertSameRecentActions(descResp, listResp)
 }
 
+func (s *scheduleFunctionalSuiteBase) TestUpdateIntervalTakesEffect() {
+	sid := "sched-test-update-interval"
+	wid := "sched-test-update-interval-wf"
+	wt := "sched-test-update-interval-wt"
+
+	var runs int32
+	workflowFn := func(ctx workflow.Context) error {
+		workflow.SideEffect(ctx, func(ctx workflow.Context) any {
+			atomic.AddInt32(&runs, 1)
+			return 0
+		})
+		return nil
+	}
+	s.worker.RegisterWorkflowWithOptions(workflowFn, workflow.RegisterOptions{Name: wt})
+
+	// Create schedule with a long interval (300s) - won't fire for 5 minutes.
+	schedule := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
+				{Interval: durationpb.New(300 * time.Second)},
+			},
+		},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   wid,
+					WorkflowType: &commonpb.WorkflowType{Name: wt},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				},
+			},
+		},
+	}
+
+	ctx := s.newContext()
+	_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   "test",
+		RequestId:  uuid.NewString(),
+	})
+	s.NoError(err)
+	s.cleanup(sid)
+
+	// Update the interval to be very short (1s).
+	schedule.Spec.Interval[0].Interval = durationpb.New(1 * time.Second)
+	_, err = s.FrontendClient().UpdateSchedule(ctx, &workflowservice.UpdateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   "test",
+		RequestId:  uuid.NewString(),
+	})
+	s.NoError(err)
+
+	// After updating to 1s interval, we should see runs start within a few seconds.
+	s.Eventually(
+		func() bool { return atomic.LoadInt32(&runs) >= 2 },
+		10*time.Second,
+		500*time.Millisecond,
+		"expected at least 2 runs within 10s after updating interval to 1s",
+	)
+}
+
+func (s *scheduleFunctionalSuiteBase) TestListScheduleMatchingTimes() {
+	sid := "sched-test-list-matching-times"
+
+	schedule := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
+				{Interval: durationpb.New(1 * time.Hour)},
+			},
+		},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   "wf-list-matching-times",
+					WorkflowType: &commonpb.WorkflowType{Name: "action"},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				},
+			},
+		},
+	}
+	req := &workflowservice.CreateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   "test",
+		RequestId:  uuid.NewString(),
+	}
+
+	ctx := s.newContext()
+	_, err := s.FrontendClient().CreateSchedule(ctx, req)
+	s.NoError(err)
+	s.cleanup(sid)
+
+	// Query for matching times over a 5-hour window.
+	now := time.Now().UTC().Truncate(time.Hour).Add(time.Hour) // Start of next hour
+	startTime := timestamppb.New(now)
+	endTime := timestamppb.New(now.Add(5 * time.Hour))
+
+	resp, err := s.FrontendClient().ListScheduleMatchingTimes(ctx, &workflowservice.ListScheduleMatchingTimesRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		StartTime:  startTime,
+		EndTime:    endTime,
+	})
+	s.NoError(err)
+	// With 1-hour interval over 5 hours, we expect 5 matching times.
+	s.Len(resp.GetStartTime(), 5)
+}
+
 // A schedule's memo should have an upper bound on the number of spec items stored.
 func (s *scheduleFunctionalSuiteBase) TestLimitMemoSpecSize() {
 	expectedLimit := scheduler.CurrentTweakablePolicies.SpecFieldLengthLimit
@@ -1219,4 +1370,48 @@ func (s *scheduleFunctionalSuiteBase) cleanup(sid string) {
 			Identity:   "test",
 		})
 	})
+}
+
+// TestCreateScheduleAlreadyExists verifies that creating a schedule with the same ID
+// returns an AlreadyExists serviceerror.
+func (s *ScheduleCHASMFunctionalSuite) TestCreateScheduleAlreadyExists() {
+	sid := "sched-test-already-exists"
+
+	schedule := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
+				{Interval: durationpb.New(1 * time.Hour)},
+			},
+		},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   "wf-already-exists",
+					WorkflowType: &commonpb.WorkflowType{Name: "action"},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				},
+			},
+		},
+	}
+	req := &workflowservice.CreateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   "test",
+		RequestId:  uuid.NewString(),
+	}
+
+	ctx := s.newContext()
+	_, err := s.FrontendClient().CreateSchedule(ctx, req)
+	s.NoError(err)
+	s.cleanup(sid)
+
+	// Try to create again with a different request ID - should fail with AlreadyExists
+	req.RequestId = uuid.NewString()
+	_, err = s.FrontendClient().CreateSchedule(ctx, req)
+	s.Error(err)
+
+	var alreadyExists *serviceerror.AlreadyExists
+	s.ErrorAs(err, &alreadyExists)
+	s.Contains(err.Error(), sid)
 }

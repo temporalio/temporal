@@ -42,7 +42,6 @@ func Invoke(
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	matchingClient matchingservice.MatchingServiceClient,
 ) (resp *historyservice.RecordActivityTaskStartedResponse, retError error) {
-
 	var err error
 	response := &historyservice.RecordActivityTaskStartedResponse{}
 	var rejectCode rejectCode
