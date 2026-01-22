@@ -34,9 +34,7 @@ func convertError(err error, scheduleID string) error {
 
 	var alreadyStartedErr *chasm.ExecutionAlreadyStartedError
 	if errors.As(err, &alreadyStartedErr) {
-		return serviceerror.NewAlreadyExists(
-			fmt.Sprintf("schedule %q is already registered", scheduleID),
-		)
+		return serviceerror.NewAlreadyExistsf("schedule %q is already registered", scheduleID)
 	}
 
 	var notFound *serviceerror.NotFound
