@@ -70,11 +70,7 @@ func NormalizeAndValidateUserDefined(
 	if err := normalizeAndValidate(taskQueue, defaultName, maxIDLengthLimit, false); err != nil {
 		return err
 	}
-	if primitives.IsInternalTaskQueueForUserNs(taskQueue.GetName()) {
-		return serviceerror.NewInvalidArgumentf(
-			"cannot use a temporal-system internal task queue %v", taskQueue.GetName())
-	}
-	return nil
+	return primitives.CheckNotInternalPerNsTaskQueue(taskQueue.GetName())
 }
 
 func normalizeAndValidate(
