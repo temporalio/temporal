@@ -153,7 +153,6 @@ func TestTransitionAttemptFailed(t *testing.T) {
 			}
 
 			event := EventAttemptFailed{
-				Time:        defaultTime,
 				Failure:     failure,
 				RetryPolicy: tc.retryPolicy,
 			}
@@ -247,7 +246,6 @@ func TestTransitionStarted(t *testing.T) {
 			operation.Attempt = tc.startingAttempt
 
 			event := EventStarted{
-				Time:           defaultTime,
 				OperationToken: tc.operationToken,
 			}
 
