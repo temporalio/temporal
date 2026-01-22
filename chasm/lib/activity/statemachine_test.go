@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payloads"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -279,42 +280,95 @@ func TestTransitionRescheduled(t *testing.T) {
 }
 
 func TestTransitionStarted(t *testing.T) {
-	ctx := &chasm.MockMutableContext{}
-	ctx.HandleNow = func(chasm.Component) time.Time { return defaultTime }
-	attemptState := &activitypb.ActivityAttemptState{
-		Count:       1,
-		StartedTime: timestamppb.New(defaultTime),
-	}
-	outcome := &activitypb.ActivityOutcome{}
-
-	activity := &Activity{
-		ActivityState: &activitypb.ActivityState{
-			RetryPolicy:            defaultRetryPolicy,
-			ScheduleToCloseTimeout: durationpb.New(defaultScheduleToCloseTimeout),
-			ScheduleToStartTimeout: durationpb.New(defaultScheduleToStartTimeout),
-			StartToCloseTimeout:    durationpb.New(defaultStartToCloseTimeout),
-			Status:                 activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+	testCases := []struct {
+		name        string
+		startStatus activitypb.ActivityExecutionStatus
+		expectError bool
+	}{
+		{
+			name:        "valid transition from scheduled",
+			startStatus: activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+			expectError: false,
 		},
-		LastAttempt: chasm.NewDataField(ctx, attemptState),
-		Outcome:     chasm.NewDataField(ctx, outcome),
+		{
+			name:        "invalid transition from completed",
+			startStatus: activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
+			expectError: true,
+		},
+		{
+			name:        "invalid transition from failed",
+			startStatus: activitypb.ACTIVITY_EXECUTION_STATUS_FAILED,
+			expectError: true,
+		},
+		{
+			name:        "invalid transition from started (duplicate)",
+			startStatus: activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
+			expectError: true,
+		},
+		{
+			name:        "invalid transition from canceled",
+			startStatus: activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED,
+			expectError: true,
+		},
+		{
+			name:        "invalid transition from terminated",
+			startStatus: activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED,
+			expectError: true,
+		},
+		{
+			name:        "invalid transition from timed out",
+			startStatus: activitypb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
+			expectError: true,
+		},
 	}
 
-	err := TransitionStarted.Apply(activity, ctx, &historyservice.RecordActivityTaskStartedRequest{
-		PollRequest: &workflowservice.PollActivityTaskQueueRequest{
-			Identity: "test-worker",
-		},
-	})
-	require.NoError(t, err)
-	require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_STARTED, activity.Status)
-	require.EqualValues(t, 1, attemptState.Count)
-	require.Equal(t, defaultTime, attemptState.StartedTime.AsTime())
-	require.Equal(t, "test-worker", attemptState.LastWorkerIdentity)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := &chasm.MockMutableContext{}
+			ctx.HandleNow = func(chasm.Component) time.Time { return defaultTime }
+			attemptState := &activitypb.ActivityAttemptState{
+				Count:       1,
+				StartedTime: timestamppb.New(defaultTime),
+			}
+			outcome := &activitypb.ActivityOutcome{}
 
-	// Verify added tasks
-	require.Len(t, ctx.Tasks, 1)
-	_, ok := ctx.Tasks[0].Payload.(*activitypb.StartToCloseTimeoutTask)
-	require.True(t, ok, "expected ScheduleToStartTimeoutTask")
-	require.Equal(t, defaultTime.Add(defaultStartToCloseTimeout), ctx.Tasks[0].Attributes.ScheduledTime)
+			activity := &Activity{
+				ActivityState: &activitypb.ActivityState{
+					RetryPolicy:            defaultRetryPolicy,
+					ScheduleToCloseTimeout: durationpb.New(defaultScheduleToCloseTimeout),
+					ScheduleToStartTimeout: durationpb.New(defaultScheduleToStartTimeout),
+					StartToCloseTimeout:    durationpb.New(defaultStartToCloseTimeout),
+					Status:                 tc.startStatus,
+				},
+				LastAttempt: chasm.NewDataField(ctx, attemptState),
+				Outcome:     chasm.NewDataField(ctx, outcome),
+			}
+
+			err := TransitionStarted.Apply(activity, ctx, &historyservice.RecordActivityTaskStartedRequest{
+				PollRequest: &workflowservice.PollActivityTaskQueueRequest{
+					Identity: "test-worker",
+				},
+			})
+
+			if tc.expectError {
+				require.Error(t, err)
+				// Invalid transitions should return FailedPrecondition
+				require.Contains(t, err.Error(), "invalid transition")
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_STARTED, activity.Status)
+				require.EqualValues(t, 1, attemptState.Count)
+				require.Equal(t, defaultTime, attemptState.StartedTime.AsTime())
+				require.Equal(t, "test-worker", attemptState.LastWorkerIdentity)
+
+				// Verify added tasks
+				require.Len(t, ctx.Tasks, 1)
+				_, ok := ctx.Tasks[0].Payload.(*activitypb.StartToCloseTimeoutTask)
+				require.True(t, ok, "expected StartToCloseTimeoutTask")
+				require.Equal(t, defaultTime.Add(defaultStartToCloseTimeout), ctx.Tasks[0].Attributes.ScheduledTime)
+			}
+		})
+	}
 }
 
 func TestTransitionTimedout(t *testing.T) {
@@ -722,4 +776,50 @@ func TestTransitionCanceled(t *testing.T) {
 		},
 	}
 	protorequire.ProtoEqual(t, expectedFailure, outcome.GetFailed().GetFailure())
+}
+
+func TestHandleStarted_WrapsFailedPreconditionAsObsoleteMatchingTask(t *testing.T) {
+	// This test verifies that HandleStarted wraps FailedPrecondition errors
+	// (from invalid state transitions) into ObsoleteMatchingTask errors so the
+	// matching service can drop the task instead of retrying.
+	ctx := &chasm.MockMutableContext{}
+	ctx.HandleNow = func(chasm.Component) time.Time { return defaultTime }
+	attemptState := &activitypb.ActivityAttemptState{
+		Count:       1,
+		StartedTime: timestamppb.New(defaultTime),
+	}
+	outcome := &activitypb.ActivityOutcome{}
+	requestData := &activitypb.ActivityRequestData{
+		Input: payloads.EncodeString("test-input"),
+	}
+
+	// Use a COMPLETED activity to trigger invalid state transition
+	activity := &Activity{
+		ActivityState: &activitypb.ActivityState{
+			RetryPolicy:            defaultRetryPolicy,
+			ScheduleToCloseTimeout: durationpb.New(defaultScheduleToCloseTimeout),
+			ScheduleToStartTimeout: durationpb.New(defaultScheduleToStartTimeout),
+			StartToCloseTimeout:    durationpb.New(defaultStartToCloseTimeout),
+			Status:                 activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
+		},
+		LastAttempt: chasm.NewDataField(ctx, attemptState),
+		Outcome:     chasm.NewDataField(ctx, outcome),
+		RequestData: chasm.NewDataField(ctx, requestData),
+	}
+
+	request := &historyservice.RecordActivityTaskStartedRequest{
+		PollRequest: &workflowservice.PollActivityTaskQueueRequest{
+			Identity:  "test-worker",
+			Namespace: "test-namespace",
+		},
+	}
+
+	resp, err := activity.HandleStarted(ctx, request)
+	require.Error(t, err)
+	require.Nil(t, resp)
+
+	var obsoleteErr *serviceerrors.ObsoleteMatchingTask
+	require.ErrorAs(t, err, &obsoleteErr, "HandleStarted should wrap FailedPrecondition as ObsoleteMatchingTask")
+	require.Contains(t, err.Error(), "invalid state transition")
+	require.Contains(t, err.Error(), "Completed")
 }

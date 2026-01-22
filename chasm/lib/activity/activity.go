@@ -1,6 +1,7 @@
 package activity
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 	"time"
@@ -22,6 +23,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payload"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tqid"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -195,6 +197,15 @@ func (a *Activity) HandleStarted(ctx chasm.MutableContext, request *historyservi
 	*historyservice.RecordActivityTaskStartedResponse, error,
 ) {
 	if err := TransitionStarted.Apply(a, ctx, request); err != nil {
+		// If the transition failed due to invalid state (e.g., activity already completed),
+		// return ObsoleteMatchingTask so matching service can safely drop the task.
+		// History has already processed the activity, so this task is stale.
+		var fpErr *serviceerror.FailedPrecondition
+		if errors.As(err, &fpErr) {
+			return nil, serviceerrors.NewObsoleteMatchingTaskf(
+				"activity task start rejected due to invalid state transition from %s: %v",
+				a.GetStatus(), err)
+		}
 		return nil, err
 	}
 	response := &historyservice.RecordActivityTaskStartedResponse{}
