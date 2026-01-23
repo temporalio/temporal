@@ -107,11 +107,6 @@ func sendUpdateInternal(
 				// Not an Aborted error, don't retry
 				break
 			}
-
-			// Simulate SDK backoff before retrying
-			if attempt < maxRetries-1 {
-				time.Sleep(10 * time.Millisecond)
-			}
 		}
 
 		if requireNoError && updateErr != nil {
