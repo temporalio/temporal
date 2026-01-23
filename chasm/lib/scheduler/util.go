@@ -6,6 +6,7 @@ import (
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -48,6 +49,11 @@ func newTaggedLogger(baseLogger log.Logger, scheduler *Scheduler) log.Logger {
 		tag.WorkflowNamespace(scheduler.Namespace),
 		tag.ScheduleID(scheduler.ScheduleId),
 	)
+}
+
+// newTaggedMetricsHandler returns a metrics handler tagged with the Scheduler's namespace.
+func newTaggedMetricsHandler(baseHandler metrics.Handler, scheduler *Scheduler) metrics.Handler {
+	return baseHandler.WithTags(metrics.NamespaceTag(scheduler.Namespace))
 }
 
 // validateTaskHighWaterMark validates a component's lastProcessedTime against a
