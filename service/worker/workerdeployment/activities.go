@@ -6,10 +6,13 @@ import (
 	"sync"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/sdk/activity"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/sdk"
+	"go.temporal.io/server/common/worker_versioning"
 )
 
 type (
@@ -140,16 +143,37 @@ func (a *Activities) IsVersionMissingTaskQueues(ctx context.Context, args *deplo
 
 func (a *Activities) DeleteWorkerDeploymentVersion(ctx context.Context, args *deploymentspb.DeleteVersionActivityArgs) error {
 	identity := "worker-deployment workflow " + activity.GetInfo(ctx).WorkflowExecution.ID
-	err := a.WorkerDeploymentClient.DeleteVersionFromWorkerDeployment(
+	versionObj, err := worker_versioning.WorkerDeploymentVersionFromStringV31(args.Version)
+	if err != nil {
+		return err
+	}
+
+	workflowID := GenerateVersionWorkflowID(args.DeploymentName, versionObj.GetBuildId())
+	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.DeleteVersionArgs{
+		Identity:         identity,
+		Version:          args.Version,
+		SkipDrainage:     args.SkipDrainage,
+		AsyncPropagation: args.AsyncPropagation,
+	})
+	if err != nil {
+		return err
+	}
+
+	outcome, err := updateWorkflow(
 		ctx,
+		a.HistoryClient,
 		a.namespace,
-		args.DeploymentName,
-		args.Version,
-		identity,
-		args.RequestId,
-		args.SkipDrainage,
-		args.AsyncPropagation,
+		workflowID,
+		&updatepb.Request{
+			Input: &updatepb.Input{Name: DeleteVersion, Args: updatePayload},
+			Meta:  &updatepb.Meta{UpdateId: args.RequestId, Identity: identity},
+		},
 	)
+	if err != nil {
+		return err
+	}
+
+	err = extractApplicationErrorOrInternal(outcome.GetFailure())
 	if err != nil {
 		return err
 	}

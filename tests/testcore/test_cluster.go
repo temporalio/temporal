@@ -257,7 +257,8 @@ func newClusterWithPersistenceTestBaseFactory(t *testing.T, clusterConfig *TestC
 				Host:   fmt.Sprintf("%s:%d", environment.GetESAddress(), environment.GetESPort()),
 				Scheme: "http",
 			},
-			Version: environment.GetESVersion(),
+			Version:     environment.GetESVersion(),
+			DisableGzip: true, // lowers memory and CPU usage significantly in tests
 		}
 
 		err := setupIndex(clusterConfig.ESConfig, logger)

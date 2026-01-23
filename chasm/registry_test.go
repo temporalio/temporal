@@ -22,7 +22,17 @@ type (
 	testTaskComponentInterface interface {
 		DoSomething()
 	}
+
+	// testComponentWithVisibility is a test component that has a Visibility field.
+	testComponentWithVisibility struct {
+		chasm.UnimplementedComponent
+		Visibility chasm.Field[*chasm.Visibility]
+	}
 )
+
+func (t *testComponentWithVisibility) LifecycleState(_ chasm.Context) chasm.LifecycleState {
+	return chasm.LifecycleStateRunning
+}
 
 func TestRegistryTestSuite(t *testing.T) {
 	suite.Run(t, new(RegistryTestSuite))
@@ -257,6 +267,65 @@ func (s *RegistryTestSuite) TestRegistry_RegisterComponents_Error() {
 				),
 			)
 		})
+	})
+
+	s.Run("ExecutionStatus alias is allowed for CHASM components", func() {
+		s.Require().NotPanics(func() {
+			chasm.NewRegistrableComponent[*chasm.MockComponent](
+				"Component1",
+				chasm.WithSearchAttributes(
+					chasm.NewSearchAttributeKeyword("ExecutionStatus", chasm.SearchAttributeFieldLowCardinalityKeyword01),
+				),
+			)
+		})
+	})
+
+	s.Run("TaskQueue preallocated search attribute is allowed", func() {
+		s.Require().NotPanics(func() {
+			chasm.NewRegistrableComponent[*chasm.MockComponent](
+				"Component1",
+				chasm.WithSearchAttributes(
+					chasm.SearchAttributeTaskQueue,
+				),
+			)
+		})
+	})
+
+	s.Run("CHASM system search attribute alias panics", func() {
+		s.Require().PanicsWithValue(
+			"registrable component validation error: CHASM search attribute alias \"WorkflowId\" is a CHASM system search attribute",
+			func() {
+				chasm.NewRegistrableComponent[*chasm.MockComponent](
+					"Component1",
+					chasm.WithSearchAttributes(
+						chasm.NewSearchAttributeKeyword("WorkflowId", chasm.SearchAttributeFieldKeyword01),
+					),
+				)
+			},
+		)
+	})
+
+	s.Run("component with Visibility field must have businessID alias", func() {
+		lib.EXPECT().Components().Return([]*chasm.RegistrableComponent{
+			chasm.NewRegistrableComponent[*testComponentWithVisibility]("ComponentWithVis"),
+		})
+		r := chasm.NewRegistry(s.logger)
+		err := r.Register(lib)
+		s.Require().Error(err)
+		s.Require().Contains(err.Error(), "has Field[*Visibility] but no businessID alias")
+	})
+
+	s.Run("component with Visibility field and businessID alias succeeds", func() {
+		lib.EXPECT().Components().Return([]*chasm.RegistrableComponent{
+			chasm.NewRegistrableComponent[*testComponentWithVisibility](
+				"ComponentWithVis",
+				chasm.WithBusinessIDAlias("MyBusinessId"),
+			),
+		})
+		lib.EXPECT().Tasks().Return(nil)
+		r := chasm.NewRegistry(s.logger)
+		err := r.Register(lib)
+		s.Require().NoError(err)
 	})
 
 }

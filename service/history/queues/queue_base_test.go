@@ -637,14 +637,15 @@ func (s *queueBaseSuite) QueueStateEqual(
 	that *persistencespb.QueueState,
 ) {
 	// ser/de so to equal will not take timezone into consideration
-	thisBlob, err := serialization.QueueStateToBlob(this)
+	serializer := serialization.NewSerializer()
+	thisBlob, err := serializer.QueueStateToBlob(this)
 	s.NoError(err)
-	this, err = serialization.QueueStateFromBlob(thisBlob)
+	this, err = serializer.QueueStateFromBlob(thisBlob)
 	s.NoError(err)
 
-	thatBlob, err := serialization.QueueStateToBlob(that)
+	thatBlob, err := serializer.QueueStateToBlob(that)
 	s.NoError(err)
-	that, err = serialization.QueueStateFromBlob(thatBlob)
+	that, err = serializer.QueueStateFromBlob(thatBlob)
 	s.NoError(err)
 
 	s.Equal(this, that)

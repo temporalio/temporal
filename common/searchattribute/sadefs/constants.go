@@ -79,6 +79,8 @@ const (
 
 	// BuildIds is a KeywordList that holds information about current and past build ids
 	// used by the workflow. Used for Worker Versioning
+	// This SA is deprecated as of Versioning GA. Instead, users should use one of the following SAs for different purposes:
+	// TemporalWorkflowVersioningBehavior, TemporalWorkerDeployment, TemporalWorkerDeploymentVersion, TemporalUsedWorkerDeploymentVersions.
 	BuildIds = "BuildIds"
 
 	// TemporalWorkerDeploymentVersion stores the current Worker Deployment Version
@@ -97,6 +99,11 @@ const (
 	// execution. It is updated at workflow task completion when the server gets the
 	// behavior (`auto_upgrade` or `pinned`) from the SDK. Empty for unversioned workflows.
 	TemporalWorkflowVersioningBehavior = "TemporalWorkflowVersioningBehavior"
+
+	// TemporalUsedWorkerDeploymentVersions is a KeywordList that holds all Worker Deployment
+	// Versions that have completed workflow tasks for this workflow execution. Used for tracking
+	// deployment version usage history. Format: "<deployment_name>:<build_id>" per entry.
+	TemporalUsedWorkerDeploymentVersions = "TemporalUsedWorkerDeploymentVersions"
 
 	// TemporalReportedProblems is a search attribute that stores the information about problems
 	// the workflow has encountered in making progress. It is updated after successive workflow task
@@ -153,20 +160,23 @@ var (
 	// predefined are internal search attributes which are passed and stored in SearchAttributes object together with custom search attributes.
 	// Attributes listed here but not in predefinedWhiteList are considered internal-only and are banned from user-facing usage.
 	predefined = map[string]enumspb.IndexedValueType{
-		TemporalChangeVersion:              enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
-		BinaryChecksums:                    enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
-		BuildIds:                           enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
-		BatcherNamespace:                   enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		BatcherUser:                        enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		TemporalScheduledStartTime:         enumspb.INDEXED_VALUE_TYPE_DATETIME,
-		TemporalScheduledById:              enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		TemporalSchedulePaused:             enumspb.INDEXED_VALUE_TYPE_BOOL,
-		TemporalNamespaceDivision:          enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		TemporalPauseInfo:                  enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
-		TemporalReportedProblems:           enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
-		TemporalWorkerDeploymentVersion:    enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		TemporalWorkflowVersioningBehavior: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		TemporalWorkerDeployment:           enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		TemporalChangeVersion: enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		BinaryChecksums:       enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		// This SA is deprecated as of Versioning GA. Instead, users should use one of the following SAs for different purposes:
+		// TemporalWorkflowVersioningBehavior, TemporalWorkerDeployment, TemporalWorkerDeploymentVersion, TemporalUsedWorkerDeploymentVersions.
+		BuildIds:                             enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		BatcherNamespace:                     enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		BatcherUser:                          enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		TemporalScheduledStartTime:           enumspb.INDEXED_VALUE_TYPE_DATETIME,
+		TemporalScheduledById:                enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		TemporalSchedulePaused:               enumspb.INDEXED_VALUE_TYPE_BOOL,
+		TemporalNamespaceDivision:            enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		TemporalPauseInfo:                    enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		TemporalReportedProblems:             enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		TemporalWorkerDeploymentVersion:      enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		TemporalWorkflowVersioningBehavior:   enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		TemporalWorkerDeployment:             enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		TemporalUsedWorkerDeploymentVersions: enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
 	}
 
 	// reserved are internal field names that can't be used as search attribute names.
@@ -176,6 +186,20 @@ var (
 		Memo:         {},
 		// Used in the Elasticsearch bulk processor, not needed in SQL databases.
 		VisibilityTaskKey: {},
+	}
+
+	// chasmSystemSearchAttributes are system search attributes used by CHASM internally
+	// and cannot be used as CHASM search attribute aliases. These correspond to fields
+	// in chasm.ExecutionInfo.
+	chasmSystemSearchAttributes = map[string]struct{}{
+		WorkflowID:           {},
+		RunID:                {},
+		StartTime:            {},
+		ExecutionTime:        {},
+		CloseTime:            {},
+		HistoryLength:        {},
+		HistorySizeBytes:     {},
+		StateTransitionCount: {},
 	}
 
 	sqlDbSystemNameToColName = map[string]string{
@@ -269,6 +293,12 @@ func IsMappable(name string) bool {
 		return false
 	}
 	return true
+}
+
+// IsChasmSystem returns true if name is a system search attribute used by CHASM
+func IsChasmSystem(name string) bool {
+	_, ok := chasmSystemSearchAttributes[name]
+	return ok
 }
 
 // GetSqlDbColName maps system and reserved search attributes to column names for SQL tables.

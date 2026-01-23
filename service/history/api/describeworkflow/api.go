@@ -89,6 +89,7 @@ func Invoke(
 	defer func() { workflowLease.GetReleaseFn()(retError) }()
 
 	mutableState := workflowLease.GetMutableState()
+	namespaceName := mutableState.GetNamespaceEntry().Name().String()
 	executionInfo := mutableState.GetExecutionInfo()
 	executionState := mutableState.GetExecutionState()
 
@@ -157,6 +158,12 @@ func Invoke(
 
 	if mutableState.IsResetRun() {
 		result.WorkflowExtendedInfo.LastResetTime = executionState.StartTime
+	}
+
+	if shard.GetConfig().ExternalPayloadsEnabled(namespaceName) {
+		executionStats := executionInfo.GetExecutionStats()
+		result.WorkflowExecutionInfo.ExternalPayloadSizeBytes = executionStats.GetExternalPayloadSize()
+		result.WorkflowExecutionInfo.ExternalPayloadCount = executionStats.GetExternalPayloadCount()
 	}
 
 	for requestID, requestIDInfo := range mutableState.GetExecutionState().GetRequestIds() {

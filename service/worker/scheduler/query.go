@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
@@ -34,7 +35,7 @@ func newFieldNameAggInterceptor(
 	saMapperProvider searchattribute.MapperProvider,
 ) *fieldNameAggInterceptor {
 	return &fieldNameAggInterceptor{
-		baseInterceptor: elasticsearch.NewNameInterceptor(namespaceName, saNameType, saMapperProvider, nil),
+		baseInterceptor: elasticsearch.NewNameInterceptor(namespaceName, saNameType, saMapperProvider, nil, chasm.UnspecifiedArchetypeID),
 		names:           make(map[string]bool),
 	}
 }

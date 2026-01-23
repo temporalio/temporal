@@ -1,9 +1,11 @@
 # IMPORTANT: When updating ALPINE_TAG, also update the default value in:
 # - docker/docker-bake.hcl (variable "ALPINE_TAG")
 # - docker/targets/server.Dockerfile (ARG ALPINE_TAG)
-ARG ALPINE_TAG=3.23@sha256:c78ded0fee4493809c8ca71d4a6057a46237763d952fae15ea418f6d14137f2d
+# NOTE: We use just the tag without a digest pin because digest-pinned manifest lists
+# cause platform resolution issues in multi-arch buildx builds (InvalidBaseImagePlatform warnings).
+ARG ALPINE_TAG=3.23
 
-FROM alpine:${ALPINE_TAG}
+FROM --platform=$TARGETPLATFORM alpine:${ALPINE_TAG}
 
 ARG TARGETARCH
 

@@ -14,13 +14,15 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	deploymentspb "go.temporal.io/server/api/deployment/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testlogger"
@@ -28,6 +30,7 @@ import (
 	"go.temporal.io/server/common/worker_versioning"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -40,11 +43,13 @@ type PartitionManagerTestSuite struct {
 	suite.Suite
 	protorequire.ProtoAssertions
 
-	newMatcher   bool
-	fairness     bool
-	controller   *gomock.Controller
-	userDataMgr  *mockUserDataManager
-	partitionMgr *taskQueuePartitionManagerImpl
+	newMatcher     bool
+	fairness       bool
+	controller     *gomock.Controller
+	userDataMgr    *mockUserDataManager
+	partitionMgr   *taskQueuePartitionManagerImpl
+	matchingClient *matchingservicemock.MockMatchingServiceClient
+	ns             *namespace.Namespace
 }
 
 // TODO(pri): cleanup; delete this
@@ -69,15 +74,16 @@ func (s *PartitionManagerTestSuite) SetupTest() {
 	logger := testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
 
 	ns, registry := createMockNamespaceCache(s.controller, namespace.Name(namespaceName))
-	config := NewConfig(dynamicconfig.NewNoopCollection())
+	s.ns = ns
+	config := defaultTestConfig()
 	if s.fairness {
 		useFairness(config)
 	} else if s.newMatcher {
 		useNewMatcher(config)
 	}
 
-	matchingClientMock := matchingservicemock.NewMockMatchingServiceClient(s.controller)
-	engine := createTestMatchingEngine(logger, s.controller, config, matchingClientMock, registry)
+	s.matchingClient = matchingservicemock.NewMockMatchingServiceClient(s.controller)
+	engine := createTestMatchingEngine(logger, s.controller, config, s.matchingClient, registry)
 
 	f, err := tqid.NewTaskQueueFamily(namespaceID, taskQueueName)
 	s.NoError(err)
@@ -210,7 +216,7 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_MultipleBuild
 }
 
 func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_UnloadedVersionedQueues() {
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
 	// adding a task to a versioned queue
@@ -227,13 +233,381 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_UnloadedVersi
 	// unload sourceQ
 	s.partitionMgr.unloadPhysicalQueue(sourceQ, unloadCauseUnspecified)
 
-	// calling Describe on an unloaded physical queue
-	resp, err := s.partitionMgr.Describe(ctx, buildIds, false, true, false, false)
+	s.describeStatsEventually(buildIds, false, false, false, func(resp *matchingservice.DescribeTaskQueuePartitionResponse) bool {
+		// 1 task in the backlog
+		stats := resp.VersionsInfoInternal[bld].GetPhysicalTaskQueueInfo().GetTaskQueueStats()
+		return stats != nil && stats.GetApproximateBacklogCount() == 1
+	})
+}
+
+func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_CurrentAndRampingSplitDefaultBacklog() {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	const (
+		deploymentName = "foo"
+		currentBuildID = "A"
+		rampingBuildID = "B"
+		rampPct        = float32(30)
+	)
+
+	// Seed user data with deployment routing config that marks current/ramping.
+	s.userDataMgr.data = &persistencespb.VersionedTaskQueueUserData{
+		Data: &persistencespb.TaskQueueUserData{
+			PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+				int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {
+					DeploymentData: &persistencespb.DeploymentData{
+						DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
+							deploymentName: {
+								RoutingConfig: &deploymentpb.RoutingConfig{
+									CurrentDeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
+										DeploymentName: deploymentName,
+										BuildId:        currentBuildID,
+									},
+									RampingDeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
+										DeploymentName: deploymentName,
+										BuildId:        rampingBuildID,
+									},
+									RampingVersionPercentage:            rampPct,
+									RampingVersionChangedTime:           timestamppb.New(time.Now().Add(-1 * time.Hour)),
+									RampingVersionPercentageChangedTime: timestamppb.New(time.Now().Add(-1 * time.Hour)),
+									CurrentVersionChangedTime:           timestamppb.New(time.Now().Add(-1 * time.Hour)),
+								},
+								Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+									currentBuildID: {RevisionNumber: 1, UpdateTime: timestamppb.Now()},
+									rampingBuildID: {RevisionNumber: 1, UpdateTime: timestamppb.Now()},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	err := s.partitionMgr.WaitUntilInitialized(ctx)
+	s.Require().NoError(err)
+	dQueue := s.partitionMgr.defaultQueue()
+	// Backlog 10 tasks in the unversioned/default queue.
+	for i := 0; i < 10; i++ {
+		err := dQueue.SpoolTask(&persistencespb.TaskInfo{
+			NamespaceId: namespaceID,
+			RunId:       "run",
+			WorkflowId:  fmt.Sprintf("wf-%d", i),
+		})
+		s.Require().NoError(err)
+	}
+
+	currentQ, err := s.partitionMgr.getVersionedQueue(ctx, "", "", &deploymentpb.Deployment{
+		SeriesName: deploymentName,
+		BuildId:    currentBuildID,
+	}, true)
 	s.NoError(err)
 
-	// 1 task in the backlog
-	s.NotNil(resp.VersionsInfoInternal[bld].PhysicalTaskQueueInfo.TaskQueueStats)
-	s.Equal(int64(1), resp.VersionsInfoInternal[bld].PhysicalTaskQueueInfo.TaskQueueStats.ApproximateBacklogCount)
+	// Make this a pinned task so that it goes to the current versioned queue.
+	err = currentQ.SpoolTask(&persistencespb.TaskInfo{
+		NamespaceId: namespaceID,
+		RunId:       "run",
+		WorkflowId:  "wf-current-extra",
+		VersionDirective: &taskqueuespb.TaskVersionDirective{
+			Behavior: enumspb.VERSIONING_BEHAVIOR_PINNED,
+			DeploymentVersion: &deploymentspb.WorkerDeploymentVersion{
+				DeploymentName: deploymentName,
+				BuildId:        currentBuildID,
+			},
+			RevisionNumber: 1,
+		},
+	})
+	s.Require().NoError(err)
+
+	buildIds := map[string]bool{
+		worker_versioning.BuildIDToStringV32(deploymentName, currentBuildID): true,
+		worker_versioning.BuildIDToStringV32(deploymentName, rampingBuildID): true,
+		"": true, // also request unversioned stats; it should have the attributed portion removed
+	}
+
+	currentKey := worker_versioning.ExternalWorkerDeploymentVersionToString(
+		&deploymentpb.WorkerDeploymentVersion{DeploymentName: deploymentName, BuildId: currentBuildID},
+	)
+	rampingKey := worker_versioning.ExternalWorkerDeploymentVersionToString(
+		&deploymentpb.WorkerDeploymentVersion{DeploymentName: deploymentName, BuildId: rampingBuildID},
+	)
+
+	s.describeStatsEventually(buildIds, false, false, false, func(resp *matchingservice.DescribeTaskQueuePartitionResponse) bool {
+		currentStats := resp.VersionsInfoInternal[currentKey].GetPhysicalTaskQueueInfo().GetTaskQueueStats()
+		rampingStats := resp.VersionsInfoInternal[rampingKey].GetPhysicalTaskQueueInfo().GetTaskQueueStats()
+		unversionedStats := resp.VersionsInfoInternal[""].GetPhysicalTaskQueueInfo().GetTaskQueueStats()
+
+		// 7 unversioned tasks + 1 pinned task
+		if currentStats.GetApproximateBacklogCount() != 8 {
+			return false
+		}
+		// 3 unversioned tasks
+		if rampingStats.GetApproximateBacklogCount() != 3 {
+			return false
+		}
+		// 0 unversioned tasks after subtraction
+		return unversionedStats.GetApproximateBacklogCount() == 0
+	})
+}
+
+func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_OneUnversionedTask_OverAttributesToCurrentAndRamping() {
+	const (
+		deploymentName = "foo"
+		currentBuildID = "A"
+		rampingBuildID = "B"
+		rampPct        = float32(30)
+	)
+
+	// Seed user data with deployment routing config that marks current/ramping.
+	s.userDataMgr.data = &persistencespb.VersionedTaskQueueUserData{
+		Data: &persistencespb.TaskQueueUserData{
+			PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+				int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {
+					DeploymentData: &persistencespb.DeploymentData{
+						DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
+							deploymentName: {
+								RoutingConfig: &deploymentpb.RoutingConfig{
+									CurrentDeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
+										DeploymentName: deploymentName,
+										BuildId:        currentBuildID,
+									},
+									RampingDeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
+										DeploymentName: deploymentName,
+										BuildId:        rampingBuildID,
+									},
+									RampingVersionPercentage:            rampPct,
+									RampingVersionChangedTime:           timestamppb.New(time.Now().Add(-1 * time.Hour)),
+									RampingVersionPercentageChangedTime: timestamppb.New(time.Now().Add(-1 * time.Hour)),
+									CurrentVersionChangedTime:           timestamppb.New(time.Now().Add(-1 * time.Hour)),
+								},
+								Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+									currentBuildID: {RevisionNumber: 1, UpdateTime: timestamppb.Now()},
+									rampingBuildID: {RevisionNumber: 1, UpdateTime: timestamppb.Now()},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	err := s.partitionMgr.WaitUntilInitialized(ctx)
+	s.Require().NoError(err)
+	// Backlog exactly 1 task in the unversioned/default queue.
+	err = s.partitionMgr.defaultQueue().SpoolTask(&persistencespb.TaskInfo{
+		NamespaceId: namespaceID,
+		RunId:       "run",
+		WorkflowId:  "wf-single",
+	})
+	s.Require().NoError(err)
+
+	buildIds := map[string]bool{
+		worker_versioning.BuildIDToStringV32(deploymentName, currentBuildID): true,
+		worker_versioning.BuildIDToStringV32(deploymentName, rampingBuildID): true,
+		"": true, // also request unversioned stats; it should have the attributed portion removed
+	}
+
+	currentKey := worker_versioning.ExternalWorkerDeploymentVersionToString(
+		&deploymentpb.WorkerDeploymentVersion{DeploymentName: deploymentName, BuildId: currentBuildID},
+	)
+	rampingKey := worker_versioning.ExternalWorkerDeploymentVersionToString(
+		&deploymentpb.WorkerDeploymentVersion{DeploymentName: deploymentName, BuildId: rampingBuildID},
+	)
+
+	s.describeStatsEventually(buildIds, false, false, false, func(resp *matchingservice.DescribeTaskQueuePartitionResponse) bool {
+		currentStats := resp.VersionsInfoInternal[currentKey].GetPhysicalTaskQueueInfo().GetTaskQueueStats()
+		rampingStats := resp.VersionsInfoInternal[rampingKey].GetPhysicalTaskQueueInfo().GetTaskQueueStats()
+		unversionedStats := resp.VersionsInfoInternal[""].GetPhysicalTaskQueueInfo().GetTaskQueueStats()
+
+		return currentStats.GetApproximateBacklogCount() == 1 &&
+			rampingStats.GetApproximateBacklogCount() == 1 &&
+			unversionedStats.GetApproximateBacklogCount() == 0
+	})
+}
+
+func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_OnlyCurrentNoRampingTakesAllUnversionedBacklog() {
+	const (
+		deploymentName = "foo"
+		currentBuildID = "A"
+	)
+
+	// Seed user data with deployment routing config that marks only current (no ramping).
+	s.userDataMgr.data = &persistencespb.VersionedTaskQueueUserData{
+		Data: &persistencespb.TaskQueueUserData{
+			PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+				int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {
+					DeploymentData: &persistencespb.DeploymentData{
+						DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
+							deploymentName: {
+								RoutingConfig: &deploymentpb.RoutingConfig{
+									CurrentDeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
+										DeploymentName: deploymentName,
+										BuildId:        currentBuildID,
+									},
+									RampingDeploymentVersion:            nil,
+									RampingVersionPercentage:            0,
+									CurrentVersionChangedTime:           timestamppb.New(time.Now().Add(-1 * time.Hour)),
+									RampingVersionPercentageChangedTime: timestamppb.New(time.Now().Add(-1 * time.Hour)),
+								},
+								Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+									currentBuildID: {RevisionNumber: 1, UpdateTime: timestamppb.Now()},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	err := s.partitionMgr.WaitUntilInitialized(ctx)
+	s.Require().NoError(err)
+	dQueue := s.partitionMgr.defaultQueue()
+	// Backlog 10 tasks in the unversioned/default queue.
+	for i := 0; i < 10; i++ {
+		err = dQueue.SpoolTask(&persistencespb.TaskInfo{
+			NamespaceId: namespaceID,
+			RunId:       "run",
+			WorkflowId:  fmt.Sprintf("wf-only-current-%d", i),
+		})
+		s.Require().NoError(err)
+	}
+
+	buildIds := map[string]bool{
+		worker_versioning.BuildIDToStringV32(deploymentName, currentBuildID): true,
+		"": true,
+	}
+
+	currentKey := worker_versioning.ExternalWorkerDeploymentVersionToString(
+		&deploymentpb.WorkerDeploymentVersion{DeploymentName: deploymentName, BuildId: currentBuildID},
+	)
+
+	s.describeStatsEventually(buildIds, false, false, false, func(resp *matchingservice.DescribeTaskQueuePartitionResponse) bool {
+		currentStats := resp.VersionsInfoInternal[currentKey].GetPhysicalTaskQueueInfo().GetTaskQueueStats()
+		unversionedStats := resp.VersionsInfoInternal[""].GetPhysicalTaskQueueInfo().GetTaskQueueStats()
+		if currentStats == nil || unversionedStats == nil {
+			return false
+		}
+		// With only current (no ramping), all unversioned backlog is attributed to current.
+		return currentStats.GetApproximateBacklogCount() == 10 && unversionedStats.GetApproximateBacklogCount() == 0
+	})
+}
+
+func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_OnlyRampingNoCurrentSplitsUnversionedBacklog() {
+	const (
+		deploymentName = "foo"
+		rampingBuildID = "B"
+		rampPct        = float32(30)
+	)
+
+	// Seed user data with deployment routing config that marks only ramping (no current).
+	s.userDataMgr.data = &persistencespb.VersionedTaskQueueUserData{
+		Data: &persistencespb.TaskQueueUserData{
+			PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+				int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {
+					DeploymentData: &persistencespb.DeploymentData{
+						DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
+							deploymentName: {
+								RoutingConfig: &deploymentpb.RoutingConfig{
+									CurrentDeploymentVersion: nil,
+									RampingDeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
+										DeploymentName: deploymentName,
+										BuildId:        rampingBuildID,
+									},
+									RampingVersionPercentage:            rampPct,
+									CurrentVersionChangedTime:           timestamppb.New(time.Now().Add(-1 * time.Hour)),
+									RampingVersionChangedTime:           timestamppb.New(time.Now().Add(-1 * time.Hour)),
+									RampingVersionPercentageChangedTime: timestamppb.New(time.Now().Add(-1 * time.Hour)),
+								},
+								Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+									rampingBuildID: {RevisionNumber: 1, UpdateTime: timestamppb.Now()},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	err := s.partitionMgr.WaitUntilInitialized(ctx)
+	s.Require().NoError(err)
+	dQueue := s.partitionMgr.defaultQueue()
+	// Backlog 10 tasks in the unversioned/default queue.
+	for i := 0; i < 10; i++ {
+		err = dQueue.SpoolTask(&persistencespb.TaskInfo{
+			NamespaceId: namespaceID,
+			RunId:       "run",
+			WorkflowId:  fmt.Sprintf("wf-only-ramp-%d", i),
+		})
+		s.Require().NoError(err)
+	}
+
+	buildIds := map[string]bool{
+		worker_versioning.BuildIDToStringV32(deploymentName, rampingBuildID): true,
+		"": true,
+	}
+
+	rampingKey := worker_versioning.ExternalWorkerDeploymentVersionToString(
+		&deploymentpb.WorkerDeploymentVersion{DeploymentName: deploymentName, BuildId: rampingBuildID},
+	)
+
+	s.describeStatsEventually(buildIds, false, false, false, func(resp *matchingservice.DescribeTaskQueuePartitionResponse) bool {
+		rampingStats := resp.VersionsInfoInternal[rampingKey].GetPhysicalTaskQueueInfo().GetTaskQueueStats()
+		unversionedStats := resp.VersionsInfoInternal[""].GetPhysicalTaskQueueInfo().GetTaskQueueStats()
+		return rampingStats.GetApproximateBacklogCount() == 3 && unversionedStats.GetApproximateBacklogCount() == 7
+	})
+}
+
+func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_UnversionedDoesNotDoubleCount() {
+	// Current is unversioned (no current/ramping deployment versions set).
+	s.userDataMgr.data = &persistencespb.VersionedTaskQueueUserData{
+		Data: &persistencespb.TaskQueueUserData{
+			PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+				int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {
+					DeploymentData: &persistencespb.DeploymentData{
+						DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
+							"foo": {
+								RoutingConfig: &deploymentpb.RoutingConfig{
+									CurrentDeploymentVersion: nil,
+									RampingDeploymentVersion: nil,
+									RampingVersionPercentage: 0,
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	err := s.partitionMgr.WaitUntilInitialized(ctx)
+	s.Require().NoError(err)
+	dQueue := s.partitionMgr.defaultQueue()
+	// Backlog 5 tasks in the unversioned/default queue.
+	for i := 0; i < 5; i++ {
+		err = dQueue.SpoolTask(&persistencespb.TaskInfo{
+			NamespaceId: namespaceID,
+			RunId:       "run",
+			WorkflowId:  fmt.Sprintf("wf-uv-%d", i),
+		})
+		s.Require().NoError(err)
+	}
+
+	s.describeStatsEventually(map[string]bool{"": true}, false, false, false, func(resp *matchingservice.DescribeTaskQueuePartitionResponse) bool {
+		uvStats := resp.VersionsInfoInternal[""].GetPhysicalTaskQueueInfo().GetTaskQueueStats()
+		return uvStats != nil && uvStats.GetApproximateBacklogCount() == 5
+	})
 }
 
 func (s *PartitionManagerTestSuite) TestAddTaskNoRules_UnassignedTask() {
@@ -499,6 +873,29 @@ func (s *PartitionManagerTestSuite) TestLegacyDescribeTaskQueue() {
 	}
 }
 
+func (s *PartitionManagerTestSuite) TestAutoEnable() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	s.matchingClient.EXPECT().UpdateFairnessState(ctx, &matchingservice.UpdateFairnessStateRequest{
+		NamespaceId:   s.ns.ID().String(),
+		TaskQueue:     "my-test-tq",
+		TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		FairnessState: enumsspb.FAIRNESS_STATE_V2,
+	}).Times(1).Return(nil, nil)
+	_, _, err := s.partitionMgr.AddTask(ctx, addTaskParams{
+		taskInfo: &persistencespb.TaskInfo{
+			NamespaceId: namespaceID,
+			RunId:       "run",
+			WorkflowId:  "wf",
+			Priority: &commonpb.Priority{
+				PriorityKey: 3,
+				FairnessKey: "myFairnessKey",
+			},
+		},
+	})
+	s.Require().NoError(err)
+}
+
 func (s *PartitionManagerTestSuite) validateAddTask(expectedBuildId string, expectedSyncMatch bool, versioningData *persistencespb.VersioningData, directive *taskqueuespb.TaskVersionDirective) {
 	timeout := 1000000 * time.Millisecond
 	if expectedSyncMatch {
@@ -600,9 +997,179 @@ func createVersionSet(buildId string) *persistencespb.CompatibleVersionSet {
 	}
 }
 
+func (s *PartitionManagerTestSuite) describeStatsEventually(
+	buildIds map[string]bool,
+	includeAllActive, reportPollers, internalTaskQueueStatus bool,
+	check func(resp *matchingservice.DescribeTaskQueuePartitionResponse) bool,
+) {
+	// Backlog stats are sourced from async readers; wait until Describe reflects expected stable values.
+	s.Require().Eventually(func() bool {
+		ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+		defer cancel()
+		resp, err := s.partitionMgr.Describe(ctx, buildIds, includeAllActive, true /* reportStats */, reportPollers, internalTaskQueueStatus)
+		if err != nil {
+			return false
+		}
+		return check(resp)
+	}, 2*time.Second, 10*time.Millisecond)
+}
+
+// testPartitionManagerConfig holds configuration for setting up a partition manager in tests
+type testPartitionManagerConfig struct {
+	loadTime         time.Duration // How long ago partition was loaded
+	withRecentPoller bool          // Whether to register a poller to simulate recent poller activity
+}
+
+// setupPartitionManagerWithCapture creates a partition manager with a capturing metrics handler
+// and returns the manager, capture, and a cleanup function
+func (s *PartitionManagerTestSuite) setupPartitionManagerWithCapture(
+	config testPartitionManagerConfig,
+) (*taskQueuePartitionManagerImpl, *metricstest.Capture, func()) {
+	// Create capturing metrics handler
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+
+	// Create a new partition manager with the capturing metrics handler
+	f, err := tqid.NewTaskQueueFamily(namespaceID, taskQueueName)
+	s.Require().NoError(err)
+	partition := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition()
+	tqConfig := newTaskQueueConfig(partition.TaskQueue(), s.partitionMgr.engine.config, s.partitionMgr.ns.Name())
+
+	pm, err := newTaskQueuePartitionManager(s.partitionMgr.engine, s.partitionMgr.ns, partition, tqConfig, s.partitionMgr.logger, s.partitionMgr.throttledLogger, metricsHandler, s.userDataMgr)
+	s.Require().NoError(err)
+	pm.Start()
+
+	// Simulate partition loaded at specified time in the past
+	pm.loadTime = time.Now().Add(-config.loadTime)
+
+	// Wait until initialized
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	err = pm.WaitUntilInitialized(ctx)
+	cancel()
+	s.NoError(err)
+
+	// Register a poller if requested
+	if config.withRecentPoller {
+		pollCtx, pollCancel := context.WithTimeout(
+			context.WithValue(context.Background(), identityKey, "test-poller"),
+			100*time.Millisecond,
+		)
+		_, _, _ = pm.PollTask(pollCtx, &pollMetadata{
+			workerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
+				BuildId:       "",
+				UseVersioning: false,
+			},
+		})
+		pollCancel()
+	}
+
+	// Return cleanup function
+	cleanup := func() {
+		metricsHandler.StopCapture(capture)
+		pm.Stop(unloadCauseUnspecified)
+	}
+
+	return pm, capture, cleanup
+}
+
+func (s *PartitionManagerTestSuite) TestNoRecentPollerMetric_NewlyLoadedPartitionWithNoRecentPoller() {
+	pm, capture, cleanup := s.setupPartitionManagerWithCapture(testPartitionManagerConfig{
+		loadTime:         1 * time.Minute,
+		withRecentPoller: false,
+	})
+	defer cleanup()
+
+	// Add a task to trigger the metric check
+	_, _, err := pm.AddTask(context.Background(), addTaskParams{
+		taskInfo: &persistencespb.TaskInfo{
+			NamespaceId: namespaceID,
+			RunId:       "test-run",
+			WorkflowId:  "test-workflow",
+		},
+	})
+	s.Require().NoError(err)
+
+	// Verify metric was NOT emitted for newly loaded partition
+	snapshot := capture.Snapshot()
+	recordings, exists := snapshot[metrics.NoRecentPollerTasksPerTaskQueueCounter.Name()]
+	s.False(exists && len(recordings) > 0, "Metric should not be emitted for newly loaded partition")
+}
+
+func (s *PartitionManagerTestSuite) TestNoRecentPollerMetric_NewlyLoadedPartitionWithRecentPollers() {
+	pm, capture, cleanup := s.setupPartitionManagerWithCapture(testPartitionManagerConfig{
+		loadTime:         1 * time.Minute,
+		withRecentPoller: true,
+	})
+	defer cleanup()
+
+	// Add a task to trigger the metric check
+	_, _, err := pm.AddTask(context.Background(), addTaskParams{
+		taskInfo: &persistencespb.TaskInfo{
+			NamespaceId: namespaceID,
+			RunId:       "test-run",
+			WorkflowId:  "test-workflow",
+		},
+	})
+	s.Require().NoError(err)
+
+	// Verify metric was NOT emitted for newly loaded partition even with pollers
+	snapshot := capture.Snapshot()
+	recordings, exists := snapshot[metrics.NoRecentPollerTasksPerTaskQueueCounter.Name()]
+	s.False(exists && len(recordings) > 0, "Metric should not be emitted for newly loaded partition with pollers")
+}
+
+func (s *PartitionManagerTestSuite) TestNoRecentPollerMetric_OldPartitionWithNoPollers() {
+	pm, capture, cleanup := s.setupPartitionManagerWithCapture(testPartitionManagerConfig{
+		loadTime:         3 * time.Minute,
+		withRecentPoller: false,
+	})
+	defer cleanup()
+
+	// Add a task to trigger the metric check
+	_, _, err := pm.AddTask(context.Background(), addTaskParams{
+		taskInfo: &persistencespb.TaskInfo{
+			NamespaceId: namespaceID,
+			RunId:       "test-run",
+			WorkflowId:  "test-workflow",
+		},
+	})
+	s.Require().NoError(err)
+
+	// Verify metric WAS emitted for old partition with no pollers
+	snapshot := capture.Snapshot()
+	recordings, exists := snapshot[metrics.NoRecentPollerTasksPerTaskQueueCounter.Name()]
+	s.True(exists && len(recordings) > 0, "Metric should be emitted for old partition with no pollers")
+	s.Equal(int64(1), recordings[0].Value)
+}
+
+func (s *PartitionManagerTestSuite) TestNoRecentPollerMetric_OldPartitionWithRecentPollers() {
+	pm, capture, cleanup := s.setupPartitionManagerWithCapture(testPartitionManagerConfig{
+		loadTime:         3 * time.Minute,
+		withRecentPoller: true,
+	})
+	defer cleanup()
+
+	// Add a task to trigger the metric check
+	_, _, err := pm.AddTask(context.Background(), addTaskParams{
+		taskInfo: &persistencespb.TaskInfo{
+			NamespaceId: namespaceID,
+			RunId:       "test-run",
+			WorkflowId:  "test-workflow",
+		},
+	})
+	s.Require().NoError(err)
+
+	// Verify metric was NOT emitted because of recent pollers being present
+	snapshot := capture.Snapshot()
+	recordings, exists := snapshot[metrics.NoRecentPollerTasksPerTaskQueueCounter.Name()]
+	s.False(exists, "No recordings should exist when there are no recent pollers")
+	s.Empty(recordings, "Metric should not be emitted when there are recent pollers")
+}
+
 type mockUserDataManager struct {
 	sync.Mutex
-	data *persistencespb.VersionedTaskQueueUserData
+	data     *persistencespb.VersionedTaskQueueUserData
+	onChange UserDataOnChangeFunc
 }
 
 func (m *mockUserDataManager) Start() {
@@ -631,7 +1198,11 @@ func (m *mockUserDataManager) UpdateUserData(_ context.Context, _ UserDataUpdate
 		return 0, err
 	}
 	m.data = &persistencespb.VersionedTaskQueueUserData{Data: data, Version: m.data.GetVersion() + 1}
-	return m.data.Version, nil
+	version := m.data.Version
+	if m.onChange != nil {
+		go m.onChange(m.data)
+	}
+	return version, nil
 }
 
 func (m *mockUserDataManager) HandleGetUserDataRequest(ctx context.Context, req *matchingservice.GetTaskQueueUserDataRequest) (*matchingservice.GetTaskQueueUserDataResponse, error) {
@@ -639,6 +1210,10 @@ func (m *mockUserDataManager) HandleGetUserDataRequest(ctx context.Context, req 
 }
 
 func (m *mockUserDataManager) CheckTaskQueueUserDataPropagation(ctx context.Context, version int64, wfPartitions int, actPartitions int) error {
+	panic("unused")
+}
+
+func (m *mockUserDataManager) LocalBacklogPriorityChanged(map[PhysicalTaskQueueVersion]int64) {
 	panic("unused")
 }
 
