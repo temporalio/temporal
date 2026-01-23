@@ -1464,14 +1464,29 @@ func (s *nodeSuite) TestValidateAccess() {
 		setup func(*Node, Context) error
 	}{
 		{
-			name:            "access check applies only to ancestors",
+			name:            "access check applies only to ancestors (terminated)",
 			valid:           true,
 			intent:          OperationIntentProgress,
 			lifecycleStatus: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 			terminated:      false,
-			setup: func(target *Node, _ Context) error {
+			setup: func(target *Node, ctx Context) error {
 				// Set the terminated flag on the target node instead of an ancestor
 				target.terminated = true
+				return nil
+			},
+		},
+		{
+			name:            "access check applies only to ancestors (closed)",
+			valid:           true,
+			intent:          OperationIntentProgress,
+			lifecycleStatus: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			terminated:      false,
+			setup: func(target *Node, ctx Context) error {
+				if err := target.prepareComponentValue(ctx); err != nil {
+					return err
+				}
+				targetComponent, _ := target.value.(*TestSubComponent11)
+				targetComponent.SubComponent11Data.Status = enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
 				return nil
 			},
 		},
@@ -1511,9 +1526,9 @@ func (s *nodeSuite) TestValidateAccess() {
 			terminated:      false,
 			setup: func(target *Node, _ Context) error {
 				// Set the parent node (SubComponent1) as detached.
-				// When validateAccess is called on a detached node, it skips ancestor
-				// validation but still checks its own lifecycle state.
-				target.parent.detached = true
+				// When validateParentAccess is called on a detached node, it skips
+				// ancestor validation entirely.
+				target.parent.serializedNode.GetMetadata().GetComponentAttributes().Detached = true
 				return nil
 			},
 		},
@@ -1548,10 +1563,8 @@ func (s *nodeSuite) TestValidateAccess() {
 				s.NoError(tc.setup(node, ctx))
 			}
 
-			// Validation always begins on the target node's parent.
-			parent := node.parent
-			s.NotNil(parent)
-			err = parent.validateAccess(ctx)
+			// Validation begins on the target node, checking ancestors only.
+			err = node.validateParentAccess(ctx)
 			if tc.valid {
 				s.NoError(err)
 			} else {
@@ -1573,7 +1586,7 @@ func (s *nodeSuite) TestGetComponent_DetachedNodeBypassesParentValidation() {
 	s.True(ok)
 
 	// Mark the target node as detached.
-	targetNode.detached = true
+	targetNode.serializedNode.GetMetadata().GetComponentAttributes().Detached = true
 
 	// Close the root node (set lifecycle to COMPLETED).
 	ctx := NewMutableContext(
@@ -1587,6 +1600,38 @@ func (s *nodeSuite) TestGetComponent_DetachedNodeBypassesParentValidation() {
 	rootComponent.ComponentData.Status = enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
 
 	// GetComponent on the detached node should succeed despite root being closed.
+	ref := ComponentRef{
+		componentPath: targetPath,
+	}
+	component, err := root.Component(ctx, ref)
+	s.NoError(err)
+	s.NotNil(component)
+}
+
+func (s *nodeSuite) TestGetComponent_ClosedTargetSucceeds() {
+	// Test that a closed target component can still be accessed via Component()
+	// because we only check ancestor lifecycle, not the target's lifecycle.
+	root, err := s.newTestTree(testComponentSerializedNodes())
+	s.NoError(err)
+
+	targetPath := []string{"SubComponent1", "SubComponent11"}
+	targetNode, ok := root.findNode(targetPath)
+	s.True(ok)
+
+	ctx := NewMutableContext(
+		newContextWithOperationIntent(context.Background(), OperationIntentProgress),
+		root,
+	)
+
+	// Close the target node's lifecycle (set to COMPLETED).
+	err = targetNode.prepareComponentValue(ctx)
+	s.NoError(err)
+	targetComponent, ok := targetNode.value.(*TestSubComponent11)
+	s.True(ok)
+	targetComponent.SubComponent11Data.Status = enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+	s.True(targetComponent.LifecycleState(ctx).IsClosed())
+
+	// GetComponent on the closed target should succeed because we only check ancestors.
 	ref := ComponentRef{
 		componentPath: targetPath,
 	}

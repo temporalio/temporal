@@ -112,11 +112,6 @@ type (
 		// executionState and executionStatus and trigger retention timers.
 		// We could consider extending the force terminate concept to sub-components as well.
 		terminated bool
-
-		// When detached is true, this component ignores parent lifecycle validation.
-		// Detached components can continue operating, accepting writes and executing
-		// tasks, even when their parent is closed/terminated.
-		detached bool
 	}
 
 	// nodeBase is a set of dependencies and states shared by all nodes in a CHASM tree.
@@ -419,11 +414,8 @@ func (n *Node) Component(
 			fmt.Errorf("%s", reflect.TypeOf(node.value).String()))
 	}
 
-	// Access check on ancestors only. Detached nodes skip ancestor validation.
-	if !node.detached && node.parent != nil {
-		if err := node.parent.validateAccess(validationContext); err != nil {
-			return nil, err
-		}
+	if err := node.validateParentAccess(validationContext); err != nil {
+		return nil, err
 	}
 
 	if ref.validationFn != nil {
@@ -445,17 +437,27 @@ func (n *Node) Component(
 // all of a node's ancestors are still in a running state, and can accept writes. In
 // the case of a newly-created node, a detached node, or an OperationIntentObserve
 // intent, the check is skipped.
-func (n *Node) validateAccess(ctx Context) error {
+func (n *Node) validateParentAccess(ctx Context) error {
 	intent := operationIntentFromContext(ctx.getContext())
 	if intent != OperationIntentProgress {
 		// Read-only operations are always allowed.
 		return nil
 	}
 
-	// Detached nodes skip parent/ancestor validation but still check own lifecycle.
-	if !n.detached && n.parent != nil {
-		err := n.parent.validateAccess(ctx)
-		if err != nil {
+	// Detached nodes skip ancestor validation entirely.
+	if n.isDetached() || n.parent == nil {
+		return nil
+	}
+
+	return n.parent.validateAccess(ctx)
+}
+
+// validateAccessRecursive is an internal method that validates both the current
+// node's lifecycle state AND its ancestors.
+func (n *Node) validateAccess(ctx Context) error {
+	// Check ancestors first (if not detached).
+	if !n.isDetached() && n.parent != nil {
+		if err := n.parent.validateAccess(ctx); err != nil {
 			return err
 		}
 	}
@@ -466,8 +468,7 @@ func (n *Node) validateAccess(ctx Context) error {
 	}
 
 	// Hydrate the component so we can access its LifecycleState.
-	err := n.prepareComponentValue(ctx)
-	if err != nil {
+	if err := n.prepareComponentValue(ctx); err != nil {
 		return err
 	}
 	componentValue, _ := n.value.(Component) //nolint:revive // unchecked-type-assertion
@@ -580,6 +581,10 @@ func (n *Node) isMap() bool {
 	return n.serializedNode.GetMetadata().GetCollectionAttributes() != nil
 }
 
+func (n *Node) isDetached() bool {
+	return n.serializedNode.GetMetadata().GetComponentAttributes().GetDetached()
+}
+
 func (n *Node) fieldType() fieldType {
 	if n.serializedNode.GetMetadata().GetComponentAttributes() != nil {
 		return fieldTypeComponent
@@ -685,9 +690,6 @@ func (n *Node) setSerializedNode(
 		n.serializedNode = serializedNode
 		n.setValueState(valueStateNeedDeserialize)
 		n.encodedPath = &encodedPath
-		if componentAttr := serializedNode.GetMetadata().GetComponentAttributes(); componentAttr != nil {
-			n.detached = componentAttr.Detached
-		}
 		return n
 	}
 
@@ -746,7 +748,6 @@ func (n *Node) serializeComponentNode() error {
 		n.serializedNode.Data = blob
 		componentAttr := n.serializedNode.GetMetadata().GetComponentAttributes()
 		componentAttr.TypeId = rc.componentID
-		componentAttr.Detached = n.detached
 		n.updateLastUpdateVersionedTransition()
 		n.setValueState(valueStateSynced)
 
@@ -1023,10 +1024,11 @@ func (n *Node) syncSubField(
 			childNode.setValueState(valueStateNeedSyncStructure)
 
 			// Set detached flag from field option or component type registration.
-			childNode.detached = internal.detached
-			if !childNode.detached {
+			componentAttr := childNode.serializedNode.GetMetadata().GetComponentAttributes()
+			componentAttr.Detached = internal.detached
+			if !componentAttr.Detached {
 				if rc, ok := n.registry.componentFor(fieldValue); ok {
-					childNode.detached = rc.IsDetached()
+					componentAttr.Detached = rc.IsDetached()
 				}
 			}
 		case fieldTypeData:
@@ -1788,15 +1790,11 @@ func (n *Node) validateTask(
 			fmt.Errorf("%s", reflect.TypeOf(taskInstance).Name()))
 	}
 
-	// Validate access on ancestors only. Detached nodes skip ancestor validation.
-	if !n.detached && n.parent != nil {
-		err := n.parent.validateAccess(validateContext)
+	if err := n.validateParentAccess(validateContext); err != nil {
 		if errors.Is(err, errAccessCheckFailed) {
 			return false, nil
 		}
-		if err != nil {
-			return false, err
-		}
+		return false, err
 	}
 
 	defer log.CapturePanic(n.logger, &retErr)
