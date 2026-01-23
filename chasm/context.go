@@ -139,7 +139,7 @@ func (c *immutableCtx) getContext() context.Context {
 // NewMutableContext creates a new MutableContext from an existing Context and root Node.
 //
 // NOTE: Library authors should not invoke this constructor directly, and instead use the [UpdateComponent],
-// [UpdateWithNewExecution], or [NewExecution] APIs.
+// [UpdateWithStartExecution], or [StartExecution] APIs.
 func NewMutableContext(
 	ctx context.Context,
 	root *Node,

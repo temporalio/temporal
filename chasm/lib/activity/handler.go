@@ -5,18 +5,14 @@ import (
 	"errors"
 
 	enumspb "go.temporal.io/api/enums/v1"
-	errordetailspb "go.temporal.io/api/errordetails/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 var (
@@ -65,7 +61,7 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 		return nil, serviceerror.NewInvalidArgumentf("unsupported ID conflict policy: %v", frontendReq.GetIdConflictPolicy())
 	}
 
-	result, err := chasm.NewExecution(
+	result, err := chasm.StartExecution(
 		ctx,
 		chasm.ExecutionKey{
 			NamespaceID: req.GetNamespaceId(),
@@ -94,21 +90,7 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 	if err != nil {
 		var alreadyStartedErr *chasm.ExecutionAlreadyStartedError
 		if errors.As(err, &alreadyStartedErr) {
-			details := &errordetailspb.ActivityExecutionAlreadyStartedFailure{
-				StartRequestId: alreadyStartedErr.CurrentRequestID,
-				RunId:          alreadyStartedErr.CurrentRunID,
-			}
-
-			errStatus := status.New(codes.AlreadyExists, "activity execution already started")
-
-			errStatusWithDetails, errDetail := status.New(codes.AlreadyExists, "activity execution already started").WithDetails(details)
-			if errDetail != nil {
-				h.logger.Error("Failed to add error details to ActivityExecutionAlreadyStartedFailure",
-					tag.Error(errDetail), tag.ActivityID(frontendReq.GetActivityId()))
-				return nil, errStatus.Err()
-			}
-
-			return nil, errStatusWithDetails.Err()
+			return nil, serviceerror.NewActivityExecutionAlreadyStarted("activity execution already started", alreadyStartedErr.CurrentRequestID, alreadyStartedErr.CurrentRunID)
 		}
 
 		return nil, err
