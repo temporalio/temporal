@@ -5738,6 +5738,60 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 			s.Fail("timed out waiting for update")
 		}
 	})
+
+	s.Run("return update in-flight limit error", func() {
+		// lower maximum in-flight updates for testing purposes
+		maxInFlight := 1
+		cleanup := s.OverrideDynamicConfig(dynamicconfig.WorkflowExecutionMaxInFlightUpdates, maxInFlight)
+		defer cleanup()
+
+		ctx := testcore.NewContext()
+		tv := testvars.New(s.T())
+		startReq := startWorkflowReq(tv)
+		startReq.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING
+
+		// Start workflow and admit 1st update (but don't complete it)
+		updateReq := updateWorkflowRequest(s, tv.WithUpdateIDNumber(0),
+			&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED})
+		uwsCh := sendUpdateWithStart(ctx, startReq, updateReq)
+
+		// Poll workflow task but only accept, don't complete the update
+		_, err := s.TaskPoller().PollAndHandleWorkflowTask(tv,
+			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+				return &workflowservice.RespondWorkflowTaskCompletedRequest{
+					Messages: s.UpdateAcceptMessages(tv, task.Messages[0]),
+				}, nil
+			})
+		s.NoError(err)
+		uwsRes := <-uwsCh
+		s.NoError(uwsRes.err)
+
+		// Try to send 2nd update-with-start while 1st is still in-flight (not completed)
+		updateReq = updateWorkflowRequest(s, tv.WithUpdateIDNumber(1), updateReq.WaitPolicy)
+		uwsCh = sendUpdateWithStart(ctx, startReq, updateReq)
+		select {
+		case uwsRes := <-uwsCh:
+			err = uwsRes.err
+			s.Error(err)
+
+			var multiOpsErr *serviceerror.MultiOperationExecution
+			s.ErrorAs(err, &multiOpsErr)
+
+			errs := multiOpsErr.OperationErrors()
+			s.Len(errs, 2)
+			s.Equal("Operation was aborted.", errs[0].Error())
+			s.Contains(errs[1].Error(), "limit on number of concurrent in-flight updates has been reached")
+
+			// Verify ResourceExhausted error is accessible with all details preserved
+			var resExhausted *serviceerror.ResourceExhausted
+			s.ErrorAs(errs[1], &resExhausted)
+			s.Equal(enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT, resExhausted.Cause)
+			s.Equal(enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE, resExhausted.Scope)
+			s.Contains(resExhausted.Message, "limit on number of concurrent in-flight updates")
+		case <-ctx.Done():
+			s.Fail("timed out waiting for update")
+		}
+	})
 }
 
 func (s *UpdateWorkflowSuite) closeShard(wid string) {
