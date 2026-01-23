@@ -2566,6 +2566,21 @@ that task will be sent to DLQ.`,
 		500,
 		`Maximum number of outstanding tasks allowed for a single shard in the stream receiver`,
 	)
+	ReplicationReceiverSlowSubmissionLatencyThreshold = NewGlobalDurationSetting(
+		"history.ReplicationReceiverSubmissionLatencyThreshold",
+		1*time.Second,
+		`Scheduler latency threshold for recording slow scheduler submission`,
+	)
+	ReplicationReceiverSlowSubmissionWindow = NewGlobalDurationSetting(
+		"history.ReplicationReceiverSlowSubmissionWindow",
+		10*time.Second,
+		`Time window within which a slow submission will pause replication flow control`,
+	)
+	EnableReplicationReceiverSlowSubmissionFlowControl = NewGlobalBoolSetting(
+		"history.EnableReplicationReceiverSlowSubmissionFlowControl",
+		false,
+		`Enable slow submission flow control check in replication receiver`,
+	)
 	ReplicationResendMaxBatchCount = NewGlobalIntSetting(
 		"history.ReplicationResendMaxBatchCount",
 		10,
@@ -2595,6 +2610,11 @@ that task will be sent to DLQ.`,
 		"history.ReplicationStreamSenderLivenessMultiplier",
 		10,
 		"ReplicationStreamSenderLivenessMultiplier is the multiplier of liveness check interval on stream sender",
+	)
+	EnableHistoryReplicationRateLimiter = NewNamespaceBoolSetting(
+		"history.EnableHistoryReplicationRateLimiter",
+		false,
+		"EnableHistoryReplicationRateLimiter is the feature flag to enable rate limiter on history event replication",
 	)
 	ReplicationEnableRateLimit = NewGlobalBoolSetting(
 		"history.ReplicationEnableRateLimit",

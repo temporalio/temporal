@@ -56,7 +56,7 @@ func (a *attempt) run(ctx context.Context, args []string) (string, error) {
 	cmd := exec.CommandContext(ctx, a.runner.gotestsumPath, args...)
 	var output strings.Builder
 	cmd.Stdout = io.MultiWriter(os.Stdout, &output)
-	cmd.Stderr = os.Stderr
+	cmd.Stderr = io.MultiWriter(os.Stderr, &output)
 	cmd.Stdin = os.Stdin
 	err := cmd.Run()
 	return output.String(), err
