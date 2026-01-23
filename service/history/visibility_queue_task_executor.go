@@ -559,20 +559,22 @@ func (t *visibilityQueueTaskExecutor) getClosedVisibilityRequest(
 	stateTransitionCount := executionInfo.GetStateTransitionCount()
 	historySizeBytes := executionInfo.GetExecutionStats().GetHistorySize()
 
-	externalPayloadCount := executionInfo.GetExecutionStats().GetExternalPayloadCount()
-	externalPayloadSizeBytes := executionInfo.GetExecutionStats().GetExternalPayloadSize()
 	if base.SearchAttributes == nil {
 		base.SearchAttributes = &commonpb.SearchAttributes{
 			IndexedFields: make(map[string]*commonpb.Payload),
 		}
-	}
-	if base.SearchAttributes.IndexedFields == nil {
+	} else if base.SearchAttributes.IndexedFields == nil {
 		base.SearchAttributes.IndexedFields = make(map[string]*commonpb.Payload)
 	}
-	externalPayloadCountPayload, _ := payload.Encode(externalPayloadCount)
-	externalPayloadSizeBytesPayload, _ := payload.Encode(externalPayloadSizeBytes)
-	base.SearchAttributes.IndexedFields[sadefs.TemporalExternalPayloadCount] = externalPayloadCountPayload
-	base.SearchAttributes.IndexedFields[sadefs.TemporalExternalPayloadSizeBytes] = externalPayloadSizeBytesPayload
+
+	if t.shardContext.GetConfig().ExternalPayloadsEnabled(mutableState.GetNamespaceEntry().Name().String()) {
+		externalPayloadCount := executionInfo.GetExecutionStats().GetExternalPayloadCount()
+		externalPayloadSizeBytes := executionInfo.GetExecutionStats().GetExternalPayloadSize()
+		externalPayloadCountPayload, _ := payload.Encode(externalPayloadCount)
+		externalPayloadSizeBytesPayload, _ := payload.Encode(externalPayloadSizeBytes)
+		base.SearchAttributes.IndexedFields[sadefs.TemporalExternalPayloadCount] = externalPayloadCountPayload
+		base.SearchAttributes.IndexedFields[sadefs.TemporalExternalPayloadSizeBytes] = externalPayloadSizeBytesPayload
+	}
 
 	return &manager.RecordWorkflowExecutionClosedRequest{
 		VisibilityRequestBase: base,
