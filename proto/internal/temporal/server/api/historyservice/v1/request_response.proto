@@ -271,6 +271,17 @@ message RecordWorkflowTaskStartedResponse {
     bytes next_page_token = 19;
     // Deprecated: This field is being replaced by raw_history_bytes which sends raw bytes
     // instead of a proto-decoded History. This avoids matching service having to decode history.
+    // TODO: PRATHYUSH
+    // DEPRECATION PLAN:
+    // Two dynamic config flags control the raw history optimization:
+    // - history.sendRawHistoryBetweenInternalServices: enables raw history (uses field 18 when OFF, field 20/21 when ON)
+    // - history.sendRawHistoryBytesToMatchingService: selects field 20 (OFF) vs field 21 (ON)
+    //
+    // Version timeline (current version: v1.29):
+    // - v1.31: This change is released. Both flags default to false for backward compatibility.
+    // - v1.32: Both flags will be enabled by default in code.
+    // - v1.33: raw_history (field 20) and history (field 18) will be deprecated and removed,
+    //          as raw_history_bytes (field 21) will be the only field used.
     temporal.api.history.v1.History raw_history = 20 [deprecated = true];
     repeated bytes raw_history_bytes = 21;
 }

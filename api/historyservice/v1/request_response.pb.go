@@ -1284,6 +1284,17 @@ type RecordWorkflowTaskStartedResponse struct {
 	NextPageToken              []byte                         `protobuf:"bytes,19,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
 	// Deprecated: This field is being replaced by raw_history_bytes which sends raw bytes
 	// instead of a proto-decoded History. This avoids matching service having to decode history.
+	// TODO: PRATHYUSH
+	// DEPRECATION PLAN:
+	// Two dynamic config flags control the raw history optimization:
+	// - history.sendRawHistoryBetweenInternalServices: enables raw history (uses field 18 when OFF, field 20/21 when ON)
+	// - history.sendRawHistoryBytesToMatchingService: selects field 20 (OFF) vs field 21 (ON)
+	//
+	// Version timeline (current version: v1.29):
+	//   - v1.31: This change is released. Both flags default to false for backward compatibility.
+	//   - v1.32: Both flags will be enabled by default in code.
+	//   - v1.33: raw_history (field 20) and history (field 18) will be deprecated and removed,
+	//     as raw_history_bytes (field 21) will be the only field used.
 	//
 	// Deprecated: Marked as deprecated in temporal/server/api/historyservice/v1/request_response.proto.
 	RawHistory      *v115.History `protobuf:"bytes,20,opt,name=raw_history,json=rawHistory,proto3" json:"raw_history,omitempty"`
