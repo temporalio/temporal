@@ -10,6 +10,8 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 )
 
@@ -51,6 +53,7 @@ type (
 		enabledForNS       dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		namespaceRegistry  namespace.Registry
 		enableForAllAPIs   bool
+		logger             log.Logger
 	}
 )
 
@@ -75,6 +78,7 @@ func RedirectionPolicyGenerator(
 	enabledForNS dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	namespaceRegistry namespace.Registry,
 	policy config.DCRedirectionPolicy,
+	logger log.Logger,
 ) DCRedirectionPolicy {
 	switch policy.Policy {
 	case DCRedirectionPolicyDefault:
@@ -84,10 +88,10 @@ func RedirectionPolicyGenerator(
 		return NewNoopRedirectionPolicy(clusterMetadata.GetCurrentClusterName())
 	case DCRedirectionPolicySelectedAPIsForwarding:
 		currentClusterName := clusterMetadata.GetCurrentClusterName()
-		return NewSelectedAPIsForwardingPolicy(currentClusterName, enabledForNS, namespaceRegistry)
+		return NewSelectedAPIsForwardingPolicy(currentClusterName, enabledForNS, namespaceRegistry, logger)
 	case DCRedirectionPolicyAllAPIsForwarding:
 		currentClusterName := clusterMetadata.GetCurrentClusterName()
-		return NewAllAPIsForwardingPolicy(currentClusterName, enabledForNS, namespaceRegistry)
+		return NewAllAPIsForwardingPolicy(currentClusterName, enabledForNS, namespaceRegistry, logger)
 	default:
 		panic(fmt.Sprintf("Unknown DC redirection policy %v", policy.Policy))
 	}
@@ -115,11 +119,13 @@ func NewSelectedAPIsForwardingPolicy(
 	currentClusterName string,
 	enabledForNS dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	namespaceRegistry namespace.Registry,
+	logger log.Logger,
 ) *SelectedAPIsForwardingRedirectionPolicy {
 	return &SelectedAPIsForwardingRedirectionPolicy{
 		currentClusterName: currentClusterName,
 		enabledForNS:       enabledForNS,
 		namespaceRegistry:  namespaceRegistry,
+		logger:             logger,
 	}
 }
 
@@ -128,12 +134,14 @@ func NewAllAPIsForwardingPolicy(
 	currentClusterName string,
 	enabledForNS dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	namespaceRegistry namespace.Registry,
+	logger log.Logger,
 ) *SelectedAPIsForwardingRedirectionPolicy {
 	return &SelectedAPIsForwardingRedirectionPolicy{
 		currentClusterName: currentClusterName,
 		enabledForNS:       enabledForNS,
 		namespaceRegistry:  namespaceRegistry,
 		enableForAllAPIs:   true,
+		logger:             logger,
 	}
 }
 
@@ -158,12 +166,39 @@ func (policy *SelectedAPIsForwardingRedirectionPolicy) WithNamespaceRedirect(ctx
 func (policy *SelectedAPIsForwardingRedirectionPolicy) withRedirect(ctx context.Context, namespaceEntry *namespace.Namespace, apiName string, call func(string) error) error {
 	targetDC, enableNamespaceNotActiveForwarding := policy.getTargetClusterAndIsNamespaceNotActiveAutoForwarding(ctx, namespaceEntry, apiName)
 
+	policy.logger.Info("DC redirection policy: initial call",
+		tag.WorkflowNamespace(namespaceEntry.Name().String()),
+		tag.NewStringTag("apiName", apiName),
+		tag.NewStringTag("targetDC", targetDC),
+		tag.NewStringTag("currentCluster", policy.currentClusterName),
+		tag.NewBoolTag("enableNamespaceNotActiveForwarding", enableNamespaceNotActiveForwarding))
+
 	err := call(targetDC)
 
+	if err != nil {
+		policy.logger.Info("DC redirection policy: call returned error",
+			tag.WorkflowNamespace(namespaceEntry.Name().String()),
+			tag.NewStringTag("apiName", apiName),
+			tag.NewStringTag("targetDC", targetDC),
+			tag.NewStringTag("errorType", fmt.Sprintf("%T", err)),
+			tag.Error(err))
+	}
+
 	targetDC, ok := policy.isNamespaceNotActiveError(err)
+	policy.logger.Info("DC redirection policy: isNamespaceNotActiveError check",
+		tag.WorkflowNamespace(namespaceEntry.Name().String()),
+		tag.NewStringTag("apiName", apiName),
+		tag.NewBoolTag("isNamespaceNotActiveError", ok),
+		tag.NewStringTag("redirectTargetDC", targetDC),
+		tag.NewBoolTag("enableNamespaceNotActiveForwarding", enableNamespaceNotActiveForwarding))
+
 	if !ok || !enableNamespaceNotActiveForwarding {
 		return err
 	}
+	policy.logger.Info("DC redirection policy: forwarding to active cluster",
+		tag.WorkflowNamespace(namespaceEntry.Name().String()),
+		tag.NewStringTag("apiName", apiName),
+		tag.NewStringTag("forwardingTo", targetDC))
 	return call(targetDC)
 }
 

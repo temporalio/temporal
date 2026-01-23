@@ -180,6 +180,7 @@ func NewRedirection(
 		enabledForNS,
 		namespaceCache,
 		policy,
+		logger,
 	)
 
 	return &Redirection{
