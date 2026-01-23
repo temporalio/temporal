@@ -396,17 +396,8 @@ install-typos:
 	fi
 	cargo install typos-cli --locked
 
-lint-typos:
-	@printf $(COLOR) "Checking spelling with typos..."
-	@if ! command -v $(TYPOS) >/dev/null 2>&1; then \
-		printf $(RED) "ERROR: typos is not installed. Run 'make install-typos' or 'cargo install typos-cli'"; \
-		echo ""; \
-		exit 1; \
-	fi
-	@$(TYPOS) --config .github/_typos.toml
-
 # Check spelling only on files changed from main branch
-lint-typos-changed:
+lint-typos:
 	@printf $(COLOR) "Checking spelling on changed files with typos..."
 	@if ! command -v $(TYPOS) >/dev/null 2>&1; then \
 		printf $(RED) "ERROR: typos is not installed. Run 'make install-typos' or 'cargo install typos-cli'"; \
