@@ -7,7 +7,6 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 )
@@ -37,11 +36,10 @@ type (
 	}
 
 	mapperProviderImpl struct {
-		customMapper               Mapper
-		namespaceRegistry          namespace.Registry
-		searchAttributesProvider   Provider
-		enableMapperFromNamespace  bool
-		enableCustomMapperOverride dynamicconfig.BoolPropertyFn
+		customMapper              Mapper
+		namespaceRegistry         namespace.Registry
+		searchAttributesProvider  Provider
+		enableMapperFromNamespace bool
 	}
 )
 
@@ -89,19 +87,17 @@ func NewMapperProvider(
 	namespaceRegistry namespace.Registry,
 	searchAttributesProvider Provider,
 	enableMapperFromNamespace bool,
-	enableCustomMapperOverride dynamicconfig.BoolPropertyFn,
 ) MapperProvider {
 	return &mapperProviderImpl{
-		customMapper:               customMapper,
-		namespaceRegistry:          namespaceRegistry,
-		searchAttributesProvider:   searchAttributesProvider,
-		enableMapperFromNamespace:  enableMapperFromNamespace,
-		enableCustomMapperOverride: enableCustomMapperOverride,
+		customMapper:              customMapper,
+		namespaceRegistry:         namespaceRegistry,
+		searchAttributesProvider:  searchAttributesProvider,
+		enableMapperFromNamespace: enableMapperFromNamespace,
 	}
 }
 
 func (m *mapperProviderImpl) GetMapper(nsName namespace.Name) (Mapper, error) {
-	if m.customMapper != nil && m.enableCustomMapperOverride() {
+	if m.customMapper != nil {
 		return m.customMapper, nil
 	}
 	if !m.enableMapperFromNamespace {
