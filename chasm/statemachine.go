@@ -1,10 +1,14 @@
 package chasm
 
 import (
+	"fmt"
 	"slices"
 
 	"go.temporal.io/api/serviceerror"
 )
+
+// ErrInvalidTransition is returned from [Transition.Apply] on an invalid state transition.
+var ErrInvalidTransition = serviceerror.NewFailedPrecondition("invalid transition")
 
 // A StateMachine is anything that can get and set a comparable state S and re-generate tasks based on current state.
 // It is meant to be used with [Transition] objects to safely transition their state on a given event.
@@ -43,7 +47,7 @@ func (t Transition[S, SM, E]) Possible(sm SM) bool {
 func (t Transition[S, SM, E]) Apply(sm SM, ctx MutableContext, event E) error {
 	prevState := sm.StateMachineState()
 	if !t.Possible(sm) {
-		return serviceerror.NewFailedPreconditionf("invalid transition from %v: %v", prevState, event)
+		return fmt.Errorf("%w from %v", ErrInvalidTransition, prevState)
 	}
 
 	sm.SetStateMachineState(t.Destination)
