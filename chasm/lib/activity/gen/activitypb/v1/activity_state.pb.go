@@ -434,12 +434,20 @@ type ActivityAttemptState struct {
 	// including start-to-close timeout. Activity success, termination, schedule-to-start and schedule-to-close timeouts
 	// will not reset it.
 	LastFailureDetails *ActivityAttemptState_LastFailureDetails `protobuf:"bytes,5,opt,name=last_failure_details,json=lastFailureDetails,proto3" json:"last_failure_details,omitempty"`
-	LastWorkerIdentity string                                   `protobuf:"bytes,7,opt,name=last_worker_identity,json=lastWorkerIdentity,proto3" json:"last_worker_identity,omitempty"`
+	// An incremental version number used to validate tasks.
+	// Initially this only verifies that a task belong to the current attempt.
+	// Later on this stamp will be used to also invalidate tasks when the activity is paused, reset, or has its options
+	// updated.
+	Stamp              int32  `protobuf:"varint,6,opt,name=stamp,proto3" json:"stamp,omitempty"`
+	LastWorkerIdentity string `protobuf:"bytes,7,opt,name=last_worker_identity,json=lastWorkerIdentity,proto3" json:"last_worker_identity,omitempty"`
 	// The Worker Deployment Version this activity was dispatched to most recently.
 	// If nil, the activity has not yet been dispatched or was last dispatched to an unversioned worker.
 	LastDeploymentVersion *v12.WorkerDeploymentVersion `protobuf:"bytes,8,opt,name=last_deployment_version,json=lastDeploymentVersion,proto3" json:"last_deployment_version,omitempty"`
-	unknownFields         protoimpl.UnknownFields
-	sizeCache             protoimpl.SizeCache
+	// The request ID that came from matching's RecordActivityTaskStarted API call. Used to make this API idempotent in
+	// case of implicit retries.
+	StartRequestId string `protobuf:"bytes,9,opt,name=start_request_id,json=startRequestId,proto3" json:"start_request_id,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *ActivityAttemptState) Reset() {
@@ -507,6 +515,13 @@ func (x *ActivityAttemptState) GetLastFailureDetails() *ActivityAttemptState_Las
 	return nil
 }
 
+func (x *ActivityAttemptState) GetStamp() int32 {
+	if x != nil {
+		return x.Stamp
+	}
+	return 0
+}
+
 func (x *ActivityAttemptState) GetLastWorkerIdentity() string {
 	if x != nil {
 		return x.LastWorkerIdentity
@@ -519,6 +534,13 @@ func (x *ActivityAttemptState) GetLastDeploymentVersion() *v12.WorkerDeploymentV
 		return x.LastDeploymentVersion
 	}
 	return nil
+}
+
+func (x *ActivityAttemptState) GetStartRequestId() string {
+	if x != nil {
+		return x.StartRequestId
+	}
+	return ""
 }
 
 type ActivityHeartbeatState struct {
@@ -891,15 +913,17 @@ const file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawD
 	"\x06reason\x18\x04 \x01(\tR\x06reason\"7\n" +
 	"\x16ActivityTerminateState\x12\x1d\n" +
 	"\n" +
-	"request_id\x18\x01 \x01(\tR\trequestId\"\xa8\x05\n" +
+	"request_id\x18\x01 \x01(\tR\trequestId\"\xe8\x05\n" +
 	"\x14ActivityAttemptState\x12\x14\n" +
 	"\x05count\x18\x01 \x01(\x05R\x05count\x12O\n" +
 	"\x16current_retry_interval\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\x14currentRetryInterval\x12=\n" +
 	"\fstarted_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\vstartedTime\x12?\n" +
 	"\rcomplete_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\fcompleteTime\x12\x86\x01\n" +
-	"\x14last_failure_details\x18\x05 \x01(\v2T.temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.LastFailureDetailsR\x12lastFailureDetails\x120\n" +
+	"\x14last_failure_details\x18\x05 \x01(\v2T.temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.LastFailureDetailsR\x12lastFailureDetails\x12\x14\n" +
+	"\x05stamp\x18\x06 \x01(\x05R\x05stamp\x120\n" +
 	"\x14last_worker_identity\x18\a \x01(\tR\x12lastWorkerIdentity\x12k\n" +
-	"\x17last_deployment_version\x18\b \x01(\v23.temporal.api.deployment.v1.WorkerDeploymentVersionR\x15lastDeploymentVersion\x1a\x80\x01\n" +
+	"\x17last_deployment_version\x18\b \x01(\v23.temporal.api.deployment.v1.WorkerDeploymentVersionR\x15lastDeploymentVersion\x12(\n" +
+	"\x10start_request_id\x18\t \x01(\tR\x0estartRequestId\x1a\x80\x01\n" +
 	"\x12LastFailureDetails\x12.\n" +
 	"\x04time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\x12:\n" +
 	"\afailure\x18\x02 \x01(\v2 .temporal.api.failure.v1.FailureR\afailure\"\x95\x01\n" +
