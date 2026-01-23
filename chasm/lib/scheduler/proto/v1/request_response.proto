@@ -4,6 +4,8 @@ package temporal.server.chasm.lib.scheduler.proto.v1;
 
 option go_package = "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb;schedulerpb";
 
+import "chasm/lib/scheduler/proto/v1/message.proto";
+import "temporal/api/common/v1/message.proto";
 import "temporal/api/workflowservice/v1/request_response.proto";
 
 message CreateScheduleRequest {
@@ -71,3 +73,27 @@ message ListScheduleMatchingTimesRequest {
 message ListScheduleMatchingTimesResponse {
     temporal.api.workflowservice.v1.ListScheduleMatchingTimesResponse frontend_response = 1;
 }
+
+message MigrateScheduleRequest {
+    // Internal namespace ID (UUID).
+    string namespace_id = 1;
+
+    // Namespace name.
+    string namespace = 2;
+
+    // Schedule ID.
+    string schedule_id = 3;
+
+    // Migrated CHASM state components.
+    SchedulerState scheduler_state = 4;
+    GeneratorState generator_state = 5;
+    InvokerState invoker_state = 6;
+    map<string, BackfillerState> backfillers = 7;
+    LastCompletionResult last_completion_result = 8;
+
+    // Visibility data.
+    map<string, temporal.api.common.v1.Payload> search_attributes = 9;
+    map<string, temporal.api.common.v1.Payload> memo = 10;
+}
+
+message MigrateScheduleResponse {}

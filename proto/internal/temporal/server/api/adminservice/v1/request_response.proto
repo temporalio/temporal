@@ -641,3 +641,21 @@ message StartAdminBatchOperationResponse {
 // This regenerates all pending tasks for each execution.
 message BatchOperationRefreshTasks {
 }
+
+// MigrateScheduleRequest triggers migration of a V1 workflow-backed schedule
+// to a V2 CHASM-backed schedule.
+message MigrateScheduleRequest {
+  // The namespace of the schedule.
+  string namespace = 1;
+  // The schedule ID to migrate.
+  string schedule_id = 2;
+  // The identity of the caller.
+  string identity = 3;
+  // Used for request deduplication.
+  string request_id = 4;
+}
+
+// MigrateScheduleResponse is returned when the migration signal has been sent.
+// The actual migration happens asynchronously within the V1 workflow.
+message MigrateScheduleResponse {
+}

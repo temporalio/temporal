@@ -31,4 +31,10 @@ service SchedulerService {
     rpc ListScheduleMatchingTimes(ListScheduleMatchingTimesRequest) returns (ListScheduleMatchingTimesResponse) {
         option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.schedule_id";
     }
+
+    // MigrateSchedule creates a CHASM schedule from migrated V1 state.
+    // Used during migration from workflow-backed schedules to CHASM schedules.
+    rpc MigrateSchedule(MigrateScheduleRequest) returns (MigrateScheduleResponse) {
+        option (temporal.server.api.routing.v1.routing).business_id = "schedule_id";
+    }
 }

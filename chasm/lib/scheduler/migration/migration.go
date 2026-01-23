@@ -13,63 +13,42 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// LegacyState represents the complete state extracted from the legacy (workflow-powered) scheduler.
-type LegacyState struct {
-	Schedule         *schedulepb.Schedule
-	Info             *schedulepb.ScheduleInfo
-	InitialPatch     *schedulepb.SchedulePatch
-	State            *schedulespb.InternalState
-	SearchAttributes map[string]*commonpb.Payload
-	Memo             map[string]*commonpb.Payload
-}
-
-// CHASMState represents the complete state for the CHASM scheduler.
-type CHASMState struct {
-	Scheduler            *schedulerpb.SchedulerState
-	Generator            *schedulerpb.GeneratorState
-	Invoker              *schedulerpb.InvokerState
-	Backfillers          map[string]*schedulerpb.BackfillerState
-	LastCompletionResult *schedulerpb.LastCompletionResult
-	SearchAttributes     map[string]*commonpb.Payload
-	Memo                 map[string]*commonpb.Payload
-}
-
-// LegacyToCHASM converts legacy scheduler state to CHASM scheduler state.
+// LegacyToMigrateScheduleRequest converts legacy (workflow-backed) scheduler state to a
+// MigrateScheduleRequest proto. This is the primary V1-to-V2 migration function.
 //
-// The migrationTime is used for initializing timestamps that don't have a direct mapping.
+// The migrationTime parameter is used for initializing timestamps that don't have a
+// direct mapping from V1 state (e.g., StartTime for running workflows).
 //
-// State preserved during migration includes:
-//   - Schedule spec and policies
-//   - ScheduleInfo metadata (action counts, but not RunningWorkflows/RecentActions)
-//   - Buffered starts (with V2-specific fields populated)
+// State preserved during migration:
+//   - Schedule spec, action, policies, and state
+//   - ScheduleInfo metadata (action counts, create/update times)
+//   - ConflictToken (for optimistic concurrency control)
+//   - Buffered starts (with V2-specific fields like RequestId, WorkflowId populated)
 //   - Running workflows (converted to BufferedStarts with RunId/StartTime set)
 //   - Recent actions (converted to BufferedStarts with Completed field set)
 //   - Ongoing backfills (converted to Backfiller components)
-//   - Last completion result/failure
-//   - High water mark (Generator.LastProcessedTime)
+//   - Last completion result and continued failure
+//   - High water mark (becomes Generator.LastProcessedTime)
 //   - Search attributes and memo
 //
-// In V2, RunningWorkflows and RecentActions are computed on-demand from BufferedStarts
-// by the Invoker component, rather than being stored separately.
-//
-// After conversion, the following tasks must be scheduled by the caller:
-//   - GeneratorTask: Populates FutureActionTimes based on the schedule spec
-//   - BackfillerTask: For each backfiller in the Backfillers map
-//   - InvokerProcessBufferTask: Processes any buffered starts
-//
-// TODO(migration): Nexus callbacks should be attached to workflows in RunningWorkflows
-// to enable V2's completion tracking mechanism.
-func LegacyToCHASM(legacy *LegacyState, migrationTime time.Time) (*CHASMState, error) {
-	state := legacy.State
-
+// Note: In V2, RunningWorkflows and RecentActions are computed on-demand from
+// BufferedStarts by the Invoker, rather than being stored separately in ScheduleInfo.
+func LegacyToMigrateScheduleRequest(
+	schedule *schedulepb.Schedule,
+	info *schedulepb.ScheduleInfo,
+	state *schedulespb.InternalState,
+	searchAttributes map[string]*commonpb.Payload,
+	memo map[string]*commonpb.Payload,
+	migrationTime time.Time,
+) *schedulerpb.MigrateScheduleRequest {
 	// V2 computes RunningWorkflows/RecentActions on-demand from BufferedStarts
-	info := common.CloneProto(legacy.Info)
-	info.RunningWorkflows = nil
-	info.RecentActions = nil
+	infoClone := common.CloneProto(info)
+	infoClone.RunningWorkflows = nil
+	infoClone.RecentActions = nil
 
 	schedulerState := &schedulerpb.SchedulerState{
-		Schedule:      common.CloneProto(legacy.Schedule),
-		Info:          info,
+		Schedule:      common.CloneProto(schedule),
+		Info:          infoClone,
 		Namespace:     state.Namespace,
 		NamespaceId:   state.NamespaceId,
 		ScheduleId:    state.ScheduleId,
@@ -87,11 +66,11 @@ func LegacyToCHASM(legacy *LegacyState, migrationTime time.Time) (*CHASMState, e
 		state.NamespaceId,
 		state.ScheduleId,
 		state.ConflictToken,
-		getWorkflowID(legacy.Schedule),
+		getWorkflowID(schedule),
 	)
 
 	runningBufferedStarts := convertRunningWorkflowsToBufferedStarts(
-		legacy.Info.RunningWorkflows,
+		info.RunningWorkflows,
 		state.NamespaceId,
 		state.ScheduleId,
 		state.ConflictToken,
@@ -99,7 +78,7 @@ func LegacyToCHASM(legacy *LegacyState, migrationTime time.Time) (*CHASMState, e
 	)
 
 	recentActionsBufferedStarts := convertRecentActionsToBufferedStarts(
-		legacy.Info.RecentActions,
+		info.RecentActions,
 		state.NamespaceId,
 		state.ScheduleId,
 		state.ConflictToken,
@@ -117,89 +96,68 @@ func LegacyToCHASM(legacy *LegacyState, migrationTime time.Time) (*CHASMState, e
 	backfillers := convertBackfillsLegacyToCHASM(state.OngoingBackfills, state.NamespaceId, state.ScheduleId)
 	lastCompletion := convertLastCompletionLegacyToCHASM(state.LastCompletionResult, state.ContinuedFailure)
 
-	return &CHASMState{
-		Scheduler:            schedulerState,
-		Generator:            generatorState,
-		Invoker:              invokerState,
+	return &schedulerpb.MigrateScheduleRequest{
+		NamespaceId:          state.NamespaceId,
+		Namespace:            state.Namespace,
+		ScheduleId:           state.ScheduleId,
+		SchedulerState:       schedulerState,
+		GeneratorState:       generatorState,
+		InvokerState:         invokerState,
 		Backfillers:          backfillers,
 		LastCompletionResult: lastCompletion,
-		SearchAttributes:     legacy.SearchAttributes,
-		Memo:                 legacy.Memo,
-	}, nil
+		SearchAttributes:     searchAttributes,
+		Memo:                 memo,
+	}
 }
 
-// CHASMToLegacy converts CHASM scheduler state back to legacy scheduler state.
+// CHASMToMigrateScheduleRequest extracts CHASM (V2) scheduler state into a
+// MigrateScheduleRequest proto. This creates a deep copy of all state.
 //
-// The migrationTime is used for initializing timestamps that don't have a direct mapping.
+// This function is the inverse of applying a MigrateScheduleRequest - it extracts
+// the current CHASM scheduler state back into the request format. Use cases include:
+//   - Re-migration scenarios (e.g., migrating to a different shard)
+//   - State inspection and debugging
+//   - Creating snapshots of scheduler state
 //
-// State preserved during migration includes:
-//   - Schedule spec and policies
-//   - ScheduleInfo metadata (action counts)
-//   - RunningWorkflows (extracted from BufferedStarts with RunId but no Completed)
-//   - RecentActions (extracted from BufferedStarts with Completed field set)
-//   - Buffered starts (pending workflows only, with V2-specific fields removed)
-//   - Backfiller components (converted to ongoing backfills)
-//   - Last completion result/failure
-//   - Search attributes and memo
-//
-// After conversion, NeedRefresh is set to true to trigger V1's watcher activities,
-// which will monitor workflows in RunningWorkflows and process buffered starts.
-func CHASMToLegacy(chasm *CHASMState, migrationTime time.Time) (*LegacyState, error) {
-	bufferedStarts := chasm.Invoker.GetBufferedStarts()
-	var pendingStarts []*schedulespb.BufferedStart
-	var runningWorkflows []*commonpb.WorkflowExecution
-	var recentActions []*schedulepb.ScheduleActionResult
-
-	for _, start := range bufferedStarts {
-		if start.GetRunId() == "" {
-			pendingStarts = append(pendingStarts, start)
-		} else if start.GetCompleted() == nil {
-			runningWorkflows = append(runningWorkflows, &commonpb.WorkflowExecution{
-				WorkflowId: start.GetWorkflowId(),
-				RunId:      start.GetRunId(),
-			})
-		} else {
-			recentActions = append(recentActions, &schedulepb.ScheduleActionResult{
-				ScheduleTime: start.GetNominalTime(),
-				ActualTime:   start.GetStartTime(),
-				StartWorkflowResult: &commonpb.WorkflowExecution{
-					WorkflowId: start.GetWorkflowId(),
-					RunId:      start.GetRunId(),
-				},
-				StartWorkflowStatus: start.GetCompleted().GetStatus(),
-			})
-		}
+// All proto fields are deep-cloned to ensure the returned request is independent
+// of the source state. SearchAttributes and Memo maps are shallow-copied since
+// Payload values are treated as immutable.
+func CHASMToMigrateScheduleRequest(
+	scheduler *schedulerpb.SchedulerState,
+	generator *schedulerpb.GeneratorState,
+	invoker *schedulerpb.InvokerState,
+	backfillers map[string]*schedulerpb.BackfillerState,
+	lastCompletionResult *schedulerpb.LastCompletionResult,
+	searchAttributes map[string]*commonpb.Payload,
+	memo map[string]*commonpb.Payload,
+) *schedulerpb.MigrateScheduleRequest {
+	return &schedulerpb.MigrateScheduleRequest{
+		NamespaceId:          scheduler.NamespaceId,
+		Namespace:            scheduler.Namespace,
+		ScheduleId:           scheduler.ScheduleId,
+		SchedulerState:       common.CloneProto(scheduler),
+		GeneratorState:       common.CloneProto(generator),
+		InvokerState:         common.CloneProto(invoker),
+		Backfillers:          cloneBackfillers(backfillers),
+		LastCompletionResult: common.CloneProto(lastCompletionResult),
+		SearchAttributes:     searchAttributes,
+		Memo:                 memo,
 	}
+}
 
-	legacyBufferedStarts := convertBufferedStartsCHASMToLegacy(pendingStarts)
-	legacyBackfills := convertBackfillersCHASMToLegacy(chasm.Backfillers)
-	lastResult, continuedFailure := convertLastCompletionCHASMToLegacy(chasm.LastCompletionResult)
+// -----------------------------------------------------------------------------
+// Helper functions for state conversion
+// -----------------------------------------------------------------------------
 
-	internalState := &schedulespb.InternalState{
-		Namespace:            chasm.Scheduler.Namespace,
-		NamespaceId:          chasm.Scheduler.NamespaceId,
-		ScheduleId:           chasm.Scheduler.ScheduleId,
-		LastProcessedTime:    common.CloneProto(chasm.Generator.LastProcessedTime),
-		BufferedStarts:       legacyBufferedStarts,
-		OngoingBackfills:     legacyBackfills,
-		LastCompletionResult: lastResult,
-		ContinuedFailure:     continuedFailure,
-		ConflictToken:        chasm.Scheduler.ConflictToken,
-		NeedRefresh:          true,
+func cloneBackfillers(backfillers map[string]*schedulerpb.BackfillerState) map[string]*schedulerpb.BackfillerState {
+	if backfillers == nil {
+		return nil
 	}
-
-	info := common.CloneProto(chasm.Scheduler.Info)
-	info.RunningWorkflows = runningWorkflows
-	info.RecentActions = recentActions
-
-	return &LegacyState{
-		Schedule:         common.CloneProto(chasm.Scheduler.Schedule),
-		Info:             info,
-		InitialPatch:     nil,
-		State:            internalState,
-		SearchAttributes: chasm.SearchAttributes,
-		Memo:             chasm.Memo,
-	}, nil
+	result := make(map[string]*schedulerpb.BackfillerState, len(backfillers))
+	for k, v := range backfillers {
+		result[k] = common.CloneProto(v)
+	}
+	return result
 }
 
 // convertBufferedStartsLegacyToCHASM transforms V1 buffered starts to V2 format.
@@ -328,31 +286,6 @@ func convertRecentActionsToBufferedStarts(
 	return bufferedStarts
 }
 
-// convertBufferedStartsCHASMToLegacy transforms V2 pending buffered starts to V1 format.
-// This should only be called on BufferedStarts that have not been started yet (no RunId).
-// V1 doesn't use request_id, workflow_id, attempt, backoff_time, run_id, start_time, or completed fields.
-func convertBufferedStartsCHASMToLegacy(v2Starts []*schedulespb.BufferedStart) []*schedulespb.BufferedStart {
-	if len(v2Starts) == 0 {
-		return nil
-	}
-
-	v1Starts := make([]*schedulespb.BufferedStart, len(v2Starts))
-	for i, v2Start := range v2Starts {
-		v1Start := common.CloneProto(v2Start)
-		v1Start.RequestId = ""
-		v1Start.WorkflowId = ""
-		v1Start.Attempt = 0
-		v1Start.BackoffTime = nil
-		v1Start.RunId = ""
-		v1Start.StartTime = nil
-		v1Start.Completed = nil
-
-		v1Starts[i] = v1Start
-	}
-
-	return v1Starts
-}
-
 // convertBackfillsLegacyToCHASM transforms V1 ongoing backfills to V2 Backfiller states.
 // V1 backfills track progress by advancing the BackfillRequest.StartTime, while V2 uses
 // a separate LastProcessedTime field. When converting to V2, LastProcessedTime is left
@@ -382,34 +315,6 @@ func convertBackfillsLegacyToCHASM(
 	return backfillers
 }
 
-// convertBackfillersCHASMToLegacy transforms V2 Backfiller states to V1 ongoing backfills.
-// V2 tracks backfill progress in a separate LastProcessedTime field, while V1 advances
-// the BackfillRequest.StartTime directly. This conversion updates StartTime to reflect
-// the current progress, allowing V1 to continue from where V2 left off.
-func convertBackfillersCHASMToLegacy(v2Backfillers map[string]*schedulerpb.BackfillerState) []*schedulepb.BackfillRequest {
-	if len(v2Backfillers) == 0 {
-		return nil
-	}
-
-	legacyBackfills := make([]*schedulepb.BackfillRequest, 0, len(v2Backfillers))
-	for _, backfiller := range v2Backfillers {
-		switch req := backfiller.Request.(type) {
-		case *schedulerpb.BackfillerState_BackfillRequest:
-			v1Backfill := common.CloneProto(req.BackfillRequest)
-			if backfiller.LastProcessedTime != nil {
-				v1Backfill.StartTime = common.CloneProto(backfiller.LastProcessedTime)
-			}
-
-			legacyBackfills = append(legacyBackfills, v1Backfill)
-
-		case *schedulerpb.BackfillerState_TriggerRequest:
-			continue // TriggerImmediately handled as buffered starts in V1
-		}
-	}
-
-	return legacyBackfills
-}
-
 // convertLastCompletionLegacyToCHASM transforms V1 completion result to V2 format.
 // V1 uses Payloads (plural), V2 uses single Payload.
 func convertLastCompletionLegacyToCHASM(
@@ -430,28 +335,6 @@ func convertLastCompletionLegacyToCHASM(
 	}
 
 	return lcr
-}
-
-// convertLastCompletionCHASMToLegacy transforms V2 completion result to V1 format.
-// V2 uses single Payload, V1 uses Payloads (plural).
-func convertLastCompletionCHASMToLegacy(result *schedulerpb.LastCompletionResult) (*commonpb.Payloads, *failurepb.Failure) {
-	if result == nil {
-		return nil, nil
-	}
-
-	var lastResult *commonpb.Payloads
-	if result.Success != nil {
-		lastResult = &commonpb.Payloads{
-			Payloads: []*commonpb.Payload{common.CloneProto(result.Success)},
-		}
-	}
-
-	var continuedFailure *failurepb.Failure
-	if result.Failure != nil {
-		continuedFailure = common.CloneProto(result.Failure)
-	}
-
-	return lastResult, continuedFailure
 }
 
 // getWorkflowID extracts the workflow ID from the schedule's action.
