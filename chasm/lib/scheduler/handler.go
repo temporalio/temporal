@@ -28,7 +28,7 @@ func newHandler(logger log.Logger, specBuilder *legacyscheduler.SpecBuilder) *ha
 func (h *handler) CreateSchedule(ctx context.Context, req *schedulerpb.CreateScheduleRequest) (resp *schedulerpb.CreateScheduleResponse, err error) {
 	defer log.CapturePanic(h.logger, &err)
 
-	result, err := chasm.NewExecution(
+	result, err := chasm.StartExecution(
 		ctx,
 		chasm.ExecutionKey{
 			NamespaceID: req.NamespaceId,
