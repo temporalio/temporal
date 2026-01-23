@@ -387,28 +387,35 @@ fmt-imports: $(GCI) # Don't get confused, there is a single linter called gci, w
 	@printf $(COLOR) "Formatting imports..."
 	@$(GCI) write --skip-generated -s standard -s default ./*
 
+install-typos:
+	@printf $(COLOR) "Installing typos-cli..."
+	@if ! command -v cargo >/dev/null 2>&1; then \
+		printf $(RED) "ERROR: cargo is not installed. Install Rust from https://rustup.rs"; \
+		echo ""; \
+		exit 1; \
+	fi
+	cargo install typos-cli --locked
+
 lint-typos:
 	@printf $(COLOR) "Checking spelling with typos..."
-	@if command -v $(TYPOS) >/dev/null 2>&1; then \
-		$(TYPOS) --config .github/_typos.toml; \
-	else \
-		printf $(RED) "WARNING: typos is not installed. Install it from https://github.com/crate-ci/typos or run: cargo install typos-cli"; \
+	@if ! command -v $(TYPOS) >/dev/null 2>&1; then \
+		printf $(RED) "ERROR: typos is not installed. Run 'make install-typos' or 'cargo install typos-cli'"; \
 		echo ""; \
-		echo "Skipping spell check..."; \
+		exit 1; \
 	fi
+	@$(TYPOS) --config .github/_typos.toml
 
 # Check spelling only on files changed from main branch
 lint-typos-changed:
 	@printf $(COLOR) "Checking spelling on changed files with typos..."
-	@if command -v $(TYPOS) >/dev/null 2>&1; then \
-		git diff --name-only --diff-filter=ACMR $(MAIN_BRANCH)...HEAD | $(TYPOS) --config .github/_typos.toml --file-list -; \
-	else \
-		printf $(RED) "WARNING: typos is not installed. Install it from https://github.com/crate-ci/typos or run: cargo install typos-cli"; \
+	@if ! command -v $(TYPOS) >/dev/null 2>&1; then \
+		printf $(RED) "ERROR: typos is not installed. Run 'make install-typos' or 'cargo install typos-cli'"; \
 		echo ""; \
-		echo "Skipping spell check..."; \
+		exit 1; \
 	fi
+	@git diff --name-only --diff-filter=ACMR $(MAIN_BRANCH)...HEAD | $(TYPOS) --config .github/_typos.toml --file-list -
 
-lint: lint-code lint-actions lint-api lint-protos lint-typos-changed
+lint: lint-code lint-actions lint-api lint-protos
 	@printf $(COLOR) "Run linters..."
 
 lint-api: $(API_LINTER) $(API_BINPB)
