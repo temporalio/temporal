@@ -415,6 +415,16 @@ lint-typos-changed:
 	fi
 	@git diff --name-only --diff-filter=ACMR $(MAIN_BRANCH)...HEAD | $(TYPOS) --config .github/_typos.toml --file-list -
 
+# Fix spelling on files changed from main branch
+fix-typos:
+	@printf $(COLOR) "Fixing spelling on changed files with typos..."
+	@if ! command -v $(TYPOS) >/dev/null 2>&1; then \
+		printf $(RED) "ERROR: typos is not installed. Run 'make install-typos' or 'cargo install typos-cli'"; \
+		echo ""; \
+		exit 1; \
+	fi
+	@git diff --name-only --diff-filter=ACMR $(MAIN_BRANCH)...HEAD | $(TYPOS) --config .github/_typos.toml --write-changes --file-list -
+
 lint: lint-code lint-actions lint-api lint-protos
 	@printf $(COLOR) "Run linters..."
 
