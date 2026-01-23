@@ -396,7 +396,7 @@ func (m *registryImpl) RecordWorkerHeartbeats(nsID namespace.ID, nsName namespac
 func (m *registryImpl) recordActivitySlotsMetric(heartbeats []*workerpb.WorkerHeartbeat) {
 	for _, hb := range heartbeats {
 		if hb.ActivityTaskSlotsInfo != nil {
-			metrics.WorkerRegistryActivitySlotsUsed.With(m.metricsHandler).Record(float64(hb.ActivityTaskSlotsInfo.CurrentUsedSlots))
+			metrics.WorkerRegistryActivitySlotsUsed.With(m.metricsHandler).Record(int64(hb.ActivityTaskSlotsInfo.CurrentUsedSlots))
 		}
 	}
 }

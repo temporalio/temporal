@@ -1171,7 +1171,7 @@ var (
 		"worker_registry_workers_removed",
 		WithDescription("Count of workers removed from the worker registry."),
 	)
-	WorkerRegistryActivitySlotsUsed = NewGaugeDef(
+	WorkerRegistryActivitySlotsUsed = NewDimensionlessHistogramDef(
 		"worker_registry_activity_slots_used",
 		WithDescription("Number of activity slots in use per worker."),
 	)
