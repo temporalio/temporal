@@ -36,7 +36,7 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
 	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
-	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/client/frontend"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
@@ -5678,6 +5678,9 @@ func (wh *WorkflowHandler) validateVersioningInfo(nsName string, id buildIdAndFl
 func (wh *WorkflowHandler) validateDeploymentOptions(deploymentOptions *deploymentpb.WorkerDeploymentOptions) error {
 	if deploymentOptions == nil {
 		return nil
+	}
+	if deploymentOptions.GetWorkerVersioningMode() != enumspb.WORKER_VERSIONING_MODE_VERSIONED {
+		return nil // both deployment name and build ID fields are optional for unversioned workers
 	}
 	if deploymentOptions.GetDeploymentName() == "" || deploymentOptions.GetBuildId() == "" {
 		return errDeploymentOptionsNotSet
