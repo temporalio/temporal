@@ -12,7 +12,6 @@ import (
 	activitypb "go.temporal.io/api/activity/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	errordetailspb "go.temporal.io/api/errordetails/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/operatorservice/v1"
 	sdkpb "go.temporal.io/api/sdk/v1"
@@ -195,20 +194,10 @@ func (s *standaloneActivityTestSuite) TestIDConflictPolicy() {
 			StartToCloseTimeout: durationpb.New(1 * time.Minute),
 		})
 
-		require.Error(t, err)
-		statusErr := serviceerror.ToStatus(err)
-		require.Equal(t, codes.AlreadyExists, statusErr.Code())
-
-		var details *errordetailspb.ActivityExecutionAlreadyStartedFailure
-		for _, detail := range statusErr.Details() {
-			if d, ok := detail.(*errordetailspb.ActivityExecutionAlreadyStartedFailure); ok {
-				details = d
-				break
-			}
-		}
-		require.NotNil(t, details, "expected ActivityExecutionAlreadyStartedFailure in error details")
-		require.Equal(t, s.tv.RequestID(), details.StartRequestId)
-		require.Equal(t, startResponse.GetRunId(), details.RunId)
+		var alreadyStartedErr *serviceerror.ActivityExecutionAlreadyStarted
+		require.ErrorAs(t, err, &alreadyStartedErr)
+		require.Equal(t, s.tv.RequestID(), alreadyStartedErr.StartRequestId)
+		require.Equal(t, startResponse.GetRunId(), alreadyStartedErr.RunId)
 	})
 
 	t.Run("UseExistingNoError", func(t *testing.T) {
