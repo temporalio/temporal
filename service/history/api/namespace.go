@@ -3,6 +3,7 @@ package api
 import (
 	"github.com/google/uuid"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	historyi "go.temporal.io/server/service/history/interfaces"
 )
@@ -22,11 +23,27 @@ func GetActiveNamespace(
 	if err != nil {
 		return nil, err
 	}
-	if namespaceEntry.ActiveClusterName(businessID) != shard.GetClusterMetadata().GetCurrentClusterName() {
+
+	activeCluster := namespaceEntry.ActiveClusterName(businessID)
+	currentCluster := shard.GetClusterMetadata().GetCurrentClusterName()
+
+	shard.GetLogger().Info("History GetActiveNamespace check",
+		tag.WorkflowNamespace(namespaceEntry.Name().String()),
+		tag.NewStringTag("businessID", businessID),
+		tag.NewStringTag("activeCluster", activeCluster),
+		tag.NewStringTag("currentCluster", currentCluster),
+		tag.NewBoolTag("isGlobalNamespace", namespaceEntry.IsGlobalNamespace()))
+
+	if activeCluster != currentCluster {
+		shard.GetLogger().Info("History GetActiveNamespace: namespace not active in current cluster",
+			tag.WorkflowNamespace(namespaceEntry.Name().String()),
+			tag.NewStringTag("businessID", businessID),
+			tag.NewStringTag("activeCluster", activeCluster),
+			tag.NewStringTag("currentCluster", currentCluster))
 		return nil, serviceerror.NewNamespaceNotActive(
 			namespaceEntry.Name().String(),
-			shard.GetClusterMetadata().GetCurrentClusterName(),
-			namespaceEntry.ActiveClusterName(businessID))
+			currentCluster,
+			activeCluster)
 	}
 	return namespaceEntry, nil
 }
