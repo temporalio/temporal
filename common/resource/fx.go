@@ -425,7 +425,8 @@ func RPCFactoryProvider(
 	)
 	factory.EnableInternodeServerKeepalive = enableServerKeepalive
 	factory.EnableInternodeClientKeepalive = enableClientKeepalive
-	logger.Debug(fmt.Sprintf("RPC factory created. enableServerKeepalive: %v, enableClientKeepalive: %v", enableServerKeepalive, enableClientKeepalive))
+	logger.Info(fmt.Sprintf("RPC factory created for service %s with frontendURL: %s, frontendHTTPURL: %s, enableServerKeepalive: %v, enableClientKeepalive: %v",
+		svcName, frontendURL, frontendHTTPURL, enableServerKeepalive, enableClientKeepalive))
 	return factory, nil
 }
 

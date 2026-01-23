@@ -202,6 +202,8 @@ func getListenIP(cfg *config.RPC, logger log.Logger) net.IP {
 
 // CreateRemoteFrontendGRPCConnection creates connection for gRPC calls
 func (d *RPCFactory) CreateRemoteFrontendGRPCConnection(rpcAddress string) *grpc.ClientConn {
+	d.logger.Info("CreateRemoteFrontendGRPCConnection: dialing remote frontend",
+		tag.Address(rpcAddress))
 	var tlsClientConfig *tls.Config
 	var err error
 	if d.tlsFactory != nil {
@@ -226,6 +228,9 @@ func (d *RPCFactory) CreateRemoteFrontendGRPCConnection(rpcAddress string) *grpc
 func (d *RPCFactory) CreateLocalFrontendGRPCConnection() *grpc.ClientConn {
 	additionalDialOptions := append([]grpc.DialOption{}, d.perServiceDialOptions[primitives.InternalFrontendService]...)
 
+	d.logger.Info("CreateLocalFrontendGRPCConnection: dialing local frontend",
+		tag.Address(d.frontendURL),
+		tag.NewBoolTag("hasTLS", d.frontendTLSConfig != nil))
 	return d.dial(d.frontendURL, d.frontendTLSConfig, additionalDialOptions...)
 }
 
