@@ -38,6 +38,7 @@ type (
 		ensureCloseBeforeDelete       dynamicconfig.BoolPropertyFn
 		enableCloseWorkflowCleanup    dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		relocateAttributesMinBlobSize dynamicconfig.IntPropertyFnWithNamespaceFilter
+		externalPayloadsEnabled       dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	}
 )
 
@@ -52,6 +53,7 @@ func newVisibilityQueueTaskExecutor(
 	ensureCloseBeforeDelete dynamicconfig.BoolPropertyFn,
 	enableCloseWorkflowCleanup dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	relocateAttributesMinBlobSize dynamicconfig.IntPropertyFnWithNamespaceFilter,
+	externalPayloadsEnabled dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 ) queues.Executor {
 	return &visibilityQueueTaskExecutor{
 		shardContext:   shardContext,
@@ -63,6 +65,7 @@ func newVisibilityQueueTaskExecutor(
 		ensureCloseBeforeDelete:       ensureCloseBeforeDelete,
 		enableCloseWorkflowCleanup:    enableCloseWorkflowCleanup,
 		relocateAttributesMinBlobSize: relocateAttributesMinBlobSize,
+		externalPayloadsEnabled:       externalPayloadsEnabled,
 	}
 }
 
@@ -270,7 +273,7 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 		mutableState.GetExecutionInfo().Memo,
 		mutableState.GetExecutionInfo().SearchAttributes,
 	)
-	closedRequest, err := t.getClosedVisibilityRequest(ctx, requestBase, mutableState)
+	closedRequest, err := t.getClosedVisibilityRequest(ctx, requestBase, mutableState, namespaceEntry)
 	if err != nil {
 		return err
 	}
@@ -482,7 +485,7 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 		)
 	}
 
-	closedRequest, err := t.getClosedVisibilityRequest(ctx, requestBase, mutableState)
+	closedRequest, err := t.getClosedVisibilityRequest(ctx, requestBase, mutableState, namespaceEntry)
 	if err != nil {
 		return err
 	}
@@ -545,6 +548,7 @@ func (t *visibilityQueueTaskExecutor) getClosedVisibilityRequest(
 	ctx context.Context,
 	base *manager.VisibilityRequestBase,
 	mutableState historyi.MutableState,
+	namespaceEntry *namespace.Namespace,
 ) (*manager.RecordWorkflowExecutionClosedRequest, error) {
 	wfCloseTime, err := mutableState.GetWorkflowCloseTime(ctx)
 	if err != nil {
@@ -567,7 +571,7 @@ func (t *visibilityQueueTaskExecutor) getClosedVisibilityRequest(
 		base.SearchAttributes.IndexedFields = make(map[string]*commonpb.Payload)
 	}
 
-	if t.shardContext.GetConfig().ExternalPayloadsEnabled(mutableState.GetNamespaceEntry().Name().String()) {
+	if t.externalPayloadsEnabled(namespaceEntry.Name().String()) {
 		externalPayloadCount := executionInfo.GetExecutionStats().GetExternalPayloadCount()
 		externalPayloadSizeBytes := executionInfo.GetExecutionStats().GetExternalPayloadSize()
 		externalPayloadCountPayload, _ := payload.Encode(externalPayloadCount)

@@ -238,7 +238,12 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_SearchAttribute() {
 	we, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err)
 	query := fmt.Sprintf(`WorkflowId = "%s" and %s = "%s"`, id, testSearchAttributeKey, testSearchAttributeVal)
-	s.testHelperForReadOnce(we.GetRunId(), query)
+	openExecution := s.testHelperForReadOnce(we.GetRunId(), query)
+	searchValBytes, ok := openExecution.GetSearchAttributes().GetIndexedFields()[testSearchAttributeKey]
+	s.True(ok)
+	var searchVal string
+	_ = payload.Decode(searchValBytes, &searchVal)
+	s.Equal(testSearchAttributeVal, searchVal)
 
 	searchAttributes := s.createSearchAttributes()
 	// test upsert
@@ -849,7 +854,7 @@ func (s *AdvancedVisibilitySuite) testListWorkflowHelper(
 	s.Nil(nextPageToken)
 }
 
-func (s *AdvancedVisibilitySuite) testHelperForReadOnce(expectedRunID string, query string) {
+func (s *AdvancedVisibilitySuite) testHelperForReadOnce(expectedRunID string, query string) *workflowpb.WorkflowExecutionInfo {
 	var openExecution *workflowpb.WorkflowExecutionInfo
 	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
 		Namespace: s.Namespace().String(),
@@ -870,12 +875,7 @@ func (s *AdvancedVisibilitySuite) testHelperForReadOnce(expectedRunID string, qu
 	s.NotNil(openExecution)
 	s.Equal(expectedRunID, openExecution.GetExecution().GetRunId())
 	s.True(!openExecution.GetExecutionTime().AsTime().Before(openExecution.GetStartTime().AsTime()))
-	if openExecution.SearchAttributes != nil && len(openExecution.SearchAttributes.GetIndexedFields()) > 0 {
-		searchValBytes := openExecution.SearchAttributes.GetIndexedFields()[testSearchAttributeKey]
-		var searchVal string
-		_ = payload.Decode(searchValBytes, &searchVal)
-		s.Equal(testSearchAttributeVal, searchVal)
-	}
+	return openExecution
 }
 
 func (s *AdvancedVisibilitySuite) TestCountWorkflow() {
@@ -2496,14 +2496,6 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_ExternalPayloadSearchAttribut
 		}},
 	}
 
-	// Add testSearchAttributeKey to satisfy testHelperForReadOnce validation
-	attrValBytes, _ := payload.Encode(testSearchAttributeVal)
-	searchAttr := &commonpb.SearchAttributes{
-		IndexedFields: map[string]*commonpb.Payload{
-			testSearchAttributeKey: attrValBytes,
-		},
-	}
-
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
@@ -2511,7 +2503,6 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_ExternalPayloadSearchAttribut
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               workflowInput,
-		SearchAttributes:    searchAttr,
 		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
 		Identity:            "test-identity",
