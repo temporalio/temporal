@@ -930,10 +930,7 @@ func InitializeSearchAttributeMappings(
 				indexSearchAttrs.CustomSearchAttributes,
 				logger,
 			); err != nil {
-				logger.Warn("Failed to update namespace search attribute mappings",
-					tag.WorkflowNamespace(nsDetail.Namespace.Info.Name),
-					tag.Error(err))
-				// Continue with other namespaces
+				return fmt.Errorf("failed to update namespace search attribute mappings: %w", err)
 			}
 		}
 

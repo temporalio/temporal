@@ -227,6 +227,7 @@ func (s *adminHandlerSuite) Test_AddSearchAttributes() {
 
 	// Elasticsearch is not configured
 	s.mockVisibilityMgr.EXPECT().GetIndexName().Return("").AnyTimes()
+	s.mockVisibilityMgr.EXPECT().HasStoreName(elasticsearch.PersistenceName).Return(false).AnyTimes()
 	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("", true).Return(searchattribute.TestEsNameTypeMap(), nil).AnyTimes()
 	testCases3 := []test{
 		{
@@ -242,10 +243,10 @@ func (s *adminHandlerSuite) Test_AddSearchAttributes() {
 			Name: "key already whitelisted (empty index)",
 			Request: &adminservice.AddSearchAttributesRequest{
 				SearchAttributes: map[string]enumspb.IndexedValueType{
-					"CustomTextField": enumspb.INDEXED_VALUE_TYPE_TEXT,
+					"Text01": enumspb.INDEXED_VALUE_TYPE_TEXT,
 				},
 			},
-			Expected: &serviceerror.InvalidArgument{Message: "Search attribute CustomTextField already exists."},
+			Expected: &serviceerror.InvalidArgument{Message: "Search attribute Text01 already exists."},
 		},
 	}
 	for _, testCase := range testCases3 {
@@ -273,10 +274,10 @@ func (s *adminHandlerSuite) Test_AddSearchAttributes() {
 			Name: "key already whitelisted (ES configured)",
 			Request: &adminservice.AddSearchAttributesRequest{
 				SearchAttributes: map[string]enumspb.IndexedValueType{
-					"CustomTextField": enumspb.INDEXED_VALUE_TYPE_TEXT,
+					"Text01": enumspb.INDEXED_VALUE_TYPE_TEXT,
 				},
 			},
-			Expected: &serviceerror.InvalidArgument{Message: "Search attribute CustomTextField already exists."},
+			Expected: &serviceerror.InvalidArgument{Message: "Search attribute Text01 already exists."},
 		},
 	}
 	for _, testCase := range testCases2 {
@@ -496,7 +497,7 @@ func (s *adminHandlerSuite) Test_RemoveSearchAttributes_NonEmptyIndexName() {
 
 	resp, err := handler.RemoveSearchAttributes(ctx, &adminservice.RemoveSearchAttributesRequest{
 		SearchAttributes: []string{
-			"CustomKeywordField",
+			"Keyword01",
 		},
 	})
 	s.NoError(err)
@@ -1998,7 +1999,7 @@ func (s *adminHandlerSuite) TestImportWorkflowExecution_WithNonAliasedSearchAttr
 	}{
 		{
 			Name:        "valid SA field",
-			SaName:      "CustomKeywordField",
+			SaName:      "Keyword01",
 			ExpectedErr: nil,
 		},
 		{
@@ -2048,27 +2049,30 @@ func (s *adminHandlerSuite) TestImportWorkflowExecution_WithNonAliasedSearchAttr
 				return "", serviceerror.NewInvalidArgument("unknown alias")
 			}).Times(eventsWithSasCount)
 
-			if subTest.ExpectedErr != nil {
-				s.mockSaMapper.EXPECT().GetAlias(gomock.Any(), tv.NamespaceName().String()).Return("", serviceerror.NewInvalidArgument(""))
-			} else {
-				s.mockVisibilityMgr.EXPECT().ValidateCustomSearchAttributes(gomock.Any()).Return(nil, nil).Times(eventsWithSasCount)
-				s.mockHistoryClient.EXPECT().ImportWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, request *historyservice.ImportWorkflowExecutionRequest, opts ...grpc.CallOption) (*historyservice.ImportWorkflowExecutionResponse, error) {
-					s.Equal(tv.NamespaceID().String(), request.NamespaceId)
-					for _, historyBatch := range request.HistoryBatches {
-						events, err := serializer.DeserializeEvents(historyBatch)
-						s.NoError(err)
-						for _, event := range events {
-							unaliasedSas, eventHasSas := searchattribute.GetFromEvent(event)
-							if eventHasSas {
-								s.NotNil(unaliasedSas, "search attributes must be set on every event with search_attributes field")
-								s.Len(unaliasedSas.GetIndexedFields(), 1, "only 1 search attribute must be set")
-								s.ProtoEqual(saValue, unaliasedSas.GetIndexedFields()["CustomKeywordField"])
-							}
+		// Mock GetAlias - for valid field names it returns an alias, for invalid ones it returns an error.
+		if subTest.ExpectedErr != nil {
+			s.mockSaMapper.EXPECT().GetAlias(gomock.Any(), tv.NamespaceName().String()).Return("", serviceerror.NewInvalidArgument("")).AnyTimes()
+		} else {
+			// For valid field names, GetAlias returns an alias (field exists in the ES schema).
+			s.mockSaMapper.EXPECT().GetAlias(gomock.Any(), tv.NamespaceName().String()).Return("CustomKeywordField", nil).AnyTimes()
+			s.mockVisibilityMgr.EXPECT().ValidateCustomSearchAttributes(gomock.Any()).Return(nil, nil).Times(eventsWithSasCount)
+			s.mockHistoryClient.EXPECT().ImportWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, request *historyservice.ImportWorkflowExecutionRequest, opts ...grpc.CallOption) (*historyservice.ImportWorkflowExecutionResponse, error) {
+				s.Equal(tv.NamespaceID().String(), request.NamespaceId)
+				for _, historyBatch := range request.HistoryBatches {
+					events, err := serializer.DeserializeEvents(historyBatch)
+					s.NoError(err)
+					for _, event := range events {
+						unaliasedSas, eventHasSas := searchattribute.GetFromEvent(event)
+						if eventHasSas {
+							s.NotNil(unaliasedSas, "search attributes must be set on every event with search_attributes field")
+							s.Len(unaliasedSas.GetIndexedFields(), 1, "only 1 search attribute must be set")
+							s.ProtoEqual(saValue, unaliasedSas.GetIndexedFields()["Keyword01"])
 						}
 					}
-					return &historyservice.ImportWorkflowExecutionResponse{}, nil
-				})
-			}
+				}
+				return &historyservice.ImportWorkflowExecutionResponse{}, nil
+			})
+		}
 
 			_, err := s.handler.ImportWorkflowExecution(context.Background(), &adminservice.ImportWorkflowExecutionRequest{
 				Namespace:      tv.NamespaceName().String(),

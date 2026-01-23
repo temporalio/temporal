@@ -1,0 +1,258 @@
+{
+  "order": 0,
+  "index_patterns": ["temporal_visibility_v1*"],
+  "settings": {
+    "index": {
+      "number_of_shards": "1",
+      "number_of_replicas": "0",
+      "auto_expand_replicas": "0-2",
+      "search.idle.after": "365d",
+      "sort.field": ["CloseTime", "StartTime", "RunId"],
+      "sort.order": ["desc", "desc", "desc"],
+      "sort.missing": ["_first", "_first", "_first"]
+    }
+  },
+  "mappings": {
+    "dynamic": "false",
+    "properties": {
+      "NamespaceId": {
+        "type": "keyword"
+      },
+      "TemporalNamespaceDivision": {
+        "type": "keyword"
+      },
+      "WorkflowId": {
+        "type": "keyword"
+      },
+      "RunId": {
+        "type": "keyword"
+      },
+      "WorkflowType": {
+        "type": "keyword"
+      },
+      "StartTime": {
+        "type": "date_nanos"
+      },
+      "ExecutionTime": {
+        "type": "date_nanos"
+      },
+      "CloseTime": {
+        "type": "date_nanos"
+      },
+      "ExecutionDuration": {
+        "type": "long"
+      },
+      "ExecutionStatus": {
+        "type": "keyword"
+      },
+      "TaskQueue": {
+        "type": "keyword"
+      },
+      "TemporalChangeVersion": {
+        "type": "keyword"
+      },
+      "BatcherNamespace": {
+        "type": "keyword"
+      },
+      "BatcherUser": {
+        "type": "keyword"
+      },
+      "BinaryChecksums": {
+        "type": "keyword"
+      },
+      "HistoryLength": {
+        "type": "long"
+      },
+      "StateTransitionCount": {
+        "type": "long"
+      },
+      "TemporalScheduledStartTime": {
+        "type": "date_nanos"
+      },
+      "TemporalScheduledById": {
+        "type": "keyword"
+      },
+      "TemporalSchedulePaused": {
+        "type": "boolean"
+      },
+      "HistorySizeBytes": {
+        "type": "long"
+      },
+      "BuildIds": {
+        "type": "keyword"
+      },
+      "ParentWorkflowId": {
+        "type": "keyword"
+      },
+      "ParentRunId": {
+        "type": "keyword"
+      },
+      "RootWorkflowId": {
+        "type": "keyword"
+      },
+      "RootRunId": {
+        "type": "keyword"
+      },
+      "TemporalPauseInfo": {
+        "type": "keyword"
+      },
+      "TemporalWorkerDeploymentVersion": {
+        "type": "keyword"
+      },
+      "TemporalWorkflowVersioningBehavior": {
+        "type": "keyword"
+      },
+      "TemporalWorkerDeployment": {
+        "type": "keyword"
+      },
+      "TemporalReportedProblems": {
+        "type": "keyword"
+      },
+      "TemporalUsedWorkerDeploymentVersions": {
+        "type": "keyword"
+      },
+      "TemporalExternalPayloadSizeBytes": {
+        "type": "long"
+      },
+      "TemporalExternalPayloadCount": {
+        "type": "long"
+      },
+      "TemporalBool01": {
+        "type": "boolean"
+      },
+      "TemporalBool02": {
+        "type": "boolean"
+      },
+      "TemporalDatetime01": {
+        "type": "date_nanos"
+      },
+      "TemporalDatetime02": {
+        "type": "date_nanos"
+      },
+      "TemporalDouble01": {
+        "type": "scaled_float",
+        "scaling_factor": 10000
+      },
+      "TemporalDouble02": {
+        "type": "scaled_float",
+        "scaling_factor": 10000
+      },
+      "TemporalInt01": {
+        "type": "long"
+      },
+      "TemporalInt02": {
+        "type": "long"
+      },
+      "TemporalKeyword01": {
+        "type": "keyword"
+      },
+      "TemporalKeyword02": {
+        "type": "keyword"
+      },
+      "TemporalKeyword03": {
+        "type": "keyword"
+      },
+      "TemporalKeyword04": {
+        "type": "keyword"
+      },
+      "TemporalLowCardinalityKeyword01": {
+        "type": "keyword"
+      },
+      "TemporalKeywordList01": {
+        "type": "keyword"
+      },
+      "TemporalKeywordList02": {
+        "type": "keyword"
+      },
+      "Bool01": {
+        "type": "boolean"
+      },
+      "Bool02": {
+        "type": "boolean"
+      },
+      "Bool03": {
+        "type": "boolean"
+      },
+      "Int01": {
+        "type": "long"
+      },
+      "Int02": {
+        "type": "long"
+      },
+      "Int03": {
+        "type": "long"
+      },
+      "Double01": {
+        "type": "scaled_float",
+        "scaling_factor": 10000
+      },
+      "Double02": {
+        "type": "scaled_float",
+        "scaling_factor": 10000
+      },
+      "Double03": {
+        "type": "scaled_float",
+        "scaling_factor": 10000
+      },
+      "Datetime01": {
+        "type": "date_nanos"
+      },
+      "Datetime02": {
+        "type": "date_nanos"
+      },
+      "Datetime03": {
+        "type": "date_nanos"
+      },
+      "Keyword01": {
+        "type": "keyword"
+      },
+      "Keyword02": {
+        "type": "keyword"
+      },
+      "Keyword03": {
+        "type": "keyword"
+      },
+      "Keyword04": {
+        "type": "keyword"
+      },
+      "Keyword05": {
+        "type": "keyword"
+      },
+      "Keyword06": {
+        "type": "keyword"
+      },
+      "Keyword07": {
+        "type": "keyword"
+      },
+      "Keyword08": {
+        "type": "keyword"
+      },
+      "Keyword09": {
+        "type": "keyword"
+      },
+      "Keyword10": {
+        "type": "keyword"
+      },
+      "KeywordList01": {
+        "type": "keyword"
+      },
+      "KeywordList02": {
+        "type": "keyword"
+      },
+      "KeywordList03": {
+        "type": "keyword"
+      },
+      "Text01": {
+        "type": "text"
+      },
+      "Text02": {
+        "type": "text"
+      },
+      "Text03": {
+        "type": "text"
+      }
+    }
+  },
+  "aliases": {}
+}
+

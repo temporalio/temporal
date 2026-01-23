@@ -779,11 +779,6 @@ This config is EXPERIMENTAL and may be changed or removed in a later release.`,
 		false,
 		`SendRawWorkflowHistory is whether to enable raw history retrieving`,
 	)
-	EnableSearchAttributeCustomMapperOverride = NewGlobalBoolSetting(
-		"frontend.enableCustomSearchAttributeProviderOverride",
-		true,
-		`EnableCustomSearchAttributeProviderOverride is whether to enable custom search attribute mapper override. If disabled, the namespace detail search attribute mapper will be used.`,
-	)
 	SearchAttributesNumberOfKeysLimit = NewNamespaceIntSetting(
 		"frontend.searchAttributesNumberOfKeysLimit",
 		100,

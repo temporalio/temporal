@@ -154,18 +154,13 @@ func SearchAttributeMapperProviderProvider(
 	saMapper searchattribute.Mapper,
 	namespaceRegistry namespace.Registry,
 	searchAttributeProvider searchattribute.Provider,
-	persistenceConfig *config.Persistence,
 	dynamicCollection *dynamicconfig.Collection,
 ) searchattribute.MapperProvider {
-	enableMapperFromNamespace := persistenceConfig.IsSQLVisibilityStore() ||
-		persistenceConfig.IsCustomVisibilityStore() ||
-		persistenceConfig.IsElasticsearchVisibilityStore()
 	return searchattribute.NewMapperProvider(
 		saMapper,
 		namespaceRegistry,
 		searchAttributeProvider,
-		enableMapperFromNamespace,
-		dynamicconfig.EnableSearchAttributeCustomMapperOverride.Get(dynamicCollection),
+		true,
 	)
 }
 

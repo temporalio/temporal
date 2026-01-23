@@ -32,7 +32,7 @@ new_mapping='
 {
   "properties": {
     "TemporalExternalPayloadSizeBytes": {
-        "type": "long"
+      "type": "long"
     },
     "TemporalExternalPayloadCount": {
       "type": "long"

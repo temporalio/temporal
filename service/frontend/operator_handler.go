@@ -3,7 +3,6 @@ package frontend
 import (
 	"context"
 	"fmt"
-	"maps"
 	"sync/atomic"
 	"time"
 
@@ -27,7 +26,6 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
@@ -186,18 +184,6 @@ func (h *OperatorHandlerImpl) addSearchAttributesInternal(
 	request *operatorservice.AddSearchAttributesRequest,
 	visManager manager.VisibilityManager,
 ) error {
-	storeName := visManager.GetStoreNames()[0]
-	if storeName == elasticsearch.PersistenceName {
-		return h.addSearchAttributesElasticsearch(ctx, request, visManager)
-	}
-	return h.addSearchAttributesSQL(ctx, request, visManager)
-}
-
-func (h *OperatorHandlerImpl) addSearchAttributesElasticsearch(
-	ctx context.Context,
-	request *operatorservice.AddSearchAttributesRequest,
-	visManager manager.VisibilityManager,
-) error {
 	indexName := visManager.GetIndexName()
 	currentSearchAttributes, err := h.saManager.GetSearchAttributes(indexName, true)
 	if err != nil {
@@ -213,8 +199,6 @@ func (h *OperatorHandlerImpl) addSearchAttributesElasticsearch(
 	upsertFieldToAliasMap := make(map[string]string)
 	fieldToAliasMap := resp.Config.CustomSearchAttributeAliases
 	aliasToFieldMap := util.InverseMap(fieldToAliasMap)
-	fieldNamesToAddToES := make(map[string]enumspb.IndexedValueType)
-
 	for saName, saType := range request.GetSearchAttributes() {
 		// check if alias is already in use
 		if _, ok := aliasToFieldMap[saName]; ok {
@@ -245,83 +229,9 @@ func (h *OperatorHandlerImpl) addSearchAttributesElasticsearch(
 			return serviceerror.NewInvalidArgumentf(errTooManySearchAttributesMessage, cntUsed, saType)
 		}
 		upsertFieldToAliasMap[targetFieldName] = saName
-		fieldNamesToAddToES[targetFieldName] = saType
 	}
 
 	// If the map is empty, then all custom search attributes already exist.
-	if len(upsertFieldToAliasMap) == 0 {
-		return nil
-	}
-
-	// Update namespace detail with alias mappings
-	if err := h.updateNamespaceAliases(ctx, request.GetNamespace(), upsertFieldToAliasMap); err != nil {
-		return err
-	}
-
-	// Add to ElasticSearch using field names (not aliases)
-	if err := visManager.AddSearchAttributes(
-		ctx,
-		&manager.AddSearchAttributesRequest{SearchAttributes: fieldNamesToAddToES},
-	); err != nil {
-		return serviceerror.NewUnavailablef(errUnableToSaveSearchAttributesMessage, err)
-	}
-
-	return nil
-}
-
-func (h *OperatorHandlerImpl) addSearchAttributesSQL(
-	ctx context.Context,
-	request *operatorservice.AddSearchAttributesRequest,
-	visManager manager.VisibilityManager,
-) error {
-	indexName := visManager.GetIndexName()
-	currentSearchAttributes, err := h.saManager.GetSearchAttributes(indexName, true)
-	if err != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
-	}
-
-	resp, err := h.getNamespaceInfo(ctx, request.GetNamespace())
-	if err != nil {
-		return err
-	}
-
-	cmCustomSearchAttributes := currentSearchAttributes.Custom()
-	upsertFieldToAliasMap := make(map[string]string)
-	fieldToAliasMap := resp.Config.CustomSearchAttributeAliases
-	aliasToFieldMap := util.InverseMap(fieldToAliasMap)
-	for saName, saType := range request.GetSearchAttributes() {
-		// check if alias is already in use
-		if _, ok := aliasToFieldMap[saName]; ok {
-			h.logger.Warn(
-				fmt.Sprintf(errSearchAttributeAlreadyExistsMessage, saName),
-				tag.NewStringTag(namespaceTagName, request.GetNamespace()),
-				tag.NewStringTag(visibilitySearchAttributeTagName, saName),
-			)
-			continue
-		}
-		// find the first available field for the given type
-		targetFieldName := ""
-		cntUsed := 0
-		for fieldName, fieldType := range cmCustomSearchAttributes {
-			if fieldType != saType || !sadefs.IsPreallocatedCSAFieldName(fieldName, fieldType) {
-				continue
-			}
-			if _, ok := fieldToAliasMap[fieldName]; ok {
-				cntUsed++
-			} else if _, ok := upsertFieldToAliasMap[fieldName]; ok {
-				cntUsed++
-			} else {
-				targetFieldName = fieldName
-				break
-			}
-		}
-		if targetFieldName == "" {
-			return serviceerror.NewInvalidArgumentf(errTooManySearchAttributesMessage, cntUsed, saType)
-		}
-		upsertFieldToAliasMap[targetFieldName] = saName
-	}
-
-	// If the map is empty, then all custom search attributes already exists.
 	if len(upsertFieldToAliasMap) == 0 {
 		return nil
 	}
@@ -369,55 +279,7 @@ func (h *OperatorHandlerImpl) removeSearchAttributesInternal(
 	request *operatorservice.RemoveSearchAttributesRequest,
 	visManager manager.VisibilityManager,
 ) error {
-	storeName := visManager.GetStoreNames()[0]
-	if storeName == elasticsearch.PersistenceName {
-		return h.removeSearchAttributesElasticsearch(ctx, request, visManager)
-	}
-	return h.removeSearchAttributesSQL(ctx, request, visManager)
-}
-
-func (h *OperatorHandlerImpl) removeSearchAttributesElasticsearch(
-	ctx context.Context,
-	request *operatorservice.RemoveSearchAttributesRequest,
-	visManager manager.VisibilityManager,
-) error {
-	indexName := h.visibilityMgr.GetIndexName()
-	currentSearchAttributes, err := h.saManager.GetSearchAttributes(indexName, true)
-	if err != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
-	}
-
-	newCustomSearchAttributes := maps.Clone(currentSearchAttributes.Custom())
-	for _, saName := range request.GetSearchAttributes() {
-		if !currentSearchAttributes.IsDefined(saName) {
-			// Custom search attribute not found, skip it.
-			continue
-		}
-		if _, ok := newCustomSearchAttributes[saName]; !ok {
-			return serviceerror.NewInvalidArgumentf(
-				errUnableToRemoveNonCustomSearchAttributesMessage, saName,
-			)
-		}
-		delete(newCustomSearchAttributes, saName)
-	}
-
-	if len(newCustomSearchAttributes) == len(currentSearchAttributes.Custom()) {
-		return nil
-	}
-
-	err = h.saManager.SaveSearchAttributes(ctx, indexName, newCustomSearchAttributes)
-	if err != nil {
-		return serviceerror.NewUnavailablef(errUnableToSaveSearchAttributesMessage, err)
-	}
-	return nil
-}
-
-func (h *OperatorHandlerImpl) removeSearchAttributesSQL(
-	ctx context.Context,
-	request *operatorservice.RemoveSearchAttributesRequest,
-	visManager manager.VisibilityManager,
-) error {
-	indexName := h.visibilityMgr.GetIndexName()
+	indexName := visManager.GetIndexName()
 	currentSearchAttributes, err := h.saManager.GetSearchAttributes(indexName, true)
 	if err != nil {
 		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
@@ -467,10 +329,22 @@ func (h *OperatorHandlerImpl) ListSearchAttributes(
 		)
 	}
 
-	if h.visibilityMgr.HasStoreName(elasticsearch.PersistenceName) {
-		return h.listSearchAttributesElasticsearch(ctx, indexName, searchAttributes)
+	resp, err := h.getNamespaceInfo(ctx, request.GetNamespace())
+	if err != nil {
+		return nil, err
 	}
-	return h.listSearchAttributesSQL(ctx, request, searchAttributes)
+
+	fieldToAliasMap := resp.Config.CustomSearchAttributeAliases
+	customSearchAttributes := make(map[string]enumspb.IndexedValueType)
+	for field, tp := range searchAttributes.Custom() {
+		if alias, ok := fieldToAliasMap[field]; ok {
+			customSearchAttributes[alias] = tp
+		}
+	}
+	return &operatorservice.ListSearchAttributesResponse{
+		CustomAttributes: customSearchAttributes,
+		SystemAttributes: searchAttributes.System(),
+	}, nil
 }
 
 // Helper functions for search attribute management
@@ -527,41 +401,6 @@ func (h *OperatorHandlerImpl) updateNamespaceAliases(
 		return serviceerror.NewUnavailablef(errUnableToSaveSearchAttributesMessage, err)
 	}
 	return nil
-}
-
-func (h *OperatorHandlerImpl) listSearchAttributesElasticsearch(
-	ctx context.Context,
-	indexName string,
-	searchAttributes searchattribute.NameTypeMap,
-) (*operatorservice.ListSearchAttributesResponse, error) {
-	return &operatorservice.ListSearchAttributesResponse{
-		CustomAttributes: searchAttributes.Custom(),
-		SystemAttributes: searchAttributes.System(),
-	}, nil
-}
-
-func (h *OperatorHandlerImpl) listSearchAttributesSQL(
-	ctx context.Context,
-	request *operatorservice.ListSearchAttributesRequest,
-	searchAttributes searchattribute.NameTypeMap,
-) (*operatorservice.ListSearchAttributesResponse, error) {
-	resp, err := h.getNamespaceInfo(ctx, request.GetNamespace())
-	if err != nil {
-		return nil, err
-	}
-
-	fieldToAliasMap := resp.Config.CustomSearchAttributeAliases
-	customSearchAttributes := make(map[string]enumspb.IndexedValueType)
-	for field, tp := range searchAttributes.Custom() {
-		if alias, ok := fieldToAliasMap[field]; ok {
-			customSearchAttributes[alias] = tp
-		}
-	}
-	return &operatorservice.ListSearchAttributesResponse{
-		CustomAttributes: customSearchAttributes,
-		SystemAttributes: searchAttributes.System(),
-		StorageSchema:    nil,
-	}, nil
 }
 
 func (h *OperatorHandlerImpl) DeleteNamespace(

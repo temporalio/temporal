@@ -153,7 +153,7 @@ func NewNoopMapper() Mapper {
 }
 
 func NewTestMapperProvider(customMapper Mapper) MapperProvider {
-	return NewMapperProvider(customMapper, nil, NewTestProvider(), false, func() bool { return true })
+	return NewMapperProvider(customMapper, nil, NewTestProvider(), false)
 }
 
 func NewNameTypeMapStub(attributes map[string]enumspb.IndexedValueType) NameTypeMap {
