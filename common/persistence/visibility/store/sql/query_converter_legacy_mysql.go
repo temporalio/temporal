@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/temporalio/sqlparser"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
@@ -64,6 +65,8 @@ func newMySQLQueryConverter(
 	saTypeMap searchattribute.NameTypeMap,
 	saMapper searchattribute.Mapper,
 	queryString string,
+	chasmMapper *chasm.VisibilitySearchAttributesMapper,
+	archetypeID chasm.ArchetypeID,
 ) *QueryConverterLegacy {
 	return newQueryConverterInternal(
 		&mysqlQueryConverter{},
@@ -72,6 +75,8 @@ func newMySQLQueryConverter(
 		saTypeMap,
 		saMapper,
 		queryString,
+		chasmMapper,
+		archetypeID,
 	)
 }
 
@@ -234,12 +239,14 @@ func (c *mysqlQueryConverter) buildSelectStmt(
 	return fmt.Sprintf(
 		`SELECT %s
 		FROM executions_visibility ev
-		LEFT JOIN custom_search_attributes
-		USING (%s, %s)
+		LEFT JOIN custom_search_attributes USING (%s, %s)
+		LEFT JOIN chasm_search_attributes USING (%s, %s)
 		WHERE %s
 		ORDER BY %s DESC, %s DESC, %s
 		LIMIT ?`,
 		strings.Join(addPrefix("ev.", sqlplugin.DbFields), ", "),
+		sadefs.GetSqlDbColName(sadefs.NamespaceID),
+		sadefs.GetSqlDbColName(sadefs.RunID),
 		sadefs.GetSqlDbColName(sadefs.NamespaceID),
 		sadefs.GetSqlDbColName(sadefs.RunID),
 		strings.Join(whereClauses, " AND "),
@@ -275,11 +282,13 @@ func (c *mysqlQueryConverter) buildCountStmt(
 	return fmt.Sprintf(
 		`SELECT %s
 		FROM executions_visibility ev
-		LEFT JOIN custom_search_attributes
-		USING (%s, %s)
+		LEFT JOIN custom_search_attributes USING (%s, %s)
+		LEFT JOIN chasm_search_attributes USING (%s, %s)
 		WHERE %s
 		%s`,
 		strings.Join(append(groupBy, "COUNT(*)"), ", "),
+		sadefs.GetSqlDbColName(sadefs.NamespaceID),
+		sadefs.GetSqlDbColName(sadefs.RunID),
 		sadefs.GetSqlDbColName(sadefs.NamespaceID),
 		sadefs.GetSqlDbColName(sadefs.RunID),
 		strings.Join(whereClauses, " AND "),

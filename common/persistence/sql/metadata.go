@@ -8,6 +8,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/primitives"
 )
@@ -22,9 +23,10 @@ func newMetadataPersistenceV2(
 	db sqlplugin.DB,
 	currentClusterName string,
 	logger log.Logger,
+	serializer serialization.Serializer,
 ) (persistence.MetadataStore, error) {
 	return &sqlMetadataManagerV2{
-		SqlStore:          NewSqlStore(db, logger),
+		SqlStore:          NewSQLStore(db, logger, serializer),
 		activeClusterName: currentClusterName,
 	}, nil
 }

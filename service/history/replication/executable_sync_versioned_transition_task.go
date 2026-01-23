@@ -72,12 +72,13 @@ func (e *ExecutableSyncVersionedTransitionTask) Execute() error {
 	if e.TerminalState() {
 		return nil
 	}
+	e.MarkExecutionStart()
 
 	callerInfo := getReplicaitonCallerInfo(e.GetPriority())
 	namespaceName, apply, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
 		context.Background(),
 		callerInfo,
-	), e.NamespaceID)
+	), e.NamespaceID, e.WorkflowID)
 	if nsError != nil {
 		return nsError
 	} else if !apply {
@@ -117,6 +118,12 @@ func (e *ExecutableSyncVersionedTransitionTask) Execute() error {
 }
 
 func (e *ExecutableSyncVersionedTransitionTask) HandleErr(err error) error {
+	metrics.ReplicationTasksErrorByType.With(e.MetricsHandler).Record(
+		1,
+		metrics.OperationTag(metrics.SyncVersionedTransitionTaskScope),
+		metrics.NamespaceTag(e.NamespaceName()),
+		metrics.ServiceErrorTypeTag(err),
+	)
 	if errors.Is(err, consts.ErrDuplicate) {
 		e.MarkTaskDuplicated()
 		return nil
@@ -134,7 +141,7 @@ func (e *ExecutableSyncVersionedTransitionTask) HandleErr(err error) error {
 		namespaceName, _, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
 			context.Background(),
 			callerInfo,
-		), e.NamespaceID)
+		), e.NamespaceID, e.WorkflowID)
 		if nsError != nil {
 			return err
 		}
@@ -163,7 +170,7 @@ func (e *ExecutableSyncVersionedTransitionTask) HandleErr(err error) error {
 		namespaceName, _, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
 			context.Background(),
 			callerInfo,
-		), e.NamespaceID)
+		), e.NamespaceID, e.WorkflowID)
 		if nsError != nil {
 			return err
 		}

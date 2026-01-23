@@ -35,10 +35,11 @@ import (
 
 type (
 	SourceTaskConverterImpl struct {
-		historyEngine  historyi.Engine
-		namespaceCache namespace.Registry
-		serializer     serialization.Serializer
-		config         *configs.Config
+		historyEngine             historyi.Engine
+		namespaceCache            namespace.Registry
+		serializer                serialization.Serializer
+		replicationTaskSerializer TaskSerializer
+		config                    *configs.Config
 	}
 	SourceTaskConverter interface {
 		Convert(task tasks.Task, targetClusterID int32, priority enumsspb.TaskPriority) (*replicationspb.ReplicationTask, error)
@@ -66,13 +67,15 @@ func NewSourceTaskConverter(
 	historyEngine historyi.Engine,
 	namespaceCache namespace.Registry,
 	serializer serialization.Serializer,
+	replicationTaskSerializer TaskSerializer,
 	config *configs.Config,
 ) *SourceTaskConverterImpl {
 	return &SourceTaskConverterImpl{
-		historyEngine:  historyEngine,
-		namespaceCache: namespaceCache,
-		serializer:     serializer,
-		config:         config,
+		historyEngine:             historyEngine,
+		namespaceCache:            namespaceCache,
+		serializer:                serializer,
+		replicationTaskSerializer: replicationTaskSerializer,
+		config:                    config,
 	}
 }
 
@@ -103,7 +106,7 @@ func (c *SourceTaskConverterImpl) Convert(
 		return nil, err
 	}
 	if replicationTask != nil {
-		rawTaskInfo, err := c.serializer.ParseReplicationTaskInfo(task)
+		rawTaskInfo, err := c.replicationTaskSerializer.SerializeReplicationTask(task)
 		if err != nil {
 			return nil, err
 		}

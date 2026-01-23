@@ -19,6 +19,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/resourcetest"
@@ -39,16 +40,15 @@ type (
 		*require.Assertions
 		controller *gomock.Controller
 
-		remoteCluster      string
-		mockResource       *resourcetest.Test
-		mockShard          *shard.ContextTest
-		config             *configs.Config
-		historyClient      *historyservicemock.MockHistoryServiceClient
-		mockNamespaceCache *namespace.MockRegistry
-		clusterMetadata    *cluster.MockMetadata
-		workflowCache      *wcache.MockCache
-		nDCHistoryResender *eventhandler.MockResendHandler
-
+		remoteCluster           string
+		mockResource            *resourcetest.Test
+		mockShard               *shard.ContextTest
+		config                  *configs.Config
+		historyClient           *historyservicemock.MockHistoryServiceClient
+		mockNamespaceCache      *namespace.MockRegistry
+		clusterMetadata         *cluster.MockMetadata
+		workflowCache           *wcache.MockCache
+		remoteHistoryFetcher    *eventhandler.MockHistoryPaginatedFetcher
 		replicationTaskExecutor *taskExecutorImpl
 	}
 )
@@ -86,9 +86,10 @@ func (s *taskExecutorSuite) SetupTest() {
 	s.mockResource = s.mockShard.Resource
 	s.mockNamespaceCache = s.mockResource.NamespaceCache
 	s.clusterMetadata = s.mockResource.ClusterMetadata
-	s.nDCHistoryResender = eventhandler.NewMockResendHandler(s.controller)
+
 	s.historyClient = historyservicemock.NewMockHistoryServiceClient(s.controller)
 	s.workflowCache = wcache.NewMockCache(s.controller)
+	s.remoteHistoryFetcher = eventhandler.NewMockHistoryPaginatedFetcher(s.controller)
 
 	s.clusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(tests.Namespace, nil).AnyTimes()
@@ -96,7 +97,7 @@ func (s *taskExecutorSuite) SetupTest() {
 	s.replicationTaskExecutor = NewTaskExecutor(
 		s.remoteCluster,
 		s.mockShard,
-		s.nDCHistoryResender,
+		s.remoteHistoryFetcher,
 		deletemanager.NewMockDeleteManager(s.controller),
 		s.workflowCache,
 	).(*taskExecutorImpl)
@@ -120,7 +121,7 @@ func (s *taskExecutorSuite) TestFilterTask_Apply() {
 			}},
 			0,
 		), nil)
-	ok, err := s.replicationTaskExecutor.filterTask(namespaceID, false)
+	ok, err := s.replicationTaskExecutor.filterTask(namespaceID, "test-workflow-id", false)
 	s.NoError(err)
 	s.True(ok)
 }
@@ -135,7 +136,7 @@ func (s *taskExecutorSuite) TestFilterTask_NotApply() {
 			&persistencespb.NamespaceReplicationConfig{Clusters: []string{cluster.TestAlternativeClusterName}},
 			0,
 		), nil)
-	ok, err := s.replicationTaskExecutor.filterTask(namespaceID, false)
+	ok, err := s.replicationTaskExecutor.filterTask(namespaceID, "test-workflow-id", false)
 	s.NoError(err)
 	s.False(ok)
 }
@@ -145,14 +146,14 @@ func (s *taskExecutorSuite) TestFilterTask_Error() {
 	s.mockNamespaceCache.EXPECT().
 		GetNamespaceByID(namespaceID).
 		Return(nil, fmt.Errorf("random error"))
-	ok, err := s.replicationTaskExecutor.filterTask(namespaceID, false)
+	ok, err := s.replicationTaskExecutor.filterTask(namespaceID, "test-workflow-id", false)
 	s.Error(err)
 	s.False(ok)
 }
 
 func (s *taskExecutorSuite) TestFilterTask_EnforceApply() {
 	namespaceID := namespace.ID(uuid.NewString())
-	ok, err := s.replicationTaskExecutor.filterTask(namespaceID, true)
+	ok, err := s.replicationTaskExecutor.filterTask(namespaceID, "test-workflow-id", true)
 	s.NoError(err)
 	s.True(ok)
 }
@@ -162,7 +163,7 @@ func (s *taskExecutorSuite) TestFilterTask_NamespaceNotFound() {
 	s.mockNamespaceCache.EXPECT().
 		GetNamespaceByID(namespaceID).
 		Return(nil, &serviceerror.NamespaceNotFound{})
-	ok, err := s.replicationTaskExecutor.filterTask(namespaceID, false)
+	ok, err := s.replicationTaskExecutor.filterTask(namespaceID, "test-workflow-id", false)
 	s.NoError(err)
 	s.False(ok)
 }
@@ -263,7 +264,10 @@ func (s *taskExecutorSuite) TestProcessTaskOnce_SyncActivityReplicationTask_Rese
 		456,
 	)
 	s.historyClient.EXPECT().SyncActivity(gomock.Any(), request).Return(nil, resendErr)
-	s.nDCHistoryResender.EXPECT().ResendHistoryEvents(
+	emptyIterator := collection.NewPagingIterator(func(paginationToken []byte) ([]*eventhandler.HistoryBatch, []byte, error) {
+		return nil, nil, nil
+	})
+	s.remoteHistoryFetcher.EXPECT().GetSingleWorkflowHistoryPaginatedIteratorExclusive(
 		gomock.Any(),
 		s.remoteCluster,
 		namespaceID,
@@ -273,7 +277,7 @@ func (s *taskExecutorSuite) TestProcessTaskOnce_SyncActivityReplicationTask_Rese
 		int64(234),
 		int64(345),
 		int64(456),
-	)
+	).Return(emptyIterator)
 
 	s.historyClient.EXPECT().SyncActivity(gomock.Any(), request).Return(&historyservice.SyncActivityResponse{}, nil)
 	err := s.replicationTaskExecutor.Execute(context.Background(), task, true)
@@ -351,7 +355,10 @@ func (s *taskExecutorSuite) TestProcess_HistoryReplicationTask_Resend() {
 		456,
 	)
 	s.historyClient.EXPECT().ReplicateEventsV2(gomock.Any(), request).Return(nil, resendErr)
-	s.nDCHistoryResender.EXPECT().ResendHistoryEvents(
+	emptyIterator := collection.NewPagingIterator(func(paginationToken []byte) ([]*eventhandler.HistoryBatch, []byte, error) {
+		return nil, nil, nil
+	})
+	s.remoteHistoryFetcher.EXPECT().GetSingleWorkflowHistoryPaginatedIteratorExclusive(
 		gomock.Any(),
 		s.remoteCluster,
 		namespaceID,
@@ -361,7 +368,7 @@ func (s *taskExecutorSuite) TestProcess_HistoryReplicationTask_Resend() {
 		int64(234),
 		int64(345),
 		int64(456),
-	)
+	).Return(emptyIterator)
 
 	s.historyClient.EXPECT().ReplicateEventsV2(gomock.Any(), request).Return(&historyservice.ReplicateEventsV2Response{}, nil)
 	err := s.replicationTaskExecutor.Execute(context.Background(), task, true)

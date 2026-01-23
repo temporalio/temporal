@@ -93,14 +93,14 @@ func (s *visibilityQueueTaskExecutorSuite) SetupTest() {
 
 	s.namespaceID = tests.NamespaceID
 	s.namespace = tests.Namespace
-	s.version = tests.GlobalNamespaceEntry.FailoverVersion()
+	s.version = tests.GlobalNamespaceEntry.FailoverVersion(namespace.EmptyBusinessID)
 	s.now = time.Now().UTC()
 	s.timeSource = clock.NewEventTimeSource().Update(s.now)
 
 	s.controller = gomock.NewController(s.T())
 
 	config := tests.NewDynamicConfig()
-	config.EnableChasm = dynamicconfig.GetBoolPropertyFn(true)
+	config.EnableChasm = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
 	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&persistencespb.ShardInfo{
@@ -641,9 +641,16 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessChasmTask_RunningExecution
 			s.True(paused)
 
 			s.Len(request.Memo.Fields, 1)
-			err = payload.Decode(request.Memo.Fields[testComponentPausedSAName], &paused)
+
+			// Memo should contain "__chasm__" key with encoded proto message
+			chasmMemoPayload, ok := request.Memo.Fields[chasm.ChasmMemoKey]
+			s.True(ok, "Expected %s key in memo", chasm.ChasmMemoKey)
+
+			// Decode the chasm memo proto message
+			var chasmMemoProto persistencespb.WorkflowExecutionState
+			err = payload.Decode(chasmMemoPayload, &chasmMemoProto)
 			s.NoError(err)
-			s.True(paused)
+			s.NotEmpty(chasmMemoProto.RunId)
 
 			return nil
 		},
@@ -730,7 +737,10 @@ func (s *visibilityQueueTaskExecutorSuite) buildChasmMutableState(
 					},
 				},
 			},
-			Data: newTestComponentStateBlob(&persistencespb.ActivityInfo{Paused: true}),
+			Data: newTestComponentStateBlob(&persistencespb.ActivityInfo{
+				Paused:     true,
+				ActivityId: key.RunID,
+			}),
 		},
 		"Visibility": {
 			Metadata: &persistencespb.ChasmNodeMetadata{
@@ -920,7 +930,7 @@ func (s *visibilityQueueTaskExecutorSuite) createPersistenceMutableState(
 		lastEventID, lastEventVersion,
 	))
 	s.NoError(err)
-	return workflow.TestCloneToProto(ms)
+	return workflow.TestCloneToProto(context.Background(), ms)
 }
 
 func (s *visibilityQueueTaskExecutorSuite) newTaskExecutable(

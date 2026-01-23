@@ -6,7 +6,9 @@ import (
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/visibility/store"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
@@ -19,11 +21,14 @@ type (
 		searchAttributesTypeMap        searchattribute.NameTypeMap
 		searchAttributesMapperProvider searchattribute.MapperProvider
 		seenNamespaceDivision          bool
+		chasmMapper                    *chasm.VisibilitySearchAttributesMapper
+		archetypeID                    chasm.ArchetypeID
 	}
 
 	valuesInterceptor struct {
-		namespace               namespace.Name
-		searchAttributesTypeMap searchattribute.NameTypeMap
+		namespace   namespace.Name
+		saTypeMap   searchattribute.NameTypeMap
+		chasmMapper *chasm.VisibilitySearchAttributesMapper
 	}
 )
 
@@ -31,21 +36,29 @@ func NewNameInterceptor(
 	namespaceName namespace.Name,
 	saTypeMap searchattribute.NameTypeMap,
 	searchAttributesMapperProvider searchattribute.MapperProvider,
+	chasmMapper *chasm.VisibilitySearchAttributesMapper,
+	archetypeID chasm.ArchetypeID,
 ) *nameInterceptor {
 	return &nameInterceptor{
 		namespace:                      namespaceName,
 		searchAttributesTypeMap:        saTypeMap,
 		searchAttributesMapperProvider: searchAttributesMapperProvider,
+		seenNamespaceDivision:          false,
+		chasmMapper:                    chasmMapper,
+		archetypeID:                    archetypeID,
 	}
 }
 
 func NewValuesInterceptor(
 	namespaceName namespace.Name,
-	saTypeMap searchattribute.NameTypeMap,
+	csaTypeMap searchattribute.NameTypeMap,
+	chasmMapper *chasm.VisibilitySearchAttributesMapper,
 ) *valuesInterceptor {
+	saTypeMap := store.CombineTypeMaps(csaTypeMap, chasmMapper)
 	return &valuesInterceptor{
-		namespace:               namespaceName,
-		searchAttributesTypeMap: saTypeMap,
+		namespace:   namespaceName,
+		saTypeMap:   saTypeMap,
+		chasmMapper: chasmMapper,
 	}
 }
 
@@ -55,9 +68,15 @@ func (ni *nameInterceptor) Name(name string, usage query.FieldNameUsage) (string
 	if err != nil {
 		return "", err
 	}
-	fieldName, fieldType, err := query.ResolveSearchAttributeAlias(name, ni.namespace, mapper, ni.searchAttributesTypeMap)
+	fieldName, fieldType, err := query.ResolveSearchAttributeAlias(name, ni.namespace, mapper,
+		ni.searchAttributesTypeMap, ni.chasmMapper)
 	if err != nil {
-		return "", err
+		// Check for special aliases that require archetypeID context.
+		if ni.archetypeID != chasm.SchedulerArchetypeID || name != "TemporalSystemExecutionStatus" {
+			return "", err
+		}
+		fieldName = sadefs.ExecutionStatus
+		fieldType, _ = ni.searchAttributesTypeMap.GetType(fieldName)
 	}
 
 	switch usage {
@@ -74,10 +93,10 @@ func (ni *nameInterceptor) Name(name string, usage query.FieldNameUsage) (string
 			)
 		}
 	case query.FieldNameGroupBy:
-		if fieldName != sadefs.ExecutionStatus {
+		if !query.IsGroupByFieldAllowed(fieldName) {
 			return "", query.NewConverterError(
-				"'group by' clause is only supported for %s search attribute",
-				sadefs.ExecutionStatus,
+				"%s: 'GROUP BY' clause is only supported for ExecutionStatus",
+				query.NotSupportedErrMessage,
 			)
 		}
 	}
@@ -86,7 +105,10 @@ func (ni *nameInterceptor) Name(name string, usage query.FieldNameUsage) (string
 }
 
 func (vi *valuesInterceptor) Values(name string, fieldName string, values ...interface{}) ([]interface{}, error) {
-	fieldType, err := vi.searchAttributesTypeMap.GetType(fieldName)
+	var fieldType enumspb.IndexedValueType
+	var err error
+
+	fieldType, err = vi.saTypeMap.GetType(fieldName)
 	if err != nil {
 		return nil, query.NewConverterError("invalid search attribute: %s", name)
 	}

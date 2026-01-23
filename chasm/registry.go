@@ -92,6 +92,15 @@ func (r *Registry) ComponentIDByFqn(fqn string) (uint32, bool) {
 	return rc.componentID, true
 }
 
+// ComponentByID returns the registrable component for a given archetype ID.
+func (r *Registry) ComponentByID(id uint32) (*RegistrableComponent, bool) {
+	fqn, ok := r.componentFqnByID[id]
+	if !ok {
+		return nil, false
+	}
+	return r.component(fqn)
+}
+
 // ComponentIDFor converts registered component instance to component type ID.
 // This method should only be used by CHASM framework internal code,
 // NOT CHASM library developers.
@@ -101,6 +110,11 @@ func (r *Registry) ComponentIDFor(componentInstance any) (uint32, bool) {
 		return 0, false
 	}
 	return rc.componentID, true
+}
+
+// TaskByID returns the registrable task for a given task type ID.
+func (r *Registry) TaskByID(id uint32) (*RegistrableTask, bool) {
+	return r.taskByID(id)
 }
 
 // TaskFqnByID converts task type ID to fully qualified task type name.
@@ -147,17 +161,20 @@ func (r *Registry) componentOf(componentGoType reflect.Type) (*RegistrableCompon
 	return rc, ok
 }
 
+// ArchetypeIDOf returns the ArchetypeID for the given component Go type.
+// This method should only be used by CHASM framework internal,
+// NOT CHASM library developers.
+func (r *Registry) ArchetypeIDOf(componentGoType reflect.Type) (ArchetypeID, bool) {
+	rc, ok := r.componentByGoType[componentGoType]
+	if !ok {
+		return UnspecifiedArchetypeID, false
+	}
+	return rc.componentID, true
+}
+
 func (r *Registry) taskOf(taskGoType reflect.Type) (*RegistrableTask, bool) {
 	rt, ok := r.taskByGoType[taskGoType]
 	return rt, ok
-}
-
-func (r *Registry) componentByID(id uint32) (*RegistrableComponent, bool) {
-	fqn, ok := r.componentFqnByID[id]
-	if !ok {
-		return nil, false
-	}
-	return r.component(fqn)
 }
 
 func (r *Registry) taskByID(id uint32) (*RegistrableTask, bool) {
@@ -172,7 +189,7 @@ func (r *Registry) registerComponent(
 	lib namer,
 	rc *RegistrableComponent,
 ) error {
-	if err := r.validateName(rc.componentType); err != nil {
+	if err := r.validate(rc); err != nil {
 		return err
 	}
 
@@ -209,6 +226,14 @@ func (r *Registry) registerComponent(
 	r.componentByGoType[rc.goType] = rc
 	return nil
 }
+
+func (r *Registry) validate(rc *RegistrableComponent) error {
+	if err := r.validateName(rc.componentType); err != nil {
+		return err
+	}
+	return r.validateVisibilityBusinessIDAlias(rc)
+}
+
 func (r *Registry) registerTask(
 	lib namer,
 	rt *RegistrableTask,
@@ -256,6 +281,17 @@ func (r *Registry) validateName(n string) error {
 	}
 	if !nameValidator.MatchString(n) {
 		return fmt.Errorf("name %s is invalid. name must follow golang identifier rules: %s", n, nameValidator.String())
+	}
+	return nil
+}
+
+func (r *Registry) validateVisibilityBusinessIDAlias(rc *RegistrableComponent) error {
+	if !hasVisibilityField(rc.goType) {
+		return nil
+	}
+	// Archetypes that contain a Field[*Visibility] must specify WithBusinessIDAlias.
+	if !rc.hasBusinessIDAlias() {
+		return fmt.Errorf("component %s has Field[*Visibility] but no businessID alias; use WithBusinessIDAlias option", rc.componentType)
 	}
 	return nil
 }

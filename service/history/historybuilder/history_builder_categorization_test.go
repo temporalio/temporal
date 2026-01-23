@@ -208,7 +208,7 @@ func TestHistoryBuilder_FlushBufferToCurrentBatch(t *testing.T) {
 			t.Errorf("expected 1 event in memBufferBatch got %d", len(hb.memBufferBatch))
 		}
 		// add another event to memBufferBatch
-		hb.AddWorkflowExecutionOptionsUpdatedEvent(nil, false, "request-id-1", nil, nil, "")
+		hb.AddWorkflowExecutionOptionsUpdatedEvent(nil, false, "request-id-1", nil, nil, "", nil)
 		if len(hb.memBufferBatch) != 2 {
 			t.Errorf("expected 2 event in memBufferBatch got %d", len(hb.memBufferBatch))
 		}
@@ -1238,7 +1238,7 @@ func (s *sutTestingAdapter) AddWorkflowExecutionStartedEvent(_ ...eventConfig) *
 }
 
 func (s *sutTestingAdapter) AddWorkflowTaskStartedEvent(_ ...eventConfig) *historypb.HistoryEvent {
-	return s.HistoryBuilder.AddWorkflowTaskStartedEvent(64, "request-1", "identity-1", s.today, false, 100, nil, 0)
+	return s.HistoryBuilder.AddWorkflowTaskStartedEvent(64, "request-1", "identity-1", s.today, false, 100, nil, 0, nil)
 }
 
 func (s *sutTestingAdapter) AddWorkflowTaskCompletedEvent(_ ...eventConfig) *historypb.HistoryEvent {

@@ -463,6 +463,8 @@ func (handler *workflowTaskCompletedHandler) handleCommandScheduleActivity(
 		}
 	}
 
+	metricsHandler := handler.metricsHandler.WithTags(metrics.HeaderCallsiteTag("ScheduleActivityTaskCommand"))
+	metrics.HeaderSize.With(metricsHandler).Record(int64(attr.GetHeader().Size()))
 	if err := handler.sizeLimitChecker.checkIfPayloadSizeExceedsLimit(
 		metrics.CommandTypeTag(enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK.String()),
 		attr.GetInput().Size(),
@@ -495,10 +497,17 @@ func (handler *workflowTaskCompletedHandler) handleCommandScheduleActivity(
 	eagerStartActivity := attr.RequestEagerExecution && handler.config.EnableActivityEagerExecution(namespace) &&
 		(!versioningUsed || attr.UseWorkflowBuildId)
 
+	// if the workflow is paused, we bypass activity task generation and also prevent eager activity execution.
+	bypassActivityTaskGeneration := eagerStartActivity
+	if handler.mutableState.GetExecutionState().Status == enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED {
+		bypassActivityTaskGeneration = true
+		eagerStartActivity = false
+	}
+
 	event, _, err := handler.mutableState.AddActivityTaskScheduledEvent(
 		handler.workflowTaskCompletedID,
 		attr,
-		eagerStartActivity,
+		bypassActivityTaskGeneration,
 	)
 	if err != nil {
 		return nil, nil, handler.failWorkflowTaskOnInvalidArgument(enumspb.WORKFLOW_TASK_FAILED_CAUSE_SCHEDULE_ACTIVITY_DUPLICATE_ID, err)
@@ -571,6 +580,7 @@ func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivi
 		shardClock,
 		ai.Version,
 		ai.StartVersion,
+		nil,
 	)
 	serializedToken, err := handler.tokenSerializer.Serialize(taskToken)
 	if err != nil {
@@ -871,6 +881,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandRequestCancelExternalW
 		func() (enumspb.WorkflowTaskFailedCause, error) {
 			return handler.attrValidator.ValidateCancelExternalWorkflowExecutionAttributes(
 				namespaceID,
+				executionInfo.WorkflowId,
 				targetNamespaceID,
 				handler.initiatedChildExecutionsInBatch,
 				attr,
@@ -903,6 +914,8 @@ func (handler *workflowTaskCompletedHandler) handleCommandRecordMarker(
 		return nil, err
 	}
 
+	metricsHandler := handler.metricsHandler.WithTags(metrics.HeaderCallsiteTag("RecordMarkerCommand"))
+	metrics.HeaderSize.With(metricsHandler).Record(int64(attr.GetHeader().Size()))
 	if err := handler.sizeLimitChecker.checkIfPayloadSizeExceedsLimit(
 		metrics.CommandTypeTag(enumspb.COMMAND_TYPE_RECORD_MARKER.String()),
 		common.GetPayloadsMapSize(attr.GetDetails()),
@@ -960,6 +973,8 @@ func (handler *workflowTaskCompletedHandler) handleCommandContinueAsNewWorkflow(
 		}
 	}
 
+	metricsHandler := handler.metricsHandler.WithTags(metrics.HeaderCallsiteTag("ContinueAsNewWorkflowExecutionCommand"))
+	metrics.HeaderSize.With(metricsHandler).Record(int64(attr.GetHeader().Size()))
 	if err := handler.sizeLimitChecker.checkIfPayloadSizeExceedsLimit(
 		metrics.CommandTypeTag(enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION.String()),
 		attr.GetInput().Size(),
@@ -1081,6 +1096,8 @@ func (handler *workflowTaskCompletedHandler) handleCommandStartChildWorkflow(
 		}
 	}
 
+	metricsHandler := handler.metricsHandler.WithTags(metrics.HeaderCallsiteTag("StartChildWorkflowExecutionCommand"))
+	metrics.HeaderSize.With(metricsHandler).Record(int64(attr.GetHeader().Size()))
 	if err := handler.sizeLimitChecker.checkIfPayloadSizeExceedsLimit(
 		metrics.CommandTypeTag(enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION.String()),
 		attr.GetInput().Size(),
@@ -1149,6 +1166,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandSignalExternalWorkflow
 		func() (enumspb.WorkflowTaskFailedCause, error) {
 			return handler.attrValidator.ValidateSignalExternalWorkflowExecutionAttributes(
 				namespaceID,
+				executionInfo.WorkflowId,
 				targetNamespaceID,
 				attr,
 			)
@@ -1160,6 +1178,8 @@ func (handler *workflowTaskCompletedHandler) handleCommandSignalExternalWorkflow
 		return nil, handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_PENDING_SIGNALS_LIMIT_EXCEEDED, err)
 	}
 
+	metricsHandler := handler.metricsHandler.WithTags(metrics.HeaderCallsiteTag("SignalExternalWorkflowExecutionCommand"))
+	metrics.HeaderSize.With(metricsHandler).Record(int64(attr.GetHeader().Size()))
 	if err := handler.sizeLimitChecker.checkIfPayloadSizeExceedsLimit(
 		metrics.CommandTypeTag(enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION.String()),
 		attr.GetInput().Size(),

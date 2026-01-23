@@ -11,6 +11,7 @@ import (
 	"github.com/temporalio/sqlparser"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/primitives"
@@ -52,6 +53,8 @@ func (s *queryConverterSuite) SetupTest() {
 		searchattribute.TestNameTypeMap(),
 		&searchattribute.TestMapper{},
 		"",
+		nil,
+		chasm.UnspecifiedArchetypeID,
 	)
 }
 
@@ -109,7 +112,7 @@ func (s *queryConverterSuite) TestConvertWhereString() {
 			input:  "GROUP BY ExecutionStatus, WorkflowType",
 			output: nil,
 			err: query.NewConverterError(
-				"%s: 'group by' clause supports only a single field",
+				"%s: 'GROUP BY' clause supports only a single field",
 				query.NotSupportedErrMessage,
 			),
 		},
@@ -118,22 +121,21 @@ func (s *queryConverterSuite) TestConvertWhereString() {
 			input:  "GROUP BY WorkflowType",
 			output: nil,
 			err: query.NewConverterError(
-				"%s: 'group by' clause is only supported for %s search attribute",
+				"%s: 'GROUP BY' clause is only supported for ExecutionStatus",
 				query.NotSupportedErrMessage,
-				sadefs.ExecutionStatus,
 			),
 		},
 		{
 			name:   "order by not supported",
 			input:  "ORDER BY StartTime",
 			output: nil,
-			err:    query.NewConverterError("%s: 'order by' clause", query.NotSupportedErrMessage),
+			err:    query.NewConverterError("%s: 'ORDER BY' clause", query.NotSupportedErrMessage),
 		},
 		{
 			name:   "group by with order by not supported",
 			input:  "GROUP BY ExecutionStatus ORDER BY StartTime",
 			output: nil,
-			err:    query.NewConverterError("%s: 'order by' clause", query.NotSupportedErrMessage),
+			err:    query.NewConverterError("%s: 'ORDER BY' clause", query.NotSupportedErrMessage),
 		},
 	}
 
@@ -146,6 +148,8 @@ func (s *queryConverterSuite) TestConvertWhereString() {
 				searchattribute.TestNameTypeMap(),
 				&searchattribute.TestMapper{},
 				"",
+				nil,
+				chasm.UnspecifiedArchetypeID,
 			)
 			qp, err := qc.convertWhereString(tc.input)
 			if tc.err == nil {
@@ -821,8 +825,9 @@ func (s *queryConverterSuite) TestParseSQLVal() {
 			name:  "valid string",
 			input: "'foo'",
 			args: map[string]any{
-				"saName": "AliasForKeyword01",
-				"saType": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+				"saName":      "AliasForKeyword01",
+				"saFieldName": "Keyword01",
+				"saType":      enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 			},
 			retValue: "foo",
 			err:      nil,
@@ -831,8 +836,9 @@ func (s *queryConverterSuite) TestParseSQLVal() {
 			name:  "valid integer",
 			input: "123",
 			args: map[string]any{
-				"saName": "AliasForInt01",
-				"saType": enumspb.INDEXED_VALUE_TYPE_INT,
+				"saName":      "AliasForInt01",
+				"saFieldName": "Int01",
+				"saType":      enumspb.INDEXED_VALUE_TYPE_INT,
 			},
 			retValue: int64(123),
 			err:      nil,
@@ -841,8 +847,9 @@ func (s *queryConverterSuite) TestParseSQLVal() {
 			name:  "valid float",
 			input: "1.230",
 			args: map[string]any{
-				"saName": "AliasForDouble01",
-				"saType": enumspb.INDEXED_VALUE_TYPE_DOUBLE,
+				"saName":      "AliasForDouble01",
+				"saFieldName": "Double01",
+				"saType":      enumspb.INDEXED_VALUE_TYPE_DOUBLE,
 			},
 			retValue: float64(1.23),
 			err:      nil,
@@ -851,8 +858,9 @@ func (s *queryConverterSuite) TestParseSQLVal() {
 			name:  "valid datetime",
 			input: fmt.Sprintf("'%s'", dt.Format(time.RFC3339Nano)),
 			args: map[string]any{
-				"saName": "AliasForDatetime01",
-				"saType": enumspb.INDEXED_VALUE_TYPE_DATETIME,
+				"saName":      "AliasForDatetime01",
+				"saFieldName": "Datetime01",
+				"saType":      enumspb.INDEXED_VALUE_TYPE_DATETIME,
 			},
 			retValue: dt.Format(s.queryConverter.getDatetimeFormat()),
 			err:      nil,
@@ -861,8 +869,9 @@ func (s *queryConverterSuite) TestParseSQLVal() {
 			name:  "invalid datetime",
 			input: fmt.Sprintf("'%s'", dt.String()),
 			args: map[string]any{
-				"saName": "AliasForDatetime01",
-				"saType": enumspb.INDEXED_VALUE_TYPE_DATETIME,
+				"saName":      "AliasForDatetime01",
+				"saFieldName": "Datetime01",
+				"saType":      enumspb.INDEXED_VALUE_TYPE_DATETIME,
 			},
 			retValue: nil,
 			err: query.NewConverterError(
@@ -872,31 +881,34 @@ func (s *queryConverterSuite) TestParseSQLVal() {
 			),
 		},
 		{
-			name:  "valid ExecutionStatus keyword",
+			name:  "valid ExecutionStatus keyword (system)",
 			input: "'Running'",
 			args: map[string]any{
-				"saName": "ExecutionStatus",
-				"saType": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+				"saName":      "ExecutionStatus",
+				"saFieldName": "ExecutionStatus", // System ExecutionStatus uses field name = alias
+				"saType":      enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 			},
 			retValue: int64(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING),
 			err:      nil,
 		},
 		{
-			name:  "valid ExecutionStatus code",
+			name:  "valid ExecutionStatus code (system)",
 			input: "1",
 			args: map[string]any{
-				"saName": "ExecutionStatus",
-				"saType": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+				"saName":      "ExecutionStatus",
+				"saFieldName": "ExecutionStatus", // System ExecutionStatus uses field name = alias
+				"saType":      enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 			},
 			retValue: int64(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING),
 			err:      nil,
 		},
 		{
-			name:  "invalid ExecutionStatus keyword",
+			name:  "invalid ExecutionStatus keyword (system)",
 			input: "'Foo'",
 			args: map[string]any{
-				"saName": "ExecutionStatus",
-				"saType": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+				"saName":      "ExecutionStatus",
+				"saFieldName": "ExecutionStatus", // System ExecutionStatus uses field name = alias
+				"saType":      enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 			},
 			retValue: nil,
 			err: query.NewConverterError(
@@ -906,11 +918,23 @@ func (s *queryConverterSuite) TestParseSQLVal() {
 			),
 		},
 		{
+			name:  "valid ExecutionStatus alias (CHASM)",
+			input: "'CustomStatus'",
+			args: map[string]any{
+				"saName":      "ExecutionStatus",
+				"saFieldName": "TemporalLowCardinalityKeyword01", // CHASM alias maps to different field
+				"saType":      enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+			},
+			retValue: "CustomStatus", // No validation against enum, just returns the string
+			err:      nil,
+		},
+		{
 			name:  "valid ExecutionDuration day suffix",
 			input: "'10d'",
 			args: map[string]any{
-				"saName": "ExecutionDuration",
-				"saType": enumspb.INDEXED_VALUE_TYPE_INT,
+				"saName":      "ExecutionDuration",
+				"saFieldName": "ExecutionDuration",
+				"saType":      enumspb.INDEXED_VALUE_TYPE_INT,
 			},
 			retValue: int64(10 * 24 * time.Hour),
 			err:      nil,
@@ -919,8 +943,9 @@ func (s *queryConverterSuite) TestParseSQLVal() {
 			name:  "valid ExecutionDuration hour suffix",
 			input: "'10h'",
 			args: map[string]any{
-				"saName": "ExecutionDuration",
-				"saType": enumspb.INDEXED_VALUE_TYPE_INT,
+				"saName":      "ExecutionDuration",
+				"saFieldName": "ExecutionDuration",
+				"saType":      enumspb.INDEXED_VALUE_TYPE_INT,
 			},
 			retValue: int64(10 * time.Hour),
 			err:      nil,
@@ -929,8 +954,9 @@ func (s *queryConverterSuite) TestParseSQLVal() {
 			name:  "valid ExecutionDuration string nanos",
 			input: "'100'",
 			args: map[string]any{
-				"saName": "ExecutionDuration",
-				"saType": enumspb.INDEXED_VALUE_TYPE_INT,
+				"saName":      "ExecutionDuration",
+				"saFieldName": "ExecutionDuration",
+				"saType":      enumspb.INDEXED_VALUE_TYPE_INT,
 			},
 			retValue: int64(100),
 			err:      nil,
@@ -939,8 +965,9 @@ func (s *queryConverterSuite) TestParseSQLVal() {
 			name:  "valid ExecutionDuration int nanos",
 			input: "100",
 			args: map[string]any{
-				"saName": "ExecutionDuration",
-				"saType": enumspb.INDEXED_VALUE_TYPE_INT,
+				"saName":      "ExecutionDuration",
+				"saFieldName": "ExecutionDuration",
+				"saType":      enumspb.INDEXED_VALUE_TYPE_INT,
 			},
 			retValue: int64(100),
 			err:      nil,
@@ -949,8 +976,9 @@ func (s *queryConverterSuite) TestParseSQLVal() {
 			name:  "invalid ExecutionDuration",
 			input: "'100q'",
 			args: map[string]any{
-				"saName": "ExecutionDuration",
-				"saType": enumspb.INDEXED_VALUE_TYPE_INT,
+				"saName":      "ExecutionDuration",
+				"saFieldName": "ExecutionDuration",
+				"saType":      enumspb.INDEXED_VALUE_TYPE_INT,
 			},
 			retValue: nil,
 			err: query.NewConverterError(
@@ -960,8 +988,9 @@ func (s *queryConverterSuite) TestParseSQLVal() {
 			name:  "invalid ExecutionDuration out of bounds",
 			input: "'10000000h'",
 			args: map[string]any{
-				"saName": "ExecutionDuration",
-				"saType": enumspb.INDEXED_VALUE_TYPE_INT,
+				"saName":      "ExecutionDuration",
+				"saFieldName": "ExecutionDuration",
+				"saType":      enumspb.INDEXED_VALUE_TYPE_INT,
 			},
 			retValue: nil,
 			err: query.NewConverterError(
@@ -978,6 +1007,7 @@ func (s *queryConverterSuite) TestParseSQLVal() {
 			value, err := s.queryConverter.parseSQLVal(
 				expr.(*sqlparser.SQLVal),
 				tc.args["saName"].(string),
+				tc.args["saFieldName"].(string),
 				tc.args["saType"].(enumspb.IndexedValueType),
 			)
 			if tc.err == nil {
@@ -1085,4 +1115,185 @@ func (m *FlexibleMapper) GetAlias(fieldName, ns string) (string, error) {
 
 func (m *FlexibleMapper) GetFieldName(alias, ns string) (string, error) {
 	return m.GetFieldNameFunc(alias, ns)
+}
+
+func (s *queryConverterSuite) TestConvertColName_WithChasmMapper() {
+	chasmMapper := chasm.NewTestVisibilitySearchAttributesMapper(
+		map[string]string{
+			"TemporalBool01":    "ChasmCompleted",
+			"TemporalKeyword01": "ChasmStatus",
+		},
+		map[string]enumspb.IndexedValueType{
+			"TemporalBool01":    enumspb.INDEXED_VALUE_TYPE_BOOL,
+			"TemporalKeyword01": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		},
+	)
+
+	qc := newQueryConverterInternal(
+		s.pqc,
+		testNamespaceName,
+		testNamespaceID,
+		searchattribute.TestNameTypeMap(),
+		&searchattribute.TestMapper{},
+		"",
+		chasmMapper,
+		chasm.UnspecifiedArchetypeID,
+	)
+
+	testCases := []struct {
+		name              string
+		input             string
+		expectedFieldName string
+		expectedFieldType enumspb.IndexedValueType
+		expectedErr       bool
+	}{
+		{
+			name:              "ChasmCompleted",
+			input:             "ChasmCompleted",
+			expectedFieldName: "TemporalBool01",
+			expectedFieldType: enumspb.INDEXED_VALUE_TYPE_BOOL,
+			expectedErr:       false,
+		},
+		{
+			name:              "ChasmStatus",
+			input:             "ChasmStatus",
+			expectedFieldName: "TemporalKeyword01",
+			expectedFieldType: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+			expectedErr:       false,
+		},
+		{
+			name:              "NonExistentChasmAlias",
+			input:             "NonExistentChasmAlias",
+			expectedFieldName: "",
+			expectedFieldType: enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED,
+			expectedErr:       true,
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			sql := fmt.Sprintf("select * from table1 where %s = 'value'", tc.input)
+			stmt, err := sqlparser.Parse(sql)
+			s.NoError(err)
+			expr := stmt.(*sqlparser.Select).Where.Expr.(*sqlparser.ComparisonExpr).Left
+			colName, err := qc.convertColName(&expr)
+			if tc.expectedErr {
+				s.Error(err)
+			} else {
+				s.NoError(err)
+				s.Equal(tc.expectedFieldName, colName.fieldName)
+				s.Equal(tc.expectedFieldType, colName.valueType)
+			}
+		})
+	}
+}
+
+func (s *queryConverterSuite) TestConvertWhereString_WithChasmMapper() {
+	chasmMapper := chasm.NewTestVisibilitySearchAttributesMapper(
+		map[string]string{
+			"TemporalKeyword01": "ChasmStatus",
+		},
+		map[string]enumspb.IndexedValueType{
+			"TemporalKeyword01": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		},
+	)
+
+	qc := newQueryConverterInternal(
+		s.pqc,
+		testNamespaceName,
+		testNamespaceID,
+		searchattribute.TestNameTypeMap(),
+		&searchattribute.TestMapper{},
+		"",
+		chasmMapper,
+		chasm.UnspecifiedArchetypeID,
+	)
+
+	testCases := []struct {
+		name     string
+		input    string
+		expected string
+		err      error
+	}{
+		{
+			name:     "CHASM search attribute",
+			input:    "ChasmStatus = 'active'",
+			expected: "(TemporalKeyword01 = 'active') and TemporalNamespaceDivision is null",
+			err:      nil,
+		},
+		{
+			name:     "CHASM search attribute with namespace division",
+			input:    "ChasmStatus = 'active' AND TemporalNamespaceDivision = '123'",
+			expected: "(TemporalKeyword01 = 'active' and TemporalNamespaceDivision = '123')",
+			err:      nil,
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			qp, err := qc.convertWhereString(tc.input)
+			if tc.err == nil {
+				s.NoError(err)
+				s.Equal(tc.expected, qp.queryString)
+			} else {
+				s.Error(err)
+				s.Equal(tc.err, err)
+			}
+		})
+	}
+}
+
+func (s *queryConverterSuite) TestConvertWhereString_WithArchetypeID() {
+	testCases := []struct {
+		name        string
+		input       string
+		archetypeID chasm.ArchetypeID
+		expected    string
+		err         error
+	}{
+		{
+			name:        "with archetypeID",
+			input:       "AliasForInt01 = 1",
+			archetypeID: 123,
+			expected:    "(Int01 = 1) and TemporalNamespaceDivision = '123'",
+			err:         nil,
+		},
+		{
+			name:        "with UnspecifiedArchetypeID",
+			input:       "AliasForInt01 = 1",
+			archetypeID: chasm.UnspecifiedArchetypeID,
+			expected:    "(Int01 = 1) and TemporalNamespaceDivision is null",
+			err:         nil,
+		},
+		{
+			name:        "with explicit namespace division and archetypeID",
+			input:       "AliasForInt01 = 1 AND TemporalNamespaceDivision = '456'",
+			archetypeID: 123,
+			expected:    "(Int01 = 1 and TemporalNamespaceDivision = '456')",
+			err:         nil,
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			qc := newQueryConverterInternal(
+				s.pqc,
+				testNamespaceName,
+				testNamespaceID,
+				searchattribute.TestNameTypeMap(),
+				&searchattribute.TestMapper{},
+				"",
+				nil,
+				tc.archetypeID,
+			)
+			qp, err := qc.convertWhereString(tc.input)
+			if tc.err == nil {
+				s.NoError(err)
+				s.Equal(tc.expected, qp.queryString)
+			} else {
+				s.Error(err)
+				s.Equal(tc.err, err)
+			}
+		})
+	}
 }

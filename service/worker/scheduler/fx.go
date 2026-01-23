@@ -5,11 +5,11 @@ import (
 	"math"
 	"time"
 
-	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -26,16 +26,24 @@ const (
 	NamespaceDivision = "TemporalScheduler"
 )
 
-var (
-	VisibilityBaseListQuery = fmt.Sprintf(
-		"%s = '%s' AND %s = '%s' AND %s = '%s'",
-		sadefs.WorkflowType,
-		WorkflowType,
-		sadefs.TemporalNamespaceDivision,
-		NamespaceDivision,
-		sadefs.ExecutionStatus,
-		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String(),
-	)
+// VisibilityListQueryV1 selects only V1 scheduler workflows.
+// Used by listSchedulesWorkflow which calls ListWorkflowExecutions without archetype ID.
+var VisibilityListQueryV1 = fmt.Sprintf(
+	"%s = '%s' AND %s = 'Running'",
+	sadefs.TemporalNamespaceDivision,
+	NamespaceDivision,
+	sadefs.ExecutionStatus,
+)
+
+// VisibilityListQueryChasm selects both V1 scheduler and CHASM scheduler.
+// Used by listSchedulesChasm which calls chasm.ListExecutions with archetype ID set,
+// allowing TemporalSystemExecutionStatus to be translated to ExecutionStatus.
+var VisibilityListQueryChasm = fmt.Sprintf(
+	"((%s = '%s' AND TemporalSystemExecutionStatus = 'Running') OR (%s = '%d' AND ExecutionStatus = 'Running'))",
+	sadefs.TemporalNamespaceDivision,
+	NamespaceDivision,
+	sadefs.TemporalNamespaceDivision,
+	chasm.SchedulerArchetypeID,
 )
 
 type (

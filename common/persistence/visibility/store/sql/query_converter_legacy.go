@@ -9,6 +9,7 @@ import (
 
 	"github.com/temporalio/sqlparser"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
@@ -47,6 +48,9 @@ type (
 		queryString   string
 
 		seenNamespaceDivision bool
+
+		chasmMapper *chasm.VisibilitySearchAttributesMapper
+		archetypeID chasm.ArchetypeID
 	}
 
 	queryParamsLegacy struct {
@@ -97,6 +101,8 @@ func newQueryConverterInternal(
 	saTypeMap searchattribute.NameTypeMap,
 	saMapper searchattribute.Mapper,
 	queryString string,
+	chasmMapper *chasm.VisibilitySearchAttributesMapper,
+	archetypeID chasm.ArchetypeID,
 ) *QueryConverterLegacy {
 	return &QueryConverterLegacy{
 		pluginQueryConverterLegacy: pqc,
@@ -107,6 +113,9 @@ func newQueryConverterInternal(
 		queryString:                queryString,
 
 		seenNamespaceDivision: false,
+
+		chasmMapper: chasmMapper,
+		archetypeID: archetypeID,
 	}
 }
 
@@ -123,7 +132,7 @@ func (c *QueryConverterLegacy) BuildSelectStmt(
 		return nil, err
 	}
 	if len(qp.groupBy) > 0 {
-		return nil, query.NewConverterError("%s: 'group by' clause", query.NotSupportedErrMessage)
+		return nil, query.NewConverterError("%s: 'GROUP BY' clause", query.NotSupportedErrMessage)
 	}
 	queryString, queryArgs := c.buildSelectStmt(
 		c.namespaceID,
@@ -188,11 +197,11 @@ func (c *QueryConverterLegacy) convertWhereString(queryString string) (*queryPar
 
 func (c *QueryConverterLegacy) convertSelectStmt(sel *sqlparser.Select) error {
 	if sel.OrderBy != nil {
-		return query.NewConverterError("%s: 'order by' clause", query.NotSupportedErrMessage)
+		return query.NewConverterError("%s: 'ORDER BY' clause", query.NotSupportedErrMessage)
 	}
 
 	if sel.Limit != nil {
-		return query.NewConverterError("%s: 'limit' clause", query.NotSupportedErrMessage)
+		return query.NewConverterError("%s: 'LIMIT' clause", query.NotSupportedErrMessage)
 	}
 
 	if sel.Where == nil {
@@ -222,13 +231,23 @@ func (c *QueryConverterLegacy) convertSelectStmt(sel *sqlparser.Select) error {
 
 	// This logic comes from elasticsearch/visibility_store.go#convertQuery function.
 	// If the query did not explicitly filter on TemporalNamespaceDivision,
-	// then add "is null" query to it.
+	// try setting the namespace division filter based on the archetype ID,
+	// else filter by null (no division).
 	if !c.seenNamespaceDivision {
-		namespaceDivisionExpr := &sqlparser.IsExpr{
-			Operator: sqlparser.IsNullStr,
-			Expr: newColName(
-				sadefs.GetSqlDbColName(sadefs.TemporalNamespaceDivision),
-			),
+		var namespaceDivisionExpr sqlparser.Expr
+		if c.archetypeID != chasm.UnspecifiedArchetypeID {
+			namespaceDivisionExpr = &sqlparser.ComparisonExpr{
+				Operator: sqlparser.EqualStr,
+				Left:     newColName(sadefs.GetSqlDbColName(sadefs.TemporalNamespaceDivision)),
+				Right:    sqlparser.NewStrVal([]byte(strconv.Itoa(int(c.archetypeID)))),
+			}
+		} else {
+			namespaceDivisionExpr = &sqlparser.IsExpr{
+				Operator: sqlparser.IsNullStr,
+				Expr: newColName(
+					sadefs.GetSqlDbColName(sadefs.TemporalNamespaceDivision),
+				),
+			}
 		}
 		if sel.Where.Expr == nil {
 			sel.Where.Expr = namespaceDivisionExpr
@@ -242,7 +261,7 @@ func (c *QueryConverterLegacy) convertSelectStmt(sel *sqlparser.Select) error {
 
 	if len(sel.GroupBy) > 1 {
 		return query.NewConverterError(
-			"%s: 'group by' clause supports only a single field",
+			"%s: 'GROUP BY' clause supports only a single field",
 			query.NotSupportedErrMessage,
 		)
 	}
@@ -251,11 +270,10 @@ func (c *QueryConverterLegacy) convertSelectStmt(sel *sqlparser.Select) error {
 		if err != nil {
 			return err
 		}
-		if colName.fieldName != sadefs.ExecutionStatus {
+		if !query.IsGroupByFieldAllowed(colName.fieldName) {
 			return query.NewConverterError(
-				"%s: 'group by' clause is only supported for %s search attribute",
+				"%s: 'GROUP BY' clause is only supported for ExecutionStatus",
 				query.NotSupportedErrMessage,
-				sadefs.ExecutionStatus,
 			)
 		}
 	}
@@ -425,13 +443,20 @@ func (c *QueryConverterLegacy) convertColName(exprRef *sqlparser.Expr) (*saColNa
 		)
 	}
 	saAlias := strings.ReplaceAll(sqlparser.String(expr), "`", "")
-	saFieldName, saType, err := query.ResolveSearchAttributeAlias(saAlias, c.namespaceName, c.saMapper, c.saTypeMap)
+
+	saFieldName, saType, err := query.ResolveSearchAttributeAlias(saAlias, c.namespaceName, c.saMapper, c.saTypeMap, c.chasmMapper)
 	if err != nil {
-		return nil, query.NewConverterError(
-			"%s: column name '%s' is not a valid search attribute",
-			query.InvalidExpressionErrMessage,
-			saAlias,
-		)
+		if c.archetypeID != chasm.SchedulerArchetypeID || saAlias != "TemporalSystemExecutionStatus" {
+			return nil, query.NewConverterError(
+				"%s: column name '%s' is not a valid search attribute",
+				query.InvalidExpressionErrMessage,
+				saAlias,
+			)
+		}
+		// To support querying Workflow based schedulers and CHASM based schedulers, we need to translate
+		// TemporalSystemExecutionStatus as an alias to the system search attribute ExecutionStatus.
+		saFieldName = sadefs.ExecutionStatus
+		saType, _ = c.saTypeMap.GetType(saFieldName)
 	}
 	if saFieldName == sadefs.TemporalNamespaceDivision {
 		c.seenNamespaceDivision = true
@@ -459,7 +484,7 @@ func (c *QueryConverterLegacy) convertValueExpr(
 	expr := *exprRef
 	switch e := expr.(type) {
 	case *sqlparser.SQLVal:
-		value, err := c.parseSQLVal(e, name, saType)
+		value, err := c.parseSQLVal(e, name, saFieldName, saType)
 		if err != nil {
 			return err
 		}
@@ -521,11 +546,12 @@ func (c *QueryConverterLegacy) convertValueExpr(
 // parseSQLVal handles values for specific search attributes.
 // Returns a string, an int64 or a float64 if there are no errors.
 // For datetime, converts to UTC.
-// For execution status, converts string to enum value.
+// For execution status, converts string to enum value (only for system ExecutionStatus field).
 // For execution duration, converts to nanoseconds.
 func (c *QueryConverterLegacy) parseSQLVal(
 	expr *sqlparser.SQLVal,
 	saName string,
+	saFieldName string,
 	saType enumspb.IndexedValueType,
 ) (any, error) {
 	// Using expr.Val instead of sqlparser.String(expr) because the latter escapes chars using MySQL
@@ -568,7 +594,7 @@ func (c *QueryConverterLegacy) parseSQLVal(
 		return tm.UTC().Format(c.getDatetimeFormat()), nil
 	}
 
-	if saName == sadefs.ExecutionStatus {
+	if saFieldName == sadefs.ExecutionStatus {
 		var status int64
 		switch v := value.(type) {
 		case int64:
@@ -594,7 +620,7 @@ func (c *QueryConverterLegacy) parseSQLVal(
 		return status, nil
 	}
 
-	if saName == sadefs.ExecutionDuration {
+	if saFieldName == sadefs.ExecutionDuration {
 		if durationStr, isString := value.(string); isString {
 			duration, err := query.ParseExecutionDurationStr(durationStr)
 			if err != nil {

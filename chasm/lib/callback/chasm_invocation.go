@@ -82,13 +82,13 @@ func (c chasmInvocation) Invoke(
 
 	request, err := c.getHistoryRequest(decodedRef)
 	if err != nil {
-		return invocationResultFail{logInternalError(e.logger, "failed to build history request: %v", err)}
+		return invocationResultFail{logInternalError(e.logger, "failed to build history request", err)}
 	}
 
 	// RPC to History for cross-shard completion delivery.
 	_, err = e.historyClient.CompleteNexusOperationChasm(ctx, request)
 	if err != nil {
-		msg := logInternalError(e.logger, "failed to complete Nexus operation: %v", err)
+		msg := logInternalError(e.logger, "failed to complete Nexus operation", err)
 		if isRetryableRPCResponse(err) {
 			return invocationResultRetry{err: msg}
 		}
@@ -142,17 +142,21 @@ func (c chasmInvocation) getHistoryRequest(
 			return nil, fmt.Errorf("failed to read payload: %v", err)
 		}
 
-		var payload commonpb.Payload
+		var payload *commonpb.Payload
 		if payloadBody != nil {
-			err := proto.Unmarshal(payloadBody, &payload)
+			content := &nexus.Content{
+				Header: op.Reader.Header,
+				Data:   payloadBody,
+			}
+			err := commonnexus.PayloadSerializer.Deserialize(content, &payload)
 			if err != nil {
-				return nil, fmt.Errorf("failed to unmarshal payload body: %v", err)
+				return nil, fmt.Errorf("failed to deserialize payload: %v", err)
 			}
 		}
 
 		req = &historyservice.CompleteNexusOperationChasmRequest{
 			Outcome: &historyservice.CompleteNexusOperationChasmRequest_Success{
-				Success: &payload,
+				Success: payload,
 			},
 			CloseTime:  timestamppb.New(op.CloseTime),
 			Completion: completion,

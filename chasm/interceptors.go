@@ -11,17 +11,17 @@ import (
 
 const chasmRequestPrefix = "/temporal.server.chasm"
 
-// ChasmRequestInterceptor Interceptor that intercepts RPC requests, detects Chasm-specific calls and does additional
-// boilerplate processing before handing off.
-type ChasmRequestInterceptor struct {
+// ChasmEngineInterceptor Interceptor that intercepts RPC requests,
+// detects CHASM-specific calls and does additional boilerplate processing before
+// handing off. Visibility is injected separately with
+// ChasmVisibilityInterceptor.
+type ChasmEngineInterceptor struct {
 	engine         Engine
 	logger         log.Logger
 	metricsHandler metrics.Handler
 }
 
-var _ grpc.UnaryServerInterceptor = (*ChasmRequestInterceptor)(nil).Intercept
-
-func (i *ChasmRequestInterceptor) Intercept(
+func (i *ChasmEngineInterceptor) Intercept(
 	ctx context.Context,
 	req interface{},
 	info *grpc.UnaryServerInfo,
@@ -32,14 +32,39 @@ func (i *ChasmRequestInterceptor) Intercept(
 	}
 
 	ctx = NewEngineContext(ctx, i.engine)
-
 	return handler(ctx, req)
 }
 
-func ChasmRequestInterceptorProvider(engine Engine, logger log.Logger, metricsHandler metrics.Handler) *ChasmRequestInterceptor {
-	return &ChasmRequestInterceptor{
+func ChasmEngineInterceptorProvider(
+	engine Engine,
+	logger log.Logger,
+	metricsHandler metrics.Handler,
+) *ChasmEngineInterceptor {
+	return &ChasmEngineInterceptor{
 		engine:         engine,
 		logger:         logger,
 		metricsHandler: metricsHandler,
+	}
+}
+
+// ChasmVisibilityInterceptor intercepts RPC requests and adds the CHASM
+// VisibilityManager to their context.
+type ChasmVisibilityInterceptor struct {
+	visibilityMgr VisibilityManager
+}
+
+func (i *ChasmVisibilityInterceptor) Intercept(
+	ctx context.Context,
+	req interface{},
+	info *grpc.UnaryServerInfo,
+	handler grpc.UnaryHandler,
+) (resp interface{}, retError error) {
+	ctx = NewVisibilityManagerContext(ctx, i.visibilityMgr)
+	return handler(ctx, req)
+}
+
+func ChasmVisibilityInterceptorProvider(visibilityMgr VisibilityManager) *ChasmVisibilityInterceptor {
+	return &ChasmVisibilityInterceptor{
+		visibilityMgr: visibilityMgr,
 	}
 }

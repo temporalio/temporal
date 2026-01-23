@@ -1,6 +1,8 @@
 package workerdeployment
 
 import (
+	"time"
+
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
@@ -23,9 +25,11 @@ const (
 	// history for TestReplays using generate_history.sh.
 
 	// Represents the state before the versioning API's received the option of becoming async in nature
-	InitialVersion DeploymentWorkflowVersion = 0
-	// SetCurrent and SetRamping APIs are async
-	AsyncSetCurrentAndRamping = 1
+	InitialVersion DeploymentWorkflowVersion = iota
+	// SetCurrent and SetRamping and DeleteVersion APIs are async
+	AsyncSetCurrentAndRamping
+	// Version Data has its own revision number with TaskQueue registration being async as well
+	VersionDataRevisionNumber
 )
 
 type (
@@ -40,6 +44,7 @@ type (
 		Logger                 log.Logger
 		ClientFactory          sdk.ClientFactory
 		MatchingClient         resource.MatchingClient
+		HistoryClient          resource.HistoryClient
 		WorkerDeploymentClient Client
 	}
 
@@ -61,6 +66,7 @@ func ClientProvider(
 	visibilityManager manager.VisibilityManager,
 	dc *dynamicconfig.Collection,
 	testHooks testhooks.TestHooks,
+	metricsHandler metrics.Handler,
 ) Client {
 	return &ClientImpl{
 		logger:                           logger,
@@ -72,6 +78,7 @@ func ClientProvider(
 		maxTaskQueuesInDeploymentVersion: dynamicconfig.MatchingMaxTaskQueuesInDeploymentVersion.Get(dc),
 		maxDeployments:                   dynamicconfig.MatchingMaxDeployments.Get(dc),
 		testHooks:                        testHooks,
+		metricsHandler:                   metricsHandler,
 	}
 }
 
@@ -100,10 +107,10 @@ func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Na
 	}
 
 	versionWorkflow := func(ctx workflow.Context, args *deploymentspb.WorkerDeploymentVersionWorkflowArgs) error {
-		refreshIntervalGetter := func() any {
+		refreshIntervalGetter := func() time.Duration {
 			return dynamicconfig.VersionDrainageStatusRefreshInterval.Get(s.dynamicConfig)(ns.Name().String())
 		}
-		visibilityGracePeriodGetter := func() any {
+		visibilityGracePeriodGetter := func() time.Duration {
 			return dynamicconfig.VersionDrainageStatusVisibilityGracePeriod.Get(s.dynamicConfig)(ns.Name().String())
 		}
 		return VersionWorkflow(ctx, workflowVersionGetter, refreshIntervalGetter, visibilityGracePeriodGetter, args)
@@ -119,16 +126,14 @@ func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Na
 	registry.RegisterWorkflowWithOptions(deploymentWorkflow, workflow.RegisterOptions{Name: WorkerDeploymentWorkflowType})
 
 	versionActivities := &VersionActivities{
-		namespace:        ns,
-		deploymentClient: s.activityDeps.WorkerDeploymentClient,
-		matchingClient:   s.activityDeps.MatchingClient,
+		activityDeps: s.activityDeps,
+		namespace:    ns,
 	}
 	registry.RegisterActivity(versionActivities)
 
 	activities := &Activities{
-		namespace:        ns,
-		deploymentClient: s.activityDeps.WorkerDeploymentClient,
-		matchingClient:   s.activityDeps.MatchingClient,
+		activityDeps: s.activityDeps,
+		namespace:    ns,
 	}
 	registry.RegisterActivity(activities)
 	return nil

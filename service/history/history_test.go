@@ -118,6 +118,7 @@ func (s *historyAPISuite) TestDeleteWorkflowExecution_DeleteCurrentExecution() {
 					{BranchToken: []byte("branch1")},
 					{BranchToken: []byte("branch2")},
 					{BranchToken: []byte("branch3")},
+					{BranchToken: []byte{}},
 				},
 			},
 		},
@@ -151,7 +152,7 @@ func (s *historyAPISuite) TestDeleteWorkflowExecution_DeleteCurrentExecution() {
 		RunID:       runID,
 		ArchetypeID: chasm.WorkflowArchetypeID,
 	}).Return(nil)
-	s.mockExecutionMgr.EXPECT().DeleteHistoryBranch(gomock.Any(), gomock.Any()).Times(len(mutableState.ExecutionInfo.VersionHistories.Histories))
+	s.mockExecutionMgr.EXPECT().DeleteHistoryBranch(gomock.Any(), gomock.Any()).Times(3)
 
 	_, err = forcedeleteworkflowexecution.Invoke(
 		context.Background(),

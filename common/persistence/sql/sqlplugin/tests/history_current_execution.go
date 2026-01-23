@@ -10,6 +10,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
@@ -23,6 +24,8 @@ type (
 		*require.Assertions
 
 		store sqlplugin.HistoryExecution
+
+		archetypeID chasm.ArchetypeID
 	}
 )
 
@@ -51,10 +54,12 @@ var (
 func NewHistoryCurrentExecutionSuite(
 	t *testing.T,
 	store sqlplugin.HistoryExecution,
+	archetypeID chasm.ArchetypeID,
 ) *historyCurrentExecutionSuite {
 	return &historyCurrentExecutionSuite{
-		Assertions: require.New(t),
-		store:      store,
+		Assertions:  require.New(t),
+		store:       store,
+		archetypeID: archetypeID,
 	}
 }
 
@@ -130,6 +135,7 @@ func (s *historyCurrentExecutionSuite) TestInsertSelect() {
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       nil,
+		ArchetypeID: s.archetypeID,
 	}
 	row, err := s.store.SelectFromCurrentExecutions(newExecutionContext(), filter)
 	s.NoError(err)
@@ -202,6 +208,7 @@ func (s *historyCurrentExecutionSuite) TestInsertUpdateSelect() {
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       nil,
+		ArchetypeID: s.archetypeID,
 	}
 	row, err := s.store.SelectFromCurrentExecutions(newExecutionContext(), filter)
 	s.NoError(err)
@@ -228,6 +235,7 @@ func (s *historyCurrentExecutionSuite) TestInsertDeleteSelect_Success() {
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
+		ArchetypeID: s.archetypeID,
 	}
 	result, err = s.store.DeleteFromCurrentExecutions(newExecutionContext(), filter)
 	s.NoError(err)
@@ -260,6 +268,7 @@ func (s *historyCurrentExecutionSuite) TestInsertDeleteSelect_Fail() {
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       primitives.NewUUID(),
+		ArchetypeID: s.archetypeID,
 	}
 	result, err = s.store.DeleteFromCurrentExecutions(newExecutionContext(), filter)
 	s.NoError(err)
@@ -295,6 +304,7 @@ func (s *historyCurrentExecutionSuite) TestLock() {
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       nil,
+		ArchetypeID: s.archetypeID,
 	}
 	row, err := s.store.LockCurrentExecutions(newExecutionContext(), filter)
 	s.NoError(err)
@@ -323,12 +333,13 @@ func (s *historyCurrentExecutionSuite) newRandomCurrentExecutionRow(
 			},
 		},
 	}
-	executionStateBlob, _ := serialization.WorkflowExecutionStateToBlob(executionState)
+	executionStateBlob, _ := serialization.NewSerializer().WorkflowExecutionStateToBlob(executionState)
 	return sqlplugin.CurrentExecutionsRow{
 		ShardID:          shardID,
 		NamespaceID:      namespaceID,
 		WorkflowID:       workflowID,
 		RunID:            runID,
+		ArchetypeID:      s.archetypeID,
 		CreateRequestID:  requestID,
 		LastWriteVersion: lastWriteVersion,
 		State:            state,

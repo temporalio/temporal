@@ -8,6 +8,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
@@ -26,14 +27,12 @@ func Invoke(
 	resetRequest *historyservice.ResetWorkflowExecutionRequest,
 	shardContext historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
+	matchingClient matchingservice.MatchingServiceClient,
+	versionMembershipCache worker_versioning.VersionMembershipCache,
 ) (_ *historyservice.ResetWorkflowExecutionResponse, retError error) {
 	namespaceID := namespace.ID(resetRequest.GetNamespaceId())
 	err := api.ValidateNamespaceUUID(namespaceID)
 	if err != nil {
-		return nil, err
-	}
-
-	if err := validatePostResetOperationInputs(resetRequest.ResetRequest.PostResetOperations); err != nil {
 		return nil, err
 	}
 
@@ -60,6 +59,13 @@ func Invoke(
 	if request.GetWorkflowTaskFinishEventId() <= common.FirstEventID ||
 		request.GetWorkflowTaskFinishEventId() >= baseMutableState.GetNextEventID() {
 		return nil, serviceerror.NewInvalidArgument("Workflow task finish ID must be > 1 && <= workflow last event ID.")
+	}
+
+	// Validate versioning override, if any.
+	err = validatePostResetOperationInputs(ctx, request.GetPostResetOperations(), matchingClient, versionMembershipCache,
+		baseMutableState.GetExecutionInfo().GetTaskQueue(), namespaceID.String())
+	if err != nil {
+		return nil, err
 	}
 
 	// also load the current run of the workflow, it can be different from the base runID
@@ -127,7 +133,7 @@ func Invoke(
 		baseWorkflowLease.GetReleaseFn(),
 	)
 
-	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespaceID)
+	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespaceID, workflowID)
 	if err != nil {
 		return nil, err
 	}
@@ -205,12 +211,17 @@ func GetResetReapplyExcludeTypes(
 }
 
 // validatePostResetOperationInputs validates the optional post reset operation inputs.
-func validatePostResetOperationInputs(postResetOperations []*workflowpb.PostResetOperation) error {
+func validatePostResetOperationInputs(ctx context.Context,
+	postResetOperations []*workflowpb.PostResetOperation,
+	matchingClient matchingservice.MatchingServiceClient,
+	versionMembershipCache worker_versioning.VersionMembershipCache,
+	taskQueue string,
+	namespaceID string) error {
 	for _, operation := range postResetOperations {
 		switch op := operation.GetVariant().(type) {
 		case *workflowpb.PostResetOperation_UpdateWorkflowOptions_:
 			opts := op.UpdateWorkflowOptions.GetWorkflowExecutionOptions()
-			if err := worker_versioning.ValidateVersioningOverride(opts.GetVersioningOverride()); err != nil {
+			if err := worker_versioning.ValidateVersioningOverride(ctx, opts.GetVersioningOverride(), matchingClient, versionMembershipCache, taskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, namespaceID); err != nil {
 				return err
 			}
 		default:

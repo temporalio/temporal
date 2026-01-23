@@ -87,6 +87,7 @@ func startAndSignalWorkflow(
 		shard,
 		newMutableState,
 		signalWithStartRequest.GetSignalInput().Size(),
+		signalWithStartRequest.GetHeader().Size(),
 		"SignalWithStartWorkflowExecution",
 	); err != nil {
 		return "", false, err
@@ -220,6 +221,7 @@ func startAndSignalWithoutCurrentWorkflow(
 	requestID string,
 ) (string, bool, error) {
 	newWorkflow, newWorkflowEventsSeq, err := newWorkflowLease.GetMutableState().CloseTransactionAsSnapshot(
+		ctx,
 		historyi.TransactionPolicyActive,
 	)
 	if err != nil {
@@ -280,6 +282,7 @@ func signalWorkflow(
 		shardContext,
 		workflowLease.GetMutableState(),
 		request.GetSignalInput().Size(),
+		request.GetHeader().Size(),
 		"SignalWithStartWorkflowExecution",
 	); err != nil {
 		// in-memory mutable state is still clean, release the lock with nil error to prevent
@@ -309,7 +312,7 @@ func signalWorkflow(
 	}
 
 	// Create a transfer task to schedule a workflow task
-	if !mutableState.HasPendingWorkflowTask() {
+	if !mutableState.HasPendingWorkflowTask() && !mutableState.IsWorkflowExecutionStatusPaused() {
 
 		executionInfo := mutableState.GetExecutionInfo()
 		executionState := mutableState.GetExecutionState()

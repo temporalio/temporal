@@ -1,18 +1,21 @@
 package workerdeployment
 
 import (
+	"os"
 	"strings"
 	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/worker_versioning"
 	"go.uber.org/mock/gomock"
 )
 
@@ -89,49 +92,49 @@ func (d *deploymentWorkflowClientSuite) TestValidateVersionWfParams() {
 	}{
 		{
 			Description:   "Empty Field",
-			FieldName:     WorkerDeploymentNameFieldName,
+			FieldName:     worker_versioning.WorkerDeploymentNameFieldName,
 			Input:         "",
 			ExpectedError: serviceerror.NewInvalidArgument("WorkerDeploymentName cannot be empty"),
 		},
 		{
 			Description:   "Large Field",
-			FieldName:     WorkerDeploymentNameFieldName,
+			FieldName:     worker_versioning.WorkerDeploymentNameFieldName,
 			Input:         strings.Repeat("s", 1000),
 			ExpectedError: serviceerror.NewInvalidArgument("size of WorkerDeploymentName larger than the maximum allowed"),
 		},
 		{
 			Description:   "Valid field",
-			FieldName:     WorkerDeploymentNameFieldName,
+			FieldName:     worker_versioning.WorkerDeploymentNameFieldName,
 			Input:         "A",
 			ExpectedError: nil,
 		},
 		{
 			Description:   "Invalid buildID",
-			FieldName:     WorkerDeploymentBuildIDFieldName,
+			FieldName:     worker_versioning.WorkerDeploymentBuildIDFieldName,
 			Input:         "__unversioned__",
 			ExpectedError: serviceerror.NewInvalidArgument("BuildID cannot start with '__'"),
 		},
 		{
 			Description:   "Invalid buildID",
-			FieldName:     WorkerDeploymentNameFieldName,
+			FieldName:     worker_versioning.WorkerDeploymentNameFieldName,
 			Input:         "__my_dep",
 			ExpectedError: serviceerror.NewInvalidArgument("WorkerDeploymentName cannot start with '__'"),
 		},
 		{
 			Description:   "Valid buildID",
-			FieldName:     WorkerDeploymentBuildIDFieldName,
+			FieldName:     worker_versioning.WorkerDeploymentBuildIDFieldName,
 			Input:         "valid_build__id",
 			ExpectedError: nil,
 		},
 		{
 			Description:   "Invalid deploymentName",
-			FieldName:     WorkerDeploymentNameFieldName,
+			FieldName:     worker_versioning.WorkerDeploymentNameFieldName,
 			Input:         "A/B",
 			ExpectedError: nil,
 		},
 		{
 			Description:   "Invalid deploymentName",
-			FieldName:     WorkerDeploymentNameFieldName,
+			FieldName:     worker_versioning.WorkerDeploymentNameFieldName,
 			Input:         "A.B",
 			ExpectedError: serviceerror.NewInvalidArgument("worker deployment name cannot contain '.'"),
 		},
@@ -151,6 +154,49 @@ func (d *deploymentWorkflowClientSuite) TestValidateVersionWfParams() {
 		d.ErrorAs(err, &invalidArgument)
 		d.Equal(test.ExpectedError.Error(), err.Error())
 	}
+}
+
+func TestDecodeWorkerDeploymentMemoTolerateUnknownFields(t *testing.T) {
+	t.Parallel()
+	decodeAndValidateMemo(t, "testdata/memo_with_last_current_time.json", "test-deployment", "build-1")
+}
+
+func TestDecodeWorkerDeploymentMemoTolerateMissingFields(t *testing.T) {
+	t.Parallel()
+	decodeAndValidateMemo(t, "testdata/memo_without_last_current_time.json", "test-deployment", "build-1")
+}
+
+func decodeAndValidateMemo(t *testing.T, filePath, deploymentName, buildID string) {
+	jsonData, err := os.ReadFile(filePath)
+	require.NoError(t, err)
+
+	// Create a payload with json/protobuf encoding (matching SDK's ProtoJSONPayloadConverter)
+	payload := &commonpb.Payload{
+		Metadata: map[string][]byte{
+			"encoding":    []byte("json/protobuf"),
+			"messageType": []byte("temporal.server.api.deployment.v1.WorkerDeploymentWorkflowMemo"),
+		},
+		Data: jsonData,
+	}
+
+	// Create a memo with the payload
+	memo := &commonpb.Memo{
+		Fields: map[string]*commonpb.Payload{
+			WorkerDeploymentMemoField: payload,
+		},
+	}
+
+	// Decode should succeed even if the payload contains unknown fields
+	result, err := DecodeWorkerDeploymentMemo(memo)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	// Verify known fields are decoded correctly
+	require.Equal(t, deploymentName, result.DeploymentName)
+	require.NotNil(t, result.CreateTime)
+	require.NotNil(t, result.RoutingConfig)
+	require.Equal(t, deploymentName, result.RoutingConfig.GetCurrentDeploymentVersion().GetDeploymentName())
+	require.Equal(t, buildID, result.RoutingConfig.GetCurrentDeploymentVersion().GetBuildId())
 }
 
 //nolint:revive

@@ -35,6 +35,10 @@ func (wt *WorkflowTags) extractFromMatchingServiceServerMessage(message any) []t
 		return nil
 	case *matchingservice.CheckTaskQueueUserDataPropagationResponse:
 		return nil
+	case *matchingservice.CheckTaskQueueVersionMembershipRequest:
+		return nil
+	case *matchingservice.CheckTaskQueueVersionMembershipResponse:
+		return nil
 	case *matchingservice.CreateNexusEndpointRequest:
 		return nil
 	case *matchingservice.CreateNexusEndpointResponse:
@@ -151,6 +155,10 @@ func (wt *WorkflowTags) extractFromMatchingServiceServerMessage(message any) []t
 	case *matchingservice.SyncDeploymentUserDataRequest:
 		return nil
 	case *matchingservice.SyncDeploymentUserDataResponse:
+		return nil
+	case *matchingservice.UpdateFairnessStateRequest:
+		return nil
+	case *matchingservice.UpdateFairnessStateResponse:
 		return nil
 	case *matchingservice.UpdateNexusEndpointRequest:
 		return nil

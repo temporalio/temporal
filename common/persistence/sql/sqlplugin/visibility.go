@@ -210,6 +210,10 @@ func parseCountGroupByGroupValue(fieldName string, value any) (any, error) {
 			),
 		)
 	default:
+		// MySQL driver returns VARCHAR columns as []byte when scanning into *any.
+		if bs, ok := value.([]byte); ok {
+			return string(bs), nil
+		}
 		return value, nil
 	}
 }

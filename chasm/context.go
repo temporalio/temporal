@@ -3,6 +3,8 @@ package chasm
 import (
 	"context"
 	"time"
+
+	"go.temporal.io/server/common/log"
 )
 
 type Context interface {
@@ -17,10 +19,18 @@ type Context interface {
 	Now(Component) time.Time
 	// ExecutionKey returns the execution key for the execution the context is operating on.
 	ExecutionKey() ExecutionKey
+	// StateTransitionCount returns the number of create/update transactions in the history of this execution.
+	StateTransitionCount() int64
+	// ExecutionCloseTime returns the time when the execution was closed. An execution is closed when its root component reaches a terminal
+	// state in its lifecycle. If the component is still running (not yet closed), it returns a zero time.Time value.
+	ExecutionCloseTime() time.Time
+	// Logger returns a logger tagged with execution key and other chasm framework internal information.
+	Logger() log.Logger
 
 	// Intent() OperationIntent
 	// ComponentOptions(Component) []ComponentOption
 
+	structuredRef(Component) (ComponentRef, error)
 	getContext() context.Context
 }
 
@@ -100,6 +110,26 @@ func (c *immutableCtx) Now(component Component) time.Time {
 
 func (c *immutableCtx) ExecutionKey() ExecutionKey {
 	return c.executionKey
+}
+
+func (c *immutableCtx) StateTransitionCount() int64 {
+	return c.root.backend.GetExecutionInfo().GetStateTransitionCount()
+}
+
+func (c *immutableCtx) ExecutionCloseTime() time.Time {
+	closeTime := c.root.backend.GetExecutionInfo().GetCloseTime()
+	if closeTime == nil {
+		return time.Time{}
+	}
+	return closeTime.AsTime()
+}
+
+func (c *immutableCtx) Logger() log.Logger {
+	return c.root.logger
+}
+
+func (c *immutableCtx) structuredRef(component Component) (ComponentRef, error) {
+	return c.root.structuredRef(component)
 }
 
 func (c *immutableCtx) getContext() context.Context {

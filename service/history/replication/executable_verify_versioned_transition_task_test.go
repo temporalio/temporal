@@ -112,7 +112,7 @@ func (s *executableVerifyVersionedTransitionTaskSuite) SetupTest() {
 		NamespaceCache:          s.namespaceCache,
 		MetricsHandler:          s.metricsHandler,
 		Logger:                  s.logger,
-		EventSerializer:         s.eventSerializer,
+		Serializer:              s.eventSerializer,
 		EagerNamespaceRefresher: s.eagerNamespaceRefresher,
 		DLQWriter:               NewExecutionManagerDLQWriter(s.mockExecutionManager),
 		Config:                  s.config,
@@ -174,8 +174,9 @@ func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_CurrentBranch
 		},
 	}
 	s.executableTask.EXPECT().TerminalState().Return(false)
+	s.executableTask.EXPECT().MarkExecutionStart()
 	s.executableTask.EXPECT().ReplicationTask().Times(1).Return(replicationTask)
-	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID).Return(
+	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID, gomock.Any()).Return(
 		uuid.NewString(), true, nil,
 	).AnyTimes()
 	mu := historyi.NewMockMutableState(s.controller)
@@ -231,8 +232,9 @@ func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_CurrentBranch
 		},
 	}
 	s.executableTask.EXPECT().TerminalState().Return(false)
+	s.executableTask.EXPECT().MarkExecutionStart()
 	s.executableTask.EXPECT().ReplicationTask().Times(1).Return(replicationTask).AnyTimes()
-	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID).Return(
+	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID, gomock.Any()).Return(
 		uuid.NewString(), true, nil,
 	).AnyTimes()
 
@@ -315,8 +317,9 @@ func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_CurrentBranch
 		},
 	}
 	s.executableTask.EXPECT().TerminalState().Return(false)
+	s.executableTask.EXPECT().MarkExecutionStart()
 	s.executableTask.EXPECT().ReplicationTask().Return(replicationTask).AnyTimes()
-	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID).Return(
+	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID, gomock.Any()).Return(
 		uuid.NewString(), true, nil,
 	).AnyTimes()
 
@@ -372,8 +375,9 @@ func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_MissingVersio
 		},
 	}
 	s.executableTask.EXPECT().TerminalState().Return(false)
+	s.executableTask.EXPECT().MarkExecutionStart()
 	s.executableTask.EXPECT().ReplicationTask().Return(replicationTask).AnyTimes()
-	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID).Return(
+	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID, gomock.Any()).Return(
 		uuid.NewString(), true, nil,
 	).AnyTimes()
 
@@ -432,8 +436,9 @@ func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_NonCurrentBra
 		},
 	}
 	s.executableTask.EXPECT().TerminalState().Return(false)
+	s.executableTask.EXPECT().MarkExecutionStart()
 	s.executableTask.EXPECT().ReplicationTask().Return(replicationTask).AnyTimes()
-	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID).Return(
+	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID, gomock.Any()).Return(
 		uuid.NewString(), true, nil,
 	).AnyTimes()
 
@@ -522,8 +527,9 @@ func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_NonCurrentBra
 		},
 	}
 	s.executableTask.EXPECT().TerminalState().Return(false)
+	s.executableTask.EXPECT().MarkExecutionStart()
 	s.executableTask.EXPECT().ReplicationTask().Return(replicationTask).AnyTimes()
-	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID).Return(
+	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID, gomock.Any()).Return(
 		uuid.NewString(), true, nil,
 	).AnyTimes()
 
@@ -588,7 +594,8 @@ func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_Skip_Terminal
 
 func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_Skip_Namespace() {
 	s.executableTask.EXPECT().TerminalState().Return(false)
-	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID).Return(
+	s.executableTask.EXPECT().MarkExecutionStart()
+	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID, gomock.Any()).Return(
 		uuid.NewString(), false, nil,
 	).AnyTimes()
 
@@ -598,8 +605,9 @@ func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_Skip_Namespac
 
 func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_Err() {
 	s.executableTask.EXPECT().TerminalState().Return(false)
+	s.executableTask.EXPECT().MarkExecutionStart()
 	err := errors.New("OwO")
-	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID).Return(
+	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID, gomock.Any()).Return(
 		"", false, err,
 	).AnyTimes()
 

@@ -73,6 +73,7 @@ type (
 		// Address for SDK to connect to, using membership grpc resolver.
 		frontendMembershipAddress string
 		chasmEngine               chasm.Engine
+		chasmVisibilityMgr        chasm.VisibilityManager
 
 		// These are routing/load balancing clients but do not do retries:
 		adminClient    adminservice.AdminServiceClient
@@ -214,14 +215,13 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 		tlsConfigProvider:                params.TLSConfigProvider,
 		captureMetricsHandler:            params.CaptureMetricsHandler,
 		dcClient:                         dynamicconfig.NewMemoryClient(),
-		// If this doesn't build, make sure you're building with tags 'test_dep':
-		testHooks:                 testhooks.NewTestHooksImpl(),
-		serviceFxOptions:          params.ServiceFxOptions,
-		taskCategoryRegistry:      params.TaskCategoryRegistry,
-		hostsByProtocolByService:  params.HostsByProtocolByService,
-		grpcClientInterceptor:     grpcinject.NewInterceptor(),
-		replicationStreamRecorder: NewReplicationStreamRecorder(),
-		spanExporters:             params.SpanExporters,
+		testHooks:                        testhooks.NewTestHooks(),
+		serviceFxOptions:                 params.ServiceFxOptions,
+		taskCategoryRegistry:             params.TaskCategoryRegistry,
+		hostsByProtocolByService:         params.HostsByProtocolByService,
+		grpcClientInterceptor:            grpcinject.NewInterceptor(),
+		replicationStreamRecorder:        NewReplicationStreamRecorder(),
+		spanExporters:                    params.SpanExporters,
 	}
 
 	// Configure output file path for on-demand logging (call WriteToLog() to write)
@@ -322,6 +322,10 @@ func (c *TemporalImpl) ChasmEngine() (chasm.Engine, error) {
 		return nil, fmt.Errorf("expected exactly one host for chasm engine, got %d", numHistoryHosts)
 	}
 	return c.chasmEngine, nil
+}
+
+func (c *TemporalImpl) ChasmVisibilityManager() chasm.VisibilityManager {
+	return c.chasmVisibilityMgr
 }
 
 func (c *TemporalImpl) copyPersistenceConfig() config.Persistence {
@@ -507,6 +511,7 @@ func (c *TemporalImpl) startHistory() {
 			chasmFxOptions,
 			fx.Populate(&namespaceRegistry),
 			fx.Populate(&c.chasmEngine),
+			fx.Populate(&c.chasmVisibilityMgr),
 			fx.Populate(&c.chasmRegistry),
 		)
 		err := app.Err()

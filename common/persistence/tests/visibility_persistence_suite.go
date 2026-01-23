@@ -11,6 +11,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
@@ -19,6 +20,7 @@ import (
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence"
 	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -70,6 +72,7 @@ func (s *VisibilityPersistenceSuite) SetupSuite() {
 		s.SearchAttributesProvider,
 		s.SearchAttributesMapperProvider,
 		s.NamespaceRegistry,
+		chasm.NewRegistry(nil),
 		dynamicconfig.GetIntPropertyFn(1000),
 		dynamicconfig.GetIntPropertyFn(1000),
 		dynamicconfig.GetFloatPropertyFn(0.2),
@@ -82,6 +85,7 @@ func (s *VisibilityPersistenceSuite) SetupSuite() {
 		dynamicconfig.GetBoolPropertyFn(true),
 		metrics.NoopMetricsHandler,
 		s.Logger,
+		serialization.NewSerializer(),
 	)
 
 	if err != nil {

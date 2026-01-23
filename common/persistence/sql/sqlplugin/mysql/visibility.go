@@ -26,6 +26,12 @@ var (
 		) VALUES (:namespace_id, :run_id, :search_attributes)
 		ON DUPLICATE KEY UPDATE run_id = VALUES(run_id)`
 
+	templateInsertChasmSearchAttributes = `
+		INSERT INTO chasm_search_attributes (
+			namespace_id, run_id, search_attributes
+		) VALUES (:namespace_id, :run_id, :search_attributes)
+		ON DUPLICATE KEY UPDATE run_id = VALUES(run_id)`
+
 	templateUpsertWorkflowExecution = fmt.Sprintf(
 		`INSERT INTO executions_visibility (%s)
 		VALUES (%s)
@@ -41,12 +47,22 @@ var (
 		) VALUES (:namespace_id, :run_id, :search_attributes, :_version)` +
 		buildOnDuplicateKeyUpdate("search_attributes", sqlplugin.VersionColumnName)
 
+	templateUpsertChasmSearchAttributes = `
+		INSERT INTO chasm_search_attributes (
+			namespace_id, run_id, search_attributes, _version
+		) VALUES (:namespace_id, :run_id, :search_attributes, :_version)` +
+		buildOnDuplicateKeyUpdate("search_attributes", sqlplugin.VersionColumnName)
+
 	templateDeleteWorkflowExecution_v8 = `
 		DELETE FROM executions_visibility
 		WHERE namespace_id = :namespace_id AND run_id = :run_id`
 
 	templateDeleteCustomSearchAttributes = `
 		DELETE FROM custom_search_attributes
+		WHERE namespace_id = :namespace_id AND run_id = :run_id`
+
+	templateDeleteChasmSearchAttributes = `
+		DELETE FROM chasm_search_attributes
 		WHERE namespace_id = :namespace_id AND run_id = :run_id`
 
 	templateGetWorkflowExecution_v8 = fmt.Sprintf(
@@ -101,6 +117,10 @@ func (mdb *db) InsertIntoVisibility(
 	if err != nil {
 		return nil, fmt.Errorf("unable to insert custom search attributes: %w", err)
 	}
+	_, err = tx.NamedExecContext(ctx, templateInsertChasmSearchAttributes, finalRow)
+	if err != nil {
+		return nil, fmt.Errorf("unable to insert chasm search attributes: %w", err)
+	}
 	err = tx.Commit()
 	if err != nil {
 		return nil, err
@@ -141,6 +161,10 @@ func (mdb *db) ReplaceIntoVisibility(
 	if err != nil {
 		return nil, fmt.Errorf("unable to upsert custom search attributes: %w", err)
 	}
+	_, err = tx.NamedExecContext(ctx, templateUpsertChasmSearchAttributes, finalRow)
+	if err != nil {
+		return nil, fmt.Errorf("unable to upsert chasm search attributes: %w", err)
+	}
 	err = tx.Commit()
 	if err != nil {
 		return nil, err
@@ -180,6 +204,10 @@ func (mdb *db) DeleteFromVisibility(
 	result, err = mdb.NamedExecContext(ctx, templateDeleteWorkflowExecution_v8, filter)
 	if err != nil {
 		return nil, fmt.Errorf("unable to delete workflow execution: %w", err)
+	}
+	_, err = mdb.NamedExecContext(ctx, templateDeleteChasmSearchAttributes, filter)
+	if err != nil {
+		return nil, fmt.Errorf("unable to delete chasm search attributes: %w", err)
 	}
 	err = tx.Commit()
 	if err != nil {

@@ -74,12 +74,13 @@ func (e *ExecutableBackfillHistoryEventsTask) Execute() error {
 	if e.TerminalState() {
 		return nil
 	}
+	e.MarkExecutionStart()
 
 	callerInfo := getReplicaitonCallerInfo(e.GetPriority())
 	namespaceName, apply, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
 		context.Background(),
 		callerInfo,
-	), e.NamespaceID)
+	), e.NamespaceID, e.WorkflowID)
 	if nsError != nil {
 		return nsError
 	} else if !apply {
@@ -131,6 +132,12 @@ func (e *ExecutableBackfillHistoryEventsTask) Execute() error {
 }
 
 func (e *ExecutableBackfillHistoryEventsTask) HandleErr(err error) error {
+	metrics.ReplicationTasksErrorByType.With(e.MetricsHandler).Record(
+		1,
+		metrics.OperationTag(metrics.BackfillHistoryEventsTaskScope),
+		metrics.NamespaceTag(e.NamespaceName()),
+		metrics.ServiceErrorTypeTag(err),
+	)
 	if errors.Is(err, consts.ErrDuplicate) {
 		e.MarkTaskDuplicated()
 		return nil
@@ -150,7 +157,7 @@ func (e *ExecutableBackfillHistoryEventsTask) HandleErr(err error) error {
 		namespaceName, _, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
 			context.Background(),
 			callerInfo,
-		), e.NamespaceID)
+		), e.NamespaceID, e.WorkflowID)
 		if nsError != nil {
 			return err
 		}
@@ -179,7 +186,7 @@ func (e *ExecutableBackfillHistoryEventsTask) HandleErr(err error) error {
 		namespaceName, _, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
 			context.Background(),
 			callerInfo,
-		), e.NamespaceID)
+		), e.NamespaceID, e.WorkflowID)
 		if nsError != nil {
 			return err
 		}
@@ -226,7 +233,7 @@ func (e *ExecutableBackfillHistoryEventsTask) HandleErr(err error) error {
 func (e *ExecutableBackfillHistoryEventsTask) getDeserializedEvents() (_ [][]*historypb.HistoryEvent, _ []*historypb.HistoryEvent, retError error) {
 	eventBatches := [][]*historypb.HistoryEvent{}
 	for _, eventsBlob := range e.taskAttr.EventBatches {
-		events, err := e.EventSerializer.DeserializeEvents(eventsBlob)
+		events, err := e.Serializer.DeserializeEvents(eventsBlob)
 		if err != nil {
 			e.Logger.Error("unable to deserialize history events",
 				tag.WorkflowNamespaceID(e.NamespaceID),
@@ -240,7 +247,7 @@ func (e *ExecutableBackfillHistoryEventsTask) getDeserializedEvents() (_ [][]*hi
 		eventBatches = append(eventBatches, events)
 	}
 
-	newRunEvents, err := e.EventSerializer.DeserializeEvents(e.taskAttr.NewRunInfo.EventBatch)
+	newRunEvents, err := e.Serializer.DeserializeEvents(e.taskAttr.NewRunInfo.EventBatch)
 	if err != nil {
 		e.Logger.Error("unable to deserialize new run history events",
 			tag.WorkflowNamespaceID(e.NamespaceID),

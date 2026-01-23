@@ -34,6 +34,7 @@ type (
 		UpdateTaskQueueUserData(ctx context.Context, request *matchingservice.UpdateTaskQueueUserDataRequest) (*matchingservice.UpdateTaskQueueUserDataResponse, error)
 		ReplicateTaskQueueUserData(ctx context.Context, request *matchingservice.ReplicateTaskQueueUserDataRequest) (*matchingservice.ReplicateTaskQueueUserDataResponse, error)
 		CheckTaskQueueUserDataPropagation(ctx context.Context, request *matchingservice.CheckTaskQueueUserDataPropagationRequest) (*matchingservice.CheckTaskQueueUserDataPropagationResponse, error)
+		CheckTaskQueueVersionMembership(ctx context.Context, request *matchingservice.CheckTaskQueueVersionMembershipRequest) (*matchingservice.CheckTaskQueueVersionMembershipResponse, error)
 		DispatchNexusTask(ctx context.Context, request *matchingservice.DispatchNexusTaskRequest) (*matchingservice.DispatchNexusTaskResponse, error)
 		PollNexusTaskQueue(ctx context.Context, request *matchingservice.PollNexusTaskQueueRequest, opMetrics metrics.Handler) (*matchingservice.PollNexusTaskQueueResponse, error)
 		RespondNexusTaskCompleted(ctx context.Context, request *matchingservice.RespondNexusTaskCompletedRequest, opMetrics metrics.Handler) (*matchingservice.RespondNexusTaskCompletedResponse, error)
@@ -46,5 +47,6 @@ type (
 		GetWorkerVersioningRules(ctx context.Context, request *matchingservice.GetWorkerVersioningRulesRequest) (*matchingservice.GetWorkerVersioningRulesResponse, error)
 		DescribeVersionedTaskQueues(ctx context.Context, request *matchingservice.DescribeVersionedTaskQueuesRequest) (*matchingservice.DescribeVersionedTaskQueuesResponse, error)
 		UpdateTaskQueueConfig(ctx context.Context, request *matchingservice.UpdateTaskQueueConfigRequest) (*matchingservice.UpdateTaskQueueConfigResponse, error)
+		UpdateFairnessState(ctx context.Context, request *matchingservice.UpdateFairnessStateRequest) (*matchingservice.UpdateFairnessStateResponse, error)
 	}
 )

@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
@@ -396,41 +397,62 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 		return err
 	}
 
-	searchattributesMapperProvider := t.shardContext.GetSearchAttributesMapperProvider()
-	searchAttributesMapper, err := searchattributesMapperProvider.GetMapper(namespaceEntry.Name())
+	customSaMapperProvider := t.shardContext.GetSearchAttributesMapperProvider()
+	customSaMapper, err := customSaMapperProvider.GetMapper(namespaceEntry.Name())
 	if err != nil {
 		return err
 	}
 
 	searchattributes := make(map[string]*commonpb.Payload)
 
-	aliasedSearchAttributes := visComponent.GetSearchAttributes(visTaskContext)
-
-	for alias, value := range aliasedSearchAttributes {
-		fieldName, err := searchAttributesMapper.GetFieldName(alias, namespaceEntry.Name().String())
+	aliasedCustomSearchAttributes := visComponent.CustomSearchAttributes(visTaskContext)
+	for alias, value := range aliasedCustomSearchAttributes {
+		fieldName, err := customSaMapper.GetFieldName(alias, namespaceEntry.Name().String())
 		if err != nil {
-			return err
+			// To reach here, either the search attribute has been deregistered before task execution, which is valid behavior,
+			// or there are delays in propagating search attribute mappings to History.
+			t.logger.Warn("Failed to get field name for alias, ignoring search attribute", tag.NewStringTag("alias", alias), tag.Error(err))
+			continue
 		}
 		searchattributes[fieldName] = value
-	}
-
-	memo := visComponent.GetMemo(visTaskContext)
-	if memo == nil {
-		memo = make(map[string]*commonpb.Payload)
 	}
 
 	rootComponent, err := tree.ComponentByPath(visTaskContext, nil)
 	if err != nil {
 		return err
 	}
-	if saProvider, ok := rootComponent.(chasm.VisibilitySearchAttributesProvider); ok {
-		for _, sa := range saProvider.SearchAttributes(visTaskContext) {
-			searchattributes[sa.Field] = sa.Value.MustEncode()
+
+	var chasmTaskQueue string
+	if chasmSAProvider, ok := rootComponent.(chasm.VisibilitySearchAttributesProvider); ok {
+		for _, chasmSA := range chasmSAProvider.SearchAttributes(visTaskContext) {
+			if chasmSA.Field == sadefs.TaskQueue {
+				if strVal, ok := chasmSA.Value.Value().(string); ok {
+					chasmTaskQueue = strVal
+				}
+				continue
+			}
+			searchattributes[chasmSA.Field] = chasmSA.Value.MustEncode()
 		}
 	}
+
+	combinedMemo := make(map[string]*commonpb.Payload, 2)
+	userMemoMap := visComponent.CustomMemo(visTaskContext)
+	if len(userMemoMap) > 0 {
+		userMemoProto := &commonpb.Memo{Fields: userMemoMap}
+		userMemoPayload, err := payload.Encode(userMemoProto)
+		if err != nil {
+			return err
+		}
+		combinedMemo[chasm.UserMemoKey] = userMemoPayload
+	}
 	if memoProvider, ok := rootComponent.(chasm.VisibilityMemoProvider); ok {
-		for key, value := range memoProvider.Memo(visTaskContext) {
-			memo[key] = value.MustEncode()
+		chasmMemo := memoProvider.Memo(visTaskContext)
+		if chasmMemo != nil {
+			chasmMemoPayload, err := payload.Encode(chasmMemo)
+			if err != nil {
+				return err
+			}
+			combinedMemo[chasm.ChasmMemoKey] = chasmMemoPayload
 		}
 	}
 
@@ -438,12 +460,17 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 		task,
 		namespaceEntry,
 		mutableState,
-		memo,
+		combinedMemo,
 		searchattributes,
 	)
 
 	// We reuse the TemporalNamespaceDivision column to store the string representation of ArchetypeID.
 	requestBase.SearchAttributes.IndexedFields[sadefs.TemporalNamespaceDivision] = payload.EncodeString(strconv.FormatUint(uint64(tree.ArchetypeID()), 10))
+
+	// Override TaskQueue if provided by CHASM search attributes.
+	if chasmTaskQueue != "" {
+		requestBase.TaskQueue = chasmTaskQueue
+	}
 
 	if mutableState.IsWorkflowExecutionRunning() {
 		release(nil)

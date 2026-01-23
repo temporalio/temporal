@@ -13,13 +13,11 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/common/rpc/interceptor"
-	"go.temporal.io/server/common/worker_versioning"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
@@ -114,6 +112,7 @@ func NewWorkflowWithSignal(
 			nil,
 			nil,
 			false,
+			nil,
 		)
 		if err != nil {
 			// Unable to add WorkflowTaskStarted event to history
@@ -217,6 +216,7 @@ func ValidateStart(
 	workflowID string,
 	workflowInputSize int,
 	workflowMemoSize int,
+	workflowHeaderSize int,
 	operation string,
 ) error {
 	config := shard.GetConfig()
@@ -224,6 +224,9 @@ func ValidateStart(
 	throttledLogger := shard.GetThrottledLogger()
 	namespaceName := namespaceEntry.Name().String()
 
+	metricsHandler := interceptor.GetMetricsHandlerFromContext(ctx, logger)
+	metrics.HeaderSize.With(metricsHandler.WithTags(metrics.HeaderCallsiteTag(operation))).Record(int64(workflowHeaderSize))
+	handlerWithCommandTag := metricsHandler.WithTags(metrics.CommandTypeTag(operation))
 	if err := common.CheckEventBlobSizeLimit(
 		workflowInputSize,
 		config.BlobSizeLimitWarn(namespaceName),
@@ -231,15 +234,14 @@ func ValidateStart(
 		namespaceName,
 		workflowID,
 		"",
-		interceptor.GetMetricsHandlerFromContext(ctx, logger).WithTags(metrics.CommandTypeTag(operation)),
+		handlerWithCommandTag,
 		throttledLogger,
-		tag.BlobSizeViolationOperation(operation),
+		operation,
 	); err != nil {
 		return err
 	}
 
-	handler := interceptor.GetMetricsHandlerFromContext(ctx, logger).WithTags(metrics.CommandTypeTag(operation))
-	metrics.MemoSize.With(handler).Record(int64(workflowMemoSize))
+	metrics.MemoSize.With(handlerWithCommandTag).Record(int64(workflowMemoSize))
 	if err := common.CheckEventBlobSizeLimit(
 		workflowMemoSize,
 		config.MemoSizeLimitWarn(namespaceName),
@@ -247,9 +249,9 @@ func ValidateStart(
 		namespaceName,
 		workflowID,
 		"",
-		handler,
+		handlerWithCommandTag,
 		throttledLogger,
-		tag.BlobSizeViolationOperation(operation),
+		operation,
 	); err != nil {
 		return common.ErrMemoSizeExceedsLimit
 	}
@@ -298,9 +300,7 @@ func ValidateStartWorkflowExecutionRequest(
 	if len(request.WorkflowType.GetName()) > maxIDLengthLimit {
 		return serviceerror.NewInvalidArgument("WorkflowType exceeds length limit.")
 	}
-	if err := worker_versioning.ValidateVersioningOverride(request.GetVersioningOverride()); err != nil {
-		return err
-	}
+
 	if err := retrypolicy.Validate(request.RetryPolicy); err != nil {
 		return err
 	}
@@ -311,6 +311,7 @@ func ValidateStartWorkflowExecutionRequest(
 		workflowID,
 		request.GetInput().Size(),
 		request.GetMemo().Size(),
+		request.GetHeader().Size(),
 		operation,
 	)
 }

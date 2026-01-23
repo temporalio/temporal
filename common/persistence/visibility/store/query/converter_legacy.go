@@ -9,6 +9,8 @@ import (
 	"github.com/olivere/elastic/v7"
 	"github.com/temporalio/sqlparser"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common/persistence/visibility/store"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/sqlquery"
 )
@@ -49,7 +51,8 @@ type (
 		fnInterceptor    FieldNameInterceptor
 		fvInterceptor    FieldValuesInterceptor
 		allowedOperators map[string]struct{}
-		saNameType       searchattribute.NameTypeMap
+		combinedTypeMap  searchattribute.NameTypeMap
+		chasmMapper      *chasm.VisibilitySearchAttributesMapper
 	}
 
 	isConverter struct {
@@ -144,7 +147,8 @@ func NewComparisonExprConverter(
 	fnInterceptor FieldNameInterceptor,
 	fvInterceptor FieldValuesInterceptor,
 	allowedOperators map[string]struct{},
-	saNameType searchattribute.NameTypeMap,
+	customSaNameType searchattribute.NameTypeMap,
+	chasmMapper *chasm.VisibilitySearchAttributesMapper,
 ) ExprConverter {
 	if fnInterceptor == nil {
 		fnInterceptor = &NopFieldNameInterceptor{}
@@ -152,11 +156,15 @@ func NewComparisonExprConverter(
 	if fvInterceptor == nil {
 		fvInterceptor = &NopFieldValuesInterceptor{}
 	}
+
+	combinedTypeMap := store.CombineTypeMaps(customSaNameType, chasmMapper)
+
 	return &comparisonExprConverter{
 		fnInterceptor:    fnInterceptor,
 		fvInterceptor:    fvInterceptor,
 		allowedOperators: allowedOperators,
-		saNameType:       saNameType,
+		combinedTypeMap:  combinedTypeMap,
+		chasmMapper:      chasmMapper,
 	}
 }
 
@@ -236,7 +244,7 @@ func (c *ConverterLegacy) convertSelect(sel *sqlparser.Select) (*QueryParamsLega
 		if err != nil {
 			return nil, wrapConverterError("unable to convert 'order by' column name", err)
 		}
-		fieldSort := elastic.NewFieldSort(colName)
+		fieldSort := elastic.NewFieldSort(colName).Missing("_last")
 		if orderByExpr.Direction == sqlparser.DescScr {
 			fieldSort = fieldSort.Desc()
 		}
@@ -451,7 +459,7 @@ func (c *comparisonExprConverter) Convert(expr sqlparser.Expr) (elastic.Query, e
 		return nil, NewConverterError("operator '%v' not allowed in comparison expression", comparisonExpr.Operator)
 	}
 
-	tp, err := c.saNameType.GetType(colName)
+	tp, err := c.combinedTypeMap.GetType(colName)
 	if err != nil {
 		return nil, err
 	}

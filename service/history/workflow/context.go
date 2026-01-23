@@ -2,7 +2,6 @@ package workflow
 
 import (
 	"context"
-	"runtime/debug"
 	"strconv"
 
 	"go.opentelemetry.io/otel/trace"
@@ -76,7 +75,6 @@ func NewContext(
 		contextImpl.throttledLogger,
 		contextImpl.archetypeID != chasm.UnspecifiedArchetypeID,
 		"Creating execution context with unspecified archetype ID",
-		tag.SysStackTrace(string(debug.Stack())),
 	)
 
 	return contextImpl
@@ -280,7 +278,7 @@ func (c *ContextImpl) CreateWorkflowExecution(
 	if err != nil {
 		return err
 	}
-	NotifyWorkflowSnapshotTasks(engine, newWorkflow)
+	NotifyOnExecutionSnapshot(engine, newWorkflow)
 	emitStateTransitionCount(c.metricsHandler, shardContext.GetClusterMetadata(), newMutableState)
 
 	return nil
@@ -307,6 +305,7 @@ func (c *ContextImpl) ConflictResolveWorkflowExecution(
 	}()
 
 	resetWorkflow, resetWorkflowEventsSeq, err := resetMutableState.CloseTransactionAsSnapshot(
+		ctx,
 		resetWorkflowTransactionPolicy,
 	)
 	if err != nil {
@@ -324,6 +323,7 @@ func (c *ContextImpl) ConflictResolveWorkflowExecution(
 		}()
 
 		newWorkflow, newWorkflowEventsSeq, err = newMutableState.CloseTransactionAsSnapshot(
+			ctx,
 			*newWorkflowTransactionPolicy,
 		)
 		if err != nil {
@@ -342,6 +342,7 @@ func (c *ContextImpl) ConflictResolveWorkflowExecution(
 		}()
 
 		currentWorkflow, currentWorkflowEventsSeq, err = currentMutableState.CloseTransactionAsMutation(
+			ctx,
 			*currentTransactionPolicy,
 		)
 		if err != nil {
@@ -538,6 +539,7 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 	}
 
 	updateWorkflow, updateWorkflowEventsSeq, err := c.MutableState.CloseTransactionAsMutation(
+		ctx,
 		updateWorkflowTransactionPolicy,
 	)
 	if err != nil {
@@ -554,6 +556,7 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 		}()
 
 		newWorkflow, newWorkflowEventsSeq, err = newMutableState.CloseTransactionAsSnapshot(
+			ctx,
 			*newWorkflowTransactionPolicy,
 		)
 		if err != nil {
@@ -643,6 +646,7 @@ func (c *ContextImpl) SubmitClosedWorkflowSnapshot(
 	}()
 
 	resetWorkflowSnapshot, resetWorkflowEventsSeq, err := c.MutableState.CloseTransactionAsSnapshot(
+		ctx,
 		transactionPolicy,
 	)
 	if err != nil {
@@ -882,7 +886,7 @@ func (c *ContextImpl) ReapplyEvents(
 		return err
 	}
 
-	activeCluster := namespaceEntry.ActiveClusterName()
+	activeCluster := namespaceEntry.ActiveClusterName(workflowID)
 	if activeCluster == shardContext.GetClusterMetadata().GetCurrentClusterName() {
 		engine, err := shardContext.GetEngine(ctx)
 		if err != nil {

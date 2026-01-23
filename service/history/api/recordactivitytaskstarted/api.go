@@ -42,7 +42,6 @@ func Invoke(
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	matchingClient matchingservice.MatchingServiceClient,
 ) (resp *historyservice.RecordActivityTaskStartedResponse, retError error) {
-
 	var err error
 	response := &historyservice.RecordActivityTaskStartedResponse{}
 	var rejectCode rejectCode
@@ -108,7 +107,7 @@ func recordActivityTaskStarted(
 	request *historyservice.RecordActivityTaskStartedRequest,
 	matchingClient matchingservice.MatchingServiceClient,
 ) (*historyservice.RecordActivityTaskStartedResponse, rejectCode, error) {
-	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(request.GetNamespaceId()))
+	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(request.GetNamespaceId()), request.WorkflowExecution.WorkflowId)
 	if err != nil {
 		return nil, rejectCodeUndefined, err
 	}
@@ -165,12 +164,11 @@ func recordActivityTaskStarted(
 	}
 
 	if ai.Stamp != request.Stamp {
-		// activity has changes before task is started.
-		// ErrActivityStampMismatch is the error to indicate that requested activity has mismatched stamp
+		// This happens when the workflow task was rescheduled.
 		errorMessage := fmt.Sprintf(
-			"Activity task with this stamp not found. Id: %s,: type: %s, current stamp: %d",
+			"Activity task rejected; stamp has changed. Id: %s,: type: %s, current stamp: %d",
 			ai.ActivityId, ai.ActivityType.Name, ai.Stamp)
-		return nil, rejectCodeUndefined, serviceerror.NewNotFound(errorMessage)
+		return nil, rejectCodeUndefined, serviceerrors.NewObsoleteMatchingTask(errorMessage)
 	}
 
 	wfBehavior := mutableState.GetEffectiveVersioningBehavior()

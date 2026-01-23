@@ -23,7 +23,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/softassert"
@@ -80,6 +79,7 @@ type (
 		GetNamespaceInfo(
 			ctx context.Context,
 			namespaceID string,
+			businessID string,
 		) (string, bool, error)
 		SyncState(
 			ctx context.Context,
@@ -99,7 +99,9 @@ type (
 			newRunId string,
 		) error
 		MarkTaskDuplicated()
+		MarkExecutionStart()
 		GetPriority() enumsspb.TaskPriority
+		NamespaceName() string
 	}
 	ExecutableTaskImpl struct {
 		ProcessToolBox
@@ -120,6 +122,7 @@ type (
 		namespace              atomic.Value
 		markPoisonPillAttempts int
 		isDuplicated           bool
+		taskExecuteStartTime   time.Time
 	}
 )
 
@@ -281,8 +284,20 @@ func (e *ExecutableTaskImpl) MarkTaskDuplicated() {
 	e.isDuplicated = true
 }
 
+func (e *ExecutableTaskImpl) MarkExecutionStart() {
+	e.taskExecuteStartTime = time.Now().UTC()
+}
+
 func (e *ExecutableTaskImpl) GetPriority() enumsspb.TaskPriority {
 	return e.taskPriority
+}
+
+func (e *ExecutableTaskImpl) NamespaceName() string {
+	item := e.namespace.Load()
+	if item != nil {
+		return item.(namespace.Name).String()
+	}
+	return ""
 }
 
 func (e *ExecutableTaskImpl) emitFinishMetrics(
@@ -301,26 +316,41 @@ func (e *ExecutableTaskImpl) emitFinishMetrics(
 	if item != nil {
 		nsTag = metrics.NamespaceTag(item.(namespace.Name).String())
 	}
-	processingLatency := now.Sub(e.taskReceivedTime)
-	metrics.ReplicationTaskProcessingLatency.With(e.MetricsHandler).Record(
-		processingLatency,
-		metrics.OperationTag(e.metricsTag),
-		nsTag,
-	)
-	replicationLatency := now.Sub(e.taskCreationTime)
-	if replicationLatency > time.Minute {
-		e.Logger.Warn(fmt.Sprintf(
-			"replication task latency is too long: transmission=%.2fs processing=%.2fs",
-			e.taskReceivedTime.Sub(e.taskCreationTime).Seconds(),
-			processingLatency.Seconds(),
-		),
-			tag.WorkflowNamespaceID(e.replicationTask.RawTaskInfo.NamespaceId),
-			tag.WorkflowID(e.replicationTask.RawTaskInfo.WorkflowId),
-			tag.WorkflowRunID(e.replicationTask.RawTaskInfo.RunId),
-			tag.ReplicationTask(e.replicationTask.GetRawTaskInfo()),
+
+	// Only emit queue/processing latency metrics if execution actually started
+	if !e.taskExecuteStartTime.IsZero() {
+		// Queue latency: time from task creation to execution start
+		queueLatency := e.taskExecuteStartTime.Sub(e.taskReceivedTime)
+		metrics.ReplicationTaskQueueLatency.With(e.MetricsHandler).Record(
+			queueLatency,
+			metrics.OperationTag(e.metricsTag),
+			nsTag,
+			metrics.SourceClusterTag(e.sourceClusterName),
 		)
+
+		// Processing latency: time from execution start to ACK/NACK
+		processingLatency := now.Sub(e.taskExecuteStartTime)
+		metrics.ReplicationTaskProcessingLatency.With(e.MetricsHandler).Record(
+			processingLatency,
+			metrics.OperationTag(e.metricsTag),
+			nsTag,
+		)
+		if processingLatency > 10*time.Second && e.replicationTask != nil && e.replicationTask.RawTaskInfo != nil {
+			e.Logger.Warn(fmt.Sprintf(
+				"replication task latency is too long: queue=%.2fs processing=%.2fs",
+				queueLatency.Seconds(),
+				processingLatency.Seconds(),
+			),
+				tag.WorkflowNamespace(e.NamespaceName()),
+				tag.WorkflowID(e.replicationTask.RawTaskInfo.WorkflowId),
+				tag.WorkflowRunID(e.replicationTask.RawTaskInfo.RunId),
+				tag.ReplicationTask(e.replicationTask.GetRawTaskInfo()),
+				tag.ShardID(e.Config.GetShardID(namespace.ID(e.replicationTask.RawTaskInfo.NamespaceId), e.replicationTask.RawTaskInfo.WorkflowId)),
+			)
+		}
 	}
 
+	replicationLatency := now.Sub(e.taskCreationTime)
 	metrics.ReplicationLatency.With(e.MetricsHandler).Record(
 		replicationLatency,
 		metrics.OperationTag(e.metricsTag),
@@ -334,7 +364,12 @@ func (e *ExecutableTaskImpl) emitFinishMetrics(
 		metrics.SourceClusterTag(e.sourceClusterName),
 	)
 
-	// TODO consider emit attempt metrics
+	// Emit task attempt count
+	metrics.ReplicationTasksAttempt.With(e.MetricsHandler).Record(
+		int64(e.Attempt()),
+		metrics.OperationTag(e.metricsTag),
+		nsTag,
+	)
 }
 
 func (e *ExecutableTaskImpl) Resend(
@@ -526,7 +561,7 @@ func (e *ExecutableTaskImpl) BackFillEvents(
 		if err != nil {
 			return serviceerror.NewInternalf("failed to get new run history when backfill: %v", err)
 		}
-		events, err := e.EventSerializer.DeserializeEvents(batch.RawEventBatch)
+		events, err := e.Serializer.DeserializeEvents(batch.RawEventBatch)
 		if err != nil {
 			return serviceerror.NewInternalf("failed to deserailize run history events when backfill: %v", err)
 		}
@@ -570,7 +605,7 @@ func (e *ExecutableTaskImpl) BackFillEvents(
 		if err != nil {
 			return err
 		}
-		events, err := e.EventSerializer.DeserializeEvents(batch.RawEventBatch)
+		events, err := e.Serializer.DeserializeEvents(batch.RawEventBatch)
 		if err != nil {
 			return err
 		}
@@ -622,7 +657,17 @@ func (e *ExecutableTaskImpl) SyncState(
 	}
 
 	targetClusterInfo := e.ClusterMetadata.GetAllClusterInfo()[e.ClusterMetadata.GetCurrentClusterName()]
-	resp, err := remoteAdminClient.SyncWorkflowState(ctx, &adminservice.SyncWorkflowStateRequest{
+
+	// Remove branch tokens from version histories to reduce request size
+	versionHistories := syncStateErr.VersionHistories
+	if versionHistories != nil {
+		versionHistories = versionhistory.CopyVersionHistories(versionHistories)
+		for _, history := range versionHistories.Histories {
+			history.BranchToken = nil
+		}
+	}
+
+	req := &adminservice.SyncWorkflowStateRequest{
 		NamespaceId: syncStateErr.NamespaceId,
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: syncStateErr.WorkflowId,
@@ -630,10 +675,15 @@ func (e *ExecutableTaskImpl) SyncState(
 		},
 		ArchetypeId:         syncStateErr.ArchetypeId,
 		VersionedTransition: syncStateErr.VersionedTransition,
-		VersionHistories:    syncStateErr.VersionHistories,
+		VersionHistories:    versionHistories,
 		TargetClusterId:     int32(targetClusterInfo.InitialFailoverVersion),
-	})
+	}
+	resp, err := remoteAdminClient.SyncWorkflowState(ctx, req)
 	if err != nil {
+		var resourceExhaustedError *serviceerror.ResourceExhausted
+		if errors.As(err, &resourceExhaustedError) {
+			return false, serviceerror.NewInvalidArgumentf("sync workflow state failed due to resource exhausted: %v, request payload size: %v", err, req.Size())
+		}
 		logger := log.With(e.Logger,
 			tag.WorkflowNamespaceID(syncStateErr.NamespaceId),
 			tag.WorkflowID(syncStateErr.WorkflowId),
@@ -645,6 +695,20 @@ func (e *ExecutableTaskImpl) SyncState(
 		if errors.As(err, &workflowNotReady) {
 			logger.Info("Dropped replication task as source mutable state has buffered events.", tag.Error(err))
 			return false, nil
+		}
+		var notFoundErr *serviceerror.NotFound
+		if errors.As(err, &notFoundErr) {
+			logger.Error(
+				"workflow not found in source cluster, proceed to cleanup")
+			// workflow is not found in source cluster, cleanup workflow in target cluster
+			return false, e.DeleteWorkflow(
+				ctx,
+				definition.NewWorkflowKey(
+					syncStateErr.NamespaceId,
+					syncStateErr.WorkflowId,
+					syncStateErr.RunId,
+				),
+			)
 		}
 		var failedPreconditionErr *serviceerror.FailedPrecondition
 		if !errors.As(err, &failedPreconditionErr) {
@@ -662,7 +726,7 @@ func (e *ExecutableTaskImpl) SyncState(
 
 		tasksToAdd := make([]*adminservice.AddTasksRequest_Task, 0, len(taskEquivalents))
 		for _, taskEquivalent := range taskEquivalents {
-			blob, err := serialization.ReplicationTaskInfoToBlob(taskEquivalent)
+			blob, err := e.Serializer.ReplicationTaskInfoToBlob(taskEquivalent)
 			if err != nil {
 				return false, err
 			}
@@ -727,11 +791,12 @@ func (e *ExecutableTaskImpl) DeleteWorkflow(
 func (e *ExecutableTaskImpl) GetNamespaceInfo(
 	ctx context.Context,
 	namespaceID string,
+	businessID string,
 ) (string, bool, error) {
 	namespaceEntry, err := e.NamespaceCache.GetNamespaceByID(namespace.ID(namespaceID))
 	switch err.(type) {
 	case nil:
-		if e.replicationTask.VersionedTransition != nil && e.replicationTask.VersionedTransition.NamespaceFailoverVersion > namespaceEntry.FailoverVersion() {
+		if e.replicationTask.VersionedTransition != nil && e.replicationTask.VersionedTransition.NamespaceFailoverVersion > namespaceEntry.FailoverVersion(businessID) {
 			_, err = e.ProcessToolBox.EagerNamespaceRefresher.SyncNamespaceFromSourceCluster(ctx, namespace.ID(namespaceID), e.sourceClusterName)
 			if err != nil {
 				return "", false, err
@@ -751,8 +816,9 @@ func (e *ExecutableTaskImpl) GetNamespaceInfo(
 		return "", false, err
 	}
 	// need to make sure ns in cache is up-to-date
-	if e.replicationTask.VersionedTransition != nil && namespaceEntry.FailoverVersion() < e.replicationTask.VersionedTransition.NamespaceFailoverVersion {
-		return "", false, serviceerror.NewInternalf("cannot process task because namespace failover version is not up to date after sync, task version: %v, namespace version: %v", e.replicationTask.VersionedTransition.NamespaceFailoverVersion, namespaceEntry.FailoverVersion())
+	if e.replicationTask.VersionedTransition != nil && namespaceEntry.FailoverVersion(businessID) < e.replicationTask.VersionedTransition.NamespaceFailoverVersion {
+		return "", false, serviceerror.NewInternalf("cannot process task because namespace failover version is not up to date after sync, task version: %v, namespace version: %v",
+			e.replicationTask.VersionedTransition.NamespaceFailoverVersion, namespaceEntry.FailoverVersion(businessID))
 	}
 
 	e.namespace.Store(namespaceEntry.Name())
@@ -761,7 +827,7 @@ func (e *ExecutableTaskImpl) GetNamespaceInfo(
 	}
 	shouldProcessTask := false
 FilterLoop:
-	for _, targetCluster := range namespaceEntry.ClusterNames() {
+	for _, targetCluster := range namespaceEntry.ClusterNames(businessID) {
 		if e.ClusterMetadata.GetCurrentClusterName() == targetCluster {
 			shouldProcessTask = true
 			break FilterLoop

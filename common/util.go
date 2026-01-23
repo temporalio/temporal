@@ -89,6 +89,8 @@ const (
 
 	contextExpireThreshold = 10 * time.Millisecond
 
+	// FailureReasonActivityTimeout is failureReason for when an activity times out, with %v as the timeout type.
+	FailureReasonActivityTimeout = "activity %v timeout"
 	// FailureReasonCompleteResultExceedsLimit is failureReason for complete result exceeds limit
 	FailureReasonCompleteResultExceedsLimit = "Complete result exceeds size limit."
 	// FailureReasonFailureDetailsExceedsLimit is failureReason for failure details exceeds limit
@@ -381,20 +383,14 @@ func ErrorHash(err error) string {
 }
 
 // WorkflowIDToHistoryShard is used to map namespaceID-workflowID pair to a shardID.
+// TODO: rename to BusinessIDToHistoryShard.
 func WorkflowIDToHistoryShard(
 	namespaceID string,
 	workflowID string,
 	numberOfShards int32,
 ) int32 {
-	return ShardingKeyToShard(namespaceID+"_"+workflowID, numberOfShards)
-}
-
-// ShardingKeyToShard is used to map a sharding key to a shardID.
-func ShardingKeyToShard(
-	shardingKey string,
-	numberOfShards int32,
-) int32 {
-	hash := farm.Fingerprint32([]byte(shardingKey))
+	idBytes := []byte(namespaceID + "_" + workflowID)
+	hash := farm.Fingerprint32(idBytes)
 	return int32(hash%uint32(numberOfShards)) + 1 // ShardID starts with 1
 }
 
@@ -585,21 +581,22 @@ func CheckEventBlobSizeLimit(
 	runID string,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
-	blobSizeViolationOperationTag tag.ZapTag,
+	operation string,
 ) error {
 
-	metrics.EventBlobSize.With(metricsHandler).Record(int64(actualSize))
+	metrics.EventBlobSize.With(metricsHandler).Record(int64(actualSize), metrics.OperationTag(operation))
 	if actualSize > warnLimit {
 		if logger != nil {
 			logger.Warn("Blob data size exceeds the warning limit.",
-				tag.WorkflowNamespace(namespace),
-				tag.WorkflowID(workflowID),
-				tag.WorkflowRunID(runID),
+				tag.WorkflowNamespace(namespace), // TODO: Not necessarily a "workflow" namespace, fix the tag.
+				tag.WorkflowID(workflowID),       // TODO: this should be entity ID and we need an archetype too.
+				tag.WorkflowRunID(runID),         // TODO: not necessarily a workflow run ID, fix the tag.
 				tag.WorkflowSize(int64(actualSize)),
-				blobSizeViolationOperationTag)
+				tag.BlobSizeViolationOperation(operation))
 		}
 
 		if actualSize > errorLimit {
+			metrics.BlobSizeError.With(metricsHandler).Record(1, metrics.OperationTag(operation))
 			return ErrBlobSizeExceedsLimit
 		}
 	}
