@@ -2,11 +2,13 @@ package tests
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/payloads"
@@ -89,7 +91,29 @@ func sendUpdateInternal(
 
 	updateResultCh := make(chan updateResponseErr)
 	go func() {
-		updateResp, updateErr := s.FrontendClient().UpdateWorkflowExecution(ctx, updateWorkflowRequest(s, tv, waitPolicy))
+		var updateResp *workflowservice.UpdateWorkflowExecutionResponse
+		var updateErr error
+
+		// Retry loop to simulate SDK behavior for Aborted errors
+		maxRetries := 3
+		for attempt := 0; attempt < maxRetries; attempt++ {
+			updateResp, updateErr = s.FrontendClient().UpdateWorkflowExecution(ctx, updateWorkflowRequest(s, tv, waitPolicy))
+			if updateErr == nil {
+				break
+			}
+
+			var abortedErr *serviceerror.Aborted
+			if !errors.As(updateErr, &abortedErr) {
+				// Not an Aborted error, don't retry
+				break
+			}
+
+			// Simulate SDK backoff before retrying
+			if attempt < maxRetries-1 {
+				time.Sleep(10 * time.Millisecond)
+			}
+		}
+
 		if requireNoError && updateErr != nil {
 			s.T().Errorf("Update failed: %v", updateErr)
 		}
