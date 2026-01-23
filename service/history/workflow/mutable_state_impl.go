@@ -777,7 +777,7 @@ func (ms *MutableStateImpl) GetNexusCompletion(
 		}
 		return completion, nil
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED:
-		f, err := commonnexus.APIFailureToNexusFailure(ce.GetWorkflowExecutionFailedEventAttributes().GetFailure())
+		f, err := commonnexus.TemporalFailureToNexusFailure(ce.GetWorkflowExecutionFailedEventAttributes().GetFailure())
 		if err != nil {
 			return nil, err
 		}
@@ -793,7 +793,7 @@ func (ms *MutableStateImpl) GetNexusCompletion(
 				Links:     []nexus.Link{startLink},
 			})
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED:
-		f, err := commonnexus.APIFailureToNexusFailure(&failurepb.Failure{
+		f, err := commonnexus.TemporalFailureToNexusFailure(&failurepb.Failure{
 			Message: "operation canceled",
 			FailureInfo: &failurepb.Failure_CanceledFailureInfo{
 				CanceledFailureInfo: &failurepb.CanceledFailureInfo{
@@ -816,7 +816,7 @@ func (ms *MutableStateImpl) GetNexusCompletion(
 				Links:     []nexus.Link{startLink},
 			})
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:
-		f, err := commonnexus.APIFailureToNexusFailure(&failurepb.Failure{
+		f, err := commonnexus.TemporalFailureToNexusFailure(&failurepb.Failure{
 			Message: "operation terminated",
 			FailureInfo: &failurepb.Failure_TerminatedFailureInfo{
 				TerminatedFailureInfo: &failurepb.TerminatedFailureInfo{},
@@ -837,7 +837,7 @@ func (ms *MutableStateImpl) GetNexusCompletion(
 				Links:     []nexus.Link{startLink},
 			})
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT:
-		f, err := commonnexus.APIFailureToNexusFailure(&failurepb.Failure{
+		f, err := commonnexus.TemporalFailureToNexusFailure(&failurepb.Failure{
 			Message: "operation exceeded internal timeout",
 			FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
 				TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{

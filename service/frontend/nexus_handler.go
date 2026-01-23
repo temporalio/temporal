@@ -449,7 +449,7 @@ func (h *nexusHandler) StartOperation(
 	switch t := response.GetOutcome().(type) {
 	case *matchingservice.DispatchNexusTaskResponse_Failure:
 		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error:" + t.Failure.GetNexusHandlerFailureInfo().GetType()))
-		nf, err := commonnexus.APIFailureToNexusFailure(t.Failure)
+		nf, err := commonnexus.TemporalFailureToNexusFailure(t.Failure)
 		if err != nil {
 			oc.logger.Error("error converting Temporal failure to Nexus failure", tag.Error(err), tag.Operation(operation), tag.WorkflowNamespace(oc.namespaceName))
 			return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
@@ -510,7 +510,7 @@ func (h *nexusHandler) StartOperation(
 
 		case *nexuspb.StartOperationResponse_Failure:
 			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("failure"))
-			nf, err := commonnexus.APIFailureToNexusFailure(t.Failure)
+			nf, err := commonnexus.TemporalFailureToNexusFailure(t.Failure)
 			if err != nil {
 				oc.logger.Error("error converting Temporal failure to Nexus failure", tag.Error(err), tag.Operation(operation), tag.WorkflowNamespace(oc.namespaceName))
 				return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
@@ -641,7 +641,7 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 	switch t := response.GetOutcome().(type) {
 	case *matchingservice.DispatchNexusTaskResponse_Failure:
 		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error:" + t.Failure.GetNexusHandlerFailureInfo().GetType()))
-		nf, err := commonnexus.APIFailureToNexusFailure(t.Failure)
+		nf, err := commonnexus.TemporalFailureToNexusFailure(t.Failure)
 		if err != nil {
 			oc.logger.Error("error converting Temporal failure to Nexus failure", tag.Error(err), tag.Operation(operation), tag.WorkflowNamespace(oc.namespaceName))
 			return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
