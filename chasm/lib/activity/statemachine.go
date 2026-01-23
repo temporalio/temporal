@@ -133,6 +133,7 @@ var TransitionStarted = chasm.NewTransition(
 	func(a *Activity, ctx chasm.MutableContext, request *historyservice.RecordActivityTaskStartedRequest) error {
 		attempt := a.LastAttempt.Get(ctx)
 		attempt.StartedTime = timestamppb.New(ctx.Now(a))
+		attempt.StartRequestId = request.GetRequestId()
 		attempt.LastWorkerIdentity = request.GetPollRequest().GetIdentity()
 		if versionDirective := request.GetVersionDirective().GetDeploymentVersion(); versionDirective != nil {
 			attempt.LastDeploymentVersion = &deploymentpb.WorkerDeploymentVersion{
