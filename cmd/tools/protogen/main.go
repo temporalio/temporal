@@ -319,6 +319,14 @@ func (g *generator) modifyHistoryServiceFile() error {
 		return fmt.Errorf("error modifying GetWorkflowExecutionHistory: %w", err)
 	}
 
+	// Replace RecordWorkflowTaskStarted method signature to return WithRawHistory response
+	err = replaceInFile(historyServiceFile,
+		`RecordWorkflowTaskStarted\(context\.Context, \*RecordWorkflowTaskStartedRequest\) \(\*RecordWorkflowTaskStartedResponse, error\)`,
+		`RecordWorkflowTaskStarted(context.Context, *RecordWorkflowTaskStartedRequest) (*RecordWorkflowTaskStartedResponseWithRawHistory, error)`)
+	if err != nil {
+		return fmt.Errorf("error modifying RecordWorkflowTaskStarted: %w", err)
+	}
+
 	return nil
 }
 

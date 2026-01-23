@@ -63,7 +63,7 @@ func TestRecordWorkflowTaskStarted_Errors(t *testing.T) {
 	})
 }
 
-func invoke(t *testing.T, modifyMutableState mutableStateModifier) func() (*historyservice.RecordWorkflowTaskStartedResponse, error) {
+func invoke(t *testing.T, modifyMutableState mutableStateModifier) func() (*historyservice.RecordWorkflowTaskStartedResponseWithRawHistory, error) {
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 	t.Cleanup(ctrl.Finish)
@@ -117,7 +117,7 @@ func invoke(t *testing.T, modifyMutableState mutableStateModifier) func() (*hist
 
 	config := &configs.Config{}
 
-	return func() (*historyservice.RecordWorkflowTaskStartedResponse, error) {
+	return func() (*historyservice.RecordWorkflowTaskStartedResponseWithRawHistory, error) {
 		return Invoke(ctx, request, shardContext, config, nil, nil, consistencyChecker)
 	}
 }

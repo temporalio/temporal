@@ -376,8 +376,9 @@ type Config struct {
 	EnableUpdateWithStartRetryOnClosedWorkflowAbort               dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableUpdateWithStartRetryableErrorOnClosedWorkflowAbort      dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
-	SendRawHistoryBetweenInternalServices dynamicconfig.BoolPropertyFn
-	SendRawWorkflowHistory                dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	SendRawHistoryBetweenInternalServices    dynamicconfig.BoolPropertyFn
+	SendRawHistoryBytesToMatchingService     dynamicconfig.BoolPropertyFn
+	SendRawWorkflowHistory                   dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	WorkflowIdReuseMinimalInterval           dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	EnableWorkflowIdReuseStartTimeValidation dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -737,6 +738,7 @@ func NewConfig(
 		EnableUpdateWithStartRetryableErrorOnClosedWorkflowAbort:      dynamicconfig.EnableUpdateWithStartRetryableErrorOnClosedWorkflowAbort.Get(dc),
 
 		SendRawHistoryBetweenInternalServices:    dynamicconfig.SendRawHistoryBetweenInternalServices.Get(dc),
+		SendRawHistoryBytesToMatchingService:     dynamicconfig.SendRawHistoryBytesToMatchingService.Get(dc),
 		SendRawWorkflowHistory:                   dynamicconfig.SendRawWorkflowHistory.Get(dc),
 		WorkflowIdReuseMinimalInterval:           dynamicconfig.WorkflowIdReuseMinimalInterval.Get(dc),
 		EnableWorkflowIdReuseStartTimeValidation: dynamicconfig.EnableWorkflowIdReuseStartTimeValidation.Get(dc),

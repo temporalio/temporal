@@ -3058,17 +3058,35 @@ func (e *matchingEngineImpl) recordWorkflowTaskStarted(
 	if err != nil {
 		return nil, err
 	}
-	// When history.sendRawHistoryBetweenInternalServices is enabled:
-	// - History service sends raw bytes in RawHistoryBytes field, History is nil
-	// - CreateMatchingPollWorkflowTaskQueueResponse copies RawHistoryBytes to RawHistory
-	// - Frontend receives RawHistory auto-deserialized by gRPC and processes search attributes there
-	// Search attribute processing is NOT done here - it's handled by:
-	// 1. Frontend for non-forwarded requests (processes RawHistory after receiving from matching)
-	// 2. convertPollWorkflowTaskQueueResponse for forwarded requests (processes deserialized history)
-	if resp.RawHistory != nil && resp.History == nil { //nolint:staticcheck
-		// Backward compat: old history service using deprecated RawHistory field (auto-deserialized by gRPC).
+
+	// History service returns RecordWorkflowTaskStartedResponseWithRawHistory on the wire,
+	// but the gRPC client deserializes it as RecordWorkflowTaskStartedResponse.
+	// Due to wire compatibility:
+	// - Server's RawHistory (repeated bytes, field 20) -> Client's RawHistory (*History, auto-deserialized)
+	// - Server's RawHistoryBytes (repeated bytes, field 21) -> Client's RawHistoryBytes ([][]byte, stays as raw)
+	//
+	// Handle history fields - check which one has data:
+	// 1. RawHistoryBytes (new path) - raw bytes, pass through to frontend
+	// 2. RawHistory (old path) - auto-deserialized to *History by gRPC wire compatibility
+	// 3. History - use directly (raw history disabled)
+	if len(resp.RawHistoryBytes) > 0 {
+		// New path: raw bytes in field 21, pass through to frontend without processing.
+		// Search attributes will be processed by frontend.
+	} else if resp.RawHistory != nil { //nolint:staticcheck
+		// Old path: history service using deprecated RawHistory field (field 20).
+		// The gRPC client auto-deserializes repeated bytes into *History via wire compatibility.
+		// Since this came from raw bytes, search attributes haven't been processed yet.
+		// Process them here before moving to History field.
+		ns := namespace.Name(pollReq.Namespace)
+		if err := api.ProcessOutgoingSearchAttributes(e.saProvider, e.saMapperProvider, resp.RawHistory.Events, ns, e.visibilityManager); err != nil { //nolint:staticcheck
+			return nil, err
+		}
+		// Move to History field for consistent handling downstream.
 		resp.History = resp.RawHistory //nolint:staticcheck
+		resp.RawHistory = nil          //nolint:staticcheck
 	}
+	// If neither RawHistoryBytes nor RawHistory is set, resp.History should already have the data.
+
 	return resp, nil
 }
 
