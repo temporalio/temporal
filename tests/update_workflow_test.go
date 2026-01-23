@@ -5775,7 +5775,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 			s.Error(err)
 
 			var multiOpsErr *serviceerror.MultiOperationExecution
-			s.True(errors.As(err, &multiOpsErr))
+			s.ErrorAs(err, &multiOpsErr)
 
 			errs := multiOpsErr.OperationErrors()
 			s.Len(errs, 2)
@@ -5784,7 +5784,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 
 			// Verify ResourceExhausted error is accessible with all details preserved
 			var resExhausted *serviceerror.ResourceExhausted
-			s.True(errors.As(errs[1], &resExhausted))
+			s.ErrorAs(errs[1], &resExhausted)
 			s.Equal(enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT, resExhausted.Cause)
 			s.Equal(enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE, resExhausted.Scope)
 			s.Contains(resExhausted.Message, "limit on number of concurrent in-flight updates")
