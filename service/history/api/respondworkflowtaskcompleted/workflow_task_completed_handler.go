@@ -443,8 +443,6 @@ func (handler *workflowTaskCompletedHandler) handleCommandScheduleActivity(
 		}
 	}
 
-	// todo, maki:
-	// try to understand sticky queue, and if this impacts our check
 	workflowTaskQueue := handler.mutableState.CurrentTaskQueue()
 	if err := handler.validateCommandAttr(
 		func() (enumspb.WorkflowTaskFailedCause, error) {
@@ -456,6 +454,9 @@ func (handler *workflowTaskCompletedHandler) handleCommandScheduleActivity(
 			)
 		},
 	); err != nil || handler.stopProcessing {
+		if err != nil {
+			handler.logger.Info("Invalid activity schedule attributes", tag.Error(err))
+		}
 		return nil, nil, err
 	}
 

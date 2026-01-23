@@ -15,6 +15,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/api"
@@ -65,6 +66,7 @@ func Invoke(
 			}
 
 			if err != nil {
+				shardContext.GetLogger().Info("Invalid activity options", tag.Error(err))
 				return nil, err
 			}
 			return &api.UpdateWorkflowAction{
