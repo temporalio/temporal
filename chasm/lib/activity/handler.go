@@ -65,7 +65,7 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 		return nil, serviceerror.NewInvalidArgumentf("unsupported ID conflict policy: %v", frontendReq.GetIdConflictPolicy())
 	}
 
-	result, err := chasm.NewExecution(
+	result, err := chasm.StartExecution(
 		ctx,
 		chasm.ExecutionKey{
 			NamespaceID: req.GetNamespaceId(),
