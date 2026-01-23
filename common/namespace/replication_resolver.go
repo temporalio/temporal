@@ -12,6 +12,7 @@ type ReplicationResolver interface {
 	IsGlobalNamespace() bool
 	FailoverVersion(businessID string) int64
 	FailoverNotificationVersion() int64
+	ActiveInCluster(clusterName string) bool
 
 	// Mutation methods for modifying resolver state
 	SetGlobalFlag(isGlobal bool)
@@ -78,6 +79,13 @@ func (r *defaultReplicationResolver) FailoverVersion(businessID string) int64 {
 
 func (r *defaultReplicationResolver) FailoverNotificationVersion() int64 {
 	return r.failoverNotificationVersion
+}
+
+func (r *defaultReplicationResolver) ActiveInCluster(clusterName string) bool {
+	if !r.isGlobalNamespace {
+		return true
+	}
+	return clusterName == r.ActiveClusterName(EmptyBusinessID)
 }
 
 func (r *defaultReplicationResolver) SetGlobalFlag(isGlobal bool) {

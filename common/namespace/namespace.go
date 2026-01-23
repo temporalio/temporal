@@ -234,14 +234,10 @@ func (ns *Namespace) NotificationVersion() int64 {
 }
 
 // ActiveInCluster returns whether the namespace is active, i.e. non global
-// namespace or global namespace which active cluster is the provided cluster
+// namespace or global namespace which active cluster is the provided cluster.
+// For MCN namespaces, this returns true for all cells in the active replica.
 func (ns *Namespace) ActiveInCluster(clusterName string) bool {
-	if !ns.replicationResolver.IsGlobalNamespace() {
-		// namespace is not a global namespace, meaning namespace is always
-		// "active" within each cluster
-		return true
-	}
-	return clusterName == ns.ActiveClusterName(EmptyBusinessID)
+	return ns.replicationResolver.ActiveInCluster(clusterName)
 }
 
 // ReplicationPolicy return the derived workflow replication policy
