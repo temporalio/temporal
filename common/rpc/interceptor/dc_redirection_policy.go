@@ -223,8 +223,20 @@ func (policy *SelectedAPIsForwardingRedirectionPolicy) getTargetClusterAndIsName
 	// Get business ID from context (set by BusinessIDInterceptor)
 	businessID := GetBusinessIDFromContext(ctx)
 
+	policy.logger.Info("DC redirection policy: computing target cluster",
+		tag.WorkflowNamespace(namespaceEntry.Name().String()),
+		tag.NewStringTag("apiName", apiName),
+		tag.NewStringTag("businessID", businessID),
+		tag.NewBoolTag("enableForAllAPIs", policy.enableForAllAPIs),
+		tag.NewBoolTag("isGlobalNamespace", namespaceEntry.IsGlobalNamespace()))
+
 	if policy.enableForAllAPIs {
-		return namespaceEntry.ActiveClusterName(businessID), true
+		targetCluster := namespaceEntry.ActiveClusterName(businessID)
+		policy.logger.Info("DC redirection policy: target cluster computed (all APIs)",
+			tag.WorkflowNamespace(namespaceEntry.Name().String()),
+			tag.NewStringTag("businessID", businessID),
+			tag.NewStringTag("targetCluster", targetCluster))
+		return targetCluster, true
 	}
 
 	_, ok := selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs[apiName]
@@ -233,5 +245,10 @@ func (policy *SelectedAPIsForwardingRedirectionPolicy) getTargetClusterAndIsName
 		return policy.currentClusterName, false
 	}
 
-	return namespaceEntry.ActiveClusterName(businessID), true
+	targetCluster := namespaceEntry.ActiveClusterName(businessID)
+	policy.logger.Info("DC redirection policy: target cluster computed (whitelisted API)",
+		tag.WorkflowNamespace(namespaceEntry.Name().String()),
+		tag.NewStringTag("businessID", businessID),
+		tag.NewStringTag("targetCluster", targetCluster))
+	return targetCluster, true
 }
