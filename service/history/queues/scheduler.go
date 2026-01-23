@@ -222,7 +222,6 @@ func NewRateLimitedScheduler(
 		if err != nil {
 			namespaceName = namespace.EmptyName
 		}
-
 		return quotas.NewRequest(e.GetType().String(), taskSchedulerToken, namespaceName.String(), e.GetPriority().CallerType(), 0, "")
 	}
 	taskMetricsTagsFn := func(e Executable) []metrics.Tag {

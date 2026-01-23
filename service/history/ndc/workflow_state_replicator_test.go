@@ -92,6 +92,7 @@ func (s *workflowReplicatorSuite) SetupTest() {
 	s.NoError(err)
 	s.mockShard.SetStateMachineRegistry(reg)
 	s.mockShard.Resource.ClusterMetadata.EXPECT().GetClusterID().Return(int64(1)).AnyTimes()
+	s.mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return("test-cluster").AnyTimes()
 
 	s.mockExecutionManager = s.mockShard.Resource.ExecutionMgr
 	s.mockNamespaceCache = s.mockShard.Resource.NamespaceCache
@@ -1125,6 +1126,7 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_W
 		ExecutionStats: &persistencespb.ExecutionStats{
 			HistorySize: 100,
 		},
+		LastFirstEventTxnId: 0,
 	}).AnyTimes()
 	mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: s.runID,
@@ -1152,8 +1154,14 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_W
 	mockShard.EXPECT().GetShardID().Return(int32(0)).AnyTimes()
 	mockShard.EXPECT().GetConfig().Return(s.mockShard.GetConfig()).AnyTimes()
 	s.workflowStateReplicator.shardContext = mockShard
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespace.NewNamespaceForTest(
+		&persistencespb.NamespaceInfo{Name: "test-namespace"},
+		nil,
+		false,
+		nil,
+		int64(100),
+	), nil).AnyTimes()
 	nsName := namespace.Name("test-namespace")
-	s.mockNamespaceCache.EXPECT().GetNamespaceName(namespace.ID(namespaceID)).Return(nsName, nil).AnyTimes()
 	mockMutableState.EXPECT().GetNamespaceEntry().Return(namespace.NewLocalNamespaceForTest(
 		&persistencespb.NamespaceInfo{Id: namespaceID, Name: nsName.String()},
 		&persistencespb.NamespaceConfig{},
@@ -1280,8 +1288,9 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_W
 	s.NoError(err)
 	mockMutableState := historyi.NewMockMutableState(s.controller)
 	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
-		VersionHistories: localVersionHistories,
-		ExecutionStats:   &persistencespb.ExecutionStats{HistorySize: 0},
+		VersionHistories:    localVersionHistories,
+		ExecutionStats:      &persistencespb.ExecutionStats{HistorySize: 0},
+		LastFirstEventTxnId: 0,
 	}).AnyTimes()
 	mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: s.runID,
@@ -1309,8 +1318,14 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_W
 	mockShard.EXPECT().GetShardID().Return(int32(0)).AnyTimes()
 	mockShard.EXPECT().GetConfig().Return(s.mockShard.GetConfig()).AnyTimes()
 	s.workflowStateReplicator.shardContext = mockShard
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespace.NewNamespaceForTest(
+		&persistencespb.NamespaceInfo{Name: "test-namespace"},
+		nil,
+		false,
+		nil,
+		int64(100),
+	), nil).AnyTimes()
 	nsName := namespace.Name("test-namespace")
-	s.mockNamespaceCache.EXPECT().GetNamespaceName(namespace.ID(namespaceID)).Return(nsName, nil).AnyTimes()
 	mockMutableState.EXPECT().GetNamespaceEntry().Return(namespace.NewLocalNamespaceForTest(
 		&persistencespb.NamespaceInfo{Id: namespaceID, Name: nsName.String()},
 		&persistencespb.NamespaceConfig{},
@@ -1466,6 +1481,7 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_W
 		ExecutionStats: &persistencespb.ExecutionStats{
 			HistorySize: 100,
 		},
+		LastFirstEventTxnId: 0,
 	}).AnyTimes()
 	mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: s.runID,
@@ -1491,8 +1507,14 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_W
 	mockShard.EXPECT().GetShardID().Return(int32(0)).AnyTimes()
 	mockShard.EXPECT().GetConfig().Return(s.mockShard.GetConfig()).AnyTimes()
 	s.workflowStateReplicator.shardContext = mockShard
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespace.NewNamespaceForTest(
+		&persistencespb.NamespaceInfo{Name: "test-namespace"},
+		nil,
+		false,
+		nil,
+		int64(100),
+	), nil).AnyTimes()
 	nsName := namespace.Name("test-namespace")
-	s.mockNamespaceCache.EXPECT().GetNamespaceName(namespace.ID(namespaceID)).Return(nsName, nil).AnyTimes()
 	mockMutableState.EXPECT().GetNamespaceEntry().Return(namespace.NewLocalNamespaceForTest(
 		&persistencespb.NamespaceInfo{Id: namespaceID, Name: nsName.String()},
 		&persistencespb.NamespaceConfig{},
@@ -1720,8 +1742,9 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_E
 	}
 	mockMutableState := historyi.NewMockMutableState(s.controller)
 	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
-		VersionHistories: localVersionHistories,
-		ExecutionStats:   executionStats,
+		VersionHistories:    localVersionHistories,
+		ExecutionStats:      executionStats,
+		LastFirstEventTxnId: 0,
 	}).AnyTimes()
 	mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: s.runID,
@@ -1735,6 +1758,13 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_E
 
 	nsName := namespace.Name("test-namespace")
 	s.mockNamespaceCache.EXPECT().GetNamespaceName(namespace.ID(namespaceID)).Return(nsName, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespace.NewNamespaceForTest(
+		&persistencespb.NamespaceInfo{Name: nsName.String()},
+		nil,
+		false,
+		nil,
+		int64(100),
+	), nil).AnyTimes()
 	mockMutableState.EXPECT().GetNamespaceEntry().Return(namespace.NewLocalNamespaceForTest(
 		&persistencespb.NamespaceInfo{Id: namespaceID, Name: nsName.String()},
 		&persistencespb.NamespaceConfig{},
