@@ -96,7 +96,7 @@ func sendUpdateInternal(
 
 		// Retry loop to simulate SDK behavior for Aborted errors
 		maxRetries := 3
-		for attempt := 0; attempt < maxRetries; attempt++ {
+		for range maxRetries {
 			updateResp, updateErr = s.FrontendClient().UpdateWorkflowExecution(ctx, updateWorkflowRequest(s, tv, waitPolicy))
 			if updateErr == nil {
 				break
