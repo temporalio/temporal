@@ -2,14 +2,11 @@ package chasm
 
 import (
 	"context"
-	"strings"
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"google.golang.org/grpc"
 )
-
-const chasmRequestPrefix = "/temporal.server.chasm"
 
 // ChasmEngineInterceptor Interceptor that intercepts RPC requests,
 // detects CHASM-specific calls and does additional boilerplate processing before
@@ -27,9 +24,7 @@ func (i *ChasmEngineInterceptor) Intercept(
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
 ) (resp interface{}, retError error) {
-	if strings.HasPrefix(info.FullMethod, chasmRequestPrefix) {
-		defer metrics.CapturePanic(i.logger, i.metricsHandler, &retError)
-	}
+	defer metrics.CapturePanic(i.logger, i.metricsHandler, &retError)
 
 	ctx = NewEngineContext(ctx, i.engine)
 	return handler(ctx, req)
