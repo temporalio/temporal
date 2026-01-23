@@ -228,9 +228,9 @@ func (e *ChasmEngine) UpdateWithStartExecution(
 			return e.updateExecution(ctx, shardContext, executionLease, executionRef, updateFn)
 		}
 		executionLease.GetReleaseFn()(nil)
-		return e.startAndUpdateExecution(ctx, shardContext, executionRef, archetypeID, newFn, updateFn, options)
+		return e.startAndUpdateExecution(ctx, shardContext, executionRef, archetypeID, startFn, updateFn, options)
 	case *serviceerror.NotFound:
-		return e.startAndUpdateExecution(ctx, shardContext, executionRef, archetypeID, newFn, updateFn, options)
+		return e.startAndUpdateExecution(ctx, shardContext, executionRef, archetypeID, startFn, updateFn, options)
 	default:
 		return chasm.ExecutionKey{}, nil, err
 	}
@@ -288,7 +288,7 @@ func (e *ChasmEngine) startAndUpdateExecution(
 	shardContext historyi.ShardContext,
 	executionRef chasm.ComponentRef,
 	archetypeID chasm.ArchetypeID,
-	newFn func(chasm.MutableContext) (chasm.Component, error),
+	startFn func(chasm.MutableContext) (chasm.Component, error),
 	updateFn func(chasm.MutableContext, chasm.Component) error,
 	options chasm.TransitionOptions,
 ) (retKey chasm.ExecutionKey, retRef []byte, retErr error) {
@@ -311,7 +311,7 @@ func (e *ChasmEngine) startAndUpdateExecution(
 		shardContext,
 		executionRef,
 		archetypeID,
-		newFn,
+		startFn,
 		updateFn,
 		options,
 	)
@@ -345,7 +345,7 @@ func (e *ChasmEngine) startAndUpdateExecution(
 	if err != nil {
 		return chasm.ExecutionKey{}, nil, err
 	}
-	return result.ExecutionKey, result.NewExecutionRef, nil
+	return result.ExecutionKey, result.ExecutionRef, nil
 }
 
 // UpdateComponent applies updateFn to the component identified by the supplied component reference,
