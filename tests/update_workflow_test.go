@@ -90,6 +90,11 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 				s := testcore.NewEnv(t, testcore.WithDedicatedCluster())
 				runID := mustStartWorkflow(s, s.Tv())
 
+				tv := s.Tv()
+				if tc.useRunID {
+					tv = tv.WithRunID(runID)
+				}
+
 				capture := s.GetTestCluster().Host().CaptureMetricsHandler().StartCapture()
 				defer s.GetTestCluster().Host().CaptureMetricsHandler().StopCapture(capture)
 
@@ -152,7 +157,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 				_, err := poller.PollAndProcessWorkflowTask()
 				s.NoError(err)
 
-				updateResultCh := sendUpdateNoError(s, useRunID(s.Tv(), tc.useRunID, runID))
+				updateResultCh := sendUpdateNoError(s, tv)
 
 				// Process update in workflow.
 				res, err := poller.PollAndProcessWorkflowTask(testcore.WithoutRetries)
@@ -179,7 +184,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 				s.Equal(1, commits)
 				s.Equal(0, rollbacks)
 
-				events := s.GetHistory(s.Namespace().String(), useRunID(s.Tv(), tc.useRunID, runID).WorkflowExecution())
+				events := s.GetHistory(s.Namespace().String(), tv.WorkflowExecution())
 
 				s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
@@ -215,6 +220,10 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 			t.Run(tc.name, func(t *testing.T) {
 				s := testcore.NewEnv(t)
 				runID := mustStartWorkflow(s, s.Tv())
+				tv := s.Tv()
+				if tc.useRunID {
+					tv = tv.WithRunID(runID)
+				}
 
 				wtHandlerCalls := 0
 				wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
@@ -285,7 +294,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 				_, err := poller.PollAndProcessWorkflowTask()
 				s.NoError(err)
 
-				updateResultCh := sendUpdateNoError(s, useRunID(s.Tv(), tc.useRunID, runID))
+				updateResultCh := sendUpdateNoError(s, tv)
 
 				// Process update in workflow.
 				res, err := poller.PollAndProcessWorkflowTask(testcore.WithoutRetries)
@@ -298,7 +307,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 				s.Equal(2, wtHandlerCalls)
 				s.Equal(2, msgHandlerCalls)
 
-				events := s.GetHistory(s.Namespace().String(), useRunID(s.Tv(), tc.useRunID, runID).WorkflowExecution())
+				events := s.GetHistory(s.Namespace().String(), tv.WorkflowExecution())
 
 				s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
@@ -335,6 +344,10 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 			t.Run(tc.name, func(t *testing.T) {
 				s := testcore.NewEnv(t)
 				runID := mustStartWorkflow(s, s.Tv())
+				tv := s.Tv()
+				if tc.useRunID {
+					tv = tv.WithRunID(runID)
+				}
 
 				wtHandlerCalls := 0
 				wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
@@ -384,7 +397,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 					T:                   s.T(),
 				}
 
-				updateResultCh := sendUpdateNoError(s, useRunID(s.Tv(), tc.useRunID, runID))
+				updateResultCh := sendUpdateNoError(s, tv)
 
 				// Process update in workflow.
 				res, err := poller.PollAndProcessWorkflowTask(testcore.WithoutRetries)
@@ -398,7 +411,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 				s.Equal(1, wtHandlerCalls)
 				s.Equal(1, msgHandlerCalls)
 
-				events := s.GetHistory(s.Namespace().String(), useRunID(s.Tv(), tc.useRunID, runID).WorkflowExecution())
+				events := s.GetHistory(s.Namespace().String(), tv.WorkflowExecution())
 
 				s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
@@ -431,6 +444,10 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 			t.Run(tc.name, func(t *testing.T) {
 				s := testcore.NewEnv(t)
 				runID := mustStartWorkflow(s, s.Tv())
+				tv := s.Tv()
+				if tc.useRunID {
+					tv = tv.WithRunID(runID)
+				}
 
 				wtHandlerCalls := 0
 				wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
@@ -497,7 +514,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 				err = s.SendSignal(s.Namespace().String(), s.Tv().WorkflowExecution(), s.Tv().Any().String(), s.Tv().Any().Payloads(), s.Tv().Any().String())
 				s.NoError(err)
 
-				updateResultCh := sendUpdateNoError(s, useRunID(s.Tv(), tc.useRunID, runID))
+				updateResultCh := sendUpdateNoError(s, tv)
 
 				// Process update in workflow. It will be attached to existing WT.
 				res, err := poller.PollAndProcessWorkflowTask(testcore.WithoutRetries)
@@ -511,7 +528,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 				s.Equal(2, wtHandlerCalls)
 				s.Equal(2, msgHandlerCalls)
 
-				events := s.GetHistory(s.Namespace().String(), useRunID(s.Tv(), tc.useRunID, runID).WorkflowExecution())
+				events := s.GetHistory(s.Namespace().String(), tv.WorkflowExecution())
 
 				s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
@@ -1307,6 +1324,10 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 			t.Run(tc.name, func(t *testing.T) {
 				s := testcore.NewEnv(t)
 				runID := mustStartWorkflow(s, s.Tv())
+				tv := s.Tv()
+				if tc.useRunID {
+					tv = tv.WithRunID(runID)
+				}
 
 				// Drain existing first WT from regular task queue, but respond with sticky queue enabled response, next WT will go to sticky queue.
 				_, err := s.TaskPoller().PollAndHandleWorkflowTask(s.Tv(),
@@ -1350,7 +1371,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 				// This is to make sure that sticky poller above reached server first.
 				// And when update comes, stick poller is already available.
 				time.Sleep(500 * time.Millisecond) //nolint:forbidigo
-				updateResult := <-sendUpdateNoError(s, useRunID(s.Tv(), tc.useRunID, runID))
+				updateResult := <-sendUpdateNoError(s, tv)
 
 				s.Equal("success-result-of-"+s.Tv().UpdateID(), testcore.DecodeString(s.T(), updateResult.GetOutcome().GetSuccess()))
 
@@ -1364,7 +1385,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 			  7 WorkflowTaskCompleted
 			  8 WorkflowExecutionUpdateAccepted {"AcceptedRequestSequencingEventId": 5} // WTScheduled event which delivered update to the worker.
 			  9 WorkflowExecutionUpdateCompleted {"AcceptedEventId": 8}
-			`, s.GetHistory(s.Namespace().String(), useRunID(s.Tv(), tc.useRunID, runID).WorkflowExecution()))
+			`, s.GetHistory(s.Namespace().String(), tv.WorkflowExecution()))
 			})
 		}
 	})
@@ -3143,6 +3164,10 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 				t.Run(tc.name+" "+wfCC.name, func(t *testing.T) {
 					s := testcore.NewEnv(t)
 					runID := mustStartWorkflow(s, s.Tv())
+					tv := s.Tv()
+					if wfCC.useRunID {
+						tv = tv.WithRunID(runID)
+					}
 
 					wtHandlerCalls := 0
 					wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
@@ -3190,7 +3215,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 					_, err := poller.PollAndProcessWorkflowTask()
 					s.NoError(err)
 
-					updateResultCh := sendUpdate(testcore.NewContext(), s, useRunID(s.Tv(), wfCC.useRunID, runID))
+					updateResultCh := sendUpdate(testcore.NewContext(), s, tv)
 
 					// Complete workflow.
 					_, err = poller.PollAndProcessWorkflowTask()
@@ -3222,7 +3247,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 					// Check that update didn't block workflow completion.
 					descResp, err := s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
 						Namespace: s.Namespace().String(),
-						Execution: useRunID(s.Tv(), wfCC.useRunID, runID).WorkflowExecution(),
+						Execution: tv.WorkflowExecution(),
 					})
 					s.NoError(err)
 					s.Equal(wfCC.finalStatus, descResp.WorkflowExecutionInfo.Status)
@@ -5787,11 +5812,4 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 			}
 		})
 	})
-}
-
-func useRunID(tv *testvars.TestVars, useRunID bool, runID string) *testvars.TestVars {
-	if useRunID {
-		return tv.WithRunID(runID)
-	}
-	return tv
 }
