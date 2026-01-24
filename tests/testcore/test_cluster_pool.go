@@ -1,7 +1,6 @@
 package testcore
 
 import (
-	"fmt"
 	"os"
 	"runtime"
 	"strconv"
@@ -106,13 +105,11 @@ func (p *pool) get(t *testing.T, createCluster func() *FunctionalTestBase) *Func
 				if p.slots != nil {
 					poolType = "dedicated"
 				}
-				fmt.Printf("[cluster] recreating %s cluster %d after %d tests\n", poolType, idx, p.maxUsage)
 				if err := p.clusters[idx].testCluster.TearDownCluster(); err != nil {
 					t.Logf("Failed to tear down cluster %d: %v", idx, err)
 				}
 				p.clusters[idx] = createCluster()
 				p.usageCounts[idx].Store(1) // Reset to 1 (this test counts)
-				fmt.Printf("[cluster] recreated %s cluster %d\n", poolType, idx)
 			}
 			p.clusterMu[idx].Unlock()
 		}
@@ -164,11 +161,9 @@ func (p *clusterPool) getDedicated(t *testing.T, dynamicConfig map[dynamicconfig
 
 		// Register cleanup to tear down the cluster when the test completes.
 		t.Cleanup(func() {
-			fmt.Printf("[cluster] tearing down cluster for %s\n", t.Name())
 			if err := cluster.testCluster.TearDownCluster(); err != nil {
 				t.Logf("Failed to tear down cluster: %v", err)
 			}
-			fmt.Printf("[cluster] torn down cluster for %s\n", t.Name())
 		})
 
 		return cluster
