@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/taskpoller"
+	"go.temporal.io/server/common/testing/testvars"
 )
 
 var _ Env = (*testEnv)(nil)
@@ -36,6 +37,7 @@ type testEnv struct {
 	nsName     namespace.Name
 	taskPoller *taskpoller.TaskPoller
 	t          *testing.T
+	tv         *testvars.TestVars
 }
 
 type TestOption func(*testOptions)
@@ -116,6 +118,7 @@ func NewEnv(t *testing.T, opts ...TestOption) *testEnv {
 		Logger:             base.Logger,
 		taskPoller:         taskpoller.New(t, cluster.FrontendClient(), ns.String()),
 		t:                  t,
+		tv:                 testvars.New(t),
 	}
 
 	// For shared clusters, apply all dynamic config settings as overrides.
@@ -139,6 +142,10 @@ func (e *testEnv) TaskPoller() *taskpoller.TaskPoller {
 
 func (e *testEnv) T() *testing.T {
 	return e.t
+}
+
+func (e *testEnv) Tv() *testvars.TestVars {
+	return e.tv
 }
 
 // OverrideDynamicConfig overrides a dynamic config setting for the duration of this test.
