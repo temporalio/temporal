@@ -86,6 +86,28 @@ func Invoke(
 			// Set options for gRPC response
 			ret.WorkflowExecutionOptions = mergedOpts
 
+			// Handle completion callback attachment if provided
+			completionCallbacks := request.GetCompletionCallbacks()
+			attachRequestID := request.GetAttachRequestId()
+			hasCallbackAttachment := len(completionCallbacks) > 0
+
+			// If there are callbacks to attach, we need to create an event even if no options changed
+			if hasCallbackAttachment {
+				_, err = mutableState.AddWorkflowExecutionOptionsUpdatedEvent(
+					nil,   // no versioning override change
+					false, // don't unset override
+					attachRequestID,
+					completionCallbacks,
+					nil, // no links
+					req.GetIdentity(),
+					nil, // no priority change
+				)
+				if err != nil {
+					return nil, err
+				}
+				hasChanges = true
+			}
+
 			// If there is no mutable state change at all, return with no new history event and Noop=true
 			if !hasChanges {
 				return &api.UpdateWorkflowAction{

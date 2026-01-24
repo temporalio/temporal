@@ -23,8 +23,15 @@ import (
 )
 
 type commandHandler struct {
-	config           *nexusoperations.Config
-	endpointRegistry commonnexus.EndpointRegistry
+	config                  *nexusoperations.Config
+	endpointRegistry        commonnexus.EndpointRegistry
+	systemOperationRegistry SystemOperationRegistry
+}
+
+// SystemOperationRegistry is an interface for checking if a system operation is known.
+// This allows the command handler to validate system operations without importing the system package.
+type SystemOperationRegistry interface {
+	IsKnownOperation(service, operation string) bool
 }
 
 func (ch *commandHandler) HandleScheduleCommand(
@@ -53,23 +60,38 @@ func (ch *commandHandler) HandleScheduleCommand(
 	}
 
 	var endpointID string
-	endpoint, err := ch.endpointRegistry.GetByName(ctx, ns.ID(), attrs.Endpoint)
-	if err != nil {
-		if errors.As(err, new(*serviceerror.NotFound)) {
+	isSystemEndpoint := commonnexus.IsSystemEndpoint(attrs.Endpoint)
+
+	if isSystemEndpoint {
+		// System endpoint - validate that the operation is known
+		if ch.systemOperationRegistry == nil || !ch.systemOperationRegistry.IsKnownOperation(attrs.Service, attrs.Operation) {
 			return workflow.FailWorkflowTaskError{
 				Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
-				Message: fmt.Sprintf("endpoint %q not found", attrs.Endpoint),
+				Message: fmt.Sprintf("unknown system operation: %s/%s", attrs.Service, attrs.Operation),
 			}
-		} else if errors.As(err, new(*serviceerror.PermissionDenied)) {
-			return workflow.FailWorkflowTaskError{
-				Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
-				Message: fmt.Sprintf("caller namespace %q unauthorized for %q", ns.Name(), attrs.Endpoint),
+		}
+		// System endpoint has no endpoint ID
+		endpointID = ""
+	} else {
+		// User-defined endpoint - look up in registry
+		endpoint, err := ch.endpointRegistry.GetByName(ctx, ns.ID(), attrs.Endpoint)
+		if err != nil {
+			if errors.As(err, new(*serviceerror.NotFound)) {
+				return workflow.FailWorkflowTaskError{
+					Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
+					Message: fmt.Sprintf("endpoint %q not found", attrs.Endpoint),
+				}
+			} else if errors.As(err, new(*serviceerror.PermissionDenied)) {
+				return workflow.FailWorkflowTaskError{
+					Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
+					Message: fmt.Sprintf("caller namespace %q unauthorized for %q", ns.Name(), attrs.Endpoint),
+				}
+			} else {
+				return err
 			}
 		} else {
-			return err
+			endpointID = endpoint.Id
 		}
-	} else {
-		endpointID = endpoint.Id
 	}
 
 	if len(attrs.Service) > ch.config.MaxServiceNameLength(nsName) {
@@ -261,8 +283,17 @@ func (ch *commandHandler) HandleCancelCommand(
 	return err
 }
 
-func RegisterCommandHandlers(reg *workflow.CommandHandlerRegistry, endpointRegistry commonnexus.EndpointRegistry, config *nexusoperations.Config) error {
-	h := commandHandler{config: config, endpointRegistry: endpointRegistry}
+func RegisterCommandHandlers(
+	reg *workflow.CommandHandlerRegistry,
+	endpointRegistry commonnexus.EndpointRegistry,
+	systemOperationRegistry SystemOperationRegistry,
+	config *nexusoperations.Config,
+) error {
+	h := commandHandler{
+		config:                  config,
+		endpointRegistry:        endpointRegistry,
+		systemOperationRegistry: systemOperationRegistry,
+	}
 	if err := reg.Register(enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION, h.HandleScheduleCommand); err != nil {
 		return err
 	}

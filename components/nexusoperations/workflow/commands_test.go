@@ -68,7 +68,8 @@ func newTestContext(t *testing.T, cfg *nexusoperations.Config) testContext {
 		},
 	}
 	chReg := workflow.NewCommandHandlerRegistry()
-	require.NoError(t, opsworkflow.RegisterCommandHandlers(chReg, endpointReg, cfg))
+	// Pass nil for system operation registry - tests are for user-defined endpoints
+	require.NoError(t, opsworkflow.RegisterCommandHandlers(chReg, endpointReg, nil, cfg))
 	smReg := hsm.NewRegistry()
 	require.NoError(t, workflow.RegisterStateMachine(smReg))
 	require.NoError(t, nexusoperations.RegisterStateMachines(smReg))

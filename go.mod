@@ -171,3 +171,6 @@ require (
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
 )
+
+// Local SDK for system nexus endpoint development
+replace go.temporal.io/sdk => ../sdk-go
