@@ -783,8 +783,9 @@ func (ms *MutableStateImpl) GetNexusCompletion(
 		}
 		return nexusrpc.NewOperationCompletionUnsuccessful(
 			&nexus.OperationError{
-				State:           nexus.OperationStateFailed,
-				Cause:           &nexus.FailureError{Failure: f},
+				State: nexus.OperationStateFailed,
+				Cause: &nexus.FailureError{Failure: f},
+				// Store the original failure to bypass the Nexus failure converter.
 				OriginalFailure: &f,
 			},
 			nexusrpc.OperationCompletionUnsuccessfulOptions{
@@ -806,8 +807,9 @@ func (ms *MutableStateImpl) GetNexusCompletion(
 		}
 		return nexusrpc.NewOperationCompletionUnsuccessful(
 			&nexus.OperationError{
-				State:           nexus.OperationStateCanceled,
-				Cause:           &nexus.FailureError{Failure: f},
+				State: nexus.OperationStateCanceled,
+				Cause: &nexus.FailureError{Failure: f},
+				// Store the original failure to bypass the Nexus failure converter.
 				OriginalFailure: &f,
 			},
 			nexusrpc.OperationCompletionUnsuccessfulOptions{
@@ -826,9 +828,11 @@ func (ms *MutableStateImpl) GetNexusCompletion(
 			return nil, err
 		}
 		return nexusrpc.NewOperationCompletionUnsuccessful(
+			// NOTE: Not setting a message for compatibility with older servers than don't support both cause and message.
 			&nexus.OperationError{
-				State:           nexus.OperationStateFailed,
-				Cause:           &nexus.FailureError{Failure: f},
+				State: nexus.OperationStateFailed,
+				Cause: &nexus.FailureError{Failure: f},
+				// Store the original failure to bypass the Nexus failure converter.
 				OriginalFailure: &f,
 			},
 			nexusrpc.OperationCompletionUnsuccessfulOptions{
@@ -851,8 +855,9 @@ func (ms *MutableStateImpl) GetNexusCompletion(
 		}
 		return nexusrpc.NewOperationCompletionUnsuccessful(
 			&nexus.OperationError{
-				State:           nexus.OperationStateFailed,
-				Cause:           &nexus.FailureError{Failure: f},
+				State: nexus.OperationStateFailed,
+				Cause: &nexus.FailureError{Failure: f},
+				// Store the original failure to bypass the Nexus failure converter.
 				OriginalFailure: &f,
 			},
 			nexusrpc.OperationCompletionUnsuccessfulOptions{

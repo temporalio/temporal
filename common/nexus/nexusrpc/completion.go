@@ -257,7 +257,7 @@ type CompletionRequest struct {
 	// Links are used to link back to the operation when a completion callback is received before a started response.
 	Links []nexus.Link
 	// Parsed from request and set if State is failed or canceled.
-	Error error
+	Error *nexus.OperationError
 	// Extracted from request and set if State is succeeded.
 	Result *nexus.LazyValue
 }
@@ -330,10 +330,26 @@ func (h *completionHTTPHandler) ServeHTTP(writer http.ResponseWriter, request *h
 			h.writeFailure(writer, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "failed to read Failure from request body"))
 			return
 		}
-		completion.Error, err = h.failureConverter.FailureToError(failure)
+		completionErr, err := h.failureConverter.FailureToError(failure)
 		if err != nil {
 			h.writeFailure(writer, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "failed to decode failure from request body"))
 			return
+		}
+		opErr, ok := completionErr.(*nexus.OperationError)
+		if !ok {
+			// Backwards compatibility: wrap non-OperationError errors in an OperationError with the appropriate state.
+			completion.Error = &nexus.OperationError{
+				State: completion.State,
+				Cause: completionErr,
+			}
+			originalFailure, err := h.failureConverter.ErrorToFailure(completion.Error)
+			if err != nil {
+				h.writeFailure(writer, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "failed to decode failure from request body"))
+				return
+			}
+			completion.Error.OriginalFailure = &originalFailure
+		} else {
+			completion.Error = opErr
 		}
 	case nexus.OperationStateSucceeded:
 		completion.Result = nexus.NewLazyValue(

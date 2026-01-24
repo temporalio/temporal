@@ -49,7 +49,7 @@ func handleOperationError(
 	if err != nil {
 		return err
 	}
-	failure, err := commonnexus.OperationErrorToTemporalFailure(opFailedError)
+	cause, err := commonnexus.OperationErrorToTemporalFailureCause(opFailedError)
 	if err != nil {
 		return err
 	}
@@ -61,7 +61,7 @@ func handleOperationError(
 			// nolint:revive
 			e.Attributes = &historypb.HistoryEvent_NexusOperationFailedEventAttributes{
 				NexusOperationFailedEventAttributes: &historypb.NexusOperationFailedEventAttributes{
-					Failure:          nexusOperationFailure(operation, eventID, failure),
+					Failure:          nexusOperationFailure(operation, eventID, cause),
 					ScheduledEventId: eventID,
 					RequestId:        operation.RequestId,
 				},
@@ -75,7 +75,7 @@ func handleOperationError(
 			// nolint:revive
 			e.Attributes = &historypb.HistoryEvent_NexusOperationCanceledEventAttributes{
 				NexusOperationCanceledEventAttributes: &historypb.NexusOperationCanceledEventAttributes{
-					Failure:          nexusOperationFailure(operation, eventID, failure),
+					Failure:          nexusOperationFailure(operation, eventID, cause),
 					ScheduledEventId: eventID,
 					RequestId:        operation.RequestId,
 				},

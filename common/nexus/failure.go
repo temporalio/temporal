@@ -55,21 +55,32 @@ var failureTypeString = string((&failurepb.Failure{}).ProtoReflect().Descriptor(
 
 // ProtoFailureToNexusFailure converts a proto Nexus Failure to a Nexus SDK Failure.
 func ProtoFailureToNexusFailure(failure *nexuspb.Failure) nexus.Failure {
-	return nexus.Failure{
-		Message:  failure.GetMessage(),
-		Metadata: failure.GetMetadata(),
-		Details:  failure.GetDetails(),
+	nf := nexus.Failure{
+		Message:    failure.GetMessage(),
+		StackTrace: failure.GetStackTrace(),
+		Metadata:   failure.GetMetadata(),
+		Details:    failure.GetDetails(),
 	}
+	if failure.GetCause() != nil {
+		cause := ProtoFailureToNexusFailure(failure.GetCause())
+		nf.Cause = &cause
+	}
+	return nf
 }
 
 // NexusFailureToProtoFailure converts a Nexus SDK Failure to a proto Nexus Failure.
 // Always returns a non-nil value.
 func NexusFailureToProtoFailure(failure nexus.Failure) *nexuspb.Failure {
-	return &nexuspb.Failure{
-		Message:  failure.Message,
-		Metadata: failure.Metadata,
-		Details:  failure.Details,
+	pf := &nexuspb.Failure{
+		Message:    failure.Message,
+		Metadata:   failure.Metadata,
+		Details:    failure.Details,
+		StackTrace: failure.StackTrace,
 	}
+	if failure.Cause != nil {
+		pf.Cause = NexusFailureToProtoFailure(*failure.Cause)
+	}
+	return pf
 }
 
 type serializedOperationError struct {
@@ -299,77 +310,28 @@ func NexusFailureToTemporalFailure(f nexus.Failure) (*failurepb.Failure, error) 
 	return apiFailure, nil
 }
 
-func OperationErrorToTemporalFailure(opErr *nexus.OperationError) (*failurepb.Failure, error) {
-	var nexusFailure nexus.Failure
-	var failureErr *nexus.FailureError
-	ok := errors.As(opErr.Cause, &failureErr)
-	if ok {
-		nexusFailure = failureErr.Failure
-	} else if opErr.Cause != nil {
-		nexusFailure = nexus.Failure{Message: opErr.Cause.Error()}
-	}
-
-	// Canceled must be translated into a CanceledFailure to match the SDK expectation.
-	if opErr.State == nexus.OperationStateCanceled {
-		if nexusFailure.Metadata != nil && nexusFailure.Metadata["type"] == failureTypeString {
-			temporalFailure, err := NexusFailureToTemporalFailure(nexusFailure)
-			if err != nil {
-				return nil, err
-			}
-			if temporalFailure.GetCanceledFailureInfo() != nil {
-				// We already have a CanceledFailure, use it.
-				return temporalFailure, nil
-			}
-			// Fallback to encoding the Nexus failure into a Temporal canceled failure, we expect operations that end up
-			// as canceled to have a CanceledFailureInfo object.
-		}
-		payloads, err := nexusFailureMetadataToPayloads(nexusFailure)
-		if err != nil {
-			return nil, err
-		}
-		return &failurepb.Failure{
-			Message: nexusFailure.Message,
-			FailureInfo: &failurepb.Failure_CanceledFailureInfo{
-				CanceledFailureInfo: &failurepb.CanceledFailureInfo{
-					Details: payloads,
-				},
-			},
-		}, nil
-	}
-
-	f, err := NexusFailureToTemporalFailure(nexusFailure)
-	if err != nil {
-		return nil, err
-	}
-	if f.GetApplicationFailureInfo() != nil {
-		f.GetApplicationFailureInfo().NonRetryable = true
-	}
-	return f, nil
-}
-
-func nexusFailureMetadataToPayloads(failure nexus.Failure) (*commonpb.Payloads, error) {
-	if len(failure.Metadata) == 0 && len(failure.Details) == 0 {
+func OperationErrorToTemporalFailureCause(opErr *nexus.OperationError) (*failurepb.Failure, error) {
+	if opErr == nil || opErr.OriginalFailure == nil {
 		return nil, nil
 	}
-	// Only serialize metadata and details.
-	cpy := nexus.Failure{
-		Metadata: failure.Metadata,
-		Details:  failure.Details,
-	}
-	data, err := json.Marshal(cpy)
+	nexusFailure := opErr.OriginalFailure
+	temporalFailure, err := NexusFailureToTemporalFailure(*nexusFailure)
 	if err != nil {
-		return nil, err
+		return nil, serviceerror.NewInvalidArgument("Malformed failure")
 	}
-	return &commonpb.Payloads{
-		Payloads: []*commonpb.Payload{
-			{
-				Metadata: map[string][]byte{
-					"encoding": []byte("json/plain"),
-				},
-				Data: data,
+	if opErr.State == nexus.OperationStateCanceled {
+		return &failurepb.Failure{
+			FailureInfo: &failurepb.Failure_CanceledFailureInfo{
+				CanceledFailureInfo: &failurepb.CanceledFailureInfo{},
 			},
-		},
-	}, err
+			// Preserve the original cause.
+			Cause: temporalFailure,
+		}, nil
+	}
+	if temporalFailure.GetApplicationFailureInfo() != nil {
+		temporalFailure.GetApplicationFailureInfo().NonRetryable = true
+	}
+	return temporalFailure, nil
 }
 
 // ConvertGRPCError converts either a serviceerror or a gRPC status error into a Nexus HandlerError if possible.
