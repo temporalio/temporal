@@ -482,7 +482,7 @@ func handleNonRetryableStartOperationError(node *hsm.Node, operation Operation, 
 	if err != nil {
 		return err
 	}
-	failure, err := callErrToFailure(callErr, true)
+	failure, err := callErrToFailure(callErr, false)
 	if err != nil {
 		return err
 	}
