@@ -446,13 +446,13 @@ func (e *historyEngineImpl) PollMutableState(
 	response, err := api.GetOrPollWorkflowMutableState(
 		ctx,
 		e.shardContext,
-		&historyservice.GetMutableStateRequest{
+		historyservice.GetMutableStateRequest_builder{
 			NamespaceId:         request.GetNamespaceId(),
-			Execution:           request.Execution,
-			ExpectedNextEventId: request.ExpectedNextEventId,
-			CurrentBranchToken:  request.CurrentBranchToken,
+			Execution:           request.GetExecution(),
+			ExpectedNextEventId: request.GetExpectedNextEventId(),
+			CurrentBranchToken:  request.GetCurrentBranchToken(),
 			VersionHistoryItem:  request.GetVersionHistoryItem(),
-		},
+		}.Build(),
 		e.workflowConsistencyChecker,
 		e.eventNotifier,
 	)
@@ -460,22 +460,22 @@ func (e *historyEngineImpl) PollMutableState(
 		return nil, err
 	}
 
-	return &historyservice.PollMutableStateResponse{
-		Execution:                             response.Execution,
-		WorkflowType:                          response.WorkflowType,
-		NextEventId:                           response.NextEventId,
-		PreviousStartedEventId:                response.PreviousStartedEventId,
-		LastFirstEventId:                      response.LastFirstEventId,
-		LastFirstEventTxnId:                   response.LastFirstEventTxnId,
-		TaskQueue:                             response.TaskQueue,
-		StickyTaskQueue:                       response.StickyTaskQueue,
-		StickyTaskQueueScheduleToStartTimeout: response.StickyTaskQueueScheduleToStartTimeout,
-		CurrentBranchToken:                    response.CurrentBranchToken,
-		VersionHistories:                      response.VersionHistories,
-		WorkflowState:                         response.WorkflowState,
-		WorkflowStatus:                        response.WorkflowStatus,
-		FirstExecutionRunId:                   response.FirstExecutionRunId,
-	}, nil
+	return historyservice.PollMutableStateResponse_builder{
+		Execution:                             response.GetExecution(),
+		WorkflowType:                          response.GetWorkflowType(),
+		NextEventId:                           response.GetNextEventId(),
+		PreviousStartedEventId:                response.GetPreviousStartedEventId(),
+		LastFirstEventId:                      response.GetLastFirstEventId(),
+		LastFirstEventTxnId:                   response.GetLastFirstEventTxnId(),
+		TaskQueue:                             response.GetTaskQueue(),
+		StickyTaskQueue:                       response.GetStickyTaskQueue(),
+		StickyTaskQueueScheduleToStartTimeout: response.GetStickyTaskQueueScheduleToStartTimeout(),
+		CurrentBranchToken:                    response.GetCurrentBranchToken(),
+		VersionHistories:                      response.GetVersionHistories(),
+		WorkflowState:                         response.GetWorkflowState(),
+		WorkflowStatus:                        response.GetWorkflowStatus(),
+		FirstExecutionRunId:                   response.GetFirstExecutionRunId(),
+	}.Build(), nil
 }
 
 func (e *historyEngineImpl) QueryWorkflow(
@@ -790,28 +790,28 @@ func (e *historyEngineImpl) ImportWorkflowExecution(
 	ctx context.Context,
 	request *historyservice.ImportWorkflowExecutionRequest,
 ) (*historyservice.ImportWorkflowExecutionResponse, error) {
-	historyEvents, err := ndc.DeserializeBlobs(e.serializer, request.HistoryBatches)
+	historyEvents, err := ndc.DeserializeBlobs(e.serializer, request.GetHistoryBatches())
 	if err != nil {
 		return nil, err
 	}
 	token, eventsApplied, err := e.nDCHistoryImporter.ImportWorkflow(
 		ctx,
 		definition.NewWorkflowKey(
-			request.NamespaceId,
-			request.Execution.GetWorkflowId(),
-			request.Execution.GetRunId(),
+			request.GetNamespaceId(),
+			request.GetExecution().GetWorkflowId(),
+			request.GetExecution().GetRunId(),
 		),
-		request.VersionHistory.Items,
+		request.GetVersionHistory().GetItems(),
 		historyEvents,
-		request.Token,
+		request.GetToken(),
 	)
 	if err != nil {
 		return nil, err
 	}
-	return &historyservice.ImportWorkflowExecutionResponse{
+	return historyservice.ImportWorkflowExecutionResponse_builder{
 		Token:         token,
 		EventsApplied: eventsApplied,
-	}, nil
+	}.Build(), nil
 }
 
 func (e *historyEngineImpl) SyncShardStatus(
@@ -994,7 +994,7 @@ func (e *historyEngineImpl) RefreshWorkflowTasks(
 ) (retError error) {
 	return refreshworkflow.Invoke(
 		ctx,
-		definition.NewWorkflowKey(namespaceUUID.String(), execution.WorkflowId, execution.RunId),
+		definition.NewWorkflowKey(namespaceUUID.String(), execution.GetWorkflowId(), execution.GetRunId()),
 		archetypeID,
 		e.shardContext,
 		e.workflowConsistencyChecker,

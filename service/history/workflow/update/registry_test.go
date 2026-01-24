@@ -16,6 +16,7 @@ import (
 	. "go.temporal.io/server/common/testing/protoutils"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/service/history/workflow/update"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 )
 
@@ -34,11 +35,9 @@ func TestNewRegistry(t *testing.T) {
 			VisitUpdatesFunc: func(visitor func(updID string, updInfo *persistencespb.UpdateInfo)) {
 				visitor(
 					tv.UpdateID(),
-					&persistencespb.UpdateInfo{
-						Value: &persistencespb.UpdateInfo_Admission{
-							Admission: &persistencespb.UpdateAdmissionInfo{},
-						},
-					})
+					persistencespb.UpdateInfo_builder{
+						Admission: &persistencespb.UpdateAdmissionInfo{},
+					}.Build())
 			},
 		})
 		evStore := mockEventStore{Controller: effect.Immediate(context.Background())}
@@ -63,11 +62,9 @@ func TestNewRegistry(t *testing.T) {
 			VisitUpdatesFunc: func(visitor func(updID string, updInfo *persistencespb.UpdateInfo)) {
 				visitor(
 					tv.UpdateID(),
-					&persistencespb.UpdateInfo{
-						Value: &persistencespb.UpdateInfo_Acceptance{
-							Acceptance: &persistencespb.UpdateAcceptanceInfo{},
-						},
-					})
+					persistencespb.UpdateInfo_builder{
+						Acceptance: &persistencespb.UpdateAcceptanceInfo{},
+					}.Build())
 			},
 		})
 		evStore := mockEventStore{Controller: effect.Immediate(context.Background())}
@@ -91,11 +88,9 @@ func TestNewRegistry(t *testing.T) {
 			VisitUpdatesFunc: func(visitor func(updID string, updInfo *persistencespb.UpdateInfo)) {
 				visitor(
 					tv.UpdateID(),
-					&persistencespb.UpdateInfo{
-						Value: &persistencespb.UpdateInfo_Acceptance{
-							Acceptance: &persistencespb.UpdateAcceptanceInfo{},
-						},
-					})
+					persistencespb.UpdateInfo_builder{
+						Acceptance: &persistencespb.UpdateAcceptanceInfo{},
+					}.Build())
 			},
 			IsWorkflowExecutionRunningFunc: func() bool { return false },
 		})
@@ -109,7 +104,7 @@ func TestNewRegistry(t *testing.T) {
 		status, err := upd.WaitLifecycleStage(context.Background(), 0, 100*time.Millisecond)
 		require.NoError(t, err)
 		require.NotNil(t, status)
-		require.Equal(t, "Workflow Update failed because the Workflow completed before the Update completed.", status.Outcome.GetFailure().Message)
+		require.Equal(t, "Workflow Update failed because the Workflow completed before the Update completed.", status.Outcome.GetFailure().GetMessage())
 	})
 
 	t.Run("registry created from store with update in stateCompleted has no updates but increased completed count", func(t *testing.T) {
@@ -117,11 +112,9 @@ func TestNewRegistry(t *testing.T) {
 			VisitUpdatesFunc: func(visitor func(updID string, updInfo *persistencespb.UpdateInfo)) {
 				visitor(
 					tv.UpdateID(),
-					&persistencespb.UpdateInfo{
-						Value: &persistencespb.UpdateInfo_Completion{
-							Completion: &persistencespb.UpdateCompletionInfo{},
-						},
-					})
+					persistencespb.UpdateInfo_builder{
+						Completion: &persistencespb.UpdateCompletionInfo{},
+					}.Build())
 			},
 		})
 
@@ -136,9 +129,9 @@ func TestFind(t *testing.T) {
 	t.Run("return update when found in registry", func(t *testing.T) {
 		reg := update.NewRegistry(&mockUpdateStore{
 			GetUpdateOutcomeFunc: func(context.Context, string) (*updatepb.Outcome, error) {
-				return &updatepb.Outcome{
-					Value: &updatepb.Outcome_Success{Success: tv.Any().Payloads()},
-				}, nil
+				return updatepb.Outcome_builder{
+					Success: proto.ValueOrDefault(tv.Any().Payloads()),
+				}.Build(), nil
 			},
 		})
 		upd := reg.Find(context.Background(), tv.UpdateID())
@@ -148,11 +141,9 @@ func TestFind(t *testing.T) {
 	t.Run("return update when found in store", func(t *testing.T) {
 		reg := update.NewRegistry(&mockUpdateStore{
 			VisitUpdatesFunc: func(visitor func(updID string, updInfo *persistencespb.UpdateInfo)) {
-				storedUpdate := &persistencespb.UpdateInfo{
-					Value: &persistencespb.UpdateInfo_Acceptance{
-						Acceptance: &persistencespb.UpdateAcceptanceInfo{},
-					},
-				}
+				storedUpdate := persistencespb.UpdateInfo_builder{
+					Acceptance: &persistencespb.UpdateAcceptanceInfo{},
+				}.Build()
 				visitor(tv.UpdateID(), storedUpdate)
 			},
 		})
@@ -193,11 +184,9 @@ func TestFindOrCreate(t *testing.T) {
 	t.Run("find stored update", func(t *testing.T) {
 		reg := update.NewRegistry(&mockUpdateStore{
 			VisitUpdatesFunc: func(visitor func(updID string, updInfo *persistencespb.UpdateInfo)) {
-				storedUpdate := &persistencespb.UpdateInfo{
-					Value: &persistencespb.UpdateInfo_Acceptance{
-						Acceptance: &persistencespb.UpdateAcceptanceInfo{},
-					},
-				}
+				storedUpdate := persistencespb.UpdateInfo_builder{
+					Acceptance: &persistencespb.UpdateAcceptanceInfo{},
+				}.Build()
 				visitor(tv.UpdateID(), storedUpdate)
 			},
 		})
@@ -536,7 +525,7 @@ func TestSendMessages(t *testing.T) {
 		require.Len(t, msgs, 1)
 		require.True(t, upd1.IsSent())
 		require.False(t, upd2.IsSent())
-		require.Equal(t, upd1.ID(), msgs[0].ProtocolInstanceId)
+		require.Equal(t, upd1.ID(), msgs[0].GetProtocolInstanceId())
 		require.Equal(t, testSequencingEventID-1, msgs[0].GetEventId())
 
 		// no more to send as update #1 is already sent
@@ -571,8 +560,8 @@ func TestSendMessages(t *testing.T) {
 		require.Len(t, msgs, 2)
 		require.True(t, upd1.IsSent())
 		require.True(t, upd2.IsSent())
-		require.Equal(t, upd1.ID(), msgs[0].ProtocolInstanceId)
-		require.Equal(t, upd2.ID(), msgs[1].ProtocolInstanceId)
+		require.Equal(t, upd1.ID(), msgs[0].GetProtocolInstanceId())
+		require.Equal(t, upd2.ID(), msgs[1].GetProtocolInstanceId())
 	})
 }
 
@@ -650,18 +639,14 @@ func TestAbort(t *testing.T) {
 		VisitUpdatesFunc: func(visitor func(updID string, updInfo *persistencespb.UpdateInfo)) {
 			visitor(
 				tv.WithUpdateIDNumber(1).UpdateID(),
-				&persistencespb.UpdateInfo{
-					Value: &persistencespb.UpdateInfo_Admission{
-						Admission: &persistencespb.UpdateAdmissionInfo{},
-					},
-				})
+				persistencespb.UpdateInfo_builder{
+					Admission: &persistencespb.UpdateAdmissionInfo{},
+				}.Build())
 			visitor(
 				tv.WithUpdateIDNumber(2).UpdateID(),
-				&persistencespb.UpdateInfo{
-					Value: &persistencespb.UpdateInfo_Acceptance{
-						Acceptance: &persistencespb.UpdateAcceptanceInfo{},
-					},
-				})
+				persistencespb.UpdateInfo_builder{
+					Acceptance: &persistencespb.UpdateAcceptanceInfo{},
+				}.Build())
 		},
 	})
 
@@ -679,7 +664,7 @@ func TestAbort(t *testing.T) {
 	status2, err := upd2.WaitLifecycleStage(context.Background(), 0, 2*time.Second)
 	require.NoError(t, err)
 	require.NotNil(t, status2)
-	require.Equal(t, "Workflow Update failed because the Workflow completed before the Update completed.", status2.Outcome.GetFailure().Message)
+	require.Equal(t, "Workflow Update failed because the Workflow completed before the Update completed.", status2.Outcome.GetFailure().GetMessage())
 
 	require.Equal(t, 2, reg.Len(), "registry should still contain both updates")
 }
@@ -691,11 +676,9 @@ func TestClear(t *testing.T) {
 		VisitUpdatesFunc: func(visitor func(updID string, updInfo *persistencespb.UpdateInfo)) {
 			visitor(
 				tv.UpdateID(),
-				&persistencespb.UpdateInfo{
-					Value: &persistencespb.UpdateInfo_Admission{
-						Admission: &persistencespb.UpdateAdmissionInfo{},
-					},
-				})
+				persistencespb.UpdateInfo_builder{
+					Admission: &persistencespb.UpdateAdmissionInfo{},
+				}.Build())
 		},
 	})
 
@@ -745,11 +728,11 @@ func TestTryResurrect(t *testing.T) {
 	t.Run("add acceptance message as new update with stateAdmitted", func(t *testing.T) {
 		reg := update.NewRegistry(emptyUpdateStore)
 		evStore := mockEventStore{Controller: effect.Immediate(context.Background())}
-		msg := &protocolpb.Message{Body: MarshalAny(t, &updatepb.Acceptance{
+		msg := protocolpb.Message_builder{Body: MarshalAny(t, updatepb.Acceptance_builder{
 			AcceptedRequestMessageId:         tv.MessageID(),
 			AcceptedRequestSequencingEventId: testSequencingEventID,
 			AcceptedRequest:                  &updatepb.Request{},
-		}), ProtocolInstanceId: tv.UpdateID()}
+		}.Build()), ProtocolInstanceId: tv.UpdateID()}.Build()
 
 		upd, err := reg.TryResurrect(context.Background(), msg)
 		require.NoError(t, err)
@@ -767,11 +750,11 @@ func TestTryResurrect(t *testing.T) {
 	t.Run("add rejection message as new update with stateAdmitted", func(t *testing.T) {
 		reg := update.NewRegistry(emptyUpdateStore)
 		evStore := mockEventStore{Controller: effect.Immediate(context.Background())}
-		msg := &protocolpb.Message{Body: MarshalAny(t, &updatepb.Rejection{
+		msg := protocolpb.Message_builder{Body: MarshalAny(t, updatepb.Rejection_builder{
 			RejectedRequestMessageId:         tv.MessageID(),
 			RejectedRequestSequencingEventId: testSequencingEventID,
 			RejectedRequest:                  &updatepb.Request{},
-		}), ProtocolInstanceId: tv.UpdateID()}
+		}.Build()), ProtocolInstanceId: tv.UpdateID()}.Build()
 
 		upd, err := reg.TryResurrect(context.Background(), msg)
 		require.NoError(t, err)
@@ -793,16 +776,16 @@ func TestTryResurrect(t *testing.T) {
 		require.Nil(t, err)
 		require.Nil(t, upd)
 
-		upd, err = reg.TryResurrect(context.Background(), &protocolpb.Message{Body: nil})
+		upd, err = reg.TryResurrect(context.Background(), protocolpb.Message_builder{Body: nil}.Build())
 		require.Nil(t, err)
 		require.Nil(t, upd)
 	})
 
 	t.Run("ignore completed protocol message", func(t *testing.T) {
 		reg := update.NewRegistry(emptyUpdateStore)
-		completedMsg := &protocolpb.Message{Body: MarshalAny(t, &updatepb.Outcome{
-			Value: &updatepb.Outcome_Success{Success: tv.Any().Payloads()},
-		})}
+		completedMsg := protocolpb.Message_builder{Body: MarshalAny(t, updatepb.Outcome_builder{
+			Success: proto.ValueOrDefault(tv.Any().Payloads()),
+		}.Build())}.Build()
 
 		upd, err := reg.TryResurrect(context.Background(), completedMsg)
 		require.Nil(t, err)
@@ -811,7 +794,7 @@ func TestTryResurrect(t *testing.T) {
 
 	t.Run("ignore invalid message body", func(t *testing.T) {
 		reg := update.NewRegistry(emptyUpdateStore)
-		invalidMsg := &protocolpb.Message{Body: &anypb.Any{TypeUrl: "invalid"}}
+		invalidMsg := protocolpb.Message_builder{Body: &anypb.Any{TypeUrl: "invalid"}}.Build()
 
 		_, err := reg.TryResurrect(context.Background(), invalidMsg)
 		var invalidArg *serviceerror.InvalidArgument
@@ -826,10 +809,10 @@ func TestTryResurrect(t *testing.T) {
 				func() int { return 1 },
 			),
 		)
-		msg := &protocolpb.Message{Body: MarshalAny(t, &updatepb.Acceptance{
+		msg := protocolpb.Message_builder{Body: MarshalAny(t, updatepb.Acceptance_builder{
 			AcceptedRequestMessageId:         tv.MessageID(),
 			AcceptedRequestSequencingEventId: testSequencingEventID,
-		})}
+		}.Build())}.Build()
 
 		_, err := reg.TryResurrect(context.Background(), msg)
 		require.NoError(t, err)
@@ -844,19 +827,19 @@ func TestTryResurrect(t *testing.T) {
 		)
 
 		// 1st is allowed
-		msg := &protocolpb.Message{Body: MarshalAny(t, &updatepb.Acceptance{
+		msg := protocolpb.Message_builder{Body: MarshalAny(t, updatepb.Acceptance_builder{
 			AcceptedRequestMessageId: "0",
 			AcceptedRequest:          &updatepb.Request{},
-		})}
+		}.Build())}.Build()
 		_, err := reg.TryResurrect(context.Background(), msg)
 		require.NoError(t, err)
 		require.Equal(t, 1, reg.Len())
 
 		// 2nd is denied
-		msg = &protocolpb.Message{Body: MarshalAny(t, &updatepb.Acceptance{
+		msg = protocolpb.Message_builder{Body: MarshalAny(t, updatepb.Acceptance_builder{
 			AcceptedRequestMessageId: "1",
 			AcceptedRequest:          &updatepb.Request{},
-		})}
+		}.Build())}.Build()
 		_, err = reg.TryResurrect(context.Background(), msg)
 		var failedPrecon *serviceerror.FailedPrecondition
 		require.ErrorAs(t, err, &failedPrecon)

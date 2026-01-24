@@ -93,7 +93,7 @@ func (q *QueueStore) tryEnqueue(
 	messageID int64,
 	blob *commonpb.DataBlob,
 ) (int64, error) {
-	query := q.session.Query(templateEnqueueMessageQuery, queueType, messageID, blob.Data, blob.EncodingType.String()).WithContext(ctx)
+	query := q.session.Query(templateEnqueueMessageQuery, queueType, messageID, blob.GetData(), blob.GetEncodingType().String()).WithContext(ctx)
 	previous := make(map[string]interface{})
 	applied, err := query.MapScanCAS(previous)
 	if err != nil {
@@ -278,8 +278,8 @@ func (q *QueueStore) insertInitialQueueMetadataRecord(
 	query := q.session.Query(templateInsertQueueMetadataQuery,
 		queueType,
 		clusterAckLevels,
-		blob.Data,
-		blob.EncodingType.String(),
+		blob.GetData(),
+		blob.GetEncodingType().String(),
 		version,
 	).WithContext(ctx)
 	_, err := query.MapScanCAS(make(map[string]interface{}))
@@ -318,9 +318,9 @@ func (q *QueueStore) updateAckLevel(
 	}
 
 	query := q.session.Query(templateUpdateQueueMetadataQuery,
-		metadataStruct.ClusterAckLevels,
-		metadata.Blob.Data,
-		metadata.Blob.EncodingType.String(),
+		metadataStruct.GetClusterAckLevels(),
+		metadata.Blob.GetData(),
+		metadata.Blob.GetEncodingType().String(),
 		metadata.Version+1, // always increase version number on update
 		queueType,
 		metadata.Version, // condition update
@@ -397,7 +397,7 @@ func convertQueueMetadata(
 	if ok {
 		clusterAckLevel := message["cluster_ack_level"].(map[string]int64)
 		// TODO: remove this once we remove cluster_ack_level from DB.
-		blob, err := serializer.QueueMetadataToBlob(&persistencespb.QueueMetadata{ClusterAckLevels: clusterAckLevel})
+		blob, err := serializer.QueueMetadataToBlob(persistencespb.QueueMetadata_builder{ClusterAckLevels: clusterAckLevel}.Build())
 		if err != nil {
 			return nil, err
 		}

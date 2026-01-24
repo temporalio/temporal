@@ -8,7 +8,6 @@ package nexusoperationpb
 
 import (
 	reflect "reflect"
-	sync "sync"
 	unsafe "unsafe"
 
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -23,10 +22,10 @@ const (
 )
 
 type InvocationTask struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Attempt       int32                  `protobuf:"varint,1,opt,name=attempt,proto3" json:"attempt,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state              protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Attempt int32                  `protobuf:"varint,1,opt,name=attempt,proto3"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *InvocationTask) Reset() {
@@ -54,23 +53,36 @@ func (x *InvocationTask) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use InvocationTask.ProtoReflect.Descriptor instead.
-func (*InvocationTask) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_nexusoperation_proto_v1_tasks_proto_rawDescGZIP(), []int{0}
-}
-
 func (x *InvocationTask) GetAttempt() int32 {
 	if x != nil {
-		return x.Attempt
+		return x.xxx_hidden_Attempt
 	}
 	return 0
 }
 
+func (x *InvocationTask) SetAttempt(v int32) {
+	x.xxx_hidden_Attempt = v
+}
+
+type InvocationTask_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Attempt int32
+}
+
+func (b0 InvocationTask_builder) Build() *InvocationTask {
+	m0 := &InvocationTask{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Attempt = b.Attempt
+	return m0
+}
+
 type InvocationTimeoutTask struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Attempt       int32                  `protobuf:"varint,1,opt,name=attempt,proto3" json:"attempt,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state              protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Attempt int32                  `protobuf:"varint,1,opt,name=attempt,proto3"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *InvocationTimeoutTask) Reset() {
@@ -98,23 +110,36 @@ func (x *InvocationTimeoutTask) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use InvocationTimeoutTask.ProtoReflect.Descriptor instead.
-func (*InvocationTimeoutTask) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_nexusoperation_proto_v1_tasks_proto_rawDescGZIP(), []int{1}
-}
-
 func (x *InvocationTimeoutTask) GetAttempt() int32 {
 	if x != nil {
-		return x.Attempt
+		return x.xxx_hidden_Attempt
 	}
 	return 0
 }
 
+func (x *InvocationTimeoutTask) SetAttempt(v int32) {
+	x.xxx_hidden_Attempt = v
+}
+
+type InvocationTimeoutTask_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Attempt int32
+}
+
+func (b0 InvocationTimeoutTask_builder) Build() *InvocationTimeoutTask {
+	m0 := &InvocationTimeoutTask{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Attempt = b.Attempt
+	return m0
+}
+
 type InvocationBackoffTask struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Attempt       int32                  `protobuf:"varint,1,opt,name=attempt,proto3" json:"attempt,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state              protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Attempt int32                  `protobuf:"varint,1,opt,name=attempt,proto3"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *InvocationBackoffTask) Reset() {
@@ -142,23 +167,36 @@ func (x *InvocationBackoffTask) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use InvocationBackoffTask.ProtoReflect.Descriptor instead.
-func (*InvocationBackoffTask) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_nexusoperation_proto_v1_tasks_proto_rawDescGZIP(), []int{2}
-}
-
 func (x *InvocationBackoffTask) GetAttempt() int32 {
 	if x != nil {
-		return x.Attempt
+		return x.xxx_hidden_Attempt
 	}
 	return 0
 }
 
+func (x *InvocationBackoffTask) SetAttempt(v int32) {
+	x.xxx_hidden_Attempt = v
+}
+
+type InvocationBackoffTask_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Attempt int32
+}
+
+func (b0 InvocationBackoffTask_builder) Build() *InvocationBackoffTask {
+	m0 := &InvocationBackoffTask{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Attempt = b.Attempt
+	return m0
+}
+
 type CancellationTask struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Attempt       int32                  `protobuf:"varint,1,opt,name=attempt,proto3" json:"attempt,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state              protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Attempt int32                  `protobuf:"varint,1,opt,name=attempt,proto3"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *CancellationTask) Reset() {
@@ -186,23 +224,36 @@ func (x *CancellationTask) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CancellationTask.ProtoReflect.Descriptor instead.
-func (*CancellationTask) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_nexusoperation_proto_v1_tasks_proto_rawDescGZIP(), []int{3}
-}
-
 func (x *CancellationTask) GetAttempt() int32 {
 	if x != nil {
-		return x.Attempt
+		return x.xxx_hidden_Attempt
 	}
 	return 0
 }
 
+func (x *CancellationTask) SetAttempt(v int32) {
+	x.xxx_hidden_Attempt = v
+}
+
+type CancellationTask_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Attempt int32
+}
+
+func (b0 CancellationTask_builder) Build() *CancellationTask {
+	m0 := &CancellationTask{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Attempt = b.Attempt
+	return m0
+}
+
 type CancellationBackoffTask struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Attempt       int32                  `protobuf:"varint,1,opt,name=attempt,proto3" json:"attempt,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state              protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Attempt int32                  `protobuf:"varint,1,opt,name=attempt,proto3"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *CancellationBackoffTask) Reset() {
@@ -230,16 +281,29 @@ func (x *CancellationBackoffTask) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CancellationBackoffTask.ProtoReflect.Descriptor instead.
-func (*CancellationBackoffTask) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_nexusoperation_proto_v1_tasks_proto_rawDescGZIP(), []int{4}
-}
-
 func (x *CancellationBackoffTask) GetAttempt() int32 {
 	if x != nil {
-		return x.Attempt
+		return x.xxx_hidden_Attempt
 	}
 	return 0
+}
+
+func (x *CancellationBackoffTask) SetAttempt(v int32) {
+	x.xxx_hidden_Attempt = v
+}
+
+type CancellationBackoffTask_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Attempt int32
+}
+
+func (b0 CancellationBackoffTask_builder) Build() *CancellationBackoffTask {
+	m0 := &CancellationBackoffTask{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Attempt = b.Attempt
+	return m0
 }
 
 var File_temporal_server_chasm_lib_nexusoperation_proto_v1_tasks_proto protoreflect.FileDescriptor
@@ -257,18 +321,6 @@ const file_temporal_server_chasm_lib_nexusoperation_proto_v1_tasks_proto_rawDesc
 	"\aattempt\x18\x01 \x01(\x05R\aattempt\"3\n" +
 	"\x17CancellationBackoffTask\x12\x18\n" +
 	"\aattempt\x18\x01 \x01(\x05R\aattemptBVZTgo.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb;nexusoperationpbb\x06proto3"
-
-var (
-	file_temporal_server_chasm_lib_nexusoperation_proto_v1_tasks_proto_rawDescOnce sync.Once
-	file_temporal_server_chasm_lib_nexusoperation_proto_v1_tasks_proto_rawDescData []byte
-)
-
-func file_temporal_server_chasm_lib_nexusoperation_proto_v1_tasks_proto_rawDescGZIP() []byte {
-	file_temporal_server_chasm_lib_nexusoperation_proto_v1_tasks_proto_rawDescOnce.Do(func() {
-		file_temporal_server_chasm_lib_nexusoperation_proto_v1_tasks_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_chasm_lib_nexusoperation_proto_v1_tasks_proto_rawDesc), len(file_temporal_server_chasm_lib_nexusoperation_proto_v1_tasks_proto_rawDesc)))
-	})
-	return file_temporal_server_chasm_lib_nexusoperation_proto_v1_tasks_proto_rawDescData
-}
 
 var file_temporal_server_chasm_lib_nexusoperation_proto_v1_tasks_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_temporal_server_chasm_lib_nexusoperation_proto_v1_tasks_proto_goTypes = []any{

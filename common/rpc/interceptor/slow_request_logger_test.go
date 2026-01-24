@@ -55,13 +55,13 @@ func (s *slowRequestLoggerSuite) TestIntercept() {
 	slowHandler := makeHandler(testThreshold + 1)
 
 	// Dummy request to test extraction.
-	request := &workflowservice.DescribeWorkflowExecutionRequest{
+	request := workflowservice.DescribeWorkflowExecutionRequest_builder{
 		Namespace: "namespace-name",
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: "wf-id",
 			RunId:      "run-id",
-		},
-	}
+		}.Build(),
+	}.Build()
 	info := &grpc.UnaryServerInfo{
 		FullMethod: workflowservice.WorkflowService_DescribeWorkflowExecution_FullMethodName,
 	}

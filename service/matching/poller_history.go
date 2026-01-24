@@ -53,13 +53,13 @@ func (pollers *pollerHistory) getPollerInfo(earliestAccessTime time.Time) []*tas
 		value := entry.Value().(*pollerInfo)
 		lastAccessTime := entry.CreateTime()
 		if earliestAccessTime.Before(lastAccessTime) {
-			result = append(result, &taskqueuepb.PollerInfo{
+			result = append(result, taskqueuepb.PollerInfo_builder{
 				Identity:                  string(key),
 				LastAccessTime:            timestamppb.New(lastAccessTime),
 				RatePerSecond:             defaultRPS(value.taskQueueMetadata.GetMaxTasksPerSecond()),
 				WorkerVersionCapabilities: value.workerVersionCapabilities,
 				DeploymentOptions:         value.deploymentOptions,
-			})
+			}.Build())
 		}
 	}
 

@@ -60,7 +60,7 @@ func (b *BackfillerTaskExecutor) Execute(
 	_ chasm.TaskAttributes,
 	_ *schedulerpb.BackfillerTask,
 ) error {
-	defer func() { backfiller.Attempt++ }()
+	defer func() { backfiller.SetAttempt(backfiller.GetAttempt() + 1) }()
 
 	scheduler := backfiller.Scheduler.Get(ctx)
 	logger := newTaggedLogger(b.baseLogger, scheduler)
@@ -69,7 +69,7 @@ func (b *BackfillerTaskExecutor) Execute(
 
 	// If the buffer is already full, don't move the watermark at all, just back off
 	// and retry.
-	tweakables := b.config.Tweakables(scheduler.Namespace)
+	tweakables := b.config.Tweakables(scheduler.GetNamespace())
 	limit, err := b.allowedBufferedStarts(ctx, scheduler, invoker, tweakables)
 	if err != nil {
 		return err
@@ -112,7 +112,7 @@ func (b *BackfillerTaskExecutor) Execute(
 	}
 
 	// Otherwise, update watermark and reschedule.
-	backfiller.LastProcessedTime = timestamppb.New(result.LastProcessedTime)
+	backfiller.SetLastProcessedTime(timestamppb.New(result.LastProcessedTime))
 	b.rescheduleBackfill(ctx, backfiller)
 
 	return nil
@@ -196,7 +196,7 @@ func (b *BackfillerTaskExecutor) processTrigger(
 	requestID := generateRequestID(scheduler, backfiller.GetBackfillId(), now, now)
 	workflowID := generateWorkflowID(scheduler.WorkflowID(), now)
 	result.BufferedStarts = []*schedulespb.BufferedStart{
-		{
+		schedulespb.BufferedStart_builder{
 			NominalTime:   nowpb,
 			ActualTime:    nowpb,
 			DesiredTime:   nowpb,
@@ -204,7 +204,7 @@ func (b *BackfillerTaskExecutor) processTrigger(
 			Manual:        true,
 			RequestId:     requestID,
 			WorkflowId:    workflowID,
-		},
+		}.Build(),
 	}
 	result.Complete = true
 

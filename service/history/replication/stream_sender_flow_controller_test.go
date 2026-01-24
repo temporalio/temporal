@@ -119,14 +119,14 @@ func (s *senderFlowControllerSuite) TestWait_DefaultPriority() {
 
 func (s *senderFlowControllerSuite) TestRefreshReceiverFlowControlInfo() {
 	senderFlowCtrlImpl := NewSenderFlowController(s.config, s.logger)
-	state := &replicationspb.SyncReplicationState{
-		HighPriorityState: &replicationspb.ReplicationState{
+	state := replicationspb.SyncReplicationState_builder{
+		HighPriorityState: replicationspb.ReplicationState_builder{
 			FlowControlCommand: enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_RESUME,
-		},
-		LowPriorityState: &replicationspb.ReplicationState{
+		}.Build(),
+		LowPriorityState: replicationspb.ReplicationState_builder{
 			FlowControlCommand: enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE,
-		},
-	}
+		}.Build(),
+	}.Build()
 
 	senderFlowCtrlImpl.RefreshReceiverFlowControlInfo(state)
 

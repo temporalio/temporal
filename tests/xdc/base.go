@@ -67,9 +67,9 @@ type (
 func (s *xdcBaseSuite) clusterReplicationConfig() []*replicationpb.ClusterReplicationConfig {
 	config := make([]*replicationpb.ClusterReplicationConfig, 2)
 	for ci, c := range s.clusters {
-		config[ci] = &replicationpb.ClusterReplicationConfig{
+		config[ci] = replicationpb.ClusterReplicationConfig_builder{
 			ClusterName: c.ClusterName(),
-		}
+		}.Build()
 	}
 	return config
 }
@@ -157,12 +157,12 @@ func (s *xdcBaseSuite) setupSuite(opts ...testcore.TestClusterOption) {
 			if ci != remoteCi {
 				_, err := c.AdminClient().AddOrUpdateRemoteCluster(
 					testcore.NewContext(),
-					&adminservice.AddOrUpdateRemoteClusterRequest{
+					adminservice.AddOrUpdateRemoteClusterRequest_builder{
 						FrontendAddress:               remoteC.Host().RemoteFrontendGRPCAddress(),
 						FrontendHttpAddress:           remoteC.Host().FrontendHTTPAddress(),
 						EnableRemoteClusterConnection: true,
 						EnableReplication:             true,
-					})
+					}.Build())
 				s.Require().NoError(err)
 			}
 		}
@@ -181,21 +181,21 @@ func (s *xdcBaseSuite) waitForClusterConnected(
 		s.logger.Info("check if clusters are synced", tag.SourceCluster(sourceCluster.ClusterName()), tag.TargetCluster(targetClusterName))
 		resp, err := sourceCluster.HistoryClient().GetReplicationStatus(context.Background(), &historyservice.GetReplicationStatusRequest{})
 		require.NoError(c, err)
-		require.Lenf(c, resp.Shards, 1, "test cluster has only one history shard")
+		require.Lenf(c, resp.GetShards(), 1, "test cluster has only one history shard")
 
-		shard := resp.Shards[0]
+		shard := resp.GetShards()[0]
 		require.NotNil(c, shard)
-		require.Greater(c, shard.MaxReplicationTaskId, int64(0))
-		require.NotNil(c, shard.ShardLocalTime)
-		require.WithinRange(c, shard.ShardLocalTime.AsTime(), s.startTime, time.Now())
-		require.NotNil(c, shard.RemoteClusters)
+		require.Greater(c, shard.GetMaxReplicationTaskId(), int64(0))
+		require.NotNil(c, shard.GetShardLocalTime())
+		require.WithinRange(c, shard.GetShardLocalTime().AsTime(), s.startTime, time.Now())
+		require.NotNil(c, shard.GetRemoteClusters())
 
-		standbyAckInfo, ok := shard.RemoteClusters[targetClusterName]
+		standbyAckInfo, ok := shard.GetRemoteClusters()[targetClusterName]
 		require.True(c, ok)
 		require.NotNil(c, standbyAckInfo)
-		require.LessOrEqual(c, shard.MaxReplicationTaskId, standbyAckInfo.AckedTaskId)
-		require.NotNil(c, standbyAckInfo.AckedTaskVisibilityTime)
-		require.WithinRange(c, standbyAckInfo.AckedTaskVisibilityTime.AsTime(), s.startTime, time.Now())
+		require.LessOrEqual(c, shard.GetMaxReplicationTaskId(), standbyAckInfo.GetAckedTaskId())
+		require.NotNil(c, standbyAckInfo.GetAckedTaskVisibilityTime())
+		require.WithinRange(c, standbyAckInfo.GetAckedTaskVisibilityTime().AsTime(), s.startTime, time.Now())
 	}, 90*time.Second, 1*time.Second)
 	s.logger.Info("clusters synced", tag.SourceCluster(sourceCluster.ClusterName()), tag.TargetCluster(targetClusterName))
 }
@@ -248,18 +248,18 @@ func (s *xdcBaseSuite) createNamespace(
 		replicationConfigs = make([]*replicationpb.ClusterReplicationConfig, len(clusters))
 		clusterNames = make([]string, len(clusters))
 		for ci, c := range clusters {
-			replicationConfigs[ci] = &replicationpb.ClusterReplicationConfig{ClusterName: c.ClusterName()}
+			replicationConfigs[ci] = replicationpb.ClusterReplicationConfig_builder{ClusterName: c.ClusterName()}.Build()
 			clusterNames[ci] = c.ClusterName()
 		}
 	}
 
-	regReq := &workflowservice.RegisterNamespaceRequest{
+	regReq := workflowservice.RegisterNamespaceRequest_builder{
 		Namespace:                        ns,
 		IsGlobalNamespace:                isGlobal,
 		Clusters:                         replicationConfigs,
 		ActiveClusterName:                clusters[0].ClusterName(), // cluster 0 is always active.
 		WorkflowExecutionRetentionPeriod: durationpb.New(7 * time.Hour * 24),
-	}
+	}.Build()
 	// namespace is always created in cluster 0.
 	_, err := clusters[0].FrontendClient().RegisterNamespace(ctx, regReq)
 	s.NoError(err)
@@ -316,10 +316,10 @@ func updateNamespaceConfig(
 	}, namespaceCacheWaitTime, namespaceCacheCheckInterval)
 	s.NotEqual(int64(-1), configVersion)
 
-	updateReq := &workflowservice.UpdateNamespaceRequest{
+	updateReq := workflowservice.UpdateNamespaceRequest_builder{
 		Namespace: ns,
 		Config:    newConfigFn(),
-	}
+	}.Build()
 	_, err := clusters[inClusterIndex].FrontendClient().UpdateNamespace(testcore.NewContext(), updateReq)
 	s.NoError(err)
 
@@ -363,15 +363,15 @@ func (s *xdcBaseSuite) updateNamespaceClusters(
 	replicationConfigs := make([]*replicationpb.ClusterReplicationConfig, len(clusters))
 	clusterNames := make([]string, len(clusters))
 	for ci, c := range clusters {
-		replicationConfigs[ci] = &replicationpb.ClusterReplicationConfig{ClusterName: c.ClusterName()}
+		replicationConfigs[ci] = replicationpb.ClusterReplicationConfig_builder{ClusterName: c.ClusterName()}.Build()
 		clusterNames[ci] = c.ClusterName()
 	}
 
-	_, err := clusters[inClusterIndex].FrontendClient().UpdateNamespace(testcore.NewContext(), &workflowservice.UpdateNamespaceRequest{
+	_, err := clusters[inClusterIndex].FrontendClient().UpdateNamespace(testcore.NewContext(), workflowservice.UpdateNamespaceRequest_builder{
 		Namespace: ns,
-		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
+		ReplicationConfig: replicationpb.NamespaceReplicationConfig_builder{
 			Clusters: replicationConfigs,
-		}})
+		}.Build()}.Build())
 	s.NoError(err)
 
 	var isGlobalNamespace bool
@@ -409,10 +409,10 @@ func (s *xdcBaseSuite) promoteNamespace(
 	inClusterIndex int,
 ) {
 
-	_, err := s.clusters[inClusterIndex].FrontendClient().UpdateNamespace(testcore.NewContext(), &workflowservice.UpdateNamespaceRequest{
+	_, err := s.clusters[inClusterIndex].FrontendClient().UpdateNamespace(testcore.NewContext(), workflowservice.UpdateNamespaceRequest_builder{
 		Namespace:        ns,
 		PromoteNamespace: true,
-	})
+	}.Build())
 	s.NoError(err)
 
 	s.EventuallyWithT(func(t *assert.CollectT) {
@@ -434,12 +434,12 @@ func (s *xdcBaseSuite) failover(
 	s.waitForClusterSynced()
 
 	// update namespace to fail over
-	updateReq := &workflowservice.UpdateNamespaceRequest{
+	updateReq := workflowservice.UpdateNamespaceRequest_builder{
 		Namespace: ns,
-		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
+		ReplicationConfig: replicationpb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: targetCluster,
-		},
-	}
+		}.Build(),
+	}.Build()
 	updateResp, err := s.clusters[inClusterIndex].FrontendClient().UpdateNamespace(testcore.NewContext(), updateReq)
 	s.NoError(err)
 	// TODO (alex): not clear why it matters.

@@ -8,7 +8,6 @@ package commonspb
 
 import (
 	reflect "reflect"
-	sync "sync"
 	unsafe "unsafe"
 
 	v1 "go.temporal.io/api/common/v1"
@@ -24,12 +23,11 @@ const (
 )
 
 type HistoryTask struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// shard_id is included to avoid having to deserialize the task blob.
-	ShardId       int32        `protobuf:"varint,1,opt,name=shard_id,json=shardId,proto3" json:"shard_id,omitempty"`
-	Blob          *v1.DataBlob `protobuf:"bytes,2,opt,name=blob,proto3" json:"blob,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state              protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_ShardId int32                  `protobuf:"varint,1,opt,name=shard_id,json=shardId,proto3"`
+	xxx_hidden_Blob    *v1.DataBlob           `protobuf:"bytes,2,opt,name=blob,proto3"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *HistoryTask) Reset() {
@@ -57,31 +55,61 @@ func (x *HistoryTask) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use HistoryTask.ProtoReflect.Descriptor instead.
-func (*HistoryTask) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_common_v1_dlq_proto_rawDescGZIP(), []int{0}
-}
-
 func (x *HistoryTask) GetShardId() int32 {
 	if x != nil {
-		return x.ShardId
+		return x.xxx_hidden_ShardId
 	}
 	return 0
 }
 
 func (x *HistoryTask) GetBlob() *v1.DataBlob {
 	if x != nil {
-		return x.Blob
+		return x.xxx_hidden_Blob
 	}
 	return nil
 }
 
+func (x *HistoryTask) SetShardId(v int32) {
+	x.xxx_hidden_ShardId = v
+}
+
+func (x *HistoryTask) SetBlob(v *v1.DataBlob) {
+	x.xxx_hidden_Blob = v
+}
+
+func (x *HistoryTask) HasBlob() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Blob != nil
+}
+
+func (x *HistoryTask) ClearBlob() {
+	x.xxx_hidden_Blob = nil
+}
+
+type HistoryTask_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// shard_id is included to avoid having to deserialize the task blob.
+	ShardId int32
+	Blob    *v1.DataBlob
+}
+
+func (b0 HistoryTask_builder) Build() *HistoryTask {
+	m0 := &HistoryTask{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_ShardId = b.ShardId
+	x.xxx_hidden_Blob = b.Blob
+	return m0
+}
+
 type HistoryDLQTaskMetadata struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// message_id is the zero-indexed sequence number of the message in the queue that contains this history task.
-	MessageId     int64 `protobuf:"varint,1,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_MessageId int64                  `protobuf:"varint,1,opt,name=message_id,json=messageId,proto3"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *HistoryDLQTaskMetadata) Reset() {
@@ -109,27 +137,40 @@ func (x *HistoryDLQTaskMetadata) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use HistoryDLQTaskMetadata.ProtoReflect.Descriptor instead.
-func (*HistoryDLQTaskMetadata) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_common_v1_dlq_proto_rawDescGZIP(), []int{1}
-}
-
 func (x *HistoryDLQTaskMetadata) GetMessageId() int64 {
 	if x != nil {
-		return x.MessageId
+		return x.xxx_hidden_MessageId
 	}
 	return 0
+}
+
+func (x *HistoryDLQTaskMetadata) SetMessageId(v int64) {
+	x.xxx_hidden_MessageId = v
+}
+
+type HistoryDLQTaskMetadata_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// message_id is the zero-indexed sequence number of the message in the queue that contains this history task.
+	MessageId int64
+}
+
+func (b0 HistoryDLQTaskMetadata_builder) Build() *HistoryDLQTaskMetadata {
+	m0 := &HistoryDLQTaskMetadata{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_MessageId = b.MessageId
+	return m0
 }
 
 // HistoryDLQTask is a history task that has been moved to the DLQ, so it also has a message ID (index within that
 // queue).
 type HistoryDLQTask struct {
-	state    protoimpl.MessageState  `protogen:"open.v1"`
-	Metadata *HistoryDLQTaskMetadata `protobuf:"bytes,1,opt,name=metadata,proto3" json:"metadata,omitempty"`
-	// This is named payload to prevent stuttering (e.g. task.Task).
-	Payload       *HistoryTask `protobuf:"bytes,2,opt,name=payload,proto3" json:"payload,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state               protoimpl.MessageState  `protogen:"opaque.v1"`
+	xxx_hidden_Metadata *HistoryDLQTaskMetadata `protobuf:"bytes,1,opt,name=metadata,proto3"`
+	xxx_hidden_Payload  *HistoryTask            `protobuf:"bytes,2,opt,name=payload,proto3"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *HistoryDLQTask) Reset() {
@@ -157,40 +198,75 @@ func (x *HistoryDLQTask) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use HistoryDLQTask.ProtoReflect.Descriptor instead.
-func (*HistoryDLQTask) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_common_v1_dlq_proto_rawDescGZIP(), []int{2}
-}
-
 func (x *HistoryDLQTask) GetMetadata() *HistoryDLQTaskMetadata {
 	if x != nil {
-		return x.Metadata
+		return x.xxx_hidden_Metadata
 	}
 	return nil
 }
 
 func (x *HistoryDLQTask) GetPayload() *HistoryTask {
 	if x != nil {
-		return x.Payload
+		return x.xxx_hidden_Payload
 	}
 	return nil
 }
 
+func (x *HistoryDLQTask) SetMetadata(v *HistoryDLQTaskMetadata) {
+	x.xxx_hidden_Metadata = v
+}
+
+func (x *HistoryDLQTask) SetPayload(v *HistoryTask) {
+	x.xxx_hidden_Payload = v
+}
+
+func (x *HistoryDLQTask) HasMetadata() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Metadata != nil
+}
+
+func (x *HistoryDLQTask) HasPayload() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Payload != nil
+}
+
+func (x *HistoryDLQTask) ClearMetadata() {
+	x.xxx_hidden_Metadata = nil
+}
+
+func (x *HistoryDLQTask) ClearPayload() {
+	x.xxx_hidden_Payload = nil
+}
+
+type HistoryDLQTask_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Metadata *HistoryDLQTaskMetadata
+	// This is named payload to prevent stuttering (e.g. task.Task).
+	Payload *HistoryTask
+}
+
+func (b0 HistoryDLQTask_builder) Build() *HistoryDLQTask {
+	m0 := &HistoryDLQTask{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Metadata = b.Metadata
+	x.xxx_hidden_Payload = b.Payload
+	return m0
+}
+
 // HistoryDLQKey is a compound key that identifies a history DLQ.
 type HistoryDLQKey struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// task_category is the category of the task. The default values are defined in the TaskCategory enum. However, there
-	// may also be other categories registered at runtime with the history/tasks package. As a result, the category here
-	// is an integer instead of an enum to support both the default values and custom values.
-	TaskCategory int32 `protobuf:"varint,1,opt,name=task_category,json=taskCategory,proto3" json:"task_category,omitempty"`
-	// source_cluster and target_cluster must both be non-empty. For non-cross DC tasks, i.e. non-replication tasks,
-	// they should be the same. The reason for this is that we may support wildcard clusters in the future, and we want
-	// to differentiate between queues which go from one cluster to all other clusters, and queues which don't leave the
-	// current cluster.
-	SourceCluster string `protobuf:"bytes,2,opt,name=source_cluster,json=sourceCluster,proto3" json:"source_cluster,omitempty"`
-	TargetCluster string `protobuf:"bytes,3,opt,name=target_cluster,json=targetCluster,proto3" json:"target_cluster,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                    protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_TaskCategory  int32                  `protobuf:"varint,1,opt,name=task_category,json=taskCategory,proto3"`
+	xxx_hidden_SourceCluster string                 `protobuf:"bytes,2,opt,name=source_cluster,json=sourceCluster,proto3"`
+	xxx_hidden_TargetCluster string                 `protobuf:"bytes,3,opt,name=target_cluster,json=targetCluster,proto3"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *HistoryDLQKey) Reset() {
@@ -218,30 +294,62 @@ func (x *HistoryDLQKey) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use HistoryDLQKey.ProtoReflect.Descriptor instead.
-func (*HistoryDLQKey) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_common_v1_dlq_proto_rawDescGZIP(), []int{3}
-}
-
 func (x *HistoryDLQKey) GetTaskCategory() int32 {
 	if x != nil {
-		return x.TaskCategory
+		return x.xxx_hidden_TaskCategory
 	}
 	return 0
 }
 
 func (x *HistoryDLQKey) GetSourceCluster() string {
 	if x != nil {
-		return x.SourceCluster
+		return x.xxx_hidden_SourceCluster
 	}
 	return ""
 }
 
 func (x *HistoryDLQKey) GetTargetCluster() string {
 	if x != nil {
-		return x.TargetCluster
+		return x.xxx_hidden_TargetCluster
 	}
 	return ""
+}
+
+func (x *HistoryDLQKey) SetTaskCategory(v int32) {
+	x.xxx_hidden_TaskCategory = v
+}
+
+func (x *HistoryDLQKey) SetSourceCluster(v string) {
+	x.xxx_hidden_SourceCluster = v
+}
+
+func (x *HistoryDLQKey) SetTargetCluster(v string) {
+	x.xxx_hidden_TargetCluster = v
+}
+
+type HistoryDLQKey_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// task_category is the category of the task. The default values are defined in the TaskCategory enum. However, there
+	// may also be other categories registered at runtime with the history/tasks package. As a result, the category here
+	// is an integer instead of an enum to support both the default values and custom values.
+	TaskCategory int32
+	// source_cluster and target_cluster must both be non-empty. For non-cross DC tasks, i.e. non-replication tasks,
+	// they should be the same. The reason for this is that we may support wildcard clusters in the future, and we want
+	// to differentiate between queues which go from one cluster to all other clusters, and queues which don't leave the
+	// current cluster.
+	SourceCluster string
+	TargetCluster string
+}
+
+func (b0 HistoryDLQKey_builder) Build() *HistoryDLQKey {
+	m0 := &HistoryDLQKey{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_TaskCategory = b.TaskCategory
+	x.xxx_hidden_SourceCluster = b.SourceCluster
+	x.xxx_hidden_TargetCluster = b.TargetCluster
+	return m0
 }
 
 var File_temporal_server_api_common_v1_dlq_proto protoreflect.FileDescriptor
@@ -262,18 +370,6 @@ const file_temporal_server_api_common_v1_dlq_proto_rawDesc = "" +
 	"\rtask_category\x18\x01 \x01(\x05R\ftaskCategory\x12%\n" +
 	"\x0esource_cluster\x18\x02 \x01(\tR\rsourceCluster\x12%\n" +
 	"\x0etarget_cluster\x18\x03 \x01(\tR\rtargetClusterB/Z-go.temporal.io/server/api/common/v1;commonspbb\x06proto3"
-
-var (
-	file_temporal_server_api_common_v1_dlq_proto_rawDescOnce sync.Once
-	file_temporal_server_api_common_v1_dlq_proto_rawDescData []byte
-)
-
-func file_temporal_server_api_common_v1_dlq_proto_rawDescGZIP() []byte {
-	file_temporal_server_api_common_v1_dlq_proto_rawDescOnce.Do(func() {
-		file_temporal_server_api_common_v1_dlq_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_api_common_v1_dlq_proto_rawDesc), len(file_temporal_server_api_common_v1_dlq_proto_rawDesc)))
-	})
-	return file_temporal_server_api_common_v1_dlq_proto_rawDescData
-}
 
 var file_temporal_server_api_common_v1_dlq_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_temporal_server_api_common_v1_dlq_proto_goTypes = []any{

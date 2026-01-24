@@ -16,11 +16,11 @@ func mustStartWorkflow(s testcore.Env, tv *testvars.TestVars) string {
 }
 
 func startWorkflowRequest(s testcore.Env, tv *testvars.TestVars) *workflowservice.StartWorkflowExecutionRequest {
-	return &workflowservice.StartWorkflowExecutionRequest{
+	return workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:    tv.Any().String(),
 		Namespace:    s.Namespace().String(),
 		WorkflowId:   tv.WorkflowID(),
 		WorkflowType: tv.WorkflowType(),
 		TaskQueue:    tv.TaskQueue(),
-	}
+	}.Build()
 }

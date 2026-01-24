@@ -107,13 +107,13 @@ func (InvocationTaskSerializer) Deserialize(data []byte, attrs hsm.TaskAttribute
 	if err != nil {
 		return nil, serialization.NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, err)
 	}
-	return InvocationTask{EndpointName: attrs.Destination, Attempt: info.Attempt}, nil
+	return InvocationTask{EndpointName: attrs.Destination, Attempt: info.GetAttempt()}, nil
 }
 
 func (InvocationTaskSerializer) Serialize(task hsm.Task) ([]byte, error) {
 	switch task := task.(type) {
 	case InvocationTask:
-		return proto.Marshal(&persistencespb.NexusInvocationTaskInfo{Attempt: task.Attempt})
+		return proto.Marshal(persistencespb.NexusInvocationTaskInfo_builder{Attempt: task.Attempt}.Build())
 	default:
 		return nil, serviceerror.NewInternalf("unknown HSM task type while serializing: %v", task)
 	}
@@ -188,13 +188,13 @@ func (CancelationTaskSerializer) Deserialize(data []byte, attrs hsm.TaskAttribut
 	if err != nil {
 		return nil, serialization.NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, err)
 	}
-	return CancelationTask{EndpointName: attrs.Destination, Attempt: info.Attempt}, nil
+	return CancelationTask{EndpointName: attrs.Destination, Attempt: info.GetAttempt()}, nil
 }
 
 func (CancelationTaskSerializer) Serialize(task hsm.Task) ([]byte, error) {
 	switch task := task.(type) {
 	case CancelationTask:
-		return proto.Marshal(&persistencespb.NexusCancelationTaskInfo{Attempt: task.Attempt})
+		return proto.Marshal(persistencespb.NexusCancelationTaskInfo_builder{Attempt: task.Attempt}.Build())
 	default:
 		return nil, serviceerror.NewInternalf("unknown HSM task type while serializing: %v", task)
 	}

@@ -49,40 +49,40 @@ func (s *WorkflowAliasSearchAttributeTestSuite) startVersionedPollerAndValidate(
 	deploymentName string,
 	buildID string,
 ) {
-	taskQueue := &taskqueuepb.TaskQueue{
+	taskQueue := taskqueuepb.TaskQueue_builder{
 		Name: taskQueueName,
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-	}
+	}.Build()
 
 	// Start versioned poller in background
 	go func() {
-		_, _ = s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		_, _ = s.FrontendClient().PollWorkflowTaskQueue(ctx, workflowservice.PollWorkflowTaskQueueRequest_builder{
 			Namespace: s.Namespace().String(),
 			TaskQueue: taskQueue,
 			Identity:  "versioned-poller",
-			DeploymentOptions: &deploymentpb.WorkerDeploymentOptions{
+			DeploymentOptions: deploymentpb.WorkerDeploymentOptions_builder{
 				DeploymentName:       deploymentName,
 				BuildId:              buildID,
 				WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_VERSIONED,
-			},
-		})
+			}.Build(),
+		}.Build())
 	}()
 
 	// Validate version is present via matching RPC
-	version := &deploymentspb.WorkerDeploymentVersion{
+	version := deploymentspb.WorkerDeploymentVersion_builder{
 		DeploymentName: deploymentName,
 		BuildId:        buildID,
-	}
+	}.Build()
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := require.New(t)
 		resp, err := s.GetTestCluster().MatchingClient().CheckTaskQueueVersionMembership(
 			ctx,
-			&matchingservice.CheckTaskQueueVersionMembershipRequest{
+			matchingservice.CheckTaskQueueVersionMembershipRequest_builder{
 				NamespaceId:   s.NamespaceID().String(),
 				TaskQueue:     taskQueueName,
 				TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 				Version:       version,
-			},
+			}.Build(),
 		)
 		a.NoError(err)
 		a.True(resp.GetIsMember())
@@ -95,9 +95,9 @@ func (s *WorkflowAliasSearchAttributeTestSuite) createWorkflow(
 	sa *commonpb.SearchAttributes,
 ) (*workflowservice.StartWorkflowExecutionResponse, error) {
 	// Start a versioned poller so that the version, which will be set as an override, is present in the task queue.
-	s.startVersionedPollerAndValidate(ctx, tv.TaskQueue().Name, tv.DeploymentSeries(), tv.BuildID())
+	s.startVersionedPollerAndValidate(ctx, tv.TaskQueue().GetName(), tv.DeploymentSeries(), tv.BuildID())
 
-	request := &workflowservice.StartWorkflowExecutionRequest{
+	request := workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:          tv.Any().String(),
 		Namespace:          s.Namespace().String(),
 		WorkflowId:         tv.WorkflowID(),
@@ -106,7 +106,7 @@ func (s *WorkflowAliasSearchAttributeTestSuite) createWorkflow(
 		Identity:           tv.WorkerIdentity(),
 		VersioningOverride: tv.VersioningOverridePinned(true),
 		SearchAttributes:   sa,
-	}
+	}.Build()
 	return s.FrontendClient().StartWorkflowExecution(ctx, request)
 }
 
@@ -114,13 +114,13 @@ func (s *WorkflowAliasSearchAttributeTestSuite) terminateWorkflow(
 	ctx context.Context,
 	tv *testvars.TestVars,
 ) (*workflowservice.TerminateWorkflowExecutionResponse, error) {
-	return s.FrontendClient().TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
+	return s.FrontendClient().TerminateWorkflowExecution(ctx, workflowservice.TerminateWorkflowExecutionRequest_builder{
 		Namespace: s.Namespace().String(),
-		WorkflowExecution: &commonpb.WorkflowExecution{
+		WorkflowExecution: commonpb.WorkflowExecution_builder{
 			WorkflowId: tv.WorkflowID(),
-		},
+		}.Build(),
 		Reason: "terminate reason",
-	})
+	}.Build())
 }
 
 func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute() {
@@ -140,26 +140,26 @@ func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute
 	s.EventuallyWithT(
 		func(t *assert.CollectT) {
 			// Filter by WorkflowId to isolate this test's workflow from other tests
-			resp, err := s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+			resp, err := s.SdkClient().ListWorkflow(ctx, workflowservice.ListWorkflowExecutionsRequest_builder{
 				Namespace: s.Namespace().String(),
 				Query:     fmt.Sprintf("WorkflowId = '%s'", tv.WorkflowID()),
-			})
+			}.Build())
 			require.NoError(t, err)
 			require.NotNil(t, resp)
 			require.Len(t, resp.GetExecutions(), 1)
 
-			queriedResp, err := s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+			queriedResp, err := s.SdkClient().ListWorkflow(ctx, workflowservice.ListWorkflowExecutionsRequest_builder{
 				Namespace: s.Namespace().String(),
 				Query:     fmt.Sprintf("%s = 'Pinned' AND WorkflowId = '%s'", sadefs.TemporalWorkflowVersioningBehavior, tv.WorkflowID()),
-			})
+			}.Build())
 			require.NoError(t, err)
 			require.NotNil(t, resp)
 			require.Len(t, queriedResp.GetExecutions(), 1)
 
-			queriedResp, err = s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+			queriedResp, err = s.SdkClient().ListWorkflow(ctx, workflowservice.ListWorkflowExecutionsRequest_builder{
 				Namespace: s.Namespace().String(),
 				Query:     fmt.Sprintf("WorkflowVersioningBehavior = 'Pinned' AND WorkflowId = '%s'", tv.WorkflowID()),
-			})
+			}.Build())
 			require.NoError(t, err)
 			require.NotNil(t, resp)
 			require.Len(t, queriedResp.GetExecutions(), 1)
@@ -183,19 +183,19 @@ func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute
 		WithDeploymentSeries("dep-alias-sa-custom").
 		WithBuildID("build-alias-sa-custom")
 
-	_, err := s.SdkClient().OperatorService().AddSearchAttributes(ctx, &operatorservice.AddSearchAttributesRequest{
+	_, err := s.SdkClient().OperatorService().AddSearchAttributes(ctx, operatorservice.AddSearchAttributesRequest_builder{
 		Namespace: s.Namespace().String(),
 		SearchAttributes: map[string]enumspb.IndexedValueType{
 			"WorkflowVersioningBehavior": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		},
-	})
+	}.Build())
 	s.Require().NoError(err)
 
-	sa := &commonpb.SearchAttributes{
+	sa := commonpb.SearchAttributes_builder{
 		IndexedFields: map[string]*commonpb.Payload{
 			"WorkflowVersioningBehavior": payload.EncodeString("user-defined"),
 		},
-	}
+	}.Build()
 
 	_, err = s.createWorkflow(ctx, tv, sa)
 	s.Require().NoError(err)
@@ -203,18 +203,18 @@ func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute
 	s.EventuallyWithT(
 		func(t *assert.CollectT) {
 			// Filter by WorkflowId to isolate this test's workflow from other tests
-			queriedResp, err := s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+			queriedResp, err := s.SdkClient().ListWorkflow(ctx, workflowservice.ListWorkflowExecutionsRequest_builder{
 				Namespace: s.Namespace().String(),
 				Query:     fmt.Sprintf("%s = 'Pinned' AND WorkflowId = '%s'", sadefs.TemporalWorkflowVersioningBehavior, tv.WorkflowID()),
-			})
+			}.Build())
 			require.NoError(t, err)
 			require.NotNil(t, queriedResp)
 			require.Len(t, queriedResp.GetExecutions(), 1)
 
-			queriedResp, err = s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+			queriedResp, err = s.SdkClient().ListWorkflow(ctx, workflowservice.ListWorkflowExecutionsRequest_builder{
 				Namespace: s.Namespace().String(),
 				Query:     fmt.Sprintf("WorkflowVersioningBehavior = 'user-defined' AND WorkflowId = '%s'", tv.WorkflowID()),
-			})
+			}.Build())
 			require.NoError(t, err)
 			require.NotNil(t, queriedResp)
 			require.Len(t, queriedResp.GetExecutions(), 1)

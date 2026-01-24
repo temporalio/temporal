@@ -17,35 +17,35 @@ func statusOfInternalWorkflow(
 	executionInfoSize := sizeOfBlob(internalState.ExecutionInfo)
 	executionStateSize := sizeOfBlob(internalState.ExecutionState)
 
-	totalActivityCount := state.ExecutionInfo.ActivityCount
+	totalActivityCount := state.GetExecutionInfo().GetActivityCount()
 	activityInfoCount := len(internalState.ActivityInfos)
 	activityInfoSize := sizeOfInt64BlobMap(internalState.ActivityInfos)
 
-	totalUserTimerCount := state.ExecutionInfo.UserTimerCount
+	totalUserTimerCount := state.GetExecutionInfo().GetUserTimerCount()
 	timerInfoCount := len(internalState.TimerInfos)
 	timerInfoSize := sizeOfStringBlobMap(internalState.TimerInfos)
 
-	totalChildExecutionCount := state.ExecutionInfo.ChildExecutionCount
+	totalChildExecutionCount := state.GetExecutionInfo().GetChildExecutionCount()
 	childExecutionInfoCount := len(internalState.ChildExecutionInfos)
 	childExecutionInfoSize := sizeOfInt64BlobMap(internalState.ChildExecutionInfos)
 
-	totalRequestCancelExternalCount := state.ExecutionInfo.RequestCancelExternalCount
+	totalRequestCancelExternalCount := state.GetExecutionInfo().GetRequestCancelExternalCount()
 	requestCancelInfoCount := len(internalState.RequestCancelInfos)
 	requestCancelInfoSize := sizeOfInt64BlobMap(internalState.RequestCancelInfos)
 
-	totalSignalExternalCount := state.ExecutionInfo.SignalExternalCount
+	totalSignalExternalCount := state.GetExecutionInfo().GetSignalExternalCount()
 	signalInfoCount := len(internalState.SignalInfos)
 	signalInfoSize := sizeOfInt64BlobMap(internalState.SignalInfos)
 
-	totalSignalCount := state.ExecutionInfo.SignalCount
+	totalSignalCount := state.GetExecutionInfo().GetSignalCount()
 	signalRequestIDCount := len(internalState.SignalRequestedIDs)
 	signalRequestIDSize := sizeOfStringSlice(internalState.SignalRequestedIDs)
 
 	bufferedEventsCount := len(internalState.BufferedEvents)
 	bufferedEventsSize := sizeOfBlobSlice(internalState.BufferedEvents)
 
-	totalUpdateCount := state.ExecutionInfo.UpdateCount
-	updateInfoCount := len(state.ExecutionInfo.UpdateInfos)
+	totalUpdateCount := state.GetExecutionInfo().GetUpdateCount()
+	updateInfoCount := len(state.GetExecutionInfo().GetUpdateInfos())
 
 	chasmTotalSize := sizeOfChasmNodeMap(internalState.ChasmNodes)
 
@@ -112,44 +112,44 @@ func statusOfInternalWorkflowMutation(
 	executionInfoSize := sizeOfBlob(mutation.ExecutionInfoBlob)
 	executionStateSize := sizeOfBlob(mutation.ExecutionStateBlob)
 
-	totalActivityCount := mutation.ExecutionInfo.ActivityCount
+	totalActivityCount := mutation.ExecutionInfo.GetActivityCount()
 	activityInfoCount := len(mutation.UpsertActivityInfos)
 	activityInfoCount += len(mutation.DeleteActivityInfos)
 	activityInfoSize := sizeOfInt64BlobMap(mutation.UpsertActivityInfos)
 	activityInfoSize += sizeOfInt64Set(mutation.DeleteActivityInfos)
 
-	totalUserTimerCount := mutation.ExecutionInfo.UserTimerCount
+	totalUserTimerCount := mutation.ExecutionInfo.GetUserTimerCount()
 	timerInfoCount := len(mutation.UpsertTimerInfos)
 	timerInfoCount += len(mutation.DeleteTimerInfos)
 	timerInfoSize := sizeOfStringBlobMap(mutation.UpsertTimerInfos)
 	timerInfoSize += sizeOfStringSet(mutation.DeleteTimerInfos)
 
-	totalChildExecutionCount := mutation.ExecutionInfo.ChildExecutionCount
+	totalChildExecutionCount := mutation.ExecutionInfo.GetChildExecutionCount()
 	childExecutionInfoCount := len(mutation.UpsertChildExecutionInfos)
 	childExecutionInfoCount += len(mutation.DeleteChildExecutionInfos)
 	childExecutionInfoSize := sizeOfInt64BlobMap(mutation.UpsertChildExecutionInfos)
 	childExecutionInfoSize += sizeOfInt64Set(mutation.DeleteChildExecutionInfos)
 
-	totalRequestCancelExternalCount := mutation.ExecutionInfo.RequestCancelExternalCount
+	totalRequestCancelExternalCount := mutation.ExecutionInfo.GetRequestCancelExternalCount()
 	requestCancelInfoCount := len(mutation.UpsertRequestCancelInfos)
 	requestCancelInfoCount += len(mutation.DeleteRequestCancelInfos)
 	requestCancelInfoSize := sizeOfInt64BlobMap(mutation.UpsertRequestCancelInfos)
 	requestCancelInfoSize += sizeOfInt64Set(mutation.DeleteRequestCancelInfos)
 
-	totalSignalExternalCount := mutation.ExecutionInfo.SignalExternalCount
+	totalSignalExternalCount := mutation.ExecutionInfo.GetSignalExternalCount()
 	signalInfoCount := len(mutation.UpsertSignalInfos)
 	signalInfoCount += len(mutation.DeleteSignalInfos)
 	signalInfoSize := sizeOfInt64BlobMap(mutation.UpsertSignalInfos)
 	signalInfoSize += sizeOfInt64Set(mutation.DeleteSignalInfos)
 
-	totalSignalCount := mutation.ExecutionInfo.SignalCount
+	totalSignalCount := mutation.ExecutionInfo.GetSignalCount()
 	signalRequestIDCount := len(mutation.UpsertSignalRequestedIDs)
 	signalRequestIDCount += len(mutation.DeleteSignalRequestedIDs)
 	signalRequestIDSize := sizeOfStringSet(mutation.UpsertSignalRequestedIDs)
 	signalRequestIDSize += sizeOfStringSet(mutation.DeleteSignalRequestedIDs)
 
-	totalUpdateCount := mutation.ExecutionInfo.UpdateCount
-	updateInfoCount := len(mutation.ExecutionInfo.UpdateInfos)
+	totalUpdateCount := mutation.ExecutionInfo.GetUpdateCount()
+	updateInfoCount := len(mutation.ExecutionInfo.GetUpdateInfos())
 
 	bufferedEventsCount := 0
 	bufferedEventsSize := 0
@@ -238,32 +238,32 @@ func statusOfInternalWorkflowSnapshot(
 	executionInfoSize := sizeOfBlob(snapshot.ExecutionInfoBlob)
 	executionStateSize := sizeOfBlob(snapshot.ExecutionStateBlob)
 
-	totalActivityCount := snapshot.ExecutionInfo.ActivityCount
+	totalActivityCount := snapshot.ExecutionInfo.GetActivityCount()
 	activityInfoCount := len(snapshot.ActivityInfos)
 	activityInfoSize := sizeOfInt64BlobMap(snapshot.ActivityInfos)
 
-	totalUserTimerCount := snapshot.ExecutionInfo.UserTimerCount
+	totalUserTimerCount := snapshot.ExecutionInfo.GetUserTimerCount()
 	timerInfoCount := len(snapshot.TimerInfos)
 	timerInfoSize := sizeOfStringBlobMap(snapshot.TimerInfos)
 
-	totalChildExecutionCount := snapshot.ExecutionInfo.ChildExecutionCount
+	totalChildExecutionCount := snapshot.ExecutionInfo.GetChildExecutionCount()
 	childExecutionInfoCount := len(snapshot.ChildExecutionInfos)
 	childExecutionInfoSize := sizeOfInt64BlobMap(snapshot.ChildExecutionInfos)
 
-	totalRequestCancelExternalCount := snapshot.ExecutionInfo.RequestCancelExternalCount
+	totalRequestCancelExternalCount := snapshot.ExecutionInfo.GetRequestCancelExternalCount()
 	requestCancelInfoCount := len(snapshot.RequestCancelInfos)
 	requestCancelInfoSize := sizeOfInt64BlobMap(snapshot.RequestCancelInfos)
 
-	totalSignalExternalCount := snapshot.ExecutionInfo.SignalExternalCount
+	totalSignalExternalCount := snapshot.ExecutionInfo.GetSignalExternalCount()
 	signalInfoCount := len(snapshot.SignalInfos)
 	signalInfoSize := sizeOfInt64BlobMap(snapshot.SignalInfos)
 
-	totalSignalCount := snapshot.ExecutionInfo.SignalCount
+	totalSignalCount := snapshot.ExecutionInfo.GetSignalCount()
 	signalRequestIDCount := len(snapshot.SignalRequestedIDs)
 	signalRequestIDSize := sizeOfStringSet(snapshot.SignalRequestedIDs)
 
-	totalUpdateCount := snapshot.ExecutionInfo.UpdateCount
-	updateInfoCount := len(snapshot.ExecutionInfo.UpdateInfos)
+	totalUpdateCount := snapshot.ExecutionInfo.GetUpdateCount()
+	updateInfoCount := len(snapshot.ExecutionInfo.GetUpdateInfos())
 
 	bufferedEventsCount := 0
 	bufferedEventsSize := 0

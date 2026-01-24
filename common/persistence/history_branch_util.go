@@ -63,16 +63,16 @@ func (u *HistoryBranchUtilImpl) NewHistoryBranch(
 	} else {
 		id = *branchID
 	}
-	bi := &persistencespb.HistoryBranch{
+	bi := persistencespb.HistoryBranch_builder{
 		TreeId:    treeID,
 		BranchId:  id,
 		Ancestors: ancestors,
-	}
+	}.Build()
 	data, err := u.serializer.HistoryBranchToBlob(bi)
 	if err != nil {
 		return nil, err
 	}
-	return data.Data, nil
+	return data.GetData(), nil
 }
 
 func (u *HistoryBranchUtilImpl) ParseHistoryBranchInfo(
@@ -90,13 +90,13 @@ func (u *HistoryBranchUtilImpl) UpdateHistoryBranchInfo(
 	if err != nil {
 		return nil, err
 	}
-	bi.TreeId = branchInfo.TreeId
-	bi.BranchId = branchInfo.BranchId
-	bi.Ancestors = branchInfo.Ancestors
+	bi.SetTreeId(branchInfo.GetTreeId())
+	bi.SetBranchId(branchInfo.GetBranchId())
+	bi.SetAncestors(branchInfo.GetAncestors())
 
 	blob, err := u.serializer.HistoryBranchToBlob(bi)
 	if err != nil {
 		return nil, err
 	}
-	return blob.Data, nil
+	return blob.GetData(), nil
 }

@@ -37,7 +37,7 @@ func (e *activityDispatchTaskExecutor) Validate(
 ) (bool, error) {
 	// TODO(saa-preview): make sure we handle resets when we support them, as they will reset the attempt count
 	return (TransitionStarted.Possible(activity) &&
-		task.Stamp == activity.LastAttempt.Get(ctx).GetStamp()), nil
+		task.GetStamp() == activity.LastAttempt.Get(ctx).GetStamp()), nil
 }
 
 func (e *activityDispatchTaskExecutor) Execute(
@@ -85,8 +85,8 @@ func (e *scheduleToStartTimeoutTaskExecutor) Validate(
 	_ chasm.TaskAttributes,
 	task *activitypb.ScheduleToStartTimeoutTask,
 ) (bool, error) {
-	return (activity.Status == activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED &&
-		task.Stamp == activity.LastAttempt.Get(ctx).GetStamp()), nil
+	return (activity.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED &&
+		task.GetStamp() == activity.LastAttempt.Get(ctx).GetStamp()), nil
 }
 
 func (e *scheduleToStartTimeoutTaskExecutor) Execute(
@@ -180,8 +180,8 @@ func (e *startToCloseTimeoutTaskExecutor) Validate(
 	_ chasm.TaskAttributes,
 	task *activitypb.StartToCloseTimeoutTask,
 ) (bool, error) {
-	valid := (activity.Status == activitypb.ACTIVITY_EXECUTION_STATUS_STARTED &&
-		task.Stamp == activity.LastAttempt.Get(ctx).GetStamp())
+	valid := (activity.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_STARTED &&
+		task.GetStamp() == activity.LastAttempt.Get(ctx).GetStamp())
 	return valid, nil
 }
 
@@ -252,13 +252,13 @@ func (e *heartbeatTimeoutTaskExecutor) Validate(
 	// On the i-th execution of this function, we look back into the past and determine whether the
 	// last heartbeat was received after hb_i. If so, we reject this timeout task. Otherwise, the
 	// Execute function runs and we fail the attempt.
-	if activity.Status != activitypb.ACTIVITY_EXECUTION_STATUS_STARTED &&
-		activity.Status != activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED {
+	if activity.GetStatus() != activitypb.ACTIVITY_EXECUTION_STATUS_STARTED &&
+		activity.GetStatus() != activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED {
 		return false, nil
 	}
 	// Task attempt must still match current attempt.
 	attempt := activity.LastAttempt.Get(ctx)
-	if attempt.GetStamp() != task.Stamp {
+	if attempt.GetStamp() != task.GetStamp() {
 		return false, nil
 	}
 

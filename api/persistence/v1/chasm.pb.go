@@ -8,7 +8,7 @@ package persistence
 
 import (
 	reflect "reflect"
-	sync "sync"
+	"strconv"
 	unsafe "unsafe"
 
 	v1 "go.temporal.io/api/common/v1"
@@ -26,13 +26,11 @@ const (
 )
 
 type ChasmNode struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Metadata present for all nodes.
-	Metadata *ChasmNodeMetadata `protobuf:"bytes,1,opt,name=metadata,proto3" json:"metadata,omitempty"`
-	// User data for any type of node that stores it.
-	Data          *v1.DataBlob `protobuf:"bytes,2,opt,name=data,proto3" json:"data,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state               protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Metadata *ChasmNodeMetadata     `protobuf:"bytes,1,opt,name=metadata,proto3"`
+	xxx_hidden_Data     *v1.DataBlob           `protobuf:"bytes,2,opt,name=data,proto3"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *ChasmNode) Reset() {
@@ -60,40 +58,75 @@ func (x *ChasmNode) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ChasmNode.ProtoReflect.Descriptor instead.
-func (*ChasmNode) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_chasm_proto_rawDescGZIP(), []int{0}
-}
-
 func (x *ChasmNode) GetMetadata() *ChasmNodeMetadata {
 	if x != nil {
-		return x.Metadata
+		return x.xxx_hidden_Metadata
 	}
 	return nil
 }
 
 func (x *ChasmNode) GetData() *v1.DataBlob {
 	if x != nil {
-		return x.Data
+		return x.xxx_hidden_Data
 	}
 	return nil
 }
 
+func (x *ChasmNode) SetMetadata(v *ChasmNodeMetadata) {
+	x.xxx_hidden_Metadata = v
+}
+
+func (x *ChasmNode) SetData(v *v1.DataBlob) {
+	x.xxx_hidden_Data = v
+}
+
+func (x *ChasmNode) HasMetadata() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Metadata != nil
+}
+
+func (x *ChasmNode) HasData() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Data != nil
+}
+
+func (x *ChasmNode) ClearMetadata() {
+	x.xxx_hidden_Metadata = nil
+}
+
+func (x *ChasmNode) ClearData() {
+	x.xxx_hidden_Data = nil
+}
+
+type ChasmNode_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Metadata present for all nodes.
+	Metadata *ChasmNodeMetadata
+	// User data for any type of node that stores it.
+	Data *v1.DataBlob
+}
+
+func (b0 ChasmNode_builder) Build() *ChasmNode {
+	m0 := &ChasmNode{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Metadata = b.Metadata
+	x.xxx_hidden_Data = b.Data
+	return m0
+}
+
 type ChasmNodeMetadata struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Versioned transition when the node was instantiated.
-	InitialVersionedTransition *VersionedTransition `protobuf:"bytes,1,opt,name=initial_versioned_transition,json=initialVersionedTransition,proto3" json:"initial_versioned_transition,omitempty"`
-	// Versioned transition when the node was last updated.
-	LastUpdateVersionedTransition *VersionedTransition `protobuf:"bytes,2,opt,name=last_update_versioned_transition,json=lastUpdateVersionedTransition,proto3" json:"last_update_versioned_transition,omitempty"`
-	// Types that are valid to be assigned to Attributes:
-	//
-	//	*ChasmNodeMetadata_ComponentAttributes
-	//	*ChasmNodeMetadata_DataAttributes
-	//	*ChasmNodeMetadata_CollectionAttributes
-	//	*ChasmNodeMetadata_PointerAttributes
-	Attributes    isChasmNodeMetadata_Attributes `protobuf_oneof:"attributes"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                                    protoimpl.MessageState         `protogen:"opaque.v1"`
+	xxx_hidden_InitialVersionedTransition    *VersionedTransition           `protobuf:"bytes,1,opt,name=initial_versioned_transition,json=initialVersionedTransition,proto3"`
+	xxx_hidden_LastUpdateVersionedTransition *VersionedTransition           `protobuf:"bytes,2,opt,name=last_update_versioned_transition,json=lastUpdateVersionedTransition,proto3"`
+	xxx_hidden_Attributes                    isChasmNodeMetadata_Attributes `protobuf_oneof:"attributes"`
+	unknownFields                            protoimpl.UnknownFields
+	sizeCache                                protoimpl.SizeCache
 }
 
 func (x *ChasmNodeMetadata) Reset() {
@@ -121,35 +154,23 @@ func (x *ChasmNodeMetadata) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ChasmNodeMetadata.ProtoReflect.Descriptor instead.
-func (*ChasmNodeMetadata) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_chasm_proto_rawDescGZIP(), []int{1}
-}
-
 func (x *ChasmNodeMetadata) GetInitialVersionedTransition() *VersionedTransition {
 	if x != nil {
-		return x.InitialVersionedTransition
+		return x.xxx_hidden_InitialVersionedTransition
 	}
 	return nil
 }
 
 func (x *ChasmNodeMetadata) GetLastUpdateVersionedTransition() *VersionedTransition {
 	if x != nil {
-		return x.LastUpdateVersionedTransition
-	}
-	return nil
-}
-
-func (x *ChasmNodeMetadata) GetAttributes() isChasmNodeMetadata_Attributes {
-	if x != nil {
-		return x.Attributes
+		return x.xxx_hidden_LastUpdateVersionedTransition
 	}
 	return nil
 }
 
 func (x *ChasmNodeMetadata) GetComponentAttributes() *ChasmComponentAttributes {
 	if x != nil {
-		if x, ok := x.Attributes.(*ChasmNodeMetadata_ComponentAttributes); ok {
+		if x, ok := x.xxx_hidden_Attributes.(*chasmNodeMetadata_ComponentAttributes); ok {
 			return x.ComponentAttributes
 		}
 	}
@@ -158,7 +179,7 @@ func (x *ChasmNodeMetadata) GetComponentAttributes() *ChasmComponentAttributes {
 
 func (x *ChasmNodeMetadata) GetDataAttributes() *ChasmDataAttributes {
 	if x != nil {
-		if x, ok := x.Attributes.(*ChasmNodeMetadata_DataAttributes); ok {
+		if x, ok := x.xxx_hidden_Attributes.(*chasmNodeMetadata_DataAttributes); ok {
 			return x.DataAttributes
 		}
 	}
@@ -167,7 +188,7 @@ func (x *ChasmNodeMetadata) GetDataAttributes() *ChasmDataAttributes {
 
 func (x *ChasmNodeMetadata) GetCollectionAttributes() *ChasmCollectionAttributes {
 	if x != nil {
-		if x, ok := x.Attributes.(*ChasmNodeMetadata_CollectionAttributes); ok {
+		if x, ok := x.xxx_hidden_Attributes.(*chasmNodeMetadata_CollectionAttributes); ok {
 			return x.CollectionAttributes
 		}
 	}
@@ -176,54 +197,257 @@ func (x *ChasmNodeMetadata) GetCollectionAttributes() *ChasmCollectionAttributes
 
 func (x *ChasmNodeMetadata) GetPointerAttributes() *ChasmPointerAttributes {
 	if x != nil {
-		if x, ok := x.Attributes.(*ChasmNodeMetadata_PointerAttributes); ok {
+		if x, ok := x.xxx_hidden_Attributes.(*chasmNodeMetadata_PointerAttributes); ok {
 			return x.PointerAttributes
 		}
 	}
 	return nil
 }
 
+func (x *ChasmNodeMetadata) SetInitialVersionedTransition(v *VersionedTransition) {
+	x.xxx_hidden_InitialVersionedTransition = v
+}
+
+func (x *ChasmNodeMetadata) SetLastUpdateVersionedTransition(v *VersionedTransition) {
+	x.xxx_hidden_LastUpdateVersionedTransition = v
+}
+
+func (x *ChasmNodeMetadata) SetComponentAttributes(v *ChasmComponentAttributes) {
+	if v == nil {
+		x.xxx_hidden_Attributes = nil
+		return
+	}
+	x.xxx_hidden_Attributes = &chasmNodeMetadata_ComponentAttributes{v}
+}
+
+func (x *ChasmNodeMetadata) SetDataAttributes(v *ChasmDataAttributes) {
+	if v == nil {
+		x.xxx_hidden_Attributes = nil
+		return
+	}
+	x.xxx_hidden_Attributes = &chasmNodeMetadata_DataAttributes{v}
+}
+
+func (x *ChasmNodeMetadata) SetCollectionAttributes(v *ChasmCollectionAttributes) {
+	if v == nil {
+		x.xxx_hidden_Attributes = nil
+		return
+	}
+	x.xxx_hidden_Attributes = &chasmNodeMetadata_CollectionAttributes{v}
+}
+
+func (x *ChasmNodeMetadata) SetPointerAttributes(v *ChasmPointerAttributes) {
+	if v == nil {
+		x.xxx_hidden_Attributes = nil
+		return
+	}
+	x.xxx_hidden_Attributes = &chasmNodeMetadata_PointerAttributes{v}
+}
+
+func (x *ChasmNodeMetadata) HasInitialVersionedTransition() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_InitialVersionedTransition != nil
+}
+
+func (x *ChasmNodeMetadata) HasLastUpdateVersionedTransition() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_LastUpdateVersionedTransition != nil
+}
+
+func (x *ChasmNodeMetadata) HasAttributes() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Attributes != nil
+}
+
+func (x *ChasmNodeMetadata) HasComponentAttributes() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_Attributes.(*chasmNodeMetadata_ComponentAttributes)
+	return ok
+}
+
+func (x *ChasmNodeMetadata) HasDataAttributes() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_Attributes.(*chasmNodeMetadata_DataAttributes)
+	return ok
+}
+
+func (x *ChasmNodeMetadata) HasCollectionAttributes() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_Attributes.(*chasmNodeMetadata_CollectionAttributes)
+	return ok
+}
+
+func (x *ChasmNodeMetadata) HasPointerAttributes() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_Attributes.(*chasmNodeMetadata_PointerAttributes)
+	return ok
+}
+
+func (x *ChasmNodeMetadata) ClearInitialVersionedTransition() {
+	x.xxx_hidden_InitialVersionedTransition = nil
+}
+
+func (x *ChasmNodeMetadata) ClearLastUpdateVersionedTransition() {
+	x.xxx_hidden_LastUpdateVersionedTransition = nil
+}
+
+func (x *ChasmNodeMetadata) ClearAttributes() {
+	x.xxx_hidden_Attributes = nil
+}
+
+func (x *ChasmNodeMetadata) ClearComponentAttributes() {
+	if _, ok := x.xxx_hidden_Attributes.(*chasmNodeMetadata_ComponentAttributes); ok {
+		x.xxx_hidden_Attributes = nil
+	}
+}
+
+func (x *ChasmNodeMetadata) ClearDataAttributes() {
+	if _, ok := x.xxx_hidden_Attributes.(*chasmNodeMetadata_DataAttributes); ok {
+		x.xxx_hidden_Attributes = nil
+	}
+}
+
+func (x *ChasmNodeMetadata) ClearCollectionAttributes() {
+	if _, ok := x.xxx_hidden_Attributes.(*chasmNodeMetadata_CollectionAttributes); ok {
+		x.xxx_hidden_Attributes = nil
+	}
+}
+
+func (x *ChasmNodeMetadata) ClearPointerAttributes() {
+	if _, ok := x.xxx_hidden_Attributes.(*chasmNodeMetadata_PointerAttributes); ok {
+		x.xxx_hidden_Attributes = nil
+	}
+}
+
+const ChasmNodeMetadata_Attributes_not_set_case case_ChasmNodeMetadata_Attributes = 0
+const ChasmNodeMetadata_ComponentAttributes_case case_ChasmNodeMetadata_Attributes = 11
+const ChasmNodeMetadata_DataAttributes_case case_ChasmNodeMetadata_Attributes = 12
+const ChasmNodeMetadata_CollectionAttributes_case case_ChasmNodeMetadata_Attributes = 13
+const ChasmNodeMetadata_PointerAttributes_case case_ChasmNodeMetadata_Attributes = 14
+
+func (x *ChasmNodeMetadata) WhichAttributes() case_ChasmNodeMetadata_Attributes {
+	if x == nil {
+		return ChasmNodeMetadata_Attributes_not_set_case
+	}
+	switch x.xxx_hidden_Attributes.(type) {
+	case *chasmNodeMetadata_ComponentAttributes:
+		return ChasmNodeMetadata_ComponentAttributes_case
+	case *chasmNodeMetadata_DataAttributes:
+		return ChasmNodeMetadata_DataAttributes_case
+	case *chasmNodeMetadata_CollectionAttributes:
+		return ChasmNodeMetadata_CollectionAttributes_case
+	case *chasmNodeMetadata_PointerAttributes:
+		return ChasmNodeMetadata_PointerAttributes_case
+	default:
+		return ChasmNodeMetadata_Attributes_not_set_case
+	}
+}
+
+type ChasmNodeMetadata_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Versioned transition when the node was instantiated.
+	InitialVersionedTransition *VersionedTransition
+	// Versioned transition when the node was last updated.
+	LastUpdateVersionedTransition *VersionedTransition
+	// Fields of oneof xxx_hidden_Attributes:
+	ComponentAttributes  *ChasmComponentAttributes
+	DataAttributes       *ChasmDataAttributes
+	CollectionAttributes *ChasmCollectionAttributes
+	PointerAttributes    *ChasmPointerAttributes
+	// -- end of xxx_hidden_Attributes
+}
+
+func (b0 ChasmNodeMetadata_builder) Build() *ChasmNodeMetadata {
+	m0 := &ChasmNodeMetadata{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_InitialVersionedTransition = b.InitialVersionedTransition
+	x.xxx_hidden_LastUpdateVersionedTransition = b.LastUpdateVersionedTransition
+	if b.ComponentAttributes != nil {
+		x.xxx_hidden_Attributes = &chasmNodeMetadata_ComponentAttributes{b.ComponentAttributes}
+	}
+	if b.DataAttributes != nil {
+		x.xxx_hidden_Attributes = &chasmNodeMetadata_DataAttributes{b.DataAttributes}
+	}
+	if b.CollectionAttributes != nil {
+		x.xxx_hidden_Attributes = &chasmNodeMetadata_CollectionAttributes{b.CollectionAttributes}
+	}
+	if b.PointerAttributes != nil {
+		x.xxx_hidden_Attributes = &chasmNodeMetadata_PointerAttributes{b.PointerAttributes}
+	}
+	return m0
+}
+
+type case_ChasmNodeMetadata_Attributes protoreflect.FieldNumber
+
+func (x case_ChasmNodeMetadata_Attributes) String() string {
+	switch x {
+	case ChasmNodeMetadata_Attributes_not_set_case:
+		return "ChasmNodeMetadataAttributesNotSetCase"
+	case ChasmNodeMetadata_ComponentAttributes_case:
+		return "ChasmNodeMetadataComponentAttributesCase"
+	case ChasmNodeMetadata_DataAttributes_case:
+		return "ChasmNodeMetadataDataAttributesCase"
+	case ChasmNodeMetadata_CollectionAttributes_case:
+		return "ChasmNodeMetadataCollectionAttributesCase"
+	case ChasmNodeMetadata_PointerAttributes_case:
+		return "ChasmNodeMetadataPointerAttributesCase"
+	default:
+		return strconv.Itoa(int(x))
+	}
+
+}
+
 type isChasmNodeMetadata_Attributes interface {
 	isChasmNodeMetadata_Attributes()
 }
 
-type ChasmNodeMetadata_ComponentAttributes struct {
+type chasmNodeMetadata_ComponentAttributes struct {
 	ComponentAttributes *ChasmComponentAttributes `protobuf:"bytes,11,opt,name=component_attributes,json=componentAttributes,proto3,oneof"`
 }
 
-type ChasmNodeMetadata_DataAttributes struct {
+type chasmNodeMetadata_DataAttributes struct {
 	DataAttributes *ChasmDataAttributes `protobuf:"bytes,12,opt,name=data_attributes,json=dataAttributes,proto3,oneof"`
 }
 
-type ChasmNodeMetadata_CollectionAttributes struct {
+type chasmNodeMetadata_CollectionAttributes struct {
 	CollectionAttributes *ChasmCollectionAttributes `protobuf:"bytes,13,opt,name=collection_attributes,json=collectionAttributes,proto3,oneof"`
 }
 
-type ChasmNodeMetadata_PointerAttributes struct {
+type chasmNodeMetadata_PointerAttributes struct {
 	PointerAttributes *ChasmPointerAttributes `protobuf:"bytes,14,opt,name=pointer_attributes,json=pointerAttributes,proto3,oneof"`
 }
 
-func (*ChasmNodeMetadata_ComponentAttributes) isChasmNodeMetadata_Attributes() {}
+func (*chasmNodeMetadata_ComponentAttributes) isChasmNodeMetadata_Attributes() {}
 
-func (*ChasmNodeMetadata_DataAttributes) isChasmNodeMetadata_Attributes() {}
+func (*chasmNodeMetadata_DataAttributes) isChasmNodeMetadata_Attributes() {}
 
-func (*ChasmNodeMetadata_CollectionAttributes) isChasmNodeMetadata_Attributes() {}
+func (*chasmNodeMetadata_CollectionAttributes) isChasmNodeMetadata_Attributes() {}
 
-func (*ChasmNodeMetadata_PointerAttributes) isChasmNodeMetadata_Attributes() {}
+func (*chasmNodeMetadata_PointerAttributes) isChasmNodeMetadata_Attributes() {}
 
 type ChasmComponentAttributes struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Registered component's type ID.
-	// (-- api-linter: core::0141::forbidden-types=disabled --)
-	TypeId uint32 `protobuf:"varint,1,opt,name=type_id,json=typeId,proto3" json:"type_id,omitempty"`
-	// Tasks are in their insertion order,
-	// i.e. by versioned transtion and versioned_transition_offset.
-	SideEffectTasks []*ChasmComponentAttributes_Task `protobuf:"bytes,2,rep,name=side_effect_tasks,json=sideEffectTasks,proto3" json:"side_effect_tasks,omitempty"`
-	// Tasks are ordered by their scheduled time, breaking ties by
-	// versioned transition and versioned_transition_offset.
-	PureTasks     []*ChasmComponentAttributes_Task `protobuf:"bytes,3,rep,name=pure_tasks,json=pureTasks,proto3" json:"pure_tasks,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                      protoimpl.MessageState            `protogen:"opaque.v1"`
+	xxx_hidden_TypeId          uint32                            `protobuf:"varint,1,opt,name=type_id,json=typeId,proto3"`
+	xxx_hidden_SideEffectTasks *[]*ChasmComponentAttributes_Task `protobuf:"bytes,2,rep,name=side_effect_tasks,json=sideEffectTasks,proto3"`
+	xxx_hidden_PureTasks       *[]*ChasmComponentAttributes_Task `protobuf:"bytes,3,rep,name=pure_tasks,json=pureTasks,proto3"`
+	unknownFields              protoimpl.UnknownFields
+	sizeCache                  protoimpl.SizeCache
 }
 
 func (x *ChasmComponentAttributes) Reset() {
@@ -251,34 +475,69 @@ func (x *ChasmComponentAttributes) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ChasmComponentAttributes.ProtoReflect.Descriptor instead.
-func (*ChasmComponentAttributes) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_chasm_proto_rawDescGZIP(), []int{2}
-}
-
 func (x *ChasmComponentAttributes) GetTypeId() uint32 {
 	if x != nil {
-		return x.TypeId
+		return x.xxx_hidden_TypeId
 	}
 	return 0
 }
 
 func (x *ChasmComponentAttributes) GetSideEffectTasks() []*ChasmComponentAttributes_Task {
 	if x != nil {
-		return x.SideEffectTasks
+		if x.xxx_hidden_SideEffectTasks != nil {
+			return *x.xxx_hidden_SideEffectTasks
+		}
 	}
 	return nil
 }
 
 func (x *ChasmComponentAttributes) GetPureTasks() []*ChasmComponentAttributes_Task {
 	if x != nil {
-		return x.PureTasks
+		if x.xxx_hidden_PureTasks != nil {
+			return *x.xxx_hidden_PureTasks
+		}
 	}
 	return nil
 }
 
+func (x *ChasmComponentAttributes) SetTypeId(v uint32) {
+	x.xxx_hidden_TypeId = v
+}
+
+func (x *ChasmComponentAttributes) SetSideEffectTasks(v []*ChasmComponentAttributes_Task) {
+	x.xxx_hidden_SideEffectTasks = &v
+}
+
+func (x *ChasmComponentAttributes) SetPureTasks(v []*ChasmComponentAttributes_Task) {
+	x.xxx_hidden_PureTasks = &v
+}
+
+type ChasmComponentAttributes_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Registered component's type ID.
+	// (-- api-linter: core::0141::forbidden-types=disabled --)
+	TypeId uint32
+	// Tasks are in their insertion order,
+	// i.e. by versioned transtion and versioned_transition_offset.
+	SideEffectTasks []*ChasmComponentAttributes_Task
+	// Tasks are ordered by their scheduled time, breaking ties by
+	// versioned transition and versioned_transition_offset.
+	PureTasks []*ChasmComponentAttributes_Task
+}
+
+func (b0 ChasmComponentAttributes_builder) Build() *ChasmComponentAttributes {
+	m0 := &ChasmComponentAttributes{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_TypeId = b.TypeId
+	x.xxx_hidden_SideEffectTasks = &b.SideEffectTasks
+	x.xxx_hidden_PureTasks = &b.PureTasks
+	return m0
+}
+
 type ChasmDataAttributes struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -308,13 +567,20 @@ func (x *ChasmDataAttributes) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ChasmDataAttributes.ProtoReflect.Descriptor instead.
-func (*ChasmDataAttributes) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_chasm_proto_rawDescGZIP(), []int{3}
+type ChasmDataAttributes_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+}
+
+func (b0 ChasmDataAttributes_builder) Build() *ChasmDataAttributes {
+	m0 := &ChasmDataAttributes{}
+	b, x := &b0, m0
+	_, _ = b, x
+	return m0
 }
 
 type ChasmCollectionAttributes struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -344,16 +610,23 @@ func (x *ChasmCollectionAttributes) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ChasmCollectionAttributes.ProtoReflect.Descriptor instead.
-func (*ChasmCollectionAttributes) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_chasm_proto_rawDescGZIP(), []int{4}
+type ChasmCollectionAttributes_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+}
+
+func (b0 ChasmCollectionAttributes_builder) Build() *ChasmCollectionAttributes {
+	m0 := &ChasmCollectionAttributes{}
+	b, x := &b0, m0
+	_, _ = b, x
+	return m0
 }
 
 type ChasmPointerAttributes struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	NodePath      []string               `protobuf:"bytes,1,rep,name=node_path,json=nodePath,proto3" json:"node_path,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state               protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_NodePath []string               `protobuf:"bytes,1,rep,name=node_path,json=nodePath,proto3"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *ChasmPointerAttributes) Reset() {
@@ -381,39 +654,42 @@ func (x *ChasmPointerAttributes) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ChasmPointerAttributes.ProtoReflect.Descriptor instead.
-func (*ChasmPointerAttributes) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_chasm_proto_rawDescGZIP(), []int{5}
-}
-
 func (x *ChasmPointerAttributes) GetNodePath() []string {
 	if x != nil {
-		return x.NodePath
+		return x.xxx_hidden_NodePath
 	}
 	return nil
 }
 
+func (x *ChasmPointerAttributes) SetNodePath(v []string) {
+	x.xxx_hidden_NodePath = v
+}
+
+type ChasmPointerAttributes_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NodePath []string
+}
+
+func (b0 ChasmPointerAttributes_builder) Build() *ChasmPointerAttributes {
+	m0 := &ChasmPointerAttributes{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NodePath = b.NodePath
+	return m0
+}
+
 // ChasmTaskInfo includes component-facing task metadata
 type ChasmTaskInfo struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Initial versioned transition of the component being referenced.
-	ComponentInitialVersionedTransition *VersionedTransition `protobuf:"bytes,1,opt,name=component_initial_versioned_transition,json=componentInitialVersionedTransition,proto3" json:"component_initial_versioned_transition,omitempty"`
-	// Last updated transition of the component being referenced at the time the
-	// reference was created. Can be used to invalidate this reference.
-	ComponentLastUpdateVersionedTransition *VersionedTransition `protobuf:"bytes,2,opt,name=component_last_update_versioned_transition,json=componentLastUpdateVersionedTransition,proto3" json:"component_last_update_versioned_transition,omitempty"`
-	// Path to the component.
-	Path []string `protobuf:"bytes,3,rep,name=path,proto3" json:"path,omitempty"`
-	// Registered task's type ID.
-	// (-- api-linter: core::0141::forbidden-types=disabled --)
-	TypeId uint32 `protobuf:"varint,4,opt,name=type_id,json=typeId,proto3" json:"type_id,omitempty"`
-	// Opaque attached task data. May be nil. Usable by components, not the CHASM
-	// framework itself.
-	Data *v1.DataBlob `protobuf:"bytes,5,opt,name=data,proto3" json:"data,omitempty"`
-	// ArchetypeID of the execution that generated this task.
-	// (-- api-linter: core::0141::forbidden-types=disabled --)
-	ArchetypeId   uint32 `protobuf:"varint,6,opt,name=archetype_id,json=archetypeId,proto3" json:"archetype_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                                             protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_ComponentInitialVersionedTransition    *VersionedTransition   `protobuf:"bytes,1,opt,name=component_initial_versioned_transition,json=componentInitialVersionedTransition,proto3"`
+	xxx_hidden_ComponentLastUpdateVersionedTransition *VersionedTransition   `protobuf:"bytes,2,opt,name=component_last_update_versioned_transition,json=componentLastUpdateVersionedTransition,proto3"`
+	xxx_hidden_Path                                   []string               `protobuf:"bytes,3,rep,name=path,proto3"`
+	xxx_hidden_TypeId                                 uint32                 `protobuf:"varint,4,opt,name=type_id,json=typeId,proto3"`
+	xxx_hidden_Data                                   *v1.DataBlob           `protobuf:"bytes,5,opt,name=data,proto3"`
+	xxx_hidden_ArchetypeId                            uint32                 `protobuf:"varint,6,opt,name=archetype_id,json=archetypeId,proto3"`
+	unknownFields                                     protoimpl.UnknownFields
+	sizeCache                                         protoimpl.SizeCache
 }
 
 func (x *ChasmTaskInfo) Reset() {
@@ -441,67 +717,151 @@ func (x *ChasmTaskInfo) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ChasmTaskInfo.ProtoReflect.Descriptor instead.
-func (*ChasmTaskInfo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_chasm_proto_rawDescGZIP(), []int{6}
-}
-
 func (x *ChasmTaskInfo) GetComponentInitialVersionedTransition() *VersionedTransition {
 	if x != nil {
-		return x.ComponentInitialVersionedTransition
+		return x.xxx_hidden_ComponentInitialVersionedTransition
 	}
 	return nil
 }
 
 func (x *ChasmTaskInfo) GetComponentLastUpdateVersionedTransition() *VersionedTransition {
 	if x != nil {
-		return x.ComponentLastUpdateVersionedTransition
+		return x.xxx_hidden_ComponentLastUpdateVersionedTransition
 	}
 	return nil
 }
 
 func (x *ChasmTaskInfo) GetPath() []string {
 	if x != nil {
-		return x.Path
+		return x.xxx_hidden_Path
 	}
 	return nil
 }
 
 func (x *ChasmTaskInfo) GetTypeId() uint32 {
 	if x != nil {
-		return x.TypeId
+		return x.xxx_hidden_TypeId
 	}
 	return 0
 }
 
 func (x *ChasmTaskInfo) GetData() *v1.DataBlob {
 	if x != nil {
-		return x.Data
+		return x.xxx_hidden_Data
 	}
 	return nil
 }
 
 func (x *ChasmTaskInfo) GetArchetypeId() uint32 {
 	if x != nil {
-		return x.ArchetypeId
+		return x.xxx_hidden_ArchetypeId
 	}
 	return 0
 }
 
+func (x *ChasmTaskInfo) SetComponentInitialVersionedTransition(v *VersionedTransition) {
+	x.xxx_hidden_ComponentInitialVersionedTransition = v
+}
+
+func (x *ChasmTaskInfo) SetComponentLastUpdateVersionedTransition(v *VersionedTransition) {
+	x.xxx_hidden_ComponentLastUpdateVersionedTransition = v
+}
+
+func (x *ChasmTaskInfo) SetPath(v []string) {
+	x.xxx_hidden_Path = v
+}
+
+func (x *ChasmTaskInfo) SetTypeId(v uint32) {
+	x.xxx_hidden_TypeId = v
+}
+
+func (x *ChasmTaskInfo) SetData(v *v1.DataBlob) {
+	x.xxx_hidden_Data = v
+}
+
+func (x *ChasmTaskInfo) SetArchetypeId(v uint32) {
+	x.xxx_hidden_ArchetypeId = v
+}
+
+func (x *ChasmTaskInfo) HasComponentInitialVersionedTransition() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_ComponentInitialVersionedTransition != nil
+}
+
+func (x *ChasmTaskInfo) HasComponentLastUpdateVersionedTransition() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_ComponentLastUpdateVersionedTransition != nil
+}
+
+func (x *ChasmTaskInfo) HasData() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Data != nil
+}
+
+func (x *ChasmTaskInfo) ClearComponentInitialVersionedTransition() {
+	x.xxx_hidden_ComponentInitialVersionedTransition = nil
+}
+
+func (x *ChasmTaskInfo) ClearComponentLastUpdateVersionedTransition() {
+	x.xxx_hidden_ComponentLastUpdateVersionedTransition = nil
+}
+
+func (x *ChasmTaskInfo) ClearData() {
+	x.xxx_hidden_Data = nil
+}
+
+type ChasmTaskInfo_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Initial versioned transition of the component being referenced.
+	ComponentInitialVersionedTransition *VersionedTransition
+	// Last updated transition of the component being referenced at the time the
+	// reference was created. Can be used to invalidate this reference.
+	ComponentLastUpdateVersionedTransition *VersionedTransition
+	// Path to the component.
+	Path []string
+	// Registered task's type ID.
+	// (-- api-linter: core::0141::forbidden-types=disabled --)
+	TypeId uint32
+	// Opaque attached task data. May be nil. Usable by components, not the CHASM
+	// framework itself.
+	Data *v1.DataBlob
+	// ArchetypeID of the execution that generated this task.
+	// (-- api-linter: core::0141::forbidden-types=disabled --)
+	ArchetypeId uint32
+}
+
+func (b0 ChasmTaskInfo_builder) Build() *ChasmTaskInfo {
+	m0 := &ChasmTaskInfo{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_ComponentInitialVersionedTransition = b.ComponentInitialVersionedTransition
+	x.xxx_hidden_ComponentLastUpdateVersionedTransition = b.ComponentLastUpdateVersionedTransition
+	x.xxx_hidden_Path = b.Path
+	x.xxx_hidden_TypeId = b.TypeId
+	x.xxx_hidden_Data = b.Data
+	x.xxx_hidden_ArchetypeId = b.ArchetypeId
+	return m0
+}
+
 // ChasmComponentRef references a specific chasm component.
 type ChasmComponentRef struct {
-	state       protoimpl.MessageState `protogen:"open.v1"`
-	NamespaceId string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	BusinessId  string                 `protobuf:"bytes,2,opt,name=business_id,json=businessId,proto3" json:"business_id,omitempty"`
-	RunId       string                 `protobuf:"bytes,3,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	// Executions's root component's type ID.
-	// (-- api-linter: core::0141::forbidden-types=disabled --)
-	ArchetypeId                         uint32               `protobuf:"varint,4,opt,name=archetype_id,json=archetypeId,proto3" json:"archetype_id,omitempty"`
-	ExecutionVersionedTransition        *VersionedTransition `protobuf:"bytes,5,opt,name=execution_versioned_transition,json=executionVersionedTransition,proto3" json:"execution_versioned_transition,omitempty"`
-	ComponentPath                       []string             `protobuf:"bytes,6,rep,name=component_path,json=componentPath,proto3" json:"component_path,omitempty"`
-	ComponentInitialVersionedTransition *VersionedTransition `protobuf:"bytes,7,opt,name=component_initial_versioned_transition,json=componentInitialVersionedTransition,proto3" json:"component_initial_versioned_transition,omitempty"`
-	unknownFields                       protoimpl.UnknownFields
-	sizeCache                           protoimpl.SizeCache
+	state                                          protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId                         string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_BusinessId                          string                 `protobuf:"bytes,2,opt,name=business_id,json=businessId,proto3"`
+	xxx_hidden_RunId                               string                 `protobuf:"bytes,3,opt,name=run_id,json=runId,proto3"`
+	xxx_hidden_ArchetypeId                         uint32                 `protobuf:"varint,4,opt,name=archetype_id,json=archetypeId,proto3"`
+	xxx_hidden_ExecutionVersionedTransition        *VersionedTransition   `protobuf:"bytes,5,opt,name=execution_versioned_transition,json=executionVersionedTransition,proto3"`
+	xxx_hidden_ComponentPath                       []string               `protobuf:"bytes,6,rep,name=component_path,json=componentPath,proto3"`
+	xxx_hidden_ComponentInitialVersionedTransition *VersionedTransition   `protobuf:"bytes,7,opt,name=component_initial_versioned_transition,json=componentInitialVersionedTransition,proto3"`
+	unknownFields                                  protoimpl.UnknownFields
+	sizeCache                                      protoimpl.SizeCache
 }
 
 func (x *ChasmComponentRef) Reset() {
@@ -529,75 +889,141 @@ func (x *ChasmComponentRef) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ChasmComponentRef.ProtoReflect.Descriptor instead.
-func (*ChasmComponentRef) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_chasm_proto_rawDescGZIP(), []int{7}
-}
-
 func (x *ChasmComponentRef) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *ChasmComponentRef) GetBusinessId() string {
 	if x != nil {
-		return x.BusinessId
+		return x.xxx_hidden_BusinessId
 	}
 	return ""
 }
 
 func (x *ChasmComponentRef) GetRunId() string {
 	if x != nil {
-		return x.RunId
+		return x.xxx_hidden_RunId
 	}
 	return ""
 }
 
 func (x *ChasmComponentRef) GetArchetypeId() uint32 {
 	if x != nil {
-		return x.ArchetypeId
+		return x.xxx_hidden_ArchetypeId
 	}
 	return 0
 }
 
 func (x *ChasmComponentRef) GetExecutionVersionedTransition() *VersionedTransition {
 	if x != nil {
-		return x.ExecutionVersionedTransition
+		return x.xxx_hidden_ExecutionVersionedTransition
 	}
 	return nil
 }
 
 func (x *ChasmComponentRef) GetComponentPath() []string {
 	if x != nil {
-		return x.ComponentPath
+		return x.xxx_hidden_ComponentPath
 	}
 	return nil
 }
 
 func (x *ChasmComponentRef) GetComponentInitialVersionedTransition() *VersionedTransition {
 	if x != nil {
-		return x.ComponentInitialVersionedTransition
+		return x.xxx_hidden_ComponentInitialVersionedTransition
 	}
 	return nil
 }
 
+func (x *ChasmComponentRef) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *ChasmComponentRef) SetBusinessId(v string) {
+	x.xxx_hidden_BusinessId = v
+}
+
+func (x *ChasmComponentRef) SetRunId(v string) {
+	x.xxx_hidden_RunId = v
+}
+
+func (x *ChasmComponentRef) SetArchetypeId(v uint32) {
+	x.xxx_hidden_ArchetypeId = v
+}
+
+func (x *ChasmComponentRef) SetExecutionVersionedTransition(v *VersionedTransition) {
+	x.xxx_hidden_ExecutionVersionedTransition = v
+}
+
+func (x *ChasmComponentRef) SetComponentPath(v []string) {
+	x.xxx_hidden_ComponentPath = v
+}
+
+func (x *ChasmComponentRef) SetComponentInitialVersionedTransition(v *VersionedTransition) {
+	x.xxx_hidden_ComponentInitialVersionedTransition = v
+}
+
+func (x *ChasmComponentRef) HasExecutionVersionedTransition() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_ExecutionVersionedTransition != nil
+}
+
+func (x *ChasmComponentRef) HasComponentInitialVersionedTransition() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_ComponentInitialVersionedTransition != nil
+}
+
+func (x *ChasmComponentRef) ClearExecutionVersionedTransition() {
+	x.xxx_hidden_ExecutionVersionedTransition = nil
+}
+
+func (x *ChasmComponentRef) ClearComponentInitialVersionedTransition() {
+	x.xxx_hidden_ComponentInitialVersionedTransition = nil
+}
+
+type ChasmComponentRef_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId string
+	BusinessId  string
+	RunId       string
+	// Executions's root component's type ID.
+	// (-- api-linter: core::0141::forbidden-types=disabled --)
+	ArchetypeId                         uint32
+	ExecutionVersionedTransition        *VersionedTransition
+	ComponentPath                       []string
+	ComponentInitialVersionedTransition *VersionedTransition
+}
+
+func (b0 ChasmComponentRef_builder) Build() *ChasmComponentRef {
+	m0 := &ChasmComponentRef{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_BusinessId = b.BusinessId
+	x.xxx_hidden_RunId = b.RunId
+	x.xxx_hidden_ArchetypeId = b.ArchetypeId
+	x.xxx_hidden_ExecutionVersionedTransition = b.ExecutionVersionedTransition
+	x.xxx_hidden_ComponentPath = b.ComponentPath
+	x.xxx_hidden_ComponentInitialVersionedTransition = b.ComponentInitialVersionedTransition
+	return m0
+}
+
 // ChasmNexusCompletion includes details about a completed Nexus operation.
 type ChasmNexusCompletion struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Types that are valid to be assigned to Outcome:
-	//
-	//	*ChasmNexusCompletion_Success
-	//	*ChasmNexusCompletion_Failure
-	Outcome isChasmNexusCompletion_Outcome `protobuf_oneof:"outcome"`
-	// Time when the operation was closed.
-	CloseTime *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=close_time,json=closeTime,proto3" json:"close_time,omitempty"`
-	// Request ID embedded in the NexusOperationScheduledEvent.
-	// Allows completing a started operation after a workflow has been reset.
-	RequestId     string `protobuf:"bytes,4,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                protoimpl.MessageState         `protogen:"opaque.v1"`
+	xxx_hidden_Outcome   isChasmNexusCompletion_Outcome `protobuf_oneof:"outcome"`
+	xxx_hidden_CloseTime *timestamppb.Timestamp         `protobuf:"bytes,3,opt,name=close_time,json=closeTime,proto3"`
+	xxx_hidden_RequestId string                         `protobuf:"bytes,4,opt,name=request_id,json=requestId,proto3"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *ChasmNexusCompletion) Reset() {
@@ -625,21 +1051,9 @@ func (x *ChasmNexusCompletion) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ChasmNexusCompletion.ProtoReflect.Descriptor instead.
-func (*ChasmNexusCompletion) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_chasm_proto_rawDescGZIP(), []int{8}
-}
-
-func (x *ChasmNexusCompletion) GetOutcome() isChasmNexusCompletion_Outcome {
-	if x != nil {
-		return x.Outcome
-	}
-	return nil
-}
-
 func (x *ChasmNexusCompletion) GetSuccess() *v1.Payload {
 	if x != nil {
-		if x, ok := x.Outcome.(*ChasmNexusCompletion_Success); ok {
+		if x, ok := x.xxx_hidden_Outcome.(*chasmNexusCompletion_Success); ok {
 			return x.Success
 		}
 	}
@@ -648,7 +1062,7 @@ func (x *ChasmNexusCompletion) GetSuccess() *v1.Payload {
 
 func (x *ChasmNexusCompletion) GetFailure() *v11.Failure {
 	if x != nil {
-		if x, ok := x.Outcome.(*ChasmNexusCompletion_Failure); ok {
+		if x, ok := x.xxx_hidden_Outcome.(*chasmNexusCompletion_Failure); ok {
 			return x.Failure
 		}
 	}
@@ -657,56 +1071,186 @@ func (x *ChasmNexusCompletion) GetFailure() *v11.Failure {
 
 func (x *ChasmNexusCompletion) GetCloseTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.CloseTime
+		return x.xxx_hidden_CloseTime
 	}
 	return nil
 }
 
 func (x *ChasmNexusCompletion) GetRequestId() string {
 	if x != nil {
-		return x.RequestId
+		return x.xxx_hidden_RequestId
 	}
 	return ""
+}
+
+func (x *ChasmNexusCompletion) SetSuccess(v *v1.Payload) {
+	if v == nil {
+		x.xxx_hidden_Outcome = nil
+		return
+	}
+	x.xxx_hidden_Outcome = &chasmNexusCompletion_Success{v}
+}
+
+func (x *ChasmNexusCompletion) SetFailure(v *v11.Failure) {
+	if v == nil {
+		x.xxx_hidden_Outcome = nil
+		return
+	}
+	x.xxx_hidden_Outcome = &chasmNexusCompletion_Failure{v}
+}
+
+func (x *ChasmNexusCompletion) SetCloseTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_CloseTime = v
+}
+
+func (x *ChasmNexusCompletion) SetRequestId(v string) {
+	x.xxx_hidden_RequestId = v
+}
+
+func (x *ChasmNexusCompletion) HasOutcome() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Outcome != nil
+}
+
+func (x *ChasmNexusCompletion) HasSuccess() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_Outcome.(*chasmNexusCompletion_Success)
+	return ok
+}
+
+func (x *ChasmNexusCompletion) HasFailure() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_Outcome.(*chasmNexusCompletion_Failure)
+	return ok
+}
+
+func (x *ChasmNexusCompletion) HasCloseTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_CloseTime != nil
+}
+
+func (x *ChasmNexusCompletion) ClearOutcome() {
+	x.xxx_hidden_Outcome = nil
+}
+
+func (x *ChasmNexusCompletion) ClearSuccess() {
+	if _, ok := x.xxx_hidden_Outcome.(*chasmNexusCompletion_Success); ok {
+		x.xxx_hidden_Outcome = nil
+	}
+}
+
+func (x *ChasmNexusCompletion) ClearFailure() {
+	if _, ok := x.xxx_hidden_Outcome.(*chasmNexusCompletion_Failure); ok {
+		x.xxx_hidden_Outcome = nil
+	}
+}
+
+func (x *ChasmNexusCompletion) ClearCloseTime() {
+	x.xxx_hidden_CloseTime = nil
+}
+
+const ChasmNexusCompletion_Outcome_not_set_case case_ChasmNexusCompletion_Outcome = 0
+const ChasmNexusCompletion_Success_case case_ChasmNexusCompletion_Outcome = 1
+const ChasmNexusCompletion_Failure_case case_ChasmNexusCompletion_Outcome = 2
+
+func (x *ChasmNexusCompletion) WhichOutcome() case_ChasmNexusCompletion_Outcome {
+	if x == nil {
+		return ChasmNexusCompletion_Outcome_not_set_case
+	}
+	switch x.xxx_hidden_Outcome.(type) {
+	case *chasmNexusCompletion_Success:
+		return ChasmNexusCompletion_Success_case
+	case *chasmNexusCompletion_Failure:
+		return ChasmNexusCompletion_Failure_case
+	default:
+		return ChasmNexusCompletion_Outcome_not_set_case
+	}
+}
+
+type ChasmNexusCompletion_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Fields of oneof xxx_hidden_Outcome:
+	// Result of a successful operation, only set if state == successful.
+	Success *v1.Payload
+	// Operation failure, only set if state != successful.
+	Failure *v11.Failure
+	// -- end of xxx_hidden_Outcome
+	// Time when the operation was closed.
+	CloseTime *timestamppb.Timestamp
+	// Request ID embedded in the NexusOperationScheduledEvent.
+	// Allows completing a started operation after a workflow has been reset.
+	RequestId string
+}
+
+func (b0 ChasmNexusCompletion_builder) Build() *ChasmNexusCompletion {
+	m0 := &ChasmNexusCompletion{}
+	b, x := &b0, m0
+	_, _ = b, x
+	if b.Success != nil {
+		x.xxx_hidden_Outcome = &chasmNexusCompletion_Success{b.Success}
+	}
+	if b.Failure != nil {
+		x.xxx_hidden_Outcome = &chasmNexusCompletion_Failure{b.Failure}
+	}
+	x.xxx_hidden_CloseTime = b.CloseTime
+	x.xxx_hidden_RequestId = b.RequestId
+	return m0
+}
+
+type case_ChasmNexusCompletion_Outcome protoreflect.FieldNumber
+
+func (x case_ChasmNexusCompletion_Outcome) String() string {
+	switch x {
+	case ChasmNexusCompletion_Outcome_not_set_case:
+		return "ChasmNexusCompletionOutcomeNotSetCase"
+	case ChasmNexusCompletion_Success_case:
+		return "ChasmNexusCompletionSuccessCase"
+	case ChasmNexusCompletion_Failure_case:
+		return "ChasmNexusCompletionFailureCase"
+	default:
+		return strconv.Itoa(int(x))
+	}
+
 }
 
 type isChasmNexusCompletion_Outcome interface {
 	isChasmNexusCompletion_Outcome()
 }
 
-type ChasmNexusCompletion_Success struct {
+type chasmNexusCompletion_Success struct {
 	// Result of a successful operation, only set if state == successful.
 	Success *v1.Payload `protobuf:"bytes,1,opt,name=success,proto3,oneof"`
 }
 
-type ChasmNexusCompletion_Failure struct {
+type chasmNexusCompletion_Failure struct {
 	// Operation failure, only set if state != successful.
 	Failure *v11.Failure `protobuf:"bytes,2,opt,name=failure,proto3,oneof"`
 }
 
-func (*ChasmNexusCompletion_Success) isChasmNexusCompletion_Outcome() {}
+func (*chasmNexusCompletion_Success) isChasmNexusCompletion_Outcome() {}
 
-func (*ChasmNexusCompletion_Failure) isChasmNexusCompletion_Outcome() {}
+func (*chasmNexusCompletion_Failure) isChasmNexusCompletion_Outcome() {}
 
 type ChasmComponentAttributes_Task struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Registered task's type ID.
-	// (-- api-linter: core::0141::forbidden-types=disabled --)
-	TypeId        uint32                 `protobuf:"varint,1,opt,name=type_id,json=typeId,proto3" json:"type_id,omitempty"`
-	Destination   string                 `protobuf:"bytes,2,opt,name=destination,proto3" json:"destination,omitempty"`
-	ScheduledTime *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=scheduled_time,json=scheduledTime,proto3" json:"scheduled_time,omitempty"`
-	Data          *v1.DataBlob           `protobuf:"bytes,4,opt,name=data,proto3" json:"data,omitempty"`
-	// Versioned transition of the execution when the task was created.
-	VersionedTransition *VersionedTransition `protobuf:"bytes,5,opt,name=versioned_transition,json=versionedTransition,proto3" json:"versioned_transition,omitempty"`
-	// The xth task generated in this versioned transition.
-	// Together with the versioned transition, this is a unique identifier for
-	// this task.
-	VersionedTransitionOffset int64 `protobuf:"varint,6,opt,name=versioned_transition_offset,json=versionedTransitionOffset,proto3" json:"versioned_transition_offset,omitempty"`
-	// If a physical task is created for this task in this cluster.
-	// NOTE: this is a cluster-specific field and can not be replicated.
-	// Changes to this field also doesn't require an increase in versioned transition.
-	PhysicalTaskStatus int32 `protobuf:"varint,7,opt,name=physical_task_status,json=physicalTaskStatus,proto3" json:"physical_task_status,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	state                                protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_TypeId                    uint32                 `protobuf:"varint,1,opt,name=type_id,json=typeId,proto3"`
+	xxx_hidden_Destination               string                 `protobuf:"bytes,2,opt,name=destination,proto3"`
+	xxx_hidden_ScheduledTime             *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=scheduled_time,json=scheduledTime,proto3"`
+	xxx_hidden_Data                      *v1.DataBlob           `protobuf:"bytes,4,opt,name=data,proto3"`
+	xxx_hidden_VersionedTransition       *VersionedTransition   `protobuf:"bytes,5,opt,name=versioned_transition,json=versionedTransition,proto3"`
+	xxx_hidden_VersionedTransitionOffset int64                  `protobuf:"varint,6,opt,name=versioned_transition_offset,json=versionedTransitionOffset,proto3"`
+	xxx_hidden_PhysicalTaskStatus        int32                  `protobuf:"varint,7,opt,name=physical_task_status,json=physicalTaskStatus,proto3"`
+	unknownFields                        protoimpl.UnknownFields
+	sizeCache                            protoimpl.SizeCache
 }
 
 func (x *ChasmComponentAttributes_Task) Reset() {
@@ -734,58 +1278,149 @@ func (x *ChasmComponentAttributes_Task) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ChasmComponentAttributes_Task.ProtoReflect.Descriptor instead.
-func (*ChasmComponentAttributes_Task) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_chasm_proto_rawDescGZIP(), []int{2, 0}
-}
-
 func (x *ChasmComponentAttributes_Task) GetTypeId() uint32 {
 	if x != nil {
-		return x.TypeId
+		return x.xxx_hidden_TypeId
 	}
 	return 0
 }
 
 func (x *ChasmComponentAttributes_Task) GetDestination() string {
 	if x != nil {
-		return x.Destination
+		return x.xxx_hidden_Destination
 	}
 	return ""
 }
 
 func (x *ChasmComponentAttributes_Task) GetScheduledTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.ScheduledTime
+		return x.xxx_hidden_ScheduledTime
 	}
 	return nil
 }
 
 func (x *ChasmComponentAttributes_Task) GetData() *v1.DataBlob {
 	if x != nil {
-		return x.Data
+		return x.xxx_hidden_Data
 	}
 	return nil
 }
 
 func (x *ChasmComponentAttributes_Task) GetVersionedTransition() *VersionedTransition {
 	if x != nil {
-		return x.VersionedTransition
+		return x.xxx_hidden_VersionedTransition
 	}
 	return nil
 }
 
 func (x *ChasmComponentAttributes_Task) GetVersionedTransitionOffset() int64 {
 	if x != nil {
-		return x.VersionedTransitionOffset
+		return x.xxx_hidden_VersionedTransitionOffset
 	}
 	return 0
 }
 
 func (x *ChasmComponentAttributes_Task) GetPhysicalTaskStatus() int32 {
 	if x != nil {
-		return x.PhysicalTaskStatus
+		return x.xxx_hidden_PhysicalTaskStatus
 	}
 	return 0
+}
+
+func (x *ChasmComponentAttributes_Task) SetTypeId(v uint32) {
+	x.xxx_hidden_TypeId = v
+}
+
+func (x *ChasmComponentAttributes_Task) SetDestination(v string) {
+	x.xxx_hidden_Destination = v
+}
+
+func (x *ChasmComponentAttributes_Task) SetScheduledTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_ScheduledTime = v
+}
+
+func (x *ChasmComponentAttributes_Task) SetData(v *v1.DataBlob) {
+	x.xxx_hidden_Data = v
+}
+
+func (x *ChasmComponentAttributes_Task) SetVersionedTransition(v *VersionedTransition) {
+	x.xxx_hidden_VersionedTransition = v
+}
+
+func (x *ChasmComponentAttributes_Task) SetVersionedTransitionOffset(v int64) {
+	x.xxx_hidden_VersionedTransitionOffset = v
+}
+
+func (x *ChasmComponentAttributes_Task) SetPhysicalTaskStatus(v int32) {
+	x.xxx_hidden_PhysicalTaskStatus = v
+}
+
+func (x *ChasmComponentAttributes_Task) HasScheduledTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_ScheduledTime != nil
+}
+
+func (x *ChasmComponentAttributes_Task) HasData() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Data != nil
+}
+
+func (x *ChasmComponentAttributes_Task) HasVersionedTransition() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_VersionedTransition != nil
+}
+
+func (x *ChasmComponentAttributes_Task) ClearScheduledTime() {
+	x.xxx_hidden_ScheduledTime = nil
+}
+
+func (x *ChasmComponentAttributes_Task) ClearData() {
+	x.xxx_hidden_Data = nil
+}
+
+func (x *ChasmComponentAttributes_Task) ClearVersionedTransition() {
+	x.xxx_hidden_VersionedTransition = nil
+}
+
+type ChasmComponentAttributes_Task_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Registered task's type ID.
+	// (-- api-linter: core::0141::forbidden-types=disabled --)
+	TypeId        uint32
+	Destination   string
+	ScheduledTime *timestamppb.Timestamp
+	Data          *v1.DataBlob
+	// Versioned transition of the execution when the task was created.
+	VersionedTransition *VersionedTransition
+	// The xth task generated in this versioned transition.
+	// Together with the versioned transition, this is a unique identifier for
+	// this task.
+	VersionedTransitionOffset int64
+	// If a physical task is created for this task in this cluster.
+	// NOTE: this is a cluster-specific field and can not be replicated.
+	// Changes to this field also doesn't require an increase in versioned transition.
+	PhysicalTaskStatus int32
+}
+
+func (b0 ChasmComponentAttributes_Task_builder) Build() *ChasmComponentAttributes_Task {
+	m0 := &ChasmComponentAttributes_Task{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_TypeId = b.TypeId
+	x.xxx_hidden_Destination = b.Destination
+	x.xxx_hidden_ScheduledTime = b.ScheduledTime
+	x.xxx_hidden_Data = b.Data
+	x.xxx_hidden_VersionedTransition = b.VersionedTransition
+	x.xxx_hidden_VersionedTransitionOffset = b.VersionedTransitionOffset
+	x.xxx_hidden_PhysicalTaskStatus = b.PhysicalTaskStatus
+	return m0
 }
 
 var File_temporal_server_api_persistence_v1_chasm_proto protoreflect.FileDescriptor
@@ -847,18 +1482,6 @@ const file_temporal_server_api_persistence_v1_chasm_proto_rawDesc = "" +
 	"request_id\x18\x04 \x01(\tR\trequestIdB\t\n" +
 	"\aoutcomeB6Z4go.temporal.io/server/api/persistence/v1;persistenceb\x06proto3"
 
-var (
-	file_temporal_server_api_persistence_v1_chasm_proto_rawDescOnce sync.Once
-	file_temporal_server_api_persistence_v1_chasm_proto_rawDescData []byte
-)
-
-func file_temporal_server_api_persistence_v1_chasm_proto_rawDescGZIP() []byte {
-	file_temporal_server_api_persistence_v1_chasm_proto_rawDescOnce.Do(func() {
-		file_temporal_server_api_persistence_v1_chasm_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_api_persistence_v1_chasm_proto_rawDesc), len(file_temporal_server_api_persistence_v1_chasm_proto_rawDesc)))
-	})
-	return file_temporal_server_api_persistence_v1_chasm_proto_rawDescData
-}
-
 var file_temporal_server_api_persistence_v1_chasm_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
 var file_temporal_server_api_persistence_v1_chasm_proto_goTypes = []any{
 	(*ChasmNode)(nil),                     // 0: temporal.server.api.persistence.v1.ChasmNode
@@ -913,14 +1536,14 @@ func file_temporal_server_api_persistence_v1_chasm_proto_init() {
 	}
 	file_temporal_server_api_persistence_v1_hsm_proto_init()
 	file_temporal_server_api_persistence_v1_chasm_proto_msgTypes[1].OneofWrappers = []any{
-		(*ChasmNodeMetadata_ComponentAttributes)(nil),
-		(*ChasmNodeMetadata_DataAttributes)(nil),
-		(*ChasmNodeMetadata_CollectionAttributes)(nil),
-		(*ChasmNodeMetadata_PointerAttributes)(nil),
+		(*chasmNodeMetadata_ComponentAttributes)(nil),
+		(*chasmNodeMetadata_DataAttributes)(nil),
+		(*chasmNodeMetadata_CollectionAttributes)(nil),
+		(*chasmNodeMetadata_PointerAttributes)(nil),
 	}
 	file_temporal_server_api_persistence_v1_chasm_proto_msgTypes[8].OneofWrappers = []any{
-		(*ChasmNexusCompletion_Success)(nil),
-		(*ChasmNexusCompletion_Failure)(nil),
+		(*chasmNexusCompletion_Success)(nil),
+		(*chasmNexusCompletion_Failure)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{

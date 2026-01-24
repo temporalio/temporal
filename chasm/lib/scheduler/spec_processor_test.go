@@ -65,8 +65,8 @@ func (s *specProcessorSuite) TestProcessTimeRange_LimitedActions() {
 	start := end.Add(-defaultInterval)
 
 	// A schedule with an action limit and remaining actions should buffer actions.
-	sched.Schedule.State.LimitedActions = true
-	sched.Schedule.State.RemainingActions = 1
+	sched.Schedule.GetState().SetLimitedActions(true)
+	sched.Schedule.GetState().SetRemainingActions(1)
 
 	res, err := s.processor.ProcessTimeRange(sched, start, end, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, sched.WorkflowID(), "", false, nil)
 	s.NoError(err)
@@ -74,7 +74,7 @@ func (s *specProcessorSuite) TestProcessTimeRange_LimitedActions() {
 
 	// When a schedule has an action limit that has been exceeded, we don't bother
 	// buffering additional actions.
-	sched.Schedule.State.RemainingActions = 0
+	sched.Schedule.GetState().SetRemainingActions(0)
 
 	res, err = s.processor.ProcessTimeRange(sched, start, end, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, sched.WorkflowID(), "", false, nil)
 	s.NoError(err)
@@ -86,9 +86,9 @@ func (s *specProcessorSuite) TestProcessTimeRange_LimitedActions() {
 	s.NoError(err)
 	s.Equal(1, len(res.BufferedStarts))
 	bufferedStart := res.BufferedStarts[0]
-	s.True(bufferedStart.Manual)
-	s.Contains(bufferedStart.RequestId, backfillID)
-	s.NotEmpty(bufferedStart.WorkflowId)
+	s.True(bufferedStart.GetManual())
+	s.Contains(bufferedStart.GetRequestId(), backfillID)
+	s.NotEmpty(bufferedStart.GetWorkflowId())
 }
 
 func (s *specProcessorSuite) TestProcessTimeRange_UpdateAfterHighWatermark() {
@@ -101,7 +101,7 @@ func (s *specProcessorSuite) TestProcessTimeRange_UpdateAfterHighWatermark() {
 	end := base.Add(defaultInterval * 3)
 
 	// Actions taking place in time before the last update time should be dropped.
-	sched.Info.UpdateTime = timestamppb.Now()
+	sched.Info.SetUpdateTime(timestamppb.Now())
 
 	res, err := s.processor.ProcessTimeRange(sched, start, end, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, sched.WorkflowID(), "", false, nil)
 	s.NoError(err)
@@ -113,13 +113,13 @@ func (s *specProcessorSuite) TestProcessTimeRange_UpdateAfterHighWatermark() {
 func (s *specProcessorSuite) TestProcessTimeRange_UpdateBetweenNominalAndJitter() {
 	ctx := chasm.NewMutableContext(context.Background(), s.node)
 	schedule := defaultSchedule()
-	schedule.Policies.CatchupWindow = durationpb.New(2 * time.Hour)
-	schedule.Spec = &schedulepb.ScheduleSpec{
-		Interval: []*schedulepb.IntervalSpec{{
+	schedule.GetPolicies().SetCatchupWindow(durationpb.New(2 * time.Hour))
+	schedule.SetSpec(schedulepb.ScheduleSpec_builder{
+		Interval: []*schedulepb.IntervalSpec{schedulepb.IntervalSpec_builder{
 			Interval: durationpb.New(1 * time.Hour),
-		}},
+		}.Build()},
 		Jitter: durationpb.New(1 * time.Hour),
-	}
+	}.Build())
 	sched := scheduler.NewScheduler(ctx, namespace, namespaceID, scheduleID, schedule, nil)
 
 	// Generate a start with a long jitter period.
@@ -129,7 +129,7 @@ func (s *specProcessorSuite) TestProcessTimeRange_UpdateBetweenNominalAndJitter(
 
 	// Set our update time between the start's nominal and jittered time.
 	updateTime := start.Add(10 * time.Minute)
-	sched.Info.UpdateTime = timestamppb.New(updateTime)
+	sched.Info.SetUpdateTime(timestamppb.New(updateTime))
 
 	// A single start should have been buffered.
 	res, err := s.processor.ProcessTimeRange(sched, start, end, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, sched.WorkflowID(), "", false, nil)
@@ -181,24 +181,24 @@ func (s *specProcessorSuite) TestProcessTimeRange_OverlapPolicy() {
 	start := end.Add(-defaultInterval * 5)
 
 	// Check that a default overlap policy (SKIP) is applied, even when left unspecified.
-	sched.Schedule.Policies.OverlapPolicy = enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED
+	sched.Schedule.GetPolicies().SetOverlapPolicy(enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED)
 
 	res, err := s.processor.ProcessTimeRange(sched, start, end, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, sched.WorkflowID(), "", false, nil)
 	s.NoError(err)
 	s.Equal(5, len(res.BufferedStarts))
 	for _, b := range res.BufferedStarts {
-		s.Equal(enumspb.SCHEDULE_OVERLAP_POLICY_SKIP, b.OverlapPolicy)
+		s.Equal(enumspb.SCHEDULE_OVERLAP_POLICY_SKIP, b.GetOverlapPolicy())
 	}
 
 	// Check that a specified overlap policy is applied.
 	overlapPolicy := enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL
-	sched.Schedule.Policies.OverlapPolicy = overlapPolicy
+	sched.Schedule.GetPolicies().SetOverlapPolicy(overlapPolicy)
 
 	res, err = s.processor.ProcessTimeRange(sched, start, end, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, sched.WorkflowID(), "", false, nil)
 	s.NoError(err)
 	s.Equal(5, len(res.BufferedStarts))
 	for _, b := range res.BufferedStarts {
-		s.Equal(overlapPolicy, b.OverlapPolicy)
+		s.Equal(overlapPolicy, b.GetOverlapPolicy())
 	}
 }
 
@@ -216,18 +216,18 @@ func (s *specProcessorSuite) TestProcessTimeRange_Basic() {
 	uniqueTimes := make(map[time.Time]bool)
 	uniqueIDs := make(map[string]bool)
 	for _, b := range res.BufferedStarts {
-		s.False(b.Manual)
+		s.False(b.GetManual())
 
-		actualTime := b.ActualTime.AsTime()
+		actualTime := b.GetActualTime().AsTime()
 		s.False(uniqueTimes[actualTime])
-		s.False(uniqueIDs[b.RequestId])
+		s.False(uniqueIDs[b.GetRequestId()])
 		uniqueTimes[actualTime] = true
-		uniqueIDs[b.RequestId] = true
+		uniqueIDs[b.GetRequestId()] = true
 
 		// Validate WorkflowId format: scheduled-wf-{RFC3339 timestamp}
-		nominalTime := b.NominalTime.AsTime()
+		nominalTime := b.GetNominalTime().AsTime()
 		expectedTimestamp := nominalTime.Truncate(time.Second).Format(time.RFC3339)
-		s.Equal("scheduled-wf-"+expectedTimestamp, b.WorkflowId)
+		s.Equal("scheduled-wf-"+expectedTimestamp, b.GetWorkflowId())
 	}
 
 	// Validate next wakeup time.

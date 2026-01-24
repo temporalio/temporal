@@ -37,7 +37,7 @@ func (s *visibilityArchiverSuite) SetupTest() {
 	s.logger = log.NewNoopLogger()
 	s.metricsHandler = metrics.NoopMetricsHandler
 	s.expectedVisibilityRecords = []*archiverspb.VisibilityRecord{
-		{
+		archiverspb.VisibilityRecord_builder{
 			NamespaceId:      testNamespaceID,
 			Namespace:        testNamespace,
 			WorkflowId:       testWorkflowID,
@@ -47,7 +47,7 @@ func (s *visibilityArchiverSuite) SetupTest() {
 			CloseTime:        timestamp.UnixOrZeroTimePtr(1580896575946478000),
 			Status:           enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 			HistoryLength:    36,
-		},
+		}.Build(),
 	}
 }
 
@@ -119,12 +119,12 @@ func (s *visibilityArchiverSuite) TestArchive_Fail_InvalidVisibilityURI() {
 
 	visibilityArchiver := newVisibilityArchiver(s.logger, s.metricsHandler, storageWrapper)
 	s.NoError(err)
-	request := &archiverspb.VisibilityRecord{
+	request := archiverspb.VisibilityRecord_builder{
 		NamespaceId: testNamespaceID,
 		Namespace:   testNamespace,
 		WorkflowId:  testWorkflowID,
 		RunId:       testRunID,
-	}
+	}.Build()
 
 	err = visibilityArchiver.Archive(ctx, URI, request)
 	s.Error(err)
@@ -159,7 +159,7 @@ func (s *visibilityArchiverSuite) TestVisibilityArchive() {
 	visibilityArchiver := newVisibilityArchiver(s.logger, s.metricsHandler, storageWrapper)
 	s.NoError(err)
 
-	request := &archiverspb.VisibilityRecord{
+	request := archiverspb.VisibilityRecord_builder{
 		Namespace:        testNamespace,
 		NamespaceId:      testNamespaceID,
 		WorkflowId:       testWorkflowID,
@@ -170,7 +170,7 @@ func (s *visibilityArchiverSuite) TestVisibilityArchive() {
 		CloseTime:        timestamp.TimeNowPtrUtc(),
 		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
 		HistoryLength:    int64(101),
-	}
+	}.Build()
 
 	err = visibilityArchiver.Archive(ctx, URI, request)
 	s.NoError(err)
@@ -431,9 +431,9 @@ func (s *visibilityArchiverSuite) TestQuery_EmptyQuery_Pagination() {
 		)
 
 		for _, execution := range response.Executions {
-			key := execution.Execution.GetWorkflowId() +
-				"/" + execution.Execution.GetRunId() +
-				"/" + execution.CloseTime.String()
+			key := execution.GetExecution().GetWorkflowId() +
+				"/" + execution.GetExecution().GetRunId() +
+				"/" + execution.GetCloseTime().String()
 			executions[key] = execution
 		}
 	}

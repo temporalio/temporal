@@ -8,7 +8,6 @@ package history
 
 import (
 	reflect "reflect"
-	sync "sync"
 	unsafe "unsafe"
 
 	v1 "go.temporal.io/api/history/v1"
@@ -25,11 +24,10 @@ const (
 )
 
 type TransientWorkflowTaskInfo struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// A list of history events that are to be appended to the "real" workflow history.
-	HistorySuffix []*v1.HistoryEvent `protobuf:"bytes,3,rep,name=history_suffix,json=historySuffix,proto3" json:"history_suffix,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                    protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_HistorySuffix *[]*v1.HistoryEvent    `protobuf:"bytes,3,rep,name=history_suffix,json=historySuffix,proto3"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *TransientWorkflowTaskInfo) Reset() {
@@ -57,25 +55,41 @@ func (x *TransientWorkflowTaskInfo) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use TransientWorkflowTaskInfo.ProtoReflect.Descriptor instead.
-func (*TransientWorkflowTaskInfo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_history_v1_message_proto_rawDescGZIP(), []int{0}
-}
-
 func (x *TransientWorkflowTaskInfo) GetHistorySuffix() []*v1.HistoryEvent {
 	if x != nil {
-		return x.HistorySuffix
+		if x.xxx_hidden_HistorySuffix != nil {
+			return *x.xxx_hidden_HistorySuffix
+		}
 	}
 	return nil
 }
 
+func (x *TransientWorkflowTaskInfo) SetHistorySuffix(v []*v1.HistoryEvent) {
+	x.xxx_hidden_HistorySuffix = &v
+}
+
+type TransientWorkflowTaskInfo_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// A list of history events that are to be appended to the "real" workflow history.
+	HistorySuffix []*v1.HistoryEvent
+}
+
+func (b0 TransientWorkflowTaskInfo_builder) Build() *TransientWorkflowTaskInfo {
+	m0 := &TransientWorkflowTaskInfo{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_HistorySuffix = &b.HistorySuffix
+	return m0
+}
+
 // VersionHistoryItem contains signal eventId and the corresponding version.
 type VersionHistoryItem struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	EventId       int64                  `protobuf:"varint,1,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
-	Version       int64                  `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state              protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_EventId int64                  `protobuf:"varint,1,opt,name=event_id,json=eventId,proto3"`
+	xxx_hidden_Version int64                  `protobuf:"varint,2,opt,name=version,proto3"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *VersionHistoryItem) Reset() {
@@ -103,32 +117,51 @@ func (x *VersionHistoryItem) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use VersionHistoryItem.ProtoReflect.Descriptor instead.
-func (*VersionHistoryItem) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_history_v1_message_proto_rawDescGZIP(), []int{1}
-}
-
 func (x *VersionHistoryItem) GetEventId() int64 {
 	if x != nil {
-		return x.EventId
+		return x.xxx_hidden_EventId
 	}
 	return 0
 }
 
 func (x *VersionHistoryItem) GetVersion() int64 {
 	if x != nil {
-		return x.Version
+		return x.xxx_hidden_Version
 	}
 	return 0
 }
 
+func (x *VersionHistoryItem) SetEventId(v int64) {
+	x.xxx_hidden_EventId = v
+}
+
+func (x *VersionHistoryItem) SetVersion(v int64) {
+	x.xxx_hidden_Version = v
+}
+
+type VersionHistoryItem_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	EventId int64
+	Version int64
+}
+
+func (b0 VersionHistoryItem_builder) Build() *VersionHistoryItem {
+	m0 := &VersionHistoryItem{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_EventId = b.EventId
+	x.xxx_hidden_Version = b.Version
+	return m0
+}
+
 // VersionHistory contains the version history of a branch.
 type VersionHistory struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	BranchToken   []byte                 `protobuf:"bytes,1,opt,name=branch_token,json=branchToken,proto3" json:"branch_token,omitempty"`
-	Items         []*VersionHistoryItem  `protobuf:"bytes,2,rep,name=items,proto3" json:"items,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                  protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_BranchToken []byte                 `protobuf:"bytes,1,opt,name=branch_token,json=branchToken,proto3"`
+	xxx_hidden_Items       *[]*VersionHistoryItem `protobuf:"bytes,2,rep,name=items,proto3"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *VersionHistory) Reset() {
@@ -156,32 +189,56 @@ func (x *VersionHistory) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use VersionHistory.ProtoReflect.Descriptor instead.
-func (*VersionHistory) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_history_v1_message_proto_rawDescGZIP(), []int{2}
-}
-
 func (x *VersionHistory) GetBranchToken() []byte {
 	if x != nil {
-		return x.BranchToken
+		return x.xxx_hidden_BranchToken
 	}
 	return nil
 }
 
 func (x *VersionHistory) GetItems() []*VersionHistoryItem {
 	if x != nil {
-		return x.Items
+		if x.xxx_hidden_Items != nil {
+			return *x.xxx_hidden_Items
+		}
 	}
 	return nil
 }
 
+func (x *VersionHistory) SetBranchToken(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_BranchToken = v
+}
+
+func (x *VersionHistory) SetItems(v []*VersionHistoryItem) {
+	x.xxx_hidden_Items = &v
+}
+
+type VersionHistory_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	BranchToken []byte
+	Items       []*VersionHistoryItem
+}
+
+func (b0 VersionHistory_builder) Build() *VersionHistory {
+	m0 := &VersionHistory{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_BranchToken = b.BranchToken
+	x.xxx_hidden_Items = &b.Items
+	return m0
+}
+
 // VersionHistories contains all version histories from all branches.
 type VersionHistories struct {
-	state                      protoimpl.MessageState `protogen:"open.v1"`
-	CurrentVersionHistoryIndex int32                  `protobuf:"varint,1,opt,name=current_version_history_index,json=currentVersionHistoryIndex,proto3" json:"current_version_history_index,omitempty"`
-	Histories                  []*VersionHistory      `protobuf:"bytes,2,rep,name=histories,proto3" json:"histories,omitempty"`
-	unknownFields              protoimpl.UnknownFields
-	sizeCache                  protoimpl.SizeCache
+	state                                 protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_CurrentVersionHistoryIndex int32                  `protobuf:"varint,1,opt,name=current_version_history_index,json=currentVersionHistoryIndex,proto3"`
+	xxx_hidden_Histories                  *[]*VersionHistory     `protobuf:"bytes,2,rep,name=histories,proto3"`
+	unknownFields                         protoimpl.UnknownFields
+	sizeCache                             protoimpl.SizeCache
 }
 
 func (x *VersionHistories) Reset() {
@@ -209,31 +266,52 @@ func (x *VersionHistories) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use VersionHistories.ProtoReflect.Descriptor instead.
-func (*VersionHistories) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_history_v1_message_proto_rawDescGZIP(), []int{3}
-}
-
 func (x *VersionHistories) GetCurrentVersionHistoryIndex() int32 {
 	if x != nil {
-		return x.CurrentVersionHistoryIndex
+		return x.xxx_hidden_CurrentVersionHistoryIndex
 	}
 	return 0
 }
 
 func (x *VersionHistories) GetHistories() []*VersionHistory {
 	if x != nil {
-		return x.Histories
+		if x.xxx_hidden_Histories != nil {
+			return *x.xxx_hidden_Histories
+		}
 	}
 	return nil
 }
 
+func (x *VersionHistories) SetCurrentVersionHistoryIndex(v int32) {
+	x.xxx_hidden_CurrentVersionHistoryIndex = v
+}
+
+func (x *VersionHistories) SetHistories(v []*VersionHistory) {
+	x.xxx_hidden_Histories = &v
+}
+
+type VersionHistories_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	CurrentVersionHistoryIndex int32
+	Histories                  []*VersionHistory
+}
+
+func (b0 VersionHistories_builder) Build() *VersionHistories {
+	m0 := &VersionHistories{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_CurrentVersionHistoryIndex = b.CurrentVersionHistoryIndex
+	x.xxx_hidden_Histories = &b.Histories
+	return m0
+}
+
 type TaskKey struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	TaskId        int64                  `protobuf:"varint,1,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
-	FireTime      *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=fire_time,json=fireTime,proto3" json:"fire_time,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state               protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_TaskId   int64                  `protobuf:"varint,1,opt,name=task_id,json=taskId,proto3"`
+	xxx_hidden_FireTime *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=fire_time,json=fireTime,proto3"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *TaskKey) Reset() {
@@ -261,31 +339,61 @@ func (x *TaskKey) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use TaskKey.ProtoReflect.Descriptor instead.
-func (*TaskKey) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_history_v1_message_proto_rawDescGZIP(), []int{4}
-}
-
 func (x *TaskKey) GetTaskId() int64 {
 	if x != nil {
-		return x.TaskId
+		return x.xxx_hidden_TaskId
 	}
 	return 0
 }
 
 func (x *TaskKey) GetFireTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.FireTime
+		return x.xxx_hidden_FireTime
 	}
 	return nil
 }
 
+func (x *TaskKey) SetTaskId(v int64) {
+	x.xxx_hidden_TaskId = v
+}
+
+func (x *TaskKey) SetFireTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_FireTime = v
+}
+
+func (x *TaskKey) HasFireTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_FireTime != nil
+}
+
+func (x *TaskKey) ClearFireTime() {
+	x.xxx_hidden_FireTime = nil
+}
+
+type TaskKey_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	TaskId   int64
+	FireTime *timestamppb.Timestamp
+}
+
+func (b0 TaskKey_builder) Build() *TaskKey {
+	m0 := &TaskKey{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_TaskId = b.TaskId
+	x.xxx_hidden_FireTime = b.FireTime
+	return m0
+}
+
 type TaskRange struct {
-	state               protoimpl.MessageState `protogen:"open.v1"`
-	InclusiveMinTaskKey *TaskKey               `protobuf:"bytes,1,opt,name=inclusive_min_task_key,json=inclusiveMinTaskKey,proto3" json:"inclusive_min_task_key,omitempty"`
-	ExclusiveMaxTaskKey *TaskKey               `protobuf:"bytes,2,opt,name=exclusive_max_task_key,json=exclusiveMaxTaskKey,proto3" json:"exclusive_max_task_key,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	state                          protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_InclusiveMinTaskKey *TaskKey               `protobuf:"bytes,1,opt,name=inclusive_min_task_key,json=inclusiveMinTaskKey,proto3"`
+	xxx_hidden_ExclusiveMaxTaskKey *TaskKey               `protobuf:"bytes,2,opt,name=exclusive_max_task_key,json=exclusiveMaxTaskKey,proto3"`
+	unknownFields                  protoimpl.UnknownFields
+	sizeCache                      protoimpl.SizeCache
 }
 
 func (x *TaskRange) Reset() {
@@ -313,32 +421,73 @@ func (x *TaskRange) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use TaskRange.ProtoReflect.Descriptor instead.
-func (*TaskRange) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_history_v1_message_proto_rawDescGZIP(), []int{5}
-}
-
 func (x *TaskRange) GetInclusiveMinTaskKey() *TaskKey {
 	if x != nil {
-		return x.InclusiveMinTaskKey
+		return x.xxx_hidden_InclusiveMinTaskKey
 	}
 	return nil
 }
 
 func (x *TaskRange) GetExclusiveMaxTaskKey() *TaskKey {
 	if x != nil {
-		return x.ExclusiveMaxTaskKey
+		return x.xxx_hidden_ExclusiveMaxTaskKey
 	}
 	return nil
 }
 
+func (x *TaskRange) SetInclusiveMinTaskKey(v *TaskKey) {
+	x.xxx_hidden_InclusiveMinTaskKey = v
+}
+
+func (x *TaskRange) SetExclusiveMaxTaskKey(v *TaskKey) {
+	x.xxx_hidden_ExclusiveMaxTaskKey = v
+}
+
+func (x *TaskRange) HasInclusiveMinTaskKey() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_InclusiveMinTaskKey != nil
+}
+
+func (x *TaskRange) HasExclusiveMaxTaskKey() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_ExclusiveMaxTaskKey != nil
+}
+
+func (x *TaskRange) ClearInclusiveMinTaskKey() {
+	x.xxx_hidden_InclusiveMinTaskKey = nil
+}
+
+func (x *TaskRange) ClearExclusiveMaxTaskKey() {
+	x.xxx_hidden_ExclusiveMaxTaskKey = nil
+}
+
+type TaskRange_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	InclusiveMinTaskKey *TaskKey
+	ExclusiveMaxTaskKey *TaskKey
+}
+
+func (b0 TaskRange_builder) Build() *TaskRange {
+	m0 := &TaskRange{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_InclusiveMinTaskKey = b.InclusiveMinTaskKey
+	x.xxx_hidden_ExclusiveMaxTaskKey = b.ExclusiveMaxTaskKey
+	return m0
+}
+
 // StrippedHistoryEvent is a stripped down version of HistoryEvent that only contains the event_id and version.
 type StrippedHistoryEvent struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	EventId       int64                  `protobuf:"varint,1,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
-	Version       int64                  `protobuf:"varint,4,opt,name=version,proto3" json:"version,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state              protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_EventId int64                  `protobuf:"varint,1,opt,name=event_id,json=eventId,proto3"`
+	xxx_hidden_Version int64                  `protobuf:"varint,4,opt,name=version,proto3"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *StrippedHistoryEvent) Reset() {
@@ -366,30 +515,49 @@ func (x *StrippedHistoryEvent) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use StrippedHistoryEvent.ProtoReflect.Descriptor instead.
-func (*StrippedHistoryEvent) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_history_v1_message_proto_rawDescGZIP(), []int{6}
-}
-
 func (x *StrippedHistoryEvent) GetEventId() int64 {
 	if x != nil {
-		return x.EventId
+		return x.xxx_hidden_EventId
 	}
 	return 0
 }
 
 func (x *StrippedHistoryEvent) GetVersion() int64 {
 	if x != nil {
-		return x.Version
+		return x.xxx_hidden_Version
 	}
 	return 0
 }
 
+func (x *StrippedHistoryEvent) SetEventId(v int64) {
+	x.xxx_hidden_EventId = v
+}
+
+func (x *StrippedHistoryEvent) SetVersion(v int64) {
+	x.xxx_hidden_Version = v
+}
+
+type StrippedHistoryEvent_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	EventId int64
+	Version int64
+}
+
+func (b0 StrippedHistoryEvent_builder) Build() *StrippedHistoryEvent {
+	m0 := &StrippedHistoryEvent{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_EventId = b.EventId
+	x.xxx_hidden_Version = b.Version
+	return m0
+}
+
 type StrippedHistoryEvents struct {
-	state         protoimpl.MessageState  `protogen:"open.v1"`
-	Events        []*StrippedHistoryEvent `protobuf:"bytes,1,rep,name=events,proto3" json:"events,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state             protoimpl.MessageState   `protogen:"opaque.v1"`
+	xxx_hidden_Events *[]*StrippedHistoryEvent `protobuf:"bytes,1,rep,name=events,proto3"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *StrippedHistoryEvents) Reset() {
@@ -417,16 +585,31 @@ func (x *StrippedHistoryEvents) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use StrippedHistoryEvents.ProtoReflect.Descriptor instead.
-func (*StrippedHistoryEvents) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_history_v1_message_proto_rawDescGZIP(), []int{7}
-}
-
 func (x *StrippedHistoryEvents) GetEvents() []*StrippedHistoryEvent {
 	if x != nil {
-		return x.Events
+		if x.xxx_hidden_Events != nil {
+			return *x.xxx_hidden_Events
+		}
 	}
 	return nil
+}
+
+func (x *StrippedHistoryEvents) SetEvents(v []*StrippedHistoryEvent) {
+	x.xxx_hidden_Events = &v
+}
+
+type StrippedHistoryEvents_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Events []*StrippedHistoryEvent
+}
+
+func (b0 StrippedHistoryEvents_builder) Build() *StrippedHistoryEvents {
+	m0 := &StrippedHistoryEvents{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Events = &b.Events
+	return m0
 }
 
 var File_temporal_server_api_history_v1_message_proto protoreflect.FileDescriptor
@@ -456,18 +639,6 @@ const file_temporal_server_api_history_v1_message_proto_rawDesc = "" +
 	"\aversion\x18\x04 \x01(\x03R\aversion\"e\n" +
 	"\x15StrippedHistoryEvents\x12L\n" +
 	"\x06events\x18\x01 \x03(\v24.temporal.server.api.history.v1.StrippedHistoryEventR\x06eventsB.Z,go.temporal.io/server/api/history/v1;historyb\x06proto3"
-
-var (
-	file_temporal_server_api_history_v1_message_proto_rawDescOnce sync.Once
-	file_temporal_server_api_history_v1_message_proto_rawDescData []byte
-)
-
-func file_temporal_server_api_history_v1_message_proto_rawDescGZIP() []byte {
-	file_temporal_server_api_history_v1_message_proto_rawDescOnce.Do(func() {
-		file_temporal_server_api_history_v1_message_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_api_history_v1_message_proto_rawDesc), len(file_temporal_server_api_history_v1_message_proto_rawDesc)))
-	})
-	return file_temporal_server_api_history_v1_message_proto_rawDescData
-}
 
 var file_temporal_server_api_history_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_temporal_server_api_history_v1_message_proto_goTypes = []any{

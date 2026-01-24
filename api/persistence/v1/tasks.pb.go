@@ -8,7 +8,6 @@ package persistence
 
 import (
 	reflect "reflect"
-	sync "sync"
 	unsafe "unsafe"
 
 	v12 "go.temporal.io/api/common/v1"
@@ -29,12 +28,12 @@ const (
 
 // task column
 type AllocatedTaskInfo struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Data          *TaskInfo              `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
-	TaskPass      int64                  `protobuf:"varint,3,opt,name=task_pass,json=taskPass,proto3" json:"task_pass,omitempty"`
-	TaskId        int64                  `protobuf:"varint,2,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state               protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Data     *TaskInfo              `protobuf:"bytes,1,opt,name=data,proto3"`
+	xxx_hidden_TaskPass int64                  `protobuf:"varint,3,opt,name=task_pass,json=taskPass,proto3"`
+	xxx_hidden_TaskId   int64                  `protobuf:"varint,2,opt,name=task_id,json=taskId,proto3"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *AllocatedTaskInfo) Reset() {
@@ -62,51 +61,83 @@ func (x *AllocatedTaskInfo) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use AllocatedTaskInfo.ProtoReflect.Descriptor instead.
-func (*AllocatedTaskInfo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_tasks_proto_rawDescGZIP(), []int{0}
-}
-
 func (x *AllocatedTaskInfo) GetData() *TaskInfo {
 	if x != nil {
-		return x.Data
+		return x.xxx_hidden_Data
 	}
 	return nil
 }
 
 func (x *AllocatedTaskInfo) GetTaskPass() int64 {
 	if x != nil {
-		return x.TaskPass
+		return x.xxx_hidden_TaskPass
 	}
 	return 0
 }
 
 func (x *AllocatedTaskInfo) GetTaskId() int64 {
 	if x != nil {
-		return x.TaskId
+		return x.xxx_hidden_TaskId
 	}
 	return 0
 }
 
+func (x *AllocatedTaskInfo) SetData(v *TaskInfo) {
+	x.xxx_hidden_Data = v
+}
+
+func (x *AllocatedTaskInfo) SetTaskPass(v int64) {
+	x.xxx_hidden_TaskPass = v
+}
+
+func (x *AllocatedTaskInfo) SetTaskId(v int64) {
+	x.xxx_hidden_TaskId = v
+}
+
+func (x *AllocatedTaskInfo) HasData() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Data != nil
+}
+
+func (x *AllocatedTaskInfo) ClearData() {
+	x.xxx_hidden_Data = nil
+}
+
+type AllocatedTaskInfo_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Data     *TaskInfo
+	TaskPass int64
+	TaskId   int64
+}
+
+func (b0 AllocatedTaskInfo_builder) Build() *AllocatedTaskInfo {
+	m0 := &AllocatedTaskInfo{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Data = b.Data
+	x.xxx_hidden_TaskPass = b.TaskPass
+	x.xxx_hidden_TaskId = b.TaskId
+	return m0
+}
+
 type TaskInfo struct {
-	state            protoimpl.MessageState `protogen:"open.v1"`
-	NamespaceId      string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	WorkflowId       string                 `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
-	RunId            string                 `protobuf:"bytes,3,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	ScheduledEventId int64                  `protobuf:"varint,4,opt,name=scheduled_event_id,json=scheduledEventId,proto3" json:"scheduled_event_id,omitempty"`
-	CreateTime       *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
-	ExpiryTime       *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=expiry_time,json=expiryTime,proto3" json:"expiry_time,omitempty"`
-	Clock            *v1.VectorClock        `protobuf:"bytes,7,opt,name=clock,proto3" json:"clock,omitempty"`
-	// How this task should be directed. (Missing means the default for
-	// TaskVersionDirective, which is unversioned.)
-	VersionDirective *v11.TaskVersionDirective `protobuf:"bytes,8,opt,name=version_directive,json=versionDirective,proto3" json:"version_directive,omitempty"`
-	// Stamp field allows to differentiate between different instances of the same task
-	Stamp    int32         `protobuf:"varint,9,opt,name=stamp,proto3" json:"stamp,omitempty"`
-	Priority *v12.Priority `protobuf:"bytes,10,opt,name=priority,proto3" json:"priority,omitempty"`
-	// Reference to any chasm component associated with this task
-	ComponentRef  []byte `protobuf:"bytes,11,opt,name=component_ref,json=componentRef,proto3" json:"component_ref,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                       protoimpl.MessageState    `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId      string                    `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_WorkflowId       string                    `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3"`
+	xxx_hidden_RunId            string                    `protobuf:"bytes,3,opt,name=run_id,json=runId,proto3"`
+	xxx_hidden_ScheduledEventId int64                     `protobuf:"varint,4,opt,name=scheduled_event_id,json=scheduledEventId,proto3"`
+	xxx_hidden_CreateTime       *timestamppb.Timestamp    `protobuf:"bytes,5,opt,name=create_time,json=createTime,proto3"`
+	xxx_hidden_ExpiryTime       *timestamppb.Timestamp    `protobuf:"bytes,6,opt,name=expiry_time,json=expiryTime,proto3"`
+	xxx_hidden_Clock            *v1.VectorClock           `protobuf:"bytes,7,opt,name=clock,proto3"`
+	xxx_hidden_VersionDirective *v11.TaskVersionDirective `protobuf:"bytes,8,opt,name=version_directive,json=versionDirective,proto3"`
+	xxx_hidden_Stamp            int32                     `protobuf:"varint,9,opt,name=stamp,proto3"`
+	xxx_hidden_Priority         *v12.Priority             `protobuf:"bytes,10,opt,name=priority,proto3"`
+	xxx_hidden_ComponentRef     []byte                    `protobuf:"bytes,11,opt,name=component_ref,json=componentRef,proto3"`
+	unknownFields               protoimpl.UnknownFields
+	sizeCache                   protoimpl.SizeCache
 }
 
 func (x *TaskInfo) Reset() {
@@ -134,126 +165,238 @@ func (x *TaskInfo) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use TaskInfo.ProtoReflect.Descriptor instead.
-func (*TaskInfo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_tasks_proto_rawDescGZIP(), []int{1}
-}
-
 func (x *TaskInfo) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *TaskInfo) GetWorkflowId() string {
 	if x != nil {
-		return x.WorkflowId
+		return x.xxx_hidden_WorkflowId
 	}
 	return ""
 }
 
 func (x *TaskInfo) GetRunId() string {
 	if x != nil {
-		return x.RunId
+		return x.xxx_hidden_RunId
 	}
 	return ""
 }
 
 func (x *TaskInfo) GetScheduledEventId() int64 {
 	if x != nil {
-		return x.ScheduledEventId
+		return x.xxx_hidden_ScheduledEventId
 	}
 	return 0
 }
 
 func (x *TaskInfo) GetCreateTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.CreateTime
+		return x.xxx_hidden_CreateTime
 	}
 	return nil
 }
 
 func (x *TaskInfo) GetExpiryTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.ExpiryTime
+		return x.xxx_hidden_ExpiryTime
 	}
 	return nil
 }
 
 func (x *TaskInfo) GetClock() *v1.VectorClock {
 	if x != nil {
-		return x.Clock
+		return x.xxx_hidden_Clock
 	}
 	return nil
 }
 
 func (x *TaskInfo) GetVersionDirective() *v11.TaskVersionDirective {
 	if x != nil {
-		return x.VersionDirective
+		return x.xxx_hidden_VersionDirective
 	}
 	return nil
 }
 
 func (x *TaskInfo) GetStamp() int32 {
 	if x != nil {
-		return x.Stamp
+		return x.xxx_hidden_Stamp
 	}
 	return 0
 }
 
 func (x *TaskInfo) GetPriority() *v12.Priority {
 	if x != nil {
-		return x.Priority
+		return x.xxx_hidden_Priority
 	}
 	return nil
 }
 
 func (x *TaskInfo) GetComponentRef() []byte {
 	if x != nil {
-		return x.ComponentRef
+		return x.xxx_hidden_ComponentRef
 	}
 	return nil
 }
 
+func (x *TaskInfo) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *TaskInfo) SetWorkflowId(v string) {
+	x.xxx_hidden_WorkflowId = v
+}
+
+func (x *TaskInfo) SetRunId(v string) {
+	x.xxx_hidden_RunId = v
+}
+
+func (x *TaskInfo) SetScheduledEventId(v int64) {
+	x.xxx_hidden_ScheduledEventId = v
+}
+
+func (x *TaskInfo) SetCreateTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_CreateTime = v
+}
+
+func (x *TaskInfo) SetExpiryTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_ExpiryTime = v
+}
+
+func (x *TaskInfo) SetClock(v *v1.VectorClock) {
+	x.xxx_hidden_Clock = v
+}
+
+func (x *TaskInfo) SetVersionDirective(v *v11.TaskVersionDirective) {
+	x.xxx_hidden_VersionDirective = v
+}
+
+func (x *TaskInfo) SetStamp(v int32) {
+	x.xxx_hidden_Stamp = v
+}
+
+func (x *TaskInfo) SetPriority(v *v12.Priority) {
+	x.xxx_hidden_Priority = v
+}
+
+func (x *TaskInfo) SetComponentRef(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_ComponentRef = v
+}
+
+func (x *TaskInfo) HasCreateTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_CreateTime != nil
+}
+
+func (x *TaskInfo) HasExpiryTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_ExpiryTime != nil
+}
+
+func (x *TaskInfo) HasClock() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Clock != nil
+}
+
+func (x *TaskInfo) HasVersionDirective() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_VersionDirective != nil
+}
+
+func (x *TaskInfo) HasPriority() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Priority != nil
+}
+
+func (x *TaskInfo) ClearCreateTime() {
+	x.xxx_hidden_CreateTime = nil
+}
+
+func (x *TaskInfo) ClearExpiryTime() {
+	x.xxx_hidden_ExpiryTime = nil
+}
+
+func (x *TaskInfo) ClearClock() {
+	x.xxx_hidden_Clock = nil
+}
+
+func (x *TaskInfo) ClearVersionDirective() {
+	x.xxx_hidden_VersionDirective = nil
+}
+
+func (x *TaskInfo) ClearPriority() {
+	x.xxx_hidden_Priority = nil
+}
+
+type TaskInfo_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId      string
+	WorkflowId       string
+	RunId            string
+	ScheduledEventId int64
+	CreateTime       *timestamppb.Timestamp
+	ExpiryTime       *timestamppb.Timestamp
+	Clock            *v1.VectorClock
+	// How this task should be directed. (Missing means the default for
+	// TaskVersionDirective, which is unversioned.)
+	VersionDirective *v11.TaskVersionDirective
+	// Stamp field allows to differentiate between different instances of the same task
+	Stamp    int32
+	Priority *v12.Priority
+	// Reference to any chasm component associated with this task
+	ComponentRef []byte
+}
+
+func (b0 TaskInfo_builder) Build() *TaskInfo {
+	m0 := &TaskInfo{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_WorkflowId = b.WorkflowId
+	x.xxx_hidden_RunId = b.RunId
+	x.xxx_hidden_ScheduledEventId = b.ScheduledEventId
+	x.xxx_hidden_CreateTime = b.CreateTime
+	x.xxx_hidden_ExpiryTime = b.ExpiryTime
+	x.xxx_hidden_Clock = b.Clock
+	x.xxx_hidden_VersionDirective = b.VersionDirective
+	x.xxx_hidden_Stamp = b.Stamp
+	x.xxx_hidden_Priority = b.Priority
+	x.xxx_hidden_ComponentRef = b.ComponentRef
+	return m0
+}
+
 // task_queue column
 type TaskQueueInfo struct {
-	state       protoimpl.MessageState `protogen:"open.v1"`
-	NamespaceId string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	Name        string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	TaskType    v13.TaskQueueType      `protobuf:"varint,3,opt,name=task_type,json=taskType,proto3,enum=temporal.api.enums.v1.TaskQueueType" json:"task_type,omitempty"`
-	Kind        v13.TaskQueueKind      `protobuf:"varint,4,opt,name=kind,proto3,enum=temporal.api.enums.v1.TaskQueueKind" json:"kind,omitempty"`
-	// After data is migrated into subqueues, this contains a copy of the ack level for subqueue 0.
-	AckLevel       int64                  `protobuf:"varint,5,opt,name=ack_level,json=ackLevel,proto3" json:"ack_level,omitempty"`
-	ExpiryTime     *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=expiry_time,json=expiryTime,proto3" json:"expiry_time,omitempty"`
-	LastUpdateTime *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=last_update_time,json=lastUpdateTime,proto3" json:"last_update_time,omitempty"`
-	// After data is migrated into subqueues, this contains a copy of the count for subqueue 0.
-	ApproximateBacklogCount int64 `protobuf:"varint,8,opt,name=approximate_backlog_count,json=approximateBacklogCount,proto3" json:"approximate_backlog_count,omitempty"`
-	// Subqueues contains one entry for each subqueue in this physical task queue.
-	// Tasks are split into subqueues to implement priority and fairness.
-	// Subqueues are indexed starting from 0, the zero subqueue is always present
-	// and corresponds to the "main" queue before subqueues were introduced.
-	//
-	// The message at index n describes the subqueue at index n.
-	//
-	// Each subqueue has its own ack level and approx backlog count, but they share
-	// the range id. For compatibility, ack level and backlog count for subqueue 0
-	// is copied into TaskQueueInfo.
-	Subqueues []*SubqueueInfo `protobuf:"bytes,9,rep,name=subqueues,proto3" json:"subqueues,omitempty"`
-	// For transitioning from tasks (v1) to tasks_v2 and back:
-	//
-	// If this TaskQueueInfo is in v1 and this is set, then v2 may have tasks.
-	// If this TaskQueueInfo is in v2 and this is set, then v1 may have tasks.
-	//
-	// New metadata starts with this flag set (we could skip this when useNewMatcher is off).
-	// Whenever locking any metadata as the inactive one (drain-only), this should be set.
-	// If the flag is true, no tasks should be written to the active table until the inactive
-	// table has also been locked (and the flag set there for a potential reverse transition).
-	// After determinining that the inactive table has no more tasks left, then this
-	// can be cleared on the active table.
-	OtherHasTasks bool `protobuf:"varint,10,opt,name=other_has_tasks,json=otherHasTasks,proto3" json:"other_has_tasks,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                              protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId             string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_Name                    string                 `protobuf:"bytes,2,opt,name=name,proto3"`
+	xxx_hidden_TaskType                v13.TaskQueueType      `protobuf:"varint,3,opt,name=task_type,json=taskType,proto3,enum=temporal.api.enums.v1.TaskQueueType"`
+	xxx_hidden_Kind                    v13.TaskQueueKind      `protobuf:"varint,4,opt,name=kind,proto3,enum=temporal.api.enums.v1.TaskQueueKind"`
+	xxx_hidden_AckLevel                int64                  `protobuf:"varint,5,opt,name=ack_level,json=ackLevel,proto3"`
+	xxx_hidden_ExpiryTime              *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=expiry_time,json=expiryTime,proto3"`
+	xxx_hidden_LastUpdateTime          *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=last_update_time,json=lastUpdateTime,proto3"`
+	xxx_hidden_ApproximateBacklogCount int64                  `protobuf:"varint,8,opt,name=approximate_backlog_count,json=approximateBacklogCount,proto3"`
+	xxx_hidden_Subqueues               *[]*SubqueueInfo       `protobuf:"bytes,9,rep,name=subqueues,proto3"`
+	xxx_hidden_OtherHasTasks           bool                   `protobuf:"varint,10,opt,name=other_has_tasks,json=otherHasTasks,proto3"`
+	unknownFields                      protoimpl.UnknownFields
+	sizeCache                          protoimpl.SizeCache
 }
 
 func (x *TaskQueueInfo) Reset() {
@@ -281,95 +424,204 @@ func (x *TaskQueueInfo) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use TaskQueueInfo.ProtoReflect.Descriptor instead.
-func (*TaskQueueInfo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_tasks_proto_rawDescGZIP(), []int{2}
-}
-
 func (x *TaskQueueInfo) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *TaskQueueInfo) GetName() string {
 	if x != nil {
-		return x.Name
+		return x.xxx_hidden_Name
 	}
 	return ""
 }
 
 func (x *TaskQueueInfo) GetTaskType() v13.TaskQueueType {
 	if x != nil {
-		return x.TaskType
+		return x.xxx_hidden_TaskType
 	}
 	return v13.TaskQueueType(0)
 }
 
 func (x *TaskQueueInfo) GetKind() v13.TaskQueueKind {
 	if x != nil {
-		return x.Kind
+		return x.xxx_hidden_Kind
 	}
 	return v13.TaskQueueKind(0)
 }
 
 func (x *TaskQueueInfo) GetAckLevel() int64 {
 	if x != nil {
-		return x.AckLevel
+		return x.xxx_hidden_AckLevel
 	}
 	return 0
 }
 
 func (x *TaskQueueInfo) GetExpiryTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.ExpiryTime
+		return x.xxx_hidden_ExpiryTime
 	}
 	return nil
 }
 
 func (x *TaskQueueInfo) GetLastUpdateTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.LastUpdateTime
+		return x.xxx_hidden_LastUpdateTime
 	}
 	return nil
 }
 
 func (x *TaskQueueInfo) GetApproximateBacklogCount() int64 {
 	if x != nil {
-		return x.ApproximateBacklogCount
+		return x.xxx_hidden_ApproximateBacklogCount
 	}
 	return 0
 }
 
 func (x *TaskQueueInfo) GetSubqueues() []*SubqueueInfo {
 	if x != nil {
-		return x.Subqueues
+		if x.xxx_hidden_Subqueues != nil {
+			return *x.xxx_hidden_Subqueues
+		}
 	}
 	return nil
 }
 
 func (x *TaskQueueInfo) GetOtherHasTasks() bool {
 	if x != nil {
-		return x.OtherHasTasks
+		return x.xxx_hidden_OtherHasTasks
 	}
 	return false
 }
 
+func (x *TaskQueueInfo) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *TaskQueueInfo) SetName(v string) {
+	x.xxx_hidden_Name = v
+}
+
+func (x *TaskQueueInfo) SetTaskType(v v13.TaskQueueType) {
+	x.xxx_hidden_TaskType = v
+}
+
+func (x *TaskQueueInfo) SetKind(v v13.TaskQueueKind) {
+	x.xxx_hidden_Kind = v
+}
+
+func (x *TaskQueueInfo) SetAckLevel(v int64) {
+	x.xxx_hidden_AckLevel = v
+}
+
+func (x *TaskQueueInfo) SetExpiryTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_ExpiryTime = v
+}
+
+func (x *TaskQueueInfo) SetLastUpdateTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_LastUpdateTime = v
+}
+
+func (x *TaskQueueInfo) SetApproximateBacklogCount(v int64) {
+	x.xxx_hidden_ApproximateBacklogCount = v
+}
+
+func (x *TaskQueueInfo) SetSubqueues(v []*SubqueueInfo) {
+	x.xxx_hidden_Subqueues = &v
+}
+
+func (x *TaskQueueInfo) SetOtherHasTasks(v bool) {
+	x.xxx_hidden_OtherHasTasks = v
+}
+
+func (x *TaskQueueInfo) HasExpiryTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_ExpiryTime != nil
+}
+
+func (x *TaskQueueInfo) HasLastUpdateTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_LastUpdateTime != nil
+}
+
+func (x *TaskQueueInfo) ClearExpiryTime() {
+	x.xxx_hidden_ExpiryTime = nil
+}
+
+func (x *TaskQueueInfo) ClearLastUpdateTime() {
+	x.xxx_hidden_LastUpdateTime = nil
+}
+
+type TaskQueueInfo_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId string
+	Name        string
+	TaskType    v13.TaskQueueType
+	Kind        v13.TaskQueueKind
+	// After data is migrated into subqueues, this contains a copy of the ack level for subqueue 0.
+	AckLevel       int64
+	ExpiryTime     *timestamppb.Timestamp
+	LastUpdateTime *timestamppb.Timestamp
+	// After data is migrated into subqueues, this contains a copy of the count for subqueue 0.
+	ApproximateBacklogCount int64
+	// Subqueues contains one entry for each subqueue in this physical task queue.
+	// Tasks are split into subqueues to implement priority and fairness.
+	// Subqueues are indexed starting from 0, the zero subqueue is always present
+	// and corresponds to the "main" queue before subqueues were introduced.
+	//
+	// The message at index n describes the subqueue at index n.
+	//
+	// Each subqueue has its own ack level and approx backlog count, but they share
+	// the range id. For compatibility, ack level and backlog count for subqueue 0
+	// is copied into TaskQueueInfo.
+	Subqueues []*SubqueueInfo
+	// For transitioning from tasks (v1) to tasks_v2 and back:
+	//
+	// If this TaskQueueInfo is in v1 and this is set, then v2 may have tasks.
+	// If this TaskQueueInfo is in v2 and this is set, then v1 may have tasks.
+	//
+	// New metadata starts with this flag set (we could skip this when useNewMatcher is off).
+	// Whenever locking any metadata as the inactive one (drain-only), this should be set.
+	// If the flag is true, no tasks should be written to the active table until the inactive
+	// table has also been locked (and the flag set there for a potential reverse transition).
+	// After determinining that the inactive table has no more tasks left, then this
+	// can be cleared on the active table.
+	OtherHasTasks bool
+}
+
+func (b0 TaskQueueInfo_builder) Build() *TaskQueueInfo {
+	m0 := &TaskQueueInfo{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_Name = b.Name
+	x.xxx_hidden_TaskType = b.TaskType
+	x.xxx_hidden_Kind = b.Kind
+	x.xxx_hidden_AckLevel = b.AckLevel
+	x.xxx_hidden_ExpiryTime = b.ExpiryTime
+	x.xxx_hidden_LastUpdateTime = b.LastUpdateTime
+	x.xxx_hidden_ApproximateBacklogCount = b.ApproximateBacklogCount
+	x.xxx_hidden_Subqueues = &b.Subqueues
+	x.xxx_hidden_OtherHasTasks = b.OtherHasTasks
+	return m0
+}
+
 type SubqueueInfo struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Key is the information used by a splitting algorithm to decide which tasks should go in
-	// this subqueue. It should not change after being registered in TaskQueueInfo.
-	Key *SubqueueKey `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
-	// The rest are mutable state for the subqueue:
-	AckLevel                int64          `protobuf:"varint,2,opt,name=ack_level,json=ackLevel,proto3" json:"ack_level,omitempty"`
-	FairAckLevel            *v11.FairLevel `protobuf:"bytes,4,opt,name=fair_ack_level,json=fairAckLevel,proto3" json:"fair_ack_level,omitempty"`
-	ApproximateBacklogCount int64          `protobuf:"varint,3,opt,name=approximate_backlog_count,json=approximateBacklogCount,proto3" json:"approximate_backlog_count,omitempty"`
-	// Max read level keeps track of the highest task level ever written, but is only
-	// maintained best-effort. Do not trust these values.
-	FairMaxReadLevel *v11.FairLevel `protobuf:"bytes,5,opt,name=fair_max_read_level,json=fairMaxReadLevel,proto3" json:"fair_max_read_level,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	state                              protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Key                     *SubqueueKey           `protobuf:"bytes,1,opt,name=key,proto3"`
+	xxx_hidden_AckLevel                int64                  `protobuf:"varint,2,opt,name=ack_level,json=ackLevel,proto3"`
+	xxx_hidden_FairAckLevel            *v11.FairLevel         `protobuf:"bytes,4,opt,name=fair_ack_level,json=fairAckLevel,proto3"`
+	xxx_hidden_ApproximateBacklogCount int64                  `protobuf:"varint,3,opt,name=approximate_backlog_count,json=approximateBacklogCount,proto3"`
+	xxx_hidden_FairMaxReadLevel        *v11.FairLevel         `protobuf:"bytes,5,opt,name=fair_max_read_level,json=fairMaxReadLevel,proto3"`
+	unknownFields                      protoimpl.UnknownFields
+	sizeCache                          protoimpl.SizeCache
 }
 
 func (x *SubqueueInfo) Reset() {
@@ -397,52 +649,126 @@ func (x *SubqueueInfo) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SubqueueInfo.ProtoReflect.Descriptor instead.
-func (*SubqueueInfo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_tasks_proto_rawDescGZIP(), []int{3}
-}
-
 func (x *SubqueueInfo) GetKey() *SubqueueKey {
 	if x != nil {
-		return x.Key
+		return x.xxx_hidden_Key
 	}
 	return nil
 }
 
 func (x *SubqueueInfo) GetAckLevel() int64 {
 	if x != nil {
-		return x.AckLevel
+		return x.xxx_hidden_AckLevel
 	}
 	return 0
 }
 
 func (x *SubqueueInfo) GetFairAckLevel() *v11.FairLevel {
 	if x != nil {
-		return x.FairAckLevel
+		return x.xxx_hidden_FairAckLevel
 	}
 	return nil
 }
 
 func (x *SubqueueInfo) GetApproximateBacklogCount() int64 {
 	if x != nil {
-		return x.ApproximateBacklogCount
+		return x.xxx_hidden_ApproximateBacklogCount
 	}
 	return 0
 }
 
 func (x *SubqueueInfo) GetFairMaxReadLevel() *v11.FairLevel {
 	if x != nil {
-		return x.FairMaxReadLevel
+		return x.xxx_hidden_FairMaxReadLevel
 	}
 	return nil
 }
 
+func (x *SubqueueInfo) SetKey(v *SubqueueKey) {
+	x.xxx_hidden_Key = v
+}
+
+func (x *SubqueueInfo) SetAckLevel(v int64) {
+	x.xxx_hidden_AckLevel = v
+}
+
+func (x *SubqueueInfo) SetFairAckLevel(v *v11.FairLevel) {
+	x.xxx_hidden_FairAckLevel = v
+}
+
+func (x *SubqueueInfo) SetApproximateBacklogCount(v int64) {
+	x.xxx_hidden_ApproximateBacklogCount = v
+}
+
+func (x *SubqueueInfo) SetFairMaxReadLevel(v *v11.FairLevel) {
+	x.xxx_hidden_FairMaxReadLevel = v
+}
+
+func (x *SubqueueInfo) HasKey() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Key != nil
+}
+
+func (x *SubqueueInfo) HasFairAckLevel() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_FairAckLevel != nil
+}
+
+func (x *SubqueueInfo) HasFairMaxReadLevel() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_FairMaxReadLevel != nil
+}
+
+func (x *SubqueueInfo) ClearKey() {
+	x.xxx_hidden_Key = nil
+}
+
+func (x *SubqueueInfo) ClearFairAckLevel() {
+	x.xxx_hidden_FairAckLevel = nil
+}
+
+func (x *SubqueueInfo) ClearFairMaxReadLevel() {
+	x.xxx_hidden_FairMaxReadLevel = nil
+}
+
+type SubqueueInfo_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Key is the information used by a splitting algorithm to decide which tasks should go in
+	// this subqueue. It should not change after being registered in TaskQueueInfo.
+	Key *SubqueueKey
+	// The rest are mutable state for the subqueue:
+	AckLevel                int64
+	FairAckLevel            *v11.FairLevel
+	ApproximateBacklogCount int64
+	// Max read level keeps track of the highest task level ever written, but is only
+	// maintained best-effort. Do not trust these values.
+	FairMaxReadLevel *v11.FairLevel
+}
+
+func (b0 SubqueueInfo_builder) Build() *SubqueueInfo {
+	m0 := &SubqueueInfo{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Key = b.Key
+	x.xxx_hidden_AckLevel = b.AckLevel
+	x.xxx_hidden_FairAckLevel = b.FairAckLevel
+	x.xxx_hidden_ApproximateBacklogCount = b.ApproximateBacklogCount
+	x.xxx_hidden_FairMaxReadLevel = b.FairMaxReadLevel
+	return m0
+}
+
 type SubqueueKey struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Each subqueue contains tasks from only one priority level.
-	Priority      int32 `protobuf:"varint,1,opt,name=priority,proto3" json:"priority,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state               protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Priority int32                  `protobuf:"varint,1,opt,name=priority,proto3"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *SubqueueKey) Reset() {
@@ -470,24 +796,38 @@ func (x *SubqueueKey) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SubqueueKey.ProtoReflect.Descriptor instead.
-func (*SubqueueKey) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_tasks_proto_rawDescGZIP(), []int{4}
-}
-
 func (x *SubqueueKey) GetPriority() int32 {
 	if x != nil {
-		return x.Priority
+		return x.xxx_hidden_Priority
 	}
 	return 0
 }
 
+func (x *SubqueueKey) SetPriority(v int32) {
+	x.xxx_hidden_Priority = v
+}
+
+type SubqueueKey_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Each subqueue contains tasks from only one priority level.
+	Priority int32
+}
+
+func (b0 SubqueueKey_builder) Build() *SubqueueKey {
+	m0 := &SubqueueKey{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Priority = b.Priority
+	return m0
+}
+
 type TaskKey struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	FireTime      *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=fire_time,json=fireTime,proto3" json:"fire_time,omitempty"`
-	TaskId        int64                  `protobuf:"varint,2,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state               protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_FireTime *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=fire_time,json=fireTime,proto3"`
+	xxx_hidden_TaskId   int64                  `protobuf:"varint,2,opt,name=task_id,json=taskId,proto3"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *TaskKey) Reset() {
@@ -515,23 +855,53 @@ func (x *TaskKey) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use TaskKey.ProtoReflect.Descriptor instead.
-func (*TaskKey) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_tasks_proto_rawDescGZIP(), []int{5}
-}
-
 func (x *TaskKey) GetFireTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.FireTime
+		return x.xxx_hidden_FireTime
 	}
 	return nil
 }
 
 func (x *TaskKey) GetTaskId() int64 {
 	if x != nil {
-		return x.TaskId
+		return x.xxx_hidden_TaskId
 	}
 	return 0
+}
+
+func (x *TaskKey) SetFireTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_FireTime = v
+}
+
+func (x *TaskKey) SetTaskId(v int64) {
+	x.xxx_hidden_TaskId = v
+}
+
+func (x *TaskKey) HasFireTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_FireTime != nil
+}
+
+func (x *TaskKey) ClearFireTime() {
+	x.xxx_hidden_FireTime = nil
+}
+
+type TaskKey_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	FireTime *timestamppb.Timestamp
+	TaskId   int64
+}
+
+func (b0 TaskKey_builder) Build() *TaskKey {
+	m0 := &TaskKey{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_FireTime = b.FireTime
+	x.xxx_hidden_TaskId = b.TaskId
+	return m0
 }
 
 var File_temporal_server_api_persistence_v1_tasks_proto protoreflect.FileDescriptor
@@ -583,18 +953,6 @@ const file_temporal_server_api_persistence_v1_tasks_proto_rawDesc = "" +
 	"\aTaskKey\x127\n" +
 	"\tfire_time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\bfireTime\x12\x17\n" +
 	"\atask_id\x18\x02 \x01(\x03R\x06taskIdB6Z4go.temporal.io/server/api/persistence/v1;persistenceb\x06proto3"
-
-var (
-	file_temporal_server_api_persistence_v1_tasks_proto_rawDescOnce sync.Once
-	file_temporal_server_api_persistence_v1_tasks_proto_rawDescData []byte
-)
-
-func file_temporal_server_api_persistence_v1_tasks_proto_rawDescGZIP() []byte {
-	file_temporal_server_api_persistence_v1_tasks_proto_rawDescOnce.Do(func() {
-		file_temporal_server_api_persistence_v1_tasks_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_api_persistence_v1_tasks_proto_rawDesc), len(file_temporal_server_api_persistence_v1_tasks_proto_rawDesc)))
-	})
-	return file_temporal_server_api_persistence_v1_tasks_proto_rawDescData
-}
 
 var file_temporal_server_api_persistence_v1_tasks_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_temporal_server_api_persistence_v1_tasks_proto_goTypes = []any{

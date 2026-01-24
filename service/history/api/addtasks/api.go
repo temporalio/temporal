@@ -46,47 +46,47 @@ func Invoke(
 	req *historyservice.AddTasksRequest,
 	taskRegistry tasks.TaskCategoryRegistry,
 ) (*historyservice.AddTasksResponse, error) {
-	if len(req.Tasks) > maxTasksPerRequest {
+	if len(req.GetTasks()) > maxTasksPerRequest {
 		return nil, serviceerror.NewInvalidArgumentf(
 			"Too many tasks in request: %d > %d",
-			len(req.Tasks),
+			len(req.GetTasks()),
 			maxTasksPerRequest,
 		)
 	}
 
-	if len(req.Tasks) == 0 {
+	if len(req.GetTasks()) == 0 {
 		return nil, serviceerror.NewInvalidArgument("No tasks in request")
 	}
 
 	taskGroups := make(map[taskGroupKey]map[tasks.Category][]tasks.Task)
 
-	for i, task := range req.Tasks {
+	for i, task := range req.GetTasks() {
 		if task == nil {
 			return nil, serviceerror.NewInvalidArgumentf("Nil task at index: %d", i)
 		}
 
-		category, err := api.GetTaskCategory(int(task.CategoryId), taskRegistry)
+		category, err := api.GetTaskCategory(int(task.GetCategoryId()), taskRegistry)
 		if err != nil {
 			return nil, err
 		}
 
-		if task.Blob == nil {
+		if !task.HasBlob() {
 			return nil, serviceerror.NewInvalidArgumentf(
 				"Task blob is nil at index: %d",
 				i,
 			)
 		}
 
-		deserializedTask, err := deserializer.DeserializeTask(category, task.Blob)
+		deserializedTask, err := deserializer.DeserializeTask(category, task.GetBlob())
 		if err != nil {
 			return nil, err
 		}
 
 		shardID := tasks.GetShardIDForTask(deserializedTask, numShards)
-		if shardID != int(req.ShardId) {
+		if shardID != int(req.GetShardId()) {
 			return nil, serviceerror.NewInvalidArgumentf(
 				"Task is for wrong shard: index = %d, task shard = %d, request shard = %d",
-				i, shardID, req.ShardId,
+				i, shardID, req.GetShardId(),
 			)
 		}
 

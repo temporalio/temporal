@@ -82,18 +82,18 @@ func (s *deleteManagerWorkflowSuite) SetupTest() {
 }
 
 func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution() {
-	we := commonpb.WorkflowExecution{
+	we := commonpb.WorkflowExecution_builder{
 		WorkflowId: tests.WorkflowID,
 		RunId:      tests.RunID,
-	}
+	}.Build()
 
 	mockWeCtx := historyi.NewMockWorkflowContext(s.controller)
 	mockMutableState := historyi.NewMockMutableState(s.controller)
 	mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{22, 8, 78}, nil)
 	closeExecutionVisibilityTaskID := int64(39)
-	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+	mockMutableState.EXPECT().GetExecutionInfo().Return(persistencespb.WorkflowExecutionInfo_builder{
 		CloseVisibilityTaskId: closeExecutionVisibilityTaskID,
-	})
+	}.Build())
 	mockMutableState.EXPECT().ChasmTree().Return(workflow.NoopChasmTree).AnyTimes()
 	stage := tasks.DeleteWorkflowExecutionStageNone
 
@@ -115,7 +115,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution() {
 	err := s.deleteManager.DeleteWorkflowExecution(
 		context.Background(),
 		tests.NamespaceID,
-		&we,
+		we,
 		mockWeCtx,
 		mockMutableState,
 		&stage,
@@ -124,18 +124,18 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution() {
 }
 
 func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution_Error() {
-	we := commonpb.WorkflowExecution{
+	we := commonpb.WorkflowExecution_builder{
 		WorkflowId: tests.WorkflowID,
 		RunId:      tests.RunID,
-	}
+	}.Build()
 
 	mockWeCtx := historyi.NewMockWorkflowContext(s.controller)
 	mockMutableState := historyi.NewMockMutableState(s.controller)
 	mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{22, 8, 78}, nil)
 	closeExecutionVisibilityTaskID := int64(39)
-	mockMutableState.EXPECT().GetExecutionInfo().MinTimes(1).Return(&persistencespb.WorkflowExecutionInfo{
+	mockMutableState.EXPECT().GetExecutionInfo().MinTimes(1).Return(persistencespb.WorkflowExecutionInfo_builder{
 		CloseVisibilityTaskId: closeExecutionVisibilityTaskID,
-	})
+	}.Build())
 	mockMutableState.EXPECT().ChasmTree().Return(workflow.NoopChasmTree).AnyTimes()
 	stage := tasks.DeleteWorkflowExecutionStageNone
 
@@ -156,7 +156,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution_Error() 
 	err := s.deleteManager.DeleteWorkflowExecution(
 		context.Background(),
 		tests.NamespaceID,
-		&we,
+		we,
 		mockWeCtx,
 		mockMutableState,
 		&stage,
@@ -165,18 +165,18 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution_Error() 
 }
 
 func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecution_OpenWorkflow() {
-	we := commonpb.WorkflowExecution{
+	we := commonpb.WorkflowExecution_builder{
 		WorkflowId: tests.WorkflowID,
 		RunId:      tests.RunID,
-	}
+	}.Build()
 
 	mockWeCtx := historyi.NewMockWorkflowContext(s.controller)
 	mockMutableState := historyi.NewMockMutableState(s.controller)
 	closeExecutionVisibilityTaskID := int64(39)
 	mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{22, 8, 78}, nil)
-	mockMutableState.EXPECT().GetExecutionInfo().MinTimes(1).Return(&persistencespb.WorkflowExecutionInfo{
+	mockMutableState.EXPECT().GetExecutionInfo().MinTimes(1).Return(persistencespb.WorkflowExecutionInfo_builder{
 		CloseVisibilityTaskId: closeExecutionVisibilityTaskID,
-	})
+	}.Build())
 	mockMutableState.EXPECT().ChasmTree().Return(workflow.NoopChasmTree).AnyTimes()
 	stage := tasks.DeleteWorkflowExecutionStageNone
 
@@ -198,7 +198,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecution_OpenWorkflow() 
 	err := s.deleteManager.DeleteWorkflowExecution(
 		context.Background(),
 		tests.NamespaceID,
-		&we,
+		we,
 		mockWeCtx,
 		mockMutableState,
 		&stage,

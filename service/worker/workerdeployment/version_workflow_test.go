@@ -99,12 +99,12 @@ func (s *VersionWorkflowSuite) syncStateInBatches(totalWorkers int) {
 	for workerNum := 0; workerNum < totalWorkers; workerNum++ {
 		s.env.RegisterDelayedCallback(func() {
 
-			registerWorkerArgs := &deploymentspb.RegisterWorkerInVersionArgs{
-				TaskQueueName: tv.TaskQueue().Name + fmt.Sprintf("%03d", workerNum),
+			registerWorkerArgs := deploymentspb.RegisterWorkerInVersionArgs_builder{
+				TaskQueueName: tv.TaskQueue().GetName() + fmt.Sprintf("%03d", workerNum),
 				TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 				MaxTaskQueues: 100,
 				Version:       tv.DeploymentVersionString(),
-			}
+			}.Build()
 			s.env.UpdateWorkflow(RegisterWorkerInDeploymentVersion, "", &testsuite.TestUpdateCallback{
 				OnReject: func(err error) {
 					s.Fail("register worker in version should not have failed with error %v", err)
@@ -116,27 +116,27 @@ func (s *VersionWorkflowSuite) syncStateInBatches(totalWorkers int) {
 			}, registerWorkerArgs)
 		}, 1*time.Millisecond)
 
-		s.env.OnActivity(a.SyncDeploymentVersionUserData, mock.Anything, &deploymentspb.SyncDeploymentVersionUserDataRequest{
+		s.env.OnActivity(a.SyncDeploymentVersionUserData, mock.Anything, deploymentspb.SyncDeploymentVersionUserDataRequest_builder{
 			Version: tv.DeploymentVersion(),
 			Sync: []*deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData{
-				{
-					Name:  tv.TaskQueue().Name + fmt.Sprintf("%03d", workerNum),
+				deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData_builder{
+					Name:  tv.TaskQueue().GetName() + fmt.Sprintf("%03d", workerNum),
 					Types: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW},
-					Data: &deploymentspb.DeploymentVersionData{
+					Data: deploymentspb.DeploymentVersionData_builder{
 						Version:           tv.DeploymentVersion(),
 						RoutingUpdateTime: nil,
 						CurrentSinceTime:  nil,
 						RampingSinceTime:  nil,
 						RampPercentage:    0,
-					},
-				},
+					}.Build(),
+				}.Build(),
 			},
 			ForgetVersion: false,
-		}).Once().Return(&deploymentspb.SyncDeploymentVersionUserDataResponse{
+		}.Build()).Once().Return(deploymentspb.SyncDeploymentVersionUserDataResponse_builder{
 			TaskQueueMaxVersions: map[string]int64{
-				tv.TaskQueue().Name + fmt.Sprintf("%03d", workerNum): 1,
+				tv.TaskQueue().GetName() + fmt.Sprintf("%03d", workerNum): 1,
 			},
-		}, nil)
+		}.Build(), nil)
 	}
 
 	// Mocking the SyncDeploymentVersionUserData + CheckWorkerDeploymentUserDataPropagation activity which
@@ -144,18 +144,18 @@ func (s *VersionWorkflowSuite) syncStateInBatches(totalWorkers int) {
 	s.env.OnActivity(a.CheckWorkerDeploymentUserDataPropagation, mock.Anything, mock.Anything).Times(totalWorkers).Return(nil)
 
 	batches := make([][]*deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData, 0)
-	syncReq := &deploymentspb.SyncDeploymentVersionUserDataRequest{
+	syncReq := deploymentspb.SyncDeploymentVersionUserDataRequest_builder{
 		Version:       tv.DeploymentVersion(),
 		ForgetVersion: false,
-	}
+	}.Build()
 
 	s.env.RegisterDelayedCallback(func() {
-		syncStateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
+		syncStateArgs := deploymentspb.SyncVersionStateUpdateArgs_builder{
 			RoutingUpdateTime: now,
 			CurrentSinceTime:  now,
 			RampingSinceTime:  nil,
 			RampPercentage:    0,
-		}
+		}.Build()
 
 		s.env.UpdateWorkflow(SyncVersionState, "", &testsuite.TestUpdateCallback{
 			OnReject: func(err error) {
@@ -170,46 +170,46 @@ func (s *VersionWorkflowSuite) syncStateInBatches(totalWorkers int) {
 	}, 30*time.Millisecond)
 
 	for i := 0; i < totalWorkers; i++ {
-		syncReq.Sync = append(syncReq.Sync, &deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData{
-			Name:  tv.TaskQueue().Name + fmt.Sprintf("%03d", i),
+		syncReq.SetSync(append(syncReq.GetSync(), deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData_builder{
+			Name:  tv.TaskQueue().GetName() + fmt.Sprintf("%03d", i),
 			Types: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW},
-			Data: &deploymentspb.DeploymentVersionData{
+			Data: deploymentspb.DeploymentVersionData_builder{
 				Version:           tv.DeploymentVersion(),
 				RoutingUpdateTime: now,
 				CurrentSinceTime:  now,
 				RampingSinceTime:  nil,
 				RampPercentage:    0,
-			},
-		})
+			}.Build(),
+		}.Build()))
 
-		if len(syncReq.Sync) == int(s.workerDeploymentClient.getSyncBatchSize()) {
-			batches = append(batches, syncReq.Sync)
-			syncReq.Sync = make([]*deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData, 0)
+		if len(syncReq.GetSync()) == int(s.workerDeploymentClient.getSyncBatchSize()) {
+			batches = append(batches, syncReq.GetSync())
+			syncReq.SetSync(make([]*deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData, 0))
 		}
 	}
 
-	if len(syncReq.Sync) > 0 {
-		batches = append(batches, syncReq.Sync)
+	if len(syncReq.GetSync()) > 0 {
+		batches = append(batches, syncReq.GetSync())
 	}
 
 	// SyncDeploymentVersionUserData should be called # of batches times with the right batch argument.
 	for _, batch := range batches {
-		s.env.OnActivity(a.SyncDeploymentVersionUserData, mock.Anything, &deploymentspb.SyncDeploymentVersionUserDataRequest{
+		s.env.OnActivity(a.SyncDeploymentVersionUserData, mock.Anything, deploymentspb.SyncDeploymentVersionUserDataRequest_builder{
 			Version:       tv.DeploymentVersion(),
 			Sync:          batch,
 			ForgetVersion: false,
-		}).Once().Return(nil, nil)
+		}.Build()).Once().Return(nil, nil)
 	}
 
 	// starting the version workflow
-	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, &deploymentspb.WorkerDeploymentVersionWorkflowArgs{
+	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, deploymentspb.WorkerDeploymentVersionWorkflowArgs_builder{
 		NamespaceName: tv.NamespaceName().String(),
 		NamespaceId:   tv.NamespaceID().String(),
-		VersionState: &deploymentspb.VersionLocalState{
-			Version: &deploymentspb.WorkerDeploymentVersion{
+		VersionState: deploymentspb.VersionLocalState_builder{
+			Version: deploymentspb.WorkerDeploymentVersion_builder{
 				DeploymentName: tv.DeploymentSeries(),
 				BuildId:        tv.BuildID(),
-			},
+			}.Build(),
 			CreateTime:        nil,
 			RoutingUpdateTime: nil,
 			CurrentSinceTime:  nil,                                 // not current
@@ -218,8 +218,8 @@ func (s *VersionWorkflowSuite) syncStateInBatches(totalWorkers int) {
 			DrainageInfo:      &deploymentpb.VersionDrainageInfo{}, // not draining or drained
 			Metadata:          nil,
 			SyncBatchSize:     int32(s.workerDeploymentClient.getSyncBatchSize()), // initialize the sync batch size
-		},
-	})
+		}.Build(),
+	}.Build())
 }
 
 // Test_SyncRoutingConfigAsync tests that routing config is propagated asynchronously
@@ -233,27 +233,27 @@ func (s *VersionWorkflowSuite) Test_SyncRoutingConfigAsync() {
 	s.env.OnActivity(a.StartWorkerDeploymentWorkflow, mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	// Setup task queues in version state
-	taskQueueName1 := tv.TaskQueue().Name + "001"
-	taskQueueName2 := tv.TaskQueue().Name + "002"
+	taskQueueName1 := tv.TaskQueue().GetName() + "001"
+	taskQueueName2 := tv.TaskQueue().GetName() + "002"
 
-	routingConfig := &deploymentpb.RoutingConfig{
+	routingConfig := deploymentpb.RoutingConfig_builder{
 		CurrentVersion:            tv.DeploymentVersionString(),
 		CurrentVersionChangedTime: now,
 		RevisionNumber:            5,
-	}
+	}.Build()
 
 	// Mock SyncDeploymentVersionUserData activity - async mode expects batches with UpdateRoutingConfig
 	s.env.OnActivity(a.SyncDeploymentVersionUserData, mock.Anything, mock.Anything).Return(
 		func(ctx context.Context, req *deploymentspb.SyncDeploymentVersionUserDataRequest) (*deploymentspb.SyncDeploymentVersionUserDataResponse, error) {
 			// Verify that UpdateRoutingConfig is present (async mode)
-			s.NotNil(req.UpdateRoutingConfig, "UpdateRoutingConfig should be present in async mode")
-			s.Equal(routingConfig.RevisionNumber, req.UpdateRoutingConfig.RevisionNumber)
-			return &deploymentspb.SyncDeploymentVersionUserDataResponse{
+			s.NotNil(req.GetUpdateRoutingConfig(), "UpdateRoutingConfig should be present in async mode")
+			s.Equal(routingConfig.GetRevisionNumber(), req.GetUpdateRoutingConfig().GetRevisionNumber())
+			return deploymentspb.SyncDeploymentVersionUserDataResponse_builder{
 				TaskQueueMaxVersions: map[string]int64{
 					taskQueueName1: 10,
 					taskQueueName2: 11,
 				},
-			}, nil
+			}.Build(), nil
 		},
 	).Maybe()
 
@@ -264,13 +264,13 @@ func (s *VersionWorkflowSuite) Test_SyncRoutingConfigAsync() {
 	s.env.OnSignalExternalWorkflow(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	s.env.RegisterDelayedCallback(func() {
-		syncStateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
+		syncStateArgs := deploymentspb.SyncVersionStateUpdateArgs_builder{
 			RoutingUpdateTime: now,
 			CurrentSinceTime:  now,
 			RampingSinceTime:  nil,
 			RampPercentage:    0,
 			RoutingConfig:     routingConfig, // Async mode: provide routing config
-		}
+		}.Build()
 
 		s.env.UpdateWorkflow(SyncVersionState, "", &testsuite.TestUpdateCallback{
 			OnReject: func(err error) {
@@ -283,30 +283,30 @@ func (s *VersionWorkflowSuite) Test_SyncRoutingConfigAsync() {
 		}, syncStateArgs)
 	}, 1*time.Millisecond)
 
-	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, &deploymentspb.WorkerDeploymentVersionWorkflowArgs{
+	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, deploymentspb.WorkerDeploymentVersionWorkflowArgs_builder{
 		NamespaceName: tv.NamespaceName().String(),
 		NamespaceId:   tv.NamespaceID().String(),
-		VersionState: &deploymentspb.VersionLocalState{
-			Version: &deploymentspb.WorkerDeploymentVersion{
+		VersionState: deploymentspb.VersionLocalState_builder{
+			Version: deploymentspb.WorkerDeploymentVersion_builder{
 				DeploymentName: tv.DeploymentSeries(),
 				BuildId:        tv.BuildID(),
-			},
+			}.Build(),
 			TaskQueueFamilies: map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData{
-				taskQueueName1: {
+				taskQueueName1: deploymentspb.VersionLocalState_TaskQueueFamilyData_builder{
 					TaskQueues: map[int32]*deploymentspb.TaskQueueVersionData{
 						int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {},
 					},
-				},
-				taskQueueName2: {
+				}.Build(),
+				taskQueueName2: deploymentspb.VersionLocalState_TaskQueueFamilyData_builder{
 					TaskQueues: map[int32]*deploymentspb.TaskQueueVersionData{
 						int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {},
 					},
-				},
+				}.Build(),
 			},
 			SyncBatchSize:             int32(s.workerDeploymentClient.getSyncBatchSize()),
 			StartedDeploymentWorkflow: true,
-		},
-	})
+		}.Build(),
+	}.Build())
 
 	s.True(s.env.IsWorkflowCompleted())
 }
@@ -321,21 +321,21 @@ func (s *VersionWorkflowSuite) Test_AsyncPropagationsPreventsCanUntilComplete() 
 	s.env.RegisterActivity(a.StartWorkerDeploymentWorkflow)
 	s.env.OnActivity(a.StartWorkerDeploymentWorkflow, mock.Anything, mock.Anything).Return(nil).Maybe()
 
-	taskQueueName := tv.TaskQueue().Name
+	taskQueueName := tv.TaskQueue().GetName()
 
-	routingConfig := &deploymentpb.RoutingConfig{
+	routingConfig := deploymentpb.RoutingConfig_builder{
 		CurrentVersion:            tv.DeploymentVersionString(),
 		CurrentVersionChangedTime: now,
 		RevisionNumber:            5,
-	}
+	}.Build()
 
 	// Mock SyncDeploymentVersionUserData to return with task queue max versions
 	s.env.OnActivity(a.SyncDeploymentVersionUserData, mock.Anything, mock.Anything).Return(
-		&deploymentspb.SyncDeploymentVersionUserDataResponse{
+		deploymentspb.SyncDeploymentVersionUserDataResponse_builder{
 			TaskQueueMaxVersions: map[string]int64{
 				taskQueueName: 10,
 			},
-		}, nil,
+		}.Build(), nil,
 	).Maybe()
 
 	// Mock CheckWorkerDeploymentUserDataPropagation with a delay to simulate async processing
@@ -346,11 +346,11 @@ func (s *VersionWorkflowSuite) Test_AsyncPropagationsPreventsCanUntilComplete() 
 	s.env.OnSignalExternalWorkflow(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	s.env.RegisterDelayedCallback(func() {
-		syncStateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
+		syncStateArgs := deploymentspb.SyncVersionStateUpdateArgs_builder{
 			RoutingUpdateTime: now,
 			CurrentSinceTime:  now,
 			RoutingConfig:     routingConfig, // Async mode
-		}
+		}.Build()
 
 		s.env.UpdateWorkflow(SyncVersionState, "", &testsuite.TestUpdateCallback{
 			OnReject: func(err error) {
@@ -363,25 +363,25 @@ func (s *VersionWorkflowSuite) Test_AsyncPropagationsPreventsCanUntilComplete() 
 		}, syncStateArgs)
 	}, 1*time.Millisecond)
 
-	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, &deploymentspb.WorkerDeploymentVersionWorkflowArgs{
+	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, deploymentspb.WorkerDeploymentVersionWorkflowArgs_builder{
 		NamespaceName: tv.NamespaceName().String(),
 		NamespaceId:   tv.NamespaceID().String(),
-		VersionState: &deploymentspb.VersionLocalState{
-			Version: &deploymentspb.WorkerDeploymentVersion{
+		VersionState: deploymentspb.VersionLocalState_builder{
+			Version: deploymentspb.WorkerDeploymentVersion_builder{
 				DeploymentName: tv.DeploymentSeries(),
 				BuildId:        tv.BuildID(),
-			},
+			}.Build(),
 			TaskQueueFamilies: map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData{
-				taskQueueName: {
+				taskQueueName: deploymentspb.VersionLocalState_TaskQueueFamilyData_builder{
 					TaskQueues: map[int32]*deploymentspb.TaskQueueVersionData{
 						int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {},
 					},
-				},
+				}.Build(),
 			},
 			SyncBatchSize:             int32(s.workerDeploymentClient.getSyncBatchSize()),
 			StartedDeploymentWorkflow: true,
-		},
-	})
+		}.Build(),
+	}.Build())
 
 	s.True(s.env.IsWorkflowCompleted())
 }
@@ -394,7 +394,7 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_Success() {
 	s.env.RegisterActivity(a.StartWorkerDeploymentWorkflow)
 	s.env.OnActivity(a.StartWorkerDeploymentWorkflow, mock.Anything, mock.Anything).Return(nil).Maybe()
 
-	taskQueueName := tv.TaskQueue().Name
+	taskQueueName := tv.TaskQueue().GetName()
 
 	// Mock CheckIfTaskQueuesHavePollers - return false (no pollers)
 	s.env.OnActivity(a.CheckIfTaskQueuesHavePollers, mock.Anything, mock.Anything).Return(false, nil).Maybe()
@@ -402,12 +402,12 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_Success() {
 	// Mock SyncDeploymentVersionUserData for deletion (ForgetVersion = true)
 	s.env.OnActivity(a.SyncDeploymentVersionUserData, mock.Anything, mock.Anything).Return(
 		func(ctx context.Context, req *deploymentspb.SyncDeploymentVersionUserDataRequest) (*deploymentspb.SyncDeploymentVersionUserDataResponse, error) {
-			s.True(req.ForgetVersion, "ForgetVersion should be true during deletion")
-			return &deploymentspb.SyncDeploymentVersionUserDataResponse{
+			s.True(req.GetForgetVersion(), "ForgetVersion should be true during deletion")
+			return deploymentspb.SyncDeploymentVersionUserDataResponse_builder{
 				TaskQueueMaxVersions: map[string]int64{
 					taskQueueName: 10,
 				},
-			}, nil
+			}.Build(), nil
 		},
 	).Maybe()
 
@@ -415,9 +415,9 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_Success() {
 	s.env.OnActivity(a.CheckWorkerDeploymentUserDataPropagation, mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	s.env.RegisterDelayedCallback(func() {
-		deleteArgs := &deploymentspb.DeleteVersionArgs{
+		deleteArgs := deploymentspb.DeleteVersionArgs_builder{
 			SkipDrainage: false,
-		}
+		}.Build()
 
 		s.env.UpdateWorkflow(DeleteVersion, "", &testsuite.TestUpdateCallback{
 			OnReject: func(err error) {
@@ -430,26 +430,26 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_Success() {
 		}, deleteArgs)
 	}, 1*time.Millisecond)
 
-	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, &deploymentspb.WorkerDeploymentVersionWorkflowArgs{
+	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, deploymentspb.WorkerDeploymentVersionWorkflowArgs_builder{
 		NamespaceName: tv.NamespaceName().String(),
 		NamespaceId:   tv.NamespaceID().String(),
-		VersionState: &deploymentspb.VersionLocalState{
-			Version: &deploymentspb.WorkerDeploymentVersion{
+		VersionState: deploymentspb.VersionLocalState_builder{
+			Version: deploymentspb.WorkerDeploymentVersion_builder{
 				DeploymentName: tv.DeploymentSeries(),
 				BuildId:        tv.BuildID(),
-			},
+			}.Build(),
 			TaskQueueFamilies: map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData{
-				taskQueueName: {
+				taskQueueName: deploymentspb.VersionLocalState_TaskQueueFamilyData_builder{
 					TaskQueues: map[int32]*deploymentspb.TaskQueueVersionData{
 						int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {},
 					},
-				},
+				}.Build(),
 			},
 			Status:                    enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE,
 			SyncBatchSize:             int32(s.workerDeploymentClient.getSyncBatchSize()),
 			StartedDeploymentWorkflow: true,
-		},
-	})
+		}.Build(),
+	}.Build())
 
 	s.True(s.env.IsWorkflowCompleted())
 	s.Require().NoError(s.env.GetWorkflowError())
@@ -463,18 +463,18 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_QueryAfterDeletion() {
 	s.env.RegisterActivity(a.StartWorkerDeploymentWorkflow)
 	s.env.OnActivity(a.StartWorkerDeploymentWorkflow, mock.Anything, mock.Anything).Return(nil).Maybe()
 
-	taskQueueName := tv.TaskQueue().Name
+	taskQueueName := tv.TaskQueue().GetName()
 
 	// Mock CheckIfTaskQueuesHavePollers - return false (no pollers)
 	s.env.OnActivity(a.CheckIfTaskQueuesHavePollers, mock.Anything, mock.Anything).Return(false, nil).Maybe()
 
 	// Mock SyncDeploymentVersionUserData for deletion
 	s.env.OnActivity(a.SyncDeploymentVersionUserData, mock.Anything, mock.Anything).Return(
-		&deploymentspb.SyncDeploymentVersionUserDataResponse{
+		deploymentspb.SyncDeploymentVersionUserDataResponse_builder{
 			TaskQueueMaxVersions: map[string]int64{
 				taskQueueName: 10,
 			},
-		}, nil,
+		}.Build(), nil,
 	).Maybe()
 
 	// Mock propagation check
@@ -482,9 +482,9 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_QueryAfterDeletion() {
 
 	// Send delete update
 	s.env.RegisterDelayedCallback(func() {
-		deleteArgs := &deploymentspb.DeleteVersionArgs{
+		deleteArgs := deploymentspb.DeleteVersionArgs_builder{
 			SkipDrainage: false,
-		}
+		}.Build()
 
 		s.env.UpdateWorkflow(DeleteVersion, "", &testsuite.TestUpdateCallback{
 			OnReject: func(err error) {
@@ -505,26 +505,26 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_QueryAfterDeletion() {
 		s.Contains(err.Error(), "worker deployment version deleted")
 	}, 5*time.Millisecond)
 
-	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, &deploymentspb.WorkerDeploymentVersionWorkflowArgs{
+	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, deploymentspb.WorkerDeploymentVersionWorkflowArgs_builder{
 		NamespaceName: tv.NamespaceName().String(),
 		NamespaceId:   tv.NamespaceID().String(),
-		VersionState: &deploymentspb.VersionLocalState{
-			Version: &deploymentspb.WorkerDeploymentVersion{
+		VersionState: deploymentspb.VersionLocalState_builder{
+			Version: deploymentspb.WorkerDeploymentVersion_builder{
 				DeploymentName: tv.DeploymentSeries(),
 				BuildId:        tv.BuildID(),
-			},
+			}.Build(),
 			TaskQueueFamilies: map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData{
-				taskQueueName: {
+				taskQueueName: deploymentspb.VersionLocalState_TaskQueueFamilyData_builder{
 					TaskQueues: map[int32]*deploymentspb.TaskQueueVersionData{
 						int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {},
 					},
-				},
+				}.Build(),
 			},
 			Status:                    enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE,
 			SyncBatchSize:             int32(s.workerDeploymentClient.getSyncBatchSize()),
 			StartedDeploymentWorkflow: true,
-		},
-	})
+		}.Build(),
+	}.Build())
 
 	s.True(s.env.IsWorkflowCompleted())
 	s.Require().NoError(s.env.GetWorkflowError())
@@ -539,12 +539,12 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_FailsWhenDraining() {
 	s.env.RegisterActivity(a.StartWorkerDeploymentWorkflow)
 	s.env.OnActivity(a.StartWorkerDeploymentWorkflow, mock.Anything, mock.Anything).Return(nil).Maybe()
 
-	taskQueueName := tv.TaskQueue().Name
+	taskQueueName := tv.TaskQueue().GetName()
 
 	s.env.RegisterDelayedCallback(func() {
-		deleteArgs := &deploymentspb.DeleteVersionArgs{
+		deleteArgs := deploymentspb.DeleteVersionArgs_builder{
 			SkipDrainage: false, // Do not skip drainage check
-		}
+		}.Build()
 
 		s.env.UpdateWorkflow(DeleteVersion, "", &testsuite.TestUpdateCallback{
 			OnReject: func(err error) {
@@ -560,31 +560,31 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_FailsWhenDraining() {
 		}, deleteArgs)
 	}, 1*time.Millisecond)
 
-	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, &deploymentspb.WorkerDeploymentVersionWorkflowArgs{
+	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, deploymentspb.WorkerDeploymentVersionWorkflowArgs_builder{
 		NamespaceName: tv.NamespaceName().String(),
 		NamespaceId:   tv.NamespaceID().String(),
-		VersionState: &deploymentspb.VersionLocalState{
-			Version: &deploymentspb.WorkerDeploymentVersion{
+		VersionState: deploymentspb.VersionLocalState_builder{
+			Version: deploymentspb.WorkerDeploymentVersion_builder{
 				DeploymentName: tv.DeploymentSeries(),
 				BuildId:        tv.BuildID(),
-			},
+			}.Build(),
 			TaskQueueFamilies: map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData{
-				taskQueueName: {
+				taskQueueName: deploymentspb.VersionLocalState_TaskQueueFamilyData_builder{
 					TaskQueues: map[int32]*deploymentspb.TaskQueueVersionData{
 						int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {},
 					},
-				},
+				}.Build(),
 			},
 			Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING,
-			DrainageInfo: &deploymentpb.VersionDrainageInfo{
+			DrainageInfo: deploymentpb.VersionDrainageInfo_builder{
 				Status:          enumspb.VERSION_DRAINAGE_STATUS_DRAINING,
 				LastCheckedTime: now,
 				LastChangedTime: now,
-			},
+			}.Build(),
 			SyncBatchSize:             int32(s.workerDeploymentClient.getSyncBatchSize()),
 			StartedDeploymentWorkflow: true,
-		},
-	})
+		}.Build(),
+	}.Build())
 
 	s.True(s.env.IsWorkflowCompleted())
 }
@@ -598,27 +598,27 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_SucceedsWhenDrainingWithSkipFl
 	s.env.RegisterActivity(a.StartWorkerDeploymentWorkflow)
 	s.env.OnActivity(a.StartWorkerDeploymentWorkflow, mock.Anything, mock.Anything).Return(nil).Maybe()
 
-	taskQueueName := tv.TaskQueue().Name
+	taskQueueName := tv.TaskQueue().GetName()
 
 	// Mock CheckIfTaskQueuesHavePollers - return false (no pollers)
 	s.env.OnActivity(a.CheckIfTaskQueuesHavePollers, mock.Anything, mock.Anything).Return(false, nil).Maybe()
 
 	// Mock SyncDeploymentVersionUserData for deletion
 	s.env.OnActivity(a.SyncDeploymentVersionUserData, mock.Anything, mock.Anything).Return(
-		&deploymentspb.SyncDeploymentVersionUserDataResponse{
+		deploymentspb.SyncDeploymentVersionUserDataResponse_builder{
 			TaskQueueMaxVersions: map[string]int64{
 				taskQueueName: 10,
 			},
-		}, nil,
+		}.Build(), nil,
 	).Maybe()
 
 	// Mock propagation check
 	s.env.OnActivity(a.CheckWorkerDeploymentUserDataPropagation, mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	s.env.RegisterDelayedCallback(func() {
-		deleteArgs := &deploymentspb.DeleteVersionArgs{
+		deleteArgs := deploymentspb.DeleteVersionArgs_builder{
 			SkipDrainage: true, // Skip drainage check
-		}
+		}.Build()
 
 		s.env.UpdateWorkflow(DeleteVersion, "", &testsuite.TestUpdateCallback{
 			OnReject: func(err error) {
@@ -631,31 +631,31 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_SucceedsWhenDrainingWithSkipFl
 		}, deleteArgs)
 	}, 1*time.Millisecond)
 
-	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, &deploymentspb.WorkerDeploymentVersionWorkflowArgs{
+	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, deploymentspb.WorkerDeploymentVersionWorkflowArgs_builder{
 		NamespaceName: tv.NamespaceName().String(),
 		NamespaceId:   tv.NamespaceID().String(),
-		VersionState: &deploymentspb.VersionLocalState{
-			Version: &deploymentspb.WorkerDeploymentVersion{
+		VersionState: deploymentspb.VersionLocalState_builder{
+			Version: deploymentspb.WorkerDeploymentVersion_builder{
 				DeploymentName: tv.DeploymentSeries(),
 				BuildId:        tv.BuildID(),
-			},
+			}.Build(),
 			TaskQueueFamilies: map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData{
-				taskQueueName: {
+				taskQueueName: deploymentspb.VersionLocalState_TaskQueueFamilyData_builder{
 					TaskQueues: map[int32]*deploymentspb.TaskQueueVersionData{
 						int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {},
 					},
-				},
+				}.Build(),
 			},
 			Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING,
-			DrainageInfo: &deploymentpb.VersionDrainageInfo{
+			DrainageInfo: deploymentpb.VersionDrainageInfo_builder{
 				Status:          enumspb.VERSION_DRAINAGE_STATUS_DRAINING,
 				LastCheckedTime: now,
 				LastChangedTime: now,
-			},
+			}.Build(),
 			SyncBatchSize:             25, // Use explicit batch size
 			StartedDeploymentWorkflow: true,
-		},
-	})
+		}.Build(),
+	}.Build())
 
 	s.True(s.env.IsWorkflowCompleted())
 	s.Require().NoError(s.env.GetWorkflowError())
@@ -669,15 +669,15 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_FailsWithActivePollers() {
 	s.env.RegisterActivity(a.StartWorkerDeploymentWorkflow)
 	s.env.OnActivity(a.StartWorkerDeploymentWorkflow, mock.Anything, mock.Anything).Return(nil).Maybe()
 
-	taskQueueName := tv.TaskQueue().Name
+	taskQueueName := tv.TaskQueue().GetName()
 
 	// Mock CheckIfTaskQueuesHavePollers - return true (has pollers)
 	s.env.OnActivity(a.CheckIfTaskQueuesHavePollers, mock.Anything, mock.Anything).Return(true, nil).Maybe()
 
 	s.env.RegisterDelayedCallback(func() {
-		deleteArgs := &deploymentspb.DeleteVersionArgs{
+		deleteArgs := deploymentspb.DeleteVersionArgs_builder{
 			SkipDrainage: false,
-		}
+		}.Build()
 
 		s.env.UpdateWorkflow(DeleteVersion, "", &testsuite.TestUpdateCallback{
 			OnReject: func(err error) {
@@ -693,26 +693,26 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_FailsWithActivePollers() {
 		}, deleteArgs)
 	}, 1*time.Millisecond)
 
-	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, &deploymentspb.WorkerDeploymentVersionWorkflowArgs{
+	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, deploymentspb.WorkerDeploymentVersionWorkflowArgs_builder{
 		NamespaceName: tv.NamespaceName().String(),
 		NamespaceId:   tv.NamespaceID().String(),
-		VersionState: &deploymentspb.VersionLocalState{
-			Version: &deploymentspb.WorkerDeploymentVersion{
+		VersionState: deploymentspb.VersionLocalState_builder{
+			Version: deploymentspb.WorkerDeploymentVersion_builder{
 				DeploymentName: tv.DeploymentSeries(),
 				BuildId:        tv.BuildID(),
-			},
+			}.Build(),
 			TaskQueueFamilies: map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData{
-				taskQueueName: {
+				taskQueueName: deploymentspb.VersionLocalState_TaskQueueFamilyData_builder{
 					TaskQueues: map[int32]*deploymentspb.TaskQueueVersionData{
 						int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {},
 					},
-				},
+				}.Build(),
 			},
 			Status:                    enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE,
 			SyncBatchSize:             int32(s.workerDeploymentClient.getSyncBatchSize()),
 			StartedDeploymentWorkflow: true,
-		},
-	})
+		}.Build(),
+	}.Build())
 
 	s.True(s.env.IsWorkflowCompleted())
 }
@@ -725,7 +725,7 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_QueryBeforeDeletion() {
 	s.env.RegisterActivity(a.StartWorkerDeploymentWorkflow)
 	s.env.OnActivity(a.StartWorkerDeploymentWorkflow, mock.Anything, mock.Anything).Return(nil).Maybe()
 
-	taskQueueName := tv.TaskQueue().Name
+	taskQueueName := tv.TaskQueue().GetName()
 
 	// Query before deletion - should succeed
 	s.env.RegisterDelayedCallback(func() {
@@ -736,30 +736,30 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_QueryBeforeDeletion() {
 		var resp deploymentspb.QueryDescribeVersionResponse
 		err = val.Get(&resp)
 		s.Require().NoError(err)
-		s.NotNil(resp.VersionState)
-		s.Equal(tv.BuildID(), resp.VersionState.Version.BuildId)
+		s.NotNil(resp.GetVersionState())
+		s.Equal(tv.BuildID(), resp.GetVersionState().GetVersion().GetBuildId())
 	}, 1*time.Millisecond)
 
-	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, &deploymentspb.WorkerDeploymentVersionWorkflowArgs{
+	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, deploymentspb.WorkerDeploymentVersionWorkflowArgs_builder{
 		NamespaceName: tv.NamespaceName().String(),
 		NamespaceId:   tv.NamespaceID().String(),
-		VersionState: &deploymentspb.VersionLocalState{
-			Version: &deploymentspb.WorkerDeploymentVersion{
+		VersionState: deploymentspb.VersionLocalState_builder{
+			Version: deploymentspb.WorkerDeploymentVersion_builder{
 				DeploymentName: tv.DeploymentSeries(),
 				BuildId:        tv.BuildID(),
-			},
+			}.Build(),
 			TaskQueueFamilies: map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData{
-				taskQueueName: {
+				taskQueueName: deploymentspb.VersionLocalState_TaskQueueFamilyData_builder{
 					TaskQueues: map[int32]*deploymentspb.TaskQueueVersionData{
 						int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {},
 					},
-				},
+				}.Build(),
 			},
 			Status:                    enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE,
 			SyncBatchSize:             int32(s.workerDeploymentClient.getSyncBatchSize()),
 			StartedDeploymentWorkflow: true,
-		},
-	})
+		}.Build(),
+	}.Build())
 
 	s.True(s.env.IsWorkflowCompleted())
 }
@@ -774,7 +774,7 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_AsyncPropagation() {
 	s.env.RegisterActivity(a.StartWorkerDeploymentWorkflow)
 	s.env.OnActivity(a.StartWorkerDeploymentWorkflow, mock.Anything, mock.Anything).Return(nil).Maybe()
 
-	taskQueueName := tv.TaskQueue().Name
+	taskQueueName := tv.TaskQueue().GetName()
 
 	// Mock CheckIfTaskQueuesHavePollers - return false (no pollers)
 	s.env.OnActivity(a.CheckIfTaskQueuesHavePollers, mock.Anything, mock.Anything).Return(false, nil).Maybe()
@@ -784,11 +784,11 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_AsyncPropagation() {
 	s.env.OnActivity(a.SyncDeploymentVersionUserData, mock.Anything, mock.Anything).
 		After(100*time.Millisecond). // Simulate slow propagation
 		Return(
-			&deploymentspb.SyncDeploymentVersionUserDataResponse{
+			deploymentspb.SyncDeploymentVersionUserDataResponse_builder{
 				TaskQueueMaxVersions: map[string]int64{
 					taskQueueName: 10,
 				},
-			}, nil,
+			}.Build(), nil,
 		).Maybe()
 
 	// Mock propagation check - also slow
@@ -798,10 +798,10 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_AsyncPropagation() {
 
 	// Send delete update with AsyncPropagation enabled
 	s.env.RegisterDelayedCallback(func() {
-		deleteArgs := &deploymentspb.DeleteVersionArgs{
+		deleteArgs := deploymentspb.DeleteVersionArgs_builder{
 			SkipDrainage:     false,
 			AsyncPropagation: true, // Enable async propagation
-		}
+		}.Build()
 
 		s.env.UpdateWorkflow(DeleteVersion, "", &testsuite.TestUpdateCallback{
 			OnReject: func(err error) {
@@ -823,26 +823,26 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_AsyncPropagation() {
 		s.Contains(err.Error(), "worker deployment version deleted")
 	}, 10*time.Millisecond)
 
-	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, &deploymentspb.WorkerDeploymentVersionWorkflowArgs{
+	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, deploymentspb.WorkerDeploymentVersionWorkflowArgs_builder{
 		NamespaceName: tv.NamespaceName().String(),
 		NamespaceId:   tv.NamespaceID().String(),
-		VersionState: &deploymentspb.VersionLocalState{
-			Version: &deploymentspb.WorkerDeploymentVersion{
+		VersionState: deploymentspb.VersionLocalState_builder{
+			Version: deploymentspb.WorkerDeploymentVersion_builder{
 				DeploymentName: tv.DeploymentSeries(),
 				BuildId:        tv.BuildID(),
-			},
+			}.Build(),
 			TaskQueueFamilies: map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData{
-				taskQueueName: {
+				taskQueueName: deploymentspb.VersionLocalState_TaskQueueFamilyData_builder{
 					TaskQueues: map[int32]*deploymentspb.TaskQueueVersionData{
 						int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {},
 					},
-				},
+				}.Build(),
 			},
 			Status:                    enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE,
 			SyncBatchSize:             int32(s.workerDeploymentClient.getSyncBatchSize()),
 			StartedDeploymentWorkflow: true,
-		},
-	})
+		}.Build(),
+	}.Build())
 
 	s.True(s.env.IsWorkflowCompleted())
 	s.Require().NoError(s.env.GetWorkflowError())
@@ -860,8 +860,8 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_AsyncPropagation_BlocksWorkerR
 	s.env.RegisterActivity(a.StartWorkerDeploymentWorkflow)
 	s.env.OnActivity(a.StartWorkerDeploymentWorkflow, mock.Anything, mock.Anything).Return(nil).Maybe()
 
-	taskQueueName := tv.TaskQueue().Name
-	newTaskQueueName := tv.TaskQueue().Name + "_new"
+	taskQueueName := tv.TaskQueue().GetName()
+	newTaskQueueName := tv.TaskQueue().GetName() + "_new"
 
 	// Track whether operations completed
 	deleteCompleted := false
@@ -877,11 +877,11 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_AsyncPropagation_BlocksWorkerR
 		Return(
 			func(ctx context.Context, req *deploymentspb.SyncDeploymentVersionUserDataRequest) (*deploymentspb.SyncDeploymentVersionUserDataResponse, error) {
 				// This is the delete propagation
-				return &deploymentspb.SyncDeploymentVersionUserDataResponse{
+				return deploymentspb.SyncDeploymentVersionUserDataResponse_builder{
 					TaskQueueMaxVersions: map[string]int64{
 						taskQueueName: 10,
 					},
-				}, nil
+				}.Build(), nil
 			},
 		).Once()
 
@@ -890,11 +890,11 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_AsyncPropagation_BlocksWorkerR
 			func(ctx context.Context, req *deploymentspb.SyncDeploymentVersionUserDataRequest) (*deploymentspb.SyncDeploymentVersionUserDataResponse, error) {
 				// This is for worker registration
 				s.True(deleteCompleted, "worker registration sync should happen after delete propagation completes")
-				return &deploymentspb.SyncDeploymentVersionUserDataResponse{
+				return deploymentspb.SyncDeploymentVersionUserDataResponse_builder{
 					TaskQueueMaxVersions: map[string]int64{
 						newTaskQueueName: 1,
 					},
-				}, nil
+				}.Build(), nil
 			},
 		).Once()
 
@@ -904,10 +904,10 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_AsyncPropagation_BlocksWorkerR
 
 	// Send delete update with AsyncPropagation enabled at 1ms
 	s.env.RegisterDelayedCallback(func() {
-		deleteArgs := &deploymentspb.DeleteVersionArgs{
+		deleteArgs := deploymentspb.DeleteVersionArgs_builder{
 			SkipDrainage:     false,
 			AsyncPropagation: true, // Enable async propagation
-		}
+		}.Build()
 
 		s.env.UpdateWorkflow(DeleteVersion, "", &testsuite.TestUpdateCallback{
 			OnReject: func(err error) {
@@ -924,12 +924,12 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_AsyncPropagation_BlocksWorkerR
 	// Try to register a worker at 50ms (while propagation is still happening)
 	s.env.RegisterDelayedCallback(func() {
 		workerRegistrationStarted = true
-		registerWorkerArgs := &deploymentspb.RegisterWorkerInVersionArgs{
+		registerWorkerArgs := deploymentspb.RegisterWorkerInVersionArgs_builder{
 			TaskQueueName: newTaskQueueName,
 			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			MaxTaskQueues: 100,
 			Version:       tv.DeploymentVersionString(),
-		}
+		}.Build()
 
 		s.env.UpdateWorkflow(RegisterWorkerInDeploymentVersion, "", &testsuite.TestUpdateCallback{
 			OnReject: func(err error) {
@@ -955,10 +955,10 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_AsyncPropagation_BlocksWorkerR
 	s.env.RegisterDelayedCallback(func() {
 		s.True(workerRegistrationCompleted, "worker registration should have completed by now")
 
-		deleteArgs2 := &deploymentspb.DeleteVersionArgs{
+		deleteArgs2 := deploymentspb.DeleteVersionArgs_builder{
 			SkipDrainage:     false,
 			AsyncPropagation: true,
-		}
+		}.Build()
 
 		s.env.UpdateWorkflow(DeleteVersion, "", &testsuite.TestUpdateCallback{
 			OnReject: func(err error) {
@@ -971,26 +971,26 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_AsyncPropagation_BlocksWorkerR
 		}, deleteArgs2)
 	}, 500*time.Millisecond)
 
-	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, &deploymentspb.WorkerDeploymentVersionWorkflowArgs{
+	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, deploymentspb.WorkerDeploymentVersionWorkflowArgs_builder{
 		NamespaceName: tv.NamespaceName().String(),
 		NamespaceId:   tv.NamespaceID().String(),
-		VersionState: &deploymentspb.VersionLocalState{
-			Version: &deploymentspb.WorkerDeploymentVersion{
+		VersionState: deploymentspb.VersionLocalState_builder{
+			Version: deploymentspb.WorkerDeploymentVersion_builder{
 				DeploymentName: tv.DeploymentSeries(),
 				BuildId:        tv.BuildID(),
-			},
+			}.Build(),
 			TaskQueueFamilies: map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData{
-				taskQueueName: {
+				taskQueueName: deploymentspb.VersionLocalState_TaskQueueFamilyData_builder{
 					TaskQueues: map[int32]*deploymentspb.TaskQueueVersionData{
 						int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {},
 					},
-				},
+				}.Build(),
 			},
 			Status:                    enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE,
 			SyncBatchSize:             int32(s.workerDeploymentClient.getSyncBatchSize()),
 			StartedDeploymentWorkflow: true,
-		},
-	})
+		}.Build(),
+	}.Build())
 
 	s.True(s.env.IsWorkflowCompleted())
 	s.Require().Error(s.env.GetWorkflowError()) // CaN
@@ -1008,8 +1008,8 @@ func (s *VersionWorkflowSuite) Test_RegisterWorker_IncrementsRevisionNumber_When
 	s.env.RegisterActivity(a.StartWorkerDeploymentWorkflow)
 	s.env.OnActivity(a.StartWorkerDeploymentWorkflow, mock.Anything, mock.Anything).Return(nil).Maybe()
 
-	taskQueueName := tv.TaskQueue().Name
-	newTaskQueueName := tv.TaskQueue().Name + "_new"
+	taskQueueName := tv.TaskQueue().GetName()
+	newTaskQueueName := tv.TaskQueue().GetName() + "_new"
 
 	// Mock CheckIfTaskQueuesHavePollers - return false (no pollers)
 	s.env.OnActivity(a.CheckIfTaskQueuesHavePollers, mock.Anything, mock.Anything).Return(false, nil).Maybe()
@@ -1017,20 +1017,20 @@ func (s *VersionWorkflowSuite) Test_RegisterWorker_IncrementsRevisionNumber_When
 	// Mock delete and register propagation
 	s.env.OnActivity(a.SyncDeploymentVersionUserData, mock.Anything, mock.Anything).Return(
 		func(ctx context.Context, req *deploymentspb.SyncDeploymentVersionUserDataRequest) (*deploymentspb.SyncDeploymentVersionUserDataResponse, error) {
-			if req.UpsertVersionData != nil && req.UpsertVersionData.Deleted {
+			if req.HasUpsertVersionData() && req.GetUpsertVersionData().GetDeleted() {
 				// This is the delete call
-				s.Equal(int64(6), req.UpsertVersionData.RevisionNumber, "Revision number should be incremented from 5 to 6 on delete")
-				return &deploymentspb.SyncDeploymentVersionUserDataResponse{
+				s.Equal(int64(6), req.GetUpsertVersionData().GetRevisionNumber(), "Revision number should be incremented from 5 to 6 on delete")
+				return deploymentspb.SyncDeploymentVersionUserDataResponse_builder{
 					TaskQueueMaxVersions: map[string]int64{taskQueueName: 10},
-				}, nil
+				}.Build(), nil
 			}
 			// This is a register worker propagation call
-			s.NotNil(req.UpsertVersionData, "UpsertVersionData should be present for registration")
-			s.False(req.UpsertVersionData.Deleted, "Deleted should be false after revival")
-			s.Equal(int64(7), req.UpsertVersionData.RevisionNumber, "Revision number should be incremented from 6 to 7 on revival")
-			return &deploymentspb.SyncDeploymentVersionUserDataResponse{
+			s.NotNil(req.GetUpsertVersionData(), "UpsertVersionData should be present for registration")
+			s.False(req.GetUpsertVersionData().GetDeleted(), "Deleted should be false after revival")
+			s.Equal(int64(7), req.GetUpsertVersionData().GetRevisionNumber(), "Revision number should be incremented from 6 to 7 on revival")
+			return deploymentspb.SyncDeploymentVersionUserDataResponse_builder{
 				TaskQueueMaxVersions: map[string]int64{newTaskQueueName: 1},
-			}, nil
+			}.Build(), nil
 		},
 	).Times(2)
 
@@ -1039,10 +1039,10 @@ func (s *VersionWorkflowSuite) Test_RegisterWorker_IncrementsRevisionNumber_When
 
 	// Delete the version
 	s.env.RegisterDelayedCallback(func() {
-		deleteArgs := &deploymentspb.DeleteVersionArgs{
+		deleteArgs := deploymentspb.DeleteVersionArgs_builder{
 			SkipDrainage:     false,
 			AsyncPropagation: true,
-		}
+		}.Build()
 
 		s.env.UpdateWorkflow(DeleteVersion, "", &testsuite.TestUpdateCallback{
 			OnReject: func(err error) {
@@ -1057,19 +1057,19 @@ func (s *VersionWorkflowSuite) Test_RegisterWorker_IncrementsRevisionNumber_When
 
 	// Register worker to revive the version
 	s.env.RegisterDelayedCallback(func() {
-		routingConfig := &deploymentpb.RoutingConfig{
+		routingConfig := deploymentpb.RoutingConfig_builder{
 			CurrentVersion:            tv.DeploymentVersionString(),
 			CurrentVersionChangedTime: timestamppb.New(time.Now()),
 			RevisionNumber:            10,
-		}
+		}.Build()
 
-		registerArgs := &deploymentspb.RegisterWorkerInVersionArgs{
+		registerArgs := deploymentspb.RegisterWorkerInVersionArgs_builder{
 			TaskQueueName: newTaskQueueName,
 			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			MaxTaskQueues: 100,
 			Version:       tv.DeploymentVersionString(),
 			RoutingConfig: routingConfig,
-		}
+		}.Build()
 
 		s.env.UpdateWorkflow(RegisterWorkerInDeploymentVersion, "", &testsuite.TestUpdateCallback{
 			OnReject: func(err error) {
@@ -1082,27 +1082,27 @@ func (s *VersionWorkflowSuite) Test_RegisterWorker_IncrementsRevisionNumber_When
 		}, registerArgs)
 	}, 50*time.Millisecond)
 
-	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, &deploymentspb.WorkerDeploymentVersionWorkflowArgs{
+	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, deploymentspb.WorkerDeploymentVersionWorkflowArgs_builder{
 		NamespaceName: tv.NamespaceName().String(),
 		NamespaceId:   tv.NamespaceID().String(),
-		VersionState: &deploymentspb.VersionLocalState{
-			Version: &deploymentspb.WorkerDeploymentVersion{
+		VersionState: deploymentspb.VersionLocalState_builder{
+			Version: deploymentspb.WorkerDeploymentVersion_builder{
 				DeploymentName: tv.DeploymentSeries(),
 				BuildId:        tv.BuildID(),
-			},
+			}.Build(),
 			TaskQueueFamilies: map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData{
-				taskQueueName: {
+				taskQueueName: deploymentspb.VersionLocalState_TaskQueueFamilyData_builder{
 					TaskQueues: map[int32]*deploymentspb.TaskQueueVersionData{
 						int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {},
 					},
-				},
+				}.Build(),
 			},
 			Status:                    enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE,
 			RevisionNumber:            5,
 			SyncBatchSize:             int32(s.workerDeploymentClient.getSyncBatchSize()),
 			StartedDeploymentWorkflow: true,
-		},
-	})
+		}.Build(),
+	}.Build())
 
 	s.True(s.env.IsWorkflowCompleted())
 }
@@ -1119,19 +1119,19 @@ func (s *VersionWorkflowSuite) Test_SyncState_IncrementsRevisionNumber_InAsyncMo
 	s.env.RegisterActivity(a.StartWorkerDeploymentWorkflow)
 	s.env.OnActivity(a.StartWorkerDeploymentWorkflow, mock.Anything, mock.Anything).Return(nil).Maybe()
 
-	taskQueueName := tv.TaskQueue().Name
+	taskQueueName := tv.TaskQueue().GetName()
 
 	s.env.OnActivity(a.SyncDeploymentVersionUserData, mock.Anything, mock.Anything).Return(
 		func(ctx context.Context, req *deploymentspb.SyncDeploymentVersionUserDataRequest) (*deploymentspb.SyncDeploymentVersionUserDataResponse, error) {
-			s.NotNil(req.UpsertVersionData, "UpsertVersionData should be present in async mode")
-			s.NotNil(req.UpdateRoutingConfig, "UpdateRoutingConfig should be present in async mode")
+			s.NotNil(req.GetUpsertVersionData(), "UpsertVersionData should be present in async mode")
+			s.NotNil(req.GetUpdateRoutingConfig(), "UpdateRoutingConfig should be present in async mode")
 
 			// Revision should increment from 0 to 1
-			s.Equal(int64(1), req.UpsertVersionData.RevisionNumber, "Sync should have revision 1")
+			s.Equal(int64(1), req.GetUpsertVersionData().GetRevisionNumber(), "Sync should have revision 1")
 
-			return &deploymentspb.SyncDeploymentVersionUserDataResponse{
+			return deploymentspb.SyncDeploymentVersionUserDataResponse_builder{
 				TaskQueueMaxVersions: map[string]int64{taskQueueName: 1},
-			}, nil
+			}.Build(), nil
 		},
 	).Maybe()
 
@@ -1140,18 +1140,18 @@ func (s *VersionWorkflowSuite) Test_SyncState_IncrementsRevisionNumber_InAsyncMo
 
 	// Sync with routing config
 	s.env.RegisterDelayedCallback(func() {
-		routingConfig := &deploymentpb.RoutingConfig{
+		routingConfig := deploymentpb.RoutingConfig_builder{
 			CurrentDeploymentVersion:  tv.ExternalDeploymentVersion(),
 			CurrentVersion:            tv.DeploymentVersionString(),
 			CurrentVersionChangedTime: now,
 			RevisionNumber:            5,
-		}
+		}.Build()
 
-		syncArgs := &deploymentspb.SyncVersionStateUpdateArgs{
+		syncArgs := deploymentspb.SyncVersionStateUpdateArgs_builder{
 			RoutingUpdateTime: now,
 			CurrentSinceTime:  now,
 			RoutingConfig:     routingConfig,
-		}
+		}.Build()
 
 		s.env.UpdateWorkflow(SyncVersionState, "", &testsuite.TestUpdateCallback{
 			OnReject: func(err error) {
@@ -1164,26 +1164,26 @@ func (s *VersionWorkflowSuite) Test_SyncState_IncrementsRevisionNumber_InAsyncMo
 		}, syncArgs)
 	}, 1*time.Millisecond)
 
-	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, &deploymentspb.WorkerDeploymentVersionWorkflowArgs{
+	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, deploymentspb.WorkerDeploymentVersionWorkflowArgs_builder{
 		NamespaceName: tv.NamespaceName().String(),
 		NamespaceId:   tv.NamespaceID().String(),
-		VersionState: &deploymentspb.VersionLocalState{
-			Version: &deploymentspb.WorkerDeploymentVersion{
+		VersionState: deploymentspb.VersionLocalState_builder{
+			Version: deploymentspb.WorkerDeploymentVersion_builder{
 				DeploymentName: tv.DeploymentSeries(),
 				BuildId:        tv.BuildID(),
-			},
+			}.Build(),
 			TaskQueueFamilies: map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData{
-				taskQueueName: {
+				taskQueueName: deploymentspb.VersionLocalState_TaskQueueFamilyData_builder{
 					TaskQueues: map[int32]*deploymentspb.TaskQueueVersionData{
 						int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {},
 					},
-				},
+				}.Build(),
 			},
 			RevisionNumber:            0,
 			SyncBatchSize:             int32(s.workerDeploymentClient.getSyncBatchSize()),
 			StartedDeploymentWorkflow: true,
-		},
-	})
+		}.Build(),
+	}.Build())
 
 	s.True(s.env.IsWorkflowCompleted())
 }
@@ -1198,15 +1198,15 @@ func (s *VersionWorkflowSuite) Test_MultipleSyncStates_BlocksCaNUntilAllComplete
 	s.env.RegisterActivity(a.StartWorkerDeploymentWorkflow)
 	s.env.OnActivity(a.StartWorkerDeploymentWorkflow, mock.Anything, mock.Anything).Return(nil).Maybe()
 
-	taskQueueName := tv.TaskQueue().Name
+	taskQueueName := tv.TaskQueue().GetName()
 
 	syncCallCount := 0
 	s.env.OnActivity(a.SyncDeploymentVersionUserData, mock.Anything, mock.Anything).Return(
 		func(ctx context.Context, req *deploymentspb.SyncDeploymentVersionUserDataRequest) (*deploymentspb.SyncDeploymentVersionUserDataResponse, error) {
 			syncCallCount++
-			return &deploymentspb.SyncDeploymentVersionUserDataResponse{
+			return deploymentspb.SyncDeploymentVersionUserDataResponse_builder{
 				TaskQueueMaxVersions: map[string]int64{taskQueueName: int64(syncCallCount * 10)},
-			}, nil
+			}.Build(), nil
 		},
 	).Maybe()
 
@@ -1224,17 +1224,17 @@ func (s *VersionWorkflowSuite) Test_MultipleSyncStates_BlocksCaNUntilAllComplete
 
 	// First sync
 	s.env.RegisterDelayedCallback(func() {
-		routingConfig := &deploymentpb.RoutingConfig{
+		routingConfig := deploymentpb.RoutingConfig_builder{
 			CurrentVersion:            tv.DeploymentVersionString(),
 			CurrentVersionChangedTime: now,
 			RevisionNumber:            5,
-		}
+		}.Build()
 
-		syncArgs := &deploymentspb.SyncVersionStateUpdateArgs{
+		syncArgs := deploymentspb.SyncVersionStateUpdateArgs_builder{
 			RoutingUpdateTime: now,
 			CurrentSinceTime:  now,
 			RoutingConfig:     routingConfig,
-		}
+		}.Build()
 
 		s.env.UpdateWorkflow(SyncVersionState, "", &testsuite.TestUpdateCallback{
 			OnReject: func(err error) {
@@ -1250,17 +1250,17 @@ func (s *VersionWorkflowSuite) Test_MultipleSyncStates_BlocksCaNUntilAllComplete
 	// Second sync shortly after
 	s.env.RegisterDelayedCallback(func() {
 		newTime := timestamppb.New(time.Now().Add(5 * time.Second))
-		routingConfig := &deploymentpb.RoutingConfig{
+		routingConfig := deploymentpb.RoutingConfig_builder{
 			CurrentVersion:            tv.DeploymentVersionString(),
 			CurrentVersionChangedTime: newTime,
 			RevisionNumber:            6,
-		}
+		}.Build()
 
-		syncArgs := &deploymentspb.SyncVersionStateUpdateArgs{
+		syncArgs := deploymentspb.SyncVersionStateUpdateArgs_builder{
 			RoutingUpdateTime: newTime,
 			CurrentSinceTime:  newTime,
 			RoutingConfig:     routingConfig,
-		}
+		}.Build()
 
 		s.env.UpdateWorkflow(SyncVersionState, "", &testsuite.TestUpdateCallback{
 			OnReject: func(err error) {
@@ -1273,26 +1273,26 @@ func (s *VersionWorkflowSuite) Test_MultipleSyncStates_BlocksCaNUntilAllComplete
 		}, syncArgs)
 	}, 10*time.Millisecond)
 
-	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, &deploymentspb.WorkerDeploymentVersionWorkflowArgs{
+	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, deploymentspb.WorkerDeploymentVersionWorkflowArgs_builder{
 		NamespaceName: tv.NamespaceName().String(),
 		NamespaceId:   tv.NamespaceID().String(),
-		VersionState: &deploymentspb.VersionLocalState{
-			Version: &deploymentspb.WorkerDeploymentVersion{
+		VersionState: deploymentspb.VersionLocalState_builder{
+			Version: deploymentspb.WorkerDeploymentVersion_builder{
 				DeploymentName: tv.DeploymentSeries(),
 				BuildId:        tv.BuildID(),
-			},
+			}.Build(),
 			TaskQueueFamilies: map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData{
-				taskQueueName: {
+				taskQueueName: deploymentspb.VersionLocalState_TaskQueueFamilyData_builder{
 					TaskQueues: map[int32]*deploymentspb.TaskQueueVersionData{
 						int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {},
 					},
-				},
+				}.Build(),
 			},
 			RevisionNumber:            0,
 			SyncBatchSize:             int32(s.workerDeploymentClient.getSyncBatchSize()),
 			StartedDeploymentWorkflow: true,
-		},
-	})
+		}.Build(),
+	}.Build())
 
 	s.True(s.env.IsWorkflowCompleted())
 	// Both propagations should have completed before CaN
@@ -1309,23 +1309,23 @@ func (s *VersionWorkflowSuite) Test_SyncState_And_RegisterWorker_ConcurrentPropa
 	s.env.RegisterActivity(a.StartWorkerDeploymentWorkflow)
 	s.env.OnActivity(a.StartWorkerDeploymentWorkflow, mock.Anything, mock.Anything).Return(nil).Maybe()
 
-	taskQueueName := tv.TaskQueue().Name
-	newTaskQueueName := tv.TaskQueue().Name + "_new"
+	taskQueueName := tv.TaskQueue().GetName()
+	newTaskQueueName := tv.TaskQueue().GetName() + "_new"
 
 	syncActivityCalls := 0
 	s.env.OnActivity(a.SyncDeploymentVersionUserData, mock.Anything, mock.Anything).Return(
 		func(ctx context.Context, req *deploymentspb.SyncDeploymentVersionUserDataRequest) (*deploymentspb.SyncDeploymentVersionUserDataResponse, error) {
 			syncActivityCalls++
-			if req.UpdateRoutingConfig != nil && len(req.Sync) == 1 && req.Sync[0].Name == taskQueueName {
+			if req.HasUpdateRoutingConfig() && len(req.GetSync()) == 1 && req.GetSync()[0].GetName() == taskQueueName {
 				// This is the SyncState propagation
-				return &deploymentspb.SyncDeploymentVersionUserDataResponse{
+				return deploymentspb.SyncDeploymentVersionUserDataResponse_builder{
 					TaskQueueMaxVersions: map[string]int64{taskQueueName: 10},
-				}, nil
+				}.Build(), nil
 			}
 			// This is the RegisterWorker propagation
-			return &deploymentspb.SyncDeploymentVersionUserDataResponse{
+			return deploymentspb.SyncDeploymentVersionUserDataResponse_builder{
 				TaskQueueMaxVersions: map[string]int64{newTaskQueueName: 1},
-			}, nil
+			}.Build(), nil
 		},
 	).Maybe()
 
@@ -1342,17 +1342,17 @@ func (s *VersionWorkflowSuite) Test_SyncState_And_RegisterWorker_ConcurrentPropa
 
 	// Start SyncState
 	s.env.RegisterDelayedCallback(func() {
-		routingConfig := &deploymentpb.RoutingConfig{
+		routingConfig := deploymentpb.RoutingConfig_builder{
 			CurrentVersion:            tv.DeploymentVersionString(),
 			CurrentVersionChangedTime: now,
 			RevisionNumber:            5,
-		}
+		}.Build()
 
-		syncArgs := &deploymentspb.SyncVersionStateUpdateArgs{
+		syncArgs := deploymentspb.SyncVersionStateUpdateArgs_builder{
 			RoutingUpdateTime: now,
 			CurrentSinceTime:  now,
 			RoutingConfig:     routingConfig,
-		}
+		}.Build()
 
 		s.env.UpdateWorkflow(SyncVersionState, "", &testsuite.TestUpdateCallback{
 			OnReject: func(err error) {
@@ -1367,19 +1367,19 @@ func (s *VersionWorkflowSuite) Test_SyncState_And_RegisterWorker_ConcurrentPropa
 
 	// Start RegisterWorker
 	s.env.RegisterDelayedCallback(func() {
-		routingConfig := &deploymentpb.RoutingConfig{
+		routingConfig := deploymentpb.RoutingConfig_builder{
 			CurrentVersion:            tv.DeploymentVersionString(),
 			CurrentVersionChangedTime: now,
 			RevisionNumber:            5,
-		}
+		}.Build()
 
-		registerArgs := &deploymentspb.RegisterWorkerInVersionArgs{
+		registerArgs := deploymentspb.RegisterWorkerInVersionArgs_builder{
 			TaskQueueName: newTaskQueueName,
 			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			MaxTaskQueues: 100,
 			Version:       tv.DeploymentVersionString(),
 			RoutingConfig: routingConfig,
-		}
+		}.Build()
 
 		s.env.UpdateWorkflow(RegisterWorkerInDeploymentVersion, "", &testsuite.TestUpdateCallback{
 			OnReject: func(err error) {
@@ -1392,26 +1392,26 @@ func (s *VersionWorkflowSuite) Test_SyncState_And_RegisterWorker_ConcurrentPropa
 		}, registerArgs)
 	}, 10*time.Millisecond)
 
-	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, &deploymentspb.WorkerDeploymentVersionWorkflowArgs{
+	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, deploymentspb.WorkerDeploymentVersionWorkflowArgs_builder{
 		NamespaceName: tv.NamespaceName().String(),
 		NamespaceId:   tv.NamespaceID().String(),
-		VersionState: &deploymentspb.VersionLocalState{
-			Version: &deploymentspb.WorkerDeploymentVersion{
+		VersionState: deploymentspb.VersionLocalState_builder{
+			Version: deploymentspb.WorkerDeploymentVersion_builder{
 				DeploymentName: tv.DeploymentSeries(),
 				BuildId:        tv.BuildID(),
-			},
+			}.Build(),
 			TaskQueueFamilies: map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData{
-				taskQueueName: {
+				taskQueueName: deploymentspb.VersionLocalState_TaskQueueFamilyData_builder{
 					TaskQueues: map[int32]*deploymentspb.TaskQueueVersionData{
 						int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {},
 					},
-				},
+				}.Build(),
 			},
 			RevisionNumber:            0,
 			SyncBatchSize:             int32(s.workerDeploymentClient.getSyncBatchSize()),
 			StartedDeploymentWorkflow: true,
-		},
-	})
+		}.Build(),
+	}.Build())
 
 	s.True(s.env.IsWorkflowCompleted())
 	// Both syncs should complete
@@ -1432,12 +1432,12 @@ func (s *VersionWorkflowSuite) Test_SyncState_SignalsPropagationComplete_WithCor
 	s.env.RegisterActivity(a.StartWorkerDeploymentWorkflow)
 	s.env.OnActivity(a.StartWorkerDeploymentWorkflow, mock.Anything, mock.Anything).Return(nil).Maybe()
 
-	taskQueueName := tv.TaskQueue().Name
+	taskQueueName := tv.TaskQueue().GetName()
 
 	s.env.OnActivity(a.SyncDeploymentVersionUserData, mock.Anything, mock.Anything).Return(
-		&deploymentspb.SyncDeploymentVersionUserDataResponse{
+		deploymentspb.SyncDeploymentVersionUserDataResponse_builder{
 			TaskQueueMaxVersions: map[string]int64{taskQueueName: 10},
-		}, nil,
+		}.Build(), nil,
 	).Maybe()
 
 	s.env.OnActivity(a.CheckWorkerDeploymentUserDataPropagation, mock.Anything, mock.Anything).Return(nil).Maybe()
@@ -1457,17 +1457,17 @@ func (s *VersionWorkflowSuite) Test_SyncState_SignalsPropagationComplete_WithCor
 	}).Maybe()
 
 	s.env.RegisterDelayedCallback(func() {
-		routingConfig := &deploymentpb.RoutingConfig{
+		routingConfig := deploymentpb.RoutingConfig_builder{
 			CurrentVersion:            tv.DeploymentVersionString(),
 			CurrentVersionChangedTime: now,
 			RevisionNumber:            5, // This should be in the signal
-		}
+		}.Build()
 
-		syncArgs := &deploymentspb.SyncVersionStateUpdateArgs{
+		syncArgs := deploymentspb.SyncVersionStateUpdateArgs_builder{
 			RoutingUpdateTime: now,
 			CurrentSinceTime:  now,
 			RoutingConfig:     routingConfig,
-		}
+		}.Build()
 
 		s.env.UpdateWorkflow(SyncVersionState, "", &testsuite.TestUpdateCallback{
 			OnReject: func(err error) {
@@ -1480,33 +1480,33 @@ func (s *VersionWorkflowSuite) Test_SyncState_SignalsPropagationComplete_WithCor
 		}, syncArgs)
 	}, 1*time.Millisecond)
 
-	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, &deploymentspb.WorkerDeploymentVersionWorkflowArgs{
+	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, deploymentspb.WorkerDeploymentVersionWorkflowArgs_builder{
 		NamespaceName: tv.NamespaceName().String(),
 		NamespaceId:   tv.NamespaceID().String(),
-		VersionState: &deploymentspb.VersionLocalState{
-			Version: &deploymentspb.WorkerDeploymentVersion{
+		VersionState: deploymentspb.VersionLocalState_builder{
+			Version: deploymentspb.WorkerDeploymentVersion_builder{
 				DeploymentName: tv.DeploymentSeries(),
 				BuildId:        tv.BuildID(),
-			},
+			}.Build(),
 			TaskQueueFamilies: map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData{
-				taskQueueName: {
+				taskQueueName: deploymentspb.VersionLocalState_TaskQueueFamilyData_builder{
 					TaskQueues: map[int32]*deploymentspb.TaskQueueVersionData{
 						int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {},
 					},
-				},
+				}.Build(),
 			},
 			RevisionNumber:            0,
 			SyncBatchSize:             int32(s.workerDeploymentClient.getSyncBatchSize()),
 			StartedDeploymentWorkflow: true,
-		},
-	})
+		}.Build(),
+	}.Build())
 
 	s.True(s.env.IsWorkflowCompleted())
 
 	// Verify that the signal was sent with the correct revision number
 	s.Require().NotNil(capturedSignalArg, "PropagationCompleteSignal should have been sent")
-	s.Equal(int64(5), capturedSignalArg.RevisionNumber, "Signal should contain the correct revision number")
-	s.Equal(tv.BuildID(), capturedSignalArg.BuildId, "Signal should contain the correct build ID")
+	s.Equal(int64(5), capturedSignalArg.GetRevisionNumber(), "Signal should contain the correct revision number")
+	s.Equal(tv.BuildID(), capturedSignalArg.GetBuildId(), "Signal should contain the correct build ID")
 }
 
 // Test_RegisterWorker_DoesNotSignalPropagationComplete tests that worker registration
@@ -1519,12 +1519,12 @@ func (s *VersionWorkflowSuite) Test_RegisterWorker_DoesNotSignalPropagationCompl
 	s.env.RegisterActivity(a.StartWorkerDeploymentWorkflow)
 	s.env.OnActivity(a.StartWorkerDeploymentWorkflow, mock.Anything, mock.Anything).Return(nil).Maybe()
 
-	newTaskQueueName := tv.TaskQueue().Name + "_new"
+	newTaskQueueName := tv.TaskQueue().GetName() + "_new"
 
 	s.env.OnActivity(a.SyncDeploymentVersionUserData, mock.Anything, mock.Anything).Return(
-		&deploymentspb.SyncDeploymentVersionUserDataResponse{
+		deploymentspb.SyncDeploymentVersionUserDataResponse_builder{
 			TaskQueueMaxVersions: map[string]int64{newTaskQueueName: 1},
-		}, nil,
+		}.Build(), nil,
 	).Maybe()
 
 	s.env.OnActivity(a.CheckWorkerDeploymentUserDataPropagation, mock.Anything, mock.Anything).Return(nil).Maybe()
@@ -1534,19 +1534,19 @@ func (s *VersionWorkflowSuite) Test_RegisterWorker_DoesNotSignalPropagationCompl
 	}).Maybe()
 
 	s.env.RegisterDelayedCallback(func() {
-		routingConfig := &deploymentpb.RoutingConfig{
+		routingConfig := deploymentpb.RoutingConfig_builder{
 			CurrentVersion:            tv.DeploymentVersionString(),
 			CurrentVersionChangedTime: now,
 			RevisionNumber:            5,
-		}
+		}.Build()
 
-		registerArgs := &deploymentspb.RegisterWorkerInVersionArgs{
+		registerArgs := deploymentspb.RegisterWorkerInVersionArgs_builder{
 			TaskQueueName: newTaskQueueName,
 			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			MaxTaskQueues: 100,
 			Version:       tv.DeploymentVersionString(),
 			RoutingConfig: routingConfig,
-		}
+		}.Build()
 
 		s.env.UpdateWorkflow(RegisterWorkerInDeploymentVersion, "", &testsuite.TestUpdateCallback{
 			OnReject: func(err error) {
@@ -1559,20 +1559,20 @@ func (s *VersionWorkflowSuite) Test_RegisterWorker_DoesNotSignalPropagationCompl
 		}, registerArgs)
 	}, 1*time.Millisecond)
 
-	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, &deploymentspb.WorkerDeploymentVersionWorkflowArgs{
+	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, deploymentspb.WorkerDeploymentVersionWorkflowArgs_builder{
 		NamespaceName: tv.NamespaceName().String(),
 		NamespaceId:   tv.NamespaceID().String(),
-		VersionState: &deploymentspb.VersionLocalState{
-			Version: &deploymentspb.WorkerDeploymentVersion{
+		VersionState: deploymentspb.VersionLocalState_builder{
+			Version: deploymentspb.WorkerDeploymentVersion_builder{
 				DeploymentName: tv.DeploymentSeries(),
 				BuildId:        tv.BuildID(),
-			},
+			}.Build(),
 			TaskQueueFamilies:         map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData{},
 			RevisionNumber:            0,
 			SyncBatchSize:             int32(s.workerDeploymentClient.getSyncBatchSize()),
 			StartedDeploymentWorkflow: true,
-		},
-	})
+		}.Build(),
+	}.Build())
 
 	s.True(s.env.IsWorkflowCompleted())
 }
@@ -1589,19 +1589,19 @@ func (s *VersionWorkflowSuite) Test_BatchTaskQueuesForSync_SingleBatch() {
 	// Create 5 task queues, batch size is 25, so should be single batch
 	taskQueues := make(map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData)
 	for i := 0; i < 5; i++ {
-		tqName := fmt.Sprintf("%s_%d", tv.TaskQueue().Name, i)
-		taskQueues[tqName] = &deploymentspb.VersionLocalState_TaskQueueFamilyData{
+		tqName := fmt.Sprintf("%s_%d", tv.TaskQueue().GetName(), i)
+		taskQueues[tqName] = deploymentspb.VersionLocalState_TaskQueueFamilyData_builder{
 			TaskQueues: map[int32]*deploymentspb.TaskQueueVersionData{
 				int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {},
 			},
-		}
+		}.Build()
 	}
 
 	syncCallCount := 0
 	s.env.OnActivity(a.SyncDeploymentVersionUserData, mock.Anything, mock.Anything).Return(
 		func(ctx context.Context, req *deploymentspb.SyncDeploymentVersionUserDataRequest) (*deploymentspb.SyncDeploymentVersionUserDataResponse, error) {
 			syncCallCount++
-			s.Len(req.Sync, 5, "Should sync all 5 task queues in one batch")
+			s.Len(req.GetSync(), 5, "Should sync all 5 task queues in one batch")
 			return &deploymentspb.SyncDeploymentVersionUserDataResponse{}, nil
 		},
 	).Maybe()
@@ -1610,17 +1610,17 @@ func (s *VersionWorkflowSuite) Test_BatchTaskQueuesForSync_SingleBatch() {
 	s.env.OnSignalExternalWorkflow(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	s.env.RegisterDelayedCallback(func() {
-		routingConfig := &deploymentpb.RoutingConfig{
+		routingConfig := deploymentpb.RoutingConfig_builder{
 			CurrentVersion:            tv.DeploymentVersionString(),
 			CurrentVersionChangedTime: now,
 			RevisionNumber:            5,
-		}
+		}.Build()
 
-		syncArgs := &deploymentspb.SyncVersionStateUpdateArgs{
+		syncArgs := deploymentspb.SyncVersionStateUpdateArgs_builder{
 			RoutingUpdateTime: now,
 			CurrentSinceTime:  now,
 			RoutingConfig:     routingConfig,
-		}
+		}.Build()
 
 		s.env.UpdateWorkflow(SyncVersionState, "", &testsuite.TestUpdateCallback{
 			OnReject: func(err error) {
@@ -1633,20 +1633,20 @@ func (s *VersionWorkflowSuite) Test_BatchTaskQueuesForSync_SingleBatch() {
 		}, syncArgs)
 	}, 1*time.Millisecond)
 
-	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, &deploymentspb.WorkerDeploymentVersionWorkflowArgs{
+	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, deploymentspb.WorkerDeploymentVersionWorkflowArgs_builder{
 		NamespaceName: tv.NamespaceName().String(),
 		NamespaceId:   tv.NamespaceID().String(),
-		VersionState: &deploymentspb.VersionLocalState{
-			Version: &deploymentspb.WorkerDeploymentVersion{
+		VersionState: deploymentspb.VersionLocalState_builder{
+			Version: deploymentspb.WorkerDeploymentVersion_builder{
 				DeploymentName: tv.DeploymentSeries(),
 				BuildId:        tv.BuildID(),
-			},
+			}.Build(),
 			TaskQueueFamilies:         taskQueues,
 			RevisionNumber:            0,
 			SyncBatchSize:             int32(s.workerDeploymentClient.getSyncBatchSize()),
 			StartedDeploymentWorkflow: true,
-		},
-	})
+		}.Build(),
+	}.Build())
 
 	s.True(s.env.IsWorkflowCompleted())
 	s.Equal(1, syncCallCount, "Should make exactly 1 sync call for single batch")
@@ -1664,50 +1664,50 @@ func (s *VersionWorkflowSuite) Test_BatchTaskQueuesForSync_MultipleBatches() {
 	// Create 50 task queues, batch size is 25, so should be 2 batches
 	taskQueues := make(map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData)
 	for i := 0; i < 50; i++ {
-		tqName := fmt.Sprintf("%s_%03d", tv.TaskQueue().Name, i)
-		taskQueues[tqName] = &deploymentspb.VersionLocalState_TaskQueueFamilyData{
+		tqName := fmt.Sprintf("%s_%03d", tv.TaskQueue().GetName(), i)
+		taskQueues[tqName] = deploymentspb.VersionLocalState_TaskQueueFamilyData_builder{
 			TaskQueues: map[int32]*deploymentspb.TaskQueueVersionData{
 				int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {},
 			},
-		}
+		}.Build()
 	}
 
 	syncCallCount := 0
 	s.env.OnActivity(a.SyncDeploymentVersionUserData, mock.Anything, mock.Anything).Return(
 		func(ctx context.Context, req *deploymentspb.SyncDeploymentVersionUserDataRequest) (*deploymentspb.SyncDeploymentVersionUserDataResponse, error) {
 			syncCallCount++
-			s.Len(req.Sync, 25, "Each batch should contain 25 task queues")
+			s.Len(req.GetSync(), 25, "Each batch should contain 25 task queues")
 			taskQueuesToCheck := make(map[string]int64, 24)
-			for i, tq := range req.Sync {
+			for i, tq := range req.GetSync() {
 				if i == 0 {
 					// skip the first task queue as if it did not update and doesn't need check
 					continue
 				}
-				taskQueuesToCheck[tq.Name] = 10
+				taskQueuesToCheck[tq.GetName()] = 10
 			}
-			return &deploymentspb.SyncDeploymentVersionUserDataResponse{TaskQueueMaxVersions: taskQueuesToCheck}, nil
+			return deploymentspb.SyncDeploymentVersionUserDataResponse_builder{TaskQueueMaxVersions: taskQueuesToCheck}.Build(), nil
 		},
 	).Twice()
 
 	s.env.OnActivity(a.CheckWorkerDeploymentUserDataPropagation, mock.Anything, mock.Anything).Return(
 		func(ctx context.Context, req *deploymentspb.CheckWorkerDeploymentUserDataPropagationRequest) error {
-			s.True(len(req.TaskQueueMaxVersions) == 25 || len(req.TaskQueueMaxVersions) == 23, "Should check all task queues except two")
+			s.True(len(req.GetTaskQueueMaxVersions()) == 25 || len(req.GetTaskQueueMaxVersions()) == 23, "Should check all task queues except two")
 			return nil
 		}).Twice()
 	s.env.OnSignalExternalWorkflow(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	s.env.RegisterDelayedCallback(func() {
-		routingConfig := &deploymentpb.RoutingConfig{
+		routingConfig := deploymentpb.RoutingConfig_builder{
 			CurrentVersion:            tv.DeploymentVersionString(),
 			CurrentVersionChangedTime: now,
 			RevisionNumber:            5,
-		}
+		}.Build()
 
-		syncArgs := &deploymentspb.SyncVersionStateUpdateArgs{
+		syncArgs := deploymentspb.SyncVersionStateUpdateArgs_builder{
 			RoutingUpdateTime: now,
 			CurrentSinceTime:  now,
 			RoutingConfig:     routingConfig,
-		}
+		}.Build()
 
 		s.env.UpdateWorkflow(SyncVersionState, "", &testsuite.TestUpdateCallback{
 			OnReject: func(err error) {
@@ -1720,20 +1720,20 @@ func (s *VersionWorkflowSuite) Test_BatchTaskQueuesForSync_MultipleBatches() {
 		}, syncArgs)
 	}, 1*time.Millisecond)
 
-	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, &deploymentspb.WorkerDeploymentVersionWorkflowArgs{
+	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, deploymentspb.WorkerDeploymentVersionWorkflowArgs_builder{
 		NamespaceName: tv.NamespaceName().String(),
 		NamespaceId:   tv.NamespaceID().String(),
-		VersionState: &deploymentspb.VersionLocalState{
-			Version: &deploymentspb.WorkerDeploymentVersion{
+		VersionState: deploymentspb.VersionLocalState_builder{
+			Version: deploymentspb.WorkerDeploymentVersion_builder{
 				DeploymentName: tv.DeploymentSeries(),
 				BuildId:        tv.BuildID(),
-			},
+			}.Build(),
 			TaskQueueFamilies:         taskQueues,
 			RevisionNumber:            0,
 			SyncBatchSize:             int32(s.workerDeploymentClient.getSyncBatchSize()),
 			StartedDeploymentWorkflow: true,
-		},
-	})
+		}.Build(),
+	}.Build())
 
 	s.True(s.env.IsWorkflowCompleted())
 	s.Equal(2, syncCallCount, "Should make exactly 2 sync calls for 2 batches")
@@ -1751,12 +1751,12 @@ func (s *VersionWorkflowSuite) Test_BatchTaskQueuesForSync_PartialLastBatch() {
 	// Create 27 task queues, batch size is 10, so should be 3 batches: 10, 10, 7
 	taskQueues := make(map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData)
 	for i := 0; i < 27; i++ {
-		tqName := fmt.Sprintf("%s_%02d", tv.TaskQueue().Name, i)
-		taskQueues[tqName] = &deploymentspb.VersionLocalState_TaskQueueFamilyData{
+		tqName := fmt.Sprintf("%s_%02d", tv.TaskQueue().GetName(), i)
+		taskQueues[tqName] = deploymentspb.VersionLocalState_TaskQueueFamilyData_builder{
 			TaskQueues: map[int32]*deploymentspb.TaskQueueVersionData{
 				int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {},
 			},
-		}
+		}.Build()
 	}
 
 	syncCallCount := 0
@@ -1764,9 +1764,9 @@ func (s *VersionWorkflowSuite) Test_BatchTaskQueuesForSync_PartialLastBatch() {
 		func(ctx context.Context, req *deploymentspb.SyncDeploymentVersionUserDataRequest) (*deploymentspb.SyncDeploymentVersionUserDataResponse, error) {
 			syncCallCount++
 			if syncCallCount <= 2 {
-				s.Len(req.Sync, 10, "First two batches should contain 10 task queues each")
+				s.Len(req.GetSync(), 10, "First two batches should contain 10 task queues each")
 			} else {
-				s.Len(req.Sync, 7, "Last batch should contain 7 task queues")
+				s.Len(req.GetSync(), 7, "Last batch should contain 7 task queues")
 			}
 			// Return no task queues as if none were updated
 			return &deploymentspb.SyncDeploymentVersionUserDataResponse{}, nil
@@ -1779,17 +1779,17 @@ func (s *VersionWorkflowSuite) Test_BatchTaskQueuesForSync_PartialLastBatch() {
 	s.env.OnSignalExternalWorkflow(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	s.env.RegisterDelayedCallback(func() {
-		routingConfig := &deploymentpb.RoutingConfig{
+		routingConfig := deploymentpb.RoutingConfig_builder{
 			CurrentVersion:            tv.DeploymentVersionString(),
 			CurrentVersionChangedTime: now,
 			RevisionNumber:            5,
-		}
+		}.Build()
 
-		syncArgs := &deploymentspb.SyncVersionStateUpdateArgs{
+		syncArgs := deploymentspb.SyncVersionStateUpdateArgs_builder{
 			RoutingUpdateTime: now,
 			CurrentSinceTime:  now,
 			RoutingConfig:     routingConfig,
-		}
+		}.Build()
 
 		s.env.UpdateWorkflow(SyncVersionState, "", &testsuite.TestUpdateCallback{
 			OnReject: func(err error) {
@@ -1802,20 +1802,20 @@ func (s *VersionWorkflowSuite) Test_BatchTaskQueuesForSync_PartialLastBatch() {
 		}, syncArgs)
 	}, 1*time.Millisecond)
 
-	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, &deploymentspb.WorkerDeploymentVersionWorkflowArgs{
+	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, deploymentspb.WorkerDeploymentVersionWorkflowArgs_builder{
 		NamespaceName: tv.NamespaceName().String(),
 		NamespaceId:   tv.NamespaceID().String(),
-		VersionState: &deploymentspb.VersionLocalState{
-			Version: &deploymentspb.WorkerDeploymentVersion{
+		VersionState: deploymentspb.VersionLocalState_builder{
+			Version: deploymentspb.WorkerDeploymentVersion_builder{
 				DeploymentName: tv.DeploymentSeries(),
 				BuildId:        tv.BuildID(),
-			},
+			}.Build(),
 			TaskQueueFamilies:         taskQueues,
 			RevisionNumber:            0,
 			SyncBatchSize:             10, // Use smaller batch size for this test
 			StartedDeploymentWorkflow: true,
-		},
-	})
+		}.Build(),
+	}.Build())
 
 	s.True(s.env.IsWorkflowCompleted())
 	s.Equal(3, syncCallCount, "Should make exactly 3 sync calls for 3 batches")
@@ -1831,15 +1831,15 @@ func (s *VersionWorkflowSuite) Test_FindNewVersionStatusFromRoutingConfig_Curren
 	s.env.RegisterActivity(a.StartWorkerDeploymentWorkflow)
 	s.env.OnActivity(a.StartWorkerDeploymentWorkflow, mock.Anything, mock.Anything).Return(nil).Maybe()
 
-	taskQueueName := tv.TaskQueue().Name
+	taskQueueName := tv.TaskQueue().GetName()
 
 	s.env.OnActivity(a.SyncDeploymentVersionUserData, mock.Anything, mock.Anything).Return(
 		func(ctx context.Context, req *deploymentspb.SyncDeploymentVersionUserDataRequest) (*deploymentspb.SyncDeploymentVersionUserDataResponse, error) {
-			if req.UpsertVersionData != nil {
-				s.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING, req.UpsertVersionData.Status,
+			if req.HasUpsertVersionData() {
+				s.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING, req.GetUpsertVersionData().GetStatus(),
 					"Version status should transition to RAMPING")
 				if s.workflowVersion >= VersionDataRevisionNumber {
-					s.Equal(int64(1), req.UpsertVersionData.RevisionNumber, "Revision number should be incremented")
+					s.Equal(int64(1), req.GetUpsertVersionData().GetRevisionNumber(), "Revision number should be incremented")
 				}
 			}
 			return &deploymentspb.SyncDeploymentVersionUserDataResponse{}, nil
@@ -1851,7 +1851,7 @@ func (s *VersionWorkflowSuite) Test_FindNewVersionStatusFromRoutingConfig_Curren
 
 	// Make version RAMPING instead of CURRENT
 	s.env.RegisterDelayedCallback(func() {
-		routingConfig := &deploymentpb.RoutingConfig{
+		routingConfig := deploymentpb.RoutingConfig_builder{
 			CurrentDeploymentVersion:            worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(tv.DeploymentVersionString() + "_other"),
 			CurrentVersion:                      tv.DeploymentVersionString() + "_other",
 			CurrentVersionChangedTime:           rampingTime,
@@ -1861,14 +1861,14 @@ func (s *VersionWorkflowSuite) Test_FindNewVersionStatusFromRoutingConfig_Curren
 			RampingVersionPercentage:            30,
 			RampingVersionPercentageChangedTime: rampingTime,
 			RevisionNumber:                      6,
-		}
+		}.Build()
 
-		syncArgs := &deploymentspb.SyncVersionStateUpdateArgs{
+		syncArgs := deploymentspb.SyncVersionStateUpdateArgs_builder{
 			RoutingUpdateTime: rampingTime,
 			RampingSinceTime:  rampingTime,
 			RampPercentage:    30,
 			RoutingConfig:     routingConfig,
-		}
+		}.Build()
 
 		s.env.UpdateWorkflow(SyncVersionState, "", &testsuite.TestUpdateCallback{
 			OnReject: func(err error) {
@@ -1878,26 +1878,26 @@ func (s *VersionWorkflowSuite) Test_FindNewVersionStatusFromRoutingConfig_Curren
 			OnComplete: func(result interface{}, err error) {
 				s.Require().NoError(err)
 				resp := result.(*deploymentspb.SyncVersionStateResponse)
-				s.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING, resp.Summary.Status,
+				s.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING, resp.GetSummary().GetStatus(),
 					"Version should be RAMPING")
 			},
 		}, syncArgs)
 	}, 1*time.Millisecond)
 
-	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, &deploymentspb.WorkerDeploymentVersionWorkflowArgs{
+	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, deploymentspb.WorkerDeploymentVersionWorkflowArgs_builder{
 		NamespaceName: tv.NamespaceName().String(),
 		NamespaceId:   tv.NamespaceID().String(),
-		VersionState: &deploymentspb.VersionLocalState{
-			Version: &deploymentspb.WorkerDeploymentVersion{
+		VersionState: deploymentspb.VersionLocalState_builder{
+			Version: deploymentspb.WorkerDeploymentVersion_builder{
 				DeploymentName: tv.DeploymentSeries(),
 				BuildId:        tv.BuildID(),
-			},
+			}.Build(),
 			TaskQueueFamilies: map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData{
-				taskQueueName: {
+				taskQueueName: deploymentspb.VersionLocalState_TaskQueueFamilyData_builder{
 					TaskQueues: map[int32]*deploymentspb.TaskQueueVersionData{
 						int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {},
 					},
-				},
+				}.Build(),
 			},
 			Status:                    enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
 			CurrentSinceTime:          now,
@@ -1905,8 +1905,8 @@ func (s *VersionWorkflowSuite) Test_FindNewVersionStatusFromRoutingConfig_Curren
 			RevisionNumber:            0,
 			SyncBatchSize:             int32(s.workerDeploymentClient.getSyncBatchSize()),
 			StartedDeploymentWorkflow: true,
-		},
-	})
+		}.Build(),
+	}.Build())
 
 	s.True(s.env.IsWorkflowCompleted())
 }
@@ -1921,15 +1921,15 @@ func (s *VersionWorkflowSuite) Test_FindNewVersionStatusFromRoutingConfig_Rampin
 	s.env.RegisterActivity(a.StartWorkerDeploymentWorkflow)
 	s.env.OnActivity(a.StartWorkerDeploymentWorkflow, mock.Anything, mock.Anything).Return(nil).Maybe()
 
-	taskQueueName := tv.TaskQueue().Name
+	taskQueueName := tv.TaskQueue().GetName()
 
 	s.env.OnActivity(a.SyncDeploymentVersionUserData, mock.Anything, mock.Anything).Return(
 		func(ctx context.Context, req *deploymentspb.SyncDeploymentVersionUserDataRequest) (*deploymentspb.SyncDeploymentVersionUserDataResponse, error) {
-			if req.UpsertVersionData != nil {
-				s.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING, req.UpsertVersionData.Status,
+			if req.HasUpsertVersionData() {
+				s.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING, req.GetUpsertVersionData().GetStatus(),
 					"Version status should transition to DRAINING")
 				if s.workflowVersion >= VersionDataRevisionNumber {
-					s.Equal(int64(1), req.UpsertVersionData.RevisionNumber, "Revision number should be incremented")
+					s.Equal(int64(1), req.GetUpsertVersionData().GetRevisionNumber(), "Revision number should be incremented")
 				}
 			}
 			return &deploymentspb.SyncDeploymentVersionUserDataResponse{}, nil
@@ -1941,20 +1941,20 @@ func (s *VersionWorkflowSuite) Test_FindNewVersionStatusFromRoutingConfig_Rampin
 
 	// Remove version from routing entirely (neither current nor ramping)
 	s.env.RegisterDelayedCallback(func() {
-		routingConfig := &deploymentpb.RoutingConfig{
+		routingConfig := deploymentpb.RoutingConfig_builder{
 			CurrentDeploymentVersion:            worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(tv.DeploymentVersionString() + "_other"),
 			CurrentVersion:                      tv.DeploymentVersionString() + "_other",
 			CurrentVersionChangedTime:           drainTime,
 			RampingVersionPercentageChangedTime: drainTime,
 			RevisionNumber:                      7,
-		}
+		}.Build()
 
-		syncArgs := &deploymentspb.SyncVersionStateUpdateArgs{
+		syncArgs := deploymentspb.SyncVersionStateUpdateArgs_builder{
 			RoutingUpdateTime: drainTime,
 			CurrentSinceTime:  nil,
 			RampingSinceTime:  nil,
 			RoutingConfig:     routingConfig,
-		}
+		}.Build()
 
 		s.env.UpdateWorkflow(SyncVersionState, "", &testsuite.TestUpdateCallback{
 			OnReject: func(err error) {
@@ -1964,26 +1964,26 @@ func (s *VersionWorkflowSuite) Test_FindNewVersionStatusFromRoutingConfig_Rampin
 			OnComplete: func(result interface{}, err error) {
 				s.Require().NoError(err)
 				resp := result.(*deploymentspb.SyncVersionStateResponse)
-				s.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING, resp.Summary.Status,
+				s.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING, resp.GetSummary().GetStatus(),
 					"Version should be DRAINING")
 			},
 		}, syncArgs)
 	}, 1*time.Millisecond)
 
-	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, &deploymentspb.WorkerDeploymentVersionWorkflowArgs{
+	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, deploymentspb.WorkerDeploymentVersionWorkflowArgs_builder{
 		NamespaceName: tv.NamespaceName().String(),
 		NamespaceId:   tv.NamespaceID().String(),
-		VersionState: &deploymentspb.VersionLocalState{
-			Version: &deploymentspb.WorkerDeploymentVersion{
+		VersionState: deploymentspb.VersionLocalState_builder{
+			Version: deploymentspb.WorkerDeploymentVersion_builder{
 				DeploymentName: tv.DeploymentSeries(),
 				BuildId:        tv.BuildID(),
-			},
+			}.Build(),
 			TaskQueueFamilies: map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData{
-				taskQueueName: {
+				taskQueueName: deploymentspb.VersionLocalState_TaskQueueFamilyData_builder{
 					TaskQueues: map[int32]*deploymentspb.TaskQueueVersionData{
 						int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {},
 					},
-				},
+				}.Build(),
 			},
 			Status:                    enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING,
 			RampingSinceTime:          now,
@@ -1992,8 +1992,8 @@ func (s *VersionWorkflowSuite) Test_FindNewVersionStatusFromRoutingConfig_Rampin
 			RevisionNumber:            0,
 			SyncBatchSize:             int32(s.workerDeploymentClient.getSyncBatchSize()),
 			StartedDeploymentWorkflow: true,
-		},
-	})
+		}.Build(),
+	}.Build())
 
 	s.True(s.env.IsWorkflowCompleted())
 }
@@ -2007,15 +2007,15 @@ func (s *VersionWorkflowSuite) Test_FindNewVersionStatusFromRoutingConfig_Inacti
 	s.env.RegisterActivity(a.StartWorkerDeploymentWorkflow)
 	s.env.OnActivity(a.StartWorkerDeploymentWorkflow, mock.Anything, mock.Anything).Return(nil).Maybe()
 
-	taskQueueName := tv.TaskQueue().Name
+	taskQueueName := tv.TaskQueue().GetName()
 
 	s.env.OnActivity(a.SyncDeploymentVersionUserData, mock.Anything, mock.Anything).Return(
 		func(ctx context.Context, req *deploymentspb.SyncDeploymentVersionUserDataRequest) (*deploymentspb.SyncDeploymentVersionUserDataResponse, error) {
-			if req.UpsertVersionData != nil {
-				s.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT, req.UpsertVersionData.Status,
+			if req.HasUpsertVersionData() {
+				s.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT, req.GetUpsertVersionData().GetStatus(),
 					"Version status should transition to CURRENT (not DRAINING)")
 				if s.workflowVersion >= VersionDataRevisionNumber {
-					s.Equal(int64(1), req.UpsertVersionData.RevisionNumber, "Revision number should be incremented")
+					s.Equal(int64(1), req.GetUpsertVersionData().GetRevisionNumber(), "Revision number should be incremented")
 				}
 			}
 			return &deploymentspb.SyncDeploymentVersionUserDataResponse{}, nil
@@ -2027,18 +2027,18 @@ func (s *VersionWorkflowSuite) Test_FindNewVersionStatusFromRoutingConfig_Inacti
 
 	// Make version CURRENT for first time (never activated before)
 	s.env.RegisterDelayedCallback(func() {
-		routingConfig := &deploymentpb.RoutingConfig{
+		routingConfig := deploymentpb.RoutingConfig_builder{
 			CurrentDeploymentVersion:  tv.ExternalDeploymentVersion(),
 			CurrentVersion:            tv.DeploymentVersionString(),
 			CurrentVersionChangedTime: now,
 			RevisionNumber:            5,
-		}
+		}.Build()
 
-		syncArgs := &deploymentspb.SyncVersionStateUpdateArgs{
+		syncArgs := deploymentspb.SyncVersionStateUpdateArgs_builder{
 			RoutingUpdateTime: now,
 			CurrentSinceTime:  now,
 			RoutingConfig:     routingConfig,
-		}
+		}.Build()
 
 		s.env.UpdateWorkflow(SyncVersionState, "", &testsuite.TestUpdateCallback{
 			OnReject: func(err error) {
@@ -2048,26 +2048,26 @@ func (s *VersionWorkflowSuite) Test_FindNewVersionStatusFromRoutingConfig_Inacti
 			OnComplete: func(result interface{}, err error) {
 				s.Require().NoError(err)
 				resp := result.(*deploymentspb.SyncVersionStateResponse)
-				s.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT, resp.Summary.Status,
+				s.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT, resp.GetSummary().GetStatus(),
 					"Version should be CURRENT, not DRAINING")
 			},
 		}, syncArgs)
 	}, 1*time.Millisecond)
 
-	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, &deploymentspb.WorkerDeploymentVersionWorkflowArgs{
+	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, deploymentspb.WorkerDeploymentVersionWorkflowArgs_builder{
 		NamespaceName: tv.NamespaceName().String(),
 		NamespaceId:   tv.NamespaceID().String(),
-		VersionState: &deploymentspb.VersionLocalState{
-			Version: &deploymentspb.WorkerDeploymentVersion{
+		VersionState: deploymentspb.VersionLocalState_builder{
+			Version: deploymentspb.WorkerDeploymentVersion_builder{
 				DeploymentName: tv.DeploymentSeries(),
 				BuildId:        tv.BuildID(),
-			},
+			}.Build(),
 			TaskQueueFamilies: map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData{
-				taskQueueName: {
+				taskQueueName: deploymentspb.VersionLocalState_TaskQueueFamilyData_builder{
 					TaskQueues: map[int32]*deploymentspb.TaskQueueVersionData{
 						int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {},
 					},
-				},
+				}.Build(),
 			},
 			Status:                    enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE,
 			CurrentSinceTime:          nil, // Never activated
@@ -2075,8 +2075,8 @@ func (s *VersionWorkflowSuite) Test_FindNewVersionStatusFromRoutingConfig_Inacti
 			RevisionNumber:            0,
 			SyncBatchSize:             int32(s.workerDeploymentClient.getSyncBatchSize()),
 			StartedDeploymentWorkflow: true,
-		},
-	})
+		}.Build(),
+	}.Build())
 
 	s.True(s.env.IsWorkflowCompleted())
 }
@@ -2091,7 +2091,7 @@ func (s *VersionWorkflowSuite) Test_UpdateStateFromRoutingConfig_UpdatesTimestam
 	s.env.RegisterActivity(a.StartWorkerDeploymentWorkflow)
 	s.env.OnActivity(a.StartWorkerDeploymentWorkflow, mock.Anything, mock.Anything).Return(nil).Maybe()
 
-	taskQueueName := tv.TaskQueue().Name
+	taskQueueName := tv.TaskQueue().GetName()
 
 	s.env.OnActivity(a.SyncDeploymentVersionUserData, mock.Anything, mock.Anything).Return(
 		&deploymentspb.SyncDeploymentVersionUserDataResponse{}, nil,
@@ -2102,7 +2102,7 @@ func (s *VersionWorkflowSuite) Test_UpdateStateFromRoutingConfig_UpdatesTimestam
 
 	// Set version as RAMPING
 	s.env.RegisterDelayedCallback(func() {
-		routingConfig := &deploymentpb.RoutingConfig{
+		routingConfig := deploymentpb.RoutingConfig_builder{
 			CurrentDeploymentVersion:            worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(tv.DeploymentVersionString() + "_other"),
 			CurrentVersion:                      tv.DeploymentVersionString() + "_other",
 			CurrentVersionChangedTime:           currentTime,
@@ -2112,14 +2112,14 @@ func (s *VersionWorkflowSuite) Test_UpdateStateFromRoutingConfig_UpdatesTimestam
 			RampingVersionPercentage:            45,
 			RampingVersionPercentageChangedTime: rampingTime,
 			RevisionNumber:                      5,
-		}
+		}.Build()
 
-		syncArgs := &deploymentspb.SyncVersionStateUpdateArgs{
+		syncArgs := deploymentspb.SyncVersionStateUpdateArgs_builder{
 			RoutingUpdateTime: rampingTime,
 			RampingSinceTime:  rampingTime,
 			RampPercentage:    45,
 			RoutingConfig:     routingConfig,
-		}
+		}.Build()
 
 		s.env.UpdateWorkflow(SyncVersionState, "", &testsuite.TestUpdateCallback{
 			OnReject: func(err error) {
@@ -2129,37 +2129,37 @@ func (s *VersionWorkflowSuite) Test_UpdateStateFromRoutingConfig_UpdatesTimestam
 			OnComplete: func(result interface{}, err error) {
 				s.Require().NoError(err)
 				resp := result.(*deploymentspb.SyncVersionStateResponse)
-				s.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING, resp.Summary.Status)
-				s.Equal(rampingTime.AsTime(), resp.Summary.RampingSinceTime.AsTime(),
+				s.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING, resp.GetSummary().GetStatus())
+				s.Equal(rampingTime.AsTime(), resp.GetSummary().GetRampingSinceTime().AsTime(),
 					"RampingSinceTime should match routing config")
-				s.Equal(rampingTime.AsTime(), resp.Summary.RoutingUpdateTime.AsTime(),
+				s.Equal(rampingTime.AsTime(), resp.GetSummary().GetRoutingUpdateTime().AsTime(),
 					"RoutingUpdateTime should use percentage changed time for ramping")
-				s.Nil(resp.Summary.CurrentSinceTime, "CurrentSinceTime should be nil")
+				s.Nil(resp.GetSummary().GetCurrentSinceTime(), "CurrentSinceTime should be nil")
 			},
 		}, syncArgs)
 	}, 1*time.Millisecond)
 
-	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, &deploymentspb.WorkerDeploymentVersionWorkflowArgs{
+	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, deploymentspb.WorkerDeploymentVersionWorkflowArgs_builder{
 		NamespaceName: tv.NamespaceName().String(),
 		NamespaceId:   tv.NamespaceID().String(),
-		VersionState: &deploymentspb.VersionLocalState{
-			Version: &deploymentspb.WorkerDeploymentVersion{
+		VersionState: deploymentspb.VersionLocalState_builder{
+			Version: deploymentspb.WorkerDeploymentVersion_builder{
 				DeploymentName: tv.DeploymentSeries(),
 				BuildId:        tv.BuildID(),
-			},
+			}.Build(),
 			TaskQueueFamilies: map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData{
-				taskQueueName: {
+				taskQueueName: deploymentspb.VersionLocalState_TaskQueueFamilyData_builder{
 					TaskQueues: map[int32]*deploymentspb.TaskQueueVersionData{
 						int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {},
 					},
-				},
+				}.Build(),
 			},
 			Status:                    enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE,
 			RevisionNumber:            0,
 			SyncBatchSize:             int32(s.workerDeploymentClient.getSyncBatchSize()),
 			StartedDeploymentWorkflow: true,
-		},
-	})
+		}.Build(),
+	}.Build())
 
 	s.True(s.env.IsWorkflowCompleted())
 }
@@ -2175,15 +2175,15 @@ func (s *VersionWorkflowSuite) Test_DrainageStatusChange_TriggersAsyncPropagatio
 	s.env.RegisterActivity(a.StartWorkerDeploymentWorkflow)
 	s.env.OnActivity(a.StartWorkerDeploymentWorkflow, mock.Anything, mock.Anything).Return(nil).Maybe()
 
-	taskQueueName := tv.TaskQueue().Name
+	taskQueueName := tv.TaskQueue().GetName()
 
 	// Track if async propagation was triggered (not the old sync method)
 	asyncPropagationTriggered := false
 	s.env.OnActivity(a.SyncDeploymentVersionUserData, mock.Anything, mock.Anything).Return(
 		func(ctx context.Context, req *deploymentspb.SyncDeploymentVersionUserDataRequest) (*deploymentspb.SyncDeploymentVersionUserDataResponse, error) {
-			if req.UpsertVersionData != nil && req.UpsertVersionData.Status == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED {
+			if req.HasUpsertVersionData() && req.GetUpsertVersionData().GetStatus() == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED {
 				asyncPropagationTriggered = true
-				s.Equal(int64(6), req.UpsertVersionData.RevisionNumber)
+				s.Equal(int64(6), req.GetUpsertVersionData().GetRevisionNumber())
 			}
 			return &deploymentspb.SyncDeploymentVersionUserDataResponse{}, nil
 		},
@@ -2191,43 +2191,43 @@ func (s *VersionWorkflowSuite) Test_DrainageStatusChange_TriggersAsyncPropagatio
 
 	// Mock the drainage activity to return DRAINED status
 	s.env.OnActivity(a.GetVersionDrainageStatus, mock.Anything, mock.Anything).Return(
-		&deploymentpb.VersionDrainageInfo{
+		deploymentpb.VersionDrainageInfo_builder{
 			Status:          enumspb.VERSION_DRAINAGE_STATUS_DRAINED,
 			LastCheckedTime: timestamppb.New(time.Now()),
 			LastChangedTime: timestamppb.New(time.Now()),
-		}, nil,
+		}.Build(), nil,
 	).Maybe()
 
 	s.env.OnActivity(a.CheckWorkerDeploymentUserDataPropagation, mock.Anything, mock.Anything).Return(nil).Maybe()
 	s.env.OnSignalExternalWorkflow(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	now := timestamppb.New(time.Now())
-	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, &deploymentspb.WorkerDeploymentVersionWorkflowArgs{
+	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, deploymentspb.WorkerDeploymentVersionWorkflowArgs_builder{
 		NamespaceName: tv.NamespaceName().String(),
 		NamespaceId:   tv.NamespaceID().String(),
-		VersionState: &deploymentspb.VersionLocalState{
-			Version: &deploymentspb.WorkerDeploymentVersion{
+		VersionState: deploymentspb.VersionLocalState_builder{
+			Version: deploymentspb.WorkerDeploymentVersion_builder{
 				DeploymentName: tv.DeploymentSeries(),
 				BuildId:        tv.BuildID(),
-			},
+			}.Build(),
 			TaskQueueFamilies: map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData{
-				taskQueueName: {
+				taskQueueName: deploymentspb.VersionLocalState_TaskQueueFamilyData_builder{
 					TaskQueues: map[int32]*deploymentspb.TaskQueueVersionData{
 						int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {},
 					},
-				},
+				}.Build(),
 			},
 			Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING,
-			DrainageInfo: &deploymentpb.VersionDrainageInfo{
+			DrainageInfo: deploymentpb.VersionDrainageInfo_builder{
 				Status:          enumspb.VERSION_DRAINAGE_STATUS_DRAINING,
 				LastCheckedTime: now,
 				LastChangedTime: now,
-			},
+			}.Build(),
 			RevisionNumber:            5,
 			SyncBatchSize:             int32(s.workerDeploymentClient.getSyncBatchSize()),
 			StartedDeploymentWorkflow: true,
-		},
-	})
+		}.Build(),
+	}.Build())
 
 	s.True(s.env.IsWorkflowCompleted())
 	s.True(asyncPropagationTriggered, "Async propagation should be triggered for drainage status change")

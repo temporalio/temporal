@@ -96,24 +96,24 @@ func (s *WorkflowTaskReportedProblemsReplicationSuite) checkReportedProblemsSear
 }
 
 func (s *WorkflowTaskReportedProblemsReplicationSuite) getWFTFailure(admin adminservice.AdminServiceClient, ns, wfid, runid string) (lastWFTCause string, lastWFTCategory string, err error) {
-	resp, err := admin.DescribeMutableState(context.Background(), &adminservice.DescribeMutableStateRequest{
+	resp, err := admin.DescribeMutableState(context.Background(), adminservice.DescribeMutableStateRequest_builder{
 		Namespace: ns,
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: wfid,
 			RunId:      runid,
-		},
+		}.Build(),
 		Archetype: chasm.WorkflowArchetype,
-	})
+	}.Build())
 	require.NoError(s.T(), err)
 	require.NotNil(s.T(), resp)
-	require.NotNil(s.T(), resp.DatabaseMutableState)
-	require.NotNil(s.T(), resp.DatabaseMutableState.ExecutionInfo)
-	require.NotNil(s.T(), resp.DatabaseMutableState.ExecutionInfo.LastWorkflowTaskFailure)
-	switch i := resp.DatabaseMutableState.ExecutionInfo.GetLastWorkflowTaskFailure().(type) {
-	case *persistencespb.WorkflowExecutionInfo_LastWorkflowTaskFailureCause:
-		return "WorkflowTaskFailed", fmt.Sprintf("WorkflowTaskFailedCause%s", i.LastWorkflowTaskFailureCause.String()), nil
-	case *persistencespb.WorkflowExecutionInfo_LastWorkflowTaskTimedOutType:
-		return "WorkflowTaskTimedOut", fmt.Sprintf("WorkflowTaskTimedOutCause%s", i.LastWorkflowTaskTimedOutType.String()), nil
+	require.NotNil(s.T(), resp.GetDatabaseMutableState())
+	require.NotNil(s.T(), resp.GetDatabaseMutableState().GetExecutionInfo())
+	require.NotZero(s.T(), resp.GetDatabaseMutableState().GetExecutionInfo().WhichLastWorkflowTaskFailure())
+	switch resp.GetDatabaseMutableState().GetExecutionInfo().WhichLastWorkflowTaskFailure() {
+	case persistencespb.WorkflowExecutionInfo_LastWorkflowTaskFailureCause_case:
+		return "WorkflowTaskFailed", fmt.Sprintf("WorkflowTaskFailedCause%s", resp.GetDatabaseMutableState().GetExecutionInfo().GetLastWorkflowTaskFailureCause().String()), nil
+	case persistencespb.WorkflowExecutionInfo_LastWorkflowTaskTimedOutType_case:
+		return "WorkflowTaskTimedOut", fmt.Sprintf("WorkflowTaskTimedOutCause%s", resp.GetDatabaseMutableState().GetExecutionInfo().GetLastWorkflowTaskTimedOutType().String()), nil
 	default:
 		return "", "", nil
 	}
@@ -245,7 +245,7 @@ func (s *WorkflowTaskReportedProblemsReplicationSuite) TestWFTFailureReportedPro
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		exec, err := s.activeSDKClient.DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
-		require.GreaterOrEqual(t, exec.PendingWorkflowTask.Attempt, int32(2))
+		require.GreaterOrEqual(t, exec.GetPendingWorkflowTask().GetAttempt(), int32(2))
 	}, 5*time.Second, 500*time.Millisecond)
 
 	// Change dynamic config to enable search attribute setting

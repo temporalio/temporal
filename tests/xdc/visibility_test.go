@@ -71,7 +71,7 @@ func (s *VisibilityTestSuite) TestSearchAttributes() {
 		// When Elasticsearch is enabled, the search attribute aliases are not used.
 		updateNamespaceConfig(s.Assertions, ns,
 			func() *namespacepb.NamespaceConfig {
-				return &namespacepb.NamespaceConfig{
+				return namespacepb.NamespaceConfig_builder{
 					CustomSearchAttributeAliases: map[string]string{
 						"Bool01":     "CustomBoolField",
 						"Datetime01": "CustomDatetimeField",
@@ -80,7 +80,7 @@ func (s *VisibilityTestSuite) TestSearchAttributes() {
 						"Keyword01":  "CustomKeywordField",
 						"Text01":     "CustomTextField",
 					},
-				}
+				}.Build()
 			},
 			s.clusters, 0)
 	}
@@ -93,14 +93,14 @@ func (s *VisibilityTestSuite) TestSearchAttributes() {
 	wt := "xdc-search-attr-test-type"
 	tl := "xdc-search-attr-test-taskqueue"
 	identity := "worker1"
-	workflowType := &commonpb.WorkflowType{Name: wt}
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
-	searchAttr := &commonpb.SearchAttributes{
+	workflowType := commonpb.WorkflowType_builder{Name: wt}.Build()
+	taskQueue := taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build()
+	searchAttr := commonpb.SearchAttributes_builder{
 		IndexedFields: map[string]*commonpb.Payload{
 			"CustomTextField": payload.EncodeString("test value"),
 		},
-	}
-	startReq := &workflowservice.StartWorkflowExecutionRequest{
+	}.Build()
+	startReq := workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:           uuid.NewString(),
 		Namespace:           ns,
 		WorkflowId:          id,
@@ -111,7 +111,7 @@ func (s *VisibilityTestSuite) TestSearchAttributes() {
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 		SearchAttributes:    searchAttr,
-	}
+	}.Build()
 	startTime := time.Now().UTC()
 	we, err := client0.StartWorkflowExecution(testcore.NewContext(), startReq)
 	s.NoError(err)
@@ -120,18 +120,18 @@ func (s *VisibilityTestSuite) TestSearchAttributes() {
 	s.logger.Info("StartWorkflowExecution \n", tag.WorkflowRunID(we.GetRunId()))
 
 	startFilter := &filterpb.StartTimeFilter{}
-	startFilter.EarliestTime = timestamppb.New(startTime)
-	saListRequest := &workflowservice.ListWorkflowExecutionsRequest{
+	startFilter.SetEarliestTime(timestamppb.New(startTime))
+	saListRequest := workflowservice.ListWorkflowExecutionsRequest_builder{
 		Namespace: ns,
 		PageSize:  5,
 		Query:     fmt.Sprintf(`WorkflowId = "%s" and CustomTextField = "test value"`, id),
-	}
+	}.Build()
 
 	testListResult := func(client workflowservice.WorkflowServiceClient, lr *workflowservice.ListWorkflowExecutionsRequest) {
 		var openExecution *workflowpb.WorkflowExecutionInfo
 
 		s.Eventually(func() bool {
-			startFilter.LatestTime = timestamppb.New(time.Now().UTC())
+			startFilter.SetLatestTime(timestamppb.New(time.Now().UTC()))
 
 			resp, err := client.ListWorkflowExecutions(testcore.NewContext(), lr)
 			s.NoError(err)
@@ -160,11 +160,11 @@ func (s *VisibilityTestSuite) TestSearchAttributes() {
 
 	// upsert search attributes
 	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
-		upsertCommand := &commandpb.Command{
+		upsertCommand := commandpb.Command_builder{
 			CommandType: enumspb.COMMAND_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES,
-			Attributes: &commandpb.Command_UpsertWorkflowSearchAttributesCommandAttributes{UpsertWorkflowSearchAttributesCommandAttributes: &commandpb.UpsertWorkflowSearchAttributesCommandAttributes{
+			UpsertWorkflowSearchAttributesCommandAttributes: commandpb.UpsertWorkflowSearchAttributesCommandAttributes_builder{
 				SearchAttributes: getUpsertSearchAttributes(),
-			}}}
+			}.Build()}.Build()
 
 		return []*commandpb.Command{upsertCommand}, nil
 	}
@@ -191,7 +191,7 @@ func (s *VisibilityTestSuite) TestSearchAttributes() {
 			if len(resp.GetExecutions()) != 1 {
 				return false
 			}
-			fields := resp.GetExecutions()[0].SearchAttributes.GetIndexedFields()
+			fields := resp.GetExecutions()[0].GetSearchAttributes().GetIndexedFields()
 			if len(fields) != 3 {
 				return false
 			}
@@ -216,22 +216,22 @@ func (s *VisibilityTestSuite) TestSearchAttributes() {
 		}, 20*time.Second, 100*time.Millisecond)
 	}
 
-	saListRequest = &workflowservice.ListWorkflowExecutionsRequest{
+	saListRequest = workflowservice.ListWorkflowExecutionsRequest_builder{
 		Namespace: ns,
 		PageSize:  int32(2),
 		Query:     fmt.Sprintf(`WorkflowId = "%s" and CustomTextField = "another string"`, id),
-	}
+	}.Build()
 
 	// test upsert result in active
 	testListResult(engine1, saListRequest)
 	// test upsert result in standby
 	testListResult(engine2, saListRequest)
 
-	runningListRequest := &workflowservice.ListWorkflowExecutionsRequest{
+	runningListRequest := workflowservice.ListWorkflowExecutionsRequest_builder{
 		Namespace: ns,
 		PageSize:  int32(2),
 		Query:     fmt.Sprintf(`WorkflowType = '%s' and ExecutionStatus = 'Running'`, wt),
-	}
+	}.Build()
 	// test upsert result in active
 	testListResult(engine1, runningListRequest)
 	// test upsert result in standby
@@ -240,24 +240,24 @@ func (s *VisibilityTestSuite) TestSearchAttributes() {
 	// terminate workflow
 	terminateReason := "force terminate to make sure standby process tasks"
 	terminateDetails := payloads.EncodeString("terminate details")
-	_, err = client0.TerminateWorkflowExecution(testcore.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
+	_, err = client0.TerminateWorkflowExecution(testcore.NewContext(), workflowservice.TerminateWorkflowExecutionRequest_builder{
 		Namespace: ns,
-		WorkflowExecution: &commonpb.WorkflowExecution{
+		WorkflowExecution: commonpb.WorkflowExecution_builder{
 			WorkflowId: id,
-		},
+		}.Build(),
 		Reason:   terminateReason,
 		Details:  terminateDetails,
 		Identity: identity,
-	})
+	}.Build())
 	s.NoError(err)
 
 	// check terminate done
-	getHistoryReq := &workflowservice.GetWorkflowExecutionHistoryRequest{
+	getHistoryReq := workflowservice.GetWorkflowExecutionHistoryRequest_builder{
 		Namespace: ns,
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: id,
-		},
-	}
+		}.Build(),
+	}.Build()
 
 	s.WaitForHistory(`
   1 v1 WorkflowExecutionStarted
@@ -269,7 +269,7 @@ func (s *VisibilityTestSuite) TestSearchAttributes() {
 		func() *historypb.History {
 			historyResponse, err := client0.GetWorkflowExecutionHistory(testcore.NewContext(), getHistoryReq)
 			s.NoError(err)
-			return historyResponse.History
+			return historyResponse.GetHistory()
 		}, 1*time.Second, 100*time.Millisecond)
 
 	// check history replicated to the other cluster
@@ -285,14 +285,14 @@ func (s *VisibilityTestSuite) TestSearchAttributes() {
 			if err != nil {
 				return nil
 			}
-			return historyResponse.History
+			return historyResponse.GetHistory()
 		}, 20*time.Second, 100*time.Millisecond)
 
-	terminatedListRequest := &workflowservice.ListWorkflowExecutionsRequest{
+	terminatedListRequest := workflowservice.ListWorkflowExecutionsRequest_builder{
 		Namespace: ns,
 		PageSize:  int32(2),
 		Query:     fmt.Sprintf(`WorkflowType = '%s' and ExecutionStatus = 'Terminated'`, wt),
-	}
+	}.Build()
 	// test upsert result in active
 	testListResult(engine1, terminatedListRequest)
 	// test upsert result in standby
@@ -302,11 +302,11 @@ func (s *VisibilityTestSuite) TestSearchAttributes() {
 // TODO (alex): remove this func.
 func getUpsertSearchAttributes() *commonpb.SearchAttributes {
 	attrValPayload2, _ := payload.Encode(123)
-	upsertSearchAttr := &commonpb.SearchAttributes{
+	upsertSearchAttr := commonpb.SearchAttributes_builder{
 		IndexedFields: map[string]*commonpb.Payload{
 			"CustomTextField": payload.EncodeString("another string"),
 			"CustomIntField":  attrValPayload2,
 		},
-	}
+	}.Build()
 	return upsertSearchAttr
 }

@@ -59,5 +59,5 @@ func (wt *WorkflowTags) fromTaskToken(taskTokenBytes []byte) []tag.Tag {
 		wt.logger.Warn("unable to deserialize task token while getting workflow tags", tag.Error(err))
 		return nil
 	}
-	return []tag.Tag{tag.WorkflowID(taskToken.WorkflowId), tag.WorkflowRunID(taskToken.RunId)}
+	return []tag.Tag{tag.WorkflowID(taskToken.GetWorkflowId()), tag.WorkflowRunID(taskToken.GetRunId())}
 }

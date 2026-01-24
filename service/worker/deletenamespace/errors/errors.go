@@ -48,7 +48,7 @@ func ToServiceError(err error, workflowID, runID string) error {
 		}
 	}
 	return serviceerror.NewSystemWorkflow(
-		&commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
+		commonpb.WorkflowExecution_builder{WorkflowId: workflowID, RunId: runID}.Build(),
 		err,
 	)
 }

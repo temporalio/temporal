@@ -140,18 +140,18 @@ func (s *executableTaskSuite) SetupTest() {
 		receivedTime,
 		s.sourceCluster,
 		s.sourceShardKey,
-		&replicationspb.ReplicationTask{
-			RawTaskInfo: &persistencespb.ReplicationTaskInfo{
+		replicationspb.ReplicationTask_builder{
+			RawTaskInfo: persistencespb.ReplicationTaskInfo_builder{
 				NamespaceId: s.namespaceId,
 				WorkflowId:  s.workflowId,
 				RunId:       s.runId,
 				TaskId:      s.taskId,
 				TaskEquivalents: []*persistencespb.ReplicationTaskInfo{
-					{NamespaceId: s.namespaceId, WorkflowId: s.workflowId, RunId: s.runId},
-					{NamespaceId: s.namespaceId, WorkflowId: s.workflowId, RunId: s.runId},
+					persistencespb.ReplicationTaskInfo_builder{NamespaceId: s.namespaceId, WorkflowId: s.workflowId, RunId: s.runId}.Build(),
+					persistencespb.ReplicationTaskInfo_builder{NamespaceId: s.namespaceId, WorkflowId: s.workflowId, RunId: s.runId}.Build(),
 				},
-			},
-		},
+			}.Build(),
+		}.Build(),
 	)
 }
 
@@ -347,14 +347,14 @@ func (s *executableTaskSuite) TestResend_NotFound() {
 		resendErr.WorkflowId,
 	).Return(shardContext, nil).AnyTimes()
 	shardContext.EXPECT().GetEngine(gomock.Any()).Return(engine, nil).AnyTimes()
-	engine.EXPECT().DeleteWorkflowExecution(gomock.Any(), &historyservice.DeleteWorkflowExecutionRequest{
+	engine.EXPECT().DeleteWorkflowExecution(gomock.Any(), historyservice.DeleteWorkflowExecutionRequest_builder{
 		NamespaceId: resendErr.NamespaceId,
-		WorkflowExecution: &commonpb.WorkflowExecution{
+		WorkflowExecution: commonpb.WorkflowExecution_builder{
 			WorkflowId: resendErr.WorkflowId,
 			RunId:      resendErr.RunId,
-		},
+		}.Build(),
 		ClosedWorkflowOnly: false,
-	}).Return(&historyservice.DeleteWorkflowExecutionResponse{}, nil)
+	}.Build()).Return(&historyservice.DeleteWorkflowExecutionResponse{}, nil)
 
 	doContinue, err := s.task.Resend(context.Background(), remoteCluster, resendErr, ResendAttempt)
 	s.NoError(err)
@@ -551,20 +551,20 @@ func (s *executableTaskSuite) TestResend_TransitionHistoryDisabled() {
 		WorkflowId:  uuid.NewString(),
 		RunId:       uuid.NewString(),
 		ArchetypeId: chasm.WorkflowArchetypeID,
-		VersionedTransition: &persistencespb.VersionedTransition{
+		VersionedTransition: persistencespb.VersionedTransition_builder{
 			NamespaceFailoverVersion: rand.Int63(),
 			TransitionCount:          rand.Int63(),
-		},
-		VersionHistories: &historyspb.VersionHistories{
+		}.Build(),
+		VersionHistories: historyspb.VersionHistories_builder{
 			Histories: []*historyspb.VersionHistory{
-				{
+				historyspb.VersionHistory_builder{
 					BranchToken: []byte("token#1"),
 					Items: []*historyspb.VersionHistoryItem{
-						{EventId: 102, Version: 1234},
+						historyspb.VersionHistoryItem_builder{EventId: 102, Version: 1234}.Build(),
 					},
-				},
+				}.Build(),
 			},
-		},
+		}.Build(),
 	}
 
 	mockRemoteAdminClient := adminservicemock.NewMockAdminServiceClient(s.controller)
@@ -572,34 +572,34 @@ func (s *executableTaskSuite) TestResend_TransitionHistoryDisabled() {
 
 	mockRemoteAdminClient.EXPECT().SyncWorkflowState(
 		gomock.Any(),
-		&adminservice.SyncWorkflowStateRequest{
+		adminservice.SyncWorkflowStateRequest_builder{
 			NamespaceId: syncStateErr.NamespaceId,
-			Execution: &commonpb.WorkflowExecution{
+			Execution: commonpb.WorkflowExecution_builder{
 				WorkflowId: syncStateErr.WorkflowId,
 				RunId:      syncStateErr.RunId,
-			},
+			}.Build(),
 			ArchetypeId:         syncStateErr.ArchetypeId,
 			VersionedTransition: syncStateErr.VersionedTransition,
-			VersionHistories: &historyspb.VersionHistories{
+			VersionHistories: historyspb.VersionHistories_builder{
 				Histories: []*historyspb.VersionHistory{
-					{
+					historyspb.VersionHistory_builder{
 						// BranchToken is removed in the actual implementation
 						Items: []*historyspb.VersionHistoryItem{
-							{EventId: 102, Version: 1234},
+							historyspb.VersionHistoryItem_builder{EventId: 102, Version: 1234}.Build(),
 						},
-					},
+					}.Build(),
 				},
-			},
+			}.Build(),
 			TargetClusterId: int32(s.clusterMetadata.GetAllClusterInfo()[s.clusterMetadata.GetCurrentClusterName()].InitialFailoverVersion),
-		},
+		}.Build(),
 	).Return(nil, consts.ErrTransitionHistoryDisabled).Times(1)
 
 	mockRemoteAdminClient.EXPECT().AddTasks(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, request *adminservice.AddTasksRequest, opts ...grpc.CallOption) (*adminservice.AddTasksResponse, error) {
-			s.Equal(s.sourceShardKey.ShardID, request.ShardId)
-			s.Len(request.Tasks, len(s.task.replicationTask.GetRawTaskInfo().TaskEquivalents))
-			for _, task := range request.Tasks {
-				s.Equal(tasks.CategoryIDReplication, int(task.CategoryId))
+			s.Equal(s.sourceShardKey.ShardID, request.GetShardId())
+			s.Len(request.GetTasks(), len(s.task.replicationTask.GetRawTaskInfo().GetTaskEquivalents()))
+			for _, task := range request.GetTasks() {
+				s.Equal(tasks.CategoryIDReplication, int(task.GetCategoryId()))
 			}
 			return nil, nil
 		},
@@ -616,20 +616,20 @@ func (s *executableTaskSuite) TestSyncState_SourceMutableStateHasUnFlushedBuffer
 		WorkflowId:  uuid.NewString(),
 		RunId:       uuid.NewString(),
 		ArchetypeId: chasm.WorkflowArchetypeID,
-		VersionedTransition: &persistencespb.VersionedTransition{
+		VersionedTransition: persistencespb.VersionedTransition_builder{
 			NamespaceFailoverVersion: rand.Int63(),
 			TransitionCount:          rand.Int63(),
-		},
-		VersionHistories: &historyspb.VersionHistories{
+		}.Build(),
+		VersionHistories: historyspb.VersionHistories_builder{
 			Histories: []*historyspb.VersionHistory{
-				{
+				historyspb.VersionHistory_builder{
 					BranchToken: []byte("token#1"),
 					Items: []*historyspb.VersionHistoryItem{
-						{EventId: 102, Version: 1234},
+						historyspb.VersionHistoryItem_builder{EventId: 102, Version: 1234}.Build(),
 					},
-				},
+				}.Build(),
 			},
-		},
+		}.Build(),
 	}
 
 	mockRemoteAdminClient := adminservicemock.NewMockAdminServiceClient(s.controller)
@@ -637,26 +637,26 @@ func (s *executableTaskSuite) TestSyncState_SourceMutableStateHasUnFlushedBuffer
 
 	mockRemoteAdminClient.EXPECT().SyncWorkflowState(
 		gomock.Any(),
-		&adminservice.SyncWorkflowStateRequest{
+		adminservice.SyncWorkflowStateRequest_builder{
 			NamespaceId: syncStateErr.NamespaceId,
-			Execution: &commonpb.WorkflowExecution{
+			Execution: commonpb.WorkflowExecution_builder{
 				WorkflowId: syncStateErr.WorkflowId,
 				RunId:      syncStateErr.RunId,
-			},
+			}.Build(),
 			ArchetypeId:         chasm.WorkflowArchetypeID,
 			VersionedTransition: syncStateErr.VersionedTransition,
-			VersionHistories: &historyspb.VersionHistories{
+			VersionHistories: historyspb.VersionHistories_builder{
 				Histories: []*historyspb.VersionHistory{
-					{
+					historyspb.VersionHistory_builder{
 						// BranchToken is removed in the actual implementation
 						Items: []*historyspb.VersionHistoryItem{
-							{EventId: 102, Version: 1234},
+							historyspb.VersionHistoryItem_builder{EventId: 102, Version: 1234}.Build(),
 						},
-					},
+					}.Build(),
 				},
-			},
+			}.Build(),
 			TargetClusterId: int32(s.clusterMetadata.GetAllClusterInfo()[s.clusterMetadata.GetCurrentClusterName()].InitialFailoverVersion),
-		},
+		}.Build(),
 	).Return(nil, serviceerror.NewWorkflowNotReady("workflow not ready")).Times(1)
 
 	doContinue, err := s.task.SyncState(context.Background(), syncStateErr, ResendAttempt)
@@ -678,22 +678,22 @@ func (s *executableTaskSuite) TestBackFillEvents_Success() {
 	newRunId := uuid.NewString()
 	remoteCluster := "remote cluster"
 	eventBatchOriginal1 := []*historypb.HistoryEvent{
-		{EventId: 20, Version: 10},
+		historypb.HistoryEvent_builder{EventId: 20, Version: 10}.Build(),
 	}
 	eventBatchOriginal2 := []*historypb.HistoryEvent{
-		{EventId: 21, Version: 12},
+		historypb.HistoryEvent_builder{EventId: 21, Version: 12}.Build(),
 	}
 	blogOriginal1, err := s.serializer.SerializeEvents(eventBatchOriginal1)
 	s.NoError(err)
 
 	blogOriginal2, err := s.serializer.SerializeEvents(eventBatchOriginal2)
 	s.NoError(err)
-	versionHistory := &historyspb.VersionHistory{
+	versionHistory := historyspb.VersionHistory_builder{
 		Items: []*historyspb.VersionHistoryItem{
-			{EventId: 20, Version: 10},
-			{EventId: 28, Version: 12},
+			historyspb.VersionHistoryItem_builder{EventId: 20, Version: 10}.Build(),
+			historyspb.VersionHistoryItem_builder{EventId: 28, Version: 12}.Build(),
 		},
-	}
+	}.Build()
 	fetcher := collection.NewPagingIterator(func(paginationToken []byte) ([]*eventhandler.HistoryBatch, []byte, error) {
 		return []*eventhandler.HistoryBatch{
 			{RawEventBatch: blogOriginal1, VersionHistory: versionHistory},
@@ -701,18 +701,18 @@ func (s *executableTaskSuite) TestBackFillEvents_Success() {
 		}, nil, nil
 	})
 	eventBatchNewRun := []*historypb.HistoryEvent{
-		{EventId: 1, Version: 12},
-		{EventId: 2, Version: 12},
+		historypb.HistoryEvent_builder{EventId: 1, Version: 12}.Build(),
+		historypb.HistoryEvent_builder{EventId: 2, Version: 12}.Build(),
 	}
 	blobNewRun, err := s.serializer.SerializeEvents(eventBatchNewRun)
 	s.NoError(err)
 	fetcherNewRun := collection.NewPagingIterator(func(paginationToken []byte) ([]*eventhandler.HistoryBatch, []byte, error) {
 		return []*eventhandler.HistoryBatch{
-			{RawEventBatch: blobNewRun, VersionHistory: &historyspb.VersionHistory{
+			{RawEventBatch: blobNewRun, VersionHistory: historyspb.VersionHistory_builder{
 				Items: []*historyspb.VersionHistoryItem{
-					{EventId: 4, Version: 12},
+					historyspb.VersionHistoryItem_builder{EventId: 4, Version: 12}.Build(),
 				},
-			}},
+			}.Build()},
 		}, nil, nil
 	})
 	s.remoteHistoryFetcher.EXPECT().GetSingleWorkflowHistoryPaginatedIteratorInclusive(
@@ -748,16 +748,16 @@ func (s *executableTaskSuite) TestBackFillEvents_Success() {
 		gomock.Any(), protomock.Eq(&historyi.BackfillHistoryEventsRequest{
 			WorkflowKey:         workflowKey,
 			SourceClusterName:   s.sourceCluster,
-			VersionedHistory:    s.task.replicationTask.VersionedTransition,
-			VersionHistoryItems: versionHistory.Items,
+			VersionedHistory:    s.task.replicationTask.GetVersionedTransition(),
+			VersionHistoryItems: versionHistory.GetItems(),
 			Events:              [][]*historypb.HistoryEvent{eventBatchOriginal1},
 		})).Return(nil)
 	engine.EXPECT().BackfillHistoryEvents(
 		gomock.Any(), protomock.Eq(&historyi.BackfillHistoryEventsRequest{
 			WorkflowKey:         workflowKey,
 			SourceClusterName:   s.sourceCluster,
-			VersionedHistory:    s.task.replicationTask.VersionedTransition,
-			VersionHistoryItems: versionHistory.Items,
+			VersionedHistory:    s.task.replicationTask.GetVersionedTransition(),
+			VersionHistoryItems: versionHistory.GetItems(),
 			Events:              [][]*historypb.HistoryEvent{eventBatchOriginal2},
 			NewRunID:            newRunId,
 			NewEvents:           eventBatchNewRun,
@@ -770,19 +770,19 @@ func (s *executableTaskSuite) TestBackFillEvents_Success() {
 		time.Now(),
 		s.sourceCluster,
 		s.sourceShardKey,
-		&replicationspb.ReplicationTask{
+		replicationspb.ReplicationTask_builder{
 			TaskType: enumsspb.REPLICATION_TASK_TYPE_VERIFY_VERSIONED_TRANSITION_TASK,
-			RawTaskInfo: &persistencespb.ReplicationTaskInfo{
+			RawTaskInfo: persistencespb.ReplicationTaskInfo_builder{
 				NamespaceId: s.namespaceId,
 				WorkflowId:  s.workflowId,
 				RunId:       s.runId,
 				TaskId:      s.taskId,
 				TaskEquivalents: []*persistencespb.ReplicationTaskInfo{
-					{NamespaceId: s.namespaceId, WorkflowId: s.workflowId, RunId: s.runId},
-					{NamespaceId: s.namespaceId, WorkflowId: s.workflowId, RunId: s.runId},
+					persistencespb.ReplicationTaskInfo_builder{NamespaceId: s.namespaceId, WorkflowId: s.workflowId, RunId: s.runId}.Build(),
+					persistencespb.ReplicationTaskInfo_builder{NamespaceId: s.namespaceId, WorkflowId: s.workflowId, RunId: s.runId}.Build(),
 				},
-			},
-		},
+			}.Build(),
+		}.Build(),
 	)
 	err = task.BackFillEvents(
 		context.Background(),
@@ -801,20 +801,20 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_Process() {
 	namespaceID := uuid.NewString()
 	namespaceName := uuid.NewString()
 	factory := namespace.NewDefaultReplicationResolverFactory()
-	detail := &persistencespb.NamespaceDetail{
-		Info: &persistencespb.NamespaceInfo{
+	detail := persistencespb.NamespaceDetail_builder{
+		Info: persistencespb.NamespaceInfo_builder{
 			Id:   namespaceID,
 			Name: namespaceName,
-		},
+		}.Build(),
 		Config: &persistencespb.NamespaceConfig{},
-		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+		ReplicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
 			Clusters: []string{
 				cluster.TestCurrentClusterName,
 				cluster.TestAlternativeClusterName,
 			},
-		},
-	}
+		}.Build(),
+	}.Build()
 	namespaceEntry, err := namespace.FromPersistentState(detail, factory(detail))
 	s.NoError(err)
 	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespaceEntry, nil).AnyTimes()
@@ -829,19 +829,19 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_Skip() {
 	namespaceID := uuid.NewString()
 	namespaceName := uuid.NewString()
 	factory := namespace.NewDefaultReplicationResolverFactory()
-	detail := &persistencespb.NamespaceDetail{
-		Info: &persistencespb.NamespaceInfo{
+	detail := persistencespb.NamespaceDetail_builder{
+		Info: persistencespb.NamespaceInfo_builder{
 			Id:   namespaceID,
 			Name: namespaceName,
-		},
+		}.Build(),
 		Config: &persistencespb.NamespaceConfig{},
-		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+		ReplicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
 			Clusters: []string{
 				cluster.TestAlternativeClusterName,
 			},
-		},
-	}
+		}.Build(),
+	}.Build()
 	namespaceEntry, err := namespace.FromPersistentState(detail, factory(detail))
 	s.NoError(err)
 	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespaceEntry, nil).AnyTimes()
@@ -856,21 +856,21 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_Deleted() {
 	namespaceID := uuid.NewString()
 	namespaceName := uuid.NewString()
 	factory := namespace.NewDefaultReplicationResolverFactory()
-	detail := &persistencespb.NamespaceDetail{
-		Info: &persistencespb.NamespaceInfo{
+	detail := persistencespb.NamespaceDetail_builder{
+		Info: persistencespb.NamespaceInfo_builder{
 			Id:    namespaceID,
 			Name:  namespaceName,
 			State: enumspb.NAMESPACE_STATE_DELETED,
-		},
+		}.Build(),
 		Config: &persistencespb.NamespaceConfig{},
-		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+		ReplicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
 			Clusters: []string{
 				cluster.TestCurrentClusterName,
 				cluster.TestAlternativeClusterName,
 			},
-		},
-	}
+		}.Build(),
+	}.Build()
 	namespaceEntry, err := namespace.FromPersistentState(detail, factory(detail))
 	s.NoError(err)
 	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespaceEntry, nil).AnyTimes()
@@ -893,20 +893,20 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_NotFoundOnCurrentCluster_Sync
 	namespaceID := uuid.NewString()
 	namespaceName := uuid.NewString()
 	factory := namespace.NewDefaultReplicationResolverFactory()
-	detail := &persistencespb.NamespaceDetail{
-		Info: &persistencespb.NamespaceInfo{
+	detail := persistencespb.NamespaceDetail_builder{
+		Info: persistencespb.NamespaceInfo_builder{
 			Id:   namespaceID,
 			Name: namespaceName,
-		},
+		}.Build(),
 		Config: &persistencespb.NamespaceConfig{},
-		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+		ReplicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
 			Clusters: []string{
 				cluster.TestCurrentClusterName,
 				cluster.TestAlternativeClusterName,
 			},
-		},
-	}
+		}.Build(),
+	}.Build()
 	namespaceEntry, err := namespace.FromPersistentState(detail, factory(detail))
 	s.NoError(err)
 	// enable feature flag
@@ -945,44 +945,44 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_NamespaceFailoverNotSync_Sync
 		now,
 		s.sourceCluster,
 		s.sourceShardKey,
-		&replicationspb.ReplicationTask{
+		replicationspb.ReplicationTask_builder{
 			TaskType:            enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
-			VersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 80},
-		},
+			VersionedTransition: persistencespb.VersionedTransition_builder{NamespaceFailoverVersion: 80}.Build(),
+		}.Build(),
 	)
 	factory := namespace.NewDefaultReplicationResolverFactory()
-	detailOld := &persistencespb.NamespaceDetail{
-		Info: &persistencespb.NamespaceInfo{
+	detailOld := persistencespb.NamespaceDetail_builder{
+		Info: persistencespb.NamespaceInfo_builder{
 			Id:   namespaceID,
 			Name: namespaceName,
-		},
+		}.Build(),
 		Config: &persistencespb.NamespaceConfig{},
-		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+		ReplicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
 			Clusters: []string{
 				cluster.TestCurrentClusterName,
 				cluster.TestAlternativeClusterName,
 			},
-		},
+		}.Build(),
 		FailoverVersion: 10,
-	}
+	}.Build()
 	namespaceEntryOld, err := namespace.FromPersistentState(detailOld, factory(detailOld))
 	s.NoError(err)
-	detailNew := &persistencespb.NamespaceDetail{
-		Info: &persistencespb.NamespaceInfo{
+	detailNew := persistencespb.NamespaceDetail_builder{
+		Info: persistencespb.NamespaceInfo_builder{
 			Id:   namespaceID,
 			Name: namespaceName,
-		},
+		}.Build(),
 		Config: &persistencespb.NamespaceConfig{},
-		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+		ReplicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
 			Clusters: []string{
 				cluster.TestCurrentClusterName,
 				cluster.TestAlternativeClusterName,
 			},
-		},
+		}.Build(),
 		FailoverVersion: 100,
-	}
+	}.Build()
 	namespaceEntryNew, err := namespace.FromPersistentState(detailNew, factory(detailNew))
 	s.NoError(err)
 
@@ -1020,27 +1020,27 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_NamespaceFailoverBehind_Still
 		now,
 		s.sourceCluster,
 		s.sourceShardKey,
-		&replicationspb.ReplicationTask{
+		replicationspb.ReplicationTask_builder{
 			TaskType:            enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
-			VersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 80},
-		},
+			VersionedTransition: persistencespb.VersionedTransition_builder{NamespaceFailoverVersion: 80}.Build(),
+		}.Build(),
 	)
 	factory := namespace.NewDefaultReplicationResolverFactory()
-	detailOld := &persistencespb.NamespaceDetail{
-		Info: &persistencespb.NamespaceInfo{
+	detailOld := persistencespb.NamespaceDetail_builder{
+		Info: persistencespb.NamespaceInfo_builder{
 			Id:   namespaceID,
 			Name: namespaceName,
-		},
+		}.Build(),
 		Config: &persistencespb.NamespaceConfig{},
-		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+		ReplicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
 			Clusters: []string{
 				cluster.TestCurrentClusterName,
 				cluster.TestAlternativeClusterName,
 			},
-		},
+		}.Build(),
 		FailoverVersion: 10,
-	}
+	}.Build()
 	namespaceEntryOld, err := namespace.FromPersistentState(detailOld, factory(detailOld))
 	s.NoError(err)
 
@@ -1078,7 +1078,7 @@ func (s *executableTaskSuite) TestMarkPoisonPill() {
 	s.mockExecutionManager.EXPECT().PutReplicationTaskToDLQ(gomock.Any(), &persistence.PutReplicationTaskToDLQRequest{
 		ShardID:           shardID,
 		SourceClusterName: s.task.sourceClusterName,
-		TaskInfo:          s.task.replicationTask.RawTaskInfo,
+		TaskInfo:          s.task.replicationTask.GetRawTaskInfo(),
 	}).Return(nil)
 
 	err := s.task.MarkPoisonPill()
@@ -1097,7 +1097,7 @@ func (s *executableTaskSuite) TestMarkPoisonPill_MaxAttemptsReached() {
 	s.mockExecutionManager.EXPECT().PutReplicationTaskToDLQ(gomock.Any(), &persistence.PutReplicationTaskToDLQRequest{
 		ShardID:           shardID,
 		SourceClusterName: s.task.sourceClusterName,
-		TaskInfo:          s.task.replicationTask.RawTaskInfo,
+		TaskInfo:          s.task.replicationTask.GetRawTaskInfo(),
 	}).Return(serviceerror.NewInternal("failed"))
 
 	err := s.task.MarkPoisonPill()
@@ -1112,61 +1112,59 @@ func (s *executableTaskSuite) TestSyncState() {
 		WorkflowId:  uuid.NewString(),
 		RunId:       uuid.NewString(),
 		ArchetypeId: chasm.WorkflowArchetypeID,
-		VersionedTransition: &persistencespb.VersionedTransition{
+		VersionedTransition: persistencespb.VersionedTransition_builder{
 			NamespaceFailoverVersion: rand.Int63(),
 			TransitionCount:          rand.Int63(),
-		},
-		VersionHistories: &historyspb.VersionHistories{
+		}.Build(),
+		VersionHistories: historyspb.VersionHistories_builder{
 			Histories: []*historyspb.VersionHistory{
-				{
+				historyspb.VersionHistory_builder{
 					BranchToken: []byte("token#1"),
 					Items: []*historyspb.VersionHistoryItem{
-						{EventId: 102, Version: 1234},
+						historyspb.VersionHistoryItem_builder{EventId: 102, Version: 1234}.Build(),
 					},
-				},
+				}.Build(),
 			},
-		},
+		}.Build(),
 	}
 
-	versionedTransitionArtifact := &replicationspb.VersionedTransitionArtifact{
-		StateAttributes: &replicationspb.VersionedTransitionArtifact_SyncWorkflowStateSnapshotAttributes{
-			SyncWorkflowStateSnapshotAttributes: &replicationspb.SyncWorkflowStateSnapshotAttributes{
-				State: &persistencespb.WorkflowMutableState{
-					Checksum: &persistencespb.Checksum{
-						Value: []byte("test-checksum"),
-					},
-				},
-			},
-		},
-	}
+	versionedTransitionArtifact := replicationspb.VersionedTransitionArtifact_builder{
+		SyncWorkflowStateSnapshotAttributes: replicationspb.SyncWorkflowStateSnapshotAttributes_builder{
+			State: persistencespb.WorkflowMutableState_builder{
+				Checksum: persistencespb.Checksum_builder{
+					Value: []byte("test-checksum"),
+				}.Build(),
+			}.Build(),
+		}.Build(),
+	}.Build()
 
 	mockRemoteAdminClient := adminservicemock.NewMockAdminServiceClient(s.controller)
 	s.clientBean.EXPECT().GetRemoteAdminClient(s.sourceCluster).Return(mockRemoteAdminClient, nil).AnyTimes()
 	mockRemoteAdminClient.EXPECT().SyncWorkflowState(
 		gomock.Any(),
-		&adminservice.SyncWorkflowStateRequest{
+		adminservice.SyncWorkflowStateRequest_builder{
 			NamespaceId: syncStateErr.NamespaceId,
-			Execution: &commonpb.WorkflowExecution{
+			Execution: commonpb.WorkflowExecution_builder{
 				WorkflowId: syncStateErr.WorkflowId,
 				RunId:      syncStateErr.RunId,
-			},
+			}.Build(),
 			ArchetypeId:         chasm.WorkflowArchetypeID,
 			VersionedTransition: syncStateErr.VersionedTransition,
-			VersionHistories: &historyspb.VersionHistories{
+			VersionHistories: historyspb.VersionHistories_builder{
 				Histories: []*historyspb.VersionHistory{
-					{
+					historyspb.VersionHistory_builder{
 						// BranchToken is removed in the actual implementation
 						Items: []*historyspb.VersionHistoryItem{
-							{EventId: 102, Version: 1234},
+							historyspb.VersionHistoryItem_builder{EventId: 102, Version: 1234}.Build(),
 						},
-					},
+					}.Build(),
 				},
-			},
+			}.Build(),
 			TargetClusterId: int32(s.clusterMetadata.GetAllClusterInfo()[s.clusterMetadata.GetCurrentClusterName()].InitialFailoverVersion),
-		},
-	).Return(&adminservice.SyncWorkflowStateResponse{
+		}.Build(),
+	).Return(adminservice.SyncWorkflowStateResponse_builder{
 		VersionedTransitionArtifact: versionedTransitionArtifact,
-	}, nil).Times(1)
+	}.Build(), nil).Times(1)
 
 	shardContext := historyi.NewMockShardContext(s.controller)
 	engine := historyi.NewMockEngine(s.controller)
@@ -1188,46 +1186,46 @@ func (s *executableTaskSuite) TestSyncState_NotFound() {
 		WorkflowId:  uuid.NewString(),
 		RunId:       uuid.NewString(),
 		ArchetypeId: chasm.WorkflowArchetypeID,
-		VersionedTransition: &persistencespb.VersionedTransition{
+		VersionedTransition: persistencespb.VersionedTransition_builder{
 			NamespaceFailoverVersion: rand.Int63(),
 			TransitionCount:          rand.Int63(),
-		},
-		VersionHistories: &historyspb.VersionHistories{
+		}.Build(),
+		VersionHistories: historyspb.VersionHistories_builder{
 			Histories: []*historyspb.VersionHistory{
-				{
+				historyspb.VersionHistory_builder{
 					BranchToken: []byte("token#1"),
 					Items: []*historyspb.VersionHistoryItem{
-						{EventId: 102, Version: 1234},
+						historyspb.VersionHistoryItem_builder{EventId: 102, Version: 1234}.Build(),
 					},
-				},
+				}.Build(),
 			},
-		},
+		}.Build(),
 	}
 
 	mockRemoteAdminClient := adminservicemock.NewMockAdminServiceClient(s.controller)
 	s.clientBean.EXPECT().GetRemoteAdminClient(s.sourceCluster).Return(mockRemoteAdminClient, nil).AnyTimes()
 	mockRemoteAdminClient.EXPECT().SyncWorkflowState(
 		gomock.Any(),
-		&adminservice.SyncWorkflowStateRequest{
+		adminservice.SyncWorkflowStateRequest_builder{
 			NamespaceId: syncStateErr.NamespaceId,
-			Execution: &commonpb.WorkflowExecution{
+			Execution: commonpb.WorkflowExecution_builder{
 				WorkflowId: syncStateErr.WorkflowId,
 				RunId:      syncStateErr.RunId,
-			},
+			}.Build(),
 			ArchetypeId:         chasm.WorkflowArchetypeID,
 			VersionedTransition: syncStateErr.VersionedTransition,
-			VersionHistories: &historyspb.VersionHistories{
+			VersionHistories: historyspb.VersionHistories_builder{
 				Histories: []*historyspb.VersionHistory{
-					{
+					historyspb.VersionHistory_builder{
 						// BranchToken is removed in the actual implementation
 						Items: []*historyspb.VersionHistoryItem{
-							{EventId: 102, Version: 1234},
+							historyspb.VersionHistoryItem_builder{EventId: 102, Version: 1234}.Build(),
 						},
-					},
+					}.Build(),
 				},
-			},
+			}.Build(),
 			TargetClusterId: int32(s.clusterMetadata.GetAllClusterInfo()[s.clusterMetadata.GetCurrentClusterName()].InitialFailoverVersion),
-		},
+		}.Build(),
 	).Return(nil, serviceerror.NewNotFound("workflow not found")).Times(1)
 
 	shardContext := historyi.NewMockShardContext(s.controller)
@@ -1237,14 +1235,14 @@ func (s *executableTaskSuite) TestSyncState_NotFound() {
 		syncStateErr.WorkflowId,
 	).Return(shardContext, nil).AnyTimes()
 	shardContext.EXPECT().GetEngine(gomock.Any()).Return(engine, nil).AnyTimes()
-	engine.EXPECT().DeleteWorkflowExecution(gomock.Any(), &historyservice.DeleteWorkflowExecutionRequest{
+	engine.EXPECT().DeleteWorkflowExecution(gomock.Any(), historyservice.DeleteWorkflowExecutionRequest_builder{
 		NamespaceId: syncStateErr.NamespaceId,
-		WorkflowExecution: &commonpb.WorkflowExecution{
+		WorkflowExecution: commonpb.WorkflowExecution_builder{
 			WorkflowId: syncStateErr.WorkflowId,
 			RunId:      syncStateErr.RunId,
-		},
+		}.Build(),
 		ClosedWorkflowOnly: false,
-	}).Return(&historyservice.DeleteWorkflowExecutionResponse{}, nil)
+	}.Build()).Return(&historyservice.DeleteWorkflowExecutionResponse{}, nil)
 
 	doContinue, err := s.task.SyncState(context.Background(), syncStateErr, ResendAttempt)
 	s.NoError(err)

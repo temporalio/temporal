@@ -75,58 +75,56 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 	clusters := []string{clusterActive, clusterStandby}
 
 	namespaceOperation := enumsspb.NAMESPACE_OPERATION_CREATE
-	info := &persistencespb.NamespaceInfo{
+	info := persistencespb.NamespaceInfo_builder{
 		Id:          id,
 		Name:        name,
 		State:       enumspb.NAMESPACE_STATE_REGISTERED,
 		Description: description,
 		Owner:       ownerEmail,
 		Data:        data,
-	}
-	config := &persistencespb.NamespaceConfig{
+	}.Build()
+	config := persistencespb.NamespaceConfig_builder{
 		Retention:               durationpb.New(retention),
 		HistoryArchivalState:    historyArchivalState,
 		HistoryArchivalUri:      historyArchivalURI,
 		VisibilityArchivalState: visibilityArchivalState,
 		VisibilityArchivalUri:   visibilityArchivalURI,
-		BadBinaries:             &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
-	}
-	replicationConfig := &persistencespb.NamespaceReplicationConfig{
+		BadBinaries:             namespacepb.BadBinaries_builder{Binaries: map[string]*namespacepb.BadBinaryInfo{}}.Build(),
+	}.Build()
+	replicationConfig := persistencespb.NamespaceReplicationConfig_builder{
 		ActiveClusterName: clusterActive,
 		Clusters:          clusters,
-	}
+	}.Build()
 	isGlobalNamespace := true
 
-	s.namespaceReplicationQueue.EXPECT().Publish(gomock.Any(), &replicationspb.ReplicationTask{
+	s.namespaceReplicationQueue.EXPECT().Publish(gomock.Any(), replicationspb.ReplicationTask_builder{
 		TaskType: taskType,
-		Attributes: &replicationspb.ReplicationTask_NamespaceTaskAttributes{
-			NamespaceTaskAttributes: &replicationspb.NamespaceTaskAttributes{
-				NamespaceOperation: namespaceOperation,
-				Id:                 id,
-				Info: &namespacepb.NamespaceInfo{
-					Name:        name,
-					State:       state,
-					Description: description,
-					OwnerEmail:  ownerEmail,
-					Data:        data,
-				},
-				Config: &namespacepb.NamespaceConfig{
-					WorkflowExecutionRetentionTtl: durationpb.New(retention),
-					HistoryArchivalState:          historyArchivalState,
-					HistoryArchivalUri:            historyArchivalURI,
-					VisibilityArchivalState:       visibilityArchivalState,
-					VisibilityArchivalUri:         visibilityArchivalURI,
-					BadBinaries:                   &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
-				},
-				ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
-					ActiveClusterName: clusterActive,
-					Clusters:          convertClusterReplicationConfigToProto(clusters),
-				},
-				ConfigVersion:   configVersion,
-				FailoverVersion: failoverVersion,
-			},
-		},
-	}).Return(nil)
+		NamespaceTaskAttributes: replicationspb.NamespaceTaskAttributes_builder{
+			NamespaceOperation: namespaceOperation,
+			Id:                 id,
+			Info: namespacepb.NamespaceInfo_builder{
+				Name:        name,
+				State:       state,
+				Description: description,
+				OwnerEmail:  ownerEmail,
+				Data:        data,
+			}.Build(),
+			Config: namespacepb.NamespaceConfig_builder{
+				WorkflowExecutionRetentionTtl: durationpb.New(retention),
+				HistoryArchivalState:          historyArchivalState,
+				HistoryArchivalUri:            historyArchivalURI,
+				VisibilityArchivalState:       visibilityArchivalState,
+				VisibilityArchivalUri:         visibilityArchivalURI,
+				BadBinaries:                   namespacepb.BadBinaries_builder{Binaries: map[string]*namespacepb.BadBinaryInfo{}}.Build(),
+			}.Build(),
+			ReplicationConfig: replicationpb.NamespaceReplicationConfig_builder{
+				ActiveClusterName: clusterActive,
+				Clusters:          convertClusterReplicationConfigToProto(clusters),
+			}.Build(),
+			ConfigVersion:   configVersion,
+			FailoverVersion: failoverVersion,
+		}.Build(),
+	}.Build()).Return(nil)
 
 	err := s.namespaceReplicator.HandleTransmissionTask(
 		context.Background(),
@@ -161,26 +159,26 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 	clusters := []string{clusterActive, clusterStandby}
 
 	namespaceOperation := enumsspb.NAMESPACE_OPERATION_CREATE
-	info := &persistencespb.NamespaceInfo{
+	info := persistencespb.NamespaceInfo_builder{
 		Id:          id,
 		Name:        name,
 		State:       enumspb.NAMESPACE_STATE_REGISTERED,
 		Description: description,
 		Owner:       ownerEmail,
 		Data:        data,
-	}
-	config := &persistencespb.NamespaceConfig{
+	}.Build()
+	config := persistencespb.NamespaceConfig_builder{
 		Retention:               durationpb.New(retention),
 		HistoryArchivalState:    historyArchivalState,
 		HistoryArchivalUri:      historyArchivalURI,
 		VisibilityArchivalState: visibilityArchivalState,
 		VisibilityArchivalUri:   visibilityArchivalURI,
 		BadBinaries:             &namespacepb.BadBinaries{},
-	}
-	replicationConfig := &persistencespb.NamespaceReplicationConfig{
+	}.Build()
+	replicationConfig := persistencespb.NamespaceReplicationConfig_builder{
 		ActiveClusterName: clusterActive,
 		Clusters:          clusters,
-	}
+	}.Build()
 	isGlobalNamespace := false
 
 	err := s.namespaceReplicator.HandleTransmissionTask(
@@ -218,58 +216,56 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_I
 	clusters := []string{clusterActive, clusterStandby}
 
 	namespaceOperation := enumsspb.NAMESPACE_OPERATION_UPDATE
-	info := &persistencespb.NamespaceInfo{
+	info := persistencespb.NamespaceInfo_builder{
 		Id:          id,
 		Name:        name,
 		State:       enumspb.NAMESPACE_STATE_DEPRECATED,
 		Description: description,
 		Owner:       ownerEmail,
 		Data:        data,
-	}
-	config := &persistencespb.NamespaceConfig{
+	}.Build()
+	config := persistencespb.NamespaceConfig_builder{
 		Retention:               durationpb.New(retention),
 		HistoryArchivalState:    historyArchivalState,
 		HistoryArchivalUri:      historyArchivalURI,
 		VisibilityArchivalState: visibilityArchivalState,
 		VisibilityArchivalUri:   visibilityArchivalURI,
-		BadBinaries:             &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
-	}
-	replicationConfig := &persistencespb.NamespaceReplicationConfig{
+		BadBinaries:             namespacepb.BadBinaries_builder{Binaries: map[string]*namespacepb.BadBinaryInfo{}}.Build(),
+	}.Build()
+	replicationConfig := persistencespb.NamespaceReplicationConfig_builder{
 		ActiveClusterName: clusterActive,
 		Clusters:          clusters,
-	}
+	}.Build()
 	isGlobalNamespace := true
 
-	s.namespaceReplicationQueue.EXPECT().Publish(gomock.Any(), &replicationspb.ReplicationTask{
+	s.namespaceReplicationQueue.EXPECT().Publish(gomock.Any(), replicationspb.ReplicationTask_builder{
 		TaskType: taskType,
-		Attributes: &replicationspb.ReplicationTask_NamespaceTaskAttributes{
-			NamespaceTaskAttributes: &replicationspb.NamespaceTaskAttributes{
-				NamespaceOperation: namespaceOperation,
-				Id:                 id,
-				Info: &namespacepb.NamespaceInfo{
-					Name:        name,
-					State:       state,
-					Description: description,
-					OwnerEmail:  ownerEmail,
-					Data:        data,
-				},
-				Config: &namespacepb.NamespaceConfig{
-					WorkflowExecutionRetentionTtl: durationpb.New(retention),
-					HistoryArchivalState:          historyArchivalState,
-					HistoryArchivalUri:            historyArchivalURI,
-					VisibilityArchivalState:       visibilityArchivalState,
-					VisibilityArchivalUri:         visibilityArchivalURI,
-					BadBinaries:                   &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
-				},
-				ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
-					ActiveClusterName: clusterActive,
-					Clusters:          convertClusterReplicationConfigToProto(clusters),
-				},
-				ConfigVersion:   configVersion,
-				FailoverVersion: failoverVersion,
-			},
-		},
-	}).Return(nil)
+		NamespaceTaskAttributes: replicationspb.NamespaceTaskAttributes_builder{
+			NamespaceOperation: namespaceOperation,
+			Id:                 id,
+			Info: namespacepb.NamespaceInfo_builder{
+				Name:        name,
+				State:       state,
+				Description: description,
+				OwnerEmail:  ownerEmail,
+				Data:        data,
+			}.Build(),
+			Config: namespacepb.NamespaceConfig_builder{
+				WorkflowExecutionRetentionTtl: durationpb.New(retention),
+				HistoryArchivalState:          historyArchivalState,
+				HistoryArchivalUri:            historyArchivalURI,
+				VisibilityArchivalState:       visibilityArchivalState,
+				VisibilityArchivalUri:         visibilityArchivalURI,
+				BadBinaries:                   namespacepb.BadBinaries_builder{Binaries: map[string]*namespacepb.BadBinaryInfo{}}.Build(),
+			}.Build(),
+			ReplicationConfig: replicationpb.NamespaceReplicationConfig_builder{
+				ActiveClusterName: clusterActive,
+				Clusters:          convertClusterReplicationConfigToProto(clusters),
+			}.Build(),
+			ConfigVersion:   configVersion,
+			FailoverVersion: failoverVersion,
+		}.Build(),
+	}.Build()).Return(nil)
 
 	err := s.namespaceReplicator.HandleTransmissionTask(
 		context.Background(),
@@ -304,25 +300,25 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_N
 	clusters := []string{clusterActive, clusterStandby}
 
 	namespaceOperation := enumsspb.NAMESPACE_OPERATION_UPDATE
-	info := &persistencespb.NamespaceInfo{
+	info := persistencespb.NamespaceInfo_builder{
 		Id:          id,
 		Name:        name,
 		State:       enumspb.NAMESPACE_STATE_DEPRECATED,
 		Description: description,
 		Owner:       ownerEmail,
 		Data:        data,
-	}
-	config := &persistencespb.NamespaceConfig{
+	}.Build()
+	config := persistencespb.NamespaceConfig_builder{
 		Retention:               durationpb.New(retention),
 		HistoryArchivalState:    historyArchivalState,
 		HistoryArchivalUri:      historyArchivalURI,
 		VisibilityArchivalState: visibilityArchivalState,
 		VisibilityArchivalUri:   visibilityArchivalURI,
-	}
-	replicationConfig := &persistencespb.NamespaceReplicationConfig{
+	}.Build()
+	replicationConfig := persistencespb.NamespaceReplicationConfig_builder{
 		ActiveClusterName: clusterActive,
 		Clusters:          clusters,
-	}
+	}.Build()
 	isGlobalNamespace := false
 
 	err := s.namespaceReplicator.HandleTransmissionTask(
@@ -359,59 +355,57 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_R
 	singleClusterList := []string{clusterActive}
 
 	namespaceOperation := enumsspb.NAMESPACE_OPERATION_UPDATE
-	info := &persistencespb.NamespaceInfo{
+	info := persistencespb.NamespaceInfo_builder{
 		Id:          id,
 		Name:        name,
 		State:       enumspb.NAMESPACE_STATE_DEPRECATED,
 		Description: description,
 		Owner:       ownerEmail,
 		Data:        data,
-	}
-	config := &persistencespb.NamespaceConfig{
+	}.Build()
+	config := persistencespb.NamespaceConfig_builder{
 		Retention:               durationpb.New(retention),
 		HistoryArchivalState:    historyArchivalState,
 		HistoryArchivalUri:      historyArchivalURI,
 		VisibilityArchivalState: visibilityArchivalState,
 		VisibilityArchivalUri:   visibilityArchivalURI,
-		BadBinaries:             &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
-	}
-	replicationConfig := &persistencespb.NamespaceReplicationConfig{
+		BadBinaries:             namespacepb.BadBinaries_builder{Binaries: map[string]*namespacepb.BadBinaryInfo{}}.Build(),
+	}.Build()
+	replicationConfig := persistencespb.NamespaceReplicationConfig_builder{
 		ActiveClusterName: clusterActive,
 		Clusters:          singleClusterList,
-	}
+	}.Build()
 
 	isGlobalNamespace := true
 
-	s.namespaceReplicationQueue.EXPECT().Publish(gomock.Any(), &replicationspb.ReplicationTask{
+	s.namespaceReplicationQueue.EXPECT().Publish(gomock.Any(), replicationspb.ReplicationTask_builder{
 		TaskType: taskType,
-		Attributes: &replicationspb.ReplicationTask_NamespaceTaskAttributes{
-			NamespaceTaskAttributes: &replicationspb.NamespaceTaskAttributes{
-				NamespaceOperation: namespaceOperation,
-				Id:                 id,
-				Info: &namespacepb.NamespaceInfo{
-					Name:        name,
-					State:       state,
-					Description: description,
-					OwnerEmail:  ownerEmail,
-					Data:        data,
-				},
-				Config: &namespacepb.NamespaceConfig{
-					WorkflowExecutionRetentionTtl: durationpb.New(retention),
-					HistoryArchivalState:          historyArchivalState,
-					HistoryArchivalUri:            historyArchivalURI,
-					VisibilityArchivalState:       visibilityArchivalState,
-					VisibilityArchivalUri:         visibilityArchivalURI,
-					BadBinaries:                   &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
-				},
-				ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
-					ActiveClusterName: clusterActive,
-					Clusters:          convertClusterReplicationConfigToProto(singleClusterList),
-				},
-				ConfigVersion:   configVersion,
-				FailoverVersion: failoverVersion,
-			},
-		},
-	}).Return(nil).Times(1)
+		NamespaceTaskAttributes: replicationspb.NamespaceTaskAttributes_builder{
+			NamespaceOperation: namespaceOperation,
+			Id:                 id,
+			Info: namespacepb.NamespaceInfo_builder{
+				Name:        name,
+				State:       state,
+				Description: description,
+				OwnerEmail:  ownerEmail,
+				Data:        data,
+			}.Build(),
+			Config: namespacepb.NamespaceConfig_builder{
+				WorkflowExecutionRetentionTtl: durationpb.New(retention),
+				HistoryArchivalState:          historyArchivalState,
+				HistoryArchivalUri:            historyArchivalURI,
+				VisibilityArchivalState:       visibilityArchivalState,
+				VisibilityArchivalUri:         visibilityArchivalURI,
+				BadBinaries:                   namespacepb.BadBinaries_builder{Binaries: map[string]*namespacepb.BadBinaryInfo{}}.Build(),
+			}.Build(),
+			ReplicationConfig: replicationpb.NamespaceReplicationConfig_builder{
+				ActiveClusterName: clusterActive,
+				Clusters:          convertClusterReplicationConfigToProto(singleClusterList),
+			}.Build(),
+			ConfigVersion:   configVersion,
+			FailoverVersion: failoverVersion,
+		}.Build(),
+	}.Build()).Return(nil).Times(1)
 
 	err := s.namespaceReplicator.HandleTransmissionTask(
 		context.Background(),

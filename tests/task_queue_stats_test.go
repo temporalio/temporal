@@ -77,19 +77,19 @@ func (s *TaskQueueStatsSuite) SetupTest() {
 }
 
 func (s *TaskQueueStatsSuite) TestDescribeTaskQueue_NonRoot() {
-	resp, err := s.FrontendClient().DescribeTaskQueue(context.Background(), &workflowservice.DescribeTaskQueueRequest{
+	resp, err := s.FrontendClient().DescribeTaskQueue(context.Background(), workflowservice.DescribeTaskQueueRequest_builder{
 		Namespace: s.Namespace().String(),
-		TaskQueue: &taskqueuepb.TaskQueue{Name: "/_sys/foo/1", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-	})
+		TaskQueue: taskqueuepb.TaskQueue_builder{Name: "/_sys/foo/1", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
+	}.Build())
 	s.NoError(err)
 	s.NotNil(resp)
 
 	_, err = s.FrontendClient().DescribeTaskQueue(context.Background(),
-		&workflowservice.DescribeTaskQueueRequest{
+		workflowservice.DescribeTaskQueueRequest_builder{
 			Namespace:   s.Namespace().String(),
-			TaskQueue:   &taskqueuepb.TaskQueue{Name: "/_sys/foo/1", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			TaskQueue:   taskqueuepb.TaskQueue_builder{Name: "/_sys/foo/1", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 			ReportStats: true,
-		})
+		}.Build())
 	s.ErrorContains(err, "DescribeTaskQueue stats are only supported for the root partition")
 }
 
@@ -964,19 +964,19 @@ func (s *TaskQueueStatsSuite) publishConsumeWorkflowTasksValidateStats(sets int,
 
 func (s *TaskQueueStatsSuite) startUnversionedWorkflows(count int, tqName string) {
 	wt := "functional-workflow-current-absorbs-unversioned"
-	workflowType := &commonpb.WorkflowType{Name: wt}
-	request := &workflowservice.StartWorkflowExecutionRequest{
+	workflowType := commonpb.WorkflowType_builder{Name: wt}.Build()
+	request := workflowservice.StartWorkflowExecutionRequest_builder{
 		Namespace:             s.Namespace().String(),
 		WorkflowType:          workflowType,
-		TaskQueue:             &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		TaskQueue:             taskqueuepb.TaskQueue_builder{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 		WorkflowRunTimeout:    durationpb.New(10 * time.Minute),
 		WorkflowTaskTimeout:   durationpb.New(10 * time.Minute),
 		RequestId:             uuid.NewString(),
 		WorkflowIdReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
-	}
+	}.Build()
 
 	for range count {
-		request.WorkflowId = uuid.NewString() // starting "count" different Unversioned workflows.
+		request.SetWorkflowId(uuid.NewString()) // starting "count" different Unversioned workflows.
 		_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 		s.NoError(err)
 	}
@@ -984,30 +984,28 @@ func (s *TaskQueueStatsSuite) startUnversionedWorkflows(count int, tqName string
 
 func (s *TaskQueueStatsSuite) startPinnedWorkflows(count int, tqName string, deploymentName string, buildID string) {
 	wt := "functional-workflow-pinned"
-	workflowType := &commonpb.WorkflowType{Name: wt}
+	workflowType := commonpb.WorkflowType_builder{Name: wt}.Build()
 
-	request := &workflowservice.StartWorkflowExecutionRequest{
+	request := workflowservice.StartWorkflowExecutionRequest_builder{
 		Namespace:             s.Namespace().String(),
 		WorkflowType:          workflowType,
-		TaskQueue:             &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		TaskQueue:             taskqueuepb.TaskQueue_builder{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 		WorkflowRunTimeout:    durationpb.New(10 * time.Minute),
 		WorkflowTaskTimeout:   durationpb.New(10 * time.Minute),
 		RequestId:             uuid.NewString(),
 		WorkflowIdReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
-		VersioningOverride: &workflowpb.VersioningOverride{
-			Override: &workflowpb.VersioningOverride_Pinned{
-				Pinned: &workflowpb.VersioningOverride_PinnedOverride{
-					Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
-					Version: &deploymentpb.WorkerDeploymentVersion{
-						BuildId:        buildID,
-						DeploymentName: deploymentName,
-					},
-				},
-			},
-		},
-	}
+		VersioningOverride: workflowpb.VersioningOverride_builder{
+			Pinned: workflowpb.VersioningOverride_PinnedOverride_builder{
+				Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
+				Version: deploymentpb.WorkerDeploymentVersion_builder{
+					BuildId:        buildID,
+					DeploymentName: deploymentName,
+				}.Build(),
+			}.Build(),
+		}.Build(),
+	}.Build()
 	for range count {
-		request.WorkflowId = uuid.NewString() // starting "n" different Pinned workflows.
+		request.SetWorkflowId(uuid.NewString()) // starting "n" different Pinned workflows.
 		_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 		s.NoError(err)
 	}
@@ -1051,12 +1049,12 @@ func (s *TaskQueueStatsSuite) pollWorkflowTasksAndScheduleActivities(params work
 	scheduled := 0
 	emptyPollCount := 0
 	for i := 0; i < params.maxToSchedule; {
-		resp, err := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
+		resp, err := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), workflowservice.PollWorkflowTaskQueueRequest_builder{
 			Namespace:         s.Namespace().String(),
-			TaskQueue:         &taskqueuepb.TaskQueue{Name: params.tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			TaskQueue:         taskqueuepb.TaskQueue_builder{Name: params.tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 			Identity:          params.identity,
 			DeploymentOptions: deploymentOpts,
-		})
+		}.Build())
 		if err != nil {
 			return scheduled, err
 		}
@@ -1072,26 +1070,24 @@ func (s *TaskQueueStatsSuite) pollWorkflowTasksAndScheduleActivities(params work
 
 		emptyPollCount = 0
 
-		respondReq := &workflowservice.RespondWorkflowTaskCompletedRequest{
+		respondReq := workflowservice.RespondWorkflowTaskCompletedRequest_builder{
 			Namespace: s.Namespace().String(),
-			TaskToken: resp.TaskToken,
+			TaskToken: resp.GetTaskToken(),
 			Commands: []*commandpb.Command{
-				{
+				commandpb.Command_builder{
 					CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-					Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{
-						ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-							ActivityId:            fmt.Sprintf("%s-%d", params.activityIDPrefix, i),
-							ActivityType:          &commonpb.ActivityType{Name: "activity_type1"},
-							TaskQueue:             &taskqueuepb.TaskQueue{Name: params.tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-							StartToCloseTimeout:   durationpb.New(time.Minute),
-							RequestEagerExecution: false,
-						},
-					},
-				},
+					ScheduleActivityTaskCommandAttributes: commandpb.ScheduleActivityTaskCommandAttributes_builder{
+						ActivityId:            fmt.Sprintf("%s-%d", params.activityIDPrefix, i),
+						ActivityType:          commonpb.ActivityType_builder{Name: "activity_type1"}.Build(),
+						TaskQueue:             taskqueuepb.TaskQueue_builder{Name: params.tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
+						StartToCloseTimeout:   durationpb.New(time.Minute),
+						RequestEagerExecution: false,
+					}.Build(),
+				}.Build(),
 			},
 			VersioningBehavior: params.versioningBehavior,
 			DeploymentOptions:  deploymentOpts,
-		}
+		}.Build()
 		_, err = s.FrontendClient().RespondWorkflowTaskCompleted(testcore.NewContext(), respondReq)
 		if err != nil {
 			return scheduled, err
@@ -1113,12 +1109,12 @@ func (s *TaskQueueStatsSuite) completeWorkflowTasksAndScheduleActivities(
 	deploymentOpts := s.createDeploymentOptions(deploymentName, buildID)
 
 	for i := 0; i < activityCount; {
-		resp, err := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
+		resp, err := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), workflowservice.PollWorkflowTaskQueueRequest_builder{
 			Namespace:         s.Namespace().String(),
-			TaskQueue:         &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			TaskQueue:         taskqueuepb.TaskQueue_builder{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 			Identity:          "current-version-worker",
 			DeploymentOptions: deploymentOpts,
-		})
+		}.Build())
 		s.NoError(err)
 		if resp == nil || resp.GetAttempt() < 1 {
 			fmt.Println("Empty poll! Continuing...")
@@ -1127,26 +1123,24 @@ func (s *TaskQueueStatsSuite) completeWorkflowTasksAndScheduleActivities(
 
 		// Note: Scheduling activities with no VersioningBehaviour only for the purpose of this test so that we can validate
 		// if unversioned activity tasks are considered part of the backlog for the activity task queue in a current version.
-		respondReq := &workflowservice.RespondWorkflowTaskCompletedRequest{
+		respondReq := workflowservice.RespondWorkflowTaskCompletedRequest_builder{
 			Namespace: s.Namespace().String(),
-			TaskToken: resp.TaskToken,
+			TaskToken: resp.GetTaskToken(),
 			Commands: []*commandpb.Command{
-				{
+				commandpb.Command_builder{
 					CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-					Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{
-						ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-							ActivityId:            fmt.Sprintf("activity-%d", i),
-							ActivityType:          &commonpb.ActivityType{Name: "activity_type1"},
-							TaskQueue:             &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-							StartToCloseTimeout:   durationpb.New(time.Minute),
-							RequestEagerExecution: false,
-						},
-					},
-				},
+					ScheduleActivityTaskCommandAttributes: commandpb.ScheduleActivityTaskCommandAttributes_builder{
+						ActivityId:            fmt.Sprintf("activity-%d", i),
+						ActivityType:          commonpb.ActivityType_builder{Name: "activity_type1"}.Build(),
+						TaskQueue:             taskqueuepb.TaskQueue_builder{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
+						StartToCloseTimeout:   durationpb.New(time.Minute),
+						RequestEagerExecution: false,
+					}.Build(),
+				}.Build(),
 			},
 			VersioningBehavior: enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE,
 			DeploymentOptions:  deploymentOpts,
-		}
+		}.Build()
 
 		_, err = s.FrontendClient().RespondWorkflowTaskCompleted(testcore.NewContext(), respondReq)
 		s.NoError(err)
@@ -1159,11 +1153,11 @@ func (s *TaskQueueStatsSuite) setCurrentVersion(deploymentName, buildID string) 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	_, err := s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
+	_, err := s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, workflowservice.SetWorkerDeploymentCurrentVersionRequest_builder{
 		Namespace:      s.Namespace().String(),
 		DeploymentName: deploymentName,
 		BuildId:        buildID,
-	})
+	}.Build())
 	s.NoError(err)
 }
 
@@ -1172,12 +1166,12 @@ func (s *TaskQueueStatsSuite) setRampingVersion(deploymentName, buildID string, 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	_, err := s.FrontendClient().SetWorkerDeploymentRampingVersion(ctx, &workflowservice.SetWorkerDeploymentRampingVersionRequest{
+	_, err := s.FrontendClient().SetWorkerDeploymentRampingVersion(ctx, workflowservice.SetWorkerDeploymentRampingVersionRequest_builder{
 		Namespace:      s.Namespace().String(),
 		DeploymentName: deploymentName,
 		BuildId:        buildID,
 		Percentage:     float32(rampPercentage),
-	})
+	}.Build())
 	s.NoError(err)
 }
 
@@ -1188,14 +1182,14 @@ func (s *TaskQueueStatsSuite) describeWDVTaskQueueStats(
 	deploymentName string,
 	buildID string,
 ) (stats *taskqueuepb.TaskQueueStats, found bool, err error) {
-	resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
+	resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, workflowservice.DescribeWorkerDeploymentVersionRequest_builder{
 		Namespace: s.Namespace().String(),
-		DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
+		DeploymentVersion: deploymentpb.WorkerDeploymentVersion_builder{
 			DeploymentName: deploymentName,
 			BuildId:        buildID,
-		},
+		}.Build(),
 		ReportTaskQueueStats: true,
-	})
+	}.Build())
 	if err != nil {
 		return nil, false, err
 	}
@@ -1214,12 +1208,12 @@ func (s *TaskQueueStatsSuite) describeLegacyTaskQueueStats(
 	tqName string,
 	tqType enumspb.TaskQueueType,
 ) (stats *taskqueuepb.TaskQueueStats, found bool, err error) {
-	resp, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+	resp, err := s.FrontendClient().DescribeTaskQueue(ctx, workflowservice.DescribeTaskQueueRequest_builder{
 		Namespace:     s.Namespace().String(),
-		TaskQueue:     &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		TaskQueue:     taskqueuepb.TaskQueue_builder{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 		TaskQueueType: tqType,
 		ReportStats:   true,
-	})
+	}.Build())
 	if err != nil {
 		return nil, false, err
 	}
@@ -1233,33 +1227,31 @@ func (s *TaskQueueStatsSuite) enqueueWorkflows(sets int, tqName string) int {
 		for priority := 0; priority <= maxPriority; priority++ {
 			for range sets {
 				wt := "functional-workflow-multiple-tasks"
-				workflowType := &commonpb.WorkflowType{Name: wt}
+				workflowType := commonpb.WorkflowType_builder{Name: wt}.Build()
 
-				request := &workflowservice.StartWorkflowExecutionRequest{
+				request := workflowservice.StartWorkflowExecutionRequest_builder{
 					Namespace:             s.Namespace().String(),
 					WorkflowId:            uuid.NewString(),
 					WorkflowType:          workflowType,
-					TaskQueue:             &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+					TaskQueue:             taskqueuepb.TaskQueue_builder{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 					Input:                 nil,
 					WorkflowRunTimeout:    durationpb.New(10 * time.Minute),
 					WorkflowTaskTimeout:   durationpb.New(10 * time.Minute),
 					RequestId:             uuid.NewString(),
 					WorkflowIdReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
-					Priority:              &commonpb.Priority{PriorityKey: int32(priority)},
-				}
+					Priority:              commonpb.Priority_builder{PriorityKey: int32(priority)}.Build(),
+				}.Build()
 
 				if version == 1 {
-					request.VersioningOverride = &workflowpb.VersioningOverride{
-						Override: &workflowpb.VersioningOverride_Pinned{
-							Pinned: &workflowpb.VersioningOverride_PinnedOverride{
-								Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
-								Version: &deploymentpb.WorkerDeploymentVersion{
-									BuildId:        deploymentOpts.BuildId,
-									DeploymentName: deploymentOpts.DeploymentName,
-								},
-							},
-						},
-					}
+					request.SetVersioningOverride(workflowpb.VersioningOverride_builder{
+						Pinned: workflowpb.VersioningOverride_PinnedOverride_builder{
+							Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
+							Version: deploymentpb.WorkerDeploymentVersion_builder{
+								BuildId:        deploymentOpts.GetBuildId(),
+								DeploymentName: deploymentOpts.GetDeploymentName(),
+							}.Build(),
+						}.Build(),
+					}.Build())
 				}
 
 				_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
@@ -1276,33 +1268,33 @@ func (s *TaskQueueStatsSuite) enqueueWorkflows(sets int, tqName string) int {
 
 func (s *TaskQueueStatsSuite) createVersionsInTaskQueue(ctx context.Context, tqName string, deploymentName string, buildID string) {
 	go func() {
-		_, _ = s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		_, _ = s.FrontendClient().PollWorkflowTaskQueue(ctx, workflowservice.PollWorkflowTaskQueueRequest_builder{
 			Namespace:         s.Namespace().String(),
-			TaskQueue:         &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			TaskQueue:         taskqueuepb.TaskQueue_builder{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 			Identity:          "random",
 			DeploymentOptions: s.createDeploymentOptions(deploymentName, buildID),
-		})
+		}.Build())
 	}()
 
 	go func() {
-		_, _ = s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+		_, _ = s.FrontendClient().PollActivityTaskQueue(ctx, workflowservice.PollActivityTaskQueueRequest_builder{
 			Namespace:         s.Namespace().String(),
-			TaskQueue:         &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			TaskQueue:         taskqueuepb.TaskQueue_builder{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 			Identity:          "random",
 			DeploymentOptions: s.createDeploymentOptions(deploymentName, buildID),
-		})
+		}.Build())
 	}()
 
 	// Wait for the version to be created.
 	s.EventuallyWithT(func(c *assert.CollectT) {
 		a := require.New(c)
-		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
+		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, workflowservice.DescribeWorkerDeploymentVersionRequest_builder{
 			Namespace: s.Namespace().String(),
-			DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
+			DeploymentVersion: deploymentpb.WorkerDeploymentVersion_builder{
 				DeploymentName: deploymentName,
 				BuildId:        buildID,
-			},
-		})
+			}.Build(),
+		}.Build())
 		a.NoError(err)
 		a.NotNil(resp)
 	}, 10*time.Second, 200*time.Millisecond)
@@ -1316,22 +1308,22 @@ func (s *TaskQueueStatsSuite) createDeploymentInTaskQueue(tqName string) {
 
 	go func() {
 		defer wg.Done()
-		_, _ = s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
+		_, _ = s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), workflowservice.PollWorkflowTaskQueueRequest_builder{
 			Namespace:         s.Namespace().String(),
-			TaskQueue:         &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			TaskQueue:         taskqueuepb.TaskQueue_builder{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 			Identity:          "random",
 			DeploymentOptions: s.deploymentOptions(tqName),
-		})
+		}.Build())
 	}()
 
 	go func() {
 		defer wg.Done()
-		_, _ = s.FrontendClient().PollActivityTaskQueue(testcore.NewContext(), &workflowservice.PollActivityTaskQueueRequest{
+		_, _ = s.FrontendClient().PollActivityTaskQueue(testcore.NewContext(), workflowservice.PollActivityTaskQueueRequest_builder{
 			Namespace:         s.Namespace().String(),
-			TaskQueue:         &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			TaskQueue:         taskqueuepb.TaskQueue_builder{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 			Identity:          "random",
 			DeploymentOptions: s.deploymentOptions(tqName),
-		})
+		}.Build())
 	}()
 
 	wg.Wait()
@@ -1344,12 +1336,12 @@ func (s *TaskQueueStatsSuite) enqueueActivitiesForEachWorkflow(sets int, tqName 
 	for version := 0; version < 2; version++ { // 0=unversioned, 1=versioned
 		for priority := 0; priority <= maxPriority; priority++ {
 			for i := 0; i < sets; { // not counting up here to allow for retries
-				pollReq := &workflowservice.PollWorkflowTaskQueueRequest{
+				pollReq := workflowservice.PollWorkflowTaskQueueRequest_builder{
 					Namespace: s.Namespace().String(),
-					TaskQueue: &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-				}
+					TaskQueue: taskqueuepb.TaskQueue_builder{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
+				}.Build()
 				if version == 1 {
-					pollReq.DeploymentOptions = deploymentOpts
+					pollReq.SetDeploymentOptions(deploymentOpts)
 				}
 
 				resp, err := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), pollReq)
@@ -1358,29 +1350,27 @@ func (s *TaskQueueStatsSuite) enqueueActivitiesForEachWorkflow(sets int, tqName 
 					continue
 				}
 
-				respondReq := &workflowservice.RespondWorkflowTaskCompletedRequest{
+				respondReq := workflowservice.RespondWorkflowTaskCompletedRequest_builder{
 					Namespace: s.Namespace().String(),
-					TaskToken: resp.TaskToken,
+					TaskToken: resp.GetTaskToken(),
 					Commands: []*commandpb.Command{
-						{
+						commandpb.Command_builder{
 							CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-							Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{
-								ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-									ActivityId:            "activity1",
-									ActivityType:          &commonpb.ActivityType{Name: "activity_type1"},
-									TaskQueue:             &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-									StartToCloseTimeout:   durationpb.New(time.Minute),
-									RequestEagerExecution: false,
-									// Priority is inherted from the workflow
-								},
-							},
-						},
+							ScheduleActivityTaskCommandAttributes: commandpb.ScheduleActivityTaskCommandAttributes_builder{
+								ActivityId:            "activity1",
+								ActivityType:          commonpb.ActivityType_builder{Name: "activity_type1"}.Build(),
+								TaskQueue:             taskqueuepb.TaskQueue_builder{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
+								StartToCloseTimeout:   durationpb.New(time.Minute),
+								RequestEagerExecution: false,
+								// Priority is inherted from the workflow
+							}.Build(),
+						}.Build(),
 					},
-				}
+				}.Build()
 
 				if version == 1 {
-					respondReq.DeploymentOptions = deploymentOpts
-					respondReq.VersioningBehavior = enumspb.VERSIONING_BEHAVIOR_PINNED
+					respondReq.SetDeploymentOptions(deploymentOpts)
+					respondReq.SetVersioningBehavior(enumspb.VERSIONING_BEHAVIOR_PINNED)
 				}
 
 				_, err = s.FrontendClient().RespondWorkflowTaskCompleted(testcore.NewContext(), respondReq)
@@ -1397,15 +1387,15 @@ func (s *TaskQueueStatsSuite) enqueueActivitiesForEachWorkflow(sets int, tqName 
 
 func (s *TaskQueueStatsSuite) pollActivities(count int, tqName string) {
 	for i := 0; i < count; {
-		pollReq := &workflowservice.PollActivityTaskQueueRequest{
+		pollReq := workflowservice.PollActivityTaskQueueRequest_builder{
 			Namespace: s.Namespace().String(),
-			TaskQueue: &taskqueuepb.TaskQueue{
+			TaskQueue: taskqueuepb.TaskQueue_builder{
 				Name: tqName,
 				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-			},
-		}
+			}.Build(),
+		}.Build()
 		if i%2 == 0 {
-			pollReq.DeploymentOptions = s.deploymentOptions(tqName)
+			pollReq.SetDeploymentOptions(s.deploymentOptions(tqName))
 		}
 
 		resp, err := s.FrontendClient().PollActivityTaskQueue(
@@ -1442,12 +1432,12 @@ func (s *TaskQueueStatsSuite) validateRates(
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	req := &workflowservice.DescribeTaskQueueRequest{
+	req := workflowservice.DescribeTaskQueueRequest_builder{
 		Namespace:     s.Namespace().String(),
-		TaskQueue:     &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		TaskQueue:     taskqueuepb.TaskQueue_builder{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 		TaskQueueType: tqType,
 		ReportStats:   true,
-	}
+	}.Build()
 
 	s.EventuallyWithT(func(c *assert.CollectT) {
 		a := require.New(c)
@@ -1456,15 +1446,15 @@ func (s *TaskQueueStatsSuite) validateRates(
 		resp, err := s.FrontendClient().DescribeTaskQueue(ctx, req)
 		a.NoError(err)
 		a.NotNil(resp)
-		a.NotNil(resp.Stats)
+		a.NotNil(resp.GetStats())
 
 		if expectAddRate {
-			a.Greater(resp.Stats.TasksAddRate, float32(0),
-				"%s: TasksAddRate should be > 0, got %f", label, resp.Stats.TasksAddRate)
+			a.Greater(resp.GetStats().GetTasksAddRate(), float32(0),
+				"%s: TasksAddRate should be > 0, got %f", label, resp.GetStats().GetTasksAddRate())
 		}
 		if expectDispatchRate {
-			a.Greater(resp.Stats.TasksDispatchRate, float32(0),
-				"%s: TasksDispatchRate should be > 0, got %f", label, resp.Stats.TasksDispatchRate)
+			a.Greater(resp.GetStats().GetTasksDispatchRate(), float32(0),
+				"%s: TasksDispatchRate should be > 0, got %f", label, resp.GetStats().GetTasksDispatchRate())
 		}
 	}, 5*time.Second, 100*time.Millisecond)
 }
@@ -1497,27 +1487,27 @@ func (s *TaskQueueStatsSuite) validateDescribeTaskQueueWithDefaultMode(
 	expectation TaskQueueExpectations,
 	singlePartition bool,
 ) {
-	req := &workflowservice.DescribeTaskQueueRequest{
+	req := workflowservice.DescribeTaskQueueRequest_builder{
 		Namespace:     s.Namespace().String(),
-		TaskQueue:     &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		TaskQueue:     taskqueuepb.TaskQueue_builder{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 		TaskQueueType: tqType,
-	}
+	}.Build()
 
 	// test stats are not reported by default (and therefore also not cached)
 	resp, err := s.FrontendClient().DescribeTaskQueue(ctx, req)
 	s.NoError(err)
 	s.NotNil(resp)
-	s.Nil(resp.Stats, "stats should not be reported by default")
+	s.Nil(resp.GetStats(), "stats should not be reported by default")
 	//nolint:staticcheck // SA1019 deprecated
-	s.Nil(resp.TaskQueueStatus, "status should not be reported by default")
+	s.Nil(resp.GetTaskQueueStatus(), "status should not be reported by default")
 
 	s.EventuallyWithT(func(c *assert.CollectT) {
 		a := require.New(c)
 		label := "DescribeTaskQueue_DefaultMode[" + tqType.String() + "]"
 
-		req.ReportStats = true
+		req.SetReportStats(true)
 		//nolint:staticcheck // SA1019 deprecated
-		req.IncludeTaskQueueStatus = true
+		req.SetIncludeTaskQueueStatus(true)
 		resp, err := s.FrontendClient().DescribeTaskQueue(ctx, req)
 		a.NoError(err)
 		a.NotNil(resp)
@@ -1525,14 +1515,14 @@ func (s *TaskQueueStatsSuite) validateDescribeTaskQueueWithDefaultMode(
 		if singlePartition {
 			expected := expectation.BacklogCount / 2 // only reports unversioned
 			//nolint:staticcheck // SA1019 deprecated field
-			actual := resp.TaskQueueStatus.GetBacklogCountHint()
+			actual := resp.GetTaskQueueStatus().GetBacklogCountHint()
 			a.EqualValuesf(expected, actual, "%s: backlog hint should be %d, got %d", label, expected, actual)
 		}
 
-		validateTaskQueueStats(label, a, resp.Stats, expectation)
+		validateTaskQueueStats(label, a, resp.GetStats(), expectation)
 		if s.usePriMatcher && expectation.BacklogCount > 0 {
 			// Per priority stats are only available with the priority matcher and when they've been actively used.
-			validateTaskQueueStatsByPriority(label, a, resp.StatsByPriorityKey, expectation)
+			validateTaskQueueStatsByPriority(label, a, resp.GetStatsByPriorityKey(), expectation)
 		}
 	}, 5*time.Second, 100*time.Millisecond)
 }
@@ -1544,35 +1534,35 @@ func (s *TaskQueueStatsSuite) validateDescribeTaskQueueWithEnhancedMode(
 	expectation TaskQueueExpectations,
 ) {
 	deploymentOpts := s.deploymentOptions(tqName)
-	req := &workflowservice.DescribeTaskQueueRequest{
+	req := workflowservice.DescribeTaskQueueRequest_builder{
 		Namespace: s.Namespace().String(),
-		TaskQueue: &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		TaskQueue: taskqueuepb.TaskQueue_builder{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 		ApiMode:   enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED,
-		Versions: &taskqueuepb.TaskQueueVersionSelection{
+		Versions: taskqueuepb.TaskQueueVersionSelection_builder{
 			BuildIds: []string{worker_versioning.WorkerDeploymentVersionToStringV32(
-				&deploymentspb.WorkerDeploymentVersion{
-					BuildId:        deploymentOpts.BuildId,
-					DeploymentName: deploymentOpts.DeploymentName,
-				})},
+				deploymentspb.WorkerDeploymentVersion_builder{
+					BuildId:        deploymentOpts.GetBuildId(),
+					DeploymentName: deploymentOpts.GetDeploymentName(),
+				}.Build())},
 			Unversioned: true,
-		},
+		}.Build(),
 		TaskQueueTypes: []enumspb.TaskQueueType{tqType},
 		ReportPollers:  true,
-	}
+	}.Build()
 
 	if !expectation.CachedEnabled { // skip if testing caching; as this would pin the result to the cache
 		resp, err := s.FrontendClient().DescribeTaskQueue(ctx, req)
 		s.NoError(err)
 		s.NotNil(resp)
-		s.Nil(resp.Stats, "stats should not be reported by default")
+		s.Nil(resp.GetStats(), "stats should not be reported by default")
 		//nolint:staticcheck // SA1019 deprecated
-		s.Nil(resp.TaskQueueStatus, "status should not be reported")
+		s.Nil(resp.GetTaskQueueStatus(), "status should not be reported")
 	}
 
 	s.EventuallyWithT(func(c *assert.CollectT) {
 		a := require.New(c)
 
-		req.ReportStats = true
+		req.SetReportStats(true)
 		resp, err := s.FrontendClient().DescribeTaskQueue(ctx, req)
 		a.NoError(err)
 		a.NotNil(resp)
@@ -1586,7 +1576,7 @@ func (s *TaskQueueStatsSuite) validateDescribeTaskQueueWithEnhancedMode(
 			info := v.GetTypesInfo()[int32(tqType)]
 			a.NotNil(info, "should have info for task queue type %s", tqType)
 
-			validateTaskQueueStats("DescribeTaskQueue_EnhancedMode["+tqType.String()+"]", a, info.Stats, expectation)
+			validateTaskQueueStats("DescribeTaskQueue_EnhancedMode["+tqType.String()+"]", a, info.GetStats(), expectation)
 		}
 	}, 5*time.Second, 100*time.Millisecond)
 }
@@ -1598,37 +1588,37 @@ func (s *TaskQueueStatsSuite) validateDescribeWorkerDeploymentVersion(
 	expectation TaskQueueExpectations,
 ) {
 	deploymentOpts := s.deploymentOptions(tqName)
-	req := &workflowservice.DescribeWorkerDeploymentVersionRequest{
+	req := workflowservice.DescribeWorkerDeploymentVersionRequest_builder{
 		Namespace: s.Namespace().String(),
-		DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
-			BuildId:        deploymentOpts.BuildId,
-			DeploymentName: deploymentOpts.DeploymentName,
-		},
-	}
+		DeploymentVersion: deploymentpb.WorkerDeploymentVersion_builder{
+			BuildId:        deploymentOpts.GetBuildId(),
+			DeploymentName: deploymentOpts.GetDeploymentName(),
+		}.Build(),
+	}.Build()
 
 	// test stats are not reported by default (and therefore also not cached)
 	resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, req)
 	s.NoError(err)
 	s.NotNil(resp)
-	for _, info := range resp.VersionTaskQueues {
-		s.Nil(info.Stats, "stats should not be reported by default")
+	for _, info := range resp.GetVersionTaskQueues() {
+		s.Nil(info.GetStats(), "stats should not be reported by default")
 	}
 
 	s.EventuallyWithT(func(c *assert.CollectT) {
 		a := require.New(c)
 
-		req.ReportTaskQueueStats = true
+		req.SetReportTaskQueueStats(true)
 		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, req)
 		s.NoError(err)
-		a.Len(resp.VersionTaskQueues, 2, "should be 1 task queue for Workflows and 1 for Activities")
+		a.Len(resp.GetVersionTaskQueues(), 2, "should be 1 task queue for Workflows and 1 for Activities")
 
-		for _, info := range resp.VersionTaskQueues {
-			if info.Name == tqName || info.Type == tqType {
+		for _, info := range resp.GetVersionTaskQueues() {
+			if info.GetName() == tqName || info.GetType() == tqType {
 				label := "DescribeWorkerDeploymentVersion[" + tqType.String() + "]"
-				validateTaskQueueStats(label, a, info.Stats, expectation)
+				validateTaskQueueStats(label, a, info.GetStats(), expectation)
 				if s.usePriMatcher && expectation.BacklogCount > 0 {
 					// Per priority stats are only available with the priority matcher and when they've been actively used.
-					validateTaskQueueStatsByPriority(label, a, info.StatsByPriorityKey, expectation)
+					validateTaskQueueStatsByPriority(label, a, info.GetStatsByPriorityKey(), expectation)
 				}
 				return
 			}
@@ -1648,7 +1638,7 @@ func validateTaskQueueStatsByPriority(
 	// use an abgridged version when caching since the exact stats are difficult to predict
 	if taskQueueExpectation.CachedEnabled {
 		for i := int32(minPriority); i <= maxPriority; i++ {
-			if stats[i].ApproximateBacklogCount != 0 && stats[i].TasksDispatchRate > 0 || stats[i].TasksAddRate > 0 {
+			if stats[i].GetApproximateBacklogCount() != 0 && stats[i].GetTasksDispatchRate() > 0 || stats[i].GetTasksAddRate() > 0 {
 				return
 			}
 		}
@@ -1665,7 +1655,7 @@ func validateTaskQueueStatsByPriority(
 
 		a.Containsf(stats, i, "%s: stats should contain priority %d", label, i)
 		validateTaskQueueStats(fmt.Sprintf("%s_Pri[%d]", label, i), a, stats[i], priExpectation)
-		accBacklogCount += int(stats[i].ApproximateBacklogCount)
+		accBacklogCount += int(stats[i].GetApproximateBacklogCount())
 	}
 	a.GreaterOrEqualf(taskQueueExpectation.BacklogCount, accBacklogCount,
 		"%s: accumulated backlog count from all priorities should be at least %d, got %d",
@@ -1678,13 +1668,13 @@ func validateTaskQueueStatsStrict(
 	stats *taskqueuepb.TaskQueueStats,
 	expectation TaskQueueExpectations,
 ) {
-	a.Equal(int64(expectation.BacklogCount), stats.ApproximateBacklogCount,
+	a.Equal(int64(expectation.BacklogCount), stats.GetApproximateBacklogCount(),
 		"%s: ApproximateBacklogCount should be %d, got %d",
-		label, expectation.BacklogCount, stats.ApproximateBacklogCount)
+		label, expectation.BacklogCount, stats.GetApproximateBacklogCount())
 
-	a.Equal(stats.ApproximateBacklogCount == 0, stats.ApproximateBacklogAge.AsDuration() == time.Duration(0),
+	a.Equal(stats.GetApproximateBacklogCount() == 0, stats.GetApproximateBacklogAge().AsDuration() == time.Duration(0),
 		"%s: ApproximateBacklogAge should be 0 when ApproximateBacklogCount is 0, got %s",
-		label, stats.ApproximateBacklogAge.AsDuration())
+		label, stats.GetApproximateBacklogAge().AsDuration())
 }
 
 func validateTaskQueueStats(
@@ -1695,33 +1685,33 @@ func validateTaskQueueStats(
 ) {
 	// Actual counter can be greater than the expected due to history retries. We make sure the counter is in
 	// range [expected, expected+maxBacklogExtraTasks]
-	a.GreaterOrEqual(stats.ApproximateBacklogCount, int64(expectation.BacklogCount),
+	a.GreaterOrEqual(stats.GetApproximateBacklogCount(), int64(expectation.BacklogCount),
 		"%s: ApproximateBacklogCount should be at least %d, got %d",
-		label, expectation.BacklogCount, stats.ApproximateBacklogCount)
+		label, expectation.BacklogCount, stats.GetApproximateBacklogCount())
 
 	maxApproximateBacklogCount := int64(expectation.BacklogCount + expectation.MaxExtraTasks)
-	a.LessOrEqual(stats.ApproximateBacklogCount, maxApproximateBacklogCount,
+	a.LessOrEqual(stats.GetApproximateBacklogCount(), maxApproximateBacklogCount,
 		"%s: ApproximateBacklogCount should be at most %d, got %d",
-		label, maxApproximateBacklogCount, stats.ApproximateBacklogCount)
+		label, maxApproximateBacklogCount, stats.GetApproximateBacklogCount())
 
-	a.Equal(stats.ApproximateBacklogCount == 0, stats.ApproximateBacklogAge.AsDuration() == time.Duration(0),
+	a.Equal(stats.GetApproximateBacklogCount() == 0, stats.GetApproximateBacklogAge().AsDuration() == time.Duration(0),
 		"%s: ApproximateBacklogAge should be 0 when ApproximateBacklogCount is 0, got %s",
-		label, stats.ApproximateBacklogAge.AsDuration())
+		label, stats.GetApproximateBacklogAge().AsDuration())
 }
 
 // TODO: Remove this once older stats tests are refactored to use the createDeploymentOptions function.
 func (s *TaskQueueStatsSuite) deploymentOptions(tqName string) *deploymentpb.WorkerDeploymentOptions {
-	return &deploymentpb.WorkerDeploymentOptions{
+	return deploymentpb.WorkerDeploymentOptions_builder{
 		DeploymentName:       tqName + "-deployment",
 		BuildId:              "build-id",
 		WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_VERSIONED,
-	}
+	}.Build()
 }
 
 func (s *TaskQueueStatsSuite) createDeploymentOptions(deploymentName string, buildID string) *deploymentpb.WorkerDeploymentOptions {
-	return &deploymentpb.WorkerDeploymentOptions{
+	return deploymentpb.WorkerDeploymentOptions_builder{
 		DeploymentName:       deploymentName,
 		BuildId:              buildID,
 		WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_VERSIONED,
-	}
+	}.Build()
 }

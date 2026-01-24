@@ -79,7 +79,7 @@ func ReadFullPageEventsByBatch(
 		}
 		historyBatches = append(historyBatches, response.History...)
 		for _, batch := range response.History {
-			eventsRead += len(batch.Events)
+			eventsRead += len(batch.GetEvents())
 		}
 		size += response.Size
 		if eventsRead >= req.PageSize || len(response.NextPageToken) == 0 {
@@ -115,21 +115,21 @@ func ReadFullPageEventsReverse(
 
 // GetBeginNodeID gets node id from last ancestor
 func GetBeginNodeID(bi *persistencespb.HistoryBranch) int64 {
-	if len(bi.Ancestors) == 0 {
+	if len(bi.GetAncestors()) == 0 {
 		// root branch
 		return 1
 	}
-	idx := len(bi.Ancestors) - 1
-	return bi.Ancestors[idx].GetEndNodeId()
+	idx := len(bi.GetAncestors()) - 1
+	return bi.GetAncestors()[idx].GetEndNodeId()
 }
 
 func sortAncestors(ans []*persistencespb.HistoryBranchRange) {
 	if len(ans) > 0 {
 		// sort ans based onf EndNodeID so that we can set BeginNodeID
 		sort.Slice(ans, func(i, j int) bool { return (ans)[i].GetEndNodeId() < (ans)[j].GetEndNodeId() })
-		(ans)[0].BeginNodeId = int64(1)
+		(ans)[0].SetBeginNodeId(int64(1))
 		for i := 1; i < len(ans); i++ {
-			(ans)[i].BeginNodeId = (ans)[i-1].GetEndNodeId()
+			(ans)[i].SetBeginNodeId((ans)[i-1].GetEndNodeId())
 		}
 	}
 }

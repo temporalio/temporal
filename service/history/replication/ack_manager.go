@@ -189,7 +189,7 @@ func (p *ackMgrImpl) GetTask(
 	taskInfo *replicationspb.ReplicationTaskInfo,
 ) (*replicationspb.ReplicationTask, error) {
 
-	switch taskInfo.TaskType {
+	switch taskInfo.GetTaskType() {
 	case enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY:
 		return p.ConvertTask(ctx, &tasks.SyncActivityTask{
 			WorkflowKey: definition.NewWorkflowKey(
@@ -198,9 +198,9 @@ func (p *ackMgrImpl) GetTask(
 				taskInfo.GetRunId(),
 			),
 			VisibilityTimestamp: time.Unix(0, 0),
-			TaskID:              taskInfo.TaskId,
-			Version:             taskInfo.Version,
-			ScheduledEventID:    taskInfo.ScheduledEventId,
+			TaskID:              taskInfo.GetTaskId(),
+			Version:             taskInfo.GetVersion(),
+			ScheduledEventID:    taskInfo.GetScheduledEventId(),
 		})
 	case enumsspb.TASK_TYPE_REPLICATION_HISTORY:
 		return p.ConvertTask(ctx, &tasks.HistoryReplicationTask{
@@ -210,10 +210,10 @@ func (p *ackMgrImpl) GetTask(
 				taskInfo.GetRunId(),
 			),
 			VisibilityTimestamp: time.Unix(0, 0),
-			TaskID:              taskInfo.TaskId,
-			Version:             taskInfo.Version,
-			FirstEventID:        taskInfo.FirstEventId,
-			NextEventID:         taskInfo.NextEventId,
+			TaskID:              taskInfo.GetTaskId(),
+			Version:             taskInfo.GetVersion(),
+			FirstEventID:        taskInfo.GetFirstEventId(),
+			NextEventID:         taskInfo.GetNextEventId(),
 		})
 	case enumsspb.TASK_TYPE_REPLICATION_SYNC_WORKFLOW_STATE:
 		return p.ConvertTask(ctx, &tasks.SyncWorkflowStateTask{
@@ -223,8 +223,8 @@ func (p *ackMgrImpl) GetTask(
 				taskInfo.GetRunId(),
 			),
 			VisibilityTimestamp: time.Unix(0, 0),
-			TaskID:              taskInfo.TaskId,
-			Version:             taskInfo.Version,
+			TaskID:              taskInfo.GetTaskId(),
+			Version:             taskInfo.GetVersion(),
 			Priority:            taskInfo.GetPriority(),
 		})
 	case enumsspb.TASK_TYPE_REPLICATION_SYNC_HSM:
@@ -235,10 +235,10 @@ func (p *ackMgrImpl) GetTask(
 				taskInfo.GetRunId(),
 			),
 			VisibilityTimestamp: time.Unix(0, 0),
-			TaskID:              taskInfo.TaskId,
+			TaskID:              taskInfo.GetTaskId(),
 		})
 	default:
-		return nil, serviceerror.NewInternalf("Unknown replication task type: %v", taskInfo.TaskType)
+		return nil, serviceerror.NewInternalf("Unknown replication task type: %v", taskInfo.GetTaskType())
 	}
 }
 
@@ -273,14 +273,14 @@ func (p *ackMgrImpl) GetTasks(
 	if len(replicationTasks) > 0 {
 		replicationEventTime = replicationTasks[len(replicationTasks)-1].GetVisibilityTime()
 	}
-	return &replicationspb.ReplicationMessages{
+	return replicationspb.ReplicationMessages_builder{
 		ReplicationTasks:       replicationTasks,
 		HasMore:                lastTaskID < maxTaskID,
 		LastRetrievedMessageId: lastTaskID,
-		SyncShardStatus: &replicationspb.SyncShardStatus{
+		SyncShardStatus: replicationspb.SyncShardStatus_builder{
 			StatusTime: replicationEventTime,
-		},
-	}, nil
+		}.Build(),
+	}.Build(), nil
 }
 
 func (p *ackMgrImpl) getTasks(

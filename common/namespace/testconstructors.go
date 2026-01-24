@@ -13,15 +13,15 @@ func NewLocalNamespaceForTest(
 	config *persistencespb.NamespaceConfig,
 	targetCluster string,
 ) *Namespace {
-	detail := &persistencespb.NamespaceDetail{
+	detail := persistencespb.NamespaceDetail_builder{
 		Info:   ensureInfo(info),
 		Config: ensureConfig(config),
-		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+		ReplicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: targetCluster,
 			Clusters:          []string{targetCluster},
-		},
+		}.Build(),
 		FailoverVersion: common.EmptyVersion,
-	}
+	}.Build()
 	factory := NewDefaultReplicationResolverFactory()
 	resolver := factory(detail)
 	ns, _ := FromPersistentState(detail, resolver, WithGlobalFlag(false))
@@ -36,12 +36,12 @@ func NewNamespaceForTest(
 	repConfig *persistencespb.NamespaceReplicationConfig,
 	failoverVersion int64,
 ) *Namespace {
-	detail := &persistencespb.NamespaceDetail{
+	detail := persistencespb.NamespaceDetail_builder{
 		Info:              ensureInfo(info),
 		Config:            ensureConfig(config),
 		ReplicationConfig: ensureRepConfig(repConfig),
 		FailoverVersion:   failoverVersion,
-	}
+	}.Build()
 	factory := NewDefaultReplicationResolverFactory()
 	resolver := factory(detail)
 	ns, _ := FromPersistentState(detail, resolver, WithGlobalFlag(isGlobalNamespace))
@@ -55,12 +55,12 @@ func NewGlobalNamespaceForTest(
 	repConfig *persistencespb.NamespaceReplicationConfig,
 	failoverVersion int64,
 ) *Namespace {
-	detail := &persistencespb.NamespaceDetail{
+	detail := persistencespb.NamespaceDetail_builder{
 		Info:              ensureInfo(info),
 		Config:            ensureConfig(config),
 		ReplicationConfig: ensureRepConfig(repConfig),
 		FailoverVersion:   failoverVersion,
-	}
+	}.Build()
 	factory := NewDefaultReplicationResolverFactory()
 	resolver := factory(detail)
 	ns, _ := FromPersistentState(detail, resolver, WithGlobalFlag(true))

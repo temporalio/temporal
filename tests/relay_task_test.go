@@ -32,48 +32,48 @@ func (s *RelayTaskTestSuite) TestRelayWorkflowTaskTimeout() {
 	identity := "worker1"
 
 	// Start workflow execution
-	request := &workflowservice.StartWorkflowExecutionRequest{
+	request := workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
-		WorkflowType:        &commonpb.WorkflowType{Name: wt},
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		WorkflowType:        commonpb.WorkflowType_builder{Name: wt}.Build(),
+		TaskQueue:           taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 		Input:               nil,
 		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(2 * time.Second),
 		Identity:            identity,
-	}
+	}.Build()
 
 	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
-	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.GetRunId()))
 
-	workflowExecution := &commonpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution_builder{
 		WorkflowId: id,
-		RunId:      we.RunId,
-	}
+		RunId:      we.GetRunId(),
+	}.Build()
 
 	workflowComplete, isFirst := false, true
 	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		if isFirst {
 			isFirst = false
-			return []*commandpb.Command{{
+			return []*commandpb.Command{commandpb.Command_builder{
 				CommandType: enumspb.COMMAND_TYPE_RECORD_MARKER,
-				Attributes: &commandpb.Command_RecordMarkerCommandAttributes{RecordMarkerCommandAttributes: &commandpb.RecordMarkerCommandAttributes{
+				RecordMarkerCommandAttributes: commandpb.RecordMarkerCommandAttributes_builder{
 					MarkerName: "test-marker",
-				}},
-			}}, nil
+				}.Build(),
+			}.Build()}, nil
 		}
 		workflowComplete = true
-		return []*commandpb.Command{{
+		return []*commandpb.Command{commandpb.Command_builder{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes:  &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{}}}}, nil
+			CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{}}.Build()}, nil
 	}
 
 	poller := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
 		Namespace:           s.Namespace().String(),
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		TaskQueue:           taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
 		ActivityTaskHandler: nil,
@@ -90,7 +90,7 @@ func (s *RelayTaskTestSuite) TestRelayWorkflowTaskTimeout() {
 	s.NoError(err)
 	newTask := res.NewTask
 	s.NotNil(newTask)
-	s.NotNil(newTask.WorkflowTask)
+	s.NotNil(newTask.GetWorkflowTask())
 
 	//nolint:forbidigo
 	time.Sleep(time.Second * 2) // wait 2s for relay workflow task to timeout

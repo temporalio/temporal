@@ -151,12 +151,12 @@ func (h *historyArchiver) Archive(ctx context.Context, URI archiver.URI, request
 			return err
 		}
 
-		if historyMutated(request, historyBlob.Body, historyBlob.Header.IsLast) {
+		if historyMutated(request, historyBlob.GetBody(), historyBlob.GetHeader().GetIsLast()) {
 			logger.Error(archiver.ArchiveNonRetryableErrorMsg, tag.ArchivalArchiveFailReason(archiver.ErrReasonHistoryMutated))
 			return archiver.ErrHistoryMutated
 		}
 
-		encodedHistoryPart, err := encoder.EncodeHistories(historyBlob.Body)
+		encodedHistoryPart, err := encoder.EncodeHistories(historyBlob.GetBody())
 		if err != nil {
 			logger.Error(archiver.ArchiveNonRetryableErrorMsg, tag.ArchivalArchiveFailReason(errEncodeHistory), tag.Error(err))
 			return errUploadNonRetryable
@@ -247,7 +247,7 @@ outer:
 		for idx, batch := range batches {
 			response.HistoryBatches = append(response.HistoryBatches, batch)
 			token.BatchIdxOffset++
-			numOfEvents += len(batch.Events)
+			numOfEvents += len(batch.GetEvents())
 
 			if numOfEvents >= request.PageSize {
 				if idx == len(batches)-1 {
@@ -299,7 +299,7 @@ func (h *historyArchiver) validateURI(URI archiver.URI) (err error) {
 }
 
 func historyMutated(request *archiver.ArchiveHistoryRequest, historyBatches []*historypb.History, isLast bool) bool {
-	lastBatch := historyBatches[len(historyBatches)-1].Events
+	lastBatch := historyBatches[len(historyBatches)-1].GetEvents()
 	lastEvent := lastBatch[len(lastBatch)-1]
 	lastFailoverVersion := lastEvent.GetVersion()
 	if lastFailoverVersion > request.CloseFailoverVersion {

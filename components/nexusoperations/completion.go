@@ -21,21 +21,19 @@ func handleSuccessfulOperationResult(
 	result *commonpb.Payload,
 	links []*commonpb.Link,
 ) error {
-	eventID, err := hsm.EventIDFromToken(operation.ScheduledEventToken)
+	eventID, err := hsm.EventIDFromToken(operation.GetScheduledEventToken())
 	if err != nil {
 		return err
 	}
 	event := node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED, func(e *historypb.HistoryEvent) {
 		// We must assign to this property, linter doesn't like this.
 		// nolint:revive
-		e.Attributes = &historypb.HistoryEvent_NexusOperationCompletedEventAttributes{
-			NexusOperationCompletedEventAttributes: &historypb.NexusOperationCompletedEventAttributes{
-				ScheduledEventId: eventID,
-				Result:           result,
-				RequestId:        operation.RequestId,
-			},
-		}
-		e.Links = links
+		e.SetNexusOperationCompletedEventAttributes(historypb.NexusOperationCompletedEventAttributes_builder{
+			ScheduledEventId: eventID,
+			Result:           result,
+			RequestId:        operation.GetRequestId(),
+		}.Build())
+		e.SetLinks(links)
 	})
 	return CompletedEventDefinition{}.Apply(node.Parent, event)
 }
@@ -45,7 +43,7 @@ func handleOperationError(
 	operation Operation,
 	opFailedError *nexus.OperationError,
 ) error {
-	eventID, err := hsm.EventIDFromToken(operation.ScheduledEventToken)
+	eventID, err := hsm.EventIDFromToken(operation.GetScheduledEventToken())
 	if err != nil {
 		return err
 	}
@@ -59,13 +57,11 @@ func handleOperationError(
 		event := node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED, func(e *historypb.HistoryEvent) {
 			// We must assign to this property, linter doesn't like this.
 			// nolint:revive
-			e.Attributes = &historypb.HistoryEvent_NexusOperationFailedEventAttributes{
-				NexusOperationFailedEventAttributes: &historypb.NexusOperationFailedEventAttributes{
-					Failure:          nexusOperationFailure(operation, eventID, failure),
-					ScheduledEventId: eventID,
-					RequestId:        operation.RequestId,
-				},
-			}
+			e.SetNexusOperationFailedEventAttributes(historypb.NexusOperationFailedEventAttributes_builder{
+				Failure:          nexusOperationFailure(operation, eventID, failure),
+				ScheduledEventId: eventID,
+				RequestId:        operation.GetRequestId(),
+			}.Build())
 		})
 
 		return FailedEventDefinition{}.Apply(node.Parent, event)
@@ -73,13 +69,11 @@ func handleOperationError(
 		event := node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED, func(e *historypb.HistoryEvent) {
 			// We must assign to this property, linter doesn't like this.
 			// nolint:revive
-			e.Attributes = &historypb.HistoryEvent_NexusOperationCanceledEventAttributes{
-				NexusOperationCanceledEventAttributes: &historypb.NexusOperationCanceledEventAttributes{
-					Failure:          nexusOperationFailure(operation, eventID, failure),
-					ScheduledEventId: eventID,
-					RequestId:        operation.RequestId,
-				},
-			}
+			e.SetNexusOperationCanceledEventAttributes(historypb.NexusOperationCanceledEventAttributes_builder{
+				Failure:          nexusOperationFailure(operation, eventID, failure),
+				ScheduledEventId: eventID,
+				RequestId:        operation.GetRequestId(),
+			}.Build())
 		})
 
 		return CanceledEventDefinition{}.Apply(node.Parent, event)
@@ -109,24 +103,22 @@ func fabricateStartedEventIfMissing(
 		return nil
 	}
 
-	eventID, err := hsm.EventIDFromToken(operation.ScheduledEventToken)
+	eventID, err := hsm.EventIDFromToken(operation.GetScheduledEventToken())
 	if err != nil {
 		return err
 	}
 
 	event := node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED, func(e *historypb.HistoryEvent) {
-		e.Attributes = &historypb.HistoryEvent_NexusOperationStartedEventAttributes{
-			NexusOperationStartedEventAttributes: &historypb.NexusOperationStartedEventAttributes{
-				ScheduledEventId: eventID,
-				OperationToken:   operationToken,
-				// TODO(bergundy): Remove this fallback after the 1.27 release.
-				OperationId: operationToken,
-				RequestId:   requestID,
-			},
-		}
-		e.Links = links
+		e.SetNexusOperationStartedEventAttributes(historypb.NexusOperationStartedEventAttributes_builder{
+			ScheduledEventId: eventID,
+			OperationToken:   operationToken,
+			// TODO(bergundy): Remove this fallback after the 1.27 release.
+			OperationId: operationToken,
+			RequestId:   requestID,
+		}.Build())
+		e.SetLinks(links)
 		if startTime != nil {
-			e.EventTime = startTime
+			e.SetEventTime(startTime)
 		}
 	})
 	return StartedEventDefinition{}.Apply(node.Parent, event)
@@ -157,7 +149,7 @@ func CompletionHandler(
 		if err != nil {
 			return nil
 		}
-		if requestID != "" && operation.RequestId != requestID {
+		if requestID != "" && operation.GetRequestId() != requestID {
 			isRetryableNotFoundErr = false
 			return serviceerror.NewNotFound("operation not found")
 		}
@@ -180,9 +172,9 @@ func CompletionHandler(
 		// VersionedTransition is for a specific run. After reset, the TransitionCount will
 		// start from 1 again. Reset the TransitionCount to 0 here to fallback to old ref
 		// validation logic.
-		ref.StateMachineRef.MutableStateVersionedTransition = nil
-		ref.StateMachineRef.MachineInitialVersionedTransition.TransitionCount = 0
-		ref.StateMachineRef.MachineLastUpdateVersionedTransition.TransitionCount = 0
+		ref.StateMachineRef.ClearMutableStateVersionedTransition()
+		ref.StateMachineRef.GetMachineInitialVersionedTransition().SetTransitionCount(0)
+		ref.StateMachineRef.GetMachineLastUpdateVersionedTransition().SetTransitionCount(0)
 		return CompletionHandler(ctx, env, ref, requestID, operationToken, startTime, links, result, opFailedError)
 	}
 	return err

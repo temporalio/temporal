@@ -256,9 +256,9 @@ func (h *NexusHTTPHandler) baseNexusContext(apiName string) *nexusContext {
 // For security reasons, at the moment only worker target endpoints are considered valid, in the future external
 // endpoints may also be supported.
 func (h *NexusHTTPHandler) nexusContextFromEndpoint(entry *persistencespb.NexusEndpointEntry, w http.ResponseWriter) (*nexusContext, bool) {
-	switch v := entry.Endpoint.Spec.GetTarget().GetVariant().(type) {
-	case *persistencespb.NexusEndpointTarget_Worker_:
-		nsName, err := h.namespaceRegistry.GetNamespaceName(namespace.ID(v.Worker.GetNamespaceId()))
+	switch entry.GetEndpoint().GetSpec().GetTarget().WhichVariant() {
+	case persistencespb.NexusEndpointTarget_Worker_case:
+		nsName, err := h.namespaceRegistry.GetNamespaceName(namespace.ID(entry.GetEndpoint().GetSpec().GetTarget().GetWorker().GetNamespaceId()))
 		if err != nil {
 			h.logger.Error("failed to get namespace name by ID", tag.Error(err))
 			var notFoundErr *serviceerror.NamespaceNotFound
@@ -272,9 +272,9 @@ func (h *NexusHTTPHandler) nexusContextFromEndpoint(entry *persistencespb.NexusE
 		}
 		nc := h.baseNexusContext(configs.DispatchNexusTaskByEndpointAPIName)
 		nc.namespaceName = nsName.String()
-		nc.taskQueue = v.Worker.GetTaskQueue()
-		nc.endpointName = entry.Endpoint.Spec.Name
-		nc.endpointID = entry.Id
+		nc.taskQueue = entry.GetEndpoint().GetSpec().GetTarget().GetWorker().GetTaskQueue()
+		nc.endpointName = entry.GetEndpoint().GetSpec().GetName()
+		nc.endpointID = entry.GetId()
 		return nc, true
 	default:
 		h.writeNexusFailure(w, http.StatusBadRequest, &nexus.Failure{Message: "invalid endpoint target"})

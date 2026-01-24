@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/proto"
 )
 
 type (
@@ -133,16 +134,16 @@ func (s *executableHistoryTaskSuite) SetupTest() {
 	firstEventID := rand.Int63()
 	nextEventID := firstEventID + 1
 	version := rand.Int63()
-	eventsBlob, _ := s.eventSerializer.SerializeEvents([]*historypb.HistoryEvent{{
+	eventsBlob, _ := s.eventSerializer.SerializeEvents([]*historypb.HistoryEvent{historypb.HistoryEvent_builder{
 		EventId: firstEventID,
 		Version: version,
-	}})
+	}.Build()})
 	s.events, _ = s.eventSerializer.DeserializeEvents(eventsBlob)
 	s.eventsBatches = [][]*historypb.HistoryEvent{s.events}
-	newEventsBlob, _ := s.eventSerializer.SerializeEvents([]*historypb.HistoryEvent{{
+	newEventsBlob, _ := s.eventSerializer.SerializeEvents([]*historypb.HistoryEvent{historypb.HistoryEvent_builder{
 		EventId: 1,
 		Version: version,
-	}})
+	}.Build()})
 	s.newRunEvents, _ = s.eventSerializer.DeserializeEvents(newEventsBlob)
 	s.newRunID = uuid.NewString()
 
@@ -152,20 +153,20 @@ func (s *executableHistoryTaskSuite) SetupTest() {
 		s.eventsBlob = eventsBlob
 	}
 
-	s.replicationTask = &replicationspb.HistoryTaskAttributes{
+	s.replicationTask = replicationspb.HistoryTaskAttributes_builder{
 		NamespaceId:       uuid.NewString(),
 		WorkflowId:        uuid.NewString(),
 		RunId:             uuid.NewString(),
 		BaseExecutionInfo: &workflowspb.BaseExecutionInfo{},
-		VersionHistoryItems: []*historyspb.VersionHistoryItem{{
+		VersionHistoryItems: []*historyspb.VersionHistoryItem{historyspb.VersionHistoryItem_builder{
 			EventId: nextEventID - 1,
 			Version: version,
-		}},
+		}.Build()},
 		Events:        s.eventsBlob,
 		NewRunEvents:  newEventsBlob,
 		NewRunId:      s.newRunID,
 		EventsBatches: s.eventsBlobs,
-	}
+	}.Build()
 	s.sourceClusterName = cluster.TestCurrentClusterName
 	s.sourceShardKey = ClusterShardKey{
 		ClusterID: int32(cluster.TestCurrentClusterInitialFailoverVersion),
@@ -179,9 +180,9 @@ func (s *executableHistoryTaskSuite) SetupTest() {
 		s.replicationTask,
 		s.sourceClusterName,
 		s.sourceShardKey,
-		&replicationspb.ReplicationTask{
+		replicationspb.ReplicationTask_builder{
 			Priority: enumsspb.TASK_PRIORITY_HIGH,
-		},
+		}.Build(),
 	)
 	s.task.ExecutableTask = s.executableTask
 	s.executableTask.EXPECT().TaskID().Return(s.taskID).AnyTimes()
@@ -336,14 +337,12 @@ func (s *executableHistoryTaskSuite) TestMarkPoisonPill() {
 	).Return(shardContext, nil).AnyTimes()
 	shardContext.EXPECT().GetShardID().Return(shardID).AnyTimes()
 
-	replicationTask := &replicationspb.ReplicationTask{
-		TaskType:     enumsspb.REPLICATION_TASK_TYPE_HISTORY_TASK,
-		SourceTaskId: s.taskID,
-		Attributes: &replicationspb.ReplicationTask_HistoryTaskAttributes{
-			HistoryTaskAttributes: s.replicationTask,
-		},
-		RawTaskInfo: nil,
-	}
+	replicationTask := replicationspb.ReplicationTask_builder{
+		TaskType:              enumsspb.REPLICATION_TASK_TYPE_HISTORY_TASK,
+		SourceTaskId:          s.taskID,
+		HistoryTaskAttributes: proto.ValueOrDefault(s.replicationTask),
+		RawTaskInfo:           nil,
+	}.Build()
 	s.executableTask.EXPECT().ReplicationTask().Return(replicationTask).AnyTimes()
 	s.executableTask.EXPECT().MarkPoisonPill().Times(1)
 
@@ -418,16 +417,16 @@ func (s *executableHistoryTaskSuite) TestBatchWith_EventVersionNotMatch_BatchFai
 func (s *executableHistoryTaskSuite) TestBatchWith_VersionHistoryDoesNotMatch_BatchFailed() {
 	currentTask, incomingTask := s.generateTwoBatchableTasks()
 	currentTask.versionHistoryItems = []*historyspb.VersionHistoryItem{
-		{
+		historyspb.VersionHistoryItem_builder{
 			EventId: 108,
 			Version: 3,
-		},
+		}.Build(),
 	}
 	incomingTask.versionHistoryItems = []*historyspb.VersionHistoryItem{
-		{
+		historyspb.VersionHistoryItem_builder{
 			EventId: 108,
 			Version: 4,
-		},
+		}.Build(),
 	}
 	_, success := currentTask.BatchWith(incomingTask)
 	s.False(success)
@@ -444,10 +443,10 @@ func (s *executableHistoryTaskSuite) TestBatchWith_WorkflowKeyDoesNotMatch_Batch
 func (s *executableHistoryTaskSuite) TestBatchWith_CurrentTaskHasNewRunEvents_BatchFailed() {
 	currentTask, incomingTask := s.generateTwoBatchableTasks()
 	currentTask.eventsDesResponse.newRunEvents = []*historypb.HistoryEvent{
-		{
+		historypb.HistoryEvent_builder{
 			EventId: 104,
 			Version: 3,
-		},
+		}.Build(),
 	}
 	_, success := currentTask.BatchWith(incomingTask)
 	s.False(success)
@@ -457,10 +456,10 @@ func (s *executableHistoryTaskSuite) TestBatchWith_IncomingTaskHasNewRunEvents_B
 	currentTask, incomingTask := s.generateTwoBatchableTasks()
 	incomingTask.newRunID = uuid.NewString()
 	incomingTask.eventsDesResponse.newRunEvents = []*historypb.HistoryEvent{
-		{
+		historypb.HistoryEvent_builder{
 			EventId: 104,
 			Version: 3,
-		},
+		}.Build(),
 	}
 	batchedTask, success := currentTask.BatchWith(incomingTask)
 	s.True(success)
@@ -510,16 +509,16 @@ func (s *executableHistoryTaskSuite) generateTwoBatchableTasks() (*ExecutableHis
 		},
 	}
 	currentVersionHistoryItems := []*historyspb.VersionHistoryItem{
-		{
+		historyspb.VersionHistoryItem_builder{
 			EventId: 102,
 			Version: 3,
-		},
+		}.Build(),
 	}
 	incomingVersionHistoryItems := []*historyspb.VersionHistoryItem{
-		{
+		historyspb.VersionHistoryItem_builder{
 			EventId: 108,
 			Version: 3,
-		},
+		}.Build(),
 	}
 	namespaceId := uuid.NewString()
 	workflowId := uuid.NewString()
@@ -561,7 +560,7 @@ func (s *executableHistoryTaskSuite) buildExecutableHistoryTask(
 ) *ExecutableHistoryTask {
 	eventsBlob, _ := s.eventSerializer.SerializeEvents(events[0])
 	newRunEventsBlob, _ := s.eventSerializer.SerializeEvents(newRunEvents)
-	replicationTaskAttribute := &replicationspb.HistoryTaskAttributes{
+	replicationTaskAttribute := replicationspb.HistoryTaskAttributes_builder{
 		WorkflowId:          workflowKey.WorkflowID,
 		NamespaceId:         workflowKey.NamespaceID,
 		RunId:               workflowKey.RunID,
@@ -570,7 +569,7 @@ func (s *executableHistoryTaskSuite) buildExecutableHistoryTask(
 		Events:              eventsBlob,
 		NewRunEvents:        newRunEventsBlob,
 		NewRunId:            newRunID,
-	}
+	}.Build()
 	executableTask := NewMockExecutableTask(s.controller)
 	executableTask.EXPECT().TaskID().Return(taskId).AnyTimes()
 	executableTask.EXPECT().SourceClusterName().Return(s.sourceClusterName).AnyTimes()
@@ -581,9 +580,9 @@ func (s *executableHistoryTaskSuite) buildExecutableHistoryTask(
 		replicationTaskAttribute,
 		s.sourceClusterName,
 		s.sourceShardKey,
-		&replicationspb.ReplicationTask{
+		replicationspb.ReplicationTask_builder{
 			Priority: enumsspb.TASK_PRIORITY_HIGH,
-		},
+		}.Build(),
 	)
 	executableHistoryTask.ExecutableTask = executableTask
 	return executableHistoryTask

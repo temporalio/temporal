@@ -20,13 +20,13 @@ func TestInvoke_InvalidCategory(t *testing.T) {
 	t.Parallel()
 
 	queueKey := persistencetest.GetQueueKey(t, persistencetest.WithQueueType(persistence.QueueTypeHistoryDLQ))
-	_, err := deletedlqtasks.Invoke(context.Background(), nil, &historyservice.DeleteDLQTasksRequest{
-		DlqKey: &commonspb.HistoryDLQKey{
+	_, err := deletedlqtasks.Invoke(context.Background(), nil, historyservice.DeleteDLQTasksRequest_builder{
+		DlqKey: commonspb.HistoryDLQKey_builder{
 			TaskCategory:  -1,
 			SourceCluster: queueKey.SourceCluster,
 			TargetCluster: queueKey.TargetCluster,
-		},
-	}, tasks.NewDefaultTaskCategoryRegistry())
+		}.Build(),
+	}.Build(), tasks.NewDefaultTaskCategoryRegistry())
 	require.Error(t, err)
 	assert.Equal(t, codes.InvalidArgument, serviceerror.ToStatus(err).Code())
 	assert.ErrorContains(t, err, "-1")
@@ -36,13 +36,13 @@ func TestInvoke_ErrDeleteMissingMessageIDUpperBound(t *testing.T) {
 	t.Parallel()
 
 	queueKey := persistencetest.GetQueueKey(t, persistencetest.WithQueueType(persistence.QueueTypeHistoryDLQ))
-	_, err := deletedlqtasks.Invoke(context.Background(), nil, &historyservice.DeleteDLQTasksRequest{
-		DlqKey: &commonspb.HistoryDLQKey{
+	_, err := deletedlqtasks.Invoke(context.Background(), nil, historyservice.DeleteDLQTasksRequest_builder{
+		DlqKey: commonspb.HistoryDLQKey_builder{
 			TaskCategory:  int32(queueKey.Category.ID()),
 			SourceCluster: queueKey.SourceCluster,
 			TargetCluster: queueKey.TargetCluster,
-		},
-	}, tasks.NewDefaultTaskCategoryRegistry())
+		}.Build(),
+	}.Build(), tasks.NewDefaultTaskCategoryRegistry())
 	require.Error(t, err)
 	assert.Equal(t, codes.InvalidArgument, serviceerror.ToStatus(err).Code())
 	assert.ErrorContains(t, err, "inclusive_max_task_metadata")

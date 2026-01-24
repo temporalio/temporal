@@ -40,7 +40,7 @@ func AdminListTaskQueueTasks(c *cli.Context, clientFactory ClientFactory) error 
 	}
 	client := clientFactory.AdminClient(c)
 
-	req := &adminservice.GetTaskQueueTasksRequest{
+	req := adminservice.GetTaskQueueTasksRequest_builder{
 		Namespace:     namespace,
 		TaskQueue:     tqName,
 		TaskQueueType: tqType,
@@ -49,27 +49,27 @@ func AdminListTaskQueueTasks(c *cli.Context, clientFactory ClientFactory) error 
 		BatchSize:     int32(pageSize),
 		Subqueue:      int32(subqueue),
 		MinPass:       minPass,
-	}
+	}.Build()
 
 	paginationFunc := func(paginationToken []byte) ([]interface{}, []byte, error) {
 		ctx, cancel := newContext(c)
 		defer cancel()
 
-		req.NextPageToken = paginationToken
+		req.SetNextPageToken(paginationToken)
 		response, err := client.GetTaskQueueTasks(ctx, req)
 		if err != nil {
 			return nil, nil, err
 		}
 
-		tasks := response.Tasks
+		tasks := response.GetTasks()
 		if workflowID != "" {
 			filteredTasks := tasks[:0]
 
 			for _, task := range tasks {
-				if task.Data.WorkflowId != workflowID {
+				if task.GetData().GetWorkflowId() != workflowID {
 					continue
 				}
-				if runID != "" && task.Data.RunId != runID {
+				if runID != "" && task.GetData().GetRunId() != runID {
 					continue
 				}
 				filteredTasks = append(filteredTasks, task)
@@ -82,7 +82,7 @@ func AdminListTaskQueueTasks(c *cli.Context, clientFactory ClientFactory) error 
 		for _, task := range tasks {
 			items = append(items, task)
 		}
-		return items, response.NextPageToken, nil
+		return items, response.GetNextPageToken(), nil
 	}
 
 	if err := paginate(c, paginationFunc, pageSize); err != nil {
@@ -150,26 +150,26 @@ func AdminDescribeTaskQueuePartition(c *cli.Context, clientFactory ClientFactory
 		allActive = c.Bool(FlagAllActive)
 	}
 
-	tqPartition := &taskqueuespb.TaskQueuePartition{
+	tqPartition := taskqueuespb.TaskQueuePartition_builder{
 		TaskQueue:     tqName,
 		TaskQueueType: tqType,
-	}
+	}.Build()
 	if stickyName != "" {
-		tqPartition.PartitionId = &taskqueuespb.TaskQueuePartition_StickyName{StickyName: stickyName}
+		tqPartition.SetStickyName(stickyName)
 	} else {
-		tqPartition.PartitionId = &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: int32(partitionID)}
+		tqPartition.SetNormalPartitionId(int32(partitionID))
 	}
 
 	client := clientFactory.AdminClient(c)
-	req := &adminservice.DescribeTaskQueuePartitionRequest{
+	req := adminservice.DescribeTaskQueuePartitionRequest_builder{
 		Namespace:          namespace,
 		TaskQueuePartition: tqPartition,
-		BuildIds: &taskqueuepb.TaskQueueVersionSelection{
+		BuildIds: taskqueuepb.TaskQueueVersionSelection_builder{
 			BuildIds:    buildIDs,
 			Unversioned: unversioned,
 			AllActive:   allActive,
-		},
-	}
+		}.Build(),
+	}.Build()
 
 	ctx, cancel := newContext(c)
 	defer cancel()
@@ -223,21 +223,21 @@ func AdminForceUnloadTaskQueuePartition(c *cli.Context, clientFactory ClientFact
 		stickyName = c.String(FlagStickyName)
 	}
 
-	tqPartition := &taskqueuespb.TaskQueuePartition{
+	tqPartition := taskqueuespb.TaskQueuePartition_builder{
 		TaskQueue:     tqName,
 		TaskQueueType: tqType,
-	}
+	}.Build()
 	if stickyName != "" {
-		tqPartition.PartitionId = &taskqueuespb.TaskQueuePartition_StickyName{StickyName: stickyName}
+		tqPartition.SetStickyName(stickyName)
 	} else {
-		tqPartition.PartitionId = &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: int32(partitionID)}
+		tqPartition.SetNormalPartitionId(int32(partitionID))
 	}
 
 	client := clientFactory.AdminClient(c)
-	req := &adminservice.ForceUnloadTaskQueuePartitionRequest{
+	req := adminservice.ForceUnloadTaskQueuePartitionRequest_builder{
 		Namespace:          namespace,
 		TaskQueuePartition: tqPartition,
-	}
+	}.Build()
 
 	ctx, cancel := newContext(c)
 	defer cancel()

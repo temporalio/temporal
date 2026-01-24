@@ -92,64 +92,64 @@ func rebuildMutableStateWorkflowHelper(s *AdminTestSuite, testWithChasm bool) {
 
 	var response1 *adminservice.DescribeMutableStateResponse
 	for {
-		response1, err = s.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
+		response1, err = s.AdminClient().DescribeMutableState(ctx, adminservice.DescribeMutableStateRequest_builder{
 			Namespace: s.Namespace().String(),
-			Execution: &commonpb.WorkflowExecution{
+			Execution: commonpb.WorkflowExecution_builder{
 				WorkflowId: workflowID,
 				RunId:      runID,
-			},
+			}.Build(),
 			Archetype: chasm.WorkflowArchetype,
-		})
+		}.Build())
 		s.NoError(err)
-		if response1.DatabaseMutableState.ExecutionInfo.StateTransitionCount == 3 {
+		if response1.GetDatabaseMutableState().GetExecutionInfo().GetStateTransitionCount() == 3 {
 			// Note: ChasmNodes may be empty even with CHASM enabled, so we only check if the rebuild can be performed,
 			// and not checking whether it is rebuildable because ChasmNodes are present.
 			if !testWithChasm {
-				s.Empty(response1.DatabaseMutableState.ChasmNodes, "CHASM-disabled workflows should not have ChasmNodes")
+				s.Empty(response1.GetDatabaseMutableState().GetChasmNodes(), "CHASM-disabled workflows should not have ChasmNodes")
 			}
 			break
 		}
 		time.Sleep(20 * time.Millisecond) //nolint:forbidigo
 	}
 
-	_, err = s.AdminClient().RebuildMutableState(ctx, &adminservice.RebuildMutableStateRequest{
+	_, err = s.AdminClient().RebuildMutableState(ctx, adminservice.RebuildMutableStateRequest_builder{
 		Namespace: s.Namespace().String(),
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: workflowID,
 			RunId:      runID,
-		},
-	})
+		}.Build(),
+	}.Build())
 	s.NoError(err)
 
-	response2, err := s.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
+	response2, err := s.AdminClient().DescribeMutableState(ctx, adminservice.DescribeMutableStateRequest_builder{
 		Namespace: s.Namespace().String(),
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: workflowID,
 			RunId:      runID,
-		},
+		}.Build(),
 		Archetype: chasm.WorkflowArchetype,
-	})
+	}.Build())
 	s.NoError(err)
-	s.Equal(response1.DatabaseMutableState.ExecutionInfo.VersionHistories, response2.DatabaseMutableState.ExecutionInfo.VersionHistories)
-	s.Equal(response1.DatabaseMutableState.ExecutionInfo.StateTransitionCount, response2.DatabaseMutableState.ExecutionInfo.StateTransitionCount)
+	s.Equal(response1.GetDatabaseMutableState().GetExecutionInfo().GetVersionHistories(), response2.GetDatabaseMutableState().GetExecutionInfo().GetVersionHistories())
+	s.Equal(response1.GetDatabaseMutableState().GetExecutionInfo().GetStateTransitionCount(), response2.GetDatabaseMutableState().GetExecutionInfo().GetStateTransitionCount())
 
-	s.Equal(response1.DatabaseMutableState.ExecutionState.CreateRequestId, response2.DatabaseMutableState.ExecutionState.CreateRequestId)
-	s.Equal(response1.DatabaseMutableState.ExecutionState.RunId, response2.DatabaseMutableState.ExecutionState.RunId)
-	s.Equal(response1.DatabaseMutableState.ExecutionState.State, response2.DatabaseMutableState.ExecutionState.State)
-	s.Equal(response1.DatabaseMutableState.ExecutionState.Status, response2.DatabaseMutableState.ExecutionState.Status)
+	s.Equal(response1.GetDatabaseMutableState().GetExecutionState().GetCreateRequestId(), response2.GetDatabaseMutableState().GetExecutionState().GetCreateRequestId())
+	s.Equal(response1.GetDatabaseMutableState().GetExecutionState().GetRunId(), response2.GetDatabaseMutableState().GetExecutionState().GetRunId())
+	s.Equal(response1.GetDatabaseMutableState().GetExecutionState().GetState(), response2.GetDatabaseMutableState().GetExecutionState().GetState())
+	s.Equal(response1.GetDatabaseMutableState().GetExecutionState().GetStatus(), response2.GetDatabaseMutableState().GetExecutionState().GetStatus())
 
 	// From transition history perspective, Rebuild is considered as an update to the workflow and updates
 	// all sub state machines in the workflow, which includes the workflow ExecutionState.
-	s.Equal(&persistencespb.VersionedTransition{
-		NamespaceFailoverVersion: response1.DatabaseMutableState.ExecutionState.LastUpdateVersionedTransition.NamespaceFailoverVersion,
-		TransitionCount:          response1.DatabaseMutableState.ExecutionInfo.StateTransitionCount + 1,
-	}, response2.DatabaseMutableState.ExecutionState.LastUpdateVersionedTransition)
+	s.Equal(persistencespb.VersionedTransition_builder{
+		NamespaceFailoverVersion: response1.GetDatabaseMutableState().GetExecutionState().GetLastUpdateVersionedTransition().GetNamespaceFailoverVersion(),
+		TransitionCount:          response1.GetDatabaseMutableState().GetExecutionInfo().GetStateTransitionCount() + 1,
+	}.Build(), response2.GetDatabaseMutableState().GetExecutionState().GetLastUpdateVersionedTransition())
 
 	// Rebuild explicitly sets start time, thus start time will change after rebuild.
-	s.NotNil(response1.DatabaseMutableState.ExecutionState.StartTime)
-	s.NotNil(response2.DatabaseMutableState.ExecutionState.StartTime)
+	s.NotNil(response1.GetDatabaseMutableState().GetExecutionState().GetStartTime())
+	s.NotNil(response2.GetDatabaseMutableState().GetExecutionState().GetStartTime())
 
-	timeBefore := timestamp.TimeValue(response1.DatabaseMutableState.ExecutionState.StartTime)
-	timeAfter := timestamp.TimeValue(response2.DatabaseMutableState.ExecutionState.StartTime)
+	timeBefore := timestamp.TimeValue(response1.GetDatabaseMutableState().GetExecutionState().GetStartTime())
+	timeAfter := timestamp.TimeValue(response2.GetDatabaseMutableState().GetExecutionState().GetStartTime())
 	s.False(timeAfter.Before(timeBefore))
 }

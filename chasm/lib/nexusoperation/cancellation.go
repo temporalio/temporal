@@ -20,7 +20,7 @@ func NewCancellation() *Cancellation {
 }
 
 func (o *Cancellation) LifecycleState(_ chasm.Context) chasm.LifecycleState {
-	switch o.Status {
+	switch o.GetStatus() {
 	case nexusoperationpb.CANCELLATION_STATUS_SUCCEEDED:
 		return chasm.LifecycleStateCompleted
 	case nexusoperationpb.CANCELLATION_STATUS_FAILED,
@@ -32,9 +32,9 @@ func (o *Cancellation) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 }
 
 func (o *Cancellation) StateMachineState() nexusoperationpb.CancellationStatus {
-	return o.Status
+	return o.GetStatus()
 }
 
 func (o *Cancellation) SetStateMachineState(status nexusoperationpb.CancellationStatus) {
-	o.Status = status
+	o.SetStatus(status)
 }

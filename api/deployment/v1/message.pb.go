@@ -8,7 +8,6 @@ package deployment
 
 import (
 	reflect "reflect"
-	sync "sync"
 	unsafe "unsafe"
 
 	v12 "go.temporal.io/api/common/v1"
@@ -29,14 +28,11 @@ const (
 // Identifies a Worker Deployment Version. The combination of `deployment_name` and `build_id`
 // serve as the identifier.
 type WorkerDeploymentVersion struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// The name of the Deployment this version belongs too.
-	DeploymentName string `protobuf:"bytes,1,opt,name=deployment_name,json=deploymentName,proto3" json:"deployment_name,omitempty"`
-	// Build ID uniquely identifies the Deployment Version within a Deployment, but the same Build
-	// ID can be used in multiple Deployments.
-	BuildId       string `protobuf:"bytes,2,opt,name=build_id,json=buildId,proto3" json:"build_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                     protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_DeploymentName string                 `protobuf:"bytes,1,opt,name=deployment_name,json=deploymentName,proto3"`
+	xxx_hidden_BuildId        string                 `protobuf:"bytes,2,opt,name=build_id,json=buildId,proto3"`
+	unknownFields             protoimpl.UnknownFields
+	sizeCache                 protoimpl.SizeCache
 }
 
 func (x *WorkerDeploymentVersion) Reset() {
@@ -64,53 +60,60 @@ func (x *WorkerDeploymentVersion) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use WorkerDeploymentVersion.ProtoReflect.Descriptor instead.
-func (*WorkerDeploymentVersion) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{0}
-}
-
 func (x *WorkerDeploymentVersion) GetDeploymentName() string {
 	if x != nil {
-		return x.DeploymentName
+		return x.xxx_hidden_DeploymentName
 	}
 	return ""
 }
 
 func (x *WorkerDeploymentVersion) GetBuildId() string {
 	if x != nil {
-		return x.BuildId
+		return x.xxx_hidden_BuildId
 	}
 	return ""
+}
+
+func (x *WorkerDeploymentVersion) SetDeploymentName(v string) {
+	x.xxx_hidden_DeploymentName = v
+}
+
+func (x *WorkerDeploymentVersion) SetBuildId(v string) {
+	x.xxx_hidden_BuildId = v
+}
+
+type WorkerDeploymentVersion_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// The name of the Deployment this version belongs too.
+	DeploymentName string
+	// Build ID uniquely identifies the Deployment Version within a Deployment, but the same Build
+	// ID can be used in multiple Deployments.
+	BuildId string
+}
+
+func (b0 WorkerDeploymentVersion_builder) Build() *WorkerDeploymentVersion {
+	m0 := &WorkerDeploymentVersion{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_DeploymentName = b.DeploymentName
+	x.xxx_hidden_BuildId = b.BuildId
+	return m0
 }
 
 // The source of truth for this data is in the WorkerDeployment entity workflows, which is
 // synced to all TQs whenever the source changes.
 // Deprecated.
 type DeploymentVersionData struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Nil means unversioned.
-	Version *WorkerDeploymentVersion `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`
-	// Last time `current_since_time`, `ramping_since_time, or `ramp_percentage` of this version changed.
-	RoutingUpdateTime *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=routing_update_time,json=routingUpdateTime,proto3" json:"routing_update_time,omitempty"`
-	// (-- api-linter: core::0140::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: 'Since' captures the field semantics despite being a preposition. --)
-	//
-	// Nil if not current.
-	CurrentSinceTime *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=current_since_time,json=currentSinceTime,proto3" json:"current_since_time,omitempty"`
-	// (-- api-linter: core::0140::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: 'Since' captures the field semantics despite being a preposition. --)
-	//
-	// Nil if not ramping. Updated when the version first starts ramping, not on each ramp change.
-	RampingSinceTime *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=ramping_since_time,json=rampingSinceTime,proto3" json:"ramping_since_time,omitempty"`
-	// Range: [0, 100]. Must be zero if the version is not ramping (i.e. `ramping_since_time` is nil).
-	// Can be in the range [0, 100] if the version is ramping.
-	RampPercentage float32 `protobuf:"fixed32,5,opt,name=ramp_percentage,json=rampPercentage,proto3" json:"ramp_percentage,omitempty"`
-	// Status of the Worker Deployment Version.
-	Status        v1.WorkerDeploymentVersionStatus `protobuf:"varint,6,opt,name=status,proto3,enum=temporal.api.enums.v1.WorkerDeploymentVersionStatus" json:"status,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                        protoimpl.MessageState           `protogen:"opaque.v1"`
+	xxx_hidden_Version           *WorkerDeploymentVersion         `protobuf:"bytes,1,opt,name=version,proto3"`
+	xxx_hidden_RoutingUpdateTime *timestamppb.Timestamp           `protobuf:"bytes,2,opt,name=routing_update_time,json=routingUpdateTime,proto3"`
+	xxx_hidden_CurrentSinceTime  *timestamppb.Timestamp           `protobuf:"bytes,3,opt,name=current_since_time,json=currentSinceTime,proto3"`
+	xxx_hidden_RampingSinceTime  *timestamppb.Timestamp           `protobuf:"bytes,4,opt,name=ramping_since_time,json=rampingSinceTime,proto3"`
+	xxx_hidden_RampPercentage    float32                          `protobuf:"fixed32,5,opt,name=ramp_percentage,json=rampPercentage,proto3"`
+	xxx_hidden_Status            v1.WorkerDeploymentVersionStatus `protobuf:"varint,6,opt,name=status,proto3,enum=temporal.api.enums.v1.WorkerDeploymentVersionStatus"`
+	unknownFields                protoimpl.UnknownFields
+	sizeCache                    protoimpl.SizeCache
 }
 
 func (x *DeploymentVersionData) Reset() {
@@ -138,51 +141,153 @@ func (x *DeploymentVersionData) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DeploymentVersionData.ProtoReflect.Descriptor instead.
-func (*DeploymentVersionData) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{1}
-}
-
 func (x *DeploymentVersionData) GetVersion() *WorkerDeploymentVersion {
 	if x != nil {
-		return x.Version
+		return x.xxx_hidden_Version
 	}
 	return nil
 }
 
 func (x *DeploymentVersionData) GetRoutingUpdateTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.RoutingUpdateTime
+		return x.xxx_hidden_RoutingUpdateTime
 	}
 	return nil
 }
 
 func (x *DeploymentVersionData) GetCurrentSinceTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.CurrentSinceTime
+		return x.xxx_hidden_CurrentSinceTime
 	}
 	return nil
 }
 
 func (x *DeploymentVersionData) GetRampingSinceTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.RampingSinceTime
+		return x.xxx_hidden_RampingSinceTime
 	}
 	return nil
 }
 
 func (x *DeploymentVersionData) GetRampPercentage() float32 {
 	if x != nil {
-		return x.RampPercentage
+		return x.xxx_hidden_RampPercentage
 	}
 	return 0
 }
 
 func (x *DeploymentVersionData) GetStatus() v1.WorkerDeploymentVersionStatus {
 	if x != nil {
-		return x.Status
+		return x.xxx_hidden_Status
 	}
 	return v1.WorkerDeploymentVersionStatus(0)
+}
+
+func (x *DeploymentVersionData) SetVersion(v *WorkerDeploymentVersion) {
+	x.xxx_hidden_Version = v
+}
+
+func (x *DeploymentVersionData) SetRoutingUpdateTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_RoutingUpdateTime = v
+}
+
+func (x *DeploymentVersionData) SetCurrentSinceTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_CurrentSinceTime = v
+}
+
+func (x *DeploymentVersionData) SetRampingSinceTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_RampingSinceTime = v
+}
+
+func (x *DeploymentVersionData) SetRampPercentage(v float32) {
+	x.xxx_hidden_RampPercentage = v
+}
+
+func (x *DeploymentVersionData) SetStatus(v v1.WorkerDeploymentVersionStatus) {
+	x.xxx_hidden_Status = v
+}
+
+func (x *DeploymentVersionData) HasVersion() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Version != nil
+}
+
+func (x *DeploymentVersionData) HasRoutingUpdateTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_RoutingUpdateTime != nil
+}
+
+func (x *DeploymentVersionData) HasCurrentSinceTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_CurrentSinceTime != nil
+}
+
+func (x *DeploymentVersionData) HasRampingSinceTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_RampingSinceTime != nil
+}
+
+func (x *DeploymentVersionData) ClearVersion() {
+	x.xxx_hidden_Version = nil
+}
+
+func (x *DeploymentVersionData) ClearRoutingUpdateTime() {
+	x.xxx_hidden_RoutingUpdateTime = nil
+}
+
+func (x *DeploymentVersionData) ClearCurrentSinceTime() {
+	x.xxx_hidden_CurrentSinceTime = nil
+}
+
+func (x *DeploymentVersionData) ClearRampingSinceTime() {
+	x.xxx_hidden_RampingSinceTime = nil
+}
+
+type DeploymentVersionData_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Nil means unversioned.
+	Version *WorkerDeploymentVersion
+	// Last time `current_since_time`, `ramping_since_time, or `ramp_percentage` of this version changed.
+	RoutingUpdateTime *timestamppb.Timestamp
+	// (-- api-linter: core::0140::prepositions=disabled
+	//
+	//	aip.dev/not-precedent: 'Since' captures the field semantics despite being a preposition. --)
+	//
+	// Nil if not current.
+	CurrentSinceTime *timestamppb.Timestamp
+	// (-- api-linter: core::0140::prepositions=disabled
+	//
+	//	aip.dev/not-precedent: 'Since' captures the field semantics despite being a preposition. --)
+	//
+	// Nil if not ramping. Updated when the version first starts ramping, not on each ramp change.
+	RampingSinceTime *timestamppb.Timestamp
+	// Range: [0, 100]. Must be zero if the version is not ramping (i.e. `ramping_since_time` is nil).
+	// Can be in the range [0, 100] if the version is ramping.
+	RampPercentage float32
+	// Status of the Worker Deployment Version.
+	Status v1.WorkerDeploymentVersionStatus
+}
+
+func (b0 DeploymentVersionData_builder) Build() *DeploymentVersionData {
+	m0 := &DeploymentVersionData{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Version = b.Version
+	x.xxx_hidden_RoutingUpdateTime = b.RoutingUpdateTime
+	x.xxx_hidden_CurrentSinceTime = b.CurrentSinceTime
+	x.xxx_hidden_RampingSinceTime = b.RampingSinceTime
+	x.xxx_hidden_RampPercentage = b.RampPercentage
+	x.xxx_hidden_Status = b.Status
+	return m0
 }
 
 // Information that a TQ should know about a particular Deployment Version. This info is not part of
@@ -190,20 +295,13 @@ func (x *DeploymentVersionData) GetStatus() v1.WorkerDeploymentVersionStatus {
 // As of Workflow Version `VersionDataRevisionNumber`, version specific data has its own revision
 // number, which makes async propagations safer and allows async registration.
 type WorkerDeploymentVersionData struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Incremented everytime version data changes. Updates with lower revision number than what is
-	// already in the TQ will be ignored to avoid stale writes.
-	RevisionNumber int64 `protobuf:"varint,1,opt,name=revision_number,json=revisionNumber,proto3" json:"revision_number,omitempty"`
-	// Last update time. Used for garbage collecting deleted versions from TQ user data.
-	UpdateTime *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=update_time,json=updateTime,proto3" json:"update_time,omitempty"`
-	// In order to protect against deletes being overwritten by delayed stale writes, we can't
-	// immediately delete the version data from task queues. instead, we mark them as deleted while
-	// keeping the revision number.
-	// Old enough deleted versions are GCed based on update_time.
-	Deleted       bool                             `protobuf:"varint,3,opt,name=deleted,proto3" json:"deleted,omitempty"`
-	Status        v1.WorkerDeploymentVersionStatus `protobuf:"varint,6,opt,name=status,proto3,enum=temporal.api.enums.v1.WorkerDeploymentVersionStatus" json:"status,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                     protoimpl.MessageState           `protogen:"opaque.v1"`
+	xxx_hidden_RevisionNumber int64                            `protobuf:"varint,1,opt,name=revision_number,json=revisionNumber,proto3"`
+	xxx_hidden_UpdateTime     *timestamppb.Timestamp           `protobuf:"bytes,2,opt,name=update_time,json=updateTime,proto3"`
+	xxx_hidden_Deleted        bool                             `protobuf:"varint,3,opt,name=deleted,proto3"`
+	xxx_hidden_Status         v1.WorkerDeploymentVersionStatus `protobuf:"varint,6,opt,name=status,proto3,enum=temporal.api.enums.v1.WorkerDeploymentVersionStatus"`
+	unknownFields             protoimpl.UnknownFields
+	sizeCache                 protoimpl.SizeCache
 }
 
 func (x *WorkerDeploymentVersionData) Reset() {
@@ -231,101 +329,109 @@ func (x *WorkerDeploymentVersionData) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use WorkerDeploymentVersionData.ProtoReflect.Descriptor instead.
-func (*WorkerDeploymentVersionData) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{2}
-}
-
 func (x *WorkerDeploymentVersionData) GetRevisionNumber() int64 {
 	if x != nil {
-		return x.RevisionNumber
+		return x.xxx_hidden_RevisionNumber
 	}
 	return 0
 }
 
 func (x *WorkerDeploymentVersionData) GetUpdateTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.UpdateTime
+		return x.xxx_hidden_UpdateTime
 	}
 	return nil
 }
 
 func (x *WorkerDeploymentVersionData) GetDeleted() bool {
 	if x != nil {
-		return x.Deleted
+		return x.xxx_hidden_Deleted
 	}
 	return false
 }
 
 func (x *WorkerDeploymentVersionData) GetStatus() v1.WorkerDeploymentVersionStatus {
 	if x != nil {
-		return x.Status
+		return x.xxx_hidden_Status
 	}
 	return v1.WorkerDeploymentVersionStatus(0)
 }
 
+func (x *WorkerDeploymentVersionData) SetRevisionNumber(v int64) {
+	x.xxx_hidden_RevisionNumber = v
+}
+
+func (x *WorkerDeploymentVersionData) SetUpdateTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_UpdateTime = v
+}
+
+func (x *WorkerDeploymentVersionData) SetDeleted(v bool) {
+	x.xxx_hidden_Deleted = v
+}
+
+func (x *WorkerDeploymentVersionData) SetStatus(v v1.WorkerDeploymentVersionStatus) {
+	x.xxx_hidden_Status = v
+}
+
+func (x *WorkerDeploymentVersionData) HasUpdateTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_UpdateTime != nil
+}
+
+func (x *WorkerDeploymentVersionData) ClearUpdateTime() {
+	x.xxx_hidden_UpdateTime = nil
+}
+
+type WorkerDeploymentVersionData_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Incremented everytime version data changes. Updates with lower revision number than what is
+	// already in the TQ will be ignored to avoid stale writes.
+	RevisionNumber int64
+	// Last update time. Used for garbage collecting deleted versions from TQ user data.
+	UpdateTime *timestamppb.Timestamp
+	// In order to protect against deletes being overwritten by delayed stale writes, we can't
+	// immediately delete the version data from task queues. instead, we mark them as deleted while
+	// keeping the revision number.
+	// Old enough deleted versions are GCed based on update_time.
+	Deleted bool
+	Status  v1.WorkerDeploymentVersionStatus
+}
+
+func (b0 WorkerDeploymentVersionData_builder) Build() *WorkerDeploymentVersionData {
+	m0 := &WorkerDeploymentVersionData{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_RevisionNumber = b.RevisionNumber
+	x.xxx_hidden_UpdateTime = b.UpdateTime
+	x.xxx_hidden_Deleted = b.Deleted
+	x.xxx_hidden_Status = b.Status
+	return m0
+}
+
 // Local state for Worker Deployment Version
 type VersionLocalState struct {
-	state      protoimpl.MessageState   `protogen:"open.v1"`
-	Version    *WorkerDeploymentVersion `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`
-	CreateTime *timestamppb.Timestamp   `protobuf:"bytes,2,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
-	// Last time `current_since_time`, `ramping_since_time, or `ramp_percentage` of this version changed.
-	RoutingUpdateTime *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=routing_update_time,json=routingUpdateTime,proto3" json:"routing_update_time,omitempty"`
-	// (-- api-linter: core::0140::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: 'Since' captures the field semantics despite being a preposition. --)
-	//
-	// Nil if not current.
-	CurrentSinceTime *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=current_since_time,json=currentSinceTime,proto3" json:"current_since_time,omitempty"`
-	// (-- api-linter: core::0140::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: 'Since' captures the field semantics despite being a preposition. --)
-	//
-	// Nil if not ramping. Updated when the version first starts ramping, not on each ramp change.
-	RampingSinceTime *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=ramping_since_time,json=rampingSinceTime,proto3" json:"ramping_since_time,omitempty"`
-	// Range: [0, 100]. Must be zero if the version is not ramping (i.e. `ramping_since_time` is nil).
-	// Can be in the range [0, 100] if the version is ramping.
-	RampPercentage float32 `protobuf:"fixed32,6,opt,name=ramp_percentage,json=rampPercentage,proto3" json:"ramp_percentage,omitempty"`
-	// Timestamp when this version first became current or ramping.
-	FirstActivationTime *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=first_activation_time,json=firstActivationTime,proto3" json:"first_activation_time,omitempty"`
-	// Timestamp when this version last became current.
-	// Can be used to determine whether a version has ever been Current.
-	LastCurrentTime *timestamppb.Timestamp `protobuf:"bytes,16,opt,name=last_current_time,json=lastCurrentTime,proto3" json:"last_current_time,omitempty"`
-	// Timestamp when this version last stopped being current or ramping.
-	LastDeactivationTime *timestamppb.Timestamp `protobuf:"bytes,13,opt,name=last_deactivation_time,json=lastDeactivationTime,proto3" json:"last_deactivation_time,omitempty"`
-	// Helps user determine when it is safe to decommission the workers of this
-	// Version. Not present when version is current or ramping.
-	// Current limitations:
-	//   - Not supported for Unversioned mode.
-	//   - Periodically refreshed, may have delays up to few minutes (consult the
-	//     last_checked_time value).
-	//   - Refreshed only when version is not current or ramping AND the status is not
-	//     "drained" yet.
-	//   - Once the status is changed to "drained", it is not changed until the Version
-	//     becomes Current or Ramping again, at which time the drainage info is cleared.
-	//     This means if the Version is "drained" but new workflows are sent to it via
-	//     Pinned Versioning Override, the status does not account for those Pinned-override
-	//     executions and remains "drained".
-	DrainageInfo *v11.VersionDrainageInfo `protobuf:"bytes,7,opt,name=drainage_info,json=drainageInfo,proto3" json:"drainage_info,omitempty"`
-	// Arbitrary user-provided metadata attached to this version.
-	Metadata *v11.VersionMetadata `protobuf:"bytes,8,opt,name=metadata,proto3" json:"metadata,omitempty"`
-	// Deployment workflow should always be running before starting the version workflow.
-	// We should not start the deployment workflow. If we cannot find the deployment workflow when signaling, it means a bug and we should fix it.
-	// Deprecated.
-	//
-	// Deprecated: Marked as deprecated in temporal/server/api/deployment/v1/message.proto.
-	StartedDeploymentWorkflow bool `protobuf:"varint,9,opt,name=started_deployment_workflow,json=startedDeploymentWorkflow,proto3" json:"started_deployment_workflow,omitempty"`
-	// Key: Task Queue Name
-	TaskQueueFamilies map[string]*VersionLocalState_TaskQueueFamilyData `protobuf:"bytes,10,rep,name=task_queue_families,json=taskQueueFamilies,proto3" json:"task_queue_families,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	// Number of task queues which will be synced in a single batch.
-	SyncBatchSize int32 `protobuf:"varint,11,opt,name=sync_batch_size,json=syncBatchSize,proto3" json:"sync_batch_size,omitempty"`
-	// Status of the Worker Deployment Version.
-	Status v1.WorkerDeploymentVersionStatus `protobuf:"varint,14,opt,name=status,proto3,enum=temporal.api.enums.v1.WorkerDeploymentVersionStatus" json:"status,omitempty"`
-	// Incremented everytime version data synced to TQ changes. Updates with lower revision number
-	// than what is already in the TQ will be ignored to avoid stale writes during async operations.
-	RevisionNumber int64 `protobuf:"varint,15,opt,name=revision_number,json=revisionNumber,proto3" json:"revision_number,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state                                protoimpl.MessageState                            `protogen:"opaque.v1"`
+	xxx_hidden_Version                   *WorkerDeploymentVersion                          `protobuf:"bytes,1,opt,name=version,proto3"`
+	xxx_hidden_CreateTime                *timestamppb.Timestamp                            `protobuf:"bytes,2,opt,name=create_time,json=createTime,proto3"`
+	xxx_hidden_RoutingUpdateTime         *timestamppb.Timestamp                            `protobuf:"bytes,3,opt,name=routing_update_time,json=routingUpdateTime,proto3"`
+	xxx_hidden_CurrentSinceTime          *timestamppb.Timestamp                            `protobuf:"bytes,4,opt,name=current_since_time,json=currentSinceTime,proto3"`
+	xxx_hidden_RampingSinceTime          *timestamppb.Timestamp                            `protobuf:"bytes,5,opt,name=ramping_since_time,json=rampingSinceTime,proto3"`
+	xxx_hidden_RampPercentage            float32                                           `protobuf:"fixed32,6,opt,name=ramp_percentage,json=rampPercentage,proto3"`
+	xxx_hidden_FirstActivationTime       *timestamppb.Timestamp                            `protobuf:"bytes,12,opt,name=first_activation_time,json=firstActivationTime,proto3"`
+	xxx_hidden_LastCurrentTime           *timestamppb.Timestamp                            `protobuf:"bytes,16,opt,name=last_current_time,json=lastCurrentTime,proto3"`
+	xxx_hidden_LastDeactivationTime      *timestamppb.Timestamp                            `protobuf:"bytes,13,opt,name=last_deactivation_time,json=lastDeactivationTime,proto3"`
+	xxx_hidden_DrainageInfo              *v11.VersionDrainageInfo                          `protobuf:"bytes,7,opt,name=drainage_info,json=drainageInfo,proto3"`
+	xxx_hidden_Metadata                  *v11.VersionMetadata                              `protobuf:"bytes,8,opt,name=metadata,proto3"`
+	xxx_hidden_StartedDeploymentWorkflow bool                                              `protobuf:"varint,9,opt,name=started_deployment_workflow,json=startedDeploymentWorkflow,proto3"`
+	xxx_hidden_TaskQueueFamilies         map[string]*VersionLocalState_TaskQueueFamilyData `protobuf:"bytes,10,rep,name=task_queue_families,json=taskQueueFamilies,proto3" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	xxx_hidden_SyncBatchSize             int32                                             `protobuf:"varint,11,opt,name=sync_batch_size,json=syncBatchSize,proto3"`
+	xxx_hidden_Status                    v1.WorkerDeploymentVersionStatus                  `protobuf:"varint,14,opt,name=status,proto3,enum=temporal.api.enums.v1.WorkerDeploymentVersionStatus"`
+	xxx_hidden_RevisionNumber            int64                                             `protobuf:"varint,15,opt,name=revision_number,json=revisionNumber,proto3"`
+	unknownFields                        protoimpl.UnknownFields
+	sizeCache                            protoimpl.SizeCache
 }
 
 func (x *VersionLocalState) Reset() {
@@ -353,84 +459,79 @@ func (x *VersionLocalState) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use VersionLocalState.ProtoReflect.Descriptor instead.
-func (*VersionLocalState) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{3}
-}
-
 func (x *VersionLocalState) GetVersion() *WorkerDeploymentVersion {
 	if x != nil {
-		return x.Version
+		return x.xxx_hidden_Version
 	}
 	return nil
 }
 
 func (x *VersionLocalState) GetCreateTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.CreateTime
+		return x.xxx_hidden_CreateTime
 	}
 	return nil
 }
 
 func (x *VersionLocalState) GetRoutingUpdateTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.RoutingUpdateTime
+		return x.xxx_hidden_RoutingUpdateTime
 	}
 	return nil
 }
 
 func (x *VersionLocalState) GetCurrentSinceTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.CurrentSinceTime
+		return x.xxx_hidden_CurrentSinceTime
 	}
 	return nil
 }
 
 func (x *VersionLocalState) GetRampingSinceTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.RampingSinceTime
+		return x.xxx_hidden_RampingSinceTime
 	}
 	return nil
 }
 
 func (x *VersionLocalState) GetRampPercentage() float32 {
 	if x != nil {
-		return x.RampPercentage
+		return x.xxx_hidden_RampPercentage
 	}
 	return 0
 }
 
 func (x *VersionLocalState) GetFirstActivationTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.FirstActivationTime
+		return x.xxx_hidden_FirstActivationTime
 	}
 	return nil
 }
 
 func (x *VersionLocalState) GetLastCurrentTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.LastCurrentTime
+		return x.xxx_hidden_LastCurrentTime
 	}
 	return nil
 }
 
 func (x *VersionLocalState) GetLastDeactivationTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.LastDeactivationTime
+		return x.xxx_hidden_LastDeactivationTime
 	}
 	return nil
 }
 
 func (x *VersionLocalState) GetDrainageInfo() *v11.VersionDrainageInfo {
 	if x != nil {
-		return x.DrainageInfo
+		return x.xxx_hidden_DrainageInfo
 	}
 	return nil
 }
 
 func (x *VersionLocalState) GetMetadata() *v11.VersionMetadata {
 	if x != nil {
-		return x.Metadata
+		return x.xxx_hidden_Metadata
 	}
 	return nil
 }
@@ -438,42 +539,302 @@ func (x *VersionLocalState) GetMetadata() *v11.VersionMetadata {
 // Deprecated: Marked as deprecated in temporal/server/api/deployment/v1/message.proto.
 func (x *VersionLocalState) GetStartedDeploymentWorkflow() bool {
 	if x != nil {
-		return x.StartedDeploymentWorkflow
+		return x.xxx_hidden_StartedDeploymentWorkflow
 	}
 	return false
 }
 
 func (x *VersionLocalState) GetTaskQueueFamilies() map[string]*VersionLocalState_TaskQueueFamilyData {
 	if x != nil {
-		return x.TaskQueueFamilies
+		return x.xxx_hidden_TaskQueueFamilies
 	}
 	return nil
 }
 
 func (x *VersionLocalState) GetSyncBatchSize() int32 {
 	if x != nil {
-		return x.SyncBatchSize
+		return x.xxx_hidden_SyncBatchSize
 	}
 	return 0
 }
 
 func (x *VersionLocalState) GetStatus() v1.WorkerDeploymentVersionStatus {
 	if x != nil {
-		return x.Status
+		return x.xxx_hidden_Status
 	}
 	return v1.WorkerDeploymentVersionStatus(0)
 }
 
 func (x *VersionLocalState) GetRevisionNumber() int64 {
 	if x != nil {
-		return x.RevisionNumber
+		return x.xxx_hidden_RevisionNumber
 	}
 	return 0
 }
 
+func (x *VersionLocalState) SetVersion(v *WorkerDeploymentVersion) {
+	x.xxx_hidden_Version = v
+}
+
+func (x *VersionLocalState) SetCreateTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_CreateTime = v
+}
+
+func (x *VersionLocalState) SetRoutingUpdateTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_RoutingUpdateTime = v
+}
+
+func (x *VersionLocalState) SetCurrentSinceTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_CurrentSinceTime = v
+}
+
+func (x *VersionLocalState) SetRampingSinceTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_RampingSinceTime = v
+}
+
+func (x *VersionLocalState) SetRampPercentage(v float32) {
+	x.xxx_hidden_RampPercentage = v
+}
+
+func (x *VersionLocalState) SetFirstActivationTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_FirstActivationTime = v
+}
+
+func (x *VersionLocalState) SetLastCurrentTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_LastCurrentTime = v
+}
+
+func (x *VersionLocalState) SetLastDeactivationTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_LastDeactivationTime = v
+}
+
+func (x *VersionLocalState) SetDrainageInfo(v *v11.VersionDrainageInfo) {
+	x.xxx_hidden_DrainageInfo = v
+}
+
+func (x *VersionLocalState) SetMetadata(v *v11.VersionMetadata) {
+	x.xxx_hidden_Metadata = v
+}
+
+// Deprecated: Marked as deprecated in temporal/server/api/deployment/v1/message.proto.
+func (x *VersionLocalState) SetStartedDeploymentWorkflow(v bool) {
+	x.xxx_hidden_StartedDeploymentWorkflow = v
+}
+
+func (x *VersionLocalState) SetTaskQueueFamilies(v map[string]*VersionLocalState_TaskQueueFamilyData) {
+	x.xxx_hidden_TaskQueueFamilies = v
+}
+
+func (x *VersionLocalState) SetSyncBatchSize(v int32) {
+	x.xxx_hidden_SyncBatchSize = v
+}
+
+func (x *VersionLocalState) SetStatus(v v1.WorkerDeploymentVersionStatus) {
+	x.xxx_hidden_Status = v
+}
+
+func (x *VersionLocalState) SetRevisionNumber(v int64) {
+	x.xxx_hidden_RevisionNumber = v
+}
+
+func (x *VersionLocalState) HasVersion() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Version != nil
+}
+
+func (x *VersionLocalState) HasCreateTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_CreateTime != nil
+}
+
+func (x *VersionLocalState) HasRoutingUpdateTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_RoutingUpdateTime != nil
+}
+
+func (x *VersionLocalState) HasCurrentSinceTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_CurrentSinceTime != nil
+}
+
+func (x *VersionLocalState) HasRampingSinceTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_RampingSinceTime != nil
+}
+
+func (x *VersionLocalState) HasFirstActivationTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_FirstActivationTime != nil
+}
+
+func (x *VersionLocalState) HasLastCurrentTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_LastCurrentTime != nil
+}
+
+func (x *VersionLocalState) HasLastDeactivationTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_LastDeactivationTime != nil
+}
+
+func (x *VersionLocalState) HasDrainageInfo() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_DrainageInfo != nil
+}
+
+func (x *VersionLocalState) HasMetadata() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Metadata != nil
+}
+
+func (x *VersionLocalState) ClearVersion() {
+	x.xxx_hidden_Version = nil
+}
+
+func (x *VersionLocalState) ClearCreateTime() {
+	x.xxx_hidden_CreateTime = nil
+}
+
+func (x *VersionLocalState) ClearRoutingUpdateTime() {
+	x.xxx_hidden_RoutingUpdateTime = nil
+}
+
+func (x *VersionLocalState) ClearCurrentSinceTime() {
+	x.xxx_hidden_CurrentSinceTime = nil
+}
+
+func (x *VersionLocalState) ClearRampingSinceTime() {
+	x.xxx_hidden_RampingSinceTime = nil
+}
+
+func (x *VersionLocalState) ClearFirstActivationTime() {
+	x.xxx_hidden_FirstActivationTime = nil
+}
+
+func (x *VersionLocalState) ClearLastCurrentTime() {
+	x.xxx_hidden_LastCurrentTime = nil
+}
+
+func (x *VersionLocalState) ClearLastDeactivationTime() {
+	x.xxx_hidden_LastDeactivationTime = nil
+}
+
+func (x *VersionLocalState) ClearDrainageInfo() {
+	x.xxx_hidden_DrainageInfo = nil
+}
+
+func (x *VersionLocalState) ClearMetadata() {
+	x.xxx_hidden_Metadata = nil
+}
+
+type VersionLocalState_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Version    *WorkerDeploymentVersion
+	CreateTime *timestamppb.Timestamp
+	// Last time `current_since_time`, `ramping_since_time, or `ramp_percentage` of this version changed.
+	RoutingUpdateTime *timestamppb.Timestamp
+	// (-- api-linter: core::0140::prepositions=disabled
+	//
+	//	aip.dev/not-precedent: 'Since' captures the field semantics despite being a preposition. --)
+	//
+	// Nil if not current.
+	CurrentSinceTime *timestamppb.Timestamp
+	// (-- api-linter: core::0140::prepositions=disabled
+	//
+	//	aip.dev/not-precedent: 'Since' captures the field semantics despite being a preposition. --)
+	//
+	// Nil if not ramping. Updated when the version first starts ramping, not on each ramp change.
+	RampingSinceTime *timestamppb.Timestamp
+	// Range: [0, 100]. Must be zero if the version is not ramping (i.e. `ramping_since_time` is nil).
+	// Can be in the range [0, 100] if the version is ramping.
+	RampPercentage float32
+	// Timestamp when this version first became current or ramping.
+	FirstActivationTime *timestamppb.Timestamp
+	// Timestamp when this version last became current.
+	// Can be used to determine whether a version has ever been Current.
+	LastCurrentTime *timestamppb.Timestamp
+	// Timestamp when this version last stopped being current or ramping.
+	LastDeactivationTime *timestamppb.Timestamp
+	// Helps user determine when it is safe to decommission the workers of this
+	// Version. Not present when version is current or ramping.
+	// Current limitations:
+	//   - Not supported for Unversioned mode.
+	//   - Periodically refreshed, may have delays up to few minutes (consult the
+	//     last_checked_time value).
+	//   - Refreshed only when version is not current or ramping AND the status is not
+	//     "drained" yet.
+	//   - Once the status is changed to "drained", it is not changed until the Version
+	//     becomes Current or Ramping again, at which time the drainage info is cleared.
+	//     This means if the Version is "drained" but new workflows are sent to it via
+	//     Pinned Versioning Override, the status does not account for those Pinned-override
+	//     executions and remains "drained".
+	DrainageInfo *v11.VersionDrainageInfo
+	// Arbitrary user-provided metadata attached to this version.
+	Metadata *v11.VersionMetadata
+	// Deployment workflow should always be running before starting the version workflow.
+	// We should not start the deployment workflow. If we cannot find the deployment workflow when signaling, it means a bug and we should fix it.
+	// Deprecated.
+	//
+	// Deprecated: Marked as deprecated in temporal/server/api/deployment/v1/message.proto.
+	StartedDeploymentWorkflow bool
+	// Key: Task Queue Name
+	TaskQueueFamilies map[string]*VersionLocalState_TaskQueueFamilyData
+	// Number of task queues which will be synced in a single batch.
+	SyncBatchSize int32
+	// Status of the Worker Deployment Version.
+	Status v1.WorkerDeploymentVersionStatus
+	// Incremented everytime version data synced to TQ changes. Updates with lower revision number
+	// than what is already in the TQ will be ignored to avoid stale writes during async operations.
+	RevisionNumber int64
+}
+
+func (b0 VersionLocalState_builder) Build() *VersionLocalState {
+	m0 := &VersionLocalState{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Version = b.Version
+	x.xxx_hidden_CreateTime = b.CreateTime
+	x.xxx_hidden_RoutingUpdateTime = b.RoutingUpdateTime
+	x.xxx_hidden_CurrentSinceTime = b.CurrentSinceTime
+	x.xxx_hidden_RampingSinceTime = b.RampingSinceTime
+	x.xxx_hidden_RampPercentage = b.RampPercentage
+	x.xxx_hidden_FirstActivationTime = b.FirstActivationTime
+	x.xxx_hidden_LastCurrentTime = b.LastCurrentTime
+	x.xxx_hidden_LastDeactivationTime = b.LastDeactivationTime
+	x.xxx_hidden_DrainageInfo = b.DrainageInfo
+	x.xxx_hidden_Metadata = b.Metadata
+	x.xxx_hidden_StartedDeploymentWorkflow = b.StartedDeploymentWorkflow
+	x.xxx_hidden_TaskQueueFamilies = b.TaskQueueFamilies
+	x.xxx_hidden_SyncBatchSize = b.SyncBatchSize
+	x.xxx_hidden_Status = b.Status
+	x.xxx_hidden_RevisionNumber = b.RevisionNumber
+	return m0
+}
+
 // Data specific to a task queue, from the perspective of a worker deployment version.
 type TaskQueueVersionData struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -503,19 +864,26 @@ func (x *TaskQueueVersionData) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use TaskQueueVersionData.ProtoReflect.Descriptor instead.
-func (*TaskQueueVersionData) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{4}
+type TaskQueueVersionData_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+}
+
+func (b0 TaskQueueVersionData_builder) Build() *TaskQueueVersionData {
+	m0 := &TaskQueueVersionData{}
+	b, x := &b0, m0
+	_, _ = b, x
+	return m0
 }
 
 // used as Worker Deployment Version workflow input:
 type WorkerDeploymentVersionWorkflowArgs struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	NamespaceName string                 `protobuf:"bytes,1,opt,name=namespace_name,json=namespaceName,proto3" json:"namespace_name,omitempty"`
-	NamespaceId   string                 `protobuf:"bytes,2,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	VersionState  *VersionLocalState     `protobuf:"bytes,3,opt,name=version_state,json=versionState,proto3" json:"version_state,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                    protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceName string                 `protobuf:"bytes,1,opt,name=namespace_name,json=namespaceName,proto3"`
+	xxx_hidden_NamespaceId   string                 `protobuf:"bytes,2,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_VersionState  *VersionLocalState     `protobuf:"bytes,3,opt,name=version_state,json=versionState,proto3"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *WorkerDeploymentVersionWorkflowArgs) Reset() {
@@ -543,41 +911,77 @@ func (x *WorkerDeploymentVersionWorkflowArgs) ProtoReflect() protoreflect.Messag
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use WorkerDeploymentVersionWorkflowArgs.ProtoReflect.Descriptor instead.
-func (*WorkerDeploymentVersionWorkflowArgs) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{5}
-}
-
 func (x *WorkerDeploymentVersionWorkflowArgs) GetNamespaceName() string {
 	if x != nil {
-		return x.NamespaceName
+		return x.xxx_hidden_NamespaceName
 	}
 	return ""
 }
 
 func (x *WorkerDeploymentVersionWorkflowArgs) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *WorkerDeploymentVersionWorkflowArgs) GetVersionState() *VersionLocalState {
 	if x != nil {
-		return x.VersionState
+		return x.xxx_hidden_VersionState
 	}
 	return nil
 }
 
+func (x *WorkerDeploymentVersionWorkflowArgs) SetNamespaceName(v string) {
+	x.xxx_hidden_NamespaceName = v
+}
+
+func (x *WorkerDeploymentVersionWorkflowArgs) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *WorkerDeploymentVersionWorkflowArgs) SetVersionState(v *VersionLocalState) {
+	x.xxx_hidden_VersionState = v
+}
+
+func (x *WorkerDeploymentVersionWorkflowArgs) HasVersionState() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_VersionState != nil
+}
+
+func (x *WorkerDeploymentVersionWorkflowArgs) ClearVersionState() {
+	x.xxx_hidden_VersionState = nil
+}
+
+type WorkerDeploymentVersionWorkflowArgs_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceName string
+	NamespaceId   string
+	VersionState  *VersionLocalState
+}
+
+func (b0 WorkerDeploymentVersionWorkflowArgs_builder) Build() *WorkerDeploymentVersionWorkflowArgs {
+	m0 := &WorkerDeploymentVersionWorkflowArgs{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceName = b.NamespaceName
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_VersionState = b.VersionState
+	return m0
+}
+
 // used as Worker Deployment workflow input:
 type WorkerDeploymentWorkflowArgs struct {
-	state          protoimpl.MessageState      `protogen:"open.v1"`
-	NamespaceName  string                      `protobuf:"bytes,1,opt,name=namespace_name,json=namespaceName,proto3" json:"namespace_name,omitempty"`
-	NamespaceId    string                      `protobuf:"bytes,2,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	DeploymentName string                      `protobuf:"bytes,3,opt,name=deployment_name,json=deploymentName,proto3" json:"deployment_name,omitempty"`
-	State          *WorkerDeploymentLocalState `protobuf:"bytes,4,opt,name=state,proto3" json:"state,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state                     protoimpl.MessageState      `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceName  string                      `protobuf:"bytes,1,opt,name=namespace_name,json=namespaceName,proto3"`
+	xxx_hidden_NamespaceId    string                      `protobuf:"bytes,2,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_DeploymentName string                      `protobuf:"bytes,3,opt,name=deployment_name,json=deploymentName,proto3"`
+	xxx_hidden_State          *WorkerDeploymentLocalState `protobuf:"bytes,4,opt,name=state,proto3"`
+	unknownFields             protoimpl.UnknownFields
+	sizeCache                 protoimpl.SizeCache
 }
 
 func (x *WorkerDeploymentWorkflowArgs) Reset() {
@@ -605,56 +1009,94 @@ func (x *WorkerDeploymentWorkflowArgs) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use WorkerDeploymentWorkflowArgs.ProtoReflect.Descriptor instead.
-func (*WorkerDeploymentWorkflowArgs) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{6}
-}
-
 func (x *WorkerDeploymentWorkflowArgs) GetNamespaceName() string {
 	if x != nil {
-		return x.NamespaceName
+		return x.xxx_hidden_NamespaceName
 	}
 	return ""
 }
 
 func (x *WorkerDeploymentWorkflowArgs) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *WorkerDeploymentWorkflowArgs) GetDeploymentName() string {
 	if x != nil {
-		return x.DeploymentName
+		return x.xxx_hidden_DeploymentName
 	}
 	return ""
 }
 
 func (x *WorkerDeploymentWorkflowArgs) GetState() *WorkerDeploymentLocalState {
 	if x != nil {
-		return x.State
+		return x.xxx_hidden_State
 	}
 	return nil
 }
 
+func (x *WorkerDeploymentWorkflowArgs) SetNamespaceName(v string) {
+	x.xxx_hidden_NamespaceName = v
+}
+
+func (x *WorkerDeploymentWorkflowArgs) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *WorkerDeploymentWorkflowArgs) SetDeploymentName(v string) {
+	x.xxx_hidden_DeploymentName = v
+}
+
+func (x *WorkerDeploymentWorkflowArgs) SetState(v *WorkerDeploymentLocalState) {
+	x.xxx_hidden_State = v
+}
+
+func (x *WorkerDeploymentWorkflowArgs) HasState() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_State != nil
+}
+
+func (x *WorkerDeploymentWorkflowArgs) ClearState() {
+	x.xxx_hidden_State = nil
+}
+
+type WorkerDeploymentWorkflowArgs_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceName  string
+	NamespaceId    string
+	DeploymentName string
+	State          *WorkerDeploymentLocalState
+}
+
+func (b0 WorkerDeploymentWorkflowArgs_builder) Build() *WorkerDeploymentWorkflowArgs {
+	m0 := &WorkerDeploymentWorkflowArgs{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceName = b.NamespaceName
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_DeploymentName = b.DeploymentName
+	x.xxx_hidden_State = b.State
+	return m0
+}
+
 // Local state for Worker Deployment
 type WorkerDeploymentLocalState struct {
-	state      protoimpl.MessageState `protogen:"open.v1"`
-	CreateTime *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
-	// Encapsulates task routing information for this deployment.
-	RoutingConfig        *v11.RoutingConfig                         `protobuf:"bytes,2,opt,name=routing_config,json=routingConfig,proto3" json:"routing_config,omitempty"`
-	Versions             map[string]*WorkerDeploymentVersionSummary `protobuf:"bytes,3,rep,name=versions,proto3" json:"versions,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	ConflictToken        []byte                                     `protobuf:"bytes,4,opt,name=conflict_token,json=conflictToken,proto3" json:"conflict_token,omitempty"`
-	LastModifierIdentity string                                     `protobuf:"bytes,5,opt,name=last_modifier_identity,json=lastModifierIdentity,proto3" json:"last_modifier_identity,omitempty"`
-	// Number of task queues which will be synced in a single batch.
-	SyncBatchSize   int32  `protobuf:"varint,6,opt,name=sync_batch_size,json=syncBatchSize,proto3" json:"sync_batch_size,omitempty"`
-	ManagerIdentity string `protobuf:"bytes,7,opt,name=manager_identity,json=managerIdentity,proto3" json:"manager_identity,omitempty"`
-	// Track async propagations in progress per build ID. Map: build_id -> revision numbers.
-	// Used to track which propagations are still pending across continue-as-new.
-	PropagatingRevisions map[string]*PropagatingRevisions `protobuf:"bytes,8,rep,name=propagating_revisions,json=propagatingRevisions,proto3" json:"propagating_revisions,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	unknownFields        protoimpl.UnknownFields
-	sizeCache            protoimpl.SizeCache
+	state                           protoimpl.MessageState                     `protogen:"opaque.v1"`
+	xxx_hidden_CreateTime           *timestamppb.Timestamp                     `protobuf:"bytes,1,opt,name=create_time,json=createTime,proto3"`
+	xxx_hidden_RoutingConfig        *v11.RoutingConfig                         `protobuf:"bytes,2,opt,name=routing_config,json=routingConfig,proto3"`
+	xxx_hidden_Versions             map[string]*WorkerDeploymentVersionSummary `protobuf:"bytes,3,rep,name=versions,proto3" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	xxx_hidden_ConflictToken        []byte                                     `protobuf:"bytes,4,opt,name=conflict_token,json=conflictToken,proto3"`
+	xxx_hidden_LastModifierIdentity string                                     `protobuf:"bytes,5,opt,name=last_modifier_identity,json=lastModifierIdentity,proto3"`
+	xxx_hidden_SyncBatchSize        int32                                      `protobuf:"varint,6,opt,name=sync_batch_size,json=syncBatchSize,proto3"`
+	xxx_hidden_ManagerIdentity      string                                     `protobuf:"bytes,7,opt,name=manager_identity,json=managerIdentity,proto3"`
+	xxx_hidden_PropagatingRevisions map[string]*PropagatingRevisions           `protobuf:"bytes,8,rep,name=propagating_revisions,json=propagatingRevisions,proto3" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields                   protoimpl.UnknownFields
+	sizeCache                       protoimpl.SizeCache
 }
 
 func (x *WorkerDeploymentLocalState) Reset() {
@@ -682,73 +1124,157 @@ func (x *WorkerDeploymentLocalState) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use WorkerDeploymentLocalState.ProtoReflect.Descriptor instead.
-func (*WorkerDeploymentLocalState) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{7}
-}
-
 func (x *WorkerDeploymentLocalState) GetCreateTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.CreateTime
+		return x.xxx_hidden_CreateTime
 	}
 	return nil
 }
 
 func (x *WorkerDeploymentLocalState) GetRoutingConfig() *v11.RoutingConfig {
 	if x != nil {
-		return x.RoutingConfig
+		return x.xxx_hidden_RoutingConfig
 	}
 	return nil
 }
 
 func (x *WorkerDeploymentLocalState) GetVersions() map[string]*WorkerDeploymentVersionSummary {
 	if x != nil {
-		return x.Versions
+		return x.xxx_hidden_Versions
 	}
 	return nil
 }
 
 func (x *WorkerDeploymentLocalState) GetConflictToken() []byte {
 	if x != nil {
-		return x.ConflictToken
+		return x.xxx_hidden_ConflictToken
 	}
 	return nil
 }
 
 func (x *WorkerDeploymentLocalState) GetLastModifierIdentity() string {
 	if x != nil {
-		return x.LastModifierIdentity
+		return x.xxx_hidden_LastModifierIdentity
 	}
 	return ""
 }
 
 func (x *WorkerDeploymentLocalState) GetSyncBatchSize() int32 {
 	if x != nil {
-		return x.SyncBatchSize
+		return x.xxx_hidden_SyncBatchSize
 	}
 	return 0
 }
 
 func (x *WorkerDeploymentLocalState) GetManagerIdentity() string {
 	if x != nil {
-		return x.ManagerIdentity
+		return x.xxx_hidden_ManagerIdentity
 	}
 	return ""
 }
 
 func (x *WorkerDeploymentLocalState) GetPropagatingRevisions() map[string]*PropagatingRevisions {
 	if x != nil {
-		return x.PropagatingRevisions
+		return x.xxx_hidden_PropagatingRevisions
 	}
 	return nil
 }
 
+func (x *WorkerDeploymentLocalState) SetCreateTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_CreateTime = v
+}
+
+func (x *WorkerDeploymentLocalState) SetRoutingConfig(v *v11.RoutingConfig) {
+	x.xxx_hidden_RoutingConfig = v
+}
+
+func (x *WorkerDeploymentLocalState) SetVersions(v map[string]*WorkerDeploymentVersionSummary) {
+	x.xxx_hidden_Versions = v
+}
+
+func (x *WorkerDeploymentLocalState) SetConflictToken(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_ConflictToken = v
+}
+
+func (x *WorkerDeploymentLocalState) SetLastModifierIdentity(v string) {
+	x.xxx_hidden_LastModifierIdentity = v
+}
+
+func (x *WorkerDeploymentLocalState) SetSyncBatchSize(v int32) {
+	x.xxx_hidden_SyncBatchSize = v
+}
+
+func (x *WorkerDeploymentLocalState) SetManagerIdentity(v string) {
+	x.xxx_hidden_ManagerIdentity = v
+}
+
+func (x *WorkerDeploymentLocalState) SetPropagatingRevisions(v map[string]*PropagatingRevisions) {
+	x.xxx_hidden_PropagatingRevisions = v
+}
+
+func (x *WorkerDeploymentLocalState) HasCreateTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_CreateTime != nil
+}
+
+func (x *WorkerDeploymentLocalState) HasRoutingConfig() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_RoutingConfig != nil
+}
+
+func (x *WorkerDeploymentLocalState) ClearCreateTime() {
+	x.xxx_hidden_CreateTime = nil
+}
+
+func (x *WorkerDeploymentLocalState) ClearRoutingConfig() {
+	x.xxx_hidden_RoutingConfig = nil
+}
+
+type WorkerDeploymentLocalState_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	CreateTime *timestamppb.Timestamp
+	// Encapsulates task routing information for this deployment.
+	RoutingConfig        *v11.RoutingConfig
+	Versions             map[string]*WorkerDeploymentVersionSummary
+	ConflictToken        []byte
+	LastModifierIdentity string
+	// Number of task queues which will be synced in a single batch.
+	SyncBatchSize   int32
+	ManagerIdentity string
+	// Track async propagations in progress per build ID. Map: build_id -> revision numbers.
+	// Used to track which propagations are still pending across continue-as-new.
+	PropagatingRevisions map[string]*PropagatingRevisions
+}
+
+func (b0 WorkerDeploymentLocalState_builder) Build() *WorkerDeploymentLocalState {
+	m0 := &WorkerDeploymentLocalState{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_CreateTime = b.CreateTime
+	x.xxx_hidden_RoutingConfig = b.RoutingConfig
+	x.xxx_hidden_Versions = b.Versions
+	x.xxx_hidden_ConflictToken = b.ConflictToken
+	x.xxx_hidden_LastModifierIdentity = b.LastModifierIdentity
+	x.xxx_hidden_SyncBatchSize = b.SyncBatchSize
+	x.xxx_hidden_ManagerIdentity = b.ManagerIdentity
+	x.xxx_hidden_PropagatingRevisions = b.PropagatingRevisions
+	return m0
+}
+
 // Tracks revision numbers that are currently propagating for a specific build ID
 type PropagatingRevisions struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	RevisionNumbers []int64                `protobuf:"varint,1,rep,packed,name=revision_numbers,json=revisionNumbers,proto3" json:"revision_numbers,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state                      protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_RevisionNumbers []int64                `protobuf:"varint,1,rep,packed,name=revision_numbers,json=revisionNumbers,proto3"`
+	unknownFields              protoimpl.UnknownFields
+	sizeCache                  protoimpl.SizeCache
 }
 
 func (x *PropagatingRevisions) Reset() {
@@ -776,52 +1302,46 @@ func (x *PropagatingRevisions) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use PropagatingRevisions.ProtoReflect.Descriptor instead.
-func (*PropagatingRevisions) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{8}
-}
-
 func (x *PropagatingRevisions) GetRevisionNumbers() []int64 {
 	if x != nil {
-		return x.RevisionNumbers
+		return x.xxx_hidden_RevisionNumbers
 	}
 	return nil
 }
 
+func (x *PropagatingRevisions) SetRevisionNumbers(v []int64) {
+	x.xxx_hidden_RevisionNumbers = v
+}
+
+type PropagatingRevisions_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	RevisionNumbers []int64
+}
+
+func (b0 PropagatingRevisions_builder) Build() *PropagatingRevisions {
+	m0 := &PropagatingRevisions{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_RevisionNumbers = b.RevisionNumbers
+	return m0
+}
+
 type WorkerDeploymentVersionSummary struct {
-	state      protoimpl.MessageState `protogen:"open.v1"`
-	Version    string                 `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`
-	CreateTime *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
-	// Deprecated: Marked as deprecated in temporal/server/api/deployment/v1/message.proto.
-	DrainageStatus v1.VersionDrainageStatus `protobuf:"varint,3,opt,name=drainage_status,json=drainageStatus,proto3,enum=temporal.api.enums.v1.VersionDrainageStatus" json:"drainage_status,omitempty"`
-	// Information about workflow drainage to help the user determine when it is safe
-	// to decommission a Version. Not present while version is current or ramping.
-	DrainageInfo *v11.VersionDrainageInfo `protobuf:"bytes,4,opt,name=drainage_info,json=drainageInfo,proto3" json:"drainage_info,omitempty"`
-	// Last time `current_since_time`, `ramping_since_time, or `ramp_percentage` of this version changed.
-	RoutingUpdateTime *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=routing_update_time,json=routingUpdateTime,proto3" json:"routing_update_time,omitempty"`
-	// (-- api-linter: core::0140::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: 'Since' captures the field semantics despite being a preposition. --)
-	//
-	// Nil if not current.
-	CurrentSinceTime *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=current_since_time,json=currentSinceTime,proto3" json:"current_since_time,omitempty"`
-	// (-- api-linter: core::0140::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: 'Since' captures the field semantics despite being a preposition. --)
-	//
-	// Nil if not ramping. Updated when the version first starts ramping, not on each ramp change.
-	RampingSinceTime *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=ramping_since_time,json=rampingSinceTime,proto3" json:"ramping_since_time,omitempty"`
-	// Timestamp when this version first became current or ramping.
-	FirstActivationTime *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=first_activation_time,json=firstActivationTime,proto3" json:"first_activation_time,omitempty"`
-	// Timestamp when this version last became current.
-	// Can be used to determine whether a version has ever been Current.
-	LastCurrentTime *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=last_current_time,json=lastCurrentTime,proto3" json:"last_current_time,omitempty"`
-	// Timestamp when this version last stopped being current or ramping.
-	LastDeactivationTime *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=last_deactivation_time,json=lastDeactivationTime,proto3" json:"last_deactivation_time,omitempty"`
-	// Status of the Worker Deployment Version.
-	Status        v1.WorkerDeploymentVersionStatus `protobuf:"varint,10,opt,name=status,proto3,enum=temporal.api.enums.v1.WorkerDeploymentVersionStatus" json:"status,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                           protoimpl.MessageState           `protogen:"opaque.v1"`
+	xxx_hidden_Version              string                           `protobuf:"bytes,1,opt,name=version,proto3"`
+	xxx_hidden_CreateTime           *timestamppb.Timestamp           `protobuf:"bytes,2,opt,name=create_time,json=createTime,proto3"`
+	xxx_hidden_DrainageStatus       v1.VersionDrainageStatus         `protobuf:"varint,3,opt,name=drainage_status,json=drainageStatus,proto3,enum=temporal.api.enums.v1.VersionDrainageStatus"`
+	xxx_hidden_DrainageInfo         *v11.VersionDrainageInfo         `protobuf:"bytes,4,opt,name=drainage_info,json=drainageInfo,proto3"`
+	xxx_hidden_RoutingUpdateTime    *timestamppb.Timestamp           `protobuf:"bytes,5,opt,name=routing_update_time,json=routingUpdateTime,proto3"`
+	xxx_hidden_CurrentSinceTime     *timestamppb.Timestamp           `protobuf:"bytes,6,opt,name=current_since_time,json=currentSinceTime,proto3"`
+	xxx_hidden_RampingSinceTime     *timestamppb.Timestamp           `protobuf:"bytes,7,opt,name=ramping_since_time,json=rampingSinceTime,proto3"`
+	xxx_hidden_FirstActivationTime  *timestamppb.Timestamp           `protobuf:"bytes,8,opt,name=first_activation_time,json=firstActivationTime,proto3"`
+	xxx_hidden_LastCurrentTime      *timestamppb.Timestamp           `protobuf:"bytes,11,opt,name=last_current_time,json=lastCurrentTime,proto3"`
+	xxx_hidden_LastDeactivationTime *timestamppb.Timestamp           `protobuf:"bytes,9,opt,name=last_deactivation_time,json=lastDeactivationTime,proto3"`
+	xxx_hidden_Status               v1.WorkerDeploymentVersionStatus `protobuf:"varint,10,opt,name=status,proto3,enum=temporal.api.enums.v1.WorkerDeploymentVersionStatus"`
+	unknownFields                   protoimpl.UnknownFields
+	sizeCache                       protoimpl.SizeCache
 }
 
 func (x *WorkerDeploymentVersionSummary) Reset() {
@@ -849,21 +1369,16 @@ func (x *WorkerDeploymentVersionSummary) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use WorkerDeploymentVersionSummary.ProtoReflect.Descriptor instead.
-func (*WorkerDeploymentVersionSummary) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{9}
-}
-
 func (x *WorkerDeploymentVersionSummary) GetVersion() string {
 	if x != nil {
-		return x.Version
+		return x.xxx_hidden_Version
 	}
 	return ""
 }
 
 func (x *WorkerDeploymentVersionSummary) GetCreateTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.CreateTime
+		return x.xxx_hidden_CreateTime
 	}
 	return nil
 }
@@ -871,77 +1386,263 @@ func (x *WorkerDeploymentVersionSummary) GetCreateTime() *timestamppb.Timestamp 
 // Deprecated: Marked as deprecated in temporal/server/api/deployment/v1/message.proto.
 func (x *WorkerDeploymentVersionSummary) GetDrainageStatus() v1.VersionDrainageStatus {
 	if x != nil {
-		return x.DrainageStatus
+		return x.xxx_hidden_DrainageStatus
 	}
 	return v1.VersionDrainageStatus(0)
 }
 
 func (x *WorkerDeploymentVersionSummary) GetDrainageInfo() *v11.VersionDrainageInfo {
 	if x != nil {
-		return x.DrainageInfo
+		return x.xxx_hidden_DrainageInfo
 	}
 	return nil
 }
 
 func (x *WorkerDeploymentVersionSummary) GetRoutingUpdateTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.RoutingUpdateTime
+		return x.xxx_hidden_RoutingUpdateTime
 	}
 	return nil
 }
 
 func (x *WorkerDeploymentVersionSummary) GetCurrentSinceTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.CurrentSinceTime
+		return x.xxx_hidden_CurrentSinceTime
 	}
 	return nil
 }
 
 func (x *WorkerDeploymentVersionSummary) GetRampingSinceTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.RampingSinceTime
+		return x.xxx_hidden_RampingSinceTime
 	}
 	return nil
 }
 
 func (x *WorkerDeploymentVersionSummary) GetFirstActivationTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.FirstActivationTime
+		return x.xxx_hidden_FirstActivationTime
 	}
 	return nil
 }
 
 func (x *WorkerDeploymentVersionSummary) GetLastCurrentTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.LastCurrentTime
+		return x.xxx_hidden_LastCurrentTime
 	}
 	return nil
 }
 
 func (x *WorkerDeploymentVersionSummary) GetLastDeactivationTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.LastDeactivationTime
+		return x.xxx_hidden_LastDeactivationTime
 	}
 	return nil
 }
 
 func (x *WorkerDeploymentVersionSummary) GetStatus() v1.WorkerDeploymentVersionStatus {
 	if x != nil {
-		return x.Status
+		return x.xxx_hidden_Status
 	}
 	return v1.WorkerDeploymentVersionStatus(0)
 }
 
+func (x *WorkerDeploymentVersionSummary) SetVersion(v string) {
+	x.xxx_hidden_Version = v
+}
+
+func (x *WorkerDeploymentVersionSummary) SetCreateTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_CreateTime = v
+}
+
+// Deprecated: Marked as deprecated in temporal/server/api/deployment/v1/message.proto.
+func (x *WorkerDeploymentVersionSummary) SetDrainageStatus(v v1.VersionDrainageStatus) {
+	x.xxx_hidden_DrainageStatus = v
+}
+
+func (x *WorkerDeploymentVersionSummary) SetDrainageInfo(v *v11.VersionDrainageInfo) {
+	x.xxx_hidden_DrainageInfo = v
+}
+
+func (x *WorkerDeploymentVersionSummary) SetRoutingUpdateTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_RoutingUpdateTime = v
+}
+
+func (x *WorkerDeploymentVersionSummary) SetCurrentSinceTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_CurrentSinceTime = v
+}
+
+func (x *WorkerDeploymentVersionSummary) SetRampingSinceTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_RampingSinceTime = v
+}
+
+func (x *WorkerDeploymentVersionSummary) SetFirstActivationTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_FirstActivationTime = v
+}
+
+func (x *WorkerDeploymentVersionSummary) SetLastCurrentTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_LastCurrentTime = v
+}
+
+func (x *WorkerDeploymentVersionSummary) SetLastDeactivationTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_LastDeactivationTime = v
+}
+
+func (x *WorkerDeploymentVersionSummary) SetStatus(v v1.WorkerDeploymentVersionStatus) {
+	x.xxx_hidden_Status = v
+}
+
+func (x *WorkerDeploymentVersionSummary) HasCreateTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_CreateTime != nil
+}
+
+func (x *WorkerDeploymentVersionSummary) HasDrainageInfo() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_DrainageInfo != nil
+}
+
+func (x *WorkerDeploymentVersionSummary) HasRoutingUpdateTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_RoutingUpdateTime != nil
+}
+
+func (x *WorkerDeploymentVersionSummary) HasCurrentSinceTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_CurrentSinceTime != nil
+}
+
+func (x *WorkerDeploymentVersionSummary) HasRampingSinceTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_RampingSinceTime != nil
+}
+
+func (x *WorkerDeploymentVersionSummary) HasFirstActivationTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_FirstActivationTime != nil
+}
+
+func (x *WorkerDeploymentVersionSummary) HasLastCurrentTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_LastCurrentTime != nil
+}
+
+func (x *WorkerDeploymentVersionSummary) HasLastDeactivationTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_LastDeactivationTime != nil
+}
+
+func (x *WorkerDeploymentVersionSummary) ClearCreateTime() {
+	x.xxx_hidden_CreateTime = nil
+}
+
+func (x *WorkerDeploymentVersionSummary) ClearDrainageInfo() {
+	x.xxx_hidden_DrainageInfo = nil
+}
+
+func (x *WorkerDeploymentVersionSummary) ClearRoutingUpdateTime() {
+	x.xxx_hidden_RoutingUpdateTime = nil
+}
+
+func (x *WorkerDeploymentVersionSummary) ClearCurrentSinceTime() {
+	x.xxx_hidden_CurrentSinceTime = nil
+}
+
+func (x *WorkerDeploymentVersionSummary) ClearRampingSinceTime() {
+	x.xxx_hidden_RampingSinceTime = nil
+}
+
+func (x *WorkerDeploymentVersionSummary) ClearFirstActivationTime() {
+	x.xxx_hidden_FirstActivationTime = nil
+}
+
+func (x *WorkerDeploymentVersionSummary) ClearLastCurrentTime() {
+	x.xxx_hidden_LastCurrentTime = nil
+}
+
+func (x *WorkerDeploymentVersionSummary) ClearLastDeactivationTime() {
+	x.xxx_hidden_LastDeactivationTime = nil
+}
+
+type WorkerDeploymentVersionSummary_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Version    string
+	CreateTime *timestamppb.Timestamp
+	// Deprecated: Marked as deprecated in temporal/server/api/deployment/v1/message.proto.
+	DrainageStatus v1.VersionDrainageStatus
+	// Information about workflow drainage to help the user determine when it is safe
+	// to decommission a Version. Not present while version is current or ramping.
+	DrainageInfo *v11.VersionDrainageInfo
+	// Last time `current_since_time`, `ramping_since_time, or `ramp_percentage` of this version changed.
+	RoutingUpdateTime *timestamppb.Timestamp
+	// (-- api-linter: core::0140::prepositions=disabled
+	//
+	//	aip.dev/not-precedent: 'Since' captures the field semantics despite being a preposition. --)
+	//
+	// Nil if not current.
+	CurrentSinceTime *timestamppb.Timestamp
+	// (-- api-linter: core::0140::prepositions=disabled
+	//
+	//	aip.dev/not-precedent: 'Since' captures the field semantics despite being a preposition. --)
+	//
+	// Nil if not ramping. Updated when the version first starts ramping, not on each ramp change.
+	RampingSinceTime *timestamppb.Timestamp
+	// Timestamp when this version first became current or ramping.
+	FirstActivationTime *timestamppb.Timestamp
+	// Timestamp when this version last became current.
+	// Can be used to determine whether a version has ever been Current.
+	LastCurrentTime *timestamppb.Timestamp
+	// Timestamp when this version last stopped being current or ramping.
+	LastDeactivationTime *timestamppb.Timestamp
+	// Status of the Worker Deployment Version.
+	Status v1.WorkerDeploymentVersionStatus
+}
+
+func (b0 WorkerDeploymentVersionSummary_builder) Build() *WorkerDeploymentVersionSummary {
+	m0 := &WorkerDeploymentVersionSummary{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Version = b.Version
+	x.xxx_hidden_CreateTime = b.CreateTime
+	x.xxx_hidden_DrainageStatus = b.DrainageStatus
+	x.xxx_hidden_DrainageInfo = b.DrainageInfo
+	x.xxx_hidden_RoutingUpdateTime = b.RoutingUpdateTime
+	x.xxx_hidden_CurrentSinceTime = b.CurrentSinceTime
+	x.xxx_hidden_RampingSinceTime = b.RampingSinceTime
+	x.xxx_hidden_FirstActivationTime = b.FirstActivationTime
+	x.xxx_hidden_LastCurrentTime = b.LastCurrentTime
+	x.xxx_hidden_LastDeactivationTime = b.LastDeactivationTime
+	x.xxx_hidden_Status = b.Status
+	return m0
+}
+
 // used as Worker Deployment Version workflow update input:
 type RegisterWorkerInVersionArgs struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	TaskQueueName string                 `protobuf:"bytes,1,opt,name=task_queue_name,json=taskQueueName,proto3" json:"task_queue_name,omitempty"`
-	TaskQueueType v1.TaskQueueType       `protobuf:"varint,2,opt,name=task_queue_type,json=taskQueueType,proto3,enum=temporal.api.enums.v1.TaskQueueType" json:"task_queue_type,omitempty"`
-	MaxTaskQueues int32                  `protobuf:"varint,3,opt,name=max_task_queues,json=maxTaskQueues,proto3" json:"max_task_queues,omitempty"`
-	Version       string                 `protobuf:"bytes,4,opt,name=version,proto3" json:"version,omitempty"`
-	RoutingConfig *v11.RoutingConfig     `protobuf:"bytes,5,opt,name=routing_config,json=routingConfig,proto3" json:"routing_config,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                    protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_TaskQueueName string                 `protobuf:"bytes,1,opt,name=task_queue_name,json=taskQueueName,proto3"`
+	xxx_hidden_TaskQueueType v1.TaskQueueType       `protobuf:"varint,2,opt,name=task_queue_type,json=taskQueueType,proto3,enum=temporal.api.enums.v1.TaskQueueType"`
+	xxx_hidden_MaxTaskQueues int32                  `protobuf:"varint,3,opt,name=max_task_queues,json=maxTaskQueues,proto3"`
+	xxx_hidden_Version       string                 `protobuf:"bytes,4,opt,name=version,proto3"`
+	xxx_hidden_RoutingConfig *v11.RoutingConfig     `protobuf:"bytes,5,opt,name=routing_config,json=routingConfig,proto3"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *RegisterWorkerInVersionArgs) Reset() {
@@ -969,55 +1670,103 @@ func (x *RegisterWorkerInVersionArgs) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RegisterWorkerInVersionArgs.ProtoReflect.Descriptor instead.
-func (*RegisterWorkerInVersionArgs) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{10}
-}
-
 func (x *RegisterWorkerInVersionArgs) GetTaskQueueName() string {
 	if x != nil {
-		return x.TaskQueueName
+		return x.xxx_hidden_TaskQueueName
 	}
 	return ""
 }
 
 func (x *RegisterWorkerInVersionArgs) GetTaskQueueType() v1.TaskQueueType {
 	if x != nil {
-		return x.TaskQueueType
+		return x.xxx_hidden_TaskQueueType
 	}
 	return v1.TaskQueueType(0)
 }
 
 func (x *RegisterWorkerInVersionArgs) GetMaxTaskQueues() int32 {
 	if x != nil {
-		return x.MaxTaskQueues
+		return x.xxx_hidden_MaxTaskQueues
 	}
 	return 0
 }
 
 func (x *RegisterWorkerInVersionArgs) GetVersion() string {
 	if x != nil {
-		return x.Version
+		return x.xxx_hidden_Version
 	}
 	return ""
 }
 
 func (x *RegisterWorkerInVersionArgs) GetRoutingConfig() *v11.RoutingConfig {
 	if x != nil {
-		return x.RoutingConfig
+		return x.xxx_hidden_RoutingConfig
 	}
 	return nil
 }
 
+func (x *RegisterWorkerInVersionArgs) SetTaskQueueName(v string) {
+	x.xxx_hidden_TaskQueueName = v
+}
+
+func (x *RegisterWorkerInVersionArgs) SetTaskQueueType(v v1.TaskQueueType) {
+	x.xxx_hidden_TaskQueueType = v
+}
+
+func (x *RegisterWorkerInVersionArgs) SetMaxTaskQueues(v int32) {
+	x.xxx_hidden_MaxTaskQueues = v
+}
+
+func (x *RegisterWorkerInVersionArgs) SetVersion(v string) {
+	x.xxx_hidden_Version = v
+}
+
+func (x *RegisterWorkerInVersionArgs) SetRoutingConfig(v *v11.RoutingConfig) {
+	x.xxx_hidden_RoutingConfig = v
+}
+
+func (x *RegisterWorkerInVersionArgs) HasRoutingConfig() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_RoutingConfig != nil
+}
+
+func (x *RegisterWorkerInVersionArgs) ClearRoutingConfig() {
+	x.xxx_hidden_RoutingConfig = nil
+}
+
+type RegisterWorkerInVersionArgs_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	TaskQueueName string
+	TaskQueueType v1.TaskQueueType
+	MaxTaskQueues int32
+	Version       string
+	RoutingConfig *v11.RoutingConfig
+}
+
+func (b0 RegisterWorkerInVersionArgs_builder) Build() *RegisterWorkerInVersionArgs {
+	m0 := &RegisterWorkerInVersionArgs{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_TaskQueueName = b.TaskQueueName
+	x.xxx_hidden_TaskQueueType = b.TaskQueueType
+	x.xxx_hidden_MaxTaskQueues = b.MaxTaskQueues
+	x.xxx_hidden_Version = b.Version
+	x.xxx_hidden_RoutingConfig = b.RoutingConfig
+	return m0
+}
+
 // used as Worker Deployment workflow update input:
 type RegisterWorkerInWorkerDeploymentArgs struct {
-	state         protoimpl.MessageState   `protogen:"open.v1"`
-	TaskQueueName string                   `protobuf:"bytes,1,opt,name=task_queue_name,json=taskQueueName,proto3" json:"task_queue_name,omitempty"`
-	TaskQueueType v1.TaskQueueType         `protobuf:"varint,2,opt,name=task_queue_type,json=taskQueueType,proto3,enum=temporal.api.enums.v1.TaskQueueType" json:"task_queue_type,omitempty"`
-	MaxTaskQueues int32                    `protobuf:"varint,3,opt,name=max_task_queues,json=maxTaskQueues,proto3" json:"max_task_queues,omitempty"`
-	Version       *WorkerDeploymentVersion `protobuf:"bytes,4,opt,name=version,proto3" json:"version,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                    protoimpl.MessageState   `protogen:"opaque.v1"`
+	xxx_hidden_TaskQueueName string                   `protobuf:"bytes,1,opt,name=task_queue_name,json=taskQueueName,proto3"`
+	xxx_hidden_TaskQueueType v1.TaskQueueType         `protobuf:"varint,2,opt,name=task_queue_type,json=taskQueueType,proto3,enum=temporal.api.enums.v1.TaskQueueType"`
+	xxx_hidden_MaxTaskQueues int32                    `protobuf:"varint,3,opt,name=max_task_queues,json=maxTaskQueues,proto3"`
+	xxx_hidden_Version       *WorkerDeploymentVersion `protobuf:"bytes,4,opt,name=version,proto3"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *RegisterWorkerInWorkerDeploymentArgs) Reset() {
@@ -1045,45 +1794,87 @@ func (x *RegisterWorkerInWorkerDeploymentArgs) ProtoReflect() protoreflect.Messa
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RegisterWorkerInWorkerDeploymentArgs.ProtoReflect.Descriptor instead.
-func (*RegisterWorkerInWorkerDeploymentArgs) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{11}
-}
-
 func (x *RegisterWorkerInWorkerDeploymentArgs) GetTaskQueueName() string {
 	if x != nil {
-		return x.TaskQueueName
+		return x.xxx_hidden_TaskQueueName
 	}
 	return ""
 }
 
 func (x *RegisterWorkerInWorkerDeploymentArgs) GetTaskQueueType() v1.TaskQueueType {
 	if x != nil {
-		return x.TaskQueueType
+		return x.xxx_hidden_TaskQueueType
 	}
 	return v1.TaskQueueType(0)
 }
 
 func (x *RegisterWorkerInWorkerDeploymentArgs) GetMaxTaskQueues() int32 {
 	if x != nil {
-		return x.MaxTaskQueues
+		return x.xxx_hidden_MaxTaskQueues
 	}
 	return 0
 }
 
 func (x *RegisterWorkerInWorkerDeploymentArgs) GetVersion() *WorkerDeploymentVersion {
 	if x != nil {
-		return x.Version
+		return x.xxx_hidden_Version
 	}
 	return nil
 }
 
+func (x *RegisterWorkerInWorkerDeploymentArgs) SetTaskQueueName(v string) {
+	x.xxx_hidden_TaskQueueName = v
+}
+
+func (x *RegisterWorkerInWorkerDeploymentArgs) SetTaskQueueType(v v1.TaskQueueType) {
+	x.xxx_hidden_TaskQueueType = v
+}
+
+func (x *RegisterWorkerInWorkerDeploymentArgs) SetMaxTaskQueues(v int32) {
+	x.xxx_hidden_MaxTaskQueues = v
+}
+
+func (x *RegisterWorkerInWorkerDeploymentArgs) SetVersion(v *WorkerDeploymentVersion) {
+	x.xxx_hidden_Version = v
+}
+
+func (x *RegisterWorkerInWorkerDeploymentArgs) HasVersion() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Version != nil
+}
+
+func (x *RegisterWorkerInWorkerDeploymentArgs) ClearVersion() {
+	x.xxx_hidden_Version = nil
+}
+
+type RegisterWorkerInWorkerDeploymentArgs_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	TaskQueueName string
+	TaskQueueType v1.TaskQueueType
+	MaxTaskQueues int32
+	Version       *WorkerDeploymentVersion
+}
+
+func (b0 RegisterWorkerInWorkerDeploymentArgs_builder) Build() *RegisterWorkerInWorkerDeploymentArgs {
+	m0 := &RegisterWorkerInWorkerDeploymentArgs{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_TaskQueueName = b.TaskQueueName
+	x.xxx_hidden_TaskQueueType = b.TaskQueueType
+	x.xxx_hidden_MaxTaskQueues = b.MaxTaskQueues
+	x.xxx_hidden_Version = b.Version
+	return m0
+}
+
 // used as Worker Deployment workflow activity input:
 type DescribeVersionFromWorkerDeploymentActivityArgs struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Version       string                 `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state              protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Version string                 `protobuf:"bytes,1,opt,name=version,proto3"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *DescribeVersionFromWorkerDeploymentActivityArgs) Reset() {
@@ -1111,24 +1902,36 @@ func (x *DescribeVersionFromWorkerDeploymentActivityArgs) ProtoReflect() protore
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DescribeVersionFromWorkerDeploymentActivityArgs.ProtoReflect.Descriptor instead.
-func (*DescribeVersionFromWorkerDeploymentActivityArgs) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{12}
-}
-
 func (x *DescribeVersionFromWorkerDeploymentActivityArgs) GetVersion() string {
 	if x != nil {
-		return x.Version
+		return x.xxx_hidden_Version
 	}
 	return ""
 }
 
+func (x *DescribeVersionFromWorkerDeploymentActivityArgs) SetVersion(v string) {
+	x.xxx_hidden_Version = v
+}
+
+type DescribeVersionFromWorkerDeploymentActivityArgs_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Version string
+}
+
+func (b0 DescribeVersionFromWorkerDeploymentActivityArgs_builder) Build() *DescribeVersionFromWorkerDeploymentActivityArgs {
+	m0 := &DescribeVersionFromWorkerDeploymentActivityArgs{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Version = b.Version
+	return m0
+}
+
 type DescribeVersionFromWorkerDeploymentActivityResult struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// All the Task Queues that have ever polled from this Deployment version.
-	TaskQueueInfos []*v11.WorkerDeploymentVersionInfo_VersionTaskQueueInfo `protobuf:"bytes,1,rep,name=task_queue_infos,json=taskQueueInfos,proto3" json:"task_queue_infos,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state                     protoimpl.MessageState                                   `protogen:"opaque.v1"`
+	xxx_hidden_TaskQueueInfos *[]*v11.WorkerDeploymentVersionInfo_VersionTaskQueueInfo `protobuf:"bytes,1,rep,name=task_queue_infos,json=taskQueueInfos,proto3"`
+	unknownFields             protoimpl.UnknownFields
+	sizeCache                 protoimpl.SizeCache
 }
 
 func (x *DescribeVersionFromWorkerDeploymentActivityResult) Reset() {
@@ -1156,51 +1959,44 @@ func (x *DescribeVersionFromWorkerDeploymentActivityResult) ProtoReflect() proto
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DescribeVersionFromWorkerDeploymentActivityResult.ProtoReflect.Descriptor instead.
-func (*DescribeVersionFromWorkerDeploymentActivityResult) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{13}
-}
-
 func (x *DescribeVersionFromWorkerDeploymentActivityResult) GetTaskQueueInfos() []*v11.WorkerDeploymentVersionInfo_VersionTaskQueueInfo {
 	if x != nil {
-		return x.TaskQueueInfos
+		if x.xxx_hidden_TaskQueueInfos != nil {
+			return *x.xxx_hidden_TaskQueueInfos
+		}
 	}
 	return nil
 }
 
+func (x *DescribeVersionFromWorkerDeploymentActivityResult) SetTaskQueueInfos(v []*v11.WorkerDeploymentVersionInfo_VersionTaskQueueInfo) {
+	x.xxx_hidden_TaskQueueInfos = &v
+}
+
+type DescribeVersionFromWorkerDeploymentActivityResult_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// All the Task Queues that have ever polled from this Deployment version.
+	TaskQueueInfos []*v11.WorkerDeploymentVersionInfo_VersionTaskQueueInfo
+}
+
+func (b0 DescribeVersionFromWorkerDeploymentActivityResult_builder) Build() *DescribeVersionFromWorkerDeploymentActivityResult {
+	m0 := &DescribeVersionFromWorkerDeploymentActivityResult{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_TaskQueueInfos = &b.TaskQueueInfos
+	return m0
+}
+
 // used as Worker Deployment workflow update input (sent from Worker Deployment workflow):
 type SyncVersionStateUpdateArgs struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Last time `current_since_time`, `ramping_since_time, or `ramp_percentage` of this version changed.
-	//
-	// Deprecated: Marked as deprecated in temporal/server/api/deployment/v1/message.proto.
-	RoutingUpdateTime *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=routing_update_time,json=routingUpdateTime,proto3" json:"routing_update_time,omitempty"`
-	// (-- api-linter: core::0140::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: 'Since' captures the field semantics despite being a preposition. --)
-	//
-	// Nil if not current.
-	//
-	// Deprecated: Marked as deprecated in temporal/server/api/deployment/v1/message.proto.
-	CurrentSinceTime *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=current_since_time,json=currentSinceTime,proto3" json:"current_since_time,omitempty"`
-	// (-- api-linter: core::0140::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: 'Since' captures the field semantics despite being a preposition. --)
-	//
-	// Nil if not ramping. Updated when the version first starts ramping, not on each ramp change.
-	//
-	// Deprecated: Marked as deprecated in temporal/server/api/deployment/v1/message.proto.
-	RampingSinceTime *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=ramping_since_time,json=rampingSinceTime,proto3" json:"ramping_since_time,omitempty"`
-	// Range: [0, 100]. Must be zero if the version is not ramping (i.e. `ramping_since_time` is nil).
-	// Can be in the range [0, 100] if the version is ramping.
-	//
-	// Deprecated: Marked as deprecated in temporal/server/api/deployment/v1/message.proto.
-	RampPercentage float32 `protobuf:"fixed32,4,opt,name=ramp_percentage,json=rampPercentage,proto3" json:"ramp_percentage,omitempty"`
-	// Full routing config for async propagation mode. When present, the version workflow
-	// will propagate the entire routing config asynchronously. When absent, sync mode is used.
-	RoutingConfig *v11.RoutingConfig `protobuf:"bytes,5,opt,name=routing_config,json=routingConfig,proto3" json:"routing_config,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                        protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_RoutingUpdateTime *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=routing_update_time,json=routingUpdateTime,proto3"`
+	xxx_hidden_CurrentSinceTime  *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=current_since_time,json=currentSinceTime,proto3"`
+	xxx_hidden_RampingSinceTime  *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=ramping_since_time,json=rampingSinceTime,proto3"`
+	xxx_hidden_RampPercentage    float32                `protobuf:"fixed32,4,opt,name=ramp_percentage,json=rampPercentage,proto3"`
+	xxx_hidden_RoutingConfig     *v11.RoutingConfig     `protobuf:"bytes,5,opt,name=routing_config,json=routingConfig,proto3"`
+	unknownFields                protoimpl.UnknownFields
+	sizeCache                    protoimpl.SizeCache
 }
 
 func (x *SyncVersionStateUpdateArgs) Reset() {
@@ -1228,15 +2024,10 @@ func (x *SyncVersionStateUpdateArgs) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SyncVersionStateUpdateArgs.ProtoReflect.Descriptor instead.
-func (*SyncVersionStateUpdateArgs) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{14}
-}
-
 // Deprecated: Marked as deprecated in temporal/server/api/deployment/v1/message.proto.
 func (x *SyncVersionStateUpdateArgs) GetRoutingUpdateTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.RoutingUpdateTime
+		return x.xxx_hidden_RoutingUpdateTime
 	}
 	return nil
 }
@@ -1244,7 +2035,7 @@ func (x *SyncVersionStateUpdateArgs) GetRoutingUpdateTime() *timestamppb.Timesta
 // Deprecated: Marked as deprecated in temporal/server/api/deployment/v1/message.proto.
 func (x *SyncVersionStateUpdateArgs) GetCurrentSinceTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.CurrentSinceTime
+		return x.xxx_hidden_CurrentSinceTime
 	}
 	return nil
 }
@@ -1252,7 +2043,7 @@ func (x *SyncVersionStateUpdateArgs) GetCurrentSinceTime() *timestamppb.Timestam
 // Deprecated: Marked as deprecated in temporal/server/api/deployment/v1/message.proto.
 func (x *SyncVersionStateUpdateArgs) GetRampingSinceTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.RampingSinceTime
+		return x.xxx_hidden_RampingSinceTime
 	}
 	return nil
 }
@@ -1260,28 +2051,144 @@ func (x *SyncVersionStateUpdateArgs) GetRampingSinceTime() *timestamppb.Timestam
 // Deprecated: Marked as deprecated in temporal/server/api/deployment/v1/message.proto.
 func (x *SyncVersionStateUpdateArgs) GetRampPercentage() float32 {
 	if x != nil {
-		return x.RampPercentage
+		return x.xxx_hidden_RampPercentage
 	}
 	return 0
 }
 
 func (x *SyncVersionStateUpdateArgs) GetRoutingConfig() *v11.RoutingConfig {
 	if x != nil {
-		return x.RoutingConfig
+		return x.xxx_hidden_RoutingConfig
 	}
 	return nil
 }
 
-// used as Worker Deployment workflow update response (sent from Worker Deployment workflow):
-type SyncVersionStateResponse struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Deprecated. State could be so large, no need to send it to the deployment workflow.
+// Deprecated: Marked as deprecated in temporal/server/api/deployment/v1/message.proto.
+func (x *SyncVersionStateUpdateArgs) SetRoutingUpdateTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_RoutingUpdateTime = v
+}
+
+// Deprecated: Marked as deprecated in temporal/server/api/deployment/v1/message.proto.
+func (x *SyncVersionStateUpdateArgs) SetCurrentSinceTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_CurrentSinceTime = v
+}
+
+// Deprecated: Marked as deprecated in temporal/server/api/deployment/v1/message.proto.
+func (x *SyncVersionStateUpdateArgs) SetRampingSinceTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_RampingSinceTime = v
+}
+
+// Deprecated: Marked as deprecated in temporal/server/api/deployment/v1/message.proto.
+func (x *SyncVersionStateUpdateArgs) SetRampPercentage(v float32) {
+	x.xxx_hidden_RampPercentage = v
+}
+
+func (x *SyncVersionStateUpdateArgs) SetRoutingConfig(v *v11.RoutingConfig) {
+	x.xxx_hidden_RoutingConfig = v
+}
+
+// Deprecated: Marked as deprecated in temporal/server/api/deployment/v1/message.proto.
+func (x *SyncVersionStateUpdateArgs) HasRoutingUpdateTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_RoutingUpdateTime != nil
+}
+
+// Deprecated: Marked as deprecated in temporal/server/api/deployment/v1/message.proto.
+func (x *SyncVersionStateUpdateArgs) HasCurrentSinceTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_CurrentSinceTime != nil
+}
+
+// Deprecated: Marked as deprecated in temporal/server/api/deployment/v1/message.proto.
+func (x *SyncVersionStateUpdateArgs) HasRampingSinceTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_RampingSinceTime != nil
+}
+
+func (x *SyncVersionStateUpdateArgs) HasRoutingConfig() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_RoutingConfig != nil
+}
+
+// Deprecated: Marked as deprecated in temporal/server/api/deployment/v1/message.proto.
+func (x *SyncVersionStateUpdateArgs) ClearRoutingUpdateTime() {
+	x.xxx_hidden_RoutingUpdateTime = nil
+}
+
+// Deprecated: Marked as deprecated in temporal/server/api/deployment/v1/message.proto.
+func (x *SyncVersionStateUpdateArgs) ClearCurrentSinceTime() {
+	x.xxx_hidden_CurrentSinceTime = nil
+}
+
+// Deprecated: Marked as deprecated in temporal/server/api/deployment/v1/message.proto.
+func (x *SyncVersionStateUpdateArgs) ClearRampingSinceTime() {
+	x.xxx_hidden_RampingSinceTime = nil
+}
+
+func (x *SyncVersionStateUpdateArgs) ClearRoutingConfig() {
+	x.xxx_hidden_RoutingConfig = nil
+}
+
+type SyncVersionStateUpdateArgs_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Last time `current_since_time`, `ramping_since_time, or `ramp_percentage` of this version changed.
 	//
 	// Deprecated: Marked as deprecated in temporal/server/api/deployment/v1/message.proto.
-	VersionState  *VersionLocalState              `protobuf:"bytes,1,opt,name=version_state,json=versionState,proto3" json:"version_state,omitempty"`
-	Summary       *WorkerDeploymentVersionSummary `protobuf:"bytes,2,opt,name=summary,proto3" json:"summary,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	RoutingUpdateTime *timestamppb.Timestamp
+	// (-- api-linter: core::0140::prepositions=disabled
+	//
+	//	aip.dev/not-precedent: 'Since' captures the field semantics despite being a preposition. --)
+	//
+	// Nil if not current.
+	//
+	// Deprecated: Marked as deprecated in temporal/server/api/deployment/v1/message.proto.
+	CurrentSinceTime *timestamppb.Timestamp
+	// (-- api-linter: core::0140::prepositions=disabled
+	//
+	//	aip.dev/not-precedent: 'Since' captures the field semantics despite being a preposition. --)
+	//
+	// Nil if not ramping. Updated when the version first starts ramping, not on each ramp change.
+	//
+	// Deprecated: Marked as deprecated in temporal/server/api/deployment/v1/message.proto.
+	RampingSinceTime *timestamppb.Timestamp
+	// Range: [0, 100]. Must be zero if the version is not ramping (i.e. `ramping_since_time` is nil).
+	// Can be in the range [0, 100] if the version is ramping.
+	//
+	// Deprecated: Marked as deprecated in temporal/server/api/deployment/v1/message.proto.
+	RampPercentage float32
+	// Full routing config for async propagation mode. When present, the version workflow
+	// will propagate the entire routing config asynchronously. When absent, sync mode is used.
+	RoutingConfig *v11.RoutingConfig
+}
+
+func (b0 SyncVersionStateUpdateArgs_builder) Build() *SyncVersionStateUpdateArgs {
+	m0 := &SyncVersionStateUpdateArgs{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_RoutingUpdateTime = b.RoutingUpdateTime
+	x.xxx_hidden_CurrentSinceTime = b.CurrentSinceTime
+	x.xxx_hidden_RampingSinceTime = b.RampingSinceTime
+	x.xxx_hidden_RampPercentage = b.RampPercentage
+	x.xxx_hidden_RoutingConfig = b.RoutingConfig
+	return m0
+}
+
+// used as Worker Deployment workflow update response (sent from Worker Deployment workflow):
+type SyncVersionStateResponse struct {
+	state                   protoimpl.MessageState          `protogen:"opaque.v1"`
+	xxx_hidden_VersionState *VersionLocalState              `protobuf:"bytes,1,opt,name=version_state,json=versionState,proto3"`
+	xxx_hidden_Summary      *WorkerDeploymentVersionSummary `protobuf:"bytes,2,opt,name=summary,proto3"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
 }
 
 func (x *SyncVersionStateResponse) Reset() {
@@ -1309,33 +2216,80 @@ func (x *SyncVersionStateResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SyncVersionStateResponse.ProtoReflect.Descriptor instead.
-func (*SyncVersionStateResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{15}
-}
-
 // Deprecated: Marked as deprecated in temporal/server/api/deployment/v1/message.proto.
 func (x *SyncVersionStateResponse) GetVersionState() *VersionLocalState {
 	if x != nil {
-		return x.VersionState
+		return x.xxx_hidden_VersionState
 	}
 	return nil
 }
 
 func (x *SyncVersionStateResponse) GetSummary() *WorkerDeploymentVersionSummary {
 	if x != nil {
-		return x.Summary
+		return x.xxx_hidden_Summary
 	}
 	return nil
 }
 
+// Deprecated: Marked as deprecated in temporal/server/api/deployment/v1/message.proto.
+func (x *SyncVersionStateResponse) SetVersionState(v *VersionLocalState) {
+	x.xxx_hidden_VersionState = v
+}
+
+func (x *SyncVersionStateResponse) SetSummary(v *WorkerDeploymentVersionSummary) {
+	x.xxx_hidden_Summary = v
+}
+
+// Deprecated: Marked as deprecated in temporal/server/api/deployment/v1/message.proto.
+func (x *SyncVersionStateResponse) HasVersionState() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_VersionState != nil
+}
+
+func (x *SyncVersionStateResponse) HasSummary() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Summary != nil
+}
+
+// Deprecated: Marked as deprecated in temporal/server/api/deployment/v1/message.proto.
+func (x *SyncVersionStateResponse) ClearVersionState() {
+	x.xxx_hidden_VersionState = nil
+}
+
+func (x *SyncVersionStateResponse) ClearSummary() {
+	x.xxx_hidden_Summary = nil
+}
+
+type SyncVersionStateResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Deprecated. State could be so large, no need to send it to the deployment workflow.
+	//
+	// Deprecated: Marked as deprecated in temporal/server/api/deployment/v1/message.proto.
+	VersionState *VersionLocalState
+	Summary      *WorkerDeploymentVersionSummary
+}
+
+func (b0 SyncVersionStateResponse_builder) Build() *SyncVersionStateResponse {
+	m0 := &SyncVersionStateResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_VersionState = b.VersionState
+	x.xxx_hidden_Summary = b.Summary
+	return m0
+}
+
 // Sent from Version workflow to Worker Deployment workflow
 type AddVersionUpdateArgs struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Version       string                 `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`
-	CreateTime    *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                 protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Version    string                 `protobuf:"bytes,1,opt,name=version,proto3"`
+	xxx_hidden_CreateTime *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=create_time,json=createTime,proto3"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
 }
 
 func (x *AddVersionUpdateArgs) Reset() {
@@ -1363,31 +2317,61 @@ func (x *AddVersionUpdateArgs) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use AddVersionUpdateArgs.ProtoReflect.Descriptor instead.
-func (*AddVersionUpdateArgs) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{16}
-}
-
 func (x *AddVersionUpdateArgs) GetVersion() string {
 	if x != nil {
-		return x.Version
+		return x.xxx_hidden_Version
 	}
 	return ""
 }
 
 func (x *AddVersionUpdateArgs) GetCreateTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.CreateTime
+		return x.xxx_hidden_CreateTime
 	}
 	return nil
 }
 
+func (x *AddVersionUpdateArgs) SetVersion(v string) {
+	x.xxx_hidden_Version = v
+}
+
+func (x *AddVersionUpdateArgs) SetCreateTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_CreateTime = v
+}
+
+func (x *AddVersionUpdateArgs) HasCreateTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_CreateTime != nil
+}
+
+func (x *AddVersionUpdateArgs) ClearCreateTime() {
+	x.xxx_hidden_CreateTime = nil
+}
+
+type AddVersionUpdateArgs_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Version    string
+	CreateTime *timestamppb.Timestamp
+}
+
+func (b0 AddVersionUpdateArgs_builder) Build() *AddVersionUpdateArgs {
+	m0 := &AddVersionUpdateArgs{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Version = b.Version
+	x.xxx_hidden_CreateTime = b.CreateTime
+	return m0
+}
+
 // Sent from Drainage child workflow to Version parent
 type SyncDrainageInfoSignalArgs struct {
-	state         protoimpl.MessageState   `protogen:"open.v1"`
-	DrainageInfo  *v11.VersionDrainageInfo `protobuf:"bytes,1,opt,name=drainage_info,json=drainageInfo,proto3" json:"drainage_info,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                   protoimpl.MessageState   `protogen:"opaque.v1"`
+	xxx_hidden_DrainageInfo *v11.VersionDrainageInfo `protobuf:"bytes,1,opt,name=drainage_info,json=drainageInfo,proto3"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
 }
 
 func (x *SyncDrainageInfoSignalArgs) Reset() {
@@ -1415,25 +2399,49 @@ func (x *SyncDrainageInfoSignalArgs) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SyncDrainageInfoSignalArgs.ProtoReflect.Descriptor instead.
-func (*SyncDrainageInfoSignalArgs) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{17}
-}
-
 func (x *SyncDrainageInfoSignalArgs) GetDrainageInfo() *v11.VersionDrainageInfo {
 	if x != nil {
-		return x.DrainageInfo
+		return x.xxx_hidden_DrainageInfo
 	}
 	return nil
 }
 
+func (x *SyncDrainageInfoSignalArgs) SetDrainageInfo(v *v11.VersionDrainageInfo) {
+	x.xxx_hidden_DrainageInfo = v
+}
+
+func (x *SyncDrainageInfoSignalArgs) HasDrainageInfo() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_DrainageInfo != nil
+}
+
+func (x *SyncDrainageInfoSignalArgs) ClearDrainageInfo() {
+	x.xxx_hidden_DrainageInfo = nil
+}
+
+type SyncDrainageInfoSignalArgs_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	DrainageInfo *v11.VersionDrainageInfo
+}
+
+func (b0 SyncDrainageInfoSignalArgs_builder) Build() *SyncDrainageInfoSignalArgs {
+	m0 := &SyncDrainageInfoSignalArgs{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_DrainageInfo = b.DrainageInfo
+	return m0
+}
+
 // Sent from Version workflow to Worker Deployment workflow
 type SyncDrainageStatusSignalArgs struct {
-	state          protoimpl.MessageState   `protogen:"open.v1"`
-	Version        string                   `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`
-	DrainageStatus v1.VersionDrainageStatus `protobuf:"varint,2,opt,name=drainage_status,json=drainageStatus,proto3,enum=temporal.api.enums.v1.VersionDrainageStatus" json:"drainage_status,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state                     protoimpl.MessageState   `protogen:"opaque.v1"`
+	xxx_hidden_Version        string                   `protobuf:"bytes,1,opt,name=version,proto3"`
+	xxx_hidden_DrainageStatus v1.VersionDrainageStatus `protobuf:"varint,2,opt,name=drainage_status,json=drainageStatus,proto3,enum=temporal.api.enums.v1.VersionDrainageStatus"`
+	unknownFields             protoimpl.UnknownFields
+	sizeCache                 protoimpl.SizeCache
 }
 
 func (x *SyncDrainageStatusSignalArgs) Reset() {
@@ -1461,32 +2469,51 @@ func (x *SyncDrainageStatusSignalArgs) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SyncDrainageStatusSignalArgs.ProtoReflect.Descriptor instead.
-func (*SyncDrainageStatusSignalArgs) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{18}
-}
-
 func (x *SyncDrainageStatusSignalArgs) GetVersion() string {
 	if x != nil {
-		return x.Version
+		return x.xxx_hidden_Version
 	}
 	return ""
 }
 
 func (x *SyncDrainageStatusSignalArgs) GetDrainageStatus() v1.VersionDrainageStatus {
 	if x != nil {
-		return x.DrainageStatus
+		return x.xxx_hidden_DrainageStatus
 	}
 	return v1.VersionDrainageStatus(0)
 }
 
+func (x *SyncDrainageStatusSignalArgs) SetVersion(v string) {
+	x.xxx_hidden_Version = v
+}
+
+func (x *SyncDrainageStatusSignalArgs) SetDrainageStatus(v v1.VersionDrainageStatus) {
+	x.xxx_hidden_DrainageStatus = v
+}
+
+type SyncDrainageStatusSignalArgs_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Version        string
+	DrainageStatus v1.VersionDrainageStatus
+}
+
+func (b0 SyncDrainageStatusSignalArgs_builder) Build() *SyncDrainageStatusSignalArgs {
+	m0 := &SyncDrainageStatusSignalArgs{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Version = b.Version
+	x.xxx_hidden_DrainageStatus = b.DrainageStatus
+	return m0
+}
+
 // Sent from Version workflow to Worker Deployment workflow when async propagation completes
 type PropagationCompletionInfo struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	RevisionNumber int64                  `protobuf:"varint,1,opt,name=revision_number,json=revisionNumber,proto3" json:"revision_number,omitempty"`
-	BuildId        string                 `protobuf:"bytes,2,opt,name=build_id,json=buildId,proto3" json:"build_id,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state                     protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_RevisionNumber int64                  `protobuf:"varint,1,opt,name=revision_number,json=revisionNumber,proto3"`
+	xxx_hidden_BuildId        string                 `protobuf:"bytes,2,opt,name=build_id,json=buildId,proto3"`
+	unknownFields             protoimpl.UnknownFields
+	sizeCache                 protoimpl.SizeCache
 }
 
 func (x *PropagationCompletionInfo) Reset() {
@@ -1514,31 +2541,50 @@ func (x *PropagationCompletionInfo) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use PropagationCompletionInfo.ProtoReflect.Descriptor instead.
-func (*PropagationCompletionInfo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{19}
-}
-
 func (x *PropagationCompletionInfo) GetRevisionNumber() int64 {
 	if x != nil {
-		return x.RevisionNumber
+		return x.xxx_hidden_RevisionNumber
 	}
 	return 0
 }
 
 func (x *PropagationCompletionInfo) GetBuildId() string {
 	if x != nil {
-		return x.BuildId
+		return x.xxx_hidden_BuildId
 	}
 	return ""
 }
 
+func (x *PropagationCompletionInfo) SetRevisionNumber(v int64) {
+	x.xxx_hidden_RevisionNumber = v
+}
+
+func (x *PropagationCompletionInfo) SetBuildId(v string) {
+	x.xxx_hidden_BuildId = v
+}
+
+type PropagationCompletionInfo_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	RevisionNumber int64
+	BuildId        string
+}
+
+func (b0 PropagationCompletionInfo_builder) Build() *PropagationCompletionInfo {
+	m0 := &PropagationCompletionInfo{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_RevisionNumber = b.RevisionNumber
+	x.xxx_hidden_BuildId = b.BuildId
+	return m0
+}
+
 // used as Worker Deployment Version workflow query response:
 type QueryDescribeVersionResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	VersionState  *VersionLocalState     `protobuf:"bytes,1,opt,name=version_state,json=versionState,proto3" json:"version_state,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                   protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_VersionState *VersionLocalState     `protobuf:"bytes,1,opt,name=version_state,json=versionState,proto3"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
 }
 
 func (x *QueryDescribeVersionResponse) Reset() {
@@ -1566,24 +2612,48 @@ func (x *QueryDescribeVersionResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use QueryDescribeVersionResponse.ProtoReflect.Descriptor instead.
-func (*QueryDescribeVersionResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{20}
-}
-
 func (x *QueryDescribeVersionResponse) GetVersionState() *VersionLocalState {
 	if x != nil {
-		return x.VersionState
+		return x.xxx_hidden_VersionState
 	}
 	return nil
 }
 
+func (x *QueryDescribeVersionResponse) SetVersionState(v *VersionLocalState) {
+	x.xxx_hidden_VersionState = v
+}
+
+func (x *QueryDescribeVersionResponse) HasVersionState() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_VersionState != nil
+}
+
+func (x *QueryDescribeVersionResponse) ClearVersionState() {
+	x.xxx_hidden_VersionState = nil
+}
+
+type QueryDescribeVersionResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	VersionState *VersionLocalState
+}
+
+func (b0 QueryDescribeVersionResponse_builder) Build() *QueryDescribeVersionResponse {
+	m0 := &QueryDescribeVersionResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_VersionState = b.VersionState
+	return m0
+}
+
 // used as Worker Deployment Version workflow query response:
 type QueryDescribeWorkerDeploymentResponse struct {
-	state         protoimpl.MessageState      `protogen:"open.v1"`
-	State         *WorkerDeploymentLocalState `protobuf:"bytes,1,opt,name=state,proto3" json:"state,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state            protoimpl.MessageState      `protogen:"opaque.v1"`
+	xxx_hidden_State *WorkerDeploymentLocalState `protobuf:"bytes,1,opt,name=state,proto3"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *QueryDescribeWorkerDeploymentResponse) Reset() {
@@ -1611,25 +2681,49 @@ func (x *QueryDescribeWorkerDeploymentResponse) ProtoReflect() protoreflect.Mess
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use QueryDescribeWorkerDeploymentResponse.ProtoReflect.Descriptor instead.
-func (*QueryDescribeWorkerDeploymentResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{21}
-}
-
 func (x *QueryDescribeWorkerDeploymentResponse) GetState() *WorkerDeploymentLocalState {
 	if x != nil {
-		return x.State
+		return x.xxx_hidden_State
 	}
 	return nil
 }
 
+func (x *QueryDescribeWorkerDeploymentResponse) SetState(v *WorkerDeploymentLocalState) {
+	x.xxx_hidden_State = v
+}
+
+func (x *QueryDescribeWorkerDeploymentResponse) HasState() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_State != nil
+}
+
+func (x *QueryDescribeWorkerDeploymentResponse) ClearState() {
+	x.xxx_hidden_State = nil
+}
+
+type QueryDescribeWorkerDeploymentResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	State *WorkerDeploymentLocalState
+}
+
+func (b0 QueryDescribeWorkerDeploymentResponse_builder) Build() *QueryDescribeWorkerDeploymentResponse {
+	m0 := &QueryDescribeWorkerDeploymentResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_State = b.State
+	return m0
+}
+
 // used as Worker Deployment Version workflow activity input:
 type StartWorkerDeploymentRequest struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	DeploymentName string                 `protobuf:"bytes,1,opt,name=deployment_name,json=deploymentName,proto3" json:"deployment_name,omitempty"`
-	RequestId      string                 `protobuf:"bytes,2,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state                     protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_DeploymentName string                 `protobuf:"bytes,1,opt,name=deployment_name,json=deploymentName,proto3"`
+	xxx_hidden_RequestId      string                 `protobuf:"bytes,2,opt,name=request_id,json=requestId,proto3"`
+	unknownFields             protoimpl.UnknownFields
+	sizeCache                 protoimpl.SizeCache
 }
 
 func (x *StartWorkerDeploymentRequest) Reset() {
@@ -1657,33 +2751,52 @@ func (x *StartWorkerDeploymentRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use StartWorkerDeploymentRequest.ProtoReflect.Descriptor instead.
-func (*StartWorkerDeploymentRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{22}
-}
-
 func (x *StartWorkerDeploymentRequest) GetDeploymentName() string {
 	if x != nil {
-		return x.DeploymentName
+		return x.xxx_hidden_DeploymentName
 	}
 	return ""
 }
 
 func (x *StartWorkerDeploymentRequest) GetRequestId() string {
 	if x != nil {
-		return x.RequestId
+		return x.xxx_hidden_RequestId
 	}
 	return ""
 }
 
+func (x *StartWorkerDeploymentRequest) SetDeploymentName(v string) {
+	x.xxx_hidden_DeploymentName = v
+}
+
+func (x *StartWorkerDeploymentRequest) SetRequestId(v string) {
+	x.xxx_hidden_RequestId = v
+}
+
+type StartWorkerDeploymentRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	DeploymentName string
+	RequestId      string
+}
+
+func (b0 StartWorkerDeploymentRequest_builder) Build() *StartWorkerDeploymentRequest {
+	m0 := &StartWorkerDeploymentRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_DeploymentName = b.DeploymentName
+	x.xxx_hidden_RequestId = b.RequestId
+	return m0
+}
+
 // used as Worker Deployment workflow activity input:
 type StartWorkerDeploymentVersionRequest struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	DeploymentName string                 `protobuf:"bytes,1,opt,name=deployment_name,json=deploymentName,proto3" json:"deployment_name,omitempty"`
-	BuildId        string                 `protobuf:"bytes,2,opt,name=build_id,json=buildId,proto3" json:"build_id,omitempty"`
-	RequestId      string                 `protobuf:"bytes,3,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state                     protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_DeploymentName string                 `protobuf:"bytes,1,opt,name=deployment_name,json=deploymentName,proto3"`
+	xxx_hidden_BuildId        string                 `protobuf:"bytes,2,opt,name=build_id,json=buildId,proto3"`
+	xxx_hidden_RequestId      string                 `protobuf:"bytes,3,opt,name=request_id,json=requestId,proto3"`
+	unknownFields             protoimpl.UnknownFields
+	sizeCache                 protoimpl.SizeCache
 }
 
 func (x *StartWorkerDeploymentVersionRequest) Reset() {
@@ -1711,46 +2824,68 @@ func (x *StartWorkerDeploymentVersionRequest) ProtoReflect() protoreflect.Messag
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use StartWorkerDeploymentVersionRequest.ProtoReflect.Descriptor instead.
-func (*StartWorkerDeploymentVersionRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{23}
-}
-
 func (x *StartWorkerDeploymentVersionRequest) GetDeploymentName() string {
 	if x != nil {
-		return x.DeploymentName
+		return x.xxx_hidden_DeploymentName
 	}
 	return ""
 }
 
 func (x *StartWorkerDeploymentVersionRequest) GetBuildId() string {
 	if x != nil {
-		return x.BuildId
+		return x.xxx_hidden_BuildId
 	}
 	return ""
 }
 
 func (x *StartWorkerDeploymentVersionRequest) GetRequestId() string {
 	if x != nil {
-		return x.RequestId
+		return x.xxx_hidden_RequestId
 	}
 	return ""
 }
 
+func (x *StartWorkerDeploymentVersionRequest) SetDeploymentName(v string) {
+	x.xxx_hidden_DeploymentName = v
+}
+
+func (x *StartWorkerDeploymentVersionRequest) SetBuildId(v string) {
+	x.xxx_hidden_BuildId = v
+}
+
+func (x *StartWorkerDeploymentVersionRequest) SetRequestId(v string) {
+	x.xxx_hidden_RequestId = v
+}
+
+type StartWorkerDeploymentVersionRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	DeploymentName string
+	BuildId        string
+	RequestId      string
+}
+
+func (b0 StartWorkerDeploymentVersionRequest_builder) Build() *StartWorkerDeploymentVersionRequest {
+	m0 := &StartWorkerDeploymentVersionRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_DeploymentName = b.DeploymentName
+	x.xxx_hidden_BuildId = b.BuildId
+	x.xxx_hidden_RequestId = b.RequestId
+	return m0
+}
+
 // used as Worker Deployment Version workflow activity input:
 type SyncDeploymentVersionUserDataRequest struct {
-	state          protoimpl.MessageState                               `protogen:"open.v1"`
-	DeploymentName string                                               `protobuf:"bytes,4,opt,name=deployment_name,json=deploymentName,proto3" json:"deployment_name,omitempty"`
-	Version        *WorkerDeploymentVersion                             `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`
-	Sync           []*SyncDeploymentVersionUserDataRequest_SyncUserData `protobuf:"bytes,2,rep,name=sync,proto3" json:"sync,omitempty"`
-	// if true, the version will be forgotten from the task queue user data.
-	ForgetVersion bool `protobuf:"varint,3,opt,name=forget_version,json=forgetVersion,proto3" json:"forget_version,omitempty"`
-	// Async mode: full routing config to propagate (includes revision_number)
-	UpdateRoutingConfig *v11.RoutingConfig `protobuf:"bytes,5,opt,name=update_routing_config,json=updateRoutingConfig,proto3" json:"update_routing_config,omitempty"`
-	// Async mode: version-specific data to upsert
-	UpsertVersionData *WorkerDeploymentVersionData `protobuf:"bytes,6,opt,name=upsert_version_data,json=upsertVersionData,proto3" json:"upsert_version_data,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state                          protoimpl.MessageState                                `protogen:"opaque.v1"`
+	xxx_hidden_DeploymentName      string                                                `protobuf:"bytes,4,opt,name=deployment_name,json=deploymentName,proto3"`
+	xxx_hidden_Version             *WorkerDeploymentVersion                              `protobuf:"bytes,1,opt,name=version,proto3"`
+	xxx_hidden_Sync                *[]*SyncDeploymentVersionUserDataRequest_SyncUserData `protobuf:"bytes,2,rep,name=sync,proto3"`
+	xxx_hidden_ForgetVersion       bool                                                  `protobuf:"varint,3,opt,name=forget_version,json=forgetVersion,proto3"`
+	xxx_hidden_UpdateRoutingConfig *v11.RoutingConfig                                    `protobuf:"bytes,5,opt,name=update_routing_config,json=updateRoutingConfig,proto3"`
+	xxx_hidden_UpsertVersionData   *WorkerDeploymentVersionData                          `protobuf:"bytes,6,opt,name=upsert_version_data,json=upsertVersionData,proto3"`
+	unknownFields                  protoimpl.UnknownFields
+	sizeCache                      protoimpl.SizeCache
 }
 
 func (x *SyncDeploymentVersionUserDataRequest) Reset() {
@@ -1778,59 +2913,140 @@ func (x *SyncDeploymentVersionUserDataRequest) ProtoReflect() protoreflect.Messa
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SyncDeploymentVersionUserDataRequest.ProtoReflect.Descriptor instead.
-func (*SyncDeploymentVersionUserDataRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{24}
-}
-
 func (x *SyncDeploymentVersionUserDataRequest) GetDeploymentName() string {
 	if x != nil {
-		return x.DeploymentName
+		return x.xxx_hidden_DeploymentName
 	}
 	return ""
 }
 
 func (x *SyncDeploymentVersionUserDataRequest) GetVersion() *WorkerDeploymentVersion {
 	if x != nil {
-		return x.Version
+		return x.xxx_hidden_Version
 	}
 	return nil
 }
 
 func (x *SyncDeploymentVersionUserDataRequest) GetSync() []*SyncDeploymentVersionUserDataRequest_SyncUserData {
 	if x != nil {
-		return x.Sync
+		if x.xxx_hidden_Sync != nil {
+			return *x.xxx_hidden_Sync
+		}
 	}
 	return nil
 }
 
 func (x *SyncDeploymentVersionUserDataRequest) GetForgetVersion() bool {
 	if x != nil {
-		return x.ForgetVersion
+		return x.xxx_hidden_ForgetVersion
 	}
 	return false
 }
 
 func (x *SyncDeploymentVersionUserDataRequest) GetUpdateRoutingConfig() *v11.RoutingConfig {
 	if x != nil {
-		return x.UpdateRoutingConfig
+		return x.xxx_hidden_UpdateRoutingConfig
 	}
 	return nil
 }
 
 func (x *SyncDeploymentVersionUserDataRequest) GetUpsertVersionData() *WorkerDeploymentVersionData {
 	if x != nil {
-		return x.UpsertVersionData
+		return x.xxx_hidden_UpsertVersionData
 	}
 	return nil
 }
 
+func (x *SyncDeploymentVersionUserDataRequest) SetDeploymentName(v string) {
+	x.xxx_hidden_DeploymentName = v
+}
+
+func (x *SyncDeploymentVersionUserDataRequest) SetVersion(v *WorkerDeploymentVersion) {
+	x.xxx_hidden_Version = v
+}
+
+func (x *SyncDeploymentVersionUserDataRequest) SetSync(v []*SyncDeploymentVersionUserDataRequest_SyncUserData) {
+	x.xxx_hidden_Sync = &v
+}
+
+func (x *SyncDeploymentVersionUserDataRequest) SetForgetVersion(v bool) {
+	x.xxx_hidden_ForgetVersion = v
+}
+
+func (x *SyncDeploymentVersionUserDataRequest) SetUpdateRoutingConfig(v *v11.RoutingConfig) {
+	x.xxx_hidden_UpdateRoutingConfig = v
+}
+
+func (x *SyncDeploymentVersionUserDataRequest) SetUpsertVersionData(v *WorkerDeploymentVersionData) {
+	x.xxx_hidden_UpsertVersionData = v
+}
+
+func (x *SyncDeploymentVersionUserDataRequest) HasVersion() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Version != nil
+}
+
+func (x *SyncDeploymentVersionUserDataRequest) HasUpdateRoutingConfig() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_UpdateRoutingConfig != nil
+}
+
+func (x *SyncDeploymentVersionUserDataRequest) HasUpsertVersionData() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_UpsertVersionData != nil
+}
+
+func (x *SyncDeploymentVersionUserDataRequest) ClearVersion() {
+	x.xxx_hidden_Version = nil
+}
+
+func (x *SyncDeploymentVersionUserDataRequest) ClearUpdateRoutingConfig() {
+	x.xxx_hidden_UpdateRoutingConfig = nil
+}
+
+func (x *SyncDeploymentVersionUserDataRequest) ClearUpsertVersionData() {
+	x.xxx_hidden_UpsertVersionData = nil
+}
+
+type SyncDeploymentVersionUserDataRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	DeploymentName string
+	Version        *WorkerDeploymentVersion
+	Sync           []*SyncDeploymentVersionUserDataRequest_SyncUserData
+	// if true, the version will be forgotten from the task queue user data.
+	ForgetVersion bool
+	// Async mode: full routing config to propagate (includes revision_number)
+	UpdateRoutingConfig *v11.RoutingConfig
+	// Async mode: version-specific data to upsert
+	UpsertVersionData *WorkerDeploymentVersionData
+}
+
+func (b0 SyncDeploymentVersionUserDataRequest_builder) Build() *SyncDeploymentVersionUserDataRequest {
+	m0 := &SyncDeploymentVersionUserDataRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_DeploymentName = b.DeploymentName
+	x.xxx_hidden_Version = b.Version
+	x.xxx_hidden_Sync = &b.Sync
+	x.xxx_hidden_ForgetVersion = b.ForgetVersion
+	x.xxx_hidden_UpdateRoutingConfig = b.UpdateRoutingConfig
+	x.xxx_hidden_UpsertVersionData = b.UpsertVersionData
+	return m0
+}
+
 // used as Worker Deployment Version workflow activity output:
 type SyncDeploymentVersionUserDataResponse struct {
-	state                protoimpl.MessageState `protogen:"open.v1"`
-	TaskQueueMaxVersions map[string]int64       `protobuf:"bytes,1,rep,name=task_queue_max_versions,json=taskQueueMaxVersions,proto3" json:"task_queue_max_versions,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
-	unknownFields        protoimpl.UnknownFields
-	sizeCache            protoimpl.SizeCache
+	state                           protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_TaskQueueMaxVersions map[string]int64       `protobuf:"bytes,1,rep,name=task_queue_max_versions,json=taskQueueMaxVersions,proto3" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
+	unknownFields                   protoimpl.UnknownFields
+	sizeCache                       protoimpl.SizeCache
 }
 
 func (x *SyncDeploymentVersionUserDataResponse) Reset() {
@@ -1858,24 +3074,37 @@ func (x *SyncDeploymentVersionUserDataResponse) ProtoReflect() protoreflect.Mess
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SyncDeploymentVersionUserDataResponse.ProtoReflect.Descriptor instead.
-func (*SyncDeploymentVersionUserDataResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{25}
-}
-
 func (x *SyncDeploymentVersionUserDataResponse) GetTaskQueueMaxVersions() map[string]int64 {
 	if x != nil {
-		return x.TaskQueueMaxVersions
+		return x.xxx_hidden_TaskQueueMaxVersions
 	}
 	return nil
 }
 
+func (x *SyncDeploymentVersionUserDataResponse) SetTaskQueueMaxVersions(v map[string]int64) {
+	x.xxx_hidden_TaskQueueMaxVersions = v
+}
+
+type SyncDeploymentVersionUserDataResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	TaskQueueMaxVersions map[string]int64
+}
+
+func (b0 SyncDeploymentVersionUserDataResponse_builder) Build() *SyncDeploymentVersionUserDataResponse {
+	m0 := &SyncDeploymentVersionUserDataResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_TaskQueueMaxVersions = b.TaskQueueMaxVersions
+	return m0
+}
+
 // used as Worker Deployment Version workflow activity input:
 type CheckWorkerDeploymentUserDataPropagationRequest struct {
-	state                protoimpl.MessageState `protogen:"open.v1"`
-	TaskQueueMaxVersions map[string]int64       `protobuf:"bytes,1,rep,name=task_queue_max_versions,json=taskQueueMaxVersions,proto3" json:"task_queue_max_versions,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
-	unknownFields        protoimpl.UnknownFields
-	sizeCache            protoimpl.SizeCache
+	state                           protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_TaskQueueMaxVersions map[string]int64       `protobuf:"bytes,1,rep,name=task_queue_max_versions,json=taskQueueMaxVersions,proto3" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
+	unknownFields                   protoimpl.UnknownFields
+	sizeCache                       protoimpl.SizeCache
 }
 
 func (x *CheckWorkerDeploymentUserDataPropagationRequest) Reset() {
@@ -1903,25 +3132,38 @@ func (x *CheckWorkerDeploymentUserDataPropagationRequest) ProtoReflect() protore
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CheckWorkerDeploymentUserDataPropagationRequest.ProtoReflect.Descriptor instead.
-func (*CheckWorkerDeploymentUserDataPropagationRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{26}
-}
-
 func (x *CheckWorkerDeploymentUserDataPropagationRequest) GetTaskQueueMaxVersions() map[string]int64 {
 	if x != nil {
-		return x.TaskQueueMaxVersions
+		return x.xxx_hidden_TaskQueueMaxVersions
 	}
 	return nil
 }
 
+func (x *CheckWorkerDeploymentUserDataPropagationRequest) SetTaskQueueMaxVersions(v map[string]int64) {
+	x.xxx_hidden_TaskQueueMaxVersions = v
+}
+
+type CheckWorkerDeploymentUserDataPropagationRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	TaskQueueMaxVersions map[string]int64
+}
+
+func (b0 CheckWorkerDeploymentUserDataPropagationRequest_builder) Build() *CheckWorkerDeploymentUserDataPropagationRequest {
+	m0 := &CheckWorkerDeploymentUserDataPropagationRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_TaskQueueMaxVersions = b.TaskQueueMaxVersions
+	return m0
+}
+
 // used as Worker Deployment workflow activity input:
 type SyncUnversionedRampActivityArgs struct {
-	state          protoimpl.MessageState      `protogen:"open.v1"`
-	CurrentVersion string                      `protobuf:"bytes,1,opt,name=current_version,json=currentVersion,proto3" json:"current_version,omitempty"`
-	UpdateArgs     *SyncVersionStateUpdateArgs `protobuf:"bytes,2,opt,name=update_args,json=updateArgs,proto3" json:"update_args,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state                     protoimpl.MessageState      `protogen:"opaque.v1"`
+	xxx_hidden_CurrentVersion string                      `protobuf:"bytes,1,opt,name=current_version,json=currentVersion,proto3"`
+	xxx_hidden_UpdateArgs     *SyncVersionStateUpdateArgs `protobuf:"bytes,2,opt,name=update_args,json=updateArgs,proto3"`
+	unknownFields             protoimpl.UnknownFields
+	sizeCache                 protoimpl.SizeCache
 }
 
 func (x *SyncUnversionedRampActivityArgs) Reset() {
@@ -1949,31 +3191,61 @@ func (x *SyncUnversionedRampActivityArgs) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SyncUnversionedRampActivityArgs.ProtoReflect.Descriptor instead.
-func (*SyncUnversionedRampActivityArgs) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{27}
-}
-
 func (x *SyncUnversionedRampActivityArgs) GetCurrentVersion() string {
 	if x != nil {
-		return x.CurrentVersion
+		return x.xxx_hidden_CurrentVersion
 	}
 	return ""
 }
 
 func (x *SyncUnversionedRampActivityArgs) GetUpdateArgs() *SyncVersionStateUpdateArgs {
 	if x != nil {
-		return x.UpdateArgs
+		return x.xxx_hidden_UpdateArgs
 	}
 	return nil
 }
 
+func (x *SyncUnversionedRampActivityArgs) SetCurrentVersion(v string) {
+	x.xxx_hidden_CurrentVersion = v
+}
+
+func (x *SyncUnversionedRampActivityArgs) SetUpdateArgs(v *SyncVersionStateUpdateArgs) {
+	x.xxx_hidden_UpdateArgs = v
+}
+
+func (x *SyncUnversionedRampActivityArgs) HasUpdateArgs() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_UpdateArgs != nil
+}
+
+func (x *SyncUnversionedRampActivityArgs) ClearUpdateArgs() {
+	x.xxx_hidden_UpdateArgs = nil
+}
+
+type SyncUnversionedRampActivityArgs_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	CurrentVersion string
+	UpdateArgs     *SyncVersionStateUpdateArgs
+}
+
+func (b0 SyncUnversionedRampActivityArgs_builder) Build() *SyncUnversionedRampActivityArgs {
+	m0 := &SyncUnversionedRampActivityArgs{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_CurrentVersion = b.CurrentVersion
+	x.xxx_hidden_UpdateArgs = b.UpdateArgs
+	return m0
+}
+
 // used as Worker Deployment workflow activity output:
 type SyncUnversionedRampActivityResponse struct {
-	state                protoimpl.MessageState `protogen:"open.v1"`
-	TaskQueueMaxVersions map[string]int64       `protobuf:"bytes,1,rep,name=task_queue_max_versions,json=taskQueueMaxVersions,proto3" json:"task_queue_max_versions,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
-	unknownFields        protoimpl.UnknownFields
-	sizeCache            protoimpl.SizeCache
+	state                           protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_TaskQueueMaxVersions map[string]int64       `protobuf:"bytes,1,rep,name=task_queue_max_versions,json=taskQueueMaxVersions,proto3" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
+	unknownFields                   protoimpl.UnknownFields
+	sizeCache                       protoimpl.SizeCache
 }
 
 func (x *SyncUnversionedRampActivityResponse) Reset() {
@@ -2001,26 +3273,39 @@ func (x *SyncUnversionedRampActivityResponse) ProtoReflect() protoreflect.Messag
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SyncUnversionedRampActivityResponse.ProtoReflect.Descriptor instead.
-func (*SyncUnversionedRampActivityResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{28}
-}
-
 func (x *SyncUnversionedRampActivityResponse) GetTaskQueueMaxVersions() map[string]int64 {
 	if x != nil {
-		return x.TaskQueueMaxVersions
+		return x.xxx_hidden_TaskQueueMaxVersions
 	}
 	return nil
 }
 
+func (x *SyncUnversionedRampActivityResponse) SetTaskQueueMaxVersions(v map[string]int64) {
+	x.xxx_hidden_TaskQueueMaxVersions = v
+}
+
+type SyncUnversionedRampActivityResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	TaskQueueMaxVersions map[string]int64
+}
+
+func (b0 SyncUnversionedRampActivityResponse_builder) Build() *SyncUnversionedRampActivityResponse {
+	m0 := &SyncUnversionedRampActivityResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_TaskQueueMaxVersions = b.TaskQueueMaxVersions
+	return m0
+}
+
 // used as Worker Deployment Version workflow update input:
 type UpdateVersionMetadataArgs struct {
-	state         protoimpl.MessageState  `protogen:"open.v1"`
-	UpsertEntries map[string]*v12.Payload `protobuf:"bytes,1,rep,name=upsert_entries,json=upsertEntries,proto3" json:"upsert_entries,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	RemoveEntries []string                `protobuf:"bytes,2,rep,name=remove_entries,json=removeEntries,proto3" json:"remove_entries,omitempty"`
-	Identity      string                  `protobuf:"bytes,3,opt,name=identity,proto3" json:"identity,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                    protoimpl.MessageState  `protogen:"opaque.v1"`
+	xxx_hidden_UpsertEntries map[string]*v12.Payload `protobuf:"bytes,1,rep,name=upsert_entries,json=upsertEntries,proto3" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	xxx_hidden_RemoveEntries []string                `protobuf:"bytes,2,rep,name=remove_entries,json=removeEntries,proto3"`
+	xxx_hidden_Identity      string                  `protobuf:"bytes,3,opt,name=identity,proto3"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *UpdateVersionMetadataArgs) Reset() {
@@ -2048,38 +3333,63 @@ func (x *UpdateVersionMetadataArgs) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use UpdateVersionMetadataArgs.ProtoReflect.Descriptor instead.
-func (*UpdateVersionMetadataArgs) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{29}
-}
-
 func (x *UpdateVersionMetadataArgs) GetUpsertEntries() map[string]*v12.Payload {
 	if x != nil {
-		return x.UpsertEntries
+		return x.xxx_hidden_UpsertEntries
 	}
 	return nil
 }
 
 func (x *UpdateVersionMetadataArgs) GetRemoveEntries() []string {
 	if x != nil {
-		return x.RemoveEntries
+		return x.xxx_hidden_RemoveEntries
 	}
 	return nil
 }
 
 func (x *UpdateVersionMetadataArgs) GetIdentity() string {
 	if x != nil {
-		return x.Identity
+		return x.xxx_hidden_Identity
 	}
 	return ""
 }
 
+func (x *UpdateVersionMetadataArgs) SetUpsertEntries(v map[string]*v12.Payload) {
+	x.xxx_hidden_UpsertEntries = v
+}
+
+func (x *UpdateVersionMetadataArgs) SetRemoveEntries(v []string) {
+	x.xxx_hidden_RemoveEntries = v
+}
+
+func (x *UpdateVersionMetadataArgs) SetIdentity(v string) {
+	x.xxx_hidden_Identity = v
+}
+
+type UpdateVersionMetadataArgs_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	UpsertEntries map[string]*v12.Payload
+	RemoveEntries []string
+	Identity      string
+}
+
+func (b0 UpdateVersionMetadataArgs_builder) Build() *UpdateVersionMetadataArgs {
+	m0 := &UpdateVersionMetadataArgs{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_UpsertEntries = b.UpsertEntries
+	x.xxx_hidden_RemoveEntries = b.RemoveEntries
+	x.xxx_hidden_Identity = b.Identity
+	return m0
+}
+
 // used as Worker Deployment Version workflow update response:
 type UpdateVersionMetadataResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Metadata      *v11.VersionMetadata   `protobuf:"bytes,1,opt,name=metadata,proto3" json:"metadata,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state               protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Metadata *v11.VersionMetadata   `protobuf:"bytes,1,opt,name=metadata,proto3"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *UpdateVersionMetadataResponse) Reset() {
@@ -2107,28 +3417,52 @@ func (x *UpdateVersionMetadataResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use UpdateVersionMetadataResponse.ProtoReflect.Descriptor instead.
-func (*UpdateVersionMetadataResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{30}
-}
-
 func (x *UpdateVersionMetadataResponse) GetMetadata() *v11.VersionMetadata {
 	if x != nil {
-		return x.Metadata
+		return x.xxx_hidden_Metadata
 	}
 	return nil
 }
 
+func (x *UpdateVersionMetadataResponse) SetMetadata(v *v11.VersionMetadata) {
+	x.xxx_hidden_Metadata = v
+}
+
+func (x *UpdateVersionMetadataResponse) HasMetadata() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Metadata != nil
+}
+
+func (x *UpdateVersionMetadataResponse) ClearMetadata() {
+	x.xxx_hidden_Metadata = nil
+}
+
+type UpdateVersionMetadataResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Metadata *v11.VersionMetadata
+}
+
+func (b0 UpdateVersionMetadataResponse_builder) Build() *UpdateVersionMetadataResponse {
+	m0 := &UpdateVersionMetadataResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Metadata = b.Metadata
+	return m0
+}
+
 // used as Worker Deployment workflow update input:
 type SetCurrentVersionArgs struct {
-	state                   protoimpl.MessageState `protogen:"open.v1"`
-	Identity                string                 `protobuf:"bytes,1,opt,name=identity,proto3" json:"identity,omitempty"`
-	Version                 string                 `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
-	IgnoreMissingTaskQueues bool                   `protobuf:"varint,3,opt,name=ignore_missing_task_queues,json=ignoreMissingTaskQueues,proto3" json:"ignore_missing_task_queues,omitempty"`
-	ConflictToken           []byte                 `protobuf:"bytes,4,opt,name=conflict_token,json=conflictToken,proto3" json:"conflict_token,omitempty"`
-	AllowNoPollers          bool                   `protobuf:"varint,5,opt,name=allow_no_pollers,json=allowNoPollers,proto3" json:"allow_no_pollers,omitempty"`
-	unknownFields           protoimpl.UnknownFields
-	sizeCache               protoimpl.SizeCache
+	state                              protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Identity                string                 `protobuf:"bytes,1,opt,name=identity,proto3"`
+	xxx_hidden_Version                 string                 `protobuf:"bytes,2,opt,name=version,proto3"`
+	xxx_hidden_IgnoreMissingTaskQueues bool                   `protobuf:"varint,3,opt,name=ignore_missing_task_queues,json=ignoreMissingTaskQueues,proto3"`
+	xxx_hidden_ConflictToken           []byte                 `protobuf:"bytes,4,opt,name=conflict_token,json=conflictToken,proto3"`
+	xxx_hidden_AllowNoPollers          bool                   `protobuf:"varint,5,opt,name=allow_no_pollers,json=allowNoPollers,proto3"`
+	unknownFields                      protoimpl.UnknownFields
+	sizeCache                          protoimpl.SizeCache
 }
 
 func (x *SetCurrentVersionArgs) Reset() {
@@ -2156,53 +3490,93 @@ func (x *SetCurrentVersionArgs) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SetCurrentVersionArgs.ProtoReflect.Descriptor instead.
-func (*SetCurrentVersionArgs) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{31}
-}
-
 func (x *SetCurrentVersionArgs) GetIdentity() string {
 	if x != nil {
-		return x.Identity
+		return x.xxx_hidden_Identity
 	}
 	return ""
 }
 
 func (x *SetCurrentVersionArgs) GetVersion() string {
 	if x != nil {
-		return x.Version
+		return x.xxx_hidden_Version
 	}
 	return ""
 }
 
 func (x *SetCurrentVersionArgs) GetIgnoreMissingTaskQueues() bool {
 	if x != nil {
-		return x.IgnoreMissingTaskQueues
+		return x.xxx_hidden_IgnoreMissingTaskQueues
 	}
 	return false
 }
 
 func (x *SetCurrentVersionArgs) GetConflictToken() []byte {
 	if x != nil {
-		return x.ConflictToken
+		return x.xxx_hidden_ConflictToken
 	}
 	return nil
 }
 
 func (x *SetCurrentVersionArgs) GetAllowNoPollers() bool {
 	if x != nil {
-		return x.AllowNoPollers
+		return x.xxx_hidden_AllowNoPollers
 	}
 	return false
 }
 
+func (x *SetCurrentVersionArgs) SetIdentity(v string) {
+	x.xxx_hidden_Identity = v
+}
+
+func (x *SetCurrentVersionArgs) SetVersion(v string) {
+	x.xxx_hidden_Version = v
+}
+
+func (x *SetCurrentVersionArgs) SetIgnoreMissingTaskQueues(v bool) {
+	x.xxx_hidden_IgnoreMissingTaskQueues = v
+}
+
+func (x *SetCurrentVersionArgs) SetConflictToken(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_ConflictToken = v
+}
+
+func (x *SetCurrentVersionArgs) SetAllowNoPollers(v bool) {
+	x.xxx_hidden_AllowNoPollers = v
+}
+
+type SetCurrentVersionArgs_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Identity                string
+	Version                 string
+	IgnoreMissingTaskQueues bool
+	ConflictToken           []byte
+	AllowNoPollers          bool
+}
+
+func (b0 SetCurrentVersionArgs_builder) Build() *SetCurrentVersionArgs {
+	m0 := &SetCurrentVersionArgs{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Identity = b.Identity
+	x.xxx_hidden_Version = b.Version
+	x.xxx_hidden_IgnoreMissingTaskQueues = b.IgnoreMissingTaskQueues
+	x.xxx_hidden_ConflictToken = b.ConflictToken
+	x.xxx_hidden_AllowNoPollers = b.AllowNoPollers
+	return m0
+}
+
 // used as Worker Deployment update response:
 type SetCurrentVersionResponse struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	PreviousVersion string                 `protobuf:"bytes,1,opt,name=previous_version,json=previousVersion,proto3" json:"previous_version,omitempty"`
-	ConflictToken   []byte                 `protobuf:"bytes,2,opt,name=conflict_token,json=conflictToken,proto3" json:"conflict_token,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state                      protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_PreviousVersion string                 `protobuf:"bytes,1,opt,name=previous_version,json=previousVersion,proto3"`
+	xxx_hidden_ConflictToken   []byte                 `protobuf:"bytes,2,opt,name=conflict_token,json=conflictToken,proto3"`
+	unknownFields              protoimpl.UnknownFields
+	sizeCache                  protoimpl.SizeCache
 }
 
 func (x *SetCurrentVersionResponse) Reset() {
@@ -2230,39 +3604,57 @@ func (x *SetCurrentVersionResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SetCurrentVersionResponse.ProtoReflect.Descriptor instead.
-func (*SetCurrentVersionResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{32}
-}
-
 func (x *SetCurrentVersionResponse) GetPreviousVersion() string {
 	if x != nil {
-		return x.PreviousVersion
+		return x.xxx_hidden_PreviousVersion
 	}
 	return ""
 }
 
 func (x *SetCurrentVersionResponse) GetConflictToken() []byte {
 	if x != nil {
-		return x.ConflictToken
+		return x.xxx_hidden_ConflictToken
 	}
 	return nil
 }
 
+func (x *SetCurrentVersionResponse) SetPreviousVersion(v string) {
+	x.xxx_hidden_PreviousVersion = v
+}
+
+func (x *SetCurrentVersionResponse) SetConflictToken(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_ConflictToken = v
+}
+
+type SetCurrentVersionResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	PreviousVersion string
+	ConflictToken   []byte
+}
+
+func (b0 SetCurrentVersionResponse_builder) Build() *SetCurrentVersionResponse {
+	m0 := &SetCurrentVersionResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_PreviousVersion = b.PreviousVersion
+	x.xxx_hidden_ConflictToken = b.ConflictToken
+	return m0
+}
+
 // used as Worker Deployment workflow update input:
 type DeleteVersionArgs struct {
-	state        protoimpl.MessageState `protogen:"open.v1"`
-	Identity     string                 `protobuf:"bytes,1,opt,name=identity,proto3" json:"identity,omitempty"`
-	Version      string                 `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
-	SkipDrainage bool                   `protobuf:"varint,3,opt,name=skip_drainage,json=skipDrainage,proto3" json:"skip_drainage,omitempty"`
-	// If true, it would mean that the delete operation is initiated by the server internally. This is done on the
-	// event that the addition of a version exceeds the max number of versions allowed in a worker-deployment (defaultMaxVersions).
-	// False elsewhere.
-	ServerDelete bool `protobuf:"varint,4,opt,name=server_delete,json=serverDelete,proto3" json:"server_delete,omitempty"`
-	// version workflow does not block the update for tq propagation
-	AsyncPropagation bool `protobuf:"varint,5,opt,name=async_propagation,json=asyncPropagation,proto3" json:"async_propagation,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	state                       protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Identity         string                 `protobuf:"bytes,1,opt,name=identity,proto3"`
+	xxx_hidden_Version          string                 `protobuf:"bytes,2,opt,name=version,proto3"`
+	xxx_hidden_SkipDrainage     bool                   `protobuf:"varint,3,opt,name=skip_drainage,json=skipDrainage,proto3"`
+	xxx_hidden_ServerDelete     bool                   `protobuf:"varint,4,opt,name=server_delete,json=serverDelete,proto3"`
+	xxx_hidden_AsyncPropagation bool                   `protobuf:"varint,5,opt,name=async_propagation,json=asyncPropagation,proto3"`
+	unknownFields               protoimpl.UnknownFields
+	sizeCache                   protoimpl.SizeCache
 }
 
 func (x *DeleteVersionArgs) Reset() {
@@ -2290,57 +3682,98 @@ func (x *DeleteVersionArgs) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DeleteVersionArgs.ProtoReflect.Descriptor instead.
-func (*DeleteVersionArgs) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{33}
-}
-
 func (x *DeleteVersionArgs) GetIdentity() string {
 	if x != nil {
-		return x.Identity
+		return x.xxx_hidden_Identity
 	}
 	return ""
 }
 
 func (x *DeleteVersionArgs) GetVersion() string {
 	if x != nil {
-		return x.Version
+		return x.xxx_hidden_Version
 	}
 	return ""
 }
 
 func (x *DeleteVersionArgs) GetSkipDrainage() bool {
 	if x != nil {
-		return x.SkipDrainage
+		return x.xxx_hidden_SkipDrainage
 	}
 	return false
 }
 
 func (x *DeleteVersionArgs) GetServerDelete() bool {
 	if x != nil {
-		return x.ServerDelete
+		return x.xxx_hidden_ServerDelete
 	}
 	return false
 }
 
 func (x *DeleteVersionArgs) GetAsyncPropagation() bool {
 	if x != nil {
-		return x.AsyncPropagation
+		return x.xxx_hidden_AsyncPropagation
 	}
 	return false
 }
 
+func (x *DeleteVersionArgs) SetIdentity(v string) {
+	x.xxx_hidden_Identity = v
+}
+
+func (x *DeleteVersionArgs) SetVersion(v string) {
+	x.xxx_hidden_Version = v
+}
+
+func (x *DeleteVersionArgs) SetSkipDrainage(v bool) {
+	x.xxx_hidden_SkipDrainage = v
+}
+
+func (x *DeleteVersionArgs) SetServerDelete(v bool) {
+	x.xxx_hidden_ServerDelete = v
+}
+
+func (x *DeleteVersionArgs) SetAsyncPropagation(v bool) {
+	x.xxx_hidden_AsyncPropagation = v
+}
+
+type DeleteVersionArgs_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Identity     string
+	Version      string
+	SkipDrainage bool
+	// If true, it would mean that the delete operation is initiated by the server internally. This is done on the
+	// event that the addition of a version exceeds the max number of versions allowed in a worker-deployment (defaultMaxVersions).
+	// False elsewhere.
+	ServerDelete bool
+	// version workflow does not block the update for tq propagation
+	AsyncPropagation bool
+}
+
+func (b0 DeleteVersionArgs_builder) Build() *DeleteVersionArgs {
+	m0 := &DeleteVersionArgs{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Identity = b.Identity
+	x.xxx_hidden_Version = b.Version
+	x.xxx_hidden_SkipDrainage = b.SkipDrainage
+	x.xxx_hidden_ServerDelete = b.ServerDelete
+	x.xxx_hidden_AsyncPropagation = b.AsyncPropagation
+	return m0
+}
+
 // used as Worker Deployment Activity input:
 type DeleteVersionActivityArgs struct {
-	state            protoimpl.MessageState `protogen:"open.v1"`
-	Identity         string                 `protobuf:"bytes,1,opt,name=identity,proto3" json:"identity,omitempty"`
-	DeploymentName   string                 `protobuf:"bytes,2,opt,name=deployment_name,json=deploymentName,proto3" json:"deployment_name,omitempty"`
-	Version          string                 `protobuf:"bytes,3,opt,name=version,proto3" json:"version,omitempty"`
-	RequestId        string                 `protobuf:"bytes,4,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
-	SkipDrainage     bool                   `protobuf:"varint,5,opt,name=skip_drainage,json=skipDrainage,proto3" json:"skip_drainage,omitempty"`
-	AsyncPropagation bool                   `protobuf:"varint,6,opt,name=async_propagation,json=asyncPropagation,proto3" json:"async_propagation,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	state                       protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Identity         string                 `protobuf:"bytes,1,opt,name=identity,proto3"`
+	xxx_hidden_DeploymentName   string                 `protobuf:"bytes,2,opt,name=deployment_name,json=deploymentName,proto3"`
+	xxx_hidden_Version          string                 `protobuf:"bytes,3,opt,name=version,proto3"`
+	xxx_hidden_RequestId        string                 `protobuf:"bytes,4,opt,name=request_id,json=requestId,proto3"`
+	xxx_hidden_SkipDrainage     bool                   `protobuf:"varint,5,opt,name=skip_drainage,json=skipDrainage,proto3"`
+	xxx_hidden_AsyncPropagation bool                   `protobuf:"varint,6,opt,name=async_propagation,json=asyncPropagation,proto3"`
+	unknownFields               protoimpl.UnknownFields
+	sizeCache                   protoimpl.SizeCache
 }
 
 func (x *DeleteVersionActivityArgs) Reset() {
@@ -2368,61 +3801,103 @@ func (x *DeleteVersionActivityArgs) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DeleteVersionActivityArgs.ProtoReflect.Descriptor instead.
-func (*DeleteVersionActivityArgs) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{34}
-}
-
 func (x *DeleteVersionActivityArgs) GetIdentity() string {
 	if x != nil {
-		return x.Identity
+		return x.xxx_hidden_Identity
 	}
 	return ""
 }
 
 func (x *DeleteVersionActivityArgs) GetDeploymentName() string {
 	if x != nil {
-		return x.DeploymentName
+		return x.xxx_hidden_DeploymentName
 	}
 	return ""
 }
 
 func (x *DeleteVersionActivityArgs) GetVersion() string {
 	if x != nil {
-		return x.Version
+		return x.xxx_hidden_Version
 	}
 	return ""
 }
 
 func (x *DeleteVersionActivityArgs) GetRequestId() string {
 	if x != nil {
-		return x.RequestId
+		return x.xxx_hidden_RequestId
 	}
 	return ""
 }
 
 func (x *DeleteVersionActivityArgs) GetSkipDrainage() bool {
 	if x != nil {
-		return x.SkipDrainage
+		return x.xxx_hidden_SkipDrainage
 	}
 	return false
 }
 
 func (x *DeleteVersionActivityArgs) GetAsyncPropagation() bool {
 	if x != nil {
-		return x.AsyncPropagation
+		return x.xxx_hidden_AsyncPropagation
 	}
 	return false
 }
 
+func (x *DeleteVersionActivityArgs) SetIdentity(v string) {
+	x.xxx_hidden_Identity = v
+}
+
+func (x *DeleteVersionActivityArgs) SetDeploymentName(v string) {
+	x.xxx_hidden_DeploymentName = v
+}
+
+func (x *DeleteVersionActivityArgs) SetVersion(v string) {
+	x.xxx_hidden_Version = v
+}
+
+func (x *DeleteVersionActivityArgs) SetRequestId(v string) {
+	x.xxx_hidden_RequestId = v
+}
+
+func (x *DeleteVersionActivityArgs) SetSkipDrainage(v bool) {
+	x.xxx_hidden_SkipDrainage = v
+}
+
+func (x *DeleteVersionActivityArgs) SetAsyncPropagation(v bool) {
+	x.xxx_hidden_AsyncPropagation = v
+}
+
+type DeleteVersionActivityArgs_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Identity         string
+	DeploymentName   string
+	Version          string
+	RequestId        string
+	SkipDrainage     bool
+	AsyncPropagation bool
+}
+
+func (b0 DeleteVersionActivityArgs_builder) Build() *DeleteVersionActivityArgs {
+	m0 := &DeleteVersionActivityArgs{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Identity = b.Identity
+	x.xxx_hidden_DeploymentName = b.DeploymentName
+	x.xxx_hidden_Version = b.Version
+	x.xxx_hidden_RequestId = b.RequestId
+	x.xxx_hidden_SkipDrainage = b.SkipDrainage
+	x.xxx_hidden_AsyncPropagation = b.AsyncPropagation
+	return m0
+}
+
 // used as Worker Deployment Activity input:
 type CheckTaskQueuesHavePollersActivityArgs struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Key: Task Queue Name
-	TaskQueuesAndTypes      map[string]*CheckTaskQueuesHavePollersActivityArgs_TaskQueueTypes `protobuf:"bytes,1,rep,name=task_queues_and_types,json=taskQueuesAndTypes,proto3" json:"task_queues_and_types,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	WorkerDeploymentVersion *WorkerDeploymentVersion                                          `protobuf:"bytes,2,opt,name=worker_deployment_version,json=workerDeploymentVersion,proto3" json:"worker_deployment_version,omitempty"`
-	unknownFields           protoimpl.UnknownFields
-	sizeCache               protoimpl.SizeCache
+	state                              protoimpl.MessageState                                            `protogen:"opaque.v1"`
+	xxx_hidden_TaskQueuesAndTypes      map[string]*CheckTaskQueuesHavePollersActivityArgs_TaskQueueTypes `protobuf:"bytes,1,rep,name=task_queues_and_types,json=taskQueuesAndTypes,proto3" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	xxx_hidden_WorkerDeploymentVersion *WorkerDeploymentVersion                                          `protobuf:"bytes,2,opt,name=worker_deployment_version,json=workerDeploymentVersion,proto3"`
+	unknownFields                      protoimpl.UnknownFields
+	sizeCache                          protoimpl.SizeCache
 }
 
 func (x *CheckTaskQueuesHavePollersActivityArgs) Reset() {
@@ -2450,31 +3925,62 @@ func (x *CheckTaskQueuesHavePollersActivityArgs) ProtoReflect() protoreflect.Mes
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CheckTaskQueuesHavePollersActivityArgs.ProtoReflect.Descriptor instead.
-func (*CheckTaskQueuesHavePollersActivityArgs) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{35}
-}
-
 func (x *CheckTaskQueuesHavePollersActivityArgs) GetTaskQueuesAndTypes() map[string]*CheckTaskQueuesHavePollersActivityArgs_TaskQueueTypes {
 	if x != nil {
-		return x.TaskQueuesAndTypes
+		return x.xxx_hidden_TaskQueuesAndTypes
 	}
 	return nil
 }
 
 func (x *CheckTaskQueuesHavePollersActivityArgs) GetWorkerDeploymentVersion() *WorkerDeploymentVersion {
 	if x != nil {
-		return x.WorkerDeploymentVersion
+		return x.xxx_hidden_WorkerDeploymentVersion
 	}
 	return nil
 }
 
+func (x *CheckTaskQueuesHavePollersActivityArgs) SetTaskQueuesAndTypes(v map[string]*CheckTaskQueuesHavePollersActivityArgs_TaskQueueTypes) {
+	x.xxx_hidden_TaskQueuesAndTypes = v
+}
+
+func (x *CheckTaskQueuesHavePollersActivityArgs) SetWorkerDeploymentVersion(v *WorkerDeploymentVersion) {
+	x.xxx_hidden_WorkerDeploymentVersion = v
+}
+
+func (x *CheckTaskQueuesHavePollersActivityArgs) HasWorkerDeploymentVersion() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_WorkerDeploymentVersion != nil
+}
+
+func (x *CheckTaskQueuesHavePollersActivityArgs) ClearWorkerDeploymentVersion() {
+	x.xxx_hidden_WorkerDeploymentVersion = nil
+}
+
+type CheckTaskQueuesHavePollersActivityArgs_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Key: Task Queue Name
+	TaskQueuesAndTypes      map[string]*CheckTaskQueuesHavePollersActivityArgs_TaskQueueTypes
+	WorkerDeploymentVersion *WorkerDeploymentVersion
+}
+
+func (b0 CheckTaskQueuesHavePollersActivityArgs_builder) Build() *CheckTaskQueuesHavePollersActivityArgs {
+	m0 := &CheckTaskQueuesHavePollersActivityArgs{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_TaskQueuesAndTypes = b.TaskQueuesAndTypes
+	x.xxx_hidden_WorkerDeploymentVersion = b.WorkerDeploymentVersion
+	return m0
+}
+
 // used as Worker Deployment workflow update input:
 type DeleteDeploymentArgs struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Identity      string                 `protobuf:"bytes,1,opt,name=identity,proto3" json:"identity,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state               protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Identity string                 `protobuf:"bytes,1,opt,name=identity,proto3"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *DeleteDeploymentArgs) Reset() {
@@ -2502,26 +4008,39 @@ func (x *DeleteDeploymentArgs) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DeleteDeploymentArgs.ProtoReflect.Descriptor instead.
-func (*DeleteDeploymentArgs) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{36}
-}
-
 func (x *DeleteDeploymentArgs) GetIdentity() string {
 	if x != nil {
-		return x.Identity
+		return x.xxx_hidden_Identity
 	}
 	return ""
 }
 
+func (x *DeleteDeploymentArgs) SetIdentity(v string) {
+	x.xxx_hidden_Identity = v
+}
+
+type DeleteDeploymentArgs_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Identity string
+}
+
+func (b0 DeleteDeploymentArgs_builder) Build() *DeleteDeploymentArgs {
+	m0 := &DeleteDeploymentArgs{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Identity = b.Identity
+	return m0
+}
+
 // used as Worker Deployment update response:
 type SetRampingVersionResponse struct {
-	state              protoimpl.MessageState `protogen:"open.v1"`
-	PreviousVersion    string                 `protobuf:"bytes,1,opt,name=previous_version,json=previousVersion,proto3" json:"previous_version,omitempty"`
-	PreviousPercentage float32                `protobuf:"fixed32,2,opt,name=previous_percentage,json=previousPercentage,proto3" json:"previous_percentage,omitempty"`
-	ConflictToken      []byte                 `protobuf:"bytes,3,opt,name=conflict_token,json=conflictToken,proto3" json:"conflict_token,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	state                         protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_PreviousVersion    string                 `protobuf:"bytes,1,opt,name=previous_version,json=previousVersion,proto3"`
+	xxx_hidden_PreviousPercentage float32                `protobuf:"fixed32,2,opt,name=previous_percentage,json=previousPercentage,proto3"`
+	xxx_hidden_ConflictToken      []byte                 `protobuf:"bytes,3,opt,name=conflict_token,json=conflictToken,proto3"`
+	unknownFields                 protoimpl.UnknownFields
+	sizeCache                     protoimpl.SizeCache
 }
 
 func (x *SetRampingVersionResponse) Reset() {
@@ -2549,43 +4068,71 @@ func (x *SetRampingVersionResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SetRampingVersionResponse.ProtoReflect.Descriptor instead.
-func (*SetRampingVersionResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{37}
-}
-
 func (x *SetRampingVersionResponse) GetPreviousVersion() string {
 	if x != nil {
-		return x.PreviousVersion
+		return x.xxx_hidden_PreviousVersion
 	}
 	return ""
 }
 
 func (x *SetRampingVersionResponse) GetPreviousPercentage() float32 {
 	if x != nil {
-		return x.PreviousPercentage
+		return x.xxx_hidden_PreviousPercentage
 	}
 	return 0
 }
 
 func (x *SetRampingVersionResponse) GetConflictToken() []byte {
 	if x != nil {
-		return x.ConflictToken
+		return x.xxx_hidden_ConflictToken
 	}
 	return nil
 }
 
+func (x *SetRampingVersionResponse) SetPreviousVersion(v string) {
+	x.xxx_hidden_PreviousVersion = v
+}
+
+func (x *SetRampingVersionResponse) SetPreviousPercentage(v float32) {
+	x.xxx_hidden_PreviousPercentage = v
+}
+
+func (x *SetRampingVersionResponse) SetConflictToken(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_ConflictToken = v
+}
+
+type SetRampingVersionResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	PreviousVersion    string
+	PreviousPercentage float32
+	ConflictToken      []byte
+}
+
+func (b0 SetRampingVersionResponse_builder) Build() *SetRampingVersionResponse {
+	m0 := &SetRampingVersionResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_PreviousVersion = b.PreviousVersion
+	x.xxx_hidden_PreviousPercentage = b.PreviousPercentage
+	x.xxx_hidden_ConflictToken = b.ConflictToken
+	return m0
+}
+
 // used as Worker Deployment workflow update input:
 type SetRampingVersionArgs struct {
-	state                   protoimpl.MessageState `protogen:"open.v1"`
-	Identity                string                 `protobuf:"bytes,1,opt,name=identity,proto3" json:"identity,omitempty"`
-	Version                 string                 `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
-	Percentage              float32                `protobuf:"fixed32,3,opt,name=percentage,proto3" json:"percentage,omitempty"`
-	IgnoreMissingTaskQueues bool                   `protobuf:"varint,4,opt,name=ignore_missing_task_queues,json=ignoreMissingTaskQueues,proto3" json:"ignore_missing_task_queues,omitempty"`
-	ConflictToken           []byte                 `protobuf:"bytes,5,opt,name=conflict_token,json=conflictToken,proto3" json:"conflict_token,omitempty"`
-	AllowNoPollers          bool                   `protobuf:"varint,6,opt,name=allow_no_pollers,json=allowNoPollers,proto3" json:"allow_no_pollers,omitempty"`
-	unknownFields           protoimpl.UnknownFields
-	sizeCache               protoimpl.SizeCache
+	state                              protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Identity                string                 `protobuf:"bytes,1,opt,name=identity,proto3"`
+	xxx_hidden_Version                 string                 `protobuf:"bytes,2,opt,name=version,proto3"`
+	xxx_hidden_Percentage              float32                `protobuf:"fixed32,3,opt,name=percentage,proto3"`
+	xxx_hidden_IgnoreMissingTaskQueues bool                   `protobuf:"varint,4,opt,name=ignore_missing_task_queues,json=ignoreMissingTaskQueues,proto3"`
+	xxx_hidden_ConflictToken           []byte                 `protobuf:"bytes,5,opt,name=conflict_token,json=conflictToken,proto3"`
+	xxx_hidden_AllowNoPollers          bool                   `protobuf:"varint,6,opt,name=allow_no_pollers,json=allowNoPollers,proto3"`
+	unknownFields                      protoimpl.UnknownFields
+	sizeCache                          protoimpl.SizeCache
 }
 
 func (x *SetRampingVersionArgs) Reset() {
@@ -2613,63 +4160,107 @@ func (x *SetRampingVersionArgs) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SetRampingVersionArgs.ProtoReflect.Descriptor instead.
-func (*SetRampingVersionArgs) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{38}
-}
-
 func (x *SetRampingVersionArgs) GetIdentity() string {
 	if x != nil {
-		return x.Identity
+		return x.xxx_hidden_Identity
 	}
 	return ""
 }
 
 func (x *SetRampingVersionArgs) GetVersion() string {
 	if x != nil {
-		return x.Version
+		return x.xxx_hidden_Version
 	}
 	return ""
 }
 
 func (x *SetRampingVersionArgs) GetPercentage() float32 {
 	if x != nil {
-		return x.Percentage
+		return x.xxx_hidden_Percentage
 	}
 	return 0
 }
 
 func (x *SetRampingVersionArgs) GetIgnoreMissingTaskQueues() bool {
 	if x != nil {
-		return x.IgnoreMissingTaskQueues
+		return x.xxx_hidden_IgnoreMissingTaskQueues
 	}
 	return false
 }
 
 func (x *SetRampingVersionArgs) GetConflictToken() []byte {
 	if x != nil {
-		return x.ConflictToken
+		return x.xxx_hidden_ConflictToken
 	}
 	return nil
 }
 
 func (x *SetRampingVersionArgs) GetAllowNoPollers() bool {
 	if x != nil {
-		return x.AllowNoPollers
+		return x.xxx_hidden_AllowNoPollers
 	}
 	return false
 }
 
+func (x *SetRampingVersionArgs) SetIdentity(v string) {
+	x.xxx_hidden_Identity = v
+}
+
+func (x *SetRampingVersionArgs) SetVersion(v string) {
+	x.xxx_hidden_Version = v
+}
+
+func (x *SetRampingVersionArgs) SetPercentage(v float32) {
+	x.xxx_hidden_Percentage = v
+}
+
+func (x *SetRampingVersionArgs) SetIgnoreMissingTaskQueues(v bool) {
+	x.xxx_hidden_IgnoreMissingTaskQueues = v
+}
+
+func (x *SetRampingVersionArgs) SetConflictToken(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_ConflictToken = v
+}
+
+func (x *SetRampingVersionArgs) SetAllowNoPollers(v bool) {
+	x.xxx_hidden_AllowNoPollers = v
+}
+
+type SetRampingVersionArgs_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Identity                string
+	Version                 string
+	Percentage              float32
+	IgnoreMissingTaskQueues bool
+	ConflictToken           []byte
+	AllowNoPollers          bool
+}
+
+func (b0 SetRampingVersionArgs_builder) Build() *SetRampingVersionArgs {
+	m0 := &SetRampingVersionArgs{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Identity = b.Identity
+	x.xxx_hidden_Version = b.Version
+	x.xxx_hidden_Percentage = b.Percentage
+	x.xxx_hidden_IgnoreMissingTaskQueues = b.IgnoreMissingTaskQueues
+	x.xxx_hidden_ConflictToken = b.ConflictToken
+	x.xxx_hidden_AllowNoPollers = b.AllowNoPollers
+	return m0
+}
+
 // used as Worker Deployment workflow update input:
 type SetManagerIdentityArgs struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// identity is the client's identity, as usual
-	Identity string `protobuf:"bytes,1,opt,name=identity,proto3" json:"identity,omitempty"`
-	// manager_identity is the new manager_identity.
-	ManagerIdentity string `protobuf:"bytes,2,opt,name=manager_identity,json=managerIdentity,proto3" json:"manager_identity,omitempty"`
-	ConflictToken   []byte `protobuf:"bytes,5,opt,name=conflict_token,json=conflictToken,proto3" json:"conflict_token,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state                      protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Identity        string                 `protobuf:"bytes,1,opt,name=identity,proto3"`
+	xxx_hidden_ManagerIdentity string                 `protobuf:"bytes,2,opt,name=manager_identity,json=managerIdentity,proto3"`
+	xxx_hidden_ConflictToken   []byte                 `protobuf:"bytes,5,opt,name=conflict_token,json=conflictToken,proto3"`
+	unknownFields              protoimpl.UnknownFields
+	sizeCache                  protoimpl.SizeCache
 }
 
 func (x *SetManagerIdentityArgs) Reset() {
@@ -2697,39 +4288,69 @@ func (x *SetManagerIdentityArgs) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SetManagerIdentityArgs.ProtoReflect.Descriptor instead.
-func (*SetManagerIdentityArgs) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{39}
-}
-
 func (x *SetManagerIdentityArgs) GetIdentity() string {
 	if x != nil {
-		return x.Identity
+		return x.xxx_hidden_Identity
 	}
 	return ""
 }
 
 func (x *SetManagerIdentityArgs) GetManagerIdentity() string {
 	if x != nil {
-		return x.ManagerIdentity
+		return x.xxx_hidden_ManagerIdentity
 	}
 	return ""
 }
 
 func (x *SetManagerIdentityArgs) GetConflictToken() []byte {
 	if x != nil {
-		return x.ConflictToken
+		return x.xxx_hidden_ConflictToken
 	}
 	return nil
 }
 
+func (x *SetManagerIdentityArgs) SetIdentity(v string) {
+	x.xxx_hidden_Identity = v
+}
+
+func (x *SetManagerIdentityArgs) SetManagerIdentity(v string) {
+	x.xxx_hidden_ManagerIdentity = v
+}
+
+func (x *SetManagerIdentityArgs) SetConflictToken(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_ConflictToken = v
+}
+
+type SetManagerIdentityArgs_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// identity is the client's identity, as usual
+	Identity string
+	// manager_identity is the new manager_identity.
+	ManagerIdentity string
+	ConflictToken   []byte
+}
+
+func (b0 SetManagerIdentityArgs_builder) Build() *SetManagerIdentityArgs {
+	m0 := &SetManagerIdentityArgs{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Identity = b.Identity
+	x.xxx_hidden_ManagerIdentity = b.ManagerIdentity
+	x.xxx_hidden_ConflictToken = b.ConflictToken
+	return m0
+}
+
 // used as Worker Deployment update response:
 type SetManagerIdentityResponse struct {
-	state                   protoimpl.MessageState `protogen:"open.v1"`
-	PreviousManagerIdentity string                 `protobuf:"bytes,1,opt,name=previous_manager_identity,json=previousManagerIdentity,proto3" json:"previous_manager_identity,omitempty"`
-	ConflictToken           []byte                 `protobuf:"bytes,2,opt,name=conflict_token,json=conflictToken,proto3" json:"conflict_token,omitempty"`
-	unknownFields           protoimpl.UnknownFields
-	sizeCache               protoimpl.SizeCache
+	state                              protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_PreviousManagerIdentity string                 `protobuf:"bytes,1,opt,name=previous_manager_identity,json=previousManagerIdentity,proto3"`
+	xxx_hidden_ConflictToken           []byte                 `protobuf:"bytes,2,opt,name=conflict_token,json=conflictToken,proto3"`
+	unknownFields                      protoimpl.UnknownFields
+	sizeCache                          protoimpl.SizeCache
 }
 
 func (x *SetManagerIdentityResponse) Reset() {
@@ -2757,35 +4378,56 @@ func (x *SetManagerIdentityResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SetManagerIdentityResponse.ProtoReflect.Descriptor instead.
-func (*SetManagerIdentityResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{40}
-}
-
 func (x *SetManagerIdentityResponse) GetPreviousManagerIdentity() string {
 	if x != nil {
-		return x.PreviousManagerIdentity
+		return x.xxx_hidden_PreviousManagerIdentity
 	}
 	return ""
 }
 
 func (x *SetManagerIdentityResponse) GetConflictToken() []byte {
 	if x != nil {
-		return x.ConflictToken
+		return x.xxx_hidden_ConflictToken
 	}
 	return nil
 }
 
+func (x *SetManagerIdentityResponse) SetPreviousManagerIdentity(v string) {
+	x.xxx_hidden_PreviousManagerIdentity = v
+}
+
+func (x *SetManagerIdentityResponse) SetConflictToken(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_ConflictToken = v
+}
+
+type SetManagerIdentityResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	PreviousManagerIdentity string
+	ConflictToken           []byte
+}
+
+func (b0 SetManagerIdentityResponse_builder) Build() *SetManagerIdentityResponse {
+	m0 := &SetManagerIdentityResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_PreviousManagerIdentity = b.PreviousManagerIdentity
+	x.xxx_hidden_ConflictToken = b.ConflictToken
+	return m0
+}
+
 // used as Worker Deployment activity input:
 type SyncVersionStateActivityArgs struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	DeploymentName string                 `protobuf:"bytes,1,opt,name=deployment_name,json=deploymentName,proto3" json:"deployment_name,omitempty"`
-	// <deployment_name>.<build_id> or possibly just <version_id> in the future
-	Version       string                      `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
-	UpdateArgs    *SyncVersionStateUpdateArgs `protobuf:"bytes,3,opt,name=update_args,json=updateArgs,proto3" json:"update_args,omitempty"`
-	RequestId     string                      `protobuf:"bytes,4,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                     protoimpl.MessageState      `protogen:"opaque.v1"`
+	xxx_hidden_DeploymentName string                      `protobuf:"bytes,1,opt,name=deployment_name,json=deploymentName,proto3"`
+	xxx_hidden_Version        string                      `protobuf:"bytes,2,opt,name=version,proto3"`
+	xxx_hidden_UpdateArgs     *SyncVersionStateUpdateArgs `protobuf:"bytes,3,opt,name=update_args,json=updateArgs,proto3"`
+	xxx_hidden_RequestId      string                      `protobuf:"bytes,4,opt,name=request_id,json=requestId,proto3"`
+	unknownFields             protoimpl.UnknownFields
+	sizeCache                 protoimpl.SizeCache
 }
 
 func (x *SyncVersionStateActivityArgs) Reset() {
@@ -2813,47 +4455,89 @@ func (x *SyncVersionStateActivityArgs) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SyncVersionStateActivityArgs.ProtoReflect.Descriptor instead.
-func (*SyncVersionStateActivityArgs) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{41}
-}
-
 func (x *SyncVersionStateActivityArgs) GetDeploymentName() string {
 	if x != nil {
-		return x.DeploymentName
+		return x.xxx_hidden_DeploymentName
 	}
 	return ""
 }
 
 func (x *SyncVersionStateActivityArgs) GetVersion() string {
 	if x != nil {
-		return x.Version
+		return x.xxx_hidden_Version
 	}
 	return ""
 }
 
 func (x *SyncVersionStateActivityArgs) GetUpdateArgs() *SyncVersionStateUpdateArgs {
 	if x != nil {
-		return x.UpdateArgs
+		return x.xxx_hidden_UpdateArgs
 	}
 	return nil
 }
 
 func (x *SyncVersionStateActivityArgs) GetRequestId() string {
 	if x != nil {
-		return x.RequestId
+		return x.xxx_hidden_RequestId
 	}
 	return ""
 }
 
+func (x *SyncVersionStateActivityArgs) SetDeploymentName(v string) {
+	x.xxx_hidden_DeploymentName = v
+}
+
+func (x *SyncVersionStateActivityArgs) SetVersion(v string) {
+	x.xxx_hidden_Version = v
+}
+
+func (x *SyncVersionStateActivityArgs) SetUpdateArgs(v *SyncVersionStateUpdateArgs) {
+	x.xxx_hidden_UpdateArgs = v
+}
+
+func (x *SyncVersionStateActivityArgs) SetRequestId(v string) {
+	x.xxx_hidden_RequestId = v
+}
+
+func (x *SyncVersionStateActivityArgs) HasUpdateArgs() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_UpdateArgs != nil
+}
+
+func (x *SyncVersionStateActivityArgs) ClearUpdateArgs() {
+	x.xxx_hidden_UpdateArgs = nil
+}
+
+type SyncVersionStateActivityArgs_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	DeploymentName string
+	// <deployment_name>.<build_id> or possibly just <version_id> in the future
+	Version    string
+	UpdateArgs *SyncVersionStateUpdateArgs
+	RequestId  string
+}
+
+func (b0 SyncVersionStateActivityArgs_builder) Build() *SyncVersionStateActivityArgs {
+	m0 := &SyncVersionStateActivityArgs{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_DeploymentName = b.DeploymentName
+	x.xxx_hidden_Version = b.Version
+	x.xxx_hidden_UpdateArgs = b.UpdateArgs
+	x.xxx_hidden_RequestId = b.RequestId
+	return m0
+}
+
 // used as Worker Deployment activity result:
 type SyncVersionStateActivityResult struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Deprecated: Marked as deprecated in temporal/server/api/deployment/v1/message.proto.
-	VersionState  *VersionLocalState              `protobuf:"bytes,1,opt,name=version_state,json=versionState,proto3" json:"version_state,omitempty"`
-	Summary       *WorkerDeploymentVersionSummary `protobuf:"bytes,2,opt,name=summary,proto3" json:"summary,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                   protoimpl.MessageState          `protogen:"opaque.v1"`
+	xxx_hidden_VersionState *VersionLocalState              `protobuf:"bytes,1,opt,name=version_state,json=versionState,proto3"`
+	xxx_hidden_Summary      *WorkerDeploymentVersionSummary `protobuf:"bytes,2,opt,name=summary,proto3"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
 }
 
 func (x *SyncVersionStateActivityResult) Reset() {
@@ -2881,33 +4565,78 @@ func (x *SyncVersionStateActivityResult) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SyncVersionStateActivityResult.ProtoReflect.Descriptor instead.
-func (*SyncVersionStateActivityResult) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{42}
-}
-
 // Deprecated: Marked as deprecated in temporal/server/api/deployment/v1/message.proto.
 func (x *SyncVersionStateActivityResult) GetVersionState() *VersionLocalState {
 	if x != nil {
-		return x.VersionState
+		return x.xxx_hidden_VersionState
 	}
 	return nil
 }
 
 func (x *SyncVersionStateActivityResult) GetSummary() *WorkerDeploymentVersionSummary {
 	if x != nil {
-		return x.Summary
+		return x.xxx_hidden_Summary
 	}
 	return nil
 }
 
+// Deprecated: Marked as deprecated in temporal/server/api/deployment/v1/message.proto.
+func (x *SyncVersionStateActivityResult) SetVersionState(v *VersionLocalState) {
+	x.xxx_hidden_VersionState = v
+}
+
+func (x *SyncVersionStateActivityResult) SetSummary(v *WorkerDeploymentVersionSummary) {
+	x.xxx_hidden_Summary = v
+}
+
+// Deprecated: Marked as deprecated in temporal/server/api/deployment/v1/message.proto.
+func (x *SyncVersionStateActivityResult) HasVersionState() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_VersionState != nil
+}
+
+func (x *SyncVersionStateActivityResult) HasSummary() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Summary != nil
+}
+
+// Deprecated: Marked as deprecated in temporal/server/api/deployment/v1/message.proto.
+func (x *SyncVersionStateActivityResult) ClearVersionState() {
+	x.xxx_hidden_VersionState = nil
+}
+
+func (x *SyncVersionStateActivityResult) ClearSummary() {
+	x.xxx_hidden_Summary = nil
+}
+
+type SyncVersionStateActivityResult_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Deprecated: Marked as deprecated in temporal/server/api/deployment/v1/message.proto.
+	VersionState *VersionLocalState
+	Summary      *WorkerDeploymentVersionSummary
+}
+
+func (b0 SyncVersionStateActivityResult_builder) Build() *SyncVersionStateActivityResult {
+	m0 := &SyncVersionStateActivityResult{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_VersionState = b.VersionState
+	x.xxx_hidden_Summary = b.Summary
+	return m0
+}
+
 // used as Worker Deployment activity input:
 type IsVersionMissingTaskQueuesArgs struct {
-	state              protoimpl.MessageState `protogen:"open.v1"`
-	PrevCurrentVersion string                 `protobuf:"bytes,1,opt,name=prev_current_version,json=prevCurrentVersion,proto3" json:"prev_current_version,omitempty"`
-	NewCurrentVersion  string                 `protobuf:"bytes,2,opt,name=new_current_version,json=newCurrentVersion,proto3" json:"new_current_version,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	state                         protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_PrevCurrentVersion string                 `protobuf:"bytes,1,opt,name=prev_current_version,json=prevCurrentVersion,proto3"`
+	xxx_hidden_NewCurrentVersion  string                 `protobuf:"bytes,2,opt,name=new_current_version,json=newCurrentVersion,proto3"`
+	unknownFields                 protoimpl.UnknownFields
+	sizeCache                     protoimpl.SizeCache
 }
 
 func (x *IsVersionMissingTaskQueuesArgs) Reset() {
@@ -2935,31 +4664,50 @@ func (x *IsVersionMissingTaskQueuesArgs) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use IsVersionMissingTaskQueuesArgs.ProtoReflect.Descriptor instead.
-func (*IsVersionMissingTaskQueuesArgs) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{43}
-}
-
 func (x *IsVersionMissingTaskQueuesArgs) GetPrevCurrentVersion() string {
 	if x != nil {
-		return x.PrevCurrentVersion
+		return x.xxx_hidden_PrevCurrentVersion
 	}
 	return ""
 }
 
 func (x *IsVersionMissingTaskQueuesArgs) GetNewCurrentVersion() string {
 	if x != nil {
-		return x.NewCurrentVersion
+		return x.xxx_hidden_NewCurrentVersion
 	}
 	return ""
 }
 
+func (x *IsVersionMissingTaskQueuesArgs) SetPrevCurrentVersion(v string) {
+	x.xxx_hidden_PrevCurrentVersion = v
+}
+
+func (x *IsVersionMissingTaskQueuesArgs) SetNewCurrentVersion(v string) {
+	x.xxx_hidden_NewCurrentVersion = v
+}
+
+type IsVersionMissingTaskQueuesArgs_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	PrevCurrentVersion string
+	NewCurrentVersion  string
+}
+
+func (b0 IsVersionMissingTaskQueuesArgs_builder) Build() *IsVersionMissingTaskQueuesArgs {
+	m0 := &IsVersionMissingTaskQueuesArgs{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_PrevCurrentVersion = b.PrevCurrentVersion
+	x.xxx_hidden_NewCurrentVersion = b.NewCurrentVersion
+	return m0
+}
+
 // used as Worker Deployment activity output:
 type IsVersionMissingTaskQueuesResult struct {
-	state               protoimpl.MessageState `protogen:"open.v1"`
-	IsMissingTaskQueues bool                   `protobuf:"varint,1,opt,name=is_missing_task_queues,json=isMissingTaskQueues,proto3" json:"is_missing_task_queues,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	state                          protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_IsMissingTaskQueues bool                   `protobuf:"varint,1,opt,name=is_missing_task_queues,json=isMissingTaskQueues,proto3"`
+	unknownFields                  protoimpl.UnknownFields
+	sizeCache                      protoimpl.SizeCache
 }
 
 func (x *IsVersionMissingTaskQueuesResult) Reset() {
@@ -2987,29 +4735,42 @@ func (x *IsVersionMissingTaskQueuesResult) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use IsVersionMissingTaskQueuesResult.ProtoReflect.Descriptor instead.
-func (*IsVersionMissingTaskQueuesResult) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{44}
-}
-
 func (x *IsVersionMissingTaskQueuesResult) GetIsMissingTaskQueues() bool {
 	if x != nil {
-		return x.IsMissingTaskQueues
+		return x.xxx_hidden_IsMissingTaskQueues
 	}
 	return false
 }
 
+func (x *IsVersionMissingTaskQueuesResult) SetIsMissingTaskQueues(v bool) {
+	x.xxx_hidden_IsMissingTaskQueues = v
+}
+
+type IsVersionMissingTaskQueuesResult_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	IsMissingTaskQueues bool
+}
+
+func (b0 IsVersionMissingTaskQueuesResult_builder) Build() *IsVersionMissingTaskQueuesResult {
+	m0 := &IsVersionMissingTaskQueuesResult{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_IsMissingTaskQueues = b.IsMissingTaskQueues
+	return m0
+}
+
 // used as Worker Deployment workflow memo:
 type WorkerDeploymentWorkflowMemo struct {
-	state                 protoimpl.MessageState                                   `protogen:"open.v1"`
-	DeploymentName        string                                                   `protobuf:"bytes,1,opt,name=deployment_name,json=deploymentName,proto3" json:"deployment_name,omitempty"`
-	CreateTime            *timestamppb.Timestamp                                   `protobuf:"bytes,2,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
-	RoutingConfig         *v11.RoutingConfig                                       `protobuf:"bytes,3,opt,name=routing_config,json=routingConfig,proto3" json:"routing_config,omitempty"`
-	LatestVersionSummary  *v11.WorkerDeploymentInfo_WorkerDeploymentVersionSummary `protobuf:"bytes,4,opt,name=latest_version_summary,json=latestVersionSummary,proto3" json:"latest_version_summary,omitempty"`
-	CurrentVersionSummary *v11.WorkerDeploymentInfo_WorkerDeploymentVersionSummary `protobuf:"bytes,5,opt,name=current_version_summary,json=currentVersionSummary,proto3" json:"current_version_summary,omitempty"`
-	RampingVersionSummary *v11.WorkerDeploymentInfo_WorkerDeploymentVersionSummary `protobuf:"bytes,6,opt,name=ramping_version_summary,json=rampingVersionSummary,proto3" json:"ramping_version_summary,omitempty"`
-	unknownFields         protoimpl.UnknownFields
-	sizeCache             protoimpl.SizeCache
+	state                            protoimpl.MessageState                                   `protogen:"opaque.v1"`
+	xxx_hidden_DeploymentName        string                                                   `protobuf:"bytes,1,opt,name=deployment_name,json=deploymentName,proto3"`
+	xxx_hidden_CreateTime            *timestamppb.Timestamp                                   `protobuf:"bytes,2,opt,name=create_time,json=createTime,proto3"`
+	xxx_hidden_RoutingConfig         *v11.RoutingConfig                                       `protobuf:"bytes,3,opt,name=routing_config,json=routingConfig,proto3"`
+	xxx_hidden_LatestVersionSummary  *v11.WorkerDeploymentInfo_WorkerDeploymentVersionSummary `protobuf:"bytes,4,opt,name=latest_version_summary,json=latestVersionSummary,proto3"`
+	xxx_hidden_CurrentVersionSummary *v11.WorkerDeploymentInfo_WorkerDeploymentVersionSummary `protobuf:"bytes,5,opt,name=current_version_summary,json=currentVersionSummary,proto3"`
+	xxx_hidden_RampingVersionSummary *v11.WorkerDeploymentInfo_WorkerDeploymentVersionSummary `protobuf:"bytes,6,opt,name=ramping_version_summary,json=rampingVersionSummary,proto3"`
+	unknownFields                    protoimpl.UnknownFields
+	sizeCache                        protoimpl.SizeCache
 }
 
 func (x *WorkerDeploymentWorkflowMemo) Reset() {
@@ -3037,64 +4798,162 @@ func (x *WorkerDeploymentWorkflowMemo) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use WorkerDeploymentWorkflowMemo.ProtoReflect.Descriptor instead.
-func (*WorkerDeploymentWorkflowMemo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{45}
-}
-
 func (x *WorkerDeploymentWorkflowMemo) GetDeploymentName() string {
 	if x != nil {
-		return x.DeploymentName
+		return x.xxx_hidden_DeploymentName
 	}
 	return ""
 }
 
 func (x *WorkerDeploymentWorkflowMemo) GetCreateTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.CreateTime
+		return x.xxx_hidden_CreateTime
 	}
 	return nil
 }
 
 func (x *WorkerDeploymentWorkflowMemo) GetRoutingConfig() *v11.RoutingConfig {
 	if x != nil {
-		return x.RoutingConfig
+		return x.xxx_hidden_RoutingConfig
 	}
 	return nil
 }
 
 func (x *WorkerDeploymentWorkflowMemo) GetLatestVersionSummary() *v11.WorkerDeploymentInfo_WorkerDeploymentVersionSummary {
 	if x != nil {
-		return x.LatestVersionSummary
+		return x.xxx_hidden_LatestVersionSummary
 	}
 	return nil
 }
 
 func (x *WorkerDeploymentWorkflowMemo) GetCurrentVersionSummary() *v11.WorkerDeploymentInfo_WorkerDeploymentVersionSummary {
 	if x != nil {
-		return x.CurrentVersionSummary
+		return x.xxx_hidden_CurrentVersionSummary
 	}
 	return nil
 }
 
 func (x *WorkerDeploymentWorkflowMemo) GetRampingVersionSummary() *v11.WorkerDeploymentInfo_WorkerDeploymentVersionSummary {
 	if x != nil {
-		return x.RampingVersionSummary
+		return x.xxx_hidden_RampingVersionSummary
 	}
 	return nil
 }
 
+func (x *WorkerDeploymentWorkflowMemo) SetDeploymentName(v string) {
+	x.xxx_hidden_DeploymentName = v
+}
+
+func (x *WorkerDeploymentWorkflowMemo) SetCreateTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_CreateTime = v
+}
+
+func (x *WorkerDeploymentWorkflowMemo) SetRoutingConfig(v *v11.RoutingConfig) {
+	x.xxx_hidden_RoutingConfig = v
+}
+
+func (x *WorkerDeploymentWorkflowMemo) SetLatestVersionSummary(v *v11.WorkerDeploymentInfo_WorkerDeploymentVersionSummary) {
+	x.xxx_hidden_LatestVersionSummary = v
+}
+
+func (x *WorkerDeploymentWorkflowMemo) SetCurrentVersionSummary(v *v11.WorkerDeploymentInfo_WorkerDeploymentVersionSummary) {
+	x.xxx_hidden_CurrentVersionSummary = v
+}
+
+func (x *WorkerDeploymentWorkflowMemo) SetRampingVersionSummary(v *v11.WorkerDeploymentInfo_WorkerDeploymentVersionSummary) {
+	x.xxx_hidden_RampingVersionSummary = v
+}
+
+func (x *WorkerDeploymentWorkflowMemo) HasCreateTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_CreateTime != nil
+}
+
+func (x *WorkerDeploymentWorkflowMemo) HasRoutingConfig() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_RoutingConfig != nil
+}
+
+func (x *WorkerDeploymentWorkflowMemo) HasLatestVersionSummary() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_LatestVersionSummary != nil
+}
+
+func (x *WorkerDeploymentWorkflowMemo) HasCurrentVersionSummary() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_CurrentVersionSummary != nil
+}
+
+func (x *WorkerDeploymentWorkflowMemo) HasRampingVersionSummary() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_RampingVersionSummary != nil
+}
+
+func (x *WorkerDeploymentWorkflowMemo) ClearCreateTime() {
+	x.xxx_hidden_CreateTime = nil
+}
+
+func (x *WorkerDeploymentWorkflowMemo) ClearRoutingConfig() {
+	x.xxx_hidden_RoutingConfig = nil
+}
+
+func (x *WorkerDeploymentWorkflowMemo) ClearLatestVersionSummary() {
+	x.xxx_hidden_LatestVersionSummary = nil
+}
+
+func (x *WorkerDeploymentWorkflowMemo) ClearCurrentVersionSummary() {
+	x.xxx_hidden_CurrentVersionSummary = nil
+}
+
+func (x *WorkerDeploymentWorkflowMemo) ClearRampingVersionSummary() {
+	x.xxx_hidden_RampingVersionSummary = nil
+}
+
+type WorkerDeploymentWorkflowMemo_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	DeploymentName        string
+	CreateTime            *timestamppb.Timestamp
+	RoutingConfig         *v11.RoutingConfig
+	LatestVersionSummary  *v11.WorkerDeploymentInfo_WorkerDeploymentVersionSummary
+	CurrentVersionSummary *v11.WorkerDeploymentInfo_WorkerDeploymentVersionSummary
+	RampingVersionSummary *v11.WorkerDeploymentInfo_WorkerDeploymentVersionSummary
+}
+
+func (b0 WorkerDeploymentWorkflowMemo_builder) Build() *WorkerDeploymentWorkflowMemo {
+	m0 := &WorkerDeploymentWorkflowMemo{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_DeploymentName = b.DeploymentName
+	x.xxx_hidden_CreateTime = b.CreateTime
+	x.xxx_hidden_RoutingConfig = b.RoutingConfig
+	x.xxx_hidden_LatestVersionSummary = b.LatestVersionSummary
+	x.xxx_hidden_CurrentVersionSummary = b.CurrentVersionSummary
+	x.xxx_hidden_RampingVersionSummary = b.RampingVersionSummary
+	return m0
+}
+
 // Subset of fields of WorkerDeploymentInfo returned in ListWorkerDeploymentsResponse
 type WorkerDeploymentSummary struct {
-	state                 protoimpl.MessageState                                   `protogen:"open.v1"`
-	Name                  string                                                   `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	CreateTime            *timestamppb.Timestamp                                   `protobuf:"bytes,2,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
-	RoutingConfig         *v11.RoutingConfig                                       `protobuf:"bytes,3,opt,name=routing_config,json=routingConfig,proto3" json:"routing_config,omitempty"`
-	LatestVersionSummary  *v11.WorkerDeploymentInfo_WorkerDeploymentVersionSummary `protobuf:"bytes,4,opt,name=latest_version_summary,json=latestVersionSummary,proto3" json:"latest_version_summary,omitempty"`
-	CurrentVersionSummary *v11.WorkerDeploymentInfo_WorkerDeploymentVersionSummary `protobuf:"bytes,5,opt,name=current_version_summary,json=currentVersionSummary,proto3" json:"current_version_summary,omitempty"`
-	RampingVersionSummary *v11.WorkerDeploymentInfo_WorkerDeploymentVersionSummary `protobuf:"bytes,6,opt,name=ramping_version_summary,json=rampingVersionSummary,proto3" json:"ramping_version_summary,omitempty"`
-	unknownFields         protoimpl.UnknownFields
-	sizeCache             protoimpl.SizeCache
+	state                            protoimpl.MessageState                                   `protogen:"opaque.v1"`
+	xxx_hidden_Name                  string                                                   `protobuf:"bytes,1,opt,name=name,proto3"`
+	xxx_hidden_CreateTime            *timestamppb.Timestamp                                   `protobuf:"bytes,2,opt,name=create_time,json=createTime,proto3"`
+	xxx_hidden_RoutingConfig         *v11.RoutingConfig                                       `protobuf:"bytes,3,opt,name=routing_config,json=routingConfig,proto3"`
+	xxx_hidden_LatestVersionSummary  *v11.WorkerDeploymentInfo_WorkerDeploymentVersionSummary `protobuf:"bytes,4,opt,name=latest_version_summary,json=latestVersionSummary,proto3"`
+	xxx_hidden_CurrentVersionSummary *v11.WorkerDeploymentInfo_WorkerDeploymentVersionSummary `protobuf:"bytes,5,opt,name=current_version_summary,json=currentVersionSummary,proto3"`
+	xxx_hidden_RampingVersionSummary *v11.WorkerDeploymentInfo_WorkerDeploymentVersionSummary `protobuf:"bytes,6,opt,name=ramping_version_summary,json=rampingVersionSummary,proto3"`
+	unknownFields                    protoimpl.UnknownFields
+	sizeCache                        protoimpl.SizeCache
 }
 
 func (x *WorkerDeploymentSummary) Reset() {
@@ -3122,59 +4981,156 @@ func (x *WorkerDeploymentSummary) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use WorkerDeploymentSummary.ProtoReflect.Descriptor instead.
-func (*WorkerDeploymentSummary) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{46}
-}
-
 func (x *WorkerDeploymentSummary) GetName() string {
 	if x != nil {
-		return x.Name
+		return x.xxx_hidden_Name
 	}
 	return ""
 }
 
 func (x *WorkerDeploymentSummary) GetCreateTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.CreateTime
+		return x.xxx_hidden_CreateTime
 	}
 	return nil
 }
 
 func (x *WorkerDeploymentSummary) GetRoutingConfig() *v11.RoutingConfig {
 	if x != nil {
-		return x.RoutingConfig
+		return x.xxx_hidden_RoutingConfig
 	}
 	return nil
 }
 
 func (x *WorkerDeploymentSummary) GetLatestVersionSummary() *v11.WorkerDeploymentInfo_WorkerDeploymentVersionSummary {
 	if x != nil {
-		return x.LatestVersionSummary
+		return x.xxx_hidden_LatestVersionSummary
 	}
 	return nil
 }
 
 func (x *WorkerDeploymentSummary) GetCurrentVersionSummary() *v11.WorkerDeploymentInfo_WorkerDeploymentVersionSummary {
 	if x != nil {
-		return x.CurrentVersionSummary
+		return x.xxx_hidden_CurrentVersionSummary
 	}
 	return nil
 }
 
 func (x *WorkerDeploymentSummary) GetRampingVersionSummary() *v11.WorkerDeploymentInfo_WorkerDeploymentVersionSummary {
 	if x != nil {
-		return x.RampingVersionSummary
+		return x.xxx_hidden_RampingVersionSummary
 	}
 	return nil
 }
 
+func (x *WorkerDeploymentSummary) SetName(v string) {
+	x.xxx_hidden_Name = v
+}
+
+func (x *WorkerDeploymentSummary) SetCreateTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_CreateTime = v
+}
+
+func (x *WorkerDeploymentSummary) SetRoutingConfig(v *v11.RoutingConfig) {
+	x.xxx_hidden_RoutingConfig = v
+}
+
+func (x *WorkerDeploymentSummary) SetLatestVersionSummary(v *v11.WorkerDeploymentInfo_WorkerDeploymentVersionSummary) {
+	x.xxx_hidden_LatestVersionSummary = v
+}
+
+func (x *WorkerDeploymentSummary) SetCurrentVersionSummary(v *v11.WorkerDeploymentInfo_WorkerDeploymentVersionSummary) {
+	x.xxx_hidden_CurrentVersionSummary = v
+}
+
+func (x *WorkerDeploymentSummary) SetRampingVersionSummary(v *v11.WorkerDeploymentInfo_WorkerDeploymentVersionSummary) {
+	x.xxx_hidden_RampingVersionSummary = v
+}
+
+func (x *WorkerDeploymentSummary) HasCreateTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_CreateTime != nil
+}
+
+func (x *WorkerDeploymentSummary) HasRoutingConfig() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_RoutingConfig != nil
+}
+
+func (x *WorkerDeploymentSummary) HasLatestVersionSummary() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_LatestVersionSummary != nil
+}
+
+func (x *WorkerDeploymentSummary) HasCurrentVersionSummary() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_CurrentVersionSummary != nil
+}
+
+func (x *WorkerDeploymentSummary) HasRampingVersionSummary() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_RampingVersionSummary != nil
+}
+
+func (x *WorkerDeploymentSummary) ClearCreateTime() {
+	x.xxx_hidden_CreateTime = nil
+}
+
+func (x *WorkerDeploymentSummary) ClearRoutingConfig() {
+	x.xxx_hidden_RoutingConfig = nil
+}
+
+func (x *WorkerDeploymentSummary) ClearLatestVersionSummary() {
+	x.xxx_hidden_LatestVersionSummary = nil
+}
+
+func (x *WorkerDeploymentSummary) ClearCurrentVersionSummary() {
+	x.xxx_hidden_CurrentVersionSummary = nil
+}
+
+func (x *WorkerDeploymentSummary) ClearRampingVersionSummary() {
+	x.xxx_hidden_RampingVersionSummary = nil
+}
+
+type WorkerDeploymentSummary_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Name                  string
+	CreateTime            *timestamppb.Timestamp
+	RoutingConfig         *v11.RoutingConfig
+	LatestVersionSummary  *v11.WorkerDeploymentInfo_WorkerDeploymentVersionSummary
+	CurrentVersionSummary *v11.WorkerDeploymentInfo_WorkerDeploymentVersionSummary
+	RampingVersionSummary *v11.WorkerDeploymentInfo_WorkerDeploymentVersionSummary
+}
+
+func (b0 WorkerDeploymentSummary_builder) Build() *WorkerDeploymentSummary {
+	m0 := &WorkerDeploymentSummary{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Name = b.Name
+	x.xxx_hidden_CreateTime = b.CreateTime
+	x.xxx_hidden_RoutingConfig = b.RoutingConfig
+	x.xxx_hidden_LatestVersionSummary = b.LatestVersionSummary
+	x.xxx_hidden_CurrentVersionSummary = b.CurrentVersionSummary
+	x.xxx_hidden_RampingVersionSummary = b.RampingVersionSummary
+	return m0
+}
+
 type VersionLocalState_TaskQueueFamilyData struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Key: Task Queue Type
-	TaskQueues    map[int32]*TaskQueueVersionData `protobuf:"bytes,1,rep,name=task_queues,json=taskQueues,proto3" json:"task_queues,omitempty" protobuf_key:"varint,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                 protoimpl.MessageState          `protogen:"opaque.v1"`
+	xxx_hidden_TaskQueues map[int32]*TaskQueueVersionData `protobuf:"bytes,1,rep,name=task_queues,json=taskQueues,proto3" protobuf_key:"varint,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
 }
 
 func (x *VersionLocalState_TaskQueueFamilyData) Reset() {
@@ -3202,25 +5158,39 @@ func (x *VersionLocalState_TaskQueueFamilyData) ProtoReflect() protoreflect.Mess
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use VersionLocalState_TaskQueueFamilyData.ProtoReflect.Descriptor instead.
-func (*VersionLocalState_TaskQueueFamilyData) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{3, 1}
-}
-
 func (x *VersionLocalState_TaskQueueFamilyData) GetTaskQueues() map[int32]*TaskQueueVersionData {
 	if x != nil {
-		return x.TaskQueues
+		return x.xxx_hidden_TaskQueues
 	}
 	return nil
 }
 
+func (x *VersionLocalState_TaskQueueFamilyData) SetTaskQueues(v map[int32]*TaskQueueVersionData) {
+	x.xxx_hidden_TaskQueues = v
+}
+
+type VersionLocalState_TaskQueueFamilyData_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Key: Task Queue Type
+	TaskQueues map[int32]*TaskQueueVersionData
+}
+
+func (b0 VersionLocalState_TaskQueueFamilyData_builder) Build() *VersionLocalState_TaskQueueFamilyData {
+	m0 := &VersionLocalState_TaskQueueFamilyData{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_TaskQueues = b.TaskQueues
+	return m0
+}
+
 type SyncDeploymentVersionUserDataRequest_SyncUserData struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Types         []v1.TaskQueueType     `protobuf:"varint,2,rep,packed,name=types,proto3,enum=temporal.api.enums.v1.TaskQueueType" json:"types,omitempty"`
-	Data          *DeploymentVersionData `protobuf:"bytes,3,opt,name=data,proto3" json:"data,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state            protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Name  string                 `protobuf:"bytes,1,opt,name=name,proto3"`
+	xxx_hidden_Types []v1.TaskQueueType     `protobuf:"varint,2,rep,packed,name=types,proto3,enum=temporal.api.enums.v1.TaskQueueType"`
+	xxx_hidden_Data  *DeploymentVersionData `protobuf:"bytes,3,opt,name=data,proto3"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *SyncDeploymentVersionUserDataRequest_SyncUserData) Reset() {
@@ -3248,37 +5218,73 @@ func (x *SyncDeploymentVersionUserDataRequest_SyncUserData) ProtoReflect() proto
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SyncDeploymentVersionUserDataRequest_SyncUserData.ProtoReflect.Descriptor instead.
-func (*SyncDeploymentVersionUserDataRequest_SyncUserData) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{24, 0}
-}
-
 func (x *SyncDeploymentVersionUserDataRequest_SyncUserData) GetName() string {
 	if x != nil {
-		return x.Name
+		return x.xxx_hidden_Name
 	}
 	return ""
 }
 
 func (x *SyncDeploymentVersionUserDataRequest_SyncUserData) GetTypes() []v1.TaskQueueType {
 	if x != nil {
-		return x.Types
+		return x.xxx_hidden_Types
 	}
 	return nil
 }
 
 func (x *SyncDeploymentVersionUserDataRequest_SyncUserData) GetData() *DeploymentVersionData {
 	if x != nil {
-		return x.Data
+		return x.xxx_hidden_Data
 	}
 	return nil
 }
 
+func (x *SyncDeploymentVersionUserDataRequest_SyncUserData) SetName(v string) {
+	x.xxx_hidden_Name = v
+}
+
+func (x *SyncDeploymentVersionUserDataRequest_SyncUserData) SetTypes(v []v1.TaskQueueType) {
+	x.xxx_hidden_Types = v
+}
+
+func (x *SyncDeploymentVersionUserDataRequest_SyncUserData) SetData(v *DeploymentVersionData) {
+	x.xxx_hidden_Data = v
+}
+
+func (x *SyncDeploymentVersionUserDataRequest_SyncUserData) HasData() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Data != nil
+}
+
+func (x *SyncDeploymentVersionUserDataRequest_SyncUserData) ClearData() {
+	x.xxx_hidden_Data = nil
+}
+
+type SyncDeploymentVersionUserDataRequest_SyncUserData_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Name  string
+	Types []v1.TaskQueueType
+	Data  *DeploymentVersionData
+}
+
+func (b0 SyncDeploymentVersionUserDataRequest_SyncUserData_builder) Build() *SyncDeploymentVersionUserDataRequest_SyncUserData {
+	m0 := &SyncDeploymentVersionUserDataRequest_SyncUserData{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Name = b.Name
+	x.xxx_hidden_Types = b.Types
+	x.xxx_hidden_Data = b.Data
+	return m0
+}
+
 type CheckTaskQueuesHavePollersActivityArgs_TaskQueueTypes struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Types         []v1.TaskQueueType     `protobuf:"varint,1,rep,packed,name=types,proto3,enum=temporal.api.enums.v1.TaskQueueType" json:"types,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state            protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Types []v1.TaskQueueType     `protobuf:"varint,1,rep,packed,name=types,proto3,enum=temporal.api.enums.v1.TaskQueueType"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *CheckTaskQueuesHavePollersActivityArgs_TaskQueueTypes) Reset() {
@@ -3306,16 +5312,29 @@ func (x *CheckTaskQueuesHavePollersActivityArgs_TaskQueueTypes) ProtoReflect() p
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CheckTaskQueuesHavePollersActivityArgs_TaskQueueTypes.ProtoReflect.Descriptor instead.
-func (*CheckTaskQueuesHavePollersActivityArgs_TaskQueueTypes) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{35, 1}
-}
-
 func (x *CheckTaskQueuesHavePollersActivityArgs_TaskQueueTypes) GetTypes() []v1.TaskQueueType {
 	if x != nil {
-		return x.Types
+		return x.xxx_hidden_Types
 	}
 	return nil
+}
+
+func (x *CheckTaskQueuesHavePollersActivityArgs_TaskQueueTypes) SetTypes(v []v1.TaskQueueType) {
+	x.xxx_hidden_Types = v
+}
+
+type CheckTaskQueuesHavePollersActivityArgs_TaskQueueTypes_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Types []v1.TaskQueueType
+}
+
+func (b0 CheckTaskQueuesHavePollersActivityArgs_TaskQueueTypes_builder) Build() *CheckTaskQueuesHavePollersActivityArgs_TaskQueueTypes {
+	m0 := &CheckTaskQueuesHavePollersActivityArgs_TaskQueueTypes{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Types = b.Types
+	return m0
 }
 
 var File_temporal_server_api_deployment_v1_message_proto protoreflect.FileDescriptor
@@ -3581,18 +5600,6 @@ const file_temporal_server_api_deployment_v1_message_proto_rawDesc = "" +
 	"\x16latest_version_summary\x18\x04 \x01(\v2O.temporal.api.deployment.v1.WorkerDeploymentInfo.WorkerDeploymentVersionSummaryR\x14latestVersionSummary\x12\x87\x01\n" +
 	"\x17current_version_summary\x18\x05 \x01(\v2O.temporal.api.deployment.v1.WorkerDeploymentInfo.WorkerDeploymentVersionSummaryR\x15currentVersionSummary\x12\x87\x01\n" +
 	"\x17ramping_version_summary\x18\x06 \x01(\v2O.temporal.api.deployment.v1.WorkerDeploymentInfo.WorkerDeploymentVersionSummaryR\x15rampingVersionSummaryB4Z2go.temporal.io/server/api/deployment/v1;deploymentb\x06proto3"
-
-var (
-	file_temporal_server_api_deployment_v1_message_proto_rawDescOnce sync.Once
-	file_temporal_server_api_deployment_v1_message_proto_rawDescData []byte
-)
-
-func file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP() []byte {
-	file_temporal_server_api_deployment_v1_message_proto_rawDescOnce.Do(func() {
-		file_temporal_server_api_deployment_v1_message_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_api_deployment_v1_message_proto_rawDesc), len(file_temporal_server_api_deployment_v1_message_proto_rawDesc)))
-	})
-	return file_temporal_server_api_deployment_v1_message_proto_rawDescData
-}
 
 var file_temporal_server_api_deployment_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 59)
 var file_temporal_server_api_deployment_v1_message_proto_goTypes = []any{

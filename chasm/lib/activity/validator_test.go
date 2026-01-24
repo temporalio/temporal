@@ -27,16 +27,17 @@ const (
 	defaultNamespaceID      = "default"
 )
 
+// DO NOT SUBMIT: fix callers to work with a pointer (go/goprotoapi-findings#message-value)
 var (
-	defaultActivityOptions = activitypb.ActivityOptions{
-		RetryPolicy: &commonpb.RetryPolicy{
+	defaultActivityOptions = activitypb.ActivityOptions_builder{
+		RetryPolicy: commonpb.RetryPolicy_builder{
 			InitialInterval: durationpb.New(1 * time.Second),
-		},
+		}.Build(),
 		ScheduleToCloseTimeout: durationpb.New(10 * time.Second),
-		TaskQueue:              &taskqueuepb.TaskQueue{Name: defaultTaskQueue},
-	}
+		TaskQueue:              taskqueuepb.TaskQueue_builder{Name: defaultTaskQueue}.Build(),
+	}.Build()
 
-	defaultPriority = commonpb.Priority{FairnessKey: "normal"}
+	defaultPriority = commonpb.Priority_builder{FairnessKey: "normal"}.Build()
 
 	defaultBlobSizeLimitError = func(ns string) int {
 		return 64
@@ -122,10 +123,10 @@ func TestValidateFailures(t *testing.T) {
 			getDefaultActivityRetrySettings: getDefaultRetrySettings,
 			maxIDLengthLimit:                defaultMaxIDLengthLimit,
 			namespaceID:                     defaultNamespaceID,
-			options: &activitypb.ActivityOptions{
-				TaskQueue:              &taskqueuepb.TaskQueue{Name: ""},
+			options: activitypb.ActivityOptions_builder{
+				TaskQueue:              taskqueuepb.TaskQueue_builder{Name: ""}.Build(),
 				ScheduleToCloseTimeout: durationpb.New(10 * time.Second),
-			},
+			}.Build(),
 			priority:   &defaultPriority,
 			runTimeout: nil,
 		},
@@ -136,10 +137,10 @@ func TestValidateFailures(t *testing.T) {
 			getDefaultActivityRetrySettings: getDefaultRetrySettings,
 			maxIDLengthLimit:                defaultMaxIDLengthLimit,
 			namespaceID:                     defaultNamespaceID,
-			options: &activitypb.ActivityOptions{
-				TaskQueue:              &taskqueuepb.TaskQueue{Name: defaultTaskQueue},
+			options: activitypb.ActivityOptions_builder{
+				TaskQueue:              taskqueuepb.TaskQueue_builder{Name: defaultTaskQueue}.Build(),
 				ScheduleToCloseTimeout: durationpb.New(-1 * time.Second),
-			},
+			}.Build(),
 			priority:   &defaultPriority,
 			runTimeout: nil,
 		},
@@ -150,11 +151,11 @@ func TestValidateFailures(t *testing.T) {
 			getDefaultActivityRetrySettings: getDefaultRetrySettings,
 			maxIDLengthLimit:                defaultMaxIDLengthLimit,
 			namespaceID:                     defaultNamespaceID,
-			options: &activitypb.ActivityOptions{
-				TaskQueue:              &taskqueuepb.TaskQueue{Name: defaultTaskQueue},
+			options: activitypb.ActivityOptions_builder{
+				TaskQueue:              taskqueuepb.TaskQueue_builder{Name: defaultTaskQueue}.Build(),
 				ScheduleToCloseTimeout: durationpb.New(10 * time.Second),
 				ScheduleToStartTimeout: durationpb.New(-1 * time.Second),
-			},
+			}.Build(),
 			priority:   &defaultPriority,
 			runTimeout: nil,
 		},
@@ -165,10 +166,10 @@ func TestValidateFailures(t *testing.T) {
 			getDefaultActivityRetrySettings: getDefaultRetrySettings,
 			maxIDLengthLimit:                defaultMaxIDLengthLimit,
 			namespaceID:                     defaultNamespaceID,
-			options: &activitypb.ActivityOptions{
-				TaskQueue:           &taskqueuepb.TaskQueue{Name: defaultTaskQueue},
+			options: activitypb.ActivityOptions_builder{
+				TaskQueue:           taskqueuepb.TaskQueue_builder{Name: defaultTaskQueue}.Build(),
 				StartToCloseTimeout: durationpb.New(-1 * time.Second),
-			},
+			}.Build(),
 			priority:   &defaultPriority,
 			runTimeout: nil,
 		},
@@ -179,11 +180,11 @@ func TestValidateFailures(t *testing.T) {
 			getDefaultActivityRetrySettings: getDefaultRetrySettings,
 			maxIDLengthLimit:                defaultMaxIDLengthLimit,
 			namespaceID:                     defaultNamespaceID,
-			options: &activitypb.ActivityOptions{
-				TaskQueue:              &taskqueuepb.TaskQueue{Name: defaultTaskQueue},
+			options: activitypb.ActivityOptions_builder{
+				TaskQueue:              taskqueuepb.TaskQueue_builder{Name: defaultTaskQueue}.Build(),
 				ScheduleToCloseTimeout: durationpb.New(10 * time.Second),
 				HeartbeatTimeout:       durationpb.New(-1 * time.Second),
-			},
+			}.Build(),
 			priority:   &defaultPriority,
 			runTimeout: nil,
 		},
@@ -195,7 +196,7 @@ func TestValidateFailures(t *testing.T) {
 			maxIDLengthLimit:                defaultMaxIDLengthLimit,
 			namespaceID:                     defaultNamespaceID,
 			options:                         &defaultActivityOptions,
-			priority:                        &commonpb.Priority{FairnessKey: string(make([]byte, 1001))},
+			priority:                        commonpb.Priority_builder{FairnessKey: string(make([]byte, 1001))}.Build(),
 			runTimeout:                      nil,
 		},
 	}
@@ -233,18 +234,18 @@ func newTestFrontendHandler(
 }
 
 func TestValidateStandAloneRequestIDTooLong(t *testing.T) {
-	req := &workflowservice.StartActivityExecutionRequest{
+	req := workflowservice.StartActivityExecutionRequest_builder{
 		ActivityId:   defaultActivityID,
-		ActivityType: &commonpb.ActivityType{Name: defaultActivityType},
-		RetryPolicy: &commonpb.RetryPolicy{
+		ActivityType: commonpb.ActivityType_builder{Name: defaultActivityType}.Build(),
+		RetryPolicy: commonpb.RetryPolicy_builder{
 			InitialInterval: durationpb.New(1 * time.Second),
-		},
+		}.Build(),
 		ScheduleToCloseTimeout: durationpb.New(10 * time.Second),
-		TaskQueue:              &taskqueuepb.TaskQueue{Name: defaultTaskQueue},
+		TaskQueue:              taskqueuepb.TaskQueue_builder{Name: defaultTaskQueue}.Build(),
 		Namespace:              "default",
 		RequestId:              string(make([]byte, 1001)),
 		Input:                  payloads.EncodeString("test-input"),
-	}
+	}.Build()
 
 	h := newTestFrontendHandler(defaultBlobSizeLimitError, defaultBlobSizeLimitWarn, defaultMaxIDLengthLimit)
 	err := h.validateAndNormalizeStartActivityExecutionRequest(req)
@@ -253,18 +254,18 @@ func TestValidateStandAloneRequestIDTooLong(t *testing.T) {
 }
 
 func TestValidateStandAloneInputTooLarge(t *testing.T) {
-	req := &workflowservice.StartActivityExecutionRequest{
+	req := workflowservice.StartActivityExecutionRequest_builder{
 		ActivityId:   defaultActivityID,
-		ActivityType: &commonpb.ActivityType{Name: defaultActivityType},
-		RetryPolicy: &commonpb.RetryPolicy{
+		ActivityType: commonpb.ActivityType_builder{Name: defaultActivityType}.Build(),
+		RetryPolicy: commonpb.RetryPolicy_builder{
 			InitialInterval: durationpb.New(1 * time.Second),
-		},
+		}.Build(),
 		ScheduleToCloseTimeout: durationpb.New(10 * time.Second),
-		TaskQueue:              &taskqueuepb.TaskQueue{Name: defaultTaskQueue},
+		TaskQueue:              taskqueuepb.TaskQueue_builder{Name: defaultTaskQueue}.Build(),
 		Namespace:              "default",
 		RequestId:              "test-request-id",
 		Input:                  payloads.EncodeString(string(make([]byte, 1000))),
-	}
+	}.Build()
 
 	h := newTestFrontendHandler(defaultBlobSizeLimitError, defaultBlobSizeLimitWarn, defaultMaxIDLengthLimit)
 	err := h.validateAndNormalizeStartActivityExecutionRequest(req)
@@ -276,18 +277,18 @@ func TestValidateStandAloneInputWarningSizeShouldSucceed(t *testing.T) {
 	payload := payloads.EncodeString("test-input")
 	payloadSize := payload.Size()
 
-	req := &workflowservice.StartActivityExecutionRequest{
+	req := workflowservice.StartActivityExecutionRequest_builder{
 		ActivityId:   defaultActivityID,
-		ActivityType: &commonpb.ActivityType{Name: defaultActivityType},
-		RetryPolicy: &commonpb.RetryPolicy{
+		ActivityType: commonpb.ActivityType_builder{Name: defaultActivityType}.Build(),
+		RetryPolicy: commonpb.RetryPolicy_builder{
 			InitialInterval: durationpb.New(1 * time.Second),
-		},
+		}.Build(),
 		ScheduleToCloseTimeout: durationpb.New(10 * time.Second),
-		TaskQueue:              &taskqueuepb.TaskQueue{Name: defaultTaskQueue},
+		TaskQueue:              taskqueuepb.TaskQueue_builder{Name: defaultTaskQueue}.Build(),
 		Namespace:              "default",
 		RequestId:              "test-request-id",
 		Input:                  payload,
-	}
+	}.Build()
 
 	h := newTestFrontendHandler(
 		func(ns string) int { return payloadSize + 1 },
@@ -299,24 +300,24 @@ func TestValidateStandAloneInputWarningSizeShouldSucceed(t *testing.T) {
 }
 
 func TestValidateStandAlone_IDPolicyShouldDefault(t *testing.T) {
-	req := &workflowservice.StartActivityExecutionRequest{
+	req := workflowservice.StartActivityExecutionRequest_builder{
 		ActivityId:   defaultActivityID,
-		ActivityType: &commonpb.ActivityType{Name: defaultActivityType},
-		RetryPolicy: &commonpb.RetryPolicy{
+		ActivityType: commonpb.ActivityType_builder{Name: defaultActivityType}.Build(),
+		RetryPolicy: commonpb.RetryPolicy_builder{
 			InitialInterval: durationpb.New(1 * time.Second),
-		},
+		}.Build(),
 		ScheduleToCloseTimeout: durationpb.New(10 * time.Second),
-		TaskQueue:              &taskqueuepb.TaskQueue{Name: defaultTaskQueue},
+		TaskQueue:              taskqueuepb.TaskQueue_builder{Name: defaultTaskQueue}.Build(),
 		Namespace:              "default",
 		RequestId:              "test-request-id",
-	}
+	}.Build()
 
 	h := newTestFrontendHandler(defaultBlobSizeLimitError, defaultBlobSizeLimitWarn, defaultMaxIDLengthLimit)
 	err := h.validateAndNormalizeStartActivityExecutionRequest(req)
 
 	require.NoError(t, err)
-	require.Equal(t, enumspb.ACTIVITY_ID_REUSE_POLICY_ALLOW_DUPLICATE, req.IdReusePolicy)
-	require.Equal(t, enumspb.ACTIVITY_ID_CONFLICT_POLICY_FAIL, req.IdConflictPolicy)
+	require.Equal(t, enumspb.ACTIVITY_ID_REUSE_POLICY_ALLOW_DUPLICATE, req.GetIdReusePolicy())
+	require.Equal(t, enumspb.ACTIVITY_ID_CONFLICT_POLICY_FAIL, req.GetIdConflictPolicy())
 }
 
 func TestModifiedActivityTimeouts(t *testing.T) {
@@ -329,108 +330,108 @@ func TestModifiedActivityTimeouts(t *testing.T) {
 	}{
 		{
 			name: "ScheduleToClose set - fills in missing timeouts",
-			options: &activitypb.ActivityOptions{
-				TaskQueue:              &taskqueuepb.TaskQueue{Name: defaultTaskQueue},
+			options: activitypb.ActivityOptions_builder{
+				TaskQueue:              taskqueuepb.TaskQueue_builder{Name: defaultTaskQueue}.Build(),
 				ScheduleToCloseTimeout: durationpb.New(10 * time.Second),
-			},
+			}.Build(),
 			runTimeout: durationpb.New(0),
 			isErr:      false,
 			validate: func(t *testing.T, options *activitypb.ActivityOptions) {
-				require.Equal(t, 10*time.Second, options.ScheduleToCloseTimeout.AsDuration())
-				require.Equal(t, 10*time.Second, options.ScheduleToStartTimeout.AsDuration())
-				require.Equal(t, 10*time.Second, options.StartToCloseTimeout.AsDuration())
-				require.Equal(t, 0*time.Second, options.HeartbeatTimeout.AsDuration())
+				require.Equal(t, 10*time.Second, options.GetScheduleToCloseTimeout().AsDuration())
+				require.Equal(t, 10*time.Second, options.GetScheduleToStartTimeout().AsDuration())
+				require.Equal(t, 10*time.Second, options.GetStartToCloseTimeout().AsDuration())
+				require.Equal(t, 0*time.Second, options.GetHeartbeatTimeout().AsDuration())
 			},
 		},
 		{
 			name: "StartToClose set but not ScheduleToClose - fills from runTimeout",
-			options: &activitypb.ActivityOptions{
-				TaskQueue:           &taskqueuepb.TaskQueue{Name: defaultTaskQueue},
+			options: activitypb.ActivityOptions_builder{
+				TaskQueue:           taskqueuepb.TaskQueue_builder{Name: defaultTaskQueue}.Build(),
 				StartToCloseTimeout: durationpb.New(5 * time.Second),
-			},
+			}.Build(),
 			runTimeout: durationpb.New(20 * time.Second),
 			isErr:      false,
 			validate: func(t *testing.T, options *activitypb.ActivityOptions) {
-				require.Equal(t, 20*time.Second, options.ScheduleToCloseTimeout.AsDuration())
-				require.Equal(t, 20*time.Second, options.ScheduleToStartTimeout.AsDuration())
-				require.Equal(t, 5*time.Second, options.StartToCloseTimeout.AsDuration())
-				require.Equal(t, 0*time.Second, options.HeartbeatTimeout.AsDuration())
+				require.Equal(t, 20*time.Second, options.GetScheduleToCloseTimeout().AsDuration())
+				require.Equal(t, 20*time.Second, options.GetScheduleToStartTimeout().AsDuration())
+				require.Equal(t, 5*time.Second, options.GetStartToCloseTimeout().AsDuration())
+				require.Equal(t, 0*time.Second, options.GetHeartbeatTimeout().AsDuration())
 			},
 		},
 		{
 			name: "Neither ScheduleToClose nor StartToClose set - returns error",
-			options: &activitypb.ActivityOptions{
-				TaskQueue: &taskqueuepb.TaskQueue{Name: defaultTaskQueue},
-			},
+			options: activitypb.ActivityOptions_builder{
+				TaskQueue: taskqueuepb.TaskQueue_builder{Name: defaultTaskQueue}.Build(),
+			}.Build(),
 			runTimeout: durationpb.New(0),
 			isErr:      true,
 			validate:   func(t *testing.T, options *activitypb.ActivityOptions) {},
 		},
 		{
 			name: "ScheduleToClose and StartToClose set - StartToClose capped by ScheduleToClose",
-			options: &activitypb.ActivityOptions{
-				TaskQueue:              &taskqueuepb.TaskQueue{Name: defaultTaskQueue},
+			options: activitypb.ActivityOptions_builder{
+				TaskQueue:              taskqueuepb.TaskQueue_builder{Name: defaultTaskQueue}.Build(),
 				ScheduleToCloseTimeout: durationpb.New(10 * time.Second),
 				StartToCloseTimeout:    durationpb.New(15 * time.Second),
-			},
+			}.Build(),
 			runTimeout: durationpb.New(0),
 			isErr:      false,
 			validate: func(t *testing.T, options *activitypb.ActivityOptions) {
-				require.Equal(t, 10*time.Second, options.ScheduleToCloseTimeout.AsDuration())
-				require.Equal(t, 10*time.Second, options.ScheduleToStartTimeout.AsDuration())
-				require.Equal(t, 10*time.Second, options.StartToCloseTimeout.AsDuration())
-				require.Equal(t, 0*time.Second, options.HeartbeatTimeout.AsDuration())
+				require.Equal(t, 10*time.Second, options.GetScheduleToCloseTimeout().AsDuration())
+				require.Equal(t, 10*time.Second, options.GetScheduleToStartTimeout().AsDuration())
+				require.Equal(t, 10*time.Second, options.GetStartToCloseTimeout().AsDuration())
+				require.Equal(t, 0*time.Second, options.GetHeartbeatTimeout().AsDuration())
 			},
 		},
 		{
 			name: "ScheduleToStart capped by ScheduleToClose",
-			options: &activitypb.ActivityOptions{
-				TaskQueue:              &taskqueuepb.TaskQueue{Name: defaultTaskQueue},
+			options: activitypb.ActivityOptions_builder{
+				TaskQueue:              taskqueuepb.TaskQueue_builder{Name: defaultTaskQueue}.Build(),
 				ScheduleToCloseTimeout: durationpb.New(10 * time.Second),
 				ScheduleToStartTimeout: durationpb.New(20 * time.Second),
-			},
+			}.Build(),
 			runTimeout: durationpb.New(0),
 			isErr:      false,
 			validate: func(t *testing.T, options *activitypb.ActivityOptions) {
-				require.Equal(t, 10*time.Second, options.ScheduleToCloseTimeout.AsDuration())
-				require.Equal(t, 10*time.Second, options.ScheduleToStartTimeout.AsDuration())
-				require.Equal(t, 10*time.Second, options.StartToCloseTimeout.AsDuration())
-				require.Equal(t, 0*time.Second, options.HeartbeatTimeout.AsDuration())
+				require.Equal(t, 10*time.Second, options.GetScheduleToCloseTimeout().AsDuration())
+				require.Equal(t, 10*time.Second, options.GetScheduleToStartTimeout().AsDuration())
+				require.Equal(t, 10*time.Second, options.GetStartToCloseTimeout().AsDuration())
+				require.Equal(t, 0*time.Second, options.GetHeartbeatTimeout().AsDuration())
 			},
 		},
 		{
 			name: "HeartbeatTimeout capped by StartToClose",
-			options: &activitypb.ActivityOptions{
-				TaskQueue:              &taskqueuepb.TaskQueue{Name: defaultTaskQueue},
+			options: activitypb.ActivityOptions_builder{
+				TaskQueue:              taskqueuepb.TaskQueue_builder{Name: defaultTaskQueue}.Build(),
 				ScheduleToCloseTimeout: durationpb.New(20 * time.Second),
 				StartToCloseTimeout:    durationpb.New(10 * time.Second),
 				HeartbeatTimeout:       durationpb.New(15 * time.Second),
-			},
+			}.Build(),
 			runTimeout: durationpb.New(0),
 			isErr:      false,
 			validate: func(t *testing.T, options *activitypb.ActivityOptions) {
-				require.Equal(t, 20*time.Second, options.ScheduleToCloseTimeout.AsDuration())
-				require.Equal(t, 20*time.Second, options.ScheduleToStartTimeout.AsDuration())
-				require.Equal(t, 10*time.Second, options.StartToCloseTimeout.AsDuration())
-				require.Equal(t, 10*time.Second, options.HeartbeatTimeout.AsDuration())
+				require.Equal(t, 20*time.Second, options.GetScheduleToCloseTimeout().AsDuration())
+				require.Equal(t, 20*time.Second, options.GetScheduleToStartTimeout().AsDuration())
+				require.Equal(t, 10*time.Second, options.GetStartToCloseTimeout().AsDuration())
+				require.Equal(t, 10*time.Second, options.GetHeartbeatTimeout().AsDuration())
 			},
 		},
 		{
 			name: "All timeouts capped by runTimeout",
-			options: &activitypb.ActivityOptions{
-				TaskQueue:              &taskqueuepb.TaskQueue{Name: defaultTaskQueue},
+			options: activitypb.ActivityOptions_builder{
+				TaskQueue:              taskqueuepb.TaskQueue_builder{Name: defaultTaskQueue}.Build(),
 				ScheduleToCloseTimeout: durationpb.New(30 * time.Second),
 				ScheduleToStartTimeout: durationpb.New(25 * time.Second),
 				StartToCloseTimeout:    durationpb.New(20 * time.Second),
 				HeartbeatTimeout:       durationpb.New(15 * time.Second),
-			},
+			}.Build(),
 			runTimeout: durationpb.New(10 * time.Second),
 			isErr:      false,
 			validate: func(t *testing.T, options *activitypb.ActivityOptions) {
-				require.Equal(t, 10*time.Second, options.ScheduleToCloseTimeout.AsDuration())
-				require.Equal(t, 10*time.Second, options.ScheduleToStartTimeout.AsDuration())
-				require.Equal(t, 10*time.Second, options.StartToCloseTimeout.AsDuration())
-				require.Equal(t, 10*time.Second, options.HeartbeatTimeout.AsDuration())
+				require.Equal(t, 10*time.Second, options.GetScheduleToCloseTimeout().AsDuration())
+				require.Equal(t, 10*time.Second, options.GetScheduleToStartTimeout().AsDuration())
+				require.Equal(t, 10*time.Second, options.GetStartToCloseTimeout().AsDuration())
+				require.Equal(t, 10*time.Second, options.GetHeartbeatTimeout().AsDuration())
 			},
 		},
 	}

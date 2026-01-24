@@ -34,9 +34,9 @@ func Invoke(
 		ctx,
 		nil,
 		definition.NewWorkflowKey(
-			req.NamespaceId,
-			req.Execution.WorkflowId,
-			req.Execution.RunId,
+			req.GetNamespaceId(),
+			req.GetExecution().GetWorkflowId(),
+			req.GetExecution().GetRunId(),
 		),
 		archetypeID,
 		locks.PriorityHigh,
@@ -49,7 +49,7 @@ func Invoke(
 	response := &historyservice.DescribeMutableStateResponse{}
 	if chasmLease.GetContext().(*workflow.ContextImpl).MutableState != nil {
 		msb := chasmLease.GetContext().(*workflow.ContextImpl).MutableState
-		response.CacheMutableState = msb.CloneToProto()
+		response.SetCacheMutableState(msb.CloneToProto())
 	}
 
 	if !req.GetSkipForceReload() {
@@ -62,6 +62,6 @@ func Invoke(
 		return nil, err
 	}
 
-	response.DatabaseMutableState = mutableState.CloneToProto()
+	response.SetDatabaseMutableState(mutableState.CloneToProto())
 	return response, nil
 }

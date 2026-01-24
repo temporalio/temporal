@@ -235,7 +235,7 @@ func NewTreeFromDB(
 	if len(serializedNodes) == 0 {
 		root := NewEmptyTree(registry, timeSource, backend, pathEncoder, logger)
 		// NewEmptyTree initializes the serializedNode to an empty component node,
-		root.serializedNode.Metadata.GetComponentAttributes().TypeId = WorkflowArchetypeID
+		root.serializedNode.GetMetadata().GetComponentAttributes().SetTypeId(WorkflowArchetypeID)
 		return root, nil
 	}
 
@@ -268,7 +268,7 @@ func NewEmptyTree(
 	// Initialize empty serializedNode.
 	root.initSerializedNode(fieldTypeComponent)
 	// Default to Workflow archetype as empty tree is created for workflow as well.
-	root.serializedNode.Metadata.GetComponentAttributes().TypeId = WorkflowArchetypeID
+	root.serializedNode.GetMetadata().GetComponentAttributes().SetTypeId(WorkflowArchetypeID)
 	// Although both value and serializedNode.Data are nil, they are considered NOT synced
 	// because value has no type and serializedNode does.
 	// deserialize method should set value when called.
@@ -347,7 +347,7 @@ func (n *Node) SetRootComponent(
 	root.setValue(rootComponent)
 	root.setValueState(valueStateNeedSyncStructure)
 	if componentID, ok := n.registry.ComponentIDFor(rootComponent); ok {
-		root.serializedNode.GetMetadata().GetComponentAttributes().TypeId = componentID
+		root.serializedNode.GetMetadata().GetComponentAttributes().SetTypeId(componentID)
 	}
 }
 
@@ -396,7 +396,7 @@ func (n *Node) Component(
 
 	if ref.componentInitialVT != nil && transitionhistory.Compare(
 		ref.componentInitialVT,
-		node.serializedNode.Metadata.InitialVersionedTransition,
+		node.serializedNode.GetMetadata().GetInitialVersionedTransition(),
 	) != 0 {
 		return nil, errComponentNotFound
 	}
@@ -486,13 +486,13 @@ func (n *Node) prepareComponentValue(
 	chasmContext Context,
 ) error {
 	if n.valueState == valueStateNeedDeserialize {
-		metadata := n.serializedNode.Metadata
+		metadata := n.serializedNode.GetMetadata()
 		componentAttr := metadata.GetComponentAttributes()
 		if componentAttr == nil {
 			return softassert.UnexpectedInternalErr(
 				n.logger,
 				"expect chasm node to have ComponentAttributes",
-				fmt.Errorf("actual attributes: %v", metadata.Attributes))
+				fmt.Errorf("actual attributes: %v", metadata.WhichAttributes()))
 		}
 
 		registrableComponent, ok := n.registry.ComponentByID(componentAttr.GetTypeId())
@@ -522,13 +522,13 @@ func (n *Node) prepareDataValue(
 	chasmContext Context,
 	valueT reflect.Type,
 ) error {
-	metadata := n.serializedNode.Metadata
+	metadata := n.serializedNode.GetMetadata()
 	dataAttr := metadata.GetDataAttributes()
 	if dataAttr == nil {
 		return softassert.UnexpectedInternalErr(
 			n.logger,
 			"expect chasm node to have DataAttributes",
-			fmt.Errorf("actual attributes: %v", metadata.Attributes))
+			fmt.Errorf("actual attributes: %v", metadata.WhichAttributes()))
 	}
 
 	if n.valueState == valueStateNeedDeserialize {
@@ -548,13 +548,13 @@ func (n *Node) prepareDataValue(
 }
 
 func (n *Node) preparePointerValue() error {
-	metadata := n.serializedNode.Metadata
+	metadata := n.serializedNode.GetMetadata()
 	pointerAttr := metadata.GetPointerAttributes()
 	if pointerAttr == nil {
 		return softassert.UnexpectedInternalErr(
 			n.logger,
 			"expect chasm node to have PointerAttributes",
-			fmt.Errorf("actual attributes: %v", metadata.Attributes))
+			fmt.Errorf("actual attributes: %v", metadata.WhichAttributes()))
 	}
 
 	if n.valueState == valueStateNeedDeserialize {
@@ -618,42 +618,36 @@ func assertStructPointer(t reflect.Type) error {
 func (n *Node) initSerializedNode(ft fieldType) {
 	switch ft {
 	case fieldTypeData:
-		n.serializedNode = &persistencespb.ChasmNode{
-			Metadata: &persistencespb.ChasmNodeMetadata{
-				InitialVersionedTransition: &persistencespb.VersionedTransition{
+		n.serializedNode = persistencespb.ChasmNode_builder{
+			Metadata: persistencespb.ChasmNodeMetadata_builder{
+				InitialVersionedTransition: persistencespb.VersionedTransition_builder{
 					TransitionCount:          n.backend.NextTransitionCount(),
 					NamespaceFailoverVersion: n.backend.GetCurrentVersion(),
-				},
-				Attributes: &persistencespb.ChasmNodeMetadata_DataAttributes{
-					DataAttributes: &persistencespb.ChasmDataAttributes{},
-				},
-			},
-		}
+				}.Build(),
+				DataAttributes: &persistencespb.ChasmDataAttributes{},
+			}.Build(),
+		}.Build()
 	case fieldTypeComponent:
-		n.serializedNode = &persistencespb.ChasmNode{
-			Metadata: &persistencespb.ChasmNodeMetadata{
-				InitialVersionedTransition: &persistencespb.VersionedTransition{
+		n.serializedNode = persistencespb.ChasmNode_builder{
+			Metadata: persistencespb.ChasmNodeMetadata_builder{
+				InitialVersionedTransition: persistencespb.VersionedTransition_builder{
 					TransitionCount:          n.backend.NextTransitionCount(),
 					NamespaceFailoverVersion: n.backend.GetCurrentVersion(),
-				},
-				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
-					ComponentAttributes: &persistencespb.ChasmComponentAttributes{},
-				},
-			},
-		}
+				}.Build(),
+				ComponentAttributes: &persistencespb.ChasmComponentAttributes{},
+			}.Build(),
+		}.Build()
 	case fieldTypePointer, fieldTypeDeferredPointer:
 		// A deferred pointer will be resolved to a regular pointer before persistence.
-		n.serializedNode = &persistencespb.ChasmNode{
-			Metadata: &persistencespb.ChasmNodeMetadata{
-				InitialVersionedTransition: &persistencespb.VersionedTransition{
+		n.serializedNode = persistencespb.ChasmNode_builder{
+			Metadata: persistencespb.ChasmNodeMetadata_builder{
+				InitialVersionedTransition: persistencespb.VersionedTransition_builder{
 					TransitionCount:          n.backend.NextTransitionCount(),
 					NamespaceFailoverVersion: n.backend.GetCurrentVersion(),
-				},
-				Attributes: &persistencespb.ChasmNodeMetadata_PointerAttributes{
-					PointerAttributes: &persistencespb.ChasmPointerAttributes{},
-				},
-			},
-		}
+				}.Build(),
+				PointerAttributes: &persistencespb.ChasmPointerAttributes{},
+			}.Build(),
+		}.Build()
 	case fieldTypeUnspecified:
 		softassert.Fail(n.logger,
 			"initSerializedNode can't be called with unspecified field type")
@@ -661,17 +655,15 @@ func (n *Node) initSerializedNode(ft fieldType) {
 }
 
 func (n *Node) initSerializedCollectionNode() {
-	n.serializedNode = &persistencespb.ChasmNode{
-		Metadata: &persistencespb.ChasmNodeMetadata{
-			InitialVersionedTransition: &persistencespb.VersionedTransition{
+	n.serializedNode = persistencespb.ChasmNode_builder{
+		Metadata: persistencespb.ChasmNodeMetadata_builder{
+			InitialVersionedTransition: persistencespb.VersionedTransition_builder{
 				TransitionCount:          n.backend.NextTransitionCount(),
 				NamespaceFailoverVersion: n.backend.GetCurrentVersion(),
-			},
-			Attributes: &persistencespb.ChasmNodeMetadata_CollectionAttributes{
-				CollectionAttributes: &persistencespb.ChasmCollectionAttributes{},
-			},
-		},
-	}
+			}.Build(),
+			CollectionAttributes: &persistencespb.ChasmCollectionAttributes{},
+		}.Build(),
+	}.Build()
 }
 
 func (n *Node) setSerializedNode(
@@ -698,14 +690,14 @@ func (n *Node) setSerializedNode(
 // serialize sets or updates serializedValue field of the node n with serialized value.
 // It sets node's valueState to valueStateSynced and updates LastUpdateVersionedTransition.
 func (n *Node) serialize() error {
-	switch n.serializedNode.GetMetadata().GetAttributes().(type) {
-	case *persistencespb.ChasmNodeMetadata_ComponentAttributes:
+	switch n.serializedNode.GetMetadata().WhichAttributes() {
+	case persistencespb.ChasmNodeMetadata_ComponentAttributes_case:
 		return n.serializeComponentNode()
-	case *persistencespb.ChasmNodeMetadata_DataAttributes:
+	case persistencespb.ChasmNodeMetadata_DataAttributes_case:
 		return n.serializeDataNode()
-	case *persistencespb.ChasmNodeMetadata_CollectionAttributes:
+	case persistencespb.ChasmNodeMetadata_CollectionAttributes_case:
 		return n.serializeCollectionNode()
-	case *persistencespb.ChasmNodeMetadata_PointerAttributes:
+	case persistencespb.ChasmNodeMetadata_PointerAttributes_case:
 		return n.serializePointerNode()
 	default:
 		return softassert.UnexpectedInternalErr(n.logger, "unknown node type", nil)
@@ -738,8 +730,8 @@ func (n *Node) serializeComponentNode() error {
 				fmt.Errorf("%s", reflect.TypeOf(n.value).String()))
 		}
 
-		n.serializedNode.Data = blob
-		n.serializedNode.GetMetadata().GetComponentAttributes().TypeId = rc.componentID
+		n.serializedNode.SetData(blob)
+		n.serializedNode.GetMetadata().GetComponentAttributes().SetTypeId(rc.componentID)
 		n.updateLastUpdateVersionedTransition()
 		n.setValueState(valueStateSynced)
 
@@ -1081,7 +1073,7 @@ func (n *Node) serializeDataNode() error {
 			return err
 		}
 	}
-	n.serializedNode.Data = blob
+	n.serializedNode.SetData(blob)
 	n.updateLastUpdateVersionedTransition()
 	n.setValueState(valueStateSynced)
 
@@ -1105,7 +1097,7 @@ func (n *Node) serializePointerNode() error {
 			fmt.Errorf("got %T for node %s", n.value, n.nodeName))
 	}
 
-	n.serializedNode.GetMetadata().GetPointerAttributes().NodePath = path
+	n.serializedNode.GetMetadata().GetPointerAttributes().SetNodePath(path)
 	n.updateLastUpdateVersionedTransition()
 	n.setValueState(valueStateSynced)
 
@@ -1114,10 +1106,10 @@ func (n *Node) serializePointerNode() error {
 
 func (n *Node) updateLastUpdateVersionedTransition() {
 	if n.serializedNode.GetMetadata().GetLastUpdateVersionedTransition() == nil {
-		n.serializedNode.GetMetadata().LastUpdateVersionedTransition = &persistencespb.VersionedTransition{}
+		n.serializedNode.GetMetadata().SetLastUpdateVersionedTransition(&persistencespb.VersionedTransition{})
 	}
-	n.serializedNode.GetMetadata().GetLastUpdateVersionedTransition().TransitionCount = n.backend.NextTransitionCount()
-	n.serializedNode.GetMetadata().GetLastUpdateVersionedTransition().NamespaceFailoverVersion = n.backend.GetCurrentVersion()
+	n.serializedNode.GetMetadata().GetLastUpdateVersionedTransition().SetTransitionCount(n.backend.NextTransitionCount())
+	n.serializedNode.GetMetadata().GetLastUpdateVersionedTransition().SetNamespaceFailoverVersion(n.backend.GetCurrentVersion())
 }
 
 // deserialize initializes the node's value from its serializedNode.
@@ -1136,16 +1128,16 @@ func (n *Node) deserialize(
 		return nil
 	}
 
-	switch n.serializedNode.GetMetadata().GetAttributes().(type) {
-	case *persistencespb.ChasmNodeMetadata_ComponentAttributes:
+	switch n.serializedNode.GetMetadata().WhichAttributes() {
+	case persistencespb.ChasmNodeMetadata_ComponentAttributes_case:
 		return n.deserializeComponentNode(valueT)
-	case *persistencespb.ChasmNodeMetadata_DataAttributes:
+	case persistencespb.ChasmNodeMetadata_DataAttributes_case:
 		return n.deserializeDataNode(valueT)
-	case *persistencespb.ChasmNodeMetadata_CollectionAttributes:
+	case persistencespb.ChasmNodeMetadata_CollectionAttributes_case:
 		softassert.Fail(
 			n.logger,
 			"deserialize shouldn't be called on the collection node because it is deserialized with the parent component.")
-	case *persistencespb.ChasmNodeMetadata_PointerAttributes:
+	case persistencespb.ChasmNodeMetadata_PointerAttributes_case:
 		return n.deserializePointerNode()
 	}
 	return nil
@@ -1247,14 +1239,14 @@ func unmarshalProto(
 
 	value := reflect.New(valueT.Elem())
 
-	if dataBlob == nil || len(dataBlob.Data) == 0 {
+	if dataBlob == nil || len(dataBlob.GetData()) == 0 {
 		// If the original data is the zero value of its type, the dataBlob loaded from persistence layer will be nil.
 		// But we know for component & data nodes, they won't get persisted in the first place if there's no data,
 		// so it must be a zero value.
-		dataBlob = &commonpb.DataBlob{
+		dataBlob = commonpb.DataBlob_builder{
 			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 			Data:         []byte{},
-		}
+		}.Build()
 	}
 
 	if err := serialization.Decode(dataBlob, value.Interface().(proto.Message)); err != nil {
@@ -1384,10 +1376,10 @@ func (n *Node) CloseTransaction() (NodesMutation, error) {
 		}
 	}
 
-	nextVersionedTransition := &persistencespb.VersionedTransition{
+	nextVersionedTransition := persistencespb.VersionedTransition_builder{
 		NamespaceFailoverVersion: n.backend.GetCurrentVersion(),
 		TransitionCount:          n.backend.NextTransitionCount(),
-	}
+	}.Build()
 
 	rootLifecycleChanged, err := n.closeTransactionHandleRootLifecycleChange()
 	if err != nil {
@@ -1550,7 +1542,7 @@ func (n *Node) closeTransactionForceUpdateVisibility(
 				visibilityNode = child
 				break
 			}
-		} else if child.serializedNode.Metadata.GetComponentAttributes().TypeId == visibilityComponentTypeID {
+		} else if child.serializedNode.GetMetadata().GetComponentAttributes().GetTypeId() == visibilityComponentTypeID {
 			visibilityNode = child
 			break
 		}
@@ -1602,7 +1594,7 @@ func (n *Node) closeTransactionSerializeNodes() error {
 		}
 
 		if componentAttr := node.serializedNode.GetMetadata().GetComponentAttributes(); componentAttr != nil &&
-			componentAttr.TypeId == visibilityComponentTypeID &&
+			componentAttr.GetTypeId() == visibilityComponentTypeID &&
 			len(nodePath) != 1 {
 			return softassert.UnexpectedInternalErr(
 				n.logger,
@@ -1640,7 +1632,7 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 
 	for nodePath, node := range n.andAllChildren() {
 		// no-op if node is not a component
-		componentAttr := node.serializedNode.Metadata.GetComponentAttributes()
+		componentAttr := node.serializedNode.GetMetadata().GetComponentAttributes()
 		if componentAttr == nil {
 			continue
 		}
@@ -1686,7 +1678,7 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 		// This method is called after the closeTransactionSerializeNodes which sets valueState
 		// to valueStateSynced.
 		if transitionhistory.Compare(
-			node.serializedNode.GetMetadata().LastUpdateVersionedTransition,
+			node.serializedNode.GetMetadata().GetLastUpdateVersionedTransition(),
 			nextVersionedTransition,
 		) == 0 && node.valueState != valueStateNeedDeserialize {
 			if err := node.closeTransactionHandleNewTasks(
@@ -1701,7 +1693,7 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 		sideEffectTasks := componentAttr.GetSideEffectTasks()
 		for idx := len(sideEffectTasks) - 1; idx >= 0; idx-- {
 			sideEffectTask := sideEffectTasks[idx]
-			if sideEffectTask.PhysicalTaskStatus == physicalTaskStatusCreated {
+			if sideEffectTask.GetPhysicalTaskStatus() == physicalTaskStatusCreated {
 				break
 			}
 
@@ -1742,15 +1734,15 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 func (n *Node) deserializeComponentTask(
 	componentTask *persistencespb.ChasmComponentAttributes_Task,
 ) (any, error) {
-	registableTask, ok := n.registry.taskByID(componentTask.TypeId)
+	registableTask, ok := n.registry.taskByID(componentTask.GetTypeId())
 	if !ok {
 		return nil, softassert.UnexpectedInternalErr(
 			n.logger,
 			"unknown task type id",
-			fmt.Errorf("%d", componentTask.TypeId))
+			fmt.Errorf("%d", componentTask.GetTypeId()))
 	}
 
-	taskValue, err := n.deserializeTaskWithCache(registableTask, componentTask.Data)
+	taskValue, err := n.deserializeTaskWithCache(registableTask, componentTask.GetData())
 	if err != nil {
 		return nil, err
 	}
@@ -1817,8 +1809,8 @@ func (n *Node) closeTransactionCleanupInvalidTasks(
 		valid, err := n.validateTask(
 			validateContext,
 			TaskAttributes{
-				ScheduledTime: existingTask.ScheduledTime.AsTime(),
-				Destination:   existingTask.Destination,
+				ScheduledTime: existingTask.GetScheduledTime().AsTime(),
+				Destination:   existingTask.GetDestination(),
 			},
 			existingTaskInstance,
 		)
@@ -1828,17 +1820,17 @@ func (n *Node) closeTransactionCleanupInvalidTasks(
 		}
 		if !valid {
 			cleanedUp = true
-			delete(n.taskValueCache, existingTask.Data)
+			delete(n.taskValueCache, existingTask.GetData())
 		}
 		return !valid
 	}
 
-	componentAttr := n.serializedNode.Metadata.GetComponentAttributes()
-	componentAttr.SideEffectTasks = slices.DeleteFunc(componentAttr.SideEffectTasks, deleteFunc)
+	componentAttr := n.serializedNode.GetMetadata().GetComponentAttributes()
+	componentAttr.SetSideEffectTasks(slices.DeleteFunc(componentAttr.GetSideEffectTasks(), deleteFunc))
 	if validationErr != nil {
 		return false, validationErr
 	}
-	componentAttr.PureTasks = slices.DeleteFunc(componentAttr.PureTasks, deleteFunc)
+	componentAttr.SetPureTasks(slices.DeleteFunc(componentAttr.GetPureTasks(), deleteFunc))
 	if validationErr != nil {
 		return false, validationErr
 	}
@@ -1855,7 +1847,7 @@ func (n *Node) closeTransactionHandleNewTasks(
 		return nil
 	}
 
-	componentAttr := n.serializedNode.Metadata.GetComponentAttributes()
+	componentAttr := n.serializedNode.GetMetadata().GetComponentAttributes()
 	sortPureTasks := false
 
 	for _, newTask := range newTasks {
@@ -1891,7 +1883,7 @@ func (n *Node) closeTransactionHandleNewTasks(
 			return err
 		}
 
-		componentTask := &persistencespb.ChasmComponentAttributes_Task{
+		componentTask := persistencespb.ChasmComponentAttributes_Task_builder{
 			TypeId:                    registrableTask.taskTypeID,
 			Destination:               newTask.attributes.Destination,
 			ScheduledTime:             timestamppb.New(newTask.attributes.ScheduledTime),
@@ -1899,13 +1891,13 @@ func (n *Node) closeTransactionHandleNewTasks(
 			VersionedTransition:       nextVersionedTransition,
 			VersionedTransitionOffset: *taskOffset,
 			PhysicalTaskStatus:        physicalTaskStatusNone,
-		}
+		}.Build()
 
 		if registrableTask.isPureTask {
-			componentAttr.PureTasks = append(componentAttr.PureTasks, componentTask)
+			componentAttr.SetPureTasks(append(componentAttr.GetPureTasks(), componentTask))
 			sortPureTasks = true
 		} else {
-			componentAttr.SideEffectTasks = append(componentAttr.SideEffectTasks, componentTask)
+			componentAttr.SetSideEffectTasks(append(componentAttr.GetSideEffectTasks(), componentTask))
 		}
 
 		*taskOffset++
@@ -1913,7 +1905,7 @@ func (n *Node) closeTransactionHandleNewTasks(
 
 	if sortPureTasks {
 		// pure tasks are sorted by scheduled time.
-		slices.SortFunc(componentAttr.PureTasks, comparePureTasks)
+		slices.SortFunc(componentAttr.GetPureTasks(), comparePureTasks)
 	}
 
 	return nil
@@ -1926,19 +1918,19 @@ func (n *Node) closeTransactionGeneratePhysicalSideEffectTask(
 ) {
 	n.backend.AddTasks(&tasks.ChasmTask{
 		WorkflowKey:         n.backend.GetWorkflowKey(),
-		VisibilityTimestamp: sideEffectTask.ScheduledTime.AsTime(),
-		Destination:         sideEffectTask.Destination,
+		VisibilityTimestamp: sideEffectTask.GetScheduledTime().AsTime(),
+		Destination:         sideEffectTask.GetDestination(),
 		Category:            taskCategory(sideEffectTask),
-		Info: &persistencespb.ChasmTaskInfo{
-			ComponentInitialVersionedTransition:    n.serializedNode.Metadata.InitialVersionedTransition,
-			ComponentLastUpdateVersionedTransition: n.serializedNode.Metadata.LastUpdateVersionedTransition,
+		Info: persistencespb.ChasmTaskInfo_builder{
+			ComponentInitialVersionedTransition:    n.serializedNode.GetMetadata().GetInitialVersionedTransition(),
+			ComponentLastUpdateVersionedTransition: n.serializedNode.GetMetadata().GetLastUpdateVersionedTransition(),
 			Path:                                   nodePath,
-			TypeId:                                 sideEffectTask.TypeId,
-			Data:                                   sideEffectTask.Data,
+			TypeId:                                 sideEffectTask.GetTypeId(),
+			Data:                                   sideEffectTask.GetData(),
 			ArchetypeId:                            archetypeID,
-		},
+		}.Build(),
 	})
-	sideEffectTask.PhysicalTaskStatus = physicalTaskStatusCreated
+	sideEffectTask.SetPhysicalTaskStatus(physicalTaskStatusCreated)
 }
 
 func (n *Node) closeTransactionGeneratePhysicalPureTask(
@@ -1951,10 +1943,10 @@ func (n *Node) closeTransactionGeneratePhysicalPureTask(
 		return nil
 	}
 
-	firstPureTaskScheduledTime := firstPureTask.ScheduledTime.AsTime()
+	firstPureTaskScheduledTime := firstPureTask.GetScheduledTime().AsTime()
 	n.backend.DeleteCHASMPureTasks(firstPureTaskScheduledTime)
 
-	if firstPureTask.PhysicalTaskStatus == physicalTaskStatusCreated {
+	if firstPureTask.GetPhysicalTaskStatus() == physicalTaskStatusCreated {
 		return nil
 	}
 
@@ -1968,7 +1960,7 @@ func (n *Node) closeTransactionGeneratePhysicalPureTask(
 	// to the list of updated nodes.
 	// However, since task status is a cluster local field, we don't really
 	// update LastUpdateVersionedTransition for this node, and the change won't be replicated.
-	firstPureTask.PhysicalTaskStatus = physicalTaskStatusCreated
+	firstPureTask.SetPhysicalTaskStatus(physicalTaskStatusCreated)
 	encodedPath, err := firstTaskNode.getEncodedPath()
 	if err != nil {
 		return err
@@ -2109,7 +2101,7 @@ func (n *Node) snapshotInternal(
 		return
 	}
 
-	if transitionhistory.Compare(n.serializedNode.Metadata.LastUpdateVersionedTransition, exclusiveMinVT) > 0 {
+	if transitionhistory.Compare(n.serializedNode.GetMetadata().GetLastUpdateVersionedTransition(), exclusiveMinVT) > 0 {
 		encodedPath, err := n.getEncodedPath()
 		if !softassert.That(n.logger, err == nil, "chasm path encoding should always succeed on clean tree") {
 			panic(fmt.Sprintf("failed to encode chasm path on clean tree: %v", err))
@@ -2203,8 +2195,8 @@ func (n *Node) ApplySnapshot(
 		}
 
 		if transitionhistory.Compare(
-			currentNode.Metadata.LastUpdateVersionedTransition,
-			incomingNode.Metadata.LastUpdateVersionedTransition,
+			currentNode.GetMetadata().GetLastUpdateVersionedTransition(),
+			incomingNode.GetMetadata().GetLastUpdateVersionedTransition(),
 		) != 0 {
 			mutation.UpdatedNodes[encodedPath] = incomingNode
 		}
@@ -2261,20 +2253,20 @@ func (n *Node) applyUpdates(
 		// An empty node may be created when child update is applied before the parent,
 		// in which case node.serializedNode will be nil.
 		if node.serializedNode == nil || transitionhistory.Compare(
-			node.serializedNode.Metadata.LastUpdateVersionedTransition,
-			updatedNode.Metadata.LastUpdateVersionedTransition,
+			node.serializedNode.GetMetadata().GetLastUpdateVersionedTransition(),
+			updatedNode.GetMetadata().GetLastUpdateVersionedTransition(),
 		) != 0 {
 			localComponentAttr := node.serializedNode.GetMetadata().GetComponentAttributes()
 			updatedComponentAttr := updatedNode.GetMetadata().GetComponentAttributes()
 			if localComponentAttr != nil && updatedComponentAttr != nil {
 				n.carryOverTaskStatus(
-					localComponentAttr.SideEffectTasks,
-					updatedComponentAttr.SideEffectTasks,
+					localComponentAttr.GetSideEffectTasks(),
+					updatedComponentAttr.GetSideEffectTasks(),
 					compareSideEffectTasks,
 				)
 				n.carryOverTaskStatus(
-					localComponentAttr.PureTasks,
-					updatedComponentAttr.PureTasks,
+					localComponentAttr.GetPureTasks(),
+					updatedComponentAttr.GetPureTasks(),
 					comparePureTasks,
 				)
 			}
@@ -2328,14 +2320,14 @@ func (n *Node) resetTaskStatus() bool {
 
 	reset := false
 	for _, componentTasks := range [][]*persistencespb.ChasmComponentAttributes_Task{
-		componentAttr.PureTasks,
-		componentAttr.SideEffectTasks,
+		componentAttr.GetPureTasks(),
+		componentAttr.GetSideEffectTasks(),
 	} {
 		for _, t := range componentTasks {
-			if !reset && t.PhysicalTaskStatus == physicalTaskStatusCreated {
+			if !reset && t.GetPhysicalTaskStatus() == physicalTaskStatusCreated {
 				reset = true
 			}
-			t.PhysicalTaskStatus = physicalTaskStatusNone
+			t.SetPhysicalTaskStatus(physicalTaskStatusNone)
 		}
 	}
 
@@ -2411,10 +2403,10 @@ func (n *Node) cleanupCachedTasks() {
 
 	componentAttr := n.serializedNode.GetMetadata().GetComponentAttributes()
 	for _, task := range componentAttr.GetPureTasks() {
-		delete(n.taskValueCache, task.Data)
+		delete(n.taskValueCache, task.GetData())
 	}
 	for _, task := range componentAttr.GetSideEffectTasks() {
-		delete(n.taskValueCache, task.Data)
+		delete(n.taskValueCache, task.GetData())
 	}
 }
 
@@ -2446,7 +2438,7 @@ func (n *Node) IsStale(
 	}
 
 	return transitionhistory.StalenessCheck(
-		n.backend.GetExecutionInfo().TransitionHistory,
+		n.backend.GetExecutionInfo().GetTransitionHistory(),
 		ref.executionLastUpdateVT,
 	)
 }
@@ -2472,7 +2464,7 @@ func (n *Node) Terminate(
 // ArchetypeID returns the framework's internal ID for the root component's fully qualified name.
 func (n *Node) ArchetypeID() ArchetypeID {
 	// Root must be a component.
-	return n.root().serializedNode.Metadata.GetComponentAttributes().GetTypeId()
+	return n.root().serializedNode.GetMetadata().GetComponentAttributes().GetTypeId()
 }
 
 // Archetype returns the root component's fully qualified name.
@@ -2506,11 +2498,11 @@ func isComponentTaskExpired(
 	referenceTime time.Time,
 	task *persistencespb.ChasmComponentAttributes_Task,
 ) bool {
-	if task.ScheduledTime == nil {
+	if !task.HasScheduledTime() {
 		return false
 	}
 
-	scheduledTime := task.ScheduledTime.AsTime().Truncate(common.ScheduledTaskMinPrecision)
+	scheduledTime := task.GetScheduledTime().AsTime().Truncate(common.ScheduledTaskMinPrecision)
 	referenceTime = referenceTime.Truncate(common.ScheduledTaskMinPrecision)
 
 	return !scheduledTime.After(referenceTime)
@@ -2531,21 +2523,21 @@ func (n *Node) EachPureTask(
 	var componentToProcess []any
 	for _, node := range n.andAllChildren() {
 		// Skip nodes that aren't serialized yet.
-		if node.serializedNode == nil || node.serializedNode.Metadata == nil {
+		if node.serializedNode == nil || !node.serializedNode.HasMetadata() {
 			continue
 		}
 
-		componentAttr := node.serializedNode.Metadata.GetComponentAttributes()
+		componentAttr := node.serializedNode.GetMetadata().GetComponentAttributes()
 		// Skip nodes that aren't components.
 		if componentAttr == nil {
 			continue
 		}
 
-		if len(componentAttr.PureTasks) == 0 {
+		if len(componentAttr.GetPureTasks()) == 0 {
 			continue
 		}
 
-		if !isComponentTaskExpired(referenceTime, componentAttr.PureTasks[0]) {
+		if !isComponentTaskExpired(referenceTime, componentAttr.GetPureTasks()[0]) {
 			continue
 		}
 
@@ -2566,7 +2558,7 @@ func (n *Node) EachPureTask(
 			continue
 		}
 
-		componentAttr := node.serializedNode.Metadata.GetComponentAttributes()
+		componentAttr := node.serializedNode.GetMetadata().GetComponentAttributes()
 
 		for _, task := range componentAttr.GetPureTasks() {
 			if !isComponentTaskExpired(referenceTime, task) {
@@ -2586,8 +2578,8 @@ func (n *Node) EachPureTask(
 			}
 
 			taskAttributes := TaskAttributes{
-				ScheduledTime: task.ScheduledTime.AsTime(),
-				Destination:   task.Destination,
+				ScheduledTime: task.GetScheduledTime().AsTime(),
+				Destination:   task.GetDestination(),
 			}
 
 			executed, err := callback(node, taskAttributes, taskInstance)
@@ -2626,14 +2618,14 @@ func newNode(
 }
 
 func compareSideEffectTasks(a, b *persistencespb.ChasmComponentAttributes_Task) int {
-	if cmpResult := transitionhistory.Compare(a.VersionedTransition, b.VersionedTransition); cmpResult != 0 {
+	if cmpResult := transitionhistory.Compare(a.GetVersionedTransition(), b.GetVersionedTransition()); cmpResult != 0 {
 		return cmpResult
 	}
-	return cmp.Compare(a.VersionedTransitionOffset, b.VersionedTransitionOffset)
+	return cmp.Compare(a.GetVersionedTransitionOffset(), b.GetVersionedTransitionOffset())
 }
 
 func comparePureTasks(a, b *persistencespb.ChasmComponentAttributes_Task) int {
-	if cmpResult := a.ScheduledTime.AsTime().Compare(b.ScheduledTime.AsTime()); cmpResult != 0 {
+	if cmpResult := a.GetScheduledTime().AsTime().Compare(b.GetScheduledTime().AsTime()); cmpResult != 0 {
 		return cmpResult
 	}
 
@@ -2652,49 +2644,49 @@ func (n *Node) carryOverTaskStatus(
 		switch compareFn(sourceTask, targetTask) {
 		case 0:
 			// Task match, carry over status.
-			targetTask.PhysicalTaskStatus = sourceTask.PhysicalTaskStatus
+			targetTask.SetPhysicalTaskStatus(sourceTask.GetPhysicalTaskStatus())
 			// Use existing task data to avoid taskValueCache miss, since the cache uses
 			// *DataBlob as the key.
 			// Otherwise we have to clear cache for all tasks in the node, and re-deserialize
 			// tasks later.
-			targetTask.Data = sourceTask.Data
+			targetTask.SetData(sourceTask.GetData())
 			sourceIdx++
 			targetIdx++
 		case -1:
 			// Source task has a smaller key, meaning the task has been deleted.
 			// Move on to the next source task.
 			sourceIdx++
-			delete(n.taskValueCache, sourceTask.Data)
+			delete(n.taskValueCache, sourceTask.GetData())
 		case 1:
 			// Source task has a larger key, meaning there's a new task inserted.
 			// Sanitize incoming task status.
-			targetTask.PhysicalTaskStatus = physicalTaskStatusNone
+			targetTask.SetPhysicalTaskStatus(physicalTaskStatusNone)
 			targetIdx++
 		}
 	}
 
 	// Sanitize incoming task status for remaining tasks.
 	for ; targetIdx < len(targetTasks); targetIdx++ {
-		targetTasks[targetIdx].PhysicalTaskStatus = physicalTaskStatusNone
+		targetTasks[targetIdx].SetPhysicalTaskStatus(physicalTaskStatusNone)
 	}
 	for ; sourceIdx < len(sourceTasks); sourceIdx++ {
-		delete(n.taskValueCache, sourceTasks[sourceIdx].Data)
+		delete(n.taskValueCache, sourceTasks[sourceIdx].GetData())
 	}
 }
 
 func taskCategory(
 	task *persistencespb.ChasmComponentAttributes_Task,
 ) tasks.Category {
-	if task.TypeId == visibilityTaskTypeID {
+	if task.GetTypeId() == visibilityTaskTypeID {
 		return tasks.CategoryVisibility
 	}
 
-	if task.Destination != "" {
+	if task.GetDestination() != "" {
 		return tasks.CategoryOutbound
 	}
 
-	if task.ScheduledTime == nil ||
-		task.ScheduledTime.AsTime().Equal(TaskScheduledTimeImmediate) {
+	if !task.HasScheduledTime() ||
+		task.GetScheduledTime().AsTime().Equal(TaskScheduledTimeImmediate) {
 		return tasks.CategoryTransfer
 	}
 	return tasks.CategoryTimer
@@ -2806,10 +2798,10 @@ func serializeTask(
 
 	// Handle empty task struct.
 	if taskGoType.NumField() == 0 {
-		return &commonpb.DataBlob{
+		return commonpb.DataBlob_builder{
 			Data:         nil,
 			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
-		}, nil
+		}.Build(), nil
 	}
 
 	// TODO: consider pre-calculating the proto field num when registring the task type.
@@ -2933,7 +2925,7 @@ func (n *Node) ValidateSideEffectTask(
 ) (isValid bool, retErr error) {
 
 	taskInfo := chasmTask.Info
-	taskTypeID := taskInfo.TypeId
+	taskTypeID := taskInfo.GetTypeId()
 	registrableTask, ok := n.registry.taskByID(taskTypeID)
 	if !ok {
 		return false, softassert.UnexpectedInternalErr(
@@ -2949,15 +2941,15 @@ func (n *Node) ValidateSideEffectTask(
 			fmt.Errorf("%s", registrableTask.fqType()))
 	}
 
-	node, ok := n.findNode(taskInfo.Path)
+	node, ok := n.findNode(taskInfo.GetPath())
 	if !ok {
 		return false, nil
 	}
 
 	// node.serializedNode should always be available when running a side effect task.
 	if transitionhistory.Compare(
-		taskInfo.ComponentInitialVersionedTransition,
-		node.serializedNode.Metadata.InitialVersionedTransition,
+		taskInfo.GetComponentInitialVersionedTransition(),
+		node.serializedNode.GetMetadata().GetInitialVersionedTransition(),
 	) != 0 {
 		return false, nil
 	}
@@ -2982,7 +2974,7 @@ func (n *Node) ValidateSideEffectTask(
 		// TODO: Change physical side effect task to reference logical task and
 		// then use deserializeTaskWithCache as well.
 		var err error
-		chasmTask.DeserializedTask, err = deserializeTask(registrableTask, taskInfo.Data)
+		chasmTask.DeserializedTask, err = deserializeTask(registrableTask, taskInfo.GetData())
 		if err != nil {
 			return false, err
 		}
@@ -3018,7 +3010,7 @@ func (n *Node) ExecuteSideEffectTask(
 	}
 
 	taskInfo := chasmTask.Info
-	taskTypeID := taskInfo.TypeId
+	taskTypeID := taskInfo.GetTypeId()
 	registrableTask, ok := registry.taskByID(taskTypeID)
 	if !ok {
 		return softassert.UnexpectedInternalErr(
@@ -3047,7 +3039,7 @@ func (n *Node) ExecuteSideEffectTask(
 		var err error
 		// TODO: Change physical side effect task to reference logical task and
 		// then use deserializeTaskWithCache as well.
-		chasmTask.DeserializedTask, err = deserializeTask(registrableTask, taskInfo.Data)
+		chasmTask.DeserializedTask, err = deserializeTask(registrableTask, taskInfo.GetData())
 		if err != nil {
 			return err
 		}
@@ -3062,9 +3054,9 @@ func (n *Node) ExecuteSideEffectTask(
 	ref := ComponentRef{
 		ExecutionKey:          executionKey,
 		archetypeID:           n.ArchetypeID(),
-		executionLastUpdateVT: taskInfo.ComponentLastUpdateVersionedTransition,
-		componentPath:         taskInfo.Path,
-		componentInitialVT:    taskInfo.ComponentInitialVersionedTransition,
+		executionLastUpdateVT: taskInfo.GetComponentLastUpdateVersionedTransition(),
+		componentPath:         taskInfo.GetPath(),
+		componentInitialVT:    taskInfo.GetComponentInitialVersionedTransition(),
 
 		// Validate the Ref only once it is accessed by the task's executor.
 		validationFn: makeValidationFn(registrableTask, validate, taskAttributes, taskValue),

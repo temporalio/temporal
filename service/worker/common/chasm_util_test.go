@@ -21,9 +21,9 @@ func TestArchetypeIDFromExecutionInfo(t *testing.T) {
 	})
 
 	t.Run("NoNamespaceDivision", func(t *testing.T) {
-		execInfo := &workflowpb.WorkflowExecutionInfo{
-			SearchAttributes: &commonpb.SearchAttributes{IndexedFields: map[string]*commonpb.Payload{}},
-		}
+		execInfo := workflowpb.WorkflowExecutionInfo_builder{
+			SearchAttributes: commonpb.SearchAttributes_builder{IndexedFields: map[string]*commonpb.Payload{}}.Build(),
+		}.Build()
 		id, err := ArchetypeIDFromExecutionInfo(execInfo)
 		require.NoError(t, err)
 		require.Equal(t, chasm.WorkflowArchetypeID, id)
@@ -31,11 +31,11 @@ func TestArchetypeIDFromExecutionInfo(t *testing.T) {
 
 	t.Run("Scheduler", func(t *testing.T) {
 		p := payload.EncodeString("TemporalScheduler")
-		execInfo := &workflowpb.WorkflowExecutionInfo{
-			SearchAttributes: &commonpb.SearchAttributes{IndexedFields: map[string]*commonpb.Payload{
+		execInfo := workflowpb.WorkflowExecutionInfo_builder{
+			SearchAttributes: commonpb.SearchAttributes_builder{IndexedFields: map[string]*commonpb.Payload{
 				sadefs.TemporalNamespaceDivision: p,
-			}},
-		}
+			}}.Build(),
+		}.Build()
 		id, err := ArchetypeIDFromExecutionInfo(execInfo)
 		require.NoError(t, err)
 		require.Equal(t, chasm.WorkflowArchetypeID, id)
@@ -43,11 +43,11 @@ func TestArchetypeIDFromExecutionInfo(t *testing.T) {
 
 	t.Run("CHASM", func(t *testing.T) {
 		p := payload.EncodeString(strconv.FormatUint(42, 10))
-		execInfo := &workflowpb.WorkflowExecutionInfo{
-			SearchAttributes: &commonpb.SearchAttributes{IndexedFields: map[string]*commonpb.Payload{
+		execInfo := workflowpb.WorkflowExecutionInfo_builder{
+			SearchAttributes: commonpb.SearchAttributes_builder{IndexedFields: map[string]*commonpb.Payload{
 				sadefs.TemporalNamespaceDivision: p,
-			}},
-		}
+			}}.Build(),
+		}.Build()
 		id, err := ArchetypeIDFromExecutionInfo(execInfo)
 		require.NoError(t, err)
 		require.Equal(t, chasm.ArchetypeID(42), id)
@@ -56,11 +56,11 @@ func TestArchetypeIDFromExecutionInfo(t *testing.T) {
 	t.Run("ErrorOnInvalidNumber", func(t *testing.T) {
 		p := payload.EncodeString("1x")
 
-		execInfo := &workflowpb.WorkflowExecutionInfo{
-			SearchAttributes: &commonpb.SearchAttributes{IndexedFields: map[string]*commonpb.Payload{
+		execInfo := workflowpb.WorkflowExecutionInfo_builder{
+			SearchAttributes: commonpb.SearchAttributes_builder{IndexedFields: map[string]*commonpb.Payload{
 				sadefs.TemporalNamespaceDivision: p,
-			}},
-		}
+			}}.Build(),
+		}.Build()
 		_, err := ArchetypeIDFromExecutionInfo(execInfo)
 		require.Error(t, err)
 	})

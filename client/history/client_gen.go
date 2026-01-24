@@ -284,7 +284,7 @@ func (c *clientImpl) GetDLQReplicationMessages(
 	if len(request.GetTaskInfos()) == 0 {
 		return nil, serviceerror.NewInvalidArgument("missing TaskInfos")
 	}
-	shardID := c.shardIDFromWorkflowID(request.GetTaskInfos()[0].NamespaceId, request.GetTaskInfos()[0].WorkflowId)
+	shardID := c.shardIDFromWorkflowID(request.GetTaskInfos()[0].GetNamespaceId(), request.GetTaskInfos()[0].GetWorkflowId())
 	var response *historyservice.GetDLQReplicationMessagesResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error

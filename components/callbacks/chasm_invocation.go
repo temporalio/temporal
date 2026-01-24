@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -82,10 +83,10 @@ func (c chasmInvocation) getHistoryRequest(
 ) (*historyservice.CompleteNexusOperationChasmRequest, error) {
 	var req *historyservice.CompleteNexusOperationChasmRequest
 
-	completion := &tokenspb.NexusOperationCompletion{
+	completion := tokenspb.NexusOperationCompletion_builder{
 		ComponentRef: ref,
 		RequestId:    c.requestID,
-	}
+	}.Build()
 
 	switch op := c.completion.(type) {
 	case *nexusrpc.OperationCompletionSuccessful:
@@ -106,26 +107,22 @@ func (c chasmInvocation) getHistoryRequest(
 			}
 		}
 
-		req = &historyservice.CompleteNexusOperationChasmRequest{
-			Outcome: &historyservice.CompleteNexusOperationChasmRequest_Success{
-				Success: payload,
-			},
+		req = historyservice.CompleteNexusOperationChasmRequest_builder{
+			Success:    proto.ValueOrDefault(payload),
 			CloseTime:  timestamppb.New(op.CloseTime),
 			Completion: completion,
-		}
+		}.Build()
 	case *nexusrpc.OperationCompletionUnsuccessful:
 		apiFailure, err := commonnexus.NexusFailureToAPIFailure(op.Failure, true)
 		if err != nil {
 			return nil, fmt.Errorf("failed to convert failure type: %v", err)
 		}
 
-		req = &historyservice.CompleteNexusOperationChasmRequest{
+		req = historyservice.CompleteNexusOperationChasmRequest_builder{
 			Completion: completion,
-			Outcome: &historyservice.CompleteNexusOperationChasmRequest_Failure{
-				Failure: apiFailure,
-			},
-			CloseTime: timestamppb.New(op.CloseTime),
-		}
+			Failure:    proto.ValueOrDefault(apiFailure),
+			CloseTime:  timestamppb.New(op.CloseTime),
+		}.Build()
 	default:
 		return nil, fmt.Errorf("unexpected nexus.OperationCompletion: %v", completion)
 	}

@@ -67,44 +67,44 @@ func (s *attrValidatorSuite) TestValidateNamespaceReplicationConfigForLocalNames
 	).AnyTimes()
 
 	err := s.validator.ValidateNamespaceReplicationConfigForLocalNamespace(
-		&persistencespb.NamespaceReplicationConfig{
+		persistencespb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
 			Clusters: []string{
 				cluster.TestAlternativeClusterName,
 			},
-		},
+		}.Build(),
 	)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 
 	err = s.validator.ValidateNamespaceReplicationConfigForLocalNamespace(
-		&persistencespb.NamespaceReplicationConfig{
+		persistencespb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
 			Clusters: []string{
 				cluster.TestCurrentClusterName,
 				cluster.TestAlternativeClusterName,
 			},
-		},
+		}.Build(),
 	)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 
 	err = s.validator.ValidateNamespaceReplicationConfigForLocalNamespace(
-		&persistencespb.NamespaceReplicationConfig{
+		persistencespb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []string{
 				cluster.TestCurrentClusterName,
 				cluster.TestAlternativeClusterName,
 			},
-		},
+		}.Build(),
 	)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 
 	err = s.validator.ValidateNamespaceReplicationConfigForLocalNamespace(
-		&persistencespb.NamespaceReplicationConfig{
+		persistencespb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []string{
 				cluster.TestCurrentClusterName,
 			},
-		},
+		}.Build(),
 	)
 	s.NoError(err)
 }
@@ -118,44 +118,44 @@ func (s *attrValidatorSuite) TestValidateNamespaceReplicationConfigForGlobalName
 	).AnyTimes()
 
 	err := s.validator.ValidateNamespaceReplicationConfigForGlobalNamespace(
-		&persistencespb.NamespaceReplicationConfig{
+		persistencespb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []string{
 				cluster.TestCurrentClusterName,
 			},
-		},
+		}.Build(),
 	)
 	s.NoError(err)
 
 	err = s.validator.ValidateNamespaceReplicationConfigForGlobalNamespace(
-		&persistencespb.NamespaceReplicationConfig{
+		persistencespb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
 			Clusters: []string{
 				cluster.TestAlternativeClusterName,
 			},
-		},
+		}.Build(),
 	)
 	s.NoError(err)
 
 	err = s.validator.ValidateNamespaceReplicationConfigForGlobalNamespace(
-		&persistencespb.NamespaceReplicationConfig{
+		persistencespb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
 			Clusters: []string{
 				cluster.TestCurrentClusterName,
 				cluster.TestAlternativeClusterName,
 			},
-		},
+		}.Build(),
 	)
 	s.NoError(err)
 
 	err = s.validator.ValidateNamespaceReplicationConfigForGlobalNamespace(
-		&persistencespb.NamespaceReplicationConfig{
+		persistencespb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []string{
 				cluster.TestCurrentClusterName,
 				cluster.TestAlternativeClusterName,
 			},
-		},
+		}.Build(),
 	)
 	s.NoError(err)
 }

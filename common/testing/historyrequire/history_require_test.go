@@ -86,7 +86,7 @@ func TestEqualHistoryEventsWithoutVersion(t *testing.T) {
 	historyEvents, _ := sampleCompactHistory(t)
 
 	for _, event := range historyEvents {
-		event.Version = 0
+		event.SetVersion(0)
 	}
 
 	hr.EqualHistoryEvents(`
@@ -111,8 +111,8 @@ func TestEqualHistoryEventsWithoutEventID(t *testing.T) {
 	historyEvents, _ := sampleCompactHistory(t)
 
 	for _, event := range historyEvents {
-		event.EventId = 0
-		event.Version = 0
+		event.SetEventId(0)
+		event.SetVersion(0)
 	}
 
 	hr.EqualHistoryEvents(`
@@ -137,8 +137,8 @@ func TestEqualHistoryEventsSuffix(t *testing.T) {
 	historyEvents, _ := sampleCompactHistory(t)
 
 	for _, event := range historyEvents {
-		event.EventId = 0
-		event.Version = 0
+		event.SetEventId(0)
+		event.SetVersion(0)
 	}
 
 	hr.EqualHistoryEventsSuffix(`
@@ -153,8 +153,8 @@ func TestEqualHistoryEventsPrefix(t *testing.T) {
 	historyEvents, _ := sampleCompactHistory(t)
 
 	for _, event := range historyEvents {
-		event.EventId = 0
-		event.Version = 0
+		event.SetEventId(0)
+		event.SetVersion(0)
 	}
 
 	hr.EqualHistoryEventsPrefix(`
@@ -181,7 +181,7 @@ func TestParsePartialHistoryEvents(t *testing.T) {
 	require.Len(t, attrs, 7)
 
 	for i, event := range historyEvents {
-		require.Equal(t, int64(i+7), event.EventId)
+		require.Equal(t, int64(i+7), event.GetEventId())
 	}
 
 	hr.EqualHistoryEvents(`
@@ -198,11 +198,9 @@ func TestContainsHistoryEventsWithoutEventID(t *testing.T) {
 	hr := New(t)
 	historyEvents, _ := sampleCompactHistory(t)
 
-	historyEvents[3].Attributes = &historypb.HistoryEvent_WorkflowTaskFailedEventAttributes{
-		WorkflowTaskFailedEventAttributes: &historypb.WorkflowTaskFailedEventAttributes{
-			Identity: "Was wollen wir trinken",
-		},
-	}
+	historyEvents[3].SetWorkflowTaskFailedEventAttributes(historypb.WorkflowTaskFailedEventAttributes_builder{
+		Identity: "Was wollen wir trinken",
+	}.Build())
 
 	hr.ContainsHistoryEvents(`
 WorkflowTaskFailed {"Identity": "Was wollen wir trinken"}
@@ -215,11 +213,9 @@ func TestContainsHistoryEventsWithEventID(t *testing.T) {
 	hr := New(t)
 	historyEvents, _ := sampleCompactHistory(t)
 
-	historyEvents[4].Attributes = &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{
-		WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
-			Attempt: 2208,
-		},
-	}
+	historyEvents[4].SetWorkflowTaskScheduledEventAttributes(historypb.WorkflowTaskScheduledEventAttributes_builder{
+		Attempt: 2208,
+	}.Build())
 
 	hr.ContainsHistoryEvents(`
 4 WorkflowTaskFailed

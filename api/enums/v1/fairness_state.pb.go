@@ -9,7 +9,6 @@ package enums
 import (
 	reflect "reflect"
 	"strconv"
-	sync "sync"
 	unsafe "unsafe"
 
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -82,11 +81,6 @@ func (x FairnessState) Number() protoreflect.EnumNumber {
 	return protoreflect.EnumNumber(x)
 }
 
-// Deprecated: Use FairnessState.Descriptor instead.
-func (FairnessState) EnumDescriptor() ([]byte, []int) {
-	return file_temporal_server_api_enums_v1_fairness_state_proto_rawDescGZIP(), []int{0}
-}
-
 var File_temporal_server_api_enums_v1_fairness_state_proto protoreflect.FileDescriptor
 
 const file_temporal_server_api_enums_v1_fairness_state_proto_rawDesc = "" +
@@ -97,18 +91,6 @@ const file_temporal_server_api_enums_v1_fairness_state_proto_rawDesc = "" +
 	"\x11FAIRNESS_STATE_V0\x10\x01\x12\x15\n" +
 	"\x11FAIRNESS_STATE_V1\x10\x02\x12\x15\n" +
 	"\x11FAIRNESS_STATE_V2\x10\x03B*Z(go.temporal.io/server/api/enums/v1;enumsb\x06proto3"
-
-var (
-	file_temporal_server_api_enums_v1_fairness_state_proto_rawDescOnce sync.Once
-	file_temporal_server_api_enums_v1_fairness_state_proto_rawDescData []byte
-)
-
-func file_temporal_server_api_enums_v1_fairness_state_proto_rawDescGZIP() []byte {
-	file_temporal_server_api_enums_v1_fairness_state_proto_rawDescOnce.Do(func() {
-		file_temporal_server_api_enums_v1_fairness_state_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_api_enums_v1_fairness_state_proto_rawDesc), len(file_temporal_server_api_enums_v1_fairness_state_proto_rawDesc)))
-	})
-	return file_temporal_server_api_enums_v1_fairness_state_proto_rawDescData
-}
 
 var file_temporal_server_api_enums_v1_fairness_state_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
 var file_temporal_server_api_enums_v1_fairness_state_proto_goTypes = []any{

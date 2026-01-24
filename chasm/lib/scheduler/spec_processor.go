@@ -81,7 +81,7 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 	manual bool,
 	limit *int,
 ) (*ProcessedTimeRange, error) {
-	tweakables := s.config.Tweakables(scheduler.Namespace)
+	tweakables := s.config.Tweakables(scheduler.GetNamespace())
 	overlapPolicy = scheduler.resolveOverlapPolicy(overlapPolicy)
 
 	s.logger.Debug("ProcessTimeRange",
@@ -125,13 +125,13 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 	for next, err = s.NextTime(scheduler, start); err == nil && (!next.Next.IsZero() && !next.Next.After(end)); next, err = s.NextTime(scheduler, next.Next) {
 		lastAction = next.Next
 
-		if scheduler.Info.UpdateTime.AsTime().After(next.Next) && !manual {
+		if scheduler.GetInfo().GetUpdateTime().AsTime().After(next.Next) && !manual {
 			// If we've received an update that took effect after the LastProcessedTime high
 			// water mark, discard actions that were scheduled to kick off before the update.
 			// Skip this check for manual (backfill) actions since they explicitly request
 			// past times.
 			s.logger.Warn("ProcessBuffer skipped an action due to update time",
-				tag.NewTimeTag("updateTime", scheduler.Info.UpdateTime.AsTime()),
+				tag.NewTimeTag("updateTime", scheduler.GetInfo().GetUpdateTime().AsTime()),
 				tag.NewTimeTag("droppedActionTime", next.Next))
 			continue
 		}
@@ -142,7 +142,7 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 				tag.NewTimeTag("time", next.Next))
 			s.metricsHandler.Counter(metrics.ScheduleMissedCatchupWindow.Name()).Record(1)
 
-			scheduler.Info.MissedCatchupWindow++
+			scheduler.GetInfo().SetMissedCatchupWindow(scheduler.GetInfo().GetMissedCatchupWindow() + 1)
 			continue
 		}
 
@@ -150,14 +150,14 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 			droppedCount++
 			continue
 		}
-		bufferedStarts = append(bufferedStarts, &schedulespb.BufferedStart{
+		bufferedStarts = append(bufferedStarts, schedulespb.BufferedStart_builder{
 			NominalTime:   timestamppb.New(next.Nominal),
 			ActualTime:    timestamppb.New(next.Next),
 			OverlapPolicy: overlapPolicy,
 			Manual:        manual,
 			RequestId:     generateRequestID(scheduler, backfillID, next.Nominal, next.Next),
 			WorkflowId:    generateWorkflowID(workflowID, next.Nominal),
-		})
+		}.Build())
 
 		if limit != nil {
 			if (*limit)--; *limit <= 0 {
@@ -179,7 +179,7 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 }
 
 func catchupWindow(s *Scheduler, tweakables Tweakables) time.Duration {
-	cw := s.Schedule.GetPolicies().GetCatchupWindow()
+	cw := s.GetSchedule().GetPolicies().GetCatchupWindow()
 	if cw == nil {
 		return tweakables.DefaultCatchupWindow
 	}

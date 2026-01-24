@@ -57,10 +57,10 @@ func (s *conflictResolverSuite) SetupTest() {
 
 	s.mockShard = shard.NewTestContext(
 		s.controller,
-		&persistencespb.ShardInfo{
+		persistencespb.ShardInfo_builder{
 			ShardId: 10,
 			RangeId: 1,
-		},
+		}.Build(),
 		tests.NewDynamicConfig(),
 	)
 
@@ -109,14 +109,14 @@ func (s *conflictResolverSuite) TestRebuild() {
 	s.NoError(err)
 
 	s.mockMutableState.EXPECT().GetUpdateCondition().Return(updateCondition, dbVersion).AnyTimes()
-	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+	s.mockMutableState.EXPECT().GetExecutionInfo().Return(persistencespb.WorkflowExecutionInfo_builder{
 		NamespaceId:      s.namespaceID,
 		WorkflowId:       s.workflowID,
 		VersionHistories: versionHistories,
-	}).AnyTimes()
-	s.mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+	}.Build()).AnyTimes()
+	s.mockMutableState.EXPECT().GetExecutionState().Return(persistencespb.WorkflowExecutionState_builder{
 		RunId: s.runID,
-	}).AnyTimes()
+	}.Build()).AnyTimes()
 	s.mockMutableState.EXPECT().GetHistorySize().Return(historySize).AnyTimes()
 	s.mockMutableState.EXPECT().GetExternalPayloadSize().Return(externalPayloadSize).AnyTimes()
 	s.mockMutableState.EXPECT().GetExternalPayloadCount().Return(externalPayloadCount).AnyTimes()
@@ -128,14 +128,14 @@ func (s *conflictResolverSuite) TestRebuild() {
 	)
 	mockRebuildMutableState := historyi.NewMockMutableState(s.controller)
 	mockRebuildMutableState.EXPECT().GetExecutionInfo().Return(
-		&persistencespb.WorkflowExecutionInfo{
+		persistencespb.WorkflowExecutionInfo_builder{
 			VersionHistories: versionhistory.NewVersionHistories(
 				versionhistory.NewVersionHistory(
 					branchToken1,
 					[]*historyspb.VersionHistoryItem{versionhistory.NewVersionHistoryItem(lastEventID1, version)},
 				),
 			),
-		},
+		}.Build(),
 	).AnyTimes()
 	mockRebuildMutableState.EXPECT().AddHistorySize(historySize)
 	mockRebuildMutableState.EXPECT().AddExternalPayloadSize(externalPayloadSize)
@@ -185,7 +185,7 @@ func (s *conflictResolverSuite) TestGetOrRebuildCurrentMutableState_NoRebuild_No
 	versionHistories := versionhistory.NewVersionHistories(versionHistory0)
 	_, _, err := versionhistory.AddAndSwitchVersionHistory(versionHistories, versionHistory1)
 	s.Nil(err)
-	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{VersionHistories: versionHistories}).AnyTimes()
+	s.mockMutableState.EXPECT().GetExecutionInfo().Return(persistencespb.WorkflowExecutionInfo_builder{VersionHistories: versionHistories}.Build()).AnyTimes()
 
 	rebuiltMutableState, isRebuilt, err := s.nDCConflictResolver.GetOrRebuildCurrentMutableState(context.Background(), 0, version0)
 	s.NoError(err)
@@ -203,7 +203,7 @@ func (s *conflictResolverSuite) TestGetOrRebuildCurrentMutableState_NoRebuild_Sa
 		[]*historyspb.VersionHistoryItem{versionHistoryItem},
 	)
 	versionHistories := versionhistory.NewVersionHistories(versionHistory)
-	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{VersionHistories: versionHistories}).AnyTimes()
+	s.mockMutableState.EXPECT().GetExecutionInfo().Return(persistencespb.WorkflowExecutionInfo_builder{VersionHistories: versionHistories}.Build()).AnyTimes()
 
 	rebuiltMutableState, isRebuilt, err := s.nDCConflictResolver.GetOrRebuildCurrentMutableState(context.Background(), 0, version)
 	s.NoError(err)
@@ -243,14 +243,14 @@ func (s *conflictResolverSuite) TestGetOrRebuildCurrentMutableState_Rebuild() {
 	s.Nil(err)
 
 	s.mockMutableState.EXPECT().GetUpdateCondition().Return(updateCondition, dbVersion).AnyTimes()
-	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+	s.mockMutableState.EXPECT().GetExecutionInfo().Return(persistencespb.WorkflowExecutionInfo_builder{
 		NamespaceId:      s.namespaceID,
 		WorkflowId:       s.workflowID,
 		VersionHistories: versionHistories,
-	}).AnyTimes()
-	s.mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+	}.Build()).AnyTimes()
+	s.mockMutableState.EXPECT().GetExecutionState().Return(persistencespb.WorkflowExecutionState_builder{
 		RunId: s.runID,
-	}).AnyTimes()
+	}.Build()).AnyTimes()
 	s.mockMutableState.EXPECT().GetHistorySize().Return(historySize).AnyTimes()
 	externalPayloadSize := int64(6789)
 	externalPayloadCount := int64(42)
@@ -264,14 +264,14 @@ func (s *conflictResolverSuite) TestGetOrRebuildCurrentMutableState_Rebuild() {
 	)
 	mockRebuildMutableState := historyi.NewMockMutableState(s.controller)
 	mockRebuildMutableState.EXPECT().GetExecutionInfo().Return(
-		&persistencespb.WorkflowExecutionInfo{
+		persistencespb.WorkflowExecutionInfo_builder{
 			VersionHistories: versionhistory.NewVersionHistories(
 				versionhistory.NewVersionHistory(
 					branchToken1,
 					[]*historyspb.VersionHistoryItem{versionhistory.NewVersionHistoryItem(lastEventID1, version)},
 				),
 			),
-		},
+		}.Build(),
 	).AnyTimes()
 	mockRebuildMutableState.EXPECT().AddHistorySize(historySize)
 	mockRebuildMutableState.EXPECT().AddExternalPayloadSize(externalPayloadSize)
@@ -311,7 +311,7 @@ func (s *conflictResolverSuite) TestGetOrRebuildMutableState_NoRebuild_SameIndex
 		[]*historyspb.VersionHistoryItem{versionHistoryItem},
 	)
 	versionHistories := versionhistory.NewVersionHistories(versionHistory)
-	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{VersionHistories: versionHistories}).AnyTimes()
+	s.mockMutableState.EXPECT().GetExecutionInfo().Return(persistencespb.WorkflowExecutionInfo_builder{VersionHistories: versionHistories}.Build()).AnyTimes()
 
 	rebuiltMutableState, isRebuilt, err := s.nDCConflictResolver.GetOrRebuildMutableState(context.Background(), 0)
 	s.NoError(err)
@@ -352,14 +352,14 @@ func (s *conflictResolverSuite) TestGetOrRebuildMutableState_Rebuild() {
 	s.Nil(err)
 
 	s.mockMutableState.EXPECT().GetUpdateCondition().Return(updateCondition, dbVersion).AnyTimes()
-	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+	s.mockMutableState.EXPECT().GetExecutionInfo().Return(persistencespb.WorkflowExecutionInfo_builder{
 		NamespaceId:      s.namespaceID,
 		WorkflowId:       s.workflowID,
 		VersionHistories: versionHistories,
-	}).AnyTimes()
-	s.mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+	}.Build()).AnyTimes()
+	s.mockMutableState.EXPECT().GetExecutionState().Return(persistencespb.WorkflowExecutionState_builder{
 		RunId: s.runID,
-	}).AnyTimes()
+	}.Build()).AnyTimes()
 	s.mockMutableState.EXPECT().GetHistorySize().Return(historySize).AnyTimes()
 	s.mockMutableState.EXPECT().GetExternalPayloadSize().Return(externalPayloadSize).AnyTimes()
 	s.mockMutableState.EXPECT().GetExternalPayloadCount().Return(externalPayloadCount).AnyTimes()
@@ -371,14 +371,14 @@ func (s *conflictResolverSuite) TestGetOrRebuildMutableState_Rebuild() {
 	)
 	mockRebuildMutableState := historyi.NewMockMutableState(s.controller)
 	mockRebuildMutableState.EXPECT().GetExecutionInfo().Return(
-		&persistencespb.WorkflowExecutionInfo{
+		persistencespb.WorkflowExecutionInfo_builder{
 			VersionHistories: versionhistory.NewVersionHistories(
 				versionhistory.NewVersionHistory(
 					branchToken1,
 					[]*historyspb.VersionHistoryItem{versionhistory.NewVersionHistoryItem(lastEventID1, version)},
 				),
 			),
-		},
+		}.Build(),
 	).AnyTimes()
 	mockRebuildMutableState.EXPECT().AddHistorySize(historySize)
 	mockRebuildMutableState.EXPECT().AddExternalPayloadSize(externalPayloadSize)

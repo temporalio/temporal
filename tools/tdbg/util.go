@@ -299,14 +299,14 @@ func getNamespaceID(c *cli.Context, clientFactory ClientFactory, nsName namespac
 	ctx, cancel := newContext(c)
 	defer cancel()
 
-	nsResponse, err := wfClient.DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+	nsResponse, err := wfClient.DescribeNamespace(ctx, workflowservice.DescribeNamespaceRequest_builder{
 		Namespace: nsName.String(),
-	})
+	}.Build())
 	if err != nil {
 		return namespace.EmptyID, err
 	}
 
-	return namespace.ID(nsResponse.NamespaceInfo.GetId()), nil
+	return namespace.ID(nsResponse.GetNamespaceInfo().GetId()), nil
 }
 
 func getArchetypeWithDefault(

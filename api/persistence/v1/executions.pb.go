@@ -8,7 +8,7 @@ package persistence
 
 import (
 	reflect "reflect"
-	sync "sync"
+	"strconv"
 	unsafe "unsafe"
 
 	v13 "go.temporal.io/api/common/v1"
@@ -36,19 +36,16 @@ const (
 
 // shard column
 type ShardInfo struct {
-	state   protoimpl.MessageState `protogen:"open.v1"`
-	ShardId int32                  `protobuf:"varint,1,opt,name=shard_id,json=shardId,proto3" json:"shard_id,omitempty"`
-	RangeId int64                  `protobuf:"varint,2,opt,name=range_id,json=rangeId,proto3" json:"range_id,omitempty"`
-	Owner   string                 `protobuf:"bytes,3,opt,name=owner,proto3" json:"owner,omitempty"`
-	// (-- api-linter: core::0140::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: "since" is needed here. --)
-	StolenSinceRenew       int32                  `protobuf:"varint,6,opt,name=stolen_since_renew,json=stolenSinceRenew,proto3" json:"stolen_since_renew,omitempty"`
-	UpdateTime             *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=update_time,json=updateTime,proto3" json:"update_time,omitempty"`
-	ReplicationDlqAckLevel map[string]int64       `protobuf:"bytes,13,rep,name=replication_dlq_ack_level,json=replicationDlqAckLevel,proto3" json:"replication_dlq_ack_level,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
-	QueueStates            map[int32]*QueueState  `protobuf:"bytes,17,rep,name=queue_states,json=queueStates,proto3" json:"queue_states,omitempty" protobuf_key:"varint,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	unknownFields          protoimpl.UnknownFields
-	sizeCache              protoimpl.SizeCache
+	state                             protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_ShardId                int32                  `protobuf:"varint,1,opt,name=shard_id,json=shardId,proto3"`
+	xxx_hidden_RangeId                int64                  `protobuf:"varint,2,opt,name=range_id,json=rangeId,proto3"`
+	xxx_hidden_Owner                  string                 `protobuf:"bytes,3,opt,name=owner,proto3"`
+	xxx_hidden_StolenSinceRenew       int32                  `protobuf:"varint,6,opt,name=stolen_since_renew,json=stolenSinceRenew,proto3"`
+	xxx_hidden_UpdateTime             *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=update_time,json=updateTime,proto3"`
+	xxx_hidden_ReplicationDlqAckLevel map[string]int64       `protobuf:"bytes,13,rep,name=replication_dlq_ack_level,json=replicationDlqAckLevel,proto3" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
+	xxx_hidden_QueueStates            map[int32]*QueueState  `protobuf:"bytes,17,rep,name=queue_states,json=queueStates,proto3" protobuf_key:"varint,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields                     protoimpl.UnknownFields
+	sizeCache                         protoimpl.SizeCache
 }
 
 func (x *ShardInfo) Reset() {
@@ -76,284 +73,228 @@ func (x *ShardInfo) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ShardInfo.ProtoReflect.Descriptor instead.
-func (*ShardInfo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_executions_proto_rawDescGZIP(), []int{0}
-}
-
 func (x *ShardInfo) GetShardId() int32 {
 	if x != nil {
-		return x.ShardId
+		return x.xxx_hidden_ShardId
 	}
 	return 0
 }
 
 func (x *ShardInfo) GetRangeId() int64 {
 	if x != nil {
-		return x.RangeId
+		return x.xxx_hidden_RangeId
 	}
 	return 0
 }
 
 func (x *ShardInfo) GetOwner() string {
 	if x != nil {
-		return x.Owner
+		return x.xxx_hidden_Owner
 	}
 	return ""
 }
 
 func (x *ShardInfo) GetStolenSinceRenew() int32 {
 	if x != nil {
-		return x.StolenSinceRenew
+		return x.xxx_hidden_StolenSinceRenew
 	}
 	return 0
 }
 
 func (x *ShardInfo) GetUpdateTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.UpdateTime
+		return x.xxx_hidden_UpdateTime
 	}
 	return nil
 }
 
 func (x *ShardInfo) GetReplicationDlqAckLevel() map[string]int64 {
 	if x != nil {
-		return x.ReplicationDlqAckLevel
+		return x.xxx_hidden_ReplicationDlqAckLevel
 	}
 	return nil
 }
 
 func (x *ShardInfo) GetQueueStates() map[int32]*QueueState {
 	if x != nil {
-		return x.QueueStates
+		return x.xxx_hidden_QueueStates
 	}
 	return nil
 }
 
-// execution column
-type WorkflowExecutionInfo struct {
-	state                                   protoimpl.MessageState `protogen:"open.v1"`
-	NamespaceId                             string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	WorkflowId                              string                 `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
-	ParentNamespaceId                       string                 `protobuf:"bytes,3,opt,name=parent_namespace_id,json=parentNamespaceId,proto3" json:"parent_namespace_id,omitempty"`
-	ParentWorkflowId                        string                 `protobuf:"bytes,4,opt,name=parent_workflow_id,json=parentWorkflowId,proto3" json:"parent_workflow_id,omitempty"`
-	ParentRunId                             string                 `protobuf:"bytes,5,opt,name=parent_run_id,json=parentRunId,proto3" json:"parent_run_id,omitempty"`
-	ParentInitiatedId                       int64                  `protobuf:"varint,6,opt,name=parent_initiated_id,json=parentInitiatedId,proto3" json:"parent_initiated_id,omitempty"`
-	CompletionEventBatchId                  int64                  `protobuf:"varint,7,opt,name=completion_event_batch_id,json=completionEventBatchId,proto3" json:"completion_event_batch_id,omitempty"`
-	TaskQueue                               string                 `protobuf:"bytes,9,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
-	WorkflowTypeName                        string                 `protobuf:"bytes,10,opt,name=workflow_type_name,json=workflowTypeName,proto3" json:"workflow_type_name,omitempty"`
-	WorkflowExecutionTimeout                *durationpb.Duration   `protobuf:"bytes,11,opt,name=workflow_execution_timeout,json=workflowExecutionTimeout,proto3" json:"workflow_execution_timeout,omitempty"`
-	WorkflowRunTimeout                      *durationpb.Duration   `protobuf:"bytes,12,opt,name=workflow_run_timeout,json=workflowRunTimeout,proto3" json:"workflow_run_timeout,omitempty"`
-	DefaultWorkflowTaskTimeout              *durationpb.Duration   `protobuf:"bytes,13,opt,name=default_workflow_task_timeout,json=defaultWorkflowTaskTimeout,proto3" json:"default_workflow_task_timeout,omitempty"`
-	LastRunningClock                        int64                  `protobuf:"varint,17,opt,name=last_running_clock,json=lastRunningClock,proto3" json:"last_running_clock,omitempty"`
-	LastFirstEventId                        int64                  `protobuf:"varint,18,opt,name=last_first_event_id,json=lastFirstEventId,proto3" json:"last_first_event_id,omitempty"`
-	LastCompletedWorkflowTaskStartedEventId int64                  `protobuf:"varint,19,opt,name=last_completed_workflow_task_started_event_id,json=lastCompletedWorkflowTaskStartedEventId,proto3" json:"last_completed_workflow_task_started_event_id,omitempty"`
-	// Deprecated. use `WorkflowExecutionState.start_time`
-	StartTime      *timestamppb.Timestamp `protobuf:"bytes,20,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
-	LastUpdateTime *timestamppb.Timestamp `protobuf:"bytes,21,opt,name=last_update_time,json=lastUpdateTime,proto3" json:"last_update_time,omitempty"`
-	// Workflow task fields.
-	WorkflowTaskVersion                     int64                            `protobuf:"varint,22,opt,name=workflow_task_version,json=workflowTaskVersion,proto3" json:"workflow_task_version,omitempty"`
-	WorkflowTaskScheduledEventId            int64                            `protobuf:"varint,23,opt,name=workflow_task_scheduled_event_id,json=workflowTaskScheduledEventId,proto3" json:"workflow_task_scheduled_event_id,omitempty"`
-	WorkflowTaskStartedEventId              int64                            `protobuf:"varint,24,opt,name=workflow_task_started_event_id,json=workflowTaskStartedEventId,proto3" json:"workflow_task_started_event_id,omitempty"`
-	WorkflowTaskTimeout                     *durationpb.Duration             `protobuf:"bytes,25,opt,name=workflow_task_timeout,json=workflowTaskTimeout,proto3" json:"workflow_task_timeout,omitempty"`
-	WorkflowTaskAttempt                     int32                            `protobuf:"varint,26,opt,name=workflow_task_attempt,json=workflowTaskAttempt,proto3" json:"workflow_task_attempt,omitempty"`
-	WorkflowTaskStartedTime                 *timestamppb.Timestamp           `protobuf:"bytes,27,opt,name=workflow_task_started_time,json=workflowTaskStartedTime,proto3" json:"workflow_task_started_time,omitempty"`
-	WorkflowTaskScheduledTime               *timestamppb.Timestamp           `protobuf:"bytes,28,opt,name=workflow_task_scheduled_time,json=workflowTaskScheduledTime,proto3" json:"workflow_task_scheduled_time,omitempty"`
-	WorkflowTaskOriginalScheduledTime       *timestamppb.Timestamp           `protobuf:"bytes,30,opt,name=workflow_task_original_scheduled_time,json=workflowTaskOriginalScheduledTime,proto3" json:"workflow_task_original_scheduled_time,omitempty"`
-	WorkflowTaskRequestId                   string                           `protobuf:"bytes,31,opt,name=workflow_task_request_id,json=workflowTaskRequestId,proto3" json:"workflow_task_request_id,omitempty"`
-	WorkflowTaskType                        v1.WorkflowTaskType              `protobuf:"varint,68,opt,name=workflow_task_type,json=workflowTaskType,proto3,enum=temporal.server.api.enums.v1.WorkflowTaskType" json:"workflow_task_type,omitempty"`
-	WorkflowTaskSuggestContinueAsNew        bool                             `protobuf:"varint,69,opt,name=workflow_task_suggest_continue_as_new,json=workflowTaskSuggestContinueAsNew,proto3" json:"workflow_task_suggest_continue_as_new,omitempty"`
-	WorkflowTaskSuggestContinueAsNewReasons []v11.SuggestContinueAsNewReason `protobuf:"varint,110,rep,packed,name=workflow_task_suggest_continue_as_new_reasons,json=workflowTaskSuggestContinueAsNewReasons,proto3,enum=temporal.api.enums.v1.SuggestContinueAsNewReason" json:"workflow_task_suggest_continue_as_new_reasons,omitempty"`
-	WorkflowTaskHistorySizeBytes            int64                            `protobuf:"varint,70,opt,name=workflow_task_history_size_bytes,json=workflowTaskHistorySizeBytes,proto3" json:"workflow_task_history_size_bytes,omitempty"`
-	// tracks the started build ID for transient/speculative WFT. This info is used for two purposes:
-	// - verify WFT completes by the same Build ID that started in the latest attempt
-	// - when persisting transient/speculative WFT, the right Build ID is used in the WFT started event
-	// Deprecated. Clean up with versioning-2. [cleanup-old-wv]
-	WorkflowTaskBuildId string `protobuf:"bytes,88,opt,name=workflow_task_build_id,json=workflowTaskBuildId,proto3" json:"workflow_task_build_id,omitempty"`
-	// tracks the started build ID redirect counter for transient/speculative WFT. This info is to
-	// ensure the right redirect counter is used in the WFT started event created later
-	// for a transient/speculative WFT.
-	// Deprecated. Clean up with versioning-2. [cleanup-old-wv]
-	WorkflowTaskBuildIdRedirectCounter int64 `protobuf:"varint,89,opt,name=workflow_task_build_id_redirect_counter,json=workflowTaskBuildIdRedirectCounter,proto3" json:"workflow_task_build_id_redirect_counter,omitempty"`
-	// Stamp represents the "version" of the workflow's internal state.
-	// It increases monotonically when the workflow's options are modified.
-	// It is used to check if a workflow task is still relevant to the corresponding workflow state machine.
-	WorkflowTaskStamp int32 `protobuf:"varint,109,opt,name=workflow_task_stamp,json=workflowTaskStamp,proto3" json:"workflow_task_stamp,omitempty"`
-	// AttemptsSinceLastSuccess tracks the number of workflow task attempts since the last successful workflow task.
-	// This is carried over when buffered events are applied after workflow task failures.
-	// Used by the TemporalReportedProblems search attribute to track continuous failure count.
+func (x *ShardInfo) SetShardId(v int32) {
+	x.xxx_hidden_ShardId = v
+}
+
+func (x *ShardInfo) SetRangeId(v int64) {
+	x.xxx_hidden_RangeId = v
+}
+
+func (x *ShardInfo) SetOwner(v string) {
+	x.xxx_hidden_Owner = v
+}
+
+func (x *ShardInfo) SetStolenSinceRenew(v int32) {
+	x.xxx_hidden_StolenSinceRenew = v
+}
+
+func (x *ShardInfo) SetUpdateTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_UpdateTime = v
+}
+
+func (x *ShardInfo) SetReplicationDlqAckLevel(v map[string]int64) {
+	x.xxx_hidden_ReplicationDlqAckLevel = v
+}
+
+func (x *ShardInfo) SetQueueStates(v map[int32]*QueueState) {
+	x.xxx_hidden_QueueStates = v
+}
+
+func (x *ShardInfo) HasUpdateTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_UpdateTime != nil
+}
+
+func (x *ShardInfo) ClearUpdateTime() {
+	x.xxx_hidden_UpdateTime = nil
+}
+
+type ShardInfo_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	ShardId int32
+	RangeId int64
+	Owner   string
 	// (-- api-linter: core::0140::prepositions=disabled
 	//
 	//	aip.dev/not-precedent: "since" is needed here. --)
-	WorkflowTaskAttemptsSinceLastSuccess int32  `protobuf:"varint,111,opt,name=workflow_task_attempts_since_last_success,json=workflowTaskAttemptsSinceLastSuccess,proto3" json:"workflow_task_attempts_since_last_success,omitempty"`
-	CancelRequested                      bool   `protobuf:"varint,29,opt,name=cancel_requested,json=cancelRequested,proto3" json:"cancel_requested,omitempty"`
-	CancelRequestId                      string `protobuf:"bytes,32,opt,name=cancel_request_id,json=cancelRequestId,proto3" json:"cancel_request_id,omitempty"`
-	StickyTaskQueue                      string `protobuf:"bytes,33,opt,name=sticky_task_queue,json=stickyTaskQueue,proto3" json:"sticky_task_queue,omitempty"`
-	// (-- api-linter: core::0140::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: "to" is used to indicate interval. --)
-	StickyScheduleToStartTimeout    *durationpb.Duration    `protobuf:"bytes,34,opt,name=sticky_schedule_to_start_timeout,json=stickyScheduleToStartTimeout,proto3" json:"sticky_schedule_to_start_timeout,omitempty"`
-	Attempt                         int32                   `protobuf:"varint,35,opt,name=attempt,proto3" json:"attempt,omitempty"`
-	RetryInitialInterval            *durationpb.Duration    `protobuf:"bytes,36,opt,name=retry_initial_interval,json=retryInitialInterval,proto3" json:"retry_initial_interval,omitempty"`
-	RetryMaximumInterval            *durationpb.Duration    `protobuf:"bytes,37,opt,name=retry_maximum_interval,json=retryMaximumInterval,proto3" json:"retry_maximum_interval,omitempty"`
-	RetryMaximumAttempts            int32                   `protobuf:"varint,38,opt,name=retry_maximum_attempts,json=retryMaximumAttempts,proto3" json:"retry_maximum_attempts,omitempty"`
-	RetryBackoffCoefficient         float64                 `protobuf:"fixed64,39,opt,name=retry_backoff_coefficient,json=retryBackoffCoefficient,proto3" json:"retry_backoff_coefficient,omitempty"`
-	WorkflowExecutionExpirationTime *timestamppb.Timestamp  `protobuf:"bytes,40,opt,name=workflow_execution_expiration_time,json=workflowExecutionExpirationTime,proto3" json:"workflow_execution_expiration_time,omitempty"`
-	RetryNonRetryableErrorTypes     []string                `protobuf:"bytes,41,rep,name=retry_non_retryable_error_types,json=retryNonRetryableErrorTypes,proto3" json:"retry_non_retryable_error_types,omitempty"`
-	HasRetryPolicy                  bool                    `protobuf:"varint,42,opt,name=has_retry_policy,json=hasRetryPolicy,proto3" json:"has_retry_policy,omitempty"`
-	CronSchedule                    string                  `protobuf:"bytes,43,opt,name=cron_schedule,json=cronSchedule,proto3" json:"cron_schedule,omitempty"`
-	SignalCount                     int64                   `protobuf:"varint,46,opt,name=signal_count,json=signalCount,proto3" json:"signal_count,omitempty"`
-	ActivityCount                   int64                   `protobuf:"varint,71,opt,name=activity_count,json=activityCount,proto3" json:"activity_count,omitempty"`
-	ChildExecutionCount             int64                   `protobuf:"varint,72,opt,name=child_execution_count,json=childExecutionCount,proto3" json:"child_execution_count,omitempty"`
-	UserTimerCount                  int64                   `protobuf:"varint,73,opt,name=user_timer_count,json=userTimerCount,proto3" json:"user_timer_count,omitempty"`
-	RequestCancelExternalCount      int64                   `protobuf:"varint,74,opt,name=request_cancel_external_count,json=requestCancelExternalCount,proto3" json:"request_cancel_external_count,omitempty"`
-	SignalExternalCount             int64                   `protobuf:"varint,75,opt,name=signal_external_count,json=signalExternalCount,proto3" json:"signal_external_count,omitempty"`
-	UpdateCount                     int64                   `protobuf:"varint,77,opt,name=update_count,json=updateCount,proto3" json:"update_count,omitempty"`
-	AutoResetPoints                 *v12.ResetPoints        `protobuf:"bytes,51,opt,name=auto_reset_points,json=autoResetPoints,proto3" json:"auto_reset_points,omitempty"`
-	SearchAttributes                map[string]*v13.Payload `protobuf:"bytes,52,rep,name=search_attributes,json=searchAttributes,proto3" json:"search_attributes,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	Memo                            map[string]*v13.Payload `protobuf:"bytes,53,rep,name=memo,proto3" json:"memo,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	VersionHistories                *v14.VersionHistories   `protobuf:"bytes,54,opt,name=version_histories,json=versionHistories,proto3" json:"version_histories,omitempty"`
-	FirstExecutionRunId             string                  `protobuf:"bytes,55,opt,name=first_execution_run_id,json=firstExecutionRunId,proto3" json:"first_execution_run_id,omitempty"`
-	ExecutionStats                  *ExecutionStats         `protobuf:"bytes,56,opt,name=execution_stats,json=executionStats,proto3" json:"execution_stats,omitempty"`
-	WorkflowRunExpirationTime       *timestamppb.Timestamp  `protobuf:"bytes,57,opt,name=workflow_run_expiration_time,json=workflowRunExpirationTime,proto3" json:"workflow_run_expiration_time,omitempty"`
-	// Transaction Id of the first event in the last batch of events.
-	LastFirstEventTxnId  int64                  `protobuf:"varint,58,opt,name=last_first_event_txn_id,json=lastFirstEventTxnId,proto3" json:"last_first_event_txn_id,omitempty"`
-	StateTransitionCount int64                  `protobuf:"varint,59,opt,name=state_transition_count,json=stateTransitionCount,proto3" json:"state_transition_count,omitempty"`
-	ExecutionTime        *timestamppb.Timestamp `protobuf:"bytes,60,opt,name=execution_time,json=executionTime,proto3" json:"execution_time,omitempty"`
-	// If continued-as-new, or retried, or cron, holds the new run id.
-	NewExecutionRunId string           `protobuf:"bytes,61,opt,name=new_execution_run_id,json=newExecutionRunId,proto3" json:"new_execution_run_id,omitempty"`
-	ParentClock       *v15.VectorClock `protobuf:"bytes,62,opt,name=parent_clock,json=parentClock,proto3" json:"parent_clock,omitempty"`
-	// version of child execution initiated event in parent workflow
-	ParentInitiatedVersion int64 `protobuf:"varint,63,opt,name=parent_initiated_version,json=parentInitiatedVersion,proto3" json:"parent_initiated_version,omitempty"`
-	// Used to check if transfer close task is processed before deleting the workflow execution.
-	CloseTransferTaskId int64 `protobuf:"varint,64,opt,name=close_transfer_task_id,json=closeTransferTaskId,proto3" json:"close_transfer_task_id,omitempty"`
-	// Used to check if visibility close task is processed before deleting the workflow execution.
-	CloseVisibilityTaskId int64                  `protobuf:"varint,65,opt,name=close_visibility_task_id,json=closeVisibilityTaskId,proto3" json:"close_visibility_task_id,omitempty"`
-	CloseTime             *timestamppb.Timestamp `protobuf:"bytes,66,opt,name=close_time,json=closeTime,proto3" json:"close_time,omitempty"`
-	// Relocatable attributes are memo and search attributes. If they were removed, then they are not
-	// present in the mutable state, and they should be in visibility store.
-	RelocatableAttributesRemoved bool                   `protobuf:"varint,67,opt,name=relocatable_attributes_removed,json=relocatableAttributesRemoved,proto3" json:"relocatable_attributes_removed,omitempty"`
-	BaseExecutionInfo            *v16.BaseExecutionInfo `protobuf:"bytes,76,opt,name=base_execution_info,json=baseExecutionInfo,proto3" json:"base_execution_info,omitempty"`
-	// If using build-id based versioning: version stamp of the last worker to complete a
-	// workflow tasks for this workflow.
-	// Deprecated. Clean up with versioning-2. [cleanup-old-wv]
-	MostRecentWorkerVersionStamp *v13.WorkerVersionStamp `protobuf:"bytes,78,opt,name=most_recent_worker_version_stamp,json=mostRecentWorkerVersionStamp,proto3" json:"most_recent_worker_version_stamp,omitempty"`
-	// The currently assigned build ID for this execution. Presence of this value means worker versioning is used
-	// for this execution. Assigned build ID is selected by matching based on Worker Versioning Assignment Rules
-	// when the first workflow task of the execution is scheduled. If the first workflow task fails and is scheduled
-	// again, the assigned build ID may change according to the latest versioning rules.
-	// Assigned build ID can also change in the middle of a execution if Compatible Redirect Rules are applied to
-	// this execution.
-	// Deprecated. Clean up with versioning-2. [cleanup-old-wv]
-	AssignedBuildId string `protobuf:"bytes,85,opt,name=assigned_build_id,json=assignedBuildId,proto3" json:"assigned_build_id,omitempty"`
-	// Build ID inherited from a previous/parent execution. If present, assigned_build_id will be set to this, instead
-	// of using the assignment rules.
-	// Deprecated. Clean up with versioning-2. [cleanup-old-wv]
-	InheritedBuildId string `protobuf:"bytes,86,opt,name=inherited_build_id,json=inheritedBuildId,proto3" json:"inherited_build_id,omitempty"`
-	// Tracks the number of times a redirect rule is applied to this workflow. Used to apply redirects in the right
-	// order when mutable state is rebuilt from history events.
-	// Deprecated. Clean up with versioning-2. [cleanup-old-wv]
-	BuildIdRedirectCounter int64 `protobuf:"varint,87,opt,name=build_id_redirect_counter,json=buildIdRedirectCounter,proto3" json:"build_id_redirect_counter,omitempty"`
-	// index of update IDs and pointers to associated history events.
-	UpdateInfos map[string]*UpdateInfo `protobuf:"bytes,79,rep,name=update_infos,json=updateInfos,proto3" json:"update_infos,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	// Transition history encodes all transitions a mutable state object has gone through in a compact way.
-	// Here the transition_count field of VersionedTransition represents the maximum transition count the mutable state object
-	// has gone through for the corresponding namespace failover version.
-	// For example, if the transition history is `[{v: 1, t: 3}, {v: 2, t: 5}]`, it means transition 1-3 have failover version 1,
-	// and transition 4-5 have failover version 2.
-	//
-	// Each task generated by the HSM framework is imprinted with the current VersionedTransition at the end of the transaction.
-	// When a task is being processed, the transition history is compared with the imprinted task information to
-	// verify that a task is not referencing a stale state or that the task itself is not stale.
-	// For example, with the same transition history above, task A `{v: 2, t: 4}` **is not**
-	// referencing stale state because for version `2` transitions `4-5` are valid, while task B `{v: 2, t: 6}` **is**
-	// referencing stale state because the transition count is out of range for version `2`.
-	// Furthermore, task C `{v: 1, t: 4}` itself is stale because it is referencing an impossible state, likely due to post
-	// split-brain reconciliation.
-	TransitionHistory []*VersionedTransition `protobuf:"bytes,80,rep,name=transition_history,json=transitionHistory,proto3" json:"transition_history,omitempty"`
-	// Map of state machine type to map of machine by ID.
-	// (-- api-linter: core::0140::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: "by" is used to clarify the keys and values. --)
-	SubStateMachinesByType map[string]*StateMachineMap `protobuf:"bytes,81,rep,name=sub_state_machines_by_type,json=subStateMachinesByType,proto3" json:"sub_state_machines_by_type,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	// This field is for tracking if the workflow execution timer task is created or not.
-	// We don't need this field if we always create the execution timer task when the first
-	// workflow in a workflow chain starts. However, this execution timer logic is later added.
-	// To maintain backward compatibility, we need to track if the execution timer task is created
-	// for a workflow chain since later workflows in the chain also need to create the execution
-	// timer task if it is not created yet.
-	// NOTE: Task status is clsuter specific information, so when replicating mutable state, this
-	// field need to be sanitized.
-	WorkflowExecutionTimerTaskStatus int32 `protobuf:"varint,82,opt,name=workflow_execution_timer_task_status,json=workflowExecutionTimerTaskStatus,proto3" json:"workflow_execution_timer_task_status,omitempty"`
-	// The root workflow execution is defined as follows:
-	// 1. A workflow without parent workflow is its own root workflow.
-	// 2. A workflow that has a parent workflow has the same root workflow as its parent workflow.
-	RootWorkflowId string `protobuf:"bytes,83,opt,name=root_workflow_id,json=rootWorkflowId,proto3" json:"root_workflow_id,omitempty"`
-	RootRunId      string `protobuf:"bytes,84,opt,name=root_run_id,json=rootRunId,proto3" json:"root_run_id,omitempty"`
-	// Timer tasks emitted from state machines are stored in this array, grouped and sorted by their deadline. Only the
-	// next state machine timer task is generated at a time per mutable state. When that task is processed it iterates
-	// this array and triggers timers that are ready.
-	// NOTE: Task status is cluster specific information, so when replicating mutable state, this field needs to be
-	// sanitized.
-	StateMachineTimers []*StateMachineTimerGroup `protobuf:"bytes,90,rep,name=state_machine_timers,json=stateMachineTimers,proto3" json:"state_machine_timers,omitempty"`
-	// The shard clock's timestamp at the time the first valid task was created for this mutable state (either for a new
-	// mutable state or when rebuilding from events). The field should be updated whenever we refresh tasks, marking
-	// older generation tasks obsolete.
-	// This field is used for task staleness checks when mutable state is rebuilt.
-	// NOTE: Task status is cluster specific information, so when replicating mutable state, this field needs to be
-	// sanitized.
-	// (-- api-linter: core::0140::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: Ignoring api-linter rules for clarity --)
-	//
-	// (-- api-linter: core::0142::time-field-type=disabled
-	//
-	//	aip.dev/not-precedent: This is a vector clock, not a timestamp --)
-	TaskGenerationShardClockTimestamp             int64                         `protobuf:"varint,91,opt,name=task_generation_shard_clock_timestamp,json=taskGenerationShardClockTimestamp,proto3" json:"task_generation_shard_clock_timestamp,omitempty"`
-	WorkflowTaskLastUpdateVersionedTransition     *VersionedTransition          `protobuf:"bytes,92,opt,name=workflow_task_last_update_versioned_transition,json=workflowTaskLastUpdateVersionedTransition,proto3" json:"workflow_task_last_update_versioned_transition,omitempty"`
-	VisibilityLastUpdateVersionedTransition       *VersionedTransition          `protobuf:"bytes,93,opt,name=visibility_last_update_versioned_transition,json=visibilityLastUpdateVersionedTransition,proto3" json:"visibility_last_update_versioned_transition,omitempty"`
-	SignalRequestIdsLastUpdateVersionedTransition *VersionedTransition          `protobuf:"bytes,94,opt,name=signal_request_ids_last_update_versioned_transition,json=signalRequestIdsLastUpdateVersionedTransition,proto3" json:"signal_request_ids_last_update_versioned_transition,omitempty"`
-	SubStateMachineTombstoneBatches               []*StateMachineTombstoneBatch `protobuf:"bytes,95,rep,name=sub_state_machine_tombstone_batches,json=subStateMachineTombstoneBatches,proto3" json:"sub_state_machine_tombstone_batches,omitempty"`
-	// The workflow has been reset.
-	WorkflowWasReset bool `protobuf:"varint,96,opt,name=workflow_was_reset,json=workflowWasReset,proto3" json:"workflow_was_reset,omitempty"`
-	// Reset Run ID points to the new nun when this execution is reset. If the execution is reset multiple times, it points to the latest run.
-	ResetRunId string `protobuf:"bytes,97,opt,name=reset_run_id,json=resetRunId,proto3" json:"reset_run_id,omitempty"`
-	// When present, it means the workflow execution is versioned, or is transitioning from
-	// unversioned workers to versioned ones.
-	// Note: Deployment objects inside versioning info are immutable, never change their fields.
-	// (-- api-linter: core::0203::immutable=disabled
-	//
-	//	aip.dev/not-precedent: field_behavior annotation is not yet used in this repo --)
-	VersioningInfo *v12.WorkflowExecutionVersioningInfo `protobuf:"bytes,98,opt,name=versioning_info,json=versioningInfo,proto3" json:"versioning_info,omitempty"`
-	// This is the run id when the WorkflowExecutionStarted event was written.
-	// A workflow reset changes the execution run_id, but preserves this field so that we have a reference to the original workflow execution that was reset.
-	OriginalExecutionRunId string `protobuf:"bytes,99,opt,name=original_execution_run_id,json=originalExecutionRunId,proto3" json:"original_execution_run_id,omitempty"`
-	// These two fields are to record the transition history when the transition history is cleaned up due to disabling transition history
-	// Should be deprecated once the transition history is fully launched
-	PreviousTransitionHistory       []*VersionedTransition `protobuf:"bytes,100,rep,name=previous_transition_history,json=previousTransitionHistory,proto3" json:"previous_transition_history,omitempty"`
-	LastTransitionHistoryBreakPoint *VersionedTransition   `protobuf:"bytes,101,opt,name=last_transition_history_break_point,json=lastTransitionHistoryBreakPoint,proto3" json:"last_transition_history_break_point,omitempty"`
-	// This is a set of child workflows that were initialized after the reset point in the parent workflow.
-	// The children are identified by the key "workflow_type:workflow_id". When the parent starts to make progress after reset, it uses this data to
-	// determine the right start policy to apply to the child. This list will include children initiated in continue-as-new runs.
-	ChildrenInitializedPostResetPoint map[string]*ResetChildInfo `protobuf:"bytes,102,rep,name=children_initialized_post_reset_point,json=childrenInitializedPostResetPoint,proto3" json:"children_initialized_post_reset_point,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	// The worker deployment that completed the last WFT.
-	WorkerDeploymentName string `protobuf:"bytes,103,opt,name=worker_deployment_name,json=workerDeploymentName,proto3" json:"worker_deployment_name,omitempty"`
-	// Priority contains metadata that controls relative ordering of task processing
-	// when tasks are backed up in a queue.
-	Priority *v13.Priority `protobuf:"bytes,104,opt,name=priority,proto3" json:"priority,omitempty"`
-	// Run ID of the execution that supersedes this one (via terminate or continue-as-new).
-	SuccessorRunId string `protobuf:"bytes,105,opt,name=successor_run_id,json=successorRunId,proto3" json:"successor_run_id,omitempty"`
-	// Pause info contains the details of the request to pause the workflow.
-	PauseInfo *WorkflowPauseInfo `protobuf:"bytes,106,opt,name=pause_info,json=pauseInfo,proto3" json:"pause_info,omitempty"`
-	// Last workflow task failure category and cause are used to track the last workflow task failure category and cause.
-	//
-	// Types that are valid to be assigned to LastWorkflowTaskFailure:
-	//
-	//	*WorkflowExecutionInfo_LastWorkflowTaskFailureCause
-	//	*WorkflowExecutionInfo_LastWorkflowTaskTimedOutType
-	LastWorkflowTaskFailure isWorkflowExecutionInfo_LastWorkflowTaskFailure `protobuf_oneof:"last_workflow_task_failure"`
-	unknownFields           protoimpl.UnknownFields
-	sizeCache               protoimpl.SizeCache
+	StolenSinceRenew       int32
+	UpdateTime             *timestamppb.Timestamp
+	ReplicationDlqAckLevel map[string]int64
+	QueueStates            map[int32]*QueueState
+}
+
+func (b0 ShardInfo_builder) Build() *ShardInfo {
+	m0 := &ShardInfo{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_ShardId = b.ShardId
+	x.xxx_hidden_RangeId = b.RangeId
+	x.xxx_hidden_Owner = b.Owner
+	x.xxx_hidden_StolenSinceRenew = b.StolenSinceRenew
+	x.xxx_hidden_UpdateTime = b.UpdateTime
+	x.xxx_hidden_ReplicationDlqAckLevel = b.ReplicationDlqAckLevel
+	x.xxx_hidden_QueueStates = b.QueueStates
+	return m0
+}
+
+// execution column
+type WorkflowExecutionInfo struct {
+	state                                                    protoimpl.MessageState                          `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId                                   string                                          `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_WorkflowId                                    string                                          `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3"`
+	xxx_hidden_ParentNamespaceId                             string                                          `protobuf:"bytes,3,opt,name=parent_namespace_id,json=parentNamespaceId,proto3"`
+	xxx_hidden_ParentWorkflowId                              string                                          `protobuf:"bytes,4,opt,name=parent_workflow_id,json=parentWorkflowId,proto3"`
+	xxx_hidden_ParentRunId                                   string                                          `protobuf:"bytes,5,opt,name=parent_run_id,json=parentRunId,proto3"`
+	xxx_hidden_ParentInitiatedId                             int64                                           `protobuf:"varint,6,opt,name=parent_initiated_id,json=parentInitiatedId,proto3"`
+	xxx_hidden_CompletionEventBatchId                        int64                                           `protobuf:"varint,7,opt,name=completion_event_batch_id,json=completionEventBatchId,proto3"`
+	xxx_hidden_TaskQueue                                     string                                          `protobuf:"bytes,9,opt,name=task_queue,json=taskQueue,proto3"`
+	xxx_hidden_WorkflowTypeName                              string                                          `protobuf:"bytes,10,opt,name=workflow_type_name,json=workflowTypeName,proto3"`
+	xxx_hidden_WorkflowExecutionTimeout                      *durationpb.Duration                            `protobuf:"bytes,11,opt,name=workflow_execution_timeout,json=workflowExecutionTimeout,proto3"`
+	xxx_hidden_WorkflowRunTimeout                            *durationpb.Duration                            `protobuf:"bytes,12,opt,name=workflow_run_timeout,json=workflowRunTimeout,proto3"`
+	xxx_hidden_DefaultWorkflowTaskTimeout                    *durationpb.Duration                            `protobuf:"bytes,13,opt,name=default_workflow_task_timeout,json=defaultWorkflowTaskTimeout,proto3"`
+	xxx_hidden_LastRunningClock                              int64                                           `protobuf:"varint,17,opt,name=last_running_clock,json=lastRunningClock,proto3"`
+	xxx_hidden_LastFirstEventId                              int64                                           `protobuf:"varint,18,opt,name=last_first_event_id,json=lastFirstEventId,proto3"`
+	xxx_hidden_LastCompletedWorkflowTaskStartedEventId       int64                                           `protobuf:"varint,19,opt,name=last_completed_workflow_task_started_event_id,json=lastCompletedWorkflowTaskStartedEventId,proto3"`
+	xxx_hidden_StartTime                                     *timestamppb.Timestamp                          `protobuf:"bytes,20,opt,name=start_time,json=startTime,proto3"`
+	xxx_hidden_LastUpdateTime                                *timestamppb.Timestamp                          `protobuf:"bytes,21,opt,name=last_update_time,json=lastUpdateTime,proto3"`
+	xxx_hidden_WorkflowTaskVersion                           int64                                           `protobuf:"varint,22,opt,name=workflow_task_version,json=workflowTaskVersion,proto3"`
+	xxx_hidden_WorkflowTaskScheduledEventId                  int64                                           `protobuf:"varint,23,opt,name=workflow_task_scheduled_event_id,json=workflowTaskScheduledEventId,proto3"`
+	xxx_hidden_WorkflowTaskStartedEventId                    int64                                           `protobuf:"varint,24,opt,name=workflow_task_started_event_id,json=workflowTaskStartedEventId,proto3"`
+	xxx_hidden_WorkflowTaskTimeout                           *durationpb.Duration                            `protobuf:"bytes,25,opt,name=workflow_task_timeout,json=workflowTaskTimeout,proto3"`
+	xxx_hidden_WorkflowTaskAttempt                           int32                                           `protobuf:"varint,26,opt,name=workflow_task_attempt,json=workflowTaskAttempt,proto3"`
+	xxx_hidden_WorkflowTaskStartedTime                       *timestamppb.Timestamp                          `protobuf:"bytes,27,opt,name=workflow_task_started_time,json=workflowTaskStartedTime,proto3"`
+	xxx_hidden_WorkflowTaskScheduledTime                     *timestamppb.Timestamp                          `protobuf:"bytes,28,opt,name=workflow_task_scheduled_time,json=workflowTaskScheduledTime,proto3"`
+	xxx_hidden_WorkflowTaskOriginalScheduledTime             *timestamppb.Timestamp                          `protobuf:"bytes,30,opt,name=workflow_task_original_scheduled_time,json=workflowTaskOriginalScheduledTime,proto3"`
+	xxx_hidden_WorkflowTaskRequestId                         string                                          `protobuf:"bytes,31,opt,name=workflow_task_request_id,json=workflowTaskRequestId,proto3"`
+	xxx_hidden_WorkflowTaskType                              v1.WorkflowTaskType                             `protobuf:"varint,68,opt,name=workflow_task_type,json=workflowTaskType,proto3,enum=temporal.server.api.enums.v1.WorkflowTaskType"`
+	xxx_hidden_WorkflowTaskSuggestContinueAsNew              bool                                            `protobuf:"varint,69,opt,name=workflow_task_suggest_continue_as_new,json=workflowTaskSuggestContinueAsNew,proto3"`
+	xxx_hidden_WorkflowTaskSuggestContinueAsNewReasons       []v11.SuggestContinueAsNewReason                `protobuf:"varint,110,rep,packed,name=workflow_task_suggest_continue_as_new_reasons,json=workflowTaskSuggestContinueAsNewReasons,proto3,enum=temporal.api.enums.v1.SuggestContinueAsNewReason"`
+	xxx_hidden_WorkflowTaskHistorySizeBytes                  int64                                           `protobuf:"varint,70,opt,name=workflow_task_history_size_bytes,json=workflowTaskHistorySizeBytes,proto3"`
+	xxx_hidden_WorkflowTaskBuildId                           string                                          `protobuf:"bytes,88,opt,name=workflow_task_build_id,json=workflowTaskBuildId,proto3"`
+	xxx_hidden_WorkflowTaskBuildIdRedirectCounter            int64                                           `protobuf:"varint,89,opt,name=workflow_task_build_id_redirect_counter,json=workflowTaskBuildIdRedirectCounter,proto3"`
+	xxx_hidden_WorkflowTaskStamp                             int32                                           `protobuf:"varint,109,opt,name=workflow_task_stamp,json=workflowTaskStamp,proto3"`
+	xxx_hidden_WorkflowTaskAttemptsSinceLastSuccess          int32                                           `protobuf:"varint,111,opt,name=workflow_task_attempts_since_last_success,json=workflowTaskAttemptsSinceLastSuccess,proto3"`
+	xxx_hidden_CancelRequested                               bool                                            `protobuf:"varint,29,opt,name=cancel_requested,json=cancelRequested,proto3"`
+	xxx_hidden_CancelRequestId                               string                                          `protobuf:"bytes,32,opt,name=cancel_request_id,json=cancelRequestId,proto3"`
+	xxx_hidden_StickyTaskQueue                               string                                          `protobuf:"bytes,33,opt,name=sticky_task_queue,json=stickyTaskQueue,proto3"`
+	xxx_hidden_StickyScheduleToStartTimeout                  *durationpb.Duration                            `protobuf:"bytes,34,opt,name=sticky_schedule_to_start_timeout,json=stickyScheduleToStartTimeout,proto3"`
+	xxx_hidden_Attempt                                       int32                                           `protobuf:"varint,35,opt,name=attempt,proto3"`
+	xxx_hidden_RetryInitialInterval                          *durationpb.Duration                            `protobuf:"bytes,36,opt,name=retry_initial_interval,json=retryInitialInterval,proto3"`
+	xxx_hidden_RetryMaximumInterval                          *durationpb.Duration                            `protobuf:"bytes,37,opt,name=retry_maximum_interval,json=retryMaximumInterval,proto3"`
+	xxx_hidden_RetryMaximumAttempts                          int32                                           `protobuf:"varint,38,opt,name=retry_maximum_attempts,json=retryMaximumAttempts,proto3"`
+	xxx_hidden_RetryBackoffCoefficient                       float64                                         `protobuf:"fixed64,39,opt,name=retry_backoff_coefficient,json=retryBackoffCoefficient,proto3"`
+	xxx_hidden_WorkflowExecutionExpirationTime               *timestamppb.Timestamp                          `protobuf:"bytes,40,opt,name=workflow_execution_expiration_time,json=workflowExecutionExpirationTime,proto3"`
+	xxx_hidden_RetryNonRetryableErrorTypes                   []string                                        `protobuf:"bytes,41,rep,name=retry_non_retryable_error_types,json=retryNonRetryableErrorTypes,proto3"`
+	xxx_hidden_HasRetryPolicy                                bool                                            `protobuf:"varint,42,opt,name=has_retry_policy,json=hasRetryPolicy,proto3"`
+	xxx_hidden_CronSchedule                                  string                                          `protobuf:"bytes,43,opt,name=cron_schedule,json=cronSchedule,proto3"`
+	xxx_hidden_SignalCount                                   int64                                           `protobuf:"varint,46,opt,name=signal_count,json=signalCount,proto3"`
+	xxx_hidden_ActivityCount                                 int64                                           `protobuf:"varint,71,opt,name=activity_count,json=activityCount,proto3"`
+	xxx_hidden_ChildExecutionCount                           int64                                           `protobuf:"varint,72,opt,name=child_execution_count,json=childExecutionCount,proto3"`
+	xxx_hidden_UserTimerCount                                int64                                           `protobuf:"varint,73,opt,name=user_timer_count,json=userTimerCount,proto3"`
+	xxx_hidden_RequestCancelExternalCount                    int64                                           `protobuf:"varint,74,opt,name=request_cancel_external_count,json=requestCancelExternalCount,proto3"`
+	xxx_hidden_SignalExternalCount                           int64                                           `protobuf:"varint,75,opt,name=signal_external_count,json=signalExternalCount,proto3"`
+	xxx_hidden_UpdateCount                                   int64                                           `protobuf:"varint,77,opt,name=update_count,json=updateCount,proto3"`
+	xxx_hidden_AutoResetPoints                               *v12.ResetPoints                                `protobuf:"bytes,51,opt,name=auto_reset_points,json=autoResetPoints,proto3"`
+	xxx_hidden_SearchAttributes                              map[string]*v13.Payload                         `protobuf:"bytes,52,rep,name=search_attributes,json=searchAttributes,proto3" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	xxx_hidden_Memo                                          map[string]*v13.Payload                         `protobuf:"bytes,53,rep,name=memo,proto3" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	xxx_hidden_VersionHistories                              *v14.VersionHistories                           `protobuf:"bytes,54,opt,name=version_histories,json=versionHistories,proto3"`
+	xxx_hidden_FirstExecutionRunId                           string                                          `protobuf:"bytes,55,opt,name=first_execution_run_id,json=firstExecutionRunId,proto3"`
+	xxx_hidden_ExecutionStats                                *ExecutionStats                                 `protobuf:"bytes,56,opt,name=execution_stats,json=executionStats,proto3"`
+	xxx_hidden_WorkflowRunExpirationTime                     *timestamppb.Timestamp                          `protobuf:"bytes,57,opt,name=workflow_run_expiration_time,json=workflowRunExpirationTime,proto3"`
+	xxx_hidden_LastFirstEventTxnId                           int64                                           `protobuf:"varint,58,opt,name=last_first_event_txn_id,json=lastFirstEventTxnId,proto3"`
+	xxx_hidden_StateTransitionCount                          int64                                           `protobuf:"varint,59,opt,name=state_transition_count,json=stateTransitionCount,proto3"`
+	xxx_hidden_ExecutionTime                                 *timestamppb.Timestamp                          `protobuf:"bytes,60,opt,name=execution_time,json=executionTime,proto3"`
+	xxx_hidden_NewExecutionRunId                             string                                          `protobuf:"bytes,61,opt,name=new_execution_run_id,json=newExecutionRunId,proto3"`
+	xxx_hidden_ParentClock                                   *v15.VectorClock                                `protobuf:"bytes,62,opt,name=parent_clock,json=parentClock,proto3"`
+	xxx_hidden_ParentInitiatedVersion                        int64                                           `protobuf:"varint,63,opt,name=parent_initiated_version,json=parentInitiatedVersion,proto3"`
+	xxx_hidden_CloseTransferTaskId                           int64                                           `protobuf:"varint,64,opt,name=close_transfer_task_id,json=closeTransferTaskId,proto3"`
+	xxx_hidden_CloseVisibilityTaskId                         int64                                           `protobuf:"varint,65,opt,name=close_visibility_task_id,json=closeVisibilityTaskId,proto3"`
+	xxx_hidden_CloseTime                                     *timestamppb.Timestamp                          `protobuf:"bytes,66,opt,name=close_time,json=closeTime,proto3"`
+	xxx_hidden_RelocatableAttributesRemoved                  bool                                            `protobuf:"varint,67,opt,name=relocatable_attributes_removed,json=relocatableAttributesRemoved,proto3"`
+	xxx_hidden_BaseExecutionInfo                             *v16.BaseExecutionInfo                          `protobuf:"bytes,76,opt,name=base_execution_info,json=baseExecutionInfo,proto3"`
+	xxx_hidden_MostRecentWorkerVersionStamp                  *v13.WorkerVersionStamp                         `protobuf:"bytes,78,opt,name=most_recent_worker_version_stamp,json=mostRecentWorkerVersionStamp,proto3"`
+	xxx_hidden_AssignedBuildId                               string                                          `protobuf:"bytes,85,opt,name=assigned_build_id,json=assignedBuildId,proto3"`
+	xxx_hidden_InheritedBuildId                              string                                          `protobuf:"bytes,86,opt,name=inherited_build_id,json=inheritedBuildId,proto3"`
+	xxx_hidden_BuildIdRedirectCounter                        int64                                           `protobuf:"varint,87,opt,name=build_id_redirect_counter,json=buildIdRedirectCounter,proto3"`
+	xxx_hidden_UpdateInfos                                   map[string]*UpdateInfo                          `protobuf:"bytes,79,rep,name=update_infos,json=updateInfos,proto3" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	xxx_hidden_TransitionHistory                             *[]*VersionedTransition                         `protobuf:"bytes,80,rep,name=transition_history,json=transitionHistory,proto3"`
+	xxx_hidden_SubStateMachinesByType                        map[string]*StateMachineMap                     `protobuf:"bytes,81,rep,name=sub_state_machines_by_type,json=subStateMachinesByType,proto3" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	xxx_hidden_WorkflowExecutionTimerTaskStatus              int32                                           `protobuf:"varint,82,opt,name=workflow_execution_timer_task_status,json=workflowExecutionTimerTaskStatus,proto3"`
+	xxx_hidden_RootWorkflowId                                string                                          `protobuf:"bytes,83,opt,name=root_workflow_id,json=rootWorkflowId,proto3"`
+	xxx_hidden_RootRunId                                     string                                          `protobuf:"bytes,84,opt,name=root_run_id,json=rootRunId,proto3"`
+	xxx_hidden_StateMachineTimers                            *[]*StateMachineTimerGroup                      `protobuf:"bytes,90,rep,name=state_machine_timers,json=stateMachineTimers,proto3"`
+	xxx_hidden_TaskGenerationShardClockTimestamp             int64                                           `protobuf:"varint,91,opt,name=task_generation_shard_clock_timestamp,json=taskGenerationShardClockTimestamp,proto3"`
+	xxx_hidden_WorkflowTaskLastUpdateVersionedTransition     *VersionedTransition                            `protobuf:"bytes,92,opt,name=workflow_task_last_update_versioned_transition,json=workflowTaskLastUpdateVersionedTransition,proto3"`
+	xxx_hidden_VisibilityLastUpdateVersionedTransition       *VersionedTransition                            `protobuf:"bytes,93,opt,name=visibility_last_update_versioned_transition,json=visibilityLastUpdateVersionedTransition,proto3"`
+	xxx_hidden_SignalRequestIdsLastUpdateVersionedTransition *VersionedTransition                            `protobuf:"bytes,94,opt,name=signal_request_ids_last_update_versioned_transition,json=signalRequestIdsLastUpdateVersionedTransition,proto3"`
+	xxx_hidden_SubStateMachineTombstoneBatches               *[]*StateMachineTombstoneBatch                  `protobuf:"bytes,95,rep,name=sub_state_machine_tombstone_batches,json=subStateMachineTombstoneBatches,proto3"`
+	xxx_hidden_WorkflowWasReset                              bool                                            `protobuf:"varint,96,opt,name=workflow_was_reset,json=workflowWasReset,proto3"`
+	xxx_hidden_ResetRunId                                    string                                          `protobuf:"bytes,97,opt,name=reset_run_id,json=resetRunId,proto3"`
+	xxx_hidden_VersioningInfo                                *v12.WorkflowExecutionVersioningInfo            `protobuf:"bytes,98,opt,name=versioning_info,json=versioningInfo,proto3"`
+	xxx_hidden_OriginalExecutionRunId                        string                                          `protobuf:"bytes,99,opt,name=original_execution_run_id,json=originalExecutionRunId,proto3"`
+	xxx_hidden_PreviousTransitionHistory                     *[]*VersionedTransition                         `protobuf:"bytes,100,rep,name=previous_transition_history,json=previousTransitionHistory,proto3"`
+	xxx_hidden_LastTransitionHistoryBreakPoint               *VersionedTransition                            `protobuf:"bytes,101,opt,name=last_transition_history_break_point,json=lastTransitionHistoryBreakPoint,proto3"`
+	xxx_hidden_ChildrenInitializedPostResetPoint             map[string]*ResetChildInfo                      `protobuf:"bytes,102,rep,name=children_initialized_post_reset_point,json=childrenInitializedPostResetPoint,proto3" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	xxx_hidden_WorkerDeploymentName                          string                                          `protobuf:"bytes,103,opt,name=worker_deployment_name,json=workerDeploymentName,proto3"`
+	xxx_hidden_Priority                                      *v13.Priority                                   `protobuf:"bytes,104,opt,name=priority,proto3"`
+	xxx_hidden_SuccessorRunId                                string                                          `protobuf:"bytes,105,opt,name=successor_run_id,json=successorRunId,proto3"`
+	xxx_hidden_PauseInfo                                     *WorkflowPauseInfo                              `protobuf:"bytes,106,opt,name=pause_info,json=pauseInfo,proto3"`
+	xxx_hidden_LastWorkflowTaskFailure                       isWorkflowExecutionInfo_LastWorkflowTaskFailure `protobuf_oneof:"last_workflow_task_failure"`
+	unknownFields                                            protoimpl.UnknownFields
+	sizeCache                                                protoimpl.SizeCache
 }
 
 func (x *WorkflowExecutionInfo) Reset() {
@@ -381,714 +322,710 @@ func (x *WorkflowExecutionInfo) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use WorkflowExecutionInfo.ProtoReflect.Descriptor instead.
-func (*WorkflowExecutionInfo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_executions_proto_rawDescGZIP(), []int{1}
-}
-
 func (x *WorkflowExecutionInfo) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *WorkflowExecutionInfo) GetWorkflowId() string {
 	if x != nil {
-		return x.WorkflowId
+		return x.xxx_hidden_WorkflowId
 	}
 	return ""
 }
 
 func (x *WorkflowExecutionInfo) GetParentNamespaceId() string {
 	if x != nil {
-		return x.ParentNamespaceId
+		return x.xxx_hidden_ParentNamespaceId
 	}
 	return ""
 }
 
 func (x *WorkflowExecutionInfo) GetParentWorkflowId() string {
 	if x != nil {
-		return x.ParentWorkflowId
+		return x.xxx_hidden_ParentWorkflowId
 	}
 	return ""
 }
 
 func (x *WorkflowExecutionInfo) GetParentRunId() string {
 	if x != nil {
-		return x.ParentRunId
+		return x.xxx_hidden_ParentRunId
 	}
 	return ""
 }
 
 func (x *WorkflowExecutionInfo) GetParentInitiatedId() int64 {
 	if x != nil {
-		return x.ParentInitiatedId
+		return x.xxx_hidden_ParentInitiatedId
 	}
 	return 0
 }
 
 func (x *WorkflowExecutionInfo) GetCompletionEventBatchId() int64 {
 	if x != nil {
-		return x.CompletionEventBatchId
+		return x.xxx_hidden_CompletionEventBatchId
 	}
 	return 0
 }
 
 func (x *WorkflowExecutionInfo) GetTaskQueue() string {
 	if x != nil {
-		return x.TaskQueue
+		return x.xxx_hidden_TaskQueue
 	}
 	return ""
 }
 
 func (x *WorkflowExecutionInfo) GetWorkflowTypeName() string {
 	if x != nil {
-		return x.WorkflowTypeName
+		return x.xxx_hidden_WorkflowTypeName
 	}
 	return ""
 }
 
 func (x *WorkflowExecutionInfo) GetWorkflowExecutionTimeout() *durationpb.Duration {
 	if x != nil {
-		return x.WorkflowExecutionTimeout
+		return x.xxx_hidden_WorkflowExecutionTimeout
 	}
 	return nil
 }
 
 func (x *WorkflowExecutionInfo) GetWorkflowRunTimeout() *durationpb.Duration {
 	if x != nil {
-		return x.WorkflowRunTimeout
+		return x.xxx_hidden_WorkflowRunTimeout
 	}
 	return nil
 }
 
 func (x *WorkflowExecutionInfo) GetDefaultWorkflowTaskTimeout() *durationpb.Duration {
 	if x != nil {
-		return x.DefaultWorkflowTaskTimeout
+		return x.xxx_hidden_DefaultWorkflowTaskTimeout
 	}
 	return nil
 }
 
 func (x *WorkflowExecutionInfo) GetLastRunningClock() int64 {
 	if x != nil {
-		return x.LastRunningClock
+		return x.xxx_hidden_LastRunningClock
 	}
 	return 0
 }
 
 func (x *WorkflowExecutionInfo) GetLastFirstEventId() int64 {
 	if x != nil {
-		return x.LastFirstEventId
+		return x.xxx_hidden_LastFirstEventId
 	}
 	return 0
 }
 
 func (x *WorkflowExecutionInfo) GetLastCompletedWorkflowTaskStartedEventId() int64 {
 	if x != nil {
-		return x.LastCompletedWorkflowTaskStartedEventId
+		return x.xxx_hidden_LastCompletedWorkflowTaskStartedEventId
 	}
 	return 0
 }
 
 func (x *WorkflowExecutionInfo) GetStartTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.StartTime
+		return x.xxx_hidden_StartTime
 	}
 	return nil
 }
 
 func (x *WorkflowExecutionInfo) GetLastUpdateTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.LastUpdateTime
+		return x.xxx_hidden_LastUpdateTime
 	}
 	return nil
 }
 
 func (x *WorkflowExecutionInfo) GetWorkflowTaskVersion() int64 {
 	if x != nil {
-		return x.WorkflowTaskVersion
+		return x.xxx_hidden_WorkflowTaskVersion
 	}
 	return 0
 }
 
 func (x *WorkflowExecutionInfo) GetWorkflowTaskScheduledEventId() int64 {
 	if x != nil {
-		return x.WorkflowTaskScheduledEventId
+		return x.xxx_hidden_WorkflowTaskScheduledEventId
 	}
 	return 0
 }
 
 func (x *WorkflowExecutionInfo) GetWorkflowTaskStartedEventId() int64 {
 	if x != nil {
-		return x.WorkflowTaskStartedEventId
+		return x.xxx_hidden_WorkflowTaskStartedEventId
 	}
 	return 0
 }
 
 func (x *WorkflowExecutionInfo) GetWorkflowTaskTimeout() *durationpb.Duration {
 	if x != nil {
-		return x.WorkflowTaskTimeout
+		return x.xxx_hidden_WorkflowTaskTimeout
 	}
 	return nil
 }
 
 func (x *WorkflowExecutionInfo) GetWorkflowTaskAttempt() int32 {
 	if x != nil {
-		return x.WorkflowTaskAttempt
+		return x.xxx_hidden_WorkflowTaskAttempt
 	}
 	return 0
 }
 
 func (x *WorkflowExecutionInfo) GetWorkflowTaskStartedTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.WorkflowTaskStartedTime
+		return x.xxx_hidden_WorkflowTaskStartedTime
 	}
 	return nil
 }
 
 func (x *WorkflowExecutionInfo) GetWorkflowTaskScheduledTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.WorkflowTaskScheduledTime
+		return x.xxx_hidden_WorkflowTaskScheduledTime
 	}
 	return nil
 }
 
 func (x *WorkflowExecutionInfo) GetWorkflowTaskOriginalScheduledTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.WorkflowTaskOriginalScheduledTime
+		return x.xxx_hidden_WorkflowTaskOriginalScheduledTime
 	}
 	return nil
 }
 
 func (x *WorkflowExecutionInfo) GetWorkflowTaskRequestId() string {
 	if x != nil {
-		return x.WorkflowTaskRequestId
+		return x.xxx_hidden_WorkflowTaskRequestId
 	}
 	return ""
 }
 
 func (x *WorkflowExecutionInfo) GetWorkflowTaskType() v1.WorkflowTaskType {
 	if x != nil {
-		return x.WorkflowTaskType
+		return x.xxx_hidden_WorkflowTaskType
 	}
 	return v1.WorkflowTaskType(0)
 }
 
 func (x *WorkflowExecutionInfo) GetWorkflowTaskSuggestContinueAsNew() bool {
 	if x != nil {
-		return x.WorkflowTaskSuggestContinueAsNew
+		return x.xxx_hidden_WorkflowTaskSuggestContinueAsNew
 	}
 	return false
 }
 
 func (x *WorkflowExecutionInfo) GetWorkflowTaskSuggestContinueAsNewReasons() []v11.SuggestContinueAsNewReason {
 	if x != nil {
-		return x.WorkflowTaskSuggestContinueAsNewReasons
+		return x.xxx_hidden_WorkflowTaskSuggestContinueAsNewReasons
 	}
 	return nil
 }
 
 func (x *WorkflowExecutionInfo) GetWorkflowTaskHistorySizeBytes() int64 {
 	if x != nil {
-		return x.WorkflowTaskHistorySizeBytes
+		return x.xxx_hidden_WorkflowTaskHistorySizeBytes
 	}
 	return 0
 }
 
 func (x *WorkflowExecutionInfo) GetWorkflowTaskBuildId() string {
 	if x != nil {
-		return x.WorkflowTaskBuildId
+		return x.xxx_hidden_WorkflowTaskBuildId
 	}
 	return ""
 }
 
 func (x *WorkflowExecutionInfo) GetWorkflowTaskBuildIdRedirectCounter() int64 {
 	if x != nil {
-		return x.WorkflowTaskBuildIdRedirectCounter
+		return x.xxx_hidden_WorkflowTaskBuildIdRedirectCounter
 	}
 	return 0
 }
 
 func (x *WorkflowExecutionInfo) GetWorkflowTaskStamp() int32 {
 	if x != nil {
-		return x.WorkflowTaskStamp
+		return x.xxx_hidden_WorkflowTaskStamp
 	}
 	return 0
 }
 
 func (x *WorkflowExecutionInfo) GetWorkflowTaskAttemptsSinceLastSuccess() int32 {
 	if x != nil {
-		return x.WorkflowTaskAttemptsSinceLastSuccess
+		return x.xxx_hidden_WorkflowTaskAttemptsSinceLastSuccess
 	}
 	return 0
 }
 
 func (x *WorkflowExecutionInfo) GetCancelRequested() bool {
 	if x != nil {
-		return x.CancelRequested
+		return x.xxx_hidden_CancelRequested
 	}
 	return false
 }
 
 func (x *WorkflowExecutionInfo) GetCancelRequestId() string {
 	if x != nil {
-		return x.CancelRequestId
+		return x.xxx_hidden_CancelRequestId
 	}
 	return ""
 }
 
 func (x *WorkflowExecutionInfo) GetStickyTaskQueue() string {
 	if x != nil {
-		return x.StickyTaskQueue
+		return x.xxx_hidden_StickyTaskQueue
 	}
 	return ""
 }
 
 func (x *WorkflowExecutionInfo) GetStickyScheduleToStartTimeout() *durationpb.Duration {
 	if x != nil {
-		return x.StickyScheduleToStartTimeout
+		return x.xxx_hidden_StickyScheduleToStartTimeout
 	}
 	return nil
 }
 
 func (x *WorkflowExecutionInfo) GetAttempt() int32 {
 	if x != nil {
-		return x.Attempt
+		return x.xxx_hidden_Attempt
 	}
 	return 0
 }
 
 func (x *WorkflowExecutionInfo) GetRetryInitialInterval() *durationpb.Duration {
 	if x != nil {
-		return x.RetryInitialInterval
+		return x.xxx_hidden_RetryInitialInterval
 	}
 	return nil
 }
 
 func (x *WorkflowExecutionInfo) GetRetryMaximumInterval() *durationpb.Duration {
 	if x != nil {
-		return x.RetryMaximumInterval
+		return x.xxx_hidden_RetryMaximumInterval
 	}
 	return nil
 }
 
 func (x *WorkflowExecutionInfo) GetRetryMaximumAttempts() int32 {
 	if x != nil {
-		return x.RetryMaximumAttempts
+		return x.xxx_hidden_RetryMaximumAttempts
 	}
 	return 0
 }
 
 func (x *WorkflowExecutionInfo) GetRetryBackoffCoefficient() float64 {
 	if x != nil {
-		return x.RetryBackoffCoefficient
+		return x.xxx_hidden_RetryBackoffCoefficient
 	}
 	return 0
 }
 
 func (x *WorkflowExecutionInfo) GetWorkflowExecutionExpirationTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.WorkflowExecutionExpirationTime
+		return x.xxx_hidden_WorkflowExecutionExpirationTime
 	}
 	return nil
 }
 
 func (x *WorkflowExecutionInfo) GetRetryNonRetryableErrorTypes() []string {
 	if x != nil {
-		return x.RetryNonRetryableErrorTypes
+		return x.xxx_hidden_RetryNonRetryableErrorTypes
 	}
 	return nil
 }
 
 func (x *WorkflowExecutionInfo) GetHasRetryPolicy() bool {
 	if x != nil {
-		return x.HasRetryPolicy
+		return x.xxx_hidden_HasRetryPolicy
 	}
 	return false
 }
 
 func (x *WorkflowExecutionInfo) GetCronSchedule() string {
 	if x != nil {
-		return x.CronSchedule
+		return x.xxx_hidden_CronSchedule
 	}
 	return ""
 }
 
 func (x *WorkflowExecutionInfo) GetSignalCount() int64 {
 	if x != nil {
-		return x.SignalCount
+		return x.xxx_hidden_SignalCount
 	}
 	return 0
 }
 
 func (x *WorkflowExecutionInfo) GetActivityCount() int64 {
 	if x != nil {
-		return x.ActivityCount
+		return x.xxx_hidden_ActivityCount
 	}
 	return 0
 }
 
 func (x *WorkflowExecutionInfo) GetChildExecutionCount() int64 {
 	if x != nil {
-		return x.ChildExecutionCount
+		return x.xxx_hidden_ChildExecutionCount
 	}
 	return 0
 }
 
 func (x *WorkflowExecutionInfo) GetUserTimerCount() int64 {
 	if x != nil {
-		return x.UserTimerCount
+		return x.xxx_hidden_UserTimerCount
 	}
 	return 0
 }
 
 func (x *WorkflowExecutionInfo) GetRequestCancelExternalCount() int64 {
 	if x != nil {
-		return x.RequestCancelExternalCount
+		return x.xxx_hidden_RequestCancelExternalCount
 	}
 	return 0
 }
 
 func (x *WorkflowExecutionInfo) GetSignalExternalCount() int64 {
 	if x != nil {
-		return x.SignalExternalCount
+		return x.xxx_hidden_SignalExternalCount
 	}
 	return 0
 }
 
 func (x *WorkflowExecutionInfo) GetUpdateCount() int64 {
 	if x != nil {
-		return x.UpdateCount
+		return x.xxx_hidden_UpdateCount
 	}
 	return 0
 }
 
 func (x *WorkflowExecutionInfo) GetAutoResetPoints() *v12.ResetPoints {
 	if x != nil {
-		return x.AutoResetPoints
+		return x.xxx_hidden_AutoResetPoints
 	}
 	return nil
 }
 
 func (x *WorkflowExecutionInfo) GetSearchAttributes() map[string]*v13.Payload {
 	if x != nil {
-		return x.SearchAttributes
+		return x.xxx_hidden_SearchAttributes
 	}
 	return nil
 }
 
 func (x *WorkflowExecutionInfo) GetMemo() map[string]*v13.Payload {
 	if x != nil {
-		return x.Memo
+		return x.xxx_hidden_Memo
 	}
 	return nil
 }
 
 func (x *WorkflowExecutionInfo) GetVersionHistories() *v14.VersionHistories {
 	if x != nil {
-		return x.VersionHistories
+		return x.xxx_hidden_VersionHistories
 	}
 	return nil
 }
 
 func (x *WorkflowExecutionInfo) GetFirstExecutionRunId() string {
 	if x != nil {
-		return x.FirstExecutionRunId
+		return x.xxx_hidden_FirstExecutionRunId
 	}
 	return ""
 }
 
 func (x *WorkflowExecutionInfo) GetExecutionStats() *ExecutionStats {
 	if x != nil {
-		return x.ExecutionStats
+		return x.xxx_hidden_ExecutionStats
 	}
 	return nil
 }
 
 func (x *WorkflowExecutionInfo) GetWorkflowRunExpirationTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.WorkflowRunExpirationTime
+		return x.xxx_hidden_WorkflowRunExpirationTime
 	}
 	return nil
 }
 
 func (x *WorkflowExecutionInfo) GetLastFirstEventTxnId() int64 {
 	if x != nil {
-		return x.LastFirstEventTxnId
+		return x.xxx_hidden_LastFirstEventTxnId
 	}
 	return 0
 }
 
 func (x *WorkflowExecutionInfo) GetStateTransitionCount() int64 {
 	if x != nil {
-		return x.StateTransitionCount
+		return x.xxx_hidden_StateTransitionCount
 	}
 	return 0
 }
 
 func (x *WorkflowExecutionInfo) GetExecutionTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.ExecutionTime
+		return x.xxx_hidden_ExecutionTime
 	}
 	return nil
 }
 
 func (x *WorkflowExecutionInfo) GetNewExecutionRunId() string {
 	if x != nil {
-		return x.NewExecutionRunId
+		return x.xxx_hidden_NewExecutionRunId
 	}
 	return ""
 }
 
 func (x *WorkflowExecutionInfo) GetParentClock() *v15.VectorClock {
 	if x != nil {
-		return x.ParentClock
+		return x.xxx_hidden_ParentClock
 	}
 	return nil
 }
 
 func (x *WorkflowExecutionInfo) GetParentInitiatedVersion() int64 {
 	if x != nil {
-		return x.ParentInitiatedVersion
+		return x.xxx_hidden_ParentInitiatedVersion
 	}
 	return 0
 }
 
 func (x *WorkflowExecutionInfo) GetCloseTransferTaskId() int64 {
 	if x != nil {
-		return x.CloseTransferTaskId
+		return x.xxx_hidden_CloseTransferTaskId
 	}
 	return 0
 }
 
 func (x *WorkflowExecutionInfo) GetCloseVisibilityTaskId() int64 {
 	if x != nil {
-		return x.CloseVisibilityTaskId
+		return x.xxx_hidden_CloseVisibilityTaskId
 	}
 	return 0
 }
 
 func (x *WorkflowExecutionInfo) GetCloseTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.CloseTime
+		return x.xxx_hidden_CloseTime
 	}
 	return nil
 }
 
 func (x *WorkflowExecutionInfo) GetRelocatableAttributesRemoved() bool {
 	if x != nil {
-		return x.RelocatableAttributesRemoved
+		return x.xxx_hidden_RelocatableAttributesRemoved
 	}
 	return false
 }
 
 func (x *WorkflowExecutionInfo) GetBaseExecutionInfo() *v16.BaseExecutionInfo {
 	if x != nil {
-		return x.BaseExecutionInfo
+		return x.xxx_hidden_BaseExecutionInfo
 	}
 	return nil
 }
 
 func (x *WorkflowExecutionInfo) GetMostRecentWorkerVersionStamp() *v13.WorkerVersionStamp {
 	if x != nil {
-		return x.MostRecentWorkerVersionStamp
+		return x.xxx_hidden_MostRecentWorkerVersionStamp
 	}
 	return nil
 }
 
 func (x *WorkflowExecutionInfo) GetAssignedBuildId() string {
 	if x != nil {
-		return x.AssignedBuildId
+		return x.xxx_hidden_AssignedBuildId
 	}
 	return ""
 }
 
 func (x *WorkflowExecutionInfo) GetInheritedBuildId() string {
 	if x != nil {
-		return x.InheritedBuildId
+		return x.xxx_hidden_InheritedBuildId
 	}
 	return ""
 }
 
 func (x *WorkflowExecutionInfo) GetBuildIdRedirectCounter() int64 {
 	if x != nil {
-		return x.BuildIdRedirectCounter
+		return x.xxx_hidden_BuildIdRedirectCounter
 	}
 	return 0
 }
 
 func (x *WorkflowExecutionInfo) GetUpdateInfos() map[string]*UpdateInfo {
 	if x != nil {
-		return x.UpdateInfos
+		return x.xxx_hidden_UpdateInfos
 	}
 	return nil
 }
 
 func (x *WorkflowExecutionInfo) GetTransitionHistory() []*VersionedTransition {
 	if x != nil {
-		return x.TransitionHistory
+		if x.xxx_hidden_TransitionHistory != nil {
+			return *x.xxx_hidden_TransitionHistory
+		}
 	}
 	return nil
 }
 
 func (x *WorkflowExecutionInfo) GetSubStateMachinesByType() map[string]*StateMachineMap {
 	if x != nil {
-		return x.SubStateMachinesByType
+		return x.xxx_hidden_SubStateMachinesByType
 	}
 	return nil
 }
 
 func (x *WorkflowExecutionInfo) GetWorkflowExecutionTimerTaskStatus() int32 {
 	if x != nil {
-		return x.WorkflowExecutionTimerTaskStatus
+		return x.xxx_hidden_WorkflowExecutionTimerTaskStatus
 	}
 	return 0
 }
 
 func (x *WorkflowExecutionInfo) GetRootWorkflowId() string {
 	if x != nil {
-		return x.RootWorkflowId
+		return x.xxx_hidden_RootWorkflowId
 	}
 	return ""
 }
 
 func (x *WorkflowExecutionInfo) GetRootRunId() string {
 	if x != nil {
-		return x.RootRunId
+		return x.xxx_hidden_RootRunId
 	}
 	return ""
 }
 
 func (x *WorkflowExecutionInfo) GetStateMachineTimers() []*StateMachineTimerGroup {
 	if x != nil {
-		return x.StateMachineTimers
+		if x.xxx_hidden_StateMachineTimers != nil {
+			return *x.xxx_hidden_StateMachineTimers
+		}
 	}
 	return nil
 }
 
 func (x *WorkflowExecutionInfo) GetTaskGenerationShardClockTimestamp() int64 {
 	if x != nil {
-		return x.TaskGenerationShardClockTimestamp
+		return x.xxx_hidden_TaskGenerationShardClockTimestamp
 	}
 	return 0
 }
 
 func (x *WorkflowExecutionInfo) GetWorkflowTaskLastUpdateVersionedTransition() *VersionedTransition {
 	if x != nil {
-		return x.WorkflowTaskLastUpdateVersionedTransition
+		return x.xxx_hidden_WorkflowTaskLastUpdateVersionedTransition
 	}
 	return nil
 }
 
 func (x *WorkflowExecutionInfo) GetVisibilityLastUpdateVersionedTransition() *VersionedTransition {
 	if x != nil {
-		return x.VisibilityLastUpdateVersionedTransition
+		return x.xxx_hidden_VisibilityLastUpdateVersionedTransition
 	}
 	return nil
 }
 
 func (x *WorkflowExecutionInfo) GetSignalRequestIdsLastUpdateVersionedTransition() *VersionedTransition {
 	if x != nil {
-		return x.SignalRequestIdsLastUpdateVersionedTransition
+		return x.xxx_hidden_SignalRequestIdsLastUpdateVersionedTransition
 	}
 	return nil
 }
 
 func (x *WorkflowExecutionInfo) GetSubStateMachineTombstoneBatches() []*StateMachineTombstoneBatch {
 	if x != nil {
-		return x.SubStateMachineTombstoneBatches
+		if x.xxx_hidden_SubStateMachineTombstoneBatches != nil {
+			return *x.xxx_hidden_SubStateMachineTombstoneBatches
+		}
 	}
 	return nil
 }
 
 func (x *WorkflowExecutionInfo) GetWorkflowWasReset() bool {
 	if x != nil {
-		return x.WorkflowWasReset
+		return x.xxx_hidden_WorkflowWasReset
 	}
 	return false
 }
 
 func (x *WorkflowExecutionInfo) GetResetRunId() string {
 	if x != nil {
-		return x.ResetRunId
+		return x.xxx_hidden_ResetRunId
 	}
 	return ""
 }
 
 func (x *WorkflowExecutionInfo) GetVersioningInfo() *v12.WorkflowExecutionVersioningInfo {
 	if x != nil {
-		return x.VersioningInfo
+		return x.xxx_hidden_VersioningInfo
 	}
 	return nil
 }
 
 func (x *WorkflowExecutionInfo) GetOriginalExecutionRunId() string {
 	if x != nil {
-		return x.OriginalExecutionRunId
+		return x.xxx_hidden_OriginalExecutionRunId
 	}
 	return ""
 }
 
 func (x *WorkflowExecutionInfo) GetPreviousTransitionHistory() []*VersionedTransition {
 	if x != nil {
-		return x.PreviousTransitionHistory
+		if x.xxx_hidden_PreviousTransitionHistory != nil {
+			return *x.xxx_hidden_PreviousTransitionHistory
+		}
 	}
 	return nil
 }
 
 func (x *WorkflowExecutionInfo) GetLastTransitionHistoryBreakPoint() *VersionedTransition {
 	if x != nil {
-		return x.LastTransitionHistoryBreakPoint
+		return x.xxx_hidden_LastTransitionHistoryBreakPoint
 	}
 	return nil
 }
 
 func (x *WorkflowExecutionInfo) GetChildrenInitializedPostResetPoint() map[string]*ResetChildInfo {
 	if x != nil {
-		return x.ChildrenInitializedPostResetPoint
+		return x.xxx_hidden_ChildrenInitializedPostResetPoint
 	}
 	return nil
 }
 
 func (x *WorkflowExecutionInfo) GetWorkerDeploymentName() string {
 	if x != nil {
-		return x.WorkerDeploymentName
+		return x.xxx_hidden_WorkerDeploymentName
 	}
 	return ""
 }
 
 func (x *WorkflowExecutionInfo) GetPriority() *v13.Priority {
 	if x != nil {
-		return x.Priority
+		return x.xxx_hidden_Priority
 	}
 	return nil
 }
 
 func (x *WorkflowExecutionInfo) GetSuccessorRunId() string {
 	if x != nil {
-		return x.SuccessorRunId
+		return x.xxx_hidden_SuccessorRunId
 	}
 	return ""
 }
 
 func (x *WorkflowExecutionInfo) GetPauseInfo() *WorkflowPauseInfo {
 	if x != nil {
-		return x.PauseInfo
-	}
-	return nil
-}
-
-func (x *WorkflowExecutionInfo) GetLastWorkflowTaskFailure() isWorkflowExecutionInfo_LastWorkflowTaskFailure {
-	if x != nil {
-		return x.LastWorkflowTaskFailure
+		return x.xxx_hidden_PauseInfo
 	}
 	return nil
 }
 
 func (x *WorkflowExecutionInfo) GetLastWorkflowTaskFailureCause() v11.WorkflowTaskFailedCause {
 	if x != nil {
-		if x, ok := x.LastWorkflowTaskFailure.(*WorkflowExecutionInfo_LastWorkflowTaskFailureCause); ok {
+		if x, ok := x.xxx_hidden_LastWorkflowTaskFailure.(*workflowExecutionInfo_LastWorkflowTaskFailureCause); ok {
 			return x.LastWorkflowTaskFailureCause
 		}
 	}
@@ -1097,42 +1034,1169 @@ func (x *WorkflowExecutionInfo) GetLastWorkflowTaskFailureCause() v11.WorkflowTa
 
 func (x *WorkflowExecutionInfo) GetLastWorkflowTaskTimedOutType() v11.TimeoutType {
 	if x != nil {
-		if x, ok := x.LastWorkflowTaskFailure.(*WorkflowExecutionInfo_LastWorkflowTaskTimedOutType); ok {
+		if x, ok := x.xxx_hidden_LastWorkflowTaskFailure.(*workflowExecutionInfo_LastWorkflowTaskTimedOutType); ok {
 			return x.LastWorkflowTaskTimedOutType
 		}
 	}
 	return v11.TimeoutType(0)
 }
 
+func (x *WorkflowExecutionInfo) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *WorkflowExecutionInfo) SetWorkflowId(v string) {
+	x.xxx_hidden_WorkflowId = v
+}
+
+func (x *WorkflowExecutionInfo) SetParentNamespaceId(v string) {
+	x.xxx_hidden_ParentNamespaceId = v
+}
+
+func (x *WorkflowExecutionInfo) SetParentWorkflowId(v string) {
+	x.xxx_hidden_ParentWorkflowId = v
+}
+
+func (x *WorkflowExecutionInfo) SetParentRunId(v string) {
+	x.xxx_hidden_ParentRunId = v
+}
+
+func (x *WorkflowExecutionInfo) SetParentInitiatedId(v int64) {
+	x.xxx_hidden_ParentInitiatedId = v
+}
+
+func (x *WorkflowExecutionInfo) SetCompletionEventBatchId(v int64) {
+	x.xxx_hidden_CompletionEventBatchId = v
+}
+
+func (x *WorkflowExecutionInfo) SetTaskQueue(v string) {
+	x.xxx_hidden_TaskQueue = v
+}
+
+func (x *WorkflowExecutionInfo) SetWorkflowTypeName(v string) {
+	x.xxx_hidden_WorkflowTypeName = v
+}
+
+func (x *WorkflowExecutionInfo) SetWorkflowExecutionTimeout(v *durationpb.Duration) {
+	x.xxx_hidden_WorkflowExecutionTimeout = v
+}
+
+func (x *WorkflowExecutionInfo) SetWorkflowRunTimeout(v *durationpb.Duration) {
+	x.xxx_hidden_WorkflowRunTimeout = v
+}
+
+func (x *WorkflowExecutionInfo) SetDefaultWorkflowTaskTimeout(v *durationpb.Duration) {
+	x.xxx_hidden_DefaultWorkflowTaskTimeout = v
+}
+
+func (x *WorkflowExecutionInfo) SetLastRunningClock(v int64) {
+	x.xxx_hidden_LastRunningClock = v
+}
+
+func (x *WorkflowExecutionInfo) SetLastFirstEventId(v int64) {
+	x.xxx_hidden_LastFirstEventId = v
+}
+
+func (x *WorkflowExecutionInfo) SetLastCompletedWorkflowTaskStartedEventId(v int64) {
+	x.xxx_hidden_LastCompletedWorkflowTaskStartedEventId = v
+}
+
+func (x *WorkflowExecutionInfo) SetStartTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_StartTime = v
+}
+
+func (x *WorkflowExecutionInfo) SetLastUpdateTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_LastUpdateTime = v
+}
+
+func (x *WorkflowExecutionInfo) SetWorkflowTaskVersion(v int64) {
+	x.xxx_hidden_WorkflowTaskVersion = v
+}
+
+func (x *WorkflowExecutionInfo) SetWorkflowTaskScheduledEventId(v int64) {
+	x.xxx_hidden_WorkflowTaskScheduledEventId = v
+}
+
+func (x *WorkflowExecutionInfo) SetWorkflowTaskStartedEventId(v int64) {
+	x.xxx_hidden_WorkflowTaskStartedEventId = v
+}
+
+func (x *WorkflowExecutionInfo) SetWorkflowTaskTimeout(v *durationpb.Duration) {
+	x.xxx_hidden_WorkflowTaskTimeout = v
+}
+
+func (x *WorkflowExecutionInfo) SetWorkflowTaskAttempt(v int32) {
+	x.xxx_hidden_WorkflowTaskAttempt = v
+}
+
+func (x *WorkflowExecutionInfo) SetWorkflowTaskStartedTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_WorkflowTaskStartedTime = v
+}
+
+func (x *WorkflowExecutionInfo) SetWorkflowTaskScheduledTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_WorkflowTaskScheduledTime = v
+}
+
+func (x *WorkflowExecutionInfo) SetWorkflowTaskOriginalScheduledTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_WorkflowTaskOriginalScheduledTime = v
+}
+
+func (x *WorkflowExecutionInfo) SetWorkflowTaskRequestId(v string) {
+	x.xxx_hidden_WorkflowTaskRequestId = v
+}
+
+func (x *WorkflowExecutionInfo) SetWorkflowTaskType(v v1.WorkflowTaskType) {
+	x.xxx_hidden_WorkflowTaskType = v
+}
+
+func (x *WorkflowExecutionInfo) SetWorkflowTaskSuggestContinueAsNew(v bool) {
+	x.xxx_hidden_WorkflowTaskSuggestContinueAsNew = v
+}
+
+func (x *WorkflowExecutionInfo) SetWorkflowTaskSuggestContinueAsNewReasons(v []v11.SuggestContinueAsNewReason) {
+	x.xxx_hidden_WorkflowTaskSuggestContinueAsNewReasons = v
+}
+
+func (x *WorkflowExecutionInfo) SetWorkflowTaskHistorySizeBytes(v int64) {
+	x.xxx_hidden_WorkflowTaskHistorySizeBytes = v
+}
+
+func (x *WorkflowExecutionInfo) SetWorkflowTaskBuildId(v string) {
+	x.xxx_hidden_WorkflowTaskBuildId = v
+}
+
+func (x *WorkflowExecutionInfo) SetWorkflowTaskBuildIdRedirectCounter(v int64) {
+	x.xxx_hidden_WorkflowTaskBuildIdRedirectCounter = v
+}
+
+func (x *WorkflowExecutionInfo) SetWorkflowTaskStamp(v int32) {
+	x.xxx_hidden_WorkflowTaskStamp = v
+}
+
+func (x *WorkflowExecutionInfo) SetWorkflowTaskAttemptsSinceLastSuccess(v int32) {
+	x.xxx_hidden_WorkflowTaskAttemptsSinceLastSuccess = v
+}
+
+func (x *WorkflowExecutionInfo) SetCancelRequested(v bool) {
+	x.xxx_hidden_CancelRequested = v
+}
+
+func (x *WorkflowExecutionInfo) SetCancelRequestId(v string) {
+	x.xxx_hidden_CancelRequestId = v
+}
+
+func (x *WorkflowExecutionInfo) SetStickyTaskQueue(v string) {
+	x.xxx_hidden_StickyTaskQueue = v
+}
+
+func (x *WorkflowExecutionInfo) SetStickyScheduleToStartTimeout(v *durationpb.Duration) {
+	x.xxx_hidden_StickyScheduleToStartTimeout = v
+}
+
+func (x *WorkflowExecutionInfo) SetAttempt(v int32) {
+	x.xxx_hidden_Attempt = v
+}
+
+func (x *WorkflowExecutionInfo) SetRetryInitialInterval(v *durationpb.Duration) {
+	x.xxx_hidden_RetryInitialInterval = v
+}
+
+func (x *WorkflowExecutionInfo) SetRetryMaximumInterval(v *durationpb.Duration) {
+	x.xxx_hidden_RetryMaximumInterval = v
+}
+
+func (x *WorkflowExecutionInfo) SetRetryMaximumAttempts(v int32) {
+	x.xxx_hidden_RetryMaximumAttempts = v
+}
+
+func (x *WorkflowExecutionInfo) SetRetryBackoffCoefficient(v float64) {
+	x.xxx_hidden_RetryBackoffCoefficient = v
+}
+
+func (x *WorkflowExecutionInfo) SetWorkflowExecutionExpirationTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_WorkflowExecutionExpirationTime = v
+}
+
+func (x *WorkflowExecutionInfo) SetRetryNonRetryableErrorTypes(v []string) {
+	x.xxx_hidden_RetryNonRetryableErrorTypes = v
+}
+
+func (x *WorkflowExecutionInfo) SetHasRetryPolicy(v bool) {
+	x.xxx_hidden_HasRetryPolicy = v
+}
+
+func (x *WorkflowExecutionInfo) SetCronSchedule(v string) {
+	x.xxx_hidden_CronSchedule = v
+}
+
+func (x *WorkflowExecutionInfo) SetSignalCount(v int64) {
+	x.xxx_hidden_SignalCount = v
+}
+
+func (x *WorkflowExecutionInfo) SetActivityCount(v int64) {
+	x.xxx_hidden_ActivityCount = v
+}
+
+func (x *WorkflowExecutionInfo) SetChildExecutionCount(v int64) {
+	x.xxx_hidden_ChildExecutionCount = v
+}
+
+func (x *WorkflowExecutionInfo) SetUserTimerCount(v int64) {
+	x.xxx_hidden_UserTimerCount = v
+}
+
+func (x *WorkflowExecutionInfo) SetRequestCancelExternalCount(v int64) {
+	x.xxx_hidden_RequestCancelExternalCount = v
+}
+
+func (x *WorkflowExecutionInfo) SetSignalExternalCount(v int64) {
+	x.xxx_hidden_SignalExternalCount = v
+}
+
+func (x *WorkflowExecutionInfo) SetUpdateCount(v int64) {
+	x.xxx_hidden_UpdateCount = v
+}
+
+func (x *WorkflowExecutionInfo) SetAutoResetPoints(v *v12.ResetPoints) {
+	x.xxx_hidden_AutoResetPoints = v
+}
+
+func (x *WorkflowExecutionInfo) SetSearchAttributes(v map[string]*v13.Payload) {
+	x.xxx_hidden_SearchAttributes = v
+}
+
+func (x *WorkflowExecutionInfo) SetMemo(v map[string]*v13.Payload) {
+	x.xxx_hidden_Memo = v
+}
+
+func (x *WorkflowExecutionInfo) SetVersionHistories(v *v14.VersionHistories) {
+	x.xxx_hidden_VersionHistories = v
+}
+
+func (x *WorkflowExecutionInfo) SetFirstExecutionRunId(v string) {
+	x.xxx_hidden_FirstExecutionRunId = v
+}
+
+func (x *WorkflowExecutionInfo) SetExecutionStats(v *ExecutionStats) {
+	x.xxx_hidden_ExecutionStats = v
+}
+
+func (x *WorkflowExecutionInfo) SetWorkflowRunExpirationTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_WorkflowRunExpirationTime = v
+}
+
+func (x *WorkflowExecutionInfo) SetLastFirstEventTxnId(v int64) {
+	x.xxx_hidden_LastFirstEventTxnId = v
+}
+
+func (x *WorkflowExecutionInfo) SetStateTransitionCount(v int64) {
+	x.xxx_hidden_StateTransitionCount = v
+}
+
+func (x *WorkflowExecutionInfo) SetExecutionTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_ExecutionTime = v
+}
+
+func (x *WorkflowExecutionInfo) SetNewExecutionRunId(v string) {
+	x.xxx_hidden_NewExecutionRunId = v
+}
+
+func (x *WorkflowExecutionInfo) SetParentClock(v *v15.VectorClock) {
+	x.xxx_hidden_ParentClock = v
+}
+
+func (x *WorkflowExecutionInfo) SetParentInitiatedVersion(v int64) {
+	x.xxx_hidden_ParentInitiatedVersion = v
+}
+
+func (x *WorkflowExecutionInfo) SetCloseTransferTaskId(v int64) {
+	x.xxx_hidden_CloseTransferTaskId = v
+}
+
+func (x *WorkflowExecutionInfo) SetCloseVisibilityTaskId(v int64) {
+	x.xxx_hidden_CloseVisibilityTaskId = v
+}
+
+func (x *WorkflowExecutionInfo) SetCloseTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_CloseTime = v
+}
+
+func (x *WorkflowExecutionInfo) SetRelocatableAttributesRemoved(v bool) {
+	x.xxx_hidden_RelocatableAttributesRemoved = v
+}
+
+func (x *WorkflowExecutionInfo) SetBaseExecutionInfo(v *v16.BaseExecutionInfo) {
+	x.xxx_hidden_BaseExecutionInfo = v
+}
+
+func (x *WorkflowExecutionInfo) SetMostRecentWorkerVersionStamp(v *v13.WorkerVersionStamp) {
+	x.xxx_hidden_MostRecentWorkerVersionStamp = v
+}
+
+func (x *WorkflowExecutionInfo) SetAssignedBuildId(v string) {
+	x.xxx_hidden_AssignedBuildId = v
+}
+
+func (x *WorkflowExecutionInfo) SetInheritedBuildId(v string) {
+	x.xxx_hidden_InheritedBuildId = v
+}
+
+func (x *WorkflowExecutionInfo) SetBuildIdRedirectCounter(v int64) {
+	x.xxx_hidden_BuildIdRedirectCounter = v
+}
+
+func (x *WorkflowExecutionInfo) SetUpdateInfos(v map[string]*UpdateInfo) {
+	x.xxx_hidden_UpdateInfos = v
+}
+
+func (x *WorkflowExecutionInfo) SetTransitionHistory(v []*VersionedTransition) {
+	x.xxx_hidden_TransitionHistory = &v
+}
+
+func (x *WorkflowExecutionInfo) SetSubStateMachinesByType(v map[string]*StateMachineMap) {
+	x.xxx_hidden_SubStateMachinesByType = v
+}
+
+func (x *WorkflowExecutionInfo) SetWorkflowExecutionTimerTaskStatus(v int32) {
+	x.xxx_hidden_WorkflowExecutionTimerTaskStatus = v
+}
+
+func (x *WorkflowExecutionInfo) SetRootWorkflowId(v string) {
+	x.xxx_hidden_RootWorkflowId = v
+}
+
+func (x *WorkflowExecutionInfo) SetRootRunId(v string) {
+	x.xxx_hidden_RootRunId = v
+}
+
+func (x *WorkflowExecutionInfo) SetStateMachineTimers(v []*StateMachineTimerGroup) {
+	x.xxx_hidden_StateMachineTimers = &v
+}
+
+func (x *WorkflowExecutionInfo) SetTaskGenerationShardClockTimestamp(v int64) {
+	x.xxx_hidden_TaskGenerationShardClockTimestamp = v
+}
+
+func (x *WorkflowExecutionInfo) SetWorkflowTaskLastUpdateVersionedTransition(v *VersionedTransition) {
+	x.xxx_hidden_WorkflowTaskLastUpdateVersionedTransition = v
+}
+
+func (x *WorkflowExecutionInfo) SetVisibilityLastUpdateVersionedTransition(v *VersionedTransition) {
+	x.xxx_hidden_VisibilityLastUpdateVersionedTransition = v
+}
+
+func (x *WorkflowExecutionInfo) SetSignalRequestIdsLastUpdateVersionedTransition(v *VersionedTransition) {
+	x.xxx_hidden_SignalRequestIdsLastUpdateVersionedTransition = v
+}
+
+func (x *WorkflowExecutionInfo) SetSubStateMachineTombstoneBatches(v []*StateMachineTombstoneBatch) {
+	x.xxx_hidden_SubStateMachineTombstoneBatches = &v
+}
+
+func (x *WorkflowExecutionInfo) SetWorkflowWasReset(v bool) {
+	x.xxx_hidden_WorkflowWasReset = v
+}
+
+func (x *WorkflowExecutionInfo) SetResetRunId(v string) {
+	x.xxx_hidden_ResetRunId = v
+}
+
+func (x *WorkflowExecutionInfo) SetVersioningInfo(v *v12.WorkflowExecutionVersioningInfo) {
+	x.xxx_hidden_VersioningInfo = v
+}
+
+func (x *WorkflowExecutionInfo) SetOriginalExecutionRunId(v string) {
+	x.xxx_hidden_OriginalExecutionRunId = v
+}
+
+func (x *WorkflowExecutionInfo) SetPreviousTransitionHistory(v []*VersionedTransition) {
+	x.xxx_hidden_PreviousTransitionHistory = &v
+}
+
+func (x *WorkflowExecutionInfo) SetLastTransitionHistoryBreakPoint(v *VersionedTransition) {
+	x.xxx_hidden_LastTransitionHistoryBreakPoint = v
+}
+
+func (x *WorkflowExecutionInfo) SetChildrenInitializedPostResetPoint(v map[string]*ResetChildInfo) {
+	x.xxx_hidden_ChildrenInitializedPostResetPoint = v
+}
+
+func (x *WorkflowExecutionInfo) SetWorkerDeploymentName(v string) {
+	x.xxx_hidden_WorkerDeploymentName = v
+}
+
+func (x *WorkflowExecutionInfo) SetPriority(v *v13.Priority) {
+	x.xxx_hidden_Priority = v
+}
+
+func (x *WorkflowExecutionInfo) SetSuccessorRunId(v string) {
+	x.xxx_hidden_SuccessorRunId = v
+}
+
+func (x *WorkflowExecutionInfo) SetPauseInfo(v *WorkflowPauseInfo) {
+	x.xxx_hidden_PauseInfo = v
+}
+
+func (x *WorkflowExecutionInfo) SetLastWorkflowTaskFailureCause(v v11.WorkflowTaskFailedCause) {
+	x.xxx_hidden_LastWorkflowTaskFailure = &workflowExecutionInfo_LastWorkflowTaskFailureCause{v}
+}
+
+func (x *WorkflowExecutionInfo) SetLastWorkflowTaskTimedOutType(v v11.TimeoutType) {
+	x.xxx_hidden_LastWorkflowTaskFailure = &workflowExecutionInfo_LastWorkflowTaskTimedOutType{v}
+}
+
+func (x *WorkflowExecutionInfo) HasWorkflowExecutionTimeout() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_WorkflowExecutionTimeout != nil
+}
+
+func (x *WorkflowExecutionInfo) HasWorkflowRunTimeout() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_WorkflowRunTimeout != nil
+}
+
+func (x *WorkflowExecutionInfo) HasDefaultWorkflowTaskTimeout() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_DefaultWorkflowTaskTimeout != nil
+}
+
+func (x *WorkflowExecutionInfo) HasStartTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_StartTime != nil
+}
+
+func (x *WorkflowExecutionInfo) HasLastUpdateTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_LastUpdateTime != nil
+}
+
+func (x *WorkflowExecutionInfo) HasWorkflowTaskTimeout() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_WorkflowTaskTimeout != nil
+}
+
+func (x *WorkflowExecutionInfo) HasWorkflowTaskStartedTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_WorkflowTaskStartedTime != nil
+}
+
+func (x *WorkflowExecutionInfo) HasWorkflowTaskScheduledTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_WorkflowTaskScheduledTime != nil
+}
+
+func (x *WorkflowExecutionInfo) HasWorkflowTaskOriginalScheduledTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_WorkflowTaskOriginalScheduledTime != nil
+}
+
+func (x *WorkflowExecutionInfo) HasStickyScheduleToStartTimeout() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_StickyScheduleToStartTimeout != nil
+}
+
+func (x *WorkflowExecutionInfo) HasRetryInitialInterval() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_RetryInitialInterval != nil
+}
+
+func (x *WorkflowExecutionInfo) HasRetryMaximumInterval() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_RetryMaximumInterval != nil
+}
+
+func (x *WorkflowExecutionInfo) HasWorkflowExecutionExpirationTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_WorkflowExecutionExpirationTime != nil
+}
+
+func (x *WorkflowExecutionInfo) HasAutoResetPoints() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_AutoResetPoints != nil
+}
+
+func (x *WorkflowExecutionInfo) HasVersionHistories() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_VersionHistories != nil
+}
+
+func (x *WorkflowExecutionInfo) HasExecutionStats() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_ExecutionStats != nil
+}
+
+func (x *WorkflowExecutionInfo) HasWorkflowRunExpirationTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_WorkflowRunExpirationTime != nil
+}
+
+func (x *WorkflowExecutionInfo) HasExecutionTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_ExecutionTime != nil
+}
+
+func (x *WorkflowExecutionInfo) HasParentClock() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_ParentClock != nil
+}
+
+func (x *WorkflowExecutionInfo) HasCloseTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_CloseTime != nil
+}
+
+func (x *WorkflowExecutionInfo) HasBaseExecutionInfo() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_BaseExecutionInfo != nil
+}
+
+func (x *WorkflowExecutionInfo) HasMostRecentWorkerVersionStamp() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_MostRecentWorkerVersionStamp != nil
+}
+
+func (x *WorkflowExecutionInfo) HasWorkflowTaskLastUpdateVersionedTransition() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_WorkflowTaskLastUpdateVersionedTransition != nil
+}
+
+func (x *WorkflowExecutionInfo) HasVisibilityLastUpdateVersionedTransition() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_VisibilityLastUpdateVersionedTransition != nil
+}
+
+func (x *WorkflowExecutionInfo) HasSignalRequestIdsLastUpdateVersionedTransition() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_SignalRequestIdsLastUpdateVersionedTransition != nil
+}
+
+func (x *WorkflowExecutionInfo) HasVersioningInfo() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_VersioningInfo != nil
+}
+
+func (x *WorkflowExecutionInfo) HasLastTransitionHistoryBreakPoint() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_LastTransitionHistoryBreakPoint != nil
+}
+
+func (x *WorkflowExecutionInfo) HasPriority() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Priority != nil
+}
+
+func (x *WorkflowExecutionInfo) HasPauseInfo() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_PauseInfo != nil
+}
+
+func (x *WorkflowExecutionInfo) HasLastWorkflowTaskFailure() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_LastWorkflowTaskFailure != nil
+}
+
+func (x *WorkflowExecutionInfo) HasLastWorkflowTaskFailureCause() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_LastWorkflowTaskFailure.(*workflowExecutionInfo_LastWorkflowTaskFailureCause)
+	return ok
+}
+
+func (x *WorkflowExecutionInfo) HasLastWorkflowTaskTimedOutType() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_LastWorkflowTaskFailure.(*workflowExecutionInfo_LastWorkflowTaskTimedOutType)
+	return ok
+}
+
+func (x *WorkflowExecutionInfo) ClearWorkflowExecutionTimeout() {
+	x.xxx_hidden_WorkflowExecutionTimeout = nil
+}
+
+func (x *WorkflowExecutionInfo) ClearWorkflowRunTimeout() {
+	x.xxx_hidden_WorkflowRunTimeout = nil
+}
+
+func (x *WorkflowExecutionInfo) ClearDefaultWorkflowTaskTimeout() {
+	x.xxx_hidden_DefaultWorkflowTaskTimeout = nil
+}
+
+func (x *WorkflowExecutionInfo) ClearStartTime() {
+	x.xxx_hidden_StartTime = nil
+}
+
+func (x *WorkflowExecutionInfo) ClearLastUpdateTime() {
+	x.xxx_hidden_LastUpdateTime = nil
+}
+
+func (x *WorkflowExecutionInfo) ClearWorkflowTaskTimeout() {
+	x.xxx_hidden_WorkflowTaskTimeout = nil
+}
+
+func (x *WorkflowExecutionInfo) ClearWorkflowTaskStartedTime() {
+	x.xxx_hidden_WorkflowTaskStartedTime = nil
+}
+
+func (x *WorkflowExecutionInfo) ClearWorkflowTaskScheduledTime() {
+	x.xxx_hidden_WorkflowTaskScheduledTime = nil
+}
+
+func (x *WorkflowExecutionInfo) ClearWorkflowTaskOriginalScheduledTime() {
+	x.xxx_hidden_WorkflowTaskOriginalScheduledTime = nil
+}
+
+func (x *WorkflowExecutionInfo) ClearStickyScheduleToStartTimeout() {
+	x.xxx_hidden_StickyScheduleToStartTimeout = nil
+}
+
+func (x *WorkflowExecutionInfo) ClearRetryInitialInterval() {
+	x.xxx_hidden_RetryInitialInterval = nil
+}
+
+func (x *WorkflowExecutionInfo) ClearRetryMaximumInterval() {
+	x.xxx_hidden_RetryMaximumInterval = nil
+}
+
+func (x *WorkflowExecutionInfo) ClearWorkflowExecutionExpirationTime() {
+	x.xxx_hidden_WorkflowExecutionExpirationTime = nil
+}
+
+func (x *WorkflowExecutionInfo) ClearAutoResetPoints() {
+	x.xxx_hidden_AutoResetPoints = nil
+}
+
+func (x *WorkflowExecutionInfo) ClearVersionHistories() {
+	x.xxx_hidden_VersionHistories = nil
+}
+
+func (x *WorkflowExecutionInfo) ClearExecutionStats() {
+	x.xxx_hidden_ExecutionStats = nil
+}
+
+func (x *WorkflowExecutionInfo) ClearWorkflowRunExpirationTime() {
+	x.xxx_hidden_WorkflowRunExpirationTime = nil
+}
+
+func (x *WorkflowExecutionInfo) ClearExecutionTime() {
+	x.xxx_hidden_ExecutionTime = nil
+}
+
+func (x *WorkflowExecutionInfo) ClearParentClock() {
+	x.xxx_hidden_ParentClock = nil
+}
+
+func (x *WorkflowExecutionInfo) ClearCloseTime() {
+	x.xxx_hidden_CloseTime = nil
+}
+
+func (x *WorkflowExecutionInfo) ClearBaseExecutionInfo() {
+	x.xxx_hidden_BaseExecutionInfo = nil
+}
+
+func (x *WorkflowExecutionInfo) ClearMostRecentWorkerVersionStamp() {
+	x.xxx_hidden_MostRecentWorkerVersionStamp = nil
+}
+
+func (x *WorkflowExecutionInfo) ClearWorkflowTaskLastUpdateVersionedTransition() {
+	x.xxx_hidden_WorkflowTaskLastUpdateVersionedTransition = nil
+}
+
+func (x *WorkflowExecutionInfo) ClearVisibilityLastUpdateVersionedTransition() {
+	x.xxx_hidden_VisibilityLastUpdateVersionedTransition = nil
+}
+
+func (x *WorkflowExecutionInfo) ClearSignalRequestIdsLastUpdateVersionedTransition() {
+	x.xxx_hidden_SignalRequestIdsLastUpdateVersionedTransition = nil
+}
+
+func (x *WorkflowExecutionInfo) ClearVersioningInfo() {
+	x.xxx_hidden_VersioningInfo = nil
+}
+
+func (x *WorkflowExecutionInfo) ClearLastTransitionHistoryBreakPoint() {
+	x.xxx_hidden_LastTransitionHistoryBreakPoint = nil
+}
+
+func (x *WorkflowExecutionInfo) ClearPriority() {
+	x.xxx_hidden_Priority = nil
+}
+
+func (x *WorkflowExecutionInfo) ClearPauseInfo() {
+	x.xxx_hidden_PauseInfo = nil
+}
+
+func (x *WorkflowExecutionInfo) ClearLastWorkflowTaskFailure() {
+	x.xxx_hidden_LastWorkflowTaskFailure = nil
+}
+
+func (x *WorkflowExecutionInfo) ClearLastWorkflowTaskFailureCause() {
+	if _, ok := x.xxx_hidden_LastWorkflowTaskFailure.(*workflowExecutionInfo_LastWorkflowTaskFailureCause); ok {
+		x.xxx_hidden_LastWorkflowTaskFailure = nil
+	}
+}
+
+func (x *WorkflowExecutionInfo) ClearLastWorkflowTaskTimedOutType() {
+	if _, ok := x.xxx_hidden_LastWorkflowTaskFailure.(*workflowExecutionInfo_LastWorkflowTaskTimedOutType); ok {
+		x.xxx_hidden_LastWorkflowTaskFailure = nil
+	}
+}
+
+const WorkflowExecutionInfo_LastWorkflowTaskFailure_not_set_case case_WorkflowExecutionInfo_LastWorkflowTaskFailure = 0
+const WorkflowExecutionInfo_LastWorkflowTaskFailureCause_case case_WorkflowExecutionInfo_LastWorkflowTaskFailure = 107
+const WorkflowExecutionInfo_LastWorkflowTaskTimedOutType_case case_WorkflowExecutionInfo_LastWorkflowTaskFailure = 108
+
+func (x *WorkflowExecutionInfo) WhichLastWorkflowTaskFailure() case_WorkflowExecutionInfo_LastWorkflowTaskFailure {
+	if x == nil {
+		return WorkflowExecutionInfo_LastWorkflowTaskFailure_not_set_case
+	}
+	switch x.xxx_hidden_LastWorkflowTaskFailure.(type) {
+	case *workflowExecutionInfo_LastWorkflowTaskFailureCause:
+		return WorkflowExecutionInfo_LastWorkflowTaskFailureCause_case
+	case *workflowExecutionInfo_LastWorkflowTaskTimedOutType:
+		return WorkflowExecutionInfo_LastWorkflowTaskTimedOutType_case
+	default:
+		return WorkflowExecutionInfo_LastWorkflowTaskFailure_not_set_case
+	}
+}
+
+type WorkflowExecutionInfo_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId                             string
+	WorkflowId                              string
+	ParentNamespaceId                       string
+	ParentWorkflowId                        string
+	ParentRunId                             string
+	ParentInitiatedId                       int64
+	CompletionEventBatchId                  int64
+	TaskQueue                               string
+	WorkflowTypeName                        string
+	WorkflowExecutionTimeout                *durationpb.Duration
+	WorkflowRunTimeout                      *durationpb.Duration
+	DefaultWorkflowTaskTimeout              *durationpb.Duration
+	LastRunningClock                        int64
+	LastFirstEventId                        int64
+	LastCompletedWorkflowTaskStartedEventId int64
+	// Deprecated. use `WorkflowExecutionState.start_time`
+	StartTime      *timestamppb.Timestamp
+	LastUpdateTime *timestamppb.Timestamp
+	// Workflow task fields.
+	WorkflowTaskVersion                     int64
+	WorkflowTaskScheduledEventId            int64
+	WorkflowTaskStartedEventId              int64
+	WorkflowTaskTimeout                     *durationpb.Duration
+	WorkflowTaskAttempt                     int32
+	WorkflowTaskStartedTime                 *timestamppb.Timestamp
+	WorkflowTaskScheduledTime               *timestamppb.Timestamp
+	WorkflowTaskOriginalScheduledTime       *timestamppb.Timestamp
+	WorkflowTaskRequestId                   string
+	WorkflowTaskType                        v1.WorkflowTaskType
+	WorkflowTaskSuggestContinueAsNew        bool
+	WorkflowTaskSuggestContinueAsNewReasons []v11.SuggestContinueAsNewReason
+	WorkflowTaskHistorySizeBytes            int64
+	// tracks the started build ID for transient/speculative WFT. This info is used for two purposes:
+	// - verify WFT completes by the same Build ID that started in the latest attempt
+	// - when persisting transient/speculative WFT, the right Build ID is used in the WFT started event
+	// Deprecated. Clean up with versioning-2. [cleanup-old-wv]
+	WorkflowTaskBuildId string
+	// tracks the started build ID redirect counter for transient/speculative WFT. This info is to
+	// ensure the right redirect counter is used in the WFT started event created later
+	// for a transient/speculative WFT.
+	// Deprecated. Clean up with versioning-2. [cleanup-old-wv]
+	WorkflowTaskBuildIdRedirectCounter int64
+	// Stamp represents the "version" of the workflow's internal state.
+	// It increases monotonically when the workflow's options are modified.
+	// It is used to check if a workflow task is still relevant to the corresponding workflow state machine.
+	WorkflowTaskStamp int32
+	// AttemptsSinceLastSuccess tracks the number of workflow task attempts since the last successful workflow task.
+	// This is carried over when buffered events are applied after workflow task failures.
+	// Used by the TemporalReportedProblems search attribute to track continuous failure count.
+	// (-- api-linter: core::0140::prepositions=disabled
+	//
+	//	aip.dev/not-precedent: "since" is needed here. --)
+	WorkflowTaskAttemptsSinceLastSuccess int32
+	CancelRequested                      bool
+	CancelRequestId                      string
+	StickyTaskQueue                      string
+	// (-- api-linter: core::0140::prepositions=disabled
+	//
+	//	aip.dev/not-precedent: "to" is used to indicate interval. --)
+	StickyScheduleToStartTimeout    *durationpb.Duration
+	Attempt                         int32
+	RetryInitialInterval            *durationpb.Duration
+	RetryMaximumInterval            *durationpb.Duration
+	RetryMaximumAttempts            int32
+	RetryBackoffCoefficient         float64
+	WorkflowExecutionExpirationTime *timestamppb.Timestamp
+	RetryNonRetryableErrorTypes     []string
+	HasRetryPolicy                  bool
+	CronSchedule                    string
+	SignalCount                     int64
+	ActivityCount                   int64
+	ChildExecutionCount             int64
+	UserTimerCount                  int64
+	RequestCancelExternalCount      int64
+	SignalExternalCount             int64
+	UpdateCount                     int64
+	AutoResetPoints                 *v12.ResetPoints
+	SearchAttributes                map[string]*v13.Payload
+	Memo                            map[string]*v13.Payload
+	VersionHistories                *v14.VersionHistories
+	FirstExecutionRunId             string
+	ExecutionStats                  *ExecutionStats
+	WorkflowRunExpirationTime       *timestamppb.Timestamp
+	// Transaction Id of the first event in the last batch of events.
+	LastFirstEventTxnId  int64
+	StateTransitionCount int64
+	ExecutionTime        *timestamppb.Timestamp
+	// If continued-as-new, or retried, or cron, holds the new run id.
+	NewExecutionRunId string
+	ParentClock       *v15.VectorClock
+	// version of child execution initiated event in parent workflow
+	ParentInitiatedVersion int64
+	// Used to check if transfer close task is processed before deleting the workflow execution.
+	CloseTransferTaskId int64
+	// Used to check if visibility close task is processed before deleting the workflow execution.
+	CloseVisibilityTaskId int64
+	CloseTime             *timestamppb.Timestamp
+	// Relocatable attributes are memo and search attributes. If they were removed, then they are not
+	// present in the mutable state, and they should be in visibility store.
+	RelocatableAttributesRemoved bool
+	BaseExecutionInfo            *v16.BaseExecutionInfo
+	// If using build-id based versioning: version stamp of the last worker to complete a
+	// workflow tasks for this workflow.
+	// Deprecated. Clean up with versioning-2. [cleanup-old-wv]
+	MostRecentWorkerVersionStamp *v13.WorkerVersionStamp
+	// The currently assigned build ID for this execution. Presence of this value means worker versioning is used
+	// for this execution. Assigned build ID is selected by matching based on Worker Versioning Assignment Rules
+	// when the first workflow task of the execution is scheduled. If the first workflow task fails and is scheduled
+	// again, the assigned build ID may change according to the latest versioning rules.
+	// Assigned build ID can also change in the middle of a execution if Compatible Redirect Rules are applied to
+	// this execution.
+	// Deprecated. Clean up with versioning-2. [cleanup-old-wv]
+	AssignedBuildId string
+	// Build ID inherited from a previous/parent execution. If present, assigned_build_id will be set to this, instead
+	// of using the assignment rules.
+	// Deprecated. Clean up with versioning-2. [cleanup-old-wv]
+	InheritedBuildId string
+	// Tracks the number of times a redirect rule is applied to this workflow. Used to apply redirects in the right
+	// order when mutable state is rebuilt from history events.
+	// Deprecated. Clean up with versioning-2. [cleanup-old-wv]
+	BuildIdRedirectCounter int64
+	// index of update IDs and pointers to associated history events.
+	UpdateInfos map[string]*UpdateInfo
+	// Transition history encodes all transitions a mutable state object has gone through in a compact way.
+	// Here the transition_count field of VersionedTransition represents the maximum transition count the mutable state object
+	// has gone through for the corresponding namespace failover version.
+	// For example, if the transition history is `[{v: 1, t: 3}, {v: 2, t: 5}]`, it means transition 1-3 have failover version 1,
+	// and transition 4-5 have failover version 2.
+	//
+	// Each task generated by the HSM framework is imprinted with the current VersionedTransition at the end of the transaction.
+	// When a task is being processed, the transition history is compared with the imprinted task information to
+	// verify that a task is not referencing a stale state or that the task itself is not stale.
+	// For example, with the same transition history above, task A `{v: 2, t: 4}` **is not**
+	// referencing stale state because for version `2` transitions `4-5` are valid, while task B `{v: 2, t: 6}` **is**
+	// referencing stale state because the transition count is out of range for version `2`.
+	// Furthermore, task C `{v: 1, t: 4}` itself is stale because it is referencing an impossible state, likely due to post
+	// split-brain reconciliation.
+	TransitionHistory []*VersionedTransition
+	// Map of state machine type to map of machine by ID.
+	// (-- api-linter: core::0140::prepositions=disabled
+	//
+	//	aip.dev/not-precedent: "by" is used to clarify the keys and values. --)
+	SubStateMachinesByType map[string]*StateMachineMap
+	// This field is for tracking if the workflow execution timer task is created or not.
+	// We don't need this field if we always create the execution timer task when the first
+	// workflow in a workflow chain starts. However, this execution timer logic is later added.
+	// To maintain backward compatibility, we need to track if the execution timer task is created
+	// for a workflow chain since later workflows in the chain also need to create the execution
+	// timer task if it is not created yet.
+	// NOTE: Task status is clsuter specific information, so when replicating mutable state, this
+	// field need to be sanitized.
+	WorkflowExecutionTimerTaskStatus int32
+	// The root workflow execution is defined as follows:
+	// 1. A workflow without parent workflow is its own root workflow.
+	// 2. A workflow that has a parent workflow has the same root workflow as its parent workflow.
+	RootWorkflowId string
+	RootRunId      string
+	// Timer tasks emitted from state machines are stored in this array, grouped and sorted by their deadline. Only the
+	// next state machine timer task is generated at a time per mutable state. When that task is processed it iterates
+	// this array and triggers timers that are ready.
+	// NOTE: Task status is cluster specific information, so when replicating mutable state, this field needs to be
+	// sanitized.
+	StateMachineTimers []*StateMachineTimerGroup
+	// The shard clock's timestamp at the time the first valid task was created for this mutable state (either for a new
+	// mutable state or when rebuilding from events). The field should be updated whenever we refresh tasks, marking
+	// older generation tasks obsolete.
+	// This field is used for task staleness checks when mutable state is rebuilt.
+	// NOTE: Task status is cluster specific information, so when replicating mutable state, this field needs to be
+	// sanitized.
+	// (-- api-linter: core::0140::prepositions=disabled
+	//
+	//	aip.dev/not-precedent: Ignoring api-linter rules for clarity --)
+	//
+	// (-- api-linter: core::0142::time-field-type=disabled
+	//
+	//	aip.dev/not-precedent: This is a vector clock, not a timestamp --)
+	TaskGenerationShardClockTimestamp             int64
+	WorkflowTaskLastUpdateVersionedTransition     *VersionedTransition
+	VisibilityLastUpdateVersionedTransition       *VersionedTransition
+	SignalRequestIdsLastUpdateVersionedTransition *VersionedTransition
+	SubStateMachineTombstoneBatches               []*StateMachineTombstoneBatch
+	// The workflow has been reset.
+	WorkflowWasReset bool
+	// Reset Run ID points to the new nun when this execution is reset. If the execution is reset multiple times, it points to the latest run.
+	ResetRunId string
+	// When present, it means the workflow execution is versioned, or is transitioning from
+	// unversioned workers to versioned ones.
+	// Note: Deployment objects inside versioning info are immutable, never change their fields.
+	// (-- api-linter: core::0203::immutable=disabled
+	//
+	//	aip.dev/not-precedent: field_behavior annotation is not yet used in this repo --)
+	VersioningInfo *v12.WorkflowExecutionVersioningInfo
+	// This is the run id when the WorkflowExecutionStarted event was written.
+	// A workflow reset changes the execution run_id, but preserves this field so that we have a reference to the original workflow execution that was reset.
+	OriginalExecutionRunId string
+	// These two fields are to record the transition history when the transition history is cleaned up due to disabling transition history
+	// Should be deprecated once the transition history is fully launched
+	PreviousTransitionHistory       []*VersionedTransition
+	LastTransitionHistoryBreakPoint *VersionedTransition
+	// This is a set of child workflows that were initialized after the reset point in the parent workflow.
+	// The children are identified by the key "workflow_type:workflow_id". When the parent starts to make progress after reset, it uses this data to
+	// determine the right start policy to apply to the child. This list will include children initiated in continue-as-new runs.
+	ChildrenInitializedPostResetPoint map[string]*ResetChildInfo
+	// The worker deployment that completed the last WFT.
+	WorkerDeploymentName string
+	// Priority contains metadata that controls relative ordering of task processing
+	// when tasks are backed up in a queue.
+	Priority *v13.Priority
+	// Run ID of the execution that supersedes this one (via terminate or continue-as-new).
+	SuccessorRunId string
+	// Pause info contains the details of the request to pause the workflow.
+	PauseInfo *WorkflowPauseInfo
+	// Last workflow task failure category and cause are used to track the last workflow task failure category and cause.
+
+	// Fields of oneof xxx_hidden_LastWorkflowTaskFailure:
+	LastWorkflowTaskFailureCause *v11.WorkflowTaskFailedCause
+	LastWorkflowTaskTimedOutType *v11.TimeoutType
+	// -- end of xxx_hidden_LastWorkflowTaskFailure
+}
+
+func (b0 WorkflowExecutionInfo_builder) Build() *WorkflowExecutionInfo {
+	m0 := &WorkflowExecutionInfo{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_WorkflowId = b.WorkflowId
+	x.xxx_hidden_ParentNamespaceId = b.ParentNamespaceId
+	x.xxx_hidden_ParentWorkflowId = b.ParentWorkflowId
+	x.xxx_hidden_ParentRunId = b.ParentRunId
+	x.xxx_hidden_ParentInitiatedId = b.ParentInitiatedId
+	x.xxx_hidden_CompletionEventBatchId = b.CompletionEventBatchId
+	x.xxx_hidden_TaskQueue = b.TaskQueue
+	x.xxx_hidden_WorkflowTypeName = b.WorkflowTypeName
+	x.xxx_hidden_WorkflowExecutionTimeout = b.WorkflowExecutionTimeout
+	x.xxx_hidden_WorkflowRunTimeout = b.WorkflowRunTimeout
+	x.xxx_hidden_DefaultWorkflowTaskTimeout = b.DefaultWorkflowTaskTimeout
+	x.xxx_hidden_LastRunningClock = b.LastRunningClock
+	x.xxx_hidden_LastFirstEventId = b.LastFirstEventId
+	x.xxx_hidden_LastCompletedWorkflowTaskStartedEventId = b.LastCompletedWorkflowTaskStartedEventId
+	x.xxx_hidden_StartTime = b.StartTime
+	x.xxx_hidden_LastUpdateTime = b.LastUpdateTime
+	x.xxx_hidden_WorkflowTaskVersion = b.WorkflowTaskVersion
+	x.xxx_hidden_WorkflowTaskScheduledEventId = b.WorkflowTaskScheduledEventId
+	x.xxx_hidden_WorkflowTaskStartedEventId = b.WorkflowTaskStartedEventId
+	x.xxx_hidden_WorkflowTaskTimeout = b.WorkflowTaskTimeout
+	x.xxx_hidden_WorkflowTaskAttempt = b.WorkflowTaskAttempt
+	x.xxx_hidden_WorkflowTaskStartedTime = b.WorkflowTaskStartedTime
+	x.xxx_hidden_WorkflowTaskScheduledTime = b.WorkflowTaskScheduledTime
+	x.xxx_hidden_WorkflowTaskOriginalScheduledTime = b.WorkflowTaskOriginalScheduledTime
+	x.xxx_hidden_WorkflowTaskRequestId = b.WorkflowTaskRequestId
+	x.xxx_hidden_WorkflowTaskType = b.WorkflowTaskType
+	x.xxx_hidden_WorkflowTaskSuggestContinueAsNew = b.WorkflowTaskSuggestContinueAsNew
+	x.xxx_hidden_WorkflowTaskSuggestContinueAsNewReasons = b.WorkflowTaskSuggestContinueAsNewReasons
+	x.xxx_hidden_WorkflowTaskHistorySizeBytes = b.WorkflowTaskHistorySizeBytes
+	x.xxx_hidden_WorkflowTaskBuildId = b.WorkflowTaskBuildId
+	x.xxx_hidden_WorkflowTaskBuildIdRedirectCounter = b.WorkflowTaskBuildIdRedirectCounter
+	x.xxx_hidden_WorkflowTaskStamp = b.WorkflowTaskStamp
+	x.xxx_hidden_WorkflowTaskAttemptsSinceLastSuccess = b.WorkflowTaskAttemptsSinceLastSuccess
+	x.xxx_hidden_CancelRequested = b.CancelRequested
+	x.xxx_hidden_CancelRequestId = b.CancelRequestId
+	x.xxx_hidden_StickyTaskQueue = b.StickyTaskQueue
+	x.xxx_hidden_StickyScheduleToStartTimeout = b.StickyScheduleToStartTimeout
+	x.xxx_hidden_Attempt = b.Attempt
+	x.xxx_hidden_RetryInitialInterval = b.RetryInitialInterval
+	x.xxx_hidden_RetryMaximumInterval = b.RetryMaximumInterval
+	x.xxx_hidden_RetryMaximumAttempts = b.RetryMaximumAttempts
+	x.xxx_hidden_RetryBackoffCoefficient = b.RetryBackoffCoefficient
+	x.xxx_hidden_WorkflowExecutionExpirationTime = b.WorkflowExecutionExpirationTime
+	x.xxx_hidden_RetryNonRetryableErrorTypes = b.RetryNonRetryableErrorTypes
+	x.xxx_hidden_HasRetryPolicy = b.HasRetryPolicy
+	x.xxx_hidden_CronSchedule = b.CronSchedule
+	x.xxx_hidden_SignalCount = b.SignalCount
+	x.xxx_hidden_ActivityCount = b.ActivityCount
+	x.xxx_hidden_ChildExecutionCount = b.ChildExecutionCount
+	x.xxx_hidden_UserTimerCount = b.UserTimerCount
+	x.xxx_hidden_RequestCancelExternalCount = b.RequestCancelExternalCount
+	x.xxx_hidden_SignalExternalCount = b.SignalExternalCount
+	x.xxx_hidden_UpdateCount = b.UpdateCount
+	x.xxx_hidden_AutoResetPoints = b.AutoResetPoints
+	x.xxx_hidden_SearchAttributes = b.SearchAttributes
+	x.xxx_hidden_Memo = b.Memo
+	x.xxx_hidden_VersionHistories = b.VersionHistories
+	x.xxx_hidden_FirstExecutionRunId = b.FirstExecutionRunId
+	x.xxx_hidden_ExecutionStats = b.ExecutionStats
+	x.xxx_hidden_WorkflowRunExpirationTime = b.WorkflowRunExpirationTime
+	x.xxx_hidden_LastFirstEventTxnId = b.LastFirstEventTxnId
+	x.xxx_hidden_StateTransitionCount = b.StateTransitionCount
+	x.xxx_hidden_ExecutionTime = b.ExecutionTime
+	x.xxx_hidden_NewExecutionRunId = b.NewExecutionRunId
+	x.xxx_hidden_ParentClock = b.ParentClock
+	x.xxx_hidden_ParentInitiatedVersion = b.ParentInitiatedVersion
+	x.xxx_hidden_CloseTransferTaskId = b.CloseTransferTaskId
+	x.xxx_hidden_CloseVisibilityTaskId = b.CloseVisibilityTaskId
+	x.xxx_hidden_CloseTime = b.CloseTime
+	x.xxx_hidden_RelocatableAttributesRemoved = b.RelocatableAttributesRemoved
+	x.xxx_hidden_BaseExecutionInfo = b.BaseExecutionInfo
+	x.xxx_hidden_MostRecentWorkerVersionStamp = b.MostRecentWorkerVersionStamp
+	x.xxx_hidden_AssignedBuildId = b.AssignedBuildId
+	x.xxx_hidden_InheritedBuildId = b.InheritedBuildId
+	x.xxx_hidden_BuildIdRedirectCounter = b.BuildIdRedirectCounter
+	x.xxx_hidden_UpdateInfos = b.UpdateInfos
+	x.xxx_hidden_TransitionHistory = &b.TransitionHistory
+	x.xxx_hidden_SubStateMachinesByType = b.SubStateMachinesByType
+	x.xxx_hidden_WorkflowExecutionTimerTaskStatus = b.WorkflowExecutionTimerTaskStatus
+	x.xxx_hidden_RootWorkflowId = b.RootWorkflowId
+	x.xxx_hidden_RootRunId = b.RootRunId
+	x.xxx_hidden_StateMachineTimers = &b.StateMachineTimers
+	x.xxx_hidden_TaskGenerationShardClockTimestamp = b.TaskGenerationShardClockTimestamp
+	x.xxx_hidden_WorkflowTaskLastUpdateVersionedTransition = b.WorkflowTaskLastUpdateVersionedTransition
+	x.xxx_hidden_VisibilityLastUpdateVersionedTransition = b.VisibilityLastUpdateVersionedTransition
+	x.xxx_hidden_SignalRequestIdsLastUpdateVersionedTransition = b.SignalRequestIdsLastUpdateVersionedTransition
+	x.xxx_hidden_SubStateMachineTombstoneBatches = &b.SubStateMachineTombstoneBatches
+	x.xxx_hidden_WorkflowWasReset = b.WorkflowWasReset
+	x.xxx_hidden_ResetRunId = b.ResetRunId
+	x.xxx_hidden_VersioningInfo = b.VersioningInfo
+	x.xxx_hidden_OriginalExecutionRunId = b.OriginalExecutionRunId
+	x.xxx_hidden_PreviousTransitionHistory = &b.PreviousTransitionHistory
+	x.xxx_hidden_LastTransitionHistoryBreakPoint = b.LastTransitionHistoryBreakPoint
+	x.xxx_hidden_ChildrenInitializedPostResetPoint = b.ChildrenInitializedPostResetPoint
+	x.xxx_hidden_WorkerDeploymentName = b.WorkerDeploymentName
+	x.xxx_hidden_Priority = b.Priority
+	x.xxx_hidden_SuccessorRunId = b.SuccessorRunId
+	x.xxx_hidden_PauseInfo = b.PauseInfo
+	if b.LastWorkflowTaskFailureCause != nil {
+		x.xxx_hidden_LastWorkflowTaskFailure = &workflowExecutionInfo_LastWorkflowTaskFailureCause{*b.LastWorkflowTaskFailureCause}
+	}
+	if b.LastWorkflowTaskTimedOutType != nil {
+		x.xxx_hidden_LastWorkflowTaskFailure = &workflowExecutionInfo_LastWorkflowTaskTimedOutType{*b.LastWorkflowTaskTimedOutType}
+	}
+	return m0
+}
+
+type case_WorkflowExecutionInfo_LastWorkflowTaskFailure protoreflect.FieldNumber
+
+func (x case_WorkflowExecutionInfo_LastWorkflowTaskFailure) String() string {
+	switch x {
+	case WorkflowExecutionInfo_LastWorkflowTaskFailure_not_set_case:
+		return "WorkflowExecutionInfoLastWorkflowTaskFailureNotSetCase"
+	case WorkflowExecutionInfo_LastWorkflowTaskFailureCause_case:
+		return "WorkflowExecutionInfoLastWorkflowTaskFailureCauseCase"
+	case WorkflowExecutionInfo_LastWorkflowTaskTimedOutType_case:
+		return "WorkflowExecutionInfoLastWorkflowTaskTimedOutTypeCase"
+	default:
+		return strconv.Itoa(int(x))
+	}
+
+}
+
 type isWorkflowExecutionInfo_LastWorkflowTaskFailure interface {
 	isWorkflowExecutionInfo_LastWorkflowTaskFailure()
 }
 
-type WorkflowExecutionInfo_LastWorkflowTaskFailureCause struct {
+type workflowExecutionInfo_LastWorkflowTaskFailureCause struct {
 	LastWorkflowTaskFailureCause v11.WorkflowTaskFailedCause `protobuf:"varint,107,opt,name=last_workflow_task_failure_cause,json=lastWorkflowTaskFailureCause,proto3,enum=temporal.api.enums.v1.WorkflowTaskFailedCause,oneof"`
 }
 
-type WorkflowExecutionInfo_LastWorkflowTaskTimedOutType struct {
+type workflowExecutionInfo_LastWorkflowTaskTimedOutType struct {
 	LastWorkflowTaskTimedOutType v11.TimeoutType `protobuf:"varint,108,opt,name=last_workflow_task_timed_out_type,json=lastWorkflowTaskTimedOutType,proto3,enum=temporal.api.enums.v1.TimeoutType,oneof"`
 }
 
-func (*WorkflowExecutionInfo_LastWorkflowTaskFailureCause) isWorkflowExecutionInfo_LastWorkflowTaskFailure() {
+func (*workflowExecutionInfo_LastWorkflowTaskFailureCause) isWorkflowExecutionInfo_LastWorkflowTaskFailure() {
 }
 
-func (*WorkflowExecutionInfo_LastWorkflowTaskTimedOutType) isWorkflowExecutionInfo_LastWorkflowTaskFailure() {
+func (*workflowExecutionInfo_LastWorkflowTaskTimedOutType) isWorkflowExecutionInfo_LastWorkflowTaskFailure() {
 }
 
 type ExecutionStats struct {
-	state       protoimpl.MessageState `protogen:"open.v1"`
-	HistorySize int64                  `protobuf:"varint,1,opt,name=history_size,json=historySize,proto3" json:"history_size,omitempty"`
-	// Total size in bytes of all external payloads referenced in the entire history tree of the execution, not just the current branch.
-	// This number doesn't include payloads in buffered events.
-	ExternalPayloadSize int64 `protobuf:"varint,2,opt,name=external_payload_size,json=externalPayloadSize,proto3" json:"external_payload_size,omitempty"`
-	// Total count of external payloads referenced in the entire history tree of the execution, not just the current branch.
-	// This number doesn't include payloads in buffered events.
-	ExternalPayloadCount int64 `protobuf:"varint,3,opt,name=external_payload_count,json=externalPayloadCount,proto3" json:"external_payload_count,omitempty"`
-	unknownFields        protoimpl.UnknownFields
-	sizeCache            protoimpl.SizeCache
+	state                           protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_HistorySize          int64                  `protobuf:"varint,1,opt,name=history_size,json=historySize,proto3"`
+	xxx_hidden_ExternalPayloadSize  int64                  `protobuf:"varint,2,opt,name=external_payload_size,json=externalPayloadSize,proto3"`
+	xxx_hidden_ExternalPayloadCount int64                  `protobuf:"varint,3,opt,name=external_payload_count,json=externalPayloadCount,proto3"`
+	unknownFields                   protoimpl.UnknownFields
+	sizeCache                       protoimpl.SizeCache
 }
 
 func (x *ExecutionStats) Reset() {
@@ -1160,47 +2224,73 @@ func (x *ExecutionStats) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ExecutionStats.ProtoReflect.Descriptor instead.
-func (*ExecutionStats) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_executions_proto_rawDescGZIP(), []int{2}
-}
-
 func (x *ExecutionStats) GetHistorySize() int64 {
 	if x != nil {
-		return x.HistorySize
+		return x.xxx_hidden_HistorySize
 	}
 	return 0
 }
 
 func (x *ExecutionStats) GetExternalPayloadSize() int64 {
 	if x != nil {
-		return x.ExternalPayloadSize
+		return x.xxx_hidden_ExternalPayloadSize
 	}
 	return 0
 }
 
 func (x *ExecutionStats) GetExternalPayloadCount() int64 {
 	if x != nil {
-		return x.ExternalPayloadCount
+		return x.xxx_hidden_ExternalPayloadCount
 	}
 	return 0
 }
 
+func (x *ExecutionStats) SetHistorySize(v int64) {
+	x.xxx_hidden_HistorySize = v
+}
+
+func (x *ExecutionStats) SetExternalPayloadSize(v int64) {
+	x.xxx_hidden_ExternalPayloadSize = v
+}
+
+func (x *ExecutionStats) SetExternalPayloadCount(v int64) {
+	x.xxx_hidden_ExternalPayloadCount = v
+}
+
+type ExecutionStats_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	HistorySize int64
+	// Total size in bytes of all external payloads referenced in the entire history tree of the execution, not just the current branch.
+	// This number doesn't include payloads in buffered events.
+	ExternalPayloadSize int64
+	// Total count of external payloads referenced in the entire history tree of the execution, not just the current branch.
+	// This number doesn't include payloads in buffered events.
+	ExternalPayloadCount int64
+}
+
+func (b0 ExecutionStats_builder) Build() *ExecutionStats {
+	m0 := &ExecutionStats{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_HistorySize = b.HistorySize
+	x.xxx_hidden_ExternalPayloadSize = b.ExternalPayloadSize
+	x.xxx_hidden_ExternalPayloadCount = b.ExternalPayloadCount
+	return m0
+}
+
 // execution_state column
 type WorkflowExecutionState struct {
-	state                         protoimpl.MessageState      `protogen:"open.v1"`
-	CreateRequestId               string                      `protobuf:"bytes,1,opt,name=create_request_id,json=createRequestId,proto3" json:"create_request_id,omitempty"`
-	RunId                         string                      `protobuf:"bytes,2,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	State                         v1.WorkflowExecutionState   `protobuf:"varint,3,opt,name=state,proto3,enum=temporal.server.api.enums.v1.WorkflowExecutionState" json:"state,omitempty"`
-	Status                        v11.WorkflowExecutionStatus `protobuf:"varint,4,opt,name=status,proto3,enum=temporal.api.enums.v1.WorkflowExecutionStatus" json:"status,omitempty"`
-	LastUpdateVersionedTransition *VersionedTransition        `protobuf:"bytes,5,opt,name=last_update_versioned_transition,json=lastUpdateVersionedTransition,proto3" json:"last_update_versioned_transition,omitempty"`
-	StartTime                     *timestamppb.Timestamp      `protobuf:"bytes,6,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
-	// Request IDs that are attached to the workflow execution. It can the request ID that started
-	// the workflow execution or request IDs that were attached to an existing running workflow
-	// execution via StartWorkflowExecutionRequest.OnConflictOptions.
-	RequestIds    map[string]*RequestIDInfo `protobuf:"bytes,7,rep,name=request_ids,json=requestIds,proto3" json:"request_ids,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                                    protoimpl.MessageState      `protogen:"opaque.v1"`
+	xxx_hidden_CreateRequestId               string                      `protobuf:"bytes,1,opt,name=create_request_id,json=createRequestId,proto3"`
+	xxx_hidden_RunId                         string                      `protobuf:"bytes,2,opt,name=run_id,json=runId,proto3"`
+	xxx_hidden_State                         v1.WorkflowExecutionState   `protobuf:"varint,3,opt,name=state,proto3,enum=temporal.server.api.enums.v1.WorkflowExecutionState"`
+	xxx_hidden_Status                        v11.WorkflowExecutionStatus `protobuf:"varint,4,opt,name=status,proto3,enum=temporal.api.enums.v1.WorkflowExecutionStatus"`
+	xxx_hidden_LastUpdateVersionedTransition *VersionedTransition        `protobuf:"bytes,5,opt,name=last_update_versioned_transition,json=lastUpdateVersionedTransition,proto3"`
+	xxx_hidden_StartTime                     *timestamppb.Timestamp      `protobuf:"bytes,6,opt,name=start_time,json=startTime,proto3"`
+	xxx_hidden_RequestIds                    map[string]*RequestIDInfo   `protobuf:"bytes,7,rep,name=request_ids,json=requestIds,proto3" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields                            protoimpl.UnknownFields
+	sizeCache                                protoimpl.SizeCache
 }
 
 func (x *WorkflowExecutionState) Reset() {
@@ -1228,66 +2318,140 @@ func (x *WorkflowExecutionState) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use WorkflowExecutionState.ProtoReflect.Descriptor instead.
-func (*WorkflowExecutionState) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_executions_proto_rawDescGZIP(), []int{3}
-}
-
 func (x *WorkflowExecutionState) GetCreateRequestId() string {
 	if x != nil {
-		return x.CreateRequestId
+		return x.xxx_hidden_CreateRequestId
 	}
 	return ""
 }
 
 func (x *WorkflowExecutionState) GetRunId() string {
 	if x != nil {
-		return x.RunId
+		return x.xxx_hidden_RunId
 	}
 	return ""
 }
 
 func (x *WorkflowExecutionState) GetState() v1.WorkflowExecutionState {
 	if x != nil {
-		return x.State
+		return x.xxx_hidden_State
 	}
 	return v1.WorkflowExecutionState(0)
 }
 
 func (x *WorkflowExecutionState) GetStatus() v11.WorkflowExecutionStatus {
 	if x != nil {
-		return x.Status
+		return x.xxx_hidden_Status
 	}
 	return v11.WorkflowExecutionStatus(0)
 }
 
 func (x *WorkflowExecutionState) GetLastUpdateVersionedTransition() *VersionedTransition {
 	if x != nil {
-		return x.LastUpdateVersionedTransition
+		return x.xxx_hidden_LastUpdateVersionedTransition
 	}
 	return nil
 }
 
 func (x *WorkflowExecutionState) GetStartTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.StartTime
+		return x.xxx_hidden_StartTime
 	}
 	return nil
 }
 
 func (x *WorkflowExecutionState) GetRequestIds() map[string]*RequestIDInfo {
 	if x != nil {
-		return x.RequestIds
+		return x.xxx_hidden_RequestIds
 	}
 	return nil
 }
 
+func (x *WorkflowExecutionState) SetCreateRequestId(v string) {
+	x.xxx_hidden_CreateRequestId = v
+}
+
+func (x *WorkflowExecutionState) SetRunId(v string) {
+	x.xxx_hidden_RunId = v
+}
+
+func (x *WorkflowExecutionState) SetState(v v1.WorkflowExecutionState) {
+	x.xxx_hidden_State = v
+}
+
+func (x *WorkflowExecutionState) SetStatus(v v11.WorkflowExecutionStatus) {
+	x.xxx_hidden_Status = v
+}
+
+func (x *WorkflowExecutionState) SetLastUpdateVersionedTransition(v *VersionedTransition) {
+	x.xxx_hidden_LastUpdateVersionedTransition = v
+}
+
+func (x *WorkflowExecutionState) SetStartTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_StartTime = v
+}
+
+func (x *WorkflowExecutionState) SetRequestIds(v map[string]*RequestIDInfo) {
+	x.xxx_hidden_RequestIds = v
+}
+
+func (x *WorkflowExecutionState) HasLastUpdateVersionedTransition() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_LastUpdateVersionedTransition != nil
+}
+
+func (x *WorkflowExecutionState) HasStartTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_StartTime != nil
+}
+
+func (x *WorkflowExecutionState) ClearLastUpdateVersionedTransition() {
+	x.xxx_hidden_LastUpdateVersionedTransition = nil
+}
+
+func (x *WorkflowExecutionState) ClearStartTime() {
+	x.xxx_hidden_StartTime = nil
+}
+
+type WorkflowExecutionState_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	CreateRequestId               string
+	RunId                         string
+	State                         v1.WorkflowExecutionState
+	Status                        v11.WorkflowExecutionStatus
+	LastUpdateVersionedTransition *VersionedTransition
+	StartTime                     *timestamppb.Timestamp
+	// Request IDs that are attached to the workflow execution. It can the request ID that started
+	// the workflow execution or request IDs that were attached to an existing running workflow
+	// execution via StartWorkflowExecutionRequest.OnConflictOptions.
+	RequestIds map[string]*RequestIDInfo
+}
+
+func (b0 WorkflowExecutionState_builder) Build() *WorkflowExecutionState {
+	m0 := &WorkflowExecutionState{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_CreateRequestId = b.CreateRequestId
+	x.xxx_hidden_RunId = b.RunId
+	x.xxx_hidden_State = b.State
+	x.xxx_hidden_Status = b.Status
+	x.xxx_hidden_LastUpdateVersionedTransition = b.LastUpdateVersionedTransition
+	x.xxx_hidden_StartTime = b.StartTime
+	x.xxx_hidden_RequestIds = b.RequestIds
+	return m0
+}
+
 type RequestIDInfo struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	EventType     v11.EventType          `protobuf:"varint,1,opt,name=event_type,json=eventType,proto3,enum=temporal.api.enums.v1.EventType" json:"event_type,omitempty"`
-	EventId       int64                  `protobuf:"varint,2,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_EventType v11.EventType          `protobuf:"varint,1,opt,name=event_type,json=eventType,proto3,enum=temporal.api.enums.v1.EventType"`
+	xxx_hidden_EventId   int64                  `protobuf:"varint,2,opt,name=event_id,json=eventId,proto3"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *RequestIDInfo) Reset() {
@@ -1315,56 +2479,65 @@ func (x *RequestIDInfo) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RequestIDInfo.ProtoReflect.Descriptor instead.
-func (*RequestIDInfo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_executions_proto_rawDescGZIP(), []int{4}
-}
-
 func (x *RequestIDInfo) GetEventType() v11.EventType {
 	if x != nil {
-		return x.EventType
+		return x.xxx_hidden_EventType
 	}
 	return v11.EventType(0)
 }
 
 func (x *RequestIDInfo) GetEventId() int64 {
 	if x != nil {
-		return x.EventId
+		return x.xxx_hidden_EventId
 	}
 	return 0
 }
 
+func (x *RequestIDInfo) SetEventType(v v11.EventType) {
+	x.xxx_hidden_EventType = v
+}
+
+func (x *RequestIDInfo) SetEventId(v int64) {
+	x.xxx_hidden_EventId = v
+}
+
+type RequestIDInfo_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	EventType v11.EventType
+	EventId   int64
+}
+
+func (b0 RequestIDInfo_builder) Build() *RequestIDInfo {
+	m0 := &RequestIDInfo{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_EventType = b.EventType
+	x.xxx_hidden_EventId = b.EventId
+	return m0
+}
+
 // transfer column
 type TransferTaskInfo struct {
-	state                   protoimpl.MessageState `protogen:"open.v1"`
-	NamespaceId             string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	WorkflowId              string                 `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
-	RunId                   string                 `protobuf:"bytes,3,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	TaskType                v1.TaskType            `protobuf:"varint,4,opt,name=task_type,json=taskType,proto3,enum=temporal.server.api.enums.v1.TaskType" json:"task_type,omitempty"`
-	TargetNamespaceId       string                 `protobuf:"bytes,5,opt,name=target_namespace_id,json=targetNamespaceId,proto3" json:"target_namespace_id,omitempty"`
-	TargetWorkflowId        string                 `protobuf:"bytes,6,opt,name=target_workflow_id,json=targetWorkflowId,proto3" json:"target_workflow_id,omitempty"`
-	TargetRunId             string                 `protobuf:"bytes,7,opt,name=target_run_id,json=targetRunId,proto3" json:"target_run_id,omitempty"`
-	TaskQueue               string                 `protobuf:"bytes,8,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
-	TargetChildWorkflowOnly bool                   `protobuf:"varint,9,opt,name=target_child_workflow_only,json=targetChildWorkflowOnly,proto3" json:"target_child_workflow_only,omitempty"`
-	ScheduledEventId        int64                  `protobuf:"varint,10,opt,name=scheduled_event_id,json=scheduledEventId,proto3" json:"scheduled_event_id,omitempty"`
-	Version                 int64                  `protobuf:"varint,11,opt,name=version,proto3" json:"version,omitempty"`
-	TaskId                  int64                  `protobuf:"varint,12,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
-	VisibilityTime          *timestamppb.Timestamp `protobuf:"bytes,13,opt,name=visibility_time,json=visibilityTime,proto3" json:"visibility_time,omitempty"`
-	// (-- api-linter: core::0140::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: "after" is used to indicate sequence of actions. --)
-	DeleteAfterClose bool `protobuf:"varint,15,opt,name=delete_after_close,json=deleteAfterClose,proto3" json:"delete_after_close,omitempty"`
-	// Types that are valid to be assigned to TaskDetails:
-	//
-	//	*TransferTaskInfo_CloseExecutionTaskDetails_
-	//	*TransferTaskInfo_ChasmTaskInfo
-	TaskDetails isTransferTaskInfo_TaskDetails `protobuf_oneof:"task_details"`
-	// Stamp represents the "version" of the entity's internal state for which the transfer task was created.
-	// It increases monotonically when the entity's options are modified.
-	// It is used to check if a task is still relevant to the entity's corresponding state machine.
-	Stamp         int32 `protobuf:"varint,17,opt,name=stamp,proto3" json:"stamp,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                              protoimpl.MessageState         `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId             string                         `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_WorkflowId              string                         `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3"`
+	xxx_hidden_RunId                   string                         `protobuf:"bytes,3,opt,name=run_id,json=runId,proto3"`
+	xxx_hidden_TaskType                v1.TaskType                    `protobuf:"varint,4,opt,name=task_type,json=taskType,proto3,enum=temporal.server.api.enums.v1.TaskType"`
+	xxx_hidden_TargetNamespaceId       string                         `protobuf:"bytes,5,opt,name=target_namespace_id,json=targetNamespaceId,proto3"`
+	xxx_hidden_TargetWorkflowId        string                         `protobuf:"bytes,6,opt,name=target_workflow_id,json=targetWorkflowId,proto3"`
+	xxx_hidden_TargetRunId             string                         `protobuf:"bytes,7,opt,name=target_run_id,json=targetRunId,proto3"`
+	xxx_hidden_TaskQueue               string                         `protobuf:"bytes,8,opt,name=task_queue,json=taskQueue,proto3"`
+	xxx_hidden_TargetChildWorkflowOnly bool                           `protobuf:"varint,9,opt,name=target_child_workflow_only,json=targetChildWorkflowOnly,proto3"`
+	xxx_hidden_ScheduledEventId        int64                          `protobuf:"varint,10,opt,name=scheduled_event_id,json=scheduledEventId,proto3"`
+	xxx_hidden_Version                 int64                          `protobuf:"varint,11,opt,name=version,proto3"`
+	xxx_hidden_TaskId                  int64                          `protobuf:"varint,12,opt,name=task_id,json=taskId,proto3"`
+	xxx_hidden_VisibilityTime          *timestamppb.Timestamp         `protobuf:"bytes,13,opt,name=visibility_time,json=visibilityTime,proto3"`
+	xxx_hidden_DeleteAfterClose        bool                           `protobuf:"varint,15,opt,name=delete_after_close,json=deleteAfterClose,proto3"`
+	xxx_hidden_TaskDetails             isTransferTaskInfo_TaskDetails `protobuf_oneof:"task_details"`
+	xxx_hidden_Stamp                   int32                          `protobuf:"varint,17,opt,name=stamp,proto3"`
+	unknownFields                      protoimpl.UnknownFields
+	sizeCache                          protoimpl.SizeCache
 }
 
 func (x *TransferTaskInfo) Reset() {
@@ -1392,119 +2565,107 @@ func (x *TransferTaskInfo) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use TransferTaskInfo.ProtoReflect.Descriptor instead.
-func (*TransferTaskInfo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_executions_proto_rawDescGZIP(), []int{5}
-}
-
 func (x *TransferTaskInfo) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *TransferTaskInfo) GetWorkflowId() string {
 	if x != nil {
-		return x.WorkflowId
+		return x.xxx_hidden_WorkflowId
 	}
 	return ""
 }
 
 func (x *TransferTaskInfo) GetRunId() string {
 	if x != nil {
-		return x.RunId
+		return x.xxx_hidden_RunId
 	}
 	return ""
 }
 
 func (x *TransferTaskInfo) GetTaskType() v1.TaskType {
 	if x != nil {
-		return x.TaskType
+		return x.xxx_hidden_TaskType
 	}
 	return v1.TaskType(0)
 }
 
 func (x *TransferTaskInfo) GetTargetNamespaceId() string {
 	if x != nil {
-		return x.TargetNamespaceId
+		return x.xxx_hidden_TargetNamespaceId
 	}
 	return ""
 }
 
 func (x *TransferTaskInfo) GetTargetWorkflowId() string {
 	if x != nil {
-		return x.TargetWorkflowId
+		return x.xxx_hidden_TargetWorkflowId
 	}
 	return ""
 }
 
 func (x *TransferTaskInfo) GetTargetRunId() string {
 	if x != nil {
-		return x.TargetRunId
+		return x.xxx_hidden_TargetRunId
 	}
 	return ""
 }
 
 func (x *TransferTaskInfo) GetTaskQueue() string {
 	if x != nil {
-		return x.TaskQueue
+		return x.xxx_hidden_TaskQueue
 	}
 	return ""
 }
 
 func (x *TransferTaskInfo) GetTargetChildWorkflowOnly() bool {
 	if x != nil {
-		return x.TargetChildWorkflowOnly
+		return x.xxx_hidden_TargetChildWorkflowOnly
 	}
 	return false
 }
 
 func (x *TransferTaskInfo) GetScheduledEventId() int64 {
 	if x != nil {
-		return x.ScheduledEventId
+		return x.xxx_hidden_ScheduledEventId
 	}
 	return 0
 }
 
 func (x *TransferTaskInfo) GetVersion() int64 {
 	if x != nil {
-		return x.Version
+		return x.xxx_hidden_Version
 	}
 	return 0
 }
 
 func (x *TransferTaskInfo) GetTaskId() int64 {
 	if x != nil {
-		return x.TaskId
+		return x.xxx_hidden_TaskId
 	}
 	return 0
 }
 
 func (x *TransferTaskInfo) GetVisibilityTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.VisibilityTime
+		return x.xxx_hidden_VisibilityTime
 	}
 	return nil
 }
 
 func (x *TransferTaskInfo) GetDeleteAfterClose() bool {
 	if x != nil {
-		return x.DeleteAfterClose
+		return x.xxx_hidden_DeleteAfterClose
 	}
 	return false
 }
 
-func (x *TransferTaskInfo) GetTaskDetails() isTransferTaskInfo_TaskDetails {
-	if x != nil {
-		return x.TaskDetails
-	}
-	return nil
-}
-
 func (x *TransferTaskInfo) GetCloseExecutionTaskDetails() *TransferTaskInfo_CloseExecutionTaskDetails {
 	if x != nil {
-		if x, ok := x.TaskDetails.(*TransferTaskInfo_CloseExecutionTaskDetails_); ok {
+		if x, ok := x.xxx_hidden_TaskDetails.(*transferTaskInfo_CloseExecutionTaskDetails_); ok {
 			return x.CloseExecutionTaskDetails
 		}
 	}
@@ -1513,7 +2674,7 @@ func (x *TransferTaskInfo) GetCloseExecutionTaskDetails() *TransferTaskInfo_Clos
 
 func (x *TransferTaskInfo) GetChasmTaskInfo() *ChasmTaskInfo {
 	if x != nil {
-		if x, ok := x.TaskDetails.(*TransferTaskInfo_ChasmTaskInfo); ok {
+		if x, ok := x.xxx_hidden_TaskDetails.(*transferTaskInfo_ChasmTaskInfo); ok {
 			return x.ChasmTaskInfo
 		}
 	}
@@ -1522,59 +2683,273 @@ func (x *TransferTaskInfo) GetChasmTaskInfo() *ChasmTaskInfo {
 
 func (x *TransferTaskInfo) GetStamp() int32 {
 	if x != nil {
-		return x.Stamp
+		return x.xxx_hidden_Stamp
 	}
 	return 0
+}
+
+func (x *TransferTaskInfo) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *TransferTaskInfo) SetWorkflowId(v string) {
+	x.xxx_hidden_WorkflowId = v
+}
+
+func (x *TransferTaskInfo) SetRunId(v string) {
+	x.xxx_hidden_RunId = v
+}
+
+func (x *TransferTaskInfo) SetTaskType(v v1.TaskType) {
+	x.xxx_hidden_TaskType = v
+}
+
+func (x *TransferTaskInfo) SetTargetNamespaceId(v string) {
+	x.xxx_hidden_TargetNamespaceId = v
+}
+
+func (x *TransferTaskInfo) SetTargetWorkflowId(v string) {
+	x.xxx_hidden_TargetWorkflowId = v
+}
+
+func (x *TransferTaskInfo) SetTargetRunId(v string) {
+	x.xxx_hidden_TargetRunId = v
+}
+
+func (x *TransferTaskInfo) SetTaskQueue(v string) {
+	x.xxx_hidden_TaskQueue = v
+}
+
+func (x *TransferTaskInfo) SetTargetChildWorkflowOnly(v bool) {
+	x.xxx_hidden_TargetChildWorkflowOnly = v
+}
+
+func (x *TransferTaskInfo) SetScheduledEventId(v int64) {
+	x.xxx_hidden_ScheduledEventId = v
+}
+
+func (x *TransferTaskInfo) SetVersion(v int64) {
+	x.xxx_hidden_Version = v
+}
+
+func (x *TransferTaskInfo) SetTaskId(v int64) {
+	x.xxx_hidden_TaskId = v
+}
+
+func (x *TransferTaskInfo) SetVisibilityTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_VisibilityTime = v
+}
+
+func (x *TransferTaskInfo) SetDeleteAfterClose(v bool) {
+	x.xxx_hidden_DeleteAfterClose = v
+}
+
+func (x *TransferTaskInfo) SetCloseExecutionTaskDetails(v *TransferTaskInfo_CloseExecutionTaskDetails) {
+	if v == nil {
+		x.xxx_hidden_TaskDetails = nil
+		return
+	}
+	x.xxx_hidden_TaskDetails = &transferTaskInfo_CloseExecutionTaskDetails_{v}
+}
+
+func (x *TransferTaskInfo) SetChasmTaskInfo(v *ChasmTaskInfo) {
+	if v == nil {
+		x.xxx_hidden_TaskDetails = nil
+		return
+	}
+	x.xxx_hidden_TaskDetails = &transferTaskInfo_ChasmTaskInfo{v}
+}
+
+func (x *TransferTaskInfo) SetStamp(v int32) {
+	x.xxx_hidden_Stamp = v
+}
+
+func (x *TransferTaskInfo) HasVisibilityTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_VisibilityTime != nil
+}
+
+func (x *TransferTaskInfo) HasTaskDetails() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_TaskDetails != nil
+}
+
+func (x *TransferTaskInfo) HasCloseExecutionTaskDetails() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_TaskDetails.(*transferTaskInfo_CloseExecutionTaskDetails_)
+	return ok
+}
+
+func (x *TransferTaskInfo) HasChasmTaskInfo() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_TaskDetails.(*transferTaskInfo_ChasmTaskInfo)
+	return ok
+}
+
+func (x *TransferTaskInfo) ClearVisibilityTime() {
+	x.xxx_hidden_VisibilityTime = nil
+}
+
+func (x *TransferTaskInfo) ClearTaskDetails() {
+	x.xxx_hidden_TaskDetails = nil
+}
+
+func (x *TransferTaskInfo) ClearCloseExecutionTaskDetails() {
+	if _, ok := x.xxx_hidden_TaskDetails.(*transferTaskInfo_CloseExecutionTaskDetails_); ok {
+		x.xxx_hidden_TaskDetails = nil
+	}
+}
+
+func (x *TransferTaskInfo) ClearChasmTaskInfo() {
+	if _, ok := x.xxx_hidden_TaskDetails.(*transferTaskInfo_ChasmTaskInfo); ok {
+		x.xxx_hidden_TaskDetails = nil
+	}
+}
+
+const TransferTaskInfo_TaskDetails_not_set_case case_TransferTaskInfo_TaskDetails = 0
+const TransferTaskInfo_CloseExecutionTaskDetails_case case_TransferTaskInfo_TaskDetails = 16
+const TransferTaskInfo_ChasmTaskInfo_case case_TransferTaskInfo_TaskDetails = 18
+
+func (x *TransferTaskInfo) WhichTaskDetails() case_TransferTaskInfo_TaskDetails {
+	if x == nil {
+		return TransferTaskInfo_TaskDetails_not_set_case
+	}
+	switch x.xxx_hidden_TaskDetails.(type) {
+	case *transferTaskInfo_CloseExecutionTaskDetails_:
+		return TransferTaskInfo_CloseExecutionTaskDetails_case
+	case *transferTaskInfo_ChasmTaskInfo:
+		return TransferTaskInfo_ChasmTaskInfo_case
+	default:
+		return TransferTaskInfo_TaskDetails_not_set_case
+	}
+}
+
+type TransferTaskInfo_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId             string
+	WorkflowId              string
+	RunId                   string
+	TaskType                v1.TaskType
+	TargetNamespaceId       string
+	TargetWorkflowId        string
+	TargetRunId             string
+	TaskQueue               string
+	TargetChildWorkflowOnly bool
+	ScheduledEventId        int64
+	Version                 int64
+	TaskId                  int64
+	VisibilityTime          *timestamppb.Timestamp
+	// (-- api-linter: core::0140::prepositions=disabled
+	//
+	//	aip.dev/not-precedent: "after" is used to indicate sequence of actions. --)
+	DeleteAfterClose bool
+	// Fields of oneof xxx_hidden_TaskDetails:
+	CloseExecutionTaskDetails *TransferTaskInfo_CloseExecutionTaskDetails
+	// If the task addresses a CHASM component, this field will be set.
+	ChasmTaskInfo *ChasmTaskInfo
+	// -- end of xxx_hidden_TaskDetails
+	// Stamp represents the "version" of the entity's internal state for which the transfer task was created.
+	// It increases monotonically when the entity's options are modified.
+	// It is used to check if a task is still relevant to the entity's corresponding state machine.
+	Stamp int32
+}
+
+func (b0 TransferTaskInfo_builder) Build() *TransferTaskInfo {
+	m0 := &TransferTaskInfo{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_WorkflowId = b.WorkflowId
+	x.xxx_hidden_RunId = b.RunId
+	x.xxx_hidden_TaskType = b.TaskType
+	x.xxx_hidden_TargetNamespaceId = b.TargetNamespaceId
+	x.xxx_hidden_TargetWorkflowId = b.TargetWorkflowId
+	x.xxx_hidden_TargetRunId = b.TargetRunId
+	x.xxx_hidden_TaskQueue = b.TaskQueue
+	x.xxx_hidden_TargetChildWorkflowOnly = b.TargetChildWorkflowOnly
+	x.xxx_hidden_ScheduledEventId = b.ScheduledEventId
+	x.xxx_hidden_Version = b.Version
+	x.xxx_hidden_TaskId = b.TaskId
+	x.xxx_hidden_VisibilityTime = b.VisibilityTime
+	x.xxx_hidden_DeleteAfterClose = b.DeleteAfterClose
+	if b.CloseExecutionTaskDetails != nil {
+		x.xxx_hidden_TaskDetails = &transferTaskInfo_CloseExecutionTaskDetails_{b.CloseExecutionTaskDetails}
+	}
+	if b.ChasmTaskInfo != nil {
+		x.xxx_hidden_TaskDetails = &transferTaskInfo_ChasmTaskInfo{b.ChasmTaskInfo}
+	}
+	x.xxx_hidden_Stamp = b.Stamp
+	return m0
+}
+
+type case_TransferTaskInfo_TaskDetails protoreflect.FieldNumber
+
+func (x case_TransferTaskInfo_TaskDetails) String() string {
+	switch x {
+	case TransferTaskInfo_TaskDetails_not_set_case:
+		return "TransferTaskInfoTaskDetailsNotSetCase"
+	case TransferTaskInfo_CloseExecutionTaskDetails_case:
+		return "TransferTaskInfoCloseExecutionTaskDetailsCase"
+	case TransferTaskInfo_ChasmTaskInfo_case:
+		return "TransferTaskInfoChasmTaskInfoCase"
+	default:
+		return strconv.Itoa(int(x))
+	}
+
 }
 
 type isTransferTaskInfo_TaskDetails interface {
 	isTransferTaskInfo_TaskDetails()
 }
 
-type TransferTaskInfo_CloseExecutionTaskDetails_ struct {
+type transferTaskInfo_CloseExecutionTaskDetails_ struct {
 	CloseExecutionTaskDetails *TransferTaskInfo_CloseExecutionTaskDetails `protobuf:"bytes,16,opt,name=close_execution_task_details,json=closeExecutionTaskDetails,proto3,oneof"`
 }
 
-type TransferTaskInfo_ChasmTaskInfo struct {
+type transferTaskInfo_ChasmTaskInfo struct {
 	// If the task addresses a CHASM component, this field will be set.
 	ChasmTaskInfo *ChasmTaskInfo `protobuf:"bytes,18,opt,name=chasm_task_info,json=chasmTaskInfo,proto3,oneof"`
 }
 
-func (*TransferTaskInfo_CloseExecutionTaskDetails_) isTransferTaskInfo_TaskDetails() {}
+func (*transferTaskInfo_CloseExecutionTaskDetails_) isTransferTaskInfo_TaskDetails() {}
 
-func (*TransferTaskInfo_ChasmTaskInfo) isTransferTaskInfo_TaskDetails() {}
+func (*transferTaskInfo_ChasmTaskInfo) isTransferTaskInfo_TaskDetails() {}
 
 // replication column
 type ReplicationTaskInfo struct {
-	state               protoimpl.MessageState `protogen:"open.v1"`
-	NamespaceId         string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	WorkflowId          string                 `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
-	RunId               string                 `protobuf:"bytes,3,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	TaskType            v1.TaskType            `protobuf:"varint,4,opt,name=task_type,json=taskType,proto3,enum=temporal.server.api.enums.v1.TaskType" json:"task_type,omitempty"`
-	Version             int64                  `protobuf:"varint,5,opt,name=version,proto3" json:"version,omitempty"`
-	FirstEventId        int64                  `protobuf:"varint,6,opt,name=first_event_id,json=firstEventId,proto3" json:"first_event_id,omitempty"`
-	NextEventId         int64                  `protobuf:"varint,7,opt,name=next_event_id,json=nextEventId,proto3" json:"next_event_id,omitempty"`
-	ScheduledEventId    int64                  `protobuf:"varint,8,opt,name=scheduled_event_id,json=scheduledEventId,proto3" json:"scheduled_event_id,omitempty"`
-	BranchToken         []byte                 `protobuf:"bytes,11,opt,name=branch_token,json=branchToken,proto3" json:"branch_token,omitempty"`
-	NewRunBranchToken   []byte                 `protobuf:"bytes,13,opt,name=new_run_branch_token,json=newRunBranchToken,proto3" json:"new_run_branch_token,omitempty"`
-	TaskId              int64                  `protobuf:"varint,15,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
-	VisibilityTime      *timestamppb.Timestamp `protobuf:"bytes,16,opt,name=visibility_time,json=visibilityTime,proto3" json:"visibility_time,omitempty"`
-	NewRunId            string                 `protobuf:"bytes,17,opt,name=new_run_id,json=newRunId,proto3" json:"new_run_id,omitempty"`
-	Priority            v1.TaskPriority        `protobuf:"varint,18,opt,name=priority,proto3,enum=temporal.server.api.enums.v1.TaskPriority" json:"priority,omitempty"`
-	VersionedTransition *VersionedTransition   `protobuf:"bytes,19,opt,name=versioned_transition,json=versionedTransition,proto3" json:"versioned_transition,omitempty"`
-	// A list of event-based replication tasks that, together, are equivalent
-	// to this state-based task.
-	// TODO: Remove this field when state-based replication is stable and
-	// doesn't need to be disabled.
-	TaskEquivalents        []*ReplicationTaskInfo  `protobuf:"bytes,20,rep,name=task_equivalents,json=taskEquivalents,proto3" json:"task_equivalents,omitempty"`
-	LastVersionHistoryItem *v14.VersionHistoryItem `protobuf:"bytes,21,opt,name=last_version_history_item,json=lastVersionHistoryItem,proto3" json:"last_version_history_item,omitempty"`
-	IsFirstTask            bool                    `protobuf:"varint,22,opt,name=is_first_task,json=isFirstTask,proto3" json:"is_first_task,omitempty"`
-	TargetClusters         []string                `protobuf:"bytes,23,rep,name=target_clusters,json=targetClusters,proto3" json:"target_clusters,omitempty"`
-	IsForceReplication     bool                    `protobuf:"varint,24,opt,name=is_force_replication,json=isForceReplication,proto3" json:"is_force_replication,omitempty"`
-	// (-- api-linter: core::0141::forbidden-types=disabled --)
-	ArchetypeId   uint32 `protobuf:"varint,25,opt,name=archetype_id,json=archetypeId,proto3" json:"archetype_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                             protoimpl.MessageState  `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId            string                  `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_WorkflowId             string                  `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3"`
+	xxx_hidden_RunId                  string                  `protobuf:"bytes,3,opt,name=run_id,json=runId,proto3"`
+	xxx_hidden_TaskType               v1.TaskType             `protobuf:"varint,4,opt,name=task_type,json=taskType,proto3,enum=temporal.server.api.enums.v1.TaskType"`
+	xxx_hidden_Version                int64                   `protobuf:"varint,5,opt,name=version,proto3"`
+	xxx_hidden_FirstEventId           int64                   `protobuf:"varint,6,opt,name=first_event_id,json=firstEventId,proto3"`
+	xxx_hidden_NextEventId            int64                   `protobuf:"varint,7,opt,name=next_event_id,json=nextEventId,proto3"`
+	xxx_hidden_ScheduledEventId       int64                   `protobuf:"varint,8,opt,name=scheduled_event_id,json=scheduledEventId,proto3"`
+	xxx_hidden_BranchToken            []byte                  `protobuf:"bytes,11,opt,name=branch_token,json=branchToken,proto3"`
+	xxx_hidden_NewRunBranchToken      []byte                  `protobuf:"bytes,13,opt,name=new_run_branch_token,json=newRunBranchToken,proto3"`
+	xxx_hidden_TaskId                 int64                   `protobuf:"varint,15,opt,name=task_id,json=taskId,proto3"`
+	xxx_hidden_VisibilityTime         *timestamppb.Timestamp  `protobuf:"bytes,16,opt,name=visibility_time,json=visibilityTime,proto3"`
+	xxx_hidden_NewRunId               string                  `protobuf:"bytes,17,opt,name=new_run_id,json=newRunId,proto3"`
+	xxx_hidden_Priority               v1.TaskPriority         `protobuf:"varint,18,opt,name=priority,proto3,enum=temporal.server.api.enums.v1.TaskPriority"`
+	xxx_hidden_VersionedTransition    *VersionedTransition    `protobuf:"bytes,19,opt,name=versioned_transition,json=versionedTransition,proto3"`
+	xxx_hidden_TaskEquivalents        *[]*ReplicationTaskInfo `protobuf:"bytes,20,rep,name=task_equivalents,json=taskEquivalents,proto3"`
+	xxx_hidden_LastVersionHistoryItem *v14.VersionHistoryItem `protobuf:"bytes,21,opt,name=last_version_history_item,json=lastVersionHistoryItem,proto3"`
+	xxx_hidden_IsFirstTask            bool                    `protobuf:"varint,22,opt,name=is_first_task,json=isFirstTask,proto3"`
+	xxx_hidden_TargetClusters         []string                `protobuf:"bytes,23,rep,name=target_clusters,json=targetClusters,proto3"`
+	xxx_hidden_IsForceReplication     bool                    `protobuf:"varint,24,opt,name=is_force_replication,json=isForceReplication,proto3"`
+	xxx_hidden_ArchetypeId            uint32                  `protobuf:"varint,25,opt,name=archetype_id,json=archetypeId,proto3"`
+	unknownFields                     protoimpl.UnknownFields
+	sizeCache                         protoimpl.SizeCache
 }
 
 func (x *ReplicationTaskInfo) Reset() {
@@ -1602,176 +2977,352 @@ func (x *ReplicationTaskInfo) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ReplicationTaskInfo.ProtoReflect.Descriptor instead.
-func (*ReplicationTaskInfo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_executions_proto_rawDescGZIP(), []int{6}
-}
-
 func (x *ReplicationTaskInfo) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *ReplicationTaskInfo) GetWorkflowId() string {
 	if x != nil {
-		return x.WorkflowId
+		return x.xxx_hidden_WorkflowId
 	}
 	return ""
 }
 
 func (x *ReplicationTaskInfo) GetRunId() string {
 	if x != nil {
-		return x.RunId
+		return x.xxx_hidden_RunId
 	}
 	return ""
 }
 
 func (x *ReplicationTaskInfo) GetTaskType() v1.TaskType {
 	if x != nil {
-		return x.TaskType
+		return x.xxx_hidden_TaskType
 	}
 	return v1.TaskType(0)
 }
 
 func (x *ReplicationTaskInfo) GetVersion() int64 {
 	if x != nil {
-		return x.Version
+		return x.xxx_hidden_Version
 	}
 	return 0
 }
 
 func (x *ReplicationTaskInfo) GetFirstEventId() int64 {
 	if x != nil {
-		return x.FirstEventId
+		return x.xxx_hidden_FirstEventId
 	}
 	return 0
 }
 
 func (x *ReplicationTaskInfo) GetNextEventId() int64 {
 	if x != nil {
-		return x.NextEventId
+		return x.xxx_hidden_NextEventId
 	}
 	return 0
 }
 
 func (x *ReplicationTaskInfo) GetScheduledEventId() int64 {
 	if x != nil {
-		return x.ScheduledEventId
+		return x.xxx_hidden_ScheduledEventId
 	}
 	return 0
 }
 
 func (x *ReplicationTaskInfo) GetBranchToken() []byte {
 	if x != nil {
-		return x.BranchToken
+		return x.xxx_hidden_BranchToken
 	}
 	return nil
 }
 
 func (x *ReplicationTaskInfo) GetNewRunBranchToken() []byte {
 	if x != nil {
-		return x.NewRunBranchToken
+		return x.xxx_hidden_NewRunBranchToken
 	}
 	return nil
 }
 
 func (x *ReplicationTaskInfo) GetTaskId() int64 {
 	if x != nil {
-		return x.TaskId
+		return x.xxx_hidden_TaskId
 	}
 	return 0
 }
 
 func (x *ReplicationTaskInfo) GetVisibilityTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.VisibilityTime
+		return x.xxx_hidden_VisibilityTime
 	}
 	return nil
 }
 
 func (x *ReplicationTaskInfo) GetNewRunId() string {
 	if x != nil {
-		return x.NewRunId
+		return x.xxx_hidden_NewRunId
 	}
 	return ""
 }
 
 func (x *ReplicationTaskInfo) GetPriority() v1.TaskPriority {
 	if x != nil {
-		return x.Priority
+		return x.xxx_hidden_Priority
 	}
 	return v1.TaskPriority(0)
 }
 
 func (x *ReplicationTaskInfo) GetVersionedTransition() *VersionedTransition {
 	if x != nil {
-		return x.VersionedTransition
+		return x.xxx_hidden_VersionedTransition
 	}
 	return nil
 }
 
 func (x *ReplicationTaskInfo) GetTaskEquivalents() []*ReplicationTaskInfo {
 	if x != nil {
-		return x.TaskEquivalents
+		if x.xxx_hidden_TaskEquivalents != nil {
+			return *x.xxx_hidden_TaskEquivalents
+		}
 	}
 	return nil
 }
 
 func (x *ReplicationTaskInfo) GetLastVersionHistoryItem() *v14.VersionHistoryItem {
 	if x != nil {
-		return x.LastVersionHistoryItem
+		return x.xxx_hidden_LastVersionHistoryItem
 	}
 	return nil
 }
 
 func (x *ReplicationTaskInfo) GetIsFirstTask() bool {
 	if x != nil {
-		return x.IsFirstTask
+		return x.xxx_hidden_IsFirstTask
 	}
 	return false
 }
 
 func (x *ReplicationTaskInfo) GetTargetClusters() []string {
 	if x != nil {
-		return x.TargetClusters
+		return x.xxx_hidden_TargetClusters
 	}
 	return nil
 }
 
 func (x *ReplicationTaskInfo) GetIsForceReplication() bool {
 	if x != nil {
-		return x.IsForceReplication
+		return x.xxx_hidden_IsForceReplication
 	}
 	return false
 }
 
 func (x *ReplicationTaskInfo) GetArchetypeId() uint32 {
 	if x != nil {
-		return x.ArchetypeId
+		return x.xxx_hidden_ArchetypeId
 	}
 	return 0
 }
 
+func (x *ReplicationTaskInfo) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *ReplicationTaskInfo) SetWorkflowId(v string) {
+	x.xxx_hidden_WorkflowId = v
+}
+
+func (x *ReplicationTaskInfo) SetRunId(v string) {
+	x.xxx_hidden_RunId = v
+}
+
+func (x *ReplicationTaskInfo) SetTaskType(v v1.TaskType) {
+	x.xxx_hidden_TaskType = v
+}
+
+func (x *ReplicationTaskInfo) SetVersion(v int64) {
+	x.xxx_hidden_Version = v
+}
+
+func (x *ReplicationTaskInfo) SetFirstEventId(v int64) {
+	x.xxx_hidden_FirstEventId = v
+}
+
+func (x *ReplicationTaskInfo) SetNextEventId(v int64) {
+	x.xxx_hidden_NextEventId = v
+}
+
+func (x *ReplicationTaskInfo) SetScheduledEventId(v int64) {
+	x.xxx_hidden_ScheduledEventId = v
+}
+
+func (x *ReplicationTaskInfo) SetBranchToken(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_BranchToken = v
+}
+
+func (x *ReplicationTaskInfo) SetNewRunBranchToken(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_NewRunBranchToken = v
+}
+
+func (x *ReplicationTaskInfo) SetTaskId(v int64) {
+	x.xxx_hidden_TaskId = v
+}
+
+func (x *ReplicationTaskInfo) SetVisibilityTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_VisibilityTime = v
+}
+
+func (x *ReplicationTaskInfo) SetNewRunId(v string) {
+	x.xxx_hidden_NewRunId = v
+}
+
+func (x *ReplicationTaskInfo) SetPriority(v v1.TaskPriority) {
+	x.xxx_hidden_Priority = v
+}
+
+func (x *ReplicationTaskInfo) SetVersionedTransition(v *VersionedTransition) {
+	x.xxx_hidden_VersionedTransition = v
+}
+
+func (x *ReplicationTaskInfo) SetTaskEquivalents(v []*ReplicationTaskInfo) {
+	x.xxx_hidden_TaskEquivalents = &v
+}
+
+func (x *ReplicationTaskInfo) SetLastVersionHistoryItem(v *v14.VersionHistoryItem) {
+	x.xxx_hidden_LastVersionHistoryItem = v
+}
+
+func (x *ReplicationTaskInfo) SetIsFirstTask(v bool) {
+	x.xxx_hidden_IsFirstTask = v
+}
+
+func (x *ReplicationTaskInfo) SetTargetClusters(v []string) {
+	x.xxx_hidden_TargetClusters = v
+}
+
+func (x *ReplicationTaskInfo) SetIsForceReplication(v bool) {
+	x.xxx_hidden_IsForceReplication = v
+}
+
+func (x *ReplicationTaskInfo) SetArchetypeId(v uint32) {
+	x.xxx_hidden_ArchetypeId = v
+}
+
+func (x *ReplicationTaskInfo) HasVisibilityTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_VisibilityTime != nil
+}
+
+func (x *ReplicationTaskInfo) HasVersionedTransition() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_VersionedTransition != nil
+}
+
+func (x *ReplicationTaskInfo) HasLastVersionHistoryItem() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_LastVersionHistoryItem != nil
+}
+
+func (x *ReplicationTaskInfo) ClearVisibilityTime() {
+	x.xxx_hidden_VisibilityTime = nil
+}
+
+func (x *ReplicationTaskInfo) ClearVersionedTransition() {
+	x.xxx_hidden_VersionedTransition = nil
+}
+
+func (x *ReplicationTaskInfo) ClearLastVersionHistoryItem() {
+	x.xxx_hidden_LastVersionHistoryItem = nil
+}
+
+type ReplicationTaskInfo_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId         string
+	WorkflowId          string
+	RunId               string
+	TaskType            v1.TaskType
+	Version             int64
+	FirstEventId        int64
+	NextEventId         int64
+	ScheduledEventId    int64
+	BranchToken         []byte
+	NewRunBranchToken   []byte
+	TaskId              int64
+	VisibilityTime      *timestamppb.Timestamp
+	NewRunId            string
+	Priority            v1.TaskPriority
+	VersionedTransition *VersionedTransition
+	// A list of event-based replication tasks that, together, are equivalent
+	// to this state-based task.
+	// TODO: Remove this field when state-based replication is stable and
+	// doesn't need to be disabled.
+	TaskEquivalents        []*ReplicationTaskInfo
+	LastVersionHistoryItem *v14.VersionHistoryItem
+	IsFirstTask            bool
+	TargetClusters         []string
+	IsForceReplication     bool
+	// (-- api-linter: core::0141::forbidden-types=disabled --)
+	ArchetypeId uint32
+}
+
+func (b0 ReplicationTaskInfo_builder) Build() *ReplicationTaskInfo {
+	m0 := &ReplicationTaskInfo{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_WorkflowId = b.WorkflowId
+	x.xxx_hidden_RunId = b.RunId
+	x.xxx_hidden_TaskType = b.TaskType
+	x.xxx_hidden_Version = b.Version
+	x.xxx_hidden_FirstEventId = b.FirstEventId
+	x.xxx_hidden_NextEventId = b.NextEventId
+	x.xxx_hidden_ScheduledEventId = b.ScheduledEventId
+	x.xxx_hidden_BranchToken = b.BranchToken
+	x.xxx_hidden_NewRunBranchToken = b.NewRunBranchToken
+	x.xxx_hidden_TaskId = b.TaskId
+	x.xxx_hidden_VisibilityTime = b.VisibilityTime
+	x.xxx_hidden_NewRunId = b.NewRunId
+	x.xxx_hidden_Priority = b.Priority
+	x.xxx_hidden_VersionedTransition = b.VersionedTransition
+	x.xxx_hidden_TaskEquivalents = &b.TaskEquivalents
+	x.xxx_hidden_LastVersionHistoryItem = b.LastVersionHistoryItem
+	x.xxx_hidden_IsFirstTask = b.IsFirstTask
+	x.xxx_hidden_TargetClusters = b.TargetClusters
+	x.xxx_hidden_IsForceReplication = b.IsForceReplication
+	x.xxx_hidden_ArchetypeId = b.ArchetypeId
+	return m0
+}
+
 // visibility_task_data column
 type VisibilityTaskInfo struct {
-	state                 protoimpl.MessageState `protogen:"open.v1"`
-	NamespaceId           string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	WorkflowId            string                 `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
-	RunId                 string                 `protobuf:"bytes,3,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	TaskType              v1.TaskType            `protobuf:"varint,4,opt,name=task_type,json=taskType,proto3,enum=temporal.server.api.enums.v1.TaskType" json:"task_type,omitempty"`
-	Version               int64                  `protobuf:"varint,5,opt,name=version,proto3" json:"version,omitempty"`
-	TaskId                int64                  `protobuf:"varint,6,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
-	VisibilityTime        *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=visibility_time,json=visibilityTime,proto3" json:"visibility_time,omitempty"`
-	CloseVisibilityTaskId int64                  `protobuf:"varint,10,opt,name=close_visibility_task_id,json=closeVisibilityTaskId,proto3" json:"close_visibility_task_id,omitempty"`
-	CloseTime             *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=close_time,json=closeTime,proto3" json:"close_time,omitempty"`
-	// Types that are valid to be assigned to TaskDetails:
-	//
-	//	*VisibilityTaskInfo_ChasmTaskInfo
-	TaskDetails   isVisibilityTaskInfo_TaskDetails `protobuf_oneof:"task_details"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                            protoimpl.MessageState           `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId           string                           `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_WorkflowId            string                           `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3"`
+	xxx_hidden_RunId                 string                           `protobuf:"bytes,3,opt,name=run_id,json=runId,proto3"`
+	xxx_hidden_TaskType              v1.TaskType                      `protobuf:"varint,4,opt,name=task_type,json=taskType,proto3,enum=temporal.server.api.enums.v1.TaskType"`
+	xxx_hidden_Version               int64                            `protobuf:"varint,5,opt,name=version,proto3"`
+	xxx_hidden_TaskId                int64                            `protobuf:"varint,6,opt,name=task_id,json=taskId,proto3"`
+	xxx_hidden_VisibilityTime        *timestamppb.Timestamp           `protobuf:"bytes,7,opt,name=visibility_time,json=visibilityTime,proto3"`
+	xxx_hidden_CloseVisibilityTaskId int64                            `protobuf:"varint,10,opt,name=close_visibility_task_id,json=closeVisibilityTaskId,proto3"`
+	xxx_hidden_CloseTime             *timestamppb.Timestamp           `protobuf:"bytes,11,opt,name=close_time,json=closeTime,proto3"`
+	xxx_hidden_TaskDetails           isVisibilityTaskInfo_TaskDetails `protobuf_oneof:"task_details"`
+	unknownFields                    protoimpl.UnknownFields
+	sizeCache                        protoimpl.SizeCache
 }
 
 func (x *VisibilityTaskInfo) Reset() {
@@ -1799,135 +3350,268 @@ func (x *VisibilityTaskInfo) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use VisibilityTaskInfo.ProtoReflect.Descriptor instead.
-func (*VisibilityTaskInfo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_executions_proto_rawDescGZIP(), []int{7}
-}
-
 func (x *VisibilityTaskInfo) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *VisibilityTaskInfo) GetWorkflowId() string {
 	if x != nil {
-		return x.WorkflowId
+		return x.xxx_hidden_WorkflowId
 	}
 	return ""
 }
 
 func (x *VisibilityTaskInfo) GetRunId() string {
 	if x != nil {
-		return x.RunId
+		return x.xxx_hidden_RunId
 	}
 	return ""
 }
 
 func (x *VisibilityTaskInfo) GetTaskType() v1.TaskType {
 	if x != nil {
-		return x.TaskType
+		return x.xxx_hidden_TaskType
 	}
 	return v1.TaskType(0)
 }
 
 func (x *VisibilityTaskInfo) GetVersion() int64 {
 	if x != nil {
-		return x.Version
+		return x.xxx_hidden_Version
 	}
 	return 0
 }
 
 func (x *VisibilityTaskInfo) GetTaskId() int64 {
 	if x != nil {
-		return x.TaskId
+		return x.xxx_hidden_TaskId
 	}
 	return 0
 }
 
 func (x *VisibilityTaskInfo) GetVisibilityTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.VisibilityTime
+		return x.xxx_hidden_VisibilityTime
 	}
 	return nil
 }
 
 func (x *VisibilityTaskInfo) GetCloseVisibilityTaskId() int64 {
 	if x != nil {
-		return x.CloseVisibilityTaskId
+		return x.xxx_hidden_CloseVisibilityTaskId
 	}
 	return 0
 }
 
 func (x *VisibilityTaskInfo) GetCloseTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.CloseTime
-	}
-	return nil
-}
-
-func (x *VisibilityTaskInfo) GetTaskDetails() isVisibilityTaskInfo_TaskDetails {
-	if x != nil {
-		return x.TaskDetails
+		return x.xxx_hidden_CloseTime
 	}
 	return nil
 }
 
 func (x *VisibilityTaskInfo) GetChasmTaskInfo() *ChasmTaskInfo {
 	if x != nil {
-		if x, ok := x.TaskDetails.(*VisibilityTaskInfo_ChasmTaskInfo); ok {
+		if x, ok := x.xxx_hidden_TaskDetails.(*visibilityTaskInfo_ChasmTaskInfo); ok {
 			return x.ChasmTaskInfo
 		}
 	}
 	return nil
 }
 
+func (x *VisibilityTaskInfo) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *VisibilityTaskInfo) SetWorkflowId(v string) {
+	x.xxx_hidden_WorkflowId = v
+}
+
+func (x *VisibilityTaskInfo) SetRunId(v string) {
+	x.xxx_hidden_RunId = v
+}
+
+func (x *VisibilityTaskInfo) SetTaskType(v v1.TaskType) {
+	x.xxx_hidden_TaskType = v
+}
+
+func (x *VisibilityTaskInfo) SetVersion(v int64) {
+	x.xxx_hidden_Version = v
+}
+
+func (x *VisibilityTaskInfo) SetTaskId(v int64) {
+	x.xxx_hidden_TaskId = v
+}
+
+func (x *VisibilityTaskInfo) SetVisibilityTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_VisibilityTime = v
+}
+
+func (x *VisibilityTaskInfo) SetCloseVisibilityTaskId(v int64) {
+	x.xxx_hidden_CloseVisibilityTaskId = v
+}
+
+func (x *VisibilityTaskInfo) SetCloseTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_CloseTime = v
+}
+
+func (x *VisibilityTaskInfo) SetChasmTaskInfo(v *ChasmTaskInfo) {
+	if v == nil {
+		x.xxx_hidden_TaskDetails = nil
+		return
+	}
+	x.xxx_hidden_TaskDetails = &visibilityTaskInfo_ChasmTaskInfo{v}
+}
+
+func (x *VisibilityTaskInfo) HasVisibilityTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_VisibilityTime != nil
+}
+
+func (x *VisibilityTaskInfo) HasCloseTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_CloseTime != nil
+}
+
+func (x *VisibilityTaskInfo) HasTaskDetails() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_TaskDetails != nil
+}
+
+func (x *VisibilityTaskInfo) HasChasmTaskInfo() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_TaskDetails.(*visibilityTaskInfo_ChasmTaskInfo)
+	return ok
+}
+
+func (x *VisibilityTaskInfo) ClearVisibilityTime() {
+	x.xxx_hidden_VisibilityTime = nil
+}
+
+func (x *VisibilityTaskInfo) ClearCloseTime() {
+	x.xxx_hidden_CloseTime = nil
+}
+
+func (x *VisibilityTaskInfo) ClearTaskDetails() {
+	x.xxx_hidden_TaskDetails = nil
+}
+
+func (x *VisibilityTaskInfo) ClearChasmTaskInfo() {
+	if _, ok := x.xxx_hidden_TaskDetails.(*visibilityTaskInfo_ChasmTaskInfo); ok {
+		x.xxx_hidden_TaskDetails = nil
+	}
+}
+
+const VisibilityTaskInfo_TaskDetails_not_set_case case_VisibilityTaskInfo_TaskDetails = 0
+const VisibilityTaskInfo_ChasmTaskInfo_case case_VisibilityTaskInfo_TaskDetails = 12
+
+func (x *VisibilityTaskInfo) WhichTaskDetails() case_VisibilityTaskInfo_TaskDetails {
+	if x == nil {
+		return VisibilityTaskInfo_TaskDetails_not_set_case
+	}
+	switch x.xxx_hidden_TaskDetails.(type) {
+	case *visibilityTaskInfo_ChasmTaskInfo:
+		return VisibilityTaskInfo_ChasmTaskInfo_case
+	default:
+		return VisibilityTaskInfo_TaskDetails_not_set_case
+	}
+}
+
+type VisibilityTaskInfo_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId           string
+	WorkflowId            string
+	RunId                 string
+	TaskType              v1.TaskType
+	Version               int64
+	TaskId                int64
+	VisibilityTime        *timestamppb.Timestamp
+	CloseVisibilityTaskId int64
+	CloseTime             *timestamppb.Timestamp
+	// Fields of oneof xxx_hidden_TaskDetails:
+	// If the task addresses a CHASM component, this field will be set.
+	ChasmTaskInfo *ChasmTaskInfo
+	// -- end of xxx_hidden_TaskDetails
+}
+
+func (b0 VisibilityTaskInfo_builder) Build() *VisibilityTaskInfo {
+	m0 := &VisibilityTaskInfo{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_WorkflowId = b.WorkflowId
+	x.xxx_hidden_RunId = b.RunId
+	x.xxx_hidden_TaskType = b.TaskType
+	x.xxx_hidden_Version = b.Version
+	x.xxx_hidden_TaskId = b.TaskId
+	x.xxx_hidden_VisibilityTime = b.VisibilityTime
+	x.xxx_hidden_CloseVisibilityTaskId = b.CloseVisibilityTaskId
+	x.xxx_hidden_CloseTime = b.CloseTime
+	if b.ChasmTaskInfo != nil {
+		x.xxx_hidden_TaskDetails = &visibilityTaskInfo_ChasmTaskInfo{b.ChasmTaskInfo}
+	}
+	return m0
+}
+
+type case_VisibilityTaskInfo_TaskDetails protoreflect.FieldNumber
+
+func (x case_VisibilityTaskInfo_TaskDetails) String() string {
+	switch x {
+	case VisibilityTaskInfo_TaskDetails_not_set_case:
+		return "VisibilityTaskInfoTaskDetailsNotSetCase"
+	case VisibilityTaskInfo_ChasmTaskInfo_case:
+		return "VisibilityTaskInfoChasmTaskInfoCase"
+	default:
+		return strconv.Itoa(int(x))
+	}
+
+}
+
 type isVisibilityTaskInfo_TaskDetails interface {
 	isVisibilityTaskInfo_TaskDetails()
 }
 
-type VisibilityTaskInfo_ChasmTaskInfo struct {
+type visibilityTaskInfo_ChasmTaskInfo struct {
 	// If the task addresses a CHASM component, this field will be set.
 	ChasmTaskInfo *ChasmTaskInfo `protobuf:"bytes,12,opt,name=chasm_task_info,json=chasmTaskInfo,proto3,oneof"`
 }
 
-func (*VisibilityTaskInfo_ChasmTaskInfo) isVisibilityTaskInfo_TaskDetails() {}
+func (*visibilityTaskInfo_ChasmTaskInfo) isVisibilityTaskInfo_TaskDetails() {}
 
 // timer column
 type TimerTaskInfo struct {
-	state               protoimpl.MessageState `protogen:"open.v1"`
-	NamespaceId         string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	WorkflowId          string                 `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
-	RunId               string                 `protobuf:"bytes,3,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	TaskType            v1.TaskType            `protobuf:"varint,4,opt,name=task_type,json=taskType,proto3,enum=temporal.server.api.enums.v1.TaskType" json:"task_type,omitempty"`
-	TimeoutType         v11.TimeoutType        `protobuf:"varint,5,opt,name=timeout_type,json=timeoutType,proto3,enum=temporal.api.enums.v1.TimeoutType" json:"timeout_type,omitempty"`
-	WorkflowBackoffType v1.WorkflowBackoffType `protobuf:"varint,6,opt,name=workflow_backoff_type,json=workflowBackoffType,proto3,enum=temporal.server.api.enums.v1.WorkflowBackoffType" json:"workflow_backoff_type,omitempty"`
-	Version             int64                  `protobuf:"varint,7,opt,name=version,proto3" json:"version,omitempty"`
-	ScheduleAttempt     int32                  `protobuf:"varint,8,opt,name=schedule_attempt,json=scheduleAttempt,proto3" json:"schedule_attempt,omitempty"`
-	EventId             int64                  `protobuf:"varint,9,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
-	TaskId              int64                  `protobuf:"varint,10,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
-	VisibilityTime      *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=visibility_time,json=visibilityTime,proto3" json:"visibility_time,omitempty"`
-	BranchToken         []byte                 `protobuf:"bytes,12,opt,name=branch_token,json=branchToken,proto3" json:"branch_token,omitempty"`
-	// If this is true, we can bypass archival before deleting. Only defined for DeleteHistoryEventTasks.
-	AlreadyArchived bool `protobuf:"varint,13,opt,name=already_archived,json=alreadyArchived,proto3" json:"already_archived,omitempty"`
-	// Number of transitions on the corresponding mutable state object. Used to verify that a task is not referencing a
-	// stale state or, in some situations, that the task itself is not stale.
-	// If task addresses a sub-statemachine (e.g. callback), this field will be set.
-	MutableStateTransitionCount int64 `protobuf:"varint,14,opt,name=mutable_state_transition_count,json=mutableStateTransitionCount,proto3" json:"mutable_state_transition_count,omitempty"`
-	// If specified, the task is a for a workflow chain instead of a specific workflow run.
-	// A workflow chain is identified by the run_id of the first workflow in the chain.
-	FirstRunId string `protobuf:"bytes,15,opt,name=first_run_id,json=firstRunId,proto3" json:"first_run_id,omitempty"`
-	// Stamp represents the "version" of the entity's internal state for which the timer task was created.
-	// It increases monotonically when the entity's options are modified.
-	// It is used to check if a task is still relevant to the entity's corresponding state machine.
-	Stamp int32 `protobuf:"varint,16,opt,name=stamp,proto3" json:"stamp,omitempty"`
-	// Types that are valid to be assigned to TaskDetails:
-	//
-	//	*TimerTaskInfo_ChasmTaskInfo
-	TaskDetails   isTimerTaskInfo_TaskDetails `protobuf_oneof:"task_details"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                                  protoimpl.MessageState      `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId                 string                      `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_WorkflowId                  string                      `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3"`
+	xxx_hidden_RunId                       string                      `protobuf:"bytes,3,opt,name=run_id,json=runId,proto3"`
+	xxx_hidden_TaskType                    v1.TaskType                 `protobuf:"varint,4,opt,name=task_type,json=taskType,proto3,enum=temporal.server.api.enums.v1.TaskType"`
+	xxx_hidden_TimeoutType                 v11.TimeoutType             `protobuf:"varint,5,opt,name=timeout_type,json=timeoutType,proto3,enum=temporal.api.enums.v1.TimeoutType"`
+	xxx_hidden_WorkflowBackoffType         v1.WorkflowBackoffType      `protobuf:"varint,6,opt,name=workflow_backoff_type,json=workflowBackoffType,proto3,enum=temporal.server.api.enums.v1.WorkflowBackoffType"`
+	xxx_hidden_Version                     int64                       `protobuf:"varint,7,opt,name=version,proto3"`
+	xxx_hidden_ScheduleAttempt             int32                       `protobuf:"varint,8,opt,name=schedule_attempt,json=scheduleAttempt,proto3"`
+	xxx_hidden_EventId                     int64                       `protobuf:"varint,9,opt,name=event_id,json=eventId,proto3"`
+	xxx_hidden_TaskId                      int64                       `protobuf:"varint,10,opt,name=task_id,json=taskId,proto3"`
+	xxx_hidden_VisibilityTime              *timestamppb.Timestamp      `protobuf:"bytes,11,opt,name=visibility_time,json=visibilityTime,proto3"`
+	xxx_hidden_BranchToken                 []byte                      `protobuf:"bytes,12,opt,name=branch_token,json=branchToken,proto3"`
+	xxx_hidden_AlreadyArchived             bool                        `protobuf:"varint,13,opt,name=already_archived,json=alreadyArchived,proto3"`
+	xxx_hidden_MutableStateTransitionCount int64                       `protobuf:"varint,14,opt,name=mutable_state_transition_count,json=mutableStateTransitionCount,proto3"`
+	xxx_hidden_FirstRunId                  string                      `protobuf:"bytes,15,opt,name=first_run_id,json=firstRunId,proto3"`
+	xxx_hidden_Stamp                       int32                       `protobuf:"varint,16,opt,name=stamp,proto3"`
+	xxx_hidden_TaskDetails                 isTimerTaskInfo_TaskDetails `protobuf_oneof:"task_details"`
+	unknownFields                          protoimpl.UnknownFields
+	sizeCache                              protoimpl.SizeCache
 }
 
 func (x *TimerTaskInfo) Reset() {
@@ -1955,161 +3639,349 @@ func (x *TimerTaskInfo) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use TimerTaskInfo.ProtoReflect.Descriptor instead.
-func (*TimerTaskInfo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_executions_proto_rawDescGZIP(), []int{8}
-}
-
 func (x *TimerTaskInfo) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *TimerTaskInfo) GetWorkflowId() string {
 	if x != nil {
-		return x.WorkflowId
+		return x.xxx_hidden_WorkflowId
 	}
 	return ""
 }
 
 func (x *TimerTaskInfo) GetRunId() string {
 	if x != nil {
-		return x.RunId
+		return x.xxx_hidden_RunId
 	}
 	return ""
 }
 
 func (x *TimerTaskInfo) GetTaskType() v1.TaskType {
 	if x != nil {
-		return x.TaskType
+		return x.xxx_hidden_TaskType
 	}
 	return v1.TaskType(0)
 }
 
 func (x *TimerTaskInfo) GetTimeoutType() v11.TimeoutType {
 	if x != nil {
-		return x.TimeoutType
+		return x.xxx_hidden_TimeoutType
 	}
 	return v11.TimeoutType(0)
 }
 
 func (x *TimerTaskInfo) GetWorkflowBackoffType() v1.WorkflowBackoffType {
 	if x != nil {
-		return x.WorkflowBackoffType
+		return x.xxx_hidden_WorkflowBackoffType
 	}
 	return v1.WorkflowBackoffType(0)
 }
 
 func (x *TimerTaskInfo) GetVersion() int64 {
 	if x != nil {
-		return x.Version
+		return x.xxx_hidden_Version
 	}
 	return 0
 }
 
 func (x *TimerTaskInfo) GetScheduleAttempt() int32 {
 	if x != nil {
-		return x.ScheduleAttempt
+		return x.xxx_hidden_ScheduleAttempt
 	}
 	return 0
 }
 
 func (x *TimerTaskInfo) GetEventId() int64 {
 	if x != nil {
-		return x.EventId
+		return x.xxx_hidden_EventId
 	}
 	return 0
 }
 
 func (x *TimerTaskInfo) GetTaskId() int64 {
 	if x != nil {
-		return x.TaskId
+		return x.xxx_hidden_TaskId
 	}
 	return 0
 }
 
 func (x *TimerTaskInfo) GetVisibilityTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.VisibilityTime
+		return x.xxx_hidden_VisibilityTime
 	}
 	return nil
 }
 
 func (x *TimerTaskInfo) GetBranchToken() []byte {
 	if x != nil {
-		return x.BranchToken
+		return x.xxx_hidden_BranchToken
 	}
 	return nil
 }
 
 func (x *TimerTaskInfo) GetAlreadyArchived() bool {
 	if x != nil {
-		return x.AlreadyArchived
+		return x.xxx_hidden_AlreadyArchived
 	}
 	return false
 }
 
 func (x *TimerTaskInfo) GetMutableStateTransitionCount() int64 {
 	if x != nil {
-		return x.MutableStateTransitionCount
+		return x.xxx_hidden_MutableStateTransitionCount
 	}
 	return 0
 }
 
 func (x *TimerTaskInfo) GetFirstRunId() string {
 	if x != nil {
-		return x.FirstRunId
+		return x.xxx_hidden_FirstRunId
 	}
 	return ""
 }
 
 func (x *TimerTaskInfo) GetStamp() int32 {
 	if x != nil {
-		return x.Stamp
+		return x.xxx_hidden_Stamp
 	}
 	return 0
 }
 
-func (x *TimerTaskInfo) GetTaskDetails() isTimerTaskInfo_TaskDetails {
-	if x != nil {
-		return x.TaskDetails
-	}
-	return nil
-}
-
 func (x *TimerTaskInfo) GetChasmTaskInfo() *ChasmTaskInfo {
 	if x != nil {
-		if x, ok := x.TaskDetails.(*TimerTaskInfo_ChasmTaskInfo); ok {
+		if x, ok := x.xxx_hidden_TaskDetails.(*timerTaskInfo_ChasmTaskInfo); ok {
 			return x.ChasmTaskInfo
 		}
 	}
 	return nil
 }
 
+func (x *TimerTaskInfo) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *TimerTaskInfo) SetWorkflowId(v string) {
+	x.xxx_hidden_WorkflowId = v
+}
+
+func (x *TimerTaskInfo) SetRunId(v string) {
+	x.xxx_hidden_RunId = v
+}
+
+func (x *TimerTaskInfo) SetTaskType(v v1.TaskType) {
+	x.xxx_hidden_TaskType = v
+}
+
+func (x *TimerTaskInfo) SetTimeoutType(v v11.TimeoutType) {
+	x.xxx_hidden_TimeoutType = v
+}
+
+func (x *TimerTaskInfo) SetWorkflowBackoffType(v v1.WorkflowBackoffType) {
+	x.xxx_hidden_WorkflowBackoffType = v
+}
+
+func (x *TimerTaskInfo) SetVersion(v int64) {
+	x.xxx_hidden_Version = v
+}
+
+func (x *TimerTaskInfo) SetScheduleAttempt(v int32) {
+	x.xxx_hidden_ScheduleAttempt = v
+}
+
+func (x *TimerTaskInfo) SetEventId(v int64) {
+	x.xxx_hidden_EventId = v
+}
+
+func (x *TimerTaskInfo) SetTaskId(v int64) {
+	x.xxx_hidden_TaskId = v
+}
+
+func (x *TimerTaskInfo) SetVisibilityTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_VisibilityTime = v
+}
+
+func (x *TimerTaskInfo) SetBranchToken(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_BranchToken = v
+}
+
+func (x *TimerTaskInfo) SetAlreadyArchived(v bool) {
+	x.xxx_hidden_AlreadyArchived = v
+}
+
+func (x *TimerTaskInfo) SetMutableStateTransitionCount(v int64) {
+	x.xxx_hidden_MutableStateTransitionCount = v
+}
+
+func (x *TimerTaskInfo) SetFirstRunId(v string) {
+	x.xxx_hidden_FirstRunId = v
+}
+
+func (x *TimerTaskInfo) SetStamp(v int32) {
+	x.xxx_hidden_Stamp = v
+}
+
+func (x *TimerTaskInfo) SetChasmTaskInfo(v *ChasmTaskInfo) {
+	if v == nil {
+		x.xxx_hidden_TaskDetails = nil
+		return
+	}
+	x.xxx_hidden_TaskDetails = &timerTaskInfo_ChasmTaskInfo{v}
+}
+
+func (x *TimerTaskInfo) HasVisibilityTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_VisibilityTime != nil
+}
+
+func (x *TimerTaskInfo) HasTaskDetails() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_TaskDetails != nil
+}
+
+func (x *TimerTaskInfo) HasChasmTaskInfo() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_TaskDetails.(*timerTaskInfo_ChasmTaskInfo)
+	return ok
+}
+
+func (x *TimerTaskInfo) ClearVisibilityTime() {
+	x.xxx_hidden_VisibilityTime = nil
+}
+
+func (x *TimerTaskInfo) ClearTaskDetails() {
+	x.xxx_hidden_TaskDetails = nil
+}
+
+func (x *TimerTaskInfo) ClearChasmTaskInfo() {
+	if _, ok := x.xxx_hidden_TaskDetails.(*timerTaskInfo_ChasmTaskInfo); ok {
+		x.xxx_hidden_TaskDetails = nil
+	}
+}
+
+const TimerTaskInfo_TaskDetails_not_set_case case_TimerTaskInfo_TaskDetails = 0
+const TimerTaskInfo_ChasmTaskInfo_case case_TimerTaskInfo_TaskDetails = 17
+
+func (x *TimerTaskInfo) WhichTaskDetails() case_TimerTaskInfo_TaskDetails {
+	if x == nil {
+		return TimerTaskInfo_TaskDetails_not_set_case
+	}
+	switch x.xxx_hidden_TaskDetails.(type) {
+	case *timerTaskInfo_ChasmTaskInfo:
+		return TimerTaskInfo_ChasmTaskInfo_case
+	default:
+		return TimerTaskInfo_TaskDetails_not_set_case
+	}
+}
+
+type TimerTaskInfo_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId         string
+	WorkflowId          string
+	RunId               string
+	TaskType            v1.TaskType
+	TimeoutType         v11.TimeoutType
+	WorkflowBackoffType v1.WorkflowBackoffType
+	Version             int64
+	ScheduleAttempt     int32
+	EventId             int64
+	TaskId              int64
+	VisibilityTime      *timestamppb.Timestamp
+	BranchToken         []byte
+	// If this is true, we can bypass archival before deleting. Only defined for DeleteHistoryEventTasks.
+	AlreadyArchived bool
+	// Number of transitions on the corresponding mutable state object. Used to verify that a task is not referencing a
+	// stale state or, in some situations, that the task itself is not stale.
+	// If task addresses a sub-statemachine (e.g. callback), this field will be set.
+	MutableStateTransitionCount int64
+	// If specified, the task is a for a workflow chain instead of a specific workflow run.
+	// A workflow chain is identified by the run_id of the first workflow in the chain.
+	FirstRunId string
+	// Stamp represents the "version" of the entity's internal state for which the timer task was created.
+	// It increases monotonically when the entity's options are modified.
+	// It is used to check if a task is still relevant to the entity's corresponding state machine.
+	Stamp int32
+	// Fields of oneof xxx_hidden_TaskDetails:
+	// If the task addresses a CHASM component, this field will be set.
+	ChasmTaskInfo *ChasmTaskInfo
+	// -- end of xxx_hidden_TaskDetails
+}
+
+func (b0 TimerTaskInfo_builder) Build() *TimerTaskInfo {
+	m0 := &TimerTaskInfo{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_WorkflowId = b.WorkflowId
+	x.xxx_hidden_RunId = b.RunId
+	x.xxx_hidden_TaskType = b.TaskType
+	x.xxx_hidden_TimeoutType = b.TimeoutType
+	x.xxx_hidden_WorkflowBackoffType = b.WorkflowBackoffType
+	x.xxx_hidden_Version = b.Version
+	x.xxx_hidden_ScheduleAttempt = b.ScheduleAttempt
+	x.xxx_hidden_EventId = b.EventId
+	x.xxx_hidden_TaskId = b.TaskId
+	x.xxx_hidden_VisibilityTime = b.VisibilityTime
+	x.xxx_hidden_BranchToken = b.BranchToken
+	x.xxx_hidden_AlreadyArchived = b.AlreadyArchived
+	x.xxx_hidden_MutableStateTransitionCount = b.MutableStateTransitionCount
+	x.xxx_hidden_FirstRunId = b.FirstRunId
+	x.xxx_hidden_Stamp = b.Stamp
+	if b.ChasmTaskInfo != nil {
+		x.xxx_hidden_TaskDetails = &timerTaskInfo_ChasmTaskInfo{b.ChasmTaskInfo}
+	}
+	return m0
+}
+
+type case_TimerTaskInfo_TaskDetails protoreflect.FieldNumber
+
+func (x case_TimerTaskInfo_TaskDetails) String() string {
+	switch x {
+	case TimerTaskInfo_TaskDetails_not_set_case:
+		return "TimerTaskInfoTaskDetailsNotSetCase"
+	case TimerTaskInfo_ChasmTaskInfo_case:
+		return "TimerTaskInfoChasmTaskInfoCase"
+	default:
+		return strconv.Itoa(int(x))
+	}
+
+}
+
 type isTimerTaskInfo_TaskDetails interface {
 	isTimerTaskInfo_TaskDetails()
 }
 
-type TimerTaskInfo_ChasmTaskInfo struct {
+type timerTaskInfo_ChasmTaskInfo struct {
 	// If the task addresses a CHASM component, this field will be set.
 	ChasmTaskInfo *ChasmTaskInfo `protobuf:"bytes,17,opt,name=chasm_task_info,json=chasmTaskInfo,proto3,oneof"`
 }
 
-func (*TimerTaskInfo_ChasmTaskInfo) isTimerTaskInfo_TaskDetails() {}
+func (*timerTaskInfo_ChasmTaskInfo) isTimerTaskInfo_TaskDetails() {}
 
 type ArchivalTaskInfo struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	TaskId         int64                  `protobuf:"varint,1,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
-	NamespaceId    string                 `protobuf:"bytes,2,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	WorkflowId     string                 `protobuf:"bytes,3,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
-	RunId          string                 `protobuf:"bytes,4,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	TaskType       v1.TaskType            `protobuf:"varint,5,opt,name=task_type,json=taskType,proto3,enum=temporal.server.api.enums.v1.TaskType" json:"task_type,omitempty"`
-	Version        int64                  `protobuf:"varint,6,opt,name=version,proto3" json:"version,omitempty"`
-	VisibilityTime *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=visibility_time,json=visibilityTime,proto3" json:"visibility_time,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state                     protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_TaskId         int64                  `protobuf:"varint,1,opt,name=task_id,json=taskId,proto3"`
+	xxx_hidden_NamespaceId    string                 `protobuf:"bytes,2,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_WorkflowId     string                 `protobuf:"bytes,3,opt,name=workflow_id,json=workflowId,proto3"`
+	xxx_hidden_RunId          string                 `protobuf:"bytes,4,opt,name=run_id,json=runId,proto3"`
+	xxx_hidden_TaskType       v1.TaskType            `protobuf:"varint,5,opt,name=task_type,json=taskType,proto3,enum=temporal.server.api.enums.v1.TaskType"`
+	xxx_hidden_Version        int64                  `protobuf:"varint,6,opt,name=version,proto3"`
+	xxx_hidden_VisibilityTime *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=visibility_time,json=visibilityTime,proto3"`
+	unknownFields             protoimpl.UnknownFields
+	sizeCache                 protoimpl.SizeCache
 }
 
 func (x *ArchivalTaskInfo) Reset() {
@@ -2137,78 +4009,132 @@ func (x *ArchivalTaskInfo) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ArchivalTaskInfo.ProtoReflect.Descriptor instead.
-func (*ArchivalTaskInfo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_executions_proto_rawDescGZIP(), []int{9}
-}
-
 func (x *ArchivalTaskInfo) GetTaskId() int64 {
 	if x != nil {
-		return x.TaskId
+		return x.xxx_hidden_TaskId
 	}
 	return 0
 }
 
 func (x *ArchivalTaskInfo) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *ArchivalTaskInfo) GetWorkflowId() string {
 	if x != nil {
-		return x.WorkflowId
+		return x.xxx_hidden_WorkflowId
 	}
 	return ""
 }
 
 func (x *ArchivalTaskInfo) GetRunId() string {
 	if x != nil {
-		return x.RunId
+		return x.xxx_hidden_RunId
 	}
 	return ""
 }
 
 func (x *ArchivalTaskInfo) GetTaskType() v1.TaskType {
 	if x != nil {
-		return x.TaskType
+		return x.xxx_hidden_TaskType
 	}
 	return v1.TaskType(0)
 }
 
 func (x *ArchivalTaskInfo) GetVersion() int64 {
 	if x != nil {
-		return x.Version
+		return x.xxx_hidden_Version
 	}
 	return 0
 }
 
 func (x *ArchivalTaskInfo) GetVisibilityTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.VisibilityTime
+		return x.xxx_hidden_VisibilityTime
 	}
 	return nil
 }
 
+func (x *ArchivalTaskInfo) SetTaskId(v int64) {
+	x.xxx_hidden_TaskId = v
+}
+
+func (x *ArchivalTaskInfo) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *ArchivalTaskInfo) SetWorkflowId(v string) {
+	x.xxx_hidden_WorkflowId = v
+}
+
+func (x *ArchivalTaskInfo) SetRunId(v string) {
+	x.xxx_hidden_RunId = v
+}
+
+func (x *ArchivalTaskInfo) SetTaskType(v v1.TaskType) {
+	x.xxx_hidden_TaskType = v
+}
+
+func (x *ArchivalTaskInfo) SetVersion(v int64) {
+	x.xxx_hidden_Version = v
+}
+
+func (x *ArchivalTaskInfo) SetVisibilityTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_VisibilityTime = v
+}
+
+func (x *ArchivalTaskInfo) HasVisibilityTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_VisibilityTime != nil
+}
+
+func (x *ArchivalTaskInfo) ClearVisibilityTime() {
+	x.xxx_hidden_VisibilityTime = nil
+}
+
+type ArchivalTaskInfo_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	TaskId         int64
+	NamespaceId    string
+	WorkflowId     string
+	RunId          string
+	TaskType       v1.TaskType
+	Version        int64
+	VisibilityTime *timestamppb.Timestamp
+}
+
+func (b0 ArchivalTaskInfo_builder) Build() *ArchivalTaskInfo {
+	m0 := &ArchivalTaskInfo{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_TaskId = b.TaskId
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_WorkflowId = b.WorkflowId
+	x.xxx_hidden_RunId = b.RunId
+	x.xxx_hidden_TaskType = b.TaskType
+	x.xxx_hidden_Version = b.Version
+	x.xxx_hidden_VisibilityTime = b.VisibilityTime
+	return m0
+}
+
 type OutboundTaskInfo struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	NamespaceId    string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	WorkflowId     string                 `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
-	RunId          string                 `protobuf:"bytes,3,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	TaskType       v1.TaskType            `protobuf:"varint,4,opt,name=task_type,json=taskType,proto3,enum=temporal.server.api.enums.v1.TaskType" json:"task_type,omitempty"`
-	TaskId         int64                  `protobuf:"varint,5,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
-	VisibilityTime *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=visibility_time,json=visibilityTime,proto3" json:"visibility_time,omitempty"`
-	// Destination of this task (e.g. protocol+host+port for callbacks).
-	// Outbound tasks are grouped by this field (and the namespace ID) when scheduling.
-	Destination string `protobuf:"bytes,7,opt,name=destination,proto3" json:"destination,omitempty"`
-	// Types that are valid to be assigned to TaskDetails:
-	//
-	//	*OutboundTaskInfo_StateMachineInfo
-	//	*OutboundTaskInfo_ChasmTaskInfo
-	TaskDetails   isOutboundTaskInfo_TaskDetails `protobuf_oneof:"task_details"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                     protoimpl.MessageState         `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId    string                         `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_WorkflowId     string                         `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3"`
+	xxx_hidden_RunId          string                         `protobuf:"bytes,3,opt,name=run_id,json=runId,proto3"`
+	xxx_hidden_TaskType       v1.TaskType                    `protobuf:"varint,4,opt,name=task_type,json=taskType,proto3,enum=temporal.server.api.enums.v1.TaskType"`
+	xxx_hidden_TaskId         int64                          `protobuf:"varint,5,opt,name=task_id,json=taskId,proto3"`
+	xxx_hidden_VisibilityTime *timestamppb.Timestamp         `protobuf:"bytes,6,opt,name=visibility_time,json=visibilityTime,proto3"`
+	xxx_hidden_Destination    string                         `protobuf:"bytes,7,opt,name=destination,proto3"`
+	xxx_hidden_TaskDetails    isOutboundTaskInfo_TaskDetails `protobuf_oneof:"task_details"`
+	unknownFields             protoimpl.UnknownFields
+	sizeCache                 protoimpl.SizeCache
 }
 
 func (x *OutboundTaskInfo) Reset() {
@@ -2236,70 +4162,58 @@ func (x *OutboundTaskInfo) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use OutboundTaskInfo.ProtoReflect.Descriptor instead.
-func (*OutboundTaskInfo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_executions_proto_rawDescGZIP(), []int{10}
-}
-
 func (x *OutboundTaskInfo) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *OutboundTaskInfo) GetWorkflowId() string {
 	if x != nil {
-		return x.WorkflowId
+		return x.xxx_hidden_WorkflowId
 	}
 	return ""
 }
 
 func (x *OutboundTaskInfo) GetRunId() string {
 	if x != nil {
-		return x.RunId
+		return x.xxx_hidden_RunId
 	}
 	return ""
 }
 
 func (x *OutboundTaskInfo) GetTaskType() v1.TaskType {
 	if x != nil {
-		return x.TaskType
+		return x.xxx_hidden_TaskType
 	}
 	return v1.TaskType(0)
 }
 
 func (x *OutboundTaskInfo) GetTaskId() int64 {
 	if x != nil {
-		return x.TaskId
+		return x.xxx_hidden_TaskId
 	}
 	return 0
 }
 
 func (x *OutboundTaskInfo) GetVisibilityTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.VisibilityTime
+		return x.xxx_hidden_VisibilityTime
 	}
 	return nil
 }
 
 func (x *OutboundTaskInfo) GetDestination() string {
 	if x != nil {
-		return x.Destination
+		return x.xxx_hidden_Destination
 	}
 	return ""
 }
 
-func (x *OutboundTaskInfo) GetTaskDetails() isOutboundTaskInfo_TaskDetails {
-	if x != nil {
-		return x.TaskDetails
-	}
-	return nil
-}
-
 func (x *OutboundTaskInfo) GetStateMachineInfo() *StateMachineTaskInfo {
 	if x != nil {
-		if x, ok := x.TaskDetails.(*OutboundTaskInfo_StateMachineInfo); ok {
+		if x, ok := x.xxx_hidden_TaskDetails.(*outboundTaskInfo_StateMachineInfo); ok {
 			return x.StateMachineInfo
 		}
 	}
@@ -2308,36 +4222,204 @@ func (x *OutboundTaskInfo) GetStateMachineInfo() *StateMachineTaskInfo {
 
 func (x *OutboundTaskInfo) GetChasmTaskInfo() *ChasmTaskInfo {
 	if x != nil {
-		if x, ok := x.TaskDetails.(*OutboundTaskInfo_ChasmTaskInfo); ok {
+		if x, ok := x.xxx_hidden_TaskDetails.(*outboundTaskInfo_ChasmTaskInfo); ok {
 			return x.ChasmTaskInfo
 		}
 	}
 	return nil
 }
 
+func (x *OutboundTaskInfo) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *OutboundTaskInfo) SetWorkflowId(v string) {
+	x.xxx_hidden_WorkflowId = v
+}
+
+func (x *OutboundTaskInfo) SetRunId(v string) {
+	x.xxx_hidden_RunId = v
+}
+
+func (x *OutboundTaskInfo) SetTaskType(v v1.TaskType) {
+	x.xxx_hidden_TaskType = v
+}
+
+func (x *OutboundTaskInfo) SetTaskId(v int64) {
+	x.xxx_hidden_TaskId = v
+}
+
+func (x *OutboundTaskInfo) SetVisibilityTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_VisibilityTime = v
+}
+
+func (x *OutboundTaskInfo) SetDestination(v string) {
+	x.xxx_hidden_Destination = v
+}
+
+func (x *OutboundTaskInfo) SetStateMachineInfo(v *StateMachineTaskInfo) {
+	if v == nil {
+		x.xxx_hidden_TaskDetails = nil
+		return
+	}
+	x.xxx_hidden_TaskDetails = &outboundTaskInfo_StateMachineInfo{v}
+}
+
+func (x *OutboundTaskInfo) SetChasmTaskInfo(v *ChasmTaskInfo) {
+	if v == nil {
+		x.xxx_hidden_TaskDetails = nil
+		return
+	}
+	x.xxx_hidden_TaskDetails = &outboundTaskInfo_ChasmTaskInfo{v}
+}
+
+func (x *OutboundTaskInfo) HasVisibilityTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_VisibilityTime != nil
+}
+
+func (x *OutboundTaskInfo) HasTaskDetails() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_TaskDetails != nil
+}
+
+func (x *OutboundTaskInfo) HasStateMachineInfo() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_TaskDetails.(*outboundTaskInfo_StateMachineInfo)
+	return ok
+}
+
+func (x *OutboundTaskInfo) HasChasmTaskInfo() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_TaskDetails.(*outboundTaskInfo_ChasmTaskInfo)
+	return ok
+}
+
+func (x *OutboundTaskInfo) ClearVisibilityTime() {
+	x.xxx_hidden_VisibilityTime = nil
+}
+
+func (x *OutboundTaskInfo) ClearTaskDetails() {
+	x.xxx_hidden_TaskDetails = nil
+}
+
+func (x *OutboundTaskInfo) ClearStateMachineInfo() {
+	if _, ok := x.xxx_hidden_TaskDetails.(*outboundTaskInfo_StateMachineInfo); ok {
+		x.xxx_hidden_TaskDetails = nil
+	}
+}
+
+func (x *OutboundTaskInfo) ClearChasmTaskInfo() {
+	if _, ok := x.xxx_hidden_TaskDetails.(*outboundTaskInfo_ChasmTaskInfo); ok {
+		x.xxx_hidden_TaskDetails = nil
+	}
+}
+
+const OutboundTaskInfo_TaskDetails_not_set_case case_OutboundTaskInfo_TaskDetails = 0
+const OutboundTaskInfo_StateMachineInfo_case case_OutboundTaskInfo_TaskDetails = 8
+const OutboundTaskInfo_ChasmTaskInfo_case case_OutboundTaskInfo_TaskDetails = 9
+
+func (x *OutboundTaskInfo) WhichTaskDetails() case_OutboundTaskInfo_TaskDetails {
+	if x == nil {
+		return OutboundTaskInfo_TaskDetails_not_set_case
+	}
+	switch x.xxx_hidden_TaskDetails.(type) {
+	case *outboundTaskInfo_StateMachineInfo:
+		return OutboundTaskInfo_StateMachineInfo_case
+	case *outboundTaskInfo_ChasmTaskInfo:
+		return OutboundTaskInfo_ChasmTaskInfo_case
+	default:
+		return OutboundTaskInfo_TaskDetails_not_set_case
+	}
+}
+
+type OutboundTaskInfo_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId    string
+	WorkflowId     string
+	RunId          string
+	TaskType       v1.TaskType
+	TaskId         int64
+	VisibilityTime *timestamppb.Timestamp
+	// Destination of this task (e.g. protocol+host+port for callbacks).
+	// Outbound tasks are grouped by this field (and the namespace ID) when scheduling.
+	Destination string
+	// Fields of oneof xxx_hidden_TaskDetails:
+	// If task addresses a sub-statemachine (e.g. callback), this field will be set.
+	StateMachineInfo *StateMachineTaskInfo
+	// If the task addresses a CHASM component, this field will be set.
+	ChasmTaskInfo *ChasmTaskInfo
+	// -- end of xxx_hidden_TaskDetails
+}
+
+func (b0 OutboundTaskInfo_builder) Build() *OutboundTaskInfo {
+	m0 := &OutboundTaskInfo{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_WorkflowId = b.WorkflowId
+	x.xxx_hidden_RunId = b.RunId
+	x.xxx_hidden_TaskType = b.TaskType
+	x.xxx_hidden_TaskId = b.TaskId
+	x.xxx_hidden_VisibilityTime = b.VisibilityTime
+	x.xxx_hidden_Destination = b.Destination
+	if b.StateMachineInfo != nil {
+		x.xxx_hidden_TaskDetails = &outboundTaskInfo_StateMachineInfo{b.StateMachineInfo}
+	}
+	if b.ChasmTaskInfo != nil {
+		x.xxx_hidden_TaskDetails = &outboundTaskInfo_ChasmTaskInfo{b.ChasmTaskInfo}
+	}
+	return m0
+}
+
+type case_OutboundTaskInfo_TaskDetails protoreflect.FieldNumber
+
+func (x case_OutboundTaskInfo_TaskDetails) String() string {
+	switch x {
+	case OutboundTaskInfo_TaskDetails_not_set_case:
+		return "OutboundTaskInfoTaskDetailsNotSetCase"
+	case OutboundTaskInfo_StateMachineInfo_case:
+		return "OutboundTaskInfoStateMachineInfoCase"
+	case OutboundTaskInfo_ChasmTaskInfo_case:
+		return "OutboundTaskInfoChasmTaskInfoCase"
+	default:
+		return strconv.Itoa(int(x))
+	}
+
+}
+
 type isOutboundTaskInfo_TaskDetails interface {
 	isOutboundTaskInfo_TaskDetails()
 }
 
-type OutboundTaskInfo_StateMachineInfo struct {
+type outboundTaskInfo_StateMachineInfo struct {
 	// If task addresses a sub-statemachine (e.g. callback), this field will be set.
 	StateMachineInfo *StateMachineTaskInfo `protobuf:"bytes,8,opt,name=state_machine_info,json=stateMachineInfo,proto3,oneof"`
 }
 
-type OutboundTaskInfo_ChasmTaskInfo struct {
+type outboundTaskInfo_ChasmTaskInfo struct {
 	// If the task addresses a CHASM component, this field will be set.
 	ChasmTaskInfo *ChasmTaskInfo `protobuf:"bytes,9,opt,name=chasm_task_info,json=chasmTaskInfo,proto3,oneof"`
 }
 
-func (*OutboundTaskInfo_StateMachineInfo) isOutboundTaskInfo_TaskDetails() {}
+func (*outboundTaskInfo_StateMachineInfo) isOutboundTaskInfo_TaskDetails() {}
 
-func (*OutboundTaskInfo_ChasmTaskInfo) isOutboundTaskInfo_TaskDetails() {}
+func (*outboundTaskInfo_ChasmTaskInfo) isOutboundTaskInfo_TaskDetails() {}
 
 type NexusInvocationTaskInfo struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Attempt       int32                  `protobuf:"varint,1,opt,name=attempt,proto3" json:"attempt,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state              protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Attempt int32                  `protobuf:"varint,1,opt,name=attempt,proto3"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *NexusInvocationTaskInfo) Reset() {
@@ -2365,23 +4447,36 @@ func (x *NexusInvocationTaskInfo) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use NexusInvocationTaskInfo.ProtoReflect.Descriptor instead.
-func (*NexusInvocationTaskInfo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_executions_proto_rawDescGZIP(), []int{11}
-}
-
 func (x *NexusInvocationTaskInfo) GetAttempt() int32 {
 	if x != nil {
-		return x.Attempt
+		return x.xxx_hidden_Attempt
 	}
 	return 0
 }
 
+func (x *NexusInvocationTaskInfo) SetAttempt(v int32) {
+	x.xxx_hidden_Attempt = v
+}
+
+type NexusInvocationTaskInfo_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Attempt int32
+}
+
+func (b0 NexusInvocationTaskInfo_builder) Build() *NexusInvocationTaskInfo {
+	m0 := &NexusInvocationTaskInfo{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Attempt = b.Attempt
+	return m0
+}
+
 type NexusCancelationTaskInfo struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Attempt       int32                  `protobuf:"varint,1,opt,name=attempt,proto3" json:"attempt,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state              protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Attempt int32                  `protobuf:"varint,1,opt,name=attempt,proto3"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *NexusCancelationTaskInfo) Reset() {
@@ -2409,112 +4504,82 @@ func (x *NexusCancelationTaskInfo) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use NexusCancelationTaskInfo.ProtoReflect.Descriptor instead.
-func (*NexusCancelationTaskInfo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_executions_proto_rawDescGZIP(), []int{12}
-}
-
 func (x *NexusCancelationTaskInfo) GetAttempt() int32 {
 	if x != nil {
-		return x.Attempt
+		return x.xxx_hidden_Attempt
 	}
 	return 0
 }
 
+func (x *NexusCancelationTaskInfo) SetAttempt(v int32) {
+	x.xxx_hidden_Attempt = v
+}
+
+type NexusCancelationTaskInfo_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Attempt int32
+}
+
+func (b0 NexusCancelationTaskInfo_builder) Build() *NexusCancelationTaskInfo {
+	m0 := &NexusCancelationTaskInfo{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Attempt = b.Attempt
+	return m0
+}
+
 // activity_map column
 type ActivityInfo struct {
-	state                 protoimpl.MessageState `protogen:"open.v1"`
-	Version               int64                  `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
-	ScheduledEventBatchId int64                  `protobuf:"varint,2,opt,name=scheduled_event_batch_id,json=scheduledEventBatchId,proto3" json:"scheduled_event_batch_id,omitempty"`
-	ScheduledTime         *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=scheduled_time,json=scheduledTime,proto3" json:"scheduled_time,omitempty"`
-	StartedEventId        int64                  `protobuf:"varint,5,opt,name=started_event_id,json=startedEventId,proto3" json:"started_event_id,omitempty"`
-	StartedTime           *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=started_time,json=startedTime,proto3" json:"started_time,omitempty"`
-	ActivityId            string                 `protobuf:"bytes,8,opt,name=activity_id,json=activityId,proto3" json:"activity_id,omitempty"`
-	RequestId             string                 `protobuf:"bytes,9,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
-	// (-- api-linter: core::0140::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: "to" is used to indicate interval. --)
-	ScheduleToStartTimeout *durationpb.Duration `protobuf:"bytes,10,opt,name=schedule_to_start_timeout,json=scheduleToStartTimeout,proto3" json:"schedule_to_start_timeout,omitempty"`
-	// (-- api-linter: core::0140::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: "to" is used to indicate interval. --)
-	ScheduleToCloseTimeout *durationpb.Duration `protobuf:"bytes,11,opt,name=schedule_to_close_timeout,json=scheduleToCloseTimeout,proto3" json:"schedule_to_close_timeout,omitempty"`
-	// (-- api-linter: core::0140::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: "to" is used to indicate interval. --)
-	StartToCloseTimeout         *durationpb.Duration   `protobuf:"bytes,12,opt,name=start_to_close_timeout,json=startToCloseTimeout,proto3" json:"start_to_close_timeout,omitempty"`
-	HeartbeatTimeout            *durationpb.Duration   `protobuf:"bytes,13,opt,name=heartbeat_timeout,json=heartbeatTimeout,proto3" json:"heartbeat_timeout,omitempty"`
-	CancelRequested             bool                   `protobuf:"varint,14,opt,name=cancel_requested,json=cancelRequested,proto3" json:"cancel_requested,omitempty"`
-	CancelRequestId             int64                  `protobuf:"varint,15,opt,name=cancel_request_id,json=cancelRequestId,proto3" json:"cancel_request_id,omitempty"`
-	TimerTaskStatus             int32                  `protobuf:"varint,16,opt,name=timer_task_status,json=timerTaskStatus,proto3" json:"timer_task_status,omitempty"`
-	Attempt                     int32                  `protobuf:"varint,17,opt,name=attempt,proto3" json:"attempt,omitempty"`
-	TaskQueue                   string                 `protobuf:"bytes,18,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
-	StartedIdentity             string                 `protobuf:"bytes,19,opt,name=started_identity,json=startedIdentity,proto3" json:"started_identity,omitempty"`
-	HasRetryPolicy              bool                   `protobuf:"varint,20,opt,name=has_retry_policy,json=hasRetryPolicy,proto3" json:"has_retry_policy,omitempty"`
-	RetryInitialInterval        *durationpb.Duration   `protobuf:"bytes,21,opt,name=retry_initial_interval,json=retryInitialInterval,proto3" json:"retry_initial_interval,omitempty"`
-	RetryMaximumInterval        *durationpb.Duration   `protobuf:"bytes,22,opt,name=retry_maximum_interval,json=retryMaximumInterval,proto3" json:"retry_maximum_interval,omitempty"`
-	RetryMaximumAttempts        int32                  `protobuf:"varint,23,opt,name=retry_maximum_attempts,json=retryMaximumAttempts,proto3" json:"retry_maximum_attempts,omitempty"`
-	RetryExpirationTime         *timestamppb.Timestamp `protobuf:"bytes,24,opt,name=retry_expiration_time,json=retryExpirationTime,proto3" json:"retry_expiration_time,omitempty"`
-	RetryBackoffCoefficient     float64                `protobuf:"fixed64,25,opt,name=retry_backoff_coefficient,json=retryBackoffCoefficient,proto3" json:"retry_backoff_coefficient,omitempty"`
-	RetryNonRetryableErrorTypes []string               `protobuf:"bytes,26,rep,name=retry_non_retryable_error_types,json=retryNonRetryableErrorTypes,proto3" json:"retry_non_retryable_error_types,omitempty"`
-	RetryLastFailure            *v17.Failure           `protobuf:"bytes,27,opt,name=retry_last_failure,json=retryLastFailure,proto3" json:"retry_last_failure,omitempty"`
-	RetryLastWorkerIdentity     string                 `protobuf:"bytes,28,opt,name=retry_last_worker_identity,json=retryLastWorkerIdentity,proto3" json:"retry_last_worker_identity,omitempty"`
-	ScheduledEventId            int64                  `protobuf:"varint,30,opt,name=scheduled_event_id,json=scheduledEventId,proto3" json:"scheduled_event_id,omitempty"`
-	LastHeartbeatDetails        *v13.Payloads          `protobuf:"bytes,31,opt,name=last_heartbeat_details,json=lastHeartbeatDetails,proto3" json:"last_heartbeat_details,omitempty"`
-	LastHeartbeatUpdateTime     *timestamppb.Timestamp `protobuf:"bytes,32,opt,name=last_heartbeat_update_time,json=lastHeartbeatUpdateTime,proto3" json:"last_heartbeat_update_time,omitempty"`
-	// When true, it means the activity is assigned to the build ID of its workflow (only set for old versioning)
-	// Deprecated. use `use_workflow_build_id`
-	// Deprecated. Clean up with versioning-2. [cleanup-old-wv]
-	UseCompatibleVersion bool              `protobuf:"varint,33,opt,name=use_compatible_version,json=useCompatibleVersion,proto3" json:"use_compatible_version,omitempty"`
-	ActivityType         *v13.ActivityType `protobuf:"bytes,34,opt,name=activity_type,json=activityType,proto3" json:"activity_type,omitempty"`
-	// Absence of `assigned_build_id` generally means this task is on an "unversioned" task queue.
-	// In rare cases, it can also mean that the task queue is versioned but we failed to write activity's
-	// independently-assigned build ID to the database. This case heals automatically once the task is dispatched.
-	// Deprecated. Clean up with versioning-2. [cleanup-old-wv]
-	//
-	// Types that are valid to be assigned to BuildIdInfo:
-	//
-	//	*ActivityInfo_UseWorkflowBuildIdInfo_
-	//	*ActivityInfo_LastIndependentlyAssignedBuildId
-	BuildIdInfo isActivityInfo_BuildIdInfo `protobuf_oneof:"build_id_info"`
-	// The version stamp of the worker to whom this activity was most-recently dispatched
-	// Deprecated. Clean up with versioning-2. [cleanup-old-wv]
-	LastWorkerVersionStamp        *v13.WorkerVersionStamp `protobuf:"bytes,37,opt,name=last_worker_version_stamp,json=lastWorkerVersionStamp,proto3" json:"last_worker_version_stamp,omitempty"`
-	LastUpdateVersionedTransition *VersionedTransition    `protobuf:"bytes,38,opt,name=last_update_versioned_transition,json=lastUpdateVersionedTransition,proto3" json:"last_update_versioned_transition,omitempty"`
-	// The first time the activity was scheduled.
-	FirstScheduledTime *timestamppb.Timestamp `protobuf:"bytes,39,opt,name=first_scheduled_time,json=firstScheduledTime,proto3" json:"first_scheduled_time,omitempty"`
-	// The last time an activity attempt completion was recorded by the server.
-	LastAttemptCompleteTime *timestamppb.Timestamp `protobuf:"bytes,40,opt,name=last_attempt_complete_time,json=lastAttemptCompleteTime,proto3" json:"last_attempt_complete_time,omitempty"`
-	// Stamp represents the “version” of the activity's internal state and can/will be changed with Activity API.
-	// It increases monotonically when the activity's options are modified.
-	// It is used to check if an activity task is still relevant to the corresponding activity state machine.
-	Stamp int32 `protobuf:"varint,41,opt,name=stamp,proto3" json:"stamp,omitempty"`
-	// Paused state. When activity is paused it will not advance until unpaused.
-	// Iw will not be scheduled, timer tasks will not be processed, etc.
-	// Note: it still can be cancelled/completed.
-	Paused bool `protobuf:"varint,42,opt,name=paused,proto3" json:"paused,omitempty"`
-	// The deployment this activity was dispatched to most recently. Present only if the activity
-	// was dispatched to a versioned worker.
-	// Deprecated. Replaced by last_worker_deployment_version.
-	LastStartedDeployment *v18.Deployment `protobuf:"bytes,43,opt,name=last_started_deployment,json=lastStartedDeployment,proto3" json:"last_started_deployment,omitempty"`
-	// The deployment this activity was dispatched to most recently. Present only if the activity
-	// was dispatched to a versioned worker.
-	// Deprecated. Clean up with versioning-3.1. [cleanup-old-wv]
-	LastWorkerDeploymentVersion string `protobuf:"bytes,44,opt,name=last_worker_deployment_version,json=lastWorkerDeploymentVersion,proto3" json:"last_worker_deployment_version,omitempty"`
-	// The deployment version this activity was dispatched to most recently. Present only if the activity
-	// was dispatched to a versioned worker.
-	LastDeploymentVersion *v18.WorkerDeploymentVersion `protobuf:"bytes,49,opt,name=last_deployment_version,json=lastDeploymentVersion,proto3" json:"last_deployment_version,omitempty"`
-	// Priority metadata. If this message is not present, or any fields are not
-	// present, they inherit the values from the workflow.
-	Priority  *v13.Priority           `protobuf:"bytes,45,opt,name=priority,proto3" json:"priority,omitempty"`
-	PauseInfo *ActivityInfo_PauseInfo `protobuf:"bytes,46,opt,name=pause_info,json=pauseInfo,proto3" json:"pause_info,omitempty"`
-	// set to true if there was an activity reset while activity is still running on the worker
-	ActivityReset bool `protobuf:"varint,47,opt,name=activity_reset,json=activityReset,proto3" json:"activity_reset,omitempty"`
-	// set to true if reset heartbeat flag was set with an activity reset
-	ResetHeartbeats bool  `protobuf:"varint,48,opt,name=reset_heartbeats,json=resetHeartbeats,proto3" json:"reset_heartbeats,omitempty"`
-	StartVersion    int64 `protobuf:"varint,50,opt,name=start_version,json=startVersion,proto3" json:"start_version,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state                                    protoimpl.MessageState       `protogen:"opaque.v1"`
+	xxx_hidden_Version                       int64                        `protobuf:"varint,1,opt,name=version,proto3"`
+	xxx_hidden_ScheduledEventBatchId         int64                        `protobuf:"varint,2,opt,name=scheduled_event_batch_id,json=scheduledEventBatchId,proto3"`
+	xxx_hidden_ScheduledTime                 *timestamppb.Timestamp       `protobuf:"bytes,4,opt,name=scheduled_time,json=scheduledTime,proto3"`
+	xxx_hidden_StartedEventId                int64                        `protobuf:"varint,5,opt,name=started_event_id,json=startedEventId,proto3"`
+	xxx_hidden_StartedTime                   *timestamppb.Timestamp       `protobuf:"bytes,7,opt,name=started_time,json=startedTime,proto3"`
+	xxx_hidden_ActivityId                    string                       `protobuf:"bytes,8,opt,name=activity_id,json=activityId,proto3"`
+	xxx_hidden_RequestId                     string                       `protobuf:"bytes,9,opt,name=request_id,json=requestId,proto3"`
+	xxx_hidden_ScheduleToStartTimeout        *durationpb.Duration         `protobuf:"bytes,10,opt,name=schedule_to_start_timeout,json=scheduleToStartTimeout,proto3"`
+	xxx_hidden_ScheduleToCloseTimeout        *durationpb.Duration         `protobuf:"bytes,11,opt,name=schedule_to_close_timeout,json=scheduleToCloseTimeout,proto3"`
+	xxx_hidden_StartToCloseTimeout           *durationpb.Duration         `protobuf:"bytes,12,opt,name=start_to_close_timeout,json=startToCloseTimeout,proto3"`
+	xxx_hidden_HeartbeatTimeout              *durationpb.Duration         `protobuf:"bytes,13,opt,name=heartbeat_timeout,json=heartbeatTimeout,proto3"`
+	xxx_hidden_CancelRequested               bool                         `protobuf:"varint,14,opt,name=cancel_requested,json=cancelRequested,proto3"`
+	xxx_hidden_CancelRequestId               int64                        `protobuf:"varint,15,opt,name=cancel_request_id,json=cancelRequestId,proto3"`
+	xxx_hidden_TimerTaskStatus               int32                        `protobuf:"varint,16,opt,name=timer_task_status,json=timerTaskStatus,proto3"`
+	xxx_hidden_Attempt                       int32                        `protobuf:"varint,17,opt,name=attempt,proto3"`
+	xxx_hidden_TaskQueue                     string                       `protobuf:"bytes,18,opt,name=task_queue,json=taskQueue,proto3"`
+	xxx_hidden_StartedIdentity               string                       `protobuf:"bytes,19,opt,name=started_identity,json=startedIdentity,proto3"`
+	xxx_hidden_HasRetryPolicy                bool                         `protobuf:"varint,20,opt,name=has_retry_policy,json=hasRetryPolicy,proto3"`
+	xxx_hidden_RetryInitialInterval          *durationpb.Duration         `protobuf:"bytes,21,opt,name=retry_initial_interval,json=retryInitialInterval,proto3"`
+	xxx_hidden_RetryMaximumInterval          *durationpb.Duration         `protobuf:"bytes,22,opt,name=retry_maximum_interval,json=retryMaximumInterval,proto3"`
+	xxx_hidden_RetryMaximumAttempts          int32                        `protobuf:"varint,23,opt,name=retry_maximum_attempts,json=retryMaximumAttempts,proto3"`
+	xxx_hidden_RetryExpirationTime           *timestamppb.Timestamp       `protobuf:"bytes,24,opt,name=retry_expiration_time,json=retryExpirationTime,proto3"`
+	xxx_hidden_RetryBackoffCoefficient       float64                      `protobuf:"fixed64,25,opt,name=retry_backoff_coefficient,json=retryBackoffCoefficient,proto3"`
+	xxx_hidden_RetryNonRetryableErrorTypes   []string                     `protobuf:"bytes,26,rep,name=retry_non_retryable_error_types,json=retryNonRetryableErrorTypes,proto3"`
+	xxx_hidden_RetryLastFailure              *v17.Failure                 `protobuf:"bytes,27,opt,name=retry_last_failure,json=retryLastFailure,proto3"`
+	xxx_hidden_RetryLastWorkerIdentity       string                       `protobuf:"bytes,28,opt,name=retry_last_worker_identity,json=retryLastWorkerIdentity,proto3"`
+	xxx_hidden_ScheduledEventId              int64                        `protobuf:"varint,30,opt,name=scheduled_event_id,json=scheduledEventId,proto3"`
+	xxx_hidden_LastHeartbeatDetails          *v13.Payloads                `protobuf:"bytes,31,opt,name=last_heartbeat_details,json=lastHeartbeatDetails,proto3"`
+	xxx_hidden_LastHeartbeatUpdateTime       *timestamppb.Timestamp       `protobuf:"bytes,32,opt,name=last_heartbeat_update_time,json=lastHeartbeatUpdateTime,proto3"`
+	xxx_hidden_UseCompatibleVersion          bool                         `protobuf:"varint,33,opt,name=use_compatible_version,json=useCompatibleVersion,proto3"`
+	xxx_hidden_ActivityType                  *v13.ActivityType            `protobuf:"bytes,34,opt,name=activity_type,json=activityType,proto3"`
+	xxx_hidden_BuildIdInfo                   isActivityInfo_BuildIdInfo   `protobuf_oneof:"build_id_info"`
+	xxx_hidden_LastWorkerVersionStamp        *v13.WorkerVersionStamp      `protobuf:"bytes,37,opt,name=last_worker_version_stamp,json=lastWorkerVersionStamp,proto3"`
+	xxx_hidden_LastUpdateVersionedTransition *VersionedTransition         `protobuf:"bytes,38,opt,name=last_update_versioned_transition,json=lastUpdateVersionedTransition,proto3"`
+	xxx_hidden_FirstScheduledTime            *timestamppb.Timestamp       `protobuf:"bytes,39,opt,name=first_scheduled_time,json=firstScheduledTime,proto3"`
+	xxx_hidden_LastAttemptCompleteTime       *timestamppb.Timestamp       `protobuf:"bytes,40,opt,name=last_attempt_complete_time,json=lastAttemptCompleteTime,proto3"`
+	xxx_hidden_Stamp                         int32                        `protobuf:"varint,41,opt,name=stamp,proto3"`
+	xxx_hidden_Paused                        bool                         `protobuf:"varint,42,opt,name=paused,proto3"`
+	xxx_hidden_LastStartedDeployment         *v18.Deployment              `protobuf:"bytes,43,opt,name=last_started_deployment,json=lastStartedDeployment,proto3"`
+	xxx_hidden_LastWorkerDeploymentVersion   string                       `protobuf:"bytes,44,opt,name=last_worker_deployment_version,json=lastWorkerDeploymentVersion,proto3"`
+	xxx_hidden_LastDeploymentVersion         *v18.WorkerDeploymentVersion `protobuf:"bytes,49,opt,name=last_deployment_version,json=lastDeploymentVersion,proto3"`
+	xxx_hidden_Priority                      *v13.Priority                `protobuf:"bytes,45,opt,name=priority,proto3"`
+	xxx_hidden_PauseInfo                     *ActivityInfo_PauseInfo      `protobuf:"bytes,46,opt,name=pause_info,json=pauseInfo,proto3"`
+	xxx_hidden_ActivityReset                 bool                         `protobuf:"varint,47,opt,name=activity_reset,json=activityReset,proto3"`
+	xxx_hidden_ResetHeartbeats               bool                         `protobuf:"varint,48,opt,name=reset_heartbeats,json=resetHeartbeats,proto3"`
+	xxx_hidden_StartVersion                  int64                        `protobuf:"varint,50,opt,name=start_version,json=startVersion,proto3"`
+	unknownFields                            protoimpl.UnknownFields
+	sizeCache                                protoimpl.SizeCache
 }
 
 func (x *ActivityInfo) Reset() {
@@ -2542,238 +4607,226 @@ func (x *ActivityInfo) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ActivityInfo.ProtoReflect.Descriptor instead.
-func (*ActivityInfo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_executions_proto_rawDescGZIP(), []int{13}
-}
-
 func (x *ActivityInfo) GetVersion() int64 {
 	if x != nil {
-		return x.Version
+		return x.xxx_hidden_Version
 	}
 	return 0
 }
 
 func (x *ActivityInfo) GetScheduledEventBatchId() int64 {
 	if x != nil {
-		return x.ScheduledEventBatchId
+		return x.xxx_hidden_ScheduledEventBatchId
 	}
 	return 0
 }
 
 func (x *ActivityInfo) GetScheduledTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.ScheduledTime
+		return x.xxx_hidden_ScheduledTime
 	}
 	return nil
 }
 
 func (x *ActivityInfo) GetStartedEventId() int64 {
 	if x != nil {
-		return x.StartedEventId
+		return x.xxx_hidden_StartedEventId
 	}
 	return 0
 }
 
 func (x *ActivityInfo) GetStartedTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.StartedTime
+		return x.xxx_hidden_StartedTime
 	}
 	return nil
 }
 
 func (x *ActivityInfo) GetActivityId() string {
 	if x != nil {
-		return x.ActivityId
+		return x.xxx_hidden_ActivityId
 	}
 	return ""
 }
 
 func (x *ActivityInfo) GetRequestId() string {
 	if x != nil {
-		return x.RequestId
+		return x.xxx_hidden_RequestId
 	}
 	return ""
 }
 
 func (x *ActivityInfo) GetScheduleToStartTimeout() *durationpb.Duration {
 	if x != nil {
-		return x.ScheduleToStartTimeout
+		return x.xxx_hidden_ScheduleToStartTimeout
 	}
 	return nil
 }
 
 func (x *ActivityInfo) GetScheduleToCloseTimeout() *durationpb.Duration {
 	if x != nil {
-		return x.ScheduleToCloseTimeout
+		return x.xxx_hidden_ScheduleToCloseTimeout
 	}
 	return nil
 }
 
 func (x *ActivityInfo) GetStartToCloseTimeout() *durationpb.Duration {
 	if x != nil {
-		return x.StartToCloseTimeout
+		return x.xxx_hidden_StartToCloseTimeout
 	}
 	return nil
 }
 
 func (x *ActivityInfo) GetHeartbeatTimeout() *durationpb.Duration {
 	if x != nil {
-		return x.HeartbeatTimeout
+		return x.xxx_hidden_HeartbeatTimeout
 	}
 	return nil
 }
 
 func (x *ActivityInfo) GetCancelRequested() bool {
 	if x != nil {
-		return x.CancelRequested
+		return x.xxx_hidden_CancelRequested
 	}
 	return false
 }
 
 func (x *ActivityInfo) GetCancelRequestId() int64 {
 	if x != nil {
-		return x.CancelRequestId
+		return x.xxx_hidden_CancelRequestId
 	}
 	return 0
 }
 
 func (x *ActivityInfo) GetTimerTaskStatus() int32 {
 	if x != nil {
-		return x.TimerTaskStatus
+		return x.xxx_hidden_TimerTaskStatus
 	}
 	return 0
 }
 
 func (x *ActivityInfo) GetAttempt() int32 {
 	if x != nil {
-		return x.Attempt
+		return x.xxx_hidden_Attempt
 	}
 	return 0
 }
 
 func (x *ActivityInfo) GetTaskQueue() string {
 	if x != nil {
-		return x.TaskQueue
+		return x.xxx_hidden_TaskQueue
 	}
 	return ""
 }
 
 func (x *ActivityInfo) GetStartedIdentity() string {
 	if x != nil {
-		return x.StartedIdentity
+		return x.xxx_hidden_StartedIdentity
 	}
 	return ""
 }
 
 func (x *ActivityInfo) GetHasRetryPolicy() bool {
 	if x != nil {
-		return x.HasRetryPolicy
+		return x.xxx_hidden_HasRetryPolicy
 	}
 	return false
 }
 
 func (x *ActivityInfo) GetRetryInitialInterval() *durationpb.Duration {
 	if x != nil {
-		return x.RetryInitialInterval
+		return x.xxx_hidden_RetryInitialInterval
 	}
 	return nil
 }
 
 func (x *ActivityInfo) GetRetryMaximumInterval() *durationpb.Duration {
 	if x != nil {
-		return x.RetryMaximumInterval
+		return x.xxx_hidden_RetryMaximumInterval
 	}
 	return nil
 }
 
 func (x *ActivityInfo) GetRetryMaximumAttempts() int32 {
 	if x != nil {
-		return x.RetryMaximumAttempts
+		return x.xxx_hidden_RetryMaximumAttempts
 	}
 	return 0
 }
 
 func (x *ActivityInfo) GetRetryExpirationTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.RetryExpirationTime
+		return x.xxx_hidden_RetryExpirationTime
 	}
 	return nil
 }
 
 func (x *ActivityInfo) GetRetryBackoffCoefficient() float64 {
 	if x != nil {
-		return x.RetryBackoffCoefficient
+		return x.xxx_hidden_RetryBackoffCoefficient
 	}
 	return 0
 }
 
 func (x *ActivityInfo) GetRetryNonRetryableErrorTypes() []string {
 	if x != nil {
-		return x.RetryNonRetryableErrorTypes
+		return x.xxx_hidden_RetryNonRetryableErrorTypes
 	}
 	return nil
 }
 
 func (x *ActivityInfo) GetRetryLastFailure() *v17.Failure {
 	if x != nil {
-		return x.RetryLastFailure
+		return x.xxx_hidden_RetryLastFailure
 	}
 	return nil
 }
 
 func (x *ActivityInfo) GetRetryLastWorkerIdentity() string {
 	if x != nil {
-		return x.RetryLastWorkerIdentity
+		return x.xxx_hidden_RetryLastWorkerIdentity
 	}
 	return ""
 }
 
 func (x *ActivityInfo) GetScheduledEventId() int64 {
 	if x != nil {
-		return x.ScheduledEventId
+		return x.xxx_hidden_ScheduledEventId
 	}
 	return 0
 }
 
 func (x *ActivityInfo) GetLastHeartbeatDetails() *v13.Payloads {
 	if x != nil {
-		return x.LastHeartbeatDetails
+		return x.xxx_hidden_LastHeartbeatDetails
 	}
 	return nil
 }
 
 func (x *ActivityInfo) GetLastHeartbeatUpdateTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.LastHeartbeatUpdateTime
+		return x.xxx_hidden_LastHeartbeatUpdateTime
 	}
 	return nil
 }
 
 func (x *ActivityInfo) GetUseCompatibleVersion() bool {
 	if x != nil {
-		return x.UseCompatibleVersion
+		return x.xxx_hidden_UseCompatibleVersion
 	}
 	return false
 }
 
 func (x *ActivityInfo) GetActivityType() *v13.ActivityType {
 	if x != nil {
-		return x.ActivityType
-	}
-	return nil
-}
-
-func (x *ActivityInfo) GetBuildIdInfo() isActivityInfo_BuildIdInfo {
-	if x != nil {
-		return x.BuildIdInfo
+		return x.xxx_hidden_ActivityType
 	}
 	return nil
 }
 
 func (x *ActivityInfo) GetUseWorkflowBuildIdInfo() *ActivityInfo_UseWorkflowBuildIdInfo {
 	if x != nil {
-		if x, ok := x.BuildIdInfo.(*ActivityInfo_UseWorkflowBuildIdInfo_); ok {
+		if x, ok := x.xxx_hidden_BuildIdInfo.(*activityInfo_UseWorkflowBuildIdInfo_); ok {
 			return x.UseWorkflowBuildIdInfo
 		}
 	}
@@ -2782,7 +4835,7 @@ func (x *ActivityInfo) GetUseWorkflowBuildIdInfo() *ActivityInfo_UseWorkflowBuil
 
 func (x *ActivityInfo) GetLastIndependentlyAssignedBuildId() string {
 	if x != nil {
-		if x, ok := x.BuildIdInfo.(*ActivityInfo_LastIndependentlyAssignedBuildId); ok {
+		if x, ok := x.xxx_hidden_BuildIdInfo.(*activityInfo_LastIndependentlyAssignedBuildId); ok {
 			return x.LastIndependentlyAssignedBuildId
 		}
 	}
@@ -2791,113 +4844,767 @@ func (x *ActivityInfo) GetLastIndependentlyAssignedBuildId() string {
 
 func (x *ActivityInfo) GetLastWorkerVersionStamp() *v13.WorkerVersionStamp {
 	if x != nil {
-		return x.LastWorkerVersionStamp
+		return x.xxx_hidden_LastWorkerVersionStamp
 	}
 	return nil
 }
 
 func (x *ActivityInfo) GetLastUpdateVersionedTransition() *VersionedTransition {
 	if x != nil {
-		return x.LastUpdateVersionedTransition
+		return x.xxx_hidden_LastUpdateVersionedTransition
 	}
 	return nil
 }
 
 func (x *ActivityInfo) GetFirstScheduledTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.FirstScheduledTime
+		return x.xxx_hidden_FirstScheduledTime
 	}
 	return nil
 }
 
 func (x *ActivityInfo) GetLastAttemptCompleteTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.LastAttemptCompleteTime
+		return x.xxx_hidden_LastAttemptCompleteTime
 	}
 	return nil
 }
 
 func (x *ActivityInfo) GetStamp() int32 {
 	if x != nil {
-		return x.Stamp
+		return x.xxx_hidden_Stamp
 	}
 	return 0
 }
 
 func (x *ActivityInfo) GetPaused() bool {
 	if x != nil {
-		return x.Paused
+		return x.xxx_hidden_Paused
 	}
 	return false
 }
 
 func (x *ActivityInfo) GetLastStartedDeployment() *v18.Deployment {
 	if x != nil {
-		return x.LastStartedDeployment
+		return x.xxx_hidden_LastStartedDeployment
 	}
 	return nil
 }
 
 func (x *ActivityInfo) GetLastWorkerDeploymentVersion() string {
 	if x != nil {
-		return x.LastWorkerDeploymentVersion
+		return x.xxx_hidden_LastWorkerDeploymentVersion
 	}
 	return ""
 }
 
 func (x *ActivityInfo) GetLastDeploymentVersion() *v18.WorkerDeploymentVersion {
 	if x != nil {
-		return x.LastDeploymentVersion
+		return x.xxx_hidden_LastDeploymentVersion
 	}
 	return nil
 }
 
 func (x *ActivityInfo) GetPriority() *v13.Priority {
 	if x != nil {
-		return x.Priority
+		return x.xxx_hidden_Priority
 	}
 	return nil
 }
 
 func (x *ActivityInfo) GetPauseInfo() *ActivityInfo_PauseInfo {
 	if x != nil {
-		return x.PauseInfo
+		return x.xxx_hidden_PauseInfo
 	}
 	return nil
 }
 
 func (x *ActivityInfo) GetActivityReset() bool {
 	if x != nil {
-		return x.ActivityReset
+		return x.xxx_hidden_ActivityReset
 	}
 	return false
 }
 
 func (x *ActivityInfo) GetResetHeartbeats() bool {
 	if x != nil {
-		return x.ResetHeartbeats
+		return x.xxx_hidden_ResetHeartbeats
 	}
 	return false
 }
 
 func (x *ActivityInfo) GetStartVersion() int64 {
 	if x != nil {
-		return x.StartVersion
+		return x.xxx_hidden_StartVersion
 	}
 	return 0
+}
+
+func (x *ActivityInfo) SetVersion(v int64) {
+	x.xxx_hidden_Version = v
+}
+
+func (x *ActivityInfo) SetScheduledEventBatchId(v int64) {
+	x.xxx_hidden_ScheduledEventBatchId = v
+}
+
+func (x *ActivityInfo) SetScheduledTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_ScheduledTime = v
+}
+
+func (x *ActivityInfo) SetStartedEventId(v int64) {
+	x.xxx_hidden_StartedEventId = v
+}
+
+func (x *ActivityInfo) SetStartedTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_StartedTime = v
+}
+
+func (x *ActivityInfo) SetActivityId(v string) {
+	x.xxx_hidden_ActivityId = v
+}
+
+func (x *ActivityInfo) SetRequestId(v string) {
+	x.xxx_hidden_RequestId = v
+}
+
+func (x *ActivityInfo) SetScheduleToStartTimeout(v *durationpb.Duration) {
+	x.xxx_hidden_ScheduleToStartTimeout = v
+}
+
+func (x *ActivityInfo) SetScheduleToCloseTimeout(v *durationpb.Duration) {
+	x.xxx_hidden_ScheduleToCloseTimeout = v
+}
+
+func (x *ActivityInfo) SetStartToCloseTimeout(v *durationpb.Duration) {
+	x.xxx_hidden_StartToCloseTimeout = v
+}
+
+func (x *ActivityInfo) SetHeartbeatTimeout(v *durationpb.Duration) {
+	x.xxx_hidden_HeartbeatTimeout = v
+}
+
+func (x *ActivityInfo) SetCancelRequested(v bool) {
+	x.xxx_hidden_CancelRequested = v
+}
+
+func (x *ActivityInfo) SetCancelRequestId(v int64) {
+	x.xxx_hidden_CancelRequestId = v
+}
+
+func (x *ActivityInfo) SetTimerTaskStatus(v int32) {
+	x.xxx_hidden_TimerTaskStatus = v
+}
+
+func (x *ActivityInfo) SetAttempt(v int32) {
+	x.xxx_hidden_Attempt = v
+}
+
+func (x *ActivityInfo) SetTaskQueue(v string) {
+	x.xxx_hidden_TaskQueue = v
+}
+
+func (x *ActivityInfo) SetStartedIdentity(v string) {
+	x.xxx_hidden_StartedIdentity = v
+}
+
+func (x *ActivityInfo) SetHasRetryPolicy(v bool) {
+	x.xxx_hidden_HasRetryPolicy = v
+}
+
+func (x *ActivityInfo) SetRetryInitialInterval(v *durationpb.Duration) {
+	x.xxx_hidden_RetryInitialInterval = v
+}
+
+func (x *ActivityInfo) SetRetryMaximumInterval(v *durationpb.Duration) {
+	x.xxx_hidden_RetryMaximumInterval = v
+}
+
+func (x *ActivityInfo) SetRetryMaximumAttempts(v int32) {
+	x.xxx_hidden_RetryMaximumAttempts = v
+}
+
+func (x *ActivityInfo) SetRetryExpirationTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_RetryExpirationTime = v
+}
+
+func (x *ActivityInfo) SetRetryBackoffCoefficient(v float64) {
+	x.xxx_hidden_RetryBackoffCoefficient = v
+}
+
+func (x *ActivityInfo) SetRetryNonRetryableErrorTypes(v []string) {
+	x.xxx_hidden_RetryNonRetryableErrorTypes = v
+}
+
+func (x *ActivityInfo) SetRetryLastFailure(v *v17.Failure) {
+	x.xxx_hidden_RetryLastFailure = v
+}
+
+func (x *ActivityInfo) SetRetryLastWorkerIdentity(v string) {
+	x.xxx_hidden_RetryLastWorkerIdentity = v
+}
+
+func (x *ActivityInfo) SetScheduledEventId(v int64) {
+	x.xxx_hidden_ScheduledEventId = v
+}
+
+func (x *ActivityInfo) SetLastHeartbeatDetails(v *v13.Payloads) {
+	x.xxx_hidden_LastHeartbeatDetails = v
+}
+
+func (x *ActivityInfo) SetLastHeartbeatUpdateTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_LastHeartbeatUpdateTime = v
+}
+
+func (x *ActivityInfo) SetUseCompatibleVersion(v bool) {
+	x.xxx_hidden_UseCompatibleVersion = v
+}
+
+func (x *ActivityInfo) SetActivityType(v *v13.ActivityType) {
+	x.xxx_hidden_ActivityType = v
+}
+
+func (x *ActivityInfo) SetUseWorkflowBuildIdInfo(v *ActivityInfo_UseWorkflowBuildIdInfo) {
+	if v == nil {
+		x.xxx_hidden_BuildIdInfo = nil
+		return
+	}
+	x.xxx_hidden_BuildIdInfo = &activityInfo_UseWorkflowBuildIdInfo_{v}
+}
+
+func (x *ActivityInfo) SetLastIndependentlyAssignedBuildId(v string) {
+	x.xxx_hidden_BuildIdInfo = &activityInfo_LastIndependentlyAssignedBuildId{v}
+}
+
+func (x *ActivityInfo) SetLastWorkerVersionStamp(v *v13.WorkerVersionStamp) {
+	x.xxx_hidden_LastWorkerVersionStamp = v
+}
+
+func (x *ActivityInfo) SetLastUpdateVersionedTransition(v *VersionedTransition) {
+	x.xxx_hidden_LastUpdateVersionedTransition = v
+}
+
+func (x *ActivityInfo) SetFirstScheduledTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_FirstScheduledTime = v
+}
+
+func (x *ActivityInfo) SetLastAttemptCompleteTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_LastAttemptCompleteTime = v
+}
+
+func (x *ActivityInfo) SetStamp(v int32) {
+	x.xxx_hidden_Stamp = v
+}
+
+func (x *ActivityInfo) SetPaused(v bool) {
+	x.xxx_hidden_Paused = v
+}
+
+func (x *ActivityInfo) SetLastStartedDeployment(v *v18.Deployment) {
+	x.xxx_hidden_LastStartedDeployment = v
+}
+
+func (x *ActivityInfo) SetLastWorkerDeploymentVersion(v string) {
+	x.xxx_hidden_LastWorkerDeploymentVersion = v
+}
+
+func (x *ActivityInfo) SetLastDeploymentVersion(v *v18.WorkerDeploymentVersion) {
+	x.xxx_hidden_LastDeploymentVersion = v
+}
+
+func (x *ActivityInfo) SetPriority(v *v13.Priority) {
+	x.xxx_hidden_Priority = v
+}
+
+func (x *ActivityInfo) SetPauseInfo(v *ActivityInfo_PauseInfo) {
+	x.xxx_hidden_PauseInfo = v
+}
+
+func (x *ActivityInfo) SetActivityReset(v bool) {
+	x.xxx_hidden_ActivityReset = v
+}
+
+func (x *ActivityInfo) SetResetHeartbeats(v bool) {
+	x.xxx_hidden_ResetHeartbeats = v
+}
+
+func (x *ActivityInfo) SetStartVersion(v int64) {
+	x.xxx_hidden_StartVersion = v
+}
+
+func (x *ActivityInfo) HasScheduledTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_ScheduledTime != nil
+}
+
+func (x *ActivityInfo) HasStartedTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_StartedTime != nil
+}
+
+func (x *ActivityInfo) HasScheduleToStartTimeout() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_ScheduleToStartTimeout != nil
+}
+
+func (x *ActivityInfo) HasScheduleToCloseTimeout() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_ScheduleToCloseTimeout != nil
+}
+
+func (x *ActivityInfo) HasStartToCloseTimeout() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_StartToCloseTimeout != nil
+}
+
+func (x *ActivityInfo) HasHeartbeatTimeout() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_HeartbeatTimeout != nil
+}
+
+func (x *ActivityInfo) HasRetryInitialInterval() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_RetryInitialInterval != nil
+}
+
+func (x *ActivityInfo) HasRetryMaximumInterval() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_RetryMaximumInterval != nil
+}
+
+func (x *ActivityInfo) HasRetryExpirationTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_RetryExpirationTime != nil
+}
+
+func (x *ActivityInfo) HasRetryLastFailure() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_RetryLastFailure != nil
+}
+
+func (x *ActivityInfo) HasLastHeartbeatDetails() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_LastHeartbeatDetails != nil
+}
+
+func (x *ActivityInfo) HasLastHeartbeatUpdateTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_LastHeartbeatUpdateTime != nil
+}
+
+func (x *ActivityInfo) HasActivityType() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_ActivityType != nil
+}
+
+func (x *ActivityInfo) HasBuildIdInfo() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_BuildIdInfo != nil
+}
+
+func (x *ActivityInfo) HasUseWorkflowBuildIdInfo() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_BuildIdInfo.(*activityInfo_UseWorkflowBuildIdInfo_)
+	return ok
+}
+
+func (x *ActivityInfo) HasLastIndependentlyAssignedBuildId() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_BuildIdInfo.(*activityInfo_LastIndependentlyAssignedBuildId)
+	return ok
+}
+
+func (x *ActivityInfo) HasLastWorkerVersionStamp() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_LastWorkerVersionStamp != nil
+}
+
+func (x *ActivityInfo) HasLastUpdateVersionedTransition() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_LastUpdateVersionedTransition != nil
+}
+
+func (x *ActivityInfo) HasFirstScheduledTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_FirstScheduledTime != nil
+}
+
+func (x *ActivityInfo) HasLastAttemptCompleteTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_LastAttemptCompleteTime != nil
+}
+
+func (x *ActivityInfo) HasLastStartedDeployment() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_LastStartedDeployment != nil
+}
+
+func (x *ActivityInfo) HasLastDeploymentVersion() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_LastDeploymentVersion != nil
+}
+
+func (x *ActivityInfo) HasPriority() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Priority != nil
+}
+
+func (x *ActivityInfo) HasPauseInfo() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_PauseInfo != nil
+}
+
+func (x *ActivityInfo) ClearScheduledTime() {
+	x.xxx_hidden_ScheduledTime = nil
+}
+
+func (x *ActivityInfo) ClearStartedTime() {
+	x.xxx_hidden_StartedTime = nil
+}
+
+func (x *ActivityInfo) ClearScheduleToStartTimeout() {
+	x.xxx_hidden_ScheduleToStartTimeout = nil
+}
+
+func (x *ActivityInfo) ClearScheduleToCloseTimeout() {
+	x.xxx_hidden_ScheduleToCloseTimeout = nil
+}
+
+func (x *ActivityInfo) ClearStartToCloseTimeout() {
+	x.xxx_hidden_StartToCloseTimeout = nil
+}
+
+func (x *ActivityInfo) ClearHeartbeatTimeout() {
+	x.xxx_hidden_HeartbeatTimeout = nil
+}
+
+func (x *ActivityInfo) ClearRetryInitialInterval() {
+	x.xxx_hidden_RetryInitialInterval = nil
+}
+
+func (x *ActivityInfo) ClearRetryMaximumInterval() {
+	x.xxx_hidden_RetryMaximumInterval = nil
+}
+
+func (x *ActivityInfo) ClearRetryExpirationTime() {
+	x.xxx_hidden_RetryExpirationTime = nil
+}
+
+func (x *ActivityInfo) ClearRetryLastFailure() {
+	x.xxx_hidden_RetryLastFailure = nil
+}
+
+func (x *ActivityInfo) ClearLastHeartbeatDetails() {
+	x.xxx_hidden_LastHeartbeatDetails = nil
+}
+
+func (x *ActivityInfo) ClearLastHeartbeatUpdateTime() {
+	x.xxx_hidden_LastHeartbeatUpdateTime = nil
+}
+
+func (x *ActivityInfo) ClearActivityType() {
+	x.xxx_hidden_ActivityType = nil
+}
+
+func (x *ActivityInfo) ClearBuildIdInfo() {
+	x.xxx_hidden_BuildIdInfo = nil
+}
+
+func (x *ActivityInfo) ClearUseWorkflowBuildIdInfo() {
+	if _, ok := x.xxx_hidden_BuildIdInfo.(*activityInfo_UseWorkflowBuildIdInfo_); ok {
+		x.xxx_hidden_BuildIdInfo = nil
+	}
+}
+
+func (x *ActivityInfo) ClearLastIndependentlyAssignedBuildId() {
+	if _, ok := x.xxx_hidden_BuildIdInfo.(*activityInfo_LastIndependentlyAssignedBuildId); ok {
+		x.xxx_hidden_BuildIdInfo = nil
+	}
+}
+
+func (x *ActivityInfo) ClearLastWorkerVersionStamp() {
+	x.xxx_hidden_LastWorkerVersionStamp = nil
+}
+
+func (x *ActivityInfo) ClearLastUpdateVersionedTransition() {
+	x.xxx_hidden_LastUpdateVersionedTransition = nil
+}
+
+func (x *ActivityInfo) ClearFirstScheduledTime() {
+	x.xxx_hidden_FirstScheduledTime = nil
+}
+
+func (x *ActivityInfo) ClearLastAttemptCompleteTime() {
+	x.xxx_hidden_LastAttemptCompleteTime = nil
+}
+
+func (x *ActivityInfo) ClearLastStartedDeployment() {
+	x.xxx_hidden_LastStartedDeployment = nil
+}
+
+func (x *ActivityInfo) ClearLastDeploymentVersion() {
+	x.xxx_hidden_LastDeploymentVersion = nil
+}
+
+func (x *ActivityInfo) ClearPriority() {
+	x.xxx_hidden_Priority = nil
+}
+
+func (x *ActivityInfo) ClearPauseInfo() {
+	x.xxx_hidden_PauseInfo = nil
+}
+
+const ActivityInfo_BuildIdInfo_not_set_case case_ActivityInfo_BuildIdInfo = 0
+const ActivityInfo_UseWorkflowBuildIdInfo_case case_ActivityInfo_BuildIdInfo = 35
+const ActivityInfo_LastIndependentlyAssignedBuildId_case case_ActivityInfo_BuildIdInfo = 36
+
+func (x *ActivityInfo) WhichBuildIdInfo() case_ActivityInfo_BuildIdInfo {
+	if x == nil {
+		return ActivityInfo_BuildIdInfo_not_set_case
+	}
+	switch x.xxx_hidden_BuildIdInfo.(type) {
+	case *activityInfo_UseWorkflowBuildIdInfo_:
+		return ActivityInfo_UseWorkflowBuildIdInfo_case
+	case *activityInfo_LastIndependentlyAssignedBuildId:
+		return ActivityInfo_LastIndependentlyAssignedBuildId_case
+	default:
+		return ActivityInfo_BuildIdInfo_not_set_case
+	}
+}
+
+type ActivityInfo_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Version               int64
+	ScheduledEventBatchId int64
+	ScheduledTime         *timestamppb.Timestamp
+	StartedEventId        int64
+	StartedTime           *timestamppb.Timestamp
+	ActivityId            string
+	RequestId             string
+	// (-- api-linter: core::0140::prepositions=disabled
+	//
+	//	aip.dev/not-precedent: "to" is used to indicate interval. --)
+	ScheduleToStartTimeout *durationpb.Duration
+	// (-- api-linter: core::0140::prepositions=disabled
+	//
+	//	aip.dev/not-precedent: "to" is used to indicate interval. --)
+	ScheduleToCloseTimeout *durationpb.Duration
+	// (-- api-linter: core::0140::prepositions=disabled
+	//
+	//	aip.dev/not-precedent: "to" is used to indicate interval. --)
+	StartToCloseTimeout         *durationpb.Duration
+	HeartbeatTimeout            *durationpb.Duration
+	CancelRequested             bool
+	CancelRequestId             int64
+	TimerTaskStatus             int32
+	Attempt                     int32
+	TaskQueue                   string
+	StartedIdentity             string
+	HasRetryPolicy              bool
+	RetryInitialInterval        *durationpb.Duration
+	RetryMaximumInterval        *durationpb.Duration
+	RetryMaximumAttempts        int32
+	RetryExpirationTime         *timestamppb.Timestamp
+	RetryBackoffCoefficient     float64
+	RetryNonRetryableErrorTypes []string
+	RetryLastFailure            *v17.Failure
+	RetryLastWorkerIdentity     string
+	ScheduledEventId            int64
+	LastHeartbeatDetails        *v13.Payloads
+	LastHeartbeatUpdateTime     *timestamppb.Timestamp
+	// When true, it means the activity is assigned to the build ID of its workflow (only set for old versioning)
+	// Deprecated. use `use_workflow_build_id`
+	// Deprecated. Clean up with versioning-2. [cleanup-old-wv]
+	UseCompatibleVersion bool
+	ActivityType         *v13.ActivityType
+	// Absence of `assigned_build_id` generally means this task is on an "unversioned" task queue.
+	// In rare cases, it can also mean that the task queue is versioned but we failed to write activity's
+	// independently-assigned build ID to the database. This case heals automatically once the task is dispatched.
+	// Deprecated. Clean up with versioning-2. [cleanup-old-wv]
+
+	// Fields of oneof xxx_hidden_BuildIdInfo:
+	// When present, it means this activity is assigned to the build ID of its workflow.
+	// Deprecated. Clean up with versioning-2. [cleanup-old-wv]
+	UseWorkflowBuildIdInfo *ActivityInfo_UseWorkflowBuildIdInfo
+	// This means the activity is independently versioned and not bound to the build ID of its workflow.
+	// If the task fails and is scheduled again, the assigned build ID may change according to the latest versioning
+	// rules. This value also updates if a redirect rule is applied to the activity task to reflect the build ID
+	// of the worker who received the task.
+	// Deprecated. Clean up with versioning-2. [cleanup-old-wv]
+	LastIndependentlyAssignedBuildId *string
+	// -- end of xxx_hidden_BuildIdInfo
+	// The version stamp of the worker to whom this activity was most-recently dispatched
+	// Deprecated. Clean up with versioning-2. [cleanup-old-wv]
+	LastWorkerVersionStamp        *v13.WorkerVersionStamp
+	LastUpdateVersionedTransition *VersionedTransition
+	// The first time the activity was scheduled.
+	FirstScheduledTime *timestamppb.Timestamp
+	// The last time an activity attempt completion was recorded by the server.
+	LastAttemptCompleteTime *timestamppb.Timestamp
+	// Stamp represents the “version” of the activity's internal state and can/will be changed with Activity API.
+	// It increases monotonically when the activity's options are modified.
+	// It is used to check if an activity task is still relevant to the corresponding activity state machine.
+	Stamp int32
+	// Paused state. When activity is paused it will not advance until unpaused.
+	// Iw will not be scheduled, timer tasks will not be processed, etc.
+	// Note: it still can be cancelled/completed.
+	Paused bool
+	// The deployment this activity was dispatched to most recently. Present only if the activity
+	// was dispatched to a versioned worker.
+	// Deprecated. Replaced by last_worker_deployment_version.
+	LastStartedDeployment *v18.Deployment
+	// The deployment this activity was dispatched to most recently. Present only if the activity
+	// was dispatched to a versioned worker.
+	// Deprecated. Clean up with versioning-3.1. [cleanup-old-wv]
+	LastWorkerDeploymentVersion string
+	// The deployment version this activity was dispatched to most recently. Present only if the activity
+	// was dispatched to a versioned worker.
+	LastDeploymentVersion *v18.WorkerDeploymentVersion
+	// Priority metadata. If this message is not present, or any fields are not
+	// present, they inherit the values from the workflow.
+	Priority  *v13.Priority
+	PauseInfo *ActivityInfo_PauseInfo
+	// set to true if there was an activity reset while activity is still running on the worker
+	ActivityReset bool
+	// set to true if reset heartbeat flag was set with an activity reset
+	ResetHeartbeats bool
+	StartVersion    int64
+}
+
+func (b0 ActivityInfo_builder) Build() *ActivityInfo {
+	m0 := &ActivityInfo{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Version = b.Version
+	x.xxx_hidden_ScheduledEventBatchId = b.ScheduledEventBatchId
+	x.xxx_hidden_ScheduledTime = b.ScheduledTime
+	x.xxx_hidden_StartedEventId = b.StartedEventId
+	x.xxx_hidden_StartedTime = b.StartedTime
+	x.xxx_hidden_ActivityId = b.ActivityId
+	x.xxx_hidden_RequestId = b.RequestId
+	x.xxx_hidden_ScheduleToStartTimeout = b.ScheduleToStartTimeout
+	x.xxx_hidden_ScheduleToCloseTimeout = b.ScheduleToCloseTimeout
+	x.xxx_hidden_StartToCloseTimeout = b.StartToCloseTimeout
+	x.xxx_hidden_HeartbeatTimeout = b.HeartbeatTimeout
+	x.xxx_hidden_CancelRequested = b.CancelRequested
+	x.xxx_hidden_CancelRequestId = b.CancelRequestId
+	x.xxx_hidden_TimerTaskStatus = b.TimerTaskStatus
+	x.xxx_hidden_Attempt = b.Attempt
+	x.xxx_hidden_TaskQueue = b.TaskQueue
+	x.xxx_hidden_StartedIdentity = b.StartedIdentity
+	x.xxx_hidden_HasRetryPolicy = b.HasRetryPolicy
+	x.xxx_hidden_RetryInitialInterval = b.RetryInitialInterval
+	x.xxx_hidden_RetryMaximumInterval = b.RetryMaximumInterval
+	x.xxx_hidden_RetryMaximumAttempts = b.RetryMaximumAttempts
+	x.xxx_hidden_RetryExpirationTime = b.RetryExpirationTime
+	x.xxx_hidden_RetryBackoffCoefficient = b.RetryBackoffCoefficient
+	x.xxx_hidden_RetryNonRetryableErrorTypes = b.RetryNonRetryableErrorTypes
+	x.xxx_hidden_RetryLastFailure = b.RetryLastFailure
+	x.xxx_hidden_RetryLastWorkerIdentity = b.RetryLastWorkerIdentity
+	x.xxx_hidden_ScheduledEventId = b.ScheduledEventId
+	x.xxx_hidden_LastHeartbeatDetails = b.LastHeartbeatDetails
+	x.xxx_hidden_LastHeartbeatUpdateTime = b.LastHeartbeatUpdateTime
+	x.xxx_hidden_UseCompatibleVersion = b.UseCompatibleVersion
+	x.xxx_hidden_ActivityType = b.ActivityType
+	if b.UseWorkflowBuildIdInfo != nil {
+		x.xxx_hidden_BuildIdInfo = &activityInfo_UseWorkflowBuildIdInfo_{b.UseWorkflowBuildIdInfo}
+	}
+	if b.LastIndependentlyAssignedBuildId != nil {
+		x.xxx_hidden_BuildIdInfo = &activityInfo_LastIndependentlyAssignedBuildId{*b.LastIndependentlyAssignedBuildId}
+	}
+	x.xxx_hidden_LastWorkerVersionStamp = b.LastWorkerVersionStamp
+	x.xxx_hidden_LastUpdateVersionedTransition = b.LastUpdateVersionedTransition
+	x.xxx_hidden_FirstScheduledTime = b.FirstScheduledTime
+	x.xxx_hidden_LastAttemptCompleteTime = b.LastAttemptCompleteTime
+	x.xxx_hidden_Stamp = b.Stamp
+	x.xxx_hidden_Paused = b.Paused
+	x.xxx_hidden_LastStartedDeployment = b.LastStartedDeployment
+	x.xxx_hidden_LastWorkerDeploymentVersion = b.LastWorkerDeploymentVersion
+	x.xxx_hidden_LastDeploymentVersion = b.LastDeploymentVersion
+	x.xxx_hidden_Priority = b.Priority
+	x.xxx_hidden_PauseInfo = b.PauseInfo
+	x.xxx_hidden_ActivityReset = b.ActivityReset
+	x.xxx_hidden_ResetHeartbeats = b.ResetHeartbeats
+	x.xxx_hidden_StartVersion = b.StartVersion
+	return m0
+}
+
+type case_ActivityInfo_BuildIdInfo protoreflect.FieldNumber
+
+func (x case_ActivityInfo_BuildIdInfo) String() string {
+	switch x {
+	case ActivityInfo_BuildIdInfo_not_set_case:
+		return "ActivityInfoBuildIdInfoNotSetCase"
+	case ActivityInfo_UseWorkflowBuildIdInfo_case:
+		return "ActivityInfoUseWorkflowBuildIdInfoCase"
+	case ActivityInfo_LastIndependentlyAssignedBuildId_case:
+		return "ActivityInfoLastIndependentlyAssignedBuildIdCase"
+	default:
+		return strconv.Itoa(int(x))
+	}
+
 }
 
 type isActivityInfo_BuildIdInfo interface {
 	isActivityInfo_BuildIdInfo()
 }
 
-type ActivityInfo_UseWorkflowBuildIdInfo_ struct {
+type activityInfo_UseWorkflowBuildIdInfo_ struct {
 	// When present, it means this activity is assigned to the build ID of its workflow.
 	// Deprecated. Clean up with versioning-2. [cleanup-old-wv]
 	UseWorkflowBuildIdInfo *ActivityInfo_UseWorkflowBuildIdInfo `protobuf:"bytes,35,opt,name=use_workflow_build_id_info,json=useWorkflowBuildIdInfo,proto3,oneof"`
 }
 
-type ActivityInfo_LastIndependentlyAssignedBuildId struct {
+type activityInfo_LastIndependentlyAssignedBuildId struct {
 	// This means the activity is independently versioned and not bound to the build ID of its workflow.
 	// If the task fails and is scheduled again, the assigned build ID may change according to the latest versioning
 	// rules. This value also updates if a redirect rule is applied to the activity task to reflect the build ID
@@ -2906,22 +5613,21 @@ type ActivityInfo_LastIndependentlyAssignedBuildId struct {
 	LastIndependentlyAssignedBuildId string `protobuf:"bytes,36,opt,name=last_independently_assigned_build_id,json=lastIndependentlyAssignedBuildId,proto3,oneof"`
 }
 
-func (*ActivityInfo_UseWorkflowBuildIdInfo_) isActivityInfo_BuildIdInfo() {}
+func (*activityInfo_UseWorkflowBuildIdInfo_) isActivityInfo_BuildIdInfo() {}
 
-func (*ActivityInfo_LastIndependentlyAssignedBuildId) isActivityInfo_BuildIdInfo() {}
+func (*activityInfo_LastIndependentlyAssignedBuildId) isActivityInfo_BuildIdInfo() {}
 
 // timer_map column
 type TimerInfo struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	Version        int64                  `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
-	StartedEventId int64                  `protobuf:"varint,2,opt,name=started_event_id,json=startedEventId,proto3" json:"started_event_id,omitempty"`
-	ExpiryTime     *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=expiry_time,json=expiryTime,proto3" json:"expiry_time,omitempty"`
-	TaskStatus     int64                  `protobuf:"varint,4,opt,name=task_status,json=taskStatus,proto3" json:"task_status,omitempty"`
-	// timerId serves the purpose of indicating whether a timer task is generated for this timer info.
-	TimerId                       string               `protobuf:"bytes,5,opt,name=timer_id,json=timerId,proto3" json:"timer_id,omitempty"`
-	LastUpdateVersionedTransition *VersionedTransition `protobuf:"bytes,6,opt,name=last_update_versioned_transition,json=lastUpdateVersionedTransition,proto3" json:"last_update_versioned_transition,omitempty"`
-	unknownFields                 protoimpl.UnknownFields
-	sizeCache                     protoimpl.SizeCache
+	state                                    protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Version                       int64                  `protobuf:"varint,1,opt,name=version,proto3"`
+	xxx_hidden_StartedEventId                int64                  `protobuf:"varint,2,opt,name=started_event_id,json=startedEventId,proto3"`
+	xxx_hidden_ExpiryTime                    *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=expiry_time,json=expiryTime,proto3"`
+	xxx_hidden_TaskStatus                    int64                  `protobuf:"varint,4,opt,name=task_status,json=taskStatus,proto3"`
+	xxx_hidden_TimerId                       string                 `protobuf:"bytes,5,opt,name=timer_id,json=timerId,proto3"`
+	xxx_hidden_LastUpdateVersionedTransition *VersionedTransition   `protobuf:"bytes,6,opt,name=last_update_versioned_transition,json=lastUpdateVersionedTransition,proto3"`
+	unknownFields                            protoimpl.UnknownFields
+	sizeCache                                protoimpl.SizeCache
 }
 
 func (x *TimerInfo) Reset() {
@@ -2949,72 +5655,138 @@ func (x *TimerInfo) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use TimerInfo.ProtoReflect.Descriptor instead.
-func (*TimerInfo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_executions_proto_rawDescGZIP(), []int{14}
-}
-
 func (x *TimerInfo) GetVersion() int64 {
 	if x != nil {
-		return x.Version
+		return x.xxx_hidden_Version
 	}
 	return 0
 }
 
 func (x *TimerInfo) GetStartedEventId() int64 {
 	if x != nil {
-		return x.StartedEventId
+		return x.xxx_hidden_StartedEventId
 	}
 	return 0
 }
 
 func (x *TimerInfo) GetExpiryTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.ExpiryTime
+		return x.xxx_hidden_ExpiryTime
 	}
 	return nil
 }
 
 func (x *TimerInfo) GetTaskStatus() int64 {
 	if x != nil {
-		return x.TaskStatus
+		return x.xxx_hidden_TaskStatus
 	}
 	return 0
 }
 
 func (x *TimerInfo) GetTimerId() string {
 	if x != nil {
-		return x.TimerId
+		return x.xxx_hidden_TimerId
 	}
 	return ""
 }
 
 func (x *TimerInfo) GetLastUpdateVersionedTransition() *VersionedTransition {
 	if x != nil {
-		return x.LastUpdateVersionedTransition
+		return x.xxx_hidden_LastUpdateVersionedTransition
 	}
 	return nil
 }
 
+func (x *TimerInfo) SetVersion(v int64) {
+	x.xxx_hidden_Version = v
+}
+
+func (x *TimerInfo) SetStartedEventId(v int64) {
+	x.xxx_hidden_StartedEventId = v
+}
+
+func (x *TimerInfo) SetExpiryTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_ExpiryTime = v
+}
+
+func (x *TimerInfo) SetTaskStatus(v int64) {
+	x.xxx_hidden_TaskStatus = v
+}
+
+func (x *TimerInfo) SetTimerId(v string) {
+	x.xxx_hidden_TimerId = v
+}
+
+func (x *TimerInfo) SetLastUpdateVersionedTransition(v *VersionedTransition) {
+	x.xxx_hidden_LastUpdateVersionedTransition = v
+}
+
+func (x *TimerInfo) HasExpiryTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_ExpiryTime != nil
+}
+
+func (x *TimerInfo) HasLastUpdateVersionedTransition() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_LastUpdateVersionedTransition != nil
+}
+
+func (x *TimerInfo) ClearExpiryTime() {
+	x.xxx_hidden_ExpiryTime = nil
+}
+
+func (x *TimerInfo) ClearLastUpdateVersionedTransition() {
+	x.xxx_hidden_LastUpdateVersionedTransition = nil
+}
+
+type TimerInfo_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Version        int64
+	StartedEventId int64
+	ExpiryTime     *timestamppb.Timestamp
+	TaskStatus     int64
+	// timerId serves the purpose of indicating whether a timer task is generated for this timer info.
+	TimerId                       string
+	LastUpdateVersionedTransition *VersionedTransition
+}
+
+func (b0 TimerInfo_builder) Build() *TimerInfo {
+	m0 := &TimerInfo{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Version = b.Version
+	x.xxx_hidden_StartedEventId = b.StartedEventId
+	x.xxx_hidden_ExpiryTime = b.ExpiryTime
+	x.xxx_hidden_TaskStatus = b.TaskStatus
+	x.xxx_hidden_TimerId = b.TimerId
+	x.xxx_hidden_LastUpdateVersionedTransition = b.LastUpdateVersionedTransition
+	return m0
+}
+
 // child_executions_map column
 type ChildExecutionInfo struct {
-	state                         protoimpl.MessageState `protogen:"open.v1"`
-	Version                       int64                  `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
-	InitiatedEventBatchId         int64                  `protobuf:"varint,2,opt,name=initiated_event_batch_id,json=initiatedEventBatchId,proto3" json:"initiated_event_batch_id,omitempty"`
-	StartedEventId                int64                  `protobuf:"varint,3,opt,name=started_event_id,json=startedEventId,proto3" json:"started_event_id,omitempty"`
-	StartedWorkflowId             string                 `protobuf:"bytes,5,opt,name=started_workflow_id,json=startedWorkflowId,proto3" json:"started_workflow_id,omitempty"`
-	StartedRunId                  string                 `protobuf:"bytes,6,opt,name=started_run_id,json=startedRunId,proto3" json:"started_run_id,omitempty"`
-	CreateRequestId               string                 `protobuf:"bytes,8,opt,name=create_request_id,json=createRequestId,proto3" json:"create_request_id,omitempty"`
-	Namespace                     string                 `protobuf:"bytes,9,opt,name=namespace,proto3" json:"namespace,omitempty"`
-	WorkflowTypeName              string                 `protobuf:"bytes,10,opt,name=workflow_type_name,json=workflowTypeName,proto3" json:"workflow_type_name,omitempty"`
-	ParentClosePolicy             v11.ParentClosePolicy  `protobuf:"varint,11,opt,name=parent_close_policy,json=parentClosePolicy,proto3,enum=temporal.api.enums.v1.ParentClosePolicy" json:"parent_close_policy,omitempty"`
-	InitiatedEventId              int64                  `protobuf:"varint,12,opt,name=initiated_event_id,json=initiatedEventId,proto3" json:"initiated_event_id,omitempty"`
-	Clock                         *v15.VectorClock       `protobuf:"bytes,13,opt,name=clock,proto3" json:"clock,omitempty"`
-	NamespaceId                   string                 `protobuf:"bytes,14,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	LastUpdateVersionedTransition *VersionedTransition   `protobuf:"bytes,15,opt,name=last_update_versioned_transition,json=lastUpdateVersionedTransition,proto3" json:"last_update_versioned_transition,omitempty"`
-	Priority                      *v13.Priority          `protobuf:"bytes,16,opt,name=priority,proto3" json:"priority,omitempty"`
-	unknownFields                 protoimpl.UnknownFields
-	sizeCache                     protoimpl.SizeCache
+	state                                    protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Version                       int64                  `protobuf:"varint,1,opt,name=version,proto3"`
+	xxx_hidden_InitiatedEventBatchId         int64                  `protobuf:"varint,2,opt,name=initiated_event_batch_id,json=initiatedEventBatchId,proto3"`
+	xxx_hidden_StartedEventId                int64                  `protobuf:"varint,3,opt,name=started_event_id,json=startedEventId,proto3"`
+	xxx_hidden_StartedWorkflowId             string                 `protobuf:"bytes,5,opt,name=started_workflow_id,json=startedWorkflowId,proto3"`
+	xxx_hidden_StartedRunId                  string                 `protobuf:"bytes,6,opt,name=started_run_id,json=startedRunId,proto3"`
+	xxx_hidden_CreateRequestId               string                 `protobuf:"bytes,8,opt,name=create_request_id,json=createRequestId,proto3"`
+	xxx_hidden_Namespace                     string                 `protobuf:"bytes,9,opt,name=namespace,proto3"`
+	xxx_hidden_WorkflowTypeName              string                 `protobuf:"bytes,10,opt,name=workflow_type_name,json=workflowTypeName,proto3"`
+	xxx_hidden_ParentClosePolicy             v11.ParentClosePolicy  `protobuf:"varint,11,opt,name=parent_close_policy,json=parentClosePolicy,proto3,enum=temporal.api.enums.v1.ParentClosePolicy"`
+	xxx_hidden_InitiatedEventId              int64                  `protobuf:"varint,12,opt,name=initiated_event_id,json=initiatedEventId,proto3"`
+	xxx_hidden_Clock                         *v15.VectorClock       `protobuf:"bytes,13,opt,name=clock,proto3"`
+	xxx_hidden_NamespaceId                   string                 `protobuf:"bytes,14,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_LastUpdateVersionedTransition *VersionedTransition   `protobuf:"bytes,15,opt,name=last_update_versioned_transition,json=lastUpdateVersionedTransition,proto3"`
+	xxx_hidden_Priority                      *v13.Priority          `protobuf:"bytes,16,opt,name=priority,proto3"`
+	unknownFields                            protoimpl.UnknownFields
+	sizeCache                                protoimpl.SizeCache
 }
 
 func (x *ChildExecutionInfo) Reset() {
@@ -3042,119 +5814,243 @@ func (x *ChildExecutionInfo) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ChildExecutionInfo.ProtoReflect.Descriptor instead.
-func (*ChildExecutionInfo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_executions_proto_rawDescGZIP(), []int{15}
-}
-
 func (x *ChildExecutionInfo) GetVersion() int64 {
 	if x != nil {
-		return x.Version
+		return x.xxx_hidden_Version
 	}
 	return 0
 }
 
 func (x *ChildExecutionInfo) GetInitiatedEventBatchId() int64 {
 	if x != nil {
-		return x.InitiatedEventBatchId
+		return x.xxx_hidden_InitiatedEventBatchId
 	}
 	return 0
 }
 
 func (x *ChildExecutionInfo) GetStartedEventId() int64 {
 	if x != nil {
-		return x.StartedEventId
+		return x.xxx_hidden_StartedEventId
 	}
 	return 0
 }
 
 func (x *ChildExecutionInfo) GetStartedWorkflowId() string {
 	if x != nil {
-		return x.StartedWorkflowId
+		return x.xxx_hidden_StartedWorkflowId
 	}
 	return ""
 }
 
 func (x *ChildExecutionInfo) GetStartedRunId() string {
 	if x != nil {
-		return x.StartedRunId
+		return x.xxx_hidden_StartedRunId
 	}
 	return ""
 }
 
 func (x *ChildExecutionInfo) GetCreateRequestId() string {
 	if x != nil {
-		return x.CreateRequestId
+		return x.xxx_hidden_CreateRequestId
 	}
 	return ""
 }
 
 func (x *ChildExecutionInfo) GetNamespace() string {
 	if x != nil {
-		return x.Namespace
+		return x.xxx_hidden_Namespace
 	}
 	return ""
 }
 
 func (x *ChildExecutionInfo) GetWorkflowTypeName() string {
 	if x != nil {
-		return x.WorkflowTypeName
+		return x.xxx_hidden_WorkflowTypeName
 	}
 	return ""
 }
 
 func (x *ChildExecutionInfo) GetParentClosePolicy() v11.ParentClosePolicy {
 	if x != nil {
-		return x.ParentClosePolicy
+		return x.xxx_hidden_ParentClosePolicy
 	}
 	return v11.ParentClosePolicy(0)
 }
 
 func (x *ChildExecutionInfo) GetInitiatedEventId() int64 {
 	if x != nil {
-		return x.InitiatedEventId
+		return x.xxx_hidden_InitiatedEventId
 	}
 	return 0
 }
 
 func (x *ChildExecutionInfo) GetClock() *v15.VectorClock {
 	if x != nil {
-		return x.Clock
+		return x.xxx_hidden_Clock
 	}
 	return nil
 }
 
 func (x *ChildExecutionInfo) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *ChildExecutionInfo) GetLastUpdateVersionedTransition() *VersionedTransition {
 	if x != nil {
-		return x.LastUpdateVersionedTransition
+		return x.xxx_hidden_LastUpdateVersionedTransition
 	}
 	return nil
 }
 
 func (x *ChildExecutionInfo) GetPriority() *v13.Priority {
 	if x != nil {
-		return x.Priority
+		return x.xxx_hidden_Priority
 	}
 	return nil
 }
 
+func (x *ChildExecutionInfo) SetVersion(v int64) {
+	x.xxx_hidden_Version = v
+}
+
+func (x *ChildExecutionInfo) SetInitiatedEventBatchId(v int64) {
+	x.xxx_hidden_InitiatedEventBatchId = v
+}
+
+func (x *ChildExecutionInfo) SetStartedEventId(v int64) {
+	x.xxx_hidden_StartedEventId = v
+}
+
+func (x *ChildExecutionInfo) SetStartedWorkflowId(v string) {
+	x.xxx_hidden_StartedWorkflowId = v
+}
+
+func (x *ChildExecutionInfo) SetStartedRunId(v string) {
+	x.xxx_hidden_StartedRunId = v
+}
+
+func (x *ChildExecutionInfo) SetCreateRequestId(v string) {
+	x.xxx_hidden_CreateRequestId = v
+}
+
+func (x *ChildExecutionInfo) SetNamespace(v string) {
+	x.xxx_hidden_Namespace = v
+}
+
+func (x *ChildExecutionInfo) SetWorkflowTypeName(v string) {
+	x.xxx_hidden_WorkflowTypeName = v
+}
+
+func (x *ChildExecutionInfo) SetParentClosePolicy(v v11.ParentClosePolicy) {
+	x.xxx_hidden_ParentClosePolicy = v
+}
+
+func (x *ChildExecutionInfo) SetInitiatedEventId(v int64) {
+	x.xxx_hidden_InitiatedEventId = v
+}
+
+func (x *ChildExecutionInfo) SetClock(v *v15.VectorClock) {
+	x.xxx_hidden_Clock = v
+}
+
+func (x *ChildExecutionInfo) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *ChildExecutionInfo) SetLastUpdateVersionedTransition(v *VersionedTransition) {
+	x.xxx_hidden_LastUpdateVersionedTransition = v
+}
+
+func (x *ChildExecutionInfo) SetPriority(v *v13.Priority) {
+	x.xxx_hidden_Priority = v
+}
+
+func (x *ChildExecutionInfo) HasClock() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Clock != nil
+}
+
+func (x *ChildExecutionInfo) HasLastUpdateVersionedTransition() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_LastUpdateVersionedTransition != nil
+}
+
+func (x *ChildExecutionInfo) HasPriority() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Priority != nil
+}
+
+func (x *ChildExecutionInfo) ClearClock() {
+	x.xxx_hidden_Clock = nil
+}
+
+func (x *ChildExecutionInfo) ClearLastUpdateVersionedTransition() {
+	x.xxx_hidden_LastUpdateVersionedTransition = nil
+}
+
+func (x *ChildExecutionInfo) ClearPriority() {
+	x.xxx_hidden_Priority = nil
+}
+
+type ChildExecutionInfo_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Version                       int64
+	InitiatedEventBatchId         int64
+	StartedEventId                int64
+	StartedWorkflowId             string
+	StartedRunId                  string
+	CreateRequestId               string
+	Namespace                     string
+	WorkflowTypeName              string
+	ParentClosePolicy             v11.ParentClosePolicy
+	InitiatedEventId              int64
+	Clock                         *v15.VectorClock
+	NamespaceId                   string
+	LastUpdateVersionedTransition *VersionedTransition
+	Priority                      *v13.Priority
+}
+
+func (b0 ChildExecutionInfo_builder) Build() *ChildExecutionInfo {
+	m0 := &ChildExecutionInfo{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Version = b.Version
+	x.xxx_hidden_InitiatedEventBatchId = b.InitiatedEventBatchId
+	x.xxx_hidden_StartedEventId = b.StartedEventId
+	x.xxx_hidden_StartedWorkflowId = b.StartedWorkflowId
+	x.xxx_hidden_StartedRunId = b.StartedRunId
+	x.xxx_hidden_CreateRequestId = b.CreateRequestId
+	x.xxx_hidden_Namespace = b.Namespace
+	x.xxx_hidden_WorkflowTypeName = b.WorkflowTypeName
+	x.xxx_hidden_ParentClosePolicy = b.ParentClosePolicy
+	x.xxx_hidden_InitiatedEventId = b.InitiatedEventId
+	x.xxx_hidden_Clock = b.Clock
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_LastUpdateVersionedTransition = b.LastUpdateVersionedTransition
+	x.xxx_hidden_Priority = b.Priority
+	return m0
+}
+
 // request_cancel_map column
 type RequestCancelInfo struct {
-	state                         protoimpl.MessageState `protogen:"open.v1"`
-	Version                       int64                  `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
-	InitiatedEventBatchId         int64                  `protobuf:"varint,2,opt,name=initiated_event_batch_id,json=initiatedEventBatchId,proto3" json:"initiated_event_batch_id,omitempty"`
-	CancelRequestId               string                 `protobuf:"bytes,3,opt,name=cancel_request_id,json=cancelRequestId,proto3" json:"cancel_request_id,omitempty"`
-	InitiatedEventId              int64                  `protobuf:"varint,4,opt,name=initiated_event_id,json=initiatedEventId,proto3" json:"initiated_event_id,omitempty"`
-	LastUpdateVersionedTransition *VersionedTransition   `protobuf:"bytes,5,opt,name=last_update_versioned_transition,json=lastUpdateVersionedTransition,proto3" json:"last_update_versioned_transition,omitempty"`
-	unknownFields                 protoimpl.UnknownFields
-	sizeCache                     protoimpl.SizeCache
+	state                                    protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Version                       int64                  `protobuf:"varint,1,opt,name=version,proto3"`
+	xxx_hidden_InitiatedEventBatchId         int64                  `protobuf:"varint,2,opt,name=initiated_event_batch_id,json=initiatedEventBatchId,proto3"`
+	xxx_hidden_CancelRequestId               string                 `protobuf:"bytes,3,opt,name=cancel_request_id,json=cancelRequestId,proto3"`
+	xxx_hidden_InitiatedEventId              int64                  `protobuf:"varint,4,opt,name=initiated_event_id,json=initiatedEventId,proto3"`
+	xxx_hidden_LastUpdateVersionedTransition *VersionedTransition   `protobuf:"bytes,5,opt,name=last_update_versioned_transition,json=lastUpdateVersionedTransition,proto3"`
+	unknownFields                            protoimpl.UnknownFields
+	sizeCache                                protoimpl.SizeCache
 }
 
 func (x *RequestCancelInfo) Reset() {
@@ -3182,56 +6078,104 @@ func (x *RequestCancelInfo) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RequestCancelInfo.ProtoReflect.Descriptor instead.
-func (*RequestCancelInfo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_executions_proto_rawDescGZIP(), []int{16}
-}
-
 func (x *RequestCancelInfo) GetVersion() int64 {
 	if x != nil {
-		return x.Version
+		return x.xxx_hidden_Version
 	}
 	return 0
 }
 
 func (x *RequestCancelInfo) GetInitiatedEventBatchId() int64 {
 	if x != nil {
-		return x.InitiatedEventBatchId
+		return x.xxx_hidden_InitiatedEventBatchId
 	}
 	return 0
 }
 
 func (x *RequestCancelInfo) GetCancelRequestId() string {
 	if x != nil {
-		return x.CancelRequestId
+		return x.xxx_hidden_CancelRequestId
 	}
 	return ""
 }
 
 func (x *RequestCancelInfo) GetInitiatedEventId() int64 {
 	if x != nil {
-		return x.InitiatedEventId
+		return x.xxx_hidden_InitiatedEventId
 	}
 	return 0
 }
 
 func (x *RequestCancelInfo) GetLastUpdateVersionedTransition() *VersionedTransition {
 	if x != nil {
-		return x.LastUpdateVersionedTransition
+		return x.xxx_hidden_LastUpdateVersionedTransition
 	}
 	return nil
 }
 
+func (x *RequestCancelInfo) SetVersion(v int64) {
+	x.xxx_hidden_Version = v
+}
+
+func (x *RequestCancelInfo) SetInitiatedEventBatchId(v int64) {
+	x.xxx_hidden_InitiatedEventBatchId = v
+}
+
+func (x *RequestCancelInfo) SetCancelRequestId(v string) {
+	x.xxx_hidden_CancelRequestId = v
+}
+
+func (x *RequestCancelInfo) SetInitiatedEventId(v int64) {
+	x.xxx_hidden_InitiatedEventId = v
+}
+
+func (x *RequestCancelInfo) SetLastUpdateVersionedTransition(v *VersionedTransition) {
+	x.xxx_hidden_LastUpdateVersionedTransition = v
+}
+
+func (x *RequestCancelInfo) HasLastUpdateVersionedTransition() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_LastUpdateVersionedTransition != nil
+}
+
+func (x *RequestCancelInfo) ClearLastUpdateVersionedTransition() {
+	x.xxx_hidden_LastUpdateVersionedTransition = nil
+}
+
+type RequestCancelInfo_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Version                       int64
+	InitiatedEventBatchId         int64
+	CancelRequestId               string
+	InitiatedEventId              int64
+	LastUpdateVersionedTransition *VersionedTransition
+}
+
+func (b0 RequestCancelInfo_builder) Build() *RequestCancelInfo {
+	m0 := &RequestCancelInfo{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Version = b.Version
+	x.xxx_hidden_InitiatedEventBatchId = b.InitiatedEventBatchId
+	x.xxx_hidden_CancelRequestId = b.CancelRequestId
+	x.xxx_hidden_InitiatedEventId = b.InitiatedEventId
+	x.xxx_hidden_LastUpdateVersionedTransition = b.LastUpdateVersionedTransition
+	return m0
+}
+
 // signal_map column
 type SignalInfo struct {
-	state                         protoimpl.MessageState `protogen:"open.v1"`
-	Version                       int64                  `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
-	InitiatedEventBatchId         int64                  `protobuf:"varint,2,opt,name=initiated_event_batch_id,json=initiatedEventBatchId,proto3" json:"initiated_event_batch_id,omitempty"`
-	RequestId                     string                 `protobuf:"bytes,3,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
-	InitiatedEventId              int64                  `protobuf:"varint,7,opt,name=initiated_event_id,json=initiatedEventId,proto3" json:"initiated_event_id,omitempty"`
-	LastUpdateVersionedTransition *VersionedTransition   `protobuf:"bytes,9,opt,name=last_update_versioned_transition,json=lastUpdateVersionedTransition,proto3" json:"last_update_versioned_transition,omitempty"`
-	unknownFields                 protoimpl.UnknownFields
-	sizeCache                     protoimpl.SizeCache
+	state                                    protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Version                       int64                  `protobuf:"varint,1,opt,name=version,proto3"`
+	xxx_hidden_InitiatedEventBatchId         int64                  `protobuf:"varint,2,opt,name=initiated_event_batch_id,json=initiatedEventBatchId,proto3"`
+	xxx_hidden_RequestId                     string                 `protobuf:"bytes,3,opt,name=request_id,json=requestId,proto3"`
+	xxx_hidden_InitiatedEventId              int64                  `protobuf:"varint,7,opt,name=initiated_event_id,json=initiatedEventId,proto3"`
+	xxx_hidden_LastUpdateVersionedTransition *VersionedTransition   `protobuf:"bytes,9,opt,name=last_update_versioned_transition,json=lastUpdateVersionedTransition,proto3"`
+	unknownFields                            protoimpl.UnknownFields
+	sizeCache                                protoimpl.SizeCache
 }
 
 func (x *SignalInfo) Reset() {
@@ -3259,54 +6203,102 @@ func (x *SignalInfo) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SignalInfo.ProtoReflect.Descriptor instead.
-func (*SignalInfo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_executions_proto_rawDescGZIP(), []int{17}
-}
-
 func (x *SignalInfo) GetVersion() int64 {
 	if x != nil {
-		return x.Version
+		return x.xxx_hidden_Version
 	}
 	return 0
 }
 
 func (x *SignalInfo) GetInitiatedEventBatchId() int64 {
 	if x != nil {
-		return x.InitiatedEventBatchId
+		return x.xxx_hidden_InitiatedEventBatchId
 	}
 	return 0
 }
 
 func (x *SignalInfo) GetRequestId() string {
 	if x != nil {
-		return x.RequestId
+		return x.xxx_hidden_RequestId
 	}
 	return ""
 }
 
 func (x *SignalInfo) GetInitiatedEventId() int64 {
 	if x != nil {
-		return x.InitiatedEventId
+		return x.xxx_hidden_InitiatedEventId
 	}
 	return 0
 }
 
 func (x *SignalInfo) GetLastUpdateVersionedTransition() *VersionedTransition {
 	if x != nil {
-		return x.LastUpdateVersionedTransition
+		return x.xxx_hidden_LastUpdateVersionedTransition
 	}
 	return nil
 }
 
+func (x *SignalInfo) SetVersion(v int64) {
+	x.xxx_hidden_Version = v
+}
+
+func (x *SignalInfo) SetInitiatedEventBatchId(v int64) {
+	x.xxx_hidden_InitiatedEventBatchId = v
+}
+
+func (x *SignalInfo) SetRequestId(v string) {
+	x.xxx_hidden_RequestId = v
+}
+
+func (x *SignalInfo) SetInitiatedEventId(v int64) {
+	x.xxx_hidden_InitiatedEventId = v
+}
+
+func (x *SignalInfo) SetLastUpdateVersionedTransition(v *VersionedTransition) {
+	x.xxx_hidden_LastUpdateVersionedTransition = v
+}
+
+func (x *SignalInfo) HasLastUpdateVersionedTransition() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_LastUpdateVersionedTransition != nil
+}
+
+func (x *SignalInfo) ClearLastUpdateVersionedTransition() {
+	x.xxx_hidden_LastUpdateVersionedTransition = nil
+}
+
+type SignalInfo_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Version                       int64
+	InitiatedEventBatchId         int64
+	RequestId                     string
+	InitiatedEventId              int64
+	LastUpdateVersionedTransition *VersionedTransition
+}
+
+func (b0 SignalInfo_builder) Build() *SignalInfo {
+	m0 := &SignalInfo{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Version = b.Version
+	x.xxx_hidden_InitiatedEventBatchId = b.InitiatedEventBatchId
+	x.xxx_hidden_RequestId = b.RequestId
+	x.xxx_hidden_InitiatedEventId = b.InitiatedEventId
+	x.xxx_hidden_LastUpdateVersionedTransition = b.LastUpdateVersionedTransition
+	return m0
+}
+
 // checksum column
 type Checksum struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Version       int32                  `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
-	Flavor        v1.ChecksumFlavor      `protobuf:"varint,2,opt,name=flavor,proto3,enum=temporal.server.api.enums.v1.ChecksumFlavor" json:"flavor,omitempty"`
-	Value         []byte                 `protobuf:"bytes,3,opt,name=value,proto3" json:"value,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state              protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Version int32                  `protobuf:"varint,1,opt,name=version,proto3"`
+	xxx_hidden_Flavor  v1.ChecksumFlavor      `protobuf:"varint,2,opt,name=flavor,proto3,enum=temporal.server.api.enums.v1.ChecksumFlavor"`
+	xxx_hidden_Value   []byte                 `protobuf:"bytes,3,opt,name=value,proto3"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *Checksum) Reset() {
@@ -3334,42 +6326,66 @@ func (x *Checksum) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use Checksum.ProtoReflect.Descriptor instead.
-func (*Checksum) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_executions_proto_rawDescGZIP(), []int{18}
-}
-
 func (x *Checksum) GetVersion() int32 {
 	if x != nil {
-		return x.Version
+		return x.xxx_hidden_Version
 	}
 	return 0
 }
 
 func (x *Checksum) GetFlavor() v1.ChecksumFlavor {
 	if x != nil {
-		return x.Flavor
+		return x.xxx_hidden_Flavor
 	}
 	return v1.ChecksumFlavor(0)
 }
 
 func (x *Checksum) GetValue() []byte {
 	if x != nil {
-		return x.Value
+		return x.xxx_hidden_Value
 	}
 	return nil
 }
 
+func (x *Checksum) SetVersion(v int32) {
+	x.xxx_hidden_Version = v
+}
+
+func (x *Checksum) SetFlavor(v v1.ChecksumFlavor) {
+	x.xxx_hidden_Flavor = v
+}
+
+func (x *Checksum) SetValue(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_Value = v
+}
+
+type Checksum_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Version int32
+	Flavor  v1.ChecksumFlavor
+	Value   []byte
+}
+
+func (b0 Checksum_builder) Build() *Checksum {
+	m0 := &Checksum{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Version = b.Version
+	x.xxx_hidden_Flavor = b.Flavor
+	x.xxx_hidden_Value = b.Value
+	return m0
+}
+
 type Callback struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Types that are valid to be assigned to Variant:
-	//
-	//	*Callback_Nexus_
-	//	*Callback_Hsm
-	Variant       isCallback_Variant `protobuf_oneof:"variant"`
-	Links         []*v13.Link        `protobuf:"bytes,100,rep,name=links,proto3" json:"links,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state              protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Variant isCallback_Variant     `protobuf_oneof:"variant"`
+	xxx_hidden_Links   *[]*v13.Link           `protobuf:"bytes,100,rep,name=links,proto3"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *Callback) Reset() {
@@ -3397,21 +6413,9 @@ func (x *Callback) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use Callback.ProtoReflect.Descriptor instead.
-func (*Callback) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_executions_proto_rawDescGZIP(), []int{19}
-}
-
-func (x *Callback) GetVariant() isCallback_Variant {
-	if x != nil {
-		return x.Variant
-	}
-	return nil
-}
-
 func (x *Callback) GetNexus() *Callback_Nexus {
 	if x != nil {
-		if x, ok := x.Variant.(*Callback_Nexus_); ok {
+		if x, ok := x.xxx_hidden_Variant.(*callback_Nexus_); ok {
 			return x.Nexus
 		}
 	}
@@ -3420,7 +6424,7 @@ func (x *Callback) GetNexus() *Callback_Nexus {
 
 func (x *Callback) GetHsm() *Callback_HSM {
 	if x != nil {
-		if x, ok := x.Variant.(*Callback_Hsm); ok {
+		if x, ok := x.xxx_hidden_Variant.(*callback_Hsm); ok {
 			return x.Hsm
 		}
 	}
@@ -3429,39 +6433,154 @@ func (x *Callback) GetHsm() *Callback_HSM {
 
 func (x *Callback) GetLinks() []*v13.Link {
 	if x != nil {
-		return x.Links
+		if x.xxx_hidden_Links != nil {
+			return *x.xxx_hidden_Links
+		}
 	}
 	return nil
+}
+
+func (x *Callback) SetNexus(v *Callback_Nexus) {
+	if v == nil {
+		x.xxx_hidden_Variant = nil
+		return
+	}
+	x.xxx_hidden_Variant = &callback_Nexus_{v}
+}
+
+func (x *Callback) SetHsm(v *Callback_HSM) {
+	if v == nil {
+		x.xxx_hidden_Variant = nil
+		return
+	}
+	x.xxx_hidden_Variant = &callback_Hsm{v}
+}
+
+func (x *Callback) SetLinks(v []*v13.Link) {
+	x.xxx_hidden_Links = &v
+}
+
+func (x *Callback) HasVariant() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Variant != nil
+}
+
+func (x *Callback) HasNexus() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_Variant.(*callback_Nexus_)
+	return ok
+}
+
+func (x *Callback) HasHsm() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_Variant.(*callback_Hsm)
+	return ok
+}
+
+func (x *Callback) ClearVariant() {
+	x.xxx_hidden_Variant = nil
+}
+
+func (x *Callback) ClearNexus() {
+	if _, ok := x.xxx_hidden_Variant.(*callback_Nexus_); ok {
+		x.xxx_hidden_Variant = nil
+	}
+}
+
+func (x *Callback) ClearHsm() {
+	if _, ok := x.xxx_hidden_Variant.(*callback_Hsm); ok {
+		x.xxx_hidden_Variant = nil
+	}
+}
+
+const Callback_Variant_not_set_case case_Callback_Variant = 0
+const Callback_Nexus_case case_Callback_Variant = 2
+const Callback_Hsm_case case_Callback_Variant = 3
+
+func (x *Callback) WhichVariant() case_Callback_Variant {
+	if x == nil {
+		return Callback_Variant_not_set_case
+	}
+	switch x.xxx_hidden_Variant.(type) {
+	case *callback_Nexus_:
+		return Callback_Nexus_case
+	case *callback_Hsm:
+		return Callback_Hsm_case
+	default:
+		return Callback_Variant_not_set_case
+	}
+}
+
+type Callback_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Fields of oneof xxx_hidden_Variant:
+	Nexus *Callback_Nexus
+	Hsm   *Callback_HSM
+	// -- end of xxx_hidden_Variant
+	Links []*v13.Link
+}
+
+func (b0 Callback_builder) Build() *Callback {
+	m0 := &Callback{}
+	b, x := &b0, m0
+	_, _ = b, x
+	if b.Nexus != nil {
+		x.xxx_hidden_Variant = &callback_Nexus_{b.Nexus}
+	}
+	if b.Hsm != nil {
+		x.xxx_hidden_Variant = &callback_Hsm{b.Hsm}
+	}
+	x.xxx_hidden_Links = &b.Links
+	return m0
+}
+
+type case_Callback_Variant protoreflect.FieldNumber
+
+func (x case_Callback_Variant) String() string {
+	switch x {
+	case Callback_Variant_not_set_case:
+		return "CallbackVariantNotSetCase"
+	case Callback_Nexus_case:
+		return "CallbackNexusCase"
+	case Callback_Hsm_case:
+		return "CallbackHsmCase"
+	default:
+		return strconv.Itoa(int(x))
+	}
+
 }
 
 type isCallback_Variant interface {
 	isCallback_Variant()
 }
 
-type Callback_Nexus_ struct {
+type callback_Nexus_ struct {
 	Nexus *Callback_Nexus `protobuf:"bytes,2,opt,name=nexus,proto3,oneof"`
 }
 
-type Callback_Hsm struct {
+type callback_Hsm struct {
 	Hsm *Callback_HSM `protobuf:"bytes,3,opt,name=hsm,proto3,oneof"`
 }
 
-func (*Callback_Nexus_) isCallback_Variant() {}
+func (*callback_Nexus_) isCallback_Variant() {}
 
-func (*Callback_Hsm) isCallback_Variant() {}
+func (*callback_Hsm) isCallback_Variant() {}
 
 type HSMCompletionCallbackArg struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// namespace ID of the workflow that just completed.
-	NamespaceId string `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	// ID of the workflow that just completed.
-	WorkflowId string `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
-	// run ID of the workflow that just completed.
-	RunId string `protobuf:"bytes,3,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	// Last event of the completed workflow.
-	LastEvent     *v19.HistoryEvent `protobuf:"bytes,4,opt,name=last_event,json=lastEvent,proto3" json:"last_event,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                  protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_WorkflowId  string                 `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3"`
+	xxx_hidden_RunId       string                 `protobuf:"bytes,3,opt,name=run_id,json=runId,proto3"`
+	xxx_hidden_LastEvent   *v19.HistoryEvent      `protobuf:"bytes,4,opt,name=last_event,json=lastEvent,proto3"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *HSMCompletionCallbackArg) Reset() {
@@ -3489,61 +6608,98 @@ func (x *HSMCompletionCallbackArg) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use HSMCompletionCallbackArg.ProtoReflect.Descriptor instead.
-func (*HSMCompletionCallbackArg) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_executions_proto_rawDescGZIP(), []int{20}
-}
-
 func (x *HSMCompletionCallbackArg) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *HSMCompletionCallbackArg) GetWorkflowId() string {
 	if x != nil {
-		return x.WorkflowId
+		return x.xxx_hidden_WorkflowId
 	}
 	return ""
 }
 
 func (x *HSMCompletionCallbackArg) GetRunId() string {
 	if x != nil {
-		return x.RunId
+		return x.xxx_hidden_RunId
 	}
 	return ""
 }
 
 func (x *HSMCompletionCallbackArg) GetLastEvent() *v19.HistoryEvent {
 	if x != nil {
-		return x.LastEvent
+		return x.xxx_hidden_LastEvent
 	}
 	return nil
 }
 
+func (x *HSMCompletionCallbackArg) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *HSMCompletionCallbackArg) SetWorkflowId(v string) {
+	x.xxx_hidden_WorkflowId = v
+}
+
+func (x *HSMCompletionCallbackArg) SetRunId(v string) {
+	x.xxx_hidden_RunId = v
+}
+
+func (x *HSMCompletionCallbackArg) SetLastEvent(v *v19.HistoryEvent) {
+	x.xxx_hidden_LastEvent = v
+}
+
+func (x *HSMCompletionCallbackArg) HasLastEvent() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_LastEvent != nil
+}
+
+func (x *HSMCompletionCallbackArg) ClearLastEvent() {
+	x.xxx_hidden_LastEvent = nil
+}
+
+type HSMCompletionCallbackArg_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// namespace ID of the workflow that just completed.
+	NamespaceId string
+	// ID of the workflow that just completed.
+	WorkflowId string
+	// run ID of the workflow that just completed.
+	RunId string
+	// Last event of the completed workflow.
+	LastEvent *v19.HistoryEvent
+}
+
+func (b0 HSMCompletionCallbackArg_builder) Build() *HSMCompletionCallbackArg {
+	m0 := &HSMCompletionCallbackArg{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_WorkflowId = b.WorkflowId
+	x.xxx_hidden_RunId = b.RunId
+	x.xxx_hidden_LastEvent = b.LastEvent
+	return m0
+}
+
 type CallbackInfo struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Information on how this callback should be invoked (e.g. its URL and type).
-	Callback *Callback `protobuf:"bytes,1,opt,name=callback,proto3" json:"callback,omitempty"`
-	// Trigger for this callback.
-	Trigger *CallbackInfo_Trigger `protobuf:"bytes,2,opt,name=trigger,proto3" json:"trigger,omitempty"`
-	// The time when the callback was registered.
-	RegistrationTime *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=registration_time,json=registrationTime,proto3" json:"registration_time,omitempty"`
-	State            v1.CallbackState       `protobuf:"varint,4,opt,name=state,proto3,enum=temporal.server.api.enums.v1.CallbackState" json:"state,omitempty"`
-	// The number of attempts made to deliver the callback.
-	// This number represents a minimum bound since the attempt is incremented after the callback request completes.
-	Attempt int32 `protobuf:"varint,5,opt,name=attempt,proto3" json:"attempt,omitempty"`
-	// The time when the last attempt completed.
-	LastAttemptCompleteTime *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=last_attempt_complete_time,json=lastAttemptCompleteTime,proto3" json:"last_attempt_complete_time,omitempty"`
-	// The last attempt's failure, if any.
-	LastAttemptFailure *v17.Failure `protobuf:"bytes,7,opt,name=last_attempt_failure,json=lastAttemptFailure,proto3" json:"last_attempt_failure,omitempty"`
-	// The time when the next attempt is scheduled.
-	NextAttemptScheduleTime *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=next_attempt_schedule_time,json=nextAttemptScheduleTime,proto3" json:"next_attempt_schedule_time,omitempty"`
-	// Request ID that added the callback.
-	RequestId     string `protobuf:"bytes,9,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                              protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Callback                *Callback              `protobuf:"bytes,1,opt,name=callback,proto3"`
+	xxx_hidden_Trigger                 *CallbackInfo_Trigger  `protobuf:"bytes,2,opt,name=trigger,proto3"`
+	xxx_hidden_RegistrationTime        *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=registration_time,json=registrationTime,proto3"`
+	xxx_hidden_State                   v1.CallbackState       `protobuf:"varint,4,opt,name=state,proto3,enum=temporal.server.api.enums.v1.CallbackState"`
+	xxx_hidden_Attempt                 int32                  `protobuf:"varint,5,opt,name=attempt,proto3"`
+	xxx_hidden_LastAttemptCompleteTime *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=last_attempt_complete_time,json=lastAttemptCompleteTime,proto3"`
+	xxx_hidden_LastAttemptFailure      *v17.Failure           `protobuf:"bytes,7,opt,name=last_attempt_failure,json=lastAttemptFailure,proto3"`
+	xxx_hidden_NextAttemptScheduleTime *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=next_attempt_schedule_time,json=nextAttemptScheduleTime,proto3"`
+	xxx_hidden_RequestId               string                 `protobuf:"bytes,9,opt,name=request_id,json=requestId,proto3"`
+	unknownFields                      protoimpl.UnknownFields
+	sizeCache                          protoimpl.SizeCache
 }
 
 func (x *CallbackInfo) Reset() {
@@ -3571,113 +6727,229 @@ func (x *CallbackInfo) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CallbackInfo.ProtoReflect.Descriptor instead.
-func (*CallbackInfo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_executions_proto_rawDescGZIP(), []int{21}
-}
-
 func (x *CallbackInfo) GetCallback() *Callback {
 	if x != nil {
-		return x.Callback
+		return x.xxx_hidden_Callback
 	}
 	return nil
 }
 
 func (x *CallbackInfo) GetTrigger() *CallbackInfo_Trigger {
 	if x != nil {
-		return x.Trigger
+		return x.xxx_hidden_Trigger
 	}
 	return nil
 }
 
 func (x *CallbackInfo) GetRegistrationTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.RegistrationTime
+		return x.xxx_hidden_RegistrationTime
 	}
 	return nil
 }
 
 func (x *CallbackInfo) GetState() v1.CallbackState {
 	if x != nil {
-		return x.State
+		return x.xxx_hidden_State
 	}
 	return v1.CallbackState(0)
 }
 
 func (x *CallbackInfo) GetAttempt() int32 {
 	if x != nil {
-		return x.Attempt
+		return x.xxx_hidden_Attempt
 	}
 	return 0
 }
 
 func (x *CallbackInfo) GetLastAttemptCompleteTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.LastAttemptCompleteTime
+		return x.xxx_hidden_LastAttemptCompleteTime
 	}
 	return nil
 }
 
 func (x *CallbackInfo) GetLastAttemptFailure() *v17.Failure {
 	if x != nil {
-		return x.LastAttemptFailure
+		return x.xxx_hidden_LastAttemptFailure
 	}
 	return nil
 }
 
 func (x *CallbackInfo) GetNextAttemptScheduleTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.NextAttemptScheduleTime
+		return x.xxx_hidden_NextAttemptScheduleTime
 	}
 	return nil
 }
 
 func (x *CallbackInfo) GetRequestId() string {
 	if x != nil {
-		return x.RequestId
+		return x.xxx_hidden_RequestId
 	}
 	return ""
 }
 
+func (x *CallbackInfo) SetCallback(v *Callback) {
+	x.xxx_hidden_Callback = v
+}
+
+func (x *CallbackInfo) SetTrigger(v *CallbackInfo_Trigger) {
+	x.xxx_hidden_Trigger = v
+}
+
+func (x *CallbackInfo) SetRegistrationTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_RegistrationTime = v
+}
+
+func (x *CallbackInfo) SetState(v v1.CallbackState) {
+	x.xxx_hidden_State = v
+}
+
+func (x *CallbackInfo) SetAttempt(v int32) {
+	x.xxx_hidden_Attempt = v
+}
+
+func (x *CallbackInfo) SetLastAttemptCompleteTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_LastAttemptCompleteTime = v
+}
+
+func (x *CallbackInfo) SetLastAttemptFailure(v *v17.Failure) {
+	x.xxx_hidden_LastAttemptFailure = v
+}
+
+func (x *CallbackInfo) SetNextAttemptScheduleTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_NextAttemptScheduleTime = v
+}
+
+func (x *CallbackInfo) SetRequestId(v string) {
+	x.xxx_hidden_RequestId = v
+}
+
+func (x *CallbackInfo) HasCallback() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Callback != nil
+}
+
+func (x *CallbackInfo) HasTrigger() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Trigger != nil
+}
+
+func (x *CallbackInfo) HasRegistrationTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_RegistrationTime != nil
+}
+
+func (x *CallbackInfo) HasLastAttemptCompleteTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_LastAttemptCompleteTime != nil
+}
+
+func (x *CallbackInfo) HasLastAttemptFailure() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_LastAttemptFailure != nil
+}
+
+func (x *CallbackInfo) HasNextAttemptScheduleTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_NextAttemptScheduleTime != nil
+}
+
+func (x *CallbackInfo) ClearCallback() {
+	x.xxx_hidden_Callback = nil
+}
+
+func (x *CallbackInfo) ClearTrigger() {
+	x.xxx_hidden_Trigger = nil
+}
+
+func (x *CallbackInfo) ClearRegistrationTime() {
+	x.xxx_hidden_RegistrationTime = nil
+}
+
+func (x *CallbackInfo) ClearLastAttemptCompleteTime() {
+	x.xxx_hidden_LastAttemptCompleteTime = nil
+}
+
+func (x *CallbackInfo) ClearLastAttemptFailure() {
+	x.xxx_hidden_LastAttemptFailure = nil
+}
+
+func (x *CallbackInfo) ClearNextAttemptScheduleTime() {
+	x.xxx_hidden_NextAttemptScheduleTime = nil
+}
+
+type CallbackInfo_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Information on how this callback should be invoked (e.g. its URL and type).
+	Callback *Callback
+	// Trigger for this callback.
+	Trigger *CallbackInfo_Trigger
+	// The time when the callback was registered.
+	RegistrationTime *timestamppb.Timestamp
+	State            v1.CallbackState
+	// The number of attempts made to deliver the callback.
+	// This number represents a minimum bound since the attempt is incremented after the callback request completes.
+	Attempt int32
+	// The time when the last attempt completed.
+	LastAttemptCompleteTime *timestamppb.Timestamp
+	// The last attempt's failure, if any.
+	LastAttemptFailure *v17.Failure
+	// The time when the next attempt is scheduled.
+	NextAttemptScheduleTime *timestamppb.Timestamp
+	// Request ID that added the callback.
+	RequestId string
+}
+
+func (b0 CallbackInfo_builder) Build() *CallbackInfo {
+	m0 := &CallbackInfo{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Callback = b.Callback
+	x.xxx_hidden_Trigger = b.Trigger
+	x.xxx_hidden_RegistrationTime = b.RegistrationTime
+	x.xxx_hidden_State = b.State
+	x.xxx_hidden_Attempt = b.Attempt
+	x.xxx_hidden_LastAttemptCompleteTime = b.LastAttemptCompleteTime
+	x.xxx_hidden_LastAttemptFailure = b.LastAttemptFailure
+	x.xxx_hidden_NextAttemptScheduleTime = b.NextAttemptScheduleTime
+	x.xxx_hidden_RequestId = b.RequestId
+	return m0
+}
+
 // NexusOperationInfo contains the state of a nexus operation.
 type NexusOperationInfo struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Endpoint name.
-	// Resolved the endpoint registry for this workflow's namespace.
-	Endpoint string `protobuf:"bytes,1,opt,name=endpoint,proto3" json:"endpoint,omitempty"`
-	// Service name.
-	Service string `protobuf:"bytes,2,opt,name=service,proto3" json:"service,omitempty"`
-	// Operation name.
-	Operation string `protobuf:"bytes,3,opt,name=operation,proto3" json:"operation,omitempty"`
-	// Token for fetching the scheduled event.
-	ScheduledEventToken []byte `protobuf:"bytes,5,opt,name=scheduled_event_token,json=scheduledEventToken,proto3" json:"scheduled_event_token,omitempty"`
-	// Operation token. Only set for asynchronous operations after a successful StartOperation call.
-	OperationToken string `protobuf:"bytes,6,opt,name=operation_token,json=operationToken,proto3" json:"operation_token,omitempty"`
-	// Schedule-to-close timeout for this operation.
-	// This is the only timeout settable by a workflow.
-	// (-- api-linter: core::0140::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: "since" is needed here. --)
-	ScheduleToCloseTimeout *durationpb.Duration `protobuf:"bytes,7,opt,name=schedule_to_close_timeout,json=scheduleToCloseTimeout,proto3" json:"schedule_to_close_timeout,omitempty"`
-	// The time when the operation was scheduled.
-	ScheduledTime *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=scheduled_time,json=scheduledTime,proto3" json:"scheduled_time,omitempty"`
-	// Unique request ID allocated for all retry attempts of the StartOperation request.
-	RequestId string                 `protobuf:"bytes,9,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
-	State     v1.NexusOperationState `protobuf:"varint,10,opt,name=state,proto3,enum=temporal.server.api.enums.v1.NexusOperationState" json:"state,omitempty"`
-	// The number of attempts made to deliver the start operation request.
-	// This number represents a minimum bound since the attempt is incremented after the request completes.
-	Attempt int32 `protobuf:"varint,11,opt,name=attempt,proto3" json:"attempt,omitempty"`
-	// The time when the last attempt completed.
-	LastAttemptCompleteTime *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=last_attempt_complete_time,json=lastAttemptCompleteTime,proto3" json:"last_attempt_complete_time,omitempty"`
-	// The last attempt's failure, if any.
-	LastAttemptFailure *v17.Failure `protobuf:"bytes,13,opt,name=last_attempt_failure,json=lastAttemptFailure,proto3" json:"last_attempt_failure,omitempty"`
-	// The time when the next attempt is scheduled.
-	NextAttemptScheduleTime *timestamppb.Timestamp `protobuf:"bytes,14,opt,name=next_attempt_schedule_time,json=nextAttemptScheduleTime,proto3" json:"next_attempt_schedule_time,omitempty"`
-	// Endpoint ID, the name is also stored here (field 1) but we use the ID internally to avoid failing operation
-	// requests when an endpoint is renamed.
-	EndpointId    string `protobuf:"bytes,15,opt,name=endpoint_id,json=endpointId,proto3" json:"endpoint_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                              protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Endpoint                string                 `protobuf:"bytes,1,opt,name=endpoint,proto3"`
+	xxx_hidden_Service                 string                 `protobuf:"bytes,2,opt,name=service,proto3"`
+	xxx_hidden_Operation               string                 `protobuf:"bytes,3,opt,name=operation,proto3"`
+	xxx_hidden_ScheduledEventToken     []byte                 `protobuf:"bytes,5,opt,name=scheduled_event_token,json=scheduledEventToken,proto3"`
+	xxx_hidden_OperationToken          string                 `protobuf:"bytes,6,opt,name=operation_token,json=operationToken,proto3"`
+	xxx_hidden_ScheduleToCloseTimeout  *durationpb.Duration   `protobuf:"bytes,7,opt,name=schedule_to_close_timeout,json=scheduleToCloseTimeout,proto3"`
+	xxx_hidden_ScheduledTime           *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=scheduled_time,json=scheduledTime,proto3"`
+	xxx_hidden_RequestId               string                 `protobuf:"bytes,9,opt,name=request_id,json=requestId,proto3"`
+	xxx_hidden_State                   v1.NexusOperationState `protobuf:"varint,10,opt,name=state,proto3,enum=temporal.server.api.enums.v1.NexusOperationState"`
+	xxx_hidden_Attempt                 int32                  `protobuf:"varint,11,opt,name=attempt,proto3"`
+	xxx_hidden_LastAttemptCompleteTime *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=last_attempt_complete_time,json=lastAttemptCompleteTime,proto3"`
+	xxx_hidden_LastAttemptFailure      *v17.Failure           `protobuf:"bytes,13,opt,name=last_attempt_failure,json=lastAttemptFailure,proto3"`
+	xxx_hidden_NextAttemptScheduleTime *timestamppb.Timestamp `protobuf:"bytes,14,opt,name=next_attempt_schedule_time,json=nextAttemptScheduleTime,proto3"`
+	xxx_hidden_EndpointId              string                 `protobuf:"bytes,15,opt,name=endpoint_id,json=endpointId,proto3"`
+	unknownFields                      protoimpl.UnknownFields
+	sizeCache                          protoimpl.SizeCache
 }
 
 func (x *NexusOperationInfo) Reset() {
@@ -3705,128 +6977,290 @@ func (x *NexusOperationInfo) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use NexusOperationInfo.ProtoReflect.Descriptor instead.
-func (*NexusOperationInfo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_executions_proto_rawDescGZIP(), []int{22}
-}
-
 func (x *NexusOperationInfo) GetEndpoint() string {
 	if x != nil {
-		return x.Endpoint
+		return x.xxx_hidden_Endpoint
 	}
 	return ""
 }
 
 func (x *NexusOperationInfo) GetService() string {
 	if x != nil {
-		return x.Service
+		return x.xxx_hidden_Service
 	}
 	return ""
 }
 
 func (x *NexusOperationInfo) GetOperation() string {
 	if x != nil {
-		return x.Operation
+		return x.xxx_hidden_Operation
 	}
 	return ""
 }
 
 func (x *NexusOperationInfo) GetScheduledEventToken() []byte {
 	if x != nil {
-		return x.ScheduledEventToken
+		return x.xxx_hidden_ScheduledEventToken
 	}
 	return nil
 }
 
 func (x *NexusOperationInfo) GetOperationToken() string {
 	if x != nil {
-		return x.OperationToken
+		return x.xxx_hidden_OperationToken
 	}
 	return ""
 }
 
 func (x *NexusOperationInfo) GetScheduleToCloseTimeout() *durationpb.Duration {
 	if x != nil {
-		return x.ScheduleToCloseTimeout
+		return x.xxx_hidden_ScheduleToCloseTimeout
 	}
 	return nil
 }
 
 func (x *NexusOperationInfo) GetScheduledTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.ScheduledTime
+		return x.xxx_hidden_ScheduledTime
 	}
 	return nil
 }
 
 func (x *NexusOperationInfo) GetRequestId() string {
 	if x != nil {
-		return x.RequestId
+		return x.xxx_hidden_RequestId
 	}
 	return ""
 }
 
 func (x *NexusOperationInfo) GetState() v1.NexusOperationState {
 	if x != nil {
-		return x.State
+		return x.xxx_hidden_State
 	}
 	return v1.NexusOperationState(0)
 }
 
 func (x *NexusOperationInfo) GetAttempt() int32 {
 	if x != nil {
-		return x.Attempt
+		return x.xxx_hidden_Attempt
 	}
 	return 0
 }
 
 func (x *NexusOperationInfo) GetLastAttemptCompleteTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.LastAttemptCompleteTime
+		return x.xxx_hidden_LastAttemptCompleteTime
 	}
 	return nil
 }
 
 func (x *NexusOperationInfo) GetLastAttemptFailure() *v17.Failure {
 	if x != nil {
-		return x.LastAttemptFailure
+		return x.xxx_hidden_LastAttemptFailure
 	}
 	return nil
 }
 
 func (x *NexusOperationInfo) GetNextAttemptScheduleTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.NextAttemptScheduleTime
+		return x.xxx_hidden_NextAttemptScheduleTime
 	}
 	return nil
 }
 
 func (x *NexusOperationInfo) GetEndpointId() string {
 	if x != nil {
-		return x.EndpointId
+		return x.xxx_hidden_EndpointId
 	}
 	return ""
 }
 
+func (x *NexusOperationInfo) SetEndpoint(v string) {
+	x.xxx_hidden_Endpoint = v
+}
+
+func (x *NexusOperationInfo) SetService(v string) {
+	x.xxx_hidden_Service = v
+}
+
+func (x *NexusOperationInfo) SetOperation(v string) {
+	x.xxx_hidden_Operation = v
+}
+
+func (x *NexusOperationInfo) SetScheduledEventToken(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_ScheduledEventToken = v
+}
+
+func (x *NexusOperationInfo) SetOperationToken(v string) {
+	x.xxx_hidden_OperationToken = v
+}
+
+func (x *NexusOperationInfo) SetScheduleToCloseTimeout(v *durationpb.Duration) {
+	x.xxx_hidden_ScheduleToCloseTimeout = v
+}
+
+func (x *NexusOperationInfo) SetScheduledTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_ScheduledTime = v
+}
+
+func (x *NexusOperationInfo) SetRequestId(v string) {
+	x.xxx_hidden_RequestId = v
+}
+
+func (x *NexusOperationInfo) SetState(v v1.NexusOperationState) {
+	x.xxx_hidden_State = v
+}
+
+func (x *NexusOperationInfo) SetAttempt(v int32) {
+	x.xxx_hidden_Attempt = v
+}
+
+func (x *NexusOperationInfo) SetLastAttemptCompleteTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_LastAttemptCompleteTime = v
+}
+
+func (x *NexusOperationInfo) SetLastAttemptFailure(v *v17.Failure) {
+	x.xxx_hidden_LastAttemptFailure = v
+}
+
+func (x *NexusOperationInfo) SetNextAttemptScheduleTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_NextAttemptScheduleTime = v
+}
+
+func (x *NexusOperationInfo) SetEndpointId(v string) {
+	x.xxx_hidden_EndpointId = v
+}
+
+func (x *NexusOperationInfo) HasScheduleToCloseTimeout() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_ScheduleToCloseTimeout != nil
+}
+
+func (x *NexusOperationInfo) HasScheduledTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_ScheduledTime != nil
+}
+
+func (x *NexusOperationInfo) HasLastAttemptCompleteTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_LastAttemptCompleteTime != nil
+}
+
+func (x *NexusOperationInfo) HasLastAttemptFailure() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_LastAttemptFailure != nil
+}
+
+func (x *NexusOperationInfo) HasNextAttemptScheduleTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_NextAttemptScheduleTime != nil
+}
+
+func (x *NexusOperationInfo) ClearScheduleToCloseTimeout() {
+	x.xxx_hidden_ScheduleToCloseTimeout = nil
+}
+
+func (x *NexusOperationInfo) ClearScheduledTime() {
+	x.xxx_hidden_ScheduledTime = nil
+}
+
+func (x *NexusOperationInfo) ClearLastAttemptCompleteTime() {
+	x.xxx_hidden_LastAttemptCompleteTime = nil
+}
+
+func (x *NexusOperationInfo) ClearLastAttemptFailure() {
+	x.xxx_hidden_LastAttemptFailure = nil
+}
+
+func (x *NexusOperationInfo) ClearNextAttemptScheduleTime() {
+	x.xxx_hidden_NextAttemptScheduleTime = nil
+}
+
+type NexusOperationInfo_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Endpoint name.
+	// Resolved the endpoint registry for this workflow's namespace.
+	Endpoint string
+	// Service name.
+	Service string
+	// Operation name.
+	Operation string
+	// Token for fetching the scheduled event.
+	ScheduledEventToken []byte
+	// Operation token. Only set for asynchronous operations after a successful StartOperation call.
+	OperationToken string
+	// Schedule-to-close timeout for this operation.
+	// This is the only timeout settable by a workflow.
+	// (-- api-linter: core::0140::prepositions=disabled
+	//
+	//	aip.dev/not-precedent: "since" is needed here. --)
+	ScheduleToCloseTimeout *durationpb.Duration
+	// The time when the operation was scheduled.
+	ScheduledTime *timestamppb.Timestamp
+	// Unique request ID allocated for all retry attempts of the StartOperation request.
+	RequestId string
+	State     v1.NexusOperationState
+	// The number of attempts made to deliver the start operation request.
+	// This number represents a minimum bound since the attempt is incremented after the request completes.
+	Attempt int32
+	// The time when the last attempt completed.
+	LastAttemptCompleteTime *timestamppb.Timestamp
+	// The last attempt's failure, if any.
+	LastAttemptFailure *v17.Failure
+	// The time when the next attempt is scheduled.
+	NextAttemptScheduleTime *timestamppb.Timestamp
+	// Endpoint ID, the name is also stored here (field 1) but we use the ID internally to avoid failing operation
+	// requests when an endpoint is renamed.
+	EndpointId string
+}
+
+func (b0 NexusOperationInfo_builder) Build() *NexusOperationInfo {
+	m0 := &NexusOperationInfo{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Endpoint = b.Endpoint
+	x.xxx_hidden_Service = b.Service
+	x.xxx_hidden_Operation = b.Operation
+	x.xxx_hidden_ScheduledEventToken = b.ScheduledEventToken
+	x.xxx_hidden_OperationToken = b.OperationToken
+	x.xxx_hidden_ScheduleToCloseTimeout = b.ScheduleToCloseTimeout
+	x.xxx_hidden_ScheduledTime = b.ScheduledTime
+	x.xxx_hidden_RequestId = b.RequestId
+	x.xxx_hidden_State = b.State
+	x.xxx_hidden_Attempt = b.Attempt
+	x.xxx_hidden_LastAttemptCompleteTime = b.LastAttemptCompleteTime
+	x.xxx_hidden_LastAttemptFailure = b.LastAttemptFailure
+	x.xxx_hidden_NextAttemptScheduleTime = b.NextAttemptScheduleTime
+	x.xxx_hidden_EndpointId = b.EndpointId
+	return m0
+}
+
 // NexusOperationCancellationInfo contains the state of a nexus operation cancelation.
 type NexusOperationCancellationInfo struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// The time when cancelation was requested.
-	RequestedTime *timestamppb.Timestamp              `protobuf:"bytes,1,opt,name=requested_time,json=requestedTime,proto3" json:"requested_time,omitempty"`
-	State         v11.NexusOperationCancellationState `protobuf:"varint,2,opt,name=state,proto3,enum=temporal.api.enums.v1.NexusOperationCancellationState" json:"state,omitempty"`
-	// The number of attempts made to deliver the cancel operation request.
-	// This number represents a minimum bound since the attempt is incremented after the request completes.
-	Attempt int32 `protobuf:"varint,3,opt,name=attempt,proto3" json:"attempt,omitempty"`
-	// The time when the last attempt completed.
-	LastAttemptCompleteTime *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=last_attempt_complete_time,json=lastAttemptCompleteTime,proto3" json:"last_attempt_complete_time,omitempty"`
-	// The last attempt's failure, if any.
-	LastAttemptFailure *v17.Failure `protobuf:"bytes,5,opt,name=last_attempt_failure,json=lastAttemptFailure,proto3" json:"last_attempt_failure,omitempty"`
-	// The time when the next attempt is scheduled.
-	NextAttemptScheduleTime *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=next_attempt_schedule_time,json=nextAttemptScheduleTime,proto3" json:"next_attempt_schedule_time,omitempty"`
-	// The event ID of the NEXUS_OPERATION_CANCEL_REQUESTED event for this cancelation.
-	RequestedEventId int64 `protobuf:"varint,7,opt,name=requested_event_id,json=requestedEventId,proto3" json:"requested_event_id,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	state                              protoimpl.MessageState              `protogen:"opaque.v1"`
+	xxx_hidden_RequestedTime           *timestamppb.Timestamp              `protobuf:"bytes,1,opt,name=requested_time,json=requestedTime,proto3"`
+	xxx_hidden_State                   v11.NexusOperationCancellationState `protobuf:"varint,2,opt,name=state,proto3,enum=temporal.api.enums.v1.NexusOperationCancellationState"`
+	xxx_hidden_Attempt                 int32                               `protobuf:"varint,3,opt,name=attempt,proto3"`
+	xxx_hidden_LastAttemptCompleteTime *timestamppb.Timestamp              `protobuf:"bytes,4,opt,name=last_attempt_complete_time,json=lastAttemptCompleteTime,proto3"`
+	xxx_hidden_LastAttemptFailure      *v17.Failure                        `protobuf:"bytes,5,opt,name=last_attempt_failure,json=lastAttemptFailure,proto3"`
+	xxx_hidden_NextAttemptScheduleTime *timestamppb.Timestamp              `protobuf:"bytes,6,opt,name=next_attempt_schedule_time,json=nextAttemptScheduleTime,proto3"`
+	xxx_hidden_RequestedEventId        int64                               `protobuf:"varint,7,opt,name=requested_event_id,json=requestedEventId,proto3"`
+	unknownFields                      protoimpl.UnknownFields
+	sizeCache                          protoimpl.SizeCache
 }
 
 func (x *NexusOperationCancellationInfo) Reset() {
@@ -3854,67 +7288,166 @@ func (x *NexusOperationCancellationInfo) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use NexusOperationCancellationInfo.ProtoReflect.Descriptor instead.
-func (*NexusOperationCancellationInfo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_executions_proto_rawDescGZIP(), []int{23}
-}
-
 func (x *NexusOperationCancellationInfo) GetRequestedTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.RequestedTime
+		return x.xxx_hidden_RequestedTime
 	}
 	return nil
 }
 
 func (x *NexusOperationCancellationInfo) GetState() v11.NexusOperationCancellationState {
 	if x != nil {
-		return x.State
+		return x.xxx_hidden_State
 	}
 	return v11.NexusOperationCancellationState(0)
 }
 
 func (x *NexusOperationCancellationInfo) GetAttempt() int32 {
 	if x != nil {
-		return x.Attempt
+		return x.xxx_hidden_Attempt
 	}
 	return 0
 }
 
 func (x *NexusOperationCancellationInfo) GetLastAttemptCompleteTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.LastAttemptCompleteTime
+		return x.xxx_hidden_LastAttemptCompleteTime
 	}
 	return nil
 }
 
 func (x *NexusOperationCancellationInfo) GetLastAttemptFailure() *v17.Failure {
 	if x != nil {
-		return x.LastAttemptFailure
+		return x.xxx_hidden_LastAttemptFailure
 	}
 	return nil
 }
 
 func (x *NexusOperationCancellationInfo) GetNextAttemptScheduleTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.NextAttemptScheduleTime
+		return x.xxx_hidden_NextAttemptScheduleTime
 	}
 	return nil
 }
 
 func (x *NexusOperationCancellationInfo) GetRequestedEventId() int64 {
 	if x != nil {
-		return x.RequestedEventId
+		return x.xxx_hidden_RequestedEventId
 	}
 	return 0
 }
 
+func (x *NexusOperationCancellationInfo) SetRequestedTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_RequestedTime = v
+}
+
+func (x *NexusOperationCancellationInfo) SetState(v v11.NexusOperationCancellationState) {
+	x.xxx_hidden_State = v
+}
+
+func (x *NexusOperationCancellationInfo) SetAttempt(v int32) {
+	x.xxx_hidden_Attempt = v
+}
+
+func (x *NexusOperationCancellationInfo) SetLastAttemptCompleteTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_LastAttemptCompleteTime = v
+}
+
+func (x *NexusOperationCancellationInfo) SetLastAttemptFailure(v *v17.Failure) {
+	x.xxx_hidden_LastAttemptFailure = v
+}
+
+func (x *NexusOperationCancellationInfo) SetNextAttemptScheduleTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_NextAttemptScheduleTime = v
+}
+
+func (x *NexusOperationCancellationInfo) SetRequestedEventId(v int64) {
+	x.xxx_hidden_RequestedEventId = v
+}
+
+func (x *NexusOperationCancellationInfo) HasRequestedTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_RequestedTime != nil
+}
+
+func (x *NexusOperationCancellationInfo) HasLastAttemptCompleteTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_LastAttemptCompleteTime != nil
+}
+
+func (x *NexusOperationCancellationInfo) HasLastAttemptFailure() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_LastAttemptFailure != nil
+}
+
+func (x *NexusOperationCancellationInfo) HasNextAttemptScheduleTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_NextAttemptScheduleTime != nil
+}
+
+func (x *NexusOperationCancellationInfo) ClearRequestedTime() {
+	x.xxx_hidden_RequestedTime = nil
+}
+
+func (x *NexusOperationCancellationInfo) ClearLastAttemptCompleteTime() {
+	x.xxx_hidden_LastAttemptCompleteTime = nil
+}
+
+func (x *NexusOperationCancellationInfo) ClearLastAttemptFailure() {
+	x.xxx_hidden_LastAttemptFailure = nil
+}
+
+func (x *NexusOperationCancellationInfo) ClearNextAttemptScheduleTime() {
+	x.xxx_hidden_NextAttemptScheduleTime = nil
+}
+
+type NexusOperationCancellationInfo_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// The time when cancelation was requested.
+	RequestedTime *timestamppb.Timestamp
+	State         v11.NexusOperationCancellationState
+	// The number of attempts made to deliver the cancel operation request.
+	// This number represents a minimum bound since the attempt is incremented after the request completes.
+	Attempt int32
+	// The time when the last attempt completed.
+	LastAttemptCompleteTime *timestamppb.Timestamp
+	// The last attempt's failure, if any.
+	LastAttemptFailure *v17.Failure
+	// The time when the next attempt is scheduled.
+	NextAttemptScheduleTime *timestamppb.Timestamp
+	// The event ID of the NEXUS_OPERATION_CANCEL_REQUESTED event for this cancelation.
+	RequestedEventId int64
+}
+
+func (b0 NexusOperationCancellationInfo_builder) Build() *NexusOperationCancellationInfo {
+	m0 := &NexusOperationCancellationInfo{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_RequestedTime = b.RequestedTime
+	x.xxx_hidden_State = b.State
+	x.xxx_hidden_Attempt = b.Attempt
+	x.xxx_hidden_LastAttemptCompleteTime = b.LastAttemptCompleteTime
+	x.xxx_hidden_LastAttemptFailure = b.LastAttemptFailure
+	x.xxx_hidden_NextAttemptScheduleTime = b.NextAttemptScheduleTime
+	x.xxx_hidden_RequestedEventId = b.RequestedEventId
+	return m0
+}
+
 // ResetChildInfo contains the state and actions to be performed on children when a parent workflow resumes after reset.
 type ResetChildInfo struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// If true, the parent workflow should terminate the child before starting it.
-	ShouldTerminateAndStart bool `protobuf:"varint,1,opt,name=should_terminate_and_start,json=shouldTerminateAndStart,proto3" json:"should_terminate_and_start,omitempty"`
-	unknownFields           protoimpl.UnknownFields
-	sizeCache               protoimpl.SizeCache
+	state                              protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_ShouldTerminateAndStart bool                   `protobuf:"varint,1,opt,name=should_terminate_and_start,json=shouldTerminateAndStart,proto3"`
+	unknownFields                      protoimpl.UnknownFields
+	sizeCache                          protoimpl.SizeCache
 }
 
 func (x *ResetChildInfo) Reset() {
@@ -3942,30 +7475,40 @@ func (x *ResetChildInfo) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ResetChildInfo.ProtoReflect.Descriptor instead.
-func (*ResetChildInfo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_executions_proto_rawDescGZIP(), []int{24}
-}
-
 func (x *ResetChildInfo) GetShouldTerminateAndStart() bool {
 	if x != nil {
-		return x.ShouldTerminateAndStart
+		return x.xxx_hidden_ShouldTerminateAndStart
 	}
 	return false
 }
 
+func (x *ResetChildInfo) SetShouldTerminateAndStart(v bool) {
+	x.xxx_hidden_ShouldTerminateAndStart = v
+}
+
+type ResetChildInfo_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// If true, the parent workflow should terminate the child before starting it.
+	ShouldTerminateAndStart bool
+}
+
+func (b0 ResetChildInfo_builder) Build() *ResetChildInfo {
+	m0 := &ResetChildInfo{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_ShouldTerminateAndStart = b.ShouldTerminateAndStart
+	return m0
+}
+
 type WorkflowPauseInfo struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// The time when the workflow was paused.
-	PauseTime *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=pause_time,json=pauseTime,proto3" json:"pause_time,omitempty"`
-	// The identity of the actor that paused the workflow.
-	Identity string `protobuf:"bytes,2,opt,name=identity,proto3" json:"identity,omitempty"`
-	// The reason for pausing the workflow.
-	Reason string `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
-	// A unique identifier for this pause request (for idempotency checks)
-	RequestId     string `protobuf:"bytes,4,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_PauseTime *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=pause_time,json=pauseTime,proto3"`
+	xxx_hidden_Identity  string                 `protobuf:"bytes,2,opt,name=identity,proto3"`
+	xxx_hidden_Reason    string                 `protobuf:"bytes,3,opt,name=reason,proto3"`
+	xxx_hidden_RequestId string                 `protobuf:"bytes,4,opt,name=request_id,json=requestId,proto3"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *WorkflowPauseInfo) Reset() {
@@ -3993,46 +7536,90 @@ func (x *WorkflowPauseInfo) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use WorkflowPauseInfo.ProtoReflect.Descriptor instead.
-func (*WorkflowPauseInfo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_executions_proto_rawDescGZIP(), []int{25}
-}
-
 func (x *WorkflowPauseInfo) GetPauseTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.PauseTime
+		return x.xxx_hidden_PauseTime
 	}
 	return nil
 }
 
 func (x *WorkflowPauseInfo) GetIdentity() string {
 	if x != nil {
-		return x.Identity
+		return x.xxx_hidden_Identity
 	}
 	return ""
 }
 
 func (x *WorkflowPauseInfo) GetReason() string {
 	if x != nil {
-		return x.Reason
+		return x.xxx_hidden_Reason
 	}
 	return ""
 }
 
 func (x *WorkflowPauseInfo) GetRequestId() string {
 	if x != nil {
-		return x.RequestId
+		return x.xxx_hidden_RequestId
 	}
 	return ""
 }
 
+func (x *WorkflowPauseInfo) SetPauseTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_PauseTime = v
+}
+
+func (x *WorkflowPauseInfo) SetIdentity(v string) {
+	x.xxx_hidden_Identity = v
+}
+
+func (x *WorkflowPauseInfo) SetReason(v string) {
+	x.xxx_hidden_Reason = v
+}
+
+func (x *WorkflowPauseInfo) SetRequestId(v string) {
+	x.xxx_hidden_RequestId = v
+}
+
+func (x *WorkflowPauseInfo) HasPauseTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_PauseTime != nil
+}
+
+func (x *WorkflowPauseInfo) ClearPauseTime() {
+	x.xxx_hidden_PauseTime = nil
+}
+
+type WorkflowPauseInfo_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// The time when the workflow was paused.
+	PauseTime *timestamppb.Timestamp
+	// The identity of the actor that paused the workflow.
+	Identity string
+	// The reason for pausing the workflow.
+	Reason string
+	// A unique identifier for this pause request (for idempotency checks)
+	RequestId string
+}
+
+func (b0 WorkflowPauseInfo_builder) Build() *WorkflowPauseInfo {
+	m0 := &WorkflowPauseInfo{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_PauseTime = b.PauseTime
+	x.xxx_hidden_Identity = b.Identity
+	x.xxx_hidden_Reason = b.Reason
+	x.xxx_hidden_RequestId = b.RequestId
+	return m0
+}
+
 type TransferTaskInfo_CloseExecutionTaskDetails struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// can_skip_visibility_archival is set to true when we can guarantee that visibility records will be archived
-	// by some other task, so this task doesn't need to worry about it.
-	CanSkipVisibilityArchival bool `protobuf:"varint,1,opt,name=can_skip_visibility_archival,json=canSkipVisibilityArchival,proto3" json:"can_skip_visibility_archival,omitempty"`
-	unknownFields             protoimpl.UnknownFields
-	sizeCache                 protoimpl.SizeCache
+	state                                protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_CanSkipVisibilityArchival bool                   `protobuf:"varint,1,opt,name=can_skip_visibility_archival,json=canSkipVisibilityArchival,proto3"`
+	unknownFields                        protoimpl.UnknownFields
+	sizeCache                            protoimpl.SizeCache
 }
 
 func (x *TransferTaskInfo_CloseExecutionTaskDetails) Reset() {
@@ -4060,28 +7647,40 @@ func (x *TransferTaskInfo_CloseExecutionTaskDetails) ProtoReflect() protoreflect
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use TransferTaskInfo_CloseExecutionTaskDetails.ProtoReflect.Descriptor instead.
-func (*TransferTaskInfo_CloseExecutionTaskDetails) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_executions_proto_rawDescGZIP(), []int{5, 0}
-}
-
 func (x *TransferTaskInfo_CloseExecutionTaskDetails) GetCanSkipVisibilityArchival() bool {
 	if x != nil {
-		return x.CanSkipVisibilityArchival
+		return x.xxx_hidden_CanSkipVisibilityArchival
 	}
 	return false
 }
 
+func (x *TransferTaskInfo_CloseExecutionTaskDetails) SetCanSkipVisibilityArchival(v bool) {
+	x.xxx_hidden_CanSkipVisibilityArchival = v
+}
+
+type TransferTaskInfo_CloseExecutionTaskDetails_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// can_skip_visibility_archival is set to true when we can guarantee that visibility records will be archived
+	// by some other task, so this task doesn't need to worry about it.
+	CanSkipVisibilityArchival bool
+}
+
+func (b0 TransferTaskInfo_CloseExecutionTaskDetails_builder) Build() *TransferTaskInfo_CloseExecutionTaskDetails {
+	m0 := &TransferTaskInfo_CloseExecutionTaskDetails{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_CanSkipVisibilityArchival = b.CanSkipVisibilityArchival
+	return m0
+}
+
 // Deprecated. Clean up with versioning-2. [cleanup-old-wv]
 type ActivityInfo_UseWorkflowBuildIdInfo struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// build ID of the wf when this activity started last time (which is the build ID of
-	// the worker who received this activity)
-	LastUsedBuildId string `protobuf:"bytes,1,opt,name=last_used_build_id,json=lastUsedBuildId,proto3" json:"last_used_build_id,omitempty"`
-	// workflows redirect_counter value when this activity started last time
-	LastRedirectCounter int64 `protobuf:"varint,2,opt,name=last_redirect_counter,json=lastRedirectCounter,proto3" json:"last_redirect_counter,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	state                          protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_LastUsedBuildId     string                 `protobuf:"bytes,1,opt,name=last_used_build_id,json=lastUsedBuildId,proto3"`
+	xxx_hidden_LastRedirectCounter int64                  `protobuf:"varint,2,opt,name=last_redirect_counter,json=lastRedirectCounter,proto3"`
+	unknownFields                  protoimpl.UnknownFields
+	sizeCache                      protoimpl.SizeCache
 }
 
 func (x *ActivityInfo_UseWorkflowBuildIdInfo) Reset() {
@@ -4109,36 +7708,53 @@ func (x *ActivityInfo_UseWorkflowBuildIdInfo) ProtoReflect() protoreflect.Messag
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ActivityInfo_UseWorkflowBuildIdInfo.ProtoReflect.Descriptor instead.
-func (*ActivityInfo_UseWorkflowBuildIdInfo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_executions_proto_rawDescGZIP(), []int{13, 0}
-}
-
 func (x *ActivityInfo_UseWorkflowBuildIdInfo) GetLastUsedBuildId() string {
 	if x != nil {
-		return x.LastUsedBuildId
+		return x.xxx_hidden_LastUsedBuildId
 	}
 	return ""
 }
 
 func (x *ActivityInfo_UseWorkflowBuildIdInfo) GetLastRedirectCounter() int64 {
 	if x != nil {
-		return x.LastRedirectCounter
+		return x.xxx_hidden_LastRedirectCounter
 	}
 	return 0
 }
 
+func (x *ActivityInfo_UseWorkflowBuildIdInfo) SetLastUsedBuildId(v string) {
+	x.xxx_hidden_LastUsedBuildId = v
+}
+
+func (x *ActivityInfo_UseWorkflowBuildIdInfo) SetLastRedirectCounter(v int64) {
+	x.xxx_hidden_LastRedirectCounter = v
+}
+
+type ActivityInfo_UseWorkflowBuildIdInfo_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// build ID of the wf when this activity started last time (which is the build ID of
+	// the worker who received this activity)
+	LastUsedBuildId string
+	// workflows redirect_counter value when this activity started last time
+	LastRedirectCounter int64
+}
+
+func (b0 ActivityInfo_UseWorkflowBuildIdInfo_builder) Build() *ActivityInfo_UseWorkflowBuildIdInfo {
+	m0 := &ActivityInfo_UseWorkflowBuildIdInfo{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_LastUsedBuildId = b.LastUsedBuildId
+	x.xxx_hidden_LastRedirectCounter = b.LastRedirectCounter
+	return m0
+}
+
 type ActivityInfo_PauseInfo struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// The time when the activity was paused.
-	PauseTime *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=pause_time,json=pauseTime,proto3" json:"pause_time,omitempty"`
-	// Types that are valid to be assigned to PausedBy:
-	//
-	//	*ActivityInfo_PauseInfo_Manual_
-	//	*ActivityInfo_PauseInfo_RuleId
-	PausedBy      isActivityInfo_PauseInfo_PausedBy `protobuf_oneof:"paused_by"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                protoimpl.MessageState            `protogen:"opaque.v1"`
+	xxx_hidden_PauseTime *timestamppb.Timestamp            `protobuf:"bytes,1,opt,name=pause_time,json=pauseTime,proto3"`
+	xxx_hidden_PausedBy  isActivityInfo_PauseInfo_PausedBy `protobuf_oneof:"paused_by"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *ActivityInfo_PauseInfo) Reset() {
@@ -4166,28 +7782,16 @@ func (x *ActivityInfo_PauseInfo) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ActivityInfo_PauseInfo.ProtoReflect.Descriptor instead.
-func (*ActivityInfo_PauseInfo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_executions_proto_rawDescGZIP(), []int{13, 1}
-}
-
 func (x *ActivityInfo_PauseInfo) GetPauseTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.PauseTime
-	}
-	return nil
-}
-
-func (x *ActivityInfo_PauseInfo) GetPausedBy() isActivityInfo_PauseInfo_PausedBy {
-	if x != nil {
-		return x.PausedBy
+		return x.xxx_hidden_PauseTime
 	}
 	return nil
 }
 
 func (x *ActivityInfo_PauseInfo) GetManual() *ActivityInfo_PauseInfo_Manual {
 	if x != nil {
-		if x, ok := x.PausedBy.(*ActivityInfo_PauseInfo_Manual_); ok {
+		if x, ok := x.xxx_hidden_PausedBy.(*activityInfo_PauseInfo_Manual_); ok {
 			return x.Manual
 		}
 	}
@@ -4196,39 +7800,164 @@ func (x *ActivityInfo_PauseInfo) GetManual() *ActivityInfo_PauseInfo_Manual {
 
 func (x *ActivityInfo_PauseInfo) GetRuleId() string {
 	if x != nil {
-		if x, ok := x.PausedBy.(*ActivityInfo_PauseInfo_RuleId); ok {
+		if x, ok := x.xxx_hidden_PausedBy.(*activityInfo_PauseInfo_RuleId); ok {
 			return x.RuleId
 		}
 	}
 	return ""
 }
 
+func (x *ActivityInfo_PauseInfo) SetPauseTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_PauseTime = v
+}
+
+func (x *ActivityInfo_PauseInfo) SetManual(v *ActivityInfo_PauseInfo_Manual) {
+	if v == nil {
+		x.xxx_hidden_PausedBy = nil
+		return
+	}
+	x.xxx_hidden_PausedBy = &activityInfo_PauseInfo_Manual_{v}
+}
+
+func (x *ActivityInfo_PauseInfo) SetRuleId(v string) {
+	x.xxx_hidden_PausedBy = &activityInfo_PauseInfo_RuleId{v}
+}
+
+func (x *ActivityInfo_PauseInfo) HasPauseTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_PauseTime != nil
+}
+
+func (x *ActivityInfo_PauseInfo) HasPausedBy() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_PausedBy != nil
+}
+
+func (x *ActivityInfo_PauseInfo) HasManual() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_PausedBy.(*activityInfo_PauseInfo_Manual_)
+	return ok
+}
+
+func (x *ActivityInfo_PauseInfo) HasRuleId() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_PausedBy.(*activityInfo_PauseInfo_RuleId)
+	return ok
+}
+
+func (x *ActivityInfo_PauseInfo) ClearPauseTime() {
+	x.xxx_hidden_PauseTime = nil
+}
+
+func (x *ActivityInfo_PauseInfo) ClearPausedBy() {
+	x.xxx_hidden_PausedBy = nil
+}
+
+func (x *ActivityInfo_PauseInfo) ClearManual() {
+	if _, ok := x.xxx_hidden_PausedBy.(*activityInfo_PauseInfo_Manual_); ok {
+		x.xxx_hidden_PausedBy = nil
+	}
+}
+
+func (x *ActivityInfo_PauseInfo) ClearRuleId() {
+	if _, ok := x.xxx_hidden_PausedBy.(*activityInfo_PauseInfo_RuleId); ok {
+		x.xxx_hidden_PausedBy = nil
+	}
+}
+
+const ActivityInfo_PauseInfo_PausedBy_not_set_case case_ActivityInfo_PauseInfo_PausedBy = 0
+const ActivityInfo_PauseInfo_Manual_case case_ActivityInfo_PauseInfo_PausedBy = 2
+const ActivityInfo_PauseInfo_RuleId_case case_ActivityInfo_PauseInfo_PausedBy = 3
+
+func (x *ActivityInfo_PauseInfo) WhichPausedBy() case_ActivityInfo_PauseInfo_PausedBy {
+	if x == nil {
+		return ActivityInfo_PauseInfo_PausedBy_not_set_case
+	}
+	switch x.xxx_hidden_PausedBy.(type) {
+	case *activityInfo_PauseInfo_Manual_:
+		return ActivityInfo_PauseInfo_Manual_case
+	case *activityInfo_PauseInfo_RuleId:
+		return ActivityInfo_PauseInfo_RuleId_case
+	default:
+		return ActivityInfo_PauseInfo_PausedBy_not_set_case
+	}
+}
+
+type ActivityInfo_PauseInfo_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// The time when the activity was paused.
+	PauseTime *timestamppb.Timestamp
+	// Fields of oneof xxx_hidden_PausedBy:
+	// activity was paused by the manual intervention
+	Manual *ActivityInfo_PauseInfo_Manual
+	// Id of the rule that paused the activity.
+	RuleId *string
+	// -- end of xxx_hidden_PausedBy
+}
+
+func (b0 ActivityInfo_PauseInfo_builder) Build() *ActivityInfo_PauseInfo {
+	m0 := &ActivityInfo_PauseInfo{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_PauseTime = b.PauseTime
+	if b.Manual != nil {
+		x.xxx_hidden_PausedBy = &activityInfo_PauseInfo_Manual_{b.Manual}
+	}
+	if b.RuleId != nil {
+		x.xxx_hidden_PausedBy = &activityInfo_PauseInfo_RuleId{*b.RuleId}
+	}
+	return m0
+}
+
+type case_ActivityInfo_PauseInfo_PausedBy protoreflect.FieldNumber
+
+func (x case_ActivityInfo_PauseInfo_PausedBy) String() string {
+	switch x {
+	case ActivityInfo_PauseInfo_PausedBy_not_set_case:
+		return "ActivityInfoPauseInfoPausedByNotSetCase"
+	case ActivityInfo_PauseInfo_Manual_case:
+		return "ActivityInfoPauseInfoManualCase"
+	case ActivityInfo_PauseInfo_RuleId_case:
+		return "ActivityInfoPauseInfoRuleIdCase"
+	default:
+		return strconv.Itoa(int(x))
+	}
+
+}
+
 type isActivityInfo_PauseInfo_PausedBy interface {
 	isActivityInfo_PauseInfo_PausedBy()
 }
 
-type ActivityInfo_PauseInfo_Manual_ struct {
+type activityInfo_PauseInfo_Manual_ struct {
 	// activity was paused by the manual intervention
 	Manual *ActivityInfo_PauseInfo_Manual `protobuf:"bytes,2,opt,name=manual,proto3,oneof"`
 }
 
-type ActivityInfo_PauseInfo_RuleId struct {
+type activityInfo_PauseInfo_RuleId struct {
 	// Id of the rule that paused the activity.
 	RuleId string `protobuf:"bytes,3,opt,name=rule_id,json=ruleId,proto3,oneof"`
 }
 
-func (*ActivityInfo_PauseInfo_Manual_) isActivityInfo_PauseInfo_PausedBy() {}
+func (*activityInfo_PauseInfo_Manual_) isActivityInfo_PauseInfo_PausedBy() {}
 
-func (*ActivityInfo_PauseInfo_RuleId) isActivityInfo_PauseInfo_PausedBy() {}
+func (*activityInfo_PauseInfo_RuleId) isActivityInfo_PauseInfo_PausedBy() {}
 
 type ActivityInfo_PauseInfo_Manual struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// The identity of the actor that paused the activity.
-	Identity string `protobuf:"bytes,1,opt,name=identity,proto3" json:"identity,omitempty"`
-	// Reason for pausing the activity.
-	Reason        string `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state               protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Identity string                 `protobuf:"bytes,1,opt,name=identity,proto3"`
+	xxx_hidden_Reason   string                 `protobuf:"bytes,2,opt,name=reason,proto3"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *ActivityInfo_PauseInfo_Manual) Reset() {
@@ -4256,36 +7985,52 @@ func (x *ActivityInfo_PauseInfo_Manual) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ActivityInfo_PauseInfo_Manual.ProtoReflect.Descriptor instead.
-func (*ActivityInfo_PauseInfo_Manual) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_executions_proto_rawDescGZIP(), []int{13, 1, 0}
-}
-
 func (x *ActivityInfo_PauseInfo_Manual) GetIdentity() string {
 	if x != nil {
-		return x.Identity
+		return x.xxx_hidden_Identity
 	}
 	return ""
 }
 
 func (x *ActivityInfo_PauseInfo_Manual) GetReason() string {
 	if x != nil {
-		return x.Reason
+		return x.xxx_hidden_Reason
 	}
 	return ""
 }
 
+func (x *ActivityInfo_PauseInfo_Manual) SetIdentity(v string) {
+	x.xxx_hidden_Identity = v
+}
+
+func (x *ActivityInfo_PauseInfo_Manual) SetReason(v string) {
+	x.xxx_hidden_Reason = v
+}
+
+type ActivityInfo_PauseInfo_Manual_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// The identity of the actor that paused the activity.
+	Identity string
+	// Reason for pausing the activity.
+	Reason string
+}
+
+func (b0 ActivityInfo_PauseInfo_Manual_builder) Build() *ActivityInfo_PauseInfo_Manual {
+	m0 := &ActivityInfo_PauseInfo_Manual{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Identity = b.Identity
+	x.xxx_hidden_Reason = b.Reason
+	return m0
+}
+
 type Callback_Nexus struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Callback URL.
-	// (-- api-linter: core::0140::uri=disabled
-	//
-	//	aip.dev/not-precedent: Not respecting aip here. --)
-	Url string `protobuf:"bytes,1,opt,name=url,proto3" json:"url,omitempty"`
-	// Header to attach to callback request.
-	Header        map[string]string `protobuf:"bytes,2,rep,name=header,proto3" json:"header,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state             protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Url    string                 `protobuf:"bytes,1,opt,name=url,proto3"`
+	xxx_hidden_Header map[string]string      `protobuf:"bytes,2,rep,name=header,proto3" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *Callback_Nexus) Reset() {
@@ -4313,41 +8058,58 @@ func (x *Callback_Nexus) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use Callback_Nexus.ProtoReflect.Descriptor instead.
-func (*Callback_Nexus) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_executions_proto_rawDescGZIP(), []int{19, 0}
-}
-
 func (x *Callback_Nexus) GetUrl() string {
 	if x != nil {
-		return x.Url
+		return x.xxx_hidden_Url
 	}
 	return ""
 }
 
 func (x *Callback_Nexus) GetHeader() map[string]string {
 	if x != nil {
-		return x.Header
+		return x.xxx_hidden_Header
 	}
 	return nil
 }
 
+func (x *Callback_Nexus) SetUrl(v string) {
+	x.xxx_hidden_Url = v
+}
+
+func (x *Callback_Nexus) SetHeader(v map[string]string) {
+	x.xxx_hidden_Header = v
+}
+
+type Callback_Nexus_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Callback URL.
+	// (-- api-linter: core::0140::uri=disabled
+	//
+	//	aip.dev/not-precedent: Not respecting aip here. --)
+	Url string
+	// Header to attach to callback request.
+	Header map[string]string
+}
+
+func (b0 Callback_Nexus_builder) Build() *Callback_Nexus {
+	m0 := &Callback_Nexus{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Url = b.Url
+	x.xxx_hidden_Header = b.Header
+	return m0
+}
+
 type Callback_HSM struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// namespace id of the target state machine.
-	NamespaceId string `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	// ID of the workflow that the target state machine is attached to.
-	WorkflowId string `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
-	// Run id of said workflow.
-	RunId string `protobuf:"bytes,3,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	// A reference to the state machine.
-	Ref *StateMachineRef `protobuf:"bytes,4,opt,name=ref,proto3" json:"ref,omitempty"`
-	// The method name to invoke. Methods must be explicitly registered for the target state machine in the state
-	// machine registry, and accept an argument type of HistoryEvent that is the completion event of the completed
-	// workflow.
-	Method        string `protobuf:"bytes,5,opt,name=method,proto3" json:"method,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                  protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_WorkflowId  string                 `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3"`
+	xxx_hidden_RunId       string                 `protobuf:"bytes,3,opt,name=run_id,json=runId,proto3"`
+	xxx_hidden_Ref         *StateMachineRef       `protobuf:"bytes,4,opt,name=ref,proto3"`
+	xxx_hidden_Method      string                 `protobuf:"bytes,5,opt,name=method,proto3"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *Callback_HSM) Reset() {
@@ -4375,49 +8137,104 @@ func (x *Callback_HSM) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use Callback_HSM.ProtoReflect.Descriptor instead.
-func (*Callback_HSM) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_executions_proto_rawDescGZIP(), []int{19, 1}
-}
-
 func (x *Callback_HSM) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *Callback_HSM) GetWorkflowId() string {
 	if x != nil {
-		return x.WorkflowId
+		return x.xxx_hidden_WorkflowId
 	}
 	return ""
 }
 
 func (x *Callback_HSM) GetRunId() string {
 	if x != nil {
-		return x.RunId
+		return x.xxx_hidden_RunId
 	}
 	return ""
 }
 
 func (x *Callback_HSM) GetRef() *StateMachineRef {
 	if x != nil {
-		return x.Ref
+		return x.xxx_hidden_Ref
 	}
 	return nil
 }
 
 func (x *Callback_HSM) GetMethod() string {
 	if x != nil {
-		return x.Method
+		return x.xxx_hidden_Method
 	}
 	return ""
 }
 
+func (x *Callback_HSM) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *Callback_HSM) SetWorkflowId(v string) {
+	x.xxx_hidden_WorkflowId = v
+}
+
+func (x *Callback_HSM) SetRunId(v string) {
+	x.xxx_hidden_RunId = v
+}
+
+func (x *Callback_HSM) SetRef(v *StateMachineRef) {
+	x.xxx_hidden_Ref = v
+}
+
+func (x *Callback_HSM) SetMethod(v string) {
+	x.xxx_hidden_Method = v
+}
+
+func (x *Callback_HSM) HasRef() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Ref != nil
+}
+
+func (x *Callback_HSM) ClearRef() {
+	x.xxx_hidden_Ref = nil
+}
+
+type Callback_HSM_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// namespace id of the target state machine.
+	NamespaceId string
+	// ID of the workflow that the target state machine is attached to.
+	WorkflowId string
+	// Run id of said workflow.
+	RunId string
+	// A reference to the state machine.
+	Ref *StateMachineRef
+	// The method name to invoke. Methods must be explicitly registered for the target state machine in the state
+	// machine registry, and accept an argument type of HistoryEvent that is the completion event of the completed
+	// workflow.
+	Method string
+}
+
+func (b0 Callback_HSM_builder) Build() *Callback_HSM {
+	m0 := &Callback_HSM{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_WorkflowId = b.WorkflowId
+	x.xxx_hidden_RunId = b.RunId
+	x.xxx_hidden_Ref = b.Ref
+	x.xxx_hidden_Method = b.Method
+	return m0
+}
+
 // Trigger for when the workflow is closed.
 type CallbackInfo_WorkflowClosed struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4447,19 +8264,23 @@ func (x *CallbackInfo_WorkflowClosed) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CallbackInfo_WorkflowClosed.ProtoReflect.Descriptor instead.
-func (*CallbackInfo_WorkflowClosed) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_executions_proto_rawDescGZIP(), []int{21, 0}
+type CallbackInfo_WorkflowClosed_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+}
+
+func (b0 CallbackInfo_WorkflowClosed_builder) Build() *CallbackInfo_WorkflowClosed {
+	m0 := &CallbackInfo_WorkflowClosed{}
+	b, x := &b0, m0
+	_, _ = b, x
+	return m0
 }
 
 type CallbackInfo_Trigger struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Types that are valid to be assigned to Variant:
-	//
-	//	*CallbackInfo_Trigger_WorkflowClosed
-	Variant       isCallbackInfo_Trigger_Variant `protobuf_oneof:"variant"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state              protoimpl.MessageState         `protogen:"opaque.v1"`
+	xxx_hidden_Variant isCallbackInfo_Trigger_Variant `protobuf_oneof:"variant"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *CallbackInfo_Trigger) Reset() {
@@ -4487,36 +8308,104 @@ func (x *CallbackInfo_Trigger) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CallbackInfo_Trigger.ProtoReflect.Descriptor instead.
-func (*CallbackInfo_Trigger) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_executions_proto_rawDescGZIP(), []int{21, 1}
-}
-
-func (x *CallbackInfo_Trigger) GetVariant() isCallbackInfo_Trigger_Variant {
-	if x != nil {
-		return x.Variant
-	}
-	return nil
-}
-
 func (x *CallbackInfo_Trigger) GetWorkflowClosed() *CallbackInfo_WorkflowClosed {
 	if x != nil {
-		if x, ok := x.Variant.(*CallbackInfo_Trigger_WorkflowClosed); ok {
+		if x, ok := x.xxx_hidden_Variant.(*callbackInfo_Trigger_WorkflowClosed); ok {
 			return x.WorkflowClosed
 		}
 	}
 	return nil
 }
 
+func (x *CallbackInfo_Trigger) SetWorkflowClosed(v *CallbackInfo_WorkflowClosed) {
+	if v == nil {
+		x.xxx_hidden_Variant = nil
+		return
+	}
+	x.xxx_hidden_Variant = &callbackInfo_Trigger_WorkflowClosed{v}
+}
+
+func (x *CallbackInfo_Trigger) HasVariant() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Variant != nil
+}
+
+func (x *CallbackInfo_Trigger) HasWorkflowClosed() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_Variant.(*callbackInfo_Trigger_WorkflowClosed)
+	return ok
+}
+
+func (x *CallbackInfo_Trigger) ClearVariant() {
+	x.xxx_hidden_Variant = nil
+}
+
+func (x *CallbackInfo_Trigger) ClearWorkflowClosed() {
+	if _, ok := x.xxx_hidden_Variant.(*callbackInfo_Trigger_WorkflowClosed); ok {
+		x.xxx_hidden_Variant = nil
+	}
+}
+
+const CallbackInfo_Trigger_Variant_not_set_case case_CallbackInfo_Trigger_Variant = 0
+const CallbackInfo_Trigger_WorkflowClosed_case case_CallbackInfo_Trigger_Variant = 1
+
+func (x *CallbackInfo_Trigger) WhichVariant() case_CallbackInfo_Trigger_Variant {
+	if x == nil {
+		return CallbackInfo_Trigger_Variant_not_set_case
+	}
+	switch x.xxx_hidden_Variant.(type) {
+	case *callbackInfo_Trigger_WorkflowClosed:
+		return CallbackInfo_Trigger_WorkflowClosed_case
+	default:
+		return CallbackInfo_Trigger_Variant_not_set_case
+	}
+}
+
+type CallbackInfo_Trigger_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Fields of oneof xxx_hidden_Variant:
+	WorkflowClosed *CallbackInfo_WorkflowClosed
+	// -- end of xxx_hidden_Variant
+}
+
+func (b0 CallbackInfo_Trigger_builder) Build() *CallbackInfo_Trigger {
+	m0 := &CallbackInfo_Trigger{}
+	b, x := &b0, m0
+	_, _ = b, x
+	if b.WorkflowClosed != nil {
+		x.xxx_hidden_Variant = &callbackInfo_Trigger_WorkflowClosed{b.WorkflowClosed}
+	}
+	return m0
+}
+
+type case_CallbackInfo_Trigger_Variant protoreflect.FieldNumber
+
+func (x case_CallbackInfo_Trigger_Variant) String() string {
+	switch x {
+	case CallbackInfo_Trigger_Variant_not_set_case:
+		return "CallbackInfoTriggerVariantNotSetCase"
+	case CallbackInfo_Trigger_WorkflowClosed_case:
+		return "CallbackInfoTriggerWorkflowClosedCase"
+	default:
+		return strconv.Itoa(int(x))
+	}
+
+}
+
 type isCallbackInfo_Trigger_Variant interface {
 	isCallbackInfo_Trigger_Variant()
 }
 
-type CallbackInfo_Trigger_WorkflowClosed struct {
+type callbackInfo_Trigger_WorkflowClosed struct {
 	WorkflowClosed *CallbackInfo_WorkflowClosed `protobuf:"bytes,1,opt,name=workflow_closed,json=workflowClosed,proto3,oneof"`
 }
 
-func (*CallbackInfo_Trigger_WorkflowClosed) isCallbackInfo_Trigger_Variant() {}
+func (*callbackInfo_Trigger_WorkflowClosed) isCallbackInfo_Trigger_Variant() {}
 
 var File_temporal_server_api_persistence_v1_executions_proto protoreflect.FileDescriptor
 
@@ -4984,18 +8873,6 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	"\n" +
 	"request_id\x18\x04 \x01(\tR\trequestIdB6Z4go.temporal.io/server/api/persistence/v1;persistenceb\x06proto3"
 
-var (
-	file_temporal_server_api_persistence_v1_executions_proto_rawDescOnce sync.Once
-	file_temporal_server_api_persistence_v1_executions_proto_rawDescData []byte
-)
-
-func file_temporal_server_api_persistence_v1_executions_proto_rawDescGZIP() []byte {
-	file_temporal_server_api_persistence_v1_executions_proto_rawDescOnce.Do(func() {
-		file_temporal_server_api_persistence_v1_executions_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_api_persistence_v1_executions_proto_rawDesc), len(file_temporal_server_api_persistence_v1_executions_proto_rawDesc)))
-	})
-	return file_temporal_server_api_persistence_v1_executions_proto_rawDescData
-}
-
 var file_temporal_server_api_persistence_v1_executions_proto_msgTypes = make([]protoimpl.MessageInfo, 43)
 var file_temporal_server_api_persistence_v1_executions_proto_goTypes = []any{
 	(*ShardInfo)(nil),                      // 0: temporal.server.api.persistence.v1.ShardInfo
@@ -5244,37 +9121,37 @@ func file_temporal_server_api_persistence_v1_executions_proto_init() {
 	file_temporal_server_api_persistence_v1_hsm_proto_init()
 	file_temporal_server_api_persistence_v1_update_proto_init()
 	file_temporal_server_api_persistence_v1_executions_proto_msgTypes[1].OneofWrappers = []any{
-		(*WorkflowExecutionInfo_LastWorkflowTaskFailureCause)(nil),
-		(*WorkflowExecutionInfo_LastWorkflowTaskTimedOutType)(nil),
+		(*workflowExecutionInfo_LastWorkflowTaskFailureCause)(nil),
+		(*workflowExecutionInfo_LastWorkflowTaskTimedOutType)(nil),
 	}
 	file_temporal_server_api_persistence_v1_executions_proto_msgTypes[5].OneofWrappers = []any{
-		(*TransferTaskInfo_CloseExecutionTaskDetails_)(nil),
-		(*TransferTaskInfo_ChasmTaskInfo)(nil),
+		(*transferTaskInfo_CloseExecutionTaskDetails_)(nil),
+		(*transferTaskInfo_ChasmTaskInfo)(nil),
 	}
 	file_temporal_server_api_persistence_v1_executions_proto_msgTypes[7].OneofWrappers = []any{
-		(*VisibilityTaskInfo_ChasmTaskInfo)(nil),
+		(*visibilityTaskInfo_ChasmTaskInfo)(nil),
 	}
 	file_temporal_server_api_persistence_v1_executions_proto_msgTypes[8].OneofWrappers = []any{
-		(*TimerTaskInfo_ChasmTaskInfo)(nil),
+		(*timerTaskInfo_ChasmTaskInfo)(nil),
 	}
 	file_temporal_server_api_persistence_v1_executions_proto_msgTypes[10].OneofWrappers = []any{
-		(*OutboundTaskInfo_StateMachineInfo)(nil),
-		(*OutboundTaskInfo_ChasmTaskInfo)(nil),
+		(*outboundTaskInfo_StateMachineInfo)(nil),
+		(*outboundTaskInfo_ChasmTaskInfo)(nil),
 	}
 	file_temporal_server_api_persistence_v1_executions_proto_msgTypes[13].OneofWrappers = []any{
-		(*ActivityInfo_UseWorkflowBuildIdInfo_)(nil),
-		(*ActivityInfo_LastIndependentlyAssignedBuildId)(nil),
+		(*activityInfo_UseWorkflowBuildIdInfo_)(nil),
+		(*activityInfo_LastIndependentlyAssignedBuildId)(nil),
 	}
 	file_temporal_server_api_persistence_v1_executions_proto_msgTypes[19].OneofWrappers = []any{
-		(*Callback_Nexus_)(nil),
-		(*Callback_Hsm)(nil),
+		(*callback_Nexus_)(nil),
+		(*callback_Hsm)(nil),
 	}
 	file_temporal_server_api_persistence_v1_executions_proto_msgTypes[36].OneofWrappers = []any{
-		(*ActivityInfo_PauseInfo_Manual_)(nil),
-		(*ActivityInfo_PauseInfo_RuleId)(nil),
+		(*activityInfo_PauseInfo_Manual_)(nil),
+		(*activityInfo_PauseInfo_RuleId)(nil),
 	}
 	file_temporal_server_api_persistence_v1_executions_proto_msgTypes[42].OneofWrappers = []any{
-		(*CallbackInfo_Trigger_WorkflowClosed)(nil),
+		(*callbackInfo_Trigger_WorkflowClosed)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{

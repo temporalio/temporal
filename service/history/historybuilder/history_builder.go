@@ -167,11 +167,11 @@ func (b *HistoryBuilder) AddWorkflowExecutionStartedEvent(
 		firstInChainRunID,
 		originalRunID,
 	)
-	if request.StartRequest.GetUserMetadata() != nil {
-		event.UserMetadata = request.StartRequest.GetUserMetadata()
+	if request.GetStartRequest().GetUserMetadata() != nil {
+		event.SetUserMetadata(request.GetStartRequest().GetUserMetadata())
 	}
-	if len(request.StartRequest.GetLinks()) > 0 {
-		event.Links = request.StartRequest.GetLinks()
+	if len(request.GetStartRequest().GetLinks()) > 0 {
+		event.SetLinks(request.GetStartRequest().GetLinks())
 	}
 	event, _ = b.EventStore.add(event)
 	return event
@@ -285,7 +285,7 @@ func (b *HistoryBuilder) AddWorkflowExecutionPausedEvent(
 ) *historypb.HistoryEvent {
 	event := b.CreateWorkflowExecutionPausedEvent(identity, reason, requestID)
 	// Mark the event as 'worker may ignore' so that older SDKs can safely ignore it.
-	event.WorkerMayIgnore = true
+	event.SetWorkerMayIgnore(true)
 	event, _ = b.add(event)
 	return event
 }
@@ -297,7 +297,7 @@ func (b *HistoryBuilder) AddWorkflowExecutionUnpausedEvent(
 ) *historypb.HistoryEvent {
 	event := b.CreateWorkflowExecutionUnpausedEvent(identity, reason, requestID)
 	// Mark the event as 'worker may ignore' so that older SDKs can safely ignore it.
-	event.WorkerMayIgnore = true
+	event.SetWorkerMayIgnore(true)
 	event, _ = b.add(event)
 	return event
 }
@@ -310,7 +310,7 @@ func (b *HistoryBuilder) AddActivityTaskScheduledEvent(
 	event := b.EventFactory.CreateActivityTaskScheduledEvent(workflowTaskCompletedEventID, command)
 	event, _ = b.EventStore.add(event)
 
-	if payloadSize := command.Input.Size(); payloadSize > 0 {
+	if payloadSize := command.GetInput().Size(); payloadSize > 0 {
 		b.metricsHandler.Counter(metrics.ActivityPayloadSize.Name()).Record(
 			int64(payloadSize),
 			metrics.OperationTag(metrics.HistoryRecordActivityTaskStartedScope),

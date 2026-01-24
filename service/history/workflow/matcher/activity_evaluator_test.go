@@ -64,12 +64,12 @@ func TestActivityInfoMatchEvaluator_LogicalOperations(t *testing.T) {
 		},
 	}
 
-	ai := &persistencespb.ActivityInfo{
+	ai := persistencespb.ActivityInfo_builder{
 		ActivityId: "activity_id",
-		ActivityType: &commonpb.ActivityType{
+		ActivityType: commonpb.ActivityType_builder{
 			Name: "activity_type",
-		},
-	}
+		}.Build(),
+	}.Build()
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -183,17 +183,17 @@ func TestActivityInfoMatchEvaluator_Basic(t *testing.T) {
 	startTime, err := sqlquery.ConvertToTime(fmt.Sprintf("'%s'", startTimeStr))
 	assert.NoError(t, err)
 
-	ai := &persistencespb.ActivityInfo{
+	ai := persistencespb.ActivityInfo_builder{
 		ActivityId: "activity_id",
-		ActivityType: &commonpb.ActivityType{
+		ActivityType: commonpb.ActivityType_builder{
 			Name: "activity_type",
-		},
+		}.Build(),
 		StartedTime:      timestamppb.New(startTime),
 		CancelRequested:  false,
 		StartedEventId:   1,
 		ScheduledEventId: 1,
 		TaskQueue:        "task_queue",
-	}
+	}.Build()
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -339,16 +339,16 @@ func TestActivityInfoMatchEvaluator_StartTime(t *testing.T) {
 	startTime, err := sqlquery.ConvertToTime(fmt.Sprintf("'%s'", startTimeStr))
 	assert.NoError(t, err)
 
-	ai := &persistencespb.ActivityInfo{
+	ai := persistencespb.ActivityInfo_builder{
 		ActivityId: "activity_id",
-		ActivityType: &commonpb.ActivityType{
+		ActivityType: commonpb.ActivityType_builder{
 			Name: "activity_type",
-		},
+		}.Build(),
 		StartedTime:      timestamppb.New(startTime),
 		CancelRequested:  false,
 		StartedEventId:   1,
 		ScheduledEventId: 1,
-	}
+	}.Build()
 
 	controller := gomock.NewController(t)
 	defer controller.Finish()
@@ -446,17 +446,17 @@ func TestActivityInfoMatchEvaluator_Attempts(t *testing.T) {
 	startTime, err := sqlquery.ConvertToTime(fmt.Sprintf("'%s'", startTimeStr))
 	assert.NoError(t, err)
 
-	ai := &persistencespb.ActivityInfo{
+	ai := persistencespb.ActivityInfo_builder{
 		ActivityId: "activity_id",
-		ActivityType: &commonpb.ActivityType{
+		ActivityType: commonpb.ActivityType_builder{
 			Name: "activity_type",
-		},
+		}.Build(),
 		StartedTime:      timestamppb.New(startTime),
 		CancelRequested:  false,
 		StartedEventId:   1,
 		ScheduledEventId: 1,
 		Attempt:          2,
-	}
+	}.Build()
 
 	controller := gomock.NewController(t)
 	defer controller.Finish()
@@ -554,11 +554,11 @@ func TestActivityInfoMatchEvaluator_BackoffInterval(t *testing.T) {
 	startTime, err := sqlquery.ConvertToTime(fmt.Sprintf("'%s'", startTimeStr))
 	assert.NoError(t, err)
 
-	ai := &persistencespb.ActivityInfo{
+	ai := persistencespb.ActivityInfo_builder{
 		ActivityId: "activity_id",
-		ActivityType: &commonpb.ActivityType{
+		ActivityType: commonpb.ActivityType_builder{
 			Name: "activity_type",
-		},
+		}.Build(),
 		StartedTime:             timestamppb.New(startTime),
 		CancelRequested:         false,
 		StartedEventId:          1,
@@ -566,7 +566,7 @@ func TestActivityInfoMatchEvaluator_BackoffInterval(t *testing.T) {
 		Attempt:                 2,
 		LastAttemptCompleteTime: timestamppb.New(startTime),
 		ScheduledTime:           timestamppb.New(startTime.Add(10 * time.Second)),
-	}
+	}.Build()
 
 	controller := gomock.NewController(t)
 	defer controller.Finish()

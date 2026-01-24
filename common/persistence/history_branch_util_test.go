@@ -56,26 +56,26 @@ func (s *historyBranchUtilSuite) TestHistoryBranchUtil() {
 
 	branchInfo0, err := historyBranchUtil.ParseHistoryBranchInfo(branchToken0)
 	s.NoError(err)
-	s.Equal(treeID0, branchInfo0.TreeId)
-	s.Equal(branchID0, branchInfo0.BranchId)
-	s.Equal(ancestors, branchInfo0.Ancestors)
+	s.Equal(treeID0, branchInfo0.GetTreeId())
+	s.Equal(branchID0, branchInfo0.GetBranchId())
+	s.Equal(ancestors, branchInfo0.GetAncestors())
 
 	treeID1 := primitives.NewUUID().String()
 	branchID1 := primitives.NewUUID().String()
 	branchToken1, err := historyBranchUtil.UpdateHistoryBranchInfo(
 		branchToken0,
-		&persistencespb.HistoryBranch{
+		persistencespb.HistoryBranch_builder{
 			TreeId:    treeID1,
 			BranchId:  branchID1,
 			Ancestors: ancestors,
-		},
+		}.Build(),
 		primitives.NewUUID().String(),
 	)
 	s.NoError(err)
 
 	branchInfo1, err := historyBranchUtil.ParseHistoryBranchInfo(branchToken1)
 	s.NoError(err)
-	s.Equal(treeID1, branchInfo1.TreeId)
-	s.Equal(branchID1, branchInfo1.BranchId)
-	s.Equal(ancestors, branchInfo1.Ancestors)
+	s.Equal(treeID1, branchInfo1.GetTreeId())
+	s.Equal(branchID1, branchInfo1.GetBranchId())
+	s.Equal(ancestors, branchInfo1.GetAncestors())
 }

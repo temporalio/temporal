@@ -137,12 +137,12 @@ func (s *taskSerializerSuite) TestTransferChasmTask() {
 		VisibilityTimestamp: time.Unix(0, rand.Int63()).UTC(),
 		TaskID:              rand.Int63(),
 		Category:            tasks.CategoryTransfer,
-		Info: &persistencespb.ChasmTaskInfo{
-			Data: &commonpb.DataBlob{
+		Info: persistencespb.ChasmTaskInfo_builder{
+			Data: commonpb.DataBlob_builder{
 				Data: []byte("some-data"),
-			},
+			}.Build(),
 			ArchetypeId: rand.Uint32(),
-		},
+		}.Build(),
 	}
 
 	s.assertEqualTasks(transferChasmTask)
@@ -318,12 +318,12 @@ func (s *taskSerializerSuite) TestVisibilityChasmTask() {
 		VisibilityTimestamp: time.Unix(0, rand.Int63()).UTC(),
 		TaskID:              rand.Int63(),
 		Category:            tasks.CategoryVisibility,
-		Info: &persistencespb.ChasmTaskInfo{
-			Data: &commonpb.DataBlob{
+		Info: persistencespb.ChasmTaskInfo_builder{
+			Data: commonpb.DataBlob_builder{
 				Data: []byte("some-data"),
-			},
+			}.Build(),
 			ArchetypeId: rand.Uint32(),
-		},
+		}.Build(),
 	}
 
 	s.assertEqualTasks(visibilityChasmTask)
@@ -375,10 +375,10 @@ func (s *taskSerializerSuite) TestSyncVersionedTransitionTask() {
 		FirstEventID:        rand.Int63(),
 		NextEventID:         rand.Int63(),
 		NewRunID:            uuid.New().String(),
-		VersionedTransition: &persistencespb.VersionedTransition{
+		VersionedTransition: persistencespb.VersionedTransition_builder{
 			NamespaceFailoverVersion: rand.Int63(),
 			TransitionCount:          rand.Int63(),
-		},
+		}.Build(),
 		TaskEquivalents: []tasks.Task{
 			&tasks.HistoryReplicationTask{
 				WorkflowKey:         s.workflowKey,
@@ -441,12 +441,12 @@ func (s *taskSerializerSuite) TestOutboundChasmTask() {
 		VisibilityTimestamp: time.Unix(0, rand.Int63()).UTC(),
 		TaskID:              rand.Int63(),
 		Category:            tasks.CategoryOutbound,
-		Info: &persistencespb.ChasmTaskInfo{
-			Data: &commonpb.DataBlob{
+		Info: persistencespb.ChasmTaskInfo_builder{
+			Data: commonpb.DataBlob_builder{
 				Data: []byte("some-data"),
-			},
+			}.Build(),
 			ArchetypeId: rand.Uint32(),
-		},
+		}.Build(),
 		Destination: "somewhere",
 	}
 
@@ -459,31 +459,31 @@ func (s *taskSerializerSuite) TestStateMachineOutboundTask() {
 			WorkflowKey:         s.workflowKey,
 			VisibilityTimestamp: time.Now().UTC(),
 			TaskID:              rand.Int63(),
-			Info: &persistencespb.StateMachineTaskInfo{
-				Ref: &persistencespb.StateMachineRef{
+			Info: persistencespb.StateMachineTaskInfo_builder{
+				Ref: persistencespb.StateMachineRef_builder{
 					Path: []*persistencespb.StateMachineKey{
-						{
+						persistencespb.StateMachineKey_builder{
 							Type: "some-type",
 							Id:   "some-id",
-						},
+						}.Build(),
 					},
-					MutableStateVersionedTransition: &persistencespb.VersionedTransition{
+					MutableStateVersionedTransition: persistencespb.VersionedTransition_builder{
 						NamespaceFailoverVersion: rand.Int63(),
 						TransitionCount:          rand.Int63(),
-					},
-					MachineInitialVersionedTransition: &persistencespb.VersionedTransition{
+					}.Build(),
+					MachineInitialVersionedTransition: persistencespb.VersionedTransition_builder{
 						NamespaceFailoverVersion: rand.Int63(),
 						TransitionCount:          rand.Int63(),
-					},
-					MachineLastUpdateVersionedTransition: &persistencespb.VersionedTransition{
+					}.Build(),
+					MachineLastUpdateVersionedTransition: persistencespb.VersionedTransition_builder{
 						NamespaceFailoverVersion: rand.Int63(),
 						TransitionCount:          rand.Int63(),
-					},
+					}.Build(),
 					MachineTransitionCount: rand.Int63(),
-				},
+				}.Build(),
 				Type: "some-type",
 				Data: []byte{},
-			},
+			}.Build(),
 		},
 		Destination: "foo",
 	}
@@ -509,12 +509,12 @@ func (s *taskSerializerSuite) TestTimerChasmTask() {
 		VisibilityTimestamp: time.Unix(0, rand.Int63()).UTC(),
 		TaskID:              rand.Int63(),
 		Category:            tasks.CategoryTimer,
-		Info: &persistencespb.ChasmTaskInfo{
-			Data: &commonpb.DataBlob{
+		Info: persistencespb.ChasmTaskInfo_builder{
+			Data: commonpb.DataBlob_builder{
 				Data: []byte("some-data"),
-			},
+			}.Build(),
 			ArchetypeId: rand.Uint32(),
-		},
+		}.Build(),
 	}
 
 	s.assertEqualTasks(task)

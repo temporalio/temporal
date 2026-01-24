@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/tests/testcore"
 	"go.uber.org/fx"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -660,7 +661,7 @@ func (t *hrsuTest) executeNamespaceReplicationTasksUntil(ctx context.Context, op
 		task := <-t.namespaceReplicationTasks
 		err := t.s.namespaceTaskExecutor.Execute(ctx, task)
 		t.s.NoError(err)
-		if task.NamespaceOperation == operation {
+		if task.GetNamespaceOperation() == operation {
 			return
 		}
 	}
@@ -689,7 +690,7 @@ func (s *hrsuTestSuite) executeHistoryReplicationTask(task *hrsuTestExecutableTa
 	task.result <- err
 	attrs := (*task).replicationTask.GetHistoryTaskAttributes()
 	s.NotNil(attrs)
-	events, err := serialization.DefaultDecoder.DeserializeEvents(attrs.Events)
+	events, err := serialization.DefaultDecoder.DeserializeEvents(attrs.GetEvents())
 	s.NoError(err)
 	return events
 }
@@ -697,7 +698,7 @@ func (s *hrsuTestSuite) executeHistoryReplicationTask(task *hrsuTestExecutableTa
 func (e *hrsuTestNamespaceReplicationTaskExecutor) Execute(_ context.Context, task *replicationspb.NamespaceTaskAttributes) error {
 	// TODO (dan) Use one channel per cluster, as we do for history replication tasks in this test suite. This is
 	// currently blocked by the fact that namespace tasks don't expose the current cluster name.
-	ns := task.Info.Name
+	ns := task.GetInfo().GetName()
 	e.s.testMapLock.Lock()
 	test := e.s.testsByNamespaceName[ns]
 	e.s.testMapLock.Unlock()
@@ -753,7 +754,7 @@ func (task *hrsuTestExecutableTask) Execute() error {
 func (task *hrsuTestExecutableTask) workflowId() string {
 	attrs := (*task).replicationTask.GetHistoryTaskAttributes()
 	task.s.NotNil(attrs)
-	return attrs.WorkflowId
+	return attrs.GetWorkflowId()
 }
 
 // Update test utilities
@@ -792,14 +793,14 @@ func (c *hrsuTestCluster) sendUpdateAndWaitUntilStage(ctx context.Context, updat
 
 func (c *hrsuTestCluster) waitUpdateAdmitted(tv *testvars.TestVars, updateID string) {
 	c.t.s.EventuallyWithTf(func(collectT *assert.CollectT) {
-		pollResp, pollErr := c.testCluster.FrontendClient().PollWorkflowExecutionUpdate(testcore.NewContext(), &workflowservice.PollWorkflowExecutionUpdateRequest{
+		pollResp, pollErr := c.testCluster.FrontendClient().PollWorkflowExecutionUpdate(testcore.NewContext(), workflowservice.PollWorkflowExecutionUpdateRequest_builder{
 			Namespace: tv.NamespaceName().String(),
-			UpdateRef: &updatepb.UpdateRef{
+			UpdateRef: updatepb.UpdateRef_builder{
 				WorkflowExecution: tv.WorkflowExecution(),
 				UpdateId:          updateID,
-			},
-			WaitPolicy: &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED},
-		})
+			}.Build(),
+			WaitPolicy: updatepb.WaitPolicy_builder{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED}.Build(),
+		}.Build())
 		require.NoError(collectT, pollErr)
 		// This is technically "at least Admitted".
 		require.GreaterOrEqual(collectT, pollResp.GetStage(), enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED)
@@ -870,63 +871,60 @@ func (t *hrsuTest) acceptUpdateMessageHandler(resp *workflowservice.PollWorkflow
 	// The WFT contains the update request as a protocol message xor an UpdateAdmittedEvent: obtain the updateId from
 	// one or the other.
 	var updateAdmittedEvent *historypb.HistoryEvent
-	for _, e := range resp.History.Events {
-		if e.EventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED {
+	for _, e := range resp.GetHistory().GetEvents() {
+		if e.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED {
 			t.s.Nil(updateAdmittedEvent)
 			updateAdmittedEvent = e
 		}
 	}
 	updateId := ""
 	if updateAdmittedEvent != nil {
-		t.s.Empty(resp.Messages)
+		t.s.Empty(resp.GetMessages())
 		attrs := updateAdmittedEvent.GetWorkflowExecutionUpdateAdmittedEventAttributes()
-		updateId = attrs.Request.Meta.UpdateId
+		updateId = attrs.GetRequest().GetMeta().GetUpdateId()
 	} else {
-		t.s.Len(resp.Messages, 1)
-		msg := resp.Messages[0]
-		updateId = msg.ProtocolInstanceId
+		t.s.Len(resp.GetMessages(), 1)
+		msg := resp.GetMessages()[0]
+		updateId = msg.GetProtocolInstanceId()
 	}
 
 	return []*protocolpb.Message{
-		{
+		protocolpb.Message_builder{
 			Id:                 "accept-msg-id",
 			ProtocolInstanceId: updateId,
-			Body: protoutils.MarshalAny(t.s.T(), &updatepb.Acceptance{
+			Body: protoutils.MarshalAny(t.s.T(), updatepb.Acceptance_builder{
 				AcceptedRequestMessageId:         "request-msg-id",
 				AcceptedRequestSequencingEventId: int64(-1),
-			}),
-		},
+			}.Build()),
+		}.Build(),
 	}, nil
 }
 
 func (t *hrsuTest) acceptUpdateWFTHandler(_ *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
-	return []*commandpb.Command{{
+	return []*commandpb.Command{commandpb.Command_builder{
 		CommandType: enumspb.COMMAND_TYPE_PROTOCOL_MESSAGE,
-		Attributes: &commandpb.Command_ProtocolMessageCommandAttributes{ProtocolMessageCommandAttributes: &commandpb.ProtocolMessageCommandAttributes{
+		ProtocolMessageCommandAttributes: commandpb.ProtocolMessageCommandAttributes_builder{
 			MessageId: "accept-msg-id",
-		}},
-	}}, nil
+		}.Build(),
+	}.Build()}, nil
 }
 
 func (c *hrsuTestCluster) completeUpdateMessageHandler(updateId string) func(resp *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {
 	return func(resp *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {
 		return []*protocolpb.Message{
-			{
+			protocolpb.Message_builder{
 				Id:                 "completion-msg-id",
 				ProtocolInstanceId: updateId,
-				SequencingId:       nil,
-				Body: protoutils.MarshalAny(c.t.s.T(), &updatepb.Response{
-					Meta: &updatepb.Meta{
+				Body: protoutils.MarshalAny(c.t.s.T(), updatepb.Response_builder{
+					Meta: updatepb.Meta_builder{
 						UpdateId: updateId,
 						Identity: c.t.tv.WorkerIdentity(),
-					},
-					Outcome: &updatepb.Outcome{
-						Value: &updatepb.Outcome_Success{
-							Success: payloads.EncodeString(c.updateResult(updateId)),
-						},
-					},
-				}),
-			},
+					}.Build(),
+					Outcome: updatepb.Outcome_builder{
+						Success: proto.ValueOrDefault(payloads.EncodeString(c.updateResult(updateId))),
+					}.Build(),
+				}.Build()),
+			}.Build(),
 		}, nil
 
 	}
@@ -938,12 +936,12 @@ func (c *hrsuTestCluster) updateResult(updateId string) string {
 }
 
 func (t *hrsuTest) completeUpdateWFTHandler(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
-	return []*commandpb.Command{{
+	return []*commandpb.Command{commandpb.Command_builder{
 		CommandType: enumspb.COMMAND_TYPE_PROTOCOL_MESSAGE,
-		Attributes: &commandpb.Command_ProtocolMessageCommandAttributes{ProtocolMessageCommandAttributes: &commandpb.ProtocolMessageCommandAttributes{
+		ProtocolMessageCommandAttributes: commandpb.ProtocolMessageCommandAttributes_builder{
 			MessageId: "completion-msg-id",
-		}},
-	}}, nil
+		}.Build(),
+	}.Build()}, nil
 }
 
 func (t *hrsuTest) respondWithErrorMessageHandler(resp *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {
@@ -970,13 +968,13 @@ func (c *hrsuTestCluster) otherCluster() *hrsuTestCluster {
 // gRPC utilities
 
 func (t *hrsuTest) registerMultiRegionNamespace(ctx context.Context) {
-	_, err := t.cluster1.testCluster.FrontendClient().RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
+	_, err := t.cluster1.testCluster.FrontendClient().RegisterNamespace(ctx, workflowservice.RegisterNamespaceRequest_builder{
 		Namespace:                        t.tv.NamespaceName().String(),
 		Clusters:                         t.s.clusterReplicationConfig(),
 		ActiveClusterName:                t.s.clusters[0].ClusterName(),
 		IsGlobalNamespace:                true,                           // Needed so that the namespace is replicated
 		WorkflowExecutionRetentionPeriod: durationpb.New(time.Hour * 24), // Required parameter
-	})
+	}.Build())
 	t.s.NoError(err)
 	// Namespace event replication tasks are being captured; we need to execute the pending ones now to propagate the
 	// new namespace to cluster1.
@@ -991,7 +989,7 @@ func (t *hrsuTest) getActiveClusters(ctx context.Context) []string {
 // startWorkflow starts a workflow in the cluster and replicates the initial workflow events to the other cluster.
 func (c *hrsuTestCluster) startWorkflow(ctx context.Context, workflowFn any) {
 	run, err := c.client.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
-		TaskQueue: c.t.tv.TaskQueue().Name,
+		TaskQueue: c.t.tv.TaskQueue().GetName(),
 		ID:        c.t.tv.WorkflowID(),
 	}, workflowFn)
 	c.t.s.NoError(err)
@@ -1009,23 +1007,23 @@ func (c *hrsuTestCluster) startWorkflow(ctx context.Context, workflowFn any) {
 }
 
 func (c *hrsuTestCluster) resetWorkflow(ctx context.Context, workflowTaskFinishEventId int64) string {
-	resp, err := c.client.ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
+	resp, err := c.client.ResetWorkflowExecution(ctx, workflowservice.ResetWorkflowExecutionRequest_builder{
 		Namespace:                 c.t.tv.NamespaceName().String(),
 		WorkflowExecution:         c.t.tv.WorkflowExecution(),
 		Reason:                    "reset",
 		WorkflowTaskFinishEventId: workflowTaskFinishEventId,
-	})
+	}.Build())
 	c.t.s.NoError(err)
-	return resp.RunId
+	return resp.GetRunId()
 }
 
 func (c *hrsuTestCluster) setActive(ctx context.Context, clusterName string) {
-	_, err := c.testCluster.FrontendClient().UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
+	_, err := c.testCluster.FrontendClient().UpdateNamespace(ctx, workflowservice.UpdateNamespaceRequest_builder{
 		Namespace: c.t.tv.NamespaceName().String(),
-		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
+		ReplicationConfig: replicationpb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: clusterName,
-		},
-	})
+		}.Build(),
+	}.Build())
 	c.t.s.NoError(err)
 }
 
@@ -1034,32 +1032,32 @@ func (c *hrsuTestCluster) getHistory(ctx context.Context) []*historypb.HistoryEv
 }
 
 func (c *hrsuTestCluster) getHistoryForRunId(ctx context.Context, runId string) []*historypb.HistoryEvent {
-	historyResponse, err := c.testCluster.FrontendClient().GetWorkflowExecutionHistory(ctx, &workflowservice.GetWorkflowExecutionHistoryRequest{
+	historyResponse, err := c.testCluster.FrontendClient().GetWorkflowExecutionHistory(ctx, workflowservice.GetWorkflowExecutionHistoryRequest_builder{
 		Namespace: c.t.tv.NamespaceName().String(),
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: c.t.tv.WorkflowID(),
 			RunId:      runId,
-		},
-	})
+		}.Build(),
+	}.Build())
 	c.t.s.NoError(err)
-	return historyResponse.History.Events
+	return historyResponse.GetHistory().GetEvents()
 }
 
 func (c *hrsuTestCluster) pollWorkflowResult(ctx context.Context, runId string) *historypb.HistoryEvent {
 	getHistoryWithLongPoll := func(token []byte) ([]*historypb.HistoryEvent, []byte) {
-		responseInner, err := c.testCluster.FrontendClient().GetWorkflowExecutionHistory(ctx, &workflowservice.GetWorkflowExecutionHistoryRequest{
+		responseInner, err := c.testCluster.FrontendClient().GetWorkflowExecutionHistory(ctx, workflowservice.GetWorkflowExecutionHistoryRequest_builder{
 			Namespace: c.t.tv.NamespaceName().String(),
-			Execution: &commonpb.WorkflowExecution{
+			Execution: commonpb.WorkflowExecution_builder{
 				WorkflowId: c.t.tv.WorkflowID(),
 				RunId:      runId,
-			},
+			}.Build(),
 			MaximumPageSize:        1,
 			WaitNewEvent:           true,
 			NextPageToken:          token,
 			HistoryEventFilterType: enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT,
-		})
+		}.Build())
 		c.t.s.NoError(err)
-		return responseInner.History.Events, responseInner.NextPageToken
+		return responseInner.GetHistory().GetEvents(), responseInner.GetNextPageToken()
 	}
 
 	var token []byte
@@ -1081,9 +1079,9 @@ func (c *hrsuTestCluster) pollWorkflowResult(ctx context.Context, runId string) 
 }
 
 func (c *hrsuTestCluster) getActiveCluster(ctx context.Context) string {
-	resp, err := c.testCluster.FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{Namespace: c.t.tv.NamespaceName().String()})
+	resp, err := c.testCluster.FrontendClient().DescribeNamespace(ctx, workflowservice.DescribeNamespaceRequest_builder{Namespace: c.t.tv.NamespaceName().String()}.Build())
 	c.t.s.NoError(err)
-	return resp.ReplicationConfig.ActiveClusterName
+	return resp.GetReplicationConfig().GetActiveClusterName()
 }
 
 func joinHandlers[T any](handlers ...func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*T, error)) func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*T, error) {
@@ -1167,23 +1165,21 @@ func (s *hrsuTestSuite) TestConflictResolutionGetResult() {
 	s.EqualValues(t.cluster1.getHistory(ctx), t.cluster2.getHistory(ctx))
 
 	// Complete the workflow in cluster2. This will cause the workflow result to be sent to cluste1.
-	task, err := t.cluster2.testCluster.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+	task, err := t.cluster2.testCluster.FrontendClient().PollWorkflowTaskQueue(ctx, workflowservice.PollWorkflowTaskQueueRequest_builder{
 		Namespace: t.tv.NamespaceName().String(),
 		TaskQueue: t.tv.TaskQueue(),
 		Identity:  t.tv.WorkerIdentity(),
-	})
+	}.Build())
 	s.Require().NoError(err)
-	_, err = t.cluster2.testCluster.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
-		TaskToken: task.TaskToken,
+	_, err = t.cluster2.testCluster.FrontendClient().RespondWorkflowTaskCompleted(ctx, workflowservice.RespondWorkflowTaskCompletedRequest_builder{
+		TaskToken: task.GetTaskToken(),
 		Commands: []*commandpb.Command{
-			{
+			commandpb.Command_builder{
 				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
-					CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{},
-				},
-			},
+				CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{},
+			}.Build(),
 		},
-	})
+	}.Build())
 	s.Require().NoError(err)
 
 	t.cluster1.executeHistoryReplicationTasksUntil(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED)

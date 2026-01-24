@@ -238,13 +238,13 @@ func (p *visibilityManagerImpl) convertToChasmExecutionInfo(
 
 // splitSearchAttributes splits decoded search attributes into CHASM and custom attributes.
 func splitSearchAttributes(searchAttributes *commonpb.SearchAttributes) (customSAs, chasmSAs *commonpb.SearchAttributes) {
-	chasmSAs = &commonpb.SearchAttributes{IndexedFields: make(map[string]*commonpb.Payload)}
-	customSAs = &commonpb.SearchAttributes{IndexedFields: make(map[string]*commonpb.Payload)}
+	chasmSAs = commonpb.SearchAttributes_builder{IndexedFields: make(map[string]*commonpb.Payload)}.Build()
+	customSAs = commonpb.SearchAttributes_builder{IndexedFields: make(map[string]*commonpb.Payload)}.Build()
 	for name, payloadValue := range searchAttributes.GetIndexedFields() {
 		if sadefs.IsChasmSearchAttribute(name) {
-			chasmSAs.IndexedFields[name] = payloadValue
+			chasmSAs.GetIndexedFields()[name] = payloadValue
 		} else {
-			customSAs.IndexedFields[name] = payloadValue
+			customSAs.GetIndexedFields()[name] = payloadValue
 		}
 	}
 	return
@@ -259,12 +259,12 @@ func splitUserAndChasmMemo(exec *store.InternalExecutionInfo) (userMemo *commonp
 
 	if combinedMemo != nil && isChasmExecution(exec.SearchAttributes) {
 		// Archetype exists - split memo into user and chasm parts
-		userPayload := combinedMemo.Fields[chasm.UserMemoKey]
+		userPayload := combinedMemo.GetFields()[chasm.UserMemoKey]
 		if err := payload.Decode(userPayload, &userMemo); err != nil {
 			return nil, nil, serialization.NewDeserializationError(
 				enumspb.ENCODING_TYPE_PROTO3, fmt.Errorf("unable to decode user memo from combined memo payload: %w", err))
 		}
-		chasmMemoPayload = combinedMemo.Fields[chasm.ChasmMemoKey]
+		chasmMemoPayload = combinedMemo.GetFields()[chasm.ChasmMemoKey]
 	} else {
 		// Archetype doesn't match or no combined memo - return entire memo as user memo
 		userMemo = combinedMemo
@@ -328,10 +328,10 @@ func (p *visibilityManagerImpl) convertToCountWorkflowExecutionsResponse(
 	if len(internal.Groups) > 0 {
 		response.Groups = make([]*workflowservice.CountWorkflowExecutionsResponse_AggregationGroup, 0, len(internal.Groups))
 		for _, group := range internal.Groups {
-			response.Groups = append(response.Groups, &workflowservice.CountWorkflowExecutionsResponse_AggregationGroup{
+			response.Groups = append(response.Groups, workflowservice.CountWorkflowExecutionsResponse_AggregationGroup_builder{
 				GroupValues: group.GroupValues,
 				Count:       group.Count,
-			})
+			}.Build())
 		}
 	}
 
@@ -372,12 +372,12 @@ func (p *visibilityManagerImpl) newInternalVisibilityRequestBase(
 		// Remove any system search attribute from the map.
 		// This is necessary because the validation can supress errors when trying
 		// to set a value on a system search attribute.
-		searchAttrs = &commonpb.SearchAttributes{
+		searchAttrs = commonpb.SearchAttributes_builder{
 			IndexedFields: make(map[string]*commonpb.Payload),
-		}
-		for key, value := range request.SearchAttributes.IndexedFields {
+		}.Build()
+		for key, value := range request.SearchAttributes.GetIndexedFields() {
 			if !sadefs.IsSystem(key) {
-				searchAttrs.IndexedFields[key] = value
+				searchAttrs.GetIndexedFields()[key] = value
 			}
 		}
 	}
@@ -387,8 +387,8 @@ func (p *visibilityManagerImpl) newInternalVisibilityRequestBase(
 		parentRunID      *string
 	)
 	if request.ParentExecution != nil {
-		parentWorkflowID = &request.ParentExecution.WorkflowId
-		parentRunID = &request.ParentExecution.RunId
+		parentWorkflowID = proto.String(request.ParentExecution.GetWorkflowId())
+		parentRunID = proto.String(request.ParentExecution.GetRunId())
 	}
 
 	return &store.InternalVisibilityRequestBase{
@@ -451,63 +451,63 @@ func (p *visibilityManagerImpl) convertToWorkflowExecutionInfo(
 		return nil, err
 	}
 
-	executionInfo := &workflowpb.WorkflowExecutionInfo{
-		Execution: &commonpb.WorkflowExecution{
+	executionInfo := workflowpb.WorkflowExecutionInfo_builder{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: internalExecution.WorkflowID,
 			RunId:      internalExecution.RunID,
-		},
-		Type: &commonpb.WorkflowType{
+		}.Build(),
+		Type: commonpb.WorkflowType_builder{
 			Name: internalExecution.TypeName,
-		},
+		}.Build(),
 		StartTime:        timestamppb.New(internalExecution.StartTime),
 		ExecutionTime:    timestamppb.New(internalExecution.ExecutionTime),
 		Memo:             userMemo,
 		SearchAttributes: aliasedCustomSAs,
 		TaskQueue:        internalExecution.TaskQueue,
 		Status:           internalExecution.Status,
-		RootExecution: &commonpb.WorkflowExecution{
+		RootExecution: commonpb.WorkflowExecution_builder{
 			WorkflowId: internalExecution.RootWorkflowID,
 			RunId:      internalExecution.RootRunID,
-		},
+		}.Build(),
 		// TODO: poplulate FirstRunId once it has been added as a system search attribute.
-	}
+	}.Build()
 
 	if internalExecution.ParentWorkflowID != "" {
-		executionInfo.ParentExecution = &commonpb.WorkflowExecution{
+		executionInfo.SetParentExecution(commonpb.WorkflowExecution_builder{
 			WorkflowId: internalExecution.ParentWorkflowID,
 			RunId:      internalExecution.ParentRunID,
-		}
+		}.Build())
 	}
 
 	// for close records
 	if internalExecution.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-		executionInfo.CloseTime = timestamppb.New(internalExecution.CloseTime)
-		executionInfo.ExecutionDuration = durationpb.New(internalExecution.ExecutionDuration)
-		executionInfo.HistoryLength = internalExecution.HistoryLength
-		executionInfo.HistorySizeBytes = internalExecution.HistorySizeBytes
-		executionInfo.StateTransitionCount = internalExecution.StateTransitionCount
+		executionInfo.SetCloseTime(timestamppb.New(internalExecution.CloseTime))
+		executionInfo.SetExecutionDuration(durationpb.New(internalExecution.ExecutionDuration))
+		executionInfo.SetHistoryLength(internalExecution.HistoryLength)
+		executionInfo.SetHistorySizeBytes(internalExecution.HistorySizeBytes)
+		executionInfo.SetStateTransitionCount(internalExecution.StateTransitionCount)
 	}
 
 	// Workflows created before 1.11 have ExecutionTime set to Unix epoch zero time (1/1/1970) for non-cron/non-retry case.
 	// Use StartTime as ExecutionTime for this case (if there was a backoff it must be set).
 	// Remove this "if" block when ExecutionTime field has actual correct value (added 6/9/21).
 	// Affects only non-advanced visibility.
-	if !executionInfo.ExecutionTime.AsTime().After(time.Unix(0, 0)) {
-		executionInfo.ExecutionTime = timestamppb.New(internalExecution.StartTime)
+	if !executionInfo.GetExecutionTime().AsTime().After(time.Unix(0, 0)) {
+		executionInfo.SetExecutionTime(timestamppb.New(internalExecution.StartTime))
 	}
 
 	return executionInfo, nil
 }
 
 func deserializeMemo(data *commonpb.DataBlob) (*commonpb.Memo, error) {
-	if data == nil || len(data.Data) == 0 {
+	if data == nil || len(data.GetData()) == 0 {
 		return &commonpb.Memo{}, nil
 	}
 
-	switch data.EncodingType {
+	switch data.GetEncodingType() {
 	case enumspb.ENCODING_TYPE_PROTO3:
 		memo := &commonpb.Memo{}
-		err := proto.Unmarshal(data.Data, memo)
+		err := proto.Unmarshal(data.GetData(), memo)
 		if err != nil {
 			return nil, serialization.NewDeserializationError(
 				enumspb.ENCODING_TYPE_PROTO3, fmt.Errorf("unable to deserialize memo from data blob: %w", err))
@@ -528,10 +528,10 @@ func serializeMemo(memo *commonpb.Memo) (*commonpb.DataBlob, error) {
 		return nil, serviceerror.NewInternalf("Unable to serialize memo to data blob: %v", err)
 	}
 
-	return &commonpb.DataBlob{
+	return commonpb.DataBlob_builder{
 		Data:         data,
 		EncodingType: MemoEncoding,
-	}, nil
+	}.Build(), nil
 }
 
 func isChasmExecution(searchAttributes *commonpb.SearchAttributes) bool {

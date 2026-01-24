@@ -9,7 +9,6 @@ package enums
 import (
 	reflect "reflect"
 	"strconv"
-	sync "sync"
 	unsafe "unsafe"
 
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -99,10 +98,7 @@ func (x PredicateType) String() string {
 		return "Destination"
 	case PREDICATE_TYPE_OUTBOUND_TASK_GROUP:
 		return "OutboundTaskGroup"
-	case
-
-		// Deprecated: Use PredicateType.Descriptor instead.
-		PREDICATE_TYPE_OUTBOUND_TASK:
+	case PREDICATE_TYPE_OUTBOUND_TASK:
 		return "OutboundTask"
 	default:
 		return strconv.Itoa(int(x))
@@ -120,10 +116,6 @@ func (PredicateType) Type() protoreflect.EnumType {
 
 func (x PredicateType) Number() protoreflect.EnumNumber {
 	return protoreflect.EnumNumber(x)
-}
-
-func (PredicateType) EnumDescriptor() ([]byte, []int) {
-	return file_temporal_server_api_enums_v1_predicate_proto_rawDescGZIP(), []int{0}
 }
 
 var File_temporal_server_api_enums_v1_predicate_proto protoreflect.FileDescriptor
@@ -144,18 +136,6 @@ const file_temporal_server_api_enums_v1_predicate_proto_rawDesc = "" +
 	"\"PREDICATE_TYPE_OUTBOUND_TASK_GROUP\x10\t\x12 \n" +
 	"\x1cPREDICATE_TYPE_OUTBOUND_TASK\x10\n" +
 	"B*Z(go.temporal.io/server/api/enums/v1;enumsb\x06proto3"
-
-var (
-	file_temporal_server_api_enums_v1_predicate_proto_rawDescOnce sync.Once
-	file_temporal_server_api_enums_v1_predicate_proto_rawDescData []byte
-)
-
-func file_temporal_server_api_enums_v1_predicate_proto_rawDescGZIP() []byte {
-	file_temporal_server_api_enums_v1_predicate_proto_rawDescOnce.Do(func() {
-		file_temporal_server_api_enums_v1_predicate_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_api_enums_v1_predicate_proto_rawDesc), len(file_temporal_server_api_enums_v1_predicate_proto_rawDesc)))
-	})
-	return file_temporal_server_api_enums_v1_predicate_proto_rawDescData
-}
 
 var file_temporal_server_api_enums_v1_predicate_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
 var file_temporal_server_api_enums_v1_predicate_proto_goTypes = []any{

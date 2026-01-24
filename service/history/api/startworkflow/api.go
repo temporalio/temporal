@@ -93,7 +93,7 @@ func NewStarter(
 	versionMembershipCache worker_versioning.VersionMembershipCache,
 	createLeaseFn api.CreateOrUpdateLeaseFunc,
 ) (*Starter, error) {
-	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(request.GetNamespaceId()), request.StartRequest.WorkflowId)
+	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(request.GetNamespaceId()), request.GetStartRequest().GetWorkflowId())
 	if err != nil {
 		return nil, err
 	}
@@ -115,16 +115,18 @@ func NewStarter(
 
 // prepare applies request overrides, validates the request, and records eager execution metrics.
 func (s *Starter) prepare(ctx context.Context) error {
-	request := s.request.StartRequest
+	request := s.request.GetStartRequest()
 
 	// TODO: remove this call in 1.25
-	enums.SetDefaultWorkflowIdConflictPolicy(
-		&request.WorkflowIdConflictPolicy,
-		enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL)
+	request.SetWorkflowIdConflictPolicy(enums.DefaultWorkflowIdConflictPolicy(
+		request.GetWorkflowIdConflictPolicy(),
+		enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL))
 
-	api.MigrateWorkflowIdReusePolicyForRunningWorkflow(
-		&request.WorkflowIdReusePolicy,
-		&request.WorkflowIdConflictPolicy)
+	reusePolicy, conflictPolicy := api.MigrateWorkflowIdReusePolicyForRunningWorkflow(
+		request.GetWorkflowIdReusePolicy(),
+		request.GetWorkflowIdConflictPolicy())
+	request.SetWorkflowIdReusePolicy(reusePolicy)
+	request.SetWorkflowIdConflictPolicy(conflictPolicy)
 
 	api.OverrideStartWorkflowExecutionRequest(
 		request,
@@ -144,7 +146,7 @@ func (s *Starter) prepare(ctx context.Context) error {
 		return err
 	}
 
-	if request.RequestEagerExecution {
+	if request.GetRequestEagerExecution() {
 		metricsHandler := s.getMetricsHandler()
 		metrics.WorkflowEagerExecutionCounter.With(metricsHandler).Record(1)
 
@@ -152,11 +154,11 @@ func (s *Starter) prepare(ctx context.Context) error {
 		if !s.shardContext.GetConfig().EnableEagerWorkflowStart(s.namespace.Name().String()) {
 			metrics.WorkflowEagerExecutionDeniedCounter.With(metricsHandler).
 				Record(1, metrics.ReasonTag(eagerStartDeniedReasonDynamicConfigDisabled))
-			request.RequestEagerExecution = false
-		} else if s.request.FirstWorkflowTaskBackoff.AsDuration() > 0 {
+			request.SetRequestEagerExecution(false)
+		} else if s.request.GetFirstWorkflowTaskBackoff().AsDuration() > 0 {
 			metrics.WorkflowEagerExecutionDeniedCounter.With(metricsHandler).
 				Record(1, metrics.ReasonTag(eagerStartDeniedReasonFirstWorkflowTaskBackoff))
-			request.RequestEagerExecution = false
+			request.SetRequestEagerExecution(false)
 		}
 	}
 	return nil
@@ -167,16 +169,16 @@ func (s *Starter) getMetricsHandler() metrics.Handler {
 		s.metricsHandler = workflow.GetPerTaskQueueFamilyScope(
 			s.shardContext.GetMetricsHandler(),
 			s.namespace.Name(),
-			s.request.StartRequest.TaskQueue.Name,
+			s.request.GetStartRequest().GetTaskQueue().GetName(),
 			s.shardContext.GetConfig(),
-			metrics.WorkflowTypeTag(s.request.StartRequest.WorkflowType.Name),
+			metrics.WorkflowTypeTag(s.request.GetStartRequest().GetWorkflowType().GetName()),
 		)
 	}
 	return s.metricsHandler
 }
 
 func (s *Starter) requestEagerStart() bool {
-	return s.request.StartRequest.GetRequestEagerExecution()
+	return s.request.GetStartRequest().GetRequestEagerExecution()
 }
 
 // Invoke starts a new workflow execution.
@@ -185,7 +187,7 @@ func (s *Starter) requestEagerStart() bool {
 func (s *Starter) Invoke(
 	ctx context.Context,
 ) (resp *historyservice.StartWorkflowExecutionResponse, startOutcome StartOutcome, retError error) {
-	request := s.request.StartRequest
+	request := s.request.GetStartRequest()
 	if err := s.prepare(ctx); err != nil {
 		return nil, StartErr, err
 	}
@@ -232,7 +234,7 @@ func (s *Starter) lockCurrentWorkflowExecution(
 		ctx,
 		s.shardContext,
 		s.namespace.ID(),
-		s.request.StartRequest.WorkflowId,
+		s.request.GetStartRequest().GetWorkflowId(),
 		chasm.WorkflowArchetypeID,
 		locks.PriorityHigh,
 	)
@@ -318,7 +320,7 @@ func (s *Starter) handleConflict(
 	creationParams *creationParams,
 	currentWorkflowConditionFailed *persistence.CurrentWorkflowConditionFailedError,
 ) (*historyservice.StartWorkflowExecutionResponse, StartOutcome, error) {
-	request := s.request.StartRequest
+	request := s.request.GetStartRequest()
 	currentWorkflowRequestIDs := currentWorkflowConditionFailed.RequestIDs
 	if requestIDInfo, ok := currentWorkflowRequestIDs[request.GetRequestId()]; ok {
 		metrics.StartWorkflowRequestDeduped.With(s.getMetricsHandler()).Record(1)
@@ -326,17 +328,17 @@ func (s *Starter) handleConflict(
 		if requestIDInfo.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
 			resp, err := s.respondToRetriedRequest(ctx, currentWorkflowConditionFailed.RunID)
 			if resp != nil {
-				resp.Status = currentWorkflowConditionFailed.Status
+				resp.SetStatus(currentWorkflowConditionFailed.Status)
 			}
 			return resp, StartDeduped, err
 		}
 
-		resp := &historyservice.StartWorkflowExecutionResponse{
+		resp := historyservice.StartWorkflowExecutionResponse_builder{
 			RunId:   currentWorkflowConditionFailed.RunID,
 			Started: false,
 			Status:  currentWorkflowConditionFailed.Status,
 			Link:    s.generateRequestIdRefLink(currentWorkflowConditionFailed.RunID),
-		}
+		}.Build()
 		return resp, StartDeduped, nil
 	}
 
@@ -407,7 +409,7 @@ func (s *Starter) resolveDuplicateWorkflowID(
 	ctx context.Context,
 	currentWorkflowConditionFailed *persistence.CurrentWorkflowConditionFailedError,
 ) (*historyservice.StartWorkflowExecutionResponse, StartOutcome, error) {
-	workflowID := s.request.StartRequest.WorkflowId
+	workflowID := s.request.GetStartRequest().GetWorkflowId()
 
 	currentWorkflowStartTime := time.Time{}
 	if s.shardContext.GetConfig().EnableWorkflowIdReuseStartTimeValidation(s.namespace.Name().String()) &&
@@ -434,11 +436,11 @@ func (s *Starter) resolveDuplicateWorkflowID(
 		currentWorkflowConditionFailed.State,
 		currentWorkflowConditionFailed.Status,
 		currentWorkflowConditionFailed.RequestIDs,
-		s.request.StartRequest.GetWorkflowIdReusePolicy(),
-		s.request.StartRequest.GetWorkflowIdConflictPolicy(),
+		s.request.GetStartRequest().GetWorkflowIdReusePolicy(),
+		s.request.GetStartRequest().GetWorkflowIdConflictPolicy(),
 		currentWorkflowStartTime,
-		s.request.ParentExecutionInfo,
-		s.request.ChildWorkflowOnly,
+		s.request.GetParentExecutionInfo(),
+		s.request.GetChildWorkflowOnly(),
 	)
 
 	switch {
@@ -502,12 +504,12 @@ func (s *Starter) resolveDuplicateWorkflowID(
 	switch err {
 	case nil:
 		if !s.requestEagerStart() {
-			return &historyservice.StartWorkflowExecutionResponse{
+			return historyservice.StartWorkflowExecutionResponse_builder{
 				RunId:   newRunID,
 				Started: true,
 				Status:  enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 				Link:    s.generateStartedEventRefLink(newRunID),
-			}, StartNew, nil
+			}.Build(), StartNew, nil
 		}
 		events, err := s.getWorkflowHistory(ctx, mutableStateInfo)
 		if err != nil {
@@ -534,12 +536,12 @@ func (s *Starter) respondToRetriedRequest(
 	runID string,
 ) (*historyservice.StartWorkflowExecutionResponse, error) {
 	if !s.requestEagerStart() {
-		return &historyservice.StartWorkflowExecutionResponse{
+		return historyservice.StartWorkflowExecutionResponse_builder{
 			RunId:   runID,
 			Started: true,
 			// Status is set by caller
 			Link: s.generateStartedEventRefLink(runID),
-		}, nil
+		}.Build(), nil
 	}
 
 	// For eager workflow execution, we need to get the task info and history events in order to construct a poll response.
@@ -554,12 +556,12 @@ func (s *Starter) respondToRetriedRequest(
 		metrics.WorkflowEagerExecutionDeniedCounter.With(s.getMetricsHandler()).
 			Record(1, metrics.ReasonTag(eagerStartDeniedReasonTaskAlreadyDispatched))
 
-		return &historyservice.StartWorkflowExecutionResponse{
+		return historyservice.StartWorkflowExecutionResponse_builder{
 			RunId:   runID,
 			Started: true,
 			// Status is set by caller
 			Link: s.generateStartedEventRefLink(runID),
-		}, nil
+		}.Build(), nil
 	}
 
 	events, err := s.getWorkflowHistory(ctx, mutableStateInfo)
@@ -578,7 +580,7 @@ func (s *Starter) getMutableStateInfo(ctx context.Context, runID string) (_ *mut
 		ctx,
 		s.shardContext,
 		s.namespace.ID(),
-		&commonpb.WorkflowExecution{WorkflowId: s.request.StartRequest.WorkflowId, RunId: runID},
+		commonpb.WorkflowExecution_builder{WorkflowId: s.request.GetStartRequest().GetWorkflowId(), RunId: runID}.Build(),
 		locks.PriorityHigh,
 	)
 	if err != nil {
@@ -654,20 +656,20 @@ func (s *Starter) handleUseExistingWorkflowOnConflictOptions(
 	responseLink := s.generateStartedEventRefLink(currentWorkflowConditionFailed.RunID)
 
 	var err error
-	onConflictOptions := s.request.StartRequest.GetOnConflictOptions()
+	onConflictOptions := s.request.GetStartRequest().GetOnConflictOptions()
 	if onConflictOptions != nil {
 		requestID := ""
-		if onConflictOptions.AttachRequestId {
-			requestID = s.request.StartRequest.GetRequestId()
+		if onConflictOptions.GetAttachRequestId() {
+			requestID = s.request.GetStartRequest().GetRequestId()
 			responseLink = s.generateRequestIdRefLink(currentWorkflowConditionFailed.RunID)
 		}
 		var completionCallbacks []*commonpb.Callback
-		if onConflictOptions.AttachCompletionCallbacks {
-			completionCallbacks = s.request.StartRequest.GetCompletionCallbacks()
+		if onConflictOptions.GetAttachCompletionCallbacks() {
+			completionCallbacks = s.request.GetStartRequest().GetCompletionCallbacks()
 		}
 		var links []*commonpb.Link
-		if onConflictOptions.AttachLinks {
-			links = s.request.StartRequest.GetLinks()
+		if onConflictOptions.GetAttachLinks() {
+			links = s.request.GetStartRequest().GetLinks()
 		}
 		err = api.GetAndUpdateWorkflowWithNew(
 			ctx,
@@ -698,12 +700,12 @@ func (s *Starter) handleUseExistingWorkflowOnConflictOptions(
 
 	switch err {
 	case nil:
-		resp := &historyservice.StartWorkflowExecutionResponse{
+		resp := historyservice.StartWorkflowExecutionResponse_builder{
 			RunId:   workflowKey.RunID,
 			Started: false, // set explicitly for emphasis
 			Status:  enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 			Link:    responseLink,
-		}
+		}.Build()
 		return resp, StartReused, nil
 	case consts.ErrWorkflowCompleted:
 		// Need to re-evaluate the reuse policy because the previous check didn't lock the current
@@ -715,7 +717,7 @@ func (s *Starter) handleUseExistingWorkflowOnConflictOptions(
 			s.namespace,
 			currentWorkflowConditionFailed.Status,
 			currentWorkflowConditionFailed.RequestIDs,
-			s.request.StartRequest.GetWorkflowIdReusePolicy(),
+			s.request.GetStartRequest().GetWorkflowIdReusePolicy(),
 			currentWorkflowStartTime,
 		)
 		if err != nil {
@@ -751,16 +753,16 @@ func (s *Starter) generateResponse(
 ) (*historyservice.StartWorkflowExecutionResponse, error) {
 	shardCtx := s.shardContext
 	tokenSerializer := s.tokenSerializer
-	request := s.request.StartRequest
-	workflowID := request.WorkflowId
+	request := s.request.GetStartRequest()
+	workflowID := request.GetWorkflowId()
 
 	if !s.requestEagerStart() {
-		return &historyservice.StartWorkflowExecutionResponse{
+		return historyservice.StartWorkflowExecutionResponse_builder{
 			RunId:   runID,
 			Started: true,
 			Status:  enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 			Link:    s.generateStartedEventRefLink(runID),
-		}, nil
+		}.Build(), nil
 	}
 
 	clock, err := shardCtx.NewVectorClock()
@@ -783,67 +785,59 @@ func (s *Starter) generateResponse(
 	if err != nil {
 		return nil, err
 	}
-	return &historyservice.StartWorkflowExecutionResponse{
+	return historyservice.StartWorkflowExecutionResponse_builder{
 		RunId:   runID,
 		Clock:   clock,
 		Started: true,
 		Status:  enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		Link:    s.generateStartedEventRefLink(runID),
-		EagerWorkflowTask: &workflowservice.PollWorkflowTaskQueueResponse{
+		EagerWorkflowTask: workflowservice.PollWorkflowTaskQueueResponse_builder{
 			TaskToken:         serializedToken,
-			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
+			WorkflowExecution: commonpb.WorkflowExecution_builder{WorkflowId: workflowID, RunId: runID}.Build(),
 			WorkflowType:      request.GetWorkflowType(),
 			// TODO: consider getting the ID from mutable state, this was not done to avoid adding more complexity to
 			// the code to plumb that value through.
 			PreviousStartedEventId:     0,
 			StartedEventId:             workflowTaskInfo.StartedEventID,
 			Attempt:                    workflowTaskInfo.Attempt,
-			History:                    &historypb.History{Events: historyEvents},
+			History:                    historypb.History_builder{Events: historyEvents}.Build(),
 			NextPageToken:              nil,
 			WorkflowExecutionTaskQueue: workflowTaskInfo.TaskQueue,
 			ScheduledTime:              timestamppb.New(workflowTaskInfo.ScheduledTime),
 			StartedTime:                timestamppb.New(workflowTaskInfo.StartedTime),
-		},
-	}, nil
+		}.Build(),
+	}.Build(), nil
 }
 
 func (s *Starter) generateStartedEventRefLink(runID string) *commonpb.Link {
-	return &commonpb.Link{
-		Variant: &commonpb.Link_WorkflowEvent_{
-			WorkflowEvent: &commonpb.Link_WorkflowEvent{
-				Namespace:  s.namespace.Name().String(),
-				WorkflowId: s.request.StartRequest.WorkflowId,
-				RunId:      runID,
-				Reference: &commonpb.Link_WorkflowEvent_EventRef{
-					EventRef: &commonpb.Link_WorkflowEvent_EventReference{
-						EventId:   common.FirstEventID,
-						EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
-					},
-				},
-			},
-		},
-	}
+	return commonpb.Link_builder{
+		WorkflowEvent: commonpb.Link_WorkflowEvent_builder{
+			Namespace:  s.namespace.Name().String(),
+			WorkflowId: s.request.GetStartRequest().GetWorkflowId(),
+			RunId:      runID,
+			EventRef: commonpb.Link_WorkflowEvent_EventReference_builder{
+				EventId:   common.FirstEventID,
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+			}.Build(),
+		}.Build(),
+	}.Build()
 }
 
 func (s *Starter) generateRequestIdRefLink(runID string) *commonpb.Link {
 	if !s.enableRequestIdRefLinks() {
 		return s.generateStartedEventRefLink(runID)
 	}
-	return &commonpb.Link{
-		Variant: &commonpb.Link_WorkflowEvent_{
-			WorkflowEvent: &commonpb.Link_WorkflowEvent{
-				Namespace:  s.namespace.Name().String(),
-				WorkflowId: s.request.StartRequest.WorkflowId,
-				RunId:      runID,
-				Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
-					RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
-						RequestId: s.request.StartRequest.RequestId,
-						EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
-					},
-				},
-			},
-		},
-	}
+	return commonpb.Link_builder{
+		WorkflowEvent: commonpb.Link_WorkflowEvent_builder{
+			Namespace:  s.namespace.Name().String(),
+			WorkflowId: s.request.GetStartRequest().GetWorkflowId(),
+			RunId:      runID,
+			RequestIdRef: commonpb.Link_WorkflowEvent_RequestIdReference_builder{
+				RequestId: s.request.GetStartRequest().GetRequestId(),
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+			}.Build(),
+		}.Build(),
+	}.Build()
 }
 
 func (s StartOutcome) String() string {

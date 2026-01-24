@@ -162,7 +162,7 @@ func (t *taskPQ) Push(x any) {
 	t.heap = append(t.heap, task)
 
 	if task.source == enumsspb.TASK_SOURCE_DB_BACKLOG && task.forwardInfo == nil {
-		t.ages.record(task.event.Data.CreateTime, 1)
+		t.ages.record(task.event.GetData().GetCreateTime(), 1)
 	}
 }
 
@@ -174,7 +174,7 @@ func (t *taskPQ) Pop() any {
 	task.matchHeapIndex = invalidHeapIndex
 
 	if task.source == enumsspb.TASK_SOURCE_DB_BACKLOG && task.forwardInfo == nil {
-		t.ages.record(task.event.Data.CreateTime, -1)
+		t.ages.record(task.event.GetData().GetCreateTime(), -1)
 	}
 
 	return task
@@ -190,7 +190,7 @@ func (t *taskPQ) ForEachTask(pred func(*internalTask) bool, post func(*internalT
 		}
 		task.matchHeapIndex = invalidHeapIndex - 1 // maintain heap/index invariant
 		if task.source == enumsspb.TASK_SOURCE_DB_BACKLOG && task.forwardInfo == nil {
-			t.ages.record(task.event.Data.CreateTime, -1)
+			t.ages.record(task.event.GetData().GetCreateTime(), -1)
 		}
 		post(task)
 		return true

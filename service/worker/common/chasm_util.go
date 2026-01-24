@@ -14,7 +14,7 @@ import (
 func ArchetypeIDFromExecutionInfo(
 	executionInfo *workflowpb.WorkflowExecutionInfo,
 ) (chasm.ArchetypeID, error) {
-	indexedField := executionInfo.SearchAttributes.GetIndexedFields()
+	indexedField := executionInfo.GetSearchAttributes().GetIndexedFields()
 	if indexedField == nil {
 		return chasm.WorkflowArchetypeID, nil
 	}

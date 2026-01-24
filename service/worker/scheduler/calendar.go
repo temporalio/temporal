@@ -82,13 +82,13 @@ var (
 func newCompiledCalendar(cal *schedulepb.StructuredCalendarSpec, tz *time.Location) *compiledCalendar {
 	return &compiledCalendar{
 		tz:         tz,
-		year:       makeYearMatcher(cal.Year),
-		month:      makeBitMatcher(cal.Month),
-		dayOfMonth: makeBitMatcher(cal.DayOfMonth),
-		dayOfWeek:  makeBitMatcher(cal.DayOfWeek),
-		hour:       makeBitMatcher(cal.Hour),
-		minute:     makeBitMatcher(cal.Minute),
-		second:     makeBitMatcher(cal.Second),
+		year:       makeYearMatcher(cal.GetYear()),
+		month:      makeBitMatcher(cal.GetMonth()),
+		dayOfMonth: makeBitMatcher(cal.GetDayOfMonth()),
+		dayOfWeek:  makeBitMatcher(cal.GetDayOfWeek()),
+		hour:       makeBitMatcher(cal.GetHour()),
+		minute:     makeBitMatcher(cal.GetMinute()),
+		second:     makeBitMatcher(cal.GetSecond()),
 	}
 }
 
@@ -222,16 +222,16 @@ func parseCalendarToStructured(cal *schedulepb.CalendarSpec) (*schedulepb.Struct
 		}
 		return r
 	}
-	ss := &schedulepb.StructuredCalendarSpec{
-		Second:     makeRangeOrNil(cal.Second, "Second", "0", 0, 59, parseModeInt),
-		Minute:     makeRangeOrNil(cal.Minute, "Minute", "0", 0, 59, parseModeInt),
-		Hour:       makeRangeOrNil(cal.Hour, "Hour", "0", 0, 23, parseModeInt),
-		DayOfWeek:  makeRangeOrNil(cal.DayOfWeek, "DayOfWeek", "*", 0, 7, parseModeDow),
-		DayOfMonth: makeRangeOrNil(cal.DayOfMonth, "DayOfMonth", "*", 1, 31, parseModeInt),
-		Month:      makeRangeOrNil(cal.Month, "Month", "*", 1, 12, parseModeMonth),
-		Year:       makeRangeOrNil(cal.Year, "Year", "*", minCalendarYear, maxCalendarYear, parseModeYear),
-		Comment:    cal.Comment,
-	}
+	ss := schedulepb.StructuredCalendarSpec_builder{
+		Second:     makeRangeOrNil(cal.GetSecond(), "Second", "0", 0, 59, parseModeInt),
+		Minute:     makeRangeOrNil(cal.GetMinute(), "Minute", "0", 0, 59, parseModeInt),
+		Hour:       makeRangeOrNil(cal.GetHour(), "Hour", "0", 0, 23, parseModeInt),
+		DayOfWeek:  makeRangeOrNil(cal.GetDayOfWeek(), "DayOfWeek", "*", 0, 7, parseModeDow),
+		DayOfMonth: makeRangeOrNil(cal.GetDayOfMonth(), "DayOfMonth", "*", 1, 31, parseModeInt),
+		Month:      makeRangeOrNil(cal.GetMonth(), "Month", "*", 1, 12, parseModeMonth),
+		Year:       makeRangeOrNil(cal.GetYear(), "Year", "*", minCalendarYear, maxCalendarYear, parseModeYear),
+		Comment:    cal.GetComment(),
+	}.Build()
 	if len(errs) > 0 {
 		return nil, errors.New(strings.Join(errs, ", "))
 	}
@@ -269,7 +269,7 @@ func parseCronString(c string) (*schedulepb.StructuredCalendarSpec, *schedulepb.
 	c = handlePredefinedCronStrings(c)
 
 	// split fields
-	cal := schedulepb.CalendarSpec{Comment: comment}
+	cal := schedulepb.CalendarSpec_builder{Comment: comment}.Build()
 	// Use FieldsSeq to avoid building an unbounded slice; we only accept 5–7 fields.
 	const maxCronFields = 7
 	var toks [maxCronFields]string
@@ -285,16 +285,31 @@ func parseCronString(c string) (*schedulepb.StructuredCalendarSpec, *schedulepb.
 	}
 	switch n {
 	case 5:
-		cal.Minute, cal.Hour, cal.DayOfMonth, cal.Month, cal.DayOfWeek = toks[0], toks[1], toks[2], toks[3], toks[4]
+		cal.SetMinute(toks[0])
+		cal.SetHour(toks[1])
+		cal.SetDayOfMonth(toks[2])
+		cal.SetMonth(toks[3])
+		cal.SetDayOfWeek(toks[4])
 	case 6:
-		cal.Minute, cal.Hour, cal.DayOfMonth, cal.Month, cal.DayOfWeek, cal.Year = toks[0], toks[1], toks[2], toks[3], toks[4], toks[5]
+		cal.SetMinute(toks[0])
+		cal.SetHour(toks[1])
+		cal.SetDayOfMonth(toks[2])
+		cal.SetMonth(toks[3])
+		cal.SetDayOfWeek(toks[4])
+		cal.SetYear(toks[5])
 	case 7:
-		cal.Second, cal.Minute, cal.Hour, cal.DayOfMonth, cal.Month, cal.DayOfWeek, cal.Year = toks[0], toks[1], toks[2], toks[3], toks[4], toks[5], toks[6]
+		cal.SetSecond(toks[0])
+		cal.SetMinute(toks[1])
+		cal.SetHour(toks[2])
+		cal.SetDayOfMonth(toks[3])
+		cal.SetMonth(toks[4])
+		cal.SetDayOfWeek(toks[5])
+		cal.SetYear(toks[6])
 	default:
 		return nil, nil, "", errors.New("CronString does not have 5-7 fields")
 	}
 
-	structured, err := parseCalendarToStructured(&cal)
+	structured, err := parseCalendarToStructured(cal)
 	if err != nil {
 		return nil, nil, "", err
 	}
@@ -315,13 +330,13 @@ func parseCronStringInterval(c string) (*schedulepb.IntervalSpec, error) {
 		return nil, err
 	}
 	if phase == "" {
-		return &schedulepb.IntervalSpec{Interval: durationpb.New(intervalDuration)}, nil
+		return schedulepb.IntervalSpec_builder{Interval: durationpb.New(intervalDuration)}.Build(), nil
 	}
 	phaseDuration, err := timestamp.ParseDuration(phase)
 	if err != nil {
 		return nil, err
 	}
-	return &schedulepb.IntervalSpec{Interval: durationpb.New(intervalDuration), Phase: durationpb.New(phaseDuration)}, nil
+	return schedulepb.IntervalSpec_builder{Interval: durationpb.New(intervalDuration), Phase: durationpb.New(phaseDuration)}.Build(), nil
 }
 
 func handlePredefinedCronStrings(c string) string {
@@ -486,7 +501,7 @@ func makeRange(s, field, def string, minVal, maxVal int, parseMode parseMode) ([
 		// range was just 7-7, then we're done.
 		if parseMode == parseModeDow && end == 7 {
 			if (7-start)%step == 0 && (step > 1 || step == 1 && start > 1) {
-				ranges = append(ranges, &schedulepb.Range{Start: int32(0)})
+				ranges = append(ranges, schedulepb.Range_builder{Start: int32(0)}.Build())
 				if start == 7 {
 					continue
 				}
@@ -499,7 +514,7 @@ func makeRange(s, field, def string, minVal, maxVal int, parseMode parseMode) ([
 		if step == 1 {
 			step = 0 // use default value so proto is smaller
 		}
-		ranges = append(ranges, &schedulepb.Range{Start: int32(start), End: int32(end), Step: int32(step)})
+		ranges = append(ranges, schedulepb.Range_builder{Start: int32(start), End: int32(end), Step: int32(step)}.Build())
 	}
 	return ranges, nil
 }

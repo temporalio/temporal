@@ -118,9 +118,9 @@ func TestArchiver(t *testing.T) {
 		{
 			Name:    "Search attribute with no embedded type information",
 			Targets: []Target{TargetVisibility},
-			SearchAttributes: &commonpb.SearchAttributes{IndexedFields: map[string]*commonpb.Payload{
+			SearchAttributes: commonpb.SearchAttributes_builder{IndexedFields: map[string]*commonpb.Payload{
 				"Text01": payload.EncodeString("value"),
-			}},
+			}}.Build(),
 			NameTypeMap: searchattribute.TestNameTypeMap(),
 
 			ExpectArchiveVisibility: true,
@@ -128,9 +128,9 @@ func TestArchiver(t *testing.T) {
 		{
 			Name:    "Search attribute missing in type map",
 			Targets: []Target{TargetVisibility},
-			SearchAttributes: &commonpb.SearchAttributes{IndexedFields: map[string]*commonpb.Payload{
+			SearchAttributes: commonpb.SearchAttributes_builder{IndexedFields: map[string]*commonpb.Payload{
 				"Text01": payload.EncodeString("value"),
-			}},
+			}}.Build(),
 			NameTypeMap: searchattribute.NameTypeMap{},
 
 			ExpectedReturnErrors: []string{
@@ -140,9 +140,9 @@ func TestArchiver(t *testing.T) {
 		{
 			Name:    "Error getting name type map from search attribute provider",
 			Targets: []Target{TargetVisibility},
-			SearchAttributes: &commonpb.SearchAttributes{IndexedFields: map[string]*commonpb.Payload{
+			SearchAttributes: commonpb.SearchAttributes_builder{IndexedFields: map[string]*commonpb.Payload{
 				"Text01": payload.EncodeString("value"),
-			}},
+			}}.Build(),
 			NameTypeMapErr: errors.New("name-type-map-err"),
 
 			ExpectedReturnErrors: []string{

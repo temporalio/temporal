@@ -91,34 +91,34 @@ type WorkerHeartbeatPropertyFunc func(*workerpb.WorkerHeartbeat) string
 var (
 	propertyMapFuncs = map[string]WorkerHeartbeatPropertyFunc{
 		workerInstanceKeyColName: func(hb *workerpb.WorkerHeartbeat) string {
-			return hb.WorkerInstanceKey
+			return hb.GetWorkerInstanceKey()
 		},
 		workerIdentityColName: func(hb *workerpb.WorkerHeartbeat) string {
-			return hb.WorkerIdentity
+			return hb.GetWorkerIdentity()
 		},
 		workerHostNameColName: func(hb *workerpb.WorkerHeartbeat) string {
-			if hb.HostInfo == nil {
+			if !hb.HasHostInfo() {
 				return ""
 			}
-			return hb.HostInfo.HostName
+			return hb.GetHostInfo().GetHostName()
 		},
 		workerTaskQueueColName: func(hb *workerpb.WorkerHeartbeat) string {
-			return hb.TaskQueue
+			return hb.GetTaskQueue()
 		},
 		workerDeploymentNameColName: func(hb *workerpb.WorkerHeartbeat) string {
-			if hb.DeploymentVersion == nil {
+			if !hb.HasDeploymentVersion() {
 				return ""
 			}
-			return hb.DeploymentVersion.DeploymentName
+			return hb.GetDeploymentVersion().GetDeploymentName()
 		},
 		workerSdkNameColName: func(hb *workerpb.WorkerHeartbeat) string {
-			return hb.SdkName
+			return hb.GetSdkName()
 		},
 		workerSdkVersionColName: func(hb *workerpb.WorkerHeartbeat) string {
-			return hb.SdkVersion
+			return hb.GetSdkVersion()
 		},
 		workerStatusColName: func(hb *workerpb.WorkerHeartbeat) string {
-			return hb.Status.String()
+			return hb.GetStatus().String()
 		},
 	}
 )

@@ -22,6 +22,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/tests/testcore"
+	"google.golang.org/protobuf/proto"
 )
 
 type ActivityApiRulesClientTestSuite struct {
@@ -159,12 +160,12 @@ func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_CRUD() {
 	defer cancel()
 
 	// Initial state - no rules
-	nsResp, err := s.FrontendClient().ListWorkflowRules(ctx, &workflowservice.ListWorkflowRulesRequest{
+	nsResp, err := s.FrontendClient().ListWorkflowRules(ctx, workflowservice.ListWorkflowRulesRequest_builder{
 		Namespace: s.Namespace().String(),
-	})
+	}.Build())
 	s.NoError(err)
 	s.NotNil(nsResp)
-	s.Len(nsResp.Rules, 0)
+	s.Len(nsResp.GetRules(), 0)
 
 	// create a rule
 	ruleID1 := "pause-activity-rule-1"
@@ -177,14 +178,14 @@ func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_CRUD() {
 
 	// verify that frontend has updated namespaces
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		nsResp, err := s.FrontendClient().ListWorkflowRules(ctx, &workflowservice.ListWorkflowRulesRequest{
+		nsResp, err := s.FrontendClient().ListWorkflowRules(ctx, workflowservice.ListWorkflowRulesRequest_builder{
 			Namespace: s.Namespace().String(),
-		})
+		}.Build())
 		require.NoError(t, err)
 		require.NotNil(t, nsResp)
-		require.NotNil(t, nsResp.Rules)
-		require.Len(t, nsResp.Rules, 1)
-		require.Equal(t, ruleID1, nsResp.Rules[0].Spec.Id)
+		require.NotNil(t, nsResp.GetRules())
+		require.Len(t, nsResp.GetRules(), 1)
+		require.Equal(t, ruleID1, nsResp.GetRules()[0].GetSpec().GetId())
 	}, 5*time.Second, 200*time.Millisecond)
 
 	// create a second rule with the same ID
@@ -196,79 +197,79 @@ func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_CRUD() {
 
 	// create a second rule with a different ID
 	ruleID2 := "pause-activity-rule-2"
-	createRuleRequest.Spec.Id = ruleID2
+	createRuleRequest.GetSpec().SetId(ruleID2)
 	createRuleResponse, err = s.FrontendClient().CreateWorkflowRule(ctx, createRuleRequest)
 	s.NoError(err)
 	s.NotNil(createRuleResponse)
 
 	// verify that frontend has updated namespaces
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		nsResp, err := s.FrontendClient().ListWorkflowRules(ctx, &workflowservice.ListWorkflowRulesRequest{
+		nsResp, err := s.FrontendClient().ListWorkflowRules(ctx, workflowservice.ListWorkflowRulesRequest_builder{
 			Namespace: s.Namespace().String(),
-		})
+		}.Build())
 		require.NoError(t, err)
 		require.NotNil(t, nsResp)
-		require.NotNil(t, nsResp.Rules)
-		require.Len(t, nsResp.Rules, 2)
+		require.NotNil(t, nsResp.GetRules())
+		require.Len(t, nsResp.GetRules(), 2)
 		// we can't guarantee the order of the rules
-		require.True(t, nsResp.Rules[0].Spec.Id == ruleID1 || nsResp.Rules[1].Spec.Id == ruleID1)
-		require.True(t, nsResp.Rules[0].Spec.Id == ruleID2 || nsResp.Rules[1].Spec.Id == ruleID2)
+		require.True(t, nsResp.GetRules()[0].GetSpec().GetId() == ruleID1 || nsResp.GetRules()[1].GetSpec().GetId() == ruleID1)
+		require.True(t, nsResp.GetRules()[0].GetSpec().GetId() == ruleID2 || nsResp.GetRules()[1].GetSpec().GetId() == ruleID2)
 	}, 5*time.Second, 200*time.Millisecond)
 
 	// get rule by ID
-	describeRuleResponse, err := s.FrontendClient().DescribeWorkflowRule(ctx, &workflowservice.DescribeWorkflowRuleRequest{
+	describeRuleResponse, err := s.FrontendClient().DescribeWorkflowRule(ctx, workflowservice.DescribeWorkflowRuleRequest_builder{
 		Namespace: s.Namespace().String(),
 		RuleId:    ruleID1,
-	})
+	}.Build())
 	s.NoError(err)
 	s.NotNil(describeRuleResponse)
-	s.Equal(ruleID1, describeRuleResponse.Rule.Spec.Id)
+	s.Equal(ruleID1, describeRuleResponse.GetRule().GetSpec().GetId())
 
-	describeRuleResponse, err = s.FrontendClient().DescribeWorkflowRule(ctx, &workflowservice.DescribeWorkflowRuleRequest{
+	describeRuleResponse, err = s.FrontendClient().DescribeWorkflowRule(ctx, workflowservice.DescribeWorkflowRuleRequest_builder{
 		Namespace: s.Namespace().String(),
 		RuleId:    ruleID2,
-	})
+	}.Build())
 	s.NoError(err)
 	s.NotNil(describeRuleResponse)
-	s.Equal(ruleID2, describeRuleResponse.Rule.Spec.Id)
+	s.Equal(ruleID2, describeRuleResponse.GetRule().GetSpec().GetId())
 
 	// delete rule 1
-	deleteRuleResponse, err := s.FrontendClient().DeleteWorkflowRule(ctx, &workflowservice.DeleteWorkflowRuleRequest{
+	deleteRuleResponse, err := s.FrontendClient().DeleteWorkflowRule(ctx, workflowservice.DeleteWorkflowRuleRequest_builder{
 		Namespace: s.Namespace().String(),
 		RuleId:    ruleID1,
-	})
+	}.Build())
 	s.NoError(err)
 	s.NotNil(deleteRuleResponse)
 
 	// verify that frontend has updated namespaces
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		nsResp, err := s.FrontendClient().ListWorkflowRules(ctx, &workflowservice.ListWorkflowRulesRequest{
+		nsResp, err := s.FrontendClient().ListWorkflowRules(ctx, workflowservice.ListWorkflowRulesRequest_builder{
 			Namespace: s.Namespace().String(),
-		})
+		}.Build())
 		require.NoError(t, err)
 		require.NotNil(t, nsResp)
-		require.NotNil(t, nsResp.Rules)
-		require.Len(t, nsResp.Rules, 1)
+		require.NotNil(t, nsResp.GetRules())
+		require.Len(t, nsResp.GetRules(), 1)
 		// we can't guarantee the order of the rules
-		require.Equal(t, ruleID2, nsResp.Rules[0].Spec.Id)
+		require.Equal(t, ruleID2, nsResp.GetRules()[0].GetSpec().GetId())
 	}, 5*time.Second, 200*time.Millisecond)
 
 	// delete rule 2
-	deleteRuleResponse, err = s.FrontendClient().DeleteWorkflowRule(ctx, &workflowservice.DeleteWorkflowRuleRequest{
+	deleteRuleResponse, err = s.FrontendClient().DeleteWorkflowRule(ctx, workflowservice.DeleteWorkflowRuleRequest_builder{
 		Namespace: s.Namespace().String(),
 		RuleId:    ruleID2,
-	})
+	}.Build())
 	s.NoError(err)
 	s.NotNil(deleteRuleResponse)
 
 	// verify that frontend has updated namespaces and all rules are deleted
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		nsResp, err := s.FrontendClient().ListWorkflowRules(ctx, &workflowservice.ListWorkflowRulesRequest{
+		nsResp, err := s.FrontendClient().ListWorkflowRules(ctx, workflowservice.ListWorkflowRulesRequest_builder{
 			Namespace: s.Namespace().String(),
-		})
+		}.Build())
 		require.NoError(t, err)
 		require.NotNil(t, nsResp)
-		require.Len(t, nsResp.Rules, 0)
+		require.Len(t, nsResp.GetRules(), 0)
 	}, 5*time.Second, 200*time.Millisecond)
 }
 
@@ -297,13 +298,13 @@ func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_RetryActivity() {
 
 	// verify that frontend has updated namespaces
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		nsResp, err := s.FrontendClient().ListWorkflowRules(ctx, &workflowservice.ListWorkflowRulesRequest{
+		nsResp, err := s.FrontendClient().ListWorkflowRules(ctx, workflowservice.ListWorkflowRulesRequest_builder{
 			Namespace: s.Namespace().String(),
-		})
+		}.Build())
 		require.NoError(t, err)
 		require.NotNil(t, nsResp)
-		require.Len(t, nsResp.Rules, 1)
-		require.Equal(t, ruleID, nsResp.Rules[0].Spec.Id)
+		require.Len(t, nsResp.GetRules(), 1)
+		require.Equal(t, ruleID, nsResp.GetRules()[0].GetSpec().GetId())
 	}, 5*time.Second, 200*time.Millisecond)
 
 	// Let namespace config propagate.
@@ -317,41 +318,41 @@ func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_RetryActivity() {
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
-		require.Len(t, description.PendingActivities, 1)
-		require.Equal(t, activityType, description.PendingActivities[0].GetActivityType().GetName())
-		require.True(t, description.PendingActivities[0].GetPaused())
+		require.Len(t, description.GetPendingActivities(), 1)
+		require.Equal(t, activityType, description.GetPendingActivities()[0].GetActivityType().GetName())
+		require.True(t, description.GetPendingActivities()[0].GetPaused())
 		require.Equal(t, int32(1), testWorkflow.startedActivityCount.Load())
 	}, 2*time.Second, 200*time.Millisecond)
 
 	// make sure activity pause info is set
 	description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 	s.NoError(err)
-	s.Equal(1, len(description.PendingActivities))
-	s.True(description.PendingActivities[0].Paused)
-	s.NotNil(description.PendingActivities[0].PauseInfo)
-	rule := description.PendingActivities[0].PauseInfo.GetRule()
+	s.Equal(1, len(description.GetPendingActivities()))
+	s.True(description.GetPendingActivities()[0].GetPaused())
+	s.NotNil(description.GetPendingActivities()[0].GetPauseInfo())
+	rule := description.GetPendingActivities()[0].GetPauseInfo().GetRule()
 	s.NotNil(rule)
-	s.Equal(ruleID, rule.RuleId)
+	s.Equal(ruleID, rule.GetRuleId())
 
 	// let activity succeed
 	testWorkflow.letActivitySucceed.Store(true)
 
 	// remove the rule so it didn't interfere with the activity
-	deleteRuleResponse, err := s.FrontendClient().DeleteWorkflowRule(ctx, &workflowservice.DeleteWorkflowRuleRequest{
+	deleteRuleResponse, err := s.FrontendClient().DeleteWorkflowRule(ctx, workflowservice.DeleteWorkflowRuleRequest_builder{
 		Namespace: s.Namespace().String(),
 		RuleId:    ruleID,
-	})
+	}.Build())
 	s.NoError(err)
 	s.NotNil(deleteRuleResponse)
 
 	// make sure there is no rules
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		nsResp, err := s.FrontendClient().ListWorkflowRules(ctx, &workflowservice.ListWorkflowRulesRequest{
+		nsResp, err := s.FrontendClient().ListWorkflowRules(ctx, workflowservice.ListWorkflowRulesRequest_builder{
 			Namespace: s.Namespace().String(),
-		})
+		}.Build())
 		require.NoError(t, err)
 		require.NotNil(t, nsResp)
-		require.Len(t, nsResp.Rules, 0)
+		require.Len(t, nsResp.GetRules(), 0)
 	}, 5*time.Second, 200*time.Millisecond)
 
 	// Let namespace config propagate.
@@ -360,22 +361,22 @@ func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_RetryActivity() {
 	s.NoError(err)
 
 	// unpause the activity
-	_, err = s.FrontendClient().UnpauseActivity(ctx, &workflowservice.UnpauseActivityRequest{
+	_, err = s.FrontendClient().UnpauseActivity(ctx, workflowservice.UnpauseActivityRequest_builder{
 		Namespace: s.Namespace().String(),
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: workflowRun.GetID(),
-		},
-		Activity: &workflowservice.UnpauseActivityRequest_Type{Type: activityType},
-	})
+		}.Build(),
+		Type: proto.String(activityType),
+	}.Build())
 	s.NoError(err)
 
 	// wait for activity to be unpaused
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
-		require.Len(t, description.PendingActivities, 1)
-		require.Equal(t, activityType, description.PendingActivities[0].GetActivityType().GetName())
-		require.False(t, description.PendingActivities[0].GetPaused())
+		require.Len(t, description.GetPendingActivities(), 1)
+		require.Equal(t, activityType, description.GetPendingActivities()[0].GetActivityType().GetName())
+		require.False(t, description.GetPendingActivities()[0].GetPaused())
 		require.LessOrEqual(t, int32(1), testWorkflow.startedActivityCount.Load())
 	}, 5*time.Second, 200*time.Millisecond)
 
@@ -421,7 +422,7 @@ func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_RetryTask() {
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
-		require.Len(t, description.PendingActivities, 1)
+		require.Len(t, description.GetPendingActivities(), 1)
 		require.Equal(t, int32(1), testRetryTaskWorkflow.startedActivityCount.Load())
 	}, 2*time.Second, 200*time.Millisecond)
 
@@ -435,13 +436,13 @@ func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_RetryTask() {
 
 	// 4. verify that frontend has updated namespaces
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		nsResp, err := s.FrontendClient().ListWorkflowRules(ctx, &workflowservice.ListWorkflowRulesRequest{
+		nsResp, err := s.FrontendClient().ListWorkflowRules(ctx, workflowservice.ListWorkflowRulesRequest_builder{
 			Namespace: s.Namespace().String(),
-		})
+		}.Build())
 		require.NoError(t, err)
 		require.NotNil(t, nsResp)
-		require.Len(t, nsResp.Rules, 1)
-		require.Equal(t, ruleID, nsResp.Rules[0].Spec.Id)
+		require.Len(t, nsResp.GetRules(), 1)
+		require.Equal(t, ruleID, nsResp.GetRules()[0].GetSpec().GetId())
 	}, 5*time.Second, 200*time.Millisecond)
 
 	// Let namespace config propagate.
@@ -453,41 +454,41 @@ func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_RetryTask() {
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
-		require.Len(t, description.PendingActivities, 1)
-		require.Equal(t, activityType, description.PendingActivities[0].GetActivityType().GetName())
-		require.True(t, description.PendingActivities[0].GetPaused())
+		require.Len(t, description.GetPendingActivities(), 1)
+		require.Equal(t, activityType, description.GetPendingActivities()[0].GetActivityType().GetName())
+		require.True(t, description.GetPendingActivities()[0].GetPaused())
 		require.Equal(t, int32(1), testRetryTaskWorkflow.startedActivityCount.Load())
 	}, 5*time.Second, 200*time.Millisecond)
 
 	// make sure activity pause info is set
 	description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 	s.NoError(err)
-	s.Equal(1, len(description.PendingActivities))
-	s.True(description.PendingActivities[0].Paused)
-	s.NotNil(description.PendingActivities[0].PauseInfo)
-	rule := description.PendingActivities[0].PauseInfo.GetRule()
+	s.Equal(1, len(description.GetPendingActivities()))
+	s.True(description.GetPendingActivities()[0].GetPaused())
+	s.NotNil(description.GetPendingActivities()[0].GetPauseInfo())
+	rule := description.GetPendingActivities()[0].GetPauseInfo().GetRule()
 	s.NotNil(rule)
-	s.Equal(ruleID, rule.RuleId)
+	s.Equal(ruleID, rule.GetRuleId())
 
 	// let activity succeed
 	testRetryTaskWorkflow.letActivitySucceed.Store(true)
 
 	// remove the rule so it didn't interfere with the activity
-	deleteRuleResponse, err := s.FrontendClient().DeleteWorkflowRule(ctx, &workflowservice.DeleteWorkflowRuleRequest{
+	deleteRuleResponse, err := s.FrontendClient().DeleteWorkflowRule(ctx, workflowservice.DeleteWorkflowRuleRequest_builder{
 		Namespace: s.Namespace().String(),
 		RuleId:    ruleID,
-	})
+	}.Build())
 	s.NoError(err)
 	s.NotNil(deleteRuleResponse)
 
 	// make sure there is no rules
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		nsResp, err := s.FrontendClient().ListWorkflowRules(ctx, &workflowservice.ListWorkflowRulesRequest{
+		nsResp, err := s.FrontendClient().ListWorkflowRules(ctx, workflowservice.ListWorkflowRulesRequest_builder{
 			Namespace: s.Namespace().String(),
-		})
+		}.Build())
 		require.NoError(t, err)
 		require.NotNil(t, nsResp)
-		require.Len(t, nsResp.Rules, 0)
+		require.Len(t, nsResp.GetRules(), 0)
 	}, 5*time.Second, 200*time.Millisecond)
 
 	// Let namespace config propagate.
@@ -496,22 +497,22 @@ func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_RetryTask() {
 	s.NoError(err)
 
 	// unpause the activity. this will also trigger the activity
-	_, err = s.FrontendClient().UnpauseActivity(ctx, &workflowservice.UnpauseActivityRequest{
+	_, err = s.FrontendClient().UnpauseActivity(ctx, workflowservice.UnpauseActivityRequest_builder{
 		Namespace: s.Namespace().String(),
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: workflowRun.GetID(),
-		},
-		Activity: &workflowservice.UnpauseActivityRequest_Type{Type: activityType},
-	})
+		}.Build(),
+		Type: proto.String(activityType),
+	}.Build())
 	s.NoError(err)
 
 	// wait for activity to be unpaused
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
-		require.Len(t, description.PendingActivities, 1)
-		require.Equal(t, activityType, description.PendingActivities[0].GetActivityType().GetName())
-		require.False(t, description.PendingActivities[0].GetPaused())
+		require.Len(t, description.GetPendingActivities(), 1)
+		require.Equal(t, activityType, description.GetPendingActivities()[0].GetActivityType().GetName())
+		require.False(t, description.GetPendingActivities()[0].GetPaused())
 		require.LessOrEqual(t, int32(1), testRetryTaskWorkflow.startedActivityCount.Load())
 	}, 5*time.Second, 200*time.Millisecond)
 
@@ -556,14 +557,14 @@ func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_PrePause() {
 
 	// 2. Verify that frontend has updated namespaces and rules are available
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		nsResp, err := s.FrontendClient().ListWorkflowRules(ctx, &workflowservice.ListWorkflowRulesRequest{
+		nsResp, err := s.FrontendClient().ListWorkflowRules(ctx, workflowservice.ListWorkflowRulesRequest_builder{
 			Namespace: s.Namespace().String(),
-		})
+		}.Build())
 		require.NoError(t, err)
 		require.NotNil(t, nsResp)
-		require.NotNil(t, nsResp.Rules)
-		require.Len(t, nsResp.Rules, 1)
-		require.Equal(t, ruleID, nsResp.Rules[0].Spec.Id)
+		require.NotNil(t, nsResp.GetRules())
+		require.Len(t, nsResp.GetRules(), 1)
+		require.Equal(t, ruleID, nsResp.GetRules()[0].GetSpec().GetId())
 	}, 5*time.Second, 200*time.Millisecond)
 
 	// 3. Let namespace config propagate to the history service.
@@ -578,11 +579,11 @@ func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_PrePause() {
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
-		require.Len(t, description.PendingActivities, 1)
-		require.Equal(t, activityType, description.PendingActivities[0].GetActivityType().GetName())
-		require.True(t, description.PendingActivities[0].GetPaused())
-		require.NotNil(t, description.PendingActivities[0].GetPauseInfo())
-		require.Equal(t, ruleID, description.PendingActivities[0].GetPauseInfo().GetRule().GetRuleId())
+		require.Len(t, description.GetPendingActivities(), 1)
+		require.Equal(t, activityType, description.GetPendingActivities()[0].GetActivityType().GetName())
+		require.True(t, description.GetPendingActivities()[0].GetPaused())
+		require.NotNil(t, description.GetPendingActivities()[0].GetPauseInfo())
+		require.Equal(t, ruleID, description.GetPendingActivities()[0].GetPauseInfo().GetRule().GetRuleId())
 		// to be sure activity doesn't actually start
 		require.Equal(t, int32(0), testRetryTaskWorkflow.startedActivityCount.Load())
 	}, 5*time.Second, 200*time.Millisecond)
@@ -590,27 +591,27 @@ func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_PrePause() {
 	// make sure activity pause info is set
 	description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 	s.NoError(err)
-	s.Equal(1, len(description.PendingActivities))
-	s.True(description.PendingActivities[0].Paused)
-	s.NotNil(description.PendingActivities[0].PauseInfo)
-	s.Equal(ruleID, description.PendingActivities[0].PauseInfo.GetRule().GetRuleId())
+	s.Equal(1, len(description.GetPendingActivities()))
+	s.True(description.GetPendingActivities()[0].GetPaused())
+	s.NotNil(description.GetPendingActivities()[0].GetPauseInfo())
+	s.Equal(ruleID, description.GetPendingActivities()[0].GetPauseInfo().GetRule().GetRuleId())
 
 	// 6. Remove the rule so it didn't interfere with the activity
-	deleteRuleResponse, err := s.FrontendClient().DeleteWorkflowRule(ctx, &workflowservice.DeleteWorkflowRuleRequest{
+	deleteRuleResponse, err := s.FrontendClient().DeleteWorkflowRule(ctx, workflowservice.DeleteWorkflowRuleRequest_builder{
 		Namespace: s.Namespace().String(),
 		RuleId:    ruleID,
-	})
+	}.Build())
 	s.NoError(err)
 	s.NotNil(deleteRuleResponse)
 
 	// 7. Make sure there is no rules in frontend
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		nsResp, err := s.FrontendClient().ListWorkflowRules(ctx, &workflowservice.ListWorkflowRulesRequest{
+		nsResp, err := s.FrontendClient().ListWorkflowRules(ctx, workflowservice.ListWorkflowRulesRequest_builder{
 			Namespace: s.Namespace().String(),
-		})
+		}.Build())
 		require.NoError(t, err)
 		require.NotNil(t, nsResp)
-		require.Len(t, nsResp.Rules, 0)
+		require.Len(t, nsResp.GetRules(), 0)
 	}, 5*time.Second, 200*time.Millisecond)
 
 	// 8. Let namespace config changes propagate to the history service.
@@ -619,22 +620,22 @@ func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_PrePause() {
 	s.NoError(err)
 
 	// 9. Unpause the activity. this will also trigger the activity
-	_, err = s.FrontendClient().UnpauseActivity(ctx, &workflowservice.UnpauseActivityRequest{
+	_, err = s.FrontendClient().UnpauseActivity(ctx, workflowservice.UnpauseActivityRequest_builder{
 		Namespace: s.Namespace().String(),
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: workflowRun.GetID(),
-		},
-		Activity: &workflowservice.UnpauseActivityRequest_Type{Type: activityType},
-	})
+		}.Build(),
+		Type: proto.String(activityType),
+	}.Build())
 	s.NoError(err)
 
 	// 10. Wait for activity to be unpaused
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
-		require.Len(t, description.PendingActivities, 1)
-		require.Equal(t, activityType, description.PendingActivities[0].GetActivityType().GetName())
-		require.False(t, description.PendingActivities[0].GetPaused())
+		require.Len(t, description.GetPendingActivities(), 1)
+		require.Equal(t, activityType, description.GetPendingActivities()[0].GetActivityType().GetName())
+		require.False(t, description.GetPendingActivities()[0].GetPaused())
 		require.Equal(t, int32(1), testRetryTaskWorkflow.startedActivityCount.Load())
 	}, 5*time.Second, 200*time.Millisecond)
 
@@ -650,23 +651,19 @@ func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_PrePause() {
 func (s *ActivityApiRulesClientTestSuite) createPauseRuleRequest(
 	activityType string, ruleID string,
 ) *workflowservice.CreateWorkflowRuleRequest {
-	createRuleRequest := &workflowservice.CreateWorkflowRuleRequest{
+	createRuleRequest := workflowservice.CreateWorkflowRuleRequest_builder{
 		Namespace: s.Namespace().String(),
-		Spec: &rulespb.WorkflowRuleSpec{
+		Spec: rulespb.WorkflowRuleSpec_builder{
 			Id: ruleID,
-			Trigger: &rulespb.WorkflowRuleSpec_ActivityStart{
-				ActivityStart: &rulespb.WorkflowRuleSpec_ActivityStartingTrigger{
-					Predicate: fmt.Sprintf("ActivityType = \"%s\"", activityType),
-				},
-			},
+			ActivityStart: rulespb.WorkflowRuleSpec_ActivityStartingTrigger_builder{
+				Predicate: fmt.Sprintf("ActivityType = \"%s\"", activityType),
+			}.Build(),
 			Actions: []*rulespb.WorkflowRuleAction{
-				{
-					Variant: &rulespb.WorkflowRuleAction_ActivityPause{
-						ActivityPause: &rulespb.WorkflowRuleAction_ActionActivityPause{},
-					},
-				},
+				rulespb.WorkflowRuleAction_builder{
+					ActivityPause: &rulespb.WorkflowRuleAction_ActionActivityPause{},
+				}.Build(),
 			},
-		},
-	}
+		}.Build(),
+	}.Build()
 	return createRuleRequest
 }

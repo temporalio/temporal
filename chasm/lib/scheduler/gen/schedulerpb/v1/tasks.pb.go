@@ -8,7 +8,6 @@ package schedulerpb
 
 import (
 	reflect "reflect"
-	sync "sync"
 	unsafe "unsafe"
 
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -26,12 +25,10 @@ const (
 // Fires when the scheduler's idle period has lapsed, and the scheduler should
 // be closed.
 type SchedulerIdleTask struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Idle time total is set at time of task creation, so that if the dynamic config key
-	// controlling idle time changes, task validation will be aware.
-	IdleTimeTotal *durationpb.Duration `protobuf:"bytes,1,opt,name=idle_time_total,json=idleTimeTotal,proto3" json:"idle_time_total,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                    protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_IdleTimeTotal *durationpb.Duration   `protobuf:"bytes,1,opt,name=idle_time_total,json=idleTimeTotal,proto3"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *SchedulerIdleTask) Reset() {
@@ -59,21 +56,47 @@ func (x *SchedulerIdleTask) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SchedulerIdleTask.ProtoReflect.Descriptor instead.
-func (*SchedulerIdleTask) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_rawDescGZIP(), []int{0}
-}
-
 func (x *SchedulerIdleTask) GetIdleTimeTotal() *durationpb.Duration {
 	if x != nil {
-		return x.IdleTimeTotal
+		return x.xxx_hidden_IdleTimeTotal
 	}
 	return nil
 }
 
+func (x *SchedulerIdleTask) SetIdleTimeTotal(v *durationpb.Duration) {
+	x.xxx_hidden_IdleTimeTotal = v
+}
+
+func (x *SchedulerIdleTask) HasIdleTimeTotal() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_IdleTimeTotal != nil
+}
+
+func (x *SchedulerIdleTask) ClearIdleTimeTotal() {
+	x.xxx_hidden_IdleTimeTotal = nil
+}
+
+type SchedulerIdleTask_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Idle time total is set at time of task creation, so that if the dynamic config key
+	// controlling idle time changes, task validation will be aware.
+	IdleTimeTotal *durationpb.Duration
+}
+
+func (b0 SchedulerIdleTask_builder) Build() *SchedulerIdleTask {
+	m0 := &SchedulerIdleTask{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_IdleTimeTotal = b.IdleTimeTotal
+	return m0
+}
+
 // Buffers actions based on the schedule's specification.
 type GeneratorTask struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -103,14 +126,21 @@ func (x *GeneratorTask) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GeneratorTask.ProtoReflect.Descriptor instead.
-func (*GeneratorTask) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_rawDescGZIP(), []int{1}
+type GeneratorTask_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+}
+
+func (b0 GeneratorTask_builder) Build() *GeneratorTask {
+	m0 := &GeneratorTask{}
+	b, x := &b0, m0
+	_, _ = b, x
+	return m0
 }
 
 // Processes buffered actions, deciding whether to execute, delay, or discard.
 type InvokerProcessBufferTask struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -140,15 +170,22 @@ func (x *InvokerProcessBufferTask) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use InvokerProcessBufferTask.ProtoReflect.Descriptor instead.
-func (*InvokerProcessBufferTask) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_rawDescGZIP(), []int{2}
+type InvokerProcessBufferTask_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+}
+
+func (b0 InvokerProcessBufferTask_builder) Build() *InvokerProcessBufferTask {
+	m0 := &InvokerProcessBufferTask{}
+	b, x := &b0, m0
+	_, _ = b, x
+	return m0
 }
 
 // Drives execution of pending buffered actions to completion by starting,
 // canceling, or terminating workflows.
 type InvokerExecuteTask struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -178,14 +215,21 @@ func (x *InvokerExecuteTask) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use InvokerExecuteTask.ProtoReflect.Descriptor instead.
-func (*InvokerExecuteTask) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_rawDescGZIP(), []int{3}
+type InvokerExecuteTask_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+}
+
+func (b0 InvokerExecuteTask_builder) Build() *InvokerExecuteTask {
+	m0 := &InvokerExecuteTask{}
+	b, x := &b0, m0
+	_, _ = b, x
+	return m0
 }
 
 // Buffers actions based on a manually-requested backfill.
 type BackfillerTask struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -215,9 +259,16 @@ func (x *BackfillerTask) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use BackfillerTask.ProtoReflect.Descriptor instead.
-func (*BackfillerTask) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_rawDescGZIP(), []int{4}
+type BackfillerTask_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+}
+
+func (b0 BackfillerTask_builder) Build() *BackfillerTask {
+	m0 := &BackfillerTask{}
+	b, x := &b0, m0
+	_, _ = b, x
+	return m0
 }
 
 var File_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto protoreflect.FileDescriptor
@@ -231,18 +282,6 @@ const file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_rawDesc = ""
 	"\x18InvokerProcessBufferTask\"\x14\n" +
 	"\x12InvokerExecuteTask\"\x10\n" +
 	"\x0eBackfillerTaskBGZEgo.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb;schedulerpbb\x06proto3"
-
-var (
-	file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_rawDescOnce sync.Once
-	file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_rawDescData []byte
-)
-
-func file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_rawDescGZIP() []byte {
-	file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_rawDescOnce.Do(func() {
-		file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_rawDesc), len(file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_rawDesc)))
-	})
-	return file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_rawDescData
-}
 
 var file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_goTypes = []any{

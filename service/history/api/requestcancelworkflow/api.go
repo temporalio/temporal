@@ -17,18 +17,18 @@ func Invoke(
 	shard historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (resp *historyservice.RequestCancelWorkflowExecutionResponse, retError error) {
-	namespaceEntry, err := api.GetActiveNamespace(shard, namespace.ID(req.GetNamespaceId()), req.CancelRequest.WorkflowExecution.WorkflowId)
+	namespaceEntry, err := api.GetActiveNamespace(shard, namespace.ID(req.GetNamespaceId()), req.GetCancelRequest().GetWorkflowExecution().GetWorkflowId())
 	if err != nil {
 		return nil, err
 	}
 	namespaceID := namespaceEntry.ID()
 
-	request := req.CancelRequest
-	parentExecution := req.ExternalWorkflowExecution
+	request := req.GetCancelRequest()
+	parentExecution := req.GetExternalWorkflowExecution()
 	childWorkflowOnly := req.GetChildWorkflowOnly()
-	workflowID := request.WorkflowExecution.WorkflowId
-	runID := request.WorkflowExecution.RunId
-	firstExecutionRunID := request.FirstExecutionRunId
+	workflowID := request.GetWorkflowExecution().GetWorkflowId()
+	runID := request.GetWorkflowExecution().GetRunId()
+	firstExecutionRunID := request.GetFirstExecutionRunId()
 	if len(firstExecutionRunID) != 0 {
 		runID = ""
 	}
@@ -57,13 +57,13 @@ func Invoke(
 			// let's compare the FirstExecutionRunID on the request to make sure we cancel the correct workflow
 			// execution.
 			executionInfo := mutableState.GetExecutionInfo()
-			if len(firstExecutionRunID) > 0 && executionInfo.FirstExecutionRunId != firstExecutionRunID {
+			if len(firstExecutionRunID) > 0 && executionInfo.GetFirstExecutionRunId() != firstExecutionRunID {
 				return nil, consts.ErrWorkflowExecutionNotFound
 			}
 
 			if childWorkflowOnly {
-				parentWorkflowID := executionInfo.ParentWorkflowId
-				parentRunID := executionInfo.ParentRunId
+				parentWorkflowID := executionInfo.GetParentWorkflowId()
+				parentRunID := executionInfo.GetParentRunId()
 				if parentExecution.GetWorkflowId() != parentWorkflowID ||
 					parentExecution.GetRunId() != parentRunID {
 					return nil, consts.ErrWorkflowParent

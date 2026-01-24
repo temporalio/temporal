@@ -62,14 +62,14 @@ func (ac *DLQV1Service) ReadMessages(c *cli.Context) (err error) {
 		if err != nil {
 			return nil, nil, err
 		}
-		resp, err := adminClient.GetDLQMessages(ctx, &adminservice.GetDLQMessagesRequest{
+		resp, err := adminClient.GetDLQMessages(ctx, adminservice.GetDLQMessagesRequest_builder{
 			Type:                  t,
 			SourceCluster:         sourceCluster,
 			ShardId:               int32(shardID),
 			InclusiveEndMessageId: lastMessageID,
 			MaximumPageSize:       defaultPageSize,
 			NextPageToken:         paginationToken,
-		})
+		}.Build())
 		if err != nil {
 			return nil, nil, err
 		}
@@ -95,7 +95,7 @@ func (ac *DLQV1Service) ReadMessages(c *cli.Context) (err error) {
 			return fmt.Errorf("unable to encode dlq message. Last read message id: %v", lastReadMessageID)
 		}
 
-		lastReadMessageID = int(task.SourceTaskId)
+		lastReadMessageID = int(task.GetSourceTaskId())
 		remainingMessageCount--
 		_, err = outputFile.Write([]byte(fmt.Sprintf("%v\n", string(taskStr))))
 		if err != nil {
@@ -125,12 +125,12 @@ func (ac *DLQV1Service) PurgeMessages(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	if _, err := adminClient.PurgeDLQMessages(ctx, &adminservice.PurgeDLQMessagesRequest{
+	if _, err := adminClient.PurgeDLQMessages(ctx, adminservice.PurgeDLQMessagesRequest_builder{
 		Type:                  t,
 		SourceCluster:         sourceCluster,
 		ShardId:               int32(shardID),
 		InclusiveEndMessageId: lastMessageID,
-	}); err != nil {
+	}.Build()); err != nil {
 		return fmt.Errorf("failed to purge DLQ")
 	}
 	fmt.Fprintln(c.App.Writer, "Successfully purged DLQ Messages.")
@@ -159,13 +159,13 @@ func (ac *DLQV1Service) MergeMessages(c *cli.Context) error {
 		return err
 	}
 
-	request := &adminservice.MergeDLQMessagesRequest{
+	request := adminservice.MergeDLQMessagesRequest_builder{
 		Type:                  t,
 		SourceCluster:         sourceCluster,
 		ShardId:               int32(shardID),
 		InclusiveEndMessageId: lastMessageID,
 		MaximumPageSize:       defaultPageSize,
-	}
+	}.Build()
 
 	var response *adminservice.MergeDLQMessagesResponse
 	for response == nil || len(response.GetNextPageToken()) > 0 {
@@ -174,7 +174,7 @@ func (ac *DLQV1Service) MergeMessages(c *cli.Context) error {
 			return fmt.Errorf("failed to merge DLQ message: %s", err)
 		}
 
-		request.NextPageToken = response.NextPageToken
+		request.SetNextPageToken(response.GetNextPageToken())
 		fmt.Fprintf(c.App.Writer, "Successfully merged %v messages. More messages to merge.\n", defaultPageSize)
 	}
 	fmt.Fprintln(c.App.Writer, "Successfully merged all messages.")

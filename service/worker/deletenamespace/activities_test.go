@@ -62,20 +62,18 @@ func Test_ValidateNexusEndpointsActivity(t *testing.T) {
 	// The "fake" namespace ID is associated with a Nexus endoint.
 	nexusEndpointManager.EXPECT().ListNexusEndpoints(gomock.Any(), gomock.Any()).Return(&persistence.ListNexusEndpointsResponse{
 		Entries: []*persistencespb.NexusEndpointEntry{
-			{
-				Endpoint: &persistencespb.NexusEndpoint{
-					Spec: &persistencespb.NexusEndpointSpec{
+			persistencespb.NexusEndpointEntry_builder{
+				Endpoint: persistencespb.NexusEndpoint_builder{
+					Spec: persistencespb.NexusEndpointSpec_builder{
 						Name: "test-endpoint",
-						Target: &persistencespb.NexusEndpointTarget{
-							Variant: &persistencespb.NexusEndpointTarget_Worker_{
-								Worker: &persistencespb.NexusEndpointTarget_Worker{
-									NamespaceId: "namespace-id",
-								},
-							},
-						},
-					},
-				},
-			},
+						Target: persistencespb.NexusEndpointTarget_builder{
+							Worker: persistencespb.NexusEndpointTarget_Worker_builder{
+								NamespaceId: "namespace-id",
+							}.Build(),
+						}.Build(),
+					}.Build(),
+				}.Build(),
+			}.Build(),
 		},
 	}, nil).Times(2)
 

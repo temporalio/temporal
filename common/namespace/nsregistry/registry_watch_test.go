@@ -139,24 +139,24 @@ func (s *registryWatchSuite) newNamespaceResponse(
 	notificationVersion int64,
 ) *persistence.GetNamespaceResponse {
 	return &persistence.GetNamespaceResponse{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
+		Namespace: persistencespb.NamespaceDetail_builder{
+			Info: persistencespb.NamespaceInfo_builder{
 				Id:    id.String(),
 				Name:  name,
 				State: enumspb.NAMESPACE_STATE_REGISTERED,
 				Data:  make(map[string]string),
-			},
-			Config: &persistencespb.NamespaceConfig{
+			}.Build(),
+			Config: persistencespb.NamespaceConfig_builder{
 				Retention: timestamp.DurationFromDays(int32(1)),
-				BadBinaries: &namespacepb.BadBinaries{
+				BadBinaries: namespacepb.BadBinaries_builder{
 					Binaries: map[string]*namespacepb.BadBinaryInfo{},
-				},
-			},
-			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+				}.Build(),
+			}.Build(),
+			ReplicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 				ActiveClusterName: activeCluster,
 				Clusters:          []string{activeCluster},
-			},
-		},
+			}.Build(),
+		}.Build(),
 		NotificationVersion: notificationVersion,
 	}
 }
@@ -340,7 +340,7 @@ func (s *registryWatchSuite) TestWatchStaleUpdateIgnored() {
 	// Send stale update (NotificationVersion 1 < current version 3)
 	// Uses different retention as a marker to verify it wasn't applied
 	staleRecord := s.newNamespaceResponse(nsID, "test-namespace", cluster.TestCurrentClusterName, 1)
-	staleRecord.Namespace.Config.Retention = timestamp.DurationFromDays(int32(99))
+	staleRecord.Namespace.GetConfig().SetRetention(timestamp.DurationFromDays(int32(99)))
 	watchCh <- &persistence.NamespaceWatchEvent{
 		Type:     persistence.NamespaceWatchEventTypeUpdate,
 		Response: staleRecord,
@@ -645,7 +645,7 @@ func (s *registryWatchSuite) TestWatchUpdateWithoutStateChange() {
 
 	// Send update that only changes retention (not a "state" field)
 	updatedRecord := s.newNamespaceResponse(nsID, "test-namespace", cluster.TestCurrentClusterName, 2)
-	updatedRecord.Namespace.Config.Retention = timestamp.DurationFromDays(int32(7))
+	updatedRecord.Namespace.GetConfig().SetRetention(timestamp.DurationFromDays(int32(7)))
 	watchCh <- &persistence.NamespaceWatchEvent{
 		Type:     persistence.NamespaceWatchEventTypeUpdate,
 		Response: updatedRecord,
@@ -1430,7 +1430,7 @@ func (s *registryWatchSuite) TestWatchProcessEventError() {
 
 	// Custom resolver factory that returns nil for badNsID, causing FromPersistentState to fail.
 	customFactory := func(detail *persistencespb.NamespaceDetail) namespace.ReplicationResolver {
-		if detail != nil && detail.Info != nil && detail.Info.Id == badNsID.String() {
+		if detail != nil && detail.HasInfo() && detail.GetInfo().GetId() == badNsID.String() {
 			return nil
 		}
 		return namespace.NewDefaultReplicationResolverFactory()(detail)
@@ -1477,24 +1477,24 @@ func (s *registryWatchSuite) TestWatchProcessEventError() {
 	// Create bad namespace record that will trigger error in processWatchEvent.
 	// The custom resolver factory returns nil for this namespace ID.
 	badNsRecord := &persistence.GetNamespaceResponse{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
+		Namespace: persistencespb.NamespaceDetail_builder{
+			Info: persistencespb.NamespaceInfo_builder{
 				Id:    badNsID.String(),
 				Name:  "bad-namespace",
 				State: enumspb.NAMESPACE_STATE_REGISTERED,
 				Data:  make(map[string]string),
-			},
-			Config: &persistencespb.NamespaceConfig{
+			}.Build(),
+			Config: persistencespb.NamespaceConfig_builder{
 				Retention: timestamp.DurationFromDays(1),
-				BadBinaries: &namespacepb.BadBinaries{
+				BadBinaries: namespacepb.BadBinaries_builder{
 					Binaries: map[string]*namespacepb.BadBinaryInfo{},
-				},
-			},
-			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+				}.Build(),
+			}.Build(),
+			ReplicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters:          []string{cluster.TestCurrentClusterName},
-			},
-		},
+			}.Build(),
+		}.Build(),
 		NotificationVersion: 10,
 	}
 

@@ -48,11 +48,11 @@ func Invoke(
 
 	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
-		request.Clock,
+		request.GetClock(),
 		definition.NewWorkflowKey(
-			request.NamespaceId,
-			request.WorkflowExecution.WorkflowId,
-			request.WorkflowExecution.RunId,
+			request.GetNamespaceId(),
+			request.GetWorkflowExecution().GetWorkflowId(),
+			request.GetWorkflowExecution().GetRunId(),
 		),
 		func(workflowLease api.WorkflowLease) (resp *api.UpdateWorkflowAction, retErr error) {
 			mutableState := workflowLease.GetMutableState()
@@ -93,7 +93,7 @@ func Invoke(
 	if rejectCode == rejectCodePaused {
 		// Rejecting the activity start because activity was modified (paused_.
 		// Matching can drop the task. New activity will be scheduled once activity is resumed.
-		errorMessage := fmt.Sprintf("Activity task with this stamp not found: %v", request.Stamp)
+		errorMessage := fmt.Sprintf("Activity task with this stamp not found: %v", request.GetStamp())
 		return nil, serviceerror.NewNotFound(errorMessage)
 	}
 
@@ -107,7 +107,7 @@ func recordActivityTaskStarted(
 	request *historyservice.RecordActivityTaskStartedRequest,
 	matchingClient matchingservice.MatchingServiceClient,
 ) (*historyservice.RecordActivityTaskStartedResponse, rejectCode, error) {
-	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(request.GetNamespaceId()), request.WorkflowExecution.WorkflowId)
+	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(request.GetNamespaceId()), request.GetWorkflowExecution().GetWorkflowId())
 	if err != nil {
 		return nil, rejectCodeUndefined, err
 	}
@@ -139,17 +139,17 @@ func recordActivityTaskStarted(
 		return nil, rejectCodeUndefined, err
 	}
 
-	response := &historyservice.RecordActivityTaskStartedResponse{
+	response := historyservice.RecordActivityTaskStartedResponse_builder{
 		ScheduledEvent:              scheduledEvent,
-		CurrentAttemptScheduledTime: ai.ScheduledTime,
-		Priority:                    priorities.Merge(mutableState.GetExecutionInfo().Priority, ai.Priority),
-	}
+		CurrentAttemptScheduledTime: ai.GetScheduledTime(),
+		Priority:                    priorities.Merge(mutableState.GetExecutionInfo().GetPriority(), ai.GetPriority()),
+	}.Build()
 
-	if ai.StartedEventId != common.EmptyEventID {
+	if ai.GetStartedEventId() != common.EmptyEventID {
 		// If activity is started as part of the current request scope then return a positive response
-		if ai.RequestId == requestID {
-			response.StartedTime = ai.StartedTime
-			response.Attempt = ai.Attempt
+		if ai.GetRequestId() == requestID {
+			response.SetStartedTime(ai.GetStartedTime())
+			response.SetAttempt(ai.GetAttempt())
 			return response, rejectCodeAccepted, nil
 		}
 
@@ -163,22 +163,22 @@ func recordActivityTaskStarted(
 		return nil, code, err
 	}
 
-	if ai.Stamp != request.Stamp {
+	if ai.GetStamp() != request.GetStamp() {
 		// This happens when the workflow task was rescheduled.
 		errorMessage := fmt.Sprintf(
 			"Activity task rejected; stamp has changed. Id: %s,: type: %s, current stamp: %d",
-			ai.ActivityId, ai.ActivityType.Name, ai.Stamp)
+			ai.GetActivityId(), ai.GetActivityType().GetName(), ai.GetStamp())
 		return nil, rejectCodeUndefined, serviceerrors.NewObsoleteMatchingTask(errorMessage)
 	}
 
 	wfBehavior := mutableState.GetEffectiveVersioningBehavior()
 	wfDeployment := mutableState.GetEffectiveDeployment()
 	//nolint:staticcheck // SA1019 deprecated WorkerVersionCapabilities will clean up later
-	pollerDeployment, err := worker_versioning.DeploymentFromCapabilities(request.PollRequest.WorkerVersionCapabilities, request.PollRequest.DeploymentOptions)
+	pollerDeployment, err := worker_versioning.DeploymentFromCapabilities(request.GetPollRequest().GetWorkerVersionCapabilities(), request.GetPollRequest().GetDeploymentOptions())
 	if err != nil {
 		return nil, rejectCodeUndefined, err
 	}
-	err = worker_versioning.ValidateTaskVersionDirective(request.GetVersionDirective(), wfBehavior, wfDeployment, request.ScheduledDeployment)
+	err = worker_versioning.ValidateTaskVersionDirective(request.GetVersionDirective(), wfBehavior, wfDeployment, request.GetScheduledDeployment())
 	if err != nil {
 		return nil, rejectCodeUndefined, err
 	}
@@ -198,7 +198,7 @@ func recordActivityTaskStarted(
 		// allow it to start without affecting the workflow.
 
 		wftDepVer, wftDepRevNum, err := getDeploymentVersionAndRevisionNumberForWorkflowID(ctx,
-			request.NamespaceId,
+			request.GetNamespaceId(),
 			mutableState.GetExecutionInfo().GetTaskQueue(),
 			enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			matchingClient,
@@ -217,8 +217,8 @@ func recordActivityTaskStarted(
 		// Note: Revision number mechanics are only involved if the dynamic config is enabled.
 		useRevisionNumber := shardContext.GetConfig().UseRevisionNumberForWorkerVersioning(namespaceName)
 		if pollerDeployment.Equal(worker_versioning.DeploymentFromDeploymentVersion(wftDepVer)) ||
-			(useRevisionNumber && pollerDeployment.GetSeriesName() == wftDepVer.GetDeploymentName() && request.TaskDispatchRevisionNumber > wftDepRevNum) {
-			if err := mutableState.StartDeploymentTransition(pollerDeployment, request.TaskDispatchRevisionNumber); err != nil {
+			(useRevisionNumber && pollerDeployment.GetSeriesName() == wftDepVer.GetDeploymentName() && request.GetTaskDispatchRevisionNumber() > wftDepRevNum) {
+			if err := mutableState.StartDeploymentTransition(pollerDeployment, request.GetTaskDispatchRevisionNumber()); err != nil {
 				if errors.Is(err, workflow.ErrPinnedWorkflowCannotTransition) {
 					// This must be a task from a time that the workflow was unpinned, but it's
 					// now pinned so can't transition. Matching can drop the task safely.
@@ -235,9 +235,9 @@ func recordActivityTaskStarted(
 		}
 	}
 
-	versioningStamp := worker_versioning.StampFromCapabilities(request.PollRequest.WorkerVersionCapabilities)
+	versioningStamp := worker_versioning.StampFromCapabilities(request.GetPollRequest().GetWorkerVersionCapabilities())
 	if _, err := mutableState.AddActivityTaskStartedEvent(
-		ai, scheduledEventID, requestID, request.PollRequest.GetIdentity(),
+		ai, scheduledEventID, requestID, request.GetPollRequest().GetIdentity(),
 		versioningStamp, pollerDeployment, request.GetBuildIdRedirectInfo(),
 	); err != nil {
 		return nil, rejectCodeUndefined, err
@@ -257,21 +257,21 @@ func recordActivityTaskStarted(
 		),
 	).Record(scheduleToStartLatency)
 
-	response.StartedTime = ai.StartedTime
-	response.Attempt = ai.Attempt
-	response.HeartbeatDetails = ai.LastHeartbeatDetails
-	response.Version = ai.Version
-	response.StartVersion = ai.StartVersion
+	response.SetStartedTime(ai.GetStartedTime())
+	response.SetAttempt(ai.GetAttempt())
+	response.SetHeartbeatDetails(ai.GetLastHeartbeatDetails())
+	response.SetVersion(ai.GetVersion())
+	response.SetStartVersion(ai.GetStartVersion())
 
-	response.WorkflowType = mutableState.GetWorkflowType()
-	response.WorkflowNamespace = namespaceName
-	response.RetryPolicy = &commonpb.RetryPolicy{
-		InitialInterval:        ai.RetryInitialInterval,
-		BackoffCoefficient:     ai.RetryBackoffCoefficient,
-		MaximumInterval:        ai.RetryMaximumInterval,
-		MaximumAttempts:        ai.RetryMaximumAttempts,
-		NonRetryableErrorTypes: ai.RetryNonRetryableErrorTypes,
-	}
+	response.SetWorkflowType(mutableState.GetWorkflowType())
+	response.SetWorkflowNamespace(namespaceName)
+	response.SetRetryPolicy(commonpb.RetryPolicy_builder{
+		InitialInterval:        ai.GetRetryInitialInterval(),
+		BackoffCoefficient:     ai.GetRetryBackoffCoefficient(),
+		MaximumInterval:        ai.GetRetryMaximumInterval(),
+		MaximumAttempts:        ai.GetRetryMaximumAttempts(),
+		NonRetryableErrorTypes: ai.GetRetryNonRetryableErrorTypes(),
+	}.Build())
 
 	return response, rejectCodeAccepted, nil
 }
@@ -287,11 +287,11 @@ func getDeploymentVersionAndRevisionNumberForWorkflowID(
 	workflowId string,
 ) (*deploymentspb.WorkerDeploymentVersion, int64, error) {
 	resp, err := matchingClient.GetTaskQueueUserData(ctx,
-		&matchingservice.GetTaskQueueUserDataRequest{
+		matchingservice.GetTaskQueueUserDataRequest_builder{
 			NamespaceId:   namespaceID,
 			TaskQueue:     taskQueueName,
 			TaskQueueType: taskQueueType,
-		})
+		}.Build())
 	if err != nil {
 		return nil, 0, err
 	}
@@ -312,39 +312,39 @@ func processActivityWorkflowRules(
 	ms historyi.MutableState,
 	ai *persistencespb.ActivityInfo,
 ) (rejectCode, error) {
-	if ai.Stamp == request.Stamp && ai.Paused {
+	if ai.GetStamp() == request.GetStamp() && ai.GetPaused() {
 		// this shouldn't happen. For now log an error
 		shardContext.GetLogger().Error(
 			fmt.Sprintf(
 				"Activity is paused, but new task was schedulled. Activity ID: %v, Stamp: %v, event ID: %v",
-				ai.ActivityId, request.Stamp, ai.StartedEventId),
+				ai.GetActivityId(), request.GetStamp(), ai.GetStartedEventId()),
 		)
 	}
 
 	// if activity is already paused or Stamp is not the same as the one in the request we shouldn't process workflow rules
 	// this is a no-op
-	if ai.Stamp != request.Stamp || ai.Paused {
+	if ai.GetStamp() != request.GetStamp() || ai.GetPaused() {
 		return rejectCodeUndefined, nil
 	}
 
 	// This is an attempt to reduce the number of workflow rules calls.
 	// We only need to process the first invocation of an activity.
 	// Other invocations should be blocked by either RetryActivity or retryTask.
-	if ai.Attempt > 1 {
+	if ai.GetAttempt() > 1 {
 		return rejectCodeUndefined, nil
 	}
 
 	ruleMatched := workflow.ActivityMatchWorkflowRules(ms, shardContext.GetTimeSource(), shardContext.GetLogger(), ai)
-	if !ruleMatched || !ai.Paused {
+	if !ruleMatched || !ai.GetPaused() {
 		return rejectCodeUndefined, nil
 	}
 
 	// activity was paused, need to update activity
-	if err := ms.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ historyi.MutableState) error {
-		activityInfo.StartedEventId = common.EmptyEventID
-		activityInfo.StartVersion = common.EmptyVersion
-		activityInfo.StartedTime = nil
-		activityInfo.RequestId = ""
+	if err := ms.UpdateActivity(ai.GetScheduledEventId(), func(activityInfo *persistencespb.ActivityInfo, _ historyi.MutableState) error {
+		activityInfo.SetStartedEventId(common.EmptyEventID)
+		activityInfo.SetStartVersion(common.EmptyVersion)
+		activityInfo.ClearStartedTime()
+		activityInfo.SetRequestId("")
 		return nil
 	}); err != nil {
 		return rejectCodeUndefined, err

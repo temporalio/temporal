@@ -44,12 +44,12 @@ func (e *CurrentBranchChanged) Status() *status.Status {
 
 	st := status.New(codes.InvalidArgument, e.Message)
 	st, _ = st.WithDetails(
-		&errordetailsspb.CurrentBranchChangedFailure{
+		errordetailsspb.CurrentBranchChangedFailure_builder{
 			CurrentBranchToken:         e.CurrentBranchToken,
 			RequestBranchToken:         e.RequestBranchToken,
 			CurrentVersionedTransition: e.CurrentVersionedTransition,
 			RequestVersionedTransition: e.RequestVersionedTransition,
-		},
+		}.Build(),
 	)
 	return st
 }

@@ -32,7 +32,7 @@ func Invoke(
 	updateRequest := request.GetUpdateRequest()
 
 	mask := updateRequest.GetUpdateMask()
-	if mask != nil && updateRequest.RestoreOriginal {
+	if mask != nil && updateRequest.GetRestoreOriginal() {
 		updateFields := util.ParseFieldMask(mask)
 		if len(updateFields) != 0 {
 			return nil, serviceerror.NewInvalidArgument("Both UpdateMask and RestoreOriginal are provided")
@@ -51,14 +51,14 @@ func Invoke(
 		ctx,
 		nil,
 		definition.NewWorkflowKey(
-			request.NamespaceId,
+			request.GetNamespaceId(),
 			updateRequest.GetExecution().GetWorkflowId(),
 			updateRequest.GetExecution().GetRunId(),
 		),
 		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
 			mutableState := workflowLease.GetMutableState()
 			var err error
-			if updateRequest.RestoreOriginal {
+			if updateRequest.GetRestoreOriginal() {
 				response, err = restoreOriginalOptions(ctx, mutableState, updateRequest)
 			} else {
 				response, err = processActivityOptionsRequest(validator, mutableState, updateRequest, request.GetNamespaceId())
@@ -126,9 +126,9 @@ func processActivityOptionsRequest(
 	}
 
 	// fill the response
-	response := &historyservice.UpdateActivityOptionsResponse{
+	response := historyservice.UpdateActivityOptionsResponse_builder{
 		ActivityOptions: adjustedOptions,
-	}
+	}.Build()
 	return response, nil
 }
 
@@ -141,22 +141,22 @@ func processActivityOptionsUpdate(
 	updateFields map[string]struct{},
 ) (*activitypb.ActivityOptions, error) {
 
-	mergeInto := &activitypb.ActivityOptions{
-		TaskQueue: &taskqueuepb.TaskQueue{
-			Name: ai.TaskQueue,
-		},
-		ScheduleToCloseTimeout: ai.ScheduleToCloseTimeout,
-		ScheduleToStartTimeout: ai.ScheduleToStartTimeout,
-		StartToCloseTimeout:    ai.StartToCloseTimeout,
-		HeartbeatTimeout:       ai.HeartbeatTimeout,
-		Priority:               common.CloneProto(ai.Priority),
-		RetryPolicy: &commonpb.RetryPolicy{
-			BackoffCoefficient: ai.RetryBackoffCoefficient,
-			InitialInterval:    ai.RetryInitialInterval,
-			MaximumInterval:    ai.RetryMaximumInterval,
-			MaximumAttempts:    ai.RetryMaximumAttempts,
-		},
-	}
+	mergeInto := activitypb.ActivityOptions_builder{
+		TaskQueue: taskqueuepb.TaskQueue_builder{
+			Name: ai.GetTaskQueue(),
+		}.Build(),
+		ScheduleToCloseTimeout: ai.GetScheduleToCloseTimeout(),
+		ScheduleToStartTimeout: ai.GetScheduleToStartTimeout(),
+		StartToCloseTimeout:    ai.GetStartToCloseTimeout(),
+		HeartbeatTimeout:       ai.GetHeartbeatTimeout(),
+		Priority:               common.CloneProto(ai.GetPriority()),
+		RetryPolicy: commonpb.RetryPolicy_builder{
+			BackoffCoefficient: ai.GetRetryBackoffCoefficient(),
+			InitialInterval:    ai.GetRetryInitialInterval(),
+			MaximumInterval:    ai.GetRetryMaximumInterval(),
+			MaximumAttempts:    ai.GetRetryMaximumAttempts(),
+		}.Build(),
+	}.Build()
 
 	// update activity options
 	if err := mergeActivityOptions(mergeInto, mergeFrom, updateFields); err != nil {
@@ -164,7 +164,7 @@ func processActivityOptionsUpdate(
 	}
 
 	// validate the updated options
-	adjustedOptions, err := adjustActivityOptions(validator, namespaceID, ai.ActivityId, ai.ActivityType, mergeInto)
+	adjustedOptions, err := adjustActivityOptions(validator, namespaceID, ai.GetActivityId(), ai.GetActivityType(), mergeInto)
 	if err != nil {
 		return nil, err
 	}
@@ -179,98 +179,98 @@ func mergeActivityOptions(
 ) error {
 
 	if _, ok := updateFields["taskQueue.name"]; ok {
-		if mergeFrom.TaskQueue == nil {
+		if !mergeFrom.HasTaskQueue() {
 			return serviceerror.NewInvalidArgument("TaskQueue is not provided")
 		}
-		if mergeInto.TaskQueue == nil {
-			mergeInto.TaskQueue = mergeFrom.TaskQueue
+		if !mergeInto.HasTaskQueue() {
+			mergeInto.SetTaskQueue(mergeFrom.GetTaskQueue())
 		}
-		mergeInto.TaskQueue.Name = mergeFrom.TaskQueue.Name
+		mergeInto.GetTaskQueue().SetName(mergeFrom.GetTaskQueue().GetName())
 	}
 
 	if _, ok := updateFields["scheduleToCloseTimeout"]; ok {
-		mergeInto.ScheduleToCloseTimeout = mergeFrom.ScheduleToCloseTimeout
+		mergeInto.SetScheduleToCloseTimeout(mergeFrom.GetScheduleToCloseTimeout())
 	}
 
 	if _, ok := updateFields["scheduleToStartTimeout"]; ok {
-		mergeInto.ScheduleToStartTimeout = mergeFrom.ScheduleToStartTimeout
+		mergeInto.SetScheduleToStartTimeout(mergeFrom.GetScheduleToStartTimeout())
 	}
 
 	if _, ok := updateFields["startToCloseTimeout"]; ok {
-		mergeInto.StartToCloseTimeout = mergeFrom.StartToCloseTimeout
+		mergeInto.SetStartToCloseTimeout(mergeFrom.GetStartToCloseTimeout())
 	}
 
 	if _, ok := updateFields["heartbeatTimeout"]; ok {
-		mergeInto.HeartbeatTimeout = mergeFrom.HeartbeatTimeout
+		mergeInto.SetHeartbeatTimeout(mergeFrom.GetHeartbeatTimeout())
 	}
 
 	if _, ok := updateFields["priority"]; ok {
-		mergeInto.Priority = mergeFrom.Priority
+		mergeInto.SetPriority(mergeFrom.GetPriority())
 	}
 
 	if _, ok := updateFields["priority.priorityKey"]; ok {
-		if mergeFrom.Priority == nil {
+		if !mergeFrom.HasPriority() {
 			return serviceerror.NewInvalidArgument("Priority is not provided")
 		}
-		if mergeInto.Priority == nil {
-			mergeInto.Priority = &commonpb.Priority{}
+		if !mergeInto.HasPriority() {
+			mergeInto.SetPriority(&commonpb.Priority{})
 		}
-		mergeInto.Priority.PriorityKey = mergeFrom.Priority.PriorityKey
+		mergeInto.GetPriority().SetPriorityKey(mergeFrom.GetPriority().GetPriorityKey())
 	}
 
 	if _, ok := updateFields["priority.fairnessKey"]; ok {
-		if mergeFrom.Priority == nil {
+		if !mergeFrom.HasPriority() {
 			return serviceerror.NewInvalidArgument("Priority is not provided")
 		}
-		if mergeInto.Priority == nil {
-			mergeInto.Priority = &commonpb.Priority{}
+		if !mergeInto.HasPriority() {
+			mergeInto.SetPriority(&commonpb.Priority{})
 		}
-		mergeInto.Priority.FairnessKey = mergeFrom.Priority.FairnessKey
+		mergeInto.GetPriority().SetFairnessKey(mergeFrom.GetPriority().GetFairnessKey())
 	}
 
 	if _, ok := updateFields["priority.fairnessWeight"]; ok {
-		if mergeFrom.Priority == nil {
+		if !mergeFrom.HasPriority() {
 			return serviceerror.NewInvalidArgument("Priority is not provided")
 		}
-		if mergeInto.Priority == nil {
-			mergeInto.Priority = &commonpb.Priority{}
+		if !mergeInto.HasPriority() {
+			mergeInto.SetPriority(&commonpb.Priority{})
 		}
-		mergeInto.Priority.FairnessWeight = mergeFrom.Priority.FairnessWeight
+		mergeInto.GetPriority().SetFairnessWeight(mergeFrom.GetPriority().GetFairnessWeight())
 	}
 
-	if mergeInto.RetryPolicy == nil {
-		mergeInto.RetryPolicy = &commonpb.RetryPolicy{}
+	if !mergeInto.HasRetryPolicy() {
+		mergeInto.SetRetryPolicy(&commonpb.RetryPolicy{})
 	}
 
 	if _, ok := updateFields["retryPolicy"]; ok {
-		mergeInto.RetryPolicy = mergeFrom.RetryPolicy
+		mergeInto.SetRetryPolicy(mergeFrom.GetRetryPolicy())
 	}
 
 	if _, ok := updateFields["retryPolicy.initialInterval"]; ok {
-		if mergeFrom.RetryPolicy == nil {
+		if !mergeFrom.HasRetryPolicy() {
 			return serviceerror.NewInvalidArgument("RetryPolicy is not provided")
 		}
-		mergeInto.RetryPolicy.InitialInterval = mergeFrom.RetryPolicy.InitialInterval
+		mergeInto.GetRetryPolicy().SetInitialInterval(mergeFrom.GetRetryPolicy().GetInitialInterval())
 	}
 
 	if _, ok := updateFields["retryPolicy.backoffCoefficient"]; ok {
-		if mergeFrom.RetryPolicy == nil {
+		if !mergeFrom.HasRetryPolicy() {
 			return serviceerror.NewInvalidArgument("RetryPolicy is not provided")
 		}
-		mergeInto.RetryPolicy.BackoffCoefficient = mergeFrom.RetryPolicy.BackoffCoefficient
+		mergeInto.GetRetryPolicy().SetBackoffCoefficient(mergeFrom.GetRetryPolicy().GetBackoffCoefficient())
 	}
 
 	if _, ok := updateFields["retryPolicy.maximumInterval"]; ok {
-		if mergeFrom.RetryPolicy == nil {
+		if !mergeFrom.HasRetryPolicy() {
 			return serviceerror.NewInvalidArgument("RetryPolicy is not provided")
 		}
-		mergeInto.RetryPolicy.MaximumInterval = mergeFrom.RetryPolicy.MaximumInterval
+		mergeInto.GetRetryPolicy().SetMaximumInterval(mergeFrom.GetRetryPolicy().GetMaximumInterval())
 	}
 	if _, ok := updateFields["retryPolicy.maximumAttempts"]; ok {
-		if mergeFrom.RetryPolicy == nil {
+		if !mergeFrom.HasRetryPolicy() {
 			return serviceerror.NewInvalidArgument("RetryPolicy is not provided")
 		}
-		mergeInto.RetryPolicy.MaximumAttempts = mergeFrom.RetryPolicy.MaximumAttempts
+		mergeInto.GetRetryPolicy().SetMaximumAttempts(mergeFrom.GetRetryPolicy().GetMaximumAttempts())
 	}
 
 	return nil
@@ -283,39 +283,39 @@ func adjustActivityOptions(
 	activityType *commonpb.ActivityType,
 	ao *activitypb.ActivityOptions,
 ) (*activitypb.ActivityOptions, error) {
-	attributes := &commandpb.ScheduleActivityTaskCommandAttributes{
-		TaskQueue:              ao.TaskQueue,
-		ScheduleToCloseTimeout: ao.ScheduleToCloseTimeout,
-		ScheduleToStartTimeout: ao.ScheduleToStartTimeout,
-		StartToCloseTimeout:    ao.StartToCloseTimeout,
-		HeartbeatTimeout:       ao.HeartbeatTimeout,
+	attributes := commandpb.ScheduleActivityTaskCommandAttributes_builder{
+		TaskQueue:              ao.GetTaskQueue(),
+		ScheduleToCloseTimeout: ao.GetScheduleToCloseTimeout(),
+		ScheduleToStartTimeout: ao.GetScheduleToStartTimeout(),
+		StartToCloseTimeout:    ao.GetStartToCloseTimeout(),
+		HeartbeatTimeout:       ao.GetHeartbeatTimeout(),
 		ActivityId:             activityID,
 		ActivityType:           activityType,
-	}
+	}.Build()
 
 	_, err := validator.ValidateActivityScheduleAttributes(namespace.ID(namespaceID), attributes, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	ao.ScheduleToCloseTimeout = attributes.ScheduleToCloseTimeout
-	ao.ScheduleToStartTimeout = attributes.ScheduleToStartTimeout
-	ao.StartToCloseTimeout = attributes.StartToCloseTimeout
-	ao.HeartbeatTimeout = attributes.HeartbeatTimeout
+	ao.SetScheduleToCloseTimeout(attributes.GetScheduleToCloseTimeout())
+	ao.SetScheduleToStartTimeout(attributes.GetScheduleToStartTimeout())
+	ao.SetStartToCloseTimeout(attributes.GetStartToCloseTimeout())
+	ao.SetHeartbeatTimeout(attributes.GetHeartbeatTimeout())
 
 	return ao, nil
 }
 
 func getActivityIDs(updateRequest *workflowservice.UpdateActivityOptionsRequest, ms historyi.MutableState) []string {
 	var activityIDs []string
-	switch a := updateRequest.GetActivity().(type) {
-	case *workflowservice.UpdateActivityOptionsRequest_Id:
-		activityIDs = append(activityIDs, a.Id)
-	case *workflowservice.UpdateActivityOptionsRequest_Type:
-		activityType := a.Type
+	switch updateRequest.WhichActivity() {
+	case workflowservice.UpdateActivityOptionsRequest_Id_case:
+		activityIDs = append(activityIDs, updateRequest.GetId())
+	case workflowservice.UpdateActivityOptionsRequest_Type_case:
+		activityType := updateRequest.GetType()
 		for _, ai := range ms.GetPendingActivityInfos() {
-			if ai.ActivityType.Name == activityType {
-				activityIDs = append(activityIDs, ai.ActivityId)
+			if ai.GetActivityType().GetName() == activityType {
+				activityIDs = append(activityIDs, ai.GetActivityId())
 			}
 		}
 	}
@@ -328,24 +328,24 @@ func updateActivityOptions(
 	activityOptions *activitypb.ActivityOptions,
 ) (*activitypb.ActivityOptions, error) {
 	var err error
-	if err = ms.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ historyi.MutableState) error {
+	if err = ms.UpdateActivity(ai.GetScheduledEventId(), func(activityInfo *persistencespb.ActivityInfo, _ historyi.MutableState) error {
 		// update activity info with new options
-		activityInfo.TaskQueue = activityOptions.TaskQueue.Name
-		activityInfo.ScheduleToCloseTimeout = activityOptions.ScheduleToCloseTimeout
-		activityInfo.ScheduleToStartTimeout = activityOptions.ScheduleToStartTimeout
-		activityInfo.StartToCloseTimeout = activityOptions.StartToCloseTimeout
-		activityInfo.HeartbeatTimeout = activityOptions.HeartbeatTimeout
-		activityInfo.Priority = activityOptions.Priority
-		activityInfo.RetryMaximumInterval = activityOptions.RetryPolicy.MaximumInterval
-		activityInfo.RetryBackoffCoefficient = activityOptions.RetryPolicy.BackoffCoefficient
-		activityInfo.RetryInitialInterval = activityOptions.RetryPolicy.InitialInterval
-		activityInfo.RetryMaximumAttempts = activityOptions.RetryPolicy.MaximumAttempts
+		activityInfo.SetTaskQueue(activityOptions.GetTaskQueue().GetName())
+		activityInfo.SetScheduleToCloseTimeout(activityOptions.GetScheduleToCloseTimeout())
+		activityInfo.SetScheduleToStartTimeout(activityOptions.GetScheduleToStartTimeout())
+		activityInfo.SetStartToCloseTimeout(activityOptions.GetStartToCloseTimeout())
+		activityInfo.SetHeartbeatTimeout(activityOptions.GetHeartbeatTimeout())
+		activityInfo.SetPriority(activityOptions.GetPriority())
+		activityInfo.SetRetryMaximumInterval(activityOptions.GetRetryPolicy().GetMaximumInterval())
+		activityInfo.SetRetryBackoffCoefficient(activityOptions.GetRetryPolicy().GetBackoffCoefficient())
+		activityInfo.SetRetryInitialInterval(activityOptions.GetRetryPolicy().GetInitialInterval())
+		activityInfo.SetRetryMaximumAttempts(activityOptions.GetRetryPolicy().GetMaximumAttempts())
 
 		// move forward activity version
-		activityInfo.Stamp++
+		activityInfo.SetStamp(activityInfo.GetStamp() + 1)
 
 		// invalidate timers
-		activityInfo.TimerTaskStatus = workflow.TimerTaskStatusNone
+		activityInfo.SetTimerTaskStatus(workflow.TimerTaskStatusNone)
 		return nil
 	}); err != nil {
 		return nil, err
@@ -394,31 +394,29 @@ func restoreOriginalOptions(
 			return nil, consts.ErrActivityNotFound
 		}
 
-		event, err := ms.GetActivityScheduledEvent(ctx, ai.ScheduledEventId)
+		event, err := ms.GetActivityScheduledEvent(ctx, ai.GetScheduledEventId())
 		if err != nil {
 			return nil, err
 		}
-		attrs, ok := event.Attributes.(*historypb.HistoryEvent_ActivityTaskScheduledEventAttributes)
-		if !ok {
+		if event.WhichAttributes() != historypb.HistoryEvent_ActivityTaskScheduledEventAttributes_case {
 			return nil, serviceerror.NewInvalidArgument("ActivityTaskScheduledEvent is invalid")
 		}
-		if attrs == nil || attrs.ActivityTaskScheduledEventAttributes == nil {
+		originalOptions := event.GetActivityTaskScheduledEventAttributes()
+		if originalOptions == nil {
 			return nil, serviceerror.NewInvalidArgument("ActivityTaskScheduledEvent is incomplete")
 		}
 
-		originalOptions := attrs.ActivityTaskScheduledEventAttributes
-
-		activityOptions := &activitypb.ActivityOptions{
-			TaskQueue: &taskqueuepb.TaskQueue{
-				Name: originalOptions.TaskQueue.Name,
-			},
-			ScheduleToCloseTimeout: originalOptions.ScheduleToCloseTimeout,
-			ScheduleToStartTimeout: originalOptions.ScheduleToStartTimeout,
-			StartToCloseTimeout:    originalOptions.StartToCloseTimeout,
-			HeartbeatTimeout:       originalOptions.HeartbeatTimeout,
-			Priority:               originalOptions.Priority,
-			RetryPolicy:            originalOptions.RetryPolicy,
-		}
+		activityOptions := activitypb.ActivityOptions_builder{
+			TaskQueue: taskqueuepb.TaskQueue_builder{
+				Name: originalOptions.GetTaskQueue().GetName(),
+			}.Build(),
+			ScheduleToCloseTimeout: originalOptions.GetScheduleToCloseTimeout(),
+			ScheduleToStartTimeout: originalOptions.GetScheduleToStartTimeout(),
+			StartToCloseTimeout:    originalOptions.GetStartToCloseTimeout(),
+			HeartbeatTimeout:       originalOptions.GetHeartbeatTimeout(),
+			Priority:               originalOptions.GetPriority(),
+			RetryPolicy:            originalOptions.GetRetryPolicy(),
+		}.Build()
 
 		if updatedOptions, err = updateActivityOptions(ms, ai, activityOptions); err != nil {
 			return nil, err
@@ -426,7 +424,7 @@ func restoreOriginalOptions(
 
 	}
 
-	return &historyservice.UpdateActivityOptionsResponse{
+	return historyservice.UpdateActivityOptionsResponse_builder{
 		ActivityOptions: updatedOptions,
-	}, nil
+	}.Build(), nil
 }

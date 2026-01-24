@@ -58,8 +58,8 @@ func (s *grpcSuite) TestMetadataMetricInjection() {
 							opts ...grpc.CallOption,
 						) error {
 							trailer := opts[0].(grpc.TrailerCallOption)
-							propagationContext := &metricsspb.Baggage{CountersInt: make(map[string]int64)}
-							propagationContext.CountersInt[anyMetricName] = 1234
+							propagationContext := metricsspb.Baggage_builder{CountersInt: make(map[string]int64)}.Build()
+							propagationContext.GetCountersInt()[anyMetricName] = 1234
 							data, err := propagationContext.Marshal()
 							if err != nil {
 								s.Fail("failed to marshal values")
@@ -82,7 +82,7 @@ func (s *grpcSuite) TestMetadataMetricInjection() {
 			baggage := &metricsspb.Baggage{}
 			err = baggage.Unmarshal(([]byte)(propagationContextBlobs[0]))
 			s.Nil(err)
-			s.Equal(int64(1234), baggage.CountersInt[anyMetricName])
+			s.Equal(int64(1234), baggage.GetCountersInt()[anyMetricName])
 			return res, err
 		},
 	)
@@ -138,7 +138,7 @@ func (s *grpcSuite) TestMetadataMetricInjection_NoMetricPresent() {
 			baggage := &metricsspb.Baggage{}
 			err = baggage.Unmarshal(([]byte)(propagationContextBlobs[0]))
 			s.Nil(err)
-			s.Nil(baggage.CountersInt)
+			s.Nil(baggage.GetCountersInt())
 			return res, err
 		},
 	)

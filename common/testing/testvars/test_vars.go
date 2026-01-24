@@ -165,18 +165,18 @@ func (tv *TestVars) WithNamespaceName(namespaceName namespace.Name) *TestVars {
 
 func (tv *TestVars) Namespace() *namespace.Namespace {
 	return namespace.NewLocalNamespaceForTest(
-		&persistencespb.NamespaceInfo{
+		persistencespb.NamespaceInfo_builder{
 			Id:   tv.NamespaceID().String(),
 			Name: tv.NamespaceName().String(),
-		},
-		&persistencespb.NamespaceConfig{
+		}.Build(),
+		persistencespb.NamespaceConfig_builder{
 			Retention: timestamp.DurationFromDays(int32(tv.Any().Int())),
-			BadBinaries: &namespacepb.BadBinaries{
+			BadBinaries: namespacepb.BadBinaries_builder{
 				Binaries: map[string]*namespacepb.BadBinaryInfo{
 					tv.Any().String(): nil,
 				},
-			},
-		},
+			}.Build(),
+		}.Build(),
 		tv.Global().ClusterName(),
 	)
 }
@@ -201,10 +201,10 @@ func (tv *TestVars) WithRunID(runID string) *TestVars {
 }
 
 func (tv *TestVars) WorkflowExecution() *commonpb.WorkflowExecution {
-	return &commonpb.WorkflowExecution{
+	return commonpb.WorkflowExecution_builder{
 		WorkflowId: tv.WorkflowID(),
 		RunId:      tv.RunID(),
-	}
+	}.Build()
 }
 
 func (tv *TestVars) RequestID() string {
@@ -235,24 +235,24 @@ func (tv *TestVars) WithDeploymentSeriesNumber(n int) *TestVars {
 
 // [cleanup-wv-pre-release]
 func (tv *TestVars) Deployment() *deploymentpb.Deployment {
-	return &deploymentpb.Deployment{
+	return deploymentpb.Deployment_builder{
 		SeriesName: tv.DeploymentSeries(),
 		BuildId:    tv.BuildID(),
-	}
+	}.Build()
 }
 
 func (tv *TestVars) DeploymentVersion() *deploymentspb.WorkerDeploymentVersion {
-	return &deploymentspb.WorkerDeploymentVersion{
+	return deploymentspb.WorkerDeploymentVersion_builder{
 		BuildId:        tv.BuildID(),
 		DeploymentName: tv.DeploymentSeries(),
-	}
+	}.Build()
 }
 
 func (tv *TestVars) ExternalDeploymentVersion() *deploymentpb.WorkerDeploymentVersion {
-	return &deploymentpb.WorkerDeploymentVersion{
+	return deploymentpb.WorkerDeploymentVersion_builder{
 		BuildId:        tv.BuildID(),
 		DeploymentName: tv.DeploymentSeries(),
-	}
+	}.Build()
 }
 
 // SDKDeploymentVersion returns SDK worker deployment version
@@ -273,37 +273,35 @@ func (tv *TestVars) DeploymentVersionStringV32() string {
 }
 
 func (tv *TestVars) DeploymentVersionTransition() *workflowpb.DeploymentVersionTransition {
-	ret := &workflowpb.DeploymentVersionTransition{
+	ret := workflowpb.DeploymentVersionTransition_builder{
 		DeploymentVersion: worker_versioning.ExternalWorkerDeploymentVersionFromVersion(tv.DeploymentVersion()),
-	}
+	}.Build()
 	// DescribeWorkflowExecution populates both fields on read, so we expect to see both fields
 	//nolint:staticcheck // SA1019: worker versioning v0.31
-	ret.Version = worker_versioning.ExternalWorkerDeploymentVersionToStringV31(ret.GetDeploymentVersion())
+	ret.SetVersion(worker_versioning.ExternalWorkerDeploymentVersionToStringV31(ret.GetDeploymentVersion()))
 	return ret
 }
 
 func (tv *TestVars) VersioningOverridePinned(useV32 bool) *workflowpb.VersioningOverride {
 	if useV32 {
-		return &workflowpb.VersioningOverride{
-			Override: &workflowpb.VersioningOverride_Pinned{
-				Pinned: &workflowpb.VersioningOverride_PinnedOverride{
-					Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
-					Version:  tv.ExternalDeploymentVersion(),
-				},
-			},
-		}
+		return workflowpb.VersioningOverride_builder{
+			Pinned: workflowpb.VersioningOverride_PinnedOverride_builder{
+				Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
+				Version:  tv.ExternalDeploymentVersion(),
+			}.Build(),
+		}.Build()
 	}
-	return &workflowpb.VersioningOverride{
+	return workflowpb.VersioningOverride_builder{
 		Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
 		PinnedVersion: tv.DeploymentVersionString(),
-	}
+	}.Build()
 }
 
 func (tv *TestVars) TaskQueue() *taskqueuepb.TaskQueue {
-	return &taskqueuepb.TaskQueue{
+	return taskqueuepb.TaskQueue_builder{
 		Name: getOrCreate(tv, "task_queue", tv.uniqueString, tv.stringNSetter),
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-	}
+	}.Build()
 }
 
 func (tv *TestVars) WithTaskQueue(taskQueue string) *TestVars {
@@ -327,24 +325,24 @@ func (tv *TestVars) WithTaskQueueNumber(n int) *TestVars {
 }
 
 func (tv *TestVars) StickyTaskQueue() *taskqueuepb.TaskQueue {
-	return &taskqueuepb.TaskQueue{
+	return taskqueuepb.TaskQueue_builder{
 		Name:       getOrCreate(tv, "sticky_task_queue", tv.uniqueString, tv.stringNSetter),
 		Kind:       enumspb.TASK_QUEUE_KIND_STICKY,
-		NormalName: tv.TaskQueue().Name,
-	}
+		NormalName: tv.TaskQueue().GetName(),
+	}.Build()
 }
 
 func (tv *TestVars) StickyExecutionAttributes(timeout time.Duration) *taskqueuepb.StickyExecutionAttributes {
-	return &taskqueuepb.StickyExecutionAttributes{
+	return taskqueuepb.StickyExecutionAttributes_builder{
 		WorkerTaskQueue:        tv.StickyTaskQueue(),
 		ScheduleToStartTimeout: durationpb.New(timeout),
-	}
+	}.Build()
 }
 
 func (tv *TestVars) WorkflowType() *commonpb.WorkflowType {
-	return &commonpb.WorkflowType{
+	return commonpb.WorkflowType_builder{
 		Name: getOrCreate(tv, "workflow_type", tv.uniqueString, tv.stringNSetter),
-	}
+	}.Build()
 }
 
 func (tv *TestVars) ActivityID() string {
@@ -356,9 +354,9 @@ func (tv *TestVars) WithActivityIDNumber(n int) *TestVars {
 }
 
 func (tv *TestVars) ActivityType() *commonpb.ActivityType {
-	return &commonpb.ActivityType{
+	return commonpb.ActivityType_builder{
 		Name: getOrCreate(tv, "activity_type", tv.uniqueString, tv.stringNSetter),
-	}
+	}.Build()
 }
 
 func (tv *TestVars) MessageID() string {
@@ -378,10 +376,10 @@ func (tv *TestVars) WithUpdateIDNumber(n int) *TestVars {
 }
 
 func (tv *TestVars) UpdateRef() *updatepb.UpdateRef {
-	return &updatepb.UpdateRef{
+	return updatepb.UpdateRef_builder{
 		UpdateId:          tv.UpdateID(),
 		WorkflowExecution: tv.WorkflowExecution(),
-	}
+	}.Build()
 }
 
 func (tv *TestVars) HandlerName() string {
@@ -409,10 +407,10 @@ func (tv *TestVars) QueryType() string {
 }
 
 func (tv *TestVars) Query() *querypb.WorkflowQuery {
-	return &querypb.WorkflowQuery{
+	return querypb.WorkflowQuery_builder{
 		QueryType: tv.QueryType(),
 		QueryArgs: tv.Any().Payloads(),
-	}
+	}.Build()
 }
 
 func (tv *TestVars) SignalName() string {
@@ -445,9 +443,9 @@ func (tv *TestVars) WorkerDeploymentOptions(versioned bool) *deploymentpb.Worker
 	if versioned {
 		m = enumspb.WORKER_VERSIONING_MODE_VERSIONED
 	}
-	return &deploymentpb.WorkerDeploymentOptions{
+	return deploymentpb.WorkerDeploymentOptions_builder{
 		BuildId:              tv.BuildID(),
 		DeploymentName:       tv.DeploymentSeries(),
 		WorkerVersioningMode: m,
-	}
+	}.Build()
 }

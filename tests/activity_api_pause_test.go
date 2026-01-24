@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/tests/testcore"
+	"google.golang.org/protobuf/proto"
 )
 
 type ActivityApiPauseClientTestSuite struct {
@@ -100,22 +101,22 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WhileRunning() {
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
-		require.Len(t, description.PendingActivities, 1)
+		require.Len(t, description.GetPendingActivities(), 1)
 		require.Equal(t, int32(1), startedActivityCount.Load())
 	}, 5*time.Second, 500*time.Millisecond)
 
 	// pause activity
 	testIdentity := "test-identity"
 	testReason := "test-reason"
-	pauseRequest := &workflowservice.PauseActivityRequest{
+	pauseRequest := workflowservice.PauseActivityRequest_builder{
 		Namespace: s.Namespace().String(),
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: workflowRun.GetID(),
-		},
-		Activity: &workflowservice.PauseActivityRequest_Id{Id: "activity-id"},
+		}.Build(),
+		Id:       proto.String("activity-id"),
 		Identity: testIdentity,
 		Reason:   testReason,
-	}
+	}.Build()
 	resp, err := s.FrontendClient().PauseActivity(ctx, pauseRequest)
 	s.NoError(err)
 	s.NotNil(resp)
@@ -124,8 +125,8 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WhileRunning() {
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
-		require.Len(t, description.PendingActivities, 1)
-		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_PAUSE_REQUESTED, description.PendingActivities[0].State)
+		require.Len(t, description.GetPendingActivities(), 1)
+		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_PAUSE_REQUESTED, description.GetPendingActivities()[0].GetState())
 		require.Equal(t, int32(1), startedActivityCount.Load())
 	}, 5*time.Second, 500*time.Millisecond)
 
@@ -135,15 +136,15 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WhileRunning() {
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
-		require.Len(t, description.PendingActivities, 1)
-		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_PAUSED, description.PendingActivities[0].State)
+		require.Len(t, description.GetPendingActivities(), 1)
+		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_PAUSED, description.GetPendingActivities()[0].GetState())
 		require.Equal(t, int32(1), startedActivityCount.Load())
 	}, 5*time.Second, 500*time.Millisecond)
 
 	description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 	s.NoError(err)
-	s.Equal(1, len(description.PendingActivities))
-	s.True(description.PendingActivities[0].Paused)
+	s.Equal(1, len(description.GetPendingActivities()))
+	s.True(description.GetPendingActivities()[0].GetPaused())
 
 	// wait long enough for activity to retry if pause is not working
 	// Note: because activity is retried we expect the attempts to be incremented
@@ -153,24 +154,24 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WhileRunning() {
 	// make sure activity is not completed, and was not retried
 	description, err = s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 	s.NoError(err)
-	s.Equal(1, len(description.PendingActivities))
-	s.True(description.PendingActivities[0].Paused)
-	s.Equal(int32(2), description.PendingActivities[0].Attempt)
-	s.NotNil(description.PendingActivities[0].LastFailure)
-	s.Equal(activityErr.Error(), description.PendingActivities[0].LastFailure.Message)
-	s.NotNil(description.PendingActivities[0].PauseInfo)
-	s.NotNil(description.PendingActivities[0].PauseInfo.GetManual())
-	s.Equal(testIdentity, description.PendingActivities[0].PauseInfo.GetManual().Identity)
-	s.Equal(testReason, description.PendingActivities[0].PauseInfo.GetManual().Reason)
+	s.Equal(1, len(description.GetPendingActivities()))
+	s.True(description.GetPendingActivities()[0].GetPaused())
+	s.Equal(int32(2), description.GetPendingActivities()[0].GetAttempt())
+	s.NotNil(description.GetPendingActivities()[0].GetLastFailure())
+	s.Equal(activityErr.Error(), description.GetPendingActivities()[0].GetLastFailure().GetMessage())
+	s.NotNil(description.GetPendingActivities()[0].GetPauseInfo())
+	s.NotNil(description.GetPendingActivities()[0].GetPauseInfo().GetManual())
+	s.Equal(testIdentity, description.GetPendingActivities()[0].GetPauseInfo().GetManual().GetIdentity())
+	s.Equal(testReason, description.GetPendingActivities()[0].GetPauseInfo().GetManual().GetReason())
 
 	// unpause the activity
-	unpauseRequest := &workflowservice.UnpauseActivityRequest{
+	unpauseRequest := workflowservice.UnpauseActivityRequest_builder{
 		Namespace: s.Namespace().String(),
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: workflowRun.GetID(),
-		},
-		Activity: &workflowservice.UnpauseActivityRequest_Id{Id: "activity-id"},
-	}
+		}.Build(),
+		Id: proto.String("activity-id"),
+	}.Build()
 	unpauseResp, err := s.FrontendClient().UnpauseActivity(ctx, unpauseRequest)
 	s.NoError(err)
 	s.NotNil(unpauseResp)
@@ -226,22 +227,22 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_IncreaseAttemptsO
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
-		require.Len(t, description.PendingActivities, 1)
+		require.Len(t, description.GetPendingActivities(), 1)
 		require.Equal(t, int32(1), startedActivityCount.Load())
 	}, 5*time.Second, 500*time.Millisecond)
 
 	// pause activity
 	testIdentity := "test-identity"
 	testReason := "test-reason"
-	pauseRequest := &workflowservice.PauseActivityRequest{
+	pauseRequest := workflowservice.PauseActivityRequest_builder{
 		Namespace: s.Namespace().String(),
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: workflowRun.GetID(),
-		},
-		Activity: &workflowservice.PauseActivityRequest_Id{Id: "activity-id"},
+		}.Build(),
+		Id:       proto.String("activity-id"),
 		Identity: testIdentity,
 		Reason:   testReason,
-	}
+	}.Build()
 	resp, err := s.FrontendClient().PauseActivity(ctx, pauseRequest)
 	s.NoError(err)
 	s.NotNil(resp)
@@ -250,8 +251,8 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_IncreaseAttemptsO
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
-		require.Len(t, description.PendingActivities, 1)
-		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_PAUSE_REQUESTED, description.PendingActivities[0].State)
+		require.Len(t, description.GetPendingActivities(), 1)
+		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_PAUSE_REQUESTED, description.GetPendingActivities()[0].GetState())
 		require.Equal(t, int32(1), startedActivityCount.Load())
 	}, 5*time.Second, 500*time.Millisecond)
 
@@ -262,14 +263,14 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_IncreaseAttemptsO
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
 		require.NotNil(t, description)
-		require.Equal(t, 1, len(description.PendingActivities))
-		require.True(t, description.PendingActivities[0].Paused)
-		require.Equal(t, int32(2), description.PendingActivities[0].Attempt)
-		require.NotNil(t, description.PendingActivities[0].LastFailure)
-		require.NotNil(t, description.PendingActivities[0].PauseInfo)
-		require.NotNil(t, description.PendingActivities[0].PauseInfo.GetManual())
-		require.Equal(t, testIdentity, description.PendingActivities[0].PauseInfo.GetManual().Identity)
-		require.Equal(t, testReason, description.PendingActivities[0].PauseInfo.GetManual().Reason)
+		require.Equal(t, 1, len(description.GetPendingActivities()))
+		require.True(t, description.GetPendingActivities()[0].GetPaused())
+		require.Equal(t, int32(2), description.GetPendingActivities()[0].GetAttempt())
+		require.NotNil(t, description.GetPendingActivities()[0].GetLastFailure())
+		require.NotNil(t, description.GetPendingActivities()[0].GetPauseInfo())
+		require.NotNil(t, description.GetPendingActivities()[0].GetPauseInfo().GetManual())
+		require.Equal(t, testIdentity, description.GetPendingActivities()[0].GetPauseInfo().GetManual().GetIdentity())
+		require.Equal(t, testReason, description.GetPendingActivities()[0].GetPauseInfo().GetManual().GetReason())
 		require.Equal(t, int32(1), startedActivityCount.Load())
 	}, 5*time.Second, 500*time.Millisecond)
 
@@ -278,13 +279,13 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_IncreaseAttemptsO
 	shouldSucceed.Store(true)
 
 	// unpause the activity
-	unpauseRequest := &workflowservice.UnpauseActivityRequest{
+	unpauseRequest := workflowservice.UnpauseActivityRequest_builder{
 		Namespace: s.Namespace().String(),
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: workflowRun.GetID(),
-		},
-		Activity: &workflowservice.UnpauseActivityRequest_Id{Id: "activity-id"},
-	}
+		}.Build(),
+		Id: proto.String("activity-id"),
+	}.Build()
 	unpauseResp, err := s.FrontendClient().UnpauseActivity(ctx, unpauseRequest)
 	s.NoError(err)
 	s.NotNil(unpauseResp)
@@ -341,22 +342,22 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WhileWaiting() {
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
-		require.Equal(t, 1, len(description.PendingActivities))
+		require.Equal(t, 1, len(description.GetPendingActivities()))
 		require.Equal(t, int32(1), startedActivityCount.Load())
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// pause activity
 	testIdentity := "test-identity"
 	testReason := "test-reason"
-	pauseRequest := &workflowservice.PauseActivityRequest{
+	pauseRequest := workflowservice.PauseActivityRequest_builder{
 		Namespace: s.Namespace().String(),
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: workflowRun.GetID(),
-		},
-		Activity: &workflowservice.PauseActivityRequest_Id{Id: "activity-id"},
+		}.Build(),
+		Id:       proto.String("activity-id"),
 		Identity: testIdentity,
 		Reason:   testReason,
-	}
+	}.Build()
 	resp, err := s.FrontendClient().PauseActivity(ctx, pauseRequest)
 	s.NoError(err)
 	s.NotNil(resp)
@@ -367,22 +368,22 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WhileWaiting() {
 	// make sure activity is not completed, and was not retried
 	description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 	s.NoError(err)
-	s.Equal(1, len(description.PendingActivities))
-	s.True(description.PendingActivities[0].Paused)
-	s.Equal(int32(2), description.PendingActivities[0].Attempt)
-	s.NotNil(description.PendingActivities[0].PauseInfo)
-	s.NotNil(description.PendingActivities[0].PauseInfo.GetManual())
-	s.Equal(testIdentity, description.PendingActivities[0].PauseInfo.GetManual().Identity)
-	s.Equal(testReason, description.PendingActivities[0].PauseInfo.GetManual().Reason)
+	s.Equal(1, len(description.GetPendingActivities()))
+	s.True(description.GetPendingActivities()[0].GetPaused())
+	s.Equal(int32(2), description.GetPendingActivities()[0].GetAttempt())
+	s.NotNil(description.GetPendingActivities()[0].GetPauseInfo())
+	s.NotNil(description.GetPendingActivities()[0].GetPauseInfo().GetManual())
+	s.Equal(testIdentity, description.GetPendingActivities()[0].GetPauseInfo().GetManual().GetIdentity())
+	s.Equal(testReason, description.GetPendingActivities()[0].GetPauseInfo().GetManual().GetReason())
 
 	// unpause the activity
-	unpauseRequest := &workflowservice.UnpauseActivityRequest{
+	unpauseRequest := workflowservice.UnpauseActivityRequest_builder{
 		Namespace: s.Namespace().String(),
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: workflowRun.GetID(),
-		},
-		Activity: &workflowservice.UnpauseActivityRequest_Id{Id: "activity-id"},
-	}
+		}.Build(),
+		Id: proto.String("activity-id"),
+	}.Build()
 	unpauseResp, err := s.FrontendClient().UnpauseActivity(ctx, unpauseRequest)
 	s.NoError(err)
 	s.NotNil(unpauseResp)
@@ -445,25 +446,25 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WhileRetryNoWait(
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// pause activity
-	pauseRequest := &workflowservice.PauseActivityRequest{
+	pauseRequest := workflowservice.PauseActivityRequest_builder{
 		Namespace: s.Namespace().String(),
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: workflowRun.GetID(),
-		},
-		Activity: &workflowservice.PauseActivityRequest_Id{Id: "activity-id"},
-	}
+		}.Build(),
+		Id: proto.String("activity-id"),
+	}.Build()
 	resp, err := s.FrontendClient().PauseActivity(ctx, pauseRequest)
 	s.NoError(err)
 	s.NotNil(resp)
 
 	// unpause the activity
-	unpauseRequest := &workflowservice.UnpauseActivityRequest{
+	unpauseRequest := workflowservice.UnpauseActivityRequest_builder{
 		Namespace: s.Namespace().String(),
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: workflowRun.GetID(),
-		},
-		Activity: &workflowservice.UnpauseActivityRequest_Id{Id: "activity-id"},
-	}
+		}.Build(),
+		Id: proto.String("activity-id"),
+	}.Build()
 	unpauseResp, err := s.FrontendClient().UnpauseActivity(ctx, unpauseRequest)
 	s.NoError(err)
 	s.NotNil(unpauseResp)
@@ -527,13 +528,13 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WithReset() {
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// pause activity
-	pauseRequest := &workflowservice.PauseActivityRequest{
+	pauseRequest := workflowservice.PauseActivityRequest_builder{
 		Namespace: s.Namespace().String(),
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: workflowRun.GetID(),
-		},
-		Activity: &workflowservice.PauseActivityRequest_Id{Id: "activity-id"},
-	}
+		}.Build(),
+		Id: proto.String("activity-id"),
+	}.Build()
 	resp, err := s.FrontendClient().PauseActivity(ctx, pauseRequest)
 	s.NoError(err)
 	s.NotNil(resp)
@@ -543,22 +544,22 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WithReset() {
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
 		require.Len(t, description.GetPendingActivities(), 1)
-		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_PAUSED, description.PendingActivities[0].State)
+		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_PAUSED, description.GetPendingActivities()[0].GetState())
 		// also verify that the number of attempts was not reset
-		require.True(t, description.PendingActivities[0].Attempt > 1)
+		require.True(t, description.GetPendingActivities()[0].GetAttempt() > 1)
 	}, 5*time.Second, 100*time.Millisecond)
 
 	activityWasReset = true
 
 	// unpause the activity with reset, and set noWait flag
-	unpauseRequest := &workflowservice.UnpauseActivityRequest{
+	unpauseRequest := workflowservice.UnpauseActivityRequest_builder{
 		Namespace: s.Namespace().String(),
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: workflowRun.GetID(),
-		},
-		Activity:      &workflowservice.UnpauseActivityRequest_Id{Id: "activity-id"},
+		}.Build(),
+		Id:            proto.String("activity-id"),
 		ResetAttempts: true,
-	}
+	}.Build()
 	unpauseResp, err := s.FrontendClient().UnpauseActivity(ctx, unpauseRequest)
 	s.NoError(err)
 	s.NotNil(unpauseResp)
@@ -568,9 +569,9 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WithReset() {
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
 		require.Len(t, description.GetPendingActivities(), 1)
-		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, description.PendingActivities[0].State)
+		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, description.GetPendingActivities()[0].GetState())
 		// also verify that the number of attempts was reset
-		require.Equal(t, int32(1), description.PendingActivities[0].Attempt)
+		require.Equal(t, int32(1), description.GetPendingActivities()[0].GetAttempt())
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// let activity finish

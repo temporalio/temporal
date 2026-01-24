@@ -24,13 +24,13 @@ func Invoke(
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (resp *historyservice.RespondActivityTaskCompletedResponse, retError error) {
 	tokenSerializer := tasktoken.NewSerializer()
-	request := req.CompleteRequest
-	token, err0 := tokenSerializer.Deserialize(request.TaskToken)
+	request := req.GetCompleteRequest()
+	token, err0 := tokenSerializer.Deserialize(request.GetTaskToken())
 	if err0 != nil {
 		return nil, consts.ErrDeserializingToken
 	}
 
-	namespaceEntry, err := api.GetActiveNamespace(shard, namespace.ID(req.GetNamespaceId()), token.WorkflowId)
+	namespaceEntry, err := api.GetActiveNamespace(shard, namespace.ID(req.GetNamespaceId()), token.GetWorkflowId())
 	if err != nil {
 		return nil, err
 	}
@@ -47,11 +47,11 @@ func Invoke(
 	var versioningBehavior enumspb.VersioningBehavior
 	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
-		token.Clock,
+		token.GetClock(),
 		definition.NewWorkflowKey(
-			token.NamespaceId,
-			token.WorkflowId,
-			token.RunId,
+			token.GetNamespaceId(),
+			token.GetWorkflowId(),
+			token.GetRunId(),
 		),
 		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
 			mutableState := workflowLease.GetMutableState()
@@ -86,7 +86,7 @@ func Invoke(
 
 			// We fabricate a started event only when the activity is not started yet and
 			// we need to force complete an activity
-			fabricateStartedEvent = ai.StartedEventId == common.EmptyEventID
+			fabricateStartedEvent = ai.GetStartedEventId() == common.EmptyEventID
 			if fabricateStartedEvent {
 				_, err := mutableState.AddActivityTaskStartedEvent(
 					ai,
@@ -105,16 +105,16 @@ func Invoke(
 			}
 
 			ai, _ = mutableState.GetActivityInfo(scheduledEventID)
-			if _, err = mutableState.AddActivityTaskCompletedEvent(scheduledEventID, ai.StartedEventId, request); err != nil {
+			if _, err = mutableState.AddActivityTaskCompletedEvent(scheduledEventID, ai.GetStartedEventId(), request); err != nil {
 				// Unable to add ActivityTaskCompleted event to history
 				return nil, err
 			}
 			if !fabricateStartedEvent {
 				// leave it zero if the event is fabricated so the latency metrics are not emitted
-				attemptStartedTime = ai.StartedTime.AsTime()
+				attemptStartedTime = ai.GetStartedTime().AsTime()
 			}
-			firstScheduledTime = ai.FirstScheduledTime.AsTime()
-			taskQueue = ai.TaskQueue
+			firstScheduledTime = ai.GetFirstScheduledTime().AsTime()
+			taskQueue = ai.GetTaskQueue()
 			versioningBehavior = mutableState.GetEffectiveVersioningBehavior()
 			return &api.UpdateWorkflowAction{
 				Noop:               false,
@@ -139,7 +139,7 @@ func Invoke(
 			},
 			metrics.OperationTag(metrics.HistoryRespondActivityTaskCompletedScope),
 			metrics.WorkflowTypeTag(workflowTypeName),
-			metrics.ActivityTypeTag(token.ActivityType),
+			metrics.ActivityTypeTag(token.GetActivityType()),
 			metrics.VersioningBehaviorTag(versioningBehavior),
 		)
 	}

@@ -304,10 +304,10 @@ func (e *ExecutableTaskImpl) emitFinishMetrics(
 	now time.Time,
 ) {
 	if e.isDuplicated {
-		if e.replicationTask.RawTaskInfo != nil {
+		if e.replicationTask.HasRawTaskInfo() {
 			metrics.ReplicationDuplicatedTaskCount.With(e.MetricsHandler).Record(1,
 				metrics.OperationTag(e.metricsTag),
-				metrics.NamespaceTag(e.replicationTask.RawTaskInfo.NamespaceId))
+				metrics.NamespaceTag(e.replicationTask.GetRawTaskInfo().GetNamespaceId()))
 		}
 		return
 	}
@@ -335,17 +335,17 @@ func (e *ExecutableTaskImpl) emitFinishMetrics(
 			metrics.OperationTag(e.metricsTag),
 			nsTag,
 		)
-		if processingLatency > 10*time.Second && e.replicationTask != nil && e.replicationTask.RawTaskInfo != nil {
+		if processingLatency > 10*time.Second && e.replicationTask != nil && e.replicationTask.HasRawTaskInfo() {
 			e.Logger.Warn(fmt.Sprintf(
 				"replication task latency is too long: queue=%.2fs processing=%.2fs",
 				queueLatency.Seconds(),
 				processingLatency.Seconds(),
 			),
 				tag.WorkflowNamespace(e.NamespaceName()),
-				tag.WorkflowID(e.replicationTask.RawTaskInfo.WorkflowId),
-				tag.WorkflowRunID(e.replicationTask.RawTaskInfo.RunId),
+				tag.WorkflowID(e.replicationTask.GetRawTaskInfo().GetWorkflowId()),
+				tag.WorkflowRunID(e.replicationTask.GetRawTaskInfo().GetRunId()),
 				tag.ReplicationTask(e.replicationTask.GetRawTaskInfo()),
-				tag.ShardID(e.Config.GetShardID(namespace.ID(e.replicationTask.RawTaskInfo.NamespaceId), e.replicationTask.RawTaskInfo.WorkflowId)),
+				tag.ShardID(e.Config.GetShardID(namespace.ID(e.replicationTask.GetRawTaskInfo().GetNamespaceId()), e.replicationTask.GetRawTaskInfo().GetWorkflowId())),
 			)
 		}
 	}
@@ -572,7 +572,7 @@ func (e *ExecutableTaskImpl) BackFillEvents(
 		backFillRequest := &historyi.BackfillHistoryEventsRequest{
 			WorkflowKey:         workflowKey,
 			SourceClusterName:   e.SourceClusterName(),
-			VersionedHistory:    e.ReplicationTask().VersionedTransition,
+			VersionedHistory:    e.ReplicationTask().GetVersionedTransition(),
 			VersionHistoryItems: versionHistory,
 			Events:              eventsBatch,
 		}
@@ -613,8 +613,8 @@ func (e *ExecutableTaskImpl) BackFillEvents(
 			return serviceerror.NewInvalidArgument("Empty batch received from remote during resend")
 		}
 		if len(eventsBatch) != 0 && len(versionHistory) != 0 {
-			if !versionhistory.IsEqualVersionHistoryItems(versionHistory, batch.VersionHistory.Items) ||
-				(eventsVersion != EmptyVersion && eventsVersion != events[0].Version) {
+			if !versionhistory.IsEqualVersionHistoryItems(versionHistory, batch.VersionHistory.GetItems()) ||
+				(eventsVersion != EmptyVersion && eventsVersion != events[0].GetVersion()) {
 				err := applyFn()
 				if err != nil {
 					return err
@@ -625,8 +625,8 @@ func (e *ExecutableTaskImpl) BackFillEvents(
 		if events[len(events)-1].GetEventId() == endEventId {
 			isLastEvent = true
 		}
-		versionHistory = batch.VersionHistory.Items
-		eventsVersion = events[0].Version
+		versionHistory = batch.VersionHistory.GetItems()
+		eventsVersion = events[0].GetVersion()
 		if len(eventsBatch) >= e.Config.ReplicationResendMaxBatchCount() {
 			err := applyFn()
 			if err != nil {
@@ -662,22 +662,22 @@ func (e *ExecutableTaskImpl) SyncState(
 	versionHistories := syncStateErr.VersionHistories
 	if versionHistories != nil {
 		versionHistories = versionhistory.CopyVersionHistories(versionHistories)
-		for _, history := range versionHistories.Histories {
-			history.BranchToken = nil
+		for _, history := range versionHistories.GetHistories() {
+			history.SetBranchToken(nil)
 		}
 	}
 
-	req := &adminservice.SyncWorkflowStateRequest{
+	req := adminservice.SyncWorkflowStateRequest_builder{
 		NamespaceId: syncStateErr.NamespaceId,
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: syncStateErr.WorkflowId,
 			RunId:      syncStateErr.RunId,
-		},
+		}.Build(),
 		ArchetypeId:         syncStateErr.ArchetypeId,
 		VersionedTransition: syncStateErr.VersionedTransition,
 		VersionHistories:    versionHistories,
 		TargetClusterId:     int32(targetClusterInfo.InitialFailoverVersion),
-	}
+	}.Build()
 	resp, err := remoteAdminClient.SyncWorkflowState(ctx, req)
 	if err != nil {
 		var resourceExhaustedError *serviceerror.ResourceExhausted
@@ -731,16 +731,16 @@ func (e *ExecutableTaskImpl) SyncState(
 				return false, err
 			}
 
-			tasksToAdd = append(tasksToAdd, &adminservice.AddTasksRequest_Task{
+			tasksToAdd = append(tasksToAdd, adminservice.AddTasksRequest_Task_builder{
 				CategoryId: tasks.CategoryIDReplication,
 				Blob:       blob,
-			})
+			}.Build())
 		}
 
-		_, err := remoteAdminClient.AddTasks(ctx, &adminservice.AddTasksRequest{
+		_, err := remoteAdminClient.AddTasks(ctx, adminservice.AddTasksRequest_builder{
 			ShardId: e.sourceShardKey.ShardID,
 			Tasks:   tasksToAdd,
-		})
+		}.Build())
 		return false, err
 	}
 
@@ -755,7 +755,7 @@ func (e *ExecutableTaskImpl) SyncState(
 	if err != nil {
 		return false, err
 	}
-	err = engine.ReplicateVersionedTransition(ctx, syncStateErr.ArchetypeId, resp.VersionedTransitionArtifact, e.SourceClusterName())
+	err = engine.ReplicateVersionedTransition(ctx, syncStateErr.ArchetypeId, resp.GetVersionedTransitionArtifact(), e.SourceClusterName())
 	if err == nil || errors.Is(err, consts.ErrDuplicate) {
 		return true, nil
 	}
@@ -777,14 +777,14 @@ func (e *ExecutableTaskImpl) DeleteWorkflow(
 	if err != nil {
 		return err
 	}
-	_, err = engine.DeleteWorkflowExecution(ctx, &historyservice.DeleteWorkflowExecutionRequest{
+	_, err = engine.DeleteWorkflowExecution(ctx, historyservice.DeleteWorkflowExecutionRequest_builder{
 		NamespaceId: workflowKey.NamespaceID,
-		WorkflowExecution: &commonpb.WorkflowExecution{
+		WorkflowExecution: commonpb.WorkflowExecution_builder{
 			WorkflowId: workflowKey.WorkflowID,
 			RunId:      workflowKey.RunID,
-		},
+		}.Build(),
 		ClosedWorkflowOnly: false,
-	})
+	}.Build())
 	return err
 }
 
@@ -796,7 +796,7 @@ func (e *ExecutableTaskImpl) GetNamespaceInfo(
 	namespaceEntry, err := e.NamespaceCache.GetNamespaceByID(namespace.ID(namespaceID))
 	switch err.(type) {
 	case nil:
-		if e.replicationTask.VersionedTransition != nil && e.replicationTask.VersionedTransition.NamespaceFailoverVersion > namespaceEntry.FailoverVersion(businessID) {
+		if e.replicationTask.HasVersionedTransition() && e.replicationTask.GetVersionedTransition().GetNamespaceFailoverVersion() > namespaceEntry.FailoverVersion(businessID) {
 			_, err = e.ProcessToolBox.EagerNamespaceRefresher.SyncNamespaceFromSourceCluster(ctx, namespace.ID(namespaceID), e.sourceClusterName)
 			if err != nil {
 				return "", false, err
@@ -816,9 +816,9 @@ func (e *ExecutableTaskImpl) GetNamespaceInfo(
 		return "", false, err
 	}
 	// need to make sure ns in cache is up-to-date
-	if e.replicationTask.VersionedTransition != nil && namespaceEntry.FailoverVersion(businessID) < e.replicationTask.VersionedTransition.NamespaceFailoverVersion {
+	if e.replicationTask.HasVersionedTransition() && namespaceEntry.FailoverVersion(businessID) < e.replicationTask.GetVersionedTransition().GetNamespaceFailoverVersion() {
 		return "", false, serviceerror.NewInternalf("cannot process task because namespace failover version is not up to date after sync, task version: %v, namespace version: %v",
-			e.replicationTask.VersionedTransition.NamespaceFailoverVersion, namespaceEntry.FailoverVersion(businessID))
+			e.replicationTask.GetVersionedTransition().GetNamespaceFailoverVersion(), namespaceEntry.FailoverVersion(businessID))
 	}
 
 	e.namespace.Store(namespaceEntry.Name())
@@ -849,8 +849,8 @@ func (e *ExecutableTaskImpl) MarkPoisonPill() error {
 	e.markPoisonPillAttempts++
 
 	shardContext, err := e.ShardController.GetShardByNamespaceWorkflow(
-		namespace.ID(e.replicationTask.RawTaskInfo.NamespaceId),
-		e.replicationTask.RawTaskInfo.WorkflowId,
+		namespace.ID(e.replicationTask.GetRawTaskInfo().GetNamespaceId()),
+		e.replicationTask.GetRawTaskInfo().GetWorkflowId(),
 	)
 	if err != nil {
 		return err
@@ -859,16 +859,16 @@ func (e *ExecutableTaskImpl) MarkPoisonPill() error {
 	e.Logger.Error("Enqueued replication task to DLQ",
 		tag.TargetShardID(shardContext.GetShardID()),
 		tag.SourceShardID(e.sourceShardKey.ShardID),
-		tag.WorkflowNamespaceID(e.replicationTask.RawTaskInfo.NamespaceId),
-		tag.WorkflowID(e.replicationTask.RawTaskInfo.WorkflowId),
-		tag.WorkflowRunID(e.replicationTask.RawTaskInfo.RunId),
+		tag.WorkflowNamespaceID(e.replicationTask.GetRawTaskInfo().GetNamespaceId()),
+		tag.WorkflowID(e.replicationTask.GetRawTaskInfo().GetWorkflowId()),
+		tag.WorkflowRunID(e.replicationTask.GetRawTaskInfo().GetRunId()),
 		tag.TaskID(e.taskID),
 		tag.SourceCluster(e.SourceClusterName()),
 		tag.ReplicationTask(taskInfo),
 	)
 
 	ctx, cancel := newTaskContext(
-		e.replicationTask.RawTaskInfo.NamespaceId,
+		e.replicationTask.GetRawTaskInfo().GetNamespaceId(),
 		e.Config.ReplicationTaskApplyTimeout(),
 		headers.SystemPreemptableCallerInfo,
 	)

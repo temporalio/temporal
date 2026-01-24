@@ -47,8 +47,8 @@ func (uds *userDataStore) UpdateTaskQueueUserData(ctx context.Context, request *
 			err := tx.UpdateTaskQueueUserData(ctx, &sqlplugin.UpdateTaskQueueDataRequest{
 				NamespaceID:   namespaceID,
 				TaskQueueName: taskQueue,
-				Data:          update.UserData.Data,
-				DataEncoding:  update.UserData.EncodingType.String(),
+				Data:          update.UserData.GetData(),
+				DataEncoding:  update.UserData.GetEncodingType().String(),
 				Version:       update.Version,
 			})
 			// note these are in a transaction: if one fails the others will be rolled back

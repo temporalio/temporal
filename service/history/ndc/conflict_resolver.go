@@ -133,9 +133,9 @@ func (r *ConflictResolverImpl) rebuild(
 	executionInfo := r.mutableState.GetExecutionInfo()
 	executionState := r.mutableState.GetExecutionState()
 	workflowKey := definition.NewWorkflowKey(
-		executionInfo.NamespaceId,
-		executionInfo.WorkflowId,
-		executionState.RunId,
+		executionInfo.GetNamespaceId(),
+		executionInfo.GetWorkflowId(),
+		executionState.GetRunId(),
 	)
 	historySize := r.mutableState.GetHistorySize()
 	externalPayloadSize := r.mutableState.GetExternalPayloadSize()
@@ -143,7 +143,7 @@ func (r *ConflictResolverImpl) rebuild(
 
 	rebuildMutableState, _, err := r.stateRebuilder.Rebuild(
 		ctx,
-		timestamp.TimeValue(executionState.StartTime),
+		timestamp.TimeValue(executionState.GetStartTime()),
 		workflowKey,
 		replayVersionHistory.GetBranchToken(),
 		lastItem.GetEventId(),
@@ -159,8 +159,8 @@ func (r *ConflictResolverImpl) rebuild(
 	// after rebuilt verification
 	rebuildVersionHistories := rebuildMutableState.GetExecutionInfo().GetVersionHistories()
 	rebuildVersionHistory, err := versionhistory.GetCurrentVersionHistory(rebuildVersionHistories)
-	rebuildMutableState.GetExecutionInfo().PreviousTransitionHistory = r.mutableState.GetExecutionInfo().PreviousTransitionHistory
-	rebuildMutableState.GetExecutionInfo().LastTransitionHistoryBreakPoint = r.mutableState.GetExecutionInfo().LastTransitionHistoryBreakPoint
+	rebuildMutableState.GetExecutionInfo().SetPreviousTransitionHistory(r.mutableState.GetExecutionInfo().GetPreviousTransitionHistory())
+	rebuildMutableState.GetExecutionInfo().SetLastTransitionHistoryBreakPoint(r.mutableState.GetExecutionInfo().GetLastTransitionHistoryBreakPoint())
 	if err != nil {
 		return nil, err
 	}
@@ -173,7 +173,7 @@ func (r *ConflictResolverImpl) rebuild(
 	if err := versionhistory.SetCurrentVersionHistoryIndex(versionHistories, branchIndex); err != nil {
 		return nil, err
 	}
-	rebuildMutableState.GetExecutionInfo().VersionHistories = versionHistories
+	rebuildMutableState.GetExecutionInfo().SetVersionHistories(versionHistories)
 	rebuildMutableState.AddHistorySize(historySize)
 	rebuildMutableState.AddExternalPayloadSize(externalPayloadSize)
 	rebuildMutableState.AddExternalPayloadCount(externalPayloadCount)

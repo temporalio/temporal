@@ -55,30 +55,30 @@ type processBufferTestCase struct {
 func (s *invokerProcessBufferTaskSuite) TestProcessBufferTask_AllowAll() {
 	startTime := timestamppb.New(s.timeSource.Now())
 	bufferedStarts := []*schedulespb.BufferedStart{
-		{
+		schedulespb.BufferedStart_builder{
 			NominalTime:   startTime,
 			ActualTime:    startTime,
 			DesiredTime:   startTime,
 			Manual:        false,
 			RequestId:     "req1",
 			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
-		},
-		{
+		}.Build(),
+		schedulespb.BufferedStart_builder{
 			NominalTime:   startTime,
 			ActualTime:    startTime,
 			DesiredTime:   startTime,
 			Manual:        false,
 			RequestId:     "req2",
 			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
-		},
-		{
+		}.Build(),
+		schedulespb.BufferedStart_builder{
 			NominalTime:   startTime,
 			ActualTime:    startTime,
 			DesiredTime:   startTime,
 			Manual:        false,
 			RequestId:     "req3",
 			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
-		},
+		}.Build(),
 	}
 
 	s.runProcessBufferTestCase(&processBufferTestCase{
@@ -87,7 +87,7 @@ func (s *invokerProcessBufferTaskSuite) TestProcessBufferTask_AllowAll() {
 		ExpectedOverlapSkipped: 0,
 		ValidateInvoker: func(invoker *scheduler.Invoker) {
 			s.Equal(3, len(util.FilterSlice(invoker.GetBufferedStarts(), func(start *schedulespb.BufferedStart) bool {
-				return start.Attempt > 0
+				return start.GetAttempt() > 0
 			})))
 		},
 	})
@@ -99,14 +99,14 @@ func (s *invokerProcessBufferTaskSuite) TestProcessBufferTask_MissedCatchupWindo
 	startTime := now.Add(-defaultCatchupWindow * 2)
 	startTimestamp := timestamppb.New(startTime)
 	bufferedStarts := []*schedulespb.BufferedStart{
-		{
+		schedulespb.BufferedStart_builder{
 			NominalTime:   startTimestamp,
 			ActualTime:    startTimestamp,
 			DesiredTime:   startTimestamp,
 			Manual:        false,
 			RequestId:     "req1",
 			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
-		},
+		}.Build(),
 	}
 
 	s.runProcessBufferTestCase(&processBufferTestCase{
@@ -121,30 +121,30 @@ func (s *invokerProcessBufferTaskSuite) TestProcessBufferTask_MissedCatchupWindo
 func (s *invokerProcessBufferTaskSuite) TestProcessBufferTask_BufferOne() {
 	startTime := timestamppb.New(s.timeSource.Now())
 	bufferedStarts := []*schedulespb.BufferedStart{
-		{
+		schedulespb.BufferedStart_builder{
 			NominalTime:   startTime,
 			ActualTime:    startTime,
 			DesiredTime:   startTime,
 			Manual:        false,
 			RequestId:     "req1",
 			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE,
-		},
-		{
+		}.Build(),
+		schedulespb.BufferedStart_builder{
 			NominalTime:   startTime,
 			ActualTime:    startTime,
 			DesiredTime:   startTime,
 			Manual:        false,
 			RequestId:     "req2",
 			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE,
-		},
-		{
+		}.Build(),
+		schedulespb.BufferedStart_builder{
 			NominalTime:   startTime,
 			ActualTime:    startTime,
 			DesiredTime:   startTime,
 			Manual:        false,
 			RequestId:     "req3",
 			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE,
-		},
+		}.Build(),
 	}
 
 	s.runProcessBufferTestCase(&processBufferTestCase{
@@ -157,7 +157,7 @@ func (s *invokerProcessBufferTaskSuite) TestProcessBufferTask_BufferOne() {
 		ValidateInvoker: func(invoker *scheduler.Invoker) {
 			// Only one start should be set for execution (Attempt > 0)
 			s.Equal(1, len(util.FilterSlice(invoker.GetBufferedStarts(), func(start *schedulespb.BufferedStart) bool {
-				return start.Attempt > 0
+				return start.GetAttempt() > 0
 			})))
 		},
 	})
@@ -175,7 +175,7 @@ func (s *invokerProcessBufferTaskSuite) TestProcessBufferTask_BackingOff() {
 	startTime := timestamppb.New(s.timeSource.Now())
 	backoffTime := startTime.AsTime().Add(30 * time.Minute)
 	bufferedStarts := []*schedulespb.BufferedStart{
-		{
+		schedulespb.BufferedStart_builder{
 			NominalTime:   startTime,
 			ActualTime:    startTime,
 			DesiredTime:   startTime,
@@ -184,8 +184,8 @@ func (s *invokerProcessBufferTaskSuite) TestProcessBufferTask_BackingOff() {
 			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
 			Attempt:       2,
 			BackoffTime:   timestamppb.New(backoffTime),
-		},
-		{
+		}.Build(),
+		schedulespb.BufferedStart_builder{
 			NominalTime:   startTime,
 			ActualTime:    startTime,
 			DesiredTime:   startTime,
@@ -194,7 +194,7 @@ func (s *invokerProcessBufferTaskSuite) TestProcessBufferTask_BackingOff() {
 			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
 			Attempt:       3,
 			BackoffTime:   timestamppb.New(backoffTime),
-		},
+		}.Build(),
 	}
 
 	s.runProcessBufferTestCase(&processBufferTestCase{
@@ -208,7 +208,7 @@ func (s *invokerProcessBufferTaskSuite) TestProcessBufferTask_BackingOffReady() 
 	startTime := timestamppb.New(s.timeSource.Now())
 	backoffTime := s.timeSource.Now().Add(-1 * time.Minute)
 	bufferedStarts := []*schedulespb.BufferedStart{
-		{
+		schedulespb.BufferedStart_builder{
 			NominalTime:   startTime,
 			ActualTime:    startTime,
 			DesiredTime:   startTime,
@@ -217,7 +217,7 @@ func (s *invokerProcessBufferTaskSuite) TestProcessBufferTask_BackingOffReady() 
 			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
 			Attempt:       2,
 			BackoffTime:   timestamppb.New(backoffTime),
-		},
+		}.Build(),
 	}
 
 	s.runProcessBufferTestCase(&processBufferTestCase{
@@ -226,7 +226,7 @@ func (s *invokerProcessBufferTaskSuite) TestProcessBufferTask_BackingOffReady() 
 		ValidateInvoker: func(invoker *scheduler.Invoker) {
 			// The start should be ready for execution (Attempt > 0)
 			s.Equal(1, len(util.FilterSlice(invoker.GetBufferedStarts(), func(start *schedulespb.BufferedStart) bool {
-				return start.Attempt > 0
+				return start.GetAttempt() > 0
 			})))
 		},
 	})
@@ -235,22 +235,22 @@ func (s *invokerProcessBufferTaskSuite) TestProcessBufferTask_BackingOffReady() 
 // A buffered start with an overlap policy to terminate other workflows is processed.
 func (s *invokerProcessBufferTaskSuite) TestProcessBufferTask_NeedsTerminate() {
 	// Add a running workflow to the Scheduler.
-	initialRunningWorkflows := []*commonpb.WorkflowExecution{{
+	initialRunningWorkflows := []*commonpb.WorkflowExecution{commonpb.WorkflowExecution_builder{
 		WorkflowId: "existing-wf",
 		RunId:      "existing-run",
-	}}
+	}.Build()}
 
 	// Set up the BufferedStart with a policy that will terminate existing workflows.
 	startTime := timestamppb.New(s.timeSource.Now())
 	bufferedStarts := []*schedulespb.BufferedStart{
-		{
+		schedulespb.BufferedStart_builder{
 			NominalTime:   startTime,
 			ActualTime:    startTime,
 			DesiredTime:   startTime,
 			Manual:        false,
 			RequestId:     "new-wf",
 			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_TERMINATE_OTHER,
-		},
+		}.Build(),
 	}
 
 	s.runProcessBufferTestCase(&processBufferTestCase{
@@ -268,22 +268,22 @@ func (s *invokerProcessBufferTaskSuite) TestProcessBufferTask_NeedsTerminate() {
 // A buffered start with an overlap policy to cancel other workflows is processed.
 func (s *invokerProcessBufferTaskSuite) TestProcessBufferTask_NeedsCancel() {
 	// Add a running workflow to the Scheduler.
-	initialRunningWorkflows := []*commonpb.WorkflowExecution{{
+	initialRunningWorkflows := []*commonpb.WorkflowExecution{commonpb.WorkflowExecution_builder{
 		WorkflowId: "existing-wf",
 		RunId:      "existing-run",
-	}}
+	}.Build()}
 
 	// Set up the BufferedStart with a policy that will cancel existing workflows.
 	startTime := timestamppb.New(s.timeSource.Now())
 	bufferedStarts := []*schedulespb.BufferedStart{
-		{
+		schedulespb.BufferedStart_builder{
 			NominalTime:   startTime,
 			ActualTime:    startTime,
 			DesiredTime:   startTime,
 			Manual:        false,
 			RequestId:     "new-wf",
 			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_CANCEL_OTHER,
-		},
+		}.Build(),
 	}
 
 	s.runProcessBufferTestCase(&processBufferTestCase{
@@ -310,12 +310,12 @@ func (s *invokerProcessBufferTaskSuite) runProcessBufferTestCase(c *processBuffe
 
 	// Add initial running workflows as BufferedStarts with RunId set
 	for _, wf := range c.InitialRunningWorkflows {
-		invoker.BufferedStarts = append(invoker.BufferedStarts, &schedulespb.BufferedStart{
-			RequestId:  wf.WorkflowId + "-req",
-			WorkflowId: wf.WorkflowId,
-			RunId:      wf.RunId,
+		invoker.BufferedStarts = append(invoker.BufferedStarts, schedulespb.BufferedStart_builder{
+			RequestId:  wf.GetWorkflowId() + "-req",
+			WorkflowId: wf.GetWorkflowId(),
+			RunId:      wf.GetRunId(),
 			Attempt:    1,
-		})
+		}.Build())
 	}
 
 	// Set LastProcessedTime to current time to ensure time checks pass
@@ -341,8 +341,8 @@ func (s *invokerProcessBufferTaskSuite) runProcessBufferTestCase(c *processBuffe
 
 	s.Equal(c.ExpectedTerminateWorkflows, len(invoker.TerminateWorkflows))
 	s.Equal(c.ExpectedCancelWorkflows, len(invoker.CancelWorkflows))
-	s.Equal(c.ExpectedOverlapSkipped, s.scheduler.Info.OverlapSkipped)
-	s.Equal(c.ExpectedMissedCatchupWindow, s.scheduler.Info.MissedCatchupWindow)
+	s.Equal(c.ExpectedOverlapSkipped, s.scheduler.Info.GetOverlapSkipped())
+	s.Equal(c.ExpectedMissedCatchupWindow, s.scheduler.Info.GetMissedCatchupWindow())
 
 	// Callbacks
 	if c.ValidateInvoker != nil {

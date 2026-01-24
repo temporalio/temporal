@@ -24,11 +24,11 @@ func Invoke(
 
 	workflowLease, err := workflowConsistencyChecker.GetWorkflowLease(
 		ctx,
-		req.Clock,
+		req.GetClock(),
 		definition.NewWorkflowKey(
-			req.NamespaceId,
-			req.WorkflowExecution.WorkflowId,
-			req.WorkflowExecution.RunId,
+			req.GetNamespaceId(),
+			req.GetWorkflowExecution().GetWorkflowId(),
+			req.GetWorkflowExecution().GetRunId(),
 		),
 		locks.PriorityLow,
 	)
@@ -39,7 +39,7 @@ func Invoke(
 
 	mutableState := workflowLease.GetMutableState()
 	if !mutableState.IsWorkflowExecutionRunning() &&
-		mutableState.GetExecutionState().State != enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
+		mutableState.GetExecutionState().GetState() != enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
 		return nil
 	}
 

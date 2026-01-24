@@ -14,13 +14,13 @@ func TestNewDefaultReplicationResolverFactory(t *testing.T) {
 	factory := namespace.NewDefaultReplicationResolverFactory()
 	require.NotNil(t, factory)
 
-	detail := &persistencespb.NamespaceDetail{
-		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+	detail := persistencespb.NamespaceDetail_builder{
+		ReplicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: "active-cluster",
 			Clusters:          []string{"cluster1", "cluster2", "cluster3"},
 			State:             enumspb.REPLICATION_STATE_NORMAL,
-		},
-	}
+		}.Build(),
+	}.Build()
 
 	resolver := factory(detail)
 	require.NotNil(t, resolver)
@@ -37,18 +37,18 @@ func TestDefaultReplicationResolver_ActiveClusterName(t *testing.T) {
 	}{
 		{
 			name: "returns active cluster name",
-			replicationConfig: &persistencespb.NamespaceReplicationConfig{
+			replicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 				ActiveClusterName: "cluster-a",
 				Clusters:          []string{"cluster-a", "cluster-b"},
-			},
+			}.Build(),
 			want: "cluster-a",
 		},
 		{
 			name: "returns active cluster name for cluster-b",
-			replicationConfig: &persistencespb.NamespaceReplicationConfig{
+			replicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 				ActiveClusterName: "cluster-b",
 				Clusters:          []string{"cluster-a", "cluster-b"},
-			},
+			}.Build(),
 			want: "cluster-b",
 		},
 		{
@@ -61,9 +61,9 @@ func TestDefaultReplicationResolver_ActiveClusterName(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			factory := namespace.NewDefaultReplicationResolverFactory()
-			detail := &persistencespb.NamespaceDetail{
+			detail := persistencespb.NamespaceDetail_builder{
 				ReplicationConfig: tt.replicationConfig,
-			}
+			}.Build()
 			resolver := factory(detail)
 
 			got := resolver.ActiveClusterName(namespace.EmptyBusinessID)
@@ -80,18 +80,18 @@ func TestDefaultReplicationResolver_ClusterNames(t *testing.T) {
 	}{
 		{
 			name: "returns cluster names",
-			replicationConfig: &persistencespb.NamespaceReplicationConfig{
+			replicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 				ActiveClusterName: "cluster-a",
 				Clusters:          []string{"cluster-a", "cluster-b", "cluster-c"},
-			},
+			}.Build(),
 			want: []string{"cluster-a", "cluster-b", "cluster-c"},
 		},
 		{
 			name: "returns cluster names for multiple clusters",
-			replicationConfig: &persistencespb.NamespaceReplicationConfig{
+			replicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 				ActiveClusterName: "cluster-a",
 				Clusters:          []string{"cluster-1", "cluster-2"},
-			},
+			}.Build(),
 			want: []string{"cluster-1", "cluster-2"},
 		},
 		{
@@ -101,10 +101,10 @@ func TestDefaultReplicationResolver_ClusterNames(t *testing.T) {
 		},
 		{
 			name: "returns empty slice when clusters is empty",
-			replicationConfig: &persistencespb.NamespaceReplicationConfig{
+			replicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 				ActiveClusterName: "cluster-a",
 				Clusters:          []string{},
-			},
+			}.Build(),
 			want: []string{},
 		},
 	}
@@ -112,9 +112,9 @@ func TestDefaultReplicationResolver_ClusterNames(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			factory := namespace.NewDefaultReplicationResolverFactory()
-			detail := &persistencespb.NamespaceDetail{
+			detail := persistencespb.NamespaceDetail_builder{
 				ReplicationConfig: tt.replicationConfig,
-			}
+			}.Build()
 			resolver := factory(detail)
 
 			got := resolver.ClusterNames(namespace.EmptyBusinessID)
@@ -140,20 +140,20 @@ func TestDefaultReplicationResolver_ReplicationState(t *testing.T) {
 	}{
 		{
 			name: "returns normal state",
-			replicationConfig: &persistencespb.NamespaceReplicationConfig{
+			replicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 				ActiveClusterName: "cluster-a",
 				Clusters:          []string{"cluster-a", "cluster-b"},
 				State:             enumspb.REPLICATION_STATE_NORMAL,
-			},
+			}.Build(),
 			want: enumspb.REPLICATION_STATE_NORMAL,
 		},
 		{
 			name: "returns handover state",
-			replicationConfig: &persistencespb.NamespaceReplicationConfig{
+			replicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 				ActiveClusterName: "cluster-a",
 				Clusters:          []string{"cluster-a", "cluster-b"},
 				State:             enumspb.REPLICATION_STATE_HANDOVER,
-			},
+			}.Build(),
 			want: enumspb.REPLICATION_STATE_HANDOVER,
 		},
 		{
@@ -166,9 +166,9 @@ func TestDefaultReplicationResolver_ReplicationState(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			factory := namespace.NewDefaultReplicationResolverFactory()
-			detail := &persistencespb.NamespaceDetail{
+			detail := persistencespb.NamespaceDetail_builder{
 				ReplicationConfig: tt.replicationConfig,
-			}
+			}.Build()
 			resolver := factory(detail)
 
 			got := resolver.ReplicationState()
@@ -180,13 +180,13 @@ func TestDefaultReplicationResolver_ReplicationState(t *testing.T) {
 func TestDefaultReplicationResolver_MultipleCalls(t *testing.T) {
 	// Test that resolver state is consistent across multiple calls
 	factory := namespace.NewDefaultReplicationResolverFactory()
-	detail := &persistencespb.NamespaceDetail{
-		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+	detail := persistencespb.NamespaceDetail_builder{
+		ReplicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: "primary",
 			Clusters:          []string{"primary", "secondary", "tertiary"},
 			State:             enumspb.REPLICATION_STATE_NORMAL,
-		},
-	}
+		}.Build(),
+	}.Build()
 	resolver := factory(detail)
 
 	// Call multiple times and verify consistency
@@ -208,23 +208,23 @@ func TestDefaultReplicationResolver_IsGlobalNamespace(t *testing.T) {
 	}{
 		{
 			name: "global namespace",
-			detail: &persistencespb.NamespaceDetail{
-				ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+			detail: persistencespb.NamespaceDetail_builder{
+				ReplicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 					ActiveClusterName: "cluster-a",
 					Clusters:          []string{"cluster-a", "cluster-b"},
-				},
-			},
+				}.Build(),
+			}.Build(),
 			setGlobal: true,
 			want:      true,
 		},
 		{
 			name: "local namespace",
-			detail: &persistencespb.NamespaceDetail{
-				ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+			detail: persistencespb.NamespaceDetail_builder{
+				ReplicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 					ActiveClusterName: "cluster-a",
 					Clusters:          []string{"cluster-a"},
-				},
-			},
+				}.Build(),
+			}.Build(),
 			setGlobal: false,
 			want:      false,
 		},
@@ -269,9 +269,9 @@ func TestDefaultReplicationResolver_FailoverVersion(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			detail := &persistencespb.NamespaceDetail{
+			detail := persistencespb.NamespaceDetail_builder{
 				FailoverVersion: tt.failoverVersion,
-			}
+			}.Build()
 			resolver := factory(detail)
 			assert.Equal(t, tt.want, resolver.FailoverVersion(namespace.EmptyBusinessID))
 		})
@@ -300,9 +300,9 @@ func TestDefaultReplicationResolver_FailoverNotificationVersion(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			detail := &persistencespb.NamespaceDetail{
+			detail := persistencespb.NamespaceDetail_builder{
 				FailoverNotificationVersion: tt.failoverNotificationVersion,
-			}
+			}.Build()
 			resolver := factory(detail)
 			assert.Equal(t, tt.want, resolver.FailoverNotificationVersion())
 		})
@@ -312,17 +312,17 @@ func TestDefaultReplicationResolver_FailoverNotificationVersion(t *testing.T) {
 func TestDefaultReplicationResolver_Clone(t *testing.T) {
 	factory := namespace.NewDefaultReplicationResolverFactory()
 
-	originalConfig := &persistencespb.NamespaceReplicationConfig{
+	originalConfig := persistencespb.NamespaceReplicationConfig_builder{
 		ActiveClusterName: "cluster-primary",
 		Clusters:          []string{"cluster-primary", "cluster-secondary"},
 		State:             enumspb.REPLICATION_STATE_NORMAL,
-	}
+	}.Build()
 
-	detail := &persistencespb.NamespaceDetail{
+	detail := persistencespb.NamespaceDetail_builder{
 		ReplicationConfig:           originalConfig,
 		FailoverVersion:             123,
 		FailoverNotificationVersion: 456,
-	}
+	}.Build()
 	resolver := factory(detail)
 
 	// Clone the resolver

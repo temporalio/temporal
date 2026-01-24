@@ -50,13 +50,13 @@ func NewExecutableVerifyVersionedTransitionTask(
 	replicationTask *replicationspb.ReplicationTask,
 ) *ExecutableVerifyVersionedTransitionTask {
 	task := replicationTask.GetVerifyVersionedTransitionTaskAttributes()
-	if task.ArchetypeId == chasm.UnspecifiedArchetypeID {
-		task.ArchetypeId = chasm.WorkflowArchetypeID
+	if task.GetArchetypeId() == chasm.UnspecifiedArchetypeID {
+		task.SetArchetypeId(chasm.WorkflowArchetypeID)
 	}
 	return &ExecutableVerifyVersionedTransitionTask{
 		ProcessToolBox: processToolBox,
 
-		WorkflowKey: definition.NewWorkflowKey(task.NamespaceId, task.WorkflowId, task.RunId),
+		WorkflowKey: definition.NewWorkflowKey(task.GetNamespaceId(), task.GetWorkflowId(), task.GetRunId()),
 		ExecutableTask: NewExecutableTask(
 			processToolBox,
 			taskID,
@@ -124,7 +124,7 @@ func (e *ExecutableVerifyVersionedTransitionTask) Execute() error {
 		}
 	}
 
-	transitionHistory := ms.GetExecutionInfo().TransitionHistory
+	transitionHistory := ms.GetExecutionInfo().GetTransitionHistory()
 	if len(transitionHistory) == 0 {
 		return serviceerrors.NewSyncState(
 			"mutable state is not up to date",
@@ -133,23 +133,23 @@ func (e *ExecutableVerifyVersionedTransitionTask) Execute() error {
 			e.RunID,
 			e.taskAttr.GetArchetypeId(),
 			nil,
-			ms.GetExecutionInfo().VersionHistories,
+			ms.GetExecutionInfo().GetVersionHistories(),
 		)
 	}
-	err = transitionhistory.StalenessCheck(transitionHistory, e.ReplicationTask().VersionedTransition)
+	err = transitionhistory.StalenessCheck(transitionHistory, e.ReplicationTask().GetVersionedTransition())
 
 	// case 1: VersionedTransition is up-to-date on current mutable state
 	if err == nil {
-		if ms.GetNextEventId() < e.taskAttr.NextEventId {
+		if ms.GetNextEventId() < e.taskAttr.GetNextEventId() {
 			return softassert.UnexpectedDataLoss(e.Logger, "Workflow event missed",
 				fmt.Errorf("NamespaceId: %v, workflowId: %v, runId: %v, expected last eventId: %v, versionedTransition: %v",
-					e.NamespaceID, e.WorkflowID, e.RunID, e.taskAttr.NextEventId-1, e.ReplicationTask().VersionedTransition))
+					e.NamespaceID, e.WorkflowID, e.RunID, e.taskAttr.GetNextEventId()-1, e.ReplicationTask().GetVersionedTransition()))
 		}
 		return e.verifyNewRunExist(ctx)
 	}
 
 	// case 2: verify task has newer VersionedTransition, need to sync state
-	if transitionhistory.Compare(e.ReplicationTask().VersionedTransition, transitionhistory.LastVersionedTransition(transitionHistory)) > 0 {
+	if transitionhistory.Compare(e.ReplicationTask().GetVersionedTransition(), transitionhistory.LastVersionedTransition(transitionHistory)) > 0 {
 		return serviceerrors.NewSyncState(
 			"mutable state not up to date",
 			e.NamespaceID,
@@ -157,24 +157,24 @@ func (e *ExecutableVerifyVersionedTransitionTask) Execute() error {
 			e.RunID,
 			e.taskAttr.GetArchetypeId(),
 			transitionhistory.LastVersionedTransition(transitionHistory),
-			ms.GetExecutionInfo().VersionHistories,
+			ms.GetExecutionInfo().GetVersionHistories(),
 		)
 	}
 	// case 3: state transition is on non-current branch, but no event to verify
-	if e.taskAttr.NextEventId == common2.EmptyEventID {
+	if e.taskAttr.GetNextEventId() == common2.EmptyEventID {
 		return e.verifyNewRunExist(ctx)
 	}
 
-	if len(e.taskAttr.EventVersionHistory) == 0 {
+	if len(e.taskAttr.GetEventVersionHistory()) == 0 {
 		// no events to verify
 		return nil
 	}
 
-	targetHistory := &historyspb.VersionHistory{
-		Items: e.taskAttr.EventVersionHistory,
-	}
+	targetHistory := historyspb.VersionHistory_builder{
+		Items: e.taskAttr.GetEventVersionHistory(),
+	}.Build()
 
-	lcaItem, _, err := versionhistory.FindLCAVersionHistoryItemAndIndex(ms.GetExecutionInfo().VersionHistories, targetHistory)
+	lcaItem, _, err := versionhistory.FindLCAVersionHistoryItemAndIndex(ms.GetExecutionInfo().GetVersionHistories(), targetHistory)
 	if err != nil {
 		return err
 	}
@@ -187,7 +187,7 @@ func (e *ExecutableVerifyVersionedTransitionTask) Execute() error {
 		return e.verifyNewRunExist(ctx)
 	}
 	// case 5: event on non-current branch are not up-to-date, we need to backfill events
-	startEventVersion, err := versionhistory.GetVersionHistoryEventVersion(targetHistory, lcaItem.EventId+1)
+	startEventVersion, err := versionhistory.GetVersionHistoryEventVersion(targetHistory, lcaItem.GetEventId()+1)
 	if err != nil {
 		return err
 	}
@@ -195,26 +195,26 @@ func (e *ExecutableVerifyVersionedTransitionTask) Execute() error {
 		ctx,
 		e.ExecutableTask.SourceClusterName(),
 		e.WorkflowKey,
-		lcaItem.EventId+1,
+		lcaItem.GetEventId()+1,
 		startEventVersion,
-		lastItem.EventId,
-		lastItem.Version,
-		e.taskAttr.NewRunId,
+		lastItem.GetEventId(),
+		lastItem.GetVersion(),
+		e.taskAttr.GetNewRunId(),
 	)
 }
 
 func (e *ExecutableVerifyVersionedTransitionTask) verifyNewRunExist(ctx context.Context) error {
-	if len(e.taskAttr.NewRunId) == 0 {
+	if len(e.taskAttr.GetNewRunId()) == 0 {
 		return nil
 	}
-	_, err := e.getMutableState(ctx, e.taskAttr.NewRunId)
+	_, err := e.getMutableState(ctx, e.taskAttr.GetNewRunId())
 	switch err.(type) {
 	case nil:
 		return nil
 	case *serviceerror.NotFound:
 		return softassert.UnexpectedDataLoss(e.Logger, "workflow new run not found",
 			fmt.Errorf("NamespaceId: %v, workflowId: %v, runId: %v, newRunId: %v",
-				e.NamespaceID, e.WorkflowID, e.RunID, e.taskAttr.NewRunId))
+				e.NamespaceID, e.WorkflowID, e.RunID, e.taskAttr.GetNewRunId()))
 	default:
 		return err
 	}
@@ -232,10 +232,10 @@ func (e *ExecutableVerifyVersionedTransitionTask) getMutableState(ctx context.Co
 		ctx,
 		shardContext,
 		namespace.ID(e.NamespaceID),
-		&commonpb.WorkflowExecution{
+		commonpb.WorkflowExecution_builder{
 			WorkflowId: e.WorkflowID,
 			RunId:      runId,
-		},
+		}.Build(),
 		e.taskAttr.GetArchetypeId(),
 		locks.PriorityHigh,
 	)

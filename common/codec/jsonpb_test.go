@@ -21,25 +21,25 @@ type (
 )
 
 var (
-	history = &historypb.History{
+	history = historypb.History_builder{
 		Events: []*historypb.HistoryEvent{
-			{
+			historypb.HistoryEvent_builder{
 				Version:   1234,
 				EventId:   130,
 				EventTime: timestamppb.New(time.Date(1978, 8, 22, 0, 0, 0, 0, time.UTC)),
 				EventType: enumspb.EVENT_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED,
-				Attributes: &historypb.HistoryEvent_RequestCancelExternalWorkflowExecutionInitiatedEventAttributes{RequestCancelExternalWorkflowExecutionInitiatedEventAttributes: &historypb.RequestCancelExternalWorkflowExecutionInitiatedEventAttributes{
+				RequestCancelExternalWorkflowExecutionInitiatedEventAttributes: historypb.RequestCancelExternalWorkflowExecutionInitiatedEventAttributes_builder{
 					Namespace: "some random target namespace",
-					WorkflowExecution: &commonpb.WorkflowExecution{
+					WorkflowExecution: commonpb.WorkflowExecution_builder{
 						WorkflowId: "some random target workflow ID",
 						RunId:      "some random target run ID",
-					},
+					}.Build(),
 					ChildWorkflowOnly: true,
 					Control:           "some random control",
-				}},
-			},
+				}.Build(),
+			}.Build(),
 		},
-	}
+	}.Build()
 	encodedHistory    = `{"events": [{"eventId":"130","eventTime":"1978-08-22T00:00:00Z","eventType":"EVENT_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED","version":"1234","requestCancelExternalWorkflowExecutionInitiatedEventAttributes":{"namespace":"some random target namespace","workflowExecution":{"workflowId":"some random target workflow ID","runId":"some random target run ID"},"control":"some random control","childWorkflowOnly":true}}]}`
 	oldEncodedHistory = `{"events": [{"eventId":"130","eventTime":"1978-08-22T00:00:00Z","eventType":"RequestCancelExternalWorkflowExecutionInitiated","version":"1234","requestCancelExternalWorkflowExecutionInitiatedEventAttributes":{"namespace":"some random target namespace","workflowExecution":{"workflowId":"some random target workflow ID","runId":"some random target run ID"},"control":"some random control","childWorkflowOnly":true}}]}`
 )

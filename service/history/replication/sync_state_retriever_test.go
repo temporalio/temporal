@@ -66,25 +66,25 @@ func (s *syncWorkflowStateSuite) SetupSuite() {
 	s.newRunWorkflowContext = historyi.NewMockWorkflowContext(s.controller)
 	s.mockShard = shard.NewTestContext(
 		s.controller,
-		&persistencespb.ShardInfo{
+		persistencespb.ShardInfo_builder{
 			ShardId: 0,
 			RangeId: 1,
-		},
+		}.Build(),
 		tests.NewDynamicConfig(),
 	)
 	s.releaseFunc = func(err error) {}
 	s.workflowCache = wcache.NewMockCache(s.controller)
 	s.logger = s.mockShard.GetLogger()
 	s.namespaceID = tests.NamespaceID.String()
-	s.execution = &commonpb.WorkflowExecution{
+	s.execution = commonpb.WorkflowExecution_builder{
 		WorkflowId: uuid.NewString(),
 		RunId:      uuid.NewString(),
-	}
+	}.Build()
 	s.newRunId = uuid.NewString()
 	s.workflowKey = definition.WorkflowKey{
 		NamespaceID: s.namespaceID,
-		WorkflowID:  s.execution.WorkflowId,
-		RunID:       s.execution.RunId,
+		WorkflowID:  s.execution.GetWorkflowId(),
+		RunID:       s.execution.GetRunId(),
 	}
 	s.workflowConsistencyChecker = api.NewMockWorkflowConsistencyChecker(s.controller)
 }
@@ -110,14 +110,14 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_TransitionHistoryDisabled
 	mu := historyi.NewMockMutableState(s.controller)
 	s.workflowConsistencyChecker.EXPECT().GetChasmLeaseWithConsistencyCheck(gomock.Any(), nil, gomock.Any(), definition.WorkflowKey{
 		NamespaceID: s.namespaceID,
-		WorkflowID:  s.execution.WorkflowId,
-		RunID:       s.execution.RunId,
+		WorkflowID:  s.execution.GetWorkflowId(),
+		RunID:       s.execution.GetRunId(),
 	}, chasm.WorkflowArchetypeID, locks.PriorityLow).Return(
 		api.NewWorkflowLease(nil, func(err error) {}, mu), nil)
 
-	executionInfo := &persistencespb.WorkflowExecutionInfo{
+	executionInfo := persistencespb.WorkflowExecutionInfo_builder{
 		TransitionHistory: nil, // transition history is disabled
-	}
+	}.Build()
 	mu.EXPECT().HasBufferedEvents().Return(false)
 	mu.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	result, err := s.syncStateRetriever.GetSyncWorkflowStateArtifact(
@@ -137,8 +137,8 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_UnFlushedBufferedEvents()
 	mu := historyi.NewMockMutableState(s.controller)
 	s.workflowConsistencyChecker.EXPECT().GetChasmLeaseWithConsistencyCheck(gomock.Any(), nil, gomock.Any(), definition.WorkflowKey{
 		NamespaceID: s.namespaceID,
-		WorkflowID:  s.execution.WorkflowId,
-		RunID:       s.execution.RunId,
+		WorkflowID:  s.execution.GetWorkflowId(),
+		RunID:       s.execution.GetRunId(),
 	}, chasm.WorkflowArchetypeID, locks.PriorityLow).Return(
 		api.NewWorkflowLease(nil, func(err error) {}, mu), nil)
 
@@ -160,68 +160,68 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_ReturnMutation() {
 	mu := historyi.NewMockMutableState(s.controller)
 	s.workflowConsistencyChecker.EXPECT().GetChasmLeaseWithConsistencyCheck(gomock.Any(), nil, gomock.Any(), definition.WorkflowKey{
 		NamespaceID: s.namespaceID,
-		WorkflowID:  s.execution.WorkflowId,
-		RunID:       s.execution.RunId,
+		WorkflowID:  s.execution.GetWorkflowId(),
+		RunID:       s.execution.GetRunId(),
 	}, chasm.WorkflowArchetypeID, locks.PriorityLow).Return(
 		api.NewWorkflowLease(nil, func(err error) {}, mu), nil)
-	versionHistories := &historyspb.VersionHistories{
+	versionHistories := historyspb.VersionHistories_builder{
 		CurrentVersionHistoryIndex: 0,
 		Histories: []*historyspb.VersionHistory{
-			{
+			historyspb.VersionHistory_builder{
 				BranchToken: []byte("branchToken1"),
 				Items: []*historyspb.VersionHistoryItem{
-					{EventId: 1, Version: 10},
-					{EventId: 2, Version: 13},
+					historyspb.VersionHistoryItem_builder{EventId: 1, Version: 10}.Build(),
+					historyspb.VersionHistoryItem_builder{EventId: 2, Version: 13}.Build(),
 				},
-			},
+			}.Build(),
 		},
-	}
-	executionInfo := &persistencespb.WorkflowExecutionInfo{
+	}.Build()
+	executionInfo := persistencespb.WorkflowExecutionInfo_builder{
 		TransitionHistory: []*persistencespb.VersionedTransition{
-			{NamespaceFailoverVersion: 1, TransitionCount: 12},
-			{NamespaceFailoverVersion: 2, TransitionCount: 15},
+			persistencespb.VersionedTransition_builder{NamespaceFailoverVersion: 1, TransitionCount: 12}.Build(),
+			persistencespb.VersionedTransition_builder{NamespaceFailoverVersion: 2, TransitionCount: 15}.Build(),
 		},
 		SubStateMachineTombstoneBatches: []*persistencespb.StateMachineTombstoneBatch{
-			{
-				VersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 12},
-			},
+			persistencespb.StateMachineTombstoneBatch_builder{
+				VersionedTransition: persistencespb.VersionedTransition_builder{NamespaceFailoverVersion: 1, TransitionCount: 12}.Build(),
+			}.Build(),
 		},
 		VersionHistories:    versionHistories,
 		LastFirstEventTxnId: 1234, // some state that should be sanitized
-	}
+	}.Build()
 	mu.EXPECT().HasBufferedEvents().Return(false)
 	mu.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	mu.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{})
 	mu.EXPECT().GetPendingActivityInfos().Return(map[int64]*persistencespb.ActivityInfo{})
 	mu.EXPECT().GetPendingTimerInfos().Return(map[string]*persistencespb.TimerInfo{
 		// should not be included in the mutation
-		"timerID": {LastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 8}},
+		"timerID": persistencespb.TimerInfo_builder{LastUpdateVersionedTransition: persistencespb.VersionedTransition_builder{NamespaceFailoverVersion: 1, TransitionCount: 8}.Build()}.Build(),
 	})
 	mu.EXPECT().GetPendingChildExecutionInfos().Return(map[int64]*persistencespb.ChildExecutionInfo{
 		// should be included in the mutation
-		13: {
-			LastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 2, TransitionCount: 13},
-			Clock:                         &clockspb.VectorClock{ShardId: s.mockShard.GetShardID(), Clock: 1234},
-		},
+		13: persistencespb.ChildExecutionInfo_builder{
+			LastUpdateVersionedTransition: persistencespb.VersionedTransition_builder{NamespaceFailoverVersion: 2, TransitionCount: 13}.Build(),
+			Clock:                         clockspb.VectorClock_builder{ShardId: s.mockShard.GetShardID(), Clock: 1234}.Build(),
+		}.Build(),
 	})
 	mu.EXPECT().GetPendingRequestCancelExternalInfos().Return(map[int64]*persistencespb.RequestCancelInfo{
 		// should not be included in the mutation
-		5: {LastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 5}},
+		5: persistencespb.RequestCancelInfo_builder{LastUpdateVersionedTransition: persistencespb.VersionedTransition_builder{NamespaceFailoverVersion: 1, TransitionCount: 5}.Build()}.Build(),
 	})
 	mu.EXPECT().GetPendingSignalExternalInfos().Return(map[int64]*persistencespb.SignalInfo{
 		// should be included in the mutation
-		15: {LastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 2, TransitionCount: 15}},
+		15: persistencespb.SignalInfo_builder{LastUpdateVersionedTransition: persistencespb.VersionedTransition_builder{NamespaceFailoverVersion: 2, TransitionCount: 15}.Build()}.Build(),
 	})
 	mu.EXPECT().HSM().Return(nil)
 	mockChasmTree := historyi.NewMockChasmTree(s.controller)
-	mockChasmTree.EXPECT().Snapshot(&persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 12}).
+	mockChasmTree.EXPECT().Snapshot(persistencespb.VersionedTransition_builder{NamespaceFailoverVersion: 1, TransitionCount: 12}.Build()).
 		Return(chasm.NodesSnapshot{
 			Nodes: map[string]*persistencespb.ChasmNode{
-				"node-path": {
-					Metadata: &persistencespb.ChasmNodeMetadata{
-						LastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 2, TransitionCount: 13},
-					},
-				},
+				"node-path": persistencespb.ChasmNode_builder{
+					Metadata: persistencespb.ChasmNodeMetadata_builder{
+						LastUpdateVersionedTransition: persistencespb.VersionedTransition_builder{NamespaceFailoverVersion: 2, TransitionCount: 13}.Build(),
+					}.Build(),
+				}.Build(),
 			},
 		})
 	mu.EXPECT().ChasmTree().Return(mockChasmTree)
@@ -231,108 +231,108 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_ReturnMutation() {
 		s.namespaceID,
 		s.execution,
 		chasm.WorkflowArchetypeID,
-		&persistencespb.VersionedTransition{
+		persistencespb.VersionedTransition_builder{
 			NamespaceFailoverVersion: 1,
 			TransitionCount:          12,
-		},
+		}.Build(),
 		versionHistories)
 	s.NoError(err)
 	s.NotNil(result)
 	syncAttributes := result.VersionedTransitionArtifact.GetSyncWorkflowStateMutationAttributes()
 	s.NotNil(result.VersionedTransitionArtifact.GetSyncWorkflowStateMutationAttributes())
 
-	mutation := syncAttributes.StateMutation
+	mutation := syncAttributes.GetStateMutation()
 	// ensure it's a copy by checking the pointers are pointing to different memory addresses
-	s.True(executionInfo != mutation.ExecutionInfo)
-	s.Nil(mutation.ExecutionInfo.UpdateInfos)
-	s.Nil(mutation.ExecutionInfo.SubStateMachinesByType)
-	s.Nil(mutation.ExecutionInfo.SubStateMachineTombstoneBatches)
-	s.Zero(mutation.ExecutionInfo.LastFirstEventTxnId) // field should be sanitized
-	s.Empty(mutation.UpdatedActivityInfos)
-	s.Len(mutation.UpdatedTimerInfos, 0)
-	s.Len(mutation.UpdatedChildExecutionInfos, 1)
-	s.Len(mutation.UpdatedRequestCancelInfos, 0)
-	s.Len(mutation.UpdatedSignalInfos, 1)
-	s.Len(mutation.UpdatedChasmNodes, 1)
-	s.Nil(mutation.UpdatedChildExecutionInfos[13].Clock) // field should be sanitized
+	s.True(executionInfo != mutation.GetExecutionInfo())
+	s.Nil(mutation.GetExecutionInfo().GetUpdateInfos())
+	s.Nil(mutation.GetExecutionInfo().GetSubStateMachinesByType())
+	s.Nil(mutation.GetExecutionInfo().GetSubStateMachineTombstoneBatches())
+	s.Zero(mutation.GetExecutionInfo().GetLastFirstEventTxnId()) // field should be sanitized
+	s.Empty(mutation.GetUpdatedActivityInfos())
+	s.Len(mutation.GetUpdatedTimerInfos(), 0)
+	s.Len(mutation.GetUpdatedChildExecutionInfos(), 1)
+	s.Len(mutation.GetUpdatedRequestCancelInfos(), 0)
+	s.Len(mutation.GetUpdatedSignalInfos(), 1)
+	s.Len(mutation.GetUpdatedChasmNodes(), 1)
+	s.Nil(mutation.GetUpdatedChildExecutionInfos()[13].GetClock()) // field should be sanitized
 
-	s.Nil(result.VersionedTransitionArtifact.EventBatches)
-	s.Nil(result.VersionedTransitionArtifact.NewRunInfo)
+	s.Nil(result.VersionedTransitionArtifact.GetEventBatches())
+	s.Nil(result.VersionedTransitionArtifact.GetNewRunInfo())
 }
 
 func (s *syncWorkflowStateSuite) TestGetSyncStateRetrieverForNewWorkflow_WithEvents() {
 	mu := historyi.NewMockMutableState(s.controller)
 
-	versionHistories := &historyspb.VersionHistories{
+	versionHistories := historyspb.VersionHistories_builder{
 		CurrentVersionHistoryIndex: 0,
 		Histories: []*historyspb.VersionHistory{
-			{
+			historyspb.VersionHistory_builder{
 				BranchToken: []byte("branchToken1"),
 				Items: []*historyspb.VersionHistoryItem{
-					{EventId: 1, Version: 10},
+					historyspb.VersionHistoryItem_builder{EventId: 1, Version: 10}.Build(),
 				},
-			},
+			}.Build(),
 		},
-	}
-	executionInfo := &persistencespb.WorkflowExecutionInfo{
+	}.Build()
+	executionInfo := persistencespb.WorkflowExecutionInfo_builder{
 		TransitionHistory: []*persistencespb.VersionedTransition{
-			{NamespaceFailoverVersion: 1, TransitionCount: 12},
-			{NamespaceFailoverVersion: 2, TransitionCount: 15},
+			persistencespb.VersionedTransition_builder{NamespaceFailoverVersion: 1, TransitionCount: 12}.Build(),
+			persistencespb.VersionedTransition_builder{NamespaceFailoverVersion: 2, TransitionCount: 15}.Build(),
 		},
 		SubStateMachineTombstoneBatches: []*persistencespb.StateMachineTombstoneBatch{
-			{
-				VersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 1},
-			},
-			{
-				VersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 12},
-			},
+			persistencespb.StateMachineTombstoneBatch_builder{
+				VersionedTransition: persistencespb.VersionedTransition_builder{NamespaceFailoverVersion: 1, TransitionCount: 1}.Build(),
+			}.Build(),
+			persistencespb.StateMachineTombstoneBatch_builder{
+				VersionedTransition: persistencespb.VersionedTransition_builder{NamespaceFailoverVersion: 1, TransitionCount: 12}.Build(),
+			}.Build(),
 		},
 		VersionHistories:    versionHistories,
 		LastFirstEventTxnId: 1234, // some state that should be sanitized
-	}
+	}.Build()
 	mu.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	mu.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{})
 	mu.EXPECT().GetPendingActivityInfos().Return(map[int64]*persistencespb.ActivityInfo{})
 	mu.EXPECT().GetPendingTimerInfos().Return(map[string]*persistencespb.TimerInfo{
 		// should not be included in the mutation
-		"timerID": {LastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 8}},
+		"timerID": persistencespb.TimerInfo_builder{LastUpdateVersionedTransition: persistencespb.VersionedTransition_builder{NamespaceFailoverVersion: 1, TransitionCount: 8}.Build()}.Build(),
 	})
 	mu.EXPECT().GetPendingChildExecutionInfos().Return(map[int64]*persistencespb.ChildExecutionInfo{
 		// should be included in the mutation
-		13: {
-			LastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 2, TransitionCount: 13},
-			Clock:                         &clockspb.VectorClock{ShardId: s.mockShard.GetShardID(), Clock: 1234},
-		},
+		13: persistencespb.ChildExecutionInfo_builder{
+			LastUpdateVersionedTransition: persistencespb.VersionedTransition_builder{NamespaceFailoverVersion: 2, TransitionCount: 13}.Build(),
+			Clock:                         clockspb.VectorClock_builder{ShardId: s.mockShard.GetShardID(), Clock: 1234}.Build(),
+		}.Build(),
 	})
 	mu.EXPECT().GetPendingRequestCancelExternalInfos().Return(map[int64]*persistencespb.RequestCancelInfo{
 		// should not be included in the mutation
-		5: {LastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 5}},
+		5: persistencespb.RequestCancelInfo_builder{LastUpdateVersionedTransition: persistencespb.VersionedTransition_builder{NamespaceFailoverVersion: 1, TransitionCount: 5}.Build()}.Build(),
 	})
 	mu.EXPECT().GetPendingSignalExternalInfos().Return(map[int64]*persistencespb.SignalInfo{
 		// should be included in the mutation
-		15: {LastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 2, TransitionCount: 15}},
+		15: persistencespb.SignalInfo_builder{LastUpdateVersionedTransition: persistencespb.VersionedTransition_builder{NamespaceFailoverVersion: 2, TransitionCount: 15}.Build()}.Build(),
 	})
 	mu.EXPECT().HSM().Return(nil)
 	mockChasmTree := historyi.NewMockChasmTree(s.controller)
-	mockChasmTree.EXPECT().Snapshot(&persistencespb.VersionedTransition{
+	mockChasmTree.EXPECT().Snapshot(persistencespb.VersionedTransition_builder{
 		NamespaceFailoverVersion: 1,
 		TransitionCount:          0,
-	}).
+	}.Build()).
 		Return(chasm.NodesSnapshot{
 			Nodes: map[string]*persistencespb.ChasmNode{
-				"node-path": {
-					Metadata: &persistencespb.ChasmNodeMetadata{
-						LastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 2, TransitionCount: 13},
-					},
-				},
+				"node-path": persistencespb.ChasmNode_builder{
+					Metadata: persistencespb.ChasmNodeMetadata_builder{
+						LastUpdateVersionedTransition: persistencespb.VersionedTransition_builder{NamespaceFailoverVersion: 2, TransitionCount: 13}.Build(),
+					}.Build(),
+				}.Build(),
 			},
 		})
 	mu.EXPECT().ChasmTree().Return(mockChasmTree)
 
 	s.mockShard.Resource.ExecutionMgr.EXPECT().ReadRawHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
-		BranchToken: versionHistories.Histories[0].GetBranchToken(),
+		BranchToken: versionHistories.GetHistories()[0].GetBranchToken(),
 		MinEventID:  1,
-		MaxEventID:  versionHistories.Histories[0].Items[0].GetEventId() + 1,
+		MaxEventID:  versionHistories.GetHistories()[0].GetItems()[0].GetEventId() + 1,
 		ShardID:     s.mockShard.GetShardID(),
 		PageSize:    defaultPageSize,
 	}).Return(&persistence.ReadRawHistoryBranchResponse{HistoryEventBlobs: s.getEventBlobs(1, 10)}, nil)
@@ -343,32 +343,32 @@ func (s *syncWorkflowStateSuite) TestGetSyncStateRetrieverForNewWorkflow_WithEve
 		s.execution,
 		mu,
 		func(err error) {},
-		&persistencespb.VersionedTransition{
+		persistencespb.VersionedTransition_builder{
 			NamespaceFailoverVersion: 1,
 			TransitionCount:          12,
-		},
+		}.Build(),
 	)
 	s.NoError(err)
 	s.NotNil(result)
 	syncAttributes := result.VersionedTransitionArtifact.GetSyncWorkflowStateMutationAttributes()
 	s.NotNil(result.VersionedTransitionArtifact.GetSyncWorkflowStateMutationAttributes())
 
-	mutation := syncAttributes.StateMutation
+	mutation := syncAttributes.GetStateMutation()
 	// ensure it's a copy by checking the pointers are pointing to different memory addresses
-	s.True(executionInfo != mutation.ExecutionInfo)
-	s.Nil(mutation.ExecutionInfo.UpdateInfos)
-	s.Nil(mutation.ExecutionInfo.SubStateMachinesByType)
-	s.Nil(mutation.ExecutionInfo.SubStateMachineTombstoneBatches)
-	s.Zero(mutation.ExecutionInfo.LastFirstEventTxnId) // field should be sanitized
-	s.Empty(mutation.UpdatedActivityInfos)
-	s.Len(mutation.UpdatedTimerInfos, 1)
-	s.Len(mutation.UpdatedChildExecutionInfos, 1)
-	s.Len(mutation.UpdatedRequestCancelInfos, 1)
-	s.Len(mutation.UpdatedSignalInfos, 1)
-	s.Len(mutation.UpdatedChasmNodes, 1)
-	s.Nil(mutation.UpdatedChildExecutionInfos[13].Clock) // field should be sanitized
+	s.True(executionInfo != mutation.GetExecutionInfo())
+	s.Nil(mutation.GetExecutionInfo().GetUpdateInfos())
+	s.Nil(mutation.GetExecutionInfo().GetSubStateMachinesByType())
+	s.Nil(mutation.GetExecutionInfo().GetSubStateMachineTombstoneBatches())
+	s.Zero(mutation.GetExecutionInfo().GetLastFirstEventTxnId()) // field should be sanitized
+	s.Empty(mutation.GetUpdatedActivityInfos())
+	s.Len(mutation.GetUpdatedTimerInfos(), 1)
+	s.Len(mutation.GetUpdatedChildExecutionInfos(), 1)
+	s.Len(mutation.GetUpdatedRequestCancelInfos(), 1)
+	s.Len(mutation.GetUpdatedSignalInfos(), 1)
+	s.Len(mutation.GetUpdatedChasmNodes(), 1)
+	s.Nil(mutation.GetUpdatedChildExecutionInfos()[13].GetClock()) // field should be sanitized
 
-	s.Nil(result.VersionedTransitionArtifact.NewRunInfo)
+	s.Nil(result.VersionedTransitionArtifact.GetNewRunInfo())
 }
 
 func (s *syncWorkflowStateSuite) TestGetSyncStateRetrieverForNewWorkflow_NoEvents() {
@@ -377,22 +377,22 @@ func (s *syncWorkflowStateSuite) TestGetSyncStateRetrieverForNewWorkflow_NoEvent
 
 	mu := historyi.NewMockMutableState(s.controller)
 
-	versionHistories := &historyspb.VersionHistories{
+	versionHistories := historyspb.VersionHistories_builder{
 		CurrentVersionHistoryIndex: 0,
 		Histories:                  []*historyspb.VersionHistory{{}},
-	}
-	executionInfo := &persistencespb.WorkflowExecutionInfo{
+	}.Build()
+	executionInfo := persistencespb.WorkflowExecutionInfo_builder{
 		TransitionHistory: []*persistencespb.VersionedTransition{
-			{NamespaceFailoverVersion: 1, TransitionCount: 12},
+			persistencespb.VersionedTransition_builder{NamespaceFailoverVersion: 1, TransitionCount: 12}.Build(),
 		},
 		SubStateMachineTombstoneBatches: []*persistencespb.StateMachineTombstoneBatch{
-			{
-				VersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 1},
-			},
+			persistencespb.StateMachineTombstoneBatch_builder{
+				VersionedTransition: persistencespb.VersionedTransition_builder{NamespaceFailoverVersion: 1, TransitionCount: 1}.Build(),
+			}.Build(),
 		},
 		VersionHistories:    versionHistories,
 		LastFirstEventTxnId: 1234, // some state that should be sanitized
-	}
+	}.Build()
 	mu.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	mu.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{})
 	mu.EXPECT().GetPendingActivityInfos().Return(map[int64]*persistencespb.ActivityInfo{})
@@ -402,16 +402,16 @@ func (s *syncWorkflowStateSuite) TestGetSyncStateRetrieverForNewWorkflow_NoEvent
 	mu.EXPECT().GetPendingSignalExternalInfos().Return(map[int64]*persistencespb.SignalInfo{})
 	mu.EXPECT().HSM().Return(nil)
 	mockChasmTree := historyi.NewMockChasmTree(s.controller)
-	mockChasmTree.EXPECT().Snapshot(&persistencespb.VersionedTransition{
+	mockChasmTree.EXPECT().Snapshot(persistencespb.VersionedTransition_builder{
 		NamespaceFailoverVersion: 1,
 		TransitionCount:          0,
-	}).Return(chasm.NodesSnapshot{
+	}.Build()).Return(chasm.NodesSnapshot{
 		Nodes: map[string]*persistencespb.ChasmNode{
-			"node-path": {
-				Metadata: &persistencespb.ChasmNodeMetadata{
-					LastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 12},
-				},
-			},
+			"node-path": persistencespb.ChasmNode_builder{
+				Metadata: persistencespb.ChasmNodeMetadata_builder{
+					LastUpdateVersionedTransition: persistencespb.VersionedTransition_builder{NamespaceFailoverVersion: 1, TransitionCount: 12}.Build(),
+				}.Build(),
+			}.Build(),
 		},
 	})
 	mu.EXPECT().ChasmTree().Return(mockChasmTree)
@@ -422,10 +422,10 @@ func (s *syncWorkflowStateSuite) TestGetSyncStateRetrieverForNewWorkflow_NoEvent
 		s.execution,
 		mu,
 		func(err error) {},
-		&persistencespb.VersionedTransition{
+		persistencespb.VersionedTransition_builder{
 			NamespaceFailoverVersion: 1,
 			TransitionCount:          5,
-		},
+		}.Build(),
 	)
 	s.NoError(err)
 	s.NotNil(result)
@@ -440,72 +440,72 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_ReturnSnapshot() {
 		{
 			name: "tombstone batch is empty",
 			infoFn: func() (*historyspb.VersionHistories, []*persistencespb.VersionedTransition, []*persistencespb.StateMachineTombstoneBatch, *persistencespb.VersionedTransition) {
-				versionHistories := &historyspb.VersionHistories{
+				versionHistories := historyspb.VersionHistories_builder{
 					CurrentVersionHistoryIndex: 0,
 					Histories: []*historyspb.VersionHistory{
-						{
+						historyspb.VersionHistory_builder{
 							BranchToken: []byte("branchToken1"),
 							Items: []*historyspb.VersionHistoryItem{
-								{EventId: 1, Version: 10},
-								{EventId: 2, Version: 13},
+								historyspb.VersionHistoryItem_builder{EventId: 1, Version: 10}.Build(),
+								historyspb.VersionHistoryItem_builder{EventId: 2, Version: 13}.Build(),
 							},
-						},
+						}.Build(),
 					},
-				}
+				}.Build()
 				return versionHistories, []*persistencespb.VersionedTransition{
-					{NamespaceFailoverVersion: 1, TransitionCount: 12},
-					{NamespaceFailoverVersion: 2, TransitionCount: 15},
+					persistencespb.VersionedTransition_builder{NamespaceFailoverVersion: 1, TransitionCount: 12}.Build(),
+					persistencespb.VersionedTransition_builder{NamespaceFailoverVersion: 2, TransitionCount: 15}.Build(),
 				}, nil, nil
 			},
 		},
 		{
 			name: "tombstone batch is not empty",
 			infoFn: func() (*historyspb.VersionHistories, []*persistencespb.VersionedTransition, []*persistencespb.StateMachineTombstoneBatch, *persistencespb.VersionedTransition) {
-				versionHistories := &historyspb.VersionHistories{
+				versionHistories := historyspb.VersionHistories_builder{
 					CurrentVersionHistoryIndex: 0,
 					Histories: []*historyspb.VersionHistory{
-						{
+						historyspb.VersionHistory_builder{
 							BranchToken: []byte("branchToken1"),
 							Items: []*historyspb.VersionHistoryItem{
-								{EventId: 1, Version: 10},
-								{EventId: 2, Version: 13},
+								historyspb.VersionHistoryItem_builder{EventId: 1, Version: 10}.Build(),
+								historyspb.VersionHistoryItem_builder{EventId: 2, Version: 13}.Build(),
 							},
-						},
+						}.Build(),
 					},
-				}
+				}.Build()
 				return versionHistories, []*persistencespb.VersionedTransition{
-						{NamespaceFailoverVersion: 1, TransitionCount: 12},
-						{NamespaceFailoverVersion: 2, TransitionCount: 15},
+						persistencespb.VersionedTransition_builder{NamespaceFailoverVersion: 1, TransitionCount: 12}.Build(),
+						persistencespb.VersionedTransition_builder{NamespaceFailoverVersion: 2, TransitionCount: 15}.Build(),
 					}, []*persistencespb.StateMachineTombstoneBatch{
-						{
-							VersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 12},
-						},
+						persistencespb.StateMachineTombstoneBatch_builder{
+							VersionedTransition: persistencespb.VersionedTransition_builder{NamespaceFailoverVersion: 1, TransitionCount: 12}.Build(),
+						}.Build(),
 					}, nil
 			},
 		},
 		{
 			name: "tombstone batch is not empty, but target state transition is before break point",
 			infoFn: func() (*historyspb.VersionHistories, []*persistencespb.VersionedTransition, []*persistencespb.StateMachineTombstoneBatch, *persistencespb.VersionedTransition) {
-				versionHistories := &historyspb.VersionHistories{
+				versionHistories := historyspb.VersionHistories_builder{
 					CurrentVersionHistoryIndex: 0,
 					Histories: []*historyspb.VersionHistory{
-						{
+						historyspb.VersionHistory_builder{
 							BranchToken: []byte("branchToken1"),
 							Items: []*historyspb.VersionHistoryItem{
-								{EventId: 1, Version: 10},
-								{EventId: 2, Version: 13},
+								historyspb.VersionHistoryItem_builder{EventId: 1, Version: 10}.Build(),
+								historyspb.VersionHistoryItem_builder{EventId: 2, Version: 13}.Build(),
 							},
-						},
+						}.Build(),
 					},
-				}
+				}.Build()
 				return versionHistories, []*persistencespb.VersionedTransition{
-						{NamespaceFailoverVersion: 1, TransitionCount: 13},
-						{NamespaceFailoverVersion: 2, TransitionCount: 15},
+						persistencespb.VersionedTransition_builder{NamespaceFailoverVersion: 1, TransitionCount: 13}.Build(),
+						persistencespb.VersionedTransition_builder{NamespaceFailoverVersion: 2, TransitionCount: 15}.Build(),
 					}, []*persistencespb.StateMachineTombstoneBatch{
-						{
-							VersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 12},
-						},
-					}, &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 13}
+						persistencespb.StateMachineTombstoneBatch_builder{
+							VersionedTransition: persistencespb.VersionedTransition_builder{NamespaceFailoverVersion: 1, TransitionCount: 12}.Build(),
+						}.Build(),
+					}, persistencespb.VersionedTransition_builder{NamespaceFailoverVersion: 1, TransitionCount: 13}.Build()
 			},
 		},
 	}
@@ -514,37 +514,37 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_ReturnSnapshot() {
 			mu := historyi.NewMockMutableState(s.controller)
 			s.workflowConsistencyChecker.EXPECT().GetChasmLeaseWithConsistencyCheck(gomock.Any(), nil, gomock.Any(), definition.WorkflowKey{
 				NamespaceID: s.namespaceID,
-				WorkflowID:  s.execution.WorkflowId,
-				RunID:       s.execution.RunId,
+				WorkflowID:  s.execution.GetWorkflowId(),
+				RunID:       s.execution.GetRunId(),
 			}, chasm.WorkflowArchetypeID, locks.PriorityLow).Return(
 				api.NewWorkflowLease(nil, func(err error) {}, mu), nil)
 			versionHistories, transitions, tombstoneBatches, breakPoint := tc.infoFn()
-			executionInfo := &persistencespb.WorkflowExecutionInfo{
+			executionInfo := persistencespb.WorkflowExecutionInfo_builder{
 				TransitionHistory:               transitions,
 				SubStateMachineTombstoneBatches: tombstoneBatches,
 				VersionHistories:                versionHistories,
 				LastTransitionHistoryBreakPoint: breakPoint,
-			}
+			}.Build()
 			mu.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 			mu.EXPECT().HasBufferedEvents().Return(false)
-			mu.EXPECT().CloneToProto().Return(&persistencespb.WorkflowMutableState{
+			mu.EXPECT().CloneToProto().Return(persistencespb.WorkflowMutableState_builder{
 				ExecutionInfo: executionInfo,
-			})
+			}.Build())
 			result, err := s.syncStateRetriever.GetSyncWorkflowStateArtifact(
 				context.Background(),
 				s.namespaceID,
 				s.execution,
 				chasm.WorkflowArchetypeID,
-				&persistencespb.VersionedTransition{
+				persistencespb.VersionedTransition_builder{
 					NamespaceFailoverVersion: 1,
 					TransitionCount:          13,
-				},
+				}.Build(),
 				versionHistories)
 			s.NoError(err)
 			s.NotNil(result)
 			s.NotNil(result.VersionedTransitionArtifact.GetSyncWorkflowStateSnapshotAttributes())
-			s.Nil(result.VersionedTransitionArtifact.EventBatches)
-			s.Nil(result.VersionedTransitionArtifact.NewRunInfo)
+			s.Nil(result.VersionedTransitionArtifact.GetEventBatches())
+			s.Nil(result.VersionedTransitionArtifact.GetNewRunInfo())
 		})
 	}
 }
@@ -553,39 +553,39 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_NoVersionTransitionProvid
 	mu := historyi.NewMockMutableState(s.controller)
 	s.workflowConsistencyChecker.EXPECT().GetChasmLeaseWithConsistencyCheck(gomock.Any(), nil, gomock.Any(), definition.WorkflowKey{
 		NamespaceID: s.namespaceID,
-		WorkflowID:  s.execution.WorkflowId,
-		RunID:       s.execution.RunId,
+		WorkflowID:  s.execution.GetWorkflowId(),
+		RunID:       s.execution.GetRunId(),
 	}, chasm.WorkflowArchetypeID, locks.PriorityLow).Return(
 		api.NewWorkflowLease(nil, func(err error) {}, mu), nil)
-	versionHistories := &historyspb.VersionHistories{
+	versionHistories := historyspb.VersionHistories_builder{
 		CurrentVersionHistoryIndex: 0,
 		Histories: []*historyspb.VersionHistory{
-			{
+			historyspb.VersionHistory_builder{
 				BranchToken: []byte("branchToken1"),
 				Items: []*historyspb.VersionHistoryItem{
-					{EventId: 1, Version: 10},
-					{EventId: 2, Version: 13},
+					historyspb.VersionHistoryItem_builder{EventId: 1, Version: 10}.Build(),
+					historyspb.VersionHistoryItem_builder{EventId: 2, Version: 13}.Build(),
 				},
-			},
+			}.Build(),
 		},
-	}
-	executionInfo := &persistencespb.WorkflowExecutionInfo{
+	}.Build()
+	executionInfo := persistencespb.WorkflowExecutionInfo_builder{
 		TransitionHistory: []*persistencespb.VersionedTransition{
-			{NamespaceFailoverVersion: 1, TransitionCount: 12},
-			{NamespaceFailoverVersion: 2, TransitionCount: 15},
+			persistencespb.VersionedTransition_builder{NamespaceFailoverVersion: 1, TransitionCount: 12}.Build(),
+			persistencespb.VersionedTransition_builder{NamespaceFailoverVersion: 2, TransitionCount: 15}.Build(),
 		},
 		SubStateMachineTombstoneBatches: []*persistencespb.StateMachineTombstoneBatch{
-			{
-				VersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 12},
-			},
+			persistencespb.StateMachineTombstoneBatch_builder{
+				VersionedTransition: persistencespb.VersionedTransition_builder{NamespaceFailoverVersion: 1, TransitionCount: 12}.Build(),
+			}.Build(),
 		},
 		VersionHistories: versionHistories,
-	}
+	}.Build()
 	mu.EXPECT().HasBufferedEvents().Return(false)
 	mu.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
-	mu.EXPECT().CloneToProto().Return(&persistencespb.WorkflowMutableState{
+	mu.EXPECT().CloneToProto().Return(persistencespb.WorkflowMutableState_builder{
 		ExecutionInfo: executionInfo,
-	})
+	}.Build())
 	result, err := s.syncStateRetriever.GetSyncWorkflowStateArtifact(
 		context.Background(),
 		s.namespaceID,
@@ -596,37 +596,37 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_NoVersionTransitionProvid
 	s.NoError(err)
 	s.NotNil(result)
 	s.NotNil(result.VersionedTransitionArtifact.GetSyncWorkflowStateSnapshotAttributes())
-	s.Nil(result.VersionedTransitionArtifact.EventBatches)
-	s.Nil(result.VersionedTransitionArtifact.NewRunInfo)
+	s.Nil(result.VersionedTransitionArtifact.GetEventBatches())
+	s.Nil(result.VersionedTransitionArtifact.GetNewRunInfo())
 }
 
 func (s *syncWorkflowStateSuite) TestGetNewRunInfo() {
 	mu := historyi.NewMockMutableState(s.controller)
-	versionHistories := &historyspb.VersionHistories{
+	versionHistories := historyspb.VersionHistories_builder{
 		CurrentVersionHistoryIndex: 0,
 		Histories: []*historyspb.VersionHistory{
-			{
+			historyspb.VersionHistory_builder{
 				BranchToken: []byte("branchToken1"),
 				Items: []*historyspb.VersionHistoryItem{
-					{EventId: 1, Version: 10},
-					{EventId: 2, Version: 13},
+					historyspb.VersionHistoryItem_builder{EventId: 1, Version: 10}.Build(),
+					historyspb.VersionHistoryItem_builder{EventId: 2, Version: 13}.Build(),
 				},
-			},
+			}.Build(),
 		},
-	}
-	executionInfo := &persistencespb.WorkflowExecutionInfo{
+	}.Build()
+	executionInfo := persistencespb.WorkflowExecutionInfo_builder{
 		TransitionHistory: []*persistencespb.VersionedTransition{
-			{NamespaceFailoverVersion: 1, TransitionCount: 12},
-			{NamespaceFailoverVersion: 2, TransitionCount: 15},
+			persistencespb.VersionedTransition_builder{NamespaceFailoverVersion: 1, TransitionCount: 12}.Build(),
+			persistencespb.VersionedTransition_builder{NamespaceFailoverVersion: 2, TransitionCount: 15}.Build(),
 		},
 		SubStateMachineTombstoneBatches: []*persistencespb.StateMachineTombstoneBatch{
-			{
-				VersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 12},
-			},
+			persistencespb.StateMachineTombstoneBatch_builder{
+				VersionedTransition: persistencespb.VersionedTransition_builder{NamespaceFailoverVersion: 1, TransitionCount: 12}.Build(),
+			}.Build(),
 		},
 		VersionHistories:  versionHistories,
 		NewExecutionRunId: s.newRunId,
-	}
+	}.Build()
 	mu.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	// New logic queries start version and checks cluster affinity
 	mu.EXPECT().GetStartVersion().Return(int64(1), nil)
@@ -634,22 +634,22 @@ func (s *syncWorkflowStateSuite) TestGetNewRunInfo() {
 	cm.EXPECT().GetClusterID().Return(int64(1))
 	cm.EXPECT().IsVersionFromSameCluster(int64(1), int64(1)).Return(true)
 	s.mockShard.SetClusterMetadata(cm)
-	s.workflowCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), s.mockShard, namespace.ID(s.namespaceID), &commonpb.WorkflowExecution{
-		WorkflowId: s.execution.WorkflowId,
+	s.workflowCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), s.mockShard, namespace.ID(s.namespaceID), commonpb.WorkflowExecution_builder{
+		WorkflowId: s.execution.GetWorkflowId(),
 		RunId:      s.newRunId,
-	}, locks.PriorityLow).Return(s.newRunWorkflowContext, s.releaseFunc, nil)
+	}.Build(), locks.PriorityLow).Return(s.newRunWorkflowContext, s.releaseFunc, nil)
 	s.newRunWorkflowContext.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).
 		Return(mu, nil).Times(1)
 
 	s.mockShard.Resource.ExecutionMgr.EXPECT().ReadRawHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
-		BranchToken: versionHistories.Histories[0].GetBranchToken(),
+		BranchToken: versionHistories.GetHistories()[0].GetBranchToken(),
 		MinEventID:  1,
 		MaxEventID:  2,
 		ShardID:     s.mockShard.GetShardID(),
 		PageSize:    defaultPageSize,
 	}).Return(&persistence.ReadRawHistoryBranchResponse{
 		HistoryEventBlobs: []*commonpb.DataBlob{
-			{Data: []byte("event1")}},
+			commonpb.DataBlob_builder{Data: []byte("event1")}.Build()},
 	}, nil)
 	newRunInfo, err := s.syncStateRetriever.getNewRunInfo(context.Background(), namespace.ID(s.namespaceID), s.execution, s.newRunId)
 	s.NoError(err)
@@ -658,31 +658,31 @@ func (s *syncWorkflowStateSuite) TestGetNewRunInfo() {
 
 func (s *syncWorkflowStateSuite) TestGetNewRunInfo_NewRunFromDifferentCluster_ReturnNil() {
 	mu := historyi.NewMockMutableState(s.controller)
-	versionHistories := &historyspb.VersionHistories{
+	versionHistories := historyspb.VersionHistories_builder{
 		CurrentVersionHistoryIndex: 0,
 		Histories: []*historyspb.VersionHistory{
-			{
+			historyspb.VersionHistory_builder{
 				BranchToken: []byte("branchToken1"),
 				Items: []*historyspb.VersionHistoryItem{
-					{EventId: 1, Version: 7},
-					{EventId: 2, Version: 13},
+					historyspb.VersionHistoryItem_builder{EventId: 1, Version: 7}.Build(),
+					historyspb.VersionHistoryItem_builder{EventId: 2, Version: 13}.Build(),
 				},
-			},
+			}.Build(),
 		},
-	}
-	executionInfo := &persistencespb.WorkflowExecutionInfo{
+	}.Build()
+	executionInfo := persistencespb.WorkflowExecutionInfo_builder{
 		TransitionHistory: []*persistencespb.VersionedTransition{
-			{NamespaceFailoverVersion: 7, TransitionCount: 12},
-			{NamespaceFailoverVersion: 13, TransitionCount: 15},
+			persistencespb.VersionedTransition_builder{NamespaceFailoverVersion: 7, TransitionCount: 12}.Build(),
+			persistencespb.VersionedTransition_builder{NamespaceFailoverVersion: 13, TransitionCount: 15}.Build(),
 		},
 		SubStateMachineTombstoneBatches: []*persistencespb.StateMachineTombstoneBatch{
-			{
-				VersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 12},
-			},
+			persistencespb.StateMachineTombstoneBatch_builder{
+				VersionedTransition: persistencespb.VersionedTransition_builder{NamespaceFailoverVersion: 1, TransitionCount: 12}.Build(),
+			}.Build(),
 		},
 		VersionHistories:  versionHistories,
 		NewExecutionRunId: s.newRunId,
-	}
+	}.Build()
 	mu.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	// New logic queries start version and checks cluster affinity
 	mu.EXPECT().GetStartVersion().Return(int64(7), nil)
@@ -691,10 +691,10 @@ func (s *syncWorkflowStateSuite) TestGetNewRunInfo_NewRunFromDifferentCluster_Re
 	cm.EXPECT().IsVersionFromSameCluster(int64(7), int64(1)).Return(false)
 	s.mockShard.SetClusterMetadata(cm)
 
-	s.workflowCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), s.mockShard, namespace.ID(s.namespaceID), &commonpb.WorkflowExecution{
-		WorkflowId: s.execution.WorkflowId,
+	s.workflowCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), s.mockShard, namespace.ID(s.namespaceID), commonpb.WorkflowExecution_builder{
+		WorkflowId: s.execution.GetWorkflowId(),
 		RunId:      s.newRunId,
-	}, locks.PriorityLow).Return(s.newRunWorkflowContext, s.releaseFunc, nil)
+	}.Build(), locks.PriorityLow).Return(s.newRunWorkflowContext, s.releaseFunc, nil)
 	s.newRunWorkflowContext.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).
 		Return(mu, nil).Times(1)
 
@@ -705,36 +705,36 @@ func (s *syncWorkflowStateSuite) TestGetNewRunInfo_NewRunFromDifferentCluster_Re
 
 func (s *syncWorkflowStateSuite) TestGetNewRunInfo_NotFound() {
 	mu := historyi.NewMockMutableState(s.controller)
-	versionHistories := &historyspb.VersionHistories{
+	versionHistories := historyspb.VersionHistories_builder{
 		CurrentVersionHistoryIndex: 0,
 		Histories: []*historyspb.VersionHistory{
-			{
+			historyspb.VersionHistory_builder{
 				BranchToken: []byte("branchToken1"),
 				Items: []*historyspb.VersionHistoryItem{
-					{EventId: 1, Version: 10},
-					{EventId: 2, Version: 13},
+					historyspb.VersionHistoryItem_builder{EventId: 1, Version: 10}.Build(),
+					historyspb.VersionHistoryItem_builder{EventId: 2, Version: 13}.Build(),
 				},
-			},
+			}.Build(),
 		},
-	}
-	executionInfo := &persistencespb.WorkflowExecutionInfo{
+	}.Build()
+	executionInfo := persistencespb.WorkflowExecutionInfo_builder{
 		TransitionHistory: []*persistencespb.VersionedTransition{
-			{NamespaceFailoverVersion: 1, TransitionCount: 12},
-			{NamespaceFailoverVersion: 2, TransitionCount: 15},
+			persistencespb.VersionedTransition_builder{NamespaceFailoverVersion: 1, TransitionCount: 12}.Build(),
+			persistencespb.VersionedTransition_builder{NamespaceFailoverVersion: 2, TransitionCount: 15}.Build(),
 		},
 		SubStateMachineTombstoneBatches: []*persistencespb.StateMachineTombstoneBatch{
-			{
-				VersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 12},
-			},
+			persistencespb.StateMachineTombstoneBatch_builder{
+				VersionedTransition: persistencespb.VersionedTransition_builder{NamespaceFailoverVersion: 1, TransitionCount: 12}.Build(),
+			}.Build(),
 		},
 		VersionHistories:  versionHistories,
 		NewExecutionRunId: s.newRunId,
-	}
+	}.Build()
 	mu.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
-	s.workflowCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), s.mockShard, namespace.ID(s.namespaceID), &commonpb.WorkflowExecution{
-		WorkflowId: s.execution.WorkflowId,
+	s.workflowCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), s.mockShard, namespace.ID(s.namespaceID), commonpb.WorkflowExecution_builder{
+		WorkflowId: s.execution.GetWorkflowId(),
 		RunId:      s.newRunId,
-	}, locks.PriorityLow).Return(s.newRunWorkflowContext, s.releaseFunc, nil)
+	}.Build(), locks.PriorityLow).Return(s.newRunWorkflowContext, s.releaseFunc, nil)
 	s.newRunWorkflowContext.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).
 		Return(nil, serviceerror.NewNotFound("not found")).Times(1)
 
@@ -757,7 +757,7 @@ func (s *syncWorkflowStateSuite) addXDCCache(minEventID int64, version int64, ne
 }
 
 func (s *syncWorkflowStateSuite) getEventBlobs(firstEventID, nextEventID int64) []*commonpb.DataBlob {
-	eventBlob := &commonpb.DataBlob{Data: []byte("event1")}
+	eventBlob := commonpb.DataBlob_builder{Data: []byte("event1")}.Build()
 	eventBlobs := make([]*commonpb.DataBlob, nextEventID-firstEventID)
 	for i := 0; i < int(nextEventID-firstEventID); i++ {
 		eventBlobs[i] = eventBlob
@@ -776,22 +776,22 @@ func (s *syncWorkflowStateSuite) TestGetSyncStateEvents() {
 		},
 	}
 	versionHistoryItems := []*historyspb.VersionHistoryItem{
-		{EventId: 1, Version: 10},
-		{EventId: 30, Version: 13},
+		historyspb.VersionHistoryItem_builder{EventId: 1, Version: 10}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 30, Version: 13}.Build(),
 	}
-	sourceVersionHistories := &historyspb.VersionHistories{
+	sourceVersionHistories := historyspb.VersionHistories_builder{
 		CurrentVersionHistoryIndex: 0,
 		Histories: []*historyspb.VersionHistory{
-			{
+			historyspb.VersionHistory_builder{
 				BranchToken: []byte("source branchToken1"),
 				Items:       versionHistoryItems,
-			},
+			}.Build(),
 		},
-	}
+	}.Build()
 
 	// get [19, 31) from DB
 	s.mockShard.Resource.ExecutionMgr.EXPECT().ReadRawHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
-		BranchToken: sourceVersionHistories.Histories[0].GetBranchToken(),
+		BranchToken: sourceVersionHistories.GetHistories()[0].GetBranchToken(),
 		MinEventID:  19,
 		MaxEventID:  31,
 		ShardID:     s.mockShard.GetShardID(),
@@ -804,7 +804,7 @@ func (s *syncWorkflowStateSuite) TestGetSyncStateEvents() {
 
 	// get [19,21) from cache, [21, 31) from DB
 	s.mockShard.Resource.ExecutionMgr.EXPECT().ReadRawHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
-		BranchToken: sourceVersionHistories.Histories[0].GetBranchToken(),
+		BranchToken: sourceVersionHistories.GetHistories()[0].GetBranchToken(),
 		MinEventID:  21,
 		MaxEventID:  31,
 		ShardID:     s.mockShard.GetShardID(),
@@ -824,16 +824,16 @@ func (s *syncWorkflowStateSuite) TestGetSyncStateEvents() {
 }
 
 func (s *syncWorkflowStateSuite) TestGetEventsBlob_NewRun() {
-	versionHistory := &historyspb.VersionHistory{
+	versionHistory := historyspb.VersionHistory_builder{
 		BranchToken: []byte("branchToken1"),
 		Items: []*historyspb.VersionHistoryItem{
-			{EventId: 1, Version: 1},
+			historyspb.VersionHistoryItem_builder{EventId: 1, Version: 1}.Build(),
 		},
-	}
+	}.Build()
 
 	// get [1,4) from DB
 	s.mockShard.Resource.ExecutionMgr.EXPECT().ReadRawHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
-		BranchToken: versionHistory.BranchToken,
+		BranchToken: versionHistory.GetBranchToken(),
 		MinEventID:  common.FirstEventID,
 		MaxEventID:  common.FirstEventID + 1,
 		ShardID:     s.mockShard.GetShardID(),
@@ -844,7 +844,7 @@ func (s *syncWorkflowStateSuite) TestGetEventsBlob_NewRun() {
 	s.Len(events, 4-1)
 
 	// get [1,4) from cache
-	s.addXDCCache(1, 1, 4, s.getEventBlobs(1, 4), versionHistory.Items)
+	s.addXDCCache(1, 1, 4, s.getEventBlobs(1, 4), versionHistory.GetItems())
 	events, err = s.syncStateRetriever.getEventsBlob(context.Background(), s.workflowKey, versionHistory, common.FirstEventID, common.FirstEventID+1, true)
 	s.NoError(err)
 	s.Len(events, 4-1)
@@ -857,18 +857,18 @@ func (s *syncWorkflowStateSuite) TestGetSyncStateEvents_EventsUpToDate_ReturnNot
 			{EventId: 18, Version: 13},
 		},
 	}
-	sourceVersionHistories := &historyspb.VersionHistories{
+	sourceVersionHistories := historyspb.VersionHistories_builder{
 		CurrentVersionHistoryIndex: 0,
 		Histories: []*historyspb.VersionHistory{
-			{
+			historyspb.VersionHistory_builder{
 				BranchToken: []byte("source branchToken1"),
 				Items: []*historyspb.VersionHistoryItem{
-					{EventId: 1, Version: 10},
-					{EventId: 18, Version: 13},
+					historyspb.VersionHistoryItem_builder{EventId: 1, Version: 10}.Build(),
+					historyspb.VersionHistoryItem_builder{EventId: 18, Version: 13}.Build(),
 				},
-			},
+			}.Build(),
 		},
-	}
+	}.Build()
 
 	events, err := s.syncStateRetriever.getSyncStateEvents(context.Background(), s.workflowKey, targetVersionHistoriesItems, sourceVersionHistories, false)
 
@@ -884,17 +884,17 @@ func (s *syncWorkflowStateSuite) TestGetUpdatedSubStateMachine() {
 
 	root, err := hsm.NewRoot(reg, def1.Type(), hsmtest.NewData(hsmtest.State1), make(map[string]*persistencespb.StateMachineMap), &hsmtest.NodeBackend{})
 	s.NoError(err)
-	root.InternalRepr().LastUpdateVersionedTransition = &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 10}
+	root.InternalRepr().SetLastUpdateVersionedTransition(persistencespb.VersionedTransition_builder{NamespaceFailoverVersion: 1, TransitionCount: 10}.Build())
 	child1, err := root.AddChild(hsm.Key{Type: def1.Type(), ID: "child1"}, hsmtest.NewData(hsmtest.State1))
 	s.Nil(err)
-	child1.InternalRepr().LastUpdateVersionedTransition = &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 8}
+	child1.InternalRepr().SetLastUpdateVersionedTransition(persistencespb.VersionedTransition_builder{NamespaceFailoverVersion: 1, TransitionCount: 8}.Build())
 	child2, err := root.AddChild(hsm.Key{Type: def1.Type(), ID: "child2"}, hsmtest.NewData(hsmtest.State1))
 	s.Nil(err)
-	child2.InternalRepr().LastUpdateVersionedTransition = &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 10}
+	child2.InternalRepr().SetLastUpdateVersionedTransition(persistencespb.VersionedTransition_builder{NamespaceFailoverVersion: 1, TransitionCount: 10}.Build())
 
-	result, err := s.syncStateRetriever.getUpdatedSubStateMachine(root, &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 9})
+	result, err := s.syncStateRetriever.getUpdatedSubStateMachine(root, persistencespb.VersionedTransition_builder{NamespaceFailoverVersion: 1, TransitionCount: 9}.Build())
 	s.NoError(err)
 	s.Equal(1, len(result))
-	s.Equal(len(child2.Path()), len(result[0].Path.Path))
-	s.Equal(child2.Path()[0].ID, result[0].Path.Path[0].Id)
+	s.Equal(len(child2.Path()), len(result[0].GetPath().GetPath()))
+	s.Equal(child2.Path()[0].ID, result[0].GetPath().GetPath()[0].GetId())
 }

@@ -27,11 +27,11 @@ func Merge(
 		return base
 	}
 
-	return &commonpb.Priority{
-		PriorityKey:    cmp.Or(override.PriorityKey, base.PriorityKey),
-		FairnessKey:    cmp.Or(override.FairnessKey, base.FairnessKey),
-		FairnessWeight: cmp.Or(override.FairnessWeight, base.FairnessWeight),
-	}
+	return commonpb.Priority_builder{
+		PriorityKey:    cmp.Or(override.GetPriorityKey(), base.GetPriorityKey()),
+		FairnessKey:    cmp.Or(override.GetFairnessKey(), base.GetFairnessKey()),
+		FairnessWeight: cmp.Or(override.GetFairnessWeight(), base.GetFairnessWeight()),
+	}.Build()
 }
 
 func ValidateFairnessKey(key string) error {
@@ -51,11 +51,11 @@ func ValidateFairnessWeight(weight float32) error {
 func Validate(p *commonpb.Priority) error {
 	if p == nil {
 		return nil
-	} else if p.PriorityKey < 0 {
+	} else if p.GetPriorityKey() < 0 {
 		return ErrInvalidPriority
-	} else if err := ValidateFairnessKey(p.FairnessKey); err != nil {
+	} else if err := ValidateFairnessKey(p.GetFairnessKey()); err != nil {
 		return err
-	} else if p.FairnessWeight < 0 {
+	} else if p.GetFairnessWeight() < 0 {
 		return ErrInvalidFairnessWeight
 	}
 	return nil

@@ -403,10 +403,10 @@ func (d *MutableStateStore) CreateWorkflowExecution(
 	case p.CreateWorkflowModeUpdateCurrent:
 		batch.Query(templateUpdateCurrentWorkflowExecutionForNewQuery,
 			runID,
-			newWorkflow.ExecutionStateBlob.Data,
-			newWorkflow.ExecutionStateBlob.EncodingType.String(),
+			newWorkflow.ExecutionStateBlob.GetData(),
+			newWorkflow.ExecutionStateBlob.GetEncodingType().String(),
 			lastWriteVersion,
-			newWorkflow.ExecutionState.State,
+			newWorkflow.ExecutionState.GetState(),
 			shardID,
 			rowTypeExecution,
 			namespaceID,
@@ -431,10 +431,10 @@ func (d *MutableStateStore) CreateWorkflowExecution(
 			defaultVisibilityTimestamp,
 			rowTypeExecutionTaskID,
 			runID,
-			newWorkflow.ExecutionStateBlob.Data,
-			newWorkflow.ExecutionStateBlob.EncodingType.String(),
+			newWorkflow.ExecutionStateBlob.GetData(),
+			newWorkflow.ExecutionStateBlob.GetEncodingType().String(),
 			lastWriteVersion,
-			newWorkflow.ExecutionState.State,
+			newWorkflow.ExecutionState.GetState(),
 		)
 
 		requestCurrentRunID = ""
@@ -480,7 +480,7 @@ func (d *MutableStateStore) CreateWorkflowExecution(
 			request.RangeID,
 			requestCurrentRunID,
 			[]executionCASCondition{{
-				runID: newWorkflow.ExecutionState.RunId,
+				runID: newWorkflow.ExecutionState.GetRunId(),
 				// dbVersion is for CAS, so the db record version will be set to `updateWorkflow.DBRecordVersion`
 				// while CAS on `updateWorkflow.DBRecordVersion - 1`
 				dbVersion:   newWorkflow.DBRecordVersion - 1,
@@ -624,7 +624,7 @@ func (d *MutableStateStore) UpdateWorkflowExecution(
 			workflowID,
 			request.ArchetypeID,
 			runID,
-			timestamp.TimeValuePtr(updateWorkflow.ExecutionState.StartTime),
+			timestamp.TimeValuePtr(updateWorkflow.ExecutionState.GetStartTime()),
 		); err != nil {
 			return err
 		}
@@ -642,10 +642,10 @@ func (d *MutableStateStore) UpdateWorkflowExecution(
 
 			batch.Query(templateUpdateCurrentWorkflowExecutionQuery,
 				newRunID,
-				newWorkflow.ExecutionStateBlob.Data,
-				newWorkflow.ExecutionStateBlob.EncodingType.String(),
+				newWorkflow.ExecutionStateBlob.GetData(),
+				newWorkflow.ExecutionStateBlob.GetEncodingType().String(),
 				newLastWriteVersion,
-				newWorkflow.ExecutionState.State,
+				newWorkflow.ExecutionState.GetState(),
 				shardID,
 				rowTypeExecution,
 				newNamespaceID,
@@ -667,10 +667,10 @@ func (d *MutableStateStore) UpdateWorkflowExecution(
 
 			batch.Query(templateUpdateCurrentWorkflowExecutionQuery,
 				runID,
-				executionStateDatablob.Data,
-				executionStateDatablob.EncodingType.String(),
+				executionStateDatablob.GetData(),
+				executionStateDatablob.GetEncodingType().String(),
 				lastWriteVersion,
-				updateWorkflow.ExecutionState.State,
+				updateWorkflow.ExecutionState.GetState(),
 				request.ShardID,
 				rowTypeExecution,
 				namespaceID,
@@ -727,9 +727,9 @@ func (d *MutableStateStore) UpdateWorkflowExecution(
 			currentRecordRunID,
 			request.ShardID,
 			request.RangeID,
-			updateWorkflow.ExecutionState.RunId,
+			updateWorkflow.ExecutionState.GetRunId(),
 			[]executionCASCondition{{
-				runID: updateWorkflow.ExecutionState.RunId,
+				runID: updateWorkflow.ExecutionState.GetRunId(),
 				// dbVersion is for CAS, so the db record version will be set to `updateWorkflow.DBRecordVersion`
 				// while CAS on `updateWorkflow.DBRecordVersion - 1`
 				dbVersion:   updateWorkflow.DBRecordVersion - 1,
@@ -759,7 +759,7 @@ func (d *MutableStateStore) ConflictResolveWorkflowExecution(
 
 	var startTime *time.Time
 	if currentWorkflow != nil && currentWorkflow.ExecutionState != nil {
-		startTime = timestamp.TimeValuePtr(currentWorkflow.ExecutionState.StartTime)
+		startTime = timestamp.TimeValuePtr(currentWorkflow.ExecutionState.GetStartTime())
 	}
 
 	currentRecordRunID := d.getCurrentRecordRunID(request.ArchetypeID)
@@ -772,7 +772,7 @@ func (d *MutableStateStore) ConflictResolveWorkflowExecution(
 			namespaceID,
 			workflowID,
 			request.ArchetypeID,
-			resetWorkflow.ExecutionState.RunId,
+			resetWorkflow.ExecutionState.GetRunId(),
 			startTime,
 		); err != nil {
 			return err
@@ -789,18 +789,18 @@ func (d *MutableStateStore) ConflictResolveWorkflowExecution(
 		}
 
 		if currentWorkflow != nil {
-			currentRunID = currentWorkflow.ExecutionState.RunId
+			currentRunID = currentWorkflow.ExecutionState.GetRunId()
 		} else {
 			// reset workflow is current
-			currentRunID = resetWorkflow.ExecutionState.RunId
+			currentRunID = resetWorkflow.ExecutionState.GetRunId()
 		}
 
 		batch.Query(templateUpdateCurrentWorkflowExecutionQuery,
-			executionState.RunId,
-			executionStateBlob.Data,
-			executionStateBlob.EncodingType.String(),
+			executionState.GetRunId(),
+			executionStateBlob.GetData(),
+			executionStateBlob.GetEncodingType().String(),
 			lastWriteVersion,
-			executionState.State,
+			executionState.GetState(),
 			shardID,
 			rowTypeExecution,
 			namespaceID,

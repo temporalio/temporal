@@ -306,14 +306,14 @@ func (m *userDataManagerImpl) fetchUserData(ctx context.Context) error {
 		callCtx, cancel := context.WithTimeout(ctx, m.config.GetUserDataLongPollTimeout())
 		defer cancel()
 
-		res, err := m.matchingClient.GetTaskQueueUserData(callCtx, &matchingservice.GetTaskQueueUserDataRequest{
+		res, err := m.matchingClient.GetTaskQueueUserData(callCtx, matchingservice.GetTaskQueueUserDataRequest_builder{
 			NamespaceId:                   m.partition.NamespaceId(),
 			TaskQueue:                     fetchSource.RpcName(),
 			TaskQueueType:                 fetchSource.TaskType(),
 			LastKnownUserDataVersion:      knownUserData.GetVersion(),
 			LastKnownEphemeralDataVersion: m.getIncomingEphemeralDataVersion(),
 			WaitNewData:                   hasFetchedUserData,
-		})
+		}.Build())
 		if err != nil {
 			// don't log on context canceled, produces too much log spam at shutdown
 			if !common.IsContextCanceledErr(err) {
@@ -341,7 +341,7 @@ func (m *userDataManagerImpl) fetchUserData(ctx context.Context) error {
 			m.logger.Debug("fetched user data from parent, no change")
 		}
 		if res.GetEphemeralData() != nil {
-			m.gotIncomingEphemeralData(res.EphemeralData)
+			m.gotIncomingEphemeralData(res.GetEphemeralData())
 		}
 		hasFetchedUserData = true
 		m.setUserDataState(userDataEnabled, nil)
@@ -475,11 +475,11 @@ func (m *userDataManagerImpl) UpdateUserData(ctx context.Context, options UserDa
 		return newData.GetVersion(), nil
 	}
 
-	_, err = m.matchingClient.ReplicateTaskQueueUserData(ctx, &matchingservice.ReplicateTaskQueueUserDataRequest{
+	_, err = m.matchingClient.ReplicateTaskQueueUserData(ctx, matchingservice.ReplicateTaskQueueUserDataRequest_builder{
 		NamespaceId: m.partition.NamespaceId(),
 		TaskQueue:   m.partition.TaskQueue().Name(),
 		UserData:    newData.GetData(),
-	})
+	}.Build())
 	if err != nil {
 		m.logger.Error("Failed to publish a replication task after updating task queue user data", tag.Error(err))
 		return 0, serviceerror.NewUnavailable("storing task queue user data succeeded but publishing to the namespace replication queue failed, please try again")
@@ -546,19 +546,19 @@ func (m *userDataManagerImpl) updateUserData(
 		}
 	}
 
-	_, err = m.matchingClient.UpdateTaskQueueUserData(ctx, &matchingservice.UpdateTaskQueueUserDataRequest{
+	_, err = m.matchingClient.UpdateTaskQueueUserData(ctx, matchingservice.UpdateTaskQueueUserDataRequest_builder{
 		NamespaceId:     m.partition.NamespaceId(),
 		TaskQueue:       m.partition.TaskQueue().Name(),
-		UserData:        &persistencespb.VersionedTaskQueueUserData{Version: preUpdateVersion, Data: updatedUserData},
+		UserData:        persistencespb.VersionedTaskQueueUserData_builder{Version: preUpdateVersion, Data: updatedUserData}.Build(),
 		BuildIdsAdded:   added,
 		BuildIdsRemoved: removed,
-	})
+	}.Build())
 	if err != nil {
 		m.logger.Error("failed to push new user data to owning matching node for namespace", tag.Error(err))
 		return nil, false, err
 	}
 
-	updatedVersionedData := &persistencespb.VersionedTaskQueueUserData{Version: preUpdateVersion + 1, Data: updatedUserData}
+	updatedVersionedData := persistencespb.VersionedTaskQueueUserData_builder{Version: preUpdateVersion + 1, Data: updatedUserData}.Build()
 	m.logNewUserData("modified user data", updatedVersionedData, tag.NewStringTag("user-data-update-source", options.Source))
 	m.setUserDataLocked(updatedVersionedData)
 
@@ -575,7 +575,7 @@ func (m *userDataManagerImpl) HandleGetUserDataRequest(
 	}
 	lastEphVersion := req.GetLastKnownEphemeralDataVersion()
 
-	if req.WaitNewData {
+	if req.GetWaitNewData() {
 		var cancel context.CancelFunc
 		ctx, cancel = contextutil.WithDeadlineBuffer(ctx, m.config.GetUserDataLongPollTimeout(), m.config.GetUserDataReturnBudget)
 		defer cancel()
@@ -588,7 +588,7 @@ func (m *userDataManagerImpl) HandleGetUserDataRequest(
 			// If we're closing, return a success with no data, as if the request expired. We shouldn't
 			// close due to idleness (because of the MarkAlive above), so we're probably closing due to a
 			// change of ownership. The caller will retry and be redirected to the new owner.
-			m.logger.Debug("returning empty user data (closing)", tag.NewBoolTag("long-poll", req.WaitNewData))
+			m.logger.Debug("returning empty user data (closing)", tag.NewBoolTag("long-poll", req.GetWaitNewData()))
 			return &matchingservice.GetTaskQueueUserDataResponse{}, nil
 		} else if err != nil {
 			return nil, err
@@ -597,7 +597,7 @@ func (m *userDataManagerImpl) HandleGetUserDataRequest(
 		newEphData := ephData.GetVersion() > lastEphVersion
 		if newUserData || newEphData {
 			m.logger.Info("returning user data",
-				tag.NewBoolTag("long-poll", req.WaitNewData),
+				tag.NewBoolTag("long-poll", req.GetWaitNewData()),
 				tag.NewInt64("request-known-version", lastVersion),
 				tag.UserDataVersion(userData.GetVersion()),
 				tag.NewInt64("request-eph-data-version", lastEphVersion),
@@ -605,13 +605,13 @@ func (m *userDataManagerImpl) HandleGetUserDataRequest(
 			)
 			var res matchingservice.GetTaskQueueUserDataResponse
 			if newUserData {
-				res.UserData = userData
+				res.SetUserData(userData)
 			}
 			if newEphData {
-				res.EphemeralData = ephData
+				res.SetEphemeralData(ephData)
 			}
 			return &res, nil
-		} else if userData != nil && userData.Version < lastVersion && m.store != nil {
+		} else if userData != nil && userData.GetVersion() < lastVersion && m.store != nil {
 			// When m.store == nil it means this is a non-owner partition, so it is possible
 			// for the requested version to be greater than the known version if there are
 			// concurrent user data updates in flight. We do not log an error in that case.
@@ -621,7 +621,7 @@ func (m *userDataManagerImpl) HandleGetUserDataRequest(
 			// We rely on client retries in this case to let the system eventually self-heal.
 			m.logger.Error("requested task queue user data for version greater than known version",
 				tag.NewInt64("request-known-version", lastVersion),
-				tag.UserDataVersion(userData.Version),
+				tag.UserDataVersion(userData.GetVersion()),
 			)
 			return nil, errRequestedVersionTooLarge
 		}
@@ -629,7 +629,7 @@ func (m *userDataManagerImpl) HandleGetUserDataRequest(
 		// have older data than the child. Don't return a error in that case, just wait until we
 		// have newer data. Note that "version" is a timestamp.
 
-		if !req.WaitNewData {
+		if !req.GetWaitNewData() {
 			m.logger.Debug("returning empty user data (no data or no change)")
 			return &matchingservice.GetTaskQueueUserDataResponse{}, nil
 		}
@@ -679,14 +679,14 @@ func (m *userDataManagerImpl) CheckTaskQueueUserDataPropagation(
 
 	check := func(p int, tp enumspb.TaskQueueType) {
 		err := backoff.ThrottleRetryContext(ctx, func(ctx context.Context) error {
-			res, err := m.matchingClient.GetTaskQueueUserData(ctx, &matchingservice.GetTaskQueueUserDataRequest{
+			res, err := m.matchingClient.GetTaskQueueUserData(ctx, matchingservice.GetTaskQueueUserDataRequest_builder{
 				NamespaceId:              m.partition.NamespaceId(),
 				TaskQueue:                m.partition.TaskQueue().NormalPartition(p).RpcName(),
 				TaskQueueType:            tp,
 				LastKnownUserDataVersion: version - 1,
 				WaitNewData:              true,
 				OnlyIfLoaded:             true,
-			})
+			}.Build())
 			if err != nil {
 				var failed *serviceerror.FailedPrecondition
 				if errors.As(err, &failed) {
@@ -732,23 +732,23 @@ func (m *userDataManagerImpl) LocalBacklogPriorityChanged(backlogPriority map[Ph
 
 	byVersion := make([]*taskqueuespb.EphemeralData_ByVersion, 0, len(backlogPriority))
 	for ver, levels := range backlogPriority {
-		byVersion = append(byVersion, &taskqueuespb.EphemeralData_ByVersion{
+		byVersion = append(byVersion, taskqueuespb.EphemeralData_ByVersion_builder{
 			Version:               ver.WorkerDeploymentVersionS(),
 			BacklogPriorityLevels: levels,
-		})
+		}.Build())
 	}
 
-	newEph := &taskqueuespb.VersionedEphemeralData{
-		Data: &taskqueuespb.EphemeralData{
+	newEph := taskqueuespb.VersionedEphemeralData_builder{
+		Data: taskqueuespb.EphemeralData_builder{
 			Partition: []*taskqueuespb.EphemeralData_ByPartition{
-				&taskqueuespb.EphemeralData_ByPartition{
+				taskqueuespb.EphemeralData_ByPartition_builder{
 					Partition: int32(normal.PartitionId()),
 					Version:   byVersion,
-				},
+				}.Build(),
 			},
-		},
+		}.Build(),
 		Version: time.Now().UnixNano(),
-	}
+	}.Build()
 
 	m.lock.Lock()
 	defer m.lock.Unlock()
@@ -780,21 +780,21 @@ func (m *userDataManagerImpl) getIncomingEphemeralDataVersion() int64 {
 }
 
 func (m *userDataManagerImpl) mergeEphemeralDataLocked() {
-	m.mergedEphemeralData = &taskqueuespb.VersionedEphemeralData{
-		Data: &taskqueuespb.EphemeralData{
+	m.mergedEphemeralData = taskqueuespb.VersionedEphemeralData_builder{
+		Data: taskqueuespb.EphemeralData_builder{
 			// data is already separated by partition, so we can just concatenate
 			Partition: slices.Concat(
 				m.incomingEphemeralData.GetData().GetPartition(),
 				m.myEphemeralData.GetData().GetPartition(),
 			),
-		},
+		}.Build(),
 		Version: time.Now().UnixNano(),
-	}
+	}.Build()
 
 	close(m.ephemeralDataChanged)
 	m.ephemeralDataChanged = make(chan struct{})
 	if m.onEphemeralDataChanged != nil {
-		go m.onEphemeralDataChanged(m.mergedEphemeralData.Data)
+		go m.onEphemeralDataChanged(m.mergedEphemeralData.GetData())
 	}
 }
 

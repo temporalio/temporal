@@ -74,13 +74,13 @@ func (d *userDataStore) UpdateTaskQueueUserData(
 			batch.Query(templateInsertTaskQueueUserDataQuery,
 				request.NamespaceID,
 				taskQueue,
-				update.UserData.Data,
-				update.UserData.EncodingType.String(),
+				update.UserData.GetData(),
+				update.UserData.GetEncodingType().String(),
 			)
 		} else {
 			batch.Query(templateUpdateTaskQueueUserDataQuery,
-				update.UserData.Data,
-				update.UserData.EncodingType.String(),
+				update.UserData.GetData(),
+				update.UserData.GetEncodingType().String(),
 				update.Version+1,
 				request.NamespaceID,
 				taskQueue,

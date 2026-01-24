@@ -84,13 +84,13 @@ func (v *taskValidatorImpl) maybeValidate(
 func (v *taskValidatorImpl) preValidate(
 	task *persistencespb.AllocatedTaskInfo,
 ) bool {
-	namespaceID := task.Data.NamespaceId
+	namespaceID := task.GetData().GetNamespaceId()
 	namespaceEntry, err := v.namespaceRegistry.GetNamespaceByID(namespace.ID(namespaceID))
 	if err != nil {
 		// if cannot find the namespace entry, treat task as active
 		return v.preValidateActive(task)
 	}
-	if v.clusterMetadata.GetCurrentClusterName() == namespaceEntry.ActiveClusterName(task.Data.WorkflowId) {
+	if v.clusterMetadata.GetCurrentClusterName() == namespaceEntry.ActiveClusterName(task.GetData().GetWorkflowId()) {
 		return v.preValidateActive(task)
 	}
 	return v.preValidatePassive(task)
@@ -100,16 +100,16 @@ func (v *taskValidatorImpl) preValidate(
 func (v *taskValidatorImpl) preValidateActive(
 	task *persistencespb.AllocatedTaskInfo,
 ) bool {
-	if v.lastValidatedTaskInfo.taskID != task.TaskId {
+	if v.lastValidatedTaskInfo.taskID != task.GetTaskId() {
 		// first time seen the task, caller should try to dispatch first
-		if task.Data.CreateTime != nil {
+		if task.GetData().HasCreateTime() {
 			v.lastValidatedTaskInfo = taskValidationInfo{
-				taskID:         task.TaskId,
-				validationTime: task.Data.CreateTime.AsTime(), // task is valid when created
+				taskID:         task.GetTaskId(),
+				validationTime: task.GetData().GetCreateTime().AsTime(), // task is valid when created
 			}
 		} else {
 			v.lastValidatedTaskInfo = taskValidationInfo{
-				taskID:         task.TaskId,
+				taskID:         task.GetTaskId(),
 				validationTime: time.Now().UTC(), // if no creation time specified, use now
 			}
 		}
@@ -124,16 +124,16 @@ func (v *taskValidatorImpl) preValidateActive(
 func (v *taskValidatorImpl) preValidatePassive(
 	task *persistencespb.AllocatedTaskInfo,
 ) bool {
-	if v.lastValidatedTaskInfo.taskID != task.TaskId {
+	if v.lastValidatedTaskInfo.taskID != task.GetTaskId() {
 		// first time seen the task, make a decision based on task creation time
-		if task.Data.CreateTime != nil {
+		if task.GetData().HasCreateTime() {
 			v.lastValidatedTaskInfo = taskValidationInfo{
-				taskID:         task.TaskId,
-				validationTime: task.Data.CreateTime.AsTime(), // task is valid when created
+				taskID:         task.GetTaskId(),
+				validationTime: task.GetData().GetCreateTime().AsTime(), // task is valid when created
 			}
 		} else {
 			v.lastValidatedTaskInfo = taskValidationInfo{
-				taskID:         task.TaskId,
+				taskID:         task.GetTaskId(),
 				validationTime: time.Now().UTC(), // if no creation time specified, use now
 			}
 		}
@@ -148,7 +148,7 @@ func (v *taskValidatorImpl) postValidate(
 	task *persistencespb.AllocatedTaskInfo,
 ) {
 	v.lastValidatedTaskInfo = taskValidationInfo{
-		taskID:         task.TaskId,
+		taskID:         task.GetTaskId(),
 		validationTime: time.Now().UTC(),
 	}
 }
@@ -160,44 +160,44 @@ func (v *taskValidatorImpl) isTaskValid(
 	ctx, cancel := context.WithTimeout(v.tqCtx, ioTimeout)
 	defer cancel()
 
-	namespaceID := task.Data.NamespaceId
-	workflowID := task.Data.WorkflowId
-	runID := task.Data.RunId
+	namespaceID := task.GetData().GetNamespaceId()
+	workflowID := task.GetData().GetWorkflowId()
+	runID := task.GetData().GetRunId()
 
 	switch taskType {
 	case enumspb.TASK_QUEUE_TYPE_ACTIVITY:
-		resp, err := v.historyClient.IsActivityTaskValid(ctx, &historyservice.IsActivityTaskValidRequest{
+		resp, err := v.historyClient.IsActivityTaskValid(ctx, historyservice.IsActivityTaskValidRequest_builder{
 			NamespaceId: namespaceID,
-			Execution: &commonpb.WorkflowExecution{
+			Execution: commonpb.WorkflowExecution_builder{
 				WorkflowId: workflowID,
 				RunId:      runID,
-			},
-			Clock:            task.Data.Clock,
-			ScheduledEventId: task.Data.ScheduledEventId,
-			Stamp:            task.Data.GetStamp(),
-		})
+			}.Build(),
+			Clock:            task.GetData().GetClock(),
+			ScheduledEventId: task.GetData().GetScheduledEventId(),
+			Stamp:            task.GetData().GetStamp(),
+		}.Build())
 		switch err.(type) {
 		case nil:
-			return resp.IsValid, nil
+			return resp.GetIsValid(), nil
 		case *serviceerror.NotFound:
 			return false, nil
 		default:
 			return false, err
 		}
 	case enumspb.TASK_QUEUE_TYPE_WORKFLOW:
-		resp, err := v.historyClient.IsWorkflowTaskValid(ctx, &historyservice.IsWorkflowTaskValidRequest{
+		resp, err := v.historyClient.IsWorkflowTaskValid(ctx, historyservice.IsWorkflowTaskValidRequest_builder{
 			NamespaceId: namespaceID,
-			Execution: &commonpb.WorkflowExecution{
+			Execution: commonpb.WorkflowExecution_builder{
 				WorkflowId: workflowID,
 				RunId:      runID,
-			},
-			Clock:            task.Data.Clock,
-			ScheduledEventId: task.Data.ScheduledEventId,
-			Stamp:            task.Data.GetStamp(),
-		})
+			}.Build(),
+			Clock:            task.GetData().GetClock(),
+			ScheduledEventId: task.GetData().GetScheduledEventId(),
+			Stamp:            task.GetData().GetStamp(),
+		}.Build())
 		switch err.(type) {
 		case nil:
-			return resp.IsValid, nil
+			return resp.GetIsValid(), nil
 		case *serviceerror.NotFound:
 			return false, nil
 		default:

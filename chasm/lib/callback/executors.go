@@ -59,7 +59,7 @@ func (e InvocationTaskExecutor) Execute(ctx context.Context, ref chasm.Component
 }
 
 func (e InvocationTaskExecutor) Validate(ctx chasm.Context, cb *Callback, attrs chasm.TaskAttributes, task *callbackspb.InvocationTask) (bool, error) {
-	return cb.Attempt == task.Attempt && cb.Status == callbackspb.CALLBACK_STATUS_SCHEDULED, nil
+	return cb.GetAttempt() == task.GetAttempt() && cb.GetStatus() == callbackspb.CALLBACK_STATUS_SCHEDULED, nil
 }
 
 // invocationResult is a marker for the callbackInvokable.Invoke result to indicate to the executor how to handle the
@@ -189,5 +189,5 @@ func (e *BackoffTaskExecutor) Validate(
 	task *callbackspb.BackoffTask,
 ) (bool, error) {
 	// Validate that the callback is in BACKING_OFF state
-	return callback.Status == callbackspb.CALLBACK_STATUS_BACKING_OFF && callback.Attempt == task.Attempt, nil
+	return callback.GetStatus() == callbackspb.CALLBACK_STATUS_BACKING_OFF && callback.GetAttempt() == task.GetAttempt(), nil
 }

@@ -36,9 +36,9 @@ func Invoke(
 		return nil, err
 	}
 
-	request := resetRequest.ResetRequest
-	workflowID := request.WorkflowExecution.GetWorkflowId()
-	baseRunID := request.WorkflowExecution.GetRunId()
+	request := resetRequest.GetResetRequest()
+	workflowID := request.GetWorkflowExecution().GetWorkflowId()
+	baseRunID := request.GetWorkflowExecution().GetRunId()
 
 	baseWorkflowLease, err := workflowConsistencyChecker.GetWorkflowLease(
 		ctx,
@@ -72,7 +72,7 @@ func Invoke(
 	currentRunID, err := workflowConsistencyChecker.GetCurrentWorkflowRunID(
 		ctx,
 		namespaceID.String(),
-		request.WorkflowExecution.GetWorkflowId(),
+		request.GetWorkflowExecution().GetWorkflowId(),
 		locks.PriorityHigh,
 	)
 	if err != nil {
@@ -103,14 +103,14 @@ func Invoke(
 	}
 
 	// dedup by requestID
-	if currentWorkflowLease.GetMutableState().GetExecutionState().CreateRequestId == request.GetRequestId() {
+	if currentWorkflowLease.GetMutableState().GetExecutionState().GetCreateRequestId() == request.GetRequestId() {
 		shardContext.GetLogger().Info("Duplicated reset request",
 			tag.WorkflowID(workflowID),
 			tag.WorkflowRunID(currentRunID),
 			tag.WorkflowNamespaceID(namespaceID.String()))
-		return &historyservice.ResetWorkflowExecutionResponse{
+		return historyservice.ResetWorkflowExecutionResponse_builder{
 			RunId: currentRunID,
-		}, nil
+		}.Build(), nil
 	}
 
 	resetRunID := uuid.New().String()
@@ -173,13 +173,13 @@ func Invoke(
 		nil,
 		GetResetReapplyExcludeTypes(request.GetResetReapplyExcludeTypes(), request.GetResetReapplyType()),
 		allowResetWithPendingChildren,
-		resetRequest.ResetRequest.PostResetOperations,
+		resetRequest.GetResetRequest().GetPostResetOperations(),
 	); err != nil {
 		return nil, err
 	}
-	return &historyservice.ResetWorkflowExecutionResponse{
+	return historyservice.ResetWorkflowExecutionResponse_builder{
 		RunId: resetRunID,
-	}, nil
+	}.Build(), nil
 }
 
 // GetResetReapplyExcludeTypes computes the set of requested exclude types. It
@@ -218,14 +218,14 @@ func validatePostResetOperationInputs(ctx context.Context,
 	taskQueue string,
 	namespaceID string) error {
 	for _, operation := range postResetOperations {
-		switch op := operation.GetVariant().(type) {
-		case *workflowpb.PostResetOperation_UpdateWorkflowOptions_:
-			opts := op.UpdateWorkflowOptions.GetWorkflowExecutionOptions()
+		switch op := operation.WhichVariant(); op {
+		case workflowpb.PostResetOperation_UpdateWorkflowOptions_case:
+			opts := operation.GetUpdateWorkflowOptions().GetWorkflowExecutionOptions()
 			if err := worker_versioning.ValidateVersioningOverride(ctx, opts.GetVersioningOverride(), matchingClient, versionMembershipCache, taskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, namespaceID); err != nil {
 				return err
 			}
 		default:
-			return serviceerror.NewInvalidArgumentf("unsupported post reset operation: %T", op)
+			return serviceerror.NewInvalidArgumentf("unsupported post reset operation: %v", op)
 		}
 	}
 	return nil

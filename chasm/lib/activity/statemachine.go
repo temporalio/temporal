@@ -24,12 +24,12 @@ func (a *Activity) StateMachineState() activitypb.ActivityExecutionStatus {
 	if a.ActivityState == nil {
 		return activitypb.ACTIVITY_EXECUTION_STATUS_UNSPECIFIED
 	}
-	return a.Status
+	return a.GetStatus()
 }
 
 // SetStateMachineState sets the status of the activity.
 func (a *Activity) SetStateMachineState(state activitypb.ActivityExecutionStatus) {
-	a.Status = state
+	a.SetStatus(state)
 }
 
 // TransitionScheduled transitions to Scheduled status. This is only called on the initial
@@ -42,8 +42,8 @@ var TransitionScheduled = chasm.NewTransition(
 	func(a *Activity, ctx chasm.MutableContext, _ any) error {
 		attempt := a.LastAttempt.Get(ctx)
 		currentTime := ctx.Now(a)
-		attempt.Count++
-		attempt.Stamp++
+		attempt.SetCount(attempt.GetCount() + 1)
+		attempt.SetStamp(attempt.GetStamp() + 1)
 
 		if timeout := a.GetScheduleToStartTimeout().AsDuration(); timeout > 0 {
 			ctx.AddTask(
@@ -51,9 +51,9 @@ var TransitionScheduled = chasm.NewTransition(
 				chasm.TaskAttributes{
 					ScheduledTime: currentTime.Add(timeout),
 				},
-				&activitypb.ScheduleToStartTimeoutTask{
+				activitypb.ScheduleToStartTimeoutTask_builder{
 					Stamp: attempt.GetStamp(),
-				})
+				}.Build())
 		}
 
 		if timeout := a.GetScheduleToCloseTimeout().AsDuration(); timeout > 0 {
@@ -68,9 +68,9 @@ var TransitionScheduled = chasm.NewTransition(
 		ctx.AddTask(
 			a,
 			chasm.TaskAttributes{},
-			&activitypb.ActivityDispatchTask{
+			activitypb.ActivityDispatchTask_builder{
 				Stamp: attempt.GetStamp(),
-			})
+			}.Build())
 
 		return nil
 	},
@@ -92,8 +92,8 @@ var TransitionRescheduled = chasm.NewTransition(
 	func(a *Activity, ctx chasm.MutableContext, event rescheduleEvent) error {
 		attempt := a.LastAttempt.Get(ctx)
 		currentTime := ctx.Now(a)
-		attempt.Count++
-		attempt.Stamp++
+		attempt.SetCount(attempt.GetCount() + 1)
+		attempt.SetStamp(attempt.GetStamp() + 1)
 
 		err := a.recordFailedAttempt(ctx, event.retryInterval, event.failure, currentTime, false)
 		if err != nil {
@@ -106,9 +106,9 @@ var TransitionRescheduled = chasm.NewTransition(
 				chasm.TaskAttributes{
 					ScheduledTime: currentTime.Add(timeout).Add(event.retryInterval),
 				},
-				&activitypb.ScheduleToStartTimeoutTask{
+				activitypb.ScheduleToStartTimeoutTask_builder{
 					Stamp: attempt.GetStamp(),
-				})
+				}.Build())
 		}
 
 		ctx.AddTask(
@@ -116,9 +116,9 @@ var TransitionRescheduled = chasm.NewTransition(
 			chasm.TaskAttributes{
 				ScheduledTime: currentTime.Add(event.retryInterval),
 			},
-			&activitypb.ActivityDispatchTask{
+			activitypb.ActivityDispatchTask_builder{
 				Stamp: attempt.GetStamp(),
-			})
+			}.Build())
 
 		return nil
 	},
@@ -132,14 +132,14 @@ var TransitionStarted = chasm.NewTransition(
 	activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
 	func(a *Activity, ctx chasm.MutableContext, request *historyservice.RecordActivityTaskStartedRequest) error {
 		attempt := a.LastAttempt.Get(ctx)
-		attempt.StartedTime = timestamppb.New(ctx.Now(a))
-		attempt.StartRequestId = request.GetRequestId()
-		attempt.LastWorkerIdentity = request.GetPollRequest().GetIdentity()
+		attempt.SetStartedTime(timestamppb.New(ctx.Now(a)))
+		attempt.SetStartRequestId(request.GetRequestId())
+		attempt.SetLastWorkerIdentity(request.GetPollRequest().GetIdentity())
 		if versionDirective := request.GetVersionDirective().GetDeploymentVersion(); versionDirective != nil {
-			attempt.LastDeploymentVersion = &deploymentpb.WorkerDeploymentVersion{
+			attempt.SetLastDeploymentVersion(deploymentpb.WorkerDeploymentVersion_builder{
 				BuildId:        versionDirective.GetBuildId(),
 				DeploymentName: versionDirective.GetDeploymentName(),
-			}
+			}.Build())
 		}
 		startTime := attempt.GetStartedTime().AsTime()
 		ctx.AddTask(
@@ -147,9 +147,9 @@ var TransitionStarted = chasm.NewTransition(
 			chasm.TaskAttributes{
 				ScheduledTime: startTime.Add(a.GetStartToCloseTimeout().AsDuration()),
 			},
-			&activitypb.StartToCloseTimeoutTask{
+			activitypb.StartToCloseTimeoutTask_builder{
 				Stamp: a.LastAttempt.Get(ctx).GetStamp(),
-			})
+			}.Build())
 
 		if heartbeatTimeout := a.GetHeartbeatTimeout().AsDuration(); heartbeatTimeout > 0 {
 			ctx.AddTask(
@@ -157,9 +157,9 @@ var TransitionStarted = chasm.NewTransition(
 				chasm.TaskAttributes{
 					ScheduledTime: startTime.Add(heartbeatTimeout),
 				},
-				&activitypb.HeartbeatTimeoutTask{
+				activitypb.HeartbeatTimeoutTask_builder{
 					Stamp: attempt.GetStamp(),
-				})
+				}.Build())
 		}
 
 		return nil
@@ -183,14 +183,12 @@ var TransitionCompleted = chasm.NewTransition(
 			req := event.req.GetCompleteRequest()
 
 			attempt := a.LastAttempt.Get(ctx)
-			attempt.CompleteTime = timestamppb.New(ctx.Now(a))
-			attempt.LastWorkerIdentity = req.GetIdentity()
+			attempt.SetCompleteTime(timestamppb.New(ctx.Now(a)))
+			attempt.SetLastWorkerIdentity(req.GetIdentity())
 			outcome := a.Outcome.Get(ctx)
-			outcome.Variant = &activitypb.ActivityOutcome_Successful_{
-				Successful: &activitypb.ActivityOutcome_Successful{
-					Output: req.GetResult(),
-				},
-			}
+			outcome.SetSuccessful(activitypb.ActivityOutcome_Successful_builder{
+				Output: req.GetResult(),
+			}.Build())
 
 			a.emitOnCompletedMetrics(ctx, event.metricsHandler)
 
@@ -217,11 +215,11 @@ var TransitionFailed = chasm.NewTransition(
 
 			if details := req.GetLastHeartbeatDetails(); details != nil {
 				heartbeat := a.getOrCreateLastHeartbeat(ctx)
-				heartbeat.Details = details
-				heartbeat.RecordedTime = timestamppb.New(ctx.Now(a))
+				heartbeat.SetDetails(details)
+				heartbeat.SetRecordedTime(timestamppb.New(ctx.Now(a)))
 			}
 			attempt := a.LastAttempt.Get(ctx)
-			attempt.LastWorkerIdentity = req.GetIdentity()
+			attempt.SetLastWorkerIdentity(req.GetIdentity())
 
 			if err := a.recordFailedAttempt(ctx, 0, req.GetFailure(), ctx.Now(a), true); err != nil {
 				return err
@@ -246,20 +244,18 @@ var TransitionTerminated = chasm.NewTransition(
 		return a.StoreOrSelf(ctx).RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
 			req := event.request.GetFrontendRequest()
 
-			a.TerminateState = &activitypb.ActivityTerminateState{
+			a.SetTerminateState(activitypb.ActivityTerminateState_builder{
 				RequestId: req.GetRequestId(),
-			}
+			}.Build())
 			outcome := a.Outcome.Get(ctx)
-			failure := &failurepb.Failure{
+			failure := failurepb.Failure_builder{
 				// TODO(saa-preview): if the reason isn't provided, perhaps set a default reason. Also see if we should prefix with "Activity terminated: "
-				Message:     req.GetReason(),
-				FailureInfo: &failurepb.Failure_TerminatedFailureInfo{},
-			}
-			outcome.Variant = &activitypb.ActivityOutcome_Failed_{
-				Failed: &activitypb.ActivityOutcome_Failed{
-					Failure: failure,
-				},
-			}
+				Message:               req.GetReason(),
+				TerminatedFailureInfo: &failurepb.TerminatedFailureInfo{},
+			}.Build()
+			outcome.SetFailed(activitypb.ActivityOutcome_Failed_builder{
+				Failure: failure,
+			}.Build())
 
 			metricsHandler := enrichMetricsHandler(
 				a,
@@ -284,12 +280,12 @@ var TransitionCancelRequested = chasm.NewTransition(
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
 	func(a *Activity, ctx chasm.MutableContext, req *workflowservice.RequestCancelActivityExecutionRequest) error {
-		a.CancelState = &activitypb.ActivityCancelState{
+		a.SetCancelState(activitypb.ActivityCancelState_builder{
 			Identity:    req.GetIdentity(),
 			RequestId:   req.GetRequestId(),
 			Reason:      req.GetReason(),
 			RequestTime: timestamppb.New(ctx.Now(a)),
-		}
+		}.Build())
 
 		return nil
 	},
@@ -310,19 +306,15 @@ var TransitionCanceled = chasm.NewTransition(
 	func(a *Activity, ctx chasm.MutableContext, event cancelEvent) error {
 		return a.StoreOrSelf(ctx).RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
 			outcome := a.Outcome.Get(ctx)
-			failure := &failurepb.Failure{
+			failure := failurepb.Failure_builder{
 				Message: "Activity canceled",
-				FailureInfo: &failurepb.Failure_CanceledFailureInfo{
-					CanceledFailureInfo: &failurepb.CanceledFailureInfo{
-						Details: event.details,
-					},
-				},
-			}
-			outcome.Variant = &activitypb.ActivityOutcome_Failed_{
-				Failed: &activitypb.ActivityOutcome_Failed{
-					Failure: failure,
-				},
-			}
+				CanceledFailureInfo: failurepb.CanceledFailureInfo_builder{
+					Details: event.details,
+				}.Build(),
+			}.Build()
+			outcome.SetFailed(activitypb.ActivityOutcome_Failed_builder{
+				Failure: failure,
+			}.Build())
 
 			a.emitOnCanceledMetrics(ctx, event.handler, event.fromStatus)
 

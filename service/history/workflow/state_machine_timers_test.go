@@ -24,35 +24,35 @@ func TestTrackStateMachineTimer_MaintainsSortedSlice(t *testing.T) {
 	ms.EXPECT().GetCurrentVersion().Return(int64(1)).AnyTimes()
 	ms.EXPECT().NextTransitionCount().Return(int64(3)).AnyTimes()
 
-	workflow.TrackStateMachineTimer(ms, now, &persistencespb.StateMachineTaskInfo{Type: "0", Ref: &persistencespb.StateMachineRef{
-		Path: []*persistencespb.StateMachineKey{{Type: "t", Id: "a"}},
-	}})
+	workflow.TrackStateMachineTimer(ms, now, persistencespb.StateMachineTaskInfo_builder{Type: "0", Ref: persistencespb.StateMachineRef_builder{
+		Path: []*persistencespb.StateMachineKey{persistencespb.StateMachineKey_builder{Type: "t", Id: "a"}.Build()},
+	}.Build()}.Build())
 	// This should be deduped.
-	workflow.TrackStateMachineTimer(ms, now, &persistencespb.StateMachineTaskInfo{Type: "0", Ref: &persistencespb.StateMachineRef{
-		Path: []*persistencespb.StateMachineKey{{Type: "t", Id: "a"}},
-	}})
+	workflow.TrackStateMachineTimer(ms, now, persistencespb.StateMachineTaskInfo_builder{Type: "0", Ref: persistencespb.StateMachineRef_builder{
+		Path: []*persistencespb.StateMachineKey{persistencespb.StateMachineKey_builder{Type: "t", Id: "a"}.Build()},
+	}.Build()}.Build())
 	// This should be deduped.
-	workflow.TrackStateMachineTimer(ms, now, &persistencespb.StateMachineTaskInfo{Type: "0", Ref: &persistencespb.StateMachineRef{
-		Path: []*persistencespb.StateMachineKey{{Type: "t", Id: "b"}},
-	}})
-	workflow.TrackStateMachineTimer(ms, now.Add(time.Hour), &persistencespb.StateMachineTaskInfo{Type: "1"})
-	workflow.TrackStateMachineTimer(ms, now.Add(time.Hour), &persistencespb.StateMachineTaskInfo{Type: "2"})
-	workflow.TrackStateMachineTimer(ms, now.Add(-time.Hour), &persistencespb.StateMachineTaskInfo{Type: "3"})
+	workflow.TrackStateMachineTimer(ms, now, persistencespb.StateMachineTaskInfo_builder{Type: "0", Ref: persistencespb.StateMachineRef_builder{
+		Path: []*persistencespb.StateMachineKey{persistencespb.StateMachineKey_builder{Type: "t", Id: "b"}.Build()},
+	}.Build()}.Build())
+	workflow.TrackStateMachineTimer(ms, now.Add(time.Hour), persistencespb.StateMachineTaskInfo_builder{Type: "1"}.Build())
+	workflow.TrackStateMachineTimer(ms, now.Add(time.Hour), persistencespb.StateMachineTaskInfo_builder{Type: "2"}.Build())
+	workflow.TrackStateMachineTimer(ms, now.Add(-time.Hour), persistencespb.StateMachineTaskInfo_builder{Type: "3"}.Build())
 
-	require.Equal(t, 3, len(execInfo.StateMachineTimers))
+	require.Equal(t, 3, len(execInfo.GetStateMachineTimers()))
 
-	require.Equal(t, 1, len(execInfo.StateMachineTimers[0].Infos))
-	require.Equal(t, "3", execInfo.StateMachineTimers[0].Infos[0].Type)
+	require.Equal(t, 1, len(execInfo.GetStateMachineTimers()[0].GetInfos()))
+	require.Equal(t, "3", execInfo.GetStateMachineTimers()[0].GetInfos()[0].GetType())
 
-	require.Equal(t, 2, len(execInfo.StateMachineTimers[1].Infos))
-	require.Equal(t, "0", execInfo.StateMachineTimers[1].Infos[0].Type)
-	protorequire.ProtoSliceEqual(t, []*persistencespb.StateMachineKey{{Type: "t", Id: "a"}}, execInfo.StateMachineTimers[1].Infos[0].Ref.Path)
-	require.Equal(t, "0", execInfo.StateMachineTimers[1].Infos[1].Type)
-	protorequire.ProtoSliceEqual(t, []*persistencespb.StateMachineKey{{Type: "t", Id: "b"}}, execInfo.StateMachineTimers[1].Infos[1].Ref.Path)
+	require.Equal(t, 2, len(execInfo.GetStateMachineTimers()[1].GetInfos()))
+	require.Equal(t, "0", execInfo.GetStateMachineTimers()[1].GetInfos()[0].GetType())
+	protorequire.ProtoSliceEqual(t, []*persistencespb.StateMachineKey{persistencespb.StateMachineKey_builder{Type: "t", Id: "a"}.Build()}, execInfo.GetStateMachineTimers()[1].GetInfos()[0].GetRef().GetPath())
+	require.Equal(t, "0", execInfo.GetStateMachineTimers()[1].GetInfos()[1].GetType())
+	protorequire.ProtoSliceEqual(t, []*persistencespb.StateMachineKey{persistencespb.StateMachineKey_builder{Type: "t", Id: "b"}.Build()}, execInfo.GetStateMachineTimers()[1].GetInfos()[1].GetRef().GetPath())
 
-	require.Equal(t, 2, len(execInfo.StateMachineTimers[2].Infos))
-	require.Equal(t, "1", execInfo.StateMachineTimers[2].Infos[0].Type)
-	require.Equal(t, "2", execInfo.StateMachineTimers[2].Infos[1].Type)
+	require.Equal(t, 2, len(execInfo.GetStateMachineTimers()[2].GetInfos()))
+	require.Equal(t, "1", execInfo.GetStateMachineTimers()[2].GetInfos()[0].GetType())
+	require.Equal(t, "2", execInfo.GetStateMachineTimers()[2].GetInfos()[1].GetType())
 }
 
 func TestAddNextStateMachineTimerTask(t *testing.T) {
@@ -70,10 +70,10 @@ func TestAddNextStateMachineTimerTask(t *testing.T) {
 		scheduledTasks = append(scheduledTasks, task)
 	})
 
-	workflow.TrackStateMachineTimer(ms, now, &persistencespb.StateMachineTaskInfo{Type: "0"})
-	workflow.TrackStateMachineTimer(ms, now.Add(time.Hour), &persistencespb.StateMachineTaskInfo{Type: "1"})
-	workflow.TrackStateMachineTimer(ms, now.Add(time.Hour), &persistencespb.StateMachineTaskInfo{Type: "2"})
-	workflow.TrackStateMachineTimer(ms, now.Add(-time.Hour), &persistencespb.StateMachineTaskInfo{Type: "3"})
+	workflow.TrackStateMachineTimer(ms, now, persistencespb.StateMachineTaskInfo_builder{Type: "0"}.Build())
+	workflow.TrackStateMachineTimer(ms, now.Add(time.Hour), persistencespb.StateMachineTaskInfo_builder{Type: "1"}.Build())
+	workflow.TrackStateMachineTimer(ms, now.Add(time.Hour), persistencespb.StateMachineTaskInfo_builder{Type: "2"}.Build())
+	workflow.TrackStateMachineTimer(ms, now.Add(-time.Hour), persistencespb.StateMachineTaskInfo_builder{Type: "3"}.Build())
 
 	workflow.AddNextStateMachineTimerTask(ms)
 

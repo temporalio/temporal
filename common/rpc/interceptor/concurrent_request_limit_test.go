@@ -107,7 +107,7 @@ func TestNamespaceCountLimitInterceptor_Intercept(t *testing.T) {
 		},
 		{
 			name:               "long poll request",
-			request:            &workflowservice.GetWorkflowExecutionHistoryRequest{WaitNewEvent: true},
+			request:            workflowservice.GetWorkflowExecutionHistoryRequest_builder{WaitNewEvent: true}.Build(),
 			numBlockedRequests: 3,
 			perInstanceLimit:   2,
 			globalLimit:        4,
@@ -120,7 +120,7 @@ func TestNamespaceCountLimitInterceptor_Intercept(t *testing.T) {
 		},
 		{
 			name:               "non-long poll request",
-			request:            &workflowservice.GetWorkflowExecutionHistoryRequest{WaitNewEvent: false},
+			request:            workflowservice.GetWorkflowExecutionHistoryRequest_builder{WaitNewEvent: false}.Build(),
 			numBlockedRequests: 3,
 			perInstanceLimit:   2,
 			globalLimit:        4,

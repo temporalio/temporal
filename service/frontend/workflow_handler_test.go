@@ -68,6 +68,7 @@ import (
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -209,54 +210,54 @@ func (s *WorkflowHandlerSuite) TestDisableListVisibilityByFilter() {
 	s.mockVisibilityMgr.EXPECT().GetReadStoreName(testNamespace).Return("").AnyTimes()
 
 	// test list open by wid
-	listRequest := &workflowservice.ListOpenWorkflowExecutionsRequest{
+	listRequest := workflowservice.ListOpenWorkflowExecutionsRequest_builder{
 		Namespace: testNamespace.String(),
-		StartTimeFilter: &filterpb.StartTimeFilter{
+		StartTimeFilter: filterpb.StartTimeFilter_builder{
 			EarliestTime: nil,
 			LatestTime:   timestamppb.New(time.Now().UTC()),
-		},
-		Filters: &workflowservice.ListOpenWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
+		}.Build(),
+		ExecutionFilter: filterpb.WorkflowExecutionFilter_builder{
 			WorkflowId: "wid",
-		}},
-	}
+		}.Build(),
+	}.Build()
 	_, err := wh.ListOpenWorkflowExecutions(context.Background(), listRequest)
 	s.Error(err)
 	s.Equal(errListNotAllowed, err)
 
 	// test list open by workflow type
-	listRequest.Filters = &workflowservice.ListOpenWorkflowExecutionsRequest_TypeFilter{TypeFilter: &filterpb.WorkflowTypeFilter{
+	listRequest.SetTypeFilter(filterpb.WorkflowTypeFilter_builder{
 		Name: "workflow-type",
-	}}
+	}.Build())
 	_, err = wh.ListOpenWorkflowExecutions(context.Background(), listRequest)
 	s.Error(err)
 	s.Equal(errListNotAllowed, err)
 
 	// test list close by wid
-	listRequest2 := &workflowservice.ListClosedWorkflowExecutionsRequest{
+	listRequest2 := workflowservice.ListClosedWorkflowExecutionsRequest_builder{
 		Namespace: testNamespace.String(),
-		StartTimeFilter: &filterpb.StartTimeFilter{
+		StartTimeFilter: filterpb.StartTimeFilter_builder{
 			EarliestTime: nil,
 			LatestTime:   timestamppb.New(time.Now().UTC()),
-		},
-		Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
+		}.Build(),
+		ExecutionFilter: filterpb.WorkflowExecutionFilter_builder{
 			WorkflowId: "wid",
-		}},
-	}
+		}.Build(),
+	}.Build()
 	_, err = wh.ListClosedWorkflowExecutions(context.Background(), listRequest2)
 	s.Error(err)
 	s.Equal(errListNotAllowed, err)
 
 	// test list close by workflow type
-	listRequest2.Filters = &workflowservice.ListClosedWorkflowExecutionsRequest_TypeFilter{TypeFilter: &filterpb.WorkflowTypeFilter{
+	listRequest2.SetTypeFilter(filterpb.WorkflowTypeFilter_builder{
 		Name: "workflow-type",
-	}}
+	}.Build())
 	_, err = wh.ListClosedWorkflowExecutions(context.Background(), listRequest2)
 	s.Error(err)
 	s.Equal(errListNotAllowed, err)
 
 	// test list close by workflow status
 	failedStatus := enumspb.WORKFLOW_EXECUTION_STATUS_FAILED
-	listRequest2.Filters = &workflowservice.ListClosedWorkflowExecutionsRequest_StatusFilter{StatusFilter: &filterpb.StatusFilter{Status: failedStatus}}
+	listRequest2.SetStatusFilter(filterpb.StatusFilter_builder{Status: failedStatus}.Build())
 	_, err = wh.ListClosedWorkflowExecutions(context.Background(), listRequest2)
 	s.Error(err)
 	s.Equal(errListNotAllowed, err)
@@ -305,26 +306,26 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_NamespaceNotSet
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(namespace.EmptyName).Return(namespace.EmptyID, serviceerror.NewNamespaceNotFound("missing-namespace")).AnyTimes()
 	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(namespace.EmptyName).Return(nil, nil)
 
-	startWorkflowExecutionRequest := &workflowservice.StartWorkflowExecutionRequest{
+	startWorkflowExecutionRequest := workflowservice.StartWorkflowExecutionRequest_builder{
 		// Namespace: "forget to specify",
 		WorkflowId: "workflow-id",
-		WorkflowType: &commonpb.WorkflowType{
+		WorkflowType: commonpb.WorkflowType_builder{
 			Name: "workflow-type",
-		},
-		TaskQueue: &taskqueuepb.TaskQueue{
+		}.Build(),
+		TaskQueue: taskqueuepb.TaskQueue_builder{
 			Name: "task-queue",
-		},
+		}.Build(),
 		WorkflowExecutionTimeout: durationpb.New(1 * time.Second),
 		WorkflowRunTimeout:       durationpb.New(1 * time.Second),
 		WorkflowTaskTimeout:      durationpb.New(1 * time.Second),
-		RetryPolicy: &commonpb.RetryPolicy{
+		RetryPolicy: commonpb.RetryPolicy_builder{
 			InitialInterval:    durationpb.New(1 * time.Second),
 			BackoffCoefficient: 2,
 			MaximumInterval:    durationpb.New(2 * time.Second),
 			MaximumAttempts:    1,
-		},
+		}.Build(),
 		RequestId: uuid.NewString(),
-	}
+	}.Build()
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
 	s.Error(err)
 	var notFound *serviceerror.NamespaceNotFound
@@ -336,25 +337,25 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_WorkflowIdNotSe
 	config.RPS = dc.GetIntPropertyFn(10)
 	wh := s.getWorkflowHandler(config)
 
-	startWorkflowExecutionRequest := &workflowservice.StartWorkflowExecutionRequest{
+	startWorkflowExecutionRequest := workflowservice.StartWorkflowExecutionRequest_builder{
 		Namespace: "test-namespace",
-		WorkflowType: &commonpb.WorkflowType{
+		WorkflowType: commonpb.WorkflowType_builder{
 			Name: "workflow-type",
-		},
-		TaskQueue: &taskqueuepb.TaskQueue{
+		}.Build(),
+		TaskQueue: taskqueuepb.TaskQueue_builder{
 			Name: "task-queue",
-		},
+		}.Build(),
 		WorkflowExecutionTimeout: durationpb.New(1 * time.Second),
 		WorkflowRunTimeout:       durationpb.New(1 * time.Second),
 		WorkflowTaskTimeout:      durationpb.New(1 * time.Second),
-		RetryPolicy: &commonpb.RetryPolicy{
+		RetryPolicy: commonpb.RetryPolicy_builder{
 			InitialInterval:    durationpb.New(1 * time.Second),
 			BackoffCoefficient: 2,
 			MaximumInterval:    durationpb.New(2 * time.Second),
 			MaximumAttempts:    1,
-		},
+		}.Build(),
 		RequestId: uuid.NewString(),
-	}
+	}.Build()
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
 	s.Error(err)
 	s.Equal(errWorkflowIDNotSet, err)
@@ -365,26 +366,26 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_WorkflowTypeNot
 	config.RPS = dc.GetIntPropertyFn(10)
 	wh := s.getWorkflowHandler(config)
 
-	startWorkflowExecutionRequest := &workflowservice.StartWorkflowExecutionRequest{
+	startWorkflowExecutionRequest := workflowservice.StartWorkflowExecutionRequest_builder{
 		Namespace:  "test-namespace",
 		WorkflowId: "workflow-id",
-		WorkflowType: &commonpb.WorkflowType{
+		WorkflowType: commonpb.WorkflowType_builder{
 			Name: "",
-		},
-		TaskQueue: &taskqueuepb.TaskQueue{
+		}.Build(),
+		TaskQueue: taskqueuepb.TaskQueue_builder{
 			Name: "task-queue",
-		},
+		}.Build(),
 		WorkflowExecutionTimeout: durationpb.New(1 * time.Second),
 		WorkflowRunTimeout:       durationpb.New(1 * time.Second),
 		WorkflowTaskTimeout:      durationpb.New(1 * time.Second),
-		RetryPolicy: &commonpb.RetryPolicy{
+		RetryPolicy: commonpb.RetryPolicy_builder{
 			InitialInterval:    durationpb.New(1 * time.Second),
 			BackoffCoefficient: 2,
 			MaximumInterval:    durationpb.New(2 * time.Second),
 			MaximumAttempts:    1,
-		},
+		}.Build(),
 		RequestId: uuid.NewString(),
-	}
+	}.Build()
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
 	s.Error(err)
 	s.Equal(errWorkflowTypeNotSet, err)
@@ -395,23 +396,23 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_TaskQueueNotSet
 	config.RPS = dc.GetIntPropertyFn(10)
 	wh := s.getWorkflowHandler(config)
 
-	startWorkflowExecutionRequest := &workflowservice.StartWorkflowExecutionRequest{
+	startWorkflowExecutionRequest := workflowservice.StartWorkflowExecutionRequest_builder{
 		Namespace:  "test-namespace",
 		WorkflowId: "workflow-id",
-		WorkflowType: &commonpb.WorkflowType{
+		WorkflowType: commonpb.WorkflowType_builder{
 			Name: "workflow-type",
-		},
-		TaskQueue: &taskqueuepb.TaskQueue{
+		}.Build(),
+		TaskQueue: taskqueuepb.TaskQueue_builder{
 			Name: "",
-		},
-		RetryPolicy: &commonpb.RetryPolicy{
+		}.Build(),
+		RetryPolicy: commonpb.RetryPolicy_builder{
 			InitialInterval:    durationpb.New(1 * time.Second),
 			BackoffCoefficient: 2,
 			MaximumInterval:    durationpb.New(2 * time.Second),
 			MaximumAttempts:    1,
-		},
+		}.Build(),
 		RequestId: uuid.NewString(),
-	}
+	}.Build()
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
 	s.Error(err)
 	s.Equal(serviceerror.NewInvalidArgument("missing task queue name"), err)
@@ -422,25 +423,25 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidExecutio
 	config.RPS = dc.GetIntPropertyFn(10)
 	wh := s.getWorkflowHandler(config)
 
-	startWorkflowExecutionRequest := &workflowservice.StartWorkflowExecutionRequest{
+	startWorkflowExecutionRequest := workflowservice.StartWorkflowExecutionRequest_builder{
 		Namespace:  "test-namespace",
 		WorkflowId: "workflow-id",
-		WorkflowType: &commonpb.WorkflowType{
+		WorkflowType: commonpb.WorkflowType_builder{
 			Name: "workflow-type",
-		},
-		TaskQueue: &taskqueuepb.TaskQueue{
+		}.Build(),
+		TaskQueue: taskqueuepb.TaskQueue_builder{
 			Name: "task-queue",
-		},
+		}.Build(),
 		WorkflowExecutionTimeout: durationpb.New(time.Duration(-1) * time.Second),
 		WorkflowRunTimeout:       durationpb.New(1 * time.Second),
-		RetryPolicy: &commonpb.RetryPolicy{
+		RetryPolicy: commonpb.RetryPolicy_builder{
 			InitialInterval:    durationpb.New(1 * time.Second),
 			BackoffCoefficient: 2,
 			MaximumInterval:    durationpb.New(2 * time.Second),
 			MaximumAttempts:    1,
-		},
+		}.Build(),
 		RequestId: uuid.NewString(),
-	}
+	}.Build()
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
 	var invalidArg *serviceerror.InvalidArgument
 	s.ErrorAs(err, &invalidArg)
@@ -452,25 +453,25 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidRunTimeo
 	config.RPS = dc.GetIntPropertyFn(10)
 	wh := s.getWorkflowHandler(config)
 
-	startWorkflowExecutionRequest := &workflowservice.StartWorkflowExecutionRequest{
+	startWorkflowExecutionRequest := workflowservice.StartWorkflowExecutionRequest_builder{
 		Namespace:  "test-namespace",
 		WorkflowId: "workflow-id",
-		WorkflowType: &commonpb.WorkflowType{
+		WorkflowType: commonpb.WorkflowType_builder{
 			Name: "workflow-type",
-		},
-		TaskQueue: &taskqueuepb.TaskQueue{
+		}.Build(),
+		TaskQueue: taskqueuepb.TaskQueue_builder{
 			Name: "task-queue",
-		},
+		}.Build(),
 		WorkflowExecutionTimeout: durationpb.New(1 * time.Second),
 		WorkflowRunTimeout:       durationpb.New(time.Duration(-1) * time.Second),
-		RetryPolicy: &commonpb.RetryPolicy{
+		RetryPolicy: commonpb.RetryPolicy_builder{
 			InitialInterval:    durationpb.New(1 * time.Second),
 			BackoffCoefficient: 2,
 			MaximumInterval:    durationpb.New(2 * time.Second),
 			MaximumAttempts:    1,
-		},
+		}.Build(),
 		RequestId: uuid.NewString(),
-	}
+	}.Build()
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
 	var invalidArg *serviceerror.InvalidArgument
 	s.ErrorAs(err, &invalidArg)
@@ -482,27 +483,27 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_EnsureNonNilRetryPolic
 	config.RPS = dc.GetIntPropertyFn(10)
 	wh := s.getWorkflowHandler(config)
 
-	startWorkflowExecutionRequest := &workflowservice.StartWorkflowExecutionRequest{
+	startWorkflowExecutionRequest := workflowservice.StartWorkflowExecutionRequest_builder{
 		Namespace:  "test-namespace",
 		WorkflowId: "workflow-id",
-		WorkflowType: &commonpb.WorkflowType{
+		WorkflowType: commonpb.WorkflowType_builder{
 			Name: "workflow-type",
-		},
-		TaskQueue: &taskqueuepb.TaskQueue{
+		}.Build(),
+		TaskQueue: taskqueuepb.TaskQueue_builder{
 			Name: "task-queue",
-		},
+		}.Build(),
 		WorkflowExecutionTimeout: durationpb.New(1 * time.Second),
 		WorkflowRunTimeout:       durationpb.New(time.Duration(-1) * time.Second),
 		RetryPolicy:              &commonpb.RetryPolicy{},
 		RequestId:                uuid.NewString(),
-	}
+	}.Build()
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
 	s.Error(err)
-	s.Equal(&commonpb.RetryPolicy{
+	s.Equal(commonpb.RetryPolicy_builder{
 		BackoffCoefficient: 2.0,
 		InitialInterval:    durationpb.New(time.Second),
 		MaximumInterval:    durationpb.New(100 * time.Second),
-	}, startWorkflowExecutionRequest.RetryPolicy)
+	}.Build(), startWorkflowExecutionRequest.GetRetryPolicy())
 }
 
 func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_EnsureNilRetryPolicyNotInitialized() {
@@ -510,22 +511,22 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_EnsureNilRetryPolicyNo
 	config.RPS = dc.GetIntPropertyFn(10)
 	wh := s.getWorkflowHandler(config)
 
-	startWorkflowExecutionRequest := &workflowservice.StartWorkflowExecutionRequest{
+	startWorkflowExecutionRequest := workflowservice.StartWorkflowExecutionRequest_builder{
 		Namespace:  "test-namespace",
 		WorkflowId: "workflow-id",
-		WorkflowType: &commonpb.WorkflowType{
+		WorkflowType: commonpb.WorkflowType_builder{
 			Name: "workflow-type",
-		},
-		TaskQueue: &taskqueuepb.TaskQueue{
+		}.Build(),
+		TaskQueue: taskqueuepb.TaskQueue_builder{
 			Name: "task-queue",
-		},
+		}.Build(),
 		WorkflowExecutionTimeout: durationpb.New(1 * time.Second),
 		WorkflowRunTimeout:       durationpb.New(time.Duration(-1) * time.Second),
 		RequestId:                uuid.NewString(),
-	}
+	}.Build()
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
 	s.Error(err)
-	s.Nil(startWorkflowExecutionRequest.RetryPolicy)
+	s.Nil(startWorkflowExecutionRequest.GetRetryPolicy())
 }
 
 func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidTaskTimeout() {
@@ -533,26 +534,26 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidTaskTime
 	config.RPS = dc.GetIntPropertyFn(10)
 	wh := s.getWorkflowHandler(config)
 
-	startWorkflowExecutionRequest := &workflowservice.StartWorkflowExecutionRequest{
+	startWorkflowExecutionRequest := workflowservice.StartWorkflowExecutionRequest_builder{
 		Namespace:  "test-namespace",
 		WorkflowId: "workflow-id",
-		WorkflowType: &commonpb.WorkflowType{
+		WorkflowType: commonpb.WorkflowType_builder{
 			Name: "workflow-type",
-		},
-		TaskQueue: &taskqueuepb.TaskQueue{
+		}.Build(),
+		TaskQueue: taskqueuepb.TaskQueue_builder{
 			Name: "task-queue",
-		},
+		}.Build(),
 		WorkflowExecutionTimeout: durationpb.New(1 * time.Second),
 		WorkflowRunTimeout:       durationpb.New(1 * time.Second),
 		WorkflowTaskTimeout:      durationpb.New(time.Duration(-1) * time.Second),
-		RetryPolicy: &commonpb.RetryPolicy{
+		RetryPolicy: commonpb.RetryPolicy_builder{
 			InitialInterval:    durationpb.New(1 * time.Second),
 			BackoffCoefficient: 2,
 			MaximumInterval:    durationpb.New(2 * time.Second),
 			MaximumAttempts:    1,
-		},
+		}.Build(),
 		RequestId: uuid.NewString(),
-	}
+	}.Build()
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
 	var invalidArg *serviceerror.InvalidArgument
 	s.ErrorAs(err, &invalidArg)
@@ -564,28 +565,28 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_CronAndStartDel
 	config.RPS = dc.GetIntPropertyFn(10)
 	wh := s.getWorkflowHandler(config)
 
-	startWorkflowExecutionRequest := &workflowservice.StartWorkflowExecutionRequest{
+	startWorkflowExecutionRequest := workflowservice.StartWorkflowExecutionRequest_builder{
 		Namespace:  "test-namespace",
 		WorkflowId: "workflow-id",
-		WorkflowType: &commonpb.WorkflowType{
+		WorkflowType: commonpb.WorkflowType_builder{
 			Name: "workflow-type",
-		},
-		TaskQueue: &taskqueuepb.TaskQueue{
+		}.Build(),
+		TaskQueue: taskqueuepb.TaskQueue_builder{
 			Name: "task-queue",
-		},
+		}.Build(),
 		WorkflowExecutionTimeout: durationpb.New(1 * time.Second),
 		WorkflowRunTimeout:       durationpb.New(1 * time.Second),
 		WorkflowTaskTimeout:      durationpb.New(time.Duration(-1) * time.Second),
-		RetryPolicy: &commonpb.RetryPolicy{
+		RetryPolicy: commonpb.RetryPolicy_builder{
 			InitialInterval:    durationpb.New(1 * time.Second),
 			BackoffCoefficient: 2,
 			MaximumInterval:    durationpb.New(2 * time.Second),
 			MaximumAttempts:    1,
-		},
+		}.Build(),
 		RequestId:          uuid.NewString(),
 		CronSchedule:       "dummy-cron-schedule",
 		WorkflowStartDelay: durationpb.New(10 * time.Second),
-	}
+	}.Build()
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
 	s.ErrorIs(err, errCronAndStartDelaySet)
 }
@@ -595,27 +596,27 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidStartDel
 	config.RPS = dc.GetIntPropertyFn(10)
 	wh := s.getWorkflowHandler(config)
 
-	startWorkflowExecutionRequest := &workflowservice.StartWorkflowExecutionRequest{
+	startWorkflowExecutionRequest := workflowservice.StartWorkflowExecutionRequest_builder{
 		Namespace:  "test-namespace",
 		WorkflowId: "workflow-id",
-		WorkflowType: &commonpb.WorkflowType{
+		WorkflowType: commonpb.WorkflowType_builder{
 			Name: "workflow-type",
-		},
-		TaskQueue: &taskqueuepb.TaskQueue{
+		}.Build(),
+		TaskQueue: taskqueuepb.TaskQueue_builder{
 			Name: "task-queue",
-		},
+		}.Build(),
 		WorkflowExecutionTimeout: durationpb.New(1 * time.Second),
 		WorkflowRunTimeout:       durationpb.New(1 * time.Second),
 		WorkflowTaskTimeout:      durationpb.New(time.Duration(-1) * time.Second),
-		RetryPolicy: &commonpb.RetryPolicy{
+		RetryPolicy: commonpb.RetryPolicy_builder{
 			InitialInterval:    durationpb.New(1 * time.Second),
 			BackoffCoefficient: 2,
 			MaximumInterval:    durationpb.New(2 * time.Second),
 			MaximumAttempts:    1,
-		},
+		}.Build(),
 		RequestId:          uuid.NewString(),
 		WorkflowStartDelay: durationpb.New(-10 * time.Second),
-	}
+	}.Build()
 
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
 	var invalidArg *serviceerror.InvalidArgument
@@ -626,13 +627,13 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidStartDel
 func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_InvalidWorkflowIdReusePolicy_TerminateIfRunning() {
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
-	req := &workflowservice.StartWorkflowExecutionRequest{
+	req := workflowservice.StartWorkflowExecutionRequest_builder{
 		WorkflowId:               testWorkflowID,
-		WorkflowType:             &commonpb.WorkflowType{Name: "WORKFLOW"},
-		TaskQueue:                &taskqueuepb.TaskQueue{Name: "TASK_QUEUE", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		WorkflowType:             commonpb.WorkflowType_builder{Name: "WORKFLOW"}.Build(),
+		TaskQueue:                taskqueuepb.TaskQueue_builder{Name: "TASK_QUEUE", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 		WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING,
 		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
-	}
+	}.Build()
 
 	resp, err := wh.StartWorkflowExecution(context.Background(), req)
 
@@ -642,13 +643,13 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_InvalidWorkflowIdReuse
 }
 
 func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_InvalidWorkflowIdReusePolicy_RejectDuplicate() {
-	req := &workflowservice.StartWorkflowExecutionRequest{
+	req := workflowservice.StartWorkflowExecutionRequest_builder{
 		WorkflowId:               testWorkflowID,
-		WorkflowType:             &commonpb.WorkflowType{Name: "WORKFLOW"},
-		TaskQueue:                &taskqueuepb.TaskQueue{Name: "TASK_QUEUE", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		WorkflowType:             commonpb.WorkflowType_builder{Name: "WORKFLOW"}.Build(),
+		TaskQueue:                taskqueuepb.TaskQueue_builder{Name: "TASK_QUEUE", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 		WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
 		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING,
-	}
+	}.Build()
 
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
@@ -663,22 +664,22 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_DefaultWorkflowIdDupli
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespace.NewID(), nil)
 	s.mockHistoryClient.EXPECT().StartWorkflowExecution(gomock.Any(), mock.MatchedBy(
 		func(request *historyservice.StartWorkflowExecutionRequest) bool {
-			return request.StartRequest.WorkflowIdReusePolicy == enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE &&
-				request.StartRequest.WorkflowIdConflictPolicy == enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL
+			return request.GetStartRequest().GetWorkflowIdReusePolicy() == enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE &&
+				request.GetStartRequest().GetWorkflowIdConflictPolicy() == enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL
 		},
-	)).Return(&historyservice.StartWorkflowExecutionResponse{Started: true}, nil)
+	)).Return(historyservice.StartWorkflowExecutionResponse_builder{Started: true}.Build(), nil)
 
 	wh := s.getWorkflowHandler(s.newConfig())
-	req := &workflowservice.StartWorkflowExecutionRequest{
+	req := workflowservice.StartWorkflowExecutionRequest_builder{
 		WorkflowId:   testWorkflowID,
-		WorkflowType: &commonpb.WorkflowType{Name: "WORKFLOW"},
-		TaskQueue:    &taskqueuepb.TaskQueue{Name: "TASK_QUEUE", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		WorkflowType: commonpb.WorkflowType_builder{Name: "WORKFLOW"}.Build(),
+		TaskQueue:    taskqueuepb.TaskQueue_builder{Name: "TASK_QUEUE", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 		// both policies are not specified
-	}
+	}.Build()
 
 	resp, err := wh.StartWorkflowExecution(context.Background(), req)
 	s.NoError(err)
-	s.True(resp.Started)
+	s.True(resp.GetStarted())
 }
 
 func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidLinks() {
@@ -687,121 +688,105 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidLinks() 
 	config.MaxLinksPerRequest = dc.GetIntPropertyFnFilteredByNamespace(10)
 	wh := s.getWorkflowHandler(config)
 
-	req := &workflowservice.StartWorkflowExecutionRequest{
+	req := workflowservice.StartWorkflowExecutionRequest_builder{
 		Namespace:  "test-namespace",
 		WorkflowId: "workflow-id",
-		WorkflowType: &commonpb.WorkflowType{
+		WorkflowType: commonpb.WorkflowType_builder{
 			Name: "workflow-type",
-		},
-		TaskQueue: &taskqueuepb.TaskQueue{
+		}.Build(),
+		TaskQueue: taskqueuepb.TaskQueue_builder{
 			Name: "task-queue",
-		},
+		}.Build(),
 		RequestId: uuid.NewString(),
-	}
+	}.Build()
 
-	req.Links = []*commonpb.Link{
-		{
-			Variant: &commonpb.Link_WorkflowEvent_{
-				WorkflowEvent: &commonpb.Link_WorkflowEvent{
-					Namespace:  "dont-care",
-					WorkflowId: strings.Repeat("X", 4000),
-					RunId:      uuid.NewString(),
-				},
-			},
-		},
-	}
+	req.SetLinks([]*commonpb.Link{
+		commonpb.Link_builder{
+			WorkflowEvent: commonpb.Link_WorkflowEvent_builder{
+				Namespace:  "dont-care",
+				WorkflowId: strings.Repeat("X", 4000),
+				RunId:      uuid.NewString(),
+			}.Build(),
+		}.Build(),
+	})
 
 	_, err := wh.StartWorkflowExecution(context.Background(), req)
 	var invalidArgument *serviceerror.InvalidArgument
 	s.ErrorAs(err, &invalidArgument)
 	s.ErrorContains(err, "link exceeds allowed size of 4000")
 
-	req.Links = []*commonpb.Link{}
+	req.SetLinks([]*commonpb.Link{})
 	for i := 0; i < 11; i++ {
-		req.Links = append(req.Links, &commonpb.Link{
-			Variant: &commonpb.Link_WorkflowEvent_{
-				WorkflowEvent: &commonpb.Link_WorkflowEvent{
-					Namespace:  "dont-care",
-					WorkflowId: "dont-care",
-					RunId:      uuid.NewString(),
-				},
-			},
-		})
+		req.SetLinks(append(req.GetLinks(), commonpb.Link_builder{
+			WorkflowEvent: commonpb.Link_WorkflowEvent_builder{
+				Namespace:  "dont-care",
+				WorkflowId: "dont-care",
+				RunId:      uuid.NewString(),
+			}.Build(),
+		}.Build()))
 	}
 
 	_, err = wh.StartWorkflowExecution(context.Background(), req)
 	s.ErrorAs(err, &invalidArgument)
 	s.ErrorContains(err, "cannot attach more than 10 links per request, got 11")
 
-	req.Links = []*commonpb.Link{
-		{
-			Variant: &commonpb.Link_WorkflowEvent_{
-				WorkflowEvent: &commonpb.Link_WorkflowEvent{},
-			},
-		},
-	}
+	req.SetLinks([]*commonpb.Link{
+		commonpb.Link_builder{
+			WorkflowEvent: &commonpb.Link_WorkflowEvent{},
+		}.Build(),
+	})
 
 	_, err = wh.StartWorkflowExecution(context.Background(), req)
 	s.ErrorAs(err, &invalidArgument)
 	s.ErrorContains(err, "workflow event link must not have an empty namespace field")
 
-	req.Links = []*commonpb.Link{
-		{
-			Variant: &commonpb.Link_WorkflowEvent_{
-				WorkflowEvent: &commonpb.Link_WorkflowEvent{
-					Namespace: "present",
-				},
-			},
-		},
-	}
+	req.SetLinks([]*commonpb.Link{
+		commonpb.Link_builder{
+			WorkflowEvent: commonpb.Link_WorkflowEvent_builder{
+				Namespace: "present",
+			}.Build(),
+		}.Build(),
+	})
 
 	_, err = wh.StartWorkflowExecution(context.Background(), req)
 	s.ErrorAs(err, &invalidArgument)
 	s.ErrorContains(err, "workflow event link must not have an empty workflow ID field")
 
-	req.Links = []*commonpb.Link{
-		{
-			Variant: &commonpb.Link_WorkflowEvent_{
-				WorkflowEvent: &commonpb.Link_WorkflowEvent{
-					Namespace:  "present",
-					WorkflowId: "present",
-				},
-			},
-		},
-	}
+	req.SetLinks([]*commonpb.Link{
+		commonpb.Link_builder{
+			WorkflowEvent: commonpb.Link_WorkflowEvent_builder{
+				Namespace:  "present",
+				WorkflowId: "present",
+			}.Build(),
+		}.Build(),
+	})
 
 	_, err = wh.StartWorkflowExecution(context.Background(), req)
 	s.ErrorAs(err, &invalidArgument)
 	s.ErrorContains(err, "workflow event link must not have an empty run ID field")
 
-	req.Links = []*commonpb.Link{
-		{
-			Variant: &commonpb.Link_WorkflowEvent_{
-				WorkflowEvent: &commonpb.Link_WorkflowEvent{
-					Namespace:  "present",
-					WorkflowId: "present",
-					RunId:      uuid.NewString(),
-					Reference: &commonpb.Link_WorkflowEvent_EventRef{
-						EventRef: &commonpb.Link_WorkflowEvent_EventReference{
-							EventId: 3,
-						},
-					},
-				},
-			},
-		},
-	}
+	req.SetLinks([]*commonpb.Link{
+		commonpb.Link_builder{
+			WorkflowEvent: commonpb.Link_WorkflowEvent_builder{
+				Namespace:  "present",
+				WorkflowId: "present",
+				RunId:      uuid.NewString(),
+				EventRef: commonpb.Link_WorkflowEvent_EventReference_builder{
+					EventId: 3,
+				}.Build(),
+			}.Build(),
+		}.Build(),
+	})
 
 	_, err = wh.StartWorkflowExecution(context.Background(), req)
 	s.ErrorAs(err, &invalidArgument)
 	s.ErrorContains(err, "workflow event link ref cannot have an unspecified event type and a non-zero event ID")
 
-	req.Links = []*commonpb.Link{
-		{
-			Variant: &commonpb.Link_BatchJob_{
-				BatchJob: &commonpb.Link_BatchJob{},
-			},
-		},
-	}
+	req.SetLinks([]*commonpb.Link{
+		commonpb.Link_builder{
+			BatchJob: &commonpb.Link_BatchJob{},
+		}.Build(),
+	})
 
 	_, err = wh.StartWorkflowExecution(context.Background(), req)
 	s.ErrorAs(err, &invalidArgument)
@@ -813,31 +798,27 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidCallback
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
 
-	req := &workflowservice.StartWorkflowExecutionRequest{
+	req := workflowservice.StartWorkflowExecutionRequest_builder{
 		Namespace:  "test-namespace",
 		WorkflowId: "workflow-id",
-		WorkflowType: &commonpb.WorkflowType{
+		WorkflowType: commonpb.WorkflowType_builder{
 			Name: "workflow-type",
-		},
-		TaskQueue: &taskqueuepb.TaskQueue{
+		}.Build(),
+		TaskQueue: taskqueuepb.TaskQueue_builder{
 			Name: "task-queue",
-		},
+		}.Build(),
 		RequestId: uuid.NewString(),
 		CompletionCallbacks: []*commonpb.Callback{
-			{
-				Variant: &commonpb.Callback_Internal_{
-					Internal: &commonpb.Callback_Internal{},
-				},
+			commonpb.Callback_builder{
+				Internal: &commonpb.Callback_Internal{},
 				Links: []*commonpb.Link{
-					{
-						Variant: &commonpb.Link_WorkflowEvent_{
-							WorkflowEvent: &commonpb.Link_WorkflowEvent{},
-						},
-					},
+					commonpb.Link_builder{
+						WorkflowEvent: &commonpb.Link_WorkflowEvent{},
+					}.Build(),
 				},
-			},
+			}.Build(),
 		},
-	}
+	}.Build()
 
 	var invalidArgument *serviceerror.InvalidArgument
 	_, err := wh.StartWorkflowExecution(context.Background(), req)
@@ -859,55 +840,47 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidAggregat
 	})
 	wh := s.getWorkflowHandler(config)
 
-	req := &workflowservice.StartWorkflowExecutionRequest{
+	req := workflowservice.StartWorkflowExecutionRequest_builder{
 		Namespace:  "test-namespace",
 		WorkflowId: "workflow-id",
-		WorkflowType: &commonpb.WorkflowType{
+		WorkflowType: commonpb.WorkflowType_builder{
 			Name: "workflow-type",
-		},
-		TaskQueue: &taskqueuepb.TaskQueue{
+		}.Build(),
+		TaskQueue: taskqueuepb.TaskQueue_builder{
 			Name: "task-queue",
-		},
+		}.Build(),
 		RequestId: uuid.NewString(),
 		CompletionCallbacks: []*commonpb.Callback{
-			{
-				Variant: &commonpb.Callback_Nexus_{
-					Nexus: &commonpb.Callback_Nexus{
-						Url: "http://localhost/test",
-					},
-				},
+			commonpb.Callback_builder{
+				Nexus: commonpb.Callback_Nexus_builder{
+					Url: "http://localhost/test",
+				}.Build(),
 				Links: []*commonpb.Link{
-					{
-						Variant: &commonpb.Link_WorkflowEvent_{
-							WorkflowEvent: &commonpb.Link_WorkflowEvent{},
-						},
-					},
-					{
-						Variant: &commonpb.Link_WorkflowEvent_{
-							WorkflowEvent: &commonpb.Link_WorkflowEvent{
-								Namespace:  "dont-care",
-								WorkflowId: "dont-care",
-								RunId:      "run-id-0",
-							},
-						},
-					},
+					commonpb.Link_builder{
+						WorkflowEvent: &commonpb.Link_WorkflowEvent{},
+					}.Build(),
+					commonpb.Link_builder{
+						WorkflowEvent: commonpb.Link_WorkflowEvent_builder{
+							Namespace:  "dont-care",
+							WorkflowId: "dont-care",
+							RunId:      "run-id-0",
+						}.Build(),
+					}.Build(),
 				},
-			},
+			}.Build(),
 		},
-	}
+	}.Build()
 
 	// add 10 links and one of them is duplicated in the callback
-	req.Links = []*commonpb.Link{}
+	req.SetLinks([]*commonpb.Link{})
 	for i := 0; i < 10; i++ {
-		req.Links = append(req.Links, &commonpb.Link{
-			Variant: &commonpb.Link_WorkflowEvent_{
-				WorkflowEvent: &commonpb.Link_WorkflowEvent{
-					Namespace:  "dont-care",
-					WorkflowId: "dont-care",
-					RunId:      fmt.Sprintf("run-id-%d", i),
-				},
-			},
-		})
+		req.SetLinks(append(req.GetLinks(), commonpb.Link_builder{
+			WorkflowEvent: commonpb.Link_WorkflowEvent_builder{
+				Namespace:  "dont-care",
+				WorkflowId: "dont-care",
+				RunId:      fmt.Sprintf("run-id-%d", i),
+			}.Build(),
+		}.Build()))
 	}
 
 	var invalidArgument *serviceerror.InvalidArgument
@@ -922,17 +895,17 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Priority() {
 
 	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).Return(nil, nil).AnyTimes()
 
-	request := &workflowservice.StartWorkflowExecutionRequest{
+	request := workflowservice.StartWorkflowExecutionRequest_builder{
 		Namespace:  s.testNamespace.String(),
 		WorkflowId: "workflow-id",
-		WorkflowType: &commonpb.WorkflowType{
+		WorkflowType: commonpb.WorkflowType_builder{
 			Name: "workflow-type",
-		},
-		TaskQueue: &taskqueuepb.TaskQueue{
+		}.Build(),
+		TaskQueue: taskqueuepb.TaskQueue_builder{
 			Name: "task-queue",
-		},
-		Priority: &commonpb.Priority{PriorityKey: -1},
-	}
+		}.Build(),
+		Priority: commonpb.Priority_builder{PriorityKey: -1}.Build(),
+	}.Build()
 
 	_, err := wh.StartWorkflowExecution(context.Background(), request)
 	var invalidArg *serviceerror.InvalidArgument
@@ -944,13 +917,13 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Priority() {
 func (s *WorkflowHandlerSuite) TestSignalWithStartWorkflowExecution_InvalidWorkflowIdConflictPolicy() {
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
-	req := &workflowservice.SignalWithStartWorkflowExecutionRequest{
+	req := workflowservice.SignalWithStartWorkflowExecutionRequest_builder{
 		WorkflowId:               testWorkflowID,
-		WorkflowType:             &commonpb.WorkflowType{Name: "WORKFLOW"},
-		TaskQueue:                &taskqueuepb.TaskQueue{Name: "TASK_QUEUE", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		WorkflowType:             commonpb.WorkflowType_builder{Name: "WORKFLOW"}.Build(),
+		TaskQueue:                taskqueuepb.TaskQueue_builder{Name: "TASK_QUEUE", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 		SignalName:               "SIGNAL",
 		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
-	}
+	}.Build()
 
 	resp, err := wh.SignalWithStartWorkflowExecution(context.Background(), req)
 
@@ -962,14 +935,14 @@ func (s *WorkflowHandlerSuite) TestSignalWithStartWorkflowExecution_InvalidWorkf
 func (s *WorkflowHandlerSuite) TestSignalWithStartWorkflowExecution_InvalidWorkflowIdReusePolicy_TerminateIfRunning() {
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
-	req := &workflowservice.SignalWithStartWorkflowExecutionRequest{
+	req := workflowservice.SignalWithStartWorkflowExecutionRequest_builder{
 		WorkflowId:               testWorkflowID,
-		WorkflowType:             &commonpb.WorkflowType{Name: "WORKFLOW"},
-		TaskQueue:                &taskqueuepb.TaskQueue{Name: "TASK_QUEUE", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		WorkflowType:             commonpb.WorkflowType_builder{Name: "WORKFLOW"}.Build(),
+		TaskQueue:                taskqueuepb.TaskQueue_builder{Name: "TASK_QUEUE", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 		SignalName:               "SIGNAL",
 		WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING,
 		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
-	}
+	}.Build()
 
 	resp, err := wh.SignalWithStartWorkflowExecution(context.Background(), req)
 
@@ -983,23 +956,23 @@ func (s *WorkflowHandlerSuite) TestSignalWithStartWorkflowExecution_DefaultWorkf
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespace.NewID(), nil)
 	s.mockHistoryClient.EXPECT().SignalWithStartWorkflowExecution(gomock.Any(), mock.MatchedBy(
 		func(request *historyservice.SignalWithStartWorkflowExecutionRequest) bool {
-			return request.SignalWithStartRequest.WorkflowIdReusePolicy == enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE &&
-				request.SignalWithStartRequest.WorkflowIdConflictPolicy == enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING
+			return request.GetSignalWithStartRequest().GetWorkflowIdReusePolicy() == enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE &&
+				request.GetSignalWithStartRequest().GetWorkflowIdConflictPolicy() == enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING
 		},
-	)).Return(&historyservice.SignalWithStartWorkflowExecutionResponse{Started: true}, nil)
+	)).Return(historyservice.SignalWithStartWorkflowExecutionResponse_builder{Started: true}.Build(), nil)
 
 	wh := s.getWorkflowHandler(s.newConfig())
-	req := &workflowservice.SignalWithStartWorkflowExecutionRequest{
+	req := workflowservice.SignalWithStartWorkflowExecutionRequest_builder{
 		WorkflowId:   testWorkflowID,
-		WorkflowType: &commonpb.WorkflowType{Name: "WORKFLOW"},
-		TaskQueue:    &taskqueuepb.TaskQueue{Name: "TASK_QUEUE", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		WorkflowType: commonpb.WorkflowType_builder{Name: "WORKFLOW"}.Build(),
+		TaskQueue:    taskqueuepb.TaskQueue_builder{Name: "TASK_QUEUE", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 		SignalName:   "SIGNAL",
 		// both policies are not specified
-	}
+	}.Build()
 
 	resp, err := wh.SignalWithStartWorkflowExecution(context.Background(), req)
 	s.NoError(err)
-	s.True(resp.Started)
+	s.True(resp.GetStarted())
 }
 
 func (s *WorkflowHandlerSuite) TestSignalWithStartWorkflowExecution_Failed_InvalidLinks() {
@@ -1008,29 +981,27 @@ func (s *WorkflowHandlerSuite) TestSignalWithStartWorkflowExecution_Failed_Inval
 	config.MaxLinksPerRequest = dc.GetIntPropertyFnFilteredByNamespace(10)
 	wh := s.getWorkflowHandler(config)
 
-	req := &workflowservice.SignalWithStartWorkflowExecutionRequest{
+	req := workflowservice.SignalWithStartWorkflowExecutionRequest_builder{
 		Namespace:  "test-namespace",
 		WorkflowId: "workflow-id",
-		WorkflowType: &commonpb.WorkflowType{
+		WorkflowType: commonpb.WorkflowType_builder{
 			Name: "workflow-type",
-		},
+		}.Build(),
 		SignalName: "dont-care",
-		TaskQueue: &taskqueuepb.TaskQueue{
+		TaskQueue: taskqueuepb.TaskQueue_builder{
 			Name: "task-queue",
-		},
+		}.Build(),
 		RequestId: uuid.NewString(),
 		Links: []*commonpb.Link{
-			{
-				Variant: &commonpb.Link_WorkflowEvent_{
-					WorkflowEvent: &commonpb.Link_WorkflowEvent{
-						Namespace:  "dont-care",
-						WorkflowId: strings.Repeat("X", 4000),
-						RunId:      uuid.NewString(),
-					},
-				},
-			},
+			commonpb.Link_builder{
+				WorkflowEvent: commonpb.Link_WorkflowEvent_builder{
+					Namespace:  "dont-care",
+					WorkflowId: strings.Repeat("X", 4000),
+					RunId:      uuid.NewString(),
+				}.Build(),
+			}.Build(),
 		},
-	}
+	}.Build()
 
 	_, err := wh.SignalWithStartWorkflowExecution(context.Background(), req)
 	var invalidArgument *serviceerror.InvalidArgument
@@ -1044,18 +1015,18 @@ func (s *WorkflowHandlerSuite) TestSignalWithStartWorkflowExecution_Priority() {
 
 	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).Return(nil, nil).AnyTimes()
 
-	request := &workflowservice.SignalWithStartWorkflowExecutionRequest{
+	request := workflowservice.SignalWithStartWorkflowExecutionRequest_builder{
 		Namespace:  s.testNamespace.String(),
 		WorkflowId: "workflow-id",
-		WorkflowType: &commonpb.WorkflowType{
+		WorkflowType: commonpb.WorkflowType_builder{
 			Name: "workflow-type",
-		},
-		TaskQueue: &taskqueuepb.TaskQueue{
+		}.Build(),
+		TaskQueue: taskqueuepb.TaskQueue_builder{
 			Name: "task-queue",
-		},
+		}.Build(),
 		SignalName: "signal-name",
-		Priority:   &commonpb.Priority{PriorityKey: -1},
-	}
+		Priority:   commonpb.Priority_builder{PriorityKey: -1}.Build(),
+	}.Build()
 
 	_, err := wh.SignalWithStartWorkflowExecution(context.Background(), request)
 	var invalidArg *serviceerror.InvalidArgument
@@ -1070,25 +1041,23 @@ func (s *WorkflowHandlerSuite) TestSignalWorkflowExecution_Failed_InvalidLinks()
 	config.MaxLinksPerRequest = dc.GetIntPropertyFnFilteredByNamespace(10)
 	wh := s.getWorkflowHandler(config)
 
-	req := &workflowservice.SignalWorkflowExecutionRequest{
+	req := workflowservice.SignalWorkflowExecutionRequest_builder{
 		Namespace: "test-namespace",
-		WorkflowExecution: &commonpb.WorkflowExecution{
+		WorkflowExecution: commonpb.WorkflowExecution_builder{
 			WorkflowId: "workflow-id",
-		},
+		}.Build(),
 		SignalName: "dont-care",
 		Identity:   "test",
 		Links: []*commonpb.Link{
-			{
-				Variant: &commonpb.Link_WorkflowEvent_{
-					WorkflowEvent: &commonpb.Link_WorkflowEvent{
-						Namespace:  "dont-care",
-						WorkflowId: strings.Repeat("X", 4000),
-						RunId:      uuid.NewString(),
-					},
-				},
-			},
+			commonpb.Link_builder{
+				WorkflowEvent: commonpb.Link_WorkflowEvent_builder{
+					Namespace:  "dont-care",
+					WorkflowId: strings.Repeat("X", 4000),
+					RunId:      uuid.NewString(),
+				}.Build(),
+			}.Build(),
 		},
-	}
+	}.Build()
 
 	_, err := wh.SignalWorkflowExecution(context.Background(), req)
 	var invalidArgument *serviceerror.InvalidArgument
@@ -1102,24 +1071,22 @@ func (s *WorkflowHandlerSuite) TestTerminateWorkflowExecution_Failed_InvalidLink
 	config.MaxLinksPerRequest = dc.GetIntPropertyFnFilteredByNamespace(10)
 	wh := s.getWorkflowHandler(config)
 
-	req := &workflowservice.TerminateWorkflowExecutionRequest{
+	req := workflowservice.TerminateWorkflowExecutionRequest_builder{
 		Namespace: "test-namespace",
-		WorkflowExecution: &commonpb.WorkflowExecution{
+		WorkflowExecution: commonpb.WorkflowExecution_builder{
 			WorkflowId: "workflow-id",
-		},
+		}.Build(),
 		Reason: "dont-care",
 		Links: []*commonpb.Link{
-			{
-				Variant: &commonpb.Link_WorkflowEvent_{
-					WorkflowEvent: &commonpb.Link_WorkflowEvent{
-						Namespace:  "dont-care",
-						WorkflowId: strings.Repeat("X", 4000),
-						RunId:      uuid.NewString(),
-					},
-				},
-			},
+			commonpb.Link_builder{
+				WorkflowEvent: commonpb.Link_WorkflowEvent_builder{
+					Namespace:  "dont-care",
+					WorkflowId: strings.Repeat("X", 4000),
+					RunId:      uuid.NewString(),
+				}.Build(),
+			}.Build(),
 		},
-	}
+	}.Build()
 
 	_, err := wh.TerminateWorkflowExecution(context.Background(), req)
 	var invalidArgument *serviceerror.InvalidArgument
@@ -1141,21 +1108,21 @@ func (s *WorkflowHandlerSuite) TestTerminateWorkflowExecution_Succeed_WithDefaul
 			request *historyservice.TerminateWorkflowExecutionRequest,
 			_ ...grpc.CallOption,
 		) (*historyservice.TerminateWorkflowExecutionResponse, error) {
-			s.Equal(namespaceID.String(), request.NamespaceId)
-			s.Equal("workflow-id", request.TerminateRequest.WorkflowExecution.GetWorkflowId())
+			s.Equal(namespaceID.String(), request.GetNamespaceId())
+			s.Equal("workflow-id", request.GetTerminateRequest().GetWorkflowExecution().GetWorkflowId())
 			// Verify that default values are set when reason and identity are empty
-			s.Equal(defaultUserTerminateReason, request.TerminateRequest.GetReason())
-			s.Equal(defaultUserTerminateIdentity, request.TerminateRequest.GetIdentity())
+			s.Equal(defaultUserTerminateReason, request.GetTerminateRequest().GetReason())
+			s.Equal(defaultUserTerminateIdentity, request.GetTerminateRequest().GetIdentity())
 			return &historyservice.TerminateWorkflowExecutionResponse{}, nil
 		},
 	)
 
-	req := &workflowservice.TerminateWorkflowExecutionRequest{
+	req := workflowservice.TerminateWorkflowExecutionRequest_builder{
 		Namespace: "test-namespace",
-		WorkflowExecution: &commonpb.WorkflowExecution{
+		WorkflowExecution: commonpb.WorkflowExecution_builder{
 			WorkflowId: "workflow-id",
-		},
-	}
+		}.Build(),
+	}.Build()
 
 	_, err := wh.TerminateWorkflowExecution(context.Background(), req)
 	s.NoError(err)
@@ -1177,23 +1144,23 @@ func (s *WorkflowHandlerSuite) TestTerminateWorkflowExecution_Succeed_WithCustom
 			request *historyservice.TerminateWorkflowExecutionRequest,
 			_ ...grpc.CallOption,
 		) (*historyservice.TerminateWorkflowExecutionResponse, error) {
-			s.Equal(namespaceID.String(), request.NamespaceId)
-			s.Equal("workflow-id", request.TerminateRequest.WorkflowExecution.GetWorkflowId())
+			s.Equal(namespaceID.String(), request.GetNamespaceId())
+			s.Equal("workflow-id", request.GetTerminateRequest().GetWorkflowExecution().GetWorkflowId())
 			// Verify that custom values are preserved and not overwritten by defaults
-			s.Equal(reason, request.TerminateRequest.GetReason())
-			s.Equal(identity, request.TerminateRequest.GetIdentity())
+			s.Equal(reason, request.GetTerminateRequest().GetReason())
+			s.Equal(identity, request.GetTerminateRequest().GetIdentity())
 			return &historyservice.TerminateWorkflowExecutionResponse{}, nil
 		},
 	)
 
-	req := &workflowservice.TerminateWorkflowExecutionRequest{
+	req := workflowservice.TerminateWorkflowExecutionRequest_builder{
 		Namespace: "test-namespace",
-		WorkflowExecution: &commonpb.WorkflowExecution{
+		WorkflowExecution: commonpb.WorkflowExecution_builder{
 			WorkflowId: "workflow-id",
-		},
+		}.Build(),
 		Reason:   reason,
 		Identity: identity,
-	}
+	}.Build()
 
 	_, err := wh.TerminateWorkflowExecution(context.Background(), req)
 	s.NoError(err)
@@ -1205,24 +1172,22 @@ func (s *WorkflowHandlerSuite) TestRequestCancelWorkflowExecution_Failed_Invalid
 	config.MaxLinksPerRequest = dc.GetIntPropertyFnFilteredByNamespace(10)
 	wh := s.getWorkflowHandler(config)
 
-	req := &workflowservice.RequestCancelWorkflowExecutionRequest{
+	req := workflowservice.RequestCancelWorkflowExecutionRequest_builder{
 		Namespace: "test-namespace",
-		WorkflowExecution: &commonpb.WorkflowExecution{
+		WorkflowExecution: commonpb.WorkflowExecution_builder{
 			WorkflowId: "workflow-id",
-		},
+		}.Build(),
 		Reason: "dont-care",
 		Links: []*commonpb.Link{
-			{
-				Variant: &commonpb.Link_WorkflowEvent_{
-					WorkflowEvent: &commonpb.Link_WorkflowEvent{
-						Namespace:  "dont-care",
-						WorkflowId: strings.Repeat("X", 4000),
-						RunId:      uuid.NewString(),
-					},
-				},
-			},
+			commonpb.Link_builder{
+				WorkflowEvent: commonpb.Link_WorkflowEvent_builder{
+					Namespace:  "dont-care",
+					WorkflowId: strings.Repeat("X", 4000),
+					RunId:      uuid.NewString(),
+				}.Build(),
+			}.Build(),
 		},
-	}
+	}.Build()
 
 	_, err := wh.RequestCancelWorkflowExecution(context.Background(), req)
 	var invalidArgument *serviceerror.InvalidArgument
@@ -1355,20 +1320,20 @@ func (s *WorkflowHandlerSuite) TestDeprecateNamespace_Success() {
 
 	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{}, nil)
 	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(&persistence.GetNamespaceResponse{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
+		Namespace: persistencespb.NamespaceDetail_builder{
+			Info: persistencespb.NamespaceInfo_builder{
 				State: enumspb.NAMESPACE_STATE_REGISTERED,
-			},
+			}.Build(),
 			Config: &persistencespb.NamespaceConfig{},
-			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+			ReplicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters:          []string{cluster.TestCurrentClusterName},
-			},
-		},
+			}.Build(),
+		}.Build(),
 	}, nil)
 	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, request *persistence.UpdateNamespaceRequest) error {
-			s.Equal(enumspb.NAMESPACE_STATE_DEPRECATED, request.Namespace.Info.State)
+			s.Equal(enumspb.NAMESPACE_STATE_DEPRECATED, request.Namespace.GetInfo().GetState())
 			return nil
 		},
 	)
@@ -1380,12 +1345,12 @@ func (s *WorkflowHandlerSuite) TestDeprecateNamespace_Success() {
 	resp, err := wh.RegisterNamespace(context.Background(), req)
 	s.NoError(err)
 	s.NotNil(resp)
-	respDeprecate, errDeprecate := wh.UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
-		Namespace: req.Namespace,
-		UpdateInfo: &namespacepb.UpdateNamespaceInfo{
+	respDeprecate, errDeprecate := wh.UpdateNamespace(context.Background(), workflowservice.UpdateNamespaceRequest_builder{
+		Namespace: req.GetNamespace(),
+		UpdateInfo: namespacepb.UpdateNamespaceInfo_builder{
 			State: enumspb.NAMESPACE_STATE_DEPRECATED,
-		},
-	})
+		}.Build(),
+	}.Build())
 	s.NoError(errDeprecate)
 	s.NotNil(respDeprecate)
 }
@@ -1403,20 +1368,20 @@ func (s *WorkflowHandlerSuite) TestDeprecateNamespace_Error() {
 
 	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{}, nil)
 	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(&persistence.GetNamespaceResponse{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
+		Namespace: persistencespb.NamespaceDetail_builder{
+			Info: persistencespb.NamespaceInfo_builder{
 				State: enumspb.NAMESPACE_STATE_REGISTERED,
-			},
+			}.Build(),
 			Config: &persistencespb.NamespaceConfig{},
-			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+			ReplicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters:          []string{cluster.TestCurrentClusterName},
-			},
-		},
+			}.Build(),
+		}.Build(),
 	}, nil)
 	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, request *persistence.UpdateNamespaceRequest) error {
-			s.Equal(enumspb.NAMESPACE_STATE_DEPRECATED, request.Namespace.Info.State)
+			s.Equal(enumspb.NAMESPACE_STATE_DEPRECATED, request.Namespace.GetInfo().GetState())
 			return serviceerror.NewInternal("db is down")
 		},
 	)
@@ -1428,12 +1393,12 @@ func (s *WorkflowHandlerSuite) TestDeprecateNamespace_Error() {
 	resp, err := wh.RegisterNamespace(context.Background(), req)
 	s.NoError(err)
 	s.NotNil(resp)
-	respDeprecate, errDeprecate := wh.UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
-		Namespace: req.Namespace,
-		UpdateInfo: &namespacepb.UpdateNamespaceInfo{
+	respDeprecate, errDeprecate := wh.UpdateNamespace(context.Background(), workflowservice.UpdateNamespaceRequest_builder{
+		Namespace: req.GetNamespace(),
+		UpdateInfo: namespacepb.UpdateNamespaceInfo_builder{
 			State: enumspb.NAMESPACE_STATE_DEPRECATED,
-		},
-	})
+		}.Build(),
+	}.Build())
 	s.Error(errDeprecate)
 	s.Nil(respDeprecate)
 }
@@ -1451,20 +1416,20 @@ func (s *WorkflowHandlerSuite) TestDeleteNamespace_Success() {
 
 	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{}, nil)
 	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(&persistence.GetNamespaceResponse{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
+		Namespace: persistencespb.NamespaceDetail_builder{
+			Info: persistencespb.NamespaceInfo_builder{
 				State: enumspb.NAMESPACE_STATE_REGISTERED,
-			},
+			}.Build(),
 			Config: &persistencespb.NamespaceConfig{},
-			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+			ReplicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters:          []string{cluster.TestCurrentClusterName},
-			},
-		},
+			}.Build(),
+		}.Build(),
 	}, nil)
 	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, request *persistence.UpdateNamespaceRequest) error {
-			s.Equal(enumspb.NAMESPACE_STATE_DELETED, request.Namespace.Info.State)
+			s.Equal(enumspb.NAMESPACE_STATE_DELETED, request.Namespace.GetInfo().GetState())
 			return nil
 		},
 	)
@@ -1476,12 +1441,12 @@ func (s *WorkflowHandlerSuite) TestDeleteNamespace_Success() {
 	resp, err := wh.RegisterNamespace(context.Background(), req)
 	s.NoError(err)
 	s.NotNil(resp)
-	respDelete, errDelete := wh.UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
-		Namespace: req.Namespace,
-		UpdateInfo: &namespacepb.UpdateNamespaceInfo{
+	respDelete, errDelete := wh.UpdateNamespace(context.Background(), workflowservice.UpdateNamespaceRequest_builder{
+		Namespace: req.GetNamespace(),
+		UpdateInfo: namespacepb.UpdateNamespaceInfo_builder{
 			State: enumspb.NAMESPACE_STATE_DELETED,
-		},
-	})
+		}.Build(),
+	}.Build())
 	s.NoError(errDelete)
 	s.NotNil(respDelete)
 }
@@ -1499,20 +1464,20 @@ func (s *WorkflowHandlerSuite) TestDeleteNamespace_Error() {
 
 	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{}, nil)
 	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(&persistence.GetNamespaceResponse{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
+		Namespace: persistencespb.NamespaceDetail_builder{
+			Info: persistencespb.NamespaceInfo_builder{
 				State: enumspb.NAMESPACE_STATE_REGISTERED,
-			},
+			}.Build(),
 			Config: &persistencespb.NamespaceConfig{},
-			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+			ReplicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters:          []string{cluster.TestCurrentClusterName},
-			},
-		},
+			}.Build(),
+		}.Build(),
 	}, nil)
 	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, request *persistence.UpdateNamespaceRequest) error {
-			s.Equal(enumspb.NAMESPACE_STATE_DELETED, request.Namespace.Info.State)
+			s.Equal(enumspb.NAMESPACE_STATE_DELETED, request.Namespace.GetInfo().GetState())
 			return serviceerror.NewInternal("db is down")
 		},
 	)
@@ -1524,12 +1489,12 @@ func (s *WorkflowHandlerSuite) TestDeleteNamespace_Error() {
 	resp, err := wh.RegisterNamespace(context.Background(), req)
 	s.NoError(err)
 	s.NotNil(resp)
-	respDelete, errDelete := wh.UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
-		Namespace: req.Namespace,
-		UpdateInfo: &namespacepb.UpdateNamespaceInfo{
+	respDelete, errDelete := wh.UpdateNamespace(context.Background(), workflowservice.UpdateNamespaceRequest_builder{
+		Namespace: req.GetNamespace(),
+		UpdateInfo: namespacepb.UpdateNamespaceInfo_builder{
 			State: enumspb.NAMESPACE_STATE_DELETED,
-		},
-	})
+		}.Build(),
+	}.Build())
 	s.Error(errDelete)
 	s.Nil(respDelete)
 }
@@ -1543,18 +1508,18 @@ func (s *WorkflowHandlerSuite) TestDescribeNamespace_Success_ArchivalDisabled() 
 
 	wh := s.getWorkflowHandler(s.newConfig())
 
-	req := &workflowservice.DescribeNamespaceRequest{
+	req := workflowservice.DescribeNamespaceRequest_builder{
 		Namespace: "test-namespace",
-	}
+	}.Build()
 	result, err := wh.DescribeNamespace(context.Background(), req)
 
 	s.NoError(err)
 	s.NotNil(result)
-	s.NotNil(result.Config)
-	s.Equal(enumspb.ARCHIVAL_STATE_DISABLED, result.Config.GetHistoryArchivalState())
-	s.Equal("", result.Config.GetHistoryArchivalUri())
-	s.Equal(enumspb.ARCHIVAL_STATE_DISABLED, result.Config.GetVisibilityArchivalState())
-	s.Equal("", result.Config.GetVisibilityArchivalUri())
+	s.NotNil(result.GetConfig())
+	s.Equal(enumspb.ARCHIVAL_STATE_DISABLED, result.GetConfig().GetHistoryArchivalState())
+	s.Equal("", result.GetConfig().GetHistoryArchivalUri())
+	s.Equal(enumspb.ARCHIVAL_STATE_DISABLED, result.GetConfig().GetVisibilityArchivalState())
+	s.Equal("", result.GetConfig().GetVisibilityArchivalUri())
 }
 
 func (s *WorkflowHandlerSuite) TestDescribeNamespace_Success_ArchivalEnabled() {
@@ -1566,18 +1531,18 @@ func (s *WorkflowHandlerSuite) TestDescribeNamespace_Success_ArchivalEnabled() {
 
 	wh := s.getWorkflowHandler(s.newConfig())
 
-	req := &workflowservice.DescribeNamespaceRequest{
+	req := workflowservice.DescribeNamespaceRequest_builder{
 		Namespace: "test-namespace",
-	}
+	}.Build()
 	result, err := wh.DescribeNamespace(context.Background(), req)
 
 	s.NoError(err)
 	s.NotNil(result)
-	s.NotNil(result.Config)
-	s.Equal(enumspb.ARCHIVAL_STATE_ENABLED, result.Config.GetHistoryArchivalState())
-	s.Equal(testHistoryArchivalURI, result.Config.GetHistoryArchivalUri())
-	s.Equal(enumspb.ARCHIVAL_STATE_ENABLED, result.Config.GetVisibilityArchivalState())
-	s.Equal(testVisibilityArchivalURI, result.Config.GetVisibilityArchivalUri())
+	s.NotNil(result.GetConfig())
+	s.Equal(enumspb.ARCHIVAL_STATE_ENABLED, result.GetConfig().GetHistoryArchivalState())
+	s.Equal(testHistoryArchivalURI, result.GetConfig().GetHistoryArchivalUri())
+	s.Equal(enumspb.ARCHIVAL_STATE_ENABLED, result.GetConfig().GetVisibilityArchivalState())
+	s.Equal(testVisibilityArchivalURI, result.GetConfig().GetVisibilityArchivalUri())
 }
 
 func (s *WorkflowHandlerSuite) TestUpdateNamespace_Failure_UpdateExistingArchivalURI() {
@@ -1661,11 +1626,11 @@ func (s *WorkflowHandlerSuite) TestUpdateNamespace_Success_ArchivalEnabledToArch
 	result, err := wh.UpdateNamespace(context.Background(), updateReq)
 	s.NoError(err)
 	s.NotNil(result)
-	s.NotNil(result.Config)
-	s.Equal(enumspb.ARCHIVAL_STATE_DISABLED, result.Config.GetHistoryArchivalState())
-	s.Equal(testHistoryArchivalURI, result.Config.GetHistoryArchivalUri())
-	s.Equal(enumspb.ARCHIVAL_STATE_DISABLED, result.Config.GetVisibilityArchivalState())
-	s.Equal(testVisibilityArchivalURI, result.Config.GetVisibilityArchivalUri())
+	s.NotNil(result.GetConfig())
+	s.Equal(enumspb.ARCHIVAL_STATE_DISABLED, result.GetConfig().GetHistoryArchivalState())
+	s.Equal(testHistoryArchivalURI, result.GetConfig().GetHistoryArchivalUri())
+	s.Equal(enumspb.ARCHIVAL_STATE_DISABLED, result.GetConfig().GetVisibilityArchivalState())
+	s.Equal(testVisibilityArchivalURI, result.GetConfig().GetVisibilityArchivalUri())
 }
 
 func (s *WorkflowHandlerSuite) TestUpdateNamespace_Success_ClusterNotConfiguredForArchival() {
@@ -1688,11 +1653,11 @@ func (s *WorkflowHandlerSuite) TestUpdateNamespace_Success_ClusterNotConfiguredF
 	result, err := wh.UpdateNamespace(context.Background(), updateReq)
 	s.NoError(err)
 	s.NotNil(result)
-	s.NotNil(result.Config)
-	s.Equal(enumspb.ARCHIVAL_STATE_ENABLED, result.Config.GetHistoryArchivalState())
-	s.Equal("some random history URI", result.Config.GetHistoryArchivalUri())
-	s.Equal(enumspb.ARCHIVAL_STATE_ENABLED, result.Config.GetVisibilityArchivalState())
-	s.Equal("some random visibility URI", result.Config.GetVisibilityArchivalUri())
+	s.NotNil(result.GetConfig())
+	s.Equal(enumspb.ARCHIVAL_STATE_ENABLED, result.GetConfig().GetHistoryArchivalState())
+	s.Equal("some random history URI", result.GetConfig().GetHistoryArchivalUri())
+	s.Equal(enumspb.ARCHIVAL_STATE_ENABLED, result.GetConfig().GetVisibilityArchivalState())
+	s.Equal("some random visibility URI", result.GetConfig().GetVisibilityArchivalUri())
 }
 
 func (s *WorkflowHandlerSuite) TestUpdateNamespace_Success_ArchivalEnabledToArchivalDisabledWithSettingBucket() {
@@ -1725,11 +1690,11 @@ func (s *WorkflowHandlerSuite) TestUpdateNamespace_Success_ArchivalEnabledToArch
 	result, err := wh.UpdateNamespace(context.Background(), updateReq)
 	s.NoError(err)
 	s.NotNil(result)
-	s.NotNil(result.Config)
-	s.Equal(enumspb.ARCHIVAL_STATE_DISABLED, result.Config.GetHistoryArchivalState())
-	s.Equal(testHistoryArchivalURI, result.Config.GetHistoryArchivalUri())
-	s.Equal(enumspb.ARCHIVAL_STATE_DISABLED, result.Config.GetVisibilityArchivalState())
-	s.Equal(testVisibilityArchivalURI, result.Config.GetVisibilityArchivalUri())
+	s.NotNil(result.GetConfig())
+	s.Equal(enumspb.ARCHIVAL_STATE_DISABLED, result.GetConfig().GetHistoryArchivalState())
+	s.Equal(testHistoryArchivalURI, result.GetConfig().GetHistoryArchivalUri())
+	s.Equal(enumspb.ARCHIVAL_STATE_DISABLED, result.GetConfig().GetVisibilityArchivalState())
+	s.Equal(testVisibilityArchivalURI, result.GetConfig().GetVisibilityArchivalUri())
 }
 
 func (s *WorkflowHandlerSuite) TestUpdateNamespace_Success_ArchivalEnabledToEnabled() {
@@ -1761,11 +1726,11 @@ func (s *WorkflowHandlerSuite) TestUpdateNamespace_Success_ArchivalEnabledToEnab
 	result, err := wh.UpdateNamespace(context.Background(), updateReq)
 	s.NoError(err)
 	s.NotNil(result)
-	s.NotNil(result.Config)
-	s.Equal(enumspb.ARCHIVAL_STATE_ENABLED, result.Config.GetHistoryArchivalState())
-	s.Equal(testHistoryArchivalURI, result.Config.GetHistoryArchivalUri())
-	s.Equal(enumspb.ARCHIVAL_STATE_ENABLED, result.Config.GetVisibilityArchivalState())
-	s.Equal(testVisibilityArchivalURI, result.Config.GetVisibilityArchivalUri())
+	s.NotNil(result.GetConfig())
+	s.Equal(enumspb.ARCHIVAL_STATE_ENABLED, result.GetConfig().GetHistoryArchivalState())
+	s.Equal(testHistoryArchivalURI, result.GetConfig().GetHistoryArchivalUri())
+	s.Equal(enumspb.ARCHIVAL_STATE_ENABLED, result.GetConfig().GetVisibilityArchivalState())
+	s.Equal(testVisibilityArchivalURI, result.GetConfig().GetVisibilityArchivalUri())
 }
 
 func (s *WorkflowHandlerSuite) TestUpdateNamespace_Success_ArchivalNeverEnabledToEnabled() {
@@ -1798,11 +1763,11 @@ func (s *WorkflowHandlerSuite) TestUpdateNamespace_Success_ArchivalNeverEnabledT
 	result, err := wh.UpdateNamespace(context.Background(), updateReq)
 	s.NoError(err)
 	s.NotNil(result)
-	s.NotNil(result.Config)
-	s.Equal(enumspb.ARCHIVAL_STATE_ENABLED, result.Config.GetHistoryArchivalState())
-	s.Equal(testHistoryArchivalURI, result.Config.GetHistoryArchivalUri())
-	s.Equal(enumspb.ARCHIVAL_STATE_ENABLED, result.Config.GetVisibilityArchivalState())
-	s.Equal(testVisibilityArchivalURI, result.Config.GetVisibilityArchivalUri())
+	s.NotNil(result.GetConfig())
+	s.Equal(enumspb.ARCHIVAL_STATE_ENABLED, result.GetConfig().GetHistoryArchivalState())
+	s.Equal(testHistoryArchivalURI, result.GetConfig().GetHistoryArchivalUri())
+	s.Equal(enumspb.ARCHIVAL_STATE_ENABLED, result.GetConfig().GetVisibilityArchivalState())
+	s.Equal(testVisibilityArchivalURI, result.GetConfig().GetVisibilityArchivalUri())
 }
 
 func (s *WorkflowHandlerSuite) TestHistoryArchived() {
@@ -1811,36 +1776,36 @@ func (s *WorkflowHandlerSuite) TestHistoryArchived() {
 	getHistoryRequest := &workflowservice.GetWorkflowExecutionHistoryRequest{}
 	s.False(wh.historyArchived(context.Background(), getHistoryRequest, "test-namespace"))
 
-	getHistoryRequest = &workflowservice.GetWorkflowExecutionHistoryRequest{
+	getHistoryRequest = workflowservice.GetWorkflowExecutionHistoryRequest_builder{
 		Execution: &commonpb.WorkflowExecution{},
-	}
+	}.Build()
 	s.False(wh.historyArchived(context.Background(), getHistoryRequest, "test-namespace"))
 
 	s.mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any()).Return(nil, nil)
-	getHistoryRequest = &workflowservice.GetWorkflowExecutionHistoryRequest{
-		Execution: &commonpb.WorkflowExecution{
+	getHistoryRequest = workflowservice.GetWorkflowExecutionHistoryRequest_builder{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: testWorkflowID,
 			RunId:      testRunID,
-		},
-	}
+		}.Build(),
+	}.Build()
 	s.False(wh.historyArchived(context.Background(), getHistoryRequest, "test-namespace"))
 
 	s.mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNotFound("got archival indication error"))
-	getHistoryRequest = &workflowservice.GetWorkflowExecutionHistoryRequest{
-		Execution: &commonpb.WorkflowExecution{
+	getHistoryRequest = workflowservice.GetWorkflowExecutionHistoryRequest_builder{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: testWorkflowID,
 			RunId:      testRunID,
-		},
-	}
+		}.Build(),
+	}.Build()
 	s.True(wh.historyArchived(context.Background(), getHistoryRequest, "test-namespace"))
 
 	s.mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any()).Return(nil, errors.New("got non-archival indication error"))
-	getHistoryRequest = &workflowservice.GetWorkflowExecutionHistoryRequest{
-		Execution: &commonpb.WorkflowExecution{
+	getHistoryRequest = workflowservice.GetWorkflowExecutionHistoryRequest_builder{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: testWorkflowID,
 			RunId:      testRunID,
-		},
-	}
+		}.Build(),
+	}.Build()
 	s.False(wh.historyArchived(context.Background(), getHistoryRequest, "test-namespace"))
 }
 
@@ -1856,13 +1821,13 @@ func (s *WorkflowHandlerSuite) TestGetArchivedHistory_Failure_NamespaceCacheEntr
 
 func (s *WorkflowHandlerSuite) TestGetArchivedHistory_Failure_ArchivalURIEmpty() {
 	namespaceEntry := namespace.NewLocalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: "test-namespace"},
-		&persistencespb.NamespaceConfig{
+		persistencespb.NamespaceInfo_builder{Name: "test-namespace"}.Build(),
+		persistencespb.NamespaceConfig_builder{
 			HistoryArchivalState:    enumspb.ARCHIVAL_STATE_DISABLED,
 			HistoryArchivalUri:      "",
 			VisibilityArchivalState: enumspb.ARCHIVAL_STATE_DISABLED,
 			VisibilityArchivalUri:   "",
-		},
+		}.Build(),
 		"")
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(namespaceEntry, nil).AnyTimes()
 
@@ -1875,13 +1840,13 @@ func (s *WorkflowHandlerSuite) TestGetArchivedHistory_Failure_ArchivalURIEmpty()
 
 func (s *WorkflowHandlerSuite) TestGetArchivedHistory_Failure_InvalidURI() {
 	namespaceEntry := namespace.NewLocalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: "test-namespace"},
-		&persistencespb.NamespaceConfig{
+		persistencespb.NamespaceInfo_builder{Name: "test-namespace"}.Build(),
+		persistencespb.NamespaceConfig_builder{
 			HistoryArchivalState:    enumspb.ARCHIVAL_STATE_ENABLED,
 			HistoryArchivalUri:      "uri without scheme",
 			VisibilityArchivalState: enumspb.ARCHIVAL_STATE_DISABLED,
 			VisibilityArchivalUri:   "",
-		},
+		}.Build(),
 		"")
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(namespaceEntry, nil).AnyTimes()
 
@@ -1894,33 +1859,33 @@ func (s *WorkflowHandlerSuite) TestGetArchivedHistory_Failure_InvalidURI() {
 
 func (s *WorkflowHandlerSuite) TestGetArchivedHistory_Success_GetFirstPage() {
 	namespaceEntry := namespace.NewLocalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: "test-namespace"},
-		&persistencespb.NamespaceConfig{
+		persistencespb.NamespaceInfo_builder{Name: "test-namespace"}.Build(),
+		persistencespb.NamespaceConfig_builder{
 			HistoryArchivalState:    enumspb.ARCHIVAL_STATE_ENABLED,
 			HistoryArchivalUri:      testHistoryArchivalURI,
 			VisibilityArchivalState: enumspb.ARCHIVAL_STATE_DISABLED,
 			VisibilityArchivalUri:   "",
-		},
+		}.Build(),
 		"")
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(namespaceEntry, nil).AnyTimes()
 
 	nextPageToken := []byte{'1', '2', '3'}
-	historyBatch1 := &historypb.History{
+	historyBatch1 := historypb.History_builder{
 		Events: []*historypb.HistoryEvent{
-			{EventId: 1},
-			{EventId: 2},
+			historypb.HistoryEvent_builder{EventId: 1}.Build(),
+			historypb.HistoryEvent_builder{EventId: 2}.Build(),
 		},
-	}
-	historyBatch2 := &historypb.History{
+	}.Build()
+	historyBatch2 := historypb.History_builder{
 		Events: []*historypb.HistoryEvent{
-			{EventId: 3},
-			{EventId: 4},
-			{EventId: 5},
+			historypb.HistoryEvent_builder{EventId: 3}.Build(),
+			historypb.HistoryEvent_builder{EventId: 4}.Build(),
+			historypb.HistoryEvent_builder{EventId: 5}.Build(),
 		},
-	}
+	}.Build()
 	history := &historypb.History{}
-	history.Events = append(history.Events, historyBatch1.Events...)
-	history.Events = append(history.Events, historyBatch2.Events...)
+	history.SetEvents(append(history.GetEvents(), historyBatch1.GetEvents()...))
+	history.SetEvents(append(history.GetEvents(), historyBatch2.GetEvents()...))
 	s.mockHistoryArchiver.EXPECT().Get(gomock.Any(), gomock.Any(), gomock.Any()).Return(&archiver.GetHistoryResponse{
 		NextPageToken:  nextPageToken,
 		HistoryBatches: []*historypb.History{historyBatch1, historyBatch2},
@@ -1932,9 +1897,9 @@ func (s *WorkflowHandlerSuite) TestGetArchivedHistory_Success_GetFirstPage() {
 	resp, err := wh.getArchivedHistory(context.Background(), getHistoryRequest(nil), s.testNamespaceID)
 	s.NoError(err)
 	s.NotNil(resp)
-	s.NotNil(resp.History)
-	s.Equal(history, resp.History)
-	s.Equal(nextPageToken, resp.NextPageToken)
+	s.NotNil(resp.GetHistory())
+	s.Equal(history, resp.GetHistory())
+	s.Equal(nextPageToken, resp.GetNextPageToken())
 	s.True(resp.GetArchived())
 }
 
@@ -1972,9 +1937,9 @@ func (s *WorkflowHandlerSuite) TestListArchivedVisibility_Failure_NamespaceCache
 func (s *WorkflowHandlerSuite) TestListArchivedVisibility_Failure_NamespaceNotConfiguredForArchival() {
 	s.mockNamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(namespace.NewLocalNamespaceForTest(
 		nil,
-		&persistencespb.NamespaceConfig{
+		persistencespb.NamespaceConfig_builder{
 			VisibilityArchivalState: enumspb.ARCHIVAL_STATE_DISABLED,
-		},
+		}.Build(),
 		"",
 	), nil)
 	s.mockArchivalMetadata.EXPECT().GetVisibilityConfig().Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "random URI")).Times(2)
@@ -1988,11 +1953,11 @@ func (s *WorkflowHandlerSuite) TestListArchivedVisibility_Failure_NamespaceNotCo
 
 func (s *WorkflowHandlerSuite) TestListArchivedVisibility_Failure_InvalidURI() {
 	s.mockNamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(namespace.NewLocalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: "test-namespace"},
-		&persistencespb.NamespaceConfig{
+		persistencespb.NamespaceInfo_builder{Name: "test-namespace"}.Build(),
+		persistencespb.NamespaceConfig_builder{
 			VisibilityArchivalState: enumspb.ARCHIVAL_STATE_DISABLED,
 			VisibilityArchivalUri:   "uri without scheme",
-		},
+		}.Build(),
 		"",
 	), nil)
 	s.mockArchivalMetadata.EXPECT().GetVisibilityConfig().Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "random URI")).Times(2)
@@ -2006,11 +1971,11 @@ func (s *WorkflowHandlerSuite) TestListArchivedVisibility_Failure_InvalidURI() {
 
 func (s *WorkflowHandlerSuite) TestListArchivedVisibility_Success() {
 	s.mockNamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(namespace.NewLocalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: "test-namespace"},
-		&persistencespb.NamespaceConfig{
+		persistencespb.NamespaceInfo_builder{Name: "test-namespace"}.Build(),
+		persistencespb.NamespaceConfig_builder{
 			VisibilityArchivalState: enumspb.ARCHIVAL_STATE_ENABLED,
 			VisibilityArchivalUri:   testVisibilityArchivalURI,
-		},
+		}.Build(),
 		"",
 	), nil).AnyTimes()
 	s.mockArchivalMetadata.EXPECT().GetVisibilityConfig().Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "random URI")).Times(2)
@@ -2044,29 +2009,29 @@ func (s *WorkflowHandlerSuite) TestDescribeWorkflowExecution_RunningStatus() {
 		nil,
 	).AnyTimes()
 	s.mockHistoryClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).Return(
-		&historyservice.DescribeWorkflowExecutionResponse{
-			WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
-				Execution: &commonpb.WorkflowExecution{
+		historyservice.DescribeWorkflowExecutionResponse_builder{
+			WorkflowExecutionInfo: workflowpb.WorkflowExecutionInfo_builder{
+				Execution: commonpb.WorkflowExecution_builder{
 					WorkflowId: testWorkflowID,
 					RunId:      testRunID,
-				},
+				}.Build(),
 				StartTime:        now,
 				CloseTime:        now,
 				Status:           enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 				ExecutionTime:    now,
 				Memo:             nil,
 				SearchAttributes: nil,
-			},
-		},
+			}.Build(),
+		}.Build(),
 		nil,
 	)
 
-	request := &workflowservice.DescribeWorkflowExecutionRequest{
+	request := workflowservice.DescribeWorkflowExecutionRequest_builder{
 		Namespace: s.testNamespace.String(),
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: testWorkflowID,
-		},
-	}
+		}.Build(),
+	}.Build()
 	_, err := wh.DescribeWorkflowExecution(context.Background(), request)
 	s.NoError(err)
 }
@@ -2080,29 +2045,29 @@ func (s *WorkflowHandlerSuite) TestDescribeWorkflowExecution_CompletedStatus() {
 		nil,
 	).AnyTimes()
 	s.mockHistoryClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).Return(
-		&historyservice.DescribeWorkflowExecutionResponse{
-			WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
-				Execution: &commonpb.WorkflowExecution{
+		historyservice.DescribeWorkflowExecutionResponse_builder{
+			WorkflowExecutionInfo: workflowpb.WorkflowExecutionInfo_builder{
+				Execution: commonpb.WorkflowExecution_builder{
 					WorkflowId: testWorkflowID,
 					RunId:      testRunID,
-				},
+				}.Build(),
 				StartTime:        now,
 				CloseTime:        now,
 				Status:           enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 				ExecutionTime:    now,
 				Memo:             nil,
 				SearchAttributes: nil,
-			},
-		},
+			}.Build(),
+		}.Build(),
 		nil,
 	)
 
-	request := &workflowservice.DescribeWorkflowExecutionRequest{
+	request := workflowservice.DescribeWorkflowExecutionRequest_builder{
 		Namespace: s.testNamespace.String(),
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: testWorkflowID,
-		},
-	}
+		}.Build(),
+	}.Build()
 	_, err := wh.DescribeWorkflowExecution(context.Background(), request)
 	s.NoError(err)
 }
@@ -2114,11 +2079,11 @@ func (s *WorkflowHandlerSuite) TestListWorkflowExecutions() {
 	s.mockVisibilityMgr.EXPECT().GetReadStoreName(s.testNamespace).Return(elasticsearch.PersistenceName).AnyTimes()
 
 	query := "WorkflowId = 'wid'"
-	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
+	listRequest := workflowservice.ListWorkflowExecutionsRequest_builder{
 		Namespace: s.testNamespace.String(),
 		PageSize:  int32(config.VisibilityMaxPageSize(s.testNamespace.String())),
 		Query:     query,
-	}
+	}.Build()
 	ctx := context.Background()
 
 	// page size <= 0 => max page size = 1000
@@ -2147,7 +2112,7 @@ func (s *WorkflowHandlerSuite) TestListWorkflowExecutions() {
 			Query:         query,
 		},
 	).Return(&manager.ListWorkflowExecutionsResponse{}, nil)
-	listRequest.PageSize = int32(config.VisibilityMaxPageSize(s.testNamespace.String())) + 1
+	listRequest.SetPageSize(int32(config.VisibilityMaxPageSize(s.testNamespace.String())) + 1)
 	_, err = wh.ListWorkflowExecutions(ctx, listRequest)
 	s.NoError(err)
 	s.Equal(query, listRequest.GetQuery())
@@ -2163,7 +2128,7 @@ func (s *WorkflowHandlerSuite) TestListWorkflowExecutions() {
 			Query:         query,
 		},
 	).Return(&manager.ListWorkflowExecutionsResponse{}, nil)
-	listRequest.PageSize = 10
+	listRequest.SetPageSize(10)
 	_, err = wh.ListWorkflowExecutions(ctx, listRequest)
 	s.NoError(err)
 	s.Equal(query, listRequest.GetQuery())
@@ -2175,23 +2140,23 @@ func (s *WorkflowHandlerSuite) TestCountWorkflowExecutions() {
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(s.testNamespaceID, nil).AnyTimes()
 	s.mockVisibilityMgr.EXPECT().CountWorkflowExecutions(gomock.Any(), gomock.Any()).Return(&manager.CountWorkflowExecutionsResponse{Count: 5}, nil)
 
-	countRequest := &workflowservice.CountWorkflowExecutionsRequest{
+	countRequest := workflowservice.CountWorkflowExecutionsRequest_builder{
 		Namespace: s.testNamespace.String(),
-	}
+	}.Build()
 	ctx := context.Background()
 
 	query := "WorkflowId = 'wid'"
-	countRequest.Query = query
+	countRequest.SetQuery(query)
 	resp, err := wh.CountWorkflowExecutions(ctx, countRequest)
 	s.NoError(err)
-	s.Equal(int64(5), resp.Count)
+	s.Equal(int64(5), resp.GetCount())
 }
 
 func (s *WorkflowHandlerSuite) TestVerifyHistoryIsComplete() {
 	logger := log.NewTestLogger()
 	events := make([]*historyspb.StrippedHistoryEvent, 50)
 	for i := 0; i < len(events); i++ {
-		events[i] = &historyspb.StrippedHistoryEvent{EventId: int64(i + 1)}
+		events[i] = historyspb.StrippedHistoryEvent_builder{EventId: int64(i + 1)}.Build()
 	}
 	var eventsWithHoles []*historyspb.StrippedHistoryEvent
 	eventsWithHoles = append(eventsWithHoles, events[9:12]...)
@@ -2256,14 +2221,14 @@ func (s *WorkflowHandlerSuite) TestGetSystemInfo() {
 
 	resp, err := wh.GetSystemInfo(context.Background(), &workflowservice.GetSystemInfoRequest{})
 	s.NoError(err)
-	s.Equal(headers.ServerVersion, resp.ServerVersion)
-	s.True(resp.Capabilities.SignalAndQueryHeader)
-	s.True(resp.Capabilities.InternalErrorDifferentiation)
-	s.True(resp.Capabilities.ActivityFailureIncludeHeartbeat)
-	s.True(resp.Capabilities.SupportsSchedules)
-	s.True(resp.Capabilities.EncodedFailureAttributes)
-	s.True(resp.Capabilities.UpsertMemo)
-	s.True(resp.Capabilities.Nexus)
+	s.Equal(headers.ServerVersion, resp.GetServerVersion())
+	s.True(resp.GetCapabilities().GetSignalAndQueryHeader())
+	s.True(resp.GetCapabilities().GetInternalErrorDifferentiation())
+	s.True(resp.GetCapabilities().GetActivityFailureIncludeHeartbeat())
+	s.True(resp.GetCapabilities().GetSupportsSchedules())
+	s.True(resp.GetCapabilities().GetEncodedFailureAttributes())
+	s.True(resp.GetCapabilities().GetUpsertMemo())
+	s.True(resp.GetCapabilities().GetNexus())
 }
 
 func (s *WorkflowHandlerSuite) TestStartBatchOperation_Terminate() {
@@ -2274,21 +2239,19 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Terminate() {
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
 
-	params := &batchspb.BatchOperationInput{
+	params := batchspb.BatchOperationInput_builder{
 		NamespaceId: namespaceID.String(),
 		BatchType:   enumspb.BATCH_OPERATION_TYPE_TERMINATE,
-		Request: &workflowservice.StartBatchOperationRequest{
+		Request: workflowservice.StartBatchOperationRequest_builder{
 			Namespace:       testNamespace.String(),
 			VisibilityQuery: inputString,
 			JobId:           jobId,
 			Reason:          inputString,
-			Operation: &workflowservice.StartBatchOperationRequest_TerminationOperation{
-				TerminationOperation: &batchpb.BatchOperationTermination{
-					Identity: inputString,
-				},
-			},
-		},
-	}
+			TerminationOperation: batchpb.BatchOperationTermination_builder{
+				Identity: inputString,
+			}.Build(),
+		}.Build(),
+	}.Build()
 	inputPayload, err := payloads.Encode(params)
 	s.NoError(err)
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespaceID, nil).AnyTimes()
@@ -2298,30 +2261,28 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Terminate() {
 			request *historyservice.StartWorkflowExecutionRequest,
 			_ ...grpc.CallOption,
 		) (*historyservice.StartWorkflowExecutionResponse, error) {
-			s.Equal(namespaceID.String(), request.NamespaceId)
-			s.Equal(batcher.BatchWFTypeProtobufName, request.StartRequest.WorkflowType.Name)
-			s.Equal(primitives.PerNSWorkerTaskQueue, request.StartRequest.TaskQueue.Name)
-			s.Equal(enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE, request.StartRequest.WorkflowIdReusePolicy)
-			s.Equal(inputString, request.StartRequest.Identity)
-			s.ProtoEqual(payload.EncodeString(batcher.BatchTypeTerminate), request.StartRequest.Memo.Fields[batcher.BatchOperationTypeMemo])
-			s.ProtoEqual(payload.EncodeString(inputString), request.StartRequest.Memo.Fields[batcher.BatchReasonMemo])
-			s.ProtoEqual(payload.EncodeString(inputString), request.StartRequest.SearchAttributes.IndexedFields[sadefs.BatcherUser])
-			s.ProtoEqual(inputPayload, request.StartRequest.Input)
+			s.Equal(namespaceID.String(), request.GetNamespaceId())
+			s.Equal(batcher.BatchWFTypeProtobufName, request.GetStartRequest().GetWorkflowType().GetName())
+			s.Equal(primitives.PerNSWorkerTaskQueue, request.GetStartRequest().GetTaskQueue().GetName())
+			s.Equal(enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE, request.GetStartRequest().GetWorkflowIdReusePolicy())
+			s.Equal(inputString, request.GetStartRequest().GetIdentity())
+			s.ProtoEqual(payload.EncodeString(batcher.BatchTypeTerminate), request.GetStartRequest().GetMemo().GetFields()[batcher.BatchOperationTypeMemo])
+			s.ProtoEqual(payload.EncodeString(inputString), request.GetStartRequest().GetMemo().GetFields()[batcher.BatchReasonMemo])
+			s.ProtoEqual(payload.EncodeString(inputString), request.GetStartRequest().GetSearchAttributes().GetIndexedFields()[sadefs.BatcherUser])
+			s.ProtoEqual(inputPayload, request.GetStartRequest().GetInput())
 			return &historyservice.StartWorkflowExecutionResponse{}, nil
 		},
 	)
 	s.mockVisibilityMgr.EXPECT().CountWorkflowExecutions(gomock.Any(), gomock.Any()).Return(&manager.CountWorkflowExecutionsResponse{Count: 0}, nil)
-	request := &workflowservice.StartBatchOperationRequest{
+	request := workflowservice.StartBatchOperationRequest_builder{
 		Namespace: testNamespace.String(),
 		JobId:     jobId,
 		Reason:    inputString,
-		Operation: &workflowservice.StartBatchOperationRequest_TerminationOperation{
-			TerminationOperation: &batchpb.BatchOperationTermination{
-				Identity: inputString,
-			},
-		},
+		TerminationOperation: batchpb.BatchOperationTermination_builder{
+			Identity: inputString,
+		}.Build(),
 		VisibilityQuery: inputString,
-	}
+	}.Build()
 
 	_, err = wh.StartBatchOperation(context.Background(), request)
 	s.NoError(err)
@@ -2335,21 +2296,19 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Cancellation() {
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
 
-	params := &batchspb.BatchOperationInput{
+	params := batchspb.BatchOperationInput_builder{
 		NamespaceId: namespaceID.String(),
 		BatchType:   enumspb.BATCH_OPERATION_TYPE_CANCEL,
-		Request: &workflowservice.StartBatchOperationRequest{
+		Request: workflowservice.StartBatchOperationRequest_builder{
 			Namespace:       testNamespace.String(),
 			VisibilityQuery: inputString,
 			JobId:           jobId,
 			Reason:          inputString,
-			Operation: &workflowservice.StartBatchOperationRequest_CancellationOperation{
-				CancellationOperation: &batchpb.BatchOperationCancellation{
-					Identity: inputString,
-				},
-			},
-		},
-	}
+			CancellationOperation: batchpb.BatchOperationCancellation_builder{
+				Identity: inputString,
+			}.Build(),
+		}.Build(),
+	}.Build()
 	inputPayload, err := payloads.Encode(params)
 	s.NoError(err)
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespaceID, nil).AnyTimes()
@@ -2359,30 +2318,28 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Cancellation() {
 			request *historyservice.StartWorkflowExecutionRequest,
 			_ ...grpc.CallOption,
 		) (*historyservice.StartWorkflowExecutionResponse, error) {
-			s.Equal(namespaceID.String(), request.NamespaceId)
-			s.Equal(batcher.BatchWFTypeProtobufName, request.StartRequest.WorkflowType.Name)
-			s.Equal(primitives.PerNSWorkerTaskQueue, request.StartRequest.TaskQueue.Name)
-			s.Equal(enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE, request.StartRequest.WorkflowIdReusePolicy)
-			s.Equal(inputString, request.StartRequest.Identity)
-			s.ProtoEqual(payload.EncodeString(batcher.BatchTypeCancel), request.StartRequest.Memo.Fields[batcher.BatchOperationTypeMemo])
-			s.ProtoEqual(payload.EncodeString(inputString), request.StartRequest.Memo.Fields[batcher.BatchReasonMemo])
-			s.ProtoEqual(payload.EncodeString(inputString), request.StartRequest.SearchAttributes.IndexedFields[sadefs.BatcherUser])
-			s.ProtoEqual(inputPayload, request.StartRequest.Input)
+			s.Equal(namespaceID.String(), request.GetNamespaceId())
+			s.Equal(batcher.BatchWFTypeProtobufName, request.GetStartRequest().GetWorkflowType().GetName())
+			s.Equal(primitives.PerNSWorkerTaskQueue, request.GetStartRequest().GetTaskQueue().GetName())
+			s.Equal(enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE, request.GetStartRequest().GetWorkflowIdReusePolicy())
+			s.Equal(inputString, request.GetStartRequest().GetIdentity())
+			s.ProtoEqual(payload.EncodeString(batcher.BatchTypeCancel), request.GetStartRequest().GetMemo().GetFields()[batcher.BatchOperationTypeMemo])
+			s.ProtoEqual(payload.EncodeString(inputString), request.GetStartRequest().GetMemo().GetFields()[batcher.BatchReasonMemo])
+			s.ProtoEqual(payload.EncodeString(inputString), request.GetStartRequest().GetSearchAttributes().GetIndexedFields()[sadefs.BatcherUser])
+			s.ProtoEqual(inputPayload, request.GetStartRequest().GetInput())
 			return &historyservice.StartWorkflowExecutionResponse{}, nil
 		},
 	)
 	s.mockVisibilityMgr.EXPECT().CountWorkflowExecutions(gomock.Any(), gomock.Any()).Return(&manager.CountWorkflowExecutionsResponse{Count: 0}, nil)
-	request := &workflowservice.StartBatchOperationRequest{
+	request := workflowservice.StartBatchOperationRequest_builder{
 		Namespace: testNamespace.String(),
 		JobId:     jobId,
 		Reason:    inputString,
-		Operation: &workflowservice.StartBatchOperationRequest_CancellationOperation{
-			CancellationOperation: &batchpb.BatchOperationCancellation{
-				Identity: inputString,
-			},
-		},
+		CancellationOperation: batchpb.BatchOperationCancellation_builder{
+			Identity: inputString,
+		}.Build(),
 		VisibilityQuery: inputString,
-	}
+	}.Build()
 
 	_, err = wh.StartBatchOperation(context.Background(), request)
 	s.NoError(err)
@@ -2397,23 +2354,21 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Signal() {
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
 	signalPayloads := payloads.EncodeString(signalName)
-	params := &batchspb.BatchOperationInput{
+	params := batchspb.BatchOperationInput_builder{
 		NamespaceId: namespaceID.String(),
 		BatchType:   enumspb.BATCH_OPERATION_TYPE_SIGNAL,
-		Request: &workflowservice.StartBatchOperationRequest{
+		Request: workflowservice.StartBatchOperationRequest_builder{
 			Namespace:       testNamespace.String(),
 			VisibilityQuery: inputString,
 			JobId:           jobId,
 			Reason:          inputString,
-			Operation: &workflowservice.StartBatchOperationRequest_SignalOperation{
-				SignalOperation: &batchpb.BatchOperationSignal{
-					Signal:   signalName,
-					Input:    signalPayloads,
-					Identity: inputString,
-				},
-			},
-		},
-	}
+			SignalOperation: batchpb.BatchOperationSignal_builder{
+				Signal:   signalName,
+				Input:    signalPayloads,
+				Identity: inputString,
+			}.Build(),
+		}.Build(),
+	}.Build()
 	inputPayload, err := payloads.Encode(params)
 	s.NoError(err)
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespaceID, nil).AnyTimes()
@@ -2423,32 +2378,30 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Signal() {
 			request *historyservice.StartWorkflowExecutionRequest,
 			_ ...grpc.CallOption,
 		) (*historyservice.StartWorkflowExecutionResponse, error) {
-			s.Equal(namespaceID.String(), request.NamespaceId)
-			s.Equal(batcher.BatchWFTypeProtobufName, request.StartRequest.WorkflowType.Name)
-			s.Equal(primitives.PerNSWorkerTaskQueue, request.StartRequest.TaskQueue.Name)
-			s.Equal(enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE, request.StartRequest.WorkflowIdReusePolicy)
-			s.Equal(inputString, request.StartRequest.Identity)
-			s.ProtoEqual(payload.EncodeString(batcher.BatchTypeSignal), request.StartRequest.Memo.Fields[batcher.BatchOperationTypeMemo])
-			s.ProtoEqual(payload.EncodeString(inputString), request.StartRequest.Memo.Fields[batcher.BatchReasonMemo])
-			s.ProtoEqual(payload.EncodeString(inputString), request.StartRequest.SearchAttributes.IndexedFields[sadefs.BatcherUser])
-			s.ProtoEqual(inputPayload, request.StartRequest.Input)
+			s.Equal(namespaceID.String(), request.GetNamespaceId())
+			s.Equal(batcher.BatchWFTypeProtobufName, request.GetStartRequest().GetWorkflowType().GetName())
+			s.Equal(primitives.PerNSWorkerTaskQueue, request.GetStartRequest().GetTaskQueue().GetName())
+			s.Equal(enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE, request.GetStartRequest().GetWorkflowIdReusePolicy())
+			s.Equal(inputString, request.GetStartRequest().GetIdentity())
+			s.ProtoEqual(payload.EncodeString(batcher.BatchTypeSignal), request.GetStartRequest().GetMemo().GetFields()[batcher.BatchOperationTypeMemo])
+			s.ProtoEqual(payload.EncodeString(inputString), request.GetStartRequest().GetMemo().GetFields()[batcher.BatchReasonMemo])
+			s.ProtoEqual(payload.EncodeString(inputString), request.GetStartRequest().GetSearchAttributes().GetIndexedFields()[sadefs.BatcherUser])
+			s.ProtoEqual(inputPayload, request.GetStartRequest().GetInput())
 			return &historyservice.StartWorkflowExecutionResponse{}, nil
 		},
 	)
 	s.mockVisibilityMgr.EXPECT().CountWorkflowExecutions(gomock.Any(), gomock.Any()).Return(&manager.CountWorkflowExecutionsResponse{Count: 0}, nil)
-	request := &workflowservice.StartBatchOperationRequest{
+	request := workflowservice.StartBatchOperationRequest_builder{
 		Namespace: testNamespace.String(),
 		JobId:     jobId,
-		Operation: &workflowservice.StartBatchOperationRequest_SignalOperation{
-			SignalOperation: &batchpb.BatchOperationSignal{
-				Signal:   signalName,
-				Input:    signalPayloads,
-				Identity: inputString,
-			},
-		},
+		SignalOperation: batchpb.BatchOperationSignal_builder{
+			Signal:   signalName,
+			Input:    signalPayloads,
+			Identity: inputString,
+		}.Build(),
 		Reason:          inputString,
 		VisibilityQuery: inputString,
-	}
+	}.Build()
 
 	_, err = wh.StartBatchOperation(context.Background(), request)
 	s.NoError(err)
@@ -2458,10 +2411,10 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Signal
 	testNamespace := namespace.Name("test-namespace")
 	namespaceID := namespace.ID(uuid.NewString())
 	executions := []*commonpb.WorkflowExecution{
-		{
+		commonpb.WorkflowExecution_builder{
 			WorkflowId: uuid.NewString(),
 			RunId:      uuid.NewString(),
-		},
+		}.Build(),
 	}
 	reason := "reason"
 	identity := "identity"
@@ -2470,24 +2423,22 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Signal
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
 	signalPayloads := payloads.EncodeString(signalName)
-	request := &workflowservice.StartBatchOperationRequest{
+	request := workflowservice.StartBatchOperationRequest_builder{
 		Namespace:  testNamespace.String(),
 		JobId:      jobId,
 		Reason:     reason,
 		Executions: executions,
-		Operation: &workflowservice.StartBatchOperationRequest_SignalOperation{
-			SignalOperation: &batchpb.BatchOperationSignal{
-				Signal:   signalName,
-				Input:    signalPayloads,
-				Identity: identity,
-			},
-		},
-	}
-	params := &batchspb.BatchOperationInput{
+		SignalOperation: batchpb.BatchOperationSignal_builder{
+			Signal:   signalName,
+			Input:    signalPayloads,
+			Identity: identity,
+		}.Build(),
+	}.Build()
+	params := batchspb.BatchOperationInput_builder{
 		NamespaceId: namespaceID.String(),
 		BatchType:   enumspb.BATCH_OPERATION_TYPE_SIGNAL,
 		Request:     request,
-	}
+	}.Build()
 	inputPayload, err := payloads.Encode(params)
 	s.NoError(err)
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespaceID, nil).AnyTimes()
@@ -2497,15 +2448,15 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Signal
 			request *historyservice.StartWorkflowExecutionRequest,
 			_ ...grpc.CallOption,
 		) (*historyservice.StartWorkflowExecutionResponse, error) {
-			s.Equal(namespaceID.String(), request.NamespaceId)
-			s.Equal(batcher.BatchWFTypeProtobufName, request.StartRequest.WorkflowType.Name)
-			s.Equal(primitives.PerNSWorkerTaskQueue, request.StartRequest.TaskQueue.Name)
-			s.Equal(enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE, request.StartRequest.WorkflowIdReusePolicy)
-			s.Equal(identity, request.StartRequest.Identity)
-			s.ProtoEqual(payload.EncodeString(batcher.BatchTypeSignal), request.StartRequest.Memo.Fields[batcher.BatchOperationTypeMemo])
-			s.ProtoEqual(payload.EncodeString(reason), request.StartRequest.Memo.Fields[batcher.BatchReasonMemo])
-			s.ProtoEqual(payload.EncodeString(identity), request.StartRequest.SearchAttributes.IndexedFields[sadefs.BatcherUser])
-			s.ProtoEqual(inputPayload, request.StartRequest.Input)
+			s.Equal(namespaceID.String(), request.GetNamespaceId())
+			s.Equal(batcher.BatchWFTypeProtobufName, request.GetStartRequest().GetWorkflowType().GetName())
+			s.Equal(primitives.PerNSWorkerTaskQueue, request.GetStartRequest().GetTaskQueue().GetName())
+			s.Equal(enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE, request.GetStartRequest().GetWorkflowIdReusePolicy())
+			s.Equal(identity, request.GetStartRequest().GetIdentity())
+			s.ProtoEqual(payload.EncodeString(batcher.BatchTypeSignal), request.GetStartRequest().GetMemo().GetFields()[batcher.BatchOperationTypeMemo])
+			s.ProtoEqual(payload.EncodeString(reason), request.GetStartRequest().GetMemo().GetFields()[batcher.BatchReasonMemo])
+			s.ProtoEqual(payload.EncodeString(identity), request.GetStartRequest().GetSearchAttributes().GetIndexedFields()[sadefs.BatcherUser])
+			s.ProtoEqual(inputPayload, request.GetStartRequest().GetInput())
 			return &historyservice.StartWorkflowExecutionResponse{}, nil
 		},
 	)
@@ -2519,33 +2470,31 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Reset(
 	testNamespace := namespace.Name("test-namespace")
 	namespaceID := namespace.ID(uuid.NewString())
 	executions := []*commonpb.WorkflowExecution{
-		{
+		commonpb.WorkflowExecution_builder{
 			WorkflowId: uuid.NewString(),
 			RunId:      uuid.NewString(),
-		},
+		}.Build(),
 	}
 	reason := "reason"
 	identity := "identity"
 	jobId := uuid.NewString()
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
-	params := &batchspb.BatchOperationInput{
+	params := batchspb.BatchOperationInput_builder{
 		NamespaceId: namespaceID.String(),
 		BatchType:   enumspb.BATCH_OPERATION_TYPE_RESET,
-		Request: &workflowservice.StartBatchOperationRequest{
+		Request: workflowservice.StartBatchOperationRequest_builder{
 			Namespace:  testNamespace.String(),
 			JobId:      jobId,
 			Reason:     reason,
 			Executions: executions,
-			Operation: &workflowservice.StartBatchOperationRequest_ResetOperation{
-				ResetOperation: &batchpb.BatchOperationReset{
-					Identity:         identity,
-					ResetType:        enumspb.RESET_TYPE_LAST_WORKFLOW_TASK,
-					ResetReapplyType: enumspb.RESET_REAPPLY_TYPE_NONE,
-				},
-			},
-		},
-	}
+			ResetOperation: batchpb.BatchOperationReset_builder{
+				Identity:         identity,
+				ResetType:        enumspb.RESET_TYPE_LAST_WORKFLOW_TASK,
+				ResetReapplyType: enumspb.RESET_REAPPLY_TYPE_NONE,
+			}.Build(),
+		}.Build(),
+	}.Build()
 	inputPayload, err := payloads.Encode(params)
 	s.NoError(err)
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespaceID, nil).AnyTimes()
@@ -2555,32 +2504,30 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Reset(
 			request *historyservice.StartWorkflowExecutionRequest,
 			_ ...grpc.CallOption,
 		) (*historyservice.StartWorkflowExecutionResponse, error) {
-			s.Equal(namespaceID.String(), request.NamespaceId)
-			s.Equal(batcher.BatchWFTypeProtobufName, request.StartRequest.WorkflowType.Name)
-			s.Equal(primitives.PerNSWorkerTaskQueue, request.StartRequest.TaskQueue.Name)
-			s.Equal(enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE, request.StartRequest.WorkflowIdReusePolicy)
-			s.Equal(identity, request.StartRequest.Identity)
-			s.ProtoEqual(payload.EncodeString(batcher.BatchTypeReset), request.StartRequest.Memo.Fields[batcher.BatchOperationTypeMemo])
-			s.ProtoEqual(payload.EncodeString(reason), request.StartRequest.Memo.Fields[batcher.BatchReasonMemo])
-			s.ProtoEqual(payload.EncodeString(identity), request.StartRequest.SearchAttributes.IndexedFields[sadefs.BatcherUser])
-			s.ProtoEqual(inputPayload, request.StartRequest.Input)
+			s.Equal(namespaceID.String(), request.GetNamespaceId())
+			s.Equal(batcher.BatchWFTypeProtobufName, request.GetStartRequest().GetWorkflowType().GetName())
+			s.Equal(primitives.PerNSWorkerTaskQueue, request.GetStartRequest().GetTaskQueue().GetName())
+			s.Equal(enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE, request.GetStartRequest().GetWorkflowIdReusePolicy())
+			s.Equal(identity, request.GetStartRequest().GetIdentity())
+			s.ProtoEqual(payload.EncodeString(batcher.BatchTypeReset), request.GetStartRequest().GetMemo().GetFields()[batcher.BatchOperationTypeMemo])
+			s.ProtoEqual(payload.EncodeString(reason), request.GetStartRequest().GetMemo().GetFields()[batcher.BatchReasonMemo])
+			s.ProtoEqual(payload.EncodeString(identity), request.GetStartRequest().GetSearchAttributes().GetIndexedFields()[sadefs.BatcherUser])
+			s.ProtoEqual(inputPayload, request.GetStartRequest().GetInput())
 			return &historyservice.StartWorkflowExecutionResponse{}, nil
 		},
 	)
 	s.mockVisibilityMgr.EXPECT().CountWorkflowExecutions(gomock.Any(), gomock.Any()).Return(&manager.CountWorkflowExecutionsResponse{Count: 0}, nil)
-	request := &workflowservice.StartBatchOperationRequest{
+	request := workflowservice.StartBatchOperationRequest_builder{
 		Namespace: testNamespace.String(),
 		JobId:     jobId,
-		Operation: &workflowservice.StartBatchOperationRequest_ResetOperation{
-			ResetOperation: &batchpb.BatchOperationReset{
-				ResetType:        enumspb.RESET_TYPE_LAST_WORKFLOW_TASK,
-				ResetReapplyType: enumspb.RESET_REAPPLY_TYPE_NONE,
-				Identity:         identity,
-			},
-		},
+		ResetOperation: batchpb.BatchOperationReset_builder{
+			ResetType:        enumspb.RESET_TYPE_LAST_WORKFLOW_TASK,
+			ResetReapplyType: enumspb.RESET_REAPPLY_TYPE_NONE,
+			Identity:         identity,
+		}.Build(),
 		Reason:     reason,
 		Executions: executions,
-	}
+	}.Build()
 
 	_, err = wh.StartBatchOperation(context.Background(), request)
 	s.NoError(err)
@@ -2590,10 +2537,10 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Reset_
 	testNamespace := namespace.Name("test-namespace")
 	namespaceID := namespace.ID(uuid.NewString())
 	executions := []*commonpb.WorkflowExecution{
-		{
+		commonpb.WorkflowExecution_builder{
 			WorkflowId: uuid.NewString(),
 			RunId:      uuid.NewString(),
-		},
+		}.Build(),
 	}
 	reason := "reason"
 	identity := "identity"
@@ -2602,14 +2549,12 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Reset_
 
 	// Create post-reset operations to test the serialization fix
 	postResetOps := []*workflowpb.PostResetOperation{
-		{
-			Variant: &workflowpb.PostResetOperation_UpdateWorkflowOptions_{
-				UpdateWorkflowOptions: &workflowpb.PostResetOperation_UpdateWorkflowOptions{
-					WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{},
-					UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
-				},
-			},
-		},
+		workflowpb.PostResetOperation_builder{
+			UpdateWorkflowOptions: workflowpb.PostResetOperation_UpdateWorkflowOptions_builder{
+				WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{},
+				UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
+			}.Build(),
+		}.Build(),
 	}
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespaceID, nil).AnyTimes()
@@ -2619,24 +2564,24 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Reset_
 			request *historyservice.StartWorkflowExecutionRequest,
 			_ ...grpc.CallOption,
 		) (*historyservice.StartWorkflowExecutionResponse, error) {
-			s.Equal(namespaceID.String(), request.NamespaceId)
-			s.Equal(batcher.BatchWFTypeProtobufName, request.StartRequest.WorkflowType.Name)
-			s.Equal(primitives.PerNSWorkerTaskQueue, request.StartRequest.TaskQueue.Name)
-			s.Equal(enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE, request.StartRequest.WorkflowIdReusePolicy)
-			s.Equal(identity, request.StartRequest.Identity)
-			s.ProtoEqual(payload.EncodeString(batcher.BatchTypeReset), request.StartRequest.Memo.Fields[batcher.BatchOperationTypeMemo])
-			s.ProtoEqual(payload.EncodeString(reason), request.StartRequest.Memo.Fields[batcher.BatchReasonMemo])
-			s.ProtoEqual(payload.EncodeString(identity), request.StartRequest.SearchAttributes.IndexedFields[sadefs.BatcherUser])
+			s.Equal(namespaceID.String(), request.GetNamespaceId())
+			s.Equal(batcher.BatchWFTypeProtobufName, request.GetStartRequest().GetWorkflowType().GetName())
+			s.Equal(primitives.PerNSWorkerTaskQueue, request.GetStartRequest().GetTaskQueue().GetName())
+			s.Equal(enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE, request.GetStartRequest().GetWorkflowIdReusePolicy())
+			s.Equal(identity, request.GetStartRequest().GetIdentity())
+			s.ProtoEqual(payload.EncodeString(batcher.BatchTypeReset), request.GetStartRequest().GetMemo().GetFields()[batcher.BatchOperationTypeMemo])
+			s.ProtoEqual(payload.EncodeString(reason), request.GetStartRequest().GetMemo().GetFields()[batcher.BatchReasonMemo])
+			s.ProtoEqual(payload.EncodeString(identity), request.GetStartRequest().GetSearchAttributes().GetIndexedFields()[sadefs.BatcherUser])
 
 			// Decode the input and verify PostResetOperations are correctly set
 			var batchParams batchspb.BatchOperationInput
-			err := payloads.Decode(request.StartRequest.Input, &batchParams)
+			err := payloads.Decode(request.GetStartRequest().GetInput(), &batchParams)
 			s.NoError(err)
 
 			// Verify that PostResetOperations slice has the correct length and no nil values
-			s.Len(batchParams.Request.Operation.(*workflowservice.StartBatchOperationRequest_ResetOperation).ResetOperation.PostResetOperations, len(postResetOps))
+			s.Len(batchParams.GetRequest().Operation.(*workflowservice.StartBatchOperationRequest_ResetOperation).ResetOperation.GetPostResetOperations(), len(postResetOps))
 
-			for i, encoded := range batchParams.Request.Operation.(*workflowservice.StartBatchOperationRequest_ResetOperation).ResetOperation.PostResetOperations {
+			for i, encoded := range batchParams.GetRequest().Operation.(*workflowservice.StartBatchOperationRequest_ResetOperation).ResetOperation.GetPostResetOperations() {
 				s.ProtoEqual(postResetOps[i], encoded)
 			}
 
@@ -2645,23 +2590,19 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Reset_
 	)
 	s.mockVisibilityMgr.EXPECT().CountWorkflowExecutions(gomock.Any(), gomock.Any()).Return(&manager.CountWorkflowExecutionsResponse{Count: 0}, nil)
 
-	request := &workflowservice.StartBatchOperationRequest{
+	request := workflowservice.StartBatchOperationRequest_builder{
 		Namespace: testNamespace.String(),
 		JobId:     uuid.NewString(),
-		Operation: &workflowservice.StartBatchOperationRequest_ResetOperation{
-			ResetOperation: &batchpb.BatchOperationReset{
-				Options: &commonpb.ResetOptions{
-					Target: &commonpb.ResetOptions_WorkflowTaskId{
-						WorkflowTaskId: 10,
-					},
-				},
-				PostResetOperations: postResetOps,
-				Identity:            identity,
-			},
-		},
+		ResetOperation: batchpb.BatchOperationReset_builder{
+			Options: commonpb.ResetOptions_builder{
+				WorkflowTaskId: proto.Int64(10),
+			}.Build(),
+			PostResetOperations: postResetOps,
+			Identity:            identity,
+		}.Build(),
 		Reason:     reason,
 		Executions: executions,
-	}
+	}.Build()
 
 	_, err := wh.StartBatchOperation(context.Background(), request)
 	s.NoError(err)
@@ -2671,10 +2612,10 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Reset_
 	testNamespace := namespace.Name("test-namespace")
 	namespaceID := namespace.ID(uuid.NewString())
 	executions := []*commonpb.WorkflowExecution{
-		{
+		commonpb.WorkflowExecution_builder{
 			WorkflowId: uuid.NewString(),
 			RunId:      uuid.NewString(),
-		},
+		}.Build(),
 	}
 	reason := "reason"
 	identity := "identity"
@@ -2690,32 +2631,28 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Reset_
 		) (*historyservice.StartWorkflowExecutionResponse, error) {
 			// Decode the input and verify PostResetOperations slice is properly initialized
 			var batchParams batchspb.BatchOperationInput
-			err := payloads.Decode(request.StartRequest.Input, &batchParams)
+			err := payloads.Decode(request.GetStartRequest().GetInput(), &batchParams)
 			s.NoError(err)
-			s.Len(batchParams.Request.Operation.(*workflowservice.StartBatchOperationRequest_ResetOperation).ResetOperation.PostResetOperations, 0)
+			s.Len(batchParams.GetRequest().Operation.(*workflowservice.StartBatchOperationRequest_ResetOperation).ResetOperation.GetPostResetOperations(), 0)
 
 			return &historyservice.StartWorkflowExecutionResponse{}, nil
 		},
 	)
 	s.mockVisibilityMgr.EXPECT().CountWorkflowExecutions(gomock.Any(), gomock.Any()).Return(&manager.CountWorkflowExecutionsResponse{Count: 0}, nil)
 
-	request := &workflowservice.StartBatchOperationRequest{
+	request := workflowservice.StartBatchOperationRequest_builder{
 		Namespace: testNamespace.String(),
 		JobId:     uuid.NewString(),
-		Operation: &workflowservice.StartBatchOperationRequest_ResetOperation{
-			ResetOperation: &batchpb.BatchOperationReset{
-				Options: &commonpb.ResetOptions{
-					Target: &commonpb.ResetOptions_WorkflowTaskId{
-						WorkflowTaskId: 10,
-					},
-				},
-				PostResetOperations: []*workflowpb.PostResetOperation{}, // Empty slice
-				Identity:            identity,
-			},
-		},
+		ResetOperation: batchpb.BatchOperationReset_builder{
+			Options: commonpb.ResetOptions_builder{
+				WorkflowTaskId: proto.Int64(10),
+			}.Build(),
+			PostResetOperations: []*workflowpb.PostResetOperation{}, // Empty slice
+			Identity:            identity,
+		}.Build(),
 		Reason:     reason,
 		Executions: executions,
-	}
+	}.Build()
 
 	_, err := wh.StartBatchOperation(context.Background(), request)
 	s.NoError(err)
@@ -2725,10 +2662,10 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_TooMan
 	testNamespace := namespace.Name("test-namespace")
 	namespaceID := namespace.ID(uuid.NewString())
 	executions := []*commonpb.WorkflowExecution{
-		{
+		commonpb.WorkflowExecution_builder{
 			WorkflowId: uuid.NewString(),
 			RunId:      uuid.NewString(),
-		},
+		}.Build(),
 	}
 	reason := "reason"
 	identity := "identity"
@@ -2738,35 +2675,31 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_TooMan
 	// StartBatchOperation API uses CountWorkflowExecutions to know how many existing in-flight batch operations.
 	s.mockVisibilityMgr.EXPECT().CountWorkflowExecutions(gomock.Any(), gomock.Any()).Return(&manager.CountWorkflowExecutionsResponse{Count: 1}, nil)
 
-	request := &workflowservice.StartBatchOperationRequest{
+	request := workflowservice.StartBatchOperationRequest_builder{
 		Namespace: testNamespace.String(),
 		JobId:     uuid.NewString(),
-		Operation: &workflowservice.StartBatchOperationRequest_CancellationOperation{
-			CancellationOperation: &batchpb.BatchOperationCancellation{
-				Identity: identity,
-			},
-		},
+		CancellationOperation: batchpb.BatchOperationCancellation_builder{
+			Identity: identity,
+		}.Build(),
 		Reason:     reason,
 		Executions: executions,
-	}
+	}.Build()
 
 	_, err := wh.StartBatchOperation(context.Background(), request)
 	s.EqualError(err, "Max concurrent batch operations is reached")
 }
 
 func (s *WorkflowHandlerSuite) TestStartBatchOperation_InvalidRequest() {
-	request := &workflowservice.StartBatchOperationRequest{
+	request := workflowservice.StartBatchOperationRequest_builder{
 		Namespace: "",
 		JobId:     uuid.NewString(),
-		Operation: &workflowservice.StartBatchOperationRequest_SignalOperation{
-			SignalOperation: &batchpb.BatchOperationSignal{
-				Signal:   "signalName",
-				Identity: "identity",
-			},
-		},
+		SignalOperation: batchpb.BatchOperationSignal_builder{
+			Signal:   "signalName",
+			Identity: "identity",
+		}.Build(),
 		Reason:          uuid.NewString(),
 		VisibilityQuery: uuid.NewString(),
-	}
+	}.Build()
 
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
@@ -2774,28 +2707,26 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_InvalidRequest() {
 	_, err := wh.StartBatchOperation(context.Background(), request)
 	s.ErrorAs(err, &invalidArgumentErr)
 
-	request.Namespace = uuid.NewString()
-	request.JobId = ""
+	request.SetNamespace(uuid.NewString())
+	request.SetJobId("")
 	_, err = wh.StartBatchOperation(context.Background(), request)
 	s.ErrorAs(err, &invalidArgumentErr)
 
-	request.JobId = uuid.NewString()
-	request.Operation = nil
+	request.SetJobId(uuid.NewString())
+	request.ClearOperation()
 	_, err = wh.StartBatchOperation(context.Background(), request)
 	s.ErrorAs(err, &invalidArgumentErr)
 
-	request.Operation = &workflowservice.StartBatchOperationRequest_SignalOperation{
-		SignalOperation: &batchpb.BatchOperationSignal{
-			Signal:   "signalName",
-			Identity: "identity",
-		},
-	}
-	request.Reason = ""
+	request.SetSignalOperation(batchpb.BatchOperationSignal_builder{
+		Signal:   "signalName",
+		Identity: "identity",
+	}.Build())
+	request.SetReason("")
 	_, err = wh.StartBatchOperation(context.Background(), request)
 	s.ErrorAs(err, &invalidArgumentErr)
 
-	request.Reason = uuid.NewString()
-	request.VisibilityQuery = ""
+	request.SetReason(uuid.NewString())
+	request.SetVisibilityQuery("")
 	_, err = wh.StartBatchOperation(context.Background(), request)
 	s.ErrorAs(err, &invalidArgumentErr)
 }
@@ -2814,17 +2745,17 @@ func (s *WorkflowHandlerSuite) TestStopBatchOperation() {
 			request *historyservice.TerminateWorkflowExecutionRequest,
 			_ ...grpc.CallOption,
 		) (*historyservice.TerminateWorkflowExecutionResponse, error) {
-			s.Equal(namespaceID.String(), request.NamespaceId)
-			s.Equal(jobID, request.TerminateRequest.WorkflowExecution.GetWorkflowId())
-			s.Equal("", request.TerminateRequest.WorkflowExecution.GetRunId())
+			s.Equal(namespaceID.String(), request.GetNamespaceId())
+			s.Equal(jobID, request.GetTerminateRequest().GetWorkflowExecution().GetWorkflowId())
+			s.Equal("", request.GetTerminateRequest().GetWorkflowExecution().GetRunId())
 			return &historyservice.TerminateWorkflowExecutionResponse{}, nil
 		},
 	)
-	request := &workflowservice.StopBatchOperationRequest{
+	request := workflowservice.StopBatchOperationRequest_builder{
 		Namespace: testNamespace.String(),
 		JobId:     jobID,
 		Reason:    "reason",
-	}
+	}.Build()
 
 	_, err := wh.StopBatchOperation(context.Background(), request)
 	s.NoError(err)
@@ -2833,23 +2764,23 @@ func (s *WorkflowHandlerSuite) TestStopBatchOperation() {
 func (s *WorkflowHandlerSuite) TestStopBatchOperation_InvalidRequest() {
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
-	request := &workflowservice.StopBatchOperationRequest{
+	request := workflowservice.StopBatchOperationRequest_builder{
 		Namespace: "",
 		JobId:     uuid.NewString(),
 		Reason:    "reason",
-	}
+	}.Build()
 
 	var invalidArgumentErr *serviceerror.InvalidArgument
 	_, err := wh.StopBatchOperation(context.Background(), request)
 	s.ErrorAs(err, &invalidArgumentErr)
 
-	request.Namespace = uuid.NewString()
-	request.JobId = ""
+	request.SetNamespace(uuid.NewString())
+	request.SetJobId("")
 	_, err = wh.StopBatchOperation(context.Background(), request)
 	s.ErrorAs(err, &invalidArgumentErr)
 
-	request.JobId = uuid.NewString()
-	request.Reason = ""
+	request.SetJobId(uuid.NewString())
+	request.SetReason("")
 	_, err = wh.StopBatchOperation(context.Background(), request)
 	s.ErrorAs(err, &invalidArgumentErr)
 }
@@ -2869,29 +2800,29 @@ func (s *WorkflowHandlerSuite) TestDescribeBatchOperation_CompletedStatus() {
 				request *historyservice.DescribeWorkflowExecutionRequest,
 				_ ...grpc.CallOption,
 			) (*historyservice.DescribeWorkflowExecutionResponse, error) {
-				return &historyservice.DescribeWorkflowExecutionResponse{
-					WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
-						Execution: &commonpb.WorkflowExecution{
+				return historyservice.DescribeWorkflowExecutionResponse_builder{
+					WorkflowExecutionInfo: workflowpb.WorkflowExecutionInfo_builder{
+						Execution: commonpb.WorkflowExecution_builder{
 							WorkflowId: jobID,
-						},
+						}.Build(),
 						StartTime:     now,
 						CloseTime:     now,
 						Status:        enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 						ExecutionTime: now,
-						Memo: &commonpb.Memo{
+						Memo: commonpb.Memo_builder{
 							Fields: map[string]*commonpb.Payload{
 								batcher.BatchOperationTypeMemo: payload.EncodeString(batcher.BatchTypeReset),
 							},
-						},
+						}.Build(),
 						SearchAttributes: nil,
-					},
-				}, nil
+					}.Build(),
+				}.Build(), nil
 			},
 		)
-		request := &workflowservice.DescribeBatchOperationRequest{
+		request := workflowservice.DescribeBatchOperationRequest_builder{
 			Namespace: testNamespace.String(),
 			JobId:     jobID,
-		}
+		}.Build()
 
 		_, err := wh.DescribeBatchOperation(context.Background(), request)
 		s.Require().Error(err)
@@ -2910,30 +2841,30 @@ func (s *WorkflowHandlerSuite) TestDescribeBatchOperation_CompletedStatus() {
 					NumFailure: 1,
 				})
 				s.Require().NoError(err)
-				return &historyservice.DescribeWorkflowExecutionResponse{
-					WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
-						Execution: &commonpb.WorkflowExecution{
+				return historyservice.DescribeWorkflowExecutionResponse_builder{
+					WorkflowExecutionInfo: workflowpb.WorkflowExecutionInfo_builder{
+						Execution: commonpb.WorkflowExecution_builder{
 							WorkflowId: jobID,
-						},
+						}.Build(),
 						StartTime:     now,
 						CloseTime:     now,
 						Status:        enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 						ExecutionTime: now,
-						Memo: &commonpb.Memo{
+						Memo: commonpb.Memo_builder{
 							Fields: map[string]*commonpb.Payload{
 								batcher.BatchOperationTypeMemo:  payload.EncodeString(batcher.BatchTypeTerminate),
 								batcher.BatchOperationStatsMemo: statsPayload,
 							},
-						},
+						}.Build(),
 						SearchAttributes: nil,
-					},
-				}, nil
+					}.Build(),
+				}.Build(), nil
 			},
 		)
-		request := &workflowservice.DescribeBatchOperationRequest{
+		request := workflowservice.DescribeBatchOperationRequest_builder{
 			Namespace: testNamespace.String(),
 			JobId:     jobID,
-		}
+		}.Build()
 
 		resp, err := wh.DescribeBatchOperation(context.Background(), request)
 		s.Require().NoError(err)
@@ -2968,34 +2899,34 @@ func (s *WorkflowHandlerSuite) TestDescribeBatchOperation_RunningStatus() {
 				ErrorCount:    1,
 			})
 			s.Require().NoError(err)
-			return &historyservice.DescribeWorkflowExecutionResponse{
-				WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
-					Execution: &commonpb.WorkflowExecution{
+			return historyservice.DescribeWorkflowExecutionResponse_builder{
+				WorkflowExecutionInfo: workflowpb.WorkflowExecutionInfo_builder{
+					Execution: commonpb.WorkflowExecution_builder{
 						WorkflowId: jobID,
-					},
+					}.Build(),
 					StartTime:     now,
 					CloseTime:     now,
 					Status:        enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 					ExecutionTime: now,
-					Memo: &commonpb.Memo{
+					Memo: commonpb.Memo_builder{
 						Fields: map[string]*commonpb.Payload{
 							batcher.BatchOperationTypeMemo: payload.EncodeString(batcher.BatchTypeTerminate),
 						},
-					},
+					}.Build(),
 					SearchAttributes: nil,
-				},
+				}.Build(),
 				PendingActivities: []*workflowpb.PendingActivityInfo{
-					{
+					workflowpb.PendingActivityInfo_builder{
 						HeartbeatDetails: hbdPayload,
-					},
+					}.Build(),
 				},
-			}, nil
+			}.Build(), nil
 		},
 	)
-	request := &workflowservice.DescribeBatchOperationRequest{
+	request := workflowservice.DescribeBatchOperationRequest_builder{
 		Namespace: testNamespace.String(),
 		JobId:     jobID,
-	}
+	}.Build()
 
 	resp, err := wh.DescribeBatchOperation(context.Background(), request)
 	s.NoError(err)
@@ -3004,9 +2935,9 @@ func (s *WorkflowHandlerSuite) TestDescribeBatchOperation_RunningStatus() {
 	s.Equal(now, resp.GetCloseTime())
 	s.Equal(enumspb.BATCH_OPERATION_TYPE_TERMINATE, resp.GetOperationType())
 	s.Equal(enumspb.BATCH_OPERATION_STATE_RUNNING, resp.GetState())
-	s.Assert().Equal(int64(5), resp.TotalOperationCount)
-	s.Assert().Equal(int64(3), resp.CompleteOperationCount)
-	s.Assert().Equal(int64(1), resp.FailureOperationCount)
+	s.Assert().Equal(int64(5), resp.GetTotalOperationCount())
+	s.Assert().Equal(int64(3), resp.GetCompleteOperationCount())
+	s.Assert().Equal(int64(1), resp.GetFailureOperationCount())
 }
 
 func (s *WorkflowHandlerSuite) TestDescribeBatchOperation_FailedStatus() {
@@ -3024,29 +2955,29 @@ func (s *WorkflowHandlerSuite) TestDescribeBatchOperation_FailedStatus() {
 			_ ...grpc.CallOption,
 		) (*historyservice.DescribeWorkflowExecutionResponse, error) {
 
-			return &historyservice.DescribeWorkflowExecutionResponse{
-				WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
-					Execution: &commonpb.WorkflowExecution{
+			return historyservice.DescribeWorkflowExecutionResponse_builder{
+				WorkflowExecutionInfo: workflowpb.WorkflowExecutionInfo_builder{
+					Execution: commonpb.WorkflowExecution_builder{
 						WorkflowId: jobID,
-					},
+					}.Build(),
 					StartTime:     now,
 					CloseTime:     now,
 					Status:        enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
 					ExecutionTime: now,
-					Memo: &commonpb.Memo{
+					Memo: commonpb.Memo_builder{
 						Fields: map[string]*commonpb.Payload{
 							batcher.BatchOperationTypeMemo: payload.EncodeString(batcher.BatchTypeTerminate),
 						},
-					},
+					}.Build(),
 					SearchAttributes: nil,
-				},
-			}, nil
+				}.Build(),
+			}.Build(), nil
 		},
 	)
-	request := &workflowservice.DescribeBatchOperationRequest{
+	request := workflowservice.DescribeBatchOperationRequest_builder{
 		Namespace: testNamespace.String(),
 		JobId:     jobID,
-	}
+	}.Build()
 
 	resp, err := wh.DescribeBatchOperation(context.Background(), request)
 	s.NoError(err)
@@ -3060,16 +2991,16 @@ func (s *WorkflowHandlerSuite) TestDescribeBatchOperation_FailedStatus() {
 func (s *WorkflowHandlerSuite) TestDescribeBatchOperation_InvalidRequest() {
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
-	request := &workflowservice.DescribeBatchOperationRequest{
+	request := workflowservice.DescribeBatchOperationRequest_builder{
 		Namespace: "",
 		JobId:     uuid.NewString(),
-	}
+	}.Build()
 	var invalidArgumentErr *serviceerror.InvalidArgument
 	_, err := wh.DescribeBatchOperation(context.Background(), request)
 	s.ErrorAs(err, &invalidArgumentErr)
 
-	request.Namespace = uuid.NewString()
-	request.JobId = ""
+	request.SetNamespace(uuid.NewString())
+	request.SetJobId("")
 	_, err = wh.DescribeBatchOperation(context.Background(), request)
 	s.ErrorAs(err, &invalidArgumentErr)
 }
@@ -3091,43 +3022,43 @@ func (s *WorkflowHandlerSuite) TestListBatchOperations() {
 			s.Contains(request.Query, sadefs.TemporalNamespaceDivision)
 			return &manager.ListWorkflowExecutionsResponse{
 				Executions: []*workflowpb.WorkflowExecutionInfo{
-					{Execution: &commonpb.WorkflowExecution{
+					workflowpb.WorkflowExecutionInfo_builder{Execution: commonpb.WorkflowExecution_builder{
 						WorkflowId: jobID,
-					},
+					}.Build(),
 						StartTime:     now,
 						CloseTime:     now,
 						Status:        enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
 						ExecutionTime: now,
-						Memo: &commonpb.Memo{
+						Memo: commonpb.Memo_builder{
 							Fields: map[string]*commonpb.Payload{
 								batcher.BatchOperationTypeMemo: payload.EncodeString(batcher.BatchTypeTerminate),
 							},
-						},
-					},
+						}.Build(),
+					}.Build(),
 				},
 			}, nil
 		},
 	)
-	request := &workflowservice.ListBatchOperationsRequest{
+	request := workflowservice.ListBatchOperationsRequest_builder{
 		Namespace: testNamespace.String(),
-	}
+	}.Build()
 
 	resp, err := wh.ListBatchOperations(context.Background(), request)
 	s.NoError(err)
-	s.Equal(1, len(resp.OperationInfo))
-	s.Equal(jobID, resp.OperationInfo[0].GetJobId())
-	s.Equal(now, resp.OperationInfo[0].GetStartTime())
-	s.Equal(now, resp.OperationInfo[0].GetCloseTime())
-	s.Equal(enumspb.BATCH_OPERATION_STATE_FAILED, resp.OperationInfo[0].GetState())
+	s.Equal(1, len(resp.GetOperationInfo()))
+	s.Equal(jobID, resp.GetOperationInfo()[0].GetJobId())
+	s.Equal(now, resp.GetOperationInfo()[0].GetStartTime())
+	s.Equal(now, resp.GetOperationInfo()[0].GetCloseTime())
+	s.Equal(enumspb.BATCH_OPERATION_STATE_FAILED, resp.GetOperationInfo()[0].GetState())
 }
 
 func (s *WorkflowHandlerSuite) TestListBatchOperations_InvalidRerquest() {
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
 
-	request := &workflowservice.ListBatchOperationsRequest{
+	request := workflowservice.ListBatchOperationsRequest_builder{
 		Namespace: "",
-	}
+	}.Build()
 	var invalidArgumentErr *serviceerror.InvalidArgument
 	_, err := wh.ListBatchOperations(context.Background(), request)
 	s.ErrorAs(err, &invalidArgumentErr)
@@ -3140,52 +3071,48 @@ func (s *WorkflowHandlerSuite) TestListBatchOperations_InvalidRerquest() {
 func (s *WorkflowHandlerSuite) TestGetWorkflowExecutionHistory_InternalRawHistoryEnabled() {
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
-	we := commonpb.WorkflowExecution{WorkflowId: "wid1", RunId: uuid.New().String()}
+	we := commonpb.WorkflowExecution_builder{WorkflowId: "wid1", RunId: uuid.New().String()}.Build()
 	newRunID := uuid.New().String()
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(tests.Namespace).Return(tests.NamespaceID, nil).Times(2)
 	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), gomock.Any()).Return(searchattribute.TestNameTypeMap(), nil).Times(2)
 
-	req := &workflowservice.GetWorkflowExecutionHistoryRequest{
+	req := workflowservice.GetWorkflowExecutionHistoryRequest_builder{
 		Namespace:              tests.Namespace.String(),
-		Execution:              &we,
+		Execution:              we,
 		MaximumPageSize:        10,
 		HistoryEventFilterType: enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT,
 		SkipArchival:           true,
-	}
-	s.mockHistoryClient.EXPECT().GetWorkflowExecutionHistory(gomock.Any(), &historyservice.GetWorkflowExecutionHistoryRequest{
+	}.Build()
+	s.mockHistoryClient.EXPECT().GetWorkflowExecutionHistory(gomock.Any(), historyservice.GetWorkflowExecutionHistoryRequest_builder{
 		NamespaceId: tests.NamespaceID.String(),
 		Request:     req,
-	}).Return(&historyservice.GetWorkflowExecutionHistoryResponse{
-		Response: &workflowservice.GetWorkflowExecutionHistoryResponse{
+	}.Build()).Return(historyservice.GetWorkflowExecutionHistoryResponse_builder{
+		Response: workflowservice.GetWorkflowExecutionHistoryResponse_builder{
 			History: &historypb.History{},
-		},
-		History: &historypb.History{
+		}.Build(),
+		History: historypb.History_builder{
 			Events: []*historypb.HistoryEvent{
-				{
+				historypb.HistoryEvent_builder{
 					EventId:   int64(5),
 					EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED,
-					Attributes: &historypb.HistoryEvent_WorkflowTaskFailedEventAttributes{
-						WorkflowTaskFailedEventAttributes: &historypb.WorkflowTaskFailedEventAttributes{
-							Failure: &failurepb.Failure{Message: "this workflow task failed"},
-						},
-					},
-				},
-				{
+					WorkflowTaskFailedEventAttributes: historypb.WorkflowTaskFailedEventAttributes_builder{
+						Failure: failurepb.Failure_builder{Message: "this workflow task failed"}.Build(),
+					}.Build(),
+				}.Build(),
+				historypb.HistoryEvent_builder{
 					EventId:   int64(5),
 					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED,
-					Attributes: &historypb.HistoryEvent_WorkflowExecutionFailedEventAttributes{
-						WorkflowExecutionFailedEventAttributes: &historypb.WorkflowExecutionFailedEventAttributes{
-							Failure:                      &failurepb.Failure{Message: "this workflow failed"},
-							RetryState:                   enumspb.RETRY_STATE_IN_PROGRESS,
-							WorkflowTaskCompletedEventId: 4,
-							NewExecutionRunId:            newRunID,
-						},
-					},
-				},
+					WorkflowExecutionFailedEventAttributes: historypb.WorkflowExecutionFailedEventAttributes_builder{
+						Failure:                      failurepb.Failure_builder{Message: "this workflow failed"}.Build(),
+						RetryState:                   enumspb.RETRY_STATE_IN_PROGRESS,
+						WorkflowTaskCompletedEventId: 4,
+						NewExecutionRunId:            newRunID,
+					}.Build(),
+				}.Build(),
 			},
-		},
-	}, nil).Times(2)
+		}.Build(),
+	}.Build(), nil).Times(2)
 
 	oldGoSDKVersion := "1.9.1"
 	newGoSDKVersion := "1.10.1"
@@ -3194,14 +3121,14 @@ func (s *WorkflowHandlerSuite) TestGetWorkflowExecutionHistory_InternalRawHistor
 	ctx := headers.SetVersionsForTests(context.Background(), newGoSDKVersion, headers.ClientNameGoSDK, headers.SupportedServerVersions, headers.AllFeatures)
 	resp, err := wh.GetWorkflowExecutionHistory(ctx, req)
 	s.NoError(err)
-	s.False(resp.Archived)
-	event := resp.History.Events[0]
-	s.Equal(int64(5), event.EventId)
-	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED, event.EventType)
+	s.False(resp.GetArchived())
+	event := resp.GetHistory().GetEvents()[0]
+	s.Equal(int64(5), event.GetEventId())
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED, event.GetEventType())
 	attrs := event.GetWorkflowExecutionFailedEventAttributes()
-	s.Equal("this workflow failed", attrs.Failure.Message)
-	s.Equal(newRunID, attrs.NewExecutionRunId)
-	s.Equal(enumspb.RETRY_STATE_IN_PROGRESS, attrs.RetryState)
+	s.Equal("this workflow failed", attrs.GetFailure().GetMessage())
+	s.Equal(newRunID, attrs.GetNewExecutionRunId())
+	s.Equal(enumspb.RETRY_STATE_IN_PROGRESS, attrs.GetRetryState())
 
 	// old sdk: should see continued-as-new event
 	// TODO: We can remove this once we no longer support SDK versions prior to around September 2021.
@@ -3209,13 +3136,13 @@ func (s *WorkflowHandlerSuite) TestGetWorkflowExecutionHistory_InternalRawHistor
 	ctx = headers.SetVersionsForTests(context.Background(), oldGoSDKVersion, headers.ClientNameGoSDK, headers.SupportedServerVersions, "")
 	resp, err = wh.GetWorkflowExecutionHistory(ctx, req)
 	s.NoError(err)
-	s.False(resp.Archived)
-	event = resp.History.Events[0]
-	s.Equal(int64(5), event.EventId)
-	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW, event.EventType)
+	s.False(resp.GetArchived())
+	event = resp.GetHistory().GetEvents()[0]
+	s.Equal(int64(5), event.GetEventId())
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW, event.GetEventType())
 	attrs2 := event.GetWorkflowExecutionContinuedAsNewEventAttributes()
-	s.Equal(newRunID, attrs2.NewExecutionRunId)
-	s.Equal("this workflow failed", attrs2.Failure.Message)
+	s.Equal(newRunID, attrs2.GetNewExecutionRunId())
+	s.Equal("this workflow failed", attrs2.GetFailure().GetMessage())
 }
 
 func (s *WorkflowHandlerSuite) newConfig() *Config {
@@ -3228,45 +3155,45 @@ func updateRequest(
 	visibilityArchivalURI string,
 	visibilityArchivalState enumspb.ArchivalState,
 ) *workflowservice.UpdateNamespaceRequest {
-	return &workflowservice.UpdateNamespaceRequest{
+	return workflowservice.UpdateNamespaceRequest_builder{
 		Namespace: "test-name",
-		Config: &namespacepb.NamespaceConfig{
+		Config: namespacepb.NamespaceConfig_builder{
 			HistoryArchivalState:    historyArchivalState,
 			HistoryArchivalUri:      historyArchivalURI,
 			VisibilityArchivalState: visibilityArchivalState,
 			VisibilityArchivalUri:   visibilityArchivalURI,
-		},
-	}
+		}.Build(),
+	}.Build()
 }
 
 func persistenceGetNamespaceResponse(historyArchivalState, visibilityArchivalState *namespace.ArchivalConfigState) *persistence.GetNamespaceResponse {
 	return &persistence.GetNamespaceResponse{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
+		Namespace: persistencespb.NamespaceDetail_builder{
+			Info: persistencespb.NamespaceInfo_builder{
 				Id:          testNamespaceID,
 				Name:        "test-name",
 				State:       0,
 				Description: "test-description",
 				Owner:       "test-owner-email",
 				Data:        make(map[string]string),
-			},
-			Config: &persistencespb.NamespaceConfig{
+			}.Build(),
+			Config: persistencespb.NamespaceConfig_builder{
 				Retention:               timestamp.DurationFromDays(1),
 				HistoryArchivalState:    historyArchivalState.State,
 				HistoryArchivalUri:      historyArchivalState.URI,
 				VisibilityArchivalState: visibilityArchivalState.State,
 				VisibilityArchivalUri:   visibilityArchivalState.URI,
-			},
-			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+			}.Build(),
+			ReplicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []string{
 					cluster.TestCurrentClusterName,
 				},
-			},
+			}.Build(),
 			ConfigVersion:               0,
 			FailoverVersion:             0,
 			FailoverNotificationVersion: 0,
-		},
+		}.Build(),
 		IsGlobalNamespace:   false,
 		NotificationVersion: 0,
 	}
@@ -3278,15 +3205,15 @@ func registerNamespaceRequest(
 	visibilityArchivalState enumspb.ArchivalState,
 	visibilityArchivalURI string,
 ) *workflowservice.RegisterNamespaceRequest {
-	return &workflowservice.RegisterNamespaceRequest{
+	return workflowservice.RegisterNamespaceRequest_builder{
 		Namespace:                        "test-namespace",
 		Description:                      "test-description",
 		OwnerEmail:                       "test-owner-email",
 		WorkflowExecutionRetentionPeriod: durationpb.New(10 * time.Hour * 24),
 		Clusters: []*replicationpb.ClusterReplicationConfig{
-			{
+			replicationpb.ClusterReplicationConfig_builder{
 				ClusterName: cluster.TestCurrentClusterName,
-			},
+			}.Build(),
 		},
 		ActiveClusterName:       cluster.TestCurrentClusterName,
 		Data:                    make(map[string]string),
@@ -3295,25 +3222,25 @@ func registerNamespaceRequest(
 		VisibilityArchivalState: visibilityArchivalState,
 		VisibilityArchivalUri:   visibilityArchivalURI,
 		IsGlobalNamespace:       false,
-	}
+	}.Build()
 }
 
 func getHistoryRequest(nextPageToken []byte) *workflowservice.GetWorkflowExecutionHistoryRequest {
-	return &workflowservice.GetWorkflowExecutionHistoryRequest{
-		Execution: &commonpb.WorkflowExecution{
+	return workflowservice.GetWorkflowExecutionHistoryRequest_builder{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: testWorkflowID,
 			RunId:      testRunID,
-		},
+		}.Build(),
 		NextPageToken: nextPageToken,
-	}
+	}.Build()
 }
 
 func listArchivedWorkflowExecutionsTestRequest() *workflowservice.ListArchivedWorkflowExecutionsRequest {
-	return &workflowservice.ListArchivedWorkflowExecutionsRequest{
+	return workflowservice.ListArchivedWorkflowExecutionsRequest_builder{
 		Namespace: "some random namespace name",
 		PageSize:  10,
 		Query:     "some random query string",
-	}
+	}.Build()
 }
 
 func TestContextNearDeadline(t *testing.T) {
@@ -3326,141 +3253,109 @@ func TestContextNearDeadline(t *testing.T) {
 }
 
 func TestValidateRequestId(t *testing.T) {
-	req := workflowservice.StartWorkflowExecutionRequest{RequestId: ""}
-	err := validateRequestId(&req.RequestId, 100)
+	req := workflowservice.StartWorkflowExecutionRequest_builder{RequestId: ""}.Build()
+	err := validateRequestId(proto.String(req.GetRequestId()), 100)
 	assert.Nil(t, err)
-	assert.Len(t, req.RequestId, 36) // new UUID length
+	assert.Len(t, req.GetRequestId(), 36) // new UUID length
 }
 
 func TestDedupLinksFromCallbacks(t *testing.T) {
 	links := []*commonpb.Link{
-		{
-			Variant: &commonpb.Link_WorkflowEvent_{
-				WorkflowEvent: &commonpb.Link_WorkflowEvent{
-					Namespace:  "test-ns",
-					WorkflowId: "test-workflow-id",
-					RunId:      "test-run-id",
-					Reference: &commonpb.Link_WorkflowEvent_EventRef{
-						EventRef: &commonpb.Link_WorkflowEvent_EventReference{
-							EventId:   3,
-							EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
-						},
-					},
-				},
-			},
-		},
-		{
-			Variant: &commonpb.Link_WorkflowEvent_{
-				WorkflowEvent: &commonpb.Link_WorkflowEvent{
-					Namespace:  "test-ns",
-					WorkflowId: "test-workflow-id",
-					RunId:      "test-run-id",
-					Reference: &commonpb.Link_WorkflowEvent_EventRef{
-						EventRef: &commonpb.Link_WorkflowEvent_EventReference{
-							EventId:   5,
-							EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
-						},
-					},
-				},
-			},
-		},
-		{
-			Variant: &commonpb.Link_WorkflowEvent_{
-				WorkflowEvent: &commonpb.Link_WorkflowEvent{
-					Namespace:  "test-ns",
-					WorkflowId: "test-workflow-id",
-					RunId:      "test-run-id",
-					Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
-						RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
-							RequestId: "test-request-id",
-							EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
-						},
-					},
-				},
-			},
-		},
+		commonpb.Link_builder{
+			WorkflowEvent: commonpb.Link_WorkflowEvent_builder{
+				Namespace:  "test-ns",
+				WorkflowId: "test-workflow-id",
+				RunId:      "test-run-id",
+				EventRef: commonpb.Link_WorkflowEvent_EventReference_builder{
+					EventId:   3,
+					EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
+				}.Build(),
+			}.Build(),
+		}.Build(),
+		commonpb.Link_builder{
+			WorkflowEvent: commonpb.Link_WorkflowEvent_builder{
+				Namespace:  "test-ns",
+				WorkflowId: "test-workflow-id",
+				RunId:      "test-run-id",
+				EventRef: commonpb.Link_WorkflowEvent_EventReference_builder{
+					EventId:   5,
+					EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
+				}.Build(),
+			}.Build(),
+		}.Build(),
+		commonpb.Link_builder{
+			WorkflowEvent: commonpb.Link_WorkflowEvent_builder{
+				Namespace:  "test-ns",
+				WorkflowId: "test-workflow-id",
+				RunId:      "test-run-id",
+				RequestIdRef: commonpb.Link_WorkflowEvent_RequestIdReference_builder{
+					RequestId: "test-request-id",
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+				}.Build(),
+			}.Build(),
+		}.Build(),
 	}
 	callbacks := []*commonpb.Callback{
-		{
-			Variant: &commonpb.Callback_Nexus_{
-				Nexus: &commonpb.Callback_Nexus{},
-			},
+		commonpb.Callback_builder{
+			Nexus: &commonpb.Callback_Nexus{},
 			Links: []*commonpb.Link{
-				{
-					Variant: &commonpb.Link_WorkflowEvent_{
-						WorkflowEvent: &commonpb.Link_WorkflowEvent{
-							Namespace:  "test-ns",
-							WorkflowId: "test-workflow-id",
-							RunId:      "test-run-id",
-							Reference: &commonpb.Link_WorkflowEvent_EventRef{
-								EventRef: &commonpb.Link_WorkflowEvent_EventReference{
-									EventId:   3,
-									EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
-								},
-							},
-						},
-					},
-				},
-				{
-					Variant: &commonpb.Link_WorkflowEvent_{
-						WorkflowEvent: &commonpb.Link_WorkflowEvent{
-							Namespace:  "test-ns",
-							WorkflowId: "test-workflow-id",
-							RunId:      "test-run-id",
-							Reference: &commonpb.Link_WorkflowEvent_EventRef{
-								EventRef: &commonpb.Link_WorkflowEvent_EventReference{
-									EventId:   5,
-									EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
-								},
-							},
-						},
-					},
-				},
+				commonpb.Link_builder{
+					WorkflowEvent: commonpb.Link_WorkflowEvent_builder{
+						Namespace:  "test-ns",
+						WorkflowId: "test-workflow-id",
+						RunId:      "test-run-id",
+						EventRef: commonpb.Link_WorkflowEvent_EventReference_builder{
+							EventId:   3,
+							EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
+						}.Build(),
+					}.Build(),
+				}.Build(),
+				commonpb.Link_builder{
+					WorkflowEvent: commonpb.Link_WorkflowEvent_builder{
+						Namespace:  "test-ns",
+						WorkflowId: "test-workflow-id",
+						RunId:      "test-run-id",
+						EventRef: commonpb.Link_WorkflowEvent_EventReference_builder{
+							EventId:   5,
+							EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
+						}.Build(),
+					}.Build(),
+				}.Build(),
 			},
-		},
-		{
-			Variant: &commonpb.Callback_Internal_{
-				Internal: &commonpb.Callback_Internal{},
-			},
+		}.Build(),
+		commonpb.Callback_builder{
+			Internal: &commonpb.Callback_Internal{},
 			Links: []*commonpb.Link{
-				{
-					Variant: &commonpb.Link_WorkflowEvent_{
-						WorkflowEvent: &commonpb.Link_WorkflowEvent{
-							Namespace:  "test-ns",
-							WorkflowId: "test-workflow-id",
-							RunId:      "test-run-id",
-							Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
-								RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
-									RequestId: "test-request-id",
-									EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
-								},
-							},
-						},
-					},
-				},
+				commonpb.Link_builder{
+					WorkflowEvent: commonpb.Link_WorkflowEvent_builder{
+						Namespace:  "test-ns",
+						WorkflowId: "test-workflow-id",
+						RunId:      "test-run-id",
+						RequestIdRef: commonpb.Link_WorkflowEvent_RequestIdReference_builder{
+							RequestId: "test-request-id",
+							EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+						}.Build(),
+					}.Build(),
+				}.Build(),
 			},
-		},
+		}.Build(),
 	}
 
 	dedupedLinks := dedupLinksFromCallbacks(links, callbacks)
 	assert.Len(t, dedupedLinks, 1)
 	protoassert.ProtoEqual(
 		t,
-		&commonpb.Link{
-			Variant: &commonpb.Link_WorkflowEvent_{
-				WorkflowEvent: &commonpb.Link_WorkflowEvent{
-					Namespace:  "test-ns",
-					WorkflowId: "test-workflow-id",
-					RunId:      "test-run-id",
-					Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
-						RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
-							RequestId: "test-request-id",
-							EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
-						},
-					},
-				},
-			},
-		},
+		commonpb.Link_builder{
+			WorkflowEvent: commonpb.Link_WorkflowEvent_builder{
+				Namespace:  "test-ns",
+				WorkflowId: "test-workflow-id",
+				RunId:      "test-run-id",
+				RequestIdRef: commonpb.Link_WorkflowEvent_RequestIdReference_builder{
+					RequestId: "test-request-id",
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+				}.Build(),
+			}.Build(),
+		}.Build(),
 		dedupedLinks[0],
 	)
 }
@@ -3489,12 +3384,12 @@ func (s *WorkflowHandlerSuite) Test_DeleteWorkflowExecution() {
 		},
 		{
 			Name: "empty namespace",
-			Request: &workflowservice.DeleteWorkflowExecutionRequest{
-				WorkflowExecution: &commonpb.WorkflowExecution{
+			Request: workflowservice.DeleteWorkflowExecutionRequest_builder{
+				WorkflowExecution: commonpb.WorkflowExecution_builder{
 					WorkflowId: "test-workflow-id",
 					RunId:      "wrong-run-id",
-				},
-			},
+				}.Build(),
+			}.Build(),
 			Expected: &serviceerror.InvalidArgument{Message: "Invalid RunId."},
 		},
 	}
@@ -3509,13 +3404,13 @@ func (s *WorkflowHandlerSuite) Test_DeleteWorkflowExecution() {
 	// History call failed.
 	s.mockResource.HistoryClient.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, errors.New("random error"))
 	s.mockResource.NamespaceCache.EXPECT().GetNamespaceID(namespace.Name("test-namespace")).Return(namespace.ID("test-namespace-id"), nil)
-	resp, err := wh.DeleteWorkflowExecution(ctx, &workflowservice.DeleteWorkflowExecutionRequest{
+	resp, err := wh.DeleteWorkflowExecution(ctx, workflowservice.DeleteWorkflowExecutionRequest_builder{
 		Namespace: "test-namespace",
-		WorkflowExecution: &commonpb.WorkflowExecution{
+		WorkflowExecution: commonpb.WorkflowExecution_builder{
 			WorkflowId: "test-workflow-id",
 			RunId:      "d2595cb3-3b21-4026-a3e8-17bc32fb2a2b",
-		},
-	})
+		}.Build(),
+	}.Build())
 	s.Error(err)
 	s.Equal("random error", err.Error())
 	s.Nil(resp)
@@ -3523,13 +3418,13 @@ func (s *WorkflowHandlerSuite) Test_DeleteWorkflowExecution() {
 	// Success case.
 	s.mockResource.HistoryClient.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).Return(&historyservice.DeleteWorkflowExecutionResponse{}, nil)
 	s.mockResource.NamespaceCache.EXPECT().GetNamespaceID(namespace.Name("test-namespace")).Return(namespace.ID("test-namespace-id"), nil)
-	resp, err = wh.DeleteWorkflowExecution(ctx, &workflowservice.DeleteWorkflowExecutionRequest{
+	resp, err = wh.DeleteWorkflowExecution(ctx, workflowservice.DeleteWorkflowExecutionRequest_builder{
 		Namespace: "test-namespace",
-		WorkflowExecution: &commonpb.WorkflowExecution{
+		WorkflowExecution: commonpb.WorkflowExecution_builder{
 			WorkflowId: "test-workflow-id",
 			// RunId is not required.
-		},
-	})
+		}.Build(),
+	}.Build())
 	s.NoError(err)
 	s.NotNil(resp)
 }
@@ -3545,99 +3440,95 @@ func (s *WorkflowHandlerSuite) TestExecuteMultiOperation() {
 		GetMapper(gomock.Any()).Return(nil, nil).AnyTimes()
 
 	newStartOp := func(op *workflowservice.StartWorkflowExecutionRequest) *workflowservice.ExecuteMultiOperationRequest_Operation {
-		return &workflowservice.ExecuteMultiOperationRequest_Operation{
-			Operation: &workflowservice.ExecuteMultiOperationRequest_Operation_StartWorkflow{
-				StartWorkflow: op,
-			},
-		}
+		return workflowservice.ExecuteMultiOperationRequest_Operation_builder{
+			StartWorkflow: proto.ValueOrDefault(op),
+		}.Build()
 	}
 	validStartReq := func() *workflowservice.StartWorkflowExecutionRequest {
-		return &workflowservice.StartWorkflowExecutionRequest{
+		return workflowservice.StartWorkflowExecutionRequest_builder{
 			Namespace:    s.testNamespace.String(),
 			WorkflowId:   "WORKFLOW_ID",
-			WorkflowType: &commonpb.WorkflowType{Name: "workflow-type"},
-			TaskQueue:    &taskqueuepb.TaskQueue{Name: "task-queue"},
-		}
+			WorkflowType: commonpb.WorkflowType_builder{Name: "workflow-type"}.Build(),
+			TaskQueue:    taskqueuepb.TaskQueue_builder{Name: "task-queue"}.Build(),
+		}.Build()
 	}
 	newUpdateOp := func(op *workflowservice.UpdateWorkflowExecutionRequest) *workflowservice.ExecuteMultiOperationRequest_Operation {
-		return &workflowservice.ExecuteMultiOperationRequest_Operation{
-			Operation: &workflowservice.ExecuteMultiOperationRequest_Operation_UpdateWorkflow{
-				UpdateWorkflow: op,
-			},
-		}
+		return workflowservice.ExecuteMultiOperationRequest_Operation_builder{
+			UpdateWorkflow: proto.ValueOrDefault(op),
+		}.Build()
 	}
 	validUpdateReq := func() *workflowservice.UpdateWorkflowExecutionRequest {
-		return &workflowservice.UpdateWorkflowExecutionRequest{
+		return workflowservice.UpdateWorkflowExecutionRequest_builder{
 			Namespace:         s.testNamespace.String(),
-			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: "WORKFLOW_ID"},
-			Request: &updatepb.Request{
-				Meta:  &updatepb.Meta{UpdateId: "UPDATE_ID"},
-				Input: &updatepb.Input{Name: "NAME"},
-			},
-		}
+			WorkflowExecution: commonpb.WorkflowExecution_builder{WorkflowId: "WORKFLOW_ID"}.Build(),
+			Request: updatepb.Request_builder{
+				Meta:  updatepb.Meta_builder{UpdateId: "UPDATE_ID"}.Build(),
+				Input: updatepb.Input_builder{Name: "NAME"}.Build(),
+			}.Build(),
+		}.Build()
 	}
 
 	// NOTE: functional tests are testing the happy case
 
 	s.Run("operations list that is not [Start, Update] is invalid", func() {
 		// empty list
-		resp, err := wh.ExecuteMultiOperation(ctx, &workflowservice.ExecuteMultiOperationRequest{
+		resp, err := wh.ExecuteMultiOperation(ctx, workflowservice.ExecuteMultiOperationRequest_builder{
 			Namespace: s.testNamespace.String(),
-		})
+		}.Build())
 
 		s.Nil(resp)
 		s.Equal(errMultiOpNotStartAndUpdate, err)
 
 		// 1 item
-		resp, err = wh.ExecuteMultiOperation(ctx, &workflowservice.ExecuteMultiOperationRequest{
+		resp, err = wh.ExecuteMultiOperation(ctx, workflowservice.ExecuteMultiOperationRequest_builder{
 			Namespace:  s.testNamespace.String(),
 			Operations: []*workflowservice.ExecuteMultiOperationRequest_Operation{newStartOp(nil)},
-		})
+		}.Build())
 
 		s.Nil(resp)
 		s.Equal(errMultiOpNotStartAndUpdate, err)
 
 		// 3 items
-		resp, err = wh.ExecuteMultiOperation(ctx, &workflowservice.ExecuteMultiOperationRequest{
+		resp, err = wh.ExecuteMultiOperation(ctx, workflowservice.ExecuteMultiOperationRequest_builder{
 			Namespace: s.testNamespace.String(),
 			Operations: []*workflowservice.ExecuteMultiOperationRequest_Operation{
 				newStartOp(nil), newStartOp(nil), newStartOp(nil),
 			},
-		})
+		}.Build())
 
 		s.Nil(resp)
 		s.Equal(errMultiOpNotStartAndUpdate, err)
 
 		// 2 undefined operations
-		resp, err = wh.ExecuteMultiOperation(ctx, &workflowservice.ExecuteMultiOperationRequest{
+		resp, err = wh.ExecuteMultiOperation(ctx, workflowservice.ExecuteMultiOperationRequest_builder{
 			Namespace: s.testNamespace.String(),
 			Operations: []*workflowservice.ExecuteMultiOperationRequest_Operation{
 				{},
 				{},
 			},
-		})
+		}.Build())
 
 		s.Nil(resp)
 		s.Equal(errMultiOpNotStartAndUpdate, err)
 
 		// 2 Starts
-		resp, err = wh.ExecuteMultiOperation(ctx, &workflowservice.ExecuteMultiOperationRequest{
+		resp, err = wh.ExecuteMultiOperation(ctx, workflowservice.ExecuteMultiOperationRequest_builder{
 			Namespace: s.testNamespace.String(),
 			Operations: []*workflowservice.ExecuteMultiOperationRequest_Operation{
 				newStartOp(validStartReq()), newStartOp(validStartReq()),
 			},
-		})
+		}.Build())
 
 		s.Nil(resp)
 		s.Equal(errMultiOpNotStartAndUpdate, err)
 
 		// 2 Updates
-		resp, err = wh.ExecuteMultiOperation(ctx, &workflowservice.ExecuteMultiOperationRequest{
+		resp, err = wh.ExecuteMultiOperation(ctx, workflowservice.ExecuteMultiOperationRequest_builder{
 			Namespace: s.testNamespace.String(),
 			Operations: []*workflowservice.ExecuteMultiOperationRequest_Operation{
 				newUpdateOp(validUpdateReq()), newUpdateOp(validUpdateReq()),
 			},
-		})
+		}.Build())
 
 		s.Nil(resp)
 		s.Equal(errMultiOpNotStartAndUpdate, err)
@@ -3650,15 +3541,15 @@ func (s *WorkflowHandlerSuite) TestExecuteMultiOperation() {
 
 	s.Run("operation with different workflow ID as previous operation is invalid", func() {
 		updateReq := validUpdateReq()
-		updateReq.WorkflowExecution.WorkflowId = "foo"
+		updateReq.GetWorkflowExecution().SetWorkflowId("foo")
 
-		resp, err := wh.ExecuteMultiOperation(ctx, &workflowservice.ExecuteMultiOperationRequest{
+		resp, err := wh.ExecuteMultiOperation(ctx, workflowservice.ExecuteMultiOperationRequest_builder{
 			Namespace: s.testNamespace.String(),
 			Operations: []*workflowservice.ExecuteMultiOperationRequest_Operation{
 				newStartOp(validStartReq()),
 				newUpdateOp(updateReq),
 			},
-		})
+		}.Build())
 
 		s.Nil(resp)
 		assertMultiOpsErr([]error{errMultiOpAborted, errMultiOpWorkflowIdInconsistent}, err)
@@ -3668,15 +3559,15 @@ func (s *WorkflowHandlerSuite) TestExecuteMultiOperation() {
 		// expecting the same validation as for standalone Start operation; only testing one here:
 		s.Run("requires workflow id", func() {
 			startReq := validStartReq()
-			startReq.WorkflowId = ""
+			startReq.SetWorkflowId("")
 
-			resp, err := wh.ExecuteMultiOperation(ctx, &workflowservice.ExecuteMultiOperationRequest{
+			resp, err := wh.ExecuteMultiOperation(ctx, workflowservice.ExecuteMultiOperationRequest_builder{
 				Namespace: s.testNamespace.String(),
 				Operations: []*workflowservice.ExecuteMultiOperationRequest_Operation{
 					newStartOp(startReq),
 					newUpdateOp(validUpdateReq()),
 				},
-			})
+			}.Build())
 
 			s.Nil(resp)
 			assertMultiOpsErr([]error{errWorkflowIDNotSet, errMultiOpAborted}, err)
@@ -3685,15 +3576,15 @@ func (s *WorkflowHandlerSuite) TestExecuteMultiOperation() {
 		// unique to MultiOperation:
 		s.Run("`cron_schedule` is invalid", func() {
 			startReq := validStartReq()
-			startReq.CronSchedule = "0 */12 * * *"
+			startReq.SetCronSchedule("0 */12 * * *")
 
-			resp, err := wh.ExecuteMultiOperation(ctx, &workflowservice.ExecuteMultiOperationRequest{
+			resp, err := wh.ExecuteMultiOperation(ctx, workflowservice.ExecuteMultiOperationRequest_builder{
 				Namespace: s.testNamespace.String(),
 				Operations: []*workflowservice.ExecuteMultiOperationRequest_Operation{
 					newStartOp(startReq),
 					newUpdateOp(validUpdateReq()),
 				},
-			})
+			}.Build())
 
 			s.Nil(resp)
 			assertMultiOpsErr([]error{errMultiOpStartCronSchedule, errMultiOpAborted}, err)
@@ -3702,15 +3593,15 @@ func (s *WorkflowHandlerSuite) TestExecuteMultiOperation() {
 		// unique to MultiOperation:
 		s.Run("`request_eager_execution` is invalid", func() {
 			startReq := validStartReq()
-			startReq.RequestEagerExecution = true
+			startReq.SetRequestEagerExecution(true)
 
-			resp, err := wh.ExecuteMultiOperation(ctx, &workflowservice.ExecuteMultiOperationRequest{
+			resp, err := wh.ExecuteMultiOperation(ctx, workflowservice.ExecuteMultiOperationRequest_builder{
 				Namespace: s.testNamespace.String(),
 				Operations: []*workflowservice.ExecuteMultiOperationRequest_Operation{
 					newStartOp(startReq),
 					newUpdateOp(validUpdateReq()),
 				},
-			})
+			}.Build())
 
 			s.Nil(resp)
 			assertMultiOpsErr([]error{errMultiOpEagerWorkflow, errMultiOpAborted}, err)
@@ -3719,15 +3610,15 @@ func (s *WorkflowHandlerSuite) TestExecuteMultiOperation() {
 		// unique to MultiOperation:
 		s.Run("`workflow_start_delay` is invalid", func() {
 			startReq := validStartReq()
-			startReq.WorkflowStartDelay = durationpb.New(1 * time.Second)
+			startReq.SetWorkflowStartDelay(durationpb.New(1 * time.Second))
 
-			resp, err := wh.ExecuteMultiOperation(ctx, &workflowservice.ExecuteMultiOperationRequest{
+			resp, err := wh.ExecuteMultiOperation(ctx, workflowservice.ExecuteMultiOperationRequest_builder{
 				Namespace: s.testNamespace.String(),
 				Operations: []*workflowservice.ExecuteMultiOperationRequest_Operation{
 					newStartOp(startReq),
 					newUpdateOp(validUpdateReq()),
 				},
-			})
+			}.Build())
 
 			s.Nil(resp)
 			assertMultiOpsErr([]error{errMultiOpStartDelay, errMultiOpAborted}, err)
@@ -3736,15 +3627,15 @@ func (s *WorkflowHandlerSuite) TestExecuteMultiOperation() {
 		// unique to MultiOperation:
 		s.Run("namespace mismatch", func() {
 			startReq := validStartReq()
-			startReq.Namespace = "other-namespace"
+			startReq.SetNamespace("other-namespace")
 
-			resp, err := wh.ExecuteMultiOperation(ctx, &workflowservice.ExecuteMultiOperationRequest{
+			resp, err := wh.ExecuteMultiOperation(ctx, workflowservice.ExecuteMultiOperationRequest_builder{
 				Namespace: s.testNamespace.String(),
 				Operations: []*workflowservice.ExecuteMultiOperationRequest_Operation{
 					newStartOp(startReq),
 					newUpdateOp(validUpdateReq()),
 				},
-			})
+			}.Build())
 
 			s.Nil(resp)
 			assertMultiOpsErr(
@@ -3761,15 +3652,15 @@ func (s *WorkflowHandlerSuite) TestExecuteMultiOperation() {
 		// expecting the same validation as for standalone Update operation; only testing a few of the validations here
 		s.Run("requires workflow id", func() {
 			updateReq := validUpdateReq()
-			updateReq.Request.Input = nil
+			updateReq.GetRequest().ClearInput()
 
-			resp, err := wh.ExecuteMultiOperation(ctx, &workflowservice.ExecuteMultiOperationRequest{
+			resp, err := wh.ExecuteMultiOperation(ctx, workflowservice.ExecuteMultiOperationRequest_builder{
 				Namespace: s.testNamespace.String(),
 				Operations: []*workflowservice.ExecuteMultiOperationRequest_Operation{
 					newStartOp(validStartReq()),
 					newUpdateOp(updateReq),
 				},
-			})
+			}.Build())
 
 			s.Nil(resp)
 			assertMultiOpsErr([]error{errMultiOpAborted, errUpdateInputNotSet}, err)
@@ -3778,15 +3669,15 @@ func (s *WorkflowHandlerSuite) TestExecuteMultiOperation() {
 		// unique to MultiOperation:
 		s.Run("namespace mismatch", func() {
 			updateReq := validUpdateReq()
-			updateReq.Namespace = "other-namespace"
+			updateReq.SetNamespace("other-namespace")
 
-			resp, err := wh.ExecuteMultiOperation(ctx, &workflowservice.ExecuteMultiOperationRequest{
+			resp, err := wh.ExecuteMultiOperation(ctx, workflowservice.ExecuteMultiOperationRequest_builder{
 				Namespace: s.testNamespace.String(),
 				Operations: []*workflowservice.ExecuteMultiOperationRequest_Operation{
 					newStartOp(validStartReq()),
 					newUpdateOp(updateReq),
 				},
-			})
+			}.Build())
 
 			s.Nil(resp)
 			assertMultiOpsErr(
@@ -3807,23 +3698,23 @@ func (s *WorkflowHandlerSuite) TestShutdownWorker() {
 
 	stickyTaskQueue := "sticky-task-queue"
 
-	expectedMatchingRequest := &matchingservice.ForceUnloadTaskQueuePartitionRequest{
+	expectedMatchingRequest := matchingservice.ForceUnloadTaskQueuePartitionRequest_builder{
 		NamespaceId: s.testNamespaceID.String(),
-		TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+		TaskQueuePartition: taskqueuespb.TaskQueuePartition_builder{
 			TaskQueue:     stickyTaskQueue,
 			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-		},
-	}
+		}.Build(),
+	}.Build()
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Eq(s.testNamespace)).Return(s.testNamespaceID, nil).AnyTimes()
 	s.mockMatchingClient.EXPECT().ForceUnloadTaskQueuePartition(gomock.Any(), gomock.Eq(expectedMatchingRequest)).Return(&matchingservice.ForceUnloadTaskQueuePartitionResponse{}, nil)
 
-	_, err := wh.ShutdownWorker(ctx, &workflowservice.ShutdownWorkerRequest{
+	_, err := wh.ShutdownWorker(ctx, workflowservice.ShutdownWorkerRequest_builder{
 		Namespace:       s.testNamespace.String(),
 		StickyTaskQueue: stickyTaskQueue,
 		Identity:        "worker",
 		Reason:          "graceful shutdown",
-	})
+	}.Build())
 	if err != nil {
 		s.Fail("ShutdownWorker failed:", err)
 	}
@@ -3849,10 +3740,10 @@ func (s *WorkflowHandlerSuite) TestPatchSchedule_TriggerImmediatelyScheduledTime
 		{
 			name: "trigger with nil ScheduledTime should get timestamp set",
 			setupTrigger: func() *schedulepb.TriggerImmediatelyRequest {
-				return &schedulepb.TriggerImmediatelyRequest{
+				return schedulepb.TriggerImmediatelyRequest_builder{
 					OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP,
 					ScheduledTime: nil,
-				}
+				}.Build()
 			},
 			expectScheduledTimeSet:  true,
 			expectHistoryClientCall: true,
@@ -3861,10 +3752,10 @@ func (s *WorkflowHandlerSuite) TestPatchSchedule_TriggerImmediatelyScheduledTime
 			name: "trigger with existing ScheduledTime should not be modified",
 			setupTrigger: func() *schedulepb.TriggerImmediatelyRequest {
 				existingTime := timestamppb.New(time.Date(2023, 1, 1, 12, 0, 0, 0, time.UTC))
-				return &schedulepb.TriggerImmediatelyRequest{
+				return schedulepb.TriggerImmediatelyRequest_builder{
 					OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP,
 					ScheduledTime: existingTime,
-				}
+				}.Build()
 			},
 			expectScheduledTimeSet:  false, // Should not modify existing time
 			expectHistoryClientCall: true,
@@ -3885,21 +3776,21 @@ func (s *WorkflowHandlerSuite) TestPatchSchedule_TriggerImmediatelyScheduledTime
 
 			patch := &schedulepb.SchedulePatch{}
 			if trigger != nil {
-				patch.TriggerImmediately = trigger
+				patch.SetTriggerImmediately(trigger)
 			}
 
-			request := &workflowservice.PatchScheduleRequest{
+			request := workflowservice.PatchScheduleRequest_builder{
 				Namespace:  s.testNamespace.String(),
 				ScheduleId: scheduleID,
 				RequestId:  requestID,
 				Patch:      patch,
 				Identity:   "test-identity",
-			}
+			}.Build()
 
 			// Capture the original ScheduledTime if it exists
 			var originalScheduledTime *timestamppb.Timestamp
 			if trigger != nil {
-				originalScheduledTime = trigger.ScheduledTime
+				originalScheduledTime = trigger.GetScheduledTime()
 			}
 
 			if tt.expectHistoryClientCall {
@@ -3919,10 +3810,10 @@ func (s *WorkflowHandlerSuite) TestPatchSchedule_TriggerImmediatelyScheduledTime
 			if trigger != nil {
 				if tt.expectScheduledTimeSet {
 					// Verify that ScheduledTime was set and is recent
-					s.NotNil(trigger.ScheduledTime, "ScheduledTime should have been set")
+					s.NotNil(trigger.GetScheduledTime(), "ScheduledTime should have been set")
 					s.Nil(originalScheduledTime, "Original ScheduledTime should have been nil")
 
-					scheduledTime := trigger.ScheduledTime.AsTime()
+					scheduledTime := trigger.GetScheduledTime().AsTime()
 					s.True(scheduledTime.After(beforeCall) || scheduledTime.Equal(beforeCall),
 						"ScheduledTime should be at or after the call start time")
 					s.True(scheduledTime.Before(afterCall) || scheduledTime.Equal(afterCall),
@@ -3930,7 +3821,7 @@ func (s *WorkflowHandlerSuite) TestPatchSchedule_TriggerImmediatelyScheduledTime
 				} else {
 					// Verify that existing ScheduledTime was not modified
 					if originalScheduledTime != nil {
-						s.Equal(originalScheduledTime.AsTime(), trigger.ScheduledTime.AsTime(),
+						s.Equal(originalScheduledTime.AsTime(), trigger.GetScheduledTime().AsTime(),
 							"Existing ScheduledTime should not have been modified")
 					}
 				}
@@ -3956,11 +3847,11 @@ func (s *WorkflowHandlerSuite) TestPatchSchedule_ValidationAndErrors() {
 		disabledConfig.EnableSchedules = dc.GetBoolPropertyFnFilteredByNamespace(false)
 		disabledWh := s.getWorkflowHandler(disabledConfig)
 
-		request := &workflowservice.PatchScheduleRequest{
+		request := workflowservice.PatchScheduleRequest_builder{
 			Namespace:  s.testNamespace.String(),
 			ScheduleId: "test-schedule",
 			Patch:      &schedulepb.SchedulePatch{},
-		}
+		}.Build()
 
 		resp, err := disabledWh.PatchSchedule(ctx, request)
 		s.Nil(resp)
@@ -3969,12 +3860,12 @@ func (s *WorkflowHandlerSuite) TestPatchSchedule_ValidationAndErrors() {
 
 	s.Run("request ID too long should return error", func() {
 		longRequestID := strings.Repeat("a", common.ScheduleNotesSizeLimit+1)
-		request := &workflowservice.PatchScheduleRequest{
+		request := workflowservice.PatchScheduleRequest_builder{
 			Namespace:  s.testNamespace.String(),
 			ScheduleId: "test-schedule",
 			RequestId:  longRequestID,
 			Patch:      &schedulepb.SchedulePatch{},
-		}
+		}.Build()
 
 		resp, err := wh.PatchSchedule(ctx, request)
 		s.Nil(resp)
@@ -3984,11 +3875,11 @@ func (s *WorkflowHandlerSuite) TestPatchSchedule_ValidationAndErrors() {
 	s.Run("invalid namespace should return error", func() {
 		s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Eq(namespace.Name("invalid-namespace"))).Return(namespace.ID(""), errors.New("namespace not found")).Times(1)
 
-		request := &workflowservice.PatchScheduleRequest{
+		request := workflowservice.PatchScheduleRequest_builder{
 			Namespace:  "invalid-namespace",
 			ScheduleId: "test-schedule",
 			Patch:      &schedulepb.SchedulePatch{},
-		}
+		}.Build()
 
 		resp, err := wh.PatchSchedule(ctx, request)
 		s.Nil(resp)
@@ -4003,14 +3894,14 @@ func (s *WorkflowHandlerSuite) TestUpdateTaskQueueConfig_Validation() {
 	s.Run("rate limit on workflow task queue should return error", func() {
 		s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Eq(s.testNamespace)).Return(s.testNamespaceID, nil).Times(1)
 
-		request := &workflowservice.UpdateTaskQueueConfigRequest{
+		request := workflowservice.UpdateTaskQueueConfigRequest_builder{
 			Namespace:     s.testNamespace.String(),
 			TaskQueue:     "test-task-queue",
 			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-			UpdateQueueRateLimit: &workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate{
+			UpdateQueueRateLimit: workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate_builder{
 				RateLimit: &taskqueuepb.RateLimit{},
-			},
-		}
+			}.Build(),
+		}.Build()
 
 		resp, err := wh.UpdateTaskQueueConfig(s.T().Context(), request)
 		s.Nil(resp)
@@ -4020,14 +3911,14 @@ func (s *WorkflowHandlerSuite) TestUpdateTaskQueueConfig_Validation() {
 	s.Run("fairness key rate limit on workflow task queue should return error", func() {
 		s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Eq(s.testNamespace)).Return(s.testNamespaceID, nil).Times(1)
 
-		request := &workflowservice.UpdateTaskQueueConfigRequest{
+		request := workflowservice.UpdateTaskQueueConfigRequest_builder{
 			Namespace:     s.testNamespace.String(),
 			TaskQueue:     "test-task-queue",
 			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-			UpdateFairnessKeyRateLimitDefault: &workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate{
+			UpdateFairnessKeyRateLimitDefault: workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate_builder{
 				RateLimit: &taskqueuepb.RateLimit{},
-			},
-		}
+			}.Build(),
+		}.Build()
 
 		resp, err := wh.UpdateTaskQueueConfig(s.T().Context(), request)
 		s.Nil(resp)
@@ -4037,11 +3928,11 @@ func (s *WorkflowHandlerSuite) TestUpdateTaskQueueConfig_Validation() {
 	s.Run("fairness weight override on workflow task queue should return success", func() {
 		s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Eq(s.testNamespace)).Return(s.testNamespaceID, nil).Times(1)
 		s.mockMatchingClient.EXPECT().UpdateTaskQueueConfig(gomock.Any(), gomock.Any()).Return(
-			&matchingservice.UpdateTaskQueueConfigResponse{
+			matchingservice.UpdateTaskQueueConfigResponse_builder{
 				UpdatedTaskqueueConfig: &taskqueuepb.TaskQueueConfig{},
-			}, nil).Times(1)
+			}.Build(), nil).Times(1)
 
-		request := &workflowservice.UpdateTaskQueueConfigRequest{
+		request := workflowservice.UpdateTaskQueueConfigRequest_builder{
 			Namespace:     s.testNamespace.String(),
 			TaskQueue:     "test-task-queue",
 			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
@@ -4049,7 +3940,7 @@ func (s *WorkflowHandlerSuite) TestUpdateTaskQueueConfig_Validation() {
 				"key1": 1.5,
 				"key2": 2.0,
 			},
-		}
+		}.Build()
 
 		resp, err := wh.UpdateTaskQueueConfig(s.T().Context(), request)
 		s.NoError(err)
@@ -4061,17 +3952,17 @@ func (s *WorkflowHandlerSuite) TestUpdateWorkflowExecutionOptions_Priority() {
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
 
-	request := &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+	request := workflowservice.UpdateWorkflowExecutionOptionsRequest_builder{
 		Namespace: s.testNamespace.String(),
-		WorkflowExecution: &commonpb.WorkflowExecution{
+		WorkflowExecution: commonpb.WorkflowExecution_builder{
 			WorkflowId: "workflow-id",
 			RunId:      "run-id",
-		},
-		WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{
-			Priority: &commonpb.Priority{PriorityKey: -1},
-		},
+		}.Build(),
+		WorkflowExecutionOptions: workflowpb.WorkflowExecutionOptions_builder{
+			Priority: commonpb.Priority_builder{PriorityKey: -1}.Build(),
+		}.Build(),
 		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"priority"}},
-	}
+	}.Build()
 
 	_, err := wh.UpdateWorkflowExecutionOptions(context.Background(), request)
 	var invalidArg *serviceerror.InvalidArgument
@@ -4084,20 +3975,18 @@ func (s *WorkflowHandlerSuite) TestUpdateActivityOptions_Priority() {
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
 
-	request := &workflowservice.UpdateActivityOptionsRequest{
+	request := workflowservice.UpdateActivityOptionsRequest_builder{
 		Namespace: s.testNamespace.String(),
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: "workflow-id",
 			RunId:      "run-id",
-		},
-		Activity: &workflowservice.UpdateActivityOptionsRequest_Id{
-			Id: "activity-id",
-		},
-		ActivityOptions: &activitypb.ActivityOptions{
-			Priority: &commonpb.Priority{PriorityKey: -1},
-		},
+		}.Build(),
+		Id: proto.String("activity-id"),
+		ActivityOptions: activitypb.ActivityOptions_builder{
+			Priority: commonpb.Priority_builder{PriorityKey: -1}.Build(),
+		}.Build(),
 		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"priority"}},
-	}
+	}.Build()
 
 	_, err := wh.UpdateActivityOptions(context.Background(), request)
 	var invalidArg *serviceerror.InvalidArgument

@@ -185,10 +185,10 @@ func (s *queueV2Store) ReadMessages(
 
 		message := persistence.QueueV2Message{
 			MetaData: persistence.MessageMetadata{ID: messageID},
-			Data: &commonpb.DataBlob{
+			Data: commonpb.DataBlob_builder{
 				EncodingType: encodingType,
 				Data:         messagePayload,
-			},
+			}.Build(),
 		}
 		messages = append(messages, message)
 	}
@@ -210,13 +210,13 @@ func (s *queueV2Store) CreateQueue(
 ) (*persistence.InternalCreateQueueResponse, error) {
 	queueType := request.QueueType
 	queueName := request.QueueName
-	q := persistencespb.Queue{
+	q := persistencespb.Queue_builder{
 		Partitions: map[int32]*persistencespb.QueuePartition{
-			0: {
+			0: persistencespb.QueuePartition_builder{
 				MinMessageId: persistence.FirstQueueMessageID,
-			},
+			}.Build(),
 		},
-	}
+	}.Build()
 	bytes, _ := q.Marshal()
 	applied, err := s.session.Query(
 		TemplateCreateQueueQuery,
@@ -274,7 +274,7 @@ func (s *queueV2Store) RangeDeleteMessages(
 	deleteRange, ok := persistence.GetDeleteRange(persistence.DeleteRequest{
 		LastIDToDeleteInclusive: request.InclusiveMaxMessageMetadata.ID,
 		ExistingMessageRange: persistence.InclusiveMessageRange{
-			MinMessageID: partition.MinMessageId,
+			MinMessageID: partition.GetMinMessageId(),
 			MaxMessageID: maxMessageID,
 		},
 	})
@@ -292,7 +292,7 @@ func (s *queueV2Store) RangeDeleteMessages(
 	if err != nil {
 		return nil, gocql.ConvertError("QueueV2RangeDeleteMessages", err)
 	}
-	partition.MinMessageId = deleteRange.NewMinMessageID
+	partition.SetMinMessageId(deleteRange.NewMinMessageID)
 	err = s.updateQueue(ctx, q, queueType, queueName)
 	if err != nil {
 		return nil, err
@@ -348,8 +348,8 @@ func (s *queueV2Store) tryInsert(
 		queueName,
 		0,
 		messageID,
-		blob.Data,
-		blob.EncodingType.String(),
+		blob.GetData(),
+		blob.GetEncodingType().String(),
 	).WithContext(ctx).MapScanCAS(make(map[string]interface{}))
 	if err != nil {
 		return gocql.ConvertError("QueueV2EnqueueMessage", err)
@@ -447,7 +447,7 @@ func (s *queueV2Store) getMessageCountAndLastID(
 	if !ok {
 		return 0, -1, nil // No messages
 	}
-	messageCount = maxMessageID - partition.MinMessageId + 1
+	messageCount = maxMessageID - partition.GetMinMessageId() + 1
 	return messageCount, maxMessageID, nil
 }
 

@@ -10,39 +10,35 @@ import (
 
 func TestBuildCallbackURL(t *testing.T) {
 	ns := namespace.NewLocalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: "ns-name", Id: "ns-id"},
+		persistencespb.NamespaceInfo_builder{Name: "ns-name", Id: "ns-id"}.Build(),
 		&persistencespb.NamespaceConfig{},
 		"active-cluster",
 	)
 
-	workerEndpoint := &persistencespb.NexusEndpointEntry{
-		Endpoint: &persistencespb.NexusEndpoint{
-			Spec: &persistencespb.NexusEndpointSpec{
+	workerEndpoint := persistencespb.NexusEndpointEntry_builder{
+		Endpoint: persistencespb.NexusEndpoint_builder{
+			Spec: persistencespb.NexusEndpointSpec_builder{
 				Name: "endpoint",
-				Target: &persistencespb.NexusEndpointTarget{
-					Variant: &persistencespb.NexusEndpointTarget_Worker_{
-						Worker: &persistencespb.NexusEndpointTarget_Worker{
-							NamespaceId: "ns-id",
-							TaskQueue:   "nexus-tq",
-						},
-					},
-				},
-			},
-		},
-	}
+				Target: persistencespb.NexusEndpointTarget_builder{
+					Worker: persistencespb.NexusEndpointTarget_Worker_builder{
+						NamespaceId: "ns-id",
+						TaskQueue:   "nexus-tq",
+					}.Build(),
+				}.Build(),
+			}.Build(),
+		}.Build(),
+	}.Build()
 
-	externalEndpoint := &persistencespb.NexusEndpointEntry{
-		Endpoint: &persistencespb.NexusEndpoint{
-			Spec: &persistencespb.NexusEndpointSpec{
+	externalEndpoint := persistencespb.NexusEndpointEntry_builder{
+		Endpoint: persistencespb.NexusEndpoint_builder{
+			Spec: persistencespb.NexusEndpointSpec_builder{
 				Name: "endpoint",
-				Target: &persistencespb.NexusEndpointTarget{
-					Variant: &persistencespb.NexusEndpointTarget_External_{
-						External: &persistencespb.NexusEndpointTarget_External{Url: "https://api.example.com"},
-					},
-				},
-			},
-		},
-	}
+				Target: persistencespb.NexusEndpointTarget_builder{
+					External: persistencespb.NexusEndpointTarget_External_builder{Url: "https://api.example.com"}.Build(),
+				}.Build(),
+			}.Build(),
+		}.Build(),
+	}.Build()
 
 	// When UseSystemCallbackURL is true and target is worker, return the system URL
 	got, err := buildCallbackURL(true, "http://example/callback/{{.NamespaceName}}", ns, workerEndpoint)

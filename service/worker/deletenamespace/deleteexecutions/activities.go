@@ -191,24 +191,24 @@ func (a *Activities) DeleteExecutionsActivity(ctx context.Context, params Delete
 
 		if archetypeID == chasm.WorkflowArchetypeID {
 			// TODO: consider using ForceDeleteWorkflowExecution for workflow as well.
-			_, err = a.historyClient.DeleteWorkflowExecution(ctx, &historyservice.DeleteWorkflowExecutionRequest{
+			_, err = a.historyClient.DeleteWorkflowExecution(ctx, historyservice.DeleteWorkflowExecutionRequest_builder{
 				NamespaceId:       params.NamespaceID.String(),
-				WorkflowExecution: execution.Execution,
-			})
+				WorkflowExecution: execution.GetExecution(),
+			}.Build())
 		} else {
 			// NOTE: ForceDeleteWorkflowExecution is NOT design as a API to be consumed programmatically,
 			// and only performs best effort deletion on execution histories.
 			// It works for CHASM now as CHASM executions don't have any history events, so as long as this API,
 			// returns nil error, it means we have successfully deleted the mutable state and visibility records.
-			_, err = a.historyClient.ForceDeleteWorkflowExecution(ctx, &historyservice.ForceDeleteWorkflowExecutionRequest{
+			_, err = a.historyClient.ForceDeleteWorkflowExecution(ctx, historyservice.ForceDeleteWorkflowExecutionRequest_builder{
 				NamespaceId: params.NamespaceID.String(),
 				ArchetypeId: archetypeID,
-				Request: &adminservice.DeleteWorkflowExecutionRequest{
+				Request: adminservice.DeleteWorkflowExecutionRequest_builder{
 					// Namespace and Archetype fields are not required since we are calling history
 					// service directly.
-					Execution: execution.Execution,
-				},
-			})
+					Execution: execution.GetExecution(),
+				}.Build(),
+			}.Build())
 		}
 
 		switch err.(type) {
@@ -218,7 +218,7 @@ func (a *Activities) DeleteExecutionsActivity(ctx context.Context, params Delete
 
 		case *serviceerror.NotFound:
 			metrics.DeleteExecutionsNotFoundCount.With(a.metricsHandler.WithTags(metrics.NamespaceTag(params.Namespace.String()))).Record(1)
-			logger.Info("Workflow execution exists in the visibility store but not in the main store.", tag.WorkflowID(execution.Execution.GetWorkflowId()), tag.WorkflowRunID(execution.Execution.GetRunId()))
+			logger.Info("Workflow execution exists in the visibility store but not in the main store.", tag.WorkflowID(execution.GetExecution().GetWorkflowId()), tag.WorkflowRunID(execution.GetExecution().GetRunId()))
 			// The reasons why workflow execution doesn't exist in the main store, but exists in the visibility store might be:
 			// 1. Someone else deleted the workflow execution after the last ListWorkflowExecutions call but before historyClient.DeleteWorkflowExecution call.
 			// 2. Database is in inconsistent state: workflow execution was manually deleted from history store, but not from visibility store.
@@ -230,7 +230,7 @@ func (a *Activities) DeleteExecutionsActivity(ctx context.Context, params Delete
 		default:
 			result.ErrorCount++
 			metrics.DeleteExecutionsFailureCount.With(a.metricsHandler.WithTags(metrics.NamespaceTag(params.Namespace.String()))).Record(1)
-			logger.Error("Unable to delete workflow execution.", tag.WorkflowID(execution.Execution.GetWorkflowId()), tag.WorkflowRunID(execution.Execution.GetRunId()), tag.Error(err))
+			logger.Error("Unable to delete workflow execution.", tag.WorkflowID(execution.GetExecution().GetWorkflowId()), tag.WorkflowRunID(execution.GetExecution().GetRunId()), tag.Error(err))
 		}
 		select {
 		case progressCh <- result:
@@ -253,13 +253,13 @@ func (a *Activities) deleteWorkflowExecutionFromVisibility(
 	logger log.Logger,
 ) (successCount int, errorCount int) {
 
-	logger = log.With(logger, tag.WorkflowID(execution.Execution.GetWorkflowId()), tag.WorkflowRunID(execution.Execution.GetRunId()))
+	logger = log.With(logger, tag.WorkflowID(execution.GetExecution().GetWorkflowId()), tag.WorkflowRunID(execution.GetExecution().GetRunId()))
 
 	logger.Info("Deleting workflow execution from visibility.")
-	_, err := a.historyClient.DeleteWorkflowVisibilityRecord(ctx, &historyservice.DeleteWorkflowVisibilityRecordRequest{
+	_, err := a.historyClient.DeleteWorkflowVisibilityRecord(ctx, historyservice.DeleteWorkflowVisibilityRecordRequest_builder{
 		NamespaceId: nsID.String(),
 		Execution:   execution.GetExecution(),
-	})
+	}.Build())
 	switch err.(type) {
 	case nil:
 		// Indicates that main and visibility stores were in inconsistent state.

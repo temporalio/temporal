@@ -17,11 +17,11 @@ import (
 // yet.
 func AddNextStateMachineTimerTask(ms historyi.MutableState) {
 	// filter out empty timer groups
-	timers := ms.GetExecutionInfo().StateMachineTimers
+	timers := ms.GetExecutionInfo().GetStateMachineTimers()
 	timers = slices.DeleteFunc(timers, func(timerGroup *persistencespb.StateMachineTimerGroup) bool {
-		return len(timerGroup.Infos) == 0
+		return len(timerGroup.GetInfos()) == 0
 	})
-	ms.GetExecutionInfo().StateMachineTimers = timers
+	ms.GetExecutionInfo().SetStateMachineTimers(timers)
 
 	if len(timers) == 0 {
 		return
@@ -29,15 +29,15 @@ func AddNextStateMachineTimerTask(ms historyi.MutableState) {
 
 	timerGroup := timers[0]
 	// We already have a timer for this deadline.
-	if timerGroup.Scheduled {
+	if timerGroup.GetScheduled() {
 		return
 	}
 	ms.AddTasks(&tasks.StateMachineTimerTask{
 		WorkflowKey:         ms.GetWorkflowKey(),
-		VisibilityTimestamp: timerGroup.Deadline.AsTime(),
+		VisibilityTimestamp: timerGroup.GetDeadline().AsTime(),
 		Version:             ms.GetCurrentVersion(),
 	})
-	timerGroup.Scheduled = true
+	timerGroup.SetScheduled(true)
 }
 
 // TrackStateMachineTimer tracks a timer task in the mutable state's StateMachineTimers slice sorted and grouped by
@@ -46,26 +46,26 @@ func AddNextStateMachineTimerTask(ms historyi.MutableState) {
 // tracked, it will be overridden.
 func TrackStateMachineTimer(ms historyi.MutableState, deadline time.Time, taskInfo *persistencespb.StateMachineTaskInfo) {
 	execInfo := ms.GetExecutionInfo()
-	group := &persistencespb.StateMachineTimerGroup{
+	group := persistencespb.StateMachineTimerGroup_builder{
 		Deadline: timestamppb.New(deadline),
 		Infos:    []*persistencespb.StateMachineTaskInfo{taskInfo},
-	}
-	idx, groupFound := slices.BinarySearchFunc(execInfo.StateMachineTimers, group, func(a, b *persistencespb.StateMachineTimerGroup) int {
-		return a.Deadline.AsTime().Compare(b.Deadline.AsTime())
+	}.Build()
+	idx, groupFound := slices.BinarySearchFunc(execInfo.GetStateMachineTimers(), group, func(a, b *persistencespb.StateMachineTimerGroup) int {
+		return a.GetDeadline().AsTime().Compare(b.GetDeadline().AsTime())
 	})
 	if groupFound {
-		groupIdx := slices.IndexFunc(execInfo.StateMachineTimers[idx].Infos, func(info *persistencespb.StateMachineTaskInfo) bool {
+		groupIdx := slices.IndexFunc(execInfo.GetStateMachineTimers()[idx].GetInfos(), func(info *persistencespb.StateMachineTaskInfo) bool {
 			return info.GetType() == taskInfo.GetType() && slices.EqualFunc(info.GetRef().GetPath(), taskInfo.GetRef().GetPath(), func(a, b *persistencespb.StateMachineKey) bool {
 				return a.GetType() == b.GetType() && a.GetId() == b.GetId()
 			})
 		})
 		if groupIdx == -1 {
-			execInfo.StateMachineTimers[idx].Infos = append(execInfo.StateMachineTimers[idx].Infos, taskInfo)
+			execInfo.GetStateMachineTimers()[idx].SetInfos(append(execInfo.GetStateMachineTimers()[idx].GetInfos(), taskInfo))
 		} else {
-			execInfo.StateMachineTimers[idx].Infos[groupIdx] = taskInfo
+			execInfo.GetStateMachineTimers()[idx].GetInfos()[groupIdx] = taskInfo
 		}
 	} else {
-		execInfo.StateMachineTimers = slices.Insert(execInfo.StateMachineTimers, idx, group)
+		execInfo.SetStateMachineTimers(slices.Insert(execInfo.GetStateMachineTimers(), idx, group))
 	}
 }
 
@@ -77,18 +77,18 @@ func TrimStateMachineTimers(
 ) error {
 	if transitionhistory.Compare(minVersionedTransition, EmptyVersionedTransition) == 0 {
 		// Reset all the state machine timers, we'll recreate them all.
-		mutableState.GetExecutionInfo().StateMachineTimers = nil
+		mutableState.GetExecutionInfo().SetStateMachineTimers(nil)
 		return nil
 	}
 
 	hsmRoot := mutableState.HSM()
-	trimmedStateMachineTimers := make([]*persistencespb.StateMachineTimerGroup, 0, len(mutableState.GetExecutionInfo().StateMachineTimers))
-	for _, timerGroup := range mutableState.GetExecutionInfo().StateMachineTimers {
-		trimmedTaskInfos := make([]*persistencespb.StateMachineTaskInfo, 0, len(timerGroup.Infos))
+	trimmedStateMachineTimers := make([]*persistencespb.StateMachineTimerGroup, 0, len(mutableState.GetExecutionInfo().GetStateMachineTimers()))
+	for _, timerGroup := range mutableState.GetExecutionInfo().GetStateMachineTimers() {
+		trimmedTaskInfos := make([]*persistencespb.StateMachineTaskInfo, 0, len(timerGroup.GetInfos()))
 		for _, taskInfo := range timerGroup.GetInfos() {
 
 			node, err := hsmRoot.Child(hsm.Ref{
-				StateMachineRef: taskInfo.Ref,
+				StateMachineRef: taskInfo.GetRef(),
 			}.StateMachinePath())
 			if err != nil {
 				if errors.Is(err, hsm.ErrStateMachineNotFound) {
@@ -99,7 +99,7 @@ func TrimStateMachineTimers(
 			}
 
 			if transitionhistory.Compare(
-				node.InternalRepr().LastUpdateVersionedTransition,
+				node.InternalRepr().GetLastUpdateVersionedTransition(),
 				minVersionedTransition,
 			) >= 0 {
 				// node recently updated, trim the task.
@@ -109,16 +109,16 @@ func TrimStateMachineTimers(
 
 			trimmedTaskInfos = append(trimmedTaskInfos, taskInfo)
 		}
-		if len(trimmedTaskInfos) > 0 || timerGroup.Scheduled {
+		if len(trimmedTaskInfos) > 0 || timerGroup.GetScheduled() {
 			// We still want to keep the timer group if it has been scheduled even if it has no task info.
 			// This will prevent us from scheduling a new timer task for the same group.
-			trimmedStateMachineTimers = append(trimmedStateMachineTimers, &persistencespb.StateMachineTimerGroup{
+			trimmedStateMachineTimers = append(trimmedStateMachineTimers, persistencespb.StateMachineTimerGroup_builder{
 				Infos:     trimmedTaskInfos,
-				Deadline:  timerGroup.Deadline,
-				Scheduled: timerGroup.Scheduled,
-			})
+				Deadline:  timerGroup.GetDeadline(),
+				Scheduled: timerGroup.GetScheduled(),
+			}.Build())
 		}
 	}
-	mutableState.GetExecutionInfo().StateMachineTimers = trimmedStateMachineTimers
+	mutableState.GetExecutionInfo().SetStateMachineTimers(trimmedStateMachineTimers)
 	return nil
 }

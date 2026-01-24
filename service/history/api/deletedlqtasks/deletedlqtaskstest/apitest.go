@@ -36,16 +36,16 @@ func TestInvoke(t *testing.T, manager persistence.HistoryTaskQueueManager) {
 			})
 			require.NoError(t, err)
 		}
-		_, err = deletedlqtasks.Invoke(ctx, manager, &historyservice.DeleteDLQTasksRequest{
-			DlqKey: &commonspb.HistoryDLQKey{
+		_, err = deletedlqtasks.Invoke(ctx, manager, historyservice.DeleteDLQTasksRequest_builder{
+			DlqKey: commonspb.HistoryDLQKey_builder{
 				TaskCategory:  int32(queueKey.Category.ID()),
 				SourceCluster: queueKey.SourceCluster,
 				TargetCluster: queueKey.TargetCluster,
-			},
-			InclusiveMaxTaskMetadata: &commonspb.HistoryDLQTaskMetadata{
+			}.Build(),
+			InclusiveMaxTaskMetadata: commonspb.HistoryDLQTaskMetadata_builder{
 				MessageId: persistence.FirstQueueMessageID + 1,
-			},
-		}, tasks.NewDefaultTaskCategoryRegistry())
+			}.Build(),
+		}.Build(), tasks.NewDefaultTaskCategoryRegistry())
 		require.NoError(t, err)
 		resp, err := manager.ReadRawTasks(ctx, &persistence.ReadRawTasksRequest{
 			QueueKey: queueKey,
@@ -59,16 +59,16 @@ func TestInvoke(t *testing.T, manager persistence.HistoryTaskQueueManager) {
 		t.Parallel()
 
 		queueKey := persistencetest.GetQueueKey(t, persistencetest.WithQueueType(persistence.QueueTypeHistoryDLQ))
-		_, err := deletedlqtasks.Invoke(ctx, manager, &historyservice.DeleteDLQTasksRequest{
-			DlqKey: &commonspb.HistoryDLQKey{
+		_, err := deletedlqtasks.Invoke(ctx, manager, historyservice.DeleteDLQTasksRequest_builder{
+			DlqKey: commonspb.HistoryDLQKey_builder{
 				TaskCategory:  int32(queueKey.Category.ID()),
 				SourceCluster: queueKey.SourceCluster,
 				TargetCluster: queueKey.TargetCluster,
-			},
-			InclusiveMaxTaskMetadata: &commonspb.HistoryDLQTaskMetadata{
+			}.Build(),
+			InclusiveMaxTaskMetadata: commonspb.HistoryDLQTaskMetadata_builder{
 				MessageId: persistence.FirstQueueMessageID,
-			},
-		}, tasks.NewDefaultTaskCategoryRegistry())
+			}.Build(),
+		}.Build(), tasks.NewDefaultTaskCategoryRegistry())
 		require.Error(t, err)
 		assert.Equal(t, codes.NotFound, serviceerror.ToStatus(err).Code(), err.Error())
 	})

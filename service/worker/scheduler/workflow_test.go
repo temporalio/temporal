@@ -24,6 +24,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/protoassert"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -59,25 +60,23 @@ func (s *workflowSuite) now() time.Time {
 }
 
 func (s *workflowSuite) defaultAction(id string) *schedulepb.ScheduleAction {
-	return &schedulepb.ScheduleAction{
-		Action: &schedulepb.ScheduleAction_StartWorkflow{
-			StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
-				WorkflowId:   id,
-				WorkflowType: &commonpb.WorkflowType{Name: "mywf"},
-				TaskQueue:    &taskqueuepb.TaskQueue{Name: "mytq"},
-				Memo: &commonpb.Memo{
-					Fields: map[string]*commonpb.Payload{
-						"mymemo": payload.EncodeString("value"),
-					},
+	return schedulepb.ScheduleAction_builder{
+		StartWorkflow: workflowpb.NewWorkflowExecutionInfo_builder{
+			WorkflowId:   id,
+			WorkflowType: commonpb.WorkflowType_builder{Name: "mywf"}.Build(),
+			TaskQueue:    taskqueuepb.TaskQueue_builder{Name: "mytq"}.Build(),
+			Memo: commonpb.Memo_builder{
+				Fields: map[string]*commonpb.Payload{
+					"mymemo": payload.EncodeString("value"),
 				},
-				SearchAttributes: &commonpb.SearchAttributes{
-					IndexedFields: map[string]*commonpb.Payload{
-						"myfield": payload.EncodeString("value"),
-					},
+			}.Build(),
+			SearchAttributes: commonpb.SearchAttributes_builder{
+				IndexedFields: map[string]*commonpb.Payload{
+					"myfield": payload.EncodeString("value"),
 				},
-			},
-		},
-	}
+			}.Build(),
+		}.Build(),
+	}.Build()
 }
 
 func (s *workflowSuite) run(sched *schedulepb.Schedule, iterations int) {
@@ -89,19 +88,19 @@ func (s *workflowSuite) run(sched *schedulepb.Schedule, iterations int) {
 	s.env.SetStartTime(baseStartTime)
 
 	// fill this in so callers don't need to
-	if sched.Action == nil {
-		sched.Action = s.defaultAction("myid")
+	if !sched.HasAction() {
+		sched.SetAction(s.defaultAction("myid"))
 	}
 
-	s.env.ExecuteWorkflow(SchedulerWorkflow, &schedulespb.StartScheduleArgs{
+	s.env.ExecuteWorkflow(SchedulerWorkflow, schedulespb.StartScheduleArgs_builder{
 		Schedule: sched,
-		State: &schedulespb.InternalState{
+		State: schedulespb.InternalState_builder{
 			Namespace:     "myns",
 			NamespaceId:   "mynsid",
 			ScheduleId:    "myschedule",
 			ConflictToken: InitialConflictToken,
-		},
-	})
+		}.Build(),
+	}.Build())
 }
 
 func (s *workflowSuite) describe() *schedulespb.DescribeResponse {
@@ -115,8 +114,8 @@ func (s *workflowSuite) describe() *schedulespb.DescribeResponse {
 func (s *workflowSuite) runningWorkflows() []string {
 	desc := s.describe()
 	var out []string
-	for _, ex := range desc.Info.RunningWorkflows {
-		out = append(out, ex.WorkflowId)
+	for _, ex := range desc.GetInfo().GetRunningWorkflows() {
+		out = append(out, ex.GetWorkflowId())
 	}
 	return out
 }
@@ -128,10 +127,10 @@ func (s *workflowSuite) expectStart(f func(req *schedulespb.StartWorkflowRequest
 		func(_ context.Context, req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
 			resp, err := f(req)
 			if resp == nil && err == nil { // fill in defaults so callers can be more concise
-				resp = &schedulespb.StartWorkflowResponse{
+				resp = schedulespb.StartWorkflowResponse_builder{
 					RunId:         uuid.NewString(),
 					RealStartTime: timestamppb.New(s.env.Now()),
-				}
+				}.Build()
 			}
 
 			return resp, err
@@ -185,46 +184,46 @@ func (s *workflowSuite) setupMocksForWorkflows(runs []workflowRun, state *runAcr
 		run := run // capture fresh value
 		// set up start
 		matchStart := mock.MatchedBy(func(req *schedulespb.StartWorkflowRequest) bool {
-			return req.Request.WorkflowId == run.id
+			return req.GetRequest().GetWorkflowId() == run.id
 		})
 		s.env.OnActivity(new(activities).StartWorkflow, mock.Anything, matchStart).Times(0).Maybe().Return(
 			func(_ context.Context, req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
-				if prev, ok := state.started[req.Request.WorkflowId]; ok {
-					s.Failf("multiple starts", "for %s at %s (prev %s)", req.Request.WorkflowId, s.now(), prev)
+				if prev, ok := state.started[req.GetRequest().GetWorkflowId()]; ok {
+					s.Failf("multiple starts", "for %s at %s (prev %s)", req.GetRequest().GetWorkflowId(), s.now(), prev)
 				}
-				state.started[req.Request.WorkflowId] = s.now()
+				state.started[req.GetRequest().GetWorkflowId()] = s.now()
 				overhead := time.Duration(100+rand.Intn(100)) * time.Millisecond
-				return &schedulespb.StartWorkflowResponse{
+				return schedulespb.StartWorkflowResponse_builder{
 					RunId:         uuid.NewString(),
 					RealStartTime: timestamppb.New(s.now().Add(overhead)),
-				}, nil
+				}.Build(), nil
 			})
 		// set up short-poll watchers
 		matchShortPoll := mock.MatchedBy(func(req *schedulespb.WatchWorkflowRequest) bool {
-			return req.Execution.WorkflowId == run.id && !req.LongPoll
+			return req.GetExecution().GetWorkflowId() == run.id && !req.GetLongPoll()
 		})
 		s.env.OnActivity(new(activities).WatchWorkflow, mock.Anything, matchShortPoll).Times(0).Maybe().Return(
 			func(_ context.Context, req *schedulespb.WatchWorkflowRequest) (*schedulespb.WatchWorkflowResponse, error) {
 				if s.now().Before(run.end) {
-					return &schedulespb.WatchWorkflowResponse{Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING}, nil
+					return schedulespb.WatchWorkflowResponse_builder{Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING}.Build(), nil
 				}
-				return &schedulespb.WatchWorkflowResponse{Status: run.result}, nil
+				return schedulespb.WatchWorkflowResponse_builder{Status: run.result}.Build(), nil
 			})
 		// set up long-poll watchers
 		matchLongPoll := mock.MatchedBy(func(req *schedulespb.WatchWorkflowRequest) bool {
-			return req.Execution.WorkflowId == run.id && req.LongPoll
+			return req.GetExecution().GetWorkflowId() == run.id && req.GetLongPoll()
 		})
 		s.env.OnActivity(new(activities).WatchWorkflow, mock.Anything, matchLongPoll).Times(0).Maybe().AfterFn(func() time.Duration {
 			// this can be called after end of workflow, use captured env
 			return run.end.Sub(env.Now().UTC())
 		}).Return(func(_ context.Context, req *schedulespb.WatchWorkflowRequest) (*schedulespb.WatchWorkflowResponse, error) {
-			return &schedulespb.WatchWorkflowResponse{Status: run.result}, nil
+			return schedulespb.WatchWorkflowResponse_builder{Status: run.result}.Build(), nil
 		})
 	}
 	// catch unexpected starts
 	s.env.OnActivity(new(activities).StartWorkflow, mock.Anything, mock.Anything).Times(0).Maybe().Return(
 		func(_ context.Context, req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
-			s.Failf("unexpected start", "for %s at %s", req.Request.WorkflowId, s.now())
+			s.Failf("unexpected start", "for %s at %s", req.GetRequest().GetWorkflowId(), s.now())
 			return nil, nil
 		})
 }
@@ -255,21 +254,21 @@ func (s *workflowSuite) runAcrossContinue(
 	sched *schedulepb.Schedule,
 ) {
 	// fill this in so callers don't need to
-	sched.Action = s.defaultAction("myid")
+	sched.SetAction(s.defaultAction("myid"))
 
 	for _, every := range []int{1, 2, 3, 5, 7, 11, 1000} {
 		s.T().Logf("running %s with continue-as-new every %d iterations", s.T().Name(), every)
 
 		startTime := baseStartTime
-		startArgs := &schedulespb.StartScheduleArgs{
+		startArgs := schedulespb.StartScheduleArgs_builder{
 			Schedule: sched,
-			State: &schedulespb.InternalState{
+			State: schedulespb.InternalState_builder{
 				Namespace:     "myns",
 				NamespaceId:   "mynsid",
 				ScheduleId:    "myschedule",
 				ConflictToken: InitialConflictToken,
-			},
-		}
+			}.Build(),
+		}.Build()
 		CurrentTweakablePolicies.IterationsBeforeContinueAsNew = every
 		state := runAcrossContinueState{
 			started: make(map[string]time.Time),
@@ -314,43 +313,43 @@ func (s *workflowSuite) runAcrossContinue(
 func (s *workflowSuite) TestStart() {
 	// written using low-level mocks so we can test all fields in the start request
 
-	userMetadata := &sdkpb.UserMetadata{
-		Summary: &commonpb.Payload{
+	userMetadata := sdkpb.UserMetadata_builder{
+		Summary: commonpb.Payload_builder{
 			Metadata: map[string][]byte{"test_key": []byte(`test_val`)},
 			Data:     []byte(`Test summary Data`),
-		},
-		Details: &commonpb.Payload{
+		}.Build(),
+		Details: commonpb.Payload_builder{
 			Metadata: map[string][]byte{"test_key": []byte(`test_val`)},
 			Data:     []byte(`Test Details Data`),
-		},
-	}
+		}.Build(),
+	}.Build()
 	action := s.defaultAction("myid")
-	action.Action.(*schedulepb.ScheduleAction_StartWorkflow).StartWorkflow.UserMetadata = userMetadata
+	action.Action.(*schedulepb.ScheduleAction_StartWorkflow).StartWorkflow.SetUserMetadata(userMetadata)
 
 	s.expectStart(func(req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
 		s.True(time.Date(2022, 6, 1, 0, 15, 0, 0, time.UTC).Equal(s.now()))
-		s.Nil(req.Request.LastCompletionResult)
-		s.Nil(req.Request.ContinuedFailure)
-		s.Equal("myid-2022-06-01T00:15:00Z", req.Request.WorkflowId)
-		s.Equal("mywf", req.Request.WorkflowType.Name)
-		s.Equal("mytq", req.Request.TaskQueue.Name)
-		s.Equal(`"value"`, payload.ToString(req.Request.Memo.Fields["mymemo"]))
-		s.Equal(`"value"`, payload.ToString(req.Request.SearchAttributes.IndexedFields["myfield"]))
-		s.Equal(`"myschedule"`, payload.ToString(req.Request.SearchAttributes.IndexedFields[sadefs.TemporalScheduledById]))
-		s.Equal(`"2022-06-01T00:15:00Z"`, payload.ToString(req.Request.SearchAttributes.IndexedFields[sadefs.TemporalScheduledStartTime]))
-		protoassert.ProtoEqual(s.T(), userMetadata, req.Request.GetUserMetadata())
+		s.Nil(req.GetRequest().GetLastCompletionResult())
+		s.Nil(req.GetRequest().GetContinuedFailure())
+		s.Equal("myid-2022-06-01T00:15:00Z", req.GetRequest().GetWorkflowId())
+		s.Equal("mywf", req.GetRequest().GetWorkflowType().GetName())
+		s.Equal("mytq", req.GetRequest().GetTaskQueue().GetName())
+		s.Equal(`"value"`, payload.ToString(req.GetRequest().GetMemo().GetFields()["mymemo"]))
+		s.Equal(`"value"`, payload.ToString(req.GetRequest().GetSearchAttributes().GetIndexedFields()["myfield"]))
+		s.Equal(`"myschedule"`, payload.ToString(req.GetRequest().GetSearchAttributes().GetIndexedFields()[sadefs.TemporalScheduledById]))
+		s.Equal(`"2022-06-01T00:15:00Z"`, payload.ToString(req.GetRequest().GetSearchAttributes().GetIndexedFields()[sadefs.TemporalScheduledStartTime]))
+		protoassert.ProtoEqual(s.T(), userMetadata, req.GetRequest().GetUserMetadata())
 
 		return nil, nil
 	})
 
-	s.run(&schedulepb.Schedule{
-		Spec: &schedulepb.ScheduleSpec{
-			Interval: []*schedulepb.IntervalSpec{{
+	s.run(schedulepb.Schedule_builder{
+		Spec: schedulepb.ScheduleSpec_builder{
+			Interval: []*schedulepb.IntervalSpec{schedulepb.IntervalSpec_builder{
 				Interval: durationpb.New(55 * time.Minute),
-			}},
-		},
+			}.Build()},
+		}.Build(),
 		Action: action,
-	}, 2)
+	}.Build(), 2)
 	// two iterations to start one workflow: first will sleep, second will start and then sleep again
 	s.True(s.env.IsWorkflowCompleted())
 	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
@@ -361,42 +360,42 @@ func (s *workflowSuite) TestInitialPatch() {
 
 	s.expectStart(func(req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
 		s.True(time.Date(2022, 6, 1, 0, 0, 0, 0, time.UTC).Equal(s.now()))
-		s.Equal("myid-2022-06-01T00:00:00Z", req.Request.WorkflowId)
+		s.Equal("myid-2022-06-01T00:00:00Z", req.GetRequest().GetWorkflowId())
 		return nil, nil
 	})
 	s.expectWatch(func(req *schedulespb.WatchWorkflowRequest) (*schedulespb.WatchWorkflowResponse, error) {
 		s.True(time.Date(2022, 6, 1, 0, 15, 0, 0, time.UTC).Equal(s.now()))
-		s.Equal("myid-2022-06-01T00:00:00Z", req.Execution.WorkflowId)
-		s.False(req.LongPoll)
-		return &schedulespb.WatchWorkflowResponse{Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED}, nil
+		s.Equal("myid-2022-06-01T00:00:00Z", req.GetExecution().GetWorkflowId())
+		s.False(req.GetLongPoll())
+		return schedulespb.WatchWorkflowResponse_builder{Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED}.Build(), nil
 	})
 	s.expectStart(func(req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
 		s.True(time.Date(2022, 6, 1, 0, 15, 0, 0, time.UTC).Equal(s.now()))
-		s.Equal("myid-2022-06-01T00:15:00Z", req.Request.WorkflowId)
+		s.Equal("myid-2022-06-01T00:15:00Z", req.GetRequest().GetWorkflowId())
 		return nil, nil
 	})
 
 	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 2
 	s.env.SetStartTime(baseStartTime)
-	s.env.ExecuteWorkflow(SchedulerWorkflow, &schedulespb.StartScheduleArgs{
-		Schedule: &schedulepb.Schedule{
-			Spec: &schedulepb.ScheduleSpec{
-				Interval: []*schedulepb.IntervalSpec{{
+	s.env.ExecuteWorkflow(SchedulerWorkflow, schedulespb.StartScheduleArgs_builder{
+		Schedule: schedulepb.Schedule_builder{
+			Spec: schedulepb.ScheduleSpec_builder{
+				Interval: []*schedulepb.IntervalSpec{schedulepb.IntervalSpec_builder{
 					Interval: durationpb.New(55 * time.Minute),
-				}},
-			},
+				}.Build()},
+			}.Build(),
 			Action: s.defaultAction("myid"),
-		},
-		State: &schedulespb.InternalState{
+		}.Build(),
+		State: schedulespb.InternalState_builder{
 			Namespace:     "myns",
 			NamespaceId:   "mynsid",
 			ScheduleId:    "myschedule",
 			ConflictToken: InitialConflictToken,
-		},
-		InitialPatch: &schedulepb.SchedulePatch{
+		}.Build(),
+		InitialPatch: schedulepb.SchedulePatch_builder{
 			TriggerImmediately: &schedulepb.TriggerImmediatelyRequest{},
-		},
-	})
+		}.Build(),
+	}.Build())
 	s.True(s.env.IsWorkflowCompleted())
 	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
 }
@@ -407,49 +406,49 @@ func (s *workflowSuite) TestCatchupWindow() {
 	// one catchup
 	s.expectStart(func(req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
 		s.True(time.Date(2022, 6, 1, 0, 0, 0, 0, time.UTC).Equal(s.now()))
-		s.Equal("myid-2022-05-31T23:17:00Z", req.Request.WorkflowId)
+		s.Equal("myid-2022-05-31T23:17:00Z", req.GetRequest().GetWorkflowId())
 		return nil, nil
 	})
 	s.expectWatch(func(req *schedulespb.WatchWorkflowRequest) (*schedulespb.WatchWorkflowResponse, error) {
 		s.True(time.Date(2022, 6, 1, 0, 17, 0, 0, time.UTC).Equal(s.now()))
-		s.Equal("myid-2022-05-31T23:17:00Z", req.Execution.WorkflowId)
-		s.False(req.LongPoll)
-		return &schedulespb.WatchWorkflowResponse{Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED}, nil
+		s.Equal("myid-2022-05-31T23:17:00Z", req.GetExecution().GetWorkflowId())
+		s.False(req.GetLongPoll())
+		return schedulespb.WatchWorkflowResponse_builder{Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED}.Build(), nil
 	})
 	// one on time
 	s.expectStart(func(req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
 		s.True(time.Date(2022, 6, 1, 0, 17, 0, 0, time.UTC).Equal(s.now()))
-		s.Equal("myid-2022-06-01T00:17:00Z", req.Request.WorkflowId)
+		s.Equal("myid-2022-06-01T00:17:00Z", req.GetRequest().GetWorkflowId())
 		return nil, nil
 	})
 	s.env.RegisterDelayedCallback(func() {
-		s.Equal(int64(5), s.describe().Info.MissedCatchupWindow)
+		s.Equal(int64(5), s.describe().GetInfo().GetMissedCatchupWindow())
 	}, 18*time.Minute)
 
 	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 2
 	s.env.SetStartTime(baseStartTime)
-	s.env.ExecuteWorkflow(SchedulerWorkflow, &schedulespb.StartScheduleArgs{
-		Schedule: &schedulepb.Schedule{
-			Spec: &schedulepb.ScheduleSpec{
-				Calendar: []*schedulepb.CalendarSpec{{
+	s.env.ExecuteWorkflow(SchedulerWorkflow, schedulespb.StartScheduleArgs_builder{
+		Schedule: schedulepb.Schedule_builder{
+			Spec: schedulepb.ScheduleSpec_builder{
+				Calendar: []*schedulepb.CalendarSpec{schedulepb.CalendarSpec_builder{
 					Minute: "17",
 					Hour:   "*",
-				}},
-			},
+				}.Build()},
+			}.Build(),
 			Action: s.defaultAction("myid"),
-			Policies: &schedulepb.SchedulePolicies{
+			Policies: schedulepb.SchedulePolicies_builder{
 				CatchupWindow: durationpb.New(1 * time.Hour),
-			},
-		},
-		State: &schedulespb.InternalState{
+			}.Build(),
+		}.Build(),
+		State: schedulespb.InternalState_builder{
 			Namespace:     "myns",
 			NamespaceId:   "mynsid",
 			ScheduleId:    "myschedule",
 			ConflictToken: InitialConflictToken,
 			// workflow "woke up" after 6 hours
 			LastProcessedTime: timestamppb.New(time.Date(2022, 5, 31, 18, 0, 0, 0, time.UTC)),
-		},
-	})
+		}.Build(),
+	}.Build())
 	s.True(s.env.IsWorkflowCompleted())
 	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
 }
@@ -459,43 +458,43 @@ func (s *workflowSuite) TestCatchupWindowWhilePaused() {
 
 	s.env.RegisterDelayedCallback(func() {
 		// should not count any "misses" since we were paused
-		s.Equal(int64(0), s.describe().Info.MissedCatchupWindow)
+		s.Equal(int64(0), s.describe().GetInfo().GetMissedCatchupWindow())
 		// unpause just to make the test end cleanly
-		s.env.SignalWorkflow(SignalNamePatch, &schedulepb.SchedulePatch{Unpause: "go ahead"})
+		s.env.SignalWorkflow(SignalNamePatch, schedulepb.SchedulePatch_builder{Unpause: "go ahead"}.Build())
 	}, 3*time.Minute)
 	s.expectStart(func(req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
 		s.True(time.Date(2022, 6, 1, 0, 17, 0, 0, time.UTC).Equal(s.now()))
-		s.Equal("myid-2022-06-01T00:17:00Z", req.Request.WorkflowId)
+		s.Equal("myid-2022-06-01T00:17:00Z", req.GetRequest().GetWorkflowId())
 		return nil, nil
 	})
 
 	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 3
 	s.env.SetStartTime(baseStartTime)
-	s.env.ExecuteWorkflow(SchedulerWorkflow, &schedulespb.StartScheduleArgs{
-		Schedule: &schedulepb.Schedule{
-			Spec: &schedulepb.ScheduleSpec{
-				Calendar: []*schedulepb.CalendarSpec{{
+	s.env.ExecuteWorkflow(SchedulerWorkflow, schedulespb.StartScheduleArgs_builder{
+		Schedule: schedulepb.Schedule_builder{
+			Spec: schedulepb.ScheduleSpec_builder{
+				Calendar: []*schedulepb.CalendarSpec{schedulepb.CalendarSpec_builder{
 					Minute: "17",
 					Hour:   "*",
-				}},
-			},
+				}.Build()},
+			}.Build(),
 			Action: s.defaultAction("myid"),
-			Policies: &schedulepb.SchedulePolicies{
+			Policies: schedulepb.SchedulePolicies_builder{
 				CatchupWindow: durationpb.New(1 * time.Hour),
-			},
-			State: &schedulepb.ScheduleState{
+			}.Build(),
+			State: schedulepb.ScheduleState_builder{
 				Paused: true,
-			},
-		},
-		State: &schedulespb.InternalState{
+			}.Build(),
+		}.Build(),
+		State: schedulespb.InternalState_builder{
 			Namespace:     "myns",
 			NamespaceId:   "mynsid",
 			ScheduleId:    "myschedule",
 			ConflictToken: InitialConflictToken,
 			// workflow "woke up" after 6 hours
 			LastProcessedTime: timestamppb.New(time.Date(2022, 5, 31, 18, 0, 0, 0, time.UTC)),
-		},
-	})
+		}.Build(),
+	}.Build())
 	s.True(s.env.IsWorkflowCompleted())
 	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()), s.env.GetWorkflowError())
 }
@@ -521,7 +520,7 @@ func (s *workflowSuite) TestOverlapSkip() {
 			{
 				at: time.Date(2022, 6, 1, 0, 11, 0, 0, time.UTC),
 				f: func() {
-					s.Equal(int64(1), s.describe().Info.OverlapSkipped)
+					s.Equal(int64(1), s.describe().GetInfo().GetOverlapSkipped())
 					s.Equal([]string{"myid-2022-06-01T00:05:00Z"}, s.runningWorkflows())
 				},
 			},
@@ -536,16 +535,16 @@ func (s *workflowSuite) TestOverlapSkip() {
 				finishTest: true,
 			},
 		},
-		&schedulepb.Schedule{
-			Spec: &schedulepb.ScheduleSpec{
-				Interval: []*schedulepb.IntervalSpec{{
+		schedulepb.Schedule_builder{
+			Spec: schedulepb.ScheduleSpec_builder{
+				Interval: []*schedulepb.IntervalSpec{schedulepb.IntervalSpec_builder{
 					Interval: durationpb.New(5 * time.Minute),
-				}},
-			},
-			Policies: &schedulepb.SchedulePolicies{
+				}.Build()},
+			}.Build(),
+			Policies: schedulepb.SchedulePolicies_builder{
 				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP,
-			},
-		},
+			}.Build(),
+		}.Build(),
 	)
 }
 
@@ -581,22 +580,22 @@ func (s *workflowSuite) TestOverlapBufferOne() {
 			{
 				at: time.Date(2022, 6, 1, 0, 11, 0, 0, time.UTC),
 				f: func() {
-					s.Equal(int64(1), s.describe().Info.BufferSize)
-					s.Equal(int64(0), s.describe().Info.OverlapSkipped)
+					s.Equal(int64(1), s.describe().GetInfo().GetBufferSize())
+					s.Equal(int64(0), s.describe().GetInfo().GetOverlapSkipped())
 				},
 			},
 			{
 				at: time.Date(2022, 6, 1, 0, 16, 0, 0, time.UTC),
 				f: func() {
-					s.Equal(int64(1), s.describe().Info.BufferSize)
-					s.Equal(int64(1), s.describe().Info.OverlapSkipped)
+					s.Equal(int64(1), s.describe().GetInfo().GetBufferSize())
+					s.Equal(int64(1), s.describe().GetInfo().GetOverlapSkipped())
 				},
 			},
 			{
 				at: time.Date(2022, 6, 1, 0, 26, 0, 0, time.UTC),
 				f: func() {
-					s.Equal(int64(1), s.describe().Info.BufferSize)
-					s.Equal(int64(3), s.describe().Info.OverlapSkipped)
+					s.Equal(int64(1), s.describe().GetInfo().GetBufferSize())
+					s.Equal(int64(3), s.describe().GetInfo().GetOverlapSkipped())
 				},
 			},
 			{
@@ -606,8 +605,8 @@ func (s *workflowSuite) TestOverlapBufferOne() {
 			{
 				at: time.Date(2022, 6, 1, 0, 32, 0, 0, time.UTC),
 				f: func() {
-					s.Equal(int64(0), s.describe().Info.BufferSize)
-					s.Equal(int64(3), s.describe().Info.OverlapSkipped)
+					s.Equal(int64(0), s.describe().GetInfo().GetBufferSize())
+					s.Equal(int64(3), s.describe().GetInfo().GetOverlapSkipped())
 				},
 			},
 			{
@@ -615,16 +614,16 @@ func (s *workflowSuite) TestOverlapBufferOne() {
 				finishTest: true,
 			},
 		},
-		&schedulepb.Schedule{
-			Spec: &schedulepb.ScheduleSpec{
-				Interval: []*schedulepb.IntervalSpec{{
+		schedulepb.Schedule_builder{
+			Spec: schedulepb.ScheduleSpec_builder{
+				Interval: []*schedulepb.IntervalSpec{schedulepb.IntervalSpec_builder{
 					Interval: durationpb.New(5 * time.Minute),
-				}},
-			},
-			Policies: &schedulepb.SchedulePolicies{
+				}.Build()},
+			}.Build(),
+			Policies: schedulepb.SchedulePolicies_builder{
 				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE,
-			},
-		},
+			}.Build(),
+		}.Build(),
 	)
 }
 
@@ -680,16 +679,16 @@ func (s *workflowSuite) TestOverlapBufferAll() {
 				finishTest: true,
 			},
 		},
-		&schedulepb.Schedule{
-			Spec: &schedulepb.ScheduleSpec{
-				Interval: []*schedulepb.IntervalSpec{{
+		schedulepb.Schedule_builder{
+			Spec: schedulepb.ScheduleSpec_builder{
+				Interval: []*schedulepb.IntervalSpec{schedulepb.IntervalSpec_builder{
 					Interval: durationpb.New(5 * time.Minute),
-				}},
-			},
-			Policies: &schedulepb.SchedulePolicies{
+				}.Build()},
+			}.Build(),
+			Policies: schedulepb.SchedulePolicies_builder{
 				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
-			},
-		},
+			}.Build(),
+		}.Build(),
 	)
 }
 
@@ -733,24 +732,24 @@ func (s *workflowSuite) TestBufferLimit() {
 				at: time.Date(2022, 6, 1, 0, 20, 30, 0, time.UTC),
 				f: func() {
 					s.Equal([]string{"myid-2022-06-01T00:05:00Z"}, s.runningWorkflows())
-					s.Equal(int64(2), s.describe().Info.BufferSize)
-					s.Equal(int64(1), s.describe().Info.BufferDropped)
+					s.Equal(int64(2), s.describe().GetInfo().GetBufferSize())
+					s.Equal(int64(1), s.describe().GetInfo().GetBufferDropped())
 				},
 			},
 			{
 				at: time.Date(2022, 6, 1, 0, 23, 30, 0, time.UTC),
 				f: func() {
 					s.Equal([]string{"myid-2022-06-01T00:15:00Z"}, s.runningWorkflows())
-					s.Equal(int64(0), s.describe().Info.BufferSize)
-					s.Equal(int64(1), s.describe().Info.BufferDropped)
+					s.Equal(int64(0), s.describe().GetInfo().GetBufferSize())
+					s.Equal(int64(1), s.describe().GetInfo().GetBufferDropped())
 				},
 			},
 			{
 				at: time.Date(2022, 6, 1, 0, 25, 30, 0, time.UTC),
 				f: func() {
 					s.Equal([]string{"myid-2022-06-01T00:25:00Z"}, s.runningWorkflows())
-					s.Equal(int64(0), s.describe().Info.BufferSize)
-					s.Equal(int64(1), s.describe().Info.BufferDropped)
+					s.Equal(int64(0), s.describe().GetInfo().GetBufferSize())
+					s.Equal(int64(1), s.describe().GetInfo().GetBufferDropped())
 				},
 			},
 			{
@@ -758,16 +757,16 @@ func (s *workflowSuite) TestBufferLimit() {
 				finishTest: true,
 			},
 		},
-		&schedulepb.Schedule{
-			Spec: &schedulepb.ScheduleSpec{
-				Interval: []*schedulepb.IntervalSpec{{
+		schedulepb.Schedule_builder{
+			Spec: schedulepb.ScheduleSpec_builder{
+				Interval: []*schedulepb.IntervalSpec{schedulepb.IntervalSpec_builder{
 					Interval: durationpb.New(5 * time.Minute),
-				}},
-			},
-			Policies: &schedulepb.SchedulePolicies{
+				}.Build()},
+			}.Build(),
+			Policies: schedulepb.SchedulePolicies_builder{
 				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
-			},
-		},
+			}.Build(),
+		}.Build(),
 	)
 }
 
@@ -777,44 +776,44 @@ func (s *workflowSuite) TestOverlapCancel() {
 
 	s.expectStart(func(req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
 		s.True(time.Date(2022, 6, 1, 0, 15, 0, 0, time.UTC).Equal(s.now()))
-		s.Equal("myid-2022-06-01T00:15:00Z", req.Request.WorkflowId)
+		s.Equal("myid-2022-06-01T00:15:00Z", req.GetRequest().GetWorkflowId())
 		return nil, nil
 	})
 	s.expectWatch(func(req *schedulespb.WatchWorkflowRequest) (*schedulespb.WatchWorkflowResponse, error) {
 		s.True(time.Date(2022, 6, 1, 1, 10, 0, 0, time.UTC).Equal(s.now()))
-		s.Equal("myid-2022-06-01T00:15:00Z", req.Execution.WorkflowId)
-		s.False(req.LongPoll)
-		return &schedulespb.WatchWorkflowResponse{Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING}, nil
+		s.Equal("myid-2022-06-01T00:15:00Z", req.GetExecution().GetWorkflowId())
+		s.False(req.GetLongPoll())
+		return schedulespb.WatchWorkflowResponse_builder{Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING}.Build(), nil
 	})
 	// will cancel and then long poll to wait for it
 	s.expectCancel(func(req *schedulespb.CancelWorkflowRequest) error {
 		s.True(time.Date(2022, 6, 1, 1, 10, 0, 0, time.UTC).Equal(s.now()))
-		s.Equal("myid-2022-06-01T00:15:00Z", req.Execution.WorkflowId)
+		s.Equal("myid-2022-06-01T00:15:00Z", req.GetExecution().GetWorkflowId())
 		return nil
 	})
 	s.expectWatch(func(req *schedulespb.WatchWorkflowRequest) (*schedulespb.WatchWorkflowResponse, error) {
 		s.True(time.Date(2022, 6, 1, 1, 10, 15, 0, time.UTC).Equal(s.now()))
-		s.Equal("myid-2022-06-01T00:15:00Z", req.Execution.WorkflowId)
-		s.True(req.LongPoll)
-		return &schedulespb.WatchWorkflowResponse{Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED}, nil
+		s.Equal("myid-2022-06-01T00:15:00Z", req.GetExecution().GetWorkflowId())
+		s.True(req.GetLongPoll())
+		return schedulespb.WatchWorkflowResponse_builder{Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED}.Build(), nil
 	}).After(15 * time.Second)
 	// now it'll run the next one
 	s.expectStart(func(req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
 		s.True(time.Date(2022, 6, 1, 1, 10, 15, 0, time.UTC).Equal(s.now()))
-		s.Equal("myid-2022-06-01T01:10:00Z", req.Request.WorkflowId)
+		s.Equal("myid-2022-06-01T01:10:00Z", req.GetRequest().GetWorkflowId())
 		return nil, nil
 	})
 
-	s.run(&schedulepb.Schedule{
-		Spec: &schedulepb.ScheduleSpec{
-			Interval: []*schedulepb.IntervalSpec{{
+	s.run(schedulepb.Schedule_builder{
+		Spec: schedulepb.ScheduleSpec_builder{
+			Interval: []*schedulepb.IntervalSpec{schedulepb.IntervalSpec_builder{
 				Interval: durationpb.New(55 * time.Minute),
-			}},
-		},
-		Policies: &schedulepb.SchedulePolicies{
+			}.Build()},
+		}.Build(),
+		Policies: schedulepb.SchedulePolicies_builder{
 			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_CANCEL_OTHER,
-		},
-	}, 4)
+		}.Build(),
+	}.Build(), 4)
 	s.True(s.env.IsWorkflowCompleted())
 	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
 }
@@ -825,47 +824,47 @@ func (s *workflowSuite) TestOverlapTerminate() {
 
 	s.expectStart(func(req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
 		s.True(time.Date(2022, 6, 1, 0, 15, 0, 0, time.UTC).Equal(s.now()))
-		s.Equal("myid-2022-06-01T00:15:00Z", req.Request.WorkflowId)
+		s.Equal("myid-2022-06-01T00:15:00Z", req.GetRequest().GetWorkflowId())
 		return nil, nil
 	})
 	s.expectWatch(func(req *schedulespb.WatchWorkflowRequest) (*schedulespb.WatchWorkflowResponse, error) {
 		s.True(time.Date(2022, 6, 1, 1, 10, 0, 0, time.UTC).Equal(s.now()))
-		s.Equal("myid-2022-06-01T00:15:00Z", req.Execution.WorkflowId)
-		s.False(req.LongPoll)
-		return &schedulespb.WatchWorkflowResponse{Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING}, nil
+		s.Equal("myid-2022-06-01T00:15:00Z", req.GetExecution().GetWorkflowId())
+		s.False(req.GetLongPoll())
+		return schedulespb.WatchWorkflowResponse_builder{Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING}.Build(), nil
 	})
 	// will terminate and then long poll to wait for it (could be improved since
 	// we don't have to wait after terminate)
 	s.expectTerminate(func(req *schedulespb.TerminateWorkflowRequest) error {
 		s.True(time.Date(2022, 6, 1, 1, 10, 0, 0, time.UTC).Equal(s.now()))
-		s.Equal("myid-2022-06-01T00:15:00Z", req.Execution.WorkflowId)
+		s.Equal("myid-2022-06-01T00:15:00Z", req.GetExecution().GetWorkflowId())
 		return nil
 	})
 	s.expectWatch(func(req *schedulespb.WatchWorkflowRequest) (*schedulespb.WatchWorkflowResponse, error) {
 		s.True(time.Date(2022, 6, 1, 1, 10, 1, 0, time.UTC).Equal(s.now()))
-		s.Equal("myid-2022-06-01T00:15:00Z", req.Execution.WorkflowId)
-		s.True(req.LongPoll)
-		return &schedulespb.WatchWorkflowResponse{
+		s.Equal("myid-2022-06-01T00:15:00Z", req.GetExecution().GetWorkflowId())
+		s.True(req.GetLongPoll())
+		return schedulespb.WatchWorkflowResponse_builder{
 			Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
-		}, nil
+		}.Build(), nil
 	}).After(1 * time.Second)
 	// now it'll run the next one
 	s.expectStart(func(req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
 		s.True(time.Date(2022, 6, 1, 1, 10, 1, 0, time.UTC).Equal(s.now()))
-		s.Equal("myid-2022-06-01T01:10:00Z", req.Request.WorkflowId)
+		s.Equal("myid-2022-06-01T01:10:00Z", req.GetRequest().GetWorkflowId())
 		return nil, nil
 	})
 
-	s.run(&schedulepb.Schedule{
-		Spec: &schedulepb.ScheduleSpec{
-			Interval: []*schedulepb.IntervalSpec{{
+	s.run(schedulepb.Schedule_builder{
+		Spec: schedulepb.ScheduleSpec_builder{
+			Interval: []*schedulepb.IntervalSpec{schedulepb.IntervalSpec_builder{
 				Interval: durationpb.New(55 * time.Minute),
-			}},
-		},
-		Policies: &schedulepb.SchedulePolicies{
+			}.Build()},
+		}.Build(),
+		Policies: schedulepb.SchedulePolicies_builder{
 			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_TERMINATE_OTHER,
-		},
-	}, 4)
+		}.Build(),
+	}.Build(), 4)
 	s.True(s.env.IsWorkflowCompleted())
 	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
 }
@@ -904,16 +903,16 @@ func (s *workflowSuite) TestOverlapAllowAll() {
 				finishTest: true,
 			},
 		},
-		&schedulepb.Schedule{
-			Spec: &schedulepb.ScheduleSpec{
-				Interval: []*schedulepb.IntervalSpec{{
+		schedulepb.Schedule_builder{
+			Spec: schedulepb.ScheduleSpec_builder{
+				Interval: []*schedulepb.IntervalSpec{schedulepb.IntervalSpec_builder{
 					Interval: durationpb.New(5 * time.Minute),
-				}},
-			},
-			Policies: &schedulepb.SchedulePolicies{
+				}.Build()},
+			}.Build(),
+			Policies: schedulepb.SchedulePolicies_builder{
 				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
-			},
-		},
+			}.Build(),
+		}.Build(),
 	)
 }
 
@@ -924,36 +923,36 @@ func (s *workflowSuite) TestFailedStart() {
 
 	s.expectStart(func(req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
 		s.True(time.Date(2022, 6, 1, 0, 5, 0, 0, time.UTC).Equal(s.now()))
-		s.Equal("myid-2022-06-01T00:05:00Z", req.Request.WorkflowId)
+		s.Equal("myid-2022-06-01T00:05:00Z", req.GetRequest().GetWorkflowId())
 		return nil, nil
 	})
 	s.expectWatch(func(req *schedulespb.WatchWorkflowRequest) (*schedulespb.WatchWorkflowResponse, error) {
 		s.True(time.Date(2022, 6, 1, 0, 10, 0, 0, time.UTC).Equal(s.now()))
-		s.Equal("myid-2022-06-01T00:05:00Z", req.Execution.WorkflowId)
-		s.False(req.LongPoll)
-		return &schedulespb.WatchWorkflowResponse{Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED}, nil
+		s.Equal("myid-2022-06-01T00:05:00Z", req.GetExecution().GetWorkflowId())
+		s.False(req.GetLongPoll())
+		return schedulespb.WatchWorkflowResponse_builder{Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED}.Build(), nil
 	})
 	// failed start, but doesn't do anything else until next scheduled time
 	s.expectStart(func(req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
 		s.True(time.Date(2022, 6, 1, 0, 10, 0, 0, time.UTC).Equal(s.now()))
-		s.Equal("myid-2022-06-01T00:10:00Z", req.Request.WorkflowId)
+		s.Equal("myid-2022-06-01T00:10:00Z", req.GetRequest().GetWorkflowId())
 		return nil, errors.New("failed to start!")
 	})
 	s.expectStart(func(req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
 		s.True(time.Date(2022, 6, 1, 0, 15, 0, 0, time.UTC).Equal(s.now()))
-		s.Equal("myid-2022-06-01T00:15:00Z", req.Request.WorkflowId)
+		s.Equal("myid-2022-06-01T00:15:00Z", req.GetRequest().GetWorkflowId())
 		return nil, nil
 	})
 	// TODO: buffer two or more starts using backfill, then have the first start fail, and
 	// check that the second start is attempted immediately after, without sleeping.
 
-	s.run(&schedulepb.Schedule{
-		Spec: &schedulepb.ScheduleSpec{
-			Interval: []*schedulepb.IntervalSpec{{
+	s.run(schedulepb.Schedule_builder{
+		Spec: schedulepb.ScheduleSpec_builder{
+			Interval: []*schedulepb.IntervalSpec{schedulepb.IntervalSpec_builder{
 				Interval: durationpb.New(5 * time.Minute),
-			}},
-		},
-	}, 4)
+			}.Build()},
+		}.Build(),
+	}.Build(), 4)
 	s.True(s.env.IsWorkflowCompleted())
 	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
 }
@@ -963,70 +962,64 @@ func (s *workflowSuite) TestLastCompletionResultAndContinuedFailure() {
 	// start workflow requests
 
 	s.expectStart(func(req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
-		s.Equal("myid-2022-06-01T00:05:00Z", req.Request.WorkflowId)
-		s.Nil(req.Request.LastCompletionResult)
-		s.Nil(req.Request.ContinuedFailure)
+		s.Equal("myid-2022-06-01T00:05:00Z", req.GetRequest().GetWorkflowId())
+		s.Nil(req.GetRequest().GetLastCompletionResult())
+		s.Nil(req.GetRequest().GetContinuedFailure())
 		return nil, nil
 	})
 	s.expectWatch(func(req *schedulespb.WatchWorkflowRequest) (*schedulespb.WatchWorkflowResponse, error) {
-		s.Equal("myid-2022-06-01T00:05:00Z", req.Execution.WorkflowId)
-		s.False(req.LongPoll)
-		return &schedulespb.WatchWorkflowResponse{
+		s.Equal("myid-2022-06-01T00:05:00Z", req.GetExecution().GetWorkflowId())
+		s.False(req.GetLongPoll())
+		return schedulespb.WatchWorkflowResponse_builder{
 			Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
-			ResultFailure: &schedulespb.WatchWorkflowResponse_Result{
-				Result: payloads.EncodeString("res1"),
-			},
-		}, nil
+			Result: proto.ValueOrDefault(payloads.EncodeString("res1")),
+		}.Build(), nil
 	})
 	s.expectStart(func(req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
-		s.Equal("myid-2022-06-01T00:10:00Z", req.Request.WorkflowId)
-		s.Equal(`["res1"]`, payloads.ToString(req.Request.LastCompletionResult))
-		s.Nil(req.Request.ContinuedFailure)
+		s.Equal("myid-2022-06-01T00:10:00Z", req.GetRequest().GetWorkflowId())
+		s.Equal(`["res1"]`, payloads.ToString(req.GetRequest().GetLastCompletionResult()))
+		s.Nil(req.GetRequest().GetContinuedFailure())
 		return nil, nil
 	})
 	s.expectWatch(func(req *schedulespb.WatchWorkflowRequest) (*schedulespb.WatchWorkflowResponse, error) {
-		s.Equal("myid-2022-06-01T00:10:00Z", req.Execution.WorkflowId)
-		s.False(req.LongPoll)
-		return &schedulespb.WatchWorkflowResponse{
-			Status: enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
-			ResultFailure: &schedulespb.WatchWorkflowResponse_Failure{
-				Failure: &failurepb.Failure{Message: "oops"},
-			},
-		}, nil
+		s.Equal("myid-2022-06-01T00:10:00Z", req.GetExecution().GetWorkflowId())
+		s.False(req.GetLongPoll())
+		return schedulespb.WatchWorkflowResponse_builder{
+			Status:  enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+			Failure: failurepb.Failure_builder{Message: "oops"}.Build(),
+		}.Build(), nil
 	})
 	s.expectStart(func(req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
-		s.Equal("myid-2022-06-01T00:15:00Z", req.Request.WorkflowId)
-		s.Equal(`["res1"]`, payloads.ToString(req.Request.LastCompletionResult))
-		s.Equal(`oops`, req.Request.ContinuedFailure.Message)
+		s.Equal("myid-2022-06-01T00:15:00Z", req.GetRequest().GetWorkflowId())
+		s.Equal(`["res1"]`, payloads.ToString(req.GetRequest().GetLastCompletionResult()))
+		s.Equal(`oops`, req.GetRequest().GetContinuedFailure().GetMessage())
 		return nil, nil
 	})
 	s.expectWatch(func(req *schedulespb.WatchWorkflowRequest) (*schedulespb.WatchWorkflowResponse, error) {
-		s.Equal("myid-2022-06-01T00:15:00Z", req.Execution.WorkflowId)
-		s.False(req.LongPoll)
-		return &schedulespb.WatchWorkflowResponse{
+		s.Equal("myid-2022-06-01T00:15:00Z", req.GetExecution().GetWorkflowId())
+		s.False(req.GetLongPoll())
+		return schedulespb.WatchWorkflowResponse_builder{
 			Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
-			ResultFailure: &schedulespb.WatchWorkflowResponse_Result{
-				Result: payloads.EncodeString("works again"),
-			},
-		}, nil
+			Result: proto.ValueOrDefault(payloads.EncodeString("works again")),
+		}.Build(), nil
 	})
 	s.expectStart(func(req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
-		s.Equal("myid-2022-06-01T00:20:00Z", req.Request.WorkflowId)
-		s.Equal(`["works again"]`, payloads.ToString(req.Request.LastCompletionResult))
-		s.Nil(req.Request.ContinuedFailure)
+		s.Equal("myid-2022-06-01T00:20:00Z", req.GetRequest().GetWorkflowId())
+		s.Equal(`["works again"]`, payloads.ToString(req.GetRequest().GetLastCompletionResult()))
+		s.Nil(req.GetRequest().GetContinuedFailure())
 		return nil, nil
 	})
 
-	s.run(&schedulepb.Schedule{
-		Spec: &schedulepb.ScheduleSpec{
-			Interval: []*schedulepb.IntervalSpec{{
+	s.run(schedulepb.Schedule_builder{
+		Spec: schedulepb.ScheduleSpec_builder{
+			Interval: []*schedulepb.IntervalSpec{schedulepb.IntervalSpec_builder{
 				Interval: durationpb.New(5 * time.Minute),
-			}},
-		},
-		Policies: &schedulepb.SchedulePolicies{
+			}.Build()},
+		}.Build(),
+		Policies: schedulepb.SchedulePolicies_builder{
 			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP,
-		},
-	}, 5)
+		}.Build(),
+	}.Build(), 5)
 	s.True(s.env.IsWorkflowCompleted())
 	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
 }
@@ -1035,34 +1028,34 @@ func (s *workflowSuite) TestOnlyStartForAllowAll() {
 	// written using low-level mocks so we can check fields of start workflow requests
 
 	s.expectStart(func(req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
-		s.Equal("myid-2022-06-01T00:05:00Z", req.Request.WorkflowId)
-		s.Nil(req.Request.LastCompletionResult)
-		s.Nil(req.Request.ContinuedFailure)
+		s.Equal("myid-2022-06-01T00:05:00Z", req.GetRequest().GetWorkflowId())
+		s.Nil(req.GetRequest().GetLastCompletionResult())
+		s.Nil(req.GetRequest().GetContinuedFailure())
 		return nil, nil
 	})
 	s.expectStart(func(req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
-		s.Equal("myid-2022-06-01T00:10:00Z", req.Request.WorkflowId)
-		s.Nil(req.Request.LastCompletionResult)
-		s.Nil(req.Request.ContinuedFailure)
+		s.Equal("myid-2022-06-01T00:10:00Z", req.GetRequest().GetWorkflowId())
+		s.Nil(req.GetRequest().GetLastCompletionResult())
+		s.Nil(req.GetRequest().GetContinuedFailure())
 		return nil, nil
 	})
 	s.expectStart(func(req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
-		s.Equal("myid-2022-06-01T00:15:00Z", req.Request.WorkflowId)
-		s.Nil(req.Request.LastCompletionResult)
-		s.Nil(req.Request.ContinuedFailure)
+		s.Equal("myid-2022-06-01T00:15:00Z", req.GetRequest().GetWorkflowId())
+		s.Nil(req.GetRequest().GetLastCompletionResult())
+		s.Nil(req.GetRequest().GetContinuedFailure())
 		return nil, nil
 	})
 
-	s.run(&schedulepb.Schedule{
-		Spec: &schedulepb.ScheduleSpec{
-			Interval: []*schedulepb.IntervalSpec{{
+	s.run(schedulepb.Schedule_builder{
+		Spec: schedulepb.ScheduleSpec_builder{
+			Interval: []*schedulepb.IntervalSpec{schedulepb.IntervalSpec_builder{
 				Interval: durationpb.New(5 * time.Minute),
-			}},
-		},
-		Policies: &schedulepb.SchedulePolicies{
+			}.Build()},
+		}.Build(),
+		Policies: schedulepb.SchedulePolicies_builder{
 			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
-		},
-	}, 4)
+		}.Build(),
+	}.Build(), 4)
 	s.True(s.env.IsWorkflowCompleted())
 	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
 }
@@ -1072,42 +1065,40 @@ func (s *workflowSuite) TestPauseOnFailure() {
 
 	s.expectStart(func(req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
 		s.True(time.Date(2022, 6, 1, 0, 5, 0, 0, time.UTC).Equal(s.now()))
-		s.Equal("myid-2022-06-01T00:05:00Z", req.Request.WorkflowId)
-		s.Nil(req.Request.LastCompletionResult)
-		s.Nil(req.Request.ContinuedFailure)
+		s.Equal("myid-2022-06-01T00:05:00Z", req.GetRequest().GetWorkflowId())
+		s.Nil(req.GetRequest().GetLastCompletionResult())
+		s.Nil(req.GetRequest().GetContinuedFailure())
 		return nil, nil
 	})
 	s.expectWatch(func(req *schedulespb.WatchWorkflowRequest) (*schedulespb.WatchWorkflowResponse, error) {
 		s.True(time.Date(2022, 6, 1, 0, 10, 0, 0, time.UTC).Equal(s.now()))
-		s.Equal("myid-2022-06-01T00:05:00Z", req.Execution.WorkflowId)
-		s.False(req.LongPoll)
-		return &schedulespb.WatchWorkflowResponse{
-			Status: enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
-			ResultFailure: &schedulespb.WatchWorkflowResponse_Failure{
-				Failure: &failurepb.Failure{Message: "oops"},
-			},
-		}, nil
+		s.Equal("myid-2022-06-01T00:05:00Z", req.GetExecution().GetWorkflowId())
+		s.False(req.GetLongPoll())
+		return schedulespb.WatchWorkflowResponse_builder{
+			Status:  enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+			Failure: failurepb.Failure_builder{Message: "oops"}.Build(),
+		}.Build(), nil
 	})
 	s.env.RegisterDelayedCallback(func() {
-		s.False(s.describe().Schedule.State.Paused)
+		s.False(s.describe().GetSchedule().GetState().GetPaused())
 	}, 9*time.Minute)
 	s.env.RegisterDelayedCallback(func() {
 		desc := s.describe()
-		s.True(desc.Schedule.State.Paused)
-		s.Contains(desc.Schedule.State.Notes, "paused due to workflow failure")
-		s.Contains(desc.Schedule.State.Notes, "oops")
+		s.True(desc.GetSchedule().GetState().GetPaused())
+		s.Contains(desc.GetSchedule().GetState().GetNotes(), "paused due to workflow failure")
+		s.Contains(desc.GetSchedule().GetState().GetNotes(), "oops")
 	}, 11*time.Minute)
 
-	s.run(&schedulepb.Schedule{
-		Spec: &schedulepb.ScheduleSpec{
-			Interval: []*schedulepb.IntervalSpec{{
+	s.run(schedulepb.Schedule_builder{
+		Spec: schedulepb.ScheduleSpec_builder{
+			Interval: []*schedulepb.IntervalSpec{schedulepb.IntervalSpec_builder{
 				Interval: durationpb.New(5 * time.Minute),
-			}},
-		},
-		Policies: &schedulepb.SchedulePolicies{
+			}.Build()},
+		}.Build(),
+		Policies: schedulepb.SchedulePolicies_builder{
 			PauseOnFailure: true,
-		},
-	}, 3)
+		}.Build(),
+	}.Build(), 3)
 	s.True(s.env.IsWorkflowCompleted())
 	// doesn't end properly since it sleeps forever after pausing
 }
@@ -1116,16 +1107,16 @@ func (s *workflowSuite) TestCompileError() {
 	// written using low-level mocks since it sleeps forever
 
 	s.env.RegisterDelayedCallback(func() {
-		s.Contains(s.describe().Info.InvalidScheduleError, "Month is not in range [1-12]")
+		s.Contains(s.describe().GetInfo().GetInvalidScheduleError(), "Month is not in range [1-12]")
 	}, 1*time.Minute)
 
-	s.run(&schedulepb.Schedule{
-		Spec: &schedulepb.ScheduleSpec{
-			Calendar: []*schedulepb.CalendarSpec{{
+	s.run(schedulepb.Schedule_builder{
+		Spec: schedulepb.ScheduleSpec_builder{
+			Calendar: []*schedulepb.CalendarSpec{schedulepb.CalendarSpec_builder{
 				Month: "juneuary",
-			}},
-		},
-	}, 1)
+			}.Build()},
+		}.Build(),
+	}.Build(), 1)
 	// doesn't end properly since it sleeps forever
 }
 
@@ -1150,11 +1141,11 @@ func (s *workflowSuite) TestTriggerImmediate() {
 				at: time.Date(2022, 6, 1, 0, 20, 0, 0, time.UTC),
 				f: func() {
 					// this gets skipped because a scheduled run is still running
-					s.env.SignalWorkflow(SignalNamePatch, &schedulepb.SchedulePatch{
-						TriggerImmediately: &schedulepb.TriggerImmediatelyRequest{
+					s.env.SignalWorkflow(SignalNamePatch, schedulepb.SchedulePatch_builder{
+						TriggerImmediately: schedulepb.TriggerImmediatelyRequest_builder{
 							ScheduledTime: timestamppb.New(time.Date(2022, 6, 1, 0, 20, 0, 0, time.UTC)),
-						},
-					})
+						}.Build(),
+					}.Build())
 				},
 			},
 			{
@@ -1162,7 +1153,7 @@ func (s *workflowSuite) TestTriggerImmediate() {
 				f: func() {
 					// Validate that the first trigger was skipped
 					desc := s.describe()
-					s.Equal(int64(1), desc.Info.OverlapSkipped, "First trigger should have been skipped due to overlap policy")
+					s.Equal(int64(1), desc.GetInfo().GetOverlapSkipped(), "First trigger should have been skipped due to overlap policy")
 					s.Equal([]string{"myid-2022-06-01T00:15:00Z"}, s.runningWorkflows(), "Only the scheduled workflow should be running")
 				},
 			},
@@ -1170,12 +1161,12 @@ func (s *workflowSuite) TestTriggerImmediate() {
 				at: time.Date(2022, 6, 1, 0, 30, 0, 0, time.UTC),
 				f: func() {
 					// this one runs with overridden overlap policy
-					s.env.SignalWorkflow(SignalNamePatch, &schedulepb.SchedulePatch{
-						TriggerImmediately: &schedulepb.TriggerImmediatelyRequest{
+					s.env.SignalWorkflow(SignalNamePatch, schedulepb.SchedulePatch_builder{
+						TriggerImmediately: schedulepb.TriggerImmediatelyRequest_builder{
 							ScheduledTime: timestamppb.New(time.Date(2022, 6, 1, 0, 30, 0, 0, time.UTC)),
 							OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
-						},
-					})
+						}.Build(),
+					}.Build())
 				},
 			},
 			{
@@ -1183,16 +1174,16 @@ func (s *workflowSuite) TestTriggerImmediate() {
 				finishTest: true,
 			},
 		},
-		&schedulepb.Schedule{
-			Spec: &schedulepb.ScheduleSpec{
-				Interval: []*schedulepb.IntervalSpec{{
+		schedulepb.Schedule_builder{
+			Spec: schedulepb.ScheduleSpec_builder{
+				Interval: []*schedulepb.IntervalSpec{schedulepb.IntervalSpec_builder{
 					Interval: durationpb.New(55 * time.Minute),
-				}},
-			},
-			Policies: &schedulepb.SchedulePolicies{
+				}.Build()},
+			}.Build(),
+			Policies: schedulepb.SchedulePolicies_builder{
 				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP,
-			},
-		},
+			}.Build(),
+		}.Build(),
 	)
 }
 
@@ -1235,13 +1226,13 @@ func (s *workflowSuite) TestBackfill() {
 			{
 				at: time.Date(2022, 6, 1, 0, 5, 0, 0, time.UTC),
 				f: func() {
-					s.env.SignalWorkflow(SignalNamePatch, &schedulepb.SchedulePatch{
-						BackfillRequest: []*schedulepb.BackfillRequest{{
+					s.env.SignalWorkflow(SignalNamePatch, schedulepb.SchedulePatch_builder{
+						BackfillRequest: []*schedulepb.BackfillRequest{schedulepb.BackfillRequest_builder{
 							StartTime:     timestamppb.New(time.Date(2022, 5, 31, 0, 0, 0, 0, time.UTC)),
 							EndTime:       timestamppb.New(time.Date(2022, 6, 1, 0, 0, 0, 0, time.UTC)),
 							OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
-						}},
-					})
+						}.Build()},
+					}.Build())
 				},
 			},
 			{
@@ -1249,18 +1240,18 @@ func (s *workflowSuite) TestBackfill() {
 				finishTest: true,
 			},
 		},
-		&schedulepb.Schedule{
-			Spec: &schedulepb.ScheduleSpec{
-				Calendar: []*schedulepb.CalendarSpec{{
+		schedulepb.Schedule_builder{
+			Spec: schedulepb.ScheduleSpec_builder{
+				Calendar: []*schedulepb.CalendarSpec{schedulepb.CalendarSpec_builder{
 					Minute:     "*/17",
 					Hour:       "19",
 					DayOfMonth: "31",
-				}},
-			},
-			Policies: &schedulepb.SchedulePolicies{
+				}.Build()},
+			}.Build(),
+			Policies: schedulepb.SchedulePolicies_builder{
 				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP,
-			},
-		},
+			}.Build(),
+		}.Build(),
 	)
 }
 
@@ -1287,22 +1278,22 @@ func (s *workflowSuite) TestBackfillInclusiveStartEnd() {
 				at: time.Date(2022, 6, 1, 0, 5, 0, 0, time.UTC),
 				f: func() {
 					triggerBackfillTime := time.Date(2022, 5, 31, 19, 17, 0, 0, time.UTC)
-					triggerBackfill := &schedulepb.BackfillRequest{
+					triggerBackfill := schedulepb.BackfillRequest_builder{
 						StartTime:     timestamppb.New(triggerBackfillTime),
 						EndTime:       timestamppb.New(triggerBackfillTime),
 						OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
-					}
+					}.Build()
 
 					ignoreBackfillTime := triggerBackfillTime.Add(500 * time.Millisecond)
-					ignoreBackfill := &schedulepb.BackfillRequest{
+					ignoreBackfill := schedulepb.BackfillRequest_builder{
 						StartTime:     timestamppb.New(ignoreBackfillTime),
 						EndTime:       timestamppb.New(ignoreBackfillTime),
 						OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
-					}
+					}.Build()
 
-					s.env.SignalWorkflow(SignalNamePatch, &schedulepb.SchedulePatch{
+					s.env.SignalWorkflow(SignalNamePatch, schedulepb.SchedulePatch_builder{
 						BackfillRequest: []*schedulepb.BackfillRequest{triggerBackfill, ignoreBackfill},
-					})
+					}.Build())
 				},
 			},
 			{
@@ -1310,18 +1301,18 @@ func (s *workflowSuite) TestBackfillInclusiveStartEnd() {
 				finishTest: true,
 			},
 		},
-		&schedulepb.Schedule{
-			Spec: &schedulepb.ScheduleSpec{
-				Calendar: []*schedulepb.CalendarSpec{{
+		schedulepb.Schedule_builder{
+			Spec: schedulepb.ScheduleSpec_builder{
+				Calendar: []*schedulepb.CalendarSpec{schedulepb.CalendarSpec_builder{
 					Minute:     "*/17",
 					Hour:       "19",
 					DayOfMonth: "31",
-				}},
-			},
-			Policies: &schedulepb.SchedulePolicies{
+				}.Build()},
+			}.Build(),
+			Policies: schedulepb.SchedulePolicies_builder{
 				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP,
-			},
-		},
+			}.Build(),
+		}.Build(),
 	)
 }
 
@@ -1361,13 +1352,13 @@ func (s *workflowSuite) TestHugeBackfillAllowAll() {
 			// as a workflow timer, so use an odd interval to force it to be different.
 			at: baseStartTime.Add(time.Minute).Add(time.Duration(i) * 1113 * time.Millisecond),
 			f: func() {
-				s.env.SignalWorkflow(SignalNamePatch, &schedulepb.SchedulePatch{
-					BackfillRequest: []*schedulepb.BackfillRequest{{
+				s.env.SignalWorkflow(SignalNamePatch, schedulepb.SchedulePatch_builder{
+					BackfillRequest: []*schedulepb.BackfillRequest{schedulepb.BackfillRequest_builder{
 						StartTime:     timestamppb.New(base.Add(time.Duration(i*backfillRuns/backfills) * time.Hour)),
 						EndTime:       timestamppb.New(base.Add(time.Duration((i+1)*backfillRuns/backfills-1) * time.Hour)),
 						OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
-					}},
-				})
+					}.Build()},
+				}.Build())
 			},
 		}
 	}
@@ -1380,11 +1371,11 @@ func (s *workflowSuite) TestHugeBackfillAllowAll() {
 	s.runAcrossContinue(
 		runs,
 		delayedCallbacks,
-		&schedulepb.Schedule{
-			Spec: &schedulepb.ScheduleSpec{
-				Interval: []*schedulepb.IntervalSpec{{Interval: durationpb.New(time.Hour)}},
-			},
-		},
+		schedulepb.Schedule_builder{
+			Spec: schedulepb.ScheduleSpec_builder{
+				Interval: []*schedulepb.IntervalSpec{schedulepb.IntervalSpec_builder{Interval: durationpb.New(time.Hour)}.Build()},
+			}.Build(),
+		}.Build(),
 	)
 }
 
@@ -1427,13 +1418,13 @@ func (s *workflowSuite) TestHugeBackfillBuffer() {
 		delayedCallbacks[i] = delayedCallback{
 			at: baseStartTime.Add(time.Minute).Add(time.Duration(i) * 1113 * time.Millisecond),
 			f: func() {
-				s.env.SignalWorkflow(SignalNamePatch, &schedulepb.SchedulePatch{
-					BackfillRequest: []*schedulepb.BackfillRequest{{
+				s.env.SignalWorkflow(SignalNamePatch, schedulepb.SchedulePatch_builder{
+					BackfillRequest: []*schedulepb.BackfillRequest{schedulepb.BackfillRequest_builder{
 						StartTime:     timestamppb.New(base.Add(time.Duration(i*backfillRuns/backfills) * time.Hour)),
 						EndTime:       timestamppb.New(base.Add(time.Duration((i+1)*backfillRuns/backfills-1) * time.Hour)),
 						OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
-					}},
-				})
+					}.Build()},
+				}.Build())
 			},
 		}
 	}
@@ -1446,14 +1437,14 @@ func (s *workflowSuite) TestHugeBackfillBuffer() {
 	s.runAcrossContinue(
 		runs,
 		delayedCallbacks,
-		&schedulepb.Schedule{
-			Spec: &schedulepb.ScheduleSpec{
-				Interval: []*schedulepb.IntervalSpec{{Interval: durationpb.New(time.Hour)}},
-			},
-			Policies: &schedulepb.SchedulePolicies{
+		schedulepb.Schedule_builder{
+			Spec: schedulepb.ScheduleSpec_builder{
+				Interval: []*schedulepb.IntervalSpec{schedulepb.IntervalSpec_builder{Interval: durationpb.New(time.Hour)}.Build()},
+			}.Build(),
+			Policies: schedulepb.SchedulePolicies_builder{
 				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
-			},
-		},
+			}.Build(),
+		}.Build(),
 	)
 }
 
@@ -1484,33 +1475,33 @@ func (s *workflowSuite) TestPause() {
 			{
 				at: time.Date(2022, 6, 1, 0, 7, 7, 0, time.UTC),
 				f: func() {
-					s.env.SignalWorkflow(SignalNamePatch, &schedulepb.SchedulePatch{
+					s.env.SignalWorkflow(SignalNamePatch, schedulepb.SchedulePatch_builder{
 						Pause: "paused",
-					})
+					}.Build())
 				},
 			},
 			{
 				at: time.Date(2022, 6, 1, 0, 12, 7, 0, time.UTC),
 				f: func() {
 					desc := s.describe()
-					s.True(desc.Schedule.State.Paused)
-					s.Equal("paused", desc.Schedule.State.Notes)
+					s.True(desc.GetSchedule().GetState().GetPaused())
+					s.Equal("paused", desc.GetSchedule().GetState().GetNotes())
 				},
 			},
 			{
 				at: time.Date(2022, 6, 1, 0, 26, 7, 0, time.UTC),
 				f: func() {
-					s.env.SignalWorkflow(SignalNamePatch, &schedulepb.SchedulePatch{
+					s.env.SignalWorkflow(SignalNamePatch, schedulepb.SchedulePatch_builder{
 						Unpause: "go ahead",
-					})
+					}.Build())
 				},
 			},
 			{
 				at: time.Date(2022, 6, 1, 0, 28, 7, 0, time.UTC),
 				f: func() {
 					desc := s.describe()
-					s.False(desc.Schedule.State.Paused)
-					s.Equal("go ahead", desc.Schedule.State.Notes)
+					s.False(desc.GetSchedule().GetState().GetPaused())
+					s.Equal("go ahead", desc.GetSchedule().GetState().GetNotes())
 				},
 			},
 			{
@@ -1518,16 +1509,16 @@ func (s *workflowSuite) TestPause() {
 				finishTest: true,
 			},
 		},
-		&schedulepb.Schedule{
-			Spec: &schedulepb.ScheduleSpec{
-				Interval: []*schedulepb.IntervalSpec{{
+		schedulepb.Schedule_builder{
+			Spec: schedulepb.ScheduleSpec_builder{
+				Interval: []*schedulepb.IntervalSpec{schedulepb.IntervalSpec_builder{
 					Interval: durationpb.New(3 * time.Minute),
-				}},
-			},
-			Policies: &schedulepb.SchedulePolicies{
+				}.Build()},
+			}.Build(),
+			Policies: schedulepb.SchedulePolicies_builder{
 				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
-			},
-		},
+			}.Build(),
+		}.Build(),
 	)
 }
 
@@ -1574,35 +1565,35 @@ func (s *workflowSuite) TestUpdate() {
 				at: time.Date(2022, 6, 1, 0, 9, 7, 0, time.UTC),
 				f: func() {
 					desc := s.describe()
-					s.env.SignalWorkflow(SignalNameUpdate, &schedulespb.FullUpdateRequest{
-						ConflictToken: desc.ConflictToken,
-						Schedule: &schedulepb.Schedule{
-							Spec: &schedulepb.ScheduleSpec{
-								Interval: []*schedulepb.IntervalSpec{{
+					s.env.SignalWorkflow(SignalNameUpdate, schedulespb.FullUpdateRequest_builder{
+						ConflictToken: desc.GetConflictToken(),
+						Schedule: schedulepb.Schedule_builder{
+							Spec: schedulepb.ScheduleSpec_builder{
+								Interval: []*schedulepb.IntervalSpec{schedulepb.IntervalSpec_builder{
 									Interval: durationpb.New(5 * time.Minute),
-								}},
-							},
-							Policies: &schedulepb.SchedulePolicies{
+								}.Build()},
+							}.Build(),
+							Policies: schedulepb.SchedulePolicies_builder{
 								OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
-							},
+							}.Build(),
 							Action: s.defaultAction("newid"),
-						},
-						SearchAttributes: &commonpb.SearchAttributes{
+						}.Build(),
+						SearchAttributes: commonpb.SearchAttributes_builder{
 							IndexedFields: map[string]*commonpb.Payload{
 								"myfield": payload.EncodeString("another value"),
 							},
-						},
-					})
+						}.Build(),
+					}.Build())
 				},
 			},
 			{
 				at: time.Date(2022, 6, 1, 0, 12, 7, 0, time.UTC),
 				f: func() {
 					desc := s.describe()
-					s.env.SignalWorkflow(SignalNameUpdate, &schedulespb.FullUpdateRequest{
-						ConflictToken: desc.ConflictToken + 37, // conflict, should not take effect
+					s.env.SignalWorkflow(SignalNameUpdate, schedulespb.FullUpdateRequest_builder{
+						ConflictToken: desc.GetConflictToken() + 37, // conflict, should not take effect
 						Schedule:      &schedulepb.Schedule{},
-					})
+					}.Build())
 				},
 			},
 			{
@@ -1610,16 +1601,16 @@ func (s *workflowSuite) TestUpdate() {
 				finishTest: true,
 			},
 		},
-		&schedulepb.Schedule{
-			Spec: &schedulepb.ScheduleSpec{
-				Interval: []*schedulepb.IntervalSpec{{
+		schedulepb.Schedule_builder{
+			Spec: schedulepb.ScheduleSpec_builder{
+				Interval: []*schedulepb.IntervalSpec{schedulepb.IntervalSpec_builder{
 					Interval: durationpb.New(3 * time.Minute),
-				}},
-			},
-			Policies: &schedulepb.SchedulePolicies{
+				}.Build()},
+			}.Build(),
+			Policies: schedulepb.SchedulePolicies_builder{
 				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP,
-			},
-		},
+			}.Build(),
+		}.Build(),
 	)
 }
 
@@ -1649,16 +1640,16 @@ func (s *workflowSuite) TestUpdateNotRetroactive() {
 			{
 				at: time.Date(2022, 6, 1, 1, 7, 10, 0, time.UTC),
 				f: func() {
-					s.env.SignalWorkflow(SignalNameUpdate, &schedulespb.FullUpdateRequest{
-						Schedule: &schedulepb.Schedule{
-							Spec: &schedulepb.ScheduleSpec{
-								Interval: []*schedulepb.IntervalSpec{{
+					s.env.SignalWorkflow(SignalNameUpdate, schedulespb.FullUpdateRequest_builder{
+						Schedule: schedulepb.Schedule_builder{
+							Spec: schedulepb.ScheduleSpec_builder{
+								Interval: []*schedulepb.IntervalSpec{schedulepb.IntervalSpec_builder{
 									Interval: durationpb.New(20 * time.Second),
-								}},
-							},
+								}.Build()},
+							}.Build(),
 							Action: s.defaultAction("newid"),
-						},
-					})
+						}.Build(),
+					}.Build())
 				},
 			},
 			// After the update above modifies the schedule, we should discard any newly
@@ -1667,8 +1658,8 @@ func (s *workflowSuite) TestUpdateNotRetroactive() {
 				at: time.Date(2022, 6, 1, 1, 7, 12, 0, time.UTC),
 				f: func() {
 					desc := s.describe()
-					times := desc.Info.FutureActionTimes
-					s.True(times[0].AsTime().After(desc.Info.UpdateTime.AsTime()), "getFutureActionTimes returned an action preceding the update time after a schedule change")
+					times := desc.GetInfo().GetFutureActionTimes()
+					s.True(times[0].AsTime().After(desc.GetInfo().GetUpdateTime().AsTime()), "getFutureActionTimes returned an action preceding the update time after a schedule change")
 				},
 			},
 			{
@@ -1676,25 +1667,25 @@ func (s *workflowSuite) TestUpdateNotRetroactive() {
 				finishTest: true,
 			},
 		},
-		&schedulepb.Schedule{
-			Spec: &schedulepb.ScheduleSpec{
-				Interval: []*schedulepb.IntervalSpec{{
+		schedulepb.Schedule_builder{
+			Spec: schedulepb.ScheduleSpec_builder{
+				Interval: []*schedulepb.IntervalSpec{schedulepb.IntervalSpec_builder{
 					Interval: durationpb.New(1 * time.Hour),
-				}},
-			},
-		},
+				}.Build()},
+			}.Build(),
+		}.Build(),
 	)
 }
 
 // Tests that an update between a nominal time and jittered time for a start, that doesn't
 // modify that start, will still start it.
 func (s *workflowSuite) TestUpdateBetweenNominalAndJitter() {
-	spec := &schedulepb.ScheduleSpec{
-		Interval: []*schedulepb.IntervalSpec{{
+	spec := schedulepb.ScheduleSpec_builder{
+		Interval: []*schedulepb.IntervalSpec{schedulepb.IntervalSpec_builder{
 			Interval: durationpb.New(1 * time.Hour),
-		}},
+		}.Build()},
 		Jitter: durationpb.New(1 * time.Hour),
-	}
+	}.Build()
 	s.runAcrossContinue(
 		[]workflowRun{
 			{
@@ -1727,12 +1718,12 @@ func (s *workflowSuite) TestUpdateBetweenNominalAndJitter() {
 				// update after nominal time 03:00:00 but before jittered time 03:37:29
 				at: time.Date(2022, 6, 1, 3, 22, 10, 0, time.UTC),
 				f: func() {
-					s.env.SignalWorkflow(SignalNameUpdate, &schedulespb.FullUpdateRequest{
-						Schedule: &schedulepb.Schedule{
+					s.env.SignalWorkflow(SignalNameUpdate, schedulespb.FullUpdateRequest_builder{
+						Schedule: schedulepb.Schedule_builder{
 							Spec:   spec,
 							Action: s.defaultAction("newid"),
-						},
-					})
+						}.Build(),
+					}.Build())
 				},
 			},
 			{
@@ -1740,9 +1731,9 @@ func (s *workflowSuite) TestUpdateBetweenNominalAndJitter() {
 				finishTest: true,
 			},
 		},
-		&schedulepb.Schedule{
+		schedulepb.Schedule_builder{
 			Spec: spec,
-		},
+		}.Build(),
 	)
 }
 
@@ -1788,14 +1779,14 @@ func (s *workflowSuite) TestSignalBetweenNominalAndJittered() {
 				finishTest: true,
 			},
 		},
-		&schedulepb.Schedule{
-			Spec: &schedulepb.ScheduleSpec{
-				Interval: []*schedulepb.IntervalSpec{{
+		schedulepb.Schedule_builder{
+			Spec: schedulepb.ScheduleSpec_builder{
+				Interval: []*schedulepb.IntervalSpec{schedulepb.IntervalSpec_builder{
 					Interval: durationpb.New(1 * time.Hour),
-				}},
+				}.Build()},
 				Jitter: durationpb.New(1 * time.Hour),
-			},
-		},
+			}.Build(),
+		}.Build(),
 	)
 }
 
@@ -1833,13 +1824,13 @@ func (s *workflowSuite) TestPauseUnpauseBetweenNominalAndJittered() {
 			{
 				at: time.Date(2022, 6, 1, 3, 20, 0, 0, time.UTC),
 				f: func() {
-					s.env.SignalWorkflow(SignalNamePatch, &schedulepb.SchedulePatch{Pause: "paused"})
+					s.env.SignalWorkflow(SignalNamePatch, schedulepb.SchedulePatch_builder{Pause: "paused"}.Build())
 				},
 			},
 			{
 				at: time.Date(2022, 6, 1, 3, 30, 0, 0, time.UTC),
 				f: func() {
-					s.env.SignalWorkflow(SignalNamePatch, &schedulepb.SchedulePatch{Unpause: "go ahead"})
+					s.env.SignalWorkflow(SignalNamePatch, schedulepb.SchedulePatch_builder{Unpause: "go ahead"}.Build())
 				},
 			},
 			{
@@ -1847,14 +1838,14 @@ func (s *workflowSuite) TestPauseUnpauseBetweenNominalAndJittered() {
 				finishTest: true,
 			},
 		},
-		&schedulepb.Schedule{
-			Spec: &schedulepb.ScheduleSpec{
-				Interval: []*schedulepb.IntervalSpec{{
+		schedulepb.Schedule_builder{
+			Spec: schedulepb.ScheduleSpec_builder{
+				Interval: []*schedulepb.IntervalSpec{schedulepb.IntervalSpec_builder{
 					Interval: durationpb.New(1 * time.Hour),
-				}},
+				}.Build()},
 				Jitter: durationpb.New(1 * time.Hour),
-			},
-		},
+			}.Build(),
+		}.Build(),
 	)
 }
 
@@ -1864,40 +1855,40 @@ func (s *workflowSuite) TestLimitedActions() {
 	// limited to 2
 	s.expectStart(func(req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
 		s.True(time.Date(2022, 6, 1, 0, 3, 0, 0, time.UTC).Equal(s.now()))
-		s.Equal("myid-2022-06-01T00:03:00Z", req.Request.WorkflowId)
+		s.Equal("myid-2022-06-01T00:03:00Z", req.GetRequest().GetWorkflowId())
 		return nil, nil
 	})
 	s.expectWatch(func(req *schedulespb.WatchWorkflowRequest) (*schedulespb.WatchWorkflowResponse, error) {
 		s.True(time.Date(2022, 6, 1, 0, 6, 0, 0, time.UTC).Equal(s.now()))
-		s.Equal("myid-2022-06-01T00:03:00Z", req.Execution.WorkflowId)
-		return &schedulespb.WatchWorkflowResponse{Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED}, nil
+		s.Equal("myid-2022-06-01T00:03:00Z", req.GetExecution().GetWorkflowId())
+		return schedulespb.WatchWorkflowResponse_builder{Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED}.Build(), nil
 	})
 	s.expectStart(func(req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
 		s.True(time.Date(2022, 6, 1, 0, 6, 0, 0, time.UTC).Equal(s.now()))
-		s.Equal("myid-2022-06-01T00:06:00Z", req.Request.WorkflowId)
+		s.Equal("myid-2022-06-01T00:06:00Z", req.GetRequest().GetWorkflowId())
 		return nil, nil
 	})
 	// does not watch again at :09, but does at :10
 	s.expectWatch(func(req *schedulespb.WatchWorkflowRequest) (*schedulespb.WatchWorkflowResponse, error) {
 		s.True(time.Date(2022, 6, 1, 0, 10, 0, 0, time.UTC).Equal(s.now()))
-		s.Equal("myid-2022-06-01T00:06:00Z", req.Execution.WorkflowId)
-		return &schedulespb.WatchWorkflowResponse{Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED}, nil
+		s.Equal("myid-2022-06-01T00:06:00Z", req.GetExecution().GetWorkflowId())
+		return schedulespb.WatchWorkflowResponse_builder{Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED}.Build(), nil
 	})
 
 	s.env.RegisterDelayedCallback(func() {
 		desc := s.describe()
-		s.Equal(int64(2), desc.Schedule.State.RemainingActions)
-		s.Equal(2, len(desc.Info.FutureActionTimes))
+		s.Equal(int64(2), desc.GetSchedule().GetState().GetRemainingActions())
+		s.Equal(2, len(desc.GetInfo().GetFutureActionTimes()))
 	}, 1*time.Minute)
 	s.env.RegisterDelayedCallback(func() {
 		desc := s.describe()
-		s.Equal(int64(1), desc.Schedule.State.RemainingActions)
-		s.Equal(1, len(desc.Info.FutureActionTimes))
+		s.Equal(int64(1), desc.GetSchedule().GetState().GetRemainingActions())
+		s.Equal(1, len(desc.GetInfo().GetFutureActionTimes()))
 	}, 5*time.Minute)
 	s.env.RegisterDelayedCallback(func() {
 		desc := s.describe()
-		s.Equal(int64(0), desc.Schedule.State.RemainingActions)
-		s.Equal(0, len(desc.Info.FutureActionTimes))
+		s.Equal(int64(0), desc.GetSchedule().GetState().GetRemainingActions())
+		s.Equal(0, len(desc.GetInfo().GetFutureActionTimes()))
 		s.Equal(1, len(s.runningWorkflows()))
 	}, 7*time.Minute)
 	s.env.RegisterDelayedCallback(func() {
@@ -1909,20 +1900,20 @@ func (s *workflowSuite) TestLimitedActions() {
 		s.Equal(0, len(s.runningWorkflows()))
 	}, 10*time.Minute+1*time.Second)
 
-	s.run(&schedulepb.Schedule{
-		Spec: &schedulepb.ScheduleSpec{
-			Interval: []*schedulepb.IntervalSpec{{
+	s.run(schedulepb.Schedule_builder{
+		Spec: schedulepb.ScheduleSpec_builder{
+			Interval: []*schedulepb.IntervalSpec{schedulepb.IntervalSpec_builder{
 				Interval: durationpb.New(3 * time.Minute),
-			}},
-		},
-		State: &schedulepb.ScheduleState{
+			}.Build()},
+		}.Build(),
+		State: schedulepb.ScheduleState_builder{
 			LimitedActions:   true,
 			RemainingActions: 2,
-		},
-		Policies: &schedulepb.SchedulePolicies{
+		}.Build(),
+		Policies: schedulepb.SchedulePolicies_builder{
 			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP,
-		},
-	}, 4)
+		}.Build(),
+	}.Build(), 4)
 	s.True(s.env.IsWorkflowCompleted())
 	// doesn't end properly since it sleeps forever after pausing
 }
@@ -1971,13 +1962,13 @@ func (s *workflowSuite) TestLotsOfIterations() {
 		delayedCallbacks[i] = delayedCallback{
 			at: callbackTime,
 			f: func() {
-				s.env.SignalWorkflow(SignalNamePatch, &schedulepb.SchedulePatch{
-					BackfillRequest: []*schedulepb.BackfillRequest{{
+				s.env.SignalWorkflow(SignalNamePatch, schedulepb.SchedulePatch_builder{
+					BackfillRequest: []*schedulepb.BackfillRequest{schedulepb.BackfillRequest_builder{
 						StartTime:     timestamppb.New(callBackRangeStartTime),
 						EndTime:       timestamppb.New(callBackRangeStartTime.Add(time.Duration(maxRuns) * time.Hour)),
 						OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
-					}},
-				})
+					}.Build()},
+				}.Build())
 			},
 		}
 	}
@@ -1990,14 +1981,14 @@ func (s *workflowSuite) TestLotsOfIterations() {
 	s.runAcrossContinue(
 		runs,
 		delayedCallbacks,
-		&schedulepb.Schedule{
-			Spec: &schedulepb.ScheduleSpec{
+		schedulepb.Schedule_builder{
+			Spec: schedulepb.ScheduleSpec_builder{
 				Calendar: []*schedulepb.CalendarSpec{
-					{Minute: "27", Hour: "0/2"},
-					{Minute: "28", Hour: "1/2"},
+					schedulepb.CalendarSpec_builder{Minute: "27", Hour: "0/2"}.Build(),
+					schedulepb.CalendarSpec_builder{Minute: "28", Hour: "1/2"}.Build(),
 				},
-			},
-		},
+			}.Build(),
+		}.Build(),
 	)
 }
 
@@ -2005,43 +1996,43 @@ func (s *workflowSuite) TestExitScheduleWorkflowWhenNoActions() {
 	scheduleId := "myschedule"
 	s.expectStart(func(req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
 		s.True(time.Date(2022, 6, 1, 0, 15, 0, 0, time.UTC).Equal(s.now()))
-		s.Equal("myid-2022-06-01T00:15:00Z", req.Request.WorkflowId)
+		s.Equal("myid-2022-06-01T00:15:00Z", req.GetRequest().GetWorkflowId())
 		return nil, nil
 	})
 	s.expectWatch(func(req *schedulespb.WatchWorkflowRequest) (*schedulespb.WatchWorkflowResponse, error) {
 		s.True(time.Date(2022, 6, 1, 0, 30, 0, 0, time.UTC).Equal(s.now()))
-		s.Equal("myid-2022-06-01T00:15:00Z", req.Execution.WorkflowId)
-		s.False(req.LongPoll)
-		return &schedulespb.WatchWorkflowResponse{Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED}, nil
+		s.Equal("myid-2022-06-01T00:15:00Z", req.GetExecution().GetWorkflowId())
+		s.False(req.GetLongPoll())
+		return schedulespb.WatchWorkflowResponse_builder{Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED}.Build(), nil
 	})
 	s.expectStart(func(req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
 		s.True(time.Date(2022, 6, 1, 0, 30, 0, 0, time.UTC).Equal(s.now()))
-		s.Equal("myid-2022-06-01T00:30:00Z", req.Request.WorkflowId)
+		s.Equal("myid-2022-06-01T00:30:00Z", req.GetRequest().GetWorkflowId())
 		return nil, nil
 	})
 
 	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 5
 	s.env.SetStartTime(baseStartTime)
-	s.env.ExecuteWorkflow(SchedulerWorkflow, &schedulespb.StartScheduleArgs{
-		Schedule: &schedulepb.Schedule{
-			Spec: &schedulepb.ScheduleSpec{
-				Interval: []*schedulepb.IntervalSpec{{
+	s.env.ExecuteWorkflow(SchedulerWorkflow, schedulespb.StartScheduleArgs_builder{
+		Schedule: schedulepb.Schedule_builder{
+			Spec: schedulepb.ScheduleSpec_builder{
+				Interval: []*schedulepb.IntervalSpec{schedulepb.IntervalSpec_builder{
 					Interval: durationpb.New(15 * time.Minute),
-				}},
-			},
-			State: &schedulepb.ScheduleState{
+				}.Build()},
+			}.Build(),
+			State: schedulepb.ScheduleState_builder{
 				LimitedActions:   true,
 				RemainingActions: 2,
-			},
+			}.Build(),
 			Action: s.defaultAction("myid"),
-		},
-		State: &schedulespb.InternalState{
+		}.Build(),
+		State: schedulespb.InternalState_builder{
 			Namespace:     "myns",
 			NamespaceId:   "mynsid",
 			ScheduleId:    scheduleId,
 			ConflictToken: InitialConflictToken,
-		},
-	})
+		}.Build(),
+	}.Build())
 	s.True(s.env.IsWorkflowCompleted())
 	s.False(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
 	s.True(s.env.Now().Sub(time.Date(2022, 6, 1, 0, 30, 0, 0, time.UTC)) == CurrentTweakablePolicies.RetentionTime)
@@ -2051,33 +2042,33 @@ func (s *workflowSuite) TestExitScheduleWorkflowWhenNoNextTime() {
 	scheduleId := "myschedule"
 	s.expectStart(func(req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
 		s.True(time.Date(2022, 6, 1, 1, 0, 0, 0, time.UTC).Equal(s.now()))
-		s.Equal("myid-2022-06-01T01:00:00Z", req.Request.WorkflowId)
+		s.Equal("myid-2022-06-01T01:00:00Z", req.GetRequest().GetWorkflowId())
 		return nil, nil
 	})
 
 	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 3
 	s.env.SetStartTime(baseStartTime)
-	s.env.ExecuteWorkflow(SchedulerWorkflow, &schedulespb.StartScheduleArgs{
-		Schedule: &schedulepb.Schedule{
-			Spec: &schedulepb.ScheduleSpec{
-				Calendar: []*schedulepb.CalendarSpec{{
+	s.env.ExecuteWorkflow(SchedulerWorkflow, schedulespb.StartScheduleArgs_builder{
+		Schedule: schedulepb.Schedule_builder{
+			Spec: schedulepb.ScheduleSpec_builder{
+				Calendar: []*schedulepb.CalendarSpec{schedulepb.CalendarSpec_builder{
 					Year:       "2022",
 					Month:      "June",
 					DayOfMonth: "1",
 					Hour:       "1",
 					Minute:     "0",
 					Second:     "0",
-				}},
-			},
+				}.Build()},
+			}.Build(),
 			Action: s.defaultAction("myid"),
-		},
-		State: &schedulespb.InternalState{
+		}.Build(),
+		State: schedulespb.InternalState_builder{
 			Namespace:     "myns",
 			NamespaceId:   "mynsid",
 			ScheduleId:    scheduleId,
 			ConflictToken: InitialConflictToken,
-		},
-	})
+		}.Build(),
+	}.Build())
 	s.True(s.env.IsWorkflowCompleted())
 	s.False(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
 	s.True(s.env.Now().Sub(time.Date(2022, 6, 1, 1, 0, 0, 0, time.UTC)) == CurrentTweakablePolicies.RetentionTime)
@@ -2088,17 +2079,17 @@ func (s *workflowSuite) TestExitScheduleWorkflowWhenEmpty() {
 
 	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 3
 	s.env.SetStartTime(baseStartTime)
-	s.env.ExecuteWorkflow(SchedulerWorkflow, &schedulespb.StartScheduleArgs{
-		Schedule: &schedulepb.Schedule{
+	s.env.ExecuteWorkflow(SchedulerWorkflow, schedulespb.StartScheduleArgs_builder{
+		Schedule: schedulepb.Schedule_builder{
 			Action: s.defaultAction("myid"),
-		},
-		State: &schedulespb.InternalState{
+		}.Build(),
+		State: schedulespb.InternalState_builder{
 			Namespace:     "myns",
 			NamespaceId:   "mynsid",
 			ScheduleId:    scheduleId,
 			ConflictToken: InitialConflictToken,
-		},
-	})
+		}.Build(),
+	}.Build())
 
 	s.True(s.env.IsWorkflowCompleted())
 	s.False(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
@@ -2113,7 +2104,7 @@ func (s *workflowSuite) TestCANByIterations() {
 	for i := 1; i < iters; i++ {
 		t := baseStartTime.Add(5 * time.Minute * time.Duration(i))
 		s.expectStart(func(req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
-			s.Equal("myid-"+t.Format(time.RFC3339), req.Request.WorkflowId)
+			s.Equal("myid-"+t.Format(time.RFC3339), req.GetRequest().GetWorkflowId())
 			return nil, nil
 		})
 	}
@@ -2128,16 +2119,16 @@ func (s *workflowSuite) TestCANByIterations() {
 		s.env.SetContinueAsNewSuggested(true)
 	}, 5*time.Minute*iters/2-time.Second)
 
-	s.run(&schedulepb.Schedule{
-		Spec: &schedulepb.ScheduleSpec{
-			Interval: []*schedulepb.IntervalSpec{{
+	s.run(schedulepb.Schedule_builder{
+		Spec: schedulepb.ScheduleSpec_builder{
+			Interval: []*schedulepb.IntervalSpec{schedulepb.IntervalSpec_builder{
 				Interval: durationpb.New(5 * time.Minute),
-			}},
-		},
-		Policies: &schedulepb.SchedulePolicies{
+			}.Build()},
+		}.Build(),
+		Policies: schedulepb.SchedulePolicies_builder{
 			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
-		},
-	}, iters)
+		}.Build(),
+	}.Build(), iters)
 	s.True(s.env.IsWorkflowCompleted())
 	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
 }
@@ -2150,13 +2141,13 @@ func (s *workflowSuite) TestCANBySuggested() {
 	for i := 1; i < iters; i++ {
 		t := baseStartTime.Add(5 * time.Minute * time.Duration(i))
 		s.expectStart(func(req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
-			s.Equal("myid-"+t.Format(time.RFC3339), req.Request.WorkflowId)
+			s.Equal("myid-"+t.Format(time.RFC3339), req.GetRequest().GetWorkflowId())
 			return nil, nil
 		})
 	}
 	// this one catches and fails if we go over
 	s.expectStart(func(req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
-		s.Fail("too many starts", req.Request.WorkflowId)
+		s.Fail("too many starts", req.GetRequest().GetWorkflowId())
 		return nil, nil
 	}).Times(0).Maybe()
 
@@ -2164,16 +2155,16 @@ func (s *workflowSuite) TestCANBySuggested() {
 		s.env.SetContinueAsNewSuggested(true)
 	}, 5*time.Minute*iters-time.Second)
 
-	s.run(&schedulepb.Schedule{
-		Spec: &schedulepb.ScheduleSpec{
-			Interval: []*schedulepb.IntervalSpec{{
+	s.run(schedulepb.Schedule_builder{
+		Spec: schedulepb.ScheduleSpec_builder{
+			Interval: []*schedulepb.IntervalSpec{schedulepb.IntervalSpec_builder{
 				Interval: durationpb.New(5 * time.Minute),
-			}},
-		},
-		Policies: &schedulepb.SchedulePolicies{
+			}.Build()},
+		}.Build(),
+		Policies: schedulepb.SchedulePolicies_builder{
 			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
-		},
-	}, 0) // 0 means use suggested
+		}.Build(),
+	}.Build(), 0) // 0 means use suggested
 	s.True(s.env.IsWorkflowCompleted())
 	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
 }
@@ -2192,7 +2183,7 @@ func (s *workflowSuite) TestCANBySuggestedWithSignals() {
 	for _, d := range runs {
 		t := baseStartTime.Add(d)
 		s.expectStart(func(req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
-			s.Equal("myid-"+t.Format(time.RFC3339), req.Request.WorkflowId)
+			s.Equal("myid-"+t.Format(time.RFC3339), req.GetRequest().GetWorkflowId())
 			return nil, nil
 		})
 		if d > suggestCANAt {
@@ -2201,7 +2192,7 @@ func (s *workflowSuite) TestCANBySuggestedWithSignals() {
 		}
 	}
 	s.expectStart(func(req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
-		s.Fail("too many starts", req.Request.WorkflowId)
+		s.Fail("too many starts", req.GetRequest().GetWorkflowId())
 		return nil, nil
 	}).Times(0).Maybe()
 
@@ -2211,25 +2202,25 @@ func (s *workflowSuite) TestCANBySuggestedWithSignals() {
 
 	for _, d := range runs {
 		s.env.RegisterDelayedCallback(func() {
-			s.env.SignalWorkflow(SignalNamePatch, &schedulepb.SchedulePatch{
+			s.env.SignalWorkflow(SignalNamePatch, schedulepb.SchedulePatch_builder{
 				TriggerImmediately: &schedulepb.TriggerImmediatelyRequest{},
-			})
+			}.Build())
 		}, d)
 	}
 
-	s.run(&schedulepb.Schedule{
-		Spec: &schedulepb.ScheduleSpec{
-			Interval: []*schedulepb.IntervalSpec{{
+	s.run(schedulepb.Schedule_builder{
+		Spec: schedulepb.ScheduleSpec_builder{
+			Interval: []*schedulepb.IntervalSpec{schedulepb.IntervalSpec_builder{
 				Interval: durationpb.New(100 * time.Minute),
-			}},
-		},
-		Policies: &schedulepb.SchedulePolicies{
+			}.Build()},
+		}.Build(),
+		Policies: schedulepb.SchedulePolicies_builder{
 			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
-		},
-		State: &schedulepb.ScheduleState{
+		}.Build(),
+		State: schedulepb.ScheduleState_builder{
 			Paused: true,
-		},
-	}, 0) // 0 means use suggested
+		}.Build(),
+	}.Build(), 0) // 0 means use suggested
 	s.True(s.env.IsWorkflowCompleted())
 	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
 }
@@ -2242,13 +2233,13 @@ func (s *workflowSuite) TestCANBySignal() {
 	for i := 1; i < iters; i++ {
 		t := baseStartTime.Add(5 * time.Minute * time.Duration(i))
 		s.expectStart(func(req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
-			s.Equal("myid-"+t.Format(time.RFC3339), req.Request.WorkflowId)
+			s.Equal("myid-"+t.Format(time.RFC3339), req.GetRequest().GetWorkflowId())
 			return nil, nil
 		})
 	}
 	// this one catches and fails if we go over
 	s.expectStart(func(req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
-		s.Fail("too many starts", req.Request.WorkflowId)
+		s.Fail("too many starts", req.GetRequest().GetWorkflowId())
 		return nil, nil
 	}).Times(0).Maybe()
 
@@ -2256,16 +2247,16 @@ func (s *workflowSuite) TestCANBySignal() {
 		s.env.SignalWorkflow(SignalNameForceCAN, nil)
 	}, 5*time.Minute*iters-time.Second)
 
-	s.run(&schedulepb.Schedule{
-		Spec: &schedulepb.ScheduleSpec{
-			Interval: []*schedulepb.IntervalSpec{{
+	s.run(schedulepb.Schedule_builder{
+		Spec: schedulepb.ScheduleSpec_builder{
+			Interval: []*schedulepb.IntervalSpec{schedulepb.IntervalSpec_builder{
 				Interval: durationpb.New(5 * time.Minute),
-			}},
-		},
-		Policies: &schedulepb.SchedulePolicies{
+			}.Build()},
+		}.Build(),
+		Policies: schedulepb.SchedulePolicies_builder{
 			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
-		},
-	}, 0) // 0 means use suggested
+		}.Build(),
+	}.Build(), 0) // 0 means use suggested
 	s.True(s.env.IsWorkflowCompleted())
 	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
 }

@@ -100,23 +100,23 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 	priority *commonpb.Priority,
 	transactionPolicy historyi.TransactionPolicy,
 ) error {
-	resp, err := t.matchingRawClient.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
+	resp, err := t.matchingRawClient.AddActivityTask(ctx, matchingservice.AddActivityTaskRequest_builder{
 		NamespaceId: task.NamespaceID,
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: task.WorkflowID,
 			RunId:      task.RunID,
-		},
-		TaskQueue: &taskqueuepb.TaskQueue{
+		}.Build(),
+		TaskQueue: taskqueuepb.TaskQueue_builder{
 			Name: task.TaskQueue,
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-		},
+		}.Build(),
 		ScheduledEventId:       task.ScheduledEventID,
 		ScheduleToStartTimeout: durationpb.New(activityScheduleToStartTimeout),
 		Clock:                  vclock.NewVectorClock(t.shardContext.GetClusterMetadata().GetClusterID(), t.shardContext.GetShardID(), task.TaskID),
 		VersionDirective:       directive,
 		Stamp:                  task.Stamp,
 		Priority:               priority,
-	})
+	}.Build())
 	if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
 		// NotFound error is not expected for AddTasks calls
 		// but will be ignored by task error handling logic, so log it here
@@ -135,7 +135,7 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 	return updateIndependentActivityBuildId(
 		ctx,
 		task,
-		resp.AssignedBuildId,
+		resp.GetAssignedBuildId(),
 		t.shardContext,
 		transactionPolicy,
 		t.cache,
@@ -157,12 +157,12 @@ func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
 	if workflowTaskScheduleToStartTimeout > 0 {
 		sst = durationpb.New(workflowTaskScheduleToStartTimeout)
 	}
-	resp, err := t.matchingRawClient.AddWorkflowTask(ctx, &matchingservice.AddWorkflowTaskRequest{
+	resp, err := t.matchingRawClient.AddWorkflowTask(ctx, matchingservice.AddWorkflowTaskRequest_builder{
 		NamespaceId: task.NamespaceID,
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: task.WorkflowID,
 			RunId:      task.RunID,
-		},
+		}.Build(),
 		TaskQueue:              taskqueue,
 		ScheduledEventId:       task.ScheduledEventID,
 		ScheduleToStartTimeout: sst,
@@ -170,7 +170,7 @@ func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
 		VersionDirective:       directive,
 		Priority:               priority,
 		Stamp:                  task.Stamp,
-	})
+	}.Build())
 	if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
 		// NotFound error is not expected for AddTasks calls
 		// but will be ignored by task error handling logic, so log it here
@@ -189,7 +189,7 @@ func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
 	return initializeWorkflowAssignedBuildId(
 		ctx,
 		task,
-		resp.AssignedBuildId,
+		resp.GetAssignedBuildId(),
 		t.shardContext,
 		transactionPolicy,
 		t.cache,
@@ -219,16 +219,16 @@ func (t *transferQueueTaskExecutorBase) deleteExecution(
 	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
 
-	workflowExecution := commonpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution_builder{
 		WorkflowId: task.GetWorkflowID(),
 		RunId:      task.GetRunID(),
-	}
+	}.Build()
 
 	weCtx, release, err := t.cache.GetOrCreateChasmExecution(
 		ctx,
 		t.shardContext,
 		namespace.ID(task.GetNamespaceID()),
-		&workflowExecution,
+		workflowExecution,
 		archetypeID,
 		locks.PriorityLow,
 	)
@@ -281,7 +281,7 @@ func (t *transferQueueTaskExecutorBase) deleteExecution(
 	return t.workflowDeleteManager.DeleteWorkflowExecution(
 		ctx,
 		namespace.ID(task.GetNamespaceID()),
-		&workflowExecution,
+		workflowExecution,
 		weCtx,
 		mutableState,
 		stage,
@@ -289,7 +289,7 @@ func (t *transferQueueTaskExecutorBase) deleteExecution(
 }
 
 func (t *transferQueueTaskExecutorBase) isCloseExecutionTaskPending(ms historyi.MutableState, weCtx historyi.WorkflowContext) bool {
-	closeTransferTaskId := ms.GetExecutionInfo().CloseTransferTaskId
+	closeTransferTaskId := ms.GetExecutionInfo().GetCloseTransferTaskId()
 	// taskID == 0 if workflow closed before this field was added (v1.17).
 	if closeTransferTaskId == 0 {
 		return false

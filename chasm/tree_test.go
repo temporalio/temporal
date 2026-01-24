@@ -88,36 +88,34 @@ func (s *nodeSuite) initAssertions() {
 
 func (s *nodeSuite) TestNewTree() {
 	persistenceNodes := map[string]*persistencespb.ChasmNode{
-		"": {
-			Metadata: &persistencespb.ChasmNodeMetadata{
-				InitialVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
-				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
-					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
-						TypeId: testComponentTypeID,
-					},
-				},
-			},
-		},
-		"child1": {
-			Metadata: &persistencespb.ChasmNodeMetadata{
-				InitialVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 2},
-			},
-		},
-		"child2": {
-			Metadata: &persistencespb.ChasmNodeMetadata{
-				InitialVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 3},
-			},
-		},
-		"child1/grandchild1": {
-			Metadata: &persistencespb.ChasmNodeMetadata{
-				InitialVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 4},
-			},
-		},
-		"child2/grandchild1": {
-			Metadata: &persistencespb.ChasmNodeMetadata{
-				InitialVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 5},
-			},
-		},
+		"": persistencespb.ChasmNode_builder{
+			Metadata: persistencespb.ChasmNodeMetadata_builder{
+				InitialVersionedTransition: persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+				ComponentAttributes: persistencespb.ChasmComponentAttributes_builder{
+					TypeId: testComponentTypeID,
+				}.Build(),
+			}.Build(),
+		}.Build(),
+		"child1": persistencespb.ChasmNode_builder{
+			Metadata: persistencespb.ChasmNodeMetadata_builder{
+				InitialVersionedTransition: persistencespb.VersionedTransition_builder{TransitionCount: 2}.Build(),
+			}.Build(),
+		}.Build(),
+		"child2": persistencespb.ChasmNode_builder{
+			Metadata: persistencespb.ChasmNodeMetadata_builder{
+				InitialVersionedTransition: persistencespb.VersionedTransition_builder{TransitionCount: 3}.Build(),
+			}.Build(),
+		}.Build(),
+		"child1/grandchild1": persistencespb.ChasmNode_builder{
+			Metadata: persistencespb.ChasmNodeMetadata_builder{
+				InitialVersionedTransition: persistencespb.VersionedTransition_builder{TransitionCount: 4}.Build(),
+			}.Build(),
+		}.Build(),
+		"child2/grandchild1": persistencespb.ChasmNode_builder{
+			Metadata: persistencespb.ChasmNodeMetadata_builder{
+				InitialVersionedTransition: persistencespb.VersionedTransition_builder{TransitionCount: 5}.Build(),
+			}.Build(),
+		}.Build(),
 	}
 	expectedPreorderNodes := []*persistencespb.ChasmNode{
 		persistenceNodes[""],
@@ -662,7 +660,7 @@ func (s *nodeSuite) TestDeserializeNode_ComponentAttributes() {
 	s.IsType(&TestComponent{}, node.value)
 	tc := node.value.(*TestComponent)
 	s.Equal(tc.SubComponent1.Internal.node, node.children["SubComponent1"])
-	s.Equal(tc.ComponentData.CreateRequestId, "component-data")
+	s.Equal(tc.ComponentData.GetCreateRequestId(), "component-data")
 	s.Equal(valueStateSynced, node.valueState)
 
 	s.Nil(tc.SubComponent1.Internal.value())
@@ -671,7 +669,7 @@ func (s *nodeSuite) TestDeserializeNode_ComponentAttributes() {
 	s.NoError(err)
 	s.NotNil(tc.SubComponent1.Internal.node.value)
 	s.IsType(&TestSubComponent1{}, tc.SubComponent1.Internal.node.value)
-	s.Equal("sub-component1-data", tc.SubComponent1.Internal.node.value.(*TestSubComponent1).SubComponent1Data.CreateRequestId)
+	s.Equal("sub-component1-data", tc.SubComponent1.Internal.node.value.(*TestSubComponent1).SubComponent1Data.GetCreateRequestId())
 	s.Equal(valueStateSynced, tc.SubComponent1.Internal.node.valueState)
 }
 
@@ -697,7 +695,7 @@ func (s *nodeSuite) TestDeserializeNode_DataAttributes() {
 	s.NotNil(tc.SubData1.Internal.node.value)
 	s.Equal(valueStateSynced, tc.SubData1.Internal.node.valueState)
 	s.IsType(&protoMessageType{}, tc.SubData1.Internal.node.value)
-	s.Equal("sub-data1", tc.SubData1.Internal.node.value.(*protoMessageType).CreateRequestId)
+	s.Equal("sub-data1", tc.SubData1.Internal.node.value.(*protoMessageType).GetCreateRequestId())
 }
 
 func (s *nodeSuite) TestFieldInterface() {
@@ -750,41 +748,39 @@ func (s *nodeSuite) TestGenerateSerializedNodes() {
 
 func (s *nodeSuite) TestNodeSnapshot() {
 	persistenceNodes := map[string]*persistencespb.ChasmNode{
-		"": {
-			Metadata: &persistencespb.ChasmNodeMetadata{
-				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
-				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
-				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
-					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
-						TypeId: testComponentTypeID,
-					},
-				},
-			},
-		},
-		"child1": {
-			Metadata: &persistencespb.ChasmNodeMetadata{
-				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 4},
-				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 4},
-			},
-		},
-		"child2": {
-			Metadata: &persistencespb.ChasmNodeMetadata{
-				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 3},
-				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 3},
-			},
-		},
-		"child1/grandchild1": {
-			Metadata: &persistencespb.ChasmNodeMetadata{
-				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 2},
-				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 2},
-			},
-		},
-		"child2/grandchild1": {
-			Metadata: &persistencespb.ChasmNodeMetadata{
-				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 5},
-				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 5},
-			},
-		},
+		"": persistencespb.ChasmNode_builder{
+			Metadata: persistencespb.ChasmNodeMetadata_builder{
+				InitialVersionedTransition:    persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+				LastUpdateVersionedTransition: persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+				ComponentAttributes: persistencespb.ChasmComponentAttributes_builder{
+					TypeId: testComponentTypeID,
+				}.Build(),
+			}.Build(),
+		}.Build(),
+		"child1": persistencespb.ChasmNode_builder{
+			Metadata: persistencespb.ChasmNodeMetadata_builder{
+				InitialVersionedTransition:    persistencespb.VersionedTransition_builder{TransitionCount: 4}.Build(),
+				LastUpdateVersionedTransition: persistencespb.VersionedTransition_builder{TransitionCount: 4}.Build(),
+			}.Build(),
+		}.Build(),
+		"child2": persistencespb.ChasmNode_builder{
+			Metadata: persistencespb.ChasmNodeMetadata_builder{
+				InitialVersionedTransition:    persistencespb.VersionedTransition_builder{TransitionCount: 3}.Build(),
+				LastUpdateVersionedTransition: persistencespb.VersionedTransition_builder{TransitionCount: 3}.Build(),
+			}.Build(),
+		}.Build(),
+		"child1/grandchild1": persistencespb.ChasmNode_builder{
+			Metadata: persistencespb.ChasmNodeMetadata_builder{
+				InitialVersionedTransition:    persistencespb.VersionedTransition_builder{TransitionCount: 2}.Build(),
+				LastUpdateVersionedTransition: persistencespb.VersionedTransition_builder{TransitionCount: 2}.Build(),
+			}.Build(),
+		}.Build(),
+		"child2/grandchild1": persistencespb.ChasmNode_builder{
+			Metadata: persistencespb.ChasmNodeMetadata_builder{
+				InitialVersionedTransition:    persistencespb.VersionedTransition_builder{TransitionCount: 5}.Build(),
+				LastUpdateVersionedTransition: persistencespb.VersionedTransition_builder{TransitionCount: 5}.Build(),
+			}.Build(),
+		}.Build(),
 	}
 
 	root, err := s.newTestTree(persistenceNodes)
@@ -802,7 +798,7 @@ func (s *nodeSuite) TestNodeSnapshot() {
 	for _, path := range expectedNodePaths {
 		expectedNodes[path] = persistenceNodes[path]
 	}
-	snapshot = root.Snapshot(&persistencespb.VersionedTransition{TransitionCount: 3})
+	snapshot = root.Snapshot(persistencespb.VersionedTransition_builder{TransitionCount: 3}.Build())
 	s.Equal(expectedNodes, snapshot.Nodes)
 }
 
@@ -815,78 +811,74 @@ func (s *nodeSuite) TestApplyMutation() {
 
 	now := s.timeSource.Now()
 	persistenceNodes := map[string]*persistencespb.ChasmNode{
-		"": {
-			Metadata: &persistencespb.ChasmNodeMetadata{
-				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
-				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
-				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
-					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
-						TypeId: testComponentTypeID,
-						PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
-							{
-								// This task is not updated, so it's deserialized version will
-								// NOT be cleared below as part of the updateNode process.
-								TypeId:                    testPureTaskTypeID,
-								ScheduledTime:             timestamppb.New(now.Add(time.Second)),
-								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
-								VersionedTransitionOffset: 1,
-								PhysicalTaskStatus:        physicalTaskStatusNone,
-								Data: mustEncode(&commonpb.Payload{
-									Data: []byte("root-task-data-1"),
-								}),
-							},
-							{
-								// Task will be deleted, so deserialized version of this task should also be deleted from cache.
-								TypeId:                    testPureTaskTypeID,
-								ScheduledTime:             timestamppb.New(now.Add(time.Second)),
-								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
-								VersionedTransitionOffset: 2,
-								PhysicalTaskStatus:        physicalTaskStatusNone,
-								Data: mustEncode(&commonpb.Payload{
-									Data: []byte("root-task-data-2"),
-								}),
-							},
-						},
+		"": persistencespb.ChasmNode_builder{
+			Metadata: persistencespb.ChasmNodeMetadata_builder{
+				InitialVersionedTransition:    persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+				LastUpdateVersionedTransition: persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+				ComponentAttributes: persistencespb.ChasmComponentAttributes_builder{
+					TypeId: testComponentTypeID,
+					PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
+						persistencespb.ChasmComponentAttributes_Task_builder{
+							// This task is not updated, so it's deserialized version will
+							// NOT be cleared below as part of the updateNode process.
+							TypeId:                    testPureTaskTypeID,
+							ScheduledTime:             timestamppb.New(now.Add(time.Second)),
+							VersionedTransition:       persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+							VersionedTransitionOffset: 1,
+							PhysicalTaskStatus:        physicalTaskStatusNone,
+							Data: mustEncode(commonpb.Payload_builder{
+								Data: []byte("root-task-data-1"),
+							}.Build()),
+						}.Build(),
+						persistencespb.ChasmComponentAttributes_Task_builder{
+							// Task will be deleted, so deserialized version of this task should also be deleted from cache.
+							TypeId:                    testPureTaskTypeID,
+							ScheduledTime:             timestamppb.New(now.Add(time.Second)),
+							VersionedTransition:       persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+							VersionedTransitionOffset: 2,
+							PhysicalTaskStatus:        physicalTaskStatusNone,
+							Data: mustEncode(commonpb.Payload_builder{
+								Data: []byte("root-task-data-2"),
+							}.Build()),
+						}.Build(),
 					},
-				},
-			},
-		},
-		"SubComponent1": {
-			Metadata: &persistencespb.ChasmNodeMetadata{
-				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 2},
-				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 2},
-			},
-		},
-		"SubComponent1/SubComponent11": {
-			Metadata: &persistencespb.ChasmNodeMetadata{
-				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 3},
-				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 3},
-				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
-					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
-						TypeId: testSubComponent11TypeID,
-						PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
-							{
-								// Node is deleted, so deserialized version of this task should be deleted from cache.
-								TypeId:                    testPureTaskTypeID,
-								ScheduledTime:             timestamppb.New(now.Add(time.Minute)),
-								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
-								VersionedTransitionOffset: 3,
-								PhysicalTaskStatus:        physicalTaskStatusNone,
-								Data: mustEncode(&commonpb.Payload{
-									Data: []byte("SubComponent11-task-data"),
-								}),
-							},
-						},
+				}.Build(),
+			}.Build(),
+		}.Build(),
+		"SubComponent1": persistencespb.ChasmNode_builder{
+			Metadata: persistencespb.ChasmNodeMetadata_builder{
+				InitialVersionedTransition:    persistencespb.VersionedTransition_builder{TransitionCount: 2}.Build(),
+				LastUpdateVersionedTransition: persistencespb.VersionedTransition_builder{TransitionCount: 2}.Build(),
+			}.Build(),
+		}.Build(),
+		"SubComponent1/SubComponent11": persistencespb.ChasmNode_builder{
+			Metadata: persistencespb.ChasmNodeMetadata_builder{
+				InitialVersionedTransition:    persistencespb.VersionedTransition_builder{TransitionCount: 3}.Build(),
+				LastUpdateVersionedTransition: persistencespb.VersionedTransition_builder{TransitionCount: 3}.Build(),
+				ComponentAttributes: persistencespb.ChasmComponentAttributes_builder{
+					TypeId: testSubComponent11TypeID,
+					PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
+						persistencespb.ChasmComponentAttributes_Task_builder{
+							// Node is deleted, so deserialized version of this task should be deleted from cache.
+							TypeId:                    testPureTaskTypeID,
+							ScheduledTime:             timestamppb.New(now.Add(time.Minute)),
+							VersionedTransition:       persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+							VersionedTransitionOffset: 3,
+							PhysicalTaskStatus:        physicalTaskStatusNone,
+							Data: mustEncode(commonpb.Payload_builder{
+								Data: []byte("SubComponent11-task-data"),
+							}.Build()),
+						}.Build(),
 					},
-				},
-			},
-		},
-		"SubComponent1/SubComponent11/SubComponent11Data": {
-			Metadata: &persistencespb.ChasmNodeMetadata{
-				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 4},
-				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 4},
-			},
-		},
+				}.Build(),
+			}.Build(),
+		}.Build(),
+		"SubComponent1/SubComponent11/SubComponent11Data": persistencespb.ChasmNode_builder{
+			Metadata: persistencespb.ChasmNodeMetadata_builder{
+				InitialVersionedTransition:    persistencespb.VersionedTransition_builder{TransitionCount: 4}.Build(),
+				LastUpdateVersionedTransition: persistencespb.VersionedTransition_builder{TransitionCount: 4}.Build(),
+			}.Build(),
+		}.Build(),
 	}
 	root, err := s.newTestTree(persistenceNodes)
 	s.NoError(err)
@@ -897,11 +889,11 @@ func (s *nodeSuite) TestApplyMutation() {
 	s.ProtoEqual(&protoMessageType{}, initialMemo)
 
 	// Manually deserialize some tasks to populate the taskValueCache
-	_, err = root.deserializeComponentTask(root.serializedNode.Metadata.GetComponentAttributes().PureTasks[0])
+	_, err = root.deserializeComponentTask(root.serializedNode.GetMetadata().GetComponentAttributes().GetPureTasks()[0])
 	s.NoError(err)
-	_, err = root.deserializeComponentTask(root.serializedNode.Metadata.GetComponentAttributes().PureTasks[1])
+	_, err = root.deserializeComponentTask(root.serializedNode.GetMetadata().GetComponentAttributes().GetPureTasks()[1])
 	s.NoError(err)
-	_, err = root.deserializeComponentTask(root.children["SubComponent1"].children["SubComponent11"].serializedNode.Metadata.GetComponentAttributes().PureTasks[0])
+	_, err = root.deserializeComponentTask(root.children["SubComponent1"].children["SubComponent11"].serializedNode.GetMetadata().GetComponentAttributes().GetPureTasks()[0])
 	s.NoError(err)
 	s.Len(root.taskValueCache, 3)
 
@@ -910,45 +902,43 @@ func (s *nodeSuite) TestApplyMutation() {
 
 	// Prepare mutation: update root and "SubComponent1" node, delete "SubComponent1/SubComponent11", and add "newchild".
 
-	updatedRoot := &persistencespb.ChasmNode{
-		Metadata: &persistencespb.ChasmNodeMetadata{
-			InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 30},
-			LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 30},
-			Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
-				ComponentAttributes: &persistencespb.ChasmComponentAttributes{
-					TypeId: testComponentTypeID,
-					PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
-						{
-							TypeId:                    testPureTaskTypeID,
-							ScheduledTime:             timestamppb.New(now.Add(time.Second)),
-							VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
-							VersionedTransitionOffset: 1,
-							PhysicalTaskStatus:        physicalTaskStatusNone,
-							Data: mustEncode(&commonpb.Payload{
-								Data: []byte("root-task-data-1"),
-							}),
-						},
-					},
+	updatedRoot := persistencespb.ChasmNode_builder{
+		Metadata: persistencespb.ChasmNodeMetadata_builder{
+			InitialVersionedTransition:    persistencespb.VersionedTransition_builder{TransitionCount: 30}.Build(),
+			LastUpdateVersionedTransition: persistencespb.VersionedTransition_builder{TransitionCount: 30}.Build(),
+			ComponentAttributes: persistencespb.ChasmComponentAttributes_builder{
+				TypeId: testComponentTypeID,
+				PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
+					persistencespb.ChasmComponentAttributes_Task_builder{
+						TypeId:                    testPureTaskTypeID,
+						ScheduledTime:             timestamppb.New(now.Add(time.Second)),
+						VersionedTransition:       persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+						VersionedTransitionOffset: 1,
+						PhysicalTaskStatus:        physicalTaskStatusNone,
+						Data: mustEncode(commonpb.Payload_builder{
+							Data: []byte("root-task-data-1"),
+						}.Build()),
+					}.Build(),
 				},
-			},
-		},
+			}.Build(),
+		}.Build(),
 		Data: mustEncode(
 			&protoMessageType{
 				StartTime: timestamppb.New(now),
 			}),
-	}
-	updatedSC1 := &persistencespb.ChasmNode{
-		Metadata: &persistencespb.ChasmNodeMetadata{
-			InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 20},
-			LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 20},
-		},
-	}
-	newSC2 := &persistencespb.ChasmNode{
-		Metadata: &persistencespb.ChasmNodeMetadata{
-			InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 100},
-			LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 100},
-		},
-	}
+	}.Build()
+	updatedSC1 := persistencespb.ChasmNode_builder{
+		Metadata: persistencespb.ChasmNodeMetadata_builder{
+			InitialVersionedTransition:    persistencespb.VersionedTransition_builder{TransitionCount: 20}.Build(),
+			LastUpdateVersionedTransition: persistencespb.VersionedTransition_builder{TransitionCount: 20}.Build(),
+		}.Build(),
+	}.Build()
+	newSC2 := persistencespb.ChasmNode_builder{
+		Metadata: persistencespb.ChasmNodeMetadata_builder{
+			InitialVersionedTransition:    persistencespb.VersionedTransition_builder{TransitionCount: 100}.Build(),
+			LastUpdateVersionedTransition: persistencespb.VersionedTransition_builder{TransitionCount: 100}.Build(),
+		}.Build(),
+	}.Build()
 	mutation := NodesMutation{
 		UpdatedNodes: map[string]*persistencespb.ChasmNode{
 			"":              updatedRoot,
@@ -975,7 +965,7 @@ func (s *nodeSuite) TestApplyMutation() {
 	s.NotNil(root.currentMemo)
 	decodedMemo, ok := root.currentMemo.(*protoMessageType)
 	s.True(ok, "currentMemo should be of type *protoMessageType")
-	s.True(decodedMemo.StartTime.AsTime().Equal(now))
+	s.True(decodedMemo.GetStartTime().AsTime().Equal(now))
 
 	// Validate the "child" node got updated.
 	nodeSC1, ok := root.children["SubComponent1"]
@@ -1011,35 +1001,33 @@ func (s *nodeSuite) TestApplyMutation() {
 
 func (s *nodeSuite) TestApplySnapshot() {
 	persistenceNodes := map[string]*persistencespb.ChasmNode{
-		"": {
-			Metadata: &persistencespb.ChasmNodeMetadata{
-				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
-				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
-				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
-					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
-						TypeId: testComponentTypeID,
-					},
-				},
-			},
-		},
-		"SubComponent1": {
-			Metadata: &persistencespb.ChasmNodeMetadata{
-				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 2},
-				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 2},
-			},
-		},
-		"SubComponent1/SubComponent11": {
-			Metadata: &persistencespb.ChasmNodeMetadata{
-				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 3},
-				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 3},
-			},
-		},
-		"SubComponent1/SubComponent11/SubComponent11Data": {
-			Metadata: &persistencespb.ChasmNodeMetadata{
-				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 4},
-				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 4},
-			},
-		},
+		"": persistencespb.ChasmNode_builder{
+			Metadata: persistencespb.ChasmNodeMetadata_builder{
+				InitialVersionedTransition:    persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+				LastUpdateVersionedTransition: persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+				ComponentAttributes: persistencespb.ChasmComponentAttributes_builder{
+					TypeId: testComponentTypeID,
+				}.Build(),
+			}.Build(),
+		}.Build(),
+		"SubComponent1": persistencespb.ChasmNode_builder{
+			Metadata: persistencespb.ChasmNodeMetadata_builder{
+				InitialVersionedTransition:    persistencespb.VersionedTransition_builder{TransitionCount: 2}.Build(),
+				LastUpdateVersionedTransition: persistencespb.VersionedTransition_builder{TransitionCount: 2}.Build(),
+			}.Build(),
+		}.Build(),
+		"SubComponent1/SubComponent11": persistencespb.ChasmNode_builder{
+			Metadata: persistencespb.ChasmNodeMetadata_builder{
+				InitialVersionedTransition:    persistencespb.VersionedTransition_builder{TransitionCount: 3}.Build(),
+				LastUpdateVersionedTransition: persistencespb.VersionedTransition_builder{TransitionCount: 3}.Build(),
+			}.Build(),
+		}.Build(),
+		"SubComponent1/SubComponent11/SubComponent11Data": persistencespb.ChasmNode_builder{
+			Metadata: persistencespb.ChasmNodeMetadata_builder{
+				InitialVersionedTransition:    persistencespb.VersionedTransition_builder{TransitionCount: 4}.Build(),
+				LastUpdateVersionedTransition: persistencespb.VersionedTransition_builder{TransitionCount: 4}.Build(),
+			}.Build(),
+		}.Build(),
 	}
 	root, err := s.newTestTree(persistenceNodes)
 	s.NoError(err)
@@ -1059,30 +1047,28 @@ func (s *nodeSuite) TestApplySnapshot() {
 	s.NoError(err)
 	incomingSnapshot := NodesSnapshot{
 		Nodes: map[string]*persistencespb.ChasmNode{
-			"": {
-				Metadata: &persistencespb.ChasmNodeMetadata{
-					InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
-					LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 10},
-					Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
-						ComponentAttributes: &persistencespb.ChasmComponentAttributes{
-							TypeId: testComponentTypeID,
-						},
-					},
-				},
+			"": persistencespb.ChasmNode_builder{
+				Metadata: persistencespb.ChasmNodeMetadata_builder{
+					InitialVersionedTransition:    persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+					LastUpdateVersionedTransition: persistencespb.VersionedTransition_builder{TransitionCount: 10}.Build(),
+					ComponentAttributes: persistencespb.ChasmComponentAttributes_builder{
+						TypeId: testComponentTypeID,
+					}.Build(),
+				}.Build(),
 				Data: updatedRootData,
-			},
-			"SubComponent1": {
-				Metadata: &persistencespb.ChasmNodeMetadata{
-					InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 2},
-					LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 20},
-				},
-			},
-			"SubComponent2": {
-				Metadata: &persistencespb.ChasmNodeMetadata{
-					InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 100},
-					LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 100},
-				},
-			},
+			}.Build(),
+			"SubComponent1": persistencespb.ChasmNode_builder{
+				Metadata: persistencespb.ChasmNodeMetadata_builder{
+					InitialVersionedTransition:    persistencespb.VersionedTransition_builder{TransitionCount: 2}.Build(),
+					LastUpdateVersionedTransition: persistencespb.VersionedTransition_builder{TransitionCount: 20}.Build(),
+				}.Build(),
+			}.Build(),
+			"SubComponent2": persistencespb.ChasmNode_builder{
+				Metadata: persistencespb.ChasmNodeMetadata_builder{
+					InitialVersionedTransition:    persistencespb.VersionedTransition_builder{TransitionCount: 100}.Build(),
+					LastUpdateVersionedTransition: persistencespb.VersionedTransition_builder{TransitionCount: 100}.Build(),
+				}.Build(),
+			}.Build(),
 		},
 	}
 	err = root.ApplySnapshot(incomingSnapshot)
@@ -1113,17 +1099,15 @@ func (s *nodeSuite) TestApplySnapshot() {
 
 func (s *nodeSuite) TestApplyMutation_OutOfOrder() {
 	persistenceNodes := map[string]*persistencespb.ChasmNode{
-		"": {
-			Metadata: &persistencespb.ChasmNodeMetadata{
-				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
-				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
-				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
-					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
-						TypeId: testComponentTypeID,
-					},
-				},
-			},
-		},
+		"": persistencespb.ChasmNode_builder{
+			Metadata: persistencespb.ChasmNodeMetadata_builder{
+				InitialVersionedTransition:    persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+				LastUpdateVersionedTransition: persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+				ComponentAttributes: persistencespb.ChasmComponentAttributes_builder{
+					TypeId: testComponentTypeID,
+				}.Build(),
+			}.Build(),
+		}.Build(),
 	}
 
 	root, err := s.newTestTree(persistenceNodes)
@@ -1132,35 +1116,33 @@ func (s *nodeSuite) TestApplyMutation_OutOfOrder() {
 	// Test the case where child node is applied before parent node.
 	err = root.ApplyMutation(NodesMutation{
 		UpdatedNodes: map[string]*persistencespb.ChasmNode{
-			"SubComponent1/SubComponent11": {
-				Metadata: &persistencespb.ChasmNodeMetadata{
-					InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 2},
-					LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 20},
-				},
-			},
+			"SubComponent1/SubComponent11": persistencespb.ChasmNode_builder{
+				Metadata: persistencespb.ChasmNodeMetadata_builder{
+					InitialVersionedTransition:    persistencespb.VersionedTransition_builder{TransitionCount: 2}.Build(),
+					LastUpdateVersionedTransition: persistencespb.VersionedTransition_builder{TransitionCount: 20}.Build(),
+				}.Build(),
+			}.Build(),
 		},
 	})
 	s.NoError(err)
 
 	err = root.ApplyMutation(NodesMutation{
 		UpdatedNodes: map[string]*persistencespb.ChasmNode{
-			"": {
-				Metadata: &persistencespb.ChasmNodeMetadata{
-					InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
-					LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 2},
-					Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
-						ComponentAttributes: &persistencespb.ChasmComponentAttributes{
-							TypeId: testComponentTypeID,
-						},
-					},
-				},
-			},
-			"SubComponent1": {
-				Metadata: &persistencespb.ChasmNodeMetadata{
-					InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
-					LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 2},
-				},
-			},
+			"": persistencespb.ChasmNode_builder{
+				Metadata: persistencespb.ChasmNodeMetadata_builder{
+					InitialVersionedTransition:    persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+					LastUpdateVersionedTransition: persistencespb.VersionedTransition_builder{TransitionCount: 2}.Build(),
+					ComponentAttributes: persistencespb.ChasmComponentAttributes_builder{
+						TypeId: testComponentTypeID,
+					}.Build(),
+				}.Build(),
+			}.Build(),
+			"SubComponent1": persistencespb.ChasmNode_builder{
+				Metadata: persistencespb.ChasmNodeMetadata_builder{
+					InitialVersionedTransition:    persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+					LastUpdateVersionedTransition: persistencespb.VersionedTransition_builder{TransitionCount: 2}.Build(),
+				}.Build(),
+			}.Build(),
 		},
 	})
 	s.NoError(err)
@@ -1174,65 +1156,59 @@ func (s *nodeSuite) TestRefreshTasks() {
 	now := s.timeSource.Now()
 	pureTaskScheduledTime := now.Add(time.Second).UTC()
 	persistenceNodes := map[string]*persistencespb.ChasmNode{
-		"": {
-			Metadata: &persistencespb.ChasmNodeMetadata{
-				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
-				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
-				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
-					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
-						TypeId: testComponentTypeID,
-						PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
-							{
-								TypeId:                    testPureTaskTypeID,
-								ScheduledTime:             timestamppb.New(now.Add(time.Minute)),
-								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
-								VersionedTransitionOffset: 1,
-								PhysicalTaskStatus:        physicalTaskStatusNone,
-							},
-						},
+		"": persistencespb.ChasmNode_builder{
+			Metadata: persistencespb.ChasmNodeMetadata_builder{
+				InitialVersionedTransition:    persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+				LastUpdateVersionedTransition: persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+				ComponentAttributes: persistencespb.ChasmComponentAttributes_builder{
+					TypeId: testComponentTypeID,
+					PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
+						persistencespb.ChasmComponentAttributes_Task_builder{
+							TypeId:                    testPureTaskTypeID,
+							ScheduledTime:             timestamppb.New(now.Add(time.Minute)),
+							VersionedTransition:       persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+							VersionedTransitionOffset: 1,
+							PhysicalTaskStatus:        physicalTaskStatusNone,
+						}.Build(),
 					},
-				},
-			},
-		},
-		"SubComponent1": {
-			Metadata: &persistencespb.ChasmNodeMetadata{
-				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
-				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
-				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
-					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
-						TypeId: testSubComponent1TypeID,
-						PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
-							{
-								TypeId:                    testPureTaskTypeID,
-								ScheduledTime:             timestamppb.New(pureTaskScheduledTime),
-								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
-								VersionedTransitionOffset: 2,
-								PhysicalTaskStatus:        physicalTaskStatusCreated,
-							},
-						},
+				}.Build(),
+			}.Build(),
+		}.Build(),
+		"SubComponent1": persistencespb.ChasmNode_builder{
+			Metadata: persistencespb.ChasmNodeMetadata_builder{
+				InitialVersionedTransition:    persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+				LastUpdateVersionedTransition: persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+				ComponentAttributes: persistencespb.ChasmComponentAttributes_builder{
+					TypeId: testSubComponent1TypeID,
+					PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
+						persistencespb.ChasmComponentAttributes_Task_builder{
+							TypeId:                    testPureTaskTypeID,
+							ScheduledTime:             timestamppb.New(pureTaskScheduledTime),
+							VersionedTransition:       persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+							VersionedTransitionOffset: 2,
+							PhysicalTaskStatus:        physicalTaskStatusCreated,
+						}.Build(),
 					},
-				},
-			},
-		},
-		"SubComponent2": {
-			Metadata: &persistencespb.ChasmNodeMetadata{
-				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
-				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
-				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
-					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
-						TypeId: testSubComponent2TypeID,
-						SideEffectTasks: []*persistencespb.ChasmComponentAttributes_Task{
-							{
-								TypeId:                    testSideEffectTaskTypeID,
-								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
-								VersionedTransitionOffset: 3,
-								PhysicalTaskStatus:        physicalTaskStatusCreated,
-							},
-						},
+				}.Build(),
+			}.Build(),
+		}.Build(),
+		"SubComponent2": persistencespb.ChasmNode_builder{
+			Metadata: persistencespb.ChasmNodeMetadata_builder{
+				InitialVersionedTransition:    persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+				LastUpdateVersionedTransition: persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+				ComponentAttributes: persistencespb.ChasmComponentAttributes_builder{
+					TypeId: testSubComponent2TypeID,
+					SideEffectTasks: []*persistencespb.ChasmComponentAttributes_Task{
+						persistencespb.ChasmComponentAttributes_Task_builder{
+							TypeId:                    testSideEffectTaskTypeID,
+							VersionedTransition:       persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+							VersionedTransitionOffset: 3,
+							PhysicalTaskStatus:        physicalTaskStatusCreated,
+						}.Build(),
 					},
-				},
-			},
-		},
+				}.Build(),
+			}.Build(),
+		}.Build(),
 	}
 
 	root, err := s.newTestTree(persistenceNodes)
@@ -1254,193 +1230,181 @@ func (s *nodeSuite) TestRefreshTasks() {
 func (s *nodeSuite) TestCarryOverTaskStatus() {
 	now := s.timeSource.Now()
 	persistenceNodes := map[string]*persistencespb.ChasmNode{
-		"": {
-			Metadata: &persistencespb.ChasmNodeMetadata{
-				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
-				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 2},
-				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
-					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
-						TypeId: testComponentTypeID,
-						SideEffectTasks: []*persistencespb.ChasmComponentAttributes_Task{
-							{
-								TypeId:                    testSideEffectTaskTypeID,
-								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
-								VersionedTransitionOffset: 1,
-								PhysicalTaskStatus:        physicalTaskStatusCreated,
-							},
-							{
-								TypeId:                    testSideEffectTaskTypeID,
-								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
-								VersionedTransitionOffset: 2,
-								PhysicalTaskStatus:        physicalTaskStatusCreated,
-							},
-							{
-								TypeId:                    testSideEffectTaskTypeID,
-								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 2},
-								VersionedTransitionOffset: 1,
-								PhysicalTaskStatus:        physicalTaskStatusCreated,
-							},
-						},
-						PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
-							{
-								TypeId:                    testPureTaskTypeID,
-								ScheduledTime:             timestamppb.New(now.Add(time.Minute)),
-								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 2},
-								VersionedTransitionOffset: 2,
-								PhysicalTaskStatus:        physicalTaskStatusCreated,
-							},
-							{
-								TypeId:                    testPureTaskTypeID,
-								ScheduledTime:             timestamppb.New(now.Add(2 * time.Minute)),
-								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
-								VersionedTransitionOffset: 3,
-								PhysicalTaskStatus:        physicalTaskStatusCreated,
-							},
-							{
-								TypeId:                    testPureTaskTypeID,
-								ScheduledTime:             timestamppb.New(now.Add(3 * time.Minute)),
-								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 2},
-								VersionedTransitionOffset: 3,
-								PhysicalTaskStatus:        physicalTaskStatusNone,
-							},
-						},
+		"": persistencespb.ChasmNode_builder{
+			Metadata: persistencespb.ChasmNodeMetadata_builder{
+				InitialVersionedTransition:    persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+				LastUpdateVersionedTransition: persistencespb.VersionedTransition_builder{TransitionCount: 2}.Build(),
+				ComponentAttributes: persistencespb.ChasmComponentAttributes_builder{
+					TypeId: testComponentTypeID,
+					SideEffectTasks: []*persistencespb.ChasmComponentAttributes_Task{
+						persistencespb.ChasmComponentAttributes_Task_builder{
+							TypeId:                    testSideEffectTaskTypeID,
+							VersionedTransition:       persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+							VersionedTransitionOffset: 1,
+							PhysicalTaskStatus:        physicalTaskStatusCreated,
+						}.Build(),
+						persistencespb.ChasmComponentAttributes_Task_builder{
+							TypeId:                    testSideEffectTaskTypeID,
+							VersionedTransition:       persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+							VersionedTransitionOffset: 2,
+							PhysicalTaskStatus:        physicalTaskStatusCreated,
+						}.Build(),
+						persistencespb.ChasmComponentAttributes_Task_builder{
+							TypeId:                    testSideEffectTaskTypeID,
+							VersionedTransition:       persistencespb.VersionedTransition_builder{TransitionCount: 2}.Build(),
+							VersionedTransitionOffset: 1,
+							PhysicalTaskStatus:        physicalTaskStatusCreated,
+						}.Build(),
 					},
-				},
-			},
-		},
-		"data": {
-			Metadata: &persistencespb.ChasmNodeMetadata{
-				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 2},
-				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 2},
-				Attributes: &persistencespb.ChasmNodeMetadata_DataAttributes{
-					DataAttributes: &persistencespb.ChasmDataAttributes{},
-				},
-			},
-		},
+					PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
+						persistencespb.ChasmComponentAttributes_Task_builder{
+							TypeId:                    testPureTaskTypeID,
+							ScheduledTime:             timestamppb.New(now.Add(time.Minute)),
+							VersionedTransition:       persistencespb.VersionedTransition_builder{TransitionCount: 2}.Build(),
+							VersionedTransitionOffset: 2,
+							PhysicalTaskStatus:        physicalTaskStatusCreated,
+						}.Build(),
+						persistencespb.ChasmComponentAttributes_Task_builder{
+							TypeId:                    testPureTaskTypeID,
+							ScheduledTime:             timestamppb.New(now.Add(2 * time.Minute)),
+							VersionedTransition:       persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+							VersionedTransitionOffset: 3,
+							PhysicalTaskStatus:        physicalTaskStatusCreated,
+						}.Build(),
+						persistencespb.ChasmComponentAttributes_Task_builder{
+							TypeId:                    testPureTaskTypeID,
+							ScheduledTime:             timestamppb.New(now.Add(3 * time.Minute)),
+							VersionedTransition:       persistencespb.VersionedTransition_builder{TransitionCount: 2}.Build(),
+							VersionedTransitionOffset: 3,
+							PhysicalTaskStatus:        physicalTaskStatusNone,
+						}.Build(),
+					},
+				}.Build(),
+			}.Build(),
+		}.Build(),
+		"data": persistencespb.ChasmNode_builder{
+			Metadata: persistencespb.ChasmNodeMetadata_builder{
+				InitialVersionedTransition:    persistencespb.VersionedTransition_builder{TransitionCount: 2}.Build(),
+				LastUpdateVersionedTransition: persistencespb.VersionedTransition_builder{TransitionCount: 2}.Build(),
+				DataAttributes:                &persistencespb.ChasmDataAttributes{},
+			}.Build(),
+		}.Build(),
 	}
 	root, err := s.newTestTree(persistenceNodes)
 	s.NoError(err)
 
 	mutations := NodesMutation{
 		UpdatedNodes: map[string]*persistencespb.ChasmNode{
-			"": {
-				Metadata: &persistencespb.ChasmNodeMetadata{
-					InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
-					LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 3},
-					Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
-						ComponentAttributes: &persistencespb.ChasmComponentAttributes{
-							TypeId: testComponentTypeID,
-							SideEffectTasks: []*persistencespb.ChasmComponentAttributes_Task{
-								{
-									TypeId:                    testSideEffectTaskTypeID,
-									VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
-									VersionedTransitionOffset: 2,
-									PhysicalTaskStatus:        physicalTaskStatusCreated,
-								},
-								{
-									TypeId:                    testSideEffectTaskTypeID,
-									VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 3},
-									VersionedTransitionOffset: 1,
-									PhysicalTaskStatus:        physicalTaskStatusCreated,
-								},
-							},
-							PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
-								{
-									TypeId:                    testPureTaskTypeID,
-									ScheduledTime:             timestamppb.New(now.Add(time.Second)),
-									VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 3},
-									VersionedTransitionOffset: 2,
-									PhysicalTaskStatus:        physicalTaskStatusCreated,
-								},
-								{
-									TypeId:                    testPureTaskTypeID,
-									ScheduledTime:             timestamppb.New(now.Add(2 * time.Minute)),
-									VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
-									VersionedTransitionOffset: 3,
-									PhysicalTaskStatus:        physicalTaskStatusCreated,
-								},
-								{
-									TypeId:                    testPureTaskTypeID,
-									ScheduledTime:             timestamppb.New(now.Add(3 * time.Minute)),
-									VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 2},
-									VersionedTransitionOffset: 3,
-									PhysicalTaskStatus:        physicalTaskStatusNone,
-								},
-							},
+			"": persistencespb.ChasmNode_builder{
+				Metadata: persistencespb.ChasmNodeMetadata_builder{
+					InitialVersionedTransition:    persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+					LastUpdateVersionedTransition: persistencespb.VersionedTransition_builder{TransitionCount: 3}.Build(),
+					ComponentAttributes: persistencespb.ChasmComponentAttributes_builder{
+						TypeId: testComponentTypeID,
+						SideEffectTasks: []*persistencespb.ChasmComponentAttributes_Task{
+							persistencespb.ChasmComponentAttributes_Task_builder{
+								TypeId:                    testSideEffectTaskTypeID,
+								VersionedTransition:       persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+								VersionedTransitionOffset: 2,
+								PhysicalTaskStatus:        physicalTaskStatusCreated,
+							}.Build(),
+							persistencespb.ChasmComponentAttributes_Task_builder{
+								TypeId:                    testSideEffectTaskTypeID,
+								VersionedTransition:       persistencespb.VersionedTransition_builder{TransitionCount: 3}.Build(),
+								VersionedTransitionOffset: 1,
+								PhysicalTaskStatus:        physicalTaskStatusCreated,
+							}.Build(),
 						},
-					},
-				},
-			},
-			"data": {
-				Metadata: &persistencespb.ChasmNodeMetadata{
-					InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 2},
-					LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 3},
-					Attributes: &persistencespb.ChasmNodeMetadata_DataAttributes{
-						DataAttributes: &persistencespb.ChasmDataAttributes{},
-					},
-				},
-			},
+						PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
+							persistencespb.ChasmComponentAttributes_Task_builder{
+								TypeId:                    testPureTaskTypeID,
+								ScheduledTime:             timestamppb.New(now.Add(time.Second)),
+								VersionedTransition:       persistencespb.VersionedTransition_builder{TransitionCount: 3}.Build(),
+								VersionedTransitionOffset: 2,
+								PhysicalTaskStatus:        physicalTaskStatusCreated,
+							}.Build(),
+							persistencespb.ChasmComponentAttributes_Task_builder{
+								TypeId:                    testPureTaskTypeID,
+								ScheduledTime:             timestamppb.New(now.Add(2 * time.Minute)),
+								VersionedTransition:       persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+								VersionedTransitionOffset: 3,
+								PhysicalTaskStatus:        physicalTaskStatusCreated,
+							}.Build(),
+							persistencespb.ChasmComponentAttributes_Task_builder{
+								TypeId:                    testPureTaskTypeID,
+								ScheduledTime:             timestamppb.New(now.Add(3 * time.Minute)),
+								VersionedTransition:       persistencespb.VersionedTransition_builder{TransitionCount: 2}.Build(),
+								VersionedTransitionOffset: 3,
+								PhysicalTaskStatus:        physicalTaskStatusNone,
+							}.Build(),
+						},
+					}.Build(),
+				}.Build(),
+			}.Build(),
+			"data": persistencespb.ChasmNode_builder{
+				Metadata: persistencespb.ChasmNodeMetadata_builder{
+					InitialVersionedTransition:    persistencespb.VersionedTransition_builder{TransitionCount: 2}.Build(),
+					LastUpdateVersionedTransition: persistencespb.VersionedTransition_builder{TransitionCount: 3}.Build(),
+					DataAttributes:                &persistencespb.ChasmDataAttributes{},
+				}.Build(),
+			}.Build(),
 		},
 	}
 
 	expectedNodes := map[string]*persistencespb.ChasmNode{
-		"": {
-			Metadata: &persistencespb.ChasmNodeMetadata{
-				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
-				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 3},
-				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
-					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
-						TypeId: testComponentTypeID,
-						SideEffectTasks: []*persistencespb.ChasmComponentAttributes_Task{
-							{
-								TypeId:                    testSideEffectTaskTypeID,
-								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
-								VersionedTransitionOffset: 2,
-								PhysicalTaskStatus:        physicalTaskStatusCreated,
-							},
-							{
-								TypeId:                    testSideEffectTaskTypeID,
-								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 3},
-								VersionedTransitionOffset: 1,
-								PhysicalTaskStatus:        physicalTaskStatusNone,
-							},
-						},
-						PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
-							{
-								TypeId:                    testPureTaskTypeID,
-								ScheduledTime:             timestamppb.New(now.Add(time.Second)),
-								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 3},
-								VersionedTransitionOffset: 2,
-								PhysicalTaskStatus:        physicalTaskStatusNone,
-							},
-							{
-								TypeId:                    testPureTaskTypeID,
-								ScheduledTime:             timestamppb.New(now.Add(2 * time.Minute)),
-								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
-								VersionedTransitionOffset: 3,
-								PhysicalTaskStatus:        physicalTaskStatusCreated,
-							},
-							{
-								TypeId:                    testPureTaskTypeID,
-								ScheduledTime:             timestamppb.New(now.Add(3 * time.Minute)),
-								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 2},
-								VersionedTransitionOffset: 3,
-								PhysicalTaskStatus:        physicalTaskStatusNone,
-							},
-						},
+		"": persistencespb.ChasmNode_builder{
+			Metadata: persistencespb.ChasmNodeMetadata_builder{
+				InitialVersionedTransition:    persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+				LastUpdateVersionedTransition: persistencespb.VersionedTransition_builder{TransitionCount: 3}.Build(),
+				ComponentAttributes: persistencespb.ChasmComponentAttributes_builder{
+					TypeId: testComponentTypeID,
+					SideEffectTasks: []*persistencespb.ChasmComponentAttributes_Task{
+						persistencespb.ChasmComponentAttributes_Task_builder{
+							TypeId:                    testSideEffectTaskTypeID,
+							VersionedTransition:       persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+							VersionedTransitionOffset: 2,
+							PhysicalTaskStatus:        physicalTaskStatusCreated,
+						}.Build(),
+						persistencespb.ChasmComponentAttributes_Task_builder{
+							TypeId:                    testSideEffectTaskTypeID,
+							VersionedTransition:       persistencespb.VersionedTransition_builder{TransitionCount: 3}.Build(),
+							VersionedTransitionOffset: 1,
+							PhysicalTaskStatus:        physicalTaskStatusNone,
+						}.Build(),
 					},
-				},
-			},
-		},
-		"data": {
-			Metadata: &persistencespb.ChasmNodeMetadata{
-				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 2},
-				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 3},
-				Attributes: &persistencespb.ChasmNodeMetadata_DataAttributes{
-					DataAttributes: &persistencespb.ChasmDataAttributes{},
-				},
-			},
-		},
+					PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
+						persistencespb.ChasmComponentAttributes_Task_builder{
+							TypeId:                    testPureTaskTypeID,
+							ScheduledTime:             timestamppb.New(now.Add(time.Second)),
+							VersionedTransition:       persistencespb.VersionedTransition_builder{TransitionCount: 3}.Build(),
+							VersionedTransitionOffset: 2,
+							PhysicalTaskStatus:        physicalTaskStatusNone,
+						}.Build(),
+						persistencespb.ChasmComponentAttributes_Task_builder{
+							TypeId:                    testPureTaskTypeID,
+							ScheduledTime:             timestamppb.New(now.Add(2 * time.Minute)),
+							VersionedTransition:       persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+							VersionedTransitionOffset: 3,
+							PhysicalTaskStatus:        physicalTaskStatusCreated,
+						}.Build(),
+						persistencespb.ChasmComponentAttributes_Task_builder{
+							TypeId:                    testPureTaskTypeID,
+							ScheduledTime:             timestamppb.New(now.Add(3 * time.Minute)),
+							VersionedTransition:       persistencespb.VersionedTransition_builder{TransitionCount: 2}.Build(),
+							VersionedTransitionOffset: 3,
+							PhysicalTaskStatus:        physicalTaskStatusNone,
+						}.Build(),
+					},
+				}.Build(),
+			}.Build(),
+		}.Build(),
+		"data": persistencespb.ChasmNode_builder{
+			Metadata: persistencespb.ChasmNodeMetadata_builder{
+				InitialVersionedTransition:    persistencespb.VersionedTransition_builder{TransitionCount: 2}.Build(),
+				LastUpdateVersionedTransition: persistencespb.VersionedTransition_builder{TransitionCount: 3}.Build(),
+				DataAttributes:                &persistencespb.ChasmDataAttributes{},
+			}.Build(),
+		}.Build(),
 	}
 
 	err = root.ApplyMutation(mutations)
@@ -1521,7 +1485,7 @@ func (s *nodeSuite) TestValidateAccess() {
 			root.terminated = tc.terminated
 			component, ok := root.value.(*TestComponent)
 			if ok {
-				component.ComponentData.Status = tc.lifecycleStatus
+				component.ComponentData.SetStatus(tc.lifecycleStatus)
 			}
 
 			// Find target node
@@ -1589,10 +1553,10 @@ func (s *nodeSuite) TestGetComponent() {
 			ref: ComponentRef{
 				componentPath: []string{"SubComponent1", "SubComponent11"},
 				// should be (1, 1) but we set it to (2, 2)
-				componentInitialVT: &persistencespb.VersionedTransition{
+				componentInitialVT: persistencespb.VersionedTransition_builder{
 					NamespaceFailoverVersion: 2,
 					TransitionCount:          2,
-				},
+				}.Build(),
 			},
 			expectedErr: errComponentNotFound,
 		},
@@ -1603,10 +1567,10 @@ func (s *nodeSuite) TestGetComponent() {
 			},
 			ref: ComponentRef{
 				componentPath: []string{"SubComponent1"},
-				componentInitialVT: &persistencespb.VersionedTransition{
+				componentInitialVT: persistencespb.VersionedTransition_builder{
 					NamespaceFailoverVersion: 1,
 					TransitionCount:          1,
-				},
+				}.Build(),
 				validationFn: func(_ NodeBackend, _ Context, _ Component) error {
 					return errValidation
 				},
@@ -1620,10 +1584,10 @@ func (s *nodeSuite) TestGetComponent() {
 			},
 			ref: ComponentRef{
 				componentPath: []string{}, // root
-				componentInitialVT: &persistencespb.VersionedTransition{
+				componentInitialVT: persistencespb.VersionedTransition_builder{
 					NamespaceFailoverVersion: 1,
 					TransitionCount:          1,
-				},
+				}.Build(),
 				validationFn: func(_ NodeBackend, _ Context, _ Component) error {
 					return nil
 				},
@@ -1681,10 +1645,10 @@ func (s *nodeSuite) TestRef() {
 		BusinessID:  workflowKey.WorkflowID,
 		RunID:       workflowKey.RunID,
 	}
-	currentVT := &persistencespb.VersionedTransition{
+	currentVT := persistencespb.VersionedTransition_builder{
 		NamespaceFailoverVersion: 2,
 		TransitionCount:          2,
-	}
+	}.Build()
 	s.nodeBackend = &MockNodeBackend{
 		HandleCurrentVersionedTransition: func() *persistencespb.VersionedTransition {
 			return currentVT
@@ -1722,30 +1686,30 @@ func (s *nodeSuite) TestRef() {
 			component:    testComponent,
 			expectErr:    false,
 			expectedPath: nil, // same as []string{}
-			expectedInitalVT: &persistencespb.VersionedTransition{
+			expectedInitalVT: persistencespb.VersionedTransition_builder{
 				NamespaceFailoverVersion: 1,
 				TransitionCount:          1,
-			},
+			}.Build(),
 		},
 		{
 			name:         "subComponent1",
 			component:    subComponent1,
 			expectErr:    false,
 			expectedPath: []string{"SubComponent1"},
-			expectedInitalVT: &persistencespb.VersionedTransition{
+			expectedInitalVT: persistencespb.VersionedTransition_builder{
 				NamespaceFailoverVersion: 1,
 				TransitionCount:          1,
-			},
+			}.Build(),
 		},
 		{
 			name:         "subComponent11",
 			component:    subComponent11,
 			expectErr:    false,
 			expectedPath: []string{"SubComponent1", "SubComponent11"},
-			expectedInitalVT: &persistencespb.VersionedTransition{
+			expectedInitalVT: persistencespb.VersionedTransition_builder{
 				NamespaceFailoverVersion: 1,
 				TransitionCount:          1,
-			},
+			}.Build(),
 		},
 		{
 			name:      "unknown",
@@ -1787,9 +1751,9 @@ func (s *nodeSuite) TestRef() {
 }
 
 func (s *nodeSuite) TestSerializeDeserializeTask() {
-	payload := &commonpb.Payload{
+	payload := commonpb.Payload_builder{
 		Data: []byte("some-random-data"),
-	}
+	}.Build()
 	expectedBlob, err := serialization.ProtoEncode(payload)
 	s.NoError(err)
 
@@ -1949,7 +1913,7 @@ func (s *nodeSuite) TestCloseTransaction_ForceUpdateVisibility_RootLifecycleChan
 	s.NoError(err)
 	pVisibilityNode, ok := mutation.UpdatedNodes["Visibility"]
 	s.True(ok)
-	s.Len(pVisibilityNode.GetMetadata().GetComponentAttributes().SideEffectTasks, 1)
+	s.Len(pVisibilityNode.GetMetadata().GetComponentAttributes().GetSideEffectTasks(), 1)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, s.nodeBackend.UpdateCalls[0].State)
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, s.nodeBackend.UpdateCalls[0].Status)
 
@@ -1968,7 +1932,7 @@ func (s *nodeSuite) TestCloseTransaction_ForceUpdateVisibility_RootLifecycleChan
 	s.NoError(err)
 	pVisibilityNode, ok = mutation.UpdatedNodes["Visibility"]
 	s.True(ok, "visibility should be updated when memo changes")
-	s.Len(pVisibilityNode.GetMetadata().GetComponentAttributes().SideEffectTasks, 1)
+	s.Len(pVisibilityNode.GetMetadata().GetComponentAttributes().GetSideEffectTasks(), 1)
 
 	// Close the run, visibility should be force updated
 	// even if not explicitly updated.
@@ -1983,7 +1947,7 @@ func (s *nodeSuite) TestCloseTransaction_ForceUpdateVisibility_RootLifecycleChan
 	s.NoError(err)
 	pVisibilityNode, ok = mutation.UpdatedNodes["Visibility"]
 	s.True(ok)
-	s.Len(pVisibilityNode.GetMetadata().GetComponentAttributes().SideEffectTasks, 1)
+	s.Len(pVisibilityNode.GetMetadata().GetComponentAttributes().GetSideEffectTasks(), 1)
 }
 
 func (s *nodeSuite) TestCloseTransaction_ForceUpdateVisibility_RootSAMemoChanged() {
@@ -2006,7 +1970,7 @@ func (s *nodeSuite) TestCloseTransaction_ForceUpdateVisibility_RootSAMemoChanged
 	s.NoError(err)
 	pVisibilityNode, ok := mutation.UpdatedNodes["Visibility"]
 	s.True(ok)
-	s.Len(pVisibilityNode.GetMetadata().GetComponentAttributes().SideEffectTasks, 1)
+	s.Len(pVisibilityNode.GetMetadata().GetComponentAttributes().GetSideEffectTasks(), 1)
 
 	// Update root component state, which results in a change to the search attributes and memo.
 	// CHASM framework should automatically detect the change and generate a visibility task.
@@ -2023,85 +1987,81 @@ func (s *nodeSuite) TestCloseTransaction_ForceUpdateVisibility_RootSAMemoChanged
 	s.NoError(err)
 	pVisibilityNode, ok = mutation.UpdatedNodes["Visibility"]
 	s.True(ok)
-	s.Len(pVisibilityNode.GetMetadata().GetComponentAttributes().SideEffectTasks, 1)
+	s.Len(pVisibilityNode.GetMetadata().GetComponentAttributes().GetSideEffectTasks(), 1)
 }
 
 func (s *nodeSuite) TestCloseTransaction_InvalidateComponentTasks() {
-	payload := &commonpb.Payload{
+	payload := commonpb.Payload_builder{
 		Data: []byte("some-random-data"),
-	}
+	}.Build()
 	taskBlob, err := serialization.ProtoEncode(payload)
 	s.NoError(err)
 
 	persistenceNodes := map[string]*persistencespb.ChasmNode{
-		"": {
-			Metadata: &persistencespb.ChasmNodeMetadata{
-				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
-				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
-				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
-					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
-						TypeId: testComponentTypeID,
-						SideEffectTasks: []*persistencespb.ChasmComponentAttributes_Task{
-							{
-								TypeId:                    testSideEffectTaskTypeID,
-								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
-								VersionedTransitionOffset: 1,
-								Data:                      taskBlob,
-								PhysicalTaskStatus:        physicalTaskStatusCreated,
-							},
-							{
-								TypeId:                    testOutboundSideEffectTaskTypeID,
-								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
-								VersionedTransitionOffset: 2,
-								Data: &commonpb.DataBlob{
-									Data:         nil,
-									EncodingType: enumspb.ENCODING_TYPE_PROTO3,
-								},
-								PhysicalTaskStatus: physicalTaskStatusCreated,
-							},
-						},
-						PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
-							{
-								TypeId:                    testPureTaskTypeID,
-								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
-								VersionedTransitionOffset: 3,
-								Data:                      taskBlob,
-								PhysicalTaskStatus:        physicalTaskStatusCreated,
-							},
-						},
+		"": persistencespb.ChasmNode_builder{
+			Metadata: persistencespb.ChasmNodeMetadata_builder{
+				InitialVersionedTransition:    persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+				LastUpdateVersionedTransition: persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+				ComponentAttributes: persistencespb.ChasmComponentAttributes_builder{
+					TypeId: testComponentTypeID,
+					SideEffectTasks: []*persistencespb.ChasmComponentAttributes_Task{
+						persistencespb.ChasmComponentAttributes_Task_builder{
+							TypeId:                    testSideEffectTaskTypeID,
+							VersionedTransition:       persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+							VersionedTransitionOffset: 1,
+							Data:                      taskBlob,
+							PhysicalTaskStatus:        physicalTaskStatusCreated,
+						}.Build(),
+						persistencespb.ChasmComponentAttributes_Task_builder{
+							TypeId:                    testOutboundSideEffectTaskTypeID,
+							VersionedTransition:       persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+							VersionedTransitionOffset: 2,
+							Data: commonpb.DataBlob_builder{
+								Data:         nil,
+								EncodingType: enumspb.ENCODING_TYPE_PROTO3,
+							}.Build(),
+							PhysicalTaskStatus: physicalTaskStatusCreated,
+						}.Build(),
 					},
-				},
-			},
-		},
-		"SubComponent1": {
-			Metadata: &persistencespb.ChasmNodeMetadata{
-				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
-				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
-				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
-					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
-						TypeId: testSubComponent1TypeID,
-						SideEffectTasks: []*persistencespb.ChasmComponentAttributes_Task{
-							{
-								TypeId:                    testSideEffectTaskTypeID,
-								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
-								VersionedTransitionOffset: 4,
-								Data:                      taskBlob,
-								PhysicalTaskStatus:        physicalTaskStatusCreated,
-							},
-						},
-						PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
-							{
-								TypeId:                    testPureTaskTypeID,
-								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
-								VersionedTransitionOffset: 5,
-								Data:                      taskBlob,
-								PhysicalTaskStatus:        physicalTaskStatusNone,
-							},
-						},
+					PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
+						persistencespb.ChasmComponentAttributes_Task_builder{
+							TypeId:                    testPureTaskTypeID,
+							VersionedTransition:       persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+							VersionedTransitionOffset: 3,
+							Data:                      taskBlob,
+							PhysicalTaskStatus:        physicalTaskStatusCreated,
+						}.Build(),
 					},
-				},
-			},
-		},
+				}.Build(),
+			}.Build(),
+		}.Build(),
+		"SubComponent1": persistencespb.ChasmNode_builder{
+			Metadata: persistencespb.ChasmNodeMetadata_builder{
+				InitialVersionedTransition:    persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+				LastUpdateVersionedTransition: persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+				ComponentAttributes: persistencespb.ChasmComponentAttributes_builder{
+					TypeId: testSubComponent1TypeID,
+					SideEffectTasks: []*persistencespb.ChasmComponentAttributes_Task{
+						persistencespb.ChasmComponentAttributes_Task_builder{
+							TypeId:                    testSideEffectTaskTypeID,
+							VersionedTransition:       persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+							VersionedTransitionOffset: 4,
+							Data:                      taskBlob,
+							PhysicalTaskStatus:        physicalTaskStatusCreated,
+						}.Build(),
+					},
+					PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
+						persistencespb.ChasmComponentAttributes_Task_builder{
+							TypeId:                    testPureTaskTypeID,
+							VersionedTransition:       persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+							VersionedTransitionOffset: 5,
+							Data:                      taskBlob,
+							PhysicalTaskStatus:        physicalTaskStatusNone,
+						}.Build(),
+					},
+				}.Build(),
+			}.Build(),
+		}.Build(),
 	}
 	root, err := s.newTestTree(persistenceNodes)
 	s.NoError(err)
@@ -2128,55 +2088,49 @@ func (s *nodeSuite) TestCloseTransaction_InvalidateComponentTasks() {
 
 	s.Len(mutation.UpdatedNodes, 2)
 	for _, updatedNode := range mutation.UpdatedNodes {
-		s.Equal(nextTransitionCount, updatedNode.GetMetadata().GetLastUpdateVersionedTransition().TransitionCount)
+		s.Equal(nextTransitionCount, updatedNode.GetMetadata().GetLastUpdateVersionedTransition().GetTransitionCount())
 	}
 	s.Empty(mutation.DeletedNodes)
 
-	componentAttr := root.serializedNode.Metadata.GetComponentAttributes()
-	s.Empty(componentAttr.PureTasks)
-	s.Len(componentAttr.SideEffectTasks, 1)
-	s.Equal(testOutboundSideEffectTaskTypeID, componentAttr.SideEffectTasks[0].GetTypeId())
+	componentAttr := root.serializedNode.GetMetadata().GetComponentAttributes()
+	s.Empty(componentAttr.GetPureTasks())
+	s.Len(componentAttr.GetSideEffectTasks(), 1)
+	s.Equal(testOutboundSideEffectTaskTypeID, componentAttr.GetSideEffectTasks()[0].GetTypeId())
 
-	componentAttr = root.children["SubComponent1"].serializedNode.Metadata.GetComponentAttributes()
-	s.Empty(componentAttr.PureTasks)
-	s.Empty(componentAttr.SideEffectTasks)
+	componentAttr = root.children["SubComponent1"].serializedNode.GetMetadata().GetComponentAttributes()
+	s.Empty(componentAttr.GetPureTasks())
+	s.Empty(componentAttr.GetSideEffectTasks())
 }
 
 func (s *nodeSuite) TestCloseTransaction_NewComponentTasks() {
 	persistenceNodes := map[string]*persistencespb.ChasmNode{
-		"": {
-			Metadata: &persistencespb.ChasmNodeMetadata{
-				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
-				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
-				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
-					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
-						TypeId: testComponentTypeID,
-					},
-				},
-			},
-		},
-		"SubComponent1": {
-			Metadata: &persistencespb.ChasmNodeMetadata{
-				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
-				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
-				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
-					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
-						TypeId: testSubComponent1TypeID,
-					},
-				},
-			},
-		},
-		"SubComponent2": {
-			Metadata: &persistencespb.ChasmNodeMetadata{
-				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
-				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
-				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
-					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
-						TypeId: testSubComponent2TypeID,
-					},
-				},
-			},
-		},
+		"": persistencespb.ChasmNode_builder{
+			Metadata: persistencespb.ChasmNodeMetadata_builder{
+				InitialVersionedTransition:    persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+				LastUpdateVersionedTransition: persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+				ComponentAttributes: persistencespb.ChasmComponentAttributes_builder{
+					TypeId: testComponentTypeID,
+				}.Build(),
+			}.Build(),
+		}.Build(),
+		"SubComponent1": persistencespb.ChasmNode_builder{
+			Metadata: persistencespb.ChasmNodeMetadata_builder{
+				InitialVersionedTransition:    persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+				LastUpdateVersionedTransition: persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+				ComponentAttributes: persistencespb.ChasmComponentAttributes_builder{
+					TypeId: testSubComponent1TypeID,
+				}.Build(),
+			}.Build(),
+		}.Build(),
+		"SubComponent2": persistencespb.ChasmNode_builder{
+			Metadata: persistencespb.ChasmNodeMetadata_builder{
+				InitialVersionedTransition:    persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+				LastUpdateVersionedTransition: persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+				ComponentAttributes: persistencespb.ChasmComponentAttributes_builder{
+					TypeId: testSubComponent2TypeID,
+				}.Build(),
+			}.Build(),
+		}.Build(),
 	}
 
 	s.nodeBackend.HandleNextTransitionCount = func() int64 {
@@ -2215,9 +2169,9 @@ func (s *nodeSuite) TestCloseTransaction_NewComponentTasks() {
 		testComponent,
 		TaskAttributes{ScheduledTime: s.timeSource.Now()},
 		&TestPureTask{
-			Payload: &commonpb.Payload{
+			Payload: commonpb.Payload_builder{
 				Data: []byte("valid-pure-task"),
-			},
+			}.Build(),
 		},
 	)
 
@@ -2229,9 +2183,9 @@ func (s *nodeSuite) TestCloseTransaction_NewComponentTasks() {
 		testComponent,
 		TaskAttributes{ScheduledTime: s.timeSource.Now()},
 		&TestPureTask{
-			Payload: &commonpb.Payload{
+			Payload: commonpb.Payload_builder{
 				Data: []byte("invalid-pure-task"),
-			},
+			}.Build(),
 		},
 	)
 
@@ -2251,130 +2205,126 @@ func (s *nodeSuite) TestCloseTransaction_NewComponentTasks() {
 	s.Equal(s.timeSource.Now().UTC(), s.nodeBackend.LastDeletePureTaskCall())
 
 	rootAttr := mutation.UpdatedNodes[""].GetMetadata().GetComponentAttributes()
-	s.Len(rootAttr.SideEffectTasks, 1) // Only one valid side effect task.
-	newSideEffectTask := rootAttr.SideEffectTasks[0]
-	newSideEffectTask.Data = nil // This is tested by TestSerializeTask()
-	s.Equal(&persistencespb.ChasmComponentAttributes_Task{
+	s.Len(rootAttr.GetSideEffectTasks(), 1) // Only one valid side effect task.
+	newSideEffectTask := rootAttr.GetSideEffectTasks()[0]
+	newSideEffectTask.ClearData() // This is tested by TestSerializeTask()
+	s.Equal(persistencespb.ChasmComponentAttributes_Task_builder{
 		TypeId:                    testSideEffectTaskTypeID,
 		ScheduledTime:             timestamppb.New(time.Time{}),
-		VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 2},
+		VersionedTransition:       persistencespb.VersionedTransition_builder{TransitionCount: 2}.Build(),
 		VersionedTransitionOffset: 1,
 		PhysicalTaskStatus:        physicalTaskStatusCreated,
-	}, newSideEffectTask)
+	}.Build(), newSideEffectTask)
 	s.Len(s.nodeBackend.TasksByCategory[tasks.CategoryTransfer], 1)
 	chasmTask := s.nodeBackend.TasksByCategory[tasks.CategoryTransfer][0].(*tasks.ChasmTask)
-	s.ProtoEqual(&persistencespb.ChasmTaskInfo{
-		ComponentInitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
-		ComponentLastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 2},
+	s.ProtoEqual(persistencespb.ChasmTaskInfo_builder{
+		ComponentInitialVersionedTransition:    persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+		ComponentLastUpdateVersionedTransition: persistencespb.VersionedTransition_builder{TransitionCount: 2}.Build(),
 		Path:                                   rootPath,
 		TypeId:                                 testSideEffectTaskTypeID,
 		Data:                                   chasmTask.Info.GetData(), // This is tested by TestSerializeTask()
 		ArchetypeId:                            testComponentTypeID,
-	}, chasmTask.Info)
+	}.Build(), chasmTask.Info)
 
-	s.Len(rootAttr.PureTasks, 1) // Only one valid side effect task.
-	newPureTask := rootAttr.PureTasks[0]
-	newPureTask.Data = nil // This is tested by TestSerializeTask()
-	s.Equal(&persistencespb.ChasmComponentAttributes_Task{
+	s.Len(rootAttr.GetPureTasks(), 1) // Only one valid side effect task.
+	newPureTask := rootAttr.GetPureTasks()[0]
+	newPureTask.ClearData() // This is tested by TestSerializeTask()
+	s.Equal(persistencespb.ChasmComponentAttributes_Task_builder{
 		TypeId:                    testPureTaskTypeID,
 		ScheduledTime:             timestamppb.New(s.timeSource.Now()),
-		VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 2},
+		VersionedTransition:       persistencespb.VersionedTransition_builder{TransitionCount: 2}.Build(),
 		VersionedTransitionOffset: 2,
 		PhysicalTaskStatus:        physicalTaskStatusCreated,
-	}, newPureTask)
+	}.Build(), newPureTask)
 	s.Len(s.nodeBackend.TasksByCategory[tasks.CategoryTimer], 1)
 	chasmPureTask := s.nodeBackend.TasksByCategory[tasks.CategoryTimer][0].(*tasks.ChasmTaskPure)
 	s.Equal(tasks.CategoryTimer, chasmPureTask.GetCategory())
 	s.True(chasmPureTask.VisibilityTimestamp.Equal(s.timeSource.Now()))
 
 	subComponent2Attr := mutation.UpdatedNodes["SubComponent2"].GetMetadata().GetComponentAttributes()
-	newOutboundSideEffectTask := subComponent2Attr.SideEffectTasks[0]
-	newOutboundSideEffectTask.Data = nil // This is tested by TestSerializeTask()
-	s.Equal(&persistencespb.ChasmComponentAttributes_Task{
+	newOutboundSideEffectTask := subComponent2Attr.GetSideEffectTasks()[0]
+	newOutboundSideEffectTask.ClearData() // This is tested by TestSerializeTask()
+	s.Equal(persistencespb.ChasmComponentAttributes_Task_builder{
 		TypeId:                    testOutboundSideEffectTaskTypeID,
 		Destination:               "destination",
 		ScheduledTime:             timestamppb.New(time.Time{}),
-		VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 2},
+		VersionedTransition:       persistencespb.VersionedTransition_builder{TransitionCount: 2}.Build(),
 		VersionedTransitionOffset: 3,
 		PhysicalTaskStatus:        physicalTaskStatusCreated,
-	}, newOutboundSideEffectTask)
+	}.Build(), newOutboundSideEffectTask)
 	s.Len(s.nodeBackend.TasksByCategory[tasks.CategoryOutbound], 1)
 	chasmTask = s.nodeBackend.TasksByCategory[tasks.CategoryOutbound][0].(*tasks.ChasmTask)
-	s.ProtoEqual(&persistencespb.ChasmTaskInfo{
-		ComponentInitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
-		ComponentLastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 2},
+	s.ProtoEqual(persistencespb.ChasmTaskInfo_builder{
+		ComponentInitialVersionedTransition:    persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+		ComponentLastUpdateVersionedTransition: persistencespb.VersionedTransition_builder{TransitionCount: 2}.Build(),
 		Path:                                   []string{"SubComponent2"},
 		TypeId:                                 testOutboundSideEffectTaskTypeID,
 		Data:                                   chasmTask.Info.GetData(), // This is tested by TestSerializeTask()
 		ArchetypeId:                            testComponentTypeID,
-	}, chasmTask.Info)
+	}.Build(), chasmTask.Info)
 }
 
 func (s *nodeSuite) TestCloseTransaction_ApplyMutation_SideEffectTasks() {
 	persistenceNodes := map[string]*persistencespb.ChasmNode{
-		"": {
-			Metadata: &persistencespb.ChasmNodeMetadata{
-				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
-				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
-				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
-					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
-						TypeId: testComponentTypeID,
-						SideEffectTasks: []*persistencespb.ChasmComponentAttributes_Task{
-							{
-								TypeId:                    testSideEffectTaskTypeID,
-								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
-								VersionedTransitionOffset: 1,
-								PhysicalTaskStatus:        physicalTaskStatusCreated,
-							},
-						},
+		"": persistencespb.ChasmNode_builder{
+			Metadata: persistencespb.ChasmNodeMetadata_builder{
+				InitialVersionedTransition:    persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+				LastUpdateVersionedTransition: persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+				ComponentAttributes: persistencespb.ChasmComponentAttributes_builder{
+					TypeId: testComponentTypeID,
+					SideEffectTasks: []*persistencespb.ChasmComponentAttributes_Task{
+						persistencespb.ChasmComponentAttributes_Task_builder{
+							TypeId:                    testSideEffectTaskTypeID,
+							VersionedTransition:       persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+							VersionedTransitionOffset: 1,
+							PhysicalTaskStatus:        physicalTaskStatusCreated,
+						}.Build(),
 					},
-				},
-			},
-		},
+				}.Build(),
+			}.Build(),
+		}.Build(),
 	}
 
 	incomingMutation := NodesMutation{
 		UpdatedNodes: map[string]*persistencespb.ChasmNode{
-			"": {
-				Metadata: &persistencespb.ChasmNodeMetadata{
-					InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
-					LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 2},
-					Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
-						ComponentAttributes: &persistencespb.ChasmComponentAttributes{
-							TypeId: testComponentTypeID,
-							SideEffectTasks: []*persistencespb.ChasmComponentAttributes_Task{
-								{
-									TypeId:                    testSideEffectTaskTypeID,
-									VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
-									VersionedTransitionOffset: 1,
-									PhysicalTaskStatus:        physicalTaskStatusCreated,
-								},
-								{
-									TypeId:                    testSideEffectTaskTypeID,
-									VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 2},
-									VersionedTransitionOffset: 1,
-									PhysicalTaskStatus:        physicalTaskStatusNone,
-								},
-								{
-									TypeId:                    testSideEffectTaskTypeID,
-									Destination:               "destination",
-									ScheduledTime:             timestamppb.New(TaskScheduledTimeImmediate),
-									VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 2},
-									VersionedTransitionOffset: 2,
-									PhysicalTaskStatus:        physicalTaskStatusNone,
-								},
-								{
-									TypeId:                    testSideEffectTaskTypeID,
-									ScheduledTime:             timestamppb.New(s.timeSource.Now().Add(time.Minute)),
-									VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 2},
-									VersionedTransitionOffset: 3,
-									PhysicalTaskStatus:        physicalTaskStatusNone,
-								},
-							},
+			"": persistencespb.ChasmNode_builder{
+				Metadata: persistencespb.ChasmNodeMetadata_builder{
+					InitialVersionedTransition:    persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+					LastUpdateVersionedTransition: persistencespb.VersionedTransition_builder{TransitionCount: 2}.Build(),
+					ComponentAttributes: persistencespb.ChasmComponentAttributes_builder{
+						TypeId: testComponentTypeID,
+						SideEffectTasks: []*persistencespb.ChasmComponentAttributes_Task{
+							persistencespb.ChasmComponentAttributes_Task_builder{
+								TypeId:                    testSideEffectTaskTypeID,
+								VersionedTransition:       persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+								VersionedTransitionOffset: 1,
+								PhysicalTaskStatus:        physicalTaskStatusCreated,
+							}.Build(),
+							persistencespb.ChasmComponentAttributes_Task_builder{
+								TypeId:                    testSideEffectTaskTypeID,
+								VersionedTransition:       persistencespb.VersionedTransition_builder{TransitionCount: 2}.Build(),
+								VersionedTransitionOffset: 1,
+								PhysicalTaskStatus:        physicalTaskStatusNone,
+							}.Build(),
+							persistencespb.ChasmComponentAttributes_Task_builder{
+								TypeId:                    testSideEffectTaskTypeID,
+								Destination:               "destination",
+								ScheduledTime:             timestamppb.New(TaskScheduledTimeImmediate),
+								VersionedTransition:       persistencespb.VersionedTransition_builder{TransitionCount: 2}.Build(),
+								VersionedTransitionOffset: 2,
+								PhysicalTaskStatus:        physicalTaskStatusNone,
+							}.Build(),
+							persistencespb.ChasmComponentAttributes_Task_builder{
+								TypeId:                    testSideEffectTaskTypeID,
+								ScheduledTime:             timestamppb.New(s.timeSource.Now().Add(time.Minute)),
+								VersionedTransition:       persistencespb.VersionedTransition_builder{TransitionCount: 2}.Build(),
+								VersionedTransitionOffset: 3,
+								PhysicalTaskStatus:        physicalTaskStatusNone,
+							}.Build(),
 						},
-					},
-				},
-			},
+					}.Build(),
+				}.Build(),
+			}.Build(),
 		},
 	}
 
@@ -2399,70 +2349,64 @@ func (s *nodeSuite) TestCloseTransaction_ApplyMutation_SideEffectTasks() {
 func (s *nodeSuite) TestCloseTransaction_ApplyMutation_PureTasks() {
 	now := s.timeSource.Now().UTC()
 	persistenceNodes := map[string]*persistencespb.ChasmNode{
-		"": {
-			Metadata: &persistencespb.ChasmNodeMetadata{
-				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
-				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
-				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
-					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
-						TypeId: testComponentTypeID,
-						PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
-							{
-								TypeId:                    testPureTaskTypeID,
-								ScheduledTime:             timestamppb.New(now.Add(time.Second)),
-								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
-								VersionedTransitionOffset: 1,
-								PhysicalTaskStatus:        physicalTaskStatusCreated,
-							},
-						},
+		"": persistencespb.ChasmNode_builder{
+			Metadata: persistencespb.ChasmNodeMetadata_builder{
+				InitialVersionedTransition:    persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+				LastUpdateVersionedTransition: persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+				ComponentAttributes: persistencespb.ChasmComponentAttributes_builder{
+					TypeId: testComponentTypeID,
+					PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
+						persistencespb.ChasmComponentAttributes_Task_builder{
+							TypeId:                    testPureTaskTypeID,
+							ScheduledTime:             timestamppb.New(now.Add(time.Second)),
+							VersionedTransition:       persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+							VersionedTransitionOffset: 1,
+							PhysicalTaskStatus:        physicalTaskStatusCreated,
+						}.Build(),
 					},
-				},
-			},
-		},
-		"SubComponent1": {
-			Metadata: &persistencespb.ChasmNodeMetadata{
-				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
-				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
-				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
-					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
-						TypeId: testSubComponent1TypeID,
-						PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
-							{
-								TypeId:                    testPureTaskTypeID,
-								ScheduledTime:             timestamppb.New(now.Add(time.Minute)),
-								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
-								VersionedTransitionOffset: 2,
-								PhysicalTaskStatus:        physicalTaskStatusNone,
-							},
-						},
+				}.Build(),
+			}.Build(),
+		}.Build(),
+		"SubComponent1": persistencespb.ChasmNode_builder{
+			Metadata: persistencespb.ChasmNodeMetadata_builder{
+				InitialVersionedTransition:    persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+				LastUpdateVersionedTransition: persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+				ComponentAttributes: persistencespb.ChasmComponentAttributes_builder{
+					TypeId: testSubComponent1TypeID,
+					PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
+						persistencespb.ChasmComponentAttributes_Task_builder{
+							TypeId:                    testPureTaskTypeID,
+							ScheduledTime:             timestamppb.New(now.Add(time.Minute)),
+							VersionedTransition:       persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+							VersionedTransitionOffset: 2,
+							PhysicalTaskStatus:        physicalTaskStatusNone,
+						}.Build(),
 					},
-				},
-			},
-		},
+				}.Build(),
+			}.Build(),
+		}.Build(),
 	}
 
 	incomingMutation := NodesMutation{
 		UpdatedNodes: map[string]*persistencespb.ChasmNode{
-			"": {
-				Metadata: &persistencespb.ChasmNodeMetadata{
-					InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
-					LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 2},
-					Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
-						ComponentAttributes: &persistencespb.ChasmComponentAttributes{
-							TypeId: testComponentTypeID,
-							PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
-								{
-									TypeId:                    testPureTaskTypeID,
-									ScheduledTime:             timestamppb.New(now.Add(2 * time.Minute)),
-									VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 2},
-									VersionedTransitionOffset: 1,
-									PhysicalTaskStatus:        physicalTaskStatusNone,
-								},
-							},
+			"": persistencespb.ChasmNode_builder{
+				Metadata: persistencespb.ChasmNodeMetadata_builder{
+					InitialVersionedTransition:    persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+					LastUpdateVersionedTransition: persistencespb.VersionedTransition_builder{TransitionCount: 2}.Build(),
+					ComponentAttributes: persistencespb.ChasmComponentAttributes_builder{
+						TypeId: testComponentTypeID,
+						PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
+							persistencespb.ChasmComponentAttributes_Task_builder{
+								TypeId:                    testPureTaskTypeID,
+								ScheduledTime:             timestamppb.New(now.Add(2 * time.Minute)),
+								VersionedTransition:       persistencespb.VersionedTransition_builder{TransitionCount: 2}.Build(),
+								VersionedTransitionOffset: 1,
+								PhysicalTaskStatus:        physicalTaskStatusNone,
+							}.Build(),
 						},
-					},
-				},
-			},
+					}.Build(),
+				}.Build(),
+			}.Build(),
 		},
 	}
 
@@ -2624,7 +2568,7 @@ func (s *nodeSuite) TestExecuteImmediatePureTask() {
 		testComponent,
 		taskAttributes,
 		&TestPureTask{
-			Payload: &commonpb.Payload{Data: []byte("root-task-payload")},
+			Payload: commonpb.Payload_builder{Data: []byte("root-task-payload")}.Build(),
 		},
 	)
 
@@ -2634,7 +2578,7 @@ func (s *nodeSuite) TestExecuteImmediatePureTask() {
 		sc1,
 		taskAttributes,
 		&TestPureTask{
-			Payload: &commonpb.Payload{Data: []byte("sc1-task-payload")},
+			Payload: commonpb.Payload_builder{Data: []byte("sc1-task-payload")}.Build(),
 		},
 	)
 
@@ -2671,122 +2615,114 @@ func (s *nodeSuite) TestEachPureTask() {
 
 	// Set up a tree with expired and unexpired pure tasks.
 	persistenceNodes := map[string]*persistencespb.ChasmNode{
-		"": {
-			Metadata: &persistencespb.ChasmNodeMetadata{
-				InitialVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
-				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
-					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
-						TypeId: testComponentTypeID,
-						PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
-							{
-								// Expired
-								TypeId:                    testPureTaskTypeID,
-								ScheduledTime:             timestamppb.New(now),
-								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
-								VersionedTransitionOffset: 1,
-								PhysicalTaskStatus:        physicalTaskStatusCreated,
-								Data: mustEncode(&commonpb.Payload{
-									Data: []byte("some-random-data-root"),
-								}),
-							},
-						},
+		"": persistencespb.ChasmNode_builder{
+			Metadata: persistencespb.ChasmNodeMetadata_builder{
+				InitialVersionedTransition: persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+				ComponentAttributes: persistencespb.ChasmComponentAttributes_builder{
+					TypeId: testComponentTypeID,
+					PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
+						persistencespb.ChasmComponentAttributes_Task_builder{
+							// Expired
+							TypeId:                    testPureTaskTypeID,
+							ScheduledTime:             timestamppb.New(now),
+							VersionedTransition:       persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+							VersionedTransitionOffset: 1,
+							PhysicalTaskStatus:        physicalTaskStatusCreated,
+							Data: mustEncode(commonpb.Payload_builder{
+								Data: []byte("some-random-data-root"),
+							}.Build()),
+						}.Build(),
 					},
-				},
-			},
-		},
-		"SubComponent1": {
-			Metadata: &persistencespb.ChasmNodeMetadata{
-				InitialVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
-				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
-					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
-						TypeId: testSubComponent1TypeID,
-						PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
-							{
-								TypeId: testPureTaskTypeID,
-								// Not expired yet.
-								ScheduledTime:             timestamppb.New(now.Add(time.Hour)),
-								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
-								VersionedTransitionOffset: 2,
-								PhysicalTaskStatus:        physicalTaskStatusCreated,
-								Data: mustEncode(&commonpb.Payload{
-									Data: []byte("some-random-data-sc1"),
-								}),
-							},
-						},
+				}.Build(),
+			}.Build(),
+		}.Build(),
+		"SubComponent1": persistencespb.ChasmNode_builder{
+			Metadata: persistencespb.ChasmNodeMetadata_builder{
+				InitialVersionedTransition: persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+				ComponentAttributes: persistencespb.ChasmComponentAttributes_builder{
+					TypeId: testSubComponent1TypeID,
+					PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
+						persistencespb.ChasmComponentAttributes_Task_builder{
+							TypeId: testPureTaskTypeID,
+							// Not expired yet.
+							ScheduledTime:             timestamppb.New(now.Add(time.Hour)),
+							VersionedTransition:       persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+							VersionedTransitionOffset: 2,
+							PhysicalTaskStatus:        physicalTaskStatusCreated,
+							Data: mustEncode(commonpb.Payload_builder{
+								Data: []byte("some-random-data-sc1"),
+							}.Build()),
+						}.Build(),
 					},
-				},
-			},
-		},
-		"SubComponent1/SubComponent11": {
-			Metadata: &persistencespb.ChasmNodeMetadata{
-				InitialVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
-				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
-					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
-						TypeId: testSubComponent11TypeID,
-						PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
-							{
-								TypeId: testPureTaskTypeID,
-								// Expired, and physical task not created
-								ScheduledTime:             timestamppb.New(now),
-								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
-								VersionedTransitionOffset: 3,
-								PhysicalTaskStatus:        physicalTaskStatusNone,
-								Data: mustEncode(&commonpb.Payload{
-									Data: []byte("some-random-data-sc11-1"),
-								}),
-							},
-							{
-								TypeId: testPureTaskTypeID,
-								// Expired, but when processing this task, delete the SubComponent11 itself.
-								ScheduledTime:             timestamppb.New(now),
-								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
-								VersionedTransitionOffset: 4,
-								PhysicalTaskStatus:        physicalTaskStatusCreated,
-								Data: mustEncode(&commonpb.Payload{
-									Data: []byte("some-random-data-sc11-2"),
-								}),
-							},
-							{
-								TypeId: testPureTaskTypeID,
-								// Expired, but should not be executed because previous task deletes SubComponent1
-								// (this node's parent).
-								ScheduledTime:             timestamppb.New(now),
-								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
-								VersionedTransitionOffset: 5,
-								PhysicalTaskStatus:        physicalTaskStatusCreated,
-								Data: mustEncode(&commonpb.Payload{
-									Data: []byte("some-random-data-sc11-3"),
-								}),
-							},
-						},
+				}.Build(),
+			}.Build(),
+		}.Build(),
+		"SubComponent1/SubComponent11": persistencespb.ChasmNode_builder{
+			Metadata: persistencespb.ChasmNodeMetadata_builder{
+				InitialVersionedTransition: persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+				ComponentAttributes: persistencespb.ChasmComponentAttributes_builder{
+					TypeId: testSubComponent11TypeID,
+					PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
+						persistencespb.ChasmComponentAttributes_Task_builder{
+							TypeId: testPureTaskTypeID,
+							// Expired, and physical task not created
+							ScheduledTime:             timestamppb.New(now),
+							VersionedTransition:       persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+							VersionedTransitionOffset: 3,
+							PhysicalTaskStatus:        physicalTaskStatusNone,
+							Data: mustEncode(commonpb.Payload_builder{
+								Data: []byte("some-random-data-sc11-1"),
+							}.Build()),
+						}.Build(),
+						persistencespb.ChasmComponentAttributes_Task_builder{
+							TypeId: testPureTaskTypeID,
+							// Expired, but when processing this task, delete the SubComponent11 itself.
+							ScheduledTime:             timestamppb.New(now),
+							VersionedTransition:       persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+							VersionedTransitionOffset: 4,
+							PhysicalTaskStatus:        physicalTaskStatusCreated,
+							Data: mustEncode(commonpb.Payload_builder{
+								Data: []byte("some-random-data-sc11-2"),
+							}.Build()),
+						}.Build(),
+						persistencespb.ChasmComponentAttributes_Task_builder{
+							TypeId: testPureTaskTypeID,
+							// Expired, but should not be executed because previous task deletes SubComponent1
+							// (this node's parent).
+							ScheduledTime:             timestamppb.New(now),
+							VersionedTransition:       persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+							VersionedTransitionOffset: 5,
+							PhysicalTaskStatus:        physicalTaskStatusCreated,
+							Data: mustEncode(commonpb.Payload_builder{
+								Data: []byte("some-random-data-sc11-3"),
+							}.Build()),
+						}.Build(),
 					},
-				},
-			},
-		},
-		"SubComponent2": {
-			Metadata: &persistencespb.ChasmNodeMetadata{
-				InitialVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
-				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
-					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
-						TypeId: testSubComponent2TypeID,
-						PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
-							{
-								TypeId: testPureTaskTypeID,
-								// Expired. However, this task won't be executed because the node is deleted
-								// when processing the pure task from the root component.
-								ScheduledTime:             timestamppb.New(now),
-								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
-								VersionedTransitionOffset: 6,
-								PhysicalTaskStatus:        physicalTaskStatusCreated,
-								Data: mustEncode(&commonpb.Payload{
-									Data: []byte("some-random-data-sc2"),
-								}),
-							},
-						},
+				}.Build(),
+			}.Build(),
+		}.Build(),
+		"SubComponent2": persistencespb.ChasmNode_builder{
+			Metadata: persistencespb.ChasmNodeMetadata_builder{
+				InitialVersionedTransition: persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+				ComponentAttributes: persistencespb.ChasmComponentAttributes_builder{
+					TypeId: testSubComponent2TypeID,
+					PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
+						persistencespb.ChasmComponentAttributes_Task_builder{
+							TypeId: testPureTaskTypeID,
+							// Expired. However, this task won't be executed because the node is deleted
+							// when processing the pure task from the root component.
+							ScheduledTime:             timestamppb.New(now),
+							VersionedTransition:       persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+							VersionedTransitionOffset: 6,
+							PhysicalTaskStatus:        physicalTaskStatusCreated,
+							Data: mustEncode(commonpb.Payload_builder{
+								Data: []byte("some-random-data-sc2"),
+							}.Build()),
+						}.Build(),
 					},
-				},
-			},
-		},
+				}.Build(),
+			}.Build(),
+		}.Build(),
 	}
 
 	root, err := s.newTestTree(persistenceNodes)
@@ -2801,11 +2737,11 @@ func (s *nodeSuite) TestEachPureTask() {
 		testPureTask, ok := task.(*TestPureTask)
 		s.True(ok)
 
-		processedTaskData = append(processedTaskData, testPureTask.Payload.Data)
+		processedTaskData = append(processedTaskData, testPureTask.Payload.GetData())
 
 		// When processing root component task, delete SubComponent2 to verify its task is not executed.
 		if slices.Equal(
-			testPureTask.Payload.Data,
+			testPureTask.Payload.GetData(),
 			[]byte("some-random-data-root"),
 		) {
 			mutableContext := NewMutableContext(context.Background(), root)
@@ -2817,7 +2753,7 @@ func (s *nodeSuite) TestEachPureTask() {
 
 		// When processing task for SubComponent11, delete its parent SubComponent1 so that the remaining task is not executed.
 		if slices.Equal(
-			testPureTask.Payload.Data,
+			testPureTask.Payload.GetData(),
 			[]byte("some-random-data-sc11-2"),
 		) {
 			mutableContext := NewMutableContext(context.Background(), root)
@@ -2840,23 +2776,21 @@ func (s *nodeSuite) TestEachPureTask() {
 
 func (s *nodeSuite) TestExecutePureTask() {
 	persistenceNodes := map[string]*persistencespb.ChasmNode{
-		"": {
-			Metadata: &persistencespb.ChasmNodeMetadata{
-				InitialVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
-				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
-					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
-						TypeId: testComponentTypeID,
-					},
-				},
-			},
-		},
+		"": persistencespb.ChasmNode_builder{
+			Metadata: persistencespb.ChasmNodeMetadata_builder{
+				InitialVersionedTransition: persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+				ComponentAttributes: persistencespb.ChasmComponentAttributes_builder{
+					TypeId: testComponentTypeID,
+				}.Build(),
+			}.Build(),
+		}.Build(),
 	}
 
 	taskAttributes := TaskAttributes{}
 	pureTask := &TestPureTask{
-		Payload: &commonpb.Payload{
+		Payload: commonpb.Payload_builder{
 			Data: []byte("some-random-data"),
-		},
+		}.Build(),
 	}
 
 	root, err := s.newTestTree(persistenceNodes)
@@ -2917,9 +2851,9 @@ func (s *nodeSuite) TestExecutePureTask() {
 func (s *nodeSuite) TestValidatePureTask() {
 	taskAttributes := TaskAttributes{}
 	pureTask := &TestPureTask{
-		Payload: &commonpb.Payload{
+		Payload: commonpb.Payload_builder{
 			Data: []byte("some-random-data"),
-		},
+		}.Build(),
 	}
 
 	root := s.testComponentTree()
@@ -2972,32 +2906,30 @@ func (s *nodeSuite) TestValidatePureTask() {
 
 func (s *nodeSuite) TestExecuteSideEffectTask() {
 	persistenceNodes := map[string]*persistencespb.ChasmNode{
-		"": {
-			Metadata: &persistencespb.ChasmNodeMetadata{
-				InitialVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
-				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
-					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
-						TypeId: testComponentTypeID,
-					},
-				},
-			},
-		},
+		"": persistencespb.ChasmNode_builder{
+			Metadata: persistencespb.ChasmNodeMetadata_builder{
+				InitialVersionedTransition: persistencespb.VersionedTransition_builder{TransitionCount: 1}.Build(),
+				ComponentAttributes: persistencespb.ChasmComponentAttributes_builder{
+					TypeId: testComponentTypeID,
+				}.Build(),
+			}.Build(),
+		}.Build(),
 	}
 
-	taskInfo := &persistencespb.ChasmTaskInfo{
-		ComponentInitialVersionedTransition: &persistencespb.VersionedTransition{
+	taskInfo := persistencespb.ChasmTaskInfo_builder{
+		ComponentInitialVersionedTransition: persistencespb.VersionedTransition_builder{
 			TransitionCount: 1,
-		},
-		ComponentLastUpdateVersionedTransition: &persistencespb.VersionedTransition{
+		}.Build(),
+		ComponentLastUpdateVersionedTransition: persistencespb.VersionedTransition_builder{
 			TransitionCount: 1,
-		},
+		}.Build(),
 		Path:   rootPath,
 		TypeId: testSideEffectTaskTypeID,
-		Data: &commonpb.DataBlob{
+		Data: commonpb.DataBlob_builder{
 			Data:         nil,
 			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
-		},
-	}
+		}.Build(),
+	}.Build()
 	workflowKey := definition.NewWorkflowKey(
 		primitives.NewUUID().String(),
 		primitives.NewUUID().String(),
@@ -3098,22 +3030,22 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 }
 
 func (s *nodeSuite) TestValidateSideEffectTask() {
-	taskInfo := &persistencespb.ChasmTaskInfo{
-		ComponentInitialVersionedTransition: &persistencespb.VersionedTransition{
+	taskInfo := persistencespb.ChasmTaskInfo_builder{
+		ComponentInitialVersionedTransition: persistencespb.VersionedTransition_builder{
 			TransitionCount:          1,
 			NamespaceFailoverVersion: 1,
-		},
-		ComponentLastUpdateVersionedTransition: &persistencespb.VersionedTransition{
+		}.Build(),
+		ComponentLastUpdateVersionedTransition: persistencespb.VersionedTransition_builder{
 			TransitionCount:          1,
 			NamespaceFailoverVersion: 1,
-		},
+		}.Build(),
 		Path:   rootPath,
 		TypeId: testSideEffectTaskTypeID,
-		Data: &commonpb.DataBlob{
+		Data: commonpb.DataBlob_builder{
 			Data:         nil,
 			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
-		},
-	}
+		}.Build(),
+	}.Build()
 	workflowKey := definition.NewWorkflowKey(
 		primitives.NewUUID().String(),
 		primitives.NewUUID().String(),
@@ -3169,7 +3101,7 @@ func (s *nodeSuite) TestValidateSideEffectTask() {
 
 	// Succeed validation as valid for a sub component.
 	childTaskInfo := taskInfo
-	childTaskInfo.Path = []string{"SubComponent1"}
+	childTaskInfo.SetPath([]string{"SubComponent1"})
 	childWorkflowKey := definition.NewWorkflowKey(
 		primitives.NewUUID().String(),
 		primitives.NewUUID().String(),

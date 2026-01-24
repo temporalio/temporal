@@ -42,22 +42,22 @@ func GetTasks(
 	if ackMessageID != persistence.EmptyQueueMessageID {
 		if err := shardContext.UpdateReplicationQueueReaderState(
 			readerID,
-			&persistencespb.QueueReaderState{
-				Scopes: []*persistencespb.QueueSliceScope{{
-					Range: &persistencespb.QueueSliceRange{
+			persistencespb.QueueReaderState_builder{
+				Scopes: []*persistencespb.QueueSliceScope{persistencespb.QueueSliceScope_builder{
+					Range: persistencespb.QueueSliceRange_builder{
 						InclusiveMin: shard.ConvertToPersistenceTaskKey(
 							tasks.NewImmediateKey(ackMessageID + 1),
 						),
 						ExclusiveMax: shard.ConvertToPersistenceTaskKey(
 							tasks.NewImmediateKey(math.MaxInt64),
 						),
-					},
-					Predicate: &persistencespb.Predicate{
-						PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
-						Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
-					},
-				}},
-			},
+					}.Build(),
+					Predicate: persistencespb.Predicate_builder{
+						PredicateType:                enumsspb.PREDICATE_TYPE_UNIVERSAL,
+						UniversalPredicateAttributes: &persistencespb.UniversalPredicateAttributes{},
+					}.Build(),
+				}.Build()},
+			}.Build(),
 		); err != nil {
 			shardContext.GetLogger().Error("error updating replication level for shard", tag.Error(err), tag.OperationFailed)
 		}
@@ -74,6 +74,6 @@ func GetTasks(
 		return nil, err
 	}
 
-	shardContext.GetLogger().Debug("Successfully fetched replication messages.", tag.Counter(len(replicationMessages.ReplicationTasks)))
+	shardContext.GetLogger().Debug("Successfully fetched replication messages.", tag.Counter(len(replicationMessages.GetReplicationTasks())))
 	return replicationMessages, nil
 }

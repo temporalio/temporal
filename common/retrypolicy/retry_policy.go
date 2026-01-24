@@ -39,19 +39,19 @@ var DefaultDefaultRetrySettings = DefaultRetrySettings{
 // EnsureDefaults ensures the policy subfields, if not explicitly set, are set to the specified defaults
 func EnsureDefaults(originalPolicy *commonpb.RetryPolicy, defaultSettings DefaultRetrySettings) {
 	if originalPolicy.GetMaximumAttempts() == 0 {
-		originalPolicy.MaximumAttempts = defaultSettings.MaximumAttempts
+		originalPolicy.SetMaximumAttempts(defaultSettings.MaximumAttempts)
 	}
 
 	if timestamp.DurationValue(originalPolicy.GetInitialInterval()) == 0 {
-		originalPolicy.InitialInterval = durationpb.New(defaultSettings.InitialInterval)
+		originalPolicy.SetInitialInterval(durationpb.New(defaultSettings.InitialInterval))
 	}
 
 	if timestamp.DurationValue(originalPolicy.GetMaximumInterval()) == 0 {
-		originalPolicy.MaximumInterval = durationpb.New(time.Duration(defaultSettings.MaximumIntervalCoefficient) * timestamp.DurationValue(originalPolicy.GetInitialInterval()))
+		originalPolicy.SetMaximumInterval(durationpb.New(time.Duration(defaultSettings.MaximumIntervalCoefficient) * timestamp.DurationValue(originalPolicy.GetInitialInterval())))
 	}
 
 	if originalPolicy.GetBackoffCoefficient() == 0 {
-		originalPolicy.BackoffCoefficient = defaultSettings.BackoffCoefficient
+		originalPolicy.SetBackoffCoefficient(defaultSettings.BackoffCoefficient)
 	}
 }
 
@@ -83,7 +83,7 @@ func Validate(policy *commonpb.RetryPolicy) error {
 		return serviceerror.NewInvalidArgument("MaximumAttempts cannot be negative on retry policy.")
 	}
 
-	for _, nrt := range policy.NonRetryableErrorTypes {
+	for _, nrt := range policy.GetNonRetryableErrorTypes() {
 		if strings.HasPrefix(nrt, TimeoutFailureTypePrefix) {
 			timeoutTypeValue := nrt[len(TimeoutFailureTypePrefix):]
 			timeoutType, err := enumspb.TimeoutTypeFromString(timeoutTypeValue)

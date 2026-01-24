@@ -32,14 +32,14 @@ type SomeJSONStruct struct {
 }
 
 func jsonPayload(data string) *commonpb.Payloads {
-	return &commonpb.Payloads{
-		Payloads: []*commonpb.Payload{{
+	return commonpb.Payloads_builder{
+		Payloads: []*commonpb.Payload{commonpb.Payload_builder{
 			Metadata: map[string][]byte{
 				converter.MetadataEncoding: []byte(converter.MetadataEncodingJSON),
 			},
 			Data: []byte(data),
-		}},
-	}
+		}.Build()},
+	}.Build()
 }
 
 type HttpApiTestSuite struct {
@@ -171,27 +171,27 @@ func (s *HttpApiTestSuite) runHTTPAPIBasicsTest_Protojson(contentType string, pr
 	}
 	// These are callbacks because the worker needs to be initialized so we can get the task queue
 	reqBody := func() string {
-		requestBody, err := protojson.Marshal(&workflowservice.StartWorkflowExecutionRequest{
-			WorkflowType: &commonpb.WorkflowType{Name: "http-basic-workflow"},
-			TaskQueue:    &taskqueuepb.TaskQueue{Name: s.TaskQueue()},
+		requestBody, err := protojson.Marshal(workflowservice.StartWorkflowExecutionRequest_builder{
+			WorkflowType: commonpb.WorkflowType_builder{Name: "http-basic-workflow"}.Build(),
+			TaskQueue:    taskqueuepb.TaskQueue_builder{Name: s.TaskQueue()}.Build(),
 			Input:        jsonPayload(`{ "someField": "workflow-arg" }`),
-		})
+		}.Build())
 		s.Require().NoError(err)
 		return string(requestBody)
 	}
 	queryBody := func() string {
-		queryBody, err := protojson.Marshal(&workflowservice.QueryWorkflowRequest{
-			Query: &querypb.WorkflowQuery{
+		queryBody, err := protojson.Marshal(workflowservice.QueryWorkflowRequest_builder{
+			Query: querypb.WorkflowQuery_builder{
 				QueryArgs: jsonPayload(`{ "someField": "query-arg" }`),
-			},
-		})
+			}.Build(),
+		}.Build())
 		s.Require().NoError(err)
 		return string(queryBody)
 	}
 	signalBody := func() string {
-		signalBody, err := protojson.Marshal(&workflowservice.SignalWorkflowExecutionRequest{
+		signalBody, err := protojson.Marshal(workflowservice.SignalWorkflowExecutionRequest_builder{
 			Input: jsonPayload(`{ "someField": "signal-arg" }`),
-		})
+		}.Build())
 		s.Require().NoError(err)
 		return string(signalBody)
 	}
@@ -203,10 +203,10 @@ func (s *HttpApiTestSuite) runHTTPAPIBasicsTest_Protojson(contentType string, pr
 		}
 		var queryResp workflowservice.QueryWorkflowResponse
 		s.Require().NoError(protojson.Unmarshal(respBody, &queryResp), string(respBody))
-		s.Require().Len(queryResp.QueryResult.Payloads, 1)
+		s.Require().Len(queryResp.GetQueryResult().GetPayloads(), 1)
 		var payload SomeJSONStruct
 		conv := converter.NewJSONPayloadConverter()
-		s.Require().NoError(conv.FromPayload(queryResp.QueryResult.Payloads[0], &payload))
+		s.Require().NoError(conv.FromPayload(queryResp.GetQueryResult().GetPayloads()[0], &payload))
 		s.Require().Equal("query-arg", payload.SomeField)
 	}
 	verifyHistory := func(s *HttpApiTestSuite, respBody []byte) {
@@ -217,14 +217,14 @@ func (s *HttpApiTestSuite) runHTTPAPIBasicsTest_Protojson(contentType string, pr
 		}
 		var histResp workflowservice.GetWorkflowExecutionHistoryResponse
 		s.Require().NoError(protojson.Unmarshal(respBody, &histResp))
-		s.Require().Len(histResp.History.Events, 1)
-		s.Require().Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED, histResp.History.Events[0].EventType)
+		s.Require().Len(histResp.GetHistory().GetEvents(), 1)
+		s.Require().Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED, histResp.GetHistory().GetEvents()[0].GetEventType())
 
-		event := histResp.History.Events[0].GetWorkflowExecutionCompletedEventAttributes()
+		event := histResp.GetHistory().GetEvents()[0].GetWorkflowExecutionCompletedEventAttributes()
 		var payload SomeJSONStruct
 		conv := converter.NewJSONPayloadConverter()
-		s.Require().Len(event.Result.Payloads, 1)
-		s.Require().NoError(conv.FromPayload(event.Result.Payloads[0], &payload))
+		s.Require().Len(event.GetResult().GetPayloads(), 1)
+		s.Require().NoError(conv.FromPayload(event.GetResult().GetPayloads()[0], &payload))
 		s.Require().Equal("workflow-arg", payload.SomeField)
 	}
 	s.runHTTPAPIBasicsTest(contentType, reqBody, queryBody, signalBody, verifyQueryResult, verifyHistory)

@@ -64,10 +64,10 @@ var (
 
 func cloneOrMkData(data *persistencespb.VersioningData) *persistencespb.VersioningData {
 	if data == nil {
-		return &persistencespb.VersioningData{
+		return persistencespb.VersioningData_builder{
 			AssignmentRules: make([]*persistencespb.AssignmentRule, 0),
 			RedirectRules:   make([]*persistencespb.RedirectRule, 0),
-		}
+		}.Build()
 	}
 	return common.CloneProto(data)
 }
@@ -92,16 +92,16 @@ func InsertAssignmentRule(timestamp *hlc.Clock,
 	}
 	data = cloneOrMkData(data)
 	rules := data.GetAssignmentRules()
-	persistenceAR := persistencespb.AssignmentRule{
+	persistenceAR := persistencespb.AssignmentRule_builder{
 		Rule:            rule,
 		CreateTimestamp: timestamp,
 		DeleteTimestamp: nil,
-	}
+	}.Build()
 	if actualIdx := given2ActualIdx(req.GetRuleIndex(), rules); actualIdx < 0 {
 		// given index was too large, insert at end
-		data.AssignmentRules = append(rules, &persistenceAR)
+		data.SetAssignmentRules(append(rules, persistenceAR))
 	} else {
-		data.AssignmentRules = slices.Insert(rules, actualIdx, &persistenceAR)
+		data.SetAssignmentRules(slices.Insert(rules, actualIdx, persistenceAR))
 	}
 	return data, checkAssignmentConditions(data, maxAssignmentRules, false)
 }
@@ -129,12 +129,12 @@ func ReplaceAssignmentRule(timestamp *hlc.Clock,
 	if actualIdx < 0 {
 		return nil, errAssignmentRuleIndexOutOfBounds(int(idx), len(getActiveAssignmentRules(rules)))
 	}
-	rules[actualIdx].DeleteTimestamp = timestamp
-	data.AssignmentRules = slices.Insert(rules, actualIdx, &persistencespb.AssignmentRule{
+	rules[actualIdx].SetDeleteTimestamp(timestamp)
+	data.SetAssignmentRules(slices.Insert(rules, actualIdx, persistencespb.AssignmentRule_builder{
 		Rule:            rule,
 		CreateTimestamp: timestamp,
 		DeleteTimestamp: nil,
-	})
+	}.Build()))
 	return data, checkAssignmentConditions(data, 0, hadFullyRamped && !req.GetForce())
 }
 
@@ -150,7 +150,7 @@ func DeleteAssignmentRule(timestamp *hlc.Clock,
 	if actualIdx < 0 || actualIdx > len(rules)-1 {
 		return nil, errAssignmentRuleIndexOutOfBounds(int(idx), len(getActiveAssignmentRules(rules)))
 	}
-	rules[actualIdx].DeleteTimestamp = timestamp
+	rules[actualIdx].SetDeleteTimestamp(timestamp)
 	return data, checkAssignmentConditions(data, 0, hadFullyRamped && !req.GetForce())
 }
 
@@ -181,11 +181,11 @@ func AddCompatibleRedirectRule(timestamp *hlc.Clock,
 			return nil, errSourceAlreadyExists(source, r.GetRule().GetTargetBuildId())
 		}
 	}
-	data.RedirectRules = slices.Insert(rules, 0, &persistencespb.RedirectRule{
+	data.SetRedirectRules(slices.Insert(rules, 0, persistencespb.RedirectRule_builder{
 		Rule:            rule,
 		CreateTimestamp: timestamp,
 		DeleteTimestamp: nil,
-	})
+	}.Build()))
 	return data, checkRedirectConditions(data, maxRedirectRules, maxUpstreamBuildIds)
 }
 
@@ -210,12 +210,12 @@ func ReplaceCompatibleRedirectRule(timestamp *hlc.Clock,
 	rules := data.GetRedirectRules()
 	for _, r := range rules {
 		if r.GetDeleteTimestamp() == nil && r.GetRule().GetSourceBuildId() == source {
-			r.DeleteTimestamp = timestamp
-			data.RedirectRules = slices.Insert(rules, 0, &persistencespb.RedirectRule{
+			r.SetDeleteTimestamp(timestamp)
+			data.SetRedirectRules(slices.Insert(rules, 0, persistencespb.RedirectRule_builder{
 				Rule:            rule,
 				CreateTimestamp: timestamp,
 				DeleteTimestamp: nil,
-			})
+			}.Build()))
 			return data, checkRedirectConditions(data, 0, maxUpstreamBuildIDs)
 		}
 	}
@@ -230,7 +230,7 @@ func DeleteCompatibleRedirectRule(timestamp *hlc.Clock,
 	source := req.GetSourceBuildId()
 	for _, r := range data.GetRedirectRules() {
 		if r.GetDeleteTimestamp() == nil && r.GetRule().GetSourceBuildId() == source {
-			r.DeleteTimestamp = timestamp
+			r.SetDeleteTimestamp(timestamp)
 			return data, nil // no need to check cycle or chain because removing a node cannot create a cycle or create a link
 		}
 	}
@@ -243,12 +243,12 @@ func CleanupRuleTombstones(versioningData *persistencespb.VersioningData,
 	retentionTime time.Duration,
 ) *persistencespb.VersioningData {
 	modifiedData := shallowCloneVersioningData(versioningData)
-	modifiedData.AssignmentRules = util.FilterSlice(modifiedData.GetAssignmentRules(), func(ar *persistencespb.AssignmentRule) bool {
-		return ar.DeleteTimestamp == nil || (ar.DeleteTimestamp != nil && hlc.Since(ar.DeleteTimestamp) < retentionTime)
-	})
-	modifiedData.RedirectRules = util.FilterSlice(modifiedData.GetRedirectRules(), func(rr *persistencespb.RedirectRule) bool {
-		return rr.DeleteTimestamp == nil || (rr.DeleteTimestamp != nil && hlc.Since(rr.DeleteTimestamp) < retentionTime)
-	})
+	modifiedData.SetAssignmentRules(util.FilterSlice(modifiedData.GetAssignmentRules(), func(ar *persistencespb.AssignmentRule) bool {
+		return !ar.HasDeleteTimestamp() || (ar.HasDeleteTimestamp() && hlc.Since(ar.GetDeleteTimestamp()) < retentionTime)
+	}))
+	modifiedData.SetRedirectRules(util.FilterSlice(modifiedData.GetRedirectRules(), func(rr *persistencespb.RedirectRule) bool {
+		return !rr.HasDeleteTimestamp() || (rr.HasDeleteTimestamp() && hlc.Since(rr.GetDeleteTimestamp()) < retentionTime)
+	}))
 	return modifiedData
 }
 
@@ -276,20 +276,20 @@ func CommitBuildID(timestamp *hlc.Clock,
 
 	for _, ar := range getActiveAssignmentRules(data.GetAssignmentRules()) {
 		if ar.GetRule().GetTargetBuildId() == target {
-			ar.DeleteTimestamp = timestamp
+			ar.SetDeleteTimestamp(timestamp)
 		}
 		if isFullyRamped(ar.GetRule()) {
-			ar.DeleteTimestamp = timestamp
+			ar.SetDeleteTimestamp(timestamp)
 		}
 	}
 
-	data.AssignmentRules = append(data.GetAssignmentRules(), &persistencespb.AssignmentRule{
-		Rule: &taskqueuepb.BuildIdAssignmentRule{
-			TargetBuildId: target,
-			Ramp:          &taskqueuepb.BuildIdAssignmentRule_PercentageRamp{PercentageRamp: &taskqueuepb.RampByPercentage{RampPercentage: 100}},
-		},
+	data.SetAssignmentRules(append(data.GetAssignmentRules(), persistencespb.AssignmentRule_builder{
+		Rule: taskqueuepb.BuildIdAssignmentRule_builder{
+			TargetBuildId:  target,
+			PercentageRamp: taskqueuepb.RampByPercentage_builder{RampPercentage: 100}.Build(),
+		}.Build(),
 		CreateTimestamp: timestamp,
-	})
+	}.Build()))
 	if err := checkAssignmentConditions(data, maxAssignmentRules, false); err != nil {
 		return nil, err
 	}
@@ -308,28 +308,28 @@ func GetTimestampedWorkerVersioningRules(
 	activeAssignmentRules := make([]*taskqueuepb.TimestampedBuildIdAssignmentRule, 0)
 	for _, ar := range versioningData.GetAssignmentRules() {
 		if ar.GetDeleteTimestamp() == nil {
-			activeAssignmentRules = append(activeAssignmentRules, &taskqueuepb.TimestampedBuildIdAssignmentRule{
+			activeAssignmentRules = append(activeAssignmentRules, taskqueuepb.TimestampedBuildIdAssignmentRule_builder{
 				Rule:       ar.GetRule(),
 				CreateTime: hlc.ProtoTimestamp(ar.GetCreateTimestamp()),
-			})
+			}.Build())
 		}
 	}
 	activeRedirectRules := make([]*taskqueuepb.TimestampedCompatibleBuildIdRedirectRule, 0)
 	for _, rr := range versioningData.GetRedirectRules() {
 		if rr.GetDeleteTimestamp() == nil {
-			activeRedirectRules = append(activeRedirectRules, &taskqueuepb.TimestampedCompatibleBuildIdRedirectRule{
+			activeRedirectRules = append(activeRedirectRules, taskqueuepb.TimestampedCompatibleBuildIdRedirectRule_builder{
 				Rule:       rr.GetRule(),
 				CreateTime: hlc.ProtoTimestamp(rr.GetCreateTimestamp()),
-			})
+			}.Build())
 		}
 	}
-	return &matchingservice.GetWorkerVersioningRulesResponse{
-		Response: &workflowservice.GetWorkerVersioningRulesResponse{
+	return matchingservice.GetWorkerVersioningRulesResponse_builder{
+		Response: workflowservice.GetWorkerVersioningRulesResponse_builder{
 			AssignmentRules:         activeAssignmentRules,
 			CompatibleRedirectRules: activeRedirectRules,
 			ConflictToken:           cT,
-		},
-	}, nil
+		}.Build(),
+	}.Build(), nil
 }
 
 // checkAssignmentConditions checks for validity conditions that must be assessed by looking at the entire set of rules.
@@ -372,13 +372,13 @@ func checkRedirectConditions(g *persistencespb.VersioningData, maxRRs, maxUpstre
 
 func getActiveAssignmentRules(rules []*persistencespb.AssignmentRule) []*persistencespb.AssignmentRule {
 	return util.FilterSlice(slices.Clone(rules), func(ar *persistencespb.AssignmentRule) bool {
-		return ar.DeleteTimestamp == nil
+		return !ar.HasDeleteTimestamp()
 	})
 }
 
 func getActiveRedirectRules(rules []*persistencespb.RedirectRule) []*persistencespb.RedirectRule {
 	return util.FilterSlice(slices.Clone(rules), func(rr *persistencespb.RedirectRule) bool {
-		return rr.DeleteTimestamp == nil
+		return !rr.HasDeleteTimestamp()
 	})
 }
 
@@ -445,7 +445,7 @@ func containsFullyRamped(rules []*persistencespb.AssignmentRule) bool {
 // isInVersionSets returns true if the given build ID is in any of the listed version sets
 func isInVersionSets(id string, sets []*persistencespb.CompatibleVersionSet) bool {
 	for _, set := range sets {
-		for _, bid := range set.BuildIds {
+		for _, bid := range set.GetBuildIds() {
 			if bid.GetId() == id {
 				return true
 			}
@@ -459,7 +459,7 @@ func isInVersionSets(id string, sets []*persistencespb.CompatibleVersionSet) boo
 // A negative return value means index out of bounds.
 func given2ActualIdx(idx int32, rules []*persistencespb.AssignmentRule) int {
 	for i, rule := range rules {
-		if rule.DeleteTimestamp == nil {
+		if !rule.HasDeleteTimestamp() {
 			if idx == 0 {
 				return i
 			}
@@ -471,20 +471,20 @@ func given2ActualIdx(idx int32, rules []*persistencespb.AssignmentRule) int {
 
 // handleAssignmentRuleNilRamp mutates and returns rule object to convert nil ramp to 100%
 func handleAssignmentRuleNilRamp(rule *taskqueuepb.BuildIdAssignmentRule) *taskqueuepb.BuildIdAssignmentRule {
-	if rule.GetRamp() == nil {
-		rule.Ramp = &taskqueuepb.BuildIdAssignmentRule_PercentageRamp{PercentageRamp: &taskqueuepb.RampByPercentage{RampPercentage: 100}}
+	if rule.WhichRamp() == 0 {
+		rule.SetPercentageRamp(taskqueuepb.RampByPercentage_builder{RampPercentage: 100}.Build())
 	}
 	return rule
 }
 
 // hasValidRamp returns true if the rule has a ramp percentage within [0, 100] or a ramp of nil
 func hasValidRamp(rule *taskqueuepb.BuildIdAssignmentRule) bool {
-	return rule.GetRamp() == nil || (rule.GetPercentageRamp().GetRampPercentage() >= 0 && rule.GetPercentageRamp().GetRampPercentage() <= 100)
+	return rule.WhichRamp() == 0 || (rule.GetPercentageRamp().GetRampPercentage() >= 0 && rule.GetPercentageRamp().GetRampPercentage() <= 100)
 }
 
 // isFullyRamped returns true if the rule has a ramp percentage of 100 or a ramp of nil
 func isFullyRamped(rule *taskqueuepb.BuildIdAssignmentRule) bool {
-	return rule.GetRamp() == nil || rule.GetPercentageRamp().GetRampPercentage() == 100
+	return rule.WhichRamp() == 0 || rule.GetPercentageRamp().GetRampPercentage() == 100
 }
 
 // isCyclic returns true if there is a cycle in the DAG of redirect rules.

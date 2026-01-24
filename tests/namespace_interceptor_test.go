@@ -58,8 +58,8 @@ func newSystemUnderTestConnector(s *NamespaceInterceptorTestSuite) *sutConnector
 	return &sutConnector{
 		suite:           s,
 		identity:        "worker-1",
-		taskQueue:       &taskqueuepb.TaskQueue{Name: id, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		stickyTaskQueue: &taskqueuepb.TaskQueue{Name: "test-sticky-taskqueue", Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: id},
+		taskQueue:       taskqueuepb.TaskQueue_builder{Name: id, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
+		stickyTaskQueue: taskqueuepb.TaskQueue_builder{Name: "test-sticky-taskqueue", Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: id}.Build(),
 		id:              id,
 	}
 
@@ -90,8 +90,8 @@ func (b *sutConnector) respondWorkflowTaskCompleted(token []byte, ns namespace.N
 
 func newStartWorkflowExecutionRequest(ns namespace.Name, workflowId string, identity string, queue *taskqueuepb.TaskQueue) *workflowservice.StartWorkflowExecutionRequest {
 	wt := "functional-workflow-namespace-validator-interceptor"
-	workflowType := &commonpb.WorkflowType{Name: wt}
-	request := &workflowservice.StartWorkflowExecutionRequest{
+	workflowType := commonpb.WorkflowType_builder{Name: wt}.Build()
+	request := workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:           uuid.NewString(),
 		Namespace:           ns.String(),
 		WorkflowId:          workflowId,
@@ -101,36 +101,34 @@ func newStartWorkflowExecutionRequest(ns namespace.Name, workflowId string, iden
 		WorkflowRunTimeout:  durationpb.New(20 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(3 * time.Second),
 		Identity:            identity,
-	}
+	}.Build()
 	return request
 }
 
 func newPollWorkflowTaskQueueRequest(ns namespace.Name, identity string, queue *taskqueuepb.TaskQueue) *workflowservice.PollWorkflowTaskQueueRequest {
-	return &workflowservice.PollWorkflowTaskQueueRequest{
+	return workflowservice.PollWorkflowTaskQueueRequest_builder{
 		Namespace: ns.String(),
 		TaskQueue: queue,
 		Identity:  identity,
-	}
+	}.Build()
 }
 
 func newRespondWorkflowTaskCompletedRequest(ns namespace.Name, stickyQueue *taskqueuepb.TaskQueue, token []byte) *workflowservice.RespondWorkflowTaskCompletedRequest {
-	return &workflowservice.RespondWorkflowTaskCompletedRequest{
+	return workflowservice.RespondWorkflowTaskCompletedRequest_builder{
 		Namespace: ns.String(),
 		TaskToken: token,
 		Commands: []*commandpb.Command{
-			{
+			commandpb.Command_builder{
 				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
-					CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
-						Result: payloads.EncodeString("efg"),
-					},
-				},
-			}},
-		StickyAttributes: &taskqueuepb.StickyExecutionAttributes{
+				CompleteWorkflowExecutionCommandAttributes: commandpb.CompleteWorkflowExecutionCommandAttributes_builder{
+					Result: payloads.EncodeString("efg"),
+				}.Build(),
+			}.Build()},
+		StickyAttributes: taskqueuepb.StickyExecutionAttributes_builder{
 			WorkerTaskQueue:        stickyQueue,
 			ScheduleToStartTimeout: durationpb.New(5 * time.Second),
-		},
+		}.Build(),
 		ReturnNewWorkflowTask:      true,
 		ForceCreateNewWorkflowTask: false,
-	}
+	}.Build()
 }

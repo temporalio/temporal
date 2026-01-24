@@ -280,15 +280,15 @@ func (s *DLQSuite) TestPurgeRealWorkflow() {
 
 	// Run DescribeJob and validate
 	response := s.describeJob(ctx, token)
-	s.Equal(enumsspb.DLQ_OPERATION_TYPE_PURGE, response.OperationType)
-	s.Equal(enumsspb.DLQ_OPERATION_STATE_COMPLETED, response.OperationState)
-	s.Equal(dlqMessageID, response.MaxMessageId)
-	s.Equal(dlqMessageID, response.LastProcessedMessageId)
-	s.Equal(int64(1), response.MessagesProcessed)
+	s.Equal(enumsspb.DLQ_OPERATION_TYPE_PURGE, response.GetOperationType())
+	s.Equal(enumsspb.DLQ_OPERATION_STATE_COMPLETED, response.GetOperationState())
+	s.Equal(dlqMessageID, response.GetMaxMessageId())
+	s.Equal(dlqMessageID, response.GetLastProcessedMessageId())
+	s.Equal(int64(1), response.GetMessagesProcessed())
 
 	// Try to cancel completed workflow
 	cancelResponse := s.cancelJob(ctx, token)
-	s.Equal(false, cancelResponse.Canceled)
+	s.Equal(false, cancelResponse.GetCanceled())
 }
 
 // This test executes actual workflows for which we've set up an executor wrapper to return a terminal error. This
@@ -329,15 +329,15 @@ func (s *DLQSuite) TestMergeRealWorkflow() {
 
 	// Run DescribeJob and validate
 	response := s.describeJob(ctx, token)
-	s.Equal(enumsspb.DLQ_OPERATION_TYPE_MERGE, response.OperationType)
-	s.Equal(enumsspb.DLQ_OPERATION_STATE_COMPLETED, response.OperationState)
-	s.Equal(dlqMessageID, response.MaxMessageId)
-	s.Equal(dlqMessageID, response.LastProcessedMessageId)
-	s.Equal(int64(numWorkflows), response.MessagesProcessed)
+	s.Equal(enumsspb.DLQ_OPERATION_TYPE_MERGE, response.GetOperationType())
+	s.Equal(enumsspb.DLQ_OPERATION_STATE_COMPLETED, response.GetOperationState())
+	s.Equal(dlqMessageID, response.GetMaxMessageId())
+	s.Equal(dlqMessageID, response.GetLastProcessedMessageId())
+	s.Equal(int64(numWorkflows), response.GetMessagesProcessed())
 
 	// Try to cancel completed workflow
 	cancelResponse := s.cancelJob(ctx, token)
-	s.Equal(false, cancelResponse.Canceled)
+	s.Equal(false, cancelResponse.GetCanceled())
 }
 
 func (s *DLQSuite) TestCancelRunningMerge() {
@@ -353,7 +353,7 @@ func (s *DLQSuite) TestCancelRunningMerge() {
 
 	// Try to cancel running workflow
 	cancelResponse := s.cancelJob(ctx, token)
-	s.Equal(true, cancelResponse.Canceled)
+	s.Equal(true, cancelResponse.GetCanceled())
 	// Unblock waiting tests on Delete
 	close(s.deleteBlockCh)
 	// Delete the workflow task from the DLQ.
@@ -401,24 +401,24 @@ func (s *DLQSuite) TestListQueues() {
 	s.NoError(err)
 
 	queueInfos := s.listQueues(ctx)
-	qi0 := adminservice.ListQueuesResponse_QueueInfo{
+	qi0 := adminservice.ListQueuesResponse_QueueInfo_builder{
 		QueueName:     queueKey1.GetQueueName(),
 		MessageCount:  0,
 		LastMessageId: -1,
-	}
-	qi1 := adminservice.ListQueuesResponse_QueueInfo{
+	}.Build()
+	qi1 := adminservice.ListQueuesResponse_QueueInfo_builder{
 		QueueName:     queueKey2.GetQueueName(),
 		MessageCount:  1,
 		LastMessageId: 0,
-	}
+	}.Build()
 	var found0, found1 bool
 	for _, qi := range queueInfos {
-		found0 = found0 || proto.Equal(qi, &qi0)
-		found1 = found1 || proto.Equal(qi, &qi1)
+		found0 = found0 || proto.Equal(qi, qi0)
+		found1 = found1 || proto.Equal(qi, qi1)
 
 	}
-	s.True(found0, "unable to find %v in %v", &qi0, queueInfos)
-	s.True(found1, "unable to find %v in %v", &qi1, queueInfos)
+	s.True(found0, "unable to find %v in %v", qi0, queueInfos)
+	s.True(found1, "unable to find %v in %v", qi1, queueInfos)
 }
 
 func (s *DLQSuite) validateWorkflowRun(ctx context.Context, run sdkclient.WorkflowRun) {
@@ -455,7 +455,7 @@ func (s *DLQSuite) verifyRunIsInDLQ(
 ) tdbgtest.DLQMessage[*persistencespb.TransferTaskInfo] {
 	dlqTasks := s.readDLQTasks(ctx)
 	for _, task := range dlqTasks {
-		if task.Payload.RunId == run.GetRunID() {
+		if task.Payload.GetRunId() == run.GetRunID() {
 			return task
 		}
 	}
@@ -498,7 +498,7 @@ func (s *DLQSuite) purgeMessages(ctx context.Context, maxMessageIDToDelete int64
 	s.NoError(proto.Unmarshal(response.GetJobToken(), &token))
 
 	systemSDKClient := s.sdkClientFactory.GetSystemClient()
-	run := systemSDKClient.GetWorkflow(ctx, token.WorkflowId, token.RunId)
+	run := systemSDKClient.GetWorkflow(ctx, token.GetWorkflowId(), token.GetRunId())
 	s.NoError(run.Get(ctx, nil))
 	return tokenString
 }
@@ -511,7 +511,7 @@ func (s *DLQSuite) mergeMessages(ctx context.Context, maxMessageID int64) string
 	var token adminservice.DLQJobToken
 	s.NoError(token.Unmarshal(tokenBytes))
 	systemSDKClient := s.sdkClientFactory.GetSystemClient()
-	run := systemSDKClient.GetWorkflow(ctx, token.WorkflowId, token.RunId)
+	run := systemSDKClient.GetWorkflow(ctx, token.GetWorkflowId(), token.GetRunId())
 	s.NoError(run.Get(ctx, nil))
 	return tokenString
 }
@@ -628,11 +628,11 @@ func (s *DLQSuite) verifyNumTasks(file *os.File, expectedNumTasks int) {
 	for i, task := range dlqTasks {
 		s.Equal(int64(persistence.FirstQueueMessageID+i), task.MessageID)
 		taskInfo := task.Payload
-		s.Equal(enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK, taskInfo.TaskType)
-		s.Equal("test-namespace", taskInfo.NamespaceId)
-		s.Equal("test-workflow-id", taskInfo.WorkflowId)
-		s.Equal("test-run-id", taskInfo.RunId)
-		s.Equal(int64(42+i), taskInfo.TaskId)
+		s.Equal(enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK, taskInfo.GetTaskType())
+		s.Equal("test-namespace", taskInfo.GetNamespaceId())
+		s.Equal("test-workflow-id", taskInfo.GetWorkflowId())
+		s.Equal("test-run-id", taskInfo.GetRunId())
+		s.Equal(int64(42+i), taskInfo.GetTaskId())
 	}
 }
 

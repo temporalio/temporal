@@ -35,7 +35,7 @@ func (tdc *TestDataConverter) ToPayloads(values ...interface{}) (*commonpb.Paylo
 			return nil, fmt.Errorf(
 				"args[%d], %T: %w", i, value, err)
 		}
-		result.Payloads = append(result.Payloads, p)
+		result.SetPayloads(append(result.GetPayloads(), p))
 	}
 	return result, nil
 }
@@ -57,12 +57,12 @@ func (tdc *TestDataConverter) ToPayload(value interface{}) (*commonpb.Payload, e
 	if err := enc.Encode(value); err != nil {
 		return nil, err
 	}
-	p := &commonpb.Payload{
+	p := commonpb.Payload_builder{
 		Metadata: map[string][]byte{
 			"encoding": []byte("gob"),
 		},
 		Data: buf.Bytes(),
-	}
+	}.Build()
 	return p, nil
 }
 

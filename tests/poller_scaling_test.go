@@ -63,19 +63,17 @@ func (s *PollerScalingIntegSuite) TestPollerScalingSimpleBacklog() {
 		nexusoperations.CallbackURLTemplate,
 		"http://"+s.HttpAPIAddress()+"/namespaces/{{.NamespaceName}}/nexus/callback")
 
-	_, err := s.OperatorClient().CreateNexusEndpoint(ctx, &operatorservice.CreateNexusEndpointRequest{
-		Spec: &nexuspb.EndpointSpec{
+	_, err := s.OperatorClient().CreateNexusEndpoint(ctx, operatorservice.CreateNexusEndpointRequest_builder{
+		Spec: nexuspb.EndpointSpec_builder{
 			Name: endpointName,
-			Target: &nexuspb.EndpointTarget{
-				Variant: &nexuspb.EndpointTarget_Worker_{
-					Worker: &nexuspb.EndpointTarget_Worker{
-						Namespace: s.Namespace().String(),
-						TaskQueue: tq,
-					},
-				},
-			},
-		},
-	})
+			Target: nexuspb.EndpointTarget_builder{
+				Worker: nexuspb.EndpointTarget_Worker_builder{
+					Namespace: s.Namespace().String(),
+					TaskQueue: tq,
+				}.Build(),
+			}.Build(),
+		}.Build(),
+	}.Build())
 	s.NoError(err)
 
 	// Queue up a couple workflows
@@ -89,77 +87,75 @@ func (s *PollerScalingIntegSuite) TestPollerScalingSimpleBacklog() {
 	feClient := s.FrontendClient()
 	// This needs to be done in an eventually loop because nexus endpoints don't become available immediately...
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		resp, err := feClient.PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		resp, err := feClient.PollWorkflowTaskQueue(ctx, workflowservice.PollWorkflowTaskQueueRequest_builder{
 			Namespace: s.Namespace().String(),
-			TaskQueue: &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		})
+			TaskQueue: taskqueuepb.TaskQueue_builder{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
+		}.Build())
 		require.NoError(t, err)
-		require.NotNil(t, resp.PollerScalingDecision)
-		require.GreaterOrEqual(t, int32(1), resp.PollerScalingDecision.PollRequestDeltaSuggestion)
+		require.NotNil(t, resp.GetPollerScalingDecision())
+		require.GreaterOrEqual(t, int32(1), resp.GetPollerScalingDecision().GetPollRequestDeltaSuggestion())
 
 		// Start enough activities / nexus tasks to ensure we will see scale up decisions
 		commands := make([]*commandpb.Command, 0, 5)
 		for i := 0; i < 5; i++ {
-			commands = append(commands, &commandpb.Command{
+			commands = append(commands, commandpb.Command_builder{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+				ScheduleActivityTaskCommandAttributes: commandpb.ScheduleActivityTaskCommandAttributes_builder{
 					ActivityId:          fmt.Sprintf("%v", i),
-					ActivityType:        &commonpb.ActivityType{Name: "test-activity-type"},
-					TaskQueue:           &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+					ActivityType:        commonpb.ActivityType_builder{Name: "test-activity-type"}.Build(),
+					TaskQueue:           taskqueuepb.TaskQueue_builder{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 					Input:               payloads.EncodeString("test-input"),
 					StartToCloseTimeout: durationpb.New(10 * time.Second),
-				}},
-			})
-			commands = append(commands, &commandpb.Command{
+				}.Build(),
+			}.Build())
+			commands = append(commands, commandpb.Command_builder{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION,
-				Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
-					ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
-						Endpoint:  endpointName,
-						Service:   "service",
-						Operation: "operation",
-						Input:     s.mustToPayload("input"),
-					},
-				},
-			},
+				ScheduleNexusOperationCommandAttributes: commandpb.ScheduleNexusOperationCommandAttributes_builder{
+					Endpoint:  endpointName,
+					Service:   "service",
+					Operation: "operation",
+					Input:     s.mustToPayload("input"),
+				}.Build(),
+			}.Build(),
 			)
 		}
-		_, err = feClient.RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		_, err = feClient.RespondWorkflowTaskCompleted(ctx, workflowservice.RespondWorkflowTaskCompletedRequest_builder{
 			Identity:  "test",
-			TaskToken: resp.TaskToken,
+			TaskToken: resp.GetTaskToken(),
 			Commands:  commands,
-		})
+		}.Build())
 		require.NoError(t, err)
 	}, 20*time.Second, 200*time.Millisecond)
 
 	// Wait to ensure add rate exceeds dispatch rate & backlog age grows
 	tqtyp := enumspb.TASK_QUEUE_TYPE_ACTIVITY
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		res, err := feClient.DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+		res, err := feClient.DescribeTaskQueue(ctx, workflowservice.DescribeTaskQueueRequest_builder{
 			Namespace:      s.Namespace().String(),
-			TaskQueue:      &taskqueuepb.TaskQueue{Name: tq},
+			TaskQueue:      taskqueuepb.TaskQueue_builder{Name: tq}.Build(),
 			ApiMode:        enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED,
 			TaskQueueTypes: []enumspb.TaskQueueType{tqtyp},
 			ReportStats:    true,
-		})
+		}.Build())
 		require.NoError(t, err)
-		stats := res.GetVersionsInfo()[""].TypesInfo[int32(tqtyp)].Stats
-		require.GreaterOrEqual(t, stats.ApproximateBacklogAge.AsDuration(), 200*time.Millisecond)
+		stats := res.GetVersionsInfo()[""].GetTypesInfo()[int32(tqtyp)].GetStats()
+		require.GreaterOrEqual(t, stats.GetApproximateBacklogAge().AsDuration(), 200*time.Millisecond)
 	}, 20*time.Second, 200*time.Millisecond)
 
-	actResp, err := feClient.PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+	actResp, err := feClient.PollActivityTaskQueue(ctx, workflowservice.PollActivityTaskQueueRequest_builder{
 		Namespace: s.Namespace().String(),
-		TaskQueue: &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-	})
+		TaskQueue: taskqueuepb.TaskQueue_builder{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
+	}.Build())
 	s.NoError(err)
-	s.NotNil(actResp.PollerScalingDecision)
-	s.Assert().GreaterOrEqual(int32(1), actResp.PollerScalingDecision.PollRequestDeltaSuggestion)
+	s.NotNil(actResp.GetPollerScalingDecision())
+	s.Assert().GreaterOrEqual(int32(1), actResp.GetPollerScalingDecision().GetPollRequestDeltaSuggestion())
 
-	nexusResp, err := feClient.PollNexusTaskQueue(ctx, &workflowservice.PollNexusTaskQueueRequest{
+	nexusResp, err := feClient.PollNexusTaskQueue(ctx, workflowservice.PollNexusTaskQueueRequest_builder{
 		Namespace: s.Namespace().String(),
-		TaskQueue: &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-	})
+		TaskQueue: taskqueuepb.TaskQueue_builder{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
+	}.Build())
 	s.NoError(err)
-	s.NotNil(nexusResp.PollerScalingDecision)
+	s.NotNil(nexusResp.GetPollerScalingDecision())
 }
 
 // Here we verify that, even with multiple partitions, pollers see scaling decisions at least often enough
@@ -190,12 +186,12 @@ func (s *PollerScalingIntegSuite) TestPollerScalingDecisionsAreSeenProbabilistic
 
 	allScaleDecisions := make([]*taskqueuepb.PollerScalingDecision, 0, 15)
 	for i := 0; i < 15; i++ {
-		resp, _ := s.FrontendClient().PollWorkflowTaskQueue(longctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		resp, _ := s.FrontendClient().PollWorkflowTaskQueue(longctx, workflowservice.PollWorkflowTaskQueueRequest_builder{
 			Namespace: s.Namespace().String(),
-			TaskQueue: &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		})
+			TaskQueue: taskqueuepb.TaskQueue_builder{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
+		}.Build())
 		if resp != nil {
-			allScaleDecisions = append(allScaleDecisions, resp.PollerScalingDecision)
+			allScaleDecisions = append(allScaleDecisions, resp.GetPollerScalingDecision())
 		}
 		// Poll slightly less frequently than we insert tasks
 		time.Sleep(300 * time.Millisecond) //nolint:forbidigo
@@ -215,11 +211,11 @@ func (s *PollerScalingIntegSuite) TestPollerScalingOnCurrentVersionConsidersUnve
 		enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
 		buildID,
 		func(ctx context.Context, feClient workflowservice.WorkflowServiceClient, deploymentName, buildID string) error {
-			_, err := feClient.SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
+			_, err := feClient.SetWorkerDeploymentCurrentVersion(ctx, workflowservice.SetWorkerDeploymentCurrentVersionRequest_builder{
 				Namespace:      ns,
 				DeploymentName: deploymentName,
 				BuildId:        buildID,
-			})
+			}.Build())
 			return err
 		},
 	)
@@ -235,12 +231,12 @@ func (s *PollerScalingIntegSuite) TestPollerScalingOnRampingVersionConsidersUnve
 		enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING,
 		rampingBuildID,
 		func(ctx context.Context, feClient workflowservice.WorkflowServiceClient, deploymentName, buildID string) error {
-			_, err := feClient.SetWorkerDeploymentRampingVersion(ctx, &workflowservice.SetWorkerDeploymentRampingVersionRequest{
+			_, err := feClient.SetWorkerDeploymentRampingVersion(ctx, workflowservice.SetWorkerDeploymentRampingVersionRequest_builder{
 				Namespace:      ns,
 				DeploymentName: deploymentName,
 				BuildId:        buildID,
 				Percentage:     rampPercentage,
-			})
+			}.Build())
 			return err
 		},
 	)
@@ -281,30 +277,30 @@ func (s *PollerScalingIntegSuite) testPollerScalingOnPromotedVersionConsidersUnv
 	pollResultCh := make(chan pollResult, 1)
 
 	go func() {
-		pollResp, err := feClient.PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		pollResp, err := feClient.PollWorkflowTaskQueue(ctx, workflowservice.PollWorkflowTaskQueueRequest_builder{
 			Namespace: s.Namespace().String(),
-			TaskQueue: &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-			DeploymentOptions: &deploymentpb.WorkerDeploymentOptions{
+			TaskQueue: taskqueuepb.TaskQueue_builder{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
+			DeploymentOptions: deploymentpb.WorkerDeploymentOptions_builder{
 				DeploymentName:       deploymentName,
 				BuildId:              testBuildID,
 				WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_VERSIONED,
-			},
-		})
+			}.Build(),
+		}.Build())
 		pollResultCh <- pollResult{resp: pollResp, err: err}
 	}()
 
 	// Also start a versioned activity poller so that the activity task queue is registered in the version
 	pollCtx, pollCancel := context.WithTimeout(context.Background(), 1*time.Minute)
 	go func() {
-		_, _ = feClient.PollActivityTaskQueue(pollCtx, &workflowservice.PollActivityTaskQueueRequest{
+		_, _ = feClient.PollActivityTaskQueue(pollCtx, workflowservice.PollActivityTaskQueueRequest_builder{
 			Namespace: s.Namespace().String(),
-			TaskQueue: &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-			DeploymentOptions: &deploymentpb.WorkerDeploymentOptions{
+			TaskQueue: taskqueuepb.TaskQueue_builder{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
+			DeploymentOptions: deploymentpb.WorkerDeploymentOptions_builder{
 				DeploymentName:       deploymentName,
 				BuildId:              testBuildID,
 				WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_VERSIONED,
-			},
-		})
+			}.Build(),
+		}.Build())
 	}()
 
 	// This needs to be done in an eventually loop since version existence in the server is eventually consistent.
@@ -312,13 +308,13 @@ func (s *PollerScalingIntegSuite) testPollerScalingOnPromotedVersionConsidersUnv
 		a := require.New(t)
 
 		// Verify the version status is Inactive and has been registered due to a poller.
-		descResp, err := feClient.DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
+		descResp, err := feClient.DescribeWorkerDeploymentVersion(ctx, workflowservice.DescribeWorkerDeploymentVersionRequest_builder{
 			Namespace: s.Namespace().String(),
-			DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
+			DeploymentVersion: deploymentpb.WorkerDeploymentVersion_builder{
 				DeploymentName: deploymentName,
 				BuildId:        testBuildID,
-			},
-		})
+			}.Build(),
+		}.Build())
 		a.NoError(err)
 		a.NotNil(descResp)
 		a.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE, descResp.GetWorkerDeploymentVersionInfo().GetStatus())
@@ -329,13 +325,13 @@ func (s *PollerScalingIntegSuite) testPollerScalingOnPromotedVersionConsidersUnv
 		a.NoError(err)
 
 		// Verify the version status is the expected status.
-		descResp, err = feClient.DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
+		descResp, err = feClient.DescribeWorkerDeploymentVersion(ctx, workflowservice.DescribeWorkerDeploymentVersionRequest_builder{
 			Namespace: s.Namespace().String(),
-			DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
+			DeploymentVersion: deploymentpb.WorkerDeploymentVersion_builder{
 				DeploymentName: deploymentName,
 				BuildId:        testBuildID,
-			},
-		})
+			}.Build(),
+		}.Build())
 		a.NoError(err)
 		a.NotNil(descResp)
 		a.Equal(expectedStatus, descResp.GetWorkerDeploymentVersionInfo().GetStatus())
@@ -353,64 +349,64 @@ func (s *PollerScalingIntegSuite) testPollerScalingOnPromotedVersionConsidersUnv
 	// Start enough activities to ensure we will see scale up decisions. These are scheduled by an unversioned poller.
 	commands := make([]*commandpb.Command, 0, 10)
 	for i := 0; i < 10; i++ {
-		commands = append(commands, &commandpb.Command{
+		commands = append(commands, commandpb.Command_builder{
 			CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-			Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+			ScheduleActivityTaskCommandAttributes: commandpb.ScheduleActivityTaskCommandAttributes_builder{
 				ActivityId:          fmt.Sprintf("%v", i),
-				ActivityType:        &commonpb.ActivityType{Name: "test-activity-type"},
-				TaskQueue:           &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				ActivityType:        commonpb.ActivityType_builder{Name: "test-activity-type"}.Build(),
+				TaskQueue:           taskqueuepb.TaskQueue_builder{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 				Input:               payloads.EncodeString("test-input"),
 				StartToCloseTimeout: durationpb.New(10 * time.Second),
-			}},
-		})
+			}.Build(),
+		}.Build())
 	}
 
-	_, err := feClient.RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+	_, err := feClient.RespondWorkflowTaskCompleted(ctx, workflowservice.RespondWorkflowTaskCompletedRequest_builder{
 		Identity:  "test",
-		TaskToken: pollResp.TaskToken,
+		TaskToken: pollResp.GetTaskToken(),
 		Commands:  commands,
 		// Only doing this for the purpose of this test. Setting the versioning behavior to AutoUpgrade so that
 		// we transition the workflow to the deployment version and can poll the activities that are scheduled.
 		// If this was not present, all the scheduled activities would have to be dropped and we would have had to
 		// complete the transition task.
 		VersioningBehavior: enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE,
-		DeploymentOptions: &deploymentpb.WorkerDeploymentOptions{
+		DeploymentOptions: deploymentpb.WorkerDeploymentOptions_builder{
 			DeploymentName:       deploymentName,
 			BuildId:              testBuildID,
 			WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_VERSIONED,
-		},
-	})
+		}.Build(),
+	}.Build())
 	s.NoError(err)
 
 	// Wait to ensure add rate exceeds dispatch rate & backlog age grows.
 	tqtyp := enumspb.TASK_QUEUE_TYPE_ACTIVITY
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := require.New(t)
-		res, err := feClient.DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+		res, err := feClient.DescribeTaskQueue(ctx, workflowservice.DescribeTaskQueueRequest_builder{
 			Namespace:     s.Namespace().String(),
-			TaskQueue:     &taskqueuepb.TaskQueue{Name: tq},
+			TaskQueue:     taskqueuepb.TaskQueue_builder{Name: tq}.Build(),
 			TaskQueueType: tqtyp,
 			ReportStats:   true,
-		})
+		}.Build())
 		require.NoError(t, err)
 		stats := res.GetStats()
-		a.GreaterOrEqual(stats.ApproximateBacklogAge.AsDuration(), 200*time.Millisecond)
+		a.GreaterOrEqual(stats.GetApproximateBacklogAge().AsDuration(), 200*time.Millisecond)
 
 		// Describe the deployment version to see the activity stats attributed to it.
-		versionDescResp, err := feClient.DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
+		versionDescResp, err := feClient.DescribeWorkerDeploymentVersion(ctx, workflowservice.DescribeWorkerDeploymentVersionRequest_builder{
 			Namespace: s.Namespace().String(),
-			DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
+			DeploymentVersion: deploymentpb.WorkerDeploymentVersion_builder{
 				DeploymentName: deploymentName,
 				BuildId:        testBuildID,
-			},
+			}.Build(),
 			ReportTaskQueueStats: true,
-		})
+		}.Build())
 		a.NoError(err)
 		a.NotNil(versionDescResp)
 
 		found := false
 		for _, info := range versionDescResp.GetVersionTaskQueues() {
-			if info.Type == enumspb.TASK_QUEUE_TYPE_ACTIVITY {
+			if info.GetType() == enumspb.TASK_QUEUE_TYPE_ACTIVITY {
 				a.Equal(int64(10), info.GetStats().GetApproximateBacklogCount())
 				found = true
 			}
@@ -420,16 +416,16 @@ func (s *PollerScalingIntegSuite) testPollerScalingOnPromotedVersionConsidersUnv
 
 	// Start an activity poller that's in the deployment version. This should see a scale up decision since the backlog
 	// is absorbed by the deployment version.
-	actResp, err := feClient.PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+	actResp, err := feClient.PollActivityTaskQueue(ctx, workflowservice.PollActivityTaskQueueRequest_builder{
 		Namespace: s.Namespace().String(),
-		TaskQueue: &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		DeploymentOptions: &deploymentpb.WorkerDeploymentOptions{
+		TaskQueue: taskqueuepb.TaskQueue_builder{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
+		DeploymentOptions: deploymentpb.WorkerDeploymentOptions_builder{
 			DeploymentName:       deploymentName,
 			BuildId:              testBuildID,
 			WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_VERSIONED,
-		},
-	})
+		}.Build(),
+	}.Build())
 	s.NoError(err)
-	s.NotNil(actResp.PollerScalingDecision)
-	s.Equal(int32(1), actResp.PollerScalingDecision.PollRequestDeltaSuggestion)
+	s.NotNil(actResp.GetPollerScalingDecision())
+	s.Equal(int32(1), actResp.GetPollerScalingDecision().GetPollRequestDeltaSuggestion())
 }

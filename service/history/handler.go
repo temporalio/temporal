@@ -60,6 +60,7 @@ import (
 	"go.uber.org/fx"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/protobuf/proto"
 )
 
 type (
@@ -212,7 +213,7 @@ func (h *Handler) DeepHealthCheck(
 	}
 	if status.Status != healthpb.HealthCheckResponse_SERVING {
 		metrics.HistoryHostHealthGauge.With(h.metricsHandler).Record(float64(enumsspb.HEALTH_STATE_DECLINED_SERVING))
-		return &historyservice.DeepHealthCheckResponse{State: enumsspb.HEALTH_STATE_DECLINED_SERVING}, nil
+		return historyservice.DeepHealthCheckResponse_builder{State: enumsspb.HEALTH_STATE_DECLINED_SERVING}.Build(), nil
 	}
 
 	rsp := h.checkHistoryHealthSignals()
@@ -225,10 +226,10 @@ func (h *Handler) DeepHealthCheck(
 
 	if latency > h.config.HealthPersistenceLatencyFailure() || errRatio > h.config.HealthPersistenceErrorRatio() {
 		metrics.HistoryHostHealthGauge.With(h.metricsHandler).Record(float64(enumsspb.HEALTH_STATE_NOT_SERVING))
-		return &historyservice.DeepHealthCheckResponse{State: enumsspb.HEALTH_STATE_NOT_SERVING}, nil
+		return historyservice.DeepHealthCheckResponse_builder{State: enumsspb.HEALTH_STATE_NOT_SERVING}.Build(), nil
 	}
 	metrics.HistoryHostHealthGauge.With(h.metricsHandler).Record(float64(enumsspb.HEALTH_STATE_SERVING))
-	return &historyservice.DeepHealthCheckResponse{State: enumsspb.HEALTH_STATE_SERVING}, nil
+	return historyservice.DeepHealthCheckResponse_builder{State: enumsspb.HEALTH_STATE_SERVING}.Build(), nil
 }
 
 // checkHistoryHealthSignals checks the history health signal that is captured by the interceptor.
@@ -236,13 +237,13 @@ func (h *Handler) checkHistoryHealthSignals() *historyservice.DeepHealthCheckRes
 	// Check that the RPC latency doesn't exceed the threshold.
 	if h.historyHealthSignal.AverageLatency() > h.config.HealthRPCLatencyFailure() {
 		metrics.HistoryHostHealthGauge.With(h.metricsHandler).Record(float64(enumsspb.HEALTH_STATE_NOT_SERVING))
-		return &historyservice.DeepHealthCheckResponse{State: enumsspb.HEALTH_STATE_NOT_SERVING}
+		return historyservice.DeepHealthCheckResponse_builder{State: enumsspb.HEALTH_STATE_NOT_SERVING}.Build()
 	}
 
 	// Check if the RPC error ratio exceeds the threshold
 	if h.historyHealthSignal.ErrorRatio() > h.config.HealthRPCErrorRatio() {
 		metrics.HistoryHostHealthGauge.With(h.metricsHandler).Record(float64(enumsspb.HEALTH_STATE_NOT_SERVING))
-		return &historyservice.DeepHealthCheckResponse{State: enumsspb.HEALTH_STATE_NOT_SERVING}
+		return historyservice.DeepHealthCheckResponse_builder{State: enumsspb.HEALTH_STATE_NOT_SERVING}.Build()
 	}
 	return nil
 }
@@ -255,7 +256,7 @@ func (h *Handler) IsWorkflowTaskValid(ctx context.Context, request *historyservi
 	if namespaceID == "" {
 		return nil, h.convertError(errNamespaceNotSet)
 	}
-	workflowID := request.Execution.WorkflowId
+	workflowID := request.GetExecution().GetWorkflowId()
 
 	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
 	if err != nil {
@@ -281,7 +282,7 @@ func (h *Handler) IsActivityTaskValid(ctx context.Context, request *historyservi
 	if namespaceID == "" {
 		return nil, h.convertError(errNamespaceNotSet)
 	}
-	workflowID := request.Execution.WorkflowId
+	workflowID := request.GetExecution().GetWorkflowId()
 
 	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
 	if err != nil {
@@ -385,10 +386,11 @@ func (h *Handler) RecordActivityTaskStarted(ctx context.Context, request *histor
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	response.Clock, err = shardContext.NewVectorClock()
+	clock, err := shardContext.NewVectorClock()
 	if err != nil {
 		return nil, h.convertError(err)
 	}
+	response.SetClock(clock)
 	return response, nil
 }
 
@@ -397,13 +399,13 @@ func (h *Handler) RecordWorkflowTaskStarted(ctx context.Context, request *histor
 	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
 
 	namespaceID := namespace.ID(request.GetNamespaceId())
-	workflowExecution := request.WorkflowExecution
+	workflowExecution := request.GetWorkflowExecution()
 	workflowID := workflowExecution.GetWorkflowId()
 	if namespaceID == "" {
 		return nil, h.convertError(errNamespaceNotSet)
 	}
 
-	if request.PollRequest == nil || request.PollRequest.TaskQueue.GetName() == "" {
+	if !request.HasPollRequest() || request.GetPollRequest().GetTaskQueue().GetName() == "" {
 		return nil, h.convertError(errTaskQueueNotSet)
 	}
 
@@ -415,8 +417,8 @@ func (h *Handler) RecordWorkflowTaskStarted(ctx context.Context, request *histor
 	if err != nil {
 		h.logger.Error("RecordWorkflowTaskStarted failed.",
 			tag.Error(err),
-			tag.WorkflowID(request.WorkflowExecution.GetWorkflowId()),
-			tag.WorkflowRunID(request.WorkflowExecution.GetRunId()),
+			tag.WorkflowID(request.GetWorkflowExecution().GetWorkflowId()),
+			tag.WorkflowRunID(request.GetWorkflowExecution().GetRunId()),
 			tag.WorkflowScheduledEventID(request.GetScheduledEventId()),
 		)
 		return nil, h.convertError(err)
@@ -426,10 +428,11 @@ func (h *Handler) RecordWorkflowTaskStarted(ctx context.Context, request *histor
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	response.Clock, err = shardContext.NewVectorClock()
+	clock, err := shardContext.NewVectorClock()
 	if err != nil {
 		return nil, h.convertError(err)
 	}
+	response.SetClock(clock)
 	return response, nil
 }
 
@@ -437,7 +440,7 @@ func (h *Handler) RecordWorkflowTaskStarted(ctx context.Context, request *histor
 func (h *Handler) RespondActivityTaskCompleted(ctx context.Context, request *historyservice.RespondActivityTaskCompletedRequest) (_ *historyservice.RespondActivityTaskCompletedResponse, retError error) {
 	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
 
-	taskToken, err := h.tokenSerializer.Deserialize(request.CompleteRequest.GetTaskToken())
+	taskToken, err := h.tokenSerializer.Deserialize(request.GetCompleteRequest().GetTaskToken())
 	if err != nil {
 		return nil, consts.ErrDeserializingToken
 	}
@@ -500,7 +503,7 @@ func (h *Handler) RespondActivityTaskCompleted(ctx context.Context, request *his
 func (h *Handler) RespondActivityTaskFailed(ctx context.Context, request *historyservice.RespondActivityTaskFailedRequest) (_ *historyservice.RespondActivityTaskFailedResponse, retError error) {
 	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
 
-	taskToken, err := h.tokenSerializer.Deserialize(request.FailedRequest.GetTaskToken())
+	taskToken, err := h.tokenSerializer.Deserialize(request.GetFailedRequest().GetTaskToken())
 	if err != nil {
 		return nil, consts.ErrDeserializingToken
 	}
@@ -563,7 +566,7 @@ func (h *Handler) RespondActivityTaskFailed(ctx context.Context, request *histor
 func (h *Handler) RespondActivityTaskCanceled(ctx context.Context, request *historyservice.RespondActivityTaskCanceledRequest) (_ *historyservice.RespondActivityTaskCanceledResponse, retError error) {
 	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
 
-	taskToken, err := h.tokenSerializer.Deserialize(request.CancelRequest.GetTaskToken())
+	taskToken, err := h.tokenSerializer.Deserialize(request.GetCancelRequest().GetTaskToken())
 	if err != nil {
 		return nil, consts.ErrDeserializingToken
 	}
@@ -631,8 +634,8 @@ func (h *Handler) RespondWorkflowTaskCompleted(ctx context.Context, request *his
 		return nil, h.convertError(errNamespaceNotSet)
 	}
 
-	completeRequest := request.CompleteRequest
-	token, err0 := h.tokenSerializer.Deserialize(completeRequest.TaskToken)
+	completeRequest := request.GetCompleteRequest()
+	token, err0 := h.tokenSerializer.Deserialize(completeRequest.GetTaskToken())
 	if err0 != nil {
 		return nil, consts.ErrDeserializingToken
 	}
@@ -675,8 +678,8 @@ func (h *Handler) RespondWorkflowTaskFailed(ctx context.Context, request *histor
 		return nil, h.convertError(errNamespaceNotSet)
 	}
 
-	failedRequest := request.FailedRequest
-	token, err0 := h.tokenSerializer.Deserialize(failedRequest.TaskToken)
+	failedRequest := request.GetFailedRequest()
+	token, err0 := h.tokenSerializer.Deserialize(failedRequest.GetTaskToken())
 	if err0 != nil {
 		return nil, consts.ErrDeserializingToken
 	}
@@ -719,7 +722,7 @@ func (h *Handler) StartWorkflowExecution(ctx context.Context, request *historyse
 		return nil, h.convertError(errNamespaceNotSet)
 	}
 
-	startRequest := request.StartRequest
+	startRequest := request.GetStartRequest()
 	workflowID := startRequest.GetWorkflowId()
 	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
 	if err != nil {
@@ -735,11 +738,12 @@ func (h *Handler) StartWorkflowExecution(ctx context.Context, request *historyse
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	if response.Clock == nil {
-		response.Clock, err = shardContext.NewVectorClock()
+	if !response.HasClock() {
+		clock, err := shardContext.NewVectorClock()
 		if err != nil {
 			return nil, h.convertError(err)
 		}
+		response.SetClock(clock)
 	}
 	return response, nil
 }
@@ -755,7 +759,7 @@ func (h *Handler) ExecuteMultiOperation(
 		return nil, h.convertError(errNamespaceNotSet)
 	}
 
-	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, request.WorkflowId)
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, request.GetWorkflowId())
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -770,13 +774,14 @@ func (h *Handler) ExecuteMultiOperation(
 		return nil, h.convertError(err)
 	}
 
-	for _, opResp := range response.Responses {
+	for _, opResp := range response.GetResponses() {
 		if startResp := opResp.GetStartWorkflow(); startResp != nil {
-			if startResp.Clock == nil {
-				startResp.Clock, err = shardContext.NewVectorClock()
+			if !startResp.HasClock() {
+				clock, err := shardContext.NewVectorClock()
 				if err != nil {
 					return nil, h.convertError(err)
 				}
+				startResp.SetClock(clock)
 			}
 		}
 	}
@@ -803,24 +808,24 @@ func (h *Handler) DescribeHistoryHost(_ context.Context, req *historyservice.Des
 
 	itemsInRegistryByIDCount, itemsInRegistryByNameCount := h.namespaceRegistry.GetRegistrySize()
 	ownedShardIDs := h.controller.ShardIDs()
-	resp := &historyservice.DescribeHistoryHostResponse{
+	resp := historyservice.DescribeHistoryHostResponse_builder{
 		ShardsNumber: int32(len(ownedShardIDs)),
 		ShardIds:     ownedShardIDs,
-		NamespaceCache: &namespacespb.NamespaceCacheInfo{
+		NamespaceCache: namespacespb.NamespaceCacheInfo_builder{
 			ItemsInCacheByIdCount:   itemsInRegistryByIDCount,
 			ItemsInCacheByNameCount: itemsInRegistryByNameCount,
-		},
+		}.Build(),
 		Address: h.hostInfoProvider.HostInfo().GetAddress(),
-	}
+	}.Build()
 	return resp, nil
 }
 
 // RemoveTask returns information about the internal states of a history host
 func (h *Handler) RemoveTask(ctx context.Context, request *historyservice.RemoveTaskRequest) (_ *historyservice.RemoveTaskResponse, retError error) {
 	var err error
-	category, ok := h.taskCategoryRegistry.GetCategoryByID(int(request.Category))
+	category, ok := h.taskCategoryRegistry.GetCategoryByID(int(request.GetCategory()))
 	if !ok {
-		return nil, serviceerror.NewInvalidArgumentf("Invalid task category ID: %v", request.Category)
+		return nil, serviceerror.NewInvalidArgumentf("Invalid task category ID: %v", request.GetCategory())
 	}
 
 	key := tasks.NewKey(
@@ -851,12 +856,12 @@ func (h *Handler) CloseShard(_ context.Context, request *historyservice.CloseSha
 func (h *Handler) GetShard(ctx context.Context, request *historyservice.GetShardRequest) (_ *historyservice.GetShardResponse, retError error) {
 	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
 	resp, err := h.persistenceShardManager.GetOrCreateShard(ctx, &persistence.GetOrCreateShardRequest{
-		ShardID: request.ShardId,
+		ShardID: request.GetShardId(),
 	})
 	if err != nil {
 		return nil, err
 	}
-	return &historyservice.GetShardResponse{ShardInfo: resp.ShardInfo}, nil
+	return historyservice.GetShardResponse_builder{ShardInfo: resp.ShardInfo}.Build(), nil
 }
 
 // RebuildMutableState attempts to rebuild mutable state according to persisted history events
@@ -872,7 +877,7 @@ func (h *Handler) RebuildMutableState(ctx context.Context, request *historyservi
 		return nil, h.convertError(errNamespaceNotSet)
 	}
 
-	workflowExecution := request.Execution
+	workflowExecution := request.GetExecution()
 	workflowID := workflowExecution.GetWorkflowId()
 	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
 	if err != nil {
@@ -883,10 +888,10 @@ func (h *Handler) RebuildMutableState(ctx context.Context, request *historyservi
 		return nil, h.convertError(err)
 	}
 
-	if err := engine.RebuildMutableState(ctx, namespaceID, &commonpb.WorkflowExecution{
-		WorkflowId: workflowExecution.WorkflowId,
-		RunId:      workflowExecution.RunId,
-	}); err != nil {
+	if err := engine.RebuildMutableState(ctx, namespaceID, commonpb.WorkflowExecution_builder{
+		WorkflowId: workflowExecution.GetWorkflowId(),
+		RunId:      workflowExecution.GetRunId(),
+	}.Build()); err != nil {
 		return nil, h.convertError(err)
 	}
 	return &historyservice.RebuildMutableStateResponse{}, nil
@@ -905,7 +910,7 @@ func (h *Handler) ImportWorkflowExecution(ctx context.Context, request *historys
 		return nil, h.convertError(errNamespaceNotSet)
 	}
 
-	workflowExecution := request.Execution
+	workflowExecution := request.GetExecution()
 	workflowID := workflowExecution.GetWorkflowId()
 	if workflowID == "" {
 		return nil, h.convertError(errWorkflowIDNotSet)
@@ -946,7 +951,7 @@ func (h *Handler) DescribeMutableState(ctx context.Context, request *historyserv
 		return nil, h.convertError(errNamespaceNotSet)
 	}
 
-	workflowExecution := request.Execution
+	workflowExecution := request.GetExecution()
 	workflowID := workflowExecution.GetWorkflowId()
 	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
 	if err != nil {
@@ -977,7 +982,7 @@ func (h *Handler) GetMutableState(ctx context.Context, request *historyservice.G
 		return nil, h.convertError(errNamespaceNotSet)
 	}
 
-	workflowExecution := request.Execution
+	workflowExecution := request.GetExecution()
 	workflowID := workflowExecution.GetWorkflowId()
 	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
 	if err != nil {
@@ -1008,7 +1013,7 @@ func (h *Handler) PollMutableState(ctx context.Context, request *historyservice.
 		return nil, h.convertError(errNamespaceNotSet)
 	}
 
-	workflowExecution := request.Execution
+	workflowExecution := request.GetExecution()
 	workflowID := workflowExecution.GetWorkflowId()
 	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
 	if err != nil {
@@ -1039,7 +1044,7 @@ func (h *Handler) DescribeWorkflowExecution(ctx context.Context, request *histor
 		return nil, h.convertError(errNamespaceNotSet)
 	}
 
-	workflowExecution := request.Request.Execution
+	workflowExecution := request.GetRequest().GetExecution()
 	workflowID := workflowExecution.GetWorkflowId()
 	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
 	if err != nil {
@@ -1066,18 +1071,18 @@ func (h *Handler) RequestCancelWorkflowExecution(ctx context.Context, request *h
 	}
 
 	namespaceID := namespace.ID(request.GetNamespaceId())
-	if namespaceID == "" || request.CancelRequest.GetNamespace() == "" {
+	if namespaceID == "" || request.GetCancelRequest().GetNamespace() == "" {
 		return nil, h.convertError(errNamespaceNotSet)
 	}
 
-	cancelRequest := request.CancelRequest
+	cancelRequest := request.GetCancelRequest()
 	h.logger.Debug("RequestCancelWorkflowExecution",
 		tag.WorkflowNamespace(cancelRequest.GetNamespace()),
 		tag.WorkflowNamespaceID(request.GetNamespaceId()),
-		tag.WorkflowID(cancelRequest.WorkflowExecution.GetWorkflowId()),
-		tag.WorkflowRunID(cancelRequest.WorkflowExecution.GetRunId()))
+		tag.WorkflowID(cancelRequest.GetWorkflowExecution().GetWorkflowId()),
+		tag.WorkflowRunID(cancelRequest.GetWorkflowExecution().GetRunId()))
 
-	workflowID := cancelRequest.WorkflowExecution.GetWorkflowId()
+	workflowID := cancelRequest.GetWorkflowExecution().GetWorkflowId()
 	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
 	if err != nil {
 		return nil, h.convertError(err)
@@ -1109,7 +1114,7 @@ func (h *Handler) SignalWorkflowExecution(ctx context.Context, request *historys
 		return nil, h.convertError(errNamespaceNotSet)
 	}
 
-	workflowExecution := request.SignalRequest.WorkflowExecution
+	workflowExecution := request.GetSignalRequest().GetWorkflowExecution()
 	workflowID := workflowExecution.GetWorkflowId()
 	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
 	if err != nil {
@@ -1145,7 +1150,7 @@ func (h *Handler) SignalWithStartWorkflowExecution(ctx context.Context, request 
 		return nil, h.convertError(errNamespaceNotSet)
 	}
 
-	signalWithStartRequest := request.SignalWithStartRequest
+	signalWithStartRequest := request.GetSignalWithStartRequest()
 	workflowID := signalWithStartRequest.GetWorkflowId()
 	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
 	if err != nil {
@@ -1201,7 +1206,7 @@ func (h *Handler) RemoveSignalMutableState(ctx context.Context, request *history
 		return nil, h.convertError(errNamespaceNotSet)
 	}
 
-	workflowExecution := request.WorkflowExecution
+	workflowExecution := request.GetWorkflowExecution()
 	workflowID := workflowExecution.GetWorkflowId()
 	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
 	if err != nil {
@@ -1234,7 +1239,7 @@ func (h *Handler) TerminateWorkflowExecution(ctx context.Context, request *histo
 		return nil, h.convertError(errNamespaceNotSet)
 	}
 
-	workflowExecution := request.TerminateRequest.WorkflowExecution
+	workflowExecution := request.GetTerminateRequest().GetWorkflowExecution()
 	workflowID := workflowExecution.GetWorkflowId()
 	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
 	if err != nil {
@@ -1265,7 +1270,7 @@ func (h *Handler) DeleteWorkflowExecution(ctx context.Context, request *historys
 		return nil, h.convertError(errNamespaceNotSet)
 	}
 
-	workflowExecution := request.WorkflowExecution
+	workflowExecution := request.GetWorkflowExecution()
 	workflowID := workflowExecution.GetWorkflowId()
 	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
 	if err != nil {
@@ -1302,7 +1307,7 @@ func (h *Handler) ResetWorkflowExecution(ctx context.Context, request *historyse
 		return nil, h.convertError(errNamespaceNotSet)
 	}
 
-	workflowExecution := request.ResetRequest.WorkflowExecution
+	workflowExecution := request.GetResetRequest().GetWorkflowExecution()
 	workflowID := workflowExecution.GetWorkflowId()
 	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
 	if err != nil {
@@ -1335,7 +1340,7 @@ func (h *Handler) UpdateWorkflowExecutionOptions(ctx context.Context, request *h
 		return nil, h.convertError(errNamespaceNotSet)
 	}
 
-	workflowExecution := request.UpdateRequest.WorkflowExecution
+	workflowExecution := request.GetUpdateRequest().GetWorkflowExecution()
 	workflowID := workflowExecution.GetWorkflowId()
 	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
 	if err != nil {
@@ -1401,11 +1406,11 @@ func (h *Handler) ScheduleWorkflowTask(ctx context.Context, request *historyserv
 		return nil, h.convertError(errNamespaceNotSet)
 	}
 
-	if request.WorkflowExecution == nil {
+	if !request.HasWorkflowExecution() {
 		return nil, h.convertError(errWorkflowExecutionNotSet)
 	}
 
-	workflowExecution := request.WorkflowExecution
+	workflowExecution := request.GetWorkflowExecution()
 	workflowID := workflowExecution.GetWorkflowId()
 	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
 	if err != nil {
@@ -1439,11 +1444,11 @@ func (h *Handler) VerifyFirstWorkflowTaskScheduled(
 		return nil, h.convertError(errNamespaceNotSet)
 	}
 
-	if request.WorkflowExecution == nil {
+	if !request.HasWorkflowExecution() {
 		return nil, h.convertError(errWorkflowExecutionNotSet)
 	}
 
-	workflowExecution := request.WorkflowExecution
+	workflowExecution := request.GetWorkflowExecution()
 	workflowID := workflowExecution.GetWorkflowId()
 	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
 	if err != nil {
@@ -1480,7 +1485,7 @@ func (h *Handler) RecordChildExecutionCompleted(ctx context.Context, request *hi
 		return nil, h.convertError(errWorkflowExecutionNotSet)
 	}
 
-	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, request.GetParentExecution().WorkflowId)
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, request.GetParentExecution().GetWorkflowId())
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -1512,11 +1517,11 @@ func (h *Handler) VerifyChildExecutionCompletionRecorded(
 		return nil, h.convertError(errNamespaceNotSet)
 	}
 
-	if request.ParentExecution == nil {
+	if !request.HasParentExecution() {
 		return nil, h.convertError(errWorkflowExecutionNotSet)
 	}
 
-	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, request.ParentExecution.GetWorkflowId())
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, request.GetParentExecution().GetWorkflowId())
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -1550,7 +1555,7 @@ func (h *Handler) ResetStickyTaskQueue(ctx context.Context, request *historyserv
 		return nil, h.convertError(errNamespaceNotSet)
 	}
 
-	workflowID := request.Execution.GetWorkflowId()
+	workflowID := request.GetExecution().GetWorkflowId()
 	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
 	if err != nil {
 		return nil, h.convertError(err)
@@ -1585,7 +1590,7 @@ func (h *Handler) ReplicateEventsV2(ctx context.Context, request *historyservice
 		return nil, h.convertError(errNamespaceNotSet)
 	}
 
-	workflowExecution := request.WorkflowExecution
+	workflowExecution := request.GetWorkflowExecution()
 	workflowID := workflowExecution.GetWorkflowId()
 	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
 	if err != nil {
@@ -1726,10 +1731,10 @@ func (h *Handler) GetReplicationMessages(ctx context.Context, request *historyse
 	}
 
 	var wg sync.WaitGroup
-	wg.Add(len(request.Tokens))
+	wg.Add(len(request.GetTokens()))
 	result := new(sync.Map)
 
-	for _, token := range request.Tokens {
+	for _, token := range request.GetTokens() {
 		go func(token *replicationspb.ReplicationToken) {
 			defer wg.Done()
 
@@ -1748,7 +1753,7 @@ func (h *Handler) GetReplicationMessages(ctx context.Context, request *historyse
 				ctx,
 				request.GetClusterName(),
 				token.GetLastProcessedMessageId(),
-				timestamp.TimeValue(token.LastProcessedVisibilityTime),
+				timestamp.TimeValue(token.GetLastProcessedVisibilityTime()),
 				token.GetLastRetrievedMessageId(),
 			)
 			if err != nil {
@@ -1771,7 +1776,7 @@ func (h *Handler) GetReplicationMessages(ctx context.Context, request *historyse
 
 	h.logger.Debug("GetReplicationMessages succeeded.")
 
-	return &historyservice.GetReplicationMessagesResponse{ShardMessages: messagesByShard}, nil
+	return historyservice.GetReplicationMessagesResponse_builder{ShardMessages: messagesByShard}.Build(), nil
 }
 
 // GetDLQReplicationMessages is called by remote peers to get replicated messages for DLQ merging
@@ -1845,9 +1850,9 @@ func (h *Handler) GetDLQReplicationMessages(ctx context.Context, request *histor
 	for t := range tasksChan {
 		replicationTasks = append(replicationTasks, t)
 	}
-	return &historyservice.GetDLQReplicationMessagesResponse{
+	return historyservice.GetDLQReplicationMessagesResponse_builder{
 		ReplicationTasks: replicationTasks,
-	}, nil
+	}.Build(), nil
 }
 
 // ReapplyEvents applies stale events to the current workflow and the current run
@@ -1871,10 +1876,10 @@ func (h *Handler) ReapplyEvents(ctx context.Context, request *historyservice.Rea
 
 	// deserialize history event object
 	eventsBlob := request.GetRequest().GetEvents()
-	historyEvents, err := h.payloadSerializer.DeserializeEvents(&commonpb.DataBlob{
+	historyEvents, err := h.payloadSerializer.DeserializeEvents(commonpb.DataBlob_builder{
 		EncodingType: cmp.Or(eventsBlob.GetEncodingType(), enumspb.ENCODING_TYPE_PROTO3),
 		Data:         eventsBlob.GetData(),
-	})
+	}.Build())
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -2058,7 +2063,7 @@ func (h *Handler) GetReplicationStatus(
 		if err != nil {
 			return nil, err
 		}
-		resp.Shards = append(resp.Shards, status)
+		resp.SetShards(append(resp.GetShards(), status))
 	}
 	return resp, nil
 }
@@ -2078,7 +2083,7 @@ func (h *Handler) DeleteWorkflowVisibilityRecord(
 		return nil, errNamespaceNotSet
 	}
 
-	if request.Execution == nil {
+	if !request.HasExecution() {
 		return nil, errWorkflowExecutionNotSet
 	}
 
@@ -2090,8 +2095,8 @@ func (h *Handler) DeleteWorkflowVisibilityRecord(
 	// the last operation applied for this workflow
 	err := h.persistenceVisibilityManager.DeleteWorkflowExecution(ctx, &manager.VisibilityDeleteWorkflowExecutionRequest{
 		NamespaceID: namespaceID,
-		WorkflowID:  request.Execution.GetWorkflowId(),
-		RunID:       request.Execution.GetRunId(),
+		WorkflowID:  request.GetExecution().GetWorkflowId(),
+		RunID:       request.GetExecution().GetRunId(),
 		TaskID:      math.MaxInt64,
 	})
 	if err != nil {
@@ -2231,7 +2236,7 @@ func (h *Handler) GetWorkflowExecutionHistory(
 
 	shardContext, err := h.controller.GetShardByNamespaceWorkflow(
 		namespace.ID(request.GetNamespaceId()),
-		request.Request.GetExecution().GetWorkflowId(),
+		request.GetRequest().GetExecution().GetWorkflowId(),
 	)
 	if err != nil {
 		return nil, h.convertError(err)
@@ -2334,7 +2339,7 @@ func (h *Handler) ForceDeleteWorkflowExecution(
 	}
 	shardID := common.WorkflowIDToHistoryShard(
 		namespaceID.String(),
-		request.Request.Execution.WorkflowId,
+		request.GetRequest().GetExecution().GetWorkflowId(),
 		h.config.NumberOfShards,
 	)
 
@@ -2374,7 +2379,7 @@ func (h *Handler) AddTasks(
 	ctx context.Context,
 	request *historyservice.AddTasksRequest,
 ) (*historyservice.AddTasksResponse, error) {
-	shardContext, err := h.controller.GetShardByID(request.ShardId)
+	shardContext, err := h.controller.GetShardByID(request.GetShardId())
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -2402,7 +2407,7 @@ func (h *Handler) ListTasks(
 		return nil, errShuttingDown
 	}
 
-	shardContext, err := h.controller.GetShardByID(request.Request.GetShardId())
+	shardContext, err := h.controller.GetShardByID(request.GetRequest().GetShardId())
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -2427,7 +2432,7 @@ func (h *Handler) CompleteNexusOperation(ctx context.Context, request *historyse
 		return nil, errShuttingDown
 	}
 
-	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespace.ID(request.Completion.NamespaceId), request.Completion.WorkflowId)
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespace.ID(request.GetCompletion().GetNamespaceId()), request.GetCompletion().GetWorkflowId())
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -2438,11 +2443,11 @@ func (h *Handler) CompleteNexusOperation(ctx context.Context, request *historyse
 	}
 
 	ref := hsm.Ref{
-		WorkflowKey:     definition.NewWorkflowKey(request.Completion.NamespaceId, request.Completion.WorkflowId, request.Completion.RunId),
-		StateMachineRef: request.Completion.Ref,
+		WorkflowKey:     definition.NewWorkflowKey(request.GetCompletion().GetNamespaceId(), request.GetCompletion().GetWorkflowId(), request.GetCompletion().GetRunId()),
+		StateMachineRef: request.GetCompletion().GetRef(),
 	}
 	var opErr *nexus.OperationError
-	if request.State != string(nexus.OperationStateSucceeded) {
+	if request.GetState() != string(nexus.OperationStateSucceeded) {
 		opErr = &nexus.OperationError{
 			State: nexus.OperationState(request.GetState()),
 			Cause: &nexus.FailureError{
@@ -2454,10 +2459,10 @@ func (h *Handler) CompleteNexusOperation(ctx context.Context, request *historyse
 		ctx,
 		engine.StateMachineEnvironment(metrics.OperationTag(metrics.HistoryCompleteNexusOperationScope)),
 		ref,
-		request.Completion.RequestId,
-		request.OperationToken,
-		request.StartTime,
-		request.Links,
+		request.GetCompletion().GetRequestId(),
+		request.GetOperationToken(),
+		request.GetStartTime(),
+		request.GetLinks(),
 		request.GetSuccess(),
 		opErr,
 	)
@@ -2477,19 +2482,15 @@ func (h *Handler) CompleteNexusOperationChasm(
 		return nil, errShuttingDown
 	}
 
-	completion := &persistencespb.ChasmNexusCompletion{
-		CloseTime: request.CloseTime,
-		RequestId: request.Completion.RequestId,
-	}
-	switch variant := request.Outcome.(type) {
-	case *historyservice.CompleteNexusOperationChasmRequest_Failure:
-		completion.Outcome = &persistencespb.ChasmNexusCompletion_Failure{
-			Failure: variant.Failure,
-		}
-	case *historyservice.CompleteNexusOperationChasmRequest_Success:
-		completion.Outcome = &persistencespb.ChasmNexusCompletion_Success{
-			Success: variant.Success,
-		}
+	completion := persistencespb.ChasmNexusCompletion_builder{
+		CloseTime: request.GetCloseTime(),
+		RequestId: request.GetCompletion().GetRequestId(),
+	}.Build()
+	switch request.WhichOutcome() {
+	case historyservice.CompleteNexusOperationChasmRequest_Failure_case:
+		completion.SetFailure(proto.ValueOrDefault(request.GetFailure()))
+	case historyservice.CompleteNexusOperationChasmRequest_Success_case:
+		completion.SetSuccess(proto.ValueOrDefault(request.GetSuccess()))
 	default:
 		return nil, serviceerror.NewUnimplemented("unhandled Nexus operation outcome")
 	}
@@ -2553,7 +2554,7 @@ func (h *Handler) InvokeStateMachineMethod(ctx context.Context, request *history
 		return nil, errShuttingDown
 	}
 
-	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespace.ID(request.NamespaceId), request.WorkflowId)
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespace.ID(request.GetNamespaceId()), request.GetWorkflowId())
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -2566,23 +2567,23 @@ func (h *Handler) InvokeStateMachineMethod(ctx context.Context, request *history
 	}
 
 	ref := hsm.Ref{
-		WorkflowKey:     definition.NewWorkflowKey(request.NamespaceId, request.WorkflowId, request.RunId),
-		StateMachineRef: request.Ref,
+		WorkflowKey:     definition.NewWorkflowKey(request.GetNamespaceId(), request.GetWorkflowId(), request.GetRunId()),
+		StateMachineRef: request.GetRef(),
 	}
 
 	bytes, err := registry.ExecuteRemoteMethod(
 		ctx,
-		engine.StateMachineEnvironment(metrics.OperationTag(request.MethodName)),
+		engine.StateMachineEnvironment(metrics.OperationTag(request.GetMethodName())),
 		ref,
-		request.MethodName,
-		request.Input,
+		request.GetMethodName(),
+		request.GetInput(),
 	)
 	if err != nil {
 		return nil, err
 	}
-	return &historyservice.InvokeStateMachineMethodResponse{
+	return historyservice.InvokeStateMachineMethodResponse_builder{
 		Output: bytes,
-	}, nil
+	}.Build(), nil
 }
 
 func (h *Handler) SyncWorkflowState(ctx context.Context, request *historyservice.SyncWorkflowStateRequest) (_ *historyservice.SyncWorkflowStateResponse, retError error) {
@@ -2592,7 +2593,7 @@ func (h *Handler) SyncWorkflowState(ctx context.Context, request *historyservice
 	if namespaceID == "" {
 		return nil, h.convertError(errNamespaceNotSet)
 	}
-	workflowID := request.Execution.WorkflowId
+	workflowID := request.GetExecution().GetWorkflowId()
 
 	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
 	if err != nil {

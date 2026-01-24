@@ -70,13 +70,13 @@ func (h *HistoryStore) AppendHistoryNodes(
 
 	if !request.IsNewBranch {
 		query := h.Session.Query(v2templateUpsertHistoryNode,
-			branchInfo.TreeId,
-			branchInfo.BranchId,
+			branchInfo.GetTreeId(),
+			branchInfo.GetBranchId(),
 			node.NodeID,
 			node.PrevTransactionID,
 			node.TransactionID,
-			node.Events.Data,
-			node.Events.EncodingType.String(),
+			node.Events.GetData(),
+			node.Events.GetEncodingType().String(),
 		).WithContext(ctx)
 		if err := query.Exec(); err != nil {
 			return convertTimeoutError(gocql.ConvertError("AppendHistoryNodes", err))
@@ -87,19 +87,19 @@ func (h *HistoryStore) AppendHistoryNodes(
 	treeInfoDataBlob := request.TreeInfo
 	batch := h.Session.NewBatch(gocql.LoggedBatch).WithContext(ctx)
 	batch.Query(v2templateInsertTree,
-		branchInfo.TreeId,
-		branchInfo.BranchId,
-		treeInfoDataBlob.Data,
-		treeInfoDataBlob.EncodingType.String(),
+		branchInfo.GetTreeId(),
+		branchInfo.GetBranchId(),
+		treeInfoDataBlob.GetData(),
+		treeInfoDataBlob.GetEncodingType().String(),
 	)
 	batch.Query(v2templateUpsertHistoryNode,
-		branchInfo.TreeId,
-		branchInfo.BranchId,
+		branchInfo.GetTreeId(),
+		branchInfo.GetBranchId(),
 		node.NodeID,
 		node.PrevTransactionID,
 		node.TransactionID,
-		node.Events.Data,
-		node.Events.EncodingType.String(),
+		node.Events.GetData(),
+		node.Events.GetEncodingType().String(),
 	)
 	if err := h.Session.ExecuteBatch(batch); err != nil {
 		return convertTimeoutError(gocql.ConvertError("AppendHistoryNodes", err))
@@ -113,8 +113,8 @@ func (h *HistoryStore) DeleteHistoryNodes(
 	request *p.InternalDeleteHistoryNodesRequest,
 ) error {
 	branchInfo := request.BranchInfo
-	treeID := branchInfo.TreeId
-	branchID := branchInfo.BranchId
+	treeID := branchInfo.GetTreeId()
+	branchID := branchInfo.GetBranchId()
 	nodeID := request.NodeID
 	txnID := request.TransactionID
 
@@ -147,7 +147,7 @@ func (h *HistoryStore) ReadHistoryBranch(
 		return nil, err
 	}
 
-	treeID, err := primitives.ValidateUUID(branch.TreeId)
+	treeID, err := primitives.ValidateUUID(branch.GetTreeId())
 	if err != nil {
 		return nil, serviceerror.NewInternalf("ReadHistoryBranch - Gocql TreeId UUID cast failed. Error: %v", err)
 	}
@@ -246,7 +246,7 @@ func (h *HistoryStore) ForkHistoryBranch(
 	forkB := request.ForkBranchInfo
 	datablob := request.TreeInfo
 
-	cqlTreeID, err := primitives.ValidateUUID(forkB.TreeId)
+	cqlTreeID, err := primitives.ValidateUUID(forkB.GetTreeId())
 	if err != nil {
 		return serviceerror.NewInternalf("ForkHistoryBranch - Gocql TreeId UUID cast failed. Error: %v", err)
 	}
@@ -255,7 +255,7 @@ func (h *HistoryStore) ForkHistoryBranch(
 	if err != nil {
 		return serviceerror.NewInternalf("ForkHistoryBranch - Gocql NewBranchID UUID cast failed. Error: %v", err)
 	}
-	query := h.Session.Query(v2templateInsertTree, cqlTreeID, cqlNewBranchID, datablob.Data, datablob.EncodingType.String()).WithContext(ctx)
+	query := h.Session.Query(v2templateInsertTree, cqlTreeID, cqlNewBranchID, datablob.GetData(), datablob.GetEncodingType().String()).WithContext(ctx)
 	err = query.Exec()
 	if err != nil {
 		return gocql.ConvertError("ForkHistoryBranch", err)
@@ -271,11 +271,11 @@ func (h *HistoryStore) DeleteHistoryBranch(
 ) error {
 
 	batch := h.Session.NewBatch(gocql.LoggedBatch).WithContext(ctx)
-	batch.Query(v2templateDeleteBranch, request.BranchInfo.TreeId, request.BranchInfo.BranchId)
+	batch.Query(v2templateDeleteBranch, request.BranchInfo.GetTreeId(), request.BranchInfo.GetBranchId())
 
 	// delete each branch range
 	for _, br := range request.BranchRanges {
-		h.deleteBranchRangeNodes(batch, request.BranchInfo.TreeId, br.BranchId, br.BeginNodeId)
+		h.deleteBranchRangeNodes(batch, request.BranchInfo.GetTreeId(), br.BranchId, br.BeginNodeId)
 	}
 
 	err := h.Session.ExecuteBatch(batch)
@@ -356,7 +356,7 @@ func (h *HistoryStore) GetHistoryTreeContainingBranch(
 		return nil, err
 	}
 
-	treeID, err := primitives.ValidateUUID(branch.TreeId)
+	treeID, err := primitives.ValidateUUID(branch.GetTreeId())
 	if err != nil {
 		return nil, serviceerror.NewInternalf("ReadHistoryBranch. Gocql TreeId UUID cast failed. Error: %v", err)
 	}

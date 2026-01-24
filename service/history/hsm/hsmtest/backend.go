@@ -25,17 +25,17 @@ func (n *NodeBackend) NextTransitionCount() int64 {
 }
 
 func (n *NodeBackend) AddHistoryEvent(t enumspb.EventType, setAttributes func(*historypb.HistoryEvent)) *historypb.HistoryEvent {
-	event := &historypb.HistoryEvent{EventType: t, EventId: 2}
+	event := historypb.HistoryEvent_builder{EventType: t, EventId: 2}.Build()
 	setAttributes(event)
 	n.Events = append(n.Events, event)
 	return event
 }
 
 func (n *NodeBackend) GenerateEventLoadToken(event *historypb.HistoryEvent) ([]byte, error) {
-	token := &tokenspb.HistoryEventRef{
-		EventId:      event.EventId,
-		EventBatchId: event.EventId,
-	}
+	token := tokenspb.HistoryEventRef_builder{
+		EventId:      event.GetEventId(),
+		EventBatchId: event.GetEventId(),
+	}.Build()
 	return proto.Marshal(token)
 }
 
@@ -45,7 +45,7 @@ func (n *NodeBackend) LoadHistoryEvent(ctx context.Context, tokenBytes []byte) (
 		return nil, err
 	}
 	idx := slices.IndexFunc(n.Events, func(event *historypb.HistoryEvent) bool {
-		return event.EventId == token.EventId
+		return event.GetEventId() == token.GetEventId()
 	})
 
 	if idx < 0 {

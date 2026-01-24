@@ -78,10 +78,10 @@ func (s *stateRebuilderSuite) SetupTest() {
 	config.ExternalPayloadsEnabled = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
 	s.mockShard = shard.NewTestContext(
 		s.controller,
-		&persistencespb.ShardInfo{
+		persistencespb.ShardInfo_builder{
 			ShardId: 10,
 			RangeId: 1,
-		},
+		}.Build(),
 		config,
 	)
 
@@ -125,16 +125,16 @@ func (s *stateRebuilderSuite) TestApplyEvents() {
 
 	requestID := uuid.NewString()
 	events := []*historypb.HistoryEvent{
-		{
-			EventId:    1,
-			EventType:  enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
-			Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{}},
-		},
-		{
-			EventId:    2,
-			EventType:  enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
-			Attributes: &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{}},
-		},
+		historypb.HistoryEvent_builder{
+			EventId:                                 1,
+			EventType:                               enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+			WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{},
+		}.Build(),
+		historypb.HistoryEvent_builder{
+			EventId:                                  2,
+			EventType:                                enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
+			WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{},
+		}.Build(),
 	}
 
 	workflowKey := definition.NewWorkflowKey(s.namespaceID.String(), s.workflowID, s.runID)
@@ -144,10 +144,10 @@ func (s *stateRebuilderSuite) TestApplyEvents() {
 		gomock.Any(),
 		s.namespaceID,
 		requestID,
-		protomock.Eq(&commonpb.WorkflowExecution{
+		protomock.Eq(commonpb.WorkflowExecution_builder{
 			WorkflowId: s.workflowID,
 			RunId:      s.runID,
-		}),
+		}.Build()),
 		[][]*historypb.HistoryEvent{events},
 		[]*historypb.HistoryEvent(nil),
 		"",
@@ -162,34 +162,34 @@ func (s *stateRebuilderSuite) TestPagination() {
 	nextEventID := int64(101)
 	branchToken := []byte("some random branch token")
 
-	event1 := &historypb.HistoryEvent{
-		EventId:    1,
-		EventType:  enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
-		Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{}},
-	}
-	event2 := &historypb.HistoryEvent{
-		EventId:    2,
-		EventType:  enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
-		Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{}},
-	}
-	event3 := &historypb.HistoryEvent{
-		EventId:    3,
-		EventType:  enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
-		Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{}},
-	}
-	event4 := &historypb.HistoryEvent{
-		EventId:    4,
-		EventType:  enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
-		Attributes: &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{}},
-	}
-	event5 := &historypb.HistoryEvent{
-		EventId:    5,
-		EventType:  enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
-		Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{}},
-	}
-	history1 := []*historypb.History{{Events: []*historypb.HistoryEvent{event1, event2, event3}}}
+	event1 := historypb.HistoryEvent_builder{
+		EventId:                                 1,
+		EventType:                               enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+		WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{},
+	}.Build()
+	event2 := historypb.HistoryEvent_builder{
+		EventId:                              2,
+		EventType:                            enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+		WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{},
+	}.Build()
+	event3 := historypb.HistoryEvent_builder{
+		EventId:                            3,
+		EventType:                          enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
+		WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{},
+	}.Build()
+	event4 := historypb.HistoryEvent_builder{
+		EventId:                              4,
+		EventType:                            enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
+		WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{},
+	}.Build()
+	event5 := historypb.HistoryEvent_builder{
+		EventId:                              5,
+		EventType:                            enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
+		ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{},
+	}.Build()
+	history1 := []*historypb.History{historypb.History_builder{Events: []*historypb.HistoryEvent{event1, event2, event3}}.Build()}
 	transactionID1 := int64(10)
-	history2 := []*historypb.History{{Events: []*historypb.HistoryEvent{event4, event5}}}
+	history2 := []*historypb.History{historypb.History_builder{Events: []*historypb.HistoryEvent{event4, event5}}.Build()}
 	transactionID2 := int64(20)
 	expectedHistory := append(history1, history2...)
 	expectedTransactionIDs := []int64{transactionID1, transactionID2}
@@ -258,43 +258,43 @@ func (s *stateRebuilderSuite) TestRebuild() {
 	firstEventID := common.FirstEventID
 	nextEventID := lastEventID + 1
 	payloadsWithExternalReference1 := payloads.EncodeString("some random input")
-	payloadsWithExternalReference1.Payloads[0].ExternalPayloads = []*commonpb.Payload_ExternalPayloadDetails{
-		{
+	payloadsWithExternalReference1.GetPayloads()[0].SetExternalPayloads([]*commonpb.Payload_ExternalPayloadDetails{
+		commonpb.Payload_ExternalPayloadDetails_builder{
 			SizeBytes: 1024,
-		},
-	}
-	events1 := []*historypb.HistoryEvent{{
+		}.Build(),
+	})
+	events1 := []*historypb.HistoryEvent{historypb.HistoryEvent_builder{
 		EventId:   1,
 		Version:   version,
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
-		Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
-			WorkflowType:             &commonpb.WorkflowType{Name: "some random workflow type"},
-			TaskQueue:                &taskqueuepb.TaskQueue{Name: "some random workflow type"},
+		WorkflowExecutionStartedEventAttributes: historypb.WorkflowExecutionStartedEventAttributes_builder{
+			WorkflowType:             commonpb.WorkflowType_builder{Name: "some random workflow type"}.Build(),
+			TaskQueue:                taskqueuepb.TaskQueue_builder{Name: "some random workflow type"}.Build(),
 			Input:                    payloadsWithExternalReference1,
 			WorkflowExecutionTimeout: durationpb.New(123 * time.Second),
 			WorkflowRunTimeout:       durationpb.New(233 * time.Second),
 			WorkflowTaskTimeout:      durationpb.New(45 * time.Second),
 			Identity:                 "some random identity",
-		}},
-	}}
+		}.Build(),
+	}.Build()}
 	payloadsWithExternalReference2 := payloads.EncodeString("some random input")
-	payloadsWithExternalReference2.Payloads[0].ExternalPayloads = []*commonpb.Payload_ExternalPayloadDetails{
-		{
+	payloadsWithExternalReference2.GetPayloads()[0].SetExternalPayloads([]*commonpb.Payload_ExternalPayloadDetails{
+		commonpb.Payload_ExternalPayloadDetails_builder{
 			SizeBytes: 2048,
-		},
-	}
-	events2 := []*historypb.HistoryEvent{{
+		}.Build(),
+	})
+	events2 := []*historypb.HistoryEvent{historypb.HistoryEvent_builder{
 		EventId:   2,
 		Version:   version,
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
-		Attributes: &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{
+		WorkflowExecutionSignaledEventAttributes: historypb.WorkflowExecutionSignaledEventAttributes_builder{
 			SignalName: "some random signal name",
 			Input:      payloadsWithExternalReference2,
 			Identity:   "some random identity",
-		}},
-	}}
-	history1 := []*historypb.History{{Events: events1}}
-	history2 := []*historypb.History{{Events: events2}}
+		}.Build(),
+	}.Build()}
+	history1 := []*historypb.History{historypb.History_builder{Events: events1}.Build()}
+	history2 := []*historypb.History{historypb.History_builder{Events: events2}.Build()}
 	pageToken := []byte("some random pagination token")
 
 	historySize1 := 12345
@@ -329,15 +329,15 @@ func (s *stateRebuilderSuite) TestRebuild() {
 	}, nil)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(targetNamespaceID).Return(namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Id: targetNamespaceID.String(), Name: targetNamespace.String()},
+		persistencespb.NamespaceInfo_builder{Id: targetNamespaceID.String(), Name: targetNamespace.String()}.Build(),
 		&persistencespb.NamespaceConfig{},
-		&persistencespb.NamespaceReplicationConfig{
+		persistencespb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []string{
 				cluster.TestCurrentClusterName,
 				cluster.TestAlternativeClusterName,
 			},
-		},
+		}.Build(),
 		1234,
 	), nil).AnyTimes()
 	s.mockTaskRefresher.EXPECT().Refresh(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
@@ -356,9 +356,9 @@ func (s *stateRebuilderSuite) TestRebuild() {
 	s.NoError(err)
 	s.NotNil(rebuildMutableState)
 	rebuildExecutionInfo := rebuildMutableState.GetExecutionInfo()
-	s.Equal(targetNamespaceID, namespace.ID(rebuildExecutionInfo.NamespaceId))
-	s.Equal(targetWorkflowID, rebuildExecutionInfo.WorkflowId)
-	s.Equal(targetRunID, rebuildMutableState.GetExecutionState().RunId)
+	s.Equal(targetNamespaceID, namespace.ID(rebuildExecutionInfo.GetNamespaceId()))
+	s.Equal(targetWorkflowID, rebuildExecutionInfo.GetWorkflowId())
+	s.Equal(targetRunID, rebuildMutableState.GetExecutionState().GetRunId())
 	s.Equal(int64(historySize1+historySize2), rebuildStats.HistorySize)
 	s.Equal(int64(1024+2048), rebuildStats.ExternalPayloadSize)
 	s.Equal(int64(2), rebuildStats.ExternalPayloadCount)
@@ -368,8 +368,8 @@ func (s *stateRebuilderSuite) TestRebuild() {
 			[]*historyspb.VersionHistoryItem{versionhistory.NewVersionHistoryItem(lastEventID, version)},
 		),
 	), rebuildMutableState.GetExecutionInfo().GetVersionHistories())
-	s.Equal(timestamp.TimeValue(rebuildMutableState.GetExecutionState().StartTime), s.now)
-	s.Equal(expectedLastFirstTransactionID, rebuildExecutionInfo.LastFirstEventTxnId)
+	s.Equal(timestamp.TimeValue(rebuildMutableState.GetExecutionState().GetStartTime()), s.now)
+	s.Equal(expectedLastFirstTransactionID, rebuildExecutionInfo.GetLastFirstEventTxnId())
 }
 
 func (s *stateRebuilderSuite) TestRebuildWithCurrentMutableState() {
@@ -386,32 +386,32 @@ func (s *stateRebuilderSuite) TestRebuildWithCurrentMutableState() {
 
 	firstEventID := common.FirstEventID
 	nextEventID := lastEventID + 1
-	events1 := []*historypb.HistoryEvent{{
+	events1 := []*historypb.HistoryEvent{historypb.HistoryEvent_builder{
 		EventId:   1,
 		Version:   version,
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
-		Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
-			WorkflowType:             &commonpb.WorkflowType{Name: "some random workflow type"},
-			TaskQueue:                &taskqueuepb.TaskQueue{Name: "some random workflow type"},
+		WorkflowExecutionStartedEventAttributes: historypb.WorkflowExecutionStartedEventAttributes_builder{
+			WorkflowType:             commonpb.WorkflowType_builder{Name: "some random workflow type"}.Build(),
+			TaskQueue:                taskqueuepb.TaskQueue_builder{Name: "some random workflow type"}.Build(),
 			Input:                    payloads.EncodeString("some random input"),
 			WorkflowExecutionTimeout: durationpb.New(123 * time.Second),
 			WorkflowRunTimeout:       durationpb.New(233 * time.Second),
 			WorkflowTaskTimeout:      durationpb.New(45 * time.Second),
 			Identity:                 "some random identity",
-		}},
-	}}
-	events2 := []*historypb.HistoryEvent{{
+		}.Build(),
+	}.Build()}
+	events2 := []*historypb.HistoryEvent{historypb.HistoryEvent_builder{
 		EventId:   2,
 		Version:   version,
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
-		Attributes: &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{
+		WorkflowExecutionSignaledEventAttributes: historypb.WorkflowExecutionSignaledEventAttributes_builder{
 			SignalName: "some random signal name",
 			Input:      payloads.EncodeString("some random signal input"),
 			Identity:   "some random identity",
-		}},
-	}}
-	history1 := []*historypb.History{{Events: events1}}
-	history2 := []*historypb.History{{Events: events2}}
+		}.Build(),
+	}.Build()}
+	history1 := []*historypb.History{historypb.History_builder{Events: events1}.Build()}
+	history2 := []*historypb.History{historypb.History_builder{Events: events2}.Build()}
 	pageToken := []byte("some random pagination token")
 
 	historySize1 := 12345
@@ -446,29 +446,29 @@ func (s *stateRebuilderSuite) TestRebuildWithCurrentMutableState() {
 	}, nil)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(targetNamespaceID).Return(namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Id: targetNamespaceID.String(), Name: targetNamespace.String()},
+		persistencespb.NamespaceInfo_builder{Id: targetNamespaceID.String(), Name: targetNamespace.String()}.Build(),
 		&persistencespb.NamespaceConfig{},
-		&persistencespb.NamespaceReplicationConfig{
+		persistencespb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []string{
 				cluster.TestCurrentClusterName,
 				cluster.TestAlternativeClusterName,
 			},
-		},
+		}.Build(),
 		1234,
 	), nil).AnyTimes()
 
 	s.mockTaskRefresher.EXPECT().Refresh(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
-	currentMutableState := &persistencespb.WorkflowMutableState{
-		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+	currentMutableState := persistencespb.WorkflowMutableState_builder{
+		ExecutionInfo: persistencespb.WorkflowExecutionInfo_builder{
 			TransitionHistory: []*persistencespb.VersionedTransition{
-				{
+				persistencespb.VersionedTransition_builder{
 					TransitionCount:          10,
 					NamespaceFailoverVersion: 12,
-				},
+				}.Build(),
 			},
-		},
-	}
+		}.Build(),
+	}.Build()
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, int64(12)).Return(cluster.TestCurrentClusterName).AnyTimes()
 	rebuildMutableState, rebuildStats, err := s.nDCStateRebuilder.RebuildWithCurrentMutableState(
 		context.Background(),
@@ -485,9 +485,9 @@ func (s *stateRebuilderSuite) TestRebuildWithCurrentMutableState() {
 	s.NoError(err)
 	s.NotNil(rebuildMutableState)
 	rebuildExecutionInfo := rebuildMutableState.GetExecutionInfo()
-	s.Equal(targetNamespaceID, namespace.ID(rebuildExecutionInfo.NamespaceId))
-	s.Equal(targetWorkflowID, rebuildExecutionInfo.WorkflowId)
-	s.Equal(targetRunID, rebuildMutableState.GetExecutionState().RunId)
+	s.Equal(targetNamespaceID, namespace.ID(rebuildExecutionInfo.GetNamespaceId()))
+	s.Equal(targetWorkflowID, rebuildExecutionInfo.GetWorkflowId())
+	s.Equal(targetRunID, rebuildMutableState.GetExecutionState().GetRunId())
 	s.Equal(int64(historySize1+historySize2), rebuildStats.HistorySize)
 	s.ProtoEqual(versionhistory.NewVersionHistories(
 		versionhistory.NewVersionHistory(
@@ -495,7 +495,7 @@ func (s *stateRebuilderSuite) TestRebuildWithCurrentMutableState() {
 			[]*historyspb.VersionHistoryItem{versionhistory.NewVersionHistoryItem(lastEventID, version)},
 		),
 	), rebuildMutableState.GetExecutionInfo().GetVersionHistories())
-	s.Equal(timestamp.TimeValue(rebuildMutableState.GetExecutionState().StartTime), s.now)
-	s.Equal(expectedLastFirstTransactionID, rebuildExecutionInfo.LastFirstEventTxnId)
-	s.Equal(int64(11), rebuildExecutionInfo.TransitionHistory[0].TransitionCount)
+	s.Equal(timestamp.TimeValue(rebuildMutableState.GetExecutionState().GetStartTime()), s.now)
+	s.Equal(expectedLastFirstTransactionID, rebuildExecutionInfo.GetLastFirstEventTxnId())
+	s.Equal(int64(11), rebuildExecutionInfo.GetTransitionHistory()[0].GetTransitionCount())
 }

@@ -14,8 +14,8 @@ func NewDataBlob(data []byte, encodingTypeStr string) *commonpb.DataBlob {
 		encodingType = enumspb.ENCODING_TYPE_UNSPECIFIED
 	}
 
-	return &commonpb.DataBlob{
+	return commonpb.DataBlob_builder{
 		Data:         data,
 		EncodingType: encodingType,
-	}
+	}.Build()
 }

@@ -89,11 +89,11 @@ func (s *WorkerDeploymentSuite) Test_SetCurrentVersion_RejectStaleConcurrentUpda
 		},
 	)
 
-	updateArgs := &deploymentspb.SetCurrentVersionArgs{
+	updateArgs := deploymentspb.SetCurrentVersionArgs_builder{
 		Identity:                tv.ClientIdentity(),
 		Version:                 tv.DeploymentVersionString(),
 		IgnoreMissingTaskQueues: true,
-	}
+	}.Build()
 
 	s.env.RegisterDelayedCallback(func() {
 		// Firing update #1
@@ -122,19 +122,19 @@ func (s *WorkerDeploymentSuite) Test_SetCurrentVersion_RejectStaleConcurrentUpda
 
 	}, 0*time.Millisecond)
 
-	s.env.ExecuteWorkflow(WorkerDeploymentWorkflowType, &deploymentspb.WorkerDeploymentWorkflowArgs{
+	s.env.ExecuteWorkflow(WorkerDeploymentWorkflowType, deploymentspb.WorkerDeploymentWorkflowArgs_builder{
 		NamespaceName:  tv.NamespaceName().String(),
 		NamespaceId:    tv.NamespaceID().String(),
 		DeploymentName: tv.DeploymentSeries(),
 		// Add version to deployment's local state since it's a prerequisite for SetCurrentVersion.
-		State: &deploymentspb.WorkerDeploymentLocalState{
+		State: deploymentspb.WorkerDeploymentLocalState_builder{
 			Versions: map[string]*deploymentspb.WorkerDeploymentVersionSummary{
-				tv.DeploymentVersionString(): {
+				tv.DeploymentVersionString(): deploymentspb.WorkerDeploymentVersionSummary_builder{
 					Version: tv.DeploymentVersionString(),
-				},
+				}.Build(),
 			},
-		},
-	})
+		}.Build(),
+	}.Build())
 
 	s.True(s.env.IsWorkflowCompleted())
 }
@@ -159,12 +159,12 @@ func (s *WorkerDeploymentSuite) Test_SetRampingVersion_RejectStaleConcurrentUpda
 		},
 	)
 
-	updateArgs := &deploymentspb.SetRampingVersionArgs{
+	updateArgs := deploymentspb.SetRampingVersionArgs_builder{
 		Identity:                tv.ClientIdentity(),
 		Version:                 tv.DeploymentVersionString(),
 		Percentage:              50,
 		IgnoreMissingTaskQueues: true,
-	}
+	}.Build()
 
 	s.env.RegisterDelayedCallback(func() {
 		// Firing Update #1.
@@ -194,18 +194,18 @@ func (s *WorkerDeploymentSuite) Test_SetRampingVersion_RejectStaleConcurrentUpda
 
 	}, 0*time.Millisecond)
 
-	s.env.ExecuteWorkflow(WorkerDeploymentWorkflowType, &deploymentspb.WorkerDeploymentWorkflowArgs{
+	s.env.ExecuteWorkflow(WorkerDeploymentWorkflowType, deploymentspb.WorkerDeploymentWorkflowArgs_builder{
 		NamespaceName:  tv.NamespaceName().String(),
 		NamespaceId:    tv.NamespaceID().String(),
 		DeploymentName: tv.DeploymentSeries(),
-		State: &deploymentspb.WorkerDeploymentLocalState{
+		State: deploymentspb.WorkerDeploymentLocalState_builder{
 			Versions: map[string]*deploymentspb.WorkerDeploymentVersionSummary{
-				tv.DeploymentVersionString(): {
+				tv.DeploymentVersionString(): deploymentspb.WorkerDeploymentVersionSummary_builder{
 					Version: tv.DeploymentVersionString(),
-				},
+				}.Build(),
 			},
-		},
-	})
+		}.Build(),
+	}.Build())
 	s.True(s.env.IsWorkflowCompleted())
 }
 
@@ -228,16 +228,16 @@ func (s *WorkerDeploymentSuite) syncUnversionedRampInBatches(totalWorkers int) {
 	var a *Activities
 	taskQueueInfos := make([]*deploymentpb.WorkerDeploymentVersionInfo_VersionTaskQueueInfo, totalWorkers)
 	for i := 0; i < totalWorkers; i++ {
-		taskQueueInfos[i] = &deploymentpb.WorkerDeploymentVersionInfo_VersionTaskQueueInfo{
-			Name: tv.TaskQueue().Name + fmt.Sprintf("%03d", i),
+		taskQueueInfos[i] = deploymentpb.WorkerDeploymentVersionInfo_VersionTaskQueueInfo_builder{
+			Name: tv.TaskQueue().GetName() + fmt.Sprintf("%03d", i),
 			Type: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-		}
+		}.Build()
 	}
 	// Mock the DescribeVersionFromWorkerDeployment activity to return numWorker taskQueues
 	s.env.OnActivity(a.DescribeVersionFromWorkerDeployment, mock.Anything, mock.Anything).Return(
-		&deploymentspb.DescribeVersionFromWorkerDeploymentActivityResult{
+		deploymentspb.DescribeVersionFromWorkerDeploymentActivityResult_builder{
 			TaskQueueInfos: taskQueueInfos,
-		}, nil)
+		}.Build(), nil)
 
 	// Mock the SyncDeploymentVersionUserData activity and expect it to be called totalWorkers times
 	var totalBatches int
@@ -260,27 +260,27 @@ func (s *WorkerDeploymentSuite) syncUnversionedRampInBatches(totalWorkers int) {
 			},
 			OnComplete: func(a interface{}, err error) {
 			},
-		}, &deploymentspb.SetRampingVersionArgs{
+		}, deploymentspb.SetRampingVersionArgs_builder{
 			Version: worker_versioning.UnversionedVersionId,
-		})
+		}.Build())
 
 	}, 0*time.Millisecond)
 
-	s.env.ExecuteWorkflow(WorkerDeploymentWorkflowType, &deploymentspb.WorkerDeploymentWorkflowArgs{
+	s.env.ExecuteWorkflow(WorkerDeploymentWorkflowType, deploymentspb.WorkerDeploymentWorkflowArgs_builder{
 		NamespaceName:  tv.NamespaceName().String(),
 		NamespaceId:    tv.NamespaceID().String(),
 		DeploymentName: tv.DeploymentSeries(),
-		State: &deploymentspb.WorkerDeploymentLocalState{
+		State: deploymentspb.WorkerDeploymentLocalState_builder{
 			CreateTime:    timestamppb.New(time.Now()),
 			SyncBatchSize: int32(s.workerDeploymentClient.getSyncBatchSize()), // initialize the sync batch size
 			// Initialize the routing config with the current version (tv.DeploymentVersionString()).
 			// This simulates a scenario where the worker deployment already has a current version,
 			// which is a prerequisite for ramping to an unversioned state.
-			RoutingConfig: &deploymentpb.RoutingConfig{
+			RoutingConfig: deploymentpb.RoutingConfig_builder{
 				CurrentVersion: tv.DeploymentVersionString(),
-			},
-		},
-	})
+			}.Build(),
+		}.Build(),
+	}.Build())
 
 	s.True(s.env.IsWorkflowCompleted())
 
@@ -318,28 +318,28 @@ func (s *WorkerDeploymentSuite) Test_RevisionIncrementsWithAsyncSetCurrentAndRam
 				// Query after SetRampingVersion - revision should be 1
 				s.verifyRevisionNumber(1)
 			},
-		}, &deploymentspb.SetCurrentVersionArgs{
+		}, deploymentspb.SetCurrentVersionArgs_builder{
 			Identity:                tv.ClientIdentity(),
 			Version:                 version1,
 			IgnoreMissingTaskQueues: true,
-		})
+		}.Build())
 	}, 1*time.Millisecond)
 
-	s.env.ExecuteWorkflow(WorkerDeploymentWorkflowType, &deploymentspb.WorkerDeploymentWorkflowArgs{
+	s.env.ExecuteWorkflow(WorkerDeploymentWorkflowType, deploymentspb.WorkerDeploymentWorkflowArgs_builder{
 		NamespaceName:  tv.NamespaceName().String(),
 		NamespaceId:    tv.NamespaceID().String(),
 		DeploymentName: tv.DeploymentSeries(),
-		State: &deploymentspb.WorkerDeploymentLocalState{
+		State: deploymentspb.WorkerDeploymentLocalState_builder{
 			Versions: map[string]*deploymentspb.WorkerDeploymentVersionSummary{
-				version1: {
+				version1: deploymentspb.WorkerDeploymentVersionSummary_builder{
 					Version: version1,
-				},
-				version2: {
+				}.Build(),
+				version2: deploymentspb.WorkerDeploymentVersionSummary_builder{
 					Version: version2,
-				},
+				}.Build(),
 			},
-		},
-	})
+		}.Build(),
+	}.Build())
 
 	s.True(s.env.IsWorkflowCompleted())
 
@@ -354,12 +354,12 @@ func (s *WorkerDeploymentSuite) Test_RevisionIncrementsWithAsyncSetCurrentAndRam
 			// After SetRamping completes, verify revision number is 2
 			s.verifyRevisionNumber(2)
 		},
-	}, &deploymentspb.SetRampingVersionArgs{
+	}, deploymentspb.SetRampingVersionArgs_builder{
 		Identity:                tv.ClientIdentity(),
 		Version:                 version2,
 		Percentage:              50,
 		IgnoreMissingTaskQueues: true,
-	})
+	}.Build())
 	s.True(s.env.IsWorkflowCompleted())
 }
 
@@ -395,28 +395,28 @@ func (s *WorkerDeploymentSuite) Test_NoRevisionIncrementsWithoutAsyncSetCurrentA
 				// Query after SetRampingVersion - revision should be 0
 				s.verifyRevisionNumber(0)
 			},
-		}, &deploymentspb.SetCurrentVersionArgs{
+		}, deploymentspb.SetCurrentVersionArgs_builder{
 			Identity:                tv.ClientIdentity(),
 			Version:                 version1,
 			IgnoreMissingTaskQueues: true,
-		})
+		}.Build())
 	}, 1*time.Millisecond)
 
-	s.env.ExecuteWorkflow(WorkerDeploymentWorkflowType, &deploymentspb.WorkerDeploymentWorkflowArgs{
+	s.env.ExecuteWorkflow(WorkerDeploymentWorkflowType, deploymentspb.WorkerDeploymentWorkflowArgs_builder{
 		NamespaceName:  tv.NamespaceName().String(),
 		NamespaceId:    tv.NamespaceID().String(),
 		DeploymentName: tv.DeploymentSeries(),
-		State: &deploymentspb.WorkerDeploymentLocalState{
+		State: deploymentspb.WorkerDeploymentLocalState_builder{
 			Versions: map[string]*deploymentspb.WorkerDeploymentVersionSummary{
-				version1: {
+				version1: deploymentspb.WorkerDeploymentVersionSummary_builder{
 					Version: version1,
-				},
-				version2: {
+				}.Build(),
+				version2: deploymentspb.WorkerDeploymentVersionSummary_builder{
 					Version: version2,
-				},
+				}.Build(),
 			},
-		},
-	})
+		}.Build(),
+	}.Build())
 
 	s.True(s.env.IsWorkflowCompleted())
 
@@ -431,12 +431,12 @@ func (s *WorkerDeploymentSuite) Test_NoRevisionIncrementsWithoutAsyncSetCurrentA
 			// After SetRamping completes, verify revision number is 0
 			s.verifyRevisionNumber(0)
 		},
-	}, &deploymentspb.SetRampingVersionArgs{
+	}, deploymentspb.SetRampingVersionArgs_builder{
 		Identity:                tv.ClientIdentity(),
 		Version:                 version2,
 		Percentage:              50,
 		IgnoreMissingTaskQueues: true,
-	})
+	}.Build())
 	s.True(s.env.IsWorkflowCompleted())
 }
 
@@ -459,7 +459,7 @@ func (s *WorkerDeploymentSuite) verifyRevisionNumber(expected int) {
 	s.Require().NoError(err)
 	var stateAfterSetRamping deploymentspb.QueryDescribeWorkerDeploymentResponse
 	s.Require().NoError(queryResult.Get(&stateAfterSetRamping))
-	s.Equal(int64(expected), stateAfterSetRamping.State.RoutingConfig.RevisionNumber)
+	s.Equal(int64(expected), stateAfterSetRamping.GetState().GetRoutingConfig().GetRevisionNumber())
 }
 
 // Test_RevisionNumberPassedToContinueAsNew tests that the revision number is
@@ -474,7 +474,7 @@ func (s *WorkerDeploymentSuite) Test_RevisionNumberPassedToContinueAsNew() {
 	s.env.RegisterActivity(a.SyncWorkerDeploymentVersion)
 	s.env.OnActivity(a.SyncWorkerDeploymentVersion, mock.Anything, mock.Anything).Return(
 		func(ctx context.Context, args *deploymentspb.SyncVersionStateActivityArgs) (*deploymentspb.SyncVersionStateActivityResult, error) {
-			return &deploymentspb.SyncVersionStateActivityResult{Summary: &deploymentspb.WorkerDeploymentVersionSummary{}}, nil
+			return deploymentspb.SyncVersionStateActivityResult_builder{Summary: &deploymentspb.WorkerDeploymentVersionSummary{}}.Build(), nil
 		},
 	)
 
@@ -492,28 +492,28 @@ func (s *WorkerDeploymentSuite) Test_RevisionNumberPassedToContinueAsNew() {
 				// Verify revision number is 46 after update
 				s.verifyRevisionNumber(46)
 			},
-		}, &deploymentspb.SetCurrentVersionArgs{
+		}, deploymentspb.SetCurrentVersionArgs_builder{
 			Identity:                tv.ClientIdentity(),
 			Version:                 version1,
 			IgnoreMissingTaskQueues: true,
-		})
+		}.Build())
 	}, 0*time.Millisecond)
 
-	s.env.ExecuteWorkflow(WorkerDeploymentWorkflowType, &deploymentspb.WorkerDeploymentWorkflowArgs{
+	s.env.ExecuteWorkflow(WorkerDeploymentWorkflowType, deploymentspb.WorkerDeploymentWorkflowArgs_builder{
 		NamespaceName:  tv.NamespaceName().String(),
 		NamespaceId:    tv.NamespaceID().String(),
 		DeploymentName: tv.DeploymentSeries(),
-		State: &deploymentspb.WorkerDeploymentLocalState{
+		State: deploymentspb.WorkerDeploymentLocalState_builder{
 			Versions: map[string]*deploymentspb.WorkerDeploymentVersionSummary{
-				version1: {
+				version1: deploymentspb.WorkerDeploymentVersionSummary_builder{
 					Version: version1,
-				},
+				}.Build(),
 			},
-			RoutingConfig: &deploymentpb.RoutingConfig{
+			RoutingConfig: deploymentpb.RoutingConfig_builder{
 				RevisionNumber: 45,
-			},
-		},
-	})
+			}.Build(),
+		}.Build(),
+	}.Build())
 
 	s.True(s.env.IsWorkflowCompleted())
 	err := s.env.GetWorkflowError()
@@ -522,7 +522,7 @@ func (s *WorkerDeploymentSuite) Test_RevisionNumberPassedToContinueAsNew() {
 	s.Require().ErrorAs(err, &workflowErr, "error should be of type WorkflowExecutionError")
 	var canErr *workflow.ContinueAsNewError
 	s.Require().ErrorAs(workflowErr.Unwrap(), &canErr, "error should be of type ContinueAsNewError")
-	s.Contains(string(canErr.Input.Payloads[0].Data), "\"revisionNumber\":\"46\"")
+	s.Contains(string(canErr.Input.GetPayloads()[0].GetData()), "\"revisionNumber\":\"46\"")
 }
 
 // Test_RevisionNumberDoesNotIncrementOnFailedSetCurrent tests that when SetCurrentVersion fails,
@@ -559,28 +559,28 @@ func (s *WorkerDeploymentSuite) Test_RevisionNumberDoesNotIncrementOnFailedSetCu
 				// Verify revision number did NOT increment (still at initial value)
 				s.verifyRevisionNumber(int(initialRevision))
 			},
-		}, &deploymentspb.SetCurrentVersionArgs{
+		}, deploymentspb.SetCurrentVersionArgs_builder{
 			Identity:                tv.ClientIdentity(),
 			Version:                 version1,
 			IgnoreMissingTaskQueues: true,
-		})
+		}.Build())
 	}, 1*time.Millisecond)
 
-	s.env.ExecuteWorkflow(WorkerDeploymentWorkflowType, &deploymentspb.WorkerDeploymentWorkflowArgs{
+	s.env.ExecuteWorkflow(WorkerDeploymentWorkflowType, deploymentspb.WorkerDeploymentWorkflowArgs_builder{
 		NamespaceName:  tv.NamespaceName().String(),
 		NamespaceId:    tv.NamespaceID().String(),
 		DeploymentName: tv.DeploymentSeries(),
-		State: &deploymentspb.WorkerDeploymentLocalState{
+		State: deploymentspb.WorkerDeploymentLocalState_builder{
 			Versions: map[string]*deploymentspb.WorkerDeploymentVersionSummary{
-				version1: {
+				version1: deploymentspb.WorkerDeploymentVersionSummary_builder{
 					Version: version1,
-				},
+				}.Build(),
 			},
-			RoutingConfig: &deploymentpb.RoutingConfig{
+			RoutingConfig: deploymentpb.RoutingConfig_builder{
 				RevisionNumber: initialRevision,
-			},
-		},
-	})
+			}.Build(),
+		}.Build(),
+	}.Build())
 
 	s.True(s.env.IsWorkflowCompleted())
 }
@@ -620,33 +620,33 @@ func (s *WorkerDeploymentSuite) Test_RevisionNumberDoesNotIncrementOnFailedSetRa
 				// Verify revision number did NOT increment (still at initial value)
 				s.verifyRevisionNumber(int(initialRevision))
 			},
-		}, &deploymentspb.SetRampingVersionArgs{
+		}, deploymentspb.SetRampingVersionArgs_builder{
 			Identity:                tv.ClientIdentity(),
 			Version:                 version2,
 			Percentage:              50,
 			IgnoreMissingTaskQueues: true,
-		})
+		}.Build())
 	}, 1*time.Millisecond)
 
-	s.env.ExecuteWorkflow(WorkerDeploymentWorkflowType, &deploymentspb.WorkerDeploymentWorkflowArgs{
+	s.env.ExecuteWorkflow(WorkerDeploymentWorkflowType, deploymentspb.WorkerDeploymentWorkflowArgs_builder{
 		NamespaceName:  tv.NamespaceName().String(),
 		NamespaceId:    tv.NamespaceID().String(),
 		DeploymentName: tv.DeploymentSeries(),
-		State: &deploymentspb.WorkerDeploymentLocalState{
+		State: deploymentspb.WorkerDeploymentLocalState_builder{
 			Versions: map[string]*deploymentspb.WorkerDeploymentVersionSummary{
-				version1: {
+				version1: deploymentspb.WorkerDeploymentVersionSummary_builder{
 					Version: version1,
-				},
-				version2: {
+				}.Build(),
+				version2: deploymentspb.WorkerDeploymentVersionSummary_builder{
 					Version: version2,
-				},
+				}.Build(),
 			},
-			RoutingConfig: &deploymentpb.RoutingConfig{
+			RoutingConfig: deploymentpb.RoutingConfig_builder{
 				CurrentVersion: version1,
 				RevisionNumber: initialRevision,
-			},
-		},
-	})
+			}.Build(),
+		}.Build(),
+	}.Build())
 
 	s.True(s.env.IsWorkflowCompleted())
 }
@@ -665,27 +665,27 @@ func (s *WorkerDeploymentSuite) Test_HandlePropagationComplete() {
 	// Setup initial state with a propagating revision
 	s.env.RegisterDelayedCallback(func() {
 		// Send propagation complete signal
-		s.env.SignalWorkflow(PropagationCompleteSignal, &deploymentspb.PropagationCompletionInfo{
+		s.env.SignalWorkflow(PropagationCompleteSignal, deploymentspb.PropagationCompletionInfo_builder{
 			BuildId:        buildID,
 			RevisionNumber: revisionNumber,
-		})
+		}.Build())
 	}, 1*time.Millisecond)
 
-	s.env.ExecuteWorkflow(WorkerDeploymentWorkflowType, &deploymentspb.WorkerDeploymentWorkflowArgs{
+	s.env.ExecuteWorkflow(WorkerDeploymentWorkflowType, deploymentspb.WorkerDeploymentWorkflowArgs_builder{
 		NamespaceName:  tv.NamespaceName().String(),
 		NamespaceId:    tv.NamespaceID().String(),
 		DeploymentName: tv.DeploymentSeries(),
-		State: &deploymentspb.WorkerDeploymentLocalState{
+		State: deploymentspb.WorkerDeploymentLocalState_builder{
 			PropagatingRevisions: map[string]*deploymentspb.PropagatingRevisions{
-				buildID: {
+				buildID: deploymentspb.PropagatingRevisions_builder{
 					RevisionNumbers: []int64{3, revisionNumber, 7},
-				},
+				}.Build(),
 			},
-			RoutingConfig: &deploymentpb.RoutingConfig{
+			RoutingConfig: deploymentpb.RoutingConfig_builder{
 				RevisionNumber: 10,
-			},
-		},
-	})
+			}.Build(),
+		}.Build(),
+	}.Build())
 
 	s.True(s.env.IsWorkflowCompleted())
 
@@ -696,10 +696,10 @@ func (s *WorkerDeploymentSuite) Test_HandlePropagationComplete() {
 	s.Require().NoError(queryResult.Get(&state))
 
 	// Verify the revision was removed from the propagating revisions
-	s.Require().Contains(state.State.PropagatingRevisions, buildID)
-	s.NotContains(state.State.PropagatingRevisions[buildID].RevisionNumbers, revisionNumber)
-	s.Contains(state.State.PropagatingRevisions[buildID].RevisionNumbers, int64(3))
-	s.Contains(state.State.PropagatingRevisions[buildID].RevisionNumbers, int64(7))
+	s.Require().Contains(state.GetState().GetPropagatingRevisions(), buildID)
+	s.NotContains(state.GetState().GetPropagatingRevisions()[buildID].GetRevisionNumbers(), revisionNumber)
+	s.Contains(state.GetState().GetPropagatingRevisions()[buildID].GetRevisionNumbers(), int64(3))
+	s.Contains(state.GetState().GetPropagatingRevisions()[buildID].GetRevisionNumbers(), int64(7))
 }
 
 // Test_HandlePropagationComplete_RemovesEmptyBuildId tests that the deployment workflow
@@ -716,27 +716,27 @@ func (s *WorkerDeploymentSuite) Test_HandlePropagationComplete_RemovesEmptyBuild
 	// Setup initial state with only one revision for this build
 	s.env.RegisterDelayedCallback(func() {
 		// Send propagation complete signal
-		s.env.SignalWorkflow(PropagationCompleteSignal, &deploymentspb.PropagationCompletionInfo{
+		s.env.SignalWorkflow(PropagationCompleteSignal, deploymentspb.PropagationCompletionInfo_builder{
 			BuildId:        buildID,
 			RevisionNumber: revisionNumber,
-		})
+		}.Build())
 	}, 1*time.Millisecond)
 
-	s.env.ExecuteWorkflow(WorkerDeploymentWorkflowType, &deploymentspb.WorkerDeploymentWorkflowArgs{
+	s.env.ExecuteWorkflow(WorkerDeploymentWorkflowType, deploymentspb.WorkerDeploymentWorkflowArgs_builder{
 		NamespaceName:  tv.NamespaceName().String(),
 		NamespaceId:    tv.NamespaceID().String(),
 		DeploymentName: tv.DeploymentSeries(),
-		State: &deploymentspb.WorkerDeploymentLocalState{
+		State: deploymentspb.WorkerDeploymentLocalState_builder{
 			PropagatingRevisions: map[string]*deploymentspb.PropagatingRevisions{
-				buildID: {
+				buildID: deploymentspb.PropagatingRevisions_builder{
 					RevisionNumbers: []int64{revisionNumber},
-				},
+				}.Build(),
 			},
-			RoutingConfig: &deploymentpb.RoutingConfig{
+			RoutingConfig: deploymentpb.RoutingConfig_builder{
 				RevisionNumber: 10,
-			},
-		},
-	})
+			}.Build(),
+		}.Build(),
+	}.Build())
 
 	s.True(s.env.IsWorkflowCompleted())
 
@@ -747,7 +747,7 @@ func (s *WorkerDeploymentSuite) Test_HandlePropagationComplete_RemovesEmptyBuild
 	s.Require().NoError(queryResult.Get(&state))
 
 	// Verify the build ID entry was removed entirely
-	s.NotContains(state.State.PropagatingRevisions, buildID)
+	s.NotContains(state.GetState().GetPropagatingRevisions(), buildID)
 }
 
 // Test_DeleteDeployment_Success tests successful deletion of a deployment with no versions
@@ -767,14 +767,14 @@ func (s *WorkerDeploymentSuite) Test_DeleteDeployment_Success() {
 		}, nil) // DeleteDeployment takes no arguments
 	}, 1*time.Millisecond)
 
-	s.env.ExecuteWorkflow(WorkerDeploymentWorkflowType, &deploymentspb.WorkerDeploymentWorkflowArgs{
+	s.env.ExecuteWorkflow(WorkerDeploymentWorkflowType, deploymentspb.WorkerDeploymentWorkflowArgs_builder{
 		NamespaceName:  tv.NamespaceName().String(),
 		NamespaceId:    tv.NamespaceID().String(),
 		DeploymentName: tv.DeploymentSeries(),
-		State: &deploymentspb.WorkerDeploymentLocalState{
+		State: deploymentspb.WorkerDeploymentLocalState_builder{
 			Versions: map[string]*deploymentspb.WorkerDeploymentVersionSummary{},
-		},
-	})
+		}.Build(),
+	}.Build())
 
 	s.True(s.env.IsWorkflowCompleted())
 	s.Require().NoError(s.env.GetWorkflowError())
@@ -802,20 +802,20 @@ func (s *WorkerDeploymentSuite) Test_DeleteDeployment_FailsWithVersions() {
 		}, nil)
 	}, 1*time.Millisecond)
 
-	s.env.ExecuteWorkflow(WorkerDeploymentWorkflowType, &deploymentspb.WorkerDeploymentWorkflowArgs{
+	s.env.ExecuteWorkflow(WorkerDeploymentWorkflowType, deploymentspb.WorkerDeploymentWorkflowArgs_builder{
 		NamespaceName:  tv.NamespaceName().String(),
 		NamespaceId:    tv.NamespaceID().String(),
 		DeploymentName: tv.DeploymentSeries(),
-		State: &deploymentspb.WorkerDeploymentLocalState{
+		State: deploymentspb.WorkerDeploymentLocalState_builder{
 			Versions: map[string]*deploymentspb.WorkerDeploymentVersionSummary{
-				version: {
+				version: deploymentspb.WorkerDeploymentVersionSummary_builder{
 					Version:    version,
 					CreateTime: timestamppb.New(time.Now()),
 					Status:     enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE,
-				},
+				}.Build(),
 			},
-		},
-	})
+		}.Build(),
+	}.Build())
 
 	s.True(s.env.IsWorkflowCompleted())
 }
@@ -846,14 +846,14 @@ func (s *WorkerDeploymentSuite) Test_DeleteDeployment_QueryAfterDeletion() {
 		s.Contains(err.Error(), errDeploymentDeleted)
 	}, 5*time.Millisecond)
 
-	s.env.ExecuteWorkflow(WorkerDeploymentWorkflowType, &deploymentspb.WorkerDeploymentWorkflowArgs{
+	s.env.ExecuteWorkflow(WorkerDeploymentWorkflowType, deploymentspb.WorkerDeploymentWorkflowArgs_builder{
 		NamespaceName:  tv.NamespaceName().String(),
 		NamespaceId:    tv.NamespaceID().String(),
 		DeploymentName: tv.DeploymentSeries(),
-		State: &deploymentspb.WorkerDeploymentLocalState{
+		State: deploymentspb.WorkerDeploymentLocalState_builder{
 			Versions: map[string]*deploymentspb.WorkerDeploymentVersionSummary{},
-		},
-	})
+		}.Build(),
+	}.Build())
 
 	s.True(s.env.IsWorkflowCompleted())
 	s.Require().NoError(s.env.GetWorkflowError())
@@ -873,17 +873,17 @@ func (s *WorkerDeploymentSuite) Test_DeleteDeployment_QueryBeforeDeletion() {
 		var resp deploymentspb.QueryDescribeWorkerDeploymentResponse
 		err = val.Get(&resp)
 		s.Require().NoError(err)
-		s.NotNil(resp.State)
+		s.NotNil(resp.GetState())
 	}, 1*time.Millisecond)
 
-	s.env.ExecuteWorkflow(WorkerDeploymentWorkflowType, &deploymentspb.WorkerDeploymentWorkflowArgs{
+	s.env.ExecuteWorkflow(WorkerDeploymentWorkflowType, deploymentspb.WorkerDeploymentWorkflowArgs_builder{
 		NamespaceName:  tv.NamespaceName().String(),
 		NamespaceId:    tv.NamespaceID().String(),
 		DeploymentName: tv.DeploymentSeries(),
-		State: &deploymentspb.WorkerDeploymentLocalState{
+		State: deploymentspb.WorkerDeploymentLocalState_builder{
 			Versions: map[string]*deploymentspb.WorkerDeploymentVersionSummary{},
-		},
-	})
+		}.Build(),
+	}.Build())
 
 	s.True(s.env.IsWorkflowCompleted())
 }
@@ -908,11 +908,11 @@ func (s *WorkerDeploymentSuite) Test_DeleteVersion_Success() {
 			OnComplete: func(result interface{}, err error) {
 				s.Require().NoError(err, "delete version should complete without error")
 			},
-		}, &deploymentspb.DeleteVersionArgs{
+		}, deploymentspb.DeleteVersionArgs_builder{
 			Identity:     tv.ClientIdentity(),
 			Version:      version,
 			SkipDrainage: false,
-		})
+		}.Build())
 	}, 1*time.Millisecond)
 
 	// Query after deletion to verify version was removed
@@ -921,26 +921,26 @@ func (s *WorkerDeploymentSuite) Test_DeleteVersion_Success() {
 		s.Require().NoError(err)
 		var state deploymentspb.QueryDescribeWorkerDeploymentResponse
 		s.Require().NoError(queryResult.Get(&state))
-		s.NotContains(state.State.Versions, version, "version should be removed from state after deletion")
+		s.NotContains(state.GetState().GetVersions(), version, "version should be removed from state after deletion")
 	}, 50*time.Millisecond)
 
-	s.env.ExecuteWorkflow(WorkerDeploymentWorkflowType, &deploymentspb.WorkerDeploymentWorkflowArgs{
+	s.env.ExecuteWorkflow(WorkerDeploymentWorkflowType, deploymentspb.WorkerDeploymentWorkflowArgs_builder{
 		NamespaceName:  tv.NamespaceName().String(),
 		NamespaceId:    tv.NamespaceID().String(),
 		DeploymentName: tv.DeploymentSeries(),
-		State: &deploymentspb.WorkerDeploymentLocalState{
+		State: deploymentspb.WorkerDeploymentLocalState_builder{
 			Versions: map[string]*deploymentspb.WorkerDeploymentVersionSummary{
-				version: {
+				version: deploymentspb.WorkerDeploymentVersionSummary_builder{
 					Version:    version,
 					CreateTime: timestamppb.New(time.Now()),
 					Status:     enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE,
-				},
+				}.Build(),
 			},
-			RoutingConfig: &deploymentpb.RoutingConfig{
+			RoutingConfig: deploymentpb.RoutingConfig_builder{
 				CurrentVersion: worker_versioning.UnversionedVersionId,
-			},
-		},
-	})
+			}.Build(),
+		}.Build(),
+	}.Build())
 
 	s.True(s.env.IsWorkflowCompleted())
 }
@@ -964,30 +964,30 @@ func (s *WorkerDeploymentSuite) Test_DeleteVersion_FailsWhenCurrentOrRamping() {
 			OnComplete: func(result interface{}, err error) {
 				s.Fail("delete version should not have reached completion")
 			},
-		}, &deploymentspb.DeleteVersionArgs{
+		}, deploymentspb.DeleteVersionArgs_builder{
 			Identity:     tv.ClientIdentity(),
 			Version:      version,
 			SkipDrainage: false,
-		})
+		}.Build())
 	}, 1*time.Millisecond)
 
-	s.env.ExecuteWorkflow(WorkerDeploymentWorkflowType, &deploymentspb.WorkerDeploymentWorkflowArgs{
+	s.env.ExecuteWorkflow(WorkerDeploymentWorkflowType, deploymentspb.WorkerDeploymentWorkflowArgs_builder{
 		NamespaceName:  tv.NamespaceName().String(),
 		NamespaceId:    tv.NamespaceID().String(),
 		DeploymentName: tv.DeploymentSeries(),
-		State: &deploymentspb.WorkerDeploymentLocalState{
+		State: deploymentspb.WorkerDeploymentLocalState_builder{
 			Versions: map[string]*deploymentspb.WorkerDeploymentVersionSummary{
-				version: {
+				version: deploymentspb.WorkerDeploymentVersionSummary_builder{
 					Version:    version,
 					CreateTime: timestamppb.New(time.Now()),
 					Status:     enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
-				},
+				}.Build(),
 			},
-			RoutingConfig: &deploymentpb.RoutingConfig{
+			RoutingConfig: deploymentpb.RoutingConfig_builder{
 				CurrentVersion: version, // Version is current
-			},
-		},
-	})
+			}.Build(),
+		}.Build(),
+	}.Build())
 
 	s.True(s.env.IsWorkflowCompleted())
 }
@@ -1011,24 +1011,24 @@ func (s *WorkerDeploymentSuite) Test_DeleteVersion_FailsWhenVersionNotFound() {
 			OnComplete: func(result interface{}, err error) {
 				s.Fail("delete version should not have reached completion")
 			},
-		}, &deploymentspb.DeleteVersionArgs{
+		}, deploymentspb.DeleteVersionArgs_builder{
 			Identity:     tv.ClientIdentity(),
 			Version:      nonExistentVersion,
 			SkipDrainage: false,
-		})
+		}.Build())
 	}, 1*time.Millisecond)
 
-	s.env.ExecuteWorkflow(WorkerDeploymentWorkflowType, &deploymentspb.WorkerDeploymentWorkflowArgs{
+	s.env.ExecuteWorkflow(WorkerDeploymentWorkflowType, deploymentspb.WorkerDeploymentWorkflowArgs_builder{
 		NamespaceName:  tv.NamespaceName().String(),
 		NamespaceId:    tv.NamespaceID().String(),
 		DeploymentName: tv.DeploymentSeries(),
-		State: &deploymentspb.WorkerDeploymentLocalState{
+		State: deploymentspb.WorkerDeploymentLocalState_builder{
 			Versions: map[string]*deploymentspb.WorkerDeploymentVersionSummary{},
-			RoutingConfig: &deploymentpb.RoutingConfig{
+			RoutingConfig: deploymentpb.RoutingConfig_builder{
 				CurrentVersion: worker_versioning.UnversionedVersionId,
-			},
-		},
-	})
+			}.Build(),
+		}.Build(),
+	}.Build())
 
 	s.True(s.env.IsWorkflowCompleted())
 }
@@ -1044,11 +1044,11 @@ func (s *WorkerDeploymentSuite) Test_DeleteVersion_ConcurrentDeletes() {
 	s.env.RegisterActivity(a.DeleteWorkerDeploymentVersion)
 	s.env.OnActivity(a.DeleteWorkerDeploymentVersion, mock.Anything, mock.Anything).Return(nil).Once() // Only one should succeed
 
-	deleteArgs := &deploymentspb.DeleteVersionArgs{
+	deleteArgs := deploymentspb.DeleteVersionArgs_builder{
 		Identity:     tv.ClientIdentity(),
 		Version:      version,
 		SkipDrainage: false,
-	}
+	}.Build()
 
 	s.env.RegisterDelayedCallback(func() {
 		// Fire first delete update
@@ -1076,23 +1076,23 @@ func (s *WorkerDeploymentSuite) Test_DeleteVersion_ConcurrentDeletes() {
 		}, deleteArgs)
 	}, 1*time.Millisecond)
 
-	s.env.ExecuteWorkflow(WorkerDeploymentWorkflowType, &deploymentspb.WorkerDeploymentWorkflowArgs{
+	s.env.ExecuteWorkflow(WorkerDeploymentWorkflowType, deploymentspb.WorkerDeploymentWorkflowArgs_builder{
 		NamespaceName:  tv.NamespaceName().String(),
 		NamespaceId:    tv.NamespaceID().String(),
 		DeploymentName: tv.DeploymentSeries(),
-		State: &deploymentspb.WorkerDeploymentLocalState{
+		State: deploymentspb.WorkerDeploymentLocalState_builder{
 			Versions: map[string]*deploymentspb.WorkerDeploymentVersionSummary{
-				version: {
+				version: deploymentspb.WorkerDeploymentVersionSummary_builder{
 					Version:    version,
 					CreateTime: timestamppb.New(time.Now()),
 					Status:     enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE,
-				},
+				}.Build(),
 			},
-			RoutingConfig: &deploymentpb.RoutingConfig{
+			RoutingConfig: deploymentpb.RoutingConfig_builder{
 				CurrentVersion: worker_versioning.UnversionedVersionId,
-			},
-		},
-	})
+			}.Build(),
+		}.Build(),
+	}.Build())
 
 	s.True(s.env.IsWorkflowCompleted())
 }
@@ -1109,11 +1109,11 @@ func (s *WorkerDeploymentSuite) Test_SetCurrent_AddsPropagatingRevision() {
 	s.env.RegisterActivity(a.SyncWorkerDeploymentVersion)
 	s.env.OnActivity(a.SyncWorkerDeploymentVersion, mock.Anything, mock.Anything).Return(
 		func(ctx context.Context, args *deploymentspb.SyncVersionStateActivityArgs) (*deploymentspb.SyncVersionStateActivityResult, error) {
-			return &deploymentspb.SyncVersionStateActivityResult{
-				Summary: &deploymentspb.WorkerDeploymentVersionSummary{
-					Version: args.Version,
-				},
-			}, nil
+			return deploymentspb.SyncVersionStateActivityResult_builder{
+				Summary: deploymentspb.WorkerDeploymentVersionSummary_builder{
+					Version: args.GetVersion(),
+				}.Build(),
+			}.Build(), nil
 		},
 	)
 
@@ -1139,41 +1139,41 @@ func (s *WorkerDeploymentSuite) Test_SetCurrent_AddsPropagatingRevision() {
 
 				// Verify revision number incremented
 				expectedRevision := initialRevision + 1
-				s.Equal(expectedRevision, state.State.RoutingConfig.RevisionNumber,
+				s.Equal(expectedRevision, state.GetState().GetRoutingConfig().GetRevisionNumber(),
 					"revision number should be incremented")
 
 				// Verify propagating revisions map contains the build ID
-				s.Require().Contains(state.State.PropagatingRevisions, buildID,
+				s.Require().Contains(state.GetState().GetPropagatingRevisions(), buildID,
 					"propagating revisions should contain the build ID")
 
 				// Verify the revision number is tracked for this build
-				revisions := state.State.PropagatingRevisions[buildID].RevisionNumbers
+				revisions := state.GetState().GetPropagatingRevisions()[buildID].GetRevisionNumbers()
 				s.Require().Contains(revisions, expectedRevision,
 					"propagating revisions should track the new revision number")
 			},
-		}, &deploymentspb.SetCurrentVersionArgs{
+		}, deploymentspb.SetCurrentVersionArgs_builder{
 			Identity:                tv.ClientIdentity(),
 			Version:                 version1,
 			IgnoreMissingTaskQueues: true,
-		})
+		}.Build())
 	}, 1*time.Millisecond)
 
-	s.env.ExecuteWorkflow(WorkerDeploymentWorkflowType, &deploymentspb.WorkerDeploymentWorkflowArgs{
+	s.env.ExecuteWorkflow(WorkerDeploymentWorkflowType, deploymentspb.WorkerDeploymentWorkflowArgs_builder{
 		NamespaceName:  tv.NamespaceName().String(),
 		NamespaceId:    tv.NamespaceID().String(),
 		DeploymentName: tv.DeploymentSeries(),
-		State: &deploymentspb.WorkerDeploymentLocalState{
+		State: deploymentspb.WorkerDeploymentLocalState_builder{
 			Versions: map[string]*deploymentspb.WorkerDeploymentVersionSummary{
-				version1: {
+				version1: deploymentspb.WorkerDeploymentVersionSummary_builder{
 					Version: version1,
-				},
+				}.Build(),
 			},
-			RoutingConfig: &deploymentpb.RoutingConfig{
+			RoutingConfig: deploymentpb.RoutingConfig_builder{
 				RevisionNumber: initialRevision,
-			},
+			}.Build(),
 			PropagatingRevisions: make(map[string]*deploymentspb.PropagatingRevisions),
-		},
-	})
+		}.Build(),
+	}.Build())
 
 	s.True(s.env.IsWorkflowCompleted())
 }

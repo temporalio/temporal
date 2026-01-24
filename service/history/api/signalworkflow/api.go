@@ -17,14 +17,14 @@ func Invoke(
 	shard historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (resp *historyservice.SignalWorkflowExecutionResponse, retError error) {
-	namespaceEntry, err := api.GetActiveNamespace(shard, namespace.ID(req.GetNamespaceId()), req.SignalRequest.WorkflowExecution.WorkflowId)
+	namespaceEntry, err := api.GetActiveNamespace(shard, namespace.ID(req.GetNamespaceId()), req.GetSignalRequest().GetWorkflowExecution().GetWorkflowId())
 	if err != nil {
 		return nil, err
 	}
 	namespaceID := namespaceEntry.ID()
 
-	request := req.SignalRequest
-	externalWorkflowExecution := req.ExternalWorkflowExecution
+	request := req.GetSignalRequest()
+	externalWorkflowExecution := req.GetExternalWorkflowExecution()
 	childWorkflowOnly := req.GetChildWorkflowOnly()
 
 	err = api.GetAndUpdateWorkflowWithNew(
@@ -32,8 +32,8 @@ func Invoke(
 		nil,
 		definition.NewWorkflowKey(
 			namespaceID.String(),
-			request.WorkflowExecution.WorkflowId,
-			request.WorkflowExecution.RunId,
+			request.GetWorkflowExecution().GetWorkflowId(),
+			request.GetWorkflowExecution().GetRunId(),
 		),
 		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
 			mutableState := workflowLease.GetMutableState()
@@ -70,8 +70,8 @@ func Invoke(
 			createWorkflowTask := !mutableState.IsWorkflowPendingOnWorkflowTaskBackoff()
 
 			if childWorkflowOnly {
-				parentWorkflowID := executionInfo.ParentWorkflowId
-				parentRunID := executionInfo.ParentRunId
+				parentWorkflowID := executionInfo.GetParentWorkflowId()
+				parentRunID := executionInfo.GetParentRunId()
 				if externalWorkflowExecution.GetWorkflowId() != parentWorkflowID ||
 					externalWorkflowExecution.GetRunId() != parentRunID {
 					releaseFn(nil)

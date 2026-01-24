@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/hsm/hsmtest"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -26,77 +27,65 @@ func TestCherryPick(t *testing.T) {
 
 	t.Run("NoRequestID", func(t *testing.T) {
 		node, _, eventID := setup(t)
-		err := nexusoperations.StartedEventDefinition{}.CherryPick(node.Parent, &historypb.HistoryEvent{
-			Attributes: &historypb.HistoryEvent_NexusOperationStartedEventAttributes{
-				NexusOperationStartedEventAttributes: &historypb.NexusOperationStartedEventAttributes{
-					ScheduledEventId: eventID,
-				},
-			},
-		},
+		err := nexusoperations.StartedEventDefinition{}.CherryPick(node.Parent, historypb.HistoryEvent_builder{
+			NexusOperationStartedEventAttributes: historypb.NexusOperationStartedEventAttributes_builder{
+				ScheduledEventId: eventID,
+			}.Build(),
+		}.Build(),
 			nil,
 		)
 		require.NoError(t, err)
 	})
 	t.Run("ValidRequestID", func(t *testing.T) {
 		node, op, eventID := setup(t)
-		err := nexusoperations.StartedEventDefinition{}.CherryPick(node.Parent, &historypb.HistoryEvent{
-			Attributes: &historypb.HistoryEvent_NexusOperationStartedEventAttributes{
-				NexusOperationStartedEventAttributes: &historypb.NexusOperationStartedEventAttributes{
-					ScheduledEventId: eventID,
-					RequestId:        op.RequestId,
-				},
-			},
-		},
+		err := nexusoperations.StartedEventDefinition{}.CherryPick(node.Parent, historypb.HistoryEvent_builder{
+			NexusOperationStartedEventAttributes: historypb.NexusOperationStartedEventAttributes_builder{
+				ScheduledEventId: eventID,
+				RequestId:        op.RequestId,
+			}.Build(),
+		}.Build(),
 			nil,
 		)
 		require.NoError(t, err)
 	})
 	t.Run("InvalidRequestID", func(t *testing.T) {
 		node, _, eventID := setup(t)
-		err := nexusoperations.StartedEventDefinition{}.CherryPick(node.Parent, &historypb.HistoryEvent{
-			Attributes: &historypb.HistoryEvent_NexusOperationStartedEventAttributes{
-				NexusOperationStartedEventAttributes: &historypb.NexusOperationStartedEventAttributes{
-					ScheduledEventId: eventID,
-					RequestId:        "invalid",
-				},
-			},
-		},
+		err := nexusoperations.StartedEventDefinition{}.CherryPick(node.Parent, historypb.HistoryEvent_builder{
+			NexusOperationStartedEventAttributes: historypb.NexusOperationStartedEventAttributes_builder{
+				ScheduledEventId: eventID,
+				RequestId:        "invalid",
+			}.Build(),
+		}.Build(),
 			nil,
 		)
 		require.ErrorIs(t, err, hsm.ErrNotCherryPickable)
 	})
 	t.Run("InvalidScheduledEventID", func(t *testing.T) {
 		node, _, eventID := setup(t)
-		err := nexusoperations.StartedEventDefinition{}.CherryPick(node.Parent, &historypb.HistoryEvent{
-			Attributes: &historypb.HistoryEvent_NexusOperationStartedEventAttributes{
-				NexusOperationStartedEventAttributes: &historypb.NexusOperationStartedEventAttributes{
-					ScheduledEventId: eventID + 1,
-				},
-			},
-		},
+		err := nexusoperations.StartedEventDefinition{}.CherryPick(node.Parent, historypb.HistoryEvent_builder{
+			NexusOperationStartedEventAttributes: historypb.NexusOperationStartedEventAttributes_builder{
+				ScheduledEventId: eventID + 1,
+			}.Build(),
+		}.Build(),
 			nil,
 		)
 		require.ErrorIs(t, err, hsm.ErrStateMachineNotFound)
 	})
 	t.Run("DoubleApply", func(t *testing.T) {
 		node, _, eventID := setup(t)
-		err := nexusoperations.StartedEventDefinition{}.CherryPick(node.Parent, &historypb.HistoryEvent{
-			Attributes: &historypb.HistoryEvent_NexusOperationStartedEventAttributes{
-				NexusOperationStartedEventAttributes: &historypb.NexusOperationStartedEventAttributes{
-					ScheduledEventId: eventID,
-				},
-			},
-		},
+		err := nexusoperations.StartedEventDefinition{}.CherryPick(node.Parent, historypb.HistoryEvent_builder{
+			NexusOperationStartedEventAttributes: historypb.NexusOperationStartedEventAttributes_builder{
+				ScheduledEventId: eventID,
+			}.Build(),
+		}.Build(),
 			nil,
 		)
 		require.NoError(t, err)
-		err = nexusoperations.StartedEventDefinition{}.CherryPick(node.Parent, &historypb.HistoryEvent{
-			Attributes: &historypb.HistoryEvent_NexusOperationStartedEventAttributes{
-				NexusOperationStartedEventAttributes: &historypb.NexusOperationStartedEventAttributes{
-					ScheduledEventId: eventID,
-				},
-			},
-		},
+		err = nexusoperations.StartedEventDefinition{}.CherryPick(node.Parent, historypb.HistoryEvent_builder{
+			NexusOperationStartedEventAttributes: historypb.NexusOperationStartedEventAttributes_builder{
+				ScheduledEventId: eventID,
+			}.Build(),
+		}.Build(),
 			nil,
 		)
 		require.ErrorIs(t, err, hsm.ErrInvalidTransition)
@@ -130,30 +119,30 @@ func TestTerminalStatesDeletion(t *testing.T) {
 		{
 			name: "CompletedDeletesStateMachine",
 			def:  nexusoperations.CompletedEventDefinition{},
-			attributes: &historypb.NexusOperationCompletedEventAttributes{
+			attributes: historypb.NexusOperationCompletedEventAttributes_builder{
 				ScheduledEventId: 0,
-			},
+			}.Build(),
 		},
 		{
 			name: "FailedDeletesStateMachine",
 			def:  nexusoperations.FailedEventDefinition{},
-			attributes: &historypb.NexusOperationFailedEventAttributes{
+			attributes: historypb.NexusOperationFailedEventAttributes_builder{
 				ScheduledEventId: 0,
-			},
+			}.Build(),
 		},
 		{
 			name: "CanceledDeletesStateMachine",
 			def:  nexusoperations.CanceledEventDefinition{},
-			attributes: &historypb.NexusOperationCanceledEventAttributes{
+			attributes: historypb.NexusOperationCanceledEventAttributes_builder{
 				ScheduledEventId: 0,
-			},
+			}.Build(),
 		},
 		{
 			name: "TimedOutDeletesStateMachine",
 			def:  nexusoperations.TimedOutEventDefinition{},
-			attributes: &historypb.NexusOperationTimedOutEventAttributes{
+			attributes: historypb.NexusOperationTimedOutEventAttributes_builder{
 				ScheduledEventId: 0,
-			},
+			}.Build(),
 		},
 	}
 
@@ -168,40 +157,32 @@ func TestTerminalStatesDeletion(t *testing.T) {
 			// Update the event ID in attributes
 			switch a := tc.attributes.(type) {
 			case *historypb.NexusOperationCompletedEventAttributes:
-				a.ScheduledEventId = eventID
+				a.SetScheduledEventId(eventID)
 			case *historypb.NexusOperationFailedEventAttributes:
-				a.ScheduledEventId = eventID
+				a.SetScheduledEventId(eventID)
 			case *historypb.NexusOperationCanceledEventAttributes:
-				a.ScheduledEventId = eventID
+				a.SetScheduledEventId(eventID)
 			case *historypb.NexusOperationTimedOutEventAttributes:
-				a.ScheduledEventId = eventID
+				a.SetScheduledEventId(eventID)
 			}
 
-			event := &historypb.HistoryEvent{
+			event := historypb.HistoryEvent_builder{
 				EventTime: timestamppb.Now(),
-			}
+			}.Build()
 
 			switch d := tc.def.(type) {
 			case nexusoperations.CompletedEventDefinition:
-				event.EventType = d.Type()
-				event.Attributes = &historypb.HistoryEvent_NexusOperationCompletedEventAttributes{
-					NexusOperationCompletedEventAttributes: tc.attributes.(*historypb.NexusOperationCompletedEventAttributes),
-				}
+				event.SetEventType(d.Type())
+				event.SetNexusOperationCompletedEventAttributes(proto.ValueOrDefault(tc.attributes.(*historypb.NexusOperationCompletedEventAttributes)))
 			case nexusoperations.FailedEventDefinition:
-				event.EventType = d.Type()
-				event.Attributes = &historypb.HistoryEvent_NexusOperationFailedEventAttributes{
-					NexusOperationFailedEventAttributes: tc.attributes.(*historypb.NexusOperationFailedEventAttributes),
-				}
+				event.SetEventType(d.Type())
+				event.SetNexusOperationFailedEventAttributes(proto.ValueOrDefault(tc.attributes.(*historypb.NexusOperationFailedEventAttributes)))
 			case nexusoperations.CanceledEventDefinition:
-				event.EventType = d.Type()
-				event.Attributes = &historypb.HistoryEvent_NexusOperationCanceledEventAttributes{
-					NexusOperationCanceledEventAttributes: tc.attributes.(*historypb.NexusOperationCanceledEventAttributes),
-				}
+				event.SetEventType(d.Type())
+				event.SetNexusOperationCanceledEventAttributes(proto.ValueOrDefault(tc.attributes.(*historypb.NexusOperationCanceledEventAttributes)))
 			case nexusoperations.TimedOutEventDefinition:
-				event.EventType = d.Type()
-				event.Attributes = &historypb.HistoryEvent_NexusOperationTimedOutEventAttributes{
-					NexusOperationTimedOutEventAttributes: tc.attributes.(*historypb.NexusOperationTimedOutEventAttributes),
-				}
+				event.SetEventType(d.Type())
+				event.SetNexusOperationTimedOutEventAttributes(proto.ValueOrDefault(tc.attributes.(*historypb.NexusOperationTimedOutEventAttributes)))
 			default:
 				t.Fatalf("unknown event definition type: %T", tc.def)
 			}

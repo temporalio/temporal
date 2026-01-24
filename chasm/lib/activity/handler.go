@@ -96,12 +96,12 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 		return nil, err
 	}
 
-	result.Output.RunId = result.ExecutionKey.RunID
-	result.Output.Started = result.Created
+	result.Output.SetRunId(result.ExecutionKey.RunID)
+	result.Output.SetStarted(result.Created)
 
-	return &activitypb.StartActivityExecutionResponse{
+	return activitypb.StartActivityExecutionResponse_builder{
 		FrontendResponse: result.Output,
-	}, nil
+	}.Build(), nil
 }
 
 // DescribeActivityExecution queries current activity state, optionally as a long-poll that waits
@@ -166,9 +166,9 @@ func (h *handler) DescribeActivityExecution(
 
 	if err != nil && ctx.Err() != nil {
 		// Send empty non-error response on deadline expiry: caller should continue long-polling.
-		return &activitypb.DescribeActivityExecutionResponse{
+		return activitypb.DescribeActivityExecutionResponse_builder{
 			FrontendResponse: &workflowservice.DescribeActivityExecutionResponse{},
-		}, nil
+		}.Build(), nil
 	}
 	return response, err
 }
@@ -220,9 +220,9 @@ func (h *handler) PollActivityExecution(
 
 	if err != nil && ctx.Err() != nil {
 		// Send an empty non-error response as an invitation to resubmit the long-poll.
-		return &activitypb.PollActivityExecutionResponse{
+		return activitypb.PollActivityExecutionResponse_builder{
 			FrontendResponse: &workflowservice.PollActivityExecutionResponse{},
-		}, nil
+		}.Build(), nil
 	}
 	return response, err
 }

@@ -8,7 +8,6 @@ package testservice
 
 import (
 	reflect "reflect"
-	sync "sync"
 	unsafe "unsafe"
 
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -23,10 +22,10 @@ const (
 )
 
 type SendHelloRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Name string                 `protobuf:"bytes,1,opt,name=name,proto3"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *SendHelloRequest) Reset() {
@@ -54,23 +53,36 @@ func (x *SendHelloRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SendHelloRequest.ProtoReflect.Descriptor instead.
-func (*SendHelloRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_testservice_v1_request_response_proto_rawDescGZIP(), []int{0}
-}
-
 func (x *SendHelloRequest) GetName() string {
 	if x != nil {
-		return x.Name
+		return x.xxx_hidden_Name
 	}
 	return ""
 }
 
+func (x *SendHelloRequest) SetName(v string) {
+	x.xxx_hidden_Name = v
+}
+
+type SendHelloRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Name string
+}
+
+func (b0 SendHelloRequest_builder) Build() *SendHelloRequest {
+	m0 := &SendHelloRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Name = b.Name
+	return m0
+}
+
 type SendHelloResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Message       string                 `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state              protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Message string                 `protobuf:"bytes,1,opt,name=message,proto3"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *SendHelloResponse) Reset() {
@@ -98,16 +110,29 @@ func (x *SendHelloResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SendHelloResponse.ProtoReflect.Descriptor instead.
-func (*SendHelloResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_testservice_v1_request_response_proto_rawDescGZIP(), []int{1}
-}
-
 func (x *SendHelloResponse) GetMessage() string {
 	if x != nil {
-		return x.Message
+		return x.xxx_hidden_Message
 	}
 	return ""
+}
+
+func (x *SendHelloResponse) SetMessage(v string) {
+	x.xxx_hidden_Message = v
+}
+
+type SendHelloResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Message string
+}
+
+func (b0 SendHelloResponse_builder) Build() *SendHelloResponse {
+	m0 := &SendHelloResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Message = b.Message
+	return m0
 }
 
 var File_temporal_server_api_testservice_v1_request_response_proto protoreflect.FileDescriptor
@@ -119,18 +144,6 @@ const file_temporal_server_api_testservice_v1_request_response_proto_rawDesc = "
 	"\x04name\x18\x01 \x01(\tR\x04name\"-\n" +
 	"\x11SendHelloResponse\x12\x18\n" +
 	"\amessage\x18\x01 \x01(\tR\amessageB6Z4go.temporal.io/server/api/testservice/v1;testserviceb\x06proto3"
-
-var (
-	file_temporal_server_api_testservice_v1_request_response_proto_rawDescOnce sync.Once
-	file_temporal_server_api_testservice_v1_request_response_proto_rawDescData []byte
-)
-
-func file_temporal_server_api_testservice_v1_request_response_proto_rawDescGZIP() []byte {
-	file_temporal_server_api_testservice_v1_request_response_proto_rawDescOnce.Do(func() {
-		file_temporal_server_api_testservice_v1_request_response_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_api_testservice_v1_request_response_proto_rawDesc), len(file_temporal_server_api_testservice_v1_request_response_proto_rawDesc)))
-	})
-	return file_temporal_server_api_testservice_v1_request_response_proto_rawDescData
-}
 
 var file_temporal_server_api_testservice_v1_request_response_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
 var file_temporal_server_api_testservice_v1_request_response_proto_goTypes = []any{

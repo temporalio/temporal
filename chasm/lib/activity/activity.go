@@ -25,6 +25,7 @@ import (
 	"go.temporal.io/server/common/payload"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tqid"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -114,7 +115,7 @@ type terminateEvent struct {
 }
 
 func (a *Activity) LifecycleState(_ chasm.Context) chasm.LifecycleState {
-	switch a.Status {
+	switch a.GetStatus() {
 	case activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED:
 		return chasm.LifecycleStateCompleted
 	case activitypb.ACTIVITY_EXECUTION_STATUS_FAILED,
@@ -139,27 +140,27 @@ func NewStandaloneActivity(
 	)
 
 	activity := &Activity{
-		ActivityState: &activitypb.ActivityState{
-			ActivityType:           request.ActivityType,
+		ActivityState: activitypb.ActivityState_builder{
+			ActivityType:           request.GetActivityType(),
 			TaskQueue:              request.GetTaskQueue(),
 			ScheduleToCloseTimeout: request.GetScheduleToCloseTimeout(),
 			ScheduleToStartTimeout: request.GetScheduleToStartTimeout(),
 			StartToCloseTimeout:    request.GetStartToCloseTimeout(),
 			HeartbeatTimeout:       request.GetHeartbeatTimeout(),
 			RetryPolicy:            request.GetRetryPolicy(),
-			Priority:               request.Priority,
-		},
+			Priority:               request.GetPriority(),
+		}.Build(),
 		LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{}),
-		RequestData: chasm.NewDataField(ctx, &activitypb.ActivityRequestData{
-			Input:        request.Input,
-			Header:       request.Header,
-			UserMetadata: request.UserMetadata,
-		}),
+		RequestData: chasm.NewDataField(ctx, activitypb.ActivityRequestData_builder{
+			Input:        request.GetInput(),
+			Header:       request.GetHeader(),
+			UserMetadata: request.GetUserMetadata(),
+		}.Build()),
 		Outcome:    chasm.NewDataField(ctx, &activitypb.ActivityOutcome{}),
 		Visibility: chasm.NewComponentField(ctx, visibility),
 	}
 
-	activity.ScheduleTime = timestamppb.New(ctx.Now(activity))
+	activity.SetScheduleTime(timestamppb.New(ctx.Now(activity)))
 
 	return activity, nil
 }
@@ -180,14 +181,14 @@ func (a *Activity) createAddActivityTaskRequest(ctx chasm.Context, namespaceID s
 
 	// Note: No need to set the vector clock here, as the components track version conflicts for read/write
 	// TODO: Need to fill in VersionDirective once we decide how to handle versioning for standalone activities
-	return &matchingservice.AddActivityTaskRequest{
+	return matchingservice.AddActivityTaskRequest_builder{
 		NamespaceId:            namespaceID,
-		ScheduleToStartTimeout: a.ScheduleToStartTimeout,
+		ScheduleToStartTimeout: a.GetScheduleToStartTimeout(),
 		TaskQueue:              a.GetTaskQueue(),
 		Priority:               a.GetPriority(),
 		ComponentRef:           componentRef,
 		Stamp:                  a.LastAttempt.Get(ctx).GetStamp(),
-	}, nil
+	}.Build(), nil
 }
 
 // HandleStarted updates the activity on recording activity task started and populates the response.
@@ -220,7 +221,7 @@ func (a *Activity) GenerateRecordActivityTaskStartedResponse(
 	lastHeartbeat, _ := a.LastHeartbeat.TryGet(ctx)
 	requestData := a.RequestData.Get(ctx)
 	attempt := a.LastAttempt.Get(ctx)
-	return &historyservice.RecordActivityTaskStartedResponse{
+	return historyservice.RecordActivityTaskStartedResponse_builder{
 		StartedTime:       attempt.GetStartedTime(),
 		Attempt:           attempt.GetCount(),
 		Priority:          a.GetPriority(),
@@ -228,24 +229,22 @@ func (a *Activity) GenerateRecordActivityTaskStartedResponse(
 		ActivityRunId:     key.RunID,
 		WorkflowNamespace: namespace,
 		HeartbeatDetails:  lastHeartbeat.GetDetails(),
-		ScheduledEvent: &historypb.HistoryEvent{
+		ScheduledEvent: historypb.HistoryEvent_builder{
 			EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
 			EventTime: a.GetScheduleTime(),
-			Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{
-				ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{
-					ActivityId:             key.BusinessID,
-					ActivityType:           a.GetActivityType(),
-					Input:                  requestData.GetInput(),
-					Header:                 requestData.GetHeader(),
-					TaskQueue:              a.GetTaskQueue(),
-					ScheduleToCloseTimeout: a.GetScheduleToCloseTimeout(),
-					ScheduleToStartTimeout: a.GetScheduleToStartTimeout(),
-					StartToCloseTimeout:    a.GetStartToCloseTimeout(),
-					HeartbeatTimeout:       a.GetHeartbeatTimeout(),
-				},
-			},
-		},
-	}, nil
+			ActivityTaskScheduledEventAttributes: historypb.ActivityTaskScheduledEventAttributes_builder{
+				ActivityId:             key.BusinessID,
+				ActivityType:           a.GetActivityType(),
+				Input:                  requestData.GetInput(),
+				Header:                 requestData.GetHeader(),
+				TaskQueue:              a.GetTaskQueue(),
+				ScheduleToCloseTimeout: a.GetScheduleToCloseTimeout(),
+				ScheduleToStartTimeout: a.GetScheduleToStartTimeout(),
+				StartToCloseTimeout:    a.GetStartToCloseTimeout(),
+				HeartbeatTimeout:       a.GetHeartbeatTimeout(),
+			}.Build(),
+		}.Build(),
+	}.Build(), nil
 }
 
 // RecordCompleted applies the provided function to record activity completion.
@@ -413,11 +412,11 @@ func (a *Activity) handleCancellationRequested(ctx chasm.MutableContext, event r
 	}
 
 	if isCancelImmediately {
-		details := &commonpb.Payloads{
+		details := commonpb.Payloads_builder{
 			Payloads: []*commonpb.Payload{
 				payload.EncodeString(req.GetReason()),
 			},
-		}
+		}.Build()
 
 		metricsHandler := enrichMetricsHandler(
 			a,
@@ -444,20 +443,16 @@ func (a *Activity) handleCancellationRequested(ctx chasm.MutableContext, event r
 func (a *Activity) recordScheduleToStartOrCloseTimeoutFailure(ctx chasm.MutableContext, timeoutType enumspb.TimeoutType) error {
 	outcome := a.Outcome.Get(ctx)
 
-	failure := &failurepb.Failure{
+	failure := failurepb.Failure_builder{
 		Message: fmt.Sprintf(common.FailureReasonActivityTimeout, timeoutType.String()),
-		FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
-			TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
-				TimeoutType: timeoutType,
-			},
-		},
-	}
+		TimeoutFailureInfo: failurepb.TimeoutFailureInfo_builder{
+			TimeoutType: timeoutType,
+		}.Build(),
+	}.Build()
 
-	outcome.Variant = &activitypb.ActivityOutcome_Failed_{
-		Failed: &activitypb.ActivityOutcome_Failed{
-			Failure: failure,
-		},
-	}
+	outcome.SetFailed(activitypb.ActivityOutcome_Failed_builder{
+		Failure: failure,
+	}.Build())
 
 	return nil
 }
@@ -474,16 +469,16 @@ func (a *Activity) recordFailedAttempt(
 ) error {
 	attempt := a.LastAttempt.Get(ctx)
 
-	attempt.LastFailureDetails = &activitypb.ActivityAttemptState_LastFailureDetails{
+	attempt.SetLastFailureDetails(activitypb.ActivityAttemptState_LastFailureDetails_builder{
 		Failure: failure,
 		Time:    timestamppb.New(currentTime),
-	}
-	attempt.CompleteTime = timestamppb.New(currentTime)
+	}.Build())
+	attempt.SetCompleteTime(timestamppb.New(currentTime))
 
 	if noRetriesLeft {
-		attempt.CurrentRetryInterval = nil
+		attempt.ClearCurrentRetryInterval()
 	} else {
-		attempt.CurrentRetryInterval = durationpb.New(retryInterval)
+		attempt.SetCurrentRetryInterval(durationpb.New(retryInterval))
 	}
 	return nil
 }
@@ -510,7 +505,7 @@ func (a *Activity) shouldRetry(ctx chasm.Context, overridingRetryInterval time.D
 		return false, 0
 	}
 	attempt := a.LastAttempt.Get(ctx)
-	retryPolicy := a.RetryPolicy
+	retryPolicy := a.GetRetryPolicy()
 
 	enoughAttempts := retryPolicy.GetMaximumAttempts() == 0 || attempt.GetCount() < retryPolicy.GetMaximumAttempts()
 	enoughTime, retryInterval := a.hasEnoughTimeForRetry(ctx, overridingRetryInterval)
@@ -525,7 +520,7 @@ func (a *Activity) hasEnoughTimeForRetry(ctx chasm.Context, overridingRetryInter
 	// Use overriding retry interval if provided, else calculate based on retry policy
 	retryInterval := overridingRetryInterval
 	if retryInterval <= 0 {
-		retryInterval = backoff.CalculateExponentialRetryInterval(a.RetryPolicy, attempt.Count)
+		retryInterval = backoff.CalculateExponentialRetryInterval(a.GetRetryPolicy(), attempt.GetCount())
 	}
 
 	scheduleToClose := a.GetScheduleToCloseTimeout().AsDuration()
@@ -533,30 +528,26 @@ func (a *Activity) hasEnoughTimeForRetry(ctx chasm.Context, overridingRetryInter
 		return true, retryInterval
 	}
 
-	deadline := a.ScheduleTime.AsTime().Add(scheduleToClose)
+	deadline := a.GetScheduleTime().AsTime().Add(scheduleToClose)
 	return ctx.Now(a).Add(retryInterval).Before(deadline), retryInterval
 }
 
 func createStartToCloseTimeoutFailure() *failurepb.Failure {
-	return &failurepb.Failure{
+	return failurepb.Failure_builder{
 		Message: fmt.Sprintf(common.FailureReasonActivityTimeout, enumspb.TIMEOUT_TYPE_START_TO_CLOSE.String()),
-		FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
-			TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
-				TimeoutType: enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
-			},
-		},
-	}
+		TimeoutFailureInfo: failurepb.TimeoutFailureInfo_builder{
+			TimeoutType: enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
+		}.Build(),
+	}.Build()
 }
 
 func createHeartbeatTimeoutFailure() *failurepb.Failure {
-	return &failurepb.Failure{
+	return failurepb.Failure_builder{
 		Message: fmt.Sprintf(common.FailureReasonActivityTimeout, enumspb.TIMEOUT_TYPE_HEARTBEAT.String()),
-		FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
-			TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
-				TimeoutType: enumspb.TIMEOUT_TYPE_HEARTBEAT,
-			},
-		},
-	}
+		TimeoutFailureInfo: failurepb.TimeoutFailureInfo_builder{
+			TimeoutType: enumspb.TIMEOUT_TYPE_HEARTBEAT,
+		}.Build(),
+	}.Build()
 }
 
 // RecordHeartbeat records a heartbeat for the activity.
@@ -568,23 +559,23 @@ func (a *Activity) RecordHeartbeat(
 	if err != nil {
 		return nil, err
 	}
-	a.LastHeartbeat = chasm.NewDataField(ctx, &activitypb.ActivityHeartbeatState{
+	a.LastHeartbeat = chasm.NewDataField(ctx, activitypb.ActivityHeartbeatState_builder{
 		RecordedTime: timestamppb.New(ctx.Now(a)),
 		Details:      input.Request.GetHeartbeatRequest().GetDetails(),
-	})
+	}.Build())
 	ctx.AddTask(
 		a,
 		chasm.TaskAttributes{
 			ScheduledTime: ctx.Now(a).Add(a.GetHeartbeatTimeout().AsDuration()),
 		},
-		&activitypb.HeartbeatTimeoutTask{
+		activitypb.HeartbeatTimeoutTask_builder{
 			Stamp: a.LastAttempt.Get(ctx).GetStamp(),
-		},
+		}.Build(),
 	)
-	return &historyservice.RecordActivityTaskHeartbeatResponse{
-		CancelRequested: a.Status == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
+	return historyservice.RecordActivityTaskHeartbeatResponse_builder{
+		CancelRequested: a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
 		// TODO(saa-preview): ActivityPaused, ActivityReset
-	}, nil
+	}.Build(), nil
 }
 
 // InternalStatusToAPIStatus converts internal activity execution status to API status.
@@ -661,15 +652,15 @@ func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) (*apiactivitypb
 		expirationTime = timestamppb.New(a.GetScheduleTime().AsTime().Add(timeout))
 	}
 
-	sa := &commonpb.SearchAttributes{
+	sa := commonpb.SearchAttributes_builder{
 		IndexedFields: a.Visibility.Get(ctx).CustomSearchAttributes(ctx),
-	}
+	}.Build()
 
-	info := &apiactivitypb.ActivityExecutionInfo{
+	info := apiactivitypb.ActivityExecutionInfo_builder{
 		ActivityId:              key.BusinessID,
 		ActivityType:            a.GetActivityType(),
 		Attempt:                 attempt.GetCount(),
-		CanceledReason:          a.CancelState.GetReason(),
+		CanceledReason:          a.GetCancelState().GetReason(),
 		CloseTime:               closeTime,
 		CurrentRetryInterval:    attempt.GetCurrentRetryInterval(),
 		ExecutionDuration:       executionDuration,
@@ -697,7 +688,7 @@ func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) (*apiactivitypb
 		Status:           status,
 		TaskQueue:        a.GetTaskQueue().GetName(),
 		UserMetadata:     requestData.GetUserMetadata(),
-	}
+	}.Build()
 
 	return info, nil
 }
@@ -723,31 +714,31 @@ func (a *Activity) buildDescribeActivityExecutionResponse(
 		input = a.RequestData.Get(ctx).GetInput()
 	}
 
-	response := &workflowservice.DescribeActivityExecutionResponse{
+	response := workflowservice.DescribeActivityExecutionResponse_builder{
 		Info:          info,
 		RunId:         ctx.ExecutionKey().RunID,
 		Input:         input,
 		LongPollToken: token,
-	}
+	}.Build()
 
 	if request.GetIncludeOutcome() {
-		response.Outcome = a.outcome(ctx)
+		response.SetOutcome(a.outcome(ctx))
 	}
 
-	return &activitypb.DescribeActivityExecutionResponse{
+	return activitypb.DescribeActivityExecutionResponse_builder{
 		FrontendResponse: response,
-	}, nil
+	}.Build(), nil
 }
 
 func (a *Activity) buildPollActivityExecutionResponse(
 	ctx chasm.Context,
 ) (*activitypb.PollActivityExecutionResponse, error) {
-	return &activitypb.PollActivityExecutionResponse{
-		FrontendResponse: &workflowservice.PollActivityExecutionResponse{
+	return activitypb.PollActivityExecutionResponse_builder{
+		FrontendResponse: workflowservice.PollActivityExecutionResponse_builder{
 			RunId:   ctx.ExecutionKey().RunID,
 			Outcome: a.outcome(ctx),
-		},
-	}, nil
+		}.Build(),
+	}.Build(), nil
 }
 
 // outcome retrieves the activity outcome (result or failure) if the activity has completed.
@@ -758,19 +749,19 @@ func (a *Activity) outcome(ctx chasm.Context) *apiactivitypb.ActivityExecutionOu
 	}
 	activityOutcome := a.Outcome.Get(ctx)
 	if successful := activityOutcome.GetSuccessful(); successful != nil {
-		return &apiactivitypb.ActivityExecutionOutcome{
-			Value: &apiactivitypb.ActivityExecutionOutcome_Result{Result: successful.GetOutput()},
-		}
+		return apiactivitypb.ActivityExecutionOutcome_builder{
+			Result: proto.ValueOrDefault(successful.GetOutput()),
+		}.Build()
 	}
 	if failure := activityOutcome.GetFailed().GetFailure(); failure != nil {
-		return &apiactivitypb.ActivityExecutionOutcome{
-			Value: &apiactivitypb.ActivityExecutionOutcome_Failure{Failure: failure},
-		}
+		return apiactivitypb.ActivityExecutionOutcome_builder{
+			Failure: proto.ValueOrDefault(failure),
+		}.Build()
 	}
 	if details := a.LastAttempt.Get(ctx).GetLastFailureDetails(); details != nil {
-		return &apiactivitypb.ActivityExecutionOutcome{
-			Value: &apiactivitypb.ActivityExecutionOutcome_Failure{Failure: details.GetFailure()},
-		}
+		return apiactivitypb.ActivityExecutionOutcome_builder{
+			Failure: proto.ValueOrDefault(details.GetFailure()),
+		}.Build()
 	}
 	return nil
 }
@@ -791,11 +782,11 @@ func (a *Activity) validateActivityTaskToken(
 	token *tokenspb.Task,
 	requestNamespaceID string,
 ) error {
-	if a.Status != activitypb.ACTIVITY_EXECUTION_STATUS_STARTED &&
-		a.Status != activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED {
+	if a.GetStatus() != activitypb.ACTIVITY_EXECUTION_STATUS_STARTED &&
+		a.GetStatus() != activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED {
 		return serviceerror.NewNotFound("activity task not found")
 	}
-	if token.Attempt != a.LastAttempt.Get(ctx).GetCount() {
+	if token.GetAttempt() != a.LastAttempt.Get(ctx).GetCount() {
 		return serviceerror.NewNotFound("activity task not found")
 	}
 

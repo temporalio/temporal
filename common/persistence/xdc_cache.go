@@ -138,8 +138,8 @@ func GetXDCCacheValue(
 	eventID int64,
 	version int64,
 ) ([]*historyspb.VersionHistoryItem, []byte, *workflowspb.BaseExecutionInfo, error) {
-	baseWorkflowInfo := CopyBaseWorkflowInfo(executionInfo.BaseExecutionInfo)
-	versionHistories := executionInfo.VersionHistories
+	baseWorkflowInfo := CopyBaseWorkflowInfo(executionInfo.GetBaseExecutionInfo())
+	versionHistories := executionInfo.GetVersionHistories()
 	versionHistoryIndex, err := versionhistory.FindFirstVersionHistoryIndexByVersionHistoryItem(
 		versionHistories,
 		versionhistory.NewVersionHistoryItem(
@@ -164,9 +164,9 @@ func CopyBaseWorkflowInfo(
 	if baseWorkflowInfo == nil {
 		return nil
 	}
-	return &workflowspb.BaseExecutionInfo{
-		RunId:                            baseWorkflowInfo.RunId,
-		LowestCommonAncestorEventId:      baseWorkflowInfo.LowestCommonAncestorEventId,
-		LowestCommonAncestorEventVersion: baseWorkflowInfo.LowestCommonAncestorEventVersion,
-	}
+	return workflowspb.BaseExecutionInfo_builder{
+		RunId:                            baseWorkflowInfo.GetRunId(),
+		LowestCommonAncestorEventId:      baseWorkflowInfo.GetLowestCommonAncestorEventId(),
+		LowestCommonAncestorEventVersion: baseWorkflowInfo.GetLowestCommonAncestorEventVersion(),
+	}.Build()
 }

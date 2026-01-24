@@ -20,7 +20,7 @@ func Invoke(
 ) (resp *historyservice.ResetActivityResponse, retError error) {
 	request := req.GetFrontendRequest()
 	workflowKey := definition.NewWorkflowKey(
-		req.NamespaceId,
+		req.GetNamespaceId(),
 		request.GetExecution().GetWorkflowId(),
 		request.GetExecution().GetRunId(),
 	)
@@ -32,14 +32,14 @@ func Invoke(
 		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
 			mutableState := workflowLease.GetMutableState()
 			var activityIDs []string
-			switch a := request.GetActivity().(type) {
-			case *workflowservice.ResetActivityRequest_Id:
-				activityIDs = append(activityIDs, a.Id)
-			case *workflowservice.ResetActivityRequest_Type:
-				activityType := a.Type
+			switch request.WhichActivity() {
+			case workflowservice.ResetActivityRequest_Id_case:
+				activityIDs = append(activityIDs, request.GetId())
+			case workflowservice.ResetActivityRequest_Type_case:
+				activityType := request.GetType()
 				for _, ai := range mutableState.GetPendingActivityInfos() {
-					if ai.ActivityType.Name == activityType {
-						activityIDs = append(activityIDs, ai.ActivityId)
+					if ai.GetActivityType().GetName() == activityType {
+						activityIDs = append(activityIDs, ai.GetActivityId())
 					}
 				}
 			}
@@ -52,8 +52,8 @@ func Invoke(
 				if err := workflow.ResetActivity(
 					ctx,
 					shardContext, mutableState, activityId,
-					request.ResetHeartbeat, request.KeepPaused, request.RestoreOriginalOptions,
-					request.Jitter.AsDuration(),
+					request.GetResetHeartbeat(), request.GetKeepPaused(), request.GetRestoreOriginalOptions(),
+					request.GetJitter().AsDuration(),
 				); err != nil {
 					return nil, err
 				}

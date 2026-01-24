@@ -37,26 +37,26 @@ func (s *TransientTaskSuite) TestTransientWorkflowTaskTimeout() {
 	identity := "worker1"
 
 	// Start workflow execution
-	request := &workflowservice.StartWorkflowExecutionRequest{
+	request := workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
-		WorkflowType:        &commonpb.WorkflowType{Name: wt},
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		WorkflowType:        commonpb.WorkflowType_builder{Name: wt}.Build(),
+		TaskQueue:           taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 		Input:               nil,
 		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(2 * time.Second),
 		Identity:            identity,
-	}
+	}.Build()
 
 	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
-	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.GetRunId()))
 
-	workflowExecution := &commonpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution_builder{
 		WorkflowId: id,
-		RunId:      we.RunId,
-	}
+		RunId:      we.GetRunId(),
+	}.Build()
 
 	// workflow logic
 	workflowComplete := false
@@ -70,25 +70,25 @@ func (s *TransientTaskSuite) TestTransientWorkflowTaskTimeout() {
 		}
 
 		// Count signals
-		for _, event := range task.History.Events[task.PreviousStartedEventId:] {
+		for _, event := range task.GetHistory().GetEvents()[task.GetPreviousStartedEventId():] {
 			if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
 				signalCount++
 			}
 		}
 
 		workflowComplete = true
-		return []*commandpb.Command{{
+		return []*commandpb.Command{commandpb.Command_builder{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+			CompleteWorkflowExecutionCommandAttributes: commandpb.CompleteWorkflowExecutionCommandAttributes_builder{
 				Result: payloads.EncodeString("Done"),
-			}},
-		}}, nil
+			}.Build(),
+		}.Build()}, nil
 	}
 
 	poller := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
 		Namespace:           s.Namespace().String(),
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		TaskQueue:           taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
 		ActivityTaskHandler: nil,
@@ -126,26 +126,26 @@ func (s *TransientTaskSuite) TestTransientWorkflowTaskHistorySize() {
 	identity := "worker1"
 
 	// Start workflow execution
-	request := &workflowservice.StartWorkflowExecutionRequest{
+	request := workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
-		WorkflowType:        &commonpb.WorkflowType{Name: wt},
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		WorkflowType:        commonpb.WorkflowType_builder{Name: wt}.Build(),
+		TaskQueue:           taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 		Input:               nil,
 		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(4 * time.Second), // use a higher timeout as this test uses large payloads.
 		Identity:            identity,
-	}
+	}.Build()
 
 	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
-	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.GetRunId()))
 
-	workflowExecution := &commonpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution_builder{
 		WorkflowId: id,
-		RunId:      we.RunId,
-	}
+		RunId:      we.GetRunId(),
+	}.Build()
 
 	// start with 2mb limit
 	s.OverrideDynamicConfig(dynamicconfig.HistorySizeSuggestContinueAsNew, 2*1024*1024)
@@ -164,7 +164,7 @@ func (s *TransientTaskSuite) TestTransientWorkflowTaskHistorySize() {
 	var failedTaskSawSize int64
 	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		// find workflow task started event
-		event := task.History.Events[len(task.History.Events)-1]
+		event := task.GetHistory().GetEvents()[len(task.GetHistory().GetEvents())-1]
 		s.Equal(event.GetEventType(), enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED)
 		attrs := event.GetWorkflowTaskStartedEventAttributes()
 		s.Logger.Info("wtHandler", tag.Counter(stage))
@@ -172,61 +172,61 @@ func (s *TransientTaskSuite) TestTransientWorkflowTaskHistorySize() {
 		stage++
 		switch stage {
 		case 1:
-			s.Less(attrs.HistorySizeBytes, int64(1024*1024))
-			s.False(attrs.SuggestContinueAsNew)
+			s.Less(attrs.GetHistorySizeBytes(), int64(1024*1024))
+			s.False(attrs.GetSuggestContinueAsNew())
 			// record a large marker
-			sawFields = append(sawFields, fields{size: attrs.HistorySizeBytes, suggest: attrs.SuggestContinueAsNew})
-			return []*commandpb.Command{{
+			sawFields = append(sawFields, fields{size: attrs.GetHistorySizeBytes(), suggest: attrs.GetSuggestContinueAsNew()})
+			return []*commandpb.Command{commandpb.Command_builder{
 				CommandType: enumspb.COMMAND_TYPE_RECORD_MARKER,
-				Attributes: &commandpb.Command_RecordMarkerCommandAttributes{RecordMarkerCommandAttributes: &commandpb.RecordMarkerCommandAttributes{
+				RecordMarkerCommandAttributes: commandpb.RecordMarkerCommandAttributes_builder{
 					MarkerName: "big marker",
 					Details:    map[string]*commonpb.Payloads{"value": payloads.EncodeBytes(largeValue)},
-				}},
-			}}, nil
+				}.Build(),
+			}.Build()}, nil
 
 		case 2:
-			s.Greater(attrs.HistorySizeBytes, int64(1024*1024))
-			s.False(attrs.SuggestContinueAsNew)
+			s.Greater(attrs.GetHistorySizeBytes(), int64(1024*1024))
+			s.False(attrs.GetSuggestContinueAsNew())
 			// record another large marker
-			sawFields = append(sawFields, fields{size: attrs.HistorySizeBytes, suggest: attrs.SuggestContinueAsNew})
-			return []*commandpb.Command{{
+			sawFields = append(sawFields, fields{size: attrs.GetHistorySizeBytes(), suggest: attrs.GetSuggestContinueAsNew()})
+			return []*commandpb.Command{commandpb.Command_builder{
 				CommandType: enumspb.COMMAND_TYPE_RECORD_MARKER,
-				Attributes: &commandpb.Command_RecordMarkerCommandAttributes{RecordMarkerCommandAttributes: &commandpb.RecordMarkerCommandAttributes{
+				RecordMarkerCommandAttributes: commandpb.RecordMarkerCommandAttributes_builder{
 					MarkerName: "big marker",
 					Details:    map[string]*commonpb.Payloads{"value": payloads.EncodeBytes(largeValue)},
-				}},
-			}}, nil
+				}.Build(),
+			}.Build()}, nil
 
 		case 3:
-			s.Greater(attrs.HistorySizeBytes, int64(2048*1024))
-			s.True(attrs.SuggestContinueAsNew)
-			failedTaskSawSize = attrs.HistorySizeBytes
+			s.Greater(attrs.GetHistorySizeBytes(), int64(2048*1024))
+			s.True(attrs.GetSuggestContinueAsNew())
+			failedTaskSawSize = attrs.GetHistorySizeBytes()
 			// fail workflow task and we'll get a transient one
 			return nil, errors.New("oops") //nolint:err113
 
 		case 4:
 			// we might not get the same value but it shouldn't be smaller, and not too much larger
-			s.GreaterOrEqual(attrs.HistorySizeBytes, failedTaskSawSize)
-			s.Less(attrs.HistorySizeBytes, failedTaskSawSize+10000)
-			s.False(attrs.SuggestContinueAsNew)
-			sawFields = append(sawFields, fields{size: attrs.HistorySizeBytes, suggest: attrs.SuggestContinueAsNew})
+			s.GreaterOrEqual(attrs.GetHistorySizeBytes(), failedTaskSawSize)
+			s.Less(attrs.GetHistorySizeBytes(), failedTaskSawSize+10000)
+			s.False(attrs.GetSuggestContinueAsNew())
+			sawFields = append(sawFields, fields{size: attrs.GetHistorySizeBytes(), suggest: attrs.GetSuggestContinueAsNew()})
 			return nil, nil
 
 		case 5:
 			// we should get just a little larger
 			prevSize := sawFields[len(sawFields)-1].size
-			s.Greater(attrs.HistorySizeBytes, prevSize)
-			s.Less(attrs.HistorySizeBytes, prevSize+10000)
-			s.False(attrs.SuggestContinueAsNew) // now false
+			s.Greater(attrs.GetHistorySizeBytes(), prevSize)
+			s.Less(attrs.GetHistorySizeBytes(), prevSize+10000)
+			s.False(attrs.GetSuggestContinueAsNew()) // now false
 
 			workflowComplete = true
-			sawFields = append(sawFields, fields{size: attrs.HistorySizeBytes, suggest: attrs.SuggestContinueAsNew})
-			return []*commandpb.Command{{
+			sawFields = append(sawFields, fields{size: attrs.GetHistorySizeBytes(), suggest: attrs.GetSuggestContinueAsNew()})
+			return []*commandpb.Command{commandpb.Command_builder{
 				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+				CompleteWorkflowExecutionCommandAttributes: commandpb.CompleteWorkflowExecutionCommandAttributes_builder{
 					Result: payloads.EncodeString("done"),
-				}},
-			}}, nil
+				}.Build(),
+			}.Build()}, nil
 		}
 
 		return nil, errors.New("bad stage") //nolint:err113
@@ -235,7 +235,7 @@ func (s *TransientTaskSuite) TestTransientWorkflowTaskHistorySize() {
 	poller := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
 		Namespace:           s.Namespace().String(),
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		TaskQueue:           taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
 		ActivityTaskHandler: nil,
@@ -329,22 +329,22 @@ func (s *TransientTaskSuite) TestNoTransientWorkflowTaskAfterFlushBufferedEvents
 	identity := "worker1"
 
 	// Start workflow execution
-	request := &workflowservice.StartWorkflowExecutionRequest{
+	request := workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
-		WorkflowType:        &commonpb.WorkflowType{Name: wt},
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		WorkflowType:        commonpb.WorkflowType_builder{Name: wt}.Build(),
+		TaskQueue:           taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 		Input:               nil,
 		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(20 * time.Second),
 		Identity:            identity,
-	}
+	}.Build()
 
 	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
 
-	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.GetRunId()))
 
 	// workflow logic
 	workflowComplete := false
@@ -354,42 +354,42 @@ func (s *TransientTaskSuite) TestNoTransientWorkflowTaskAfterFlushBufferedEvents
 			continueAsNewAndSignal = true
 			// this will create new event when there is in-flight workflow task, and the new event will be buffered
 			_, err := s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(),
-				&workflowservice.SignalWorkflowExecutionRequest{
+				workflowservice.SignalWorkflowExecutionRequest_builder{
 					Namespace: s.Namespace().String(),
-					WorkflowExecution: &commonpb.WorkflowExecution{
+					WorkflowExecution: commonpb.WorkflowExecution_builder{
 						WorkflowId: id,
-					},
+					}.Build(),
 					SignalName: "buffered-signal-1",
 					Input:      payloads.EncodeString("buffered-signal-input"),
 					Identity:   identity,
-				})
+				}.Build())
 			s.NoError(err)
 
-			return []*commandpb.Command{{
+			return []*commandpb.Command{commandpb.Command_builder{
 				CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
-				Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
-					WorkflowType:        task.WorkflowType,
-					TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				ContinueAsNewWorkflowExecutionCommandAttributes: commandpb.ContinueAsNewWorkflowExecutionCommandAttributes_builder{
+					WorkflowType:        task.GetWorkflowType(),
+					TaskQueue:           taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 					Input:               nil,
 					WorkflowRunTimeout:  durationpb.New(1000 * time.Second),
 					WorkflowTaskTimeout: durationpb.New(100 * time.Second),
-				}},
-			}}, nil
+				}.Build(),
+			}.Build()}, nil
 		}
 
 		workflowComplete = true
-		return []*commandpb.Command{{
+		return []*commandpb.Command{commandpb.Command_builder{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+			CompleteWorkflowExecutionCommandAttributes: commandpb.CompleteWorkflowExecutionCommandAttributes_builder{
 				Result: payloads.EncodeString("Done"),
-			}},
-		}}, nil
+			}.Build(),
+		}.Build()}, nil
 	}
 
 	poller := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
 		Namespace:           s.Namespace().String(),
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		TaskQueue:           taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
 		Logger:              s.Logger,

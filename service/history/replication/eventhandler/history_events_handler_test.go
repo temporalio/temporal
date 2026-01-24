@@ -69,28 +69,28 @@ func (s *historyEventHandlerSuite) TestHandleHistoryEvents_RemoteOnly() {
 	s.clusterMetadata.EXPECT().GetClusterID().Return(int64(1))
 	s.clusterMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(1000))
 
-	versionHistory := &historyspb.VersionHistory{
+	versionHistory := historyspb.VersionHistory_builder{
 		BranchToken: []byte{1, 0, 1},
 		Items: []*historyspb.VersionHistoryItem{
-			{EventId: 10, Version: 1},
-			{EventId: 15, Version: 2},
+			historyspb.VersionHistoryItem_builder{EventId: 10, Version: 1}.Build(),
+			historyspb.VersionHistoryItem_builder{EventId: 15, Version: 2}.Build(),
 		},
-	}
+	}.Build()
 	historyEvents1 := []*historypb.HistoryEvent{
-		{
+		historypb.HistoryEvent_builder{
 			EventId: 11,
-		},
-		{
+		}.Build(),
+		historypb.HistoryEvent_builder{
 			EventId: 12,
-		},
+		}.Build(),
 	}
 	historyEvents2 := []*historypb.HistoryEvent{
-		{
+		historypb.HistoryEvent_builder{
 			EventId: 13,
-		},
-		{
+		}.Build(),
+		historypb.HistoryEvent_builder{
 			EventId: 14,
-		},
+		}.Build(),
 	}
 	historyEvents := [][]*historypb.HistoryEvent{historyEvents1, historyEvents2}
 	workflowKey := definition.WorkflowKey{
@@ -109,7 +109,7 @@ func (s *historyEventHandlerSuite) TestHandleHistoryEvents_RemoteOnly() {
 		gomock.Any(),
 		workflowKey,
 		nil,
-		versionHistory.Items,
+		versionHistory.GetItems(),
 		historyEvents,
 		nil,
 		"",
@@ -120,7 +120,7 @@ func (s *historyEventHandlerSuite) TestHandleHistoryEvents_RemoteOnly() {
 		remoteCluster,
 		workflowKey,
 		nil,
-		versionHistory.Items,
+		versionHistory.GetItems(),
 		historyEvents,
 		nil,
 		"",
@@ -137,14 +137,14 @@ func (s *historyEventHandlerSuite) TestHandleHistoryEvents_LocalAndRemote_Handle
 	s.clusterMetadata.EXPECT().GetClusterID().Return(int64(1)).AnyTimes() // current cluster ID is 1
 	s.clusterMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(1000)).AnyTimes()
 
-	versionHistory := &historyspb.VersionHistory{
+	versionHistory := historyspb.VersionHistory_builder{
 		Items: []*historyspb.VersionHistoryItem{
-			{EventId: 5, Version: 3},
-			{EventId: 10, Version: 1001},
-			{EventId: 13, Version: 1002},
-			{EventId: 15, Version: 1003},
+			historyspb.VersionHistoryItem_builder{EventId: 5, Version: 3}.Build(),
+			historyspb.VersionHistoryItem_builder{EventId: 10, Version: 1001}.Build(),
+			historyspb.VersionHistoryItem_builder{EventId: 13, Version: 1002}.Build(),
+			historyspb.VersionHistoryItem_builder{EventId: 15, Version: 1003}.Build(),
 		},
-	}
+	}.Build()
 	localHistoryEvents := [][]*historypb.HistoryEvent{
 		{
 			{EventId: 5, Version: 3},
@@ -183,13 +183,13 @@ func (s *historyEventHandlerSuite) TestHandleHistoryEvents_LocalAndRemote_Handle
 		workflowId,
 	).Return(shardContext, nil).Times(2)
 	shardContext.EXPECT().GetEngine(gomock.Any()).Return(engine, nil).Times(2)
-	engine.EXPECT().GetMutableState(gomock.Any(), &historyservice.GetMutableStateRequest{
+	engine.EXPECT().GetMutableState(gomock.Any(), historyservice.GetMutableStateRequest_builder{
 		NamespaceId: namespaceId,
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: workflowId,
 			RunId:      runId,
-		},
-	}).Return(nil, serviceerror.NewNotFound("Mutable state not found")).Times(1)
+		}.Build(),
+	}.Build()).Return(nil, serviceerror.NewNotFound("Mutable state not found")).Times(1)
 	s.eventImporter.EXPECT().ImportHistoryEventsFromBeginning(
 		gomock.Any(),
 		remoteCluster,
@@ -201,7 +201,7 @@ func (s *historyEventHandlerSuite) TestHandleHistoryEvents_LocalAndRemote_Handle
 		gomock.Any(),
 		workflowKey,
 		nil,
-		versionHistory.Items,
+		versionHistory.GetItems(),
 		remoteHistoryEvents,
 		nil,
 		"",
@@ -212,7 +212,7 @@ func (s *historyEventHandlerSuite) TestHandleHistoryEvents_LocalAndRemote_Handle
 		remoteCluster,
 		workflowKey,
 		nil,
-		versionHistory.Items,
+		versionHistory.GetItems(),
 		initialHistoryEvents,
 		nil,
 		"",
@@ -228,12 +228,12 @@ func (s *historyEventHandlerSuite) TestHandleLocalHistoryEvents_AlreadyExist() {
 	s.clusterMetadata.EXPECT().GetClusterID().Return(int64(1))
 	s.clusterMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(1000))
 
-	versionHistory := &historyspb.VersionHistory{
+	versionHistory := historyspb.VersionHistory_builder{
 		Items: []*historyspb.VersionHistoryItem{
-			{EventId: 10, Version: 1},
-			{EventId: 15, Version: 2},
+			historyspb.VersionHistoryItem_builder{EventId: 10, Version: 1}.Build(),
+			historyspb.VersionHistoryItem_builder{EventId: 15, Version: 2}.Build(),
 		},
-	}
+	}.Build()
 	workflowKey := definition.WorkflowKey{
 		NamespaceID: namespaceId,
 		WorkflowID:  workflowId,
@@ -246,27 +246,27 @@ func (s *historyEventHandlerSuite) TestHandleLocalHistoryEvents_AlreadyExist() {
 		workflowId,
 	).Return(shardContext, nil).Times(1)
 	shardContext.EXPECT().GetEngine(gomock.Any()).Return(engine, nil).Times(1)
-	mutableState := &historyservice.GetMutableStateResponse{
-		VersionHistories: &historyspb.VersionHistories{Histories: []*historyspb.VersionHistory{{
+	mutableState := historyservice.GetMutableStateResponse_builder{
+		VersionHistories: historyspb.VersionHistories_builder{Histories: []*historyspb.VersionHistory{historyspb.VersionHistory_builder{
 			Items: []*historyspb.VersionHistoryItem{
-				{EventId: 10, Version: 1},
+				historyspb.VersionHistoryItem_builder{EventId: 10, Version: 1}.Build(),
 			},
-		}}},
-	}
+		}.Build()}}.Build(),
+	}.Build()
 
-	engine.EXPECT().GetMutableState(gomock.Any(), &historyservice.GetMutableStateRequest{
+	engine.EXPECT().GetMutableState(gomock.Any(), historyservice.GetMutableStateRequest_builder{
 		NamespaceId: namespaceId,
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: workflowId,
 			RunId:      runId,
-		},
-	}).Return(mutableState, nil).Times(1)
+		}.Build(),
+	}.Build()).Return(mutableState, nil).Times(1)
 
 	err := s.historyEventHandler.handleLocalGeneratedEvent(
 		context.Background(),
 		remoteCluster,
 		workflowKey,
-		versionHistory.Items,
+		versionHistory.GetItems(),
 	)
 	s.Nil(err)
 }
@@ -280,13 +280,13 @@ func (s *historyEventHandlerSuite) TestHandleHistoryEvents_LocalOnly_ImportAllLo
 	s.clusterMetadata.EXPECT().GetClusterID().Return(int64(1))
 	s.clusterMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(1000))
 
-	versionHistory := &historyspb.VersionHistory{
+	versionHistory := historyspb.VersionHistory_builder{
 		Items: []*historyspb.VersionHistoryItem{
-			{EventId: 2, Version: 3},
-			{EventId: 5, Version: 5},
-			{EventId: 7, Version: 1001},
+			historyspb.VersionHistoryItem_builder{EventId: 2, Version: 3}.Build(),
+			historyspb.VersionHistoryItem_builder{EventId: 5, Version: 5}.Build(),
+			historyspb.VersionHistoryItem_builder{EventId: 7, Version: 1001}.Build(),
 		},
-	}
+	}.Build()
 
 	workflowKey := definition.WorkflowKey{
 		NamespaceID: namespaceId,
@@ -303,13 +303,13 @@ func (s *historyEventHandlerSuite) TestHandleHistoryEvents_LocalOnly_ImportAllLo
 	shardContext.EXPECT().GetEngine(gomock.Any()).Return(engine, nil).Times(1)
 
 	gomock.InOrder(
-		engine.EXPECT().GetMutableState(gomock.Any(), &historyservice.GetMutableStateRequest{
+		engine.EXPECT().GetMutableState(gomock.Any(), historyservice.GetMutableStateRequest_builder{
 			NamespaceId: namespaceId,
-			Execution: &commonpb.WorkflowExecution{
+			Execution: commonpb.WorkflowExecution_builder{
 				WorkflowId: workflowId,
 				RunId:      runId,
-			},
-		}).Return(nil, serviceerror.NewNotFound("Mutable state not found")).Times(1),
+			}.Build(),
+		}.Build()).Return(nil, serviceerror.NewNotFound("Mutable state not found")).Times(1),
 		s.eventImporter.EXPECT().ImportHistoryEventsFromBeginning(
 			gomock.Any(),
 			remoteCluster,
@@ -323,7 +323,7 @@ func (s *historyEventHandlerSuite) TestHandleHistoryEvents_LocalOnly_ImportAllLo
 		context.Background(),
 		remoteCluster,
 		workflowKey,
-		versionHistory.Items,
+		versionHistory.GetItems(),
 	)
 	s.Nil(err)
 }
@@ -337,13 +337,13 @@ func (s *historyEventHandlerSuite) TestHandleHistoryEvents_LocalOnly_ExistButNot
 	s.clusterMetadata.EXPECT().GetClusterID().Return(int64(1))
 	s.clusterMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(1000))
 
-	versionHistory := &historyspb.VersionHistory{
+	versionHistory := historyspb.VersionHistory_builder{
 		Items: []*historyspb.VersionHistoryItem{
-			{EventId: 2, Version: 3},
-			{EventId: 5, Version: 5},
-			{EventId: 7, Version: 1001},
+			historyspb.VersionHistoryItem_builder{EventId: 2, Version: 3}.Build(),
+			historyspb.VersionHistoryItem_builder{EventId: 5, Version: 5}.Build(),
+			historyspb.VersionHistoryItem_builder{EventId: 7, Version: 1001}.Build(),
 		},
-	}
+	}.Build()
 
 	workflowKey := definition.WorkflowKey{
 		NamespaceID: namespaceId,
@@ -360,26 +360,26 @@ func (s *historyEventHandlerSuite) TestHandleHistoryEvents_LocalOnly_ExistButNot
 	shardContext.EXPECT().GetEngine(gomock.Any()).Return(engine, nil).Times(1)
 
 	gomock.InOrder(
-		engine.EXPECT().GetMutableState(gomock.Any(), &historyservice.GetMutableStateRequest{
+		engine.EXPECT().GetMutableState(gomock.Any(), historyservice.GetMutableStateRequest_builder{
 			NamespaceId: namespaceId,
-			Execution: &commonpb.WorkflowExecution{
+			Execution: commonpb.WorkflowExecution_builder{
 				WorkflowId: workflowId,
 				RunId:      runId,
-			},
-		}).Return(&historyservice.GetMutableStateResponse{
-			VersionHistories: &historyspb.VersionHistories{Histories: []*historyspb.VersionHistory{{
+			}.Build(),
+		}.Build()).Return(historyservice.GetMutableStateResponse_builder{
+			VersionHistories: historyspb.VersionHistories_builder{Histories: []*historyspb.VersionHistory{historyspb.VersionHistory_builder{
 				Items: []*historyspb.VersionHistoryItem{
-					{EventId: 6, Version: 1001},
+					historyspb.VersionHistoryItem_builder{EventId: 6, Version: 1001}.Build(),
 				},
-			}}},
-		}, nil).Times(1),
+			}.Build()}}.Build(),
+		}.Build(), nil).Times(1),
 	)
 
 	err := s.historyEventHandler.handleLocalGeneratedEvent(
 		context.Background(),
 		remoteCluster,
 		workflowKey,
-		versionHistory.Items,
+		versionHistory.GetItems(),
 	)
 	s.NotNil(err)
 }

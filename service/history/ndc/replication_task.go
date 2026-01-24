@@ -108,14 +108,14 @@ func newReplicationTaskFromRequest(
 		logger,
 		definition.NewWorkflowKey(
 			request.GetNamespaceId(),
-			request.WorkflowExecution.WorkflowId,
-			request.WorkflowExecution.RunId,
+			request.GetWorkflowExecution().GetWorkflowId(),
+			request.GetWorkflowExecution().GetRunId(),
 		),
-		request.BaseExecutionInfo,
-		request.VersionHistoryItems,
+		request.GetBaseExecutionInfo(),
+		request.GetVersionHistoryItems(),
 		[][]*historypb.HistoryEvent{events},
 		newEvents,
-		request.NewRunId,
+		request.GetNewRunId(),
 		nil,
 		false,
 	)
@@ -178,10 +178,10 @@ func newReplicationTask(
 	isStateBased bool,
 ) (*replicationTaskImpl, error) {
 
-	versionHistory := &historyspb.VersionHistory{
+	versionHistory := historyspb.VersionHistory_builder{
 		BranchToken: nil,
 		Items:       versionHistoryItems,
-	}
+	}.Build()
 
 	firstBlob := eventsSlice[0]
 	lastBlob := eventsSlice[len(eventsSlice)-1]
@@ -246,10 +246,10 @@ func (t *replicationTaskImpl) getNamespaceID() namespace.ID {
 }
 
 func (t *replicationTaskImpl) getExecution() *commonpb.WorkflowExecution {
-	return &commonpb.WorkflowExecution{
+	return commonpb.WorkflowExecution_builder{
 		WorkflowId: t.workflowKey.WorkflowID,
 		RunId:      t.workflowKey.RunID,
-	}
+	}.Build()
 }
 
 func (t *replicationTaskImpl) getWorkflowID() string {
@@ -309,7 +309,7 @@ func (t *replicationTaskImpl) getVersionHistory() *historyspb.VersionHistory {
 }
 
 func (t *replicationTaskImpl) isWorkflowReset() bool {
-	if t.baseWorkflowInfo != nil && t.baseWorkflowInfo.LowestCommonAncestorEventId+1 == t.firstEvent.EventId {
+	if t.baseWorkflowInfo != nil && t.baseWorkflowInfo.GetLowestCommonAncestorEventId()+1 == t.firstEvent.GetEventId() {
 		return true
 	}
 	return false
@@ -362,13 +362,13 @@ func (t *replicationTaskImpl) splitTask() (_ replicationTask, _ replicationTask,
 		newEventTime = util.MaxTime(newEventTime, timestamp.TimeValue(event.GetEventTime()))
 	}
 
-	newVersionHistory := &historyspb.VersionHistory{
+	newVersionHistory := historyspb.VersionHistory_builder{
 		BranchToken: nil,
-		Items: []*historyspb.VersionHistoryItem{{
+		Items: []*historyspb.VersionHistoryItem{historyspb.VersionHistoryItem_builder{
 			EventId: newLastEvent.GetEventId(),
 			Version: newLastEvent.GetVersion(),
-		}},
-	}
+		}.Build()},
+	}.Build()
 
 	logger := log.With(
 		t.logger,
@@ -397,10 +397,10 @@ func (t *replicationTaskImpl) splitTask() (_ replicationTask, _ replicationTask,
 		logger:           logger,
 	}
 	if t.stateBased() {
-		newRunTask.versionedTransition = &persistencespb.VersionedTransition{
+		newRunTask.versionedTransition = persistencespb.VersionedTransition_builder{
 			NamespaceFailoverVersion: t.newEvents[0].GetVersion(),
 			TransitionCount:          1,
-		}
+		}.Build()
 		newRunTask.isStateBased = true
 	}
 
@@ -420,14 +420,14 @@ func validateReplicateEventsRequest(
 	if valid := validateUUID(request.GetNamespaceId()); !valid {
 		return nil, nil, ErrInvalidNamespaceID
 	}
-	if request.WorkflowExecution == nil {
+	if !request.HasWorkflowExecution() {
 		return nil, nil, ErrInvalidExecution
 	}
-	if valid := validateUUID(request.WorkflowExecution.GetRunId()); !valid {
+	if valid := validateUUID(request.GetWorkflowExecution().GetRunId()); !valid {
 		return nil, nil, ErrInvalidRunID
 	}
 
-	events, err := deserializeBlob(historySerializer, request.Events)
+	events, err := deserializeBlob(historySerializer, request.GetEvents())
 	if err != nil {
 		return nil, nil, err
 	}
@@ -440,7 +440,7 @@ func validateReplicateEventsRequest(
 		return nil, nil, err
 	}
 
-	if request.NewRunEvents == nil {
+	if !request.HasNewRunEvents() {
 		return events, nil, nil
 	}
 
@@ -448,7 +448,7 @@ func validateReplicateEventsRequest(
 	// so that some backward compatiblity logic can be used by
 	// newReplicationTaskFromBatch
 
-	newRunEvents, err := deserializeBlob(historySerializer, request.NewRunEvents)
+	newRunEvents, err := deserializeBlob(historySerializer, request.GetNewRunEvents())
 	if err != nil {
 		return nil, nil, err
 	}
@@ -520,7 +520,7 @@ func deserializeBlob(
 	if blob == nil {
 		return nil, nil
 	}
-	blob.EncodingType = cmp.Or(blob.EncodingType, enumspb.ENCODING_TYPE_PROTO3)
+	blob.SetEncodingType(cmp.Or(blob.GetEncodingType(), enumspb.ENCODING_TYPE_PROTO3))
 	return historySerializer.DeserializeEvents(blob)
 }
 
@@ -533,7 +533,7 @@ func DeserializeBlobs(
 		return eventBatches, nil
 	}
 	for _, blob := range blobs {
-		blob.EncodingType = cmp.Or(blob.EncodingType, enumspb.ENCODING_TYPE_PROTO3)
+		blob.SetEncodingType(cmp.Or(blob.GetEncodingType(), enumspb.ENCODING_TYPE_PROTO3))
 		events, err := historySerializer.DeserializeEvents(blob)
 		if err != nil {
 			return nil, err

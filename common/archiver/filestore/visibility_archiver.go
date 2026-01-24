@@ -111,7 +111,7 @@ func (v *visibilityArchiver) Archive(
 
 	// The filename has the format: closeTimestamp_hash(runID).visibility
 	// This format allows the archiver to sort all records without reading the file contents
-	filename := constructVisibilityFilename(request.CloseTime.AsTime(), request.GetRunId())
+	filename := constructVisibilityFilename(request.GetCloseTime().AsTime(), request.GetRunId())
 	if err := writeFile(path.Join(dirPath, filename), encodedVisibilityRecord, v.fileMode); err != nil {
 		logger.Error(archiver.ArchiveNonRetryableErrorMsg, tag.ArchivalArchiveFailReason(errWriteFile), tag.Error(err))
 		return err
@@ -205,7 +205,7 @@ func (v *visibilityArchiver) query(
 			return nil, serviceerror.NewInternal(err.Error())
 		}
 
-		if record.CloseTime.AsTime().Before(request.parsedQuery.earliestCloseTime) {
+		if record.GetCloseTime().AsTime().Before(request.parsedQuery.earliestCloseTime) {
 			break
 		}
 
@@ -219,7 +219,7 @@ func (v *visibilityArchiver) query(
 			if len(response.Executions) == request.pageSize {
 				if idx != len(files) {
 					newToken := &queryVisibilityToken{
-						LastCloseTime: timestamp.TimeValue(record.CloseTime),
+						LastCloseTime: timestamp.TimeValue(record.GetCloseTime()),
 						LastRunID:     record.GetRunId(),
 					}
 					encodedToken, err := serializeToken(newToken)
@@ -303,7 +303,7 @@ func sortAndFilterFiles(filenames []string, token *queryVisibilityToken) ([]stri
 }
 
 func matchQuery(record *archiverspb.VisibilityRecord, query *parsedQuery) bool {
-	closeTime := record.CloseTime.AsTime()
+	closeTime := record.GetCloseTime().AsTime()
 	if closeTime.Before(query.earliestCloseTime) || closeTime.After(query.latestCloseTime) {
 		return false
 	}
@@ -313,36 +313,36 @@ func matchQuery(record *archiverspb.VisibilityRecord, query *parsedQuery) bool {
 	if query.runID != nil && record.GetRunId() != *query.runID {
 		return false
 	}
-	if query.workflowTypeName != nil && record.WorkflowTypeName != *query.workflowTypeName {
+	if query.workflowTypeName != nil && record.GetWorkflowTypeName() != *query.workflowTypeName {
 		return false
 	}
-	if query.status != nil && record.Status != *query.status {
+	if query.status != nil && record.GetStatus() != *query.status {
 		return false
 	}
 	return true
 }
 
 func convertToExecutionInfo(record *archiverspb.VisibilityRecord, saTypeMap searchattribute.NameTypeMap) (*workflowpb.WorkflowExecutionInfo, error) {
-	searchAttributes, err := searchattribute.Parse(record.SearchAttributes, &saTypeMap)
+	searchAttributes, err := searchattribute.Parse(record.GetSearchAttributes(), &saTypeMap)
 	if err != nil {
 		return nil, err
 	}
 
-	return &workflowpb.WorkflowExecutionInfo{
-		Execution: &commonpb.WorkflowExecution{
+	return workflowpb.WorkflowExecutionInfo_builder{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: record.GetWorkflowId(),
 			RunId:      record.GetRunId(),
-		},
-		Type: &commonpb.WorkflowType{
-			Name: record.WorkflowTypeName,
-		},
-		StartTime:         record.StartTime,
-		ExecutionTime:     record.ExecutionTime,
-		CloseTime:         record.CloseTime,
-		ExecutionDuration: record.ExecutionDuration,
-		Status:            record.Status,
-		HistoryLength:     record.HistoryLength,
-		Memo:              record.Memo,
+		}.Build(),
+		Type: commonpb.WorkflowType_builder{
+			Name: record.GetWorkflowTypeName(),
+		}.Build(),
+		StartTime:         record.GetStartTime(),
+		ExecutionTime:     record.GetExecutionTime(),
+		CloseTime:         record.GetCloseTime(),
+		ExecutionDuration: record.GetExecutionDuration(),
+		Status:            record.GetStatus(),
+		HistoryLength:     record.GetHistoryLength(),
+		Memo:              record.GetMemo(),
 		SearchAttributes:  searchAttributes,
-	}, nil
+	}.Build(), nil
 }

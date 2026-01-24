@@ -115,13 +115,13 @@ func (s *MaxBufferedEventSuite) TestMaxBufferedEventsLimit() {
 	s.NoError(err)
 	s.Equal(101, sigCount)
 
-	historyEvents := s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: wf1.GetID()})
+	historyEvents := s.GetHistory(s.Namespace().String(), commonpb.WorkflowExecution_builder{WorkflowId: wf1.GetID()}.Build())
 	// Not using historyrequire here because history is not deterministic.
 	var failedCause enumspb.WorkflowTaskFailedCause
 	var failedCount int
 	for _, evt := range historyEvents {
 		if evt.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED {
-			failedCause = evt.GetWorkflowTaskFailedEventAttributes().Cause
+			failedCause = evt.GetWorkflowTaskFailedEventAttributes().GetCause()
 			failedCount++
 		}
 	}
@@ -218,7 +218,7 @@ func (s *MaxBufferedEventSuite) TestBufferedEventsMutableStateSizeLimit() {
 	// The workflow should be terminated, so we expect an error
 	s.Error(err)
 
-	historyEvents := s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: wf1.GetID()})
+	historyEvents := s.GetHistory(s.Namespace().String(), commonpb.WorkflowExecution_builder{WorkflowId: wf1.GetID()}.Build())
 
 	// Verify that the workflow was terminated due to mutable state size limit
 	var terminated bool

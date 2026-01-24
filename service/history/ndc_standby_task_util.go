@@ -118,15 +118,15 @@ func executionExistsOnSource(
 	if err != nil {
 		return true
 	}
-	_, err = remoteAdminClient.DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
+	_, err = remoteAdminClient.DescribeMutableState(ctx, adminservice.DescribeMutableStateRequest_builder{
 		Namespace: namespaceEntry.Name().String(),
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: workflowKey.GetWorkflowID(),
 			RunId:      workflowKey.GetRunID(),
-		},
+		}.Build(),
 		Archetype:       archetype,
 		SkipForceReload: true,
-	})
+	}.Build())
 	if err != nil {
 		if common.IsNotFoundError(err) {
 			return false
@@ -169,7 +169,7 @@ func newExecutionTimerPostActionInfo(
 	mutableState historyi.MutableState,
 ) (*executionTimerPostActionInfo, error) {
 	return &executionTimerPostActionInfo{
-		currentRunID: mutableState.GetExecutionState().RunId,
+		currentRunID: mutableState.GetExecutionState().GetRunId(),
 	}, nil
 }
 
@@ -178,10 +178,10 @@ func newActivityTaskPostActionInfo(
 	activityInfo *persistencespb.ActivityInfo,
 ) (*activityTaskPostActionInfo, error) {
 	directive := MakeDirectiveForActivityTask(mutableState, activityInfo)
-	priority := priorities.Merge(mutableState.GetExecutionInfo().Priority, activityInfo.Priority)
+	priority := priorities.Merge(mutableState.GetExecutionInfo().GetPriority(), activityInfo.GetPriority())
 
 	return &activityTaskPostActionInfo{
-		activityTaskScheduleToStartTimeout: activityInfo.ScheduleToStartTimeout.AsDuration(),
+		activityTaskScheduleToStartTimeout: activityInfo.GetScheduleToStartTimeout().AsDuration(),
 		versionDirective:                   directive,
 		priority:                           priority,
 	}, nil
@@ -194,7 +194,7 @@ func newActivityRetryTimePostActionInfo(
 	activityInfo *persistencespb.ActivityInfo,
 ) (*activityTaskPostActionInfo, error) {
 	directive := MakeDirectiveForActivityTask(mutableState, activityInfo)
-	priority := priorities.Merge(mutableState.GetExecutionInfo().Priority, activityInfo.Priority)
+	priority := priorities.Merge(mutableState.GetExecutionInfo().GetPriority(), activityInfo.GetPriority())
 
 	return &activityTaskPostActionInfo{
 		taskQueue:                          taskQueue,
@@ -210,7 +210,7 @@ func newWorkflowTaskPostActionInfo(
 	taskqueue *taskqueuepb.TaskQueue,
 ) (*workflowTaskPostActionInfo, error) {
 	directive := MakeDirectiveForWorkflowTask(mutableState)
-	priority := mutableState.GetExecutionInfo().Priority
+	priority := mutableState.GetExecutionInfo().GetPriority()
 
 	return &workflowTaskPostActionInfo{
 		workflowTaskScheduleToStartTimeout: workflowTaskScheduleToStartTimeout,

@@ -129,7 +129,7 @@ func (tr *priTaskReader) completeTask(task *internalTask, res taskResponse) {
 
 	// On other errors: ask backlog manager to re-spool to persistence
 	if err != nil {
-		if tr.backlogMgr.respoolTaskAfterError(task.event.Data) != nil {
+		if tr.backlogMgr.respoolTaskAfterError(task.event.GetData()) != nil {
 			return // task queue will unload now
 		}
 	}
@@ -137,9 +137,9 @@ func (tr *priTaskReader) completeTask(task *internalTask, res taskResponse) {
 	tr.lock.Lock()
 	defer tr.lock.Unlock()
 
-	tr.backlogAge.record(task.event.AllocatedTaskInfo.Data.CreateTime, -1)
+	tr.backlogAge.record(task.event.AllocatedTaskInfo.GetData().GetCreateTime(), -1)
 
-	numAcked := tr.ackTaskLocked(task.event.TaskId)
+	numAcked := tr.ackTaskLocked(task.event.GetTaskId())
 
 	tr.maybeGCLocked()
 
@@ -244,7 +244,7 @@ func (tr *priTaskReader) processTaskBatch(tasks []*persistencespb.AllocatedTaskI
 	tr.lock.Lock()
 
 	tasks = slices.DeleteFunc(tasks, func(t *persistencespb.AllocatedTaskInfo) bool {
-		tr.readLevel = max(tr.readLevel, t.TaskId)
+		tr.readLevel = max(tr.readLevel, t.GetTaskId())
 
 		if IsTaskExpired(t) {
 			// task expired when we read it
@@ -255,7 +255,7 @@ func (tr *priTaskReader) processTaskBatch(tasks []*persistencespb.AllocatedTaskI
 		// We may race to read tasks with signalNewTasks. If it wins, we may end up seeing
 		// tasks twice. In that case, we should just ignore them. If we win (based on
 		// readLevel), signalNewTasks will give up and signal us.
-		_, found := tr.outstandingTasks.Get(t.TaskId)
+		_, found := tr.outstandingTasks.Get(t.GetTaskId())
 		return found
 	})
 
@@ -273,9 +273,9 @@ func (tr *priTaskReader) recordNewTasksLocked(tasks []*persistencespb.AllocatedT
 	// After we get to this point, we must eventually call task.finish or
 	// task.finishForwarded, which will call tr.completeTask.
 	for _, t := range tasks {
-		tr.outstandingTasks.Put(t.TaskId, false)
+		tr.outstandingTasks.Put(t.GetTaskId(), false)
 		tr.loadedTasks++
-		tr.backlogAge.record(t.Data.CreateTime, 1)
+		tr.backlogAge.record(t.GetData().GetCreateTime(), 1)
 	}
 }
 
@@ -375,7 +375,7 @@ func (tr *priTaskReader) signalNewTasks(resp subqueueCreateTasksResponse) {
 		!slices.ContainsFunc(resp.tasks, func(t *persistencespb.AllocatedTaskInfo) bool {
 			// Because we checked readLevel, we know that getTasksPump can't have beat us to
 			// adding these tasks to outstandingTasks. So they should definitely not be there.
-			_, found := tr.outstandingTasks.Get(t.TaskId)
+			_, found := tr.outstandingTasks.Get(t.GetTaskId())
 			return softassert.That(tr.logger, !found, "newly-written task already present in outstanding tasks")
 		})
 

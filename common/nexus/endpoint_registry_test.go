@@ -39,31 +39,31 @@ func TestGet(t *testing.T) {
 	mocks := newTestMocks(t)
 
 	// initial load
-	mocks.matchingClient.EXPECT().ListNexusEndpoints(gomock.Any(), gomock.Any()).Return(&matchingservice.ListNexusEndpointsResponse{
+	mocks.matchingClient.EXPECT().ListNexusEndpoints(gomock.Any(), gomock.Any()).Return(matchingservice.ListNexusEndpointsResponse_builder{
 		Entries:       []*persistencespb.NexusEndpointEntry{testEntry},
 		TableVersion:  1,
 		NextPageToken: nil,
-	}, nil)
+	}.Build(), nil)
 
 	// first long poll
-	mocks.matchingClient.EXPECT().ListNexusEndpoints(gomock.Any(), &matchingservice.ListNexusEndpointsRequest{
+	mocks.matchingClient.EXPECT().ListNexusEndpoints(gomock.Any(), matchingservice.ListNexusEndpointsRequest_builder{
 		PageSize:              int32(100),
 		LastKnownTableVersion: int64(1),
 		Wait:                  true,
-	}).DoAndReturn(func(context.Context, *matchingservice.ListNexusEndpointsRequest, ...interface{}) (*matchingservice.ListNexusEndpointsResponse, error) {
+	}.Build()).DoAndReturn(func(context.Context, *matchingservice.ListNexusEndpointsRequest, ...interface{}) (*matchingservice.ListNexusEndpointsResponse, error) {
 		time.Sleep(20 * time.Millisecond)
-		return &matchingservice.ListNexusEndpointsResponse{TableVersion: int64(1)}, nil
+		return matchingservice.ListNexusEndpointsResponse_builder{TableVersion: int64(1)}.Build(), nil
 	}).AnyTimes()
 
 	reg := NewEndpointRegistry(mocks.config, mocks.matchingClient, mocks.persistence, log.NewNoopLogger(), metrics.NoopMetricsHandler)
 	reg.StartLifecycle()
 	defer reg.StopLifecycle()
 
-	endpoint, err := reg.GetByID(context.Background(), testEntry.Id)
+	endpoint, err := reg.GetByID(context.Background(), testEntry.GetId())
 	require.NoError(t, err)
 	protoassert.ProtoEqual(t, testEntry, endpoint)
 
-	endpoint, err = reg.GetByName(context.Background(), "ignored", testEntry.Endpoint.Spec.Name)
+	endpoint, err = reg.GetByName(context.Background(), "ignored", testEntry.GetEndpoint().GetSpec().GetName())
 	require.NoError(t, err)
 	protoassert.ProtoEqual(t, testEntry, endpoint)
 
@@ -79,24 +79,24 @@ func TestGetNotFound(t *testing.T) {
 	mocks := newTestMocks(t)
 
 	// initial load
-	mocks.matchingClient.EXPECT().ListNexusEndpoints(gomock.Any(), gomock.Any()).Return(&matchingservice.ListNexusEndpointsResponse{
+	mocks.matchingClient.EXPECT().ListNexusEndpoints(gomock.Any(), gomock.Any()).Return(matchingservice.ListNexusEndpointsResponse_builder{
 		Entries:       []*persistencespb.NexusEndpointEntry{},
 		TableVersion:  1,
 		NextPageToken: nil,
-	}, nil)
+	}.Build(), nil)
 
 	// first long poll
-	mocks.matchingClient.EXPECT().ListNexusEndpoints(gomock.Any(), &matchingservice.ListNexusEndpointsRequest{
+	mocks.matchingClient.EXPECT().ListNexusEndpoints(gomock.Any(), matchingservice.ListNexusEndpointsRequest_builder{
 		PageSize:              int32(100),
 		LastKnownTableVersion: int64(1),
 		Wait:                  true,
-	}).DoAndReturn(func(context.Context, *matchingservice.ListNexusEndpointsRequest, ...interface{}) (*matchingservice.ListNexusEndpointsResponse, error) {
+	}.Build()).DoAndReturn(func(context.Context, *matchingservice.ListNexusEndpointsRequest, ...interface{}) (*matchingservice.ListNexusEndpointsResponse, error) {
 		time.Sleep(20 * time.Millisecond)
-		return &matchingservice.ListNexusEndpointsResponse{TableVersion: int64(1)}, nil
+		return matchingservice.ListNexusEndpointsResponse_builder{TableVersion: int64(1)}.Build(), nil
 	}).AnyTimes()
 
 	// readthrough
-	mocks.persistence.EXPECT().GetNexusEndpoint(gomock.Any(), &persistence.GetNexusEndpointRequest{ID: testEntry.Id}).Return(testEntry, nil)
+	mocks.persistence.EXPECT().GetNexusEndpoint(gomock.Any(), &persistence.GetNexusEndpointRequest{ID: testEntry.GetId()}).Return(testEntry, nil)
 	sentinelErr := errors.New("sentinel")
 	mocks.persistence.EXPECT().GetNexusEndpoint(gomock.Any(), gomock.Any()).Return(nil, sentinelErr)
 
@@ -107,12 +107,12 @@ func TestGetNotFound(t *testing.T) {
 	var notFound *serviceerror.NotFound
 
 	// Readthrough success
-	endpoint, err := reg.GetByID(context.Background(), testEntry.Id)
+	endpoint, err := reg.GetByID(context.Background(), testEntry.GetId())
 	assert.NoError(t, err)
 	assert.Equal(t, testEntry, endpoint)
 
 	// Readthrough is cached (mock will verify only one call)
-	endpoint, err = reg.GetByID(context.Background(), testEntry.Id)
+	endpoint, err = reg.GetByID(context.Background(), testEntry.GetId())
 	assert.NoError(t, err)
 	assert.Equal(t, testEntry, endpoint)
 
@@ -147,7 +147,7 @@ func TestInitializationFallback(t *testing.T) {
 	reg.StartLifecycle()
 	defer reg.StopLifecycle()
 
-	endpoint, err := reg.GetByID(context.Background(), testEndpoint.Id)
+	endpoint, err := reg.GetByID(context.Background(), testEndpoint.GetId())
 	require.NoError(t, err)
 	protoassert.ProtoEqual(t, testEndpoint, endpoint)
 
@@ -182,19 +182,19 @@ func TestEnableDisableEnable(t *testing.T) {
 	// mocks for initial load
 	inLongPoll := make(chan struct{})
 	closeOnce := sync.OnceFunc(func() { close(inLongPoll) })
-	mocks.matchingClient.EXPECT().ListNexusEndpoints(gomock.Any(), gomock.Any()).Return(&matchingservice.ListNexusEndpointsResponse{
+	mocks.matchingClient.EXPECT().ListNexusEndpoints(gomock.Any(), gomock.Any()).Return(matchingservice.ListNexusEndpointsResponse_builder{
 		Entries:       []*persistencespb.NexusEndpointEntry{testEntry},
 		TableVersion:  1,
 		NextPageToken: nil,
-	}, nil)
-	mocks.matchingClient.EXPECT().ListNexusEndpoints(gomock.Any(), &matchingservice.ListNexusEndpointsRequest{
+	}.Build(), nil)
+	mocks.matchingClient.EXPECT().ListNexusEndpoints(gomock.Any(), matchingservice.ListNexusEndpointsRequest_builder{
 		PageSize:              int32(100),
 		LastKnownTableVersion: int64(1),
 		Wait:                  true,
-	}).DoAndReturn(func(context.Context, *matchingservice.ListNexusEndpointsRequest, ...interface{}) (*matchingservice.ListNexusEndpointsResponse, error) {
+	}.Build()).DoAndReturn(func(context.Context, *matchingservice.ListNexusEndpointsRequest, ...interface{}) (*matchingservice.ListNexusEndpointsResponse, error) {
 		closeOnce()
 		time.Sleep(100 * time.Millisecond)
-		return &matchingservice.ListNexusEndpointsResponse{TableVersion: int64(1)}, nil
+		return matchingservice.ListNexusEndpointsResponse_builder{TableVersion: int64(1)}.Build(), nil
 	})
 
 	// enable
@@ -217,19 +217,19 @@ func TestEnableDisableEnable(t *testing.T) {
 
 	inLongPoll = make(chan struct{})
 	closeOnce = sync.OnceFunc(func() { close(inLongPoll) })
-	mocks.matchingClient.EXPECT().ListNexusEndpoints(gomock.Any(), gomock.Any()).Return(&matchingservice.ListNexusEndpointsResponse{
+	mocks.matchingClient.EXPECT().ListNexusEndpoints(gomock.Any(), gomock.Any()).Return(matchingservice.ListNexusEndpointsResponse_builder{
 		Entries:       []*persistencespb.NexusEndpointEntry{testEntry},
 		TableVersion:  1,
 		NextPageToken: nil,
-	}, nil)
-	mocks.matchingClient.EXPECT().ListNexusEndpoints(gomock.Any(), &matchingservice.ListNexusEndpointsRequest{
+	}.Build(), nil)
+	mocks.matchingClient.EXPECT().ListNexusEndpoints(gomock.Any(), matchingservice.ListNexusEndpointsRequest_builder{
 		PageSize:              int32(100),
 		LastKnownTableVersion: int64(1),
 		Wait:                  true,
-	}).DoAndReturn(func(context.Context, *matchingservice.ListNexusEndpointsRequest, ...interface{}) (*matchingservice.ListNexusEndpointsResponse, error) {
+	}.Build()).DoAndReturn(func(context.Context, *matchingservice.ListNexusEndpointsRequest, ...interface{}) (*matchingservice.ListNexusEndpointsResponse, error) {
 		closeOnce()
 		time.Sleep(100 * time.Millisecond)
-		return &matchingservice.ListNexusEndpointsResponse{TableVersion: int64(1)}, nil
+		return matchingservice.ListNexusEndpointsResponse_builder{TableVersion: int64(1)}.Build(), nil
 	})
 	callback(true)
 	<-inLongPoll
@@ -246,65 +246,65 @@ func TestTableVersionErrorResetsMatchingPagination(t *testing.T) {
 
 	// endpoint data initialization mocks
 	// successfully get first page
-	mocks.matchingClient.EXPECT().ListNexusEndpoints(gomock.Any(), &matchingservice.ListNexusEndpointsRequest{
+	mocks.matchingClient.EXPECT().ListNexusEndpoints(gomock.Any(), matchingservice.ListNexusEndpointsRequest_builder{
 		NextPageToken:         nil,
 		PageSize:              int32(1),
 		LastKnownTableVersion: int64(0),
 		Wait:                  false,
-	}).Return(&matchingservice.ListNexusEndpointsResponse{
+	}.Build()).Return(matchingservice.ListNexusEndpointsResponse_builder{
 		Entries:       []*persistencespb.NexusEndpointEntry{testEntry0},
 		TableVersion:  int64(2),
-		NextPageToken: []byte(testEntry0.Id),
-	}, nil)
+		NextPageToken: []byte(testEntry0.GetId()),
+	}.Build(), nil)
 	// persistence.ErrNexusTableVersionConflict error on second page
-	mocks.matchingClient.EXPECT().ListNexusEndpoints(gomock.Any(), &matchingservice.ListNexusEndpointsRequest{
-		NextPageToken:         []byte(testEntry0.Id),
+	mocks.matchingClient.EXPECT().ListNexusEndpoints(gomock.Any(), matchingservice.ListNexusEndpointsRequest_builder{
+		NextPageToken:         []byte(testEntry0.GetId()),
 		PageSize:              int32(1),
 		LastKnownTableVersion: int64(2),
 		Wait:                  false,
-	}).Return(nil, serviceerror.NewFailedPrecondition(persistence.ErrNexusTableVersionConflict.Error()))
+	}.Build()).Return(nil, serviceerror.NewFailedPrecondition(persistence.ErrNexusTableVersionConflict.Error()))
 	// request first page again
-	mocks.matchingClient.EXPECT().ListNexusEndpoints(gomock.Any(), &matchingservice.ListNexusEndpointsRequest{
+	mocks.matchingClient.EXPECT().ListNexusEndpoints(gomock.Any(), matchingservice.ListNexusEndpointsRequest_builder{
 		NextPageToken:         nil,
 		PageSize:              int32(1),
 		LastKnownTableVersion: int64(0),
 		Wait:                  false,
-	}).Return(&matchingservice.ListNexusEndpointsResponse{
+	}.Build()).Return(matchingservice.ListNexusEndpointsResponse_builder{
 		Entries:       []*persistencespb.NexusEndpointEntry{testEntry0},
 		TableVersion:  int64(3),
-		NextPageToken: []byte(testEntry0.Id),
-	}, nil)
+		NextPageToken: []byte(testEntry0.GetId()),
+	}.Build(), nil)
 	// successfully get second page
-	mocks.matchingClient.EXPECT().ListNexusEndpoints(gomock.Any(), &matchingservice.ListNexusEndpointsRequest{
-		NextPageToken:         []byte(testEntry0.Id),
+	mocks.matchingClient.EXPECT().ListNexusEndpoints(gomock.Any(), matchingservice.ListNexusEndpointsRequest_builder{
+		NextPageToken:         []byte(testEntry0.GetId()),
 		PageSize:              int32(1),
 		LastKnownTableVersion: int64(3),
 		Wait:                  false,
-	}).Return(&matchingservice.ListNexusEndpointsResponse{
+	}.Build()).Return(matchingservice.ListNexusEndpointsResponse_builder{
 		Entries:       []*persistencespb.NexusEndpointEntry{testEntry1},
 		TableVersion:  int64(3),
 		NextPageToken: nil,
-	}, nil)
+	}.Build(), nil)
 
 	// mock first long poll
-	mocks.matchingClient.EXPECT().ListNexusEndpoints(gomock.Any(), &matchingservice.ListNexusEndpointsRequest{
+	mocks.matchingClient.EXPECT().ListNexusEndpoints(gomock.Any(), matchingservice.ListNexusEndpointsRequest_builder{
 		PageSize:              int32(1),
 		LastKnownTableVersion: int64(3),
 		Wait:                  true,
-	}).DoAndReturn(func(context.Context, *matchingservice.ListNexusEndpointsRequest, ...interface{}) (*matchingservice.ListNexusEndpointsResponse, error) {
+	}.Build()).DoAndReturn(func(context.Context, *matchingservice.ListNexusEndpointsRequest, ...interface{}) (*matchingservice.ListNexusEndpointsResponse, error) {
 		time.Sleep(20 * time.Millisecond)
-		return &matchingservice.ListNexusEndpointsResponse{TableVersion: int64(1)}, nil
+		return matchingservice.ListNexusEndpointsResponse_builder{TableVersion: int64(1)}.Build(), nil
 	}).MaxTimes(1)
 
 	reg := NewEndpointRegistry(mocks.config, mocks.matchingClient, mocks.persistence, log.NewNoopLogger(), metrics.NoopMetricsHandler)
 	reg.StartLifecycle()
 	defer reg.StopLifecycle()
 
-	entry, err := reg.GetByID(context.Background(), testEntry0.Id)
+	entry, err := reg.GetByID(context.Background(), testEntry0.GetId())
 	require.NoError(t, err)
 	protoassert.ProtoEqual(t, testEntry0, entry)
 
-	entry, err = reg.GetByID(context.Background(), testEntry1.Id)
+	entry, err = reg.GetByID(context.Background(), testEntry1.GetId())
 	require.NoError(t, err)
 	protoassert.ProtoEqual(t, testEntry1, entry)
 
@@ -334,11 +334,11 @@ func TestTableVersionErrorResetsPersistencePagination(t *testing.T) {
 	}).Return(&persistence.ListNexusEndpointsResponse{
 		Entries:       []*persistencespb.NexusEndpointEntry{testEntry0},
 		TableVersion:  int64(2),
-		NextPageToken: []byte(testEntry0.Id),
+		NextPageToken: []byte(testEntry0.GetId()),
 	}, nil)
 	// persistence.ErrNexusTableVersionConflict error on second page
 	mocks.persistence.EXPECT().ListNexusEndpoints(gomock.Any(), &persistence.ListNexusEndpointsRequest{
-		NextPageToken:         []byte(testEntry0.Id),
+		NextPageToken:         []byte(testEntry0.GetId()),
 		PageSize:              1,
 		LastKnownTableVersion: int64(2),
 	}).Return(&persistence.ListNexusEndpointsResponse{TableVersion: int64(3)}, persistence.ErrNexusTableVersionConflict)
@@ -350,11 +350,11 @@ func TestTableVersionErrorResetsPersistencePagination(t *testing.T) {
 	}).Return(&persistence.ListNexusEndpointsResponse{
 		Entries:       []*persistencespb.NexusEndpointEntry{testEntry0},
 		TableVersion:  int64(3),
-		NextPageToken: []byte(testEntry0.Id),
+		NextPageToken: []byte(testEntry0.GetId()),
 	}, nil)
 	// successfully get second page
 	mocks.persistence.EXPECT().ListNexusEndpoints(gomock.Any(), &persistence.ListNexusEndpointsRequest{
-		NextPageToken:         []byte(testEntry0.Id),
+		NextPageToken:         []byte(testEntry0.GetId()),
 		PageSize:              1,
 		LastKnownTableVersion: int64(3),
 	}).Return(&persistence.ListNexusEndpointsResponse{
@@ -367,11 +367,11 @@ func TestTableVersionErrorResetsPersistencePagination(t *testing.T) {
 	reg.StartLifecycle()
 	defer reg.StopLifecycle()
 
-	entry, err := reg.GetByID(context.Background(), testEntry0.Id)
+	entry, err := reg.GetByID(context.Background(), testEntry0.GetId())
 	require.NoError(t, err)
 	protoassert.ProtoEqual(t, testEntry0, entry)
 
-	entry, err = reg.GetByID(context.Background(), testEntry1.Id)
+	entry, err = reg.GetByID(context.Background(), testEntry1.GetId())
 	require.NoError(t, err)
 	protoassert.ProtoEqual(t, testEntry1, entry)
 
@@ -395,46 +395,40 @@ func newTestMocks(t *testing.T) *testMocks {
 
 func newEndpointEntry(name string) *persistencespb.NexusEndpointEntry {
 	id := uuid.NewString()
-	return &persistencespb.NexusEndpointEntry{
+	return persistencespb.NexusEndpointEntry_builder{
 		Version: 1,
 		Id:      id,
-		Endpoint: &persistencespb.NexusEndpoint{
+		Endpoint: persistencespb.NexusEndpoint_builder{
 			Clock:       hybrid_logical_clock.Zero(1),
 			CreatedTime: timestamppb.Now(),
-			Spec: &persistencespb.NexusEndpointSpec{
+			Spec: persistencespb.NexusEndpointSpec_builder{
 				Name: name,
-				Target: &persistencespb.NexusEndpointTarget{
-					Variant: &persistencespb.NexusEndpointTarget_Worker_{
-						Worker: &persistencespb.NexusEndpointTarget_Worker{
-							NamespaceId: uuid.NewString(),
-							TaskQueue:   name + "-task-queue",
-						},
-					},
-				},
-			},
-		},
-	}
+				Target: persistencespb.NexusEndpointTarget_builder{
+					Worker: persistencespb.NexusEndpointTarget_Worker_builder{
+						NamespaceId: uuid.NewString(),
+						TaskQueue:   name + "-task-queue",
+					}.Build(),
+				}.Build(),
+			}.Build(),
+		}.Build(),
+	}.Build()
 }
 
 func publicToInternalEndpointTarget(target *nexuspb.EndpointTarget) *persistencespb.NexusEndpointTarget {
-	switch v := target.Variant.(type) {
-	case *nexuspb.EndpointTarget_Worker_:
-		return &persistencespb.NexusEndpointTarget{
-			Variant: &persistencespb.NexusEndpointTarget_Worker_{
-				Worker: &persistencespb.NexusEndpointTarget_Worker{
-					NamespaceId: "TODO",
-					TaskQueue:   v.Worker.TaskQueue,
-				},
-			},
-		}
-	case *nexuspb.EndpointTarget_External_:
-		return &persistencespb.NexusEndpointTarget{
-			Variant: &persistencespb.NexusEndpointTarget_External_{
-				External: &persistencespb.NexusEndpointTarget_External{
-					Url: v.External.Url,
-				},
-			},
-		}
+	switch target.WhichVariant() {
+	case nexuspb.EndpointTarget_Worker_case:
+		return persistencespb.NexusEndpointTarget_builder{
+			Worker: persistencespb.NexusEndpointTarget_Worker_builder{
+				NamespaceId: "TODO",
+				TaskQueue:   target.GetWorker().GetTaskQueue(),
+			}.Build(),
+		}.Build()
+	case nexuspb.EndpointTarget_External_case:
+		return persistencespb.NexusEndpointTarget_builder{
+			External: persistencespb.NexusEndpointTarget_External_builder{
+				Url: target.GetExternal().GetUrl(),
+			}.Build(),
+		}.Build()
 	}
 	panic(fmt.Errorf("invalid target: %v", target))
 }

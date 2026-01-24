@@ -304,7 +304,7 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 		isHeartBeatTask := timerTask.TimeoutType == enumspb.TIMEOUT_TYPE_HEARTBEAT
 		ai, heartbeatTimeoutVis, ok := mutableState.GetActivityInfoWithTimerHeartbeat(timerTask.EventID)
 		if isHeartBeatTask && ok && queues.IsTimeExpired(timerTask, timerTask.GetVisibilityTime(), heartbeatTimeoutVis) {
-			if err := mutableState.UpdateActivityTaskStatusWithTimerHeartbeat(ai.ScheduledEventId, ai.TimerTaskStatus&^workflow.TimerTaskStatusCreatedHeartbeat, nil); err != nil {
+			if err := mutableState.UpdateActivityTaskStatusWithTimerHeartbeat(ai.GetScheduledEventId(), ai.GetTimerTaskStatus()&^workflow.TimerTaskStatusCreatedHeartbeat, nil); err != nil {
 				return nil, err
 			}
 			updateMutableState = true
@@ -368,7 +368,7 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityRetryTimerTask(
 			return nil, nil
 		}
 
-		err := CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), activityInfo.Version, task.Version, task)
+		err := CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), activityInfo.GetVersion(), task.Version, task)
 		if err != nil {
 			return nil, err
 		}
@@ -377,14 +377,14 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityRetryTimerTask(
 		// * this retry task is from old Stamp.
 		// * attempts is not the same as recorded in activity info.
 		// * activity is already started.
-		if activityInfo.Attempt > task.Attempt ||
-			activityInfo.Stamp != task.Stamp ||
-			activityInfo.StartedEventId != common.EmptyEventID ||
-			activityInfo.Paused {
+		if activityInfo.GetAttempt() > task.Attempt ||
+			activityInfo.GetStamp() != task.Stamp ||
+			activityInfo.GetStartedEventId() != common.EmptyEventID ||
+			activityInfo.GetPaused() {
 			return nil, nil
 		}
 
-		return newActivityRetryTimePostActionInfo(mutableState, activityInfo.TaskQueue, activityInfo.ScheduleToStartTimeout.AsDuration(), activityInfo)
+		return newActivityRetryTimePostActionInfo(mutableState, activityInfo.GetTaskQueue(), activityInfo.GetScheduleToStartTimeout().AsDuration(), activityInfo)
 	}
 
 	return t.processTimer(
@@ -609,7 +609,7 @@ func (t *timerQueueStandbyTaskExecutor) executeStateMachineTimerTask(
 		}
 
 		// TODO: remove following code once EnableUpdateWorkflowModeIgnoreCurrent config is deprecated.
-		if mutableState.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+		if mutableState.GetExecutionState().GetState() == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 			// Can't use UpdateWorkflowExecutionAsPassive since it updates the current run,
 			// and we are operating on a closed workflow.
 			return nil, wfContext.SubmitClosedWorkflowSnapshot(
@@ -703,22 +703,22 @@ func (t *timerQueueStandbyTaskExecutor) pushActivity(
 	activityScheduleToStartTimeout := pushActivityInfo.activityTaskScheduleToStartTimeout
 	activityTask := task.(*tasks.ActivityRetryTimerTask)
 
-	resp, err := t.matchingRawClient.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
+	resp, err := t.matchingRawClient.AddActivityTask(ctx, matchingservice.AddActivityTaskRequest_builder{
 		NamespaceId: activityTask.NamespaceID,
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: activityTask.WorkflowID,
 			RunId:      activityTask.RunID,
-		},
-		TaskQueue: &taskqueuepb.TaskQueue{
+		}.Build(),
+		TaskQueue: taskqueuepb.TaskQueue_builder{
 			Name: pushActivityInfo.taskQueue,
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-		},
+		}.Build(),
 		ScheduledEventId:       activityTask.EventID,
 		ScheduleToStartTimeout: durationpb.New(activityScheduleToStartTimeout),
 		Clock:                  vclock.NewVectorClock(t.shardContext.GetClusterMetadata().GetClusterID(), t.shardContext.GetShardID(), activityTask.TaskID),
 		VersionDirective:       pushActivityInfo.versionDirective,
 		Stamp:                  activityTask.Stamp,
-	})
+	}.Build())
 
 	if err != nil {
 		return err
@@ -732,7 +732,7 @@ func (t *timerQueueStandbyTaskExecutor) pushActivity(
 	return updateIndependentActivityBuildId(
 		ctx,
 		activityTask,
-		resp.AssignedBuildId,
+		resp.GetAssignedBuildId(),
 		t.shardContext,
 		historyi.TransactionPolicyPassive,
 		t.cache,

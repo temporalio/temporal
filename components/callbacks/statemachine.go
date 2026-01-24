@@ -40,9 +40,9 @@ type Callback struct {
 
 // NewWorkflowClosedTrigger creates a WorkflowClosed trigger variant.
 func NewWorkflowClosedTrigger() *persistencespb.CallbackInfo_Trigger {
-	return &persistencespb.CallbackInfo_Trigger{
-		Variant: &persistencespb.CallbackInfo_Trigger_WorkflowClosed{},
-	}
+	return persistencespb.CallbackInfo_Trigger_builder{
+		WorkflowClosed: &persistencespb.CallbackInfo_WorkflowClosed{},
+	}.Build()
 }
 
 // NewCallback creates a new callback in the STANDBY state from given params.
@@ -53,42 +53,42 @@ func NewCallback(
 	cb *persistencespb.Callback,
 ) Callback {
 	return Callback{
-		&persistencespb.CallbackInfo{
+		persistencespb.CallbackInfo_builder{
 			Trigger:          trigger,
 			Callback:         cb,
 			State:            enumsspb.CALLBACK_STATE_STANDBY,
 			RegistrationTime: registrationTime,
 			RequestId:        requestId,
-		},
+		}.Build(),
 	}
 }
 
 func (c Callback) State() enumsspb.CallbackState {
-	return c.CallbackInfo.State
+	return c.CallbackInfo.GetState()
 }
 
 func (c Callback) SetState(state enumsspb.CallbackState) {
-	c.CallbackInfo.State = state
+	c.CallbackInfo.SetState(state)
 }
 
 func (c Callback) recordAttempt(ts time.Time) {
-	c.CallbackInfo.Attempt++
-	c.CallbackInfo.LastAttemptCompleteTime = timestamppb.New(ts)
+	c.CallbackInfo.SetAttempt(c.CallbackInfo.GetAttempt() + 1)
+	c.CallbackInfo.SetLastAttemptCompleteTime(timestamppb.New(ts))
 }
 
 func (c Callback) RegenerateTasks(*hsm.Node) ([]hsm.Task, error) {
-	switch c.CallbackInfo.State {
+	switch c.CallbackInfo.GetState() {
 	case enumsspb.CALLBACK_STATE_BACKING_OFF:
-		return []hsm.Task{BackoffTask{deadline: c.NextAttemptScheduleTime.AsTime()}}, nil
+		return []hsm.Task{BackoffTask{deadline: c.GetNextAttemptScheduleTime().AsTime()}}, nil
 	case enumsspb.CALLBACK_STATE_SCHEDULED:
-		switch v := c.Callback.GetVariant().(type) {
-		case *persistencespb.Callback_Nexus_:
-			u, err := url.Parse(c.Callback.GetNexus().Url)
+		switch v := c.GetCallback().WhichVariant(); v {
+		case persistencespb.Callback_Nexus_case:
+			u, err := url.Parse(c.GetCallback().GetNexus().GetUrl())
 			if err != nil {
 				return nil, fmt.Errorf("failed to parse URL: %v: %w", &c, err)
 			}
 			return []hsm.Task{InvocationTask{destination: u.Scheme + "://" + u.Host}}, nil
-		case *persistencespb.Callback_Hsm:
+		case persistencespb.Callback_Hsm_case:
 			// Destination is empty on the internal queue.
 			return []hsm.Task{InvocationTask{"TODO(bergundy): make this empty"}}, nil
 
@@ -201,7 +201,7 @@ var TransitionRescheduled = hsm.NewTransition(
 	[]enumsspb.CallbackState{enumsspb.CALLBACK_STATE_BACKING_OFF},
 	enumsspb.CALLBACK_STATE_SCHEDULED,
 	func(cb Callback, event EventRescheduled) (hsm.TransitionOutput, error) {
-		cb.CallbackInfo.NextAttemptScheduleTime = nil
+		cb.CallbackInfo.ClearNextAttemptScheduleTime()
 		return cb.output()
 	},
 )
@@ -219,17 +219,15 @@ var TransitionAttemptFailed = hsm.NewTransition(
 	func(cb Callback, event EventAttemptFailed) (hsm.TransitionOutput, error) {
 		cb.recordAttempt(event.Time)
 		// Use 0 for elapsed time as we don't limit the retry by time (for now).
-		nextDelay := event.RetryPolicy.ComputeNextDelay(0, int(cb.Attempt), event.Err)
+		nextDelay := event.RetryPolicy.ComputeNextDelay(0, int(cb.CallbackInfo.GetAttempt()), event.Err)
 		nextAttemptScheduleTime := event.Time.Add(nextDelay)
-		cb.CallbackInfo.NextAttemptScheduleTime = timestamppb.New(nextAttemptScheduleTime)
-		cb.CallbackInfo.LastAttemptFailure = &failurepb.Failure{
+		cb.CallbackInfo.SetNextAttemptScheduleTime(timestamppb.New(nextAttemptScheduleTime))
+		cb.CallbackInfo.SetLastAttemptFailure(failurepb.Failure_builder{
 			Message: event.Err.Error(),
-			FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
-				ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
-					NonRetryable: false,
-				},
-			},
-		}
+			ApplicationFailureInfo: failurepb.ApplicationFailureInfo_builder{
+				NonRetryable: false,
+			}.Build(),
+		}.Build())
 		return cb.output()
 	},
 )
@@ -245,14 +243,12 @@ var TransitionFailed = hsm.NewTransition(
 	enumsspb.CALLBACK_STATE_FAILED,
 	func(cb Callback, event EventFailed) (hsm.TransitionOutput, error) {
 		cb.recordAttempt(event.Time)
-		cb.CallbackInfo.LastAttemptFailure = &failurepb.Failure{
+		cb.CallbackInfo.SetLastAttemptFailure(failurepb.Failure_builder{
 			Message: event.Err.Error(),
-			FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
-				ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
-					NonRetryable: true,
-				},
-			},
-		}
+			ApplicationFailureInfo: failurepb.ApplicationFailureInfo_builder{
+				NonRetryable: true,
+			}.Build(),
+		}.Build())
 		return cb.output()
 	},
 )
@@ -267,7 +263,7 @@ var TransitionSucceeded = hsm.NewTransition(
 	enumsspb.CALLBACK_STATE_SUCCEEDED,
 	func(cb Callback, event EventSucceeded) (hsm.TransitionOutput, error) {
 		cb.recordAttempt(event.Time)
-		cb.CallbackInfo.LastAttemptFailure = nil
+		cb.CallbackInfo.ClearLastAttemptFailure()
 		return cb.output()
 	},
 )

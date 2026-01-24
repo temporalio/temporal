@@ -24,27 +24,27 @@ func Invoke(
 	tokenSerializer *tasktoken.Serializer,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (retError error) {
-	request := req.FailedRequest
-	token, err := tokenSerializer.Deserialize(request.TaskToken)
+	request := req.GetFailedRequest()
+	token, err := tokenSerializer.Deserialize(request.GetTaskToken())
 	if err != nil {
 		return consts.ErrDeserializingToken
 	}
 
-	_, err = api.GetActiveNamespace(shardContext, namespace.ID(req.GetNamespaceId()), token.WorkflowId)
+	_, err = api.GetActiveNamespace(shardContext, namespace.ID(req.GetNamespaceId()), token.GetWorkflowId())
 	if err != nil {
 		return err
 	}
 
 	return api.GetAndUpdateWorkflowWithNew(
 		ctx,
-		token.Clock,
+		token.GetClock(),
 		definition.NewWorkflowKey(
-			token.NamespaceId,
-			token.WorkflowId,
-			token.RunId,
+			token.GetNamespaceId(),
+			token.GetWorkflowId(),
+			token.GetRunId(),
 		),
 		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
-			namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(req.GetNamespaceId()), token.WorkflowId)
+			namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(req.GetNamespaceId()), token.GetWorkflowId())
 			if err != nil {
 				return nil, err
 			}
@@ -59,10 +59,10 @@ func Invoke(
 
 			if workflowTask == nil ||
 				workflowTask.StartedEventID == common.EmptyEventID ||
-				(token.StartedEventId != common.EmptyEventID && token.StartedEventId != workflowTask.StartedEventID) ||
-				(token.StartedTime != nil && !workflowTask.StartedTime.IsZero() && !token.StartedTime.AsTime().Equal(workflowTask.StartedTime)) ||
-				workflowTask.Attempt != token.Attempt ||
-				(workflowTask.Version != common.EmptyVersion && token.Version != workflowTask.Version) {
+				(token.GetStartedEventId() != common.EmptyEventID && token.GetStartedEventId() != workflowTask.StartedEventID) ||
+				(token.HasStartedTime() && !workflowTask.StartedTime.IsZero() && !token.GetStartedTime().AsTime().Equal(workflowTask.StartedTime)) ||
+				workflowTask.Attempt != token.GetAttempt() ||
+				(workflowTask.Version != common.EmptyVersion && token.GetVersion() != workflowTask.Version) {
 				// we have not alter mutable state yet, so release with it with nil to avoid clear MS.
 				workflowLease.GetReleaseFn()(nil)
 				return nil, serviceerror.NewNotFound("Workflow task not found.")

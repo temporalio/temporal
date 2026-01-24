@@ -9,7 +9,6 @@ package activitypb
 import (
 	reflect "reflect"
 	"strconv"
-	sync "sync"
 	unsafe "unsafe"
 
 	v1 "go.temporal.io/api/common/v1"
@@ -114,8 +113,6 @@ func (x ActivityExecutionStatus) String() string {
 		return "Terminated"
 	case ACTIVITY_EXECUTION_STATUS_TIMED_OUT:
 		return "TimedOut"
-
-		// Deprecated: Use ActivityExecutionStatus.Descriptor instead.
 	default:
 		return strconv.Itoa(int(x))
 	}
@@ -134,57 +131,22 @@ func (x ActivityExecutionStatus) Number() protoreflect.EnumNumber {
 	return protoreflect.EnumNumber(x)
 }
 
-func (ActivityExecutionStatus) EnumDescriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawDescGZIP(), []int{0}
-}
-
 type ActivityState struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// The type of the activity, a string that maps to a registered activity on a worker.
-	ActivityType *v1.ActivityType `protobuf:"bytes,1,opt,name=activity_type,json=activityType,proto3" json:"activity_type,omitempty"`
-	TaskQueue    *v11.TaskQueue   `protobuf:"bytes,2,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
-	// Indicates how long the caller is willing to wait for an activity completion. Limits how long
-	// retries will be attempted. Either this or `start_to_close_timeout` must be specified.
-	//
-	// (-- api-linter: core::0140::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: "to" is used to indicate interval. --)
-	ScheduleToCloseTimeout *durationpb.Duration `protobuf:"bytes,3,opt,name=schedule_to_close_timeout,json=scheduleToCloseTimeout,proto3" json:"schedule_to_close_timeout,omitempty"`
-	// Limits time an activity task can stay in a task queue before a worker picks it up. This
-	// timeout is always non retryable, as all a retry would achieve is to put it back into the same
-	// queue. Defaults to `schedule_to_close_timeout` or workflow execution timeout if not
-	// specified.
-	//
-	// (-- api-linter: core::0140::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: "to" is used to indicate interval. --)
-	ScheduleToStartTimeout *durationpb.Duration `protobuf:"bytes,4,opt,name=schedule_to_start_timeout,json=scheduleToStartTimeout,proto3" json:"schedule_to_start_timeout,omitempty"`
-	// Maximum time an activity is allowed to execute after being picked up by a worker. This
-	// timeout is always retryable. Either this or `schedule_to_close_timeout` must be
-	// specified.
-	//
-	// (-- api-linter: core::0140::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: "to" is used to indicate interval. --)
-	StartToCloseTimeout *durationpb.Duration `protobuf:"bytes,5,opt,name=start_to_close_timeout,json=startToCloseTimeout,proto3" json:"start_to_close_timeout,omitempty"`
-	// Maximum permitted time between successful worker heartbeats.
-	HeartbeatTimeout *durationpb.Duration `protobuf:"bytes,6,opt,name=heartbeat_timeout,json=heartbeatTimeout,proto3" json:"heartbeat_timeout,omitempty"`
-	// The retry policy for the activity. Will never exceed `schedule_to_close_timeout`.
-	RetryPolicy *v1.RetryPolicy `protobuf:"bytes,7,opt,name=retry_policy,json=retryPolicy,proto3" json:"retry_policy,omitempty"`
-	// All of the possible activity statuses (covers both the public ActivityExecutionStatus and PendingActivityState).
-	// TODO: consider moving this into ActivityAttemptState and renaming that message. This could save mutating two
-	// components on each attempt transition.
-	Status ActivityExecutionStatus `protobuf:"varint,8,opt,name=status,proto3,enum=temporal.server.chasm.lib.activity.proto.v1.ActivityExecutionStatus" json:"status,omitempty"`
-	// Time the activity was originally scheduled via a StartActivityExecution request.
-	ScheduleTime *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=schedule_time,json=scheduleTime,proto3" json:"schedule_time,omitempty"`
-	// Priority metadata.
-	Priority *v1.Priority `protobuf:"bytes,10,opt,name=priority,proto3" json:"priority,omitempty"`
-	// Set if activity cancellation was requested.
-	CancelState *ActivityCancelState `protobuf:"bytes,11,opt,name=cancel_state,json=cancelState,proto3" json:"cancel_state,omitempty"`
-	// Set if the activity was terminated
-	TerminateState *ActivityTerminateState `protobuf:"bytes,12,opt,name=terminate_state,json=terminateState,proto3" json:"terminate_state,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state                             protoimpl.MessageState  `protogen:"opaque.v1"`
+	xxx_hidden_ActivityType           *v1.ActivityType        `protobuf:"bytes,1,opt,name=activity_type,json=activityType,proto3"`
+	xxx_hidden_TaskQueue              *v11.TaskQueue          `protobuf:"bytes,2,opt,name=task_queue,json=taskQueue,proto3"`
+	xxx_hidden_ScheduleToCloseTimeout *durationpb.Duration    `protobuf:"bytes,3,opt,name=schedule_to_close_timeout,json=scheduleToCloseTimeout,proto3"`
+	xxx_hidden_ScheduleToStartTimeout *durationpb.Duration    `protobuf:"bytes,4,opt,name=schedule_to_start_timeout,json=scheduleToStartTimeout,proto3"`
+	xxx_hidden_StartToCloseTimeout    *durationpb.Duration    `protobuf:"bytes,5,opt,name=start_to_close_timeout,json=startToCloseTimeout,proto3"`
+	xxx_hidden_HeartbeatTimeout       *durationpb.Duration    `protobuf:"bytes,6,opt,name=heartbeat_timeout,json=heartbeatTimeout,proto3"`
+	xxx_hidden_RetryPolicy            *v1.RetryPolicy         `protobuf:"bytes,7,opt,name=retry_policy,json=retryPolicy,proto3"`
+	xxx_hidden_Status                 ActivityExecutionStatus `protobuf:"varint,8,opt,name=status,proto3,enum=temporal.server.chasm.lib.activity.proto.v1.ActivityExecutionStatus"`
+	xxx_hidden_ScheduleTime           *timestamppb.Timestamp  `protobuf:"bytes,9,opt,name=schedule_time,json=scheduleTime,proto3"`
+	xxx_hidden_Priority               *v1.Priority            `protobuf:"bytes,10,opt,name=priority,proto3"`
+	xxx_hidden_CancelState            *ActivityCancelState    `protobuf:"bytes,11,opt,name=cancel_state,json=cancelState,proto3"`
+	xxx_hidden_TerminateState         *ActivityTerminateState `protobuf:"bytes,12,opt,name=terminate_state,json=terminateState,proto3"`
+	unknownFields                     protoimpl.UnknownFields
+	sizeCache                         protoimpl.SizeCache
 }
 
 func (x *ActivityState) Reset() {
@@ -212,103 +174,334 @@ func (x *ActivityState) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ActivityState.ProtoReflect.Descriptor instead.
-func (*ActivityState) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawDescGZIP(), []int{0}
-}
-
 func (x *ActivityState) GetActivityType() *v1.ActivityType {
 	if x != nil {
-		return x.ActivityType
+		return x.xxx_hidden_ActivityType
 	}
 	return nil
 }
 
 func (x *ActivityState) GetTaskQueue() *v11.TaskQueue {
 	if x != nil {
-		return x.TaskQueue
+		return x.xxx_hidden_TaskQueue
 	}
 	return nil
 }
 
 func (x *ActivityState) GetScheduleToCloseTimeout() *durationpb.Duration {
 	if x != nil {
-		return x.ScheduleToCloseTimeout
+		return x.xxx_hidden_ScheduleToCloseTimeout
 	}
 	return nil
 }
 
 func (x *ActivityState) GetScheduleToStartTimeout() *durationpb.Duration {
 	if x != nil {
-		return x.ScheduleToStartTimeout
+		return x.xxx_hidden_ScheduleToStartTimeout
 	}
 	return nil
 }
 
 func (x *ActivityState) GetStartToCloseTimeout() *durationpb.Duration {
 	if x != nil {
-		return x.StartToCloseTimeout
+		return x.xxx_hidden_StartToCloseTimeout
 	}
 	return nil
 }
 
 func (x *ActivityState) GetHeartbeatTimeout() *durationpb.Duration {
 	if x != nil {
-		return x.HeartbeatTimeout
+		return x.xxx_hidden_HeartbeatTimeout
 	}
 	return nil
 }
 
 func (x *ActivityState) GetRetryPolicy() *v1.RetryPolicy {
 	if x != nil {
-		return x.RetryPolicy
+		return x.xxx_hidden_RetryPolicy
 	}
 	return nil
 }
 
 func (x *ActivityState) GetStatus() ActivityExecutionStatus {
 	if x != nil {
-		return x.Status
+		return x.xxx_hidden_Status
 	}
 	return ACTIVITY_EXECUTION_STATUS_UNSPECIFIED
 }
 
 func (x *ActivityState) GetScheduleTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.ScheduleTime
+		return x.xxx_hidden_ScheduleTime
 	}
 	return nil
 }
 
 func (x *ActivityState) GetPriority() *v1.Priority {
 	if x != nil {
-		return x.Priority
+		return x.xxx_hidden_Priority
 	}
 	return nil
 }
 
 func (x *ActivityState) GetCancelState() *ActivityCancelState {
 	if x != nil {
-		return x.CancelState
+		return x.xxx_hidden_CancelState
 	}
 	return nil
 }
 
 func (x *ActivityState) GetTerminateState() *ActivityTerminateState {
 	if x != nil {
-		return x.TerminateState
+		return x.xxx_hidden_TerminateState
 	}
 	return nil
 }
 
+func (x *ActivityState) SetActivityType(v *v1.ActivityType) {
+	x.xxx_hidden_ActivityType = v
+}
+
+func (x *ActivityState) SetTaskQueue(v *v11.TaskQueue) {
+	x.xxx_hidden_TaskQueue = v
+}
+
+func (x *ActivityState) SetScheduleToCloseTimeout(v *durationpb.Duration) {
+	x.xxx_hidden_ScheduleToCloseTimeout = v
+}
+
+func (x *ActivityState) SetScheduleToStartTimeout(v *durationpb.Duration) {
+	x.xxx_hidden_ScheduleToStartTimeout = v
+}
+
+func (x *ActivityState) SetStartToCloseTimeout(v *durationpb.Duration) {
+	x.xxx_hidden_StartToCloseTimeout = v
+}
+
+func (x *ActivityState) SetHeartbeatTimeout(v *durationpb.Duration) {
+	x.xxx_hidden_HeartbeatTimeout = v
+}
+
+func (x *ActivityState) SetRetryPolicy(v *v1.RetryPolicy) {
+	x.xxx_hidden_RetryPolicy = v
+}
+
+func (x *ActivityState) SetStatus(v ActivityExecutionStatus) {
+	x.xxx_hidden_Status = v
+}
+
+func (x *ActivityState) SetScheduleTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_ScheduleTime = v
+}
+
+func (x *ActivityState) SetPriority(v *v1.Priority) {
+	x.xxx_hidden_Priority = v
+}
+
+func (x *ActivityState) SetCancelState(v *ActivityCancelState) {
+	x.xxx_hidden_CancelState = v
+}
+
+func (x *ActivityState) SetTerminateState(v *ActivityTerminateState) {
+	x.xxx_hidden_TerminateState = v
+}
+
+func (x *ActivityState) HasActivityType() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_ActivityType != nil
+}
+
+func (x *ActivityState) HasTaskQueue() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_TaskQueue != nil
+}
+
+func (x *ActivityState) HasScheduleToCloseTimeout() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_ScheduleToCloseTimeout != nil
+}
+
+func (x *ActivityState) HasScheduleToStartTimeout() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_ScheduleToStartTimeout != nil
+}
+
+func (x *ActivityState) HasStartToCloseTimeout() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_StartToCloseTimeout != nil
+}
+
+func (x *ActivityState) HasHeartbeatTimeout() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_HeartbeatTimeout != nil
+}
+
+func (x *ActivityState) HasRetryPolicy() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_RetryPolicy != nil
+}
+
+func (x *ActivityState) HasScheduleTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_ScheduleTime != nil
+}
+
+func (x *ActivityState) HasPriority() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Priority != nil
+}
+
+func (x *ActivityState) HasCancelState() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_CancelState != nil
+}
+
+func (x *ActivityState) HasTerminateState() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_TerminateState != nil
+}
+
+func (x *ActivityState) ClearActivityType() {
+	x.xxx_hidden_ActivityType = nil
+}
+
+func (x *ActivityState) ClearTaskQueue() {
+	x.xxx_hidden_TaskQueue = nil
+}
+
+func (x *ActivityState) ClearScheduleToCloseTimeout() {
+	x.xxx_hidden_ScheduleToCloseTimeout = nil
+}
+
+func (x *ActivityState) ClearScheduleToStartTimeout() {
+	x.xxx_hidden_ScheduleToStartTimeout = nil
+}
+
+func (x *ActivityState) ClearStartToCloseTimeout() {
+	x.xxx_hidden_StartToCloseTimeout = nil
+}
+
+func (x *ActivityState) ClearHeartbeatTimeout() {
+	x.xxx_hidden_HeartbeatTimeout = nil
+}
+
+func (x *ActivityState) ClearRetryPolicy() {
+	x.xxx_hidden_RetryPolicy = nil
+}
+
+func (x *ActivityState) ClearScheduleTime() {
+	x.xxx_hidden_ScheduleTime = nil
+}
+
+func (x *ActivityState) ClearPriority() {
+	x.xxx_hidden_Priority = nil
+}
+
+func (x *ActivityState) ClearCancelState() {
+	x.xxx_hidden_CancelState = nil
+}
+
+func (x *ActivityState) ClearTerminateState() {
+	x.xxx_hidden_TerminateState = nil
+}
+
+type ActivityState_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// The type of the activity, a string that maps to a registered activity on a worker.
+	ActivityType *v1.ActivityType
+	TaskQueue    *v11.TaskQueue
+	// Indicates how long the caller is willing to wait for an activity completion. Limits how long
+	// retries will be attempted. Either this or `start_to_close_timeout` must be specified.
+	//
+	// (-- api-linter: core::0140::prepositions=disabled
+	//
+	//	aip.dev/not-precedent: "to" is used to indicate interval. --)
+	ScheduleToCloseTimeout *durationpb.Duration
+	// Limits time an activity task can stay in a task queue before a worker picks it up. This
+	// timeout is always non retryable, as all a retry would achieve is to put it back into the same
+	// queue. Defaults to `schedule_to_close_timeout` or workflow execution timeout if not
+	// specified.
+	//
+	// (-- api-linter: core::0140::prepositions=disabled
+	//
+	//	aip.dev/not-precedent: "to" is used to indicate interval. --)
+	ScheduleToStartTimeout *durationpb.Duration
+	// Maximum time an activity is allowed to execute after being picked up by a worker. This
+	// timeout is always retryable. Either this or `schedule_to_close_timeout` must be
+	// specified.
+	//
+	// (-- api-linter: core::0140::prepositions=disabled
+	//
+	//	aip.dev/not-precedent: "to" is used to indicate interval. --)
+	StartToCloseTimeout *durationpb.Duration
+	// Maximum permitted time between successful worker heartbeats.
+	HeartbeatTimeout *durationpb.Duration
+	// The retry policy for the activity. Will never exceed `schedule_to_close_timeout`.
+	RetryPolicy *v1.RetryPolicy
+	// All of the possible activity statuses (covers both the public ActivityExecutionStatus and PendingActivityState).
+	// TODO: consider moving this into ActivityAttemptState and renaming that message. This could save mutating two
+	// components on each attempt transition.
+	Status ActivityExecutionStatus
+	// Time the activity was originally scheduled via a StartActivityExecution request.
+	ScheduleTime *timestamppb.Timestamp
+	// Priority metadata.
+	Priority *v1.Priority
+	// Set if activity cancellation was requested.
+	CancelState *ActivityCancelState
+	// Set if the activity was terminated
+	TerminateState *ActivityTerminateState
+}
+
+func (b0 ActivityState_builder) Build() *ActivityState {
+	m0 := &ActivityState{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_ActivityType = b.ActivityType
+	x.xxx_hidden_TaskQueue = b.TaskQueue
+	x.xxx_hidden_ScheduleToCloseTimeout = b.ScheduleToCloseTimeout
+	x.xxx_hidden_ScheduleToStartTimeout = b.ScheduleToStartTimeout
+	x.xxx_hidden_StartToCloseTimeout = b.StartToCloseTimeout
+	x.xxx_hidden_HeartbeatTimeout = b.HeartbeatTimeout
+	x.xxx_hidden_RetryPolicy = b.RetryPolicy
+	x.xxx_hidden_Status = b.Status
+	x.xxx_hidden_ScheduleTime = b.ScheduleTime
+	x.xxx_hidden_Priority = b.Priority
+	x.xxx_hidden_CancelState = b.CancelState
+	x.xxx_hidden_TerminateState = b.TerminateState
+	return m0
+}
+
 type ActivityCancelState struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	RequestId     string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
-	RequestTime   *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=request_time,json=requestTime,proto3" json:"request_time,omitempty"`
-	Identity      string                 `protobuf:"bytes,3,opt,name=identity,proto3" json:"identity,omitempty"`
-	Reason        string                 `protobuf:"bytes,4,opt,name=reason,proto3" json:"reason,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                  protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_RequestId   string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3"`
+	xxx_hidden_RequestTime *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=request_time,json=requestTime,proto3"`
+	xxx_hidden_Identity    string                 `protobuf:"bytes,3,opt,name=identity,proto3"`
+	xxx_hidden_Reason      string                 `protobuf:"bytes,4,opt,name=reason,proto3"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *ActivityCancelState) Reset() {
@@ -336,44 +529,86 @@ func (x *ActivityCancelState) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ActivityCancelState.ProtoReflect.Descriptor instead.
-func (*ActivityCancelState) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawDescGZIP(), []int{1}
-}
-
 func (x *ActivityCancelState) GetRequestId() string {
 	if x != nil {
-		return x.RequestId
+		return x.xxx_hidden_RequestId
 	}
 	return ""
 }
 
 func (x *ActivityCancelState) GetRequestTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.RequestTime
+		return x.xxx_hidden_RequestTime
 	}
 	return nil
 }
 
 func (x *ActivityCancelState) GetIdentity() string {
 	if x != nil {
-		return x.Identity
+		return x.xxx_hidden_Identity
 	}
 	return ""
 }
 
 func (x *ActivityCancelState) GetReason() string {
 	if x != nil {
-		return x.Reason
+		return x.xxx_hidden_Reason
 	}
 	return ""
 }
 
+func (x *ActivityCancelState) SetRequestId(v string) {
+	x.xxx_hidden_RequestId = v
+}
+
+func (x *ActivityCancelState) SetRequestTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_RequestTime = v
+}
+
+func (x *ActivityCancelState) SetIdentity(v string) {
+	x.xxx_hidden_Identity = v
+}
+
+func (x *ActivityCancelState) SetReason(v string) {
+	x.xxx_hidden_Reason = v
+}
+
+func (x *ActivityCancelState) HasRequestTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_RequestTime != nil
+}
+
+func (x *ActivityCancelState) ClearRequestTime() {
+	x.xxx_hidden_RequestTime = nil
+}
+
+type ActivityCancelState_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	RequestId   string
+	RequestTime *timestamppb.Timestamp
+	Identity    string
+	Reason      string
+}
+
+func (b0 ActivityCancelState_builder) Build() *ActivityCancelState {
+	m0 := &ActivityCancelState{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_RequestId = b.RequestId
+	x.xxx_hidden_RequestTime = b.RequestTime
+	x.xxx_hidden_Identity = b.Identity
+	x.xxx_hidden_Reason = b.Reason
+	return m0
+}
+
 type ActivityTerminateState struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	RequestId     string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_RequestId string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *ActivityTerminateState) Reset() {
@@ -401,53 +636,44 @@ func (x *ActivityTerminateState) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ActivityTerminateState.ProtoReflect.Descriptor instead.
-func (*ActivityTerminateState) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawDescGZIP(), []int{2}
-}
-
 func (x *ActivityTerminateState) GetRequestId() string {
 	if x != nil {
-		return x.RequestId
+		return x.xxx_hidden_RequestId
 	}
 	return ""
 }
 
+func (x *ActivityTerminateState) SetRequestId(v string) {
+	x.xxx_hidden_RequestId = v
+}
+
+type ActivityTerminateState_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	RequestId string
+}
+
+func (b0 ActivityTerminateState_builder) Build() *ActivityTerminateState {
+	m0 := &ActivityTerminateState{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_RequestId = b.RequestId
+	return m0
+}
+
 type ActivityAttemptState struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// The attempt this activity is currently on.
-	// Incremented each time a new attempt is scheduled. A newly created activity will immediately be scheduled, and
-	// the count is set to 1.
-	Count int32 `protobuf:"varint,1,opt,name=count,proto3" json:"count,omitempty"`
-	// Time from the last attempt failure to the next activity retry.
-	// If the activity is currently running, this represents the next retry interval in case the attempt fails.
-	// If activity is currently backing off between attempt, this represents the current retry interval.
-	// If there is no next retry allowed, this field will be null.
-	// This interval is typically calculated from the specified retry policy, but may be modified if an activity fails
-	// with a retryable application failure specifying a retry delay.
-	CurrentRetryInterval *durationpb.Duration `protobuf:"bytes,2,opt,name=current_retry_interval,json=currentRetryInterval,proto3" json:"current_retry_interval,omitempty"`
-	// Time the last attempt was started.
-	StartedTime *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=started_time,json=startedTime,proto3" json:"started_time,omitempty"`
-	// The time when the last activity attempt completed. If activity has not been completed yet, it will be null.
-	CompleteTime *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=complete_time,json=completeTime,proto3" json:"complete_time,omitempty"`
-	// Details about the last failure. This will only be updated when an activity attempt fails,
-	// including start-to-close timeout. Activity success, termination, schedule-to-start and schedule-to-close timeouts
-	// will not reset it.
-	LastFailureDetails *ActivityAttemptState_LastFailureDetails `protobuf:"bytes,5,opt,name=last_failure_details,json=lastFailureDetails,proto3" json:"last_failure_details,omitempty"`
-	// An incremental version number used to validate tasks.
-	// Initially this only verifies that a task belong to the current attempt.
-	// Later on this stamp will be used to also invalidate tasks when the activity is paused, reset, or has its options
-	// updated.
-	Stamp              int32  `protobuf:"varint,6,opt,name=stamp,proto3" json:"stamp,omitempty"`
-	LastWorkerIdentity string `protobuf:"bytes,7,opt,name=last_worker_identity,json=lastWorkerIdentity,proto3" json:"last_worker_identity,omitempty"`
-	// The Worker Deployment Version this activity was dispatched to most recently.
-	// If nil, the activity has not yet been dispatched or was last dispatched to an unversioned worker.
-	LastDeploymentVersion *v12.WorkerDeploymentVersion `protobuf:"bytes,8,opt,name=last_deployment_version,json=lastDeploymentVersion,proto3" json:"last_deployment_version,omitempty"`
-	// The request ID that came from matching's RecordActivityTaskStarted API call. Used to make this API idempotent in
-	// case of implicit retries.
-	StartRequestId string `protobuf:"bytes,9,opt,name=start_request_id,json=startRequestId,proto3" json:"start_request_id,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state                            protoimpl.MessageState                   `protogen:"opaque.v1"`
+	xxx_hidden_Count                 int32                                    `protobuf:"varint,1,opt,name=count,proto3"`
+	xxx_hidden_CurrentRetryInterval  *durationpb.Duration                     `protobuf:"bytes,2,opt,name=current_retry_interval,json=currentRetryInterval,proto3"`
+	xxx_hidden_StartedTime           *timestamppb.Timestamp                   `protobuf:"bytes,3,opt,name=started_time,json=startedTime,proto3"`
+	xxx_hidden_CompleteTime          *timestamppb.Timestamp                   `protobuf:"bytes,4,opt,name=complete_time,json=completeTime,proto3"`
+	xxx_hidden_LastFailureDetails    *ActivityAttemptState_LastFailureDetails `protobuf:"bytes,5,opt,name=last_failure_details,json=lastFailureDetails,proto3"`
+	xxx_hidden_Stamp                 int32                                    `protobuf:"varint,6,opt,name=stamp,proto3"`
+	xxx_hidden_LastWorkerIdentity    string                                   `protobuf:"bytes,7,opt,name=last_worker_identity,json=lastWorkerIdentity,proto3"`
+	xxx_hidden_LastDeploymentVersion *v12.WorkerDeploymentVersion             `protobuf:"bytes,8,opt,name=last_deployment_version,json=lastDeploymentVersion,proto3"`
+	xxx_hidden_StartRequestId        string                                   `protobuf:"bytes,9,opt,name=start_request_id,json=startRequestId,proto3"`
+	unknownFields                    protoimpl.UnknownFields
+	sizeCache                        protoimpl.SizeCache
 }
 
 func (x *ActivityAttemptState) Reset() {
@@ -475,82 +701,218 @@ func (x *ActivityAttemptState) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ActivityAttemptState.ProtoReflect.Descriptor instead.
-func (*ActivityAttemptState) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawDescGZIP(), []int{3}
-}
-
 func (x *ActivityAttemptState) GetCount() int32 {
 	if x != nil {
-		return x.Count
+		return x.xxx_hidden_Count
 	}
 	return 0
 }
 
 func (x *ActivityAttemptState) GetCurrentRetryInterval() *durationpb.Duration {
 	if x != nil {
-		return x.CurrentRetryInterval
+		return x.xxx_hidden_CurrentRetryInterval
 	}
 	return nil
 }
 
 func (x *ActivityAttemptState) GetStartedTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.StartedTime
+		return x.xxx_hidden_StartedTime
 	}
 	return nil
 }
 
 func (x *ActivityAttemptState) GetCompleteTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.CompleteTime
+		return x.xxx_hidden_CompleteTime
 	}
 	return nil
 }
 
 func (x *ActivityAttemptState) GetLastFailureDetails() *ActivityAttemptState_LastFailureDetails {
 	if x != nil {
-		return x.LastFailureDetails
+		return x.xxx_hidden_LastFailureDetails
 	}
 	return nil
 }
 
 func (x *ActivityAttemptState) GetStamp() int32 {
 	if x != nil {
-		return x.Stamp
+		return x.xxx_hidden_Stamp
 	}
 	return 0
 }
 
 func (x *ActivityAttemptState) GetLastWorkerIdentity() string {
 	if x != nil {
-		return x.LastWorkerIdentity
+		return x.xxx_hidden_LastWorkerIdentity
 	}
 	return ""
 }
 
 func (x *ActivityAttemptState) GetLastDeploymentVersion() *v12.WorkerDeploymentVersion {
 	if x != nil {
-		return x.LastDeploymentVersion
+		return x.xxx_hidden_LastDeploymentVersion
 	}
 	return nil
 }
 
 func (x *ActivityAttemptState) GetStartRequestId() string {
 	if x != nil {
-		return x.StartRequestId
+		return x.xxx_hidden_StartRequestId
 	}
 	return ""
 }
 
+func (x *ActivityAttemptState) SetCount(v int32) {
+	x.xxx_hidden_Count = v
+}
+
+func (x *ActivityAttemptState) SetCurrentRetryInterval(v *durationpb.Duration) {
+	x.xxx_hidden_CurrentRetryInterval = v
+}
+
+func (x *ActivityAttemptState) SetStartedTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_StartedTime = v
+}
+
+func (x *ActivityAttemptState) SetCompleteTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_CompleteTime = v
+}
+
+func (x *ActivityAttemptState) SetLastFailureDetails(v *ActivityAttemptState_LastFailureDetails) {
+	x.xxx_hidden_LastFailureDetails = v
+}
+
+func (x *ActivityAttemptState) SetStamp(v int32) {
+	x.xxx_hidden_Stamp = v
+}
+
+func (x *ActivityAttemptState) SetLastWorkerIdentity(v string) {
+	x.xxx_hidden_LastWorkerIdentity = v
+}
+
+func (x *ActivityAttemptState) SetLastDeploymentVersion(v *v12.WorkerDeploymentVersion) {
+	x.xxx_hidden_LastDeploymentVersion = v
+}
+
+func (x *ActivityAttemptState) SetStartRequestId(v string) {
+	x.xxx_hidden_StartRequestId = v
+}
+
+func (x *ActivityAttemptState) HasCurrentRetryInterval() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_CurrentRetryInterval != nil
+}
+
+func (x *ActivityAttemptState) HasStartedTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_StartedTime != nil
+}
+
+func (x *ActivityAttemptState) HasCompleteTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_CompleteTime != nil
+}
+
+func (x *ActivityAttemptState) HasLastFailureDetails() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_LastFailureDetails != nil
+}
+
+func (x *ActivityAttemptState) HasLastDeploymentVersion() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_LastDeploymentVersion != nil
+}
+
+func (x *ActivityAttemptState) ClearCurrentRetryInterval() {
+	x.xxx_hidden_CurrentRetryInterval = nil
+}
+
+func (x *ActivityAttemptState) ClearStartedTime() {
+	x.xxx_hidden_StartedTime = nil
+}
+
+func (x *ActivityAttemptState) ClearCompleteTime() {
+	x.xxx_hidden_CompleteTime = nil
+}
+
+func (x *ActivityAttemptState) ClearLastFailureDetails() {
+	x.xxx_hidden_LastFailureDetails = nil
+}
+
+func (x *ActivityAttemptState) ClearLastDeploymentVersion() {
+	x.xxx_hidden_LastDeploymentVersion = nil
+}
+
+type ActivityAttemptState_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// The attempt this activity is currently on.
+	// Incremented each time a new attempt is scheduled. A newly created activity will immediately be scheduled, and
+	// the count is set to 1.
+	Count int32
+	// Time from the last attempt failure to the next activity retry.
+	// If the activity is currently running, this represents the next retry interval in case the attempt fails.
+	// If activity is currently backing off between attempt, this represents the current retry interval.
+	// If there is no next retry allowed, this field will be null.
+	// This interval is typically calculated from the specified retry policy, but may be modified if an activity fails
+	// with a retryable application failure specifying a retry delay.
+	CurrentRetryInterval *durationpb.Duration
+	// Time the last attempt was started.
+	StartedTime *timestamppb.Timestamp
+	// The time when the last activity attempt completed. If activity has not been completed yet, it will be null.
+	CompleteTime *timestamppb.Timestamp
+	// Details about the last failure. This will only be updated when an activity attempt fails,
+	// including start-to-close timeout. Activity success, termination, schedule-to-start and schedule-to-close timeouts
+	// will not reset it.
+	LastFailureDetails *ActivityAttemptState_LastFailureDetails
+	// An incremental version number used to validate tasks.
+	// Initially this only verifies that a task belong to the current attempt.
+	// Later on this stamp will be used to also invalidate tasks when the activity is paused, reset, or has its options
+	// updated.
+	Stamp              int32
+	LastWorkerIdentity string
+	// The Worker Deployment Version this activity was dispatched to most recently.
+	// If nil, the activity has not yet been dispatched or was last dispatched to an unversioned worker.
+	LastDeploymentVersion *v12.WorkerDeploymentVersion
+	// The request ID that came from matching's RecordActivityTaskStarted API call. Used to make this API idempotent in
+	// case of implicit retries.
+	StartRequestId string
+}
+
+func (b0 ActivityAttemptState_builder) Build() *ActivityAttemptState {
+	m0 := &ActivityAttemptState{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Count = b.Count
+	x.xxx_hidden_CurrentRetryInterval = b.CurrentRetryInterval
+	x.xxx_hidden_StartedTime = b.StartedTime
+	x.xxx_hidden_CompleteTime = b.CompleteTime
+	x.xxx_hidden_LastFailureDetails = b.LastFailureDetails
+	x.xxx_hidden_Stamp = b.Stamp
+	x.xxx_hidden_LastWorkerIdentity = b.LastWorkerIdentity
+	x.xxx_hidden_LastDeploymentVersion = b.LastDeploymentVersion
+	x.xxx_hidden_StartRequestId = b.StartRequestId
+	return m0
+}
+
 type ActivityHeartbeatState struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Details provided in the last recorded activity heartbeat.
-	Details *v1.Payloads `protobuf:"bytes,1,opt,name=details,proto3" json:"details,omitempty"`
-	// Time the last heartbeat was recorded.
-	RecordedTime  *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=recorded_time,json=recordedTime,proto3" json:"recorded_time,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                   protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Details      *v1.Payloads           `protobuf:"bytes,1,opt,name=details,proto3"`
+	xxx_hidden_RecordedTime *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=recorded_time,json=recordedTime,proto3"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
 }
 
 func (x *ActivityHeartbeatState) Reset() {
@@ -578,34 +940,75 @@ func (x *ActivityHeartbeatState) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ActivityHeartbeatState.ProtoReflect.Descriptor instead.
-func (*ActivityHeartbeatState) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawDescGZIP(), []int{4}
-}
-
 func (x *ActivityHeartbeatState) GetDetails() *v1.Payloads {
 	if x != nil {
-		return x.Details
+		return x.xxx_hidden_Details
 	}
 	return nil
 }
 
 func (x *ActivityHeartbeatState) GetRecordedTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.RecordedTime
+		return x.xxx_hidden_RecordedTime
 	}
 	return nil
 }
 
+func (x *ActivityHeartbeatState) SetDetails(v *v1.Payloads) {
+	x.xxx_hidden_Details = v
+}
+
+func (x *ActivityHeartbeatState) SetRecordedTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_RecordedTime = v
+}
+
+func (x *ActivityHeartbeatState) HasDetails() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Details != nil
+}
+
+func (x *ActivityHeartbeatState) HasRecordedTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_RecordedTime != nil
+}
+
+func (x *ActivityHeartbeatState) ClearDetails() {
+	x.xxx_hidden_Details = nil
+}
+
+func (x *ActivityHeartbeatState) ClearRecordedTime() {
+	x.xxx_hidden_RecordedTime = nil
+}
+
+type ActivityHeartbeatState_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Details provided in the last recorded activity heartbeat.
+	Details *v1.Payloads
+	// Time the last heartbeat was recorded.
+	RecordedTime *timestamppb.Timestamp
+}
+
+func (b0 ActivityHeartbeatState_builder) Build() *ActivityHeartbeatState {
+	m0 := &ActivityHeartbeatState{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Details = b.Details
+	x.xxx_hidden_RecordedTime = b.RecordedTime
+	return m0
+}
+
 type ActivityRequestData struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Serialized activity input, passed as arguments to the activity function.
-	Input  *v1.Payloads `protobuf:"bytes,1,opt,name=input,proto3" json:"input,omitempty"`
-	Header *v1.Header   `protobuf:"bytes,2,opt,name=header,proto3" json:"header,omitempty"`
-	// Metadata for use by user interfaces to display the fixed as-of-start summary and details of the activity.
-	UserMetadata  *v13.UserMetadata `protobuf:"bytes,3,opt,name=user_metadata,json=userMetadata,proto3" json:"user_metadata,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                   protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Input        *v1.Payloads           `protobuf:"bytes,1,opt,name=input,proto3"`
+	xxx_hidden_Header       *v1.Header             `protobuf:"bytes,2,opt,name=header,proto3"`
+	xxx_hidden_UserMetadata *v13.UserMetadata      `protobuf:"bytes,3,opt,name=user_metadata,json=userMetadata,proto3"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
 }
 
 func (x *ActivityRequestData) Reset() {
@@ -633,41 +1036,97 @@ func (x *ActivityRequestData) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ActivityRequestData.ProtoReflect.Descriptor instead.
-func (*ActivityRequestData) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawDescGZIP(), []int{5}
-}
-
 func (x *ActivityRequestData) GetInput() *v1.Payloads {
 	if x != nil {
-		return x.Input
+		return x.xxx_hidden_Input
 	}
 	return nil
 }
 
 func (x *ActivityRequestData) GetHeader() *v1.Header {
 	if x != nil {
-		return x.Header
+		return x.xxx_hidden_Header
 	}
 	return nil
 }
 
 func (x *ActivityRequestData) GetUserMetadata() *v13.UserMetadata {
 	if x != nil {
-		return x.UserMetadata
+		return x.xxx_hidden_UserMetadata
 	}
 	return nil
 }
 
+func (x *ActivityRequestData) SetInput(v *v1.Payloads) {
+	x.xxx_hidden_Input = v
+}
+
+func (x *ActivityRequestData) SetHeader(v *v1.Header) {
+	x.xxx_hidden_Header = v
+}
+
+func (x *ActivityRequestData) SetUserMetadata(v *v13.UserMetadata) {
+	x.xxx_hidden_UserMetadata = v
+}
+
+func (x *ActivityRequestData) HasInput() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Input != nil
+}
+
+func (x *ActivityRequestData) HasHeader() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Header != nil
+}
+
+func (x *ActivityRequestData) HasUserMetadata() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_UserMetadata != nil
+}
+
+func (x *ActivityRequestData) ClearInput() {
+	x.xxx_hidden_Input = nil
+}
+
+func (x *ActivityRequestData) ClearHeader() {
+	x.xxx_hidden_Header = nil
+}
+
+func (x *ActivityRequestData) ClearUserMetadata() {
+	x.xxx_hidden_UserMetadata = nil
+}
+
+type ActivityRequestData_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Serialized activity input, passed as arguments to the activity function.
+	Input  *v1.Payloads
+	Header *v1.Header
+	// Metadata for use by user interfaces to display the fixed as-of-start summary and details of the activity.
+	UserMetadata *v13.UserMetadata
+}
+
+func (b0 ActivityRequestData_builder) Build() *ActivityRequestData {
+	m0 := &ActivityRequestData{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Input = b.Input
+	x.xxx_hidden_Header = b.Header
+	x.xxx_hidden_UserMetadata = b.UserMetadata
+	return m0
+}
+
 type ActivityOutcome struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Types that are valid to be assigned to Variant:
-	//
-	//	*ActivityOutcome_Successful_
-	//	*ActivityOutcome_Failed_
-	Variant       isActivityOutcome_Variant `protobuf_oneof:"variant"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state              protoimpl.MessageState    `protogen:"opaque.v1"`
+	xxx_hidden_Variant isActivityOutcome_Variant `protobuf_oneof:"variant"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *ActivityOutcome) Reset() {
@@ -695,21 +1154,9 @@ func (x *ActivityOutcome) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ActivityOutcome.ProtoReflect.Descriptor instead.
-func (*ActivityOutcome) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawDescGZIP(), []int{6}
-}
-
-func (x *ActivityOutcome) GetVariant() isActivityOutcome_Variant {
-	if x != nil {
-		return x.Variant
-	}
-	return nil
-}
-
 func (x *ActivityOutcome) GetSuccessful() *ActivityOutcome_Successful {
 	if x != nil {
-		if x, ok := x.Variant.(*ActivityOutcome_Successful_); ok {
+		if x, ok := x.xxx_hidden_Variant.(*activityOutcome_Successful_); ok {
 			return x.Successful
 		}
 	}
@@ -718,37 +1165,146 @@ func (x *ActivityOutcome) GetSuccessful() *ActivityOutcome_Successful {
 
 func (x *ActivityOutcome) GetFailed() *ActivityOutcome_Failed {
 	if x != nil {
-		if x, ok := x.Variant.(*ActivityOutcome_Failed_); ok {
+		if x, ok := x.xxx_hidden_Variant.(*activityOutcome_Failed_); ok {
 			return x.Failed
 		}
 	}
 	return nil
 }
 
+func (x *ActivityOutcome) SetSuccessful(v *ActivityOutcome_Successful) {
+	if v == nil {
+		x.xxx_hidden_Variant = nil
+		return
+	}
+	x.xxx_hidden_Variant = &activityOutcome_Successful_{v}
+}
+
+func (x *ActivityOutcome) SetFailed(v *ActivityOutcome_Failed) {
+	if v == nil {
+		x.xxx_hidden_Variant = nil
+		return
+	}
+	x.xxx_hidden_Variant = &activityOutcome_Failed_{v}
+}
+
+func (x *ActivityOutcome) HasVariant() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Variant != nil
+}
+
+func (x *ActivityOutcome) HasSuccessful() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_Variant.(*activityOutcome_Successful_)
+	return ok
+}
+
+func (x *ActivityOutcome) HasFailed() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_Variant.(*activityOutcome_Failed_)
+	return ok
+}
+
+func (x *ActivityOutcome) ClearVariant() {
+	x.xxx_hidden_Variant = nil
+}
+
+func (x *ActivityOutcome) ClearSuccessful() {
+	if _, ok := x.xxx_hidden_Variant.(*activityOutcome_Successful_); ok {
+		x.xxx_hidden_Variant = nil
+	}
+}
+
+func (x *ActivityOutcome) ClearFailed() {
+	if _, ok := x.xxx_hidden_Variant.(*activityOutcome_Failed_); ok {
+		x.xxx_hidden_Variant = nil
+	}
+}
+
+const ActivityOutcome_Variant_not_set_case case_ActivityOutcome_Variant = 0
+const ActivityOutcome_Successful_case case_ActivityOutcome_Variant = 1
+const ActivityOutcome_Failed_case case_ActivityOutcome_Variant = 2
+
+func (x *ActivityOutcome) WhichVariant() case_ActivityOutcome_Variant {
+	if x == nil {
+		return ActivityOutcome_Variant_not_set_case
+	}
+	switch x.xxx_hidden_Variant.(type) {
+	case *activityOutcome_Successful_:
+		return ActivityOutcome_Successful_case
+	case *activityOutcome_Failed_:
+		return ActivityOutcome_Failed_case
+	default:
+		return ActivityOutcome_Variant_not_set_case
+	}
+}
+
+type ActivityOutcome_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Fields of oneof xxx_hidden_Variant:
+	Successful *ActivityOutcome_Successful
+	Failed     *ActivityOutcome_Failed
+	// -- end of xxx_hidden_Variant
+}
+
+func (b0 ActivityOutcome_builder) Build() *ActivityOutcome {
+	m0 := &ActivityOutcome{}
+	b, x := &b0, m0
+	_, _ = b, x
+	if b.Successful != nil {
+		x.xxx_hidden_Variant = &activityOutcome_Successful_{b.Successful}
+	}
+	if b.Failed != nil {
+		x.xxx_hidden_Variant = &activityOutcome_Failed_{b.Failed}
+	}
+	return m0
+}
+
+type case_ActivityOutcome_Variant protoreflect.FieldNumber
+
+func (x case_ActivityOutcome_Variant) String() string {
+	switch x {
+	case ActivityOutcome_Variant_not_set_case:
+		return "ActivityOutcomeVariantNotSetCase"
+	case ActivityOutcome_Successful_case:
+		return "ActivityOutcomeSuccessfulCase"
+	case ActivityOutcome_Failed_case:
+		return "ActivityOutcomeFailedCase"
+	default:
+		return strconv.Itoa(int(x))
+	}
+
+}
+
 type isActivityOutcome_Variant interface {
 	isActivityOutcome_Variant()
 }
 
-type ActivityOutcome_Successful_ struct {
+type activityOutcome_Successful_ struct {
 	Successful *ActivityOutcome_Successful `protobuf:"bytes,1,opt,name=successful,proto3,oneof"`
 }
 
-type ActivityOutcome_Failed_ struct {
+type activityOutcome_Failed_ struct {
 	Failed *ActivityOutcome_Failed `protobuf:"bytes,2,opt,name=failed,proto3,oneof"`
 }
 
-func (*ActivityOutcome_Successful_) isActivityOutcome_Variant() {}
+func (*activityOutcome_Successful_) isActivityOutcome_Variant() {}
 
-func (*ActivityOutcome_Failed_) isActivityOutcome_Variant() {}
+func (*activityOutcome_Failed_) isActivityOutcome_Variant() {}
 
 type ActivityAttemptState_LastFailureDetails struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// The last time the activity attempt failed.
-	Time *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=time,proto3" json:"time,omitempty"`
-	// Failure details from the last failed attempt.
-	Failure       *v14.Failure `protobuf:"bytes,2,opt,name=failure,proto3" json:"failure,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state              protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Time    *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=time,proto3"`
+	xxx_hidden_Failure *v14.Failure           `protobuf:"bytes,2,opt,name=failure,proto3"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *ActivityAttemptState_LastFailureDetails) Reset() {
@@ -776,30 +1332,73 @@ func (x *ActivityAttemptState_LastFailureDetails) ProtoReflect() protoreflect.Me
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ActivityAttemptState_LastFailureDetails.ProtoReflect.Descriptor instead.
-func (*ActivityAttemptState_LastFailureDetails) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawDescGZIP(), []int{3, 0}
-}
-
 func (x *ActivityAttemptState_LastFailureDetails) GetTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.Time
+		return x.xxx_hidden_Time
 	}
 	return nil
 }
 
 func (x *ActivityAttemptState_LastFailureDetails) GetFailure() *v14.Failure {
 	if x != nil {
-		return x.Failure
+		return x.xxx_hidden_Failure
 	}
 	return nil
 }
 
+func (x *ActivityAttemptState_LastFailureDetails) SetTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_Time = v
+}
+
+func (x *ActivityAttemptState_LastFailureDetails) SetFailure(v *v14.Failure) {
+	x.xxx_hidden_Failure = v
+}
+
+func (x *ActivityAttemptState_LastFailureDetails) HasTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Time != nil
+}
+
+func (x *ActivityAttemptState_LastFailureDetails) HasFailure() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Failure != nil
+}
+
+func (x *ActivityAttemptState_LastFailureDetails) ClearTime() {
+	x.xxx_hidden_Time = nil
+}
+
+func (x *ActivityAttemptState_LastFailureDetails) ClearFailure() {
+	x.xxx_hidden_Failure = nil
+}
+
+type ActivityAttemptState_LastFailureDetails_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// The last time the activity attempt failed.
+	Time *timestamppb.Timestamp
+	// Failure details from the last failed attempt.
+	Failure *v14.Failure
+}
+
+func (b0 ActivityAttemptState_LastFailureDetails_builder) Build() *ActivityAttemptState_LastFailureDetails {
+	m0 := &ActivityAttemptState_LastFailureDetails{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Time = b.Time
+	x.xxx_hidden_Failure = b.Failure
+	return m0
+}
+
 type ActivityOutcome_Successful struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Output        *v1.Payloads           `protobuf:"bytes,1,opt,name=output,proto3" json:"output,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state             protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Output *v1.Payloads           `protobuf:"bytes,1,opt,name=output,proto3"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *ActivityOutcome_Successful) Reset() {
@@ -827,25 +1426,47 @@ func (x *ActivityOutcome_Successful) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ActivityOutcome_Successful.ProtoReflect.Descriptor instead.
-func (*ActivityOutcome_Successful) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawDescGZIP(), []int{6, 0}
-}
-
 func (x *ActivityOutcome_Successful) GetOutput() *v1.Payloads {
 	if x != nil {
-		return x.Output
+		return x.xxx_hidden_Output
 	}
 	return nil
 }
 
+func (x *ActivityOutcome_Successful) SetOutput(v *v1.Payloads) {
+	x.xxx_hidden_Output = v
+}
+
+func (x *ActivityOutcome_Successful) HasOutput() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Output != nil
+}
+
+func (x *ActivityOutcome_Successful) ClearOutput() {
+	x.xxx_hidden_Output = nil
+}
+
+type ActivityOutcome_Successful_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Output *v1.Payloads
+}
+
+func (b0 ActivityOutcome_Successful_builder) Build() *ActivityOutcome_Successful {
+	m0 := &ActivityOutcome_Successful{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Output = b.Output
+	return m0
+}
+
 type ActivityOutcome_Failed struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Only filled on schedule-to-start timeouts, schedule-to-close timeouts or terminations. All other attempt
-	// failures will be recorded in ActivityAttemptState.last_failure_details.
-	Failure       *v14.Failure `protobuf:"bytes,1,opt,name=failure,proto3" json:"failure,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state              protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Failure *v14.Failure           `protobuf:"bytes,1,opt,name=failure,proto3"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *ActivityOutcome_Failed) Reset() {
@@ -873,16 +1494,42 @@ func (x *ActivityOutcome_Failed) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ActivityOutcome_Failed.ProtoReflect.Descriptor instead.
-func (*ActivityOutcome_Failed) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawDescGZIP(), []int{6, 1}
-}
-
 func (x *ActivityOutcome_Failed) GetFailure() *v14.Failure {
 	if x != nil {
-		return x.Failure
+		return x.xxx_hidden_Failure
 	}
 	return nil
+}
+
+func (x *ActivityOutcome_Failed) SetFailure(v *v14.Failure) {
+	x.xxx_hidden_Failure = v
+}
+
+func (x *ActivityOutcome_Failed) HasFailure() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Failure != nil
+}
+
+func (x *ActivityOutcome_Failed) ClearFailure() {
+	x.xxx_hidden_Failure = nil
+}
+
+type ActivityOutcome_Failed_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Only filled on schedule-to-start timeouts, schedule-to-close timeouts or terminations. All other attempt
+	// failures will be recorded in ActivityAttemptState.last_failure_details.
+	Failure *v14.Failure
+}
+
+func (b0 ActivityOutcome_Failed_builder) Build() *ActivityOutcome_Failed {
+	m0 := &ActivityOutcome_Failed{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Failure = b.Failure
+	return m0
 }
 
 var File_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto protoreflect.FileDescriptor
@@ -956,18 +1603,6 @@ const file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawD
 	"$ACTIVITY_EXECUTION_STATUS_TERMINATED\x10\a\x12'\n" +
 	"#ACTIVITY_EXECUTION_STATUS_TIMED_OUT\x10\bBDZBgo.temporal.io/server/chasm/lib/activity/gen/activitypb;activitypbb\x06proto3"
 
-var (
-	file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawDescOnce sync.Once
-	file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawDescData []byte
-)
-
-func file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawDescGZIP() []byte {
-	file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawDescOnce.Do(func() {
-		file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawDesc), len(file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawDesc)))
-	})
-	return file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawDescData
-}
-
 var file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
 var file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
 var file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_goTypes = []any{
@@ -1037,8 +1672,8 @@ func file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_init(
 		return
 	}
 	file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_msgTypes[6].OneofWrappers = []any{
-		(*ActivityOutcome_Successful_)(nil),
-		(*ActivityOutcome_Failed_)(nil),
+		(*activityOutcome_Successful_)(nil),
+		(*activityOutcome_Failed_)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{

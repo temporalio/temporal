@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/proto"
 )
 
 type (
@@ -65,10 +66,10 @@ func (s *dlqMessageHandlerSuite) TestReadMessages() {
 	pageToken := []byte{}
 
 	tasks := []*replicationspb.ReplicationTask{
-		{
+		replicationspb.ReplicationTask_builder{
 			TaskType:     enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
 			SourceTaskId: 1,
-		},
+		}.Build(),
 	}
 	s.mockReplicationQueue.EXPECT().GetDLQAckLevel(gomock.Any()).Return(ackLevel, nil)
 	s.mockReplicationQueue.EXPECT().GetMessagesFromDLQ(gomock.Any(), ackLevel, lastMessageID, pageSize, pageToken).
@@ -87,10 +88,10 @@ func (s *dlqMessageHandlerSuite) TestReadMessages_ThrowErrorOnGetDLQAckLevel() {
 	pageToken := []byte{}
 
 	tasks := []*replicationspb.ReplicationTask{
-		{
+		replicationspb.ReplicationTask_builder{
 			TaskType:     enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
 			SourceTaskId: 1,
-		},
+		}.Build(),
 	}
 	testError := fmt.Errorf("test")
 	s.mockReplicationQueue.EXPECT().GetDLQAckLevel(gomock.Any()).Return(int64(-1), testError)
@@ -162,18 +163,16 @@ func (s *dlqMessageHandlerSuite) TestMergeMessages() {
 	pageToken := []byte{}
 	messageID := int64(11)
 
-	namespaceAttribute := &replicationspb.NamespaceTaskAttributes{
+	namespaceAttribute := replicationspb.NamespaceTaskAttributes_builder{
 		Id: uuid.NewString(),
-	}
+	}.Build()
 
 	tasks := []*replicationspb.ReplicationTask{
-		{
-			TaskType:     enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
-			SourceTaskId: messageID,
-			Attributes: &replicationspb.ReplicationTask_NamespaceTaskAttributes{
-				NamespaceTaskAttributes: namespaceAttribute,
-			},
-		},
+		replicationspb.ReplicationTask_builder{
+			TaskType:                enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
+			SourceTaskId:            messageID,
+			NamespaceTaskAttributes: proto.ValueOrDefault(namespaceAttribute),
+		}.Build(),
 	}
 	s.mockReplicationQueue.EXPECT().GetDLQAckLevel(gomock.Any()).Return(ackLevel, nil)
 	s.mockReplicationQueue.EXPECT().GetMessagesFromDLQ(gomock.Any(), ackLevel, lastMessageID, pageSize, pageToken).
@@ -193,18 +192,16 @@ func (s *dlqMessageHandlerSuite) TestMergeMessages_ThrowErrorOnGetDLQAckLevel() 
 	pageToken := []byte{}
 	messageID := int64(11)
 	testError := fmt.Errorf("test")
-	namespaceAttribute := &replicationspb.NamespaceTaskAttributes{
+	namespaceAttribute := replicationspb.NamespaceTaskAttributes_builder{
 		Id: uuid.NewString(),
-	}
+	}.Build()
 
 	tasks := []*replicationspb.ReplicationTask{
-		{
-			TaskType:     enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
-			SourceTaskId: int64(messageID),
-			Attributes: &replicationspb.ReplicationTask_NamespaceTaskAttributes{
-				NamespaceTaskAttributes: namespaceAttribute,
-			},
-		},
+		replicationspb.ReplicationTask_builder{
+			TaskType:                enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
+			SourceTaskId:            int64(messageID),
+			NamespaceTaskAttributes: proto.ValueOrDefault(namespaceAttribute),
+		}.Build(),
 	}
 	s.mockReplicationQueue.EXPECT().GetDLQAckLevel(gomock.Any()).Return(int64(-1), testError)
 	s.mockReplicationQueue.EXPECT().GetMessagesFromDLQ(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
@@ -245,27 +242,23 @@ func (s *dlqMessageHandlerSuite) TestMergeMessages_ThrowErrorOnHandleReceivingTa
 	messageID1 := int64(11)
 	messageID2 := int64(12)
 	testError := fmt.Errorf("test")
-	namespaceAttribute1 := &replicationspb.NamespaceTaskAttributes{
+	namespaceAttribute1 := replicationspb.NamespaceTaskAttributes_builder{
 		Id: uuid.NewString(),
-	}
-	namespaceAttribute2 := &replicationspb.NamespaceTaskAttributes{
+	}.Build()
+	namespaceAttribute2 := replicationspb.NamespaceTaskAttributes_builder{
 		Id: uuid.NewString(),
-	}
+	}.Build()
 	tasks := []*replicationspb.ReplicationTask{
-		{
-			TaskType:     enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
-			SourceTaskId: messageID1,
-			Attributes: &replicationspb.ReplicationTask_NamespaceTaskAttributes{
-				NamespaceTaskAttributes: namespaceAttribute1,
-			},
-		},
-		{
-			TaskType:     enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
-			SourceTaskId: messageID2,
-			Attributes: &replicationspb.ReplicationTask_NamespaceTaskAttributes{
-				NamespaceTaskAttributes: namespaceAttribute2,
-			},
-		},
+		replicationspb.ReplicationTask_builder{
+			TaskType:                enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
+			SourceTaskId:            messageID1,
+			NamespaceTaskAttributes: proto.ValueOrDefault(namespaceAttribute1),
+		}.Build(),
+		replicationspb.ReplicationTask_builder{
+			TaskType:                enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
+			SourceTaskId:            messageID2,
+			NamespaceTaskAttributes: proto.ValueOrDefault(namespaceAttribute2),
+		}.Build(),
 	}
 	s.mockReplicationQueue.EXPECT().GetDLQAckLevel(gomock.Any()).Return(ackLevel, nil)
 	s.mockReplicationQueue.EXPECT().GetMessagesFromDLQ(gomock.Any(), ackLevel, lastMessageID, pageSize, pageToken).
@@ -286,27 +279,23 @@ func (s *dlqMessageHandlerSuite) TestMergeMessages_ThrowErrorOnDeleteMessages() 
 	messageID1 := int64(11)
 	messageID2 := int64(12)
 	testError := fmt.Errorf("test")
-	namespaceAttribute1 := &replicationspb.NamespaceTaskAttributes{
+	namespaceAttribute1 := replicationspb.NamespaceTaskAttributes_builder{
 		Id: uuid.NewString(),
-	}
-	namespaceAttribute2 := &replicationspb.NamespaceTaskAttributes{
+	}.Build()
+	namespaceAttribute2 := replicationspb.NamespaceTaskAttributes_builder{
 		Id: uuid.NewString(),
-	}
+	}.Build()
 	tasks := []*replicationspb.ReplicationTask{
-		{
-			TaskType:     enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
-			SourceTaskId: messageID1,
-			Attributes: &replicationspb.ReplicationTask_NamespaceTaskAttributes{
-				NamespaceTaskAttributes: namespaceAttribute1,
-			},
-		},
-		{
-			TaskType:     enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
-			SourceTaskId: messageID2,
-			Attributes: &replicationspb.ReplicationTask_NamespaceTaskAttributes{
-				NamespaceTaskAttributes: namespaceAttribute2,
-			},
-		},
+		replicationspb.ReplicationTask_builder{
+			TaskType:                enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
+			SourceTaskId:            messageID1,
+			NamespaceTaskAttributes: proto.ValueOrDefault(namespaceAttribute1),
+		}.Build(),
+		replicationspb.ReplicationTask_builder{
+			TaskType:                enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
+			SourceTaskId:            messageID2,
+			NamespaceTaskAttributes: proto.ValueOrDefault(namespaceAttribute2),
+		}.Build(),
 	}
 	s.mockReplicationQueue.EXPECT().GetDLQAckLevel(gomock.Any()).Return(ackLevel, nil)
 	s.mockReplicationQueue.EXPECT().GetMessagesFromDLQ(gomock.Any(), ackLevel, lastMessageID, pageSize, pageToken).
@@ -327,18 +316,16 @@ func (s *dlqMessageHandlerSuite) TestMergeMessages_IgnoreErrorOnUpdateDLQAckLeve
 	pageToken := []byte{}
 	messageID := int64(11)
 	testError := fmt.Errorf("test")
-	namespaceAttribute := &replicationspb.NamespaceTaskAttributes{
+	namespaceAttribute := replicationspb.NamespaceTaskAttributes_builder{
 		Id: uuid.NewString(),
-	}
+	}.Build()
 
 	tasks := []*replicationspb.ReplicationTask{
-		{
-			TaskType:     enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
-			SourceTaskId: messageID,
-			Attributes: &replicationspb.ReplicationTask_NamespaceTaskAttributes{
-				NamespaceTaskAttributes: namespaceAttribute,
-			},
-		},
+		replicationspb.ReplicationTask_builder{
+			TaskType:                enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
+			SourceTaskId:            messageID,
+			NamespaceTaskAttributes: proto.ValueOrDefault(namespaceAttribute),
+		}.Build(),
 	}
 	s.mockReplicationQueue.EXPECT().GetDLQAckLevel(gomock.Any()).Return(ackLevel, nil)
 	s.mockReplicationQueue.EXPECT().GetMessagesFromDLQ(gomock.Any(), ackLevel, lastMessageID, pageSize, pageToken).

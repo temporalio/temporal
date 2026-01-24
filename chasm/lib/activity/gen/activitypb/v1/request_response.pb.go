@@ -8,7 +8,6 @@ package activitypb
 
 import (
 	reflect "reflect"
-	sync "sync"
 	unsafe "unsafe"
 
 	v1 "go.temporal.io/api/workflowservice/v1"
@@ -24,11 +23,11 @@ const (
 )
 
 type StartActivityExecutionRequest struct {
-	state           protoimpl.MessageState            `protogen:"open.v1"`
-	NamespaceId     string                            `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	FrontendRequest *v1.StartActivityExecutionRequest `protobuf:"bytes,2,opt,name=frontend_request,json=frontendRequest,proto3" json:"frontend_request,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state                      protoimpl.MessageState            `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId     string                            `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_FrontendRequest *v1.StartActivityExecutionRequest `protobuf:"bytes,2,opt,name=frontend_request,json=frontendRequest,proto3"`
+	unknownFields              protoimpl.UnknownFields
+	sizeCache                  protoimpl.SizeCache
 }
 
 func (x *StartActivityExecutionRequest) Reset() {
@@ -56,30 +55,60 @@ func (x *StartActivityExecutionRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use StartActivityExecutionRequest.ProtoReflect.Descriptor instead.
-func (*StartActivityExecutionRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_rawDescGZIP(), []int{0}
-}
-
 func (x *StartActivityExecutionRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *StartActivityExecutionRequest) GetFrontendRequest() *v1.StartActivityExecutionRequest {
 	if x != nil {
-		return x.FrontendRequest
+		return x.xxx_hidden_FrontendRequest
 	}
 	return nil
 }
 
+func (x *StartActivityExecutionRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *StartActivityExecutionRequest) SetFrontendRequest(v *v1.StartActivityExecutionRequest) {
+	x.xxx_hidden_FrontendRequest = v
+}
+
+func (x *StartActivityExecutionRequest) HasFrontendRequest() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_FrontendRequest != nil
+}
+
+func (x *StartActivityExecutionRequest) ClearFrontendRequest() {
+	x.xxx_hidden_FrontendRequest = nil
+}
+
+type StartActivityExecutionRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId     string
+	FrontendRequest *v1.StartActivityExecutionRequest
+}
+
+func (b0 StartActivityExecutionRequest_builder) Build() *StartActivityExecutionRequest {
+	m0 := &StartActivityExecutionRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_FrontendRequest = b.FrontendRequest
+	return m0
+}
+
 type StartActivityExecutionResponse struct {
-	state            protoimpl.MessageState             `protogen:"open.v1"`
-	FrontendResponse *v1.StartActivityExecutionResponse `protobuf:"bytes,1,opt,name=frontend_response,json=frontendResponse,proto3" json:"frontend_response,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	state                       protoimpl.MessageState             `protogen:"opaque.v1"`
+	xxx_hidden_FrontendResponse *v1.StartActivityExecutionResponse `protobuf:"bytes,1,opt,name=frontend_response,json=frontendResponse,proto3"`
+	unknownFields               protoimpl.UnknownFields
+	sizeCache                   protoimpl.SizeCache
 }
 
 func (x *StartActivityExecutionResponse) Reset() {
@@ -107,24 +136,48 @@ func (x *StartActivityExecutionResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use StartActivityExecutionResponse.ProtoReflect.Descriptor instead.
-func (*StartActivityExecutionResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_rawDescGZIP(), []int{1}
-}
-
 func (x *StartActivityExecutionResponse) GetFrontendResponse() *v1.StartActivityExecutionResponse {
 	if x != nil {
-		return x.FrontendResponse
+		return x.xxx_hidden_FrontendResponse
 	}
 	return nil
 }
 
+func (x *StartActivityExecutionResponse) SetFrontendResponse(v *v1.StartActivityExecutionResponse) {
+	x.xxx_hidden_FrontendResponse = v
+}
+
+func (x *StartActivityExecutionResponse) HasFrontendResponse() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_FrontendResponse != nil
+}
+
+func (x *StartActivityExecutionResponse) ClearFrontendResponse() {
+	x.xxx_hidden_FrontendResponse = nil
+}
+
+type StartActivityExecutionResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	FrontendResponse *v1.StartActivityExecutionResponse
+}
+
+func (b0 StartActivityExecutionResponse_builder) Build() *StartActivityExecutionResponse {
+	m0 := &StartActivityExecutionResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_FrontendResponse = b.FrontendResponse
+	return m0
+}
+
 type DescribeActivityExecutionRequest struct {
-	state           protoimpl.MessageState               `protogen:"open.v1"`
-	NamespaceId     string                               `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	FrontendRequest *v1.DescribeActivityExecutionRequest `protobuf:"bytes,2,opt,name=frontend_request,json=frontendRequest,proto3" json:"frontend_request,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state                      protoimpl.MessageState               `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId     string                               `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_FrontendRequest *v1.DescribeActivityExecutionRequest `protobuf:"bytes,2,opt,name=frontend_request,json=frontendRequest,proto3"`
+	unknownFields              protoimpl.UnknownFields
+	sizeCache                  protoimpl.SizeCache
 }
 
 func (x *DescribeActivityExecutionRequest) Reset() {
@@ -152,30 +205,60 @@ func (x *DescribeActivityExecutionRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DescribeActivityExecutionRequest.ProtoReflect.Descriptor instead.
-func (*DescribeActivityExecutionRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_rawDescGZIP(), []int{2}
-}
-
 func (x *DescribeActivityExecutionRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *DescribeActivityExecutionRequest) GetFrontendRequest() *v1.DescribeActivityExecutionRequest {
 	if x != nil {
-		return x.FrontendRequest
+		return x.xxx_hidden_FrontendRequest
 	}
 	return nil
 }
 
+func (x *DescribeActivityExecutionRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *DescribeActivityExecutionRequest) SetFrontendRequest(v *v1.DescribeActivityExecutionRequest) {
+	x.xxx_hidden_FrontendRequest = v
+}
+
+func (x *DescribeActivityExecutionRequest) HasFrontendRequest() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_FrontendRequest != nil
+}
+
+func (x *DescribeActivityExecutionRequest) ClearFrontendRequest() {
+	x.xxx_hidden_FrontendRequest = nil
+}
+
+type DescribeActivityExecutionRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId     string
+	FrontendRequest *v1.DescribeActivityExecutionRequest
+}
+
+func (b0 DescribeActivityExecutionRequest_builder) Build() *DescribeActivityExecutionRequest {
+	m0 := &DescribeActivityExecutionRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_FrontendRequest = b.FrontendRequest
+	return m0
+}
+
 type DescribeActivityExecutionResponse struct {
-	state            protoimpl.MessageState                `protogen:"open.v1"`
-	FrontendResponse *v1.DescribeActivityExecutionResponse `protobuf:"bytes,1,opt,name=frontend_response,json=frontendResponse,proto3" json:"frontend_response,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	state                       protoimpl.MessageState                `protogen:"opaque.v1"`
+	xxx_hidden_FrontendResponse *v1.DescribeActivityExecutionResponse `protobuf:"bytes,1,opt,name=frontend_response,json=frontendResponse,proto3"`
+	unknownFields               protoimpl.UnknownFields
+	sizeCache                   protoimpl.SizeCache
 }
 
 func (x *DescribeActivityExecutionResponse) Reset() {
@@ -203,24 +286,48 @@ func (x *DescribeActivityExecutionResponse) ProtoReflect() protoreflect.Message 
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DescribeActivityExecutionResponse.ProtoReflect.Descriptor instead.
-func (*DescribeActivityExecutionResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_rawDescGZIP(), []int{3}
-}
-
 func (x *DescribeActivityExecutionResponse) GetFrontendResponse() *v1.DescribeActivityExecutionResponse {
 	if x != nil {
-		return x.FrontendResponse
+		return x.xxx_hidden_FrontendResponse
 	}
 	return nil
 }
 
+func (x *DescribeActivityExecutionResponse) SetFrontendResponse(v *v1.DescribeActivityExecutionResponse) {
+	x.xxx_hidden_FrontendResponse = v
+}
+
+func (x *DescribeActivityExecutionResponse) HasFrontendResponse() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_FrontendResponse != nil
+}
+
+func (x *DescribeActivityExecutionResponse) ClearFrontendResponse() {
+	x.xxx_hidden_FrontendResponse = nil
+}
+
+type DescribeActivityExecutionResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	FrontendResponse *v1.DescribeActivityExecutionResponse
+}
+
+func (b0 DescribeActivityExecutionResponse_builder) Build() *DescribeActivityExecutionResponse {
+	m0 := &DescribeActivityExecutionResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_FrontendResponse = b.FrontendResponse
+	return m0
+}
+
 type PollActivityExecutionRequest struct {
-	state           protoimpl.MessageState           `protogen:"open.v1"`
-	NamespaceId     string                           `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	FrontendRequest *v1.PollActivityExecutionRequest `protobuf:"bytes,2,opt,name=frontend_request,json=frontendRequest,proto3" json:"frontend_request,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state                      protoimpl.MessageState           `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId     string                           `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_FrontendRequest *v1.PollActivityExecutionRequest `protobuf:"bytes,2,opt,name=frontend_request,json=frontendRequest,proto3"`
+	unknownFields              protoimpl.UnknownFields
+	sizeCache                  protoimpl.SizeCache
 }
 
 func (x *PollActivityExecutionRequest) Reset() {
@@ -248,30 +355,60 @@ func (x *PollActivityExecutionRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use PollActivityExecutionRequest.ProtoReflect.Descriptor instead.
-func (*PollActivityExecutionRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_rawDescGZIP(), []int{4}
-}
-
 func (x *PollActivityExecutionRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *PollActivityExecutionRequest) GetFrontendRequest() *v1.PollActivityExecutionRequest {
 	if x != nil {
-		return x.FrontendRequest
+		return x.xxx_hidden_FrontendRequest
 	}
 	return nil
 }
 
+func (x *PollActivityExecutionRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *PollActivityExecutionRequest) SetFrontendRequest(v *v1.PollActivityExecutionRequest) {
+	x.xxx_hidden_FrontendRequest = v
+}
+
+func (x *PollActivityExecutionRequest) HasFrontendRequest() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_FrontendRequest != nil
+}
+
+func (x *PollActivityExecutionRequest) ClearFrontendRequest() {
+	x.xxx_hidden_FrontendRequest = nil
+}
+
+type PollActivityExecutionRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId     string
+	FrontendRequest *v1.PollActivityExecutionRequest
+}
+
+func (b0 PollActivityExecutionRequest_builder) Build() *PollActivityExecutionRequest {
+	m0 := &PollActivityExecutionRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_FrontendRequest = b.FrontendRequest
+	return m0
+}
+
 type PollActivityExecutionResponse struct {
-	state            protoimpl.MessageState            `protogen:"open.v1"`
-	FrontendResponse *v1.PollActivityExecutionResponse `protobuf:"bytes,1,opt,name=frontend_response,json=frontendResponse,proto3" json:"frontend_response,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	state                       protoimpl.MessageState            `protogen:"opaque.v1"`
+	xxx_hidden_FrontendResponse *v1.PollActivityExecutionResponse `protobuf:"bytes,1,opt,name=frontend_response,json=frontendResponse,proto3"`
+	unknownFields               protoimpl.UnknownFields
+	sizeCache                   protoimpl.SizeCache
 }
 
 func (x *PollActivityExecutionResponse) Reset() {
@@ -299,24 +436,48 @@ func (x *PollActivityExecutionResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use PollActivityExecutionResponse.ProtoReflect.Descriptor instead.
-func (*PollActivityExecutionResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_rawDescGZIP(), []int{5}
-}
-
 func (x *PollActivityExecutionResponse) GetFrontendResponse() *v1.PollActivityExecutionResponse {
 	if x != nil {
-		return x.FrontendResponse
+		return x.xxx_hidden_FrontendResponse
 	}
 	return nil
 }
 
+func (x *PollActivityExecutionResponse) SetFrontendResponse(v *v1.PollActivityExecutionResponse) {
+	x.xxx_hidden_FrontendResponse = v
+}
+
+func (x *PollActivityExecutionResponse) HasFrontendResponse() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_FrontendResponse != nil
+}
+
+func (x *PollActivityExecutionResponse) ClearFrontendResponse() {
+	x.xxx_hidden_FrontendResponse = nil
+}
+
+type PollActivityExecutionResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	FrontendResponse *v1.PollActivityExecutionResponse
+}
+
+func (b0 PollActivityExecutionResponse_builder) Build() *PollActivityExecutionResponse {
+	m0 := &PollActivityExecutionResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_FrontendResponse = b.FrontendResponse
+	return m0
+}
+
 type TerminateActivityExecutionRequest struct {
-	state           protoimpl.MessageState                `protogen:"open.v1"`
-	NamespaceId     string                                `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	FrontendRequest *v1.TerminateActivityExecutionRequest `protobuf:"bytes,2,opt,name=frontend_request,json=frontendRequest,proto3" json:"frontend_request,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state                      protoimpl.MessageState                `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId     string                                `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_FrontendRequest *v1.TerminateActivityExecutionRequest `protobuf:"bytes,2,opt,name=frontend_request,json=frontendRequest,proto3"`
+	unknownFields              protoimpl.UnknownFields
+	sizeCache                  protoimpl.SizeCache
 }
 
 func (x *TerminateActivityExecutionRequest) Reset() {
@@ -344,27 +505,57 @@ func (x *TerminateActivityExecutionRequest) ProtoReflect() protoreflect.Message 
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use TerminateActivityExecutionRequest.ProtoReflect.Descriptor instead.
-func (*TerminateActivityExecutionRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_rawDescGZIP(), []int{6}
-}
-
 func (x *TerminateActivityExecutionRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *TerminateActivityExecutionRequest) GetFrontendRequest() *v1.TerminateActivityExecutionRequest {
 	if x != nil {
-		return x.FrontendRequest
+		return x.xxx_hidden_FrontendRequest
 	}
 	return nil
 }
 
+func (x *TerminateActivityExecutionRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *TerminateActivityExecutionRequest) SetFrontendRequest(v *v1.TerminateActivityExecutionRequest) {
+	x.xxx_hidden_FrontendRequest = v
+}
+
+func (x *TerminateActivityExecutionRequest) HasFrontendRequest() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_FrontendRequest != nil
+}
+
+func (x *TerminateActivityExecutionRequest) ClearFrontendRequest() {
+	x.xxx_hidden_FrontendRequest = nil
+}
+
+type TerminateActivityExecutionRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId     string
+	FrontendRequest *v1.TerminateActivityExecutionRequest
+}
+
+func (b0 TerminateActivityExecutionRequest_builder) Build() *TerminateActivityExecutionRequest {
+	m0 := &TerminateActivityExecutionRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_FrontendRequest = b.FrontendRequest
+	return m0
+}
+
 type TerminateActivityExecutionResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -394,17 +585,24 @@ func (x *TerminateActivityExecutionResponse) ProtoReflect() protoreflect.Message
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use TerminateActivityExecutionResponse.ProtoReflect.Descriptor instead.
-func (*TerminateActivityExecutionResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_rawDescGZIP(), []int{7}
+type TerminateActivityExecutionResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+}
+
+func (b0 TerminateActivityExecutionResponse_builder) Build() *TerminateActivityExecutionResponse {
+	m0 := &TerminateActivityExecutionResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	return m0
 }
 
 type RequestCancelActivityExecutionRequest struct {
-	state           protoimpl.MessageState                    `protogen:"open.v1"`
-	NamespaceId     string                                    `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	FrontendRequest *v1.RequestCancelActivityExecutionRequest `protobuf:"bytes,2,opt,name=frontend_request,json=frontendRequest,proto3" json:"frontend_request,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state                      protoimpl.MessageState                    `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId     string                                    `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_FrontendRequest *v1.RequestCancelActivityExecutionRequest `protobuf:"bytes,2,opt,name=frontend_request,json=frontendRequest,proto3"`
+	unknownFields              protoimpl.UnknownFields
+	sizeCache                  protoimpl.SizeCache
 }
 
 func (x *RequestCancelActivityExecutionRequest) Reset() {
@@ -432,27 +630,57 @@ func (x *RequestCancelActivityExecutionRequest) ProtoReflect() protoreflect.Mess
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RequestCancelActivityExecutionRequest.ProtoReflect.Descriptor instead.
-func (*RequestCancelActivityExecutionRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_rawDescGZIP(), []int{8}
-}
-
 func (x *RequestCancelActivityExecutionRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *RequestCancelActivityExecutionRequest) GetFrontendRequest() *v1.RequestCancelActivityExecutionRequest {
 	if x != nil {
-		return x.FrontendRequest
+		return x.xxx_hidden_FrontendRequest
 	}
 	return nil
 }
 
+func (x *RequestCancelActivityExecutionRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *RequestCancelActivityExecutionRequest) SetFrontendRequest(v *v1.RequestCancelActivityExecutionRequest) {
+	x.xxx_hidden_FrontendRequest = v
+}
+
+func (x *RequestCancelActivityExecutionRequest) HasFrontendRequest() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_FrontendRequest != nil
+}
+
+func (x *RequestCancelActivityExecutionRequest) ClearFrontendRequest() {
+	x.xxx_hidden_FrontendRequest = nil
+}
+
+type RequestCancelActivityExecutionRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId     string
+	FrontendRequest *v1.RequestCancelActivityExecutionRequest
+}
+
+func (b0 RequestCancelActivityExecutionRequest_builder) Build() *RequestCancelActivityExecutionRequest {
+	m0 := &RequestCancelActivityExecutionRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_FrontendRequest = b.FrontendRequest
+	return m0
+}
+
 type RequestCancelActivityExecutionResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -482,9 +710,16 @@ func (x *RequestCancelActivityExecutionResponse) ProtoReflect() protoreflect.Mes
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RequestCancelActivityExecutionResponse.ProtoReflect.Descriptor instead.
-func (*RequestCancelActivityExecutionResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_rawDescGZIP(), []int{9}
+type RequestCancelActivityExecutionResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+}
+
+func (b0 RequestCancelActivityExecutionResponse_builder) Build() *RequestCancelActivityExecutionResponse {
+	m0 := &RequestCancelActivityExecutionResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	return m0
 }
 
 var File_temporal_server_chasm_lib_activity_proto_v1_request_response_proto protoreflect.FileDescriptor
@@ -515,18 +750,6 @@ const file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_ra
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12q\n" +
 	"\x10frontend_request\x18\x02 \x01(\v2F.temporal.api.workflowservice.v1.RequestCancelActivityExecutionRequestR\x0ffrontendRequest\"(\n" +
 	"&RequestCancelActivityExecutionResponseBDZBgo.temporal.io/server/chasm/lib/activity/gen/activitypb;activitypbb\x06proto3"
-
-var (
-	file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_rawDescOnce sync.Once
-	file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_rawDescData []byte
-)
-
-func file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_rawDescGZIP() []byte {
-	file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_rawDescOnce.Do(func() {
-		file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_rawDesc), len(file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_rawDesc)))
-	})
-	return file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_rawDescData
-}
 
 var file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
 var file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_goTypes = []any{

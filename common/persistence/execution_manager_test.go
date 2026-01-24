@@ -29,8 +29,8 @@ func newTestUpdateRequest(keys []tasks.Key) *p.UpdateWorkflowExecutionRequest {
 		Mode:        p.UpdateWorkflowModeUpdateCurrent,
 		ArchetypeID: chasm.WorkflowArchetypeID,
 		UpdateWorkflowMutation: p.WorkflowMutation{
-			ExecutionInfo:         &persistencespb.WorkflowExecutionInfo{NamespaceId: "ns", WorkflowId: "wid", ExecutionStats: &persistencespb.ExecutionStats{}},
-			ExecutionState:        &persistencespb.WorkflowExecutionState{RunId: "rid", State: enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING},
+			ExecutionInfo:         persistencespb.WorkflowExecutionInfo_builder{NamespaceId: "ns", WorkflowId: "wid", ExecutionStats: &persistencespb.ExecutionStats{}}.Build(),
+			ExecutionState:        persistencespb.WorkflowExecutionState_builder{RunId: "rid", State: enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING}.Build(),
 			NextEventID:           2,
 			BestEffortDeleteTasks: toDelete,
 		},

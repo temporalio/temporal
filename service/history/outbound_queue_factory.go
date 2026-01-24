@@ -313,27 +313,27 @@ func StateMachineTask(smRegistry *hsm.Registry, task tasks.Task) (hsm.Ref, hsm.T
 	if !ok {
 		return hsm.Ref{}, nil, queueserrors.NewUnprocessableTaskError("unknown task type")
 	}
-	def, ok := smRegistry.TaskSerializer(cbt.Info.Type)
+	def, ok := smRegistry.TaskSerializer(cbt.Info.GetType())
 	if !ok {
 		return hsm.Ref{},
 			nil,
 			queueserrors.NewUnprocessableTaskError(
-				fmt.Sprintf("deserializer not registered for task type %v", cbt.Info.Type),
+				fmt.Sprintf("deserializer not registered for task type %v", cbt.Info.GetType()),
 			)
 	}
-	smt, err := def.Deserialize(cbt.Info.Data, hsm.TaskAttributes{Destination: cbt.Destination})
+	smt, err := def.Deserialize(cbt.Info.GetData(), hsm.TaskAttributes{Destination: cbt.Destination})
 	if err != nil {
 		return hsm.Ref{},
 			nil,
 			fmt.Errorf(
 				"%w: %w",
-				queueserrors.NewUnprocessableTaskError(fmt.Sprintf("cannot deserialize task %v", cbt.Info.Type)),
+				queueserrors.NewUnprocessableTaskError(fmt.Sprintf("cannot deserialize task %v", cbt.Info.GetType())),
 				err,
 			)
 	}
 	return hsm.Ref{
 		WorkflowKey:     taskWorkflowKey(task),
-		StateMachineRef: cbt.Info.Ref,
+		StateMachineRef: cbt.Info.GetRef(),
 		TaskID:          task.GetTaskID(),
 		Validate:        smt.Validate,
 	}, smt, nil

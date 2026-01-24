@@ -19,111 +19,111 @@ import (
 func Test_IsRetryable(t *testing.T) {
 	a := assert.New(t)
 
-	f := &failurepb.Failure{
-		FailureInfo: &failurepb.Failure_TerminatedFailureInfo{TerminatedFailureInfo: &failurepb.TerminatedFailureInfo{}},
-	}
+	f := failurepb.Failure_builder{
+		TerminatedFailureInfo: &failurepb.TerminatedFailureInfo{},
+	}.Build()
 	a.False(isRetryable(f, nil))
 
-	f = &failurepb.Failure{
-		FailureInfo: &failurepb.Failure_CanceledFailureInfo{CanceledFailureInfo: &failurepb.CanceledFailureInfo{}},
-	}
+	f = failurepb.Failure_builder{
+		CanceledFailureInfo: &failurepb.CanceledFailureInfo{},
+	}.Build()
 	a.False(isRetryable(f, nil))
 
-	f = &failurepb.Failure{
-		FailureInfo: &failurepb.Failure_TimeoutFailureInfo{TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+	f = failurepb.Failure_builder{
+		TimeoutFailureInfo: failurepb.TimeoutFailureInfo_builder{
 			TimeoutType: enumspb.TIMEOUT_TYPE_UNSPECIFIED,
-		}},
-	}
+		}.Build(),
+	}.Build()
 	a.False(isRetryable(f, nil))
 
-	f = &failurepb.Failure{
-		FailureInfo: &failurepb.Failure_TimeoutFailureInfo{TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+	f = failurepb.Failure_builder{
+		TimeoutFailureInfo: failurepb.TimeoutFailureInfo_builder{
 			TimeoutType: enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
-		}},
-	}
+		}.Build(),
+	}.Build()
 	a.True(isRetryable(f, nil))
 	a.False(isRetryable(f, []string{retrypolicy.TimeoutFailureTypePrefix + enumspb.TIMEOUT_TYPE_START_TO_CLOSE.String()}))
 
-	f = &failurepb.Failure{
-		FailureInfo: &failurepb.Failure_TimeoutFailureInfo{TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+	f = failurepb.Failure_builder{
+		TimeoutFailureInfo: failurepb.TimeoutFailureInfo_builder{
 			TimeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
-		}},
-	}
+		}.Build(),
+	}.Build()
 	a.False(isRetryable(f, nil))
 	a.False(isRetryable(f, []string{retrypolicy.TimeoutFailureTypePrefix + enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START.String()}))
 
-	f = &failurepb.Failure{
-		FailureInfo: &failurepb.Failure_TimeoutFailureInfo{TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+	f = failurepb.Failure_builder{
+		TimeoutFailureInfo: failurepb.TimeoutFailureInfo_builder{
 			TimeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
-		}},
-	}
+		}.Build(),
+	}.Build()
 	a.False(isRetryable(f, nil))
 	a.False(isRetryable(f, []string{retrypolicy.TimeoutFailureTypePrefix + enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE.String()}))
 
-	f = &failurepb.Failure{
-		FailureInfo: &failurepb.Failure_TimeoutFailureInfo{TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+	f = failurepb.Failure_builder{
+		TimeoutFailureInfo: failurepb.TimeoutFailureInfo_builder{
 			TimeoutType: enumspb.TIMEOUT_TYPE_HEARTBEAT,
-		}},
-	}
+		}.Build(),
+	}.Build()
 	a.True(isRetryable(f, nil))
 	a.False(isRetryable(f, []string{retrypolicy.TimeoutFailureTypePrefix + enumspb.TIMEOUT_TYPE_HEARTBEAT.String()}))
 	a.True(isRetryable(f, []string{retrypolicy.TimeoutFailureTypePrefix + enumspb.TIMEOUT_TYPE_START_TO_CLOSE.String()}))
 	a.True(isRetryable(f, []string{retrypolicy.TimeoutFailureTypePrefix + "unknown timeout type string"}))
 
-	f = &failurepb.Failure{
-		FailureInfo: &failurepb.Failure_ServerFailureInfo{ServerFailureInfo: &failurepb.ServerFailureInfo{
+	f = failurepb.Failure_builder{
+		ServerFailureInfo: failurepb.ServerFailureInfo_builder{
 			NonRetryable: false,
-		}},
-	}
+		}.Build(),
+	}.Build()
 	a.True(isRetryable(f, nil))
 
-	f = &failurepb.Failure{
-		FailureInfo: &failurepb.Failure_ServerFailureInfo{ServerFailureInfo: &failurepb.ServerFailureInfo{
+	f = failurepb.Failure_builder{
+		ServerFailureInfo: failurepb.ServerFailureInfo_builder{
 			NonRetryable: true,
-		}},
-	}
+		}.Build(),
+	}.Build()
 	a.False(isRetryable(f, nil))
 
-	f = &failurepb.Failure{
-		FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+	f = failurepb.Failure_builder{
+		ApplicationFailureInfo: failurepb.ApplicationFailureInfo_builder{
 			NonRetryable: true,
-		}},
-	}
+		}.Build(),
+	}.Build()
 	a.False(isRetryable(f, nil))
 
-	f = &failurepb.Failure{
-		FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+	f = failurepb.Failure_builder{
+		ApplicationFailureInfo: failurepb.ApplicationFailureInfo_builder{
 			NonRetryable: false,
 			Type:         "type",
-		}},
-	}
+		}.Build(),
+	}.Build()
 	a.True(isRetryable(f, nil))
 	a.True(isRetryable(f, []string{"otherType"}))
 	a.False(isRetryable(f, []string{"otherType", "type"}))
 	a.False(isRetryable(f, []string{"type"}))
 
 	// When any failure is inside ChildWorkflowExecutionFailure, it is always retryable because ChildWorkflow is always retryable.
-	f = &failurepb.Failure{
-		FailureInfo: &failurepb.Failure_ChildWorkflowExecutionFailureInfo{ChildWorkflowExecutionFailureInfo: &failurepb.ChildWorkflowExecutionFailureInfo{}},
-		Cause: &failurepb.Failure{
-			FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+	f = failurepb.Failure_builder{
+		ChildWorkflowExecutionFailureInfo: &failurepb.ChildWorkflowExecutionFailureInfo{},
+		Cause: failurepb.Failure_builder{
+			ApplicationFailureInfo: failurepb.ApplicationFailureInfo_builder{
 				NonRetryable: true,
-			}},
-		},
-	}
+			}.Build(),
+		}.Build(),
+	}.Build()
 	a.True(isRetryable(f, nil))
 
-	f = &failurepb.Failure{
-		FailureInfo: &failurepb.Failure_ChildWorkflowExecutionFailureInfo{ChildWorkflowExecutionFailureInfo: &failurepb.ChildWorkflowExecutionFailureInfo{}},
-		Cause: &failurepb.Failure{
-			FailureInfo: &failurepb.Failure_ActivityFailureInfo{ActivityFailureInfo: &failurepb.ActivityFailureInfo{}},
-			Cause: &failurepb.Failure{
-				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+	f = failurepb.Failure_builder{
+		ChildWorkflowExecutionFailureInfo: &failurepb.ChildWorkflowExecutionFailureInfo{},
+		Cause: failurepb.Failure_builder{
+			ActivityFailureInfo: &failurepb.ActivityFailureInfo{},
+			Cause: failurepb.Failure_builder{
+				ApplicationFailureInfo: failurepb.ApplicationFailureInfo_builder{
 					NonRetryable: true,
-				}},
-			},
-		},
-	}
+				}.Build(),
+			}.Build(),
+		}.Build(),
+	}.Build()
 	a.True(isRetryable(f, nil))
 }
 

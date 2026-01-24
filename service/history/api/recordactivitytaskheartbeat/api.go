@@ -20,14 +20,14 @@ func Invoke(
 	shard historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (resp *historyservice.RecordActivityTaskHeartbeatResponse, retError error) {
-	request := req.HeartbeatRequest
+	request := req.GetHeartbeatRequest()
 	tokenSerializer := tasktoken.NewSerializer()
-	token, err0 := tokenSerializer.Deserialize(request.TaskToken)
+	token, err0 := tokenSerializer.Deserialize(request.GetTaskToken())
 	if err0 != nil {
 		return nil, consts.ErrDeserializingToken
 	}
 
-	_, err := api.GetActiveNamespace(shard, namespace.ID(req.GetNamespaceId()), token.WorkflowId)
+	_, err := api.GetActiveNamespace(shard, namespace.ID(req.GetNamespaceId()), token.GetWorkflowId())
 	if err != nil {
 		return nil, err
 	}
@@ -40,11 +40,11 @@ func Invoke(
 	var activityReset bool
 	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
-		token.Clock,
+		token.GetClock(),
 		definition.NewWorkflowKey(
-			token.NamespaceId,
-			token.WorkflowId,
-			token.RunId,
+			token.GetNamespaceId(),
+			token.GetWorkflowId(),
+			token.GetRunId(),
 		),
 		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
 			mutableState := workflowLease.GetMutableState()
@@ -75,13 +75,13 @@ func Invoke(
 			}
 
 			// update worker identity if available
-			if req.HeartbeatRequest.Identity != "" {
-				ai.RetryLastWorkerIdentity = req.HeartbeatRequest.Identity
+			if req.GetHeartbeatRequest().GetIdentity() != "" {
+				ai.SetRetryLastWorkerIdentity(req.GetHeartbeatRequest().GetIdentity())
 			}
 
-			cancelRequested = ai.CancelRequested
-			activityPaused = ai.Paused
-			activityReset = ai.ActivityReset
+			cancelRequested = ai.GetCancelRequested()
+			activityPaused = ai.GetPaused()
+			activityReset = ai.GetActivityReset()
 
 			// Save progress and last HB reported time.
 			mutableState.UpdateActivityProgress(ai, request)
@@ -99,9 +99,9 @@ func Invoke(
 		return nil, err
 	}
 
-	return &historyservice.RecordActivityTaskHeartbeatResponse{
+	return historyservice.RecordActivityTaskHeartbeatResponse_builder{
 		CancelRequested: cancelRequested,
 		ActivityPaused:  activityPaused,
 		ActivityReset:   activityReset,
-	}, nil
+	}.Build(), nil
 }

@@ -97,8 +97,8 @@ func (s *sqlClusterMetadataManager) SaveClusterMetadata(
 		}
 		_, err = tx.SaveClusterMetadata(ctx, &sqlplugin.ClusterMetadataRow{
 			ClusterName:  request.ClusterName,
-			Data:         request.ClusterMetadata.Data,
-			DataEncoding: request.ClusterMetadata.EncodingType.String(),
+			Data:         request.ClusterMetadata.GetData(),
+			DataEncoding: request.ClusterMetadata.GetEncodingType().String(),
 			Version:      request.Version,
 		})
 		if err != nil {

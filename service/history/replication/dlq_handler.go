@@ -246,7 +246,7 @@ func (r *dlqHandlerImpl) readMessagesWithAckLevel(
 	for _, task := range resp.Tasks {
 		switch task := task.(type) {
 		case *tasks.SyncActivityTask:
-			taskInfo = append(taskInfo, &replicationspb.ReplicationTaskInfo{
+			taskInfo = append(taskInfo, replicationspb.ReplicationTaskInfo_builder{
 				NamespaceId:      task.NamespaceID,
 				WorkflowId:       task.WorkflowID,
 				RunId:            task.RunID,
@@ -256,9 +256,9 @@ func (r *dlqHandlerImpl) readMessagesWithAckLevel(
 				FirstEventId:     0,
 				NextEventId:      0,
 				ScheduledEventId: task.ScheduledEventID,
-			})
+			}.Build())
 		case *tasks.HistoryReplicationTask:
-			taskInfo = append(taskInfo, &replicationspb.ReplicationTaskInfo{
+			taskInfo = append(taskInfo, replicationspb.ReplicationTaskInfo_builder{
 				NamespaceId:      task.NamespaceID,
 				WorkflowId:       task.WorkflowID,
 				RunId:            task.RunID,
@@ -268,9 +268,9 @@ func (r *dlqHandlerImpl) readMessagesWithAckLevel(
 				FirstEventId:     task.FirstEventID,
 				NextEventId:      task.NextEventID,
 				ScheduledEventId: 0,
-			})
+			}.Build())
 		case *tasks.SyncWorkflowStateTask:
-			taskInfo = append(taskInfo, &replicationspb.ReplicationTaskInfo{
+			taskInfo = append(taskInfo, replicationspb.ReplicationTaskInfo_builder{
 				NamespaceId:      task.NamespaceID,
 				WorkflowId:       task.WorkflowID,
 				RunId:            task.RunID,
@@ -280,15 +280,15 @@ func (r *dlqHandlerImpl) readMessagesWithAckLevel(
 				FirstEventId:     0,
 				NextEventId:      0,
 				ScheduledEventId: 0,
-			})
+			}.Build())
 		case *tasks.SyncHSMTask:
-			taskInfo = append(taskInfo, &replicationspb.ReplicationTaskInfo{
+			taskInfo = append(taskInfo, replicationspb.ReplicationTaskInfo_builder{
 				NamespaceId: task.NamespaceID,
 				WorkflowId:  task.WorkflowID,
 				RunId:       task.RunID,
 				TaskType:    enumsspb.TASK_TYPE_REPLICATION_SYNC_HSM,
 				TaskId:      task.TaskID,
-			})
+			}.Build())
 		default:
 			panic(fmt.Sprintf("Unknown repication task type: %v", task))
 		}
@@ -300,15 +300,15 @@ func (r *dlqHandlerImpl) readMessagesWithAckLevel(
 
 	dlqResponse, err := remoteAdminClient.GetDLQReplicationMessages(
 		ctx,
-		&adminservice.GetDLQReplicationMessagesRequest{
+		adminservice.GetDLQReplicationMessagesRequest_builder{
 			TaskInfos: taskInfo,
-		},
+		}.Build(),
 	)
 	if err != nil {
 		return nil, nil, ackLevel, nil, err
 	}
 
-	return dlqResponse.ReplicationTasks, taskInfo, ackLevel, pageToken, nil
+	return dlqResponse.GetReplicationTasks(), taskInfo, ackLevel, pageToken, nil
 }
 
 func (r *dlqHandlerImpl) getOrCreateTaskExecutor(clusterName string) (TaskExecutor, error) {

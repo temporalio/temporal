@@ -16,9 +16,9 @@ import (
 var (
 	clusterName              = []string{"cluster-a", "cluster-b", "cluster-c"}
 	clusterReplicationConfig = []*replicationpb.ClusterReplicationConfig{
-		{ClusterName: clusterName[0]},
-		{ClusterName: clusterName[1]},
-		{ClusterName: clusterName[2]},
+		replicationpb.ClusterReplicationConfig_builder{ClusterName: clusterName[0]}.Build(),
+		replicationpb.ClusterReplicationConfig_builder{ClusterName: clusterName[1]}.Build(),
+		replicationpb.ClusterReplicationConfig_builder{ClusterName: clusterName[2]}.Build(),
 	}
 )
 
@@ -65,7 +65,7 @@ func GetEventBatchesFromTestEvents(fileName string, workflowId string) ([][]*his
 		eventsFlatted = append(eventsFlatted, batch...)
 	}
 	versionHistory, err := testcore.EventBatchesToVersionHistory(nil, []*historypb.History{
-		{Events: eventsFlatted},
+		historypb.History_builder{Events: eventsFlatted}.Build(),
 	})
 	if err != nil {
 		return nil, nil, err

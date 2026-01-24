@@ -93,20 +93,20 @@ func (s *ExecutionMutableStateSuite) SetupTest() {
 	s.ShardID++
 	resp, err := s.ShardManager.GetOrCreateShard(s.Ctx, &p.GetOrCreateShardRequest{
 		ShardID: s.ShardID,
-		InitialShardInfo: &persistencespb.ShardInfo{
+		InitialShardInfo: persistencespb.ShardInfo_builder{
 			ShardId: s.ShardID,
 			RangeId: 1,
-		},
+		}.Build(),
 	})
 	s.NoError(err)
-	previousRangeID := resp.ShardInfo.RangeId
-	resp.ShardInfo.RangeId++
+	previousRangeID := resp.ShardInfo.GetRangeId()
+	resp.ShardInfo.SetRangeId(resp.ShardInfo.GetRangeId() + 1)
 	err = s.ShardManager.UpdateShard(s.Ctx, &p.UpdateShardRequest{
 		ShardInfo:       resp.ShardInfo,
 		PreviousRangeID: previousRangeID,
 	})
 	s.NoError(err)
-	s.RangeID = resp.ShardInfo.RangeId
+	s.RangeID = resp.ShardInfo.GetRangeId()
 
 	s.NamespaceID = uuid.New().String()
 	s.WorkflowID = uuid.New().String()
@@ -153,7 +153,7 @@ func (s *ExecutionMutableStateSuite) TestCreate_BrandNew_CurrentConflict() {
 	)
 
 	// Remember original execution stats because the CreateWorkflowExecution mutates the stats before failing to persist
-	executionStats, ok := proto.Clone(newSnapshot.ExecutionInfo.ExecutionStats).(*persistencespb.ExecutionStats)
+	executionStats, ok := proto.Clone(newSnapshot.ExecutionInfo.GetExecutionStats()).(*persistencespb.ExecutionStats)
 	s.True(ok)
 
 	_, err := s.ExecutionManager.CreateWorkflowExecution(s.Ctx, &p.CreateWorkflowExecutionRequest{
@@ -174,16 +174,16 @@ func (s *ExecutionMutableStateSuite) TestCreate_BrandNew_CurrentConflict() {
 	}
 	s.DeepEqual(&p.CurrentWorkflowConditionFailedError{
 		Msg:              "",
-		RequestIDs:       newSnapshot.ExecutionState.RequestIds,
-		RunID:            newSnapshot.ExecutionState.RunId,
-		State:            newSnapshot.ExecutionState.State,
-		Status:           newSnapshot.ExecutionState.Status,
+		RequestIDs:       newSnapshot.ExecutionState.GetRequestIds(),
+		RunID:            newSnapshot.ExecutionState.GetRunId(),
+		State:            newSnapshot.ExecutionState.GetState(),
+		Status:           newSnapshot.ExecutionState.GetStatus(),
 		LastWriteVersion: lastWriteVersion,
-		StartTime:        timestamp.TimeValuePtr(newSnapshot.ExecutionState.StartTime),
+		StartTime:        timestamp.TimeValuePtr(newSnapshot.ExecutionState.GetStartTime()),
 	}, err)
 
 	// Restore origin execution stats so GetWorkflowExecution matches with the pre-failed snapshot stats above
-	newSnapshot.ExecutionInfo.ExecutionStats = executionStats
+	newSnapshot.ExecutionInfo.SetExecutionStats(executionStats)
 	s.AssertMSEqualWithDB(chasm.WorkflowArchetypeID, newSnapshot)
 	s.AssertHEEqualWithDB(branchToken, newEvents)
 }
@@ -217,7 +217,7 @@ func (s *ExecutionMutableStateSuite) TestCreate_Reuse() {
 		RangeID: s.RangeID,
 		Mode:    p.CreateWorkflowModeUpdateCurrent,
 
-		PreviousRunID:            prevSnapshot.ExecutionState.RunId,
+		PreviousRunID:            prevSnapshot.ExecutionState.GetRunId(),
 		PreviousLastWriteVersion: prevLastWriteVersion,
 
 		ArchetypeID: chasm.WorkflowArchetypeID,
@@ -263,7 +263,7 @@ func (s *ExecutionMutableStateSuite) TestCreate_Reuse_CHASM() {
 		RangeID: s.RangeID,
 		Mode:    p.CreateWorkflowModeUpdateCurrent,
 
-		PreviousRunID:            prevSnapshot.ExecutionState.RunId,
+		PreviousRunID:            prevSnapshot.ExecutionState.GetRunId(),
 		PreviousLastWriteVersion: prevLastWriteVersion,
 
 		ArchetypeID: archetypeID,
@@ -286,7 +286,7 @@ func (s *ExecutionMutableStateSuite) TestCreate_Reuse_CurrentConflict() {
 	)
 
 	// Remember original execution stats because the CreateWorkflowExecution mutates the stats before failing to persist
-	executionStats, ok := proto.Clone(prevSnapshot.ExecutionInfo.ExecutionStats).(*persistencespb.ExecutionStats)
+	executionStats, ok := proto.Clone(prevSnapshot.ExecutionInfo.GetExecutionStats()).(*persistencespb.ExecutionStats)
 	s.True(ok)
 
 	_, err := s.ExecutionManager.CreateWorkflowExecution(s.Ctx, &p.CreateWorkflowExecutionRequest{
@@ -307,16 +307,16 @@ func (s *ExecutionMutableStateSuite) TestCreate_Reuse_CurrentConflict() {
 	}
 	s.DeepEqual(&p.CurrentWorkflowConditionFailedError{
 		Msg:              "",
-		RequestIDs:       prevSnapshot.ExecutionState.RequestIds,
-		RunID:            prevSnapshot.ExecutionState.RunId,
-		State:            prevSnapshot.ExecutionState.State,
-		Status:           prevSnapshot.ExecutionState.Status,
+		RequestIDs:       prevSnapshot.ExecutionState.GetRequestIds(),
+		RunID:            prevSnapshot.ExecutionState.GetRunId(),
+		State:            prevSnapshot.ExecutionState.GetState(),
+		Status:           prevSnapshot.ExecutionState.GetStatus(),
 		LastWriteVersion: prevLastWriteVersion,
-		StartTime:        timestamp.TimeValuePtr(prevSnapshot.ExecutionState.StartTime),
+		StartTime:        timestamp.TimeValuePtr(prevSnapshot.ExecutionState.GetStartTime()),
 	}, err)
 
 	// Restore origin execution stats so GetWorkflowExecution matches with the pre-failed snapshot stats above
-	prevSnapshot.ExecutionInfo.ExecutionStats = executionStats
+	prevSnapshot.ExecutionInfo.SetExecutionStats(executionStats)
 	s.AssertMSEqualWithDB(chasm.WorkflowArchetypeID, prevSnapshot)
 	s.AssertHEEqualWithDB(branchToken, prevEvents)
 }
@@ -378,7 +378,7 @@ func (s *ExecutionMutableStateSuite) TestCreate_Conflict() {
 		RangeID: s.RangeID,
 		Mode:    p.CreateWorkflowModeUpdateCurrent,
 
-		PreviousRunID:            newSnapshot.ExecutionState.RunId,
+		PreviousRunID:            newSnapshot.ExecutionState.GetRunId(),
 		PreviousLastWriteVersion: lastWriteVersion,
 
 		ArchetypeID: chasm.WorkflowArchetypeID,
@@ -473,7 +473,7 @@ func (s *ExecutionMutableStateSuite) TestCreate_ClosedWorkflow_UpdateCurrent() {
 		RangeID: s.RangeID,
 		Mode:    p.CreateWorkflowModeUpdateCurrent,
 
-		PreviousRunID:            prevSnapshot.ExecutionState.RunId,
+		PreviousRunID:            prevSnapshot.ExecutionState.GetRunId(),
 		PreviousLastWriteVersion: prevLastWriteVersion,
 
 		ArchetypeID: chasm.WorkflowArchetypeID,
@@ -606,9 +606,9 @@ func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_CurrentConflict() {
 	s.IsType(&p.CurrentWorkflowConditionFailedError{}, err)
 
 	s.AssertMissingFromDB(
-		currentMutation.ExecutionInfo.NamespaceId,
-		currentMutation.ExecutionInfo.WorkflowId,
-		currentMutation.ExecutionState.RunId,
+		currentMutation.ExecutionInfo.GetNamespaceId(),
+		currentMutation.ExecutionInfo.GetWorkflowId(),
+		currentMutation.ExecutionState.GetRunId(),
 		chasm.WorkflowArchetypeID,
 	)
 }
@@ -1034,7 +1034,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_ClosedWorkflow_IsNonCurrent() {
 		RangeID: s.RangeID,
 		Mode:    p.CreateWorkflowModeUpdateCurrent,
 
-		PreviousRunID:            nonCurrentSnapshot.ExecutionState.RunId,
+		PreviousRunID:            nonCurrentSnapshot.ExecutionState.GetRunId(),
 		PreviousLastWriteVersion: nonCurrentLastWriteVersion,
 
 		ArchetypeID: chasm.WorkflowArchetypeID,
@@ -2431,23 +2431,23 @@ func (s *ExecutionMutableStateSuite) TestListConcreteExecutions() {
 	s.Len(mutableStates, 2)
 
 	// Move mutable state for the chasm execution to index 1
-	if mutableStates[0].ExecutionState.RunId != s.RunID {
+	if mutableStates[0].GetExecutionState().GetRunId() != s.RunID {
 		mutableStates[0], mutableStates[1] = mutableStates[1], mutableStates[0]
 	}
 
 	// ListConcreteExecutions only populates those three fields today.
 	expectedWorkflowMutableState, _ := s.Accumulate(workflowSnapshot)
-	s.ProtoEqual(&persistencespb.WorkflowMutableState{
-		ExecutionInfo:  expectedWorkflowMutableState.ExecutionInfo,
-		ExecutionState: expectedWorkflowMutableState.ExecutionState,
-		NextEventId:    expectedWorkflowMutableState.NextEventId,
-	}, mutableStates[0])
+	s.ProtoEqual(persistencespb.WorkflowMutableState_builder{
+		ExecutionInfo:  expectedWorkflowMutableState.GetExecutionInfo(),
+		ExecutionState: expectedWorkflowMutableState.GetExecutionState(),
+		NextEventId:    expectedWorkflowMutableState.GetNextEventId(),
+	}.Build(), mutableStates[0])
 	expectedCHASMMutableState, _ := s.Accumulate(chasmSnapshot)
-	s.ProtoEqual(&persistencespb.WorkflowMutableState{
-		ExecutionInfo:  expectedCHASMMutableState.ExecutionInfo,
-		ExecutionState: expectedCHASMMutableState.ExecutionState,
-		NextEventId:    expectedCHASMMutableState.NextEventId,
-	}, mutableStates[1])
+	s.ProtoEqual(persistencespb.WorkflowMutableState_builder{
+		ExecutionInfo:  expectedCHASMMutableState.GetExecutionInfo(),
+		ExecutionState: expectedCHASMMutableState.GetExecutionState(),
+		NextEventId:    expectedCHASMMutableState.GetNextEventId(),
+	}.Build(), mutableStates[1])
 }
 
 func (s *ExecutionMutableStateSuite) TestArchetypeSeparateIDSpace() {
@@ -2747,9 +2747,9 @@ func (s *ExecutionMutableStateSuite) AssertMSEqualWithDB(
 ) {
 	resp, err := s.ExecutionManager.GetWorkflowExecution(s.Ctx, &p.GetWorkflowExecutionRequest{
 		ShardID:     s.ShardID,
-		NamespaceID: snapshot.ExecutionInfo.NamespaceId,
-		WorkflowID:  snapshot.ExecutionInfo.WorkflowId,
-		RunID:       snapshot.ExecutionState.RunId,
+		NamespaceID: snapshot.ExecutionInfo.GetNamespaceId(),
+		WorkflowID:  snapshot.ExecutionInfo.GetWorkflowId(),
+		RunID:       snapshot.ExecutionState.GetRunId(),
 		ArchetypeID: archetypeID,
 	})
 	s.NoError(err)
@@ -2762,10 +2762,10 @@ func (s *ExecutionMutableStateSuite) AssertMSEqualWithDB(
 	// need to special handling signal request IDs ...
 	// since ^ is slice
 	s.Equal(
-		convert.StringSliceToSet(expectedMutableState.SignalRequestedIds),
-		convert.StringSliceToSet(actualMutableState.SignalRequestedIds),
+		convert.StringSliceToSet(expectedMutableState.GetSignalRequestedIds()),
+		convert.StringSliceToSet(actualMutableState.GetSignalRequestedIds()),
 	)
-	actualMutableState.SignalRequestedIds = expectedMutableState.SignalRequestedIds
+	actualMutableState.SetSignalRequestedIds(expectedMutableState.GetSignalRequestedIds())
 
 	s.Equal(expectedDBRecordVersion, actualDBRecordVersion)
 	s.ProtoEqual(expectedMutableState, actualMutableState)
@@ -2775,7 +2775,7 @@ func (s *ExecutionMutableStateSuite) Accumulate(
 	snapshot *p.WorkflowSnapshot,
 	mutations ...*p.WorkflowMutation,
 ) (*persistencespb.WorkflowMutableState, int64) {
-	mutableState := &persistencespb.WorkflowMutableState{
+	mutableState := persistencespb.WorkflowMutableState_builder{
 		ExecutionInfo:       snapshot.ExecutionInfo,
 		ExecutionState:      snapshot.ExecutionState,
 		NextEventId:         snapshot.NextEventID,
@@ -2786,67 +2786,67 @@ func (s *ExecutionMutableStateSuite) Accumulate(
 		SignalInfos:         snapshot.SignalInfos,
 		SignalRequestedIds:  convert.StringSetToSlice(snapshot.SignalRequestedIDs),
 		ChasmNodes:          snapshot.ChasmNodes,
-	}
+	}.Build()
 	dbRecordVersion := snapshot.DBRecordVersion
 
 	for _, mutation := range mutations {
 		s.Equal(dbRecordVersion, mutation.DBRecordVersion-1)
 		dbRecordVersion = mutation.DBRecordVersion
 
-		mutableState.ExecutionInfo = mutation.ExecutionInfo
-		mutableState.ExecutionState = mutation.ExecutionState
+		mutableState.SetExecutionInfo(mutation.ExecutionInfo)
+		mutableState.SetExecutionState(mutation.ExecutionState)
 
-		mutableState.NextEventId = mutation.NextEventID
+		mutableState.SetNextEventId(mutation.NextEventID)
 
 		// activity infos
-		maps.Copy(mutableState.ActivityInfos, mutation.UpsertActivityInfos)
+		maps.Copy(mutableState.GetActivityInfos(), mutation.UpsertActivityInfos)
 		for key := range mutation.DeleteActivityInfos {
-			delete(mutableState.ActivityInfos, key)
+			delete(mutableState.GetActivityInfos(), key)
 		}
 
 		// timer infos
-		maps.Copy(mutableState.TimerInfos, mutation.UpsertTimerInfos)
+		maps.Copy(mutableState.GetTimerInfos(), mutation.UpsertTimerInfos)
 		for key := range mutation.DeleteTimerInfos {
-			delete(mutableState.TimerInfos, key)
+			delete(mutableState.GetTimerInfos(), key)
 		}
 
 		// child workflow infos
-		maps.Copy(mutableState.ChildExecutionInfos, mutation.UpsertChildExecutionInfos)
+		maps.Copy(mutableState.GetChildExecutionInfos(), mutation.UpsertChildExecutionInfos)
 		for key := range mutation.DeleteChildExecutionInfos {
-			delete(mutableState.ChildExecutionInfos, key)
+			delete(mutableState.GetChildExecutionInfos(), key)
 		}
 
 		// request cancel infos
-		maps.Copy(mutableState.RequestCancelInfos, mutation.UpsertRequestCancelInfos)
+		maps.Copy(mutableState.GetRequestCancelInfos(), mutation.UpsertRequestCancelInfos)
 		for key := range mutation.DeleteRequestCancelInfos {
-			delete(mutableState.RequestCancelInfos, key)
+			delete(mutableState.GetRequestCancelInfos(), key)
 		}
 
 		// signal infos
-		maps.Copy(mutableState.SignalInfos, mutation.UpsertSignalInfos)
+		maps.Copy(mutableState.GetSignalInfos(), mutation.UpsertSignalInfos)
 		for key := range mutation.DeleteSignalInfos {
-			delete(mutableState.SignalInfos, key)
+			delete(mutableState.GetSignalInfos(), key)
 		}
 
 		// signal request IDs
-		signalRequestIDs := convert.StringSliceToSet(mutableState.SignalRequestedIds)
+		signalRequestIDs := convert.StringSliceToSet(mutableState.GetSignalRequestedIds())
 		maps.Copy(signalRequestIDs, mutation.UpsertSignalRequestedIDs)
 		for key := range mutation.DeleteSignalRequestedIDs {
 			delete(signalRequestIDs, key)
 		}
-		mutableState.SignalRequestedIds = convert.StringSetToSlice(signalRequestIDs)
+		mutableState.SetSignalRequestedIds(convert.StringSetToSlice(signalRequestIDs))
 
 		// chasm nodes
-		maps.Copy(mutableState.ChasmNodes, mutation.UpsertChasmNodes)
+		maps.Copy(mutableState.GetChasmNodes(), mutation.UpsertChasmNodes)
 		for key := range mutation.DeleteChasmNodes {
-			delete(mutableState.ChasmNodes, key)
+			delete(mutableState.GetChasmNodes(), key)
 		}
 
 		// buffered events
 		if mutation.ClearBufferedEvents {
-			mutableState.BufferedEvents = nil
+			mutableState.SetBufferedEvents(nil)
 		} else if mutation.NewBufferedEvents != nil {
-			mutableState.BufferedEvents = append(mutableState.BufferedEvents, mutation.NewBufferedEvents...)
+			mutableState.SetBufferedEvents(append(mutableState.GetBufferedEvents(), mutation.NewBufferedEvents...))
 		}
 	}
 
@@ -2858,29 +2858,29 @@ func (s *ExecutionMutableStateSuite) Accumulate(
 	s.NoError(err)
 
 	// make equal test easier
-	if mutableState.ActivityInfos == nil {
-		mutableState.ActivityInfos = make(map[int64]*persistencespb.ActivityInfo)
+	if mutableState.GetActivityInfos() == nil {
+		mutableState.SetActivityInfos(make(map[int64]*persistencespb.ActivityInfo))
 	}
-	if mutableState.TimerInfos == nil {
-		mutableState.TimerInfos = make(map[string]*persistencespb.TimerInfo)
+	if mutableState.GetTimerInfos() == nil {
+		mutableState.SetTimerInfos(make(map[string]*persistencespb.TimerInfo))
 	}
-	if mutableState.ChildExecutionInfos == nil {
-		mutableState.ChildExecutionInfos = make(map[int64]*persistencespb.ChildExecutionInfo)
+	if mutableState.GetChildExecutionInfos() == nil {
+		mutableState.SetChildExecutionInfos(make(map[int64]*persistencespb.ChildExecutionInfo))
 	}
-	if mutableState.RequestCancelInfos == nil {
-		mutableState.RequestCancelInfos = make(map[int64]*persistencespb.RequestCancelInfo)
+	if mutableState.GetRequestCancelInfos() == nil {
+		mutableState.SetRequestCancelInfos(make(map[int64]*persistencespb.RequestCancelInfo))
 	}
-	if mutableState.SignalInfos == nil {
-		mutableState.SignalInfos = make(map[int64]*persistencespb.SignalInfo)
+	if mutableState.GetSignalInfos() == nil {
+		mutableState.SetSignalInfos(make(map[int64]*persistencespb.SignalInfo))
 	}
-	if mutableState.SignalRequestedIds == nil {
-		mutableState.SignalRequestedIds = make([]string, 0)
+	if mutableState.GetSignalRequestedIds() == nil {
+		mutableState.SetSignalRequestedIds(make([]string, 0))
 	}
-	if mutableState.BufferedEvents == nil {
-		mutableState.BufferedEvents = make([]*historypb.HistoryEvent, 0)
+	if mutableState.GetBufferedEvents() == nil {
+		mutableState.SetBufferedEvents(make([]*historypb.HistoryEvent, 0))
 	}
-	if mutableState.ChasmNodes == nil {
-		mutableState.ChasmNodes = make(map[string]*persistencespb.ChasmNode)
+	if mutableState.GetChasmNodes() == nil {
+		mutableState.SetChasmNodes(make(map[string]*persistencespb.ChasmNode))
 	}
 
 	return mutableState, dbRecordVersion

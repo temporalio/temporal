@@ -57,10 +57,10 @@ func (s *branchMgrSuite) SetupTest() {
 
 	s.mockShard = shard.NewTestContext(
 		s.controller,
-		&persistencespb.ShardInfo{
+		persistencespb.ShardInfo_builder{
 			ShardId: 10,
 			RangeId: 1,
-		},
+		}.Build(),
 		tests.NewDynamicConfig(),
 	)
 
@@ -104,14 +104,14 @@ func (s *branchMgrSuite) TestCreateNewBranch() {
 	)
 	s.NoError(err)
 
-	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+	s.mockMutableState.EXPECT().GetExecutionInfo().Return(persistencespb.WorkflowExecutionInfo_builder{
 		NamespaceId:      s.namespaceID,
 		WorkflowId:       s.workflowID,
 		VersionHistories: versionHistories,
-	}).AnyTimes()
-	s.mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+	}.Build()).AnyTimes()
+	s.mockMutableState.EXPECT().GetExecutionState().Return(persistencespb.WorkflowExecutionState_builder{
 		RunId: s.runID,
-	}).AnyTimes()
+	}.Build()).AnyTimes()
 
 	shardID := s.mockShard.GetShardID()
 	s.mockExecutionManager.EXPECT().ForkHistoryBranch(gomock.Any(), gomock.Any()).DoAndReturn(
@@ -161,11 +161,11 @@ func (s *branchMgrSuite) TestGetOrCreate_BranchAppendable_NoMissingEventInBetwee
 	)
 	s.NoError(err)
 
-	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+	s.mockMutableState.EXPECT().GetExecutionInfo().Return(persistencespb.WorkflowExecutionInfo_builder{
 		NamespaceId:      s.namespaceID,
 		WorkflowId:       s.workflowID,
 		VersionHistories: versionHistories,
-	}).AnyTimes()
+	}.Build()).AnyTimes()
 
 	doContinue, index, err := s.nDCBranchMgr.GetOrCreate(
 		context.Background(),
@@ -195,14 +195,14 @@ func (s *branchMgrSuite) TestGetOrCreate_BranchAppendable_MissingEventInBetween(
 	)
 	s.NoError(err)
 
-	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+	s.mockMutableState.EXPECT().GetExecutionInfo().Return(persistencespb.WorkflowExecutionInfo_builder{
 		NamespaceId:      s.namespaceID,
 		WorkflowId:       s.workflowID,
 		VersionHistories: versionHistories,
-	}).AnyTimes()
-	s.mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+	}.Build()).AnyTimes()
+	s.mockMutableState.EXPECT().GetExecutionState().Return(persistencespb.WorkflowExecutionState_builder{
 		RunId: s.runID,
-	}).AnyTimes()
+	}.Build()).AnyTimes()
 
 	_, _, err = s.nDCBranchMgr.GetOrCreate(
 		context.Background(),
@@ -233,14 +233,14 @@ func (s *branchMgrSuite) TestGetOrCreate_BranchNotAppendable_NoMissingEventInBet
 	})
 
 	newBranchToken := []byte("some random new branch token")
-	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+	s.mockMutableState.EXPECT().GetExecutionInfo().Return(persistencespb.WorkflowExecutionInfo_builder{
 		NamespaceId:      s.namespaceID,
 		WorkflowId:       s.workflowID,
 		VersionHistories: versionHistories,
-	}).AnyTimes()
-	s.mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+	}.Build()).AnyTimes()
+	s.mockMutableState.EXPECT().GetExecutionState().Return(persistencespb.WorkflowExecutionState_builder{
 		RunId: s.runID,
-	}).AnyTimes()
+	}.Build()).AnyTimes()
 
 	shardID := s.mockShard.GetShardID()
 	s.mockExecutionManager.EXPECT().ForkHistoryBranch(gomock.Any(), gomock.Any()).DoAndReturn(
@@ -291,14 +291,14 @@ func (s *branchMgrSuite) TestGetOrCreate_BranchNotAppendable_MissingEventInBetwe
 		versionhistory.NewVersionHistoryItem(200, 400),
 	})
 
-	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+	s.mockMutableState.EXPECT().GetExecutionInfo().Return(persistencespb.WorkflowExecutionInfo_builder{
 		NamespaceId:      s.namespaceID,
 		WorkflowId:       s.workflowID,
 		VersionHistories: versionHistories,
-	}).AnyTimes()
-	s.mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+	}.Build()).AnyTimes()
+	s.mockMutableState.EXPECT().GetExecutionState().Return(persistencespb.WorkflowExecutionState_builder{
 		RunId: s.runID,
-	}).AnyTimes()
+	}.Build()).AnyTimes()
 
 	_, _, err := s.nDCBranchMgr.GetOrCreate(
 		context.Background(),
@@ -329,14 +329,14 @@ func (s *branchMgrSuite) TestCreate_NoMissingEventInBetween() {
 	s.NoError(err)
 
 	newBranchToken := []byte("some random new branch token")
-	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+	s.mockMutableState.EXPECT().GetExecutionInfo().Return(persistencespb.WorkflowExecutionInfo_builder{
 		NamespaceId:      s.namespaceID,
 		WorkflowId:       s.workflowID,
 		VersionHistories: versionHistories,
-	}).AnyTimes()
-	s.mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+	}.Build()).AnyTimes()
+	s.mockMutableState.EXPECT().GetExecutionState().Return(persistencespb.WorkflowExecutionState_builder{
 		RunId: s.runID,
-	}).AnyTimes()
+	}.Build()).AnyTimes()
 
 	shardID := s.mockShard.GetShardID()
 	s.mockExecutionManager.EXPECT().ForkHistoryBranch(gomock.Any(), gomock.Any()).DoAndReturn(
@@ -383,14 +383,14 @@ func (s *branchMgrSuite) TestCreate_MissingEventInBetween() {
 	)
 	s.NoError(err)
 
-	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+	s.mockMutableState.EXPECT().GetExecutionInfo().Return(persistencespb.WorkflowExecutionInfo_builder{
 		NamespaceId:      s.namespaceID,
 		WorkflowId:       s.workflowID,
 		VersionHistories: versionHistories,
-	}).AnyTimes()
-	s.mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+	}.Build()).AnyTimes()
+	s.mockMutableState.EXPECT().GetExecutionState().Return(persistencespb.WorkflowExecutionState_builder{
 		RunId: s.runID,
-	}).AnyTimes()
+	}.Build()).AnyTimes()
 
 	_, _, err = s.nDCBranchMgr.Create(
 		context.Background(),

@@ -49,26 +49,26 @@ func TestRecordCompletedAction_SingleRunningWorkflow(t *testing.T) {
 		setupScheduler: func(sched *scheduler.Scheduler, ctx chasm.MutableContext) {
 			invoker := sched.Invoker.Get(ctx)
 			invoker.BufferedStarts = []*schedulespb.BufferedStart{
-				{
+				schedulespb.BufferedStart_builder{
 					RequestId:  "req-1",
 					WorkflowId: "wf-1",
 					RunId:      "run-1",
 					Attempt:    1,
 					ActualTime: timestamppb.New(time.Now().Add(-1 * time.Minute)),
 					StartTime:  timestamppb.New(time.Now().Add(-30 * time.Second)),
-				},
+				}.Build(),
 			}
 		},
 		requestID: "req-1",
-		completed: &schedulespb.CompletedResult{
+		completed: schedulespb.CompletedResult_builder{
 			Status:    enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 			CloseTime: timestamppb.New(closeTime),
-		},
+		}.Build(),
 		validate: func(t *testing.T, sched *scheduler.Scheduler, ctx chasm.Context) {
 			invoker := sched.Invoker.Get(ctx)
 			require.Len(t, invoker.BufferedStarts, 1)
-			require.NotNil(t, invoker.BufferedStarts[0].Completed)
-			require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, invoker.BufferedStarts[0].Completed.Status)
+			require.NotNil(t, invoker.BufferedStarts[0].GetCompleted())
+			require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, invoker.BufferedStarts[0].GetCompleted().GetStatus())
 		},
 	}
 
@@ -85,29 +85,29 @@ func TestRecordCompletedAction_MultipleWorkflows(t *testing.T) {
 		setupScheduler: func(sched *scheduler.Scheduler, ctx chasm.MutableContext) {
 			invoker := sched.Invoker.Get(ctx)
 			invoker.BufferedStarts = []*schedulespb.BufferedStart{
-				{
+				schedulespb.BufferedStart_builder{
 					RequestId:  "req-1",
 					WorkflowId: "wf-1",
 					RunId:      "run-1",
 					Attempt:    1,
 					ActualTime: timestamppb.New(time.Now().Add(-2 * time.Minute)),
 					StartTime:  timestamppb.New(time.Now().Add(-90 * time.Second)),
-				},
-				{
+				}.Build(),
+				schedulespb.BufferedStart_builder{
 					RequestId:  "req-2",
 					WorkflowId: "wf-2",
 					RunId:      "run-2",
 					Attempt:    1,
 					ActualTime: timestamppb.New(time.Now().Add(-1 * time.Minute)),
 					StartTime:  timestamppb.New(time.Now().Add(-30 * time.Second)),
-				},
+				}.Build(),
 			}
 		},
 		requestID: "req-1",
-		completed: &schedulespb.CompletedResult{
+		completed: schedulespb.CompletedResult_builder{
 			Status:    enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
 			CloseTime: timestamppb.New(closeTime),
-		},
+		}.Build(),
 		validate: func(t *testing.T, sched *scheduler.Scheduler, ctx chasm.Context) {
 			invoker := sched.Invoker.Get(ctx)
 			require.Len(t, invoker.BufferedStarts, 2)
@@ -116,7 +116,7 @@ func TestRecordCompletedAction_MultipleWorkflows(t *testing.T) {
 			// (non-completed first, then completed)
 			var req1Start, req2Start *schedulespb.BufferedStart
 			for _, start := range invoker.BufferedStarts {
-				switch start.RequestId {
+				switch start.GetRequestId() {
 				case "req-1":
 					req1Start = start
 				case "req-2":
@@ -128,11 +128,11 @@ func TestRecordCompletedAction_MultipleWorkflows(t *testing.T) {
 			require.NotNil(t, req2Start)
 
 			// First workflow (req-1) should be completed
-			require.NotNil(t, req1Start.Completed)
-			require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_FAILED, req1Start.Completed.Status)
+			require.NotNil(t, req1Start.GetCompleted())
+			require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_FAILED, req1Start.GetCompleted().GetStatus())
 
 			// Second workflow (req-2) should still be running
-			require.Nil(t, req2Start.Completed)
+			require.Nil(t, req2Start.GetCompleted())
 		},
 	}
 
@@ -149,28 +149,28 @@ func TestRecordCompletedAction_UpdatesDesiredTimeOnNextPending(t *testing.T) {
 		setupScheduler: func(sched *scheduler.Scheduler, ctx chasm.MutableContext) {
 			invoker := sched.Invoker.Get(ctx)
 			invoker.BufferedStarts = []*schedulespb.BufferedStart{
-				{
+				schedulespb.BufferedStart_builder{
 					RequestId:  "req-1",
 					WorkflowId: "wf-1",
 					RunId:      "run-1",
 					Attempt:    1,
 					ActualTime: timestamppb.New(time.Now().Add(-2 * time.Minute)),
 					StartTime:  timestamppb.New(time.Now().Add(-90 * time.Second)),
-				},
-				{
+				}.Build(),
+				schedulespb.BufferedStart_builder{
 					RequestId:   "req-2",
 					WorkflowId:  "wf-2",
 					Attempt:     0, // pending
 					ActualTime:  timestamppb.New(time.Now()),
 					DesiredTime: timestamppb.New(time.Now()),
-				},
+				}.Build(),
 			}
 		},
 		requestID: "req-1",
-		completed: &schedulespb.CompletedResult{
+		completed: schedulespb.CompletedResult_builder{
 			Status:    enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 			CloseTime: timestamppb.New(closeTime),
-		},
+		}.Build(),
 		validate: func(t *testing.T, sched *scheduler.Scheduler, ctx chasm.Context) {
 			invoker := sched.Invoker.Get(ctx)
 			require.Len(t, invoker.BufferedStarts, 2)
@@ -179,7 +179,7 @@ func TestRecordCompletedAction_UpdatesDesiredTimeOnNextPending(t *testing.T) {
 			// (non-completed first, then completed)
 			var req2Start *schedulespb.BufferedStart
 			for _, start := range invoker.BufferedStarts {
-				if start.RequestId == "req-2" {
+				if start.GetRequestId() == "req-2" {
 					req2Start = start
 					break
 				}
@@ -187,7 +187,7 @@ func TestRecordCompletedAction_UpdatesDesiredTimeOnNextPending(t *testing.T) {
 			require.NotNil(t, req2Start)
 
 			// Pending start (req-2) should have DesiredTime updated to closeTime
-			require.Equal(t, closeTime.Unix(), req2Start.DesiredTime.AsTime().Unix())
+			require.Equal(t, closeTime.Unix(), req2Start.GetDesiredTime().AsTime().Unix())
 		},
 	}
 
@@ -203,26 +203,26 @@ func TestRecordCompletedAction_NoMatchingRequest(t *testing.T) {
 		setupScheduler: func(sched *scheduler.Scheduler, ctx chasm.MutableContext) {
 			invoker := sched.Invoker.Get(ctx)
 			invoker.BufferedStarts = []*schedulespb.BufferedStart{
-				{
+				schedulespb.BufferedStart_builder{
 					RequestId:  "req-1",
 					WorkflowId: "wf-1",
 					RunId:      "run-1",
 					Attempt:    1,
 					ActualTime: timestamppb.New(time.Now().Add(-1 * time.Minute)),
 					StartTime:  timestamppb.New(time.Now().Add(-30 * time.Second)),
-				},
+				}.Build(),
 			}
 		},
 		requestID: "req-nonexistent",
-		completed: &schedulespb.CompletedResult{
+		completed: schedulespb.CompletedResult_builder{
 			Status:    enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 			CloseTime: timestamppb.New(closeTime),
-		},
+		}.Build(),
 		validate: func(t *testing.T, sched *scheduler.Scheduler, ctx chasm.Context) {
 			invoker := sched.Invoker.Get(ctx)
 			require.Len(t, invoker.BufferedStarts, 1)
 			// Original workflow should still be running (not completed)
-			require.Nil(t, invoker.BufferedStarts[0].Completed)
+			require.Nil(t, invoker.BufferedStarts[0].GetCompleted())
 		},
 	}
 

@@ -348,15 +348,15 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_FailurePropagated() {
 	// API.
 	// Query the workflow in the background to have the query delivered with the first workflow task in the Queries map.
 	go func() {
-		_, err := s.FrontendClient().QueryWorkflow(ctx, &workflowservice.QueryWorkflowRequest{
+		_, err := s.FrontendClient().QueryWorkflow(ctx, workflowservice.QueryWorkflowRequest_builder{
 			Namespace: s.Namespace().String(),
-			Execution: &commonpb.WorkflowExecution{
+			Execution: commonpb.WorkflowExecution_builder{
 				WorkflowId: workflowRun.GetID(),
-			},
-			Query: &querypb.WorkflowQuery{
+			}.Build(),
+			Query: querypb.WorkflowQuery_builder{
 				QueryType: "dont-care",
-			},
-		})
+			}.Build(),
+		}.Build())
 		errChan <- err
 	}()
 
@@ -364,34 +364,34 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_FailurePropagated() {
 	// There's really no other way to ensure that the query is included in the task unfortunately.
 	util.InterruptibleSleep(ctx, 3*time.Second)
 
-	task, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+	task, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, workflowservice.PollWorkflowTaskQueueRequest_builder{
 		Namespace: s.Namespace().String(),
-		TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue},
+		TaskQueue: taskqueuepb.TaskQueue_builder{Name: taskQueue}.Build(),
 		Identity:  s.T().Name(),
-	})
+	}.Build())
 	s.NoError(err)
-	s.Len(task.Queries, 1)
-	qKey := slices.Collect(maps.Keys(task.Queries))[0]
+	s.Len(task.GetQueries(), 1)
+	qKey := slices.Collect(maps.Keys(task.GetQueries()))[0]
 
-	_, err = s.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
-		TaskToken: task.TaskToken,
+	_, err = s.FrontendClient().RespondWorkflowTaskCompleted(ctx, workflowservice.RespondWorkflowTaskCompletedRequest_builder{
+		TaskToken: task.GetTaskToken(),
 		Identity:  s.T().Name(),
 		QueryResults: map[string]*querypb.WorkflowQueryResult{
-			qKey: {
+			qKey: querypb.WorkflowQueryResult_builder{
 				ResultType:   enumspb.QUERY_RESULT_TYPE_FAILED,
 				ErrorMessage: "my error message",
-				Failure: &failurepb.Failure{
+				Failure: failurepb.Failure_builder{
 					Message: "my failure error message",
-				},
-			},
+				}.Build(),
+			}.Build(),
 		},
 		Commands: []*commandpb.Command{
-			{
+			commandpb.Command_builder{
 				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-				Attributes:  &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{},
-			},
+				CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{},
+			}.Build(),
 		},
-	})
+	}.Build())
 	s.NoError(err)
 
 	select {
@@ -404,48 +404,48 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_FailurePropagated() {
 	var query1FailedErr *serviceerror.QueryFailed
 	s.ErrorAs(err, &query1FailedErr)
 	s.Equal("my error message", query1FailedErr.Message)
-	s.Equal("my failure error message", query1FailedErr.Failure.Message)
+	s.Equal("my failure error message", query1FailedErr.Failure.GetMessage())
 
 	// Second query, should come in the workflow task Query field and responded to via the RespondQueryTaskCompleted
 	// API.
 	go func() {
-		task, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		task, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, workflowservice.PollWorkflowTaskQueueRequest_builder{
 			Namespace: s.Namespace().String(),
-			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue},
+			TaskQueue: taskqueuepb.TaskQueue_builder{Name: taskQueue}.Build(),
 			Identity:  s.T().Name(),
-		})
+		}.Build())
 		if err != nil {
 			errChan <- err
 			return
 		}
 
-		_, err = s.FrontendClient().RespondQueryTaskCompleted(ctx, &workflowservice.RespondQueryTaskCompletedRequest{
+		_, err = s.FrontendClient().RespondQueryTaskCompleted(ctx, workflowservice.RespondQueryTaskCompletedRequest_builder{
 			Namespace:     s.Namespace().String(),
-			TaskToken:     task.TaskToken,
+			TaskToken:     task.GetTaskToken(),
 			CompletedType: enumspb.QUERY_RESULT_TYPE_FAILED,
 			ErrorMessage:  "my error message",
-			Failure: &failurepb.Failure{
+			Failure: failurepb.Failure_builder{
 				Message: "my failure error message",
-			},
-		})
+			}.Build(),
+		}.Build())
 
 		errChan <- err
 	}()
 
-	_, err = s.FrontendClient().QueryWorkflow(ctx, &workflowservice.QueryWorkflowRequest{
+	_, err = s.FrontendClient().QueryWorkflow(ctx, workflowservice.QueryWorkflowRequest_builder{
 		Namespace: s.Namespace().String(),
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: workflowRun.GetID(),
-		},
-		Query: &querypb.WorkflowQuery{
+		}.Build(),
+		Query: querypb.WorkflowQuery_builder{
 			QueryType: "dont-care",
-		},
-	})
+		}.Build(),
+	}.Build())
 
 	var query2FailedErr *serviceerror.QueryFailed
 	s.ErrorAs(err, &query2FailedErr)
 	s.Equal("my error message", query2FailedErr.Message)
-	s.Equal("my failure error message", query2FailedErr.Failure.Message)
+	s.Equal("my failure error message", query2FailedErr.Failure.GetMessage())
 
 	select {
 	case err = <-errChan:

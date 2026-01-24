@@ -41,10 +41,10 @@ func TestDeploymentQueueKey(t *testing.T) {
 	f, err := tqid.NewTaskQueueFamily("", "tq")
 	assert.NoError(t, err)
 	p := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(2)
-	d := &deploymentpb.Deployment{
+	d := deploymentpb.Deployment_builder{
 		SeriesName: "my_app",
 		BuildId:    "abc",
-	}
+	}.Build()
 	key := DeploymentQueueKey(p, d)
 	a.Equal(p, key.Partition())
 	a.Equal("", key.Version().VersionSet())

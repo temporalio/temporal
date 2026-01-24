@@ -8,7 +8,6 @@ package token
 
 import (
 	reflect "reflect"
-	sync "sync"
 	unsafe "unsafe"
 
 	v12 "go.temporal.io/server/api/clock/v1"
@@ -27,18 +26,18 @@ const (
 )
 
 type HistoryContinuation struct {
-	state                 protoimpl.MessageState        `protogen:"open.v1"`
-	RunId                 string                        `protobuf:"bytes,1,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	FirstEventId          int64                         `protobuf:"varint,2,opt,name=first_event_id,json=firstEventId,proto3" json:"first_event_id,omitempty"`
-	NextEventId           int64                         `protobuf:"varint,3,opt,name=next_event_id,json=nextEventId,proto3" json:"next_event_id,omitempty"`
-	IsWorkflowRunning     bool                          `protobuf:"varint,5,opt,name=is_workflow_running,json=isWorkflowRunning,proto3" json:"is_workflow_running,omitempty"`
-	PersistenceToken      []byte                        `protobuf:"bytes,6,opt,name=persistence_token,json=persistenceToken,proto3" json:"persistence_token,omitempty"`
-	TransientWorkflowTask *v1.TransientWorkflowTaskInfo `protobuf:"bytes,7,opt,name=transient_workflow_task,json=transientWorkflowTask,proto3" json:"transient_workflow_task,omitempty"`
-	BranchToken           []byte                        `protobuf:"bytes,8,opt,name=branch_token,json=branchToken,proto3" json:"branch_token,omitempty"`
-	VersionHistoryItem    *v1.VersionHistoryItem        `protobuf:"bytes,10,opt,name=version_history_item,json=versionHistoryItem,proto3" json:"version_history_item,omitempty"`
-	VersionedTransition   *v11.VersionedTransition      `protobuf:"bytes,11,opt,name=versioned_transition,json=versionedTransition,proto3" json:"versioned_transition,omitempty"`
-	unknownFields         protoimpl.UnknownFields
-	sizeCache             protoimpl.SizeCache
+	state                            protoimpl.MessageState        `protogen:"opaque.v1"`
+	xxx_hidden_RunId                 string                        `protobuf:"bytes,1,opt,name=run_id,json=runId,proto3"`
+	xxx_hidden_FirstEventId          int64                         `protobuf:"varint,2,opt,name=first_event_id,json=firstEventId,proto3"`
+	xxx_hidden_NextEventId           int64                         `protobuf:"varint,3,opt,name=next_event_id,json=nextEventId,proto3"`
+	xxx_hidden_IsWorkflowRunning     bool                          `protobuf:"varint,5,opt,name=is_workflow_running,json=isWorkflowRunning,proto3"`
+	xxx_hidden_PersistenceToken      []byte                        `protobuf:"bytes,6,opt,name=persistence_token,json=persistenceToken,proto3"`
+	xxx_hidden_TransientWorkflowTask *v1.TransientWorkflowTaskInfo `protobuf:"bytes,7,opt,name=transient_workflow_task,json=transientWorkflowTask,proto3"`
+	xxx_hidden_BranchToken           []byte                        `protobuf:"bytes,8,opt,name=branch_token,json=branchToken,proto3"`
+	xxx_hidden_VersionHistoryItem    *v1.VersionHistoryItem        `protobuf:"bytes,10,opt,name=version_history_item,json=versionHistoryItem,proto3"`
+	xxx_hidden_VersionedTransition   *v11.VersionedTransition      `protobuf:"bytes,11,opt,name=versioned_transition,json=versionedTransition,proto3"`
+	unknownFields                    protoimpl.UnknownFields
+	sizeCache                        protoimpl.SizeCache
 }
 
 func (x *HistoryContinuation) Reset() {
@@ -66,87 +65,187 @@ func (x *HistoryContinuation) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use HistoryContinuation.ProtoReflect.Descriptor instead.
-func (*HistoryContinuation) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_token_v1_message_proto_rawDescGZIP(), []int{0}
-}
-
 func (x *HistoryContinuation) GetRunId() string {
 	if x != nil {
-		return x.RunId
+		return x.xxx_hidden_RunId
 	}
 	return ""
 }
 
 func (x *HistoryContinuation) GetFirstEventId() int64 {
 	if x != nil {
-		return x.FirstEventId
+		return x.xxx_hidden_FirstEventId
 	}
 	return 0
 }
 
 func (x *HistoryContinuation) GetNextEventId() int64 {
 	if x != nil {
-		return x.NextEventId
+		return x.xxx_hidden_NextEventId
 	}
 	return 0
 }
 
 func (x *HistoryContinuation) GetIsWorkflowRunning() bool {
 	if x != nil {
-		return x.IsWorkflowRunning
+		return x.xxx_hidden_IsWorkflowRunning
 	}
 	return false
 }
 
 func (x *HistoryContinuation) GetPersistenceToken() []byte {
 	if x != nil {
-		return x.PersistenceToken
+		return x.xxx_hidden_PersistenceToken
 	}
 	return nil
 }
 
 func (x *HistoryContinuation) GetTransientWorkflowTask() *v1.TransientWorkflowTaskInfo {
 	if x != nil {
-		return x.TransientWorkflowTask
+		return x.xxx_hidden_TransientWorkflowTask
 	}
 	return nil
 }
 
 func (x *HistoryContinuation) GetBranchToken() []byte {
 	if x != nil {
-		return x.BranchToken
+		return x.xxx_hidden_BranchToken
 	}
 	return nil
 }
 
 func (x *HistoryContinuation) GetVersionHistoryItem() *v1.VersionHistoryItem {
 	if x != nil {
-		return x.VersionHistoryItem
+		return x.xxx_hidden_VersionHistoryItem
 	}
 	return nil
 }
 
 func (x *HistoryContinuation) GetVersionedTransition() *v11.VersionedTransition {
 	if x != nil {
-		return x.VersionedTransition
+		return x.xxx_hidden_VersionedTransition
 	}
 	return nil
 }
 
+func (x *HistoryContinuation) SetRunId(v string) {
+	x.xxx_hidden_RunId = v
+}
+
+func (x *HistoryContinuation) SetFirstEventId(v int64) {
+	x.xxx_hidden_FirstEventId = v
+}
+
+func (x *HistoryContinuation) SetNextEventId(v int64) {
+	x.xxx_hidden_NextEventId = v
+}
+
+func (x *HistoryContinuation) SetIsWorkflowRunning(v bool) {
+	x.xxx_hidden_IsWorkflowRunning = v
+}
+
+func (x *HistoryContinuation) SetPersistenceToken(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_PersistenceToken = v
+}
+
+func (x *HistoryContinuation) SetTransientWorkflowTask(v *v1.TransientWorkflowTaskInfo) {
+	x.xxx_hidden_TransientWorkflowTask = v
+}
+
+func (x *HistoryContinuation) SetBranchToken(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_BranchToken = v
+}
+
+func (x *HistoryContinuation) SetVersionHistoryItem(v *v1.VersionHistoryItem) {
+	x.xxx_hidden_VersionHistoryItem = v
+}
+
+func (x *HistoryContinuation) SetVersionedTransition(v *v11.VersionedTransition) {
+	x.xxx_hidden_VersionedTransition = v
+}
+
+func (x *HistoryContinuation) HasTransientWorkflowTask() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_TransientWorkflowTask != nil
+}
+
+func (x *HistoryContinuation) HasVersionHistoryItem() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_VersionHistoryItem != nil
+}
+
+func (x *HistoryContinuation) HasVersionedTransition() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_VersionedTransition != nil
+}
+
+func (x *HistoryContinuation) ClearTransientWorkflowTask() {
+	x.xxx_hidden_TransientWorkflowTask = nil
+}
+
+func (x *HistoryContinuation) ClearVersionHistoryItem() {
+	x.xxx_hidden_VersionHistoryItem = nil
+}
+
+func (x *HistoryContinuation) ClearVersionedTransition() {
+	x.xxx_hidden_VersionedTransition = nil
+}
+
+type HistoryContinuation_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	RunId                 string
+	FirstEventId          int64
+	NextEventId           int64
+	IsWorkflowRunning     bool
+	PersistenceToken      []byte
+	TransientWorkflowTask *v1.TransientWorkflowTaskInfo
+	BranchToken           []byte
+	VersionHistoryItem    *v1.VersionHistoryItem
+	VersionedTransition   *v11.VersionedTransition
+}
+
+func (b0 HistoryContinuation_builder) Build() *HistoryContinuation {
+	m0 := &HistoryContinuation{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_RunId = b.RunId
+	x.xxx_hidden_FirstEventId = b.FirstEventId
+	x.xxx_hidden_NextEventId = b.NextEventId
+	x.xxx_hidden_IsWorkflowRunning = b.IsWorkflowRunning
+	x.xxx_hidden_PersistenceToken = b.PersistenceToken
+	x.xxx_hidden_TransientWorkflowTask = b.TransientWorkflowTask
+	x.xxx_hidden_BranchToken = b.BranchToken
+	x.xxx_hidden_VersionHistoryItem = b.VersionHistoryItem
+	x.xxx_hidden_VersionedTransition = b.VersionedTransition
+	return m0
+}
+
 type RawHistoryContinuation struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	NamespaceId       string                 `protobuf:"bytes,10,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	WorkflowId        string                 `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
-	RunId             string                 `protobuf:"bytes,3,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	StartEventId      int64                  `protobuf:"varint,4,opt,name=start_event_id,json=startEventId,proto3" json:"start_event_id,omitempty"`
-	StartEventVersion int64                  `protobuf:"varint,5,opt,name=start_event_version,json=startEventVersion,proto3" json:"start_event_version,omitempty"`
-	EndEventId        int64                  `protobuf:"varint,6,opt,name=end_event_id,json=endEventId,proto3" json:"end_event_id,omitempty"`
-	EndEventVersion   int64                  `protobuf:"varint,7,opt,name=end_event_version,json=endEventVersion,proto3" json:"end_event_version,omitempty"`
-	PersistenceToken  []byte                 `protobuf:"bytes,8,opt,name=persistence_token,json=persistenceToken,proto3" json:"persistence_token,omitempty"`
-	VersionHistories  *v1.VersionHistories   `protobuf:"bytes,9,opt,name=version_histories,json=versionHistories,proto3" json:"version_histories,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state                        protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId       string                 `protobuf:"bytes,10,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_WorkflowId        string                 `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3"`
+	xxx_hidden_RunId             string                 `protobuf:"bytes,3,opt,name=run_id,json=runId,proto3"`
+	xxx_hidden_StartEventId      int64                  `protobuf:"varint,4,opt,name=start_event_id,json=startEventId,proto3"`
+	xxx_hidden_StartEventVersion int64                  `protobuf:"varint,5,opt,name=start_event_version,json=startEventVersion,proto3"`
+	xxx_hidden_EndEventId        int64                  `protobuf:"varint,6,opt,name=end_event_id,json=endEventId,proto3"`
+	xxx_hidden_EndEventVersion   int64                  `protobuf:"varint,7,opt,name=end_event_version,json=endEventVersion,proto3"`
+	xxx_hidden_PersistenceToken  []byte                 `protobuf:"bytes,8,opt,name=persistence_token,json=persistenceToken,proto3"`
+	xxx_hidden_VersionHistories  *v1.VersionHistories   `protobuf:"bytes,9,opt,name=version_histories,json=versionHistories,proto3"`
+	unknownFields                protoimpl.UnknownFields
+	sizeCache                    protoimpl.SizeCache
 }
 
 func (x *RawHistoryContinuation) Reset() {
@@ -174,93 +273,167 @@ func (x *RawHistoryContinuation) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RawHistoryContinuation.ProtoReflect.Descriptor instead.
-func (*RawHistoryContinuation) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_token_v1_message_proto_rawDescGZIP(), []int{1}
-}
-
 func (x *RawHistoryContinuation) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *RawHistoryContinuation) GetWorkflowId() string {
 	if x != nil {
-		return x.WorkflowId
+		return x.xxx_hidden_WorkflowId
 	}
 	return ""
 }
 
 func (x *RawHistoryContinuation) GetRunId() string {
 	if x != nil {
-		return x.RunId
+		return x.xxx_hidden_RunId
 	}
 	return ""
 }
 
 func (x *RawHistoryContinuation) GetStartEventId() int64 {
 	if x != nil {
-		return x.StartEventId
+		return x.xxx_hidden_StartEventId
 	}
 	return 0
 }
 
 func (x *RawHistoryContinuation) GetStartEventVersion() int64 {
 	if x != nil {
-		return x.StartEventVersion
+		return x.xxx_hidden_StartEventVersion
 	}
 	return 0
 }
 
 func (x *RawHistoryContinuation) GetEndEventId() int64 {
 	if x != nil {
-		return x.EndEventId
+		return x.xxx_hidden_EndEventId
 	}
 	return 0
 }
 
 func (x *RawHistoryContinuation) GetEndEventVersion() int64 {
 	if x != nil {
-		return x.EndEventVersion
+		return x.xxx_hidden_EndEventVersion
 	}
 	return 0
 }
 
 func (x *RawHistoryContinuation) GetPersistenceToken() []byte {
 	if x != nil {
-		return x.PersistenceToken
+		return x.xxx_hidden_PersistenceToken
 	}
 	return nil
 }
 
 func (x *RawHistoryContinuation) GetVersionHistories() *v1.VersionHistories {
 	if x != nil {
-		return x.VersionHistories
+		return x.xxx_hidden_VersionHistories
 	}
 	return nil
 }
 
+func (x *RawHistoryContinuation) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *RawHistoryContinuation) SetWorkflowId(v string) {
+	x.xxx_hidden_WorkflowId = v
+}
+
+func (x *RawHistoryContinuation) SetRunId(v string) {
+	x.xxx_hidden_RunId = v
+}
+
+func (x *RawHistoryContinuation) SetStartEventId(v int64) {
+	x.xxx_hidden_StartEventId = v
+}
+
+func (x *RawHistoryContinuation) SetStartEventVersion(v int64) {
+	x.xxx_hidden_StartEventVersion = v
+}
+
+func (x *RawHistoryContinuation) SetEndEventId(v int64) {
+	x.xxx_hidden_EndEventId = v
+}
+
+func (x *RawHistoryContinuation) SetEndEventVersion(v int64) {
+	x.xxx_hidden_EndEventVersion = v
+}
+
+func (x *RawHistoryContinuation) SetPersistenceToken(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_PersistenceToken = v
+}
+
+func (x *RawHistoryContinuation) SetVersionHistories(v *v1.VersionHistories) {
+	x.xxx_hidden_VersionHistories = v
+}
+
+func (x *RawHistoryContinuation) HasVersionHistories() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_VersionHistories != nil
+}
+
+func (x *RawHistoryContinuation) ClearVersionHistories() {
+	x.xxx_hidden_VersionHistories = nil
+}
+
+type RawHistoryContinuation_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId       string
+	WorkflowId        string
+	RunId             string
+	StartEventId      int64
+	StartEventVersion int64
+	EndEventId        int64
+	EndEventVersion   int64
+	PersistenceToken  []byte
+	VersionHistories  *v1.VersionHistories
+}
+
+func (b0 RawHistoryContinuation_builder) Build() *RawHistoryContinuation {
+	m0 := &RawHistoryContinuation{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_WorkflowId = b.WorkflowId
+	x.xxx_hidden_RunId = b.RunId
+	x.xxx_hidden_StartEventId = b.StartEventId
+	x.xxx_hidden_StartEventVersion = b.StartEventVersion
+	x.xxx_hidden_EndEventId = b.EndEventId
+	x.xxx_hidden_EndEventVersion = b.EndEventVersion
+	x.xxx_hidden_PersistenceToken = b.PersistenceToken
+	x.xxx_hidden_VersionHistories = b.VersionHistories
+	return m0
+}
+
 type Task struct {
-	state            protoimpl.MessageState `protogen:"open.v1"`
-	NamespaceId      string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	WorkflowId       string                 `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
-	RunId            string                 `protobuf:"bytes,3,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	ScheduledEventId int64                  `protobuf:"varint,4,opt,name=scheduled_event_id,json=scheduledEventId,proto3" json:"scheduled_event_id,omitempty"`
-	Attempt          int32                  `protobuf:"varint,5,opt,name=attempt,proto3" json:"attempt,omitempty"`
-	ActivityId       string                 `protobuf:"bytes,6,opt,name=activity_id,json=activityId,proto3" json:"activity_id,omitempty"`
-	WorkflowType     string                 `protobuf:"bytes,7,opt,name=workflow_type,json=workflowType,proto3" json:"workflow_type,omitempty"`
-	ActivityType     string                 `protobuf:"bytes,8,opt,name=activity_type,json=activityType,proto3" json:"activity_type,omitempty"`
-	Clock            *v12.VectorClock       `protobuf:"bytes,9,opt,name=clock,proto3" json:"clock,omitempty"`
-	StartedEventId   int64                  `protobuf:"varint,10,opt,name=started_event_id,json=startedEventId,proto3" json:"started_event_id,omitempty"`
-	Version          int64                  `protobuf:"varint,11,opt,name=version,proto3" json:"version,omitempty"`
-	StartedTime      *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=started_time,json=startedTime,proto3" json:"started_time,omitempty"`
-	StartVersion     int64                  `protobuf:"varint,13,opt,name=start_version,json=startVersion,proto3" json:"start_version,omitempty"`
-	// Reference to the associated Chasm component, if provided.
-	ComponentRef  []byte `protobuf:"bytes,14,opt,name=component_ref,json=componentRef,proto3" json:"component_ref,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                       protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId      string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_WorkflowId       string                 `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3"`
+	xxx_hidden_RunId            string                 `protobuf:"bytes,3,opt,name=run_id,json=runId,proto3"`
+	xxx_hidden_ScheduledEventId int64                  `protobuf:"varint,4,opt,name=scheduled_event_id,json=scheduledEventId,proto3"`
+	xxx_hidden_Attempt          int32                  `protobuf:"varint,5,opt,name=attempt,proto3"`
+	xxx_hidden_ActivityId       string                 `protobuf:"bytes,6,opt,name=activity_id,json=activityId,proto3"`
+	xxx_hidden_WorkflowType     string                 `protobuf:"bytes,7,opt,name=workflow_type,json=workflowType,proto3"`
+	xxx_hidden_ActivityType     string                 `protobuf:"bytes,8,opt,name=activity_type,json=activityType,proto3"`
+	xxx_hidden_Clock            *v12.VectorClock       `protobuf:"bytes,9,opt,name=clock,proto3"`
+	xxx_hidden_StartedEventId   int64                  `protobuf:"varint,10,opt,name=started_event_id,json=startedEventId,proto3"`
+	xxx_hidden_Version          int64                  `protobuf:"varint,11,opt,name=version,proto3"`
+	xxx_hidden_StartedTime      *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=started_time,json=startedTime,proto3"`
+	xxx_hidden_StartVersion     int64                  `protobuf:"varint,13,opt,name=start_version,json=startVersion,proto3"`
+	xxx_hidden_ComponentRef     []byte                 `protobuf:"bytes,14,opt,name=component_ref,json=componentRef,proto3"`
+	unknownFields               protoimpl.UnknownFields
+	sizeCache                   protoimpl.SizeCache
 }
 
 func (x *Task) Reset() {
@@ -288,116 +461,233 @@ func (x *Task) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use Task.ProtoReflect.Descriptor instead.
-func (*Task) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_token_v1_message_proto_rawDescGZIP(), []int{2}
-}
-
 func (x *Task) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *Task) GetWorkflowId() string {
 	if x != nil {
-		return x.WorkflowId
+		return x.xxx_hidden_WorkflowId
 	}
 	return ""
 }
 
 func (x *Task) GetRunId() string {
 	if x != nil {
-		return x.RunId
+		return x.xxx_hidden_RunId
 	}
 	return ""
 }
 
 func (x *Task) GetScheduledEventId() int64 {
 	if x != nil {
-		return x.ScheduledEventId
+		return x.xxx_hidden_ScheduledEventId
 	}
 	return 0
 }
 
 func (x *Task) GetAttempt() int32 {
 	if x != nil {
-		return x.Attempt
+		return x.xxx_hidden_Attempt
 	}
 	return 0
 }
 
 func (x *Task) GetActivityId() string {
 	if x != nil {
-		return x.ActivityId
+		return x.xxx_hidden_ActivityId
 	}
 	return ""
 }
 
 func (x *Task) GetWorkflowType() string {
 	if x != nil {
-		return x.WorkflowType
+		return x.xxx_hidden_WorkflowType
 	}
 	return ""
 }
 
 func (x *Task) GetActivityType() string {
 	if x != nil {
-		return x.ActivityType
+		return x.xxx_hidden_ActivityType
 	}
 	return ""
 }
 
 func (x *Task) GetClock() *v12.VectorClock {
 	if x != nil {
-		return x.Clock
+		return x.xxx_hidden_Clock
 	}
 	return nil
 }
 
 func (x *Task) GetStartedEventId() int64 {
 	if x != nil {
-		return x.StartedEventId
+		return x.xxx_hidden_StartedEventId
 	}
 	return 0
 }
 
 func (x *Task) GetVersion() int64 {
 	if x != nil {
-		return x.Version
+		return x.xxx_hidden_Version
 	}
 	return 0
 }
 
 func (x *Task) GetStartedTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.StartedTime
+		return x.xxx_hidden_StartedTime
 	}
 	return nil
 }
 
 func (x *Task) GetStartVersion() int64 {
 	if x != nil {
-		return x.StartVersion
+		return x.xxx_hidden_StartVersion
 	}
 	return 0
 }
 
 func (x *Task) GetComponentRef() []byte {
 	if x != nil {
-		return x.ComponentRef
+		return x.xxx_hidden_ComponentRef
 	}
 	return nil
 }
 
+func (x *Task) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *Task) SetWorkflowId(v string) {
+	x.xxx_hidden_WorkflowId = v
+}
+
+func (x *Task) SetRunId(v string) {
+	x.xxx_hidden_RunId = v
+}
+
+func (x *Task) SetScheduledEventId(v int64) {
+	x.xxx_hidden_ScheduledEventId = v
+}
+
+func (x *Task) SetAttempt(v int32) {
+	x.xxx_hidden_Attempt = v
+}
+
+func (x *Task) SetActivityId(v string) {
+	x.xxx_hidden_ActivityId = v
+}
+
+func (x *Task) SetWorkflowType(v string) {
+	x.xxx_hidden_WorkflowType = v
+}
+
+func (x *Task) SetActivityType(v string) {
+	x.xxx_hidden_ActivityType = v
+}
+
+func (x *Task) SetClock(v *v12.VectorClock) {
+	x.xxx_hidden_Clock = v
+}
+
+func (x *Task) SetStartedEventId(v int64) {
+	x.xxx_hidden_StartedEventId = v
+}
+
+func (x *Task) SetVersion(v int64) {
+	x.xxx_hidden_Version = v
+}
+
+func (x *Task) SetStartedTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_StartedTime = v
+}
+
+func (x *Task) SetStartVersion(v int64) {
+	x.xxx_hidden_StartVersion = v
+}
+
+func (x *Task) SetComponentRef(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_ComponentRef = v
+}
+
+func (x *Task) HasClock() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Clock != nil
+}
+
+func (x *Task) HasStartedTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_StartedTime != nil
+}
+
+func (x *Task) ClearClock() {
+	x.xxx_hidden_Clock = nil
+}
+
+func (x *Task) ClearStartedTime() {
+	x.xxx_hidden_StartedTime = nil
+}
+
+type Task_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId      string
+	WorkflowId       string
+	RunId            string
+	ScheduledEventId int64
+	Attempt          int32
+	ActivityId       string
+	WorkflowType     string
+	ActivityType     string
+	Clock            *v12.VectorClock
+	StartedEventId   int64
+	Version          int64
+	StartedTime      *timestamppb.Timestamp
+	StartVersion     int64
+	// Reference to the associated Chasm component, if provided.
+	ComponentRef []byte
+}
+
+func (b0 Task_builder) Build() *Task {
+	m0 := &Task{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_WorkflowId = b.WorkflowId
+	x.xxx_hidden_RunId = b.RunId
+	x.xxx_hidden_ScheduledEventId = b.ScheduledEventId
+	x.xxx_hidden_Attempt = b.Attempt
+	x.xxx_hidden_ActivityId = b.ActivityId
+	x.xxx_hidden_WorkflowType = b.WorkflowType
+	x.xxx_hidden_ActivityType = b.ActivityType
+	x.xxx_hidden_Clock = b.Clock
+	x.xxx_hidden_StartedEventId = b.StartedEventId
+	x.xxx_hidden_Version = b.Version
+	x.xxx_hidden_StartedTime = b.StartedTime
+	x.xxx_hidden_StartVersion = b.StartVersion
+	x.xxx_hidden_ComponentRef = b.ComponentRef
+	return m0
+}
+
 type QueryTask struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	NamespaceId   string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	TaskQueue     string                 `protobuf:"bytes,2,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
-	TaskId        string                 `protobuf:"bytes,3,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                  protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_TaskQueue   string                 `protobuf:"bytes,2,opt,name=task_queue,json=taskQueue,proto3"`
+	xxx_hidden_TaskId      string                 `protobuf:"bytes,3,opt,name=task_id,json=taskId,proto3"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *QueryTask) Reset() {
@@ -425,39 +715,64 @@ func (x *QueryTask) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use QueryTask.ProtoReflect.Descriptor instead.
-func (*QueryTask) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_token_v1_message_proto_rawDescGZIP(), []int{3}
-}
-
 func (x *QueryTask) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *QueryTask) GetTaskQueue() string {
 	if x != nil {
-		return x.TaskQueue
+		return x.xxx_hidden_TaskQueue
 	}
 	return ""
 }
 
 func (x *QueryTask) GetTaskId() string {
 	if x != nil {
-		return x.TaskId
+		return x.xxx_hidden_TaskId
 	}
 	return ""
 }
 
+func (x *QueryTask) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *QueryTask) SetTaskQueue(v string) {
+	x.xxx_hidden_TaskQueue = v
+}
+
+func (x *QueryTask) SetTaskId(v string) {
+	x.xxx_hidden_TaskId = v
+}
+
+type QueryTask_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId string
+	TaskQueue   string
+	TaskId      string
+}
+
+func (b0 QueryTask_builder) Build() *QueryTask {
+	m0 := &QueryTask{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_TaskQueue = b.TaskQueue
+	x.xxx_hidden_TaskId = b.TaskId
+	return m0
+}
+
 type NexusTask struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	NamespaceId   string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	TaskQueue     string                 `protobuf:"bytes,2,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
-	TaskId        string                 `protobuf:"bytes,3,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                  protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_TaskQueue   string                 `protobuf:"bytes,2,opt,name=task_queue,json=taskQueue,proto3"`
+	xxx_hidden_TaskId      string                 `protobuf:"bytes,3,opt,name=task_id,json=taskId,proto3"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *NexusTask) Reset() {
@@ -485,41 +800,64 @@ func (x *NexusTask) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use NexusTask.ProtoReflect.Descriptor instead.
-func (*NexusTask) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_token_v1_message_proto_rawDescGZIP(), []int{4}
-}
-
 func (x *NexusTask) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *NexusTask) GetTaskQueue() string {
 	if x != nil {
-		return x.TaskQueue
+		return x.xxx_hidden_TaskQueue
 	}
 	return ""
 }
 
 func (x *NexusTask) GetTaskId() string {
 	if x != nil {
-		return x.TaskId
+		return x.xxx_hidden_TaskId
 	}
 	return ""
 }
 
+func (x *NexusTask) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *NexusTask) SetTaskQueue(v string) {
+	x.xxx_hidden_TaskQueue = v
+}
+
+func (x *NexusTask) SetTaskId(v string) {
+	x.xxx_hidden_TaskId = v
+}
+
+type NexusTask_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId string
+	TaskQueue   string
+	TaskId      string
+}
+
+func (b0 NexusTask_builder) Build() *NexusTask {
+	m0 := &NexusTask{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_TaskQueue = b.TaskQueue
+	x.xxx_hidden_TaskId = b.TaskId
+	return m0
+}
+
 // A reference for loading a history event.
 type HistoryEventRef struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Event ID.
-	EventId int64 `protobuf:"varint,1,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
-	// Event batch ID - the first event ID in the batch the event was stored in.
-	EventBatchId  int64 `protobuf:"varint,2,opt,name=event_batch_id,json=eventBatchId,proto3" json:"event_batch_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                   protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_EventId      int64                  `protobuf:"varint,1,opt,name=event_id,json=eventId,proto3"`
+	xxx_hidden_EventBatchId int64                  `protobuf:"varint,2,opt,name=event_batch_id,json=eventBatchId,proto3"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
 }
 
 func (x *HistoryEventRef) Reset() {
@@ -547,44 +885,57 @@ func (x *HistoryEventRef) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use HistoryEventRef.ProtoReflect.Descriptor instead.
-func (*HistoryEventRef) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_token_v1_message_proto_rawDescGZIP(), []int{5}
-}
-
 func (x *HistoryEventRef) GetEventId() int64 {
 	if x != nil {
-		return x.EventId
+		return x.xxx_hidden_EventId
 	}
 	return 0
 }
 
 func (x *HistoryEventRef) GetEventBatchId() int64 {
 	if x != nil {
-		return x.EventBatchId
+		return x.xxx_hidden_EventBatchId
 	}
 	return 0
 }
 
+func (x *HistoryEventRef) SetEventId(v int64) {
+	x.xxx_hidden_EventId = v
+}
+
+func (x *HistoryEventRef) SetEventBatchId(v int64) {
+	x.xxx_hidden_EventBatchId = v
+}
+
+type HistoryEventRef_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Event ID.
+	EventId int64
+	// Event batch ID - the first event ID in the batch the event was stored in.
+	EventBatchId int64
+}
+
+func (b0 HistoryEventRef_builder) Build() *HistoryEventRef {
+	m0 := &HistoryEventRef{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_EventId = b.EventId
+	x.xxx_hidden_EventBatchId = b.EventBatchId
+	return m0
+}
+
 // A completion token for a Nexus operation started from a workflow.
 type NexusOperationCompletion struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Namespace UUID. (Deprecated)
-	NamespaceId string `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	// Workflow ID. (Deprecated)
-	WorkflowId string `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
-	// Run ID at the time this token was generated. (Deprecated)
-	RunId string `protobuf:"bytes,3,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	// Reference including the path to the backing Operation state machine and a version + transition count for
-	// staleness checks. (Deprecated)
-	Ref *v11.StateMachineRef `protobuf:"bytes,4,opt,name=ref,proto3" json:"ref,omitempty"`
-	// Request ID embedded in the NexusOperationScheduledEvent.
-	// Allows completing a started operation after a workflow has been reset.
-	RequestId string `protobuf:"bytes,5,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
-	// Reference to the CHASM component to be informed of the completion.
-	ComponentRef  []byte `protobuf:"bytes,6,opt,name=component_ref,json=componentRef,proto3" json:"component_ref,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                   protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId  string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_WorkflowId   string                 `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3"`
+	xxx_hidden_RunId        string                 `protobuf:"bytes,3,opt,name=run_id,json=runId,proto3"`
+	xxx_hidden_Ref          *v11.StateMachineRef   `protobuf:"bytes,4,opt,name=ref,proto3"`
+	xxx_hidden_RequestId    string                 `protobuf:"bytes,5,opt,name=request_id,json=requestId,proto3"`
+	xxx_hidden_ComponentRef []byte                 `protobuf:"bytes,6,opt,name=component_ref,json=componentRef,proto3"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
 }
 
 func (x *NexusOperationCompletion) Reset() {
@@ -612,51 +963,116 @@ func (x *NexusOperationCompletion) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use NexusOperationCompletion.ProtoReflect.Descriptor instead.
-func (*NexusOperationCompletion) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_token_v1_message_proto_rawDescGZIP(), []int{6}
-}
-
 func (x *NexusOperationCompletion) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *NexusOperationCompletion) GetWorkflowId() string {
 	if x != nil {
-		return x.WorkflowId
+		return x.xxx_hidden_WorkflowId
 	}
 	return ""
 }
 
 func (x *NexusOperationCompletion) GetRunId() string {
 	if x != nil {
-		return x.RunId
+		return x.xxx_hidden_RunId
 	}
 	return ""
 }
 
 func (x *NexusOperationCompletion) GetRef() *v11.StateMachineRef {
 	if x != nil {
-		return x.Ref
+		return x.xxx_hidden_Ref
 	}
 	return nil
 }
 
 func (x *NexusOperationCompletion) GetRequestId() string {
 	if x != nil {
-		return x.RequestId
+		return x.xxx_hidden_RequestId
 	}
 	return ""
 }
 
 func (x *NexusOperationCompletion) GetComponentRef() []byte {
 	if x != nil {
-		return x.ComponentRef
+		return x.xxx_hidden_ComponentRef
 	}
 	return nil
+}
+
+func (x *NexusOperationCompletion) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *NexusOperationCompletion) SetWorkflowId(v string) {
+	x.xxx_hidden_WorkflowId = v
+}
+
+func (x *NexusOperationCompletion) SetRunId(v string) {
+	x.xxx_hidden_RunId = v
+}
+
+func (x *NexusOperationCompletion) SetRef(v *v11.StateMachineRef) {
+	x.xxx_hidden_Ref = v
+}
+
+func (x *NexusOperationCompletion) SetRequestId(v string) {
+	x.xxx_hidden_RequestId = v
+}
+
+func (x *NexusOperationCompletion) SetComponentRef(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_ComponentRef = v
+}
+
+func (x *NexusOperationCompletion) HasRef() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Ref != nil
+}
+
+func (x *NexusOperationCompletion) ClearRef() {
+	x.xxx_hidden_Ref = nil
+}
+
+type NexusOperationCompletion_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Namespace UUID. (Deprecated)
+	NamespaceId string
+	// Workflow ID. (Deprecated)
+	WorkflowId string
+	// Run ID at the time this token was generated. (Deprecated)
+	RunId string
+	// Reference including the path to the backing Operation state machine and a version + transition count for
+	// staleness checks. (Deprecated)
+	Ref *v11.StateMachineRef
+	// Request ID embedded in the NexusOperationScheduledEvent.
+	// Allows completing a started operation after a workflow has been reset.
+	RequestId string
+	// Reference to the CHASM component to be informed of the completion.
+	ComponentRef []byte
+}
+
+func (b0 NexusOperationCompletion_builder) Build() *NexusOperationCompletion {
+	m0 := &NexusOperationCompletion{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_WorkflowId = b.WorkflowId
+	x.xxx_hidden_RunId = b.RunId
+	x.xxx_hidden_Ref = b.Ref
+	x.xxx_hidden_RequestId = b.RequestId
+	x.xxx_hidden_ComponentRef = b.ComponentRef
+	return m0
 }
 
 var File_temporal_server_api_token_v1_message_proto protoreflect.FileDescriptor
@@ -729,18 +1145,6 @@ const file_temporal_server_api_token_v1_message_proto_rawDesc = "" +
 	"\n" +
 	"request_id\x18\x05 \x01(\tR\trequestId\x12#\n" +
 	"\rcomponent_ref\x18\x06 \x01(\fR\fcomponentRefB*Z(go.temporal.io/server/api/token/v1;tokenb\x06proto3"
-
-var (
-	file_temporal_server_api_token_v1_message_proto_rawDescOnce sync.Once
-	file_temporal_server_api_token_v1_message_proto_rawDescData []byte
-)
-
-func file_temporal_server_api_token_v1_message_proto_rawDescGZIP() []byte {
-	file_temporal_server_api_token_v1_message_proto_rawDescOnce.Do(func() {
-		file_temporal_server_api_token_v1_message_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_api_token_v1_message_proto_rawDesc), len(file_temporal_server_api_token_v1_message_proto_rawDesc)))
-	})
-	return file_temporal_server_api_token_v1_message_proto_rawDescData
-}
 
 var file_temporal_server_api_token_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
 var file_temporal_server_api_token_v1_message_proto_goTypes = []any{

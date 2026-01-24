@@ -96,10 +96,10 @@ func (h *frontendHandler) StartActivityExecution(ctx context.Context, req *workf
 		return nil, err
 	}
 
-	resp, err := h.client.StartActivityExecution(ctx, &activitypb.StartActivityExecutionRequest{
+	resp, err := h.client.StartActivityExecution(ctx, activitypb.StartActivityExecutionRequest_builder{
 		NamespaceId:     namespaceID.String(),
 		FrontendRequest: modifiedReq,
-	})
+	}.Build())
 
 	return resp.GetFrontendResponse(), err
 }
@@ -127,10 +127,10 @@ func (h *frontendHandler) DescribeActivityExecution(
 		return nil, err
 	}
 
-	resp, err := h.client.DescribeActivityExecution(ctx, &activitypb.DescribeActivityExecutionRequest{
+	resp, err := h.client.DescribeActivityExecution(ctx, activitypb.DescribeActivityExecutionRequest_builder{
 		NamespaceId:     namespaceID.String(),
 		FrontendRequest: req,
-	})
+	}.Build())
 	return resp.GetFrontendResponse(), err
 }
 
@@ -154,10 +154,10 @@ func (h *frontendHandler) PollActivityExecution(
 	if err != nil {
 		return nil, err
 	}
-	resp, err := h.client.PollActivityExecution(ctx, &activitypb.PollActivityExecutionRequest{
+	resp, err := h.client.PollActivityExecution(ctx, activitypb.PollActivityExecutionRequest_builder{
 		NamespaceId:     namespaceID.String(),
 		FrontendRequest: req,
-	})
+	}.Build())
 	return resp.GetFrontendResponse(), err
 }
 
@@ -198,30 +198,30 @@ func (h *frontendHandler) ListActivityExecutions(
 		statusStr, _ := chasm.SearchAttributeValue(exec.ChasmSearchAttributes, StatusSearchAttribute)
 		status, _ := enumspb.ActivityExecutionStatusFromString(statusStr)
 
-		info := &apiactivitypb.ActivityExecutionListInfo{
+		info := apiactivitypb.ActivityExecutionListInfo_builder{
 			ActivityId:           exec.BusinessID,
 			RunId:                exec.RunID,
 			ScheduleTime:         timestamppb.New(exec.StartTime),
 			StateTransitionCount: exec.StateTransitionCount,
 			StateSizeBytes:       exec.HistorySizeBytes,
-			SearchAttributes:     &commonpb.SearchAttributes{IndexedFields: exec.CustomSearchAttributes},
-			ActivityType:         &commonpb.ActivityType{Name: activityType},
+			SearchAttributes:     commonpb.SearchAttributes_builder{IndexedFields: exec.CustomSearchAttributes}.Build(),
+			ActivityType:         commonpb.ActivityType_builder{Name: activityType}.Build(),
 			TaskQueue:            taskQueue,
 			Status:               status,
-		}
+		}.Build()
 		if !exec.CloseTime.IsZero() {
-			info.CloseTime = timestamppb.New(exec.CloseTime)
+			info.SetCloseTime(timestamppb.New(exec.CloseTime))
 			if !exec.StartTime.IsZero() {
-				info.ExecutionDuration = durationpb.New(exec.CloseTime.Sub(exec.StartTime))
+				info.SetExecutionDuration(durationpb.New(exec.CloseTime.Sub(exec.StartTime)))
 			}
 		}
 		executions = append(executions, info)
 	}
 
-	return &workflowservice.ListActivityExecutionsResponse{
+	return workflowservice.ListActivityExecutionsResponse_builder{
 		Executions:    executions,
 		NextPageToken: resp.NextPageToken,
-	}, nil
+	}.Build(), nil
 }
 
 // CountActivityExecutions counts activity executions matching the query in the request.
@@ -249,16 +249,16 @@ func (h *frontendHandler) CountActivityExecutions(
 
 	groups := make([]*workflowservice.CountActivityExecutionsResponse_AggregationGroup, 0, len(resp.Groups))
 	for _, g := range resp.Groups {
-		groups = append(groups, &workflowservice.CountActivityExecutionsResponse_AggregationGroup{
+		groups = append(groups, workflowservice.CountActivityExecutionsResponse_AggregationGroup_builder{
 			GroupValues: g.Values,
 			Count:       g.Count,
-		})
+		}.Build())
 	}
 
-	return &workflowservice.CountActivityExecutionsResponse{
+	return workflowservice.CountActivityExecutionsResponse_builder{
 		Count:  resp.Count,
 		Groups: groups,
-	}, nil
+	}.Build(), nil
 }
 
 // TerminateActivityExecution terminates a standalone activity execution
@@ -285,7 +285,7 @@ func (h *frontendHandler) TerminateActivityExecution(
 	}
 
 	if req.GetRequestId() == "" {
-		req.RequestId = uuid.NewString()
+		req.SetRequestId(uuid.NewString())
 	}
 
 	if err := validateInputSize(
@@ -299,10 +299,10 @@ func (h *frontendHandler) TerminateActivityExecution(
 		return nil, err
 	}
 
-	_, err = h.client.TerminateActivityExecution(ctx, &activitypb.TerminateActivityExecutionRequest{
+	_, err = h.client.TerminateActivityExecution(ctx, activitypb.TerminateActivityExecutionRequest_builder{
 		NamespaceId:     namespaceID.String(),
 		FrontendRequest: req,
-	})
+	}.Build())
 	if err != nil {
 		return nil, err
 	}
@@ -333,17 +333,17 @@ func (h *frontendHandler) RequestCancelActivityExecution(
 	}
 
 	if req.GetRequestId() == "" {
-		req.RequestId = uuid.NewString()
+		req.SetRequestId(uuid.NewString())
 	}
 
 	if len(req.GetReason()) > maxIDLen {
 		return nil, serviceerror.NewInvalidArgument("Reason length exceeds limit.")
 	}
 
-	_, err = h.client.RequestCancelActivityExecution(ctx, &activitypb.RequestCancelActivityExecutionRequest{
+	_, err = h.client.RequestCancelActivityExecution(ctx, activitypb.RequestCancelActivityExecutionRequest_builder{
 		NamespaceId:     namespaceID.String(),
 		FrontendRequest: req,
-	})
+	}.Build())
 	if err != nil {
 		return nil, err
 	}
@@ -357,21 +357,21 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 ) (*workflowservice.StartActivityExecutionRequest, error) {
 	// Since validation includes mutation of the request, we clone it first so that any retries use the original request.
 	req = common.CloneProto(req)
-	activityType := req.ActivityType.GetName()
+	activityType := req.GetActivityType().GetName()
 
-	if req.RetryPolicy == nil {
-		req.RetryPolicy = &commonpb.RetryPolicy{}
+	if !req.HasRetryPolicy() {
+		req.SetRetryPolicy(&commonpb.RetryPolicy{})
 	}
 
 	opts := activityOptionsFromStartRequest(req)
 	err := ValidateAndNormalizeActivityAttributes(
-		req.ActivityId,
+		req.GetActivityId(),
 		activityType,
 		h.config.DefaultActivityRetryPolicy,
 		h.config.MaxIDLengthLimit(),
 		namespaceID,
 		opts,
-		req.Priority,
+		req.GetPriority(),
 		durationpb.New(0),
 	)
 	if err != nil {
@@ -394,7 +394,7 @@ func (h *frontendHandler) validateAndNormalizeStartActivityExecutionRequest(
 	req *workflowservice.StartActivityExecutionRequest,
 ) error {
 	if req.GetRequestId() == "" {
-		req.RequestId = uuid.NewString()
+		req.SetRequestId(uuid.NewString())
 	}
 
 	if len(req.GetRequestId()) > h.config.MaxIDLengthLimit() {
@@ -410,7 +410,7 @@ func (h *frontendHandler) validateAndNormalizeStartActivityExecutionRequest(
 		req.GetActivityType().GetName(),
 		h.config.BlobSizeLimitError,
 		h.config.BlobSizeLimitWarn,
-		req.Input.Size(),
+		req.GetInput().Size(),
 		h.logger,
 		req.GetNamespace()); err != nil {
 		return err
@@ -431,23 +431,23 @@ func (h *frontendHandler) validateAndNormalizeStartActivityExecutionRequest(
 // activityOptionsFromStartRequest builds an ActivityOptions from the inlined fields
 // of a StartActivityExecutionRequest for use with shared validation logic.
 func activityOptionsFromStartRequest(req *workflowservice.StartActivityExecutionRequest) *apiactivitypb.ActivityOptions {
-	return &apiactivitypb.ActivityOptions{
-		TaskQueue:              req.TaskQueue,
-		ScheduleToCloseTimeout: req.ScheduleToCloseTimeout,
-		ScheduleToStartTimeout: req.ScheduleToStartTimeout,
-		StartToCloseTimeout:    req.StartToCloseTimeout,
-		HeartbeatTimeout:       req.HeartbeatTimeout,
-		RetryPolicy:            req.RetryPolicy,
-	}
+	return apiactivitypb.ActivityOptions_builder{
+		TaskQueue:              req.GetTaskQueue(),
+		ScheduleToCloseTimeout: req.GetScheduleToCloseTimeout(),
+		ScheduleToStartTimeout: req.GetScheduleToStartTimeout(),
+		StartToCloseTimeout:    req.GetStartToCloseTimeout(),
+		HeartbeatTimeout:       req.GetHeartbeatTimeout(),
+		RetryPolicy:            req.GetRetryPolicy(),
+	}.Build()
 }
 
 // applyActivityOptionsToStartRequest copies normalized values from ActivityOptions
 // back to the StartActivityExecutionRequest.
 func applyActivityOptionsToStartRequest(opts *apiactivitypb.ActivityOptions, req *workflowservice.StartActivityExecutionRequest) {
-	req.TaskQueue = opts.TaskQueue
-	req.ScheduleToCloseTimeout = opts.ScheduleToCloseTimeout
-	req.ScheduleToStartTimeout = opts.ScheduleToStartTimeout
-	req.StartToCloseTimeout = opts.StartToCloseTimeout
-	req.HeartbeatTimeout = opts.HeartbeatTimeout
-	req.RetryPolicy = opts.RetryPolicy
+	req.SetTaskQueue(opts.GetTaskQueue())
+	req.SetScheduleToCloseTimeout(opts.GetScheduleToCloseTimeout())
+	req.SetScheduleToStartTimeout(opts.GetScheduleToStartTimeout())
+	req.SetStartToCloseTimeout(opts.GetStartToCloseTimeout())
+	req.SetHeartbeatTimeout(opts.GetHeartbeatTimeout())
+	req.SetRetryPolicy(opts.GetRetryPolicy())
 }

@@ -28,8 +28,8 @@ func verifyMutableStateChecksum(
 	ms historyi.MutableState,
 	csum *persistencespb.Checksum,
 ) error {
-	if csum.Version != mutableStateChecksumPayloadV1 {
-		return fmt.Errorf("invalid checksum payload version %v", csum.Version)
+	if csum.GetVersion() != mutableStateChecksumPayloadV1 {
+		return fmt.Errorf("invalid checksum payload version %v", csum.GetVersion())
 	}
 	payload := newMutableStateChecksumPayload(ms)
 	return checksum.Verify(payload, csum)
@@ -38,25 +38,25 @@ func verifyMutableStateChecksum(
 func newMutableStateChecksumPayload(ms historyi.MutableState) *checksumspb.MutableStateChecksumPayload {
 	executionInfo := ms.GetExecutionInfo()
 	executionState := ms.GetExecutionState()
-	payload := &checksumspb.MutableStateChecksumPayload{
-		CancelRequested:              executionInfo.CancelRequested,
-		State:                        executionState.State,
-		LastFirstEventId:             executionInfo.LastFirstEventId,
+	payload := checksumspb.MutableStateChecksumPayload_builder{
+		CancelRequested:              executionInfo.GetCancelRequested(),
+		State:                        executionState.GetState(),
+		LastFirstEventId:             executionInfo.GetLastFirstEventId(),
 		NextEventId:                  ms.GetNextEventID(),
-		LastProcessedEventId:         executionInfo.LastCompletedWorkflowTaskStartedEventId,
-		ActivityCount:                executionInfo.ActivityCount,
-		ChildExecutionCount:          executionInfo.ChildExecutionCount,
-		UserTimerCount:               executionInfo.UserTimerCount,
-		RequestCancelExternalCount:   executionInfo.RequestCancelExternalCount,
-		SignalExternalCount:          executionInfo.SignalExternalCount,
-		SignalCount:                  executionInfo.SignalCount,
-		WorkflowTaskAttempt:          executionInfo.WorkflowTaskAttempt,
-		WorkflowTaskScheduledEventId: executionInfo.WorkflowTaskScheduledEventId,
-		WorkflowTaskStartedEventId:   executionInfo.WorkflowTaskStartedEventId,
-		WorkflowTaskVersion:          executionInfo.WorkflowTaskVersion,
-		StickyTaskQueueName:          executionInfo.StickyTaskQueue,
-		VersionHistories:             executionInfo.VersionHistories,
-	}
+		LastProcessedEventId:         executionInfo.GetLastCompletedWorkflowTaskStartedEventId(),
+		ActivityCount:                executionInfo.GetActivityCount(),
+		ChildExecutionCount:          executionInfo.GetChildExecutionCount(),
+		UserTimerCount:               executionInfo.GetUserTimerCount(),
+		RequestCancelExternalCount:   executionInfo.GetRequestCancelExternalCount(),
+		SignalExternalCount:          executionInfo.GetSignalExternalCount(),
+		SignalCount:                  executionInfo.GetSignalCount(),
+		WorkflowTaskAttempt:          executionInfo.GetWorkflowTaskAttempt(),
+		WorkflowTaskScheduledEventId: executionInfo.GetWorkflowTaskScheduledEventId(),
+		WorkflowTaskStartedEventId:   executionInfo.GetWorkflowTaskStartedEventId(),
+		WorkflowTaskVersion:          executionInfo.GetWorkflowTaskVersion(),
+		StickyTaskQueueName:          executionInfo.GetStickyTaskQueue(),
+		VersionHistories:             executionInfo.GetVersionHistories(),
+	}.Build()
 
 	// for each of the pendingXXX ids below, sorting is needed to guarantee that
 	// same serialized bytes can be generated during verification
@@ -65,27 +65,27 @@ func newMutableStateChecksumPayload(ms historyi.MutableState) *checksumspb.Mutab
 		pendingTimerIDs = append(pendingTimerIDs, ti.GetStartedEventId())
 	}
 	util.SortSlice(pendingTimerIDs)
-	payload.PendingTimerStartedEventIds = pendingTimerIDs
+	payload.SetPendingTimerStartedEventIds(pendingTimerIDs)
 
 	pendingActivityIDs := expmaps.Keys(ms.GetPendingActivityInfos())
 	util.SortSlice(pendingActivityIDs)
-	payload.PendingActivityScheduledEventIds = pendingActivityIDs
+	payload.SetPendingActivityScheduledEventIds(pendingActivityIDs)
 
 	pendingChildIDs := expmaps.Keys(ms.GetPendingChildExecutionInfos())
 	util.SortSlice(pendingChildIDs)
-	payload.PendingChildInitiatedEventIds = pendingChildIDs
+	payload.SetPendingChildInitiatedEventIds(pendingChildIDs)
 
 	signalIDs := expmaps.Keys(ms.GetPendingSignalExternalInfos())
 	util.SortSlice(signalIDs)
-	payload.PendingSignalInitiatedEventIds = signalIDs
+	payload.SetPendingSignalInitiatedEventIds(signalIDs)
 
 	requestCancelIDs := expmaps.Keys(ms.GetPendingRequestCancelExternalInfos())
 	util.SortSlice(requestCancelIDs)
-	payload.PendingReqCancelInitiatedEventIds = requestCancelIDs
+	payload.SetPendingReqCancelInitiatedEventIds(requestCancelIDs)
 
 	chasmNodePaths := expmaps.Keys(ms.ChasmTree().Snapshot(nil).Nodes)
 	util.SortSlice(chasmNodePaths)
-	payload.PendingChasmNodePaths = chasmNodePaths
+	payload.SetPendingChasmNodePaths(chasmNodePaths)
 
 	return payload
 }

@@ -48,19 +48,17 @@ func TestAddChild(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			root := newRoot(t, &hsmtest.NodeBackend{})
 			schedTime := timestamppb.Now()
-			event := &historypb.HistoryEvent{
+			event := historypb.HistoryEvent_builder{
 				EventTime: schedTime,
-				Attributes: &historypb.HistoryEvent_NexusOperationScheduledEventAttributes{
-					NexusOperationScheduledEventAttributes: &historypb.NexusOperationScheduledEventAttributes{
-						EndpointId:             "endpoint-id",
-						Endpoint:               "endpoint",
-						Service:                "service",
-						Operation:              "operation",
-						RequestId:              "request-id",
-						ScheduleToCloseTimeout: durationpb.New(tc.timeout),
-					},
-				},
-			}
+				NexusOperationScheduledEventAttributes: historypb.NexusOperationScheduledEventAttributes_builder{
+					EndpointId:             "endpoint-id",
+					Endpoint:               "endpoint",
+					Service:                "service",
+					Operation:              "operation",
+					RequestId:              "request-id",
+					ScheduleToCloseTimeout: durationpb.New(tc.timeout),
+				}.Build(),
+			}.Build()
 			child, err := nexusoperations.AddChild(root, "test-id", event, []byte("token"))
 			require.NoError(t, err)
 			opLog, err := root.OpLog()
@@ -142,7 +140,7 @@ func TestRegenerateTasks(t *testing.T) {
 				require.NoError(t, hsm.MachineTransition(node, func(op nexusoperations.Operation) (hsm.TransitionOutput, error) {
 					return nexusoperations.TransitionAttemptFailed.Apply(op, nexusoperations.EventAttemptFailed{
 						Time:        time.Now(),
-						Failure:     &failurepb.Failure{Message: "test"},
+						Failure:     failurepb.Failure_builder{Message: "test"}.Build(),
 						Node:        node,
 						RetryPolicy: backoff.NewExponentialRetryPolicy(time.Second),
 					})
@@ -165,7 +163,7 @@ func TestRetry(t *testing.T) {
 	require.NoError(t, hsm.MachineTransition(node, func(op nexusoperations.Operation) (hsm.TransitionOutput, error) {
 		return nexusoperations.TransitionAttemptFailed.Apply(op, nexusoperations.EventAttemptFailed{
 			Time:        time.Now(),
-			Failure:     &failurepb.Failure{Message: "test"},
+			Failure:     failurepb.Failure_builder{Message: "test"}.Build(),
 			Node:        node,
 			RetryPolicy: backoff.NewExponentialRetryPolicy(time.Second),
 		})
@@ -239,11 +237,11 @@ func TestCompleteFromAttempt(t *testing.T) {
 				return nexusoperations.TransitionFailed.Apply(op, nexusoperations.EventFailed{
 					Node: node,
 					Time: time.Now(),
-					Attributes: &historypb.NexusOperationFailedEventAttributes{
-						Failure: &failurepb.Failure{
+					Attributes: historypb.NexusOperationFailedEventAttributes_builder{
+						Failure: failurepb.Failure_builder{
 							Message: "test",
-						},
-					},
+						}.Build(),
+					}.Build(),
 				})
 			},
 			assertState: func(t *testing.T, op nexusoperations.Operation) {
@@ -268,9 +266,9 @@ func TestCompleteFromAttempt(t *testing.T) {
 				return nexusoperations.TransitionStarted.Apply(op, nexusoperations.EventStarted{
 					Node: node,
 					Time: time.Now(),
-					Attributes: &historypb.NexusOperationStartedEventAttributes{
+					Attributes: historypb.NexusOperationStartedEventAttributes_builder{
 						OperationToken: "op-token",
-					},
+					}.Build(),
 				})
 			},
 			assertState: func(t *testing.T, op nexusoperations.Operation) {
@@ -321,7 +319,7 @@ func TestCompleteExternally(t *testing.T) {
 					return nexusoperations.TransitionAttemptFailed.Apply(op, nexusoperations.EventAttemptFailed{
 						Node:        node,
 						Time:        time.Now(),
-						Failure:     &failurepb.Failure{Message: "test"},
+						Failure:     failurepb.Failure_builder{Message: "test"}.Build(),
 						RetryPolicy: backoff.NewExponentialRetryPolicy(time.Second),
 					})
 				}))
@@ -336,9 +334,9 @@ func TestCompleteExternally(t *testing.T) {
 					return nexusoperations.TransitionStarted.Apply(op, nexusoperations.EventStarted{
 						Node: node,
 						Time: time.Now(),
-						Attributes: &historypb.NexusOperationStartedEventAttributes{
+						Attributes: historypb.NexusOperationStartedEventAttributes_builder{
 							OperationToken: "op-token",
-						},
+						}.Build(),
 					})
 				}))
 				return node
@@ -426,9 +424,9 @@ func TestCancel(t *testing.T) {
 	require.NoError(t, err)
 	_, err = nexusoperations.TransitionStarted.Apply(op, nexusoperations.EventStarted{
 		Time: time.Now(),
-		Attributes: &historypb.NexusOperationStartedEventAttributes{
+		Attributes: historypb.NexusOperationStartedEventAttributes_builder{
 			OperationToken: "op-token",
-		},
+		}.Build(),
 		Node: root,
 	})
 	require.NoError(t, err)
@@ -450,9 +448,9 @@ func TestCancelationValidTransitions(t *testing.T) {
 		return nexusoperations.TransitionStarted.Apply(op, nexusoperations.EventStarted{
 			Time: time.Now(),
 			Node: root,
-			Attributes: &historypb.NexusOperationStartedEventAttributes{
+			Attributes: historypb.NexusOperationStartedEventAttributes_builder{
 				OperationToken: "test-operation-token",
-			},
+			}.Build(),
 		})
 	}))
 	require.NoError(t, hsm.MachineTransition(root, func(op nexusoperations.Operation) (hsm.TransitionOutput, error) {
@@ -467,7 +465,7 @@ func TestCancelationValidTransitions(t *testing.T) {
 	// AttemptFailed
 	out, err := nexusoperations.TransitionCancelationAttemptFailed.Apply(cancelation, nexusoperations.EventCancelationAttemptFailed{
 		Time:        currentTime,
-		Failure:     &failurepb.Failure{Message: "test"},
+		Failure:     failurepb.Failure_builder{Message: "test"}.Build(),
 		Node:        node,
 		RetryPolicy: backoff.NewExponentialRetryPolicy(time.Second),
 	})
@@ -476,7 +474,7 @@ func TestCancelationValidTransitions(t *testing.T) {
 	// Assert info object is updated
 	require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BACKING_OFF, cancelation.State())
 	require.Equal(t, int32(1), cancelation.Attempt)
-	require.Equal(t, "test", cancelation.LastAttemptFailure.Message)
+	require.Equal(t, "test", cancelation.LastAttemptFailure.GetMessage())
 	require.Equal(t, currentTime, cancelation.LastAttemptCompleteTime.AsTime())
 	dt := currentTime.Add(time.Second).Sub(cancelation.NextAttemptScheduleTime.AsTime())
 	require.True(t, dt < time.Millisecond*200)
@@ -495,7 +493,7 @@ func TestCancelationValidTransitions(t *testing.T) {
 	// Assert info object is updated only where needed
 	require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED, cancelation.State())
 	require.Equal(t, int32(1), cancelation.Attempt)
-	require.Equal(t, "test", cancelation.LastAttemptFailure.Message)
+	require.Equal(t, "test", cancelation.LastAttemptFailure.GetMessage())
 	// Remains unmodified
 	require.Equal(t, currentTime, cancelation.LastAttemptCompleteTime.AsTime())
 	require.Nil(t, cancelation.NextAttemptScheduleTime)
@@ -534,7 +532,7 @@ func TestCancelationValidTransitions(t *testing.T) {
 	// Failed
 	out, err = nexusoperations.TransitionCancelationFailed.Apply(cancelation, nexusoperations.EventCancelationFailed{
 		Time:    currentTime,
-		Failure: &failurepb.Failure{Message: "failed"},
+		Failure: failurepb.Failure_builder{Message: "failed"}.Build(),
 		Node:    node,
 	})
 	require.NoError(t, err)
@@ -542,7 +540,7 @@ func TestCancelationValidTransitions(t *testing.T) {
 	// Assert info object is updated only where needed
 	require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_FAILED, cancelation.State())
 	require.Equal(t, int32(2), cancelation.Attempt)
-	require.Equal(t, "failed", cancelation.LastAttemptFailure.Message)
+	require.Equal(t, "failed", cancelation.LastAttemptFailure.GetMessage())
 	require.Equal(t, currentTime, cancelation.LastAttemptCompleteTime.AsTime())
 	require.Nil(t, cancelation.NextAttemptScheduleTime)
 
@@ -577,9 +575,9 @@ func TestCancelationBeforeStarted(t *testing.T) {
 		return nexusoperations.TransitionStarted.Apply(op, nexusoperations.EventStarted{
 			Time: time.Now(),
 			Node: root,
-			Attributes: &historypb.NexusOperationStartedEventAttributes{
+			Attributes: historypb.NexusOperationStartedEventAttributes_builder{
 				OperationToken: "test",
-			},
+			}.Build(),
 		})
 	}))
 	opLog, err = root.Parent.OpLog()
@@ -657,16 +655,16 @@ func TestOperationCompareState(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			s1 := nexusoperations.Operation{
-				NexusOperationInfo: &persistencespb.NexusOperationInfo{
+				NexusOperationInfo: persistencespb.NexusOperationInfo_builder{
 					State:   tc.s1,
 					Attempt: tc.attempts1,
-				},
+				}.Build(),
 			}
 			s2 := nexusoperations.Operation{
-				NexusOperationInfo: &persistencespb.NexusOperationInfo{
+				NexusOperationInfo: persistencespb.NexusOperationInfo_builder{
 					State:   tc.s2,
 					Attempt: tc.attempts2,
-				},
+				}.Build(),
 			}
 			res, err := def.CompareState(s1, s2)
 			if tc.expectError {
@@ -735,16 +733,16 @@ func TestCancelationCompareState(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			s1 := nexusoperations.Cancelation{
-				NexusOperationCancellationInfo: &persistencespb.NexusOperationCancellationInfo{
+				NexusOperationCancellationInfo: persistencespb.NexusOperationCancellationInfo_builder{
 					State:   tc.s1,
 					Attempt: tc.attempts1,
-				},
+				}.Build(),
 			}
 			s2 := nexusoperations.Cancelation{
-				NexusOperationCancellationInfo: &persistencespb.NexusOperationCancellationInfo{
+				NexusOperationCancellationInfo: persistencespb.NexusOperationCancellationInfo_builder{
 					State:   tc.s2,
 					Attempt: tc.attempts2,
-				},
+				}.Build(),
 			}
 			res, err := def.CompareState(s1, s2)
 			if tc.expectError {

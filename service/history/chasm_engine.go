@@ -515,7 +515,7 @@ func (e *ChasmEngine) persistAsBrandNew(
 
 	createRequestID := ""
 	for requestID, info := range currentRunConditionFailedError.RequestIDs {
-		if info.EventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
+		if info.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
 			createRequestID = requestID
 		}
 	}

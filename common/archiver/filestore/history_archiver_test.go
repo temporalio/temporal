@@ -197,22 +197,22 @@ func (s *historyArchiverSuite) TestArchive_Fail_HistoryMutated() {
 	defer mockCtrl.Finish()
 	historyIterator := archiver.NewMockHistoryIterator(mockCtrl)
 	historyBatches := []*historypb.History{
-		{
+		historypb.History_builder{
 			Events: []*historypb.HistoryEvent{
-				{
+				historypb.HistoryEvent_builder{
 					EventId:   common.FirstEventID + 1,
 					EventTime: timestamppb.New(time.Now().UTC()),
 					Version:   testCloseFailoverVersion + 1,
-				},
+				}.Build(),
 			},
-		},
+		}.Build(),
 	}
-	historyBlob := &archiverspb.HistoryBlob{
-		Header: &archiverspb.HistoryBlobHeader{
+	historyBlob := archiverspb.HistoryBlob_builder{
+		Header: archiverspb.HistoryBlobHeader_builder{
 			IsLast: true,
-		},
+		}.Build(),
 		Body: historyBatches,
-	}
+	}.Build()
 	gomock.InOrder(
 		historyIterator.EXPECT().HasNext().Return(true),
 		historyIterator.EXPECT().Next(gomock.Any()).Return(historyBlob, nil),
@@ -260,22 +260,22 @@ func (s *historyArchiverSuite) TestArchive_Skip() {
 	mockCtrl := gomock.NewController(s.T())
 	defer mockCtrl.Finish()
 	historyIterator := archiver.NewMockHistoryIterator(mockCtrl)
-	historyBlob := &archiverspb.HistoryBlob{
-		Header: &archiverspb.HistoryBlobHeader{
+	historyBlob := archiverspb.HistoryBlob_builder{
+		Header: archiverspb.HistoryBlobHeader_builder{
 			IsLast: false,
-		},
+		}.Build(),
 		Body: []*historypb.History{
-			{
+			historypb.History_builder{
 				Events: []*historypb.HistoryEvent{
-					{
+					historypb.HistoryEvent_builder{
 						EventId:   common.FirstEventID,
 						EventTime: timestamppb.New(time.Now().UTC()),
 						Version:   testCloseFailoverVersion,
-					},
+					}.Build(),
 				},
-			},
+			}.Build(),
 		},
-	}
+	}.Build()
 	gomock.InOrder(
 		historyIterator.EXPECT().HasNext().Return(true),
 		historyIterator.EXPECT().Next(gomock.Any()).Return(historyBlob, nil),
@@ -302,36 +302,36 @@ func (s *historyArchiverSuite) TestArchive_Success() {
 	defer mockCtrl.Finish()
 	historyIterator := archiver.NewMockHistoryIterator(mockCtrl)
 	historyBatches := []*historypb.History{
-		{
+		historypb.History_builder{
 			Events: []*historypb.HistoryEvent{
-				{
+				historypb.HistoryEvent_builder{
 					EventId:   common.FirstEventID + 1,
 					EventTime: timestamppb.New(time.Now().UTC()),
 					Version:   testCloseFailoverVersion,
-				},
-				{
+				}.Build(),
+				historypb.HistoryEvent_builder{
 					EventId:   common.FirstEventID + 2,
 					EventTime: timestamppb.New(time.Now().UTC()),
 					Version:   testCloseFailoverVersion,
-				},
+				}.Build(),
 			},
-		},
-		{
+		}.Build(),
+		historypb.History_builder{
 			Events: []*historypb.HistoryEvent{
-				{
+				historypb.HistoryEvent_builder{
 					EventId:   testNextEventID - 1,
 					EventTime: timestamppb.New(time.Now().UTC()),
 					Version:   testCloseFailoverVersion,
-				},
+				}.Build(),
 			},
-		},
+		}.Build(),
 	}
-	historyBlob := &archiverspb.HistoryBlob{
-		Header: &archiverspb.HistoryBlobHeader{
+	historyBlob := archiverspb.HistoryBlob_builder{
+		Header: archiverspb.HistoryBlobHeader_builder{
 			IsLast: true,
-		},
+		}.Build(),
 		Body: historyBatches,
-	}
+	}.Build()
 	gomock.InOrder(
 		historyIterator.EXPECT().HasNext().Return(true),
 		historyIterator.EXPECT().Next(gomock.Any()).Return(historyBlob, nil),
@@ -509,12 +509,12 @@ func (s *historyArchiverSuite) TestArchiveAndGet() {
 	mockCtrl := gomock.NewController(s.T())
 	defer mockCtrl.Finish()
 	historyIterator := archiver.NewMockHistoryIterator(mockCtrl)
-	historyBlob := &archiverspb.HistoryBlob{
-		Header: &archiverspb.HistoryBlobHeader{
+	historyBlob := archiverspb.HistoryBlob_builder{
+		Header: archiverspb.HistoryBlobHeader_builder{
 			IsLast: true,
-		},
+		}.Build(),
 		Body: s.historyBatchesV100,
-	}
+	}.Build()
 	gomock.InOrder(
 		historyIterator.EXPECT().HasNext().Return(true),
 		historyIterator.EXPECT().Next(gomock.Any()).Return(historyBlob, nil),
@@ -567,41 +567,41 @@ func (s *historyArchiverSuite) newTestHistoryArchiver(historyIterator archiver.H
 func (s *historyArchiverSuite) setupHistoryDirectory() {
 	now := timestamppb.New(time.Date(2020, 8, 22, 1, 2, 3, 4, time.UTC))
 	s.historyBatchesV1 = []*historypb.History{
-		{
+		historypb.History_builder{
 			Events: []*historypb.HistoryEvent{
-				{
+				historypb.HistoryEvent_builder{
 					EventId:   testNextEventID - 1,
 					EventTime: now,
 					Version:   1,
-				},
+				}.Build(),
 			},
-		},
+		}.Build(),
 	}
 
 	s.historyBatchesV100 = []*historypb.History{
-		{
+		historypb.History_builder{
 			Events: []*historypb.HistoryEvent{
-				{
+				historypb.HistoryEvent_builder{
 					EventId:   common.FirstEventID + 1,
 					EventTime: now,
 					Version:   testCloseFailoverVersion,
-				},
-				{
+				}.Build(),
+				historypb.HistoryEvent_builder{
 					EventId:   common.FirstEventID + 1,
 					EventTime: now,
 					Version:   testCloseFailoverVersion,
-				},
+				}.Build(),
 			},
-		},
-		{
+		}.Build(),
+		historypb.History_builder{
 			Events: []*historypb.HistoryEvent{
-				{
+				historypb.HistoryEvent_builder{
 					EventId:   testNextEventID - 1,
 					EventTime: now,
 					Version:   testCloseFailoverVersion,
-				},
+				}.Build(),
 			},
-		},
+		}.Build(),
 	}
 
 	s.writeHistoryBatchesForGetTest(s.historyBatchesV1, int64(1))

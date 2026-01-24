@@ -74,13 +74,13 @@ func (s *taskExecutorSuite) SetupTest() {
 	s.config = tests.NewDynamicConfig()
 	s.mockShard = shard.NewTestContext(
 		s.controller,
-		&persistencespb.ShardInfo{
+		persistencespb.ShardInfo_builder{
 			ShardId: 0,
 			RangeId: 1,
 			ReplicationDlqAckLevel: map[string]int64{
 				cluster.TestAlternativeClusterName: persistence.EmptyQueueMessageID,
 			},
-		},
+		}.Build(),
 		s.config,
 	)
 	s.mockResource = s.mockShard.Resource
@@ -115,10 +115,10 @@ func (s *taskExecutorSuite) TestFilterTask_Apply() {
 		Return(namespace.NewGlobalNamespaceForTest(
 			nil,
 			nil,
-			&persistencespb.NamespaceReplicationConfig{Clusters: []string{
+			persistencespb.NamespaceReplicationConfig_builder{Clusters: []string{
 				cluster.TestCurrentClusterName,
 				cluster.TestAlternativeClusterName,
-			}},
+			}}.Build(),
 			0,
 		), nil)
 	ok, err := s.replicationTaskExecutor.filterTask(namespaceID, "test-workflow-id", false)
@@ -133,7 +133,7 @@ func (s *taskExecutorSuite) TestFilterTask_NotApply() {
 		Return(namespace.NewGlobalNamespaceForTest(
 			nil,
 			nil,
-			&persistencespb.NamespaceReplicationConfig{Clusters: []string{cluster.TestAlternativeClusterName}},
+			persistencespb.NamespaceReplicationConfig_builder{Clusters: []string{cluster.TestAlternativeClusterName}}.Build(),
 			0,
 		), nil)
 	ok, err := s.replicationTaskExecutor.filterTask(namespaceID, "test-workflow-id", false)
@@ -172,28 +172,26 @@ func (s *taskExecutorSuite) TestProcessTaskOnce_SyncActivityReplicationTask() {
 	namespaceID := namespace.ID(uuid.NewString())
 	workflowID := uuid.NewString()
 	runID := uuid.NewString()
-	task := &replicationspb.ReplicationTask{
+	task := replicationspb.ReplicationTask_builder{
 		TaskType: enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK,
-		Attributes: &replicationspb.ReplicationTask_SyncActivityTaskAttributes{
-			SyncActivityTaskAttributes: &replicationspb.SyncActivityTaskAttributes{
-				NamespaceId:                namespaceID.String(),
-				WorkflowId:                 workflowID,
-				RunId:                      runID,
-				Version:                    1234,
-				ScheduledEventId:           2345,
-				ScheduledTime:              nil,
-				StartedEventId:             2346,
-				StartedTime:                nil,
-				LastHeartbeatTime:          nil,
-				Attempt:                    10,
-				LastFailure:                nil,
-				LastWorkerIdentity:         "",
-				LastStartedBuildId:         "ABC",
-				LastStartedRedirectCounter: 8,
-			},
-		},
-	}
-	request := &historyservice.SyncActivityRequest{
+		SyncActivityTaskAttributes: replicationspb.SyncActivityTaskAttributes_builder{
+			NamespaceId:                namespaceID.String(),
+			WorkflowId:                 workflowID,
+			RunId:                      runID,
+			Version:                    1234,
+			ScheduledEventId:           2345,
+			ScheduledTime:              nil,
+			StartedEventId:             2346,
+			StartedTime:                nil,
+			LastHeartbeatTime:          nil,
+			Attempt:                    10,
+			LastFailure:                nil,
+			LastWorkerIdentity:         "",
+			LastStartedBuildId:         "ABC",
+			LastStartedRedirectCounter: 8,
+		}.Build(),
+	}.Build()
+	request := historyservice.SyncActivityRequest_builder{
 		NamespaceId:                namespaceID.String(),
 		WorkflowId:                 workflowID,
 		RunId:                      runID,
@@ -208,7 +206,7 @@ func (s *taskExecutorSuite) TestProcessTaskOnce_SyncActivityReplicationTask() {
 		LastWorkerIdentity:         "",
 		LastStartedBuildId:         "ABC",
 		LastStartedRedirectCounter: 8,
-	}
+	}.Build()
 
 	s.historyClient.EXPECT().SyncActivity(gomock.Any(), request).Return(&historyservice.SyncActivityResponse{}, nil)
 	err := s.replicationTaskExecutor.Execute(context.Background(), task, true)
@@ -219,26 +217,24 @@ func (s *taskExecutorSuite) TestProcessTaskOnce_SyncActivityReplicationTask_Rese
 	namespaceID := namespace.ID(uuid.NewString())
 	workflowID := uuid.NewString()
 	runID := uuid.NewString()
-	task := &replicationspb.ReplicationTask{
+	task := replicationspb.ReplicationTask_builder{
 		TaskType: enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK,
-		Attributes: &replicationspb.ReplicationTask_SyncActivityTaskAttributes{
-			SyncActivityTaskAttributes: &replicationspb.SyncActivityTaskAttributes{
-				NamespaceId:        namespaceID.String(),
-				WorkflowId:         workflowID,
-				RunId:              runID,
-				Version:            1234,
-				ScheduledEventId:   2345,
-				ScheduledTime:      nil,
-				StartedEventId:     2346,
-				StartedTime:        nil,
-				LastHeartbeatTime:  nil,
-				Attempt:            10,
-				LastFailure:        nil,
-				LastWorkerIdentity: "",
-			},
-		},
-	}
-	request := &historyservice.SyncActivityRequest{
+		SyncActivityTaskAttributes: replicationspb.SyncActivityTaskAttributes_builder{
+			NamespaceId:        namespaceID.String(),
+			WorkflowId:         workflowID,
+			RunId:              runID,
+			Version:            1234,
+			ScheduledEventId:   2345,
+			ScheduledTime:      nil,
+			StartedEventId:     2346,
+			StartedTime:        nil,
+			LastHeartbeatTime:  nil,
+			Attempt:            10,
+			LastFailure:        nil,
+			LastWorkerIdentity: "",
+		}.Build(),
+	}.Build()
+	request := historyservice.SyncActivityRequest_builder{
 		NamespaceId:        namespaceID.String(),
 		WorkflowId:         workflowID,
 		RunId:              runID,
@@ -251,7 +247,7 @@ func (s *taskExecutorSuite) TestProcessTaskOnce_SyncActivityReplicationTask_Rese
 		Attempt:            10,
 		LastFailure:        nil,
 		LastWorkerIdentity: "",
-	}
+	}.Build()
 
 	resendErr := serviceerrors.NewRetryReplication(
 		"some random error message",
@@ -288,29 +284,27 @@ func (s *taskExecutorSuite) TestProcess_HistoryReplicationTask() {
 	namespaceID := namespace.ID(uuid.NewString())
 	workflowID := uuid.NewString()
 	runID := uuid.NewString()
-	task := &replicationspb.ReplicationTask{
+	task := replicationspb.ReplicationTask_builder{
 		TaskType: enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK,
-		Attributes: &replicationspb.ReplicationTask_HistoryTaskAttributes{
-			HistoryTaskAttributes: &replicationspb.HistoryTaskAttributes{
-				NamespaceId:         namespaceID.String(),
-				WorkflowId:          workflowID,
-				RunId:               runID,
-				VersionHistoryItems: []*historyspb.VersionHistoryItem{{EventId: 233, Version: 2333}},
-				Events:              nil,
-				NewRunEvents:        nil,
-			},
-		},
-	}
-	request := &historyservice.ReplicateEventsV2Request{
+		HistoryTaskAttributes: replicationspb.HistoryTaskAttributes_builder{
+			NamespaceId:         namespaceID.String(),
+			WorkflowId:          workflowID,
+			RunId:               runID,
+			VersionHistoryItems: []*historyspb.VersionHistoryItem{historyspb.VersionHistoryItem_builder{EventId: 233, Version: 2333}.Build()},
+			Events:              nil,
+			NewRunEvents:        nil,
+		}.Build(),
+	}.Build()
+	request := historyservice.ReplicateEventsV2Request_builder{
 		NamespaceId: namespaceID.String(),
-		WorkflowExecution: &commonpb.WorkflowExecution{
+		WorkflowExecution: commonpb.WorkflowExecution_builder{
 			WorkflowId: workflowID,
 			RunId:      runID,
-		},
-		VersionHistoryItems: []*historyspb.VersionHistoryItem{{EventId: 233, Version: 2333}},
+		}.Build(),
+		VersionHistoryItems: []*historyspb.VersionHistoryItem{historyspb.VersionHistoryItem_builder{EventId: 233, Version: 2333}.Build()},
 		Events:              nil,
 		NewRunEvents:        nil,
-	}
+	}.Build()
 	s.historyClient.EXPECT().ReplicateEventsV2(gomock.Any(), request).Return(&historyservice.ReplicateEventsV2Response{}, nil)
 	err := s.replicationTaskExecutor.Execute(context.Background(), task, true)
 	s.NoError(err)
@@ -320,29 +314,27 @@ func (s *taskExecutorSuite) TestProcess_HistoryReplicationTask_Resend() {
 	namespaceID := namespace.ID(uuid.NewString())
 	workflowID := uuid.NewString()
 	runID := uuid.NewString()
-	task := &replicationspb.ReplicationTask{
+	task := replicationspb.ReplicationTask_builder{
 		TaskType: enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK,
-		Attributes: &replicationspb.ReplicationTask_HistoryTaskAttributes{
-			HistoryTaskAttributes: &replicationspb.HistoryTaskAttributes{
-				NamespaceId:         namespaceID.String(),
-				WorkflowId:          workflowID,
-				RunId:               runID,
-				VersionHistoryItems: []*historyspb.VersionHistoryItem{{EventId: 233, Version: 2333}},
-				Events:              nil,
-				NewRunEvents:        nil,
-			},
-		},
-	}
-	request := &historyservice.ReplicateEventsV2Request{
+		HistoryTaskAttributes: replicationspb.HistoryTaskAttributes_builder{
+			NamespaceId:         namespaceID.String(),
+			WorkflowId:          workflowID,
+			RunId:               runID,
+			VersionHistoryItems: []*historyspb.VersionHistoryItem{historyspb.VersionHistoryItem_builder{EventId: 233, Version: 2333}.Build()},
+			Events:              nil,
+			NewRunEvents:        nil,
+		}.Build(),
+	}.Build()
+	request := historyservice.ReplicateEventsV2Request_builder{
 		NamespaceId: namespaceID.String(),
-		WorkflowExecution: &commonpb.WorkflowExecution{
+		WorkflowExecution: commonpb.WorkflowExecution_builder{
 			WorkflowId: workflowID,
 			RunId:      runID,
-		},
-		VersionHistoryItems: []*historyspb.VersionHistoryItem{{EventId: 233, Version: 2333}},
+		}.Build(),
+		VersionHistoryItems: []*historyspb.VersionHistoryItem{historyspb.VersionHistoryItem_builder{EventId: 233, Version: 2333}.Build()},
 		Events:              nil,
 		NewRunEvents:        nil,
-	}
+	}.Build()
 
 	resendErr := serviceerrors.NewRetryReplication(
 		"some random error message",
@@ -377,18 +369,16 @@ func (s *taskExecutorSuite) TestProcess_HistoryReplicationTask_Resend() {
 
 func (s *taskExecutorSuite) TestProcessTaskOnce_SyncWorkflowStateTask() {
 	namespaceID := namespace.ID(uuid.NewString())
-	task := &replicationspb.ReplicationTask{
+	task := replicationspb.ReplicationTask_builder{
 		TaskType: enumsspb.REPLICATION_TASK_TYPE_SYNC_WORKFLOW_STATE_TASK,
-		Attributes: &replicationspb.ReplicationTask_SyncWorkflowStateTaskAttributes{
-			SyncWorkflowStateTaskAttributes: &replicationspb.SyncWorkflowStateTaskAttributes{
-				WorkflowState: &persistencespb.WorkflowMutableState{
-					ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
-						NamespaceId: namespaceID.String(),
-					},
-				},
-			},
-		},
-	}
+		SyncWorkflowStateTaskAttributes: replicationspb.SyncWorkflowStateTaskAttributes_builder{
+			WorkflowState: persistencespb.WorkflowMutableState_builder{
+				ExecutionInfo: persistencespb.WorkflowExecutionInfo_builder{
+					NamespaceId: namespaceID.String(),
+				}.Build(),
+			}.Build(),
+		}.Build(),
+	}.Build()
 	s.historyClient.EXPECT().ReplicateWorkflowState(gomock.Any(), gomock.Any()).Return(&historyservice.ReplicateWorkflowStateResponse{}, nil)
 
 	err := s.replicationTaskExecutor.Execute(context.Background(), task, true)
@@ -399,18 +389,18 @@ func (s *taskExecutorSuite) TestProcessTaskOnce_SyncHSMTask() {
 	namespaceID := namespace.ID(uuid.NewString())
 	workflowID := uuid.NewString()
 	runID := uuid.NewString()
-	task := &replicationspb.ReplicationTask{
+	task := replicationspb.ReplicationTask_builder{
 		SourceTaskId: rand.Int63(),
 		TaskType:     enumsspb.REPLICATION_TASK_TYPE_SYNC_HSM_TASK,
-		Attributes: &replicationspb.ReplicationTask_SyncHsmAttributes{SyncHsmAttributes: &replicationspb.SyncHSMAttributes{
+		SyncHsmAttributes: replicationspb.SyncHSMAttributes_builder{
 			NamespaceId:      namespaceID.String(),
 			WorkflowId:       workflowID,
 			RunId:            runID,
 			VersionHistory:   &historyspb.VersionHistory{},
 			StateMachineNode: &persistencespb.StateMachineNode{},
-		}},
+		}.Build(),
 		VisibilityTime: timestamppb.New(time.Now()),
-	}
+	}.Build()
 
 	// not handling SyncHSMTask in deprecated replication task processing code path
 	err := s.replicationTaskExecutor.Execute(context.Background(), task, true)

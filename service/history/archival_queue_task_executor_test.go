@@ -350,23 +350,23 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 			visibilityArchivalState := p.VisibilityConfig.NamespaceArchivalState
 
 			namespaceEntry := namespace.NewGlobalNamespaceForTest(
-				&persistencespb.NamespaceInfo{
+				persistencespb.NamespaceInfo_builder{
 					Id:   tests.NamespaceID.String(),
 					Name: tests.Namespace.String(),
-				},
-				&persistencespb.NamespaceConfig{
+				}.Build(),
+				persistencespb.NamespaceConfig_builder{
 					Retention:               p.Retention,
 					HistoryArchivalState:    enumspb.ArchivalState(historyArchivalState),
 					HistoryArchivalUri:      p.HistoryURI,
 					VisibilityArchivalState: enumspb.ArchivalState(visibilityArchivalState),
 					VisibilityArchivalUri:   p.VisibilityURI,
-				},
-				&persistencespb.NamespaceReplicationConfig{
+				}.Build(),
+				persistencespb.NamespaceReplicationConfig_builder{
 					ActiveClusterName: cluster.TestCurrentClusterName,
 					Clusters: []string{
 						cluster.TestCurrentClusterName,
 					},
-				},
+				}.Build(),
 				123,
 			)
 			namespaceRegistry.EXPECT().GetNamespaceName(namespaceEntry.ID()).
@@ -407,18 +407,18 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 					p.ExecutionDuration,
 					p.GetWorkflowExecutionDurationError,
 				).AnyTimes()
-				executionInfo := &persistencespb.WorkflowExecutionInfo{
+				executionInfo := persistencespb.WorkflowExecutionInfo_builder{
 					NamespaceId:                  tests.NamespaceID.String(),
 					ExecutionTime:                timestamppb.New(p.ExecutionTime),
 					CloseTime:                    timestamppb.New(p.CloseTime),
 					RelocatableAttributesRemoved: p.RelocatableAttributesRemoved,
-				}
+				}.Build()
 				mutableState.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
-				executionState := &persistencespb.WorkflowExecutionState{
+				executionState := persistencespb.WorkflowExecutionState_builder{
 					State:     0,
 					Status:    0,
 					StartTime: timestamppb.New(p.StartTime),
-				}
+				}.Build()
 				mutableState.EXPECT().GetExecutionState().Return(executionState).AnyTimes()
 				mutableState.EXPECT().ChasmTree().Return(workflow.NoopChasmTree).AnyTimes()
 				if p.ExpectAddTask {
@@ -491,10 +491,10 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 			visibilityManager := manager.NewMockVisibilityManager(p.Controller)
 			if p.RelocatableAttributesRemoved {
 				visibilityManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(
-					&manager.GetWorkflowExecutionResponse{Execution: &workflowpb.WorkflowExecutionInfo{
+					&manager.GetWorkflowExecutionResponse{Execution: workflowpb.WorkflowExecutionInfo_builder{
 						Memo:             nil,
 						SearchAttributes: nil,
-					}},
+					}.Build()},
 					p.GetWorkflowExecutionError,
 				)
 			}

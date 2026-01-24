@@ -50,18 +50,18 @@ func (m *executionManagerImpl) ForkHistoryBranch(
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("unable to parse branch token: %v", err))
 	}
 
-	newAncestors := make([]*persistencespb.HistoryBranchRange, 0, len(forkBranch.Ancestors)+1)
+	newAncestors := make([]*persistencespb.HistoryBranchRange, 0, len(forkBranch.GetAncestors())+1)
 
 	beginNodeID := GetBeginNodeID(forkBranch)
 	if beginNodeID >= request.ForkNodeID {
 		// this is the case that new branch's ancestors doesn't include the forking branch
-		for _, br := range forkBranch.Ancestors {
+		for _, br := range forkBranch.GetAncestors() {
 			if br.GetEndNodeId() >= request.ForkNodeID {
-				newAncestors = append(newAncestors, &persistencespb.HistoryBranchRange{
+				newAncestors = append(newAncestors, persistencespb.HistoryBranchRange_builder{
 					BranchId:    br.GetBranchId(),
 					BeginNodeId: br.GetBeginNodeId(),
 					EndNodeId:   request.ForkNodeID,
-				})
+				}.Build())
 				break
 			} else {
 				newAncestors = append(newAncestors, br)
@@ -69,18 +69,18 @@ func (m *executionManagerImpl) ForkHistoryBranch(
 		}
 	} else {
 		// this is the case the new branch will inherit all ancestors from forking branch
-		newAncestors = forkBranch.Ancestors
-		newAncestors = append(newAncestors, &persistencespb.HistoryBranchRange{
+		newAncestors = forkBranch.GetAncestors()
+		newAncestors = append(newAncestors, persistencespb.HistoryBranchRange_builder{
 			BranchId:    forkBranch.GetBranchId(),
 			BeginNodeId: beginNodeID,
 			EndNodeId:   request.ForkNodeID,
-		})
+		}.Build())
 	}
-	newBranchInfo := &persistencespb.HistoryBranch{
-		TreeId:    forkBranch.TreeId,
+	newBranchInfo := persistencespb.HistoryBranch_builder{
+		TreeId:    forkBranch.GetTreeId(),
 		BranchId:  uuid.NewString(),
 		Ancestors: newAncestors,
-	}
+	}.Build()
 
 	// The above newBranchInfo is a lossy construction of the forked branch token from the original opaque branch token.
 	// It only initializes with the fields it understands, which may inadvertently discard other misc fields. The
@@ -94,12 +94,12 @@ func (m *executionManagerImpl) ForkHistoryBranch(
 		return nil, err
 	}
 
-	treeInfo := &persistencespb.HistoryTreeInfo{
+	treeInfo := persistencespb.HistoryTreeInfo_builder{
 		BranchToken: newBranchToken,
 		BranchInfo:  newBranchInfo,
 		ForkTime:    timestamp.TimeNowPtrUtc(),
 		Info:        request.Info,
-	}
+	}.Build()
 
 	treeInfoBlob, err := m.serializer.HistoryTreeInfoToBlob(treeInfo)
 	if err != nil {
@@ -111,7 +111,7 @@ func (m *executionManagerImpl) ForkHistoryBranch(
 		ForkBranchInfo: forkBranch,
 		TreeInfo:       treeInfoBlob,
 		ForkNodeID:     request.ForkNodeID,
-		NewBranchID:    newBranchInfo.BranchId,
+		NewBranchID:    newBranchInfo.GetBranchId(),
 		Info:           request.Info,
 		ShardID:        request.ShardID,
 	}
@@ -140,11 +140,11 @@ func (m *executionManagerImpl) DeleteHistoryBranch(
 	// We need to delete the target branch and its ancestors if they are not referenced by any other branches.
 	// However, it is possible that part of the target branch (or its ancestors) is used as ancestors by other branch.
 	// We need to avoid deleting those referenced parts. This is similar to reference count in garbage collection.
-	brsToDelete := branch.Ancestors
-	brsToDelete = append(brsToDelete, &persistencespb.HistoryBranchRange{
+	brsToDelete := branch.GetAncestors()
+	brsToDelete = append(brsToDelete, persistencespb.HistoryBranchRange_builder{
 		BranchId:    branch.GetBranchId(),
 		BeginNodeId: GetBeginNodeID(branch),
-	})
+	}.Build())
 
 	// Get the history tree containing the branch to be delelted,
 	// so we know if any part of the target branch is referenced by other branches.
@@ -164,12 +164,12 @@ func (m *executionManagerImpl) DeleteHistoryBranch(
 	// usedBranches record branches referenced by others
 	usedBranches := map[string]int64{}
 	for _, branchInfo := range branchInfos {
-		if branchInfo.BranchId == branch.BranchId {
+		if branchInfo.GetBranchId() == branch.GetBranchId() {
 			// skip the target branch
 			continue
 		}
-		usedBranches[branchInfo.BranchId] = common.LastEventID
-		for _, ancestor := range branchInfo.Ancestors {
+		usedBranches[branchInfo.GetBranchId()] = common.LastEventID
+		for _, ancestor := range branchInfo.GetAncestors() {
 			if curr, ok := usedBranches[ancestor.GetBranchId()]; !ok || curr < ancestor.GetEndNodeId() {
 				usedBranches[ancestor.GetBranchId()] = ancestor.GetEndNodeId()
 			}
@@ -185,7 +185,7 @@ findDeleteRanges:
 			// branch is used by others, we can only delete from the maxEndNode
 			if maxEndNode != common.LastEventID {
 				deleteRanges = append(deleteRanges, InternalDeleteHistoryBranchRange{
-					BranchId:    br.BranchId,
+					BranchId:    br.GetBranchId(),
 					BeginNodeId: maxEndNode,
 				})
 			}
@@ -194,8 +194,8 @@ findDeleteRanges:
 		} else {
 			// No other branch is using this range, we can delete all of it
 			deleteRanges = append(deleteRanges, InternalDeleteHistoryBranchRange{
-				BranchId:    br.BranchId,
-				BeginNodeId: br.BeginNodeId,
+				BranchId:    br.GetBranchId(),
+				BeginNodeId: br.GetBeginNodeId(),
 			})
 		}
 	}
@@ -224,20 +224,20 @@ func (m *executionManagerImpl) TrimHistoryBranch(
 	if err != nil {
 		return nil, fmt.Errorf("unable to parse history branch info: %w", err)
 	}
-	treeID := branch.TreeId
-	branchID := branch.BranchId
-	branchAncestors := branch.Ancestors
+	treeID := branch.GetTreeId()
+	branchID := branch.GetBranchId()
+	branchAncestors := branch.GetAncestors()
 
 	// merge tree ID & branch ID into branch ancestors so the processing logic is simple
 	beginNodeID := common.FirstEventID
-	if len(branch.Ancestors) > 0 {
-		beginNodeID = branch.Ancestors[len(branch.Ancestors)-1].GetEndNodeId()
+	if len(branch.GetAncestors()) > 0 {
+		beginNodeID = branch.GetAncestors()[len(branch.GetAncestors())-1].GetEndNodeId()
 	}
-	branchAncestors = append(branchAncestors, &persistencespb.HistoryBranchRange{
+	branchAncestors = append(branchAncestors, persistencespb.HistoryBranchRange_builder{
 		BranchId:    branchID,
 		BeginNodeId: beginNodeID,
 		EndNodeId:   maxNodeID,
-	})
+	}.Build())
 
 	var pageToken []byte
 	transactionIDToNode := map[int64]historyNodeMetadata{}
@@ -262,14 +262,14 @@ func (m *executionManagerImpl) TrimHistoryBranch(
 			return nil, fmt.Errorf("unable to read raw history branch: %w", err)
 		}
 
-		branchID := branchAncestors[token.CurrentRangeIndex].BranchId
+		branchID := branchAncestors[token.CurrentRangeIndex].GetBranchId()
 		for _, node := range nodes {
 			transactionIDToNode[node.TransactionID] = historyNodeMetadata{
-				branchInfo: &persistencespb.HistoryBranch{
+				branchInfo: persistencespb.HistoryBranch_builder{
 					TreeId:    treeID,
 					BranchId:  branchID,
 					Ancestors: branchAncestors[0:token.CurrentRangeIndex],
-				},
+				}.Build(),
 				nodeID:            node.NodeID,
 				transactionID:     node.TransactionID,
 				prevTransactionID: node.PrevTransactionID,
@@ -316,7 +316,7 @@ func (m *executionManagerImpl) deserializeBranchInfos(
 		if err != nil {
 			return nil, err
 		}
-		branchInfos = append(branchInfos, treeInfo.BranchInfo)
+		branchInfos = append(branchInfos, treeInfo.GetBranchInfo())
 	}
 	return branchInfos, nil
 }
@@ -334,10 +334,10 @@ func (m *executionManagerImpl) serializeAppendHistoryNodesRequest(
 			Msg: "events to be appended cannot be empty",
 		}
 	}
-	sortAncestors(branch.Ancestors)
+	sortAncestors(branch.GetAncestors())
 
-	version := request.Events[0].Version
-	nodeID := request.Events[0].EventId
+	version := request.Events[0].GetVersion()
+	nodeID := request.Events[0].GetEventId()
 	lastID := nodeID - 1
 
 	if nodeID <= 0 {
@@ -346,12 +346,12 @@ func (m *executionManagerImpl) serializeAppendHistoryNodesRequest(
 		}
 	}
 	for _, e := range request.Events {
-		if e.Version != version {
+		if e.GetVersion() != version {
 			return nil, &InvalidPersistenceRequestError{
 				Msg: "event version must be the same inside a batch",
 			}
 		}
-		if e.EventId != lastID+1 {
+		if e.GetEventId() != lastID+1 {
 			return nil, &InvalidPersistenceRequestError{
 				Msg: "event ID must be continous",
 			}
@@ -364,7 +364,7 @@ func (m *executionManagerImpl) serializeAppendHistoryNodesRequest(
 	if err != nil {
 		return nil, err
 	}
-	size := len(blob.Data)
+	size := len(blob.GetData())
 	sizeLimit := m.transactionSizeLimit()
 	if size > sizeLimit {
 		return nil, &TransactionSizeLimitError{
@@ -388,12 +388,12 @@ func (m *executionManagerImpl) serializeAppendHistoryNodesRequest(
 
 	if req.IsNewBranch {
 		// TreeInfo is only needed for new branch
-		treeInfoBlob, err := m.serializer.HistoryTreeInfoToBlob(&persistencespb.HistoryTreeInfo{
+		treeInfoBlob, err := m.serializer.HistoryTreeInfoToBlob(persistencespb.HistoryTreeInfo_builder{
 			BranchToken: request.BranchToken, // NOTE: this is redundant but double-writing until 1 minor release later
 			BranchInfo:  branch,
 			ForkTime:    timestamp.TimeNowPtrUtc(),
 			Info:        request.Info,
-		})
+		}.Build())
 		if err != nil {
 			return nil, err
 		}
@@ -418,12 +418,12 @@ func (m *executionManagerImpl) serializeAppendRawHistoryNodesRequest(
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("unable to parse branch token: %v", err))
 	}
 
-	if len(request.History.Data) == 0 {
+	if len(request.History.GetData()) == 0 {
 		return nil, &InvalidPersistenceRequestError{
 			Msg: "events to be appended cannot be empty",
 		}
 	}
-	sortAncestors(branch.Ancestors)
+	sortAncestors(branch.GetAncestors())
 
 	nodeID := request.NodeID
 	if nodeID <= 0 {
@@ -432,7 +432,7 @@ func (m *executionManagerImpl) serializeAppendRawHistoryNodesRequest(
 		}
 	}
 	// nodeID will be the first eventID
-	size := len(request.History.Data)
+	size := len(request.History.GetData())
 	sizeLimit := m.transactionSizeLimit()
 	if size > sizeLimit {
 		return nil, &TransactionSizeLimitError{
@@ -456,12 +456,12 @@ func (m *executionManagerImpl) serializeAppendRawHistoryNodesRequest(
 
 	if req.IsNewBranch {
 		// TreeInfo is only needed for new branch
-		treeInfoBlob, err := m.serializer.HistoryTreeInfoToBlob(&persistencespb.HistoryTreeInfo{
+		treeInfoBlob, err := m.serializer.HistoryTreeInfoToBlob(persistencespb.HistoryTreeInfo_builder{
 			BranchToken: request.BranchToken, // NOTE: this is redundant but double-writing until 1 minor release later
 			BranchInfo:  branch,
 			ForkTime:    timestamp.TimeNowPtrUtc(),
 			Info:        request.Info,
-		})
+		}.Build())
 		if err != nil {
 			return nil, err
 		}
@@ -492,7 +492,7 @@ func (m *executionManagerImpl) AppendHistoryNodes(
 	err = m.persistence.AppendHistoryNodes(ctx, req)
 
 	return &AppendHistoryNodesResponse{
-		Size: len(req.Node.Events.Data),
+		Size: len(req.Node.Events.GetData()),
 	}, err
 }
 
@@ -509,7 +509,7 @@ func (m *executionManagerImpl) AppendRawHistoryNodes(
 
 	err = m.persistence.AppendHistoryNodes(ctx, req)
 	return &AppendHistoryNodesResponse{
-		Size: len(request.History.Data),
+		Size: len(request.History.GetData()),
 	}, err
 }
 
@@ -592,9 +592,9 @@ func (m *executionManagerImpl) GetAllHistoryTreeBranches(
 			return nil, err
 		}
 		branchDetail := HistoryBranchDetail{
-			BranchInfo: treeInfo.BranchInfo,
-			ForkTime:   treeInfo.ForkTime,
-			Info:       treeInfo.Info,
+			BranchInfo: treeInfo.GetBranchInfo(),
+			ForkTime:   treeInfo.GetForkTime(),
+			Info:       treeInfo.GetInfo(),
 		}
 		branches = append(branches, branchDetail)
 	}
@@ -738,19 +738,19 @@ func (m *executionManagerImpl) readRawHistoryBranchAndFilter(
 	if err != nil {
 		return nil, nil, nil, nil, 0, serviceerror.NewInvalidArgument(fmt.Sprintf("unable to parse branch token: %v", err))
 	}
-	branchID := branch.BranchId
-	branchAncestors := branch.Ancestors
+	branchID := branch.GetBranchId()
+	branchAncestors := branch.GetAncestors()
 
 	// merge tree ID & branch ID into branch ancestors so the processing logic is simple
 	beginNodeID := common.FirstEventID
-	if len(branch.Ancestors) > 0 {
-		beginNodeID = branch.Ancestors[len(branch.Ancestors)-1].GetEndNodeId()
+	if len(branch.GetAncestors()) > 0 {
+		beginNodeID = branch.GetAncestors()[len(branch.GetAncestors())-1].GetEndNodeId()
 	}
-	branchAncestors = append(branchAncestors, &persistencespb.HistoryBranchRange{
+	branchAncestors = append(branchAncestors, persistencespb.HistoryBranchRange_builder{
 		BranchId:    branchID,
 		BeginNodeId: beginNodeID,
 		EndNodeId:   maxNodeID,
-	})
+	}.Build())
 
 	token, err := m.deserializeToken(
 		request.NextPageToken,
@@ -799,7 +799,7 @@ func (m *executionManagerImpl) readRawHistoryBranchAndFilter(
 			if node.Events == nil {
 				return nil, nil, nil, nil, 0, softassert.UnexpectedDataLoss(m.logger, "no events in history node", nil)
 			}
-			dataSize += len(node.Events.Data)
+			dataSize += len(node.Events.GetData())
 			transactionIDs = append(transactionIDs, node.TransactionID)
 			nodeIDs = append(nodeIDs, node.NodeID)
 		}
@@ -829,20 +829,20 @@ func (m *executionManagerImpl) readRawHistoryBranchReverseAndFilter(
 	if err != nil {
 		return nil, nil, nil, 0, serviceerror.NewInvalidArgumentf("unable to parse branch token: %v", err)
 	}
-	treeID := branch.TreeId
-	branchID := branch.BranchId
-	branchAncestors := branch.Ancestors
+	treeID := branch.GetTreeId()
+	branchID := branch.GetBranchId()
+	branchAncestors := branch.GetAncestors()
 
 	// merge tree ID & branch ID into branch ancestors so the processing logic is simple
 	beginNodeID := common.FirstEventID
-	if len(branch.Ancestors) > 0 {
-		beginNodeID = branch.Ancestors[len(branch.Ancestors)-1].GetEndNodeId()
+	if len(branch.GetAncestors()) > 0 {
+		beginNodeID = branch.GetAncestors()[len(branch.GetAncestors())-1].GetEndNodeId()
 	}
-	branchAncestors = append(branchAncestors, &persistencespb.HistoryBranchRange{
+	branchAncestors = append(branchAncestors, persistencespb.HistoryBranchRange_builder{
 		BranchId:    branchID,
 		BeginNodeId: beginNodeID,
 		EndNodeId:   maxNodeID,
-	})
+	}.Build())
 
 	token, err := m.deserializeToken(
 		request.NextPageToken,
@@ -888,7 +888,7 @@ func (m *executionManagerImpl) readRawHistoryBranchReverseAndFilter(
 		dataBlobs = make([]*commonpb.DataBlob, len(nodes))
 		for index, node := range nodes {
 			dataBlobs[index] = node.Events
-			dataSize += len(node.Events.Data)
+			dataSize += len(node.Events.GetData())
 			transactionIDs = append(transactionIDs, node.TransactionID)
 		}
 		lastNode := nodes[len(nodes)-1]
@@ -952,7 +952,7 @@ func (m *executionManagerImpl) readHistoryBranch(
 		}
 
 		if byBatch {
-			historyEventBatches = append(historyEventBatches, &historypb.History{Events: events})
+			historyEventBatches = append(historyEventBatches, historypb.History_builder{Events: events}.Build())
 		} else {
 			historyEvents = append(historyEvents, events...)
 		}

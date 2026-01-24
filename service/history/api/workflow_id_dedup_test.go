@@ -47,7 +47,7 @@ func TestResolveDuplicateWorkflowStart(t *testing.T) {
 
 	mockShard := shard.NewTestContextWithTimeSource(
 		gomock.NewController(t),
-		&persistencespb.ShardInfo{RangeId: 1},
+		persistencespb.ShardInfo_builder{RangeId: 1}.Build(),
 		config,
 		timeSource,
 	)

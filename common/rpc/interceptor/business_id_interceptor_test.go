@@ -26,7 +26,7 @@ func TestBusinessIDInterceptor_AllMethods(t *testing.T) {
 
 	serializer := tasktoken.NewSerializer()
 	createTaskToken := func(workflowID string) []byte {
-		taskToken := &tokenspb.Task{WorkflowId: workflowID}
+		taskToken := tokenspb.Task_builder{WorkflowId: workflowID}.Build()
 		tokenBytes, err := serializer.Serialize(taskToken)
 		require.NoError(t, err)
 		return tokenBytes
@@ -41,178 +41,176 @@ func TestBusinessIDInterceptor_AllMethods(t *testing.T) {
 		// PatternWorkflowID methods (direct WorkflowId field)
 		{
 			methodName:         "StartWorkflowExecution",
-			request:            &workflowservice.StartWorkflowExecutionRequest{WorkflowId: "wf-id"},
+			request:            workflowservice.StartWorkflowExecutionRequest_builder{WorkflowId: "wf-id"}.Build(),
 			expectedBusinessID: "wf-id",
 		},
 		{
 			methodName:         "SignalWithStartWorkflowExecution",
-			request:            &workflowservice.SignalWithStartWorkflowExecutionRequest{WorkflowId: "wf-id"},
+			request:            workflowservice.SignalWithStartWorkflowExecutionRequest_builder{WorkflowId: "wf-id"}.Build(),
 			expectedBusinessID: "wf-id",
 		},
 		{
 			methodName:         "PauseWorkflowExecution",
-			request:            &workflowservice.PauseWorkflowExecutionRequest{WorkflowId: "wf-id"},
+			request:            workflowservice.PauseWorkflowExecutionRequest_builder{WorkflowId: "wf-id"}.Build(),
 			expectedBusinessID: "wf-id",
 		},
 		{
 			methodName:         "UnpauseWorkflowExecution",
-			request:            &workflowservice.UnpauseWorkflowExecutionRequest{WorkflowId: "wf-id"},
+			request:            workflowservice.UnpauseWorkflowExecutionRequest_builder{WorkflowId: "wf-id"}.Build(),
 			expectedBusinessID: "wf-id",
 		},
 		{
 			methodName:         "RecordActivityTaskHeartbeatById",
-			request:            &workflowservice.RecordActivityTaskHeartbeatByIdRequest{WorkflowId: "wf-id"},
+			request:            workflowservice.RecordActivityTaskHeartbeatByIdRequest_builder{WorkflowId: "wf-id"}.Build(),
 			expectedBusinessID: "wf-id",
 		},
 		{
 			methodName:         "RespondActivityTaskCompletedById",
-			request:            &workflowservice.RespondActivityTaskCompletedByIdRequest{WorkflowId: "wf-id"},
+			request:            workflowservice.RespondActivityTaskCompletedByIdRequest_builder{WorkflowId: "wf-id"}.Build(),
 			expectedBusinessID: "wf-id",
 		},
 		{
 			methodName:         "RespondActivityTaskCanceledById",
-			request:            &workflowservice.RespondActivityTaskCanceledByIdRequest{WorkflowId: "wf-id"},
+			request:            workflowservice.RespondActivityTaskCanceledByIdRequest_builder{WorkflowId: "wf-id"}.Build(),
 			expectedBusinessID: "wf-id",
 		},
 		{
 			methodName:         "RespondActivityTaskFailedById",
-			request:            &workflowservice.RespondActivityTaskFailedByIdRequest{WorkflowId: "wf-id"},
+			request:            workflowservice.RespondActivityTaskFailedByIdRequest_builder{WorkflowId: "wf-id"}.Build(),
 			expectedBusinessID: "wf-id",
 		},
 
 		// PatternWorkflowExecution methods (GetWorkflowExecution().GetWorkflowId())
 		{
 			methodName:         "DeleteWorkflowExecution",
-			request:            &workflowservice.DeleteWorkflowExecutionRequest{WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: "wf-id"}},
+			request:            workflowservice.DeleteWorkflowExecutionRequest_builder{WorkflowExecution: commonpb.WorkflowExecution_builder{WorkflowId: "wf-id"}.Build()}.Build(),
 			expectedBusinessID: "wf-id",
 		},
 		{
 			methodName:         "RequestCancelWorkflowExecution",
-			request:            &workflowservice.RequestCancelWorkflowExecutionRequest{WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: "wf-id"}},
+			request:            workflowservice.RequestCancelWorkflowExecutionRequest_builder{WorkflowExecution: commonpb.WorkflowExecution_builder{WorkflowId: "wf-id"}.Build()}.Build(),
 			expectedBusinessID: "wf-id",
 		},
 		{
 			methodName:         "ResetWorkflowExecution",
-			request:            &workflowservice.ResetWorkflowExecutionRequest{WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: "wf-id"}},
+			request:            workflowservice.ResetWorkflowExecutionRequest_builder{WorkflowExecution: commonpb.WorkflowExecution_builder{WorkflowId: "wf-id"}.Build()}.Build(),
 			expectedBusinessID: "wf-id",
 		},
 		{
 			methodName:         "SignalWorkflowExecution",
-			request:            &workflowservice.SignalWorkflowExecutionRequest{WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: "wf-id"}},
+			request:            workflowservice.SignalWorkflowExecutionRequest_builder{WorkflowExecution: commonpb.WorkflowExecution_builder{WorkflowId: "wf-id"}.Build()}.Build(),
 			expectedBusinessID: "wf-id",
 		},
 		{
 			methodName:         "TerminateWorkflowExecution",
-			request:            &workflowservice.TerminateWorkflowExecutionRequest{WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: "wf-id"}},
+			request:            workflowservice.TerminateWorkflowExecutionRequest_builder{WorkflowExecution: commonpb.WorkflowExecution_builder{WorkflowId: "wf-id"}.Build()}.Build(),
 			expectedBusinessID: "wf-id",
 		},
 		{
 			methodName:         "UpdateWorkflowExecution",
-			request:            &workflowservice.UpdateWorkflowExecutionRequest{WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: "wf-id"}},
+			request:            workflowservice.UpdateWorkflowExecutionRequest_builder{WorkflowExecution: commonpb.WorkflowExecution_builder{WorkflowId: "wf-id"}.Build()}.Build(),
 			expectedBusinessID: "wf-id",
 		},
 		{
 			methodName:         "UpdateWorkflowExecutionOptions",
-			request:            &workflowservice.UpdateWorkflowExecutionOptionsRequest{WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: "wf-id"}},
+			request:            workflowservice.UpdateWorkflowExecutionOptionsRequest_builder{WorkflowExecution: commonpb.WorkflowExecution_builder{WorkflowId: "wf-id"}.Build()}.Build(),
 			expectedBusinessID: "wf-id",
 		},
 
 		// PatternExecution methods (GetExecution().GetWorkflowId())
 		{
 			methodName:         "DescribeWorkflowExecution",
-			request:            &workflowservice.DescribeWorkflowExecutionRequest{Execution: &commonpb.WorkflowExecution{WorkflowId: "wf-id"}},
+			request:            workflowservice.DescribeWorkflowExecutionRequest_builder{Execution: commonpb.WorkflowExecution_builder{WorkflowId: "wf-id"}.Build()}.Build(),
 			expectedBusinessID: "wf-id",
 		},
 		{
 			methodName:         "GetWorkflowExecutionHistory",
-			request:            &workflowservice.GetWorkflowExecutionHistoryRequest{Execution: &commonpb.WorkflowExecution{WorkflowId: "wf-id"}},
+			request:            workflowservice.GetWorkflowExecutionHistoryRequest_builder{Execution: commonpb.WorkflowExecution_builder{WorkflowId: "wf-id"}.Build()}.Build(),
 			expectedBusinessID: "wf-id",
 		},
 		{
 			methodName:         "GetWorkflowExecutionHistoryReverse",
-			request:            &workflowservice.GetWorkflowExecutionHistoryReverseRequest{Execution: &commonpb.WorkflowExecution{WorkflowId: "wf-id"}},
+			request:            workflowservice.GetWorkflowExecutionHistoryReverseRequest_builder{Execution: commonpb.WorkflowExecution_builder{WorkflowId: "wf-id"}.Build()}.Build(),
 			expectedBusinessID: "wf-id",
 		},
 		{
 			methodName:         "QueryWorkflow",
-			request:            &workflowservice.QueryWorkflowRequest{Execution: &commonpb.WorkflowExecution{WorkflowId: "wf-id"}},
+			request:            workflowservice.QueryWorkflowRequest_builder{Execution: commonpb.WorkflowExecution_builder{WorkflowId: "wf-id"}.Build()}.Build(),
 			expectedBusinessID: "wf-id",
 		},
 		{
 			methodName:         "ResetStickyTaskQueue",
-			request:            &workflowservice.ResetStickyTaskQueueRequest{Execution: &commonpb.WorkflowExecution{WorkflowId: "wf-id"}},
+			request:            workflowservice.ResetStickyTaskQueueRequest_builder{Execution: commonpb.WorkflowExecution_builder{WorkflowId: "wf-id"}.Build()}.Build(),
 			expectedBusinessID: "wf-id",
 		},
 		{
 			methodName:         "ResetActivity",
-			request:            &workflowservice.ResetActivityRequest{Execution: &commonpb.WorkflowExecution{WorkflowId: "wf-id"}},
+			request:            workflowservice.ResetActivityRequest_builder{Execution: commonpb.WorkflowExecution_builder{WorkflowId: "wf-id"}.Build()}.Build(),
 			expectedBusinessID: "wf-id",
 		},
 		{
 			methodName:         "PauseActivity",
-			request:            &workflowservice.PauseActivityRequest{Execution: &commonpb.WorkflowExecution{WorkflowId: "wf-id"}},
+			request:            workflowservice.PauseActivityRequest_builder{Execution: commonpb.WorkflowExecution_builder{WorkflowId: "wf-id"}.Build()}.Build(),
 			expectedBusinessID: "wf-id",
 		},
 		{
 			methodName:         "UnpauseActivity",
-			request:            &workflowservice.UnpauseActivityRequest{Execution: &commonpb.WorkflowExecution{WorkflowId: "wf-id"}},
+			request:            workflowservice.UnpauseActivityRequest_builder{Execution: commonpb.WorkflowExecution_builder{WorkflowId: "wf-id"}.Build()}.Build(),
 			expectedBusinessID: "wf-id",
 		},
 		{
 			methodName:         "UpdateActivityOptions",
-			request:            &workflowservice.UpdateActivityOptionsRequest{Execution: &commonpb.WorkflowExecution{WorkflowId: "wf-id"}},
+			request:            workflowservice.UpdateActivityOptionsRequest_builder{Execution: commonpb.WorkflowExecution_builder{WorkflowId: "wf-id"}.Build()}.Build(),
 			expectedBusinessID: "wf-id",
 		},
 		{
 			methodName:         "TriggerWorkflowRule",
-			request:            &workflowservice.TriggerWorkflowRuleRequest{Execution: &commonpb.WorkflowExecution{WorkflowId: "wf-id"}},
+			request:            workflowservice.TriggerWorkflowRuleRequest_builder{Execution: commonpb.WorkflowExecution_builder{WorkflowId: "wf-id"}.Build()}.Build(),
 			expectedBusinessID: "wf-id",
 		},
 
 		// PatternTaskToken methods (TaskToken deserialization)
 		{
 			methodName:         "RecordActivityTaskHeartbeat",
-			request:            &workflowservice.RecordActivityTaskHeartbeatRequest{TaskToken: createTaskToken("wf-id")},
+			request:            workflowservice.RecordActivityTaskHeartbeatRequest_builder{TaskToken: createTaskToken("wf-id")}.Build(),
 			expectedBusinessID: "wf-id",
 		},
 		{
 			methodName:         "RespondActivityTaskCompleted",
-			request:            &workflowservice.RespondActivityTaskCompletedRequest{TaskToken: createTaskToken("wf-id")},
+			request:            workflowservice.RespondActivityTaskCompletedRequest_builder{TaskToken: createTaskToken("wf-id")}.Build(),
 			expectedBusinessID: "wf-id",
 		},
 		{
 			methodName:         "RespondActivityTaskCanceled",
-			request:            &workflowservice.RespondActivityTaskCanceledRequest{TaskToken: createTaskToken("wf-id")},
+			request:            workflowservice.RespondActivityTaskCanceledRequest_builder{TaskToken: createTaskToken("wf-id")}.Build(),
 			expectedBusinessID: "wf-id",
 		},
 		{
 			methodName:         "RespondActivityTaskFailed",
-			request:            &workflowservice.RespondActivityTaskFailedRequest{TaskToken: createTaskToken("wf-id")},
+			request:            workflowservice.RespondActivityTaskFailedRequest_builder{TaskToken: createTaskToken("wf-id")}.Build(),
 			expectedBusinessID: "wf-id",
 		},
 		{
 			methodName:         "RespondWorkflowTaskCompleted",
-			request:            &workflowservice.RespondWorkflowTaskCompletedRequest{TaskToken: createTaskToken("wf-id")},
+			request:            workflowservice.RespondWorkflowTaskCompletedRequest_builder{TaskToken: createTaskToken("wf-id")}.Build(),
 			expectedBusinessID: "wf-id",
 		},
 		{
 			methodName:         "RespondWorkflowTaskFailed",
-			request:            &workflowservice.RespondWorkflowTaskFailedRequest{TaskToken: createTaskToken("wf-id")},
+			request:            workflowservice.RespondWorkflowTaskFailedRequest_builder{TaskToken: createTaskToken("wf-id")}.Build(),
 			expectedBusinessID: "wf-id",
 		},
 
 		// PatternMultiOperation
 		{
 			methodName: "ExecuteMultiOperation",
-			request: &workflowservice.ExecuteMultiOperationRequest{
+			request: workflowservice.ExecuteMultiOperationRequest_builder{
 				Operations: []*workflowservice.ExecuteMultiOperationRequest_Operation{
-					{
-						Operation: &workflowservice.ExecuteMultiOperationRequest_Operation_StartWorkflow{
-							StartWorkflow: &workflowservice.StartWorkflowExecutionRequest{WorkflowId: "wf-id"},
-						},
-					},
+					workflowservice.ExecuteMultiOperationRequest_Operation_builder{
+						StartWorkflow: workflowservice.StartWorkflowExecutionRequest_builder{WorkflowId: "wf-id"}.Build(),
+					}.Build(),
 				},
-			},
+			}.Build(),
 			expectedBusinessID: "wf-id",
 		},
 	}
@@ -255,7 +253,7 @@ func TestBusinessIDInterceptor_SkipsNonWorkflowServiceAndUnmappedMethods(t *test
 		{
 			name:       "NonWorkflowServiceAPI",
 			fullMethod: "/temporal.api.operatorservice.v1.OperatorService/AddSearchAttributes",
-			request:    &workflowservice.StartWorkflowExecutionRequest{WorkflowId: "should-not-extract"},
+			request:    workflowservice.StartWorkflowExecutionRequest_builder{WorkflowId: "should-not-extract"}.Build(),
 		},
 		{
 			name:       "UnmappedMethod",
@@ -297,36 +295,34 @@ func TestBusinessIDInterceptor_EdgeCases(t *testing.T) {
 		{
 			name:               "NilWorkflowExecution",
 			methodName:         "TerminateWorkflowExecution",
-			request:            &workflowservice.TerminateWorkflowExecutionRequest{WorkflowExecution: nil},
+			request:            workflowservice.TerminateWorkflowExecutionRequest_builder{WorkflowExecution: nil}.Build(),
 			expectedBusinessID: namespace.EmptyBusinessID,
 		},
 		{
 			name:               "InvalidTaskToken",
 			methodName:         "RespondActivityTaskCompleted",
-			request:            &workflowservice.RespondActivityTaskCompletedRequest{TaskToken: []byte("invalid")},
+			request:            workflowservice.RespondActivityTaskCompletedRequest_builder{TaskToken: []byte("invalid")}.Build(),
 			expectedBusinessID: namespace.EmptyBusinessID,
 		},
 		{
 			name:               "EmptyMultiOperations",
 			methodName:         "ExecuteMultiOperation",
-			request:            &workflowservice.ExecuteMultiOperationRequest{Operations: nil},
+			request:            workflowservice.ExecuteMultiOperationRequest_builder{Operations: nil}.Build(),
 			expectedBusinessID: namespace.EmptyBusinessID,
 		},
 		{
 			name:       "MultiOperation_UpdateWorkflowFallback",
 			methodName: "ExecuteMultiOperation",
-			request: &workflowservice.ExecuteMultiOperationRequest{
+			request: workflowservice.ExecuteMultiOperationRequest_builder{
 				Operations: []*workflowservice.ExecuteMultiOperationRequest_Operation{
-					{
-						Operation: &workflowservice.ExecuteMultiOperationRequest_Operation_UpdateWorkflow{
-							UpdateWorkflow: &workflowservice.UpdateWorkflowExecutionRequest{
-								WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: "wf-update"},
-								Request:           &updatepb.Request{},
-							},
-						},
-					},
+					workflowservice.ExecuteMultiOperationRequest_Operation_builder{
+						UpdateWorkflow: workflowservice.UpdateWorkflowExecutionRequest_builder{
+							WorkflowExecution: commonpb.WorkflowExecution_builder{WorkflowId: "wf-update"}.Build(),
+							Request:           &updatepb.Request{},
+						}.Build(),
+					}.Build(),
 				},
-			},
+			}.Build(),
 			expectedBusinessID: "wf-update",
 		},
 	}

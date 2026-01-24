@@ -265,7 +265,7 @@ func newClusterWithPersistenceTestBaseFactory(t *testing.T, clusterConfig *TestC
 		clusterInfo.ClusterID = uuid.NewString()
 		clusterInfoMap[clusterName] = clusterInfo
 		_, err := testBase.ClusterMetadataManager.SaveClusterMetadata(context.Background(), &persistence.SaveClusterMetadataRequest{
-			ClusterMetadata: &persistencespb.ClusterMetadata{
+			ClusterMetadata: persistencespb.ClusterMetadata_builder{
 				HistoryShardCount:        clusterConfig.HistoryConfig.NumHistoryShards,
 				ClusterName:              clusterName,
 				ClusterId:                clusterInfo.ClusterID,
@@ -276,7 +276,7 @@ func newClusterWithPersistenceTestBaseFactory(t *testing.T, clusterConfig *TestC
 				ClusterAddress:           clusterInfo.RPCAddress,
 				HttpAddress:              clusterInfo.HTTPAddress,
 				InitialFailoverVersion:   clusterInfo.InitialFailoverVersion,
-			}})
+			}.Build()})
 		if err != nil {
 			return nil, err
 		}

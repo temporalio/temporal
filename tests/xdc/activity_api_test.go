@@ -20,6 +20,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/tests/testcore"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
@@ -108,13 +109,13 @@ func (s *ActivityApiStateReplicationSuite) TestPauseActivityFailover() {
 	}, 5*time.Second, 200*time.Millisecond)
 
 	// pause the activity in cluster0
-	pauseRequest := &workflowservice.PauseActivityRequest{
+	pauseRequest := workflowservice.PauseActivityRequest_builder{
 		Namespace: ns,
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: workflowRun.GetID(),
-		},
-		Activity: &workflowservice.PauseActivityRequest_Id{Id: "activity-id"},
-	}
+		}.Build(),
+		Id: proto.String("activity-id"),
+	}.Build()
 	pauseResp, err := s.clusters[0].Host().FrontendClient().PauseActivity(ctx, pauseRequest)
 	s.NoError(err)
 	s.NotNil(pauseResp)
@@ -123,25 +124,25 @@ func (s *ActivityApiStateReplicationSuite) TestPauseActivityFailover() {
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := activeSDKClient.DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
-		require.Equal(t, 1, len(description.PendingActivities))
-		require.True(t, description.PendingActivities[0].Paused)
+		require.Equal(t, 1, len(description.GetPendingActivities()))
+		require.True(t, description.GetPendingActivities()[0].GetPaused())
 	}, 5*time.Second, 200*time.Millisecond)
 
 	// update the activity properties in cluster0
-	updateRequest := &workflowservice.UpdateActivityOptionsRequest{
+	updateRequest := workflowservice.UpdateActivityOptionsRequest_builder{
 		Namespace: ns,
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: workflowRun.GetID(),
-		},
-		Activity: &workflowservice.UpdateActivityOptionsRequest_Id{Id: "activity-id"},
-		ActivityOptions: &activitypb.ActivityOptions{
-			RetryPolicy: &commonpb.RetryPolicy{
+		}.Build(),
+		Id: proto.String("activity-id"),
+		ActivityOptions: activitypb.ActivityOptions_builder{
+			RetryPolicy: commonpb.RetryPolicy_builder{
 				InitialInterval: durationpb.New(2 * time.Second),
 				MaximumAttempts: 10,
-			},
-		},
+			}.Build(),
+		}.Build(),
 		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"retry_policy.initial_interval", "retry_policy.maximum_attempts"}},
-	}
+	}.Build()
 	respUpdate, err := s.clusters[0].Host().FrontendClient().UpdateActivityOptions(ctx, updateRequest)
 	s.NoError(err)
 	s.NotNil(respUpdate)
@@ -152,21 +153,21 @@ func (s *ActivityApiStateReplicationSuite) TestPauseActivityFailover() {
 		require.NoError(t, err)
 		require.NotNil(t, description.GetPendingActivities())
 		if description.GetPendingActivities() != nil {
-			require.Equal(t, 1, len(description.PendingActivities))
-			require.True(t, description.PendingActivities[0].Paused)
-			require.Equal(t, int64(2), description.PendingActivities[0].CurrentRetryInterval.GetSeconds())
+			require.Equal(t, 1, len(description.GetPendingActivities()))
+			require.True(t, description.GetPendingActivities()[0].GetPaused())
+			require.Equal(t, int64(2), description.GetPendingActivities()[0].GetCurrentRetryInterval().GetSeconds())
 		}
 	}, 5*time.Second, 200*time.Millisecond)
 
 	// reset the activity in cluster0, while keeping it paused
-	resetRequest := &workflowservice.ResetActivityRequest{
+	resetRequest := workflowservice.ResetActivityRequest_builder{
 		Namespace: ns,
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: workflowRun.GetID(),
-		},
-		Activity:   &workflowservice.ResetActivityRequest_Id{Id: "activity-id"},
+		}.Build(),
+		Id:         proto.String("activity-id"),
 		KeepPaused: true,
-	}
+	}.Build()
 	resetResp, err := s.clusters[0].Host().FrontendClient().ResetActivity(ctx, resetRequest)
 	s.NoError(err)
 	s.NotNil(resetResp)
@@ -177,10 +178,10 @@ func (s *ActivityApiStateReplicationSuite) TestPauseActivityFailover() {
 		require.NoError(t, err)
 		require.NotNil(t, description.GetPendingActivities())
 		if description.GetPendingActivities() != nil {
-			require.Equal(t, 1, len(description.PendingActivities))
-			require.True(t, description.PendingActivities[0].Paused)
-			require.Equal(t, int32(1), description.PendingActivities[0].Attempt)
-			require.Equal(t, int64(2), description.PendingActivities[0].CurrentRetryInterval.GetSeconds())
+			require.Equal(t, 1, len(description.GetPendingActivities()))
+			require.True(t, description.GetPendingActivities()[0].GetPaused())
+			require.Equal(t, int32(1), description.GetPendingActivities()[0].GetAttempt())
+			require.Equal(t, int64(2), description.GetPendingActivities()[0].GetCurrentRetryInterval().GetSeconds())
 		}
 	}, 5*time.Second, 200*time.Millisecond)
 
@@ -204,10 +205,10 @@ func (s *ActivityApiStateReplicationSuite) TestPauseActivityFailover() {
 		require.NoError(t, err)
 		require.NotNil(t, description.GetPendingActivities())
 		if description.GetPendingActivities() != nil {
-			require.Equal(t, 1, len(description.PendingActivities))
-			require.True(t, description.PendingActivities[0].Paused)
-			require.Equal(t, int64(2), description.PendingActivities[0].CurrentRetryInterval.GetSeconds())
-			require.Equal(t, int32(10), description.PendingActivities[0].MaximumAttempts)
+			require.Equal(t, 1, len(description.GetPendingActivities()))
+			require.True(t, description.GetPendingActivities()[0].GetPaused())
+			require.Equal(t, int64(2), description.GetPendingActivities()[0].GetCurrentRetryInterval().GetSeconds())
+			require.Equal(t, int32(10), description.GetPendingActivities()[0].GetMaximumAttempts())
 		}
 	}, 5*time.Second, 200*time.Millisecond)
 
@@ -222,13 +223,13 @@ func (s *ActivityApiStateReplicationSuite) TestPauseActivityFailover() {
 	activityWasPaused.Store(true)
 
 	// unpause the activity in cluster1
-	unpauseRequest := &workflowservice.UnpauseActivityRequest{
+	unpauseRequest := workflowservice.UnpauseActivityRequest_builder{
 		Namespace: ns,
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: workflowRun.GetID(),
-		},
-		Activity: &workflowservice.UnpauseActivityRequest_Id{Id: "activity-id"},
-	}
+		}.Build(),
+		Id: proto.String("activity-id"),
+	}.Build()
 	unpauseResp, err := s.clusters[1].Host().FrontendClient().UnpauseActivity(ctx, unpauseRequest)
 	s.NoError(err)
 	s.NotNil(unpauseResp)

@@ -17,8 +17,8 @@ func TestProtoEncode(t *testing.T) {
 		blob, err := ProtoEncode(nil)
 		require.NoError(t, err)
 		require.NotNil(t, blob)
-		assert.Equal(t, enumspb.ENCODING_TYPE_PROTO3, blob.EncodingType)
-		assert.Nil(t, blob.Data)
+		assert.Equal(t, enumspb.ENCODING_TYPE_PROTO3, blob.GetEncodingType())
+		assert.Nil(t, blob.GetData())
 	})
 
 	t.Run("nil pointer message", func(t *testing.T) {
@@ -26,8 +26,8 @@ func TestProtoEncode(t *testing.T) {
 		blob, err := ProtoEncode(shardInfo)
 		require.NoError(t, err)
 		require.NotNil(t, blob)
-		assert.Equal(t, enumspb.ENCODING_TYPE_PROTO3, blob.EncodingType)
-		assert.Nil(t, blob.Data)
+		assert.Equal(t, enumspb.ENCODING_TYPE_PROTO3, blob.GetEncodingType())
+		assert.Nil(t, blob.GetData())
 	})
 }
 
@@ -53,10 +53,10 @@ func TestProtoDecode(t *testing.T) {
 	})
 
 	t.Run("nil data field", func(t *testing.T) {
-		blob := &commonpb.DataBlob{
+		blob := commonpb.DataBlob_builder{
 			Data:         nil,
 			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
-		}
+		}.Build()
 
 		var result persistencespb.ShardInfo
 		err := Decode(blob, &result)
@@ -64,10 +64,10 @@ func TestProtoDecode(t *testing.T) {
 	})
 
 	t.Run("unknown encoding type", func(t *testing.T) {
-		blob := &commonpb.DataBlob{
+		blob := commonpb.DataBlob_builder{
 			Data:         []byte("some data"),
 			EncodingType: enumspb.EncodingType(999),
-		}
+		}.Build()
 
 		var result persistencespb.ShardInfo
 		err := Decode(blob, &result)
@@ -77,10 +77,10 @@ func TestProtoDecode(t *testing.T) {
 	})
 
 	t.Run("invalid proto data", func(t *testing.T) {
-		blob := &commonpb.DataBlob{
+		blob := commonpb.DataBlob_builder{
 			Data:         []byte("invalid proto data"),
 			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
-		}
+		}.Build()
 
 		var result persistencespb.ShardInfo
 		err := Decode(blob, &result)

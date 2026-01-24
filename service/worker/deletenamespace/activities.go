@@ -81,15 +81,15 @@ func (a *localActivities) GetNamespaceInfoActivity(ctx context.Context, nsID nam
 		return getNamespaceInfoResult{}, err
 	}
 
-	if getNamespaceResponse.Namespace == nil || getNamespaceResponse.Namespace.Info == nil || getNamespaceResponse.Namespace.Info.Id == "" {
+	if getNamespaceResponse.Namespace == nil || !getNamespaceResponse.Namespace.HasInfo() || getNamespaceResponse.Namespace.GetInfo().GetId() == "" {
 		return getNamespaceInfoResult{}, stderrors.New("namespace info is corrupted")
 	}
 
 	return getNamespaceInfoResult{
-		NamespaceID:   namespace.ID(getNamespaceResponse.Namespace.Info.Id),
-		Namespace:     namespace.Name(getNamespaceResponse.Namespace.Info.Name),
-		Clusters:      getNamespaceResponse.Namespace.ReplicationConfig.Clusters,
-		ActiveCluster: getNamespaceResponse.Namespace.ReplicationConfig.ActiveClusterName,
+		NamespaceID:   namespace.ID(getNamespaceResponse.Namespace.GetInfo().GetId()),
+		Namespace:     namespace.Name(getNamespaceResponse.Namespace.GetInfo().GetName()),
+		Clusters:      getNamespaceResponse.Namespace.GetReplicationConfig().GetClusters(),
+		ActiveCluster: getNamespaceResponse.Namespace.GetReplicationConfig().GetActiveClusterName(),
 		// CurrentCluster is not technically a "namespace info", but since all cluster data is here,
 		// it is convenient to have the current cluster name here too.
 		CurrentCluster: a.clusterMetadata.GetCurrentClusterName(),
@@ -152,7 +152,7 @@ func (a *localActivities) MarkNamespaceDeletedActivity(ctx context.Context, nsNa
 		return err
 	}
 
-	ns.Namespace.Info.State = enumspb.NAMESPACE_STATE_DELETED
+	ns.Namespace.GetInfo().SetState(enumspb.NAMESPACE_STATE_DELETED)
 
 	updateRequest := &persistence.UpdateNamespaceRequest{
 		Namespace:           ns.Namespace,

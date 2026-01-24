@@ -1016,17 +1016,17 @@ func testCassandraQueueV2ConcurrentRangeDeleteMessages(t *testing.T, cluster *ca
 			// Verify that the queue metadata was updated by the leader query
 			q, err := cassandra.GetQueue(ctx, qs[0].session, queueName, queueType)
 			require.NoError(t, err)
-			require.Len(t, q.Metadata.Partitions, 1)
+			require.Len(t, q.Metadata.GetPartitions(), 1)
 			if tc.smallerDeleteIsLeader {
 				// The smaller delete should have updated the min message ID to 1 because it succeeded, and the follower
 				// query received a conflict. However, the follower query will get retried, so the min message ID will
 				// eventually be updated correctly.
-				assert.Equal(t, int64(persistence.FirstQueueMessageID+1), q.Metadata.Partitions[0].MinMessageId)
+				assert.Equal(t, int64(persistence.FirstQueueMessageID+1), q.Metadata.GetPartitions()[0].GetMinMessageId())
 			} else {
 				// The bigger delete should have updated the min message ID to 2 because it succeeded, so the min
 				// message ID is already correct. However, the follower query will still get retried, so we need to
 				// verify later that this retry does not change the min message ID to 1.
-				assert.Equal(t, int64(persistence.FirstQueueMessageID+2), q.Metadata.Partitions[0].MinMessageId)
+				assert.Equal(t, int64(persistence.FirstQueueMessageID+2), q.Metadata.GetPartitions()[0].GetMinMessageId())
 			}
 
 			// Retry the follower query. Note that this would fail if it actually tried to update the queue metadata
@@ -1037,8 +1037,8 @@ func testCassandraQueueV2ConcurrentRangeDeleteMessages(t *testing.T, cluster *ca
 			// Verify that the queue metadata was updated to reflect the new min message ID
 			q, err = cassandra.GetQueue(ctx, qs[0].session, queueName, queueType)
 			require.NoError(t, err)
-			require.Len(t, q.Metadata.Partitions, 1)
-			assert.Equal(t, int64(persistence.FirstQueueMessageID+2), q.Metadata.Partitions[0].MinMessageId)
+			require.Len(t, q.Metadata.GetPartitions(), 1)
+			assert.Equal(t, int64(persistence.FirstQueueMessageID+2), q.Metadata.GetPartitions()[0].GetMinMessageId())
 
 			// Verify that the first two messages were deleted no matter which query was the leader
 			response, err := qs[0].ReadMessages(ctx, &persistence.InternalReadMessagesRequest{
@@ -1206,12 +1206,12 @@ func insertQueueMetadataWithMultiplePartitions(
 ) {
 	t.Helper()
 
-	queuePB := persistencespb.Queue{
+	queuePB := persistencespb.Queue_builder{
 		Partitions: map[int32]*persistencespb.QueuePartition{
 			0: {},
 			1: {},
 		},
-	}
+	}.Build()
 	bytes, _ := queuePB.Marshal()
 	err := session.Query(
 		cassandra.TemplateCreateQueueQuery,
@@ -1285,10 +1285,10 @@ func testCassandraNexusEndpointStoreConcurrentCreate(t *testing.T, store persist
 				Endpoint: persistence.InternalNexusEndpoint{
 					ID:      endpointID,
 					Version: 0,
-					Data: &commonpb.DataBlob{
+					Data: commonpb.DataBlob_builder{
 						Data:         []byte("some dummy endpoint data"),
 						EncodingType: enumspb.ENCODING_TYPE_PROTO3,
-					}},
+					}.Build()},
 			})
 			if err != nil {
 				createErrors <- err
@@ -1313,10 +1313,10 @@ func testCassandraNexusEndpointStoreConcurrentUpdate(t *testing.T, store persist
 	endpoint := persistence.InternalNexusEndpoint{
 		ID:      uuid.NewString(),
 		Version: 0,
-		Data: &commonpb.DataBlob{
+		Data: commonpb.DataBlob_builder{
 			Data:         []byte("some dummy endpoint data"),
 			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
-		}}
+		}.Build()}
 
 	// Create an endpoint
 	createErr := store.CreateOrUpdateNexusEndpoint(ctx, &persistence.InternalCreateOrUpdateNexusEndpointRequest{
@@ -1365,10 +1365,10 @@ func testCassandraNexusEndpointStoreConcurrentCreateAndUpdate(t *testing.T, stor
 	firstEndpoint := persistence.InternalNexusEndpoint{
 		ID:      uuid.NewString(),
 		Version: 0,
-		Data: &commonpb.DataBlob{
+		Data: commonpb.DataBlob_builder{
 			Data:         []byte("some dummy endpoint data"),
 			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
-		}}
+		}.Build()}
 
 	// Create an endpoint
 	err := store.CreateOrUpdateNexusEndpoint(ctx, &persistence.InternalCreateOrUpdateNexusEndpointRequest{
@@ -1394,10 +1394,10 @@ func testCassandraNexusEndpointStoreConcurrentCreateAndUpdate(t *testing.T, stor
 			Endpoint: persistence.InternalNexusEndpoint{
 				ID:      uuid.NewString(),
 				Version: 0,
-				Data: &commonpb.DataBlob{
+				Data: commonpb.DataBlob_builder{
 					Data:         []byte("some dummy endpoint data"),
 					EncodingType: enumspb.ENCODING_TYPE_PROTO3,
-				}},
+				}.Build()},
 		})
 		if createErr != nil {
 			tableVersion.Add(1)
@@ -1435,10 +1435,10 @@ func testCassandraNexusEndpointStoreConcurrentUpdateAndDelete(t *testing.T, stor
 	endpoint := persistence.InternalNexusEndpoint{
 		ID:      uuid.NewString(),
 		Version: 0,
-		Data: &commonpb.DataBlob{
+		Data: commonpb.DataBlob_builder{
 			Data:         []byte("some dummy endpoint data"),
 			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
-		}}
+		}.Build()}
 
 	// Create an endpoint
 	err := store.CreateOrUpdateNexusEndpoint(ctx, &persistence.InternalCreateOrUpdateNexusEndpointRequest{
@@ -1504,10 +1504,10 @@ func testCassandraNexusEndpointStoreDeleteWhilePaging(t *testing.T, store persis
 			Endpoint: persistence.InternalNexusEndpoint{
 				ID:      uuid.NewString(),
 				Version: 0,
-				Data: &commonpb.DataBlob{
+				Data: commonpb.DataBlob_builder{
 					Data:         []byte("some dummy endpoint data"),
 					EncodingType: enumspb.ENCODING_TYPE_PROTO3,
-				}},
+				}.Build()},
 		})
 		require.NoError(t, err)
 		tableVersion.Add(1)

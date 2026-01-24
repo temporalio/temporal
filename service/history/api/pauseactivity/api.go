@@ -24,7 +24,7 @@ func Invoke(
 		ctx,
 		nil,
 		definition.NewWorkflowKey(
-			request.NamespaceId,
+			request.GetNamespaceId(),
 			request.GetFrontendRequest().GetExecution().GetWorkflowId(),
 			request.GetFrontendRequest().GetExecution().GetRunId(),
 		),
@@ -32,14 +32,14 @@ func Invoke(
 			mutableState := workflowLease.GetMutableState()
 			frontendRequest := request.GetFrontendRequest()
 			var activityIDs []string
-			switch a := frontendRequest.GetActivity().(type) {
-			case *workflowservice.PauseActivityRequest_Id:
-				activityIDs = append(activityIDs, a.Id)
-			case *workflowservice.PauseActivityRequest_Type:
-				activityType := a.Type
+			switch frontendRequest.WhichActivity() {
+			case workflowservice.PauseActivityRequest_Id_case:
+				activityIDs = append(activityIDs, frontendRequest.GetId())
+			case workflowservice.PauseActivityRequest_Type_case:
+				activityType := frontendRequest.GetType()
 				for _, ai := range mutableState.GetPendingActivityInfos() {
-					if ai.ActivityType.Name == activityType {
-						activityIDs = append(activityIDs, ai.ActivityId)
+					if ai.GetActivityType().GetName() == activityType {
+						activityIDs = append(activityIDs, ai.GetActivityId())
 					}
 				}
 			}
@@ -48,15 +48,13 @@ func Invoke(
 				return nil, consts.ErrActivityNotFound
 			}
 
-			pauseInfo := &persistencespb.ActivityInfo_PauseInfo{
+			pauseInfo := persistencespb.ActivityInfo_PauseInfo_builder{
 				PauseTime: timestamppb.New(shardContext.GetTimeSource().Now()),
-				PausedBy: &persistencespb.ActivityInfo_PauseInfo_Manual_{
-					Manual: &persistencespb.ActivityInfo_PauseInfo_Manual{
-						Identity: frontendRequest.GetIdentity(),
-						Reason:   frontendRequest.GetReason(),
-					},
-				},
-			}
+				Manual: persistencespb.ActivityInfo_PauseInfo_Manual_builder{
+					Identity: frontendRequest.GetIdentity(),
+					Reason:   frontendRequest.GetReason(),
+				}.Build(),
+			}.Build()
 
 			for _, activityId := range activityIDs {
 				err := workflow.PauseActivity(mutableState, activityId, pauseInfo)

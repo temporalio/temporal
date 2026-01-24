@@ -15,13 +15,13 @@ func Test_ApplyTypeMap_Success(t *testing.T) {
 	payloadInt, err := payload.Encode(123)
 	assert.NoError(err)
 
-	sa := &commonpb.SearchAttributes{
+	sa := commonpb.SearchAttributes_builder{
 		IndexedFields: map[string]*commonpb.Payload{
 			"key1": payload.EncodeString("str"),
 			"key2": payload.EncodeString("keyword"),
 			"key3": payloadInt,
 		},
-	}
+	}.Build()
 
 	validSearchAttributes := NameTypeMap{customSearchAttributes: map[string]enumspb.IndexedValueType{
 		"key1": enumspb.INDEXED_VALUE_TYPE_TEXT,
@@ -31,9 +31,9 @@ func Test_ApplyTypeMap_Success(t *testing.T) {
 	}}
 
 	ApplyTypeMap(sa, validSearchAttributes)
-	assert.Equal("Text", string(sa.GetIndexedFields()["key1"].Metadata["type"]))
-	assert.Equal("Keyword", string(sa.GetIndexedFields()["key2"].Metadata["type"]))
-	assert.Equal("Int", string(sa.GetIndexedFields()["key3"].Metadata["type"]))
+	assert.Equal("Text", string(sa.GetIndexedFields()["key1"].GetMetadata()["type"]))
+	assert.Equal("Keyword", string(sa.GetIndexedFields()["key2"].GetMetadata()["type"]))
+	assert.Equal("Int", string(sa.GetIndexedFields()["key3"].GetMetadata()["type"]))
 }
 
 func Test_ApplyTypeMap_Skip(t *testing.T) {
@@ -41,15 +41,15 @@ func Test_ApplyTypeMap_Skip(t *testing.T) {
 
 	payloadInt, err := payload.Encode(123)
 	assert.NoError(err)
-	payloadInt.Metadata["type"] = []byte("String")
+	payloadInt.GetMetadata()["type"] = []byte("String")
 
-	sa := &commonpb.SearchAttributes{
+	sa := commonpb.SearchAttributes_builder{
 		IndexedFields: map[string]*commonpb.Payload{
 			"UnknownKey": payload.EncodeString("str"),
 			"key4":       payload.EncodeString("invalid IndexValueType"),
 			"key3":       payloadInt, // Another type already set
 		},
-	}
+	}.Build()
 
 	validSearchAttributes := NameTypeMap{customSearchAttributes: map[string]enumspb.IndexedValueType{
 		"key1": enumspb.INDEXED_VALUE_TYPE_TEXT,
@@ -58,8 +58,8 @@ func Test_ApplyTypeMap_Skip(t *testing.T) {
 	}}
 
 	ApplyTypeMap(sa, validSearchAttributes)
-	assert.Nil(sa.GetIndexedFields()["UnknownKey"].Metadata["type"])
-	assert.Equal("String", string(sa.GetIndexedFields()["key3"].Metadata["type"]))
+	assert.Nil(sa.GetIndexedFields()["UnknownKey"].GetMetadata()["type"])
+	assert.Equal("String", string(sa.GetIndexedFields()["key3"].GetMetadata()["type"]))
 
 	validSearchAttributes = NameTypeMap{customSearchAttributes: map[string]enumspb.IndexedValueType{
 		"key4": enumspb.IndexedValueType(100),

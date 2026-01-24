@@ -35,7 +35,7 @@ var (
 	}
 
 	// default custom search attributes definition for SQL databases
-	sqlCustomSearchAttributes = sadefs.GetDBIndexSearchAttributes(nil).CustomSearchAttributes
+	sqlCustomSearchAttributes = sadefs.GetDBIndexSearchAttributes(nil).GetCustomSearchAttributes()
 
 	// ScheduleId is mapped to Keyword10 for tests
 	TestScheduleIDFieldName = "Keyword10"

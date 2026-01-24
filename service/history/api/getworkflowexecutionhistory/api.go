@@ -45,7 +45,7 @@ func Invoke(
 		return nil, err
 	}
 
-	isCloseEventOnly := request.Request.GetHistoryEventFilterType() == enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT
+	isCloseEventOnly := request.GetRequest().GetHistoryEventFilterType() == enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT
 
 	// this function returns the following 7 things,
 	// 1. the current branch token (to use to retrieve history events)
@@ -66,14 +66,14 @@ func Invoke(
 		response, err := api.GetOrPollWorkflowMutableState(
 			ctx,
 			shardContext,
-			&historyservice.GetMutableStateRequest{
+			historyservice.GetMutableStateRequest_builder{
 				NamespaceId:         namespaceUUID.String(),
 				Execution:           execution,
 				ExpectedNextEventId: expectedNextEventID,
 				CurrentBranchToken:  currentBranchToken,
 				VersionHistoryItem:  versionHistoryItem,
 				VersionedTransition: versionedTransition,
-			},
+			}.Build(),
 			workflowConsistencyChecker,
 			eventNotifier,
 		)
@@ -90,14 +90,14 @@ func Invoke(
 			response, err = api.GetOrPollWorkflowMutableState(
 				ctx,
 				shardContext,
-				&historyservice.GetMutableStateRequest{
+				historyservice.GetMutableStateRequest_builder{
 					NamespaceId:         namespaceUUID.String(),
 					Execution:           execution,
 					ExpectedNextEventId: expectedNextEventID,
 					CurrentBranchToken:  nil,
 					VersionHistoryItem:  nil,
 					VersionedTransition: nil,
-				},
+				}.Build(),
 				workflowConsistencyChecker,
 				eventNotifier,
 			)
@@ -117,8 +117,8 @@ func Invoke(
 		}
 
 		lastVersionedTransition := transitionhistory.LastVersionedTransition(response.GetTransitionHistory())
-		return response.CurrentBranchToken,
-			response.Execution.GetRunId(),
+		return response.GetCurrentBranchToken(),
+			response.GetExecution().GetRunId(),
 			response.GetLastFirstEventId(),
 			response.GetNextEventId(),
 			isWorkflowRunning,
@@ -127,8 +127,8 @@ func Invoke(
 			nil
 	}
 
-	isLongPoll := request.Request.GetWaitNewEvent()
-	execution := request.Request.Execution
+	isLongPoll := request.GetRequest().GetWaitNewEvent()
+	execution := request.GetRequest().GetExecution()
 	var continuationToken *tokenspb.HistoryContinuation
 
 	var runID string
@@ -138,8 +138,8 @@ func Invoke(
 
 	// process the token for paging
 	queryNextEventID := common.EndEventID
-	if request.Request.NextPageToken != nil {
-		continuationToken, err = api.DeserializeHistoryToken(request.Request.NextPageToken)
+	if len(request.GetRequest().GetNextPageToken()) != 0 {
+		continuationToken, err = api.DeserializeHistoryToken(request.GetRequest().GetNextPageToken())
 		if err != nil {
 			return nil, consts.ErrInvalidNextPageToken
 		}
@@ -147,40 +147,52 @@ func Invoke(
 			return nil, consts.ErrNextPageTokenRunIDMismatch
 		}
 
-		execution.RunId = continuationToken.GetRunId()
+		execution.SetRunId(continuationToken.GetRunId())
 
 		// we need to update the current next event ID and whether workflow is running
-		if len(continuationToken.PersistenceToken) == 0 && isLongPoll && continuationToken.IsWorkflowRunning {
+		if len(continuationToken.GetPersistenceToken()) == 0 && isLongPoll && continuationToken.GetIsWorkflowRunning() {
 			if !isCloseEventOnly {
 				queryNextEventID = continuationToken.GetNextEventId()
 			}
-			continuationToken.BranchToken, _, lastFirstEventID, nextEventID, isWorkflowRunning, continuationToken.VersionHistoryItem, continuationToken.VersionedTransition, err =
-				queryHistory(namespaceID, execution, queryNextEventID, continuationToken.BranchToken, continuationToken.VersionHistoryItem, continuationToken.VersionedTransition)
+			var branchToken []byte
+			var versionHistoryItem *historyspb.VersionHistoryItem
+			var versionedTransition *persistencespb.VersionedTransition
+			branchToken, _, lastFirstEventID, nextEventID, isWorkflowRunning, versionHistoryItem, versionedTransition, err =
+				queryHistory(namespaceID, execution, queryNextEventID, continuationToken.GetBranchToken(), continuationToken.GetVersionHistoryItem(), continuationToken.GetVersionedTransition())
 			if err != nil {
 				return nil, err
 			}
-			continuationToken.FirstEventId = continuationToken.GetNextEventId()
-			continuationToken.NextEventId = nextEventID
-			continuationToken.IsWorkflowRunning = isWorkflowRunning
+			continuationToken.SetBranchToken(branchToken)
+			continuationToken.SetVersionHistoryItem(versionHistoryItem)
+			continuationToken.SetVersionedTransition(versionedTransition)
+			continuationToken.SetFirstEventId(continuationToken.GetNextEventId())
+			continuationToken.SetNextEventId(nextEventID)
+			continuationToken.SetIsWorkflowRunning(isWorkflowRunning)
 		}
 	} else {
 		continuationToken = &tokenspb.HistoryContinuation{}
 		if !isCloseEventOnly {
 			queryNextEventID = common.FirstEventID
 		}
-		continuationToken.BranchToken, runID, lastFirstEventID, nextEventID, isWorkflowRunning, continuationToken.VersionHistoryItem, continuationToken.VersionedTransition, err =
+		var branchToken []byte
+		var versionHistoryItem *historyspb.VersionHistoryItem
+		var versionedTransition *persistencespb.VersionedTransition
+		branchToken, runID, lastFirstEventID, nextEventID, isWorkflowRunning, versionHistoryItem, versionedTransition, err =
 			queryHistory(namespaceID, execution, queryNextEventID, nil, nil, nil)
 		if err != nil {
 			return nil, err
 		}
+		continuationToken.SetBranchToken(branchToken)
+		continuationToken.SetVersionHistoryItem(versionHistoryItem)
+		continuationToken.SetVersionedTransition(versionedTransition)
 
-		execution.RunId = runID
+		execution.SetRunId(runID)
 
-		continuationToken.RunId = runID
-		continuationToken.FirstEventId = common.FirstEventID
-		continuationToken.NextEventId = nextEventID
-		continuationToken.IsWorkflowRunning = isWorkflowRunning
-		continuationToken.PersistenceToken = nil
+		continuationToken.SetRunId(runID)
+		continuationToken.SetFirstEventId(common.FirstEventID)
+		continuationToken.SetNextEventId(nextEventID)
+		continuationToken.SetIsWorkflowRunning(isWorkflowRunning)
+		continuationToken.SetPersistenceToken(nil)
 	}
 
 	// TODO below is a temporary solution to guard against invalid event batch
@@ -202,11 +214,11 @@ func Invoke(
 	}()
 
 	history := &historypb.History{}
-	history.Events = []*historypb.HistoryEvent{}
+	history.SetEvents([]*historypb.HistoryEvent{})
 	var historyBlob []*commonpb.DataBlob
 	config := shardContext.GetConfig()
 	sendRawHistoryBetweenInternalServices := config.SendRawHistoryBetweenInternalServices()
-	sendRawWorkflowHistoryForNamespace := config.SendRawWorkflowHistory(request.Request.GetNamespace())
+	sendRawWorkflowHistoryForNamespace := config.SendRawWorkflowHistory(request.GetRequest().GetNamespace())
 	if isCloseEventOnly {
 		if !isWorkflowRunning {
 			if sendRawWorkflowHistoryForNamespace || sendRawHistoryBetweenInternalServices {
@@ -218,10 +230,10 @@ func Invoke(
 					execution,
 					lastFirstEventID,
 					nextEventID,
-					request.Request.GetMaximumPageSize(),
+					request.GetRequest().GetMaximumPageSize(),
 					nil,
-					continuationToken.TransientWorkflowTask,
-					continuationToken.BranchToken,
+					continuationToken.GetTransientWorkflowTask(),
+					continuationToken.GetBranchToken(),
 				)
 				if err != nil {
 					return nil, err
@@ -237,17 +249,17 @@ func Invoke(
 					execution,
 					lastFirstEventID,
 					nextEventID,
-					request.Request.GetMaximumPageSize(),
+					request.GetRequest().GetMaximumPageSize(),
 					nil,
-					continuationToken.TransientWorkflowTask,
-					continuationToken.BranchToken,
+					continuationToken.GetTransientWorkflowTask(),
+					continuationToken.GetBranchToken(),
 					persistenceVisibilityMgr,
 				)
 				if err != nil {
 					return nil, err
 				}
 				// GetHistory func will not return empty history. Log workflow details if that is not the case
-				if len(history.Events) == 0 {
+				if len(history.GetEvents()) == 0 {
 					dataLossErr := softassert.UnexpectedDataLoss(
 						shardContext.GetLogger(),
 						"no events in workflow history",
@@ -270,54 +282,56 @@ func Invoke(
 					}
 					return nil, dataLossErr
 				}
-				history.Events = history.Events[len(history.Events)-1 : len(history.Events)]
+				history.SetEvents(history.GetEvents()[len(history.GetEvents())-1 : len(history.GetEvents())])
 			}
 			continuationToken = nil
 		} else if isLongPoll {
 			// set the persistence token to be nil so next time we will query history for updates
-			continuationToken.PersistenceToken = nil
+			continuationToken.SetPersistenceToken(nil)
 		} else {
 			continuationToken = nil
 		}
 	} else {
 		// return all events
-		if continuationToken.FirstEventId >= continuationToken.NextEventId {
+		if continuationToken.GetFirstEventId() >= continuationToken.GetNextEventId() {
 			// currently there is no new event
-			history.Events = []*historypb.HistoryEvent{}
+			history.SetEvents([]*historypb.HistoryEvent{})
 			if !isWorkflowRunning {
 				continuationToken = nil
 			}
 		} else {
+			var persistenceToken []byte
 			if sendRawWorkflowHistoryForNamespace || sendRawHistoryBetweenInternalServices {
-				historyBlob, continuationToken.PersistenceToken, err = api.GetRawHistory(
+				historyBlob, persistenceToken, err = api.GetRawHistory(
 					ctx,
 					shardContext,
 					namespaceName,
 					namespaceID,
 					execution,
-					continuationToken.FirstEventId,
-					continuationToken.NextEventId,
-					request.Request.GetMaximumPageSize(),
-					continuationToken.PersistenceToken,
-					continuationToken.TransientWorkflowTask,
-					continuationToken.BranchToken,
+					continuationToken.GetFirstEventId(),
+					continuationToken.GetNextEventId(),
+					request.GetRequest().GetMaximumPageSize(),
+					continuationToken.GetPersistenceToken(),
+					continuationToken.GetTransientWorkflowTask(),
+					continuationToken.GetBranchToken(),
 				)
 			} else {
-				history, continuationToken.PersistenceToken, err = api.GetHistory(
+				history, persistenceToken, err = api.GetHistory(
 					ctx,
 					shardContext,
 					namespaceName,
 					namespaceID,
 					execution,
-					continuationToken.FirstEventId,
-					continuationToken.NextEventId,
-					request.Request.GetMaximumPageSize(),
-					continuationToken.PersistenceToken,
-					continuationToken.TransientWorkflowTask,
-					continuationToken.BranchToken,
+					continuationToken.GetFirstEventId(),
+					continuationToken.GetNextEventId(),
+					request.GetRequest().GetMaximumPageSize(),
+					continuationToken.GetPersistenceToken(),
+					continuationToken.GetTransientWorkflowTask(),
+					continuationToken.GetBranchToken(),
 					persistenceVisibilityMgr,
 				)
 			}
+			continuationToken.SetPersistenceToken(persistenceToken)
 
 			if err != nil {
 				return nil, err
@@ -325,7 +339,7 @@ func Invoke(
 
 			// here, for long pull on history events, we need to intercept the paging token from cassandra
 			// and do something clever
-			if len(continuationToken.PersistenceToken) == 0 && (!continuationToken.IsWorkflowRunning || !isLongPoll) {
+			if len(continuationToken.GetPersistenceToken()) == 0 && (!continuationToken.GetIsWorkflowRunning() || !isLongPoll) {
 				// meaning, there is no more history to be returned
 				continuationToken = nil
 			}
@@ -338,7 +352,7 @@ func Invoke(
 	}
 
 	// if SendRawHistoryBetweenInternalServices is enabled, we do this check in frontend service
-	if len(history.Events) > 0 {
+	if len(history.GetEvents()) > 0 {
 		err = api.FixFollowEvents(ctx, versionChecker, isCloseEventOnly, history)
 		if err != nil {
 			return nil, err
@@ -353,18 +367,18 @@ func Invoke(
 	if sendRawHistoryBetweenInternalServices && !sendRawWorkflowHistoryForNamespace {
 		rawHistory = make([][]byte, 0, len(historyBlob))
 		for _, blob := range historyBlob {
-			rawHistory = append(rawHistory, blob.Data)
+			rawHistory = append(rawHistory, blob.GetData())
 		}
 		historyBlob = nil
 	}
-	return &historyservice.GetWorkflowExecutionHistoryResponseWithRaw{
-		Response: &workflowservice.GetWorkflowExecutionHistoryResponse{
+	return historyservice.GetWorkflowExecutionHistoryResponseWithRaw_builder{
+		Response: workflowservice.GetWorkflowExecutionHistoryResponse_builder{
 			History:       history,
 			RawHistory:    historyBlob,
 			NextPageToken: nextToken,
 			Archived:      false,
-		},
+		}.Build(),
 
 		History: rawHistory,
-	}, nil
+	}.Build(), nil
 }

@@ -97,7 +97,7 @@ func (ni *ConcurrentRequestLimitInterceptor) Allow(
 	}
 	// for GetWorkflowExecutionHistoryRequest, we only care about long poll requests
 	longPollReq, ok := req.(*workflowservice.GetWorkflowExecutionHistoryRequest)
-	if ok && !longPollReq.WaitNewEvent {
+	if ok && !longPollReq.GetWaitNewEvent() {
 		// ignore non-long-poll GetHistory calls.
 		return func() {}, nil
 	}

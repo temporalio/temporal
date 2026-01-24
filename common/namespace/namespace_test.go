@@ -14,22 +14,22 @@ import (
 )
 
 func base(t *testing.T) *namespace.Namespace {
-	detail := &persistencespb.NamespaceDetail{
-		Info: &persistencespb.NamespaceInfo{
+	detail := persistencespb.NamespaceDetail_builder{
+		Info: persistencespb.NamespaceInfo_builder{
 			Id:   namespace.NewID().String(),
 			Name: t.Name(),
 			Data: make(map[string]string),
-		},
-		Config: &persistencespb.NamespaceConfig{
-			BadBinaries: &namespacepb.BadBinaries{
+		}.Build(),
+		Config: persistencespb.NamespaceConfig_builder{
+			BadBinaries: namespacepb.BadBinaries_builder{
 				Binaries: make(map[string]*namespacepb.BadBinaryInfo),
-			},
-		},
-		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+			}.Build(),
+		}.Build(),
+		ReplicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: "foo",
 			Clusters:          []string{"foo", "bar"},
-		},
-	}
+		}.Build(),
+	}.Build()
 	factory := namespace.NewDefaultReplicationResolverFactory()
 	resolver := factory(detail)
 	ns, err := namespace.FromPersistentState(detail, resolver)

@@ -58,7 +58,7 @@ func (s *UpdateWorkflowSdkSuite) TestTerminateWorkflowAfterUpdateAdmitted() {
 
 	s.NoError(s.SdkClient().TerminateWorkflow(ctx, tv.WorkflowID(), run.GetRunID(), "reason"))
 
-	_, err := s.pollUpdate(ctx, tv, &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED})
+	_, err := s.pollUpdate(ctx, tv, updatepb.WaitPolicy_builder{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED}.Build())
 	var notFound *serviceerror.NotFound
 	s.ErrorAs(err, &notFound)
 
@@ -94,7 +94,7 @@ func (s *UpdateWorkflowSdkSuite) TestTimeoutWorkflowAfterUpdateAccepted() {
 
 	wfRun, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 		ID:                       tv.WorkflowID(),
-		TaskQueue:                tv.TaskQueue().Name,
+		TaskQueue:                tv.TaskQueue().GetName(),
 		WorkflowExecutionTimeout: time.Second,
 	}, workflowFn)
 	s.NoError(err)
@@ -116,7 +116,7 @@ func (s *UpdateWorkflowSdkSuite) TestTimeoutWorkflowAfterUpdateAccepted() {
 	s.ErrorAs(err, &appErr)
 	s.Contains("Workflow Update failed because the Workflow completed before the Update completed.", appErr.Message())
 
-	pollFailure, pollErr := s.pollUpdate(ctx, tv, &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
+	pollFailure, pollErr := s.pollUpdate(ctx, tv, updatepb.WaitPolicy_builder{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED}.Build())
 	s.NoError(pollErr)
 	s.Equal("Workflow Update failed because the Workflow completed before the Update completed.", pollFailure.GetOutcome().GetFailure().GetMessage())
 
@@ -176,7 +176,7 @@ func (s *UpdateWorkflowSdkSuite) TestTerminateWorkflowAfterUpdateAccepted() {
 	s.ErrorAs(err, &appErr)
 	s.Contains("Workflow Update failed because the Workflow completed before the Update completed.", appErr.Message())
 
-	pollFailure, pollErr := s.pollUpdate(ctx, tv, &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
+	pollFailure, pollErr := s.pollUpdate(ctx, tv, updatepb.WaitPolicy_builder{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED}.Build())
 	s.NoError(pollErr)
 	s.Equal("Workflow Update failed because the Workflow completed before the Update completed.", pollFailure.GetOutcome().GetFailure().GetMessage())
 
@@ -243,7 +243,7 @@ func (s *UpdateWorkflowSdkSuite) TestContinueAsNewAfterUpdateAdmitted() {
 	firstRun = s.startWorkflow(rootCtx, tv, workflowFn1)
 	var secondRunID string
 	s.Eventually(func() bool {
-		resp, err := s.pollUpdate(rootCtx, tv, &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
+		resp, err := s.pollUpdate(rootCtx, tv, updatepb.WaitPolicy_builder{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED}.Build())
 		if err != nil {
 			var notFoundErr *serviceerror.NotFound
 			var resourceExhaustedErr *serviceerror.ResourceExhausted
@@ -309,7 +309,7 @@ func (s *UpdateWorkflowSdkSuite) TestTimeoutWithRetryAfterUpdateAdmitted() {
 
 	firstRun, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 		ID:                 tv.WorkflowID(),
-		TaskQueue:          tv.TaskQueue().Name,
+		TaskQueue:          tv.TaskQueue().GetName(),
 		WorkflowRunTimeout: 1 * time.Second,
 		RetryPolicy: &temporal.RetryPolicy{
 			MaximumAttempts: 2,
@@ -327,7 +327,7 @@ func (s *UpdateWorkflowSdkSuite) TestTimeoutWithRetryAfterUpdateAdmitted() {
 
 	var secondRunID string
 	s.Eventually(func() bool {
-		resp, err := s.pollUpdate(ctx, tv, &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
+		resp, err := s.pollUpdate(ctx, tv, updatepb.WaitPolicy_builder{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED}.Build())
 		if err != nil {
 			var notFoundErr *serviceerror.NotFound
 			// If a poll beats internal update retries, it will get NotFound error for a few attempts.
@@ -360,7 +360,7 @@ func (s *UpdateWorkflowSdkSuite) TestTimeoutWithRetryAfterUpdateAdmitted() {
 func (s *UpdateWorkflowSdkSuite) startWorkflow(ctx context.Context, tv *testvars.TestVars, workflowFn any) sdkclient.WorkflowRun {
 	run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 		ID:        tv.WorkflowID(),
-		TaskQueue: tv.TaskQueue().Name,
+		TaskQueue: tv.TaskQueue().GetName(),
 	}, workflowFn)
 	s.NoError(err)
 	return run
@@ -369,9 +369,9 @@ func (s *UpdateWorkflowSdkSuite) startWorkflow(ctx context.Context, tv *testvars
 func (s *UpdateWorkflowSdkSuite) updateWorkflowWaitAdmitted(ctx context.Context, tv *testvars.TestVars, arg string) {
 	go func() { _, _ = s.updateWorkflowWaitAccepted(ctx, tv, arg) }()
 	s.Eventually(func() bool {
-		resp, err := s.pollUpdate(ctx, tv, &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED})
+		resp, err := s.pollUpdate(ctx, tv, updatepb.WaitPolicy_builder{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED}.Build())
 		if err == nil {
-			s.Equal(enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED, resp.Stage)
+			s.Equal(enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED, resp.GetStage())
 			return true
 		}
 		var notFoundErr *serviceerror.NotFound
@@ -392,10 +392,10 @@ func (s *UpdateWorkflowSdkSuite) updateWorkflowWaitAccepted(ctx context.Context,
 }
 
 func (s *UpdateWorkflowSdkSuite) pollUpdate(ctx context.Context, tv *testvars.TestVars, waitPolicy *updatepb.WaitPolicy) (*workflowservice.PollWorkflowExecutionUpdateResponse, error) {
-	return s.SdkClient().WorkflowService().PollWorkflowExecutionUpdate(ctx, &workflowservice.PollWorkflowExecutionUpdateRequest{
+	return s.SdkClient().WorkflowService().PollWorkflowExecutionUpdate(ctx, workflowservice.PollWorkflowExecutionUpdateRequest_builder{
 		Namespace:  tv.NamespaceName().String(),
 		UpdateRef:  tv.UpdateRef(),
 		Identity:   tv.ClientIdentity(),
 		WaitPolicy: waitPolicy,
-	})
+	}.Build())
 }

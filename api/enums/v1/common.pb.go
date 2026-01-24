@@ -9,7 +9,6 @@ package enums
 import (
 	reflect "reflect"
 	"strconv"
-	sync "sync"
 	unsafe "unsafe"
 
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -77,11 +76,6 @@ func (x DeadLetterQueueType) Number() protoreflect.EnumNumber {
 	return protoreflect.EnumNumber(x)
 }
 
-// Deprecated: Use DeadLetterQueueType.Descriptor instead.
-func (DeadLetterQueueType) EnumDescriptor() ([]byte, []int) {
-	return file_temporal_server_api_enums_v1_common_proto_rawDescGZIP(), []int{0}
-}
-
 type ChecksumFlavor int32
 
 const (
@@ -129,11 +123,6 @@ func (ChecksumFlavor) Type() protoreflect.EnumType {
 
 func (x ChecksumFlavor) Number() protoreflect.EnumNumber {
 	return protoreflect.EnumNumber(x)
-}
-
-// Deprecated: Use ChecksumFlavor.Descriptor instead.
-func (ChecksumFlavor) EnumDescriptor() ([]byte, []int) {
-	return file_temporal_server_api_enums_v1_common_proto_rawDescGZIP(), []int{1}
 }
 
 // State of a callback.
@@ -212,11 +201,6 @@ func (x CallbackState) Number() protoreflect.EnumNumber {
 	return protoreflect.EnumNumber(x)
 }
 
-// Deprecated: Use CallbackState.Descriptor instead.
-func (CallbackState) EnumDescriptor() ([]byte, []int) {
-	return file_temporal_server_api_enums_v1_common_proto_rawDescGZIP(), []int{2}
-}
-
 var File_temporal_server_api_enums_v1_common_proto protoreflect.FileDescriptor
 
 const file_temporal_server_api_enums_v1_common_proto_rawDesc = "" +
@@ -236,18 +220,6 @@ const file_temporal_server_api_enums_v1_common_proto_rawDesc = "" +
 	"\x1aCALLBACK_STATE_BACKING_OFF\x10\x03\x12\x19\n" +
 	"\x15CALLBACK_STATE_FAILED\x10\x04\x12\x1c\n" +
 	"\x18CALLBACK_STATE_SUCCEEDED\x10\x05B*Z(go.temporal.io/server/api/enums/v1;enumsb\x06proto3"
-
-var (
-	file_temporal_server_api_enums_v1_common_proto_rawDescOnce sync.Once
-	file_temporal_server_api_enums_v1_common_proto_rawDescData []byte
-)
-
-func file_temporal_server_api_enums_v1_common_proto_rawDescGZIP() []byte {
-	file_temporal_server_api_enums_v1_common_proto_rawDescOnce.Do(func() {
-		file_temporal_server_api_enums_v1_common_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_api_enums_v1_common_proto_rawDesc), len(file_temporal_server_api_enums_v1_common_proto_rawDesc)))
-	})
-	return file_temporal_server_api_enums_v1_common_proto_rawDescData
-}
 
 var file_temporal_server_api_enums_v1_common_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
 var file_temporal_server_api_enums_v1_common_proto_goTypes = []any{

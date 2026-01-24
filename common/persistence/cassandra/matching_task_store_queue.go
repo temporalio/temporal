@@ -119,8 +119,8 @@ func (d *taskQueueStore) CreateTaskQueue(
 		rowTypeTaskQueue,
 		taskQueueTaskID,
 		request.RangeID,
-		request.TaskQueueInfo.Data,
-		request.TaskQueueInfo.EncodingType.String(),
+		request.TaskQueueInfo.GetData(),
+		request.TaskQueueInfo.GetEncodingType().String(),
 	).WithContext(ctx)
 
 	previous := make(map[string]interface{})
@@ -196,8 +196,8 @@ func (d *taskQueueStore) UpdateTaskQueue(
 		batch.Query(switchTasksTable(templateUpdateTaskQueueQueryWithTTLPart2, d.version),
 			expiryTTL,
 			request.RangeID,
-			request.TaskQueueInfo.Data,
-			request.TaskQueueInfo.EncodingType.String(),
+			request.TaskQueueInfo.GetData(),
+			request.TaskQueueInfo.GetEncodingType().String(),
 			request.NamespaceID,
 			request.TaskQueue,
 			request.TaskType,
@@ -210,8 +210,8 @@ func (d *taskQueueStore) UpdateTaskQueue(
 		// Regular update logic for both V1 and V2
 		query := d.Session.Query(switchTasksTable(templateUpdateTaskQueueQuery, d.version),
 			request.RangeID,
-			request.TaskQueueInfo.Data,
-			request.TaskQueueInfo.EncodingType.String(),
+			request.TaskQueueInfo.GetData(),
+			request.TaskQueueInfo.GetEncodingType().String(),
 			request.NamespaceID,
 			request.TaskQueue,
 			request.TaskType,

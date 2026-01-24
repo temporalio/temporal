@@ -226,22 +226,22 @@ func (h *historyArchiverSuite) TestArchive_Fail_HistoryMutated() {
 
 	historyIterator := archiver.NewMockHistoryIterator(h.controller)
 	historyBatches := []*historypb.History{
-		{
+		historypb.History_builder{
 			Events: []*historypb.HistoryEvent{
-				{
+				historypb.HistoryEvent_builder{
 					EventId:   common.FirstEventID + 1,
 					EventTime: timestamppb.New(time.Now().UTC()),
 					Version:   testCloseFailoverVersion + 1,
-				},
+				}.Build(),
 			},
-		},
+		}.Build(),
 	}
-	historyBlob := &archiverspb.HistoryBlob{
-		Header: &archiverspb.HistoryBlobHeader{
+	historyBlob := archiverspb.HistoryBlob_builder{
+		Header: archiverspb.HistoryBlobHeader_builder{
 			IsLast: true,
-		},
+		}.Build(),
 		Body: historyBatches,
-	}
+	}.Build()
 	gomock.InOrder(
 		historyIterator.EXPECT().HasNext().Return(true),
 		historyIterator.EXPECT().Next(gomock.Any()).Return(historyBlob, nil),
@@ -296,22 +296,22 @@ func (h *historyArchiverSuite) TestArchive_Skip() {
 	storageWrapper.EXPECT().Upload(ctx, h.testArchivalURI, gomock.Any(), gomock.Any()).Return(nil)
 
 	historyIterator := archiver.NewMockHistoryIterator(h.controller)
-	historyBlob := &archiverspb.HistoryBlob{
-		Header: &archiverspb.HistoryBlobHeader{
+	historyBlob := archiverspb.HistoryBlob_builder{
+		Header: archiverspb.HistoryBlobHeader_builder{
 			IsLast: false,
-		},
+		}.Build(),
 		Body: []*historypb.History{
-			{
+			historypb.History_builder{
 				Events: []*historypb.HistoryEvent{
-					{
+					historypb.HistoryEvent_builder{
 						EventId:   common.FirstEventID,
 						EventTime: timestamppb.New(time.Now().UTC()),
 						Version:   testCloseFailoverVersion,
-					},
+					}.Build(),
 				},
-			},
+			}.Build(),
 		},
-	}
+	}.Build()
 	gomock.InOrder(
 		historyIterator.EXPECT().HasNext().Return(true),
 		historyIterator.EXPECT().Next(gomock.Any()).Return(historyBlob, nil),
@@ -343,36 +343,36 @@ func (h *historyArchiverSuite) TestArchive_Success() {
 
 	historyIterator := archiver.NewMockHistoryIterator(h.controller)
 	historyBatches := []*historypb.History{
-		{
+		historypb.History_builder{
 			Events: []*historypb.HistoryEvent{
-				{
+				historypb.HistoryEvent_builder{
 					EventId:   common.FirstEventID + 1,
 					EventTime: timestamppb.New(time.Now().UTC()),
 					Version:   testCloseFailoverVersion,
-				},
-				{
+				}.Build(),
+				historypb.HistoryEvent_builder{
 					EventId:   common.FirstEventID + 2,
 					EventTime: timestamppb.New(time.Now().UTC()),
 					Version:   testCloseFailoverVersion,
-				},
+				}.Build(),
 			},
-		},
-		{
+		}.Build(),
+		historypb.History_builder{
 			Events: []*historypb.HistoryEvent{
-				{
+				historypb.HistoryEvent_builder{
 					EventId:   testNextEventID - 1,
 					EventTime: timestamppb.New(time.Now().UTC()),
 					Version:   testCloseFailoverVersion,
-				},
+				}.Build(),
 			},
-		},
+		}.Build(),
 	}
-	historyBlob := &archiverspb.HistoryBlob{
-		Header: &archiverspb.HistoryBlobHeader{
+	historyBlob := archiverspb.HistoryBlob_builder{
+		Header: archiverspb.HistoryBlobHeader_builder{
 			IsLast: true,
-		},
+		}.Build(),
 		Body: historyBatches,
-	}
+	}.Build()
 	gomock.InOrder(
 		historyIterator.EXPECT().HasNext().Return(true),
 		historyIterator.EXPECT().Next(gomock.Any()).Return(historyBlob, nil),
@@ -562,7 +562,7 @@ func (h *historyArchiverSuite) TestGet_Success_FromToken() {
 	h.EqualValues(3, len(response.HistoryBatches))
 	numOfEvents := 0
 	for _, batch := range response.HistoryBatches {
-		numOfEvents += len(batch.Events)
+		numOfEvents += len(batch.GetEvents())
 	}
 
 	h.EqualValues(4, numOfEvents)

@@ -25,6 +25,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/tests/testcore"
+	"google.golang.org/protobuf/proto"
 )
 
 type PauseWorkflowExecutionSuite struct {
@@ -170,14 +171,14 @@ func (s *PauseWorkflowExecutionSuite) TestPauseUnpauseWorkflowExecution() {
 		require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, info.GetStatus())
 	}, 5*time.Second, 100*time.Millisecond)
 
-	pauseRequest := &workflowservice.PauseWorkflowExecutionRequest{
+	pauseRequest := workflowservice.PauseWorkflowExecutionRequest_builder{
 		Namespace:  s.Namespace().String(),
 		WorkflowId: workflowID,
 		RunId:      runID,
 		Identity:   s.pauseIdentity,
 		Reason:     s.pauseReason,
 		RequestId:  uuid.NewString(),
-	}
+	}.Build()
 
 	pauseResp, err := s.FrontendClient().PauseWorkflowExecution(ctx, pauseRequest)
 	s.NoError(err)
@@ -196,14 +197,14 @@ func (s *PauseWorkflowExecutionSuite) TestPauseUnpauseWorkflowExecution() {
 	}, 5*time.Second, 200*time.Millisecond)
 
 	// Unpause the workflow.
-	unpauseRequest := &workflowservice.UnpauseWorkflowExecutionRequest{
+	unpauseRequest := workflowservice.UnpauseWorkflowExecutionRequest_builder{
 		Namespace:  s.Namespace().String(),
 		WorkflowId: workflowID,
 		RunId:      runID,
 		Identity:   s.pauseIdentity,
 		Reason:     s.pauseReason,
 		RequestId:  uuid.NewString(),
-	}
+	}.Build()
 	unpauseResp, err := s.FrontendClient().UnpauseWorkflowExecution(ctx, unpauseRequest)
 	s.NoError(err)
 	s.NotNil(unpauseResp)
@@ -275,21 +276,21 @@ func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowAndActivity() {
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowID, runID)
 		require.NoError(t, err)
-		require.Len(t, desc.PendingActivities, 1)
-		require.NotNil(t, desc.PendingActivities[0].LastFailure)
+		require.Len(t, desc.GetPendingActivities(), 1)
+		require.NotNil(t, desc.GetPendingActivities()[0].GetLastFailure())
 	}, 5*time.Second, 200*time.Millisecond)
 
 	// Pause the activity
-	pauseActivityRequest := &workflowservice.PauseActivityRequest{
+	pauseActivityRequest := workflowservice.PauseActivityRequest_builder{
 		Namespace: s.Namespace().String(),
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: workflowID,
 			RunId:      runID,
-		},
-		Activity: &workflowservice.PauseActivityRequest_Id{Id: activityID},
+		}.Build(),
+		Id:       proto.String(activityID),
 		Identity: s.pauseIdentity,
 		Reason:   "pausing activity for test",
-	}
+	}.Build()
 	pauseActivityResp, err := s.FrontendClient().PauseActivity(ctx, pauseActivityRequest)
 	s.NoError(err)
 	s.NotNil(pauseActivityResp)
@@ -298,19 +299,19 @@ func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowAndActivity() {
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowID, runID)
 		require.NoError(t, err)
-		require.Len(t, desc.PendingActivities, 1)
-		require.True(t, desc.PendingActivities[0].Paused)
+		require.Len(t, desc.GetPendingActivities(), 1)
+		require.True(t, desc.GetPendingActivities()[0].GetPaused())
 	}, 5*time.Second, 200*time.Millisecond)
 
 	// Pause the workflow
-	pauseWorkflowRequest := &workflowservice.PauseWorkflowExecutionRequest{
+	pauseWorkflowRequest := workflowservice.PauseWorkflowExecutionRequest_builder{
 		Namespace:  s.Namespace().String(),
 		WorkflowId: workflowID,
 		RunId:      runID,
 		Identity:   s.pauseIdentity,
 		Reason:     s.pauseReason,
 		RequestId:  uuid.NewString(),
-	}
+	}.Build()
 	pauseWorkflowResp, err := s.FrontendClient().PauseWorkflowExecution(ctx, pauseWorkflowRequest)
 	s.NoError(err)
 	s.NotNil(pauseWorkflowResp)
@@ -323,8 +324,8 @@ func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowAndActivity() {
 		// Additionally verify activity is paused
 		desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowID, runID)
 		require.NoError(t, err)
-		require.Len(t, desc.PendingActivities, 1)
-		require.True(t, desc.PendingActivities[0].Paused)
+		require.Len(t, desc.GetPendingActivities(), 1)
+		require.True(t, desc.GetPendingActivities()[0].GetPaused())
 
 		// Additionally verify TemporalPauseInfo contains activity pause entry
 		assert.True(t, s.hasActivityPauseEntries(desc), "Should contain at least one activity pause entry")
@@ -334,15 +335,15 @@ func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowAndActivity() {
 	s.activityShouldSucceed.Store(true)
 
 	// Unpause the activity
-	unpauseActivityRequest := &workflowservice.UnpauseActivityRequest{
+	unpauseActivityRequest := workflowservice.UnpauseActivityRequest_builder{
 		Namespace: s.Namespace().String(),
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: workflowID,
 			RunId:      runID,
-		},
-		Activity: &workflowservice.UnpauseActivityRequest_Id{Id: activityID},
+		}.Build(),
+		Id:       proto.String(activityID),
 		Identity: s.pauseIdentity,
-	}
+	}.Build()
 	unpauseActivityResp, err := s.FrontendClient().UnpauseActivity(ctx, unpauseActivityRequest)
 	s.NoError(err)
 	s.NotNil(unpauseActivityResp)
@@ -356,7 +357,7 @@ func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowAndActivity() {
 		// Additionally verify activity is no longer pending (completed)
 		desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowID, runID)
 		require.NoError(t, err)
-		require.Empty(t, desc.PendingActivities, "Activity should have completed")
+		require.Empty(t, desc.GetPendingActivities(), "Activity should have completed")
 
 		// Verify the activity completed successfully by checking workflow history
 		// Since this workflow only has one activity, the presence of ActivityTaskCompleted confirms success
@@ -365,7 +366,7 @@ func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowAndActivity() {
 		for hist.HasNext() {
 			event, err := hist.Next()
 			require.NoError(t, err)
-			if event.EventType == enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED {
+			if event.GetEventType() == enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED {
 				activityCompleted = true
 				break
 			}
@@ -377,14 +378,14 @@ func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowAndActivity() {
 	}, 5*time.Second, 200*time.Millisecond)
 
 	// Unpause the workflow
-	unpauseWorkflowRequest := &workflowservice.UnpauseWorkflowExecutionRequest{
+	unpauseWorkflowRequest := workflowservice.UnpauseWorkflowExecutionRequest_builder{
 		Namespace:  s.Namespace().String(),
 		WorkflowId: workflowID,
 		RunId:      runID,
 		Identity:   s.pauseIdentity,
 		Reason:     s.pauseReason,
 		RequestId:  uuid.NewString(),
-	}
+	}.Build()
 	unpauseWorkflowResp, err := s.FrontendClient().UnpauseWorkflowExecution(ctx, unpauseWorkflowRequest)
 	s.NoError(err)
 	s.NotNil(unpauseWorkflowResp)
@@ -434,14 +435,14 @@ func (s *PauseWorkflowExecutionSuite) TestQueryWorkflowWhenPaused() {
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// Pause the workflow.
-	pauseRequest := &workflowservice.PauseWorkflowExecutionRequest{
+	pauseRequest := workflowservice.PauseWorkflowExecutionRequest_builder{
 		Namespace:  s.Namespace().String(),
 		WorkflowId: workflowID,
 		RunId:      runID,
 		Identity:   s.pauseIdentity,
 		Reason:     s.pauseReason,
 		RequestId:  uuid.NewString(),
-	}
+	}.Build()
 	pauseResp, err := s.FrontendClient().PauseWorkflowExecution(ctx, pauseRequest)
 	s.NoError(err)
 	s.NotNil(pauseResp)
@@ -452,16 +453,16 @@ func (s *PauseWorkflowExecutionSuite) TestQueryWorkflowWhenPaused() {
 	}, 5*time.Second, 200*time.Millisecond)
 
 	// Issue a query to the paused workflow. It should return QueryRejected with WORKFLOW_EXECUTION_STATUS_PAUSED status.
-	queryReq := &workflowservice.QueryWorkflowRequest{
+	queryReq := workflowservice.QueryWorkflowRequest_builder{
 		Namespace: s.Namespace().String(),
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: workflowID,
 			RunId:      runID,
-		},
-		Query: &querypb.WorkflowQuery{
+		}.Build(),
+		Query: querypb.WorkflowQuery_builder{
 			QueryType: "__stack_trace",
-		},
-	}
+		}.Build(),
+	}.Build()
 	queryResp, err := s.FrontendClient().QueryWorkflow(ctx, queryReq)
 	s.NoError(err)
 	s.NotNil(queryResp)
@@ -469,14 +470,14 @@ func (s *PauseWorkflowExecutionSuite) TestQueryWorkflowWhenPaused() {
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED, queryResp.GetQueryRejected().GetStatus())
 
 	// Unpause the workflow.
-	unpauseRequest := &workflowservice.UnpauseWorkflowExecutionRequest{
+	unpauseRequest := workflowservice.UnpauseWorkflowExecutionRequest_builder{
 		Namespace:  s.Namespace().String(),
 		WorkflowId: workflowID,
 		RunId:      runID,
 		Identity:   s.pauseIdentity,
 		Reason:     s.pauseReason,
 		RequestId:  uuid.NewString(),
-	}
+	}.Build()
 	unpauseResp, err := s.FrontendClient().UnpauseWorkflowExecution(ctx, unpauseRequest)
 	s.NoError(err)
 	s.NotNil(unpauseResp)
@@ -507,14 +508,14 @@ func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowExecutionRequestValidatio
 	namespaceName := s.Namespace().String()
 
 	// fails when the identity is too long.
-	pauseRequest := &workflowservice.PauseWorkflowExecutionRequest{
+	pauseRequest := workflowservice.PauseWorkflowExecutionRequest_builder{
 		Namespace:  namespaceName,
 		WorkflowId: "test-workflow-id",
 		RunId:      uuid.NewString(),
 		Identity:   strings.Repeat("x", 2000),
 		Reason:     s.pauseReason,
 		RequestId:  uuid.NewString(),
-	}
+	}.Build()
 	resp, err := s.FrontendClient().PauseWorkflowExecution(ctx, pauseRequest)
 	s.Error(err)
 	s.Nil(resp)
@@ -524,14 +525,14 @@ func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowExecutionRequestValidatio
 	s.Contains(invalidArgumentErr.Error(), "identity is too long.")
 
 	// fails when the reason is too long.
-	pauseRequest = &workflowservice.PauseWorkflowExecutionRequest{
+	pauseRequest = workflowservice.PauseWorkflowExecutionRequest_builder{
 		Namespace:  namespaceName,
 		WorkflowId: "test-workflow-id",
 		RunId:      uuid.NewString(),
 		Identity:   s.pauseIdentity,
 		Reason:     strings.Repeat("x", 2000),
 		RequestId:  uuid.NewString(),
-	}
+	}.Build()
 	resp, err = s.FrontendClient().PauseWorkflowExecution(ctx, pauseRequest)
 	s.Error(err)
 	s.Nil(resp)
@@ -540,14 +541,14 @@ func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowExecutionRequestValidatio
 	s.Contains(invalidArgumentErr.Error(), "reason is too long.")
 
 	// fails when the request id is too long.
-	pauseRequest = &workflowservice.PauseWorkflowExecutionRequest{
+	pauseRequest = workflowservice.PauseWorkflowExecutionRequest_builder{
 		Namespace:  namespaceName,
 		WorkflowId: "test-workflow-id",
 		RunId:      uuid.NewString(),
 		Identity:   s.pauseIdentity,
 		Reason:     s.pauseReason,
 		RequestId:  strings.Repeat("x", 2000),
-	}
+	}.Build()
 	resp, err = s.FrontendClient().PauseWorkflowExecution(ctx, pauseRequest)
 	s.Error(err)
 	s.Nil(resp)
@@ -557,14 +558,14 @@ func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowExecutionRequestValidatio
 
 	// fails when the dynamic config is disabled.
 	s.OverrideDynamicConfig(dynamicconfig.WorkflowPauseEnabled, false)
-	pauseRequest = &workflowservice.PauseWorkflowExecutionRequest{
+	pauseRequest = workflowservice.PauseWorkflowExecutionRequest_builder{
 		Namespace:  namespaceName,
 		WorkflowId: "test-workflow-id",
 		RunId:      uuid.NewString(),
 		Identity:   s.pauseIdentity,
 		Reason:     s.pauseReason,
 		RequestId:  uuid.NewString(),
-	}
+	}.Build()
 	resp, err = s.FrontendClient().PauseWorkflowExecution(ctx, pauseRequest)
 	s.Error(err)
 	s.Nil(resp)
@@ -585,14 +586,14 @@ func (s *PauseWorkflowExecutionSuite) TestUnpauseWorkflowExecutionRequestValidat
 	namespaceName := s.Namespace().String()
 
 	// fails when the identity is too long.
-	unpauseRequest := &workflowservice.UnpauseWorkflowExecutionRequest{
+	unpauseRequest := workflowservice.UnpauseWorkflowExecutionRequest_builder{
 		Namespace:  namespaceName,
 		WorkflowId: "test-workflow-id",
 		RunId:      uuid.NewString(),
 		Identity:   strings.Repeat("x", 2000),
 		Reason:     s.pauseReason,
 		RequestId:  uuid.NewString(),
-	}
+	}.Build()
 	resp, err := s.FrontendClient().UnpauseWorkflowExecution(ctx, unpauseRequest)
 	s.Error(err)
 	s.Nil(resp)
@@ -602,14 +603,14 @@ func (s *PauseWorkflowExecutionSuite) TestUnpauseWorkflowExecutionRequestValidat
 	s.Contains(invalidArgumentErr.Error(), "identity is too long.")
 
 	// fails when the reason is too long.
-	unpauseRequest = &workflowservice.UnpauseWorkflowExecutionRequest{
+	unpauseRequest = workflowservice.UnpauseWorkflowExecutionRequest_builder{
 		Namespace:  namespaceName,
 		WorkflowId: "test-workflow-id",
 		RunId:      uuid.NewString(),
 		Identity:   s.pauseIdentity,
 		Reason:     strings.Repeat("x", 2000),
 		RequestId:  uuid.NewString(),
-	}
+	}.Build()
 	resp, err = s.FrontendClient().UnpauseWorkflowExecution(ctx, unpauseRequest)
 	s.Error(err)
 	s.Nil(resp)
@@ -618,14 +619,14 @@ func (s *PauseWorkflowExecutionSuite) TestUnpauseWorkflowExecutionRequestValidat
 	s.Contains(invalidArgumentErr.Error(), "reason is too long.")
 
 	// fails when the request id is too long.
-	unpauseRequest = &workflowservice.UnpauseWorkflowExecutionRequest{
+	unpauseRequest = workflowservice.UnpauseWorkflowExecutionRequest_builder{
 		Namespace:  namespaceName,
 		WorkflowId: "test-workflow-id",
 		RunId:      uuid.NewString(),
 		Identity:   s.pauseIdentity,
 		Reason:     s.pauseReason,
 		RequestId:  strings.Repeat("x", 2000),
-	}
+	}.Build()
 	resp, err = s.FrontendClient().UnpauseWorkflowExecution(ctx, unpauseRequest)
 	s.Error(err)
 	s.Nil(resp)
@@ -657,14 +658,14 @@ func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowExecutionAlreadyPaused() 
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// 1st pause request should succeed.
-	pauseRequest := &workflowservice.PauseWorkflowExecutionRequest{
+	pauseRequest := workflowservice.PauseWorkflowExecutionRequest_builder{
 		Namespace:  s.Namespace().String(),
 		WorkflowId: workflowID,
 		RunId:      runID,
 		Identity:   s.pauseIdentity,
 		Reason:     s.pauseReason,
 		RequestId:  uuid.NewString(),
-	}
+	}.Build()
 	pauseResp, err := s.FrontendClient().PauseWorkflowExecution(ctx, pauseRequest)
 	s.NoError(err)
 	s.NotNil(pauseResp)
@@ -675,7 +676,7 @@ func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowExecutionAlreadyPaused() 
 	}, 5*time.Second, 200*time.Millisecond)
 
 	// 2nd pause request should fail with failed precondition error.
-	pauseRequest.RequestId = uuid.NewString()
+	pauseRequest.SetRequestId(uuid.NewString())
 	pauseResp, err = s.FrontendClient().PauseWorkflowExecution(ctx, pauseRequest)
 	s.Error(err)
 	s.Nil(pauseResp)
@@ -684,14 +685,14 @@ func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowExecutionAlreadyPaused() 
 	s.NotNil(failedPreconditionErr)
 	s.Contains(failedPreconditionErr.Error(), "workflow is already paused.")
 
-	unpauseRequest := &workflowservice.UnpauseWorkflowExecutionRequest{
+	unpauseRequest := workflowservice.UnpauseWorkflowExecutionRequest_builder{
 		Namespace:  s.Namespace().String(),
 		WorkflowId: workflowID,
 		RunId:      runID,
 		Identity:   s.pauseIdentity,
 		Reason:     "cleanup after paused workflow test",
 		RequestId:  uuid.NewString(),
-	}
+	}.Build()
 	unpauseResp, err := s.FrontendClient().UnpauseWorkflowExecution(ctx, unpauseRequest)
 	s.NoError(err)
 	s.NotNil(unpauseResp)
@@ -779,17 +780,17 @@ func (s *PauseWorkflowExecutionSuite) assertWorkflowIsPaused(ctx context.Context
 	for hist.HasNext() {
 		event, err := hist.Next()
 		require.NoError(t, err)
-		if event.EventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_PAUSED {
+		if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_PAUSED {
 			isPaused = true
 			continue
 		}
-		if event.EventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UNPAUSED {
+		if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UNPAUSED {
 			isPaused = false
 			continue
 		}
 		if isPaused {
 			// These are all events after the pause event. None of these should be workflow task scheduled events.
-			require.NotEqual(t, enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED, event.EventType)
+			require.NotEqual(t, enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED, event.GetEventType())
 		}
 	}
 }

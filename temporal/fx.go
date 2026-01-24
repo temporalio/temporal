@@ -736,7 +736,7 @@ func initCurrentClusterMetadataRecord(
 	applied, err := clusterMetadataManager.SaveClusterMetadata(
 		ctx,
 		&persistence.SaveClusterMetadataRequest{
-			ClusterMetadata: &persistencespb.ClusterMetadata{
+			ClusterMetadata: persistencespb.ClusterMetadata_builder{
 				HistoryShardCount:        svc.Persistence.NumHistoryShards,
 				ClusterName:              currentClusterName,
 				ClusterId:                clusterId,
@@ -749,7 +749,7 @@ func initCurrentClusterMetadataRecord(
 				UseClusterIdMembership:   true, // Enable this for new cluster after 1.19. This is to prevent two clusters join into one ring.
 				IndexSearchAttributes:    initialIndexSearchAttributes,
 				Tags:                     svc.ClusterMetadata.Tags,
-			},
+			}.Build(),
 		})
 	if err != nil {
 		logger.Warn("Failed to save cluster metadata.", tag.Error(err), tag.ClusterName(currentClusterName))
@@ -774,22 +774,22 @@ func updateCurrentClusterMetadataRecord(
 	currentClusterName := currentClusterMetadata.CurrentClusterName
 	currentCLusterInfo := currentClusterMetadata.ClusterInformation[currentClusterName]
 	// Allow updating cluster metadata if global namespace is disabled
-	if !currentClusterDBRecord.IsGlobalNamespaceEnabled && currentClusterMetadata.EnableGlobalNamespace {
-		currentClusterDBRecord.IsGlobalNamespaceEnabled = currentClusterMetadata.EnableGlobalNamespace
-		currentClusterDBRecord.InitialFailoverVersion = currentCLusterInfo.InitialFailoverVersion
-		currentClusterDBRecord.FailoverVersionIncrement = currentClusterMetadata.FailoverVersionIncrement
+	if !currentClusterDBRecord.GetIsGlobalNamespaceEnabled() && currentClusterMetadata.EnableGlobalNamespace {
+		currentClusterDBRecord.SetIsGlobalNamespaceEnabled(currentClusterMetadata.EnableGlobalNamespace)
+		currentClusterDBRecord.SetInitialFailoverVersion(currentCLusterInfo.InitialFailoverVersion)
+		currentClusterDBRecord.SetFailoverVersionIncrement(currentClusterMetadata.FailoverVersionIncrement)
 		updateDBRecord = true
 	}
-	if currentClusterDBRecord.ClusterAddress != currentCLusterInfo.RPCAddress {
-		currentClusterDBRecord.ClusterAddress = currentCLusterInfo.RPCAddress
+	if currentClusterDBRecord.GetClusterAddress() != currentCLusterInfo.RPCAddress {
+		currentClusterDBRecord.SetClusterAddress(currentCLusterInfo.RPCAddress)
 		updateDBRecord = true
 	}
-	if currentClusterDBRecord.HttpAddress != currentCLusterInfo.HTTPAddress {
-		currentClusterDBRecord.HttpAddress = currentCLusterInfo.HTTPAddress
+	if currentClusterDBRecord.GetHttpAddress() != currentCLusterInfo.HTTPAddress {
+		currentClusterDBRecord.SetHttpAddress(currentCLusterInfo.HTTPAddress)
 		updateDBRecord = true
 	}
-	if !maps.Equal(currentClusterDBRecord.Tags, svc.ClusterMetadata.Tags) {
-		currentClusterDBRecord.Tags = svc.ClusterMetadata.Tags
+	if !maps.Equal(currentClusterDBRecord.GetTags(), svc.ClusterMetadata.Tags) {
+		currentClusterDBRecord.SetTags(svc.ClusterMetadata.Tags)
 		updateDBRecord = true
 	}
 
@@ -819,15 +819,15 @@ func overwriteCurrentClusterMetadataWithDBRecord(
 	logger log.Logger,
 ) {
 	clusterMetadata := svc.ClusterMetadata
-	if currentClusterDBRecord.IsGlobalNamespaceEnabled && !clusterMetadata.EnableGlobalNamespace {
+	if currentClusterDBRecord.GetIsGlobalNamespaceEnabled() && !clusterMetadata.EnableGlobalNamespace {
 		logger.Warn(
 			mismatchLogMessage,
 			tag.Key("clusterMetadata.EnableGlobalNamespace"),
 			tag.IgnoredValue(clusterMetadata.EnableGlobalNamespace),
-			tag.Value(currentClusterDBRecord.IsGlobalNamespaceEnabled))
-		svc.ClusterMetadata.EnableGlobalNamespace = currentClusterDBRecord.IsGlobalNamespaceEnabled
+			tag.Value(currentClusterDBRecord.GetIsGlobalNamespaceEnabled()))
+		svc.ClusterMetadata.EnableGlobalNamespace = currentClusterDBRecord.GetIsGlobalNamespaceEnabled()
 	}
-	persistedShardCount := currentClusterDBRecord.HistoryShardCount
+	persistedShardCount := currentClusterDBRecord.GetHistoryShardCount()
 	if svc.Persistence.NumHistoryShards != persistedShardCount {
 		logger.Warn(
 			mismatchLogMessage,
@@ -836,13 +836,13 @@ func overwriteCurrentClusterMetadataWithDBRecord(
 			tag.Value(persistedShardCount))
 		svc.Persistence.NumHistoryShards = persistedShardCount
 	}
-	if currentClusterDBRecord.FailoverVersionIncrement != clusterMetadata.FailoverVersionIncrement {
+	if currentClusterDBRecord.GetFailoverVersionIncrement() != clusterMetadata.FailoverVersionIncrement {
 		logger.Warn(
 			mismatchLogMessage,
 			tag.Key("clusterMetadata.FailoverVersionIncrement"),
 			tag.IgnoredValue(clusterMetadata.FailoverVersionIncrement),
-			tag.Value(currentClusterDBRecord.FailoverVersionIncrement))
-		svc.ClusterMetadata.FailoverVersionIncrement = currentClusterDBRecord.FailoverVersionIncrement
+			tag.Value(currentClusterDBRecord.GetFailoverVersionIncrement()))
+		svc.ClusterMetadata.FailoverVersionIncrement = currentClusterDBRecord.GetFailoverVersionIncrement()
 	}
 }
 
@@ -856,22 +856,23 @@ func updateIndexSearchAttributes(
 	if len(initialIndexSearchAttributes) == 0 {
 		return false
 	}
-	if currentClusterDBRecord.IndexSearchAttributes == nil {
-		currentClusterDBRecord.IndexSearchAttributes = initialIndexSearchAttributes
+	if currentClusterDBRecord.GetIndexSearchAttributes() == nil {
+		currentClusterDBRecord.SetIndexSearchAttributes(initialIndexSearchAttributes)
 		return true
 	}
 	updateDBRecord := false
+	indexSearchAttributes := currentClusterDBRecord.GetIndexSearchAttributes()
 	for indexName, initialValue := range initialIndexSearchAttributes {
-		isa := currentClusterDBRecord.IndexSearchAttributes[indexName]
+		isa := indexSearchAttributes[indexName]
 		if isa == nil {
-			currentClusterDBRecord.IndexSearchAttributes[indexName] = initialValue
+			indexSearchAttributes[indexName] = initialValue
 			updateDBRecord = true
 			continue
 		}
 
-		for k, v := range initialValue.CustomSearchAttributes {
-			if _, ok := isa.CustomSearchAttributes[k]; !ok {
-				isa.CustomSearchAttributes[k] = v
+		for k, v := range initialValue.GetCustomSearchAttributes() {
+			if _, ok := isa.GetCustomSearchAttributes()[k]; !ok {
+				isa.GetCustomSearchAttributes()[k] = v
 				updateDBRecord = true
 			}
 		}

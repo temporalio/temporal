@@ -18,19 +18,19 @@ func Invoke(
 	shardContext historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (resp *historyservice.TerminateWorkflowExecutionResponse, retError error) {
-	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(req.GetNamespaceId()), req.TerminateRequest.WorkflowExecution.WorkflowId)
+	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(req.GetNamespaceId()), req.GetTerminateRequest().GetWorkflowExecution().GetWorkflowId())
 	if err != nil {
 		return nil, err
 	}
 	namespaceID := namespaceEntry.ID()
 
-	request := req.TerminateRequest
-	parentExecution := req.ExternalWorkflowExecution
-	childWorkflowOnly := req.ChildWorkflowOnly
-	workflowID := request.WorkflowExecution.WorkflowId
-	runID := request.WorkflowExecution.RunId
-	firstExecutionRunID := request.FirstExecutionRunId
-	if len(request.FirstExecutionRunId) != 0 {
+	request := req.GetTerminateRequest()
+	parentExecution := req.GetExternalWorkflowExecution()
+	childWorkflowOnly := req.GetChildWorkflowOnly()
+	workflowID := request.GetWorkflowExecution().GetWorkflowId()
+	runID := request.GetWorkflowExecution().GetRunId()
+	firstExecutionRunID := request.GetFirstExecutionRunId()
+	if len(request.GetFirstExecutionRunId()) != 0 {
 		runID = ""
 	}
 
@@ -53,13 +53,13 @@ func Invoke(
 			// let's compare the FirstExecutionRunID on the request to make sure we terminate the correct workflow
 			// execution.
 			executionInfo := mutableState.GetExecutionInfo()
-			if len(firstExecutionRunID) > 0 && executionInfo.FirstExecutionRunId != firstExecutionRunID {
+			if len(firstExecutionRunID) > 0 && executionInfo.GetFirstExecutionRunId() != firstExecutionRunID {
 				return nil, consts.ErrWorkflowExecutionNotFound
 			}
 
 			if childWorkflowOnly {
-				if parentExecution.GetWorkflowId() != executionInfo.ParentWorkflowId ||
-					parentExecution.GetRunId() != executionInfo.ParentRunId {
+				if parentExecution.GetWorkflowId() != executionInfo.GetParentWorkflowId() ||
+					parentExecution.GetRunId() != executionInfo.GetParentRunId() {
 					return nil, consts.ErrWorkflowParent
 				}
 			}

@@ -8,7 +8,6 @@ package archiver
 
 import (
 	reflect "reflect"
-	sync "sync"
 	unsafe "unsafe"
 
 	v12 "go.temporal.io/api/common/v1"
@@ -28,19 +27,19 @@ const (
 )
 
 type HistoryBlobHeader struct {
-	state                protoimpl.MessageState `protogen:"open.v1"`
-	Namespace            string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
-	NamespaceId          string                 `protobuf:"bytes,2,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	WorkflowId           string                 `protobuf:"bytes,3,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
-	RunId                string                 `protobuf:"bytes,4,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	IsLast               bool                   `protobuf:"varint,5,opt,name=is_last,json=isLast,proto3" json:"is_last,omitempty"`
-	FirstFailoverVersion int64                  `protobuf:"varint,6,opt,name=first_failover_version,json=firstFailoverVersion,proto3" json:"first_failover_version,omitempty"`
-	LastFailoverVersion  int64                  `protobuf:"varint,7,opt,name=last_failover_version,json=lastFailoverVersion,proto3" json:"last_failover_version,omitempty"`
-	FirstEventId         int64                  `protobuf:"varint,8,opt,name=first_event_id,json=firstEventId,proto3" json:"first_event_id,omitempty"`
-	LastEventId          int64                  `protobuf:"varint,9,opt,name=last_event_id,json=lastEventId,proto3" json:"last_event_id,omitempty"`
-	EventCount           int64                  `protobuf:"varint,10,opt,name=event_count,json=eventCount,proto3" json:"event_count,omitempty"`
-	unknownFields        protoimpl.UnknownFields
-	sizeCache            protoimpl.SizeCache
+	state                           protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Namespace            string                 `protobuf:"bytes,1,opt,name=namespace,proto3"`
+	xxx_hidden_NamespaceId          string                 `protobuf:"bytes,2,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_WorkflowId           string                 `protobuf:"bytes,3,opt,name=workflow_id,json=workflowId,proto3"`
+	xxx_hidden_RunId                string                 `protobuf:"bytes,4,opt,name=run_id,json=runId,proto3"`
+	xxx_hidden_IsLast               bool                   `protobuf:"varint,5,opt,name=is_last,json=isLast,proto3"`
+	xxx_hidden_FirstFailoverVersion int64                  `protobuf:"varint,6,opt,name=first_failover_version,json=firstFailoverVersion,proto3"`
+	xxx_hidden_LastFailoverVersion  int64                  `protobuf:"varint,7,opt,name=last_failover_version,json=lastFailoverVersion,proto3"`
+	xxx_hidden_FirstEventId         int64                  `protobuf:"varint,8,opt,name=first_event_id,json=firstEventId,proto3"`
+	xxx_hidden_LastEventId          int64                  `protobuf:"varint,9,opt,name=last_event_id,json=lastEventId,proto3"`
+	xxx_hidden_EventCount           int64                  `protobuf:"varint,10,opt,name=event_count,json=eventCount,proto3"`
+	unknownFields                   protoimpl.UnknownFields
+	sizeCache                       protoimpl.SizeCache
 }
 
 func (x *HistoryBlobHeader) Reset() {
@@ -68,87 +67,154 @@ func (x *HistoryBlobHeader) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use HistoryBlobHeader.ProtoReflect.Descriptor instead.
-func (*HistoryBlobHeader) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_archiver_v1_message_proto_rawDescGZIP(), []int{0}
-}
-
 func (x *HistoryBlobHeader) GetNamespace() string {
 	if x != nil {
-		return x.Namespace
+		return x.xxx_hidden_Namespace
 	}
 	return ""
 }
 
 func (x *HistoryBlobHeader) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *HistoryBlobHeader) GetWorkflowId() string {
 	if x != nil {
-		return x.WorkflowId
+		return x.xxx_hidden_WorkflowId
 	}
 	return ""
 }
 
 func (x *HistoryBlobHeader) GetRunId() string {
 	if x != nil {
-		return x.RunId
+		return x.xxx_hidden_RunId
 	}
 	return ""
 }
 
 func (x *HistoryBlobHeader) GetIsLast() bool {
 	if x != nil {
-		return x.IsLast
+		return x.xxx_hidden_IsLast
 	}
 	return false
 }
 
 func (x *HistoryBlobHeader) GetFirstFailoverVersion() int64 {
 	if x != nil {
-		return x.FirstFailoverVersion
+		return x.xxx_hidden_FirstFailoverVersion
 	}
 	return 0
 }
 
 func (x *HistoryBlobHeader) GetLastFailoverVersion() int64 {
 	if x != nil {
-		return x.LastFailoverVersion
+		return x.xxx_hidden_LastFailoverVersion
 	}
 	return 0
 }
 
 func (x *HistoryBlobHeader) GetFirstEventId() int64 {
 	if x != nil {
-		return x.FirstEventId
+		return x.xxx_hidden_FirstEventId
 	}
 	return 0
 }
 
 func (x *HistoryBlobHeader) GetLastEventId() int64 {
 	if x != nil {
-		return x.LastEventId
+		return x.xxx_hidden_LastEventId
 	}
 	return 0
 }
 
 func (x *HistoryBlobHeader) GetEventCount() int64 {
 	if x != nil {
-		return x.EventCount
+		return x.xxx_hidden_EventCount
 	}
 	return 0
 }
 
+func (x *HistoryBlobHeader) SetNamespace(v string) {
+	x.xxx_hidden_Namespace = v
+}
+
+func (x *HistoryBlobHeader) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *HistoryBlobHeader) SetWorkflowId(v string) {
+	x.xxx_hidden_WorkflowId = v
+}
+
+func (x *HistoryBlobHeader) SetRunId(v string) {
+	x.xxx_hidden_RunId = v
+}
+
+func (x *HistoryBlobHeader) SetIsLast(v bool) {
+	x.xxx_hidden_IsLast = v
+}
+
+func (x *HistoryBlobHeader) SetFirstFailoverVersion(v int64) {
+	x.xxx_hidden_FirstFailoverVersion = v
+}
+
+func (x *HistoryBlobHeader) SetLastFailoverVersion(v int64) {
+	x.xxx_hidden_LastFailoverVersion = v
+}
+
+func (x *HistoryBlobHeader) SetFirstEventId(v int64) {
+	x.xxx_hidden_FirstEventId = v
+}
+
+func (x *HistoryBlobHeader) SetLastEventId(v int64) {
+	x.xxx_hidden_LastEventId = v
+}
+
+func (x *HistoryBlobHeader) SetEventCount(v int64) {
+	x.xxx_hidden_EventCount = v
+}
+
+type HistoryBlobHeader_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Namespace            string
+	NamespaceId          string
+	WorkflowId           string
+	RunId                string
+	IsLast               bool
+	FirstFailoverVersion int64
+	LastFailoverVersion  int64
+	FirstEventId         int64
+	LastEventId          int64
+	EventCount           int64
+}
+
+func (b0 HistoryBlobHeader_builder) Build() *HistoryBlobHeader {
+	m0 := &HistoryBlobHeader{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Namespace = b.Namespace
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_WorkflowId = b.WorkflowId
+	x.xxx_hidden_RunId = b.RunId
+	x.xxx_hidden_IsLast = b.IsLast
+	x.xxx_hidden_FirstFailoverVersion = b.FirstFailoverVersion
+	x.xxx_hidden_LastFailoverVersion = b.LastFailoverVersion
+	x.xxx_hidden_FirstEventId = b.FirstEventId
+	x.xxx_hidden_LastEventId = b.LastEventId
+	x.xxx_hidden_EventCount = b.EventCount
+	return m0
+}
+
 type HistoryBlob struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Header        *HistoryBlobHeader     `protobuf:"bytes,1,opt,name=header,proto3" json:"header,omitempty"`
-	Body          []*v1.History          `protobuf:"bytes,2,rep,name=body,proto3" json:"body,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state             protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Header *HistoryBlobHeader     `protobuf:"bytes,1,opt,name=header,proto3"`
+	xxx_hidden_Body   *[]*v1.History         `protobuf:"bytes,2,rep,name=body,proto3"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *HistoryBlob) Reset() {
@@ -176,44 +242,76 @@ func (x *HistoryBlob) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use HistoryBlob.ProtoReflect.Descriptor instead.
-func (*HistoryBlob) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_archiver_v1_message_proto_rawDescGZIP(), []int{1}
-}
-
 func (x *HistoryBlob) GetHeader() *HistoryBlobHeader {
 	if x != nil {
-		return x.Header
+		return x.xxx_hidden_Header
 	}
 	return nil
 }
 
 func (x *HistoryBlob) GetBody() []*v1.History {
 	if x != nil {
-		return x.Body
+		if x.xxx_hidden_Body != nil {
+			return *x.xxx_hidden_Body
+		}
 	}
 	return nil
 }
 
+func (x *HistoryBlob) SetHeader(v *HistoryBlobHeader) {
+	x.xxx_hidden_Header = v
+}
+
+func (x *HistoryBlob) SetBody(v []*v1.History) {
+	x.xxx_hidden_Body = &v
+}
+
+func (x *HistoryBlob) HasHeader() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Header != nil
+}
+
+func (x *HistoryBlob) ClearHeader() {
+	x.xxx_hidden_Header = nil
+}
+
+type HistoryBlob_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Header *HistoryBlobHeader
+	Body   []*v1.History
+}
+
+func (b0 HistoryBlob_builder) Build() *HistoryBlob {
+	m0 := &HistoryBlob{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Header = b.Header
+	x.xxx_hidden_Body = &b.Body
+	return m0
+}
+
 // VisibilityRecord is a single workflow visibility record in archive.
 type VisibilityRecord struct {
-	state              protoimpl.MessageState      `protogen:"open.v1"`
-	NamespaceId        string                      `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	Namespace          string                      `protobuf:"bytes,2,opt,name=namespace,proto3" json:"namespace,omitempty"`
-	WorkflowId         string                      `protobuf:"bytes,3,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
-	RunId              string                      `protobuf:"bytes,4,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	WorkflowTypeName   string                      `protobuf:"bytes,5,opt,name=workflow_type_name,json=workflowTypeName,proto3" json:"workflow_type_name,omitempty"`
-	StartTime          *timestamppb.Timestamp      `protobuf:"bytes,6,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
-	ExecutionTime      *timestamppb.Timestamp      `protobuf:"bytes,7,opt,name=execution_time,json=executionTime,proto3" json:"execution_time,omitempty"`
-	CloseTime          *timestamppb.Timestamp      `protobuf:"bytes,8,opt,name=close_time,json=closeTime,proto3" json:"close_time,omitempty"`
-	Status             v11.WorkflowExecutionStatus `protobuf:"varint,9,opt,name=status,proto3,enum=temporal.api.enums.v1.WorkflowExecutionStatus" json:"status,omitempty"`
-	HistoryLength      int64                       `protobuf:"varint,10,opt,name=history_length,json=historyLength,proto3" json:"history_length,omitempty"`
-	Memo               *v12.Memo                   `protobuf:"bytes,11,opt,name=memo,proto3" json:"memo,omitempty"`
-	SearchAttributes   map[string]string           `protobuf:"bytes,12,rep,name=search_attributes,json=searchAttributes,proto3" json:"search_attributes,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	HistoryArchivalUri string                      `protobuf:"bytes,13,opt,name=history_archival_uri,json=historyArchivalUri,proto3" json:"history_archival_uri,omitempty"`
-	ExecutionDuration  *durationpb.Duration        `protobuf:"bytes,14,opt,name=execution_duration,json=executionDuration,proto3" json:"execution_duration,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	state                         protoimpl.MessageState      `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId        string                      `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_Namespace          string                      `protobuf:"bytes,2,opt,name=namespace,proto3"`
+	xxx_hidden_WorkflowId         string                      `protobuf:"bytes,3,opt,name=workflow_id,json=workflowId,proto3"`
+	xxx_hidden_RunId              string                      `protobuf:"bytes,4,opt,name=run_id,json=runId,proto3"`
+	xxx_hidden_WorkflowTypeName   string                      `protobuf:"bytes,5,opt,name=workflow_type_name,json=workflowTypeName,proto3"`
+	xxx_hidden_StartTime          *timestamppb.Timestamp      `protobuf:"bytes,6,opt,name=start_time,json=startTime,proto3"`
+	xxx_hidden_ExecutionTime      *timestamppb.Timestamp      `protobuf:"bytes,7,opt,name=execution_time,json=executionTime,proto3"`
+	xxx_hidden_CloseTime          *timestamppb.Timestamp      `protobuf:"bytes,8,opt,name=close_time,json=closeTime,proto3"`
+	xxx_hidden_Status             v11.WorkflowExecutionStatus `protobuf:"varint,9,opt,name=status,proto3,enum=temporal.api.enums.v1.WorkflowExecutionStatus"`
+	xxx_hidden_HistoryLength      int64                       `protobuf:"varint,10,opt,name=history_length,json=historyLength,proto3"`
+	xxx_hidden_Memo               *v12.Memo                   `protobuf:"bytes,11,opt,name=memo,proto3"`
+	xxx_hidden_SearchAttributes   map[string]string           `protobuf:"bytes,12,rep,name=search_attributes,json=searchAttributes,proto3" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	xxx_hidden_HistoryArchivalUri string                      `protobuf:"bytes,13,opt,name=history_archival_uri,json=historyArchivalUri,proto3"`
+	xxx_hidden_ExecutionDuration  *durationpb.Duration        `protobuf:"bytes,14,opt,name=execution_duration,json=executionDuration,proto3"`
+	unknownFields                 protoimpl.UnknownFields
+	sizeCache                     protoimpl.SizeCache
 }
 
 func (x *VisibilityRecord) Reset() {
@@ -241,107 +339,253 @@ func (x *VisibilityRecord) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use VisibilityRecord.ProtoReflect.Descriptor instead.
-func (*VisibilityRecord) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_archiver_v1_message_proto_rawDescGZIP(), []int{2}
-}
-
 func (x *VisibilityRecord) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *VisibilityRecord) GetNamespace() string {
 	if x != nil {
-		return x.Namespace
+		return x.xxx_hidden_Namespace
 	}
 	return ""
 }
 
 func (x *VisibilityRecord) GetWorkflowId() string {
 	if x != nil {
-		return x.WorkflowId
+		return x.xxx_hidden_WorkflowId
 	}
 	return ""
 }
 
 func (x *VisibilityRecord) GetRunId() string {
 	if x != nil {
-		return x.RunId
+		return x.xxx_hidden_RunId
 	}
 	return ""
 }
 
 func (x *VisibilityRecord) GetWorkflowTypeName() string {
 	if x != nil {
-		return x.WorkflowTypeName
+		return x.xxx_hidden_WorkflowTypeName
 	}
 	return ""
 }
 
 func (x *VisibilityRecord) GetStartTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.StartTime
+		return x.xxx_hidden_StartTime
 	}
 	return nil
 }
 
 func (x *VisibilityRecord) GetExecutionTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.ExecutionTime
+		return x.xxx_hidden_ExecutionTime
 	}
 	return nil
 }
 
 func (x *VisibilityRecord) GetCloseTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.CloseTime
+		return x.xxx_hidden_CloseTime
 	}
 	return nil
 }
 
 func (x *VisibilityRecord) GetStatus() v11.WorkflowExecutionStatus {
 	if x != nil {
-		return x.Status
+		return x.xxx_hidden_Status
 	}
 	return v11.WorkflowExecutionStatus(0)
 }
 
 func (x *VisibilityRecord) GetHistoryLength() int64 {
 	if x != nil {
-		return x.HistoryLength
+		return x.xxx_hidden_HistoryLength
 	}
 	return 0
 }
 
 func (x *VisibilityRecord) GetMemo() *v12.Memo {
 	if x != nil {
-		return x.Memo
+		return x.xxx_hidden_Memo
 	}
 	return nil
 }
 
 func (x *VisibilityRecord) GetSearchAttributes() map[string]string {
 	if x != nil {
-		return x.SearchAttributes
+		return x.xxx_hidden_SearchAttributes
 	}
 	return nil
 }
 
 func (x *VisibilityRecord) GetHistoryArchivalUri() string {
 	if x != nil {
-		return x.HistoryArchivalUri
+		return x.xxx_hidden_HistoryArchivalUri
 	}
 	return ""
 }
 
 func (x *VisibilityRecord) GetExecutionDuration() *durationpb.Duration {
 	if x != nil {
-		return x.ExecutionDuration
+		return x.xxx_hidden_ExecutionDuration
 	}
 	return nil
+}
+
+func (x *VisibilityRecord) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *VisibilityRecord) SetNamespace(v string) {
+	x.xxx_hidden_Namespace = v
+}
+
+func (x *VisibilityRecord) SetWorkflowId(v string) {
+	x.xxx_hidden_WorkflowId = v
+}
+
+func (x *VisibilityRecord) SetRunId(v string) {
+	x.xxx_hidden_RunId = v
+}
+
+func (x *VisibilityRecord) SetWorkflowTypeName(v string) {
+	x.xxx_hidden_WorkflowTypeName = v
+}
+
+func (x *VisibilityRecord) SetStartTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_StartTime = v
+}
+
+func (x *VisibilityRecord) SetExecutionTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_ExecutionTime = v
+}
+
+func (x *VisibilityRecord) SetCloseTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_CloseTime = v
+}
+
+func (x *VisibilityRecord) SetStatus(v v11.WorkflowExecutionStatus) {
+	x.xxx_hidden_Status = v
+}
+
+func (x *VisibilityRecord) SetHistoryLength(v int64) {
+	x.xxx_hidden_HistoryLength = v
+}
+
+func (x *VisibilityRecord) SetMemo(v *v12.Memo) {
+	x.xxx_hidden_Memo = v
+}
+
+func (x *VisibilityRecord) SetSearchAttributes(v map[string]string) {
+	x.xxx_hidden_SearchAttributes = v
+}
+
+func (x *VisibilityRecord) SetHistoryArchivalUri(v string) {
+	x.xxx_hidden_HistoryArchivalUri = v
+}
+
+func (x *VisibilityRecord) SetExecutionDuration(v *durationpb.Duration) {
+	x.xxx_hidden_ExecutionDuration = v
+}
+
+func (x *VisibilityRecord) HasStartTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_StartTime != nil
+}
+
+func (x *VisibilityRecord) HasExecutionTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_ExecutionTime != nil
+}
+
+func (x *VisibilityRecord) HasCloseTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_CloseTime != nil
+}
+
+func (x *VisibilityRecord) HasMemo() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Memo != nil
+}
+
+func (x *VisibilityRecord) HasExecutionDuration() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_ExecutionDuration != nil
+}
+
+func (x *VisibilityRecord) ClearStartTime() {
+	x.xxx_hidden_StartTime = nil
+}
+
+func (x *VisibilityRecord) ClearExecutionTime() {
+	x.xxx_hidden_ExecutionTime = nil
+}
+
+func (x *VisibilityRecord) ClearCloseTime() {
+	x.xxx_hidden_CloseTime = nil
+}
+
+func (x *VisibilityRecord) ClearMemo() {
+	x.xxx_hidden_Memo = nil
+}
+
+func (x *VisibilityRecord) ClearExecutionDuration() {
+	x.xxx_hidden_ExecutionDuration = nil
+}
+
+type VisibilityRecord_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId        string
+	Namespace          string
+	WorkflowId         string
+	RunId              string
+	WorkflowTypeName   string
+	StartTime          *timestamppb.Timestamp
+	ExecutionTime      *timestamppb.Timestamp
+	CloseTime          *timestamppb.Timestamp
+	Status             v11.WorkflowExecutionStatus
+	HistoryLength      int64
+	Memo               *v12.Memo
+	SearchAttributes   map[string]string
+	HistoryArchivalUri string
+	ExecutionDuration  *durationpb.Duration
+}
+
+func (b0 VisibilityRecord_builder) Build() *VisibilityRecord {
+	m0 := &VisibilityRecord{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_Namespace = b.Namespace
+	x.xxx_hidden_WorkflowId = b.WorkflowId
+	x.xxx_hidden_RunId = b.RunId
+	x.xxx_hidden_WorkflowTypeName = b.WorkflowTypeName
+	x.xxx_hidden_StartTime = b.StartTime
+	x.xxx_hidden_ExecutionTime = b.ExecutionTime
+	x.xxx_hidden_CloseTime = b.CloseTime
+	x.xxx_hidden_Status = b.Status
+	x.xxx_hidden_HistoryLength = b.HistoryLength
+	x.xxx_hidden_Memo = b.Memo
+	x.xxx_hidden_SearchAttributes = b.SearchAttributes
+	x.xxx_hidden_HistoryArchivalUri = b.HistoryArchivalUri
+	x.xxx_hidden_ExecutionDuration = b.ExecutionDuration
+	return m0
 }
 
 var File_temporal_server_api_archiver_v1_message_proto protoreflect.FileDescriptor
@@ -388,18 +632,6 @@ const file_temporal_server_api_archiver_v1_message_proto_rawDesc = "" +
 	"\x15SearchAttributesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B0Z.go.temporal.io/server/api/archiver/v1;archiverb\x06proto3"
-
-var (
-	file_temporal_server_api_archiver_v1_message_proto_rawDescOnce sync.Once
-	file_temporal_server_api_archiver_v1_message_proto_rawDescData []byte
-)
-
-func file_temporal_server_api_archiver_v1_message_proto_rawDescGZIP() []byte {
-	file_temporal_server_api_archiver_v1_message_proto_rawDescOnce.Do(func() {
-		file_temporal_server_api_archiver_v1_message_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_api_archiver_v1_message_proto_rawDesc), len(file_temporal_server_api_archiver_v1_message_proto_rawDesc)))
-	})
-	return file_temporal_server_api_archiver_v1_message_proto_rawDescData
-}
 
 var file_temporal_server_api_archiver_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_temporal_server_api_archiver_v1_message_proto_goTypes = []any{

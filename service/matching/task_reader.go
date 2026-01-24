@@ -68,10 +68,10 @@ func (tr *taskReader) Signal() {
 }
 
 func (tr *taskReader) updateBacklogAge(task *internalTask) {
-	if task.event.Data.CreateTime == nil {
+	if !task.event.GetData().HasCreateTime() {
 		return // should not happen but for safety
 	}
-	ts := timestamp.TimeValue(task.event.Data.CreateTime).UnixNano()
+	ts := timestamp.TimeValue(task.event.GetData().GetCreateTime()).UnixNano()
 	tr.backlogHeadCreateTime.Store(ts)
 }
 

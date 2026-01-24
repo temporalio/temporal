@@ -70,7 +70,7 @@ func (r *TaskRefresherImpl) Refresh(
 ) error {
 	if r.shard.GetConfig().EnableNexus() {
 		// Invalidate all tasks generated for this mutable state before the refresh.
-		mutableState.GetExecutionInfo().TaskGenerationShardClockTimestamp = r.shard.CurrentVectorClock().GetClock()
+		mutableState.GetExecutionInfo().SetTaskGenerationShardClockTimestamp(r.shard.CurrentVectorClock().GetClock())
 	}
 
 	if err := r.PartialRefresh(ctx, mutableState, EmptyVersionedTransition, nil, shouldSkipGeneratingCloseTransferTask); err != nil {
@@ -81,7 +81,7 @@ func (r *TaskRefresherImpl) Refresh(
 		return err
 	}
 
-	if !mutableState.IsWorkflow() && mutableState.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+	if !mutableState.IsWorkflow() && mutableState.GetExecutionState().GetState() == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		closeTime, err := mutableState.GetWorkflowCloseTime(ctx)
 		if err != nil {
 			return err
@@ -216,13 +216,13 @@ func RefreshTasksForWorkflowStart(
 ) error {
 
 	executionState := mutableState.GetExecutionState()
-	if executionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+	if executionState.GetStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 		return nil
 	}
 
 	// Skip task generation if workflow state has not been updated since minVersionedTransition.
 	if transitionhistory.Compare(
-		executionState.LastUpdateVersionedTransition,
+		executionState.GetLastUpdateVersionedTransition(),
 		minVersionedTransition,
 	) < 0 {
 		return nil
@@ -235,11 +235,12 @@ func RefreshTasksForWorkflowStart(
 
 	// first clear execution timeout timer task status
 	executionInfo := mutableState.GetExecutionInfo()
-	executionInfo.WorkflowExecutionTimerTaskStatus = TimerTaskStatusNone
+	executionInfo.SetWorkflowExecutionTimerTaskStatus(TimerTaskStatusNone)
 
-	executionInfo.WorkflowExecutionTimerTaskStatus, err = taskGenerator.GenerateWorkflowStartTasks(
+	status, err := taskGenerator.GenerateWorkflowStartTasks(
 		startEvent,
 	)
+	executionInfo.SetWorkflowExecutionTimerTaskStatus(status)
 	if err != nil {
 		return err
 	}
@@ -266,13 +267,13 @@ func (r *TaskRefresherImpl) refreshTasksForWorkflowClose(
 
 	executionState := mutableState.GetExecutionState()
 	// Workflow close tasks don't apply when the workflow is in running or paused status.
-	if executionState.Status == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING || executionState.Status == enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED {
+	if executionState.GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING || executionState.GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED {
 		return nil
 	}
 
 	// Skip task generation if workflow state has not been updated since minVersionedTransition.
 	if transitionhistory.Compare(
-		executionState.LastUpdateVersionedTransition,
+		executionState.GetLastUpdateVersionedTransition(),
 		minVersionedTransition,
 	) < 0 {
 		return nil
@@ -299,14 +300,14 @@ func (r *TaskRefresherImpl) refreshTasksForRecordWorkflowStarted(
 
 	executionState := mutableState.GetExecutionState()
 	// skip task generation if workflow is not running or paused.
-	if executionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING && executionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED {
+	if executionState.GetStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING && executionState.GetStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED {
 		return nil
 	}
 
 	// Skip task generation if no transition since minVersionedTransition requires
 	// an update in the visibility record.
 	if transitionhistory.Compare(
-		mutableState.GetExecutionInfo().VisibilityLastUpdateVersionedTransition,
+		mutableState.GetExecutionInfo().GetVisibilityLastUpdateVersionedTransition(),
 		minVersionedTransition,
 	) < 0 {
 		return nil
@@ -331,7 +332,7 @@ func (r *TaskRefresherImpl) refreshWorkflowTaskTasks(
 	executionState := mutableState.GetExecutionState()
 
 	// skip task generation if the workflow is not running.
-	if executionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+	if executionState.GetStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 		return nil
 	}
 
@@ -342,7 +343,7 @@ func (r *TaskRefresherImpl) refreshWorkflowTaskTasks(
 
 	// Skip task generation if workflow task has not been updated since minVersionedTransition.
 	if transitionhistory.Compare(
-		mutableState.GetExecutionInfo().WorkflowTaskLastUpdateVersionedTransition,
+		mutableState.GetExecutionInfo().GetWorkflowTaskLastUpdateVersionedTransition(),
 		minVersionedTransition,
 	) < 0 {
 		return nil
@@ -380,7 +381,7 @@ func (r *TaskRefresherImpl) refreshTasksForActivity(
 
 	executionState := mutableState.GetExecutionState()
 	// skip task generation if workflow is not running since activities are only scheduled when the workflow is in running status
-	if executionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+	if executionState.GetStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 		return nil
 	}
 
@@ -390,38 +391,38 @@ func (r *TaskRefresherImpl) refreshTasksForActivity(
 
 		// Skip task generation if this activity has not been updated since minVersionedTransition.
 		if transitionhistory.Compare(
-			activityInfo.LastUpdateVersionedTransition,
+			activityInfo.GetLastUpdateVersionedTransition(),
 			minVersionedTransition,
 		) < 0 {
 			continue
 		}
 
 		if transitionhistory.Compare(minVersionedTransition, EmptyVersionedTransition) == 0 { // Full refresh
-			activityInfo.TimerTaskStatus = TimerTaskStatusNone // clear activity timer task mask for later activity timer task re-generation
+			activityInfo.SetTimerTaskStatus(TimerTaskStatusNone) // clear activity timer task mask for later activity timer task re-generation
 			if err := mutableState.UpdateActivityTaskStatusWithTimerHeartbeat(
-				activityInfo.ScheduledEventId,
-				activityInfo.TimerTaskStatus,
+				activityInfo.GetScheduledEventId(),
+				activityInfo.GetTimerTaskStatus(),
 				nil,
 			); err != nil {
 				return err
 			}
 		}
 
-		if activityInfo.StartedEventId != common.EmptyEventID {
+		if activityInfo.GetStartedEventId() != common.EmptyEventID {
 			continue
 		}
 
-		if activityInfo.Paused {
+		if activityInfo.GetPaused() {
 			continue
 		}
 
-		if activityInfo.Attempt > 1 {
+		if activityInfo.GetAttempt() > 1 {
 			if err := taskGenerator.GenerateActivityRetryTasks(activityInfo); err != nil {
 				return err
 			}
 		} else {
 			if err := taskGenerator.GenerateActivityTasks(
-				activityInfo.ScheduledEventId,
+				activityInfo.GetScheduledEventId(),
 			); err != nil {
 				return err
 			}
@@ -439,7 +440,7 @@ func (r *TaskRefresherImpl) refreshTasksForTimer(
 
 	executionState := mutableState.GetExecutionState()
 	// skip task generation if workflow is not running or paused. For now timers continue to progress when the workflow is paused.
-	if executionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING && executionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED {
+	if executionState.GetStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING && executionState.GetStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED {
 		return nil
 	}
 
@@ -448,7 +449,7 @@ func (r *TaskRefresherImpl) refreshTasksForTimer(
 
 		// Skip task generation if this user timer has not been updated since minVersionedTransition.
 		if transitionhistory.Compare(
-			timerInfo.LastUpdateVersionedTransition,
+			timerInfo.GetLastUpdateVersionedTransition(),
 			minVersionedTransition,
 		) < 0 {
 			continue
@@ -456,7 +457,7 @@ func (r *TaskRefresherImpl) refreshTasksForTimer(
 
 		// need to update user timer task mask for which task is generated
 		if err := mutableState.UpdateUserTimerTaskStatus(
-			timerInfo.TimerId,
+			timerInfo.GetTimerId(),
 			TimerTaskStatusNone, // clear timer task mask for later timer task re-generation
 		); err != nil {
 			return err
@@ -482,22 +483,22 @@ func (r *TaskRefresherImpl) refreshTasksForChildWorkflow(
 		// However, if this child workflow was not in the previous pending child IDs,
 		// we still need to generate tasks even if it's started, because this means
 		// the child workflow was just added to the mutable state.
-		if _, ok := previousPendingChildIds[childWorkflowInfo.InitiatedEventId]; ok {
-			if childWorkflowInfo.StartedEventId != common.EmptyEventID {
+		if _, ok := previousPendingChildIds[childWorkflowInfo.GetInitiatedEventId()]; ok {
+			if childWorkflowInfo.GetStartedEventId() != common.EmptyEventID {
 				continue
 			}
 		}
 
 		// Skip task generation if this child workflow has not been updated since minVersionedTransition.
 		if transitionhistory.Compare(
-			childWorkflowInfo.LastUpdateVersionedTransition,
+			childWorkflowInfo.GetLastUpdateVersionedTransition(),
 			minVersionedTransition,
 		) < 0 {
 			continue
 		}
 
 		if err := taskGenerator.GenerateChildWorkflowTasks(
-			childWorkflowInfo.InitiatedEventId,
+			childWorkflowInfo.GetInitiatedEventId(),
 		); err != nil {
 			return err
 		}
@@ -515,7 +516,7 @@ func (r *TaskRefresherImpl) refreshTasksForRequestCancelExternalWorkflow(
 
 	executionState := mutableState.GetExecutionState()
 	// skip task generation if workflow is not running or paused.
-	if executionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING && executionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED {
+	if executionState.GetStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING && executionState.GetStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED {
 		return nil
 	}
 
@@ -525,7 +526,7 @@ func (r *TaskRefresherImpl) refreshTasksForRequestCancelExternalWorkflow(
 
 		// Skip task generation if this cancel external request has not been updated since minVersionedTransition.
 		if transitionhistory.Compare(
-			requestCancelInfo.LastUpdateVersionedTransition,
+			requestCancelInfo.GetLastUpdateVersionedTransition(),
 			minVersionedTransition,
 		) < 0 {
 			continue
@@ -555,7 +556,7 @@ func (r *TaskRefresherImpl) refreshTasksForSignalExternalWorkflow(
 
 	executionState := mutableState.GetExecutionState()
 	// skip task generation if workflow is not running or paused.
-	if executionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING && executionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED {
+	if executionState.GetStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING && executionState.GetStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED {
 		return nil
 	}
 
@@ -565,7 +566,7 @@ func (r *TaskRefresherImpl) refreshTasksForSignalExternalWorkflow(
 
 		// Skip task generation if this signal external request has not been updated since minVersionedTransition.
 		if transitionhistory.Compare(
-			signalInfo.LastUpdateVersionedTransition,
+			signalInfo.GetLastUpdateVersionedTransition(),
 			minVersionedTransition,
 		) < 0 {
 			continue
@@ -593,14 +594,14 @@ func (r *TaskRefresherImpl) refreshTasksForWorkflowSearchAttr(
 ) error {
 	executionState := mutableState.GetExecutionState()
 	// skip task generation if workflow is not running or paused. Search attributes should continue to be updated when the workflow is paused.
-	if executionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING && executionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED {
+	if executionState.GetStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING && executionState.GetStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED {
 		return nil
 	}
 
 	// Skip task generation if no transition since minVersionedTransition requires
 	// an update in the visibility record.
 	if transitionhistory.Compare(
-		mutableState.GetExecutionInfo().VisibilityLastUpdateVersionedTransition,
+		mutableState.GetExecutionInfo().GetVisibilityLastUpdateVersionedTransition(),
 		minVersionedTransition,
 	) < 0 {
 		return nil
@@ -643,7 +644,7 @@ func (r *TaskRefresherImpl) refreshTasksForSubStateMachines(
 
 		// Skip task generation if this state machine node has not been updated since minVersionedTransition.
 		if transitionhistory.Compare(
-			node.InternalRepr().LastUpdateVersionedTransition,
+			node.InternalRepr().GetLastUpdateVersionedTransition(),
 			minVersionedTransition,
 		) < 0 {
 			return nil

@@ -8,7 +8,6 @@ package batch
 
 import (
 	reflect "reflect"
-	sync "sync"
 	unsafe "unsafe"
 
 	v1 "go.temporal.io/api/enums/v1"
@@ -27,22 +26,17 @@ const (
 )
 
 type BatchOperationInput struct {
-	state                    protoimpl.MessageState `protogen:"open.v1"`
-	NamespaceId              string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	Concurrency              int64                  `protobuf:"varint,2,opt,name=concurrency,proto3" json:"concurrency,omitempty"`
-	AttemptsOnRetryableError int64                  `protobuf:"varint,3,opt,name=attempts_on_retryable_error,json=attemptsOnRetryableError,proto3" json:"attempts_on_retryable_error,omitempty"`
-	ActivityHeartbeatTimeout *durationpb.Duration   `protobuf:"bytes,4,opt,name=activity_heartbeat_timeout,json=activityHeartbeatTimeout,proto3" json:"activity_heartbeat_timeout,omitempty"`
-	NonRetryableErrors       []string               `protobuf:"bytes,5,rep,name=non_retryable_errors,json=nonRetryableErrors,proto3" json:"non_retryable_errors,omitempty"`
-	// Only needed if StartBatchOperationRequest request is set.
-	BatchType v1.BatchOperationType `protobuf:"varint,6,opt,name=batch_type,json=batchType,proto3,enum=temporal.api.enums.v1.BatchOperationType" json:"batch_type,omitempty"`
-	// The request to start the batch operation.
-	// Mutually exclusive with StartAdminBatchOperationRequest admin_request.
-	Request *v11.StartBatchOperationRequest `protobuf:"bytes,7,opt,name=request,proto3" json:"request,omitempty"`
-	// The request to start an admin batch operation.
-	// Mutually exclusive with StartBatchOperationRequest request.
-	AdminRequest  *v12.StartAdminBatchOperationRequest `protobuf:"bytes,8,opt,name=admin_request,json=adminRequest,proto3" json:"admin_request,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                               protoimpl.MessageState               `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId              string                               `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_Concurrency              int64                                `protobuf:"varint,2,opt,name=concurrency,proto3"`
+	xxx_hidden_AttemptsOnRetryableError int64                                `protobuf:"varint,3,opt,name=attempts_on_retryable_error,json=attemptsOnRetryableError,proto3"`
+	xxx_hidden_ActivityHeartbeatTimeout *durationpb.Duration                 `protobuf:"bytes,4,opt,name=activity_heartbeat_timeout,json=activityHeartbeatTimeout,proto3"`
+	xxx_hidden_NonRetryableErrors       []string                             `protobuf:"bytes,5,rep,name=non_retryable_errors,json=nonRetryableErrors,proto3"`
+	xxx_hidden_BatchType                v1.BatchOperationType                `protobuf:"varint,6,opt,name=batch_type,json=batchType,proto3,enum=temporal.api.enums.v1.BatchOperationType"`
+	xxx_hidden_Request                  *v11.StartBatchOperationRequest      `protobuf:"bytes,7,opt,name=request,proto3"`
+	xxx_hidden_AdminRequest             *v12.StartAdminBatchOperationRequest `protobuf:"bytes,8,opt,name=admin_request,json=adminRequest,proto3"`
+	unknownFields                       protoimpl.UnknownFields
+	sizeCache                           protoimpl.SizeCache
 }
 
 func (x *BatchOperationInput) Reset() {
@@ -70,65 +64,158 @@ func (x *BatchOperationInput) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use BatchOperationInput.ProtoReflect.Descriptor instead.
-func (*BatchOperationInput) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_batch_v1_request_response_proto_rawDescGZIP(), []int{0}
-}
-
 func (x *BatchOperationInput) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *BatchOperationInput) GetConcurrency() int64 {
 	if x != nil {
-		return x.Concurrency
+		return x.xxx_hidden_Concurrency
 	}
 	return 0
 }
 
 func (x *BatchOperationInput) GetAttemptsOnRetryableError() int64 {
 	if x != nil {
-		return x.AttemptsOnRetryableError
+		return x.xxx_hidden_AttemptsOnRetryableError
 	}
 	return 0
 }
 
 func (x *BatchOperationInput) GetActivityHeartbeatTimeout() *durationpb.Duration {
 	if x != nil {
-		return x.ActivityHeartbeatTimeout
+		return x.xxx_hidden_ActivityHeartbeatTimeout
 	}
 	return nil
 }
 
 func (x *BatchOperationInput) GetNonRetryableErrors() []string {
 	if x != nil {
-		return x.NonRetryableErrors
+		return x.xxx_hidden_NonRetryableErrors
 	}
 	return nil
 }
 
 func (x *BatchOperationInput) GetBatchType() v1.BatchOperationType {
 	if x != nil {
-		return x.BatchType
+		return x.xxx_hidden_BatchType
 	}
 	return v1.BatchOperationType(0)
 }
 
 func (x *BatchOperationInput) GetRequest() *v11.StartBatchOperationRequest {
 	if x != nil {
-		return x.Request
+		return x.xxx_hidden_Request
 	}
 	return nil
 }
 
 func (x *BatchOperationInput) GetAdminRequest() *v12.StartAdminBatchOperationRequest {
 	if x != nil {
-		return x.AdminRequest
+		return x.xxx_hidden_AdminRequest
 	}
 	return nil
+}
+
+func (x *BatchOperationInput) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *BatchOperationInput) SetConcurrency(v int64) {
+	x.xxx_hidden_Concurrency = v
+}
+
+func (x *BatchOperationInput) SetAttemptsOnRetryableError(v int64) {
+	x.xxx_hidden_AttemptsOnRetryableError = v
+}
+
+func (x *BatchOperationInput) SetActivityHeartbeatTimeout(v *durationpb.Duration) {
+	x.xxx_hidden_ActivityHeartbeatTimeout = v
+}
+
+func (x *BatchOperationInput) SetNonRetryableErrors(v []string) {
+	x.xxx_hidden_NonRetryableErrors = v
+}
+
+func (x *BatchOperationInput) SetBatchType(v v1.BatchOperationType) {
+	x.xxx_hidden_BatchType = v
+}
+
+func (x *BatchOperationInput) SetRequest(v *v11.StartBatchOperationRequest) {
+	x.xxx_hidden_Request = v
+}
+
+func (x *BatchOperationInput) SetAdminRequest(v *v12.StartAdminBatchOperationRequest) {
+	x.xxx_hidden_AdminRequest = v
+}
+
+func (x *BatchOperationInput) HasActivityHeartbeatTimeout() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_ActivityHeartbeatTimeout != nil
+}
+
+func (x *BatchOperationInput) HasRequest() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Request != nil
+}
+
+func (x *BatchOperationInput) HasAdminRequest() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_AdminRequest != nil
+}
+
+func (x *BatchOperationInput) ClearActivityHeartbeatTimeout() {
+	x.xxx_hidden_ActivityHeartbeatTimeout = nil
+}
+
+func (x *BatchOperationInput) ClearRequest() {
+	x.xxx_hidden_Request = nil
+}
+
+func (x *BatchOperationInput) ClearAdminRequest() {
+	x.xxx_hidden_AdminRequest = nil
+}
+
+type BatchOperationInput_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId              string
+	Concurrency              int64
+	AttemptsOnRetryableError int64
+	ActivityHeartbeatTimeout *durationpb.Duration
+	NonRetryableErrors       []string
+	// Only needed if StartBatchOperationRequest request is set.
+	BatchType v1.BatchOperationType
+	// The request to start the batch operation.
+	// Mutually exclusive with StartAdminBatchOperationRequest admin_request.
+	Request *v11.StartBatchOperationRequest
+	// The request to start an admin batch operation.
+	// Mutually exclusive with StartBatchOperationRequest request.
+	AdminRequest *v12.StartAdminBatchOperationRequest
+}
+
+func (b0 BatchOperationInput_builder) Build() *BatchOperationInput {
+	m0 := &BatchOperationInput{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_Concurrency = b.Concurrency
+	x.xxx_hidden_AttemptsOnRetryableError = b.AttemptsOnRetryableError
+	x.xxx_hidden_ActivityHeartbeatTimeout = b.ActivityHeartbeatTimeout
+	x.xxx_hidden_NonRetryableErrors = b.NonRetryableErrors
+	x.xxx_hidden_BatchType = b.BatchType
+	x.xxx_hidden_Request = b.Request
+	x.xxx_hidden_AdminRequest = b.AdminRequest
+	return m0
 }
 
 var File_temporal_server_api_batch_v1_request_response_proto protoreflect.FileDescriptor
@@ -146,18 +233,6 @@ const file_temporal_server_api_batch_v1_request_response_proto_rawDesc = "" +
 	"batch_type\x18\x06 \x01(\x0e2).temporal.api.enums.v1.BatchOperationTypeR\tbatchType\x12U\n" +
 	"\arequest\x18\a \x01(\v2;.temporal.api.workflowservice.v1.StartBatchOperationRequestR\arequest\x12i\n" +
 	"\radmin_request\x18\b \x01(\v2D.temporal.server.api.adminservice.v1.StartAdminBatchOperationRequestR\fadminRequestB*Z(go.temporal.io/server/api/batch/v1;batchb\x06proto3"
-
-var (
-	file_temporal_server_api_batch_v1_request_response_proto_rawDescOnce sync.Once
-	file_temporal_server_api_batch_v1_request_response_proto_rawDescData []byte
-)
-
-func file_temporal_server_api_batch_v1_request_response_proto_rawDescGZIP() []byte {
-	file_temporal_server_api_batch_v1_request_response_proto_rawDescOnce.Do(func() {
-		file_temporal_server_api_batch_v1_request_response_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_api_batch_v1_request_response_proto_rawDesc), len(file_temporal_server_api_batch_v1_request_response_proto_rawDesc)))
-	})
-	return file_temporal_server_api_batch_v1_request_response_proto_rawDescData
-}
 
 var file_temporal_server_api_batch_v1_request_response_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
 var file_temporal_server_api_batch_v1_request_response_proto_goTypes = []any{

@@ -194,15 +194,15 @@ func (s *TaskQueueSuite) TestDelete() {
 
 	err := s.taskManager.DeleteTaskQueue(s.ctx, &p.DeleteTaskQueueRequest{
 		TaskQueue: &p.TaskQueueKey{
-			NamespaceID:   taskQueue.NamespaceId,
-			TaskQueueName: taskQueue.Name,
-			TaskQueueType: taskQueue.TaskType,
+			NamespaceID:   taskQueue.GetNamespaceId(),
+			TaskQueueName: taskQueue.GetName(),
+			TaskQueueType: taskQueue.GetTaskType(),
 		},
 		RangeID: rangeID,
 	})
 	s.NoError(err)
 
-	s.assertMissingFromDB(taskQueue.NamespaceId, taskQueue.Name, taskQueue.TaskType)
+	s.assertMissingFromDB(taskQueue.GetNamespaceId(), taskQueue.GetName(), taskQueue.GetTaskType())
 }
 
 func (s *TaskQueueSuite) TestDelete_Conflict() {
@@ -216,9 +216,9 @@ func (s *TaskQueueSuite) TestDelete_Conflict() {
 
 	err := s.taskManager.DeleteTaskQueue(s.ctx, &p.DeleteTaskQueueRequest{
 		TaskQueue: &p.TaskQueueKey{
-			NamespaceID:   taskQueue.NamespaceId,
-			TaskQueueName: taskQueue.Name,
-			TaskQueueType: taskQueue.TaskType,
+			NamespaceID:   taskQueue.GetNamespaceId(),
+			TaskQueueName: taskQueue.GetName(),
+			TaskQueueType: taskQueue.GetTaskType(),
 		},
 		RangeID: rand.Int63(),
 	})
@@ -253,7 +253,7 @@ func (s *TaskQueueSuite) randomTaskQueueInfo(
 		expiryTime = timestamppb.New(now.Add(s.stickyTTL))
 	}
 
-	return &persistencespb.TaskQueueInfo{
+	return persistencespb.TaskQueueInfo_builder{
 		NamespaceId:    s.namespaceID,
 		Name:           s.taskQueueName,
 		TaskType:       s.taskQueueType,
@@ -261,7 +261,7 @@ func (s *TaskQueueSuite) randomTaskQueueInfo(
 		AckLevel:       rand.Int63(),
 		ExpiryTime:     expiryTime,
 		LastUpdateTime: timestamppb.New(now),
-	}
+	}.Build()
 }
 
 func (s *TaskQueueSuite) assertMissingFromDB(
@@ -282,9 +282,9 @@ func (s *TaskQueueSuite) assertEqualWithDB(
 	taskQueueInfo *persistencespb.TaskQueueInfo,
 ) {
 	resp, err := s.taskManager.GetTaskQueue(s.ctx, &p.GetTaskQueueRequest{
-		NamespaceID: taskQueueInfo.NamespaceId,
-		TaskQueue:   taskQueueInfo.Name,
-		TaskType:    taskQueueInfo.TaskType,
+		NamespaceID: taskQueueInfo.GetNamespaceId(),
+		TaskQueue:   taskQueueInfo.GetName(),
+		TaskType:    taskQueueInfo.GetTaskType(),
 	})
 	s.NoError(err)
 

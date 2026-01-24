@@ -26,11 +26,11 @@ func TestExtract(t *testing.T) {
 
 	tv := testvars.New(t)
 	tv = tv.WithRunID(tv.Any().RunID())
-	taskToken := tokenspb.Task{
+	taskToken := tokenspb.Task_builder{
 		WorkflowId: tv.WorkflowID(),
 		RunId:      tv.RunID(),
-	}
-	taskTokenBytes, err := serializer.Serialize(&taskToken)
+	}.Build()
+	taskTokenBytes, err := serializer.Serialize(taskToken)
 	assert.NoError(t, err)
 
 	testCases := []struct {
@@ -42,103 +42,103 @@ func TestExtract(t *testing.T) {
 	}{
 		{
 			name:       "Frontend StartWorkflowExecutionRequest with only workflowID",
-			req:        &workflowservice.StartWorkflowExecutionRequest{WorkflowId: tv.WorkflowID()},
+			req:        workflowservice.StartWorkflowExecutionRequest_builder{WorkflowId: tv.WorkflowID()}.Build(),
 			fullMethod: "/temporal.api.workflowservice.v1.WorkflowService/StartWorkflowExecution",
 			workflowID: tv.WorkflowID(),
 		},
 		{
 			name:       "Frontend RecordActivityTaskHeartbeatByIdRequest with workflowID and runID",
-			req:        &workflowservice.RecordActivityTaskHeartbeatByIdRequest{WorkflowId: tv.WorkflowID(), RunId: tv.RunID()},
+			req:        workflowservice.RecordActivityTaskHeartbeatByIdRequest_builder{WorkflowId: tv.WorkflowID(), RunId: tv.RunID()}.Build(),
 			fullMethod: "/temporal.api.workflowservice.v1.WorkflowService/RecordActivityTaskHeartbeatById",
 			workflowID: tv.WorkflowID(),
 			runID:      tv.RunID(),
 		},
 		{
 			name: "Frontend GetWorkflowExecutionHistoryRequest with execution",
-			req: &workflowservice.GetWorkflowExecutionHistoryRequest{
-				Execution: &commonpb.WorkflowExecution{
+			req: workflowservice.GetWorkflowExecutionHistoryRequest_builder{
+				Execution: commonpb.WorkflowExecution_builder{
 					WorkflowId: tv.WorkflowID(),
 					RunId:      tv.RunID(),
-				},
-			},
+				}.Build(),
+			}.Build(),
 			fullMethod: "/temporal.api.workflowservice.v1.WorkflowService/GetWorkflowExecutionHistory",
 			workflowID: tv.WorkflowID(),
 			runID:      tv.RunID(),
 		},
 		{
 			name: "Frontend RequestCancelWorkflowExecutionRequest with workflow_execution",
-			req: &workflowservice.RequestCancelWorkflowExecutionRequest{
-				WorkflowExecution: &commonpb.WorkflowExecution{
+			req: workflowservice.RequestCancelWorkflowExecutionRequest_builder{
+				WorkflowExecution: commonpb.WorkflowExecution_builder{
 					WorkflowId: tv.WorkflowID(),
 					RunId:      tv.RunID(),
-				},
-			},
+				}.Build(),
+			}.Build(),
 			fullMethod: "/temporal.api.workflowservice.v1.WorkflowService/RequestCancelWorkflowExecution",
 			workflowID: tv.WorkflowID(),
 			runID:      tv.RunID(),
 		},
 		{
 			name: "Frontend RespondActivityTaskCompletedRequest with task_token",
-			req: &workflowservice.RespondActivityTaskCompletedRequest{
+			req: workflowservice.RespondActivityTaskCompletedRequest_builder{
 				TaskToken: taskTokenBytes,
-			},
+			}.Build(),
 			fullMethod: "/temporal.api.workflowservice.v1.WorkflowService/RespondActivityTaskCompleted",
 			workflowID: tv.WorkflowID(),
 			runID:      tv.RunID(),
 		},
 		{
 			name: "Frontend RespondQueryTaskCompletedRequest (task_token is ignored)",
-			req: &workflowservice.RespondQueryTaskCompletedRequest{
+			req: workflowservice.RespondQueryTaskCompletedRequest_builder{
 				TaskToken: taskTokenBytes,
-			},
+			}.Build(),
 			fullMethod: "/temporal.api.workflowservice.v1.WorkflowService/RespondQueryTaskCompleted",
 		},
 		{
 			name: "History DescribeWorkflowExecutionRequest",
-			req: &historyservice.DescribeWorkflowExecutionRequest{
-				Request: &workflowservice.DescribeWorkflowExecutionRequest{
-					Execution: &commonpb.WorkflowExecution{
+			req: historyservice.DescribeWorkflowExecutionRequest_builder{
+				Request: workflowservice.DescribeWorkflowExecutionRequest_builder{
+					Execution: commonpb.WorkflowExecution_builder{
 						WorkflowId: tv.WorkflowID(),
 						RunId:      tv.RunID(),
-					},
-				},
-			},
+					}.Build(),
+				}.Build(),
+			}.Build(),
 			fullMethod: "/temporal.server.api.historyservice.v1.HistoryService/DescribeWorkflowExecution",
 			workflowID: tv.WorkflowID(),
 			runID:      tv.RunID(),
 		},
 		{
 			name: "History RespondWorkflowTaskCompletedRequest",
-			req: &historyservice.RespondWorkflowTaskCompletedRequest{
-				CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
+			req: historyservice.RespondWorkflowTaskCompletedRequest_builder{
+				CompleteRequest: workflowservice.RespondWorkflowTaskCompletedRequest_builder{
 					TaskToken: taskTokenBytes,
-				},
-			},
+				}.Build(),
+			}.Build(),
 			fullMethod: "/temporal.server.api.historyservice.v1.HistoryService/RespondWorkflowTaskCompleted",
 			workflowID: tv.WorkflowID(),
 			runID:      tv.RunID(),
 		},
 		{
 			name: "Matching QueryWorkflowRequest",
-			req: &matchingservice.QueryWorkflowRequest{
-				QueryRequest: &workflowservice.QueryWorkflowRequest{
-					Execution: &commonpb.WorkflowExecution{
+			req: matchingservice.QueryWorkflowRequest_builder{
+				QueryRequest: workflowservice.QueryWorkflowRequest_builder{
+					Execution: commonpb.WorkflowExecution_builder{
 						WorkflowId: tv.WorkflowID(),
 						RunId:      tv.RunID(),
-					},
-				},
-			},
+					}.Build(),
+				}.Build(),
+			}.Build(),
 			fullMethod: "/temporal.server.api.matchingservice.v1.MatchingService/QueryWorkflow",
 			workflowID: tv.WorkflowID(),
 			runID:      tv.RunID(),
 		},
 		{
 			name: "Matching RespondWorkflowTaskCompletedRequest",
-			req: &matchingservice.RespondQueryTaskCompletedRequest{
-				CompletedRequest: &workflowservice.RespondQueryTaskCompletedRequest{
+			req: matchingservice.RespondQueryTaskCompletedRequest_builder{
+				CompletedRequest: workflowservice.RespondQueryTaskCompletedRequest_builder{
 					TaskToken: taskTokenBytes,
-				},
-			},
+				}.Build(),
+			}.Build(),
 			fullMethod: "/temporal.server.api.matchingservice.v1.MatchingService/RespondQueryTaskCompleted",
 		},
 		{

@@ -47,17 +47,15 @@ func TestConvertLinkWorkflowEventToNexusLink(t *testing.T) {
 	cases := []testcase{
 		{
 			name: "valid",
-			input: &commonpb.Link_WorkflowEvent{
+			input: commonpb.Link_WorkflowEvent_builder{
 				Namespace:  "ns",
 				WorkflowId: "wf-id",
 				RunId:      "run-id",
-				Reference: &commonpb.Link_WorkflowEvent_EventRef{
-					EventRef: &commonpb.Link_WorkflowEvent_EventReference{
-						EventId:   1,
-						EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
-					},
-				},
-			},
+				EventRef: commonpb.Link_WorkflowEvent_EventReference_builder{
+					EventId:   1,
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+				}.Build(),
+			}.Build(),
 			output: nexus.Link{
 				URL: &url.URL{
 					Scheme:   "temporal",
@@ -71,17 +69,15 @@ func TestConvertLinkWorkflowEventToNexusLink(t *testing.T) {
 		},
 		{
 			name: "valid with angle bracket",
-			input: &commonpb.Link_WorkflowEvent{
+			input: commonpb.Link_WorkflowEvent_builder{
 				Namespace:  "ns",
 				WorkflowId: "wf-id>",
 				RunId:      "run-id",
-				Reference: &commonpb.Link_WorkflowEvent_EventRef{
-					EventRef: &commonpb.Link_WorkflowEvent_EventReference{
-						EventId:   1,
-						EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
-					},
-				},
-			},
+				EventRef: commonpb.Link_WorkflowEvent_EventReference_builder{
+					EventId:   1,
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+				}.Build(),
+			}.Build(),
 			output: nexus.Link{
 				URL: &url.URL{
 					Scheme:   "temporal",
@@ -95,17 +91,15 @@ func TestConvertLinkWorkflowEventToNexusLink(t *testing.T) {
 		},
 		{
 			name: "valid with slash",
-			input: &commonpb.Link_WorkflowEvent{
+			input: commonpb.Link_WorkflowEvent_builder{
 				Namespace:  "ns",
 				WorkflowId: "wf-id/",
 				RunId:      "run-id",
-				Reference: &commonpb.Link_WorkflowEvent_EventRef{
-					EventRef: &commonpb.Link_WorkflowEvent_EventReference{
-						EventId:   1,
-						EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
-					},
-				},
-			},
+				EventRef: commonpb.Link_WorkflowEvent_EventReference_builder{
+					EventId:   1,
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+				}.Build(),
+			}.Build(),
 			output: nexus.Link{
 				URL: &url.URL{
 					Scheme:   "temporal",
@@ -119,16 +113,14 @@ func TestConvertLinkWorkflowEventToNexusLink(t *testing.T) {
 		},
 		{
 			name: "valid event id missing",
-			input: &commonpb.Link_WorkflowEvent{
+			input: commonpb.Link_WorkflowEvent_builder{
 				Namespace:  "ns",
 				WorkflowId: "wf-id",
 				RunId:      "run-id",
-				Reference: &commonpb.Link_WorkflowEvent_EventRef{
-					EventRef: &commonpb.Link_WorkflowEvent_EventReference{
-						EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
-					},
-				},
-			},
+				EventRef: commonpb.Link_WorkflowEvent_EventReference_builder{
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+				}.Build(),
+			}.Build(),
 			output: nexus.Link{
 				URL: &url.URL{
 					Scheme:   "temporal",
@@ -142,17 +134,15 @@ func TestConvertLinkWorkflowEventToNexusLink(t *testing.T) {
 		},
 		{
 			name: "valid request id",
-			input: &commonpb.Link_WorkflowEvent{
+			input: commonpb.Link_WorkflowEvent_builder{
 				Namespace:  "ns",
 				WorkflowId: "wf-id",
 				RunId:      "run-id",
-				Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
-					RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
-						RequestId: "request-id",
-						EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
-					},
-				},
-			},
+				RequestIdRef: commonpb.Link_WorkflowEvent_RequestIdReference_builder{
+					RequestId: "request-id",
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+				}.Build(),
+			}.Build(),
 			output: nexus.Link{
 				URL: &url.URL{
 					Scheme:   "temporal",
@@ -166,16 +156,14 @@ func TestConvertLinkWorkflowEventToNexusLink(t *testing.T) {
 		},
 		{
 			name: "valid request id empty",
-			input: &commonpb.Link_WorkflowEvent{
+			input: commonpb.Link_WorkflowEvent_builder{
 				Namespace:  "ns",
 				WorkflowId: "wf-id",
 				RunId:      "run-id",
-				Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
-					RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
-						RequestId: "",
-					},
-				},
-			},
+				RequestIdRef: commonpb.Link_WorkflowEvent_RequestIdReference_builder{
+					RequestId: "",
+				}.Build(),
+			}.Build(),
 			output: nexus.Link{
 				URL: &url.URL{
 					Scheme:   "temporal",
@@ -217,17 +205,15 @@ func TestConvertNexusLinkToLinkWorkflowEvent(t *testing.T) {
 				},
 				Type: "temporal.api.common.v1.Link.WorkflowEvent",
 			},
-			output: &commonpb.Link_WorkflowEvent{
+			output: commonpb.Link_WorkflowEvent_builder{
 				Namespace:  "ns",
 				WorkflowId: "wf-id",
 				RunId:      "run-id",
-				Reference: &commonpb.Link_WorkflowEvent_EventRef{
-					EventRef: &commonpb.Link_WorkflowEvent_EventReference{
-						EventId:   1,
-						EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
-					},
-				},
-			},
+				EventRef: commonpb.Link_WorkflowEvent_EventReference_builder{
+					EventId:   1,
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+				}.Build(),
+			}.Build(),
 		},
 		{
 			name: "valid short event type",
@@ -239,17 +225,15 @@ func TestConvertNexusLinkToLinkWorkflowEvent(t *testing.T) {
 				},
 				Type: "temporal.api.common.v1.Link.WorkflowEvent",
 			},
-			output: &commonpb.Link_WorkflowEvent{
+			output: commonpb.Link_WorkflowEvent_builder{
 				Namespace:  "ns",
 				WorkflowId: "wf-id",
 				RunId:      "run-id",
-				Reference: &commonpb.Link_WorkflowEvent_EventRef{
-					EventRef: &commonpb.Link_WorkflowEvent_EventReference{
-						EventId:   1,
-						EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
-					},
-				},
-			},
+				EventRef: commonpb.Link_WorkflowEvent_EventReference_builder{
+					EventId:   1,
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+				}.Build(),
+			}.Build(),
 		},
 		{
 			name: "valid with angle bracket",
@@ -262,17 +246,15 @@ func TestConvertNexusLinkToLinkWorkflowEvent(t *testing.T) {
 				},
 				Type: "temporal.api.common.v1.Link.WorkflowEvent",
 			},
-			output: &commonpb.Link_WorkflowEvent{
+			output: commonpb.Link_WorkflowEvent_builder{
 				Namespace:  "ns",
 				WorkflowId: "wf-id>",
 				RunId:      "run-id",
-				Reference: &commonpb.Link_WorkflowEvent_EventRef{
-					EventRef: &commonpb.Link_WorkflowEvent_EventReference{
-						EventId:   1,
-						EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
-					},
-				},
-			},
+				EventRef: commonpb.Link_WorkflowEvent_EventReference_builder{
+					EventId:   1,
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+				}.Build(),
+			}.Build(),
 		},
 		{
 			name: "valid with slash",
@@ -285,17 +267,15 @@ func TestConvertNexusLinkToLinkWorkflowEvent(t *testing.T) {
 				},
 				Type: "temporal.api.common.v1.Link.WorkflowEvent",
 			},
-			output: &commonpb.Link_WorkflowEvent{
+			output: commonpb.Link_WorkflowEvent_builder{
 				Namespace:  "ns",
 				WorkflowId: "wf-id/",
 				RunId:      "run-id",
-				Reference: &commonpb.Link_WorkflowEvent_EventRef{
-					EventRef: &commonpb.Link_WorkflowEvent_EventReference{
-						EventId:   1,
-						EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
-					},
-				},
-			},
+				EventRef: commonpb.Link_WorkflowEvent_EventReference_builder{
+					EventId:   1,
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+				}.Build(),
+			}.Build(),
 		},
 		{
 			name: "valid event id missing",
@@ -308,16 +288,14 @@ func TestConvertNexusLinkToLinkWorkflowEvent(t *testing.T) {
 				},
 				Type: "temporal.api.common.v1.Link.WorkflowEvent",
 			},
-			output: &commonpb.Link_WorkflowEvent{
+			output: commonpb.Link_WorkflowEvent_builder{
 				Namespace:  "ns",
 				WorkflowId: "wf-id",
 				RunId:      "run-id",
-				Reference: &commonpb.Link_WorkflowEvent_EventRef{
-					EventRef: &commonpb.Link_WorkflowEvent_EventReference{
-						EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
-					},
-				},
-			},
+				EventRef: commonpb.Link_WorkflowEvent_EventReference_builder{
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+				}.Build(),
+			}.Build(),
 		},
 		{
 			name: "invalid scheme",
@@ -382,17 +360,15 @@ func TestConvertNexusLinkToLinkWorkflowEvent(t *testing.T) {
 				},
 				Type: "temporal.api.common.v1.Link.WorkflowEvent",
 			},
-			output: &commonpb.Link_WorkflowEvent{
+			output: commonpb.Link_WorkflowEvent_builder{
 				Namespace:  "ns",
 				WorkflowId: "wf-id",
 				RunId:      "run-id",
-				Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
-					RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
-						RequestId: "request-id",
-						EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
-					},
-				},
-			},
+				RequestIdRef: commonpb.Link_WorkflowEvent_RequestIdReference_builder{
+					RequestId: "request-id",
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+				}.Build(),
+			}.Build(),
 		},
 		{
 			name: "valid request id short event type",
@@ -405,17 +381,15 @@ func TestConvertNexusLinkToLinkWorkflowEvent(t *testing.T) {
 				},
 				Type: "temporal.api.common.v1.Link.WorkflowEvent",
 			},
-			output: &commonpb.Link_WorkflowEvent{
+			output: commonpb.Link_WorkflowEvent_builder{
 				Namespace:  "ns",
 				WorkflowId: "wf-id",
 				RunId:      "run-id",
-				Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
-					RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
-						RequestId: "request-id",
-						EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
-					},
-				},
-			},
+				RequestIdRef: commonpb.Link_WorkflowEvent_RequestIdReference_builder{
+					RequestId: "request-id",
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+				}.Build(),
+			}.Build(),
 		},
 		{
 			name: "valid request id empty",
@@ -428,17 +402,15 @@ func TestConvertNexusLinkToLinkWorkflowEvent(t *testing.T) {
 				},
 				Type: "temporal.api.common.v1.Link.WorkflowEvent",
 			},
-			output: &commonpb.Link_WorkflowEvent{
+			output: commonpb.Link_WorkflowEvent_builder{
 				Namespace:  "ns",
 				WorkflowId: "wf-id",
 				RunId:      "run-id",
-				Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
-					RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
-						RequestId: "",
-						EventType: enumspb.EVENT_TYPE_UNSPECIFIED,
-					},
-				},
-			},
+				RequestIdRef: commonpb.Link_WorkflowEvent_RequestIdReference_builder{
+					RequestId: "",
+					EventType: enumspb.EVENT_TYPE_UNSPECIFIED,
+				}.Build(),
+			}.Build(),
 		},
 		{
 			name: "invalid request id reference missing event type",

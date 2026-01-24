@@ -61,7 +61,7 @@ func (e *testSizeEstimator) EstimateSize(v interface{}) (int, error) {
 	if !ok {
 		return -1, errors.New("test size estimator only estimate the size of history batches")
 	}
-	return testDefaultHistoryEventSize * len(historyBatch.Events), nil
+	return testDefaultHistoryEventSize * len(historyBatch.GetEvents()), nil
 }
 
 func newTestSizeEstimator() SizeEstimator {
@@ -334,7 +334,7 @@ func (s *HistoryIteratorSuite) TestNext_Fail_IteratorDepleted() {
 	}
 	s.assertStateMatches(expectedIteratorState, itr)
 	s.NotNil(blob)
-	expectedHeader := &archiverspb.HistoryBlobHeader{
+	expectedHeader := archiverspb.HistoryBlobHeader_builder{
 		Namespace:            testNamespace,
 		NamespaceId:          testNamespaceID,
 		WorkflowId:           testWorkflowID,
@@ -345,9 +345,9 @@ func (s *HistoryIteratorSuite) TestNext_Fail_IteratorDepleted() {
 		FirstEventId:         common.FirstEventID,
 		LastEventId:          16,
 		EventCount:           16,
-	}
-	s.Equal(expectedHeader, blob.Header)
-	s.Len(blob.Body, 7)
+	}.Build()
+	s.Equal(expectedHeader, blob.GetHeader())
+	s.Len(blob.GetBody(), 7)
 	s.NoError(err)
 	s.False(itr.HasNext())
 
@@ -396,7 +396,7 @@ func (s *HistoryIteratorSuite) TestNext_Fail_ReturnErrOnSecondCallToNext() {
 	}
 	s.assertStateMatches(expectedIteratorState, itr)
 	s.NotNil(blob)
-	expectedHeader := &archiverspb.HistoryBlobHeader{
+	expectedHeader := archiverspb.HistoryBlobHeader_builder{
 		Namespace:            testNamespace,
 		NamespaceId:          testNamespaceID,
 		WorkflowId:           testWorkflowID,
@@ -407,8 +407,8 @@ func (s *HistoryIteratorSuite) TestNext_Fail_ReturnErrOnSecondCallToNext() {
 		FirstEventId:         common.FirstEventID,
 		LastEventId:          6,
 		EventCount:           6,
-	}
-	s.Equal(expectedHeader, blob.Header)
+	}.Build()
+	s.Equal(expectedHeader, blob.GetHeader())
 	s.NoError(err)
 	s.True(itr.HasNext())
 
@@ -446,7 +446,7 @@ func (s *HistoryIteratorSuite) TestNext_Success_TenCallsToNext() {
 		blob, err := itr.Next(context.Background())
 		s.NoError(err)
 		s.NotNil(blob)
-		expectedHeader := &archiverspb.HistoryBlobHeader{
+		expectedHeader := archiverspb.HistoryBlobHeader_builder{
 			Namespace:            testNamespace,
 			NamespaceId:          testNamespaceID,
 			WorkflowId:           testWorkflowID,
@@ -457,11 +457,11 @@ func (s *HistoryIteratorSuite) TestNext_Success_TenCallsToNext() {
 			FirstEventId:         common.FirstEventID + int64(i*200),
 			LastEventId:          int64(200 + (i * 200)),
 			EventCount:           200,
-		}
+		}.Build()
 		if i == 9 {
-			expectedHeader.IsLast = true
+			expectedHeader.SetIsLast(true)
 		}
-		s.Equal(expectedHeader, blob.Header)
+		s.Equal(expectedHeader, blob.GetHeader())
 
 		if i < 9 {
 			expectedIteratorState.FinishedIteration = false
@@ -560,10 +560,10 @@ func (s *HistoryIteratorSuite) TestNext_Success_SameHistoryDifferentPage() {
 		history2, err := itr2.Next(context.Background())
 		s.NoError(err)
 
-		s.Equal(history1.Header, history2.Header)
-		s.Equal(len(history1.Body), len(history2.Body))
-		s.Equal(expectedFirstEventID[i], history1.Body[0].Events[0].GetEventId())
-		s.Equal(expectedFirstEventID[i], history2.Body[0].Events[0].GetEventId())
+		s.Equal(history1.GetHeader(), history2.GetHeader())
+		s.Equal(len(history1.GetBody()), len(history2.GetBody()))
+		s.Equal(expectedFirstEventID[i], history1.GetBody()[0].GetEvents()[0].GetEventId())
+		s.Equal(expectedFirstEventID[i], history2.GetBody()[0].GetEvents()[0].GetEventId())
 	}
 	expectedIteratorState := historyIteratorState{
 		NextEventID:       0,
@@ -642,19 +642,19 @@ func (s *HistoryIteratorSuite) constructHistoryBatches(batchInfo []int, page pag
 	for batchIdx, numEvents := range batchInfo[page.firstbatchIdx : page.firstbatchIdx+page.numBatches] {
 		var events []*historypb.HistoryEvent
 		for i := 0; i < numEvents; i++ {
-			event := &historypb.HistoryEvent{
+			event := historypb.HistoryEvent_builder{
 				EventId: eventsID,
 				Version: page.firstEventFailoverVersion,
-			}
+			}.Build()
 			eventsID++
 			if batchIdx == page.numBatches-1 {
-				event.Version = page.lastEventFailoverVersion
+				event.SetVersion(page.lastEventFailoverVersion)
 			}
 			events = append(events, event)
 		}
-		batches = append(batches, &historypb.History{
+		batches = append(batches, historypb.History_builder{
 			Events: events,
-		})
+		}.Build())
 	}
 	return batches
 }
@@ -685,27 +685,27 @@ func (s *HistoryIteratorSuite) constructTestHistoryIterator(
 func (s *HistoryIteratorSuite) TestJSONSizeEstimator() {
 	e := NewJSONSizeEstimator()
 
-	historyEvent := &historypb.HistoryEvent{
+	historyEvent := historypb.HistoryEvent_builder{
 		EventId:   1,
 		EventTime: timestamppb.New(time.Date(1978, 8, 22, 12, 59, 59, 999999, time.UTC)),
 		TaskId:    1,
 		Version:   1,
-	}
-	historyEvent.EventType = enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED
-	historyEvent.Attributes = &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
-		TaskQueue: &taskqueuepb.TaskQueue{
+	}.Build()
+	historyEvent.SetEventType(enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED)
+	historyEvent.SetWorkflowTaskScheduledEventAttributes(historypb.WorkflowTaskScheduledEventAttributes_builder{
+		TaskQueue: taskqueuepb.TaskQueue_builder{
 			Name: "taskQueue",
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-		},
+		}.Build(),
 		StartToCloseTimeout: durationpb.New(10 * time.Second),
 		Attempt:             1,
-	}}
+	}.Build())
 
-	h := &historypb.History{
+	h := historypb.History_builder{
 		Events: []*historypb.HistoryEvent{
 			historyEvent,
 		},
-	}
+	}.Build()
 
 	size, err := e.EstimateSize(h)
 	s.NoError(err)

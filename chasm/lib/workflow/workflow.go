@@ -53,7 +53,7 @@ func (w *Workflow) ProcessCloseCallbacks(ctx chasm.MutableContext) error {
 	for _, field := range w.Callbacks {
 		cb := field.Get(ctx)
 		// Only process callbacks in STANDBY state (not already triggered)
-		if cb.Status != callbackspb.CALLBACK_STATUS_STANDBY {
+		if cb.GetStatus() != callbackspb.CALLBACK_STATUS_STANDBY {
 			continue
 		}
 		// Trigger the callback by transitioning to SCHEDULED state
@@ -90,19 +90,17 @@ func (w *Workflow) AddCompletionCallbacks(
 
 	// Add each callback
 	for idx, cb := range completionCallbacks {
-		chasmCB := &callbackspb.Callback{
+		chasmCB := callbackspb.Callback_builder{
 			Links: cb.GetLinks(),
-		}
-		switch variant := cb.Variant.(type) {
-		case *commonpb.Callback_Nexus_:
-			chasmCB.Variant = &callbackspb.Callback_Nexus_{
-				Nexus: &callbackspb.Callback_Nexus{
-					Url:    variant.Nexus.GetUrl(),
-					Header: variant.Nexus.GetHeader(),
-				},
-			}
+		}.Build()
+		switch variant := cb.WhichVariant(); variant {
+		case commonpb.Callback_Nexus_case:
+			chasmCB.SetNexus(callbackspb.Callback_Nexus_builder{
+				Url:    cb.GetNexus().GetUrl(),
+				Header: cb.GetNexus().GetHeader(),
+			}.Build())
 		default:
-			return fmt.Errorf("unsupported callback variant: %T", variant)
+			return fmt.Errorf("unsupported callback variant: %v", variant)
 		}
 
 		id := fmt.Sprintf("%s-%d", requestID, idx)

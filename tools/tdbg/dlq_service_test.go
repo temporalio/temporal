@@ -248,29 +248,29 @@ func TestDLQCommand_V2(t *testing.T) {
 				p.adminClient.err = nil
 				p.command = "list"
 				p.adminClient.listQueueResponses = []*adminservice.ListQueuesResponse{
-					{
+					adminservice.ListQueuesResponse_builder{
 						Queues: []*adminservice.ListQueuesResponse_QueueInfo{
-							{
+							adminservice.ListQueuesResponse_QueueInfo_builder{
 								QueueName:     "queueOne",
 								MessageCount:  13,
 								LastMessageId: 12, // MessageCount=13 means last message ID should be 12
-							}, {
+							}.Build(), adminservice.ListQueuesResponse_QueueInfo_builder{
 								QueueName:     "queueTwo",
 								MessageCount:  42,
 								LastMessageId: 41, // MessageCount=42 means last message ID should be 41
-							},
+							}.Build(),
 						},
 						NextPageToken: []byte{0x41, 0x41, 0x41},
-					}, {
+					}.Build(), adminservice.ListQueuesResponse_builder{
 						Queues: []*adminservice.ListQueuesResponse_QueueInfo{
-							{
+							adminservice.ListQueuesResponse_QueueInfo_builder{
 								QueueName:     "queueThree",
 								MessageCount:  0,
 								LastMessageId: -1, // Empty queue
-							},
+							}.Build(),
 						},
 						NextPageToken: nil,
-					},
+					}.Build(),
 				}
 			},
 			validateStdout: func(t *testing.T, b *bytes.Buffer) {
@@ -299,16 +299,16 @@ func TestDLQCommand_V2(t *testing.T) {
 				// Set up mock ListQueues response with our target DLQ containing LastMessageID = 150
 				queueName := persistence.GetHistoryTaskQueueName(tasks.CategoryTransfer.ID(), "test-source-cluster", "test-target-cluster")
 				p.adminClient.listQueueResponses = []*adminservice.ListQueuesResponse{
-					{
+					adminservice.ListQueuesResponse_builder{
 						Queues: []*adminservice.ListQueuesResponse_QueueInfo{
-							{
+							adminservice.ListQueuesResponse_QueueInfo_builder{
 								QueueName:     queueName,
 								MessageCount:  10,
 								LastMessageId: 150,
-							},
+							}.Build(),
 						},
 						NextPageToken: nil,
-					},
+					}.Build(),
 				}
 			},
 			validateStdout: func(t *testing.T, b *bytes.Buffer) {
@@ -335,16 +335,16 @@ func TestDLQCommand_V2(t *testing.T) {
 				// Set up mock ListQueues response with empty queue (LastMessageID = -1)
 				queueName := persistence.GetHistoryTaskQueueName(tasks.CategoryTransfer.ID(), "test-source-cluster", "test-target-cluster")
 				p.adminClient.listQueueResponses = []*adminservice.ListQueuesResponse{
-					{
+					adminservice.ListQueuesResponse_builder{
 						Queues: []*adminservice.ListQueuesResponse_QueueInfo{
-							{
+							adminservice.ListQueuesResponse_QueueInfo_builder{
 								QueueName:     queueName,
 								MessageCount:  0,
 								LastMessageId: -1, // Empty queue
-							},
+							}.Build(),
 						},
 						NextPageToken: nil,
-					},
+					}.Build(),
 				}
 			},
 			validateStdout: func(t *testing.T, b *bytes.Buffer) {
@@ -388,13 +388,13 @@ func (f *fakeAdminClient) ListQueues(_ context.Context, req *adminservice.ListQu
 	if f.nextListQueueResponse >= len(f.listQueueResponses) {
 		return &adminservice.ListQueuesResponse{}, nil
 	}
-	if bytes.Compare(f.previousPageToken, req.NextPageToken) != 0 {
-		return nil, fmt.Errorf("expected page token %v, got %v", f.previousPageToken, req.NextPageToken)
+	if bytes.Compare(f.previousPageToken, req.GetNextPageToken()) != 0 {
+		return nil, fmt.Errorf("expected page token %v, got %v", f.previousPageToken, req.GetNextPageToken())
 	}
 
 	resp := f.listQueueResponses[f.nextListQueueResponse]
 	f.nextListQueueResponse++
-	f.previousPageToken = resp.NextPageToken
+	f.previousPageToken = resp.GetNextPageToken()
 	return resp, nil
 }
 

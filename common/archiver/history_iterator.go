@@ -105,30 +105,30 @@ func (i *historyIterator) Next(
 	}
 
 	i.historyIteratorState = newIterState
-	firstEvent := historyBatches[0].Events[0]
+	firstEvent := historyBatches[0].GetEvents()[0]
 	lastBatch := historyBatches[len(historyBatches)-1]
-	lastEvent := lastBatch.Events[len(lastBatch.Events)-1]
+	lastEvent := lastBatch.GetEvents()[len(lastBatch.GetEvents())-1]
 	eventCount := int64(0)
 	for _, batch := range historyBatches {
-		eventCount += int64(len(batch.Events))
+		eventCount += int64(len(batch.GetEvents()))
 	}
-	header := &archiverspb.HistoryBlobHeader{
+	header := archiverspb.HistoryBlobHeader_builder{
 		Namespace:            i.request.Namespace,
 		NamespaceId:          i.request.NamespaceID,
 		WorkflowId:           i.request.WorkflowID,
 		RunId:                i.request.RunID,
 		IsLast:               i.FinishedIteration,
-		FirstFailoverVersion: firstEvent.Version,
-		LastFailoverVersion:  lastEvent.Version,
-		FirstEventId:         firstEvent.EventId,
-		LastEventId:          lastEvent.EventId,
+		FirstFailoverVersion: firstEvent.GetVersion(),
+		LastFailoverVersion:  lastEvent.GetVersion(),
+		FirstEventId:         firstEvent.GetEventId(),
+		LastEventId:          lastEvent.GetEventId(),
 		EventCount:           eventCount,
-	}
+	}.Build()
 
-	return &archiverspb.HistoryBlob{
+	return archiverspb.HistoryBlob_builder{
 		Header: header,
 		Body:   historyBatches,
-	}, nil
+	}.Build(), nil
 }
 
 // HasNext returns true if there are more items to iterate over.
@@ -165,7 +165,7 @@ func (i *historyIterator) readHistoryBatches(
 			}
 			size += historyBatchSize
 			historyBatches = append(historyBatches, batch)
-			firstEventID = batch.Events[len(batch.Events)-1].EventId + 1
+			firstEventID = batch.GetEvents()[len(batch.GetEvents())-1].GetEventId() + 1
 
 			// In case targetSize is satisfied before reaching the end of current set of batches, return immediately.
 			// Otherwise, we need to look ahead to see if there's more history batches.

@@ -167,73 +167,73 @@ func (s *namespaceHandlerCommonSuite) TestMergeNamespaceData_Nil() {
 func (s *namespaceHandlerCommonSuite) TestMergeBadBinaries_Overriding() {
 	out := s.handler.mergeBadBinaries(
 		map[string]*namespacepb.BadBinaryInfo{
-			"k0": {Reason: "reason0"},
+			"k0": namespacepb.BadBinaryInfo_builder{Reason: "reason0"}.Build(),
 		},
 		map[string]*namespacepb.BadBinaryInfo{
-			"k0": {Reason: "reason2"},
+			"k0": namespacepb.BadBinaryInfo_builder{Reason: "reason2"}.Build(),
 		}, now,
 	)
 
-	protoassert.ProtoEqual(s.T(), &out, &namespacepb.BadBinaries{
+	protoassert.ProtoEqual(s.T(), &out, namespacepb.BadBinaries_builder{
 		Binaries: map[string]*namespacepb.BadBinaryInfo{
-			"k0": {Reason: "reason2", CreateTime: timestamppb.New(now)},
+			"k0": namespacepb.BadBinaryInfo_builder{Reason: "reason2", CreateTime: timestamppb.New(now)}.Build(),
 		},
-	})
+	}.Build())
 }
 
 func (s *namespaceHandlerCommonSuite) TestMergeBadBinaries_Adding() {
 	out := s.handler.mergeBadBinaries(
 		map[string]*namespacepb.BadBinaryInfo{
-			"k0": {Reason: "reason0"},
+			"k0": namespacepb.BadBinaryInfo_builder{Reason: "reason0"}.Build(),
 		},
 		map[string]*namespacepb.BadBinaryInfo{
-			"k1": {Reason: "reason2"},
+			"k1": namespacepb.BadBinaryInfo_builder{Reason: "reason2"}.Build(),
 		}, now,
 	)
 
-	expected := namespacepb.BadBinaries{
+	expected := namespacepb.BadBinaries_builder{
 		Binaries: map[string]*namespacepb.BadBinaryInfo{
-			"k0": {Reason: "reason0"},
-			"k1": {Reason: "reason2", CreateTime: timestamppb.New(now)},
+			"k0": namespacepb.BadBinaryInfo_builder{Reason: "reason0"}.Build(),
+			"k1": namespacepb.BadBinaryInfo_builder{Reason: "reason2", CreateTime: timestamppb.New(now)}.Build(),
 		},
-	}
+	}.Build()
 	assert.Equal(s.T(), out.String(), expected.String())
 }
 
 func (s *namespaceHandlerCommonSuite) TestMergeBadBinaries_Merging() {
 	out := s.handler.mergeBadBinaries(
 		map[string]*namespacepb.BadBinaryInfo{
-			"k0": {Reason: "reason0"},
+			"k0": namespacepb.BadBinaryInfo_builder{Reason: "reason0"}.Build(),
 		},
 		map[string]*namespacepb.BadBinaryInfo{
-			"k0": {Reason: "reason1"},
-			"k1": {Reason: "reason2"},
+			"k0": namespacepb.BadBinaryInfo_builder{Reason: "reason1"}.Build(),
+			"k1": namespacepb.BadBinaryInfo_builder{Reason: "reason2"}.Build(),
 		}, now,
 	)
 
-	protoassert.ProtoEqual(s.T(), &out, &namespacepb.BadBinaries{
+	protoassert.ProtoEqual(s.T(), &out, namespacepb.BadBinaries_builder{
 		Binaries: map[string]*namespacepb.BadBinaryInfo{
-			"k0": {Reason: "reason1", CreateTime: timestamppb.New(now)},
-			"k1": {Reason: "reason2", CreateTime: timestamppb.New(now)},
+			"k0": namespacepb.BadBinaryInfo_builder{Reason: "reason1", CreateTime: timestamppb.New(now)}.Build(),
+			"k1": namespacepb.BadBinaryInfo_builder{Reason: "reason2", CreateTime: timestamppb.New(now)}.Build(),
 		},
-	})
+	}.Build())
 }
 
 func (s *namespaceHandlerCommonSuite) TestMergeBadBinaries_Nil() {
 	out := s.handler.mergeBadBinaries(
 		nil,
 		map[string]*namespacepb.BadBinaryInfo{
-			"k0": {Reason: "reason1"},
-			"k1": {Reason: "reason2"},
+			"k0": namespacepb.BadBinaryInfo_builder{Reason: "reason1"}.Build(),
+			"k1": namespacepb.BadBinaryInfo_builder{Reason: "reason2"}.Build(),
 		}, now,
 	)
 
-	protoassert.ProtoEqual(s.T(), &out, &namespacepb.BadBinaries{
+	protoassert.ProtoEqual(s.T(), &out, namespacepb.BadBinaries_builder{
 		Binaries: map[string]*namespacepb.BadBinaryInfo{
-			"k0": {Reason: "reason1", CreateTime: timestamppb.New(now)},
-			"k1": {Reason: "reason2", CreateTime: timestamppb.New(now)},
+			"k0": namespacepb.BadBinaryInfo_builder{Reason: "reason1", CreateTime: timestamppb.New(now)}.Build(),
+			"k1": namespacepb.BadBinaryInfo_builder{Reason: "reason2", CreateTime: timestamppb.New(now)}.Build(),
 		},
-	})
+	}.Build())
 }
 
 func (s *namespaceHandlerCommonSuite) TestListNamespace() {
@@ -249,48 +249,48 @@ func (s *namespaceHandlerCommonSuite) TestListNamespace() {
 	retention2 := 2 * time.Hour * 24
 	data2 := map[string]string{"some random key 2": "some random value 2"}
 	isGlobalNamespace2 := true
-	namespace1 := &persistencespb.NamespaceDetail{
-		Info: &persistencespb.NamespaceInfo{
+	namespace1 := persistencespb.NamespaceDetail_builder{
+		Info: persistencespb.NamespaceInfo_builder{
 			Id:          uuid.NewString(),
 			State:       enumspb.NAMESPACE_STATE_REGISTERED,
 			Name:        s.getRandomNamespace(),
 			Description: description1,
 			Owner:       email1,
 			Data:        data1,
-		},
-		Config: &persistencespb.NamespaceConfig{
+		}.Build(),
+		Config: persistencespb.NamespaceConfig_builder{
 			Retention: durationpb.New(retention1),
-		},
-		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+		}.Build(),
+		ReplicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: cluster1,
 			Clusters:          []string{cluster1},
-		},
+		}.Build(),
 		ConfigVersion:               0,
 		FailoverNotificationVersion: 0,
 		FailoverVersion:             0,
 		FailoverEndTime:             nil,
-	}
-	namespace2 := &persistencespb.NamespaceDetail{
-		Info: &persistencespb.NamespaceInfo{
+	}.Build()
+	namespace2 := persistencespb.NamespaceDetail_builder{
+		Info: persistencespb.NamespaceInfo_builder{
 			Id:          uuid.NewString(),
 			State:       enumspb.NAMESPACE_STATE_REGISTERED,
 			Name:        s.getRandomNamespace(),
 			Description: description2,
 			Owner:       email2,
 			Data:        data2,
-		},
-		Config: &persistencespb.NamespaceConfig{
+		}.Build(),
+		Config: persistencespb.NamespaceConfig_builder{
 			Retention: durationpb.New(retention2),
-		},
-		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+		}.Build(),
+		ReplicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: cluster2,
 			Clusters:          []string{cluster1, cluster2},
-		},
+		}.Build(),
 		ConfigVersion:               0,
 		FailoverNotificationVersion: 0,
 		FailoverVersion:             0,
 		FailoverEndTime:             nil,
-	}
+	}.Build()
 	s.mockMetadataMgr.EXPECT().ListNamespaces(gomock.Any(), &persistence.ListNamespacesRequest{
 		PageSize:      1,
 		NextPageToken: nil,
@@ -323,15 +323,15 @@ func (s *namespaceHandlerCommonSuite) TestListNamespace() {
 	pagesize := int32(1)
 	var token []byte
 	for doPaging := true; doPaging; doPaging = len(token) > 0 {
-		resp, err := s.handler.ListNamespaces(context.Background(), &workflowservice.ListNamespacesRequest{
+		resp, err := s.handler.ListNamespaces(context.Background(), workflowservice.ListNamespacesRequest_builder{
 			PageSize:      pagesize,
 			NextPageToken: token,
-		})
+		}.Build())
 		s.NoError(err)
-		token = resp.NextPageToken
-		s.True(len(resp.Namespaces) <= int(pagesize))
-		if len(resp.Namespaces) > 0 {
-			namespaces[resp.Namespaces[0].NamespaceInfo.GetName()] = resp.Namespaces[0]
+		token = resp.GetNextPageToken()
+		s.True(len(resp.GetNamespaces()) <= int(pagesize))
+		if len(resp.GetNamespaces()) > 0 {
+			namespaces[resp.GetNamespaces()[0].GetNamespaceInfo().GetName()] = resp.GetNamespaces()[0]
 		}
 	}
 	expectedResult := map[string]*persistencespb.NamespaceDetail{
@@ -363,31 +363,31 @@ func (s *namespaceHandlerCommonSuite) TestCapabilitiesAndLimits() {
 		Name: "ns",
 	}).Return(
 		&persistence.GetNamespaceResponse{
-			Namespace: &persistencespb.NamespaceDetail{
-				Info: &persistencespb.NamespaceInfo{
+			Namespace: persistencespb.NamespaceDetail_builder{
+				Info: persistencespb.NamespaceInfo_builder{
 					Id: "id",
-				},
+				}.Build(),
 				Config:            &persistencespb.NamespaceConfig{},
 				ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
-			},
+			}.Build(),
 		}, nil,
 	).AnyTimes()
 
 	// First call: Use default value of dynamic configs.
-	resp, err := s.handler.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
+	resp, err := s.handler.DescribeNamespace(context.Background(), workflowservice.DescribeNamespaceRequest_builder{
 		Namespace: "ns",
-	})
+	}.Build())
 	s.NoError(err)
 
-	s.True(resp.NamespaceInfo.Capabilities.EagerWorkflowStart)
-	s.True(resp.NamespaceInfo.Capabilities.SyncUpdate)
-	s.True(resp.NamespaceInfo.Capabilities.AsyncUpdate)
-	s.True(resp.NamespaceInfo.Capabilities.ReportedProblemsSearchAttribute)
-	s.True(resp.NamespaceInfo.Capabilities.WorkerHeartbeats)
-	s.False(resp.NamespaceInfo.Capabilities.WorkflowPause)
-	s.False(resp.NamespaceInfo.Capabilities.StandaloneActivities)
-	s.Equal(int64(2*1024*1024), resp.NamespaceInfo.Limits.BlobSizeLimitError)
-	s.Equal(int64(2*1024*1024), resp.NamespaceInfo.Limits.MemoSizeLimitError)
+	s.True(resp.GetNamespaceInfo().GetCapabilities().GetEagerWorkflowStart())
+	s.True(resp.GetNamespaceInfo().GetCapabilities().GetSyncUpdate())
+	s.True(resp.GetNamespaceInfo().GetCapabilities().GetAsyncUpdate())
+	s.True(resp.GetNamespaceInfo().GetCapabilities().GetReportedProblemsSearchAttribute())
+	s.True(resp.GetNamespaceInfo().GetCapabilities().GetWorkerHeartbeats())
+	s.False(resp.GetNamespaceInfo().GetCapabilities().GetWorkflowPause())
+	s.False(resp.GetNamespaceInfo().GetCapabilities().GetStandaloneActivities())
+	s.Equal(int64(2*1024*1024), resp.GetNamespaceInfo().GetLimits().GetBlobSizeLimitError())
+	s.Equal(int64(2*1024*1024), resp.GetNamespaceInfo().GetLimits().GetMemoSizeLimitError())
 
 	// Second call: Override the default value of dynamic configs.
 	s.config.EnableEagerWorkflowStart = dc.GetBoolPropertyFnFilteredByNamespace(false)
@@ -400,31 +400,31 @@ func (s *namespaceHandlerCommonSuite) TestCapabilitiesAndLimits() {
 	s.config.BlobSizeLimitError = dc.GetIntPropertyFnFilteredByNamespace(1024)
 	s.config.MemoSizeLimitError = dc.GetIntPropertyFnFilteredByNamespace(512)
 
-	resp, err = s.handler.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
+	resp, err = s.handler.DescribeNamespace(context.Background(), workflowservice.DescribeNamespaceRequest_builder{
 		Namespace: "ns",
-	})
+	}.Build())
 	s.NoError(err)
-	s.False(resp.NamespaceInfo.Capabilities.EagerWorkflowStart)
-	s.False(resp.NamespaceInfo.Capabilities.SyncUpdate)
-	s.False(resp.NamespaceInfo.Capabilities.AsyncUpdate)
-	s.True(resp.NamespaceInfo.Capabilities.ReportedProblemsSearchAttribute)
-	s.False(resp.NamespaceInfo.Capabilities.WorkerHeartbeats)
-	s.True(resp.NamespaceInfo.Capabilities.WorkflowPause)
-	s.True(resp.NamespaceInfo.Capabilities.StandaloneActivities)
-	s.Equal(int64(1024), resp.NamespaceInfo.Limits.BlobSizeLimitError)
-	s.Equal(int64(512), resp.NamespaceInfo.Limits.MemoSizeLimitError)
+	s.False(resp.GetNamespaceInfo().GetCapabilities().GetEagerWorkflowStart())
+	s.False(resp.GetNamespaceInfo().GetCapabilities().GetSyncUpdate())
+	s.False(resp.GetNamespaceInfo().GetCapabilities().GetAsyncUpdate())
+	s.True(resp.GetNamespaceInfo().GetCapabilities().GetReportedProblemsSearchAttribute())
+	s.False(resp.GetNamespaceInfo().GetCapabilities().GetWorkerHeartbeats())
+	s.True(resp.GetNamespaceInfo().GetCapabilities().GetWorkflowPause())
+	s.True(resp.GetNamespaceInfo().GetCapabilities().GetStandaloneActivities())
+	s.Equal(int64(1024), resp.GetNamespaceInfo().GetLimits().GetBlobSizeLimitError())
+	s.Equal(int64(512), resp.GetNamespaceInfo().GetLimits().GetMemoSizeLimitError())
 }
 
 func (s *namespaceHandlerCommonSuite) TestRegisterNamespace_WithOneCluster() {
 	const namespace = "namespace-to-register"
 	clusterName := "cluster1"
 	retention := durationpb.New(10 * 24 * time.Hour)
-	registerRequest := &workflowservice.RegisterNamespaceRequest{
+	registerRequest := workflowservice.RegisterNamespaceRequest_builder{
 		Namespace:                        namespace,
 		Description:                      namespace,
 		WorkflowExecutionRetentionPeriod: retention,
 		IsGlobalNamespace:                true,
-	}
+	}.Build()
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 	s.mockClusterMetadata.EXPECT().IsMasterCluster().Return(true).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{
@@ -438,12 +438,12 @@ func (s *namespaceHandlerCommonSuite) TestRegisterNamespace_WithOneCluster() {
 	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(nil, &serviceerror.NamespaceNotFound{})
 	s.mockMetadataMgr.EXPECT().CreateNamespace(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, request *persistence.CreateNamespaceRequest) (*persistence.CreateNamespaceResponse, error) {
-			s.Equal(enumspb.NAMESPACE_STATE_REGISTERED, request.Namespace.Info.GetState())
+			s.Equal(enumspb.NAMESPACE_STATE_REGISTERED, request.Namespace.GetInfo().GetState())
 			s.Equal(namespace, request.Namespace.GetInfo().GetName())
 			s.Equal(namespace, request.Namespace.GetInfo().GetDescription())
-			s.Equal(registerRequest.IsGlobalNamespace, request.IsGlobalNamespace)
+			s.Equal(registerRequest.GetIsGlobalNamespace(), request.IsGlobalNamespace)
 			s.Equal(retention, request.Namespace.GetConfig().GetRetention())
-			s.Equal(clusterName, request.Namespace.GetReplicationConfig().ActiveClusterName)
+			s.Equal(clusterName, request.Namespace.GetReplicationConfig().GetActiveClusterName())
 			s.Equal(int64(1), request.Namespace.GetFailoverVersion())
 			return &persistence.CreateNamespaceResponse{}, nil
 		})
@@ -457,21 +457,21 @@ func (s *namespaceHandlerCommonSuite) TestRegisterNamespace_WithTwoCluster() {
 	clusterName := "cluster1"
 	clusterName2 := "cluster2"
 	retention := durationpb.New(10 * 24 * time.Hour)
-	registerRequest := &workflowservice.RegisterNamespaceRequest{
+	registerRequest := workflowservice.RegisterNamespaceRequest_builder{
 		Namespace:                        namespace,
 		Description:                      namespace,
 		WorkflowExecutionRetentionPeriod: retention,
 		ActiveClusterName:                clusterName,
 		Clusters: []*replicationpb.ClusterReplicationConfig{
-			{
+			replicationpb.ClusterReplicationConfig_builder{
 				ClusterName: clusterName,
-			},
-			{
+			}.Build(),
+			replicationpb.ClusterReplicationConfig_builder{
 				ClusterName: clusterName2,
-			},
+			}.Build(),
 		},
 		IsGlobalNamespace: true,
-	}
+	}.Build()
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 	s.mockClusterMetadata.EXPECT().IsMasterCluster().Return(true).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{
@@ -489,12 +489,12 @@ func (s *namespaceHandlerCommonSuite) TestRegisterNamespace_WithTwoCluster() {
 	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(nil, &serviceerror.NamespaceNotFound{})
 	s.mockMetadataMgr.EXPECT().CreateNamespace(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, request *persistence.CreateNamespaceRequest) (*persistence.CreateNamespaceResponse, error) {
-			s.Equal(enumspb.NAMESPACE_STATE_REGISTERED, request.Namespace.Info.GetState())
+			s.Equal(enumspb.NAMESPACE_STATE_REGISTERED, request.Namespace.GetInfo().GetState())
 			s.Equal(namespace, request.Namespace.GetInfo().GetName())
 			s.Equal(namespace, request.Namespace.GetInfo().GetDescription())
-			s.Equal(registerRequest.IsGlobalNamespace, request.IsGlobalNamespace)
+			s.Equal(registerRequest.GetIsGlobalNamespace(), request.IsGlobalNamespace)
 			s.Equal(retention, request.Namespace.GetConfig().GetRetention())
-			s.Equal(clusterName, request.Namespace.GetReplicationConfig().ActiveClusterName)
+			s.Equal(clusterName, request.Namespace.GetReplicationConfig().GetActiveClusterName())
 			s.Equal(int64(1), request.Namespace.GetFailoverVersion())
 			return &persistence.CreateNamespaceResponse{}, nil
 		})
@@ -522,12 +522,12 @@ func (s *namespaceHandlerCommonSuite) TestRegisterNamespace_InvalidRetentionPeri
 		1 * time.Millisecond,
 		30 * time.Minute,
 	} {
-		registerRequest := &workflowservice.RegisterNamespaceRequest{
+		registerRequest := workflowservice.RegisterNamespaceRequest_builder{
 			Namespace:                        "random namespace name",
 			Description:                      "random namespace name",
 			WorkflowExecutionRetentionPeriod: durationpb.New(invalidDuration),
 			IsGlobalNamespace:                false,
-		}
+		}.Build()
 		resp, err := s.handler.RegisterNamespace(context.Background(), registerRequest)
 		s.Equal(errInvalidRetentionPeriod, err)
 		s.Nil(resp)
@@ -535,12 +535,12 @@ func (s *namespaceHandlerCommonSuite) TestRegisterNamespace_InvalidRetentionPeri
 
 	// global
 	for _, invalidDuration := range []time.Duration{0, -1 * time.Hour, 1 * time.Millisecond, 10 * time.Hour} {
-		registerRequest := &workflowservice.RegisterNamespaceRequest{
+		registerRequest := workflowservice.RegisterNamespaceRequest_builder{
 			Namespace:                        "random namespace name",
 			Description:                      "random namespace name",
 			WorkflowExecutionRetentionPeriod: durationpb.New(invalidDuration),
 			IsGlobalNamespace:                true,
-		}
+		}.Build()
 		resp, err := s.handler.RegisterNamespace(context.Background(), registerRequest)
 		s.Equal(errInvalidRetentionPeriod, err)
 		s.Nil(resp)
@@ -554,14 +554,14 @@ func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_InvalidRetentionPeriod
 		NotificationVersion: version,
 	}, nil).AnyTimes()
 	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(&persistence.GetNamespaceResponse{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
+		Namespace: persistencespb.NamespaceDetail_builder{
+			Info: persistencespb.NamespaceInfo_builder{
 				Id:   uuid.NewString(),
 				Name: namespace,
-			},
+			}.Build(),
 			Config:            &persistencespb.NamespaceConfig{},
 			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
-		},
+		}.Build(),
 	}, nil).AnyTimes()
 	for _, invalidDuration := range []time.Duration{
 		0,
@@ -569,12 +569,12 @@ func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_InvalidRetentionPeriod
 		1 * time.Millisecond,
 		30 * time.Minute,
 	} {
-		updateRequest := &workflowservice.UpdateNamespaceRequest{
+		updateRequest := workflowservice.UpdateNamespaceRequest_builder{
 			Namespace: namespace,
-			Config: &namespacepb.NamespaceConfig{
+			Config: namespacepb.NamespaceConfig_builder{
 				WorkflowExecutionRetentionTtl: durationpb.New(invalidDuration),
-			},
-		}
+			}.Build(),
+		}.Build()
 		resp, err := s.handler.UpdateNamespace(context.Background(), updateRequest)
 		s.Equal(errInvalidRetentionPeriod, err)
 		s.Nil(resp)
@@ -590,33 +590,33 @@ func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_PromoteLocalNamespace(
 		NotificationVersion: version,
 	}, nil)
 	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(&persistence.GetNamespaceResponse{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
+		Namespace: persistencespb.NamespaceDetail_builder{
+			Info: persistencespb.NamespaceInfo_builder{
 				Id:   nid,
 				Name: namespace,
-			},
+			}.Build(),
 			Config: &persistencespb.NamespaceConfig{},
-			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+			ReplicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 				ActiveClusterName: clusterName,
 				Clusters:          []string{clusterName},
-			},
-		},
+			}.Build(),
+		}.Build(),
 	}, nil)
 	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), &persistence.UpdateNamespaceRequest{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
+		Namespace: persistencespb.NamespaceDetail_builder{
+			Info: persistencespb.NamespaceInfo_builder{
 				Id:   nid,
 				Name: namespace,
-			},
+			}.Build(),
 			Config: &persistencespb.NamespaceConfig{},
-			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+			ReplicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 				ActiveClusterName: clusterName,
 				Clusters:          []string{clusterName},
-			},
+			}.Build(),
 			ConfigVersion:               0,
 			FailoverNotificationVersion: version,
 			FailoverVersion:             2,
-		},
+		}.Build(),
 		IsGlobalNamespace:   true,
 		NotificationVersion: version,
 	})
@@ -631,10 +631,10 @@ func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_PromoteLocalNamespace(
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(clusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetNextFailoverVersion(clusterName, int64(0)).Return(int64(2))
 
-	updateRequest := &workflowservice.UpdateNamespaceRequest{
+	updateRequest := workflowservice.UpdateNamespaceRequest_builder{
 		Namespace:        namespace,
 		PromoteNamespace: true,
-	}
+	}.Build()
 	_, err := s.handler.UpdateNamespace(context.Background(), updateRequest)
 	s.NoError(err)
 }
@@ -665,55 +665,55 @@ func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_UpdateActiveClusterWit
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(clusterName1).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetNextFailoverVersion(clusterName2, int64(0)).Return(int64(2))
 	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(&persistence.GetNamespaceResponse{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
+		Namespace: persistencespb.NamespaceDetail_builder{
+			Info: persistencespb.NamespaceInfo_builder{
 				Id:    nid,
 				Name:  namespace,
 				State: enumspb.NAMESPACE_STATE_REGISTERED,
-			},
+			}.Build(),
 			Config: &persistencespb.NamespaceConfig{},
-			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+			ReplicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 				ActiveClusterName: clusterName1,
 				Clusters:          []string{clusterName1, clusterName2},
 				State:             enumspb.REPLICATION_STATE_HANDOVER,
-			},
-		},
+			}.Build(),
+		}.Build(),
 		IsGlobalNamespace: true,
 	}, nil)
 	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Eq(&persistence.UpdateNamespaceRequest{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
+		Namespace: persistencespb.NamespaceDetail_builder{
+			Info: persistencespb.NamespaceInfo_builder{
 				Id:    nid,
 				Name:  namespace,
 				State: enumspb.NAMESPACE_STATE_REGISTERED,
-			},
+			}.Build(),
 			Config: &persistencespb.NamespaceConfig{},
-			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+			ReplicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 				ActiveClusterName: clusterName2,
 				Clusters:          []string{clusterName1, clusterName2},
 				State:             enumspb.REPLICATION_STATE_NORMAL,
 				FailoverHistory: []*persistencespb.FailoverStatus{
-					{
+					persistencespb.FailoverStatus_builder{
 						FailoverTime:    timestamppb.New(update1Time),
 						FailoverVersion: 2,
-					},
+					}.Build(),
 				},
-			},
+			}.Build(),
 			ConfigVersion:               int64(0),
 			FailoverNotificationVersion: version,
 			FailoverVersion:             int64(2),
-		},
+		}.Build(),
 		IsGlobalNamespace:   true,
 		NotificationVersion: version,
 	}))
 	s.fakeClock.Update(update1Time)
-	updateRequest := &workflowservice.UpdateNamespaceRequest{
+	updateRequest := workflowservice.UpdateNamespaceRequest_builder{
 		Namespace: namespace,
-		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
+		ReplicationConfig: replicationpb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: clusterName2,
-		},
+		}.Build(),
 		PromoteNamespace: true,
-	}
+	}.Build()
 	_, err := s.handler.UpdateNamespace(context.Background(), updateRequest)
 	s.NoError(err)
 }
@@ -744,51 +744,51 @@ func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_ChangeActiveClusterWit
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(clusterName1).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetNextFailoverVersion(clusterName2, int64(0)).Return(int64(2))
 	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(&persistence.GetNamespaceResponse{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
+		Namespace: persistencespb.NamespaceDetail_builder{
+			Info: persistencespb.NamespaceInfo_builder{
 				Id:   nid,
 				Name: namespace,
-			},
+			}.Build(),
 			Config: &persistencespb.NamespaceConfig{},
-			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+			ReplicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 				ActiveClusterName: clusterName1,
 				Clusters:          []string{clusterName1, clusterName2},
-			},
-		},
+			}.Build(),
+		}.Build(),
 	}, nil)
 	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), &persistence.UpdateNamespaceRequest{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
+		Namespace: persistencespb.NamespaceDetail_builder{
+			Info: persistencespb.NamespaceInfo_builder{
 				Id:   nid,
 				Name: namespace,
-			},
+			}.Build(),
 			Config: &persistencespb.NamespaceConfig{},
-			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+			ReplicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 				ActiveClusterName: clusterName2,
 				Clusters:          []string{clusterName1, clusterName2},
 				State:             enumspb.REPLICATION_STATE_NORMAL,
 				FailoverHistory: []*persistencespb.FailoverStatus{
-					{
+					persistencespb.FailoverStatus_builder{
 						FailoverTime:    timestamppb.New(update1Time),
 						FailoverVersion: 2,
-					},
+					}.Build(),
 				},
-			},
+			}.Build(),
 			ConfigVersion:               0,
 			FailoverNotificationVersion: version,
 			FailoverVersion:             2,
-		},
+		}.Build(),
 		IsGlobalNamespace:   true,
 		NotificationVersion: version,
 	})
 	s.fakeClock.Update(update1Time)
-	updateRequest := &workflowservice.UpdateNamespaceRequest{
+	updateRequest := workflowservice.UpdateNamespaceRequest_builder{
 		Namespace: namespace,
-		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
+		ReplicationConfig: replicationpb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: clusterName2,
-		},
+		}.Build(),
 		PromoteNamespace: true,
-	}
+	}.Build()
 	_, err := s.handler.UpdateNamespace(context.Background(), updateRequest)
 	s.NoError(err)
 }
@@ -803,34 +803,34 @@ func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_UpdateActiveCluster_Li
 	clusterName1 := "cluster1"
 	clusterName2 := "cluster2"
 	failoverHistory := []*persistencespb.FailoverStatus{
-		{
+		persistencespb.FailoverStatus_builder{
 			FailoverTime:    timestamppb.New(update1Time),
 			FailoverVersion: int64(2),
-		},
-		{
+		}.Build(),
+		persistencespb.FailoverStatus_builder{
 			FailoverTime:    timestamppb.New(update1Time),
 			FailoverVersion: int64(11),
-		},
-		{
+		}.Build(),
+		persistencespb.FailoverStatus_builder{
 			FailoverTime:    timestamppb.New(update1Time),
 			FailoverVersion: int64(12),
-		},
-		{
+		}.Build(),
+		persistencespb.FailoverStatus_builder{
 			FailoverTime:    timestamppb.New(update1Time),
 			FailoverVersion: int64(21),
-		},
-		{
+		}.Build(),
+		persistencespb.FailoverStatus_builder{
 			FailoverTime:    timestamppb.New(update1Time),
 			FailoverVersion: int64(22),
-		},
+		}.Build(),
 	}
-	updateRequest := &workflowservice.UpdateNamespaceRequest{
+	updateRequest := workflowservice.UpdateNamespaceRequest_builder{
 		Namespace: namespace,
-		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
+		ReplicationConfig: replicationpb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: "cluster2",
-		},
+		}.Build(),
 		PromoteNamespace: true,
-	}
+	}.Build()
 	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{
 		NotificationVersion: version,
 	}, nil)
@@ -849,42 +849,42 @@ func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_UpdateActiveCluster_Li
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(clusterName1).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetNextFailoverVersion(clusterName2, int64(0)).Return(int64(32))
 	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(&persistence.GetNamespaceResponse{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
+		Namespace: persistencespb.NamespaceDetail_builder{
+			Info: persistencespb.NamespaceInfo_builder{
 				Id:   nid,
 				Name: namespace,
-			},
+			}.Build(),
 			Config: &persistencespb.NamespaceConfig{},
-			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+			ReplicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 				ActiveClusterName: clusterName1,
 				Clusters:          []string{clusterName1, clusterName2},
 				FailoverHistory:   failoverHistory,
-			},
-		},
+			}.Build(),
+		}.Build(),
 	}, nil)
 	sizeLimitedFailoverHistory := slices.Clone(failoverHistory)
-	sizeLimitedFailoverHistory = append(sizeLimitedFailoverHistory, &persistencespb.FailoverStatus{
+	sizeLimitedFailoverHistory = append(sizeLimitedFailoverHistory, persistencespb.FailoverStatus_builder{
 		FailoverTime:    timestamppb.New(update1Time),
 		FailoverVersion: 32,
-	})
+	}.Build())
 	sizeLimitedFailoverHistory = sizeLimitedFailoverHistory[0:]
 	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), &persistence.UpdateNamespaceRequest{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
+		Namespace: persistencespb.NamespaceDetail_builder{
+			Info: persistencespb.NamespaceInfo_builder{
 				Id:   nid,
 				Name: namespace,
-			},
+			}.Build(),
 			Config: &persistencespb.NamespaceConfig{},
-			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+			ReplicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 				ActiveClusterName: clusterName2,
 				Clusters:          []string{clusterName1, clusterName2},
 				State:             enumspb.REPLICATION_STATE_NORMAL,
 				FailoverHistory:   sizeLimitedFailoverHistory,
-			},
+			}.Build(),
 			ConfigVersion:               0,
 			FailoverNotificationVersion: version,
 			FailoverVersion:             32,
-		},
+		}.Build(),
 		IsGlobalNamespace:   true,
 		NotificationVersion: version,
 	})
@@ -900,9 +900,9 @@ func (s *namespaceHandlerCommonSuite) TestRegisterLocalNamespace_InvalidGlobalNa
 	retention := 7 * time.Hour * 24
 	activeClusterName := cluster.TestCurrentClusterName
 	clusters := []*replicationpb.ClusterReplicationConfig{
-		{
+		replicationpb.ClusterReplicationConfig_builder{
 			ClusterName: activeClusterName,
-		},
+		}.Build(),
 	}
 	data := map[string]string{"some random key": "some random value"}
 	isGlobalNamespace := true
@@ -916,7 +916,7 @@ func (s *namespaceHandlerCommonSuite) TestRegisterLocalNamespace_InvalidGlobalNa
 	}).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(activeClusterName).AnyTimes()
 
-	resp, err := s.handler.RegisterNamespace(context.Background(), &workflowservice.RegisterNamespaceRequest{
+	resp, err := s.handler.RegisterNamespace(context.Background(), workflowservice.RegisterNamespaceRequest_builder{
 		Namespace:                        namespace,
 		Description:                      description,
 		OwnerEmail:                       email,
@@ -925,7 +925,7 @@ func (s *namespaceHandlerCommonSuite) TestRegisterLocalNamespace_InvalidGlobalNa
 		ActiveClusterName:                activeClusterName,
 		Data:                             data,
 		IsGlobalNamespace:                isGlobalNamespace,
-	})
+	}.Build())
 	s.Error(err)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 	s.Nil(resp)
@@ -938,9 +938,9 @@ func (s *namespaceHandlerCommonSuite) TestRegisterLocalNamespace_InvalidCluster(
 	retention := 7 * time.Hour * 24
 	activeClusterName := cluster.TestAlternativeClusterName
 	clusters := []*replicationpb.ClusterReplicationConfig{
-		{
+		replicationpb.ClusterReplicationConfig_builder{
 			ClusterName: activeClusterName,
-		},
+		}.Build(),
 	}
 	data := map[string]string{"some random key": "some random value"}
 	isGlobalNamespace := false
@@ -955,7 +955,7 @@ func (s *namespaceHandlerCommonSuite) TestRegisterLocalNamespace_InvalidCluster(
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(nil, &serviceerror.NamespaceNotFound{})
 
-	resp, err := s.handler.RegisterNamespace(context.Background(), &workflowservice.RegisterNamespaceRequest{
+	resp, err := s.handler.RegisterNamespace(context.Background(), workflowservice.RegisterNamespaceRequest_builder{
 		Namespace:                        namespace,
 		Description:                      description,
 		OwnerEmail:                       email,
@@ -964,7 +964,7 @@ func (s *namespaceHandlerCommonSuite) TestRegisterLocalNamespace_InvalidCluster(
 		ActiveClusterName:                activeClusterName,
 		Data:                             data,
 		IsGlobalNamespace:                isGlobalNamespace,
-	})
+	}.Build())
 	s.Error(err)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 	s.Nil(resp)
@@ -986,11 +986,11 @@ func (s *namespaceHandlerCommonSuite) TestRegisterLocalNamespace_AllDefault() {
 	s.mockMetadataMgr.EXPECT().CreateNamespace(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, request *persistence.CreateNamespaceRequest) (*persistence.CreateNamespaceResponse, error) {
 			s.NotEmpty(request.Namespace.GetInfo().GetId())
-			s.Equal(enumspb.NAMESPACE_STATE_REGISTERED, request.Namespace.Info.GetState())
+			s.Equal(enumspb.NAMESPACE_STATE_REGISTERED, request.Namespace.GetInfo().GetState())
 			s.Equal(namespace, request.Namespace.GetInfo().GetName())
 			s.Equal(false, request.IsGlobalNamespace)
 			s.Equal(retention, request.Namespace.GetConfig().GetRetention())
-			s.Equal(cluster.TestCurrentClusterName, request.Namespace.GetReplicationConfig().ActiveClusterName)
+			s.Equal(cluster.TestCurrentClusterName, request.Namespace.GetReplicationConfig().GetActiveClusterName())
 			s.Equal([]string{cluster.TestCurrentClusterName}, request.Namespace.GetReplicationConfig().GetClusters())
 			s.Equal(enumspb.ARCHIVAL_STATE_DISABLED, request.Namespace.GetConfig().GetHistoryArchivalState())
 			s.Equal(enumspb.ARCHIVAL_STATE_DISABLED, request.Namespace.GetConfig().GetVisibilityArchivalState())
@@ -998,10 +998,10 @@ func (s *namespaceHandlerCommonSuite) TestRegisterLocalNamespace_AllDefault() {
 		},
 	)
 
-	registerResp, err := s.handler.RegisterNamespace(context.Background(), &workflowservice.RegisterNamespaceRequest{
+	registerResp, err := s.handler.RegisterNamespace(context.Background(), workflowservice.RegisterNamespaceRequest_builder{
 		Namespace:                        namespace,
 		WorkflowExecutionRetentionPeriod: retention,
-	})
+	}.Build())
 	s.NoError(err)
 	s.Equal(&workflowservice.RegisterNamespaceResponse{}, registerResp)
 }
@@ -1013,9 +1013,9 @@ func (s *namespaceHandlerCommonSuite) TestRegisterLocalNamespace_NoDefault() {
 	retention := durationpb.New(7 * time.Hour * 24)
 	activeClusterName := cluster.TestCurrentClusterName
 	clusters := []*replicationpb.ClusterReplicationConfig{
-		{
+		replicationpb.ClusterReplicationConfig_builder{
 			ClusterName: activeClusterName,
-		},
+		}.Build(),
 	}
 	data := map[string]string{"some random key": "some random value"}
 	isGlobalNamespace := false
@@ -1033,14 +1033,14 @@ func (s *namespaceHandlerCommonSuite) TestRegisterLocalNamespace_NoDefault() {
 	s.mockMetadataMgr.EXPECT().CreateNamespace(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, request *persistence.CreateNamespaceRequest) (*persistence.CreateNamespaceResponse, error) {
 			s.NotEmpty(request.Namespace.GetInfo().GetId())
-			s.Equal(enumspb.NAMESPACE_STATE_REGISTERED, request.Namespace.Info.GetState())
+			s.Equal(enumspb.NAMESPACE_STATE_REGISTERED, request.Namespace.GetInfo().GetState())
 			s.Equal(namespace, request.Namespace.GetInfo().GetName())
 			s.Equal(description, request.Namespace.GetInfo().GetDescription())
 			s.Equal(email, request.Namespace.GetInfo().GetOwner())
 			s.Equal(data, request.Namespace.GetInfo().GetData())
 			s.Equal(false, request.IsGlobalNamespace)
 			s.Equal(retention, request.Namespace.GetConfig().GetRetention())
-			s.Equal(activeClusterName, request.Namespace.GetReplicationConfig().ActiveClusterName)
+			s.Equal(activeClusterName, request.Namespace.GetReplicationConfig().GetActiveClusterName())
 			s.Equal([]string{activeClusterName}, request.Namespace.GetReplicationConfig().GetClusters())
 			s.Equal(enumspb.ARCHIVAL_STATE_DISABLED, request.Namespace.GetConfig().GetHistoryArchivalState())
 			s.Equal(enumspb.ARCHIVAL_STATE_DISABLED, request.Namespace.GetConfig().GetVisibilityArchivalState())
@@ -1048,7 +1048,7 @@ func (s *namespaceHandlerCommonSuite) TestRegisterLocalNamespace_NoDefault() {
 		},
 	)
 
-	registerResp, err := s.handler.RegisterNamespace(context.Background(), &workflowservice.RegisterNamespaceRequest{
+	registerResp, err := s.handler.RegisterNamespace(context.Background(), workflowservice.RegisterNamespaceRequest_builder{
 		Namespace:                        namespace,
 		Description:                      description,
 		OwnerEmail:                       email,
@@ -1057,7 +1057,7 @@ func (s *namespaceHandlerCommonSuite) TestRegisterLocalNamespace_NoDefault() {
 		ActiveClusterName:                activeClusterName,
 		Data:                             data,
 		IsGlobalNamespace:                isGlobalNamespace,
-	})
+	}.Build())
 	s.NoError(err)
 	s.Equal(&workflowservice.RegisterNamespaceResponse{}, registerResp)
 }
@@ -1083,28 +1083,28 @@ func (s *namespaceHandlerCommonSuite) TestUpdateLocalNamespace_NoAttrSet() {
 	}).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(&persistence.GetNamespaceResponse{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
+		Namespace: persistencespb.NamespaceDetail_builder{
+			Info: persistencespb.NamespaceInfo_builder{
 				Id:          nid,
 				Name:        namespace,
 				Description: description,
 				Owner:       email,
 				Data:        data,
-			},
-			Config: &persistencespb.NamespaceConfig{
+			}.Build(),
+			Config: persistencespb.NamespaceConfig_builder{
 				Retention: durationpb.New(retention),
-			},
-			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+			}.Build(),
+			ReplicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters:          []string{cluster.TestCurrentClusterName},
-			},
-		},
+			}.Build(),
+		}.Build(),
 	}, nil)
 	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).Times(0)
 
-	_, err := s.handler.UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
+	_, err := s.handler.UpdateNamespace(context.Background(), workflowservice.UpdateNamespaceRequest_builder{
 		Namespace: namespace,
-	})
+	}.Build())
 	s.NoError(err)
 }
 
@@ -1130,68 +1130,68 @@ func (s *namespaceHandlerCommonSuite) TestUpdateLocalNamespace_AllAttrSet() {
 	}).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(activeClusterName).AnyTimes()
 	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(&persistence.GetNamespaceResponse{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
+		Namespace: persistencespb.NamespaceDetail_builder{
+			Info: persistencespb.NamespaceInfo_builder{
 				Id:   nid,
 				Name: namespace,
-			},
-			Config: &persistencespb.NamespaceConfig{
+			}.Build(),
+			Config: persistencespb.NamespaceConfig_builder{
 				Retention:   retention,
-				BadBinaries: &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
-			},
-			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+				BadBinaries: namespacepb.BadBinaries_builder{Binaries: map[string]*namespacepb.BadBinaryInfo{}}.Build(),
+			}.Build(),
+			ReplicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters:          []string{cluster.TestCurrentClusterName},
-			},
-		},
+			}.Build(),
+		}.Build(),
 	}, nil)
 	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), &persistence.UpdateNamespaceRequest{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
+		Namespace: persistencespb.NamespaceDetail_builder{
+			Info: persistencespb.NamespaceInfo_builder{
 				Id:          nid,
 				Name:        namespace,
 				Description: description,
 				Owner:       email,
 				Data:        data,
-			},
-			Config: &persistencespb.NamespaceConfig{
+			}.Build(),
+			Config: persistencespb.NamespaceConfig_builder{
 				Retention:   retention,
-				BadBinaries: &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
-			},
-			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+				BadBinaries: namespacepb.BadBinaries_builder{Binaries: map[string]*namespacepb.BadBinaryInfo{}}.Build(),
+			}.Build(),
+			ReplicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 				ActiveClusterName: activeClusterName,
 				Clusters:          []string{activeClusterName},
 				State:             enumspb.REPLICATION_STATE_NORMAL,
-			},
+			}.Build(),
 			ConfigVersion:               1,
 			FailoverNotificationVersion: 0,
 			FailoverVersion:             0,
-		},
+		}.Build(),
 		IsGlobalNamespace:   false,
 		NotificationVersion: version,
 	})
-	_, err := s.handler.UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
+	_, err := s.handler.UpdateNamespace(context.Background(), workflowservice.UpdateNamespaceRequest_builder{
 		Namespace: namespace,
-		UpdateInfo: &namespacepb.UpdateNamespaceInfo{
+		UpdateInfo: namespacepb.UpdateNamespaceInfo_builder{
 			Description: description,
 			OwnerEmail:  email,
 			Data:        data,
-		},
-		Config: &namespacepb.NamespaceConfig{
+		}.Build(),
+		Config: namespacepb.NamespaceConfig_builder{
 			WorkflowExecutionRetentionTtl: retention,
 			HistoryArchivalState:          enumspb.ARCHIVAL_STATE_DISABLED,
 			HistoryArchivalUri:            "",
 			VisibilityArchivalState:       enumspb.ARCHIVAL_STATE_DISABLED,
 			VisibilityArchivalUri:         "",
-			BadBinaries:                   &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
-		},
-		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
+			BadBinaries:                   namespacepb.BadBinaries_builder{Binaries: map[string]*namespacepb.BadBinaryInfo{}}.Build(),
+		}.Build(),
+		ReplicationConfig: replicationpb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: activeClusterName,
 			Clusters: []*replicationpb.ClusterReplicationConfig{
-				{ClusterName: activeClusterName},
+				replicationpb.ClusterReplicationConfig_builder{ClusterName: activeClusterName}.Build(),
 			},
-		},
-	})
+		}.Build(),
+	}.Build())
 	s.NoError(err)
 }
 
@@ -1213,11 +1213,11 @@ func (s *namespaceHandlerCommonSuite) TestRegisterGlobalNamespace_AllDefault() {
 	s.mockMetadataMgr.EXPECT().CreateNamespace(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, request *persistence.CreateNamespaceRequest) (*persistence.CreateNamespaceResponse, error) {
 			s.NotEmpty(request.Namespace.GetInfo().GetId())
-			s.Equal(enumspb.NAMESPACE_STATE_REGISTERED, request.Namespace.Info.GetState())
+			s.Equal(enumspb.NAMESPACE_STATE_REGISTERED, request.Namespace.GetInfo().GetState())
 			s.Equal(namespace, request.Namespace.GetInfo().GetName())
 			s.Equal(true, request.IsGlobalNamespace)
 			s.Equal(retention, request.Namespace.GetConfig().GetRetention())
-			s.Equal(cluster.TestCurrentClusterName, request.Namespace.GetReplicationConfig().ActiveClusterName)
+			s.Equal(cluster.TestCurrentClusterName, request.Namespace.GetReplicationConfig().GetActiveClusterName())
 			s.Equal([]string{cluster.TestCurrentClusterName}, request.Namespace.GetReplicationConfig().GetClusters())
 			s.Equal(enumspb.ARCHIVAL_STATE_DISABLED, request.Namespace.GetConfig().GetHistoryArchivalState())
 			s.Equal(enumspb.ARCHIVAL_STATE_DISABLED, request.Namespace.GetConfig().GetVisibilityArchivalState())
@@ -1225,11 +1225,11 @@ func (s *namespaceHandlerCommonSuite) TestRegisterGlobalNamespace_AllDefault() {
 		},
 	)
 
-	registerResp, err := s.handler.RegisterNamespace(context.Background(), &workflowservice.RegisterNamespaceRequest{
+	registerResp, err := s.handler.RegisterNamespace(context.Background(), workflowservice.RegisterNamespaceRequest_builder{
 		Namespace:                        namespace,
 		WorkflowExecutionRetentionPeriod: retention,
 		IsGlobalNamespace:                true,
-	})
+	}.Build())
 	s.NoError(err)
 	s.Equal(&workflowservice.RegisterNamespaceResponse{}, registerResp)
 }
@@ -1240,12 +1240,12 @@ func (s *namespaceHandlerCommonSuite) TestRegisterGlobalNamespace_NoDefault() {
 	description := "description"
 	email := "email"
 	clusters := []*replicationpb.ClusterReplicationConfig{
-		{
+		replicationpb.ClusterReplicationConfig_builder{
 			ClusterName: cluster.TestCurrentClusterName,
-		},
-		{
+		}.Build(),
+		replicationpb.ClusterReplicationConfig_builder{
 			ClusterName: cluster.TestAlternativeClusterName,
-		},
+		}.Build(),
 	}
 	data := map[string]string{"some random key": "some random value"}
 	s.mockProducer.EXPECT().Publish(gomock.Any(), gomock.Any()).Return(nil).Times(1)
@@ -1267,11 +1267,11 @@ func (s *namespaceHandlerCommonSuite) TestRegisterGlobalNamespace_NoDefault() {
 	s.mockMetadataMgr.EXPECT().CreateNamespace(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, request *persistence.CreateNamespaceRequest) (*persistence.CreateNamespaceResponse, error) {
 			s.NotEmpty(request.Namespace.GetInfo().GetId())
-			s.Equal(enumspb.NAMESPACE_STATE_REGISTERED, request.Namespace.Info.GetState())
+			s.Equal(enumspb.NAMESPACE_STATE_REGISTERED, request.Namespace.GetInfo().GetState())
 			s.Equal(namespace, request.Namespace.GetInfo().GetName())
 			s.Equal(true, request.IsGlobalNamespace)
 			s.Equal(retention, request.Namespace.GetConfig().GetRetention())
-			s.Equal(cluster.TestCurrentClusterName, request.Namespace.GetReplicationConfig().ActiveClusterName)
+			s.Equal(cluster.TestCurrentClusterName, request.Namespace.GetReplicationConfig().GetActiveClusterName())
 			s.Equal([]string{cluster.TestCurrentClusterName, cluster.TestAlternativeClusterName}, request.Namespace.GetReplicationConfig().GetClusters())
 			s.Equal(enumspb.ARCHIVAL_STATE_DISABLED, request.Namespace.GetConfig().GetHistoryArchivalState())
 			s.Equal(enumspb.ARCHIVAL_STATE_DISABLED, request.Namespace.GetConfig().GetVisibilityArchivalState())
@@ -1279,7 +1279,7 @@ func (s *namespaceHandlerCommonSuite) TestRegisterGlobalNamespace_NoDefault() {
 		},
 	)
 
-	registerResp, err := s.handler.RegisterNamespace(context.Background(), &workflowservice.RegisterNamespaceRequest{
+	registerResp, err := s.handler.RegisterNamespace(context.Background(), workflowservice.RegisterNamespaceRequest_builder{
 		Namespace:                        namespace,
 		Description:                      description,
 		OwnerEmail:                       email,
@@ -1288,7 +1288,7 @@ func (s *namespaceHandlerCommonSuite) TestRegisterGlobalNamespace_NoDefault() {
 		ActiveClusterName:                cluster.TestCurrentClusterName,
 		Data:                             data,
 		IsGlobalNamespace:                true,
-	})
+	}.Build())
 	s.NoError(err)
 	s.Equal(&workflowservice.RegisterNamespaceResponse{}, registerResp)
 }
@@ -1318,29 +1318,29 @@ func (s *namespaceHandlerCommonSuite) TestUpdateGlobalNamespace_NoAttrSet() {
 	}).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(&persistence.GetNamespaceResponse{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
+		Namespace: persistencespb.NamespaceDetail_builder{
+			Info: persistencespb.NamespaceInfo_builder{
 				Id:          nid,
 				Name:        namespace,
 				Description: description,
 				Owner:       email,
 				Data:        data,
-			},
-			Config: &persistencespb.NamespaceConfig{
+			}.Build(),
+			Config: persistencespb.NamespaceConfig_builder{
 				Retention: durationpb.New(retention),
-			},
-			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+			}.Build(),
+			ReplicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters:          []string{cluster.TestCurrentClusterName},
-			},
-		},
+			}.Build(),
+		}.Build(),
 		IsGlobalNamespace: true,
 	}, nil)
 	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).Times(0)
 
-	_, err := s.handler.UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
+	_, err := s.handler.UpdateNamespace(context.Background(), workflowservice.UpdateNamespaceRequest_builder{
 		Namespace: namespace,
-	})
+	}.Build())
 	s.NoError(err)
 }
 
@@ -1365,61 +1365,61 @@ func (s *namespaceHandlerCommonSuite) TestUpdateGlobalNamespace_AllAttrSet() {
 	}).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(&persistence.GetNamespaceResponse{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
+		Namespace: persistencespb.NamespaceDetail_builder{
+			Info: persistencespb.NamespaceInfo_builder{
 				Id:   nid,
 				Name: namespace,
-			},
-			Config: &persistencespb.NamespaceConfig{
+			}.Build(),
+			Config: persistencespb.NamespaceConfig_builder{
 				Retention:   retention,
-				BadBinaries: &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
-			},
-			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+				BadBinaries: namespacepb.BadBinaries_builder{Binaries: map[string]*namespacepb.BadBinaryInfo{}}.Build(),
+			}.Build(),
+			ReplicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters:          []string{cluster.TestCurrentClusterName},
-			},
-		},
+			}.Build(),
+		}.Build(),
 	}, nil)
 	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), &persistence.UpdateNamespaceRequest{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
+		Namespace: persistencespb.NamespaceDetail_builder{
+			Info: persistencespb.NamespaceInfo_builder{
 				Id:          nid,
 				Name:        namespace,
 				Description: description,
 				Owner:       email,
 				Data:        data,
-			},
-			Config: &persistencespb.NamespaceConfig{
+			}.Build(),
+			Config: persistencespb.NamespaceConfig_builder{
 				Retention:   retention,
-				BadBinaries: &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
-			},
-			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+				BadBinaries: namespacepb.BadBinaries_builder{Binaries: map[string]*namespacepb.BadBinaryInfo{}}.Build(),
+			}.Build(),
+			ReplicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters:          []string{cluster.TestCurrentClusterName},
-			},
+			}.Build(),
 			ConfigVersion:               1,
 			FailoverNotificationVersion: 0,
 			FailoverVersion:             0,
-		},
+		}.Build(),
 		IsGlobalNamespace:   false,
 		NotificationVersion: version,
 	})
-	_, err := s.handler.UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
+	_, err := s.handler.UpdateNamespace(context.Background(), workflowservice.UpdateNamespaceRequest_builder{
 		Namespace: namespace,
-		UpdateInfo: &namespacepb.UpdateNamespaceInfo{
+		UpdateInfo: namespacepb.UpdateNamespaceInfo_builder{
 			Description: description,
 			OwnerEmail:  email,
 			Data:        data,
-		},
-		Config: &namespacepb.NamespaceConfig{
+		}.Build(),
+		Config: namespacepb.NamespaceConfig_builder{
 			WorkflowExecutionRetentionTtl: retention,
 			HistoryArchivalState:          enumspb.ARCHIVAL_STATE_DISABLED,
 			HistoryArchivalUri:            "",
 			VisibilityArchivalState:       enumspb.ARCHIVAL_STATE_DISABLED,
 			VisibilityArchivalUri:         "",
-			BadBinaries:                   &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
-		},
-	})
+			BadBinaries:                   namespacepb.BadBinaries_builder{Binaries: map[string]*namespacepb.BadBinaryInfo{}}.Build(),
+		}.Build(),
+	}.Build())
 	s.NoError(err)
 }
 
@@ -1439,11 +1439,11 @@ func (s *namespaceHandlerCommonSuite) TestRegisterLocalNamespace_NotMaster() {
 	s.mockMetadataMgr.EXPECT().CreateNamespace(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, request *persistence.CreateNamespaceRequest) (*persistence.CreateNamespaceResponse, error) {
 			s.NotEmpty(request.Namespace.GetInfo().GetId())
-			s.Equal(enumspb.NAMESPACE_STATE_REGISTERED, request.Namespace.Info.GetState())
+			s.Equal(enumspb.NAMESPACE_STATE_REGISTERED, request.Namespace.GetInfo().GetState())
 			s.Equal(namespace, request.Namespace.GetInfo().GetName())
 			s.Equal(false, request.IsGlobalNamespace)
 			s.Equal(retention, request.Namespace.GetConfig().GetRetention())
-			s.Equal(cluster.TestCurrentClusterName, request.Namespace.GetReplicationConfig().ActiveClusterName)
+			s.Equal(cluster.TestCurrentClusterName, request.Namespace.GetReplicationConfig().GetActiveClusterName())
 			s.Equal([]string{cluster.TestCurrentClusterName}, request.Namespace.GetReplicationConfig().GetClusters())
 			s.Equal(enumspb.ARCHIVAL_STATE_DISABLED, request.Namespace.GetConfig().GetHistoryArchivalState())
 			s.Equal(enumspb.ARCHIVAL_STATE_DISABLED, request.Namespace.GetConfig().GetVisibilityArchivalState())
@@ -1451,10 +1451,10 @@ func (s *namespaceHandlerCommonSuite) TestRegisterLocalNamespace_NotMaster() {
 		},
 	)
 
-	registerResp, err := s.handler.RegisterNamespace(context.Background(), &workflowservice.RegisterNamespaceRequest{
+	registerResp, err := s.handler.RegisterNamespace(context.Background(), workflowservice.RegisterNamespaceRequest_builder{
 		Namespace:                        namespace,
 		WorkflowExecutionRetentionPeriod: retention,
-	})
+	}.Build())
 	s.NoError(err)
 	s.Equal(&workflowservice.RegisterNamespaceResponse{}, registerResp)
 }
@@ -1481,61 +1481,61 @@ func (s *namespaceHandlerCommonSuite) TestUpdateLocalNamespace_NotMaster() {
 	}).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(activeClusterName).AnyTimes()
 	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(&persistence.GetNamespaceResponse{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
+		Namespace: persistencespb.NamespaceDetail_builder{
+			Info: persistencespb.NamespaceInfo_builder{
 				Id:   nid,
 				Name: namespace,
-			},
-			Config: &persistencespb.NamespaceConfig{
+			}.Build(),
+			Config: persistencespb.NamespaceConfig_builder{
 				Retention:   retention,
-				BadBinaries: &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
-			},
-			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+				BadBinaries: namespacepb.BadBinaries_builder{Binaries: map[string]*namespacepb.BadBinaryInfo{}}.Build(),
+			}.Build(),
+			ReplicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters:          []string{cluster.TestCurrentClusterName},
-			},
-		},
+			}.Build(),
+		}.Build(),
 	}, nil)
 	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), &persistence.UpdateNamespaceRequest{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
+		Namespace: persistencespb.NamespaceDetail_builder{
+			Info: persistencespb.NamespaceInfo_builder{
 				Id:          nid,
 				Name:        namespace,
 				Description: description,
 				Owner:       email,
 				Data:        data,
-			},
-			Config: &persistencespb.NamespaceConfig{
+			}.Build(),
+			Config: persistencespb.NamespaceConfig_builder{
 				Retention:   retention,
-				BadBinaries: &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
-			},
-			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+				BadBinaries: namespacepb.BadBinaries_builder{Binaries: map[string]*namespacepb.BadBinaryInfo{}}.Build(),
+			}.Build(),
+			ReplicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 				ActiveClusterName: activeClusterName,
 				Clusters:          []string{activeClusterName},
-			},
+			}.Build(),
 			ConfigVersion:               1,
 			FailoverNotificationVersion: 0,
 			FailoverVersion:             0,
-		},
+		}.Build(),
 		IsGlobalNamespace:   false,
 		NotificationVersion: version,
 	})
-	_, err := s.handler.UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
+	_, err := s.handler.UpdateNamespace(context.Background(), workflowservice.UpdateNamespaceRequest_builder{
 		Namespace: namespace,
-		UpdateInfo: &namespacepb.UpdateNamespaceInfo{
+		UpdateInfo: namespacepb.UpdateNamespaceInfo_builder{
 			Description: description,
 			OwnerEmail:  email,
 			Data:        data,
-		},
-		Config: &namespacepb.NamespaceConfig{
+		}.Build(),
+		Config: namespacepb.NamespaceConfig_builder{
 			WorkflowExecutionRetentionTtl: retention,
 			HistoryArchivalState:          enumspb.ARCHIVAL_STATE_DISABLED,
 			HistoryArchivalUri:            "",
 			VisibilityArchivalState:       enumspb.ARCHIVAL_STATE_DISABLED,
 			VisibilityArchivalUri:         "",
-			BadBinaries:                   &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
-		},
-	})
+			BadBinaries:                   namespacepb.BadBinaries_builder{Binaries: map[string]*namespacepb.BadBinaryInfo{}}.Build(),
+		}.Build(),
+	}.Build())
 	s.NoError(err)
 }
 
@@ -1545,11 +1545,11 @@ func (s *namespaceHandlerCommonSuite) TestRegisterGlobalNamespace_NotMaster() {
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 	s.mockClusterMetadata.EXPECT().IsMasterCluster().Return(false).AnyTimes()
 
-	_, err := s.handler.RegisterNamespace(context.Background(), &workflowservice.RegisterNamespaceRequest{
+	_, err := s.handler.RegisterNamespace(context.Background(), workflowservice.RegisterNamespaceRequest_builder{
 		Namespace:                        namespace,
 		WorkflowExecutionRetentionPeriod: retention,
 		IsGlobalNamespace:                true,
-	})
+	}.Build())
 	s.Error(err)
 	s.Equal(errNotMasterCluster, err)
 }
@@ -1575,61 +1575,61 @@ func (s *namespaceHandlerCommonSuite) TestUpdateGlobalNamespace_NotMaster() {
 	}).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(&persistence.GetNamespaceResponse{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
+		Namespace: persistencespb.NamespaceDetail_builder{
+			Info: persistencespb.NamespaceInfo_builder{
 				Id:   nid,
 				Name: namespace,
-			},
-			Config: &persistencespb.NamespaceConfig{
+			}.Build(),
+			Config: persistencespb.NamespaceConfig_builder{
 				Retention:   retention,
-				BadBinaries: &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
-			},
-			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+				BadBinaries: namespacepb.BadBinaries_builder{Binaries: map[string]*namespacepb.BadBinaryInfo{}}.Build(),
+			}.Build(),
+			ReplicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters:          []string{cluster.TestCurrentClusterName},
-			},
-		},
+			}.Build(),
+		}.Build(),
 	}, nil)
 	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), &persistence.UpdateNamespaceRequest{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
+		Namespace: persistencespb.NamespaceDetail_builder{
+			Info: persistencespb.NamespaceInfo_builder{
 				Id:          nid,
 				Name:        namespace,
 				Description: description,
 				Owner:       email,
 				Data:        data,
-			},
-			Config: &persistencespb.NamespaceConfig{
+			}.Build(),
+			Config: persistencespb.NamespaceConfig_builder{
 				Retention:   retention,
-				BadBinaries: &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
-			},
-			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+				BadBinaries: namespacepb.BadBinaries_builder{Binaries: map[string]*namespacepb.BadBinaryInfo{}}.Build(),
+			}.Build(),
+			ReplicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters:          []string{cluster.TestCurrentClusterName},
-			},
+			}.Build(),
 			ConfigVersion:               1,
 			FailoverNotificationVersion: 0,
 			FailoverVersion:             0,
-		},
+		}.Build(),
 		IsGlobalNamespace:   false,
 		NotificationVersion: version,
 	})
-	_, err := s.handler.UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
+	_, err := s.handler.UpdateNamespace(context.Background(), workflowservice.UpdateNamespaceRequest_builder{
 		Namespace: namespace,
-		UpdateInfo: &namespacepb.UpdateNamespaceInfo{
+		UpdateInfo: namespacepb.UpdateNamespaceInfo_builder{
 			Description: description,
 			OwnerEmail:  email,
 			Data:        data,
-		},
-		Config: &namespacepb.NamespaceConfig{
+		}.Build(),
+		Config: namespacepb.NamespaceConfig_builder{
 			WorkflowExecutionRetentionTtl: retention,
 			HistoryArchivalState:          enumspb.ARCHIVAL_STATE_DISABLED,
 			HistoryArchivalUri:            "",
 			VisibilityArchivalState:       enumspb.ARCHIVAL_STATE_DISABLED,
 			VisibilityArchivalUri:         "",
-			BadBinaries:                   &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
-		},
-	})
+			BadBinaries:                   namespacepb.BadBinaries_builder{Binaries: map[string]*namespacepb.BadBinaryInfo{}}.Build(),
+		}.Build(),
+	}.Build())
 	s.NoError(err)
 }
 
@@ -1659,51 +1659,51 @@ func (s *namespaceHandlerCommonSuite) TestFailoverGlobalNamespace_NotMaster() {
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(clusterName1).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetNextFailoverVersion(clusterName2, int64(0)).Return(int64(2))
 	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(&persistence.GetNamespaceResponse{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
+		Namespace: persistencespb.NamespaceDetail_builder{
+			Info: persistencespb.NamespaceInfo_builder{
 				Id:   nid,
 				Name: namespace,
-			},
+			}.Build(),
 			Config: &persistencespb.NamespaceConfig{},
-			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+			ReplicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 				ActiveClusterName: clusterName1,
 				Clusters:          []string{clusterName1, clusterName2},
-			},
-		},
+			}.Build(),
+		}.Build(),
 	}, nil)
 	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), &persistence.UpdateNamespaceRequest{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
+		Namespace: persistencespb.NamespaceDetail_builder{
+			Info: persistencespb.NamespaceInfo_builder{
 				Id:   nid,
 				Name: namespace,
-			},
+			}.Build(),
 			Config: &persistencespb.NamespaceConfig{},
-			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+			ReplicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 				ActiveClusterName: clusterName2,
 				Clusters:          []string{clusterName1, clusterName2},
 				State:             enumspb.REPLICATION_STATE_NORMAL,
 				FailoverHistory: []*persistencespb.FailoverStatus{
-					{
+					persistencespb.FailoverStatus_builder{
 						FailoverTime:    timestamppb.New(update1Time),
 						FailoverVersion: 2,
-					},
+					}.Build(),
 				},
-			},
+			}.Build(),
 			ConfigVersion:               0,
 			FailoverNotificationVersion: version,
 			FailoverVersion:             2,
-		},
+		}.Build(),
 		IsGlobalNamespace:   true,
 		NotificationVersion: version,
 	})
 	s.fakeClock.Update(update1Time)
-	updateRequest := &workflowservice.UpdateNamespaceRequest{
+	updateRequest := workflowservice.UpdateNamespaceRequest_builder{
 		Namespace: namespace,
-		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
+		ReplicationConfig: replicationpb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: clusterName2,
-		},
+		}.Build(),
 		PromoteNamespace: true,
-	}
+	}.Build()
 	_, err := s.handler.UpdateNamespace(context.Background(), updateRequest)
 	s.NoError(err)
 }
@@ -1712,9 +1712,9 @@ func (s *namespaceHandlerCommonSuite) TestCreateWorkflowRule_Acceptance() {
 	namespaceName := "test-namespace"
 	identity := "identity"
 	description := "description"
-	spec := &rulespb.WorkflowRuleSpec{
+	spec := rulespb.WorkflowRuleSpec_builder{
 		Id: "",
-	}
+	}.Build()
 	version := int64(100)
 
 	// first call returns error, because ID is not set
@@ -1725,25 +1725,25 @@ func (s *namespaceHandlerCommonSuite) TestCreateWorkflowRule_Acceptance() {
 		NotificationVersion: version,
 	}, nil)
 	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(&persistence.GetNamespaceResponse{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
+		Namespace: persistencespb.NamespaceDetail_builder{
+			Info: persistencespb.NamespaceInfo_builder{
 				Id:   "1",
 				Name: namespaceName,
-			},
+			}.Build(),
 			Config:            &persistencespb.NamespaceConfig{},
 			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
-		},
+		}.Build(),
 	}, nil)
 	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).Return(nil)
 
-	spec.Id = "test-id"
+	spec.SetId("test-id")
 	rule, err := s.handler.CreateWorkflowRule(context.Background(), spec, identity, description, namespaceName)
 	s.NoError(err)
 	s.NotNil(rule)
-	s.NotNil(rule.Spec)
-	s.NotNil(rule.CreateTime)
-	s.Equal(identity, rule.CreatedByIdentity)
-	s.Equal(description, rule.Description)
+	s.NotNil(rule.GetSpec())
+	s.NotNil(rule.GetCreateTime())
+	s.Equal(identity, rule.GetCreatedByIdentity())
+	s.Equal(description, rule.GetDescription())
 }
 
 func (s *namespaceHandlerCommonSuite) TestCreateWorkflowRule_Duplicate() {
@@ -1751,29 +1751,29 @@ func (s *namespaceHandlerCommonSuite) TestCreateWorkflowRule_Duplicate() {
 	identity := "identity"
 	description := "description"
 	ruleId := "test-id"
-	spec := &rulespb.WorkflowRuleSpec{
+	spec := rulespb.WorkflowRuleSpec_builder{
 		Id: ruleId,
-	}
+	}.Build()
 	version := int64(100)
 
 	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{
 		NotificationVersion: version,
 	}, nil)
 	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(&persistence.GetNamespaceResponse{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
+		Namespace: persistencespb.NamespaceDetail_builder{
+			Info: persistencespb.NamespaceInfo_builder{
 				Id:   "1",
 				Name: namespaceName,
-			},
-			Config: &persistencespb.NamespaceConfig{
+			}.Build(),
+			Config: persistencespb.NamespaceConfig_builder{
 				WorkflowRules: map[string]*rulespb.WorkflowRule{
-					ruleId: {
-						Spec: &rulespb.WorkflowRuleSpec{Id: ruleId},
-					},
+					ruleId: rulespb.WorkflowRule_builder{
+						Spec: rulespb.WorkflowRuleSpec_builder{Id: ruleId}.Build(),
+					}.Build(),
 				},
-			},
+			}.Build(),
 			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
-		},
+		}.Build(),
 	}, nil)
 
 	_, err := s.handler.CreateWorkflowRule(context.Background(), spec, identity, description, namespaceName)
@@ -1785,27 +1785,27 @@ func (s *namespaceHandlerCommonSuite) TestCreateWorkflowRule_Duplicate() {
 func (s *namespaceHandlerCommonSuite) TestDeleteWorkflowRule() {
 	namespaceName := "test-namespace"
 	ruleId := "test-id"
-	nsConfig := &persistencespb.NamespaceConfig{
+	nsConfig := persistencespb.NamespaceConfig_builder{
 		WorkflowRules: map[string]*rulespb.WorkflowRule{
-			ruleId: {
-				Spec: &rulespb.WorkflowRuleSpec{Id: ruleId},
-			},
+			ruleId: rulespb.WorkflowRule_builder{
+				Spec: rulespb.WorkflowRuleSpec_builder{Id: ruleId}.Build(),
+			}.Build(),
 		},
-	}
+	}.Build()
 
 	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{
 		NotificationVersion: int64(1),
 	}, nil).AnyTimes()
 
 	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(&persistence.GetNamespaceResponse{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
+		Namespace: persistencespb.NamespaceDetail_builder{
+			Info: persistencespb.NamespaceInfo_builder{
 				Id:   "1",
 				Name: namespaceName,
-			},
+			}.Build(),
 			Config:            nsConfig,
 			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
-		},
+		}.Build(),
 	}, nil).AnyTimes()
 	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 
@@ -1821,7 +1821,7 @@ func (s *namespaceHandlerCommonSuite) TestDeleteWorkflowRule() {
 	s.ErrorAs(err, &invalidArgument)
 
 	// config is nil
-	nsConfig.WorkflowRules = nil
+	nsConfig.SetWorkflowRules(nil)
 	err = s.handler.DeleteWorkflowRule(context.Background(), "not existing rule id", namespaceName)
 	s.Error(err)
 	s.ErrorAs(err, &invalidArgument)
@@ -1830,23 +1830,23 @@ func (s *namespaceHandlerCommonSuite) TestDeleteWorkflowRule() {
 func (s *namespaceHandlerCommonSuite) TestDescribeWorkflowRule() {
 	namespaceName := "test-namespace"
 	ruleId := "test-id"
-	nsConfig := &persistencespb.NamespaceConfig{
+	nsConfig := persistencespb.NamespaceConfig_builder{
 		WorkflowRules: map[string]*rulespb.WorkflowRule{
-			ruleId: {
-				Spec: &rulespb.WorkflowRuleSpec{Id: ruleId},
-			},
+			ruleId: rulespb.WorkflowRule_builder{
+				Spec: rulespb.WorkflowRuleSpec_builder{Id: ruleId}.Build(),
+			}.Build(),
 		},
-	}
+	}.Build()
 
 	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(&persistence.GetNamespaceResponse{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
+		Namespace: persistencespb.NamespaceDetail_builder{
+			Info: persistencespb.NamespaceInfo_builder{
 				Id:   "1",
 				Name: namespaceName,
-			},
+			}.Build(),
 			Config:            nsConfig,
 			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
-		},
+		}.Build(),
 	}, nil).AnyTimes()
 
 	// happy path
@@ -1863,7 +1863,7 @@ func (s *namespaceHandlerCommonSuite) TestDescribeWorkflowRule() {
 	s.Nil(rule)
 
 	// config is nil
-	nsConfig.WorkflowRules = nil
+	nsConfig.SetWorkflowRules(nil)
 	rule, err = s.handler.DescribeWorkflowRule(context.Background(), "not existing rule id", namespaceName)
 	s.Error(err)
 	s.ErrorAs(err, &invalidArgument)
@@ -1872,22 +1872,22 @@ func (s *namespaceHandlerCommonSuite) TestDescribeWorkflowRule() {
 
 func (s *namespaceHandlerCommonSuite) TestListWorkflowRules() {
 	namespaceName := "test-namespace"
-	nsConfig := &persistencespb.NamespaceConfig{
+	nsConfig := persistencespb.NamespaceConfig_builder{
 		WorkflowRules: map[string]*rulespb.WorkflowRule{
-			"rule 1": {Spec: &rulespb.WorkflowRuleSpec{Id: "rule 1"}},
-			"rule 2": {Spec: &rulespb.WorkflowRuleSpec{Id: "rule 2"}},
+			"rule 1": rulespb.WorkflowRule_builder{Spec: rulespb.WorkflowRuleSpec_builder{Id: "rule 1"}.Build()}.Build(),
+			"rule 2": rulespb.WorkflowRule_builder{Spec: rulespb.WorkflowRuleSpec_builder{Id: "rule 2"}.Build()}.Build(),
 		},
-	}
+	}.Build()
 
 	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(&persistence.GetNamespaceResponse{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
+		Namespace: persistencespb.NamespaceDetail_builder{
+			Info: persistencespb.NamespaceInfo_builder{
 				Id:   "1",
 				Name: namespaceName,
-			},
+			}.Build(),
 			Config:            nsConfig,
 			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
-		},
+		}.Build(),
 	}, nil).AnyTimes()
 
 	// happy path
@@ -1897,7 +1897,7 @@ func (s *namespaceHandlerCommonSuite) TestListWorkflowRules() {
 	s.Equal(2, len(rules))
 
 	// config is nil
-	nsConfig.WorkflowRules = nil
+	nsConfig.SetWorkflowRules(nil)
 	rules, err = s.handler.ListWorkflowRules(context.Background(), namespaceName)
 	s.NoError(err)
 	s.NotNil(rules)
@@ -1919,18 +1919,18 @@ func (s *namespaceHandlerCommonSuite) TestWorkflowRuleEviction() {
 		},
 		{
 			name: "no rule to delete", deletedRule: "", rules: map[string]*rulespb.WorkflowRule{
-				"rule 1": {Spec: &rulespb.WorkflowRuleSpec{Id: "rule 1"}},
+				"rule 1": rulespb.WorkflowRule_builder{Spec: rulespb.WorkflowRuleSpec_builder{Id: "rule 1"}.Build()}.Build(),
 			},
 		},
 		{
 			name: "single rule to delete", deletedRule: "rule 1", rules: map[string]*rulespb.WorkflowRule{
-				"rule 1": {Spec: &rulespb.WorkflowRuleSpec{Id: "rule 1", ExpirationTime: timestamppb.New(expiredTime1)}},
+				"rule 1": rulespb.WorkflowRule_builder{Spec: rulespb.WorkflowRuleSpec_builder{Id: "rule 1", ExpirationTime: timestamppb.New(expiredTime1)}.Build()}.Build(),
 			},
 		},
 		{
 			name: "two candidates to delete", deletedRule: "rule 2", rules: map[string]*rulespb.WorkflowRule{
-				"rule 1": {Spec: &rulespb.WorkflowRuleSpec{Id: "rule 1", ExpirationTime: timestamppb.New(expiredTime1)}},
-				"rule 2": {Spec: &rulespb.WorkflowRuleSpec{Id: "rule 2", ExpirationTime: timestamppb.New(expiredTime2)}},
+				"rule 1": rulespb.WorkflowRule_builder{Spec: rulespb.WorkflowRuleSpec_builder{Id: "rule 1", ExpirationTime: timestamppb.New(expiredTime1)}.Build()}.Build(),
+				"rule 2": rulespb.WorkflowRule_builder{Spec: rulespb.WorkflowRuleSpec_builder{Id: "rule 2", ExpirationTime: timestamppb.New(expiredTime2)}.Build()}.Build(),
 			},
 		},
 	}

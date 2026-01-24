@@ -49,19 +49,19 @@ func (s *ChildWorkflowSuite) TestChildWorkflowExecution() {
 	// Uncomment this line to test with mapper.
 	// saName = "AliasForCustomKeywordField"
 
-	parentWorkflowType := &commonpb.WorkflowType{Name: wtParent}
-	childWorkflowType := &commonpb.WorkflowType{Name: wtChild}
-	grandchildWorkflowType := &commonpb.WorkflowType{Name: wtGrandchild}
+	parentWorkflowType := commonpb.WorkflowType_builder{Name: wtParent}.Build()
+	childWorkflowType := commonpb.WorkflowType_builder{Name: wtChild}.Build()
+	grandchildWorkflowType := commonpb.WorkflowType_builder{Name: wtGrandchild}.Build()
 
-	taskQueueParent := &taskqueuepb.TaskQueue{Name: tlParent, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
-	taskQueueChild := &taskqueuepb.TaskQueue{Name: tlChild, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
-	taskQueueGrandchild := &taskqueuepb.TaskQueue{Name: tlGrandchild, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	taskQueueParent := taskqueuepb.TaskQueue_builder{Name: tlParent, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build()
+	taskQueueChild := taskqueuepb.TaskQueue_builder{Name: tlChild, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build()
+	taskQueueGrandchild := taskqueuepb.TaskQueue_builder{Name: tlGrandchild, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build()
 
-	header := &commonpb.Header{
+	header := commonpb.Header_builder{
 		Fields: map[string]*commonpb.Payload{"tracing": payload.EncodeString("sample payload")},
-	}
+	}.Build()
 
-	request := &workflowservice.StartWorkflowExecutionRequest{
+	request := workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          parentID,
@@ -72,11 +72,11 @@ func (s *ChildWorkflowSuite) TestChildWorkflowExecution() {
 		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
-	}
+	}.Build()
 
 	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
-	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.GetRunId()))
 
 	// workflow logic
 	childComplete := false
@@ -87,48 +87,46 @@ func (s *ChildWorkflowSuite) TestChildWorkflowExecution() {
 	var childStartedEventFromParent *historypb.HistoryEvent
 	var childCompletedEventFromParent *historypb.HistoryEvent
 
-	memo := &commonpb.Memo{
+	memo := commonpb.Memo_builder{
 		Fields: map[string]*commonpb.Payload{
 			"Info": payload.EncodeString("memo"),
 		},
-	}
+	}.Build()
 	attrValPayload := payload.EncodeString("attrVal")
-	searchAttr := &commonpb.SearchAttributes{
+	searchAttr := commonpb.SearchAttributes_builder{
 		IndexedFields: map[string]*commonpb.Payload{
 			saName: attrValPayload,
 		},
-	}
+	}.Build()
 
 	// Parent workflow logic
 	wtHandlerParent := func(
 		task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
-		s.Logger.Info("Processing workflow task for Parent", tag.WorkflowID(task.WorkflowExecution.WorkflowId))
-		parentStartedEvent = task.History.Events[0]
+		s.Logger.Info("Processing workflow task for Parent", tag.WorkflowID(task.GetWorkflowExecution().GetWorkflowId()))
+		parentStartedEvent = task.GetHistory().GetEvents()[0]
 
-		if task.WorkflowExecution.WorkflowId == parentID {
+		if task.GetWorkflowExecution().GetWorkflowId() == parentID {
 			if !childExecutionStarted {
 				s.Logger.Info("Starting child execution")
 				childExecutionStarted = true
 
-				return []*commandpb.Command{{
+				return []*commandpb.Command{commandpb.Command_builder{
 					CommandType: enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION,
-					Attributes: &commandpb.Command_StartChildWorkflowExecutionCommandAttributes{
-						StartChildWorkflowExecutionCommandAttributes: &commandpb.StartChildWorkflowExecutionCommandAttributes{
-							WorkflowId:          childID,
-							WorkflowType:        childWorkflowType,
-							TaskQueue:           taskQueueChild,
-							Input:               payloads.EncodeString("child-workflow-input"),
-							Header:              header,
-							WorkflowRunTimeout:  durationpb.New(200 * time.Second),
-							WorkflowTaskTimeout: durationpb.New(2 * time.Second),
-							Control:             "",
-							Memo:                memo,
-							SearchAttributes:    searchAttr,
-						},
-					},
-				}}, nil
-			} else if task.PreviousStartedEventId > 0 {
-				for _, event := range task.History.Events[task.PreviousStartedEventId:] {
+					StartChildWorkflowExecutionCommandAttributes: commandpb.StartChildWorkflowExecutionCommandAttributes_builder{
+						WorkflowId:          childID,
+						WorkflowType:        childWorkflowType,
+						TaskQueue:           taskQueueChild,
+						Input:               payloads.EncodeString("child-workflow-input"),
+						Header:              header,
+						WorkflowRunTimeout:  durationpb.New(200 * time.Second),
+						WorkflowTaskTimeout: durationpb.New(2 * time.Second),
+						Control:             "",
+						Memo:                memo,
+						SearchAttributes:    searchAttr,
+					}.Build(),
+				}.Build()}, nil
+			} else if task.GetPreviousStartedEventId() > 0 {
+				for _, event := range task.GetHistory().GetEvents()[task.GetPreviousStartedEventId():] {
 					if event.GetEventType() == enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED {
 						childStartedEventFromParent = event
 						return []*commandpb.Command{}, nil
@@ -136,14 +134,12 @@ func (s *ChildWorkflowSuite) TestChildWorkflowExecution() {
 
 					if event.GetEventType() == enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED {
 						childCompletedEventFromParent = event
-						return []*commandpb.Command{{
+						return []*commandpb.Command{commandpb.Command_builder{
 							CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-							Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
-								CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
-									Result: payloads.EncodeString("Done"),
-								},
-							},
-						}}, nil
+							CompleteWorkflowExecutionCommandAttributes: commandpb.CompleteWorkflowExecutionCommandAttributes_builder{
+								Result: payloads.EncodeString("Done"),
+							}.Build(),
+						}.Build()}, nil
 					}
 				}
 			}
@@ -156,50 +152,46 @@ func (s *ChildWorkflowSuite) TestChildWorkflowExecution() {
 	var childRunID string
 	// Child workflow logic
 	wtHandlerChild := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
-		if task.PreviousStartedEventId <= 0 {
-			childStartedEvent = task.History.Events[0]
-			childRunID = task.WorkflowExecution.GetRunId()
+		if task.GetPreviousStartedEventId() <= 0 {
+			childStartedEvent = task.GetHistory().GetEvents()[0]
+			childRunID = task.GetWorkflowExecution().GetRunId()
 		}
 
-		s.Logger.Info("Processing workflow task for Child", tag.WorkflowID(task.WorkflowExecution.WorkflowId))
+		s.Logger.Info("Processing workflow task for Child", tag.WorkflowID(task.GetWorkflowExecution().GetWorkflowId()))
 		if !grandchildExecutionStarted {
 			s.Logger.Info("Starting grandchild execution")
 			grandchildExecutionStarted = true
 
-			return []*commandpb.Command{{
+			return []*commandpb.Command{commandpb.Command_builder{
 				CommandType: enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION,
-				Attributes: &commandpb.Command_StartChildWorkflowExecutionCommandAttributes{
-					StartChildWorkflowExecutionCommandAttributes: &commandpb.StartChildWorkflowExecutionCommandAttributes{
-						WorkflowId:          grandchildID,
-						WorkflowType:        grandchildWorkflowType,
-						TaskQueue:           taskQueueGrandchild,
-						Input:               payloads.EncodeString("grandchild-workflow-input"),
-						Header:              header,
-						WorkflowRunTimeout:  durationpb.New(200 * time.Second),
-						WorkflowTaskTimeout: durationpb.New(2 * time.Second),
-						Control:             "",
-						Memo:                memo,
-						SearchAttributes:    searchAttr,
-					},
-				},
-			}}, nil
+				StartChildWorkflowExecutionCommandAttributes: commandpb.StartChildWorkflowExecutionCommandAttributes_builder{
+					WorkflowId:          grandchildID,
+					WorkflowType:        grandchildWorkflowType,
+					TaskQueue:           taskQueueGrandchild,
+					Input:               payloads.EncodeString("grandchild-workflow-input"),
+					Header:              header,
+					WorkflowRunTimeout:  durationpb.New(200 * time.Second),
+					WorkflowTaskTimeout: durationpb.New(2 * time.Second),
+					Control:             "",
+					Memo:                memo,
+					SearchAttributes:    searchAttr,
+				}.Build(),
+			}.Build()}, nil
 		}
-		if task.PreviousStartedEventId > 0 {
-			for _, event := range task.History.Events[task.PreviousStartedEventId:] {
+		if task.GetPreviousStartedEventId() > 0 {
+			for _, event := range task.GetHistory().GetEvents()[task.GetPreviousStartedEventId():] {
 				if event.GetEventType() == enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED {
 					return []*commandpb.Command{}, nil
 				}
 
 				if event.GetEventType() == enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED {
 					childComplete = true
-					return []*commandpb.Command{{
+					return []*commandpb.Command{commandpb.Command_builder{
 						CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-						Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
-							CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
-								Result: payloads.EncodeString("Child Done"),
-							},
-						},
-					}}, nil
+						CompleteWorkflowExecutionCommandAttributes: commandpb.CompleteWorkflowExecutionCommandAttributes_builder{
+							Result: payloads.EncodeString("Child Done"),
+						}.Build(),
+					}.Build()}, nil
 				}
 			}
 		}
@@ -211,20 +203,18 @@ func (s *ChildWorkflowSuite) TestChildWorkflowExecution() {
 	// Grandchild workflow logic to check root workflow execution is carried correctly
 	wtHandlerGrandchild := func(
 		task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
-		if task.PreviousStartedEventId <= 0 {
-			grandchildStartedEvent = task.History.Events[0]
+		if task.GetPreviousStartedEventId() <= 0 {
+			grandchildStartedEvent = task.GetHistory().GetEvents()[0]
 		}
 
-		s.Logger.Info("Processing workflow task for Grandchild", tag.WorkflowID(task.WorkflowExecution.WorkflowId))
+		s.Logger.Info("Processing workflow task for Grandchild", tag.WorkflowID(task.GetWorkflowExecution().GetWorkflowId()))
 		grandchildComplete = true
-		return []*commandpb.Command{{
+		return []*commandpb.Command{commandpb.Command_builder{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
-				CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
-					Result: payloads.EncodeString("Grandchild Done"),
-				},
-			},
-		}}, nil
+			CompleteWorkflowExecutionCommandAttributes: commandpb.CompleteWorkflowExecutionCommandAttributes_builder{
+				Result: payloads.EncodeString("Grandchild Done"),
+			}.Build(),
+		}.Build()}, nil
 	}
 
 	pollerParent := &testcore.TaskPoller{
@@ -285,18 +275,18 @@ func (s *ChildWorkflowSuite) TestChildWorkflowExecution() {
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, childStartedEvent.GetEventType())
 	// check parent of child workflow is the top-level workflow
 	s.Equal(s.Namespace().String(), childStartedEventAttrs.GetParentWorkflowNamespace())
-	s.Equal(parentID, childStartedEventAttrs.ParentWorkflowExecution.GetWorkflowId())
-	s.Equal(we.GetRunId(), childStartedEventAttrs.ParentWorkflowExecution.GetRunId())
+	s.Equal(parentID, childStartedEventAttrs.GetParentWorkflowExecution().GetWorkflowId())
+	s.Equal(we.GetRunId(), childStartedEventAttrs.GetParentWorkflowExecution().GetRunId())
 	s.Equal(
 		childStartedEventAttrsFromParent.GetInitiatedEventId(),
 		childStartedEventAttrs.GetParentInitiatedEventId(),
 	)
 	// check root of child workflow is the top-level workflow
 	s.NotNil(childStartedEventAttrs.GetRootWorkflowExecution())
-	s.Equal(parentID, childStartedEventAttrs.RootWorkflowExecution.GetWorkflowId())
-	s.Equal(we.GetRunId(), childStartedEventAttrs.RootWorkflowExecution.GetRunId())
-	s.ProtoEqual(header, childStartedEventAttrsFromParent.Header)
-	s.ProtoEqual(header, childStartedEventAttrs.Header)
+	s.Equal(parentID, childStartedEventAttrs.GetRootWorkflowExecution().GetWorkflowId())
+	s.Equal(we.GetRunId(), childStartedEventAttrs.GetRootWorkflowExecution().GetRunId())
+	s.ProtoEqual(header, childStartedEventAttrsFromParent.GetHeader())
+	s.ProtoEqual(header, childStartedEventAttrs.GetHeader())
 	s.ProtoEqual(memo, childStartedEventAttrs.GetMemo())
 	s.Equal(
 		searchAttr.GetIndexedFields()[saName].GetData(),
@@ -324,12 +314,12 @@ func (s *ChildWorkflowSuite) TestChildWorkflowExecution() {
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, grandchildStartedEvent.GetEventType())
 	// check parent of grandchild workflow is the child workflow
 	s.NotNil(grandchildStartedEventAttrs.GetParentWorkflowExecution())
-	s.Equal(childID, grandchildStartedEventAttrs.ParentWorkflowExecution.GetWorkflowId())
-	s.Equal(childRunID, grandchildStartedEventAttrs.ParentWorkflowExecution.GetRunId())
+	s.Equal(childID, grandchildStartedEventAttrs.GetParentWorkflowExecution().GetWorkflowId())
+	s.Equal(childRunID, grandchildStartedEventAttrs.GetParentWorkflowExecution().GetRunId())
 	// check root of grandchild workflow is the top-level workflow
 	s.NotNil(grandchildStartedEventAttrs.GetRootWorkflowExecution())
-	s.Equal(parentID, grandchildStartedEventAttrs.RootWorkflowExecution.GetWorkflowId())
-	s.Equal(we.GetRunId(), grandchildStartedEventAttrs.RootWorkflowExecution.GetRunId())
+	s.Equal(parentID, grandchildStartedEventAttrs.GetRootWorkflowExecution().GetWorkflowId())
+	s.Equal(we.GetRunId(), grandchildStartedEventAttrs.GetRootWorkflowExecution().GetRunId())
 
 	// Process GrandchildExecution completed event and complete child execution
 	_, err = pollerChild.PollAndProcessWorkflowTask()
@@ -343,11 +333,11 @@ func (s *ChildWorkflowSuite) TestChildWorkflowExecution() {
 	s.NoError(err)
 	s.NotNil(childCompletedEventFromParent)
 	completedAttributes := childCompletedEventFromParent.GetChildWorkflowExecutionCompletedEventAttributes()
-	s.Equal(s.Namespace().String(), completedAttributes.Namespace)
-	s.Equal(s.NamespaceID().String(), completedAttributes.NamespaceId)
-	s.NotEmpty(completedAttributes.NamespaceId)
-	s.Equal(childID, completedAttributes.WorkflowExecution.WorkflowId)
-	s.Equal(wtChild, completedAttributes.WorkflowType.Name)
+	s.Equal(s.Namespace().String(), completedAttributes.GetNamespace())
+	s.Equal(s.NamespaceID().String(), completedAttributes.GetNamespaceId())
+	s.NotEmpty(completedAttributes.GetNamespaceId())
+	s.Equal(childID, completedAttributes.GetWorkflowExecution().GetWorkflowId())
+	s.Equal(wtChild, completedAttributes.GetWorkflowType().GetName())
 	s.Equal("Child Done", s.DecodePayloadsString(completedAttributes.GetResult()))
 }
 
@@ -363,13 +353,13 @@ func (s *ChildWorkflowSuite) TestCronChildWorkflowExecution() {
 	cronSchedule := "@every 3s"
 	targetBackoffDuration := time.Second * 3
 
-	parentWorkflowType := &commonpb.WorkflowType{Name: wtParent}
-	childWorkflowType := &commonpb.WorkflowType{Name: wtChild}
+	parentWorkflowType := commonpb.WorkflowType_builder{Name: wtParent}.Build()
+	childWorkflowType := commonpb.WorkflowType_builder{Name: wtChild}.Build()
 
-	taskQueueParent := &taskqueuepb.TaskQueue{Name: tlParent, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
-	taskQueueChild := &taskqueuepb.TaskQueue{Name: tlChild, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	taskQueueParent := taskqueuepb.TaskQueue_builder{Name: tlParent, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build()
+	taskQueueChild := taskqueuepb.TaskQueue_builder{Name: tlChild, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build()
 
-	request := &workflowservice.StartWorkflowExecutionRequest{
+	request := workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          parentID,
@@ -379,7 +369,7 @@ func (s *ChildWorkflowSuite) TestCronChildWorkflowExecution() {
 		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
-	}
+	}.Build()
 
 	// Because of rounding in GetBackoffForNextSchedule, we'll tend to stay aligned to whatever
 	// phase we start in relative to second boundaries, but drift slightly later within the second
@@ -392,7 +382,7 @@ func (s *ChildWorkflowSuite) TestCronChildWorkflowExecution() {
 	startParentWorkflowTS := time.Now().UTC()
 	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
-	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.GetRunId()))
 
 	// workflow logic
 	childExecutionStarted := false
@@ -401,40 +391,36 @@ func (s *ChildWorkflowSuite) TestCronChildWorkflowExecution() {
 	// Parent workflow logic
 	wtHandlerParent := func(
 		task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
-		s.Logger.Info("Processing workflow task for", tag.WorkflowID(task.WorkflowExecution.WorkflowId))
+		s.Logger.Info("Processing workflow task for", tag.WorkflowID(task.GetWorkflowExecution().GetWorkflowId()))
 
 		if !childExecutionStarted {
 			s.Logger.Info("Starting child execution")
 			childExecutionStarted = true
-			return []*commandpb.Command{{
+			return []*commandpb.Command{commandpb.Command_builder{
 				CommandType: enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION,
-				Attributes: &commandpb.Command_StartChildWorkflowExecutionCommandAttributes{
-					StartChildWorkflowExecutionCommandAttributes: &commandpb.StartChildWorkflowExecutionCommandAttributes{
-						WorkflowId:          childID,
-						WorkflowType:        childWorkflowType,
-						TaskQueue:           taskQueueChild,
-						Input:               nil,
-						WorkflowRunTimeout:  durationpb.New(200 * time.Second),
-						WorkflowTaskTimeout: durationpb.New(2 * time.Second),
-						Control:             "",
-						CronSchedule:        cronSchedule,
-					},
-				},
-			}}, nil
+				StartChildWorkflowExecutionCommandAttributes: commandpb.StartChildWorkflowExecutionCommandAttributes_builder{
+					WorkflowId:          childID,
+					WorkflowType:        childWorkflowType,
+					TaskQueue:           taskQueueChild,
+					Input:               nil,
+					WorkflowRunTimeout:  durationpb.New(200 * time.Second),
+					WorkflowTaskTimeout: durationpb.New(2 * time.Second),
+					Control:             "",
+					CronSchedule:        cronSchedule,
+				}.Build(),
+			}.Build()}, nil
 		}
-		for _, event := range task.History.Events[task.PreviousStartedEventId:] {
+		for _, event := range task.GetHistory().GetEvents()[task.GetPreviousStartedEventId():] {
 			if event.GetEventType() == enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED {
 				seenChildStarted = true
 			} else if event.GetEventType() == enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TERMINATED {
 				terminatedEvent = event
-				return []*commandpb.Command{{
+				return []*commandpb.Command{commandpb.Command_builder{
 					CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-					Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
-						CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
-							Result: payloads.EncodeString("Done"),
-						},
-					},
-				}}, nil
+					CompleteWorkflowExecutionCommandAttributes: commandpb.CompleteWorkflowExecutionCommandAttributes_builder{
+						Result: payloads.EncodeString("Done"),
+					}.Build(),
+				}.Build()}, nil
 			}
 		}
 		return nil, nil
@@ -443,14 +429,12 @@ func (s *ChildWorkflowSuite) TestCronChildWorkflowExecution() {
 	var childStartedEvent *historypb.HistoryEvent
 	// Child workflow logic
 	wtHandlerChild := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
-		s.Logger.Info("Processing workflow task for Child", tag.WorkflowID(task.WorkflowExecution.WorkflowId))
-		childStartedEvent = task.History.Events[0]
-		return []*commandpb.Command{{
+		s.Logger.Info("Processing workflow task for Child", tag.WorkflowID(task.GetWorkflowExecution().GetWorkflowId()))
+		childStartedEvent = task.GetHistory().GetEvents()[0]
+		return []*commandpb.Command{commandpb.Command_builder{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
-				CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{},
-			},
-		}}, nil
+			CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{},
+		}.Build()}, nil
 	}
 
 	pollerParent := &testcore.TaskPoller{
@@ -494,22 +478,22 @@ func (s *ChildWorkflowSuite) TestCronChildWorkflowExecution() {
 		childStartedEventAttrs := childStartedEvent.GetWorkflowExecutionStartedEventAttributes()
 		s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, childStartedEvent.GetEventType())
 		s.Equal(s.Namespace().String(), childStartedEventAttrs.GetParentWorkflowNamespace())
-		s.Equal(parentID, childStartedEventAttrs.ParentWorkflowExecution.GetWorkflowId())
-		s.Equal(we.GetRunId(), childStartedEventAttrs.ParentWorkflowExecution.GetRunId())
+		s.Equal(parentID, childStartedEventAttrs.GetParentWorkflowExecution().GetWorkflowId())
+		s.Equal(we.GetRunId(), childStartedEventAttrs.GetParentWorkflowExecution().GetRunId())
 		s.NotNil(childStartedEventAttrs.GetRootWorkflowExecution())
-		s.Equal(parentID, childStartedEventAttrs.RootWorkflowExecution.GetWorkflowId())
-		s.Equal(we.GetRunId(), childStartedEventAttrs.RootWorkflowExecution.GetRunId())
+		s.Equal(parentID, childStartedEventAttrs.GetRootWorkflowExecution().GetWorkflowId())
+		s.Equal(we.GetRunId(), childStartedEventAttrs.GetRootWorkflowExecution().GetRunId())
 		// clean up to make sure the next poll will update this var and assert correctly
 		childStartedEvent = nil
 	}
 
 	// terminate the child workflow
-	_, terminateErr := s.FrontendClient().TerminateWorkflowExecution(testcore.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
+	_, terminateErr := s.FrontendClient().TerminateWorkflowExecution(testcore.NewContext(), workflowservice.TerminateWorkflowExecutionRequest_builder{
 		Namespace: s.Namespace().String(),
-		WorkflowExecution: &commonpb.WorkflowExecution{
+		WorkflowExecution: commonpb.WorkflowExecution_builder{
 			WorkflowId: childID,
-		},
-	})
+		}.Build(),
+	}.Build())
 	s.Nil(terminateErr)
 
 	// Process ChildExecution terminated event and complete parent execution
@@ -518,19 +502,19 @@ func (s *ChildWorkflowSuite) TestCronChildWorkflowExecution() {
 	s.NoError(err)
 	s.NotNil(terminatedEvent)
 	terminatedAttributes := terminatedEvent.GetChildWorkflowExecutionTerminatedEventAttributes()
-	s.Equal(childID, terminatedAttributes.WorkflowExecution.WorkflowId)
-	s.Equal(wtChild, terminatedAttributes.WorkflowType.Name)
+	s.Equal(childID, terminatedAttributes.GetWorkflowExecution().GetWorkflowId())
+	s.Equal(wtChild, terminatedAttributes.GetWorkflowType().GetName())
 
 	startFilter := &filterpb.StartTimeFilter{}
-	startFilter.EarliestTime = timestamppb.New(startParentWorkflowTS)
-	startFilter.LatestTime = timestamppb.New(time.Now().UTC())
+	startFilter.SetEarliestTime(timestamppb.New(startParentWorkflowTS))
+	startFilter.SetLatestTime(timestamppb.New(time.Now().UTC()))
 	var closedExecutions []*workflowpb.WorkflowExecutionInfo
 	for i := 0; i < 10; i++ {
-		resp, err := s.FrontendClient().ListClosedWorkflowExecutions(testcore.NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
+		resp, err := s.FrontendClient().ListClosedWorkflowExecutions(testcore.NewContext(), workflowservice.ListClosedWorkflowExecutionsRequest_builder{
 			Namespace:       s.Namespace().String(),
 			MaximumPageSize: 100,
 			StartTimeFilter: startFilter,
-		})
+		}.Build())
 		s.NoError(err)
 		if len(resp.GetExecutions()) == 5 {
 			closedExecutions = resp.GetExecutions()
@@ -569,12 +553,12 @@ func (s *ChildWorkflowSuite) TestRetryChildWorkflowExecution() {
 	tlChild := "functional-retry-child-workflow-test-child-taskqueue"
 	identity := "worker1"
 
-	parentWorkflowType := &commonpb.WorkflowType{Name: wtParent}
-	childWorkflowType := &commonpb.WorkflowType{Name: wtChild}
-	taskQueueParent := &taskqueuepb.TaskQueue{Name: tlParent, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
-	taskQueueChild := &taskqueuepb.TaskQueue{Name: tlChild, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	parentWorkflowType := commonpb.WorkflowType_builder{Name: wtParent}.Build()
+	childWorkflowType := commonpb.WorkflowType_builder{Name: wtChild}.Build()
+	taskQueueParent := taskqueuepb.TaskQueue_builder{Name: tlParent, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build()
+	taskQueueChild := taskqueuepb.TaskQueue_builder{Name: tlChild, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build()
 
-	request := &workflowservice.StartWorkflowExecutionRequest{
+	request := workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          parentID,
@@ -584,11 +568,11 @@ func (s *ChildWorkflowSuite) TestRetryChildWorkflowExecution() {
 		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
-	}
+	}.Build()
 
 	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
-	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.GetRunId()))
 
 	// workflow logic
 	childComplete := false
@@ -599,32 +583,30 @@ func (s *ChildWorkflowSuite) TestRetryChildWorkflowExecution() {
 	// Parent workflow logic
 	wtHandlerParent := func(
 		task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
-		s.Logger.Info("Processing workflow task for Parent", tag.WorkflowID(task.WorkflowExecution.WorkflowId))
+		s.Logger.Info("Processing workflow task for Parent", tag.WorkflowID(task.GetWorkflowExecution().GetWorkflowId()))
 
 		if !childExecutionStarted {
 			s.Logger.Info("Starting child execution")
 			childExecutionStarted = true
 
-			return []*commandpb.Command{{
+			return []*commandpb.Command{commandpb.Command_builder{
 				CommandType: enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION,
-				Attributes: &commandpb.Command_StartChildWorkflowExecutionCommandAttributes{
-					StartChildWorkflowExecutionCommandAttributes: &commandpb.StartChildWorkflowExecutionCommandAttributes{
-						WorkflowId:          childID,
-						WorkflowType:        childWorkflowType,
-						TaskQueue:           taskQueueChild,
-						Input:               payloads.EncodeString("child-workflow-input"),
-						WorkflowRunTimeout:  durationpb.New(200 * time.Second),
-						WorkflowTaskTimeout: durationpb.New(2 * time.Second),
-						Control:             "",
-						RetryPolicy: &commonpb.RetryPolicy{
-							InitialInterval:    durationpb.New(1 * time.Millisecond),
-							BackoffCoefficient: 2.0,
-						},
-					},
-				},
-			}}, nil
-		} else if task.PreviousStartedEventId > 0 {
-			for _, event := range task.History.Events[task.PreviousStartedEventId:] {
+				StartChildWorkflowExecutionCommandAttributes: commandpb.StartChildWorkflowExecutionCommandAttributes_builder{
+					WorkflowId:          childID,
+					WorkflowType:        childWorkflowType,
+					TaskQueue:           taskQueueChild,
+					Input:               payloads.EncodeString("child-workflow-input"),
+					WorkflowRunTimeout:  durationpb.New(200 * time.Second),
+					WorkflowTaskTimeout: durationpb.New(2 * time.Second),
+					Control:             "",
+					RetryPolicy: commonpb.RetryPolicy_builder{
+						InitialInterval:    durationpb.New(1 * time.Millisecond),
+						BackoffCoefficient: 2.0,
+					}.Build(),
+				}.Build(),
+			}.Build()}, nil
+		} else if task.GetPreviousStartedEventId() > 0 {
+			for _, event := range task.GetHistory().GetEvents()[task.GetPreviousStartedEventId():] {
 				if event.GetEventType() == enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED {
 					startedEvent = event
 					return []*commandpb.Command{}, nil
@@ -632,14 +614,12 @@ func (s *ChildWorkflowSuite) TestRetryChildWorkflowExecution() {
 
 				if event.GetEventType() == enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED {
 					completedEvent = event
-					return []*commandpb.Command{{
+					return []*commandpb.Command{commandpb.Command_builder{
 						CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-						Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
-							CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
-								Result: payloads.EncodeString("Done"),
-							},
-						},
-					}}, nil
+						CompleteWorkflowExecutionCommandAttributes: commandpb.CompleteWorkflowExecutionCommandAttributes_builder{
+							Result: payloads.EncodeString("Done"),
+						}.Build(),
+					}.Build()}, nil
 				}
 			}
 		}
@@ -652,33 +632,30 @@ func (s *ChildWorkflowSuite) TestRetryChildWorkflowExecution() {
 	wtHandlerChild := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		s.Logger.Info(
 			"Processing workflow task for Child",
-			tag.WorkflowID(task.WorkflowExecution.WorkflowId),
-			tag.WorkflowRunID(task.WorkflowExecution.RunId),
+			tag.WorkflowID(task.GetWorkflowExecution().GetWorkflowId()),
+			tag.WorkflowRunID(task.GetWorkflowExecution().GetRunId()),
 		)
 
-		childStartedEvent = task.History.Events[0]
-		attempt := task.History.Events[0].GetWorkflowExecutionStartedEventAttributes().Attempt
+		childStartedEvent = task.GetHistory().GetEvents()[0]
+		attempt := task.GetHistory().GetEvents()[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt()
 		// Fail twice, succeed on third attempt
 		if attempt < 3 {
-			return []*commandpb.Command{{
+			return []*commandpb.Command{commandpb.Command_builder{
 				CommandType: enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION,
-				Attributes: &commandpb.Command_FailWorkflowExecutionCommandAttributes{
-					FailWorkflowExecutionCommandAttributes: &commandpb.FailWorkflowExecutionCommandAttributes{
-						Failure: &failurepb.Failure{
-							Message: fmt.Sprintf("Failed attempt %d", attempt),
-						},
-					}},
-			}}, nil
+				FailWorkflowExecutionCommandAttributes: commandpb.FailWorkflowExecutionCommandAttributes_builder{
+					Failure: failurepb.Failure_builder{
+						Message: fmt.Sprintf("Failed attempt %d", attempt),
+					}.Build(),
+				}.Build(),
+			}.Build()}, nil
 		}
 		childComplete = true
-		return []*commandpb.Command{{
+		return []*commandpb.Command{commandpb.Command_builder{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
-				CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
-					Result: payloads.EncodeString("Child Done"),
-				},
-			},
-		}}, nil
+			CompleteWorkflowExecutionCommandAttributes: commandpb.CompleteWorkflowExecutionCommandAttributes_builder{
+				Result: payloads.EncodeString("Child Done"),
+			}.Build(),
+		}.Build()}, nil
 	}
 
 	pollerParent := &testcore.TaskPoller{
@@ -722,11 +699,11 @@ func (s *ChildWorkflowSuite) TestRetryChildWorkflowExecution() {
 	childStartedEventAttrs := childStartedEvent.GetWorkflowExecutionStartedEventAttributes()
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, childStartedEvent.GetEventType())
 	s.Equal(s.Namespace().String(), childStartedEventAttrs.GetParentWorkflowNamespace())
-	s.Equal(parentID, childStartedEventAttrs.ParentWorkflowExecution.GetWorkflowId())
-	s.Equal(we.GetRunId(), childStartedEventAttrs.ParentWorkflowExecution.GetRunId())
+	s.Equal(parentID, childStartedEventAttrs.GetParentWorkflowExecution().GetWorkflowId())
+	s.Equal(we.GetRunId(), childStartedEventAttrs.GetParentWorkflowExecution().GetRunId())
 	s.NotNil(childStartedEventAttrs.GetRootWorkflowExecution())
-	s.Equal(parentID, childStartedEventAttrs.RootWorkflowExecution.GetWorkflowId())
-	s.Equal(we.GetRunId(), childStartedEventAttrs.RootWorkflowExecution.GetRunId())
+	s.Equal(parentID, childStartedEventAttrs.GetRootWorkflowExecution().GetWorkflowId())
+	s.Equal(we.GetRunId(), childStartedEventAttrs.GetRootWorkflowExecution().GetRunId())
 	// clean up to make sure the next poll will update this var and assert correctly
 	childStartedEvent = nil
 
@@ -739,11 +716,11 @@ func (s *ChildWorkflowSuite) TestRetryChildWorkflowExecution() {
 	childStartedEventAttrs = childStartedEvent.GetWorkflowExecutionStartedEventAttributes()
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, childStartedEvent.GetEventType())
 	s.Equal(s.Namespace().String(), childStartedEventAttrs.GetParentWorkflowNamespace())
-	s.Equal(parentID, childStartedEventAttrs.ParentWorkflowExecution.GetWorkflowId())
-	s.Equal(we.GetRunId(), childStartedEventAttrs.ParentWorkflowExecution.GetRunId())
+	s.Equal(parentID, childStartedEventAttrs.GetParentWorkflowExecution().GetWorkflowId())
+	s.Equal(we.GetRunId(), childStartedEventAttrs.GetParentWorkflowExecution().GetRunId())
 	s.NotNil(childStartedEventAttrs.GetRootWorkflowExecution())
-	s.Equal(parentID, childStartedEventAttrs.RootWorkflowExecution.GetWorkflowId())
-	s.Equal(we.GetRunId(), childStartedEventAttrs.RootWorkflowExecution.GetRunId())
+	s.Equal(parentID, childStartedEventAttrs.GetRootWorkflowExecution().GetWorkflowId())
+	s.Equal(we.GetRunId(), childStartedEventAttrs.GetRootWorkflowExecution().GetRunId())
 	// clean up to make sure the next poll will update this var and assert correctly
 	childStartedEvent = nil
 
@@ -756,11 +733,11 @@ func (s *ChildWorkflowSuite) TestRetryChildWorkflowExecution() {
 	childStartedEventAttrs = childStartedEvent.GetWorkflowExecutionStartedEventAttributes()
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, childStartedEvent.GetEventType())
 	s.Equal(s.Namespace().String(), childStartedEventAttrs.GetParentWorkflowNamespace())
-	s.Equal(parentID, childStartedEventAttrs.ParentWorkflowExecution.GetWorkflowId())
-	s.Equal(we.GetRunId(), childStartedEventAttrs.ParentWorkflowExecution.GetRunId())
+	s.Equal(parentID, childStartedEventAttrs.GetParentWorkflowExecution().GetWorkflowId())
+	s.Equal(we.GetRunId(), childStartedEventAttrs.GetParentWorkflowExecution().GetRunId())
 	s.NotNil(childStartedEventAttrs.GetRootWorkflowExecution())
-	s.Equal(parentID, childStartedEventAttrs.RootWorkflowExecution.GetWorkflowId())
-	s.Equal(we.GetRunId(), childStartedEventAttrs.RootWorkflowExecution.GetRunId())
+	s.Equal(parentID, childStartedEventAttrs.GetRootWorkflowExecution().GetWorkflowId())
+	s.Equal(we.GetRunId(), childStartedEventAttrs.GetRootWorkflowExecution().GetRunId())
 	// clean up to make sure the next poll will update this var and assert correctly
 	childStartedEvent = nil
 
@@ -784,12 +761,12 @@ func (s *ChildWorkflowSuite) TestRetryFailChildWorkflowExecution() {
 	tlChild := "functional-retry-fail-child-workflow-test-child-taskqueue"
 	identity := "worker1"
 
-	parentWorkflowType := &commonpb.WorkflowType{Name: wtParent}
-	childWorkflowType := &commonpb.WorkflowType{Name: wtChild}
-	taskQueueParent := &taskqueuepb.TaskQueue{Name: tlParent, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
-	taskQueueChild := &taskqueuepb.TaskQueue{Name: tlChild, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	parentWorkflowType := commonpb.WorkflowType_builder{Name: wtParent}.Build()
+	childWorkflowType := commonpb.WorkflowType_builder{Name: wtChild}.Build()
+	taskQueueParent := taskqueuepb.TaskQueue_builder{Name: tlParent, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build()
+	taskQueueChild := taskqueuepb.TaskQueue_builder{Name: tlChild, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build()
 
-	request := &workflowservice.StartWorkflowExecutionRequest{
+	request := workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          parentID,
@@ -799,11 +776,11 @@ func (s *ChildWorkflowSuite) TestRetryFailChildWorkflowExecution() {
 		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
-	}
+	}.Build()
 
 	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
-	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.GetRunId()))
 
 	// workflow logic
 	childExecutionStarted := false
@@ -813,47 +790,43 @@ func (s *ChildWorkflowSuite) TestRetryFailChildWorkflowExecution() {
 	// Parent workflow logic
 	wtHandlerParent := func(
 		task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
-		s.Logger.Info("Processing workflow task for Parent", tag.WorkflowID(task.WorkflowExecution.WorkflowId))
+		s.Logger.Info("Processing workflow task for Parent", tag.WorkflowID(task.GetWorkflowExecution().GetWorkflowId()))
 
 		if !childExecutionStarted {
 			s.Logger.Info("Starting child execution")
 			childExecutionStarted = true
 
-			return []*commandpb.Command{{
+			return []*commandpb.Command{commandpb.Command_builder{
 				CommandType: enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION,
-				Attributes: &commandpb.Command_StartChildWorkflowExecutionCommandAttributes{
-					StartChildWorkflowExecutionCommandAttributes: &commandpb.StartChildWorkflowExecutionCommandAttributes{
-						WorkflowId:          childID,
-						WorkflowType:        childWorkflowType,
-						TaskQueue:           taskQueueChild,
-						Input:               payloads.EncodeString("child-workflow-input"),
-						WorkflowRunTimeout:  durationpb.New(200 * time.Second),
-						WorkflowTaskTimeout: durationpb.New(2 * time.Second),
-						Control:             "",
-						RetryPolicy: &commonpb.RetryPolicy{
-							InitialInterval:    durationpb.New(1 * time.Millisecond),
-							BackoffCoefficient: 2.0,
-							MaximumAttempts:    3,
-						},
-					},
-				},
-			}}, nil
-		} else if task.PreviousStartedEventId > 0 {
-			for _, event := range task.History.Events[task.PreviousStartedEventId:] {
+				StartChildWorkflowExecutionCommandAttributes: commandpb.StartChildWorkflowExecutionCommandAttributes_builder{
+					WorkflowId:          childID,
+					WorkflowType:        childWorkflowType,
+					TaskQueue:           taskQueueChild,
+					Input:               payloads.EncodeString("child-workflow-input"),
+					WorkflowRunTimeout:  durationpb.New(200 * time.Second),
+					WorkflowTaskTimeout: durationpb.New(2 * time.Second),
+					Control:             "",
+					RetryPolicy: commonpb.RetryPolicy_builder{
+						InitialInterval:    durationpb.New(1 * time.Millisecond),
+						BackoffCoefficient: 2.0,
+						MaximumAttempts:    3,
+					}.Build(),
+				}.Build(),
+			}.Build()}, nil
+		} else if task.GetPreviousStartedEventId() > 0 {
+			for _, event := range task.GetHistory().GetEvents()[task.GetPreviousStartedEventId():] {
 				if event.GetEventType() == enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED {
 					startedEvent = event
 					return []*commandpb.Command{}, nil
 				}
 				if event.GetEventType() == enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_FAILED {
 					completedEvent = event
-					return []*commandpb.Command{{
+					return []*commandpb.Command{commandpb.Command_builder{
 						CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-						Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
-							CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
-								Result: payloads.EncodeString("Done"),
-							},
-						},
-					}}, nil
+						CompleteWorkflowExecutionCommandAttributes: commandpb.CompleteWorkflowExecutionCommandAttributes_builder{
+							Result: payloads.EncodeString("Done"),
+						}.Build(),
+					}.Build()}, nil
 				}
 			}
 		}
@@ -865,24 +838,23 @@ func (s *ChildWorkflowSuite) TestRetryFailChildWorkflowExecution() {
 	wtHandlerChild := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		s.Logger.Info(
 			"Processing workflow task for Child",
-			tag.WorkflowID(task.WorkflowExecution.WorkflowId),
-			tag.WorkflowRunID(task.WorkflowExecution.RunId),
+			tag.WorkflowID(task.GetWorkflowExecution().GetWorkflowId()),
+			tag.WorkflowRunID(task.GetWorkflowExecution().GetRunId()),
 		)
 
-		attempt := task.History.Events[0].GetWorkflowExecutionStartedEventAttributes().Attempt
+		attempt := task.GetHistory().GetEvents()[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt()
 		// We shouldn't see more than 3 attempts
 		s.LessOrEqual(int(attempt), 3)
 
 		// Always fail
-		return []*commandpb.Command{{
+		return []*commandpb.Command{commandpb.Command_builder{
 			CommandType: enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION,
-			Attributes: &commandpb.Command_FailWorkflowExecutionCommandAttributes{
-				FailWorkflowExecutionCommandAttributes: &commandpb.FailWorkflowExecutionCommandAttributes{
-					Failure: &failurepb.Failure{
-						Message: fmt.Sprintf("Failed attempt %d", attempt),
-					},
-				}},
-		}}, nil
+			FailWorkflowExecutionCommandAttributes: commandpb.FailWorkflowExecutionCommandAttributes_builder{
+				Failure: failurepb.Failure_builder{
+					Message: fmt.Sprintf("Failed attempt %d", attempt),
+				}.Build(),
+			}.Build(),
+		}.Build()}, nil
 	}
 
 	pollerParent := &testcore.TaskPoller{
@@ -940,5 +912,5 @@ func (s *ChildWorkflowSuite) TestRetryFailChildWorkflowExecution() {
 	// Child failure should be present in completion event
 	s.NotNil(completedEvent)
 	attrs := completedEvent.GetChildWorkflowExecutionFailedEventAttributes()
-	s.Equal(attrs.Failure.Message, "Failed attempt 3")
+	s.Equal(attrs.GetFailure().GetMessage(), "Failed attempt 3")
 }

@@ -141,7 +141,7 @@ func (a *Activities) ScavengeBuildIds(ctx context.Context, input BuildIdScavange
 			return err
 		}
 		for heartbeat.NamespaceIdx < len(nsResponse.Namespaces) {
-			nsId := nsResponse.Namespaces[heartbeat.NamespaceIdx].Namespace.Info.Id
+			nsId := nsResponse.Namespaces[heartbeat.NamespaceIdx].Namespace.GetInfo().GetId()
 			if err := a.processNamespaceEntry(ctx, rateLimiter, input, &heartbeat, nsId); err != nil {
 				return err
 			}
@@ -227,16 +227,14 @@ func (a *Activities) processUserDataEntry(
 	if len(buildIdsToRemove) == 0 {
 		return nil
 	}
-	_, err = a.matchingClient.UpdateWorkerBuildIdCompatibility(ctx, &matchingservice.UpdateWorkerBuildIdCompatibilityRequest{
+	_, err = a.matchingClient.UpdateWorkerBuildIdCompatibility(ctx, matchingservice.UpdateWorkerBuildIdCompatibilityRequest_builder{
 		NamespaceId: ns.ID().String(),
 		TaskQueue:   entry.TaskQueue,
-		Operation: &matchingservice.UpdateWorkerBuildIdCompatibilityRequest_RemoveBuildIds_{
-			RemoveBuildIds: &matchingservice.UpdateWorkerBuildIdCompatibilityRequest_RemoveBuildIds{
-				KnownUserDataVersion: entry.UserData.Version,
-				BuildIds:             buildIdsToRemove,
-			},
-		},
-	})
+		RemoveBuildIds: matchingservice.UpdateWorkerBuildIdCompatibilityRequest_RemoveBuildIds_builder{
+			KnownUserDataVersion: entry.UserData.GetVersion(),
+			BuildIds:             buildIdsToRemove,
+		}.Build(),
+	}.Build())
 	return err
 }
 
@@ -257,37 +255,37 @@ func (a *Activities) findBuildIdsToRemove(
 	// still processing tasks or data that hasn't made it to visibility yet.
 	removableBuildIdDurationSinceDefault := a.removableBuildIdDurationSinceDefault()
 
-	versioningData := entry.UserData.Data.GetVersioningData()
+	versioningData := entry.UserData.GetData().GetVersioningData()
 	var buildIdsToRemove []string
 	for setIdx, set := range versioningData.GetVersionSets() {
 		// Note that setActive counts build ids that may have associated workflows, i.e. not
 		// just all with STATE_ACTIVE. Also note that we always examine the default build ID
 		// for a set last, so setActive will be 1 + the number of active non-default build ids.
-		setActive := len(set.BuildIds)
-		for buildIdIdx, buildId := range set.BuildIds {
-			if buildId.State == persistencespb.STATE_DELETED {
+		setActive := len(set.GetBuildIds())
+		for buildIdIdx, buildId := range set.GetBuildIds() {
+			if buildId.GetState() == persistencespb.STATE_DELETED {
 				setActive--
 				continue
 			}
-			buildIdIsSetDefault := buildIdIdx == len(set.BuildIds)-1
-			setIsQueueDefault := setIdx == len(versioningData.VersionSets)-1
+			buildIdIsSetDefault := buildIdIdx == len(set.GetBuildIds())-1
+			setIsQueueDefault := setIdx == len(versioningData.GetVersionSets())-1
 			// Don't remove if build ID is the queue default or there's another active build ID in
 			// this set, since we might need to dispatch new tasks to this set. But if no build ids
 			// are active for the whole set, we can remove them all.
 			if buildIdIsSetDefault && (setIsQueueDefault || setActive > 1) {
 				continue
 			}
-			if hlc.Since(buildId.BecameDefaultTimestamp) < removableBuildIdDurationSinceDefault {
+			if hlc.Since(buildId.GetBecameDefaultTimestamp()) < removableBuildIdDurationSinceDefault {
 				continue
 			}
-			if !input.IgnoreRetentionTime && hlc.Since(buildId.StateUpdateTimestamp) < retention {
+			if !input.IgnoreRetentionTime && hlc.Since(buildId.GetStateUpdateTimestamp()) < retention {
 				continue
 			}
 
 			if err := rateLimiter.Wait(ctx); err != nil {
 				return nil, context.DeadlineExceeded
 			}
-			exists, err := worker_versioning.WorkflowsExistForBuildId(ctx, a.visibilityManager, ns, entry.TaskQueue, buildId.Id)
+			exists, err := worker_versioning.WorkflowsExistForBuildId(ctx, a.visibilityManager, ns, entry.TaskQueue, buildId.GetId())
 			if err != nil {
 				return nil, err
 			}
@@ -296,9 +294,9 @@ func (a *Activities) findBuildIdsToRemove(
 				a.logger.Info("Found build ID to remove",
 					tag.WorkflowNamespace(ns.Name().String()),
 					tag.WorkflowTaskQueueName(entry.TaskQueue),
-					tag.BuildId(buildId.Id),
+					tag.BuildId(buildId.GetId()),
 				)
-				buildIdsToRemove = append(buildIdsToRemove, buildId.Id)
+				buildIdsToRemove = append(buildIdsToRemove, buildId.GetId())
 				setActive--
 			}
 		}

@@ -31,7 +31,7 @@ func Invoke(
 	shardContext historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (resp *historyservice.RecordChildExecutionCompletedResponse, retError error) {
-	_, err := api.GetActiveNamespace(shardContext, namespace.ID(request.GetNamespaceId()), request.GetParentExecution().WorkflowId)
+	_, err := api.GetActiveNamespace(shardContext, namespace.ID(request.GetNamespaceId()), request.GetParentExecution().GetWorkflowId())
 	if err != nil {
 		return nil, err
 	}
@@ -49,7 +49,7 @@ func Invoke(
 					return nil, consts.ErrResetRedirectLimitReached
 				}
 				redirectCount++
-				request.ParentExecution.RunId = resetRunID
+				request.GetParentExecution().SetRunId(resetRunID)
 				continue
 			}
 		}
@@ -69,11 +69,11 @@ func recordChildWorkflowCompleted(
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (string, error) {
 	resetRunID := ""
-	parentInitiatedID := request.ParentInitiatedId
-	parentInitiatedVersion := request.ParentInitiatedVersion
+	parentInitiatedID := request.GetParentInitiatedId()
+	parentInitiatedVersion := request.GetParentInitiatedVersion()
 	err := api.GetAndUpdateWorkflowWithConsistencyCheck(
 		ctx,
-		request.Clock,
+		request.GetClock(),
 		func(mutableState historyi.MutableState) bool {
 			if !mutableState.IsWorkflowExecutionRunning() {
 				// current branch already closed, we won't perform any operation, pass the check
@@ -94,14 +94,14 @@ func recordChildWorkflowCompleted(
 			return childInitEventFound
 		},
 		definition.NewWorkflowKey(
-			request.NamespaceId,
-			request.GetParentExecution().WorkflowId,
-			request.GetParentExecution().RunId,
+			request.GetNamespaceId(),
+			request.GetParentExecution().GetWorkflowId(),
+			request.GetParentExecution().GetRunId(),
 		),
 		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
 			mutableState := workflowLease.GetMutableState()
 			if !mutableState.IsWorkflowExecutionRunning() {
-				resetRunID = mutableState.GetExecutionInfo().ResetRunId
+				resetRunID = mutableState.GetExecutionInfo().GetResetRunId()
 				return nil, consts.ErrWorkflowCompleted
 			}
 
@@ -134,7 +134,7 @@ func recordChildWorkflowCompleted(
 				return nil, consts.ErrChildExecutionNotFound
 			}
 
-			completionEvent := request.CompletionEvent
+			completionEvent := request.GetCompletionEvent()
 			switch completionEvent.GetEventType() {
 			case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:
 				attributes := completionEvent.GetWorkflowExecutionCompletedEventAttributes()
@@ -172,28 +172,28 @@ func recordStartedEventIfMissing(
 	request *historyservice.RecordChildExecutionCompletedRequest,
 	ci *persistencespb.ChildExecutionInfo,
 ) error {
-	parentInitiatedID := request.ParentInitiatedId
-	if ci.StartedEventId == common.EmptyEventID {
+	parentInitiatedID := request.GetParentInitiatedId()
+	if ci.GetStartedEventId() == common.EmptyEventID {
 		initiatedEvent, err := mutableState.GetChildExecutionInitiatedEvent(ctx, parentInitiatedID)
 		if err != nil {
 			return consts.ErrChildExecutionNotFound
 		}
 		initiatedAttr := initiatedEvent.GetStartChildWorkflowExecutionInitiatedEventAttributes()
-		execution := &commonpb.WorkflowExecution{
+		execution := commonpb.WorkflowExecution_builder{
 			WorkflowId: request.GetChildExecution().GetWorkflowId(),
 			RunId:      request.GetChildExecution().GetRunId(),
-		}
+		}.Build()
 		if request.GetChildFirstExecutionRunId() != "" {
-			execution.RunId = request.GetChildFirstExecutionRunId()
+			execution.SetRunId(request.GetChildFirstExecutionRunId())
 		}
 		// note values used here should not matter because the child info will be deleted
 		// when the response is recorded, so it should be fine e.g. that ci.Clock is nil
 		_, err = mutableState.AddChildWorkflowExecutionStartedEvent(
 			execution,
-			initiatedAttr.WorkflowType,
-			initiatedEvent.EventId,
-			initiatedAttr.Header,
-			ci.Clock,
+			initiatedAttr.GetWorkflowType(),
+			initiatedEvent.GetEventId(),
+			initiatedAttr.GetHeader(),
+			ci.GetClock(),
 		)
 		if err != nil {
 			return err

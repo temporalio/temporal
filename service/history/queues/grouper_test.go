@@ -27,9 +27,9 @@ func TestGrouperStateMachineNamespaceIDAndDestination_Key(t *testing.T) {
 	task := &tasks.StateMachineOutboundTask{
 		StateMachineTask: tasks.StateMachineTask{
 			WorkflowKey: definition.NewWorkflowKey("nid", "", ""),
-			Info: &persistencespb.StateMachineTaskInfo{
+			Info: persistencespb.StateMachineTaskInfo_builder{
 				Type: "3",
-			},
+			}.Build(),
 		},
 		Destination: "dest",
 	}

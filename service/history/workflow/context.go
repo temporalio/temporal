@@ -130,7 +130,7 @@ func (c *ContextImpl) LoadExecutionStats(ctx context.Context, shardContext histo
 	if err != nil {
 		return nil, err
 	}
-	return c.MutableState.GetExecutionInfo().ExecutionStats, nil
+	return c.MutableState.GetExecutionInfo().GetExecutionStats(), nil
 }
 
 func (c *ContextImpl) LoadMutableState(ctx context.Context, shardContext historyi.ShardContext) (historyi.MutableState, error) {
@@ -535,7 +535,7 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 	}()
 
 	if newContext != nil && newMutableState != nil && newWorkflowTransactionPolicy != nil {
-		c.MutableState.SetSuccessorRunID(newMutableState.GetExecutionState().RunId)
+		c.MutableState.SetSuccessorRunID(newMutableState.GetExecutionState().GetRunId())
 	}
 
 	updateWorkflow, updateWorkflowEventsSeq, err := c.MutableState.CloseTransactionAsMutation(
@@ -619,8 +619,8 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 	emitWorkflowHistoryStats(
 		c.metricsHandler,
 		c.GetNamespace(shardContext),
-		c.MutableState.GetExecutionState().State,
-		int(c.MutableState.GetExecutionInfo().ExecutionStats.HistorySize),
+		c.MutableState.GetExecutionState().GetState(),
+		int(c.MutableState.GetExecutionInfo().GetExecutionStats().GetHistorySize()),
 		int(c.MutableState.GetNextEventID()-1),
 	)
 
@@ -673,7 +673,7 @@ func (c *ContextImpl) mergeUpdateWithNewReplicationTasks(
 		return nil
 	}
 
-	if currentWorkflowMutation.ExecutionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW &&
+	if currentWorkflowMutation.ExecutionState.GetStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW &&
 		!c.config.ReplicationEnableUpdateWithNewTaskMerge() {
 		// we need to make sure target cell is able to handle updateWithNew
 		// for non continuedAsNew case before enabling this feature
@@ -694,13 +694,13 @@ func (c *ContextImpl) mergeUpdateWithNewReplicationTasks(
 	}
 	if numCurrentReplicationTasks == 0 {
 		c.logger.Info("Current workflow has no replication task, while new workflow has replication task",
-			tag.WorkflowNewRunID(newWorkflowSnapshot.ExecutionState.RunId),
+			tag.WorkflowNewRunID(newWorkflowSnapshot.ExecutionState.GetRunId()),
 		)
 		return nil
 	}
 	if numNewReplicationTasks == 0 {
 		c.logger.Info("New workflow has no replication task, while current workflow has replication task",
-			tag.WorkflowNewRunID(newWorkflowSnapshot.ExecutionState.RunId),
+			tag.WorkflowNewRunID(newWorkflowSnapshot.ExecutionState.GetRunId()),
 		)
 		return nil
 	}
@@ -708,7 +708,7 @@ func (c *ContextImpl) mergeUpdateWithNewReplicationTasks(
 		// This could happen when importing a workflow and current running workflow is being terminated.
 		// TODO: support more than one replication tasks (batch of events) in the new workflow
 		c.logger.Info("Skipped merging replication tasks because new run has more than one replication tasks",
-			tag.WorkflowNewRunID(newWorkflowSnapshot.ExecutionState.RunId),
+			tag.WorkflowNewRunID(newWorkflowSnapshot.ExecutionState.GetRunId()),
 		)
 		return nil
 	}
@@ -875,10 +875,10 @@ func (c *ContextImpl) ReapplyEvents(
 
 	// Reapply events only reapply to the current run.
 	// The run id is only used for reapply event de-duplication
-	execution := &commonpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution_builder{
 		WorkflowId: workflowID,
 		RunId:      runID,
-	}
+	}.Build()
 	namespaceRegistry := shardContext.GetNamespaceRegistry()
 	serializer := shardContext.GetPayloadSerializer()
 	namespaceEntry, err := namespaceRegistry.GetNamespaceByID(namespaceID)
@@ -921,11 +921,11 @@ func (c *ContextImpl) ReapplyEvents(
 
 	_, err = sourceAdminClient.ReapplyEvents(
 		ctx,
-		&adminservice.ReapplyEventsRequest{
+		adminservice.ReapplyEventsRequest_builder{
 			NamespaceId:       namespaceEntry.ID().String(),
 			WorkflowExecution: execution,
 			Events:            reapplyEventsDataBlob,
-		},
+		}.Build(),
 	)
 
 	return err
@@ -1018,7 +1018,7 @@ func (c *ContextImpl) maxHistorySizeExceeded(shardContext historyi.ShardContext)
 	namespaceName := c.GetNamespace(shardContext).String()
 	historySizeLimitWarn := c.config.HistorySizeLimitWarn(namespaceName)
 	historySizeLimitError := c.config.HistorySizeLimitError(namespaceName)
-	historySize := int(c.MutableState.GetExecutionInfo().ExecutionStats.HistorySize)
+	historySize := int(c.MutableState.GetExecutionInfo().GetExecutionStats().GetHistorySize())
 
 	if historySize > historySizeLimitError && c.MutableState.IsWorkflowExecutionRunning() {
 		c.logger.Warn("history size exceeds error limit.",
@@ -1177,7 +1177,7 @@ func emitStateTransitionCount(
 	}
 	namespaceEntry := mutableState.GetNamespaceEntry()
 	metrics.StateTransitionCount.With(metricsHandler).Record(
-		mutableState.GetExecutionInfo().StateTransitionCount,
+		mutableState.GetExecutionInfo().GetStateTransitionCount(),
 		metrics.NamespaceTag(namespaceEntry.Name().String()),
 		metrics.NamespaceStateTag(namespaceState(clusterMetadata, util.Ptr(mutableState.GetCurrentVersion()))),
 	)

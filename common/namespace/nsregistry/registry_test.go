@@ -69,26 +69,26 @@ func (s *registrySuite) TestListNamespace() {
 	factory := namespace.NewDefaultReplicationResolverFactory()
 	namespaceNotificationVersion := int64(0)
 	namespaceRecord1 := &persistence.GetNamespaceResponse{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
+		Namespace: persistencespb.NamespaceDetail_builder{
+			Info: persistencespb.NamespaceInfo_builder{
 				Id:    namespace.NewID().String(),
 				Name:  "some random namespace name",
 				State: enumspb.NAMESPACE_STATE_REGISTERED,
-				Data:  make(map[string]string)},
-			Config: &persistencespb.NamespaceConfig{
+				Data:  make(map[string]string)}.Build(),
+			Config: persistencespb.NamespaceConfig_builder{
 				Retention: timestamp.DurationFromDays(1),
-				BadBinaries: &namespacepb.BadBinaries{
+				BadBinaries: namespacepb.BadBinaries_builder{
 					Binaries: map[string]*namespacepb.BadBinaryInfo{},
-				}},
-			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+				}.Build()}.Build(),
+			ReplicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []string{
 					cluster.TestCurrentClusterName,
 					cluster.TestAlternativeClusterName,
 				},
-			},
+			}.Build(),
 			FailoverNotificationVersion: 0,
-		},
+		}.Build(),
 		NotificationVersion: namespaceNotificationVersion,
 	}
 	entry1, err := namespace.FromPersistentState(
@@ -100,26 +100,26 @@ func (s *registrySuite) TestListNamespace() {
 	namespaceNotificationVersion++
 
 	namespaceRecord2 := &persistence.GetNamespaceResponse{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
+		Namespace: persistencespb.NamespaceDetail_builder{
+			Info: persistencespb.NamespaceInfo_builder{
 				Id:    namespace.NewID().String(),
 				Name:  "another random namespace name",
 				State: enumspb.NAMESPACE_STATE_DELETED, // Still must be included.
-				Data:  make(map[string]string)},
-			Config: &persistencespb.NamespaceConfig{
+				Data:  make(map[string]string)}.Build(),
+			Config: persistencespb.NamespaceConfig_builder{
 				Retention: timestamp.DurationFromDays(2),
-				BadBinaries: &namespacepb.BadBinaries{
+				BadBinaries: namespacepb.BadBinaries_builder{
 					Binaries: map[string]*namespacepb.BadBinaryInfo{},
-				}},
-			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+				}.Build()}.Build(),
+			ReplicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 				ActiveClusterName: cluster.TestAlternativeClusterName,
 				Clusters: []string{
 					cluster.TestCurrentClusterName,
 					cluster.TestAlternativeClusterName,
 				},
-			},
+			}.Build(),
 			FailoverNotificationVersion: 0,
-		},
+		}.Build(),
 		NotificationVersion: namespaceNotificationVersion,
 	}
 	entry2, err := namespace.FromPersistentState(
@@ -131,26 +131,26 @@ func (s *registrySuite) TestListNamespace() {
 	namespaceNotificationVersion++
 
 	namespaceRecord3 := &persistence.GetNamespaceResponse{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
+		Namespace: persistencespb.NamespaceDetail_builder{
+			Info: persistencespb.NamespaceInfo_builder{
 				Id:    namespace.NewID().String(),
 				Name:  "yet another random namespace name",
 				State: enumspb.NAMESPACE_STATE_DEPRECATED, // Still must be included.
-				Data:  make(map[string]string)},
-			Config: &persistencespb.NamespaceConfig{
+				Data:  make(map[string]string)}.Build(),
+			Config: persistencespb.NamespaceConfig_builder{
 				Retention: timestamp.DurationFromDays(3),
-				BadBinaries: &namespacepb.BadBinaries{
+				BadBinaries: namespacepb.BadBinaries_builder{
 					Binaries: map[string]*namespacepb.BadBinaryInfo{},
-				}},
-			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+				}.Build()}.Build(),
+			ReplicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 				ActiveClusterName: cluster.TestAlternativeClusterName,
 				Clusters: []string{
 					cluster.TestCurrentClusterName,
 					cluster.TestAlternativeClusterName,
 				},
-			},
+			}.Build(),
 			FailoverNotificationVersion: 0,
-		},
+		}.Build(),
 		NotificationVersion: namespaceNotificationVersion,
 	}
 	// there is no namespaceNotificationVersion++ here
@@ -183,17 +183,17 @@ func (s *registrySuite) TestListNamespace() {
 	s.registry.Start()
 	defer s.registry.Stop()
 
-	entryByName1, err := s.registry.GetNamespace(namespace.Name(namespaceRecord1.Namespace.Info.Name))
+	entryByName1, err := s.registry.GetNamespace(namespace.Name(namespaceRecord1.Namespace.GetInfo().GetName()))
 	s.Nil(err)
 	s.Equal(entry1, entryByName1)
-	entryByID1, err := s.registry.GetNamespaceByID(namespace.ID(namespaceRecord1.Namespace.Info.Id))
+	entryByID1, err := s.registry.GetNamespaceByID(namespace.ID(namespaceRecord1.Namespace.GetInfo().GetId()))
 	s.Nil(err)
 	s.Equal(entry1, entryByID1)
 
-	entryByName2, err := s.registry.GetNamespace(namespace.Name(namespaceRecord2.Namespace.Info.Name))
+	entryByName2, err := s.registry.GetNamespace(namespace.Name(namespaceRecord2.Namespace.GetInfo().GetName()))
 	s.Nil(err)
 	s.Equal(entry2, entryByName2)
-	entryByID2, err := s.registry.GetNamespaceByID(namespace.ID(namespaceRecord2.Namespace.Info.Id))
+	entryByID2, err := s.registry.GetNamespaceByID(namespace.ID(namespaceRecord2.Namespace.GetInfo().GetId()))
 	s.Nil(err)
 	s.Equal(entry2, entryByID2)
 }
@@ -201,27 +201,27 @@ func (s *registrySuite) TestListNamespace() {
 func (s *registrySuite) TestRegisterStateChangeCallback_CatchUp() {
 	namespaceNotificationVersion := int64(0)
 	namespaceRecord1 := &persistence.GetNamespaceResponse{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
+		Namespace: persistencespb.NamespaceDetail_builder{
+			Info: persistencespb.NamespaceInfo_builder{
 				Id:   namespace.NewID().String(),
 				Name: "some random namespace name",
-				Data: make(map[string]string)},
-			Config: &persistencespb.NamespaceConfig{
+				Data: make(map[string]string)}.Build(),
+			Config: persistencespb.NamespaceConfig_builder{
 				Retention: timestamp.DurationFromDays(1),
-				BadBinaries: &namespacepb.BadBinaries{
+				BadBinaries: namespacepb.BadBinaries_builder{
 					Binaries: map[string]*namespacepb.BadBinaryInfo{},
-				}},
-			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+				}.Build()}.Build(),
+			ReplicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []string{
 					cluster.TestCurrentClusterName,
 					cluster.TestAlternativeClusterName,
 				},
-			},
+			}.Build(),
 			ConfigVersion:               10,
 			FailoverVersion:             11,
 			FailoverNotificationVersion: 0,
-		},
+		}.Build(),
 		NotificationVersion: namespaceNotificationVersion,
 	}
 	factory := namespace.NewDefaultReplicationResolverFactory()
@@ -234,27 +234,27 @@ func (s *registrySuite) TestRegisterStateChangeCallback_CatchUp() {
 	namespaceNotificationVersion++
 
 	namespaceRecord2 := &persistence.GetNamespaceResponse{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
+		Namespace: persistencespb.NamespaceDetail_builder{
+			Info: persistencespb.NamespaceInfo_builder{
 				Id:   namespace.NewID().String(),
 				Name: "another random namespace name",
-				Data: make(map[string]string)},
-			Config: &persistencespb.NamespaceConfig{
+				Data: make(map[string]string)}.Build(),
+			Config: persistencespb.NamespaceConfig_builder{
 				Retention: timestamp.DurationFromDays(2),
-				BadBinaries: &namespacepb.BadBinaries{
+				BadBinaries: namespacepb.BadBinaries_builder{
 					Binaries: map[string]*namespacepb.BadBinaryInfo{},
-				}},
-			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+				}.Build()}.Build(),
+			ReplicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 				ActiveClusterName: cluster.TestAlternativeClusterName,
 				Clusters: []string{
 					cluster.TestCurrentClusterName,
 					cluster.TestAlternativeClusterName,
 				},
-			},
+			}.Build(),
 			ConfigVersion:               20,
 			FailoverVersion:             21,
 			FailoverNotificationVersion: 0,
-		},
+		}.Build(),
 		NotificationVersion: namespaceNotificationVersion,
 	}
 	entry2, err := namespace.FromPersistentState(
@@ -305,27 +305,27 @@ func (s *registrySuite) TestRegisterStateChangeCallback_CatchUp() {
 func (s *registrySuite) TestUpdateCache_TriggerCallBack() {
 	namespaceNotificationVersion := int64(0)
 	namespaceRecord1Old := &persistence.GetNamespaceResponse{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
+		Namespace: persistencespb.NamespaceDetail_builder{
+			Info: persistencespb.NamespaceInfo_builder{
 				Id:   namespace.NewID().String(),
 				Name: "some random namespace name",
-				Data: make(map[string]string)},
-			Config: &persistencespb.NamespaceConfig{
+				Data: make(map[string]string)}.Build(),
+			Config: persistencespb.NamespaceConfig_builder{
 				Retention: timestamp.DurationFromDays(1),
-				BadBinaries: &namespacepb.BadBinaries{
+				BadBinaries: namespacepb.BadBinaries_builder{
 					Binaries: map[string]*namespacepb.BadBinaryInfo{},
-				}},
-			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+				}.Build()}.Build(),
+			ReplicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []string{
 					cluster.TestCurrentClusterName,
 					cluster.TestAlternativeClusterName,
 				},
-			},
+			}.Build(),
 			ConfigVersion:               10,
 			FailoverVersion:             11,
 			FailoverNotificationVersion: 0,
-		},
+		}.Build(),
 		NotificationVersion: namespaceNotificationVersion,
 	}
 	namespaceNotificationVersion++
@@ -338,27 +338,27 @@ func (s *registrySuite) TestUpdateCache_TriggerCallBack() {
 	namespaceNotificationVersion++
 
 	namespaceRecord2Old := &persistence.GetNamespaceResponse{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
+		Namespace: persistencespb.NamespaceDetail_builder{
+			Info: persistencespb.NamespaceInfo_builder{
 				Id:   namespace.NewID().String(),
 				Name: "another random namespace name",
-				Data: make(map[string]string)},
-			Config: &persistencespb.NamespaceConfig{
+				Data: make(map[string]string)}.Build(),
+			Config: persistencespb.NamespaceConfig_builder{
 				Retention: timestamp.DurationFromDays(2),
-				BadBinaries: &namespacepb.BadBinaries{
+				BadBinaries: namespacepb.BadBinaries_builder{
 					Binaries: map[string]*namespacepb.BadBinaryInfo{},
-				}},
-			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+				}.Build()}.Build(),
+			ReplicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 				ActiveClusterName: cluster.TestAlternativeClusterName,
 				Clusters: []string{
 					cluster.TestCurrentClusterName,
 					cluster.TestAlternativeClusterName,
 				},
-			},
+			}.Build(),
 			ConfigVersion:               20,
 			FailoverVersion:             21,
 			FailoverNotificationVersion: 0,
-		},
+		}.Build(),
 		NotificationVersion: namespaceNotificationVersion,
 	}
 	entry2Old, err := namespace.FromPersistentState(
@@ -378,20 +378,20 @@ func (s *registrySuite) TestUpdateCache_TriggerCallBack() {
 	}, nil)
 
 	namespaceRecord2New := &persistence.GetNamespaceResponse{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info:   namespaceRecord2Old.Namespace.Info,
-			Config: namespaceRecord2Old.Namespace.Config,
-			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+		Namespace: persistencespb.NamespaceDetail_builder{
+			Info:   namespaceRecord2Old.Namespace.GetInfo(),
+			Config: namespaceRecord2Old.Namespace.GetConfig(),
+			ReplicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 				ActiveClusterName: cluster.TestCurrentClusterName, // only this changed
 				Clusters: []string{
 					cluster.TestCurrentClusterName,
 					cluster.TestAlternativeClusterName,
 				},
-			},
-			ConfigVersion:               namespaceRecord2Old.Namespace.ConfigVersion,
-			FailoverVersion:             namespaceRecord2Old.Namespace.FailoverVersion + 1,
+			}.Build(),
+			ConfigVersion:               namespaceRecord2Old.Namespace.GetConfigVersion(),
+			FailoverVersion:             namespaceRecord2Old.Namespace.GetFailoverVersion() + 1,
 			FailoverNotificationVersion: namespaceNotificationVersion,
-		},
+		}.Build(),
 		NotificationVersion: namespaceNotificationVersion,
 	}
 	entry2New, err := namespace.FromPersistentState(
@@ -402,23 +402,23 @@ func (s *registrySuite) TestUpdateCache_TriggerCallBack() {
 	namespaceNotificationVersion++
 
 	namespaceRecord1New := &persistence.GetNamespaceResponse{ // only the description changed
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
-				Id:          namespaceRecord1Old.Namespace.Info.Id,
-				Name:        namespaceRecord1Old.Namespace.Info.Name,
-				Description: "updated description", Data: make(map[string]string)},
-			Config: namespaceRecord2Old.Namespace.Config,
-			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+		Namespace: persistencespb.NamespaceDetail_builder{
+			Info: persistencespb.NamespaceInfo_builder{
+				Id:          namespaceRecord1Old.Namespace.GetInfo().GetId(),
+				Name:        namespaceRecord1Old.Namespace.GetInfo().GetName(),
+				Description: "updated description", Data: make(map[string]string)}.Build(),
+			Config: namespaceRecord2Old.Namespace.GetConfig(),
+			ReplicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []string{
 					cluster.TestCurrentClusterName,
 					cluster.TestAlternativeClusterName,
 				},
-			},
-			ConfigVersion:               namespaceRecord1Old.Namespace.ConfigVersion + 1,
-			FailoverVersion:             namespaceRecord1Old.Namespace.FailoverVersion,
-			FailoverNotificationVersion: namespaceRecord1Old.Namespace.FailoverNotificationVersion,
-		},
+			}.Build(),
+			ConfigVersion:               namespaceRecord1Old.Namespace.GetConfigVersion() + 1,
+			FailoverVersion:             namespaceRecord1Old.Namespace.GetFailoverVersion(),
+			FailoverNotificationVersion: namespaceRecord1Old.Namespace.GetFailoverNotificationVersion(),
+		}.Build(),
 		NotificationVersion: namespaceNotificationVersion,
 	}
 	namespaceNotificationVersion++
@@ -480,23 +480,23 @@ func (s *registrySuite) TestUpdateCache_TriggerCallBack() {
 func (s *registrySuite) TestGetTriggerListAndUpdateCache_ConcurrentAccess() {
 	id := namespace.NewID()
 	namespaceRecordOld := &persistence.GetNamespaceResponse{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{Id: id.String(), Name: "some random namespace name", Data: make(map[string]string)},
-			Config: &persistencespb.NamespaceConfig{
+		Namespace: persistencespb.NamespaceDetail_builder{
+			Info: persistencespb.NamespaceInfo_builder{Id: id.String(), Name: "some random namespace name", Data: make(map[string]string)}.Build(),
+			Config: persistencespb.NamespaceConfig_builder{
 				Retention: timestamp.DurationFromDays(1),
-				BadBinaries: &namespacepb.BadBinaries{
+				BadBinaries: namespacepb.BadBinaries_builder{
 					Binaries: map[string]*namespacepb.BadBinaryInfo{},
-				}},
-			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+				}.Build()}.Build(),
+			ReplicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []string{
 					cluster.TestCurrentClusterName,
 					cluster.TestAlternativeClusterName,
 				},
-			},
+			}.Build(),
 			ConfigVersion:   0,
 			FailoverVersion: 0,
-		},
+		}.Build(),
 	}
 	factory := namespace.NewDefaultReplicationResolverFactory()
 	entryOld, err := namespace.FromPersistentState(
@@ -550,53 +550,53 @@ func (s *registrySuite) TestGetTriggerListAndUpdateCache_ConcurrentAccess() {
 func (s *registrySuite) TestRemoveDeletedNamespace() {
 	namespaceNotificationVersion := int64(0)
 	namespaceRecord1 := &persistence.GetNamespaceResponse{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
+		Namespace: persistencespb.NamespaceDetail_builder{
+			Info: persistencespb.NamespaceInfo_builder{
 				Id:   namespace.NewID().String(),
 				Name: "some random namespace name",
-				Data: make(map[string]string)},
-			Config: &persistencespb.NamespaceConfig{
+				Data: make(map[string]string)}.Build(),
+			Config: persistencespb.NamespaceConfig_builder{
 				Retention: timestamp.DurationFromDays(1),
-				BadBinaries: &namespacepb.BadBinaries{
+				BadBinaries: namespacepb.BadBinaries_builder{
 					Binaries: map[string]*namespacepb.BadBinaryInfo{},
-				}},
-			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+				}.Build()}.Build(),
+			ReplicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []string{
 					cluster.TestCurrentClusterName,
 					cluster.TestAlternativeClusterName,
 				},
-			},
+			}.Build(),
 			ConfigVersion:               10,
 			FailoverVersion:             11,
 			FailoverNotificationVersion: 0,
-		},
+		}.Build(),
 		NotificationVersion: namespaceNotificationVersion,
 	}
 	namespaceNotificationVersion++
 
 	namespaceRecord2 := &persistence.GetNamespaceResponse{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
+		Namespace: persistencespb.NamespaceDetail_builder{
+			Info: persistencespb.NamespaceInfo_builder{
 				Id:   namespace.NewID().String(),
 				Name: "another random namespace name",
-				Data: make(map[string]string)},
-			Config: &persistencespb.NamespaceConfig{
+				Data: make(map[string]string)}.Build(),
+			Config: persistencespb.NamespaceConfig_builder{
 				Retention: timestamp.DurationFromDays(2),
-				BadBinaries: &namespacepb.BadBinaries{
+				BadBinaries: namespacepb.BadBinaries_builder{
 					Binaries: map[string]*namespacepb.BadBinaryInfo{},
-				}},
-			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+				}.Build()}.Build(),
+			ReplicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 				ActiveClusterName: cluster.TestAlternativeClusterName,
 				Clusters: []string{
 					cluster.TestCurrentClusterName,
 					cluster.TestAlternativeClusterName,
 				},
-			},
+			}.Build(),
 			ConfigVersion:               20,
 			FailoverVersion:             21,
 			FailoverNotificationVersion: 0,
-		},
+		}.Build(),
 		NotificationVersion: namespaceNotificationVersion,
 	}
 	namespaceNotificationVersion++
@@ -640,16 +640,16 @@ func (s *registrySuite) TestRemoveDeletedNamespace() {
 	)
 	wg.Wait()
 
-	ns2FromRegistry, err := s.registry.GetNamespace(namespace.Name(namespaceRecord2.Namespace.Info.Name))
+	ns2FromRegistry, err := s.registry.GetNamespace(namespace.Name(namespaceRecord2.Namespace.GetInfo().GetName()))
 	s.NotNil(ns2FromRegistry)
 	s.NoError(err)
 
 	// expect readthrough call for missing ns
 	s.regPersistence.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{
-		Name: namespaceRecord1.Namespace.Info.Name,
-	}).Return(nil, serviceerror.NewNamespaceNotFound(namespaceRecord1.Namespace.Info.Name))
+		Name: namespaceRecord1.Namespace.GetInfo().GetName(),
+	}).Return(nil, serviceerror.NewNamespaceNotFound(namespaceRecord1.Namespace.GetInfo().GetName()))
 
-	ns1FromRegistry, err := s.registry.GetNamespace(namespace.Name(namespaceRecord1.Namespace.Info.Name))
+	ns1FromRegistry, err := s.registry.GetNamespace(namespace.Name(namespaceRecord1.Namespace.GetInfo().GetName()))
 	s.Nil(ns1FromRegistry)
 	s.Error(err)
 	var notFound *serviceerror.NamespaceNotFound
@@ -658,14 +658,14 @@ func (s *registrySuite) TestRemoveDeletedNamespace() {
 
 func (s *registrySuite) TestCacheByName() {
 	nsrec := persistence.GetNamespaceResponse{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
+		Namespace: persistencespb.NamespaceDetail_builder{
+			Info: persistencespb.NamespaceInfo_builder{
 				Id:   namespace.NewID().String(),
 				Name: "foo",
-			},
+			}.Build(),
 			Config:            &persistencespb.NamespaceConfig{},
 			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
-		},
+		}.Build(),
 	}
 
 	s.regPersistence.EXPECT().ListNamespaces(gomock.Any(), gomock.Any()).Return(&persistence.ListNamespacesResponse{
@@ -688,14 +688,14 @@ func (s *registrySuite) TestGetByNameWithoutReadthrough() {
 	s.regPersistence.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{
 		Name: "foo",
 	}).Return(&persistence.GetNamespaceResponse{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
+		Namespace: persistencespb.NamespaceDetail_builder{
+			Info: persistencespb.NamespaceInfo_builder{
 				Id:   namespace.NewID().String(),
 				Name: "foo",
-			},
+			}.Build(),
 			Config:            &persistencespb.NamespaceConfig{},
 			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
-		},
+		}.Build(),
 	}, nil)
 
 	s.registry.Start()
@@ -721,14 +721,14 @@ func (s *registrySuite) TestGetByIDWithoutReadthrough() {
 	s.regPersistence.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{
 		ID: id.String(),
 	}).Return(&persistence.GetNamespaceResponse{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
+		Namespace: persistencespb.NamespaceDetail_builder{
+			Info: persistencespb.NamespaceInfo_builder{
 				Id:   id.String(),
 				Name: "foo",
-			},
+			}.Build(),
 			Config:            &persistencespb.NamespaceConfig{},
 			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
-		},
+		}.Build(),
 	}, nil)
 
 	s.registry.Start()
@@ -753,50 +753,50 @@ func (s *registrySuite) TestNamespaceRename() {
 
 	// Initial namespace with original name
 	namespaceRecordOld := &persistence.GetNamespaceResponse{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
+		Namespace: persistencespb.NamespaceDetail_builder{
+			Info: persistencespb.NamespaceInfo_builder{
 				Id:   id.String(),
 				Name: "original-name",
 				Data: make(map[string]string),
-			},
-			Config: &persistencespb.NamespaceConfig{
+			}.Build(),
+			Config: persistencespb.NamespaceConfig_builder{
 				Retention: timestamp.DurationFromDays(1),
-				BadBinaries: &namespacepb.BadBinaries{
+				BadBinaries: namespacepb.BadBinaries_builder{
 					Binaries: map[string]*namespacepb.BadBinaryInfo{},
-				},
-			},
-			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+				}.Build(),
+			}.Build(),
+			ReplicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters:          []string{cluster.TestCurrentClusterName},
-			},
+			}.Build(),
 			ConfigVersion:   1,
 			FailoverVersion: 1,
-		},
+		}.Build(),
 		NotificationVersion: namespaceNotificationVersion,
 	}
 	namespaceNotificationVersion++
 
 	// Renamed namespace (same ID, different name, changed ActiveClusterName to trigger callback)
 	namespaceRecordNew := &persistence.GetNamespaceResponse{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
+		Namespace: persistencespb.NamespaceDetail_builder{
+			Info: persistencespb.NamespaceInfo_builder{
 				Id:   id.String(),
 				Name: "renamed-name",
 				Data: make(map[string]string),
-			},
-			Config: &persistencespb.NamespaceConfig{
+			}.Build(),
+			Config: persistencespb.NamespaceConfig_builder{
 				Retention: timestamp.DurationFromDays(1),
-				BadBinaries: &namespacepb.BadBinaries{
+				BadBinaries: namespacepb.BadBinaries_builder{
 					Binaries: map[string]*namespacepb.BadBinaryInfo{},
-				},
-			},
-			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+				}.Build(),
+			}.Build(),
+			ReplicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 				ActiveClusterName: cluster.TestAlternativeClusterName, // changed to trigger callback
 				Clusters:          []string{cluster.TestCurrentClusterName, cluster.TestAlternativeClusterName},
-			},
+			}.Build(),
 			ConfigVersion:   2,
 			FailoverVersion: 2,
-		},
+		}.Build(),
 		NotificationVersion: namespaceNotificationVersion,
 	}
 
@@ -882,47 +882,47 @@ func (s *registrySuite) TestNamespaceRenameViaRefreshById() {
 
 	// Initial namespace with original name
 	nsOriginal := &persistence.GetNamespaceResponse{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
+		Namespace: persistencespb.NamespaceDetail_builder{
+			Info: persistencespb.NamespaceInfo_builder{
 				Id:   id.String(),
 				Name: "original-name",
 				Data: make(map[string]string),
-			},
-			Config: &persistencespb.NamespaceConfig{
+			}.Build(),
+			Config: persistencespb.NamespaceConfig_builder{
 				Retention: timestamp.DurationFromDays(1),
-				BadBinaries: &namespacepb.BadBinaries{
+				BadBinaries: namespacepb.BadBinaries_builder{
 					Binaries: map[string]*namespacepb.BadBinaryInfo{},
-				},
-			},
-			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+				}.Build(),
+			}.Build(),
+			ReplicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters:          []string{cluster.TestCurrentClusterName},
-			},
+			}.Build(),
 			FailoverVersion: 1,
-		},
+		}.Build(),
 		NotificationVersion: 1,
 	}
 
 	// Renamed namespace (same ID, different name)
 	nsRenamed := &persistence.GetNamespaceResponse{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
+		Namespace: persistencespb.NamespaceDetail_builder{
+			Info: persistencespb.NamespaceInfo_builder{
 				Id:   id.String(),
 				Name: "renamed-name",
 				Data: make(map[string]string),
-			},
-			Config: &persistencespb.NamespaceConfig{
+			}.Build(),
+			Config: persistencespb.NamespaceConfig_builder{
 				Retention: timestamp.DurationFromDays(1),
-				BadBinaries: &namespacepb.BadBinaries{
+				BadBinaries: namespacepb.BadBinaries_builder{
 					Binaries: map[string]*namespacepb.BadBinaryInfo{},
-				},
-			},
-			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+				}.Build(),
+			}.Build(),
+			ReplicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters:          []string{cluster.TestCurrentClusterName},
-			},
+			}.Build(),
 			FailoverVersion: 1,
-		},
+		}.Build(),
 		NotificationVersion: 2,
 	}
 
@@ -977,27 +977,27 @@ func (s *registrySuite) TestRefreshSingleCacheKeyById() {
 	id := namespace.NewID()
 
 	nsV1 := persistence.GetNamespaceResponse{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
+		Namespace: persistencespb.NamespaceDetail_builder{
+			Info: persistencespb.NamespaceInfo_builder{
 				Id:   id.String(),
 				Name: "foo",
-			},
+			}.Build(),
 			Config:            &persistencespb.NamespaceConfig{},
 			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
 			FailoverVersion:   1,
-		},
+		}.Build(),
 		NotificationVersion: 1,
 	}
 	nsV2 := persistence.GetNamespaceResponse{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
+		Namespace: persistencespb.NamespaceDetail_builder{
+			Info: persistencespb.NamespaceInfo_builder{
 				Id:   id.String(),
 				Name: "foo",
-			},
+			}.Build(),
 			Config:            &persistencespb.NamespaceConfig{},
 			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
 			FailoverVersion:   2,
-		},
+		}.Build(),
 		NotificationVersion: 2,
 	}
 
@@ -1015,7 +1015,7 @@ func (s *registrySuite) TestRefreshSingleCacheKeyById() {
 	}).Return(&nsV1, nil).Times(1)
 	ns, err := s.registry.GetNamespaceByID(id)
 	s.NoError(err)
-	s.Equal(nsV1.Namespace.FailoverVersion, ns.FailoverVersion(namespace.EmptyBusinessID))
+	s.Equal(nsV1.Namespace.GetFailoverVersion(), ns.FailoverVersion(namespace.EmptyBusinessID))
 
 	s.regPersistence.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{
 		ID: id.String(),
@@ -1023,9 +1023,9 @@ func (s *registrySuite) TestRefreshSingleCacheKeyById() {
 
 	ns, err = s.registry.RefreshNamespaceById(id)
 	s.NoError(err)
-	s.Equal(nsV2.Namespace.FailoverVersion, ns.FailoverVersion(namespace.EmptyBusinessID))
+	s.Equal(nsV2.Namespace.GetFailoverVersion(), ns.FailoverVersion(namespace.EmptyBusinessID))
 
 	ns, err = s.registry.GetNamespaceByID(id)
 	s.NoError(err)
-	s.Equal(nsV2.Namespace.FailoverVersion, ns.FailoverVersion(namespace.EmptyBusinessID))
+	s.Equal(nsV2.Namespace.GetFailoverVersion(), ns.FailoverVersion(namespace.EmptyBusinessID))
 }

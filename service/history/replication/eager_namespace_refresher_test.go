@@ -26,6 +26,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/shard"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/proto"
 )
 
 const mockCurrentCuster = "current_cluster_1"
@@ -81,36 +82,34 @@ func TestEagerNamespaceRefresherSuite(t *testing.T) {
 func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_CreateSuccess() {
 	namespaceId := namespace.ID("abc")
 	nsName := "another-random-namespace-name"
-	nsResponse := &adminservice.GetNamespaceResponse{
-		Info: &namespacepb.NamespaceInfo{
+	nsResponse := adminservice.GetNamespaceResponse_builder{
+		Info: namespacepb.NamespaceInfo_builder{
 			Id:    namespaceId.String(),
 			Name:  nsName,
 			State: enumspb.NAMESPACE_STATE_DELETED,
-			Data:  make(map[string]string)},
-		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
+			Data:  make(map[string]string)}.Build(),
+		ReplicationConfig: replicationpb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
 			Clusters: []*replicationpb.ClusterReplicationConfig{
-				{ClusterName: mockCurrentCuster},
-				{ClusterName: "not_current_cluster_1"},
+				replicationpb.ClusterReplicationConfig_builder{ClusterName: mockCurrentCuster}.Build(),
+				replicationpb.ClusterReplicationConfig_builder{ClusterName: "not_current_cluster_1"}.Build(),
 			},
-		},
+		}.Build(),
 		IsGlobalNamespace: true,
-	}
-	task := &replicationspb.NamespaceTaskAttributes{
+	}.Build()
+	task := replicationspb.NamespaceTaskAttributes_builder{
 		NamespaceOperation: enumsspb.NAMESPACE_OPERATION_CREATE,
-		Id:                 nsResponse.GetInfo().Id,
+		Id:                 nsResponse.GetInfo().GetId(),
 		Info:               nsResponse.GetInfo(),
 		Config:             nsResponse.GetConfig(),
 		ReplicationConfig:  nsResponse.GetReplicationConfig(),
 		ConfigVersion:      nsResponse.GetConfigVersion(),
 		FailoverVersion:    nsResponse.GetFailoverVersion(),
 		FailoverHistory:    nsResponse.GetFailoverHistory(),
-	}
-	s.remoteAdminClient.EXPECT().GetNamespace(gomock.Any(), &adminservice.GetNamespaceRequest{
-		Attributes: &adminservice.GetNamespaceRequest_Id{
-			Id: namespaceId.String(),
-		},
-	}).Return(nsResponse, nil)
+	}.Build()
+	s.remoteAdminClient.EXPECT().GetNamespace(gomock.Any(), adminservice.GetNamespaceRequest_builder{
+		Id: proto.String(namespaceId.String()),
+	}.Build()).Return(nsResponse, nil)
 	s.mockReplicationTaskExecutor.EXPECT().Execute(gomock.Any(), task).Return(nil).Times(1)
 	s.mockNamespaceRegistry.EXPECT().GetNamespaceByID(namespaceId).Return(nil, serviceerror.NewNamespaceNotFound("namespace not found")).Times(1)
 	nsFromResponse, err := fromAdminClientAPIResponse(nsResponse)
@@ -124,36 +123,34 @@ func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_Create
 func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_UpdateSuccess() {
 	namespaceId := namespace.ID("abc")
 	nsName := "another-random-namespace-name"
-	nsResponse := &adminservice.GetNamespaceResponse{
-		Info: &namespacepb.NamespaceInfo{
+	nsResponse := adminservice.GetNamespaceResponse_builder{
+		Info: namespacepb.NamespaceInfo_builder{
 			Id:    namespaceId.String(),
 			Name:  nsName,
 			State: enumspb.NAMESPACE_STATE_DELETED,
-			Data:  make(map[string]string)},
-		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
+			Data:  make(map[string]string)}.Build(),
+		ReplicationConfig: replicationpb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
 			Clusters: []*replicationpb.ClusterReplicationConfig{
-				{ClusterName: mockCurrentCuster},
-				{ClusterName: "not_current_cluster_1"},
+				replicationpb.ClusterReplicationConfig_builder{ClusterName: mockCurrentCuster}.Build(),
+				replicationpb.ClusterReplicationConfig_builder{ClusterName: "not_current_cluster_1"}.Build(),
 			},
-		},
+		}.Build(),
 		IsGlobalNamespace: true,
-	}
-	s.remoteAdminClient.EXPECT().GetNamespace(gomock.Any(), &adminservice.GetNamespaceRequest{
-		Attributes: &adminservice.GetNamespaceRequest_Id{
-			Id: namespaceId.String(),
-		},
-	}).Return(nsResponse, nil)
-	task := &replicationspb.NamespaceTaskAttributes{
+	}.Build()
+	s.remoteAdminClient.EXPECT().GetNamespace(gomock.Any(), adminservice.GetNamespaceRequest_builder{
+		Id: proto.String(namespaceId.String()),
+	}.Build()).Return(nsResponse, nil)
+	task := replicationspb.NamespaceTaskAttributes_builder{
 		NamespaceOperation: enumsspb.NAMESPACE_OPERATION_UPDATE,
-		Id:                 nsResponse.GetInfo().Id,
+		Id:                 nsResponse.GetInfo().GetId(),
 		Info:               nsResponse.GetInfo(),
 		Config:             nsResponse.GetConfig(),
 		ReplicationConfig:  nsResponse.GetReplicationConfig(),
 		ConfigVersion:      nsResponse.GetConfigVersion(),
 		FailoverVersion:    nsResponse.GetFailoverVersion(),
 		FailoverHistory:    nsResponse.GetFailoverHistory(),
-	}
+	}.Build()
 	s.mockReplicationTaskExecutor.EXPECT().Execute(gomock.Any(), task).Return(nil).Times(1)
 	s.mockNamespaceRegistry.EXPECT().GetNamespaceByID(namespaceId).Return(nil, nil).Times(1)
 	nsFromResponse, err := fromAdminClientAPIResponse(nsResponse)
@@ -167,26 +164,24 @@ func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_Update
 func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_NamespaceNotBelongsToCurrentCluster() {
 	namespaceId := namespace.ID("abc")
 
-	nsResponse := &adminservice.GetNamespaceResponse{
-		Info: &namespacepb.NamespaceInfo{
+	nsResponse := adminservice.GetNamespaceResponse_builder{
+		Info: namespacepb.NamespaceInfo_builder{
 			Id:    namespace.NewID().String(),
 			Name:  "another random namespace name",
 			State: enumspb.NAMESPACE_STATE_DELETED,
-			Data:  make(map[string]string)},
-		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
+			Data:  make(map[string]string)}.Build(),
+		ReplicationConfig: replicationpb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
 			Clusters: []*replicationpb.ClusterReplicationConfig{
-				{ClusterName: "not_current_cluster_1"},
-				{ClusterName: "not_current_cluster_2"},
+				replicationpb.ClusterReplicationConfig_builder{ClusterName: "not_current_cluster_1"}.Build(),
+				replicationpb.ClusterReplicationConfig_builder{ClusterName: "not_current_cluster_2"}.Build(),
 			},
-		},
+		}.Build(),
 		IsGlobalNamespace: true,
-	}
-	s.remoteAdminClient.EXPECT().GetNamespace(gomock.Any(), &adminservice.GetNamespaceRequest{
-		Attributes: &adminservice.GetNamespaceRequest_Id{
-			Id: namespaceId.String(),
-		},
-	}).Return(nsResponse, nil).Times(1)
+	}.Build()
+	s.remoteAdminClient.EXPECT().GetNamespace(gomock.Any(), adminservice.GetNamespaceRequest_builder{
+		Id: proto.String(namespaceId.String()),
+	}.Build()).Return(nsResponse, nil).Times(1)
 
 	_, err := s.eagerNamespaceRefresher.SyncNamespaceFromSourceCluster(context.Background(), namespaceId, "currentCluster")
 	s.Error(err)
@@ -196,26 +191,24 @@ func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_Namesp
 func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_ExecutorReturnsError() {
 	namespaceId := namespace.ID("abc")
 
-	nsResponse := &adminservice.GetNamespaceResponse{
-		Info: &namespacepb.NamespaceInfo{
+	nsResponse := adminservice.GetNamespaceResponse_builder{
+		Info: namespacepb.NamespaceInfo_builder{
 			Id:    namespace.NewID().String(),
 			Name:  "another random namespace name",
 			State: enumspb.NAMESPACE_STATE_DELETED,
-			Data:  make(map[string]string)},
-		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
+			Data:  make(map[string]string)}.Build(),
+		ReplicationConfig: replicationpb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
 			Clusters: []*replicationpb.ClusterReplicationConfig{
-				{ClusterName: mockCurrentCuster},
-				{ClusterName: "not_current_cluster_2"},
+				replicationpb.ClusterReplicationConfig_builder{ClusterName: mockCurrentCuster}.Build(),
+				replicationpb.ClusterReplicationConfig_builder{ClusterName: "not_current_cluster_2"}.Build(),
 			},
-		},
+		}.Build(),
 		IsGlobalNamespace: true,
-	}
-	s.remoteAdminClient.EXPECT().GetNamespace(gomock.Any(), &adminservice.GetNamespaceRequest{
-		Attributes: &adminservice.GetNamespaceRequest_Id{
-			Id: namespaceId.String(),
-		},
-	}).Return(nsResponse, nil).Times(1)
+	}.Build()
+	s.remoteAdminClient.EXPECT().GetNamespace(gomock.Any(), adminservice.GetNamespaceRequest_builder{
+		Id: proto.String(namespaceId.String()),
+	}.Build()).Return(nsResponse, nil).Times(1)
 	s.mockNamespaceRegistry.EXPECT().GetNamespaceByID(namespaceId).Return(nil, serviceerror.NewNamespaceNotFound("namespace not found")).Times(1)
 
 	expectedError := errors.New("some error")
@@ -228,19 +221,17 @@ func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_Execut
 func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_NamespaceIsNotGlobalNamespace() {
 	namespaceId := namespace.ID("abc")
 
-	nsResponse := &adminservice.GetNamespaceResponse{
-		Info: &namespacepb.NamespaceInfo{
+	nsResponse := adminservice.GetNamespaceResponse_builder{
+		Info: namespacepb.NamespaceInfo_builder{
 			Id:    namespace.NewID().String(),
 			Name:  "another random namespace name",
 			State: enumspb.NAMESPACE_STATE_DELETED,
-			Data:  make(map[string]string)},
+			Data:  make(map[string]string)}.Build(),
 		IsGlobalNamespace: false,
-	}
-	s.remoteAdminClient.EXPECT().GetNamespace(gomock.Any(), &adminservice.GetNamespaceRequest{
-		Attributes: &adminservice.GetNamespaceRequest_Id{
-			Id: namespaceId.String(),
-		},
-	}).Return(nsResponse, nil).Times(1)
+	}.Build()
+	s.remoteAdminClient.EXPECT().GetNamespace(gomock.Any(), adminservice.GetNamespaceRequest_builder{
+		Id: proto.String(namespaceId.String()),
+	}.Build()).Return(nsResponse, nil).Times(1)
 
 	_, err := s.eagerNamespaceRefresher.SyncNamespaceFromSourceCluster(context.Background(), namespaceId, "currentCluster")
 	s.Error(err)
@@ -248,40 +239,40 @@ func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_Namesp
 }
 
 func fromAdminClientAPIResponse(response *adminservice.GetNamespaceResponse) (*namespace.Namespace, error) {
-	info := &persistencespb.NamespaceInfo{
+	info := persistencespb.NamespaceInfo_builder{
 		Id:          response.GetInfo().GetId(),
 		Name:        response.GetInfo().GetName(),
 		State:       response.GetInfo().GetState(),
 		Description: response.GetInfo().GetDescription(),
 		Owner:       response.GetInfo().GetOwnerEmail(),
 		Data:        response.GetInfo().GetData(),
-	}
-	config := &persistencespb.NamespaceConfig{
+	}.Build()
+	config := persistencespb.NamespaceConfig_builder{
 		Retention:                    response.GetConfig().GetWorkflowExecutionRetentionTtl(),
 		HistoryArchivalState:         response.GetConfig().GetHistoryArchivalState(),
 		HistoryArchivalUri:           response.GetConfig().GetHistoryArchivalUri(),
 		VisibilityArchivalState:      response.GetConfig().GetVisibilityArchivalState(),
 		VisibilityArchivalUri:        response.GetConfig().GetVisibilityArchivalUri(),
 		CustomSearchAttributeAliases: response.GetConfig().GetCustomSearchAttributeAliases(),
-	}
-	replicationConfig := &persistencespb.NamespaceReplicationConfig{
+	}.Build()
+	replicationConfig := persistencespb.NamespaceReplicationConfig_builder{
 		ActiveClusterName: response.GetReplicationConfig().GetActiveClusterName(),
 		State:             response.GetReplicationConfig().GetState(),
 		Clusters:          nsreplication.ConvertClusterReplicationConfigFromProto(response.GetReplicationConfig().GetClusters()),
 		FailoverHistory:   nsreplication.ConvertFailoverHistoryToPersistenceProto(response.GetFailoverHistory()),
-	}
+	}.Build()
 
 	factory := namespace.NewDefaultReplicationResolverFactory()
-	detail := &persistencespb.NamespaceDetail{
+	detail := persistencespb.NamespaceDetail_builder{
 		Info:              info,
 		Config:            config,
 		ReplicationConfig: replicationConfig,
-		ConfigVersion:     response.ConfigVersion,
+		ConfigVersion:     response.GetConfigVersion(),
 		FailoverVersion:   response.GetFailoverVersion(),
-	}
+	}.Build()
 	ns, err := namespace.FromPersistentState(
 		detail,
 		factory(detail),
-		namespace.WithGlobalFlag(response.IsGlobalNamespace))
+		namespace.WithGlobalFlag(response.GetIsGlobalNamespace()))
 	return ns, err
 }

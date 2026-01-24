@@ -164,8 +164,8 @@ func (s *ChasmTestSuite) TestPayloadStore_UpdateComponent() {
 		},
 	)
 	s.NoError(err)
-	s.Equal(int64(1), descResp.State.TotalCount)
-	s.Positive(descResp.State.TotalSize)
+	s.Equal(int64(1), descResp.State.GetTotalCount())
+	s.Positive(descResp.State.GetTotalSize())
 }
 
 func (s *ChasmTestSuite) TestPayloadStore_PureTask() {
@@ -205,7 +205,7 @@ func (s *ChasmTestSuite) TestPayloadStore_PureTask() {
 			},
 		)
 		s.NoError(err)
-		return descResp.State.TotalCount == 0
+		return descResp.State.GetTotalCount() == 0
 	}, 10*time.Second, 100*time.Millisecond)
 }
 
@@ -255,9 +255,9 @@ func (s *ChasmTestSuite) TestListExecutions() {
 	s.NotEmpty(visRecord.StartTime)
 	s.Empty(visRecord.StateTransitionCount)
 
-	totalCount := visRecord.ChasmMemo.TotalCount
+	totalCount := visRecord.ChasmMemo.GetTotalCount()
 	s.Equal(0, int(totalCount))
-	totalSize := visRecord.ChasmMemo.TotalSize
+	totalSize := visRecord.ChasmMemo.GetTotalSize()
 	s.Equal(0, int(totalSize))
 	totalCountSA, ok := chasm.SearchAttributeValue(visRecord.ChasmSearchAttributes, tests.PayloadTotalCountSearchAttribute)
 	s.True(ok)
@@ -299,13 +299,13 @@ func (s *ChasmTestSuite) TestListExecutions() {
 			}
 
 			visRecord = resp.Executions[0]
-			return visRecord.ChasmMemo.TotalCount == addPayloadResp.State.TotalCount
+			return visRecord.ChasmMemo.GetTotalCount() == addPayloadResp.State.GetTotalCount()
 		},
 		testcore.WaitForESToSettle,
 		100*time.Millisecond,
 	)
 	// We validated Count memo field above, just checking for size here.
-	s.Equal(addPayloadResp.State.TotalSize, visRecord.ChasmMemo.TotalSize)
+	s.Equal(addPayloadResp.State.GetTotalSize(), visRecord.ChasmMemo.GetTotalSize())
 
 	_, err = tests.ClosePayloadStoreHandler(
 		ctx,
@@ -473,32 +473,32 @@ func (s *ChasmTestSuite) TestListWorkflowExecutions() {
 	var execInfo *workflowpb.WorkflowExecutionInfo
 	s.Eventually(
 		func() bool {
-			listResp, err := s.FrontendClient().ListWorkflowExecutions(testcore.NewContext(), &workflowservice.ListWorkflowExecutionsRequest{
+			listResp, err := s.FrontendClient().ListWorkflowExecutions(testcore.NewContext(), workflowservice.ListWorkflowExecutionsRequest_builder{
 				Namespace: s.Namespace().String(),
 				PageSize:  10,
 				Query:     visQuery,
-			})
+			}.Build())
 			s.NoError(err)
-			if len(listResp.Executions) != 1 {
+			if len(listResp.GetExecutions()) != 1 {
 				return false
 			}
-			execInfo = listResp.Executions[0]
+			execInfo = listResp.GetExecutions()[0]
 			return true
 		},
 		testcore.WaitForESToSettle,
 		100*time.Millisecond,
 	)
 
-	s.Equal(storeID, execInfo.Execution.WorkflowId)
-	s.Equal(createResp.RunID, execInfo.Execution.RunId)
+	s.Equal(storeID, execInfo.GetExecution().GetWorkflowId())
+	s.Equal(createResp.RunID, execInfo.GetExecution().GetRunId())
 
-	s.NotNil(execInfo.SearchAttributes)
-	_, hasScheduledByID := execInfo.SearchAttributes.IndexedFields[sadefs.TemporalScheduledById]
+	s.NotNil(execInfo.GetSearchAttributes())
+	_, hasScheduledByID := execInfo.GetSearchAttributes().GetIndexedFields()[sadefs.TemporalScheduledById]
 	s.True(hasScheduledByID)
 
-	_, hasTotalCount := execInfo.SearchAttributes.IndexedFields["TemporalInt01"]
+	_, hasTotalCount := execInfo.GetSearchAttributes().GetIndexedFields()["TemporalInt01"]
 	s.False(hasTotalCount, "CHASM search attribute TemporalInt01 should not be exposed")
-	_, hasTotalSize := execInfo.SearchAttributes.IndexedFields["TemporalInt02"]
+	_, hasTotalSize := execInfo.GetSearchAttributes().GetIndexedFields()["TemporalInt02"]
 	s.False(hasTotalSize, "CHASM search attribute TemporalInt02 should not be exposed")
 }
 
@@ -526,21 +526,21 @@ func (s *ChasmTestSuite) TestPayloadStoreForceDelete() {
 	var executionInfo *workflowpb.WorkflowExecutionInfo
 	s.Eventually(
 		func() bool {
-			resp, err := s.FrontendClient().ListWorkflowExecutions(testcore.NewContext(), &workflowservice.ListWorkflowExecutionsRequest{
+			resp, err := s.FrontendClient().ListWorkflowExecutions(testcore.NewContext(), workflowservice.ListWorkflowExecutionsRequest_builder{
 				Namespace: s.Namespace().String(),
 				PageSize:  10,
 				Query:     visQuery,
-			})
+			}.Build())
 			s.NoError(err)
-			if len(resp.Executions) > 0 {
-				executionInfo = resp.Executions[0]
+			if len(resp.GetExecutions()) > 0 {
+				executionInfo = resp.GetExecutions()[0]
 			}
-			return len(resp.Executions) == 1
+			return len(resp.GetExecutions()) == 1
 		},
 		testcore.WaitForESToSettle,
 		100*time.Millisecond,
 	)
-	archetypePayload, ok := executionInfo.SearchAttributes.GetIndexedFields()[sadefs.TemporalNamespaceDivision]
+	archetypePayload, ok := executionInfo.GetSearchAttributes().GetIndexedFields()[sadefs.TemporalNamespaceDivision]
 	s.True(ok)
 	var archetypeIDStr string
 	s.NoError(payload.Decode(archetypePayload, &archetypeIDStr))
@@ -550,25 +550,25 @@ func (s *ChasmTestSuite) TestPayloadStoreForceDelete() {
 
 	archetype, ok := s.FunctionalTestBase.GetTestCluster().Host().GetCHASMRegistry().ComponentFqnByID(archetypeID)
 	s.True(ok)
-	_, err = s.AdminClient().DeleteWorkflowExecution(testcore.NewContext(), &adminservice.DeleteWorkflowExecutionRequest{
+	_, err = s.AdminClient().DeleteWorkflowExecution(testcore.NewContext(), adminservice.DeleteWorkflowExecutionRequest_builder{
 		Namespace: s.Namespace().String(),
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: storeID,
 			RunId:      createResp.RunID,
-		},
+		}.Build(),
 		Archetype: archetype,
-	})
+	}.Build())
 	s.NoError(err)
 
 	// Validate mutable state is deleted.
-	_, err = s.AdminClient().DescribeMutableState(testcore.NewContext(), &adminservice.DescribeMutableStateRequest{
+	_, err = s.AdminClient().DescribeMutableState(testcore.NewContext(), adminservice.DescribeMutableStateRequest_builder{
 		Namespace: s.Namespace().String(),
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: storeID,
 			RunId:      createResp.RunID,
-		},
+		}.Build(),
 		Archetype: archetype,
-	})
+	}.Build())
 	var notFoundErr *serviceerror.NotFound
 	s.ErrorAs(err, &notFoundErr)
 
@@ -767,13 +767,13 @@ func (s *ChasmTestSuite) TestMutableStateRebuilder() {
 	archetype, _ := s.FunctionalTestBase.GetTestCluster().Host().GetCHASMRegistry().ComponentFqnByID(archetypeID)
 	s.NotEqual(archetype, chasm.WorkflowArchetype, "Archetype should not be the workflow archetype")
 
-	_, err = s.AdminClient().RebuildMutableState(testcore.NewContext(), &adminservice.RebuildMutableStateRequest{
+	_, err = s.AdminClient().RebuildMutableState(testcore.NewContext(), adminservice.RebuildMutableStateRequest_builder{
 		Namespace: s.Namespace().String(),
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: storeID,
 			RunId:      runID,
-		},
-	})
+		}.Build(),
+	}.Build())
 	s.ErrorAs(err, new(*serviceerror.InvalidArgument))
 }
 

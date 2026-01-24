@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -278,8 +279,8 @@ func (pm *taskQueuePartitionManagerImpl) autoEnableIfNeeded(ctx context.Context,
 	if pm.fairnessState != enumsspb.FAIRNESS_STATE_UNSPECIFIED {
 		return
 	}
-	if params.taskInfo.Priority.GetFairnessKey() == "" {
-		if params.taskInfo.Priority.GetPriorityKey() == int32(0) {
+	if params.taskInfo.GetPriority().GetFairnessKey() == "" {
+		if params.taskInfo.GetPriority().GetPriorityKey() == int32(0) {
 			return
 		}
 		// Do not auto enable if we only see priority and we're using new matcher already
@@ -293,12 +294,12 @@ func (pm *taskQueuePartitionManagerImpl) autoEnableIfNeeded(ctx context.Context,
 	if !pm.autoEnableRateLimiter.Allow() {
 		return
 	}
-	req := &matchingservice.UpdateFairnessStateRequest{
+	req := matchingservice.UpdateFairnessStateRequest_builder{
 		NamespaceId:   pm.Namespace().ID().String(),
 		TaskQueue:     pm.Partition().RpcName(),
 		TaskQueueType: pm.Partition().TaskType(),
 		FairnessState: enumsspb.FAIRNESS_STATE_V2,
-	}
+	}.Build()
 	_, err := pm.matchingClient.UpdateFairnessState(ctx, req)
 	if err != nil {
 		pm.logger.Error("could not update userdata for autoenable", tag.Error(err))
@@ -325,9 +326,9 @@ reredirectTask:
 	if spoolQueue != nil && spoolQueue.QueueKey().Version().BuildId() != syncMatchQueue.QueueKey().Version().BuildId() {
 		// Task is not forwarded and build ID is different on the two queues -> redirect rule is being applied.
 		// Set redirectInfo in the task as it will be needed if we have to forward the task.
-		syncMatchTask.redirectInfo = &taskqueuespb.BuildIdRedirectInfo{
+		syncMatchTask.redirectInfo = taskqueuespb.BuildIdRedirectInfo_builder{
 			AssignedBuildId: spoolQueue.QueueKey().Version().BuildId(),
-		}
+		}.Build()
 	}
 
 	dbq := pm.defaultQueue()
@@ -582,9 +583,9 @@ func (pm *taskQueuePartitionManagerImpl) ProcessSpooledTask(
 
 		// set redirect info if spoolQueue and syncMatchQueue build ids are different
 		if assignedBuildId != syncMatchQueue.QueueKey().Version().BuildId() {
-			task.redirectInfo = &taskqueuespb.BuildIdRedirectInfo{
+			task.redirectInfo = taskqueuespb.BuildIdRedirectInfo_builder{
 				AssignedBuildId: assignedBuildId,
-			}
+			}.Build()
 		} else {
 			// make sure to reset redirectInfo in case it was set in a previous loop cycle
 			task.redirectInfo = nil
@@ -645,9 +646,9 @@ func (pm *taskQueuePartitionManagerImpl) AddSpooledTask(
 
 	// set redirect info if spoolQueue and syncMatchQueue build ids are different
 	if assignedBuildId != syncMatchQueue.QueueKey().Version().BuildId() {
-		task.redirectInfo = &taskqueuespb.BuildIdRedirectInfo{
+		task.redirectInfo = taskqueuespb.BuildIdRedirectInfo_builder{
 			AssignedBuildId: assignedBuildId,
-		}
+		}.Build()
 	} else {
 		// make sure to reset redirectInfo in case it was set in a previous loop cycle
 		task.redirectInfo = nil
@@ -679,7 +680,7 @@ func (pm *taskQueuePartitionManagerImpl) DispatchQueryTask(
 ) (*matchingservice.QueryWorkflowResponse, error) {
 reredirectTask:
 	_, syncMatchQueue, _, _, _, err := pm.getPhysicalQueuesForAdd(ctx,
-		request.VersionDirective,
+		request.GetVersionDirective(),
 		// We do not pass forwardInfo because we want the parent partition to make fresh versioning decision. Note that
 		// forwarded Query/Nexus task requests do not expire rapidly in contrast to forwarded activity/workflow tasks
 		// that only try up to 200ms sync-match. Therefore, to prevent blocking the request on the wrong build ID, its
@@ -813,18 +814,18 @@ func (pm *taskQueuePartitionManagerImpl) HasPollerAfter(buildId string, accessTi
 }
 
 func (pm *taskQueuePartitionManagerImpl) LegacyDescribeTaskQueue(includeTaskQueueStatus bool) (*matchingservice.DescribeTaskQueueResponse, error) {
-	resp := &matchingservice.DescribeTaskQueueResponse{
-		DescResponse: &workflowservice.DescribeTaskQueueResponse{
+	resp := matchingservice.DescribeTaskQueueResponse_builder{
+		DescResponse: workflowservice.DescribeTaskQueueResponse_builder{
 			Pollers: pm.GetAllPollerInfo(),
-		},
-	}
+		}.Build(),
+	}.Build()
 	dbq := pm.defaultQueue()
 	if dbq == nil {
 		return nil, errDefaultQueueNotInit
 	}
 	if includeTaskQueueStatus {
 		//nolint:staticcheck // SA1019: [cleanup-wv-3.1]
-		resp.DescResponse.TaskQueueStatus = dbq.LegacyDescribeTaskQueue(true).DescResponse.TaskQueueStatus
+		resp.GetDescResponse().SetTaskQueueStatus(dbq.LegacyDescribeTaskQueue(true).GetDescResponse().GetTaskQueueStatus())
 	}
 	if pm.partition.Kind() != enumspb.TASK_QUEUE_KIND_STICKY {
 		perTypeUserData, _, err := pm.getPerTypeUserData()
@@ -834,25 +835,25 @@ func (pm *taskQueuePartitionManagerImpl) LegacyDescribeTaskQueue(includeTaskQueu
 
 		current, _, currentUpdateTime, ramping, isRamping, rampingPercentage, _, rampingUpdateTime := worker_versioning.CalculateTaskQueueVersioningInfo(perTypeUserData.GetDeploymentData())
 
-		info := &taskqueuepb.TaskQueueVersioningInfo{
+		info := taskqueuepb.TaskQueueVersioningInfo_builder{
 			//nolint:staticcheck // SA1019: [cleanup-wv-3.1]
 			CurrentVersion:           worker_versioning.WorkerDeploymentVersionToStringV31(current),
 			CurrentDeploymentVersion: worker_versioning.ExternalWorkerDeploymentVersionFromVersion(current),
 			UpdateTime:               timestamppb.New(currentUpdateTime),
-		}
+		}.Build()
 
 		if isRamping {
-			info.RampingVersionPercentage = rampingPercentage
+			info.SetRampingVersionPercentage(rampingPercentage)
 			// If task queue is ramping to unversioned, ramping will be nil, which converts to "__unversioned__"
 			//nolint:staticcheck // SA1019: [cleanup-wv-3.1]
-			info.RampingVersion = worker_versioning.WorkerDeploymentVersionToStringV31(ramping)
-			info.RampingDeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromVersion(ramping)
+			info.SetRampingVersion(worker_versioning.WorkerDeploymentVersionToStringV31(ramping))
+			info.SetRampingDeploymentVersion(worker_versioning.ExternalWorkerDeploymentVersionFromVersion(ramping))
 			if info.GetUpdateTime().AsTime().Before(rampingUpdateTime) {
-				info.UpdateTime = timestamppb.New(rampingUpdateTime)
+				info.SetUpdateTime(timestamppb.New(rampingUpdateTime))
 			}
 		}
 
-		resp.DescResponse.VersioningInfo = info
+		resp.GetDescResponse().SetVersioningInfo(info)
 	}
 	return resp, nil
 }
@@ -900,8 +901,8 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 				if dv != nil {
 					// Add v3 version.
 					versions[PhysicalTaskQueueVersion{
-						buildId:              dv.BuildId,
-						deploymentSeriesName: dv.DeploymentName,
+						buildId:              dv.GetBuildId(),
+						deploymentSeriesName: dv.GetDeploymentName(),
 					}] = true
 				} else {
 					// Still add v2 version because user explicitly asked for the stats, we'd make sure to load the TQ.
@@ -966,16 +967,16 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 
 	versionsInfo := make(map[string]*taskqueuespb.TaskQueueVersionInfoInternal, len(versions))
 	for v := range versions {
-		vInfo := &taskqueuespb.TaskQueueVersionInfoInternal{
+		vInfo := taskqueuespb.TaskQueueVersionInfoInternal_builder{
 			PhysicalTaskQueueInfo: &taskqueuespb.PhysicalTaskQueueInfo{},
-		}
+		}.Build()
 
 		// `getPhysicalQueue` always needs the right buildID passed to function correctly. If the version is a worker-deployment version and an empty buildID is passed,
 		// the function returns the default queue which is not what we want.
 		// The following assigns buildID to either a v2 based buildID or a buildID part of a worker-deployment version.
 		buildID := v.BuildId()
 		if v.Deployment() != nil {
-			buildID = v.Deployment().BuildId
+			buildID = v.Deployment().GetBuildId()
 		}
 
 		physicalQueue, err := pm.getPhysicalQueue(ctx, buildID, v.Deployment())
@@ -983,7 +984,7 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 			return nil, err
 		}
 		if reportPollers {
-			vInfo.PhysicalTaskQueueInfo.Pollers = physicalQueue.GetAllPollerInfo()
+			vInfo.GetPhysicalTaskQueueInfo().SetPollers(physicalQueue.GetAllPollerInfo())
 		}
 		if reportStats {
 			physicalStatsByPriority := physicalQueue.GetStatsByPriority(true)
@@ -1028,11 +1029,11 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 				mergeStatsByPriority(adjustedStatsByPriority, unversionedRampingShareByPriority)
 			}
 
-			vInfo.PhysicalTaskQueueInfo.TaskQueueStatsByPriorityKey = adjustedStatsByPriority
-			vInfo.PhysicalTaskQueueInfo.TaskQueueStats = aggregateStats(adjustedStatsByPriority)
+			vInfo.GetPhysicalTaskQueueInfo().SetTaskQueueStatsByPriorityKey(adjustedStatsByPriority)
+			vInfo.GetPhysicalTaskQueueInfo().SetTaskQueueStats(aggregateStats(adjustedStatsByPriority))
 		}
 		if internalTaskQueueStatus {
-			vInfo.PhysicalTaskQueueInfo.InternalTaskQueueStatus = physicalQueue.GetInternalTaskQueueStatus()
+			vInfo.GetPhysicalTaskQueueInfo().SetInternalTaskQueueStatus(physicalQueue.GetInternalTaskQueueStatus())
 		}
 
 		// The following assigns buildID to either a v2 based buildID or a versionID representing a worker-deployment version.
@@ -1048,9 +1049,9 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 		physicalQueue.MarkAlive() // Count Describe for liveness
 	}
 
-	return &matchingservice.DescribeTaskQueuePartitionResponse{
+	return matchingservice.DescribeTaskQueuePartitionResponse_builder{
 		VersionsInfoInternal: versionsInfo,
-	}, nil
+	}.Build(), nil
 }
 
 func (pm *taskQueuePartitionManagerImpl) updateEphemeralData(ctx context.Context) error {
@@ -1087,7 +1088,7 @@ func (pm *taskQueuePartitionManagerImpl) updateEphemeralDataIteration(prevBacklo
 	setLevels := func(vk PhysicalTaskQueueVersion, vq physicalTaskQueueManager) {
 		var levels int64
 		for key, stats := range vq.GetStatsByPriority(false) {
-			if key < 64 && stats.ApproximateBacklogAge.AsDuration() > negligibleAge {
+			if key < 64 && stats.GetApproximateBacklogAge().AsDuration() > negligibleAge {
 				levels = levels | 1<<key
 			}
 		}
@@ -1133,15 +1134,15 @@ func (pm *taskQueuePartitionManagerImpl) ephemeralDataChanged(data *taskqueuespb
 	for _, part := range data.GetPartition() {
 		for _, verData := range part.GetVersion() {
 			versionKey := PhysicalTaskQueueVersion{
-				buildId:              verData.Version.GetBuildId(),
-				deploymentSeriesName: verData.Version.GetDeploymentName(),
+				buildId:              verData.GetVersion().GetBuildId(),
+				deploymentSeriesName: verData.GetVersion().GetDeploymentName(),
 			}
 			byVersion := util.GetOrSetMap(updates, versionKey)
-			levels := uint64(verData.BacklogPriorityLevels)
+			levels := uint64(verData.GetBacklogPriorityLevels())
 			for pri := bits.TrailingZeros64(levels); pri != 64; pri = bits.TrailingZeros64(levels) {
 				levels &^= 1 << pri
 				backlogKey := remotePriorityBacklog{
-					partition: part.Partition,
+					partition: part.GetPartition(),
 					priority:  priorityKey(pri),
 				}
 				byVersion[backlogKey] = struct{}{}
@@ -1168,18 +1169,18 @@ func (pm *taskQueuePartitionManagerImpl) ephemeralDataChanged(data *taskqueuespb
 
 func cloneTaskQueueStats(in *taskqueuepb.TaskQueueStats) *taskqueuepb.TaskQueueStats {
 	if in == nil {
-		return &taskqueuepb.TaskQueueStats{ApproximateBacklogAge: durationpb.New(0)}
+		return taskqueuepb.TaskQueueStats_builder{ApproximateBacklogAge: durationpb.New(0)}.Build()
 	}
 	age := in.GetApproximateBacklogAge()
 	if age == nil {
 		age = durationpb.New(0)
 	}
-	return &taskqueuepb.TaskQueueStats{
+	return taskqueuepb.TaskQueueStats_builder{
 		ApproximateBacklogCount: in.GetApproximateBacklogCount(),
 		ApproximateBacklogAge:   durationpb.New(age.AsDuration()),
 		TasksAddRate:            in.GetTasksAddRate(),
 		TasksDispatchRate:       in.GetTasksDispatchRate(),
-	}
+	}.Build()
 }
 
 func cloneStatsByPriority(in map[int32]*taskqueuepb.TaskQueueStats) map[int32]*taskqueuepb.TaskQueueStats {
@@ -1197,7 +1198,7 @@ func splitTaskQueueStatsByRampPercentage(
 	rampPct float32,
 ) (currentShare *taskqueuepb.TaskQueueStats, rampShare *taskqueuepb.TaskQueueStats) {
 	if in == nil {
-		in = &taskqueuepb.TaskQueueStats{ApproximateBacklogAge: durationpb.New(0)}
+		in = taskqueuepb.TaskQueueStats_builder{ApproximateBacklogAge: durationpb.New(0)}.Build()
 	}
 
 	total := in.GetApproximateBacklogCount()
@@ -1232,18 +1233,18 @@ func splitTaskQueueStatsByRampPercentage(
 		rampAge = durationpb.New(0)
 	}
 
-	currentShare = &taskqueuepb.TaskQueueStats{
+	currentShare = taskqueuepb.TaskQueueStats_builder{
 		ApproximateBacklogCount: currentCount,
 		ApproximateBacklogAge:   currentAge,
 		TasksAddRate:            in.GetTasksAddRate() - rampAddRate,
 		TasksDispatchRate:       in.GetTasksDispatchRate() - rampDispatchRate,
-	}
-	rampShare = &taskqueuepb.TaskQueueStats{
+	}.Build()
+	rampShare = taskqueuepb.TaskQueueStats_builder{
 		ApproximateBacklogCount: rampCount,
 		ApproximateBacklogAge:   rampAge,
 		TasksAddRate:            rampAddRate,
 		TasksDispatchRate:       rampDispatchRate,
-	}
+	}.Build()
 	return currentShare, rampShare
 }
 
@@ -1265,11 +1266,11 @@ func splitStatsByPriorityByRampPercentage(
 
 func ensureStatsWithAge(stats map[int32]*taskqueuepb.TaskQueueStats, pri int32) {
 	if _, ok := stats[pri]; !ok {
-		stats[pri] = &taskqueuepb.TaskQueueStats{ApproximateBacklogAge: durationpb.New(0)}
+		stats[pri] = taskqueuepb.TaskQueueStats_builder{ApproximateBacklogAge: durationpb.New(0)}.Build()
 		return
 	}
 	if stats[pri].GetApproximateBacklogAge() == nil {
-		stats[pri].ApproximateBacklogAge = durationpb.New(0)
+		stats[pri].SetApproximateBacklogAge(durationpb.New(0))
 	}
 }
 
@@ -1292,14 +1293,14 @@ func subtractStats(into *taskqueuepb.TaskQueueStats, sub *taskqueuepb.TaskQueueS
 	if into == nil || sub == nil {
 		return
 	}
-	into.ApproximateBacklogCount = max(0, into.GetApproximateBacklogCount()-sub.GetApproximateBacklogCount())
-	into.TasksAddRate = max(0, into.GetTasksAddRate()-sub.GetTasksAddRate())
-	into.TasksDispatchRate = max(0, into.GetTasksDispatchRate()-sub.GetTasksDispatchRate())
+	into.SetApproximateBacklogCount(max(0, into.GetApproximateBacklogCount()-sub.GetApproximateBacklogCount()))
+	into.SetTasksAddRate(max(0, into.GetTasksAddRate()-sub.GetTasksAddRate()))
+	into.SetTasksDispatchRate(max(0, into.GetTasksDispatchRate()-sub.GetTasksDispatchRate()))
 
 	// Rather than splitting the backlog age, we set it to the oldest backlog age for both the current and the ramping shares.
 	// However, if the backlog count is zero, we set the backlog age to zero.
 	if into.GetApproximateBacklogCount() == 0 || into.GetApproximateBacklogAge() == nil {
-		into.ApproximateBacklogAge = durationpb.New(0)
+		into.SetApproximateBacklogAge(durationpb.New(0))
 	}
 }
 
@@ -1356,21 +1357,21 @@ func (pm *taskQueuePartitionManagerImpl) ForceLoadAllChildPartitions() {
 
 		go func() {
 			ctx := pm.callerInfoContext(context.Background())
-			resp, err := pm.matchingClient.ForceLoadTaskQueuePartition(ctx, &matchingservice.ForceLoadTaskQueuePartitionRequest{
+			resp, err := pm.matchingClient.ForceLoadTaskQueuePartition(ctx, matchingservice.ForceLoadTaskQueuePartitionRequest_builder{
 				NamespaceId: namespaceId,
-				TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
-					TaskQueue:     taskQueueName,
-					TaskQueueType: taskQueueType,
-					PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: int32(partitionId)},
-				},
-			})
+				TaskQueuePartition: taskqueuespb.TaskQueuePartition_builder{
+					TaskQueue:         taskQueueName,
+					TaskQueueType:     taskQueueType,
+					NormalPartitionId: proto.Int32(int32(partitionId)),
+				}.Build(),
+			}.Build())
 			if err != nil {
 				pm.logger.Error("Failed to force load non-root partition after root partition was loaded",
 					tag.Error(err))
 				return
 			}
 
-			if !resp.WasUnloaded {
+			if !resp.GetWasUnloaded() {
 				// For the typical TaskQueue with 4 partitions, there is a 1/4 chance
 				// that a poller is load balanced to the root partition first.
 				// This metric will be used in conjunction with the one called earlier in the function
@@ -1671,13 +1672,13 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 	if forwardInfo != nil {
 		// Forwarded from child partition - only do sync match.
 		// No need to calculate build ID, just dispatch based on source partition's instructions.
-		if forwardInfo.DispatchVersionSet == "" && forwardInfo.DispatchBuildId == "" {
+		if forwardInfo.GetDispatchVersionSet() == "" && forwardInfo.GetDispatchBuildId() == "" {
 			syncMatchQueue = dbq
 		} else {
 			syncMatchQueue, err = pm.getVersionedQueue(
 				ctx,
-				forwardInfo.DispatchVersionSet,
-				forwardInfo.DispatchBuildId,
+				forwardInfo.GetDispatchVersionSet(),
+				forwardInfo.GetDispatchBuildId(),
 				nil,
 				true,
 			)
@@ -1685,7 +1686,7 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 		return nil, syncMatchQueue, nil, taskDispatchRevisionNumber, targetDeploymentVersion, err
 	}
 
-	if directive.GetBuildId() == nil {
+	if directive.WhichBuildId() == 0 {
 		// The task belongs to an unversioned execution. Keep using unversioned. But also return
 		// userDataChanged so if current deployment is set, the task redirects to that deployment.
 		return dbq, dbq, userDataChanged, taskDispatchRevisionNumber, targetDeploymentVersion, nil
@@ -1700,8 +1701,8 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 
 	var buildId, redirectBuildId string
 	var versionSet string
-	switch dir := directive.GetBuildId().(type) {
-	case *taskqueuespb.TaskVersionDirective_UseAssignmentRules:
+	switch directive.WhichBuildId() {
+	case taskqueuespb.TaskVersionDirective_UseAssignmentRules_case:
 		// Need to assign build ID. Assignment rules take precedence, fallback to version sets if no matching rule is found
 		if len(data.GetAssignmentRules()) > 0 {
 			buildId = FindAssignmentBuildId(data.GetAssignmentRules(), runId)
@@ -1712,7 +1713,7 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 				return nil, nil, nil, 0, nil, err
 			}
 		}
-	case *taskqueuespb.TaskVersionDirective_AssignedBuildId:
+	case taskqueuespb.TaskVersionDirective_AssignedBuildId_case:
 		// Already assigned, need to stay in the same version set or build ID. If TQ has version sets, first try to
 		// redirect to the version set based on the build ID. If the build ID does not belong to any version set,
 		// assume user wants to use the new API
@@ -1723,7 +1724,7 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 			}
 		}
 		if versionSet == "" {
-			buildId = dir.AssignedBuildId
+			buildId = directive.GetAssignedBuildId()
 		}
 	}
 
@@ -1801,11 +1802,11 @@ func (pm *taskQueuePartitionManagerImpl) chooseTargetQueueByFlag(
 
 func (pm *taskQueuePartitionManagerImpl) getVersionSetForAdd(directive *taskqueuespb.TaskVersionDirective, data *persistencespb.VersioningData) (string, error) {
 	var buildId string
-	switch dir := directive.GetBuildId().(type) {
-	case *taskqueuespb.TaskVersionDirective_UseAssignmentRules:
+	switch directive.WhichBuildId() {
+	case taskqueuespb.TaskVersionDirective_UseAssignmentRules_case:
 		// leave buildId = "", lookupVersionSetForAdd understands that to mean "default"
-	case *taskqueuespb.TaskVersionDirective_AssignedBuildId:
-		buildId = dir.AssignedBuildId
+	case taskqueuespb.TaskVersionDirective_AssignedBuildId_case:
+		buildId = directive.GetAssignedBuildId()
 	default:
 		// Unversioned task, leave on unversioned queue.
 		return "", nil

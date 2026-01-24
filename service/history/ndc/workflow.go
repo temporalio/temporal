@@ -87,7 +87,7 @@ func (r *WorkflowImpl) GetVectorClock() (int64, int64, error) {
 		}
 	}
 
-	lastRunningClock := r.mutableState.GetExecutionInfo().LastRunningClock
+	lastRunningClock := r.mutableState.GetExecutionInfo().GetLastRunningClock()
 	return version, lastRunningClock, nil
 }
 

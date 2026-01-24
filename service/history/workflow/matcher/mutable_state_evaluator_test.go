@@ -205,15 +205,15 @@ func TestBasicMutableStateMatchEvaluator(t *testing.T) {
 	startTime, err := sqlquery.ConvertToTime(fmt.Sprintf("'%s'", startTimeStr))
 	assert.NoError(t, err)
 
-	ws := &persistencespb.WorkflowExecutionState{
+	ws := persistencespb.WorkflowExecutionState_builder{
 		StartTime: timestamppb.New(startTime),
 		Status:    enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-	}
+	}.Build()
 
-	we := &persistencespb.WorkflowExecutionInfo{
+	we := persistencespb.WorkflowExecutionInfo_builder{
 		WorkflowId:       "workflow_id",
 		WorkflowTypeName: "workflow_type",
-	}
+	}.Build()
 
 	controller := gomock.NewController(t)
 	defer controller.Finish()
@@ -283,15 +283,15 @@ func TestAdvancedMutableStateMatchEvaluator(t *testing.T) {
 	startTime, err := sqlquery.ConvertToTime(fmt.Sprintf("'%s'", startTimeStr))
 	assert.NoError(t, err)
 
-	ws := &persistencespb.WorkflowExecutionState{
+	ws := persistencespb.WorkflowExecutionState_builder{
 		StartTime: timestamppb.New(startTime),
 		Status:    enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-	}
+	}.Build()
 
-	we := &persistencespb.WorkflowExecutionInfo{
+	we := persistencespb.WorkflowExecutionInfo_builder{
 		WorkflowId:       "workflow_id",
 		WorkflowTypeName: "workflow_type",
-	}
+	}.Build()
 
 	controller := gomock.NewController(t)
 	defer controller.Finish()

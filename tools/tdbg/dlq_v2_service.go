@@ -158,15 +158,15 @@ func (ac *DLQV2Service) ReadMessages(c *cli.Context) (err error) {
 	pageSize := c.Int(FlagPageSize)
 	iterator := collection.NewPagingIterator[*commonspb.HistoryDLQTask](
 		func(paginationToken []byte) ([]*commonspb.HistoryDLQTask, []byte, error) {
-			request := &adminservice.GetDLQTasksRequest{
-				DlqKey: &commonspb.HistoryDLQKey{
+			request := adminservice.GetDLQTasksRequest_builder{
+				DlqKey: commonspb.HistoryDLQKey_builder{
 					TaskCategory:  int32(ac.category.ID()),
 					SourceCluster: ac.sourceCluster,
 					TargetCluster: ac.targetCluster,
-				},
+				}.Build(),
 				PageSize:      int32(pageSize),
 				NextPageToken: paginationToken,
-			}
+			}.Build()
 			res, err := adminClient.GetDLQTasks(ctx, request)
 			if err != nil {
 				// If the DLQ does not exist yet, it's effectively empty, so we can safely return without an error.
@@ -175,7 +175,7 @@ func (ac *DLQV2Service) ReadMessages(c *cli.Context) (err error) {
 				}
 				return nil, nil, fmt.Errorf("call to GetDLQTasks from ReadMessages failed: %w", err)
 			}
-			return res.DlqTasks, res.NextPageToken, nil
+			return res.GetDlqTasks(), res.GetNextPageToken(), nil
 		},
 	)
 
@@ -184,10 +184,10 @@ func (ac *DLQV2Service) ReadMessages(c *cli.Context) (err error) {
 		if err != nil {
 			return fmt.Errorf("DLQ task iterator returned error: %w", err)
 		}
-		if dlqTask.Metadata.MessageId > maxMessageID {
+		if dlqTask.GetMetadata().GetMessageId() > maxMessageID {
 			break
 		}
-		blob := dlqTask.Payload.Blob
+		blob := dlqTask.GetPayload().GetBlob()
 		if blob == nil {
 			return fmt.Errorf("DLQ task payload blob is nil: %+v", dlqTask)
 		}
@@ -197,8 +197,8 @@ func (ac *DLQV2Service) ReadMessages(c *cli.Context) (err error) {
 			taskCategoryID:  ac.category.ID(),
 		}
 		message := DLQMessage{
-			MessageID: dlqTask.Metadata.MessageId,
-			ShardID:   dlqTask.Payload.ShardId,
+			MessageID: dlqTask.GetMetadata().GetMessageId(),
+			ShardID:   dlqTask.GetPayload().GetShardId(),
 			Payload:   payload,
 		}
 		err = newEncoder(outputFile).Encode(message)
@@ -222,12 +222,12 @@ func (ac *DLQV2Service) PurgeMessages(c *cli.Context) error {
 	}
 	ctx, cancel := newContext(c)
 	defer cancel()
-	response, err := adminClient.PurgeDLQTasks(ctx, &adminservice.PurgeDLQTasksRequest{
+	response, err := adminClient.PurgeDLQTasks(ctx, adminservice.PurgeDLQTasksRequest_builder{
 		DlqKey: ac.getDLQKey(),
-		InclusiveMaxTaskMetadata: &commonspb.HistoryDLQTaskMetadata{
+		InclusiveMaxTaskMetadata: commonspb.HistoryDLQTaskMetadata_builder{
 			MessageId: lastMessageID,
-		},
-	})
+		}.Build(),
+	}.Build())
 	if err != nil {
 		return fmt.Errorf("call to PurgeDLQTasks failed: %w", err)
 	}
@@ -272,13 +272,13 @@ func (ac *DLQV2Service) MergeMessages(c *cli.Context) error {
 	ctx, cancel := newContext(c)
 	defer cancel()
 
-	response, err := adminClient.MergeDLQTasks(ctx, &adminservice.MergeDLQTasksRequest{
+	response, err := adminClient.MergeDLQTasks(ctx, adminservice.MergeDLQTasksRequest_builder{
 		DlqKey: ac.getDLQKey(),
-		InclusiveMaxTaskMetadata: &commonspb.HistoryDLQTaskMetadata{
+		InclusiveMaxTaskMetadata: commonspb.HistoryDLQTaskMetadata_builder{
 			MessageId: lastMessageID,
-		},
+		}.Build(),
 		BatchSize: int32(c.Int(FlagPageSize)), // let the server handle validation and defaulting of batch size.
-	})
+	}.Build())
 	if err != nil {
 		return fmt.Errorf("call to MergeDLQTasks failed: %w", err)
 	}
@@ -290,11 +290,11 @@ func (ac *DLQV2Service) MergeMessages(c *cli.Context) error {
 }
 
 func (ac *DLQV2Service) getDLQKey() *commonspb.HistoryDLQKey {
-	return &commonspb.HistoryDLQKey{
+	return commonspb.HistoryDLQKey_builder{
 		TaskCategory:  int32(ac.category.ID()),
 		SourceCluster: ac.sourceCluster,
 		TargetCluster: ac.targetCluster,
-	}
+	}.Build()
 }
 
 func (ac *DLQV2Service) getLastMessageID(c *cli.Context, action string) (int64, error) {
@@ -327,29 +327,29 @@ func (ac *DLQV2Service) findLastMessageIDFromListQueues(c *cli.Context) (int64, 
 
 	// Use ListQueues to find our specific DLQ and get its LastMessageID
 	dlqKey := ac.getDLQKey()
-	queueName := persistence.GetHistoryTaskQueueName(int(dlqKey.TaskCategory), dlqKey.SourceCluster, dlqKey.TargetCluster)
+	queueName := persistence.GetHistoryTaskQueueName(int(dlqKey.GetTaskCategory()), dlqKey.GetSourceCluster(), dlqKey.GetTargetCluster())
 
 	var nextPageToken []byte
 	for {
-		resp, err := adminClient.ListQueues(ctx, &adminservice.ListQueuesRequest{
+		resp, err := adminClient.ListQueues(ctx, adminservice.ListQueuesRequest_builder{
 			QueueType:     int32(persistence.QueueTypeHistoryDLQ),
 			PageSize:      int32(defaultPageSize),
 			NextPageToken: nextPageToken,
-		})
+		}.Build())
 		if err != nil {
 			return 0, false, fmt.Errorf("call to ListQueues from findLastMessageIDFromListQueues failed: %w", err)
 		}
 
-		for _, queueInfo := range resp.Queues {
-			if queueInfo.QueueName == queueName {
-				return queueInfo.LastMessageId, queueInfo.MessageCount > 0, nil
+		for _, queueInfo := range resp.GetQueues() {
+			if queueInfo.GetQueueName() == queueName {
+				return queueInfo.GetLastMessageId(), queueInfo.GetMessageCount() > 0, nil
 			}
 		}
 
-		if len(resp.NextPageToken) == 0 {
+		if len(resp.GetNextPageToken()) == 0 {
 			break
 		}
-		nextPageToken = resp.NextPageToken
+		nextPageToken = resp.GetNextPageToken()
 	}
 
 	// Queue not found, it is empty in that case. We create the queue on first write.
@@ -428,16 +428,16 @@ func (ac *DLQV2Service) ListQueues(c *cli.Context) (err error) {
 	pageSize := c.Int(FlagPageSize)
 	iterator := collection.NewPagingIterator[*adminservice.ListQueuesResponse_QueueInfo](
 		func(paginationToken []byte) ([]*adminservice.ListQueuesResponse_QueueInfo, []byte, error) {
-			request := &adminservice.ListQueuesRequest{
+			request := adminservice.ListQueuesRequest_builder{
 				QueueType:     int32(persistence.QueueTypeHistoryDLQ),
 				PageSize:      int32(pageSize),
 				NextPageToken: paginationToken,
-			}
+			}.Build()
 			res, err := adminClient.ListQueues(ctx, request)
 			if err != nil {
 				return nil, nil, fmt.Errorf("call to ListQueues failed: %w", err)
 			}
-			return res.Queues, res.NextPageToken, nil
+			return res.GetQueues(), res.GetNextPageToken(), nil
 		},
 	)
 
@@ -452,7 +452,7 @@ func (ac *DLQV2Service) ListQueues(c *cli.Context) (err error) {
 
 	// Sort the list of queues in decreasing order of MessageCount.
 	sort.Slice(queues, func(i, j int) bool {
-		return queues[i].MessageCount > queues[j].MessageCount
+		return queues[i].GetMessageCount() > queues[j].GetMessageCount()
 	})
 
 	items := make([]interface{}, len(queues))

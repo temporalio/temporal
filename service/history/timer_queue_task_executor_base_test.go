@@ -64,10 +64,10 @@ func (s *timerQueueTaskExecutorBaseSuite) SetupTest() {
 	config := tests.NewDynamicConfig()
 	s.testShardContext = shard.NewTestContext(
 		s.controller,
-		&persistencespb.ShardInfo{
+		persistencespb.ShardInfo_builder{
 			ShardId: 0,
 			RangeId: 1,
-		},
+		}.Build(),
 		config,
 	)
 	s.testShardContext.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
@@ -102,10 +102,10 @@ func (s *timerQueueTaskExecutorBaseSuite) Test_ExecuteDeleteHistoryEventTask_NoE
 		VisibilityTimestamp: time.Now().UTC(),
 		ArchetypeID:         tests.ArchetypeID,
 	}
-	we := &commonpb.WorkflowExecution{
+	we := commonpb.WorkflowExecution_builder{
 		WorkflowId: tests.WorkflowID,
 		RunId:      tests.RunID,
-	}
+	}.Build()
 
 	mockWeCtx := historyi.NewMockWorkflowContext(s.controller)
 	mockMutableState := historyi.NewMockMutableState(s.controller)
@@ -118,7 +118,7 @@ func (s *timerQueueTaskExecutorBaseSuite) Test_ExecuteDeleteHistoryEventTask_NoE
 	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{}).AnyTimes()
 	mockMutableState.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry)
 	s.testShardContext.Resource.ClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(false)
-	mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{State: enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED})
+	mockMutableState.EXPECT().GetExecutionState().Return(persistencespb.WorkflowExecutionState_builder{State: enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED}.Build())
 
 	stage := tasks.DeleteWorkflowExecutionStageNone
 	s.mockDeleteManager.EXPECT().DeleteWorkflowExecutionByRetention(
@@ -148,10 +148,10 @@ func (s *timerQueueTaskExecutorBaseSuite) TestArchiveHistory_DeleteFailed() {
 		VisibilityTimestamp: time.Now().UTC(),
 		ArchetypeID:         tests.ArchetypeID,
 	}
-	we := &commonpb.WorkflowExecution{
+	we := commonpb.WorkflowExecution_builder{
 		WorkflowId: tests.WorkflowID,
 		RunId:      tests.RunID,
-	}
+	}.Build()
 
 	mockWeCtx := historyi.NewMockWorkflowContext(s.controller)
 	mockMutableState := historyi.NewMockMutableState(s.controller)
@@ -164,7 +164,7 @@ func (s *timerQueueTaskExecutorBaseSuite) TestArchiveHistory_DeleteFailed() {
 	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{}).AnyTimes()
 	mockMutableState.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry)
 	s.testShardContext.Resource.ClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(false)
-	mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{State: enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED})
+	mockMutableState.EXPECT().GetExecutionState().Return(persistencespb.WorkflowExecutionState_builder{State: enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED}.Build())
 
 	stage := tasks.DeleteWorkflowExecutionStageNone
 	s.mockDeleteManager.EXPECT().DeleteWorkflowExecutionByRetention(
@@ -224,9 +224,9 @@ func (s *timerQueueTaskExecutorBaseSuite) TestIsValidExecutionTimeoutTask() {
 			}
 
 			mockMutableState := historyi.NewMockMutableState(s.controller)
-			mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+			mockMutableState.EXPECT().GetExecutionInfo().Return(persistencespb.WorkflowExecutionInfo_builder{
 				FirstExecutionRunId: mutableStateFirstRunID,
-			}).AnyTimes()
+			}.Build()).AnyTimes()
 			mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(tc.workflowRunning).AnyTimes()
 
 			isValid := s.timerQueueTaskExecutorBase.isValidWorkflowExecutionTimeoutTask(mockMutableState, timerTask)
@@ -268,10 +268,10 @@ func (s *timerQueueTaskExecutorBaseSuite) TestIsValidExecutionTimeouts() {
 	}
 
 	for _, tc := range testCases {
-		mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		mockMutableState.EXPECT().GetExecutionInfo().Return(persistencespb.WorkflowExecutionInfo_builder{
 			FirstExecutionRunId:             timerTask.FirstRunID,
 			WorkflowExecutionExpirationTime: timestamppb.New(tc.expirationTime),
-		})
+		}.Build())
 		isValid := s.timerQueueTaskExecutorBase.isValidWorkflowExecutionTimeoutTask(mockMutableState, timerTask)
 		s.Equal(tc.isValid, isValid)
 	}

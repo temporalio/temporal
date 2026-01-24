@@ -9,12 +9,10 @@ type (
 	EmptyImpl[T any] struct{}
 )
 
-var EmptyPredicateProtoSize = (&persistencespb.Predicate{
-	PredicateType: enumsspb.PREDICATE_TYPE_EMPTY,
-	Attributes: &persistencespb.Predicate_EmptyPredicateAttributes{
-		EmptyPredicateAttributes: &persistencespb.EmptyPredicateAttributes{},
-	},
-}).Size()
+var EmptyPredicateProtoSize = (persistencespb.Predicate_builder{
+	PredicateType:            enumsspb.PREDICATE_TYPE_EMPTY,
+	EmptyPredicateAttributes: &persistencespb.EmptyPredicateAttributes{},
+}.Build()).Size()
 
 func Empty[T any]() Predicate[T] {
 	return &EmptyImpl[T]{}

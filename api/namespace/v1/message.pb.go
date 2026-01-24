@@ -8,7 +8,6 @@ package namespace
 
 import (
 	reflect "reflect"
-	sync "sync"
 	unsafe "unsafe"
 
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -23,17 +22,11 @@ const (
 )
 
 type NamespaceCacheInfo struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// (-- api-linter: core::0140::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: "in" and "by" are needed here. --)
-	ItemsInCacheByIdCount int64 `protobuf:"varint,1,opt,name=items_in_cache_by_id_count,json=itemsInCacheByIdCount,proto3" json:"items_in_cache_by_id_count,omitempty"`
-	// (-- api-linter: core::0140::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: "in" and "by" are needed here. --)
-	ItemsInCacheByNameCount int64 `protobuf:"varint,2,opt,name=items_in_cache_by_name_count,json=itemsInCacheByNameCount,proto3" json:"items_in_cache_by_name_count,omitempty"`
-	unknownFields           protoimpl.UnknownFields
-	sizeCache               protoimpl.SizeCache
+	state                              protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_ItemsInCacheByIdCount   int64                  `protobuf:"varint,1,opt,name=items_in_cache_by_id_count,json=itemsInCacheByIdCount,proto3"`
+	xxx_hidden_ItemsInCacheByNameCount int64                  `protobuf:"varint,2,opt,name=items_in_cache_by_name_count,json=itemsInCacheByNameCount,proto3"`
+	unknownFields                      protoimpl.UnknownFields
+	sizeCache                          protoimpl.SizeCache
 }
 
 func (x *NamespaceCacheInfo) Reset() {
@@ -61,23 +54,48 @@ func (x *NamespaceCacheInfo) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use NamespaceCacheInfo.ProtoReflect.Descriptor instead.
-func (*NamespaceCacheInfo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_namespace_v1_message_proto_rawDescGZIP(), []int{0}
-}
-
 func (x *NamespaceCacheInfo) GetItemsInCacheByIdCount() int64 {
 	if x != nil {
-		return x.ItemsInCacheByIdCount
+		return x.xxx_hidden_ItemsInCacheByIdCount
 	}
 	return 0
 }
 
 func (x *NamespaceCacheInfo) GetItemsInCacheByNameCount() int64 {
 	if x != nil {
-		return x.ItemsInCacheByNameCount
+		return x.xxx_hidden_ItemsInCacheByNameCount
 	}
 	return 0
+}
+
+func (x *NamespaceCacheInfo) SetItemsInCacheByIdCount(v int64) {
+	x.xxx_hidden_ItemsInCacheByIdCount = v
+}
+
+func (x *NamespaceCacheInfo) SetItemsInCacheByNameCount(v int64) {
+	x.xxx_hidden_ItemsInCacheByNameCount = v
+}
+
+type NamespaceCacheInfo_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// (-- api-linter: core::0140::prepositions=disabled
+	//
+	//	aip.dev/not-precedent: "in" and "by" are needed here. --)
+	ItemsInCacheByIdCount int64
+	// (-- api-linter: core::0140::prepositions=disabled
+	//
+	//	aip.dev/not-precedent: "in" and "by" are needed here. --)
+	ItemsInCacheByNameCount int64
+}
+
+func (b0 NamespaceCacheInfo_builder) Build() *NamespaceCacheInfo {
+	m0 := &NamespaceCacheInfo{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_ItemsInCacheByIdCount = b.ItemsInCacheByIdCount
+	x.xxx_hidden_ItemsInCacheByNameCount = b.ItemsInCacheByNameCount
+	return m0
 }
 
 var File_temporal_server_api_namespace_v1_message_proto protoreflect.FileDescriptor
@@ -88,18 +106,6 @@ const file_temporal_server_api_namespace_v1_message_proto_rawDesc = "" +
 	"\x12NamespaceCacheInfo\x129\n" +
 	"\x1aitems_in_cache_by_id_count\x18\x01 \x01(\x03R\x15itemsInCacheByIdCount\x12=\n" +
 	"\x1citems_in_cache_by_name_count\x18\x02 \x01(\x03R\x17itemsInCacheByNameCountB2Z0go.temporal.io/server/api/namespace/v1;namespaceb\x06proto3"
-
-var (
-	file_temporal_server_api_namespace_v1_message_proto_rawDescOnce sync.Once
-	file_temporal_server_api_namespace_v1_message_proto_rawDescData []byte
-)
-
-func file_temporal_server_api_namespace_v1_message_proto_rawDescGZIP() []byte {
-	file_temporal_server_api_namespace_v1_message_proto_rawDescOnce.Do(func() {
-		file_temporal_server_api_namespace_v1_message_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_api_namespace_v1_message_proto_rawDesc), len(file_temporal_server_api_namespace_v1_message_proto_rawDesc)))
-	})
-	return file_temporal_server_api_namespace_v1_message_proto_rawDescData
-}
 
 var file_temporal_server_api_namespace_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
 var file_temporal_server_api_namespace_v1_message_proto_goTypes = []any{

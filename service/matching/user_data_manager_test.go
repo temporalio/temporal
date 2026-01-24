@@ -91,10 +91,10 @@ func TestUserData_LoadOnInit(t *testing.T) {
 	tqCfg := defaultTqmTestOpts(controller)
 	tqCfg.dbq = dbq
 
-	data1 := &persistencespb.VersionedTaskQueueUserData{
+	data1 := persistencespb.VersionedTaskQueueUserData_builder{
 		Version: 1,
 		Data:    mkUserData(1),
-	}
+	}.Build()
 
 	m := createUserDataManager(t, controller, tqCfg)
 
@@ -107,7 +107,7 @@ func TestUserData_LoadOnInit(t *testing.T) {
 				},
 			},
 		}))
-	data1.Version++
+	data1.SetVersion(data1.GetVersion() + 1)
 
 	m.Start()
 	require.NoError(t, m.WaitUntilInitialized(ctx))
@@ -128,10 +128,10 @@ func TestUserData_LoadOnInit_Refresh(t *testing.T) {
 	tqCfg.dbq = dbq
 	tqCfg.expectUserDataError = false
 
-	data1 := &persistencespb.VersionedTaskQueueUserData{
+	data1 := persistencespb.VersionedTaskQueueUserData_builder{
 		Version: 1,
 		Data:    mkUserData(1),
-	}
+	}.Build()
 
 	m := createUserDataManager(t, controller, tqCfg)
 	m.config.GetUserDataInitialRefresh = time.Millisecond
@@ -147,7 +147,7 @@ func TestUserData_LoadOnInit_Refresh(t *testing.T) {
 				},
 			},
 		}))
-	data1.Version++
+	data1.SetVersion(data1.GetVersion() + 1)
 
 	m.Start()
 
@@ -164,10 +164,10 @@ func TestUserData_LoadOnInit_Refresh(t *testing.T) {
 	require.Equal(t, data1, userData)
 
 	// pretend someone else managed to update data
-	data2 := &persistencespb.VersionedTaskQueueUserData{
+	data2 := persistencespb.VersionedTaskQueueUserData_builder{
 		Version: 2,
 		Data:    mkUserData(2),
-	}
+	}.Build()
 	require.NoError(t, m.store.UpdateTaskQueueUserData(context.Background(),
 		&persistence.UpdateTaskQueueUserDataRequest{
 			NamespaceID: defaultNamespaceId,
@@ -177,12 +177,12 @@ func TestUserData_LoadOnInit_Refresh(t *testing.T) {
 				},
 			},
 		}))
-	data2.Version++
+	data2.SetVersion(data2.GetVersion() + 1)
 
 	// eventually it will notice and reload the data
 	require.Eventually(t, func() bool {
 		userData, _, err := m.GetUserData()
-		return err == nil && userData.Version == data2.Version
+		return err == nil && userData.GetVersion() == data2.GetVersion()
 	}, time.Second, time.Millisecond)
 
 	m.Stop()
@@ -199,10 +199,10 @@ func TestUserData_LoadOnInit_Refresh_Backwards(t *testing.T) {
 	tqCfg.dbq = dbq
 	tqCfg.expectUserDataError = true
 
-	data5 := &persistencespb.VersionedTaskQueueUserData{
+	data5 := persistencespb.VersionedTaskQueueUserData_builder{
 		Version: 5,
 		Data:    mkUserData(5),
-	}
+	}.Build()
 
 	m := createUserDataManager(t, controller, tqCfg)
 	m.config.GetUserDataInitialRefresh = time.Millisecond
@@ -218,7 +218,7 @@ func TestUserData_LoadOnInit_Refresh_Backwards(t *testing.T) {
 				},
 			},
 		}))
-	data5.Version++
+	data5.SetVersion(data5.GetVersion() + 1)
 
 	m.Start()
 
@@ -235,10 +235,10 @@ func TestUserData_LoadOnInit_Refresh_Backwards(t *testing.T) {
 	require.Equal(t, data5, userData)
 
 	// data in db has older version
-	data4 := &persistencespb.VersionedTaskQueueUserData{
+	data4 := persistencespb.VersionedTaskQueueUserData_builder{
 		Version: 4,
 		Data:    mkUserData(4),
-	}
+	}.Build()
 	require.NoError(t, m.store.UpdateTaskQueueUserData(context.Background(),
 		&persistence.UpdateTaskQueueUserDataRequest{
 			NamespaceID: defaultNamespaceId,
@@ -248,7 +248,7 @@ func TestUserData_LoadOnInit_Refresh_Backwards(t *testing.T) {
 				},
 			},
 		}))
-	data4.Version++
+	data4.SetVersion(data4.GetVersion() + 1)
 
 	// it should unload the task queue
 	require.Eventually(t, func() bool {
@@ -302,36 +302,36 @@ func TestUserData_FetchesOnInit(t *testing.T) {
 	tqCfg := defaultTqmTestOpts(controller)
 	tqCfg.dbq = dbq
 
-	data1 := &persistencespb.VersionedTaskQueueUserData{
+	data1 := persistencespb.VersionedTaskQueueUserData_builder{
 		Version: 1,
 		Data:    mkUserData(1),
-	}
+	}.Build()
 
 	tqCfg.matchingClientMock.EXPECT().GetTaskQueueUserData(
 		gomock.Any(),
-		&matchingservice.GetTaskQueueUserDataRequest{
+		matchingservice.GetTaskQueueUserDataRequest_builder{
 			NamespaceId:              defaultNamespaceId,
 			TaskQueue:                defaultRootTqID,
 			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			LastKnownUserDataVersion: 0,
 			WaitNewData:              false, // first is not long poll
-		}).
-		Return(&matchingservice.GetTaskQueueUserDataResponse{
+		}.Build()).
+		Return(matchingservice.GetTaskQueueUserDataResponse_builder{
 			UserData: data1,
-		}, nil)
+		}.Build(), nil)
 
 	tqCfg.matchingClientMock.EXPECT().GetTaskQueueUserData(
 		gomock.Any(),
-		&matchingservice.GetTaskQueueUserDataRequest{
+		matchingservice.GetTaskQueueUserDataRequest_builder{
 			NamespaceId:              defaultNamespaceId,
 			TaskQueue:                defaultRootTqID,
 			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			LastKnownUserDataVersion: 1,
 			WaitNewData:              true, // second is long poll
-		}).
-		Return(&matchingservice.GetTaskQueueUserDataResponse{
+		}.Build()).
+		Return(matchingservice.GetTaskQueueUserDataResponse_builder{
 			UserData: data1,
-		}, nil).MaxTimes(maxFastUserDataFetches + 1)
+		}.Build(), nil).MaxTimes(maxFastUserDataFetches + 1)
 
 	m := createUserDataManager(t, controller, tqCfg)
 	m.config.GetUserDataMinWaitTime = 10 * time.Second // only one fetch
@@ -355,50 +355,50 @@ func TestUserData_FetchesAndFetchesAgain(t *testing.T) {
 	tqCfg := defaultTqmTestOpts(controller)
 	tqCfg.dbq = dbq
 
-	data1 := &persistencespb.VersionedTaskQueueUserData{
+	data1 := persistencespb.VersionedTaskQueueUserData_builder{
 		Version: 1,
 		Data:    mkUserData(1),
-	}
-	data2 := &persistencespb.VersionedTaskQueueUserData{
+	}.Build()
+	data2 := persistencespb.VersionedTaskQueueUserData_builder{
 		Version: 2,
 		Data:    mkUserData(2),
-	}
+	}.Build()
 
 	tqCfg.matchingClientMock.EXPECT().GetTaskQueueUserData(
 		gomock.Any(),
-		&matchingservice.GetTaskQueueUserDataRequest{
+		matchingservice.GetTaskQueueUserDataRequest_builder{
 			NamespaceId:              defaultNamespaceId,
 			TaskQueue:                defaultRootTqID,
 			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_ACTIVITY,
 			LastKnownUserDataVersion: 0,
 			WaitNewData:              false, // first is not long poll
-		}).
-		Return(&matchingservice.GetTaskQueueUserDataResponse{
+		}.Build()).
+		Return(matchingservice.GetTaskQueueUserDataResponse_builder{
 			UserData: data1,
-		}, nil)
+		}.Build(), nil)
 
 	tqCfg.matchingClientMock.EXPECT().GetTaskQueueUserData(
 		gomock.Any(),
-		&matchingservice.GetTaskQueueUserDataRequest{
+		matchingservice.GetTaskQueueUserDataRequest_builder{
 			NamespaceId:              defaultNamespaceId,
 			TaskQueue:                defaultRootTqID,
 			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_ACTIVITY,
 			LastKnownUserDataVersion: 1,
 			WaitNewData:              true, // second is long poll
-		}).
-		Return(&matchingservice.GetTaskQueueUserDataResponse{
+		}.Build()).
+		Return(matchingservice.GetTaskQueueUserDataResponse_builder{
 			UserData: data2,
-		}, nil)
+		}.Build(), nil)
 
 	tqCfg.matchingClientMock.EXPECT().GetTaskQueueUserData(
 		gomock.Any(),
-		&matchingservice.GetTaskQueueUserDataRequest{
+		matchingservice.GetTaskQueueUserDataRequest_builder{
 			NamespaceId:              defaultNamespaceId,
 			TaskQueue:                defaultRootTqID,
 			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_ACTIVITY,
 			LastKnownUserDataVersion: 2,
 			WaitNewData:              true,
-		}).
+		}.Build()).
 		Return(nil, serviceerror.NewUnavailable("hold on")).AnyTimes()
 
 	m := createUserDataManager(t, controller, tqCfg)
@@ -422,22 +422,22 @@ func TestUserData_RetriesFetchOnUnavailable(t *testing.T) {
 	tqCfg := defaultTqmTestOpts(controller)
 	tqCfg.dbq = dbq
 
-	data1 := &persistencespb.VersionedTaskQueueUserData{
+	data1 := persistencespb.VersionedTaskQueueUserData_builder{
 		Version: 1,
 		Data:    mkUserData(1),
-	}
+	}.Build()
 
 	ch := make(chan struct{})
 
 	tqCfg.matchingClientMock.EXPECT().GetTaskQueueUserData(
 		gomock.Any(),
-		&matchingservice.GetTaskQueueUserDataRequest{
+		matchingservice.GetTaskQueueUserDataRequest_builder{
 			NamespaceId:              defaultNamespaceId,
 			TaskQueue:                defaultRootTqID,
 			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			LastKnownUserDataVersion: 0,
 			WaitNewData:              false,
-		}).
+		}.Build()).
 		DoAndReturn(func(ctx context.Context, in *matchingservice.GetTaskQueueUserDataRequest, opts ...grpc.CallOption) (*matchingservice.GetTaskQueueUserDataResponse, error) {
 			<-ch
 			return nil, serviceerror.NewUnavailable("wait a sec")
@@ -445,32 +445,32 @@ func TestUserData_RetriesFetchOnUnavailable(t *testing.T) {
 
 	tqCfg.matchingClientMock.EXPECT().GetTaskQueueUserData(
 		gomock.Any(),
-		&matchingservice.GetTaskQueueUserDataRequest{
+		matchingservice.GetTaskQueueUserDataRequest_builder{
 			NamespaceId:              defaultNamespaceId,
 			TaskQueue:                defaultRootTqID,
 			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			LastKnownUserDataVersion: 0,
 			WaitNewData:              false,
-		}).
+		}.Build()).
 		DoAndReturn(func(ctx context.Context, in *matchingservice.GetTaskQueueUserDataRequest, opts ...grpc.CallOption) (*matchingservice.GetTaskQueueUserDataResponse, error) {
 			<-ch
-			return &matchingservice.GetTaskQueueUserDataResponse{
+			return matchingservice.GetTaskQueueUserDataResponse_builder{
 				UserData: data1,
-			}, nil
+			}.Build(), nil
 		})
 
 	tqCfg.matchingClientMock.EXPECT().GetTaskQueueUserData(
 		gomock.Any(),
-		&matchingservice.GetTaskQueueUserDataRequest{
+		matchingservice.GetTaskQueueUserDataRequest_builder{
 			NamespaceId:              defaultNamespaceId,
 			TaskQueue:                defaultRootTqID,
 			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			LastKnownUserDataVersion: 1,
 			WaitNewData:              true, // after first successful poll, there would be long polls
-		}).
-		Return(&matchingservice.GetTaskQueueUserDataResponse{
+		}.Build()).
+		Return(matchingservice.GetTaskQueueUserDataResponse_builder{
 			UserData: data1,
-		}, nil).
+		}.Build(), nil).
 		// +3 because the counter resets when version changes so the calls with error do not count
 		MaxTimes(maxFastUserDataFetches + 3)
 
@@ -509,22 +509,22 @@ func TestUserData_RetriesFetchOnUnImplemented(t *testing.T) {
 	tqCfg := defaultTqmTestOpts(controller)
 	tqCfg.dbq = dbq
 
-	data1 := &persistencespb.VersionedTaskQueueUserData{
+	data1 := persistencespb.VersionedTaskQueueUserData_builder{
 		Version: 1,
 		Data:    mkUserData(1),
-	}
+	}.Build()
 
 	ch := make(chan struct{})
 
 	tqCfg.matchingClientMock.EXPECT().GetTaskQueueUserData(
 		gomock.Any(),
-		&matchingservice.GetTaskQueueUserDataRequest{
+		matchingservice.GetTaskQueueUserDataRequest_builder{
 			NamespaceId:              defaultNamespaceId,
 			TaskQueue:                defaultRootTqID,
 			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			LastKnownUserDataVersion: 0,
 			WaitNewData:              false,
-		}).
+		}.Build()).
 		DoAndReturn(func(ctx context.Context, in *matchingservice.GetTaskQueueUserDataRequest, opts ...grpc.CallOption) (*matchingservice.GetTaskQueueUserDataResponse, error) {
 			<-ch
 			return nil, serviceerror.NewUnimplemented("older version")
@@ -532,32 +532,32 @@ func TestUserData_RetriesFetchOnUnImplemented(t *testing.T) {
 
 	tqCfg.matchingClientMock.EXPECT().GetTaskQueueUserData(
 		gomock.Any(),
-		&matchingservice.GetTaskQueueUserDataRequest{
+		matchingservice.GetTaskQueueUserDataRequest_builder{
 			NamespaceId:              defaultNamespaceId,
 			TaskQueue:                defaultRootTqID,
 			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			LastKnownUserDataVersion: 0,
 			WaitNewData:              false,
-		}).
+		}.Build()).
 		DoAndReturn(func(ctx context.Context, in *matchingservice.GetTaskQueueUserDataRequest, opts ...grpc.CallOption) (*matchingservice.GetTaskQueueUserDataResponse, error) {
 			<-ch
-			return &matchingservice.GetTaskQueueUserDataResponse{
+			return matchingservice.GetTaskQueueUserDataResponse_builder{
 				UserData: data1,
-			}, nil
+			}.Build(), nil
 		})
 
 	tqCfg.matchingClientMock.EXPECT().GetTaskQueueUserData(
 		gomock.Any(),
-		&matchingservice.GetTaskQueueUserDataRequest{
+		matchingservice.GetTaskQueueUserDataRequest_builder{
 			NamespaceId:              defaultNamespaceId,
 			TaskQueue:                defaultRootTqID,
 			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			LastKnownUserDataVersion: 1,
 			WaitNewData:              true, // after first successful poll, there would be long polls
-		}).
-		Return(&matchingservice.GetTaskQueueUserDataResponse{
+		}.Build()).
+		Return(matchingservice.GetTaskQueueUserDataResponse_builder{
 			UserData: data1,
-		}, nil).
+		}.Build(), nil).
 		// +3 because the counter resets when version changes so the calls with error do not count
 		MaxTimes(maxFastUserDataFetches + 3)
 
@@ -600,36 +600,36 @@ func TestUserData_FetchesUpTree(t *testing.T) {
 	tqCfg.config.ForwarderMaxChildrenPerNode = dynamicconfig.GetIntPropertyFnFilteredByTaskQueue(3)
 	tqCfg.dbq = dbq
 
-	data1 := &persistencespb.VersionedTaskQueueUserData{
+	data1 := persistencespb.VersionedTaskQueueUserData_builder{
 		Version: 1,
 		Data:    mkUserData(1),
-	}
+	}.Build()
 
 	tqCfg.matchingClientMock.EXPECT().GetTaskQueueUserData(
 		gomock.Any(),
-		&matchingservice.GetTaskQueueUserDataRequest{
+		matchingservice.GetTaskQueueUserDataRequest_builder{
 			NamespaceId:              defaultNamespaceId,
 			TaskQueue:                taskQueue.NormalPartition(10).RpcName(),
 			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			LastKnownUserDataVersion: 0,
 			WaitNewData:              false,
-		}).
-		Return(&matchingservice.GetTaskQueueUserDataResponse{
+		}.Build()).
+		Return(matchingservice.GetTaskQueueUserDataResponse_builder{
 			UserData: data1,
-		}, nil)
+		}.Build(), nil)
 
 	tqCfg.matchingClientMock.EXPECT().GetTaskQueueUserData(
 		gomock.Any(),
-		&matchingservice.GetTaskQueueUserDataRequest{
+		matchingservice.GetTaskQueueUserDataRequest_builder{
 			NamespaceId:              defaultNamespaceId,
 			TaskQueue:                taskQueue.NormalPartition(10).RpcName(),
 			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			LastKnownUserDataVersion: 1,
 			WaitNewData:              true, // after first successful poll, there would be long polls
-		}).
-		Return(&matchingservice.GetTaskQueueUserDataResponse{
+		}.Build()).
+		Return(matchingservice.GetTaskQueueUserDataResponse_builder{
 			UserData: data1,
-		}, nil).MaxTimes(maxFastUserDataFetches + 1)
+		}.Build(), nil).MaxTimes(maxFastUserDataFetches + 1)
 
 	m := createUserDataManager(t, controller, tqCfg)
 	m.config.GetUserDataMinWaitTime = 10 * time.Second // wait on success
@@ -652,36 +652,36 @@ func TestUserData_FetchesActivityToWorkflow(t *testing.T) {
 	tqCfg := defaultTqmTestOpts(controller)
 	tqCfg.dbq = dbq
 
-	data1 := &persistencespb.VersionedTaskQueueUserData{
+	data1 := persistencespb.VersionedTaskQueueUserData_builder{
 		Version: 1,
 		Data:    mkUserData(1),
-	}
+	}.Build()
 
 	tqCfg.matchingClientMock.EXPECT().GetTaskQueueUserData(
 		gomock.Any(),
-		&matchingservice.GetTaskQueueUserDataRequest{
+		matchingservice.GetTaskQueueUserDataRequest_builder{
 			NamespaceId:              defaultNamespaceId,
 			TaskQueue:                defaultRootTqID,
 			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			LastKnownUserDataVersion: 0,
 			WaitNewData:              false,
-		}).
-		Return(&matchingservice.GetTaskQueueUserDataResponse{
+		}.Build()).
+		Return(matchingservice.GetTaskQueueUserDataResponse_builder{
 			UserData: data1,
-		}, nil)
+		}.Build(), nil)
 
 	tqCfg.matchingClientMock.EXPECT().GetTaskQueueUserData(
 		gomock.Any(),
-		&matchingservice.GetTaskQueueUserDataRequest{
+		matchingservice.GetTaskQueueUserDataRequest_builder{
 			NamespaceId:              defaultNamespaceId,
 			TaskQueue:                defaultRootTqID,
 			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			LastKnownUserDataVersion: 1,
 			WaitNewData:              true, // after first successful poll, there would be long polls
-		}).
-		Return(&matchingservice.GetTaskQueueUserDataResponse{
+		}.Build()).
+		Return(matchingservice.GetTaskQueueUserDataResponse_builder{
 			UserData: data1,
-		}, nil).MaxTimes(maxFastUserDataFetches + 1)
+		}.Build(), nil).MaxTimes(maxFastUserDataFetches + 1)
 
 	m := createUserDataManager(t, controller, tqCfg)
 	m.config.GetUserDataMinWaitTime = 10 * time.Second // wait on success
@@ -708,24 +708,24 @@ func TestUserData_FetchesStickyToNormal(t *testing.T) {
 	stickyTq := normalTq.StickyPartition(stickyName)
 	tqCfg.dbq = UnversionedQueueKey(stickyTq)
 
-	data1 := &persistencespb.VersionedTaskQueueUserData{
+	data1 := persistencespb.VersionedTaskQueueUserData_builder{
 		Version: 1,
 		Data:    mkUserData(1),
-	}
+	}.Build()
 
 	matchGetTaskQueueUserDataRequest := func(expectedReq *matchingservice.GetTaskQueueUserDataRequest, saveTq func(any)) gomock.Matcher {
 		expectedReq = common.CloneProto(expectedReq)
-		expectedTQ := expectedReq.TaskQueue
-		expectedReq.TaskQueue = ""
+		expectedTQ := expectedReq.GetTaskQueue()
+		expectedReq.SetTaskQueue("")
 		return gomock.Cond(func(req *matchingservice.GetTaskQueueUserDataRequest) bool {
-			saveTq(req.TaskQueue)
+			saveTq(req.GetTaskQueue())
 			// must be some partition of expected name, just use substring match
-			if !strings.Contains(req.TaskQueue, expectedTQ) {
+			if !strings.Contains(req.GetTaskQueue(), expectedTQ) {
 				return false
 			}
 			// check the rest matches
 			req = common.CloneProto(req)
-			req.TaskQueue = ""
+			req.SetTaskQueue("")
 			return proto.Equal(req, expectedReq)
 		})
 	}
@@ -733,29 +733,29 @@ func TestUserData_FetchesStickyToNormal(t *testing.T) {
 	var firstPartition, secondPartition atomic.Value
 	tqCfg.matchingClientMock.EXPECT().GetTaskQueueUserData(
 		gomock.Any(),
-		matchGetTaskQueueUserDataRequest(&matchingservice.GetTaskQueueUserDataRequest{
+		matchGetTaskQueueUserDataRequest(matchingservice.GetTaskQueueUserDataRequest_builder{
 			NamespaceId:              defaultNamespaceId,
 			TaskQueue:                normalName,
 			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			LastKnownUserDataVersion: 0,
 			WaitNewData:              false,
-		}, firstPartition.Store)).
-		Return(&matchingservice.GetTaskQueueUserDataResponse{
+		}.Build(), firstPartition.Store)).
+		Return(matchingservice.GetTaskQueueUserDataResponse_builder{
 			UserData: data1,
-		}, nil)
+		}.Build(), nil)
 
 	tqCfg.matchingClientMock.EXPECT().GetTaskQueueUserData(
 		gomock.Any(),
-		matchGetTaskQueueUserDataRequest(&matchingservice.GetTaskQueueUserDataRequest{
+		matchGetTaskQueueUserDataRequest(matchingservice.GetTaskQueueUserDataRequest_builder{
 			NamespaceId:              defaultNamespaceId,
 			TaskQueue:                normalName,
 			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			LastKnownUserDataVersion: 1,
 			WaitNewData:              true, // after first successful poll, there would be long polls
-		}, secondPartition.Store)).
-		Return(&matchingservice.GetTaskQueueUserDataResponse{
+		}.Build(), secondPartition.Store)).
+		Return(matchingservice.GetTaskQueueUserDataResponse_builder{
 			UserData: data1,
-		}, nil).MaxTimes(maxFastUserDataFetches + 1)
+		}.Build(), nil).MaxTimes(maxFastUserDataFetches + 1)
 
 	m := createUserDataManager(t, controller, tqCfg)
 	m.config.GetUserDataMinWaitTime = 10 * time.Second // wait on success
@@ -841,7 +841,7 @@ func TestUserData_Propagation(t *testing.T) {
 			if rand.Float64() < 0.1 {
 				return nil, serviceerror.NewUnavailable("timeout")
 			}
-			p, err := tqid.NormalPartitionFromRpcName(req.TaskQueue, req.NamespaceId, req.TaskQueueType)
+			p, err := tqid.NormalPartitionFromRpcName(req.GetTaskQueue(), req.GetNamespaceId(), req.GetTaskQueueType())
 			require.NoError(t, err)
 			require.Equal(t, enumspb.TASK_QUEUE_TYPE_WORKFLOW, p.TaskType())
 			res, err := managers[p.PartitionId()].HandleGetUserDataRequest(ctx, req)
@@ -851,12 +851,12 @@ func TestUserData_Propagation(t *testing.T) {
 	opts.matchingClientMock.EXPECT().UpdateTaskQueueUserData(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, req *matchingservice.UpdateTaskQueueUserDataRequest, opts ...grpc.CallOption) (*matchingservice.UpdateTaskQueueUserDataResponse, error) {
 			err := tm.UpdateTaskQueueUserData(ctx, &persistence.UpdateTaskQueueUserDataRequest{
-				NamespaceID: req.NamespaceId,
+				NamespaceID: req.GetNamespaceId(),
 				Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
-					req.TaskQueue: &persistence.SingleTaskQueueUserDataUpdate{
-						UserData:        req.UserData,
-						BuildIdsAdded:   req.BuildIdsAdded,
-						BuildIdsRemoved: req.BuildIdsRemoved,
+					req.GetTaskQueue(): &persistence.SingleTaskQueueUserDataUpdate{
+						UserData:        req.GetUserData(),
+						BuildIdsAdded:   req.GetBuildIdsAdded(),
+						BuildIdsRemoved: req.GetBuildIdsRemoved(),
 					},
 				},
 			})
@@ -935,7 +935,7 @@ func TestUserData_CheckPropagation(t *testing.T) {
 				util.InterruptibleSleep(ctx, 10*time.Millisecond)
 				return nil, serviceerror.NewUnavailable("timeout")
 			}
-			p, err := tqid.NormalPartitionFromRpcName(req.TaskQueue, req.NamespaceId, req.TaskQueueType)
+			p, err := tqid.NormalPartitionFromRpcName(req.GetTaskQueue(), req.GetNamespaceId(), req.GetTaskQueueType())
 			require.NoError(t, err)
 			require.Equal(t, enumspb.TASK_QUEUE_TYPE_WORKFLOW, p.TaskType())
 			res, err := managers[p.PartitionId()].HandleGetUserDataRequest(ctx, req)
@@ -945,12 +945,12 @@ func TestUserData_CheckPropagation(t *testing.T) {
 	opts.matchingClientMock.EXPECT().UpdateTaskQueueUserData(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, req *matchingservice.UpdateTaskQueueUserDataRequest, opts ...grpc.CallOption) (*matchingservice.UpdateTaskQueueUserDataResponse, error) {
 			err := tm.UpdateTaskQueueUserData(ctx, &persistence.UpdateTaskQueueUserDataRequest{
-				NamespaceID: req.NamespaceId,
+				NamespaceID: req.GetNamespaceId(),
 				Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
-					req.TaskQueue: &persistence.SingleTaskQueueUserDataUpdate{
-						UserData:        req.UserData,
-						BuildIdsAdded:   req.BuildIdsAdded,
-						BuildIdsRemoved: req.BuildIdsRemoved,
+					req.GetTaskQueue(): &persistence.SingleTaskQueueUserDataUpdate{
+						UserData:        req.GetUserData(),
+						BuildIdsAdded:   req.GetBuildIdsAdded(),
+						BuildIdsRemoved: req.GetBuildIdsRemoved(),
 					},
 				},
 			})

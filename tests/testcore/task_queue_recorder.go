@@ -76,8 +76,8 @@ func (r *TaskQueueRecorder) UpdateWorkflowExecution(
 		r.recordTasks(
 			request.ShardID,
 			request.RangeID,
-			request.UpdateWorkflowMutation.ExecutionInfo.NamespaceId,
-			request.UpdateWorkflowMutation.ExecutionInfo.WorkflowId,
+			request.UpdateWorkflowMutation.ExecutionInfo.GetNamespaceId(),
+			request.UpdateWorkflowMutation.ExecutionInfo.GetWorkflowId(),
 			request.UpdateWorkflowMutation.Tasks,
 		)
 
@@ -86,8 +86,8 @@ func (r *TaskQueueRecorder) UpdateWorkflowExecution(
 			r.recordTasks(
 				request.ShardID,
 				request.RangeID,
-				request.NewWorkflowSnapshot.ExecutionInfo.NamespaceId,
-				request.NewWorkflowSnapshot.ExecutionInfo.WorkflowId,
+				request.NewWorkflowSnapshot.ExecutionInfo.GetNamespaceId(),
+				request.NewWorkflowSnapshot.ExecutionInfo.GetWorkflowId(),
 				request.NewWorkflowSnapshot.Tasks,
 			)
 		}
@@ -108,8 +108,8 @@ func (r *TaskQueueRecorder) CreateWorkflowExecution(
 		r.recordTasks(
 			request.ShardID,
 			request.RangeID,
-			request.NewWorkflowSnapshot.ExecutionInfo.NamespaceId,
-			request.NewWorkflowSnapshot.ExecutionInfo.WorkflowId,
+			request.NewWorkflowSnapshot.ExecutionInfo.GetNamespaceId(),
+			request.NewWorkflowSnapshot.ExecutionInfo.GetWorkflowId(),
 			request.NewWorkflowSnapshot.Tasks,
 		)
 	}

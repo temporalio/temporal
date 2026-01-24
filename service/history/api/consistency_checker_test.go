@@ -89,10 +89,10 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 		ctx,
 		s.shardContext,
 		namespace.ID(s.namespaceID),
-		protomock.Eq(&commonpb.WorkflowExecution{
+		protomock.Eq(commonpb.WorkflowExecution_builder{
 			WorkflowId: s.workflowID,
 			RunId:      s.currentRunID,
-		}),
+		}.Build()),
 		chasm.WorkflowArchetypeID,
 		locks.PriorityHigh,
 	).Return(wfContext, releaseFn, nil)
@@ -171,28 +171,28 @@ func (s *workflowConsistencyCheckerSuite) Test_clockConsistencyCheck() {
 	err := s.checker.clockConsistencyCheck(nil)
 	s.NoError(err)
 
-	reqClock := &clockspb.VectorClock{
+	reqClock := clockspb.VectorClock_builder{
 		ShardId:   1,
 		Clock:     10,
 		ClusterId: 1,
-	}
+	}.Build()
 
 	// not compatible - different shard id
-	differentShardClock := &clockspb.VectorClock{
+	differentShardClock := clockspb.VectorClock_builder{
 		ShardId:   2,
 		Clock:     1,
 		ClusterId: 1,
-	}
+	}.Build()
 	s.shardContext.EXPECT().CurrentVectorClock().Return(differentShardClock)
 	err = s.checker.clockConsistencyCheck(reqClock)
 	s.NoError(err)
 
 	// not compatible - different cluster id
-	differentClusterClock := &clockspb.VectorClock{
+	differentClusterClock := clockspb.VectorClock_builder{
 		ShardId:   1,
 		Clock:     1,
 		ClusterId: 2,
-	}
+	}.Build()
 	s.shardContext.EXPECT().CurrentVectorClock().Return(differentClusterClock)
 	err = s.checker.clockConsistencyCheck(reqClock)
 	s.NoError(err)
@@ -203,21 +203,21 @@ func (s *workflowConsistencyCheckerSuite) Test_clockConsistencyCheck() {
 	s.NoError(err)
 
 	// shard clock ahead
-	shardClock := &clockspb.VectorClock{
+	shardClock := clockspb.VectorClock_builder{
 		ShardId:   1,
 		Clock:     20,
 		ClusterId: 1,
-	}
+	}.Build()
 	s.shardContext.EXPECT().CurrentVectorClock().Return(shardClock)
 	err = s.checker.clockConsistencyCheck(reqClock)
 	s.NoError(err)
 
 	// shard clock behind
-	shardClock = &clockspb.VectorClock{
+	shardClock = clockspb.VectorClock_builder{
 		ShardId:   1,
 		Clock:     1,
 		ClusterId: 1,
-	}
+	}.Build()
 	s.shardContext.EXPECT().CurrentVectorClock().Return(shardClock)
 	s.shardContext.EXPECT().UnloadForOwnershipLost()
 	err = s.checker.clockConsistencyCheck(reqClock)

@@ -260,7 +260,7 @@ func (u *Update) abort(
 		}
 		var abortOutcome *updatepb.Outcome
 		if abortFailure != nil {
-			abortOutcome = &updatepb.Outcome{Value: &updatepb.Outcome_Failure{Failure: abortFailure}}
+			abortOutcome = updatepb.Outcome_builder{Failure: proto.ValueOrDefault(abortFailure)}.Build()
 		}
 
 		beforeCommitState := u.setState(stateAborted)
@@ -368,11 +368,11 @@ func (u *Update) OnProtocolMessage(
 		return serviceerror.NewInvalidArgumentf("Update %s received nil message", u.id)
 	}
 
-	if protocolMsg.Body == nil {
+	if !protocolMsg.HasBody() {
 		return serviceerror.NewInvalidArgumentf("Update %s received message with nil body", u.id)
 	}
 
-	body, err := protocolMsg.Body.UnmarshalNew()
+	body, err := protocolMsg.GetBody().UnmarshalNew()
 	if err != nil {
 		return serviceerror.NewInvalidArgumentf("unable to unmarshal request: %v", err)
 	}
@@ -415,7 +415,7 @@ func (u *Update) needToSend(includeAlreadySent bool) bool {
 // Note: once Update moved to stateSent it never moves back to stateAdmitted.
 func (u *Update) Send(
 	includeAlreadySent bool,
-	sequencingID *protocolpb.Message_EventId,
+	sequencingEventID int64,
 ) *protocolpb.Message {
 	if !u.needToSend(includeAlreadySent) {
 		return nil
@@ -435,12 +435,12 @@ func (u *Update) Send(
 		// this event (which contains the request payload) is how the Update request will be communicated to the worker.
 		return nil
 	}
-	return &protocolpb.Message{
+	return protocolpb.Message_builder{
 		ProtocolInstanceId: u.id,
 		Id:                 u.outgoingMessageID(),
-		SequencingId:       sequencingID,
+		EventId:            proto.Int64(sequencingEventID),
 		Body:               u.request,
-	}
+	}.Build()
 }
 
 // isSent checks if Update was sent to worker.
@@ -496,12 +496,12 @@ func (u *Update) onAcceptanceMsg(
 	event, err := eventStore.AddWorkflowExecutionUpdateAcceptedEvent(
 		u.id,
 		u.outgoingMessageID(),
-		acpt.AcceptedRequestSequencingEventId,
+		acpt.GetAcceptedRequestSequencingEventId(),
 		acceptedRequest)
 	if err != nil {
 		return err
 	}
-	u.acceptedEventID = event.EventId
+	u.acceptedEventID = event.GetEventId()
 
 	prevState := u.setState(stateProvisionallyAccepted)
 	eventStore.OnAfterCommit(func(context.Context) {
@@ -566,7 +566,7 @@ func (u *Update) onRejectionMsg(
 		return err
 	}
 	u.instrumentation.countRejectionMsg()
-	return u.reject(rej.Failure, effects)
+	return u.reject(rej.GetFailure(), effects)
 }
 
 // rejects an Update with provided failure.
@@ -582,11 +582,11 @@ func (u *Update) reject(
 
 		u.request = nil
 		u.setState(stateCompleted)
-		outcome := updatepb.Outcome{
-			Value: &updatepb.Outcome_Failure{Failure: rejectionFailure},
-		}
+		outcome := updatepb.Outcome_builder{
+			Failure: proto.ValueOrDefault(rejectionFailure),
+		}.Build()
 		u.accepted.(*future.FutureImpl[*failurepb.Failure]).Set(rejectionFailure, nil)
-		u.outcome.(*future.FutureImpl[*updatepb.Outcome]).Set(&outcome, nil)
+		u.outcome.(*future.FutureImpl[*updatepb.Outcome]).Set(outcome, nil)
 		u.onComplete()
 	})
 	effects.OnAfterRollback(func(context.Context) {

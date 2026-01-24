@@ -49,21 +49,22 @@ func Invoke(
 		return nil, err
 	}
 
-	if len(request.Request.Execution.RunId) == 0 {
-		request.Request.Execution.RunId, err = workflowConsistencyChecker.GetCurrentWorkflowRunID(
+	if len(request.GetRequest().GetExecution().GetRunId()) == 0 {
+		runID, err := workflowConsistencyChecker.GetCurrentWorkflowRunID(
 			ctx,
-			request.NamespaceId,
-			request.Request.Execution.WorkflowId,
+			request.GetNamespaceId(),
+			request.GetRequest().GetExecution().GetWorkflowId(),
 			locks.PriorityHigh,
 		)
 		if err != nil {
 			return nil, err
 		}
+		request.GetRequest().GetExecution().SetRunId(runID)
 	}
 	workflowKey := definition.NewWorkflowKey(
-		request.NamespaceId,
-		request.Request.Execution.WorkflowId,
-		request.Request.Execution.RunId,
+		request.GetNamespaceId(),
+		request.GetRequest().GetExecution().GetWorkflowId(),
+		request.GetRequest().GetExecution().GetRunId(),
 	)
 	workflowLease, err := workflowConsistencyChecker.GetWorkflowLease(
 		ctx,
@@ -83,28 +84,28 @@ func Invoke(
 	req := request.GetRequest()
 	_, mutableStateStatus := workflowLease.GetMutableState().GetWorkflowStateStatus()
 	scope = scope.WithTags(metrics.StringTag("workflow_status", mutableStateStatus.String()))
-	if mutableStateStatus != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING && req.QueryRejectCondition != enumspb.QUERY_REJECT_CONDITION_NONE {
+	if mutableStateStatus != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING && req.GetQueryRejectCondition() != enumspb.QUERY_REJECT_CONDITION_NONE {
 		notOpenReject := req.GetQueryRejectCondition() == enumspb.QUERY_REJECT_CONDITION_NOT_OPEN
 		notCompletedCleanlyReject := req.GetQueryRejectCondition() == enumspb.QUERY_REJECT_CONDITION_NOT_COMPLETED_CLEANLY && mutableStateStatus != enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
 		if notOpenReject || notCompletedCleanlyReject {
-			return &historyservice.QueryWorkflowResponse{
-				Response: &workflowservice.QueryWorkflowResponse{
-					QueryRejected: &querypb.QueryRejected{
+			return historyservice.QueryWorkflowResponse_builder{
+				Response: workflowservice.QueryWorkflowResponse_builder{
+					QueryRejected: querypb.QueryRejected_builder{
 						Status: mutableStateStatus,
-					},
-				},
-			}, nil
+					}.Build(),
+				}.Build(),
+			}.Build(), nil
 		}
 	}
 	// If workflow is paused, return query rejected with PAUSED status.
 	if mutableStateStatus == enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED {
-		return &historyservice.QueryWorkflowResponse{
-			Response: &workflowservice.QueryWorkflowResponse{
-				QueryRejected: &querypb.QueryRejected{
+		return historyservice.QueryWorkflowResponse_builder{
+			Response: workflowservice.QueryWorkflowResponse_builder{
+				QueryRejected: querypb.QueryRejected_builder{
 					Status: enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED,
-				},
-			},
-		}, nil
+				}.Build(),
+			}.Build(),
+		}.Build(), nil
 	}
 
 	mutableState := workflowLease.GetMutableState()
@@ -126,18 +127,18 @@ func Invoke(
 		}
 	}
 
-	if mutableState.GetExecutionInfo().WorkflowTaskAttempt >= failQueryWorkflowTaskAttemptCount {
+	if mutableState.GetExecutionInfo().GetWorkflowTaskAttempt() >= failQueryWorkflowTaskAttemptCount {
 		// while workflow task is failing, the query to that workflow will also fail. Failing fast here to prevent wasting
 		// resources to load history for a query that will fail.
 		shardContext.GetLogger().Info("Fail query fast due to WorkflowTask in failed state.",
-			tag.WorkflowNamespace(request.Request.Namespace),
+			tag.WorkflowNamespace(request.GetRequest().GetNamespace()),
 			tag.WorkflowNamespaceID(workflowKey.NamespaceID),
 			tag.WorkflowID(workflowKey.WorkflowID),
 			tag.WorkflowRunID(workflowKey.RunID))
 		return nil, serviceerror.NewWorkflowNotReady("Unable to query workflow due to Workflow Task in failed state.")
 	}
 
-	priority := mutableState.GetExecutionInfo().Priority
+	priority := mutableState.GetExecutionInfo().GetPriority()
 
 	// There are two ways in which queries get dispatched to workflow worker. First, queries can be dispatched on workflow tasks.
 	// These workflow tasks potentially contain new events and queries. The events are treated as coming before the query in time.
@@ -160,7 +161,7 @@ func Invoke(
 				return nil, err
 			}
 			workflowLease.GetReleaseFn()(nil) // release the lock - no access to mutable state beyond this point!
-			req.Execution.RunId = msResp.Execution.RunId
+			req.GetExecution().SetRunId(msResp.GetExecution().GetRunId())
 			return queryDirectlyThroughMatching(
 				ctx,
 				msResp,
@@ -215,11 +216,11 @@ func Invoke(
 					req.GetQuery().GetQueryType(),
 					nil,
 				)
-				return &historyservice.QueryWorkflowResponse{
-					Response: &workflowservice.QueryWorkflowResponse{
+				return historyservice.QueryWorkflowResponse_builder{
+					Response: workflowservice.QueryWorkflowResponse_builder{
 						QueryResult: result.GetAnswer(),
-					},
-				}, nil
+					}.Build(),
+				}.Build(), nil
 			case enumspb.QUERY_RESULT_TYPE_FAILED:
 				err := serviceerror.NewQueryFailedWithFailure(result.GetErrorMessage(), result.GetFailure())
 				emitWorkflowQueryMetrics(
@@ -239,7 +240,7 @@ func Invoke(
 			if err != nil {
 				return nil, err
 			}
-			req.Execution.RunId = msResp.Execution.RunId
+			req.GetExecution().SetRunId(msResp.GetExecution().GetRunId())
 			return queryDirectlyThroughMatching(
 				ctx,
 				msResp,
@@ -290,7 +291,7 @@ func queryWillTimeoutsBeforeFirstWorkflowTaskStart(
 	startAttr := startEvent.GetWorkflowExecutionStartedEventAttributes()
 	workflowTaskBackoffDuration := timestamp.DurationValue(startAttr.GetFirstWorkflowTaskBackoff())
 
-	workflowStart := mutableState.GetExecutionState().StartTime.AsTime().UTC()
+	workflowStart := mutableState.GetExecutionState().GetStartTime().AsTime().UTC()
 	workflowTaskStart := workflowStart.Add(workflowTaskBackoffDuration)
 
 	deadline, ok := ctx.Deadline()
@@ -344,13 +345,13 @@ func queryDirectlyThroughMatching(
 		len(msResp.GetStickyTaskQueue().GetName()) != 0 &&
 		shard.GetConfig().EnableStickyQuery(queryRequest.GetNamespace()) {
 
-		stickyMatchingRequest := &matchingservice.QueryWorkflowRequest{
+		stickyMatchingRequest := matchingservice.QueryWorkflowRequest_builder{
 			NamespaceId:      namespaceID,
 			QueryRequest:     queryRequest,
 			TaskQueue:        msResp.GetStickyTaskQueue(),
 			VersionDirective: directive,
 			Priority:         priority,
-		}
+		}.Build()
 
 		// using a clean new context in case customer provide a context which has
 		// a really short deadline, causing we clear the stickiness
@@ -361,11 +362,11 @@ func queryDirectlyThroughMatching(
 		cancel()
 		if err == nil {
 			metrics.DirectQueryDispatchStickySuccessCount.With(metricsHandler).Record(1)
-			return &historyservice.QueryWorkflowResponse{
-				Response: &workflowservice.QueryWorkflowResponse{
+			return historyservice.QueryWorkflowResponse_builder{
+				Response: workflowservice.QueryWorkflowResponse_builder{
 					QueryResult:   matchingResp.GetQueryResult(),
 					QueryRejected: matchingResp.GetQueryRejected(),
-				}}, nil
+				}.Build()}.Build(), nil
 		}
 		if !common.IsContextDeadlineExceededErr(err) && !common.IsContextCanceledErr(err) && !common.IsStickyWorkerUnavailable(err) {
 			return nil, err
@@ -373,10 +374,10 @@ func queryDirectlyThroughMatching(
 		if msResp.GetWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 			resetContext, cancel := rpc.ResetContextTimeout(ctx, 5*time.Second)
 			clearStickinessStartTime := time.Now().UTC()
-			_, err := resetstickytaskqueue.Invoke(resetContext, &historyservice.ResetStickyTaskQueueRequest{
+			_, err := resetstickytaskqueue.Invoke(resetContext, historyservice.ResetStickyTaskQueueRequest_builder{
 				NamespaceId: namespaceID,
 				Execution:   queryRequest.GetExecution(),
-			}, shard, workflowConsistencyChecker)
+			}.Build(), shard, workflowConsistencyChecker)
 			metrics.DirectQueryDispatchClearStickinessLatency.With(metricsHandler).Record(time.Since(clearStickinessStartTime))
 			cancel()
 			if err != nil && err != consts.ErrWorkflowCompleted {
@@ -391,13 +392,13 @@ func queryDirectlyThroughMatching(
 		return nil, err
 	}
 
-	nonStickyMatchingRequest := &matchingservice.QueryWorkflowRequest{
+	nonStickyMatchingRequest := matchingservice.QueryWorkflowRequest_builder{
 		NamespaceId:      namespaceID,
 		QueryRequest:     queryRequest,
-		TaskQueue:        msResp.TaskQueue,
+		TaskQueue:        msResp.GetTaskQueue(),
 		VersionDirective: directive,
 		Priority:         priority,
-	}
+	}.Build()
 
 	nonStickyStartTime := time.Now().UTC()
 	matchingResp, err := matchingClient.QueryWorkflow(ctx, nonStickyMatchingRequest)
@@ -406,11 +407,11 @@ func queryDirectlyThroughMatching(
 		return nil, err
 	}
 	metrics.DirectQueryDispatchNonStickySuccessCount.With(metricsHandler).Record(1)
-	return &historyservice.QueryWorkflowResponse{
-		Response: &workflowservice.QueryWorkflowResponse{
+	return historyservice.QueryWorkflowResponse_builder{
+		Response: workflowservice.QueryWorkflowResponse_builder{
 			QueryResult:   matchingResp.GetQueryResult(),
 			QueryRejected: matchingResp.GetQueryRejected(),
-		}}, err
+		}.Build()}.Build(), err
 }
 
 func emitWorkflowQueryMetrics(

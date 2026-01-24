@@ -75,9 +75,9 @@ func (u *Updater) Invoke(
 	ctx context.Context,
 ) (*historyservice.UpdateWorkflowExecutionResponse, error) {
 	wfKey := definition.NewWorkflowKey(
-		u.req.NamespaceId,
-		u.req.Request.WorkflowExecution.WorkflowId,
-		u.req.Request.WorkflowExecution.RunId,
+		u.req.GetNamespaceId(),
+		u.req.GetRequest().GetWorkflowExecution().GetWorkflowId(),
+		u.req.GetRequest().GetWorkflowExecution().GetRunId(),
 	)
 
 	err := api.GetAndUpdateWorkflowWithNew(
@@ -129,13 +129,13 @@ func (u *Updater) ApplyRequest(
 		return nil, serviceerror.NewFailedPrecondition("Workflow is paused. Cannot update the workflow.")
 	}
 
-	if ms.GetExecutionInfo().WorkflowTaskAttempt >= failUpdateWorkflowTaskAttemptCount {
+	if ms.GetExecutionInfo().GetWorkflowTaskAttempt() >= failUpdateWorkflowTaskAttemptCount {
 		// If workflow task is constantly failing, the update to that workflow will also fail.
 		// Additionally, workflow update can't "fix" workflow state because updates (delivered with messages)
 		// are applied after events.
 		// Failing API call fast here to prevent wasting resources for an update that will fail.
 		u.shardCtx.GetLogger().Info("Fail update fast due to WorkflowTask in failed state.",
-			tag.WorkflowNamespace(u.req.Request.Namespace),
+			tag.WorkflowNamespace(u.req.GetRequest().GetNamespace()),
 			tag.WorkflowNamespaceID(u.wfKey.NamespaceID),
 			tag.WorkflowID(u.wfKey.WorkflowID),
 			tag.WorkflowRunID(u.wfKey.RunID))
@@ -147,7 +147,7 @@ func (u *Updater) ApplyRequest(
 	// then don't admit new updates.
 	if ms.IsWorkflowCloseAttempted() && ms.HasStartedWorkflowTask() {
 		u.shardCtx.GetLogger().Info("Fail update because workflow is closing.",
-			tag.WorkflowNamespace(u.req.Request.Namespace),
+			tag.WorkflowNamespace(u.req.GetRequest().GetNamespace()),
 			tag.WorkflowNamespaceID(u.wfKey.NamespaceID),
 			tag.WorkflowID(u.wfKey.WorkflowID),
 			tag.WorkflowRunID(u.wfKey.RunID))
@@ -189,13 +189,13 @@ func (u *Updater) ApplyRequest(
 
 	u.scheduledEventID = newWorkflowTask.ScheduledEventID
 	u.workflowTaskStamp = newWorkflowTask.Stamp
-	if _, scheduleToStartTimeoutPtr := ms.TaskQueueScheduleToStartTimeout(ms.CurrentTaskQueue().Name); scheduleToStartTimeoutPtr != nil {
+	if _, scheduleToStartTimeoutPtr := ms.TaskQueueScheduleToStartTimeout(ms.CurrentTaskQueue().GetName()); scheduleToStartTimeoutPtr != nil {
 		u.scheduleToStartTimeout = scheduleToStartTimeoutPtr.AsDuration()
 	}
 
 	u.taskQueue = common.CloneProto(newWorkflowTask.TaskQueue)
-	u.priority = common.CloneProto(ms.GetExecutionInfo().Priority)
-	u.normalTaskQueueName = ms.GetExecutionInfo().TaskQueue
+	u.priority = common.CloneProto(ms.GetExecutionInfo().GetPriority())
+	u.normalTaskQueueName = ms.GetExecutionInfo().GetTaskQueue()
 	u.directive = worker_versioning.MakeDirectiveForWorkflowTask(
 		ms.GetInheritedBuildId(),
 		ms.GetAssignedBuildId(),
@@ -224,16 +224,16 @@ func (u *Updater) OnSuccess(
 
 		if _, isStickyWorkerUnavailable := err.(*serviceerrors.StickyWorkerUnavailable); isStickyWorkerUnavailable {
 			// If sticky worker is unavailable, switch to original normal task queue.
-			u.taskQueue = &taskqueuepb.TaskQueue{
+			u.taskQueue = taskqueuepb.TaskQueue_builder{
 				Name: u.normalTaskQueueName,
 				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-			}
+			}.Build()
 			err = u.addWorkflowTaskToMatching(ctx)
 		}
 
 		if err != nil {
 			u.shardCtx.GetLogger().Warn("Unable to add WorkflowTask directly to matching.",
-				tag.WorkflowNamespace(u.req.Request.Namespace),
+				tag.WorkflowNamespace(u.req.GetRequest().GetNamespace()),
 				tag.WorkflowNamespaceID(u.wfKey.NamespaceID),
 				tag.WorkflowID(u.wfKey.WorkflowID),
 				tag.WorkflowRunID(u.wfKey.RunID),
@@ -272,12 +272,12 @@ func (u *Updater) addWorkflowTaskToMatching(ctx context.Context) error {
 		return err
 	}
 
-	_, err = u.matchingClient.AddWorkflowTask(ctx, &matchingservice.AddWorkflowTaskRequest{
+	_, err = u.matchingClient.AddWorkflowTask(ctx, matchingservice.AddWorkflowTaskRequest_builder{
 		NamespaceId: u.namespaceID.String(),
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: u.wfKey.WorkflowID,
 			RunId:      u.wfKey.RunID,
-		},
+		}.Build(),
 		TaskQueue:              u.taskQueue,
 		ScheduledEventId:       u.scheduledEventID,
 		ScheduleToStartTimeout: durationpb.New(u.scheduleToStartTimeout),
@@ -285,7 +285,7 @@ func (u *Updater) addWorkflowTaskToMatching(ctx context.Context) error {
 		VersionDirective:       u.directive,
 		Priority:               u.priority,
 		Stamp:                  u.workflowTaskStamp,
-	})
+	}.Build())
 	if err != nil {
 		return err
 	}
@@ -298,17 +298,17 @@ func (u *Updater) CreateResponse(
 	outcome *updatepb.Outcome,
 	stage enumspb.UpdateWorkflowExecutionLifecycleStage,
 ) *historyservice.UpdateWorkflowExecutionResponse {
-	return &historyservice.UpdateWorkflowExecutionResponse{
-		Response: &workflowservice.UpdateWorkflowExecutionResponse{
-			UpdateRef: &updatepb.UpdateRef{
-				WorkflowExecution: &commonpb.WorkflowExecution{
+	return historyservice.UpdateWorkflowExecutionResponse_builder{
+		Response: workflowservice.UpdateWorkflowExecutionResponse_builder{
+			UpdateRef: updatepb.UpdateRef_builder{
+				WorkflowExecution: commonpb.WorkflowExecution_builder{
 					WorkflowId: wfKey.WorkflowID,
 					RunId:      wfKey.RunID,
-				},
+				}.Build(),
 				UpdateId: u.req.GetRequest().GetRequest().GetMeta().GetUpdateId(),
-			},
+			}.Build(),
 			Outcome: outcome,
 			Stage:   stage,
-		},
-	}
+		}.Build(),
+	}.Build()
 }

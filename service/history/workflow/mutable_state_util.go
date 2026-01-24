@@ -22,8 +22,8 @@ func convertSyncActivityInfos(
 		if ok {
 			outputs = append(outputs, &tasks.SyncActivityTask{
 				WorkflowKey:         workflowKey,
-				Version:             activityInfo.Version,
-				ScheduledEventID:    activityInfo.ScheduledEventId,
+				Version:             activityInfo.GetVersion(),
+				ScheduledEventID:    activityInfo.GetScheduledEventId(),
 				VisibilityTimestamp: now,
 				TargetClusters:      targetClusters,
 			})
@@ -38,43 +38,43 @@ func SanitizeMutableState(
 	// Some values stored in mutable state are cluster or shard specific.
 	// E.g task status (if task is created or not), taskID (derived from shard rangeID), txnID (derived from shard rangeID), etc.
 	// Those fields should not be replicated across clusters and should be sanitized.
-	sanitizeExecutionInfo(workflowMutableState.ExecutionInfo)
+	sanitizeExecutionInfo(workflowMutableState.GetExecutionInfo())
 
-	sanitizeChildExecutionInfo(workflowMutableState.ChildExecutionInfos)
+	sanitizeChildExecutionInfo(workflowMutableState.GetChildExecutionInfos())
 
-	rootNode := persistencespb.StateMachineNode{
-		Children: workflowMutableState.ExecutionInfo.SubStateMachinesByType,
-	}
-	SanitizeStateMachineNode(&rootNode)
+	rootNode := persistencespb.StateMachineNode_builder{
+		Children: workflowMutableState.GetExecutionInfo().GetSubStateMachinesByType(),
+	}.Build()
+	SanitizeStateMachineNode(rootNode)
 }
 
 func SanitizeMutableStateMutation(
 	mutableStateMutation *persistencespb.WorkflowMutableStateMutation,
 ) {
-	sanitizeExecutionInfo(mutableStateMutation.ExecutionInfo)
-	sanitizeChildExecutionInfo(mutableStateMutation.UpdatedChildExecutionInfos)
+	sanitizeExecutionInfo(mutableStateMutation.GetExecutionInfo())
+	sanitizeChildExecutionInfo(mutableStateMutation.GetUpdatedChildExecutionInfos())
 }
 
 func sanitizeExecutionInfo(
 	executionInfo *persistencespb.WorkflowExecutionInfo,
 ) {
-	executionInfo.WorkflowExecutionTimerTaskStatus = TimerTaskStatusNone
-	executionInfo.LastFirstEventTxnId = common.EmptyEventTaskID
-	executionInfo.CloseVisibilityTaskId = common.EmptyEventTaskID
-	executionInfo.CloseTransferTaskId = common.EmptyEventTaskID
+	executionInfo.SetWorkflowExecutionTimerTaskStatus(TimerTaskStatusNone)
+	executionInfo.SetLastFirstEventTxnId(common.EmptyEventTaskID)
+	executionInfo.SetCloseVisibilityTaskId(common.EmptyEventTaskID)
+	executionInfo.SetCloseTransferTaskId(common.EmptyEventTaskID)
 	// TODO: after adding cluster to clock info, no need to reset clock here
-	executionInfo.ParentClock = nil
+	executionInfo.ClearParentClock()
 
 	// Timer tasks are generated locally, do not sync them.
-	executionInfo.StateMachineTimers = nil
-	executionInfo.TaskGenerationShardClockTimestamp = common.EmptyEventTaskID
+	executionInfo.SetStateMachineTimers(nil)
+	executionInfo.SetTaskGenerationShardClockTimestamp(common.EmptyEventTaskID)
 }
 
 func sanitizeChildExecutionInfo(
 	pendingChildInfo map[int64]*persistencespb.ChildExecutionInfo,
 ) {
 	for _, childExecutionInfo := range pendingChildInfo {
-		childExecutionInfo.Clock = nil
+		childExecutionInfo.ClearClock()
 	}
 }
 
@@ -87,10 +87,10 @@ func SanitizeStateMachineNode(
 
 	// Node TransitionCount is cluster local information used for detecting staleness.
 	// Reset it to 1 since we are creating a new mutable state.
-	node.TransitionCount = 1
+	node.SetTransitionCount(1)
 
-	for _, stateMachineMap := range node.Children {
-		for _, childNode := range stateMachineMap.MachinesById {
+	for _, stateMachineMap := range node.GetChildren() {
+		for _, childNode := range stateMachineMap.GetMachinesById() {
 			SanitizeStateMachineNode(childNode)
 		}
 	}

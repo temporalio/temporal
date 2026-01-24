@@ -84,7 +84,7 @@ func (m mockEventStore) AddWorkflowExecutionUpdateAcceptedEvent(
 	if m.AddWorkflowExecutionUpdateAcceptedEventFunc != nil {
 		return m.AddWorkflowExecutionUpdateAcceptedEventFunc(updateID, acceptedRequestMessageId, acceptedRequestSequencingEventId, acceptedRequest)
 	}
-	return &historypb.HistoryEvent{EventId: testAcceptedEventID}, nil
+	return historypb.HistoryEvent_builder{EventId: testAcceptedEventID}.Build(), nil
 }
 
 func (m mockEventStore) AddWorkflowExecutionUpdateCompletedEvent(

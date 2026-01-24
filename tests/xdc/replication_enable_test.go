@@ -114,9 +114,9 @@ func (s *ReplicationEnableTestSuite) TearDownSuite() {
 func (s *ReplicationEnableTestSuite) clusterReplicationConfig() []*replicationpb.ClusterReplicationConfig {
 	config := make([]*replicationpb.ClusterReplicationConfig, len(s.clusters))
 	for i, c := range s.clusters {
-		config[i] = &replicationpb.ClusterReplicationConfig{
+		config[i] = replicationpb.ClusterReplicationConfig_builder{
 			ClusterName: c.ClusterName(),
-		}
+		}.Build()
 	}
 	return config
 }
@@ -145,7 +145,7 @@ func (s *ReplicationEnableTestSuite) TestReplicationEnableFlow() {
 	}
 
 	workflowID1 := tv.WorkflowID()
-	taskQueueName := tv.TaskQueue().Name
+	taskQueueName := tv.TaskQueue().GetName()
 	activeNamespace := tv.NamespaceName().String()
 
 	s.logger.Info("Step 1: Connect clusters with connection enabled but replication disabled")
@@ -154,22 +154,22 @@ func (s *ReplicationEnableTestSuite) TestReplicationEnableFlow() {
 	var err error
 	_, err = activeCluster.AdminClient().AddOrUpdateRemoteCluster(
 		ctx,
-		&adminservice.AddOrUpdateRemoteClusterRequest{
+		adminservice.AddOrUpdateRemoteClusterRequest_builder{
 			FrontendAddress:               standbyCluster.Host().RemoteFrontendGRPCAddress(),
 			FrontendHttpAddress:           standbyCluster.Host().FrontendHTTPAddress(),
 			EnableRemoteClusterConnection: true,
 			EnableReplication:             false,
-		})
+		}.Build())
 	s.Require().NoError(err)
 
 	_, err = standbyCluster.AdminClient().AddOrUpdateRemoteCluster(
 		ctx,
-		&adminservice.AddOrUpdateRemoteClusterRequest{
+		adminservice.AddOrUpdateRemoteClusterRequest_builder{
 			FrontendAddress:               activeCluster.Host().RemoteFrontendGRPCAddress(),
 			FrontendHttpAddress:           activeCluster.Host().FrontendHTTPAddress(),
 			EnableRemoteClusterConnection: true,
 			EnableReplication:             false,
-		})
+		}.Build())
 	s.Require().NoError(err)
 
 	// Wait for cluster metadata to refresh (ClusterMetadataRefreshInterval is 5 seconds)
@@ -177,13 +177,13 @@ func (s *ReplicationEnableTestSuite) TestReplicationEnableFlow() {
 
 	s.logger.Info("Step 2: Create namespace")
 
-	_, err = activeCluster.FrontendClient().RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
+	_, err = activeCluster.FrontendClient().RegisterNamespace(ctx, workflowservice.RegisterNamespaceRequest_builder{
 		Namespace:                        activeNamespace,
 		IsGlobalNamespace:                true,
 		Clusters:                         s.clusterReplicationConfig(),
 		ActiveClusterName:                activeCluster.ClusterName(),
 		WorkflowExecutionRetentionPeriod: durationpb.New(7 * 24 * time.Hour),
-	})
+	}.Build())
 	s.Require().NoError(err)
 
 	// Create SDK client and worker after namespace is created
@@ -205,9 +205,9 @@ func (s *ReplicationEnableTestSuite) TestReplicationEnableFlow() {
 	// Namespace should replicate even when workflow replication is disabled
 	// because namespace replication happens when clusters are connected
 	s.Eventually(func() bool {
-		_, err := standbyCluster.FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+		_, err := standbyCluster.FrontendClient().DescribeNamespace(ctx, workflowservice.DescribeNamespaceRequest_builder{
 			Namespace: activeNamespace,
-		})
+		}.Build())
 		return err == nil
 	}, 60*time.Second, 1*time.Second, "Namespace should replicate when clusters are connected")
 
@@ -227,24 +227,24 @@ func (s *ReplicationEnableTestSuite) TestReplicationEnableFlow() {
 	s.Require().Equal("workflow completed successfully", result)
 
 	// Verify workflow is in completed state on active cluster
-	descResp, err := activeCluster.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+	descResp, err := activeCluster.FrontendClient().DescribeWorkflowExecution(ctx, workflowservice.DescribeWorkflowExecutionRequest_builder{
 		Namespace: activeNamespace,
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: workflowID1,
 			RunId:      workflowRun.GetRunID(),
-		},
-	})
+		}.Build(),
+	}.Build())
 	s.Require().NoError(err)
-	s.Require().Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, descResp.WorkflowExecutionInfo.Status)
+	s.Require().Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, descResp.GetWorkflowExecutionInfo().GetStatus())
 
 	// Verify workflow did NOT replicate to standby cluster (replication is disabled)
 	time.Sleep(2 * time.Second) //nolint:forbidigo
-	_, err = standbyCluster.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+	_, err = standbyCluster.FrontendClient().DescribeWorkflowExecution(ctx, workflowservice.DescribeWorkflowExecutionRequest_builder{
 		Namespace: activeNamespace,
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: workflowID1,
-		},
-	})
+		}.Build(),
+	}.Build())
 	s.Require().Error(err, "Workflow should NOT replicate to standby when replication is disabled")
 	s.Require().Contains(err.Error(), "not found", "Expected workflow not found error")
 
@@ -253,23 +253,23 @@ func (s *ReplicationEnableTestSuite) TestReplicationEnableFlow() {
 	// Enable replication active -> standby
 	_, err = activeCluster.AdminClient().AddOrUpdateRemoteCluster(
 		ctx,
-		&adminservice.AddOrUpdateRemoteClusterRequest{
+		adminservice.AddOrUpdateRemoteClusterRequest_builder{
 			FrontendAddress:               standbyCluster.Host().RemoteFrontendGRPCAddress(),
 			FrontendHttpAddress:           standbyCluster.Host().FrontendHTTPAddress(),
 			EnableRemoteClusterConnection: true,
 			EnableReplication:             true, // NOW enable replication
-		})
+		}.Build())
 	s.Require().NoError(err)
 
 	// Enable replication standby -> active
 	_, err = standbyCluster.AdminClient().AddOrUpdateRemoteCluster(
 		ctx,
-		&adminservice.AddOrUpdateRemoteClusterRequest{
+		adminservice.AddOrUpdateRemoteClusterRequest_builder{
 			FrontendAddress:               activeCluster.Host().RemoteFrontendGRPCAddress(),
 			FrontendHttpAddress:           activeCluster.Host().FrontendHTTPAddress(),
 			EnableRemoteClusterConnection: true,
 			EnableReplication:             true, // NOW enable replication
-		})
+		}.Build())
 	s.Require().NoError(err)
 
 	// Wait for cluster metadata to refresh and replication streams to establish
@@ -289,11 +289,11 @@ func (s *ReplicationEnableTestSuite) TestReplicationEnableFlow() {
 	s.logger.Info("Step 7: Verify new workflow DOES replicate to standby")
 
 	s.Eventually(func() bool {
-		descResp2, descErr := standbyCluster.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+		descResp2, descErr := standbyCluster.FrontendClient().DescribeWorkflowExecution(ctx, workflowservice.DescribeWorkflowExecutionRequest_builder{
 			Namespace: activeNamespace,
-			Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID2},
-		})
-		return descErr == nil && descResp2 != nil && descResp2.WorkflowExecutionInfo.Execution.WorkflowId == workflowID2
+			Execution: commonpb.WorkflowExecution_builder{WorkflowId: workflowID2}.Build(),
+		}.Build())
+		return descErr == nil && descResp2 != nil && descResp2.GetWorkflowExecutionInfo().GetExecution().GetWorkflowId() == workflowID2
 	}, 30*time.Second, 1*time.Second, "Workflow started after enabling replication should replicate to standby")
 
 	s.logger.Info("Step 8: Disable replication on both clusters")
@@ -301,23 +301,23 @@ func (s *ReplicationEnableTestSuite) TestReplicationEnableFlow() {
 	// Disable replication active -> standby
 	_, err = activeCluster.AdminClient().AddOrUpdateRemoteCluster(
 		ctx,
-		&adminservice.AddOrUpdateRemoteClusterRequest{
+		adminservice.AddOrUpdateRemoteClusterRequest_builder{
 			FrontendAddress:               standbyCluster.Host().RemoteFrontendGRPCAddress(),
 			FrontendHttpAddress:           standbyCluster.Host().FrontendHTTPAddress(),
 			EnableRemoteClusterConnection: true,
 			EnableReplication:             false, // Disable replication
-		})
+		}.Build())
 	s.Require().NoError(err)
 
 	// Disable replication standby -> active
 	_, err = standbyCluster.AdminClient().AddOrUpdateRemoteCluster(
 		ctx,
-		&adminservice.AddOrUpdateRemoteClusterRequest{
+		adminservice.AddOrUpdateRemoteClusterRequest_builder{
 			FrontendAddress:               activeCluster.Host().RemoteFrontendGRPCAddress(),
 			FrontendHttpAddress:           activeCluster.Host().FrontendHTTPAddress(),
 			EnableRemoteClusterConnection: true,
 			EnableReplication:             false, // Disable replication
-		})
+		}.Build())
 	s.Require().NoError(err)
 
 	// Wait for cluster metadata to refresh and replication streams to stop
@@ -340,9 +340,9 @@ func (s *ReplicationEnableTestSuite) TestReplicationEnableFlow() {
 	time.Sleep(5 * time.Second) //nolint:forbidigo
 
 	// Verify workflow does NOT exist on standby
-	_, descErr := standbyCluster.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+	_, descErr := standbyCluster.FrontendClient().DescribeWorkflowExecution(ctx, workflowservice.DescribeWorkflowExecutionRequest_builder{
 		Namespace: activeNamespace,
-		Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID3},
-	})
+		Execution: commonpb.WorkflowExecution_builder{WorkflowId: workflowID3}.Build(),
+	}.Build())
 	s.Require().Error(descErr, "Workflow should NOT replicate when replication is disabled")
 }

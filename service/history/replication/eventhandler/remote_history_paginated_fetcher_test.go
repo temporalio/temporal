@@ -79,15 +79,15 @@ func (s *historyPaginatedFetcherSuite) SetupTest() {
 	s.namespaceID = namespace.ID(uuid.NewString())
 	s.namespace = "some random namespace name"
 	namespaceEntry := namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Id: s.namespaceID.String(), Name: s.namespace.String()},
-		&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
-		&persistencespb.NamespaceReplicationConfig{
+		persistencespb.NamespaceInfo_builder{Id: s.namespaceID.String(), Name: s.namespace.String()}.Build(),
+		persistencespb.NamespaceConfig_builder{Retention: timestamp.DurationFromDays(1)}.Build(),
+		persistencespb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []string{
 				cluster.TestCurrentClusterName,
 				cluster.TestAlternativeClusterName,
 			},
-		},
+		}.Build(),
 		1234,
 	)
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.namespaceID).Return(namespaceEntry, nil).AnyTimes()
@@ -113,70 +113,70 @@ func (s *historyPaginatedFetcherSuite) TestGetSingleWorkflowHistoryIterator() {
 	token := []byte{1}
 	pageSize := defaultPageSize
 	eventBatch := []*historypb.HistoryEvent{
-		{
+		historypb.HistoryEvent_builder{
 			EventId:   2,
 			Version:   123,
 			EventTime: timestamppb.New(time.Now().UTC()),
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
-		},
-		{
+		}.Build(),
+		historypb.HistoryEvent_builder{
 			EventId:   3,
 			Version:   123,
 			EventTime: timestamppb.New(time.Now().UTC()),
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
-		},
+		}.Build(),
 	}
 	blob := s.serializeEvents(eventBatch)
 	versionHistoryItems := []*historyspb.VersionHistoryItem{
-		{
+		historyspb.VersionHistoryItem_builder{
 			EventId: 1,
 			Version: 1,
-		},
+		}.Build(),
 	}
 
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistoryV2(
 		gomock.Any(),
-		&adminservice.GetWorkflowExecutionRawHistoryV2Request{
+		adminservice.GetWorkflowExecutionRawHistoryV2Request_builder{
 			NamespaceId: s.namespaceID.String(),
-			Execution: &commonpb.WorkflowExecution{
+			Execution: commonpb.WorkflowExecution_builder{
 				WorkflowId: workflowID,
 				RunId:      runID,
-			},
+			}.Build(),
 			StartEventId:      startEventID,
 			StartEventVersion: startEventVersion,
 			EndEventId:        common.EmptyEventID,
 			EndEventVersion:   common.EmptyVersion,
 			MaximumPageSize:   pageSize,
 			NextPageToken:     nil,
-		}).Return(&adminservice.GetWorkflowExecutionRawHistoryV2Response{
+		}.Build()).Return(adminservice.GetWorkflowExecutionRawHistoryV2Response_builder{
 		HistoryBatches: []*commonpb.DataBlob{blob},
 		NextPageToken:  token,
-		VersionHistory: &historyspb.VersionHistory{
+		VersionHistory: historyspb.VersionHistory_builder{
 			Items: versionHistoryItems,
-		},
-	}, nil)
+		}.Build(),
+	}.Build(), nil)
 
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistoryV2(
 		gomock.Any(),
-		&adminservice.GetWorkflowExecutionRawHistoryV2Request{
+		adminservice.GetWorkflowExecutionRawHistoryV2Request_builder{
 			NamespaceId: s.namespaceID.String(),
-			Execution: &commonpb.WorkflowExecution{
+			Execution: commonpb.WorkflowExecution_builder{
 				WorkflowId: workflowID,
 				RunId:      runID,
-			},
+			}.Build(),
 			StartEventId:      startEventID,
 			StartEventVersion: startEventVersion,
 			EndEventId:        common.EmptyEventID,
 			EndEventVersion:   common.EmptyVersion,
 			MaximumPageSize:   pageSize,
 			NextPageToken:     token,
-		}).Return(&adminservice.GetWorkflowExecutionRawHistoryV2Response{
+		}.Build()).Return(adminservice.GetWorkflowExecutionRawHistoryV2Response_builder{
 		HistoryBatches: []*commonpb.DataBlob{blob},
 		NextPageToken:  nil,
-		VersionHistory: &historyspb.VersionHistory{
+		VersionHistory: historyspb.VersionHistory_builder{
 			Items: versionHistoryItems,
-		},
-	}, nil)
+		}.Build(),
+	}.Build(), nil)
 
 	fetcher := s.fetcher.GetSingleWorkflowHistoryPaginatedIteratorExclusive(
 		context.Background(),
@@ -213,26 +213,26 @@ func (s *historyPaginatedFetcherSuite) TestGetHistory() {
 	pageSize := int32(59)
 	blob := []byte("some random events blob")
 
-	response := &adminservice.GetWorkflowExecutionRawHistoryV2Response{
-		HistoryBatches: []*commonpb.DataBlob{{
+	response := adminservice.GetWorkflowExecutionRawHistoryV2Response_builder{
+		HistoryBatches: []*commonpb.DataBlob{commonpb.DataBlob_builder{
 			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 			Data:         blob,
-		}},
+		}.Build()},
 		NextPageToken: nextTokenOut,
-	}
-	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistoryV2(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryV2Request{
+	}.Build()
+	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistoryV2(gomock.Any(), adminservice.GetWorkflowExecutionRawHistoryV2Request_builder{
 		NamespaceId: s.namespaceID.String(),
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: workflowID,
 			RunId:      runID,
-		},
+		}.Build(),
 		StartEventId:      startEventID,
 		StartEventVersion: version,
 		EndEventId:        endEventID,
 		EndEventVersion:   version,
 		MaximumPageSize:   pageSize,
 		NextPageToken:     nextTokenIn,
-	}).Return(response, nil)
+	}.Build()).Return(response, nil)
 
 	out, token, err := s.fetcher.getHistory(
 		context.Background(),
@@ -250,14 +250,14 @@ func (s *historyPaginatedFetcherSuite) TestGetHistory() {
 	)
 	s.Nil(err)
 	s.Equal(token, nextTokenOut)
-	s.Equal(out[0].RawEventBatch.Data, blob)
+	s.Equal(out[0].RawEventBatch.GetData(), blob)
 }
 
 func (s *historyPaginatedFetcherSuite) serializeEvents(events []*historypb.HistoryEvent) *commonpb.DataBlob {
 	blob, err := s.serializer.SerializeEvents(events)
 	s.Nil(err)
-	return &commonpb.DataBlob{
+	return commonpb.DataBlob_builder{
 		EncodingType: enumspb.ENCODING_TYPE_PROTO3,
-		Data:         blob.Data,
-	}
+		Data:         blob.GetData(),
+	}.Build()
 }

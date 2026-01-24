@@ -34,30 +34,30 @@ func (s *StickyTqTestSuite) TestStickyTimeout_NonTransientWorkflowTask() {
 	stl := "functional-sticky-timeout-non-transient-workflow-taskqueue-sticky"
 	identity := "worker1"
 
-	stickyTaskQueue := &taskqueuepb.TaskQueue{Name: stl, Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: tl}
+	stickyTaskQueue := taskqueuepb.TaskQueue_builder{Name: stl, Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: tl}.Build()
 	stickyScheduleToStartTimeout := 2 * time.Second
 
 	// Start workflow execution
-	request := &workflowservice.StartWorkflowExecutionRequest{
+	request := workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
-		WorkflowType:        &commonpb.WorkflowType{Name: wt},
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		WorkflowType:        commonpb.WorkflowType_builder{Name: wt}.Build(),
+		TaskQueue:           taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 		Input:               nil,
 		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
-	}
+	}.Build()
 
 	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
 
-	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
-	workflowExecution := &commonpb.WorkflowExecution{
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.GetRunId()))
+	workflowExecution := commonpb.WorkflowExecution_builder{
 		WorkflowId: id,
-		RunId:      we.RunId,
-	}
+		RunId:      we.GetRunId(),
+	}.Build()
 
 	// workflow logic
 	localActivityDone := false
@@ -66,15 +66,15 @@ func (s *StickyTqTestSuite) TestStickyTimeout_NonTransientWorkflowTask() {
 		if !localActivityDone {
 			localActivityDone = true
 
-			return []*commandpb.Command{{
+			return []*commandpb.Command{commandpb.Command_builder{
 				CommandType: enumspb.COMMAND_TYPE_RECORD_MARKER,
-				Attributes: &commandpb.Command_RecordMarkerCommandAttributes{RecordMarkerCommandAttributes: &commandpb.RecordMarkerCommandAttributes{
+				RecordMarkerCommandAttributes: commandpb.RecordMarkerCommandAttributes_builder{
 					MarkerName: "local activity marker",
 					Details: map[string]*commonpb.Payloads{
 						"data":   payloads.EncodeString("local activity marker"),
 						"result": payloads.EncodeString("local activity result"),
-					}}},
-			}}, nil
+					}}.Build(),
+			}.Build()}, nil
 		}
 
 		if failureCount > 0 {
@@ -96,18 +96,18 @@ func (s *StickyTqTestSuite) TestStickyTimeout_NonTransientWorkflowTask() {
 			return nil, errors.New("non deterministic error")
 		}
 
-		return []*commandpb.Command{{
+		return []*commandpb.Command{commandpb.Command_builder{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+			CompleteWorkflowExecutionCommandAttributes: commandpb.CompleteWorkflowExecutionCommandAttributes_builder{
 				Result: payloads.EncodeString("Done"),
-			}},
-		}}, nil
+			}.Build(),
+		}.Build()}, nil
 	}
 
 	poller := &testcore.TaskPoller{
 		Client:                       s.FrontendClient(),
 		Namespace:                    s.Namespace().String(),
-		TaskQueue:                    &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		TaskQueue:                    taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 		Identity:                     identity,
 		WorkflowTaskHandler:          wtHandler,
 		Logger:                       s.Logger,
@@ -120,14 +120,14 @@ func (s *StickyTqTestSuite) TestStickyTimeout_NonTransientWorkflowTask() {
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
-	_, err = s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+	_, err = s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), workflowservice.SignalWorkflowExecutionRequest_builder{
 		Namespace:         s.Namespace().String(),
 		WorkflowExecution: workflowExecution,
 		SignalName:        "signalA",
 		Input:             payloads.EncodeString("signal input"),
 		Identity:          identity,
 		RequestId:         uuid.NewString(),
-	})
+	}.Build())
 	s.NoError(err)
 
 	// Wait for workflow task timeout
@@ -161,14 +161,14 @@ WaitForStickyTimeoutLoop:
 		s.NoError(err)
 	}
 
-	_, err = s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+	_, err = s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), workflowservice.SignalWorkflowExecutionRequest_builder{
 		Namespace:         s.Namespace().String(),
 		WorkflowExecution: workflowExecution,
 		SignalName:        "signalB",
 		Input:             payloads.EncodeString("signal input"),
 		Identity:          identity,
 		RequestId:         uuid.NewString(),
-	})
+	}.Build())
 	s.NoError(err)
 
 	for i := 1; i <= 2; i++ {
@@ -229,30 +229,30 @@ func (s *StickyTqTestSuite) TestStickyTaskqueueResetThenTimeout() {
 	stl := "functional-reset-sticky-fire-schedule-to-start-timeout-taskqueue-sticky"
 	identity := "worker1"
 
-	stickyTaskQueue := &taskqueuepb.TaskQueue{Name: stl, Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: tl}
+	stickyTaskQueue := taskqueuepb.TaskQueue_builder{Name: stl, Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: tl}.Build()
 	stickyScheduleToStartTimeout := 2 * time.Second
 
 	// Start workflow execution
-	request := &workflowservice.StartWorkflowExecutionRequest{
+	request := workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
-		WorkflowType:        &commonpb.WorkflowType{Name: wt},
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		WorkflowType:        commonpb.WorkflowType_builder{Name: wt}.Build(),
+		TaskQueue:           taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 		Input:               nil,
 		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
-	}
+	}.Build()
 
 	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
 
-	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
-	workflowExecution := &commonpb.WorkflowExecution{
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.GetRunId()))
+	workflowExecution := commonpb.WorkflowExecution_builder{
 		WorkflowId: id,
-		RunId:      we.RunId,
-	}
+		RunId:      we.GetRunId(),
+	}.Build()
 
 	// workflow logic
 	localActivityDone := false
@@ -261,15 +261,15 @@ func (s *StickyTqTestSuite) TestStickyTaskqueueResetThenTimeout() {
 		if !localActivityDone {
 			localActivityDone = true
 
-			return []*commandpb.Command{{
+			return []*commandpb.Command{commandpb.Command_builder{
 				CommandType: enumspb.COMMAND_TYPE_RECORD_MARKER,
-				Attributes: &commandpb.Command_RecordMarkerCommandAttributes{RecordMarkerCommandAttributes: &commandpb.RecordMarkerCommandAttributes{
+				RecordMarkerCommandAttributes: commandpb.RecordMarkerCommandAttributes_builder{
 					MarkerName: "local activity marker",
 					Details: map[string]*commonpb.Payloads{
 						"data":   payloads.EncodeString("local activity marker"),
 						"result": payloads.EncodeString("local activity result"),
-					}}},
-			}}, nil
+					}}.Build(),
+			}.Build()}, nil
 		}
 
 		if failureCount > 0 {
@@ -277,18 +277,18 @@ func (s *StickyTqTestSuite) TestStickyTaskqueueResetThenTimeout() {
 			return nil, errors.New("non deterministic error")
 		}
 
-		return []*commandpb.Command{{
+		return []*commandpb.Command{commandpb.Command_builder{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+			CompleteWorkflowExecutionCommandAttributes: commandpb.CompleteWorkflowExecutionCommandAttributes_builder{
 				Result: payloads.EncodeString("Done"),
-			}},
-		}}, nil
+			}.Build(),
+		}.Build()}, nil
 	}
 
 	poller := &testcore.TaskPoller{
 		Client:                       s.FrontendClient(),
 		Namespace:                    s.Namespace().String(),
-		TaskQueue:                    &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		TaskQueue:                    taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 		Identity:                     identity,
 		WorkflowTaskHandler:          wtHandler,
 		Logger:                       s.Logger,
@@ -301,21 +301,21 @@ func (s *StickyTqTestSuite) TestStickyTaskqueueResetThenTimeout() {
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
-	_, err = s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+	_, err = s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), workflowservice.SignalWorkflowExecutionRequest_builder{
 		Namespace:         s.Namespace().String(),
 		WorkflowExecution: workflowExecution,
 		SignalName:        "signalA",
 		Input:             payloads.EncodeString("signal input"),
 		Identity:          identity,
 		RequestId:         uuid.NewString(),
-	})
+	}.Build())
 	s.NoError(err)
 
 	// Reset sticky taskqueue before sticky workflow task starts
-	_, err = s.FrontendClient().ResetStickyTaskQueue(testcore.NewContext(), &workflowservice.ResetStickyTaskQueueRequest{
+	_, err = s.FrontendClient().ResetStickyTaskQueue(testcore.NewContext(), workflowservice.ResetStickyTaskQueueRequest_builder{
 		Namespace: s.Namespace().String(),
 		Execution: workflowExecution,
-	})
+	}.Build())
 	s.NoError(err)
 
 	// Wait for workflow task timeout
@@ -349,14 +349,14 @@ WaitForStickyTimeoutLoop:
 		s.NoError(err)
 	}
 
-	_, err = s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+	_, err = s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), workflowservice.SignalWorkflowExecutionRequest_builder{
 		Namespace:         s.Namespace().String(),
 		WorkflowExecution: workflowExecution,
 		SignalName:        "signalB",
 		Input:             payloads.EncodeString("signal input"),
 		Identity:          identity,
 		RequestId:         uuid.NewString(),
-	})
+	}.Build())
 	s.NoError(err)
 
 	for i := 1; i <= 2; i++ {

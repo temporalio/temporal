@@ -73,10 +73,10 @@ func (s *schedulerSuite) SetupTest() {
 		HandleGetWorkflowKey:      tv.Any().WorkflowKey,
 		HandleIsWorkflow:          func() bool { return false },
 		HandleCurrentVersionedTransition: func() *persistencespb.VersionedTransition {
-			return &persistencespb.VersionedTransition{
+			return persistencespb.VersionedTransition_builder{
 				NamespaceFailoverVersion: 1,
 				TransitionCount:          1,
-			}
+			}.Build()
 		},
 	}
 

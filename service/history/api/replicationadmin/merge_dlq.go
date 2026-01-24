@@ -30,7 +30,7 @@ func MergeDLQ(
 	if err != nil {
 		return nil, err
 	}
-	return &historyservice.MergeDLQMessagesResponse{
+	return historyservice.MergeDLQMessagesResponse_builder{
 		NextPageToken: token,
-	}, nil
+	}.Build(), nil
 }

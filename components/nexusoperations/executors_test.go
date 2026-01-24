@@ -35,23 +35,22 @@ import (
 	"go.temporal.io/server/service/history/hsm/hsmtest"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/proto"
 )
 
-var endpointEntry = &persistencespb.NexusEndpointEntry{
+var endpointEntry = persistencespb.NexusEndpointEntry_builder{
 	Id: "enpdoint-id",
-	Endpoint: &persistencespb.NexusEndpoint{
-		Spec: &persistencespb.NexusEndpointSpec{
+	Endpoint: persistencespb.NexusEndpoint_builder{
+		Spec: persistencespb.NexusEndpointSpec_builder{
 			Name: "endpoint",
-			Target: &persistencespb.NexusEndpointTarget{
-				Variant: &persistencespb.NexusEndpointTarget_External_{
-					External: &persistencespb.NexusEndpointTarget_External{
-						Url: "http://" + uuid.NewString(),
-					},
-				},
-			},
-		},
-	},
-}
+			Target: persistencespb.NexusEndpointTarget_builder{
+				External: persistencespb.NexusEndpointTarget_External_builder{
+					Url: "http://" + uuid.NewString(),
+				}.Build(),
+			}.Build(),
+		}.Build(),
+	}.Build(),
+}.Build()
 
 func mustToPayload(t *testing.T, input any) *commonpb.Payload {
 	conv := converter.GetDefaultDataConverter()
@@ -61,16 +60,14 @@ func mustToPayload(t *testing.T, input any) *commonpb.Payload {
 }
 
 func TestProcessInvocationTask(t *testing.T) {
-	handlerLink := &commonpb.Link_WorkflowEvent{
+	handlerLink := commonpb.Link_WorkflowEvent_builder{
 		Namespace:  "handler-ns",
 		WorkflowId: "handler-wf-id",
 		RunId:      "handler-run-id",
-		Reference: &commonpb.Link_WorkflowEvent_EventRef{
-			EventRef: &commonpb.Link_WorkflowEvent_EventReference{
-				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
-			},
-		},
-	}
+		EventRef: commonpb.Link_WorkflowEvent_EventReference_builder{
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+		}.Build(),
+	}.Build()
 	handlerNexusLink := nexusoperations.ConvertLinkWorkflowEventToNexusLink(handlerLink)
 
 	cases := []struct {
@@ -97,24 +94,20 @@ func TestProcessInvocationTask(t *testing.T) {
 				for _, nexusLink := range options.Links {
 					link, err := nexusoperations.ConvertNexusLinkToLinkWorkflowEvent(nexusLink)
 					require.NoError(t, err)
-					links = append(links, &commonpb.Link{
-						Variant: &commonpb.Link_WorkflowEvent_{
-							WorkflowEvent: link,
-						},
-					})
+					links = append(links, commonpb.Link_builder{
+						WorkflowEvent: proto.ValueOrDefault(link),
+					}.Build())
 				}
 				require.NotNil(t, links[0].GetWorkflowEvent())
-				protorequire.ProtoEqual(t, &commonpb.Link_WorkflowEvent{
+				protorequire.ProtoEqual(t, commonpb.Link_WorkflowEvent_builder{
 					Namespace:  "ns-name",
 					WorkflowId: "wf-id",
 					RunId:      "run-id",
-					Reference: &commonpb.Link_WorkflowEvent_EventRef{
-						EventRef: &commonpb.Link_WorkflowEvent_EventReference{
-							EventId:   1,
-							EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
-						},
-					},
-				}, links[0].GetWorkflowEvent())
+					EventRef: commonpb.Link_WorkflowEvent_EventReference_builder{
+						EventId:   1,
+						EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
+					}.Build(),
+				}.Build(), links[0].GetWorkflowEvent())
 			},
 			onStartOperation: func(
 				ctx context.Context,
@@ -131,15 +124,15 @@ func TestProcessInvocationTask(t *testing.T) {
 			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
 				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_STARTED, op.State())
 				require.Equal(t, 1, len(events))
-				require.Equal(t, enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED, events[0].EventType)
-				protorequire.ProtoEqual(t, &historypb.NexusOperationStartedEventAttributes{
+				require.Equal(t, enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED, events[0].GetEventType())
+				protorequire.ProtoEqual(t, historypb.NexusOperationStartedEventAttributes_builder{
 					ScheduledEventId: 1,
 					OperationToken:   "op-token",
 					OperationId:      "op-token",
 					RequestId:        op.RequestId,
-				}, events[0].GetNexusOperationStartedEventAttributes())
-				require.Len(t, events[0].Links, 1)
-				protorequire.ProtoEqual(t, handlerLink, events[0].Links[0].GetWorkflowEvent())
+				}.Build(), events[0].GetNexusOperationStartedEventAttributes())
+				require.Len(t, events[0].GetLinks(), 1)
+				protorequire.ProtoEqual(t, handlerLink, events[0].GetLinks()[0].GetWorkflowEvent())
 			},
 		},
 		{
@@ -172,12 +165,12 @@ func TestProcessInvocationTask(t *testing.T) {
 			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
 				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_SUCCEEDED, op.State())
 				require.Equal(t, 1, len(events))
-				require.Equal(t, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED, events[0].EventType)
-				attrs := &historypb.NexusOperationCompletedEventAttributes{
+				require.Equal(t, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED, events[0].GetEventType())
+				attrs := historypb.NexusOperationCompletedEventAttributes_builder{
 					ScheduledEventId: 1,
 					Result:           mustToPayload(t, "result"),
 					RequestId:        op.RequestId,
-				}
+				}.Build()
 				protorequire.ProtoEqual(t, attrs, events[0].GetNexusOperationCompletedEventAttributes())
 			},
 		},
@@ -197,36 +190,32 @@ func TestProcessInvocationTask(t *testing.T) {
 			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
 				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_FAILED, op.State())
 				require.Equal(t, 1, len(events))
-				require.Equal(t, enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED, events[0].EventType)
-				attrs := &historypb.NexusOperationFailedEventAttributes{
+				require.Equal(t, enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED, events[0].GetEventType())
+				attrs := historypb.NexusOperationFailedEventAttributes_builder{
 					ScheduledEventId: 1,
 					RequestId:        op.RequestId,
-					Failure: &failurepb.Failure{
+					Failure: failurepb.Failure_builder{
 						Message: "nexus operation completed unsuccessfully",
-						FailureInfo: &failurepb.Failure_NexusOperationExecutionFailureInfo{
-							NexusOperationExecutionFailureInfo: &failurepb.NexusOperationFailureInfo{
-								ScheduledEventId: 1,
-								Endpoint:         "endpoint",
-								Service:          "service",
-								Operation:        "operation",
-							},
-						},
-						Cause: &failurepb.Failure{
+						NexusOperationExecutionFailureInfo: failurepb.NexusOperationFailureInfo_builder{
+							ScheduledEventId: 1,
+							Endpoint:         "endpoint",
+							Service:          "service",
+							Operation:        "operation",
+						}.Build(),
+						Cause: failurepb.Failure_builder{
 							Message: "operation failed from handler",
-							FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
-								ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
-									Type: "NexusFailure",
-									Details: &commonpb.Payloads{
-										Payloads: []*commonpb.Payload{
-											mustToPayload(t, nexus.Failure{Metadata: map[string]string{"encoding": "json/plain"}, Details: []byte(`"details"`)}),
-										},
+							ApplicationFailureInfo: failurepb.ApplicationFailureInfo_builder{
+								Type: "NexusFailure",
+								Details: commonpb.Payloads_builder{
+									Payloads: []*commonpb.Payload{
+										mustToPayload(t, nexus.Failure{Metadata: map[string]string{"encoding": "json/plain"}, Details: []byte(`"details"`)}),
 									},
-									NonRetryable: true,
-								},
-							},
-						},
-					},
-				}
+								}.Build(),
+								NonRetryable: true,
+							}.Build(),
+						}.Build(),
+					}.Build(),
+				}.Build()
 				protorequire.ProtoEqual(t, attrs, events[0].GetNexusOperationFailedEventAttributes())
 			},
 		},
@@ -246,34 +235,30 @@ func TestProcessInvocationTask(t *testing.T) {
 			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
 				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_CANCELED, op.State())
 				require.Equal(t, 1, len(events))
-				require.Equal(t, enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED, events[0].EventType)
-				attrs := &historypb.NexusOperationCanceledEventAttributes{
+				require.Equal(t, enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED, events[0].GetEventType())
+				attrs := historypb.NexusOperationCanceledEventAttributes_builder{
 					ScheduledEventId: 1,
 					RequestId:        op.RequestId,
-					Failure: &failurepb.Failure{
+					Failure: failurepb.Failure_builder{
 						Message: "nexus operation completed unsuccessfully",
-						FailureInfo: &failurepb.Failure_NexusOperationExecutionFailureInfo{
-							NexusOperationExecutionFailureInfo: &failurepb.NexusOperationFailureInfo{
-								ScheduledEventId: 1,
-								Endpoint:         "endpoint",
-								Service:          "service",
-								Operation:        "operation",
-							},
-						},
-						Cause: &failurepb.Failure{
+						NexusOperationExecutionFailureInfo: failurepb.NexusOperationFailureInfo_builder{
+							ScheduledEventId: 1,
+							Endpoint:         "endpoint",
+							Service:          "service",
+							Operation:        "operation",
+						}.Build(),
+						Cause: failurepb.Failure_builder{
 							Message: "operation canceled from handler",
-							FailureInfo: &failurepb.Failure_CanceledFailureInfo{
-								CanceledFailureInfo: &failurepb.CanceledFailureInfo{
-									Details: &commonpb.Payloads{
-										Payloads: []*commonpb.Payload{
-											mustToPayload(t, nexus.Failure{Metadata: map[string]string{"encoding": "json/plain"}, Details: []byte(`"details"`)}),
-										},
+							CanceledFailureInfo: failurepb.CanceledFailureInfo_builder{
+								Details: commonpb.Payloads_builder{
+									Payloads: []*commonpb.Payload{
+										mustToPayload(t, nexus.Failure{Metadata: map[string]string{"encoding": "json/plain"}, Details: []byte(`"details"`)}),
 									},
-								},
-							},
-						},
-					},
-				}
+								}.Build(),
+							}.Build(),
+						}.Build(),
+					}.Build(),
+				}.Build()
 				protorequire.ProtoEqual(t, attrs, events[0].GetNexusOperationCanceledEventAttributes())
 			},
 		},
@@ -288,7 +273,7 @@ func TestProcessInvocationTask(t *testing.T) {
 			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
 				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF, op.State())
 				require.NotNil(t, op.LastAttemptFailure.GetNexusHandlerFailureInfo())
-				require.Equal(t, "handler error (INTERNAL): internal server error", op.LastAttemptFailure.Message)
+				require.Equal(t, "handler error (INTERNAL): internal server error", op.LastAttemptFailure.GetMessage())
 				require.Equal(t, 0, len(events))
 			},
 		},
@@ -305,7 +290,7 @@ func TestProcessInvocationTask(t *testing.T) {
 			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
 				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF, op.State())
 				require.NotNil(t, op.LastAttemptFailure.GetApplicationFailureInfo())
-				require.Regexp(t, "request timed out", op.LastAttemptFailure.Message)
+				require.Regexp(t, "request timed out", op.LastAttemptFailure.GetMessage())
 				require.Equal(t, 0, len(events))
 			},
 		},
@@ -322,7 +307,7 @@ func TestProcessInvocationTask(t *testing.T) {
 			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
 				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF, op.State())
 				require.NotNil(t, op.LastAttemptFailure.GetApplicationFailureInfo())
-				require.Regexp(t, "request timed out", op.LastAttemptFailure.Message)
+				require.Regexp(t, "request timed out", op.LastAttemptFailure.GetMessage())
 				require.Equal(t, 0, len(events))
 			},
 		},
@@ -336,9 +321,9 @@ func TestProcessInvocationTask(t *testing.T) {
 			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
 				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_TIMED_OUT, op.State())
 				require.Equal(t, 1, len(events))
-				failure := events[0].GetNexusOperationTimedOutEventAttributes().Failure.Cause
+				failure := events[0].GetNexusOperationTimedOutEventAttributes().GetFailure().GetCause()
 				require.NotNil(t, failure.GetTimeoutFailureInfo())
-				require.Equal(t, "operation timed out", failure.Message)
+				require.Equal(t, "operation timed out", failure.GetMessage())
 			},
 		},
 		{
@@ -350,9 +335,9 @@ func TestProcessInvocationTask(t *testing.T) {
 			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
 				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_FAILED, op.State())
 				require.Equal(t, 1, len(events))
-				failure := events[0].GetNexusOperationFailedEventAttributes().Failure.Cause
+				failure := events[0].GetNexusOperationFailedEventAttributes().GetFailure().GetCause()
 				require.NotNil(t, failure.GetNexusHandlerFailureInfo())
-				require.Equal(t, "handler error (NOT_FOUND): endpoint not registered", failure.Message)
+				require.Equal(t, "handler error (NOT_FOUND): endpoint not registered", failure.GetMessage())
 			},
 		},
 		{
@@ -364,11 +349,11 @@ func TestProcessInvocationTask(t *testing.T) {
 			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
 				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_FAILED, op.State())
 				require.Equal(t, 1, len(events))
-				failure := events[0].GetNexusOperationFailedEventAttributes().Failure.Cause
+				failure := events[0].GetNexusOperationFailedEventAttributes().GetFailure().GetCause()
 				require.NotNil(t, failure.GetNexusHandlerFailureInfo())
-				require.Equal(t, "handler error (NOT_FOUND): endpoint not registered", failure.Message)
-				require.NotNil(t, failure.Cause.GetApplicationFailureInfo())
-				require.Equal(t, "endpoint not registered", failure.Cause.Message)
+				require.Equal(t, "handler error (NOT_FOUND): endpoint not registered", failure.GetMessage())
+				require.NotNil(t, failure.GetCause().GetApplicationFailureInfo())
+				require.Equal(t, "endpoint not registered", failure.GetCause().GetMessage())
 			},
 		},
 		{
@@ -410,9 +395,9 @@ func TestProcessInvocationTask(t *testing.T) {
 			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
 				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_FAILED, op.State())
 				require.Equal(t, 1, len(events))
-				failure := events[0].GetNexusOperationFailedEventAttributes().Failure.Cause
+				failure := events[0].GetNexusOperationFailedEventAttributes().GetFailure().GetCause()
 				require.NotNil(t, failure.GetApplicationFailureInfo())
-				require.Equal(t, "invalid operation token: length exceeds allowed limit (11/10)", failure.Message)
+				require.Equal(t, "invalid operation token: length exceeds allowed limit (11/10)", failure.GetMessage())
 			},
 		},
 	}
@@ -439,10 +424,10 @@ func TestProcessInvocationTask(t *testing.T) {
 			reg := newRegistry(t)
 			event := mustNewScheduledEvent(time.Now(), tc.schedToCloseTimeout)
 			if tc.eventHasNoEndpointID {
-				event.GetNexusOperationScheduledEventAttributes().EndpointId = ""
+				event.GetNexusOperationScheduledEventAttributes().SetEndpointId("")
 			}
 			if tc.header != nil {
-				event.GetNexusOperationScheduledEventAttributes().NexusHeader = tc.header
+				event.GetNexusOperationScheduledEventAttributes().SetNexusHeader(tc.header)
 			}
 			backend := &hsmtest.NodeBackend{Events: []*historypb.HistoryEvent{event}}
 			node := newOperationNode(t, backend, backend.Events[0])
@@ -459,7 +444,7 @@ func TestProcessInvocationTask(t *testing.T) {
 			}
 			namespaceRegistry := namespace.NewMockRegistry(ctrl)
 			namespaceRegistry.EXPECT().GetNamespaceByID(namespace.ID("ns-id")).Return(
-				namespace.NewNamespaceForTest(&persistencespb.NamespaceInfo{Name: "ns-name"}, nil, false, nil, 0), nil)
+				namespace.NewNamespaceForTest(persistencespb.NamespaceInfo_builder{Name: "ns-name"}.Build(), nil, false, nil, 0), nil)
 
 			metricsHandler := metrics.NewMockHandler(ctrl)
 			if tc.expectedMetricOutcome != "" {
@@ -564,7 +549,7 @@ func TestProcessBackoffTask(t *testing.T) {
 		return nexusoperations.TransitionAttemptFailed.Apply(op, nexusoperations.EventAttemptFailed{
 			Node:        node,
 			Time:        time.Now(),
-			Failure:     &failurepb.Failure{Message: "test"},
+			Failure:     failurepb.Failure_builder{Message: "test"}.Build(),
 			RetryPolicy: backoff.NewExponentialRetryPolicy(time.Second),
 		})
 	})
@@ -600,30 +585,26 @@ func TestProcessTimeoutTask(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_TIMED_OUT, op.State())
 	require.Equal(t, 1, len(backend.Events))
-	require.Equal(t, enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT, backend.Events[0].EventType)
-	protorequire.ProtoEqual(t, &historypb.NexusOperationTimedOutEventAttributes{
+	require.Equal(t, enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT, backend.Events[0].GetEventType())
+	protorequire.ProtoEqual(t, historypb.NexusOperationTimedOutEventAttributes_builder{
 		ScheduledEventId: 1,
 		RequestId:        op.RequestId,
-		Failure: &failurepb.Failure{
+		Failure: failurepb.Failure_builder{
 			Message: "nexus operation completed unsuccessfully",
-			FailureInfo: &failurepb.Failure_NexusOperationExecutionFailureInfo{
-				NexusOperationExecutionFailureInfo: &failurepb.NexusOperationFailureInfo{
-					ScheduledEventId: 1,
-					Endpoint:         "endpoint",
-					Service:          "service",
-					Operation:        "operation",
-				},
-			},
-			Cause: &failurepb.Failure{
+			NexusOperationExecutionFailureInfo: failurepb.NexusOperationFailureInfo_builder{
+				ScheduledEventId: 1,
+				Endpoint:         "endpoint",
+				Service:          "service",
+				Operation:        "operation",
+			}.Build(),
+			Cause: failurepb.Failure_builder{
 				Message: "operation timed out",
-				FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
-					TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
-						TimeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
-					},
-				},
-			},
-		},
-	}, backend.Events[0].GetNexusOperationTimedOutEventAttributes())
+				TimeoutFailureInfo: failurepb.TimeoutFailureInfo_builder{
+					TimeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+				}.Build(),
+			}.Build(),
+		}.Build(),
+	}.Build(), backend.Events[0].GetNexusOperationTimedOutEventAttributes())
 }
 
 func TestProcessCancelationTask(t *testing.T) {
@@ -654,7 +635,7 @@ func TestProcessCancelationTask(t *testing.T) {
 			checkOutcome: func(t *testing.T, c nexusoperations.Cancelation) {
 				require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_FAILED, c.State())
 				require.NotNil(t, c.LastAttemptFailure.GetNexusHandlerFailureInfo())
-				require.Equal(t, "handler error (INTERNAL): operation not found", c.LastAttemptFailure.Message)
+				require.Equal(t, "handler error (INTERNAL): operation not found", c.LastAttemptFailure.GetMessage())
 			},
 		},
 		{
@@ -698,7 +679,7 @@ func TestProcessCancelationTask(t *testing.T) {
 			checkOutcome: func(t *testing.T, c nexusoperations.Cancelation) {
 				require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BACKING_OFF, c.State())
 				require.NotNil(t, c.LastAttemptFailure.GetNexusHandlerFailureInfo())
-				require.Equal(t, "handler error (INTERNAL): internal server error", c.LastAttemptFailure.Message)
+				require.Equal(t, "handler error (INTERNAL): internal server error", c.LastAttemptFailure.GetMessage())
 			},
 		},
 		{
@@ -713,7 +694,7 @@ func TestProcessCancelationTask(t *testing.T) {
 			checkOutcome: func(t *testing.T, c nexusoperations.Cancelation) {
 				require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BACKING_OFF, c.State())
 				require.NotNil(t, c.LastAttemptFailure.GetApplicationFailureInfo())
-				require.Regexp(t, "Post \"http://localhost:\\d+/service/operation/cancel\": context deadline exceeded", c.LastAttemptFailure.Message)
+				require.Regexp(t, "Post \"http://localhost:\\d+/service/operation/cancel\": context deadline exceeded", c.LastAttemptFailure.GetMessage())
 			},
 		},
 		{
@@ -726,7 +707,7 @@ func TestProcessCancelationTask(t *testing.T) {
 			checkOutcome: func(t *testing.T, c nexusoperations.Cancelation) {
 				require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_FAILED, c.State())
 				require.NotNil(t, c.LastAttemptFailure.GetApplicationFailureInfo())
-				require.Regexp(t, nexusoperations.ErrOperationTimeoutBelowMin.Error(), c.LastAttemptFailure.Message)
+				require.Regexp(t, nexusoperations.ErrOperationTimeoutBelowMin.Error(), c.LastAttemptFailure.GetMessage())
 			},
 		},
 		{
@@ -738,7 +719,7 @@ func TestProcessCancelationTask(t *testing.T) {
 			checkOutcome: func(t *testing.T, c nexusoperations.Cancelation) {
 				require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_FAILED, c.State())
 				require.NotNil(t, c.LastAttemptFailure.GetNexusHandlerFailureInfo())
-				require.Equal(t, "handler error (NOT_FOUND): endpoint not registered", c.LastAttemptFailure.Message)
+				require.Equal(t, "handler error (NOT_FOUND): endpoint not registered", c.LastAttemptFailure.GetMessage())
 			},
 		},
 	}
@@ -755,7 +736,7 @@ func TestProcessCancelationTask(t *testing.T) {
 			reg := newRegistry(t)
 			event := mustNewScheduledEvent(time.Now(), tc.schedToCloseTimeout)
 			if tc.header != nil {
-				event.GetNexusOperationScheduledEventAttributes().NexusHeader = tc.header
+				event.GetNexusOperationScheduledEventAttributes().SetNexusHeader(tc.header)
 			}
 			backend := &hsmtest.NodeBackend{Events: []*historypb.HistoryEvent{event}}
 			node := newOperationNode(t, backend, backend.Events[0])
@@ -763,9 +744,9 @@ func TestProcessCancelationTask(t *testing.T) {
 			require.NoError(t, err)
 			_, err = nexusoperations.TransitionStarted.Apply(op, nexusoperations.EventStarted{
 				Time: time.Now(),
-				Attributes: &historypb.NexusOperationStartedEventAttributes{
+				Attributes: historypb.NexusOperationStartedEventAttributes_builder{
 					OperationToken: "op-token",
-				},
+				}.Build(),
 				Node: node,
 			})
 			require.NoError(t, err)
@@ -777,7 +758,7 @@ func TestProcessCancelationTask(t *testing.T) {
 			env := fakeEnv{node}
 			namespaceRegistry := namespace.NewMockRegistry(ctrl)
 			namespaceRegistry.EXPECT().GetNamespaceByID(namespace.ID("ns-id")).Return(
-				namespace.NewNamespaceForTest(&persistencespb.NamespaceInfo{Name: "ns-name"}, nil, false, nil, 0), nil)
+				namespace.NewNamespaceForTest(persistencespb.NamespaceInfo_builder{Name: "ns-name"}.Build(), nil, false, nil, 0), nil)
 
 			metricsHandler := metrics.NewMockHandler(ctrl)
 			if tc.expectedMetricOutcome != "" {
@@ -872,9 +853,9 @@ func TestProcessCancelationTask_OperationCompleted(t *testing.T) {
 	require.NoError(t, err)
 	_, err = nexusoperations.TransitionStarted.Apply(op, nexusoperations.EventStarted{
 		Time: time.Now(),
-		Attributes: &historypb.NexusOperationStartedEventAttributes{
+		Attributes: historypb.NexusOperationStartedEventAttributes_builder{
 			OperationToken: "op-token",
-		},
+		}.Build(),
 		Node: node,
 	})
 	require.NoError(t, err)
@@ -890,7 +871,7 @@ func TestProcessCancelationTask_OperationCompleted(t *testing.T) {
 	env := fakeEnv{node}
 	namespaceRegistry := namespace.NewMockRegistry(ctrl)
 	namespaceRegistry.EXPECT().GetNamespaceByID(namespace.ID("ns-id")).Return(
-		namespace.NewNamespaceForTest(&persistencespb.NamespaceInfo{Name: "ns-name"}, nil, false, nil, 0), nil)
+		namespace.NewNamespaceForTest(persistencespb.NamespaceInfo_builder{Name: "ns-name"}.Build(), nil, false, nil, 0), nil)
 
 	require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{
 		Config: &nexusoperations.Config{
@@ -931,9 +912,9 @@ func TestProcessCancelationBackoffTask(t *testing.T) {
 	require.NoError(t, err)
 	_, err = nexusoperations.TransitionStarted.Apply(op, nexusoperations.EventStarted{
 		Time: time.Now(),
-		Attributes: &historypb.NexusOperationStartedEventAttributes{
+		Attributes: historypb.NexusOperationStartedEventAttributes_builder{
 			OperationToken: "op-token",
-		},
+		}.Build(),
 		Node: node,
 	})
 	require.NoError(t, err)
@@ -946,7 +927,7 @@ func TestProcessCancelationBackoffTask(t *testing.T) {
 	err = hsm.MachineTransition(node, func(c nexusoperations.Cancelation) (hsm.TransitionOutput, error) {
 		return nexusoperations.TransitionCancelationAttemptFailed.Apply(c, nexusoperations.EventCancelationAttemptFailed{
 			Time:        time.Now(),
-			Failure:     &failurepb.Failure{Message: "test attempt failed"},
+			Failure:     failurepb.Failure_builder{Message: "test attempt failed"}.Build(),
 			Node:        node,
 			RetryPolicy: backoff.NewExponentialRetryPolicy(time.Second),
 		})

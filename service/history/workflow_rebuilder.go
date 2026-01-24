@@ -72,10 +72,10 @@ func (r *workflowRebuilderImpl) rebuild(
 		ctx,
 		r.shard,
 		namespace.ID(workflowKey.NamespaceID),
-		&commonpb.WorkflowExecution{
+		commonpb.WorkflowExecution_builder{
 			WorkflowId: workflowKey.WorkflowID,
 			RunId:      workflowKey.RunID,
-		},
+		}.Build(),
 		locks.PriorityHigh,
 	)
 	if err != nil {
@@ -114,12 +114,12 @@ func (r *workflowRebuilderImpl) rebuildableCheck(
 ) error {
 	// check1: only workflow archetype is supported
 	checkErr := serviceerror.NewInvalidArgument("Rebuild only supports workflow executions, not other archetype types")
-	if len(mutableState.ChasmNodes) == 0 {
+	if len(mutableState.GetChasmNodes()) == 0 {
 		checkErr = nil
 	} else {
-		if rootNode, ok := mutableState.ChasmNodes[""]; ok {
+		if rootNode, ok := mutableState.GetChasmNodes()[""]; ok {
 			if componentAttrs := rootNode.GetMetadata().GetComponentAttributes(); componentAttrs != nil {
-				archetypeID := chasm.ArchetypeID(componentAttrs.TypeId)
+				archetypeID := chasm.ArchetypeID(componentAttrs.GetTypeId())
 				if archetypeID == chasm.WorkflowArchetypeID {
 					r.logger.Info("rebuild: workflow archetype found")
 					checkErr = nil
@@ -133,10 +133,10 @@ func (r *workflowRebuilderImpl) rebuildableCheck(
 
 	// check2: check if the current version history is empty
 	checkErr = serviceerror.NewInvalidArgument("version histories is nil, cannot be rebuilt")
-	if mutableState.ExecutionInfo == nil || mutableState.ExecutionInfo.VersionHistories == nil {
+	if !mutableState.HasExecutionInfo() || !mutableState.GetExecutionInfo().HasVersionHistories() {
 		return checkErr
 	}
-	isEmpty, err := versionhistory.IsCurrentVersionHistoryEmpty(mutableState.ExecutionInfo.VersionHistories)
+	isEmpty, err := versionhistory.IsCurrentVersionHistoryEmpty(mutableState.GetExecutionInfo().GetVersionHistories())
 	if err != nil {
 		return err
 	}
@@ -187,16 +187,16 @@ func (r *workflowRebuilderImpl) getRebuildSpecFromMutableState(
 		return nil, err
 	}
 
-	versionHistories := mutableState.ExecutionInfo.VersionHistories
+	versionHistories := mutableState.GetExecutionInfo().GetVersionHistories()
 	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(versionHistories)
 	if err != nil {
 		return nil, err
 	}
 	return &rebuildSpec{
-		branchToken:          currentVersionHistory.BranchToken,
-		stateTransitionCount: mutableState.ExecutionInfo.StateTransitionCount,
+		branchToken:          currentVersionHistory.GetBranchToken(),
+		stateTransitionCount: mutableState.GetExecutionInfo().GetStateTransitionCount(),
 		dbRecordVersion:      resp.DBRecordVersion,
-		requestID:            mutableState.ExecutionState.CreateRequestId,
+		requestID:            mutableState.GetExecutionState().GetCreateRequestId(),
 		mutableState:         resp.State,
 	}, nil
 }
@@ -228,7 +228,7 @@ func (r *workflowRebuilderImpl) replayResetWorkflow(
 
 	// note: this is an admin API, for operator to recover a corrupted mutable state, so state transition count
 	// should remain the same, the -= 1 exists here since later CloseTransactionAsSnapshot will += 1 to state transition count
-	rebuildMutableState.GetExecutionInfo().StateTransitionCount = stateTransitionCount - 1
+	rebuildMutableState.GetExecutionInfo().SetStateTransitionCount(stateTransitionCount - 1)
 	rebuildMutableState.AddHistorySize(rebuildStats.HistorySize)
 	rebuildMutableState.AddExternalPayloadSize(rebuildStats.ExternalPayloadSize)
 	rebuildMutableState.AddExternalPayloadCount(rebuildStats.ExternalPayloadCount)

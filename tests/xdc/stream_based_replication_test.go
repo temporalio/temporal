@@ -124,7 +124,7 @@ func (s *streamBasedReplicationTestSuite) SetupTest() {
 
 	s.once.Do(func() {
 		ctx := context.Background()
-		_, err := s.clusters[0].FrontendClient().RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
+		_, err := s.clusters[0].FrontendClient().RegisterNamespace(ctx, workflowservice.RegisterNamespaceRequest_builder{
 			Namespace: s.namespaceName,
 			Clusters:  s.clusterReplicationConfig(),
 			// The first cluster is the active cluster.
@@ -133,16 +133,16 @@ func (s *streamBasedReplicationTestSuite) SetupTest() {
 			IsGlobalNamespace: true,
 			// This is a required parameter.
 			WorkflowExecutionRetentionPeriod: durationpb.New(time.Hour * 24),
-		})
+		}.Build())
 		s.Require().NoError(err)
 		err = s.waitUntilNamespaceReplicated(ctx, s.namespaceName)
 		s.Require().NoError(err)
 
-		nsRes, _ := s.clusters[0].FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+		nsRes, _ := s.clusters[0].FrontendClient().DescribeNamespace(ctx, workflowservice.DescribeNamespaceRequest_builder{
 			Namespace: s.namespaceName,
-		})
+		}.Build())
 
-		s.namespaceID = nsRes.NamespaceInfo.GetId()
+		s.namespaceID = nsRes.GetNamespaceInfo().GetId()
 		s.generator = test.InitializeHistoryEventGenerator("namespace", "ns-id", 1)
 	})
 }
@@ -176,11 +176,11 @@ func (s *streamBasedReplicationTestSuite) TestReplicateHistoryEvents_ForceReplic
 
 	// let's trigger replication by calling GenerateLastHistoryReplicationTasks. This is also used by force replication logic
 	for _, execution := range executions {
-		_, err := historyClient0.GenerateLastHistoryReplicationTasks(ctx, &historyservice.GenerateLastHistoryReplicationTasksRequest{
+		_, err := historyClient0.GenerateLastHistoryReplicationTasks(ctx, historyservice.GenerateLastHistoryReplicationTasksRequest_builder{
 			NamespaceId: s.namespaceID,
 			Execution:   execution,
 			ArchetypeId: chasm.WorkflowArchetypeID,
-		})
+		}.Build())
 		s.NoError(err)
 	}
 
@@ -223,10 +223,10 @@ func (s *streamBasedReplicationTestSuite) importTestEvents(
 
 			historyEvents := &historypb.History{}
 			for _, event := range events {
-				historyEvents.Events = append(historyEvents.Events, event.GetData().(*historypb.HistoryEvent))
+				historyEvents.SetEvents(append(historyEvents.GetEvents(), event.GetData().(*historypb.HistoryEvent)))
 			}
-			if isCloseEvent(historyEvents.Events[len(historyEvents.Events)-1]) {
-				historyEvents.Events = historyEvents.Events[:len(historyEvents.Events)-1]
+			if isCloseEvent(historyEvents.GetEvents()[len(historyEvents.GetEvents())-1]) {
+				historyEvents.SetEvents(historyEvents.GetEvents()[:len(historyEvents.GetEvents())-1])
 			}
 			historyBatch = append(historyBatch, historyEvents)
 		}
@@ -247,17 +247,17 @@ func (s *streamBasedReplicationTestSuite) importTestEvents(
 			signalName := "my signal"
 			signalInput := payloads.EncodeString("my signal input")
 			client0 := s.clusters[0].FrontendClient() // active
-			_, err = client0.SignalWorkflowExecution(context.Background(), &workflowservice.SignalWorkflowExecutionRequest{
+			_, err = client0.SignalWorkflowExecution(context.Background(), workflowservice.SignalWorkflowExecutionRequest_builder{
 				Namespace:         s.namespaceName,
-				WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
+				WorkflowExecution: commonpb.WorkflowExecution_builder{WorkflowId: workflowID, RunId: runID}.Build(),
 				SignalName:        signalName,
 				Input:             signalInput,
 				Identity:          "worker1",
-			})
+			}.Build())
 			s.NoError(err)
 		}
 
-		executions = append(executions, &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID})
+		executions = append(executions, commonpb.WorkflowExecution_builder{WorkflowId: workflowID, RunId: runID}.Build())
 	}
 	return executions
 }
@@ -272,9 +272,9 @@ func (s *streamBasedReplicationTestSuite) waitUntilNamespaceReplicated(
 	for {
 		select {
 		case <-ticker.C:
-			_, err := s.clusters[1].FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+			_, err := s.clusters[1].FrontendClient().DescribeNamespace(ctx, workflowservice.DescribeNamespaceRequest_builder{
 				Namespace: namespaceName,
-			})
+			}.Build())
 			if err != nil {
 				continue
 			}
@@ -325,7 +325,7 @@ func (s *streamBasedReplicationTestSuite) assertHistoryEvents(
 			return fmt.Sprintf("Not equal \nevents1: %v \nevents2: %v", events1, events2)
 		}
 		s.Equal(batch1.RawEventBatch, batch2.RawEventBatch, getMsg())
-		s.Equal(batch1.VersionHistory.Items, batch2.VersionHistory.Items)
+		s.Equal(batch1.VersionHistory.GetItems(), batch2.VersionHistory.GetItems())
 
 	}
 	s.False(iterator2.HasNext())
@@ -351,56 +351,56 @@ func (s *streamBasedReplicationTestSuite) importEvents(
 	)
 	var token []byte
 	for _, batch := range eventBatches {
-		blob, err := s.serializer.SerializeEvents(batch.Events)
+		blob, err := s.serializer.SerializeEvents(batch.GetEvents())
 		s.NoError(err)
-		req := &historyservice.ImportWorkflowExecutionRequest{
+		req := historyservice.ImportWorkflowExecutionRequest_builder{
 			NamespaceId: s.namespaceID,
-			Execution: &commonpb.WorkflowExecution{
+			Execution: commonpb.WorkflowExecution_builder{
 				WorkflowId: workflowID,
 				RunId:      runID,
-			},
+			}.Build(),
 			VersionHistory: versionHistory,
 			HistoryBatches: []*commonpb.DataBlob{blob},
 			Token:          token,
-		}
+		}.Build()
 		resp, err := historyClient.ImportWorkflowExecution(context.Background(), req)
 		s.NoError(err, "Failed to import history event")
-		token = resp.Token
+		token = resp.GetToken()
 	}
 
 	if verifyWorkflowNotExists {
-		_, err := historyClient.GetMutableState(context.Background(), &historyservice.GetMutableStateRequest{
+		_, err := historyClient.GetMutableState(context.Background(), historyservice.GetMutableStateRequest_builder{
 			NamespaceId: s.namespaceID,
-			Execution: &commonpb.WorkflowExecution{
+			Execution: commonpb.WorkflowExecution_builder{
 				WorkflowId: workflowID,
 				RunId:      runID,
-			},
-		})
+			}.Build(),
+		}.Build())
 		s.IsType(&serviceerror.NotFound{}, err)
 	}
 
-	req := &historyservice.ImportWorkflowExecutionRequest{
+	req := historyservice.ImportWorkflowExecutionRequest_builder{
 		NamespaceId: s.namespaceID,
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: workflowID,
 			RunId:      runID,
-		},
+		}.Build(),
 		VersionHistory: versionHistory,
 		HistoryBatches: []*commonpb.DataBlob{},
 		Token:          token,
-	}
+	}.Build()
 	resp, err := historyClient.ImportWorkflowExecution(context.Background(), req)
 	s.NoError(err, "Failed to import history event")
-	s.Nil(resp.Token)
+	s.Nil(resp.GetToken())
 }
 
 func (s *streamBasedReplicationTestSuite) TestForceReplicateResetWorkflow_BaseWorkflowNotFound() {
 	ns := s.createGlobalNamespace()
 	client0 := s.clusters[0].FrontendClient() // active
 
-	descReq := &workflowservice.DescribeNamespaceRequest{
+	descReq := workflowservice.DescribeNamespaceRequest_builder{
 		Namespace: ns,
-	}
+	}.Build()
 	resp, err := client0.DescribeNamespace(testcore.NewContext(), descReq)
 	s.NoError(err)
 	s.NotNil(resp)
@@ -410,9 +410,9 @@ func (s *streamBasedReplicationTestSuite) TestForceReplicateResetWorkflow_BaseWo
 	wt := "force-replicate-reset-test-type"
 	tl := "force-replicate-reset-test-tq"
 	identity := "worker1"
-	workflowType := &commonpb.WorkflowType{Name: wt}
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
-	startReq := &workflowservice.StartWorkflowExecutionRequest{
+	workflowType := commonpb.WorkflowType_builder{Name: wt}.Build()
+	taskQueue := taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build()
+	startReq := workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:           uuid.NewString(),
 		Namespace:           ns,
 		WorkflowId:          id,
@@ -422,18 +422,18 @@ func (s *streamBasedReplicationTestSuite) TestForceReplicateResetWorkflow_BaseWo
 		WorkflowRunTimeout:  durationpb.New(300 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
-	}
+	}.Build()
 	we, err := client0.StartWorkflowExecution(testcore.NewContext(), startReq)
 	s.NoError(err)
 	s.NotNil(we.GetRunId())
 
 	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
-		return []*commandpb.Command{{
+		return []*commandpb.Command{commandpb.Command_builder{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+			CompleteWorkflowExecutionCommandAttributes: commandpb.CompleteWorkflowExecutionCommandAttributes_builder{
 				Result: payloads.EncodeString("Done"),
-			}},
-		}}, nil
+			}.Build(),
+		}.Build()}, nil
 	}
 
 	// nolint
@@ -451,82 +451,82 @@ func (s *streamBasedReplicationTestSuite) TestForceReplicateResetWorkflow_BaseWo
 	_, err = poller0.PollAndProcessWorkflowTask()
 	s.NoError(err)
 
-	resetResp, err := client0.ResetWorkflowExecution(testcore.NewContext(), &workflowservice.ResetWorkflowExecutionRequest{
+	resetResp, err := client0.ResetWorkflowExecution(testcore.NewContext(), workflowservice.ResetWorkflowExecutionRequest_builder{
 		Namespace: ns,
-		WorkflowExecution: &commonpb.WorkflowExecution{
+		WorkflowExecution: commonpb.WorkflowExecution_builder{
 			WorkflowId: id,
 			RunId:      we.GetRunId(),
-		},
+		}.Build(),
 		Reason:                    "test",
 		WorkflowTaskFinishEventId: 3,
 		RequestId:                 uuid.NewString(),
-	})
+	}.Build())
 	s.NoError(err)
 
 	_, err = poller0.PollAndProcessWorkflowTask()
 	s.NoError(err)
 
-	_, err = client0.DeleteWorkflowExecution(testcore.NewContext(), &workflowservice.DeleteWorkflowExecutionRequest{
+	_, err = client0.DeleteWorkflowExecution(testcore.NewContext(), workflowservice.DeleteWorkflowExecutionRequest_builder{
 		Namespace: ns,
-		WorkflowExecution: &commonpb.WorkflowExecution{
+		WorkflowExecution: commonpb.WorkflowExecution_builder{
 			WorkflowId: id,
 			RunId:      we.GetRunId(),
-		},
-	})
+		}.Build(),
+	}.Build())
 	s.NoError(err)
 
 	client1 := s.clusters[1].FrontendClient()
-	_, err = client1.DeleteWorkflowExecution(testcore.NewContext(), &workflowservice.DeleteWorkflowExecutionRequest{
+	_, err = client1.DeleteWorkflowExecution(testcore.NewContext(), workflowservice.DeleteWorkflowExecutionRequest_builder{
 		Namespace: ns,
-		WorkflowExecution: &commonpb.WorkflowExecution{
+		WorkflowExecution: commonpb.WorkflowExecution_builder{
 			WorkflowId: id,
 			RunId:      we.GetRunId(),
-		},
-	})
+		}.Build(),
+	}.Build())
 	s.NoError(err)
-	_, err = client1.DeleteWorkflowExecution(testcore.NewContext(), &workflowservice.DeleteWorkflowExecutionRequest{
+	_, err = client1.DeleteWorkflowExecution(testcore.NewContext(), workflowservice.DeleteWorkflowExecutionRequest_builder{
 		Namespace: ns,
-		WorkflowExecution: &commonpb.WorkflowExecution{
+		WorkflowExecution: commonpb.WorkflowExecution_builder{
 			WorkflowId: id,
 			RunId:      resetResp.GetRunId(),
-		},
-	})
+		}.Build(),
+	}.Build())
 	s.NoError(err)
 
 	time.Sleep(time.Second)
 
-	_, err = client1.DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+	_, err = client1.DescribeWorkflowExecution(testcore.NewContext(), workflowservice.DescribeWorkflowExecutionRequest_builder{
 		Namespace: ns,
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: id,
 			RunId:      resetResp.GetRunId(),
-		},
-	})
+		}.Build(),
+	}.Build())
 	s.Error(err)
 
-	_, err = s.clusters[0].HistoryClient().GenerateLastHistoryReplicationTasks(testcore.NewContext(), &historyservice.GenerateLastHistoryReplicationTasksRequest{
-		NamespaceId: resp.NamespaceInfo.GetId(),
-		Execution: &commonpb.WorkflowExecution{
+	_, err = s.clusters[0].HistoryClient().GenerateLastHistoryReplicationTasks(testcore.NewContext(), historyservice.GenerateLastHistoryReplicationTasksRequest_builder{
+		NamespaceId: resp.GetNamespaceInfo().GetId(),
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: id,
 			RunId:      resetResp.GetRunId(),
-		},
+		}.Build(),
 		ArchetypeId: chasm.WorkflowArchetypeID,
-	})
+	}.Build())
 	s.NoError(err)
 
 	for i := 0; i < 5; i++ {
-		wfExec, err := client1.DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+		wfExec, err := client1.DescribeWorkflowExecution(testcore.NewContext(), workflowservice.DescribeWorkflowExecutionRequest_builder{
 			Namespace: ns,
-			Execution: &commonpb.WorkflowExecution{
+			Execution: commonpb.WorkflowExecution_builder{
 				WorkflowId: id,
 				RunId:      resetResp.GetRunId(),
-			},
-		})
+			}.Build(),
+		}.Build())
 		if err != nil {
 			time.Sleep(100 * time.Millisecond)
 			continue
 		}
-		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, wfExec.WorkflowExecutionInfo.Status)
+		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, wfExec.GetWorkflowExecutionInfo().GetStatus())
 		return
 	}
 	s.Fail("Cannot replicate reset workflow to target cluster.")
@@ -536,9 +536,9 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 	ns := s.createGlobalNamespace()
 	client0 := s.clusters[0].FrontendClient() // active
 
-	descReq := &workflowservice.DescribeNamespaceRequest{
+	descReq := workflowservice.DescribeNamespaceRequest_builder{
 		Namespace: ns,
-	}
+	}.Build()
 	resp, err := client0.DescribeNamespace(testcore.NewContext(), descReq)
 	s.NoError(err)
 	s.NotNil(resp)
@@ -548,9 +548,9 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 	wt := "reset-test-type"
 	tl := "reset-test-tq"
 	identity := "worker1"
-	workflowType := &commonpb.WorkflowType{Name: wt}
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
-	startReq := &workflowservice.StartWorkflowExecutionRequest{
+	workflowType := commonpb.WorkflowType_builder{Name: wt}.Build()
+	taskQueue := taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build()
+	startReq := workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:           uuid.NewString(),
 		Namespace:           ns,
 		WorkflowId:          id,
@@ -560,18 +560,18 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 		WorkflowRunTimeout:  durationpb.New(300 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
-	}
+	}.Build()
 	we, err := client0.StartWorkflowExecution(testcore.NewContext(), startReq)
 	s.NoError(err)
 	s.NotNil(we.GetRunId())
 
 	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
-		return []*commandpb.Command{{
+		return []*commandpb.Command{commandpb.Command_builder{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+			CompleteWorkflowExecutionCommandAttributes: commandpb.CompleteWorkflowExecutionCommandAttributes_builder{
 				Result: payloads.EncodeString("Done"),
-			}},
-		}}, nil
+			}.Build(),
+		}.Build()}, nil
 	}
 
 	// nolint
@@ -589,31 +589,31 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 	_, err = poller0.PollAndProcessWorkflowTask()
 	s.NoError(err)
 
-	resetResp1, err := client0.ResetWorkflowExecution(testcore.NewContext(), &workflowservice.ResetWorkflowExecutionRequest{
+	resetResp1, err := client0.ResetWorkflowExecution(testcore.NewContext(), workflowservice.ResetWorkflowExecutionRequest_builder{
 		Namespace: ns,
-		WorkflowExecution: &commonpb.WorkflowExecution{
+		WorkflowExecution: commonpb.WorkflowExecution_builder{
 			WorkflowId: id,
 			RunId:      we.GetRunId(),
-		},
+		}.Build(),
 		Reason:                    "test",
 		WorkflowTaskFinishEventId: 4,
 		RequestId:                 uuid.NewString(),
-	})
+	}.Build())
 	s.NoError(err)
 
 	_, err = poller0.PollAndProcessWorkflowTask()
 	s.NoError(err)
 
-	resetResp2, err := client0.ResetWorkflowExecution(testcore.NewContext(), &workflowservice.ResetWorkflowExecutionRequest{
+	resetResp2, err := client0.ResetWorkflowExecution(testcore.NewContext(), workflowservice.ResetWorkflowExecutionRequest_builder{
 		Namespace: ns,
-		WorkflowExecution: &commonpb.WorkflowExecution{
+		WorkflowExecution: commonpb.WorkflowExecution_builder{
 			WorkflowId: id,
 			RunId:      resetResp1.GetRunId(),
-		},
+		}.Build(),
 		Reason:                    "test",
 		WorkflowTaskFinishEventId: 7,
 		RequestId:                 uuid.NewString(),
-	})
+	}.Build())
 	s.NoError(err)
 
 	_, err = poller0.PollAndProcessWorkflowTask()
@@ -622,14 +622,14 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 	s.Eventually(func() bool {
 		_, err = s.clusters[1].AdminClient().DescribeMutableState(
 			testcore.NewContext(),
-			&adminservice.DescribeMutableStateRequest{
+			adminservice.DescribeMutableStateRequest_builder{
 				Namespace: ns,
-				Execution: &commonpb.WorkflowExecution{
+				Execution: commonpb.WorkflowExecution_builder{
 					WorkflowId: id,
 					RunId:      we.GetRunId(),
-				},
+				}.Build(),
 				Archetype: chasm.WorkflowArchetype,
-			})
+			}.Build())
 		return err == nil
 	},
 		time.Second*10,
@@ -637,14 +637,14 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 	s.Eventually(func() bool {
 		_, err = s.clusters[1].AdminClient().DescribeMutableState(
 			testcore.NewContext(),
-			&adminservice.DescribeMutableStateRequest{
+			adminservice.DescribeMutableStateRequest_builder{
 				Namespace: ns,
-				Execution: &commonpb.WorkflowExecution{
+				Execution: commonpb.WorkflowExecution_builder{
 					WorkflowId: id,
 					RunId:      resetResp1.GetRunId(),
-				},
+				}.Build(),
 				Archetype: chasm.WorkflowArchetype,
-			})
+			}.Build())
 		return err == nil
 	},
 		time.Second*10,
@@ -652,59 +652,59 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 	s.Eventually(func() bool {
 		_, err = s.clusters[1].AdminClient().DescribeMutableState(
 			testcore.NewContext(),
-			&adminservice.DescribeMutableStateRequest{
+			adminservice.DescribeMutableStateRequest_builder{
 				Namespace: ns,
-				Execution: &commonpb.WorkflowExecution{
+				Execution: commonpb.WorkflowExecution_builder{
 					WorkflowId: id,
 					RunId:      resetResp2.GetRunId(),
-				},
+				}.Build(),
 				Archetype: chasm.WorkflowArchetype,
-			})
+			}.Build())
 		return err == nil
 	},
 		time.Second*10,
 		time.Second)
 
 	// Delete reset workflows
-	_, err = s.clusters[1].AdminClient().DeleteWorkflowExecution(testcore.NewContext(), &adminservice.DeleteWorkflowExecutionRequest{
+	_, err = s.clusters[1].AdminClient().DeleteWorkflowExecution(testcore.NewContext(), adminservice.DeleteWorkflowExecutionRequest_builder{
 		Namespace: ns,
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: id,
 			RunId:      we.GetRunId(),
-		},
+		}.Build(),
 		Archetype: chasm.WorkflowArchetype,
-	})
+	}.Build())
 	s.NoError(err)
-	_, err = s.clusters[1].AdminClient().DeleteWorkflowExecution(testcore.NewContext(), &adminservice.DeleteWorkflowExecutionRequest{
+	_, err = s.clusters[1].AdminClient().DeleteWorkflowExecution(testcore.NewContext(), adminservice.DeleteWorkflowExecutionRequest_builder{
 		Namespace: ns,
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: id,
 			RunId:      resetResp1.GetRunId(),
-		},
+		}.Build(),
 		Archetype: chasm.WorkflowArchetype,
-	})
+	}.Build())
 	s.NoError(err)
-	_, err = s.clusters[1].AdminClient().DeleteWorkflowExecution(testcore.NewContext(), &adminservice.DeleteWorkflowExecutionRequest{
+	_, err = s.clusters[1].AdminClient().DeleteWorkflowExecution(testcore.NewContext(), adminservice.DeleteWorkflowExecutionRequest_builder{
 		Namespace: ns,
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: id,
 			RunId:      resetResp2.GetRunId(),
-		},
+		}.Build(),
 		Archetype: chasm.WorkflowArchetype,
-	})
+	}.Build())
 	s.NoError(err)
 
 	s.Eventually(func() bool {
 		_, err = s.clusters[1].AdminClient().DescribeMutableState(
 			testcore.NewContext(),
-			&adminservice.DescribeMutableStateRequest{
+			adminservice.DescribeMutableStateRequest_builder{
 				Namespace: ns,
-				Execution: &commonpb.WorkflowExecution{
+				Execution: commonpb.WorkflowExecution_builder{
 					WorkflowId: id,
 					RunId:      we.GetRunId(),
-				},
+				}.Build(),
 				Archetype: chasm.WorkflowArchetype,
-			})
+			}.Build())
 		var expectedErr *serviceerror.NotFound
 		return errors.As(err, &expectedErr)
 	},
@@ -713,14 +713,14 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 	s.Eventually(func() bool {
 		_, err = s.clusters[1].AdminClient().DescribeMutableState(
 			testcore.NewContext(),
-			&adminservice.DescribeMutableStateRequest{
+			adminservice.DescribeMutableStateRequest_builder{
 				Namespace: ns,
-				Execution: &commonpb.WorkflowExecution{
+				Execution: commonpb.WorkflowExecution_builder{
 					WorkflowId: id,
 					RunId:      resetResp1.GetRunId(),
-				},
+				}.Build(),
 				Archetype: chasm.WorkflowArchetype,
-			})
+			}.Build())
 		var expectedErr *serviceerror.NotFound
 		return errors.As(err, &expectedErr)
 	},
@@ -729,90 +729,90 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 	s.Eventually(func() bool {
 		_, err = s.clusters[1].AdminClient().DescribeMutableState(
 			testcore.NewContext(),
-			&adminservice.DescribeMutableStateRequest{
+			adminservice.DescribeMutableStateRequest_builder{
 				Namespace: ns,
-				Execution: &commonpb.WorkflowExecution{
+				Execution: commonpb.WorkflowExecution_builder{
 					WorkflowId: id,
 					RunId:      resetResp2.GetRunId(),
-				},
+				}.Build(),
 				Archetype: chasm.WorkflowArchetype,
-			})
+			}.Build())
 		var expectedErr *serviceerror.NotFound
 		return errors.As(err, &expectedErr)
 	},
 		time.Second*10,
 		time.Second)
 
-	_, err = s.clusters[0].HistoryClient().GenerateLastHistoryReplicationTasks(testcore.NewContext(), &historyservice.GenerateLastHistoryReplicationTasksRequest{
-		NamespaceId: resp.NamespaceInfo.GetId(),
-		Execution: &commonpb.WorkflowExecution{
+	_, err = s.clusters[0].HistoryClient().GenerateLastHistoryReplicationTasks(testcore.NewContext(), historyservice.GenerateLastHistoryReplicationTasksRequest_builder{
+		NamespaceId: resp.GetNamespaceInfo().GetId(),
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: id,
 			RunId:      we.GetRunId(),
-		},
+		}.Build(),
 		ArchetypeId: chasm.WorkflowArchetypeID,
-	})
+	}.Build())
 	s.NoError(err)
 	s.Eventually(func() bool {
 		_, err = s.clusters[1].AdminClient().DescribeMutableState(
 			testcore.NewContext(),
-			&adminservice.DescribeMutableStateRequest{
+			adminservice.DescribeMutableStateRequest_builder{
 				Namespace: ns,
-				Execution: &commonpb.WorkflowExecution{
+				Execution: commonpb.WorkflowExecution_builder{
 					WorkflowId: id,
 					RunId:      we.GetRunId(),
-				},
+				}.Build(),
 				Archetype: chasm.WorkflowArchetype,
-			})
+			}.Build())
 		return err == nil
 	},
 		time.Second*10,
 		time.Second)
 
-	_, err = s.clusters[0].HistoryClient().GenerateLastHistoryReplicationTasks(testcore.NewContext(), &historyservice.GenerateLastHistoryReplicationTasksRequest{
-		NamespaceId: resp.NamespaceInfo.GetId(),
-		Execution: &commonpb.WorkflowExecution{
+	_, err = s.clusters[0].HistoryClient().GenerateLastHistoryReplicationTasks(testcore.NewContext(), historyservice.GenerateLastHistoryReplicationTasksRequest_builder{
+		NamespaceId: resp.GetNamespaceInfo().GetId(),
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: id,
 			RunId:      resetResp1.GetRunId(),
-		},
+		}.Build(),
 		ArchetypeId: chasm.WorkflowArchetypeID,
-	})
+	}.Build())
 	s.NoError(err)
 	s.Eventually(func() bool {
 		_, err = s.clusters[1].AdminClient().DescribeMutableState(
 			testcore.NewContext(),
-			&adminservice.DescribeMutableStateRequest{
+			adminservice.DescribeMutableStateRequest_builder{
 				Namespace: ns,
-				Execution: &commonpb.WorkflowExecution{
+				Execution: commonpb.WorkflowExecution_builder{
 					WorkflowId: id,
 					RunId:      resetResp1.GetRunId(),
-				},
+				}.Build(),
 				Archetype: chasm.WorkflowArchetype,
-			})
+			}.Build())
 		return err == nil
 	},
 		time.Second*10,
 		time.Second)
 
-	_, err = s.clusters[0].HistoryClient().GenerateLastHistoryReplicationTasks(testcore.NewContext(), &historyservice.GenerateLastHistoryReplicationTasksRequest{
-		NamespaceId: resp.NamespaceInfo.GetId(),
-		Execution: &commonpb.WorkflowExecution{
+	_, err = s.clusters[0].HistoryClient().GenerateLastHistoryReplicationTasks(testcore.NewContext(), historyservice.GenerateLastHistoryReplicationTasksRequest_builder{
+		NamespaceId: resp.GetNamespaceInfo().GetId(),
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: id,
 			RunId:      resetResp2.GetRunId(),
-		},
+		}.Build(),
 		ArchetypeId: chasm.WorkflowArchetypeID,
-	})
+	}.Build())
 	s.NoError(err)
 	s.Eventually(func() bool {
 		_, err = s.clusters[1].AdminClient().DescribeMutableState(
 			testcore.NewContext(),
-			&adminservice.DescribeMutableStateRequest{
+			adminservice.DescribeMutableStateRequest_builder{
 				Namespace: ns,
-				Execution: &commonpb.WorkflowExecution{
+				Execution: commonpb.WorkflowExecution_builder{
 					WorkflowId: id,
 					RunId:      resetResp2.GetRunId(),
-				},
+				}.Build(),
 				Archetype: chasm.WorkflowArchetype,
-			})
+			}.Build())
 		return err == nil
 	},
 		time.Second*10,
@@ -836,34 +836,32 @@ func (s *streamBasedReplicationTestSuite) TestCloseTransferTaskAckedReplication(
 
 	workflowID := "test-replication-" + uuid.NewString()
 	sourceClient := s.clusters[0].FrontendClient()
-	startResp, err := sourceClient.StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+	startResp, err := sourceClient.StartWorkflowExecution(ctx, workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:           uuid.NewString(),
 		Namespace:           ns,
 		WorkflowId:          workflowID,
-		WorkflowType:        &commonpb.WorkflowType{Name: "test-workflow-type"},
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: "test-task-queue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		WorkflowType:        commonpb.WorkflowType_builder{Name: "test-workflow-type"}.Build(),
+		TaskQueue:           taskqueuepb.TaskQueue_builder{Name: "test-task-queue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 		WorkflowRunTimeout:  durationpb.New(time.Minute),
 		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
-	})
+	}.Build())
 	s.Require().NoError(err, "Failed to start workflow execution")
 	s.T().Logf("Started workflow '%s' (RunID: %s) on cluster 0", workflowID, startResp.GetRunId())
 
 	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
-		return []*commandpb.Command{{
+		return []*commandpb.Command{commandpb.Command_builder{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
-				CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
-					Result: payloads.EncodeString("Done"),
-				},
-			},
-		}}, nil
+			CompleteWorkflowExecutionCommandAttributes: commandpb.CompleteWorkflowExecutionCommandAttributes_builder{
+				Result: payloads.EncodeString("Done"),
+			}.Build(),
+		}.Build()}, nil
 	}
 
 	//nolint:staticcheck // TODO: replace with taskpoller.TaskPoller
 	poller := &testcore.TaskPoller{
 		Client:              sourceClient,
 		Namespace:           ns,
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: "test-task-queue"},
+		TaskQueue:           taskqueuepb.TaskQueue_builder{Name: "test-task-queue"}.Build(),
 		Identity:            "worker-identity",
 		WorkflowTaskHandler: wtHandler,
 		Logger:              s.logger,
@@ -875,13 +873,13 @@ func (s *streamBasedReplicationTestSuite) TestCloseTransferTaskAckedReplication(
 	s.T().Log("Completed workflow execution via worker poll")
 
 	s.Eventually(func() bool {
-		resp, err := sourceClient.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+		resp, err := sourceClient.DescribeWorkflowExecution(ctx, workflowservice.DescribeWorkflowExecutionRequest_builder{
 			Namespace: ns,
-			Execution: &commonpb.WorkflowExecution{
+			Execution: commonpb.WorkflowExecution_builder{
 				WorkflowId: workflowID,
 				RunId:      startResp.GetRunId(),
-			},
-		})
+			}.Build(),
+		}.Build())
 		if err != nil {
 			return false
 		}
@@ -889,21 +887,21 @@ func (s *streamBasedReplicationTestSuite) TestCloseTransferTaskAckedReplication(
 	}, 10*time.Second, 100*time.Millisecond)
 	s.T().Log("Verified workflow reached COMPLETED status")
 
-	namespaceResp, err := sourceClient.DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+	namespaceResp, err := sourceClient.DescribeNamespace(ctx, workflowservice.DescribeNamespaceRequest_builder{
 		Namespace: ns,
-	})
+	}.Build())
 	s.Require().NoError(err, "Failed to describe namespace")
-	namespaceID := namespaceResp.NamespaceInfo.GetId()
+	namespaceID := namespaceResp.GetNamespaceInfo().GetId()
 
 	historyClient := s.clusters[0].HistoryClient()
-	mutableStateResp, err := historyClient.DescribeMutableState(ctx, &historyservice.DescribeMutableStateRequest{
+	mutableStateResp, err := historyClient.DescribeMutableState(ctx, historyservice.DescribeMutableStateRequest_builder{
 		NamespaceId: namespaceID,
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: workflowID,
 			RunId:      startResp.GetRunId(),
-		},
+		}.Build(),
 		ArchetypeId: chasm.WorkflowArchetypeID,
-	})
+	}.Build())
 	s.Require().NoError(err, "Failed to describe mutable state")
 	s.Require().NotNil(mutableStateResp.GetDatabaseMutableState(), "Database mutable state is nil")
 	s.T().Logf("Retrieved mutable state for workflow (NamespaceID: %s)", namespaceID)
@@ -913,51 +911,51 @@ func (s *streamBasedReplicationTestSuite) TestCloseTransferTaskAckedReplication(
 	s.T().Log("Waited 5 seconds for close transfer task to be acknowledged internally")
 
 	targetClient := s.clusters[1].FrontendClient()
-	_, err = targetClient.DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+	_, err = targetClient.DescribeNamespace(ctx, workflowservice.DescribeNamespaceRequest_builder{
 		Namespace: ns,
-	})
+	}.Build())
 	s.Require().Error(err, "Namespace should not exist on target cluster before promotion")
 
-	_, err = targetClient.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+	_, err = targetClient.DescribeWorkflowExecution(ctx, workflowservice.DescribeWorkflowExecutionRequest_builder{
 		Namespace: ns,
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: workflowID,
 			RunId:      startResp.GetRunId(),
-		},
-	})
+		}.Build(),
+	}.Build())
 	s.Require().Error(err, "Workflow should not exist on target cluster before promotion")
 	s.T().Log("Verified namespace and workflow do NOT exist on cluster 1 (standby) before promotion")
 
-	_, err = sourceClient.UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
+	_, err = sourceClient.UpdateNamespace(ctx, workflowservice.UpdateNamespaceRequest_builder{
 		Namespace:        ns,
 		PromoteNamespace: true,
-		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
+		ReplicationConfig: replicationpb.NamespaceReplicationConfig_builder{
 			Clusters: []*replicationpb.ClusterReplicationConfig{
-				{ClusterName: s.clusters[0].ClusterName()},
-				{ClusterName: s.clusters[1].ClusterName()},
+				replicationpb.ClusterReplicationConfig_builder{ClusterName: s.clusters[0].ClusterName()}.Build(),
+				replicationpb.ClusterReplicationConfig_builder{ClusterName: s.clusters[1].ClusterName()}.Build(),
 			},
-		},
-	})
+		}.Build(),
+	}.Build())
 	s.Require().NoError(err, "Failed to promote namespace to global")
 	s.T().Logf("Promoted namespace '%s' from local to global (added cluster 1)", ns)
 
 	s.Eventually(func() bool {
-		_, err := targetClient.DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+		_, err := targetClient.DescribeNamespace(ctx, workflowservice.DescribeNamespaceRequest_builder{
 			Namespace: ns,
-		})
+		}.Build())
 		return err == nil
 	}, 60*time.Second, time.Second)
 	s.T().Log("Verified namespace replicated to cluster 1")
 
 	sourceAdminClient := s.clusters[0].AdminClient()
-	_, err = sourceAdminClient.GenerateLastHistoryReplicationTasks(ctx, &adminservice.GenerateLastHistoryReplicationTasksRequest{
+	_, err = sourceAdminClient.GenerateLastHistoryReplicationTasks(ctx, adminservice.GenerateLastHistoryReplicationTasksRequest_builder{
 		Namespace: ns,
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: workflowID,
 			RunId:      startResp.GetRunId(),
-		},
+		}.Build(),
 		Archetype: chasm.WorkflowArchetype,
-	})
+	}.Build())
 	s.Require().NoError(err, "Failed to generate last history replication tasks")
 	s.T().Log("Generated last history replication tasks to force replication of completed workflow")
 
@@ -1021,13 +1019,13 @@ func (s *streamBasedReplicationTestSuite) TestCloseTransferTaskAckedReplication(
 	// Wait for replication to complete to the passive cluster
 	s.T().Log("Waiting for workflow to replicate to cluster 1 (passive)...")
 	s.Eventually(func() bool {
-		resp, err := targetClient.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+		resp, err := targetClient.DescribeWorkflowExecution(ctx, workflowservice.DescribeWorkflowExecutionRequest_builder{
 			Namespace: ns,
-			Execution: &commonpb.WorkflowExecution{
+			Execution: commonpb.WorkflowExecution_builder{
 				WorkflowId: workflowID,
 				RunId:      startResp.GetRunId(),
-			},
-		})
+			}.Build(),
+		}.Build())
 		if err != nil {
 			return false
 		}
@@ -1060,11 +1058,11 @@ func (s *streamBasedReplicationTestSuite) TestPassiveActivityRetryTimerReplicati
 	taskQueue := "task-recorder-tq"
 
 	// Get namespace ID for task filtering
-	namespaceResp, err := s.clusters[0].FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+	namespaceResp, err := s.clusters[0].FrontendClient().DescribeNamespace(ctx, workflowservice.DescribeNamespaceRequest_builder{
 		Namespace: s.namespaceName,
-	})
+	}.Build())
 	s.NoError(err)
-	namespaceID := namespaceResp.NamespaceInfo.GetId()
+	namespaceID := namespaceResp.GetNamespaceInfo().GetId()
 
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.clusters[0].Host().FrontendGRPCAddress(),

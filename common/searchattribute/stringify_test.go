@@ -52,9 +52,9 @@ func (s *StringifySuite) Test_Stringify() {
 	s.Equal("true", saStr["key3"])
 
 	// Clean Metadata type and use typeMap.
-	delete(sa.IndexedFields["key1"].Metadata, "type")
-	delete(sa.IndexedFields["key2"].Metadata, "type")
-	delete(sa.IndexedFields["key3"].Metadata, "type")
+	delete(sa.GetIndexedFields()["key1"].GetMetadata(), "type")
+	delete(sa.GetIndexedFields()["key2"].GetMetadata(), "type")
+	delete(sa.GetIndexedFields()["key3"].GetMetadata(), "type")
 
 	saStr, err = Stringify(sa, &typeMap)
 	s.NoError(err)
@@ -97,9 +97,9 @@ func (s *StringifySuite) Test_Stringify_Array() {
 	s.Equal("[true,false,true]", saStr["key3"])
 
 	// Clean Metadata type and use typeMap.
-	delete(sa.IndexedFields["key1"].Metadata, "type")
-	delete(sa.IndexedFields["key2"].Metadata, "type")
-	delete(sa.IndexedFields["key3"].Metadata, "type")
+	delete(sa.GetIndexedFields()["key1"].GetMetadata(), "type")
+	delete(sa.GetIndexedFields()["key2"].GetMetadata(), "type")
+	delete(sa.GetIndexedFields()["key3"].GetMetadata(), "type")
 
 	saStr, err = Stringify(sa, &typeMap)
 	s.NoError(err)
@@ -131,13 +131,13 @@ func (s *StringifySuite) Test_Parse_ValidTypeMap() {
 		}})
 
 	s.NoError(err)
-	s.Len(sa.IndexedFields, 3)
-	s.Equal(`"val1"`, string(sa.IndexedFields["key1"].GetData()))
-	s.Equal("Text", string(sa.IndexedFields["key1"].GetMetadata()["type"]))
-	s.Equal("2", string(sa.IndexedFields["key2"].GetData()))
-	s.Equal("Int", string(sa.IndexedFields["key2"].GetMetadata()["type"]))
-	s.Equal("true", string(sa.IndexedFields["key3"].GetData()))
-	s.Equal("Bool", string(sa.IndexedFields["key3"].GetMetadata()["type"]))
+	s.Len(sa.GetIndexedFields(), 3)
+	s.Equal(`"val1"`, string(sa.GetIndexedFields()["key1"].GetData()))
+	s.Equal("Text", string(sa.GetIndexedFields()["key1"].GetMetadata()["type"]))
+	s.Equal("2", string(sa.GetIndexedFields()["key2"].GetData()))
+	s.Equal("Int", string(sa.GetIndexedFields()["key2"].GetMetadata()["type"]))
+	s.Equal("true", string(sa.GetIndexedFields()["key3"].GetData()))
+	s.Equal("Bool", string(sa.GetIndexedFields()["key3"].GetMetadata()["type"]))
 }
 
 func (s *StringifySuite) Test_Parse_NilTypeMap() {
@@ -148,10 +148,10 @@ func (s *StringifySuite) Test_Parse_NilTypeMap() {
 	}, nil)
 
 	s.NoError(err)
-	s.Len(sa.IndexedFields, 3)
-	s.Equal(`"val1"`, string(sa.IndexedFields["key1"].GetData()))
-	s.Equal("2", string(sa.IndexedFields["key2"].GetData()))
-	s.Equal("true", string(sa.IndexedFields["key3"].GetData()))
+	s.Len(sa.GetIndexedFields(), 3)
+	s.Equal(`"val1"`, string(sa.GetIndexedFields()["key1"].GetData()))
+	s.Equal("2", string(sa.GetIndexedFields()["key2"].GetData()))
+	s.Equal("true", string(sa.GetIndexedFields()["key3"].GetData()))
 
 }
 func (s *StringifySuite) Test_Parse_WrongTypesInTypeMap() {
@@ -165,10 +165,10 @@ func (s *StringifySuite) Test_Parse_WrongTypesInTypeMap() {
 		}})
 
 	s.Error(err)
-	s.Len(sa.IndexedFields, 2)
-	s.Nil(sa.IndexedFields["key1"])
-	s.Equal(`"2"`, string(sa.IndexedFields["key2"].GetData()))
-	s.Equal("Text", string(sa.IndexedFields["key2"].GetMetadata()["type"]))
+	s.Len(sa.GetIndexedFields(), 2)
+	s.Nil(sa.GetIndexedFields()["key1"])
+	s.Equal(`"2"`, string(sa.GetIndexedFields()["key2"].GetData()))
+	s.Equal("Text", string(sa.GetIndexedFields()["key2"].GetMetadata()["type"]))
 }
 
 func (s *StringifySuite) Test_Parse_MissedFieldsInTypeMap() {
@@ -182,11 +182,11 @@ func (s *StringifySuite) Test_Parse_MissedFieldsInTypeMap() {
 		}})
 
 	s.NoError(err)
-	s.Len(sa.IndexedFields, 2)
-	s.Equal(`"val1"`, string(sa.IndexedFields["key1"].GetData()))
-	s.Nil(sa.IndexedFields["key1"].GetMetadata()["type"])
-	s.Equal("2", string(sa.IndexedFields["key2"].GetData()))
-	s.Equal("Int", string(sa.IndexedFields["key2"].GetMetadata()["type"]))
+	s.Len(sa.GetIndexedFields(), 2)
+	s.Equal(`"val1"`, string(sa.GetIndexedFields()["key1"].GetData()))
+	s.Nil(sa.GetIndexedFields()["key1"].GetMetadata()["type"])
+	s.Equal("2", string(sa.GetIndexedFields()["key2"].GetData()))
+	s.Equal("Int", string(sa.GetIndexedFields()["key2"].GetMetadata()["type"]))
 }
 
 func (s *StringifySuite) Test_Parse_Array() {
@@ -200,11 +200,11 @@ func (s *StringifySuite) Test_Parse_Array() {
 		}})
 
 	s.NoError(err)
-	s.Len(sa.IndexedFields, 2)
-	s.Equal(`["val1","val2"]`, string(sa.IndexedFields["key1"].GetData()))
-	s.Equal("Text", string(sa.IndexedFields["key1"].GetMetadata()["type"]))
-	s.Equal("[2,3,4]", string(sa.IndexedFields["key2"].GetData()))
-	s.Equal("Int", string(sa.IndexedFields["key2"].GetMetadata()["type"]))
+	s.Len(sa.GetIndexedFields(), 2)
+	s.Equal(`["val1","val2"]`, string(sa.GetIndexedFields()["key1"].GetData()))
+	s.Equal("Text", string(sa.GetIndexedFields()["key1"].GetMetadata()["type"]))
+	s.Equal("[2,3,4]", string(sa.GetIndexedFields()["key2"].GetData()))
+	s.Equal("Int", string(sa.GetIndexedFields()["key2"].GetMetadata()["type"]))
 }
 
 func (s *StringifySuite) Test_parseValueOrArray() {
@@ -214,14 +214,14 @@ func (s *StringifySuite) Test_parseValueOrArray() {
 	// int
 	res, err = parseValueOrArray("1", enumspb.INDEXED_VALUE_TYPE_INT)
 	s.NoError(err)
-	s.Equal("Int", string(res.Metadata["type"]))
-	s.Equal("1", string(res.Data))
+	s.Equal("Int", string(res.GetMetadata()["type"]))
+	s.Equal("1", string(res.GetData()))
 
 	// array must be in JSON format.
 	res, err = parseValueOrArray(`["qwe"]`, enumspb.INDEXED_VALUE_TYPE_TEXT)
 	s.NoError(err)
-	s.Equal("Text", string(res.Metadata["type"]))
-	s.Equal(`["qwe"]`, string(res.Data))
+	s.Equal("Text", string(res.GetMetadata()["type"]))
+	s.Equal(`["qwe"]`, string(res.GetData()))
 
 	// array must be in JSON format.
 	res, err = parseValueOrArray(`[qwe]`, enumspb.INDEXED_VALUE_TYPE_TEXT)

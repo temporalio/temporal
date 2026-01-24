@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/service/history/tasks"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -45,17 +46,15 @@ func serializeTransferTask(
 }
 
 func transferChasmTaskToProto(task *tasks.ChasmTask) *persistencespb.TransferTaskInfo {
-	return &persistencespb.TransferTaskInfo{
+	return persistencespb.TransferTaskInfo_builder{
 		NamespaceId:    task.WorkflowKey.NamespaceID,
 		WorkflowId:     task.WorkflowKey.WorkflowID,
 		RunId:          task.WorkflowKey.RunID,
 		TaskId:         task.TaskID,
 		TaskType:       task.GetType(),
 		VisibilityTime: timestamppb.New(task.VisibilityTimestamp),
-		TaskDetails: &persistencespb.TransferTaskInfo_ChasmTaskInfo{
-			ChasmTaskInfo: task.Info,
-		},
-	}
+		ChasmTaskInfo:  proto.ValueOrDefault(task.Info),
+	}.Build()
 }
 
 func deserializeTransferTask(
@@ -67,7 +66,7 @@ func deserializeTransferTask(
 		return nil, err
 	}
 	var task tasks.Task
-	switch transferTask.TaskType {
+	switch transferTask.GetTaskType() {
 	case enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK:
 		task = transferWorkflowTaskFromProto(transferTask)
 	case enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_TASK:
@@ -87,7 +86,7 @@ func deserializeTransferTask(
 	case enumsspb.TASK_TYPE_CHASM:
 		task = transferChasmTaskFromProto(transferTask)
 	default:
-		return nil, serviceerror.NewInternalf("Unknown transfer task type: %v", transferTask.TaskType)
+		return nil, serviceerror.NewInternalf("Unknown transfer task type: %v", transferTask.GetTaskType())
 	}
 	return task, nil
 }
@@ -95,12 +94,12 @@ func deserializeTransferTask(
 func transferChasmTaskFromProto(task *persistencespb.TransferTaskInfo) tasks.Task {
 	return &tasks.ChasmTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			task.NamespaceId,
-			task.WorkflowId,
-			task.RunId,
+			task.GetNamespaceId(),
+			task.GetWorkflowId(),
+			task.GetRunId(),
 		),
-		VisibilityTimestamp: task.VisibilityTime.AsTime(),
-		TaskID:              task.TaskId,
+		VisibilityTimestamp: task.GetVisibilityTime().AsTime(),
+		TaskID:              task.GetTaskId(),
 		Category:            tasks.CategoryTransfer,
 		Info:                task.GetChasmTaskInfo(),
 	}
@@ -141,33 +140,29 @@ func serializeTimerTask(
 }
 
 func timerChasmPureTaskToProto(task *tasks.ChasmTaskPure) *persistencespb.TimerTaskInfo {
-	return &persistencespb.TimerTaskInfo{
+	return persistencespb.TimerTaskInfo_builder{
 		NamespaceId:    task.NamespaceID,
 		WorkflowId:     task.WorkflowID,
 		RunId:          task.RunID,
 		TaskId:         task.TaskID,
 		VisibilityTime: timestamppb.New(task.VisibilityTimestamp),
 		TaskType:       task.GetType(),
-		TaskDetails: &persistencespb.TimerTaskInfo_ChasmTaskInfo{
-			ChasmTaskInfo: &persistencespb.ChasmTaskInfo{
-				ArchetypeId: task.ArchetypeID,
-			},
-		},
-	}
+		ChasmTaskInfo: persistencespb.ChasmTaskInfo_builder{
+			ArchetypeId: task.ArchetypeID,
+		}.Build(),
+	}.Build()
 }
 
 func timerChasmTaskToProto(task *tasks.ChasmTask) *persistencespb.TimerTaskInfo {
-	return &persistencespb.TimerTaskInfo{
+	return persistencespb.TimerTaskInfo_builder{
 		NamespaceId:    task.NamespaceID,
 		WorkflowId:     task.WorkflowID,
 		RunId:          task.RunID,
 		TaskId:         task.TaskID,
 		VisibilityTime: timestamppb.New(task.VisibilityTimestamp),
 		TaskType:       task.GetType(),
-		TaskDetails: &persistencespb.TimerTaskInfo_ChasmTaskInfo{
-			ChasmTaskInfo: task.Info,
-		},
-	}
+		ChasmTaskInfo:  proto.ValueOrDefault(task.Info),
+	}.Build()
 }
 
 func deserializeTimerTask(
@@ -179,7 +174,7 @@ func deserializeTimerTask(
 		return nil, err
 	}
 	var timer tasks.Task
-	switch timerTask.TaskType {
+	switch timerTask.GetTaskType() {
 	case enumsspb.TASK_TYPE_WORKFLOW_TASK_TIMEOUT:
 		timer = timerWorkflowTaskFromProto(timerTask)
 	case enumsspb.TASK_TYPE_WORKFLOW_BACKOFF_TIMER:
@@ -203,7 +198,7 @@ func deserializeTimerTask(
 	case enumsspb.TASK_TYPE_CHASM_PURE:
 		timer = timerChasmPureTaskFromProto(timerTask)
 	default:
-		return nil, serviceerror.NewInternalf("Unknown timer task type: %v", timerTask.TaskType)
+		return nil, serviceerror.NewInternalf("Unknown timer task type: %v", timerTask.GetTaskType())
 	}
 	return timer, nil
 }
@@ -211,12 +206,12 @@ func deserializeTimerTask(
 func timerChasmTaskFromProto(info *persistencespb.TimerTaskInfo) tasks.Task {
 	return &tasks.ChasmTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			info.NamespaceId,
-			info.WorkflowId,
-			info.RunId,
+			info.GetNamespaceId(),
+			info.GetWorkflowId(),
+			info.GetRunId(),
 		),
-		VisibilityTimestamp: info.VisibilityTime.AsTime(),
-		TaskID:              info.TaskId,
+		VisibilityTimestamp: info.GetVisibilityTime().AsTime(),
+		TaskID:              info.GetTaskId(),
 		Category:            tasks.CategoryTimer,
 		Info:                info.GetChasmTaskInfo(),
 	}
@@ -225,12 +220,12 @@ func timerChasmTaskFromProto(info *persistencespb.TimerTaskInfo) tasks.Task {
 func timerChasmPureTaskFromProto(info *persistencespb.TimerTaskInfo) tasks.Task {
 	return &tasks.ChasmTaskPure{
 		WorkflowKey: definition.NewWorkflowKey(
-			info.NamespaceId,
-			info.WorkflowId,
-			info.RunId,
+			info.GetNamespaceId(),
+			info.GetWorkflowId(),
+			info.GetRunId(),
 		),
-		VisibilityTimestamp: info.VisibilityTime.AsTime(),
-		TaskID:              info.TaskId,
+		VisibilityTimestamp: info.GetVisibilityTime().AsTime(),
+		TaskID:              info.GetTaskId(),
 		ArchetypeID:         info.GetChasmTaskInfo().GetArchetypeId(),
 	}
 }
@@ -266,7 +261,7 @@ func deserializeVisibilityTask(
 		return nil, err
 	}
 	var visibility tasks.Task
-	switch visibilityTask.TaskType {
+	switch visibilityTask.GetTaskType() {
 	case enumsspb.TASK_TYPE_VISIBILITY_START_EXECUTION:
 		visibility = visibilityStartTaskFromProto(visibilityTask)
 	case enumsspb.TASK_TYPE_VISIBILITY_UPSERT_EXECUTION:
@@ -278,7 +273,7 @@ func deserializeVisibilityTask(
 	case enumsspb.TASK_TYPE_CHASM:
 		visibility = visibilityChasmTaskFromProto(visibilityTask)
 	default:
-		return nil, serviceerror.NewInternalf("Unknown visibility task type: %v", visibilityTask.TaskType)
+		return nil, serviceerror.NewInternalf("Unknown visibility task type: %v", visibilityTask.GetTaskType())
 	}
 	return visibility, nil
 }
@@ -307,7 +302,7 @@ func deserializeReplicationTask(
 }
 
 func (t *serializerImpl) DeserializeReplicationTask(replicationTask *persistencespb.ReplicationTaskInfo) (tasks.Task, error) {
-	switch replicationTask.TaskType {
+	switch replicationTask.GetTaskType() {
 	case enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY:
 		return replicationActivityTaskFromProto(replicationTask), nil
 	case enumsspb.TASK_TYPE_REPLICATION_HISTORY:
@@ -319,7 +314,7 @@ func (t *serializerImpl) DeserializeReplicationTask(replicationTask *persistence
 	case enumsspb.TASK_TYPE_REPLICATION_SYNC_VERSIONED_TRANSITION:
 		return replicationSyncVersionedTransitionTaskFromProto(replicationTask, t)
 	default:
-		return nil, serviceerror.NewInternalf("Unknown replication task type: %v", replicationTask.TaskType)
+		return nil, serviceerror.NewInternalf("Unknown replication task type: %v", replicationTask.GetTaskType())
 	}
 }
 
@@ -365,7 +360,7 @@ func deserializeArchivalTask(
 		return nil, err
 	}
 	var task tasks.Task
-	switch archivalTask.TaskType {
+	switch archivalTask.GetTaskType() {
 	case enumsspb.TASK_TYPE_ARCHIVAL_ARCHIVE_EXECUTION:
 		task = archiveExecutionTaskFromProto(archivalTask)
 	default:
@@ -377,7 +372,7 @@ func deserializeArchivalTask(
 func transferActivityTaskToProto(
 	activityTask *tasks.ActivityTask,
 ) *persistencespb.TransferTaskInfo {
-	return &persistencespb.TransferTaskInfo{
+	return persistencespb.TransferTaskInfo_builder{
 		NamespaceId:             activityTask.WorkflowKey.NamespaceID,
 		WorkflowId:              activityTask.WorkflowKey.WorkflowID,
 		RunId:                   activityTask.WorkflowKey.RunID,
@@ -392,7 +387,7 @@ func transferActivityTaskToProto(
 		TaskId:                  activityTask.TaskID,
 		VisibilityTime:          timestamppb.New(activityTask.VisibilityTimestamp),
 		Stamp:                   activityTask.Stamp,
-	}
+	}.Build()
 }
 
 func transferActivityTaskFromProto(
@@ -400,23 +395,23 @@ func transferActivityTaskFromProto(
 ) *tasks.ActivityTask {
 	return &tasks.ActivityTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			activityTask.NamespaceId,
-			activityTask.WorkflowId,
-			activityTask.RunId,
+			activityTask.GetNamespaceId(),
+			activityTask.GetWorkflowId(),
+			activityTask.GetRunId(),
 		),
-		VisibilityTimestamp: activityTask.VisibilityTime.AsTime(),
-		TaskID:              activityTask.TaskId,
-		TaskQueue:           activityTask.TaskQueue,
-		ScheduledEventID:    activityTask.ScheduledEventId,
-		Version:             activityTask.Version,
-		Stamp:               activityTask.Stamp,
+		VisibilityTimestamp: activityTask.GetVisibilityTime().AsTime(),
+		TaskID:              activityTask.GetTaskId(),
+		TaskQueue:           activityTask.GetTaskQueue(),
+		ScheduledEventID:    activityTask.GetScheduledEventId(),
+		Version:             activityTask.GetVersion(),
+		Stamp:               activityTask.GetStamp(),
 	}
 }
 
 func transferWorkflowTaskToProto(
 	workflowTask *tasks.WorkflowTask,
 ) *persistencespb.TransferTaskInfo {
-	return &persistencespb.TransferTaskInfo{
+	return persistencespb.TransferTaskInfo_builder{
 		NamespaceId:             workflowTask.WorkflowKey.NamespaceID,
 		WorkflowId:              workflowTask.WorkflowKey.WorkflowID,
 		RunId:                   workflowTask.WorkflowKey.RunID,
@@ -431,7 +426,7 @@ func transferWorkflowTaskToProto(
 		TaskId:                  workflowTask.TaskID,
 		VisibilityTime:          timestamppb.New(workflowTask.VisibilityTimestamp),
 		Stamp:                   workflowTask.Stamp,
-	}
+	}.Build()
 }
 
 func transferWorkflowTaskFromProto(
@@ -439,23 +434,23 @@ func transferWorkflowTaskFromProto(
 ) *tasks.WorkflowTask {
 	return &tasks.WorkflowTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			workflowTask.NamespaceId,
-			workflowTask.WorkflowId,
-			workflowTask.RunId,
+			workflowTask.GetNamespaceId(),
+			workflowTask.GetWorkflowId(),
+			workflowTask.GetRunId(),
 		),
-		VisibilityTimestamp: workflowTask.VisibilityTime.AsTime(),
-		TaskID:              workflowTask.TaskId,
-		TaskQueue:           workflowTask.TaskQueue,
-		ScheduledEventID:    workflowTask.ScheduledEventId,
-		Version:             workflowTask.Version,
-		Stamp:               workflowTask.Stamp,
+		VisibilityTimestamp: workflowTask.GetVisibilityTime().AsTime(),
+		TaskID:              workflowTask.GetTaskId(),
+		TaskQueue:           workflowTask.GetTaskQueue(),
+		ScheduledEventID:    workflowTask.GetScheduledEventId(),
+		Version:             workflowTask.GetVersion(),
+		Stamp:               workflowTask.GetStamp(),
 	}
 }
 
 func transferRequestCancelTaskToProto(
 	requestCancelTask *tasks.CancelExecutionTask,
 ) *persistencespb.TransferTaskInfo {
-	return &persistencespb.TransferTaskInfo{
+	return persistencespb.TransferTaskInfo_builder{
 		NamespaceId:             requestCancelTask.WorkflowKey.NamespaceID,
 		WorkflowId:              requestCancelTask.WorkflowKey.WorkflowID,
 		RunId:                   requestCancelTask.WorkflowKey.RunID,
@@ -469,7 +464,7 @@ func transferRequestCancelTaskToProto(
 		Version:                 requestCancelTask.Version,
 		TaskId:                  requestCancelTask.TaskID,
 		VisibilityTime:          timestamppb.New(requestCancelTask.VisibilityTimestamp),
-	}
+	}.Build()
 }
 
 func transferRequestCancelTaskFromProto(
@@ -477,25 +472,25 @@ func transferRequestCancelTaskFromProto(
 ) *tasks.CancelExecutionTask {
 	return &tasks.CancelExecutionTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			requestCancelTask.NamespaceId,
-			requestCancelTask.WorkflowId,
-			requestCancelTask.RunId,
+			requestCancelTask.GetNamespaceId(),
+			requestCancelTask.GetWorkflowId(),
+			requestCancelTask.GetRunId(),
 		),
-		VisibilityTimestamp:     requestCancelTask.VisibilityTime.AsTime(),
-		TaskID:                  requestCancelTask.TaskId,
-		TargetNamespaceID:       requestCancelTask.TargetNamespaceId,
-		TargetWorkflowID:        requestCancelTask.TargetWorkflowId,
-		TargetRunID:             requestCancelTask.TargetRunId,
-		TargetChildWorkflowOnly: requestCancelTask.TargetChildWorkflowOnly,
-		InitiatedEventID:        requestCancelTask.ScheduledEventId,
-		Version:                 requestCancelTask.Version,
+		VisibilityTimestamp:     requestCancelTask.GetVisibilityTime().AsTime(),
+		TaskID:                  requestCancelTask.GetTaskId(),
+		TargetNamespaceID:       requestCancelTask.GetTargetNamespaceId(),
+		TargetWorkflowID:        requestCancelTask.GetTargetWorkflowId(),
+		TargetRunID:             requestCancelTask.GetTargetRunId(),
+		TargetChildWorkflowOnly: requestCancelTask.GetTargetChildWorkflowOnly(),
+		InitiatedEventID:        requestCancelTask.GetScheduledEventId(),
+		Version:                 requestCancelTask.GetVersion(),
 	}
 }
 
 func transferSignalTaskToProto(
 	signalTask *tasks.SignalExecutionTask,
 ) *persistencespb.TransferTaskInfo {
-	return &persistencespb.TransferTaskInfo{
+	return persistencespb.TransferTaskInfo_builder{
 		NamespaceId:             signalTask.WorkflowKey.NamespaceID,
 		WorkflowId:              signalTask.WorkflowKey.WorkflowID,
 		RunId:                   signalTask.WorkflowKey.RunID,
@@ -509,7 +504,7 @@ func transferSignalTaskToProto(
 		Version:                 signalTask.Version,
 		TaskId:                  signalTask.TaskID,
 		VisibilityTime:          timestamppb.New(signalTask.VisibilityTimestamp),
-	}
+	}.Build()
 }
 
 func transferSignalTaskFromProto(
@@ -517,25 +512,25 @@ func transferSignalTaskFromProto(
 ) *tasks.SignalExecutionTask {
 	return &tasks.SignalExecutionTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			signalTask.NamespaceId,
-			signalTask.WorkflowId,
-			signalTask.RunId,
+			signalTask.GetNamespaceId(),
+			signalTask.GetWorkflowId(),
+			signalTask.GetRunId(),
 		),
-		VisibilityTimestamp:     signalTask.VisibilityTime.AsTime(),
-		TaskID:                  signalTask.TaskId,
-		TargetNamespaceID:       signalTask.TargetNamespaceId,
-		TargetWorkflowID:        signalTask.TargetWorkflowId,
-		TargetRunID:             signalTask.TargetRunId,
-		TargetChildWorkflowOnly: signalTask.TargetChildWorkflowOnly,
-		InitiatedEventID:        signalTask.ScheduledEventId,
-		Version:                 signalTask.Version,
+		VisibilityTimestamp:     signalTask.GetVisibilityTime().AsTime(),
+		TaskID:                  signalTask.GetTaskId(),
+		TargetNamespaceID:       signalTask.GetTargetNamespaceId(),
+		TargetWorkflowID:        signalTask.GetTargetWorkflowId(),
+		TargetRunID:             signalTask.GetTargetRunId(),
+		TargetChildWorkflowOnly: signalTask.GetTargetChildWorkflowOnly(),
+		InitiatedEventID:        signalTask.GetScheduledEventId(),
+		Version:                 signalTask.GetVersion(),
 	}
 }
 
 func transferChildWorkflowTaskToProto(
 	childWorkflowTask *tasks.StartChildExecutionTask,
 ) *persistencespb.TransferTaskInfo {
-	return &persistencespb.TransferTaskInfo{
+	return persistencespb.TransferTaskInfo_builder{
 		NamespaceId:             childWorkflowTask.WorkflowKey.NamespaceID,
 		WorkflowId:              childWorkflowTask.WorkflowKey.WorkflowID,
 		RunId:                   childWorkflowTask.WorkflowKey.RunID,
@@ -549,7 +544,7 @@ func transferChildWorkflowTaskToProto(
 		Version:                 childWorkflowTask.Version,
 		TaskId:                  childWorkflowTask.TaskID,
 		VisibilityTime:          timestamppb.New(childWorkflowTask.VisibilityTimestamp),
-	}
+	}.Build()
 }
 
 func transferChildWorkflowTaskFromProto(
@@ -557,23 +552,23 @@ func transferChildWorkflowTaskFromProto(
 ) *tasks.StartChildExecutionTask {
 	return &tasks.StartChildExecutionTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			signalTask.NamespaceId,
-			signalTask.WorkflowId,
-			signalTask.RunId,
+			signalTask.GetNamespaceId(),
+			signalTask.GetWorkflowId(),
+			signalTask.GetRunId(),
 		),
-		VisibilityTimestamp: signalTask.VisibilityTime.AsTime(),
-		TaskID:              signalTask.TaskId,
-		TargetNamespaceID:   signalTask.TargetNamespaceId,
-		TargetWorkflowID:    signalTask.TargetWorkflowId,
-		InitiatedEventID:    signalTask.ScheduledEventId,
-		Version:             signalTask.Version,
+		VisibilityTimestamp: signalTask.GetVisibilityTime().AsTime(),
+		TaskID:              signalTask.GetTaskId(),
+		TargetNamespaceID:   signalTask.GetTargetNamespaceId(),
+		TargetWorkflowID:    signalTask.GetTargetWorkflowId(),
+		InitiatedEventID:    signalTask.GetScheduledEventId(),
+		Version:             signalTask.GetVersion(),
 	}
 }
 
 func transferCloseTaskToProto(
 	closeTask *tasks.CloseExecutionTask,
 ) *persistencespb.TransferTaskInfo {
-	return &persistencespb.TransferTaskInfo{
+	return persistencespb.TransferTaskInfo_builder{
 		NamespaceId:             closeTask.WorkflowKey.NamespaceID,
 		WorkflowId:              closeTask.WorkflowKey.WorkflowID,
 		RunId:                   closeTask.WorkflowKey.RunID,
@@ -588,14 +583,12 @@ func transferCloseTaskToProto(
 		TaskId:                  closeTask.TaskID,
 		VisibilityTime:          timestamppb.New(closeTask.VisibilityTimestamp),
 		DeleteAfterClose:        closeTask.DeleteAfterClose,
-		TaskDetails: &persistencespb.TransferTaskInfo_CloseExecutionTaskDetails_{
-			CloseExecutionTaskDetails: &persistencespb.TransferTaskInfo_CloseExecutionTaskDetails{
-				// We set this to true even though it's no longer checked in case someone downgrades to a version that
-				// still checks this field.
-				CanSkipVisibilityArchival: true,
-			},
-		},
-	}
+		CloseExecutionTaskDetails: persistencespb.TransferTaskInfo_CloseExecutionTaskDetails_builder{
+			// We set this to true even though it's no longer checked in case someone downgrades to a version that
+			// still checks this field.
+			CanSkipVisibilityArchival: true,
+		}.Build(),
+	}.Build()
 }
 
 func transferCloseTaskFromProto(
@@ -603,14 +596,14 @@ func transferCloseTaskFromProto(
 ) *tasks.CloseExecutionTask {
 	return &tasks.CloseExecutionTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			closeTask.NamespaceId,
-			closeTask.WorkflowId,
-			closeTask.RunId,
+			closeTask.GetNamespaceId(),
+			closeTask.GetWorkflowId(),
+			closeTask.GetRunId(),
 		),
-		VisibilityTimestamp: closeTask.VisibilityTime.AsTime(),
-		TaskID:              closeTask.TaskId,
-		Version:             closeTask.Version,
-		DeleteAfterClose:    closeTask.DeleteAfterClose,
+		VisibilityTimestamp: closeTask.GetVisibilityTime().AsTime(),
+		TaskID:              closeTask.GetTaskId(),
+		Version:             closeTask.GetVersion(),
+		DeleteAfterClose:    closeTask.GetDeleteAfterClose(),
 		// Delete workflow task process stage is not persisted. It is only for in memory retries.
 		DeleteProcessStage: tasks.DeleteWorkflowExecutionStageNone,
 	}
@@ -619,7 +612,7 @@ func transferCloseTaskFromProto(
 func transferResetTaskToProto(
 	resetTask *tasks.ResetWorkflowTask,
 ) *persistencespb.TransferTaskInfo {
-	return &persistencespb.TransferTaskInfo{
+	return persistencespb.TransferTaskInfo_builder{
 		NamespaceId:             resetTask.WorkflowKey.NamespaceID,
 		WorkflowId:              resetTask.WorkflowKey.WorkflowID,
 		RunId:                   resetTask.WorkflowKey.RunID,
@@ -633,7 +626,7 @@ func transferResetTaskToProto(
 		Version:                 resetTask.Version,
 		TaskId:                  resetTask.TaskID,
 		VisibilityTime:          timestamppb.New(resetTask.VisibilityTimestamp),
-	}
+	}.Build()
 }
 
 func transferResetTaskFromProto(
@@ -641,32 +634,30 @@ func transferResetTaskFromProto(
 ) *tasks.ResetWorkflowTask {
 	return &tasks.ResetWorkflowTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			resetTask.NamespaceId,
-			resetTask.WorkflowId,
-			resetTask.RunId,
+			resetTask.GetNamespaceId(),
+			resetTask.GetWorkflowId(),
+			resetTask.GetRunId(),
 		),
-		VisibilityTimestamp: resetTask.VisibilityTime.AsTime(),
-		TaskID:              resetTask.TaskId,
-		Version:             resetTask.Version,
+		VisibilityTimestamp: resetTask.GetVisibilityTime().AsTime(),
+		TaskID:              resetTask.GetTaskId(),
+		Version:             resetTask.GetVersion(),
 	}
 }
 
 func transferDeleteExecutionTaskToProto(
 	deleteExecutionTask *tasks.DeleteExecutionTask,
 ) *persistencespb.TransferTaskInfo {
-	return &persistencespb.TransferTaskInfo{
+	return persistencespb.TransferTaskInfo_builder{
 		NamespaceId:    deleteExecutionTask.WorkflowKey.NamespaceID,
 		WorkflowId:     deleteExecutionTask.WorkflowKey.WorkflowID,
 		RunId:          deleteExecutionTask.WorkflowKey.RunID,
 		TaskType:       enumsspb.TASK_TYPE_TRANSFER_DELETE_EXECUTION,
 		TaskId:         deleteExecutionTask.TaskID,
 		VisibilityTime: timestamppb.New(deleteExecutionTask.VisibilityTimestamp),
-		TaskDetails: &persistencespb.TransferTaskInfo_ChasmTaskInfo{
-			ChasmTaskInfo: &persistencespb.ChasmTaskInfo{
-				ArchetypeId: deleteExecutionTask.ArchetypeID,
-			},
-		},
-	}
+		ChasmTaskInfo: persistencespb.ChasmTaskInfo_builder{
+			ArchetypeId: deleteExecutionTask.ArchetypeID,
+		}.Build(),
+	}.Build()
 }
 
 func transferDeleteExecutionTaskFromProto(
@@ -674,12 +665,12 @@ func transferDeleteExecutionTaskFromProto(
 ) *tasks.DeleteExecutionTask {
 	return &tasks.DeleteExecutionTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			deleteExecutionTask.NamespaceId,
-			deleteExecutionTask.WorkflowId,
-			deleteExecutionTask.RunId,
+			deleteExecutionTask.GetNamespaceId(),
+			deleteExecutionTask.GetWorkflowId(),
+			deleteExecutionTask.GetRunId(),
 		),
-		VisibilityTimestamp: deleteExecutionTask.VisibilityTime.AsTime(),
-		TaskID:              deleteExecutionTask.TaskId,
+		VisibilityTimestamp: deleteExecutionTask.GetVisibilityTime().AsTime(),
+		TaskID:              deleteExecutionTask.GetTaskId(),
 		ArchetypeID:         deleteExecutionTask.GetChasmTaskInfo().GetArchetypeId(),
 		// Delete workflow task process stage is not persisted. It is only for in memory retries.
 		ProcessStage: tasks.DeleteWorkflowExecutionStageNone,
@@ -689,7 +680,7 @@ func transferDeleteExecutionTaskFromProto(
 func timerWorkflowTaskToProto(
 	workflowTimer *tasks.WorkflowTaskTimeoutTask,
 ) *persistencespb.TimerTaskInfo {
-	return &persistencespb.TimerTaskInfo{
+	return persistencespb.TimerTaskInfo_builder{
 		NamespaceId:         workflowTimer.WorkflowKey.NamespaceID,
 		WorkflowId:          workflowTimer.WorkflowKey.WorkflowID,
 		RunId:               workflowTimer.WorkflowKey.RunID,
@@ -702,7 +693,7 @@ func timerWorkflowTaskToProto(
 		TaskId:              workflowTimer.TaskID,
 		VisibilityTime:      timestamppb.New(workflowTimer.VisibilityTimestamp),
 		Stamp:               workflowTimer.Stamp,
-	}
+	}.Build()
 }
 
 func timerWorkflowTaskFromProto(
@@ -710,24 +701,24 @@ func timerWorkflowTaskFromProto(
 ) *tasks.WorkflowTaskTimeoutTask {
 	return &tasks.WorkflowTaskTimeoutTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			workflowTimer.NamespaceId,
-			workflowTimer.WorkflowId,
-			workflowTimer.RunId,
+			workflowTimer.GetNamespaceId(),
+			workflowTimer.GetWorkflowId(),
+			workflowTimer.GetRunId(),
 		),
-		VisibilityTimestamp: workflowTimer.VisibilityTime.AsTime(),
-		TaskID:              workflowTimer.TaskId,
-		EventID:             workflowTimer.EventId,
-		ScheduleAttempt:     workflowTimer.ScheduleAttempt,
-		TimeoutType:         workflowTimer.TimeoutType,
-		Version:             workflowTimer.Version,
-		Stamp:               workflowTimer.Stamp,
+		VisibilityTimestamp: workflowTimer.GetVisibilityTime().AsTime(),
+		TaskID:              workflowTimer.GetTaskId(),
+		EventID:             workflowTimer.GetEventId(),
+		ScheduleAttempt:     workflowTimer.GetScheduleAttempt(),
+		TimeoutType:         workflowTimer.GetTimeoutType(),
+		Version:             workflowTimer.GetVersion(),
+		Stamp:               workflowTimer.GetStamp(),
 	}
 }
 
 func timerWorkflowDelayTaskToProto(
 	workflowDelayTimer *tasks.WorkflowBackoffTimerTask,
 ) *persistencespb.TimerTaskInfo {
-	return &persistencespb.TimerTaskInfo{
+	return persistencespb.TimerTaskInfo_builder{
 		NamespaceId:         workflowDelayTimer.WorkflowKey.NamespaceID,
 		WorkflowId:          workflowDelayTimer.WorkflowKey.WorkflowID,
 		RunId:               workflowDelayTimer.WorkflowKey.RunID,
@@ -739,7 +730,7 @@ func timerWorkflowDelayTaskToProto(
 		EventId:             0,
 		TaskId:              workflowDelayTimer.TaskID,
 		VisibilityTime:      timestamppb.New(workflowDelayTimer.VisibilityTimestamp),
-	}
+	}.Build()
 }
 
 func timerWorkflowDelayTaskFromProto(
@@ -747,21 +738,21 @@ func timerWorkflowDelayTaskFromProto(
 ) *tasks.WorkflowBackoffTimerTask {
 	return &tasks.WorkflowBackoffTimerTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			workflowDelayTimer.NamespaceId,
-			workflowDelayTimer.WorkflowId,
-			workflowDelayTimer.RunId,
+			workflowDelayTimer.GetNamespaceId(),
+			workflowDelayTimer.GetWorkflowId(),
+			workflowDelayTimer.GetRunId(),
 		),
-		VisibilityTimestamp: workflowDelayTimer.VisibilityTime.AsTime(),
-		TaskID:              workflowDelayTimer.TaskId,
-		Version:             workflowDelayTimer.Version,
-		WorkflowBackoffType: workflowDelayTimer.WorkflowBackoffType,
+		VisibilityTimestamp: workflowDelayTimer.GetVisibilityTime().AsTime(),
+		TaskID:              workflowDelayTimer.GetTaskId(),
+		Version:             workflowDelayTimer.GetVersion(),
+		WorkflowBackoffType: workflowDelayTimer.GetWorkflowBackoffType(),
 	}
 }
 
 func timerActivityTaskToProto(
 	activityTimer *tasks.ActivityTimeoutTask,
 ) *persistencespb.TimerTaskInfo {
-	return &persistencespb.TimerTaskInfo{
+	return persistencespb.TimerTaskInfo_builder{
 		NamespaceId:         activityTimer.WorkflowKey.NamespaceID,
 		WorkflowId:          activityTimer.WorkflowKey.WorkflowID,
 		RunId:               activityTimer.WorkflowKey.RunID,
@@ -773,7 +764,7 @@ func timerActivityTaskToProto(
 		TaskId:              activityTimer.TaskID,
 		VisibilityTime:      timestamppb.New(activityTimer.VisibilityTimestamp),
 		Stamp:               activityTimer.Stamp,
-	}
+	}.Build()
 }
 
 func timerActivityTaskFromProto(
@@ -781,23 +772,23 @@ func timerActivityTaskFromProto(
 ) *tasks.ActivityTimeoutTask {
 	return &tasks.ActivityTimeoutTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			activityTimer.NamespaceId,
-			activityTimer.WorkflowId,
-			activityTimer.RunId,
+			activityTimer.GetNamespaceId(),
+			activityTimer.GetWorkflowId(),
+			activityTimer.GetRunId(),
 		),
-		VisibilityTimestamp: activityTimer.VisibilityTime.AsTime(),
-		TaskID:              activityTimer.TaskId,
-		EventID:             activityTimer.EventId,
-		Attempt:             activityTimer.ScheduleAttempt,
-		TimeoutType:         activityTimer.TimeoutType,
-		Stamp:               activityTimer.Stamp,
+		VisibilityTimestamp: activityTimer.GetVisibilityTime().AsTime(),
+		TaskID:              activityTimer.GetTaskId(),
+		EventID:             activityTimer.GetEventId(),
+		Attempt:             activityTimer.GetScheduleAttempt(),
+		TimeoutType:         activityTimer.GetTimeoutType(),
+		Stamp:               activityTimer.GetStamp(),
 	}
 }
 
 func timerActivityRetryTaskToProto(
 	activityRetryTimer *tasks.ActivityRetryTimerTask,
 ) *persistencespb.TimerTaskInfo {
-	return &persistencespb.TimerTaskInfo{
+	return persistencespb.TimerTaskInfo_builder{
 		NamespaceId:         activityRetryTimer.WorkflowKey.NamespaceID,
 		WorkflowId:          activityRetryTimer.WorkflowKey.WorkflowID,
 		RunId:               activityRetryTimer.WorkflowKey.RunID,
@@ -810,7 +801,7 @@ func timerActivityRetryTaskToProto(
 		TaskId:              activityRetryTimer.TaskID,
 		VisibilityTime:      timestamppb.New(activityRetryTimer.VisibilityTimestamp),
 		Stamp:               activityRetryTimer.Stamp,
-	}
+	}.Build()
 }
 
 func timerActivityRetryTaskFromProto(
@@ -818,23 +809,23 @@ func timerActivityRetryTaskFromProto(
 ) *tasks.ActivityRetryTimerTask {
 	return &tasks.ActivityRetryTimerTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			activityRetryTimer.NamespaceId,
-			activityRetryTimer.WorkflowId,
-			activityRetryTimer.RunId,
+			activityRetryTimer.GetNamespaceId(),
+			activityRetryTimer.GetWorkflowId(),
+			activityRetryTimer.GetRunId(),
 		),
-		VisibilityTimestamp: activityRetryTimer.VisibilityTime.AsTime(),
-		TaskID:              activityRetryTimer.TaskId,
-		EventID:             activityRetryTimer.EventId,
-		Version:             activityRetryTimer.Version,
-		Attempt:             activityRetryTimer.ScheduleAttempt,
-		Stamp:               activityRetryTimer.Stamp,
+		VisibilityTimestamp: activityRetryTimer.GetVisibilityTime().AsTime(),
+		TaskID:              activityRetryTimer.GetTaskId(),
+		EventID:             activityRetryTimer.GetEventId(),
+		Version:             activityRetryTimer.GetVersion(),
+		Attempt:             activityRetryTimer.GetScheduleAttempt(),
+		Stamp:               activityRetryTimer.GetStamp(),
 	}
 }
 
 func timerUserTaskToProto(
 	userTimer *tasks.UserTimerTask,
 ) *persistencespb.TimerTaskInfo {
-	return &persistencespb.TimerTaskInfo{
+	return persistencespb.TimerTaskInfo_builder{
 		NamespaceId:         userTimer.WorkflowKey.NamespaceID,
 		WorkflowId:          userTimer.WorkflowKey.WorkflowID,
 		RunId:               userTimer.WorkflowKey.RunID,
@@ -845,7 +836,7 @@ func timerUserTaskToProto(
 		EventId:             userTimer.EventID,
 		TaskId:              userTimer.TaskID,
 		VisibilityTime:      timestamppb.New(userTimer.VisibilityTimestamp),
-	}
+	}.Build()
 }
 
 func timerUserTaskFromProto(
@@ -853,20 +844,20 @@ func timerUserTaskFromProto(
 ) *tasks.UserTimerTask {
 	return &tasks.UserTimerTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			userTimer.NamespaceId,
-			userTimer.WorkflowId,
-			userTimer.RunId,
+			userTimer.GetNamespaceId(),
+			userTimer.GetWorkflowId(),
+			userTimer.GetRunId(),
 		),
-		VisibilityTimestamp: userTimer.VisibilityTime.AsTime(),
-		TaskID:              userTimer.TaskId,
-		EventID:             userTimer.EventId,
+		VisibilityTimestamp: userTimer.GetVisibilityTime().AsTime(),
+		TaskID:              userTimer.GetTaskId(),
+		EventID:             userTimer.GetEventId(),
 	}
 }
 
 func timerWorkflowRunToProto(
 	workflowRunTimer *tasks.WorkflowRunTimeoutTask,
 ) *persistencespb.TimerTaskInfo {
-	return &persistencespb.TimerTaskInfo{
+	return persistencespb.TimerTaskInfo_builder{
 		NamespaceId:         workflowRunTimer.WorkflowKey.NamespaceID,
 		WorkflowId:          workflowRunTimer.WorkflowKey.WorkflowID,
 		RunId:               workflowRunTimer.WorkflowKey.RunID,
@@ -878,13 +869,13 @@ func timerWorkflowRunToProto(
 		EventId:             0,
 		TaskId:              workflowRunTimer.TaskID,
 		VisibilityTime:      timestamppb.New(workflowRunTimer.VisibilityTimestamp),
-	}
+	}.Build()
 }
 
 func timerWorkflowExecutionToProto(
 	workflowExecutionTimer *tasks.WorkflowExecutionTimeoutTask,
 ) *persistencespb.TimerTaskInfo {
-	return &persistencespb.TimerTaskInfo{
+	return persistencespb.TimerTaskInfo_builder{
 		NamespaceId:         workflowExecutionTimer.GetNamespaceID(),
 		WorkflowId:          workflowExecutionTimer.GetWorkflowID(),
 		RunId:               workflowExecutionTimer.GetRunID(),
@@ -897,7 +888,7 @@ func timerWorkflowExecutionToProto(
 		EventId:             0,
 		TaskId:              workflowExecutionTimer.TaskID,
 		VisibilityTime:      timestamppb.New(workflowExecutionTimer.VisibilityTimestamp),
-	}
+	}.Build()
 }
 
 func timerWorkflowRunFromProto(
@@ -905,13 +896,13 @@ func timerWorkflowRunFromProto(
 ) *tasks.WorkflowRunTimeoutTask {
 	return &tasks.WorkflowRunTimeoutTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			workflowRunTimer.NamespaceId,
-			workflowRunTimer.WorkflowId,
-			workflowRunTimer.RunId,
+			workflowRunTimer.GetNamespaceId(),
+			workflowRunTimer.GetWorkflowId(),
+			workflowRunTimer.GetRunId(),
 		),
-		VisibilityTimestamp: workflowRunTimer.VisibilityTime.AsTime(),
-		TaskID:              workflowRunTimer.TaskId,
-		Version:             workflowRunTimer.Version,
+		VisibilityTimestamp: workflowRunTimer.GetVisibilityTime().AsTime(),
+		TaskID:              workflowRunTimer.GetTaskId(),
+		Version:             workflowRunTimer.GetVersion(),
 	}
 }
 
@@ -919,18 +910,18 @@ func timerWorkflowExecutionFromProto(
 	workflowExecutionTimer *persistencespb.TimerTaskInfo,
 ) *tasks.WorkflowExecutionTimeoutTask {
 	return &tasks.WorkflowExecutionTimeoutTask{
-		NamespaceID:         workflowExecutionTimer.NamespaceId,
-		WorkflowID:          workflowExecutionTimer.WorkflowId,
-		FirstRunID:          workflowExecutionTimer.FirstRunId,
-		VisibilityTimestamp: workflowExecutionTimer.VisibilityTime.AsTime(),
-		TaskID:              workflowExecutionTimer.TaskId,
+		NamespaceID:         workflowExecutionTimer.GetNamespaceId(),
+		WorkflowID:          workflowExecutionTimer.GetWorkflowId(),
+		FirstRunID:          workflowExecutionTimer.GetFirstRunId(),
+		VisibilityTimestamp: workflowExecutionTimer.GetVisibilityTime().AsTime(),
+		TaskID:              workflowExecutionTimer.GetTaskId(),
 	}
 }
 
 func timerWorkflowCleanupTaskToProto(
 	workflowCleanupTimer *tasks.DeleteHistoryEventTask,
 ) *persistencespb.TimerTaskInfo {
-	return &persistencespb.TimerTaskInfo{
+	return persistencespb.TimerTaskInfo_builder{
 		NamespaceId:         workflowCleanupTimer.WorkflowKey.NamespaceID,
 		WorkflowId:          workflowCleanupTimer.WorkflowKey.WorkflowID,
 		RunId:               workflowCleanupTimer.WorkflowKey.RunID,
@@ -946,16 +937,14 @@ func timerWorkflowCleanupTaskToProto(
 		// We set this to true even though it's no longer checked in case someone downgrades to a version that still
 		// checks this field.
 		AlreadyArchived: true,
-		TaskDetails: &persistencespb.TimerTaskInfo_ChasmTaskInfo{
-			ChasmTaskInfo: &persistencespb.ChasmTaskInfo{
-				ArchetypeId: workflowCleanupTimer.ArchetypeID,
-			},
-		},
-	}
+		ChasmTaskInfo: persistencespb.ChasmTaskInfo_builder{
+			ArchetypeId: workflowCleanupTimer.ArchetypeID,
+		}.Build(),
+	}.Build()
 }
 
 func stateMachineTimerTaskToProto(task *tasks.StateMachineTimerTask) *persistencespb.TimerTaskInfo {
-	return &persistencespb.TimerTaskInfo{
+	return persistencespb.TimerTaskInfo_builder{
 		NamespaceId:    task.NamespaceID,
 		WorkflowId:     task.WorkflowID,
 		RunId:          task.RunID,
@@ -963,7 +952,7 @@ func stateMachineTimerTaskToProto(task *tasks.StateMachineTimerTask) *persistenc
 		VisibilityTime: timestamppb.New(task.VisibilityTimestamp),
 		Version:        task.Version,
 		TaskType:       task.GetType(),
-	}
+	}.Build()
 }
 
 func timerWorkflowCleanupTaskFromProto(
@@ -971,14 +960,14 @@ func timerWorkflowCleanupTaskFromProto(
 ) *tasks.DeleteHistoryEventTask {
 	return &tasks.DeleteHistoryEventTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			workflowCleanupTimer.NamespaceId,
-			workflowCleanupTimer.WorkflowId,
-			workflowCleanupTimer.RunId,
+			workflowCleanupTimer.GetNamespaceId(),
+			workflowCleanupTimer.GetWorkflowId(),
+			workflowCleanupTimer.GetRunId(),
 		),
-		VisibilityTimestamp: workflowCleanupTimer.VisibilityTime.AsTime(),
-		TaskID:              workflowCleanupTimer.TaskId,
-		Version:             workflowCleanupTimer.Version,
-		BranchToken:         workflowCleanupTimer.BranchToken,
+		VisibilityTimestamp: workflowCleanupTimer.GetVisibilityTime().AsTime(),
+		TaskID:              workflowCleanupTimer.GetTaskId(),
+		Version:             workflowCleanupTimer.GetVersion(),
+		BranchToken:         workflowCleanupTimer.GetBranchToken(),
 		ArchetypeID:         workflowCleanupTimer.GetChasmTaskInfo().GetArchetypeId(),
 		// Delete workflow task process stage is not persisted. It is only for in memory retries.
 		ProcessStage: tasks.DeleteWorkflowExecutionStageNone,
@@ -988,20 +977,20 @@ func timerWorkflowCleanupTaskFromProto(
 func stateMachineTimerTaskFromProto(info *persistencespb.TimerTaskInfo) *tasks.StateMachineTimerTask {
 	return &tasks.StateMachineTimerTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			info.NamespaceId,
-			info.WorkflowId,
-			info.RunId,
+			info.GetNamespaceId(),
+			info.GetWorkflowId(),
+			info.GetRunId(),
 		),
-		VisibilityTimestamp: info.VisibilityTime.AsTime(),
-		TaskID:              info.TaskId,
-		Version:             info.Version,
+		VisibilityTimestamp: info.GetVisibilityTime().AsTime(),
+		TaskID:              info.GetTaskId(),
+		Version:             info.GetVersion(),
 	}
 }
 
 func visibilityStartTaskToProto(
 	startVisibilityTask *tasks.StartExecutionVisibilityTask,
 ) *persistencespb.VisibilityTaskInfo {
-	return &persistencespb.VisibilityTaskInfo{
+	return persistencespb.VisibilityTaskInfo_builder{
 		NamespaceId:    startVisibilityTask.WorkflowKey.NamespaceID,
 		WorkflowId:     startVisibilityTask.WorkflowKey.WorkflowID,
 		RunId:          startVisibilityTask.WorkflowKey.RunID,
@@ -1009,7 +998,7 @@ func visibilityStartTaskToProto(
 		Version:        startVisibilityTask.Version,
 		TaskId:         startVisibilityTask.TaskID,
 		VisibilityTime: timestamppb.New(startVisibilityTask.VisibilityTimestamp),
-	}
+	}.Build()
 }
 
 func visibilityStartTaskFromProto(
@@ -1017,27 +1006,27 @@ func visibilityStartTaskFromProto(
 ) *tasks.StartExecutionVisibilityTask {
 	return &tasks.StartExecutionVisibilityTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			startVisibilityTask.NamespaceId,
-			startVisibilityTask.WorkflowId,
-			startVisibilityTask.RunId,
+			startVisibilityTask.GetNamespaceId(),
+			startVisibilityTask.GetWorkflowId(),
+			startVisibilityTask.GetRunId(),
 		),
-		VisibilityTimestamp: startVisibilityTask.VisibilityTime.AsTime(),
-		TaskID:              startVisibilityTask.TaskId,
-		Version:             startVisibilityTask.Version,
+		VisibilityTimestamp: startVisibilityTask.GetVisibilityTime().AsTime(),
+		TaskID:              startVisibilityTask.GetTaskId(),
+		Version:             startVisibilityTask.GetVersion(),
 	}
 }
 
 func visibilityUpsertTaskToProto(
 	upsertVisibilityTask *tasks.UpsertExecutionVisibilityTask,
 ) *persistencespb.VisibilityTaskInfo {
-	return &persistencespb.VisibilityTaskInfo{
+	return persistencespb.VisibilityTaskInfo_builder{
 		NamespaceId:    upsertVisibilityTask.WorkflowKey.NamespaceID,
 		WorkflowId:     upsertVisibilityTask.WorkflowKey.WorkflowID,
 		RunId:          upsertVisibilityTask.WorkflowKey.RunID,
 		TaskType:       enumsspb.TASK_TYPE_VISIBILITY_UPSERT_EXECUTION,
 		TaskId:         upsertVisibilityTask.TaskID,
 		VisibilityTime: timestamppb.New(upsertVisibilityTask.VisibilityTimestamp),
-	}
+	}.Build()
 }
 
 func visibilityUpsertTaskFromProto(
@@ -1045,19 +1034,19 @@ func visibilityUpsertTaskFromProto(
 ) *tasks.UpsertExecutionVisibilityTask {
 	return &tasks.UpsertExecutionVisibilityTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			upsertVisibilityTask.NamespaceId,
-			upsertVisibilityTask.WorkflowId,
-			upsertVisibilityTask.RunId,
+			upsertVisibilityTask.GetNamespaceId(),
+			upsertVisibilityTask.GetWorkflowId(),
+			upsertVisibilityTask.GetRunId(),
 		),
-		VisibilityTimestamp: upsertVisibilityTask.VisibilityTime.AsTime(),
-		TaskID:              upsertVisibilityTask.TaskId,
+		VisibilityTimestamp: upsertVisibilityTask.GetVisibilityTime().AsTime(),
+		TaskID:              upsertVisibilityTask.GetTaskId(),
 	}
 }
 
 func visibilityCloseTaskToProto(
 	closetVisibilityTask *tasks.CloseExecutionVisibilityTask,
 ) *persistencespb.VisibilityTaskInfo {
-	return &persistencespb.VisibilityTaskInfo{
+	return persistencespb.VisibilityTaskInfo_builder{
 		NamespaceId:    closetVisibilityTask.WorkflowKey.NamespaceID,
 		WorkflowId:     closetVisibilityTask.WorkflowKey.WorkflowID,
 		RunId:          closetVisibilityTask.WorkflowKey.RunID,
@@ -1065,7 +1054,7 @@ func visibilityCloseTaskToProto(
 		Version:        closetVisibilityTask.Version,
 		TaskId:         closetVisibilityTask.TaskID,
 		VisibilityTime: timestamppb.New(closetVisibilityTask.VisibilityTimestamp),
-	}
+	}.Build()
 }
 
 func visibilityCloseTaskFromProto(
@@ -1073,20 +1062,20 @@ func visibilityCloseTaskFromProto(
 ) *tasks.CloseExecutionVisibilityTask {
 	return &tasks.CloseExecutionVisibilityTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			closeVisibilityTask.NamespaceId,
-			closeVisibilityTask.WorkflowId,
-			closeVisibilityTask.RunId,
+			closeVisibilityTask.GetNamespaceId(),
+			closeVisibilityTask.GetWorkflowId(),
+			closeVisibilityTask.GetRunId(),
 		),
-		VisibilityTimestamp: closeVisibilityTask.VisibilityTime.AsTime(),
-		TaskID:              closeVisibilityTask.TaskId,
-		Version:             closeVisibilityTask.Version,
+		VisibilityTimestamp: closeVisibilityTask.GetVisibilityTime().AsTime(),
+		TaskID:              closeVisibilityTask.GetTaskId(),
+		Version:             closeVisibilityTask.GetVersion(),
 	}
 }
 
 func visibilityDeleteTaskToProto(
 	deleteVisibilityTask *tasks.DeleteExecutionVisibilityTask,
 ) *persistencespb.VisibilityTaskInfo {
-	return &persistencespb.VisibilityTaskInfo{
+	return persistencespb.VisibilityTaskInfo_builder{
 		NamespaceId:           deleteVisibilityTask.WorkflowKey.NamespaceID,
 		WorkflowId:            deleteVisibilityTask.WorkflowKey.WorkflowID,
 		RunId:                 deleteVisibilityTask.WorkflowKey.RunID,
@@ -1095,12 +1084,10 @@ func visibilityDeleteTaskToProto(
 		VisibilityTime:        timestamppb.New(deleteVisibilityTask.VisibilityTimestamp),
 		CloseVisibilityTaskId: deleteVisibilityTask.CloseExecutionVisibilityTaskID,
 		CloseTime:             timestamppb.New(deleteVisibilityTask.CloseTime),
-		TaskDetails: &persistencespb.VisibilityTaskInfo_ChasmTaskInfo{
-			ChasmTaskInfo: &persistencespb.ChasmTaskInfo{
-				ArchetypeId: deleteVisibilityTask.ArchetypeID,
-			},
-		},
-	}
+		ChasmTaskInfo: persistencespb.ChasmTaskInfo_builder{
+			ArchetypeId: deleteVisibilityTask.ArchetypeID,
+		}.Build(),
+	}.Build()
 }
 
 func visibilityDeleteTaskFromProto(
@@ -1108,41 +1095,39 @@ func visibilityDeleteTaskFromProto(
 ) *tasks.DeleteExecutionVisibilityTask {
 	return &tasks.DeleteExecutionVisibilityTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			deleteVisibilityTask.NamespaceId,
-			deleteVisibilityTask.WorkflowId,
-			deleteVisibilityTask.RunId,
+			deleteVisibilityTask.GetNamespaceId(),
+			deleteVisibilityTask.GetWorkflowId(),
+			deleteVisibilityTask.GetRunId(),
 		),
-		VisibilityTimestamp:            deleteVisibilityTask.VisibilityTime.AsTime(),
-		TaskID:                         deleteVisibilityTask.TaskId,
+		VisibilityTimestamp:            deleteVisibilityTask.GetVisibilityTime().AsTime(),
+		TaskID:                         deleteVisibilityTask.GetTaskId(),
 		ArchetypeID:                    deleteVisibilityTask.GetChasmTaskInfo().GetArchetypeId(),
-		CloseExecutionVisibilityTaskID: deleteVisibilityTask.CloseVisibilityTaskId,
-		CloseTime:                      deleteVisibilityTask.CloseTime.AsTime(),
+		CloseExecutionVisibilityTaskID: deleteVisibilityTask.GetCloseVisibilityTaskId(),
+		CloseTime:                      deleteVisibilityTask.GetCloseTime().AsTime(),
 	}
 }
 
 func visibilityChasmTaskToProto(task *tasks.ChasmTask) *persistencespb.VisibilityTaskInfo {
-	return &persistencespb.VisibilityTaskInfo{
+	return persistencespb.VisibilityTaskInfo_builder{
 		NamespaceId:    task.WorkflowKey.NamespaceID,
 		WorkflowId:     task.WorkflowKey.WorkflowID,
 		RunId:          task.WorkflowKey.RunID,
 		TaskId:         task.TaskID,
 		TaskType:       task.GetType(),
 		VisibilityTime: timestamppb.New(task.VisibilityTimestamp),
-		TaskDetails: &persistencespb.VisibilityTaskInfo_ChasmTaskInfo{
-			ChasmTaskInfo: task.Info,
-		},
-	}
+		ChasmTaskInfo:  proto.ValueOrDefault(task.Info),
+	}.Build()
 }
 
 func visibilityChasmTaskFromProto(task *persistencespb.VisibilityTaskInfo) tasks.Task {
 	return &tasks.ChasmTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			task.NamespaceId,
-			task.WorkflowId,
-			task.RunId,
+			task.GetNamespaceId(),
+			task.GetWorkflowId(),
+			task.GetRunId(),
 		),
-		VisibilityTimestamp: task.VisibilityTime.AsTime(),
-		TaskID:              task.TaskId,
+		VisibilityTimestamp: task.GetVisibilityTime().AsTime(),
+		TaskID:              task.GetTaskId(),
 		Category:            tasks.CategoryVisibility,
 		Info:                task.GetChasmTaskInfo(),
 	}
@@ -1151,7 +1136,7 @@ func visibilityChasmTaskFromProto(task *persistencespb.VisibilityTaskInfo) tasks
 func replicationActivityTaskToProto(
 	activityTask *tasks.SyncActivityTask,
 ) *persistencespb.ReplicationTaskInfo {
-	return &persistencespb.ReplicationTaskInfo{
+	return persistencespb.ReplicationTaskInfo_builder{
 		NamespaceId:       activityTask.WorkflowKey.NamespaceID,
 		WorkflowId:        activityTask.WorkflowKey.WorkflowID,
 		RunId:             activityTask.WorkflowKey.RunID,
@@ -1165,34 +1150,34 @@ func replicationActivityTaskToProto(
 		NewRunBranchToken: nil,
 		VisibilityTime:    timestamppb.New(activityTask.VisibilityTimestamp),
 		TargetClusters:    activityTask.TargetClusters,
-	}
+	}.Build()
 }
 
 func replicationActivityTaskFromProto(
 	activityTask *persistencespb.ReplicationTaskInfo,
 ) *tasks.SyncActivityTask {
 	visibilityTimestamp := time.Unix(0, 0)
-	if activityTask.VisibilityTime != nil {
-		visibilityTimestamp = activityTask.VisibilityTime.AsTime()
+	if activityTask.HasVisibilityTime() {
+		visibilityTimestamp = activityTask.GetVisibilityTime().AsTime()
 	}
 	return &tasks.SyncActivityTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			activityTask.NamespaceId,
-			activityTask.WorkflowId,
-			activityTask.RunId,
+			activityTask.GetNamespaceId(),
+			activityTask.GetWorkflowId(),
+			activityTask.GetRunId(),
 		),
 		VisibilityTimestamp: visibilityTimestamp,
-		Version:             activityTask.Version,
-		TaskID:              activityTask.TaskId,
-		ScheduledEventID:    activityTask.ScheduledEventId,
-		TargetClusters:      activityTask.TargetClusters,
+		Version:             activityTask.GetVersion(),
+		TaskID:              activityTask.GetTaskId(),
+		ScheduledEventID:    activityTask.GetScheduledEventId(),
+		TargetClusters:      activityTask.GetTargetClusters(),
 	}
 }
 
 func replicationHistoryTaskToProto(
 	historyTask *tasks.HistoryReplicationTask,
 ) *persistencespb.ReplicationTaskInfo {
-	return &persistencespb.ReplicationTaskInfo{
+	return persistencespb.ReplicationTaskInfo_builder{
 		NamespaceId:       historyTask.WorkflowKey.NamespaceID,
 		WorkflowId:        historyTask.WorkflowKey.WorkflowID,
 		RunId:             historyTask.WorkflowKey.RunID,
@@ -1207,38 +1192,38 @@ func replicationHistoryTaskToProto(
 		NewRunId:          historyTask.NewRunID,
 		VisibilityTime:    timestamppb.New(historyTask.VisibilityTimestamp),
 		TargetClusters:    historyTask.TargetClusters,
-	}
+	}.Build()
 }
 
 func replicationHistoryTaskFromProto(
 	historyTask *persistencespb.ReplicationTaskInfo,
 ) *tasks.HistoryReplicationTask {
 	visibilityTimestamp := time.Unix(0, 0)
-	if historyTask.VisibilityTime != nil {
-		visibilityTimestamp = historyTask.VisibilityTime.AsTime()
+	if historyTask.HasVisibilityTime() {
+		visibilityTimestamp = historyTask.GetVisibilityTime().AsTime()
 	}
 	return &tasks.HistoryReplicationTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			historyTask.NamespaceId,
-			historyTask.WorkflowId,
-			historyTask.RunId,
+			historyTask.GetNamespaceId(),
+			historyTask.GetWorkflowId(),
+			historyTask.GetRunId(),
 		),
 		VisibilityTimestamp: visibilityTimestamp,
-		TaskID:              historyTask.TaskId,
-		FirstEventID:        historyTask.FirstEventId,
-		NextEventID:         historyTask.NextEventId,
-		Version:             historyTask.Version,
-		BranchToken:         historyTask.BranchToken,
-		NewRunBranchToken:   historyTask.NewRunBranchToken,
-		NewRunID:            historyTask.NewRunId,
-		TargetClusters:      historyTask.TargetClusters,
+		TaskID:              historyTask.GetTaskId(),
+		FirstEventID:        historyTask.GetFirstEventId(),
+		NextEventID:         historyTask.GetNextEventId(),
+		Version:             historyTask.GetVersion(),
+		BranchToken:         historyTask.GetBranchToken(),
+		NewRunBranchToken:   historyTask.GetNewRunBranchToken(),
+		NewRunID:            historyTask.GetNewRunId(),
+		TargetClusters:      historyTask.GetTargetClusters(),
 	}
 }
 
 func archiveExecutionTaskToProto(
 	archiveExecutionTask *tasks.ArchiveExecutionTask,
 ) *persistencespb.ArchivalTaskInfo {
-	return &persistencespb.ArchivalTaskInfo{
+	return persistencespb.ArchivalTaskInfo_builder{
 		NamespaceId:    archiveExecutionTask.WorkflowKey.NamespaceID,
 		WorkflowId:     archiveExecutionTask.WorkflowKey.WorkflowID,
 		RunId:          archiveExecutionTask.WorkflowKey.RunID,
@@ -1246,32 +1231,32 @@ func archiveExecutionTaskToProto(
 		TaskId:         archiveExecutionTask.TaskID,
 		Version:        archiveExecutionTask.Version,
 		VisibilityTime: timestamppb.New(archiveExecutionTask.VisibilityTimestamp),
-	}
+	}.Build()
 }
 
 func archiveExecutionTaskFromProto(
 	archivalTaskInfo *persistencespb.ArchivalTaskInfo,
 ) *tasks.ArchiveExecutionTask {
 	visibilityTimestamp := time.Unix(0, 0)
-	if archivalTaskInfo.VisibilityTime != nil {
-		visibilityTimestamp = archivalTaskInfo.VisibilityTime.AsTime()
+	if archivalTaskInfo.HasVisibilityTime() {
+		visibilityTimestamp = archivalTaskInfo.GetVisibilityTime().AsTime()
 	}
 	return &tasks.ArchiveExecutionTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			archivalTaskInfo.NamespaceId,
-			archivalTaskInfo.WorkflowId,
-			archivalTaskInfo.RunId,
+			archivalTaskInfo.GetNamespaceId(),
+			archivalTaskInfo.GetWorkflowId(),
+			archivalTaskInfo.GetRunId(),
 		),
 		VisibilityTimestamp: visibilityTimestamp,
-		TaskID:              archivalTaskInfo.TaskId,
-		Version:             archivalTaskInfo.Version,
+		TaskID:              archivalTaskInfo.GetTaskId(),
+		Version:             archivalTaskInfo.GetVersion(),
 	}
 }
 
 func replicationSyncWorkflowStateTaskToProto(
 	syncWorkflowStateTask *tasks.SyncWorkflowStateTask,
 ) *persistencespb.ReplicationTaskInfo {
-	return &persistencespb.ReplicationTaskInfo{
+	return persistencespb.ReplicationTaskInfo_builder{
 		NamespaceId:        syncWorkflowStateTask.NamespaceID,
 		WorkflowId:         syncWorkflowStateTask.WorkflowID,
 		RunId:              syncWorkflowStateTask.RunID,
@@ -1282,35 +1267,35 @@ func replicationSyncWorkflowStateTaskToProto(
 		Priority:           syncWorkflowStateTask.Priority,
 		TargetClusters:     syncWorkflowStateTask.TargetClusters,
 		IsForceReplication: syncWorkflowStateTask.IsForceReplication,
-	}
+	}.Build()
 }
 
 func replicationSyncWorkflowStateTaskFromProto(
 	syncWorkflowStateTask *persistencespb.ReplicationTaskInfo,
 ) *tasks.SyncWorkflowStateTask {
 	visibilityTimestamp := time.Unix(0, 0)
-	if syncWorkflowStateTask.VisibilityTime != nil {
-		visibilityTimestamp = syncWorkflowStateTask.VisibilityTime.AsTime()
+	if syncWorkflowStateTask.HasVisibilityTime() {
+		visibilityTimestamp = syncWorkflowStateTask.GetVisibilityTime().AsTime()
 	}
 	return &tasks.SyncWorkflowStateTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			syncWorkflowStateTask.NamespaceId,
-			syncWorkflowStateTask.WorkflowId,
-			syncWorkflowStateTask.RunId,
+			syncWorkflowStateTask.GetNamespaceId(),
+			syncWorkflowStateTask.GetWorkflowId(),
+			syncWorkflowStateTask.GetRunId(),
 		),
 		VisibilityTimestamp: visibilityTimestamp,
-		Version:             syncWorkflowStateTask.Version,
-		TaskID:              syncWorkflowStateTask.TaskId,
-		Priority:            syncWorkflowStateTask.Priority,
-		TargetClusters:      syncWorkflowStateTask.TargetClusters,
-		IsForceReplication:  syncWorkflowStateTask.IsForceReplication,
+		Version:             syncWorkflowStateTask.GetVersion(),
+		TaskID:              syncWorkflowStateTask.GetTaskId(),
+		Priority:            syncWorkflowStateTask.GetPriority(),
+		TargetClusters:      syncWorkflowStateTask.GetTargetClusters(),
+		IsForceReplication:  syncWorkflowStateTask.GetIsForceReplication(),
 	}
 }
 
 func replicationSyncHSMTaskToProto(
 	syncHSMTask *tasks.SyncHSMTask,
 ) *persistencespb.ReplicationTaskInfo {
-	return &persistencespb.ReplicationTaskInfo{
+	return persistencespb.ReplicationTaskInfo_builder{
 		NamespaceId:    syncHSMTask.WorkflowKey.NamespaceID,
 		WorkflowId:     syncHSMTask.WorkflowKey.WorkflowID,
 		RunId:          syncHSMTask.WorkflowKey.RunID,
@@ -1318,25 +1303,25 @@ func replicationSyncHSMTaskToProto(
 		TaskId:         syncHSMTask.TaskID,
 		VisibilityTime: timestamppb.New(syncHSMTask.VisibilityTimestamp),
 		TargetClusters: syncHSMTask.TargetClusters,
-	}
+	}.Build()
 }
 
 func replicationSyncHSMTaskFromProto(
 	syncHSMTask *persistencespb.ReplicationTaskInfo,
 ) *tasks.SyncHSMTask {
 	visibilityTimestamp := time.Unix(0, 0)
-	if syncHSMTask.VisibilityTime != nil {
-		visibilityTimestamp = syncHSMTask.VisibilityTime.AsTime()
+	if syncHSMTask.HasVisibilityTime() {
+		visibilityTimestamp = syncHSMTask.GetVisibilityTime().AsTime()
 	}
 	return &tasks.SyncHSMTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			syncHSMTask.NamespaceId,
-			syncHSMTask.WorkflowId,
-			syncHSMTask.RunId,
+			syncHSMTask.GetNamespaceId(),
+			syncHSMTask.GetWorkflowId(),
+			syncHSMTask.GetRunId(),
 		),
 		VisibilityTimestamp: visibilityTimestamp,
-		TaskID:              syncHSMTask.TaskId,
-		TargetClusters:      syncHSMTask.TargetClusters,
+		TaskID:              syncHSMTask.GetTaskId(),
+		TargetClusters:      syncHSMTask.GetTargetClusters(),
 	}
 }
 
@@ -1353,7 +1338,7 @@ func replicationSyncVersionedTransitionTaskToProto(
 		taskInfoEquivalents = append(taskInfoEquivalents, taskInfoEquivalent)
 	}
 
-	return &persistencespb.ReplicationTaskInfo{
+	return persistencespb.ReplicationTaskInfo_builder{
 		NamespaceId:            syncVersionedTransitionTask.WorkflowKey.NamespaceID,
 		WorkflowId:             syncVersionedTransitionTask.WorkflowKey.WorkflowID,
 		RunId:                  syncVersionedTransitionTask.WorkflowKey.RunID,
@@ -1371,7 +1356,7 @@ func replicationSyncVersionedTransitionTaskToProto(
 		TargetClusters:         syncVersionedTransitionTask.TargetClusters,
 		IsForceReplication:     syncVersionedTransitionTask.IsForceReplication,
 		TaskEquivalents:        taskInfoEquivalents,
-	}, nil
+	}.Build(), nil
 }
 
 func replicationSyncVersionedTransitionTaskFromProto(
@@ -1379,8 +1364,8 @@ func replicationSyncVersionedTransitionTaskFromProto(
 	decoder Decoder,
 ) (*tasks.SyncVersionedTransitionTask, error) {
 
-	taskEquivalents := make([]tasks.Task, 0, len(syncVersionedTransitionTask.TaskEquivalents))
-	for _, taskInfoEquivalent := range syncVersionedTransitionTask.TaskEquivalents {
+	taskEquivalents := make([]tasks.Task, 0, len(syncVersionedTransitionTask.GetTaskEquivalents()))
+	for _, taskInfoEquivalent := range syncVersionedTransitionTask.GetTaskEquivalents() {
 		taskEquivalent, err := decoder.DeserializeReplicationTask(taskInfoEquivalent)
 		if err != nil {
 			return nil, err
@@ -1389,28 +1374,28 @@ func replicationSyncVersionedTransitionTaskFromProto(
 	}
 
 	visibilityTimestamp := time.Unix(0, 0)
-	if syncVersionedTransitionTask.VisibilityTime != nil {
-		visibilityTimestamp = syncVersionedTransitionTask.VisibilityTime.AsTime()
+	if syncVersionedTransitionTask.HasVisibilityTime() {
+		visibilityTimestamp = syncVersionedTransitionTask.GetVisibilityTime().AsTime()
 	}
 	return &tasks.SyncVersionedTransitionTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			syncVersionedTransitionTask.NamespaceId,
-			syncVersionedTransitionTask.WorkflowId,
-			syncVersionedTransitionTask.RunId,
+			syncVersionedTransitionTask.GetNamespaceId(),
+			syncVersionedTransitionTask.GetWorkflowId(),
+			syncVersionedTransitionTask.GetRunId(),
 		),
 		VisibilityTimestamp:    visibilityTimestamp,
-		TaskID:                 syncVersionedTransitionTask.TaskId,
-		ArchetypeID:            syncVersionedTransitionTask.ArchetypeId,
-		FirstEventID:           syncVersionedTransitionTask.FirstEventId,
-		FirstEventVersion:      syncVersionedTransitionTask.Version,
-		NextEventID:            syncVersionedTransitionTask.NextEventId,
-		NewRunID:               syncVersionedTransitionTask.NewRunId,
-		VersionedTransition:    syncVersionedTransitionTask.VersionedTransition,
-		LastVersionHistoryItem: syncVersionedTransitionTask.LastVersionHistoryItem,
+		TaskID:                 syncVersionedTransitionTask.GetTaskId(),
+		ArchetypeID:            syncVersionedTransitionTask.GetArchetypeId(),
+		FirstEventID:           syncVersionedTransitionTask.GetFirstEventId(),
+		FirstEventVersion:      syncVersionedTransitionTask.GetVersion(),
+		NextEventID:            syncVersionedTransitionTask.GetNextEventId(),
+		NewRunID:               syncVersionedTransitionTask.GetNewRunId(),
+		VersionedTransition:    syncVersionedTransitionTask.GetVersionedTransition(),
+		LastVersionHistoryItem: syncVersionedTransitionTask.GetLastVersionHistoryItem(),
 		TaskEquivalents:        taskEquivalents,
-		IsFirstTask:            syncVersionedTransitionTask.IsFirstTask,
-		TargetClusters:         syncVersionedTransitionTask.TargetClusters,
-		IsForceReplication:     syncVersionedTransitionTask.IsForceReplication,
+		IsFirstTask:            syncVersionedTransitionTask.GetIsFirstTask(),
+		TargetClusters:         syncVersionedTransitionTask.GetTargetClusters(),
+		IsForceReplication:     syncVersionedTransitionTask.GetIsForceReplication(),
 	}, nil
 }
 
@@ -1421,20 +1406,18 @@ func serializeOutboundTask(
 	var outboundTaskInfo *persistencespb.OutboundTaskInfo
 	switch task := task.(type) {
 	case *tasks.StateMachineOutboundTask:
-		outboundTaskInfo = &persistencespb.OutboundTaskInfo{
-			NamespaceId:    task.NamespaceID,
-			WorkflowId:     task.WorkflowID,
-			RunId:          task.RunID,
-			TaskId:         task.TaskID,
-			TaskType:       task.GetType(),
-			Destination:    task.Destination,
-			VisibilityTime: timestamppb.New(task.VisibilityTimestamp),
-			TaskDetails: &persistencespb.OutboundTaskInfo_StateMachineInfo{
-				StateMachineInfo: task.Info,
-			},
-		}
+		outboundTaskInfo = persistencespb.OutboundTaskInfo_builder{
+			NamespaceId:      task.NamespaceID,
+			WorkflowId:       task.WorkflowID,
+			RunId:            task.RunID,
+			TaskId:           task.TaskID,
+			TaskType:         task.GetType(),
+			Destination:      task.Destination,
+			VisibilityTime:   timestamppb.New(task.VisibilityTimestamp),
+			StateMachineInfo: proto.ValueOrDefault(task.Info),
+		}.Build()
 	case *tasks.ChasmTask:
-		outboundTaskInfo = &persistencespb.OutboundTaskInfo{
+		outboundTaskInfo = persistencespb.OutboundTaskInfo_builder{
 			NamespaceId:    task.NamespaceID,
 			WorkflowId:     task.WorkflowID,
 			RunId:          task.RunID,
@@ -1442,10 +1425,8 @@ func serializeOutboundTask(
 			TaskType:       task.GetType(),
 			Destination:    task.Destination,
 			VisibilityTime: timestamppb.New(task.VisibilityTimestamp),
-			TaskDetails: &persistencespb.OutboundTaskInfo_ChasmTaskInfo{
-				ChasmTaskInfo: task.Info,
-			},
-		}
+			ChasmTaskInfo:  proto.ValueOrDefault(task.Info),
+		}.Build()
 	default:
 		return nil, serviceerror.NewInternalf("unknown outbound task type while serializing: %v", task)
 	}
@@ -1460,33 +1441,33 @@ func deserializeOutboundTask(
 	if err != nil {
 		return nil, err
 	}
-	switch info.TaskType {
+	switch info.GetTaskType() {
 	case enumsspb.TASK_TYPE_STATE_MACHINE_OUTBOUND:
 		return &tasks.StateMachineOutboundTask{
 			StateMachineTask: tasks.StateMachineTask{
 				WorkflowKey: definition.NewWorkflowKey(
-					info.NamespaceId,
-					info.WorkflowId,
-					info.RunId,
+					info.GetNamespaceId(),
+					info.GetWorkflowId(),
+					info.GetRunId(),
 				),
-				VisibilityTimestamp: info.VisibilityTime.AsTime(),
-				TaskID:              info.TaskId,
+				VisibilityTimestamp: info.GetVisibilityTime().AsTime(),
+				TaskID:              info.GetTaskId(),
 				Info:                info.GetStateMachineInfo(),
 			},
-			Destination: info.Destination,
+			Destination: info.GetDestination(),
 		}, nil
 	case enumsspb.TASK_TYPE_CHASM:
 		return &tasks.ChasmTask{
 			WorkflowKey: definition.NewWorkflowKey(
-				info.NamespaceId,
-				info.WorkflowId,
-				info.RunId,
+				info.GetNamespaceId(),
+				info.GetWorkflowId(),
+				info.GetRunId(),
 			),
-			VisibilityTimestamp: info.VisibilityTime.AsTime(),
-			TaskID:              info.TaskId,
+			VisibilityTimestamp: info.GetVisibilityTime().AsTime(),
+			TaskID:              info.GetTaskId(),
 			Category:            tasks.CategoryOutbound,
 			Info:                info.GetChasmTaskInfo(),
-			Destination:         info.Destination,
+			Destination:         info.GetDestination(),
 		}, nil
 	default:
 		return nil, serviceerror.NewInternalf("unknown outbound task type while deserializing: %v", info)

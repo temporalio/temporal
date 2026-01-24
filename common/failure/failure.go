@@ -12,35 +12,35 @@ const (
 )
 
 func NewServerFailure(message string, nonRetryable bool) *failurepb.Failure {
-	f := &failurepb.Failure{
+	f := failurepb.Failure_builder{
 		Message: message,
-		FailureInfo: &failurepb.Failure_ServerFailureInfo{ServerFailureInfo: &failurepb.ServerFailureInfo{
+		ServerFailureInfo: failurepb.ServerFailureInfo_builder{
 			NonRetryable: nonRetryable,
-		}},
-	}
+		}.Build(),
+	}.Build()
 
 	return f
 }
 
 func NewResetWorkflowFailure(message string, lastHeartbeatDetails *commonpb.Payloads) *failurepb.Failure {
-	f := &failurepb.Failure{
+	f := failurepb.Failure_builder{
 		Message: message,
-		FailureInfo: &failurepb.Failure_ResetWorkflowFailureInfo{ResetWorkflowFailureInfo: &failurepb.ResetWorkflowFailureInfo{
+		ResetWorkflowFailureInfo: failurepb.ResetWorkflowFailureInfo_builder{
 			LastHeartbeatDetails: lastHeartbeatDetails,
-		}},
-	}
+		}.Build(),
+	}.Build()
 
 	return f
 }
 
 func NewTimeoutFailure(message string, timeoutType enumspb.TimeoutType) *failurepb.Failure {
-	f := &failurepb.Failure{
+	f := failurepb.Failure_builder{
 		Message: message,
 		Source:  failureSourceServer,
-		FailureInfo: &failurepb.Failure_TimeoutFailureInfo{TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+		TimeoutFailureInfo: failurepb.TimeoutFailureInfo_builder{
 			TimeoutType: timeoutType,
-		}},
-	}
+		}.Build(),
+	}.Build()
 
 	return f
 }
@@ -68,23 +68,23 @@ func TruncateWithDepth(f *failurepb.Failure, maxSize, maxDepth int) *failurepb.F
 
 	// Keep failure info for ApplicationFailureInfo and for ServerFailureInfo to persist NonRetryable flag.
 	if i := f.GetApplicationFailureInfo(); i != nil {
-		newFailure.FailureInfo = &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
-			NonRetryable: i.NonRetryable,
-			Type:         trunc(i.Type),
-		}}
+		newFailure.SetApplicationFailureInfo(failurepb.ApplicationFailureInfo_builder{
+			NonRetryable: i.GetNonRetryable(),
+			Type:         trunc(i.GetType()),
+		}.Build())
 		maxSize -= 8 // account for proto overhead
 	} else if i := f.GetServerFailureInfo(); i != nil {
-		newFailure.FailureInfo = &failurepb.Failure_ServerFailureInfo{ServerFailureInfo: &failurepb.ServerFailureInfo{
-			NonRetryable: i.NonRetryable,
-		}}
+		newFailure.SetServerFailureInfo(failurepb.ServerFailureInfo_builder{
+			NonRetryable: i.GetNonRetryable(),
+		}.Build())
 		maxSize -= 4 // account for proto overhead
 	}
 
-	newFailure.Source = trunc(f.Source)
-	newFailure.Message = trunc(f.Message)
-	newFailure.StackTrace = trunc(f.StackTrace)
-	if f.Cause != nil && maxSize > 4 && maxDepth > 0 {
-		newFailure.Cause = TruncateWithDepth(f.Cause, maxSize-4, maxDepth-1)
+	newFailure.SetSource(trunc(f.GetSource()))
+	newFailure.SetMessage(trunc(f.GetMessage()))
+	newFailure.SetStackTrace(trunc(f.GetStackTrace()))
+	if f.HasCause() && maxSize > 4 && maxDepth > 0 {
+		newFailure.SetCause(TruncateWithDepth(f.GetCause(), maxSize-4, maxDepth-1))
 	}
 
 	return newFailure

@@ -15,20 +15,20 @@ func GetStatus(
 	shard historyi.ShardContext,
 	replicationAckMgr replication.AckManager,
 ) (_ *historyservice.ShardReplicationStatus, retError error) {
-	resp := &historyservice.ShardReplicationStatus{
+	resp := historyservice.ShardReplicationStatus_builder{
 		ShardId:        shard.GetShardID(),
 		ShardLocalTime: timestamppb.New(shard.GetTimeSource().Now()),
-	}
+	}.Build()
 
 	maxReplicationTaskId, maxTaskVisibilityTimeStamp := replicationAckMgr.GetMaxTaskInfo()
-	resp.MaxReplicationTaskId = maxReplicationTaskId
-	resp.MaxReplicationTaskVisibilityTime = timestamppb.New(maxTaskVisibilityTimeStamp)
+	resp.SetMaxReplicationTaskId(maxReplicationTaskId)
+	resp.SetMaxReplicationTaskVisibilityTime(timestamppb.New(maxTaskVisibilityTimeStamp))
 
-	remoteClusters, handoverNamespaces, err := shard.GetReplicationStatus(request.RemoteClusters)
+	remoteClusters, handoverNamespaces, err := shard.GetReplicationStatus(request.GetRemoteClusters())
 	if err != nil {
 		return nil, err
 	}
-	resp.RemoteClusters = remoteClusters
-	resp.HandoverNamespaces = handoverNamespaces
+	resp.SetRemoteClusters(remoteClusters)
+	resp.SetHandoverNamespaces(handoverNamespaces)
 	return resp, nil
 }

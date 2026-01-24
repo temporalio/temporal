@@ -53,18 +53,16 @@ func (s *batcherSuite) TestBatchWorkflow_ValidParams_Query_Protobuf() {
 			},
 		}, memo)
 	}).Once()
-	s.env.ExecuteWorkflow(BatchWorkflowProtobuf, &batchspb.BatchOperationInput{
-		Request: &workflowservice.StartBatchOperationRequest{
-			JobId: uuid.NewString(),
-			Operation: &workflowservice.StartBatchOperationRequest_TerminationOperation{
-				TerminationOperation: &batchpb.BatchOperationTermination{},
-			},
-			Namespace:       "test-namespace",
-			Reason:          "test-reason",
-			VisibilityQuery: "test-query",
-		},
+	s.env.ExecuteWorkflow(BatchWorkflowProtobuf, batchspb.BatchOperationInput_builder{
+		Request: workflowservice.StartBatchOperationRequest_builder{
+			JobId:                uuid.NewString(),
+			TerminationOperation: &batchpb.BatchOperationTermination{},
+			Namespace:            "test-namespace",
+			Reason:               "test-reason",
+			VisibilityQuery:      "test-query",
+		}.Build(),
 		BatchType: enumspb.BATCH_OPERATION_TYPE_TERMINATE,
-	})
+	}.Build())
 	err := s.env.GetWorkflowError()
 	s.Require().NoError(err)
 }
@@ -85,23 +83,21 @@ func (s *batcherSuite) TestBatchWorkflow_ValidParams_Executions_Protobuf() {
 			},
 		}, memo)
 	}).Once()
-	s.env.ExecuteWorkflow(BatchWorkflowProtobuf, &batchspb.BatchOperationInput{
-		Request: &workflowservice.StartBatchOperationRequest{
-			JobId: uuid.NewString(),
-			Operation: &workflowservice.StartBatchOperationRequest_TerminationOperation{
-				TerminationOperation: &batchpb.BatchOperationTermination{},
-			},
+	s.env.ExecuteWorkflow(BatchWorkflowProtobuf, batchspb.BatchOperationInput_builder{
+		Request: workflowservice.StartBatchOperationRequest_builder{
+			JobId:                uuid.NewString(),
+			TerminationOperation: &batchpb.BatchOperationTermination{},
 			Executions: []*commonpb.WorkflowExecution{
-				{
+				commonpb.WorkflowExecution_builder{
 					WorkflowId: uuid.NewString(),
 					RunId:      uuid.NewString(),
-				},
+				}.Build(),
 			},
 			Reason:    "test-reason",
 			Namespace: "test-namespace",
-		},
+		}.Build(),
 		BatchType: enumspb.BATCH_OPERATION_TYPE_TERMINATE,
-	})
+	}.Build())
 	err := s.env.GetWorkflowError()
 	s.Require().NoError(err)
 }

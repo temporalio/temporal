@@ -117,27 +117,27 @@ func (s *taskProcessorManagerSuite) TearDownTest() {
 func (s *taskProcessorManagerSuite) TestCleanupReplicationTask_Noop() {
 	ackedTaskID := int64(12345)
 	s.mockShard.EXPECT().GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Return(tasks.NewImmediateKey(ackedTaskID + 2)).AnyTimes()
-	s.mockShard.EXPECT().GetQueueState(tasks.CategoryReplication).Return(&persistencespb.QueueState{
+	s.mockShard.EXPECT().GetQueueState(tasks.CategoryReplication).Return(persistencespb.QueueState_builder{
 		ExclusiveReaderHighWatermark: nil,
 		ReaderStates: map[int64]*persistencespb.QueueReaderState{
-			shard.ReplicationReaderIDFromClusterShardID(cluster.TestAlternativeClusterInitialFailoverVersion, s.shardID): {
-				Scopes: []*persistencespb.QueueSliceScope{{
-					Range: &persistencespb.QueueSliceRange{
+			shard.ReplicationReaderIDFromClusterShardID(cluster.TestAlternativeClusterInitialFailoverVersion, s.shardID): persistencespb.QueueReaderState_builder{
+				Scopes: []*persistencespb.QueueSliceScope{persistencespb.QueueSliceScope_builder{
+					Range: persistencespb.QueueSliceRange_builder{
 						InclusiveMin: shard.ConvertToPersistenceTaskKey(
 							tasks.NewImmediateKey(ackedTaskID + 1),
 						),
 						ExclusiveMax: shard.ConvertToPersistenceTaskKey(
 							tasks.NewImmediateKey(math.MaxInt64),
 						),
-					},
-					Predicate: &persistencespb.Predicate{
-						PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
-						Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
-					},
-				}},
-			},
+					}.Build(),
+					Predicate: persistencespb.Predicate_builder{
+						PredicateType:                enumsspb.PREDICATE_TYPE_UNIVERSAL,
+						UniversalPredicateAttributes: &persistencespb.UniversalPredicateAttributes{},
+					}.Build(),
+				}.Build()},
+			}.Build(),
 		},
-	}, true)
+	}.Build(), true)
 
 	s.taskProcessorManager.minTxAckedTaskID = ackedTaskID
 	err := s.taskProcessorManager.cleanupReplicationTasks()
@@ -147,31 +147,31 @@ func (s *taskProcessorManagerSuite) TestCleanupReplicationTask_Noop() {
 func (s *taskProcessorManagerSuite) TestCleanupReplicationTask_Cleanup() {
 	ackedTaskID := int64(12345)
 	s.mockShard.EXPECT().GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Return(tasks.NewImmediateKey(ackedTaskID + 2)).AnyTimes()
-	s.mockShard.EXPECT().GetQueueState(tasks.CategoryReplication).Return(&persistencespb.QueueState{
+	s.mockShard.EXPECT().GetQueueState(tasks.CategoryReplication).Return(persistencespb.QueueState_builder{
 		ExclusiveReaderHighWatermark: nil,
 		ReaderStates: map[int64]*persistencespb.QueueReaderState{
 			shard.ReplicationReaderIDFromClusterShardID(cluster.TestAlternativeClusterInitialFailoverVersion, common.MapShardID(
 				cluster.TestAllClusterInfo[cluster.TestCurrentClusterName].ShardCount,
 				cluster.TestAllClusterInfo[cluster.TestAlternativeClusterName].ShardCount,
 				s.shardID,
-			)[0]): {
-				Scopes: []*persistencespb.QueueSliceScope{{
-					Range: &persistencespb.QueueSliceRange{
+			)[0]): persistencespb.QueueReaderState_builder{
+				Scopes: []*persistencespb.QueueSliceScope{persistencespb.QueueSliceScope_builder{
+					Range: persistencespb.QueueSliceRange_builder{
 						InclusiveMin: shard.ConvertToPersistenceTaskKey(
 							tasks.NewImmediateKey(ackedTaskID + 1),
 						),
 						ExclusiveMax: shard.ConvertToPersistenceTaskKey(
 							tasks.NewImmediateKey(math.MaxInt64),
 						),
-					},
-					Predicate: &persistencespb.Predicate{
-						PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
-						Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
-					},
-				}},
-			},
+					}.Build(),
+					Predicate: persistencespb.Predicate_builder{
+						PredicateType:                enumsspb.PREDICATE_TYPE_UNIVERSAL,
+						UniversalPredicateAttributes: &persistencespb.UniversalPredicateAttributes{},
+					}.Build(),
+				}.Build()},
+			}.Build(),
 		},
-	}, true)
+	}.Build(), true)
 	s.taskProcessorManager.minTxAckedTaskID = ackedTaskID - 1
 	s.mockExecutionManager.EXPECT().RangeCompleteHistoryTasks(
 		gomock.Any(),

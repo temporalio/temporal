@@ -41,27 +41,27 @@ func (s *replicationTaskSuite) TearDownSuite() {
 
 func (s *replicationTaskSuite) TestValidateEventsSlice() {
 	eS1 := []*historypb.HistoryEvent{
-		{
+		historypb.HistoryEvent_builder{
 			EventId: 1,
 			Version: 2,
-		},
-		{
+		}.Build(),
+		historypb.HistoryEvent_builder{
 			EventId: 2,
 			Version: 2,
-		},
+		}.Build(),
 	}
 	eS2 := []*historypb.HistoryEvent{
-		{
+		historypb.HistoryEvent_builder{
 			EventId: 3,
 			Version: 2,
-		},
+		}.Build(),
 	}
 
 	eS3 := []*historypb.HistoryEvent{
-		{
+		historypb.HistoryEvent_builder{
 			EventId: 4,
 			Version: 2,
-		},
+		}.Build(),
 	}
 
 	v, err := validateEventsSlice(eS1, eS2)
@@ -79,36 +79,36 @@ func (s *replicationTaskSuite) TestValidateEventsSlice() {
 
 func (s *replicationTaskSuite) TestValidateEvents() {
 	eS1 := []*historypb.HistoryEvent{
-		{
+		historypb.HistoryEvent_builder{
 			EventId: 1,
 			Version: 2,
-		},
-		{
+		}.Build(),
+		historypb.HistoryEvent_builder{
 			EventId: 2,
 			Version: 2,
-		},
+		}.Build(),
 	}
 
 	eS2 := []*historypb.HistoryEvent{
-		{
+		historypb.HistoryEvent_builder{
 			EventId: 1,
 			Version: 2,
-		},
-		{
+		}.Build(),
+		historypb.HistoryEvent_builder{
 			EventId: 3,
 			Version: 2,
-		},
+		}.Build(),
 	}
 
 	eS3 := []*historypb.HistoryEvent{
-		{
+		historypb.HistoryEvent_builder{
 			EventId: 1,
 			Version: 1,
-		},
-		{
+		}.Build(),
+		historypb.HistoryEvent_builder{
 			EventId: 2,
 			Version: 2,
-		},
+		}.Build(),
 	}
 
 	v, err := validateEvents(eS1)
@@ -130,20 +130,20 @@ func (s *replicationTaskSuite) TestSkipDuplicatedEvents_ValidInput_SkipEvents() 
 		RunID:      uuid.NewString(),
 	}
 	slice1 := []*historypb.HistoryEvent{
-		{
+		historypb.HistoryEvent_builder{
 			EventId: 11,
-		},
-		{
+		}.Build(),
+		historypb.HistoryEvent_builder{
 			EventId: 12,
-		},
+		}.Build(),
 	}
 	slice2 := []*historypb.HistoryEvent{
-		{
+		historypb.HistoryEvent_builder{
 			EventId: 13,
-		},
-		{
+		}.Build(),
+		historypb.HistoryEvent_builder{
 			EventId: 14,
-		},
+		}.Build(),
 	}
 
 	task, _ := newReplicationTask(
@@ -162,8 +162,8 @@ func (s *replicationTaskSuite) TestSkipDuplicatedEvents_ValidInput_SkipEvents() 
 	s.NoError(err)
 	s.Equal(1, len(task.getEvents()))
 	s.Equal(slice2, task.getEvents()[0])
-	s.Equal(int64(13), task.getFirstEvent().EventId)
-	s.Equal(int64(14), task.getLastEvent().EventId)
+	s.Equal(int64(13), task.getFirstEvent().GetEventId())
+	s.Equal(int64(14), task.getLastEvent().GetEventId())
 }
 
 func (s *replicationTaskSuite) TestSkipDuplicatedEvents_InvalidInput_ErrorOut() {
@@ -172,20 +172,20 @@ func (s *replicationTaskSuite) TestSkipDuplicatedEvents_InvalidInput_ErrorOut() 
 		RunID:      uuid.NewString(),
 	}
 	slice1 := []*historypb.HistoryEvent{
-		{
+		historypb.HistoryEvent_builder{
 			EventId: 11,
-		},
-		{
+		}.Build(),
+		historypb.HistoryEvent_builder{
 			EventId: 12,
-		},
+		}.Build(),
 	}
 	slice2 := []*historypb.HistoryEvent{
-		{
+		historypb.HistoryEvent_builder{
 			EventId: 13,
-		},
-		{
+		}.Build(),
+		historypb.HistoryEvent_builder{
 			EventId: 14,
-		},
+		}.Build(),
 	}
 
 	task, _ := newReplicationTask(
@@ -210,20 +210,20 @@ func (s *replicationTaskSuite) TestSkipDuplicatedEvents_ZeroInput_DoNothing() {
 		RunID:      uuid.NewString(),
 	}
 	slice1 := []*historypb.HistoryEvent{
-		{
+		historypb.HistoryEvent_builder{
 			EventId: 11,
-		},
-		{
+		}.Build(),
+		historypb.HistoryEvent_builder{
 			EventId: 12,
-		},
+		}.Build(),
 	}
 	slice2 := []*historypb.HistoryEvent{
-		{
+		historypb.HistoryEvent_builder{
 			EventId: 13,
-		},
-		{
+		}.Build(),
+		historypb.HistoryEvent_builder{
 			EventId: 14,
-		},
+		}.Build(),
 	}
 
 	task, _ := newReplicationTask(
@@ -251,13 +251,13 @@ func (s *replicationTaskSuite) TestResetInfo() {
 		RunID:      uuid.NewString(),
 	}
 	slice1 := []*historypb.HistoryEvent{
-		{
+		historypb.HistoryEvent_builder{
 			EventId:   13,
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED,
-		},
-		{
+		}.Build(),
+		historypb.HistoryEvent_builder{
 			EventId: 14,
-		},
+		}.Build(),
 	}
 
 	task, _ := newReplicationTask(

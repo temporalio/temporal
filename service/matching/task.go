@@ -120,15 +120,15 @@ func newInternalTaskForSyncMatch(
 	source := enumsspb.TASK_SOURCE_HISTORY
 	if forwardInfo != nil {
 		// if task is forwarded, it may be history or backlog. setting based on forward info
-		source = forwardInfo.TaskSource
+		source = forwardInfo.GetTaskSource()
 		redirectInfo = forwardInfo.GetRedirectInfo()
 	}
 	return &internalTask{
 		event: &genericTaskInfo{
-			AllocatedTaskInfo: &persistencespb.AllocatedTaskInfo{
+			AllocatedTaskInfo: persistencespb.AllocatedTaskInfo_builder{
 				Data:   info,
 				TaskId: syncMatchTaskId,
-			},
+			}.Build(),
 		},
 		forwardInfo:  forwardInfo,
 		source:       source,
@@ -231,13 +231,13 @@ func (task *internalTask) isSyncMatchTask() bool {
 func (task *internalTask) workflowExecution() *commonpb.WorkflowExecution {
 	switch {
 	case task.event != nil:
-		return &commonpb.WorkflowExecution{WorkflowId: task.event.Data.GetWorkflowId(), RunId: task.event.Data.GetRunId()}
+		return commonpb.WorkflowExecution_builder{WorkflowId: task.event.GetData().GetWorkflowId(), RunId: task.event.GetData().GetRunId()}.Build()
 	case task.query != nil:
 		return task.query.request.GetQueryRequest().GetExecution()
 	case task.started != nil && task.started.workflowTaskInfo != nil:
-		return task.started.workflowTaskInfo.WorkflowExecution
+		return task.started.workflowTaskInfo.GetWorkflowExecution()
 	case task.started != nil && task.started.activityTaskInfo != nil:
-		return task.started.activityTaskInfo.WorkflowExecution
+		return task.started.activityTaskInfo.GetWorkflowExecution()
 	}
 	return &commonpb.WorkflowExecution{}
 }
@@ -264,8 +264,8 @@ func (task *internalTask) pollActivityTaskQueueResponse() *matchingservice.PollA
 // should only be called when isStarted() is true
 func (task *internalTask) pollNexusTaskQueueResponse() *matchingservice.PollNexusTaskQueueResponse {
 	if task.isStarted() {
-		if task.started.nexusTaskInfo.Response != nil {
-			task.started.nexusTaskInfo.Response.PollerScalingDecision = task.pollerScalingDecision
+		if task.started.nexusTaskInfo.HasResponse() {
+			task.started.nexusTaskInfo.GetResponse().SetPollerScalingDecision(task.pollerScalingDecision)
 		}
 		return task.started.nexusTaskInfo
 	}

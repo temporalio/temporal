@@ -89,27 +89,27 @@ func (v *mutableStateValidator) Validate(
 	}
 
 	results = append(results, v.validateActivity(
-		mutableState.ActivityInfos,
+		mutableState.GetActivityInfos(),
 		lastItem.GetEventId())...,
 	)
 
 	results = append(results, v.validateTimer(
-		mutableState.TimerInfos,
+		mutableState.GetTimerInfos(),
 		lastItem.GetEventId())...,
 	)
 
 	results = append(results, v.validateChildWorkflow(
-		mutableState.ChildExecutionInfos,
+		mutableState.GetChildExecutionInfos(),
 		lastItem.GetEventId())...,
 	)
 
 	results = append(results, v.validateRequestCancel(
-		mutableState.RequestCancelInfos,
+		mutableState.GetRequestCancelInfos(),
 		lastItem.GetEventId())...,
 	)
 
 	results = append(results, v.validateSignal(
-		mutableState.SignalInfos,
+		mutableState.GetSignalInfos(),
 		lastItem.GetEventId())...,
 	)
 
@@ -143,14 +143,14 @@ func (v *mutableStateValidator) validateTimer(
 ) []MutableStateValidationResult {
 	var results []MutableStateValidationResult
 	for _, timer := range timerInfos {
-		if v.validateID(timer.StartedEventId, lastEventID) {
+		if v.validateID(timer.GetStartedEventId(), lastEventID) {
 			continue
 		}
 		results = append(results, MutableStateValidationResult{
 			failureType: mutableStateTimerIDFailureType,
 			failureDetails: fmt.Sprintf(
 				"TimerEventID: %d is not less than last event ID: %d",
-				timer.StartedEventId,
+				timer.GetStartedEventId(),
 				lastEventID,
 			),
 		})

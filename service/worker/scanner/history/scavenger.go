@@ -244,7 +244,7 @@ func (s *Scavenger) filterTask(
 		namespaceID: namespaceID,
 		workflowID:  workflowID,
 		runID:       runID,
-		branchToken: branchToken.Data,
+		branchToken: branchToken.GetData(),
 	}
 }
 
@@ -254,14 +254,14 @@ func (s *Scavenger) handleTask(
 ) error {
 	// this checks if the mutableState still exists
 	// if not then the history branch is garbage, we need to delete the history branch
-	ms, err := s.client.DescribeMutableState(ctx, &historyservice.DescribeMutableStateRequest{
+	ms, err := s.client.DescribeMutableState(ctx, historyservice.DescribeMutableStateRequest_builder{
 		NamespaceId: task.namespaceID,
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: task.workflowID,
 			RunId:      task.runID,
-		},
+		}.Build(),
 		ArchetypeId: chasm.WorkflowArchetypeID,
-	})
+	}.Build())
 	switch err.(type) {
 	case nil:
 		if s.enableRetentionVerification() {
@@ -351,14 +351,14 @@ func (s *Scavenger) cleanUpWorkflowPastRetention(
 	finalUpdateTime := executionInfo.GetLastUpdateTime()
 	age := time.Now().UTC().Sub(timestamp.TimeValue(finalUpdateTime))
 	if age > retention+s.executionDataDurationBuffer() {
-		_, err = s.adminClient.DeleteWorkflowExecution(ctx, &adminservice.DeleteWorkflowExecutionRequest{
+		_, err = s.adminClient.DeleteWorkflowExecution(ctx, adminservice.DeleteWorkflowExecutionRequest_builder{
 			Namespace: ns.Name().String(),
-			Execution: &commonpb.WorkflowExecution{
+			Execution: commonpb.WorkflowExecution_builder{
 				WorkflowId: executionInfo.GetWorkflowId(),
 				RunId:      mutableState.GetExecutionState().GetRunId(),
-			},
+			}.Build(),
 			Archetype: chasm.WorkflowArchetype,
-		})
+		}.Build())
 		if err != nil {
 			// This is experimental. Ignoring the error so it will not block the history scavenger.
 			s.logger.Warn("Failed to delete workflow past retention in history scavenger",

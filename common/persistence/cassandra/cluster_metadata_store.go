@@ -128,15 +128,15 @@ func (m *ClusterMetadataStore) SaveClusterMetadata(
 			templateCreateClusterMetadata,
 			constMetadataPartition,
 			request.ClusterName,
-			request.ClusterMetadata.Data,
-			request.ClusterMetadata.EncodingType.String(),
+			request.ClusterMetadata.GetData(),
+			request.ClusterMetadata.GetEncodingType().String(),
 			1,
 		).WithContext(ctx)
 	} else {
 		query = m.session.Query(
 			templateUpdateClusterMetadata,
-			request.ClusterMetadata.Data,
-			request.ClusterMetadata.EncodingType.String(),
+			request.ClusterMetadata.GetData(),
+			request.ClusterMetadata.GetEncodingType().String(),
 			request.Version+1,
 			constMetadataPartition,
 			request.ClusterName,

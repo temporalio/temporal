@@ -213,9 +213,9 @@ func terminateWorkflowAction(
 
 		// if this termination was requested by a parent that was reset, we need to ensure that the current execution is in fact a child of the given parent.
 		if parentExecutionInfo != nil && childWorkflowOnly {
-			if mutableState.GetExecutionInfo().GetParentWorkflowId() != parentExecutionInfo.Execution.GetWorkflowId() {
+			if mutableState.GetExecutionInfo().GetParentWorkflowId() != parentExecutionInfo.GetExecution().GetWorkflowId() {
 				return nil, &serviceerror.Internal{
-					Message: fmt.Sprintf("Current workflow %s is not a child of parent %s.", mutableState.GetExecutionInfo().GetWorkflowId(), parentExecutionInfo.Execution.GetWorkflowId()),
+					Message: fmt.Sprintf("Current workflow %s is not a child of parent %s.", mutableState.GetExecutionInfo().GetWorkflowId(), parentExecutionInfo.GetExecution().GetWorkflowId()),
 				}
 			}
 		}
@@ -237,7 +237,7 @@ func generateWorkflowAlreadyStartedError(
 ) error {
 	createRequestID := ""
 	for requestID, info := range requestIDs {
-		if info.EventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
+		if info.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
 			createRequestID = requestID
 		}
 	}
@@ -248,16 +248,20 @@ func generateWorkflowAlreadyStartedError(
 	)
 }
 
+// MigrateWorkflowIdReusePolicyForRunningWorkflow migrates the deprecated
+// TERMINATE_IF_RUNNING reuse policy to the equivalent conflict policy.
+// Returns the migrated (reusePolicy, conflictPolicy) values.
 func MigrateWorkflowIdReusePolicyForRunningWorkflow(
-	wfIDReusePolicy *enumspb.WorkflowIdReusePolicy,
-	wfIDConflictPolicy *enumspb.WorkflowIdConflictPolicy,
-) {
+	wfIDReusePolicy enumspb.WorkflowIdReusePolicy,
+	wfIDConflictPolicy enumspb.WorkflowIdConflictPolicy,
+) (enumspb.WorkflowIdReusePolicy, enumspb.WorkflowIdConflictPolicy) {
 	// workflow id reuse policy's Terminate-if-Running has been replaced by
 	// workflow id conflict policy's Terminate-Existing
-	if *wfIDReusePolicy == enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING {
-		*wfIDConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING
+	if wfIDReusePolicy == enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING {
+		wfIDConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING
 
 		// for *closed* workflows, its behavior is defined as ALLOW_DUPLICATE
-		*wfIDReusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE
+		wfIDReusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE
 	}
+	return wfIDReusePolicy, wfIDConflictPolicy
 }

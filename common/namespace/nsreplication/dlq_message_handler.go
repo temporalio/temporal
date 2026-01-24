@@ -126,7 +126,7 @@ func (d *dlqMessageHandlerImpl) Merge(
 		); err != nil {
 			return nil, err
 		}
-		ackedMessageID = message.SourceTaskId
+		ackedMessageID = message.GetSourceTaskId()
 	}
 
 	if err := d.namespaceReplicationQueue.RangeDeleteMessagesFromDLQ(

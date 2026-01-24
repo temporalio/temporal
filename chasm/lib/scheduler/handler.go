@@ -31,17 +31,17 @@ func (h *handler) CreateSchedule(ctx context.Context, req *schedulerpb.CreateSch
 	result, err := chasm.StartExecution(
 		ctx,
 		chasm.ExecutionKey{
-			NamespaceID: req.NamespaceId,
-			BusinessID:  req.FrontendRequest.ScheduleId,
+			NamespaceID: req.GetNamespaceId(),
+			BusinessID:  req.GetFrontendRequest().GetScheduleId(),
 		},
 		CreateScheduler,
 		req,
-		chasm.WithRequestID(req.FrontendRequest.RequestId),
+		chasm.WithRequestID(req.GetFrontendRequest().GetRequestId()),
 	)
 
 	var alreadyStartedErr *chasm.ExecutionAlreadyStartedError
 	if errors.As(err, &alreadyStartedErr) {
-		return nil, serviceerror.NewAlreadyExistsf("schedule %q is already registered", req.FrontendRequest.ScheduleId)
+		return nil, serviceerror.NewAlreadyExistsf("schedule %q is already registered", req.GetFrontendRequest().GetScheduleId())
 	}
 
 	return result.Output, nil
@@ -54,8 +54,8 @@ func (h *handler) UpdateSchedule(ctx context.Context, req *schedulerpb.UpdateSch
 		ctx,
 		chasm.NewComponentRef[*Scheduler](
 			chasm.ExecutionKey{
-				NamespaceID: req.NamespaceId,
-				BusinessID:  req.FrontendRequest.ScheduleId,
+				NamespaceID: req.GetNamespaceId(),
+				BusinessID:  req.GetFrontendRequest().GetScheduleId(),
 			},
 		),
 		(*Scheduler).Update,
@@ -71,8 +71,8 @@ func (h *handler) PatchSchedule(ctx context.Context, req *schedulerpb.PatchSched
 		ctx,
 		chasm.NewComponentRef[*Scheduler](
 			chasm.ExecutionKey{
-				NamespaceID: req.NamespaceId,
-				BusinessID:  req.FrontendRequest.ScheduleId,
+				NamespaceID: req.GetNamespaceId(),
+				BusinessID:  req.GetFrontendRequest().GetScheduleId(),
 			},
 		),
 		(*Scheduler).Patch,
@@ -88,8 +88,8 @@ func (h *handler) DeleteSchedule(ctx context.Context, req *schedulerpb.DeleteSch
 		ctx,
 		chasm.NewComponentRef[*Scheduler](
 			chasm.ExecutionKey{
-				NamespaceID: req.NamespaceId,
-				BusinessID:  req.FrontendRequest.ScheduleId,
+				NamespaceID: req.GetNamespaceId(),
+				BusinessID:  req.GetFrontendRequest().GetScheduleId(),
 			},
 		),
 		(*Scheduler).Delete,
@@ -105,8 +105,8 @@ func (h *handler) DescribeSchedule(ctx context.Context, req *schedulerpb.Describ
 		ctx,
 		chasm.NewComponentRef[*Scheduler](
 			chasm.ExecutionKey{
-				NamespaceID: req.NamespaceId,
-				BusinessID:  req.FrontendRequest.ScheduleId,
+				NamespaceID: req.GetNamespaceId(),
+				BusinessID:  req.GetFrontendRequest().GetScheduleId(),
 			},
 		),
 		func(s *Scheduler, ctx chasm.Context, req *schedulerpb.DescribeScheduleRequest) (*schedulerpb.DescribeScheduleResponse, error) {
@@ -124,8 +124,8 @@ func (h *handler) ListScheduleMatchingTimes(ctx context.Context, req *schedulerp
 		ctx,
 		chasm.NewComponentRef[*Scheduler](
 			chasm.ExecutionKey{
-				NamespaceID: req.NamespaceId,
-				BusinessID:  req.FrontendRequest.ScheduleId,
+				NamespaceID: req.GetNamespaceId(),
+				BusinessID:  req.GetFrontendRequest().GetScheduleId(),
 			},
 		),
 		func(s *Scheduler, ctx chasm.Context, req *schedulerpb.ListScheduleMatchingTimesRequest) (*schedulerpb.ListScheduleMatchingTimesResponse, error) {

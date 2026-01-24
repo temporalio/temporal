@@ -33,9 +33,9 @@ func TestWithValidMessage(t *testing.T) {
 	var body anypb.Any
 	require.NoError(t, body.MarshalFrom(&empty))
 
-	msg := protocolpb.Message{Body: &body}
+	msg := protocolpb.Message_builder{Body: &body}.Build()
 
-	pt, mt := protocol.IdentifyOrUnknown(&msg)
+	pt, mt := protocol.IdentifyOrUnknown(msg)
 
 	require.Equal(t, "google.protobuf", pt.String())
 	require.Equal(t, "google.protobuf.Empty", mt.String())
@@ -48,9 +48,9 @@ func TestWithInvalidBody(t *testing.T) {
 	var body anypb.Any
 	require.NoError(t, body.MarshalFrom(&empty))
 
-	msg := protocolpb.Message{Body: &body}
-	msg.Body.TypeUrl = "this isn't valid"
+	msg := protocolpb.Message_builder{Body: &body}.Build()
+	msg.GetBody().TypeUrl = "this isn't valid"
 
-	_, _, err := protocol.Identify(&msg)
+	_, _, err := protocol.Identify(msg)
 	require.Error(t, err)
 }

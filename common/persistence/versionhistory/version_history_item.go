@@ -12,17 +12,17 @@ func NewVersionHistoryItem(eventID int64, version int64) *historyspb.VersionHist
 		panic(fmt.Sprintf("invalid version history item event ID: %v, version: %v", eventID, version))
 	}
 
-	return &historyspb.VersionHistoryItem{EventId: eventID, Version: version}
+	return historyspb.VersionHistoryItem_builder{EventId: eventID, Version: version}.Build()
 }
 
 // CopyVersionHistoryItem create a new instance of VersionHistoryItem.
 func CopyVersionHistoryItem(item *historyspb.VersionHistoryItem) *historyspb.VersionHistoryItem {
-	return NewVersionHistoryItem(item.EventId, item.Version)
+	return NewVersionHistoryItem(item.GetEventId(), item.GetVersion())
 }
 
 // IsEqualVersionHistoryItem checks whether version history items are equal
 func IsEqualVersionHistoryItem(item1 *historyspb.VersionHistoryItem, item2 *historyspb.VersionHistoryItem) bool {
-	return item1.EventId == item2.EventId && item1.Version == item2.Version
+	return item1.GetEventId() == item2.GetEventId() && item1.GetVersion() == item2.GetVersion()
 }
 
 // IsEqualVersionHistoryItems checks whether version history items are equal
@@ -40,18 +40,18 @@ func IsEqualVersionHistoryItems(items1 []*historyspb.VersionHistoryItem, items2 
 
 // CompareVersionHistoryItem compares 2 version history items
 func CompareVersionHistoryItem(item1 *historyspb.VersionHistoryItem, item2 *historyspb.VersionHistoryItem) int {
-	if item1.Version < item2.Version {
+	if item1.GetVersion() < item2.GetVersion() {
 		return -1
 	}
-	if item1.Version > item2.Version {
+	if item1.GetVersion() > item2.GetVersion() {
 		return 1
 	}
 
 	// item1.Version == item2.Version
-	if item1.EventId < item2.EventId {
+	if item1.GetEventId() < item2.GetEventId() {
 		return -1
 	}
-	if item1.EventId > item2.EventId {
+	if item1.GetEventId() > item2.GetEventId() {
 		return 1
 	}
 	return 0

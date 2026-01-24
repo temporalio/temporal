@@ -71,32 +71,28 @@ func (s *nDCEventReapplicationSuite) TearDownTest() {
 
 func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_WorkflowExecutionOptionsUpdated() {
 	runID := uuid.NewString()
-	execution := &persistencespb.WorkflowExecutionInfo{
+	execution := persistencespb.WorkflowExecutionInfo_builder{
 		NamespaceId: uuid.NewString(),
-	}
-	event := &historypb.HistoryEvent{
+	}.Build()
+	event := historypb.HistoryEvent_builder{
 		EventId:   1,
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
-		Attributes: &historypb.HistoryEvent_WorkflowExecutionOptionsUpdatedEventAttributes{
-			WorkflowExecutionOptionsUpdatedEventAttributes: &historypb.WorkflowExecutionOptionsUpdatedEventAttributes{
-				VersioningOverride:          nil,
-				UnsetVersioningOverride:     false,
-				AttachedRequestId:           "test-attached-request-id",
-				AttachedCompletionCallbacks: nil,
-			},
-		},
+		WorkflowExecutionOptionsUpdatedEventAttributes: historypb.WorkflowExecutionOptionsUpdatedEventAttributes_builder{
+			VersioningOverride:          nil,
+			UnsetVersioningOverride:     false,
+			AttachedRequestId:           "test-attached-request-id",
+			AttachedCompletionCallbacks: nil,
+		}.Build(),
 		Links: []*commonpb.Link{
-			{
-				Variant: &commonpb.Link_WorkflowEvent_{
-					WorkflowEvent: &commonpb.Link_WorkflowEvent{
-						Namespace:  "whatever",
-						WorkflowId: "abc",
-						RunId:      uuid.NewString(),
-					},
-				},
-			},
+			commonpb.Link_builder{
+				WorkflowEvent: commonpb.Link_WorkflowEvent_builder{
+					Namespace:  "whatever",
+					WorkflowId: "abc",
+					RunId:      uuid.NewString(),
+				}.Build(),
+			}.Build(),
 		},
-	}
+	}.Build()
 	attr := event.GetWorkflowExecutionOptionsUpdatedEventAttributes()
 
 	msCurrent := historyi.NewMockMutableState(s.controller)
@@ -110,7 +106,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_WorkflowExec
 		attr.GetUnsetVersioningOverride(),
 		attr.GetAttachedRequestId(),
 		attr.GetAttachedCompletionCallbacks(),
-		event.Links,
+		event.GetLinks(),
 		attr.GetIdentity(),
 		attr.GetPriority(),
 	).Return(event, nil)
@@ -120,7 +116,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_WorkflowExec
 	msCurrent.EXPECT().IsResourceDuplicated(dedupResource).Return(false)
 	msCurrent.EXPECT().UpdateDuplicatedResource(dedupResource)
 	events := []*historypb.HistoryEvent{
-		{EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED},
+		historypb.HistoryEvent_builder{EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED}.Build(),
 		event,
 	}
 	appliedEvent, err := s.nDCReapplication.ReapplyEvents(context.Background(), msCurrent, updateRegistry, events, runID)
@@ -130,30 +126,28 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_WorkflowExec
 
 func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_Signal() {
 	runID := uuid.NewString()
-	execution := &persistencespb.WorkflowExecutionInfo{
+	execution := persistencespb.WorkflowExecutionInfo_builder{
 		NamespaceId: uuid.NewString(),
-	}
-	event := &historypb.HistoryEvent{
+	}.Build()
+	event := historypb.HistoryEvent_builder{
 		EventId:   1,
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
-		Attributes: &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{
+		WorkflowExecutionSignaledEventAttributes: historypb.WorkflowExecutionSignaledEventAttributes_builder{
 			Identity:   "test",
 			SignalName: "signal",
 			Input:      payloads.EncodeBytes([]byte{}),
-			Header:     &commonpb.Header{Fields: map[string]*commonpb.Payload{"myheader": {Data: []byte("myheader")}}},
-		}},
+			Header:     commonpb.Header_builder{Fields: map[string]*commonpb.Payload{"myheader": commonpb.Payload_builder{Data: []byte("myheader")}.Build()}}.Build(),
+		}.Build(),
 		Links: []*commonpb.Link{
-			{
-				Variant: &commonpb.Link_WorkflowEvent_{
-					WorkflowEvent: &commonpb.Link_WorkflowEvent{
-						Namespace:  "whatever",
-						WorkflowId: "abc",
-						RunId:      uuid.NewString(),
-					},
-				},
-			},
+			commonpb.Link_builder{
+				WorkflowEvent: commonpb.Link_WorkflowEvent_builder{
+					Namespace:  "whatever",
+					WorkflowId: "abc",
+					RunId:      uuid.NewString(),
+				}.Build(),
+			}.Build(),
 		},
-	}
+	}.Build()
 	attr := event.GetWorkflowExecutionSignaledEventAttributes()
 
 	msCurrent := historyi.NewMockMutableState(s.controller)
@@ -167,7 +161,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_Signal() {
 		attr.GetInput(),
 		attr.GetIdentity(),
 		attr.GetHeader(),
-		event.Links,
+		event.GetLinks(),
 	).Return(event, nil)
 	msCurrent.EXPECT().HSM().Return(s.hsmNode).AnyTimes()
 	msCurrent.EXPECT().IsWorkflowPendingOnWorkflowTaskBackoff().Return(true)
@@ -175,7 +169,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_Signal() {
 	msCurrent.EXPECT().IsResourceDuplicated(dedupResource).Return(false)
 	msCurrent.EXPECT().UpdateDuplicatedResource(dedupResource)
 	events := []*historypb.HistoryEvent{
-		{EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED},
+		historypb.HistoryEvent_builder{EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED}.Build(),
 		event,
 	}
 	appliedEvent, err := s.nDCReapplication.ReapplyEvents(context.Background(), msCurrent, updateRegistry, events, runID)
@@ -185,26 +179,26 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_Signal() {
 
 func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_Update() {
 	runID := uuid.NewString()
-	execution := &persistencespb.WorkflowExecutionInfo{
+	execution := persistencespb.WorkflowExecutionInfo_builder{
 		NamespaceId: uuid.NewString(),
-	}
+	}.Build()
 	for _, event := range []*historypb.HistoryEvent{
-		{
+		historypb.HistoryEvent_builder{
 			EventId:   105,
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED,
-			Attributes: &historypb.HistoryEvent_WorkflowExecutionUpdateAdmittedEventAttributes{WorkflowExecutionUpdateAdmittedEventAttributes: &historypb.WorkflowExecutionUpdateAdmittedEventAttributes{
-				Request: &updatepb.Request{Input: &updatepb.Input{Args: payloads.EncodeString("update-request-payload")}, Meta: &updatepb.Meta{UpdateId: "update-1"}},
+			WorkflowExecutionUpdateAdmittedEventAttributes: historypb.WorkflowExecutionUpdateAdmittedEventAttributes_builder{
+				Request: updatepb.Request_builder{Input: updatepb.Input_builder{Args: payloads.EncodeString("update-request-payload")}.Build(), Meta: updatepb.Meta_builder{UpdateId: "update-1"}.Build()}.Build(),
 				Origin:  enumspb.UPDATE_ADMITTED_EVENT_ORIGIN_UNSPECIFIED,
-			}},
-		},
-		{
+			}.Build(),
+		}.Build(),
+		historypb.HistoryEvent_builder{
 			EventId:   105,
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED,
-			Attributes: &historypb.HistoryEvent_WorkflowExecutionUpdateAcceptedEventAttributes{WorkflowExecutionUpdateAcceptedEventAttributes: &historypb.WorkflowExecutionUpdateAcceptedEventAttributes{
-				AcceptedRequest:    &updatepb.Request{Input: &updatepb.Input{Args: payloads.EncodeString("update-request-payload")}, Meta: &updatepb.Meta{UpdateId: "update-2"}},
+			WorkflowExecutionUpdateAcceptedEventAttributes: historypb.WorkflowExecutionUpdateAcceptedEventAttributes_builder{
+				AcceptedRequest:    updatepb.Request_builder{Input: updatepb.Input_builder{Args: payloads.EncodeString("update-request-payload")}.Build(), Meta: updatepb.Meta_builder{UpdateId: "update-2"}.Build()}.Build(),
 				ProtocolInstanceId: "update-2",
-			}},
-		},
+			}.Build(),
+		}.Build(),
 	} {
 
 		msCurrent := historyi.NewMockMutableState(s.controller)
@@ -213,7 +207,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_Update() {
 		updateRegistry := update.NewRegistry(msCurrent)
 		msCurrent.EXPECT().IsWorkflowExecutionRunning().Return(true).Times(2)
 		msCurrent.EXPECT().GetExecutionInfo().Return(execution).AnyTimes()
-		switch event.EventType {
+		switch event.GetEventType() {
 		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED:
 			attr := event.GetWorkflowExecutionUpdateAdmittedEventAttributes()
 			msCurrent.EXPECT().AddWorkflowExecutionUpdateAdmittedEvent(
@@ -235,7 +229,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_Update() {
 		msCurrent.EXPECT().IsResourceDuplicated(dedupResource).Return(false)
 		msCurrent.EXPECT().UpdateDuplicatedResource(dedupResource)
 		events := []*historypb.HistoryEvent{
-			{EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED},
+			historypb.HistoryEvent_builder{EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED}.Build(),
 			event,
 		}
 		appliedEvent, err := s.nDCReapplication.ReapplyEvents(context.Background(), msCurrent, updateRegistry, events, runID)
@@ -246,15 +240,15 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_Update() {
 
 func (s *nDCEventReapplicationSuite) TestReapplyEvents_Noop() {
 	runID := uuid.NewString()
-	event := &historypb.HistoryEvent{
+	event := historypb.HistoryEvent_builder{
 		EventId:   1,
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
-		Attributes: &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{
+		WorkflowExecutionSignaledEventAttributes: historypb.WorkflowExecutionSignaledEventAttributes_builder{
 			Identity:   "test",
 			SignalName: "signal",
 			Input:      payloads.EncodeBytes([]byte{}),
-		}},
-	}
+		}.Build(),
+	}.Build()
 
 	msCurrent := historyi.NewMockMutableState(s.controller)
 	msCurrent.EXPECT().VisitUpdates(gomock.Any()).Return()
@@ -265,7 +259,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_Noop() {
 	msCurrent.EXPECT().IsWorkflowExecutionRunning().Return(true)
 	msCurrent.EXPECT().HSM().Return(s.hsmNode).AnyTimes()
 	events := []*historypb.HistoryEvent{
-		{EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED},
+		historypb.HistoryEvent_builder{EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED}.Build(),
 		event,
 	}
 	appliedEvent, err := s.nDCReapplication.ReapplyEvents(context.Background(), msCurrent, updateRegistry, events, runID)
@@ -275,29 +269,29 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_Noop() {
 
 func (s *nDCEventReapplicationSuite) TestReapplyEvents_PartialAppliedEvent() {
 	runID := uuid.NewString()
-	execution := &persistencespb.WorkflowExecutionInfo{
+	execution := persistencespb.WorkflowExecutionInfo_builder{
 		NamespaceId: uuid.NewString(),
-	}
-	event1 := &historypb.HistoryEvent{
+	}.Build()
+	event1 := historypb.HistoryEvent_builder{
 		EventId:   1,
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
-		Attributes: &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{
+		WorkflowExecutionSignaledEventAttributes: historypb.WorkflowExecutionSignaledEventAttributes_builder{
 			Identity:   "test",
 			SignalName: "signal",
 			Input:      payloads.EncodeBytes([]byte{}),
-			Header:     &commonpb.Header{Fields: map[string]*commonpb.Payload{"myheader": {Data: []byte("myheader")}}},
-		}},
-	}
-	event2 := &historypb.HistoryEvent{
+			Header:     commonpb.Header_builder{Fields: map[string]*commonpb.Payload{"myheader": commonpb.Payload_builder{Data: []byte("myheader")}.Build()}}.Build(),
+		}.Build(),
+	}.Build()
+	event2 := historypb.HistoryEvent_builder{
 		EventId:   2,
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
-		Attributes: &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{
+		WorkflowExecutionSignaledEventAttributes: historypb.WorkflowExecutionSignaledEventAttributes_builder{
 			Identity:   "test",
 			SignalName: "signal",
 			Input:      payloads.EncodeBytes([]byte{}),
-			Header:     &commonpb.Header{Fields: map[string]*commonpb.Payload{"myheader": {Data: []byte("myheader")}}},
-		}},
-	}
+			Header:     commonpb.Header_builder{Fields: map[string]*commonpb.Payload{"myheader": commonpb.Payload_builder{Data: []byte("myheader")}.Build()}}.Build(),
+		}.Build(),
+	}.Build()
 	attr1 := event1.GetWorkflowExecutionSignaledEventAttributes()
 
 	msCurrent := historyi.NewMockMutableState(s.controller)
@@ -311,7 +305,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_PartialAppliedEvent() {
 		attr1.GetInput(),
 		attr1.GetIdentity(),
 		attr1.GetHeader(),
-		event1.Links,
+		event1.GetLinks(),
 	).Return(event1, nil)
 	msCurrent.EXPECT().IsWorkflowPendingOnWorkflowTaskBackoff().Return(true)
 	dedupResource1 := definition.NewEventReappliedID(runID, event1.GetEventId(), event1.GetVersion())
@@ -321,7 +315,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_PartialAppliedEvent() {
 	msCurrent.EXPECT().UpdateDuplicatedResource(dedupResource1)
 	msCurrent.EXPECT().HSM().Return(s.hsmNode).AnyTimes()
 	events := []*historypb.HistoryEvent{
-		{EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED},
+		historypb.HistoryEvent_builder{EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED}.Build(),
 		event1,
 		event2,
 	}
@@ -332,19 +326,19 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_PartialAppliedEvent() {
 
 func (s *nDCEventReapplicationSuite) TestReapplyEvents_Error() {
 	runID := uuid.NewString()
-	execution := &persistencespb.WorkflowExecutionInfo{
+	execution := persistencespb.WorkflowExecutionInfo_builder{
 		NamespaceId: uuid.NewString(),
-	}
-	event := &historypb.HistoryEvent{
+	}.Build()
+	event := historypb.HistoryEvent_builder{
 		EventId:   1,
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
-		Attributes: &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{
+		WorkflowExecutionSignaledEventAttributes: historypb.WorkflowExecutionSignaledEventAttributes_builder{
 			Identity:   "test",
 			SignalName: "signal",
 			Input:      payloads.EncodeBytes([]byte{}),
-			Header:     &commonpb.Header{Fields: map[string]*commonpb.Payload{"myheader": {Data: []byte("myheader")}}},
-		}},
-	}
+			Header:     commonpb.Header_builder{Fields: map[string]*commonpb.Payload{"myheader": commonpb.Payload_builder{Data: []byte("myheader")}.Build()}}.Build(),
+		}.Build(),
+	}.Build()
 	attr := event.GetWorkflowExecutionSignaledEventAttributes()
 
 	msCurrent := historyi.NewMockMutableState(s.controller)
@@ -358,13 +352,13 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_Error() {
 		attr.GetInput(),
 		attr.GetIdentity(),
 		attr.GetHeader(),
-		event.Links,
+		event.GetLinks(),
 	).Return(nil, fmt.Errorf("test"))
 	dedupResource := definition.NewEventReappliedID(runID, event.GetEventId(), event.GetVersion())
 	msCurrent.EXPECT().IsResourceDuplicated(dedupResource).Return(false)
 	msCurrent.EXPECT().HSM().Return(s.hsmNode).AnyTimes()
 	events := []*historypb.HistoryEvent{
-		{EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED},
+		historypb.HistoryEvent_builder{EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED}.Build(),
 		event,
 	}
 	appliedEvent, err := s.nDCReapplication.ReapplyEvents(context.Background(), msCurrent, updateRegistry, events, runID)
@@ -374,18 +368,18 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_Error() {
 
 func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_Termination() {
 	runID := uuid.NewString()
-	execution := &persistencespb.WorkflowExecutionInfo{
+	execution := persistencespb.WorkflowExecutionInfo_builder{
 		NamespaceId: uuid.NewString(),
-	}
-	event := &historypb.HistoryEvent{
+	}.Build()
+	event := historypb.HistoryEvent_builder{
 		EventId:   1,
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED,
-		Attributes: &historypb.HistoryEvent_WorkflowExecutionTerminatedEventAttributes{WorkflowExecutionTerminatedEventAttributes: &historypb.WorkflowExecutionTerminatedEventAttributes{
+		WorkflowExecutionTerminatedEventAttributes: historypb.WorkflowExecutionTerminatedEventAttributes_builder{
 			Reason:   "test",
 			Details:  payloads.EncodeBytes([]byte{}),
 			Identity: "test",
-		}},
-	}
+		}.Build(),
+	}.Build()
 	msCurrent := historyi.NewMockMutableState(s.controller)
 	msCurrent.EXPECT().VisitUpdates(gomock.Any()).Return()
 	msCurrent.EXPECT().GetCurrentVersion().Return(int64(0))
@@ -410,7 +404,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_Termination(
 		nil,
 	).Return(nil, nil)
 	events := []*historypb.HistoryEvent{
-		{EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED},
+		historypb.HistoryEvent_builder{EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED}.Build(),
 		event,
 	}
 	appliedEvent, err := s.nDCReapplication.ReapplyEvents(context.Background(), msCurrent, updateRegistry, events, runID)
@@ -420,30 +414,28 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_Termination(
 
 func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_NoPendingWorkflowTask() {
 	runID := uuid.NewString()
-	execution := &persistencespb.WorkflowExecutionInfo{
+	execution := persistencespb.WorkflowExecutionInfo_builder{
 		NamespaceId: uuid.NewString(),
-	}
-	event := &historypb.HistoryEvent{
+	}.Build()
+	event := historypb.HistoryEvent_builder{
 		EventId:   1,
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
-		Attributes: &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{
+		WorkflowExecutionSignaledEventAttributes: historypb.WorkflowExecutionSignaledEventAttributes_builder{
 			Identity:   "test",
 			SignalName: "signal",
 			Input:      payloads.EncodeBytes([]byte{}),
-			Header:     &commonpb.Header{Fields: map[string]*commonpb.Payload{"myheader": {Data: []byte("myheader")}}},
-		}},
+			Header:     commonpb.Header_builder{Fields: map[string]*commonpb.Payload{"myheader": commonpb.Payload_builder{Data: []byte("myheader")}.Build()}}.Build(),
+		}.Build(),
 		Links: []*commonpb.Link{
-			{
-				Variant: &commonpb.Link_WorkflowEvent_{
-					WorkflowEvent: &commonpb.Link_WorkflowEvent{
-						Namespace:  "whatever",
-						WorkflowId: "abc",
-						RunId:      uuid.NewString(),
-					},
-				},
-			},
+			commonpb.Link_builder{
+				WorkflowEvent: commonpb.Link_WorkflowEvent_builder{
+					Namespace:  "whatever",
+					WorkflowId: "abc",
+					RunId:      uuid.NewString(),
+				}.Build(),
+			}.Build(),
 		},
-	}
+	}.Build()
 	attr := event.GetWorkflowExecutionSignaledEventAttributes()
 
 	msCurrent := historyi.NewMockMutableState(s.controller)
@@ -457,7 +449,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_NoPendingWor
 		attr.GetInput(),
 		attr.GetIdentity(),
 		attr.GetHeader(),
-		event.Links,
+		event.GetLinks(),
 	).Return(event, nil)
 	msCurrent.EXPECT().HSM().Return(s.hsmNode).AnyTimes()
 	msCurrent.EXPECT().IsWorkflowPendingOnWorkflowTaskBackoff().Return(false)
@@ -471,7 +463,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_NoPendingWor
 		enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
 	).Return(nil, nil)
 	events := []*historypb.HistoryEvent{
-		{EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED},
+		historypb.HistoryEvent_builder{EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED}.Build(),
 		event,
 	}
 	appliedEvent, err := s.nDCReapplication.ReapplyEvents(context.Background(), msCurrent, updateRegistry, events, runID)
@@ -484,19 +476,19 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_NoPendingWor
 
 func (s *nDCEventReapplicationSuite) TestReapplyEvents_PausedWorkflow_NoWorkflowTaskScheduled() {
 	runID := uuid.NewString()
-	execution := &persistencespb.WorkflowExecutionInfo{
+	execution := persistencespb.WorkflowExecutionInfo_builder{
 		NamespaceId: uuid.NewString(),
-	}
-	event := &historypb.HistoryEvent{
+	}.Build()
+	event := historypb.HistoryEvent_builder{
 		EventId:   1,
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
-		Attributes: &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{
+		WorkflowExecutionSignaledEventAttributes: historypb.WorkflowExecutionSignaledEventAttributes_builder{
 			Identity:   "test",
 			SignalName: "signal",
 			Input:      payloads.EncodeBytes([]byte{}),
-			Header:     &commonpb.Header{Fields: map[string]*commonpb.Payload{"myheader": {Data: []byte("myheader")}}},
-		}},
-	}
+			Header:     commonpb.Header_builder{Fields: map[string]*commonpb.Payload{"myheader": commonpb.Payload_builder{Data: []byte("myheader")}.Build()}}.Build(),
+		}.Build(),
+	}.Build()
 	attr := event.GetWorkflowExecutionSignaledEventAttributes()
 
 	msCurrent := historyi.NewMockMutableState(s.controller)
@@ -510,7 +502,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_PausedWorkflow_NoWorkflow
 		attr.GetInput(),
 		attr.GetIdentity(),
 		attr.GetHeader(),
-		event.Links,
+		event.GetLinks(),
 	).Return(event, nil)
 	msCurrent.EXPECT().HSM().Return(s.hsmNode).AnyTimes()
 	msCurrent.EXPECT().IsWorkflowPendingOnWorkflowTaskBackoff().Return(false)
@@ -521,7 +513,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_PausedWorkflow_NoWorkflow
 	// Workflow is paused, so AddWorkflowTaskScheduledEvent should NOT be called.
 	msCurrent.EXPECT().IsWorkflowExecutionStatusPaused().Return(true)
 	events := []*historypb.HistoryEvent{
-		{EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED},
+		historypb.HistoryEvent_builder{EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED}.Build(),
 		event,
 	}
 	appliedEvent, err := s.nDCReapplication.ReapplyEvents(context.Background(), msCurrent, updateRegistry, events, runID)

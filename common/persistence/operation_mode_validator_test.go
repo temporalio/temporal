@@ -381,7 +381,7 @@ func (s *validateOperationWorkflowModeStateSuite) newTestWorkflowSnapshot(
 ) WorkflowSnapshot {
 	return WorkflowSnapshot{
 		ExecutionInfo:  &persistencespb.WorkflowExecutionInfo{},
-		ExecutionState: &persistencespb.WorkflowExecutionState{State: state},
+		ExecutionState: persistencespb.WorkflowExecutionState_builder{State: state}.Build(),
 	}
 }
 
@@ -390,6 +390,6 @@ func (s *validateOperationWorkflowModeStateSuite) newTestWorkflowMutation(
 ) WorkflowMutation {
 	return WorkflowMutation{
 		ExecutionInfo:  &persistencespb.WorkflowExecutionInfo{},
-		ExecutionState: &persistencespb.WorkflowExecutionState{State: state},
+		ExecutionState: persistencespb.WorkflowExecutionState_builder{State: state}.Build(),
 	}
 }

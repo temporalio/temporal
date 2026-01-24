@@ -61,10 +61,10 @@ func (s *contextSuite) SetupTest() {
 	s.timeSource = clock.NewEventTimeSource()
 	shardContext := NewTestContextWithTimeSource(
 		s.controller,
-		&persistencespb.ShardInfo{
+		persistencespb.ShardInfo_builder{
 			ShardId: s.shardID,
 			RangeId: 1,
-		},
+		}.Build(),
 		tests.NewDynamicConfig(),
 		s.timeSource,
 	)
@@ -425,18 +425,18 @@ func (s *contextSuite) TestHandoverNamespace() {
 	s.mockHistoryEngine.EXPECT().NotifyNewTasks(gomock.Any()).Times(1)
 
 	namespaceEntry := namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Id: tests.NamespaceID.String(), Name: tests.Namespace.String()},
-		&persistencespb.NamespaceConfig{
+		persistencespb.NamespaceInfo_builder{Id: tests.NamespaceID.String(), Name: tests.Namespace.String()}.Build(),
+		persistencespb.NamespaceConfig_builder{
 			Retention: timestamp.DurationFromDays(1),
-		},
-		&persistencespb.NamespaceReplicationConfig{
+		}.Build(),
+		persistencespb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []string{
 				cluster.TestCurrentClusterName,
 				cluster.TestAlternativeClusterName,
 			},
 			State: enumspb.REPLICATION_STATE_HANDOVER,
-		},
+		}.Build(),
 		tests.Version,
 	)
 	s.mockShard.UpdateHandoverNamespace(namespaceEntry, false)
@@ -447,7 +447,7 @@ func (s *contextSuite) TestHandoverNamespace() {
 	s.True(ok)
 	s.Equal(
 		s.mockShard.taskKeyManager.getExclusiveReaderHighWatermark(tasks.CategoryReplication).TaskID-1,
-		handoverInfo.HandoverReplicationTaskId,
+		handoverInfo.GetHandoverReplicationTaskId(),
 	)
 
 	// make shard status invalid
@@ -467,7 +467,7 @@ func (s *contextSuite) TestHandoverNamespace() {
 	s.True(ok)
 	s.Equal(
 		s.mockShard.taskKeyManager.getExclusiveReaderHighWatermark(tasks.CategoryReplication).TaskID-1,
-		handoverInfo.HandoverReplicationTaskId,
+		handoverInfo.GetHandoverReplicationTaskId(),
 	)
 
 	// delete namespace
@@ -509,10 +509,10 @@ func (s *contextSuite) TestUpdateGetRemoteClusterInfo_Legacy_8_4() {
 	remoteAckStatus, _, err := s.mockShard.GetReplicationStatus([]string{cluster.TestAlternativeClusterName})
 	s.NoError(err)
 	s.Equal(map[string]*historyservice.ShardReplicationStatusPerCluster{
-		cluster.TestAlternativeClusterName: {
+		cluster.TestAlternativeClusterName: historyservice.ShardReplicationStatusPerCluster_builder{
 			AckedTaskId:             ackTaskID,
 			AckedTaskVisibilityTime: timestamppb.New(ackTimestamp),
-		},
+		}.Build(),
 	}, remoteAckStatus)
 }
 
@@ -546,10 +546,10 @@ func (s *contextSuite) TestUpdateGetRemoteClusterInfo_Legacy_4_8() {
 	remoteAckStatus, _, err := s.mockShard.GetReplicationStatus([]string{cluster.TestAlternativeClusterName})
 	s.NoError(err)
 	s.Equal(map[string]*historyservice.ShardReplicationStatusPerCluster{
-		cluster.TestAlternativeClusterName: {
+		cluster.TestAlternativeClusterName: historyservice.ShardReplicationStatusPerCluster_builder{
 			AckedTaskId:             ackTaskID,
 			AckedTaskVisibilityTime: timestamppb.New(ackTimestamp),
-		},
+		}.Build(),
 	}, remoteAckStatus)
 }
 
@@ -587,10 +587,10 @@ func (s *contextSuite) TestUpdateGetRemoteReaderInfo_8_4() {
 	remoteAckStatus, _, err := s.mockShard.GetReplicationStatus([]string{cluster.TestAlternativeClusterName})
 	s.NoError(err)
 	s.Equal(map[string]*historyservice.ShardReplicationStatusPerCluster{
-		cluster.TestAlternativeClusterName: {
+		cluster.TestAlternativeClusterName: historyservice.ShardReplicationStatusPerCluster_builder{
 			AckedTaskId:             ackTaskID,
 			AckedTaskVisibilityTime: timestamppb.New(ackTimestamp),
-		},
+		}.Build(),
 	}, remoteAckStatus)
 }
 
@@ -647,10 +647,10 @@ func (s *contextSuite) TestUpdateGetRemoteReaderInfo_4_8() {
 	remoteAckStatus, _, err := s.mockShard.GetReplicationStatus([]string{cluster.TestAlternativeClusterName})
 	s.NoError(err)
 	s.Equal(map[string]*historyservice.ShardReplicationStatusPerCluster{
-		cluster.TestAlternativeClusterName: {
+		cluster.TestAlternativeClusterName: historyservice.ShardReplicationStatusPerCluster_builder{
 			AckedTaskId:             ackTaskID,
 			AckedTaskVisibilityTime: timestamppb.New(ackTimestamp),
-		},
+		}.Build(),
 	}, remoteAckStatus)
 }
 

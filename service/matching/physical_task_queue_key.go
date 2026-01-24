@@ -159,10 +159,10 @@ func (v PhysicalTaskQueueVersion) IsVersioned() bool {
 
 func (v PhysicalTaskQueueVersion) Deployment() *deploymentpb.Deployment {
 	if len(v.deploymentSeriesName) > 0 {
-		return &deploymentpb.Deployment{
+		return deploymentpb.Deployment_builder{
 			SeriesName: v.deploymentSeriesName,
 			BuildId:    v.buildId,
-		}
+		}.Build()
 	}
 	return nil
 }
@@ -171,10 +171,10 @@ func (v PhysicalTaskQueueVersion) Deployment() *deploymentpb.Deployment {
 // (different from the public api WorkerDeploymentVersion).
 func (v PhysicalTaskQueueVersion) WorkerDeploymentVersionS() *deploymentspb.WorkerDeploymentVersion {
 	if len(v.deploymentSeriesName) > 0 {
-		return &deploymentspb.WorkerDeploymentVersion{
+		return deploymentspb.WorkerDeploymentVersion_builder{
 			BuildId:        v.buildId,
 			DeploymentName: v.deploymentSeriesName,
-		}
+		}.Build()
 	}
 	return nil
 }

@@ -29,8 +29,8 @@ func RandomShardInfo(
 ) *persistencespb.ShardInfo {
 	var shardInfo persistencespb.ShardInfo
 	_ = fakedata.FakeStruct(&shardInfo)
-	shardInfo.ShardId = shardID
-	shardInfo.RangeId = rangeID
+	shardInfo.SetShardId(shardID)
+	shardInfo.SetRangeId(rangeID)
 	return &shardInfo
 }
 
@@ -172,14 +172,14 @@ func RandomChasmNode() *persistencespb.ChasmNode {
 	var versionedTransition persistencespb.VersionedTransition
 	_ = fakedata.FakeStruct(&versionedTransition)
 
-	return &persistencespb.ChasmNode{
-		Metadata: &persistencespb.ChasmNodeMetadata{
+	return persistencespb.ChasmNode_builder{
+		Metadata: persistencespb.ChasmNodeMetadata_builder{
 			InitialVersionedTransition:    &versionedTransition,
 			LastUpdateVersionedTransition: &versionedTransition,
-			Attributes:                    &persistencespb.ChasmNodeMetadata_DataAttributes{},
-		},
+			DataAttributes:                &persistencespb.ChasmDataAttributes{},
+		}.Build(),
 		Data: blob,
-	}
+	}.Build()
 }
 
 func RandomExecutionInfo(
@@ -191,18 +191,18 @@ func RandomExecutionInfo(
 ) *persistencespb.WorkflowExecutionInfo {
 	var executionInfo persistencespb.WorkflowExecutionInfo
 	_ = fakedata.FakeStruct(&executionInfo)
-	executionInfo.NamespaceId = namespaceID
-	executionInfo.WorkflowId = workflowID
+	executionInfo.SetNamespaceId(namespaceID)
+	executionInfo.SetWorkflowId(workflowID)
 
 	if branchToken != nil {
-		executionInfo.VersionHistories = RandomVersionHistory(eventID, lastWriteVersion, branchToken)
+		executionInfo.SetVersionHistories(RandomVersionHistory(eventID, lastWriteVersion, branchToken))
 	} else {
-		executionInfo.VersionHistories = versionhistory.NewVersionHistories(&historyspb.VersionHistory{})
+		executionInfo.SetVersionHistories(versionhistory.NewVersionHistories(&historyspb.VersionHistory{}))
 	}
-	executionInfo.TransitionHistory = []*persistencespb.VersionedTransition{{
+	executionInfo.SetTransitionHistory([]*persistencespb.VersionedTransition{persistencespb.VersionedTransition_builder{
 		NamespaceFailoverVersion: lastWriteVersion,
 		TransitionCount:          rand.Int63(),
-	}}
+	}.Build()})
 	return &executionInfo
 }
 
@@ -213,26 +213,26 @@ func RandomExecutionState(
 	lastWriteVersion int64,
 ) *persistencespb.WorkflowExecutionState {
 	createRequestID := uuid.NewString()
-	return &persistencespb.WorkflowExecutionState{
+	return persistencespb.WorkflowExecutionState_builder{
 		CreateRequestId: createRequestID,
 		RunId:           runID,
 		State:           state,
 		Status:          status,
-		LastUpdateVersionedTransition: &persistencespb.VersionedTransition{
+		LastUpdateVersionedTransition: persistencespb.VersionedTransition_builder{
 			NamespaceFailoverVersion: lastWriteVersion,
 			TransitionCount:          rand.Int63(),
-		},
+		}.Build(),
 		RequestIds: map[string]*persistencespb.RequestIDInfo{
-			createRequestID: {
+			createRequestID: persistencespb.RequestIDInfo_builder{
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 				EventId:   common.FirstEventID,
-			},
-			uuid.NewString(): {
+			}.Build(),
+			uuid.NewString(): persistencespb.RequestIDInfo_builder{
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
 				EventId:   common.BufferedEventID,
-			},
+			}.Build(),
 		},
-	}
+	}.Build()
 }
 
 func RandomInt64ActivityInfoMap() map[int64]*persistencespb.ActivityInfo {
@@ -298,20 +298,20 @@ func RandomSignalInfo() *persistencespb.SignalInfo {
 func RandomHistoryEvent(eventID int64, version int64) *historypb.HistoryEvent {
 	var historyEvent historypb.HistoryEvent
 	_ = fakedata.FakeStruct(&historyEvent)
-	historyEvent.EventId = eventID
-	historyEvent.Version = version
+	historyEvent.SetEventId(eventID)
+	historyEvent.SetVersion(version)
 	return &historyEvent
 }
 
 func RandomResetPoints() *workflowpb.ResetPoints {
-	return &workflowpb.ResetPoints{Points: []*workflowpb.ResetPointInfo{{
+	return workflowpb.ResetPoints_builder{Points: []*workflowpb.ResetPointInfo{workflowpb.ResetPointInfo_builder{
 		BinaryChecksum:               uuid.New().String(),
 		RunId:                        uuid.New().String(),
 		FirstWorkflowTaskCompletedId: rand.Int63(),
 		CreateTime:                   RandomTime(),
 		ExpireTime:                   RandomTime(),
 		Resettable:                   rand.Int31()%2 == 0,
-	}}}
+	}.Build()}}.Build()
 }
 
 func RandomStringPayloadMap() map[string]*commonpb.Payload {
@@ -331,16 +331,16 @@ func RandomVersionHistory(
 	lastWriteVersion int64,
 	branchToken []byte,
 ) *historyspb.VersionHistories {
-	return &historyspb.VersionHistories{
+	return historyspb.VersionHistories_builder{
 		CurrentVersionHistoryIndex: 0,
-		Histories: []*historyspb.VersionHistory{{
+		Histories: []*historyspb.VersionHistory{historyspb.VersionHistory_builder{
 			BranchToken: branchToken,
-			Items: []*historyspb.VersionHistoryItem{{
+			Items: []*historyspb.VersionHistoryItem{historyspb.VersionHistoryItem_builder{
 				EventId: eventID,
 				Version: lastWriteVersion,
-			}},
-		}},
-	}
+			}.Build()},
+		}.Build()},
+	}.Build()
 }
 
 func RandomBranchToken(

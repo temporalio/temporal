@@ -26,9 +26,9 @@ func Invoke(
 		ctx,
 		nil,
 		definition.NewWorkflowKey(
-			request.NamespaceId,
-			request.WorkflowExecution.WorkflowId,
-			request.WorkflowExecution.RunId,
+			request.GetNamespaceId(),
+			request.GetWorkflowExecution().GetWorkflowId(),
+			request.GetWorkflowExecution().GetRunId(),
 		),
 		locks.PriorityLow,
 	)
@@ -87,10 +87,10 @@ func Invoke(
 	if err := workflowDeleteManager.AddDeleteWorkflowExecutionTask(
 		ctx,
 		namespace.ID(request.GetNamespaceId()),
-		&commonpb.WorkflowExecution{
+		commonpb.WorkflowExecution_builder{
 			WorkflowId: request.GetWorkflowExecution().GetWorkflowId(),
 			RunId:      request.GetWorkflowExecution().GetRunId(),
-		},
+		}.Build(),
 		workflowLease.GetMutableState(),
 	); err != nil {
 		return nil, err

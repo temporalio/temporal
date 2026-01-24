@@ -104,11 +104,11 @@ func ClientProviderFactory(
 		var url string
 		var httpClient *http.Client
 		httpCaller := httpClient.Do
-		switch variant := entry.Endpoint.Spec.Target.Variant.(type) {
-		case *persistencespb.NexusEndpointTarget_External_:
-			url = variant.External.GetUrl()
+		switch entry.GetEndpoint().GetSpec().GetTarget().WhichVariant() {
+		case persistencespb.NexusEndpointTarget_External_case:
+			url = entry.GetEndpoint().GetSpec().GetTarget().GetExternal().GetUrl()
 			var err error
-			httpClient, err = m.Get(clientProviderCacheKey{namespaceID, entry.Id, url})
+			httpClient, err = m.Get(clientProviderCacheKey{namespaceID, entry.GetId(), url})
 			if err != nil {
 				return nil, err
 			}
@@ -119,8 +119,8 @@ func ClientProviderFactory(
 					return resp, callErr
 				}
 			}
-		case *persistencespb.NexusEndpointTarget_Worker_:
-			url = cl.BaseURL() + "/" + commonnexus.RouteDispatchNexusTaskByEndpoint.Path(entry.Id)
+		case persistencespb.NexusEndpointTarget_Worker_case:
+			url = cl.BaseURL() + "/" + commonnexus.RouteDispatchNexusTaskByEndpoint.Path(entry.GetId())
 			httpClient = &cl.Client
 			if clusterID != "" {
 				httpCaller = func(r *http.Request) (*http.Response, error) {

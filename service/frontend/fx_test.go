@@ -636,9 +636,9 @@ func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
 			for i := 0; i < tc.numRequests; i++ {
 				_, err = client.StartWorkflowExecution(
 					context.Background(),
-					&workflowservice.StartWorkflowExecutionRequest{
+					workflowservice.StartWorkflowExecutionRequest_builder{
 						Namespace: namespaceName,
-					},
+					}.Build(),
 					grpc.Header(&header),
 				)
 				if err != nil {
@@ -649,9 +649,9 @@ func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
 			for i := 0; i < tc.numVisibilityRequests; i++ {
 				_, err = client.ListWorkflowExecutions(
 					context.Background(),
-					&workflowservice.ListWorkflowExecutionsRequest{
+					workflowservice.ListWorkflowExecutionsRequest_builder{
 						Namespace: namespaceName,
-					},
+					}.Build(),
 					grpc.Header(&header),
 				)
 				if err != nil {
@@ -662,9 +662,9 @@ func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
 			for i := 0; i < tc.numReplicationInducingRequests; i++ {
 				_, err = client.RegisterNamespace(
 					context.Background(),
-					&workflowservice.RegisterNamespaceRequest{
+					workflowservice.RegisterNamespaceRequest_builder{
 						Namespace: namespaceName,
-					},
+					}.Build(),
 					grpc.Header(&header),
 				)
 				if err != nil {
@@ -801,9 +801,9 @@ func TestNamespaceRateLimitMetrics(t *testing.T) {
 
 			_, _ = client.StartWorkflowExecution(
 				context.Background(),
-				&workflowservice.StartWorkflowExecutionRequest{
+				workflowservice.StartWorkflowExecutionRequest_builder{
 					Namespace: testNS,
-				},
+				}.Build(),
 			)
 
 			// Check if limits are emitted by metrics handler

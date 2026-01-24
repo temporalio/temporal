@@ -25,15 +25,13 @@ func TestLinksTestSuite(t *testing.T) {
 }
 
 var links = []*commonpb.Link{
-	{
-		Variant: &commonpb.Link_WorkflowEvent_{
-			WorkflowEvent: &commonpb.Link_WorkflowEvent{
-				Namespace:  "dont-care",
-				WorkflowId: "whatever",
-				RunId:      uuid.NewString(),
-			},
-		},
-	},
+	commonpb.Link_builder{
+		WorkflowEvent: commonpb.Link_WorkflowEvent_builder{
+			Namespace:  "dont-care",
+			WorkflowId: "whatever",
+			RunId:      uuid.NewString(),
+		}.Build(),
+	}.Build(),
 }
 
 func (s *LinksSuite) TestTerminateWorkflow_LinksAttachedToEvent() {
@@ -49,20 +47,20 @@ func (s *LinksSuite) TestTerminateWorkflow_LinksAttachedToEvent() {
 	s.NoError(err)
 
 	// TODO(bergundy): Use SdkClient if and when it exposes links on TerminateWorkflow.
-	_, err = s.FrontendClient().TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
+	_, err = s.FrontendClient().TerminateWorkflowExecution(ctx, workflowservice.TerminateWorkflowExecutionRequest_builder{
 		Namespace: s.Namespace().String(),
-		WorkflowExecution: &commonpb.WorkflowExecution{
+		WorkflowExecution: commonpb.WorkflowExecution_builder{
 			WorkflowId: run.GetID(),
-		},
+		}.Build(),
 		Reason: "test",
 		Links:  links,
-	})
+	}.Build())
 	s.NoError(err)
 
 	history := s.SdkClient().GetWorkflowHistory(ctx, run.GetID(), "", false, enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT)
 	event, err := history.Next()
 	s.NoError(err)
-	protorequire.ProtoSliceEqual(s.T(), links, event.Links)
+	protorequire.ProtoSliceEqual(s.T(), links, event.GetLinks())
 }
 
 func (s *LinksSuite) TestRequestCancelWorkflow_LinksAttachedToEvent() {
@@ -78,14 +76,14 @@ func (s *LinksSuite) TestRequestCancelWorkflow_LinksAttachedToEvent() {
 	s.NoError(err)
 
 	// TODO(bergundy): Use SdkClient if and when it exposes links on CancelWorkflow.
-	_, err = s.FrontendClient().RequestCancelWorkflowExecution(ctx, &workflowservice.RequestCancelWorkflowExecutionRequest{
+	_, err = s.FrontendClient().RequestCancelWorkflowExecution(ctx, workflowservice.RequestCancelWorkflowExecutionRequest_builder{
 		Namespace: s.Namespace().String(),
-		WorkflowExecution: &commonpb.WorkflowExecution{
+		WorkflowExecution: commonpb.WorkflowExecution_builder{
 			WorkflowId: run.GetID(),
-		},
+		}.Build(),
 		Reason: "test",
 		Links:  links,
-	})
+	}.Build())
 	s.NoError(err)
 
 	history := s.SdkClient().GetWorkflowHistory(ctx, run.GetID(), "", false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
@@ -93,11 +91,11 @@ func (s *LinksSuite) TestRequestCancelWorkflow_LinksAttachedToEvent() {
 	for history.HasNext() {
 		event, err := history.Next()
 		s.NoError(err)
-		if event.EventType != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCEL_REQUESTED {
+		if event.GetEventType() != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCEL_REQUESTED {
 			continue
 		}
 		foundEvent = true
-		protorequire.ProtoSliceEqual(s.T(), links, event.Links)
+		protorequire.ProtoSliceEqual(s.T(), links, event.GetLinks())
 	}
 	s.True(foundEvent)
 }
@@ -115,16 +113,16 @@ func (s *LinksSuite) TestSignalWorkflowExecution_LinksAttachedToEvent() {
 	s.NoError(err)
 
 	// TODO(bergundy): Use SdkClient if and when it exposes links on SignalWorkflow.
-	_, err = s.FrontendClient().SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
+	_, err = s.FrontendClient().SignalWorkflowExecution(ctx, workflowservice.SignalWorkflowExecutionRequest_builder{
 		Namespace: s.Namespace().String(),
-		WorkflowExecution: &commonpb.WorkflowExecution{
+		WorkflowExecution: commonpb.WorkflowExecution_builder{
 			WorkflowId: run.GetID(),
-		},
+		}.Build(),
 		SignalName: "dont-care",
 		Identity:   "test",
 		RequestId:  uuid.NewString(),
 		Links:      links,
-	})
+	}.Build())
 	s.NoError(err)
 
 	history := s.SdkClient().GetWorkflowHistory(ctx, run.GetID(), "", false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
@@ -132,11 +130,11 @@ func (s *LinksSuite) TestSignalWorkflowExecution_LinksAttachedToEvent() {
 	for history.HasNext() {
 		event, err := history.Next()
 		s.NoError(err)
-		if event.EventType != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
+		if event.GetEventType() != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
 			continue
 		}
 		foundEvent = true
-		protorequire.ProtoSliceEqual(s.T(), links, event.Links)
+		protorequire.ProtoSliceEqual(s.T(), links, event.GetLinks())
 	}
 	s.True(foundEvent)
 }
@@ -148,25 +146,25 @@ func (s *LinksSuite) TestSignalWithStartWorkflowExecution_LinksAttachedToRelevan
 	workflowID := testcore.RandomizeStr(s.T().Name())
 
 	// TODO(bergundy): Use SdkClient if and when it exposes links on SignalWithStartWorkflow.
-	request := &workflowservice.SignalWithStartWorkflowExecutionRequest{
+	request := workflowservice.SignalWithStartWorkflowExecutionRequest_builder{
 		Namespace:  s.Namespace().String(),
 		WorkflowId: workflowID,
-		WorkflowType: &commonpb.WorkflowType{
+		WorkflowType: commonpb.WorkflowType_builder{
 			Name: "dont-care",
-		},
+		}.Build(),
 		SignalName: "dont-care",
 		Identity:   "test",
-		TaskQueue: &taskqueuepb.TaskQueue{
+		TaskQueue: taskqueuepb.TaskQueue_builder{
 			Name: "dont-care",
-		},
+		}.Build(),
 		RequestId: uuid.NewString(),
 		Links:     links,
-	}
+	}.Build()
 	_, err := s.FrontendClient().SignalWithStartWorkflowExecution(ctx, request)
 	s.NoError(err)
 
 	// Send a second request and verify that the new signal has links attached to it too.
-	request.RequestId = uuid.NewString()
+	request.SetRequestId(uuid.NewString())
 	_, err = s.FrontendClient().SignalWithStartWorkflowExecution(ctx, request)
 	s.NoError(err)
 
@@ -177,17 +175,17 @@ func (s *LinksSuite) TestSignalWithStartWorkflowExecution_LinksAttachedToRelevan
 	for history.HasNext() {
 		event, err := history.Next()
 		s.NoError(err)
-		if event.EventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
+		if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
 			if foundFirstSignal {
 				foundSecondSignal = true
 			} else {
 				foundFirstSignal = true
 			}
-			protorequire.ProtoSliceEqual(s.T(), links, event.Links)
+			protorequire.ProtoSliceEqual(s.T(), links, event.GetLinks())
 		}
-		if event.EventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
+		if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
 			foundStartEvent = true
-			protorequire.ProtoSliceEqual(s.T(), links, event.Links)
+			protorequire.ProtoSliceEqual(s.T(), links, event.GetLinks())
 		}
 	}
 	s.True(foundStartEvent)

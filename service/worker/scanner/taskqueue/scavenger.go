@@ -194,12 +194,12 @@ func (s *Scavenger) newTask(info *p.PersistedTaskQueueInfo) executor.Task {
 	return &executorTask{
 		TaskQueueKey: p.TaskQueueKey{
 			NamespaceID:   info.Data.GetNamespaceId(),
-			TaskQueueName: info.Data.Name,
-			TaskQueueType: info.Data.TaskType,
+			TaskQueueName: info.Data.GetName(),
+			TaskQueueType: info.Data.GetTaskType(),
 		},
 		taskQueueState: taskQueueState{
 			rangeID:     info.RangeID,
-			lastUpdated: info.Data.LastUpdateTime.AsTime(),
+			lastUpdated: info.Data.GetLastUpdateTime().AsTime(),
 		},
 		scvg: s,
 	}

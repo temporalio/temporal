@@ -34,12 +34,12 @@ func NewDefaultReplicationResolverFactory() ReplicationResolverFactory {
 	return func(detail *persistencespb.NamespaceDetail) ReplicationResolver {
 		// By convention, a namespace with non-zero failover version is a global namespace
 		// This can be overridden by WithGlobalFlag mutation if needed
-		isGlobal := detail.FailoverVersion != 0
+		isGlobal := detail.GetFailoverVersion() != 0
 		return &defaultReplicationResolver{
-			replicationConfig:           detail.ReplicationConfig,
+			replicationConfig:           detail.GetReplicationConfig(),
 			isGlobalNamespace:           isGlobal,
-			failoverVersion:             detail.FailoverVersion,
-			failoverNotificationVersion: detail.FailoverNotificationVersion,
+			failoverVersion:             detail.GetFailoverVersion(),
+			failoverNotificationVersion: detail.GetFailoverNotificationVersion(),
 		}
 	}
 }
@@ -48,7 +48,7 @@ func (r *defaultReplicationResolver) ActiveClusterName(businessID string) string
 	if r.replicationConfig == nil {
 		return ""
 	}
-	return r.replicationConfig.ActiveClusterName
+	return r.replicationConfig.GetActiveClusterName()
 }
 
 func (r *defaultReplicationResolver) ClusterNames(businessID string) []string {
@@ -56,8 +56,8 @@ func (r *defaultReplicationResolver) ClusterNames(businessID string) []string {
 		return nil
 	}
 	// copy slice to preserve immutability
-	out := make([]string, len(r.replicationConfig.Clusters))
-	copy(out, r.replicationConfig.Clusters)
+	out := make([]string, len(r.replicationConfig.GetClusters()))
+	copy(out, r.replicationConfig.GetClusters())
 	return out
 }
 
@@ -65,7 +65,7 @@ func (r *defaultReplicationResolver) ReplicationState() enumspb.ReplicationState
 	if r.replicationConfig == nil {
 		return enumspb.REPLICATION_STATE_UNSPECIFIED
 	}
-	return r.replicationConfig.State
+	return r.replicationConfig.GetState()
 }
 
 func (r *defaultReplicationResolver) IsGlobalNamespace() bool {
@@ -86,30 +86,30 @@ func (r *defaultReplicationResolver) SetGlobalFlag(isGlobal bool) {
 
 func (r *defaultReplicationResolver) SetActiveCluster(clusterName string) {
 	if r.replicationConfig != nil {
-		r.replicationConfig.ActiveClusterName = clusterName
+		r.replicationConfig.SetActiveClusterName(clusterName)
 	}
 }
 
 func (r *defaultReplicationResolver) PretendLocalNamespace(localClusterName string) {
 	r.isGlobalNamespace = false
-	r.replicationConfig = &persistencespb.NamespaceReplicationConfig{
+	r.replicationConfig = persistencespb.NamespaceReplicationConfig_builder{
 		ActiveClusterName: localClusterName,
 		Clusters:          []string{localClusterName},
-	}
+	}.Build()
 	r.failoverVersion = 0
 }
 
 func (r *defaultReplicationResolver) Clone() ReplicationResolver {
 	var clonedConfig *persistencespb.NamespaceReplicationConfig
 	if r.replicationConfig != nil {
-		clonedConfig = &persistencespb.NamespaceReplicationConfig{
-			ActiveClusterName: r.replicationConfig.ActiveClusterName,
-			State:             r.replicationConfig.State,
-		}
+		clonedConfig = persistencespb.NamespaceReplicationConfig_builder{
+			ActiveClusterName: r.replicationConfig.GetActiveClusterName(),
+			State:             r.replicationConfig.GetState(),
+		}.Build()
 		// Deep copy the clusters slice
-		if r.replicationConfig.Clusters != nil {
-			clonedConfig.Clusters = make([]string, len(r.replicationConfig.Clusters))
-			copy(clonedConfig.Clusters, r.replicationConfig.Clusters)
+		if r.replicationConfig.GetClusters() != nil {
+			clonedConfig.SetClusters(make([]string, len(r.replicationConfig.GetClusters())))
+			copy(clonedConfig.GetClusters(), r.replicationConfig.GetClusters())
 		}
 	}
 	return &defaultReplicationResolver{

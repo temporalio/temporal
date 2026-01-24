@@ -41,25 +41,25 @@ func TestNewClusterMetadataLoader(t *testing.T) {
 	metadataManager.EXPECT().ListClusterMetadata(gomock.Any(), gomock.Any()).Return(&persistence.ListClusterMetadataResponse{
 		ClusterMetadata: []*persistence.GetClusterMetadataResponse{
 			{
-				ClusterMetadata: &persistencespb.ClusterMetadata{
+				ClusterMetadata: persistencespb.ClusterMetadata_builder{
 					ClusterName:    "current_cluster",
 					ClusterAddress: "rpc_new",
 					HttpAddress:    "http_new",
-				},
+				}.Build(),
 			},
 			{
-				ClusterMetadata: &persistencespb.ClusterMetadata{
+				ClusterMetadata: persistencespb.ClusterMetadata_builder{
 					ClusterName:    "remote_cluster1",
 					ClusterAddress: "rpc_new",
 					HttpAddress:    "http_new",
-				},
+				}.Build(),
 			},
 			{
-				ClusterMetadata: &persistencespb.ClusterMetadata{
+				ClusterMetadata: persistencespb.ClusterMetadata_builder{
 					ClusterName:    "remote_cluster2",
 					ClusterAddress: "rpc_new",
 					HttpAddress:    "http_new",
-				},
+				}.Build(),
 			},
 		},
 	}, nil)

@@ -37,35 +37,35 @@ func (s *WorkflowVisibilityTestSuite) TestVisibility() {
 	tl := "functional-visibility-test-taskqueue"
 	identity := "worker1"
 
-	startRequest := &workflowservice.StartWorkflowExecutionRequest{
+	startRequest := workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id1,
-		WorkflowType:        &commonpb.WorkflowType{Name: wt},
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		WorkflowType:        commonpb.WorkflowType_builder{Name: wt}.Build(),
+		TaskQueue:           taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 		Input:               nil,
 		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
 		Identity:            identity,
-	}
+	}.Build()
 
 	startResponse, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), startRequest)
 	s.NoError(err0)
 
 	// Now complete one of the executions
 	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
-		return []*commandpb.Command{{
+		return []*commandpb.Command{commandpb.Command_builder{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+			CompleteWorkflowExecutionCommandAttributes: commandpb.CompleteWorkflowExecutionCommandAttributes_builder{
 				Result: payloads.EncodeString("Done"),
-			}},
-		}}, nil
+			}.Build(),
+		}.Build()}, nil
 	}
 
 	poller := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
 		Namespace:           s.Namespace().String(),
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		TaskQueue:           taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
 		ActivityTaskHandler: nil,
@@ -80,42 +80,42 @@ func (s *WorkflowVisibilityTestSuite) TestVisibility() {
 	var nextToken []byte
 	historyEventFilterType := enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT
 	for {
-		historyResponse, historyErr := s.FrontendClient().GetWorkflowExecutionHistory(testcore.NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-			Namespace: startRequest.Namespace,
-			Execution: &commonpb.WorkflowExecution{
-				WorkflowId: startRequest.WorkflowId,
-				RunId:      startResponse.RunId,
-			},
+		historyResponse, historyErr := s.FrontendClient().GetWorkflowExecutionHistory(testcore.NewContext(), workflowservice.GetWorkflowExecutionHistoryRequest_builder{
+			Namespace: startRequest.GetNamespace(),
+			Execution: commonpb.WorkflowExecution_builder{
+				WorkflowId: startRequest.GetWorkflowId(),
+				RunId:      startResponse.GetRunId(),
+			}.Build(),
 			WaitNewEvent:           true,
 			HistoryEventFilterType: historyEventFilterType,
 			NextPageToken:          nextToken,
-		})
+		}.Build())
 		s.Nil(historyErr)
-		if len(historyResponse.NextPageToken) == 0 {
+		if len(historyResponse.GetNextPageToken()) == 0 {
 			break
 		}
 
-		nextToken = historyResponse.NextPageToken
+		nextToken = historyResponse.GetNextPageToken()
 	}
 
-	startRequest = &workflowservice.StartWorkflowExecutionRequest{
+	startRequest = workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id2,
-		WorkflowType:        &commonpb.WorkflowType{Name: wt},
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		WorkflowType:        commonpb.WorkflowType_builder{Name: wt}.Build(),
+		TaskQueue:           taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 		Input:               nil,
 		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
 		Identity:            identity,
-	}
+	}.Build()
 
 	_, err2 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), startRequest)
 	s.NoError(err2)
 
 	startFilter := &filterpb.StartTimeFilter{}
-	startFilter.EarliestTime = timestamppb.New(startTime)
-	startFilter.LatestTime = timestamppb.New(time.Now().UTC())
+	startFilter.SetEarliestTime(timestamppb.New(startTime))
+	startFilter.SetLatestTime(timestamppb.New(time.Now().UTC()))
 
 	closedCount := 0
 	openCount := 0
@@ -123,21 +123,19 @@ func (s *WorkflowVisibilityTestSuite) TestVisibility() {
 	var historyLength int64
 	s.Eventually(
 		func() bool {
-			resp, err3 := s.FrontendClient().ListClosedWorkflowExecutions(testcore.NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
+			resp, err3 := s.FrontendClient().ListClosedWorkflowExecutions(testcore.NewContext(), workflowservice.ListClosedWorkflowExecutionsRequest_builder{
 				Namespace:       s.Namespace().String(),
 				MaximumPageSize: 100,
 				StartTimeFilter: startFilter,
-				Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_TypeFilter{
-					TypeFilter: &filterpb.WorkflowTypeFilter{
-						Name: wt,
-					},
-				},
-			})
+				TypeFilter: filterpb.WorkflowTypeFilter_builder{
+					Name: wt,
+				}.Build(),
+			}.Build())
 			s.NoError(err3)
-			closedCount = len(resp.Executions)
+			closedCount = len(resp.GetExecutions())
 			if closedCount == 1 {
-				historyLength = resp.Executions[0].HistoryLength
-				s.Nil(resp.NextPageToken)
+				historyLength = resp.GetExecutions()[0].GetHistoryLength()
+				s.Nil(resp.GetNextPageToken())
 				return true
 			}
 			s.Logger.Info("Closed WorkflowExecution is not yet visible")
@@ -151,20 +149,18 @@ func (s *WorkflowVisibilityTestSuite) TestVisibility() {
 
 	s.Eventually(
 		func() bool {
-			resp, err4 := s.FrontendClient().ListOpenWorkflowExecutions(testcore.NewContext(), &workflowservice.ListOpenWorkflowExecutionsRequest{
+			resp, err4 := s.FrontendClient().ListOpenWorkflowExecutions(testcore.NewContext(), workflowservice.ListOpenWorkflowExecutionsRequest_builder{
 				Namespace:       s.Namespace().String(),
 				MaximumPageSize: 100,
 				StartTimeFilter: startFilter,
-				Filters: &workflowservice.ListOpenWorkflowExecutionsRequest_TypeFilter{
-					TypeFilter: &filterpb.WorkflowTypeFilter{
-						Name: wt,
-					},
-				},
-			})
+				TypeFilter: filterpb.WorkflowTypeFilter_builder{
+					Name: wt,
+				}.Build(),
+			}.Build())
 			s.NoError(err4)
-			openCount = len(resp.Executions)
+			openCount = len(resp.GetExecutions())
 			if openCount == 1 {
-				s.Nil(resp.NextPageToken)
+				s.Nil(resp.GetNextPageToken())
 				return true
 			}
 			s.Logger.Info("Open WorkflowExecution is not yet visible")

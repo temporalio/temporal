@@ -52,7 +52,7 @@ func (s *contextSuite) SetupTest() {
 	controller := gomock.NewController(s.T())
 	s.mockShard = shard.NewTestContext(
 		controller,
-		&persistencespb.ShardInfo{ShardId: 1},
+		persistencespb.ShardInfo_builder{ShardId: 1}.Build(),
 		configs,
 	)
 	mockEngine := historyi.NewMockEngine(controller)
@@ -82,9 +82,9 @@ func (s *contextSuite) SetupTest() {
 
 func (s *contextSuite) TestMergeReplicationTasks_NoNewRun() {
 	currentWorkflowMutation := &persistence.WorkflowMutation{
-		ExecutionState: &persistencespb.WorkflowExecutionState{
+		ExecutionState: persistencespb.WorkflowExecutionState_builder{
 			Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-		},
+		}.Build(),
 	}
 
 	err := s.workflowContext.mergeUpdateWithNewReplicationTasks(
@@ -97,17 +97,17 @@ func (s *contextSuite) TestMergeReplicationTasks_NoNewRun() {
 
 func (s *contextSuite) TestMergeReplicationTasks_LocalNamespace() {
 	currentWorkflowMutation := &persistence.WorkflowMutation{
-		ExecutionState: &persistencespb.WorkflowExecutionState{
+		ExecutionState: persistencespb.WorkflowExecutionState_builder{
 			Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 			State:  enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
-		},
+		}.Build(),
 		// no replication tasks
 	}
 	newWorkflowSnapshot := &persistence.WorkflowSnapshot{
-		ExecutionState: &persistencespb.WorkflowExecutionState{
+		ExecutionState: persistencespb.WorkflowExecutionState_builder{
 			Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 			State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-		},
+		}.Build(),
 	}
 
 	err := s.workflowContext.mergeUpdateWithNewReplicationTasks(
@@ -121,10 +121,10 @@ func (s *contextSuite) TestMergeReplicationTasks_LocalNamespace() {
 
 func (s *contextSuite) TestMergeReplicationTasks_SingleReplicationTask() {
 	currentWorkflowMutation := &persistence.WorkflowMutation{
-		ExecutionState: &persistencespb.WorkflowExecutionState{
+		ExecutionState: persistencespb.WorkflowExecutionState_builder{
 			Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 			State:  enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
-		},
+		}.Build(),
 		Tasks: map[tasks.Category][]tasks.Task{
 			tasks.CategoryReplication: {
 				&tasks.HistoryReplicationTask{
@@ -147,10 +147,10 @@ func (s *contextSuite) TestMergeReplicationTasks_SingleReplicationTask() {
 
 	newRunID := uuid.NewString()
 	newWorkflowSnapshot := &persistence.WorkflowSnapshot{
-		ExecutionState: &persistencespb.WorkflowExecutionState{
+		ExecutionState: persistencespb.WorkflowExecutionState_builder{
 			Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 			State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-		},
+		}.Build(),
 		Tasks: map[tasks.Category][]tasks.Task{
 			tasks.CategoryReplication: {
 				&tasks.HistoryReplicationTask{
@@ -183,20 +183,20 @@ func (s *contextSuite) TestMergeReplicationTasks_SingleReplicationTask() {
 
 func (s *contextSuite) TestMergeReplicationTasks_SyncVersionedTransitionTask_ShouldMergeTaskAndEquivalent() {
 	currentWorkflowMutation := &persistence.WorkflowMutation{
-		ExecutionState: &persistencespb.WorkflowExecutionState{
+		ExecutionState: persistencespb.WorkflowExecutionState_builder{
 			Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 			State:  enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
-		},
+		}.Build(),
 		Tasks: map[tasks.Category][]tasks.Task{
 			tasks.CategoryReplication: {
 				&tasks.SyncVersionedTransitionTask{
 					WorkflowKey:  tests.WorkflowKey,
 					FirstEventID: 5,
 					NextEventID:  10,
-					VersionedTransition: &persistencespb.VersionedTransition{
+					VersionedTransition: persistencespb.VersionedTransition_builder{
 						NamespaceFailoverVersion: 1,
 						TransitionCount:          1,
-					},
+					}.Build(),
 					TaskEquivalents: []tasks.Task{
 						&tasks.HistoryReplicationTask{
 							WorkflowKey:         tests.WorkflowKey,
@@ -213,10 +213,10 @@ func (s *contextSuite) TestMergeReplicationTasks_SyncVersionedTransitionTask_Sho
 
 	newRunID := uuid.NewString()
 	newWorkflowSnapshot := &persistence.WorkflowSnapshot{
-		ExecutionState: &persistencespb.WorkflowExecutionState{
+		ExecutionState: persistencespb.WorkflowExecutionState_builder{
 			Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 			State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-		},
+		}.Build(),
 		Tasks: map[tasks.Category][]tasks.Task{
 			tasks.CategoryReplication: {
 				&tasks.HistoryReplicationTask{
@@ -258,10 +258,10 @@ func (s *contextSuite) TestMergeReplicationTasks_MultipleReplicationTasks() {
 	// However the implementation of mergeUpdateWithNewReplicationTasks should still handle this case and not error out.
 
 	currentWorkflowMutation := &persistence.WorkflowMutation{
-		ExecutionState: &persistencespb.WorkflowExecutionState{
+		ExecutionState: persistencespb.WorkflowExecutionState_builder{
 			Status: enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
 			State:  enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
-		},
+		}.Build(),
 		Tasks: map[tasks.Category][]tasks.Task{
 			tasks.CategoryReplication: {
 				&tasks.HistoryReplicationTask{
@@ -277,10 +277,10 @@ func (s *contextSuite) TestMergeReplicationTasks_MultipleReplicationTasks() {
 
 	newRunID := uuid.NewString()
 	newWorkflowSnapshot := &persistence.WorkflowSnapshot{
-		ExecutionState: &persistencespb.WorkflowExecutionState{
+		ExecutionState: persistencespb.WorkflowExecutionState_builder{
 			Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 			State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-		},
+		}.Build(),
 		Tasks: map[tasks.Category][]tasks.Task{
 			tasks.CategoryReplication: {
 				&tasks.HistoryReplicationTask{
@@ -334,18 +334,18 @@ func (s *contextSuite) TestMergeReplicationTasks_CurrentRunRunning() {
 	// and creating a new workflow at the same time
 
 	currentWorkflowMutation := &persistence.WorkflowMutation{
-		ExecutionState: &persistencespb.WorkflowExecutionState{
+		ExecutionState: persistencespb.WorkflowExecutionState_builder{
 			Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 			State:  enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
-		},
+		}.Build(),
 		Tasks: map[tasks.Category][]tasks.Task{},
 	}
 
 	newWorkflowSnapshot := &persistence.WorkflowSnapshot{
-		ExecutionState: &persistencespb.WorkflowExecutionState{
+		ExecutionState: persistencespb.WorkflowExecutionState_builder{
 			Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 			State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-		},
+		}.Build(),
 		Tasks: map[tasks.Category][]tasks.Task{},
 	}
 
@@ -364,10 +364,10 @@ func (s *contextSuite) TestMergeReplicationTasks_OnlyCurrentRunHasReplicationTas
 	// will not generate replication tasks again.
 
 	currentWorkflowMutation := &persistence.WorkflowMutation{
-		ExecutionState: &persistencespb.WorkflowExecutionState{
+		ExecutionState: persistencespb.WorkflowExecutionState_builder{
 			Status: enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
 			State:  enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
-		},
+		}.Build(),
 		Tasks: map[tasks.Category][]tasks.Task{
 			tasks.CategoryReplication: {
 				&tasks.HistoryReplicationTask{
@@ -382,10 +382,10 @@ func (s *contextSuite) TestMergeReplicationTasks_OnlyCurrentRunHasReplicationTas
 	}
 
 	newWorkflowSnapshot := &persistence.WorkflowSnapshot{
-		ExecutionState: &persistencespb.WorkflowExecutionState{
+		ExecutionState: persistencespb.WorkflowExecutionState_builder{
 			Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 			State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-		},
+		}.Build(),
 		Tasks: map[tasks.Category][]tasks.Task{},
 	}
 
@@ -402,18 +402,18 @@ func (s *contextSuite) TestMergeReplicationTasks_OnlyNewRunHasReplicationTasks()
 	// TODO: check if this case can happen or not.
 
 	currentWorkflowMutation := &persistence.WorkflowMutation{
-		ExecutionState: &persistencespb.WorkflowExecutionState{
+		ExecutionState: persistencespb.WorkflowExecutionState_builder{
 			Status: enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
 			State:  enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
-		},
+		}.Build(),
 		Tasks: map[tasks.Category][]tasks.Task{},
 	}
 
 	newWorkflowSnapshot := &persistence.WorkflowSnapshot{
-		ExecutionState: &persistencespb.WorkflowExecutionState{
+		ExecutionState: persistencespb.WorkflowExecutionState_builder{
 			Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 			State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-		},
+		}.Build(),
 		Tasks: map[tasks.Category][]tasks.Task{
 			tasks.CategoryReplication: {
 				&tasks.HistoryReplicationTask{
@@ -439,40 +439,40 @@ func (s *contextSuite) TestMergeReplicationTasks_OnlyNewRunHasReplicationTasks()
 func (s *contextSuite) TestRefreshTask() {
 	now := time.Now()
 
-	baseMutableState := &persistencespb.WorkflowMutableState{
-		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+	baseMutableState := persistencespb.WorkflowMutableState_builder{
+		ExecutionInfo: persistencespb.WorkflowExecutionInfo_builder{
 			NamespaceId:        tests.NamespaceID.String(),
 			WorkflowId:         tests.WorkflowID,
 			WorkflowRunTimeout: timestamp.DurationFromSeconds(200),
 			ExecutionTime:      timestamppb.New(now),
-			VersionHistories: &historyspb.VersionHistories{
+			VersionHistories: historyspb.VersionHistories_builder{
 				Histories: []*historyspb.VersionHistory{
-					{
+					historyspb.VersionHistory_builder{
 						BranchToken: []byte("token#1"),
 						Items: []*historyspb.VersionHistoryItem{
-							{EventId: 1, Version: common.EmptyVersion},
+							historyspb.VersionHistoryItem_builder{EventId: 1, Version: common.EmptyVersion}.Build(),
 						},
-					},
+					}.Build(),
 				},
-			},
+			}.Build(),
 			TransitionHistory: []*persistencespb.VersionedTransition{
-				{
+				persistencespb.VersionedTransition_builder{
 					NamespaceFailoverVersion: common.EmptyVersion,
 					TransitionCount:          1,
-				},
+				}.Build(),
 			},
-			ExecutionStats: &persistencespb.ExecutionStats{
+			ExecutionStats: persistencespb.ExecutionStats_builder{
 				HistorySize: 128,
-			},
-		},
-		ExecutionState: &persistencespb.WorkflowExecutionState{
+			}.Build(),
+		}.Build(),
+		ExecutionState: persistencespb.WorkflowExecutionState_builder{
 			RunId:     tests.RunID,
 			State:     enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 			Status:    enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 			StartTime: timestamppb.New(now),
-		},
+		}.Build(),
 		NextEventId: 2,
-	}
+	}.Build()
 
 	testCases := []struct {
 		name                  string
@@ -491,13 +491,13 @@ func (s *contextSuite) TestRefreshTask() {
 					gomock.Any(),
 					common.FirstEventID,
 					gomock.Any(),
-				).Return(&historypb.HistoryEvent{
-					EventId:    1,
-					EventTime:  timestamppb.New(now),
-					EventType:  enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
-					Version:    common.EmptyVersion,
-					Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{},
-				}, nil).Times(2)
+				).Return(historypb.HistoryEvent_builder{
+					EventId:                                 1,
+					EventTime:                               timestamppb.New(now),
+					EventType:                               enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+					Version:                                 common.EmptyVersion,
+					WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{},
+				}.Build(), nil).Times(2)
 				mockShard.Resource.ExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(_ context.Context, request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
 						s.Equal(persistence.UpdateWorkflowModeUpdateCurrent, request.Mode)
@@ -511,12 +511,12 @@ func (s *contextSuite) TestRefreshTask() {
 			name: "completed workflow",
 			persistedMutableState: func() *persistencespb.WorkflowMutableState {
 				base := common.CloneProto(baseMutableState)
-				base.ExecutionState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
-				base.ExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
-				base.NextEventId = 3
-				base.ExecutionInfo.VersionHistories.Histories[0].Items[0].EventId = 2
-				base.ExecutionInfo.TransitionHistory[0].TransitionCount = 2
-				base.ExecutionInfo.CloseTime = timestamppb.New(now.Add(time.Second))
+				base.GetExecutionState().SetStatus(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED)
+				base.GetExecutionState().SetState(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED)
+				base.SetNextEventId(3)
+				base.GetExecutionInfo().GetVersionHistories().GetHistories()[0].GetItems()[0].SetEventId(2)
+				base.GetExecutionInfo().GetTransitionHistory()[0].SetTransitionCount(2)
+				base.GetExecutionInfo().SetCloseTime(timestamppb.New(now.Add(time.Second)))
 				return base
 			},
 			setupMock: func(mockShard *shard.ContextTest) {
@@ -532,7 +532,7 @@ func (s *contextSuite) TestRefreshTask() {
 			name: "zombie workflow",
 			persistedMutableState: func() *persistencespb.WorkflowMutableState {
 				base := common.CloneProto(baseMutableState)
-				base.ExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE
+				base.GetExecutionState().SetState(enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE)
 				return base
 			},
 			setupMock: func(mockShard *shard.ContextTest) {
@@ -542,13 +542,13 @@ func (s *contextSuite) TestRefreshTask() {
 					gomock.Any(),
 					common.FirstEventID,
 					gomock.Any(),
-				).Return(&historypb.HistoryEvent{
-					EventId:    1,
-					EventTime:  timestamppb.New(now),
-					EventType:  enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
-					Version:    common.EmptyVersion,
-					Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{},
-				}, nil).Times(2)
+				).Return(historypb.HistoryEvent_builder{
+					EventId:                                 1,
+					EventTime:                               timestamppb.New(now),
+					EventType:                               enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+					Version:                                 common.EmptyVersion,
+					WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{},
+				}.Build(), nil).Times(2)
 				mockShard.Resource.ExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(_ context.Context, request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
 						s.NotEmpty(request.UpdateWorkflowMutation.Tasks)

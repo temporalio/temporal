@@ -30,6 +30,7 @@ import (
 	"go.temporal.io/server/service/history/hsm"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
 	"go.uber.org/fx"
+	"google.golang.org/protobuf/proto"
 )
 
 var ErrOperationTimeoutBelowMin = errors.New("remaining operation timeout is less than required minimum")
@@ -97,17 +98,17 @@ func buildCallbackURL(
 	ns *namespace.Namespace,
 	endpoint *persistencespb.NexusEndpointEntry,
 ) (string, error) {
-	target := endpoint.GetEndpoint().GetSpec().GetTarget().GetVariant()
+	target := endpoint.GetEndpoint().GetSpec().GetTarget()
 	if !useSystemCallback {
 		return buildCallbackFromTemplate(callbackTemplate, ns)
 	}
-	switch target.(type) {
-	case *persistencespb.NexusEndpointTarget_Worker_:
+	switch target.WhichVariant() {
+	case persistencespb.NexusEndpointTarget_Worker_case:
 		return commonnexus.SystemCallbackURL, nil
-	case *persistencespb.NexusEndpointTarget_External_:
+	case persistencespb.NexusEndpointTarget_External_case:
 		return buildCallbackFromTemplate(callbackTemplate, ns)
 	default:
-		return "", fmt.Errorf("unknown endpoint target type: %T", target)
+		return "", fmt.Errorf("unknown endpoint target type: %v", target.WhichVariant())
 	}
 }
 
@@ -168,18 +169,18 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 	// Operation machine has transitioned.
 	// TODO(bergundy): Remove this before the 1.27 release.
 	smRef := common.CloneProto(ref.StateMachineRef)
-	smRef.MachineTransitionCount = 0
+	smRef.SetMachineTransitionCount(0)
 
 	// Set ms VT to initial version because workflow may switch to a different branch.
-	smRef.MutableStateVersionedTransition = smRef.MachineInitialVersionedTransition
+	smRef.SetMutableStateVersionedTransition(smRef.GetMachineInitialVersionedTransition())
 
-	token, err := e.CallbackTokenGenerator.Tokenize(&tokenspb.NexusOperationCompletion{
+	token, err := e.CallbackTokenGenerator.Tokenize(tokenspb.NexusOperationCompletion_builder{
 		NamespaceId: ref.WorkflowKey.NamespaceID,
 		WorkflowId:  ref.WorkflowKey.WorkflowID,
 		RunId:       ref.WorkflowKey.RunID,
 		Ref:         smRef,
 		RequestId:   args.requestID,
-	})
+	}.Build())
 	if err != nil {
 		return fmt.Errorf("%w: %w", queueserrors.NewUnprocessableTaskError("failed to generate a callback token"), err)
 	}
@@ -249,7 +250,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 
 	methodTag := metrics.NexusMethodTag("StartOperation")
 	namespaceTag := metrics.NamespaceTag(ns.Name().String())
-	destTag := metrics.DestinationTag(endpoint.Endpoint.Spec.GetName())
+	destTag := metrics.DestinationTag(endpoint.GetEndpoint().GetSpec().GetName())
 	outcomeTag := metrics.OutcomeTag(startCallOutcomeTag(callCtx, rawResult, callErr))
 	failureSourceTag := metrics.FailureSourceTag(failureSourceFromContext(callCtx))
 	chasmnexus.OutboundRequestCounter.With(e.MetricsHandler).Record(1, namespaceTag, destTag, methodTag, outcomeTag, failureSourceTag)
@@ -331,32 +332,30 @@ func (e taskExecutor) loadOperationArgs(
 			return err
 		}
 
-		args.endpointName = operation.Endpoint
-		args.endpointID = operation.EndpointId
-		args.service = operation.Service
-		args.operation = operation.Operation
-		args.requestID = operation.RequestId
-		eventToken = operation.ScheduledEventToken
+		args.endpointName = operation.GetEndpoint()
+		args.endpointID = operation.GetEndpointId()
+		args.service = operation.GetService()
+		args.operation = operation.GetOperation()
+		args.requestID = operation.GetRequestId()
+		eventToken = operation.GetScheduledEventToken()
 		event, err := node.LoadHistoryEvent(ctx, eventToken)
 		if err != nil {
 			return nil
 		}
-		args.scheduledTime = event.EventTime.AsTime()
+		args.scheduledTime = event.GetEventTime().AsTime()
 		args.scheduleToCloseTimeout = event.GetNexusOperationScheduledEventAttributes().GetScheduleToCloseTimeout().AsDuration()
 		args.payload = event.GetNexusOperationScheduledEventAttributes().GetInput()
 		args.header = event.GetNexusOperationScheduledEventAttributes().GetNexusHeader()
-		args.nexusLink = ConvertLinkWorkflowEventToNexusLink(&commonpb.Link_WorkflowEvent{
+		args.nexusLink = ConvertLinkWorkflowEventToNexusLink(commonpb.Link_WorkflowEvent_builder{
 			Namespace:  ns.Name().String(),
 			WorkflowId: ref.WorkflowKey.WorkflowID,
 			RunId:      ref.WorkflowKey.RunID,
-			Reference: &commonpb.Link_WorkflowEvent_EventRef{
-				EventRef: &commonpb.Link_WorkflowEvent_EventReference{
-					EventId:   event.GetEventId(),
-					EventType: event.GetEventType(),
-				},
-			},
-		})
-		args.namespaceFailoverVersion = event.Version
+			EventRef: commonpb.Link_WorkflowEvent_EventReference_builder{
+				EventId:   event.GetEventId(),
+				EventType: event.GetEventType(),
+			}.Build(),
+		}.Build())
+		args.namespaceFailoverVersion = event.GetVersion()
 		return nil
 	})
 	return
@@ -372,7 +371,7 @@ func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref h
 		if callErr != nil {
 			return e.handleStartOperationError(env, node, operation, callErr)
 		}
-		eventID, err := hsm.EventIDFromToken(operation.ScheduledEventToken)
+		eventID, err := hsm.EventIDFromToken(operation.GetScheduledEventToken())
 		if err != nil {
 			return err
 		}
@@ -392,11 +391,9 @@ func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref h
 						)
 						continue
 					}
-					links = append(links, &commonpb.Link{
-						Variant: &commonpb.Link_WorkflowEvent_{
-							WorkflowEvent: link,
-						},
-					})
+					links = append(links, commonpb.Link_builder{
+						WorkflowEvent: proto.ValueOrDefault(link),
+					}.Build())
 				default:
 					// If the link data type is unsupported, just ignore it for now.
 					e.Logger.Error(fmt.Sprintf("invalid link data type: %q", nexusLink.Type))
@@ -409,17 +406,15 @@ func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref h
 			// to allow it to complete via callback.
 			event := node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED, func(e *historypb.HistoryEvent) {
 				// nolint:revive // We must mutate here even if the linter doesn't like it.
-				e.Attributes = &historypb.HistoryEvent_NexusOperationStartedEventAttributes{
-					NexusOperationStartedEventAttributes: &historypb.NexusOperationStartedEventAttributes{
-						ScheduledEventId: eventID,
-						OperationToken:   result.Pending.Token,
-						// TODO(bergundy): Remove this fallback after the 1.27 release.
-						OperationId: result.Pending.Token,
-						RequestId:   operation.RequestId,
-					},
-				}
+				e.SetNexusOperationStartedEventAttributes(historypb.NexusOperationStartedEventAttributes_builder{
+					ScheduledEventId: eventID,
+					OperationToken:   result.Pending.Token,
+					// TODO(bergundy): Remove this fallback after the 1.27 release.
+					OperationId: result.Pending.Token,
+					RequestId:   operation.GetRequestId(),
+				}.Build())
 				// nolint:revive // We must mutate here even if the linter doesn't like it.
-				e.Links = links
+				e.SetLinks(links)
 			})
 			return hsm.MachineTransition(node, func(operation Operation) (hsm.TransitionOutput, error) {
 				return TransitionStarted.Apply(operation, EventStarted{
@@ -478,7 +473,7 @@ func (e taskExecutor) handleStartOperationError(env hsm.Environment, node *hsm.N
 }
 
 func handleNonRetryableStartOperationError(node *hsm.Node, operation Operation, callErr error) error {
-	eventID, err := hsm.EventIDFromToken(operation.ScheduledEventToken)
+	eventID, err := hsm.EventIDFromToken(operation.GetScheduledEventToken())
 	if err != nil {
 		return err
 	}
@@ -486,20 +481,18 @@ func handleNonRetryableStartOperationError(node *hsm.Node, operation Operation, 
 	if err != nil {
 		return err
 	}
-	attrs := &historypb.NexusOperationFailedEventAttributes{
+	attrs := historypb.NexusOperationFailedEventAttributes_builder{
 		Failure: nexusOperationFailure(
 			operation,
 			eventID,
 			failure,
 		),
 		ScheduledEventId: eventID,
-		RequestId:        operation.RequestId,
-	}
+		RequestId:        operation.GetRequestId(),
+	}.Build()
 	event := node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED, func(e *historypb.HistoryEvent) {
 		// nolint:revive // We must mutate here even if the linter doesn't like it.
-		e.Attributes = &historypb.HistoryEvent_NexusOperationFailedEventAttributes{
-			NexusOperationFailedEventAttributes: attrs,
-		}
+		e.SetNexusOperationFailedEventAttributes(proto.ValueOrDefault(attrs))
 	})
 
 	return FailedEventDefinition{}.Apply(node.Parent, event)
@@ -519,30 +512,26 @@ func (e taskExecutor) executeTimeoutTask(env hsm.Environment, node *hsm.Node, ta
 
 func (e taskExecutor) recordOperationTimeout(node *hsm.Node) error {
 	return hsm.MachineTransition(node, func(op Operation) (hsm.TransitionOutput, error) {
-		eventID, err := hsm.EventIDFromToken(op.ScheduledEventToken)
+		eventID, err := hsm.EventIDFromToken(op.GetScheduledEventToken())
 		if err != nil {
 			return hsm.TransitionOutput{}, err
 		}
 		node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT, func(e *historypb.HistoryEvent) {
 			// nolint:revive // We must mutate here even if the linter doesn't like it.
-			e.Attributes = &historypb.HistoryEvent_NexusOperationTimedOutEventAttributes{
-				NexusOperationTimedOutEventAttributes: &historypb.NexusOperationTimedOutEventAttributes{
-					Failure: nexusOperationFailure(
-						op,
-						eventID,
-						&failurepb.Failure{
-							Message: "operation timed out",
-							FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
-								TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
-									TimeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
-								},
-							},
-						},
-					),
-					ScheduledEventId: eventID,
-					RequestId:        op.RequestId,
-				},
-			}
+			e.SetNexusOperationTimedOutEventAttributes(historypb.NexusOperationTimedOutEventAttributes_builder{
+				Failure: nexusOperationFailure(
+					op,
+					eventID,
+					failurepb.Failure_builder{
+						Message: "operation timed out",
+						TimeoutFailureInfo: failurepb.TimeoutFailureInfo_builder{
+							TimeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+						}.Build(),
+					}.Build(),
+				),
+				ScheduledEventId: eventID,
+				RequestId:        op.GetRequestId(),
+			}.Build())
 		})
 
 		return TransitionTimedOut.Apply(op, EventTimedOut{
@@ -625,7 +614,7 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 
 	methodTag := metrics.NexusMethodTag("CancelOperation")
 	namespaceTag := metrics.NamespaceTag(ns.Name().String())
-	destTag := metrics.DestinationTag(endpoint.Endpoint.Spec.GetName())
+	destTag := metrics.DestinationTag(endpoint.GetEndpoint().GetSpec().GetName())
 	statusCodeTag := metrics.OutcomeTag(cancelCallOutcomeTag(callCtx, callErr))
 	failureSourceTag := metrics.FailureSourceTag(failureSourceFromContext(ctx))
 	chasmnexus.OutboundRequestCounter.With(e.MetricsHandler).Record(1, namespaceTag, destTag, methodTag, statusCodeTag, failureSourceTag)
@@ -670,20 +659,20 @@ func (e taskExecutor) loadArgsForCancelation(ctx context.Context, env hsm.Enviro
 			return fmt.Errorf("%w: operation already in terminal state", consts.ErrStaleReference)
 		}
 
-		args.service = op.Service
-		args.operation = op.Operation
-		args.token = op.OperationToken
-		args.endpointID = op.EndpointId
-		args.endpointName = op.Endpoint
-		args.requestID = op.RequestId
-		args.scheduledTime = op.ScheduledTime.AsTime()
-		args.scheduleToCloseTimeout = op.ScheduleToCloseTimeout.AsDuration()
-		args.scheduledEventID, err = hsm.EventIDFromToken(op.ScheduledEventToken)
+		args.service = op.GetService()
+		args.operation = op.GetOperation()
+		args.token = op.GetOperationToken()
+		args.endpointID = op.GetEndpointId()
+		args.endpointName = op.GetEndpoint()
+		args.requestID = op.GetRequestId()
+		args.scheduledTime = op.GetScheduledTime().AsTime()
+		args.scheduleToCloseTimeout = op.GetScheduleToCloseTimeout().AsDuration()
+		args.scheduledEventID, err = hsm.EventIDFromToken(op.GetScheduledEventToken())
 		if err != nil {
 			return err
 		}
 		// Load header from the scheduled event so we can propagate it to CancelOperation.
-		event, err := n.Parent.LoadHistoryEvent(ctx, op.ScheduledEventToken)
+		event, err := n.Parent.LoadHistoryEvent(ctx, op.GetScheduledEventToken())
 		if err != nil {
 			return err
 		}
@@ -709,15 +698,13 @@ func (e taskExecutor) saveCancelationResult(ctx context.Context, env hsm.Environ
 					if e.Config.RecordCancelRequestCompletionEvents() {
 						n.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUEST_FAILED, func(e *historypb.HistoryEvent) {
 							// nolint:revive // We must mutate here even if the linter doesn't like it.
-							e.Attributes = &historypb.HistoryEvent_NexusOperationCancelRequestFailedEventAttributes{
-								NexusOperationCancelRequestFailedEventAttributes: &historypb.NexusOperationCancelRequestFailedEventAttributes{
-									ScheduledEventId: scheduledEventID,
-									RequestedEventId: c.RequestedEventId,
-									Failure:          failure,
-								},
-							}
+							e.SetNexusOperationCancelRequestFailedEventAttributes(historypb.NexusOperationCancelRequestFailedEventAttributes_builder{
+								ScheduledEventId: scheduledEventID,
+								RequestedEventId: c.GetRequestedEventId(),
+								Failure:          failure,
+							}.Build())
 							// nolint:revive // We must mutate here even if the linter doesn't like it.
-							e.WorkerMayIgnore = true // For compatibility with older SDKs.
+							e.SetWorkerMayIgnore(true) // For compatibility with older SDKs.
 						})
 					}
 					return TransitionCancelationFailed.Apply(c, EventCancelationFailed{
@@ -739,14 +726,12 @@ func (e taskExecutor) saveCancelationResult(ctx context.Context, env hsm.Environ
 			if e.Config.RecordCancelRequestCompletionEvents() {
 				n.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUEST_COMPLETED, func(e *historypb.HistoryEvent) {
 					// nolint:revive // We must mutate here even if the linter doesn't like it.
-					e.Attributes = &historypb.HistoryEvent_NexusOperationCancelRequestCompletedEventAttributes{
-						NexusOperationCancelRequestCompletedEventAttributes: &historypb.NexusOperationCancelRequestCompletedEventAttributes{
-							ScheduledEventId: scheduledEventID,
-							RequestedEventId: c.RequestedEventId,
-						},
-					}
+					e.SetNexusOperationCancelRequestCompletedEventAttributes(historypb.NexusOperationCancelRequestCompletedEventAttributes_builder{
+						ScheduledEventId: scheduledEventID,
+						RequestedEventId: c.GetRequestedEventId(),
+					}.Build())
 					// nolint:revive // We must mutate here even if the linter doesn't like it.
-					e.WorkerMayIgnore = true // For compatibility with older SDKs.
+					e.SetWorkerMayIgnore(true) // For compatibility with older SDKs.
 				})
 			}
 			return TransitionCancelationSucceeded.Apply(c, EventCancelationSucceeded{
@@ -781,21 +766,19 @@ func (e taskExecutor) lookupEndpoint(ctx context.Context, namespaceID namespace.
 }
 
 func nexusOperationFailure(operation Operation, scheduledEventID int64, cause *failurepb.Failure) *failurepb.Failure {
-	return &failurepb.Failure{
+	return failurepb.Failure_builder{
 		Message: "nexus operation completed unsuccessfully",
-		FailureInfo: &failurepb.Failure_NexusOperationExecutionFailureInfo{
-			NexusOperationExecutionFailureInfo: &failurepb.NexusOperationFailureInfo{
-				Endpoint:       operation.Endpoint,
-				Service:        operation.Service,
-				Operation:      operation.Operation,
-				OperationToken: operation.OperationToken,
-				// TODO(bergundy): This field is deprecated, remove it after the 1.27 release.
-				OperationId:      operation.OperationToken,
-				ScheduledEventId: scheduledEventID,
-			},
-		},
+		NexusOperationExecutionFailureInfo: failurepb.NexusOperationFailureInfo_builder{
+			Endpoint:       operation.GetEndpoint(),
+			Service:        operation.GetService(),
+			Operation:      operation.GetOperation(),
+			OperationToken: operation.GetOperationToken(),
+			// TODO(bergundy): This field is deprecated, remove it after the 1.27 release.
+			OperationId:      operation.GetOperationToken(),
+			ScheduledEventId: scheduledEventID,
+		}.Build(),
 		Cause: cause,
-	}
+	}.Build()
 }
 
 func startCallOutcomeTag(callCtx context.Context, result *nexusrpc.ClientStartOperationResponse[*nexus.LazyValue], callErr error) string {
@@ -871,47 +854,41 @@ func callErrToFailure(callErr error, retryable bool) (*failurepb.Failure, error)
 		case nexus.HandlerErrorRetryBehaviorNonRetryable:
 			retryBehavior = enumspb.NEXUS_HANDLER_ERROR_RETRY_BEHAVIOR_NON_RETRYABLE
 		}
-		failure := &failurepb.Failure{
+		failure := failurepb.Failure_builder{
 			Message: handlerErr.Error(),
-			FailureInfo: &failurepb.Failure_NexusHandlerFailureInfo{
-				NexusHandlerFailureInfo: &failurepb.NexusHandlerFailureInfo{
-					Type:          string(handlerErr.Type),
-					RetryBehavior: retryBehavior,
-				},
-			},
-		}
+			NexusHandlerFailureInfo: failurepb.NexusHandlerFailureInfo_builder{
+				Type:          string(handlerErr.Type),
+				RetryBehavior: retryBehavior,
+			}.Build(),
+		}.Build()
 		var failureError *nexus.FailureError
 		if errors.As(handlerErr.Cause, &failureError) {
-			var err error
-			failure.Cause, err = commonnexus.NexusFailureToAPIFailure(failureError.Failure, retryable)
+			cause, err := commonnexus.NexusFailureToAPIFailure(failureError.Failure, retryable)
 			if err != nil {
 				return nil, err
 			}
+			failure.SetCause(cause)
 		} else {
 			cause := handlerErr.Cause
 			if cause == nil {
 				cause = errors.New("unknown cause")
 			}
-			failure.Cause = &failurepb.Failure{
-				Message: cause.Error(),
-				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
-					ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{},
-				},
-			}
+			failure.SetCause(failurepb.Failure_builder{
+				Message:                cause.Error(),
+				ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{},
+			}.Build())
 		}
 
 		return failure, nil
 	}
 
-	return &failurepb.Failure{
+	return failurepb.Failure_builder{
 		Message: callErr.Error(),
-		FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
-			ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
-				Type:         "CallError",
-				NonRetryable: !retryable,
-			},
-		},
-	}, nil
+		ApplicationFailureInfo: failurepb.ApplicationFailureInfo_builder{
+			Type:         "CallError",
+			NonRetryable: !retryable,
+		}.Build(),
+	}.Build(), nil
 }
 
 func failureSourceFromContext(ctx context.Context) string {

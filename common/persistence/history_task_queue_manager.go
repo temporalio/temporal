@@ -72,15 +72,15 @@ func (m *HistoryTaskQueueManagerImpl) EnqueueTask(
 	}
 
 	taskCategory := request.Task.GetCategory()
-	task := persistencespb.HistoryTask{
+	task := persistencespb.HistoryTask_builder{
 		ShardId: int32(request.SourceShardID),
 		Blob:    blob,
-	}
+	}.Build()
 	taskBytes, _ := task.Marshal()
-	blob = &commonpb.DataBlob{
+	blob = commonpb.DataBlob_builder{
 		EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 		Data:         taskBytes,
-	}
+	}.Build()
 	queueKey := QueueKey{
 		QueueType:     request.QueueType,
 		Category:      taskCategory,
@@ -154,7 +154,7 @@ func (m *HistoryTaskQueueManagerImpl) ReadTasks(ctx context.Context, request *Re
 	resTasks := make([]HistoryTask, len(response.Tasks))
 
 	for i, rawTask := range response.Tasks {
-		blob := rawTask.Payload.Blob
+		blob := rawTask.Payload.GetBlob()
 		if blob == nil {
 			return nil, serialization.NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, ErrHistoryTaskBlobIsNil)
 		}

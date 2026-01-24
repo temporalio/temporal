@@ -246,7 +246,7 @@ func (ti *TelemetryInterceptor) emitActionMetric(
 		if !ok {
 			return
 		}
-		if resp.Started {
+		if resp.GetStarted() {
 			metrics.ActionCounter.With(metricsHandler).Record(1, metrics.ActionType("grpc_"+methodName))
 		} else {
 			typedReq, ok := req.(*workflowservice.StartWorkflowExecutionRequest)
@@ -259,13 +259,13 @@ func (ti *TelemetryInterceptor) emitActionMetric(
 		if !ok {
 			return
 		}
-		if len(resp.Responses) > 0 {
+		if len(resp.GetResponses()) > 0 {
 			if startResp := resp.GetResponses()[0].GetStartWorkflow(); startResp != nil {
-				if startResp.Started {
+				if startResp.GetStarted() {
 					metrics.ActionCounter.With(metricsHandler).Record(1, metrics.ActionType("grpc_"+methodName))
 				} else {
 					typedReq, ok := req.(*workflowservice.ExecuteMultiOperationRequest)
-					if !ok || typedReq == nil || len(typedReq.Operations) == 0 {
+					if !ok || typedReq == nil || len(typedReq.GetOperations()) == 0 {
 						return
 					}
 
@@ -284,22 +284,22 @@ func (ti *TelemetryInterceptor) emitActionMetric(
 		}
 
 		hasMarker := false
-		for _, command := range completedRequest.Commands {
-			if _, ok := commandActions[command.CommandType]; !ok {
+		for _, command := range completedRequest.GetCommands() {
+			if _, ok := commandActions[command.GetCommandType()]; !ok {
 				continue
 			}
 
-			switch command.CommandType { // nolint:exhaustive
+			switch command.GetCommandType() { // nolint:exhaustive
 			case enumspb.COMMAND_TYPE_RECORD_MARKER:
 				// handle RecordMarker command, they are used for localActivity, sideEffect, versioning etc.
 				hasMarker = true
 			case enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION:
 				// Each child workflow counts as 2 actions. We use separate tags to track them separately.
-				metrics.ActionCounter.With(metricsHandler).Record(1, metrics.ActionType("command_"+command.CommandType.String()))
-				metrics.ActionCounter.With(metricsHandler).Record(1, metrics.ActionType("command_"+command.CommandType.String()+"_Extra"))
+				metrics.ActionCounter.With(metricsHandler).Record(1, metrics.ActionType("command_"+command.GetCommandType().String()))
+				metrics.ActionCounter.With(metricsHandler).Record(1, metrics.ActionType("command_"+command.GetCommandType().String()+"_Extra"))
 			default:
 				// handle all other command action
-				metrics.ActionCounter.With(metricsHandler).Record(1, metrics.ActionType("command_"+command.CommandType.String()))
+				metrics.ActionCounter.With(metricsHandler).Record(1, metrics.ActionType("command_"+command.GetCommandType().String()))
 			}
 		}
 
@@ -311,11 +311,11 @@ func (ti *TelemetryInterceptor) emitActionMetric(
 			metrics.ActionCounter.With(metricsHandler).Record(1, metrics.ActionType("command_BatchMarkers"))
 		}
 
-		for _, msg := range completedRequest.Messages {
-			if msg == nil || msg.Body == nil {
+		for _, msg := range completedRequest.GetMessages() {
+			if msg == nil || !msg.HasBody() {
 				continue
 			}
-			switch msg.Body.GetTypeUrl() {
+			switch msg.GetBody().GetTypeUrl() {
 			case updateAcceptanceMessageBody.TypeUrl:
 				metrics.ActionCounter.With(metricsHandler).Record(1, metrics.ActionType("message_UpdateWorkflowExecution:Acceptance"))
 			case updateRejectionMessageBody.TypeUrl:
@@ -331,11 +331,11 @@ func (ti *TelemetryInterceptor) emitActionMetric(
 		if !ok {
 			return
 		}
-		if activityPollResponse == nil || len(activityPollResponse.TaskToken) == 0 {
+		if activityPollResponse == nil || len(activityPollResponse.GetTaskToken()) == 0 {
 			// empty response
 			return
 		}
-		if activityPollResponse.Attempt > 1 {
+		if activityPollResponse.GetAttempt() > 1 {
 			metrics.ActionCounter.With(metricsHandler).Record(1, metrics.ActionType("activity_retry"))
 		}
 	case queryWorkflow:

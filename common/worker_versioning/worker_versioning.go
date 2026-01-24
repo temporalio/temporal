@@ -121,10 +121,10 @@ func VersionStampToBuildIdSearchAttribute(stamp *commonpb.WorkerVersionStamp) st
 	if stamp.GetBuildId() == "" {
 		return UnversionedSearchAttribute
 	}
-	if stamp.UseVersioning {
-		return VersionedBuildIdSearchAttribute(stamp.BuildId)
+	if stamp.GetUseVersioning() {
+		return VersionedBuildIdSearchAttribute(stamp.GetBuildId())
 	}
-	return UnversionedBuildIdSearchAttribute(stamp.BuildId)
+	return UnversionedBuildIdSearchAttribute(stamp.GetBuildId())
 }
 
 // FindBuildId finds a build ID in the version data's sets, returning (set index, index within that set).
@@ -133,7 +133,7 @@ func FindBuildId(versioningData *persistencespb.VersioningData, buildId string) 
 	versionSets := versioningData.GetVersionSets()
 	for sidx, set := range versionSets {
 		for bidx, id := range set.GetBuildIds() {
-			if buildId == id.Id {
+			if buildId == id.GetId() {
 				return sidx, bidx
 			}
 		}
@@ -191,16 +191,16 @@ func DeploymentFromCapabilities(capabilities *commonpb.WorkerVersionCapabilities
 			// TODO: allow '.' once we get rid of v31 stuff
 			return nil, serviceerror.NewInvalidArgumentf("deployment name cannot contain '%s' or '%s'", WorkerDeploymentVersionDelimiter, WorkerDeploymentVersionIDDelimiterV31)
 		}
-		return &deploymentpb.Deployment{
+		return deploymentpb.Deployment_builder{
 			SeriesName: d,
 			BuildId:    b,
-		}, nil
+		}.Build(), nil
 	}
 	if capabilities.GetUseVersioning() && capabilities.GetDeploymentSeriesName() != "" && capabilities.GetBuildId() != "" {
-		return &deploymentpb.Deployment{
+		return deploymentpb.Deployment_builder{
 			SeriesName: capabilities.GetDeploymentSeriesName(),
 			BuildId:    capabilities.GetBuildId(),
-		}, nil
+		}.Build(), nil
 	}
 	return nil, nil
 }
@@ -221,10 +221,10 @@ func BuildIdFromCapabilities(capabilities *commonpb.WorkerVersionCapabilities, o
 
 func DeploymentVersionFromOptions(options *deploymentpb.WorkerDeploymentOptions) *deploymentspb.WorkerDeploymentVersion {
 	if options.GetWorkerVersioningMode() == enumspb.WORKER_VERSIONING_MODE_VERSIONED {
-		return &deploymentspb.WorkerDeploymentVersion{
+		return deploymentspb.WorkerDeploymentVersion_builder{
 			DeploymentName: options.GetDeploymentName(),
 			BuildId:        options.GetBuildId(),
-		}
+		}.Build()
 	}
 	return nil
 }
@@ -263,11 +263,11 @@ func MakeDirectiveForWorkflowTask(
 	revisionNumber int64,
 ) *taskqueuespb.TaskVersionDirective {
 	if behavior != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
-		return &taskqueuespb.TaskVersionDirective{
+		return taskqueuespb.TaskVersionDirective_builder{
 			Behavior:          behavior,
 			DeploymentVersion: DeploymentVersionFromDeployment(deployment),
 			RevisionNumber:    revisionNumber,
-		}
+		}.Build()
 	}
 	if id := BuildIdIfUsingVersioning(stamp); id != "" && assignedBuildId == "" {
 		// TODO: old versioning only [cleanup-old-wv]
@@ -289,12 +289,12 @@ func GetIsWFTaskQueueInVersionDetector(matchingClient resource.MatchingClient) I
 	return func(ctx context.Context,
 		namespaceID, tq string,
 		version *deploymentpb.WorkerDeploymentVersion) (bool, error) {
-		resp, err := matchingClient.CheckTaskQueueVersionMembership(ctx, &matchingservice.CheckTaskQueueVersionMembershipRequest{
+		resp, err := matchingClient.CheckTaskQueueVersionMembership(ctx, matchingservice.CheckTaskQueueVersionMembershipRequest_builder{
 			NamespaceId:   namespaceID,
 			TaskQueue:     tq,
 			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			Version:       DeploymentVersionFromDeployment(DeploymentFromExternalDeploymentVersion(version)),
-		})
+		}.Build())
 		if err != nil {
 			return false, err
 		}
@@ -355,10 +355,10 @@ func DeploymentVersionFromDeployment(deployment *deploymentpb.Deployment) *deplo
 	if deployment == nil {
 		return nil
 	}
-	return &deploymentspb.WorkerDeploymentVersion{
+	return deploymentspb.WorkerDeploymentVersion_builder{
 		BuildId:        deployment.GetBuildId(),
 		DeploymentName: deployment.GetSeriesName(),
-	}
+	}.Build()
 }
 
 // ExternalWorkerDeploymentVersionFromDeployment Temporary helper function to convert Deployment to
@@ -367,10 +367,10 @@ func ExternalWorkerDeploymentVersionFromDeployment(deployment *deploymentpb.Depl
 	if deployment == nil {
 		return nil
 	}
-	return &deploymentpb.WorkerDeploymentVersion{
+	return deploymentpb.WorkerDeploymentVersion_builder{
 		BuildId:        deployment.GetBuildId(),
 		DeploymentName: deployment.GetSeriesName(),
-	}
+	}.Build()
 }
 
 // ExternalWorkerDeploymentVersionFromVersion Temporary helper function to convert internal Worker Deployment to
@@ -379,10 +379,10 @@ func ExternalWorkerDeploymentVersionFromVersion(version *deploymentspb.WorkerDep
 	if version == nil {
 		return nil
 	}
-	return &deploymentpb.WorkerDeploymentVersion{
+	return deploymentpb.WorkerDeploymentVersion_builder{
 		BuildId:        version.GetBuildId(),
 		DeploymentName: version.GetDeploymentName(),
-	}
+	}.Build()
 }
 
 // DeploymentFromExternalDeploymentVersion Temporary helper function to convert WorkerDeploymentVersion to
@@ -391,10 +391,10 @@ func DeploymentFromExternalDeploymentVersion(dv *deploymentpb.WorkerDeploymentVe
 	if dv == nil {
 		return nil
 	}
-	return &deploymentpb.Deployment{
+	return deploymentpb.Deployment_builder{
 		BuildId:    dv.GetBuildId(),
 		SeriesName: dv.GetDeploymentName(),
-	}
+	}.Build()
 }
 
 // DeploymentFromDeploymentVersion Temporary helper function to convert WorkerDeploymentVersion to
@@ -403,18 +403,18 @@ func DeploymentFromDeploymentVersion(dv *deploymentspb.WorkerDeploymentVersion) 
 	if dv == nil {
 		return nil
 	}
-	return &deploymentpb.Deployment{
+	return deploymentpb.Deployment_builder{
 		BuildId:    dv.GetBuildId(),
 		SeriesName: dv.GetDeploymentName(),
-	}
+	}.Build()
 }
 
 func MakeUseAssignmentRulesDirective() *taskqueuespb.TaskVersionDirective {
-	return &taskqueuespb.TaskVersionDirective{BuildId: &taskqueuespb.TaskVersionDirective_UseAssignmentRules{UseAssignmentRules: &emptypb.Empty{}}}
+	return taskqueuespb.TaskVersionDirective_builder{UseAssignmentRules: &emptypb.Empty{}}.Build()
 }
 
 func MakeBuildIdDirective(buildId string) *taskqueuespb.TaskVersionDirective {
-	return &taskqueuespb.TaskVersionDirective{BuildId: &taskqueuespb.TaskVersionDirective_AssignedBuildId{AssignedBuildId: buildId}}
+	return taskqueuespb.TaskVersionDirective_builder{AssignedBuildId: proto.String(buildId)}.Build()
 }
 
 func StampFromCapabilities(cap *commonpb.WorkerVersionCapabilities) *commonpb.WorkerVersionStamp {
@@ -426,13 +426,13 @@ func StampFromCapabilities(cap *commonpb.WorkerVersionCapabilities) *commonpb.Wo
 	// between old and new versioning in Record*TaskStart calls. [cleanup-old-wv]
 	// we don't want to add stamp for task started events in old versioning
 	if cap.GetBuildId() != "" {
-		return &commonpb.WorkerVersionStamp{UseVersioning: cap.UseVersioning, BuildId: cap.BuildId}
+		return commonpb.WorkerVersionStamp_builder{UseVersioning: cap.GetUseVersioning(), BuildId: cap.GetBuildId()}.Build()
 	}
 	return nil
 }
 
 func StampFromBuildId(buildId string) *commonpb.WorkerVersionStamp {
-	return &commonpb.WorkerVersionStamp{UseVersioning: true, BuildId: buildId}
+	return commonpb.WorkerVersionStamp_builder{UseVersioning: true, BuildId: buildId}.Build()
 }
 
 // ValidateDeployment returns error if the deployment is nil or it has empty build ID or deployment
@@ -562,8 +562,8 @@ func validatePinnedVersionInTaskQueue(ctx context.Context,
 		namespaceID,
 		tq,
 		tqType,
-		pinnedVersion.DeploymentName,
-		pinnedVersion.BuildId,
+		pinnedVersion.GetDeploymentName(),
+		pinnedVersion.GetBuildId(),
 	); ok {
 		if isMember {
 			return nil
@@ -573,12 +573,12 @@ func validatePinnedVersionInTaskQueue(ctx context.Context,
 		)
 	}
 
-	resp, err := matchingClient.CheckTaskQueueVersionMembership(ctx, &matchingservice.CheckTaskQueueVersionMembershipRequest{
+	resp, err := matchingClient.CheckTaskQueueVersionMembership(ctx, matchingservice.CheckTaskQueueVersionMembershipRequest_builder{
 		NamespaceId:   namespaceID,
 		TaskQueue:     tq,
 		TaskQueueType: tqType,
 		Version:       DeploymentVersionFromDeployment(DeploymentFromExternalDeploymentVersion(pinnedVersion)),
-	})
+	}.Build())
 	if err != nil {
 		return err
 	}
@@ -588,8 +588,8 @@ func validatePinnedVersionInTaskQueue(ctx context.Context,
 		namespaceID,
 		tq,
 		tqType,
-		pinnedVersion.DeploymentName,
-		pinnedVersion.BuildId,
+		pinnedVersion.GetDeploymentName(),
+		pinnedVersion.GetBuildId(),
 		resp.GetIsMember(),
 	)
 	if !resp.GetIsMember() {
@@ -791,13 +791,13 @@ func CalculateTaskQueueVersioningInfo(deployments *persistencespb.DeploymentData
 	// Find current and ramping
 	// [cleanup-pp-wv]
 	for _, v := range deployments.GetVersions() {
-		if v.RoutingUpdateTime != nil && v.GetCurrentSinceTime() != nil {
-			if t := v.RoutingUpdateTime.AsTime(); t.After(current.GetRoutingUpdateTime().AsTime()) {
+		if v.HasRoutingUpdateTime() && v.GetCurrentSinceTime() != nil {
+			if t := v.GetRoutingUpdateTime().AsTime(); t.After(current.GetRoutingUpdateTime().AsTime()) {
 				current = v
 			}
 		}
-		if v.RoutingUpdateTime != nil && v.GetRampingSinceTime() != nil {
-			if t := v.RoutingUpdateTime.AsTime(); t.After(ramping.GetRoutingUpdateTime().AsTime()) {
+		if v.HasRoutingUpdateTime() && v.GetRampingSinceTime() != nil {
+			if t := v.GetRoutingUpdateTime().AsTime(); t.After(ramping.GetRoutingUpdateTime().AsTime()) {
 				ramping = v
 			}
 		}
@@ -916,28 +916,28 @@ func AddV31VersioningInfoToV32(info *workflowpb.WorkflowExecutionVersioningInfo)
 		return nil
 	}
 	//nolint:staticcheck // SA1019: worker versioning v0.31
-	if info.Version == "" && info.DeploymentVersion != nil {
+	if info.GetVersion() == "" && info.HasDeploymentVersion() {
 		//nolint:staticcheck // SA1019: worker versioning v0.31
-		info.Version = ExternalWorkerDeploymentVersionToStringV31(info.DeploymentVersion)
+		info.SetVersion(ExternalWorkerDeploymentVersionToStringV31(info.GetDeploymentVersion()))
 	}
-	if t := info.VersionTransition; t != nil {
+	if t := info.GetVersionTransition(); t != nil {
 		//nolint:staticcheck // SA1019: worker versioning v0.31
-		if t.Version == "" {
+		if t.GetVersion() == "" {
 			//nolint:staticcheck // SA1019: worker versioning v0.31
-			t.Version = ExternalWorkerDeploymentVersionToStringV31(t.DeploymentVersion)
+			t.SetVersion(ExternalWorkerDeploymentVersionToStringV31(t.GetDeploymentVersion()))
 		}
 	}
-	if o := info.VersioningOverride; o != nil {
+	if o := info.GetVersioningOverride(); o != nil {
 		//nolint:staticcheck // SA1019: worker versioning v0.31
 		if o.GetBehavior() == enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
 			if o.GetAutoUpgrade() {
 				//nolint:staticcheck // SA1019: worker versioning v0.31
-				o.Behavior = enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
+				o.SetBehavior(enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE)
 			} else if o.GetPinned() != nil {
 				//nolint:staticcheck // SA1019: worker versioning v0.31
-				o.Behavior = enumspb.VERSIONING_BEHAVIOR_PINNED
+				o.SetBehavior(enumspb.VERSIONING_BEHAVIOR_PINNED)
 				//nolint:staticcheck // SA1019: worker versioning v0.31
-				o.PinnedVersion = ExternalWorkerDeploymentVersionToStringV31(o.GetPinned().GetVersion())
+				o.SetPinnedVersion(ExternalWorkerDeploymentVersionToStringV31(o.GetPinned().GetVersion()))
 			}
 		}
 	}
@@ -950,28 +950,27 @@ func ConvertOverrideToV32(override *workflowpb.VersioningOverride) *workflowpb.V
 	if override == nil {
 		return nil
 	}
-	ret := &workflowpb.VersioningOverride{
-		Override: override.GetOverride(),
-	}
+	ret := workflowpb.VersioningOverride_builder{
+		AutoUpgrade: proto.ValueOrNil(override.HasAutoUpgrade(), override.GetAutoUpgrade),
+		Pinned:      override.GetPinned(),
+	}.Build()
 	// populate v0.32 field with deprecated fields
-	if ret.Override == nil {
+	if !ret.HasOverride() {
 		//nolint:staticcheck // SA1019: worker versioning v0.31
 		switch override.GetBehavior() {
 		case enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE:
-			ret.Override = &workflowpb.VersioningOverride_AutoUpgrade{AutoUpgrade: true}
+			ret.SetAutoUpgrade(true)
 		case enumspb.VERSIONING_BEHAVIOR_PINNED:
-			ret.Override = &workflowpb.VersioningOverride_Pinned{
-				Pinned: &workflowpb.VersioningOverride_PinnedOverride{
-					Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
-				},
-			}
+			ret.SetPinned(workflowpb.VersioningOverride_PinnedOverride_builder{
+				Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
+			}.Build())
 			//nolint:staticcheck // SA1019: worker versioning v0.31
 			if override.GetPinnedVersion() != "" {
 				//nolint:staticcheck // SA1019: worker versioning v0.31
-				ret.GetPinned().Version = ExternalWorkerDeploymentVersionFromStringV31(override.GetPinnedVersion())
+				ret.GetPinned().SetVersion(ExternalWorkerDeploymentVersionFromStringV31(override.GetPinnedVersion()))
 			} else {
 				//nolint:staticcheck // SA1019: worker versioning v0.30
-				ret.GetPinned().Version = ExternalWorkerDeploymentVersionFromDeployment(override.GetDeployment())
+				ret.GetPinned().SetVersion(ExternalWorkerDeploymentVersionFromDeployment(override.GetDeployment()))
 			}
 		case enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED:
 			// this won't happen, but if it did, it makes some sense for unspecified behavior to cause a nil override
@@ -1021,10 +1020,10 @@ func ExternalWorkerDeploymentVersionFromStringV31(s string) *deploymentpb.Worker
 	if v == nil {
 		return nil
 	}
-	return &deploymentpb.WorkerDeploymentVersion{
-		BuildId:        v.BuildId,
-		DeploymentName: v.DeploymentName,
-	}
+	return deploymentpb.WorkerDeploymentVersion_builder{
+		BuildId:        v.GetBuildId(),
+		DeploymentName: v.GetDeploymentName(),
+	}.Build()
 }
 
 func WorkerDeploymentVersionFromStringV31(s string) (*deploymentspb.WorkerDeploymentVersion, error) {
@@ -1048,10 +1047,10 @@ func WorkerDeploymentVersionFromStringV31(s string) (*deploymentspb.WorkerDeploy
 	if len(after) == 0 {
 		return nil, fmt.Errorf("build id is empty in version string %s", s)
 	}
-	return &deploymentspb.WorkerDeploymentVersion{
+	return deploymentspb.WorkerDeploymentVersion_builder{
 		DeploymentName: before,
 		BuildId:        after,
-	}, nil
+	}.Build(), nil
 }
 
 func WorkerDeploymentVersionFromStringV32(s string) (*deploymentspb.WorkerDeploymentVersion, error) {
@@ -1068,10 +1067,10 @@ func WorkerDeploymentVersionFromStringV32(s string) (*deploymentspb.WorkerDeploy
 	if len(after) == 0 {
 		return nil, fmt.Errorf("build id is empty in version string %s", s)
 	}
-	return &deploymentspb.WorkerDeploymentVersion{
+	return deploymentspb.WorkerDeploymentVersion_builder{
 		DeploymentName: before,
 		BuildId:        after,
-	}, nil
+	}.Build(), nil
 }
 
 // CleanupOldDeletedVersions removes versions deleted more than 7 days ago. Also removes more deleted versions if
@@ -1088,7 +1087,7 @@ func CleanupOldDeletedVersions(deploymentData *persistencespb.WorkerDeploymentDa
 	var deletedVersions []deletedVersion
 	undeletedCount := 0
 
-	for buildID, versionData := range deploymentData.Versions {
+	for buildID, versionData := range deploymentData.GetVersions() {
 		if versionData.GetDeleted() {
 			deletedVersions = append(deletedVersions, deletedVersion{
 				buildID:    buildID,
@@ -1115,7 +1114,7 @@ func CleanupOldDeletedVersions(deploymentData *persistencespb.WorkerDeploymentDa
 		}
 
 		// Remove this deleted version
-		delete(deploymentData.Versions, dv.buildID)
+		delete(deploymentData.GetVersions(), dv.buildID)
 		totalCount--
 		cleaned = true
 	}

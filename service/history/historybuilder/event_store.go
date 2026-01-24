@@ -84,12 +84,12 @@ func (b *EventStore) add(
 
 	batchID := common.EmptyEventID
 	if b.bufferEvent(event.GetEventType()) {
-		event.EventId = common.BufferedEventID
+		event.SetEventId(common.BufferedEventID)
 		b.memBufferBatch = append(b.memBufferBatch, event)
 	} else {
-		event.EventId = b.AllocateEventID()
+		event.SetEventId(b.AllocateEventID())
 		b.memLatestBatch = append(b.memLatestBatch, event)
-		batchID = b.memLatestBatch[0].EventId
+		batchID = b.memLatestBatch[0].GetEventId()
 	}
 	return event, batchID
 }
@@ -156,7 +156,7 @@ func (b *EventStore) FlushBufferToCurrentBatch() (map[int64]int64, map[string]in
 
 	// 1st assign event ID
 	for _, event := range bufferBatch {
-		event.EventId = b.AllocateEventID()
+		event.SetEventId(b.AllocateEventID())
 	}
 
 	// 2nd wire event ID, e.g. activity, child workflow
@@ -241,7 +241,7 @@ func (b *EventStore) assignTaskIDs(
 	for i := 0; i < height; i++ {
 		width := len(dbEventsBatches[i])
 		for j := 0; j < width; j++ {
-			dbEventsBatches[i][j].TaskId = taskIDs[taskIDPointer]
+			dbEventsBatches[i][j].SetTaskId(taskIDs[taskIDPointer])
 			taskIDPointer++
 		}
 	}
@@ -348,22 +348,22 @@ func (b *EventStore) wireEventIDs(
 		case enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED:
 			attributes := event.GetActivityTaskCompletedEventAttributes()
 			if startedEventID, ok := b.scheduledIDToStartedID[attributes.GetScheduledEventId()]; ok {
-				attributes.StartedEventId = startedEventID
+				attributes.SetStartedEventId(startedEventID)
 			}
 		case enumspb.EVENT_TYPE_ACTIVITY_TASK_FAILED:
 			attributes := event.GetActivityTaskFailedEventAttributes()
 			if startedEventID, ok := b.scheduledIDToStartedID[attributes.GetScheduledEventId()]; ok {
-				attributes.StartedEventId = startedEventID
+				attributes.SetStartedEventId(startedEventID)
 			}
 		case enumspb.EVENT_TYPE_ACTIVITY_TASK_TIMED_OUT:
 			attributes := event.GetActivityTaskTimedOutEventAttributes()
 			if startedEventID, ok := b.scheduledIDToStartedID[attributes.GetScheduledEventId()]; ok {
-				attributes.StartedEventId = startedEventID
+				attributes.SetStartedEventId(startedEventID)
 			}
 		case enumspb.EVENT_TYPE_ACTIVITY_TASK_CANCELED:
 			attributes := event.GetActivityTaskCanceledEventAttributes()
 			if startedEventID, ok := b.scheduledIDToStartedID[attributes.GetScheduledEventId()]; ok {
-				attributes.StartedEventId = startedEventID
+				attributes.SetStartedEventId(startedEventID)
 			}
 
 		case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED:
@@ -373,33 +373,33 @@ func (b *EventStore) wireEventIDs(
 		case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED:
 			attributes := event.GetChildWorkflowExecutionCompletedEventAttributes()
 			if startedEventID, ok := b.scheduledIDToStartedID[attributes.GetInitiatedEventId()]; ok {
-				attributes.StartedEventId = startedEventID
+				attributes.SetStartedEventId(startedEventID)
 			}
 		case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_FAILED:
 			attributes := event.GetChildWorkflowExecutionFailedEventAttributes()
 			if startedEventID, ok := b.scheduledIDToStartedID[attributes.GetInitiatedEventId()]; ok {
-				attributes.StartedEventId = startedEventID
+				attributes.SetStartedEventId(startedEventID)
 			}
 		case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TIMED_OUT:
 			attributes := event.GetChildWorkflowExecutionTimedOutEventAttributes()
 			if startedEventID, ok := b.scheduledIDToStartedID[attributes.GetInitiatedEventId()]; ok {
-				attributes.StartedEventId = startedEventID
+				attributes.SetStartedEventId(startedEventID)
 			}
 		case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_CANCELED:
 			attributes := event.GetChildWorkflowExecutionCanceledEventAttributes()
 			if startedEventID, ok := b.scheduledIDToStartedID[attributes.GetInitiatedEventId()]; ok {
-				attributes.StartedEventId = startedEventID
+				attributes.SetStartedEventId(startedEventID)
 			}
 		case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TERMINATED:
 			attributes := event.GetChildWorkflowExecutionTerminatedEventAttributes()
 			if startedEventID, ok := b.scheduledIDToStartedID[attributes.GetInitiatedEventId()]; ok {
-				attributes.StartedEventId = startedEventID
+				attributes.SetStartedEventId(startedEventID)
 			}
 
 		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED:
 			attributes := event.GetWorkflowExecutionOptionsUpdatedEventAttributes()
 			if attributes.GetAttachedRequestId() != "" {
-				b.requestIDToEventID[attributes.AttachedRequestId] = event.GetEventId()
+				b.requestIDToEventID[attributes.GetAttachedRequestId()] = event.GetEventId()
 			}
 		}
 	}

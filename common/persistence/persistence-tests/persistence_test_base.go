@@ -268,10 +268,10 @@ func (s *TestBase) Setup(clusterMetadataConfig *cluster.Config) {
 
 	s.ReadLevel = 0
 	s.ReplicationReadLevel = 0
-	s.ShardInfo = &persistencespb.ShardInfo{
+	s.ShardInfo = persistencespb.ShardInfo_builder{
 		ShardId: shardID,
 		RangeId: 0,
-	}
+	}.Build()
 
 	s.TaskIDGenerator = &TestTransferTaskIDGenerator{}
 	_, err = s.ShardMgr.GetOrCreateShard(context.Background(), &persistence.GetOrCreateShardRequest{

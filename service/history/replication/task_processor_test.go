@@ -88,10 +88,10 @@ func (s *taskProcessorSuite) SetupTest() {
 	s.shardID = rand.Int31()
 	s.mockShard = shard.NewTestContext(
 		s.controller,
-		&persistencespb.ShardInfo{
+		persistencespb.ShardInfo_builder{
 			ShardId: s.shardID,
 			RangeId: 1,
-		},
+		}.Build(),
 		s.config,
 	)
 	s.mockEngine = historyi.NewMockEngine(s.controller)
@@ -135,23 +135,23 @@ func (s *taskProcessorSuite) TearDownTest() {
 
 func (s *taskProcessorSuite) TestHandleSyncShardStatus_Stale() {
 	now := timestamppb.New(time.Now().Add(-2 * dropSyncShardTaskTimeThreshold))
-	err := s.replicationTaskProcessor.handleSyncShardStatus(&replicationspb.SyncShardStatus{
+	err := s.replicationTaskProcessor.handleSyncShardStatus(replicationspb.SyncShardStatus_builder{
 		StatusTime: now,
-	})
+	}.Build())
 	s.NoError(err)
 }
 
 func (s *taskProcessorSuite) TestHandleSyncShardStatus_Success() {
 	now := timestamp.TimeNowPtrUtc()
-	s.mockEngine.EXPECT().SyncShardStatus(gomock.Any(), &historyservice.SyncShardStatusRequest{
+	s.mockEngine.EXPECT().SyncShardStatus(gomock.Any(), historyservice.SyncShardStatusRequest_builder{
 		SourceCluster: cluster.TestAlternativeClusterName,
 		ShardId:       s.shardID,
 		StatusTime:    now,
-	}).Return(nil)
+	}.Build()).Return(nil)
 
-	err := s.replicationTaskProcessor.handleSyncShardStatus(&replicationspb.SyncShardStatus{
+	err := s.replicationTaskProcessor.handleSyncShardStatus(replicationspb.SyncShardStatus_builder{
 		StatusTime: now,
-	})
+	}.Build())
 	s.NoError(err)
 }
 
@@ -161,18 +161,16 @@ func (s *taskProcessorSuite) TestHandleReplicationTask_SyncActivity() {
 	runID := uuid.NewString()
 	now := time.Now()
 	attempt := int32(2)
-	task := &replicationspb.ReplicationTask{
+	task := replicationspb.ReplicationTask_builder{
 		TaskType: enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK,
-		Attributes: &replicationspb.ReplicationTask_SyncActivityTaskAttributes{
-			SyncActivityTaskAttributes: &replicationspb.SyncActivityTaskAttributes{
-				NamespaceId: namespaceID,
-				WorkflowId:  workflowID,
-				RunId:       runID,
-				Attempt:     attempt,
-			},
-		},
+		SyncActivityTaskAttributes: replicationspb.SyncActivityTaskAttributes_builder{
+			NamespaceId: namespaceID,
+			WorkflowId:  workflowID,
+			RunId:       runID,
+			Attempt:     attempt,
+		}.Build(),
 		VisibilityTime: timestamppb.New(now),
-	}
+	}.Build()
 
 	s.mockReplicationTaskExecutor.EXPECT().Execute(gomock.Any(), task, false).Return(nil)
 	err := s.replicationTaskProcessor.handleReplicationTask(context.Background(), task)
@@ -184,34 +182,32 @@ func (s *taskProcessorSuite) TestHandleReplicationTask_History() {
 	workflowID := uuid.NewString()
 	runID := uuid.NewString()
 	now := time.Now()
-	events := []*historypb.HistoryEvent{{
+	events := []*historypb.HistoryEvent{historypb.HistoryEvent_builder{
 		EventId: 1,
 		Version: 1,
-	}}
-	versionHistory := []*historyspb.VersionHistoryItem{{
+	}.Build()}
+	versionHistory := []*historyspb.VersionHistoryItem{historyspb.VersionHistoryItem_builder{
 		EventId: 1,
 		Version: 1,
-	}}
+	}.Build()}
 	serializer := s.mockResource.GetPayloadSerializer()
 	data, err := serializer.SerializeEvents(events)
 	s.NoError(err)
 
-	task := &replicationspb.ReplicationTask{
+	task := replicationspb.ReplicationTask_builder{
 		TaskType: enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK,
-		Attributes: &replicationspb.ReplicationTask_HistoryTaskAttributes{
-			HistoryTaskAttributes: &replicationspb.HistoryTaskAttributes{
-				NamespaceId: namespaceID,
-				WorkflowId:  workflowID,
-				RunId:       runID,
-				Events: &commonpb.DataBlob{
-					EncodingType: enumspb.ENCODING_TYPE_PROTO3,
-					Data:         data.Data,
-				},
-				VersionHistoryItems: versionHistory,
-			},
-		},
+		HistoryTaskAttributes: replicationspb.HistoryTaskAttributes_builder{
+			NamespaceId: namespaceID,
+			WorkflowId:  workflowID,
+			RunId:       runID,
+			Events: commonpb.DataBlob_builder{
+				EncodingType: enumspb.ENCODING_TYPE_PROTO3,
+				Data:         data.GetData(),
+			}.Build(),
+			VersionHistoryItems: versionHistory,
+		}.Build(),
 		VisibilityTime: timestamppb.New(now),
-	}
+	}.Build()
 
 	s.mockReplicationTaskExecutor.EXPECT().Execute(gomock.Any(), task, false).Return(nil)
 	err = s.replicationTaskProcessor.handleReplicationTask(context.Background(), task)
@@ -237,12 +233,12 @@ func (s *taskProcessorSuite) TestHandleReplicationDLQTask_SyncActivity() {
 	request := &persistence.PutReplicationTaskToDLQRequest{
 		ShardID:           s.shardID,
 		SourceClusterName: cluster.TestAlternativeClusterName,
-		TaskInfo: &persistencespb.ReplicationTaskInfo{
+		TaskInfo: persistencespb.ReplicationTaskInfo_builder{
 			NamespaceId: namespaceID,
 			WorkflowId:  workflowID,
 			RunId:       runID,
 			TaskType:    enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
-		},
+		}.Build(),
 	}
 
 	s.mockExecutionManager.EXPECT().PutReplicationTaskToDLQ(gomock.Any(), request).Return(nil)
@@ -258,13 +254,13 @@ func (s *taskProcessorSuite) TestHandleReplicationDLQTask_SyncWorkflowState() {
 	request := &persistence.PutReplicationTaskToDLQRequest{
 		ShardID:           s.shardID,
 		SourceClusterName: cluster.TestAlternativeClusterName,
-		TaskInfo: &persistencespb.ReplicationTaskInfo{
+		TaskInfo: persistencespb.ReplicationTaskInfo_builder{
 			NamespaceId: namespaceID,
 			WorkflowId:  workflowID,
 			RunId:       runID,
 			TaskType:    enumsspb.TASK_TYPE_REPLICATION_SYNC_WORKFLOW_STATE,
 			Version:     1,
-		},
+		}.Build(),
 	}
 
 	s.mockExecutionManager.EXPECT().PutReplicationTaskToDLQ(gomock.Any(), request).Return(nil)
@@ -280,7 +276,7 @@ func (s *taskProcessorSuite) TestHandleReplicationDLQTask_History() {
 	request := &persistence.PutReplicationTaskToDLQRequest{
 		ShardID:           s.shardID,
 		SourceClusterName: cluster.TestAlternativeClusterName,
-		TaskInfo: &persistencespb.ReplicationTaskInfo{
+		TaskInfo: persistencespb.ReplicationTaskInfo_builder{
 			NamespaceId:  namespaceID,
 			WorkflowId:   workflowID,
 			RunId:        runID,
@@ -288,7 +284,7 @@ func (s *taskProcessorSuite) TestHandleReplicationDLQTask_History() {
 			FirstEventId: 1,
 			NextEventId:  1,
 			Version:      1,
-		},
+		}.Build(),
 	}
 
 	s.mockExecutionManager.EXPECT().PutReplicationTaskToDLQ(gomock.Any(), request).Return(nil)
@@ -300,24 +296,24 @@ func (s *taskProcessorSuite) TestConvertTaskToDLQTask_SyncActivity() {
 	namespaceID := uuid.NewString()
 	workflowID := uuid.NewString()
 	runID := uuid.NewString()
-	task := &replicationspb.ReplicationTask{
+	task := replicationspb.ReplicationTask_builder{
 		TaskType: enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK,
-		Attributes: &replicationspb.ReplicationTask_SyncActivityTaskAttributes{SyncActivityTaskAttributes: &replicationspb.SyncActivityTaskAttributes{
+		SyncActivityTaskAttributes: replicationspb.SyncActivityTaskAttributes_builder{
 			NamespaceId: namespaceID,
 			WorkflowId:  workflowID,
 			RunId:       runID,
 			Attempt:     1,
-		}},
-	}
+		}.Build(),
+	}.Build()
 	request := &persistence.PutReplicationTaskToDLQRequest{
 		ShardID:           s.shardID,
 		SourceClusterName: cluster.TestAlternativeClusterName,
-		TaskInfo: &persistencespb.ReplicationTaskInfo{
+		TaskInfo: persistencespb.ReplicationTaskInfo_builder{
 			NamespaceId: namespaceID,
 			WorkflowId:  workflowID,
 			RunId:       runID,
 			TaskType:    enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
-		},
+		}.Build(),
 	}
 
 	dlqTask, err := s.replicationTaskProcessor.convertTaskToDLQTask(task)
@@ -329,33 +325,33 @@ func (s *taskProcessorSuite) TestConvertTaskToDLQTask_SyncWorkflowState() {
 	namespaceID := uuid.NewString()
 	workflowID := uuid.NewString()
 	runID := uuid.NewString()
-	task := &replicationspb.ReplicationTask{
+	task := replicationspb.ReplicationTask_builder{
 		TaskType: enumsspb.REPLICATION_TASK_TYPE_SYNC_WORKFLOW_STATE_TASK,
-		Attributes: &replicationspb.ReplicationTask_SyncWorkflowStateTaskAttributes{SyncWorkflowStateTaskAttributes: &replicationspb.SyncWorkflowStateTaskAttributes{
-			WorkflowState: &persistencespb.WorkflowMutableState{
-				ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+		SyncWorkflowStateTaskAttributes: replicationspb.SyncWorkflowStateTaskAttributes_builder{
+			WorkflowState: persistencespb.WorkflowMutableState_builder{
+				ExecutionInfo: persistencespb.WorkflowExecutionInfo_builder{
 					NamespaceId: namespaceID,
 					WorkflowId:  workflowID,
 					VersionHistories: versionhistory.NewVersionHistories(
 						versionhistory.NewVersionHistory(nil, []*historyspb.VersionHistoryItem{versionhistory.NewVersionHistoryItem(1, 1)}),
 					),
-				},
-				ExecutionState: &persistencespb.WorkflowExecutionState{
+				}.Build(),
+				ExecutionState: persistencespb.WorkflowExecutionState_builder{
 					RunId: runID,
-				},
-			},
-		}},
-	}
+				}.Build(),
+			}.Build(),
+		}.Build(),
+	}.Build()
 	request := &persistence.PutReplicationTaskToDLQRequest{
 		ShardID:           s.shardID,
 		SourceClusterName: cluster.TestAlternativeClusterName,
-		TaskInfo: &persistencespb.ReplicationTaskInfo{
+		TaskInfo: persistencespb.ReplicationTaskInfo_builder{
 			NamespaceId: namespaceID,
 			WorkflowId:  workflowID,
 			RunId:       runID,
 			TaskType:    enumsspb.TASK_TYPE_REPLICATION_SYNC_WORKFLOW_STATE,
 			Version:     1,
-		},
+		}.Build(),
 	}
 
 	dlqTask, err := s.replicationTaskProcessor.convertTaskToDLQTask(task)
@@ -367,37 +363,37 @@ func (s *taskProcessorSuite) TestConvertTaskToDLQTask_SyncHSM() {
 	namespaceID := uuid.NewString()
 	workflowID := uuid.NewString()
 	runID := uuid.NewString()
-	task := &replicationspb.ReplicationTask{
+	task := replicationspb.ReplicationTask_builder{
 		SourceTaskId: rand.Int63(),
 		TaskType:     enumsspb.REPLICATION_TASK_TYPE_SYNC_HSM_TASK,
-		Attributes: &replicationspb.ReplicationTask_SyncHsmAttributes{SyncHsmAttributes: &replicationspb.SyncHSMAttributes{
+		SyncHsmAttributes: replicationspb.SyncHSMAttributes_builder{
 			NamespaceId: namespaceID,
 			WorkflowId:  workflowID,
 			RunId:       runID,
-			VersionHistory: &historyspb.VersionHistory{
+			VersionHistory: historyspb.VersionHistory_builder{
 				BranchToken: []byte("branchToken"),
-				Items: []*historyspb.VersionHistoryItem{{
+				Items: []*historyspb.VersionHistoryItem{historyspb.VersionHistoryItem_builder{
 					EventId: 10,
 					Version: 20,
-				}},
-			},
-			StateMachineNode: &persistencespb.StateMachineNode{
+				}.Build()},
+			}.Build(),
+			StateMachineNode: persistencespb.StateMachineNode_builder{
 				Data: []byte("stateMachineData"),
-			},
-		}},
+			}.Build(),
+		}.Build(),
 		VisibilityTime: timestamppb.New(time.Now()),
-	}
+	}.Build()
 	request := &persistence.PutReplicationTaskToDLQRequest{
 		ShardID:           s.shardID,
 		SourceClusterName: cluster.TestAlternativeClusterName,
-		TaskInfo: &persistencespb.ReplicationTaskInfo{
+		TaskInfo: persistencespb.ReplicationTaskInfo_builder{
 			NamespaceId:    namespaceID,
 			WorkflowId:     workflowID,
 			RunId:          runID,
 			TaskId:         task.GetSourceTaskId(),
 			TaskType:       enumsspb.TASK_TYPE_REPLICATION_SYNC_HSM,
 			VisibilityTime: task.GetVisibilityTime(),
-		},
+		}.Build(),
 	}
 
 	dlqTask, err := s.replicationTaskProcessor.convertTaskToDLQTask(task)
@@ -409,37 +405,35 @@ func (s *taskProcessorSuite) TestConvertTaskToDLQTask_History() {
 	namespaceID := uuid.NewString()
 	workflowID := uuid.NewString()
 	runID := uuid.NewString()
-	events := []*historypb.HistoryEvent{{
+	events := []*historypb.HistoryEvent{historypb.HistoryEvent_builder{
 		EventId: 1,
 		Version: 1,
-	}}
-	versionHistory := []*historyspb.VersionHistoryItem{{
+	}.Build()}
+	versionHistory := []*historyspb.VersionHistoryItem{historyspb.VersionHistoryItem_builder{
 		EventId: 1,
 		Version: 1,
-	}}
+	}.Build()}
 	serializer := s.mockResource.GetPayloadSerializer()
 	data, err := serializer.SerializeEvents(events)
 	s.NoError(err)
 
-	task := &replicationspb.ReplicationTask{
+	task := replicationspb.ReplicationTask_builder{
 		TaskType: enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK,
-		Attributes: &replicationspb.ReplicationTask_HistoryTaskAttributes{
-			HistoryTaskAttributes: &replicationspb.HistoryTaskAttributes{
-				NamespaceId: namespaceID,
-				WorkflowId:  workflowID,
-				RunId:       runID,
-				Events: &commonpb.DataBlob{
-					EncodingType: enumspb.ENCODING_TYPE_PROTO3,
-					Data:         data.Data,
-				},
-				VersionHistoryItems: versionHistory,
-			},
-		},
-	}
+		HistoryTaskAttributes: replicationspb.HistoryTaskAttributes_builder{
+			NamespaceId: namespaceID,
+			WorkflowId:  workflowID,
+			RunId:       runID,
+			Events: commonpb.DataBlob_builder{
+				EncodingType: enumspb.ENCODING_TYPE_PROTO3,
+				Data:         data.GetData(),
+			}.Build(),
+			VersionHistoryItems: versionHistory,
+		}.Build(),
+	}.Build()
 	request := &persistence.PutReplicationTaskToDLQRequest{
 		ShardID:           s.shardID,
 		SourceClusterName: cluster.TestAlternativeClusterName,
-		TaskInfo: &persistencespb.ReplicationTaskInfo{
+		TaskInfo: persistencespb.ReplicationTaskInfo_builder{
 			NamespaceId:  namespaceID,
 			WorkflowId:   workflowID,
 			RunId:        runID,
@@ -447,7 +441,7 @@ func (s *taskProcessorSuite) TestConvertTaskToDLQTask_History() {
 			FirstEventId: 1,
 			NextEventId:  2,
 			Version:      1,
-		},
+		}.Build(),
 	}
 
 	dlqTask, err := s.replicationTaskProcessor.convertTaskToDLQTask(task)
@@ -459,39 +453,37 @@ func (s *taskProcessorSuite) TestPaginationFn_Success_More() {
 	namespaceID := uuid.NewString()
 	workflowID := uuid.NewString()
 	runID := uuid.NewString()
-	events := []*historypb.HistoryEvent{{
+	events := []*historypb.HistoryEvent{historypb.HistoryEvent_builder{
 		EventId: 1,
 		Version: 1,
-	}}
-	versionHistory := []*historyspb.VersionHistoryItem{{
+	}.Build()}
+	versionHistory := []*historyspb.VersionHistoryItem{historyspb.VersionHistoryItem_builder{
 		EventId: 1,
 		Version: 1,
-	}}
+	}.Build()}
 	serializer := s.mockResource.GetPayloadSerializer()
 	data, err := serializer.SerializeEvents(events)
 	s.NoError(err)
 
-	syncShardTask := &replicationspb.SyncShardStatus{
+	syncShardTask := replicationspb.SyncShardStatus_builder{
 		StatusTime: timestamp.TimeNowPtrUtc(),
-	}
+	}.Build()
 	taskID := int64(123)
 	lastRetrievedMessageID := 2 * taskID
-	task := &replicationspb.ReplicationTask{
+	task := replicationspb.ReplicationTask_builder{
 		SourceTaskId: taskID,
 		TaskType:     enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK,
-		Attributes: &replicationspb.ReplicationTask_HistoryTaskAttributes{
-			HistoryTaskAttributes: &replicationspb.HistoryTaskAttributes{
-				NamespaceId: namespaceID,
-				WorkflowId:  workflowID,
-				RunId:       runID,
-				Events: &commonpb.DataBlob{
-					EncodingType: enumspb.ENCODING_TYPE_PROTO3,
-					Data:         data.Data,
-				},
-				VersionHistoryItems: versionHistory,
-			},
-		},
-	}
+		HistoryTaskAttributes: replicationspb.HistoryTaskAttributes_builder{
+			NamespaceId: namespaceID,
+			WorkflowId:  workflowID,
+			RunId:       runID,
+			Events: commonpb.DataBlob_builder{
+				EncodingType: enumspb.ENCODING_TYPE_PROTO3,
+				Data:         data.GetData(),
+			}.Build(),
+			VersionHistoryItems: versionHistory,
+		}.Build(),
+	}.Build()
 
 	maxRxProcessedTaskID := rand.Int63()
 	maxRxReceivedTaskID := rand.Int63()
@@ -500,23 +492,23 @@ func (s *taskProcessorSuite) TestPaginationFn_Success_More() {
 	s.replicationTaskProcessor.maxRxReceivedTaskID = maxRxReceivedTaskID
 	s.replicationTaskProcessor.rxTaskBackoff = rxTaskBackoff
 
-	requestToken := &replicationspb.ReplicationToken{
+	requestToken := replicationspb.ReplicationToken_builder{
 		ShardId:                     s.shardID,
 		LastProcessedMessageId:      maxRxProcessedTaskID,
 		LastProcessedVisibilityTime: nil,
 		LastRetrievedMessageId:      maxRxReceivedTaskID,
-	}
+	}.Build()
 
 	go func() {
 		request := <-s.requestChan
 		defer close(request.respChan)
 		s.Equal(requestToken, request.token)
-		request.respChan <- &replicationspb.ReplicationMessages{
+		request.respChan <- replicationspb.ReplicationMessages_builder{
 			SyncShardStatus:        syncShardTask,
 			ReplicationTasks:       []*replicationspb.ReplicationTask{task},
 			LastRetrievedMessageId: lastRetrievedMessageID,
 			HasMore:                true,
-		}
+		}.Build()
 	}()
 
 	tasks, _, err := s.replicationTaskProcessor.paginationFn(nil)
@@ -532,39 +524,37 @@ func (s *taskProcessorSuite) TestPaginationFn_Success_NoMore() {
 	namespaceID := uuid.NewString()
 	workflowID := uuid.NewString()
 	runID := uuid.NewString()
-	events := []*historypb.HistoryEvent{{
+	events := []*historypb.HistoryEvent{historypb.HistoryEvent_builder{
 		EventId: 1,
 		Version: 1,
-	}}
-	versionHistory := []*historyspb.VersionHistoryItem{{
+	}.Build()}
+	versionHistory := []*historyspb.VersionHistoryItem{historyspb.VersionHistoryItem_builder{
 		EventId: 1,
 		Version: 1,
-	}}
+	}.Build()}
 	serializer := s.mockResource.GetPayloadSerializer()
 	data, err := serializer.SerializeEvents(events)
 	s.NoError(err)
 
-	syncShardTask := &replicationspb.SyncShardStatus{
+	syncShardTask := replicationspb.SyncShardStatus_builder{
 		StatusTime: timestamp.TimeNowPtrUtc(),
-	}
+	}.Build()
 	taskID := int64(123)
 	lastRetrievedMessageID := 2 * taskID
-	task := &replicationspb.ReplicationTask{
+	task := replicationspb.ReplicationTask_builder{
 		SourceTaskId: taskID,
 		TaskType:     enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK,
-		Attributes: &replicationspb.ReplicationTask_HistoryTaskAttributes{
-			HistoryTaskAttributes: &replicationspb.HistoryTaskAttributes{
-				NamespaceId: namespaceID,
-				WorkflowId:  workflowID,
-				RunId:       runID,
-				Events: &commonpb.DataBlob{
-					EncodingType: enumspb.ENCODING_TYPE_PROTO3,
-					Data:         data.Data,
-				},
-				VersionHistoryItems: versionHistory,
-			},
-		},
-	}
+		HistoryTaskAttributes: replicationspb.HistoryTaskAttributes_builder{
+			NamespaceId: namespaceID,
+			WorkflowId:  workflowID,
+			RunId:       runID,
+			Events: commonpb.DataBlob_builder{
+				EncodingType: enumspb.ENCODING_TYPE_PROTO3,
+				Data:         data.GetData(),
+			}.Build(),
+			VersionHistoryItems: versionHistory,
+		}.Build(),
+	}.Build()
 
 	maxRxProcessedTaskID := rand.Int63()
 	maxRxReceivedTaskID := rand.Int63()
@@ -573,23 +563,23 @@ func (s *taskProcessorSuite) TestPaginationFn_Success_NoMore() {
 	s.replicationTaskProcessor.maxRxReceivedTaskID = maxRxReceivedTaskID
 	s.replicationTaskProcessor.rxTaskBackoff = rxTaskBackoff
 
-	requestToken := &replicationspb.ReplicationToken{
+	requestToken := replicationspb.ReplicationToken_builder{
 		ShardId:                     s.shardID,
 		LastProcessedMessageId:      maxRxProcessedTaskID,
 		LastProcessedVisibilityTime: nil,
 		LastRetrievedMessageId:      maxRxReceivedTaskID,
-	}
+	}.Build()
 
 	go func() {
 		request := <-s.requestChan
 		defer close(request.respChan)
 		s.Equal(requestToken, request.token)
-		request.respChan <- &replicationspb.ReplicationMessages{
+		request.respChan <- replicationspb.ReplicationMessages_builder{
 			SyncShardStatus:        syncShardTask,
 			ReplicationTasks:       []*replicationspb.ReplicationTask{task},
 			LastRetrievedMessageId: lastRetrievedMessageID,
 			HasMore:                false,
-		}
+		}.Build()
 	}()
 
 	tasks, _, err := s.replicationTaskProcessor.paginationFn(nil)
@@ -609,12 +599,12 @@ func (s *taskProcessorSuite) TestPaginationFn_Error() {
 	s.replicationTaskProcessor.maxRxReceivedTaskID = maxRxReceivedTaskID
 	s.replicationTaskProcessor.rxTaskBackoff = rxTaskBackoff
 
-	requestToken := &replicationspb.ReplicationToken{
+	requestToken := replicationspb.ReplicationToken_builder{
 		ShardId:                     s.shardID,
 		LastProcessedMessageId:      maxRxProcessedTaskID,
 		LastProcessedVisibilityTime: nil,
 		LastRetrievedMessageId:      maxRxReceivedTaskID,
-	}
+	}.Build()
 
 	go func() {
 		request := <-s.requestChan

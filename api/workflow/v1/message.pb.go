@@ -8,7 +8,6 @@ package workflow
 
 import (
 	reflect "reflect"
-	sync "sync"
 	unsafe "unsafe"
 
 	v1 "go.temporal.io/api/common/v1"
@@ -25,22 +24,16 @@ const (
 )
 
 type ParentExecutionInfo struct {
-	state            protoimpl.MessageState `protogen:"open.v1"`
-	NamespaceId      string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	Namespace        string                 `protobuf:"bytes,2,opt,name=namespace,proto3" json:"namespace,omitempty"`
-	Execution        *v1.WorkflowExecution  `protobuf:"bytes,3,opt,name=execution,proto3" json:"execution,omitempty"`
-	InitiatedId      int64                  `protobuf:"varint,4,opt,name=initiated_id,json=initiatedId,proto3" json:"initiated_id,omitempty"`
-	Clock            *v11.VectorClock       `protobuf:"bytes,5,opt,name=clock,proto3" json:"clock,omitempty"`
-	InitiatedVersion int64                  `protobuf:"varint,6,opt,name=initiated_version,json=initiatedVersion,proto3" json:"initiated_version,omitempty"`
-	// When present, child workflow starts as Pinned to this Worker Deployment Version.
-	// Set only if the parent execution is effectively Pinned to a Worker Deployment Version when it
-	// first starts the child workflow, and the child workflow is starting on a Task Queue belonging
-	// to the same Worker Deployment Version.
-	// Not set in the subsequent execution if the child workflow continues-as-new.
-	// Deprecated. Replaced with `inherited_pinned_version` in WorkflowExecutionStartedEventAttributes.
-	PinnedWorkerDeploymentVersion string `protobuf:"bytes,7,opt,name=pinned_worker_deployment_version,json=pinnedWorkerDeploymentVersion,proto3" json:"pinned_worker_deployment_version,omitempty"`
-	unknownFields                 protoimpl.UnknownFields
-	sizeCache                     protoimpl.SizeCache
+	state                                    protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId                   string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_Namespace                     string                 `protobuf:"bytes,2,opt,name=namespace,proto3"`
+	xxx_hidden_Execution                     *v1.WorkflowExecution  `protobuf:"bytes,3,opt,name=execution,proto3"`
+	xxx_hidden_InitiatedId                   int64                  `protobuf:"varint,4,opt,name=initiated_id,json=initiatedId,proto3"`
+	xxx_hidden_Clock                         *v11.VectorClock       `protobuf:"bytes,5,opt,name=clock,proto3"`
+	xxx_hidden_InitiatedVersion              int64                  `protobuf:"varint,6,opt,name=initiated_version,json=initiatedVersion,proto3"`
+	xxx_hidden_PinnedWorkerDeploymentVersion string                 `protobuf:"bytes,7,opt,name=pinned_worker_deployment_version,json=pinnedWorkerDeploymentVersion,proto3"`
+	unknownFields                            protoimpl.UnknownFields
+	sizeCache                                protoimpl.SizeCache
 }
 
 func (x *ParentExecutionInfo) Reset() {
@@ -68,65 +61,142 @@ func (x *ParentExecutionInfo) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ParentExecutionInfo.ProtoReflect.Descriptor instead.
-func (*ParentExecutionInfo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_workflow_v1_message_proto_rawDescGZIP(), []int{0}
-}
-
 func (x *ParentExecutionInfo) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *ParentExecutionInfo) GetNamespace() string {
 	if x != nil {
-		return x.Namespace
+		return x.xxx_hidden_Namespace
 	}
 	return ""
 }
 
 func (x *ParentExecutionInfo) GetExecution() *v1.WorkflowExecution {
 	if x != nil {
-		return x.Execution
+		return x.xxx_hidden_Execution
 	}
 	return nil
 }
 
 func (x *ParentExecutionInfo) GetInitiatedId() int64 {
 	if x != nil {
-		return x.InitiatedId
+		return x.xxx_hidden_InitiatedId
 	}
 	return 0
 }
 
 func (x *ParentExecutionInfo) GetClock() *v11.VectorClock {
 	if x != nil {
-		return x.Clock
+		return x.xxx_hidden_Clock
 	}
 	return nil
 }
 
 func (x *ParentExecutionInfo) GetInitiatedVersion() int64 {
 	if x != nil {
-		return x.InitiatedVersion
+		return x.xxx_hidden_InitiatedVersion
 	}
 	return 0
 }
 
 func (x *ParentExecutionInfo) GetPinnedWorkerDeploymentVersion() string {
 	if x != nil {
-		return x.PinnedWorkerDeploymentVersion
+		return x.xxx_hidden_PinnedWorkerDeploymentVersion
 	}
 	return ""
 }
 
+func (x *ParentExecutionInfo) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *ParentExecutionInfo) SetNamespace(v string) {
+	x.xxx_hidden_Namespace = v
+}
+
+func (x *ParentExecutionInfo) SetExecution(v *v1.WorkflowExecution) {
+	x.xxx_hidden_Execution = v
+}
+
+func (x *ParentExecutionInfo) SetInitiatedId(v int64) {
+	x.xxx_hidden_InitiatedId = v
+}
+
+func (x *ParentExecutionInfo) SetClock(v *v11.VectorClock) {
+	x.xxx_hidden_Clock = v
+}
+
+func (x *ParentExecutionInfo) SetInitiatedVersion(v int64) {
+	x.xxx_hidden_InitiatedVersion = v
+}
+
+func (x *ParentExecutionInfo) SetPinnedWorkerDeploymentVersion(v string) {
+	x.xxx_hidden_PinnedWorkerDeploymentVersion = v
+}
+
+func (x *ParentExecutionInfo) HasExecution() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Execution != nil
+}
+
+func (x *ParentExecutionInfo) HasClock() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Clock != nil
+}
+
+func (x *ParentExecutionInfo) ClearExecution() {
+	x.xxx_hidden_Execution = nil
+}
+
+func (x *ParentExecutionInfo) ClearClock() {
+	x.xxx_hidden_Clock = nil
+}
+
+type ParentExecutionInfo_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId      string
+	Namespace        string
+	Execution        *v1.WorkflowExecution
+	InitiatedId      int64
+	Clock            *v11.VectorClock
+	InitiatedVersion int64
+	// When present, child workflow starts as Pinned to this Worker Deployment Version.
+	// Set only if the parent execution is effectively Pinned to a Worker Deployment Version when it
+	// first starts the child workflow, and the child workflow is starting on a Task Queue belonging
+	// to the same Worker Deployment Version.
+	// Not set in the subsequent execution if the child workflow continues-as-new.
+	// Deprecated. Replaced with `inherited_pinned_version` in WorkflowExecutionStartedEventAttributes.
+	PinnedWorkerDeploymentVersion string
+}
+
+func (b0 ParentExecutionInfo_builder) Build() *ParentExecutionInfo {
+	m0 := &ParentExecutionInfo{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_Namespace = b.Namespace
+	x.xxx_hidden_Execution = b.Execution
+	x.xxx_hidden_InitiatedId = b.InitiatedId
+	x.xxx_hidden_Clock = b.Clock
+	x.xxx_hidden_InitiatedVersion = b.InitiatedVersion
+	x.xxx_hidden_PinnedWorkerDeploymentVersion = b.PinnedWorkerDeploymentVersion
+	return m0
+}
+
 type RootExecutionInfo struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Execution     *v1.WorkflowExecution  `protobuf:"bytes,1,opt,name=execution,proto3" json:"execution,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Execution *v1.WorkflowExecution  `protobuf:"bytes,1,opt,name=execution,proto3"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *RootExecutionInfo) Reset() {
@@ -154,25 +224,49 @@ func (x *RootExecutionInfo) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RootExecutionInfo.ProtoReflect.Descriptor instead.
-func (*RootExecutionInfo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_workflow_v1_message_proto_rawDescGZIP(), []int{1}
-}
-
 func (x *RootExecutionInfo) GetExecution() *v1.WorkflowExecution {
 	if x != nil {
-		return x.Execution
+		return x.xxx_hidden_Execution
 	}
 	return nil
 }
 
+func (x *RootExecutionInfo) SetExecution(v *v1.WorkflowExecution) {
+	x.xxx_hidden_Execution = v
+}
+
+func (x *RootExecutionInfo) HasExecution() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Execution != nil
+}
+
+func (x *RootExecutionInfo) ClearExecution() {
+	x.xxx_hidden_Execution = nil
+}
+
+type RootExecutionInfo_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Execution *v1.WorkflowExecution
+}
+
+func (b0 RootExecutionInfo_builder) Build() *RootExecutionInfo {
+	m0 := &RootExecutionInfo{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Execution = b.Execution
+	return m0
+}
+
 type BaseExecutionInfo struct {
-	state                            protoimpl.MessageState `protogen:"open.v1"`
-	RunId                            string                 `protobuf:"bytes,1,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	LowestCommonAncestorEventId      int64                  `protobuf:"varint,2,opt,name=lowest_common_ancestor_event_id,json=lowestCommonAncestorEventId,proto3" json:"lowest_common_ancestor_event_id,omitempty"`
-	LowestCommonAncestorEventVersion int64                  `protobuf:"varint,3,opt,name=lowest_common_ancestor_event_version,json=lowestCommonAncestorEventVersion,proto3" json:"lowest_common_ancestor_event_version,omitempty"`
-	unknownFields                    protoimpl.UnknownFields
-	sizeCache                        protoimpl.SizeCache
+	state                                       protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_RunId                            string                 `protobuf:"bytes,1,opt,name=run_id,json=runId,proto3"`
+	xxx_hidden_LowestCommonAncestorEventId      int64                  `protobuf:"varint,2,opt,name=lowest_common_ancestor_event_id,json=lowestCommonAncestorEventId,proto3"`
+	xxx_hidden_LowestCommonAncestorEventVersion int64                  `protobuf:"varint,3,opt,name=lowest_common_ancestor_event_version,json=lowestCommonAncestorEventVersion,proto3"`
+	unknownFields                               protoimpl.UnknownFields
+	sizeCache                                   protoimpl.SizeCache
 }
 
 func (x *BaseExecutionInfo) Reset() {
@@ -200,30 +294,55 @@ func (x *BaseExecutionInfo) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use BaseExecutionInfo.ProtoReflect.Descriptor instead.
-func (*BaseExecutionInfo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_workflow_v1_message_proto_rawDescGZIP(), []int{2}
-}
-
 func (x *BaseExecutionInfo) GetRunId() string {
 	if x != nil {
-		return x.RunId
+		return x.xxx_hidden_RunId
 	}
 	return ""
 }
 
 func (x *BaseExecutionInfo) GetLowestCommonAncestorEventId() int64 {
 	if x != nil {
-		return x.LowestCommonAncestorEventId
+		return x.xxx_hidden_LowestCommonAncestorEventId
 	}
 	return 0
 }
 
 func (x *BaseExecutionInfo) GetLowestCommonAncestorEventVersion() int64 {
 	if x != nil {
-		return x.LowestCommonAncestorEventVersion
+		return x.xxx_hidden_LowestCommonAncestorEventVersion
 	}
 	return 0
+}
+
+func (x *BaseExecutionInfo) SetRunId(v string) {
+	x.xxx_hidden_RunId = v
+}
+
+func (x *BaseExecutionInfo) SetLowestCommonAncestorEventId(v int64) {
+	x.xxx_hidden_LowestCommonAncestorEventId = v
+}
+
+func (x *BaseExecutionInfo) SetLowestCommonAncestorEventVersion(v int64) {
+	x.xxx_hidden_LowestCommonAncestorEventVersion = v
+}
+
+type BaseExecutionInfo_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	RunId                            string
+	LowestCommonAncestorEventId      int64
+	LowestCommonAncestorEventVersion int64
+}
+
+func (b0 BaseExecutionInfo_builder) Build() *BaseExecutionInfo {
+	m0 := &BaseExecutionInfo{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_RunId = b.RunId
+	x.xxx_hidden_LowestCommonAncestorEventId = b.LowestCommonAncestorEventId
+	x.xxx_hidden_LowestCommonAncestorEventVersion = b.LowestCommonAncestorEventVersion
+	return m0
 }
 
 var File_temporal_server_api_workflow_v1_message_proto protoreflect.FileDescriptor
@@ -245,18 +364,6 @@ const file_temporal_server_api_workflow_v1_message_proto_rawDesc = "" +
 	"\x06run_id\x18\x01 \x01(\tR\x05runId\x12D\n" +
 	"\x1flowest_common_ancestor_event_id\x18\x02 \x01(\x03R\x1blowestCommonAncestorEventId\x12N\n" +
 	"$lowest_common_ancestor_event_version\x18\x03 \x01(\x03R lowestCommonAncestorEventVersionB0Z.go.temporal.io/server/api/workflow/v1;workflowb\x06proto3"
-
-var (
-	file_temporal_server_api_workflow_v1_message_proto_rawDescOnce sync.Once
-	file_temporal_server_api_workflow_v1_message_proto_rawDescData []byte
-)
-
-func file_temporal_server_api_workflow_v1_message_proto_rawDescGZIP() []byte {
-	file_temporal_server_api_workflow_v1_message_proto_rawDescOnce.Do(func() {
-		file_temporal_server_api_workflow_v1_message_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_api_workflow_v1_message_proto_rawDesc), len(file_temporal_server_api_workflow_v1_message_proto_rawDesc)))
-	})
-	return file_temporal_server_api_workflow_v1_message_proto_rawDescData
-}
 
 var file_temporal_server_api_workflow_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
 var file_temporal_server_api_workflow_v1_message_proto_goTypes = []any{

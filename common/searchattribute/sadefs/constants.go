@@ -333,9 +333,9 @@ func GetDBIndexSearchAttributes(
 			csa[fmt.Sprintf("%s%02d", saType.String(), i+1)] = saType
 		}
 	}
-	return &persistencespb.IndexSearchAttributes{
+	return persistencespb.IndexSearchAttributes_builder{
 		CustomSearchAttributes: csa,
-	}
+	}.Build()
 }
 
 func IsPreallocatedCSAFieldName(name string, valueType enumspb.IndexedValueType) bool {

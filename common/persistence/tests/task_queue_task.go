@@ -257,7 +257,7 @@ func (s *TaskQueueTaskSuite) randomTaskQueueInfo(
 		expiryTime = timestamppb.New(now.Add(s.stickyTTL))
 	}
 
-	return &persistencespb.TaskQueueInfo{
+	return persistencespb.TaskQueueInfo_builder{
 		NamespaceId:    s.namespaceID,
 		Name:           s.taskQueueName,
 		TaskType:       s.taskQueueType,
@@ -265,27 +265,27 @@ func (s *TaskQueueTaskSuite) randomTaskQueueInfo(
 		AckLevel:       rand.Int63(),
 		ExpiryTime:     expiryTime,
 		LastUpdateTime: timestamppb.New(now),
-	}
+	}.Build()
 }
 
 func (s *TaskQueueTaskSuite) randomTask(
 	taskID int64,
 ) *persistencespb.AllocatedTaskInfo {
 	now := time.Now().UTC()
-	return &persistencespb.AllocatedTaskInfo{
+	return persistencespb.AllocatedTaskInfo_builder{
 		TaskId: taskID,
-		Data: &persistencespb.TaskInfo{
+		Data: persistencespb.TaskInfo_builder{
 			NamespaceId:      s.namespaceID,
 			WorkflowId:       uuid.New().String(),
 			RunId:            uuid.New().String(),
 			ScheduledEventId: rand.Int63(),
 			CreateTime:       timestamppb.New(now),
 			ExpiryTime:       timestamppb.New(now.Add(s.taskTTL)),
-			Clock: &clockspb.VectorClock{
+			Clock: clockspb.VectorClock_builder{
 				ClusterId: rand.Int63(),
 				ShardId:   rand.Int31(),
 				Clock:     rand.Int63(),
-			},
-		},
-	}
+			}.Build(),
+		}.Build(),
+	}.Build()
 }

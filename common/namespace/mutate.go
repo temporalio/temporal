@@ -25,10 +25,10 @@ func WithActiveCluster(name string) Mutation {
 func WithBadBinary(chksum string) Mutation {
 	return mutationFunc(
 		func(ns *Namespace) {
-			if ns.config.BadBinaries.Binaries == nil {
-				ns.config.BadBinaries.Binaries = make(map[string]*namespacepb.BadBinaryInfo)
+			if ns.config.GetBadBinaries().GetBinaries() == nil {
+				ns.config.GetBadBinaries().SetBinaries(make(map[string]*namespacepb.BadBinaryInfo))
 			}
-			ns.config.BadBinaries.Binaries[chksum] =
+			ns.config.GetBadBinaries().GetBinaries()[chksum] =
 				&namespacepb.BadBinaryInfo{}
 		})
 }
@@ -37,7 +37,7 @@ func WithBadBinary(chksum string) Mutation {
 func WithID(id string) Mutation {
 	return mutationFunc(
 		func(ns *Namespace) {
-			ns.info.Id = id
+			ns.info.SetId(id)
 		})
 }
 
@@ -62,7 +62,7 @@ func WithNotificationVersion(v int64) Mutation {
 func WithRetention(dur *durationpb.Duration) Mutation {
 	return mutationFunc(
 		func(ns *Namespace) {
-			ns.config.Retention = dur
+			ns.config.SetRetention(dur)
 		})
 }
 
@@ -70,10 +70,10 @@ func WithRetention(dur *durationpb.Duration) Mutation {
 func WithData(key, value string) Mutation {
 	return mutationFunc(
 		func(ns *Namespace) {
-			if ns.info.Data == nil {
-				ns.info.Data = make(map[string]string)
+			if ns.info.GetData() == nil {
+				ns.info.SetData(make(map[string]string))
 			}
-			ns.info.Data[key] = value
+			ns.info.GetData()[key] = value
 		})
 }
 

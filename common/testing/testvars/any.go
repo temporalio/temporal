@@ -63,13 +63,13 @@ func (a Any) EventID() int64 {
 }
 
 func (a Any) ApplicationFailure() *failurepb.Failure {
-	return &failurepb.Failure{
+	return failurepb.Failure_builder{
 		Message: a.String(),
-		FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+		ApplicationFailureInfo: failurepb.ApplicationFailureInfo_builder{
 			Type:         a.String(),
 			NonRetryable: false,
-		}},
-	}
+		}.Build(),
+	}.Build()
 }
 
 func (a Any) InfiniteTimeout() *durationpb.Duration {

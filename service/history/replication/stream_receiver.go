@@ -248,20 +248,20 @@ func (r *StreamReceiverImpl) ackMessage(
 		if highPriorityFlowControlCommand == enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE {
 			r.logger.Warn(fmt.Sprintf("pausing High Priority Tasks, current size: %v, lowWatermark: %v", r.highPriorityTaskTracker.Size(), highPriorityWaterMarkInfo.Watermark))
 		}
-		highPriorityWatermark = &replicationspb.ReplicationState{
+		highPriorityWatermark = replicationspb.ReplicationState_builder{
 			InclusiveLowWatermark:     highPriorityWaterMarkInfo.Watermark,
 			InclusiveLowWatermarkTime: timestamppb.New(highPriorityWaterMarkInfo.Timestamp),
 			FlowControlCommand:        highPriorityFlowControlCommand,
-		}
+		}.Build()
 		lowPriorityFlowControlCommand := r.flowController.GetFlowControlInfo(enumsspb.TASK_PRIORITY_LOW)
 		if lowPriorityFlowControlCommand == enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE {
 			r.logger.Warn(fmt.Sprintf("pausing Low Priority Tasks, current size: %v, lowWatermark: %v", r.lowPriorityTaskTracker.Size(), lowPriorityWaterMarkInfo.Watermark))
 		}
-		lowPriorityWatermark = &replicationspb.ReplicationState{
+		lowPriorityWatermark = replicationspb.ReplicationState_builder{
 			InclusiveLowWatermark:     lowPriorityWaterMarkInfo.Watermark,
 			InclusiveLowWatermarkTime: timestamppb.New(lowPriorityWaterMarkInfo.Timestamp),
 			FlowControlCommand:        lowPriorityFlowControlCommand,
-		}
+		}.Build()
 		if highPriorityWaterMarkInfo.Watermark <= lowPriorityWaterMarkInfo.Watermark {
 			inclusiveLowWaterMark = highPriorityWaterMarkInfo.Watermark
 			inclusiveLowWaterMarkTime = highPriorityWaterMarkInfo.Timestamp
@@ -283,16 +283,14 @@ func (r *StreamReceiverImpl) ackMessage(
 		return 0, NewStreamError("InclusiveLowWaterMark is not set", serviceerror.NewInternal("Invalid inclusive low watermark"))
 	}
 
-	if err := stream.Send(&adminservice.StreamWorkflowReplicationMessagesRequest{
-		Attributes: &adminservice.StreamWorkflowReplicationMessagesRequest_SyncReplicationState{
-			SyncReplicationState: &replicationspb.SyncReplicationState{
-				InclusiveLowWatermark:     inclusiveLowWaterMark,
-				InclusiveLowWatermarkTime: timestamppb.New(inclusiveLowWaterMarkTime),
-				HighPriorityState:         highPriorityWatermark,
-				LowPriorityState:          lowPriorityWatermark,
-			},
-		},
-	}); err != nil {
+	if err := stream.Send(adminservice.StreamWorkflowReplicationMessagesRequest_builder{
+		SyncReplicationState: replicationspb.SyncReplicationState_builder{
+			InclusiveLowWatermark:     inclusiveLowWaterMark,
+			InclusiveLowWatermarkTime: timestamppb.New(inclusiveLowWaterMarkTime),
+			HighPriorityState:         highPriorityWatermark,
+			LowPriorityState:          lowPriorityWatermark,
+		}.Build(),
+	}.Build()); err != nil {
 		return 0, NewStreamError("stream_receiver failed to send", err)
 	}
 	metrics.ReplicationTasksRecvBacklog.With(r.MetricsHandler).Record(
@@ -333,14 +331,14 @@ func (r *StreamReceiverImpl) processMessages(
 		}
 
 		messages := streamResp.Resp.GetMessages()
-		priority := messages.Priority
+		priority := messages.GetPriority()
 
 		if err := r.validateAndSetReceiverMode(priority); err != nil {
 			// sender mode changed, exit loop and let stream reconnect to retry
 			return NewStreamError("ReplicationTask wrong receiver mode", err)
 		}
 
-		if err = ValidateTasksHaveSamePriority(priority, messages.ReplicationTasks...); err != nil {
+		if err = ValidateTasksHaveSamePriority(priority, messages.GetReplicationTasks()...); err != nil {
 			// This should not happen because source side is sending task 1 by 1. Validate here just in case.
 			return NewStreamError("ReplicationTask priority check failed", err)
 		}
@@ -349,10 +347,10 @@ func (r *StreamReceiverImpl) processMessages(
 			clusterName,
 			r.clientShardKey,
 			r.serverShardKey,
-			messages.ReplicationTasks...,
+			messages.GetReplicationTasks()...,
 		)
-		exclusiveHighWatermark := messages.ExclusiveHighWatermark
-		exclusiveHighWatermarkTime := timestamp.TimeValue(messages.ExclusiveHighWatermarkTime)
+		exclusiveHighWatermark := messages.GetExclusiveHighWatermark()
+		exclusiveHighWatermarkTime := timestamp.TimeValue(messages.GetExclusiveHighWatermarkTime())
 		taskTracker, err := r.getTaskTracker(priority)
 		if err != nil {
 			// Todo: Change to write Tasks to DLQ. As resend task will not help here
@@ -477,8 +475,8 @@ func ValidateTasksHaveSamePriority(messageBatchPriority enumsspb.TaskPriority, t
 		return nil
 	}
 	for _, task := range tasks {
-		if task.Priority != messageBatchPriority {
-			return serviceerror.NewInvalidArgumentf("Task priority does not match batch priority: %v, %v", task.Priority, messageBatchPriority)
+		if task.GetPriority() != messageBatchPriority {
+			return serviceerror.NewInvalidArgumentf("Task priority does not match batch priority: %v, %v", task.GetPriority(), messageBatchPriority)
 		}
 	}
 	return nil

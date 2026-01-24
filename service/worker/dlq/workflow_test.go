@@ -196,19 +196,19 @@ func TestModule(t *testing.T) {
 					req *historyservice.GetDLQTasksRequest,
 				) (*historyservice.GetDLQTasksResponse, error) {
 					getRequests = append(getRequests, req)
-					return &historyservice.GetDLQTasksResponse{
+					return historyservice.GetDLQTasksResponse_builder{
 						DlqTasks: []*commonspb.HistoryDLQTask{
-							{
-								Metadata: &commonspb.HistoryDLQTaskMetadata{
+							commonspb.HistoryDLQTask_builder{
+								Metadata: commonspb.HistoryDLQTaskMetadata_builder{
 									MessageId: 0,
-								},
-								Payload: &commonspb.HistoryTask{
+								}.Build(),
+								Payload: commonspb.HistoryTask_builder{
 									ShardId: 1,
-								},
-							},
+								}.Build(),
+							}.Build(),
 						},
 						NextPageToken: nil,
-					}, nil
+					}.Build(), nil
 				}
 				params.taskClientDialer = dlq.TaskClientDialerFn(func(ctx context.Context, address string) (dlq.TaskClient, error) {
 					return dlq.AddTasksFn(func(ctx context.Context, req *adminservice.AddTasksRequest) (*adminservice.AddTasksResponse, error) {
@@ -270,18 +270,18 @@ func TestModule(t *testing.T) {
 				params.setDefaultMergeParams(t)
 				params.workflowParams.MergeParams.MaxMessageID = 1
 				params.expectedQueryResp.MaxMessageIDToProcess = 1
-				res := &historyservice.GetDLQTasksResponse{
+				res := historyservice.GetDLQTasksResponse_builder{
 					DlqTasks: []*commonspb.HistoryDLQTask{
-						{
-							Metadata: &commonspb.HistoryDLQTaskMetadata{
+						commonspb.HistoryDLQTask_builder{
+							Metadata: commonspb.HistoryDLQTaskMetadata_builder{
 								MessageId: 0,
-							},
-							Payload: &commonspb.HistoryTask{
+							}.Build(),
+							Payload: commonspb.HistoryTask_builder{
 								ShardId: 1,
-							},
-						},
+							}.Build(),
+						}.Build(),
 					},
-				}
+				}.Build()
 				params.client.getTasksFn = func(
 					*historyservice.GetDLQTasksRequest,
 				) (*historyservice.GetDLQTasksResponse, error) {
@@ -316,18 +316,18 @@ func TestModule(t *testing.T) {
 				params.setDefaultMergeParams(t)
 				params.workflowParams.MergeParams.MaxMessageID = 1
 				params.expectedQueryResp.MaxMessageIDToProcess = 1
-				res := &historyservice.GetDLQTasksResponse{
+				res := historyservice.GetDLQTasksResponse_builder{
 					DlqTasks: []*commonspb.HistoryDLQTask{
-						{
-							Metadata: &commonspb.HistoryDLQTaskMetadata{
+						commonspb.HistoryDLQTask_builder{
+							Metadata: commonspb.HistoryDLQTaskMetadata_builder{
 								MessageId: 0,
-							},
-							Payload: &commonspb.HistoryTask{
+							}.Build(),
+							Payload: commonspb.HistoryTask_builder{
 								ShardId: 1,
-							},
-						},
+							}.Build(),
+						}.Build(),
 					},
-				}
+				}.Build()
 				params.client.getTasksFn = func(
 					*historyservice.GetDLQTasksRequest,
 				) (*historyservice.GetDLQTasksResponse, error) {
@@ -379,19 +379,19 @@ func TestModule(t *testing.T) {
 				blob, err := serialization.NewSerializer().SerializeTask(&replicationTask)
 				require.NoError(t, err)
 				params.client.getTasksFn = func(req *historyservice.GetDLQTasksRequest) (*historyservice.GetDLQTasksResponse, error) {
-					return &historyservice.GetDLQTasksResponse{
+					return historyservice.GetDLQTasksResponse_builder{
 						DlqTasks: []*commonspb.HistoryDLQTask{
-							{
-								Metadata: &commonspb.HistoryDLQTaskMetadata{
+							commonspb.HistoryDLQTask_builder{
+								Metadata: commonspb.HistoryDLQTaskMetadata_builder{
 									MessageId: 0,
-								},
-								Payload: &commonspb.HistoryTask{
+								}.Build(),
+								Payload: commonspb.HistoryTask_builder{
 									ShardId: 1,
 									Blob:    blob,
-								},
-							},
+								}.Build(),
+							}.Build(),
 						},
-					}, nil
+					}.Build(), nil
 				}
 				params.taskClientDialer = dlq.TaskClientDialerFn(func(ctx context.Context, address string) (dlq.TaskClient, error) {
 					return nil, assert.AnError
@@ -454,59 +454,59 @@ func TestModule(t *testing.T) {
 }
 
 func getPaginatedResponse(req *historyservice.GetDLQTasksRequest) (*historyservice.GetDLQTasksResponse, error) {
-	if len(req.NextPageToken) == 0 {
-		return &historyservice.GetDLQTasksResponse{
+	if len(req.GetNextPageToken()) == 0 {
+		return historyservice.GetDLQTasksResponse_builder{
 			DlqTasks: []*commonspb.HistoryDLQTask{
-				{
-					Metadata: &commonspb.HistoryDLQTaskMetadata{
+				commonspb.HistoryDLQTask_builder{
+					Metadata: commonspb.HistoryDLQTaskMetadata_builder{
 						MessageId: 0,
-					},
-					Payload: &commonspb.HistoryTask{
+					}.Build(),
+					Payload: commonspb.HistoryTask_builder{
 						ShardId: 1,
-					},
-				},
-				{
-					Metadata: &commonspb.HistoryDLQTaskMetadata{
+					}.Build(),
+				}.Build(),
+				commonspb.HistoryDLQTask_builder{
+					Metadata: commonspb.HistoryDLQTaskMetadata_builder{
 						MessageId: 1,
-					},
-					Payload: &commonspb.HistoryTask{
+					}.Build(),
+					Payload: commonspb.HistoryTask_builder{
 						ShardId: 2,
-					},
-				},
-				{
-					Metadata: &commonspb.HistoryDLQTaskMetadata{
+					}.Build(),
+				}.Build(),
+				commonspb.HistoryDLQTask_builder{
+					Metadata: commonspb.HistoryDLQTaskMetadata_builder{
 						MessageId: 2,
-					},
-					Payload: &commonspb.HistoryTask{
+					}.Build(),
+					Payload: commonspb.HistoryTask_builder{
 						ShardId: 2,
-					},
-				},
+					}.Build(),
+				}.Build(),
 			},
 			NextPageToken: []byte{42},
-		}, nil
+		}.Build(), nil
 	}
 
-	return &historyservice.GetDLQTasksResponse{
+	return historyservice.GetDLQTasksResponse_builder{
 		DlqTasks: []*commonspb.HistoryDLQTask{
-			{
-				Metadata: &commonspb.HistoryDLQTaskMetadata{
+			commonspb.HistoryDLQTask_builder{
+				Metadata: commonspb.HistoryDLQTaskMetadata_builder{
 					MessageId: 3,
-				},
-				Payload: &commonspb.HistoryTask{
+				}.Build(),
+				Payload: commonspb.HistoryTask_builder{
 					ShardId: 3,
-				},
-			},
-			{
-				Metadata: &commonspb.HistoryDLQTaskMetadata{
+				}.Build(),
+			}.Build(),
+			commonspb.HistoryDLQTask_builder{
+				Metadata: commonspb.HistoryDLQTaskMetadata_builder{
 					MessageId: 4,
-				},
-				Payload: &commonspb.HistoryTask{
+				}.Build(),
+				Payload: commonspb.HistoryTask_builder{
 					ShardId: 4,
-				},
-			},
+				}.Build(),
+			}.Build(),
 		},
 		NextPageToken: []byte{42},
-	}, nil
+	}.Build(), nil
 }
 
 func (p *testParams) setDefaultDeleteParams(t *testing.T) {

@@ -66,14 +66,14 @@ func (b *SpecBuilder) NewCompiledSpec(spec *schedulepb.ScheduleSpec) (*CompiledS
 	}
 
 	// compile StructuredCalendarSpecs
-	ccs := make([]*compiledCalendar, len(spec.StructuredCalendar))
-	for i, structured := range spec.StructuredCalendar {
+	ccs := make([]*compiledCalendar, len(spec.GetStructuredCalendar()))
+	for i, structured := range spec.GetStructuredCalendar() {
 		ccs[i] = newCompiledCalendar(structured, tz)
 	}
 
 	// compile excludes
-	excludes := make([]*compiledCalendar, len(spec.ExcludeStructuredCalendar))
-	for i, excal := range spec.ExcludeStructuredCalendar {
+	excludes := make([]*compiledCalendar, len(spec.GetExcludeStructuredCalendar()))
+	for i, excal := range spec.GetExcludeStructuredCalendar() {
 		excludes[i] = newCompiledCalendar(excal, tz)
 	}
 
@@ -91,27 +91,27 @@ func (b *SpecBuilder) NewCompiledSpec(spec *schedulepb.ScheduleSpec) (*CompiledS
 func CleanSpec(spec *schedulepb.ScheduleSpec) {
 	cleanRanges := func(ranges []*schedulepb.Range) {
 		for _, r := range ranges {
-			if r.End < r.Start {
-				r.End = r.Start
+			if r.GetEnd() < r.GetStart() {
+				r.SetEnd(r.GetStart())
 			}
-			if r.Step == 0 {
-				r.Step = 1
+			if r.GetStep() == 0 {
+				r.SetStep(1)
 			}
 		}
 	}
 	cleanCal := func(structured *schedulepb.StructuredCalendarSpec) {
-		cleanRanges(structured.Second)
-		cleanRanges(structured.Minute)
-		cleanRanges(structured.Hour)
-		cleanRanges(structured.DayOfMonth)
-		cleanRanges(structured.Month)
-		cleanRanges(structured.Year)
-		cleanRanges(structured.DayOfWeek)
+		cleanRanges(structured.GetSecond())
+		cleanRanges(structured.GetMinute())
+		cleanRanges(structured.GetHour())
+		cleanRanges(structured.GetDayOfMonth())
+		cleanRanges(structured.GetMonth())
+		cleanRanges(structured.GetYear())
+		cleanRanges(structured.GetDayOfWeek())
 	}
-	for _, structured := range spec.StructuredCalendar {
+	for _, structured := range spec.GetStructuredCalendar() {
 		cleanCal(structured)
 	}
-	for _, structured := range spec.ExcludeStructuredCalendar {
+	for _, structured := range spec.GetExcludeStructuredCalendar() {
 		cleanCal(structured)
 	}
 }
@@ -122,29 +122,29 @@ func canonicalizeSpec(spec *schedulepb.ScheduleSpec) (*schedulepb.ScheduleSpec, 
 	spec = common.CloneProto(spec)
 
 	// parse CalendarSpecs to StructuredCalendarSpecs
-	for _, cal := range spec.Calendar {
+	for _, cal := range spec.GetCalendar() {
 		structured, err := parseCalendarToStructured(cal)
 		if err != nil {
 			return nil, err
 		}
-		spec.StructuredCalendar = append(spec.StructuredCalendar, structured)
+		spec.SetStructuredCalendar(append(spec.GetStructuredCalendar(), structured))
 	}
-	spec.Calendar = nil
+	spec.SetCalendar(nil)
 
 	// parse ExcludeCalendars
-	for _, cal := range spec.ExcludeCalendar {
+	for _, cal := range spec.GetExcludeCalendar() {
 		structured, err := parseCalendarToStructured(cal)
 		if err != nil {
 			return nil, err
 		}
-		spec.ExcludeStructuredCalendar = append(spec.ExcludeStructuredCalendar, structured)
+		spec.SetExcludeStructuredCalendar(append(spec.GetExcludeStructuredCalendar(), structured))
 	}
-	spec.ExcludeCalendar = nil
+	spec.SetExcludeCalendar(nil)
 
 	// parse CronStrings
 	const unset = "__unset__"
 	cronTZ := unset
-	for _, cs := range spec.CronString {
+	for _, cs := range spec.GetCronString() {
 		structured, interval, tz, err := parseCronString(cs)
 		if err != nil {
 			return nil, err
@@ -155,33 +155,33 @@ func canonicalizeSpec(spec *schedulepb.ScheduleSpec) (*schedulepb.ScheduleSpec, 
 		}
 		cronTZ = tz
 		if structured != nil {
-			spec.StructuredCalendar = append(spec.StructuredCalendar, structured)
+			spec.SetStructuredCalendar(append(spec.GetStructuredCalendar(), structured))
 		}
 		if interval != nil {
-			spec.Interval = append(spec.Interval, interval)
+			spec.SetInterval(append(spec.GetInterval(), interval))
 		}
 	}
-	spec.CronString = nil
+	spec.SetCronString(nil)
 
 	// if we have cron string(s), copy the timezone to spec, checking for conflict first.
 	// if cron string timezone is empty string, don't copy, let the one in spec be used.
 	if cronTZ != unset && cronTZ != "" {
-		if spec.TimezoneName != "" && spec.TimezoneName != cronTZ || spec.TimezoneData != nil {
+		if spec.GetTimezoneName() != "" && spec.GetTimezoneName() != cronTZ || len(spec.GetTimezoneData()) != 0 {
 			return nil, errConflictingTimezoneNames
-		} else if spec.TimezoneName == "" {
-			spec.TimezoneName = cronTZ
+		} else if spec.GetTimezoneName() == "" {
+			spec.SetTimezoneName(cronTZ)
 		}
 	}
 
 	// validate structured calendar
-	for _, structured := range spec.StructuredCalendar {
+	for _, structured := range spec.GetStructuredCalendar() {
 		if err := validateStructuredCalendar(structured); err != nil {
 			return nil, err
 		}
 	}
 
 	// validate intervals
-	for _, interval := range spec.Interval {
+	for _, interval := range spec.GetInterval() {
 		if err := validateInterval(interval); err != nil {
 			return nil, err
 		}
@@ -199,27 +199,27 @@ func validateStructuredCalendar(scs *schedulepb.StructuredCalendarSpec) error {
 				errs = append(errs, "range is nil")
 				continue
 			}
-			if r.Start < minVal || r.Start > maxVal {
+			if r.GetStart() < minVal || r.GetStart() > maxVal {
 				errs = append(errs, fmt.Sprintf("%s Start is not in range [%d-%d]", field, minVal, maxVal))
 			}
-			if r.End != 0 && (r.End < r.Start || r.End > maxVal) {
+			if r.GetEnd() != 0 && (r.GetEnd() < r.GetStart() || r.GetEnd() > maxVal) {
 				errs = append(errs, fmt.Sprintf("%s End is before Start or not in range [%d-%d]", field, minVal, maxVal))
 			}
-			if r.Step < 0 {
+			if r.GetStep() < 0 {
 				errs = append(errs, fmt.Sprintf("%s has invalid Step", field))
 			}
 		}
 	}
 
-	checkRanges(scs.Second, "Second", 0, 59)
-	checkRanges(scs.Minute, "Minute", 0, 59)
-	checkRanges(scs.Hour, "Hour", 0, 23)
-	checkRanges(scs.DayOfMonth, "DayOfMonth", 1, 31)
-	checkRanges(scs.Month, "Month", 1, 12)
-	checkRanges(scs.Year, "Year", minCalendarYear, maxCalendarYear)
-	checkRanges(scs.DayOfWeek, "DayOfWeek", 0, 6)
+	checkRanges(scs.GetSecond(), "Second", 0, 59)
+	checkRanges(scs.GetMinute(), "Minute", 0, 59)
+	checkRanges(scs.GetHour(), "Hour", 0, 23)
+	checkRanges(scs.GetDayOfMonth(), "DayOfMonth", 1, 31)
+	checkRanges(scs.GetMonth(), "Month", 1, 12)
+	checkRanges(scs.GetYear(), "Year", minCalendarYear, maxCalendarYear)
+	checkRanges(scs.GetDayOfWeek(), "DayOfWeek", 0, 6)
 
-	if len(scs.Comment) > maxCommentLen {
+	if len(scs.GetComment()) > maxCommentLen {
 		errs = append(errs, "comment is too long")
 	}
 
@@ -235,7 +235,7 @@ func validateInterval(i *schedulepb.IntervalSpec) error {
 	}
 	// TODO: use timestamp.ValidateAndCapProtoDuration after switching to state machine based implementation.
 	// 	Not adding it to workflow based implementation to avoid potential non-determinism errors.
-	iv, phase := timestamp.DurationValue(i.Interval), timestamp.DurationValue(i.Phase)
+	iv, phase := timestamp.DurationValue(i.GetInterval()), timestamp.DurationValue(i.GetPhase())
 	if iv < time.Second {
 		return errors.New("interval is too small")
 	} else if phase < 0 {
@@ -247,15 +247,15 @@ func validateInterval(i *schedulepb.IntervalSpec) error {
 }
 
 func (b *SpecBuilder) loadTimezone(spec *schedulepb.ScheduleSpec) (*time.Location, error) {
-	if spec.TimezoneData != nil {
-		return time.LoadLocationFromTZData(spec.TimezoneName, spec.TimezoneData)
+	if len(spec.GetTimezoneData()) != 0 {
+		return time.LoadLocationFromTZData(spec.GetTimezoneName(), spec.GetTimezoneData())
 	}
 
-	if cached, ok := b.locationCache.Get(spec.TimezoneName).(*locationAndError); ok {
+	if cached, ok := b.locationCache.Get(spec.GetTimezoneName()).(*locationAndError); ok {
 		return cached.loc, cached.err
 	}
-	loc, err := time.LoadLocation(spec.TimezoneName)
-	b.locationCache.Put(spec.TimezoneName, &locationAndError{
+	loc, err := time.LoadLocation(spec.GetTimezoneName())
+	b.locationCache.Put(spec.GetTimezoneName(), &locationAndError{
 		loc: loc,
 		err: err,
 	})
@@ -273,10 +273,10 @@ func (cs *CompiledSpec) GetNextTime(jitterSeed string, after time.Time) GetNextT
 	// If we're starting before the schedule's allowed time range, jump up to right before
 	// it (so that we can still return the first second of the range if it happens to match).
 	// note: AsTime returns unix epoch on nil StartTime
-	after = util.MaxTime(after, cs.spec.StartTime.AsTime().Add(-time.Second))
+	after = util.MaxTime(after, cs.spec.GetStartTime().AsTime().Add(-time.Second))
 
 	pastEndTime := func(t time.Time) bool {
-		return cs.spec.EndTime != nil && t.After(cs.spec.EndTime.AsTime()) || t.Year() > maxCalendarYear
+		return cs.spec.HasEndTime() && t.After(cs.spec.GetEndTime().AsTime()) || t.Year() > maxCalendarYear
 	}
 	var nominal time.Time
 	for nominal.IsZero() || cs.excluded(nominal) {
@@ -288,7 +288,7 @@ func (cs *CompiledSpec) GetNextTime(jitterSeed string, after time.Time) GetNextT
 		}
 	}
 
-	maxJitter := timestamp.DurationValue(cs.spec.Jitter)
+	maxJitter := timestamp.DurationValue(cs.spec.GetJitter())
 	// Ensure that jitter doesn't push this time past the _next_ nominal start time
 	if following := cs.rawNextTime(nominal); !following.IsZero() {
 		maxJitter = min(maxJitter, following.Sub(nominal))
@@ -312,7 +312,7 @@ func (cs *CompiledSpec) rawNextTime(after time.Time) (nominal time.Time) {
 	}
 
 	ts := after.Unix()
-	for _, iv := range cs.spec.Interval {
+	for _, iv := range cs.spec.GetInterval() {
 		next := cs.nextIntervalTime(iv, ts)
 		if next < minTimestamp {
 			minTimestamp = next
@@ -327,11 +327,11 @@ func (cs *CompiledSpec) rawNextTime(after time.Time) (nominal time.Time) {
 
 // Returns the next matching time for a single interval spec.
 func (cs *CompiledSpec) nextIntervalTime(iv *schedulepb.IntervalSpec, ts int64) int64 {
-	interval := int64(timestamp.DurationValue(iv.Interval) / time.Second)
+	interval := int64(timestamp.DurationValue(iv.GetInterval()) / time.Second)
 	if interval < 1 {
 		interval = 1
 	}
-	phase := int64(timestamp.DurationValue(iv.Phase) / time.Second)
+	phase := int64(timestamp.DurationValue(iv.GetPhase()) / time.Second)
 	if phase < 0 {
 		phase = 0
 	}

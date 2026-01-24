@@ -338,8 +338,8 @@ func (handler *workflowTaskCompletedHandler) handleCommand(
 		return nil, err
 	}
 
-	if historyEvent != nil && command.UserMetadata != nil {
-		historyEvent.UserMetadata = command.UserMetadata
+	if historyEvent != nil && command.HasUserMetadata() {
+		historyEvent.SetUserMetadata(command.GetUserMetadata())
 	}
 	return response, nil
 }
@@ -355,7 +355,7 @@ func (handler *workflowTaskCompletedHandler) handleMessage(
 	if err := handler.sizeLimitChecker.checkIfPayloadSizeExceedsLimit(
 		// TODO (alex-update): Should use MessageTypeTag here but then it needs to be another metric name too.
 		metrics.CommandTypeTag(msgType.String()),
-		proto.Size(message.Body),
+		proto.Size(message.GetBody()),
 		fmt.Sprintf("Message type %v exceeds size limit.", msgType),
 	); err != nil {
 		return handler.terminateWorkflow(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_UPDATE_WORKFLOW_EXECUTION_MESSAGE, err)
@@ -363,7 +363,7 @@ func (handler *workflowTaskCompletedHandler) handleMessage(
 
 	switch protocolType {
 	case update.ProtocolV1:
-		upd := handler.updateRegistry.Find(ctx, message.ProtocolInstanceId)
+		upd := handler.updateRegistry.Find(ctx, message.GetProtocolInstanceId())
 		if upd == nil {
 			upd, err = handler.updateRegistry.TryResurrect(ctx, message)
 			if err != nil {
@@ -375,7 +375,7 @@ func (handler *workflowTaskCompletedHandler) handleMessage(
 			// Update was not found in the registry and can't be resurrected.
 			return handler.failWorkflowTask(
 				enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_UPDATE_WORKFLOW_EXECUTION_MESSAGE,
-				serviceerror.NewNotFoundf("update %s wasn't found on the server. This is most likely a transient error which will be resolved automatically by retries", message.ProtocolInstanceId))
+				serviceerror.NewNotFoundf("update %s wasn't found on the server. This is most likely a transient error which will be resolved automatically by retries", message.GetProtocolInstanceId()))
 		}
 
 		if err := upd.OnProtocolMessage(message, workflow.WithEffects(handler.effects, handler.mutableState)); err != nil {
@@ -397,26 +397,26 @@ func (handler *workflowTaskCompletedHandler) handleCommandProtocolMessage(
 	msgs *collection.IndexedTakeList[string, *protocolpb.Message],
 ) error {
 	executionInfo := handler.mutableState.GetExecutionInfo()
-	namespaceID := namespace.ID(executionInfo.NamespaceId)
+	namespaceID := namespace.ID(executionInfo.GetNamespaceId())
 
 	if err := handler.validateCommandAttr(
 		func() (enumspb.WorkflowTaskFailedCause, error) {
 			return handler.attrValidator.ValidateProtocolMessageAttributes(
 				namespaceID,
 				attr,
-				executionInfo.WorkflowRunTimeout,
+				executionInfo.GetWorkflowRunTimeout(),
 			)
 		},
 	); err != nil || handler.stopProcessing {
 		return err
 	}
 
-	if msg, ok := msgs.Take(attr.MessageId); ok {
+	if msg, ok := msgs.Take(attr.GetMessageId()); ok {
 		return handler.handleMessage(ctx, msg)
 	}
 	return handler.failWorkflowTask(
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_UPDATE_WORKFLOW_EXECUTION_MESSAGE,
-		serviceerror.NewInvalidArgumentf("ProtocolMessageCommand referenced absent message ID %s", attr.MessageId),
+		serviceerror.NewInvalidArgumentf("ProtocolMessageCommand referenced absent message ID %s", attr.GetMessageId()),
 	)
 }
 
@@ -425,7 +425,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandScheduleActivity(
 	attr *commandpb.ScheduleActivityTaskCommandAttributes,
 ) (*historypb.HistoryEvent, *handleCommandResponse, error) {
 	executionInfo := handler.mutableState.GetExecutionInfo()
-	namespaceID := namespace.ID(executionInfo.NamespaceId)
+	namespaceID := namespace.ID(executionInfo.GetNamespaceId())
 
 	// TODO(fairness): remove this again once the SDK allows setting the fairness key
 	const fairnessKeyPrefix = "x-temporal-internal-fairness-key["
@@ -435,9 +435,9 @@ func (handler *workflowTaskCompletedHandler) handleCommandScheduleActivity(
 			if colonIndex := strings.Index(keyAndWeight, ":"); colonIndex != -1 {
 				key := keyAndWeight[:colonIndex]
 				if weight, err := strconv.ParseFloat(keyAndWeight[colonIndex+1:], 32); err == nil {
-					attr.Priority = cmp.Or(attr.Priority, &commonpb.Priority{})
-					attr.Priority.FairnessKey = key
-					attr.Priority.FairnessWeight = float32(weight)
+					attr.SetPriority(cmp.Or(attr.GetPriority(), &commonpb.Priority{}))
+					attr.GetPriority().SetFairnessKey(key)
+					attr.GetPriority().SetFairnessWeight(float32(weight))
 				}
 			}
 		}
@@ -448,7 +448,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandScheduleActivity(
 			return handler.attrValidator.ValidateActivityScheduleAttributes(
 				namespaceID,
 				attr,
-				executionInfo.WorkflowRunTimeout,
+				executionInfo.GetWorkflowRunTimeout(),
 			)
 		},
 	); err != nil || handler.stopProcessing {
@@ -457,7 +457,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandScheduleActivity(
 
 	if handler.mutableState.GetAssignedBuildId() == "" {
 		// TODO: this is supported in new versioning [cleanup-old-wv]
-		if attr.UseWorkflowBuildId && attr.TaskQueue.GetName() != "" && attr.TaskQueue.Name != handler.mutableState.GetExecutionInfo().TaskQueue {
+		if attr.GetUseWorkflowBuildId() && attr.GetTaskQueue().GetName() != "" && attr.GetTaskQueue().GetName() != handler.mutableState.GetExecutionInfo().GetTaskQueue() {
 			err := serviceerror.NewInvalidArgument("Activity with UseCompatibleVersion cannot run on different task queue.")
 			return nil, nil, handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_ACTIVITY_ATTRIBUTES, err)
 		}
@@ -476,7 +476,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandScheduleActivity(
 		return nil, nil, handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_PENDING_ACTIVITIES_LIMIT_EXCEEDED, err)
 	}
 
-	enums.SetDefaultTaskQueueKind(&attr.GetTaskQueue().Kind)
+	attr.GetTaskQueue().SetKind(enums.DefaultTaskQueueKind(attr.GetTaskQueue().GetKind()))
 
 	namespace := handler.mutableState.GetNamespaceEntry().Name().String()
 
@@ -494,12 +494,12 @@ func (handler *workflowTaskCompletedHandler) handleCommandScheduleActivity(
 	// newer "default" compatible version).
 	// Note that if `UseWorkflowBuildId` is false, it implies that the activity should run on the "default" version
 	// for the task queue.
-	eagerStartActivity := attr.RequestEagerExecution && handler.config.EnableActivityEagerExecution(namespace) &&
-		(!versioningUsed || attr.UseWorkflowBuildId)
+	eagerStartActivity := attr.GetRequestEagerExecution() && handler.config.EnableActivityEagerExecution(namespace) &&
+		(!versioningUsed || attr.GetUseWorkflowBuildId())
 
 	// if the workflow is paused, we bypass activity task generation and also prevent eager activity execution.
 	bypassActivityTaskGeneration := eagerStartActivity
-	if handler.mutableState.GetExecutionState().Status == enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED {
+	if handler.mutableState.GetExecutionState().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED {
 		bypassActivityTaskGeneration = true
 		eagerStartActivity = false
 	}
@@ -537,7 +537,7 @@ func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivi
 		return nil, nil
 	}
 
-	ai, ok := handler.mutableState.GetActivityByActivityID(attr.ActivityId)
+	ai, ok := handler.mutableState.GetActivityByActivityID(attr.GetActivityId())
 	if !ok {
 		// activity cancelled in the same worflow task
 		return nil, nil
@@ -546,7 +546,7 @@ func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivi
 	var stamp *commonpb.WorkerVersionStamp
 	// eager activity always uses workflow's build ID
 	buildId := handler.mutableState.GetAssignedBuildId()
-	stamp = &commonpb.WorkerVersionStamp{UseVersioning: buildId != "", BuildId: buildId}
+	stamp = commonpb.WorkerVersionStamp_builder{UseVersioning: buildId != "", BuildId: buildId}.Build()
 
 	if _, err := handler.mutableState.AddActivityTaskStartedEvent(
 		ai,
@@ -561,8 +561,8 @@ func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivi
 	}
 
 	executionInfo := handler.mutableState.GetExecutionInfo()
-	namespaceID := namespace.ID(executionInfo.NamespaceId)
-	runID := handler.mutableState.GetExecutionState().RunId
+	namespaceID := namespace.ID(executionInfo.GetNamespaceId())
+	runID := handler.mutableState.GetExecutionState().GetRunId()
 
 	shardClock, err := handler.shard.NewVectorClock()
 	if err != nil {
@@ -571,15 +571,15 @@ func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivi
 
 	taskToken := tasktoken.NewActivityTaskToken(
 		namespaceID.String(),
-		executionInfo.WorkflowId,
+		executionInfo.GetWorkflowId(),
 		runID,
 		ai.GetScheduledEventId(),
-		attr.ActivityId,
-		attr.ActivityType.GetName(),
-		ai.Attempt,
+		attr.GetActivityId(),
+		attr.GetActivityType().GetName(),
+		ai.GetAttempt(),
 		shardClock,
-		ai.Version,
-		ai.StartVersion,
+		ai.GetVersion(),
+		ai.GetStartVersion(),
 		nil,
 	)
 	serializedToken, err := handler.tokenSerializer.Serialize(taskToken)
@@ -587,33 +587,33 @@ func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivi
 		return nil, err
 	}
 
-	activityTask := &workflowservice.PollActivityTaskQueueResponse{
-		ActivityId:   attr.ActivityId,
-		ActivityType: attr.ActivityType,
-		Header:       attr.Header,
-		Input:        attr.Input,
-		WorkflowExecution: &commonpb.WorkflowExecution{
-			WorkflowId: executionInfo.WorkflowId,
+	activityTask := workflowservice.PollActivityTaskQueueResponse_builder{
+		ActivityId:   attr.GetActivityId(),
+		ActivityType: attr.GetActivityType(),
+		Header:       attr.GetHeader(),
+		Input:        attr.GetInput(),
+		WorkflowExecution: commonpb.WorkflowExecution_builder{
+			WorkflowId: executionInfo.GetWorkflowId(),
 			RunId:      runID,
-		},
-		CurrentAttemptScheduledTime: ai.ScheduledTime,
-		ScheduledTime:               ai.ScheduledTime,
-		ScheduleToCloseTimeout:      attr.ScheduleToCloseTimeout,
-		StartedTime:                 ai.StartedTime,
-		StartToCloseTimeout:         attr.StartToCloseTimeout,
-		HeartbeatTimeout:            attr.HeartbeatTimeout,
+		}.Build(),
+		CurrentAttemptScheduledTime: ai.GetScheduledTime(),
+		ScheduledTime:               ai.GetScheduledTime(),
+		ScheduleToCloseTimeout:      attr.GetScheduleToCloseTimeout(),
+		StartedTime:                 ai.GetStartedTime(),
+		StartToCloseTimeout:         attr.GetStartToCloseTimeout(),
+		HeartbeatTimeout:            attr.GetHeartbeatTimeout(),
 		TaskToken:                   serializedToken,
-		Attempt:                     ai.Attempt,
-		HeartbeatDetails:            ai.LastHeartbeatDetails,
+		Attempt:                     ai.GetAttempt(),
+		HeartbeatDetails:            ai.GetLastHeartbeatDetails(),
 		WorkflowType:                handler.mutableState.GetWorkflowType(),
 		WorkflowNamespace:           handler.mutableState.GetNamespaceEntry().Name().String(),
-	}
+	}.Build()
 	metrics.ActivityEagerExecutionCounter.With(
-		workflow.GetPerTaskQueueFamilyScope(handler.metricsHandler, handler.mutableState.GetNamespaceEntry().Name(), ai.TaskQueue, handler.config),
+		workflow.GetPerTaskQueueFamilyScope(handler.metricsHandler, handler.mutableState.GetNamespaceEntry().Name(), ai.GetTaskQueue(), handler.config),
 	).Record(1)
 
 	return func(resp *historyservice.RespondWorkflowTaskCompletedResponse) error {
-		resp.ActivityTasks = append(resp.ActivityTasks, activityTask)
+		resp.SetActivityTasks(append(resp.GetActivityTasks(), activityTask))
 		return nil
 	}, nil
 }
@@ -643,12 +643,12 @@ func (handler *workflowTaskCompletedHandler) handleCommandRequestCancelActivity(
 		// If ai is nil, the activity has already been canceled/completed/timedout. The cancel request
 		// will be recorded in the history, but no further action will be taken.
 
-		if ai.StartedEventId == common.EmptyEventID {
+		if ai.GetStartedEventId() == common.EmptyEventID {
 			// We haven't started the activity yet, we can cancel the activity right away and
 			// schedule a workflow task to ensure the workflow makes progress.
 			_, err = handler.mutableState.AddActivityTaskCanceledEvent(
-				ai.ScheduledEventId,
-				ai.StartedEventId,
+				ai.GetScheduledEventId(),
+				ai.GetStartedEventId(),
 				actCancelReqEvent.GetEventId(),
 				payloads.EncodeString(activityCancellationMsgActivityNotStarted),
 				handler.identity,
@@ -867,7 +867,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandRequestCancelExternalW
 	attr *commandpb.RequestCancelExternalWorkflowExecutionCommandAttributes,
 ) (*historypb.HistoryEvent, error) {
 	executionInfo := handler.mutableState.GetExecutionInfo()
-	namespaceID := namespace.ID(executionInfo.NamespaceId)
+	namespaceID := namespace.ID(executionInfo.GetNamespaceId())
 	targetNamespaceID := namespaceID
 	if attr.GetNamespace() != "" {
 		targetNamespaceEntry, err := handler.namespaceRegistry.GetNamespace(namespace.Name(attr.GetNamespace()))
@@ -881,7 +881,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandRequestCancelExternalW
 		func() (enumspb.WorkflowTaskFailedCause, error) {
 			return handler.attrValidator.ValidateCancelExternalWorkflowExecutionAttributes(
 				namespaceID,
-				executionInfo.WorkflowId,
+				executionInfo.GetWorkflowId(),
 				targetNamespaceID,
 				handler.initiatedChildExecutionsInBatch,
 				attr,
@@ -949,7 +949,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandContinueAsNewWorkflow(
 		// Create a copy of the `attr` to avoid modification of original `attr`,
 		// which can be needed again in case of retry.
 		newAttr := common.CloneProto(attr)
-		newAttr.SearchAttributes = unaliasedSas
+		newAttr.SetSearchAttributes(unaliasedSas)
 		attr = newAttr
 	}
 
@@ -967,7 +967,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandContinueAsNewWorkflow(
 
 	if handler.mutableState.GetAssignedBuildId() == "" {
 		// TODO(carlydf): this is supported in new versioning [cleanup-old-wv]
-		if attr.InheritBuildId && attr.TaskQueue.GetName() != "" && attr.TaskQueue.Name != handler.mutableState.GetExecutionInfo().TaskQueue {
+		if attr.GetInheritBuildId() && attr.GetTaskQueue().GetName() != "" && attr.GetTaskQueue().GetName() != handler.mutableState.GetExecutionInfo().GetTaskQueue() {
 			err := serviceerror.NewInvalidArgument("ContinueAsNew with UseCompatibleVersion cannot run on different task queue.")
 			return nil, handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_CONTINUE_AS_NEW_ATTRIBUTES, err)
 		}
@@ -1014,7 +1014,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandContinueAsNewWorkflow(
 	// Extract parentNamespace, so it can be passed down to next run of workflow execution
 	var parentNamespace namespace.Name
 	if handler.mutableState.HasParentExecution() {
-		parentNamespaceID := namespace.ID(handler.mutableState.GetExecutionInfo().ParentNamespaceId)
+		parentNamespaceID := namespace.ID(handler.mutableState.GetExecutionInfo().GetParentNamespaceId())
 		parentNamespaceEntry, err := handler.namespaceRegistry.GetNamespaceByID(parentNamespaceID)
 		if err == nil {
 			parentNamespace = parentNamespaceEntry.Name()
@@ -1054,7 +1054,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandStartChildWorkflow(
 		targetNamespace = targetNamespaceEntry.Name()
 		targetNamespaceID = targetNamespaceEntry.ID()
 	} else {
-		attr.Namespace = parentNamespace.String()
+		attr.SetNamespace(parentNamespace.String())
 	}
 
 	unaliasedSas, err := searchattribute.UnaliasFields(
@@ -1069,7 +1069,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandStartChildWorkflow(
 		// Create a copy of the `attr` to avoid modification of original `attr`,
 		// which can be needed again in case of retry.
 		newAttr := common.CloneProto(attr)
-		newAttr.SearchAttributes = unaliasedSas
+		newAttr.SetSearchAttributes(unaliasedSas)
 		attr = newAttr
 	}
 
@@ -1090,7 +1090,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandStartChildWorkflow(
 
 	if handler.mutableState.GetAssignedBuildId() == "" {
 		// TODO: this is supported in new versioning [cleanup-old-wv]
-		if attr.InheritBuildId && attr.TaskQueue.GetName() != "" && attr.TaskQueue.Name != handler.mutableState.GetExecutionInfo().TaskQueue {
+		if attr.GetInheritBuildId() && attr.GetTaskQueue().GetName() != "" && attr.GetTaskQueue().GetName() != handler.mutableState.GetExecutionInfo().GetTaskQueue() {
 			err := serviceerror.NewInvalidArgument("StartChildWorkflowExecution with UseCompatibleVersion cannot run on different task queue.")
 			return nil, handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_START_CHILD_EXECUTION_ATTRIBUTES, err)
 		}
@@ -1130,12 +1130,12 @@ func (handler *workflowTaskCompletedHandler) handleCommandStartChildWorkflow(
 
 	enabled := handler.config.EnableParentClosePolicy(parentNamespace.String())
 	if enabled {
-		enums.SetDefaultParentClosePolicy(&attr.ParentClosePolicy)
+		attr.SetParentClosePolicy(enums.DefaultParentClosePolicy(attr.GetParentClosePolicy()))
 	} else {
-		attr.ParentClosePolicy = enumspb.PARENT_CLOSE_POLICY_ABANDON
+		attr.SetParentClosePolicy(enumspb.PARENT_CLOSE_POLICY_ABANDON)
 	}
 
-	enums.SetDefaultWorkflowIdReusePolicy(&attr.WorkflowIdReusePolicy)
+	attr.SetWorkflowIdReusePolicy(enums.DefaultWorkflowIdReusePolicy(attr.GetWorkflowIdReusePolicy()))
 
 	event, _, err := handler.mutableState.AddStartChildWorkflowExecutionInitiatedEvent(
 		handler.workflowTaskCompletedID, attr, targetNamespaceID,
@@ -1152,7 +1152,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandSignalExternalWorkflow
 	attr *commandpb.SignalExternalWorkflowExecutionCommandAttributes,
 ) (*historypb.HistoryEvent, error) {
 	executionInfo := handler.mutableState.GetExecutionInfo()
-	namespaceID := namespace.ID(executionInfo.NamespaceId)
+	namespaceID := namespace.ID(executionInfo.GetNamespaceId())
 	targetNamespaceID := namespaceID
 	if attr.GetNamespace() != "" {
 		targetNamespaceEntry, err := handler.namespaceRegistry.GetNamespace(namespace.Name(attr.GetNamespace()))
@@ -1166,7 +1166,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandSignalExternalWorkflow
 		func() (enumspb.WorkflowTaskFailedCause, error) {
 			return handler.attrValidator.ValidateSignalExternalWorkflowExecutionAttributes(
 				namespaceID,
-				executionInfo.WorkflowId,
+				executionInfo.GetWorkflowId(),
 				targetNamespaceID,
 				attr,
 			)
@@ -1201,7 +1201,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandUpsertWorkflowSearchAt
 ) (*historypb.HistoryEvent, error) {
 	// get namespace name
 	executionInfo := handler.mutableState.GetExecutionInfo()
-	namespaceID := namespace.ID(executionInfo.NamespaceId)
+	namespaceID := namespace.ID(executionInfo.GetNamespaceId())
 	namespaceEntry, err := handler.namespaceRegistry.GetNamespaceByID(namespaceID)
 	if err != nil {
 		return nil, serviceerror.NewUnavailablef("Unable to get namespace for namespaceID: %v.", namespaceID)
@@ -1220,7 +1220,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandUpsertWorkflowSearchAt
 		// Create a copy of the `attr` to avoid modification of original `attr`,
 		// which can be needed again in case of retry.
 		newAttr := common.CloneProto(attr)
-		newAttr.SearchAttributes = unaliasedSas
+		newAttr.SetSearchAttributes(unaliasedSas)
 		attr = newAttr
 	}
 
@@ -1245,12 +1245,12 @@ func (handler *workflowTaskCompletedHandler) handleCommandUpsertWorkflowSearchAt
 	// new search attributes size limit check
 	// search attribute validation must be done after unaliasing keys
 	err = handler.sizeLimitChecker.checkIfSearchAttributesSizeExceedsLimit(
-		&commonpb.SearchAttributes{
+		commonpb.SearchAttributes_builder{
 			IndexedFields: payload.MergeMapOfPayload(
-				executionInfo.SearchAttributes,
+				executionInfo.GetSearchAttributes(),
 				attr.GetSearchAttributes().GetIndexedFields(),
 			),
-		},
+		}.Build(),
 		namespace,
 		metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES.String()),
 	)
@@ -1269,7 +1269,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandModifyWorkflowProperti
 ) (*historypb.HistoryEvent, error) {
 	// get namespace name
 	executionInfo := handler.mutableState.GetExecutionInfo()
-	namespaceID := namespace.ID(executionInfo.NamespaceId)
+	namespaceID := namespace.ID(executionInfo.GetNamespaceId())
 	_, err := handler.namespaceRegistry.GetNamespaceByID(namespaceID)
 	if err != nil {
 		return nil, serviceerror.NewUnavailablef("Unable to get namespace for namespaceID: %v.", namespaceID)
@@ -1295,9 +1295,9 @@ func (handler *workflowTaskCompletedHandler) handleCommandModifyWorkflowProperti
 
 	// new memo size limit check
 	err = handler.sizeLimitChecker.checkIfMemoSizeExceedsLimit(
-		&commonpb.Memo{
-			Fields: payload.MergeMapOfPayload(executionInfo.Memo, attr.GetUpsertedMemo().GetFields()),
-		},
+		commonpb.Memo_builder{
+			Fields: payload.MergeMapOfPayload(executionInfo.GetMemo(), attr.GetUpsertedMemo().GetFields()),
+		}.Build(),
 		metrics.CommandTypeTag(enumspb.COMMAND_TYPE_MODIFY_WORKFLOW_PROPERTIES.String()),
 		"ModifyWorkflowPropertiesCommandAttributes. Memo exceeds size limit.",
 	)
@@ -1352,7 +1352,7 @@ func (handler *workflowTaskCompletedHandler) handleRetry(
 		newMutableState,
 		newRunID,
 		startAttr,
-		startEvent.Links,
+		startEvent.GetLinks(),
 		nil,
 		failure,
 		backoffInterval,
@@ -1363,8 +1363,8 @@ func (handler *workflowTaskCompletedHandler) handleRetry(
 	}
 
 	err = newMutableState.SetHistoryTree(
-		newMutableState.GetExecutionInfo().WorkflowExecutionTimeout,
-		newMutableState.GetExecutionInfo().WorkflowRunTimeout,
+		newMutableState.GetExecutionInfo().GetWorkflowExecutionTimeout(),
+		newMutableState.GetExecutionInfo().GetWorkflowRunTimeout(),
 		newRunID,
 	)
 	if err != nil {
@@ -1389,7 +1389,7 @@ func (handler *workflowTaskCompletedHandler) handleCron(
 	startAttr := startEvent.GetWorkflowExecutionStartedEventAttributes()
 
 	if failure != nil {
-		lastCompletionResult = startAttr.LastCompletionResult
+		lastCompletionResult = startAttr.GetLastCompletionResult()
 	}
 
 	newMutableState, err := workflow.NewMutableStateInChain(
@@ -1412,7 +1412,7 @@ func (handler *workflowTaskCompletedHandler) handleCron(
 		newMutableState,
 		newRunID,
 		startAttr,
-		startEvent.Links,
+		startEvent.GetLinks(),
 		lastCompletionResult,
 		failure,
 		backoffInterval,
@@ -1423,8 +1423,8 @@ func (handler *workflowTaskCompletedHandler) handleCron(
 	}
 
 	err = newMutableState.SetHistoryTree(
-		newMutableState.GetExecutionInfo().WorkflowExecutionTimeout,
-		newMutableState.GetExecutionInfo().WorkflowRunTimeout,
+		newMutableState.GetExecutionInfo().GetWorkflowExecutionTimeout(),
+		newMutableState.GetExecutionInfo().GetWorkflowRunTimeout(),
 		newRunID,
 	)
 	if err != nil {

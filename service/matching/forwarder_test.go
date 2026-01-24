@@ -76,9 +76,9 @@ func (t *ForwarderTestSuite) TearDownTest() {
 }
 
 func (t *ForwarderTestSuite) TestForwardTaskError() {
-	task := newInternalTaskFromBacklog(&persistencespb.AllocatedTaskInfo{
+	task := newInternalTaskFromBacklog(persistencespb.AllocatedTaskInfo_builder{
 		Data: &persistencespb.TaskInfo{},
-	}, nil)
+	}.Build(), nil)
 	t.Equal(tqid.ErrNoParent, t.fwdr.ForwardTask(context.Background(), task))
 }
 
@@ -96,15 +96,15 @@ func (t *ForwarderTestSuite) TestForwardWorkflowTask() {
 	task := newInternalTaskFromBacklog(taskInfo, nil)
 	t.NoError(t.fwdr.ForwardTask(context.Background(), task))
 	t.NotNil(request)
-	t.Equal(mustParent(t.partition, 20).RpcName(), request.TaskQueue.GetName())
-	t.Equal(t.partition.Kind(), request.TaskQueue.GetKind())
-	t.Equal(taskInfo.Data.GetNamespaceId(), request.GetNamespaceId())
-	t.Equal(taskInfo.Data.GetWorkflowId(), request.GetExecution().GetWorkflowId())
-	t.Equal(taskInfo.Data.GetRunId(), request.GetExecution().GetRunId())
-	t.Equal(taskInfo.Data.GetScheduledEventId(), request.GetScheduledEventId())
+	t.Equal(mustParent(t.partition, 20).RpcName(), request.GetTaskQueue().GetName())
+	t.Equal(t.partition.Kind(), request.GetTaskQueue().GetKind())
+	t.Equal(taskInfo.GetData().GetNamespaceId(), request.GetNamespaceId())
+	t.Equal(taskInfo.GetData().GetWorkflowId(), request.GetExecution().GetWorkflowId())
+	t.Equal(taskInfo.GetData().GetRunId(), request.GetExecution().GetRunId())
+	t.Equal(taskInfo.GetData().GetScheduledEventId(), request.GetScheduledEventId())
 
 	schedToStart := int32(request.GetScheduleToStartTimeout().AsDuration().Seconds())
-	rewritten := convert.Int32Ceil(time.Until(taskInfo.Data.ExpiryTime.AsTime()).Seconds())
+	rewritten := convert.Int32Ceil(time.Until(taskInfo.GetData().GetExpiryTime().AsTime()).Seconds())
 	t.EqualValues(schedToStart, rewritten)
 	t.Equal(t.partition.RpcName(), request.GetForwardInfo().GetSourcePartition())
 	t.Equal(enumsspb.TASK_SOURCE_DB_BACKLOG, request.GetForwardInfo().GetTaskSource())
@@ -123,18 +123,18 @@ func (t *ForwarderTestSuite) TestForwardWorkflowTask_WithBuildId() {
 	).Return(&matchingservice.AddWorkflowTaskResponse{}, nil)
 
 	taskInfo := randomTaskInfo()
-	task := newInternalTaskForSyncMatch(taskInfo.Data, nil, 0, nil)
+	task := newInternalTaskForSyncMatch(taskInfo.GetData(), nil, 0, nil)
 	t.NoError(t.fwdr.ForwardTask(context.Background(), task))
 	t.NotNil(request)
-	t.Equal(mustParent(t.partition, 20).RpcName(), request.TaskQueue.GetName())
-	t.Equal(t.partition.Kind(), request.TaskQueue.GetKind())
-	t.Equal(taskInfo.Data.GetNamespaceId(), request.GetNamespaceId())
-	t.Equal(taskInfo.Data.GetWorkflowId(), request.GetExecution().GetWorkflowId())
-	t.Equal(taskInfo.Data.GetRunId(), request.GetExecution().GetRunId())
-	t.Equal(taskInfo.Data.GetScheduledEventId(), request.GetScheduledEventId())
+	t.Equal(mustParent(t.partition, 20).RpcName(), request.GetTaskQueue().GetName())
+	t.Equal(t.partition.Kind(), request.GetTaskQueue().GetKind())
+	t.Equal(taskInfo.GetData().GetNamespaceId(), request.GetNamespaceId())
+	t.Equal(taskInfo.GetData().GetWorkflowId(), request.GetExecution().GetWorkflowId())
+	t.Equal(taskInfo.GetData().GetRunId(), request.GetExecution().GetRunId())
+	t.Equal(taskInfo.GetData().GetScheduledEventId(), request.GetScheduledEventId())
 
 	schedToStart := int32(request.GetScheduleToStartTimeout().AsDuration().Seconds())
-	rewritten := convert.Int32Ceil(time.Until(taskInfo.Data.ExpiryTime.AsTime()).Seconds())
+	rewritten := convert.Int32Ceil(time.Until(taskInfo.GetData().GetExpiryTime().AsTime()).Seconds())
 	t.EqualValues(schedToStart, rewritten)
 	t.Equal(t.partition.RpcName(), request.GetForwardInfo().GetSourcePartition())
 	t.Equal(enumsspb.TASK_SOURCE_HISTORY, request.GetForwardInfo().GetTaskSource())
@@ -154,13 +154,13 @@ func (t *ForwarderTestSuite) TestForwardActivityTask() {
 	task := newInternalTaskFromBacklog(taskInfo, nil)
 	t.NoError(t.fwdr.ForwardTask(context.Background(), task))
 	t.NotNil(request)
-	t.Equal(mustParent(t.partition, 20).RpcName(), request.TaskQueue.GetName())
-	t.Equal(t.partition.Kind(), request.TaskQueue.GetKind())
-	t.Equal(taskInfo.Data.GetNamespaceId(), request.GetNamespaceId())
-	t.Equal(taskInfo.Data.GetWorkflowId(), request.GetExecution().GetWorkflowId())
-	t.Equal(taskInfo.Data.GetRunId(), request.GetExecution().GetRunId())
-	t.Equal(taskInfo.Data.GetScheduledEventId(), request.GetScheduledEventId())
-	t.EqualValues(convert.Int32Ceil(time.Until(taskInfo.Data.ExpiryTime.AsTime()).Seconds()),
+	t.Equal(mustParent(t.partition, 20).RpcName(), request.GetTaskQueue().GetName())
+	t.Equal(t.partition.Kind(), request.GetTaskQueue().GetKind())
+	t.Equal(taskInfo.GetData().GetNamespaceId(), request.GetNamespaceId())
+	t.Equal(taskInfo.GetData().GetWorkflowId(), request.GetExecution().GetWorkflowId())
+	t.Equal(taskInfo.GetData().GetRunId(), request.GetExecution().GetRunId())
+	t.Equal(taskInfo.GetData().GetScheduledEventId(), request.GetScheduledEventId())
+	t.EqualValues(convert.Int32Ceil(time.Until(taskInfo.GetData().GetExpiryTime().AsTime()).Seconds()),
 		int32(request.GetScheduleToStartTimeout().AsDuration().Seconds()))
 	t.Equal(t.partition.RpcName(), request.GetForwardInfo().GetSourcePartition())
 	t.Equal(enumsspb.TASK_SOURCE_DB_BACKLOG, request.GetForwardInfo().GetTaskSource())
@@ -174,7 +174,7 @@ func (t *ForwarderTestSuite) TestForwardActivityTask_WithBuildId() {
 	t.client.EXPECT().AddActivityTask(gomock.Any(), gomock.Any(), gomock.Any()).Do(
 		func(arg0 context.Context, arg1 *matchingservice.AddActivityTaskRequest, arg2 ...interface{}) {
 			request = arg1
-			t.Equal(bld, request.ForwardInfo.GetDispatchBuildId())
+			t.Equal(bld, request.GetForwardInfo().GetDispatchBuildId())
 		},
 	).Return(&matchingservice.AddActivityTaskResponse{}, nil)
 
@@ -182,13 +182,13 @@ func (t *ForwarderTestSuite) TestForwardActivityTask_WithBuildId() {
 	task := newInternalTaskFromBacklog(taskInfo, nil)
 	t.NoError(t.fwdr.ForwardTask(context.Background(), task))
 	t.NotNil(request)
-	t.Equal(mustParent(t.partition, 20).RpcName(), request.TaskQueue.GetName())
-	t.Equal(t.partition.Kind(), request.TaskQueue.GetKind())
-	t.Equal(taskInfo.Data.GetNamespaceId(), request.GetNamespaceId())
-	t.Equal(taskInfo.Data.GetWorkflowId(), request.GetExecution().GetWorkflowId())
-	t.Equal(taskInfo.Data.GetRunId(), request.GetExecution().GetRunId())
-	t.Equal(taskInfo.Data.GetScheduledEventId(), request.GetScheduledEventId())
-	t.EqualValues(convert.Int32Ceil(time.Until(taskInfo.Data.ExpiryTime.AsTime()).Seconds()),
+	t.Equal(mustParent(t.partition, 20).RpcName(), request.GetTaskQueue().GetName())
+	t.Equal(t.partition.Kind(), request.GetTaskQueue().GetKind())
+	t.Equal(taskInfo.GetData().GetNamespaceId(), request.GetNamespaceId())
+	t.Equal(taskInfo.GetData().GetWorkflowId(), request.GetExecution().GetWorkflowId())
+	t.Equal(taskInfo.GetData().GetRunId(), request.GetExecution().GetRunId())
+	t.Equal(taskInfo.GetData().GetScheduledEventId(), request.GetScheduledEventId())
+	t.EqualValues(convert.Int32Ceil(time.Until(taskInfo.GetData().GetExpiryTime().AsTime()).Seconds()),
 		int32(request.GetScheduleToStartTimeout().AsDuration().Seconds()))
 	t.Equal(t.partition.RpcName(), request.GetForwardInfo().GetSourcePartition())
 	t.Equal(enumsspb.TASK_SOURCE_DB_BACKLOG, request.GetForwardInfo().GetTaskSource())
@@ -226,9 +226,9 @@ func (t *ForwarderTestSuite) TestForwardQueryTask() {
 
 	gotResp, err := t.fwdr.ForwardQueryTask(context.Background(), task)
 	t.NoError(err)
-	t.Equal(mustParent(t.partition, 20).RpcName(), request.TaskQueue.GetName())
-	t.Equal(t.partition.Kind(), request.TaskQueue.GetKind())
-	t.Equal(task.query.request.QueryRequest, request.QueryRequest)
+	t.Equal(mustParent(t.partition, 20).RpcName(), request.GetTaskQueue().GetName())
+	t.Equal(t.partition.Kind(), request.GetTaskQueue().GetKind())
+	t.Equal(task.query.request.GetQueryRequest(), request.GetQueryRequest())
 	t.Equal(resp, gotResp)
 	t.Equal(enumsspb.TASK_SOURCE_HISTORY, request.GetForwardInfo().GetTaskSource())
 }
@@ -258,9 +258,9 @@ func (t *ForwarderTestSuite) TestForwardPollWorkflowTaskQueue() {
 	pollerID := uuid.NewString()
 	ctx := context.WithValue(context.Background(), pollerIDKey, pollerID)
 	ctx = context.WithValue(ctx, identityKey, "id1")
-	resp := &matchingservice.PollWorkflowTaskQueueResponse{
+	resp := matchingservice.PollWorkflowTaskQueueResponse_builder{
 		TaskToken: []byte("token1"),
-	}
+	}.Build()
 
 	var request *matchingservice.PollWorkflowTaskQueueRequest
 	t.client.EXPECT().PollWorkflowTaskQueue(gomock.Any(), gomock.Any(), gomock.Any()).Do(
@@ -288,9 +288,9 @@ func (t *ForwarderTestSuite) TestForwardPollForActivity() {
 	pollerID := uuid.NewString()
 	ctx := context.WithValue(context.Background(), pollerIDKey, pollerID)
 	ctx = context.WithValue(ctx, identityKey, "id1")
-	resp := &matchingservice.PollActivityTaskQueueResponse{
+	resp := matchingservice.PollActivityTaskQueueResponse_builder{
 		TaskToken: []byte("token1"),
-	}
+	}.Build()
 
 	var request *matchingservice.PollActivityTaskQueueRequest
 	t.client.EXPECT().PollActivityTaskQueue(gomock.Any(), gomock.Any(), gomock.Any()).Do(

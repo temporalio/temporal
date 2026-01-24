@@ -20,14 +20,14 @@ func Invoke(
 	isValid := false
 	err := api.GetAndUpdateWorkflowWithNew(
 		ctx,
-		req.Clock,
+		req.GetClock(),
 		definition.NewWorkflowKey(
-			req.NamespaceId,
-			req.Execution.WorkflowId,
-			req.Execution.RunId,
+			req.GetNamespaceId(),
+			req.GetExecution().GetWorkflowId(),
+			req.GetExecution().GetRunId(),
 		),
 		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
-			isTaskValid, err := isWorkflowTaskValid(workflowLease, req.ScheduledEventId, req.GetStamp())
+			isTaskValid, err := isWorkflowTaskValid(workflowLease, req.GetScheduledEventId(), req.GetStamp())
 			if err != nil {
 				return nil, err
 			}
@@ -41,9 +41,9 @@ func Invoke(
 		shardContext,
 		workflowConsistencyChecker,
 	)
-	return &historyservice.IsWorkflowTaskValidResponse{
+	return historyservice.IsWorkflowTaskValidResponse_builder{
 		IsValid: isValid,
-	}, err
+	}.Build(), err
 }
 
 func isWorkflowTaskValid(

@@ -68,6 +68,7 @@ import (
 	"go.temporal.io/server/service/worker/dlq"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -175,7 +176,7 @@ func NewAdminHandler(
 		args.Config.HistoryHostErrorPercentage,
 		args.Config.HistoryHostSelfErrorProportion,
 		func(ctx context.Context, hostAddress string) (enumsspb.HealthState, error) {
-			resp, err := args.HistoryClient.DeepHealthCheck(ctx, &historyservice.DeepHealthCheckRequest{HostAddress: hostAddress})
+			resp, err := args.HistoryClient.DeepHealthCheck(ctx, historyservice.DeepHealthCheckRequest_builder{HostAddress: hostAddress}.Build())
 			if err != nil {
 				return enumsspb.HEALTH_STATE_NOT_SERVING, err
 			}
@@ -267,7 +268,7 @@ func (adh *AdminHandler) DeepHealthCheck(
 	if err != nil {
 		return nil, err
 	}
-	return &adminservice.DeepHealthCheckResponse{State: healthStatus}, nil
+	return adminservice.DeepHealthCheckResponse_builder{State: healthStatus}.Build(), nil
 }
 
 // AddSearchAttributes add search attribute to the cluster.
@@ -382,7 +383,7 @@ func (adh *AdminHandler) addSearchAttributesSQL(
 	}
 	resp, err := client.DescribeNamespace(
 		ctx,
-		&workflowservice.DescribeNamespaceRequest{Namespace: nsName},
+		workflowservice.DescribeNamespaceRequest_builder{Namespace: nsName}.Build(),
 	)
 	if err != nil {
 		return serviceerror.NewUnavailablef(errUnableToGetNamespaceInfoMessage, nsName, err)
@@ -390,7 +391,7 @@ func (adh *AdminHandler) addSearchAttributesSQL(
 
 	cmCustomSearchAttributes := currentSearchAttributes.Custom()
 	upsertFieldToAliasMap := make(map[string]string)
-	fieldToAliasMap := resp.Config.CustomSearchAttributeAliases
+	fieldToAliasMap := resp.GetConfig().GetCustomSearchAttributeAliases()
 	aliasToFieldMap := util.InverseMap(fieldToAliasMap)
 	for saName, saType := range request.GetSearchAttributes() {
 		// check if alias is already in use
@@ -423,12 +424,12 @@ func (adh *AdminHandler) addSearchAttributesSQL(
 		upsertFieldToAliasMap[targetFieldName] = saName
 	}
 
-	_, err = client.UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
+	_, err = client.UpdateNamespace(ctx, workflowservice.UpdateNamespaceRequest_builder{
 		Namespace: nsName,
-		Config: &namespacepb.NamespaceConfig{
+		Config: namespacepb.NamespaceConfig_builder{
 			CustomSearchAttributeAliases: upsertFieldToAliasMap,
-		},
-	})
+		}.Build(),
+	}.Build())
 	if err != nil && err.Error() == errCustomSearchAttributeFieldAlreadyAllocated.Error() {
 		return errRaceConditionAddingSearchAttributes
 	}
@@ -521,14 +522,14 @@ func (adh *AdminHandler) removeSearchAttributesSQL(
 	}
 	resp, err := client.DescribeNamespace(
 		ctx,
-		&workflowservice.DescribeNamespaceRequest{Namespace: nsName},
+		workflowservice.DescribeNamespaceRequest_builder{Namespace: nsName}.Build(),
 	)
 	if err != nil {
 		return serviceerror.NewUnavailablef(errUnableToGetNamespaceInfoMessage, nsName, err)
 	}
 
 	upsertFieldToAliasMap := make(map[string]string)
-	aliasToFieldMap := util.InverseMap(resp.Config.CustomSearchAttributeAliases)
+	aliasToFieldMap := util.InverseMap(resp.GetConfig().GetCustomSearchAttributeAliases())
 	for _, saName := range request.GetSearchAttributes() {
 		if fieldName, ok := aliasToFieldMap[saName]; ok {
 			upsertFieldToAliasMap[fieldName] = ""
@@ -542,12 +543,12 @@ func (adh *AdminHandler) removeSearchAttributesSQL(
 		return serviceerror.NewNotFoundf(errSearchAttributeDoesntExistMessage, saName)
 	}
 
-	_, err = client.UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
+	_, err = client.UpdateNamespace(ctx, workflowservice.UpdateNamespaceRequest_builder{
 		Namespace: nsName,
-		Config: &namespacepb.NamespaceConfig{
+		Config: namespacepb.NamespaceConfig_builder{
 			CustomSearchAttributeAliases: upsertFieldToAliasMap,
-		},
-	})
+		}.Build(),
+	}.Build())
 	return err
 }
 
@@ -602,11 +603,11 @@ func (adh *AdminHandler) getSearchAttributesElasticsearch(
 		wfInfo = descResp.GetWorkflowExecutionInfo()
 	}
 
-	return &adminservice.GetSearchAttributesResponse{
+	return adminservice.GetSearchAttributesResponse_builder{
 		CustomAttributes:         searchAttributes.Custom(),
 		SystemAttributes:         searchAttributes.System(),
 		AddWorkflowExecutionInfo: wfInfo,
-	}, nil
+	}.Build(), nil
 }
 
 func (adh *AdminHandler) getSearchAttributesSQL(
@@ -628,7 +629,7 @@ func (adh *AdminHandler) getSearchAttributesSQL(
 	}
 	resp, err := client.DescribeNamespace(
 		ctx,
-		&workflowservice.DescribeNamespaceRequest{Namespace: nsName},
+		workflowservice.DescribeNamespaceRequest_builder{Namespace: nsName}.Build(),
 	)
 	if err != nil {
 		return nil, serviceerror.NewUnavailablef(
@@ -636,17 +637,17 @@ func (adh *AdminHandler) getSearchAttributesSQL(
 		)
 	}
 
-	fieldToAliasMap := resp.Config.CustomSearchAttributeAliases
+	fieldToAliasMap := resp.GetConfig().GetCustomSearchAttributeAliases()
 	customSearchAttributes := make(map[string]enumspb.IndexedValueType)
 	for field, tp := range searchAttributes.Custom() {
 		if alias, ok := fieldToAliasMap[field]; ok {
 			customSearchAttributes[alias] = tp
 		}
 	}
-	return &adminservice.GetSearchAttributesResponse{
+	return adminservice.GetSearchAttributesResponse_builder{
 		CustomAttributes: customSearchAttributes,
 		SystemAttributes: searchAttributes.System(),
-	}, nil
+	}.Build(), nil
 }
 
 func (adh *AdminHandler) RebuildMutableState(
@@ -659,7 +660,7 @@ func (adh *AdminHandler) RebuildMutableState(
 		return nil, errRequestNotSet
 	}
 
-	if err := validateExecution(request.Execution); err != nil {
+	if err := validateExecution(request.GetExecution()); err != nil {
 		return nil, err
 	}
 
@@ -668,10 +669,10 @@ func (adh *AdminHandler) RebuildMutableState(
 		return nil, err
 	}
 
-	if _, err := adh.historyClient.RebuildMutableState(ctx, &historyservice.RebuildMutableStateRequest{
+	if _, err := adh.historyClient.RebuildMutableState(ctx, historyservice.RebuildMutableStateRequest_builder{
 		NamespaceId: namespaceID.String(),
-		Execution:   request.Execution,
-	}); err != nil {
+		Execution:   request.GetExecution(),
+	}.Build()); err != nil {
 		return nil, err
 	}
 	return &adminservice.RebuildMutableStateResponse{}, nil
@@ -687,7 +688,7 @@ func (adh *AdminHandler) ImportWorkflowExecution(
 		return nil, errRequestNotSet
 	}
 
-	if err := validateExecution(request.Execution); err != nil {
+	if err := validateExecution(request.GetExecution()); err != nil {
 		return nil, err
 	}
 
@@ -696,23 +697,23 @@ func (adh *AdminHandler) ImportWorkflowExecution(
 		return nil, err
 	}
 
-	unaliasedBatches, err := adh.unaliasAndValidateSearchAttributes(request.HistoryBatches, namespace.Name(request.GetNamespace()))
+	unaliasedBatches, err := adh.unaliasAndValidateSearchAttributes(request.GetHistoryBatches(), namespace.Name(request.GetNamespace()))
 	if err != nil {
 		return nil, err
 	}
-	resp, err := adh.historyClient.ImportWorkflowExecution(ctx, &historyservice.ImportWorkflowExecutionRequest{
+	resp, err := adh.historyClient.ImportWorkflowExecution(ctx, historyservice.ImportWorkflowExecutionRequest_builder{
 		NamespaceId:    namespaceID.String(),
-		Execution:      request.Execution,
+		Execution:      request.GetExecution(),
 		HistoryBatches: unaliasedBatches,
-		VersionHistory: request.VersionHistory,
-		Token:          request.Token,
-	})
+		VersionHistory: request.GetVersionHistory(),
+		Token:          request.GetToken(),
+	}.Build())
 	if err != nil {
 		return nil, err
 	}
-	return &adminservice.ImportWorkflowExecutionResponse{
-		Token: resp.Token,
-	}, nil
+	return adminservice.ImportWorkflowExecutionResponse_builder{
+		Token: resp.GetToken(),
+	}.Build(), nil
 }
 
 func (adh *AdminHandler) unaliasAndValidateSearchAttributes(historyBatches []*commonpb.DataBlob, nsName namespace.Name) ([]*commonpb.DataBlob, error) {
@@ -771,7 +772,7 @@ func (adh *AdminHandler) DescribeMutableState(ctx context.Context, request *admi
 		return nil, errRequestNotSet
 	}
 
-	if err := validateExecution(request.Execution); err != nil {
+	if err := validateExecution(request.GetExecution()); err != nil {
 		return nil, err
 	}
 
@@ -785,7 +786,7 @@ func (adh *AdminHandler) DescribeMutableState(ctx context.Context, request *admi
 		return nil, err
 	}
 
-	shardID := common.WorkflowIDToHistoryShard(namespaceID.String(), request.Execution.WorkflowId, adh.numberOfHistoryShards)
+	shardID := common.WorkflowIDToHistoryShard(namespaceID.String(), request.GetExecution().GetWorkflowId(), adh.numberOfHistoryShards)
 	shardIDStr := convert.Int32ToString(shardID)
 
 	resolver, err := adh.membershipMonitor.GetResolver(primitives.HistoryService)
@@ -799,22 +800,22 @@ func (adh *AdminHandler) DescribeMutableState(ctx context.Context, request *admi
 
 	historyAddr := historyHost.GetAddress()
 
-	historyResponse, err := adh.historyClient.DescribeMutableState(ctx, &historyservice.DescribeMutableStateRequest{
+	historyResponse, err := adh.historyClient.DescribeMutableState(ctx, historyservice.DescribeMutableStateRequest_builder{
 		NamespaceId:     namespaceID.String(),
-		Execution:       request.Execution,
+		Execution:       request.GetExecution(),
 		SkipForceReload: request.GetSkipForceReload(),
 		ArchetypeId:     archetypeID,
-	})
+	}.Build())
 
 	if err != nil {
 		return nil, err
 	}
-	return &adminservice.DescribeMutableStateResponse{
+	return adminservice.DescribeMutableStateResponse_builder{
 		ShardId:              shardIDStr,
 		HistoryAddr:          historyAddr,
 		DatabaseMutableState: historyResponse.GetDatabaseMutableState(),
 		CacheMutableState:    historyResponse.GetCacheMutableState(),
-	}, nil
+	}.Build(), nil
 }
 
 // RemoveTask returns information about the internal states of a history host
@@ -824,12 +825,12 @@ func (adh *AdminHandler) RemoveTask(ctx context.Context, request *adminservice.R
 	if request == nil {
 		return nil, errRequestNotSet
 	}
-	_, err := adh.historyClient.RemoveTask(ctx, &historyservice.RemoveTaskRequest{
+	_, err := adh.historyClient.RemoveTask(ctx, historyservice.RemoveTaskRequest_builder{
 		ShardId:        request.GetShardId(),
 		Category:       request.GetCategory(),
 		TaskId:         request.GetTaskId(),
 		VisibilityTime: request.GetVisibilityTime(),
-	})
+	}.Build())
 	return &adminservice.RemoveTaskResponse{}, err
 }
 
@@ -839,11 +840,11 @@ func (adh *AdminHandler) GetShard(ctx context.Context, request *adminservice.Get
 	if request == nil {
 		return nil, errRequestNotSet
 	}
-	resp, err := adh.historyClient.GetShard(ctx, &historyservice.GetShardRequest{ShardId: request.GetShardId()})
+	resp, err := adh.historyClient.GetShard(ctx, historyservice.GetShardRequest_builder{ShardId: request.GetShardId()}.Build())
 	if err != nil {
 		return nil, err
 	}
-	return &adminservice.GetShardResponse{ShardInfo: resp.ShardInfo}, nil
+	return adminservice.GetShardResponse_builder{ShardInfo: resp.GetShardInfo()}.Build(), nil
 }
 
 // CloseShard returns information about the internal states of a history host
@@ -853,7 +854,7 @@ func (adh *AdminHandler) CloseShard(ctx context.Context, request *adminservice.C
 	if request == nil {
 		return nil, errRequestNotSet
 	}
-	_, err := adh.historyClient.CloseShard(ctx, &historyservice.CloseShardRequest{ShardId: request.GetShardId()})
+	_, err := adh.historyClient.CloseShard(ctx, historyservice.CloseShardRequest_builder{ShardId: request.GetShardId()}.Build())
 	return &adminservice.CloseShardResponse{}, err
 }
 
@@ -876,14 +877,14 @@ func (adh *AdminHandler) ListHistoryTasks(
 	}
 
 	resp, err := adh.historyClient.ListTasks(
-		ctx, &historyservice.ListTasksRequest{
+		ctx, historyservice.ListTasksRequest_builder{
 			Request: request,
-		},
+		}.Build(),
 	)
 	if err != nil {
 		return nil, err
 	}
-	return resp.Response, nil
+	return resp.GetResponse(), nil
 }
 
 // DescribeHistoryHost returns information about the internal states of a history host
@@ -895,10 +896,10 @@ func (adh *AdminHandler) DescribeHistoryHost(ctx context.Context, request *admin
 	}
 
 	flagsCount := 0
-	if request.ShardId != 0 {
+	if request.GetShardId() != 0 {
 		flagsCount++
 	}
-	if len(request.Namespace) != 0 && request.WorkflowExecution != nil {
+	if len(request.GetNamespace()) != 0 && request.HasWorkflowExecution() {
 		flagsCount++
 	}
 	if len(request.GetHostAddress()) > 0 {
@@ -910,34 +911,34 @@ func (adh *AdminHandler) DescribeHistoryHost(ctx context.Context, request *admin
 
 	var err error
 	var namespaceID namespace.ID
-	if request.WorkflowExecution != nil {
-		namespaceID, err = adh.namespaceRegistry.GetNamespaceID(namespace.Name(request.Namespace))
+	if request.HasWorkflowExecution() {
+		namespaceID, err = adh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
 		if err != nil {
 			return nil, err
 		}
 
-		if err := validateExecution(request.WorkflowExecution); err != nil {
+		if err := validateExecution(request.GetWorkflowExecution()); err != nil {
 			return nil, err
 		}
 	}
 
-	resp, err := adh.historyClient.DescribeHistoryHost(ctx, &historyservice.DescribeHistoryHostRequest{
+	resp, err := adh.historyClient.DescribeHistoryHost(ctx, historyservice.DescribeHistoryHostRequest_builder{
 		HostAddress:       request.GetHostAddress(),
 		ShardId:           request.GetShardId(),
 		NamespaceId:       namespaceID.String(),
 		WorkflowExecution: request.GetWorkflowExecution(),
-	})
+	}.Build())
 
 	if resp == nil {
 		return nil, err
 	}
 
-	return &adminservice.DescribeHistoryHostResponse{
+	return adminservice.DescribeHistoryHostResponse_builder{
 		ShardsNumber:   resp.GetShardsNumber(),
 		ShardIds:       resp.GetShardIds(),
 		NamespaceCache: resp.GetNamespaceCache(),
 		Address:        resp.GetAddress(),
-	}, err
+	}.Build(), err
 }
 
 func (adh *AdminHandler) GetWorkflowExecutionRawHistory(
@@ -946,14 +947,14 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistory(
 ) (_ *adminservice.GetWorkflowExecutionRawHistoryResponse, retError error) {
 	defer log.CapturePanic(adh.logger, &retError)
 	response, err := adh.historyClient.GetWorkflowExecutionRawHistory(ctx,
-		&historyservice.GetWorkflowExecutionRawHistoryRequest{
-			NamespaceId: request.NamespaceId,
+		historyservice.GetWorkflowExecutionRawHistoryRequest_builder{
+			NamespaceId: request.GetNamespaceId(),
 			Request:     request,
-		})
+		}.Build())
 	if err != nil {
 		return nil, err
 	}
-	return response.Response, nil
+	return response.GetResponse(), nil
 }
 
 // GetWorkflowExecutionRawHistoryV2 - retrieves the history of workflow execution
@@ -967,21 +968,21 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 	}
 
 	response, err := adh.historyClient.GetWorkflowExecutionRawHistoryV2(ctx,
-		&historyservice.GetWorkflowExecutionRawHistoryV2Request{
-			NamespaceId: request.NamespaceId,
+		historyservice.GetWorkflowExecutionRawHistoryV2Request_builder{
+			NamespaceId: request.GetNamespaceId(),
 			Request:     request,
-		})
+		}.Build())
 	if err != nil {
 		return nil, err
 	}
-	return response.Response, nil
+	return response.GetResponse(), nil
 }
 
 func (adh *AdminHandler) validateGetWorkflowExecutionRawHistoryV2Request(
 	request *adminservice.GetWorkflowExecutionRawHistoryV2Request,
 ) error {
 
-	execution := request.Execution
+	execution := request.GetExecution()
 	if execution.GetWorkflowId() == "" {
 		return errWorkflowIDNotSet
 	}
@@ -1016,16 +1017,16 @@ func (adh *AdminHandler) DescribeCluster(
 
 	membershipInfo := &clusterspb.MembershipInfo{}
 	if monitor := adh.membershipMonitor; monitor != nil {
-		membershipInfo.CurrentHost = &clusterspb.HostInfo{
+		membershipInfo.SetCurrentHost(clusterspb.HostInfo_builder{
 			Identity: adh.hostInfoProvider.HostInfo().Identity(),
-		}
+		}.Build())
 
 		members, err := monitor.GetReachableMembers()
 		if err != nil {
 			return nil, err
 		}
 
-		membershipInfo.ReachableMembers = members
+		membershipInfo.SetReachableMembers(members)
 
 		var rings []*clusterspb.RingInfo
 		for _, role := range []primitives.ServiceName{
@@ -1045,22 +1046,22 @@ func (adh *AdminHandler) DescribeCluster(
 
 			var servers []*clusterspb.HostInfo
 			for _, server := range resolver.Members() {
-				servers = append(servers, &clusterspb.HostInfo{
+				servers = append(servers, clusterspb.HostInfo_builder{
 					Identity: server.Identity(),
-				})
+				}.Build())
 			}
 
-			rings = append(rings, &clusterspb.RingInfo{
+			rings = append(rings, clusterspb.RingInfo_builder{
 				Role:        string(role),
 				MemberCount: int32(resolver.MemberCount()),
 				Members:     servers,
-			})
+			}.Build())
 		}
-		membershipInfo.Rings = rings
+		membershipInfo.SetRings(rings)
 	}
 
-	if len(request.ClusterName) == 0 {
-		request.ClusterName = adh.clusterMetadata.GetCurrentClusterName()
+	if len(request.GetClusterName()) == 0 {
+		request.SetClusterName(adh.clusterMetadata.GetCurrentClusterName())
 	}
 	metadata, err := adh.clusterMetadataManager.GetClusterMetadata(
 		ctx,
@@ -1070,7 +1071,7 @@ func (adh *AdminHandler) DescribeCluster(
 		return nil, err
 	}
 
-	return &adminservice.DescribeClusterResponse{
+	return adminservice.DescribeClusterResponse_builder{
 		SupportedClients:         headers.SupportedClients,
 		ServerVersion:            headers.ServerVersion,
 		MembershipInfo:           membershipInfo,
@@ -1085,7 +1086,7 @@ func (adh *AdminHandler) DescribeCluster(
 		IsGlobalNamespaceEnabled: metadata.GetIsGlobalNamespaceEnabled(),
 		Tags:                     metadata.GetTags(),
 		HttpAddress:              metadata.GetHttpAddress(),
-	}, nil
+	}.Build(), nil
 }
 
 // ListClusters return information about temporal clusters
@@ -1099,7 +1100,7 @@ func (adh *AdminHandler) ListClusters(
 		return nil, errRequestNotSet
 	}
 	if request.GetPageSize() <= 0 {
-		request.PageSize = listClustersPageSize
+		request.SetPageSize(listClustersPageSize)
 	}
 
 	resp, err := adh.clusterMetadataManager.ListClusterMetadata(ctx, &persistence.ListClusterMetadataRequest{
@@ -1114,10 +1115,10 @@ func (adh *AdminHandler) ListClusters(
 	for _, clusterResp := range resp.ClusterMetadata {
 		clusterMetadataList = append(clusterMetadataList, clusterResp.ClusterMetadata)
 	}
-	return &adminservice.ListClustersResponse{
+	return adminservice.ListClustersResponse_builder{
 		Clusters:      clusterMetadataList,
 		NextPageToken: resp.NextPageToken,
-	}, nil
+	}.Build(), nil
 }
 
 // ListClusterMembers
@@ -1172,7 +1173,7 @@ func (adh *AdminHandler) ListClusterMembers(
 		if err != nil {
 			return nil, serviceerror.NewInternalf("unable to parse host ID bytes to UUID: %v", err)
 		}
-		activeMembers = append(activeMembers, &clusterspb.ClusterMember{
+		activeMembers = append(activeMembers, clusterspb.ClusterMember_builder{
 			Role:             enumsspb.ClusterMemberRole(member.Role),
 			HostId:           u.String(),
 			RpcAddress:       member.RPCAddress.String(),
@@ -1180,13 +1181,13 @@ func (adh *AdminHandler) ListClusterMembers(
 			SessionStartTime: timestamppb.New(member.SessionStart),
 			LastHeartbitTime: timestamppb.New(member.LastHeartbeat),
 			RecordExpiryTime: timestamppb.New(member.RecordExpiry),
-		})
+		}.Build())
 	}
 
-	return &adminservice.ListClusterMembersResponse{
+	return adminservice.ListClusterMembersResponse_builder{
 		ActiveMembers: activeMembers,
 		NextPageToken: resp.NextPageToken,
-	}, nil
+	}.Build(), nil
 }
 
 // AddOrUpdateRemoteCluster
@@ -1230,7 +1231,7 @@ func (adh *AdminHandler) AddOrUpdateRemoteCluster(
 	}
 
 	applied, err := clusterMetadataMrg.SaveClusterMetadata(ctx, &persistence.SaveClusterMetadataRequest{
-		ClusterMetadata: &persistencespb.ClusterMetadata{
+		ClusterMetadata: persistencespb.ClusterMetadata_builder{
 			ClusterName:              resp.GetClusterName(),
 			HistoryShardCount:        resp.GetHistoryShardCount(),
 			ClusterId:                resp.GetClusterId(),
@@ -1242,7 +1243,7 @@ func (adh *AdminHandler) AddOrUpdateRemoteCluster(
 			IsConnectionEnabled:      request.GetEnableRemoteClusterConnection(),
 			IsReplicationEnabled:     request.GetEnableReplication(),
 			Tags:                     resp.GetTags(),
-		},
+		}.Build(),
 		Version: updateRequestVersion,
 	})
 	if err != nil {
@@ -1283,14 +1284,14 @@ func (adh *AdminHandler) GetReplicationMessages(ctx context.Context, request *ad
 		return nil, errClusterNameNotSet
 	}
 
-	resp, err := adh.historyClient.GetReplicationMessages(ctx, &historyservice.GetReplicationMessagesRequest{
+	resp, err := adh.historyClient.GetReplicationMessages(ctx, historyservice.GetReplicationMessagesRequest_builder{
 		Tokens:      request.GetTokens(),
 		ClusterName: request.GetClusterName(),
-	})
+	}.Build())
 	if err != nil {
 		return nil, err
 	}
-	return &adminservice.GetReplicationMessagesResponse{ShardMessages: resp.GetShardMessages()}, nil
+	return adminservice.GetReplicationMessagesResponse_builder{ShardMessages: resp.GetShardMessages()}.Build(), nil
 }
 
 // GetNamespaceReplicationMessages returns new namespace replication tasks since last retrieved task ID.
@@ -1335,12 +1336,12 @@ func (adh *AdminHandler) GetNamespaceReplicationMessages(ctx context.Context, re
 		}
 	}
 
-	return &adminservice.GetNamespaceReplicationMessagesResponse{
-		Messages: &replicationspb.ReplicationMessages{
+	return adminservice.GetNamespaceReplicationMessagesResponse_builder{
+		Messages: replicationspb.ReplicationMessages_builder{
 			ReplicationTasks:       replicationTasks,
 			LastRetrievedMessageId: lastMessageID,
-		},
-	}, nil
+		}.Build(),
+	}.Build(), nil
 }
 
 // GetDLQReplicationMessages returns new replication tasks based on the dlq info.
@@ -1354,11 +1355,11 @@ func (adh *AdminHandler) GetDLQReplicationMessages(ctx context.Context, request 
 		return nil, errEmptyReplicationInfo
 	}
 
-	resp, err := adh.historyClient.GetDLQReplicationMessages(ctx, &historyservice.GetDLQReplicationMessagesRequest{TaskInfos: request.GetTaskInfos()})
+	resp, err := adh.historyClient.GetDLQReplicationMessages(ctx, historyservice.GetDLQReplicationMessagesRequest_builder{TaskInfos: request.GetTaskInfos()}.Build())
 	if err != nil {
 		return nil, err
 	}
-	return &adminservice.GetDLQReplicationMessagesResponse{ReplicationTasks: resp.GetReplicationTasks()}, nil
+	return adminservice.GetDLQReplicationMessagesResponse_builder{ReplicationTasks: resp.GetReplicationTasks()}.Build(), nil
 }
 
 // ReapplyEvents applies stale events to the current workflow and the current run
@@ -1367,7 +1368,7 @@ func (adh *AdminHandler) ReapplyEvents(ctx context.Context, request *adminservic
 	if request == nil {
 		return nil, errRequestNotSet
 	}
-	if request.WorkflowExecution == nil {
+	if !request.HasWorkflowExecution() {
 		return nil, errExecutionNotSet
 	}
 	if request.GetWorkflowExecution().GetWorkflowId() == "" {
@@ -1381,10 +1382,10 @@ func (adh *AdminHandler) ReapplyEvents(ctx context.Context, request *adminservic
 		return nil, err
 	}
 
-	_, err = adh.historyClient.ReapplyEvents(ctx, &historyservice.ReapplyEventsRequest{
+	_, err = adh.historyClient.ReapplyEvents(ctx, historyservice.ReapplyEventsRequest_builder{
 		NamespaceId: namespaceEntry.ID().String(),
 		Request:     request,
-	})
+	}.Build())
 	if err != nil {
 		return nil, err
 	}
@@ -1402,34 +1403,34 @@ func (adh *AdminHandler) GetDLQMessages(
 	}
 
 	if request.GetMaximumPageSize() <= 0 {
-		request.MaximumPageSize = primitives.ReadDLQMessagesPageSize
+		request.SetMaximumPageSize(primitives.ReadDLQMessagesPageSize)
 	}
 
 	if request.GetInclusiveEndMessageId() <= 0 {
-		request.InclusiveEndMessageId = common.EndMessageID
+		request.SetInclusiveEndMessageId(common.EndMessageID)
 	}
 
 	switch request.GetType() {
 	case enumsspb.DEAD_LETTER_QUEUE_TYPE_REPLICATION:
-		resp, err := adh.historyClient.GetDLQMessages(ctx, &historyservice.GetDLQMessagesRequest{
+		resp, err := adh.historyClient.GetDLQMessages(ctx, historyservice.GetDLQMessagesRequest_builder{
 			Type:                  request.GetType(),
 			ShardId:               request.GetShardId(),
 			SourceCluster:         request.GetSourceCluster(),
 			InclusiveEndMessageId: request.GetInclusiveEndMessageId(),
 			MaximumPageSize:       request.GetMaximumPageSize(),
 			NextPageToken:         request.GetNextPageToken(),
-		})
+		}.Build())
 
 		if resp == nil {
 			return nil, err
 		}
 
-		return &adminservice.GetDLQMessagesResponse{
+		return adminservice.GetDLQMessagesResponse_builder{
 			Type:                 resp.GetType(),
 			ReplicationTasks:     resp.GetReplicationTasks(),
 			ReplicationTasksInfo: resp.GetReplicationTasksInfo(),
 			NextPageToken:        resp.GetNextPageToken(),
-		}, err
+		}.Build(), err
 	case enumsspb.DEAD_LETTER_QUEUE_TYPE_NAMESPACE:
 		tasks, token, err := adh.namespaceDLQHandler.Read(
 			ctx,
@@ -1440,10 +1441,10 @@ func (adh *AdminHandler) GetDLQMessages(
 			return nil, err
 		}
 
-		return &adminservice.GetDLQMessagesResponse{
+		return adminservice.GetDLQMessagesResponse_builder{
 			ReplicationTasks: tasks,
 			NextPageToken:    token,
-		}, nil
+		}.Build(), nil
 	default:
 		return nil, errDLQTypeIsNotSupported
 	}
@@ -1460,17 +1461,17 @@ func (adh *AdminHandler) PurgeDLQMessages(
 	}
 
 	if request.GetInclusiveEndMessageId() <= 0 {
-		request.InclusiveEndMessageId = common.EndMessageID
+		request.SetInclusiveEndMessageId(common.EndMessageID)
 	}
 
 	switch request.GetType() {
 	case enumsspb.DEAD_LETTER_QUEUE_TYPE_REPLICATION:
-		resp, err := adh.historyClient.PurgeDLQMessages(ctx, &historyservice.PurgeDLQMessagesRequest{
+		resp, err := adh.historyClient.PurgeDLQMessages(ctx, historyservice.PurgeDLQMessagesRequest_builder{
 			Type:                  request.GetType(),
 			ShardId:               request.GetShardId(),
 			SourceCluster:         request.GetSourceCluster(),
 			InclusiveEndMessageId: request.GetInclusiveEndMessageId(),
-		})
+		}.Build())
 
 		if resp == nil {
 			return nil, err
@@ -1500,26 +1501,26 @@ func (adh *AdminHandler) MergeDLQMessages(
 	}
 
 	if request.GetInclusiveEndMessageId() <= 0 {
-		request.InclusiveEndMessageId = common.EndMessageID
+		request.SetInclusiveEndMessageId(common.EndMessageID)
 	}
 
 	switch request.GetType() {
 	case enumsspb.DEAD_LETTER_QUEUE_TYPE_REPLICATION:
-		resp, err := adh.historyClient.MergeDLQMessages(ctx, &historyservice.MergeDLQMessagesRequest{
+		resp, err := adh.historyClient.MergeDLQMessages(ctx, historyservice.MergeDLQMessagesRequest_builder{
 			Type:                  request.GetType(),
 			ShardId:               request.GetShardId(),
 			SourceCluster:         request.GetSourceCluster(),
 			InclusiveEndMessageId: request.GetInclusiveEndMessageId(),
 			MaximumPageSize:       request.GetMaximumPageSize(),
 			NextPageToken:         request.GetNextPageToken(),
-		})
+		}.Build())
 		if resp == nil {
 			return nil, err
 		}
 
-		return &adminservice.MergeDLQMessagesResponse{
+		return adminservice.MergeDLQMessagesResponse_builder{
 			NextPageToken: request.GetNextPageToken(),
-		}, nil
+		}.Build(), nil
 	case enumsspb.DEAD_LETTER_QUEUE_TYPE_NAMESPACE:
 		token, err := adh.namespaceDLQHandler.Merge(
 			ctx,
@@ -1531,9 +1532,9 @@ func (adh *AdminHandler) MergeDLQMessages(
 			return nil, err
 		}
 
-		return &adminservice.MergeDLQMessagesResponse{
+		return adminservice.MergeDLQMessagesResponse_builder{
 			NextPageToken: token,
-		}, nil
+		}.Build(), nil
 	default:
 		return nil, errDLQTypeIsNotSupported
 	}
@@ -1549,7 +1550,7 @@ func (adh *AdminHandler) RefreshWorkflowTasks(
 	if request == nil {
 		return nil, errRequestNotSet
 	}
-	if err := validateExecution(request.Execution); err != nil {
+	if err := validateExecution(request.GetExecution()); err != nil {
 		return nil, err
 	}
 	namespaceEntry, err := adh.namespaceRegistry.GetNamespaceByID(namespace.ID(request.GetNamespaceId()))
@@ -1562,11 +1563,11 @@ func (adh *AdminHandler) RefreshWorkflowTasks(
 		return nil, err
 	}
 
-	_, err = adh.historyClient.RefreshWorkflowTasks(ctx, &historyservice.RefreshWorkflowTasksRequest{
+	_, err = adh.historyClient.RefreshWorkflowTasks(ctx, historyservice.RefreshWorkflowTasksRequest_builder{
 		NamespaceId: namespaceEntry.ID().String(),
 		ArchetypeId: archetypeID,
 		Request:     request,
-	})
+	}.Build())
 	if err != nil {
 		return nil, err
 	}
@@ -1613,18 +1614,18 @@ func (adh *AdminHandler) StartAdminBatchOperation(
 		}
 	}
 
-	input := &batchspb.BatchOperationInput{
+	input := batchspb.BatchOperationInput_builder{
 		AdminRequest: request,
 		NamespaceId:  namespaceID.String(),
-	}
+	}.Build()
 
 	identity := request.GetIdentity()
 	var batchTypeMemo string
-	switch op := request.Operation.(type) {
-	case *adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation:
+	switch op := request.WhichOperation(); op {
+	case adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation_case:
 		batchTypeMemo = "refresh_tasks"
 	default:
-		return nil, serviceerror.NewInvalidArgumentf("The operation type %T is not supported", op)
+		return nil, serviceerror.NewInvalidArgumentf("The operation type %v is not supported", op)
 	}
 
 	inputPayload, err := payloads.Encode(input)
@@ -1632,22 +1633,22 @@ func (adh *AdminHandler) StartAdminBatchOperation(
 		return nil, err
 	}
 
-	memo := &commonpb.Memo{
+	memo := commonpb.Memo_builder{
 		Fields: map[string]*commonpb.Payload{
 			batcher.BatchOperationTypeMemo: payload.EncodeString(batchTypeMemo),
 			batcher.BatchReasonMemo:        payload.EncodeString(request.GetReason()),
 		},
-	}
+	}.Build()
 
 	var searchAttributes *commonpb.SearchAttributes
 	searchattribute.AddSearchAttribute(&searchAttributes, sadefs.BatcherUser, payload.EncodeString(identity))
 	searchattribute.AddSearchAttribute(&searchAttributes, sadefs.TemporalNamespaceDivision, payload.EncodeString(batcher.AdminNamespaceDivision))
 
-	startReq := &workflowservice.StartWorkflowExecutionRequest{
-		Namespace:                request.Namespace,
+	startReq := workflowservice.StartWorkflowExecutionRequest_builder{
+		Namespace:                request.GetNamespace(),
 		WorkflowId:               request.GetJobId(),
-		WorkflowType:             &commonpb.WorkflowType{Name: batcher.BatchWFTypeProtobufName},
-		TaskQueue:                &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
+		WorkflowType:             commonpb.WorkflowType_builder{Name: batcher.BatchWFTypeProtobufName}.Build(),
+		TaskQueue:                taskqueuepb.TaskQueue_builder{Name: primitives.PerNSWorkerTaskQueue}.Build(),
 		Input:                    inputPayload,
 		Identity:                 identity,
 		RequestId:                uuid.NewString(),
@@ -1655,7 +1656,7 @@ func (adh *AdminHandler) StartAdminBatchOperation(
 		WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
 		Memo:                     memo,
 		SearchAttributes:         searchAttributes,
-	}
+	}.Build()
 
 	_, err = adh.historyClient.StartWorkflowExecution(
 		ctx,
@@ -1674,7 +1675,7 @@ func (adh *AdminHandler) StartAdminBatchOperation(
 }
 
 func validateAdminBatchOperation(params *adminservice.StartAdminBatchOperationRequest) error {
-	if params.GetOperation() == nil ||
+	if params.WhichOperation() == 0 ||
 		params.GetReason() == "" ||
 		params.GetNamespace() == "" ||
 		(params.GetVisibilityQuery() == "" && len(params.GetExecutions()) == 0) {
@@ -1688,12 +1689,12 @@ func validateAdminBatchOperation(params *adminservice.StartAdminBatchOperationRe
 		return serviceerror.NewInvalidArgument("batch query and executions are mutually exclusive")
 	}
 
-	switch op := params.GetOperation().(type) {
-	case *adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation:
+	switch op := params.WhichOperation(); op {
+	case adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation_case:
 		// No additional validation needed
 		return nil
 	default:
-		return serviceerror.NewInvalidArgumentf("not supported admin batch type: %T", op)
+		return serviceerror.NewInvalidArgumentf("not supported admin batch type: %v", op)
 	}
 }
 
@@ -1727,7 +1728,7 @@ func (adh *AdminHandler) GetTaskQueueTasks(
 			return nil, serviceerror.NewInvalidArgument("Fairness table is not available on this cluster")
 		}
 		taskManager = adh.fairTaskManager
-		request.MaxTaskId = math.MaxInt64 // required for fairness GetTasks call
+		request.SetMaxTaskId(math.MaxInt64) // required for fairness GetTasks call
 	} else {
 		taskManager = adh.taskManager
 	}
@@ -1741,16 +1742,16 @@ func (adh *AdminHandler) GetTaskQueueTasks(
 		InclusiveMinPass:   request.GetMinPass(),
 		Subqueue:           int(request.GetSubqueue()),
 		PageSize:           int(request.GetBatchSize()),
-		NextPageToken:      request.NextPageToken,
+		NextPageToken:      request.GetNextPageToken(),
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	return &adminservice.GetTaskQueueTasksResponse{
+	return adminservice.GetTaskQueueTasksResponse_builder{
 		Tasks:         resp.Tasks,
 		NextPageToken: resp.NextPageToken,
-	}, nil
+	}.Build(), nil
 }
 
 // DescribeTaskQueuePartition returns information for a given task queue partition of the task queue
@@ -1764,7 +1765,7 @@ func (adh *AdminHandler) DescribeTaskQueuePartition(
 	if request == nil {
 		return nil, errRequestNotSet
 	}
-	if len(request.Namespace) == 0 {
+	if len(request.GetNamespace()) == 0 {
 		return nil, errNamespaceNotSet
 	}
 
@@ -1773,22 +1774,22 @@ func (adh *AdminHandler) DescribeTaskQueuePartition(
 		return nil, err
 	}
 
-	resp, err := adh.matchingClient.DescribeTaskQueuePartition(ctx, &matchingservice.DescribeTaskQueuePartitionRequest{
+	resp, err := adh.matchingClient.DescribeTaskQueuePartition(ctx, matchingservice.DescribeTaskQueuePartitionRequest_builder{
 		NamespaceId:                   namespaceID.String(),
 		TaskQueuePartition:            request.GetTaskQueuePartition(),
 		Versions:                      request.GetBuildIds(),
 		ReportStats:                   true,
 		ReportPollers:                 true,
 		ReportInternalTaskQueueStatus: true,
-	})
+	}.Build())
 
 	if err != nil {
 		return nil, err
 	}
 
-	return &adminservice.DescribeTaskQueuePartitionResponse{
-		VersionsInfoInternal: resp.VersionsInfoInternal,
-	}, nil
+	return adminservice.DescribeTaskQueuePartitionResponse_builder{
+		VersionsInfoInternal: resp.GetVersionsInfoInternal(),
+	}.Build(), nil
 }
 
 // ForceUnloadTaskQueuePartition forcefully unloads a given task queue partition
@@ -1802,7 +1803,7 @@ func (adh *AdminHandler) ForceUnloadTaskQueuePartition(
 	if request == nil {
 		return nil, errRequestNotSet
 	}
-	if len(request.Namespace) == 0 {
+	if len(request.GetNamespace()) == 0 {
 		return nil, errNamespaceNotSet
 	}
 
@@ -1811,19 +1812,19 @@ func (adh *AdminHandler) ForceUnloadTaskQueuePartition(
 		return nil, err
 	}
 
-	resp, err := adh.matchingClient.ForceUnloadTaskQueuePartition(ctx, &matchingservice.ForceUnloadTaskQueuePartitionRequest{
+	resp, err := adh.matchingClient.ForceUnloadTaskQueuePartition(ctx, matchingservice.ForceUnloadTaskQueuePartitionRequest_builder{
 		NamespaceId:        namespaceID.String(),
 		TaskQueuePartition: request.GetTaskQueuePartition(),
-	})
+	}.Build())
 
 	if err != nil {
 		return nil, err
 	}
 
 	// The response returned is for multiple build Id's
-	return &adminservice.ForceUnloadTaskQueuePartitionResponse{
-		WasLoaded: resp.WasLoaded,
-	}, nil
+	return adminservice.ForceUnloadTaskQueuePartitionResponse_builder{
+		WasLoaded: resp.GetWasLoaded(),
+	}.Build(), nil
 }
 
 func (adh *AdminHandler) DeleteWorkflowExecution(
@@ -1836,7 +1837,7 @@ func (adh *AdminHandler) DeleteWorkflowExecution(
 		return nil, errRequestNotSet
 	}
 
-	if err := validateExecution(request.Execution); err != nil {
+	if err := validateExecution(request.GetExecution()); err != nil {
 		return nil, err
 	}
 
@@ -1851,15 +1852,15 @@ func (adh *AdminHandler) DeleteWorkflowExecution(
 	}
 
 	response, err := adh.historyClient.ForceDeleteWorkflowExecution(ctx,
-		&historyservice.ForceDeleteWorkflowExecutionRequest{
+		historyservice.ForceDeleteWorkflowExecutionRequest_builder{
 			NamespaceId: namespaceID.String(),
 			ArchetypeId: archetypeID,
 			Request:     request,
-		})
+		}.Build())
 	if err != nil {
 		return nil, err
 	}
-	return response.Response, nil
+	return response.GetResponse(), nil
 }
 
 func (adh *AdminHandler) validateRemoteClusterMetadata(metadata *adminservice.DescribeClusterResponse) error {
@@ -1884,12 +1885,12 @@ func (adh *AdminHandler) validateRemoteClusterMetadata(metadata *adminservice.De
 			return serviceerror.NewInvalidArgument("Remote cluster shard number and local cluster shard number are not multiples.")
 		}
 	}
-	if !metadata.IsGlobalNamespaceEnabled {
+	if !metadata.GetIsGlobalNamespaceEnabled() {
 		// remote cluster doesn't support global namespace
 		return serviceerror.NewInvalidArgument("Cannot add remote cluster as global namespace is not supported")
 	}
 	for clusterName, cluster := range currentClusterInfo.GetAllClusterInfo() {
-		if clusterName != metadata.ClusterName && cluster.InitialFailoverVersion == metadata.GetInitialFailoverVersion() {
+		if clusterName != metadata.GetClusterName() && cluster.InitialFailoverVersion == metadata.GetInitialFailoverVersion() {
 			// initial failover version conflict
 			// best effort: race condition if a concurrent write to db with the same version.
 			return serviceerror.NewInvalidArgument("Cannot add remote cluster due to initial failover version conflict")
@@ -1937,19 +1938,17 @@ func (adh *AdminHandler) StreamWorkflowReplicationMessages(
 				logger.Info("AdminStreamReplicationMessages client -> server encountered error", tag.Error(err))
 				return
 			}
-			switch attr := req.GetAttributes().(type) {
-			case *adminservice.StreamWorkflowReplicationMessagesRequest_SyncReplicationState:
-				if err = serverCluster.Send(&historyservice.StreamWorkflowReplicationMessagesRequest{
-					Attributes: &historyservice.StreamWorkflowReplicationMessagesRequest_SyncReplicationState{
-						SyncReplicationState: attr.SyncReplicationState,
-					},
-				}); err != nil {
+			switch attr := req.WhichAttributes(); attr {
+			case adminservice.StreamWorkflowReplicationMessagesRequest_SyncReplicationState_case:
+				if err = serverCluster.Send(historyservice.StreamWorkflowReplicationMessagesRequest_builder{
+					SyncReplicationState: proto.ValueOrDefault(req.GetSyncReplicationState()),
+				}.Build()); err != nil {
 					logger.Info("AdminStreamReplicationMessages client -> server encountered error", tag.Error(err))
 					return
 				}
 			default:
 				logger.Info("AdminStreamReplicationMessages client -> server encountered error", tag.Error(serviceerror.NewInternalf(
-					"StreamWorkflowReplicationMessages encountered unknown type: %T %v", attr, attr,
+					"StreamWorkflowReplicationMessages encountered unknown type: %v %v", attr, attr,
 				)))
 				return
 			}
@@ -1967,7 +1966,7 @@ func (adh *AdminHandler) StreamWorkflowReplicationMessages(
 				if errors.As(err, &solErr) || errors.As(err, &suErr) {
 					ctx, cl := context.WithTimeout(context.Background(), 2*time.Second)
 					// getShard here to make sure we will talk to correct host when stream is retrying
-					_, err := adh.historyClient.DescribeHistoryHost(ctx, &historyservice.DescribeHistoryHostRequest{ShardId: serverClusterShardID.ShardID})
+					_, err := adh.historyClient.DescribeHistoryHost(ctx, historyservice.DescribeHistoryHostRequest_builder{ShardId: serverClusterShardID.ShardID}.Build())
 					if err != nil {
 						logger.Error("failed to get shard", tag.Error(err))
 					}
@@ -1975,13 +1974,11 @@ func (adh *AdminHandler) StreamWorkflowReplicationMessages(
 				}
 				return
 			}
-			switch attr := resp.GetAttributes().(type) {
-			case *historyservice.StreamWorkflowReplicationMessagesResponse_Messages:
-				if err = clientCluster.Send(&adminservice.StreamWorkflowReplicationMessagesResponse{
-					Attributes: &adminservice.StreamWorkflowReplicationMessagesResponse_Messages{
-						Messages: attr.Messages,
-					},
-				}); err != nil {
+			switch attr := resp.WhichAttributes(); attr {
+			case historyservice.StreamWorkflowReplicationMessagesResponse_Messages_case:
+				if err = clientCluster.Send(adminservice.StreamWorkflowReplicationMessagesResponse_builder{
+					Messages: proto.ValueOrDefault(resp.GetMessages()),
+				}.Build()); err != nil {
 					if err != io.EOF {
 						logger.Info("AdminStreamReplicationMessages server -> client encountered error", tag.Error(err))
 
@@ -1990,7 +1987,7 @@ func (adh *AdminHandler) StreamWorkflowReplicationMessages(
 				}
 			default:
 				logger.Info("AdminStreamReplicationMessages server -> client encountered error", tag.Error(serviceerror.NewInternalf(
-					"StreamWorkflowReplicationMessages encountered unknown type: %T %v", attr, attr,
+					"StreamWorkflowReplicationMessages encountered unknown type: %v %v", attr, attr,
 				)))
 				return
 			}
@@ -2017,34 +2014,34 @@ func (adh *AdminHandler) GetNamespace(ctx context.Context, request *adminservice
 	nsConfig := resp.Namespace.GetConfig()
 	replicationConfig := resp.Namespace.GetReplicationConfig()
 
-	nsResponse := &adminservice.GetNamespaceResponse{
-		Info: &namespacepb.NamespaceInfo{
-			Name:        info.Name,
-			State:       info.State,
-			Description: info.Description,
-			OwnerEmail:  info.Owner,
-			Data:        info.Data,
-			Id:          info.Id,
-		},
-		Config: &namespacepb.NamespaceConfig{
-			WorkflowExecutionRetentionTtl: nsConfig.Retention,
-			HistoryArchivalState:          nsConfig.HistoryArchivalState,
-			HistoryArchivalUri:            nsConfig.HistoryArchivalUri,
-			VisibilityArchivalState:       nsConfig.VisibilityArchivalState,
-			VisibilityArchivalUri:         nsConfig.VisibilityArchivalUri,
-			BadBinaries:                   nsConfig.BadBinaries,
-			CustomSearchAttributeAliases:  nsConfig.CustomSearchAttributeAliases,
-		},
-		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
-			ActiveClusterName: replicationConfig.ActiveClusterName,
-			Clusters:          convertClusterReplicationConfigToProto(replicationConfig.Clusters),
+	nsResponse := adminservice.GetNamespaceResponse_builder{
+		Info: namespacepb.NamespaceInfo_builder{
+			Name:        info.GetName(),
+			State:       info.GetState(),
+			Description: info.GetDescription(),
+			OwnerEmail:  info.GetOwner(),
+			Data:        info.GetData(),
+			Id:          info.GetId(),
+		}.Build(),
+		Config: namespacepb.NamespaceConfig_builder{
+			WorkflowExecutionRetentionTtl: nsConfig.GetRetention(),
+			HistoryArchivalState:          nsConfig.GetHistoryArchivalState(),
+			HistoryArchivalUri:            nsConfig.GetHistoryArchivalUri(),
+			VisibilityArchivalState:       nsConfig.GetVisibilityArchivalState(),
+			VisibilityArchivalUri:         nsConfig.GetVisibilityArchivalUri(),
+			BadBinaries:                   nsConfig.GetBadBinaries(),
+			CustomSearchAttributeAliases:  nsConfig.GetCustomSearchAttributeAliases(),
+		}.Build(),
+		ReplicationConfig: replicationpb.NamespaceReplicationConfig_builder{
+			ActiveClusterName: replicationConfig.GetActiveClusterName(),
+			Clusters:          convertClusterReplicationConfigToProto(replicationConfig.GetClusters()),
 			State:             replicationConfig.GetState(),
-		},
+		}.Build(),
 		ConfigVersion:     resp.Namespace.GetConfigVersion(),
 		FailoverVersion:   resp.Namespace.GetFailoverVersion(),
 		IsGlobalNamespace: resp.IsGlobalNamespace,
 		FailoverHistory:   convertFailoverHistoryToReplicationProto(resp.Namespace.GetReplicationConfig().GetFailoverHistory()),
-	}
+	}.Build()
 	return nsResponse, nil
 }
 
@@ -2052,29 +2049,29 @@ func (adh *AdminHandler) GetDLQTasks(
 	ctx context.Context,
 	request *adminservice.GetDLQTasksRequest,
 ) (*adminservice.GetDLQTasksResponse, error) {
-	response, err := adh.historyClient.GetDLQTasks(ctx, &historyservice.GetDLQTasksRequest{
-		DlqKey:        request.DlqKey,
-		PageSize:      request.PageSize,
-		NextPageToken: request.NextPageToken,
-	})
+	response, err := adh.historyClient.GetDLQTasks(ctx, historyservice.GetDLQTasksRequest_builder{
+		DlqKey:        request.GetDlqKey(),
+		PageSize:      request.GetPageSize(),
+		NextPageToken: request.GetNextPageToken(),
+	}.Build())
 	if err != nil {
 		return nil, err
 	}
-	return &adminservice.GetDLQTasksResponse{
-		DlqTasks:      response.DlqTasks,
-		NextPageToken: response.NextPageToken,
-	}, nil
+	return adminservice.GetDLQTasksResponse_builder{
+		DlqTasks:      response.GetDlqTasks(),
+		NextPageToken: response.GetNextPageToken(),
+	}.Build(), nil
 }
 
 func (adh *AdminHandler) PurgeDLQTasks(
 	ctx context.Context,
 	request *adminservice.PurgeDLQTasksRequest,
 ) (*adminservice.PurgeDLQTasksResponse, error) {
-	if err := validateHistoryDLQKey(request.DlqKey); err != nil {
+	if err := validateHistoryDLQKey(request.GetDlqKey()); err != nil {
 		return nil, err
 	}
 
-	workflowID := adh.getDLQWorkflowID(request.DlqKey)
+	workflowID := adh.getDLQWorkflowID(request.GetDlqKey())
 	client := adh.sdkClientFactory.GetSystemClient()
 	run, err := client.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 		ID:        workflowID,
@@ -2083,33 +2080,33 @@ func (adh *AdminHandler) PurgeDLQTasks(
 		WorkflowType: dlq.WorkflowTypeDelete,
 		DeleteParams: dlq.DeleteParams{
 			Key: dlq.Key{
-				TaskCategoryID: int(request.DlqKey.TaskCategory),
-				SourceCluster:  request.DlqKey.SourceCluster,
-				TargetCluster:  request.DlqKey.TargetCluster,
+				TaskCategoryID: int(request.GetDlqKey().GetTaskCategory()),
+				SourceCluster:  request.GetDlqKey().GetSourceCluster(),
+				TargetCluster:  request.GetDlqKey().GetTargetCluster(),
 			},
-			MaxMessageID: request.InclusiveMaxTaskMetadata.MessageId,
+			MaxMessageID: request.GetInclusiveMaxTaskMetadata().GetMessageId(),
 		},
 	})
 	if err != nil {
 		return nil, err
 	}
 	runID := run.GetRunID()
-	jobToken := adminservice.DLQJobToken{
+	jobToken := adminservice.DLQJobToken_builder{
 		WorkflowId: workflowID,
 		RunId:      runID,
-	}
+	}.Build()
 	jobTokenBytes, _ := jobToken.Marshal()
-	return &adminservice.PurgeDLQTasksResponse{
+	return adminservice.PurgeDLQTasksResponse_builder{
 		JobToken: jobTokenBytes,
-	}, nil
+	}.Build(), nil
 }
 
 func (adh *AdminHandler) MergeDLQTasks(ctx context.Context, request *adminservice.MergeDLQTasksRequest) (*adminservice.MergeDLQTasksResponse, error) {
-	if err := validateHistoryDLQKey(request.DlqKey); err != nil {
+	if err := validateHistoryDLQKey(request.GetDlqKey()); err != nil {
 		return nil, err
 	}
 
-	workflowID := adh.getDLQWorkflowID(request.DlqKey)
+	workflowID := adh.getDLQWorkflowID(request.GetDlqKey())
 	client := adh.sdkClientFactory.GetSystemClient()
 	run, err := client.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 		ID:        workflowID,
@@ -2118,40 +2115,40 @@ func (adh *AdminHandler) MergeDLQTasks(ctx context.Context, request *adminservic
 		WorkflowType: dlq.WorkflowTypeMerge,
 		MergeParams: dlq.MergeParams{
 			Key: dlq.Key{
-				TaskCategoryID: int(request.DlqKey.TaskCategory),
-				SourceCluster:  request.DlqKey.SourceCluster,
-				TargetCluster:  request.DlqKey.TargetCluster,
+				TaskCategoryID: int(request.GetDlqKey().GetTaskCategory()),
+				SourceCluster:  request.GetDlqKey().GetSourceCluster(),
+				TargetCluster:  request.GetDlqKey().GetTargetCluster(),
 			},
-			MaxMessageID: request.InclusiveMaxTaskMetadata.MessageId,
-			BatchSize:    int(request.BatchSize), // Let the workflow code validate and set the default value if needed.
+			MaxMessageID: request.GetInclusiveMaxTaskMetadata().GetMessageId(),
+			BatchSize:    int(request.GetBatchSize()), // Let the workflow code validate and set the default value if needed.
 		},
 	})
 	if err != nil {
 		return nil, err
 	}
 	runID := run.GetRunID()
-	jobToken := adminservice.DLQJobToken{
+	jobToken := adminservice.DLQJobToken_builder{
 		WorkflowId: workflowID,
 		RunId:      runID,
-	}
+	}.Build()
 	jobTokenBytes, _ := jobToken.Marshal()
-	return &adminservice.MergeDLQTasksResponse{
+	return adminservice.MergeDLQTasksResponse_builder{
 		JobToken: jobTokenBytes,
-	}, nil
+	}.Build(), nil
 }
 
 func (adh *AdminHandler) DescribeDLQJob(ctx context.Context, request *adminservice.DescribeDLQJobRequest) (*adminservice.DescribeDLQJobResponse, error) {
-	jt := adminservice.DLQJobToken{}
-	err := jt.Unmarshal([]byte(request.JobToken))
+	jt := &adminservice.DLQJobToken{}
+	err := jt.Unmarshal([]byte(request.GetJobToken()))
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", errInvalidDLQJobToken, err)
 	}
 	client := adh.sdkClientFactory.GetSystemClient()
-	execution, err := client.DescribeWorkflowExecution(ctx, jt.WorkflowId, jt.RunId)
+	execution, err := client.DescribeWorkflowExecution(ctx, jt.GetWorkflowId(), jt.GetRunId())
 	if err != nil {
 		return nil, err
 	}
-	response, err := client.QueryWorkflow(ctx, jt.WorkflowId, jt.RunId, dlq.QueryTypeProgress)
+	response, err := client.QueryWorkflow(ctx, jt.GetWorkflowId(), jt.GetRunId(), dlq.QueryTypeProgress)
 	if err != nil {
 		return nil, err
 	}
@@ -2160,7 +2157,7 @@ func (adh *AdminHandler) DescribeDLQJob(ctx context.Context, request *adminservi
 		return nil, err
 	}
 	var state enumsspb.DLQOperationState
-	switch execution.WorkflowExecutionInfo.Status {
+	switch execution.GetWorkflowExecutionInfo().GetStatus() {
 	case enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING:
 		state = enumsspb.DLQ_OPERATION_STATE_RUNNING
 	case enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED:
@@ -2177,41 +2174,41 @@ func (adh *AdminHandler) DescribeDLQJob(ctx context.Context, request *adminservi
 	default:
 		return nil, serviceerror.NewInternalf("Invalid DLQ workflow type: %v", opType)
 	}
-	return &adminservice.DescribeDLQJobResponse{
-		DlqKey: &commonspb.HistoryDLQKey{
+	return adminservice.DescribeDLQJobResponse_builder{
+		DlqKey: commonspb.HistoryDLQKey_builder{
 			TaskCategory:  int32(queryResponse.DlqKey.TaskCategoryID),
 			SourceCluster: queryResponse.DlqKey.SourceCluster,
 			TargetCluster: queryResponse.DlqKey.TargetCluster,
-		},
+		}.Build(),
 		OperationType:          opType,
 		OperationState:         state,
 		MaxMessageId:           queryResponse.MaxMessageIDToProcess,
 		LastProcessedMessageId: queryResponse.LastProcessedMessageID,
 		MessagesProcessed:      queryResponse.NumberOfMessagesProcessed,
-		StartTime:              execution.WorkflowExecutionInfo.StartTime,
-		EndTime:                execution.WorkflowExecutionInfo.CloseTime,
-	}, nil
+		StartTime:              execution.GetWorkflowExecutionInfo().GetStartTime(),
+		EndTime:                execution.GetWorkflowExecutionInfo().GetCloseTime(),
+	}.Build(), nil
 }
 
 func (adh *AdminHandler) CancelDLQJob(ctx context.Context, request *adminservice.CancelDLQJobRequest) (*adminservice.CancelDLQJobResponse, error) {
-	jt := adminservice.DLQJobToken{}
-	err := jt.Unmarshal([]byte(request.JobToken))
+	jt := &adminservice.DLQJobToken{}
+	err := jt.Unmarshal([]byte(request.GetJobToken()))
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", errInvalidDLQJobToken, err)
 	}
 	client := adh.sdkClientFactory.GetSystemClient()
-	execution, err := client.DescribeWorkflowExecution(ctx, jt.WorkflowId, jt.RunId)
+	execution, err := client.DescribeWorkflowExecution(ctx, jt.GetWorkflowId(), jt.GetRunId())
 	if err != nil {
 		return nil, err
 	}
-	if execution.WorkflowExecutionInfo.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-		return &adminservice.CancelDLQJobResponse{Canceled: false}, nil
+	if execution.GetWorkflowExecutionInfo().GetStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+		return adminservice.CancelDLQJobResponse_builder{Canceled: false}.Build(), nil
 	}
-	err = client.TerminateWorkflow(ctx, jt.WorkflowId, jt.RunId, request.Reason)
+	err = client.TerminateWorkflow(ctx, jt.GetWorkflowId(), jt.GetRunId(), request.GetReason())
 	if err != nil {
 		return nil, err
 	}
-	return &adminservice.CancelDLQJobResponse{Canceled: true}, nil
+	return adminservice.CancelDLQJobResponse_builder{Canceled: true}.Build(), nil
 }
 
 // AddTasks just translates the admin service's request proto into a history service request proto and then sends it.
@@ -2219,17 +2216,17 @@ func (adh *AdminHandler) AddTasks(
 	ctx context.Context,
 	request *adminservice.AddTasksRequest,
 ) (*adminservice.AddTasksResponse, error) {
-	historyTasks := make([]*historyservice.AddTasksRequest_Task, len(request.Tasks))
-	for i, task := range request.Tasks {
-		historyTasks[i] = &historyservice.AddTasksRequest_Task{
-			CategoryId: task.CategoryId,
-			Blob:       task.Blob,
-		}
+	historyTasks := make([]*historyservice.AddTasksRequest_Task, len(request.GetTasks()))
+	for i, task := range request.GetTasks() {
+		historyTasks[i] = historyservice.AddTasksRequest_Task_builder{
+			CategoryId: task.GetCategoryId(),
+			Blob:       task.GetBlob(),
+		}.Build()
 	}
-	historyServiceRequest := &historyservice.AddTasksRequest{
-		ShardId: request.ShardId,
+	historyServiceRequest := historyservice.AddTasksRequest_builder{
+		ShardId: request.GetShardId(),
 		Tasks:   historyTasks,
-	}
+	}.Build()
 	_, err := adh.historyClient.AddTasks(ctx, historyServiceRequest)
 	if err != nil {
 		return nil, err
@@ -2241,27 +2238,27 @@ func (adh *AdminHandler) ListQueues(
 	ctx context.Context,
 	request *adminservice.ListQueuesRequest,
 ) (*adminservice.ListQueuesResponse, error) {
-	historyServiceRequest := &historyservice.ListQueuesRequest{
-		QueueType:     request.QueueType,
-		PageSize:      request.PageSize,
-		NextPageToken: request.NextPageToken,
-	}
+	historyServiceRequest := historyservice.ListQueuesRequest_builder{
+		QueueType:     request.GetQueueType(),
+		PageSize:      request.GetPageSize(),
+		NextPageToken: request.GetNextPageToken(),
+	}.Build()
 	resp, err := adh.historyClient.ListQueues(ctx, historyServiceRequest)
 	if err != nil {
 		return nil, err
 	}
-	queues := make([]*adminservice.ListQueuesResponse_QueueInfo, len(resp.Queues))
-	for i, queue := range resp.Queues {
-		queues[i] = &adminservice.ListQueuesResponse_QueueInfo{
-			QueueName:     queue.QueueName,
-			MessageCount:  queue.MessageCount,
-			LastMessageId: queue.LastMessageId,
-		}
+	queues := make([]*adminservice.ListQueuesResponse_QueueInfo, len(resp.GetQueues()))
+	for i, queue := range resp.GetQueues() {
+		queues[i] = adminservice.ListQueuesResponse_QueueInfo_builder{
+			QueueName:     queue.GetQueueName(),
+			MessageCount:  queue.GetMessageCount(),
+			LastMessageId: queue.GetLastMessageId(),
+		}.Build()
 	}
-	return &adminservice.ListQueuesResponse{
+	return adminservice.ListQueuesResponse_builder{
 		Queues:        queues,
-		NextPageToken: resp.NextPageToken,
-	}, nil
+		NextPageToken: resp.GetNextPageToken(),
+	}.Build(), nil
 }
 
 func (adh *AdminHandler) SyncWorkflowState(ctx context.Context, request *adminservice.SyncWorkflowStateRequest) (_ *adminservice.SyncWorkflowStateResponse, retError error) {
@@ -2271,24 +2268,24 @@ func (adh *AdminHandler) SyncWorkflowState(ctx context.Context, request *adminse
 		return nil, errRequestNotSet
 	}
 
-	if err := validateExecution(request.Execution); err != nil {
+	if err := validateExecution(request.GetExecution()); err != nil {
 		return nil, err
 	}
 
-	res, err := adh.historyClient.SyncWorkflowState(ctx, &historyservice.SyncWorkflowStateRequest{
-		NamespaceId:         request.NamespaceId,
-		Execution:           request.Execution,
-		VersionHistories:    request.VersionHistories,
-		VersionedTransition: request.VersionedTransition,
-		TargetClusterId:     request.TargetClusterId,
-		ArchetypeId:         request.ArchetypeId,
-	})
+	res, err := adh.historyClient.SyncWorkflowState(ctx, historyservice.SyncWorkflowStateRequest_builder{
+		NamespaceId:         request.GetNamespaceId(),
+		Execution:           request.GetExecution(),
+		VersionHistories:    request.GetVersionHistories(),
+		VersionedTransition: request.GetVersionedTransition(),
+		TargetClusterId:     request.GetTargetClusterId(),
+		ArchetypeId:         request.GetArchetypeId(),
+	}.Build())
 	if err != nil {
 		return nil, err
 	}
-	return &adminservice.SyncWorkflowStateResponse{
-		VersionedTransitionArtifact: res.VersionedTransitionArtifact,
-	}, nil
+	return adminservice.SyncWorkflowStateResponse_builder{
+		VersionedTransitionArtifact: res.GetVersionedTransitionArtifact(),
+	}.Build(), nil
 }
 
 func (adh *AdminHandler) GenerateLastHistoryReplicationTasks(
@@ -2301,7 +2298,7 @@ func (adh *AdminHandler) GenerateLastHistoryReplicationTasks(
 		return nil, errRequestNotSet
 	}
 
-	if err := validateExecution(request.Execution); err != nil {
+	if err := validateExecution(request.GetExecution()); err != nil {
 		return nil, err
 	}
 
@@ -2317,20 +2314,20 @@ func (adh *AdminHandler) GenerateLastHistoryReplicationTasks(
 
 	resp, err := adh.historyClient.GenerateLastHistoryReplicationTasks(
 		ctx,
-		&historyservice.GenerateLastHistoryReplicationTasksRequest{
+		historyservice.GenerateLastHistoryReplicationTasksRequest_builder{
 			NamespaceId:    namespaceEntry.ID().String(),
-			Execution:      request.Execution,
-			TargetClusters: request.TargetClusters,
+			Execution:      request.GetExecution(),
+			TargetClusters: request.GetTargetClusters(),
 			ArchetypeId:    archetypeID,
-		},
+		}.Build(),
 	)
 	if err != nil {
 		return nil, err
 	}
-	return &adminservice.GenerateLastHistoryReplicationTasksResponse{
-		StateTransitionCount: resp.StateTransitionCount,
-		HistoryLength:        resp.HistoryLength,
-	}, nil
+	return adminservice.GenerateLastHistoryReplicationTasksResponse_builder{
+		StateTransitionCount: resp.GetStateTransitionCount(),
+		HistoryLength:        resp.GetHistoryLength(),
+	}.Build(), nil
 }
 
 func (adh *AdminHandler) getDLQWorkflowID(
@@ -2339,9 +2336,9 @@ func (adh *AdminHandler) getDLQWorkflowID(
 	return fmt.Sprintf(
 		"manage-dlq-tasks-%s",
 		persistence.GetHistoryTaskQueueName(
-			int(key.TaskCategory),
-			key.SourceCluster,
-			key.TargetCluster,
+			int(key.GetTaskCategory()),
+			key.GetSourceCluster(),
+			key.GetTargetCluster(),
 		),
 	)
 }
@@ -2362,11 +2359,11 @@ func (adh *AdminHandler) archetypeNameToID(archetype chasm.Archetype) (chasm.Arc
 func validateHistoryDLQKey(
 	key *commonspb.HistoryDLQKey,
 ) error {
-	if len(key.SourceCluster) == 0 {
+	if len(key.GetSourceCluster()) == 0 {
 		return errSourceClusterNotSet
 	}
 
-	if len(key.TargetCluster) == 0 {
+	if len(key.GetTargetCluster()) == 0 {
 		return errTargetClusterNotSet
 	}
 
@@ -2381,7 +2378,7 @@ func convertClusterReplicationConfigToProto(
 ) []*replicationpb.ClusterReplicationConfig {
 	output := make([]*replicationpb.ClusterReplicationConfig, 0, len(input))
 	for _, clusterName := range input {
-		output = append(output, &replicationpb.ClusterReplicationConfig{ClusterName: clusterName})
+		output = append(output, replicationpb.ClusterReplicationConfig_builder{ClusterName: clusterName}.Build())
 	}
 	return output
 }
@@ -2391,10 +2388,10 @@ func convertFailoverHistoryToReplicationProto(
 ) []*replicationpb.FailoverStatus {
 	var replicationProto []*replicationpb.FailoverStatus
 	for _, failoverStatus := range failoverHistoy {
-		replicationProto = append(replicationProto, &replicationpb.FailoverStatus{
+		replicationProto = append(replicationProto, replicationpb.FailoverStatus_builder{
 			FailoverTime:    failoverStatus.GetFailoverTime(),
 			FailoverVersion: failoverStatus.GetFailoverVersion(),
-		})
+		}.Build())
 	}
 
 	return replicationProto

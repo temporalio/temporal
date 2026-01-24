@@ -49,14 +49,12 @@ func TestCommandProtocolMessage(t *testing.T) {
 	const defaultBlobSizeLimit = 1 * 1024 * 1024
 
 	msgCommand := func(msgID string) *commandpb.Command {
-		return &commandpb.Command{
+		return commandpb.Command_builder{
 			CommandType: enumspb.COMMAND_TYPE_PROTOCOL_MESSAGE,
-			Attributes: &commandpb.Command_ProtocolMessageCommandAttributes{
-				ProtocolMessageCommandAttributes: &commandpb.ProtocolMessageCommandAttributes{
-					MessageId: msgID,
-				},
-			},
-		}
+			ProtocolMessageCommandAttributes: commandpb.ProtocolMessageCommandAttributes_builder{
+				MessageId: msgID,
+			}.Build(),
+		}.Build()
 	}
 
 	setup := func(t *testing.T, out *testconf, blobSizeLimit int) {
@@ -135,24 +133,22 @@ func TestCommandProtocolMessage(t *testing.T) {
 		setup(t, &tc, defaultBlobSizeLimit)
 		msgID := t.Name() + "-message-id"
 		command := msgCommand(msgID)
-		startTimerCommandAttributes := &commandpb.StartTimerCommandAttributes{
+		startTimerCommandAttributes := commandpb.StartTimerCommandAttributes_builder{
 			TimerId: fmt.Sprintf("random-timer-id-%d", rand.Int63()),
-		}
-		command.UserMetadata = &sdkpb.UserMetadata{
-			Summary: &commonpb.Payload{
+		}.Build()
+		command.SetUserMetadata(sdkpb.UserMetadata_builder{
+			Summary: commonpb.Payload_builder{
 				Metadata: map[string][]byte{"test_key": []byte(`test_val`)},
 				Data:     []byte(`Test summary Data`),
-			},
-			Details: &commonpb.Payload{
+			}.Build(),
+			Details: commonpb.Payload_builder{
 				Metadata: map[string][]byte{"test_key": []byte(`test_val`)},
 				Data:     []byte(`Test Details Data`),
-			},
-		}
+			}.Build(),
+		}.Build())
 
-		command.CommandType = enumspb.COMMAND_TYPE_START_TIMER
-		command.Attributes = &commandpb.Command_StartTimerCommandAttributes{
-			StartTimerCommandAttributes: startTimerCommandAttributes,
-		}
+		command.SetCommandType(enumspb.COMMAND_TYPE_START_TIMER)
+		command.SetStartTimerCommandAttributes(proto.ValueOrDefault(startTimerCommandAttributes))
 
 		// mock an event creation.
 		event := &historypb.HistoryEvent{}
@@ -162,7 +158,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 		require.NoError(t, err)
 
 		// Verify that the user metadata is populated properly in the event object
-		require.Equal(t, event.UserMetadata, command.UserMetadata)
+		require.Equal(t, event.GetUserMetadata(), command.GetUserMetadata())
 	})
 
 	// Verifies that the error is properly handled when event creation fails.
@@ -170,20 +166,18 @@ func TestCommandProtocolMessage(t *testing.T) {
 		var tc testconf
 		setup(t, &tc, defaultBlobSizeLimit)
 		command := msgCommand(t.Name() + "-message-id")
-		completeWorkflowExecutionCommandAttributes := &commandpb.CompleteWorkflowExecutionCommandAttributes{
-			Result: &commonpb.Payloads{
+		completeWorkflowExecutionCommandAttributes := commandpb.CompleteWorkflowExecutionCommandAttributes_builder{
+			Result: commonpb.Payloads_builder{
 				Payloads: []*commonpb.Payload{},
-			},
-		}
-		command.UserMetadata = &sdkpb.UserMetadata{
+			}.Build(),
+		}.Build()
+		command.SetUserMetadata(sdkpb.UserMetadata_builder{
 			Summary: &commonpb.Payload{},
 			Details: &commonpb.Payload{},
-		}
+		}.Build())
 
-		command.CommandType = enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION
-		command.Attributes = &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
-			CompleteWorkflowExecutionCommandAttributes: completeWorkflowExecutionCommandAttributes,
-		}
+		command.SetCommandType(enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION)
+		command.SetCompleteWorkflowExecutionCommandAttributes(proto.ValueOrDefault(completeWorkflowExecutionCommandAttributes))
 
 		// mock a failed event creation.
 		event := &historypb.HistoryEvent{}
@@ -197,7 +191,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 		require.Error(t, err)
 
 		// Verify that the event is discarded anduser metadata is not attached to the event.
-		require.Nil(t, event.UserMetadata)
+		require.Nil(t, event.GetUserMetadata())
 	})
 
 	t.Run("message not found", func(t *testing.T) {
@@ -224,11 +218,11 @@ func TestCommandProtocolMessage(t *testing.T) {
 		var (
 			msgID   = t.Name() + "-message-id"
 			command = msgCommand(msgID) // blank is invalid
-			msg     = &protocolpb.Message{
+			msg     = protocolpb.Message_builder{
 				Id:                 msgID,
 				ProtocolInstanceId: "does_not_matter",
 				Body:               mustMarshalAny(t, &anypb.Any{}),
-			}
+			}.Build()
 		)
 
 		tc.ms.EXPECT().GetExecutionInfo().AnyTimes().Return(&persistencespb.WorkflowExecutionInfo{})
@@ -249,11 +243,11 @@ func TestCommandProtocolMessage(t *testing.T) {
 		var (
 			msgID   = t.Name() + "-message-id"
 			command = msgCommand(msgID) // blank is invalid
-			msg     = &protocolpb.Message{
+			msg     = protocolpb.Message_builder{
 				Id:                 msgID,
 				ProtocolInstanceId: "does_not_matter",
 				Body:               mustMarshalAny(t, &anypb.Any{}),
-			}
+			}.Build()
 		)
 
 		tc.ms.EXPECT().GetExecutionInfo().AnyTimes().Return(&persistencespb.WorkflowExecutionInfo{})
@@ -276,11 +270,11 @@ func TestCommandProtocolMessage(t *testing.T) {
 		var (
 			msgID   = t.Name() + "-message-id"
 			command = msgCommand(msgID) // blank is invalid
-			msg     = &protocolpb.Message{
+			msg     = protocolpb.Message_builder{
 				Id:                 msgID,
 				ProtocolInstanceId: "will not be found",
 				Body:               mustMarshalAny(t, &updatepb.Acceptance{}),
-			}
+			}.Build()
 		)
 
 		tc.ms.EXPECT().GetExecutionInfo().AnyTimes().Return(&persistencespb.WorkflowExecutionInfo{})
@@ -304,11 +298,11 @@ func TestCommandProtocolMessage(t *testing.T) {
 			updateID = t.Name() + "-update-id"
 			msgID    = t.Name() + "-message-id"
 			command  = msgCommand(msgID) // blank is invalid
-			msg      = &protocolpb.Message{
+			msg      = protocolpb.Message_builder{
 				Id:                 msgID,
 				ProtocolInstanceId: updateID,
 				Body:               mustMarshalAny(t, &updatepb.Acceptance{}),
-			}
+			}.Build()
 		)
 		tc.ms.EXPECT().GetExecutionInfo().AnyTimes().Return(&persistencespb.WorkflowExecutionInfo{})
 		tc.ms.EXPECT().GetExecutionState().AnyTimes().Return(&persistencespb.WorkflowExecutionState{})
@@ -337,19 +331,19 @@ func TestCommandProtocolMessage(t *testing.T) {
 			updateID = t.Name() + "-update-id"
 			msgID    = updateID + "/request"
 			command  = msgCommand(msgID) // blank is invalid
-			req      = &updatepb.Request{
-				Meta:  &updatepb.Meta{UpdateId: updateID},
-				Input: &updatepb.Input{Name: "not_empty"},
-			}
-			msg = &protocolpb.Message{
+			req      = updatepb.Request_builder{
+				Meta:  updatepb.Meta_builder{UpdateId: updateID}.Build(),
+				Input: updatepb.Input_builder{Name: "not_empty"}.Build(),
+			}.Build()
+			msg = protocolpb.Message_builder{
 				Id:                 msgID,
 				ProtocolInstanceId: updateID,
-				Body: mustMarshalAny(t, &updatepb.Acceptance{
+				Body: mustMarshalAny(t, updatepb.Acceptance_builder{
 					AcceptedRequestMessageId:         msgID,
 					AcceptedRequestSequencingEventId: 2208,
 					AcceptedRequest:                  req,
-				}),
-			}
+				}.Build()),
+			}.Build()
 			msgs = newMsgList(msg)
 		)
 		tc.ms.EXPECT().GetExecutionInfo().AnyTimes().Return(&persistencespb.WorkflowExecutionInfo{})
@@ -373,7 +367,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 }
 
 func newMsgList(msgs ...*protocolpb.Message) *collection.IndexedTakeList[string, *protocolpb.Message] {
-	return collection.NewIndexedTakeList(msgs, func(msg *protocolpb.Message) string { return msg.Id })
+	return collection.NewIndexedTakeList(msgs, func(msg *protocolpb.Message) string { return msg.GetId() })
 }
 
 func mustMarshalAny(t *testing.T, pb proto.Message) *anypb.Any {

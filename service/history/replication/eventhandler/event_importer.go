@@ -91,7 +91,7 @@ func (e *eventImporterImpl) ImportHistoryEventsFromBeginning(
 		if err != nil {
 			return err
 		}
-		token = res.Token
+		token = res.GetToken()
 		blobs = []*commonpb.DataBlob{}
 		blobSize = 0
 		eventsVersion = common.EmptyVersion
@@ -108,7 +108,7 @@ func (e *eventImporterImpl) ImportHistoryEventsFromBeginning(
 			return err
 		}
 
-		if versionHistory != nil && !versionhistory.IsVersionHistoryItemsInSameBranch(versionHistory.Items, batch.VersionHistory.Items) {
+		if versionHistory != nil && !versionhistory.IsVersionHistoryItemsInSameBranch(versionHistory.GetItems(), batch.VersionHistory.GetItems()) {
 			return serviceerror.NewInternal("History Branch changed during importing")
 		}
 		events, err := e.serializer.DeserializeEvents(batch.RawEventBatch)
@@ -125,7 +125,7 @@ func (e *eventImporterImpl) ImportHistoryEventsFromBeginning(
 		}
 		versionHistory = batch.VersionHistory
 		eventsVersion = events[0].GetVersion()
-		blobSize += len(batch.RawEventBatch.Data)
+		blobSize += len(batch.RawEventBatch.GetData())
 		blobs = append(blobs, batch.RawEventBatch)
 
 		if blobSize >= historyImportPageSize || len(blobs) >= historyImportBlobSize {
@@ -143,7 +143,7 @@ func (e *eventImporterImpl) ImportHistoryEventsFromBeginning(
 
 	// call with empty event blob to commit the import
 	response, err := invokeImportWorkflowExecutionCall(ctx, engine, workflowKey, blobs, versionHistory, token, e.logger)
-	if err != nil || len(response.Token) != 0 {
+	if err != nil || len(response.GetToken()) != 0 {
 		e.logger.Error("failed to commit import action",
 			tag.WorkflowNamespaceID(workflowKey.NamespaceID),
 			tag.WorkflowID(workflowKey.WorkflowID),
@@ -163,16 +163,16 @@ func invokeImportWorkflowExecutionCall(
 	token []byte,
 	logger log.Logger,
 ) (*historyservice.ImportWorkflowExecutionResponse, error) {
-	request := &historyservice.ImportWorkflowExecutionRequest{
+	request := historyservice.ImportWorkflowExecutionRequest_builder{
 		NamespaceId: workflowKey.NamespaceID,
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: workflowKey.WorkflowID,
 			RunId:      workflowKey.RunID,
-		},
+		}.Build(),
 		HistoryBatches: historyBatches,
 		VersionHistory: versionHistory,
 		Token:          token,
-	}
+	}.Build()
 	response, err := historyEngine.ImportWorkflowExecution(ctx, request)
 	if err != nil {
 		return nil, serviceerror.NewInternal("Failed to import events")

@@ -35,7 +35,7 @@ func (t *StateMachineTask) SetVisibilityTime(timestamp time.Time) {
 }
 
 func (t *StateMachineTask) StateMachineTaskType() string {
-	return t.Info.Type
+	return t.Info.GetType()
 }
 
 // StateMachineOutboundTask is a task on the outbound queue.

@@ -139,8 +139,8 @@ func (m *MetadataStore) CreateNamespaceInV2Table(
 		constNamespacePartition,
 		request.ID,
 		request.Name,
-		request.Namespace.Data,
-		request.Namespace.EncodingType.String(),
+		request.Namespace.GetData(),
+		request.Namespace.GetEncodingType().String(),
 		metadata.NotificationVersion,
 		request.IsGlobal,
 	)
@@ -209,8 +209,8 @@ func (m *MetadataStore) UpdateNamespace(
 ) error {
 	batch := m.session.NewBatch(gocql.LoggedBatch).WithContext(ctx)
 	batch.Query(templateUpdateNamespaceByNameQueryWithinBatchV2,
-		request.Namespace.Data,
-		request.Namespace.EncodingType.String(),
+		request.Namespace.GetData(),
+		request.Namespace.GetEncodingType().String(),
 		request.IsGlobal,
 		request.NotificationVersion,
 		constNamespacePartition,
@@ -261,8 +261,8 @@ func (m *MetadataStore) RenameNamespace(
 		constNamespacePartition,
 		request.Id,
 		request.Name,
-		request.Namespace.Data,
-		request.Namespace.EncodingType.String(),
+		request.Namespace.GetData(),
+		request.Namespace.GetEncodingType().String(),
 		request.NotificationVersion,
 		request.IsGlobal,
 	)

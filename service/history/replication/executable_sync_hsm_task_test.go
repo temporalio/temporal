@@ -26,6 +26,7 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -79,32 +80,32 @@ func (s *executableSyncHSMTaskSuite) SetupTest() {
 	s.executableTask = NewMockExecutableTask(s.controller)
 	s.eagerNamespaceRefresher = NewMockEagerNamespaceRefresher(s.controller)
 
-	s.replicationTask = &replicationspb.SyncHSMAttributes{
+	s.replicationTask = replicationspb.SyncHSMAttributes_builder{
 		NamespaceId: uuid.NewString(),
 		WorkflowId:  uuid.NewString(),
 		RunId:       uuid.NewString(),
-		VersionHistory: &historyspb.VersionHistory{
+		VersionHistory: historyspb.VersionHistory_builder{
 			BranchToken: []byte("branch token 2"),
 			Items: []*historyspb.VersionHistoryItem{
-				{EventId: 5, Version: 10},
-				{EventId: 10, Version: 20},
+				historyspb.VersionHistoryItem_builder{EventId: 5, Version: 10}.Build(),
+				historyspb.VersionHistoryItem_builder{EventId: 10, Version: 20}.Build(),
 			},
-		},
-		StateMachineNode: &persistencespb.StateMachineNode{
+		}.Build(),
+		StateMachineNode: persistencespb.StateMachineNode_builder{
 			Children: map[string]*persistencespb.StateMachineMap{
-				"test": {
+				"test": persistencespb.StateMachineMap_builder{
 					MachinesById: map[string]*persistencespb.StateMachineNode{
-						"machine1": {
+						"machine1": persistencespb.StateMachineNode_builder{
 							Data: []byte("machine1 data"),
-						},
-						"machine2": {
+						}.Build(),
+						"machine2": persistencespb.StateMachineNode_builder{
 							Data: []byte("machine1 data"),
-						},
+						}.Build(),
 					},
-				},
+				}.Build(),
 			},
-		},
-	}
+		}.Build(),
+	}.Build()
 	s.sourceClusterName = cluster.TestCurrentClusterName
 	s.sourceShardKey = ClusterShardKey{
 		ClusterID: int32(cluster.TestCurrentClusterInitialFailoverVersion),
@@ -132,9 +133,9 @@ func (s *executableSyncHSMTaskSuite) SetupTest() {
 		s.replicationTask,
 		s.sourceClusterName,
 		s.sourceShardKey,
-		&replicationspb.ReplicationTask{
+		replicationspb.ReplicationTask_builder{
 			Priority: enumsspb.TASK_PRIORITY_HIGH,
-		},
+		}.Build(),
 	)
 	s.task.ExecutableTask = s.executableTask
 	s.executableTask.EXPECT().TaskID().Return(s.taskID).AnyTimes()
@@ -254,26 +255,24 @@ func (s *executableSyncHSMTaskSuite) TestHandleErr_Resend_Error() {
 }
 
 func (s *executableSyncHSMTaskSuite) TestMarkPoisonPill() {
-	replicationTask := &replicationspb.ReplicationTask{
-		TaskType:     enumsspb.REPLICATION_TASK_TYPE_SYNC_HSM_TASK,
-		SourceTaskId: s.taskID,
-		Attributes: &replicationspb.ReplicationTask_SyncHsmAttributes{
-			SyncHsmAttributes: s.replicationTask,
-		},
-		RawTaskInfo: nil,
-	}
+	replicationTask := replicationspb.ReplicationTask_builder{
+		TaskType:          enumsspb.REPLICATION_TASK_TYPE_SYNC_HSM_TASK,
+		SourceTaskId:      s.taskID,
+		SyncHsmAttributes: proto.ValueOrDefault(s.replicationTask),
+		RawTaskInfo:       nil,
+	}.Build()
 	s.executableTask.EXPECT().ReplicationTask().Return(replicationTask).AnyTimes()
 	s.executableTask.EXPECT().MarkPoisonPill().Times(1)
 
 	err := s.task.MarkPoisonPill()
 	s.NoError(err)
 
-	s.Equal(&persistencespb.ReplicationTaskInfo{
+	s.Equal(persistencespb.ReplicationTaskInfo_builder{
 		NamespaceId:    s.task.NamespaceID,
 		WorkflowId:     s.task.WorkflowID,
 		RunId:          s.task.RunID,
 		TaskId:         s.task.ExecutableTask.TaskID(),
 		TaskType:       enumsspb.TASK_TYPE_REPLICATION_SYNC_HSM,
 		VisibilityTime: timestamppb.New(s.task.TaskCreationTime()),
-	}, replicationTask.RawTaskInfo)
+	}.Build(), replicationTask.GetRawTaskInfo())
 }

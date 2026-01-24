@@ -20,9 +20,9 @@ var TransitionScheduled = chasm.NewTransition(
 	[]callbackspb.CallbackStatus{callbackspb.CALLBACK_STATUS_STANDBY},
 	callbackspb.CALLBACK_STATUS_SCHEDULED,
 	func(cb *Callback, ctx chasm.MutableContext, event EventScheduled) error {
-		u, err := url.Parse(cb.Callback.GetNexus().GetUrl())
+		u, err := url.Parse(cb.GetCallback().GetNexus().GetUrl())
 		if err != nil {
-			return fmt.Errorf("failed to parse URL: %v: %w", cb.Callback, err)
+			return fmt.Errorf("failed to parse URL: %v: %w", cb.GetCallback(), err)
 		}
 		ctx.AddTask(cb, chasm.TaskAttributes{Destination: u.Scheme + "://" + u.Host}, &callbackspb.InvocationTask{})
 		return nil
@@ -36,15 +36,15 @@ var TransitionRescheduled = chasm.NewTransition(
 	[]callbackspb.CallbackStatus{callbackspb.CALLBACK_STATUS_BACKING_OFF},
 	callbackspb.CALLBACK_STATUS_SCHEDULED,
 	func(cb *Callback, ctx chasm.MutableContext, event EventRescheduled) error {
-		cb.NextAttemptScheduleTime = nil
-		u, err := url.Parse(cb.Callback.GetNexus().Url)
+		cb.ClearNextAttemptScheduleTime()
+		u, err := url.Parse(cb.GetCallback().GetNexus().GetUrl())
 		if err != nil {
-			return fmt.Errorf("failed to parse URL: %v: %w", cb.Callback, err)
+			return fmt.Errorf("failed to parse URL: %v: %w", cb.GetCallback(), err)
 		}
 		ctx.AddTask(
 			cb,
 			chasm.TaskAttributes{Destination: u.Scheme + "://" + u.Host},
-			&callbackspb.InvocationTask{Attempt: cb.Attempt},
+			callbackspb.InvocationTask_builder{Attempt: cb.GetAttempt()}.Build(),
 		)
 		return nil
 	},
@@ -63,21 +63,19 @@ var TransitionAttemptFailed = chasm.NewTransition(
 	func(cb *Callback, ctx chasm.MutableContext, event EventAttemptFailed) error {
 		cb.recordAttempt(event.Time)
 		// Use 0 for elapsed time as we don't limit the retry by time (for now).
-		nextDelay := event.RetryPolicy.ComputeNextDelay(0, int(cb.Attempt), event.Err)
+		nextDelay := event.RetryPolicy.ComputeNextDelay(0, int(cb.GetAttempt()), event.Err)
 		nextAttemptScheduleTime := event.Time.Add(nextDelay)
-		cb.NextAttemptScheduleTime = timestamppb.New(nextAttemptScheduleTime)
-		cb.LastAttemptFailure = &failurepb.Failure{
+		cb.SetNextAttemptScheduleTime(timestamppb.New(nextAttemptScheduleTime))
+		cb.SetLastAttemptFailure(failurepb.Failure_builder{
 			Message: event.Err.Error(),
-			FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
-				ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
-					NonRetryable: false,
-				},
-			},
-		}
+			ApplicationFailureInfo: failurepb.ApplicationFailureInfo_builder{
+				NonRetryable: false,
+			}.Build(),
+		}.Build())
 		ctx.AddTask(
 			cb,
 			chasm.TaskAttributes{ScheduledTime: nextAttemptScheduleTime},
-			&callbackspb.BackoffTask{Attempt: cb.Attempt},
+			callbackspb.BackoffTask_builder{Attempt: cb.GetAttempt()}.Build(),
 		)
 		return nil
 	},
@@ -94,14 +92,12 @@ var TransitionFailed = chasm.NewTransition(
 	callbackspb.CALLBACK_STATUS_FAILED,
 	func(cb *Callback, ctx chasm.MutableContext, event EventFailed) error {
 		cb.recordAttempt(event.Time)
-		cb.LastAttemptFailure = &failurepb.Failure{
+		cb.SetLastAttemptFailure(failurepb.Failure_builder{
 			Message: event.Err.Error(),
-			FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
-				ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
-					NonRetryable: true,
-				},
-			},
-		}
+			ApplicationFailureInfo: failurepb.ApplicationFailureInfo_builder{
+				NonRetryable: true,
+			}.Build(),
+		}.Build())
 		return nil
 	},
 )
@@ -116,7 +112,7 @@ var TransitionSucceeded = chasm.NewTransition(
 	callbackspb.CALLBACK_STATUS_SUCCEEDED,
 	func(cb *Callback, ctx chasm.MutableContext, event EventSucceeded) error {
 		cb.recordAttempt(event.Time)
-		cb.LastAttemptFailure = nil
+		cb.ClearLastAttemptFailure()
 		return nil
 	},
 )

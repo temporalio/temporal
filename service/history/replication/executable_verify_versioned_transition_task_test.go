@@ -118,22 +118,20 @@ func (s *executableVerifyVersionedTransitionTaskSuite) SetupTest() {
 		Config:                  s.config,
 		WorkflowCache:           s.wfcache,
 	}
-	replicationTask := &replicationspb.ReplicationTask{
+	replicationTask := replicationspb.ReplicationTask_builder{
 		TaskType:     enumsspb.REPLICATION_TASK_TYPE_VERIFY_VERSIONED_TRANSITION_TASK,
 		SourceTaskId: s.taskID,
-		Attributes: &replicationspb.ReplicationTask_VerifyVersionedTransitionTaskAttributes{
-			VerifyVersionedTransitionTaskAttributes: &replicationspb.VerifyVersionedTransitionTaskAttributes{
-				NamespaceId: s.namespaceID,
-				WorkflowId:  s.workflowID,
-				RunId:       s.runID,
-				ArchetypeId: chasm.WorkflowArchetypeID,
-			},
-		},
-		VersionedTransition: &persistencespb.VersionedTransition{
+		VerifyVersionedTransitionTaskAttributes: replicationspb.VerifyVersionedTransitionTaskAttributes_builder{
+			NamespaceId: s.namespaceID,
+			WorkflowId:  s.workflowID,
+			RunId:       s.runID,
+			ArchetypeId: chasm.WorkflowArchetypeID,
+		}.Build(),
+		VersionedTransition: persistencespb.VersionedTransition_builder{
 			NamespaceFailoverVersion: 3,
 			TransitionCount:          5,
-		},
-	}
+		}.Build(),
+	}.Build()
 	s.task = NewExecutableVerifyVersionedTransitionTask(
 		s.toolBox,
 		s.taskID,
@@ -155,24 +153,22 @@ func (s *executableVerifyVersionedTransitionTaskSuite) TearDownTest() {
 
 func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_CurrentBranch_VerifySuccess() {
 	taskNextEvent := int64(10)
-	replicationTask := &replicationspb.ReplicationTask{
+	replicationTask := replicationspb.ReplicationTask_builder{
 		TaskType:     enumsspb.REPLICATION_TASK_TYPE_VERIFY_VERSIONED_TRANSITION_TASK,
 		SourceTaskId: s.taskID,
-		Attributes: &replicationspb.ReplicationTask_VerifyVersionedTransitionTaskAttributes{
-			VerifyVersionedTransitionTaskAttributes: &replicationspb.VerifyVersionedTransitionTaskAttributes{
-				NamespaceId: s.namespaceID,
-				WorkflowId:  s.workflowID,
-				RunId:       s.runID,
-				NextEventId: taskNextEvent,
-				NewRunId:    s.newRunID,
-				ArchetypeId: chasm.WorkflowArchetypeID,
-			},
-		},
-		VersionedTransition: &persistencespb.VersionedTransition{
+		VerifyVersionedTransitionTaskAttributes: replicationspb.VerifyVersionedTransitionTaskAttributes_builder{
+			NamespaceId: s.namespaceID,
+			WorkflowId:  s.workflowID,
+			RunId:       s.runID,
+			NextEventId: taskNextEvent,
+			NewRunId:    s.newRunID,
+			ArchetypeId: chasm.WorkflowArchetypeID,
+		}.Build(),
+		VersionedTransition: persistencespb.VersionedTransition_builder{
 			NamespaceFailoverVersion: 3,
 			TransitionCount:          5,
-		},
-	}
+		}.Build(),
+	}.Build()
 	s.executableTask.EXPECT().TerminalState().Return(false)
 	s.executableTask.EXPECT().MarkExecutionStart()
 	s.executableTask.EXPECT().ReplicationTask().Times(1).Return(replicationTask)
@@ -181,15 +177,15 @@ func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_CurrentBranch
 	).AnyTimes()
 	mu := historyi.NewMockMutableState(s.controller)
 	mu.EXPECT().CloneToProto().Return(
-		&persistencespb.WorkflowMutableState{
-			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+		persistencespb.WorkflowMutableState_builder{
+			ExecutionInfo: persistencespb.WorkflowExecutionInfo_builder{
 				TransitionHistory: []*persistencespb.VersionedTransition{
-					{NamespaceFailoverVersion: 1, TransitionCount: 3},
-					{NamespaceFailoverVersion: 3, TransitionCount: 6},
+					persistencespb.VersionedTransition_builder{NamespaceFailoverVersion: 1, TransitionCount: 3}.Build(),
+					persistencespb.VersionedTransition_builder{NamespaceFailoverVersion: 3, TransitionCount: 6}.Build(),
 				},
-			},
+			}.Build(),
 			NextEventId: taskNextEvent,
-		},
+		}.Build(),
 	).AnyTimes()
 
 	s.mockGetMutableState(s.namespaceID, s.workflowID, s.runID, mu, nil)
@@ -213,24 +209,22 @@ func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_CurrentBranch
 
 func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_CurrentBranch_NewRunNotFound() {
 	taskNextEvent := int64(10)
-	replicationTask := &replicationspb.ReplicationTask{
+	replicationTask := replicationspb.ReplicationTask_builder{
 		TaskType:     enumsspb.REPLICATION_TASK_TYPE_VERIFY_VERSIONED_TRANSITION_TASK,
 		SourceTaskId: s.taskID,
-		Attributes: &replicationspb.ReplicationTask_VerifyVersionedTransitionTaskAttributes{
-			VerifyVersionedTransitionTaskAttributes: &replicationspb.VerifyVersionedTransitionTaskAttributes{
-				NamespaceId: s.namespaceID,
-				WorkflowId:  s.workflowID,
-				RunId:       s.runID,
-				NextEventId: taskNextEvent,
-				NewRunId:    s.newRunID,
-				ArchetypeId: chasm.WorkflowArchetypeID,
-			},
-		},
-		VersionedTransition: &persistencespb.VersionedTransition{
+		VerifyVersionedTransitionTaskAttributes: replicationspb.VerifyVersionedTransitionTaskAttributes_builder{
+			NamespaceId: s.namespaceID,
+			WorkflowId:  s.workflowID,
+			RunId:       s.runID,
+			NextEventId: taskNextEvent,
+			NewRunId:    s.newRunID,
+			ArchetypeId: chasm.WorkflowArchetypeID,
+		}.Build(),
+		VersionedTransition: persistencespb.VersionedTransition_builder{
 			NamespaceFailoverVersion: 3,
 			TransitionCount:          5,
-		},
-	}
+		}.Build(),
+	}.Build()
 	s.executableTask.EXPECT().TerminalState().Return(false)
 	s.executableTask.EXPECT().MarkExecutionStart()
 	s.executableTask.EXPECT().ReplicationTask().Times(1).Return(replicationTask).AnyTimes()
@@ -240,15 +234,15 @@ func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_CurrentBranch
 
 	mu := historyi.NewMockMutableState(s.controller)
 	mu.EXPECT().CloneToProto().Return(
-		&persistencespb.WorkflowMutableState{
-			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+		persistencespb.WorkflowMutableState_builder{
+			ExecutionInfo: persistencespb.WorkflowExecutionInfo_builder{
 				TransitionHistory: []*persistencespb.VersionedTransition{
-					{NamespaceFailoverVersion: 1, TransitionCount: 3},
-					{NamespaceFailoverVersion: 3, TransitionCount: 6},
+					persistencespb.VersionedTransition_builder{NamespaceFailoverVersion: 1, TransitionCount: 3}.Build(),
+					persistencespb.VersionedTransition_builder{NamespaceFailoverVersion: 3, TransitionCount: 6}.Build(),
 				},
-			},
+			}.Build(),
 			NextEventId: taskNextEvent,
-		},
+		}.Build(),
 	).AnyTimes()
 
 	s.mockGetMutableState(s.namespaceID, s.workflowID, s.runID, mu, nil)
@@ -287,10 +281,10 @@ func (s *executableVerifyVersionedTransitionTaskSuite) mockGetMutableState(
 		gomock.Any(),
 		shardContext,
 		namespace.ID(namespaceId),
-		&commonpb.WorkflowExecution{
+		commonpb.WorkflowExecution_builder{
 			WorkflowId: workflowId,
 			RunId:      runId,
-		},
+		}.Build(),
 		chasm.WorkflowArchetypeID,
 		locks.PriorityHigh,
 	).Return(wfCtx, func(err error) {}, err)
@@ -298,24 +292,22 @@ func (s *executableVerifyVersionedTransitionTaskSuite) mockGetMutableState(
 
 func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_CurrentBranch_NotUpToDate() {
 	taskNextEvent := int64(10)
-	replicationTask := &replicationspb.ReplicationTask{
+	replicationTask := replicationspb.ReplicationTask_builder{
 		TaskType:     enumsspb.REPLICATION_TASK_TYPE_VERIFY_VERSIONED_TRANSITION_TASK,
 		SourceTaskId: s.taskID,
-		Attributes: &replicationspb.ReplicationTask_VerifyVersionedTransitionTaskAttributes{
-			VerifyVersionedTransitionTaskAttributes: &replicationspb.VerifyVersionedTransitionTaskAttributes{
-				NamespaceId: s.namespaceID,
-				WorkflowId:  s.workflowID,
-				RunId:       s.runID,
-				NextEventId: taskNextEvent,
-				NewRunId:    s.newRunID,
-				ArchetypeId: chasm.WorkflowArchetypeID,
-			},
-		},
-		VersionedTransition: &persistencespb.VersionedTransition{
+		VerifyVersionedTransitionTaskAttributes: replicationspb.VerifyVersionedTransitionTaskAttributes_builder{
+			NamespaceId: s.namespaceID,
+			WorkflowId:  s.workflowID,
+			RunId:       s.runID,
+			NextEventId: taskNextEvent,
+			NewRunId:    s.newRunID,
+			ArchetypeId: chasm.WorkflowArchetypeID,
+		}.Build(),
+		VersionedTransition: persistencespb.VersionedTransition_builder{
 			NamespaceFailoverVersion: 3,
 			TransitionCount:          7,
-		},
-	}
+		}.Build(),
+	}.Build()
 	s.executableTask.EXPECT().TerminalState().Return(false)
 	s.executableTask.EXPECT().MarkExecutionStart()
 	s.executableTask.EXPECT().ReplicationTask().Return(replicationTask).AnyTimes()
@@ -325,16 +317,16 @@ func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_CurrentBranch
 
 	mu := historyi.NewMockMutableState(s.controller)
 	transitionHistory := []*persistencespb.VersionedTransition{
-		{NamespaceFailoverVersion: 1, TransitionCount: 3},
-		{NamespaceFailoverVersion: 3, TransitionCount: 6},
+		persistencespb.VersionedTransition_builder{NamespaceFailoverVersion: 1, TransitionCount: 3}.Build(),
+		persistencespb.VersionedTransition_builder{NamespaceFailoverVersion: 3, TransitionCount: 6}.Build(),
 	}
 	mu.EXPECT().CloneToProto().Return(
-		&persistencespb.WorkflowMutableState{
-			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+		persistencespb.WorkflowMutableState_builder{
+			ExecutionInfo: persistencespb.WorkflowExecutionInfo_builder{
 				TransitionHistory: transitionHistory,
-			},
+			}.Build(),
 			NextEventId: taskNextEvent,
-		},
+		}.Build(),
 	).AnyTimes()
 
 	s.mockGetMutableState(s.namespaceID, s.workflowID, s.runID, mu, nil)
@@ -356,24 +348,22 @@ func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_CurrentBranch
 
 func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_MissingVersionedTransition() {
 	taskNextEvent := int64(10)
-	replicationTask := &replicationspb.ReplicationTask{
+	replicationTask := replicationspb.ReplicationTask_builder{
 		TaskType:     enumsspb.REPLICATION_TASK_TYPE_VERIFY_VERSIONED_TRANSITION_TASK,
 		SourceTaskId: s.taskID,
-		Attributes: &replicationspb.ReplicationTask_VerifyVersionedTransitionTaskAttributes{
-			VerifyVersionedTransitionTaskAttributes: &replicationspb.VerifyVersionedTransitionTaskAttributes{
-				NamespaceId: s.namespaceID,
-				WorkflowId:  s.workflowID,
-				RunId:       s.runID,
-				NextEventId: taskNextEvent,
-				NewRunId:    s.newRunID,
-				ArchetypeId: chasm.WorkflowArchetypeID,
-			},
-		},
-		VersionedTransition: &persistencespb.VersionedTransition{
+		VerifyVersionedTransitionTaskAttributes: replicationspb.VerifyVersionedTransitionTaskAttributes_builder{
+			NamespaceId: s.namespaceID,
+			WorkflowId:  s.workflowID,
+			RunId:       s.runID,
+			NextEventId: taskNextEvent,
+			NewRunId:    s.newRunID,
+			ArchetypeId: chasm.WorkflowArchetypeID,
+		}.Build(),
+		VersionedTransition: persistencespb.VersionedTransition_builder{
 			NamespaceFailoverVersion: 3,
 			TransitionCount:          7,
-		},
-	}
+		}.Build(),
+	}.Build()
 	s.executableTask.EXPECT().TerminalState().Return(false)
 	s.executableTask.EXPECT().MarkExecutionStart()
 	s.executableTask.EXPECT().ReplicationTask().Return(replicationTask).AnyTimes()
@@ -383,12 +373,12 @@ func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_MissingVersio
 
 	mu := historyi.NewMockMutableState(s.controller)
 	mu.EXPECT().CloneToProto().Return(
-		&persistencespb.WorkflowMutableState{
-			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+		persistencespb.WorkflowMutableState_builder{
+			ExecutionInfo: persistencespb.WorkflowExecutionInfo_builder{
 				TransitionHistory: nil,
-			},
+			}.Build(),
 			NextEventId: taskNextEvent,
-		},
+		}.Build(),
 	).AnyTimes()
 
 	s.mockGetMutableState(s.namespaceID, s.workflowID, s.runID, mu, nil)
@@ -411,30 +401,28 @@ func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_MissingVersio
 
 func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_NonCurrentBranch_VerifySuccess() {
 	taskNextEvent := int64(10)
-	replicationTask := &replicationspb.ReplicationTask{
+	replicationTask := replicationspb.ReplicationTask_builder{
 		TaskType:     enumsspb.REPLICATION_TASK_TYPE_VERIFY_VERSIONED_TRANSITION_TASK,
 		SourceTaskId: s.taskID,
-		Attributes: &replicationspb.ReplicationTask_VerifyVersionedTransitionTaskAttributes{
-			VerifyVersionedTransitionTaskAttributes: &replicationspb.VerifyVersionedTransitionTaskAttributes{
-				NamespaceId: s.namespaceID,
-				WorkflowId:  s.workflowID,
-				RunId:       s.runID,
-				NextEventId: taskNextEvent,
-				NewRunId:    s.newRunID,
-				EventVersionHistory: []*historyspb.VersionHistoryItem{
-					{
-						EventId: 9,
-						Version: 1,
-					},
-				},
-				ArchetypeId: chasm.WorkflowArchetypeID,
+		VerifyVersionedTransitionTaskAttributes: replicationspb.VerifyVersionedTransitionTaskAttributes_builder{
+			NamespaceId: s.namespaceID,
+			WorkflowId:  s.workflowID,
+			RunId:       s.runID,
+			NextEventId: taskNextEvent,
+			NewRunId:    s.newRunID,
+			EventVersionHistory: []*historyspb.VersionHistoryItem{
+				historyspb.VersionHistoryItem_builder{
+					EventId: 9,
+					Version: 1,
+				}.Build(),
 			},
-		},
-		VersionedTransition: &persistencespb.VersionedTransition{
+			ArchetypeId: chasm.WorkflowArchetypeID,
+		}.Build(),
+		VersionedTransition: persistencespb.VersionedTransition_builder{
 			NamespaceFailoverVersion: 1,
 			TransitionCount:          4,
-		},
-	}
+		}.Build(),
+	}.Build()
 	s.executableTask.EXPECT().TerminalState().Return(false)
 	s.executableTask.EXPECT().MarkExecutionStart()
 	s.executableTask.EXPECT().ReplicationTask().Return(replicationTask).AnyTimes()
@@ -444,41 +432,41 @@ func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_NonCurrentBra
 
 	mu := historyi.NewMockMutableState(s.controller)
 	mu.EXPECT().CloneToProto().Return(
-		&persistencespb.WorkflowMutableState{
-			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+		persistencespb.WorkflowMutableState_builder{
+			ExecutionInfo: persistencespb.WorkflowExecutionInfo_builder{
 				TransitionHistory: []*persistencespb.VersionedTransition{
-					{NamespaceFailoverVersion: 1, TransitionCount: 3},
-					{NamespaceFailoverVersion: 3, TransitionCount: 6},
+					persistencespb.VersionedTransition_builder{NamespaceFailoverVersion: 1, TransitionCount: 3}.Build(),
+					persistencespb.VersionedTransition_builder{NamespaceFailoverVersion: 3, TransitionCount: 6}.Build(),
 				},
-				VersionHistories: &historyspb.VersionHistories{
+				VersionHistories: historyspb.VersionHistories_builder{
 					Histories: []*historyspb.VersionHistory{
-						{
+						historyspb.VersionHistory_builder{
 							BranchToken: []byte{1, 2, 3},
 							Items: []*historyspb.VersionHistoryItem{
-								{
+								historyspb.VersionHistoryItem_builder{
 									EventId: 5,
 									Version: 1,
-								},
-								{
+								}.Build(),
+								historyspb.VersionHistoryItem_builder{
 									EventId: 10,
 									Version: 3,
-								},
+								}.Build(),
 							},
-						},
-						{
+						}.Build(),
+						historyspb.VersionHistory_builder{
 							BranchToken: []byte{1, 2, 3, 4},
 							Items: []*historyspb.VersionHistoryItem{
-								{
+								historyspb.VersionHistoryItem_builder{
 									EventId: 10,
 									Version: 1,
-								},
+								}.Build(),
 							},
-						},
+						}.Build(),
 					},
-				},
-			},
+				}.Build(),
+			}.Build(),
 			NextEventId: taskNextEvent,
-		},
+		}.Build(),
 	).AnyTimes()
 
 	s.mockGetMutableState(s.namespaceID, s.workflowID, s.runID, mu, nil)
@@ -502,30 +490,28 @@ func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_NonCurrentBra
 
 func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_NonCurrentBranch_NotUpToDate() {
 	taskNextEvent := int64(10)
-	replicationTask := &replicationspb.ReplicationTask{
+	replicationTask := replicationspb.ReplicationTask_builder{
 		TaskType:     enumsspb.REPLICATION_TASK_TYPE_VERIFY_VERSIONED_TRANSITION_TASK,
 		SourceTaskId: s.taskID,
-		Attributes: &replicationspb.ReplicationTask_VerifyVersionedTransitionTaskAttributes{
-			VerifyVersionedTransitionTaskAttributes: &replicationspb.VerifyVersionedTransitionTaskAttributes{
-				NamespaceId: s.namespaceID,
-				WorkflowId:  s.workflowID,
-				RunId:       s.runID,
-				NextEventId: taskNextEvent,
-				NewRunId:    s.newRunID,
-				EventVersionHistory: []*historyspb.VersionHistoryItem{
-					{
-						EventId: 9,
-						Version: 1,
-					},
-				},
-				ArchetypeId: chasm.WorkflowArchetypeID,
+		VerifyVersionedTransitionTaskAttributes: replicationspb.VerifyVersionedTransitionTaskAttributes_builder{
+			NamespaceId: s.namespaceID,
+			WorkflowId:  s.workflowID,
+			RunId:       s.runID,
+			NextEventId: taskNextEvent,
+			NewRunId:    s.newRunID,
+			EventVersionHistory: []*historyspb.VersionHistoryItem{
+				historyspb.VersionHistoryItem_builder{
+					EventId: 9,
+					Version: 1,
+				}.Build(),
 			},
-		},
-		VersionedTransition: &persistencespb.VersionedTransition{
+			ArchetypeId: chasm.WorkflowArchetypeID,
+		}.Build(),
+		VersionedTransition: persistencespb.VersionedTransition_builder{
 			NamespaceFailoverVersion: 1,
 			TransitionCount:          4,
-		},
-	}
+		}.Build(),
+	}.Build()
 	s.executableTask.EXPECT().TerminalState().Return(false)
 	s.executableTask.EXPECT().MarkExecutionStart()
 	s.executableTask.EXPECT().ReplicationTask().Return(replicationTask).AnyTimes()
@@ -535,28 +521,28 @@ func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_NonCurrentBra
 
 	mu := historyi.NewMockMutableState(s.controller)
 	mu.EXPECT().CloneToProto().Return(
-		&persistencespb.WorkflowMutableState{
-			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+		persistencespb.WorkflowMutableState_builder{
+			ExecutionInfo: persistencespb.WorkflowExecutionInfo_builder{
 				TransitionHistory: []*persistencespb.VersionedTransition{
-					{NamespaceFailoverVersion: 1, TransitionCount: 3},
-					{NamespaceFailoverVersion: 3, TransitionCount: 6},
+					persistencespb.VersionedTransition_builder{NamespaceFailoverVersion: 1, TransitionCount: 3}.Build(),
+					persistencespb.VersionedTransition_builder{NamespaceFailoverVersion: 3, TransitionCount: 6}.Build(),
 				},
-				VersionHistories: &historyspb.VersionHistories{
+				VersionHistories: historyspb.VersionHistories_builder{
 					Histories: []*historyspb.VersionHistory{
-						{
+						historyspb.VersionHistory_builder{
 							BranchToken: []byte{1, 2, 3},
 							Items: []*historyspb.VersionHistoryItem{
-								{
+								historyspb.VersionHistoryItem_builder{
 									EventId: 8,
 									Version: 1,
-								},
+								}.Build(),
 							},
-						},
+						}.Build(),
 					},
-				},
-			},
+				}.Build(),
+			}.Build(),
 			NextEventId: taskNextEvent,
-		},
+		}.Build(),
 	).AnyTimes()
 
 	s.mockGetMutableState(s.namespaceID, s.workflowID, s.runID, mu, nil)

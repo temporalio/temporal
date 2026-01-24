@@ -521,8 +521,8 @@ func (d *MutableStateTaskStore) PutReplicationTaskToDLQ(
 		rowTypeDLQNamespaceID,
 		request.SourceClusterName,
 		rowTypeDLQRunID,
-		datablob.Data,
-		datablob.EncodingType.String(),
+		datablob.GetData(),
+		datablob.GetEncodingType().String(),
 		defaultVisibilityTimestamp,
 		task.GetTaskId(),
 	).WithContext(ctx)

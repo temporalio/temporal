@@ -9,7 +9,6 @@ package callbackspb
 import (
 	reflect "reflect"
 	"strconv"
-	sync "sync"
 	unsafe "unsafe"
 
 	v11 "go.temporal.io/api/common/v1"
@@ -102,33 +101,18 @@ func (x CallbackStatus) Number() protoreflect.EnumNumber {
 	return protoreflect.EnumNumber(x)
 }
 
-// Deprecated: Use CallbackStatus.Descriptor instead.
-func (CallbackStatus) EnumDescriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_callback_proto_v1_message_proto_rawDescGZIP(), []int{0}
-}
-
 type CallbackState struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Information on how this callback should be invoked (e.g. its URL and type).
-	Callback *Callback `protobuf:"bytes,1,opt,name=callback,proto3" json:"callback,omitempty"`
-	// The time when the callback was registered.
-	RegistrationTime *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=registration_time,json=registrationTime,proto3" json:"registration_time,omitempty"`
-	Status           CallbackStatus         `protobuf:"varint,4,opt,name=status,proto3,enum=temporal.server.chasm.lib.callbacks.proto.v1.CallbackStatus" json:"status,omitempty"`
-	// The number of attempts made to deliver the callback.
-	// This number represents a minimum bound since the attempt is incremented after the callback request completes.
-	Attempt int32 `protobuf:"varint,5,opt,name=attempt,proto3" json:"attempt,omitempty"`
-	// The time when the last attempt completed.
-	LastAttemptCompleteTime *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=last_attempt_complete_time,json=lastAttemptCompleteTime,proto3" json:"last_attempt_complete_time,omitempty"`
-	// The last attempt's failure, if any.
-	LastAttemptFailure *v1.Failure `protobuf:"bytes,7,opt,name=last_attempt_failure,json=lastAttemptFailure,proto3" json:"last_attempt_failure,omitempty"`
-	// The time when the next attempt is scheduled.
-	// NOTE (seankane): this field might go away in the future, discussion:
-	// https://github.com/temporalio/temporal/pull/8473#discussion_r2427348436
-	NextAttemptScheduleTime *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=next_attempt_schedule_time,json=nextAttemptScheduleTime,proto3" json:"next_attempt_schedule_time,omitempty"`
-	// Request ID that added the callback.
-	RequestId     string `protobuf:"bytes,9,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                              protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Callback                *Callback              `protobuf:"bytes,1,opt,name=callback,proto3"`
+	xxx_hidden_RegistrationTime        *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=registration_time,json=registrationTime,proto3"`
+	xxx_hidden_Status                  CallbackStatus         `protobuf:"varint,4,opt,name=status,proto3,enum=temporal.server.chasm.lib.callbacks.proto.v1.CallbackStatus"`
+	xxx_hidden_Attempt                 int32                  `protobuf:"varint,5,opt,name=attempt,proto3"`
+	xxx_hidden_LastAttemptCompleteTime *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=last_attempt_complete_time,json=lastAttemptCompleteTime,proto3"`
+	xxx_hidden_LastAttemptFailure      *v1.Failure            `protobuf:"bytes,7,opt,name=last_attempt_failure,json=lastAttemptFailure,proto3"`
+	xxx_hidden_NextAttemptScheduleTime *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=next_attempt_schedule_time,json=nextAttemptScheduleTime,proto3"`
+	xxx_hidden_RequestId               string                 `protobuf:"bytes,9,opt,name=request_id,json=requestId,proto3"`
+	unknownFields                      protoimpl.UnknownFields
+	sizeCache                          protoimpl.SizeCache
 }
 
 func (x *CallbackState) Reset() {
@@ -156,76 +140,193 @@ func (x *CallbackState) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CallbackState.ProtoReflect.Descriptor instead.
-func (*CallbackState) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_callback_proto_v1_message_proto_rawDescGZIP(), []int{0}
-}
-
 func (x *CallbackState) GetCallback() *Callback {
 	if x != nil {
-		return x.Callback
+		return x.xxx_hidden_Callback
 	}
 	return nil
 }
 
 func (x *CallbackState) GetRegistrationTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.RegistrationTime
+		return x.xxx_hidden_RegistrationTime
 	}
 	return nil
 }
 
 func (x *CallbackState) GetStatus() CallbackStatus {
 	if x != nil {
-		return x.Status
+		return x.xxx_hidden_Status
 	}
 	return CALLBACK_STATUS_UNSPECIFIED
 }
 
 func (x *CallbackState) GetAttempt() int32 {
 	if x != nil {
-		return x.Attempt
+		return x.xxx_hidden_Attempt
 	}
 	return 0
 }
 
 func (x *CallbackState) GetLastAttemptCompleteTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.LastAttemptCompleteTime
+		return x.xxx_hidden_LastAttemptCompleteTime
 	}
 	return nil
 }
 
 func (x *CallbackState) GetLastAttemptFailure() *v1.Failure {
 	if x != nil {
-		return x.LastAttemptFailure
+		return x.xxx_hidden_LastAttemptFailure
 	}
 	return nil
 }
 
 func (x *CallbackState) GetNextAttemptScheduleTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.NextAttemptScheduleTime
+		return x.xxx_hidden_NextAttemptScheduleTime
 	}
 	return nil
 }
 
 func (x *CallbackState) GetRequestId() string {
 	if x != nil {
-		return x.RequestId
+		return x.xxx_hidden_RequestId
 	}
 	return ""
 }
 
+func (x *CallbackState) SetCallback(v *Callback) {
+	x.xxx_hidden_Callback = v
+}
+
+func (x *CallbackState) SetRegistrationTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_RegistrationTime = v
+}
+
+func (x *CallbackState) SetStatus(v CallbackStatus) {
+	x.xxx_hidden_Status = v
+}
+
+func (x *CallbackState) SetAttempt(v int32) {
+	x.xxx_hidden_Attempt = v
+}
+
+func (x *CallbackState) SetLastAttemptCompleteTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_LastAttemptCompleteTime = v
+}
+
+func (x *CallbackState) SetLastAttemptFailure(v *v1.Failure) {
+	x.xxx_hidden_LastAttemptFailure = v
+}
+
+func (x *CallbackState) SetNextAttemptScheduleTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_NextAttemptScheduleTime = v
+}
+
+func (x *CallbackState) SetRequestId(v string) {
+	x.xxx_hidden_RequestId = v
+}
+
+func (x *CallbackState) HasCallback() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Callback != nil
+}
+
+func (x *CallbackState) HasRegistrationTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_RegistrationTime != nil
+}
+
+func (x *CallbackState) HasLastAttemptCompleteTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_LastAttemptCompleteTime != nil
+}
+
+func (x *CallbackState) HasLastAttemptFailure() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_LastAttemptFailure != nil
+}
+
+func (x *CallbackState) HasNextAttemptScheduleTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_NextAttemptScheduleTime != nil
+}
+
+func (x *CallbackState) ClearCallback() {
+	x.xxx_hidden_Callback = nil
+}
+
+func (x *CallbackState) ClearRegistrationTime() {
+	x.xxx_hidden_RegistrationTime = nil
+}
+
+func (x *CallbackState) ClearLastAttemptCompleteTime() {
+	x.xxx_hidden_LastAttemptCompleteTime = nil
+}
+
+func (x *CallbackState) ClearLastAttemptFailure() {
+	x.xxx_hidden_LastAttemptFailure = nil
+}
+
+func (x *CallbackState) ClearNextAttemptScheduleTime() {
+	x.xxx_hidden_NextAttemptScheduleTime = nil
+}
+
+type CallbackState_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Information on how this callback should be invoked (e.g. its URL and type).
+	Callback *Callback
+	// The time when the callback was registered.
+	RegistrationTime *timestamppb.Timestamp
+	Status           CallbackStatus
+	// The number of attempts made to deliver the callback.
+	// This number represents a minimum bound since the attempt is incremented after the callback request completes.
+	Attempt int32
+	// The time when the last attempt completed.
+	LastAttemptCompleteTime *timestamppb.Timestamp
+	// The last attempt's failure, if any.
+	LastAttemptFailure *v1.Failure
+	// The time when the next attempt is scheduled.
+	// NOTE (seankane): this field might go away in the future, discussion:
+	// https://github.com/temporalio/temporal/pull/8473#discussion_r2427348436
+	NextAttemptScheduleTime *timestamppb.Timestamp
+	// Request ID that added the callback.
+	RequestId string
+}
+
+func (b0 CallbackState_builder) Build() *CallbackState {
+	m0 := &CallbackState{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Callback = b.Callback
+	x.xxx_hidden_RegistrationTime = b.RegistrationTime
+	x.xxx_hidden_Status = b.Status
+	x.xxx_hidden_Attempt = b.Attempt
+	x.xxx_hidden_LastAttemptCompleteTime = b.LastAttemptCompleteTime
+	x.xxx_hidden_LastAttemptFailure = b.LastAttemptFailure
+	x.xxx_hidden_NextAttemptScheduleTime = b.NextAttemptScheduleTime
+	x.xxx_hidden_RequestId = b.RequestId
+	return m0
+}
+
 type Callback struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Types that are valid to be assigned to Variant:
-	//
-	//	*Callback_Nexus_
-	Variant       isCallback_Variant `protobuf_oneof:"variant"`
-	Links         []*v11.Link        `protobuf:"bytes,100,rep,name=links,proto3" json:"links,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state              protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Variant isCallback_Variant     `protobuf_oneof:"variant"`
+	xxx_hidden_Links   *[]*v11.Link           `protobuf:"bytes,100,rep,name=links,proto3"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *Callback) Reset() {
@@ -253,21 +354,9 @@ func (x *Callback) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use Callback.ProtoReflect.Descriptor instead.
-func (*Callback) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_callback_proto_v1_message_proto_rawDescGZIP(), []int{1}
-}
-
-func (x *Callback) GetVariant() isCallback_Variant {
-	if x != nil {
-		return x.Variant
-	}
-	return nil
-}
-
 func (x *Callback) GetNexus() *Callback_Nexus {
 	if x != nil {
-		if x, ok := x.Variant.(*Callback_Nexus_); ok {
+		if x, ok := x.xxx_hidden_Variant.(*callback_Nexus_); ok {
 			return x.Nexus
 		}
 	}
@@ -276,24 +365,112 @@ func (x *Callback) GetNexus() *Callback_Nexus {
 
 func (x *Callback) GetLinks() []*v11.Link {
 	if x != nil {
-		return x.Links
+		if x.xxx_hidden_Links != nil {
+			return *x.xxx_hidden_Links
+		}
 	}
 	return nil
+}
+
+func (x *Callback) SetNexus(v *Callback_Nexus) {
+	if v == nil {
+		x.xxx_hidden_Variant = nil
+		return
+	}
+	x.xxx_hidden_Variant = &callback_Nexus_{v}
+}
+
+func (x *Callback) SetLinks(v []*v11.Link) {
+	x.xxx_hidden_Links = &v
+}
+
+func (x *Callback) HasVariant() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Variant != nil
+}
+
+func (x *Callback) HasNexus() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_Variant.(*callback_Nexus_)
+	return ok
+}
+
+func (x *Callback) ClearVariant() {
+	x.xxx_hidden_Variant = nil
+}
+
+func (x *Callback) ClearNexus() {
+	if _, ok := x.xxx_hidden_Variant.(*callback_Nexus_); ok {
+		x.xxx_hidden_Variant = nil
+	}
+}
+
+const Callback_Variant_not_set_case case_Callback_Variant = 0
+const Callback_Nexus_case case_Callback_Variant = 2
+
+func (x *Callback) WhichVariant() case_Callback_Variant {
+	if x == nil {
+		return Callback_Variant_not_set_case
+	}
+	switch x.xxx_hidden_Variant.(type) {
+	case *callback_Nexus_:
+		return Callback_Nexus_case
+	default:
+		return Callback_Variant_not_set_case
+	}
+}
+
+type Callback_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Fields of oneof xxx_hidden_Variant:
+	Nexus *Callback_Nexus
+	// -- end of xxx_hidden_Variant
+	Links []*v11.Link
+}
+
+func (b0 Callback_builder) Build() *Callback {
+	m0 := &Callback{}
+	b, x := &b0, m0
+	_, _ = b, x
+	if b.Nexus != nil {
+		x.xxx_hidden_Variant = &callback_Nexus_{b.Nexus}
+	}
+	x.xxx_hidden_Links = &b.Links
+	return m0
+}
+
+type case_Callback_Variant protoreflect.FieldNumber
+
+func (x case_Callback_Variant) String() string {
+	switch x {
+	case Callback_Variant_not_set_case:
+		return "CallbackVariantNotSetCase"
+	case Callback_Nexus_case:
+		return "CallbackNexusCase"
+	default:
+		return strconv.Itoa(int(x))
+	}
+
 }
 
 type isCallback_Variant interface {
 	isCallback_Variant()
 }
 
-type Callback_Nexus_ struct {
+type callback_Nexus_ struct {
 	Nexus *Callback_Nexus `protobuf:"bytes,2,opt,name=nexus,proto3,oneof"`
 }
 
-func (*Callback_Nexus_) isCallback_Variant() {}
+func (*callback_Nexus_) isCallback_Variant() {}
 
 // Trigger for when the workflow is closed.
 type CallbackState_WorkflowClosed struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -323,22 +500,24 @@ func (x *CallbackState_WorkflowClosed) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CallbackState_WorkflowClosed.ProtoReflect.Descriptor instead.
-func (*CallbackState_WorkflowClosed) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_callback_proto_v1_message_proto_rawDescGZIP(), []int{0, 0}
+type CallbackState_WorkflowClosed_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+}
+
+func (b0 CallbackState_WorkflowClosed_builder) Build() *CallbackState_WorkflowClosed {
+	m0 := &CallbackState_WorkflowClosed{}
+	b, x := &b0, m0
+	_, _ = b, x
+	return m0
 }
 
 type Callback_Nexus struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Callback URL.
-	// (-- api-linter: core::0140::uri=disabled
-	//
-	//	aip.dev/not-precedent: Not respecting aip here. --)
-	Url string `protobuf:"bytes,1,opt,name=url,proto3" json:"url,omitempty"`
-	// Header to attach to callback request.
-	Header        map[string]string `protobuf:"bytes,2,rep,name=header,proto3" json:"header,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state             protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Url    string                 `protobuf:"bytes,1,opt,name=url,proto3"`
+	xxx_hidden_Header map[string]string      `protobuf:"bytes,2,rep,name=header,proto3" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *Callback_Nexus) Reset() {
@@ -366,23 +545,47 @@ func (x *Callback_Nexus) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use Callback_Nexus.ProtoReflect.Descriptor instead.
-func (*Callback_Nexus) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_callback_proto_v1_message_proto_rawDescGZIP(), []int{1, 0}
-}
-
 func (x *Callback_Nexus) GetUrl() string {
 	if x != nil {
-		return x.Url
+		return x.xxx_hidden_Url
 	}
 	return ""
 }
 
 func (x *Callback_Nexus) GetHeader() map[string]string {
 	if x != nil {
-		return x.Header
+		return x.xxx_hidden_Header
 	}
 	return nil
+}
+
+func (x *Callback_Nexus) SetUrl(v string) {
+	x.xxx_hidden_Url = v
+}
+
+func (x *Callback_Nexus) SetHeader(v map[string]string) {
+	x.xxx_hidden_Header = v
+}
+
+type Callback_Nexus_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Callback URL.
+	// (-- api-linter: core::0140::uri=disabled
+	//
+	//	aip.dev/not-precedent: Not respecting aip here. --)
+	Url string
+	// Header to attach to callback request.
+	Header map[string]string
+}
+
+func (b0 Callback_Nexus_builder) Build() *Callback_Nexus {
+	m0 := &Callback_Nexus{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Url = b.Url
+	x.xxx_hidden_Header = b.Header
+	return m0
 }
 
 var File_temporal_server_chasm_lib_callback_proto_v1_message_proto protoreflect.FileDescriptor
@@ -418,18 +621,6 @@ const file_temporal_server_chasm_lib_callback_proto_v1_message_proto_rawDesc = "
 	"\x1bCALLBACK_STATUS_BACKING_OFF\x10\x03\x12\x1a\n" +
 	"\x16CALLBACK_STATUS_FAILED\x10\x04\x12\x1d\n" +
 	"\x19CALLBACK_STATUS_SUCCEEDED\x10\x05BGZEgo.temporal.io/server/chasm/lib/callbacks/gen/callbackspb;callbackspbb\x06proto3"
-
-var (
-	file_temporal_server_chasm_lib_callback_proto_v1_message_proto_rawDescOnce sync.Once
-	file_temporal_server_chasm_lib_callback_proto_v1_message_proto_rawDescData []byte
-)
-
-func file_temporal_server_chasm_lib_callback_proto_v1_message_proto_rawDescGZIP() []byte {
-	file_temporal_server_chasm_lib_callback_proto_v1_message_proto_rawDescOnce.Do(func() {
-		file_temporal_server_chasm_lib_callback_proto_v1_message_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_chasm_lib_callback_proto_v1_message_proto_rawDesc), len(file_temporal_server_chasm_lib_callback_proto_v1_message_proto_rawDesc)))
-	})
-	return file_temporal_server_chasm_lib_callback_proto_v1_message_proto_rawDescData
-}
 
 var file_temporal_server_chasm_lib_callback_proto_v1_message_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
 var file_temporal_server_chasm_lib_callback_proto_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
@@ -467,7 +658,7 @@ func file_temporal_server_chasm_lib_callback_proto_v1_message_proto_init() {
 		return
 	}
 	file_temporal_server_chasm_lib_callback_proto_v1_message_proto_msgTypes[1].OneofWrappers = []any{
-		(*Callback_Nexus_)(nil),
+		(*callback_Nexus_)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{

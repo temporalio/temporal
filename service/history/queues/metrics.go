@@ -19,9 +19,9 @@ func getCHASMTaskTypeTagValue(
 	t *tasks.ChasmTask,
 	chasmRegistry *chasm.Registry,
 ) string {
-	taskFqn, ok := chasmRegistry.TaskFqnByID(t.Info.TypeId)
+	taskFqn, ok := chasmRegistry.TaskFqnByID(t.Info.GetTypeId())
 	if !ok {
-		taskFqn = fmt.Sprintf("UnknownChasmTaskType: %d", t.Info.TypeId)
+		taskFqn = fmt.Sprintf("UnknownChasmTaskType: %d", t.Info.GetTypeId())
 	}
 	return taskFqn
 }

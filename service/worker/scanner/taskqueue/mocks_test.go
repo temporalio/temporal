@@ -36,15 +36,15 @@ func newMockTaskTable() *mockTaskTable {
 
 func (tbl *mockTaskQueueTable) generate(name string, idle bool) {
 	tq := p.PersistedTaskQueueInfo{
-		Data: &persistencespb.TaskQueueInfo{
+		Data: persistencespb.TaskQueueInfo_builder{
 			NamespaceId:    uuid.NewString(),
 			Name:           name,
 			LastUpdateTime: timestamp.TimeNowPtrUtc(),
-		},
+		}.Build(),
 		RangeID: 22,
 	}
 	if idle {
-		tq.Data.LastUpdateTime = timestamppb.New(time.Unix(1000, 1000).UTC())
+		tq.Data.SetLastUpdateTime(timestamppb.New(time.Unix(1000, 1000).UTC()))
 	}
 	tbl.info = append(tbl.info, &tq)
 }
@@ -73,7 +73,7 @@ func (tbl *mockTaskQueueTable) delete(name string) {
 	defer tbl.Unlock()
 	var newInfo []*p.PersistedTaskQueueInfo
 	for _, tl := range tbl.info {
-		if tl.Data.Name != name {
+		if tl.Data.GetName() != name {
 			newInfo = append(newInfo, tl)
 		}
 	}
@@ -84,7 +84,7 @@ func (tbl *mockTaskQueueTable) get(name string) *p.PersistedTaskQueueInfo {
 	tbl.Lock()
 	defer tbl.Unlock()
 	for _, tl := range tbl.info {
-		if tl.Data.Name == name {
+		if tl.Data.GetName() == name {
 			return tl
 		}
 	}
@@ -94,19 +94,19 @@ func (tbl *mockTaskQueueTable) get(name string) *p.PersistedTaskQueueInfo {
 func (tbl *mockTaskTable) generate(count int, expired bool) {
 	for i := 0; i < count; i++ {
 		exp := time.Now().UTC().Add(time.Hour)
-		ti := &persistencespb.AllocatedTaskInfo{
-			Data: &persistencespb.TaskInfo{
+		ti := persistencespb.AllocatedTaskInfo_builder{
+			Data: persistencespb.TaskInfo_builder{
 				NamespaceId:      tbl.namespaceID,
 				WorkflowId:       tbl.workflowID,
 				RunId:            tbl.runID,
 				CreateTime:       timestamp.TimePtr(time.Now().UTC()),
 				ScheduledEventId: 3,
 				ExpiryTime:       timestamppb.New(exp),
-			},
+			}.Build(),
 			TaskId: tbl.nextTaskID,
-		}
+		}.Build()
 		if expired {
-			ti.Data.ExpiryTime = timestamppb.New(time.Unix(0, time.Now().UTC().UnixNano()-int64(time.Second*33)).UTC())
+			ti.GetData().SetExpiryTime(timestamppb.New(time.Unix(0, time.Now().UTC().UnixNano()-int64(time.Second*33)).UTC()))
 		}
 		tbl.tasks = append(tbl.tasks, ti)
 		tbl.nextTaskID++

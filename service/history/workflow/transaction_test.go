@@ -107,13 +107,13 @@ func (s *transactionSuite) TestCreateWorkflowExecution_NotifyTaskWhenFailed() {
 		chasm.WorkflowArchetypeID,
 		0,
 		&persistence.WorkflowSnapshot{
-			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+			ExecutionInfo: persistencespb.WorkflowExecutionInfo_builder{
 				NamespaceId: tests.NamespaceID.String(),
 				WorkflowId:  tests.WorkflowID,
-			},
-			ExecutionState: &persistencespb.WorkflowExecutionState{
+			}.Build(),
+			ExecutionState: persistencespb.WorkflowExecutionState_builder{
 				RunId: tests.RunID,
-			},
+			}.Build(),
 		},
 		[]*persistence.WorkflowEvents{},
 		true, // isWorkflow
@@ -135,13 +135,13 @@ func (s *transactionSuite) TestUpdateWorkflowExecution_NotifyTaskWhenFailed() {
 		chasm.WorkflowArchetypeID,
 		0,
 		&persistence.WorkflowMutation{
-			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+			ExecutionInfo: persistencespb.WorkflowExecutionInfo_builder{
 				NamespaceId: tests.NamespaceID.String(),
 				WorkflowId:  tests.WorkflowID,
-			},
-			ExecutionState: &persistencespb.WorkflowExecutionState{
+			}.Build(),
+			ExecutionState: persistencespb.WorkflowExecutionState_builder{
 				RunId: tests.RunID,
-			},
+			}.Build(),
 		},
 		[]*persistence.WorkflowEvents{},
 		util.Ptr(int64(0)),
@@ -195,16 +195,16 @@ func (s *transactionSuite) TestUpdateWorkflowExecution_CompletionMetrics() {
 				chasm.WorkflowArchetypeID,
 				0,
 				&persistence.WorkflowMutation{
-					ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+					ExecutionInfo: persistencespb.WorkflowExecutionInfo_builder{
 						NamespaceId:      tests.NamespaceID.String(),
 						WorkflowId:       tests.WorkflowID,
 						VersionHistories: &historyspb.VersionHistories{},
-					},
-					ExecutionState: &persistencespb.WorkflowExecutionState{
+					}.Build(),
+					ExecutionState: persistencespb.WorkflowExecutionState_builder{
 						RunId:  tests.RunID,
 						Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 						State:  enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
-					},
+					}.Build(),
 				},
 				[]*persistence.WorkflowEvents{},
 				nil,
@@ -244,13 +244,13 @@ func (s *transactionSuite) TestConflictResolveWorkflowExecution_NotifyTaskWhenFa
 		chasm.WorkflowArchetypeID,
 		0,
 		&persistence.WorkflowSnapshot{
-			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+			ExecutionInfo: persistencespb.WorkflowExecutionInfo_builder{
 				NamespaceId: tests.NamespaceID.String(),
 				WorkflowId:  tests.WorkflowID,
-			},
-			ExecutionState: &persistencespb.WorkflowExecutionState{
+			}.Build(),
+			ExecutionState: persistencespb.WorkflowExecutionState_builder{
 				RunId: tests.RunID,
-			},
+			}.Build(),
 		},
 		[]*persistence.WorkflowEvents{},
 		util.Ptr(int64(0)),
@@ -269,37 +269,37 @@ func (s *transactionSuite) TestConflictResolveWorkflowExecution_NotifyChasmExecu
 	s.True(persistence.OperationPossiblySucceeded(timeoutErr))
 
 	resetWorkflowSnapshot := &persistence.WorkflowSnapshot{
-		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+		ExecutionInfo: persistencespb.WorkflowExecutionInfo_builder{
 			NamespaceId: tests.NamespaceID.String(),
 			WorkflowId:  tests.WorkflowID,
-		},
-		ExecutionState: &persistencespb.WorkflowExecutionState{
+		}.Build(),
+		ExecutionState: persistencespb.WorkflowExecutionState_builder{
 			RunId: tests.RunID,
-		},
+		}.Build(),
 		ChasmNodes: map[string]*persistencespb.ChasmNode{
 			"path1": {},
 		},
 	}
 	newWorkflowSnapshot := &persistence.WorkflowSnapshot{
-		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+		ExecutionInfo: persistencespb.WorkflowExecutionInfo_builder{
 			NamespaceId: tests.NamespaceID.String(),
 			WorkflowId:  tests.WorkflowID,
-		},
-		ExecutionState: &persistencespb.WorkflowExecutionState{
+		}.Build(),
+		ExecutionState: persistencespb.WorkflowExecutionState_builder{
 			RunId: "new-run-id",
-		},
+		}.Build(),
 		ChasmNodes: map[string]*persistencespb.ChasmNode{
 			"path2": {},
 		},
 	}
 	currentWorkflowMutation := &persistence.WorkflowMutation{
-		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+		ExecutionInfo: persistencespb.WorkflowExecutionInfo_builder{
 			NamespaceId: tests.NamespaceID.String(),
 			WorkflowId:  tests.WorkflowID,
-		},
-		ExecutionState: &persistencespb.WorkflowExecutionState{
+		}.Build(),
+		ExecutionState: persistencespb.WorkflowExecutionState_builder{
 			RunId: "current-run-id",
-		},
+		}.Build(),
 		UpsertChasmNodes: map[string]*persistencespb.ChasmNode{
 			"path3": {},
 		},

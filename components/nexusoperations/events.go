@@ -2,7 +2,6 @@ package nexusoperations
 
 import (
 	"fmt"
-	"reflect"
 	"strconv"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -25,7 +24,7 @@ func (d ScheduledEventDefinition) Apply(root *hsm.Node, event *historypb.History
 	if err != nil {
 		return err
 	}
-	_, err = AddChild(root, strconv.FormatInt(event.EventId, 10), event, token)
+	_, err = AddChild(root, strconv.FormatInt(event.GetEventId(), 10), event, token)
 	return err
 }
 
@@ -46,7 +45,7 @@ func (d CancelRequestedEventDefinition) Type() enumspb.EventType {
 
 func (d CancelRequestedEventDefinition) Apply(root *hsm.Node, event *historypb.HistoryEvent) error {
 	_, err := transitionOperation(root, event, func(node *hsm.Node, o Operation) (hsm.TransitionOutput, error) {
-		return o.Cancel(node, event.EventTime.AsTime(), event.EventId)
+		return o.Cancel(node, event.GetEventTime().AsTime(), event.GetEventId())
 	})
 
 	return err
@@ -76,7 +75,7 @@ func (d CancelRequestCompletedEventDefinition) Apply(root *hsm.Node, event *hist
 		if child != nil {
 			return hsm.TransitionOutput{}, hsm.MachineTransition(child, func(c Cancelation) (hsm.TransitionOutput, error) {
 				return TransitionCancelationSucceeded.Apply(c, EventCancelationSucceeded{
-					Time: event.EventTime.AsTime(),
+					Time: event.GetEventTime().AsTime(),
 					Node: child,
 				})
 			})
@@ -110,7 +109,7 @@ func (d CancelRequestFailedEventDefinition) Apply(root *hsm.Node, event *history
 		if child != nil {
 			return hsm.TransitionOutput{}, hsm.MachineTransition(child, func(c Cancelation) (hsm.TransitionOutput, error) {
 				return TransitionCancelationFailed.Apply(c, EventCancelationFailed{
-					Time:    event.EventTime.AsTime(),
+					Time:    event.GetEventTime().AsTime(),
 					Failure: event.GetNexusOperationCancelRequestFailedEventAttributes().GetFailure(),
 					Node:    child,
 				})
@@ -139,7 +138,7 @@ func (d StartedEventDefinition) Type() enumspb.EventType {
 func (d StartedEventDefinition) Apply(root *hsm.Node, event *historypb.HistoryEvent) error {
 	_, err := transitionOperation(root, event, func(node *hsm.Node, o Operation) (hsm.TransitionOutput, error) {
 		return TransitionStarted.Apply(o, EventStarted{
-			Time:       event.EventTime.AsTime(),
+			Time:       event.GetEventTime().AsTime(),
 			Node:       node,
 			Attributes: event.GetNexusOperationStartedEventAttributes(),
 		})
@@ -164,7 +163,7 @@ func (d CompletedEventDefinition) IsWorkflowTaskTrigger() bool {
 func (d CompletedEventDefinition) Apply(root *hsm.Node, event *historypb.HistoryEvent) error {
 	node, err := transitionOperation(root, event, func(node *hsm.Node, o Operation) (hsm.TransitionOutput, error) {
 		return TransitionSucceeded.Apply(o, EventSucceeded{
-			Time: event.EventTime.AsTime(),
+			Time: event.GetEventTime().AsTime(),
 			Node: node,
 		})
 	})
@@ -199,7 +198,7 @@ func (d FailedEventDefinition) Type() enumspb.EventType {
 func (d FailedEventDefinition) Apply(root *hsm.Node, event *historypb.HistoryEvent) error {
 	node, err := transitionOperation(root, event, func(node *hsm.Node, o Operation) (hsm.TransitionOutput, error) {
 		return TransitionFailed.Apply(o, EventFailed{
-			Time:       event.EventTime.AsTime(),
+			Time:       event.GetEventTime().AsTime(),
 			Attributes: event.GetNexusOperationFailedEventAttributes(),
 			Node:       node,
 		})
@@ -231,7 +230,7 @@ func (d CanceledEventDefinition) Type() enumspb.EventType {
 func (d CanceledEventDefinition) Apply(root *hsm.Node, event *historypb.HistoryEvent) error {
 	node, err := transitionOperation(root, event, func(node *hsm.Node, o Operation) (hsm.TransitionOutput, error) {
 		return TransitionCanceled.Apply(o, EventCanceled{
-			Time: event.EventTime.AsTime(),
+			Time: event.GetEventTime().AsTime(),
 			Node: node,
 		})
 	})
@@ -325,34 +324,48 @@ func transitionOperation(
 }
 
 func findOperationNode(root *hsm.Node, event *historypb.HistoryEvent) (*hsm.Node, error) {
-	attrs := reflect.ValueOf(event.Attributes).Elem()
-
-	// Attributes is always a struct with a single field (e.g: HistoryEvent_NexusOperationScheduledEventAttributes)
-	if attrs.Kind() != reflect.Struct || attrs.NumField() != 1 {
-		panic("invalid event, expected Attributes field with a single field struct")
+	// Use proto reflection to get the attributes oneof value
+	m := event.ProtoReflect()
+	oneofDesc := m.Descriptor().Oneofs().ByName("attributes")
+	if oneofDesc == nil {
+		panic("invalid event, missing attributes oneof")
 	}
 
-	f := attrs.Field(0).Interface()
+	fieldDesc := m.WhichOneof(oneofDesc)
+	if fieldDesc == nil {
+		panic("invalid event, attributes not set")
+	}
 
-	eventIDGetter, ok := f.(interface{ GetScheduledEventId() int64 })
-	if !ok {
+	attrValue := m.Get(fieldDesc)
+	attrMsg := attrValue.Message()
+
+	// Get ScheduledEventId from the attributes
+	scheduledEventIdField := attrMsg.Descriptor().Fields().ByName("scheduled_event_id")
+	if scheduledEventIdField == nil {
 		panic("Event does not have a ScheduledEventId field")
 	}
+	scheduledEventId := attrMsg.Get(scheduledEventIdField).Int()
+
 	coll := MachineCollection(root)
-	nodeID := strconv.FormatInt(eventIDGetter.GetScheduledEventId(), 10)
+	nodeID := strconv.FormatInt(scheduledEventId, 10)
 	node, err := coll.Node(nodeID)
 	if err != nil {
 		return nil, err
 	}
-	requestIDGetter, ok := f.(interface{ GetRequestId() string })
-	if ok && requestIDGetter.GetRequestId() != "" {
-		op, err := coll.Data(nodeID)
-		if err != nil {
-			return nil, err
-		}
-		if op.RequestId != requestIDGetter.GetRequestId() {
-			return nil, fmt.Errorf("%w: event has different request ID (%q) than the machine (%q)",
-				hsm.ErrNotCherryPickable, requestIDGetter.GetRequestId(), op.RequestId)
+
+	// Optionally check RequestId if present
+	requestIdField := attrMsg.Descriptor().Fields().ByName("request_id")
+	if requestIdField != nil {
+		requestId := attrMsg.Get(requestIdField).String()
+		if requestId != "" {
+			op, err := coll.Data(nodeID)
+			if err != nil {
+				return nil, err
+			}
+			if op.GetRequestId() != requestId {
+				return nil, fmt.Errorf("%w: event has different request ID (%q) than the machine (%q)",
+					hsm.ErrNotCherryPickable, requestId, op.GetRequestId())
+			}
 		}
 	}
 	return node, nil

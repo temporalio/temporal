@@ -245,7 +245,7 @@ func (e *InvokerExecuteTaskExecutor) cancelWorkflows(
 			defer resultMutex.Unlock()
 
 			if err != nil {
-				logger.Error("failed to cancel workflow", tag.Error(err), tag.WorkflowID(wf.WorkflowId))
+				logger.Error("failed to cancel workflow", tag.Error(err), tag.WorkflowID(wf.GetWorkflowId()))
 				e.metricsHandler.Counter(metrics.ScheduleCancelWorkflowErrors.Name()).Record(1)
 			}
 
@@ -282,7 +282,7 @@ func (e *InvokerExecuteTaskExecutor) terminateWorkflows(
 			defer resultMutex.Unlock()
 
 			if err != nil {
-				logger.Error("failed to terminate workflow", tag.Error(err), tag.WorkflowID(wf.WorkflowId))
+				logger.Error("failed to terminate workflow", tag.Error(err), tag.WorkflowID(wf.GetWorkflowId()))
 				e.metricsHandler.Counter(metrics.ScheduleTerminateWorkflowErrors.Name()).Record(1)
 			}
 
@@ -320,8 +320,8 @@ func (e *InvokerExecuteTaskExecutor) startWorkflows(
 
 		// Check if this start is already started. If so, we crashed after
 		// starting a workflow, but before recording the result.
-		if invoker.isWorkflowStarted(start.WorkflowId) {
-			logger.Info("skipping already-started workflow", tag.WorkflowID(start.WorkflowId))
+		if invoker.isWorkflowStarted(start.GetWorkflowId()) {
+			logger.Info("skipping already-started workflow", tag.WorkflowID(start.GetWorkflowId()))
 			continue
 		}
 
@@ -389,7 +389,7 @@ func (e *InvokerProcessBufferTaskExecutor) Execute(
 	scheduler := invoker.Scheduler.Get(ctx)
 
 	// Make sure we have something to start.
-	executionInfo := scheduler.Schedule.GetAction().GetStartWorkflow()
+	executionInfo := scheduler.GetSchedule().GetAction().GetStartWorkflow()
 	if executionInfo == nil {
 		return queueerrors.NewUnprocessableTaskError("schedules must have an Action set")
 	}
@@ -422,7 +422,7 @@ func (e *InvokerProcessBufferTaskExecutor) processBuffer(
 
 	// Processing completely ignores any BufferedStart that's already executing/backing off.
 	pendingBufferedStarts := util.FilterSlice(invoker.GetBufferedStarts(), func(start *schedulespb.BufferedStart) bool {
-		return start.Attempt == 0
+		return start.GetAttempt() == 0
 	})
 
 	// Resolve overlap policies and trim BufferedStarts that are skipped by policy.
@@ -447,7 +447,7 @@ func (e *InvokerProcessBufferTaskExecutor) processBuffer(
 	// Add starting workflows to result, trim others.
 	for _, start := range readyStarts {
 		// Ensure we can take more actions. Manual actions are always allowed.
-		if !start.Manual && !scheduler.useScheduledAction(true) {
+		if !start.GetManual() && !scheduler.useScheduledAction(true) {
 			// Drop buffered automated actions while paused.
 			result.discardStarts = append(result.discardStarts, start)
 			continue
@@ -493,10 +493,10 @@ func (e *InvokerExecuteTaskExecutor) applyBackoff(start *schedulespb.BufferedSta
 	} else {
 		// Otherwise, use the backoff policy. Elapsed time is left at 0 because we bound
 		// on number of attempts.
-		delay = e.config.RetryPolicy().ComputeNextDelay(0, int(start.Attempt), nil)
+		delay = e.config.RetryPolicy().ComputeNextDelay(0, int(start.GetAttempt()), nil)
 	}
 
-	start.BackoffTime = timestamppb.New(time.Now().Add(delay))
+	start.SetBackoffTime(timestamppb.New(time.Now().Add(delay)))
 }
 
 // startWorkflowDeadline returns the latest time at which a buffered workflow
@@ -509,7 +509,7 @@ func (e *InvokerProcessBufferTaskExecutor) startWorkflowDeadline(
 ) time.Time {
 	var timeout time.Duration
 
-	if start.Manual {
+	if start.GetManual() {
 		// For manual starts, use a default value in the future, as the catchup window
 		// doesn't apply. Manual starts may only time out through max attempt count,
 		// not deadline.
@@ -518,12 +518,12 @@ func (e *InvokerProcessBufferTaskExecutor) startWorkflowDeadline(
 
 	// Set request deadline based on the schedule's catchup window, which is the
 	// latest time that it's acceptable to start this workflow.
-	tweakables := e.config.Tweakables(scheduler.Namespace)
+	tweakables := e.config.Tweakables(scheduler.GetNamespace())
 	timeout = catchupWindow(scheduler, tweakables)
 
 	timeout = max(timeout, startWorkflowMinDeadline)
 
-	return start.ActualTime.AsTime().Add(timeout)
+	return start.GetActualTime().AsTime().Add(timeout)
 }
 
 func (e *InvokerExecuteTaskExecutor) startWorkflow(
@@ -535,12 +535,12 @@ func (e *InvokerExecuteTaskExecutor) startWorkflow(
 ) (*schedulepb.ScheduleActionResult, error) {
 	requestSpec := scheduler.GetSchedule().GetAction().GetStartWorkflow()
 
-	if start.Attempt >= InvokerMaxStartAttempts {
+	if start.GetAttempt() >= InvokerMaxStartAttempts {
 		return nil, errRetryLimitExceeded
 	}
 
 	// Get rate limiter permission once per buffered start, on the first attempt only.
-	if start.Attempt == 1 {
+	if start.GetAttempt() == 1 {
 		delay, err := e.getRateLimiterPermission()
 		if err != nil {
 			return nil, err
@@ -551,38 +551,38 @@ func (e *InvokerExecuteTaskExecutor) startWorkflow(
 	}
 
 	reusePolicy := enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE
-	if start.Manual {
+	if start.GetManual() {
 		reusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE
 	}
 
 	var lcr []*commonpb.Payload
-	if lastCompletionState.Success != nil {
-		lcr = append(lcr, lastCompletionState.Success)
+	if lastCompletionState.HasSuccess() {
+		lcr = append(lcr, lastCompletionState.GetSuccess())
 	}
-	request := &workflowservice.StartWorkflowExecutionRequest{
+	request := workflowservice.StartWorkflowExecutionRequest_builder{
 		CompletionCallbacks:      []*commonpb.Callback{callback},
-		Header:                   requestSpec.Header,
+		Header:                   requestSpec.GetHeader(),
 		Identity:                 scheduler.identity(),
-		Input:                    requestSpec.Input,
-		Memo:                     requestSpec.Memo,
-		Namespace:                scheduler.Namespace,
-		RequestId:                start.RequestId,
-		RetryPolicy:              requestSpec.RetryPolicy,
-		SearchAttributes:         scheduler.startWorkflowSearchAttributes(start.NominalTime.AsTime()),
-		TaskQueue:                requestSpec.TaskQueue,
-		UserMetadata:             requestSpec.UserMetadata,
-		WorkflowExecutionTimeout: requestSpec.WorkflowExecutionTimeout,
-		WorkflowId:               start.WorkflowId,
+		Input:                    requestSpec.GetInput(),
+		Memo:                     requestSpec.GetMemo(),
+		Namespace:                scheduler.GetNamespace(),
+		RequestId:                start.GetRequestId(),
+		RetryPolicy:              requestSpec.GetRetryPolicy(),
+		SearchAttributes:         scheduler.startWorkflowSearchAttributes(start.GetNominalTime().AsTime()),
+		TaskQueue:                requestSpec.GetTaskQueue(),
+		UserMetadata:             requestSpec.GetUserMetadata(),
+		WorkflowExecutionTimeout: requestSpec.GetWorkflowExecutionTimeout(),
+		WorkflowId:               start.GetWorkflowId(),
 		WorkflowIdReusePolicy:    reusePolicy,
-		WorkflowRunTimeout:       requestSpec.WorkflowRunTimeout,
-		WorkflowTaskTimeout:      requestSpec.WorkflowTaskTimeout,
-		WorkflowType:             requestSpec.WorkflowType,
-		Priority:                 requestSpec.Priority,
-		ContinuedFailure:         lastCompletionState.Failure,
-		LastCompletionResult: &commonpb.Payloads{
+		WorkflowRunTimeout:       requestSpec.GetWorkflowRunTimeout(),
+		WorkflowTaskTimeout:      requestSpec.GetWorkflowTaskTimeout(),
+		WorkflowType:             requestSpec.GetWorkflowType(),
+		Priority:                 requestSpec.GetPriority(),
+		ContinuedFailure:         lastCompletionState.GetFailure(),
+		LastCompletionResult: commonpb.Payloads_builder{
 			Payloads: lcr,
-		},
-	}
+		}.Build(),
+	}.Build()
 
 	result, err := e.frontendClient.StartWorkflowExecution(ctx, request)
 	if err != nil {
@@ -593,25 +593,25 @@ func (e *InvokerExecuteTaskExecutor) startWorkflow(
 	// Set metadata on the cloned start. The clone was created in startWorkflows
 	// before spawning this goroutine, and will be copied back to the Invoker's
 	// BufferedStarts in recordExecuteResult.
-	start.RunId = result.RunId
-	start.StartTime = timestamppb.New(actualStartTime)
+	start.SetRunId(result.GetRunId())
+	start.SetStartTime(timestamppb.New(actualStartTime))
 
 	// Record time taken from action eligible to workflow started.
-	if !start.Manual {
+	if !start.GetManual() {
 		e.metricsHandler.
 			Timer(metrics.ScheduleActionDelay.Name()).
-			Record(actualStartTime.Sub(start.DesiredTime.AsTime()))
+			Record(actualStartTime.Sub(start.GetDesiredTime().AsTime()))
 	}
 
-	return &schedulepb.ScheduleActionResult{
-		ScheduleTime: start.ActualTime,
+	return schedulepb.ScheduleActionResult_builder{
+		ScheduleTime: start.GetActualTime(),
 		ActualTime:   timestamppb.New(actualStartTime),
-		StartWorkflowResult: &commonpb.WorkflowExecution{
-			WorkflowId: start.WorkflowId,
-			RunId:      result.RunId,
-		},
-		StartWorkflowStatus: result.Status, // usually should be RUNNING
-	}, nil
+		StartWorkflowResult: commonpb.WorkflowExecution_builder{
+			WorkflowId: start.GetWorkflowId(),
+			RunId:      result.GetRunId(),
+		}.Build(),
+		StartWorkflowStatus: result.GetStatus(), // usually should be RUNNING
+	}.Build(), nil
 }
 
 func (e *InvokerExecuteTaskExecutor) terminateWorkflow(
@@ -619,16 +619,16 @@ func (e *InvokerExecuteTaskExecutor) terminateWorkflow(
 	scheduler *Scheduler,
 	target *commonpb.WorkflowExecution,
 ) error {
-	request := &historyservice.TerminateWorkflowExecutionRequest{
-		NamespaceId: scheduler.NamespaceId,
-		TerminateRequest: &workflowservice.TerminateWorkflowExecutionRequest{
-			Namespace:           scheduler.Namespace,
-			WorkflowExecution:   &commonpb.WorkflowExecution{WorkflowId: target.WorkflowId},
+	request := historyservice.TerminateWorkflowExecutionRequest_builder{
+		NamespaceId: scheduler.GetNamespaceId(),
+		TerminateRequest: workflowservice.TerminateWorkflowExecutionRequest_builder{
+			Namespace:           scheduler.GetNamespace(),
+			WorkflowExecution:   commonpb.WorkflowExecution_builder{WorkflowId: target.GetWorkflowId()}.Build(),
 			Reason:              "terminated by schedule overlap policy",
 			Identity:            scheduler.identity(),
-			FirstExecutionRunId: target.RunId,
-		},
-	}
+			FirstExecutionRunId: target.GetRunId(),
+		}.Build(),
+	}.Build()
 	_, err := e.historyClient.TerminateWorkflowExecution(ctx, request)
 	return err
 }
@@ -638,16 +638,16 @@ func (e *InvokerExecuteTaskExecutor) cancelWorkflow(
 	scheduler *Scheduler,
 	target *commonpb.WorkflowExecution,
 ) error {
-	request := &historyservice.RequestCancelWorkflowExecutionRequest{
-		NamespaceId: scheduler.NamespaceId,
-		CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{
-			Namespace:           scheduler.Namespace,
-			WorkflowExecution:   &commonpb.WorkflowExecution{WorkflowId: target.WorkflowId},
+	request := historyservice.RequestCancelWorkflowExecutionRequest_builder{
+		NamespaceId: scheduler.GetNamespaceId(),
+		CancelRequest: workflowservice.RequestCancelWorkflowExecutionRequest_builder{
+			Namespace:           scheduler.GetNamespace(),
+			WorkflowExecution:   commonpb.WorkflowExecution_builder{WorkflowId: target.GetWorkflowId()}.Build(),
 			Reason:              "cancelled by schedule overlap policy",
 			Identity:            scheduler.identity(),
-			FirstExecutionRunId: target.RunId,
-		},
-	}
+			FirstExecutionRunId: target.GetRunId(),
+		}.Build(),
+	}.Build()
 	_, err := e.historyClient.RequestCancelWorkflowExecution(ctx, request)
 	return err
 }
@@ -693,7 +693,7 @@ func (e *InvokerExecuteTaskExecutor) newInvokerTaskExecutorContext(
 	ctx context.Context,
 	scheduler *Scheduler,
 ) invokerTaskExecutorContext {
-	tweakables := e.config.Tweakables(scheduler.Namespace)
+	tweakables := e.config.Tweakables(scheduler.GetNamespace())
 	maxActions := tweakables.MaxActionsPerExecution
 
 	return invokerTaskExecutorContext{

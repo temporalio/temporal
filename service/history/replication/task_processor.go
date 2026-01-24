@@ -297,11 +297,11 @@ func (p *taskProcessorImpl) handleSyncShardStatus(
 	defer cancel()
 	ctx = headers.SetCallerInfo(ctx, headers.SystemPreemptableCallerInfo)
 
-	return p.historyEngine.SyncShardStatus(ctx, &historyservice.SyncShardStatusRequest{
+	return p.historyEngine.SyncShardStatus(ctx, historyservice.SyncShardStatusRequest_builder{
 		SourceCluster: p.sourceCluster,
 		ShardId:       p.shard.GetShardID(),
-		StatusTime:    status.StatusTime,
-	})
+		StatusTime:    status.GetStatusTime(),
+	}.Build())
 }
 
 func (p *taskProcessorImpl) handleReplicationTask(
@@ -366,14 +366,14 @@ func (p *taskProcessorImpl) handleReplicationDLQTask(
 func (p *taskProcessorImpl) convertTaskToDLQTask(
 	replicationTask *replicationspb.ReplicationTask,
 ) (*persistence.PutReplicationTaskToDLQRequest, error) {
-	switch replicationTask.TaskType {
+	switch replicationTask.GetTaskType() {
 	case enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK:
 		taskAttributes := replicationTask.GetSyncActivityTaskAttributes()
 		// TODO: GetShardID will break GetDLQReplicationMessages we need to handle DLQ for cross shard replication.
 		return &persistence.PutReplicationTaskToDLQRequest{
 			ShardID:           p.shard.GetShardID(),
 			SourceClusterName: p.sourceCluster,
-			TaskInfo: &persistencespb.ReplicationTaskInfo{
+			TaskInfo: persistencespb.ReplicationTaskInfo_builder{
 				NamespaceId:      taskAttributes.GetNamespaceId(),
 				WorkflowId:       taskAttributes.GetWorkflowId(),
 				RunId:            taskAttributes.GetRunId(),
@@ -382,7 +382,7 @@ func (p *taskProcessorImpl) convertTaskToDLQTask(
 				ScheduledEventId: taskAttributes.GetScheduledEventId(),
 				Version:          taskAttributes.GetVersion(),
 				VisibilityTime:   replicationTask.GetVisibilityTime(),
-			},
+			}.Build(),
 		}, nil
 
 	case enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK:
@@ -406,7 +406,7 @@ func (p *taskProcessorImpl) convertTaskToDLQTask(
 		return &persistence.PutReplicationTaskToDLQRequest{
 			ShardID:           p.shard.GetShardID(),
 			SourceClusterName: p.sourceCluster,
-			TaskInfo: &persistencespb.ReplicationTaskInfo{
+			TaskInfo: persistencespb.ReplicationTaskInfo_builder{
 				NamespaceId:    taskAttributes.GetNamespaceId(),
 				WorkflowId:     taskAttributes.GetWorkflowId(),
 				RunId:          taskAttributes.GetRunId(),
@@ -418,7 +418,7 @@ func (p *taskProcessorImpl) convertTaskToDLQTask(
 				VisibilityTime: replicationTask.GetVisibilityTime(),
 				NewRunId:       taskAttributes.GetNewRunId(),
 				// BranchToken & NewRunBranchToken should also be populated but are deprecated
-			},
+			}.Build(),
 		}, nil
 
 	case enumsspb.REPLICATION_TASK_TYPE_SYNC_WORKFLOW_STATE_TASK:
@@ -438,7 +438,7 @@ func (p *taskProcessorImpl) convertTaskToDLQTask(
 		return &persistence.PutReplicationTaskToDLQRequest{
 			ShardID:           p.shard.GetShardID(),
 			SourceClusterName: p.sourceCluster,
-			TaskInfo: &persistencespb.ReplicationTaskInfo{
+			TaskInfo: persistencespb.ReplicationTaskInfo_builder{
 				NamespaceId:    executionInfo.GetNamespaceId(),
 				WorkflowId:     executionInfo.GetWorkflowId(),
 				RunId:          executionState.GetRunId(),
@@ -446,7 +446,7 @@ func (p *taskProcessorImpl) convertTaskToDLQTask(
 				TaskType:       enumsspb.TASK_TYPE_REPLICATION_SYNC_WORKFLOW_STATE,
 				Version:        lastItem.GetVersion(),
 				VisibilityTime: replicationTask.GetVisibilityTime(),
-			},
+			}.Build(),
 		}, nil
 
 	case enumsspb.REPLICATION_TASK_TYPE_SYNC_HSM_TASK:
@@ -456,18 +456,18 @@ func (p *taskProcessorImpl) convertTaskToDLQTask(
 		return &persistence.PutReplicationTaskToDLQRequest{
 			ShardID:           p.shard.GetShardID(),
 			SourceClusterName: p.sourceCluster,
-			TaskInfo: &persistencespb.ReplicationTaskInfo{
+			TaskInfo: persistencespb.ReplicationTaskInfo_builder{
 				NamespaceId:    taskAttributes.GetNamespaceId(),
 				WorkflowId:     taskAttributes.GetWorkflowId(),
 				RunId:          taskAttributes.GetRunId(),
 				TaskId:         replicationTask.GetSourceTaskId(),
 				TaskType:       enumsspb.TASK_TYPE_REPLICATION_SYNC_HSM,
 				VisibilityTime: replicationTask.GetVisibilityTime(),
-			},
+			}.Build(),
 		}, nil
 
 	default:
-		return nil, fmt.Errorf("unknown replication task type: %v", replicationTask.TaskType)
+		return nil, fmt.Errorf("unknown replication task type: %v", replicationTask.GetTaskType())
 	}
 }
 
@@ -478,12 +478,12 @@ func (p *taskProcessorImpl) paginationFn(_ []byte) ([]interface{}, []byte, error
 		lastProcessedVisTime = timestamppb.New(p.maxRxProcessedTimestamp)
 	}
 	p.requestChan <- &replicationTaskRequest{
-		token: &replicationspb.ReplicationToken{
+		token: replicationspb.ReplicationToken_builder{
 			ShardId:                     p.sourceShardID,
 			LastProcessedMessageId:      p.maxRxProcessedTaskID,
 			LastProcessedVisibilityTime: lastProcessedVisTime,
 			LastRetrievedMessageId:      p.maxRxReceivedTaskID,
-		},
+		}.Build(),
 		respChan: respChan,
 	}
 

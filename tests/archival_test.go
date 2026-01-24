@@ -143,17 +143,17 @@ func (s *ArchivalSuite) TestVisibilityArchival() {
 	var executions []*workflowpb.WorkflowExecutionInfo
 
 	s.Eventually(func() bool {
-		request := &workflowservice.ListArchivedWorkflowExecutionsRequest{
+		request := workflowservice.ListArchivedWorkflowExecutionsRequest_builder{
 			Namespace: s.archivalNamespace.String(),
 			PageSize:  2,
 			Query:     fmt.Sprintf("CloseTime >= %v and CloseTime <= %v and WorkflowType = '%s'", startTime, endTime, workflowType),
-		}
-		for len(executions) == 0 || request.NextPageToken != nil {
+		}.Build()
+		for len(executions) == 0 || len(request.GetNextPageToken()) != 0 {
 			response, err := s.FrontendClient().ListArchivedWorkflowExecutions(testcore.NewContext(), request)
 			s.NoError(err)
 			s.NotNil(response)
 			executions = append(executions, response.GetExecutions()...)
-			request.NextPageToken = response.NextPageToken
+			request.SetNextPageToken(response.GetNextPageToken())
 		}
 		if len(executions) == numRuns {
 			return true
@@ -164,13 +164,13 @@ func (s *ArchivalSuite) TestVisibilityArchival() {
 	for _, execution := range executions {
 		s.Equal(workflowID, execution.GetExecution().GetWorkflowId())
 		s.Equal(workflowType, execution.GetType().GetName())
-		s.NotZero(execution.StartTime)
-		s.NotZero(execution.ExecutionTime)
-		s.NotZero(execution.CloseTime)
-		s.NotZero(execution.ExecutionDuration)
+		s.NotZero(execution.GetStartTime())
+		s.NotZero(execution.GetExecutionTime())
+		s.NotZero(execution.GetCloseTime())
+		s.NotZero(execution.GetExecutionDuration())
 		s.Equal(
-			execution.CloseTime.AsTime().Sub(execution.ExecutionTime.AsTime()),
-			execution.ExecutionDuration.AsDuration(),
+			execution.GetCloseTime().AsTime().Sub(execution.GetExecutionTime().AsTime()),
+			execution.GetExecutionDuration().AsDuration(),
 		)
 	}
 }
@@ -234,7 +234,7 @@ func (s *ArchivalSuite) workflowIsArchived(namespaceID namespace.ID, execution *
 func (s *ArchivalSuite) historyIsDeleted(workflowInfo archivalWorkflowInfo) {
 	shardID := common.WorkflowIDToHistoryShard(
 		s.archivalNamespaceID.String(),
-		workflowInfo.execution.WorkflowId,
+		workflowInfo.execution.GetWorkflowId(),
 		s.GetTestClusterConfig().HistoryConfig.NumHistoryShards,
 	)
 
@@ -264,8 +264,8 @@ func (s *ArchivalSuite) mutableStateIsDeleted(namespaceID namespace.ID, executio
 	request := &persistence.GetWorkflowExecutionRequest{
 		ShardID:     shardID,
 		NamespaceID: namespaceID.String(),
-		WorkflowID:  execution.WorkflowId,
-		RunID:       execution.RunId,
+		WorkflowID:  execution.GetWorkflowId(),
+		RunID:       execution.GetRunId(),
 		ArchetypeID: chasm.WorkflowArchetypeID,
 	}
 
@@ -286,9 +286,9 @@ func (s *ArchivalSuite) startAndFinishWorkflow(
 ) []archivalWorkflowInfo {
 	identity := "worker1"
 	activityName := "activity_type1"
-	workflowType := &commonpb.WorkflowType{Name: wt}
-	taskQueue := &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
-	request := &workflowservice.StartWorkflowExecutionRequest{
+	workflowType := commonpb.WorkflowType_builder{Name: wt}.Build()
+	taskQueue := taskqueuepb.TaskQueue_builder{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build()
+	request := workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:           uuid.NewString(),
 		Namespace:           nsName.String(),
 		WorkflowId:          id,
@@ -298,10 +298,10 @@ func (s *ArchivalSuite) startAndFinishWorkflow(
 		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
-	}
+	}.Build()
 	startResp, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err)
-	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(startResp.RunId))
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(startResp.GetRunId()))
 	workflowInfos := make([]archivalWorkflowInfo, numRuns)
 
 	workflowComplete := false
@@ -311,11 +311,11 @@ func (s *ArchivalSuite) startAndFinishWorkflow(
 	runCounter := 1
 
 	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
-		branchToken, err := s.getBranchToken(nsName, task.WorkflowExecution)
+		branchToken, err := s.getBranchToken(nsName, task.GetWorkflowExecution())
 		s.NoError(err)
 
 		workflowInfos[runCounter-1] = archivalWorkflowInfo{
-			execution:   task.WorkflowExecution,
+			execution:   task.GetWorkflowExecution(),
 			branchToken: branchToken,
 		}
 
@@ -323,52 +323,52 @@ func (s *ArchivalSuite) startAndFinishWorkflow(
 			activityCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
-			return []*commandpb.Command{{
+			return []*commandpb.Command{commandpb.Command_builder{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+				ScheduleActivityTaskCommandAttributes: commandpb.ScheduleActivityTaskCommandAttributes_builder{
 					ActivityId:             convert.Int32ToString(activityCounter),
-					ActivityType:           &commonpb.ActivityType{Name: activityName},
-					TaskQueue:              &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+					ActivityType:           commonpb.ActivityType_builder{Name: activityName}.Build(),
+					TaskQueue:              taskqueuepb.TaskQueue_builder{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeout: durationpb.New(100 * time.Second),
 					ScheduleToStartTimeout: durationpb.New(10 * time.Second),
 					StartToCloseTimeout:    durationpb.New(50 * time.Second),
 					HeartbeatTimeout:       durationpb.New(5 * time.Second),
-				}},
-			}}, nil
+				}.Build(),
+			}.Build()}, nil
 		}
 
 		if runCounter < numRuns {
 			activityCounter = int32(0)
 			expectedActivityID = int32(1)
 			runCounter++
-			return []*commandpb.Command{{
+			return []*commandpb.Command{commandpb.Command_builder{
 				CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
-				Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
+				ContinueAsNewWorkflowExecutionCommandAttributes: commandpb.ContinueAsNewWorkflowExecutionCommandAttributes_builder{
 					WorkflowType:        workflowType,
-					TaskQueue:           &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+					TaskQueue:           taskqueuepb.TaskQueue_builder{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 					Input:               nil,
 					WorkflowRunTimeout:  durationpb.New(100 * time.Second),
 					WorkflowTaskTimeout: durationpb.New(1 * time.Second),
-				}},
-			}}, nil
+				}.Build(),
+			}.Build()}, nil
 		}
 
 		workflowComplete = true
-		return []*commandpb.Command{{
+		return []*commandpb.Command{commandpb.Command_builder{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+			CompleteWorkflowExecutionCommandAttributes: commandpb.CompleteWorkflowExecutionCommandAttributes_builder{
 				Result: payloads.EncodeString("Done"),
-			}},
-		}}, nil
+			}.Build(),
+		}.Build()}, nil
 	}
 
 	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
-		protoassert.ProtoEqual(s.T(), workflowInfos[runCounter-1].execution, task.WorkflowExecution)
-		s.Equal(activityName, task.ActivityType.Name)
-		currentActivityId, _ := strconv.Atoi(task.ActivityId)
+		protoassert.ProtoEqual(s.T(), workflowInfos[runCounter-1].execution, task.GetWorkflowExecution())
+		s.Equal(activityName, task.GetActivityType().GetName())
+		currentActivityId, _ := strconv.Atoi(task.GetActivityId())
 		s.Equal(int(expectedActivityID), currentActivityId)
-		s.Equal(expectedActivityID, s.DecodePayloadsByteSliceInt32(task.Input))
+		s.Equal(expectedActivityID, s.DecodePayloadsByteSliceInt32(task.GetInput()))
 		expectedActivityID++
 		return payloads.EncodeString("Activity Result"), false, nil
 	}
@@ -414,16 +414,16 @@ func (s *ArchivalSuite) getBranchToken(
 	execution *commonpb.WorkflowExecution,
 ) ([]byte, error) {
 
-	descResp, err := s.AdminClient().DescribeMutableState(testcore.NewContext(), &adminservice.DescribeMutableStateRequest{
+	descResp, err := s.AdminClient().DescribeMutableState(testcore.NewContext(), adminservice.DescribeMutableStateRequest_builder{
 		Namespace: nsName.String(),
 		Execution: execution,
 		Archetype: chasm.WorkflowArchetype,
-	})
+	}.Build())
 	if err != nil {
 		return nil, err
 	}
 
-	versionHistories := descResp.CacheMutableState.ExecutionInfo.VersionHistories
+	versionHistories := descResp.GetCacheMutableState().GetExecutionInfo().GetVersionHistories()
 	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(versionHistories)
 	if err != nil {
 		return nil, err

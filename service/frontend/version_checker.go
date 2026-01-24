@@ -120,8 +120,8 @@ func (vc *VersionChecker) performVersionCheck(
 }
 
 func isUpdateNeeded(metadata *persistence.GetClusterMetadataResponse) bool {
-	return metadata.VersionInfo == nil || (metadata.VersionInfo.LastUpdateTime != nil &&
-		metadata.VersionInfo.LastUpdateTime.AsTime().Before(time.Now().Add(-time.Hour)))
+	return metadata.GetVersionInfo() == nil || (metadata.GetVersionInfo().HasLastUpdateTime() &&
+		metadata.GetVersionInfo().GetLastUpdateTime().AsTime().Before(time.Now().Add(-time.Hour)))
 }
 
 func (vc *VersionChecker) createVersionCheckRequest(metadata *persistence.GetClusterMetadataResponse) (*versioninfo.VersionCheckRequest, error) {
@@ -131,7 +131,7 @@ func (vc *VersionChecker) createVersionCheckRequest(metadata *persistence.GetClu
 		Arch:      runtime.GOARCH,
 		OS:        runtime.GOOS,
 		DB:        vc.clusterMetadataManager.GetName(),
-		ClusterID: metadata.ClusterId,
+		ClusterID: metadata.GetClusterId(),
 		Timestamp: time.Now().UnixNano(),
 		SDKInfo:   vc.sdkVersionRecorder.GetAndResetSDKInfo(),
 	}, nil
@@ -151,7 +151,7 @@ func (vc *VersionChecker) saveVersionInfo(ctx context.Context, resp *versioninfo
 	if err != nil {
 		return err
 	}
-	metadata.VersionInfo = versionInfo
+	metadata.ClusterMetadata.SetVersionInfo(versionInfo)
 	saved, err := vc.clusterMetadataManager.SaveClusterMetadata(ctx, &persistence.SaveClusterMetadataRequest{
 		ClusterMetadata: metadata.ClusterMetadata, Version: metadata.Version})
 	if err != nil {
@@ -166,13 +166,13 @@ func (vc *VersionChecker) saveVersionInfo(ctx context.Context, resp *versioninfo
 func toVersionInfo(resp *versioninfo.VersionCheckResponse) (*versionpb.VersionInfo, error) {
 	for _, product := range resp.Products {
 		if product.Product == headers.ClientNameServer {
-			return &versionpb.VersionInfo{
+			return versionpb.VersionInfo_builder{
 				Current:        convertReleaseInfo(product.Current),
 				Recommended:    convertReleaseInfo(product.Recommended),
 				Instructions:   product.Instructions,
 				Alerts:         convertAlerts(product.Alerts),
 				LastUpdateTime: timestamppb.New(time.Now().UTC()),
-			}, nil
+			}.Build(), nil
 		}
 	}
 	return nil, serviceerror.NewNotFound("version info update was not found in response")
@@ -181,18 +181,18 @@ func toVersionInfo(resp *versioninfo.VersionCheckResponse) (*versionpb.VersionIn
 func convertAlerts(alerts []versioninfo.Alert) []*versionpb.Alert {
 	var result []*versionpb.Alert
 	for _, alert := range alerts {
-		result = append(result, &versionpb.Alert{
+		result = append(result, versionpb.Alert_builder{
 			Message:  alert.Message,
 			Severity: enumspb.Severity(alert.Severity),
-		})
+		}.Build())
 	}
 	return result
 }
 
 func convertReleaseInfo(releaseInfo versioninfo.ReleaseInfo) *versionpb.ReleaseInfo {
-	return &versionpb.ReleaseInfo{
+	return versionpb.ReleaseInfo_builder{
 		Version:     releaseInfo.Version,
 		ReleaseTime: timestamp.UnixOrZeroTimePtr(releaseInfo.ReleaseTime),
 		Notes:       releaseInfo.Notes,
-	}
+	}.Build()
 }

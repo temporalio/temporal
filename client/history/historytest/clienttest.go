@@ -76,25 +76,25 @@ func TestClient(t *testing.T, historyTaskQueueManager persistence.HistoryTaskQue
 		})
 		require.NoError(t, err)
 		enqueueTasks(t, historyTaskQueueManager, 2, queueKey.SourceCluster, queueKey.TargetCluster)
-		dlqKey := &commonspb.HistoryDLQKey{
+		dlqKey := commonspb.HistoryDLQKey_builder{
 			TaskCategory:  int32(tasks.CategoryTransfer.ID()),
 			SourceCluster: queueKey.SourceCluster,
 			TargetCluster: queueKey.TargetCluster,
-		}
-		_, err = client.DeleteDLQTasks(context.Background(), &historyservice.DeleteDLQTasksRequest{
+		}.Build()
+		_, err = client.DeleteDLQTasks(context.Background(), historyservice.DeleteDLQTasksRequest_builder{
 			DlqKey: dlqKey,
-			InclusiveMaxTaskMetadata: &commonspb.HistoryDLQTaskMetadata{
+			InclusiveMaxTaskMetadata: commonspb.HistoryDLQTaskMetadata_builder{
 				MessageId: persistence.FirstQueueMessageID,
-			},
-		})
+			}.Build(),
+		}.Build())
 		require.NoError(t, err)
-		res, err := client.GetDLQTasks(context.Background(), &historyservice.GetDLQTasksRequest{
+		res, err := client.GetDLQTasks(context.Background(), historyservice.GetDLQTasksRequest_builder{
 			DlqKey:   dlqKey,
 			PageSize: 10,
-		})
+		}.Build())
 		require.NoError(t, err)
-		assert.Equal(t, 1, len(res.DlqTasks))
-		assert.Equal(t, int64(persistence.FirstQueueMessageID+1), res.DlqTasks[0].Metadata.MessageId)
+		assert.Equal(t, 1, len(res.GetDlqTasks()))
+		assert.Equal(t, int64(persistence.FirstQueueMessageID+1), res.GetDlqTasks()[0].GetMetadata().GetMessageId())
 	})
 
 	t.Cleanup(func() {
@@ -117,19 +117,19 @@ func readTasks(
 	// We want to run a test where the client makes multiple requests to the server because the client is stateful. In
 	// particular, the first request here should establish a connection, and the next one should reuse that connection.
 	for i := 0; i < numTasks; i++ {
-		res, err := client.GetDLQTasks(context.Background(), &historyservice.GetDLQTasksRequest{
-			DlqKey: &commonspb.HistoryDLQKey{
+		res, err := client.GetDLQTasks(context.Background(), historyservice.GetDLQTasksRequest_builder{
+			DlqKey: commonspb.HistoryDLQKey_builder{
 				TaskCategory:  int32(tasks.CategoryTransfer.ID()),
 				SourceCluster: sourceCluster,
 				TargetCluster: targetCluster,
-			},
+			}.Build(),
 			PageSize:      1,
 			NextPageToken: nextPageToken,
-		})
+		}.Build())
 		require.NoError(t, err)
-		assert.Equal(t, 1, len(res.DlqTasks))
-		assert.Equal(t, int64(persistence.FirstQueueMessageID+i), res.DlqTasks[0].Metadata.MessageId)
-		nextPageToken = res.NextPageToken
+		assert.Equal(t, 1, len(res.GetDlqTasks()))
+		assert.Equal(t, int64(persistence.FirstQueueMessageID+i), res.GetDlqTasks()[0].GetMetadata().GetMessageId())
+		nextPageToken = res.GetNextPageToken()
 	}
 }
 

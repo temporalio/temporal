@@ -52,21 +52,19 @@ func (s *temporalSerializerSuite) TestSerializer() {
 	serializer := serialization.NewSerializer()
 
 	eventType := enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED
-	event0 := &historypb.HistoryEvent{
+	event0 := historypb.HistoryEvent_builder{
 		EventId:   999,
 		EventTime: timestamppb.New(time.Date(2020, 8, 22, 0, 0, 0, 0, time.UTC)),
 		EventType: eventType,
-		Attributes: &historypb.HistoryEvent_ActivityTaskCompletedEventAttributes{
-			ActivityTaskCompletedEventAttributes: &historypb.ActivityTaskCompletedEventAttributes{
-				Result:           payloads.EncodeString("result-1-event-1"),
-				ScheduledEventId: 4,
-				StartedEventId:   5,
-				Identity:         "event-1",
-			},
-		},
-	}
+		ActivityTaskCompletedEventAttributes: historypb.ActivityTaskCompletedEventAttributes_builder{
+			Result:           payloads.EncodeString("result-1-event-1"),
+			ScheduledEventId: 4,
+			StartedEventId:   5,
+			Identity:         "event-1",
+		}.Build(),
+	}.Build()
 
-	history0 := &historypb.History{Events: []*historypb.HistoryEvent{event0, event0}}
+	history0 := historypb.History_builder{Events: []*historypb.HistoryEvent{event0, event0}}.Build()
 
 	for i := 0; i < concurrency; i++ {
 
@@ -91,7 +89,7 @@ func (s *temporalSerializerSuite) TestSerializer() {
 			s.Nil(err)
 			s.NotNil(nilEvents)
 
-			dsProto, err := serializer.SerializeEvents(history0.Events)
+			dsProto, err := serializer.SerializeEvents(history0.GetEvents())
 			s.Nil(err)
 			s.NotNil(dsProto)
 
@@ -112,7 +110,7 @@ func (s *temporalSerializerSuite) TestSerializer() {
 			s.Nil(dNilEvents)
 
 			events, err := serializer.DeserializeEvents(dsProto)
-			history2 := &historypb.History{Events: events}
+			history2 := historypb.History_builder{Events: events}.Build()
 			s.Nil(err)
 			s.ProtoEqual(history0, history2)
 		}()

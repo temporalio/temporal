@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
@@ -113,26 +114,26 @@ func (s *ActivityApiUpdateClientTestSuite) TestActivityUpdateApi_ChangeRetryInte
 		require.Equal(t, int32(1), startedActivityCount.Load())
 	}, 10*time.Second, 500*time.Millisecond)
 
-	updateRequest := &workflowservice.UpdateActivityOptionsRequest{
+	updateRequest := workflowservice.UpdateActivityOptionsRequest_builder{
 		Namespace: s.Namespace().String(),
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: workflowRun.GetID(),
-		},
-		Activity: &workflowservice.UpdateActivityOptionsRequest_Id{Id: "activity-id"},
-		ActivityOptions: &activitypb.ActivityOptions{
-			RetryPolicy: &commonpb.RetryPolicy{
+		}.Build(),
+		Id: proto.String("activity-id"),
+		ActivityOptions: activitypb.ActivityOptions_builder{
+			RetryPolicy: commonpb.RetryPolicy_builder{
 				InitialInterval: durationpb.New(1 * time.Second),
-			},
-		},
+			}.Build(),
+		}.Build(),
 		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"retry_policy.initial_interval"}},
-	}
+	}.Build()
 	resp, err := s.FrontendClient().UpdateActivityOptions(ctx, updateRequest)
 	s.NoError(err)
 	s.NotNil(resp)
 
 	description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 	s.NoError(err)
-	s.Equal(1, len(description.PendingActivities))
+	s.Equal(1, len(description.GetPendingActivities()))
 
 	activityUpdated <- struct{}{}
 
@@ -189,17 +190,17 @@ func (s *ActivityApiUpdateClientTestSuite) TestActivityUpdateApi_ChangeScheduleT
 	}, 2*time.Second, 200*time.Millisecond)
 
 	// update schedule_to_close_timeout
-	updateRequest := &workflowservice.UpdateActivityOptionsRequest{
+	updateRequest := workflowservice.UpdateActivityOptionsRequest_builder{
 		Namespace: s.Namespace().String(),
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: workflowRun.GetID(),
-		},
-		Activity: &workflowservice.UpdateActivityOptionsRequest_Id{Id: "activity-id"},
-		ActivityOptions: &activitypb.ActivityOptions{
+		}.Build(),
+		Id: proto.String("activity-id"),
+		ActivityOptions: activitypb.ActivityOptions_builder{
 			ScheduleToCloseTimeout: durationpb.New(1 * time.Second),
-		},
+		}.Build(),
 		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"schedule_to_close_timeout"}},
-	}
+	}.Build()
 	resp, err := s.FrontendClient().UpdateActivityOptions(ctx, updateRequest)
 	s.NoError(err)
 	s.NotNil(resp)
@@ -268,28 +269,28 @@ func (s *ActivityApiUpdateClientTestSuite) TestActivityUpdateApi_ChangeScheduleT
 	// update schedule_to_close_timeout, make it longer
 	// also update retry policy interval, make it shorter
 	newScheduleToCloseTimeout := 10 * time.Second
-	updateRequest := &workflowservice.UpdateActivityOptionsRequest{
+	updateRequest := workflowservice.UpdateActivityOptionsRequest_builder{
 		Namespace: s.Namespace().String(),
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: workflowRun.GetID(),
-		},
-		Activity: &workflowservice.UpdateActivityOptionsRequest_Id{Id: "activity-id"},
-		ActivityOptions: &activitypb.ActivityOptions{
+		}.Build(),
+		Id: proto.String("activity-id"),
+		ActivityOptions: activitypb.ActivityOptions_builder{
 			ScheduleToCloseTimeout: durationpb.New(newScheduleToCloseTimeout),
-			RetryPolicy: &commonpb.RetryPolicy{
+			RetryPolicy: commonpb.RetryPolicy_builder{
 				InitialInterval: durationpb.New(1 * time.Second),
-			},
-		},
+			}.Build(),
+		}.Build(),
 		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"schedule_to_close_timeout", "retry_policy.initial_interval"}},
-	}
+	}.Build()
 
 	resp, err := s.FrontendClient().UpdateActivityOptions(ctx, updateRequest)
 	s.NoError(err)
 	s.NotNil(resp)
 	// check that the update was successful
-	s.Equal(int64(newScheduleToCloseTimeout.Seconds()), resp.GetActivityOptions().ScheduleToCloseTimeout.GetSeconds())
+	s.Equal(int64(newScheduleToCloseTimeout.Seconds()), resp.GetActivityOptions().GetScheduleToCloseTimeout().GetSeconds())
 	// check that field we didn't update is the same
-	s.Equal(int64(scheduleToCloseTimeout.Seconds()), resp.GetActivityOptions().StartToCloseTimeout.GetSeconds())
+	s.Equal(int64(scheduleToCloseTimeout.Seconds()), resp.GetActivityOptions().GetStartToCloseTimeout().GetSeconds())
 
 	// now activity should succeed
 	s.EventuallyWithT(func(t *assert.CollectT) {
@@ -354,19 +355,19 @@ func (s *ActivityApiUpdateClientTestSuite) TestActivityUpdateApi_ResetDefaultOpt
 	}, 10*time.Second, 500*time.Millisecond)
 
 	// update activity options, set retry policy to 1000 attempts
-	updateRequest := &workflowservice.UpdateActivityOptionsRequest{
+	updateRequest := workflowservice.UpdateActivityOptionsRequest_builder{
 		Namespace: s.Namespace().String(),
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: workflowRun.GetID(),
-		},
-		Activity: &workflowservice.UpdateActivityOptionsRequest_Id{Id: "activity-id"},
-		ActivityOptions: &activitypb.ActivityOptions{
-			RetryPolicy: &commonpb.RetryPolicy{
+		}.Build(),
+		Id: proto.String("activity-id"),
+		ActivityOptions: activitypb.ActivityOptions_builder{
+			RetryPolicy: commonpb.RetryPolicy_builder{
 				MaximumAttempts: 1000,
-			},
-		},
+			}.Build(),
+		}.Build(),
 		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"retry_policy.maximum_attempts"}},
-	}
+	}.Build()
 	resp, err := s.FrontendClient().UpdateActivityOptions(ctx, updateRequest)
 	s.NoError(err)
 	s.NotNil(resp)
@@ -375,14 +376,14 @@ func (s *ActivityApiUpdateClientTestSuite) TestActivityUpdateApi_ResetDefaultOpt
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
-		require.Equal(t, 1, len(description.PendingActivities))
-		require.Equal(t, int32(1000), description.PendingActivities[0].GetActivityOptions().GetRetryPolicy().GetMaximumAttempts())
+		require.Equal(t, 1, len(description.GetPendingActivities()))
+		require.Equal(t, int32(1000), description.GetPendingActivities()[0].GetActivityOptions().GetRetryPolicy().GetMaximumAttempts())
 	}, 3*time.Second, 200*time.Millisecond)
 
 	// reset activity options to default
-	updateRequest.ActivityOptions = nil
-	updateRequest.UpdateMask = &fieldmaskpb.FieldMask{Paths: []string{}}
-	updateRequest.RestoreOriginal = true
+	updateRequest.ClearActivityOptions()
+	updateRequest.SetUpdateMask(&fieldmaskpb.FieldMask{Paths: []string{}})
+	updateRequest.SetRestoreOriginal(true)
 	resp, err = s.FrontendClient().UpdateActivityOptions(ctx, updateRequest)
 	s.NoError(err)
 	s.NotNil(resp)
@@ -391,20 +392,20 @@ func (s *ActivityApiUpdateClientTestSuite) TestActivityUpdateApi_ResetDefaultOpt
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
-		require.Equal(t, 1, len(description.PendingActivities))
-		require.Equal(t, int32(defaultMaximumAttempts), description.PendingActivities[0].GetActivityOptions().GetRetryPolicy().GetMaximumAttempts())
+		require.Equal(t, 1, len(description.GetPendingActivities()))
+		require.Equal(t, int32(defaultMaximumAttempts), description.GetPendingActivities()[0].GetActivityOptions().GetRetryPolicy().GetMaximumAttempts())
 	}, 3*time.Second, 200*time.Millisecond)
 
 	// update activity options again, this time set retry interval to 1 second
 	newScheduleToCloseTimeout := 10 * time.Second
-	updateRequest.ActivityOptions = &activitypb.ActivityOptions{
+	updateRequest.SetActivityOptions(activitypb.ActivityOptions_builder{
 		ScheduleToCloseTimeout: durationpb.New(newScheduleToCloseTimeout),
-		RetryPolicy: &commonpb.RetryPolicy{
+		RetryPolicy: commonpb.RetryPolicy_builder{
 			InitialInterval: durationpb.New(1 * time.Second),
-		},
-	}
-	updateRequest.UpdateMask = &fieldmaskpb.FieldMask{Paths: []string{"schedule_to_close_timeout", "retry_policy.initial_interval"}}
-	updateRequest.RestoreOriginal = false
+		}.Build(),
+	}.Build())
+	updateRequest.SetUpdateMask(&fieldmaskpb.FieldMask{Paths: []string{"schedule_to_close_timeout", "retry_policy.initial_interval"}})
+	updateRequest.SetRestoreOriginal(false)
 	resp, err = s.FrontendClient().UpdateActivityOptions(ctx, updateRequest)
 	s.NoError(err)
 	s.NotNil(resp)

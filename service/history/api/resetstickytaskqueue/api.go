@@ -27,9 +27,9 @@ func Invoke(
 		ctx,
 		nil,
 		definition.NewWorkflowKey(
-			resetRequest.NamespaceId,
-			resetRequest.Execution.WorkflowId,
-			resetRequest.Execution.RunId,
+			resetRequest.GetNamespaceId(),
+			resetRequest.GetExecution().GetWorkflowId(),
+			resetRequest.GetExecution().GetRunId(),
 		),
 		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
 			mutableState := workflowLease.GetMutableState()

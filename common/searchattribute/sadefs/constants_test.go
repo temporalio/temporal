@@ -39,7 +39,7 @@ func TestGetDbIndexSearchAttributesDefault(t *testing.T) {
 		"KeywordList03": enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
 	}
 	got := GetDBIndexSearchAttributes(nil)
-	require.Equal(t, want, got.CustomSearchAttributes)
+	require.Equal(t, want, got.GetCustomSearchAttributes())
 }
 
 func TestGetDbIndexSearchAttributes(t *testing.T) {
@@ -73,7 +73,7 @@ func TestGetDbIndexSearchAttributes(t *testing.T) {
 		"KeywordList05": enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
 	}
 	got := GetDBIndexSearchAttributes(override)
-	require.Equal(t, want, got.CustomSearchAttributes)
+	require.Equal(t, want, got.GetCustomSearchAttributes())
 }
 
 // This test is to make sure all system search attributes have a corresponding

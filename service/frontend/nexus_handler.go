@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
@@ -114,12 +115,12 @@ func (c *operationContext) capturePanicAndRecordMetrics(ctxPtr *context.Context,
 }
 
 func (c *operationContext) matchingRequest(req *nexuspb.Request) *matchingservice.DispatchNexusTaskRequest {
-	req.Endpoint = c.endpointName
-	return &matchingservice.DispatchNexusTaskRequest{
+	req.SetEndpoint(c.endpointName)
+	return matchingservice.DispatchNexusTaskRequest_builder{
 		NamespaceId: c.namespace.ID().String(),
-		TaskQueue:   &taskqueuepb.TaskQueue{Name: c.taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		TaskQueue:   taskqueuepb.TaskQueue_builder{Name: c.taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 		Request:     req,
-	}
+	}.Build()
 }
 
 func (c *operationContext) augmentContext(ctx context.Context, header nexus.Header) context.Context {
@@ -246,14 +247,14 @@ func (c *operationContext) interceptRequest(
 	// Sanitize headers.
 	if request.GetRequest().GetHeader() != nil {
 		// Making a copy to ensure the original map is not modified as it might be used somewhere else.
-		sanitizedHeaders := make(map[string]string, len(request.Request.Header))
+		sanitizedHeaders := make(map[string]string, len(request.GetRequest().GetHeader()))
 		headersBlacklist := c.headersBlacklist()
-		for name, value := range request.Request.Header {
+		for name, value := range request.GetRequest().GetHeader() {
 			if !headersBlacklist.MatchString(name) {
 				sanitizedHeaders[name] = value
 			}
 		}
-		request.Request.Header = sanitizedHeaders
+		request.GetRequest().SetHeader(sanitizedHeaders)
 	}
 
 	// DO NOT ADD ANY STEPS HERE. ALL STEPS MUST BE BEFORE HEADERS SANITIZATION.
@@ -394,27 +395,25 @@ func (h *nexusHandler) StartOperation(
 
 	var links []*nexuspb.Link
 	for _, nexusLink := range options.Links {
-		links = append(links, &nexuspb.Link{
+		links = append(links, nexuspb.Link_builder{
 			Url:  nexusLink.URL.String(),
 			Type: nexusLink.Type,
-		})
+		}.Build())
 	}
 
-	startOperationRequest := nexuspb.StartOperationRequest{
+	startOperationRequest := nexuspb.StartOperationRequest_builder{
 		Service:        service,
 		Operation:      operation,
 		Callback:       options.CallbackURL,
 		CallbackHeader: options.CallbackHeader,
 		RequestId:      options.RequestID,
 		Links:          links,
-	}
-	request := oc.matchingRequest(&nexuspb.Request{
-		ScheduledTime: timestamppb.New(oc.requestStartTime),
-		Header:        options.Header,
-		Variant: &nexuspb.Request_StartOperation{
-			StartOperation: &startOperationRequest,
-		},
-	})
+	}.Build()
+	request := oc.matchingRequest(nexuspb.Request_builder{
+		ScheduledTime:  timestamppb.New(oc.requestStartTime),
+		Header:         options.Header,
+		StartOperation: startOperationRequest,
+	}.Build())
 
 	if err := oc.interceptRequest(ctx, request, options.Header); err != nil {
 		var notActiveErr *serviceerror.NamespaceNotActive
@@ -425,11 +424,13 @@ func (h *nexusHandler) StartOperation(
 	}
 
 	// Transform nexus Content to temporal Payload with common/nexus PayloadSerializer.
-	if err = input.Consume(&startOperationRequest.Payload); err != nil {
+	var payload *commonpb.Payload
+	if err = input.Consume(&payload); err != nil {
 		oc.logger.Warn("invalid input", tag.Error(err))
 		return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid input")
 	}
-	if startOperationRequest.Payload.Size() > h.payloadSizeLimit(oc.namespaceName) {
+	startOperationRequest.SetPayload(payload)
+	if startOperationRequest.GetPayload().Size() > h.payloadSizeLimit(oc.namespaceName) {
 		oc.logger.Error("payload size exceeds error limit for Nexus StartOperation request", tag.Operation(operation), tag.WorkflowNamespace(oc.namespaceName))
 		return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "input exceeds size limit")
 	}
@@ -443,54 +444,54 @@ func (h *nexusHandler) StartOperation(
 		return nil, commonnexus.ConvertGRPCError(err, false)
 	}
 	// Convert to standard Nexus SDK response.
-	switch t := response.GetOutcome().(type) {
-	case *matchingservice.DispatchNexusTaskResponse_HandlerError:
-		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error:" + t.HandlerError.GetErrorType()))
+	switch response.WhichOutcome() {
+	case matchingservice.DispatchNexusTaskResponse_HandlerError_case:
+		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error:" + response.GetHandlerError().GetErrorType()))
 
 		oc.nexusContext.setFailureSource(commonnexus.FailureSourceWorker)
 
-		err := h.convertOutcomeToNexusHandlerError(t)
+		err := h.convertOutcomeToNexusHandlerError(response.GetHandlerError())
 		return nil, err
 
-	case *matchingservice.DispatchNexusTaskResponse_RequestTimeout:
+	case matchingservice.DispatchNexusTaskResponse_RequestTimeout_case:
 		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_timeout"))
 
 		oc.setFailureSource(commonnexus.FailureSourceWorker)
 
 		return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeUpstreamTimeout, "upstream timeout")
 
-	case *matchingservice.DispatchNexusTaskResponse_Response:
-		switch t := t.Response.GetStartOperation().GetVariant().(type) {
-		case *nexuspb.StartOperationResponse_SyncSuccess:
+	case matchingservice.DispatchNexusTaskResponse_Response_case:
+		switch response.GetResponse().GetStartOperation().WhichVariant() {
+		case nexuspb.StartOperationResponse_SyncSuccess_case:
 			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("sync_success"))
-			links := parseLinks(t.SyncSuccess.GetLinks(), oc.logger)
+			links := parseLinks(response.GetResponse().GetStartOperation().GetSyncSuccess().GetLinks(), oc.logger)
 			nexus.AddHandlerLinks(ctx, links...)
 			return &nexus.HandlerStartOperationResultSync[any]{
-				Value: t.SyncSuccess.GetPayload(),
+				Value: response.GetResponse().GetStartOperation().GetSyncSuccess().GetPayload(),
 			}, nil
 
-		case *nexuspb.StartOperationResponse_AsyncSuccess:
+		case nexuspb.StartOperationResponse_AsyncSuccess_case:
 			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("async_success"))
 
-			token := t.AsyncSuccess.GetOperationToken()
+			token := response.GetResponse().GetStartOperation().GetAsyncSuccess().GetOperationToken()
 			if token == "" {
-				token = t.AsyncSuccess.GetOperationId()
+				token = response.GetResponse().GetStartOperation().GetAsyncSuccess().GetOperationId()
 			}
-			links := parseLinks(t.AsyncSuccess.GetLinks(), oc.logger)
+			links := parseLinks(response.GetResponse().GetStartOperation().GetAsyncSuccess().GetLinks(), oc.logger)
 			nexus.AddHandlerLinks(ctx, links...)
 			return &nexus.HandlerStartOperationResultAsync{
 				OperationToken: token,
 			}, nil
 
-		case *nexuspb.StartOperationResponse_OperationError:
+		case nexuspb.StartOperationResponse_OperationError_case:
 			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("operation_error"))
 
 			oc.nexusContext.setFailureSource(commonnexus.FailureSourceWorker)
 
 			err := &nexus.OperationError{
-				State: nexus.OperationState(t.OperationError.GetOperationState()),
+				State: nexus.OperationState(response.GetResponse().GetStartOperation().GetOperationError().GetOperationState()),
 				Cause: &nexus.FailureError{
-					Failure: commonnexus.ProtoFailureToNexusFailure(t.OperationError.GetFailure()),
+					Failure: commonnexus.ProtoFailureToNexusFailure(response.GetResponse().GetStartOperation().GetOperationError().GetFailure()),
 				},
 			}
 			return nil, err
@@ -507,11 +508,11 @@ func (h *nexusHandler) StartOperation(
 func parseLinks(links []*nexuspb.Link, logger log.Logger) []nexus.Link {
 	var nexusLinks []nexus.Link
 	for _, link := range links {
-		linkURL, err := url.Parse(link.Url)
+		linkURL, err := url.Parse(link.GetUrl())
 		if err != nil {
 			// TODO(rodrigozhou): links are non-essential for the execution of the workflow,
 			// so ignoring the error for now; we will revisit how to handle these errors later.
-			logger.Error("failed to parse link url", tag.URL(link.Url), tag.Error(err))
+			logger.Error("failed to parse link url", tag.URL(link.GetUrl()), tag.Error(err))
 			continue
 		}
 		nexusLinks = append(nexusLinks, nexus.Link{
@@ -578,19 +579,17 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 	oc.enrichNexusOperationMetrics(service, operation, options.Header)
 	defer oc.capturePanicAndRecordMetrics(&ctx, &retErr)
 
-	request := oc.matchingRequest(&nexuspb.Request{
+	request := oc.matchingRequest(nexuspb.Request_builder{
 		Header:        options.Header,
 		ScheduledTime: timestamppb.New(oc.requestStartTime),
-		Variant: &nexuspb.Request_CancelOperation{
-			CancelOperation: &nexuspb.CancelOperationRequest{
-				Service:        service,
-				Operation:      operation,
-				OperationToken: token,
-				// TODO(bergundy): Remove this fallback after the 1.27 release.
-				OperationId: token,
-			},
-		},
-	})
+		CancelOperation: nexuspb.CancelOperationRequest_builder{
+			Service:        service,
+			Operation:      operation,
+			OperationToken: token,
+			// TODO(bergundy): Remove this fallback after the 1.27 release.
+			OperationId: token,
+		}.Build(),
+	}.Build())
 	if err := oc.interceptRequest(ctx, request, options.Header); err != nil {
 		var notActiveErr *serviceerror.NamespaceNotActive
 		if errors.As(err, &notActiveErr) {
@@ -608,23 +607,23 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 		return commonnexus.ConvertGRPCError(err, false)
 	}
 	// Convert to standard Nexus SDK response.
-	switch t := response.GetOutcome().(type) {
-	case *matchingservice.DispatchNexusTaskResponse_HandlerError:
-		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error:" + t.HandlerError.GetErrorType()))
+	switch response.WhichOutcome() {
+	case matchingservice.DispatchNexusTaskResponse_HandlerError_case:
+		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error:" + response.GetHandlerError().GetErrorType()))
 
 		oc.nexusContext.setFailureSource(commonnexus.FailureSourceWorker)
 
-		err := h.convertOutcomeToNexusHandlerError(t)
+		err := h.convertOutcomeToNexusHandlerError(response.GetHandlerError())
 		return err
 
-	case *matchingservice.DispatchNexusTaskResponse_RequestTimeout:
+	case matchingservice.DispatchNexusTaskResponse_RequestTimeout_case:
 		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_timeout"))
 
 		oc.setFailureSource(commonnexus.FailureSourceWorker)
 
 		return nexus.HandlerErrorf(nexus.HandlerErrorTypeUpstreamTimeout, "upstream timeout")
 
-	case *matchingservice.DispatchNexusTaskResponse_Response:
+	case matchingservice.DispatchNexusTaskResponse_Response_case:
 		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("success"))
 		return nil
 	}
@@ -729,19 +728,19 @@ func (h *nexusHandler) nexusClientForActiveCluster(oc *operationContext, service
 	})
 }
 
-func (h *nexusHandler) convertOutcomeToNexusHandlerError(resp *matchingservice.DispatchNexusTaskResponse_HandlerError) *nexus.HandlerError {
+func (h *nexusHandler) convertOutcomeToNexusHandlerError(resp *nexuspb.HandlerError) *nexus.HandlerError {
 	var retryBehavior nexus.HandlerErrorRetryBehavior
 	// nolint:exhaustive // unspecified is the default
-	switch resp.HandlerError.RetryBehavior {
+	switch resp.GetRetryBehavior() {
 	case enumspb.NEXUS_HANDLER_ERROR_RETRY_BEHAVIOR_RETRYABLE:
 		retryBehavior = nexus.HandlerErrorRetryBehaviorRetryable
 	case enumspb.NEXUS_HANDLER_ERROR_RETRY_BEHAVIOR_NON_RETRYABLE:
 		retryBehavior = nexus.HandlerErrorRetryBehaviorNonRetryable
 	}
 	handlerError := &nexus.HandlerError{
-		Type: nexus.HandlerErrorType(resp.HandlerError.GetErrorType()),
+		Type: nexus.HandlerErrorType(resp.GetErrorType()),
 		Cause: &nexus.FailureError{
-			Failure: commonnexus.ProtoFailureToNexusFailure(resp.HandlerError.GetFailure()),
+			Failure: commonnexus.ProtoFailureToNexusFailure(resp.GetFailure()),
 		},
 		RetryBehavior: retryBehavior,
 	}

@@ -117,7 +117,7 @@ func (w *fairTaskWriter) pickPasses(tasks []*writeTaskRequest, bases []fairLevel
 	overrides := w.backlogMgr.pqMgr.GetFairnessWeightOverrides()
 
 	for i, task := range tasks {
-		pri := task.taskInfo.Priority
+		pri := task.taskInfo.GetPriority()
 		key := pri.GetFairnessKey()
 		weight := getEffectiveWeight(overrides, pri)
 		inc := max(1, int64(strideFactor/weight))

@@ -69,13 +69,13 @@ func normalizeAndValidate(
 		return serviceerror.NewInvalidArgument("taskQueue is not set")
 	}
 
-	enums.SetDefaultTaskQueueKind(&taskQueue.Kind)
+	taskQueue.SetKind(enums.DefaultTaskQueueKind(taskQueue.GetKind()))
 
 	if taskQueue.GetName() == "" {
 		if defaultName == "" {
 			return serviceerror.NewInvalidArgument("missing task queue name")
 		}
-		taskQueue.Name = defaultName
+		taskQueue.SetName(defaultName)
 	}
 
 	if err := validate(taskQueue.GetName(), maxIDLengthLimit, expectRootPartition); err != nil {

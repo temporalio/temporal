@@ -44,7 +44,7 @@ func ValidateAndNormalizeActivityAttributes(
 	priority *commonpb.Priority,
 	runTimeout *durationpb.Duration,
 ) error {
-	if err := tqid.NormalizeAndValidate(options.TaskQueue, "", maxIDLengthLimit); err != nil {
+	if err := tqid.NormalizeAndValidate(options.GetTaskQueue(), "", maxIDLengthLimit); err != nil {
 		return err
 	}
 
@@ -55,7 +55,7 @@ func ValidateAndNormalizeActivityAttributes(
 		return serviceerror.NewInvalidArgumentf("ActivityType is not set. ActivityID=%s", activityID)
 	}
 
-	if err := validateActivityRetryPolicy(namespaceID, options.RetryPolicy, getDefaultActivityRetrySettings); err != nil {
+	if err := validateActivityRetryPolicy(namespaceID, options.GetRetryPolicy(), getDefaultActivityRetrySettings); err != nil {
 		return err
 	}
 
@@ -123,20 +123,20 @@ func normalizeAndValidateTimeouts(
 
 	if scheduleToCloseSet {
 		if scheduleToStartSet {
-			options.ScheduleToStartTimeout = timestamp.MinDurationPtr(options.ScheduleToStartTimeout, options.ScheduleToCloseTimeout)
+			options.SetScheduleToStartTimeout(timestamp.MinDurationPtr(options.GetScheduleToStartTimeout(), options.GetScheduleToCloseTimeout()))
 		} else {
-			options.ScheduleToStartTimeout = options.ScheduleToCloseTimeout
+			options.SetScheduleToStartTimeout(options.GetScheduleToCloseTimeout())
 		}
 		if startToCloseSet {
-			options.StartToCloseTimeout = timestamp.MinDurationPtr(options.StartToCloseTimeout, options.ScheduleToCloseTimeout)
+			options.SetStartToCloseTimeout(timestamp.MinDurationPtr(options.GetStartToCloseTimeout(), options.GetScheduleToCloseTimeout()))
 		} else {
-			options.StartToCloseTimeout = options.ScheduleToCloseTimeout
+			options.SetStartToCloseTimeout(options.GetScheduleToCloseTimeout())
 		}
 	} else if startToCloseSet {
 		// We are in !validScheduleToClose due to the first if above
-		options.ScheduleToCloseTimeout = runTimeout
+		options.SetScheduleToCloseTimeout(runTimeout)
 		if !scheduleToStartSet {
-			options.ScheduleToStartTimeout = runTimeout
+			options.SetScheduleToStartTimeout(runTimeout)
 		}
 	} else {
 		// Deduction failed as there's not enough information to fill in missing timeouts.
@@ -146,32 +146,32 @@ func normalizeAndValidateTimeouts(
 	// ensure activity timeout never larger than workflow timeout
 	if runTimeout.AsDuration() > 0 {
 		runTimeoutDur := runTimeout.AsDuration()
-		if options.ScheduleToCloseTimeout.AsDuration() > runTimeoutDur {
-			options.ScheduleToCloseTimeout = runTimeout
+		if options.GetScheduleToCloseTimeout().AsDuration() > runTimeoutDur {
+			options.SetScheduleToCloseTimeout(runTimeout)
 		}
-		if options.ScheduleToStartTimeout.AsDuration() > runTimeoutDur {
-			options.ScheduleToStartTimeout = runTimeout
+		if options.GetScheduleToStartTimeout().AsDuration() > runTimeoutDur {
+			options.SetScheduleToStartTimeout(runTimeout)
 		}
-		if options.StartToCloseTimeout.AsDuration() > runTimeoutDur {
-			options.StartToCloseTimeout = runTimeout
+		if options.GetStartToCloseTimeout().AsDuration() > runTimeoutDur {
+			options.SetStartToCloseTimeout(runTimeout)
 		}
-		if options.HeartbeatTimeout.AsDuration() > runTimeoutDur {
-			options.HeartbeatTimeout = runTimeout
+		if options.GetHeartbeatTimeout().AsDuration() > runTimeoutDur {
+			options.SetHeartbeatTimeout(runTimeout)
 		}
 	}
 
-	options.HeartbeatTimeout = timestamp.MinDurationPtr(options.HeartbeatTimeout, options.StartToCloseTimeout)
+	options.SetHeartbeatTimeout(timestamp.MinDurationPtr(options.GetHeartbeatTimeout(), options.GetStartToCloseTimeout()))
 
 	return nil
 }
 
 func normalizeAndValidateIDPolicy(req *workflowservice.StartActivityExecutionRequest) error {
 	if req.GetIdReusePolicy() == enumspb.ACTIVITY_ID_REUSE_POLICY_UNSPECIFIED {
-		req.IdReusePolicy = enumspb.ACTIVITY_ID_REUSE_POLICY_ALLOW_DUPLICATE
+		req.SetIdReusePolicy(enumspb.ACTIVITY_ID_REUSE_POLICY_ALLOW_DUPLICATE)
 	}
 
 	if req.GetIdConflictPolicy() == enumspb.ACTIVITY_ID_CONFLICT_POLICY_UNSPECIFIED {
-		req.IdConflictPolicy = enumspb.ACTIVITY_ID_CONFLICT_POLICY_FAIL
+		req.SetIdConflictPolicy(enumspb.ACTIVITY_ID_CONFLICT_POLICY_FAIL)
 	}
 
 	return nil
@@ -212,7 +212,7 @@ func validateAndNormalizeSearchAttributes(
 	namespaceName := req.GetNamespace()
 
 	// Unalias search attributes for validation.
-	saToValidate := req.SearchAttributes
+	saToValidate := req.GetSearchAttributes()
 	if saMapperProvider != nil && saToValidate != nil {
 		var err error
 		saToValidate, err = searchattribute.UnaliasFields(saMapperProvider, saToValidate, namespaceName)
@@ -282,11 +282,11 @@ func ValidateActivityTaskToken(
 	a *Activity,
 	token *tokenspb.Task,
 ) error {
-	if a.Status != activitystatepb.ACTIVITY_EXECUTION_STATUS_STARTED &&
-		a.Status != activitystatepb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED {
+	if a.GetStatus() != activitystatepb.ACTIVITY_EXECUTION_STATUS_STARTED &&
+		a.GetStatus() != activitystatepb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED {
 		return serviceerror.NewNotFound("activity task not found")
 	}
-	if token.Attempt != a.LastAttempt.Get(ctx).GetCount() {
+	if token.GetAttempt() != a.LastAttempt.Get(ctx).GetCount() {
 		return serviceerror.NewNotFound("activity task not found")
 	}
 	return nil

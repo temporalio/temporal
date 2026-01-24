@@ -655,11 +655,11 @@ func TestPerNsWorkerManagerSubscription(t *testing.T) {
 
 func testns(name string, state enumspb.NamespaceState) *namespace.Namespace {
 	return namespace.NewLocalNamespaceForTest(
-		&persistencespb.NamespaceInfo{
+		persistencespb.NamespaceInfo_builder{
 			Id:    name,
 			State: state,
 			Name:  name,
-		},
+		}.Build(),
 		nil,
 		cluster.TestCurrentClusterName,
 	)
@@ -667,17 +667,17 @@ func testns(name string, state enumspb.NamespaceState) *namespace.Namespace {
 
 func testInactiveNS(name string, state enumspb.NamespaceState) *namespace.Namespace {
 	return namespace.NewNamespaceForTest(
-		&persistencespb.NamespaceInfo{
+		persistencespb.NamespaceInfo_builder{
 			Id:    name,
 			State: state,
 			Name:  name,
-		},
+		}.Build(),
 		nil,
 		true,
-		&persistencespb.NamespaceReplicationConfig{
+		persistencespb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: cluster.TestAlternativeClusterName, // not active
 			Clusters:          cluster.TestAllClusterNames,
-		},
+		}.Build(),
 		0,
 	)
 }

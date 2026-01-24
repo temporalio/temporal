@@ -158,12 +158,12 @@ func (e taskExecutor) loadInvocationArgs(
 
 		// CHASM internal callbacks make use of Nexus as their callback delivery
 		// mechanism, but with the internal delivery URL.
-		if variant.Url == chasm.NexusCompletionHandlerURL {
+		if variant.GetUrl() == chasm.NexusCompletionHandlerURL {
 			invokable = chasmInvocation{
 				nexus:      variant,
-				attempt:    callback.Attempt,
+				attempt:    callback.CallbackInfo.GetAttempt(),
 				completion: completion,
-				requestID:  callback.RequestId,
+				requestID:  callback.GetRequestId(),
 			}
 		} else {
 			invokable = nexusInvocation{
@@ -171,7 +171,7 @@ func (e taskExecutor) loadInvocationArgs(
 				completion: completion,
 				workflowID: ref.WorkflowKey.WorkflowID,
 				runID:      ref.WorkflowKey.RunID,
-				attempt:    callback.Attempt,
+				attempt:    callback.CallbackInfo.GetAttempt(),
 			}
 		}
 		return nil

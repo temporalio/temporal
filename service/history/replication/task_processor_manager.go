@@ -252,21 +252,21 @@ func (r *taskProcessorManagerImpl) cleanupReplicationTasks() error {
 	minAckedTaskID := r.shard.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).TaskID - 1
 	queueStates, ok := r.shard.GetQueueState(tasks.CategoryReplication)
 	if !ok {
-		queueStates = &persistencespb.QueueState{
+		queueStates = persistencespb.QueueState_builder{
 			ExclusiveReaderHighWatermark: nil,
 			ReaderStates:                 make(map[int64]*persistencespb.QueueReaderState),
-		}
+		}.Build()
 	}
 	for _, readerID := range targetReaderIDs(
 		currentClusterName,
 		r.shard.GetShardID(),
 		allClusterInfo,
 	) {
-		readerState, ok := queueStates.ReaderStates[readerID]
+		readerState, ok := queueStates.GetReaderStates()[readerID]
 		if !ok {
 			minAckedTaskID = min(minAckedTaskID, 0)
 		} else {
-			minAckedTaskID = min(minAckedTaskID, readerState.Scopes[0].Range.InclusiveMin.TaskId-1)
+			minAckedTaskID = min(minAckedTaskID, readerState.GetScopes()[0].GetRange().GetInclusiveMin().GetTaskId()-1)
 		}
 	}
 

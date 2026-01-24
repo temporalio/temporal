@@ -50,11 +50,11 @@ func (s *scheduledQueueSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockShard = shard.NewTestContext(
 		s.controller,
-		&persistencespb.ShardInfo{
+		persistencespb.ShardInfo_builder{
 			ShardId: 0,
 			RangeId: 1,
 			Owner:   "test-shard-owner",
-		},
+		}.Build(),
 		tests.NewDynamicConfig(),
 	)
 	s.mockExecutionManager = s.mockShard.Resource.ExecutionMgr

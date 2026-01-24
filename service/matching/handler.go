@@ -173,7 +173,7 @@ func (h *Handler) AddActivityTask(
 	if syncMatch {
 		metrics.SyncMatchLatencyPerTaskQueue.With(opMetrics).Record(time.Since(startT))
 	}
-	return &matchingservice.AddActivityTaskResponse{AssignedBuildId: assignedBuildId}, err
+	return matchingservice.AddActivityTaskResponse_builder{AssignedBuildId: assignedBuildId}.Build(), err
 }
 
 // AddWorkflowTask - adds a workflow task.
@@ -198,7 +198,7 @@ func (h *Handler) AddWorkflowTask(
 	if syncMatch {
 		metrics.SyncMatchLatencyPerTaskQueue.With(opMetrics).Record(time.Since(startT))
 	}
-	return &matchingservice.AddWorkflowTaskResponse{AssignedBuildId: assignedBuildId}, err
+	return matchingservice.AddWorkflowTaskResponse_builder{AssignedBuildId: assignedBuildId}.Build(), err
 }
 
 // PollActivityTaskQueue - long poll for an activity task.
@@ -316,15 +316,15 @@ func (h *Handler) DescribeTaskQueue(
 	}
 
 	// TODO: remove after 1.24.0-m3
-	if len(resp.DescResponse.Pollers) > 0 || resp.DescResponse.TaskQueueStatus != nil {
+	if len(resp.GetDescResponse().GetPollers()) > 0 || resp.GetDescResponse().HasTaskQueueStatus() {
 		// Expand pollerinfo and task queue status into tags 1 and 2 for old frontend to handle
 		// proto incompatibility. This only works without ugly protowire code because
 		// workflowservice.DescribeTaskQueueResponse and the previous version of
 		// matchingservice.DescribeTaskQueueResponse have the same first two fields.
-		oldResp := &workflowservice.DescribeTaskQueueResponse{
-			Pollers:         resp.DescResponse.Pollers,
-			TaskQueueStatus: resp.DescResponse.TaskQueueStatus,
-		}
+		oldResp := workflowservice.DescribeTaskQueueResponse_builder{
+			Pollers:         resp.GetDescResponse().GetPollers(),
+			TaskQueueStatus: resp.GetDescResponse().GetTaskQueueStatus(),
+		}.Build()
 		if b, err := proto.Marshal(oldResp); err == nil {
 			resp.ProtoReflect().SetUnknown(protoreflect.RawFields(b))
 		}
@@ -582,14 +582,14 @@ func (h *Handler) ListWorkers(
 	}
 	var workersInfo []*workerpb.WorkerInfo
 	for _, heartbeat := range resp.Workers {
-		workersInfo = append(workersInfo, &workerpb.WorkerInfo{
+		workersInfo = append(workersInfo, workerpb.WorkerInfo_builder{
 			WorkerHeartbeat: heartbeat,
-		})
+		}.Build())
 	}
-	return &matchingservice.ListWorkersResponse{
+	return matchingservice.ListWorkersResponse_builder{
 		WorkersInfo:   workersInfo,
 		NextPageToken: resp.NextPageToken,
-	}, nil
+	}.Build(), nil
 }
 
 func (h *Handler) UpdateFairnessState(
@@ -627,13 +627,13 @@ func (h *Handler) DescribeWorker(
 ) (*matchingservice.DescribeWorkerResponse, error) {
 	nsID := namespace.ID(request.GetNamespaceId())
 	hb, err := h.workersRegistry.DescribeWorker(
-		nsID, request.Request.GetWorkerInstanceKey())
+		nsID, request.GetRequest().GetWorkerInstanceKey())
 	if err != nil {
 		return nil, err
 	}
-	return &matchingservice.DescribeWorkerResponse{
-		WorkerInfo: &workerpb.WorkerInfo{
+	return matchingservice.DescribeWorkerResponse_builder{
+		WorkerInfo: workerpb.WorkerInfo_builder{
 			WorkerHeartbeat: hb,
-		},
-	}, nil
+		}.Build(),
+	}.Build(), nil
 }

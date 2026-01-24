@@ -44,7 +44,7 @@ func EventBatchesToVersionHistory(
 		versionHistory = versionhistory.NewVersionHistory(nil, nil)
 	}
 	for _, batch := range eventBatches {
-		for _, event := range batch.Events {
+		for _, event := range batch.GetEvents() {
 			err := versionhistory.AddOrUpdateVersionHistoryItem(versionHistory,
 				versionhistory.NewVersionHistoryItem(
 					event.GetEventId(),

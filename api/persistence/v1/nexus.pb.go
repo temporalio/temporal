@@ -8,7 +8,7 @@ package persistence
 
 import (
 	reflect "reflect"
-	sync "sync"
+	"strconv"
 	unsafe "unsafe"
 
 	v1 "go.temporal.io/api/common/v1"
@@ -29,15 +29,12 @@ const (
 // the worker target has a namespace name.
 // We store an ID in persistence to prevent namespace renames from breaking references.
 type NexusEndpointSpec struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Endpoint name, unique for this cluster. Must match `[a-zA-Z_][a-zA-Z0-9_]*`.
-	// Renaming an endpoint breaks all workflow callers that reference this endpoint, causing operations to fail.
-	Name        string      `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Description *v1.Payload `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
-	// Target to route requests to.
-	Target        *NexusEndpointTarget `protobuf:"bytes,3,opt,name=target,proto3" json:"target,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                  protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Name        string                 `protobuf:"bytes,1,opt,name=name,proto3"`
+	xxx_hidden_Description *v1.Payload            `protobuf:"bytes,2,opt,name=description,proto3"`
+	xxx_hidden_Target      *NexusEndpointTarget   `protobuf:"bytes,3,opt,name=target,proto3"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *NexusEndpointSpec) Reset() {
@@ -65,44 +62,90 @@ func (x *NexusEndpointSpec) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use NexusEndpointSpec.ProtoReflect.Descriptor instead.
-func (*NexusEndpointSpec) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_nexus_proto_rawDescGZIP(), []int{0}
-}
-
 func (x *NexusEndpointSpec) GetName() string {
 	if x != nil {
-		return x.Name
+		return x.xxx_hidden_Name
 	}
 	return ""
 }
 
 func (x *NexusEndpointSpec) GetDescription() *v1.Payload {
 	if x != nil {
-		return x.Description
+		return x.xxx_hidden_Description
 	}
 	return nil
 }
 
 func (x *NexusEndpointSpec) GetTarget() *NexusEndpointTarget {
 	if x != nil {
-		return x.Target
+		return x.xxx_hidden_Target
 	}
 	return nil
+}
+
+func (x *NexusEndpointSpec) SetName(v string) {
+	x.xxx_hidden_Name = v
+}
+
+func (x *NexusEndpointSpec) SetDescription(v *v1.Payload) {
+	x.xxx_hidden_Description = v
+}
+
+func (x *NexusEndpointSpec) SetTarget(v *NexusEndpointTarget) {
+	x.xxx_hidden_Target = v
+}
+
+func (x *NexusEndpointSpec) HasDescription() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Description != nil
+}
+
+func (x *NexusEndpointSpec) HasTarget() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Target != nil
+}
+
+func (x *NexusEndpointSpec) ClearDescription() {
+	x.xxx_hidden_Description = nil
+}
+
+func (x *NexusEndpointSpec) ClearTarget() {
+	x.xxx_hidden_Target = nil
+}
+
+type NexusEndpointSpec_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Endpoint name, unique for this cluster. Must match `[a-zA-Z_][a-zA-Z0-9_]*`.
+	// Renaming an endpoint breaks all workflow callers that reference this endpoint, causing operations to fail.
+	Name        string
+	Description *v1.Payload
+	// Target to route requests to.
+	Target *NexusEndpointTarget
+}
+
+func (b0 NexusEndpointSpec_builder) Build() *NexusEndpointSpec {
+	m0 := &NexusEndpointSpec{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Name = b.Name
+	x.xxx_hidden_Description = b.Description
+	x.xxx_hidden_Target = b.Target
+	return m0
 }
 
 // Target to route requests to.
 // Duplicated from the public API's temporal.api.nexus.v1.EndpointTarget where the worker target has a namespace name.
 // We store an ID in persistence to prevent namespace renames from breaking references.
 type NexusEndpointTarget struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Types that are valid to be assigned to Variant:
-	//
-	//	*NexusEndpointTarget_Worker_
-	//	*NexusEndpointTarget_External_
-	Variant       isNexusEndpointTarget_Variant `protobuf_oneof:"variant"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state              protoimpl.MessageState        `protogen:"opaque.v1"`
+	xxx_hidden_Variant isNexusEndpointTarget_Variant `protobuf_oneof:"variant"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *NexusEndpointTarget) Reset() {
@@ -130,21 +173,9 @@ func (x *NexusEndpointTarget) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use NexusEndpointTarget.ProtoReflect.Descriptor instead.
-func (*NexusEndpointTarget) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_nexus_proto_rawDescGZIP(), []int{1}
-}
-
-func (x *NexusEndpointTarget) GetVariant() isNexusEndpointTarget_Variant {
-	if x != nil {
-		return x.Variant
-	}
-	return nil
-}
-
 func (x *NexusEndpointTarget) GetWorker() *NexusEndpointTarget_Worker {
 	if x != nil {
-		if x, ok := x.Variant.(*NexusEndpointTarget_Worker_); ok {
+		if x, ok := x.xxx_hidden_Variant.(*nexusEndpointTarget_Worker_); ok {
 			return x.Worker
 		}
 	}
@@ -153,45 +184,147 @@ func (x *NexusEndpointTarget) GetWorker() *NexusEndpointTarget_Worker {
 
 func (x *NexusEndpointTarget) GetExternal() *NexusEndpointTarget_External {
 	if x != nil {
-		if x, ok := x.Variant.(*NexusEndpointTarget_External_); ok {
+		if x, ok := x.xxx_hidden_Variant.(*nexusEndpointTarget_External_); ok {
 			return x.External
 		}
 	}
 	return nil
 }
 
+func (x *NexusEndpointTarget) SetWorker(v *NexusEndpointTarget_Worker) {
+	if v == nil {
+		x.xxx_hidden_Variant = nil
+		return
+	}
+	x.xxx_hidden_Variant = &nexusEndpointTarget_Worker_{v}
+}
+
+func (x *NexusEndpointTarget) SetExternal(v *NexusEndpointTarget_External) {
+	if v == nil {
+		x.xxx_hidden_Variant = nil
+		return
+	}
+	x.xxx_hidden_Variant = &nexusEndpointTarget_External_{v}
+}
+
+func (x *NexusEndpointTarget) HasVariant() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Variant != nil
+}
+
+func (x *NexusEndpointTarget) HasWorker() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_Variant.(*nexusEndpointTarget_Worker_)
+	return ok
+}
+
+func (x *NexusEndpointTarget) HasExternal() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_Variant.(*nexusEndpointTarget_External_)
+	return ok
+}
+
+func (x *NexusEndpointTarget) ClearVariant() {
+	x.xxx_hidden_Variant = nil
+}
+
+func (x *NexusEndpointTarget) ClearWorker() {
+	if _, ok := x.xxx_hidden_Variant.(*nexusEndpointTarget_Worker_); ok {
+		x.xxx_hidden_Variant = nil
+	}
+}
+
+func (x *NexusEndpointTarget) ClearExternal() {
+	if _, ok := x.xxx_hidden_Variant.(*nexusEndpointTarget_External_); ok {
+		x.xxx_hidden_Variant = nil
+	}
+}
+
+const NexusEndpointTarget_Variant_not_set_case case_NexusEndpointTarget_Variant = 0
+const NexusEndpointTarget_Worker_case case_NexusEndpointTarget_Variant = 1
+const NexusEndpointTarget_External_case case_NexusEndpointTarget_Variant = 2
+
+func (x *NexusEndpointTarget) WhichVariant() case_NexusEndpointTarget_Variant {
+	if x == nil {
+		return NexusEndpointTarget_Variant_not_set_case
+	}
+	switch x.xxx_hidden_Variant.(type) {
+	case *nexusEndpointTarget_Worker_:
+		return NexusEndpointTarget_Worker_case
+	case *nexusEndpointTarget_External_:
+		return NexusEndpointTarget_External_case
+	default:
+		return NexusEndpointTarget_Variant_not_set_case
+	}
+}
+
+type NexusEndpointTarget_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Fields of oneof xxx_hidden_Variant:
+	Worker   *NexusEndpointTarget_Worker
+	External *NexusEndpointTarget_External
+	// -- end of xxx_hidden_Variant
+}
+
+func (b0 NexusEndpointTarget_builder) Build() *NexusEndpointTarget {
+	m0 := &NexusEndpointTarget{}
+	b, x := &b0, m0
+	_, _ = b, x
+	if b.Worker != nil {
+		x.xxx_hidden_Variant = &nexusEndpointTarget_Worker_{b.Worker}
+	}
+	if b.External != nil {
+		x.xxx_hidden_Variant = &nexusEndpointTarget_External_{b.External}
+	}
+	return m0
+}
+
+type case_NexusEndpointTarget_Variant protoreflect.FieldNumber
+
+func (x case_NexusEndpointTarget_Variant) String() string {
+	switch x {
+	case NexusEndpointTarget_Variant_not_set_case:
+		return "NexusEndpointTargetVariantNotSetCase"
+	case NexusEndpointTarget_Worker_case:
+		return "NexusEndpointTargetWorkerCase"
+	case NexusEndpointTarget_External_case:
+		return "NexusEndpointTargetExternalCase"
+	default:
+		return strconv.Itoa(int(x))
+	}
+
+}
+
 type isNexusEndpointTarget_Variant interface {
 	isNexusEndpointTarget_Variant()
 }
 
-type NexusEndpointTarget_Worker_ struct {
+type nexusEndpointTarget_Worker_ struct {
 	Worker *NexusEndpointTarget_Worker `protobuf:"bytes,1,opt,name=worker,proto3,oneof"`
 }
 
-type NexusEndpointTarget_External_ struct {
+type nexusEndpointTarget_External_ struct {
 	External *NexusEndpointTarget_External `protobuf:"bytes,2,opt,name=external,proto3,oneof"`
 }
 
-func (*NexusEndpointTarget_Worker_) isNexusEndpointTarget_Variant() {}
+func (*nexusEndpointTarget_Worker_) isNexusEndpointTarget_Variant() {}
 
-func (*NexusEndpointTarget_External_) isNexusEndpointTarget_Variant() {}
+func (*nexusEndpointTarget_External_) isNexusEndpointTarget_Variant() {}
 
 type NexusEndpoint struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// The last recorded cluster-local Hybrid Logical Clock timestamp for _this_ endpoint.
-	// Updated whenever the endpoint is directly updated due to a user action but not when applying replication events.
-	// The clock is referenced when new timestamps are generated to ensure it produces monotonically increasing
-	// timestamps.
-	Clock *v11.HybridLogicalClock `protobuf:"bytes,1,opt,name=clock,proto3" json:"clock,omitempty"`
-	// Endpoint specification. This is a mirror of the public API and is intended to be mutable.
-	Spec *NexusEndpointSpec `protobuf:"bytes,2,opt,name=spec,proto3" json:"spec,omitempty"`
-	// The date and time when the endpoint was created.
-	// (-- api-linter: core::0142::time-field-names=disabled
-	//
-	//	aip.dev/not-precedent: Not following linter rules. --)
-	CreatedTime   *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=created_time,json=createdTime,proto3" json:"created_time,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                  protoimpl.MessageState  `protogen:"opaque.v1"`
+	xxx_hidden_Clock       *v11.HybridLogicalClock `protobuf:"bytes,1,opt,name=clock,proto3"`
+	xxx_hidden_Spec        *NexusEndpointSpec      `protobuf:"bytes,2,opt,name=spec,proto3"`
+	xxx_hidden_CreatedTime *timestamppb.Timestamp  `protobuf:"bytes,3,opt,name=created_time,json=createdTime,proto3"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *NexusEndpoint) Reset() {
@@ -219,40 +352,107 @@ func (x *NexusEndpoint) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use NexusEndpoint.ProtoReflect.Descriptor instead.
-func (*NexusEndpoint) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_nexus_proto_rawDescGZIP(), []int{2}
-}
-
 func (x *NexusEndpoint) GetClock() *v11.HybridLogicalClock {
 	if x != nil {
-		return x.Clock
+		return x.xxx_hidden_Clock
 	}
 	return nil
 }
 
 func (x *NexusEndpoint) GetSpec() *NexusEndpointSpec {
 	if x != nil {
-		return x.Spec
+		return x.xxx_hidden_Spec
 	}
 	return nil
 }
 
 func (x *NexusEndpoint) GetCreatedTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.CreatedTime
+		return x.xxx_hidden_CreatedTime
 	}
 	return nil
 }
 
+func (x *NexusEndpoint) SetClock(v *v11.HybridLogicalClock) {
+	x.xxx_hidden_Clock = v
+}
+
+func (x *NexusEndpoint) SetSpec(v *NexusEndpointSpec) {
+	x.xxx_hidden_Spec = v
+}
+
+func (x *NexusEndpoint) SetCreatedTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_CreatedTime = v
+}
+
+func (x *NexusEndpoint) HasClock() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Clock != nil
+}
+
+func (x *NexusEndpoint) HasSpec() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Spec != nil
+}
+
+func (x *NexusEndpoint) HasCreatedTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_CreatedTime != nil
+}
+
+func (x *NexusEndpoint) ClearClock() {
+	x.xxx_hidden_Clock = nil
+}
+
+func (x *NexusEndpoint) ClearSpec() {
+	x.xxx_hidden_Spec = nil
+}
+
+func (x *NexusEndpoint) ClearCreatedTime() {
+	x.xxx_hidden_CreatedTime = nil
+}
+
+type NexusEndpoint_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// The last recorded cluster-local Hybrid Logical Clock timestamp for _this_ endpoint.
+	// Updated whenever the endpoint is directly updated due to a user action but not when applying replication events.
+	// The clock is referenced when new timestamps are generated to ensure it produces monotonically increasing
+	// timestamps.
+	Clock *v11.HybridLogicalClock
+	// Endpoint specification. This is a mirror of the public API and is intended to be mutable.
+	Spec *NexusEndpointSpec
+	// The date and time when the endpoint was created.
+	// (-- api-linter: core::0142::time-field-names=disabled
+	//
+	//	aip.dev/not-precedent: Not following linter rules. --)
+	CreatedTime *timestamppb.Timestamp
+}
+
+func (b0 NexusEndpoint_builder) Build() *NexusEndpoint {
+	m0 := &NexusEndpoint{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Clock = b.Clock
+	x.xxx_hidden_Spec = b.Spec
+	x.xxx_hidden_CreatedTime = b.CreatedTime
+	return m0
+}
+
 // Container for a version, a UUID, and a NexusEndpoint.
 type NexusEndpointEntry struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Version       int64                  `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
-	Id            string                 `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
-	Endpoint      *NexusEndpoint         `protobuf:"bytes,3,opt,name=endpoint,proto3" json:"endpoint,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state               protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Version  int64                  `protobuf:"varint,1,opt,name=version,proto3"`
+	xxx_hidden_Id       string                 `protobuf:"bytes,2,opt,name=id,proto3"`
+	xxx_hidden_Endpoint *NexusEndpoint         `protobuf:"bytes,3,opt,name=endpoint,proto3"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *NexusEndpointEntry) Reset() {
@@ -280,41 +480,75 @@ func (x *NexusEndpointEntry) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use NexusEndpointEntry.ProtoReflect.Descriptor instead.
-func (*NexusEndpointEntry) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_nexus_proto_rawDescGZIP(), []int{3}
-}
-
 func (x *NexusEndpointEntry) GetVersion() int64 {
 	if x != nil {
-		return x.Version
+		return x.xxx_hidden_Version
 	}
 	return 0
 }
 
 func (x *NexusEndpointEntry) GetId() string {
 	if x != nil {
-		return x.Id
+		return x.xxx_hidden_Id
 	}
 	return ""
 }
 
 func (x *NexusEndpointEntry) GetEndpoint() *NexusEndpoint {
 	if x != nil {
-		return x.Endpoint
+		return x.xxx_hidden_Endpoint
 	}
 	return nil
 }
 
+func (x *NexusEndpointEntry) SetVersion(v int64) {
+	x.xxx_hidden_Version = v
+}
+
+func (x *NexusEndpointEntry) SetId(v string) {
+	x.xxx_hidden_Id = v
+}
+
+func (x *NexusEndpointEntry) SetEndpoint(v *NexusEndpoint) {
+	x.xxx_hidden_Endpoint = v
+}
+
+func (x *NexusEndpointEntry) HasEndpoint() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Endpoint != nil
+}
+
+func (x *NexusEndpointEntry) ClearEndpoint() {
+	x.xxx_hidden_Endpoint = nil
+}
+
+type NexusEndpointEntry_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Version  int64
+	Id       string
+	Endpoint *NexusEndpoint
+}
+
+func (b0 NexusEndpointEntry_builder) Build() *NexusEndpointEntry {
+	m0 := &NexusEndpointEntry{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Version = b.Version
+	x.xxx_hidden_Id = b.Id
+	x.xxx_hidden_Endpoint = b.Endpoint
+	return m0
+}
+
 // Target a worker polling on a Nexus task queue in a specific namespace.
 type NexusEndpointTarget_Worker struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Namespace ID to route requests to.
-	NamespaceId string `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	// Nexus task queue to route requests to.
-	TaskQueue     string `protobuf:"bytes,2,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                  protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_TaskQueue   string                 `protobuf:"bytes,2,opt,name=task_queue,json=taskQueue,proto3"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *NexusEndpointTarget_Worker) Reset() {
@@ -342,37 +576,54 @@ func (x *NexusEndpointTarget_Worker) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use NexusEndpointTarget_Worker.ProtoReflect.Descriptor instead.
-func (*NexusEndpointTarget_Worker) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_nexus_proto_rawDescGZIP(), []int{1, 0}
-}
-
 func (x *NexusEndpointTarget_Worker) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *NexusEndpointTarget_Worker) GetTaskQueue() string {
 	if x != nil {
-		return x.TaskQueue
+		return x.xxx_hidden_TaskQueue
 	}
 	return ""
+}
+
+func (x *NexusEndpointTarget_Worker) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *NexusEndpointTarget_Worker) SetTaskQueue(v string) {
+	x.xxx_hidden_TaskQueue = v
+}
+
+type NexusEndpointTarget_Worker_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Namespace ID to route requests to.
+	NamespaceId string
+	// Nexus task queue to route requests to.
+	TaskQueue string
+}
+
+func (b0 NexusEndpointTarget_Worker_builder) Build() *NexusEndpointTarget_Worker {
+	m0 := &NexusEndpointTarget_Worker{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_TaskQueue = b.TaskQueue
+	return m0
 }
 
 // Target an external server by URL.
 // At a later point, this will support providing credentials, in the meantime, an http.RoundTripper can be injected
 // into the server to modify the request.
 type NexusEndpointTarget_External struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// URL to call.
-	// (-- api-linter: core::0140::uri=disabled
-	//
-	//	aip.dev/not-precedent: Not following linter rules. --)
-	Url           string `protobuf:"bytes,1,opt,name=url,proto3" json:"url,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Url string                 `protobuf:"bytes,1,opt,name=url,proto3"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *NexusEndpointTarget_External) Reset() {
@@ -400,16 +651,33 @@ func (x *NexusEndpointTarget_External) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use NexusEndpointTarget_External.ProtoReflect.Descriptor instead.
-func (*NexusEndpointTarget_External) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_nexus_proto_rawDescGZIP(), []int{1, 1}
-}
-
 func (x *NexusEndpointTarget_External) GetUrl() string {
 	if x != nil {
-		return x.Url
+		return x.xxx_hidden_Url
 	}
 	return ""
+}
+
+func (x *NexusEndpointTarget_External) SetUrl(v string) {
+	x.xxx_hidden_Url = v
+}
+
+type NexusEndpointTarget_External_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// URL to call.
+	// (-- api-linter: core::0140::uri=disabled
+	//
+	//	aip.dev/not-precedent: Not following linter rules. --)
+	Url string
+}
+
+func (b0 NexusEndpointTarget_External_builder) Build() *NexusEndpointTarget_External {
+	m0 := &NexusEndpointTarget_External{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Url = b.Url
+	return m0
 }
 
 var File_temporal_server_api_persistence_v1_nexus_proto protoreflect.FileDescriptor
@@ -439,18 +707,6 @@ const file_temporal_server_api_persistence_v1_nexus_proto_rawDesc = "" +
 	"\aversion\x18\x01 \x01(\x03R\aversion\x12\x0e\n" +
 	"\x02id\x18\x02 \x01(\tR\x02id\x12M\n" +
 	"\bendpoint\x18\x03 \x01(\v21.temporal.server.api.persistence.v1.NexusEndpointR\bendpointB6Z4go.temporal.io/server/api/persistence/v1;persistenceb\x06proto3"
-
-var (
-	file_temporal_server_api_persistence_v1_nexus_proto_rawDescOnce sync.Once
-	file_temporal_server_api_persistence_v1_nexus_proto_rawDescData []byte
-)
-
-func file_temporal_server_api_persistence_v1_nexus_proto_rawDescGZIP() []byte {
-	file_temporal_server_api_persistence_v1_nexus_proto_rawDescOnce.Do(func() {
-		file_temporal_server_api_persistence_v1_nexus_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_api_persistence_v1_nexus_proto_rawDesc), len(file_temporal_server_api_persistence_v1_nexus_proto_rawDesc)))
-	})
-	return file_temporal_server_api_persistence_v1_nexus_proto_rawDescData
-}
 
 var file_temporal_server_api_persistence_v1_nexus_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_temporal_server_api_persistence_v1_nexus_proto_goTypes = []any{
@@ -486,8 +742,8 @@ func file_temporal_server_api_persistence_v1_nexus_proto_init() {
 		return
 	}
 	file_temporal_server_api_persistence_v1_nexus_proto_msgTypes[1].OneofWrappers = []any{
-		(*NexusEndpointTarget_Worker_)(nil),
-		(*NexusEndpointTarget_External_)(nil),
+		(*nexusEndpointTarget_Worker_)(nil),
+		(*nexusEndpointTarget_External_)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{

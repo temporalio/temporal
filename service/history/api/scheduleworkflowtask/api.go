@@ -18,18 +18,18 @@ func Invoke(
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) error {
 
-	_, err := api.GetActiveNamespace(shardContext, namespace.ID(req.GetNamespaceId()), req.WorkflowExecution.WorkflowId)
+	_, err := api.GetActiveNamespace(shardContext, namespace.ID(req.GetNamespaceId()), req.GetWorkflowExecution().GetWorkflowId())
 	if err != nil {
 		return err
 	}
 
 	return api.GetAndUpdateWorkflowWithNew(
 		ctx,
-		req.ChildClock,
+		req.GetChildClock(),
 		definition.NewWorkflowKey(
-			req.NamespaceId,
-			req.WorkflowExecution.WorkflowId,
-			req.WorkflowExecution.RunId,
+			req.GetNamespaceId(),
+			req.GetWorkflowExecution().GetWorkflowId(),
+			req.GetWorkflowExecution().GetRunId(),
 		),
 		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
 			mutableState := workflowLease.GetMutableState()
@@ -37,7 +37,7 @@ func Invoke(
 				return nil, consts.ErrWorkflowCompleted
 			}
 
-			if req.IsFirstWorkflowTask && mutableState.HadOrHasWorkflowTask() {
+			if req.GetIsFirstWorkflowTask() && mutableState.HadOrHasWorkflowTask() {
 				return &api.UpdateWorkflowAction{
 					Noop: true,
 				}, nil
@@ -47,7 +47,7 @@ func Invoke(
 			if err != nil {
 				return nil, err
 			}
-			if _, err := mutableState.AddFirstWorkflowTaskScheduled(req.ParentClock, startEvent, false); err != nil {
+			if _, err := mutableState.AddFirstWorkflowTaskScheduled(req.GetParentClock(), startEvent, false); err != nil {
 				return nil, err
 			}
 

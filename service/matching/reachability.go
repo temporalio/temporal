@@ -185,7 +185,7 @@ func (rc *reachabilityCalculator) getBuildIdsOfInterest(
 	}
 
 	includedRules := util.FilterSlice(slices.Clone(rc.redirectRules), func(rr *persistencespb.RedirectRule) bool {
-		return rr.DeleteTimestamp == nil || withinRuleInclusionPeriod(rr.DeleteTimestamp)
+		return !rr.HasDeleteTimestamp() || withinRuleInclusionPeriod(rr.GetDeleteTimestamp())
 	})
 
 	return append(getUpstreamBuildIds(buildId, includedRules), buildId)

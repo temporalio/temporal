@@ -62,11 +62,11 @@ func ProtoFailureToNexusFailure(failure *nexuspb.Failure) nexus.Failure {
 // NexusFailureToProtoFailure converts a Nexus SDK Failure to a proto Nexus Failure.
 // Always returns a non-nil value.
 func NexusFailureToProtoFailure(failure nexus.Failure) *nexuspb.Failure {
-	return &nexuspb.Failure{
+	return nexuspb.Failure_builder{
 		Message:  failure.Message,
 		Metadata: failure.Metadata,
 		Details:  failure.Details,
-	}
+	}.Build()
 }
 
 // APIFailureToNexusFailure converts an API proto Failure to a Nexus SDK Failure setting the metadata "type" field to
@@ -76,9 +76,10 @@ func NexusFailureToProtoFailure(failure nexus.Failure) *nexuspb.Failure {
 func APIFailureToNexusFailure(failure *failurepb.Failure) (nexus.Failure, error) {
 	// Unset message so it's not serialized in the details.
 	var message string
-	message, failure.Message = failure.Message, ""
+	message = failure.GetMessage()
+	failure.SetMessage("")
 	data, err := protojson.Marshal(failure)
-	failure.Message = message
+	failure.SetMessage(message)
 
 	if err != nil {
 		return nexus.Failure{}, err
@@ -107,17 +108,15 @@ func NexusFailureToAPIFailure(failure nexus.Failure, retryable bool) (*failurepb
 		if err != nil {
 			return nil, err
 		}
-		apiFailure.FailureInfo = &failurepb.Failure_ApplicationFailureInfo{
-			ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
-				// Make up a type here, it's not part of the Nexus Failure spec.
-				Type:         "NexusFailure",
-				Details:      payloads,
-				NonRetryable: !retryable,
-			},
-		}
+		apiFailure.SetApplicationFailureInfo(failurepb.ApplicationFailureInfo_builder{
+			// Make up a type here, it's not part of the Nexus Failure spec.
+			Type:         "NexusFailure",
+			Details:      payloads,
+			NonRetryable: !retryable,
+		}.Build())
 	}
 	// Ensure this always gets written.
-	apiFailure.Message = failure.Message
+	apiFailure.SetMessage(failure.Message)
 	return apiFailure, nil
 }
 
@@ -148,14 +147,12 @@ func OperationErrorToTemporalFailure(opErr *nexus.OperationError) (*failurepb.Fa
 		if err != nil {
 			return nil, err
 		}
-		return &failurepb.Failure{
+		return failurepb.Failure_builder{
 			Message: nexusFailure.Message,
-			FailureInfo: &failurepb.Failure_CanceledFailureInfo{
-				CanceledFailureInfo: &failurepb.CanceledFailureInfo{
-					Details: payloads,
-				},
-			},
-		}, nil
+			CanceledFailureInfo: failurepb.CanceledFailureInfo_builder{
+				Details: payloads,
+			}.Build(),
+		}.Build(), nil
 	}
 
 	return NexusFailureToAPIFailure(nexusFailure, false)
@@ -171,16 +168,16 @@ func nexusFailureMetadataToPayloads(failure nexus.Failure) (*commonpb.Payloads, 
 	if err != nil {
 		return nil, err
 	}
-	return &commonpb.Payloads{
+	return commonpb.Payloads_builder{
 		Payloads: []*commonpb.Payload{
-			{
+			commonpb.Payload_builder{
 				Metadata: map[string][]byte{
 					"encoding": []byte("json/plain"),
 				},
 				Data: data,
-			},
+			}.Build(),
 		},
-	}, err
+	}.Build(), err
 }
 
 // ConvertGRPCError converts either a serviceerror or a gRPC status error into a Nexus HandlerError if possible.

@@ -189,9 +189,9 @@ func (s *StreamSenderImpl) recvEventLoop() (retErr error) {
 		if err != nil {
 			return NewStreamError("StreamSender failed to receive", err)
 		}
-		switch attr := req.GetAttributes().(type) {
-		case *historyservice.StreamWorkflowReplicationMessagesRequest_SyncReplicationState:
-			if err := s.recvSyncReplicationState(attr.SyncReplicationState); err != nil {
+		switch attr := req.WhichAttributes(); attr {
+		case historyservice.StreamWorkflowReplicationMessagesRequest_SyncReplicationState_case:
+			if err := s.recvSyncReplicationState(req.GetSyncReplicationState()); err != nil {
 				return fmt.Errorf("streamSender unable to handle SyncReplicationState: %w", err)
 			}
 			metrics.ReplicationTasksRecv.With(s.metrics).Record(
@@ -247,81 +247,81 @@ func (s *StreamSenderImpl) recvSyncReplicationState(
 	var readerState *persistencespb.QueueReaderState
 	switch s.isTieredStackEnabled {
 	case true:
-		if attr.HighPriorityState == nil || attr.LowPriorityState == nil {
+		if !attr.HasHighPriorityState() || !attr.HasLowPriorityState() {
 			return NewStreamError("streamSender encountered unsupported SyncReplicationState", nil)
 		}
-		readerState = &persistencespb.QueueReaderState{
+		readerState = persistencespb.QueueReaderState_builder{
 			Scopes: []*persistencespb.QueueSliceScope{
 				// index 0 is for overall low watermark. In tiered stack it is Min(LowWatermark-high priority, LowWatermark-low priority)
-				{
-					Range: &persistencespb.QueueSliceRange{
+				persistencespb.QueueSliceScope_builder{
+					Range: persistencespb.QueueSliceRange_builder{
 						InclusiveMin: shard.ConvertToPersistenceTaskKey(
 							tasks.NewImmediateKey(attr.GetInclusiveLowWatermark()),
 						),
 						ExclusiveMax: shard.ConvertToPersistenceTaskKey(
 							tasks.NewImmediateKey(math.MaxInt64),
 						),
-					},
-					Predicate: &persistencespb.Predicate{
-						PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
-						Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
-					},
-				},
+					}.Build(),
+					Predicate: persistencespb.Predicate_builder{
+						PredicateType:                enumsspb.PREDICATE_TYPE_UNIVERSAL,
+						UniversalPredicateAttributes: &persistencespb.UniversalPredicateAttributes{},
+					}.Build(),
+				}.Build(),
 				// index 1 is for high priority
-				{
-					Range: &persistencespb.QueueSliceRange{
+				persistencespb.QueueSliceScope_builder{
+					Range: persistencespb.QueueSliceRange_builder{
 						InclusiveMin: shard.ConvertToPersistenceTaskKey(
 							tasks.NewImmediateKey(attr.GetHighPriorityState().GetInclusiveLowWatermark()),
 						),
 						ExclusiveMax: shard.ConvertToPersistenceTaskKey(
 							tasks.NewImmediateKey(math.MaxInt64),
 						),
-					},
-					Predicate: &persistencespb.Predicate{
-						PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
-						Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
-					},
-				},
+					}.Build(),
+					Predicate: persistencespb.Predicate_builder{
+						PredicateType:                enumsspb.PREDICATE_TYPE_UNIVERSAL,
+						UniversalPredicateAttributes: &persistencespb.UniversalPredicateAttributes{},
+					}.Build(),
+				}.Build(),
 				// index 2 is for low priority
-				{
-					Range: &persistencespb.QueueSliceRange{
+				persistencespb.QueueSliceScope_builder{
+					Range: persistencespb.QueueSliceRange_builder{
 						InclusiveMin: shard.ConvertToPersistenceTaskKey(
 							tasks.NewImmediateKey(attr.GetLowPriorityState().GetInclusiveLowWatermark()),
 						),
 						ExclusiveMax: shard.ConvertToPersistenceTaskKey(
 							tasks.NewImmediateKey(math.MaxInt64),
 						),
-					},
-					Predicate: &persistencespb.Predicate{
-						PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
-						Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
-					},
-				},
+					}.Build(),
+					Predicate: persistencespb.Predicate_builder{
+						PredicateType:                enumsspb.PREDICATE_TYPE_UNIVERSAL,
+						UniversalPredicateAttributes: &persistencespb.UniversalPredicateAttributes{},
+					}.Build(),
+				}.Build(),
 			},
-		}
+		}.Build()
 	case false:
-		if attr.HighPriorityState != nil || attr.LowPriorityState != nil {
+		if attr.HasHighPriorityState() || attr.HasLowPriorityState() {
 			return NewStreamError("streamSender encountered unsupported SyncReplicationState", nil)
 		}
-		readerState = &persistencespb.QueueReaderState{
+		readerState = persistencespb.QueueReaderState_builder{
 			Scopes: []*persistencespb.QueueSliceScope{
 				// in single stack, index 0 is for overall low watermark
-				{
-					Range: &persistencespb.QueueSliceRange{
+				persistencespb.QueueSliceScope_builder{
+					Range: persistencespb.QueueSliceRange_builder{
 						InclusiveMin: shard.ConvertToPersistenceTaskKey(
 							tasks.NewImmediateKey(attr.GetInclusiveLowWatermark()),
 						),
 						ExclusiveMax: shard.ConvertToPersistenceTaskKey(
 							tasks.NewImmediateKey(math.MaxInt64),
 						),
-					},
-					Predicate: &persistencespb.Predicate{
-						PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
-						Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
-					},
-				},
+					}.Build(),
+					Predicate: persistencespb.Predicate_builder{
+						PredicateType:                enumsspb.PREDICATE_TYPE_UNIVERSAL,
+						UniversalPredicateAttributes: &persistencespb.UniversalPredicateAttributes{},
+					}.Build(),
+				}.Build(),
 			},
-		}
+		}.Build()
 	}
 
 	inclusiveLowWatermark := attr.GetInclusiveLowWatermark()
@@ -348,8 +348,8 @@ func (s *StreamSenderImpl) recvSyncReplicationState(
 		// and Low Priority channel is used for force replication closed workflow.
 		return s.shardContext.UpdateRemoteReaderInfo(
 			readerID,
-			attr.HighPriorityState.InclusiveLowWatermark-1,
-			attr.HighPriorityState.InclusiveLowWatermarkTime.AsTime(),
+			attr.GetHighPriorityState().GetInclusiveLowWatermark()-1,
+			attr.GetHighPriorityState().GetInclusiveLowWatermarkTime().AsTime(),
 		)
 	}
 	return s.shardContext.UpdateRemoteReaderInfo(
@@ -375,7 +375,7 @@ func (s *StreamSenderImpl) sendCatchUp(priority enumsspb.TaskPriority) (int64, e
 		s.logger.Debug("StreamSender queueState not found")
 		catchupBeginInclusiveWatermark = catchupEndExclusiveWatermark
 	} else {
-		readerState, ok := queueState.ReaderStates[readerID]
+		readerState, ok := queueState.GetReaderStates()[readerID]
 		if !ok {
 			s.logger.Debug(fmt.Sprintf("StreamSender readerState not found, readerID %v", readerID))
 			catchupBeginInclusiveWatermark = catchupEndExclusiveWatermark
@@ -402,12 +402,12 @@ func (s *StreamSenderImpl) getSendCatchupBeginInclusiveWatermark(readerState *pe
 				In this case, it is safe to use the overall low watermark as the beginInclusiveWatermark, as long as we always guarantee
 				the overall low watermark is Min(lowPriorityLowWatermark, highPriorityLowWatermark)
 			*/
-			if len(readerState.Scopes) != 3 {
+			if len(readerState.GetScopes()) != 3 {
 				return 0
 			}
 			return 1
 		case enumsspb.TASK_PRIORITY_LOW:
-			if len(readerState.Scopes) != 3 {
+			if len(readerState.GetScopes()) != 3 {
 				return 0
 			}
 			return 2
@@ -417,7 +417,7 @@ func (s *StreamSenderImpl) getSendCatchupBeginInclusiveWatermark(readerState *pe
 			return 0
 		}
 	}
-	return readerState.Scopes[getReaderScopesIndex(priority)].Range.InclusiveMin.TaskId
+	return readerState.GetScopes()[getReaderScopesIndex(priority)].GetRange().GetInclusiveMin().GetTaskId()
 }
 
 func (s *StreamSenderImpl) sendLive(
@@ -476,16 +476,14 @@ func (s *StreamSenderImpl) sendTasks(
 		return err
 	}
 	if beginInclusiveWatermark == endExclusiveWatermark {
-		return s.sendToStream(&historyservice.StreamWorkflowReplicationMessagesResponse{
-			Attributes: &historyservice.StreamWorkflowReplicationMessagesResponse_Messages{
-				Messages: &replicationspb.WorkflowReplicationMessages{
-					ReplicationTasks:           nil,
-					ExclusiveHighWatermark:     endExclusiveWatermark,
-					ExclusiveHighWatermarkTime: timestamp.TimeNowPtrUtc(),
-					Priority:                   priority,
-				},
-			},
-		})
+		return s.sendToStream(historyservice.StreamWorkflowReplicationMessagesResponse_builder{
+			Messages: replicationspb.WorkflowReplicationMessages_builder{
+				ReplicationTasks:           nil,
+				ExclusiveHighWatermark:     endExclusiveWatermark,
+				ExclusiveHighWatermarkTime: timestamp.TimeNowPtrUtc(),
+				Priority:                   priority,
+			}.Build(),
+		}.Build())
 	}
 
 	callerInfo := getReplicaitonCallerInfo(priority)
@@ -516,15 +514,13 @@ Loop:
 		// so it will not ACK back to sender, sender will not update the ACK level.
 		// i.e. in tiered stack, if no low priority task in queue, we should still send watermark info to receiver to let it update ACK level.
 		if skipCount > TaskMaxSkipCount {
-			if err := s.sendToStream(&historyservice.StreamWorkflowReplicationMessagesResponse{
-				Attributes: &historyservice.StreamWorkflowReplicationMessagesResponse_Messages{
-					Messages: &replicationspb.WorkflowReplicationMessages{
-						ExclusiveHighWatermark:     item.GetTaskID(),
-						ExclusiveHighWatermarkTime: timestamppb.New(item.GetVisibilityTime()),
-						Priority:                   priority,
-					},
-				},
-			}); err != nil {
+			if err := s.sendToStream(historyservice.StreamWorkflowReplicationMessagesResponse_builder{
+				Messages: replicationspb.WorkflowReplicationMessages_builder{
+					ExclusiveHighWatermark:     item.GetTaskID(),
+					ExclusiveHighWatermarkTime: timestamppb.New(item.GetVisibilityTime()),
+					Priority:                   priority,
+				}.Build(),
+			}.Build()); err != nil {
 				return err
 			}
 			skipCount = 0
@@ -564,7 +560,7 @@ Loop:
 			if task == nil {
 				return nil
 			}
-			task.Priority = priority
+			task.SetPriority(priority)
 			if s.isTieredStackEnabled {
 				if err := s.flowController.Wait(s.server.Context(), priority); err != nil {
 					if errors.Is(err, context.Canceled) {
@@ -573,7 +569,7 @@ Loop:
 					// continue to send task if wait operation times out.
 				}
 			}
-			if s.config.ReplicationEnableRateLimit() && task.Priority == enumsspb.TASK_PRIORITY_LOW {
+			if s.config.ReplicationEnableRateLimit() && task.GetPriority() == enumsspb.TASK_PRIORITY_LOW {
 				nsName, err := s.shardContext.GetNamespaceRegistry().GetNamespaceName(
 					namespace.ID(item.GetNamespaceID()),
 				)
@@ -583,7 +579,7 @@ Loop:
 				}
 				rlStartTime := time.Now().UTC()
 				if err := s.ssRateLimiter.Wait(s.server.Context(), quotas.NewRequest(
-					task.TaskType.String(),
+					task.GetTaskType().String(),
 					taskSchedulerToken,
 					nsName.String(),
 					headers.SystemPreemptableCallerInfo.CallerType,
@@ -594,16 +590,14 @@ Loop:
 				}
 				metrics.ReplicationRateLimitLatency.With(s.metrics).Record(time.Since(rlStartTime), metrics.OperationTag(TaskOperationTag(task)))
 			}
-			if err := s.sendToStream(&historyservice.StreamWorkflowReplicationMessagesResponse{
-				Attributes: &historyservice.StreamWorkflowReplicationMessagesResponse_Messages{
-					Messages: &replicationspb.WorkflowReplicationMessages{
-						ReplicationTasks:           []*replicationspb.ReplicationTask{task},
-						ExclusiveHighWatermark:     task.SourceTaskId + 1,
-						ExclusiveHighWatermarkTime: task.VisibilityTime,
-						Priority:                   priority,
-					},
-				},
-			}); err != nil {
+			if err := s.sendToStream(historyservice.StreamWorkflowReplicationMessagesResponse_builder{
+				Messages: replicationspb.WorkflowReplicationMessages_builder{
+					ReplicationTasks:           []*replicationspb.ReplicationTask{task},
+					ExclusiveHighWatermark:     task.GetSourceTaskId() + 1,
+					ExclusiveHighWatermarkTime: task.GetVisibilityTime(),
+					Priority:                   priority,
+				}.Build(),
+			}.Build()); err != nil {
 				return err
 			}
 			skipCount = 0
@@ -648,16 +642,14 @@ Loop:
 			return fmt.Errorf("failed to send task: %v, cause: %w", item, err)
 		}
 	}
-	return s.sendToStream(&historyservice.StreamWorkflowReplicationMessagesResponse{
-		Attributes: &historyservice.StreamWorkflowReplicationMessagesResponse_Messages{
-			Messages: &replicationspb.WorkflowReplicationMessages{
-				ReplicationTasks:           nil,
-				ExclusiveHighWatermark:     endExclusiveWatermark,
-				ExclusiveHighWatermarkTime: timestamp.TimeNowPtrUtc(),
-				Priority:                   priority,
-			},
-		},
-	})
+	return s.sendToStream(historyservice.StreamWorkflowReplicationMessagesResponse_builder{
+		Messages: replicationspb.WorkflowReplicationMessages_builder{
+			ReplicationTasks:           nil,
+			ExclusiveHighWatermark:     endExclusiveWatermark,
+			ExclusiveHighWatermarkTime: timestamp.TimeNowPtrUtc(),
+			Priority:                   priority,
+		}.Build(),
+	}.Build())
 }
 
 func (s *StreamSenderImpl) sendToStream(payload *historyservice.StreamWorkflowReplicationMessagesResponse) error {

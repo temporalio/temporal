@@ -286,7 +286,7 @@ func (s *visibilitySuite) TestReplaceCustomMemo() {
 func (s *visibilitySuite) assertTaskPayload(expectedCount int64, taskPayload any) {
 	protorequire.ProtoEqual(
 		s.T(),
-		&persistencespb.ChasmVisibilityTaskData{TransitionCount: expectedCount},
+		persistencespb.ChasmVisibilityTaskData_builder{TransitionCount: expectedCount}.Build(),
 		taskPayload.(*persistencespb.ChasmVisibilityTaskData),
 	)
 }

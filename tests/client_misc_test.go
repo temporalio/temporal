@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/server/service/history/workflow/update"
 	"go.temporal.io/server/tests/testcore"
 	"go.uber.org/multierr"
+	"google.golang.org/protobuf/proto"
 )
 
 type ClientMiscTestSuite struct {
@@ -100,7 +101,7 @@ func (s *ClientMiscTestSuite) TestTooManyChildWorkflows() {
  WorkflowTaskStarted // 26 below is enumspb.WORKFLOW_TASK_FAILED_CAUSE_PENDING_CHILD_WORKFLOWS_LIMIT_EXCEEDED
  WorkflowTaskFailed {"Cause":26,"Failure":{"Message":"PendingChildWorkflowsLimitExceeded: the number of pending child workflow executions, 10, has reached the per-workflow limit of 10"}}
 `, func() []*historypb.HistoryEvent {
-		return s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: parentWorkflowID})
+		return s.GetHistory(s.Namespace().String(), commonpb.WorkflowExecution_builder{WorkflowId: parentWorkflowID}.Build())
 	}, 10*time.Second, 500*time.Millisecond)
 
 	// unblock the last child, allowing it to complete, which lowers the number of pending child workflows
@@ -184,7 +185,7 @@ func (s *ClientMiscTestSuite) TestTooManyPendingActivities() {
  20 WorkflowTaskStarted // 27 below is enumspb.WORKFLOW_TASK_FAILED_CAUSE_PENDING_ACTIVITIES_LIMIT_EXCEEDED
  21 WorkflowTaskFailed {"Cause":27,"Failure":{"Message":"PendingActivitiesLimitExceeded: the number of pending activities, 10, has reached the per-workflow limit of 10"}}
 `, func() []*historypb.HistoryEvent {
-		return s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: workflowRun.GetID(), RunId: workflowRun.GetRunID()})
+		return s.GetHistory(s.Namespace().String(), commonpb.WorkflowExecution_builder{WorkflowId: workflowRun.GetID(), RunId: workflowRun.GetRunID()}.Build())
 	}, 3*time.Second, 500*time.Millisecond)
 
 	// mark one of the pending activities as complete and verify that the workflow can now complete
@@ -244,7 +245,7 @@ func (s *ClientMiscTestSuite) TestTooManyCancelRequests() {
   3 WorkflowTaskStarted // 29 below is enumspb.WORKFLOW_TASK_FAILED_CAUSE_PENDING_REQUEST_CANCEL_LIMIT_EXCEEDED
   4 WorkflowTaskFailed {"Cause":29,"Failure":{"Message":"PendingRequestCancelLimitExceeded: the number of pending requests to cancel external workflows, 10, has reached the per-workflow limit of 10"}}
 `, func() []*historypb.HistoryEvent {
-			return s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()})
+			return s.GetHistory(s.Namespace().String(), commonpb.WorkflowExecution_builder{WorkflowId: run.GetID(), RunId: run.GetRunID()}.Build())
 		}, 5*time.Second, 500*time.Millisecond)
 
 		shardID := common.WorkflowIDToHistoryShard(s.NamespaceID().String(), cancelerWorkflowId, s.GetTestClusterConfig().HistoryConfig.NumHistoryShards)
@@ -256,8 +257,8 @@ func (s *ClientMiscTestSuite) TestTooManyCancelRequests() {
 			ArchetypeID: chasm.WorkflowArchetypeID,
 		})
 		s.NoError(err)
-		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, workflowExecution.State.ExecutionState.Status)
-		s.Empty(workflowExecution.State.RequestCancelInfos)
+		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, workflowExecution.State.GetExecutionState().GetStatus())
+		s.Empty(workflowExecution.State.GetRequestCancelInfos())
 		s.NoError(s.SdkClient().CancelWorkflow(ctx, cancelerWorkflowId, ""))
 	})
 
@@ -332,7 +333,7 @@ func (s *ClientMiscTestSuite) TestTooManyPendingSignals() {
   3 WorkflowTaskStarted // 28 below is enumspb.WORKFLOW_TASK_FAILED_CAUSE_PENDING_SIGNALS_LIMIT_EXCEEDED
   4 WorkflowTaskFailed {"Cause":28,"Failure":{"Message":"PendingSignalsLimitExceeded: the number of pending signals to external workflows, 10, has reached the per-workflow limit of 10"}}
 `, func() []*historypb.HistoryEvent {
-			return s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: senderRun.GetID(), RunId: senderRun.GetRunID()})
+			return s.GetHistory(s.Namespace().String(), commonpb.WorkflowExecution_builder{WorkflowId: senderRun.GetID(), RunId: senderRun.GetRunID()}.Build())
 		}, 3*time.Second, 500*time.Millisecond)
 
 		s.NoError(s.SdkClient().CancelWorkflow(ctx, senderId, ""))
@@ -414,15 +415,15 @@ func (s *ClientMiscTestSuite) TestStickyAutoReset() {
 	// wait until wf started and sticky is set
 	var stickyQueue string
 	s.Eventually(func() bool {
-		ms, err := s.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
+		ms, err := s.AdminClient().DescribeMutableState(ctx, adminservice.DescribeMutableStateRequest_builder{
 			Namespace: s.Namespace().String(),
-			Execution: &commonpb.WorkflowExecution{
+			Execution: commonpb.WorkflowExecution_builder{
 				WorkflowId: future.GetID(),
-			},
+			}.Build(),
 			Archetype: chasm.WorkflowArchetype,
-		})
+		}.Build())
 		s.NoError(err)
-		stickyQueue = ms.DatabaseMutableState.ExecutionInfo.StickyTaskQueue
+		stickyQueue = ms.GetDatabaseMutableState().GetExecutionInfo().GetStickyTaskQueue()
 		// verify workflow has sticky task queue
 		return stickyQueue != "" && stickyQueue != s.TaskQueue()
 	}, 5*time.Second, 200*time.Millisecond)
@@ -431,16 +432,16 @@ func (s *ClientMiscTestSuite) TestStickyAutoReset() {
 	s.Worker().Stop()
 	//nolint:forbidigo
 	time.Sleep(time.Second * 11) // wait 11s (longer than 10s timeout), after this time, matching will detect StickyWorkerUnavailable
-	resp, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+	resp, err := s.FrontendClient().DescribeTaskQueue(ctx, workflowservice.DescribeTaskQueueRequest_builder{
 		Namespace:     s.Namespace().String(),
-		TaskQueue:     &taskqueuepb.TaskQueue{Name: stickyQueue, Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: s.TaskQueue()},
+		TaskQueue:     taskqueuepb.TaskQueue_builder{Name: stickyQueue, Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: s.TaskQueue()}.Build(),
 		TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-	})
+	}.Build())
 	s.NoError(err)
 	s.NotNil(resp)
-	for _, p := range resp.Pollers {
-		s.NotNil(p.LastAccessTime)
-		s.Greater(time.Now().Sub(p.LastAccessTime.AsTime()), time.Second*10)
+	for _, p := range resp.GetPollers() {
+		s.NotNil(p.GetLastAccessTime())
+		s.Greater(time.Now().Sub(p.GetLastAccessTime().AsTime()), time.Second*10)
 	}
 
 	startTime := time.Now()
@@ -449,22 +450,22 @@ func (s *ClientMiscTestSuite) TestStickyAutoReset() {
 	s.NoError(err)
 
 	// check that mutable state still has sticky enabled
-	ms, err := s.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
+	ms, err := s.AdminClient().DescribeMutableState(ctx, adminservice.DescribeMutableStateRequest_builder{
 		Namespace: s.Namespace().String(),
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: future.GetID(),
-		},
+		}.Build(),
 		Archetype: chasm.WorkflowArchetype,
-	})
+	}.Build())
 	s.NoError(err)
-	s.NotEmpty(ms.DatabaseMutableState.ExecutionInfo.StickyTaskQueue)
-	s.Equal(stickyQueue, ms.DatabaseMutableState.ExecutionInfo.StickyTaskQueue)
+	s.NotEmpty(ms.GetDatabaseMutableState().GetExecutionInfo().GetStickyTaskQueue())
+	s.Equal(stickyQueue, ms.GetDatabaseMutableState().GetExecutionInfo().GetStickyTaskQueue())
 
 	// now poll from normal queue, and it should see the full history.
-	task, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+	task, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, workflowservice.PollWorkflowTaskQueueRequest_builder{
 		Namespace: s.Namespace().String(),
-		TaskQueue: &taskqueuepb.TaskQueue{Name: s.TaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-	})
+		TaskQueue: taskqueuepb.TaskQueue_builder{Name: s.TaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
+	}.Build())
 
 	// should be able to get the task without having to wait until sticky timeout (5s)
 	pollLatency := time.Now().Sub(startTime)
@@ -472,9 +473,9 @@ func (s *ClientMiscTestSuite) TestStickyAutoReset() {
 
 	s.NoError(err)
 	s.NotNil(task)
-	s.NotNil(task.History)
-	s.True(len(task.History.Events) > 0)
-	s.Equal(int64(1), task.History.Events[0].EventId)
+	s.NotNil(task.GetHistory())
+	s.True(len(task.GetHistory().GetEvents()) > 0)
+	s.Equal(int64(1), task.GetHistory().GetEvents()[0].GetEventId())
 }
 
 // Analogous to TestBufferedSignalCausesUnhandledCommandAndSchedulesNewTask
@@ -517,7 +518,7 @@ func (s *ClientMiscTestSuite) TestWorkflowCanBeCompletedDespiteAdmittedUpdate() 
 
 	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 		ID:                  tv.WorkflowID(),
-		TaskQueue:           tv.TaskQueue().Name,
+		TaskQueue:           tv.TaskQueue().GetName(),
 		WorkflowTaskTimeout: 10 * time.Second,
 		WorkflowRunTimeout:  10 * time.Second,
 	}, workflowFn)
@@ -546,14 +547,14 @@ func (s *ClientMiscTestSuite) TestWorkflowCanBeCompletedDespiteAdmittedUpdate() 
 	}()
 	for {
 		time.Sleep(10 * time.Millisecond) //nolint:forbidigo
-		_, err = s.SdkClient().WorkflowService().PollWorkflowExecutionUpdate(ctx, &workflowservice.PollWorkflowExecutionUpdateRequest{
+		_, err = s.SdkClient().WorkflowService().PollWorkflowExecutionUpdate(ctx, workflowservice.PollWorkflowExecutionUpdateRequest_builder{
 			Namespace: s.Namespace().String(),
 			UpdateRef: tv.UpdateRef(),
 			Identity:  "my-identity",
-			WaitPolicy: &updatepb.WaitPolicy{
+			WaitPolicy: updatepb.WaitPolicy_builder{
 				LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED,
-			},
-		})
+			}.Build(),
+		}.Build())
 		if err == nil {
 			// Update is admitted but doesn't block WF from completion.
 			close(updateHasBeenAdmitted)
@@ -721,7 +722,7 @@ func (s *ClientMiscTestSuite) TestInvalidCommandAttribute() {
 			if err != nil {
 				panic(err)
 			}
-			return resp.PendingWorkflowTask.StartedTime.AsTime()
+			return resp.GetPendingWorkflowTask().GetStartedTime().AsTime()
 		}).Get(&currentAttemptStartedTime)
 		if err != nil {
 			return err
@@ -829,14 +830,14 @@ func (s *ClientMiscTestSuite) Test_BufferedQuery() {
 		// sleep 2s to make sure DescribeMutableState is called after QueryWorkflow
 		time.Sleep(2 * time.Second) //nolint:forbidigo
 		// make DescribeMutableState call, which force mutable state to reload from db
-		_, err := s.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
+		_, err := s.AdminClient().DescribeMutableState(ctx, adminservice.DescribeMutableStateRequest_builder{
 			Namespace: s.Namespace().String(),
-			Execution: &commonpb.WorkflowExecution{
+			Execution: commonpb.WorkflowExecution_builder{
 				WorkflowId: id,
 				RunId:      workflowRun.GetRunID(),
-			},
+			}.Build(),
 			Archetype: chasm.WorkflowArchetype,
-		})
+		}.Build())
 		s.Assert().NoError(err)
 	}()
 
@@ -918,7 +919,7 @@ func (s *ClientMiscTestSuite) TestBufferedSignalCausesUnhandledCommandAndSchedul
 
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:        tv.WorkflowID(),
-		TaskQueue: tv.TaskQueue().Name,
+		TaskQueue: tv.TaskQueue().GetName(),
 		// Intentionally use same timeout for WorkflowTaskTimeout and WorkflowRunTimeout so if workflow task is not
 		// correctly dispatched, it would time out which would fail the workflow and cause test to fail.
 		WorkflowTaskTimeout: 10 * time.Second,
@@ -1100,23 +1101,21 @@ func (s *ClientMiscTestSuite) TestBatchSignal() {
 	inputPayloads, err := converter.GetDefaultDataConverter().ToPayloads(input1)
 	s.NoError(err)
 
-	_, err = s.SdkClient().WorkflowService().StartBatchOperation(context.Background(), &workflowservice.StartBatchOperationRequest{
+	_, err = s.SdkClient().WorkflowService().StartBatchOperation(context.Background(), workflowservice.StartBatchOperationRequest_builder{
 		Namespace: s.Namespace().String(),
-		Operation: &workflowservice.StartBatchOperationRequest_SignalOperation{
-			SignalOperation: &batchpb.BatchOperationSignal{
-				Signal: "my-signal",
-				Input:  inputPayloads,
-			},
-		},
+		SignalOperation: batchpb.BatchOperationSignal_builder{
+			Signal: "my-signal",
+			Input:  inputPayloads,
+		}.Build(),
 		Executions: []*commonpb.WorkflowExecution{
-			{
+			commonpb.WorkflowExecution_builder{
 				WorkflowId: workflowRun.GetID(),
 				RunId:      workflowRun.GetRunID(),
-			},
+			}.Build(),
 		},
 		JobId:  uuid.NewString(),
 		Reason: "test",
-	})
+	}.Build())
 	s.NoError(err)
 
 	var returnedData myData
@@ -1163,22 +1162,20 @@ func (s *ClientMiscTestSuite) TestBatchReset() {
 
 	count.Add(1)
 
-	_, err = s.SdkClient().WorkflowService().StartBatchOperation(context.Background(), &workflowservice.StartBatchOperationRequest{
+	_, err = s.SdkClient().WorkflowService().StartBatchOperation(context.Background(), workflowservice.StartBatchOperationRequest_builder{
 		Namespace: s.Namespace().String(),
-		Operation: &workflowservice.StartBatchOperationRequest_ResetOperation{
-			ResetOperation: &batchpb.BatchOperationReset{
-				ResetType: enumspb.RESET_TYPE_FIRST_WORKFLOW_TASK,
-			},
-		},
+		ResetOperation: batchpb.BatchOperationReset_builder{
+			ResetType: enumspb.RESET_TYPE_FIRST_WORKFLOW_TASK,
+		}.Build(),
 		Executions: []*commonpb.WorkflowExecution{
-			{
+			commonpb.WorkflowExecution_builder{
 				WorkflowId: workflowRun.GetID(),
 				RunId:      workflowRun.GetRunID(),
-			},
+			}.Build(),
 		},
 		JobId:  uuid.NewString(),
 		Reason: "test",
-	})
+	}.Build())
 	s.NoError(err)
 
 	// latest run should complete successfully
@@ -1266,7 +1263,7 @@ func (s *ClientMiscTestSuite) TestBatchResetByBuildId() {
 
 	run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
 	s.NoError(err)
-	ex := &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()}
+	ex := commonpb.WorkflowExecution_builder{WorkflowId: run.GetID(), RunId: run.GetRunID()}.Build()
 	// wait for first wft and first activity to complete
 	s.Eventually(func() bool { return len(s.GetHistory(s.Namespace().String(), ex)) >= 10 }, 5*time.Second, 100*time.Millisecond)
 
@@ -1313,29 +1310,25 @@ func (s *ClientMiscTestSuite) TestBatchResetByBuildId() {
 		sadefs.ExecutionStatus, "Running",
 		sadefs.BuildIds, worker_versioning.UnversionedBuildIdSearchAttribute(buildIdv2))
 	s.Eventually(func() bool {
-		resp, err := s.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+		resp, err := s.FrontendClient().ListWorkflowExecutions(ctx, workflowservice.ListWorkflowExecutionsRequest_builder{
 			Namespace: s.Namespace().String(),
 			Query:     query,
-		})
-		return err == nil && len(resp.Executions) == 1
+		}.Build())
+		return err == nil && len(resp.GetExecutions()) == 1
 	}, 10*time.Second, 500*time.Millisecond)
 
 	// reset it using v2 as the bad build ID
-	_, err = s.FrontendClient().StartBatchOperation(context.Background(), &workflowservice.StartBatchOperationRequest{
+	_, err = s.FrontendClient().StartBatchOperation(context.Background(), workflowservice.StartBatchOperationRequest_builder{
 		Namespace:       s.Namespace().String(),
 		VisibilityQuery: query,
 		JobId:           uuid.NewString(),
 		Reason:          "test",
-		Operation: &workflowservice.StartBatchOperationRequest_ResetOperation{
-			ResetOperation: &batchpb.BatchOperationReset{
-				Options: &commonpb.ResetOptions{
-					Target: &commonpb.ResetOptions_BuildId{
-						BuildId: buildIdv2,
-					},
-				},
-			},
-		},
-	})
+		ResetOperation: batchpb.BatchOperationReset_builder{
+			Options: commonpb.ResetOptions_builder{
+				BuildId: proto.String(buildIdv2),
+			}.Build(),
+		}.Build(),
+	}.Build())
 	s.NoError(err)
 
 	// now it can complete on v3. (need to loop since runid will be resolved early and we need

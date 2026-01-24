@@ -8,7 +8,6 @@ package testspb
 
 import (
 	reflect "reflect"
-	sync "sync"
 	unsafe "unsafe"
 
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -23,10 +22,10 @@ const (
 )
 
 type TestRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	RequestId     string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_RequestId string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *TestRequest) Reset() {
@@ -54,24 +53,37 @@ func (x *TestRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use TestRequest.ProtoReflect.Descriptor instead.
-func (*TestRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_tests_proto_v1_request_response_proto_rawDescGZIP(), []int{0}
-}
-
 func (x *TestRequest) GetRequestId() string {
 	if x != nil {
-		return x.RequestId
+		return x.xxx_hidden_RequestId
 	}
 	return ""
 }
 
+func (x *TestRequest) SetRequestId(v string) {
+	x.xxx_hidden_RequestId = v
+}
+
+type TestRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	RequestId string
+}
+
+func (b0 TestRequest_builder) Build() *TestRequest {
+	m0 := &TestRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_RequestId = b.RequestId
+	return m0
+}
+
 type TestResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	RequestId     string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
-	HasEngineCtx  bool                   `protobuf:"varint,2,opt,name=has_engine_ctx,json=hasEngineCtx,proto3" json:"has_engine_ctx,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                   protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_RequestId    string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3"`
+	xxx_hidden_HasEngineCtx bool                   `protobuf:"varint,2,opt,name=has_engine_ctx,json=hasEngineCtx,proto3"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
 }
 
 func (x *TestResponse) Reset() {
@@ -99,23 +111,42 @@ func (x *TestResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use TestResponse.ProtoReflect.Descriptor instead.
-func (*TestResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_tests_proto_v1_request_response_proto_rawDescGZIP(), []int{1}
-}
-
 func (x *TestResponse) GetRequestId() string {
 	if x != nil {
-		return x.RequestId
+		return x.xxx_hidden_RequestId
 	}
 	return ""
 }
 
 func (x *TestResponse) GetHasEngineCtx() bool {
 	if x != nil {
-		return x.HasEngineCtx
+		return x.xxx_hidden_HasEngineCtx
 	}
 	return false
+}
+
+func (x *TestResponse) SetRequestId(v string) {
+	x.xxx_hidden_RequestId = v
+}
+
+func (x *TestResponse) SetHasEngineCtx(v bool) {
+	x.xxx_hidden_HasEngineCtx = v
+}
+
+type TestResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	RequestId    string
+	HasEngineCtx bool
+}
+
+func (b0 TestResponse_builder) Build() *TestResponse {
+	m0 := &TestResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_RequestId = b.RequestId
+	x.xxx_hidden_HasEngineCtx = b.HasEngineCtx
+	return m0
 }
 
 var File_temporal_server_chasm_lib_tests_proto_v1_request_response_proto protoreflect.FileDescriptor
@@ -130,18 +161,6 @@ const file_temporal_server_chasm_lib_tests_proto_v1_request_response_proto_rawDe
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12$\n" +
 	"\x0ehas_engine_ctx\x18\x02 \x01(\bR\fhasEngineCtxB;Z9go.temporal.io/server/chasm/lib/tests/gen/testspb;testspbb\x06proto3"
-
-var (
-	file_temporal_server_chasm_lib_tests_proto_v1_request_response_proto_rawDescOnce sync.Once
-	file_temporal_server_chasm_lib_tests_proto_v1_request_response_proto_rawDescData []byte
-)
-
-func file_temporal_server_chasm_lib_tests_proto_v1_request_response_proto_rawDescGZIP() []byte {
-	file_temporal_server_chasm_lib_tests_proto_v1_request_response_proto_rawDescOnce.Do(func() {
-		file_temporal_server_chasm_lib_tests_proto_v1_request_response_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_chasm_lib_tests_proto_v1_request_response_proto_rawDesc), len(file_temporal_server_chasm_lib_tests_proto_v1_request_response_proto_rawDesc)))
-	})
-	return file_temporal_server_chasm_lib_tests_proto_v1_request_response_proto_rawDescData
-}
 
 var file_temporal_server_chasm_lib_tests_proto_v1_request_response_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
 var file_temporal_server_chasm_lib_tests_proto_v1_request_response_proto_goTypes = []any{

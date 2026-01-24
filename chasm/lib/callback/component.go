@@ -39,17 +39,17 @@ func NewCallback(
 	cb *callbackspb.Callback,
 ) *Callback {
 	return &Callback{
-		CallbackState: &callbackspb.CallbackState{
+		CallbackState: callbackspb.CallbackState_builder{
 			RequestId:        requestID,
 			RegistrationTime: registrationTime,
 			Callback:         cb,
 			Status:           callbackspb.CALLBACK_STATUS_STANDBY,
-		},
+		}.Build(),
 	}
 }
 
 func (c *Callback) LifecycleState(_ chasm.Context) chasm.LifecycleState {
-	switch c.Status {
+	switch c.GetStatus() {
 	case callbackspb.CALLBACK_STATUS_SUCCEEDED:
 		return chasm.LifecycleStateCompleted
 	case callbackspb.CALLBACK_STATUS_FAILED:
@@ -60,16 +60,16 @@ func (c *Callback) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 }
 
 func (c *Callback) StateMachineState() callbackspb.CallbackStatus {
-	return c.Status
+	return c.GetStatus()
 }
 
 func (c *Callback) SetStateMachineState(status callbackspb.CallbackStatus) {
-	c.Status = status
+	c.SetStatus(status)
 }
 
 func (c *Callback) recordAttempt(ts time.Time) {
-	c.Attempt++
-	c.LastAttemptCompleteTime = timestamppb.New(ts)
+	c.SetAttempt(c.GetAttempt() + 1)
+	c.SetLastAttemptCompleteTime(timestamppb.New(ts))
 }
 
 //nolint:revive // context.Context is an input parameter for chasm.ReadComponent, not a function parameter
@@ -79,7 +79,7 @@ func (c *Callback) loadInvocationArgs(
 ) (callbackInvokable, error) {
 	target := c.CompletionSource.Get(ctx)
 
-	completion, err := target.GetNexusCompletion(ctx, c.RequestId)
+	completion, err := target.GetNexusCompletion(ctx, c.GetRequestId())
 	if err != nil {
 		return nil, err
 	}
@@ -91,12 +91,12 @@ func (c *Callback) loadInvocationArgs(
 		)
 	}
 
-	if variant.Url == chasm.NexusCompletionHandlerURL {
+	if variant.GetUrl() == chasm.NexusCompletionHandlerURL {
 		return chasmInvocation{
 			nexus:      variant,
-			attempt:    c.Attempt,
+			attempt:    c.GetAttempt(),
 			completion: completion,
-			requestID:  c.RequestId,
+			requestID:  c.GetRequestId(),
 		}, nil
 	}
 	return nexusInvocation{
@@ -104,7 +104,7 @@ func (c *Callback) loadInvocationArgs(
 		completion: completion,
 		workflowID: ctx.ExecutionKey().BusinessID,
 		runID:      ctx.ExecutionKey().RunID,
-		attempt:    c.Attempt,
+		attempt:    c.GetAttempt(),
 	}, nil
 }
 
@@ -145,18 +145,17 @@ func (c *Callback) saveResult(
 func (c *Callback) ToAPICallback() (*commonpb.Callback, error) {
 	// Convert CHASM callback proto to API callback proto
 	chasmCB := c.GetCallback()
-	res := &commonpb.Callback{
+	res := commonpb.Callback_builder{
 		Links: chasmCB.GetLinks(),
-	}
+	}.Build()
 
 	// CHASM currently only supports Nexus callbacks
-	if variant, ok := chasmCB.Variant.(*callbackspb.Callback_Nexus_); ok {
-		res.Variant = &commonpb.Callback_Nexus_{
-			Nexus: &commonpb.Callback_Nexus{
-				Url:    variant.Nexus.GetUrl(),
-				Header: variant.Nexus.GetHeader(),
-			},
-		}
+	if chasmCB.HasNexus() {
+		variant := chasmCB.GetNexus()
+		res.SetNexus(commonpb.Callback_Nexus_builder{
+			Url:    variant.GetUrl(),
+			Header: variant.GetHeader(),
+		}.Build())
 		return res, nil
 	}
 

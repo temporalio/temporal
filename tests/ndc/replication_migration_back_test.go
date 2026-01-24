@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/server/service/history/replication/eventhandler"
 	"go.temporal.io/server/tests/testcore"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -104,19 +105,19 @@ func (s *ReplicationMigrationBackTestSuite) SetupSuite() {
 	s.passiveCluster = cluster
 
 	s.registerNamespace()
-	_, err = s.passiveCluster.FrontendClient().UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
+	_, err = s.passiveCluster.FrontendClient().UpdateNamespace(context.Background(), workflowservice.UpdateNamespaceRequest_builder{
 		Namespace: s.namespace.String(),
-		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
+		ReplicationConfig: replicationpb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: "cluster-b",
-		},
-	})
+		}.Build(),
+	}.Build())
 	s.Require().NoError(err)
-	_, err = s.passiveCluster.FrontendClient().UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
+	_, err = s.passiveCluster.FrontendClient().UpdateNamespace(context.Background(), workflowservice.UpdateNamespaceRequest_builder{
 		Namespace: s.namespace.String(),
-		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
+		ReplicationConfig: replicationpb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: "cluster-a",
-		},
-	})
+		}.Build(),
+	}.Build())
 	s.Require().NoError(err)
 	// we have to wait for namespace cache to pick the change
 	time.Sleep(2 * testcore.NamespaceCacheRefreshInterval) //nolint:forbidigo
@@ -150,7 +151,7 @@ func (s *ReplicationMigrationBackTestSuite) TestHistoryReplication_MultiRunMigra
 
 	history, err := testcore.EventBatchesToVersionHistory(
 		nil,
-		[]*historypb.History{{Events: run1Slices[0]}, {Events: run1Slices[1]}, {Events: run1Slices[2]}},
+		[]*historypb.History{historypb.History_builder{Events: run1Slices[0]}.Build(), historypb.History_builder{Events: run1Slices[1]}.Build(), historypb.History_builder{Events: run1Slices[2]}.Build()},
 	)
 	// when handle migration back case, passive will need to fetch the history from active cluster
 	s.mockActiveGetRawHistoryApiCalls(workflowId, runID1, run1Slices, history)
@@ -165,7 +166,7 @@ func (s *ReplicationMigrationBackTestSuite) TestHistoryReplication_MultiRunMigra
 		runID1,
 		run1Slices[0],
 		nil,
-		history.Items,
+		history.GetItems(),
 	)
 	// wait for 1 sec to let the run1 events replicated
 	time.Sleep(1 * time.Second) //nolint:forbidigo
@@ -177,33 +178,33 @@ func (s *ReplicationMigrationBackTestSuite) TestHistoryReplication_MultiRunMigra
 		runID2,
 		run2Slices[0],
 		nil,
-		history.Items,
+		history.GetItems(),
 	)
 	// wait for 1 sec to let the run2 events replicated
 	time.Sleep(1 * time.Second) //nolint:forbidigo
 
-	res1, err := s.passiveCluster.AdminClient().DescribeMutableState(context.Background(), &adminservice.DescribeMutableStateRequest{
+	res1, err := s.passiveCluster.AdminClient().DescribeMutableState(context.Background(), adminservice.DescribeMutableStateRequest_builder{
 		Namespace: s.namespace.String(),
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: workflowId,
 			RunId:      runID1,
-		},
+		}.Build(),
 		Archetype: chasm.WorkflowArchetype,
-	})
+	}.Build())
 	s.NoError(err)
 
-	res2, err := s.passiveCluster.AdminClient().DescribeMutableState(context.Background(), &adminservice.DescribeMutableStateRequest{
+	res2, err := s.passiveCluster.AdminClient().DescribeMutableState(context.Background(), adminservice.DescribeMutableStateRequest_builder{
 		Namespace: s.namespace.String(),
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: workflowId,
 			RunId:      runID2,
-		},
+		}.Build(),
 		Archetype: chasm.WorkflowArchetype,
-	})
+	}.Build())
 
 	s.NoError(err)
-	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, res1.DatabaseMutableState.ExecutionState.State)
-	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, res2.DatabaseMutableState.ExecutionState.State)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, res1.GetDatabaseMutableState().GetExecutionState().GetState())
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, res2.GetDatabaseMutableState().GetExecutionState().GetState())
 }
 
 // Test scenario: workflow was running in cluster-1, then migrated to cluster-2, then migrated to cluster-1, then we want to migrate to cluster-2.
@@ -234,30 +235,30 @@ func (s *ReplicationMigrationBackTestSuite) longRunningMigrationBackReplicationT
 		runID,
 		eventBatches[supplyBatchIndex],
 		nil,
-		history.Items,
+		history.GetItems(),
 	)
 	// wait for 1 sec to let the run1 events replicated
 	time.Sleep(1 * time.Second) //nolint:forbidigo
 
-	res1, err := s.passiveCluster.AdminClient().DescribeMutableState(context.Background(), &adminservice.DescribeMutableStateRequest{
+	res1, err := s.passiveCluster.AdminClient().DescribeMutableState(context.Background(), adminservice.DescribeMutableStateRequest_builder{
 		Namespace: s.namespace.String(),
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: workflowID,
 			RunId:      runID,
-		},
+		}.Build(),
 		Archetype: chasm.WorkflowArchetype,
-	})
+	}.Build())
 	s.NoError(err)
 
-	currentHistoryIndex := res1.DatabaseMutableState.ExecutionInfo.VersionHistories.CurrentVersionHistoryIndex
-	currentHistoryItems := res1.DatabaseMutableState.ExecutionInfo.VersionHistories.Histories[currentHistoryIndex].Items
+	currentHistoryIndex := res1.GetDatabaseMutableState().GetExecutionInfo().GetVersionHistories().GetCurrentVersionHistoryIndex()
+	currentHistoryItems := res1.GetDatabaseMutableState().GetExecutionInfo().GetVersionHistories().GetHistories()[currentHistoryIndex].GetItems()
 
 	s.Equal(2, len(currentHistoryItems))
-	s.Equal(&historyspb.VersionHistoryItem{EventId: 5, Version: 1}, currentHistoryItems[0])
-	s.Equal(&historyspb.VersionHistoryItem{EventId: 10, Version: 2}, currentHistoryItems[1])
+	s.Equal(historyspb.VersionHistoryItem_builder{EventId: 5, Version: 1}.Build(), currentHistoryItems[0])
+	s.Equal(historyspb.VersionHistoryItem_builder{EventId: 10, Version: 2}.Build(), currentHistoryItems[1])
 
 	// last imported event (event 10) is a timer started event, so it should have a timer in mutablestate
-	s.Equal(1, len(res1.DatabaseMutableState.TimerInfos))
+	s.Equal(1, len(res1.GetDatabaseMutableState().GetTimerInfos()))
 	s.assertHistoryEvents(context.Background(), s.namespaceID.String(), workflowID, runID, 1, 1, 10, 2, eventBatches[0:7])
 }
 
@@ -276,18 +277,18 @@ func (s *ReplicationMigrationBackTestSuite) TestHistoryReplication_LongRunningMi
 	// when handle migration back case, passive will need to fetch the history from active cluster
 	s.mockActiveGetRawHistoryApiCalls(workflowId, runID, eventBatches[0:7], history)
 	s.mockAdminClient["cluster-a"].(*adminservicemock.MockAdminServiceClient).EXPECT().
-		GetWorkflowExecutionRawHistoryV2(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryV2Request{
+		GetWorkflowExecutionRawHistoryV2(gomock.Any(), adminservice.GetWorkflowExecutionRawHistoryV2Request_builder{
 			NamespaceId: s.namespaceID.String(),
-			Execution: &commonpb.WorkflowExecution{
+			Execution: commonpb.WorkflowExecution_builder{
 				WorkflowId: workflowId,
 				RunId:      runID,
-			},
+			}.Build(),
 			StartEventId:      0,
 			StartEventVersion: 0,
 			EndEventId:        11,
 			EndEventVersion:   11,
 			MaximumPageSize:   100,
-		}).Return(&adminservice.GetWorkflowExecutionRawHistoryV2Response{
+		}.Build()).Return(adminservice.GetWorkflowExecutionRawHistoryV2Response_builder{
 		HistoryBatches: []*commonpb.DataBlob{
 			s.serializeEvents(eventBatches[0]),
 			s.serializeEvents(eventBatches[1]),
@@ -298,7 +299,7 @@ func (s *ReplicationMigrationBackTestSuite) TestHistoryReplication_LongRunningMi
 			s.serializeEvents(eventBatches[6]),
 		},
 		VersionHistory: history,
-	}, nil).AnyTimes()
+	}.Build(), nil).AnyTimes()
 
 	s.standByReplicationTasksChan <- s.createHistoryEventReplicationTaskFromHistoryEventBatch(
 		s.namespaceID.String(),
@@ -306,28 +307,28 @@ func (s *ReplicationMigrationBackTestSuite) TestHistoryReplication_LongRunningMi
 		runID,
 		eventBatches[7],
 		nil,
-		history.Items,
+		history.GetItems(),
 	)
 	// wait for 1 sec to let the run1 events replicated
 	time.Sleep(1 * time.Second) //nolint:forbidigo
 
-	res1, err := s.passiveCluster.AdminClient().DescribeMutableState(context.Background(), &adminservice.DescribeMutableStateRequest{
+	res1, err := s.passiveCluster.AdminClient().DescribeMutableState(context.Background(), adminservice.DescribeMutableStateRequest_builder{
 		Namespace: s.namespace.String(),
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: workflowId,
 			RunId:      runID,
-		},
+		}.Build(),
 		Archetype: chasm.WorkflowArchetype,
-	})
+	}.Build())
 	s.NoError(err)
 
-	currentHistoryIndex := res1.DatabaseMutableState.ExecutionInfo.VersionHistories.CurrentVersionHistoryIndex
-	currentHistoryItems := res1.DatabaseMutableState.ExecutionInfo.VersionHistories.Histories[currentHistoryIndex].Items
+	currentHistoryIndex := res1.GetDatabaseMutableState().GetExecutionInfo().GetVersionHistories().GetCurrentVersionHistoryIndex()
+	currentHistoryItems := res1.GetDatabaseMutableState().GetExecutionInfo().GetVersionHistories().GetHistories()[currentHistoryIndex].GetItems()
 
 	s.Equal(3, len(currentHistoryItems))
-	s.Equal(&historyspb.VersionHistoryItem{EventId: 5, Version: 1}, currentHistoryItems[0])
-	s.Equal(&historyspb.VersionHistoryItem{EventId: 10, Version: 2}, currentHistoryItems[1])
-	s.Equal(&historyspb.VersionHistoryItem{EventId: 12, Version: 11}, currentHistoryItems[2])
+	s.Equal(historyspb.VersionHistoryItem_builder{EventId: 5, Version: 1}.Build(), currentHistoryItems[0])
+	s.Equal(historyspb.VersionHistoryItem_builder{EventId: 10, Version: 2}.Build(), currentHistoryItems[1])
+	s.Equal(historyspb.VersionHistoryItem_builder{EventId: 12, Version: 11}.Build(), currentHistoryItems[2])
 	s.assertHistoryEvents(context.Background(), s.namespaceID.String(), workflowId, runID, 1, 1, 12, 11, eventBatches)
 }
 
@@ -386,40 +387,40 @@ func (s *ReplicationMigrationBackTestSuite) mockActiveGetRawHistoryApiCalls(
 	lastBatch := eventBatches[len(eventBatches)-1]
 	lastEvent := lastBatch[len(lastBatch)-1]
 	if len(eventBatches) == 1 {
-		s.mockActiveGetRawHistoryResponse(workflowID, runID, common.EmptyEventID, common.EmptyVersion, lastEvent.EventId, lastEvent.Version, nil, &adminservice.GetWorkflowExecutionRawHistoryResponse{
+		s.mockActiveGetRawHistoryResponse(workflowID, runID, common.EmptyEventID, common.EmptyVersion, lastEvent.GetEventId(), lastEvent.GetVersion(), nil, adminservice.GetWorkflowExecutionRawHistoryResponse_builder{
 			HistoryBatches: []*commonpb.DataBlob{
 				s.serializeEvents(eventBatches[0]),
 			},
 			VersionHistory: history,
-		}, nil).Times(1)
+		}.Build(), nil).Times(1)
 		return
 	}
 	token := []byte(runID + "-next-page-token" + "0")
-	s.mockActiveGetRawHistoryResponse(workflowID, runID, common.EmptyEventID, common.EmptyVersion, lastEvent.EventId, lastEvent.Version, nil, &adminservice.GetWorkflowExecutionRawHistoryResponse{
+	s.mockActiveGetRawHistoryResponse(workflowID, runID, common.EmptyEventID, common.EmptyVersion, lastEvent.GetEventId(), lastEvent.GetVersion(), nil, adminservice.GetWorkflowExecutionRawHistoryResponse_builder{
 		NextPageToken: token,
 		HistoryBatches: []*commonpb.DataBlob{
 			s.serializeEvents(eventBatches[0]),
 		},
 		VersionHistory: history,
-	}, nil).Times(1)
+	}.Build(), nil).Times(1)
 	for i := 1; i < len(eventBatches); i++ {
 		if i == len(eventBatches)-1 {
-			s.mockActiveGetRawHistoryResponse(workflowID, runID, common.EmptyEventID, common.EmptyVersion, lastEvent.EventId, lastEvent.Version, token, &adminservice.GetWorkflowExecutionRawHistoryResponse{
+			s.mockActiveGetRawHistoryResponse(workflowID, runID, common.EmptyEventID, common.EmptyVersion, lastEvent.GetEventId(), lastEvent.GetVersion(), token, adminservice.GetWorkflowExecutionRawHistoryResponse_builder{
 				HistoryBatches: []*commonpb.DataBlob{
 					s.serializeEvents(eventBatches[i]),
 				},
 				VersionHistory: history,
-			}, nil).Times(1)
+			}.Build(), nil).Times(1)
 			break
 		}
 		nextToken := []byte(runID + "-next-page-token" + string(rune(i)))
-		s.mockActiveGetRawHistoryResponse(workflowID, runID, common.EmptyEventID, common.EmptyVersion, lastEvent.EventId, lastEvent.Version, token, &adminservice.GetWorkflowExecutionRawHistoryResponse{
+		s.mockActiveGetRawHistoryResponse(workflowID, runID, common.EmptyEventID, common.EmptyVersion, lastEvent.GetEventId(), lastEvent.GetVersion(), token, adminservice.GetWorkflowExecutionRawHistoryResponse_builder{
 			NextPageToken: nextToken,
 			HistoryBatches: []*commonpb.DataBlob{
 				s.serializeEvents(eventBatches[i]),
 			},
 			VersionHistory: history,
-		}, nil).Times(1)
+		}.Build(), nil).Times(1)
 		token = nextToken
 	}
 }
@@ -436,19 +437,19 @@ func (s *ReplicationMigrationBackTestSuite) mockActiveGetRawHistoryResponse(
 	returnError error,
 ) *gomock.Call {
 	return s.mockAdminClient["cluster-a"].(*adminservicemock.MockAdminServiceClient).EXPECT().
-		GetWorkflowExecutionRawHistory(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryRequest{
+		GetWorkflowExecutionRawHistory(gomock.Any(), adminservice.GetWorkflowExecutionRawHistoryRequest_builder{
 			NamespaceId: s.namespaceID.String(),
-			Execution: &commonpb.WorkflowExecution{
+			Execution: commonpb.WorkflowExecution_builder{
 				WorkflowId: workflowID,
 				RunId:      runID,
-			},
+			}.Build(),
 			StartEventId:      startEventID,
 			StartEventVersion: startEventVersion,
 			EndEventId:        endEventID,
 			EndEventVersion:   endEventVersion,
 			MaximumPageSize:   100,
 			NextPageToken:     token,
-		}).Return(returnResponse, returnError)
+		}.Build()).Return(returnResponse, returnError)
 }
 
 func (s *ReplicationMigrationBackTestSuite) getEventSlices(version int64, timeDrift time.Duration) [][]*historypb.HistoryEvent {
@@ -456,73 +457,73 @@ func (s *ReplicationMigrationBackTestSuite) getEventSlices(version int64, timeDr
 	workflowType := "workflowType"
 	identity := "identity"
 	slice1 := []*historypb.HistoryEvent{
-		{
+		historypb.HistoryEvent_builder{
 			EventId:   1,
 			EventTime: timestamppb.New(time.Now().Add(timeDrift * time.Second).UTC()),
 			Version:   version,
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 			TaskId:    34603008,
-			Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
-				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
-				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskqueue},
+			WorkflowExecutionStartedEventAttributes: historypb.WorkflowExecutionStartedEventAttributes_builder{
+				WorkflowType:             commonpb.WorkflowType_builder{Name: workflowType}.Build(),
+				TaskQueue:                taskqueuepb.TaskQueue_builder{Name: taskqueue}.Build(),
 				Input:                    nil,
 				WorkflowRunTimeout:       durationpb.New(1000 * time.Second),
 				WorkflowTaskTimeout:      durationpb.New(1000 * time.Second),
 				FirstWorkflowTaskBackoff: durationpb.New(100 * time.Second),
 				Initiator:                enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW,
-			}},
-		},
-		{
+			}.Build(),
+		}.Build(),
+		historypb.HistoryEvent_builder{
 			EventId:   2,
 			EventTime: timestamppb.New(time.Now().Add(timeDrift * time.Second).UTC()),
 			Version:   version,
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 			TaskId:    34603009,
-			Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
-				TaskQueue:           &taskqueuepb.TaskQueue{Name: taskqueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			WorkflowTaskScheduledEventAttributes: historypb.WorkflowTaskScheduledEventAttributes_builder{
+				TaskQueue:           taskqueuepb.TaskQueue_builder{Name: taskqueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 				StartToCloseTimeout: durationpb.New(1000 * time.Second),
 				Attempt:             1,
-			}},
-		},
+			}.Build(),
+		}.Build(),
 	}
 	slice2 := []*historypb.HistoryEvent{
-		{
+		historypb.HistoryEvent_builder{
 			EventId:   3,
 			EventTime: timestamppb.New(time.Now().Add(timeDrift * time.Second).UTC()),
 			Version:   version,
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
 			TaskId:    34603018,
-			Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{
+			WorkflowTaskStartedEventAttributes: historypb.WorkflowTaskStartedEventAttributes_builder{
 				ScheduledEventId: 2,
 				Identity:         identity,
 				RequestId:        uuid.NewString(),
-			}},
-		},
+			}.Build(),
+		}.Build(),
 	}
 	slice3 := []*historypb.HistoryEvent{
-		{
+		historypb.HistoryEvent_builder{
 			EventId:   4,
 			EventTime: timestamppb.New(time.Now().Add(timeDrift * time.Second).UTC()),
 			Version:   version,
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
 			TaskId:    34603023,
-			Attributes: &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{
+			WorkflowTaskCompletedEventAttributes: historypb.WorkflowTaskCompletedEventAttributes_builder{
 				ScheduledEventId: 2,
 				StartedEventId:   3,
 				Identity:         identity,
-			}},
-		},
-		{
+			}.Build(),
+		}.Build(),
+		historypb.HistoryEvent_builder{
 			EventId:   5,
 			EventTime: timestamppb.New(time.Now().Add(timeDrift * time.Second).UTC()),
 			Version:   version,
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
 			TaskId:    34603024,
-			Attributes: &historypb.HistoryEvent_WorkflowExecutionCompletedEventAttributes{WorkflowExecutionCompletedEventAttributes: &historypb.WorkflowExecutionCompletedEventAttributes{
+			WorkflowExecutionCompletedEventAttributes: historypb.WorkflowExecutionCompletedEventAttributes_builder{
 				WorkflowTaskCompletedEventId: 4,
 				Result:                       nil,
-			}},
-		},
+			}.Build(),
+		}.Build(),
 	}
 	eventsSlices := [][]*historypb.HistoryEvent{slice1, slice2, slice3}
 	return eventsSlices
@@ -532,23 +533,23 @@ func (s *ReplicationMigrationBackTestSuite) registerNamespace() {
 	s.namespace = namespace.Name("test-simple-workflow-ndc-" + common.GenerateRandomString(5))
 	passiveFrontend := s.passiveCluster.FrontendClient() //
 	replicationConfig := []*replicationpb.ClusterReplicationConfig{
-		{ClusterName: clusterName[0]},
-		{ClusterName: clusterName[1]},
+		replicationpb.ClusterReplicationConfig_builder{ClusterName: clusterName[0]}.Build(),
+		replicationpb.ClusterReplicationConfig_builder{ClusterName: clusterName[1]}.Build(),
 	}
-	_, err := passiveFrontend.RegisterNamespace(context.Background(), &workflowservice.RegisterNamespaceRequest{
+	_, err := passiveFrontend.RegisterNamespace(context.Background(), workflowservice.RegisterNamespaceRequest_builder{
 		Namespace:                        s.namespace.String(),
 		IsGlobalNamespace:                true,
 		Clusters:                         replicationConfig,
 		ActiveClusterName:                clusterName[0],
 		WorkflowExecutionRetentionPeriod: durationpb.New(1 * time.Hour * 24),
-	})
+	}.Build())
 	s.Require().NoError(err)
 	// Wait for namespace cache to pick the change
 	time.Sleep(2 * testcore.NamespaceCacheRefreshInterval) //nolint:forbidigo
 
-	descReq := &workflowservice.DescribeNamespaceRequest{
+	descReq := workflowservice.DescribeNamespaceRequest_builder{
 		Namespace: s.namespace.String(),
-	}
+	}.Build()
 	resp, err := passiveFrontend.DescribeNamespace(context.Background(), descReq)
 	s.Require().NoError(err)
 	s.Require().NotNil(resp)
@@ -560,19 +561,17 @@ func (s *ReplicationMigrationBackTestSuite) registerNamespace() {
 func (s *ReplicationMigrationBackTestSuite) GetReplicationMessagesMock() (*adminservice.StreamWorkflowReplicationMessagesResponse, error) {
 	task := <-s.standByReplicationTasksChan
 	taskID := atomic.AddInt64(&s.standByTaskID, 1)
-	task.SourceTaskId = taskID
+	task.SetSourceTaskId(taskID)
 	tasks := []*replicationspb.ReplicationTask{task}
 
-	replicationMessage := &replicationspb.WorkflowReplicationMessages{
+	replicationMessage := replicationspb.WorkflowReplicationMessages_builder{
 		ReplicationTasks:       tasks,
 		ExclusiveHighWatermark: taskID + 1,
-	}
+	}.Build()
 
-	return &adminservice.StreamWorkflowReplicationMessagesResponse{
-		Attributes: &adminservice.StreamWorkflowReplicationMessagesResponse_Messages{
-			Messages: replicationMessage,
-		},
-	}, nil
+	return adminservice.StreamWorkflowReplicationMessagesResponse_builder{
+		Messages: proto.ValueOrDefault(replicationMessage),
+	}.Build(), nil
 }
 
 func (s *ReplicationMigrationBackTestSuite) createHistoryEventReplicationTaskFromHistoryEventBatch(
@@ -591,17 +590,16 @@ func (s *ReplicationMigrationBackTestSuite) createHistoryEventReplicationTaskFro
 	}
 	s.NoError(err)
 	taskType := enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK
-	replicationTask := &replicationspb.ReplicationTask{
+	replicationTask := replicationspb.ReplicationTask_builder{
 		TaskType: taskType,
-		Attributes: &replicationspb.ReplicationTask_HistoryTaskAttributes{
-			HistoryTaskAttributes: &replicationspb.HistoryTaskAttributes{
-				NamespaceId:         namespaceID,
-				WorkflowId:          workflowID,
-				RunId:               runID,
-				VersionHistoryItems: versionHistoryItems,
-				Events:              eventBlob,
-				NewRunEvents:        newRunEventBlob,
-			}},
-	}
+		HistoryTaskAttributes: replicationspb.HistoryTaskAttributes_builder{
+			NamespaceId:         namespaceID,
+			WorkflowId:          workflowID,
+			RunId:               runID,
+			VersionHistoryItems: versionHistoryItems,
+			Events:              eventBlob,
+			NewRunEvents:        newRunEventBlob,
+		}.Build(),
+	}.Build()
 	return replicationTask
 }

@@ -276,35 +276,33 @@ func TestMultiOperationErrorRetries(t *testing.T) {
 }
 
 func TestDiscardUnknownProto(t *testing.T) {
-	msRecord := &persistencespb.WorkflowMutableState{
-		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+	msRecord := persistencespb.WorkflowMutableState_builder{
+		ExecutionInfo: persistencespb.WorkflowExecutionInfo_builder{
 			NamespaceId: uuid.NewString(),
 			WorkflowId:  uuid.NewString(),
-		},
-		ExecutionState: &persistencespb.WorkflowExecutionState{
+		}.Build(),
+		ExecutionState: persistencespb.WorkflowExecutionState_builder{
 			RunId: uuid.NewString(),
 			State: enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
-		},
+		}.Build(),
 		TimerInfos: map[string]*persistencespb.TimerInfo{
-			"timer1": {
+			"timer1": persistencespb.TimerInfo_builder{
 				Version:        123,
 				StartedEventId: 10,
-			},
+			}.Build(),
 		},
 		BufferedEvents: []*historypb.HistoryEvent{
-			{
+			historypb.HistoryEvent_builder{
 				EventId: -123,
 				Version: 123,
-				Attributes: &historypb.HistoryEvent_ActivityTaskCompletedEventAttributes{
-					ActivityTaskCompletedEventAttributes: &historypb.ActivityTaskCompletedEventAttributes{
-						ScheduledEventId: 14,
-						StartedEventId:   15,
-					},
-				},
-			},
+				ActivityTaskCompletedEventAttributes: historypb.ActivityTaskCompletedEventAttributes_builder{
+					ScheduledEventId: 14,
+					StartedEventId:   15,
+				}.Build(),
+			}.Build(),
 		},
 		NextEventId: 101,
-	}
+	}.Build()
 
 	data, err := msRecord.Marshal()
 	require.NoError(t, err)
@@ -315,17 +313,17 @@ func TestDiscardUnknownProto(t *testing.T) {
 			protopack.Tag{Number: 1000, Type: protopack.BytesType},
 		}.Marshal(),
 	)
-	msRecord.ExecutionInfo.ProtoReflect().SetUnknown(
+	msRecord.GetExecutionInfo().ProtoReflect().SetUnknown(
 		protopack.Message{
 			protopack.Int32(-1),
 		}.Marshal(),
 	)
-	msRecord.TimerInfos["timer1"].ProtoReflect().SetUnknown(
+	msRecord.GetTimerInfos()["timer1"].ProtoReflect().SetUnknown(
 		protopack.Message{
 			protopack.String("unknown string"),
 		}.Marshal(),
 	)
-	msRecord.BufferedEvents[0].ProtoReflect().SetUnknown(
+	msRecord.GetBufferedEvents()[0].ProtoReflect().SetUnknown(
 		protopack.Message{
 			protopack.Bool(true),
 		}.Marshal(),
@@ -345,7 +343,7 @@ func TestDiscardUnknownProto(t *testing.T) {
 }
 
 func generateExecutionInfo() (a, b *persistencespb.WorkflowExecutionInfo) {
-	a = &persistencespb.WorkflowExecutionInfo{
+	a = persistencespb.WorkflowExecutionInfo_builder{
 		NamespaceId:                             "deadbeef-0123-4567-890a-bcdef0123456",
 		WorkflowId:                              "wId",
 		TaskQueue:                               "testTaskQueue",
@@ -359,24 +357,24 @@ func generateExecutionInfo() (a, b *persistencespb.WorkflowExecutionInfo) {
 		WorkflowTaskTimeout:                     timestamp.DurationPtr(time.Second * 100),
 		WorkflowTaskAttempt:                     1,
 		WorkflowTaskType:                        enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
-		VersionHistories: &historyspb.VersionHistories{
+		VersionHistories: historyspb.VersionHistories_builder{
 			Histories: []*historyspb.VersionHistory{
-				{
+				historyspb.VersionHistory_builder{
 					BranchToken: []byte("token#1"),
 					Items: []*historyspb.VersionHistoryItem{
-						{EventId: 102, Version: 1234},
+						historyspb.VersionHistoryItem_builder{EventId: 102, Version: 1234}.Build(),
 					},
-				},
+				}.Build(),
 			},
-		},
+		}.Build(),
 		TransitionHistory: []*persistencespb.VersionedTransition{
-			{NamespaceFailoverVersion: 1234, TransitionCount: 1024},
-			{TransitionCount: 1025},
+			persistencespb.VersionedTransition_builder{NamespaceFailoverVersion: 1234, TransitionCount: 1024}.Build(),
+			persistencespb.VersionedTransition_builder{TransitionCount: 1025}.Build(),
 		},
-		SignalRequestIdsLastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1025},
-	}
+		SignalRequestIdsLastUpdateVersionedTransition: persistencespb.VersionedTransition_builder{TransitionCount: 1025}.Build(),
+	}.Build()
 
-	b = &persistencespb.WorkflowExecutionInfo{
+	b = persistencespb.WorkflowExecutionInfo_builder{
 		NamespaceId:                             "deadbeef-0123-4567-890a-bcdef0123456",
 		WorkflowId:                              "wId",
 		TaskQueue:                               "testTaskQueue",
@@ -390,51 +388,49 @@ func generateExecutionInfo() (a, b *persistencespb.WorkflowExecutionInfo) {
 		WorkflowTaskTimeout:                     timestamp.DurationPtr(time.Second * 100),
 		WorkflowTaskAttempt:                     1,
 		WorkflowTaskType:                        enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE,
-		VersionHistories: &historyspb.VersionHistories{
+		VersionHistories: historyspb.VersionHistories_builder{
 			Histories: []*historyspb.VersionHistory{
-				{
+				historyspb.VersionHistory_builder{
 					BranchToken: []byte("token#1"),
 					Items: []*historyspb.VersionHistoryItem{
-						{EventId: 102, Version: 1234},
+						historyspb.VersionHistoryItem_builder{EventId: 102, Version: 1234}.Build(),
 					},
-				},
+				}.Build(),
 			},
-		},
+		}.Build(),
 		TransitionHistory: []*persistencespb.VersionedTransition{
-			{NamespaceFailoverVersion: 1234, TransitionCount: 1024},
-			{TransitionCount: 1025},
+			persistencespb.VersionedTransition_builder{NamespaceFailoverVersion: 1234, TransitionCount: 1024}.Build(),
+			persistencespb.VersionedTransition_builder{TransitionCount: 1025}.Build(),
 		},
-		SignalRequestIdsLastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1025},
-	}
+		SignalRequestIdsLastUpdateVersionedTransition: persistencespb.VersionedTransition_builder{TransitionCount: 1025}.Build(),
+	}.Build()
 	return
 }
 
 func TestMergeProtoExcludingFields(t *testing.T) {
-	source := &persistencespb.WorkflowExecutionInfo{
+	source := persistencespb.WorkflowExecutionInfo_builder{
 		NamespaceId: uuid.NewString(),
 		WorkflowId:  uuid.NewString(),
-	}
+	}.Build()
 
-	target := &persistencespb.WorkflowExecutionInfo{
-		NamespaceId: source.NamespaceId + "_target",
-		WorkflowId:  source.WorkflowId + "_target",
-	}
+	target := persistencespb.WorkflowExecutionInfo_builder{
+		NamespaceId: source.GetNamespaceId() + "_target",
+		WorkflowId:  source.GetWorkflowId() + "_target",
+	}.Build()
 
-	doNotSync := func(v any) []interface{} {
-		info, ok := v.(*persistencespb.WorkflowExecutionInfo)
-		if !ok || info == nil {
+	doNotSync := func(v any) []string {
+		_, ok := v.(*persistencespb.WorkflowExecutionInfo)
+		if !ok {
 			return nil
 		}
-		return []interface{}{
-			&info.NamespaceId,
-		}
+		return []string{"NamespaceId"}
 	}
 
 	err := MergeProtoExcludingFields(target, source, doNotSync)
 	require.NoError(t, err)
 
-	require.NotEqual(t, source.NamespaceId, target.NamespaceId)
-	require.Equal(t, source.WorkflowId, target.WorkflowId)
+	require.NotEqual(t, source.GetNamespaceId(), target.GetNamespaceId())
+	require.Equal(t, source.GetWorkflowId(), target.GetWorkflowId())
 
 	msRecord := &persistencespb.WorkflowMutableState{}
 	err = MergeProtoExcludingFields(target, msRecord, doNotSync)
@@ -445,46 +441,46 @@ func TestMergeProtoExcludingFields(t *testing.T) {
 	require.Error(t, err)
 
 	source, target = generateExecutionInfo()
-	doNotSync = func(v any) []interface{} {
-		info, ok := v.(*persistencespb.WorkflowExecutionInfo)
-		if !ok || info == nil {
+	doNotSync = func(v any) []string {
+		_, ok := v.(*persistencespb.WorkflowExecutionInfo)
+		if !ok {
 			return nil
 		}
-		return []interface{}{
-			&info.WorkflowTaskVersion,
-			&info.WorkflowTaskScheduledEventId,
-			&info.WorkflowTaskStartedEventId,
-			&info.WorkflowTaskRequestId,
-			&info.WorkflowTaskTimeout,
-			&info.WorkflowTaskAttempt,
-			&info.WorkflowTaskStartedTime,
-			&info.WorkflowTaskScheduledTime,
-			&info.WorkflowTaskOriginalScheduledTime,
-			&info.WorkflowTaskType,
-			&info.WorkflowTaskSuggestContinueAsNew,
-			&info.WorkflowTaskSuggestContinueAsNewReasons,
-			&info.WorkflowTaskHistorySizeBytes,
-			&info.WorkflowTaskBuildId,
-			&info.WorkflowTaskBuildIdRedirectCounter,
-			&info.VersionHistories,
-			&info.ExecutionStats,
-			&info.LastFirstEventTxnId,
-			&info.ParentClock,
-			&info.CloseTransferTaskId,
-			&info.CloseVisibilityTaskId,
-			&info.RelocatableAttributesRemoved,
-			&info.WorkflowExecutionTimerTaskStatus,
-			&info.SubStateMachinesByType,
-			&info.StateMachineTimers,
-			&info.TaskGenerationShardClockTimestamp,
-			&info.UpdateInfos,
+		return []string{
+			"WorkflowTaskVersion",
+			"WorkflowTaskScheduledEventId",
+			"WorkflowTaskStartedEventId",
+			"WorkflowTaskRequestId",
+			"WorkflowTaskTimeout",
+			"WorkflowTaskAttempt",
+			"WorkflowTaskStartedTime",
+			"WorkflowTaskScheduledTime",
+			"WorkflowTaskOriginalScheduledTime",
+			"WorkflowTaskType",
+			"WorkflowTaskSuggestContinueAsNew",
+			"WorkflowTaskSuggestContinueAsNewReasons",
+			"WorkflowTaskHistorySizeBytes",
+			"WorkflowTaskBuildId",
+			"WorkflowTaskBuildIdRedirectCounter",
+			"VersionHistories",
+			"ExecutionStats",
+			"LastFirstEventTxnId",
+			"ParentClock",
+			"CloseTransferTaskId",
+			"CloseVisibilityTaskId",
+			"RelocatableAttributesRemoved",
+			"WorkflowExecutionTimerTaskStatus",
+			"SubStateMachinesByType",
+			"StateMachineTimers",
+			"TaskGenerationShardClockTimestamp",
+			"UpdateInfos",
 		}
 	}
 	err = MergeProtoExcludingFields(target, source, doNotSync)
 	require.NoError(t, err)
 
-	require.NotEqual(t, source.WorkflowTaskVersion, target.WorkflowTaskVersion)
-	require.Equal(t, source.WorkflowId, target.WorkflowId)
+	require.NotEqual(t, source.GetWorkflowTaskVersion(), target.GetWorkflowTaskVersion())
+	require.Equal(t, source.GetWorkflowId(), target.GetWorkflowId())
 }
 
 // Tests that CreateHistoryStartWorkflowRequest doesn't mutate the request
@@ -492,21 +488,21 @@ func TestMergeProtoExcludingFields(t *testing.T) {
 func TestCreateHistoryStartWorkflowRequestPayloads(t *testing.T) {
 	failurePayload := &failurepb.Failure{}
 	resultPayload := payloads.EncodeString("result")
-	startRequest := &workflowservice.StartWorkflowExecutionRequest{
+	startRequest := workflowservice.StartWorkflowExecutionRequest_builder{
 		Namespace:            uuid.NewString(),
 		WorkflowId:           uuid.NewString(),
 		ContinuedFailure:     failurePayload,
 		LastCompletionResult: resultPayload,
-	}
+	}.Build()
 	startRequestClone := CloneProto(startRequest)
 
-	histRequest := CreateHistoryStartWorkflowRequest(startRequest.Namespace, startRequest, nil, nil, time.Now())
+	histRequest := CreateHistoryStartWorkflowRequest(startRequest.GetNamespace(), startRequest, nil, nil, time.Now())
 
 	// ensure we aren't copying the payloads into the history request twice
-	require.Equal(t, failurePayload, histRequest.ContinuedFailure)
-	require.Equal(t, resultPayload, histRequest.LastCompletionResult)
-	require.Nil(t, histRequest.StartRequest.ContinuedFailure)
-	require.Nil(t, histRequest.StartRequest.LastCompletionResult)
+	require.Equal(t, failurePayload, histRequest.GetContinuedFailure())
+	require.Equal(t, resultPayload, histRequest.GetLastCompletionResult())
+	require.Nil(t, histRequest.GetStartRequest().GetContinuedFailure())
+	require.Nil(t, histRequest.GetStartRequest().GetLastCompletionResult())
 
 	// ensure the original request object is unmodified
 	require.Equal(t, startRequestClone, startRequest)

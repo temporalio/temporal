@@ -42,13 +42,13 @@ func TestUpdateAndListNamespace(t *testing.T) {
 	assert.Empty(t, list, "expected empty list before updates")
 
 	// Add some heartbeats
-	hb1 := &workerpb.WorkerHeartbeat{WorkerInstanceKey: "workerA", Status: enumspb.WORKER_STATUS_RUNNING}
-	hb2 := &workerpb.WorkerHeartbeat{WorkerInstanceKey: "workerB", Status: enumspb.WORKER_STATUS_RUNNING}
+	hb1 := workerpb.WorkerHeartbeat_builder{WorkerInstanceKey: "workerA", Status: enumspb.WORKER_STATUS_RUNNING}.Build()
+	hb2 := workerpb.WorkerHeartbeat_builder{WorkerInstanceKey: "workerB", Status: enumspb.WORKER_STATUS_RUNNING}.Build()
 	m.upsertHeartbeats("ns1", []*workerpb.WorkerHeartbeat{hb1, hb2})
 
 	list = m.filterWorkers("ns1", alwaysTrue)
 	// Order is not guaranteed; check contents by keys
-	keys := []string{list[0].WorkerInstanceKey, list[1].WorkerInstanceKey}
+	keys := []string{list[0].GetWorkerInstanceKey(), list[1].GetWorkerInstanceKey()}
 	assert.Contains(t, keys, "workerA")
 	assert.Contains(t, keys, "workerB")
 
@@ -85,8 +85,8 @@ func TestShutdownStatusRemovesWorker(t *testing.T) {
 	defer m.Stop()
 
 	// Add two running workers
-	hb1 := &workerpb.WorkerHeartbeat{WorkerInstanceKey: "worker1", Status: enumspb.WORKER_STATUS_RUNNING}
-	hb2 := &workerpb.WorkerHeartbeat{WorkerInstanceKey: "worker2", Status: enumspb.WORKER_STATUS_RUNNING}
+	hb1 := workerpb.WorkerHeartbeat_builder{WorkerInstanceKey: "worker1", Status: enumspb.WORKER_STATUS_RUNNING}.Build()
+	hb2 := workerpb.WorkerHeartbeat_builder{WorkerInstanceKey: "worker2", Status: enumspb.WORKER_STATUS_RUNNING}.Build()
 	m.upsertHeartbeats("ns1", []*workerpb.WorkerHeartbeat{hb1, hb2})
 
 	// Verify both workers are registered
@@ -95,13 +95,13 @@ func TestShutdownStatusRemovesWorker(t *testing.T) {
 	assert.Equal(t, int64(2), m.total.Load(), "total should be 2")
 
 	// Worker1 sends shutdown status
-	hbShutdown := &workerpb.WorkerHeartbeat{WorkerInstanceKey: "worker1", Status: enumspb.WORKER_STATUS_SHUTDOWN}
+	hbShutdown := workerpb.WorkerHeartbeat_builder{WorkerInstanceKey: "worker1", Status: enumspb.WORKER_STATUS_SHUTDOWN}.Build()
 	m.upsertHeartbeats("ns1", []*workerpb.WorkerHeartbeat{hbShutdown})
 
 	// Verify only worker1 is removed, worker2 remains
 	list = m.filterWorkers("ns1", alwaysTrue)
 	assert.Len(t, list, 1, "only one worker should remain")
-	assert.Equal(t, "worker2", list[0].WorkerInstanceKey, "worker2 should remain")
+	assert.Equal(t, "worker2", list[0].GetWorkerInstanceKey(), "worker2 should remain")
 	assert.Equal(t, int64(1), m.total.Load(), "total should be 1 after shutdown")
 
 	// Verify metrics
@@ -131,7 +131,7 @@ func TestShutdownStatusForNonExistentWorker(t *testing.T) {
 	defer m.Stop()
 
 	// Send shutdown for non-existent worker - should be a no-op
-	hb := &workerpb.WorkerHeartbeat{WorkerInstanceKey: "unknown", Status: enumspb.WORKER_STATUS_SHUTDOWN}
+	hb := workerpb.WorkerHeartbeat_builder{WorkerInstanceKey: "unknown", Status: enumspb.WORKER_STATUS_SHUTDOWN}.Build()
 	m.upsertHeartbeats("ns1", []*workerpb.WorkerHeartbeat{hb})
 
 	// Verify nothing happened
@@ -155,7 +155,7 @@ func TestListNamespacePredicate(t *testing.T) {
 	// Set up multiple entries
 	for i := 1; i <= 5; i++ {
 		key := fmt.Sprintf("key%d", i)
-		hb := &workerpb.WorkerHeartbeat{WorkerInstanceKey: key, CurrentStickyCacheSize: int32(i)}
+		hb := workerpb.WorkerHeartbeat_builder{WorkerInstanceKey: key, CurrentStickyCacheSize: int32(i)}.Build()
 		m.upsertHeartbeats("ns", []*workerpb.WorkerHeartbeat{hb})
 	}
 
@@ -165,8 +165,8 @@ func TestListNamespacePredicate(t *testing.T) {
 		pred      func(*workerpb.WorkerHeartbeat) bool
 		wantCount int
 	}{
-		{"metric>3", func(h *workerpb.WorkerHeartbeat) bool { return h.CurrentStickyCacheSize > 3 }, 2},
-		{"metric even", func(h *workerpb.WorkerHeartbeat) bool { return h.CurrentStickyCacheSize%2 == 0 }, 2},
+		{"metric>3", func(h *workerpb.WorkerHeartbeat) bool { return h.GetCurrentStickyCacheSize() > 3 }, 2},
+		{"metric even", func(h *workerpb.WorkerHeartbeat) bool { return h.GetCurrentStickyCacheSize()%2 == 0 }, 2},
 		{"All", alwaysTrue, 5},
 	}
 
@@ -195,12 +195,12 @@ func TestEvictByTTL(t *testing.T) {
 	})
 	defer m.Stop()
 
-	hb := &workerpb.WorkerHeartbeat{WorkerInstanceKey: "oldWorker"}
+	hb := workerpb.WorkerHeartbeat_builder{WorkerInstanceKey: "oldWorker"}.Build()
 	m.upsertHeartbeats("ns", []*workerpb.WorkerHeartbeat{hb})
 
 	// Manually move beyond TTL
 	b := m.getBucket("ns")
-	e := b.namespaces["ns"][hb.WorkerInstanceKey]
+	e := b.namespaces["ns"][hb.GetWorkerInstanceKey()]
 	e.lastSeen = time.Now().Add(-2 * time.Second)
 
 	// Perform eviction
@@ -241,7 +241,7 @@ func TestEvictByCapacity(t *testing.T) {
 	// Insert more entries than maxItems
 	for i := 1; i <= 5; i++ {
 		key := fmt.Sprintf("cap%d", i)
-		hb := &workerpb.WorkerHeartbeat{WorkerInstanceKey: key}
+		hb := workerpb.WorkerHeartbeat_builder{WorkerInstanceKey: key}.Build()
 		m.upsertHeartbeats("ns", []*workerpb.WorkerHeartbeat{hb})
 	}
 
@@ -297,7 +297,7 @@ func TestEvictByCapacityWithMinAgeProtection(t *testing.T) {
 	// Add 3 entries (over capacity) - all will be "new" (< minEvictAge)
 	for i := 1; i <= 3; i++ {
 		key := fmt.Sprintf("worker%d", i)
-		hb := &workerpb.WorkerHeartbeat{WorkerInstanceKey: key}
+		hb := workerpb.WorkerHeartbeat_builder{WorkerInstanceKey: key}.Build()
 		m.upsertHeartbeats("ns", []*workerpb.WorkerHeartbeat{hb})
 	}
 
@@ -347,7 +347,7 @@ func TestEvictByCapacityAfterMinAge(t *testing.T) {
 		// Add 3 entries (over capacity)
 		for i := 1; i <= 3; i++ {
 			key := fmt.Sprintf("worker%d", i)
-			hb := &workerpb.WorkerHeartbeat{WorkerInstanceKey: key}
+			hb := workerpb.WorkerHeartbeat_builder{WorkerInstanceKey: key}.Build()
 			m.upsertHeartbeats("ns", []*workerpb.WorkerHeartbeat{hb})
 		}
 
@@ -392,16 +392,16 @@ func TestMultipleNamespaces(t *testing.T) {
 
 	// Add 3 workers to namespace1
 	ns1Workers := []*workerpb.WorkerHeartbeat{
-		{WorkerInstanceKey: "ns1-worker1", TaskQueue: "queue1"},
-		{WorkerInstanceKey: "ns1-worker2", TaskQueue: "queue1"},
-		{WorkerInstanceKey: "ns1-worker3", TaskQueue: "queue2"},
+		workerpb.WorkerHeartbeat_builder{WorkerInstanceKey: "ns1-worker1", TaskQueue: "queue1"}.Build(),
+		workerpb.WorkerHeartbeat_builder{WorkerInstanceKey: "ns1-worker2", TaskQueue: "queue1"}.Build(),
+		workerpb.WorkerHeartbeat_builder{WorkerInstanceKey: "ns1-worker3", TaskQueue: "queue2"}.Build(),
 	}
 	m.upsertHeartbeats("namespace1", ns1Workers)
 
 	// Add 2 workers to namespace2
 	ns2Workers := []*workerpb.WorkerHeartbeat{
-		{WorkerInstanceKey: "ns2-worker1", TaskQueue: "queue3"},
-		{WorkerInstanceKey: "ns2-worker2", TaskQueue: "queue3"},
+		workerpb.WorkerHeartbeat_builder{WorkerInstanceKey: "ns2-worker1", TaskQueue: "queue3"}.Build(),
+		workerpb.WorkerHeartbeat_builder{WorkerInstanceKey: "ns2-worker2", TaskQueue: "queue3"}.Build(),
 	}
 	m.upsertHeartbeats("namespace2", ns2Workers)
 
@@ -458,7 +458,7 @@ func TestEvictLoopRecordsUtilizationMetric(t *testing.T) {
 		// Add some entries to create utilization
 		for i := 1; i <= 3; i++ {
 			key := fmt.Sprintf("worker%d", i)
-			hb := &workerpb.WorkerHeartbeat{WorkerInstanceKey: key}
+			hb := workerpb.WorkerHeartbeat_builder{WorkerInstanceKey: key}.Build()
 			m.upsertHeartbeats("ns", []*workerpb.WorkerHeartbeat{hb})
 		}
 
@@ -498,7 +498,7 @@ func BenchmarkUpdate(b *testing.B) {
 		EnablePluginMetrics: dynamicconfig.GetBoolPropertyFn(true),
 	})
 	defer m.Stop()
-	hb := &workerpb.WorkerHeartbeat{WorkerInstanceKey: "benchWorker"}
+	hb := workerpb.WorkerHeartbeat_builder{WorkerInstanceKey: "benchWorker"}.Build()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		m.upsertHeartbeats("benchNs", []*workerpb.WorkerHeartbeat{hb})
@@ -519,7 +519,7 @@ func BenchmarkListNamespace(b *testing.B) {
 	// Pre-populate with entries
 	for i := 0; i < 1000; i++ {
 		key := fmt.Sprintf("worker%d", i)
-		hb := &workerpb.WorkerHeartbeat{WorkerInstanceKey: key}
+		hb := workerpb.WorkerHeartbeat_builder{WorkerInstanceKey: key}.Build()
 		m.upsertHeartbeats("benchNs", []*workerpb.WorkerHeartbeat{hb})
 	}
 	b.ResetTimer()
@@ -552,7 +552,7 @@ func BenchmarkRandomUpdate(b *testing.B) {
 	for _, ns := range namespaces {
 		for i := 0; i < totalHeartbeats; i++ {
 			key := fmt.Sprintf("%s-worker%d", ns, i)
-			hb := &workerpb.WorkerHeartbeat{WorkerInstanceKey: key, CurrentStickyCacheSize: int32(i)}
+			hb := workerpb.WorkerHeartbeat_builder{WorkerInstanceKey: key, CurrentStickyCacheSize: int32(i)}.Build()
 			m.upsertHeartbeats(ns, []*workerpb.WorkerHeartbeat{hb})
 			pairs = append(pairs, pair{ns: ns, hb: hb})
 		}
@@ -587,25 +587,25 @@ func TestActivitySlotsMetric(t *testing.T) {
 	defer m.Stop()
 
 	// Create workers with different activity slot usage
-	worker1 := &workerpb.WorkerHeartbeat{
+	worker1 := workerpb.WorkerHeartbeat_builder{
 		WorkerInstanceKey: tv.WorkerIdentity() + "_1",
 		Status:            enumspb.WORKER_STATUS_RUNNING,
-		ActivityTaskSlotsInfo: &workerpb.WorkerSlotsInfo{
+		ActivityTaskSlotsInfo: workerpb.WorkerSlotsInfo_builder{
 			CurrentUsedSlots: 5,
-		},
-	}
-	worker2 := &workerpb.WorkerHeartbeat{
+		}.Build(),
+	}.Build()
+	worker2 := workerpb.WorkerHeartbeat_builder{
 		WorkerInstanceKey: tv.WorkerIdentity() + "_2",
 		Status:            enumspb.WORKER_STATUS_RUNNING,
-		ActivityTaskSlotsInfo: &workerpb.WorkerSlotsInfo{
+		ActivityTaskSlotsInfo: workerpb.WorkerSlotsInfo_builder{
 			CurrentUsedSlots: 10,
-		},
-	}
-	worker3 := &workerpb.WorkerHeartbeat{
+		}.Build(),
+	}.Build()
+	worker3 := workerpb.WorkerHeartbeat_builder{
 		WorkerInstanceKey: tv.WorkerIdentity() + "_3",
 		Status:            enumspb.WORKER_STATUS_RUNNING,
 		// No ActivityTaskSlotsInfo - should not record metric
-	}
+	}.Build()
 
 	testNamespace := tv.NamespaceID()
 	testNamespaceName := namespace.Name(testNamespace + "_name")
@@ -658,29 +658,29 @@ func TestPluginMetricsExported(t *testing.T) {
 	// Worker 2: 2 plugins (plugin-a, plugin-c) - plugin-a is shared with worker1
 	// Worker 3: 0 plugins
 
-	worker1 := &workerpb.WorkerHeartbeat{
+	worker1 := workerpb.WorkerHeartbeat_builder{
 		WorkerInstanceKey: worker1Key,
 		Status:            enumspb.WORKER_STATUS_RUNNING,
 		Plugins: []*workerpb.PluginInfo{
-			{Name: pluginA, Version: pluginAVersion},
-			{Name: pluginB, Version: pluginBVersion},
+			workerpb.PluginInfo_builder{Name: pluginA, Version: pluginAVersion}.Build(),
+			workerpb.PluginInfo_builder{Name: pluginB, Version: pluginBVersion}.Build(),
 		},
-	}
+	}.Build()
 
-	worker2 := &workerpb.WorkerHeartbeat{
+	worker2 := workerpb.WorkerHeartbeat_builder{
 		WorkerInstanceKey: worker2Key,
 		Status:            enumspb.WORKER_STATUS_RUNNING,
 		Plugins: []*workerpb.PluginInfo{
-			{Name: pluginA, Version: pluginAVersion2}, // Same plugin name as worker1, different version
-			{Name: pluginC, Version: pluginCVersion},
+			workerpb.PluginInfo_builder{Name: pluginA, Version: pluginAVersion2}.Build(), // Same plugin name as worker1, different version
+			workerpb.PluginInfo_builder{Name: pluginC, Version: pluginCVersion}.Build(),
 		},
-	}
+	}.Build()
 
-	worker3 := &workerpb.WorkerHeartbeat{
+	worker3 := workerpb.WorkerHeartbeat_builder{
 		WorkerInstanceKey: worker3Key,
 		Status:            enumspb.WORKER_STATUS_RUNNING,
 		// No plugins - empty array
-	}
+	}.Build()
 
 	testNamespace := tv.NamespaceID()
 	testNamespaceName := namespace.Name(testNamespace + "_name")
@@ -732,14 +732,14 @@ func TestPluginMetricsDisabled(t *testing.T) {
 	defer m.Stop()
 
 	// Test data with workers having plugins
-	worker1 := &workerpb.WorkerHeartbeat{
+	worker1 := workerpb.WorkerHeartbeat_builder{
 		WorkerInstanceKey: tv.WorkerIdentity() + "_1",
 		Status:            enumspb.WORKER_STATUS_RUNNING,
 		Plugins: []*workerpb.PluginInfo{
-			{Name: "plugin-a", Version: "1.0.0"},
-			{Name: "plugin-b", Version: "2.1.0"},
+			workerpb.PluginInfo_builder{Name: "plugin-a", Version: "1.0.0"}.Build(),
+			workerpb.PluginInfo_builder{Name: "plugin-b", Version: "2.1.0"}.Build(),
 		},
-	}
+	}.Build()
 
 	// Upsert heartbeats for test namespace
 	testNamespace := tv.NamespaceID()

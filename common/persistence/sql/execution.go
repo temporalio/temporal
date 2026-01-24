@@ -166,7 +166,7 @@ func (m *sqlExecutionStore) createWorkflowExecutionTx(
 
 	case p.CreateWorkflowModeBypassCurrent:
 		if err := assertRunIDMismatch(
-			primitives.MustParseUUID(newWorkflow.ExecutionState.RunId),
+			primitives.MustParseUUID(newWorkflow.ExecutionState.GetRunId()),
 			currentRow,
 			m.serializer,
 		); err != nil {
@@ -183,13 +183,13 @@ func (m *sqlExecutionStore) createWorkflowExecutionTx(
 		WorkflowID:       workflowID,
 		RunID:            runID,
 		ArchetypeID:      request.ArchetypeID,
-		CreateRequestID:  newWorkflow.ExecutionState.CreateRequestId,
-		State:            newWorkflow.ExecutionState.State,
-		Status:           newWorkflow.ExecutionState.Status,
+		CreateRequestID:  newWorkflow.ExecutionState.GetCreateRequestId(),
+		State:            newWorkflow.ExecutionState.GetState(),
+		Status:           newWorkflow.ExecutionState.GetStatus(),
 		LastWriteVersion: lastWriteVersion,
 		StartTime:        getStartTimeFromState(newWorkflow.ExecutionState),
-		Data:             newWorkflow.ExecutionStateBlob.Data,
-		DataEncoding:     newWorkflow.ExecutionStateBlob.EncodingType.String(),
+		Data:             newWorkflow.ExecutionStateBlob.GetData(),
+		DataEncoding:     newWorkflow.ExecutionStateBlob.GetEncodingType().String(),
 	}
 
 	if err := createOrUpdateCurrentExecution(ctx, tx, row, request.Mode); err != nil {
@@ -368,7 +368,7 @@ func (m *sqlExecutionStore) updateWorkflowExecutionTx(
 
 	namespaceID := primitives.MustParseUUID(updateWorkflow.NamespaceID)
 	workflowID := updateWorkflow.WorkflowID
-	runID := primitives.MustParseUUID(updateWorkflow.ExecutionState.RunId)
+	runID := primitives.MustParseUUID(updateWorkflow.ExecutionState.GetRunId())
 
 	shardID := request.ShardID
 
@@ -399,28 +399,28 @@ func (m *sqlExecutionStore) updateWorkflowExecutionTx(
 		}
 
 		if newWorkflow != nil {
-			row.CreateRequestID = newWorkflow.ExecutionState.CreateRequestId
-			row.State = newWorkflow.ExecutionState.State
-			row.Status = newWorkflow.ExecutionState.Status
+			row.CreateRequestID = newWorkflow.ExecutionState.GetCreateRequestId()
+			row.State = newWorkflow.ExecutionState.GetState()
+			row.Status = newWorkflow.ExecutionState.GetStatus()
 			row.LastWriteVersion = newWorkflow.LastWriteVersion
 			row.NamespaceID = primitives.MustParseUUID(newWorkflow.NamespaceID)
-			row.RunID = primitives.MustParseUUID(newWorkflow.ExecutionState.RunId)
+			row.RunID = primitives.MustParseUUID(newWorkflow.ExecutionState.GetRunId())
 			row.StartTime = getStartTimeFromState(newWorkflow.ExecutionState)
-			row.Data = newWorkflow.ExecutionStateBlob.Data
-			row.DataEncoding = newWorkflow.ExecutionStateBlob.EncodingType.String()
+			row.Data = newWorkflow.ExecutionStateBlob.GetData()
+			row.DataEncoding = newWorkflow.ExecutionStateBlob.GetEncodingType().String()
 
 			if !bytes.Equal(namespaceID, row.NamespaceID) {
 				return serviceerror.NewUnavailable("UpdateWorkflowExecution: cannot continue as new to another namespace")
 			}
 		} else {
-			row.CreateRequestID = updateWorkflow.ExecutionState.CreateRequestId
-			row.State = updateWorkflow.ExecutionState.State
-			row.Status = updateWorkflow.ExecutionState.Status
+			row.CreateRequestID = updateWorkflow.ExecutionState.GetCreateRequestId()
+			row.State = updateWorkflow.ExecutionState.GetState()
+			row.Status = updateWorkflow.ExecutionState.GetStatus()
 			row.LastWriteVersion = updateWorkflow.LastWriteVersion
 			row.RunID = runID
 			row.StartTime = getStartTimeFromState(updateWorkflow.ExecutionState)
-			row.Data = updateWorkflow.ExecutionStateBlob.Data
-			row.DataEncoding = updateWorkflow.ExecutionStateBlob.EncodingType.String()
+			row.Data = updateWorkflow.ExecutionStateBlob.GetData()
+			row.DataEncoding = updateWorkflow.ExecutionStateBlob.GetEncodingType().String()
 			// we still call update only to update the current record
 		}
 		if err := assertRunIDAndUpdateCurrentExecution(ctx, tx, row, runID, m.serializer); err != nil {
@@ -495,7 +495,7 @@ func (m *sqlExecutionStore) conflictResolveWorkflowExecutionTx(
 			shardID,
 			namespaceID,
 			workflowID,
-			primitives.MustParseUUID(resetWorkflow.ExecutionState.RunId),
+			primitives.MustParseUUID(resetWorkflow.ExecutionState.GetRunId()),
 			request.ArchetypeID,
 			m.serializer,
 		); err != nil {
@@ -511,10 +511,10 @@ func (m *sqlExecutionStore) conflictResolveWorkflowExecutionTx(
 			executionStateBlob = newWorkflow.ExecutionStateBlob
 			lastWriteVersion = newWorkflow.LastWriteVersion
 		}
-		runID := primitives.MustParseUUID(executionState.RunId)
-		createRequestID := executionState.CreateRequestId
-		state := executionState.State
-		status := executionState.Status
+		runID := primitives.MustParseUUID(executionState.GetRunId())
+		createRequestID := executionState.GetCreateRequestId()
+		state := executionState.GetState()
+		status := executionState.GetStatus()
 
 		row := sqlplugin.CurrentExecutionsRow{
 			ShardID:          shardID,
@@ -527,15 +527,15 @@ func (m *sqlExecutionStore) conflictResolveWorkflowExecutionTx(
 			Status:           status,
 			LastWriteVersion: lastWriteVersion,
 			StartTime:        getStartTimeFromState(executionState),
-			Data:             executionStateBlob.Data,
-			DataEncoding:     executionStateBlob.EncodingType.String(),
+			Data:             executionStateBlob.GetData(),
+			DataEncoding:     executionStateBlob.GetEncodingType().String(),
 		}
 		var prevRunID primitives.UUID
 		if currentWorkflow != nil {
-			prevRunID = primitives.MustParseUUID(currentWorkflow.ExecutionState.RunId)
+			prevRunID = primitives.MustParseUUID(currentWorkflow.ExecutionState.GetRunId())
 		} else {
 			// reset workflow is current
-			prevRunID = primitives.MustParseUUID(resetWorkflow.ExecutionState.RunId)
+			prevRunID = primitives.MustParseUUID(resetWorkflow.ExecutionState.GetRunId())
 		}
 		if err := assertRunIDAndUpdateCurrentExecution(ctx, tx, row, prevRunID, m.serializer); err != nil {
 			return err
@@ -697,11 +697,11 @@ func (m *sqlExecutionStore) GetCurrentExecution(
 
 	return &p.InternalGetCurrentExecutionResponse{
 		RunID: row.RunID.String(),
-		ExecutionState: &persistencespb.WorkflowExecutionState{
+		ExecutionState: persistencespb.WorkflowExecutionState_builder{
 			CreateRequestId: row.CreateRequestID,
 			State:           row.State,
 			Status:          row.Status,
-		},
+		}.Build(),
 	}, nil
 }
 
@@ -745,9 +745,9 @@ func (m *sqlExecutionStore) GetHistoryBranchUtil() p.HistoryBranchUtil {
 }
 
 func getStartTimeFromState(state *persistencespb.WorkflowExecutionState) *time.Time {
-	if state == nil || state.StartTime == nil {
+	if state == nil || !state.HasStartTime() {
 		return nil
 	}
-	startTime := state.StartTime.AsTime()
+	startTime := state.GetStartTime().AsTime()
 	return &startTime
 }

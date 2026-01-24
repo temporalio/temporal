@@ -59,10 +59,10 @@ func (d *deploymentWorkflowClientSuite) SetupTest() {
 	d.ns, d.mockNamespaceCache = createMockNamespaceCache(d.controller, testNamespace)
 	d.VisibilityManager = manager.NewMockVisibilityManager(d.controller)
 	d.mockHistoryClient = historyservicemock.NewMockHistoryServiceClient(d.controller)
-	d.workerDeployment = &deploymentpb.Deployment{
+	d.workerDeployment = deploymentpb.Deployment_builder{
 		SeriesName: testDeployment,
 		BuildId:    testBuildID,
-	}
+	}.Build()
 	d.deploymentClient = &ClientImpl{
 		historyClient:     d.mockHistoryClient,
 		visibilityManager: d.VisibilityManager,
@@ -71,7 +71,7 @@ func (d *deploymentWorkflowClientSuite) SetupTest() {
 }
 
 func createMockNamespaceCache(controller *gomock.Controller, nsName namespace.Name) (*namespace.Namespace, *namespace.MockRegistry) {
-	ns := namespace.NewLocalNamespaceForTest(&persistencespb.NamespaceInfo{Name: nsName.String()}, nil, "")
+	ns := namespace.NewLocalNamespaceForTest(persistencespb.NamespaceInfo_builder{Name: nsName.String()}.Build(), nil, "")
 	mockNamespaceCache := namespace.NewMockRegistry(controller)
 	mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(ns, nil).AnyTimes()
 	mockNamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(ns.Name(), nil).AnyTimes()
@@ -171,20 +171,20 @@ func decodeAndValidateMemo(t *testing.T, filePath, deploymentName, buildID strin
 	require.NoError(t, err)
 
 	// Create a payload with json/protobuf encoding (matching SDK's ProtoJSONPayloadConverter)
-	payload := &commonpb.Payload{
+	payload := commonpb.Payload_builder{
 		Metadata: map[string][]byte{
 			"encoding":    []byte("json/protobuf"),
 			"messageType": []byte("temporal.server.api.deployment.v1.WorkerDeploymentWorkflowMemo"),
 		},
 		Data: jsonData,
-	}
+	}.Build()
 
 	// Create a memo with the payload
-	memo := &commonpb.Memo{
+	memo := commonpb.Memo_builder{
 		Fields: map[string]*commonpb.Payload{
 			WorkerDeploymentMemoField: payload,
 		},
-	}
+	}.Build()
 
 	// Decode should succeed even if the payload contains unknown fields
 	result, err := DecodeWorkerDeploymentMemo(memo)
@@ -192,11 +192,11 @@ func decodeAndValidateMemo(t *testing.T, filePath, deploymentName, buildID strin
 	require.NotNil(t, result)
 
 	// Verify known fields are decoded correctly
-	require.Equal(t, deploymentName, result.DeploymentName)
-	require.NotNil(t, result.CreateTime)
-	require.NotNil(t, result.RoutingConfig)
-	require.Equal(t, deploymentName, result.RoutingConfig.GetCurrentDeploymentVersion().GetDeploymentName())
-	require.Equal(t, buildID, result.RoutingConfig.GetCurrentDeploymentVersion().GetBuildId())
+	require.Equal(t, deploymentName, result.GetDeploymentName())
+	require.NotNil(t, result.GetCreateTime())
+	require.NotNil(t, result.GetRoutingConfig())
+	require.Equal(t, deploymentName, result.GetRoutingConfig().GetCurrentDeploymentVersion().GetDeploymentName())
+	require.Equal(t, buildID, result.GetRoutingConfig().GetCurrentDeploymentVersion().GetBuildId())
 }
 
 //nolint:revive

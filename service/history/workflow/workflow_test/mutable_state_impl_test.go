@@ -155,20 +155,20 @@ func startWorkflowExecution(
 	t.Helper()
 
 	event, err := ms.AddWorkflowExecutionStartedEvent(
-		&commonpb.WorkflowExecution{
+		commonpb.WorkflowExecution_builder{
 			WorkflowId: ms.GetWorkflowKey().WorkflowID,
 			RunId:      ms.GetWorkflowKey().RunID,
-		},
-		&historyservice.StartWorkflowExecutionRequest{
+		}.Build(),
+		historyservice.StartWorkflowExecutionRequest_builder{
 			Attempt:     1,
 			NamespaceId: nsEntry.ID().String(),
-			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:        &commonpb.WorkflowType{Name: "workflow-type"},
-				TaskQueue:           &taskqueuepb.TaskQueue{Name: "task-queue-name"},
+			StartRequest: workflowservice.StartWorkflowExecutionRequest_builder{
+				WorkflowType:        commonpb.WorkflowType_builder{Name: "workflow-type"}.Build(),
+				TaskQueue:           taskqueuepb.TaskQueue_builder{Name: "task-queue-name"}.Build(),
 				WorkflowRunTimeout:  durationpb.New(200 * time.Second),
 				WorkflowTaskTimeout: durationpb.New(1 * time.Second),
-			},
-		},
+			}.Build(),
+		}.Build(),
 	)
 	require.NoError(t, err)
 	return event
@@ -229,11 +229,11 @@ func createMutableState(t *testing.T, nsEntry *namespace.Namespace, cfg *configs
 		tests.RunID,
 		startTime,
 	)
-	ms.GetExecutionInfo().NamespaceId = nsEntry.ID().String()
+	ms.GetExecutionInfo().SetNamespaceId(nsEntry.ID().String())
 	// must start with a non-empty version history so that we have something to compare against when writing
-	ms.GetExecutionInfo().VersionHistories.Histories[0].Items = []*historyspb.VersionHistoryItem{
-		{Version: 0, EventId: 1},
-	}
+	ms.GetExecutionInfo().GetVersionHistories().GetHistories()[0].SetItems([]*historyspb.VersionHistoryItem{
+		historyspb.VersionHistoryItem_builder{Version: 0, EventId: 1}.Build(),
+	})
 
 	return ms, eventsCache
 }
@@ -266,14 +266,14 @@ func (c *mutationTestCase) testWFTFailedEvent(
 		t.Fatal("WFT-failed event has nil attributes")
 	}
 
-	if attr.ScheduledEventId != wft.ScheduledEventID || attr.StartedEventId != wft.StartedEventID {
+	if attr.GetScheduledEventId() != wft.ScheduledEventID || attr.GetStartedEventId() != wft.StartedEventID {
 		t.Errorf("WFT-failed event, %#v, does not target our WFT, %#v", event, wft)
 	}
 
-	if attr.Cause != enumspb.WORKFLOW_TASK_FAILED_CAUSE_FORCE_CLOSE_COMMAND {
+	if attr.GetCause() != enumspb.WORKFLOW_TASK_FAILED_CAUSE_FORCE_CLOSE_COMMAND {
 		t.Errorf(
 			"WFT should fail because it was force closed, but the failure cause is %q instead",
-			attr.Cause.String(),
+			attr.GetCause().String(),
 		)
 	}
 }
@@ -284,7 +284,7 @@ func (c *mutationTestCase) findWFTEvent(eventType enumspb.EventType, workflowEve
 ) {
 	for _, batch := range workflowEvents {
 		for _, ev := range batch.Events {
-			if ev.EventType == eventType {
+			if ev.GetEventType() == eventType {
 				return ev, true
 			}
 		}
@@ -315,7 +315,7 @@ func (c *mutationTestCase) testFailure(
 
 	for _, batch := range workflowEvents {
 		for _, ev := range batch.Events {
-			if ev.EventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
+			if ev.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
 				flushedSignals++
 			}
 		}
@@ -354,7 +354,7 @@ func sealMutableState(t *testing.T, mutableState historyi.MutableState, lastEven
 	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(mutableState.GetExecutionInfo().GetVersionHistories())
 	require.NoError(t, err)
 	err = versionhistory.AddOrUpdateVersionHistoryItem(currentVersionHistory, versionhistory.NewVersionHistoryItem(
-		lastEvent.EventId, lastEvent.Version,
+		lastEvent.GetEventId(), lastEvent.GetVersion(),
 	))
 	require.NoError(t, err)
 }
@@ -368,16 +368,16 @@ func TestGetNexusCompletion(t *testing.T) {
 		{
 			name: "success",
 			mutateState: func(mutableState historyi.MutableState) (*historypb.HistoryEvent, error) {
-				return mutableState.AddCompletedWorkflowEvent(mutableState.GetNextEventID(), &commandpb.CompleteWorkflowExecutionCommandAttributes{
-					Result: &commonpb.Payloads{
+				return mutableState.AddCompletedWorkflowEvent(mutableState.GetNextEventID(), commandpb.CompleteWorkflowExecutionCommandAttributes_builder{
+					Result: commonpb.Payloads_builder{
 						Payloads: []*commonpb.Payload{
-							{
+							commonpb.Payload_builder{
 								Metadata: map[string][]byte{"encoding": []byte("json/plain")},
 								Data:     []byte("3"),
-							},
+							}.Build(),
 						},
-					},
-				}, "")
+					}.Build(),
+				}.Build(), "")
 			},
 			verifyCompletion: func(t *testing.T, event *historypb.HistoryEvent, completion nexusrpc.OperationCompletion) {
 				success, ok := completion.(*nexusrpc.OperationCompletionSuccessful)
@@ -393,11 +393,11 @@ func TestGetNexusCompletion(t *testing.T) {
 		{
 			name: "failure",
 			mutateState: func(mutableState historyi.MutableState) (*historypb.HistoryEvent, error) {
-				return mutableState.AddFailWorkflowEvent(mutableState.GetNextEventID(), enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE, &commandpb.FailWorkflowExecutionCommandAttributes{
-					Failure: &failurepb.Failure{
+				return mutableState.AddFailWorkflowEvent(mutableState.GetNextEventID(), enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE, commandpb.FailWorkflowExecutionCommandAttributes_builder{
+					Failure: failurepb.Failure_builder{
 						Message: "workflow failed",
-					},
-				}, "")
+					}.Build(),
+				}.Build(), "")
 			},
 			verifyCompletion: func(t *testing.T, event *historypb.HistoryEvent, completion nexusrpc.OperationCompletion) {
 				failure, ok := completion.(*nexusrpc.OperationCompletionUnsuccessful)
@@ -445,7 +445,7 @@ func TestGetNexusCompletion(t *testing.T) {
 			_, _, err = ms.AddWorkflowTaskStartedEvent(
 				workflowTask.ScheduledEventID,
 				"---",
-				&taskqueuepb.TaskQueue{Name: "irrelevant"},
+				taskqueuepb.TaskQueue_builder{Name: "irrelevant"}.Build(),
 				"---",
 				nil,
 				nil,
@@ -454,9 +454,9 @@ func TestGetNexusCompletion(t *testing.T) {
 				nil,
 			)
 			require.NoError(t, err)
-			_, err = ms.AddWorkflowTaskCompletedEvent(workflowTask, &workflowservice.RespondWorkflowTaskCompletedRequest{
+			_, err = ms.AddWorkflowTaskCompletedEvent(workflowTask, workflowservice.RespondWorkflowTaskCompletedRequest_builder{
 				Identity: "some random identity",
-			}, historyi.WorkflowTaskCompletionLimits{MaxResetPoints: 10, MaxSearchAttributeValueSize: 10})
+			}.Build(), historyi.WorkflowTaskCompletionLimits{MaxResetPoints: 10, MaxSearchAttributeValueSize: 10})
 			require.NoError(t, err)
 
 			event, err := tc.mutateState(ms)
@@ -477,7 +477,7 @@ func TestLoadHistoryEventFromToken(t *testing.T) {
 	event := startWorkflowExecution(t, ms, nsEntry)
 	branchToken, err := ms.GetCurrentBranchToken()
 	require.NoError(t, err)
-	firstEventID := event.EventId
+	firstEventID := event.GetEventId()
 
 	token, err := hsm.GenerateEventLoadToken(event)
 	require.NoError(t, err)
@@ -487,7 +487,7 @@ func TestLoadHistoryEventFromToken(t *testing.T) {
 		NamespaceID: nsEntry.ID(),
 		WorkflowID:  wfKey.WorkflowID,
 		RunID:       wfKey.RunID,
-		EventID:     event.EventId,
+		EventID:     event.GetEventId(),
 		Version:     0,
 	}
 	evs.EXPECT().GetEvent(gomock.Any(), gomock.Any(), eventKey, firstEventID, branchToken).Return(event, nil)

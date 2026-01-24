@@ -191,41 +191,41 @@ func (n *HistoryPaginatedFetcherImpl) getHistory(
 	}
 	getResponse := func() ([]*commonpb.DataBlob, *historyspb.VersionHistory, []byte, error) {
 		if inclusive {
-			response, err := adminClient.GetWorkflowExecutionRawHistory(ctx, &adminservice.GetWorkflowExecutionRawHistoryRequest{
+			response, err := adminClient.GetWorkflowExecutionRawHistory(ctx, adminservice.GetWorkflowExecutionRawHistoryRequest_builder{
 				NamespaceId: namespaceID.String(),
-				Execution: &commonpb.WorkflowExecution{
+				Execution: commonpb.WorkflowExecution_builder{
 					WorkflowId: workflowID,
 					RunId:      runID,
-				},
+				}.Build(),
 				StartEventId:      startEventID,
 				StartEventVersion: startEventVersion,
 				EndEventId:        endEventID,
 				EndEventVersion:   endEventVersion,
 				MaximumPageSize:   pageSize,
 				NextPageToken:     token,
-			})
+			}.Build())
 			if err != nil {
 				return nil, nil, nil, err
 			}
-			return response.GetHistoryBatches(), response.GetVersionHistory(), response.NextPageToken, nil
+			return response.GetHistoryBatches(), response.GetVersionHistory(), response.GetNextPageToken(), nil
 		}
-		response, err := adminClient.GetWorkflowExecutionRawHistoryV2(ctx, &adminservice.GetWorkflowExecutionRawHistoryV2Request{
+		response, err := adminClient.GetWorkflowExecutionRawHistoryV2(ctx, adminservice.GetWorkflowExecutionRawHistoryV2Request_builder{
 			NamespaceId: namespaceID.String(),
-			Execution: &commonpb.WorkflowExecution{
+			Execution: commonpb.WorkflowExecution_builder{
 				WorkflowId: workflowID,
 				RunId:      runID,
-			},
+			}.Build(),
 			StartEventId:      startEventID,
 			StartEventVersion: startEventVersion,
 			EndEventId:        endEventID,
 			EndEventVersion:   endEventVersion,
 			MaximumPageSize:   pageSize,
 			NextPageToken:     token,
-		})
+		}.Build())
 		if err != nil {
 			return nil, nil, nil, err
 		}
-		return response.GetHistoryBatches(), response.GetVersionHistory(), response.NextPageToken, nil
+		return response.GetHistoryBatches(), response.GetVersionHistory(), response.GetNextPageToken(), nil
 	}
 
 	dataBlobs, versionHistory, nextPageToken, err := getResponse()

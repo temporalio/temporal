@@ -73,11 +73,11 @@ func (s *ackManagerSuite) SetupTest() {
 
 	s.mockShard = shard.NewTestContext(
 		s.controller,
-		&persistencespb.ShardInfo{
+		persistencespb.ShardInfo_builder{
 			ShardId: 0,
 			RangeId: 1,
 			Owner:   "test-shard-owner",
-		},
+		}.Build(),
 		tests.NewDynamicConfig(),
 	)
 
@@ -292,19 +292,19 @@ func (s *ackManagerSuite) TestGetTasks_SecondPersistenceErrorReturnsPartialResul
 	)
 	ms := workflow.TestLocalMutableState(s.mockShard, eventsCache, tests.GlobalNamespaceEntry, tests.WorkflowID, tests.RunID, log.NewTestLogger())
 	ei := ms.GetExecutionInfo()
-	ei.NamespaceId = tests.NamespaceID.String()
-	ei.VersionHistories = &historyspb.VersionHistories{
+	ei.SetNamespaceId(tests.NamespaceID.String())
+	ei.SetVersionHistories(historyspb.VersionHistories_builder{
 		Histories: []*historyspb.VersionHistory{
-			{
+			historyspb.VersionHistory_builder{
 				Items: []*historyspb.VersionHistoryItem{
-					{
+					historyspb.VersionHistoryItem_builder{
 						EventId: 1,
 						Version: 1,
-					},
+					}.Build(),
 				},
-			},
+			}.Build(),
 		},
-	}
+	}.Build())
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{
 		State: workflow.TestCloneToProto(context.Background(), ms)}, nil)
@@ -340,19 +340,19 @@ func (s *ackManagerSuite) TestGetTasks_FullPage() {
 	)
 	ms := workflow.TestLocalMutableState(s.mockShard, eventsCache, tests.GlobalNamespaceEntry, tests.WorkflowID, tests.RunID, log.NewTestLogger())
 	ei := ms.GetExecutionInfo()
-	ei.NamespaceId = tests.NamespaceID.String()
-	ei.VersionHistories = &historyspb.VersionHistories{
+	ei.SetNamespaceId(tests.NamespaceID.String())
+	ei.SetVersionHistories(historyspb.VersionHistories_builder{
 		Histories: []*historyspb.VersionHistory{
-			{
+			historyspb.VersionHistory_builder{
 				Items: []*historyspb.VersionHistoryItem{
-					{
+					historyspb.VersionHistoryItem_builder{
 						EventId: 1,
 						Version: 1,
-					},
+					}.Build(),
 				},
-			},
+			}.Build(),
 		},
-	}
+	}.Build())
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{
 		State: workflow.TestCloneToProto(context.Background(), ms)}, nil).Times(s.replicationAckManager.pageSize())
@@ -362,8 +362,8 @@ func (s *ackManagerSuite) TestGetTasks_FullPage() {
 	replicationMessages, err := s.replicationAckManager.GetTasks(context.Background(), cluster.TestCurrentClusterName, 22)
 	s.NoError(err)
 	s.NotNil(replicationMessages)
-	s.Len(replicationMessages.ReplicationTasks, s.replicationAckManager.pageSize())
-	s.Equal(tasksResponse.Tasks[len(tasksResponse.Tasks)-1].GetTaskID(), replicationMessages.LastRetrievedMessageId)
+	s.Len(replicationMessages.GetReplicationTasks(), s.replicationAckManager.pageSize())
+	s.Equal(tasksResponse.Tasks[len(tasksResponse.Tasks)-1].GetTaskID(), replicationMessages.GetLastRetrievedMessageId())
 
 }
 func (s *ackManagerSuite) TestGetTasks_PartialPage() {
@@ -388,19 +388,19 @@ func (s *ackManagerSuite) TestGetTasks_PartialPage() {
 	)
 	ms := workflow.TestLocalMutableState(s.mockShard, eventsCache, tests.GlobalNamespaceEntry, tests.WorkflowID, tests.RunID, log.NewTestLogger())
 	ei := ms.GetExecutionInfo()
-	ei.NamespaceId = tests.NamespaceID.String()
-	ei.VersionHistories = &historyspb.VersionHistories{
+	ei.SetNamespaceId(tests.NamespaceID.String())
+	ei.SetVersionHistories(historyspb.VersionHistories_builder{
 		Histories: []*historyspb.VersionHistory{
-			{
+			historyspb.VersionHistory_builder{
 				Items: []*historyspb.VersionHistoryItem{
-					{
+					historyspb.VersionHistoryItem_builder{
 						EventId: 1,
 						Version: 1,
-					},
+					}.Build(),
 				},
-			},
+			}.Build(),
 		},
-	}
+	}.Build())
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{
 		State: workflow.TestCloneToProto(context.Background(), ms)}, nil).Times(numTasks)
@@ -410,8 +410,8 @@ func (s *ackManagerSuite) TestGetTasks_PartialPage() {
 	replicationMessages, err := s.replicationAckManager.GetTasks(context.Background(), cluster.TestCurrentClusterName, 22)
 	s.NoError(err)
 	s.NotNil(replicationMessages)
-	s.Len(replicationMessages.ReplicationTasks, numTasks)
-	s.Equal(tasksResponse.Tasks[len(tasksResponse.Tasks)-1].GetTaskID(), replicationMessages.LastRetrievedMessageId)
+	s.Len(replicationMessages.GetReplicationTasks(), numTasks)
+	s.Equal(tasksResponse.Tasks[len(tasksResponse.Tasks)-1].GetTaskID(), replicationMessages.GetLastRetrievedMessageId())
 }
 
 func (s *ackManagerSuite) TestGetTasks_FilterNamespace() {
@@ -471,19 +471,19 @@ func (s *ackManagerSuite) TestGetTasks_FilterNamespace() {
 	)
 	ms := workflow.TestLocalMutableState(s.mockShard, eventsCache, tests.GlobalNamespaceEntry, tests.WorkflowID, tests.RunID, log.NewTestLogger())
 	ei := ms.GetExecutionInfo()
-	ei.NamespaceId = tests.NamespaceID.String()
-	ei.VersionHistories = &historyspb.VersionHistories{
+	ei.SetNamespaceId(tests.NamespaceID.String())
+	ei.SetVersionHistories(historyspb.VersionHistories_builder{
 		Histories: []*historyspb.VersionHistory{
-			{
+			historyspb.VersionHistory_builder{
 				Items: []*historyspb.VersionHistoryItem{
-					{
+					historyspb.VersionHistoryItem_builder{
 						EventId: 1,
 						Version: 1,
-					},
+					}.Build(),
 				},
-			},
+			}.Build(),
 		},
-	}
+	}.Build())
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{
 		State: workflow.TestCloneToProto(context.Background(), ms)}, nil).Times(s.replicationAckManager.pageSize())
@@ -493,8 +493,8 @@ func (s *ackManagerSuite) TestGetTasks_FilterNamespace() {
 	replicationMessages, err := s.replicationAckManager.GetTasks(context.Background(), cluster.TestCurrentClusterName, 22)
 	s.NoError(err)
 	s.NotNil(replicationMessages)
-	s.Len(replicationMessages.ReplicationTasks, s.replicationAckManager.pageSize())
-	s.Equal(tasksResponse3.Tasks[len(tasksResponse3.Tasks)-1].GetTaskID(), replicationMessages.LastRetrievedMessageId)
+	s.Len(replicationMessages.GetReplicationTasks(), s.replicationAckManager.pageSize())
+	s.Equal(tasksResponse3.Tasks[len(tasksResponse3.Tasks)-1].GetTaskID(), replicationMessages.GetLastRetrievedMessageId())
 }
 
 func (s *ackManagerSuite) getHistoryTasksResponse(size int) *persistence.GetHistoryTasksResponse {

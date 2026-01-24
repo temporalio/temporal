@@ -129,9 +129,9 @@ func (e *archivalQueueTaskExecutor) getArchiveTaskRequest(
 	executionState := mutableState.GetExecutionState()
 
 	logger = log.With(logger,
-		tag.WorkflowNamespaceID(executionInfo.NamespaceId),
-		tag.WorkflowID(executionInfo.WorkflowId),
-		tag.WorkflowRunID(executionState.RunId),
+		tag.WorkflowNamespaceID(executionInfo.GetNamespaceId()),
+		tag.WorkflowID(executionInfo.GetWorkflowId()),
+		tag.WorkflowRunID(executionState.GetRunId()),
 	)
 
 	closeTime, err := mutableState.GetWorkflowCloseTime(ctx)
@@ -209,7 +209,7 @@ func (e *archivalQueueTaskExecutor) getArchiveTaskRequest(
 		ExecutionTime:        executionInfo.GetExecutionTime(),
 		CloseTime:            timestamppb.New(closeTime),
 		ExecutionDuration:    durationpb.New(executionDuration),
-		Status:               executionState.Status,
+		Status:               executionState.GetStatus(),
 		HistoryLength:        nextEventID - 1,
 		Memo:                 workflowAttributes.Memo,
 		SearchAttributes:     workflowAttributes.SearchAttributes,

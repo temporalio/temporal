@@ -8,7 +8,6 @@ package persistence
 
 import (
 	reflect "reflect"
-	sync "sync"
 	unsafe "unsafe"
 
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -24,10 +23,10 @@ const (
 
 // data column
 type QueueMetadata struct {
-	state            protoimpl.MessageState `protogen:"open.v1"`
-	ClusterAckLevels map[string]int64       `protobuf:"bytes,1,rep,name=cluster_ack_levels,json=clusterAckLevels,proto3" json:"cluster_ack_levels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	state                       protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_ClusterAckLevels map[string]int64       `protobuf:"bytes,1,rep,name=cluster_ack_levels,json=clusterAckLevels,proto3" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
+	unknownFields               protoimpl.UnknownFields
+	sizeCache                   protoimpl.SizeCache
 }
 
 func (x *QueueMetadata) Reset() {
@@ -55,16 +54,29 @@ func (x *QueueMetadata) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use QueueMetadata.ProtoReflect.Descriptor instead.
-func (*QueueMetadata) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_queue_metadata_proto_rawDescGZIP(), []int{0}
-}
-
 func (x *QueueMetadata) GetClusterAckLevels() map[string]int64 {
 	if x != nil {
-		return x.ClusterAckLevels
+		return x.xxx_hidden_ClusterAckLevels
 	}
 	return nil
+}
+
+func (x *QueueMetadata) SetClusterAckLevels(v map[string]int64) {
+	x.xxx_hidden_ClusterAckLevels = v
+}
+
+type QueueMetadata_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	ClusterAckLevels map[string]int64
+}
+
+func (b0 QueueMetadata_builder) Build() *QueueMetadata {
+	m0 := &QueueMetadata{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_ClusterAckLevels = b.ClusterAckLevels
+	return m0
 }
 
 var File_temporal_server_api_persistence_v1_queue_metadata_proto protoreflect.FileDescriptor
@@ -77,18 +89,6 @@ const file_temporal_server_api_persistence_v1_queue_metadata_proto_rawDesc = "" 
 	"\x15ClusterAckLevelsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\x03R\x05value:\x028\x01B6Z4go.temporal.io/server/api/persistence/v1;persistenceb\x06proto3"
-
-var (
-	file_temporal_server_api_persistence_v1_queue_metadata_proto_rawDescOnce sync.Once
-	file_temporal_server_api_persistence_v1_queue_metadata_proto_rawDescData []byte
-)
-
-func file_temporal_server_api_persistence_v1_queue_metadata_proto_rawDescGZIP() []byte {
-	file_temporal_server_api_persistence_v1_queue_metadata_proto_rawDescOnce.Do(func() {
-		file_temporal_server_api_persistence_v1_queue_metadata_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_api_persistence_v1_queue_metadata_proto_rawDesc), len(file_temporal_server_api_persistence_v1_queue_metadata_proto_rawDesc)))
-	})
-	return file_temporal_server_api_persistence_v1_queue_metadata_proto_rawDescData
-}
 
 var file_temporal_server_api_persistence_v1_queue_metadata_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
 var file_temporal_server_api_persistence_v1_queue_metadata_proto_goTypes = []any{

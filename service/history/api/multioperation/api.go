@@ -23,6 +23,7 @@ import (
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/update"
+	"google.golang.org/protobuf/proto"
 )
 
 var multiOpAbortedErr = serviceerror.NewMultiOperationAborted("Operation was aborted.")
@@ -63,22 +64,22 @@ func Invoke(
 	versionMembershipCache worker_versioning.VersionMembershipCache,
 	testHooks testhooks.TestHooks,
 ) (*historyservice.ExecuteMultiOperationResponse, error) {
-	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(req.GetNamespaceId()), req.WorkflowId)
+	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(req.GetNamespaceId()), req.GetWorkflowId())
 	if err != nil {
 		return nil, err
 	}
 	ns := namespaceEntry.Name().String()
 
-	if len(req.Operations) != 2 {
+	if len(req.GetOperations()) != 2 {
 		return nil, serviceerror.NewInvalidArgument("expected exactly 2 operations")
 	}
 
-	updateReq := req.Operations[1].GetUpdateWorkflow()
+	updateReq := req.GetOperations()[1].GetUpdateWorkflow()
 	if updateReq == nil {
 		return nil, serviceerror.NewInvalidArgument("expected second operation to be Update Workflow")
 	}
 
-	startReq := req.Operations[0].GetStartWorkflow()
+	startReq := req.GetOperations()[0].GetStartWorkflow()
 	if startReq == nil {
 		return nil, serviceerror.NewInvalidArgument("expected first operation to be Start Workflow")
 	}
@@ -86,7 +87,7 @@ func Invoke(
 	newUpdateWithStart := func() (*updateWithStart, error) {
 		uws := &updateWithStart{
 			shardContext:       shardContext,
-			namespaceId:        namespace.ID(req.NamespaceId),
+			namespaceId:        namespace.ID(req.GetNamespaceId()),
 			consistencyChecker: workflowConsistencyChecker,
 			testHooks:          testHooks,
 			updateReq:          updateReq,
@@ -187,18 +188,18 @@ func (uws *updateWithStart) Invoke(ctx context.Context) (*historyservice.Execute
 
 	// Workflow already exists.
 	if workflowLease != nil {
-		updateID := uws.updateReq.Request.Request.Meta.GetUpdateId()
+		updateID := uws.updateReq.GetRequest().GetRequest().GetMeta().GetUpdateId()
 
 		// If Update is complete, return it.
 		if outcome, err := workflowLease.GetMutableState().GetUpdateOutcome(ctx, updateID); err == nil {
 			workflowKey := workflowLease.GetContext().GetWorkflowKey()
 			workflowLease.GetReleaseFn()(nil)
 			return makeResponse(
-				&historyservice.StartWorkflowExecutionResponse{
+				historyservice.StartWorkflowExecutionResponse_builder{
 					RunId:   workflowKey.RunID,
 					Started: false, // set explicitly for emphasis
-					Status:  workflowLease.GetMutableState().GetExecutionState().Status,
-				},
+					Status:  workflowLease.GetMutableState().GetExecutionState().GetStatus(),
+				}.Build(),
 				uws.updater.CreateResponse(workflowKey, outcome, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED),
 			), nil
 		}
@@ -216,7 +217,7 @@ func (uws *updateWithStart) Invoke(ctx context.Context) (*historyservice.Execute
 			}
 
 			// If conflict policy allows re-using the workflow, apply the update.
-			if uws.startReq.StartRequest.WorkflowIdConflictPolicy == enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING {
+			if uws.startReq.GetStartRequest().GetWorkflowIdConflictPolicy() == enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING {
 				return uws.updateWorkflow(ctx, workflowLease) // lease released inside
 			}
 		}
@@ -253,7 +254,7 @@ func (uws *updateWithStart) workflowLeaseCallback(
 				ctx,
 				shardContext,
 				ms.GetNamespaceEntry().ID(),
-				&commonpb.WorkflowExecution{WorkflowId: ms.GetExecutionInfo().WorkflowId, RunId: ms.GetExecutionState().RunId},
+				commonpb.WorkflowExecution_builder{WorkflowId: ms.GetExecutionInfo().GetWorkflowId(), RunId: ms.GetExecutionState().GetRunId()}.Build(),
 				locks.PriorityHigh,
 			)
 			if err != nil {
@@ -286,7 +287,7 @@ func (uws *updateWithStart) getWorkflowLease(ctx context.Context) (api.WorkflowL
 	runningWorkflowLease, err := uws.consistencyChecker.GetWorkflowLease(
 		ctx,
 		nil,
-		definition.NewWorkflowKey(uws.namespaceId.String(), uws.startReq.StartRequest.WorkflowId, ""),
+		definition.NewWorkflowKey(uws.namespaceId.String(), uws.startReq.GetStartRequest().GetWorkflowId(), ""),
 		locks.PriorityHigh,
 	)
 	var notFound *serviceerror.NotFound
@@ -330,25 +331,21 @@ func (uws *updateWithStart) updateWorkflow(
 	}
 
 	wfKey := currentWorkflowLease.GetContext().GetWorkflowKey()
-	startResp := &historyservice.StartWorkflowExecutionResponse{
+	startResp := historyservice.StartWorkflowExecutionResponse_builder{
 		RunId:   currentWorkflowLease.GetContext().GetWorkflowKey().RunID,
 		Started: false, // set explicitly for emphasis
 		Status:  enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-		Link: &commonpb.Link{
-			Variant: &commonpb.Link_WorkflowEvent_{
-				WorkflowEvent: &commonpb.Link_WorkflowEvent{
-					WorkflowId: wfKey.WorkflowID,
-					RunId:      wfKey.RunID,
-					Reference: &commonpb.Link_WorkflowEvent_EventRef{
-						EventRef: &commonpb.Link_WorkflowEvent_EventReference{
-							EventId:   common.FirstEventID,
-							EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
-						},
-					},
-				},
-			},
-		},
-	}
+		Link: commonpb.Link_builder{
+			WorkflowEvent: commonpb.Link_WorkflowEvent_builder{
+				WorkflowId: wfKey.WorkflowID,
+				RunId:      wfKey.RunID,
+				EventRef: commonpb.Link_WorkflowEvent_EventReference_builder{
+					EventId:   common.FirstEventID,
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+				}.Build(),
+			}.Build(),
+		}.Build(),
+	}.Build()
 
 	return makeResponse(startResp, updateResp), nil
 }
@@ -392,20 +389,16 @@ func makeResponse(
 	startResp *historyservice.StartWorkflowExecutionResponse,
 	updateResp *historyservice.UpdateWorkflowExecutionResponse,
 ) *historyservice.ExecuteMultiOperationResponse {
-	return &historyservice.ExecuteMultiOperationResponse{
+	return historyservice.ExecuteMultiOperationResponse_builder{
 		Responses: []*historyservice.ExecuteMultiOperationResponse_Response{
-			{
-				Response: &historyservice.ExecuteMultiOperationResponse_Response_StartWorkflow{
-					StartWorkflow: startResp,
-				},
-			},
-			{
-				Response: &historyservice.ExecuteMultiOperationResponse_Response_UpdateWorkflow{
-					UpdateWorkflow: updateResp,
-				},
-			},
+			historyservice.ExecuteMultiOperationResponse_Response_builder{
+				StartWorkflow: proto.ValueOrDefault(startResp),
+			}.Build(),
+			historyservice.ExecuteMultiOperationResponse_Response_builder{
+				UpdateWorkflow: proto.ValueOrDefault(updateResp),
+			}.Build(),
 		},
-	}
+	}.Build()
 }
 
 func newMultiOpError(startErr, updateErr error) error {
@@ -430,5 +423,5 @@ func newMultiOpError(startErr, updateErr error) error {
 }
 
 func canDedup(startReq *historyservice.StartWorkflowExecutionRequest, currentWorkflowLease api.WorkflowLease) bool {
-	return startReq.StartRequest.RequestId == currentWorkflowLease.GetMutableState().GetExecutionState().GetCreateRequestId()
+	return startReq.GetStartRequest().GetRequestId() == currentWorkflowLease.GetMutableState().GetExecutionState().GetCreateRequestId()
 }

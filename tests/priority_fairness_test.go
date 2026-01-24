@@ -28,6 +28,7 @@ import (
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
@@ -60,12 +61,12 @@ func (s *PrioritySuite) TestActivity_Basic() {
 	defer cancel()
 
 	for wfidx := range N {
-		_, err := s.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		_, err := s.FrontendClient().StartWorkflowExecution(ctx, workflowservice.StartWorkflowExecutionRequest_builder{
 			Namespace:    s.Namespace().String(),
 			WorkflowId:   fmt.Sprintf("wf%d", wfidx),
 			WorkflowType: tv.WorkflowType(),
 			TaskQueue:    tv.TaskQueue(),
-		})
+		}.Build())
 		s.NoError(err)
 	}
 
@@ -74,10 +75,10 @@ func (s *PrioritySuite) TestActivity_Basic() {
 		_, err := s.TaskPoller().PollAndHandleWorkflowTask(
 			tv,
 			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-				s.Len(task.History.Events, 3)
+				s.Len(task.GetHistory().GetEvents(), 3)
 
 				var wfidx int
-				_, err := fmt.Sscanf(task.WorkflowExecution.WorkflowId, "wf%d", &wfidx)
+				_, err := fmt.Sscanf(task.GetWorkflowExecution().GetWorkflowId(), "wf%d", &wfidx)
 				s.NoError(err)
 
 				var commands []*commandpb.Command
@@ -86,26 +87,24 @@ func (s *PrioritySuite) TestActivity_Basic() {
 					pri += 1 // 1-based
 					input, err := payloads.Encode(wfidx, pri)
 					s.NoError(err)
-					priMsg := &commonpb.Priority{PriorityKey: int32(pri)}
+					priMsg := commonpb.Priority_builder{PriorityKey: int32(pri)}.Build()
 					if pri == (Levels+1)/2 {
 						priMsg = nil // nil should be treated as default (3)
 					}
-					commands = append(commands, &commandpb.Command{
+					commands = append(commands, commandpb.Command_builder{
 						CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-						Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{
-							ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-								ActivityId:             fmt.Sprintf("act%d", i),
-								ActivityType:           tv.ActivityType(),
-								TaskQueue:              tv.TaskQueue(),
-								ScheduleToCloseTimeout: durationpb.New(time.Minute),
-								Priority:               priMsg,
-								Input:                  input,
-							},
-						},
-					})
+						ScheduleActivityTaskCommandAttributes: commandpb.ScheduleActivityTaskCommandAttributes_builder{
+							ActivityId:             fmt.Sprintf("act%d", i),
+							ActivityType:           tv.ActivityType(),
+							TaskQueue:              tv.TaskQueue(),
+							ScheduleToCloseTimeout: durationpb.New(time.Minute),
+							Priority:               priMsg,
+							Input:                  input,
+						}.Build(),
+					}.Build())
 				}
 
-				return &workflowservice.RespondWorkflowTaskCompletedRequest{Commands: commands}, nil
+				return workflowservice.RespondWorkflowTaskCompletedRequest_builder{Commands: commands}.Build(), nil
 			},
 			taskpoller.WithContext(ctx),
 		)
@@ -119,12 +118,12 @@ func (s *PrioritySuite) TestActivity_Basic() {
 			tv,
 			func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
 				var wfidx, pri int
-				s.NoError(payloads.Decode(task.Input, &wfidx, &pri))
+				s.NoError(payloads.Decode(task.GetInput(), &wfidx, &pri))
 				// s.T().Log("activity", "pri", pri, "wfidx", wfidx)
 				runs = append(runs, pri)
 				nothing, err := payloads.Encode()
 				s.NoError(err)
-				return &workflowservice.RespondActivityTaskCompletedRequest{Result: nothing}, nil
+				return workflowservice.RespondActivityTaskCompletedRequest_builder{Result: nothing}.Build(), nil
 			},
 			taskpoller.WithContext(ctx),
 		)
@@ -147,12 +146,12 @@ func (s *PrioritySuite) TestSubqueue_Migration() {
 
 	// start 100 workflows
 	for range 100 {
-		_, err := s.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		_, err := s.FrontendClient().StartWorkflowExecution(ctx, workflowservice.StartWorkflowExecutionRequest_builder{
 			Namespace:    s.Namespace().String(),
 			WorkflowId:   uuid.NewString(),
 			WorkflowType: tv.WorkflowType(),
 			TaskQueue:    tv.TaskQueue(),
-		})
+		}.Build())
 		s.NoError(err)
 	}
 
@@ -161,28 +160,26 @@ func (s *PrioritySuite) TestSubqueue_Migration() {
 		_, err := s.TaskPoller().PollAndHandleWorkflowTask(
 			tv,
 			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-				s.Len(task.History.Events, 3)
+				s.Len(task.GetHistory().GetEvents(), 3)
 
 				var commands []*commandpb.Command
 
 				for i := range 3 {
 					input, err := payloads.Encode(i)
 					s.NoError(err)
-					commands = append(commands, &commandpb.Command{
+					commands = append(commands, commandpb.Command_builder{
 						CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-						Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{
-							ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-								ActivityId:             fmt.Sprintf("act%d", i),
-								ActivityType:           tv.ActivityType(),
-								TaskQueue:              tv.TaskQueue(),
-								ScheduleToCloseTimeout: durationpb.New(time.Minute),
-								Input:                  input,
-							},
-						},
-					})
+						ScheduleActivityTaskCommandAttributes: commandpb.ScheduleActivityTaskCommandAttributes_builder{
+							ActivityId:             fmt.Sprintf("act%d", i),
+							ActivityType:           tv.ActivityType(),
+							TaskQueue:              tv.TaskQueue(),
+							ScheduleToCloseTimeout: durationpb.New(time.Minute),
+							Input:                  input,
+						}.Build(),
+					}.Build())
 				}
 
-				return &workflowservice.RespondWorkflowTaskCompletedRequest{Commands: commands}, nil
+				return workflowservice.RespondWorkflowTaskCompletedRequest_builder{Commands: commands}.Build(), nil
 			},
 			taskpoller.WithContext(ctx),
 		)
@@ -196,7 +193,7 @@ func (s *PrioritySuite) TestSubqueue_Migration() {
 				func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
 					nothing, err := payloads.Encode()
 					s.NoError(err)
-					return &workflowservice.RespondActivityTaskCompletedRequest{Result: nothing}, nil
+					return workflowservice.RespondActivityTaskCompletedRequest_builder{Result: nothing}.Build(), nil
 				},
 				taskpoller.WithContext(ctx),
 			)
@@ -243,33 +240,33 @@ func (s *PrioritySuite) TestStickyInteraction_SinglePartition() {
 	s.OverrideDynamicConfig(dynamicconfig.MatchingEphemeralDataUpdateInterval, shortTime)
 
 	describeSticky := func() (*adminservice.DescribeTaskQueuePartitionResponse, error) {
-		return s.AdminClient().DescribeTaskQueuePartition(ctx, &adminservice.DescribeTaskQueuePartitionRequest{
+		return s.AdminClient().DescribeTaskQueuePartition(ctx, adminservice.DescribeTaskQueuePartitionRequest_builder{
 			Namespace: s.Namespace().String(),
-			TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
-				TaskQueue:     tv.TaskQueue().Name,
+			TaskQueuePartition: taskqueuespb.TaskQueuePartition_builder{
+				TaskQueue:     tv.TaskQueue().GetName(),
 				TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-				PartitionId:   &taskqueuespb.TaskQueuePartition_StickyName{StickyName: tv.StickyTaskQueue().Name},
-			},
-			BuildIds: &taskqueuepb.TaskQueueVersionSelection{Unversioned: true},
-		})
+				StickyName:    proto.String(tv.StickyTaskQueue().GetName()),
+			}.Build(),
+			BuildIds: taskqueuepb.TaskQueueVersionSelection_builder{Unversioned: true}.Build(),
+		}.Build())
 	}
 
 	// poll sticky queue once, otherwise it won't be used
 	s.T().Log("polling sticky to load")
-	stickyPoller := s.TaskPoller().PollWorkflowTask(&workflowservice.PollWorkflowTaskQueueRequest{
-		TaskQueue: &taskqueuepb.TaskQueue{
-			Name:       tv.StickyTaskQueue().Name,
+	stickyPoller := s.TaskPoller().PollWorkflowTask(workflowservice.PollWorkflowTaskQueueRequest_builder{
+		TaskQueue: taskqueuepb.TaskQueue_builder{
+			Name:       tv.StickyTaskQueue().GetName(),
 			Kind:       enumspb.TASK_QUEUE_KIND_STICKY,
-			NormalName: tv.TaskQueue().Name,
-		},
-	})
+			NormalName: tv.TaskQueue().GetName(),
+		}.Build(),
+	}.Build())
 	stickyCtx, stickyCancel := context.WithCancel(ctx)
 	go stickyPoller.HandleTask(tv, taskpoller.DrainWorkflowTask, taskpoller.WithContext(stickyCtx)) // nolint:errcheck
 	// wait for poll to reach matching service and load the queue
 	s.EventuallyWithT(func(c *assert.CollectT) {
 		res, err := describeSticky()
 		require.NoError(c, err)
-		require.NotEmpty(c, res.VersionsInfoInternal[""].GetPhysicalTaskQueueInfo().GetPollers())
+		require.NotEmpty(c, res.GetVersionsInfoInternal()[""].GetPhysicalTaskQueueInfo().GetPollers())
 	}, 5*time.Second, 10*time.Millisecond)
 	// cancel as soon as it's registered
 	s.T().Log("canceling sticky poll")
@@ -280,12 +277,12 @@ func (s *PrioritySuite) TestStickyInteraction_SinglePartition() {
 	// create some wfts at default priority
 	s.T().Log("creating wfts on normal")
 	for wfidx := range N {
-		_, err := s.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		_, err := s.FrontendClient().StartWorkflowExecution(ctx, workflowservice.StartWorkflowExecutionRequest_builder{
 			Namespace:    s.Namespace().String(),
 			WorkflowId:   fmt.Sprintf("wf%d", wfidx),
 			WorkflowType: tv.WorkflowType(),
 			TaskQueue:    tv.TaskQueue(),
-		})
+		}.Build())
 		s.NoError(err)
 	}
 
@@ -295,21 +292,19 @@ func (s *PrioritySuite) TestStickyInteraction_SinglePartition() {
 		_, err := s.TaskPoller().PollAndHandleWorkflowTask(
 			tv,
 			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-				return &workflowservice.RespondWorkflowTaskCompletedRequest{
-					Commands: []*commandpb.Command{&commandpb.Command{
+				return workflowservice.RespondWorkflowTaskCompletedRequest_builder{
+					Commands: []*commandpb.Command{commandpb.Command_builder{
 						CommandType: enumspb.COMMAND_TYPE_START_TIMER,
-						Attributes: &commandpb.Command_StartTimerCommandAttributes{
-							StartTimerCommandAttributes: &commandpb.StartTimerCommandAttributes{
-								TimerId:            uuid.NewString(),
-								StartToFireTimeout: durationpb.New(time.Millisecond),
-							},
-						},
-					}},
-					StickyAttributes: &taskqueuepb.StickyExecutionAttributes{
+						StartTimerCommandAttributes: commandpb.StartTimerCommandAttributes_builder{
+							TimerId:            uuid.NewString(),
+							StartToFireTimeout: durationpb.New(time.Millisecond),
+						}.Build(),
+					}.Build()},
+					StickyAttributes: taskqueuepb.StickyExecutionAttributes_builder{
 						WorkerTaskQueue:        tv.StickyTaskQueue(),
 						ScheduleToStartTimeout: durationpb.New(10 * time.Second),
-					},
-				}, nil
+					}.Build(),
+				}.Build(), nil
 			},
 			taskpoller.WithContext(ctx),
 		)
@@ -321,27 +316,27 @@ func (s *PrioritySuite) TestStickyInteraction_SinglePartition() {
 	s.EventuallyWithT(func(c *assert.CollectT) {
 		res, err := describeSticky()
 		require.NoError(c, err)
-		require.EqualValues(c, N, res.VersionsInfoInternal[""].PhysicalTaskQueueInfo.TaskQueueStats.ApproximateBacklogCount)
+		require.EqualValues(c, N, res.GetVersionsInfoInternal()[""].GetPhysicalTaskQueueInfo().GetTaskQueueStats().GetApproximateBacklogCount())
 	}, 5*time.Second, 10*time.Millisecond)
 
 	// create N more workflows at high priority and N at lower
 	s.T().Log("creating high/low wfts on normal")
 	for wfidx := range N {
-		_, err := s.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		_, err := s.FrontendClient().StartWorkflowExecution(ctx, workflowservice.StartWorkflowExecutionRequest_builder{
 			Namespace:    s.Namespace().String(),
 			WorkflowId:   fmt.Sprintf("highpri%d", wfidx),
 			WorkflowType: tv.WorkflowType(),
 			TaskQueue:    tv.TaskQueue(),
-			Priority:     &commonpb.Priority{PriorityKey: 1},
-		})
+			Priority:     commonpb.Priority_builder{PriorityKey: 1}.Build(),
+		}.Build())
 		s.NoError(err)
-		_, err = s.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		_, err = s.FrontendClient().StartWorkflowExecution(ctx, workflowservice.StartWorkflowExecutionRequest_builder{
 			Namespace:    s.Namespace().String(),
 			WorkflowId:   fmt.Sprintf("lowpri%d", wfidx),
 			WorkflowType: tv.WorkflowType(),
 			TaskQueue:    tv.TaskQueue(),
-			Priority:     &commonpb.Priority{PriorityKey: 5},
-		})
+			Priority:     commonpb.Priority_builder{PriorityKey: 5}.Build(),
+		}.Build())
 		s.NoError(err)
 	}
 
@@ -358,7 +353,7 @@ func (s *PrioritySuite) TestStickyInteraction_SinglePartition() {
 		_, _ = stickyPoller.HandleTask(
 			tv,
 			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-				wfid := task.WorkflowExecution.WorkflowId
+				wfid := task.GetWorkflowExecution().GetWorkflowId()
 				s.T().Log("task for wf", wfid)
 				receivedOrder = append(receivedOrder, wfid)
 				return nil, nil
@@ -436,25 +431,25 @@ func (s *FairnessSuite) SetupSuite() {
 }
 
 func (s *FairnessSuite) TriggerAutoEnable(tv *testvars.TestVars) {
-	_, err := s.FrontendClient().StartWorkflowExecution(context.Background(), &workflowservice.StartWorkflowExecutionRequest{
+	_, err := s.FrontendClient().StartWorkflowExecution(context.Background(), workflowservice.StartWorkflowExecutionRequest_builder{
 		Namespace:    s.Namespace().String(),
 		WorkflowId:   "trigger",
 		WorkflowType: tv.WorkflowType(),
 		TaskQueue:    tv.TaskQueue(),
-		Priority: &commonpb.Priority{
+		Priority: commonpb.Priority_builder{
 			PriorityKey: 3,
-		},
-	})
+		}.Build(),
+	}.Build())
 	s.Require().NoError(err)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	s.Eventually(func() bool {
-		resp, err := s.AdminClient().GetTaskQueueTasks(ctx, &adminservice.GetTaskQueueTasksRequest{
+		resp, err := s.AdminClient().GetTaskQueueTasks(ctx, adminservice.GetTaskQueueTasksRequest_builder{
 			Namespace:     s.Namespace().String(),
-			TaskQueue:     tv.TaskQueue().Name,
+			TaskQueue:     tv.TaskQueue().GetName(),
 			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			BatchSize:     10,
 			MinPass:       1,
-		})
+		}.Build())
 		return err == nil && len(resp.GetTasks()) == 1
 	}, 10*time.Second, 100*time.Millisecond)
 
@@ -462,19 +457,17 @@ func (s *FairnessSuite) TriggerAutoEnable(tv *testvars.TestVars) {
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 			var commands []*commandpb.Command
 			commands = append(commands,
-				&commandpb.Command{
+				commandpb.Command_builder{
 					CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-					Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{
-						ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-							ActivityId:             "trigger",
-							ActivityType:           tv.ActivityType(),
-							TaskQueue:              tv.TaskQueue(),
-							ScheduleToCloseTimeout: durationpb.New(time.Minute),
-						},
-					},
-				},
+					ScheduleActivityTaskCommandAttributes: commandpb.ScheduleActivityTaskCommandAttributes_builder{
+						ActivityId:             "trigger",
+						ActivityType:           tv.ActivityType(),
+						TaskQueue:              tv.TaskQueue(),
+						ScheduleToCloseTimeout: durationpb.New(time.Minute),
+					}.Build(),
+				}.Build(),
 			)
-			return &workflowservice.RespondWorkflowTaskCompletedRequest{Commands: commands}, nil
+			return workflowservice.RespondWorkflowTaskCompletedRequest_builder{Commands: commands}.Build(), nil
 		},
 		taskpoller.WithContext(ctx),
 	)
@@ -489,12 +482,12 @@ func (s *FairnessSuite) TriggerAutoEnable(tv *testvars.TestVars) {
 	)
 	s.Require().NoError(err)
 
-	_, err = s.FrontendClient().DeleteWorkflowExecution(ctx, &workflowservice.DeleteWorkflowExecutionRequest{
+	_, err = s.FrontendClient().DeleteWorkflowExecution(ctx, workflowservice.DeleteWorkflowExecutionRequest_builder{
 		Namespace: s.Namespace().String(),
-		WorkflowExecution: &commonpb.WorkflowExecution{
+		WorkflowExecution: commonpb.WorkflowExecution_builder{
 			WorkflowId: "trigger",
-		},
-	})
+		}.Build(),
+	}.Build())
 	s.Require().NoError(err)
 
 	cancel()
@@ -516,12 +509,12 @@ func (s *FairnessSuite) Test_Activity_Basic() {
 	zipf := rand.NewZipf(rand.New(rand.NewSource(12345)), 2, 2, Keys-1)
 
 	for wfidx := range Workflows {
-		_, err := s.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		_, err := s.FrontendClient().StartWorkflowExecution(ctx, workflowservice.StartWorkflowExecutionRequest_builder{
 			Namespace:    s.Namespace().String(),
 			WorkflowId:   fmt.Sprintf("wf%d", wfidx),
 			WorkflowType: tv.WorkflowType(),
 			TaskQueue:    tv.TaskQueue(),
-		})
+		}.Build())
 		s.NoError(err)
 	}
 
@@ -530,10 +523,10 @@ func (s *FairnessSuite) Test_Activity_Basic() {
 		_, err := s.TaskPoller().PollAndHandleWorkflowTask(
 			tv,
 			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-				s.Len(task.History.Events, 3)
+				s.Len(task.GetHistory().GetEvents(), 3)
 
 				var wfidx int
-				_, err := fmt.Sscanf(task.WorkflowExecution.WorkflowId, "wf%d", &wfidx)
+				_, err := fmt.Sscanf(task.GetWorkflowExecution().GetWorkflowId(), "wf%d", &wfidx)
 				s.NoError(err)
 
 				var commands []*commandpb.Command
@@ -542,24 +535,22 @@ func (s *FairnessSuite) Test_Activity_Basic() {
 					fkey := int(zipf.Uint64())
 					input, err := payloads.Encode(wfidx, fkey)
 					s.NoError(err)
-					commands = append(commands, &commandpb.Command{
+					commands = append(commands, commandpb.Command_builder{
 						CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-						Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{
-							ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-								ActivityId:             fmt.Sprintf("act%d", i),
-								ActivityType:           tv.ActivityType(),
-								TaskQueue:              tv.TaskQueue(),
-								ScheduleToCloseTimeout: durationpb.New(time.Minute),
-								Priority: &commonpb.Priority{
-									FairnessKey: fmt.Sprintf("key%d", fkey),
-								},
-								Input: input,
-							},
-						},
-					})
+						ScheduleActivityTaskCommandAttributes: commandpb.ScheduleActivityTaskCommandAttributes_builder{
+							ActivityId:             fmt.Sprintf("act%d", i),
+							ActivityType:           tv.ActivityType(),
+							TaskQueue:              tv.TaskQueue(),
+							ScheduleToCloseTimeout: durationpb.New(time.Minute),
+							Priority: commonpb.Priority_builder{
+								FairnessKey: fmt.Sprintf("key%d", fkey),
+							}.Build(),
+							Input: input,
+						}.Build(),
+					}.Build())
 				}
 
-				return &workflowservice.RespondWorkflowTaskCompletedRequest{Commands: commands}, nil
+				return workflowservice.RespondWorkflowTaskCompletedRequest_builder{Commands: commands}.Build(), nil
 			},
 			taskpoller.WithContext(ctx),
 		)
@@ -573,12 +564,12 @@ func (s *FairnessSuite) Test_Activity_Basic() {
 			tv,
 			func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
 				var wfidx, fkey int
-				s.NoError(payloads.Decode(task.Input, &wfidx, &fkey))
+				s.NoError(payloads.Decode(task.GetInput(), &wfidx, &fkey))
 				s.T().Log("activity", "fkey", fkey, "wfidx", wfidx)
 				runs = append(runs, fkey)
 				nothing, err := payloads.Encode()
 				s.NoError(err)
-				return &workflowservice.RespondActivityTaskCompletedRequest{Result: nothing}, nil
+				return workflowservice.RespondActivityTaskCompletedRequest_builder{Result: nothing}.Build(), nil
 			},
 			taskpoller.WithContext(ctx),
 		)
@@ -618,7 +609,7 @@ func (s *FairnessSuite) testMigration(newMatcher, fairness bool) {
 			dynamicconfig.ConstrainedValue{
 				Constraints: dynamicconfig.Constraints{
 					Namespace:     s.Namespace().String(),
-					TaskQueueName: tv.TaskQueue().Name,
+					TaskQueueName: tv.TaskQueue().GetName(),
 				},
 				Value: v,
 			},
@@ -647,12 +638,12 @@ func (s *FairnessSuite) testMigration(newMatcher, fairness bool) {
 	// start 20 workflows. 20 tasks will be queued on wft queue.
 	s.T().Log("starting workflows")
 	for range 20 {
-		_, err := s.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		_, err := s.FrontendClient().StartWorkflowExecution(ctx, workflowservice.StartWorkflowExecutionRequest_builder{
 			Namespace:    s.Namespace().String(),
 			WorkflowId:   uuid.NewString(),
 			WorkflowType: tv.WorkflowType(),
 			TaskQueue:    tv.TaskQueue(),
-		})
+		}.Build())
 		s.NoError(err)
 	}
 	waitForTasks(enumspb.TASK_QUEUE_TYPE_WORKFLOW, 0, 20)
@@ -662,28 +653,26 @@ func (s *FairnessSuite) testMigration(newMatcher, fairness bool) {
 			_, err := s.TaskPoller().PollAndHandleWorkflowTask(
 				tv,
 				func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-					s.Len(task.History.Events, 3)
+					s.Len(task.GetHistory().GetEvents(), 3)
 
 					var commands []*commandpb.Command
 
 					for i := range 2 {
 						input, err := payloads.Encode(i)
 						s.NoError(err)
-						commands = append(commands, &commandpb.Command{
+						commands = append(commands, commandpb.Command_builder{
 							CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-							Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{
-								ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-									ActivityId:             fmt.Sprintf("act%d", i),
-									ActivityType:           tv.ActivityType(),
-									TaskQueue:              tv.TaskQueue(),
-									ScheduleToCloseTimeout: durationpb.New(time.Minute),
-									Input:                  input,
-								},
-							},
-						})
+							ScheduleActivityTaskCommandAttributes: commandpb.ScheduleActivityTaskCommandAttributes_builder{
+								ActivityId:             fmt.Sprintf("act%d", i),
+								ActivityType:           tv.ActivityType(),
+								TaskQueue:              tv.TaskQueue(),
+								ScheduleToCloseTimeout: durationpb.New(time.Minute),
+								Input:                  input,
+							}.Build(),
+						}.Build())
 					}
 
-					return &workflowservice.RespondWorkflowTaskCompletedRequest{Commands: commands}, nil
+					return workflowservice.RespondWorkflowTaskCompletedRequest_builder{Commands: commands}.Build(), nil
 				},
 				taskpoller.WithContext(ctx),
 			)
@@ -729,7 +718,7 @@ func (s *FairnessSuite) testMigration(newMatcher, fairness bool) {
 				func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
 					nothing, err := payloads.Encode()
 					s.NoError(err)
-					return &workflowservice.RespondActivityTaskCompletedRequest{Result: nothing}, nil
+					return workflowservice.RespondActivityTaskCompletedRequest_builder{Result: nothing}.Build(), nil
 				},
 				taskpoller.WithContext(ctx),
 			)
@@ -766,24 +755,24 @@ func (s *FairnessSuite) countTasksByDrainingActive(ctx context.Context, tv *test
 	tasksOnDraining, tasksOnActive int64, retErr error,
 ) {
 	for i := range s.partitions {
-		res, err := s.AdminClient().DescribeTaskQueuePartition(ctx, &adminservice.DescribeTaskQueuePartitionRequest{
+		res, err := s.AdminClient().DescribeTaskQueuePartition(ctx, adminservice.DescribeTaskQueuePartitionRequest_builder{
 			Namespace: s.Namespace().String(),
-			TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
-				TaskQueue:     tv.TaskQueue().Name,
-				TaskQueueType: tp,
-				PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: int32(i)},
-			},
-			BuildIds: &taskqueuepb.TaskQueueVersionSelection{Unversioned: true},
-		})
+			TaskQueuePartition: taskqueuespb.TaskQueuePartition_builder{
+				TaskQueue:         tv.TaskQueue().GetName(),
+				TaskQueueType:     tp,
+				NormalPartitionId: proto.Int32(int32(i)),
+			}.Build(),
+			BuildIds: taskqueuepb.TaskQueueVersionSelection_builder{Unversioned: true}.Build(),
+		}.Build())
 		if err != nil {
 			return 0, 0, err
 		}
-		for _, versionInfoInternal := range res.VersionsInfoInternal {
-			for _, st := range versionInfoInternal.PhysicalTaskQueueInfo.InternalTaskQueueStatus {
-				if st.Draining {
-					tasksOnDraining += st.ApproximateBacklogCount
+		for _, versionInfoInternal := range res.GetVersionsInfoInternal() {
+			for _, st := range versionInfoInternal.GetPhysicalTaskQueueInfo().GetInternalTaskQueueStatus() {
+				if st.GetDraining() {
+					tasksOnDraining += st.GetApproximateBacklogCount()
 				} else {
-					tasksOnActive += st.ApproximateBacklogCount
+					tasksOnActive += st.GetApproximateBacklogCount()
 				}
 			}
 		}
@@ -817,55 +806,55 @@ func (s *FairnessSuite) TestUpdateWorkflowExecutionOptions_InvalidatesPendingTas
 	ctx, cancel := context.WithTimeout(s.T().Context(), 10*time.Second)
 	defer cancel()
 
-	originalPriority := &commonpb.Priority{FairnessKey: "KEY"}
-	updatedPriority := &commonpb.Priority{FairnessKey: "NEW_KEY"}
+	originalPriority := commonpb.Priority_builder{FairnessKey: "KEY"}.Build()
+	updatedPriority := commonpb.Priority_builder{FairnessKey: "NEW_KEY"}.Build()
 
 	// Queue up new workflow.
-	startResp, err := s.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+	startResp, err := s.FrontendClient().StartWorkflowExecution(ctx, workflowservice.StartWorkflowExecutionRequest_builder{
 		Namespace:    s.Namespace().String(),
 		WorkflowId:   tv.WorkflowID(),
 		WorkflowType: tv.WorkflowType(),
 		TaskQueue:    tv.TaskQueue(),
 		Priority:     originalPriority,
-	})
+	}.Build())
 	s.NoError(err)
 
 	// Wait for workflow task to be backlogged.
 	s.Eventually(func() bool {
-		resp, err := s.AdminClient().GetTaskQueueTasks(ctx, &adminservice.GetTaskQueueTasksRequest{
+		resp, err := s.AdminClient().GetTaskQueueTasks(ctx, adminservice.GetTaskQueueTasksRequest_builder{
 			Namespace:     s.Namespace().String(),
-			TaskQueue:     tv.TaskQueue().Name,
+			TaskQueue:     tv.TaskQueue().GetName(),
 			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			BatchSize:     10,
 			MinPass:       1,
-		})
+		}.Build())
 		return err == nil && len(resp.GetTasks()) == 1
 	}, 10*time.Second, 100*time.Millisecond)
 
 	// Update workflow options to set a new priority.
-	updateResp, err := s.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+	updateResp, err := s.FrontendClient().UpdateWorkflowExecutionOptions(ctx, workflowservice.UpdateWorkflowExecutionOptionsRequest_builder{
 		Namespace: s.Namespace().String(),
-		WorkflowExecution: &commonpb.WorkflowExecution{
+		WorkflowExecution: commonpb.WorkflowExecution_builder{
 			WorkflowId: tv.WorkflowID(),
 			RunId:      startResp.GetRunId(),
-		},
-		WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{
+		}.Build(),
+		WorkflowExecutionOptions: workflowpb.WorkflowExecutionOptions_builder{
 			Priority: updatedPriority,
-		},
+		}.Build(),
 		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"priority"}},
-	})
+	}.Build())
 	s.NoError(err)
 	s.NotNil(updateResp.GetWorkflowExecutionOptions())
 	s.ProtoEqual(updatedPriority, updateResp.GetWorkflowExecutionOptions().GetPriority())
 
 	// Query workflow to verify workflow has the updated priority.
-	descResp, err := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+	descResp, err := s.FrontendClient().DescribeWorkflowExecution(ctx, workflowservice.DescribeWorkflowExecutionRequest_builder{
 		Namespace: s.Namespace().String(),
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: tv.WorkflowID(),
 			RunId:      startResp.GetRunId(),
-		},
-	})
+		}.Build(),
+	}.Build())
 	s.NoError(err)
 	s.NotNil(descResp.GetWorkflowExecutionInfo())
 	s.NotNil(descResp.GetWorkflowExecutionInfo().GetPriority())
@@ -879,24 +868,22 @@ func (s *FairnessSuite) TestUpdateWorkflowExecutionOptions_InvalidatesPendingTas
 			s.ContainsHistoryEvents(`
 				3 WorkflowExecutionOptionsUpdated { "Priority": { "FairnessKey": "NEW_KEY" } }
 				4 WorkflowTaskStarted
-			`, task.History.Events)
+			`, task.GetHistory().GetEvents())
 
-			return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			return workflowservice.RespondWorkflowTaskCompletedRequest_builder{
 				Commands: []*commandpb.Command{
-					{
+					commandpb.Command_builder{
 						CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-						Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{
-							ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-								ActivityId:             tv.ActivityID(),
-								ActivityType:           tv.ActivityType(),
-								TaskQueue:              tv.TaskQueue(),
-								Priority:               originalPriority,
-								ScheduleToCloseTimeout: durationpb.New(time.Minute),
-							},
-						},
-					},
+						ScheduleActivityTaskCommandAttributes: commandpb.ScheduleActivityTaskCommandAttributes_builder{
+							ActivityId:             tv.ActivityID(),
+							ActivityType:           tv.ActivityType(),
+							TaskQueue:              tv.TaskQueue(),
+							Priority:               originalPriority,
+							ScheduleToCloseTimeout: durationpb.New(time.Minute),
+						}.Build(),
+					}.Build(),
 				},
-			}, nil
+			}.Build(), nil
 		},
 		taskpoller.WithContext(ctx),
 	)
@@ -925,39 +912,39 @@ func (s *FairnessSuite) TestUpdateWorkflowExecutionOptions_InvalidatesPendingTas
 
 	// Wait for activity task to be backlogged
 	s.Eventually(func() bool {
-		resp, err := s.AdminClient().GetTaskQueueTasks(ctx, &adminservice.GetTaskQueueTasksRequest{
+		resp, err := s.AdminClient().GetTaskQueueTasks(ctx, adminservice.GetTaskQueueTasksRequest_builder{
 			Namespace:     s.Namespace().String(),
-			TaskQueue:     tv.TaskQueue().Name,
+			TaskQueue:     tv.TaskQueue().GetName(),
 			TaskQueueType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
 			BatchSize:     10,
 			MinPass:       1,
-		})
+		}.Build())
 		return err == nil && len(resp.GetTasks()) == 1
 	}, 10*time.Second, 100*time.Millisecond)
 
 	// Update activity options to set a new priority
-	_, err = s.FrontendClient().UpdateActivityOptions(ctx, &workflowservice.UpdateActivityOptionsRequest{
+	_, err = s.FrontendClient().UpdateActivityOptions(ctx, workflowservice.UpdateActivityOptionsRequest_builder{
 		Namespace: s.Namespace().String(),
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: tv.WorkflowID(),
 			RunId:      startResp.GetRunId(),
-		},
-		Activity: &workflowservice.UpdateActivityOptionsRequest_Id{Id: tv.ActivityID()},
-		ActivityOptions: &activitypb.ActivityOptions{
+		}.Build(),
+		Id: proto.String(tv.ActivityID()),
+		ActivityOptions: activitypb.ActivityOptions_builder{
 			Priority: updatedPriority,
-		},
+		}.Build(),
 		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"priority"}},
-	})
+	}.Build())
 	s.NoError(err)
 
 	// Query workflow to verify activity has the updated priority.
-	descResp, err = s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+	descResp, err = s.FrontendClient().DescribeWorkflowExecution(ctx, workflowservice.DescribeWorkflowExecutionRequest_builder{
 		Namespace: s.Namespace().String(),
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: tv.WorkflowID(),
 			RunId:      startResp.GetRunId(),
-		},
-	})
+		}.Build(),
+	}.Build())
 	s.NoError(err)
 	s.NotNil(descResp.GetPendingActivities())
 	s.Len(descResp.GetPendingActivities(), 1)
@@ -969,8 +956,8 @@ func (s *FairnessSuite) TestUpdateWorkflowExecutionOptions_InvalidatesPendingTas
 		tv,
 		func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
 			s.NotNil(task)
-			s.Equal(tv.ActivityID(), task.ActivityId)
-			s.ProtoEqual(updatedPriority, task.Priority)
+			s.Equal(tv.ActivityID(), task.GetActivityId())
+			s.ProtoEqual(updatedPriority, task.GetPriority())
 			return &workflowservice.RespondActivityTaskCompletedRequest{}, nil
 		},
 		taskpoller.WithContext(ctx),

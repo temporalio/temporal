@@ -46,11 +46,11 @@ func (f *versionSetFetcher) getFuture(ctx context.Context, ns *namespace.Namespa
 		fut := future.NewFuture[*persistencespb.VersioningData]()
 		f.futures[taskQueue] = fut
 		go func() {
-			value, err := f.matchingClient.GetTaskQueueUserData(ctx, &matchingservice.GetTaskQueueUserDataRequest{
+			value, err := f.matchingClient.GetTaskQueueUserData(ctx, matchingservice.GetTaskQueueUserDataRequest_builder{
 				NamespaceId:   ns.ID().String(),
 				TaskQueue:     taskQueue,
 				TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-			})
+			}.Build())
 			fut.Set(value.GetUserData().GetData().GetVersioningData(), err)
 		}()
 	}
@@ -75,13 +75,13 @@ func (wh *WorkflowHandler) getWorkerTaskReachabilityValidated(
 			buildId:           buildId,
 			taskQueues:        request.GetTaskQueues(),
 			versionSetFetcher: vsf,
-			reachabilityType:  request.Reachability,
+			reachabilityType:  request.GetReachability(),
 		})
 	})
 	if err != nil {
 		return nil, err
 	}
-	return &workflowservice.GetWorkerTaskReachabilityResponse{BuildIdReachability: reachability}, nil
+	return workflowservice.GetWorkerTaskReachabilityResponse_builder{BuildIdReachability: reachability}.Build(), nil
 }
 
 type buildIdReachabilityRequest struct {
@@ -99,14 +99,14 @@ func (wh *WorkflowHandler) getBuildIdReachability(
 	taskQueues := request.taskQueues
 	if len(taskQueues) == 0 {
 		// Namespace scope, fetch mapping from DB.
-		response, err := wh.matchingClient.GetBuildIdTaskQueueMapping(ctx, &matchingservice.GetBuildIdTaskQueueMappingRequest{
+		response, err := wh.matchingClient.GetBuildIdTaskQueueMapping(ctx, matchingservice.GetBuildIdTaskQueueMappingRequest_builder{
 			NamespaceId: request.namespace.ID().String(),
 			BuildId:     request.buildId,
-		})
+		}.Build())
 		if err != nil {
 			return nil, err
 		}
-		taskQueues = response.TaskQueues
+		taskQueues = response.GetTaskQueues()
 	}
 
 	numTaskQueuesToQuery := min(len(taskQueues), wh.config.ReachabilityTaskQueueScanLimit())
@@ -132,11 +132,11 @@ func (wh *WorkflowHandler) getBuildIdReachability(
 	if len(taskQueuesToSkip) > 0 {
 		skippedTasksReachability := make([]*taskqueuepb.TaskQueueReachability, len(taskQueuesToSkip))
 		for i, taskQueue := range taskQueuesToSkip {
-			skippedTasksReachability[i] = &taskqueuepb.TaskQueueReachability{TaskQueue: taskQueue, Reachability: []enumspb.TaskReachability{enumspb.TASK_REACHABILITY_UNSPECIFIED}}
+			skippedTasksReachability[i] = taskqueuepb.TaskQueueReachability_builder{TaskQueue: taskQueue, Reachability: []enumspb.TaskReachability{enumspb.TASK_REACHABILITY_UNSPECIFIED}}.Build()
 		}
 		taskQueueReachability = append(taskQueueReachability, skippedTasksReachability...)
 	}
-	return &taskqueuepb.BuildIdReachability{BuildId: request.buildId, TaskQueueReachability: taskQueueReachability}, nil
+	return taskqueuepb.BuildIdReachability_builder{BuildId: request.buildId, TaskQueueReachability: taskQueueReachability}.Build(), nil
 }
 
 type taskQueueReachabilityRequest struct {
@@ -149,7 +149,7 @@ type taskQueueReachabilityRequest struct {
 
 // Get the reachability of a single build ID in a single task queue scope.
 func (wh *WorkflowHandler) getTaskQueueReachability(ctx context.Context, request taskQueueReachabilityRequest) (*taskqueuepb.TaskQueueReachability, error) {
-	taskQueueReachability := taskqueuepb.TaskQueueReachability{TaskQueue: request.taskQueue, Reachability: []enumspb.TaskReachability{}}
+	taskQueueReachability := taskqueuepb.TaskQueueReachability_builder{TaskQueue: request.taskQueue, Reachability: []enumspb.TaskReachability{}}.Build()
 
 	var isDefaultInQueue bool
 	var reachableByNewWorkflows bool
@@ -162,8 +162,8 @@ func (wh *WorkflowHandler) getTaskQueueReachability(ctx context.Context, request
 			reachableByNewWorkflows = true
 		} else {
 			// If the queue became versioned just recently, consider the unversioned build ID reachable.
-			queueBecameVersionedAt := util.FoldSlice(versionSets, &hlc.Clock{WallClock: math.MaxInt64}, func(c *hlc.Clock, set *persistencespb.CompatibleVersionSet) *hlc.Clock {
-				return hlc.Min(c, set.BecameDefaultTimestamp)
+			queueBecameVersionedAt := util.FoldSlice(versionSets, hlc.Clock_builder{WallClock: math.MaxInt64}.Build(), func(c *hlc.Clock, set *persistencespb.CompatibleVersionSet) *hlc.Clock {
+				return hlc.Min(c, set.GetBecameDefaultTimestamp())
 			})
 			reachableByNewWorkflows = time.Since(hlc.UTC(queueBecameVersionedAt)) < wh.config.ReachabilityQuerySetDurationSinceDefault()
 		}
@@ -174,39 +174,39 @@ func (wh *WorkflowHandler) getTaskQueueReachability(ctx context.Context, request
 		setIdx, buildIdIdx := worker_versioning.FindBuildId(request.versioningData, request.buildId)
 		if setIdx == -1 {
 			// build ID not in set - unreachable
-			return &taskQueueReachability, nil
+			return taskQueueReachability, nil
 		}
 		set := versionSets[setIdx]
-		if set.BuildIds[buildIdIdx].State == persistencespb.STATE_DELETED {
+		if set.GetBuildIds()[buildIdIdx].GetState() == persistencespb.STATE_DELETED {
 			// build ID not in set anymore - unreachable
-			return &taskQueueReachability, nil
+			return taskQueueReachability, nil
 		}
-		isDefaultInSet := buildIdIdx == len(set.BuildIds)-1
+		isDefaultInSet := buildIdIdx == len(set.GetBuildIds())-1
 
 		if !isDefaultInSet {
 			// unreachable
-			return &taskQueueReachability, nil
+			return taskQueueReachability, nil
 		}
 
 		isDefaultInQueue = setIdx == len(versionSets)-1
 
 		// Allow some propagation delay of the versioning data.
-		reachableByNewWorkflows = isDefaultInQueue || time.Since(hlc.UTC(set.BecameDefaultTimestamp)) < wh.config.ReachabilityQuerySetDurationSinceDefault()
+		reachableByNewWorkflows = isDefaultInQueue || time.Since(hlc.UTC(set.GetBecameDefaultTimestamp())) < wh.config.ReachabilityQuerySetDurationSinceDefault()
 
 		var escapedBuildIds []string
 		for _, buildId := range set.GetBuildIds() {
-			if buildId.State == persistencespb.STATE_ACTIVE {
-				escapedBuildIds = append(escapedBuildIds, sqlparser.String(sqlparser.NewStrVal([]byte(worker_versioning.VersionedBuildIdSearchAttribute(buildId.Id)))))
+			if buildId.GetState() == persistencespb.STATE_ACTIVE {
+				escapedBuildIds = append(escapedBuildIds, sqlparser.String(sqlparser.NewStrVal([]byte(worker_versioning.VersionedBuildIdSearchAttribute(buildId.GetId())))))
 			}
 		}
 		buildIdsFilter = fmt.Sprintf("%s IN (%s)", sadefs.BuildIds, strings.Join(escapedBuildIds, ","))
 	}
 
 	if reachableByNewWorkflows {
-		taskQueueReachability.Reachability = append(
-			taskQueueReachability.Reachability,
+		taskQueueReachability.SetReachability(append(
+			taskQueueReachability.GetReachability(),
 			enumspb.TASK_REACHABILITY_NEW_WORKFLOWS,
-		)
+		))
 	}
 	if isDefaultInQueue {
 		// Take into account started workflows that have not yet been processed by any worker.
@@ -219,8 +219,8 @@ func (wh *WorkflowHandler) getTaskQueueReachability(ctx context.Context, request
 	if err != nil {
 		return nil, err
 	}
-	taskQueueReachability.Reachability = append(taskQueueReachability.Reachability, reachability...)
-	return &taskQueueReachability, nil
+	taskQueueReachability.SetReachability(append(taskQueueReachability.GetReachability(), reachability...))
+	return taskQueueReachability, nil
 }
 
 func (wh *WorkflowHandler) queryVisibilityForExistingWorkflowsReachability(

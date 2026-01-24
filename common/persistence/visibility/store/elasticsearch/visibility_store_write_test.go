@@ -34,11 +34,11 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted() {
 			Memo:             persistence.NewDataBlob([]byte("test bytes"), enumspb.ENCODING_TYPE_PROTO3.String()),
 			Status:           enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 			TaskQueue:        "task-queue-name",
-			SearchAttributes: &commonpb.SearchAttributes{
+			SearchAttributes: commonpb.SearchAttributes_builder{
 				IndexedFields: map[string]*commonpb.Payload{
 					"CustomTextField": payload.EncodeString("alex"),
 				},
-			},
+			}.Build(),
 		},
 	}
 
@@ -57,12 +57,12 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted() {
 			s.Equal(request.TaskQueue, body[sadefs.TaskQueue])
 			s.EqualValues(request.Status.String(), body[sadefs.ExecutionStatus])
 
-			s.Equal(request.Memo.Data, body[sadefs.Memo])
+			s.Equal(request.Memo.GetData(), body[sadefs.Memo])
 			s.Equal(enumspb.ENCODING_TYPE_PROTO3.String(), body[sadefs.MemoEncoding])
 
 			CustomTextField := body["CustomTextField"].(string)
 			// %q because request has JSON encoded string.
-			s.EqualValues(request.SearchAttributes.GetIndexedFields()["CustomTextField"].Data, fmt.Sprintf("%q", CustomTextField))
+			s.EqualValues(request.SearchAttributes.GetIndexedFields()["CustomTextField"].GetData(), fmt.Sprintf("%q", CustomTextField))
 
 			s.Equal(client.BulkableRequestTypeIndex, bulkRequest.RequestType)
 			s.EqualValues(request.TaskID, bulkRequest.Version)
@@ -126,11 +126,11 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed() {
 			Memo:             persistence.NewDataBlob([]byte("test bytes"), enumspb.ENCODING_TYPE_PROTO3.String()),
 			Status:           enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
 			TaskQueue:        "task-queue-name",
-			SearchAttributes: &commonpb.SearchAttributes{
+			SearchAttributes: commonpb.SearchAttributes_builder{
 				IndexedFields: map[string]*commonpb.Payload{
 					"CustomTextField": payload.EncodeString("alex"),
 				},
-			},
+			}.Build(),
 		},
 		CloseTime:     time.Unix(0, 1978).UTC(),
 		HistoryLength: int64(20),
@@ -148,7 +148,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed() {
 			s.Equal(request.WorkflowTypeName, body[sadefs.WorkflowType])
 			s.EqualValues(request.StartTime, body[sadefs.StartTime])
 			s.EqualValues(request.ExecutionTime, body[sadefs.ExecutionTime])
-			s.Equal(request.Memo.Data, body[sadefs.Memo])
+			s.Equal(request.Memo.GetData(), body[sadefs.Memo])
 			s.Equal(enumspb.ENCODING_TYPE_PROTO3.String(), body[sadefs.MemoEncoding])
 			s.EqualValues(request.CloseTime, body[sadefs.CloseTime])
 			s.EqualValues(request.Status.String(), body[sadefs.ExecutionStatus])

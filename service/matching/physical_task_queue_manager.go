@@ -549,7 +549,7 @@ func (c *physicalTaskQueueManagerImpl) DispatchNexusTask(
 			opTimeout, err := time.ParseDuration(opTimeoutHeader)
 			if err != nil {
 				// Operation-Timeout header is not required so don't fail request on parsing errors.
-				c.logger.Warn(fmt.Sprintf("unable to parse %v header: %v", nexus.HeaderOperationTimeout, opTimeoutHeader), tag.Error(err), tag.WorkflowNamespaceID(request.NamespaceId))
+				c.logger.Warn(fmt.Sprintf("unable to parse %v header: %v", nexus.HeaderOperationTimeout, opTimeoutHeader), tag.Error(err), tag.WorkflowNamespaceID(request.GetNamespaceId()))
 			} else {
 				opDeadline = time.Now().Add(opTimeout)
 			}
@@ -591,18 +591,18 @@ func (c *physicalTaskQueueManagerImpl) HasPollerAfter(accessTime time.Time) bool
 // pollers which polled this taskqueue in last few minutes and status of taskqueue's ackManager
 // (readLevel, ackLevel, backlogCountHint and taskIDBlock).
 func (c *physicalTaskQueueManagerImpl) LegacyDescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse {
-	response := &matchingservice.DescribeTaskQueueResponse{
-		DescResponse: &workflowservice.DescribeTaskQueueResponse{
+	response := matchingservice.DescribeTaskQueueResponse_builder{
+		DescResponse: workflowservice.DescribeTaskQueueResponse_builder{
 			Pollers: c.GetAllPollerInfo(),
-		},
-	}
+		}.Build(),
+	}.Build()
 	if includeTaskQueueStatus {
 		// Don't look at c.drainBacklogMgr here, we can't merge info from the draining queue
 		// with this interface. Use GetInternalTaskQueueStatus instead.
-		response.DescResponse.TaskQueueStatus = c.backlogMgr.BacklogStatus()
+		response.GetDescResponse().SetTaskQueueStatus(c.backlogMgr.BacklogStatus())
 		rps, _ := c.partitionMgr.GetRateLimitManager().GetEffectiveRPSAndSource()
 		//nolint:staticcheck // SA1019: using deprecated TaskQueueStatus for legacy compatibility
-		response.DescResponse.TaskQueueStatus.RatePerSecond = rps
+		response.GetDescResponse().GetTaskQueueStatus().SetRatePerSecond(rps)
 	}
 	return response
 }
@@ -620,10 +620,10 @@ func (c *physicalTaskQueueManagerImpl) GetStatsByPriority(includeRates bool) map
 	if includeRates {
 		c.taskTrackerLock.RLock()
 		for pri, tt := range c.tasksAdded {
-			util.GetOrSetNew(stats, int32(pri)).TasksAddRate = tt.rate()
+			util.GetOrSetNew(stats, int32(pri)).SetTasksAddRate(tt.rate())
 		}
 		for pri, tt := range c.tasksDispatched {
-			util.GetOrSetNew(stats, int32(pri)).TasksDispatchRate = tt.rate()
+			util.GetOrSetNew(stats, int32(pri)).SetTasksDispatchRate(tt.rate())
 		}
 		c.taskTrackerLock.RUnlock()
 	}
@@ -636,7 +636,7 @@ func (c *physicalTaskQueueManagerImpl) GetInternalTaskQueueStatus() []*taskqueue
 	if m := c.drainBacklogMgr.Load(); m != nil {
 		drainStatus := m.(backlogManager).InternalStatus()
 		for _, st := range drainStatus {
-			st.Draining = true
+			st.SetDraining(true)
 		}
 		status = append(status, drainStatus...)
 	}
@@ -733,7 +733,7 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 	}
 
 	err = c.partitionMgr.engine.workerDeploymentClient.RegisterTaskQueueWorker(
-		ctx, namespaceEntry, workerDeployment.SeriesName, workerDeployment.BuildId, c.queue.TaskQueueFamily().Name(), c.queue.TaskType(),
+		ctx, namespaceEntry, workerDeployment.GetSeriesName(), workerDeployment.GetBuildId(), c.queue.TaskQueueFamily().Name(), c.queue.TaskType(),
 		"matching service")
 	if err != nil {
 		if common.IsContextDeadlineExceededErr(err) || common.IsContextCanceledErr(err) {
@@ -809,9 +809,9 @@ func (c *physicalTaskQueueManagerImpl) makePollerScalingDecisionImpl(
 	// If a poller has waited around a while, we can always suggest a decrease.
 	if pollWaitTime >= c.partitionMgr.config.PollerScalingWaitTime() {
 		// Decrease if any poll matched after sitting idle for some configured period
-		return &taskqueuepb.PollerScalingDecision{
+		return taskqueuepb.PollerScalingDecision_builder{
 			PollRequestDeltaSuggestion: -1,
-		}
+		}.Build()
 	}
 
 	// Avoid spiking pollers crazy fast by limiting how frequently change decisions are issued. Be more permissive when
@@ -845,9 +845,9 @@ func (c *physicalTaskQueueManagerImpl) makePollerScalingDecisionImpl(
 	if delta == 0 {
 		return nil
 	}
-	return &taskqueuepb.PollerScalingDecision{
+	return taskqueuepb.PollerScalingDecision_builder{
 		PollRequestDeltaSuggestion: delta,
-	}
+	}.Build()
 }
 
 func (c *physicalTaskQueueManagerImpl) UpdateRemotePriorityBacklogs(backlogs remotePriorityBacklogSet) {
@@ -893,7 +893,7 @@ func (c *physicalTaskQueueManagerImpl) getOrCreateTaskTracker(
 }
 
 func aggregateStats(stats map[int32]*taskqueuepb.TaskQueueStats) *taskqueuepb.TaskQueueStats {
-	result := &taskqueuepb.TaskQueueStats{ApproximateBacklogAge: durationpb.New(0)}
+	result := taskqueuepb.TaskQueueStats_builder{ApproximateBacklogAge: durationpb.New(0)}.Build()
 	for _, s := range stats {
 		mergeStats(result, s)
 	}
@@ -901,10 +901,10 @@ func aggregateStats(stats map[int32]*taskqueuepb.TaskQueueStats) *taskqueuepb.Ta
 }
 
 func mergeStats(into, from *taskqueuepb.TaskQueueStats) {
-	into.ApproximateBacklogCount += from.ApproximateBacklogCount
-	into.ApproximateBacklogAge = oldestBacklogAge(into.ApproximateBacklogAge, from.ApproximateBacklogAge)
-	into.TasksAddRate += from.TasksAddRate
-	into.TasksDispatchRate += from.TasksDispatchRate
+	into.SetApproximateBacklogCount(into.GetApproximateBacklogCount() + from.GetApproximateBacklogCount())
+	into.SetApproximateBacklogAge(oldestBacklogAge(into.GetApproximateBacklogAge(), from.GetApproximateBacklogAge()))
+	into.SetTasksAddRate(into.GetTasksAddRate() + from.GetTasksAddRate())
+	into.SetTasksDispatchRate(into.GetTasksDispatchRate() + from.GetTasksDispatchRate())
 }
 
 func oldestBacklogAge(left, right *durationpb.Duration) *durationpb.Duration {

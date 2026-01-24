@@ -4,59 +4,86 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 )
 
-func SetDefaultWorkflowIdReusePolicy(f *enumspb.WorkflowIdReusePolicy) {
-	if *f == enumspb.WORKFLOW_ID_REUSE_POLICY_UNSPECIFIED {
-		*f = enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE
+// DefaultWorkflowIdReusePolicy returns ALLOW_DUPLICATE if the policy is UNSPECIFIED,
+// otherwise returns the original policy.
+func DefaultWorkflowIdReusePolicy(f enumspb.WorkflowIdReusePolicy) enumspb.WorkflowIdReusePolicy {
+	if f == enumspb.WORKFLOW_ID_REUSE_POLICY_UNSPECIFIED {
+		return enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE
 	}
+	return f
 }
 
-func SetDefaultWorkflowIdConflictPolicy(
-	conflictPolicy *enumspb.WorkflowIdConflictPolicy,
+// DefaultWorkflowIdConflictPolicy returns the specified default policy if the conflict policy is UNSPECIFIED,
+// otherwise returns the original policy.
+func DefaultWorkflowIdConflictPolicy(
+	conflictPolicy enumspb.WorkflowIdConflictPolicy,
 	defaultPolicy enumspb.WorkflowIdConflictPolicy,
-) {
-	if *conflictPolicy == enumspb.WORKFLOW_ID_CONFLICT_POLICY_UNSPECIFIED {
-		*conflictPolicy = defaultPolicy
+) enumspb.WorkflowIdConflictPolicy {
+	if conflictPolicy == enumspb.WORKFLOW_ID_CONFLICT_POLICY_UNSPECIFIED {
+		return defaultPolicy
 	}
+	return conflictPolicy
 }
 
-func SetDefaultHistoryEventFilterType(f *enumspb.HistoryEventFilterType) {
-	if *f == enumspb.HISTORY_EVENT_FILTER_TYPE_UNSPECIFIED {
-		*f = enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT
+// DefaultHistoryEventFilterType returns ALL_EVENT if the filter type is UNSPECIFIED,
+// otherwise returns the original filter type.
+func DefaultHistoryEventFilterType(f enumspb.HistoryEventFilterType) enumspb.HistoryEventFilterType {
+	if f == enumspb.HISTORY_EVENT_FILTER_TYPE_UNSPECIFIED {
+		return enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT
 	}
+	return f
 }
 
-func SetDefaultTaskQueueKind(f *enumspb.TaskQueueKind) {
-	if *f == enumspb.TASK_QUEUE_KIND_UNSPECIFIED {
-		*f = enumspb.TASK_QUEUE_KIND_NORMAL
+// DefaultTaskQueueKind returns NORMAL if the kind is UNSPECIFIED,
+// otherwise returns the original kind.
+func DefaultTaskQueueKind(f enumspb.TaskQueueKind) enumspb.TaskQueueKind {
+	if f == enumspb.TASK_QUEUE_KIND_UNSPECIFIED {
+		return enumspb.TASK_QUEUE_KIND_NORMAL
 	}
+	return f
 }
 
-func SetDefaultParentClosePolicy(f *enumspb.ParentClosePolicy) {
-	if *f == enumspb.PARENT_CLOSE_POLICY_UNSPECIFIED {
-		*f = enumspb.PARENT_CLOSE_POLICY_TERMINATE
+// DefaultParentClosePolicy returns TERMINATE if the policy is UNSPECIFIED,
+// otherwise returns the original policy.
+func DefaultParentClosePolicy(f enumspb.ParentClosePolicy) enumspb.ParentClosePolicy {
+	if f == enumspb.PARENT_CLOSE_POLICY_UNSPECIFIED {
+		return enumspb.PARENT_CLOSE_POLICY_TERMINATE
 	}
+	return f
 }
 
-func SetDefaultQueryRejectCondition(f *enumspb.QueryRejectCondition) {
-	if *f == enumspb.QUERY_REJECT_CONDITION_UNSPECIFIED {
-		*f = enumspb.QUERY_REJECT_CONDITION_NONE
+// DefaultQueryRejectCondition returns NONE if the condition is UNSPECIFIED,
+// otherwise returns the original condition.
+func DefaultQueryRejectCondition(f enumspb.QueryRejectCondition) enumspb.QueryRejectCondition {
+	if f == enumspb.QUERY_REJECT_CONDITION_UNSPECIFIED {
+		return enumspb.QUERY_REJECT_CONDITION_NONE
 	}
+	return f
 }
 
-func SetDefaultContinueAsNewInitiator(f *enumspb.ContinueAsNewInitiator) {
-	if *f == enumspb.CONTINUE_AS_NEW_INITIATOR_UNSPECIFIED {
-		*f = enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW
+// DefaultContinueAsNewInitiator returns WORKFLOW if the initiator is UNSPECIFIED,
+// otherwise returns the original initiator.
+func DefaultContinueAsNewInitiator(f enumspb.ContinueAsNewInitiator) enumspb.ContinueAsNewInitiator {
+	if f == enumspb.CONTINUE_AS_NEW_INITIATOR_UNSPECIFIED {
+		return enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW
 	}
+	return f
 }
 
-func SetDefaultResetReapplyType(f *enumspb.ResetReapplyType) {
-	if *f == enumspb.RESET_REAPPLY_TYPE_UNSPECIFIED {
-		*f = enumspb.RESET_REAPPLY_TYPE_ALL_ELIGIBLE
+// DefaultResetReapplyType returns ALL_ELIGIBLE if the type is UNSPECIFIED,
+// otherwise returns the original type.
+func DefaultResetReapplyType(f enumspb.ResetReapplyType) enumspb.ResetReapplyType {
+	if f == enumspb.RESET_REAPPLY_TYPE_UNSPECIFIED {
+		return enumspb.RESET_REAPPLY_TYPE_ALL_ELIGIBLE
 	}
+	return f
 }
 
-func SetDefaultUpdateWorkflowExecutionLifecycleStage(f *enumspb.UpdateWorkflowExecutionLifecycleStage) {
-	if *f == enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED {
-		*f = enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED
+// DefaultUpdateWorkflowExecutionLifecycleStage returns COMPLETED if the stage is UNSPECIFIED,
+// otherwise returns the original stage.
+func DefaultUpdateWorkflowExecutionLifecycleStage(f enumspb.UpdateWorkflowExecutionLifecycleStage) enumspb.UpdateWorkflowExecutionLifecycleStage {
+	if f == enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED {
+		return enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED
 	}
+	return f
 }

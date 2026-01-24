@@ -56,14 +56,12 @@ func (s *QueuePersistenceSuite) TestNamespaceReplicationQueue() {
 	taskType := enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK
 	go func() {
 		for i := 0; i < numMessages; i++ {
-			messageChan <- &replicationspb.ReplicationTask{
+			messageChan <- replicationspb.ReplicationTask_builder{
 				TaskType: taskType,
-				Attributes: &replicationspb.ReplicationTask_NamespaceTaskAttributes{
-					NamespaceTaskAttributes: &replicationspb.NamespaceTaskAttributes{
-						Id: fmt.Sprintf("message-%v", i),
-					},
-				},
-			}
+				NamespaceTaskAttributes: replicationspb.NamespaceTaskAttributes_builder{
+					Id: fmt.Sprintf("message-%v", i),
+				}.Build(),
+			}.Build()
 		}
 		close(messageChan)
 	}()
@@ -76,7 +74,7 @@ func (s *QueuePersistenceSuite) TestNamespaceReplicationQueue() {
 			defer wg.Done()
 			for message := range messageChan {
 				err := s.Publish(s.ctx, message)
-				id := message.Attributes.(*replicationspb.ReplicationTask_NamespaceTaskAttributes).NamespaceTaskAttributes.Id
+				id := message.GetNamespaceTaskAttributes().GetId()
 				s.Nil(err, "Enqueue message failed when sender %d tried to send %s", senderNum, id)
 			}
 		}(i)
@@ -133,14 +131,12 @@ func (s *QueuePersistenceSuite) TestNamespaceReplicationDLQ() {
 	taskType := enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK
 	go func() {
 		for i := 0; i < numMessages; i++ {
-			messageChan <- &replicationspb.ReplicationTask{
+			messageChan <- replicationspb.ReplicationTask_builder{
 				TaskType: taskType,
-				Attributes: &replicationspb.ReplicationTask_NamespaceTaskAttributes{
-					NamespaceTaskAttributes: &replicationspb.NamespaceTaskAttributes{
-						Id: fmt.Sprintf("message-%v", i),
-					},
-				},
-			}
+				NamespaceTaskAttributes: replicationspb.NamespaceTaskAttributes_builder{
+					Id: fmt.Sprintf("message-%v", i),
+				}.Build(),
+			}.Build()
 		}
 		close(messageChan)
 	}()
@@ -153,7 +149,7 @@ func (s *QueuePersistenceSuite) TestNamespaceReplicationDLQ() {
 			defer wg.Done()
 			for message := range messageChan {
 				err := s.PublishToNamespaceDLQ(s.ctx, message)
-				id := message.Attributes.(*replicationspb.ReplicationTask_NamespaceTaskAttributes).NamespaceTaskAttributes.Id
+				id := message.GetNamespaceTaskAttributes().GetId()
 				s.Nil(err, "Enqueue message failed when sender %d tried to send %s", senderNum, id)
 			}
 		}(i)
@@ -172,7 +168,7 @@ func (s *QueuePersistenceSuite) TestNamespaceReplicationDLQ() {
 	s.NoError(err, "GetReplicationMessages failed.")
 	s.Equal(len(token), 0)
 
-	lastMessageID := result2[len(result2)-1].SourceTaskId
+	lastMessageID := result2[len(result2)-1].GetSourceTaskId()
 	err = s.DeleteMessageFromNamespaceDLQ(s.ctx, lastMessageID)
 	s.NoError(err)
 	result3, token, err := s.GetMessagesFromNamespaceDLQ(s.ctx, persistence.EmptyQueueMessageID, maxMessageID, numMessages, token)

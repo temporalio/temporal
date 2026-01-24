@@ -18,12 +18,12 @@ func TestEnsureRetryPolicyDefaults(t *testing.T) {
 		MaximumAttempts:            120,
 	}
 
-	defaultRetryPolicy := &commonpb.RetryPolicy{
+	defaultRetryPolicy := commonpb.RetryPolicy_builder{
 		InitialInterval:    durationpb.New(1 * time.Second),
 		MaximumInterval:    durationpb.New(100 * time.Second),
 		BackoffCoefficient: 2.0,
 		MaximumAttempts:    120,
-	}
+	}.Build()
 
 	testCases := []struct {
 		name  string
@@ -37,74 +37,74 @@ func TestEnsureRetryPolicyDefaults(t *testing.T) {
 		},
 		{
 			name: "non-default InitialIntervalInSeconds is not set",
-			input: &commonpb.RetryPolicy{
+			input: commonpb.RetryPolicy_builder{
 				InitialInterval: durationpb.New(2 * time.Second),
-			},
-			want: &commonpb.RetryPolicy{
+			}.Build(),
+			want: commonpb.RetryPolicy_builder{
 				InitialInterval:    durationpb.New(2 * time.Second),
 				MaximumInterval:    durationpb.New(200 * time.Second),
 				BackoffCoefficient: 2,
 				MaximumAttempts:    120,
-			},
+			}.Build(),
 		},
 		{
 			name: "non-default MaximumIntervalInSeconds is not set",
-			input: &commonpb.RetryPolicy{
+			input: commonpb.RetryPolicy_builder{
 				MaximumInterval: durationpb.New(1000 * time.Second),
-			},
-			want: &commonpb.RetryPolicy{
+			}.Build(),
+			want: commonpb.RetryPolicy_builder{
 				InitialInterval:    durationpb.New(1 * time.Second),
 				MaximumInterval:    durationpb.New(1000 * time.Second),
 				BackoffCoefficient: 2,
 				MaximumAttempts:    120,
-			},
+			}.Build(),
 		},
 		{
 			name: "non-default BackoffCoefficient is not set",
-			input: &commonpb.RetryPolicy{
+			input: commonpb.RetryPolicy_builder{
 				BackoffCoefficient: 1.5,
-			},
-			want: &commonpb.RetryPolicy{
+			}.Build(),
+			want: commonpb.RetryPolicy_builder{
 				InitialInterval:    durationpb.New(1 * time.Second),
 				MaximumInterval:    durationpb.New(100 * time.Second),
 				BackoffCoefficient: 1.5,
 				MaximumAttempts:    120,
-			},
+			}.Build(),
 		},
 		{
 			name: "non-default Maximum attempts is not set",
-			input: &commonpb.RetryPolicy{
+			input: commonpb.RetryPolicy_builder{
 				MaximumAttempts: 49,
-			},
-			want: &commonpb.RetryPolicy{
+			}.Build(),
+			want: commonpb.RetryPolicy_builder{
 				InitialInterval:    durationpb.New(1 * time.Second),
 				MaximumInterval:    durationpb.New(100 * time.Second),
 				BackoffCoefficient: 2,
 				MaximumAttempts:    49,
-			},
+			}.Build(),
 		},
 		{
 			name: "non-retryable errors are set",
-			input: &commonpb.RetryPolicy{
+			input: commonpb.RetryPolicy_builder{
 				NonRetryableErrorTypes: []string{"testFailureType"},
-			},
-			want: &commonpb.RetryPolicy{
+			}.Build(),
+			want: commonpb.RetryPolicy_builder{
 				InitialInterval:        durationpb.New(1 * time.Second),
 				MaximumInterval:        durationpb.New(100 * time.Second),
 				BackoffCoefficient:     2.0,
 				MaximumAttempts:        120,
 				NonRetryableErrorTypes: []string{"testFailureType"},
-			},
+			}.Build(),
 		},
 		{
 			name:  "empty policy has non-zero defaults",
 			input: &commonpb.RetryPolicy{},
-			want: &commonpb.RetryPolicy{
+			want: commonpb.RetryPolicy_builder{
 				InitialInterval:    durationpb.New(1 * time.Second),
 				MaximumInterval:    durationpb.New(100 * time.Second),
 				BackoffCoefficient: 2,
 				MaximumAttempts:    120,
-			},
+			}.Build(),
 		},
 	}
 
@@ -131,60 +131,60 @@ func TestValidateRetryPolicy(t *testing.T) {
 		},
 		{
 			name: "maxAttempts is 1, coefficient < 1",
-			input: &commonpb.RetryPolicy{
+			input: commonpb.RetryPolicy_builder{
 				BackoffCoefficient: 0.5,
 				MaximumAttempts:    1,
-			},
+			}.Build(),
 			wantErr:       false,
 			wantErrString: "",
 		},
 		{
 			name: "initial interval negative",
-			input: &commonpb.RetryPolicy{
+			input: commonpb.RetryPolicy_builder{
 				InitialInterval: durationpb.New(-22 * time.Second),
-			},
+			}.Build(),
 			wantErr:       true,
 			wantErrString: "invalid InitialInterval set on retry policy: negative duration",
 		},
 		{
 			name: "coefficient < 1",
-			input: &commonpb.RetryPolicy{
+			input: commonpb.RetryPolicy_builder{
 				BackoffCoefficient: 0.8,
-			},
+			}.Build(),
 			wantErr:       true,
 			wantErrString: "BackoffCoefficient cannot be less than 1 on retry policy.",
 		},
 		{
 			name: "maximum interval in seconds is negative",
-			input: &commonpb.RetryPolicy{
+			input: commonpb.RetryPolicy_builder{
 				BackoffCoefficient: 2.0,
 				MaximumInterval:    durationpb.New(-2 * time.Second),
-			},
+			}.Build(),
 			wantErr:       true,
 			wantErrString: "invalid MaximumInterval set on retry policy: negative duration",
 		},
 		{
 			name: "maximum interval in less than initial interval",
-			input: &commonpb.RetryPolicy{
+			input: commonpb.RetryPolicy_builder{
 				BackoffCoefficient: 2.0,
 				MaximumInterval:    durationpb.New(5 * time.Second),
 				InitialInterval:    durationpb.New(10 * time.Second),
-			},
+			}.Build(),
 			wantErr:       true,
 			wantErrString: "MaximumInterval cannot be less than InitialInterval on retry policy.",
 		},
 		{
 			name: "maximum attempts negative",
-			input: &commonpb.RetryPolicy{
+			input: commonpb.RetryPolicy_builder{
 				BackoffCoefficient: 2.0,
 				MaximumAttempts:    -3,
-			},
+			}.Build(),
 			wantErr:       true,
 			wantErrString: "MaximumAttempts cannot be negative on retry policy.",
 		},
 		{
 			name: "timeout nonretryable error - valid type",
-			input: &commonpb.RetryPolicy{
+			input: commonpb.RetryPolicy_builder{
 				BackoffCoefficient: 1,
 				NonRetryableErrorTypes: []string{
 					TimeoutFailureTypePrefix + enumspb.TIMEOUT_TYPE_START_TO_CLOSE.String(),
@@ -192,29 +192,29 @@ func TestValidateRetryPolicy(t *testing.T) {
 					TimeoutFailureTypePrefix + enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE.String(),
 					TimeoutFailureTypePrefix + enumspb.TIMEOUT_TYPE_HEARTBEAT.String(),
 				},
-			},
+			}.Build(),
 			wantErr:       false,
 			wantErrString: "",
 		},
 		{
 			name: "timeout nonretryable error - unspecified type",
-			input: &commonpb.RetryPolicy{
+			input: commonpb.RetryPolicy_builder{
 				BackoffCoefficient: 1,
 				NonRetryableErrorTypes: []string{
 					TimeoutFailureTypePrefix + enumspb.TIMEOUT_TYPE_UNSPECIFIED.String(),
 				},
-			},
+			}.Build(),
 			wantErr:       true,
 			wantErrString: "Invalid timeout type value: Unspecified.",
 		},
 		{
 			name: "timeout nonretryable error - unknown type",
-			input: &commonpb.RetryPolicy{
+			input: commonpb.RetryPolicy_builder{
 				BackoffCoefficient: 1,
 				NonRetryableErrorTypes: []string{
 					TimeoutFailureTypePrefix + "unknown",
 				},
-			},
+			}.Build(),
 			wantErr:       true,
 			wantErrString: "Invalid timeout type value: unknown.",
 		},

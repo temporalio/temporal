@@ -27,30 +27,30 @@ type utilSuite struct {
 func (s *utilSuite) TestEncodeDecodeHistoryBatches() {
 	now := time.Date(2020, 8, 22, 1, 2, 3, 4, time.UTC)
 	historyBatches := []*historypb.History{
-		{
+		historypb.History_builder{
 			Events: []*historypb.HistoryEvent{
-				{
+				historypb.HistoryEvent_builder{
 					EventId: common.FirstEventID,
 					Version: 1,
-				},
+				}.Build(),
 			},
-		},
-		{
+		}.Build(),
+		historypb.History_builder{
 			Events: []*historypb.HistoryEvent{
-				{
+				historypb.HistoryEvent_builder{
 					EventId:   common.FirstEventID + 1,
 					EventTime: timestamppb.New(now),
 					Version:   1,
-				},
-				{
+				}.Build(),
+				historypb.HistoryEvent_builder{
 					EventId: common.FirstEventID + 2,
 					Version: 2,
-					Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{
+					WorkflowTaskStartedEventAttributes: historypb.WorkflowTaskStartedEventAttributes_builder{
 						Identity: "some random identity",
-					}},
-				},
+					}.Build(),
+				}.Build(),
 			},
-		},
+		}.Build(),
 	}
 
 	encoder := codec.NewJSONPBEncoder()

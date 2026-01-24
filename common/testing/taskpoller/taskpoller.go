@@ -58,9 +58,9 @@ var (
 	// CompleteActivityTask returns a RespondActivityTaskCompletedRequest with an auto-generated `Result` from `tv.Any().Payloads()`.
 	CompleteActivityTask = func(tv *testvars.TestVars) func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
 		return func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
-			return &workflowservice.RespondActivityTaskCompletedRequest{
+			return workflowservice.RespondActivityTaskCompletedRequest_builder{
 				Result: tv.Any().Payloads(),
-			}, nil
+			}.Build(), nil
 		}
 	}
 	// WithTimeout defines a timeout for a task poller method (includes *all* RPC calls it has to make)
@@ -143,20 +143,20 @@ func (p *nexusTaskPoller) pollTask(
 	p.t.Helper()
 
 	req := common.CloneProto(p.pollNexusTaskRequest)
-	if req.Namespace == "" {
-		req.Namespace = p.namespace
+	if req.GetNamespace() == "" {
+		req.SetNamespace(p.namespace)
 	}
-	if req.TaskQueue == nil {
-		req.TaskQueue = opts.tv.TaskQueue()
+	if !req.HasTaskQueue() {
+		req.SetTaskQueue(opts.tv.TaskQueue())
 	}
-	if req.Identity == "" {
-		req.Identity = opts.tv.WorkerIdentity()
+	if req.GetIdentity() == "" {
+		req.SetIdentity(opts.tv.WorkerIdentity())
 	}
 	resp, err := p.client.PollNexusTaskQueue(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	if resp == nil || resp.TaskToken == nil {
+	if resp == nil || len(resp.GetTaskToken()) == 0 {
 		return nil, NoWorkflowTaskAvailable
 	}
 
@@ -184,7 +184,7 @@ func (p *nexusTaskPoller) handleTask(
 	p.t.Helper()
 	reply, err := handler(task)
 	if err != nil {
-		return nil, p.respondNexusTaskFailed(ctx, opts, task.TaskToken)
+		return nil, p.respondNexusTaskFailed(ctx, opts, task.GetTaskToken())
 	}
 
 	resp, err := p.respondNexusTaskCompleted(ctx, opts, task, reply)
@@ -205,16 +205,16 @@ func (p *nexusTaskPoller) respondNexusTaskCompleted(
 	if reply == nil {
 		return nil, errors.New("missing RespondWorkflowTaskCompletedRequest return")
 	}
-	if reply.Namespace == "" {
-		reply.Namespace = p.namespace
+	if reply.GetNamespace() == "" {
+		reply.SetNamespace(p.namespace)
 	}
-	if len(reply.TaskToken) == 0 {
-		reply.TaskToken = task.TaskToken
+	if len(reply.GetTaskToken()) == 0 {
+		reply.SetTaskToken(task.GetTaskToken())
 	}
-	if reply.Identity == "" {
-		reply.Identity = opts.tv.WorkerIdentity()
+	if reply.GetIdentity() == "" {
+		reply.SetIdentity(opts.tv.WorkerIdentity())
 	}
-	reply.Response = &nexuspb.Response{}
+	reply.SetResponse(&nexuspb.Response{})
 
 	return p.client.RespondNexusTaskCompleted(ctx, reply)
 }
@@ -227,14 +227,14 @@ func (p *nexusTaskPoller) respondNexusTaskFailed(
 	p.t.Helper()
 	_, err := p.client.RespondNexusTaskFailed(
 		ctx,
-		&workflowservice.RespondNexusTaskFailedRequest{
+		workflowservice.RespondNexusTaskFailedRequest_builder{
 			Namespace: p.namespace,
 			TaskToken: taskToken,
 			Identity:  opts.tv.WorkerIdentity(),
-			Error: &nexuspb.HandlerError{
+			Error: nexuspb.HandlerError_builder{
 				ErrorType: string(nexus.HandlerErrorTypeInternal),
-			},
-		})
+			}.Build(),
+		}.Build())
 	return err
 }
 
@@ -333,48 +333,48 @@ func (p *workflowTaskPoller) pollTask(
 	p.t.Helper()
 
 	req := common.CloneProto(p.pollWorkflowTaskRequest)
-	if req.Namespace == "" {
-		req.Namespace = p.namespace
+	if req.GetNamespace() == "" {
+		req.SetNamespace(p.namespace)
 	}
-	if req.TaskQueue == nil {
-		req.TaskQueue = opts.tv.TaskQueue()
+	if !req.HasTaskQueue() {
+		req.SetTaskQueue(opts.tv.TaskQueue())
 	}
-	if req.Identity == "" {
-		req.Identity = opts.tv.WorkerIdentity()
+	if req.GetIdentity() == "" {
+		req.SetIdentity(opts.tv.WorkerIdentity())
 	}
 	resp, err := p.client.PollWorkflowTaskQueue(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	if resp == nil || resp.TaskToken == nil {
+	if resp == nil || len(resp.GetTaskToken()) == 0 {
 		return nil, NoWorkflowTaskAvailable
 	}
 
 	var events []*historypb.HistoryEvent
-	history := resp.History
+	history := resp.GetHistory()
 	if history == nil {
 		return nil, errors.New("history is nil")
 	}
 
-	events = history.Events
-	if len(events) == 0 && req.TaskQueue.GetKind() != enumspb.TASK_QUEUE_KIND_STICKY {
+	events = history.GetEvents()
+	if len(events) == 0 && req.GetTaskQueue().GetKind() != enumspb.TASK_QUEUE_KIND_STICKY {
 		return nil, errors.New("history events are empty")
 	}
 
-	nextPageToken := resp.NextPageToken
+	nextPageToken := resp.GetNextPageToken()
 	for nextPageToken != nil {
 		resp, err := p.client.GetWorkflowExecutionHistory(
 			ctx,
-			&workflowservice.GetWorkflowExecutionHistoryRequest{
+			workflowservice.GetWorkflowExecutionHistoryRequest_builder{
 				Namespace:     p.namespace,
-				Execution:     resp.WorkflowExecution,
+				Execution:     resp.GetWorkflowExecution(),
 				NextPageToken: nextPageToken,
-			})
+			}.Build())
 		if err != nil {
 			return nil, err
 		}
-		events = append(events, resp.History.Events...)
-		nextPageToken = resp.NextPageToken
+		events = append(events, resp.GetHistory().GetEvents()...)
+		nextPageToken = resp.GetNextPageToken()
 	}
 
 	return resp, err
@@ -443,7 +443,7 @@ func (p *workflowTaskPoller) handleTask(
 	p.t.Helper()
 	reply, err := handler(task)
 	if err != nil {
-		return nil, p.respondTaskFailed(ctx, opts, task.TaskToken, err)
+		return nil, p.respondTaskFailed(ctx, opts, task.GetTaskToken(), err)
 	}
 
 	resp, err := p.respondTaskCompleted(ctx, opts, task, reply)
@@ -464,7 +464,7 @@ func (p *workflowTaskPoller) respondQueryTaskCompleted(
 	if task == nil {
 		return nil, errors.New("missing PollWorkflowTaskQueueResponse")
 	}
-	if task.Query == nil {
+	if !task.HasQuery() {
 		return nil, errors.New("missing Legacy Query in PollWorkflowTaskQueueResponse")
 	}
 	if reply == nil {
@@ -472,23 +472,23 @@ func (p *workflowTaskPoller) respondQueryTaskCompleted(
 	}
 
 	// setting the fields for RespondQueryTaskCompletedResponse
-	if reply.Namespace == "" {
-		reply.Namespace = p.namespace
+	if reply.GetNamespace() == "" {
+		reply.SetNamespace(p.namespace)
 	}
-	if reply.TaskToken == nil {
-		reply.TaskToken = task.TaskToken
+	if len(reply.GetTaskToken()) == 0 {
+		reply.SetTaskToken(task.GetTaskToken())
 	}
 
 	if err != nil {
-		reply.ErrorMessage = err.Error()
-		reply.Failure = &failurepb.Failure{
+		reply.SetErrorMessage(err.Error())
+		reply.SetFailure(failurepb.Failure_builder{
 			Message: err.Error(),
-		}
-		reply.CompletedType = enumspb.QUERY_RESULT_TYPE_FAILED
+		}.Build())
+		reply.SetCompletedType(enumspb.QUERY_RESULT_TYPE_FAILED)
 	} else {
-		reply.CompletedType = enumspb.QUERY_RESULT_TYPE_ANSWERED
-		if reply.QueryResult == nil {
-			reply.QueryResult = payloads.EncodeString("query-result")
+		reply.SetCompletedType(enumspb.QUERY_RESULT_TYPE_ANSWERED)
+		if !reply.HasQueryResult() {
+			reply.SetQueryResult(payloads.EncodeString("query-result"))
 		}
 	}
 
@@ -509,14 +509,14 @@ func (p *workflowTaskPoller) respondTaskCompleted(
 	if reply == nil {
 		return nil, errors.New("missing RespondWorkflowTaskCompletedRequest return")
 	}
-	if reply.Namespace == "" {
-		reply.Namespace = p.namespace
+	if reply.GetNamespace() == "" {
+		reply.SetNamespace(p.namespace)
 	}
-	if len(reply.TaskToken) == 0 {
-		reply.TaskToken = task.TaskToken
+	if len(reply.GetTaskToken()) == 0 {
+		reply.SetTaskToken(task.GetTaskToken())
 	}
-	if reply.Identity == "" {
-		reply.Identity = opts.tv.WorkerIdentity()
+	if reply.GetIdentity() == "" {
+		reply.SetIdentity(opts.tv.WorkerIdentity())
 	}
 
 	return p.client.RespondWorkflowTaskCompleted(ctx, reply)
@@ -531,13 +531,13 @@ func (p *workflowTaskPoller) respondTaskFailed(
 	p.t.Helper()
 	_, err := p.client.RespondWorkflowTaskFailed(
 		ctx,
-		&workflowservice.RespondWorkflowTaskFailedRequest{
+		workflowservice.RespondWorkflowTaskFailedRequest_builder{
 			Namespace: p.namespace,
 			TaskToken: taskToken,
 			Cause:     enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE,
 			Failure:   temporal.GetDefaultFailureConverter().ErrorToFailure(taskErr),
 			Identity:  opts.tv.WorkerIdentity(),
-		})
+		}.Build())
 	return err
 }
 
@@ -548,20 +548,20 @@ func (p *activityTaskPoller) pollActivityTask(
 	p.t.Helper()
 
 	req := common.CloneProto(p.pollActivityTaskRequest)
-	if req.Namespace == "" {
-		req.Namespace = p.namespace
+	if req.GetNamespace() == "" {
+		req.SetNamespace(p.namespace)
 	}
-	if req.TaskQueue == nil {
-		req.TaskQueue = opts.tv.TaskQueue()
+	if !req.HasTaskQueue() {
+		req.SetTaskQueue(opts.tv.TaskQueue())
 	}
-	if req.Identity == "" {
-		req.Identity = opts.tv.WorkerIdentity()
+	if req.GetIdentity() == "" {
+		req.SetIdentity(opts.tv.WorkerIdentity())
 	}
 	resp, err := p.client.PollActivityTaskQueue(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	if resp == nil || len(resp.TaskToken) == 0 {
+	if resp == nil || len(resp.GetTaskToken()) == 0 {
 		return nil, NoActivityTaskAvailable
 	}
 
@@ -612,14 +612,14 @@ func (p *activityTaskPoller) respondTaskCompleted(
 	if reply == nil {
 		return nil, errors.New("missing RespondActivityTaskCompletedRequest return")
 	}
-	if reply.Namespace == "" {
-		reply.Namespace = p.namespace
+	if reply.GetNamespace() == "" {
+		reply.SetNamespace(p.namespace)
 	}
-	if len(reply.TaskToken) == 0 {
-		reply.TaskToken = task.TaskToken
+	if len(reply.GetTaskToken()) == 0 {
+		reply.SetTaskToken(task.GetTaskToken())
 	}
-	if reply.Identity == "" {
-		reply.Identity = opts.tv.WorkerIdentity()
+	if reply.GetIdentity() == "" {
+		reply.SetIdentity(opts.tv.WorkerIdentity())
 	}
 
 	return p.client.RespondActivityTaskCompleted(ctx, reply)
@@ -634,12 +634,12 @@ func (p *activityTaskPoller) respondTaskFailed(
 	p.t.Helper()
 	_, err := p.client.RespondActivityTaskFailed(
 		ctx,
-		&workflowservice.RespondActivityTaskFailedRequest{
+		workflowservice.RespondActivityTaskFailedRequest_builder{
 			Namespace: p.namespace,
-			TaskToken: task.TaskToken,
+			TaskToken: task.GetTaskToken(),
 			Failure:   temporal.GetDefaultFailureConverter().ErrorToFailure(taskErr),
 			Identity:  opts.tv.WorkerIdentity(),
-		})
+		}.Build())
 	return err
 }
 

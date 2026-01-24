@@ -83,11 +83,11 @@ func (s *taskFetcherSuite) TestBufferRequests_NoDuplicate() {
 
 	respChan := make(chan *replicationspb.ReplicationMessages, 1)
 	shardRequest := &replicationTaskRequest{
-		token: &replicationspb.ReplicationToken{
+		token: replicationspb.ReplicationToken_builder{
 			ShardId:                shardID,
 			LastProcessedMessageId: 1,
 			LastRetrievedMessageId: 2,
-		},
+		}.Build(),
 		respChan: respChan,
 	}
 
@@ -110,21 +110,21 @@ func (s *taskFetcherSuite) TestBufferRequests_Duplicate() {
 
 	respChan1 := make(chan *replicationspb.ReplicationMessages, 1)
 	shardRequest1 := &replicationTaskRequest{
-		token: &replicationspb.ReplicationToken{
+		token: replicationspb.ReplicationToken_builder{
 			ShardId:                shardID,
 			LastProcessedMessageId: 1,
 			LastRetrievedMessageId: 2,
-		},
+		}.Build(),
 		respChan: respChan1,
 	}
 
 	respChan2 := make(chan *replicationspb.ReplicationMessages, 1)
 	shardRequest2 := &replicationTaskRequest{
-		token: &replicationspb.ReplicationToken{
+		token: replicationspb.ReplicationToken_builder{
 			ShardId:                shardID,
 			LastProcessedMessageId: 1,
 			LastRetrievedMessageId: 2,
-		},
+		}.Build(),
 		respChan: respChan2,
 	}
 
@@ -150,30 +150,30 @@ func (s *taskFetcherSuite) TestGetMessages_All() {
 	shardID := int32(1)
 	respChan := make(chan *replicationspb.ReplicationMessages, 1)
 	shardRequest := &replicationTaskRequest{
-		token: &replicationspb.ReplicationToken{
+		token: replicationspb.ReplicationToken_builder{
 			ShardId:                shardID,
 			LastProcessedMessageId: 1,
 			LastRetrievedMessageId: 2,
-		},
+		}.Build(),
 		respChan: respChan,
 	}
 	requestByShard := map[int32]*replicationTaskRequest{
 		shardID: shardRequest,
 	}
 
-	replicationMessageRequest := &adminservice.GetReplicationMessagesRequest{
+	replicationMessageRequest := adminservice.GetReplicationMessagesRequest_builder{
 		Tokens: []*replicationspb.ReplicationToken{
 			shardRequest.token,
 		},
 		ClusterName: cluster.TestCurrentClusterName,
-	}
+	}.Build()
 	responseByShard := map[int32]*replicationspb.ReplicationMessages{
 		shardID: {},
 	}
 	s.frontendClient.EXPECT().GetReplicationMessages(
 		gomock.Any(),
 		newGetReplicationMessagesRequestMatcher(replicationMessageRequest),
-	).Return(&adminservice.GetReplicationMessagesResponse{ShardMessages: responseByShard}, nil)
+	).Return(adminservice.GetReplicationMessagesResponse_builder{ShardMessages: responseByShard}.Build(), nil)
 	s.replicationTaskFetcher.workers[0].requestByShard = requestByShard
 	err := s.replicationTaskFetcher.workers[0].getMessages()
 	s.NoError(err)
@@ -184,21 +184,21 @@ func (s *taskFetcherSuite) TestGetMessages_Partial() {
 	shardID1 := int32(1)
 	respChan1 := make(chan *replicationspb.ReplicationMessages, 1)
 	shardRequest1 := &replicationTaskRequest{
-		token: &replicationspb.ReplicationToken{
+		token: replicationspb.ReplicationToken_builder{
 			ShardId:                shardID1,
 			LastProcessedMessageId: 1,
 			LastRetrievedMessageId: 2,
-		},
+		}.Build(),
 		respChan: respChan1,
 	}
 	shardID2 := int32(2)
 	respChan2 := make(chan *replicationspb.ReplicationMessages, 1)
 	shardRequest2 := &replicationTaskRequest{
-		token: &replicationspb.ReplicationToken{
+		token: replicationspb.ReplicationToken_builder{
 			ShardId:                shardID2,
 			LastProcessedMessageId: 1,
 			LastRetrievedMessageId: 2,
-		},
+		}.Build(),
 		respChan: respChan2,
 	}
 	requestByShard := map[int32]*replicationTaskRequest{
@@ -206,20 +206,20 @@ func (s *taskFetcherSuite) TestGetMessages_Partial() {
 		shardID2: shardRequest2,
 	}
 
-	replicationMessageRequest := &adminservice.GetReplicationMessagesRequest{
+	replicationMessageRequest := adminservice.GetReplicationMessagesRequest_builder{
 		Tokens: []*replicationspb.ReplicationToken{
 			shardRequest1.token,
 			shardRequest2.token,
 		},
 		ClusterName: cluster.TestCurrentClusterName,
-	}
+	}.Build()
 	responseByShard := map[int32]*replicationspb.ReplicationMessages{
 		shardID1: {},
 	}
 	s.frontendClient.EXPECT().GetReplicationMessages(
 		gomock.Any(),
 		newGetReplicationMessagesRequestMatcher(replicationMessageRequest),
-	).Return(&adminservice.GetReplicationMessagesResponse{ShardMessages: responseByShard}, nil)
+	).Return(adminservice.GetReplicationMessagesResponse_builder{ShardMessages: responseByShard}.Build(), nil)
 	s.replicationTaskFetcher.workers[0].requestByShard = requestByShard
 	err := s.replicationTaskFetcher.workers[0].getMessages()
 	s.NoError(err)
@@ -231,21 +231,21 @@ func (s *taskFetcherSuite) TestGetMessages_Error() {
 	shardID1 := int32(1)
 	respChan1 := make(chan *replicationspb.ReplicationMessages, 1)
 	shardRequest1 := &replicationTaskRequest{
-		token: &replicationspb.ReplicationToken{
+		token: replicationspb.ReplicationToken_builder{
 			ShardId:                shardID1,
 			LastProcessedMessageId: 1,
 			LastRetrievedMessageId: 2,
-		},
+		}.Build(),
 		respChan: respChan1,
 	}
 	shardID2 := int32(2)
 	respChan2 := make(chan *replicationspb.ReplicationMessages, 1)
 	shardRequest2 := &replicationTaskRequest{
-		token: &replicationspb.ReplicationToken{
+		token: replicationspb.ReplicationToken_builder{
 			ShardId:                shardID2,
 			LastProcessedMessageId: 1,
 			LastRetrievedMessageId: 2,
-		},
+		}.Build(),
 		respChan: respChan2,
 	}
 	requestByShard := map[int32]*replicationTaskRequest{
@@ -253,13 +253,13 @@ func (s *taskFetcherSuite) TestGetMessages_Error() {
 		shardID2: shardRequest2,
 	}
 
-	replicationMessageRequest := &adminservice.GetReplicationMessagesRequest{
+	replicationMessageRequest := adminservice.GetReplicationMessagesRequest_builder{
 		Tokens: []*replicationspb.ReplicationToken{
 			shardRequest1.token,
 			shardRequest2.token,
 		},
 		ClusterName: cluster.TestCurrentClusterName,
-	}
+	}.Build()
 	s.frontendClient.EXPECT().GetReplicationMessages(
 		gomock.Any(),
 		newGetReplicationMessagesRequestMatcher(replicationMessageRequest),
@@ -300,11 +300,11 @@ func (s *taskFetcherSuite) TestConcurrentFetchAndProcess_Success() {
 			defer waitGroup.Done()
 			respChan := make(chan *replicationspb.ReplicationMessages, 1)
 			shardRequest := &replicationTaskRequest{
-				token: &replicationspb.ReplicationToken{
+				token: replicationspb.ReplicationToken_builder{
 					ShardId:                shardID,
 					LastProcessedMessageId: 1,
 					LastRetrievedMessageId: 2,
-				},
+				}.Build(),
 				respChan: respChan,
 			}
 
@@ -344,11 +344,11 @@ func (s *taskFetcherSuite) TestConcurrentFetchAndProcess_Error() {
 			defer waitGroup.Done()
 			respChan := make(chan *replicationspb.ReplicationMessages, 1)
 			shardRequest := &replicationTaskRequest{
-				token: &replicationspb.ReplicationToken{
+				token: replicationspb.ReplicationToken_builder{
 					ShardId:                shardID,
 					LastProcessedMessageId: 1,
 					LastRetrievedMessageId: 2,
-				},
+				}.Build(),
 				respChan: respChan,
 			}
 
@@ -363,11 +363,11 @@ func newGetReplicationMessagesRequestMatcher(
 	req *adminservice.GetReplicationMessagesRequest,
 ) *getReplicationMessagesRequestMatcher {
 	tokens := make(map[int32]*replicationspb.ReplicationToken)
-	for _, token := range req.Tokens {
-		tokens[token.ShardId] = token
+	for _, token := range req.GetTokens() {
+		tokens[token.GetShardId()] = token
 	}
 	return &getReplicationMessagesRequestMatcher{
-		clusterName: req.ClusterName,
+		clusterName: req.GetClusterName(),
 		tokens:      tokens,
 	}
 }

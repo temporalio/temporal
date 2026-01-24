@@ -71,15 +71,15 @@ func (s *componentRefSuite) TestSerializeDeserialize() {
 	ref := ComponentRef{
 		ExecutionKey:    executionKey,
 		executionGoType: reflect.TypeFor[*TestComponent](),
-		executionLastUpdateVT: &persistencespb.VersionedTransition{
+		executionLastUpdateVT: persistencespb.VersionedTransition_builder{
 			NamespaceFailoverVersion: rand.Int63(),
 			TransitionCount:          rand.Int63(),
-		},
+		}.Build(),
 		componentPath: []string{primitives.NewUUID().String(), primitives.NewUUID().String()},
-		componentInitialVT: &persistencespb.VersionedTransition{
+		componentInitialVT: persistencespb.VersionedTransition_builder{
 			NamespaceFailoverVersion: rand.Int63(),
 			TransitionCount:          rand.Int63(),
-		},
+		}.Build(),
 	}
 
 	serializedRef, err := ref.Serialize(s.registry)

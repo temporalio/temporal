@@ -52,8 +52,8 @@ func NewWorkflowWithSignal(
 	newMutableState, err := CreateMutableState(
 		shard,
 		namespaceEntry,
-		startRequest.StartRequest.WorkflowExecutionTimeout,
-		startRequest.StartRequest.WorkflowRunTimeout,
+		startRequest.GetStartRequest().GetWorkflowExecutionTimeout(),
+		startRequest.GetStartRequest().GetWorkflowRunTimeout(),
 		workflowID,
 		runID,
 	)
@@ -62,10 +62,10 @@ func NewWorkflowWithSignal(
 	}
 
 	startEvent, err := newMutableState.AddWorkflowExecutionStartedEvent(
-		&commonpb.WorkflowExecution{
+		commonpb.WorkflowExecution_builder{
 			WorkflowId: workflowID,
 			RunId:      runID,
-		},
+		}.Build(),
 		startRequest,
 	)
 	if err != nil {
@@ -86,13 +86,13 @@ func NewWorkflowWithSignal(
 			return nil, err
 		}
 	}
-	requestEagerExecution := startRequest.StartRequest.GetRequestEagerExecution()
+	requestEagerExecution := startRequest.GetStartRequest().GetRequestEagerExecution()
 
 	var scheduledEventID int64
 	// Generate first workflow task event if not child WF and no first workflow task backoff
 	scheduledEventID, err = GenerateFirstWorkflowTask(
 		newMutableState,
-		startRequest.ParentExecutionInfo,
+		startRequest.GetParentExecutionInfo(),
 		startEvent,
 		requestEagerExecution,
 	)
@@ -105,9 +105,9 @@ func NewWorkflowWithSignal(
 		// TODO: get build ID from Starter so eager workflows can be versioned
 		_, _, err = newMutableState.AddWorkflowTaskStartedEvent(
 			scheduledEventID,
-			startRequest.StartRequest.RequestId,
-			startRequest.StartRequest.TaskQueue,
-			startRequest.StartRequest.Identity,
+			startRequest.GetStartRequest().GetRequestId(),
+			startRequest.GetStartRequest().GetTaskQueue(),
+			startRequest.GetStartRequest().GetIdentity(),
 			nil,
 			nil,
 			nil,
@@ -138,8 +138,8 @@ func NewWorkflowLeaseAndContext(
 			shardCtx.GetConfig(),
 			definition.NewWorkflowKey(
 				ms.GetNamespaceEntry().ID().String(),
-				ms.GetExecutionInfo().WorkflowId,
-				ms.GetExecutionState().RunId,
+				ms.GetExecutionInfo().GetWorkflowId(),
+				ms.GetExecutionState().GetRunId(),
 			),
 			chasm.WorkflowArchetypeID,
 			shardCtx.GetLogger(),
@@ -282,10 +282,10 @@ func ValidateStartWorkflowExecutionRequest(
 	if err := timestamp.ValidateAndCapProtoDuration(request.GetWorkflowTaskTimeout()); err != nil {
 		return serviceerror.NewInvalidArgumentf("invalid WorkflowTaskTimeoutSeconds: %s", err.Error())
 	}
-	if request.TaskQueue == nil || request.TaskQueue.GetName() == "" {
+	if !request.HasTaskQueue() || request.GetTaskQueue().GetName() == "" {
 		return serviceerror.NewInvalidArgument("Missing Taskqueue.")
 	}
-	if request.WorkflowType == nil || request.WorkflowType.GetName() == "" {
+	if !request.HasWorkflowType() || request.GetWorkflowType().GetName() == "" {
 		return serviceerror.NewInvalidArgument("Missing WorkflowType.")
 	}
 	if len(request.GetNamespace()) > maxIDLengthLimit {
@@ -294,14 +294,14 @@ func ValidateStartWorkflowExecutionRequest(
 	if len(request.GetWorkflowId()) > maxIDLengthLimit {
 		return serviceerror.NewInvalidArgument("WorkflowId exceeds length limit.")
 	}
-	if len(request.TaskQueue.GetName()) > maxIDLengthLimit {
+	if len(request.GetTaskQueue().GetName()) > maxIDLengthLimit {
 		return serviceerror.NewInvalidArgument("TaskQueue exceeds length limit.")
 	}
-	if len(request.WorkflowType.GetName()) > maxIDLengthLimit {
+	if len(request.GetWorkflowType().GetName()) > maxIDLengthLimit {
 		return serviceerror.NewInvalidArgument("WorkflowType exceeds length limit.")
 	}
 
-	if err := retrypolicy.Validate(request.RetryPolicy); err != nil {
+	if err := retrypolicy.Validate(request.GetRetryPolicy()); err != nil {
 		return err
 	}
 	return ValidateStart(
@@ -332,7 +332,7 @@ func OverrideStartWorkflowExecutionRequest(
 		timestamp.DurationValue(request.GetWorkflowExecutionTimeout()),
 	)
 	if workflowRunTimeout != timestamp.DurationValue(request.GetWorkflowRunTimeout()) {
-		request.WorkflowRunTimeout = durationpb.New(workflowRunTimeout)
+		request.SetWorkflowRunTimeout(durationpb.New(workflowRunTimeout))
 		metrics.WorkflowRunTimeoutOverrideCount.With(metricsHandler).Record(
 			1,
 			metrics.OperationTag(operation),
@@ -347,7 +347,7 @@ func OverrideStartWorkflowExecutionRequest(
 		shard.GetConfig().DefaultWorkflowTaskTimeout,
 	)
 	if workflowTaskStartToCloseTimeout != timestamp.DurationValue(request.GetWorkflowTaskTimeout()) {
-		request.WorkflowTaskTimeout = durationpb.New(workflowTaskStartToCloseTimeout)
+		request.SetWorkflowTaskTimeout(durationpb.New(workflowTaskStartToCloseTimeout))
 		metrics.WorkflowTaskTimeoutOverrideCount.With(metricsHandler).Record(
 			1,
 			metrics.OperationTag(operation),

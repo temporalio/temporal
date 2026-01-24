@@ -69,12 +69,12 @@ func (s *signalWithStartWorkflowSuite) SetupTest() {
 	s.shardContext.EXPECT().GetTimeSource().Return(clock.NewRealTimeSource()).AnyTimes()
 
 	s.currentMutableState.EXPECT().GetNamespaceEntry().Return(tests.GlobalNamespaceEntry).AnyTimes()
-	s.currentMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+	s.currentMutableState.EXPECT().GetExecutionInfo().Return(persistencespb.WorkflowExecutionInfo_builder{
 		WorkflowId: s.workflowID,
-	}).AnyTimes()
-	s.currentMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+	}.Build()).AnyTimes()
+	s.currentMutableState.EXPECT().GetExecutionState().Return(persistencespb.WorkflowExecutionState_builder{
 		RunId: s.currentRunID,
-	}).AnyTimes()
+	}.Build()).AnyTimes()
 }
 
 func (s *signalWithStartWorkflowSuite) TearDownTest() {

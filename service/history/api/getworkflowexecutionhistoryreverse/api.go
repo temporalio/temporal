@@ -44,13 +44,13 @@ func Invoke(
 		response, err := api.GetOrPollWorkflowMutableState(
 			ctx,
 			shardContext,
-			&historyservice.GetMutableStateRequest{
+			historyservice.GetMutableStateRequest_builder{
 				NamespaceId:         namespaceUUID.String(),
 				Execution:           execution,
 				ExpectedNextEventId: expectedNextEventID,
 				CurrentBranchToken:  currentBranchToken,
 				VersionHistoryItem:  versionHistoryItem,
-			},
+			}.Build(),
 			workflowConsistencyChecker,
 			eventNotifier,
 		)
@@ -66,35 +66,39 @@ func Invoke(
 		if err != nil {
 			return nil, "", 0, nil, err
 		}
-		return response.CurrentBranchToken,
-			response.Execution.GetRunId(),
+		return response.GetCurrentBranchToken(),
+			response.GetExecution().GetRunId(),
 			response.GetLastFirstEventTxnId(),
 			lastVersionHistoryItem,
 			nil
 	}
 
-	req := request.Request
-	execution := req.Execution
+	req := request.GetRequest()
+	execution := req.GetExecution()
 	var continuationToken *tokenspb.HistoryContinuation
 
 	var runID string
 	var lastFirstTxnID int64
 
-	if req.NextPageToken == nil {
+	if len(req.GetNextPageToken()) == 0 {
 		continuationToken = &tokenspb.HistoryContinuation{}
-		continuationToken.BranchToken, runID, lastFirstTxnID, continuationToken.VersionHistoryItem, err =
+		var branchToken []byte
+		var versionHistoryItem *historyspb.VersionHistoryItem
+		branchToken, runID, lastFirstTxnID, versionHistoryItem, err =
 			queryMutableState(namespaceID, execution, common.FirstEventID, nil, nil)
 		if err != nil {
 			return nil, err
 		}
+		continuationToken.SetBranchToken(branchToken)
+		continuationToken.SetVersionHistoryItem(versionHistoryItem)
 
-		execution.RunId = runID
-		continuationToken.RunId = runID
-		continuationToken.FirstEventId = common.FirstEventID
-		continuationToken.NextEventId = common.EmptyEventID
-		continuationToken.PersistenceToken = nil
+		execution.SetRunId(runID)
+		continuationToken.SetRunId(runID)
+		continuationToken.SetFirstEventId(common.FirstEventID)
+		continuationToken.SetNextEventId(common.EmptyEventID)
+		continuationToken.SetPersistenceToken(nil)
 	} else {
-		continuationToken, err = api.DeserializeHistoryToken(req.NextPageToken)
+		continuationToken, err = api.DeserializeHistoryToken(req.GetNextPageToken())
 		if err != nil {
 			return nil, consts.ErrInvalidNextPageToken
 		}
@@ -102,7 +106,7 @@ func Invoke(
 			return nil, consts.ErrNextPageTokenRunIDMismatch
 		}
 
-		execution.RunId = continuationToken.GetRunId()
+		execution.SetRunId(continuationToken.GetRunId())
 	}
 
 	// TODO below is a temporal solution to guard against invalid event batch
@@ -123,26 +127,30 @@ func Invoke(
 	}()
 
 	history := &historypb.History{}
-	history.Events = []*historypb.HistoryEvent{}
+	history.SetEvents([]*historypb.HistoryEvent{})
 	// return all events
-	history, continuationToken.PersistenceToken, continuationToken.NextEventId, err = api.GetHistoryReverse(
+	var persistenceToken []byte
+	var nextEventId int64
+	history, persistenceToken, nextEventId, err = api.GetHistoryReverse(
 		ctx,
 		shardContext,
 		namespaceID,
 		execution,
-		continuationToken.NextEventId,
+		continuationToken.GetNextEventId(),
 		lastFirstTxnID,
 		req.GetMaximumPageSize(),
-		continuationToken.PersistenceToken,
-		continuationToken.BranchToken,
+		continuationToken.GetPersistenceToken(),
+		continuationToken.GetBranchToken(),
 		persistenceVisibilityMgr,
 	)
+	continuationToken.SetPersistenceToken(persistenceToken)
+	continuationToken.SetNextEventId(nextEventId)
 
 	if err != nil {
 		return nil, err
 	}
 
-	if continuationToken.NextEventId < continuationToken.FirstEventId {
+	if continuationToken.GetNextEventId() < continuationToken.GetFirstEventId() {
 		continuationToken = nil
 	}
 
@@ -151,10 +159,10 @@ func Invoke(
 		return nil, err
 	}
 
-	return &historyservice.GetWorkflowExecutionHistoryReverseResponse{
-		Response: &workflowservice.GetWorkflowExecutionHistoryReverseResponse{
+	return historyservice.GetWorkflowExecutionHistoryReverseResponse_builder{
+		Response: workflowservice.GetWorkflowExecutionHistoryReverseResponse_builder{
 			History:       history,
 			NextPageToken: nextToken,
-		},
-	}, nil
+		}.Build(),
+	}.Build(), nil
 }

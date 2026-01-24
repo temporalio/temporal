@@ -125,7 +125,7 @@ func (r *TaskGeneratorImpl) GenerateWorkflowStartTasks(
 ) (int32, error) {
 
 	executionInfo := r.mutableState.GetExecutionInfo()
-	executionTimeoutTimerTaskStatus := executionInfo.WorkflowExecutionTimerTaskStatus
+	executionTimeoutTimerTaskStatus := executionInfo.GetWorkflowExecutionTimerTaskStatus()
 	if !r.mutableState.IsWorkflowExecutionRunning() {
 		return executionTimeoutTimerTaskStatus, nil
 	}
@@ -150,26 +150,26 @@ func (r *TaskGeneratorImpl) GenerateWorkflowStartTasks(
 	// Also note the run timeout, if not specified, defaults to execution timeout, so we won't run
 	// into the situation where execution timeout is set but no timeout timer task is generated.
 
-	isFirstRun := executionInfo.FirstExecutionRunId == r.mutableState.GetExecutionState().RunId
+	isFirstRun := executionInfo.GetFirstExecutionRunId() == r.mutableState.GetExecutionState().GetRunId()
 	workflowExecutionExpirationTime := timestamp.TimeValue(
-		executionInfo.WorkflowExecutionExpirationTime,
+		executionInfo.GetWorkflowExecutionExpirationTime(),
 	)
 	if workflowExecutionTimeoutTimerEnabled &&
 		!isFirstRun &&
 		!workflowExecutionExpirationTime.IsZero() &&
-		executionInfo.WorkflowExecutionTimerTaskStatus == TimerTaskStatusNone {
+		executionInfo.GetWorkflowExecutionTimerTaskStatus() == TimerTaskStatusNone {
 		r.mutableState.AddTasks(&tasks.WorkflowExecutionTimeoutTask{
 			// TaskID is set by shard
-			NamespaceID:         executionInfo.NamespaceId,
-			WorkflowID:          executionInfo.WorkflowId,
-			FirstRunID:          executionInfo.FirstExecutionRunId,
+			NamespaceID:         executionInfo.GetNamespaceId(),
+			WorkflowID:          executionInfo.GetWorkflowId(),
+			FirstRunID:          executionInfo.GetFirstExecutionRunId(),
 			VisibilityTimestamp: workflowExecutionExpirationTime,
 		})
 		executionTimeoutTimerTaskStatus = TimerTaskStatusCreated
 	}
 
 	workflowRunExpirationTime := timestamp.TimeValue(
-		executionInfo.WorkflowRunExpirationTime,
+		executionInfo.GetWorkflowRunExpirationTime(),
 	)
 	if workflowRunExpirationTime.IsZero() {
 		return executionTimeoutTimerTaskStatus, nil
@@ -283,7 +283,7 @@ func (r *TaskGeneratorImpl) getRetention() (time.Duration, error) {
 
 	retention := defaultWorkflowRetention
 	executionInfo := r.mutableState.GetExecutionInfo()
-	namespaceEntry, err := r.namespaceRegistry.GetNamespaceByID(namespace.ID(executionInfo.NamespaceId))
+	namespaceEntry, err := r.namespaceRegistry.GetNamespaceByID(namespace.ID(executionInfo.GetNamespaceId()))
 	switch err.(type) {
 	case nil:
 		retention = namespaceEntry.Retention()
@@ -434,7 +434,7 @@ func (r *TaskGeneratorImpl) GenerateScheduleWorkflowTaskTasks(
 	}
 
 	if r.mutableState.IsStickyTaskQueueSet() {
-		scheduleToStartTimeout := timestamp.DurationValue(r.mutableState.GetExecutionInfo().StickyScheduleToStartTimeout)
+		scheduleToStartTimeout := timestamp.DurationValue(r.mutableState.GetExecutionInfo().GetStickyScheduleToStartTimeout())
 		wttt := &tasks.WorkflowTaskTimeoutTask{
 			// TaskID is set by shard
 			WorkflowKey:         r.mutableState.GetWorkflowKey(),
@@ -475,7 +475,7 @@ func (r *TaskGeneratorImpl) GenerateScheduleSpeculativeWorkflowTaskTasks(
 
 	var scheduleToStartTimeout time.Duration
 	if r.mutableState.IsStickyTaskQueueSet() {
-		scheduleToStartTimeout = timestamp.DurationValue(r.mutableState.GetExecutionInfo().StickyScheduleToStartTimeout)
+		scheduleToStartTimeout = timestamp.DurationValue(r.mutableState.GetExecutionInfo().GetStickyScheduleToStartTimeout())
 	} else {
 		// Speculative WT has ScheduleToStart timeout even on normal task queue.
 		// Normally WT should be added to matching right after being created
@@ -561,10 +561,10 @@ func (r *TaskGeneratorImpl) GenerateActivityTasks(
 	r.mutableState.AddTasks(&tasks.ActivityTask{
 		// TaskID, VisibilityTimestamp is set by shard
 		WorkflowKey:      r.mutableState.GetWorkflowKey(),
-		TaskQueue:        activityInfo.TaskQueue,
-		ScheduledEventID: activityInfo.ScheduledEventId,
-		Version:          activityInfo.Version,
-		Stamp:            activityInfo.Stamp,
+		TaskQueue:        activityInfo.GetTaskQueue(),
+		ScheduledEventID: activityInfo.GetScheduledEventId(),
+		Version:          activityInfo.GetVersion(),
+		Stamp:            activityInfo.GetStamp(),
 	})
 
 	return nil
@@ -578,7 +578,7 @@ func (r *TaskGeneratorImpl) GenerateActivityRetryTasks(activityInfo *persistence
 		VisibilityTimestamp: activityInfo.GetScheduledTime().AsTime(),
 		EventID:             activityInfo.GetScheduledEventId(),
 		Attempt:             activityInfo.GetAttempt(),
-		Stamp:               activityInfo.Stamp,
+		Stamp:               activityInfo.GetStamp(),
 	})
 	return nil
 }
@@ -604,9 +604,9 @@ func (r *TaskGeneratorImpl) GenerateChildWorkflowTasks(
 		// TaskID, VisibilityTimestamp is set by shard
 		WorkflowKey:       r.mutableState.GetWorkflowKey(),
 		TargetNamespaceID: targetNamespaceID.String(),
-		TargetWorkflowID:  childWorkflowInfo.StartedWorkflowId,
-		InitiatedEventID:  childWorkflowInfo.InitiatedEventId,
-		Version:           childWorkflowInfo.Version,
+		TargetWorkflowID:  childWorkflowInfo.GetStartedWorkflowId(),
+		InitiatedEventID:  childWorkflowInfo.GetInitiatedEventId(),
+		Version:           childWorkflowInfo.GetVersion(),
 	})
 
 	return nil
@@ -763,10 +763,10 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks(targetClusters []string) ([]t
 	archetypeID := r.mutableState.ChasmTree().ArchetypeID()
 	isWorkflow := archetypeID == chasm.WorkflowArchetypeID
 
-	lastItem := &historyspb.VersionHistoryItem{
+	lastItem := historyspb.VersionHistoryItem_builder{
 		EventId: common.EmptyEventID,
 		Version: common.EmptyVersion,
-	}
+	}.Build()
 	nextEventID := common.EmptyEventID
 	if isWorkflow {
 		// version history is empty for non-workflow
@@ -781,7 +781,7 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks(targetClusters []string) ([]t
 	workflowKey := r.mutableState.GetWorkflowKey()
 	var taskEquivalents []tasks.Task
 
-	if r.mutableState.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+	if r.mutableState.GetExecutionState().GetState() == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		if isWorkflow {
 			taskEquivalents = []tasks.Task{&tasks.SyncWorkflowStateTask{
 				// TaskID, VisibilityTimestamp is set by shard
@@ -795,16 +795,16 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks(targetClusters []string) ([]t
 		if r.mutableState.IsTransitionHistoryEnabled() &&
 			// even though current cluster may enabled state transition, but transition history can be cleared
 			// by processing a replication task from a cluster that has state transition disabled
-			len(executionInfo.TransitionHistory) > 0 {
+			len(executionInfo.GetTransitionHistory()) > 0 {
 
-			transitionHistory := executionInfo.TransitionHistory
+			transitionHistory := executionInfo.GetTransitionHistory()
 			return []tasks.Task{&tasks.SyncVersionedTransitionTask{
 				WorkflowKey:         workflowKey,
 				ArchetypeID:         archetypeID,
 				Priority:            enumsspb.TASK_PRIORITY_LOW,
 				VersionedTransition: transitionhistory.LastVersionedTransition(transitionHistory),
-				FirstEventID:        executionInfo.LastFirstEventId,
-				FirstEventVersion:   lastItem.Version,
+				FirstEventID:        executionInfo.GetLastFirstEventId(),
+				FirstEventVersion:   lastItem.GetVersion(),
 				NextEventID:         nextEventID,
 				TaskEquivalents:     taskEquivalents,
 				TargetClusters:      targetClusters,
@@ -826,7 +826,7 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks(targetClusters []string) ([]t
 		taskEquivalents = append(taskEquivalents, &tasks.HistoryReplicationTask{
 			// TaskID, VisibilityTimestamp is set by shard
 			WorkflowKey:    workflowKey,
-			FirstEventID:   executionInfo.LastFirstEventId,
+			FirstEventID:   executionInfo.GetLastFirstEventId(),
 			NextEventID:    nextEventID,
 			Version:        lastItem.GetVersion(),
 			TargetClusters: targetClusters,
@@ -854,15 +854,15 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks(targetClusters []string) ([]t
 	if r.mutableState.IsTransitionHistoryEnabled() &&
 		// even though current cluster may enabled state transition, but transition history can be cleared
 		// by processing a replication task from a cluster that has state transition disabled
-		len(executionInfo.TransitionHistory) > 0 {
+		len(executionInfo.GetTransitionHistory()) > 0 {
 
-		transitionHistory := executionInfo.TransitionHistory
+		transitionHistory := executionInfo.GetTransitionHistory()
 		return []tasks.Task{&tasks.SyncVersionedTransitionTask{
 			WorkflowKey:         workflowKey,
 			ArchetypeID:         archetypeID,
 			Priority:            enumsspb.TASK_PRIORITY_LOW,
 			VersionedTransition: transitionhistory.LastVersionedTransition(transitionHistory),
-			FirstEventID:        executionInfo.LastFirstEventId,
+			FirstEventID:        executionInfo.GetLastFirstEventId(),
 			FirstEventVersion:   lastItem.GetVersion(),
 			NextEventID:         nextEventID,
 			TaskEquivalents:     taskEquivalents,
@@ -877,7 +877,7 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks(targetClusters []string) ([]t
 			tag.WorkflowRunID(r.mutableState.GetExecutionState().GetRunId()),
 		)
 	}
-	return taskEquivalents, executionInfo.StateTransitionCount, nil
+	return taskEquivalents, executionInfo.GetStateTransitionCount(), nil
 }
 
 func (r *TaskGeneratorImpl) getTimerSequence() TimerSequence {
@@ -902,7 +902,7 @@ func (r *TaskGeneratorImpl) getTargetNamespaceID(
 		return targetNamespaceEntry.ID(), nil
 	}
 
-	return namespace.ID(r.mutableState.GetExecutionInfo().NamespaceId), nil
+	return namespace.ID(r.mutableState.GetExecutionInfo().GetNamespaceId()), nil
 }
 
 // archivalEnabled returns true if archival is enabled for either history or visibility.
@@ -933,21 +933,21 @@ func generateSubStateMachineTask(
 	}
 	ppath := make([]*persistencespb.StateMachineKey, len(subStateMachinePath))
 	for i, k := range subStateMachinePath {
-		ppath[i] = &persistencespb.StateMachineKey{
+		ppath[i] = persistencespb.StateMachineKey_builder{
 			Type: k.Type,
 			Id:   k.ID,
-		}
+		}.Build()
 	}
 	machineLastUpdateVersionedTransition := node.InternalRepr().GetLastUpdateVersionedTransition()
 
 	currentVersionedTransition := mutableState.CurrentVersionedTransition()
-	ref := &persistencespb.StateMachineRef{
+	ref := persistencespb.StateMachineRef_builder{
 		Path:                                 ppath,
 		MutableStateVersionedTransition:      currentVersionedTransition,
 		MachineInitialVersionedTransition:    node.InternalRepr().GetInitialVersionedTransition(),
 		MachineLastUpdateVersionedTransition: machineLastUpdateVersionedTransition,
 		MachineTransitionCount:               transitionCount,
-	}
+	}.Build()
 
 	// Task is invalid at generation time.
 	// This may happen during replication when multiple event batches are applied in a single transaction.
@@ -955,11 +955,11 @@ func generateSubStateMachineTask(
 		return nil
 	}
 
-	taskInfo := &persistencespb.StateMachineTaskInfo{
+	taskInfo := persistencespb.StateMachineTaskInfo_builder{
 		Ref:  ref,
 		Type: task.Type(),
 		Data: data,
-	}
+	}.Build()
 	// NOTE: at the moment deadline is mutually exclusive with destination.
 	// This will change when we add the outbound timer queue.
 	if task.Deadline() != hsm.Immediate {
@@ -985,24 +985,24 @@ func generateSubStateMachineTask(
 }
 
 func deleteStateMachineTimersByPath(execInfo *persistencespb.WorkflowExecutionInfo, path []hsm.Key) {
-	trimmedTimers := make([]*persistencespb.StateMachineTimerGroup, 0, len(execInfo.StateMachineTimers))
+	trimmedTimers := make([]*persistencespb.StateMachineTimerGroup, 0, len(execInfo.GetStateMachineTimers()))
 
-	for _, group := range execInfo.StateMachineTimers {
-		trimmedInfos := make([]*persistencespb.StateMachineTaskInfo, 0, len(group.Infos))
+	for _, group := range execInfo.GetStateMachineTimers() {
+		trimmedInfos := make([]*persistencespb.StateMachineTaskInfo, 0, len(group.GetInfos()))
 		for _, info := range group.GetInfos() {
 			if !isPathAffectedByDelete(path, info.GetRef().GetPath()) {
 				trimmedInfos = append(trimmedInfos, info)
 			}
 		}
 		if len(trimmedInfos) > 0 {
-			trimmedTimers = append(trimmedTimers, &persistencespb.StateMachineTimerGroup{
+			trimmedTimers = append(trimmedTimers, persistencespb.StateMachineTimerGroup_builder{
 				Infos:     trimmedInfos,
-				Deadline:  group.Deadline,
-				Scheduled: group.Scheduled,
-			})
+				Deadline:  group.GetDeadline(),
+				Scheduled: group.GetScheduled(),
+			}.Build())
 		}
 	}
-	execInfo.StateMachineTimers = trimmedTimers
+	execInfo.SetStateMachineTimers(trimmedTimers)
 }
 
 func isPathAffectedByDelete(deletePath []hsm.Key, timerPath []*persistencespb.StateMachineKey) bool {

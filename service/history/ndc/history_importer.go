@@ -294,7 +294,7 @@ func (r *HistoryImporterImpl) persistHistoryAndSerializeMutableState(
 	}
 	mutableState.AddHistorySize(sizeSiff)
 
-	mutableStateRow := &persistencespb.WorkflowMutableState{
+	mutableStateRow := persistencespb.WorkflowMutableState_builder{
 		ActivityInfos:       targetWorkflowSnapshot.ActivityInfos,
 		TimerInfos:          targetWorkflowSnapshot.TimerInfos,
 		ChildExecutionInfos: targetWorkflowSnapshot.ChildExecutionInfos,
@@ -306,7 +306,7 @@ func (r *HistoryImporterImpl) persistHistoryAndSerializeMutableState(
 		NextEventId:         targetWorkflowSnapshot.NextEventID,
 		BufferedEvents:      nil,
 		Checksum:            targetWorkflowSnapshot.Checksum,
-	}
+	}.Build()
 	return r.mutableStateInitializer.serializeBackfillToken(
 		mutableStateRow,
 		mutableStateSpec.DBRecordVersion,

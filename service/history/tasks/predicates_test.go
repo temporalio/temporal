@@ -193,11 +193,11 @@ func (s *predicatesSuite) TestOutboundTaskGroupPredicate_Test() {
 
 	p := NewOutboundTaskGroupPredicate(groups)
 	for _, t := range groups {
-		mockTask := &StateMachineOutboundTask{StateMachineTask: StateMachineTask{Info: &persistencespb.StateMachineTaskInfo{Type: t}}}
+		mockTask := &StateMachineOutboundTask{StateMachineTask: StateMachineTask{Info: persistencespb.StateMachineTaskInfo_builder{Type: t}.Build()}}
 		s.True(p.Test(mockTask))
 	}
 
-	mockTask := &StateMachineOutboundTask{StateMachineTask: StateMachineTask{Info: &persistencespb.StateMachineTaskInfo{Type: "3"}}}
+	mockTask := &StateMachineOutboundTask{StateMachineTask: StateMachineTask{Info: persistencespb.StateMachineTaskInfo_builder{Type: "3"}.Build()}}
 	s.False(p.Test(mockTask))
 }
 
@@ -240,7 +240,7 @@ func (s *predicatesSuite) TestOutboundTaskPredicate_Test() {
 	for _, g := range groups {
 		mockTask := &StateMachineOutboundTask{
 			StateMachineTask: StateMachineTask{
-				Info:        &persistencespb.StateMachineTaskInfo{Type: g.TaskGroup},
+				Info:        persistencespb.StateMachineTaskInfo_builder{Type: g.TaskGroup}.Build(),
 				WorkflowKey: definition.NewWorkflowKey(g.NamespaceID, "", ""),
 			},
 			Destination: g.Destination,
@@ -251,7 +251,7 @@ func (s *predicatesSuite) TestOutboundTaskPredicate_Test() {
 	// Verify any field mismatch fails Test().
 	mockTask := &StateMachineOutboundTask{
 		StateMachineTask: StateMachineTask{
-			Info:        &persistencespb.StateMachineTaskInfo{Type: "g1"},
+			Info:        persistencespb.StateMachineTaskInfo_builder{Type: "g1"}.Build(),
 			WorkflowKey: definition.NewWorkflowKey("n1", "", ""),
 		},
 		Destination: "d3",
@@ -259,7 +259,7 @@ func (s *predicatesSuite) TestOutboundTaskPredicate_Test() {
 	s.False(p.Test(mockTask))
 	mockTask = &StateMachineOutboundTask{
 		StateMachineTask: StateMachineTask{
-			Info:        &persistencespb.StateMachineTaskInfo{Type: "g3"},
+			Info:        persistencespb.StateMachineTaskInfo_builder{Type: "g3"}.Build(),
 			WorkflowKey: definition.NewWorkflowKey("n1", "", ""),
 		},
 		Destination: "d1",
@@ -267,7 +267,7 @@ func (s *predicatesSuite) TestOutboundTaskPredicate_Test() {
 	s.False(p.Test(mockTask))
 	mockTask = &StateMachineOutboundTask{
 		StateMachineTask: StateMachineTask{
-			Info:        &persistencespb.StateMachineTaskInfo{Type: "g1"},
+			Info:        persistencespb.StateMachineTaskInfo_builder{Type: "g1"}.Build(),
 			WorkflowKey: definition.NewWorkflowKey("n3", "", ""),
 		},
 		Destination: "d1",

@@ -165,8 +165,8 @@ func (t *visibilityQueueTaskExecutor) processStartExecution(
 		task,
 		namespaceEntry,
 		mutableState,
-		mutableState.GetExecutionInfo().Memo,
-		mutableState.GetExecutionInfo().SearchAttributes,
+		mutableState.GetExecutionInfo().GetMemo(),
+		mutableState.GetExecutionInfo().GetSearchAttributes(),
 	)
 
 	// NOTE: do not access anything related mutable state after this lock release
@@ -213,8 +213,8 @@ func (t *visibilityQueueTaskExecutor) processUpsertExecution(
 		task,
 		namespaceEntry,
 		mutableState,
-		mutableState.GetExecutionInfo().Memo,
-		mutableState.GetExecutionInfo().SearchAttributes,
+		mutableState.GetExecutionInfo().GetMemo(),
+		mutableState.GetExecutionInfo().GetSearchAttributes(),
 	)
 
 	// NOTE: do not access anything related mutable state after this lock release
@@ -270,8 +270,8 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 		task,
 		namespaceEntry,
 		mutableState,
-		mutableState.GetExecutionInfo().Memo,
-		mutableState.GetExecutionInfo().SearchAttributes,
+		mutableState.GetExecutionInfo().GetMemo(),
+		mutableState.GetExecutionInfo().GetSearchAttributes(),
 	)
 	closedRequest, err := t.getClosedVisibilityRequest(ctx, requestBase, mutableState, namespaceEntry)
 	if err != nil {
@@ -385,7 +385,7 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 	}
 
 	visTaskContext := chasm.NewContext(ctx, chasmNode)
-	component, err := tree.ComponentByPath(visTaskContext, task.Info.Path)
+	component, err := tree.ComponentByPath(visTaskContext, task.Info.GetPath())
 	if err != nil {
 		return err
 	}
@@ -441,7 +441,7 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 	combinedMemo := make(map[string]*commonpb.Payload, 2)
 	userMemoMap := visComponent.CustomMemo(visTaskContext)
 	if len(userMemoMap) > 0 {
-		userMemoProto := &commonpb.Memo{Fields: userMemoMap}
+		userMemoProto := commonpb.Memo_builder{Fields: userMemoMap}.Build()
 		userMemoPayload, err := payload.Encode(userMemoProto)
 		if err != nil {
 			return err
@@ -468,7 +468,7 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 	)
 
 	// We reuse the TemporalNamespaceDivision column to store the string representation of ArchetypeID.
-	requestBase.SearchAttributes.IndexedFields[sadefs.TemporalNamespaceDivision] = payload.EncodeString(strconv.FormatUint(uint64(tree.ArchetypeID()), 10))
+	requestBase.SearchAttributes.GetIndexedFields()[sadefs.TemporalNamespaceDivision] = payload.EncodeString(strconv.FormatUint(uint64(tree.ArchetypeID()), 10))
 
 	// Override TaskQueue if provided by CHASM search attributes.
 	if chasmTaskQueue != "" {
@@ -510,11 +510,11 @@ func (t *visibilityQueueTaskExecutor) getVisibilityRequestBase(
 	)
 
 	var parentExecution *commonpb.WorkflowExecution
-	if executionInfo.ParentWorkflowId != "" && executionInfo.ParentRunId != "" {
-		parentExecution = &commonpb.WorkflowExecution{
-			WorkflowId: executionInfo.ParentWorkflowId,
-			RunId:      executionInfo.ParentRunId,
-		}
+	if executionInfo.GetParentWorkflowId() != "" && executionInfo.GetParentRunId() != "" {
+		parentExecution = commonpb.WorkflowExecution_builder{
+			WorkflowId: executionInfo.GetParentWorkflowId(),
+			RunId:      executionInfo.GetParentRunId(),
+		}.Build()
 	}
 
 	// Data from mutable state used to build VisibilityRequestBase must be deep
@@ -523,24 +523,24 @@ func (t *visibilityQueueTaskExecutor) getVisibilityRequestBase(
 	return &manager.VisibilityRequestBase{
 		NamespaceID: namespaceEntry.ID(),
 		Namespace:   namespaceEntry.Name(),
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: task.GetWorkflowID(),
 			RunId:      task.GetRunID(),
-		},
-		WorkflowTypeName: executionInfo.WorkflowTypeName,
+		}.Build(),
+		WorkflowTypeName: executionInfo.GetWorkflowTypeName(),
 		StartTime:        startTime,
 		Status:           mutableState.GetExecutionState().GetStatus(),
 		ExecutionTime:    executionTime,
 		TaskID:           task.GetTaskID(),
 		ShardID:          t.shardContext.GetShardID(),
 		Memo:             visibilityMemo,
-		TaskQueue:        executionInfo.TaskQueue,
+		TaskQueue:        executionInfo.GetTaskQueue(),
 		SearchAttributes: searchAttributes,
 		ParentExecution:  parentExecution,
-		RootExecution: &commonpb.WorkflowExecution{
-			WorkflowId: executionInfo.RootWorkflowId,
-			RunId:      executionInfo.RootRunId,
-		},
+		RootExecution: commonpb.WorkflowExecution_builder{
+			WorkflowId: executionInfo.GetRootWorkflowId(),
+			RunId:      executionInfo.GetRootRunId(),
+		}.Build(),
 	}
 }
 
@@ -564,11 +564,11 @@ func (t *visibilityQueueTaskExecutor) getClosedVisibilityRequest(
 	historySizeBytes := executionInfo.GetExecutionStats().GetHistorySize()
 
 	if base.SearchAttributes == nil {
-		base.SearchAttributes = &commonpb.SearchAttributes{
+		base.SearchAttributes = commonpb.SearchAttributes_builder{
 			IndexedFields: make(map[string]*commonpb.Payload),
-		}
-	} else if base.SearchAttributes.IndexedFields == nil {
-		base.SearchAttributes.IndexedFields = make(map[string]*commonpb.Payload)
+		}.Build()
+	} else if base.SearchAttributes.GetIndexedFields() == nil {
+		base.SearchAttributes.SetIndexedFields(make(map[string]*commonpb.Payload))
 	}
 
 	if t.externalPayloadsEnabled(namespaceEntry.Name().String()) {
@@ -576,8 +576,8 @@ func (t *visibilityQueueTaskExecutor) getClosedVisibilityRequest(
 		externalPayloadSizeBytes := executionInfo.GetExecutionStats().GetExternalPayloadSize()
 		externalPayloadCountPayload, _ := payload.Encode(externalPayloadCount)
 		externalPayloadSizeBytesPayload, _ := payload.Encode(externalPayloadSizeBytes)
-		base.SearchAttributes.IndexedFields[sadefs.TemporalExternalPayloadCount] = externalPayloadCountPayload
-		base.SearchAttributes.IndexedFields[sadefs.TemporalExternalPayloadSizeBytes] = externalPayloadSizeBytesPayload
+		base.SearchAttributes.GetIndexedFields()[sadefs.TemporalExternalPayloadCount] = externalPayloadCountPayload
+		base.SearchAttributes.GetIndexedFields()[sadefs.TemporalExternalPayloadSizeBytes] = externalPayloadSizeBytesPayload
 	}
 
 	return &manager.RecordWorkflowExecutionClosedRequest{
@@ -641,9 +641,9 @@ func (t *visibilityQueueTaskExecutor) cleanupExecutionInfo(
 	}
 
 	executionInfo := mutableState.GetExecutionInfo()
-	executionInfo.Memo = nil
-	executionInfo.SearchAttributes = nil
-	executionInfo.RelocatableAttributesRemoved = true
+	executionInfo.SetMemo(nil)
+	executionInfo.SetSearchAttributes(nil)
+	executionInfo.SetRelocatableAttributesRemoved(true)
 
 	if t.shardContext.GetConfig().EnableUpdateWorkflowModeIgnoreCurrent() {
 		return weContext.UpdateWorkflowExecutionAsPassive(ctx, t.shardContext)
@@ -659,7 +659,7 @@ func getWorkflowMemo(
 	if memoFields == nil {
 		return nil
 	}
-	return &commonpb.Memo{Fields: memoFields}
+	return commonpb.Memo_builder{Fields: memoFields}.Build()
 }
 
 func getSearchAttributes(
@@ -668,7 +668,7 @@ func getSearchAttributes(
 	if indexedFields == nil {
 		return nil
 	}
-	return &commonpb.SearchAttributes{IndexedFields: indexedFields}
+	return commonpb.SearchAttributes_builder{IndexedFields: indexedFields}.Build()
 }
 
 func copyMapPayload(input map[string]*commonpb.Payload) map[string]*commonpb.Payload {

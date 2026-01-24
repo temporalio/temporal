@@ -149,10 +149,10 @@ func (q *queueV2) ReadMessages(
 		encodingType := enumspb.EncodingType(encoding)
 		message := persistence.QueueV2Message{
 			MetaData: persistence.MessageMetadata{ID: row.MessageID},
-			Data: &commonpb.DataBlob{
+			Data: commonpb.DataBlob_builder{
 				EncodingType: encodingType,
 				Data:         row.MessagePayload,
-			},
+			}.Build(),
 		}
 		messages = append(messages, message)
 	}
@@ -176,8 +176,8 @@ func newQueueV2Row(
 		QueueName:       queueName,
 		QueuePartition:  defaultPartition,
 		MessageID:       messageID,
-		MessagePayload:  blob.Data,
-		MessageEncoding: blob.EncodingType.String(),
+		MessagePayload:  blob.GetData(),
+		MessageEncoding: blob.GetEncodingType().String(),
 	}
 }
 
@@ -185,13 +185,13 @@ func (q *queueV2) CreateQueue(
 	ctx context.Context,
 	request *persistence.InternalCreateQueueRequest,
 ) (*persistence.InternalCreateQueueResponse, error) {
-	payload := persistencespb.Queue{
+	payload := persistencespb.Queue_builder{
 		Partitions: map[int32]*persistencespb.QueuePartition{
-			defaultPartition: {
+			defaultPartition: persistencespb.QueuePartition_builder{
 				MinMessageId: persistence.FirstQueueMessageID,
-			},
+			}.Build(),
 		},
-	}
+	}.Build()
 	bytes, _ := payload.Marshal()
 	row := sqlplugin.QueueV2MetadataRow{
 		QueueType:        request.QueueType,
@@ -261,7 +261,7 @@ func (q *queueV2) RangeDeleteMessages(
 		deleteRange, ok := persistence.GetDeleteRange(persistence.DeleteRequest{
 			LastIDToDeleteInclusive: request.InclusiveMaxMessageMetadata.ID,
 			ExistingMessageRange: persistence.InclusiveMessageRange{
-				MinMessageID: partition.MinMessageId,
+				MinMessageID: partition.GetMinMessageId(),
 				MaxMessageID: maxMessageID,
 			},
 		})
@@ -287,7 +287,7 @@ func (q *queueV2) RangeDeleteMessages(
 				err,
 			)
 		}
-		partition.MinMessageId = deleteRange.NewMinMessageID
+		partition.SetMinMessageId(deleteRange.NewMinMessageID)
 		bytes, _ := qm.Marshal()
 		row := sqlplugin.QueueV2MetadataRow{
 			QueueType:        request.QueueType,
@@ -461,6 +461,6 @@ func (q *queueV2) getMessageCountAndLastID(
 	if err != nil {
 		return 0, 0, err
 	}
-	messageCount = lastMessageID - partition.MinMessageId + 1
+	messageCount = lastMessageID - partition.GetMinMessageId() + 1
 	return messageCount, lastMessageID, nil
 }

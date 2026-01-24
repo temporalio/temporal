@@ -25,6 +25,7 @@ import (
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -64,7 +65,7 @@ func newTestContext(t *testing.T, cfg *nexusoperations.Config) testContext {
 				return nil, serviceerror.NewNotFound("endpoint not found")
 			}
 			// Only the ID is taken here.
-			return &persistencespb.NexusEndpointEntry{Id: "endpoint-id"}, nil
+			return persistencespb.NexusEndpointEntry_builder{Id: "endpoint-id"}.Build(), nil
 		},
 	}
 	chReg := workflow.NewCommandHandlerRegistry()
@@ -81,14 +82,14 @@ func newTestContext(t *testing.T, cfg *nexusoperations.Config) testContext {
 	lastEventID := int64(4)
 	history := &historypb.History{}
 	ms.EXPECT().AddHistoryEvent(gomock.Any(), gomock.Any()).DoAndReturn(func(t enumspb.EventType, setAttrs func(he *historypb.HistoryEvent)) *historypb.HistoryEvent {
-		e := &historypb.HistoryEvent{
+		e := historypb.HistoryEvent_builder{
 			Version:   1,
 			EventId:   lastEventID,
 			EventTime: timestamppb.Now(),
-		}
+		}.Build()
 		lastEventID++
 		setAttrs(e)
-		history.Events = append(history.Events, e)
+		history.SetEvents(append(history.GetEvents(), e))
 		return e
 	}).AnyTimes()
 
@@ -121,7 +122,7 @@ func TestHandleScheduleCommand(t *testing.T) {
 		require.ErrorAs(t, err, &failWFTErr)
 		require.False(t, failWFTErr.TerminateWorkflow)
 		require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_FEATURE_DISABLED, failWFTErr.Cause)
-		require.Equal(t, 0, len(tcx.history.Events))
+		require.Equal(t, 0, len(tcx.history.GetEvents()))
 	})
 
 	t.Run("empty attributes", func(t *testing.T) {
@@ -131,209 +132,187 @@ func TestHandleScheduleCommand(t *testing.T) {
 		require.ErrorAs(t, err, &failWFTErr)
 		require.False(t, failWFTErr.TerminateWorkflow)
 		require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES, failWFTErr.Cause)
-		require.Equal(t, 0, len(tcx.history.Events))
+		require.Equal(t, 0, len(tcx.history.GetEvents()))
 	})
 
 	t.Run("endpoint not found - rejected by config", func(t *testing.T) {
 		tcx := newTestContext(t, defaultConfig)
-		err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
-			Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
-				ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
-					Endpoint:  "not found",
-					Service:   "service",
-					Operation: "op",
-				},
-			},
-		})
+		err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, commandpb.Command_builder{
+			ScheduleNexusOperationCommandAttributes: commandpb.ScheduleNexusOperationCommandAttributes_builder{
+				Endpoint:  "not found",
+				Service:   "service",
+				Operation: "op",
+			}.Build(),
+		}.Build())
 		var failWFTErr workflow.FailWorkflowTaskError
 		require.ErrorAs(t, err, &failWFTErr)
 		require.False(t, failWFTErr.TerminateWorkflow)
 		require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES, failWFTErr.Cause)
-		require.Equal(t, 0, len(tcx.history.Events))
+		require.Equal(t, 0, len(tcx.history.GetEvents()))
 	})
 
 	t.Run("caller namespace unauthorized", func(t *testing.T) {
 		tcx := newTestContext(t, defaultConfig)
-		err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
-			Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
-				ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
-					Endpoint:  "endpoint caller namespace unauthorized",
-					Service:   "service",
-					Operation: "op",
-				},
-			},
-		})
+		err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, commandpb.Command_builder{
+			ScheduleNexusOperationCommandAttributes: commandpb.ScheduleNexusOperationCommandAttributes_builder{
+				Endpoint:  "endpoint caller namespace unauthorized",
+				Service:   "service",
+				Operation: "op",
+			}.Build(),
+		}.Build())
 		var failWFTErr workflow.FailWorkflowTaskError
 		require.ErrorAs(t, err, &failWFTErr)
 		require.False(t, failWFTErr.TerminateWorkflow)
 		require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES, failWFTErr.Cause)
-		require.Equal(t, 0, len(tcx.history.Events))
+		require.Equal(t, 0, len(tcx.history.GetEvents()))
 	})
 
 	t.Run("exceeds max service length", func(t *testing.T) {
 		tcx := newTestContext(t, defaultConfig)
-		err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
-			Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
-				ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
-					Endpoint:  "endpoint",
-					Service:   "too long",
-					Operation: "op",
-				},
-			},
-		})
+		err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, commandpb.Command_builder{
+			ScheduleNexusOperationCommandAttributes: commandpb.ScheduleNexusOperationCommandAttributes_builder{
+				Endpoint:  "endpoint",
+				Service:   "too long",
+				Operation: "op",
+			}.Build(),
+		}.Build())
 		var failWFTErr workflow.FailWorkflowTaskError
 		require.ErrorAs(t, err, &failWFTErr)
 		require.False(t, failWFTErr.TerminateWorkflow)
 		require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES, failWFTErr.Cause)
-		require.Equal(t, 0, len(tcx.history.Events))
+		require.Equal(t, 0, len(tcx.history.GetEvents()))
 	})
 
 	t.Run("exceeds max operation length", func(t *testing.T) {
 		tcx := newTestContext(t, defaultConfig)
-		err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
-			Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
-				ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
-					Endpoint:  "endpoint",
-					Service:   "service",
-					Operation: "too long",
-				},
-			},
-		})
+		err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, commandpb.Command_builder{
+			ScheduleNexusOperationCommandAttributes: commandpb.ScheduleNexusOperationCommandAttributes_builder{
+				Endpoint:  "endpoint",
+				Service:   "service",
+				Operation: "too long",
+			}.Build(),
+		}.Build())
 		var failWFTErr workflow.FailWorkflowTaskError
 		require.ErrorAs(t, err, &failWFTErr)
 		require.False(t, failWFTErr.TerminateWorkflow)
 		require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES, failWFTErr.Cause)
-		require.Equal(t, 0, len(tcx.history.Events))
+		require.Equal(t, 0, len(tcx.history.GetEvents()))
 	})
 
 	t.Run("exceeds max operation header size", func(t *testing.T) {
 		tcx := newTestContext(t, defaultConfig)
-		err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
-			Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
-				ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
-					Endpoint:  "endpoint",
-					Service:   "service",
-					Operation: "op",
-					NexusHeader: map[string]string{
-						"key1234567890": "value1234567890",
-					},
+		err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, commandpb.Command_builder{
+			ScheduleNexusOperationCommandAttributes: commandpb.ScheduleNexusOperationCommandAttributes_builder{
+				Endpoint:  "endpoint",
+				Service:   "service",
+				Operation: "op",
+				NexusHeader: map[string]string{
+					"key1234567890": "value1234567890",
 				},
-			},
-		})
+			}.Build(),
+		}.Build())
 		var failWFTErr workflow.FailWorkflowTaskError
 		require.ErrorAs(t, err, &failWFTErr)
 		require.False(t, failWFTErr.TerminateWorkflow)
 		require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES, failWFTErr.Cause)
-		require.Equal(t, 0, len(tcx.history.Events))
+		require.Equal(t, 0, len(tcx.history.GetEvents()))
 	})
 
 	t.Run("invalid header keys", func(t *testing.T) {
 		tcx := newTestContext(t, defaultConfig)
-		err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
-			Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
-				ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
-					Endpoint:  "endpoint",
-					Service:   "service",
-					Operation: "op",
-					NexusHeader: map[string]string{
-						"request-timeout": "1s",
-					},
+		err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, commandpb.Command_builder{
+			ScheduleNexusOperationCommandAttributes: commandpb.ScheduleNexusOperationCommandAttributes_builder{
+				Endpoint:  "endpoint",
+				Service:   "service",
+				Operation: "op",
+				NexusHeader: map[string]string{
+					"request-timeout": "1s",
 				},
-			},
-		})
+			}.Build(),
+		}.Build())
 		var failWFTErr workflow.FailWorkflowTaskError
 		require.ErrorAs(t, err, &failWFTErr)
 		require.False(t, failWFTErr.TerminateWorkflow)
 		require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES, failWFTErr.Cause)
-		require.Equal(t, 0, len(tcx.history.Events))
+		require.Equal(t, 0, len(tcx.history.GetEvents()))
 	})
 
 	t.Run("exceeds max payload size", func(t *testing.T) {
 		tcx := newTestContext(t, defaultConfig)
-		err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
-			Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
-				ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
-					Endpoint:  "endpoint",
-					Service:   "service",
-					Operation: "op",
-					Input: &commonpb.Payload{
-						Data: []byte("ab"),
-					},
-				},
-			},
-		})
+		err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, commandpb.Command_builder{
+			ScheduleNexusOperationCommandAttributes: commandpb.ScheduleNexusOperationCommandAttributes_builder{
+				Endpoint:  "endpoint",
+				Service:   "service",
+				Operation: "op",
+				Input: commonpb.Payload_builder{
+					Data: []byte("ab"),
+				}.Build(),
+			}.Build(),
+		}.Build())
 		var failWFTErr workflow.FailWorkflowTaskError
 		require.ErrorAs(t, err, &failWFTErr)
 		require.True(t, failWFTErr.TerminateWorkflow)
 		require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES, failWFTErr.Cause)
-		require.Equal(t, 0, len(tcx.history.Events))
+		require.Equal(t, 0, len(tcx.history.GetEvents()))
 	})
 
 	t.Run("exceeds max concurrent operations", func(t *testing.T) {
 		tcx := newTestContext(t, defaultConfig)
 		for i := 0; i < 2; i++ {
-			err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
-				Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
-					ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
-						Endpoint:  "endpoint",
-						Service:   "service",
-						Operation: "op",
-					},
-				},
-			})
-			require.NoError(t, err)
-		}
-		err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
-			Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
-				ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
+			err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, commandpb.Command_builder{
+				ScheduleNexusOperationCommandAttributes: commandpb.ScheduleNexusOperationCommandAttributes_builder{
 					Endpoint:  "endpoint",
 					Service:   "service",
 					Operation: "op",
-				},
-			},
-		})
+				}.Build(),
+			}.Build())
+			require.NoError(t, err)
+		}
+		err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, commandpb.Command_builder{
+			ScheduleNexusOperationCommandAttributes: commandpb.ScheduleNexusOperationCommandAttributes_builder{
+				Endpoint:  "endpoint",
+				Service:   "service",
+				Operation: "op",
+			}.Build(),
+		}.Build())
 		var failWFTErr workflow.FailWorkflowTaskError
 		require.ErrorAs(t, err, &failWFTErr)
 		require.False(t, failWFTErr.TerminateWorkflow)
 		require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_PENDING_NEXUS_OPERATIONS_LIMIT_EXCEEDED, failWFTErr.Cause)
-		require.Equal(t, 2, len(tcx.history.Events))
+		require.Equal(t, 2, len(tcx.history.GetEvents()))
 	})
 
 	t.Run("schedule to close timeout capped by run timeout", func(t *testing.T) {
 		tcx := newTestContext(t, defaultConfig)
-		tcx.execInfo.WorkflowRunTimeout = durationpb.New(time.Hour)
-		err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
-			Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
-				ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
-					Endpoint:               "endpoint",
-					Service:                "service",
-					Operation:              "op",
-					ScheduleToCloseTimeout: durationpb.New(time.Hour * 2),
-				},
-			},
-		})
+		tcx.execInfo.SetWorkflowRunTimeout(durationpb.New(time.Hour))
+		err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, commandpb.Command_builder{
+			ScheduleNexusOperationCommandAttributes: commandpb.ScheduleNexusOperationCommandAttributes_builder{
+				Endpoint:               "endpoint",
+				Service:                "service",
+				Operation:              "op",
+				ScheduleToCloseTimeout: durationpb.New(time.Hour * 2),
+			}.Build(),
+		}.Build())
 		require.NoError(t, err)
-		require.Equal(t, 1, len(tcx.history.Events))
-		require.Equal(t, time.Hour, tcx.history.Events[0].GetNexusOperationScheduledEventAttributes().ScheduleToCloseTimeout.AsDuration())
+		require.Equal(t, 1, len(tcx.history.GetEvents()))
+		require.Equal(t, time.Hour, tcx.history.GetEvents()[0].GetNexusOperationScheduledEventAttributes().GetScheduleToCloseTimeout().AsDuration())
 	})
 
 	t.Run("schedule to close timeout capped by dynamic config", func(t *testing.T) {
 		cfg := *defaultConfig
 		cfg.MaxOperationScheduleToCloseTimeout = dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Minute)
 		tcx := newTestContext(t, &cfg)
-		err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
-			Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
-				ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
-					Endpoint:               "endpoint",
-					Service:                "service",
-					Operation:              "op",
-					ScheduleToCloseTimeout: durationpb.New(time.Hour),
-				},
-			},
-		})
+		err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, commandpb.Command_builder{
+			ScheduleNexusOperationCommandAttributes: commandpb.ScheduleNexusOperationCommandAttributes_builder{
+				Endpoint:               "endpoint",
+				Service:                "service",
+				Operation:              "op",
+				ScheduleToCloseTimeout: durationpb.New(time.Hour),
+			}.Build(),
+		}.Build())
 		require.NoError(t, err)
-		require.Equal(t, 1, len(tcx.history.Events))
-		require.Equal(t, time.Minute, tcx.history.Events[0].GetNexusOperationScheduledEventAttributes().ScheduleToCloseTimeout.AsDuration())
+		require.Equal(t, 1, len(tcx.history.GetEvents()))
+		require.Equal(t, time.Minute, tcx.history.GetEvents()[0].GetNexusOperationScheduledEventAttributes().GetScheduleToCloseTimeout().AsDuration())
 	})
 
 	timeoutCases := []struct {
@@ -371,26 +350,24 @@ func TestHandleScheduleCommand(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			tcx := newTestContext(t, defaultConfig)
 
-			tcx.ms.GetExecutionInfo().WorkflowRunTimeout = tc.workflowRunTimeout
-			err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
-				Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
-					ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
-						Endpoint:               "endpoint",
-						Service:                "service",
-						Operation:              "op",
-						ScheduleToCloseTimeout: tc.commandTimeout,
-					},
-				},
-			})
+			tcx.ms.GetExecutionInfo().SetWorkflowRunTimeout(tc.workflowRunTimeout)
+			err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, commandpb.Command_builder{
+				ScheduleNexusOperationCommandAttributes: commandpb.ScheduleNexusOperationCommandAttributes_builder{
+					Endpoint:               "endpoint",
+					Service:                "service",
+					Operation:              "op",
+					ScheduleToCloseTimeout: tc.commandTimeout,
+				}.Build(),
+			}.Build())
 			require.NoError(t, err)
-			require.Equal(t, 1, len(tcx.history.Events))
-			require.Equal(t, tc.expectedTimeout.AsDuration(), tcx.history.Events[0].GetNexusOperationScheduledEventAttributes().ScheduleToCloseTimeout.AsDuration())
+			require.Equal(t, 1, len(tcx.history.GetEvents()))
+			require.Equal(t, tc.expectedTimeout.AsDuration(), tcx.history.GetEvents()[0].GetNexusOperationScheduledEventAttributes().GetScheduleToCloseTimeout().AsDuration())
 		})
 	}
 
 	t.Run("sets event attributes with UserMetadata and spawns a child operation machine", func(t *testing.T) {
 		tcx := newTestContext(t, defaultConfig)
-		cAttrs := &commandpb.ScheduleNexusOperationCommandAttributes{
+		cAttrs := commandpb.ScheduleNexusOperationCommandAttributes_builder{
 			Endpoint:  "endpoint",
 			Service:   "service",
 			Operation: "op",
@@ -399,37 +376,35 @@ func TestHandleScheduleCommand(t *testing.T) {
 				"key": "value",
 			},
 			ScheduleToCloseTimeout: durationpb.New(time.Hour),
-		}
-		userMetadata := &sdkpb.UserMetadata{
-			Summary: &commonpb.Payload{
+		}.Build()
+		userMetadata := sdkpb.UserMetadata_builder{
+			Summary: commonpb.Payload_builder{
 				Metadata: map[string][]byte{"test_key": []byte(`test_val`)},
 				Data:     []byte(`Test summary Data`),
-			},
-			Details: &commonpb.Payload{
+			}.Build(),
+			Details: commonpb.Payload_builder{
 				Metadata: map[string][]byte{"test_key": []byte(`test_val`)},
 				Data:     []byte(`Test Details Data`),
-			},
-		}
-		err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
-			Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
-				ScheduleNexusOperationCommandAttributes: cAttrs,
-			},
-			UserMetadata: userMetadata,
-		})
+			}.Build(),
+		}.Build()
+		err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, commandpb.Command_builder{
+			ScheduleNexusOperationCommandAttributes: proto.ValueOrDefault(cAttrs),
+			UserMetadata:                            userMetadata,
+		}.Build())
 		require.NoError(t, err)
-		require.Equal(t, 1, len(tcx.history.Events))
-		event := tcx.history.Events[0]
+		require.Equal(t, 1, len(tcx.history.GetEvents()))
+		event := tcx.history.GetEvents()[0]
 		eAttrs := event.GetNexusOperationScheduledEventAttributes()
-		require.Equal(t, cAttrs.Service, eAttrs.Service)
-		require.Equal(t, cAttrs.Operation, eAttrs.Operation)
-		require.Equal(t, cAttrs.Input, eAttrs.Input)
-		require.Equal(t, cAttrs.ScheduleToCloseTimeout, eAttrs.ScheduleToCloseTimeout)
-		require.Equal(t, cAttrs.NexusHeader, eAttrs.NexusHeader)
-		require.Equal(t, int64(1), eAttrs.WorkflowTaskCompletedEventId)
-		child, err := tcx.ms.HSM().Child([]hsm.Key{{Type: nexusoperations.OperationMachineType, ID: strconv.FormatInt(event.EventId, 10)}})
+		require.Equal(t, cAttrs.GetService(), eAttrs.GetService())
+		require.Equal(t, cAttrs.GetOperation(), eAttrs.GetOperation())
+		require.Equal(t, cAttrs.GetInput(), eAttrs.GetInput())
+		require.Equal(t, cAttrs.GetScheduleToCloseTimeout(), eAttrs.GetScheduleToCloseTimeout())
+		require.Equal(t, cAttrs.GetNexusHeader(), eAttrs.GetNexusHeader())
+		require.Equal(t, int64(1), eAttrs.GetWorkflowTaskCompletedEventId())
+		child, err := tcx.ms.HSM().Child([]hsm.Key{{Type: nexusoperations.OperationMachineType, ID: strconv.FormatInt(event.GetEventId(), 10)}})
 		require.NoError(t, err)
 		require.NotNil(t, child)
-		require.EqualExportedValues(t, userMetadata, event.UserMetadata)
+		require.EqualExportedValues(t, userMetadata, event.GetUserMetadata())
 	})
 }
 
@@ -443,7 +418,7 @@ func TestHandleCancelCommand(t *testing.T) {
 		require.ErrorAs(t, err, &failWFTErr)
 		require.False(t, failWFTErr.TerminateWorkflow)
 		require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_FEATURE_DISABLED, failWFTErr.Cause)
-		require.Equal(t, 0, len(tcx.history.Events))
+		require.Equal(t, 0, len(tcx.history.GetEvents()))
 	})
 
 	t.Run("empty attributes", func(t *testing.T) {
@@ -453,156 +428,138 @@ func TestHandleCancelCommand(t *testing.T) {
 		require.ErrorAs(t, err, &failWFTErr)
 		require.False(t, failWFTErr.TerminateWorkflow)
 		require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_NEXUS_OPERATION_ATTRIBUTES, failWFTErr.Cause)
-		require.Equal(t, 0, len(tcx.history.Events))
+		require.Equal(t, 0, len(tcx.history.GetEvents()))
 	})
 
 	t.Run("operation not found", func(t *testing.T) {
 		tcx := newTestContext(t, defaultConfig)
 		tcx.ms.EXPECT().HasAnyBufferedEvent(gomock.Any()).Return(false)
 
-		err := tcx.cancelHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
-			Attributes: &commandpb.Command_RequestCancelNexusOperationCommandAttributes{
-				RequestCancelNexusOperationCommandAttributes: &commandpb.RequestCancelNexusOperationCommandAttributes{
-					ScheduledEventId: 5,
-				},
-			},
-		})
+		err := tcx.cancelHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, commandpb.Command_builder{
+			RequestCancelNexusOperationCommandAttributes: commandpb.RequestCancelNexusOperationCommandAttributes_builder{
+				ScheduledEventId: 5,
+			}.Build(),
+		}.Build())
 		var failWFTErr workflow.FailWorkflowTaskError
 		require.ErrorAs(t, err, &failWFTErr)
 		require.False(t, failWFTErr.TerminateWorkflow)
 		require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_NEXUS_OPERATION_ATTRIBUTES, failWFTErr.Cause)
-		require.Equal(t, 0, len(tcx.history.Events))
+		require.Equal(t, 0, len(tcx.history.GetEvents()))
 	})
 
 	t.Run("operation already completed", func(t *testing.T) {
 		tcx := newTestContext(t, defaultConfig)
 		tcx.ms.EXPECT().HasAnyBufferedEvent(gomock.Any()).Return(false)
 
-		err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
-			Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
-				ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
-					Endpoint:  "endpoint",
-					Service:   "service",
-					Operation: "op",
-				},
-			},
-		})
+		err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, commandpb.Command_builder{
+			ScheduleNexusOperationCommandAttributes: commandpb.ScheduleNexusOperationCommandAttributes_builder{
+				Endpoint:  "endpoint",
+				Service:   "service",
+				Operation: "op",
+			}.Build(),
+		}.Build())
 		require.NoError(t, err)
-		require.Equal(t, 1, len(tcx.history.Events))
-		event := tcx.history.Events[0]
+		require.Equal(t, 1, len(tcx.history.GetEvents()))
+		event := tcx.history.GetEvents()[0]
 
 		// Complete the operation using CompletedEventDefinition to ensure proper deletion
-		err = nexusoperations.CompletedEventDefinition{}.Apply(tcx.ms.HSM(), &historypb.HistoryEvent{
-			EventId: event.EventId + 1,
-			Attributes: &historypb.HistoryEvent_NexusOperationCompletedEventAttributes{
-				NexusOperationCompletedEventAttributes: &historypb.NexusOperationCompletedEventAttributes{
-					ScheduledEventId: event.EventId,
-				},
-			},
-		})
+		err = nexusoperations.CompletedEventDefinition{}.Apply(tcx.ms.HSM(), historypb.HistoryEvent_builder{
+			EventId: event.GetEventId() + 1,
+			NexusOperationCompletedEventAttributes: historypb.NexusOperationCompletedEventAttributes_builder{
+				ScheduledEventId: event.GetEventId(),
+			}.Build(),
+		}.Build())
 		require.NoError(t, err)
 
 		// Try to cancel - should fail since operation is deleted
-		err = tcx.cancelHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
-			Attributes: &commandpb.Command_RequestCancelNexusOperationCommandAttributes{
-				RequestCancelNexusOperationCommandAttributes: &commandpb.RequestCancelNexusOperationCommandAttributes{
-					ScheduledEventId: event.EventId,
-				},
-			},
-		})
+		err = tcx.cancelHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, commandpb.Command_builder{
+			RequestCancelNexusOperationCommandAttributes: commandpb.RequestCancelNexusOperationCommandAttributes_builder{
+				ScheduledEventId: event.GetEventId(),
+			}.Build(),
+		}.Build())
 		var failWFTErr workflow.FailWorkflowTaskError
 		require.ErrorAs(t, err, &failWFTErr)
 		require.False(t, failWFTErr.TerminateWorkflow)
 		require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_NEXUS_OPERATION_ATTRIBUTES, failWFTErr.Cause)
-		require.Equal(t, 1, len(tcx.history.Events)) // Only scheduled event should be recorded.
+		require.Equal(t, 1, len(tcx.history.GetEvents())) // Only scheduled event should be recorded.
 	})
 
 	t.Run("operation already completed - completion buffered", func(t *testing.T) {
 		tcx := newTestContext(t, defaultConfig)
 		tcx.ms.EXPECT().HasAnyBufferedEvent(gomock.Any()).Return(true).AnyTimes()
 
-		err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
-			Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
-				ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
-					Endpoint:  "endpoint",
-					Service:   "service",
-					Operation: "op",
-				},
-			},
-		})
+		err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, commandpb.Command_builder{
+			ScheduleNexusOperationCommandAttributes: commandpb.ScheduleNexusOperationCommandAttributes_builder{
+				Endpoint:  "endpoint",
+				Service:   "service",
+				Operation: "op",
+			}.Build(),
+		}.Build())
 		require.NoError(t, err)
-		require.Equal(t, 1, len(tcx.history.Events))
-		event := tcx.history.Events[0]
+		require.Equal(t, 1, len(tcx.history.GetEvents()))
+		event := tcx.history.GetEvents()[0]
 
-		err = nexusoperations.CompletedEventDefinition{}.Apply(tcx.ms.HSM(), &historypb.HistoryEvent{
-			EventId: event.EventId + 1,
-			Attributes: &historypb.HistoryEvent_NexusOperationCompletedEventAttributes{
-				NexusOperationCompletedEventAttributes: &historypb.NexusOperationCompletedEventAttributes{
-					ScheduledEventId: event.EventId,
-				},
-			},
-		})
+		err = nexusoperations.CompletedEventDefinition{}.Apply(tcx.ms.HSM(), historypb.HistoryEvent_builder{
+			EventId: event.GetEventId() + 1,
+			NexusOperationCompletedEventAttributes: historypb.NexusOperationCompletedEventAttributes_builder{
+				ScheduledEventId: event.GetEventId(),
+			}.Build(),
+		}.Build())
 		require.NoError(t, err)
 
 		// Try to cancel - should succeed because there's a buffered completion
-		err = tcx.cancelHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
-			Attributes: &commandpb.Command_RequestCancelNexusOperationCommandAttributes{
-				RequestCancelNexusOperationCommandAttributes: &commandpb.RequestCancelNexusOperationCommandAttributes{
-					ScheduledEventId: event.EventId,
-				},
-			},
-		})
+		err = tcx.cancelHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, commandpb.Command_builder{
+			RequestCancelNexusOperationCommandAttributes: commandpb.RequestCancelNexusOperationCommandAttributes_builder{
+				ScheduledEventId: event.GetEventId(),
+			}.Build(),
+		}.Build())
 		require.NoError(t, err)
-		require.Equal(t, 2, len(tcx.history.Events)) // Both scheduled and cancel requested events should be recorded
-		crAttrs := tcx.history.Events[1].GetNexusOperationCancelRequestedEventAttributes()
-		require.Equal(t, event.EventId, crAttrs.ScheduledEventId)
+		require.Equal(t, 2, len(tcx.history.GetEvents())) // Both scheduled and cancel requested events should be recorded
+		crAttrs := tcx.history.GetEvents()[1].GetNexusOperationCancelRequestedEventAttributes()
+		require.Equal(t, event.GetEventId(), crAttrs.GetScheduledEventId())
 	})
 
 	t.Run("sets event attributes with UserMetadata and spawns cancelation child machine", func(t *testing.T) {
 		tcx := newTestContext(t, defaultConfig)
 		tcx.ms.EXPECT().HasAnyBufferedEvent(gomock.Any()).Return(false).AnyTimes()
-		err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
-			Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
-				ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
-					Endpoint:  "endpoint",
-					Service:   "service",
-					Operation: "op",
-				},
-			},
-		})
-		userMetadata := &sdkpb.UserMetadata{
-			Summary: &commonpb.Payload{
+		err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, commandpb.Command_builder{
+			ScheduleNexusOperationCommandAttributes: commandpb.ScheduleNexusOperationCommandAttributes_builder{
+				Endpoint:  "endpoint",
+				Service:   "service",
+				Operation: "op",
+			}.Build(),
+		}.Build())
+		userMetadata := sdkpb.UserMetadata_builder{
+			Summary: commonpb.Payload_builder{
 				Metadata: map[string][]byte{"test_key": []byte(`test_val`)},
 				Data:     []byte(`Test summary Data`),
-			},
-			Details: &commonpb.Payload{
+			}.Build(),
+			Details: commonpb.Payload_builder{
 				Metadata: map[string][]byte{"test_key": []byte(`test_val`)},
 				Data:     []byte(`Test Details Data`),
-			},
-		}
+			}.Build(),
+		}.Build()
 		require.NoError(t, err)
-		require.Equal(t, 1, len(tcx.history.Events))
-		event := tcx.history.Events[0]
+		require.Equal(t, 1, len(tcx.history.GetEvents()))
+		event := tcx.history.GetEvents()[0]
 
-		err = tcx.cancelHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
-			Attributes: &commandpb.Command_RequestCancelNexusOperationCommandAttributes{
-				RequestCancelNexusOperationCommandAttributes: &commandpb.RequestCancelNexusOperationCommandAttributes{
-					ScheduledEventId: event.EventId,
-				},
-			},
+		err = tcx.cancelHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, commandpb.Command_builder{
+			RequestCancelNexusOperationCommandAttributes: commandpb.RequestCancelNexusOperationCommandAttributes_builder{
+				ScheduledEventId: event.GetEventId(),
+			}.Build(),
 			UserMetadata: userMetadata,
-		})
+		}.Build())
 		require.NoError(t, err)
 
-		child, err := tcx.ms.HSM().Child([]hsm.Key{{Type: nexusoperations.OperationMachineType, ID: strconv.FormatInt(event.EventId, 10)}})
+		child, err := tcx.ms.HSM().Child([]hsm.Key{{Type: nexusoperations.OperationMachineType, ID: strconv.FormatInt(event.GetEventId(), 10)}})
 		require.NoError(t, err)
 		require.NotNil(t, child)
 
-		require.Equal(t, 2, len(tcx.history.Events))
-		crAttrs := tcx.history.Events[1].GetNexusOperationCancelRequestedEventAttributes()
-		require.Equal(t, event.EventId, crAttrs.ScheduledEventId)
-		require.Equal(t, int64(1), crAttrs.WorkflowTaskCompletedEventId)
-		savedUserMetadata := tcx.history.Events[1].GetUserMetadata()
+		require.Equal(t, 2, len(tcx.history.GetEvents()))
+		crAttrs := tcx.history.GetEvents()[1].GetNexusOperationCancelRequestedEventAttributes()
+		require.Equal(t, event.GetEventId(), crAttrs.GetScheduledEventId())
+		require.Equal(t, int64(1), crAttrs.GetWorkflowTaskCompletedEventId())
+		savedUserMetadata := tcx.history.GetEvents()[1].GetUserMetadata()
 		require.EqualExportedValues(t, userMetadata, savedUserMetadata)
 
 		child, err = child.Child([]hsm.Key{nexusoperations.CancelationMachineKey})
@@ -614,21 +571,19 @@ func TestHandleCancelCommand(t *testing.T) {
 
 func TestOperationNodeDeletionOnTerminalEvents(t *testing.T) {
 	scheduleOperation := func(t *testing.T, tcx testContext) (scheduledEvent *historypb.HistoryEvent, nodeID string) {
-		err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 100}, 1, &commandpb.Command{
-			Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
-				ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
-					Endpoint:  "endpoint",
-					Service:   "service",
-					Operation: "op",
-				},
-			},
-		})
+		err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 100}, 1, commandpb.Command_builder{
+			ScheduleNexusOperationCommandAttributes: commandpb.ScheduleNexusOperationCommandAttributes_builder{
+				Endpoint:  "endpoint",
+				Service:   "service",
+				Operation: "op",
+			}.Build(),
+		}.Build())
 		require.NoError(t, err)
-		require.Len(t, tcx.history.Events, 1)
-		scheduledEvent = tcx.history.Events[0]
+		require.Len(t, tcx.history.GetEvents(), 1)
+		scheduledEvent = tcx.history.GetEvents()[0]
 
 		coll := nexusoperations.MachineCollection(tcx.ms.HSM())
-		nodeID = strconv.FormatInt(scheduledEvent.EventId, 10)
+		nodeID = strconv.FormatInt(scheduledEvent.GetEventId(), 10)
 		_, err = coll.Node(nodeID)
 		require.NoError(t, err)
 		return
@@ -645,30 +600,22 @@ func TestOperationNodeDeletionOnTerminalEvents(t *testing.T) {
 		coll := nexusoperations.MachineCollection(tcx.ms.HSM())
 		nodeID := strconv.FormatInt(scheduledEventID, 10)
 
-		event := &historypb.HistoryEvent{
+		event := historypb.HistoryEvent_builder{
 			Version:   1,
 			EventId:   scheduledEventID + 1,
 			EventType: eventType,
 			EventTime: timestamppb.Now(),
-		}
+		}.Build()
 
 		switch eventType { //nolint:exhaustive
 		case enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED:
-			event.Attributes = &historypb.HistoryEvent_NexusOperationCompletedEventAttributes{
-				NexusOperationCompletedEventAttributes: eventAttr.(*historypb.NexusOperationCompletedEventAttributes),
-			}
+			event.SetNexusOperationCompletedEventAttributes(proto.ValueOrDefault(eventAttr.(*historypb.NexusOperationCompletedEventAttributes)))
 		case enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED:
-			event.Attributes = &historypb.HistoryEvent_NexusOperationFailedEventAttributes{
-				NexusOperationFailedEventAttributes: eventAttr.(*historypb.NexusOperationFailedEventAttributes),
-			}
+			event.SetNexusOperationFailedEventAttributes(proto.ValueOrDefault(eventAttr.(*historypb.NexusOperationFailedEventAttributes)))
 		case enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED:
-			event.Attributes = &historypb.HistoryEvent_NexusOperationCanceledEventAttributes{
-				NexusOperationCanceledEventAttributes: eventAttr.(*historypb.NexusOperationCanceledEventAttributes),
-			}
+			event.SetNexusOperationCanceledEventAttributes(proto.ValueOrDefault(eventAttr.(*historypb.NexusOperationCanceledEventAttributes)))
 		case enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT:
-			event.Attributes = &historypb.HistoryEvent_NexusOperationTimedOutEventAttributes{
-				NexusOperationTimedOutEventAttributes: eventAttr.(*historypb.NexusOperationTimedOutEventAttributes),
-			}
+			event.SetNexusOperationTimedOutEventAttributes(proto.ValueOrDefault(eventAttr.(*historypb.NexusOperationTimedOutEventAttributes)))
 		default:
 			panic(fmt.Sprintf("unexpected event type in test: %v", eventType))
 		}
@@ -680,17 +627,15 @@ func TestOperationNodeDeletionOnTerminalEvents(t *testing.T) {
 
 		tcx.ms.EXPECT().HasAnyBufferedEvent(gomock.Any()).Return(false)
 
-		err = tcx.cancelHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 2, &commandpb.Command{
-			Attributes: &commandpb.Command_RequestCancelNexusOperationCommandAttributes{
-				RequestCancelNexusOperationCommandAttributes: &commandpb.RequestCancelNexusOperationCommandAttributes{
-					ScheduledEventId: scheduledEventID,
-				},
-			},
-		})
+		err = tcx.cancelHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 2, commandpb.Command_builder{
+			RequestCancelNexusOperationCommandAttributes: commandpb.RequestCancelNexusOperationCommandAttributes_builder{
+				ScheduledEventId: scheduledEventID,
+			}.Build(),
+		}.Build())
 		var failWFTErr workflow.FailWorkflowTaskError
 		require.ErrorAs(t, err, &failWFTErr)
 		require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_NEXUS_OPERATION_ATTRIBUTES, failWFTErr.Cause)
-		require.Len(t, tcx.history.Events, 1, "no new events after attempting to cancel a terminated operation")
+		require.Len(t, tcx.history.GetEvents(), 1, "no new events after attempting to cancel a terminated operation")
 	}
 
 	cases := []struct {
@@ -732,16 +677,16 @@ func TestOperationNodeDeletionOnTerminalEvents(t *testing.T) {
 
 			switch a := tc.eventAttr.(type) {
 			case *historypb.NexusOperationCompletedEventAttributes:
-				a.ScheduledEventId = scheduledEvent.EventId
+				a.SetScheduledEventId(scheduledEvent.GetEventId())
 			case *historypb.NexusOperationFailedEventAttributes:
-				a.ScheduledEventId = scheduledEvent.EventId
+				a.SetScheduledEventId(scheduledEvent.GetEventId())
 			case *historypb.NexusOperationCanceledEventAttributes:
-				a.ScheduledEventId = scheduledEvent.EventId
+				a.SetScheduledEventId(scheduledEvent.GetEventId())
 			case *historypb.NexusOperationTimedOutEventAttributes:
-				a.ScheduledEventId = scheduledEvent.EventId
+				a.SetScheduledEventId(scheduledEvent.GetEventId())
 			}
 
-			applyTerminalEventAndAssertDeletion(t, tcx, scheduledEvent.EventId, tc.eventType, tc.eventAttr, tc.eventDef)
+			applyTerminalEventAndAssertDeletion(t, tcx, scheduledEvent.GetEventId(), tc.eventType, tc.eventAttr, tc.eventDef)
 		})
 	}
 }

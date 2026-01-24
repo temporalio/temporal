@@ -25,8 +25,8 @@ func (payloadSerializer) Deserialize(content *nexus.Content, v any) error {
 
 	payload := &commonpb.Payload{}
 	*payloadRef = payload
-	payload.Metadata = make(map[string][]byte)
-	payload.Data = content.Data
+	payload.SetMetadata(make(map[string][]byte))
+	payload.SetData(content.Data)
 
 	h := maps.Clone(content.Header)
 	// We assume that encoding is handled by the transport layer and the content is decoded.
@@ -35,23 +35,23 @@ func (payloadSerializer) Deserialize(content *nexus.Content, v any) error {
 	delete(h, "length")
 
 	if len(h) > 1 {
-		setUnknownNexusContent(h, payload.Metadata)
+		setUnknownNexusContent(h, payload.GetMetadata())
 		return nil
 	}
 
 	contentType := h.Get("type")
 	if contentType == "" {
 		if len(h) == 0 && len(content.Data) == 0 {
-			payload.Metadata["encoding"] = []byte("binary/null")
+			payload.GetMetadata()["encoding"] = []byte("binary/null")
 		} else {
-			setUnknownNexusContent(h, payload.Metadata)
+			setUnknownNexusContent(h, payload.GetMetadata())
 		}
 		return nil
 	}
 
 	mediaType, params, err := mime.ParseMediaType(contentType)
 	if err != nil {
-		setUnknownNexusContent(h, payload.Metadata)
+		setUnknownNexusContent(h, payload.GetMetadata())
 		return nil
 	}
 
@@ -63,28 +63,28 @@ func (payloadSerializer) Deserialize(content *nexus.Content, v any) error {
 		}
 	case "application/json":
 		if len(params) == 0 {
-			payload.Metadata["encoding"] = []byte("json/plain")
+			payload.GetMetadata()["encoding"] = []byte("json/plain")
 		} else if len(params) == 2 && params["format"] == "protobuf" && params["message-type"] != "" {
-			payload.Metadata["encoding"] = []byte("json/protobuf")
-			payload.Metadata["messageType"] = []byte(params["message-type"])
+			payload.GetMetadata()["encoding"] = []byte("json/protobuf")
+			payload.GetMetadata()["messageType"] = []byte(params["message-type"])
 		} else {
-			setUnknownNexusContent(h, payload.Metadata)
+			setUnknownNexusContent(h, payload.GetMetadata())
 		}
 	case "application/x-protobuf":
 		if len(params) == 1 && params["message-type"] != "" {
-			payload.Metadata["encoding"] = []byte("binary/protobuf")
-			payload.Metadata["messageType"] = []byte(params["message-type"])
+			payload.GetMetadata()["encoding"] = []byte("binary/protobuf")
+			payload.GetMetadata()["messageType"] = []byte(params["message-type"])
 		} else {
-			setUnknownNexusContent(h, payload.Metadata)
+			setUnknownNexusContent(h, payload.GetMetadata())
 		}
 	case "application/octet-stream":
 		if len(params) == 0 {
-			payload.Metadata["encoding"] = []byte("binary/plain")
+			payload.GetMetadata()["encoding"] = []byte("binary/plain")
 		} else {
-			setUnknownNexusContent(h, payload.Metadata)
+			setUnknownNexusContent(h, payload.GetMetadata())
 		}
 	default:
-		setUnknownNexusContent(h, payload.Metadata)
+		setUnknownNexusContent(h, payload.GetMetadata())
 	}
 	return nil
 }
@@ -113,36 +113,36 @@ func (payloadSerializer) Serialize(v any) (*nexus.Content, error) {
 		return xTemporalPayload(payload)
 	}
 
-	content := nexus.Content{Header: nexus.Header{}, Data: payload.Data}
-	encoding := string(payload.Metadata["encoding"])
-	messageType := string(payload.Metadata["messageType"])
+	content := nexus.Content{Header: nexus.Header{}, Data: payload.GetData()}
+	encoding := string(payload.GetMetadata()["encoding"])
+	messageType := string(payload.GetMetadata()["messageType"])
 
 	switch encoding {
 	case "unknown/nexus-content":
-		for k, v := range payload.Metadata {
+		for k, v := range payload.GetMetadata() {
 			if k != "encoding" {
 				content.Header[k] = string(v)
 			}
 		}
 	case "json/protobuf":
-		if len(payload.Metadata) != 2 || messageType == "" {
+		if len(payload.GetMetadata()) != 2 || messageType == "" {
 			return xTemporalPayload(payload)
 		}
 		content.Header["type"] = fmt.Sprintf("application/json; format=protobuf; message-type=%q", messageType)
 	case "binary/protobuf":
-		if len(payload.Metadata) != 2 || messageType == "" {
+		if len(payload.GetMetadata()) != 2 || messageType == "" {
 			return xTemporalPayload(payload)
 		}
 		content.Header["type"] = fmt.Sprintf("application/x-protobuf; message-type=%q", messageType)
 	case "json/plain":
 		content.Header["type"] = "application/json"
 	case "binary/null":
-		if len(payload.Metadata) != 1 {
+		if len(payload.GetMetadata()) != 1 {
 			return xTemporalPayload(payload)
 		}
 		// type is unset
 	case "binary/plain":
-		if len(payload.Metadata) != 1 {
+		if len(payload.GetMetadata()) != 1 {
 			return xTemporalPayload(payload)
 		}
 		content.Header["type"] = "application/octet-stream"

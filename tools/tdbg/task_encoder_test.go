@@ -47,7 +47,7 @@ func ExampleTaskBlobEncoder() {
 			blob *commonpb.DataBlob,
 		) error {
 			if taskCategoryID == customCategory.ID() {
-				_, err := writer.Write(append([]byte("hello, "), blob.Data...))
+				_, err := writer.Write(append([]byte("hello, "), blob.GetData()...))
 				return err
 			}
 			return stockEncoder.Encode(writer, taskCategoryID, blob)

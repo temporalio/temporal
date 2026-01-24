@@ -44,18 +44,18 @@ func TestParseDLQMessages(t *testing.T) {
 	require.NoError(t, err)
 	client := &testClient{
 		getDLQTasksFn: func(request *adminservice.GetDLQTasksRequest) (*adminservice.GetDLQTasksResponse, error) {
-			return &adminservice.GetDLQTasksResponse{
-				DlqTasks: []*commonspb.HistoryDLQTask{{
-					Metadata: &commonspb.HistoryDLQTaskMetadata{
+			return adminservice.GetDLQTasksResponse_builder{
+				DlqTasks: []*commonspb.HistoryDLQTask{commonspb.HistoryDLQTask_builder{
+					Metadata: commonspb.HistoryDLQTaskMetadata_builder{
 						MessageId: 21,
-					},
-					Payload: &commonspb.HistoryTask{
+					}.Build(),
+					Payload: commonspb.HistoryTask_builder{
 						ShardId: 34,
 						Blob:    blob,
-					},
+					}.Build(),
+				}.Build(),
 				},
-				},
-			}, nil
+			}.Build(), nil
 		},
 	}
 	var b bytes.Buffer
@@ -82,7 +82,7 @@ func TestParseDLQMessages(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, messages, 1)
 	message := messages[0]
-	assert.Equal(t, 13, int(message.Payload.TaskId))
+	assert.Equal(t, 13, int(message.Payload.GetTaskId()))
 	assert.Equal(t, 21, int(message.MessageID))
 	assert.Equal(t, 34, int(message.ShardID))
 }

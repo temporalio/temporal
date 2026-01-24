@@ -116,8 +116,8 @@ func updateBufferedEvents(
 		NamespaceID:  namespaceID,
 		WorkflowID:   workflowID,
 		RunID:        runID,
-		Data:         batch.Data,
-		DataEncoding: batch.EncodingType.String(),
+		Data:         batch.GetData(),
+		DataEncoding: batch.GetEncodingType().String(),
 	}
 
 	if _, err := tx.InsertIntoBufferedEvents(ctx, []sqlplugin.BufferedEventsRow{row}); err != nil {

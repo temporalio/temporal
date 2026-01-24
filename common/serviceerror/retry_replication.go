@@ -56,7 +56,7 @@ func (e *RetryReplication) Status() *status.Status {
 
 	st := status.New(codes.Aborted, e.Message)
 	st, _ = st.WithDetails(
-		&errordetailsspb.RetryReplicationFailure{
+		errordetailsspb.RetryReplicationFailure_builder{
 			NamespaceId:       e.NamespaceId,
 			WorkflowId:        e.WorkflowId,
 			RunId:             e.RunId,
@@ -64,7 +64,7 @@ func (e *RetryReplication) Status() *status.Status {
 			StartEventVersion: e.StartEventVersion,
 			EndEventId:        e.EndEventId,
 			EndEventVersion:   e.EndEventVersion,
-		},
+		}.Build(),
 	)
 	return st
 }

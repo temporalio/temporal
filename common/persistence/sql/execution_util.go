@@ -29,7 +29,7 @@ func (m *sqlExecutionStore) applyWorkflowMutationTx(
 	lastWriteVersion := workflowMutation.LastWriteVersion
 	namespaceID := workflowMutation.NamespaceID
 	workflowID := workflowMutation.WorkflowID
-	runID := workflowMutation.ExecutionState.RunId
+	runID := workflowMutation.ExecutionState.GetRunId()
 
 	namespaceIDBytes, err := primitives.ParseUUID(namespaceID)
 	if err != nil {
@@ -199,7 +199,7 @@ func (m *sqlExecutionStore) applyWorkflowSnapshotTxAsReset(
 	lastWriteVersion := workflowSnapshot.LastWriteVersion
 	workflowID := workflowSnapshot.WorkflowID
 	namespaceID := workflowSnapshot.NamespaceID
-	runID := workflowSnapshot.ExecutionState.RunId
+	runID := workflowSnapshot.ExecutionState.GetRunId()
 	namespaceIDBytes, err := primitives.ParseUUID(namespaceID)
 	if err != nil {
 		return err
@@ -425,7 +425,7 @@ func (m *sqlExecutionStore) applyWorkflowSnapshotTxAsNew(
 	lastWriteVersion := workflowSnapshot.LastWriteVersion
 	workflowID := workflowSnapshot.WorkflowID
 	namespaceID := workflowSnapshot.NamespaceID
-	runID := workflowSnapshot.ExecutionState.RunId
+	runID := workflowSnapshot.ExecutionState.GetRunId()
 	namespaceIDBytes, err := primitives.ParseUUID(namespaceID)
 	if err != nil {
 		return err
@@ -723,8 +723,8 @@ func createImmediateTasks(
 			ShardID:      shardID,
 			CategoryID:   int32(categoryID),
 			TaskID:       task.Key.TaskID,
-			Data:         task.Blob.Data,
-			DataEncoding: task.Blob.EncodingType.String(),
+			Data:         task.Blob.GetData(),
+			DataEncoding: task.Blob.GetEncodingType().String(),
 		})
 	}
 
@@ -769,8 +769,8 @@ func createScheduledTasks(
 			CategoryID:          int32(categoryID),
 			VisibilityTimestamp: task.Key.FireTime,
 			TaskID:              task.Key.TaskID,
-			Data:                task.Blob.Data,
-			DataEncoding:        task.Blob.EncodingType.String(),
+			Data:                task.Blob.GetData(),
+			DataEncoding:        task.Blob.GetEncodingType().String(),
 		})
 	}
 
@@ -805,8 +805,8 @@ func createTransferTasks(
 		transferTasksRows = append(transferTasksRows, sqlplugin.TransferTasksRow{
 			ShardID:      shardID,
 			TaskID:       task.Key.TaskID,
-			Data:         task.Blob.Data,
-			DataEncoding: task.Blob.EncodingType.String(),
+			Data:         task.Blob.GetData(),
+			DataEncoding: task.Blob.GetEncodingType().String(),
 		})
 	}
 
@@ -843,8 +843,8 @@ func createTimerTasks(
 			ShardID:             shardID,
 			VisibilityTimestamp: task.Key.FireTime,
 			TaskID:              task.Key.TaskID,
-			Data:                task.Blob.Data,
-			DataEncoding:        task.Blob.EncodingType.String(),
+			Data:                task.Blob.GetData(),
+			DataEncoding:        task.Blob.GetEncodingType().String(),
 		})
 	}
 
@@ -879,8 +879,8 @@ func createReplicationTasks(
 		replicationTasksRows = append(replicationTasksRows, sqlplugin.ReplicationTasksRow{
 			ShardID:      shardID,
 			TaskID:       task.Key.TaskID,
-			Data:         task.Blob.Data,
-			DataEncoding: task.Blob.EncodingType.String(),
+			Data:         task.Blob.GetData(),
+			DataEncoding: task.Blob.GetEncodingType().String(),
 		})
 	}
 
@@ -916,8 +916,8 @@ func createVisibilityTasks(
 		visibilityTasksRows = append(visibilityTasksRows, sqlplugin.VisibilityTasksRow{
 			ShardID:      shardID,
 			TaskID:       task.Key.TaskID,
-			Data:         task.Blob.Data,
-			DataEncoding: task.Blob.EncodingType.String(),
+			Data:         task.Blob.GetData(),
+			DataEncoding: task.Blob.GetEncodingType().String(),
 		})
 	}
 
@@ -984,7 +984,7 @@ func assertRunIDAndUpdateCurrentExecution(
 					currentRow.RunID,
 					previousRunID,
 				),
-				RequestIDs:       executionState.RequestIds,
+				RequestIDs:       executionState.GetRequestIds(),
 				RunID:            currentRow.RunID.String(),
 				State:            currentRow.State,
 				Status:           currentRow.Status,
@@ -1046,7 +1046,7 @@ func assertRunIDMismatch(requestRunID primitives.UUID, currentRow *sqlplugin.Cur
 				requestRunID,
 				currentRow.RunID.String(),
 			),
-			RequestIDs:       executionState.RequestIds,
+			RequestIDs:       executionState.GetRequestIds(),
 			RunID:            currentRow.RunID.String(),
 			State:            currentRow.State,
 			Status:           currentRow.Status,
@@ -1098,7 +1098,7 @@ func (m *sqlExecutionStore) buildExecutionRow(
 		return nil, err
 	}
 
-	ridBytes, err := primitives.ParseUUID(executionState.RunId)
+	ridBytes, err := primitives.ParseUUID(executionState.GetRunId())
 	if err != nil {
 		return nil, err
 	}
@@ -1110,10 +1110,10 @@ func (m *sqlExecutionStore) buildExecutionRow(
 		RunID:            ridBytes,
 		NextEventID:      nextEventID,
 		LastWriteVersion: lastWriteVersion,
-		Data:             executionInfo.Data,
-		DataEncoding:     executionInfo.EncodingType.String(),
-		State:            stateBlob.Data,
-		StateEncoding:    stateBlob.EncodingType.String(),
+		Data:             executionInfo.GetData(),
+		DataEncoding:     executionInfo.GetEncodingType().String(),
+		State:            stateBlob.GetData(),
+		StateEncoding:    stateBlob.GetEncodingType().String(),
 		DBRecordVersion:  dbRecordVersion,
 	}, nil
 }
@@ -1215,20 +1215,20 @@ func workflowExecutionStateFromCurrentExecutionsRow(
 	}
 
 	// Old records don't have the serialized WorkflowExecutionState stored in DB.
-	executionState := &persistencespb.WorkflowExecutionState{
+	executionState := persistencespb.WorkflowExecutionState_builder{
 		CreateRequestId: row.CreateRequestID,
 		RunId:           row.RunID.String(),
 		State:           row.State,
 		Status:          row.Status,
 		RequestIds: map[string]*persistencespb.RequestIDInfo{
-			row.CreateRequestID: {
+			row.CreateRequestID: persistencespb.RequestIDInfo_builder{
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 				EventId:   common.FirstEventID,
-			},
+			}.Build(),
 		},
-	}
+	}.Build()
 	if row.StartTime != nil {
-		executionState.StartTime = timestamp.TimePtr(*row.StartTime)
+		executionState.SetStartTime(timestamp.TimePtr(*row.StartTime))
 	}
 	return executionState, nil
 }

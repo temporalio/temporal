@@ -160,7 +160,7 @@ func AliasFields(
 	if !mapped {
 		return searchAttributes, nil
 	}
-	return &commonpb.SearchAttributes{IndexedFields: newIndexedFields}, nil
+	return commonpb.SearchAttributes_builder{IndexedFields: newIndexedFields}.Build(), nil
 }
 
 // UnaliasFields returns SearchAttributes struct where each search attribute alias is replaced with field name.
@@ -200,5 +200,5 @@ func UnaliasFields(
 		return searchAttributes, nil
 	}
 
-	return &commonpb.SearchAttributes{IndexedFields: newIndexedFields}, nil
+	return commonpb.SearchAttributes_builder{IndexedFields: newIndexedFields}.Build(), nil
 }

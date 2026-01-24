@@ -238,7 +238,7 @@ func Download(ctx context.Context, s3cli s3iface.S3API, URI archiver.URI, key st
 }
 
 func historyMutated(request *archiver.ArchiveHistoryRequest, historyBatches []*historypb.History, isLast bool) bool {
-	lastBatch := historyBatches[len(historyBatches)-1].Events
+	lastBatch := historyBatches[len(historyBatches)-1].GetEvents()
 	lastEvent := lastBatch[len(lastBatch)-1]
 	lastFailoverVersion := lastEvent.GetVersion()
 	if lastFailoverVersion > request.CloseFailoverVersion {
@@ -253,26 +253,26 @@ func historyMutated(request *archiver.ArchiveHistoryRequest, historyBatches []*h
 }
 
 func convertToExecutionInfo(record *archiverspb.VisibilityRecord, saTypeMap searchattribute.NameTypeMap) (*workflowpb.WorkflowExecutionInfo, error) {
-	searchAttributes, err := searchattribute.Parse(record.SearchAttributes, &saTypeMap)
+	searchAttributes, err := searchattribute.Parse(record.GetSearchAttributes(), &saTypeMap)
 	if err != nil {
 		return nil, err
 	}
 
-	return &workflowpb.WorkflowExecutionInfo{
-		Execution: &commonpb.WorkflowExecution{
+	return workflowpb.WorkflowExecutionInfo_builder{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: record.GetWorkflowId(),
 			RunId:      record.GetRunId(),
-		},
-		Type: &commonpb.WorkflowType{
-			Name: record.WorkflowTypeName,
-		},
-		StartTime:         record.StartTime,
-		ExecutionTime:     record.ExecutionTime,
-		CloseTime:         record.CloseTime,
-		ExecutionDuration: record.ExecutionDuration,
-		Status:            record.Status,
-		HistoryLength:     record.HistoryLength,
-		Memo:              record.Memo,
+		}.Build(),
+		Type: commonpb.WorkflowType_builder{
+			Name: record.GetWorkflowTypeName(),
+		}.Build(),
+		StartTime:         record.GetStartTime(),
+		ExecutionTime:     record.GetExecutionTime(),
+		CloseTime:         record.GetCloseTime(),
+		ExecutionDuration: record.GetExecutionDuration(),
+		Status:            record.GetStatus(),
+		HistoryLength:     record.GetHistoryLength(),
+		Memo:              record.GetMemo(),
 		SearchAttributes:  searchAttributes,
-	}, nil
+	}.Build(), nil
 }

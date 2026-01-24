@@ -34,20 +34,20 @@ func (s *NexusTestBaseSuite) versionedNexusTaskPoller(ctx context.Context, taskQ
 	var vc *commonpb.WorkerVersionCapabilities
 
 	if buildID != "" {
-		vc = &commonpb.WorkerVersionCapabilities{
+		vc = commonpb.WorkerVersionCapabilities_builder{
 			BuildId:       buildID,
 			UseVersioning: true,
-		}
+		}.Build()
 	}
-	res, err := s.GetTestCluster().FrontendClient().PollNexusTaskQueue(ctx, &workflowservice.PollNexusTaskQueueRequest{
+	res, err := s.GetTestCluster().FrontendClient().PollNexusTaskQueue(ctx, workflowservice.PollNexusTaskQueueRequest_builder{
 		Namespace: s.Namespace().String(),
 		Identity:  uuid.NewString(),
-		TaskQueue: &taskqueuepb.TaskQueue{
+		TaskQueue: taskqueuepb.TaskQueue_builder{
 			Name: taskQueue,
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-		},
+		}.Build(),
 		WorkerVersionCapabilities: vc,
-	})
+	}.Build())
 	// The test is written in a way that it doesn't expect the poll to be unblocked and it may cancel this context when it completes.
 	if ctx.Err() != nil {
 		return
@@ -56,29 +56,29 @@ func (s *NexusTestBaseSuite) versionedNexusTaskPoller(ctx context.Context, taskQ
 	if err != nil {
 		panic(err)
 	}
-	if res.Request.GetStartOperation().GetService() != "test-service" && res.Request.GetCancelOperation().GetService() != "test-service" {
+	if res.GetRequest().GetStartOperation().GetService() != "test-service" && res.GetRequest().GetCancelOperation().GetService() != "test-service" {
 		panic("expected service to be test-service")
 	}
 	response, handlerError := handler(res)
 	if handlerError != nil {
-		_, err = s.GetTestCluster().FrontendClient().RespondNexusTaskFailed(ctx, &workflowservice.RespondNexusTaskFailedRequest{
+		_, err = s.GetTestCluster().FrontendClient().RespondNexusTaskFailed(ctx, workflowservice.RespondNexusTaskFailedRequest_builder{
 			Namespace: s.Namespace().String(),
 			Identity:  uuid.NewString(),
-			TaskToken: res.TaskToken,
+			TaskToken: res.GetTaskToken(),
 			Error:     handlerError,
-		})
+		}.Build())
 		// Ignore if context is already cancelled or if the task is not found.
 		if err != nil && ctx.Err() == nil && !errors.As(err, new(*serviceerror.NotFound)) {
 			// There's no clean way to propagate this error back to the test that's worthwhile. Panic is good enough.
 			panic(err)
 		}
 	} else if response != nil {
-		_, err = s.GetTestCluster().FrontendClient().RespondNexusTaskCompleted(ctx, &workflowservice.RespondNexusTaskCompletedRequest{
+		_, err = s.GetTestCluster().FrontendClient().RespondNexusTaskCompleted(ctx, workflowservice.RespondNexusTaskCompletedRequest_builder{
 			Namespace: s.Namespace().String(),
 			Identity:  uuid.NewString(),
-			TaskToken: res.TaskToken,
+			TaskToken: res.GetTaskToken(),
 			Response:  response,
-		})
+		}.Build())
 		// Ignore if context is already cancelled or if the task is not found.
 		if err != nil && ctx.Err() == nil && !errors.As(err, new(*serviceerror.NotFound)) {
 			// There's no clean way to propagate this error back to the test that's worthwhile. Panic is good enough.

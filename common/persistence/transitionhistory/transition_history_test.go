@@ -9,10 +9,10 @@ import (
 )
 
 func TestCompareVersionedTransition(t *testing.T) {
-	b := &persistencespb.VersionedTransition{
+	b := persistencespb.VersionedTransition_builder{
 		NamespaceFailoverVersion: 2,
 		TransitionCount:          2,
-	}
+	}.Build()
 
 	testCases := []struct {
 		name           string
@@ -21,42 +21,42 @@ func TestCompareVersionedTransition(t *testing.T) {
 	}{
 		{
 			name: "equal",
-			a: &persistencespb.VersionedTransition{
+			a: persistencespb.VersionedTransition_builder{
 				NamespaceFailoverVersion: 2,
 				TransitionCount:          2,
-			},
+			}.Build(),
 			expectedResult: 0,
 		},
 		{
 			name: "same version, smaller transition count",
-			a: &persistencespb.VersionedTransition{
+			a: persistencespb.VersionedTransition_builder{
 				NamespaceFailoverVersion: 2,
 				TransitionCount:          1,
-			},
+			}.Build(),
 			expectedResult: -1,
 		},
 		{
 			name: "same version, larger transition count",
-			a: &persistencespb.VersionedTransition{
+			a: persistencespb.VersionedTransition_builder{
 				NamespaceFailoverVersion: 2,
 				TransitionCount:          3,
-			},
+			}.Build(),
 			expectedResult: 1,
 		},
 		{
 			name: "lower version",
-			a: &persistencespb.VersionedTransition{
+			a: persistencespb.VersionedTransition_builder{
 				NamespaceFailoverVersion: 1,
 				TransitionCount:          10,
-			},
+			}.Build(),
 			expectedResult: -1,
 		},
 		{
 			name: "higher version",
-			a: &persistencespb.VersionedTransition{
+			a: persistencespb.VersionedTransition_builder{
 				NamespaceFailoverVersion: 3,
 				TransitionCount:          1,
-			},
+			}.Build(),
 			expectedResult: 1,
 		},
 	}
@@ -71,46 +71,46 @@ func TestCompareVersionedTransition(t *testing.T) {
 func TestTransitionHistoryStalenessCheck(t *testing.T) {
 	var hist []*persistencespb.VersionedTransition
 	hist = []*persistencespb.VersionedTransition{
-		{NamespaceFailoverVersion: 1, TransitionCount: 3},
-		{NamespaceFailoverVersion: 3, TransitionCount: 6},
+		persistencespb.VersionedTransition_builder{NamespaceFailoverVersion: 1, TransitionCount: 3}.Build(),
+		persistencespb.VersionedTransition_builder{NamespaceFailoverVersion: 3, TransitionCount: 6}.Build(),
 	}
 
 	// sv == tv, range(sc) < tc
-	require.ErrorIs(t, StalenessCheck(hist, &persistencespb.VersionedTransition{
+	require.ErrorIs(t, StalenessCheck(hist, persistencespb.VersionedTransition_builder{
 		NamespaceFailoverVersion: 3,
 		TransitionCount:          7,
-	}), consts.ErrStaleState)
+	}.Build()), consts.ErrStaleState)
 	// sv == tv, range(sc) contains tc
-	require.NoError(t, StalenessCheck(hist, &persistencespb.VersionedTransition{
+	require.NoError(t, StalenessCheck(hist, persistencespb.VersionedTransition_builder{
 		NamespaceFailoverVersion: 3,
 		TransitionCount:          4,
-	}))
+	}.Build()))
 	// sv == tv, range(sc) > tc
-	require.ErrorIs(t, StalenessCheck(hist, &persistencespb.VersionedTransition{
+	require.ErrorIs(t, StalenessCheck(hist, persistencespb.VersionedTransition_builder{
 		NamespaceFailoverVersion: 3,
 		TransitionCount:          3,
-	}), consts.ErrStaleReference)
+	}.Build()), consts.ErrStaleReference)
 
 	// sv < tv
-	require.ErrorIs(t, StalenessCheck(hist, &persistencespb.VersionedTransition{
+	require.ErrorIs(t, StalenessCheck(hist, persistencespb.VersionedTransition_builder{
 		NamespaceFailoverVersion: 4,
 		TransitionCount:          4,
-	}), consts.ErrStaleState)
+	}.Build()), consts.ErrStaleState)
 
 	// sv does not contain tv
-	require.ErrorIs(t, StalenessCheck(hist, &persistencespb.VersionedTransition{
+	require.ErrorIs(t, StalenessCheck(hist, persistencespb.VersionedTransition_builder{
 		NamespaceFailoverVersion: 2,
 		TransitionCount:          4,
-	}), consts.ErrStaleReference)
+	}.Build()), consts.ErrStaleReference)
 
 	// sv > tv, range(sc) does not contain tc
-	require.ErrorIs(t, StalenessCheck(hist, &persistencespb.VersionedTransition{
+	require.ErrorIs(t, StalenessCheck(hist, persistencespb.VersionedTransition_builder{
 		NamespaceFailoverVersion: 1,
 		TransitionCount:          4,
-	}), consts.ErrStaleReference)
+	}.Build()), consts.ErrStaleReference)
 	// sv > tv, range(sc) contains tc
-	require.NoError(t, StalenessCheck(hist, &persistencespb.VersionedTransition{
+	require.NoError(t, StalenessCheck(hist, persistencespb.VersionedTransition_builder{
 		NamespaceFailoverVersion: 1,
 		TransitionCount:          3,
-	}))
+	}.Build()))
 }

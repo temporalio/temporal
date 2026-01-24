@@ -16,9 +16,9 @@ func Invoke(
 	req *historyservice.ListQueuesRequest,
 ) (*historyservice.ListQueuesResponse, error) {
 	resp, err := historyTaskQueueManager.ListQueues(ctx, &persistence.ListQueuesRequest{
-		QueueType:     persistence.QueueV2Type(req.QueueType),
-		PageSize:      int(req.PageSize),
-		NextPageToken: req.NextPageToken,
+		QueueType:     persistence.QueueV2Type(req.GetQueueType()),
+		PageSize:      int(req.GetPageSize()),
+		NextPageToken: req.GetNextPageToken(),
 	})
 	if err != nil {
 		if errors.Is(err, persistence.ErrNonPositiveListQueuesPageSize) {
@@ -31,14 +31,14 @@ func Invoke(
 	}
 	var queues []*historyservice.ListQueuesResponse_QueueInfo
 	for _, queue := range resp.Queues {
-		queues = append(queues, &historyservice.ListQueuesResponse_QueueInfo{
+		queues = append(queues, historyservice.ListQueuesResponse_QueueInfo_builder{
 			QueueName:     queue.QueueName,
 			MessageCount:  queue.MessageCount,
 			LastMessageId: queue.LastMessageID,
-		})
+		}.Build())
 	}
-	return &historyservice.ListQueuesResponse{
+	return historyservice.ListQueuesResponse_builder{
 		Queues:        queues,
 		NextPageToken: resp.NextPageToken,
-	}, nil
+	}.Build(), nil
 }

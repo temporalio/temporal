@@ -59,10 +59,10 @@ func (r *HSMStateReplicatorImpl) SyncHSMState(
 	request *historyi.SyncHSMRequest,
 ) (retError error) {
 	namespaceID := namespace.ID(request.WorkflowKey.GetNamespaceID())
-	execution := &commonpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution_builder{
 		WorkflowId: request.WorkflowKey.GetWorkflowID(),
 		RunId:      request.WorkflowKey.GetRunID(),
-	}
+	}.Build()
 
 	lastItem, err := versionhistory.GetLastVersionHistoryItem(request.EventVersionHistory)
 	if err != nil {
@@ -91,8 +91,8 @@ func (r *HSMStateReplicatorImpl) SyncHSMState(
 				execution.GetRunId(),
 				common.EmptyEventID,
 				common.EmptyVersion,
-				lastItem.EventId+1, // underlying resend logic is exclusive-exclusive
-				lastItem.Version,
+				lastItem.GetEventId()+1, // underlying resend logic is exclusive-exclusive
+				lastItem.GetVersion(),
 			)
 		}
 		return err
@@ -153,7 +153,7 @@ func (r *HSMStateReplicatorImpl) syncHSMNode(
 		r.shardContext.StateMachineRegistry(),
 		workflow.StateMachineType,
 		mutableState,
-		request.StateMachineNode.Children,
+		request.StateMachineNode.GetChildren(),
 		mutableState,
 	)
 	if err != nil {
@@ -200,19 +200,19 @@ func (r *HSMStateReplicatorImpl) syncHSMNode(
 func (r *HSMStateReplicatorImpl) shouldSyncNode(
 	currentNode, incomingNode *hsm.Node,
 ) (bool, error) {
-	currentLastUpdated := currentNode.InternalRepr().LastUpdateVersionedTransition
-	incomingLastUpdated := incomingNode.InternalRepr().LastUpdateVersionedTransition
+	currentLastUpdated := currentNode.InternalRepr().GetLastUpdateVersionedTransition()
+	incomingLastUpdated := incomingNode.InternalRepr().GetLastUpdateVersionedTransition()
 
-	if currentLastUpdated.TransitionCount != 0 && incomingLastUpdated.TransitionCount != 0 {
+	if currentLastUpdated.GetTransitionCount() != 0 && incomingLastUpdated.GetTransitionCount() != 0 {
 		return transitionhistory.Compare(currentLastUpdated, incomingLastUpdated) < 0, nil
 	}
 
-	if currentLastUpdated.NamespaceFailoverVersion == incomingLastUpdated.NamespaceFailoverVersion {
+	if currentLastUpdated.GetNamespaceFailoverVersion() == incomingLastUpdated.GetNamespaceFailoverVersion() {
 		result, err := currentNode.CompareState(incomingNode)
 		return result < 0, err
 	}
 
-	return currentLastUpdated.NamespaceFailoverVersion < incomingLastUpdated.NamespaceFailoverVersion, nil
+	return currentLastUpdated.GetNamespaceFailoverVersion() < incomingLastUpdated.GetNamespaceFailoverVersion(), nil
 }
 
 func (r *HSMStateReplicatorImpl) compareVersionHistory(
@@ -254,10 +254,10 @@ func (r *HSMStateReplicatorImpl) compareVersionHistory(
 			workflowKey.NamespaceID,
 			workflowKey.WorkflowID,
 			workflowKey.RunID,
-			lastLocalItem.EventId,
-			lastLocalItem.Version,
-			lastIncomingItem.EventId+1, // underlying resend logic is exclusive-exclusive
-			lastIncomingItem.Version,
+			lastLocalItem.GetEventId(),
+			lastLocalItem.GetVersion(),
+			lastIncomingItem.GetEventId()+1, // underlying resend logic is exclusive-exclusive
+			lastIncomingItem.GetVersion(),
 		)
 	}
 
@@ -276,8 +276,8 @@ func (r *HSMStateReplicatorImpl) compareVersionHistory(
 			workflowKey.RunID,
 			lcaItem.GetEventId(),
 			lcaItem.GetVersion(),
-			lastIncomingItem.EventId+1, // underlying resend logic is exclusive-exclusive
-			lastIncomingItem.Version,
+			lastIncomingItem.GetEventId()+1, // underlying resend logic is exclusive-exclusive
+			lastIncomingItem.GetVersion(),
 		)
 	}
 

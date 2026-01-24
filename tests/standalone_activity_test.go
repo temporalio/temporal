@@ -41,34 +41,34 @@ var (
 	defaultInput            = payloads.EncodeString("Input")
 	defaultHeartbeatDetails = payloads.EncodeString("Heartbeat Details")
 	defaultResult           = payloads.EncodeString("Done")
-	defaultRetryPolicy      = &commonpb.RetryPolicy{
+	defaultRetryPolicy      = commonpb.RetryPolicy_builder{
 		InitialInterval:    durationpb.New(time.Second),
 		BackoffCoefficient: 2.0,
 		MaximumAttempts:    0,
 		MaximumInterval:    durationpb.New(100 * time.Second),
-	}
-	defaultFailure = &failurepb.Failure{
+	}.Build()
+	defaultFailure = failurepb.Failure_builder{
 		Message: "Failed Activity",
-		FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+		ApplicationFailureInfo: failurepb.ApplicationFailureInfo_builder{
 			Type:         "Test",
 			NonRetryable: true,
-		}},
-	}
-	defaultHeader = &commonpb.Header{
+		}.Build(),
+	}.Build()
+	defaultHeader = commonpb.Header_builder{
 		Fields: map[string]*commonpb.Payload{
 			"key-1": payload.EncodeString("value-1"),
 			"key-2": payload.EncodeString("value-2"),
 		},
-	}
-	defaultSearchAttributes = &commonpb.SearchAttributes{
+	}.Build()
+	defaultSearchAttributes = commonpb.SearchAttributes_builder{
 		IndexedFields: map[string]*commonpb.Payload{
 			"CustomKeywordField": payload.EncodeString("value1"),
 		},
-	}
-	defaultUserMetadata = &sdkpb.UserMetadata{
+	}.Build()
+	defaultUserMetadata = sdkpb.UserMetadata_builder{
 		Summary: payload.EncodeString("test-summary"),
 		Details: payload.EncodeString("test-details"),
-	}
+	}.Build()
 )
 
 type standaloneActivityTestSuite struct {
@@ -108,31 +108,31 @@ func (s *standaloneActivityTestSuite) TestIDReusePolicy() {
 		taskQueue := testcore.RandomizeStr(t.Name())
 
 		startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
-		runID := startResp.RunId
+		runID := startResp.GetRunId()
 		pollTaskResp := s.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
 
-		_, err := s.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+		_, err := s.FrontendClient().RespondActivityTaskCompleted(ctx, workflowservice.RespondActivityTaskCompletedRequest_builder{
 			Namespace: s.Namespace().String(),
-			TaskToken: pollTaskResp.TaskToken,
+			TaskToken: pollTaskResp.GetTaskToken(),
 			Result:    defaultResult,
 			Identity:  "new-worker",
-		})
+		}.Build())
 		require.NoError(t, err)
 
 		s.validateCompletion(ctx, t, activityID, runID, "new-worker")
 
-		_, err = s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+		_, err = s.FrontendClient().StartActivityExecution(ctx, workflowservice.StartActivityExecutionRequest_builder{
 			Namespace:    s.Namespace().String(),
 			ActivityId:   activityID,
 			ActivityType: s.tv.ActivityType(),
 			Identity:     s.tv.WorkerIdentity(),
 			Input:        defaultInput,
-			TaskQueue: &taskqueuepb.TaskQueue{
+			TaskQueue: taskqueuepb.TaskQueue_builder{
 				Name: taskQueue,
-			},
+			}.Build(),
 			StartToCloseTimeout: durationpb.New(1 * time.Minute),
 			IdReusePolicy:       enumspb.ACTIVITY_ID_REUSE_POLICY_REJECT_DUPLICATE,
-		})
+		}.Build())
 		require.Error(t, err)
 	})
 
@@ -141,32 +141,32 @@ func (s *standaloneActivityTestSuite) TestIDReusePolicy() {
 		taskQueue := testcore.RandomizeStr(t.Name())
 
 		startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
-		runID := startResp.RunId
+		runID := startResp.GetRunId()
 
 		pollTaskResp := s.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
 
-		_, err := s.FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
+		_, err := s.FrontendClient().RespondActivityTaskFailed(ctx, workflowservice.RespondActivityTaskFailedRequest_builder{
 			Namespace: s.Namespace().String(),
-			TaskToken: pollTaskResp.TaskToken,
+			TaskToken: pollTaskResp.GetTaskToken(),
 			Failure:   defaultFailure,
 			Identity:  "new-worker",
-		})
+		}.Build())
 		require.NoError(t, err)
 
 		s.validateFailure(ctx, t, activityID, runID, nil, "new-worker")
 
-		_, err = s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+		_, err = s.FrontendClient().StartActivityExecution(ctx, workflowservice.StartActivityExecutionRequest_builder{
 			Namespace:    s.Namespace().String(),
 			ActivityId:   activityID,
 			ActivityType: s.tv.ActivityType(),
 			Identity:     s.tv.WorkerIdentity(),
 			Input:        defaultInput,
-			TaskQueue: &taskqueuepb.TaskQueue{
+			TaskQueue: taskqueuepb.TaskQueue_builder{
 				Name: taskQueue,
-			},
+			}.Build(),
 			StartToCloseTimeout: durationpb.New(1 * time.Minute),
 			IdReusePolicy:       enumspb.ACTIVITY_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY,
-		})
+		}.Build())
 		require.NoError(t, err)
 	})
 }
@@ -182,17 +182,17 @@ func (s *standaloneActivityTestSuite) TestIDConflictPolicy() {
 		startResponse := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
 
 		// By default, unspecified conflict policy should be set to ACTIVITY_ID_CONFLICT_POLICY_FAIL, so no need to set explicitly
-		_, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+		_, err := s.FrontendClient().StartActivityExecution(ctx, workflowservice.StartActivityExecutionRequest_builder{
 			Namespace:    s.Namespace().String(),
 			ActivityId:   activityID,
 			ActivityType: s.tv.ActivityType(),
 			Identity:     s.tv.WorkerIdentity(),
 			Input:        defaultInput,
-			TaskQueue: &taskqueuepb.TaskQueue{
+			TaskQueue: taskqueuepb.TaskQueue_builder{
 				Name: taskQueue,
-			},
+			}.Build(),
 			StartToCloseTimeout: durationpb.New(1 * time.Minute),
-		})
+		}.Build())
 
 		var alreadyStartedErr *serviceerror.ActivityExecutionAlreadyStarted
 		require.ErrorAs(t, err, &alreadyStartedErr)
@@ -205,21 +205,21 @@ func (s *standaloneActivityTestSuite) TestIDConflictPolicy() {
 		taskQueue := testcore.RandomizeStr(t.Name())
 		firstStartResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
 
-		secondStartResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+		secondStartResp, err := s.FrontendClient().StartActivityExecution(ctx, workflowservice.StartActivityExecutionRequest_builder{
 			Namespace:    s.Namespace().String(),
 			ActivityId:   activityID,
 			ActivityType: s.tv.ActivityType(),
 			Identity:     s.tv.WorkerIdentity(),
 			Input:        defaultInput,
-			TaskQueue: &taskqueuepb.TaskQueue{
+			TaskQueue: taskqueuepb.TaskQueue_builder{
 				Name: taskQueue,
-			},
+			}.Build(),
 			StartToCloseTimeout: durationpb.New(1 * time.Minute),
 			IdConflictPolicy:    enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING,
 			RequestId:           s.tv.RequestID(),
-		})
+		}.Build())
 		require.NoError(t, err)
-		require.Equal(t, firstStartResp.RunId, secondStartResp.RunId)
+		require.Equal(t, firstStartResp.GetRunId(), secondStartResp.GetRunId())
 		require.False(t, secondStartResp.GetStarted()) // indicates activity was not started anew
 	})
 }
@@ -236,36 +236,36 @@ func (s *standaloneActivityTestSuite) TestPollActivityTaskQueue() {
 	startToCloseTimeout := durationpb.New(1 * time.Minute)
 	scheduleToCloseTimeout := durationpb.New(2 * time.Minute)
 	heartbeatTimeout := durationpb.New(20 * time.Second)
-	priority := &commonpb.Priority{
+	priority := commonpb.Priority_builder{
 		FairnessKey: "test-key",
-	}
+	}.Build()
 
-	startResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+	startResp, err := s.FrontendClient().StartActivityExecution(ctx, workflowservice.StartActivityExecutionRequest_builder{
 		Namespace:    namespace,
 		ActivityId:   activityID,
 		ActivityType: s.tv.ActivityType(),
 		Identity:     s.tv.WorkerIdentity(),
 		Input:        defaultInput,
-		TaskQueue: &taskqueuepb.TaskQueue{
+		TaskQueue: taskqueuepb.TaskQueue_builder{
 			Name: taskQueue,
-		},
+		}.Build(),
 		StartToCloseTimeout:    startToCloseTimeout,
 		ScheduleToCloseTimeout: scheduleToCloseTimeout,
 		HeartbeatTimeout:       heartbeatTimeout,
 		RequestId:              s.tv.RequestID(),
 		Priority:               priority,
 		Header:                 defaultHeader,
-	})
+	}.Build())
 	require.NoError(t, err)
 
-	pollTaskResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+	pollTaskResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, workflowservice.PollActivityTaskQueueRequest_builder{
 		Namespace: namespace,
-		TaskQueue: &taskqueuepb.TaskQueue{
+		TaskQueue: taskqueuepb.TaskQueue_builder{
 			Name: taskQueue,
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-		},
+		}.Build(),
 		Identity: s.tv.WorkerIdentity(),
-	})
+	}.Build())
 	require.NoError(t, err)
 	require.Equal(t, activityID, pollTaskResp.GetActivityId())
 	require.Equal(t, namespace, pollTaskResp.GetWorkflowNamespace())
@@ -274,13 +274,13 @@ func (s *standaloneActivityTestSuite) TestPollActivityTaskQueue() {
 	protorequire.ProtoEqual(t, defaultInput, pollTaskResp.GetInput())
 	require.False(t, pollTaskResp.GetStartedTime().AsTime().IsZero())
 	require.False(t, pollTaskResp.GetScheduledTime().AsTime().IsZero())
-	require.EqualValues(t, 1, pollTaskResp.Attempt)
+	require.EqualValues(t, 1, pollTaskResp.GetAttempt())
 	protorequire.ProtoEqual(t, startToCloseTimeout, pollTaskResp.GetStartToCloseTimeout())
 	protorequire.ProtoEqual(t, scheduleToCloseTimeout, pollTaskResp.GetScheduleToCloseTimeout())
 	protorequire.ProtoEqual(t, heartbeatTimeout, pollTaskResp.GetHeartbeatTimeout())
 	protorequire.ProtoEqual(t, priority, pollTaskResp.GetPriority())
 	protorequire.ProtoEqual(t, defaultHeader, pollTaskResp.GetHeader())
-	require.NotNil(t, pollTaskResp.TaskToken)
+	require.NotNil(t, pollTaskResp.GetTaskToken())
 }
 
 func (s *standaloneActivityTestSuite) TestCompleted() {
@@ -293,16 +293,16 @@ func (s *standaloneActivityTestSuite) TestCompleted() {
 		taskQueue := testcore.RandomizeStr(t.Name())
 
 		startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
-		runID := startResp.RunId
+		runID := startResp.GetRunId()
 
 		pollTaskResp := s.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
 
-		_, err := s.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+		_, err := s.FrontendClient().RespondActivityTaskCompleted(ctx, workflowservice.RespondActivityTaskCompletedRequest_builder{
 			Namespace: s.Namespace().String(),
-			TaskToken: pollTaskResp.TaskToken,
+			TaskToken: pollTaskResp.GetTaskToken(),
 			Result:    defaultResult,
 			Identity:  "new-worker",
-		})
+		}.Build())
 		require.NoError(t, err)
 
 		s.validateCompletion(ctx, t, activityID, runID, "new-worker")
@@ -313,17 +313,17 @@ func (s *standaloneActivityTestSuite) TestCompleted() {
 		taskQueue := testcore.RandomizeStr(t.Name())
 
 		startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
-		runID := startResp.RunId
+		runID := startResp.GetRunId()
 
 		s.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
 
-		_, err := s.FrontendClient().RespondActivityTaskCompletedById(ctx, &workflowservice.RespondActivityTaskCompletedByIdRequest{
+		_, err := s.FrontendClient().RespondActivityTaskCompletedById(ctx, workflowservice.RespondActivityTaskCompletedByIdRequest_builder{
 			Namespace:  s.Namespace().String(),
 			RunId:      runID,
 			ActivityId: activityID,
 			Result:     defaultResult,
 			Identity:   s.tv.WorkerIdentity(),
-		})
+		}.Build())
 		require.NoError(t, err)
 
 		s.validateCompletion(ctx, t, activityID, runID, s.tv.WorkerIdentity())
@@ -334,17 +334,17 @@ func (s *standaloneActivityTestSuite) TestCompleted() {
 		taskQueue := testcore.RandomizeStr(t.Name())
 
 		startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
-		runID := startResp.RunId
+		runID := startResp.GetRunId()
 
 		s.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
 
-		_, err := s.FrontendClient().RespondActivityTaskCompletedById(ctx, &workflowservice.RespondActivityTaskCompletedByIdRequest{
+		_, err := s.FrontendClient().RespondActivityTaskCompletedById(ctx, workflowservice.RespondActivityTaskCompletedByIdRequest_builder{
 			Namespace:  s.Namespace().String(),
 			RunId:      runID,
 			ActivityId: activityID,
 			Result:     defaultResult,
 			Identity:   s.tv.WorkerIdentity(),
-		})
+		}.Build())
 		require.NoError(t, err)
 
 		s.validateCompletion(ctx, t, activityID, runID, s.tv.WorkerIdentity())
@@ -356,25 +356,25 @@ func (s *standaloneActivityTestSuite) TestCompleted() {
 		_, err := s.startActivity(ctx, activityID, taskQueue)
 		require.NoError(t, err)
 
-		pollResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+		pollResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, workflowservice.PollActivityTaskQueueRequest_builder{
 			Namespace: s.Namespace().String(),
-			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		})
+			TaskQueue: taskqueuepb.TaskQueue_builder{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
+		}.Build())
 		require.NoError(t, err)
 
-		_, err = s.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+		_, err = s.FrontendClient().RespondActivityTaskCompleted(ctx, workflowservice.RespondActivityTaskCompletedRequest_builder{
 			Namespace: s.Namespace().String(),
-			TaskToken: pollResp.TaskToken,
+			TaskToken: pollResp.GetTaskToken(),
 			Result:    defaultResult,
-		})
+		}.Build())
 		require.NoError(t, err)
 
 		// Complete with stale token (activity already completed)
-		_, err = s.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+		_, err = s.FrontendClient().RespondActivityTaskCompleted(ctx, workflowservice.RespondActivityTaskCompletedRequest_builder{
 			Namespace: s.Namespace().String(),
-			TaskToken: pollResp.TaskToken,
+			TaskToken: pollResp.GetTaskToken(),
 			Result:    defaultResult,
-		})
+		}.Build())
 		require.Error(t, err)
 		statusErr := serviceerror.ToStatus(err)
 		require.Equal(t, codes.NotFound, statusErr.Code())
@@ -387,65 +387,65 @@ func (s *standaloneActivityTestSuite) TestCompleted() {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
 
-		_, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+		_, err := s.FrontendClient().StartActivityExecution(ctx, workflowservice.StartActivityExecutionRequest_builder{
 			Namespace:              s.Namespace().String(),
 			ActivityId:             activityID,
 			ActivityType:           s.tv.ActivityType(),
-			TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue},
+			TaskQueue:              taskqueuepb.TaskQueue_builder{Name: taskQueue}.Build(),
 			ScheduleToCloseTimeout: durationpb.New(1 * time.Minute),
-			RetryPolicy: &commonpb.RetryPolicy{
+			RetryPolicy: commonpb.RetryPolicy_builder{
 				MaximumAttempts: 3,
-			},
-		})
+			}.Build(),
+		}.Build())
 		require.NoError(t, err)
 
 		// Poll and get task token for attempt 1
-		attempt1Resp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+		attempt1Resp, err := s.FrontendClient().PollActivityTaskQueue(ctx, workflowservice.PollActivityTaskQueueRequest_builder{
 			Namespace: s.Namespace().String(),
-			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		})
+			TaskQueue: taskqueuepb.TaskQueue_builder{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
+		}.Build())
 		require.NoError(t, err)
-		require.EqualValues(t, 1, attempt1Resp.Attempt)
+		require.EqualValues(t, 1, attempt1Resp.GetAttempt())
 
 		// Fail the task with NextRetryDelay to control retry timing
-		_, err = s.FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
+		_, err = s.FrontendClient().RespondActivityTaskFailed(ctx, workflowservice.RespondActivityTaskFailedRequest_builder{
 			Namespace: s.Namespace().String(),
-			TaskToken: attempt1Resp.TaskToken,
-			Failure: &failurepb.Failure{
+			TaskToken: attempt1Resp.GetTaskToken(),
+			Failure: failurepb.Failure_builder{
 				Message: "retryable failure",
-				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+				ApplicationFailureInfo: failurepb.ApplicationFailureInfo_builder{
 					NonRetryable:   false,
 					NextRetryDelay: durationpb.New(1 * time.Second),
-				}},
-			},
-		})
+				}.Build(),
+			}.Build(),
+		}.Build())
 		require.NoError(t, err)
 
 		// Poll to get attempt 2 (ensures retry has happened)
-		attempt2Resp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+		attempt2Resp, err := s.FrontendClient().PollActivityTaskQueue(ctx, workflowservice.PollActivityTaskQueueRequest_builder{
 			Namespace: s.Namespace().String(),
-			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		})
+			TaskQueue: taskqueuepb.TaskQueue_builder{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
+		}.Build())
 		require.NoError(t, err)
-		require.EqualValues(t, 2, attempt2Resp.Attempt)
+		require.EqualValues(t, 2, attempt2Resp.GetAttempt())
 
 		// Try to complete with the old attempt 1 token - should fail with NotFound
-		_, err = s.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+		_, err = s.FrontendClient().RespondActivityTaskCompleted(ctx, workflowservice.RespondActivityTaskCompletedRequest_builder{
 			Namespace: s.Namespace().String(),
-			TaskToken: attempt1Resp.TaskToken,
+			TaskToken: attempt1Resp.GetTaskToken(),
 			Result:    defaultResult,
-		})
+		}.Build())
 		require.Error(t, err)
 		statusErr := serviceerror.ToStatus(err)
 		require.Equal(t, codes.NotFound, statusErr.Code())
 		require.Contains(t, statusErr.Message(), "activity task not found")
 
 		// Complete with the attempt 2 token and should succeed
-		_, err = s.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+		_, err = s.FrontendClient().RespondActivityTaskCompleted(ctx, workflowservice.RespondActivityTaskCompletedRequest_builder{
 			Namespace: s.Namespace().String(),
-			TaskToken: attempt2Resp.TaskToken,
+			TaskToken: attempt2Resp.GetTaskToken(),
 			Result:    defaultResult,
-		})
+		}.Build())
 		require.NoError(t, err)
 	})
 
@@ -456,33 +456,33 @@ func (s *standaloneActivityTestSuite) TestCompleted() {
 		_, err := s.startActivity(ctx, activityID, taskQueue)
 		require.NoError(t, err)
 
-		pollResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+		pollResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, workflowservice.PollActivityTaskQueueRequest_builder{
 			Namespace: existingNamespace,
-			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		})
+			TaskQueue: taskqueuepb.TaskQueue_builder{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
+		}.Build())
 		require.NoError(t, err)
 
 		// Start an activity in a different namespace and try to complete with existing token
 		externalNamespace := s.ExternalNamespace().String()
-		_, err = s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+		_, err = s.FrontendClient().StartActivityExecution(ctx, workflowservice.StartActivityExecutionRequest_builder{
 			Namespace:    externalNamespace,
 			ActivityId:   activityID,
 			ActivityType: s.tv.ActivityType(),
 			Identity:     s.tv.WorkerIdentity(),
 			Input:        defaultInput,
-			TaskQueue: &taskqueuepb.TaskQueue{
+			TaskQueue: taskqueuepb.TaskQueue_builder{
 				Name: taskQueue,
-			},
+			}.Build(),
 			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
 			RequestId:           s.tv.Any().String(),
-		})
+		}.Build())
 		require.NoError(t, err)
 
-		_, err = s.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+		_, err = s.FrontendClient().RespondActivityTaskCompleted(ctx, workflowservice.RespondActivityTaskCompletedRequest_builder{
 			Namespace: externalNamespace,
-			TaskToken: pollResp.TaskToken,
+			TaskToken: pollResp.GetTaskToken(),
 			Result:    defaultResult,
-		})
+		}.Build())
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
 		require.Equal(t, "Operation requested with a token from a different namespace.", invalidArgErr.Message)
@@ -500,53 +500,53 @@ func (s *standaloneActivityTestSuite) TestCompleted() {
 		_, err := s.startActivity(ctx, activityID, taskQueue)
 		require.NoError(t, err)
 
-		pollResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+		pollResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, workflowservice.PollActivityTaskQueueRequest_builder{
 			Namespace: existingNamespace,
-			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		})
+			TaskQueue: taskqueuepb.TaskQueue_builder{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
+		}.Build())
 		require.NoError(t, err)
 
 		// Start another activity in namespace B with the same activity ID
 		// (different namespaces allow same activity IDs)
 		externalNamespace := s.ExternalNamespace().String()
-		_, err = s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+		_, err = s.FrontendClient().StartActivityExecution(ctx, workflowservice.StartActivityExecutionRequest_builder{
 			Namespace:    externalNamespace,
 			ActivityId:   activityID,
 			ActivityType: s.tv.ActivityType(),
 			Identity:     s.tv.WorkerIdentity(),
 			Input:        defaultInput,
-			TaskQueue: &taskqueuepb.TaskQueue{
+			TaskQueue: taskqueuepb.TaskQueue_builder{
 				Name: taskQueue,
-			},
+			}.Build(),
 			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
 			RequestId:           s.tv.Any().String(),
-		})
+		}.Build())
 		require.NoError(t, err)
 
 		// Poll for the task from namespace B
-		externalPollResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+		externalPollResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, workflowservice.PollActivityTaskQueueRequest_builder{
 			Namespace: externalNamespace,
-			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		})
+			TaskQueue: taskqueuepb.TaskQueue_builder{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
+		}.Build())
 		require.NoError(t, err)
 
 		// Deserialize both task tokens
-		existingTask, err := tasktoken.NewSerializer().Deserialize(pollResp.TaskToken)
+		existingTask, err := tasktoken.NewSerializer().Deserialize(pollResp.GetTaskToken())
 		require.NoError(t, err)
 
-		externalTask, err := tasktoken.NewSerializer().Deserialize(externalPollResp.TaskToken)
+		externalTask, err := tasktoken.NewSerializer().Deserialize(externalPollResp.GetTaskToken())
 		require.NoError(t, err)
 
 		// Tamper with namespace A's token by replacing its ComponentRef with namespace B's ComponentRef
-		existingTask.ComponentRef = externalTask.GetComponentRef()
+		existingTask.SetComponentRef(externalTask.GetComponentRef())
 		existingTaskToken, err := tasktoken.NewSerializer().Serialize(existingTask)
 		require.NoError(t, err)
 
-		_, err = s.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+		_, err = s.FrontendClient().RespondActivityTaskCompleted(ctx, workflowservice.RespondActivityTaskCompletedRequest_builder{
 			Namespace: existingNamespace,
 			TaskToken: existingTaskToken,
 			Result:    defaultResult,
-		})
+		}.Build())
 
 		// Verify that the request is rejected with the correct error
 		var invalidArgErr *serviceerror.InvalidArgument
@@ -565,16 +565,16 @@ func (s *standaloneActivityTestSuite) TestFailed() {
 		taskQueue := testcore.RandomizeStr(t.Name())
 
 		startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
-		runID := startResp.RunId
+		runID := startResp.GetRunId()
 
 		pollTaskResp := s.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
 
-		_, err := s.FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
+		_, err := s.FrontendClient().RespondActivityTaskFailed(ctx, workflowservice.RespondActivityTaskFailedRequest_builder{
 			Namespace: s.Namespace().String(),
-			TaskToken: pollTaskResp.TaskToken,
+			TaskToken: pollTaskResp.GetTaskToken(),
 			Failure:   defaultFailure,
 			Identity:  "new-worker",
-		})
+		}.Build())
 		require.NoError(t, err)
 
 		s.validateFailure(ctx, t, activityID, runID, nil, "new-worker")
@@ -585,17 +585,17 @@ func (s *standaloneActivityTestSuite) TestFailed() {
 		taskQueue := testcore.RandomizeStr(t.Name())
 
 		startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
-		runID := startResp.RunId
+		runID := startResp.GetRunId()
 
 		pollTaskResp := s.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
 
-		_, err := s.FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
+		_, err := s.FrontendClient().RespondActivityTaskFailed(ctx, workflowservice.RespondActivityTaskFailedRequest_builder{
 			Namespace:            s.Namespace().String(),
-			TaskToken:            pollTaskResp.TaskToken,
+			TaskToken:            pollTaskResp.GetTaskToken(),
 			Failure:              defaultFailure,
 			LastHeartbeatDetails: defaultHeartbeatDetails,
 			Identity:             s.tv.WorkerIdentity(),
-		})
+		}.Build())
 		require.NoError(t, err)
 
 		s.validateFailure(ctx, t, activityID, runID, defaultHeartbeatDetails, s.tv.WorkerIdentity())
@@ -606,17 +606,17 @@ func (s *standaloneActivityTestSuite) TestFailed() {
 		taskQueue := testcore.RandomizeStr(t.Name())
 
 		startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
-		runID := startResp.RunId
+		runID := startResp.GetRunId()
 
 		s.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
 
-		_, err := s.FrontendClient().RespondActivityTaskFailedById(ctx, &workflowservice.RespondActivityTaskFailedByIdRequest{
+		_, err := s.FrontendClient().RespondActivityTaskFailedById(ctx, workflowservice.RespondActivityTaskFailedByIdRequest_builder{
 			Namespace:  s.Namespace().String(),
 			RunId:      runID,
 			ActivityId: activityID,
 			Failure:    defaultFailure,
 			Identity:   s.tv.WorkerIdentity(),
-		})
+		}.Build())
 		require.NoError(t, err)
 
 		s.validateFailure(ctx, t, activityID, runID, nil, s.tv.WorkerIdentity())
@@ -627,16 +627,16 @@ func (s *standaloneActivityTestSuite) TestFailed() {
 		taskQueue := testcore.RandomizeStr(t.Name())
 
 		startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
-		runID := startResp.RunId
+		runID := startResp.GetRunId()
 
 		s.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
 
-		_, err := s.FrontendClient().RespondActivityTaskFailedById(ctx, &workflowservice.RespondActivityTaskFailedByIdRequest{
+		_, err := s.FrontendClient().RespondActivityTaskFailedById(ctx, workflowservice.RespondActivityTaskFailedByIdRequest_builder{
 			Namespace:  s.Namespace().String(),
 			ActivityId: activityID,
 			Failure:    defaultFailure,
 			Identity:   s.tv.WorkerIdentity(),
-		})
+		}.Build())
 		require.NoError(t, err)
 
 		s.validateFailure(ctx, t, activityID, runID, nil, s.tv.WorkerIdentity())
@@ -648,25 +648,25 @@ func (s *standaloneActivityTestSuite) TestFailed() {
 		_, err := s.startActivity(ctx, activityID, taskQueue)
 		require.NoError(t, err)
 
-		pollResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+		pollResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, workflowservice.PollActivityTaskQueueRequest_builder{
 			Namespace: s.Namespace().String(),
-			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		})
+			TaskQueue: taskqueuepb.TaskQueue_builder{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
+		}.Build())
 		require.NoError(t, err)
 
-		_, err = s.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+		_, err = s.FrontendClient().RespondActivityTaskCompleted(ctx, workflowservice.RespondActivityTaskCompletedRequest_builder{
 			Namespace: s.Namespace().String(),
-			TaskToken: pollResp.TaskToken,
+			TaskToken: pollResp.GetTaskToken(),
 			Result:    defaultResult,
-		})
+		}.Build())
 		require.NoError(t, err)
 
 		// Fail with stale token (activity already completed)
-		_, err = s.FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
+		_, err = s.FrontendClient().RespondActivityTaskFailed(ctx, workflowservice.RespondActivityTaskFailedRequest_builder{
 			Namespace: s.Namespace().String(),
-			TaskToken: pollResp.TaskToken,
+			TaskToken: pollResp.GetTaskToken(),
 			Failure:   defaultFailure,
-		})
+		}.Build())
 		require.Error(t, err)
 		statusErr := serviceerror.ToStatus(err)
 		require.Equal(t, codes.NotFound, statusErr.Code())
@@ -679,65 +679,65 @@ func (s *standaloneActivityTestSuite) TestFailed() {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
 
-		_, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+		_, err := s.FrontendClient().StartActivityExecution(ctx, workflowservice.StartActivityExecutionRequest_builder{
 			Namespace:              s.Namespace().String(),
 			ActivityId:             activityID,
 			ActivityType:           s.tv.ActivityType(),
-			TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue},
+			TaskQueue:              taskqueuepb.TaskQueue_builder{Name: taskQueue}.Build(),
 			ScheduleToCloseTimeout: durationpb.New(1 * time.Minute),
-			RetryPolicy: &commonpb.RetryPolicy{
+			RetryPolicy: commonpb.RetryPolicy_builder{
 				MaximumAttempts: 3,
-			},
-		})
+			}.Build(),
+		}.Build())
 		require.NoError(t, err)
 
 		// Poll and get task token for attempt 1
-		attempt1Resp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+		attempt1Resp, err := s.FrontendClient().PollActivityTaskQueue(ctx, workflowservice.PollActivityTaskQueueRequest_builder{
 			Namespace: s.Namespace().String(),
-			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		})
+			TaskQueue: taskqueuepb.TaskQueue_builder{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
+		}.Build())
 		require.NoError(t, err)
-		require.EqualValues(t, 1, attempt1Resp.Attempt)
+		require.EqualValues(t, 1, attempt1Resp.GetAttempt())
 
 		// Fail the task with NextRetryDelay to control retry timing
-		_, err = s.FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
+		_, err = s.FrontendClient().RespondActivityTaskFailed(ctx, workflowservice.RespondActivityTaskFailedRequest_builder{
 			Namespace: s.Namespace().String(),
-			TaskToken: attempt1Resp.TaskToken,
-			Failure: &failurepb.Failure{
+			TaskToken: attempt1Resp.GetTaskToken(),
+			Failure: failurepb.Failure_builder{
 				Message: "retryable failure",
-				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+				ApplicationFailureInfo: failurepb.ApplicationFailureInfo_builder{
 					NonRetryable:   false,
 					NextRetryDelay: durationpb.New(1 * time.Second),
-				}},
-			},
-		})
+				}.Build(),
+			}.Build(),
+		}.Build())
 		require.NoError(t, err)
 
 		// Poll to get attempt 2 (ensures retry has happened)
-		attempt2Resp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+		attempt2Resp, err := s.FrontendClient().PollActivityTaskQueue(ctx, workflowservice.PollActivityTaskQueueRequest_builder{
 			Namespace: s.Namespace().String(),
-			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		})
+			TaskQueue: taskqueuepb.TaskQueue_builder{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
+		}.Build())
 		require.NoError(t, err)
-		require.EqualValues(t, 2, attempt2Resp.Attempt)
+		require.EqualValues(t, 2, attempt2Resp.GetAttempt())
 
 		// Try to fail with the old attempt 1 token - should fail with NotFound
-		_, err = s.FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
+		_, err = s.FrontendClient().RespondActivityTaskFailed(ctx, workflowservice.RespondActivityTaskFailedRequest_builder{
 			Namespace: s.Namespace().String(),
-			TaskToken: attempt1Resp.TaskToken,
+			TaskToken: attempt1Resp.GetTaskToken(),
 			Failure:   defaultFailure,
-		})
+		}.Build())
 		require.Error(t, err)
 		statusErr := serviceerror.ToStatus(err)
 		require.Equal(t, codes.NotFound, statusErr.Code())
 		require.Contains(t, statusErr.Message(), "activity task not found")
 
 		// Fail with the attempt 2 token and should be no error
-		_, err = s.FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
+		_, err = s.FrontendClient().RespondActivityTaskFailed(ctx, workflowservice.RespondActivityTaskFailedRequest_builder{
 			Namespace: s.Namespace().String(),
-			TaskToken: attempt2Resp.TaskToken,
+			TaskToken: attempt2Resp.GetTaskToken(),
 			Failure:   defaultFailure,
-		})
+		}.Build())
 		require.NoError(t, err)
 	})
 
@@ -748,39 +748,39 @@ func (s *standaloneActivityTestSuite) TestFailed() {
 		_, err := s.startActivity(ctx, activityID, taskQueue)
 		require.NoError(t, err)
 
-		pollResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+		pollResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, workflowservice.PollActivityTaskQueueRequest_builder{
 			Namespace: existingNamespace,
-			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		})
+			TaskQueue: taskqueuepb.TaskQueue_builder{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
+		}.Build())
 		require.NoError(t, err)
 
 		// Start an activity in a different namespace and try to fail with existing token
 		externalNamespace := s.ExternalNamespace().String()
-		_, err = s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+		_, err = s.FrontendClient().StartActivityExecution(ctx, workflowservice.StartActivityExecutionRequest_builder{
 			Namespace:    externalNamespace,
 			ActivityId:   activityID,
 			ActivityType: s.tv.ActivityType(),
 			Identity:     s.tv.WorkerIdentity(),
 			Input:        defaultInput,
-			TaskQueue: &taskqueuepb.TaskQueue{
+			TaskQueue: taskqueuepb.TaskQueue_builder{
 				Name: taskQueue,
-			},
+			}.Build(),
 			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
 			RequestId:           s.tv.Any().String(),
-		})
+		}.Build())
 		require.NoError(t, err)
 
-		_, err = s.FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
+		_, err = s.FrontendClient().RespondActivityTaskFailed(ctx, workflowservice.RespondActivityTaskFailedRequest_builder{
 			Namespace: externalNamespace,
-			TaskToken: pollResp.TaskToken,
-			Failure: &failurepb.Failure{
+			TaskToken: pollResp.GetTaskToken(),
+			Failure: failurepb.Failure_builder{
 				Message: "retryable failure",
-				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+				ApplicationFailureInfo: failurepb.ApplicationFailureInfo_builder{
 					NonRetryable:   false,
 					NextRetryDelay: durationpb.New(1 * time.Second),
-				}},
-			},
-		})
+				}.Build(),
+			}.Build(),
+		}.Build())
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
 		require.Equal(t, "Operation requested with a token from a different namespace.", invalidArgErr.Message)
@@ -798,53 +798,53 @@ func (s *standaloneActivityTestSuite) TestFailed() {
 		_, err := s.startActivity(ctx, activityID, taskQueue)
 		require.NoError(t, err)
 
-		pollResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+		pollResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, workflowservice.PollActivityTaskQueueRequest_builder{
 			Namespace: existingNamespace,
-			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		})
+			TaskQueue: taskqueuepb.TaskQueue_builder{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
+		}.Build())
 		require.NoError(t, err)
 
 		// Start another activity in namespace B with the same activity ID
 		// (different namespaces allow same activity IDs)
 		externalNamespace := s.ExternalNamespace().String()
-		_, err = s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+		_, err = s.FrontendClient().StartActivityExecution(ctx, workflowservice.StartActivityExecutionRequest_builder{
 			Namespace:    externalNamespace,
 			ActivityId:   activityID,
 			ActivityType: s.tv.ActivityType(),
 			Identity:     s.tv.WorkerIdentity(),
 			Input:        defaultInput,
-			TaskQueue: &taskqueuepb.TaskQueue{
+			TaskQueue: taskqueuepb.TaskQueue_builder{
 				Name: taskQueue,
-			},
+			}.Build(),
 			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
 			RequestId:           s.tv.Any().String(),
-		})
+		}.Build())
 		require.NoError(t, err)
 
 		// Poll for the task from namespace B
-		externalPollResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+		externalPollResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, workflowservice.PollActivityTaskQueueRequest_builder{
 			Namespace: externalNamespace,
-			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		})
+			TaskQueue: taskqueuepb.TaskQueue_builder{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
+		}.Build())
 		require.NoError(t, err)
 
 		// Deserialize both task tokens
-		existingTask, err := tasktoken.NewSerializer().Deserialize(pollResp.TaskToken)
+		existingTask, err := tasktoken.NewSerializer().Deserialize(pollResp.GetTaskToken())
 		require.NoError(t, err)
 
-		externalTask, err := tasktoken.NewSerializer().Deserialize(externalPollResp.TaskToken)
+		externalTask, err := tasktoken.NewSerializer().Deserialize(externalPollResp.GetTaskToken())
 		require.NoError(t, err)
 
 		// Tamper with namespace A's token by replacing its ComponentRef with namespace B's ComponentRef
-		existingTask.ComponentRef = externalTask.GetComponentRef()
+		existingTask.SetComponentRef(externalTask.GetComponentRef())
 		existingTaskToken, err := tasktoken.NewSerializer().Serialize(existingTask)
 		require.NoError(t, err)
 
-		_, err = s.FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
+		_, err = s.FrontendClient().RespondActivityTaskFailed(ctx, workflowservice.RespondActivityTaskFailedRequest_builder{
 			Namespace: existingNamespace,
 			TaskToken: existingTaskToken,
 			Failure:   defaultFailure,
-		})
+		}.Build())
 
 		// Verify that the request is rejected with the correct error
 		var invalidArgErr *serviceerror.InvalidArgument
@@ -863,48 +863,48 @@ func (s *standaloneActivityTestSuite) TestCancelled() {
 		taskQueue := testcore.RandomizeStr(t.Name())
 
 		startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
-		runID := startResp.RunId
+		runID := startResp.GetRunId()
 
 		pollTaskResp := s.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
 
-		_, err := s.FrontendClient().RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
+		_, err := s.FrontendClient().RequestCancelActivityExecution(ctx, workflowservice.RequestCancelActivityExecutionRequest_builder{
 			Namespace:  s.Namespace().String(),
 			ActivityId: activityID,
 			RunId:      runID,
 			Identity:   "cancelling-worker",
 			RequestId:  s.tv.RequestID(),
 			Reason:     "Test Cancellation",
-		})
+		}.Build())
 		require.NoError(t, err)
 
-		heartbeatResp, err := s.FrontendClient().RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
+		heartbeatResp, err := s.FrontendClient().RecordActivityTaskHeartbeat(ctx, workflowservice.RecordActivityTaskHeartbeatRequest_builder{
 			Namespace: s.Namespace().String(),
-			TaskToken: pollTaskResp.TaskToken,
-		})
+			TaskToken: pollTaskResp.GetTaskToken(),
+		}.Build())
 		require.NoError(t, err)
 		require.True(t, heartbeatResp.GetCancelRequested(), "expected CancelRequested to be true but was false")
 
-		details := &commonpb.Payloads{
+		details := commonpb.Payloads_builder{
 			Payloads: []*commonpb.Payload{
 				payload.EncodeString("Canceled Details"),
 			},
-		}
+		}.Build()
 
-		_, err = s.FrontendClient().RespondActivityTaskCanceled(ctx, &workflowservice.RespondActivityTaskCanceledRequest{
+		_, err = s.FrontendClient().RespondActivityTaskCanceled(ctx, workflowservice.RespondActivityTaskCanceledRequest_builder{
 			Namespace: s.Namespace().String(),
-			TaskToken: pollTaskResp.TaskToken,
+			TaskToken: pollTaskResp.GetTaskToken(),
 			Details:   details,
 			Identity:  "new-worker",
-		})
+		}.Build())
 		require.NoError(t, err)
 
-		activityResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+		activityResp, err := s.FrontendClient().DescribeActivityExecution(ctx, workflowservice.DescribeActivityExecutionRequest_builder{
 			Namespace:      s.Namespace().String(),
 			ActivityId:     activityID,
 			RunId:          runID,
 			IncludeInput:   true,
 			IncludeOutcome: true,
-		})
+		}.Build())
 		require.NoError(t, err)
 
 		info := activityResp.GetInfo()
@@ -939,55 +939,55 @@ func (s *standaloneActivityTestSuite) TestCancelled() {
 			taskQueue := testcore.RandomizeStr(tc.name)
 
 			startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
-			runID := startResp.RunId
+			runID := startResp.GetRunId()
 
 			s.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
 
-			_, err := s.FrontendClient().RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
+			_, err := s.FrontendClient().RequestCancelActivityExecution(ctx, workflowservice.RequestCancelActivityExecutionRequest_builder{
 				Namespace:  s.Namespace().String(),
 				ActivityId: activityID,
 				RunId:      runID,
 				Identity:   "cancelling-worker",
 				RequestId:  s.tv.RequestID(),
 				Reason:     "Test Cancellation",
-			})
+			}.Build())
 			require.NoError(t, err)
 
-			heartbeatResp, err := s.FrontendClient().RecordActivityTaskHeartbeatById(ctx, &workflowservice.RecordActivityTaskHeartbeatByIdRequest{
+			heartbeatResp, err := s.FrontendClient().RecordActivityTaskHeartbeatById(ctx, workflowservice.RecordActivityTaskHeartbeatByIdRequest_builder{
 				Namespace:  s.Namespace().String(),
 				ActivityId: activityID,
-				RunId:      startResp.RunId,
-			})
+				RunId:      startResp.GetRunId(),
+			}.Build())
 			require.NoError(t, err)
 			require.True(t, heartbeatResp.GetCancelRequested(), "expected CancelRequested to be true but was false")
 
-			details := &commonpb.Payloads{
+			details := commonpb.Payloads_builder{
 				Payloads: []*commonpb.Payload{
 					payload.EncodeString("Canceled Details"),
 				},
-			}
+			}.Build()
 
-			cancelReq := &workflowservice.RespondActivityTaskCanceledByIdRequest{
+			cancelReq := workflowservice.RespondActivityTaskCanceledByIdRequest_builder{
 				Namespace:  s.Namespace().String(),
 				ActivityId: activityID,
 				Details:    details,
 				Identity:   "new-worker",
-			}
+			}.Build()
 
 			if tc.includeRunID {
-				cancelReq.RunId = runID
+				cancelReq.SetRunId(runID)
 			}
 
 			_, err = s.FrontendClient().RespondActivityTaskCanceledById(ctx, cancelReq)
 			require.NoError(t, err)
 
-			activityResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			activityResp, err := s.FrontendClient().DescribeActivityExecution(ctx, workflowservice.DescribeActivityExecutionRequest_builder{
 				Namespace:      s.Namespace().String(),
 				ActivityId:     activityID,
 				RunId:          runID,
 				IncludeInput:   true,
 				IncludeOutcome: true,
-			})
+			}.Build())
 			require.NoError(t, err)
 
 			info := activityResp.GetInfo()
@@ -1003,22 +1003,22 @@ func (s *standaloneActivityTestSuite) TestCancelled() {
 		taskQueue := testcore.RandomizeStr(t.Name())
 
 		startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
-		runID := startResp.RunId
+		runID := startResp.GetRunId()
 
 		pollTaskResp := s.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
 
-		details := &commonpb.Payloads{
+		details := commonpb.Payloads_builder{
 			Payloads: []*commonpb.Payload{
 				payload.EncodeString("Canceled Details"),
 			},
-		}
+		}.Build()
 
-		_, err := s.FrontendClient().RespondActivityTaskCanceled(ctx, &workflowservice.RespondActivityTaskCanceledRequest{
+		_, err := s.FrontendClient().RespondActivityTaskCanceled(ctx, workflowservice.RespondActivityTaskCanceledRequest_builder{
 			Namespace: s.Namespace().String(),
-			TaskToken: pollTaskResp.TaskToken,
+			TaskToken: pollTaskResp.GetTaskToken(),
 			Details:   details,
 			Identity:  "new-worker",
-		})
+		}.Build())
 		var failedPreconditionErr *serviceerror.FailedPrecondition
 		require.ErrorAs(t, err, &failedPreconditionErr)
 	})
@@ -1028,37 +1028,37 @@ func (s *standaloneActivityTestSuite) TestCancelled() {
 		taskQueue := testcore.RandomizeStr(t.Name())
 
 		startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
-		runID := startResp.RunId
+		runID := startResp.GetRunId()
 
 		s.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
 
 		for i := 0; i < 2; i++ {
-			_, err := s.FrontendClient().RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
+			_, err := s.FrontendClient().RequestCancelActivityExecution(ctx, workflowservice.RequestCancelActivityExecutionRequest_builder{
 				Namespace:  s.Namespace().String(),
 				ActivityId: activityID,
 				RunId:      runID,
 				Identity:   "cancelling-worker",
 				RequestId:  "cancel-request-id",
 				Reason:     "Test Cancellation",
-			})
+			}.Build())
 			require.NoError(t, err)
 		}
 
-		heartbeatResp, err := s.FrontendClient().RecordActivityTaskHeartbeatById(ctx, &workflowservice.RecordActivityTaskHeartbeatByIdRequest{
+		heartbeatResp, err := s.FrontendClient().RecordActivityTaskHeartbeatById(ctx, workflowservice.RecordActivityTaskHeartbeatByIdRequest_builder{
 			Namespace:  s.Namespace().String(),
 			ActivityId: activityID,
-			RunId:      startResp.RunId,
-		})
+			RunId:      startResp.GetRunId(),
+		}.Build())
 		require.NoError(t, err)
 		require.True(t, heartbeatResp.GetCancelRequested(), "expected CancelRequested to be true but was false")
 
-		activityResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+		activityResp, err := s.FrontendClient().DescribeActivityExecution(ctx, workflowservice.DescribeActivityExecutionRequest_builder{
 			Namespace:      s.Namespace().String(),
 			ActivityId:     activityID,
 			RunId:          runID,
 			IncludeInput:   true,
 			IncludeOutcome: true,
-		})
+		}.Build())
 		require.NoError(t, err)
 
 		info := activityResp.GetInfo()
@@ -1074,28 +1074,28 @@ func (s *standaloneActivityTestSuite) TestCancelled() {
 		taskQueue := testcore.RandomizeStr(t.Name())
 
 		startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
-		runID := startResp.RunId
+		runID := startResp.GetRunId()
 
 		s.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
 
-		_, err := s.FrontendClient().RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
+		_, err := s.FrontendClient().RequestCancelActivityExecution(ctx, workflowservice.RequestCancelActivityExecutionRequest_builder{
 			Namespace:  s.Namespace().String(),
 			ActivityId: activityID,
 			RunId:      runID,
 			Identity:   "cancelling-worker",
 			RequestId:  "cancel-request-id",
 			Reason:     "Test Cancellation",
-		})
+		}.Build())
 		require.NoError(t, err)
 
-		_, err = s.FrontendClient().RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
+		_, err = s.FrontendClient().RequestCancelActivityExecution(ctx, workflowservice.RequestCancelActivityExecutionRequest_builder{
 			Namespace:  s.Namespace().String(),
 			ActivityId: activityID,
 			RunId:      runID,
 			Identity:   "cancelling-worker",
 			RequestId:  "different-cancel-request-id",
 			Reason:     "Test Cancellation",
-		})
+		}.Build())
 		var failedPreconditionErr *serviceerror.FailedPrecondition
 		require.ErrorAs(t, err, &failedPreconditionErr)
 	})
@@ -1108,11 +1108,11 @@ func (s *standaloneActivityTestSuite) TestCancelled() {
 		{
 			name: "finish with completion",
 			taskCompletionFn: func(ctx context.Context, t *testing.T, taskToken []byte, activityID string, runID string) error {
-				_, err := s.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+				_, err := s.FrontendClient().RespondActivityTaskCompleted(ctx, workflowservice.RespondActivityTaskCompletedRequest_builder{
 					Namespace: s.Namespace().String(),
 					TaskToken: taskToken,
 					Result:    defaultResult,
-				})
+				}.Build())
 
 				return err
 			},
@@ -1121,11 +1121,11 @@ func (s *standaloneActivityTestSuite) TestCancelled() {
 		{
 			name: "finish with failure",
 			taskCompletionFn: func(ctx context.Context, t *testing.T, taskToken []byte, activityID string, runID string) error {
-				_, err := s.FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
+				_, err := s.FrontendClient().RespondActivityTaskFailed(ctx, workflowservice.RespondActivityTaskFailedRequest_builder{
 					Namespace: s.Namespace().String(),
 					TaskToken: taskToken,
 					Failure:   defaultFailure,
-				})
+				}.Build())
 
 				return err
 			},
@@ -1134,12 +1134,12 @@ func (s *standaloneActivityTestSuite) TestCancelled() {
 		{
 			name: "finish with termination",
 			taskCompletionFn: func(ctx context.Context, t *testing.T, taskToken []byte, activityID string, runID string) error {
-				_, err := s.FrontendClient().TerminateActivityExecution(ctx, &workflowservice.TerminateActivityExecutionRequest{
+				_, err := s.FrontendClient().TerminateActivityExecution(ctx, workflowservice.TerminateActivityExecutionRequest_builder{
 					Namespace:  s.Namespace().String(),
 					ActivityId: activityID,
 					RunId:      runID,
 					Reason:     "Test Termination",
-				})
+				}.Build())
 
 				return err
 			},
@@ -1157,28 +1157,28 @@ func (s *standaloneActivityTestSuite) TestCancelled() {
 			taskQueue := testcore.RandomizeStr(t.Name())
 
 			startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
-			runID := startResp.RunId
+			runID := startResp.GetRunId()
 
 			pollTaskResp := s.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
 
-			_, err := s.FrontendClient().RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
+			_, err := s.FrontendClient().RequestCancelActivityExecution(ctx, workflowservice.RequestCancelActivityExecutionRequest_builder{
 				Namespace:  s.Namespace().String(),
 				ActivityId: activityID,
 				RunId:      runID,
 				Identity:   "cancelling-worker",
 				RequestId:  s.tv.RequestID(),
 				Reason:     "Test Cancellation",
-			})
+			}.Build())
 			require.NoError(t, err)
 
 			err = tc.taskCompletionFn(ctx, t, pollTaskResp.GetTaskToken(), activityID, runID)
 			require.NoError(t, err)
 
-			activityResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			activityResp, err := s.FrontendClient().DescribeActivityExecution(ctx, workflowservice.DescribeActivityExecutionRequest_builder{
 				Namespace:  s.Namespace().String(),
 				ActivityId: activityID,
 				RunId:      runID,
-			})
+			}.Build())
 			require.NoError(t, err)
 
 			info := activityResp.GetInfo()
@@ -1210,14 +1210,14 @@ func (s *standaloneActivityTestSuite) TestCancelled() {
 			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 			defer cancel()
 
-			_, err := s.FrontendClient().RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
+			_, err := s.FrontendClient().RequestCancelActivityExecution(ctx, workflowservice.RequestCancelActivityExecutionRequest_builder{
 				Namespace:  s.Namespace().String(),
 				ActivityId: testcore.RandomizeStr(t.Name()),
 				RunId:      "run-id",
 				Identity:   "cancelling-worker",
 				RequestId:  tc.reqID,
 				Reason:     tc.reason,
-			})
+			}.Build())
 			var invalidArgErr *serviceerror.InvalidArgument
 			require.ErrorAs(t, err, &invalidArgErr)
 		})
@@ -1228,25 +1228,25 @@ func (s *standaloneActivityTestSuite) TestCancelled() {
 		taskQueue := testcore.RandomizeStr(t.Name())
 
 		startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
-		runID := startResp.RunId
+		runID := startResp.GetRunId()
 
-		_, err := s.FrontendClient().RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
+		_, err := s.FrontendClient().RequestCancelActivityExecution(ctx, workflowservice.RequestCancelActivityExecutionRequest_builder{
 			Namespace:  s.Namespace().String(),
 			ActivityId: activityID,
 			RunId:      runID,
 			Identity:   "cancelling-worker",
 			RequestId:  s.tv.RequestID(),
 			Reason:     "Test Cancellation",
-		})
+		}.Build())
 		require.NoError(t, err)
 
-		activityResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+		activityResp, err := s.FrontendClient().DescribeActivityExecution(ctx, workflowservice.DescribeActivityExecutionRequest_builder{
 			Namespace:      s.Namespace().String(),
 			ActivityId:     activityID,
 			RunId:          runID,
 			IncludeInput:   true,
 			IncludeOutcome: true,
-		})
+		}.Build())
 		require.NoError(t, err)
 
 		info := activityResp.GetInfo()
@@ -1259,24 +1259,24 @@ func (s *standaloneActivityTestSuite) TestCancelled() {
 		_, err := s.startActivity(ctx, activityID, taskQueue)
 		require.NoError(t, err)
 
-		pollResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+		pollResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, workflowservice.PollActivityTaskQueueRequest_builder{
 			Namespace: s.Namespace().String(),
-			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		})
+			TaskQueue: taskqueuepb.TaskQueue_builder{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
+		}.Build())
 		require.NoError(t, err)
 
-		_, err = s.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+		_, err = s.FrontendClient().RespondActivityTaskCompleted(ctx, workflowservice.RespondActivityTaskCompletedRequest_builder{
 			Namespace: s.Namespace().String(),
-			TaskToken: pollResp.TaskToken,
+			TaskToken: pollResp.GetTaskToken(),
 			Result:    defaultResult,
-		})
+		}.Build())
 		require.NoError(t, err)
 
 		// Fail with stale token (activity already completed)
-		_, err = s.FrontendClient().RespondActivityTaskCanceled(ctx, &workflowservice.RespondActivityTaskCanceledRequest{
+		_, err = s.FrontendClient().RespondActivityTaskCanceled(ctx, workflowservice.RespondActivityTaskCanceledRequest_builder{
 			Namespace: s.Namespace().String(),
-			TaskToken: pollResp.TaskToken,
-		})
+			TaskToken: pollResp.GetTaskToken(),
+		}.Build())
 		require.Error(t, err)
 		statusErr := serviceerror.ToStatus(err)
 		require.Equal(t, codes.NotFound, statusErr.Code())
@@ -1289,80 +1289,80 @@ func (s *standaloneActivityTestSuite) TestCancelled() {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
 
-		startResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+		startResp, err := s.FrontendClient().StartActivityExecution(ctx, workflowservice.StartActivityExecutionRequest_builder{
 			Namespace:              s.Namespace().String(),
 			ActivityId:             activityID,
 			ActivityType:           s.tv.ActivityType(),
-			TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue},
+			TaskQueue:              taskqueuepb.TaskQueue_builder{Name: taskQueue}.Build(),
 			ScheduleToCloseTimeout: durationpb.New(1 * time.Minute),
-			RetryPolicy: &commonpb.RetryPolicy{
+			RetryPolicy: commonpb.RetryPolicy_builder{
 				MaximumAttempts: 3,
-			},
-		})
+			}.Build(),
+		}.Build())
 		require.NoError(t, err)
 
 		// Poll and get task token for attempt 1
-		attempt1Resp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+		attempt1Resp, err := s.FrontendClient().PollActivityTaskQueue(ctx, workflowservice.PollActivityTaskQueueRequest_builder{
 			Namespace: s.Namespace().String(),
-			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		})
+			TaskQueue: taskqueuepb.TaskQueue_builder{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
+		}.Build())
 		require.NoError(t, err)
-		require.EqualValues(t, 1, attempt1Resp.Attempt)
+		require.EqualValues(t, 1, attempt1Resp.GetAttempt())
 
 		// Fail the task with NextRetryDelay to control retry timing
-		_, err = s.FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
+		_, err = s.FrontendClient().RespondActivityTaskFailed(ctx, workflowservice.RespondActivityTaskFailedRequest_builder{
 			Namespace: s.Namespace().String(),
-			TaskToken: attempt1Resp.TaskToken,
-			Failure: &failurepb.Failure{
+			TaskToken: attempt1Resp.GetTaskToken(),
+			Failure: failurepb.Failure_builder{
 				Message: "retryable failure",
-				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+				ApplicationFailureInfo: failurepb.ApplicationFailureInfo_builder{
 					NonRetryable:   false,
 					NextRetryDelay: durationpb.New(1 * time.Second),
-				}},
-			},
-		})
+				}.Build(),
+			}.Build(),
+		}.Build())
 		require.NoError(t, err)
 
 		// Poll to get attempt 2 (ensures retry has happened)
-		attempt2Resp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+		attempt2Resp, err := s.FrontendClient().PollActivityTaskQueue(ctx, workflowservice.PollActivityTaskQueueRequest_builder{
 			Namespace: s.Namespace().String(),
-			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		})
+			TaskQueue: taskqueuepb.TaskQueue_builder{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
+		}.Build())
 		require.NoError(t, err)
-		require.EqualValues(t, 2, attempt2Resp.Attempt)
+		require.EqualValues(t, 2, attempt2Resp.GetAttempt())
 
-		_, err = s.FrontendClient().RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
+		_, err = s.FrontendClient().RequestCancelActivityExecution(ctx, workflowservice.RequestCancelActivityExecutionRequest_builder{
 			Namespace:  s.Namespace().String(),
 			ActivityId: activityID,
 			RunId:      startResp.GetRunId(),
 			RequestId:  s.tv.RequestID(),
 			Reason:     "Test Cancellation",
-		})
+		}.Build())
 		require.NoError(t, err)
 
 		// Try to cancel with the old attempt 1 token - should fail with NotFound
-		_, err = s.FrontendClient().RespondActivityTaskCanceled(ctx, &workflowservice.RespondActivityTaskCanceledRequest{
+		_, err = s.FrontendClient().RespondActivityTaskCanceled(ctx, workflowservice.RespondActivityTaskCanceledRequest_builder{
 			Namespace: s.Namespace().String(),
-			TaskToken: attempt1Resp.TaskToken,
-		})
+			TaskToken: attempt1Resp.GetTaskToken(),
+		}.Build())
 		require.Error(t, err)
 		statusErr := serviceerror.ToStatus(err)
 		require.Equal(t, codes.NotFound, statusErr.Code())
 		require.Contains(t, statusErr.Message(), "activity task not found")
 
 		// Heartbeat then cancel with the attempt 2 token and should be no error
-		heartbeatResp, err := s.FrontendClient().RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
+		heartbeatResp, err := s.FrontendClient().RecordActivityTaskHeartbeat(ctx, workflowservice.RecordActivityTaskHeartbeatRequest_builder{
 			Namespace: s.Namespace().String(),
-			TaskToken: attempt2Resp.TaskToken,
-		})
+			TaskToken: attempt2Resp.GetTaskToken(),
+		}.Build())
 		require.NoError(t, err)
 		require.True(t, heartbeatResp.GetCancelRequested(), "expected CancelRequested to be true but was false")
 
-		_, err = s.FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
+		_, err = s.FrontendClient().RespondActivityTaskFailed(ctx, workflowservice.RespondActivityTaskFailedRequest_builder{
 			Namespace: s.Namespace().String(),
-			TaskToken: attempt2Resp.TaskToken,
+			TaskToken: attempt2Resp.GetTaskToken(),
 			Failure:   defaultFailure,
-		})
+		}.Build())
 		require.NoError(t, err)
 	})
 
@@ -1373,32 +1373,32 @@ func (s *standaloneActivityTestSuite) TestCancelled() {
 		_, err := s.startActivity(ctx, activityID, taskQueue)
 		require.NoError(t, err)
 
-		pollResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+		pollResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, workflowservice.PollActivityTaskQueueRequest_builder{
 			Namespace: existingNamespace,
-			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		})
+			TaskQueue: taskqueuepb.TaskQueue_builder{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
+		}.Build())
 		require.NoError(t, err)
 
 		// Start an activity in a different namespace and try to cancel with existing token
 		externalNamespace := s.ExternalNamespace().String()
-		_, err = s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+		_, err = s.FrontendClient().StartActivityExecution(ctx, workflowservice.StartActivityExecutionRequest_builder{
 			Namespace:    externalNamespace,
 			ActivityId:   activityID,
 			ActivityType: s.tv.ActivityType(),
 			Identity:     s.tv.WorkerIdentity(),
 			Input:        defaultInput,
-			TaskQueue: &taskqueuepb.TaskQueue{
+			TaskQueue: taskqueuepb.TaskQueue_builder{
 				Name: taskQueue,
-			},
+			}.Build(),
 			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
 			RequestId:           s.tv.Any().String(),
-		})
+		}.Build())
 		require.NoError(t, err)
 
-		_, err = s.FrontendClient().RespondActivityTaskCanceled(ctx, &workflowservice.RespondActivityTaskCanceledRequest{
+		_, err = s.FrontendClient().RespondActivityTaskCanceled(ctx, workflowservice.RespondActivityTaskCanceledRequest_builder{
 			Namespace: externalNamespace,
-			TaskToken: pollResp.TaskToken,
-		})
+			TaskToken: pollResp.GetTaskToken(),
+		}.Build())
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
 		require.Equal(t, "Operation requested with a token from a different namespace.", invalidArgErr.Message)
@@ -1416,52 +1416,52 @@ func (s *standaloneActivityTestSuite) TestCancelled() {
 		_, err := s.startActivity(ctx, activityID, taskQueue)
 		require.NoError(t, err)
 
-		pollResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+		pollResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, workflowservice.PollActivityTaskQueueRequest_builder{
 			Namespace: existingNamespace,
-			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		})
+			TaskQueue: taskqueuepb.TaskQueue_builder{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
+		}.Build())
 		require.NoError(t, err)
 
 		// Start another activity in namespace B with the same activity ID
 		// (different namespaces allow same activity IDs)
 		externalNamespace := s.ExternalNamespace().String()
-		_, err = s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+		_, err = s.FrontendClient().StartActivityExecution(ctx, workflowservice.StartActivityExecutionRequest_builder{
 			Namespace:    externalNamespace,
 			ActivityId:   activityID,
 			ActivityType: s.tv.ActivityType(),
 			Identity:     s.tv.WorkerIdentity(),
 			Input:        defaultInput,
-			TaskQueue: &taskqueuepb.TaskQueue{
+			TaskQueue: taskqueuepb.TaskQueue_builder{
 				Name: taskQueue,
-			},
+			}.Build(),
 			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
 			RequestId:           s.tv.Any().String(),
-		})
+		}.Build())
 		require.NoError(t, err)
 
 		// Poll for the task from namespace B
-		externalPollResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+		externalPollResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, workflowservice.PollActivityTaskQueueRequest_builder{
 			Namespace: externalNamespace,
-			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		})
+			TaskQueue: taskqueuepb.TaskQueue_builder{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
+		}.Build())
 		require.NoError(t, err)
 
 		// Deserialize both task tokens
-		existingTask, err := tasktoken.NewSerializer().Deserialize(pollResp.TaskToken)
+		existingTask, err := tasktoken.NewSerializer().Deserialize(pollResp.GetTaskToken())
 		require.NoError(t, err)
 
-		externalTask, err := tasktoken.NewSerializer().Deserialize(externalPollResp.TaskToken)
+		externalTask, err := tasktoken.NewSerializer().Deserialize(externalPollResp.GetTaskToken())
 		require.NoError(t, err)
 
 		// Tamper with namespace A's token by replacing its ComponentRef with namespace B's ComponentRef
-		existingTask.ComponentRef = externalTask.GetComponentRef()
+		existingTask.SetComponentRef(externalTask.GetComponentRef())
 		existingTaskToken, err := tasktoken.NewSerializer().Serialize(existingTask)
 		require.NoError(t, err)
 
-		_, err = s.FrontendClient().RespondActivityTaskCanceled(ctx, &workflowservice.RespondActivityTaskCanceledRequest{
+		_, err = s.FrontendClient().RespondActivityTaskCanceled(ctx, workflowservice.RespondActivityTaskCanceledRequest_builder{
 			Namespace: existingNamespace,
 			TaskToken: existingTaskToken,
-		})
+		}.Build())
 
 		// Verify that the request is rejected with the correct error
 		var invalidArgErr *serviceerror.InvalidArgument
@@ -1480,26 +1480,26 @@ func (s *standaloneActivityTestSuite) TestTerminated() {
 		taskQueue := testcore.RandomizeStr(t.Name())
 
 		startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
-		runID := startResp.RunId
+		runID := startResp.GetRunId()
 
 		s.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
 
-		_, err := s.FrontendClient().TerminateActivityExecution(ctx, &workflowservice.TerminateActivityExecutionRequest{
+		_, err := s.FrontendClient().TerminateActivityExecution(ctx, workflowservice.TerminateActivityExecutionRequest_builder{
 			Namespace:  s.Namespace().String(),
 			ActivityId: activityID,
 			RunId:      runID,
 			Reason:     "Test Termination",
 			Identity:   "terminator",
-		})
+		}.Build())
 		require.NoError(t, err)
 
-		activityResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+		activityResp, err := s.FrontendClient().DescribeActivityExecution(ctx, workflowservice.DescribeActivityExecutionRequest_builder{
 			Namespace:      s.Namespace().String(),
 			ActivityId:     activityID,
 			RunId:          runID,
 			IncludeInput:   true,
 			IncludeOutcome: true,
-		})
+		}.Build())
 
 		info := activityResp.GetInfo()
 
@@ -1516,10 +1516,10 @@ func (s *standaloneActivityTestSuite) TestTerminated() {
 		require.NotNil(t, info.GetLastStartedTime())
 		require.Nil(t, info.GetLastFailure())
 
-		expectedFailure := &failurepb.Failure{
-			Message:     "Test Termination",
-			FailureInfo: &failurepb.Failure_TerminatedFailureInfo{},
-		}
+		expectedFailure := failurepb.Failure_builder{
+			Message:               "Test Termination",
+			TerminatedFailureInfo: &failurepb.TerminatedFailureInfo{},
+		}.Build()
 		protorequire.ProtoEqual(t, expectedFailure, activityResp.GetOutcome().GetFailure())
 	})
 
@@ -1528,25 +1528,25 @@ func (s *standaloneActivityTestSuite) TestTerminated() {
 		taskQueue := testcore.RandomizeStr(t.Name())
 
 		startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
-		runID := startResp.RunId
+		runID := startResp.GetRunId()
 
 		pollTaskResp := s.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
 
-		_, err := s.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+		_, err := s.FrontendClient().RespondActivityTaskCompleted(ctx, workflowservice.RespondActivityTaskCompletedRequest_builder{
 			Namespace: s.Namespace().String(),
-			TaskToken: pollTaskResp.TaskToken,
+			TaskToken: pollTaskResp.GetTaskToken(),
 			Result:    defaultResult,
 			Identity:  "new-worker",
-		})
+		}.Build())
 		require.NoError(t, err)
 
-		_, err = s.FrontendClient().TerminateActivityExecution(ctx, &workflowservice.TerminateActivityExecutionRequest{
+		_, err = s.FrontendClient().TerminateActivityExecution(ctx, workflowservice.TerminateActivityExecutionRequest_builder{
 			Namespace:  s.Namespace().String(),
 			ActivityId: activityID,
 			RunId:      runID,
 			Reason:     "Test Termination",
 			Identity:   "worker",
-		})
+		}.Build())
 		require.Error(t, err)
 
 	})
@@ -1556,28 +1556,28 @@ func (s *standaloneActivityTestSuite) TestTerminated() {
 		taskQueue := testcore.RandomizeStr(t.Name())
 
 		startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
-		runID := startResp.RunId
+		runID := startResp.GetRunId()
 
 		s.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
 
-		_, err := s.FrontendClient().TerminateActivityExecution(ctx, &workflowservice.TerminateActivityExecutionRequest{
+		_, err := s.FrontendClient().TerminateActivityExecution(ctx, workflowservice.TerminateActivityExecutionRequest_builder{
 			Namespace:  s.Namespace().String(),
 			ActivityId: activityID,
 			RequestId:  "test-request-id",
 			RunId:      runID,
 			Reason:     "Test Termination",
 			Identity:   "terminator",
-		})
+		}.Build())
 		require.NoError(t, err)
 
-		_, err = s.FrontendClient().TerminateActivityExecution(ctx, &workflowservice.TerminateActivityExecutionRequest{
+		_, err = s.FrontendClient().TerminateActivityExecution(ctx, workflowservice.TerminateActivityExecutionRequest_builder{
 			Namespace:  s.Namespace().String(),
 			ActivityId: activityID,
 			RequestId:  "test-request-id",
 			RunId:      runID,
 			Reason:     "Test Termination",
 			Identity:   "terminator",
-		})
+		}.Build())
 		require.NoError(t, err)
 	})
 
@@ -1586,28 +1586,28 @@ func (s *standaloneActivityTestSuite) TestTerminated() {
 		taskQueue := testcore.RandomizeStr(t.Name())
 
 		startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
-		runID := startResp.RunId
+		runID := startResp.GetRunId()
 
 		s.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
 
-		_, err := s.FrontendClient().TerminateActivityExecution(ctx, &workflowservice.TerminateActivityExecutionRequest{
+		_, err := s.FrontendClient().TerminateActivityExecution(ctx, workflowservice.TerminateActivityExecutionRequest_builder{
 			Namespace:  s.Namespace().String(),
 			ActivityId: activityID,
 			RequestId:  "test-request-id",
 			RunId:      runID,
 			Reason:     "Test Termination",
 			Identity:   "terminator",
-		})
+		}.Build())
 		require.NoError(t, err)
 
-		_, err = s.FrontendClient().TerminateActivityExecution(ctx, &workflowservice.TerminateActivityExecutionRequest{
+		_, err = s.FrontendClient().TerminateActivityExecution(ctx, workflowservice.TerminateActivityExecutionRequest_builder{
 			Namespace:  s.Namespace().String(),
 			ActivityId: activityID,
 			RequestId:  "test-request-id-2",
 			RunId:      runID,
 			Reason:     "Test Termination",
 			Identity:   "terminator",
-		})
+		}.Build())
 		var failedPreconditionErr *serviceerror.FailedPrecondition
 		require.ErrorAs(t, err, &failedPreconditionErr)
 	})
@@ -1622,45 +1622,43 @@ func (s *standaloneActivityTestSuite) TestRetryWithoutScheduleToCloseTimeout() {
 	taskQueue := testcore.RandomizeStr(t.Name())
 
 	// Start activity without ScheduleToCloseTimeout
-	_, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+	_, err := s.FrontendClient().StartActivityExecution(ctx, workflowservice.StartActivityExecutionRequest_builder{
 		Namespace:           s.Namespace().String(),
 		ActivityId:          activityID,
-		ActivityType:        &commonpb.ActivityType{Name: "test-activity-type"},
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+		ActivityType:        commonpb.ActivityType_builder{Name: "test-activity-type"}.Build(),
+		TaskQueue:           taskqueuepb.TaskQueue_builder{Name: taskQueue}.Build(),
 		StartToCloseTimeout: durationpb.New(1 * time.Minute),
-		RetryPolicy: &commonpb.RetryPolicy{
+		RetryPolicy: commonpb.RetryPolicy_builder{
 			InitialInterval: durationpb.New(1 * time.Millisecond),
 			MaximumAttempts: 2,
-		},
-	})
+		}.Build(),
+	}.Build())
 	require.NoError(t, err)
 
 	// Attempt 1: fail retryably
-	pollResp1, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+	pollResp1, err := s.FrontendClient().PollActivityTaskQueue(ctx, workflowservice.PollActivityTaskQueueRequest_builder{
 		Namespace: s.Namespace().String(),
-		TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-	})
+		TaskQueue: taskqueuepb.TaskQueue_builder{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
+	}.Build())
 	require.NoError(t, err)
-	require.EqualValues(t, 1, pollResp1.Attempt)
-	_, err = s.FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
+	require.EqualValues(t, 1, pollResp1.GetAttempt())
+	_, err = s.FrontendClient().RespondActivityTaskFailed(ctx, workflowservice.RespondActivityTaskFailedRequest_builder{
 		Namespace: s.Namespace().String(),
-		TaskToken: pollResp1.TaskToken,
-		Failure: &failurepb.Failure{
-			Message: "retryable failure",
-			FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
-				ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{NonRetryable: false},
-			},
-		},
-	})
+		TaskToken: pollResp1.GetTaskToken(),
+		Failure: failurepb.Failure_builder{
+			Message:                "retryable failure",
+			ApplicationFailureInfo: failurepb.ApplicationFailureInfo_builder{NonRetryable: false}.Build(),
+		}.Build(),
+	}.Build())
 	require.NoError(t, err)
 
 	// Attempt 2 should be scheduled
-	pollResp2, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+	pollResp2, err := s.FrontendClient().PollActivityTaskQueue(ctx, workflowservice.PollActivityTaskQueueRequest_builder{
 		Namespace: s.Namespace().String(),
-		TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-	})
+		TaskQueue: taskqueuepb.TaskQueue_builder{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
+	}.Build())
 	require.NoError(t, err)
-	require.EqualValues(t, 2, pollResp2.Attempt)
+	require.EqualValues(t, 2, pollResp2.GetAttempt())
 }
 
 func (s *standaloneActivityTestSuite) Test_ScheduleToCloseTimeout_WithRetry() {
@@ -1671,56 +1669,56 @@ func (s *standaloneActivityTestSuite) Test_ScheduleToCloseTimeout_WithRetry() {
 	taskQueue := testcore.RandomizeStr(t.Name())
 
 	// Start an activity
-	startResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+	startResp, err := s.FrontendClient().StartActivityExecution(ctx, workflowservice.StartActivityExecutionRequest_builder{
 		Namespace:  s.Namespace().String(),
 		ActivityId: activityID,
-		ActivityType: &commonpb.ActivityType{
+		ActivityType: commonpb.ActivityType_builder{
 			Name: "test-activity-type",
-		},
-		TaskQueue: &taskqueuepb.TaskQueue{
+		}.Build(),
+		TaskQueue: taskqueuepb.TaskQueue_builder{
 			Name: taskQueue,
-		},
+		}.Build(),
 		// It's not possible to guarantee (e.g. via NextRetryDelay or RetryPolicy) that a retry
 		// will start with a delay <1s because of the use of TimerProcessorMaxTimeShift in the
 		// timer queue. Therefore we allow 1s for the ActivityDispatchTask to be executed, and
 		// time out the activity 1s into Attempt 2.
 		ScheduleToCloseTimeout: durationpb.New(2 * time.Second),
-	})
+	}.Build())
 	require.NoError(t, err)
 
 	// Fail attempt 1, causing the attempt counter to increment.
 	pollTaskResp, err := s.pollActivityTaskQueue(ctx, taskQueue)
 	require.NoError(t, err)
-	_, err = s.FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
+	_, err = s.FrontendClient().RespondActivityTaskFailed(ctx, workflowservice.RespondActivityTaskFailedRequest_builder{
 		Namespace: s.Namespace().String(),
-		TaskToken: pollTaskResp.TaskToken,
-		Failure: &failurepb.Failure{
+		TaskToken: pollTaskResp.GetTaskToken(),
+		Failure: failurepb.Failure_builder{
 			Message: "Retryable failure",
-			FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+			ApplicationFailureInfo: failurepb.ApplicationFailureInfo_builder{
 				NonRetryable:   false,
 				NextRetryDelay: durationpb.New(1 * time.Second),
-			}},
-		},
-	})
+			}.Build(),
+		}.Build(),
+	}.Build())
 	require.NoError(t, err)
 	_, err = s.pollActivityTaskQueue(ctx, taskQueue)
 	require.NoError(t, err)
 
 	// Wait for schedule-to-close timeout.
-	pollActivityResp, err := s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
+	pollActivityResp, err := s.FrontendClient().PollActivityExecution(ctx, workflowservice.PollActivityExecutionRequest_builder{
 		Namespace:  s.Namespace().String(),
 		ActivityId: activityID,
-		RunId:      startResp.RunId,
-	})
+		RunId:      startResp.GetRunId(),
+	}.Build())
 	require.NoError(t, err)
 	require.Equal(t, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, pollActivityResp.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType(),
 		"expected ScheduleToCloseTimeout but is %s", pollActivityResp.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType())
 
-	describeResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+	describeResp, err := s.FrontendClient().DescribeActivityExecution(ctx, workflowservice.DescribeActivityExecutionRequest_builder{
 		Namespace:  s.Namespace().String(),
 		ActivityId: activityID,
-		RunId:      startResp.RunId,
-	})
+		RunId:      startResp.GetRunId(),
+	}.Build())
 	require.NoError(t, err)
 	require.Greater(t, describeResp.GetInfo().GetExecutionDuration().AsDuration(), time.Duration(0))
 	require.False(t, describeResp.GetInfo().GetCloseTime().AsTime().IsZero())
@@ -1738,31 +1736,31 @@ func (s *standaloneActivityTestSuite) TestStartToCloseTimeout() {
 	activityID := s.tv.ActivityID()
 	taskQueue := s.tv.TaskQueue()
 
-	startResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+	startResp, err := s.FrontendClient().StartActivityExecution(ctx, workflowservice.StartActivityExecutionRequest_builder{
 		Namespace:  s.Namespace().String(),
 		ActivityId: activityID,
-		ActivityType: &commonpb.ActivityType{
+		ActivityType: commonpb.ActivityType_builder{
 			Name: "test-activity-type",
-		},
+		}.Build(),
 		Input: payloads.EncodeString("test-activity-input"),
-		TaskQueue: &taskqueuepb.TaskQueue{
-			Name: taskQueue.Name,
-		},
+		TaskQueue: taskqueuepb.TaskQueue_builder{
+			Name: taskQueue.GetName(),
+		}.Build(),
 		StartToCloseTimeout: durationpb.New(1 * time.Second),
 		// This test is expecting activity failure on start-to-close timeout.
-		RetryPolicy: &commonpb.RetryPolicy{
+		RetryPolicy: commonpb.RetryPolicy_builder{
 			MaximumAttempts: 1,
-		},
+		}.Build(),
 		RequestId: "test-request-id",
-	})
+	}.Build())
 	require.NoError(t, err)
 
 	// First poll: activity has not started yet
-	describeResp1, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+	describeResp1, err := s.FrontendClient().DescribeActivityExecution(ctx, workflowservice.DescribeActivityExecutionRequest_builder{
 		Namespace:  s.Namespace().String(),
 		ActivityId: activityID,
-		RunId:      startResp.RunId,
-	})
+		RunId:      startResp.GetRunId(),
+	}.Build())
 	require.NoError(t, err)
 	require.NotNil(t, describeResp1)
 	require.NotNil(t, describeResp1.GetInfo())
@@ -1772,24 +1770,24 @@ func (s *standaloneActivityTestSuite) TestStartToCloseTimeout() {
 		"expected Scheduled but is %s", describeResp1.GetInfo().GetRunState())
 
 	// Worker poll to start the activity
-	pollTaskResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+	pollTaskResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, workflowservice.PollActivityTaskQueueRequest_builder{
 		Namespace: s.Namespace().String(),
-		TaskQueue: &taskqueuepb.TaskQueue{
-			Name: taskQueue.Name,
-		},
+		TaskQueue: taskqueuepb.TaskQueue_builder{
+			Name: taskQueue.GetName(),
+		}.Build(),
 		Identity: s.tv.WorkerIdentity(),
-	})
+	}.Build())
 	require.NoError(t, err)
 	require.NotNil(t, pollTaskResp)
-	require.NotEmpty(t, pollTaskResp.TaskToken)
+	require.NotEmpty(t, pollTaskResp.GetTaskToken())
 
 	// Second poll: activity has started
-	describeResp2, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+	describeResp2, err := s.FrontendClient().DescribeActivityExecution(ctx, workflowservice.DescribeActivityExecutionRequest_builder{
 		Namespace:     s.Namespace().String(),
 		ActivityId:    activityID,
-		RunId:         startResp.RunId,
-		LongPollToken: describeResp1.LongPollToken,
-	})
+		RunId:         startResp.GetRunId(),
+		LongPollToken: describeResp1.GetLongPollToken(),
+	}.Build())
 	require.NoError(t, err)
 	require.NotNil(t, describeResp2)
 	require.NotNil(t, describeResp2.GetInfo())
@@ -1800,13 +1798,13 @@ func (s *standaloneActivityTestSuite) TestStartToCloseTimeout() {
 		"expected Started but is %s", describeResp2.GetInfo().GetRunState())
 
 	// Third poll: activity has timed out
-	describeResp3, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+	describeResp3, err := s.FrontendClient().DescribeActivityExecution(ctx, workflowservice.DescribeActivityExecutionRequest_builder{
 		Namespace:      s.Namespace().String(),
 		ActivityId:     activityID,
-		RunId:          startResp.RunId,
+		RunId:          startResp.GetRunId(),
 		IncludeOutcome: true,
-		LongPollToken:  describeResp2.LongPollToken,
-	})
+		LongPollToken:  describeResp2.GetLongPollToken(),
+	}.Build())
 
 	require.NoError(t, err)
 	require.NotNil(t, describeResp3)
@@ -1844,37 +1842,37 @@ func (s *standaloneActivityTestSuite) TestScheduleToStartTimeout() {
 	activityID := s.tv.ActivityID()
 	taskQueue := s.tv.TaskQueue()
 
-	startResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+	startResp, err := s.FrontendClient().StartActivityExecution(ctx, workflowservice.StartActivityExecutionRequest_builder{
 		Namespace:  s.Namespace().String(),
 		ActivityId: activityID,
-		ActivityType: &commonpb.ActivityType{
+		ActivityType: commonpb.ActivityType_builder{
 			Name: "test-activity-type",
-		},
+		}.Build(),
 		Input: payloads.EncodeString("test-activity-input"),
-		TaskQueue: &taskqueuepb.TaskQueue{
-			Name: taskQueue.Name,
-		},
+		TaskQueue: taskqueuepb.TaskQueue_builder{
+			Name: taskQueue.GetName(),
+		}.Build(),
 		ScheduleToStartTimeout: durationpb.New(100 * time.Millisecond),
 		StartToCloseTimeout:    durationpb.New(30 * time.Second),
 		RequestId:              "test-request-id",
-	})
+	}.Build())
 	require.NoError(t, err)
 
-	describeResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+	describeResp, err := s.FrontendClient().DescribeActivityExecution(ctx, workflowservice.DescribeActivityExecutionRequest_builder{
 		Namespace:  s.Namespace().String(),
 		ActivityId: activityID,
-		RunId:      startResp.RunId,
-	})
+		RunId:      startResp.GetRunId(),
+	}.Build())
 	require.NoError(t, err)
 
 	// Long poll to await activity timeout
-	describeResp, err = s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+	describeResp, err = s.FrontendClient().DescribeActivityExecution(ctx, workflowservice.DescribeActivityExecutionRequest_builder{
 		Namespace:      s.Namespace().String(),
 		ActivityId:     activityID,
-		RunId:          startResp.RunId,
+		RunId:          startResp.GetRunId(),
 		IncludeOutcome: true,
-		LongPollToken:  describeResp.LongPollToken,
-	})
+		LongPollToken:  describeResp.GetLongPollToken(),
+	}.Build())
 
 	require.NoError(t, err)
 	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, describeResp.GetInfo().GetStatus(),
@@ -1892,7 +1890,7 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_NoWait() {
 	activityID := s.tv.ActivityID()
 	taskQueue := s.tv.TaskQueue()
 
-	startReq := &workflowservice.StartActivityExecutionRequest{
+	startReq := workflowservice.StartActivityExecutionRequest_builder{
 		Namespace:              s.Namespace().String(),
 		ActivityId:             activityID,
 		ActivityType:           s.tv.ActivityType(),
@@ -1904,59 +1902,59 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_NoWait() {
 		ScheduleToCloseTimeout: durationpb.New(3 * time.Minute),
 		StartToCloseTimeout:    durationpb.New(1 * time.Minute),
 		RequestId:              s.tv.RequestID(),
-		RetryPolicy: &commonpb.RetryPolicy{
+		RetryPolicy: commonpb.RetryPolicy_builder{
 			InitialInterval:    durationpb.New(2 * time.Second),
 			BackoffCoefficient: 1.5,
 			MaximumAttempts:    3,
 			MaximumInterval:    durationpb.New(111 * time.Second),
-		},
-		Priority: &commonpb.Priority{
+		}.Build(),
+		Priority: commonpb.Priority_builder{
 			FairnessKey: "test-key",
-		},
+		}.Build(),
 		SearchAttributes: defaultSearchAttributes,
-		TaskQueue: &taskqueuepb.TaskQueue{
+		TaskQueue: taskqueuepb.TaskQueue_builder{
 			Name: taskQueue.GetName(),
-		},
+		}.Build(),
 		UserMetadata: defaultUserMetadata,
-	}
+	}.Build()
 
 	startResp, err := s.FrontendClient().StartActivityExecution(ctx, startReq)
 	require.NoError(t, err)
 
 	t.Run("MinimalResponse", func(t *testing.T) {
-		describeResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+		describeResp, err := s.FrontendClient().DescribeActivityExecution(ctx, workflowservice.DescribeActivityExecutionRequest_builder{
 			Namespace:  s.Namespace().String(),
 			ActivityId: activityID,
 			// Omit RunID to verify that latest run will be used
 			IncludeInput:   false,
 			IncludeOutcome: false,
-		})
+		}.Build())
 		require.NoError(t, err)
-		require.NotNil(t, describeResp.LongPollToken)
-		require.Equal(t, startResp.RunId, describeResp.RunId)
-		require.Nil(t, describeResp.Input)
+		require.NotNil(t, describeResp.GetLongPollToken())
+		require.Equal(t, startResp.GetRunId(), describeResp.GetRunId())
+		require.Nil(t, describeResp.GetInput())
 		require.Nil(t, describeResp.GetOutcome().GetResult())
 		require.Nil(t, describeResp.GetOutcome().GetFailure())
 	})
 
 	t.Run("FullResponse", func(t *testing.T) {
-		describeResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+		describeResp, err := s.FrontendClient().DescribeActivityExecution(ctx, workflowservice.DescribeActivityExecutionRequest_builder{
 			Namespace:      s.Namespace().String(),
 			ActivityId:     activityID,
-			RunId:          startResp.RunId,
+			RunId:          startResp.GetRunId(),
 			IncludeInput:   true,
 			IncludeOutcome: true,
-		})
+		}.Build())
 		require.NoError(t, err)
 
 		respInfo := describeResp.GetInfo()
-		require.NotNil(t, describeResp.LongPollToken)
+		require.NotNil(t, describeResp.GetLongPollToken())
 		require.NotNil(t, respInfo)
 
 		expectedExpirationTime := timestamppb.New(respInfo.GetScheduleTime().AsTime().Add(
 			startReq.GetScheduleToCloseTimeout().AsDuration()))
 
-		expected := &activitypb.ActivityExecutionInfo{
+		expected := activitypb.ActivityExecutionInfo_builder{
 			ActivityId:             activityID,
 			ActivityType:           s.tv.ActivityType(),
 			Attempt:                1,
@@ -1964,7 +1962,7 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_NoWait() {
 			Header:                 defaultHeader,
 			HeartbeatTimeout:       startReq.GetHeartbeatTimeout(),
 			RetryPolicy:            startReq.GetRetryPolicy(),
-			RunId:                  startResp.RunId,
+			RunId:                  startResp.GetRunId(),
 			RunState:               enumspb.PENDING_ACTIVITY_STATE_SCHEDULED,
 			Priority:               startReq.GetPriority(),
 			ScheduleToCloseTimeout: startReq.GetScheduleToCloseTimeout(),
@@ -1972,9 +1970,9 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_NoWait() {
 			StartToCloseTimeout:    startReq.GetStartToCloseTimeout(),
 			Status:                 enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING,
 			SearchAttributes:       defaultSearchAttributes,
-			TaskQueue:              taskQueue.Name,
+			TaskQueue:              taskQueue.GetName(),
 			UserMetadata:           defaultUserMetadata,
-		}
+		}.Build()
 
 		diff := cmp.Diff(expected, respInfo,
 			protocmp.Transform(),
@@ -1991,7 +1989,7 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_NoWait() {
 		require.Positive(t, respInfo.GetScheduleTime().AsTime().Unix())
 		require.Positive(t, respInfo.GetStateTransitionCount())
 
-		protorequire.ProtoEqual(t, defaultInput, describeResp.Input)
+		protorequire.ProtoEqual(t, defaultInput, describeResp.GetInput())
 
 		// Activity is scheduled but not completed, so no outcome yet
 		require.Nil(t, describeResp.GetOutcome().GetResult())
@@ -2007,36 +2005,36 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_WaitAnyState
 	activityID := s.tv.ActivityID()
 	taskQueue := s.tv.TaskQueue()
 
-	startResp, err := s.startActivity(ctx, activityID, taskQueue.Name)
+	startResp, err := s.startActivity(ctx, activityID, taskQueue.GetName())
 	require.NoError(t, err)
 
 	// First poll lacks token and therefore responds immediately, returning a token
-	firstDescribeResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+	firstDescribeResp, err := s.FrontendClient().DescribeActivityExecution(ctx, workflowservice.DescribeActivityExecutionRequest_builder{
 		Namespace:  s.Namespace().String(),
 		ActivityId: activityID,
 		// RunId:        startResp.RunId, // RunID is now required by validation [?]
 		IncludeInput: true,
-	})
+	}.Build())
 	require.NoError(t, err)
-	require.NotNil(t, firstDescribeResp.LongPollToken)
-	require.NotNil(t, firstDescribeResp.Info)
-	require.Equal(t, firstDescribeResp.RunId, startResp.RunId)
+	require.NotNil(t, firstDescribeResp.GetLongPollToken())
+	require.NotNil(t, firstDescribeResp.GetInfo())
+	require.Equal(t, firstDescribeResp.GetRunId(), startResp.GetRunId())
 
-	expected := &activitypb.ActivityExecutionInfo{
+	expected := activitypb.ActivityExecutionInfo_builder{
 		ActivityId:             activityID,
 		ActivityType:           s.tv.ActivityType(),
 		Attempt:                1,
 		HeartbeatTimeout:       durationpb.New(0),
 		RetryPolicy:            defaultRetryPolicy,
-		RunId:                  startResp.RunId,
+		RunId:                  startResp.GetRunId(),
 		RunState:               enumspb.PENDING_ACTIVITY_STATE_SCHEDULED,
 		SearchAttributes:       &commonpb.SearchAttributes{},
 		ScheduleToCloseTimeout: durationpb.New(0),
 		ScheduleToStartTimeout: durationpb.New(0),
 		StartToCloseTimeout:    durationpb.New(defaultStartToCloseTimeout),
 		Status:                 enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING,
-		TaskQueue:              taskQueue.Name,
-	}
+		TaskQueue:              taskQueue.GetName(),
+	}.Build()
 	diff := cmp.Diff(expected, firstDescribeResp.GetInfo(),
 		protocmp.Transform(),
 		// Ignore non-deterministic fields. Validated separately.
@@ -2056,20 +2054,20 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_WaitAnyState
 	go func() {
 		defer close(activityPollDone)
 		// Second poll uses token and therefore waits for a state transition
-		describeResp, describeErr = s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+		describeResp, describeErr = s.FrontendClient().DescribeActivityExecution(ctx, workflowservice.DescribeActivityExecutionRequest_builder{
 			Namespace:     s.Namespace().String(),
 			ActivityId:    activityID,
-			RunId:         startResp.RunId,
+			RunId:         startResp.GetRunId(),
 			IncludeInput:  true,
-			LongPollToken: firstDescribeResp.LongPollToken,
-		})
+			LongPollToken: firstDescribeResp.GetLongPollToken(),
+		}.Build())
 	}()
 
 	// TODO(dan): race here: subscription might not be established yet
 
 	// Worker picks up activity task, triggering transition (via RecordActivityTaskStarted)
 	go func() {
-		_, err := s.pollActivityTaskQueue(ctx, taskQueue.Name)
+		_, err := s.pollActivityTaskQueue(ctx, taskQueue.GetName())
 		taskQueuePollErr <- err
 	}()
 
@@ -2077,24 +2075,24 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_WaitAnyState
 	case <-activityPollDone:
 		require.NoError(t, describeErr)
 		require.NotNil(t, describeResp)
-		require.NotNil(t, describeResp.Info)
+		require.NotNil(t, describeResp.GetInfo())
 
-		expected := &activitypb.ActivityExecutionInfo{
+		expected := activitypb.ActivityExecutionInfo_builder{
 			ActivityId:             activityID,
 			ActivityType:           s.tv.ActivityType(),
 			Attempt:                1,
 			HeartbeatTimeout:       durationpb.New(0),
 			LastWorkerIdentity:     defaultIdentity,
 			RetryPolicy:            defaultRetryPolicy,
-			RunId:                  startResp.RunId,
+			RunId:                  startResp.GetRunId(),
 			RunState:               enumspb.PENDING_ACTIVITY_STATE_STARTED,
 			ScheduleToCloseTimeout: durationpb.New(0),
 			ScheduleToStartTimeout: durationpb.New(0),
 			SearchAttributes:       &commonpb.SearchAttributes{},
 			StartToCloseTimeout:    durationpb.New(defaultStartToCloseTimeout),
 			Status:                 enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING,
-			TaskQueue:              taskQueue.Name,
-		}
+			TaskQueue:              taskQueue.GetName(),
+		}.Build()
 		diff := cmp.Diff(expected, describeResp.GetInfo(),
 			protocmp.Transform(),
 			// Ignore non-deterministic fields. Validated separately.
@@ -2107,7 +2105,7 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_WaitAnyState
 		)
 		require.Empty(t, diff)
 
-		protorequire.ProtoEqual(t, defaultInput, describeResp.Input)
+		protorequire.ProtoEqual(t, defaultInput, describeResp.GetInput())
 
 	case <-ctx.Done():
 		t.Fatal("DescribeActivityExecution timed out")
@@ -2128,11 +2126,11 @@ func (s *standaloneActivityTestSuite) TestPollActivityExecution() {
 			name:           "successful completion",
 			expectedStatus: enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
 			taskCompletionFn: func(ctx context.Context, taskToken []byte) error {
-				_, err := s.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+				_, err := s.FrontendClient().RespondActivityTaskCompleted(ctx, workflowservice.RespondActivityTaskCompletedRequest_builder{
 					Namespace: s.Namespace().String(),
 					TaskToken: taskToken,
 					Result:    defaultResult,
-				})
+				}.Build())
 
 				return err
 			},
@@ -2144,11 +2142,11 @@ func (s *standaloneActivityTestSuite) TestPollActivityExecution() {
 			name:           "failure completion",
 			expectedStatus: enumspb.ACTIVITY_EXECUTION_STATUS_FAILED,
 			taskCompletionFn: func(ctx context.Context, taskToken []byte) error {
-				_, err := s.FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
+				_, err := s.FrontendClient().RespondActivityTaskFailed(ctx, workflowservice.RespondActivityTaskFailedRequest_builder{
 					Namespace: s.Namespace().String(),
 					TaskToken: taskToken,
 					Failure:   defaultFailure,
-				})
+				}.Build())
 
 				return err
 			},
@@ -2170,13 +2168,13 @@ func (s *standaloneActivityTestSuite) TestPollActivityExecution() {
 			require.NoError(t, err)
 			pollTaskResp, err := s.pollActivityTaskQueue(ctx, taskQueue)
 			require.NoError(t, err)
-			err = tc.taskCompletionFn(ctx, pollTaskResp.TaskToken)
+			err = tc.taskCompletionFn(ctx, pollTaskResp.GetTaskToken())
 			require.NoError(t, err)
-			pollActivityResp, err := s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
+			pollActivityResp, err := s.FrontendClient().PollActivityExecution(ctx, workflowservice.PollActivityExecutionRequest_builder{
 				Namespace:  s.Namespace().String(),
 				ActivityId: activityID,
-				RunId:      startResp.RunId,
-			})
+				RunId:      startResp.GetRunId(),
+			}.Build())
 			require.NoError(t, err)
 			require.NotNil(t, pollActivityResp)
 			tc.completionValidationFn(t, pollActivityResp)
@@ -2198,21 +2196,21 @@ func (s *standaloneActivityTestSuite) TestPollActivityExecution_EmptyRunID() {
 	pollTaskResp, err := s.pollActivityTaskQueue(ctx, taskQueue)
 	require.NoError(t, err)
 
-	_, err = s.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+	_, err = s.FrontendClient().RespondActivityTaskCompleted(ctx, workflowservice.RespondActivityTaskCompletedRequest_builder{
 		Namespace: s.Namespace().String(),
-		TaskToken: pollTaskResp.TaskToken,
+		TaskToken: pollTaskResp.GetTaskToken(),
 		Result:    defaultResult,
-	})
+	}.Build())
 	require.NoError(t, err)
 
-	pollActivityResp, err := s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
+	pollActivityResp, err := s.FrontendClient().PollActivityExecution(ctx, workflowservice.PollActivityExecutionRequest_builder{
 		Namespace:  s.Namespace().String(),
 		ActivityId: activityID,
 		RunId:      "", // resolves to current run ID
-	})
+	}.Build())
 	require.NoError(t, err)
 	require.NotNil(t, pollActivityResp)
-	require.Equal(t, startResp.RunId, pollActivityResp.GetRunId())
+	require.Equal(t, startResp.GetRunId(), pollActivityResp.GetRunId())
 	protorequire.ProtoEqual(t, defaultResult, pollActivityResp.GetOutcome().GetResult())
 }
 
@@ -2222,9 +2220,9 @@ func (s *standaloneActivityTestSuite) TestPollActivityExecution_NotFound() {
 
 	existingActivityID := s.tv.ActivityID()
 	tq := s.tv.TaskQueue()
-	startResp, err := s.startActivity(ctx, existingActivityID, tq.Name)
+	startResp, err := s.startActivity(ctx, existingActivityID, tq.GetName())
 	require.NoError(t, err)
-	existingRunID := startResp.RunId
+	existingRunID := startResp.GetRunId()
 	require.NotEmpty(t, existingRunID)
 	existingNamespace := s.Namespace().String()
 
@@ -2239,31 +2237,31 @@ func (s *standaloneActivityTestSuite) TestPollActivityExecution_NotFound() {
 	}{
 		{
 			name: "NonExistentNamespace",
-			request: &workflowservice.PollActivityExecutionRequest{
+			request: workflowservice.PollActivityExecutionRequest_builder{
 				Namespace:  "non-existent-namespace",
 				ActivityId: existingActivityID,
 				RunId:      existingRunID,
-			},
+			}.Build(),
 			expectedErr:    namespaceNotFoundErr,
 			expectedErrMsg: "Namespace non-existent-namespace is not found.",
 		},
 		{
 			name: "NonExistentActivityID",
-			request: &workflowservice.PollActivityExecutionRequest{
+			request: workflowservice.PollActivityExecutionRequest_builder{
 				Namespace:  existingNamespace,
 				ActivityId: "non-existent-activity",
 				RunId:      existingRunID,
-			},
+			}.Build(),
 			expectedErr:    notFoundErr,
 			expectedErrMsg: "activity execution not found",
 		},
 		{
 			name: "NonExistentRunID",
-			request: &workflowservice.PollActivityExecutionRequest{
+			request: workflowservice.PollActivityExecutionRequest_builder{
 				Namespace:  existingNamespace,
 				ActivityId: existingActivityID,
 				RunId:      "11111111-2222-3333-4444-555555555555",
-			},
+			}.Build(),
 			expectedErr:    notFoundErr,
 			expectedErrMsg: "activity execution not found",
 		},
@@ -2292,38 +2290,38 @@ func (s *standaloneActivityTestSuite) TestPollActivityExecution_InvalidArgument(
 	}{
 		{
 			name: "EmptyNamespace",
-			request: &workflowservice.PollActivityExecutionRequest{
+			request: workflowservice.PollActivityExecutionRequest_builder{
 				Namespace:  "",
 				ActivityId: "activity-id",
 				RunId:      validRunID,
-			},
+			}.Build(),
 			expectedErr: "Namespace is empty",
 		},
 		{
 			name: "EmptyActivityID",
-			request: &workflowservice.PollActivityExecutionRequest{
+			request: workflowservice.PollActivityExecutionRequest_builder{
 				Namespace:  existingNamespace,
 				ActivityId: "",
 				RunId:      validRunID,
-			},
+			}.Build(),
 			expectedErr: "activity ID is required",
 		},
 		{
 			name: "ActivityIDTooLong",
-			request: &workflowservice.PollActivityExecutionRequest{
+			request: workflowservice.PollActivityExecutionRequest_builder{
 				Namespace:  existingNamespace,
 				ActivityId: string(make([]byte, 2000)),
 				RunId:      validRunID,
-			},
+			}.Build(),
 			expectedErr: "activity ID exceeds length limit",
 		},
 		{
 			name: "InvalidRunID",
-			request: &workflowservice.PollActivityExecutionRequest{
+			request: workflowservice.PollActivityExecutionRequest_builder{
 				Namespace:  existingNamespace,
 				ActivityId: "activity-id",
 				RunId:      "invalid-uuid",
-			},
+			}.Build(),
 			expectedErr: "invalid run id",
 		},
 	}
@@ -2349,7 +2347,7 @@ func (s *standaloneActivityTestSuite) TestListActivityExecutions() {
 	activityType := s.tv.ActivityType().GetName()
 	taskQueue := s.tv.TaskQueue().GetName()
 	startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
-	runID := startResp.RunId
+	runID := startResp.GetRunId()
 
 	verifyListQuery := func(t *testing.T, query string, pageSize int32) {
 		t.Helper()
@@ -2357,11 +2355,11 @@ func (s *standaloneActivityTestSuite) TestListActivityExecutions() {
 		s.Eventually(
 			func() bool {
 				var err error
-				resp, err = s.FrontendClient().ListActivityExecutions(ctx, &workflowservice.ListActivityExecutionsRequest{
+				resp, err = s.FrontendClient().ListActivityExecutions(ctx, workflowservice.ListActivityExecutionsRequest_builder{
 					Namespace: s.Namespace().String(),
 					PageSize:  pageSize,
 					Query:     query,
-				})
+				}.Build())
 				return err == nil && len(resp.GetExecutions()) >= 1
 			},
 			testcore.WaitForESToSettle,
@@ -2407,32 +2405,32 @@ func (s *standaloneActivityTestSuite) TestListActivityExecutions() {
 		customSAValue := "custom-sa-test-value"
 		customSAActivityID := "custom-sa-activity-id"
 
-		_, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+		_, err := s.FrontendClient().StartActivityExecution(ctx, workflowservice.StartActivityExecutionRequest_builder{
 			Namespace:           s.Namespace().String(),
 			ActivityId:          customSAActivityID,
-			ActivityType:        &commonpb.ActivityType{Name: "custom-sa-activity-type"},
+			ActivityType:        commonpb.ActivityType_builder{Name: "custom-sa-activity-type"}.Build(),
 			Identity:            s.tv.WorkerIdentity(),
 			Input:               defaultInput,
-			TaskQueue:           &taskqueuepb.TaskQueue{Name: s.tv.TaskQueue().GetName()},
+			TaskQueue:           taskqueuepb.TaskQueue_builder{Name: s.tv.TaskQueue().GetName()}.Build(),
 			StartToCloseTimeout: durationpb.New(1 * time.Minute),
 			RequestId:           s.tv.RequestID(),
-			SearchAttributes: &commonpb.SearchAttributes{
+			SearchAttributes: commonpb.SearchAttributes_builder{
 				IndexedFields: map[string]*commonpb.Payload{
 					customSAName: payload.EncodeString(customSAValue),
 				},
-			},
-		})
+			}.Build(),
+		}.Build())
 		require.NoError(t, err)
 
 		var resp *workflowservice.ListActivityExecutionsResponse
 		s.Eventually(
 			func() bool {
 				var err error
-				resp, err = s.FrontendClient().ListActivityExecutions(ctx, &workflowservice.ListActivityExecutionsRequest{
+				resp, err = s.FrontendClient().ListActivityExecutions(ctx, workflowservice.ListActivityExecutionsRequest_builder{
 					Namespace: s.Namespace().String(),
 					PageSize:  10,
 					Query:     fmt.Sprintf("%s = '%s'", customSAName, customSAValue),
-				})
+				}.Build())
 				return err == nil && len(resp.GetExecutions()) >= 1
 			},
 			testcore.WaitForESToSettle,
@@ -2450,29 +2448,29 @@ func (s *standaloneActivityTestSuite) TestListActivityExecutions() {
 	})
 
 	t.Run("InvalidQuery", func(t *testing.T) {
-		_, err := s.FrontendClient().ListActivityExecutions(ctx, &workflowservice.ListActivityExecutionsRequest{
+		_, err := s.FrontendClient().ListActivityExecutions(ctx, workflowservice.ListActivityExecutionsRequest_builder{
 			Namespace: s.Namespace().String(),
 			PageSize:  10,
 			Query:     "invalid query syntax !!!",
-		})
+		}.Build())
 		s.ErrorAs(err, new(*serviceerror.InvalidArgument))
 	})
 
 	t.Run("InvalidSearchAttribute", func(t *testing.T) {
-		_, err := s.FrontendClient().ListActivityExecutions(ctx, &workflowservice.ListActivityExecutionsRequest{
+		_, err := s.FrontendClient().ListActivityExecutions(ctx, workflowservice.ListActivityExecutionsRequest_builder{
 			Namespace: s.Namespace().String(),
 			PageSize:  10,
 			Query:     "NonExistentField = 'value'",
-		})
+		}.Build())
 		s.ErrorAs(err, new(*serviceerror.InvalidArgument))
 	})
 
 	t.Run("NamespaceNotFound", func(t *testing.T) {
-		_, err := s.FrontendClient().ListActivityExecutions(ctx, &workflowservice.ListActivityExecutionsRequest{
+		_, err := s.FrontendClient().ListActivityExecutions(ctx, workflowservice.ListActivityExecutionsRequest_builder{
 			Namespace: "non-existent-namespace",
 			PageSize:  10,
 			Query:     "",
-		})
+		}.Build())
 		s.ErrorAs(err, new(*serviceerror.NamespaceNotFound))
 	})
 
@@ -2490,17 +2488,17 @@ func (s *standaloneActivityTestSuite) TestListActivityExecutions() {
 
 		// Start multiple activities of the same type
 		for i := 0; i < 2; i++ {
-			_, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			_, err := s.FrontendClient().StartActivityExecution(ctx, workflowservice.StartActivityExecutionRequest_builder{
 				Namespace:           s.Namespace().String(),
 				ActivityId:          testcore.RandomizeStr(t.Name()),
-				ActivityType:        &commonpb.ActivityType{Name: testActivityType},
+				ActivityType:        commonpb.ActivityType_builder{Name: testActivityType}.Build(),
 				Identity:            s.tv.WorkerIdentity(),
 				StartToCloseTimeout: durationpb.New(10 * time.Second),
-				TaskQueue: &taskqueuepb.TaskQueue{
+				TaskQueue: taskqueuepb.TaskQueue_builder{
 					Name: taskQueue,
-				},
+				}.Build(),
 				RequestId: s.tv.RequestID(),
-			})
+			}.Build())
 			require.NoError(t, err)
 		}
 
@@ -2509,11 +2507,11 @@ func (s *standaloneActivityTestSuite) TestListActivityExecutions() {
 		s.Eventually(
 			func() bool {
 				var err error
-				resp, err = s.FrontendClient().ListActivityExecutions(ctx, &workflowservice.ListActivityExecutionsRequest{
+				resp, err = s.FrontendClient().ListActivityExecutions(ctx, workflowservice.ListActivityExecutionsRequest_builder{
 					Namespace: s.Namespace().String(),
 					PageSize:  2,
 					Query:     fmt.Sprintf("ActivityType = '%s'", testActivityType),
-				})
+				}.Build())
 				return err == nil && len(resp.GetExecutions()) >= 1
 			},
 			testcore.WaitForESToSettle,
@@ -2522,22 +2520,22 @@ func (s *standaloneActivityTestSuite) TestListActivityExecutions() {
 		require.Len(t, resp.GetExecutions(), 1)
 
 		// Get next page. Use pageSize > FrontendVisibilityMaxPageSize
-		resp, err := s.FrontendClient().ListActivityExecutions(ctx, &workflowservice.ListActivityExecutionsRequest{
+		resp, err := s.FrontendClient().ListActivityExecutions(ctx, workflowservice.ListActivityExecutionsRequest_builder{
 			Namespace:     s.Namespace().String(),
 			PageSize:      2,
 			Query:         fmt.Sprintf("ActivityType = '%s'", testActivityType),
 			NextPageToken: resp.GetNextPageToken(),
-		})
+		}.Build())
 		require.NoError(t, err)
 		require.Len(t, resp.GetExecutions(), 1)
 
 		// Ensure no more results
-		resp, err = s.FrontendClient().ListActivityExecutions(ctx, &workflowservice.ListActivityExecutionsRequest{
+		resp, err = s.FrontendClient().ListActivityExecutions(ctx, workflowservice.ListActivityExecutionsRequest_builder{
 			Namespace:     s.Namespace().String(),
 			PageSize:      2,
 			Query:         fmt.Sprintf("ActivityType = '%s'", testActivityType),
 			NextPageToken: resp.GetNextPageToken(),
-		})
+		}.Build())
 		require.NoError(t, err)
 		require.Empty(t, resp.GetExecutions())
 		require.Nil(t, resp.GetNextPageToken())
@@ -2557,10 +2555,10 @@ func (s *standaloneActivityTestSuite) TestCountActivityExecutions() {
 		t.Helper()
 		s.Eventually(
 			func() bool {
-				resp, err := s.FrontendClient().CountActivityExecutions(ctx, &workflowservice.CountActivityExecutionsRequest{
+				resp, err := s.FrontendClient().CountActivityExecutions(ctx, workflowservice.CountActivityExecutionsRequest_builder{
 					Namespace: s.Namespace().String(),
 					Query:     query,
-				})
+				}.Build())
 				return err == nil && resp.GetCount() == int64(expectedCount)
 			},
 			testcore.WaitForESToSettle,
@@ -2585,25 +2583,25 @@ func (s *standaloneActivityTestSuite) TestCountActivityExecutions() {
 	})
 
 	t.Run("GroupByExecutionStatus", func(t *testing.T) {
-		groupByType := &commonpb.ActivityType{Name: "count-groupby-test-type"}
+		groupByType := commonpb.ActivityType_builder{Name: "count-groupby-test-type"}.Build()
 		taskQueue := s.tv.TaskQueue().GetName()
 
 		for i := range 3 {
-			id := fmt.Sprintf("%s-%d", groupByType.Name, i)
+			id := fmt.Sprintf("%s-%d", groupByType.GetName(), i)
 			resp, err := s.startActivityWithType(ctx, id, taskQueue, groupByType)
 			require.NoError(t, err)
 			require.NotEmpty(t, resp.GetRunId())
 		}
 
-		query := fmt.Sprintf("ActivityType = '%s' GROUP BY ExecutionStatus", groupByType.Name)
+		query := fmt.Sprintf("ActivityType = '%s' GROUP BY ExecutionStatus", groupByType.GetName())
 		var resp *workflowservice.CountActivityExecutionsResponse
 		s.Eventually(
 			func() bool {
 				var err error
-				resp, err = s.FrontendClient().CountActivityExecutions(ctx, &workflowservice.CountActivityExecutionsRequest{
+				resp, err = s.FrontendClient().CountActivityExecutions(ctx, workflowservice.CountActivityExecutionsRequest_builder{
 					Namespace: s.Namespace().String(),
 					Query:     query,
-				})
+				}.Build())
 				return err == nil && resp.GetCount() == 3
 			},
 			testcore.WaitForESToSettle,
@@ -2621,50 +2619,50 @@ func (s *standaloneActivityTestSuite) TestCountActivityExecutions() {
 		customSAName := "ActivityCountCustomKeyword"
 		customSAValue := "count-custom-sa-value"
 
-		_, err := s.OperatorClient().AddSearchAttributes(ctx, &operatorservice.AddSearchAttributesRequest{
+		_, err := s.OperatorClient().AddSearchAttributes(ctx, operatorservice.AddSearchAttributesRequest_builder{
 			Namespace: s.Namespace().String(),
 			SearchAttributes: map[string]enumspb.IndexedValueType{
 				customSAName: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 			},
-		})
+		}.Build())
 		require.NoError(t, err)
 
 		s.Eventually(func() bool {
-			descResp, err := s.OperatorClient().ListSearchAttributes(ctx, &operatorservice.ListSearchAttributesRequest{
+			descResp, err := s.OperatorClient().ListSearchAttributes(ctx, operatorservice.ListSearchAttributesRequest_builder{
 				Namespace: s.Namespace().String(),
-			})
+			}.Build())
 			if err != nil {
 				return false
 			}
-			_, ok := descResp.CustomAttributes[customSAName]
+			_, ok := descResp.GetCustomAttributes()[customSAName]
 			return ok
 		}, 10*time.Second, 100*time.Millisecond)
 
 		for i := range 2 {
-			_, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			_, err := s.FrontendClient().StartActivityExecution(ctx, workflowservice.StartActivityExecutionRequest_builder{
 				Namespace:           s.Namespace().String(),
 				ActivityId:          fmt.Sprintf("count-custom-sa-%d", i),
-				ActivityType:        &commonpb.ActivityType{Name: "count-custom-sa-type"},
+				ActivityType:        commonpb.ActivityType_builder{Name: "count-custom-sa-type"}.Build(),
 				Identity:            s.tv.WorkerIdentity(),
 				Input:               defaultInput,
-				TaskQueue:           &taskqueuepb.TaskQueue{Name: s.tv.TaskQueue().GetName()},
+				TaskQueue:           taskqueuepb.TaskQueue_builder{Name: s.tv.TaskQueue().GetName()}.Build(),
 				StartToCloseTimeout: durationpb.New(1 * time.Minute),
 				RequestId:           s.tv.RequestID(),
-				SearchAttributes: &commonpb.SearchAttributes{
+				SearchAttributes: commonpb.SearchAttributes_builder{
 					IndexedFields: map[string]*commonpb.Payload{
 						customSAName: payload.EncodeString(customSAValue),
 					},
-				},
-			})
+				}.Build(),
+			}.Build())
 			require.NoError(t, err)
 		}
 
 		s.Eventually(
 			func() bool {
-				resp, err := s.FrontendClient().CountActivityExecutions(ctx, &workflowservice.CountActivityExecutionsRequest{
+				resp, err := s.FrontendClient().CountActivityExecutions(ctx, workflowservice.CountActivityExecutionsRequest_builder{
 					Namespace: s.Namespace().String(),
 					Query:     fmt.Sprintf("%s = '%s'", customSAName, customSAValue),
-				})
+				}.Build())
 				return err == nil && resp.GetCount() == 2
 			},
 			testcore.WaitForESToSettle,
@@ -2673,35 +2671,35 @@ func (s *standaloneActivityTestSuite) TestCountActivityExecutions() {
 	})
 
 	t.Run("GroupByUnsupportedField", func(t *testing.T) {
-		_, err := s.FrontendClient().CountActivityExecutions(ctx, &workflowservice.CountActivityExecutionsRequest{
+		_, err := s.FrontendClient().CountActivityExecutions(ctx, workflowservice.CountActivityExecutionsRequest_builder{
 			Namespace: s.Namespace().String(),
 			Query:     "GROUP BY ActivityType",
-		})
+		}.Build())
 		s.ErrorAs(err, new(*serviceerror.InvalidArgument))
 		s.Contains(err.Error(), "'GROUP BY' clause is only supported for ExecutionStatus")
 	})
 
 	t.Run("InvalidQuery", func(t *testing.T) {
-		_, err := s.FrontendClient().CountActivityExecutions(ctx, &workflowservice.CountActivityExecutionsRequest{
+		_, err := s.FrontendClient().CountActivityExecutions(ctx, workflowservice.CountActivityExecutionsRequest_builder{
 			Namespace: s.Namespace().String(),
 			Query:     "invalid query syntax !!!",
-		})
+		}.Build())
 		s.ErrorAs(err, new(*serviceerror.InvalidArgument))
 	})
 
 	t.Run("InvalidSearchAttribute", func(t *testing.T) {
-		_, err := s.FrontendClient().CountActivityExecutions(ctx, &workflowservice.CountActivityExecutionsRequest{
+		_, err := s.FrontendClient().CountActivityExecutions(ctx, workflowservice.CountActivityExecutionsRequest_builder{
 			Namespace: s.Namespace().String(),
 			Query:     "NonExistentField = 'value'",
-		})
+		}.Build())
 		s.ErrorAs(err, new(*serviceerror.InvalidArgument))
 	})
 
 	t.Run("NamespaceNotFound", func(t *testing.T) {
-		_, err := s.FrontendClient().CountActivityExecutions(ctx, &workflowservice.CountActivityExecutionsRequest{
+		_, err := s.FrontendClient().CountActivityExecutions(ctx, workflowservice.CountActivityExecutionsRequest_builder{
 			Namespace: "non-existent-namespace",
 			Query:     "",
-		})
+		}.Build())
 		s.ErrorAs(err, new(*serviceerror.NamespaceNotFound))
 	})
 }
@@ -2713,13 +2711,13 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_DeadlineExce
 	// Start an activity and get initial long-poll state token
 	activityID := s.tv.ActivityID()
 	taskQueue := s.tv.TaskQueue()
-	startResp, err := s.startActivity(ctx, activityID, taskQueue.Name)
+	startResp, err := s.startActivity(ctx, activityID, taskQueue.GetName())
 	require.NoError(t, err)
-	describeResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+	describeResp, err := s.FrontendClient().DescribeActivityExecution(ctx, workflowservice.DescribeActivityExecutionRequest_builder{
 		Namespace:  s.Namespace().String(),
 		ActivityId: activityID,
-		RunId:      startResp.RunId,
-	})
+		RunId:      startResp.GetRunId(),
+	}.Build())
 	require.NoError(t, err)
 
 	// The DescribeActivityExecution calls below use a long-poll token and will necessarily time out,
@@ -2739,12 +2737,12 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_DeadlineExce
 		// DescribeActivityExecution will return when this long poll timeout expires.
 		s.OverrideDynamicConfig(activity.LongPollTimeout, 10*time.Millisecond)
 
-		describeResp, err = s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+		describeResp, err = s.FrontendClient().DescribeActivityExecution(ctx, workflowservice.DescribeActivityExecutionRequest_builder{
 			Namespace:     s.Namespace().String(),
 			ActivityId:    activityID,
-			RunId:         startResp.RunId,
-			LongPollToken: describeResp.LongPollToken,
-		})
+			RunId:         startResp.GetRunId(),
+			LongPollToken: describeResp.GetLongPollToken(),
+		}.Build())
 		// The server uses an empty non-error response to indicate to the caller that it should resubmit
 		// its long-poll.
 		require.NoError(t, err)
@@ -2763,12 +2761,12 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_DeadlineExce
 		// DescribeActivityExecution will return when this long poll timeout expires.
 		s.OverrideDynamicConfig(activity.LongPollTimeout, 10*time.Millisecond)
 
-		_, err = s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+		_, err = s.FrontendClient().DescribeActivityExecution(ctx, workflowservice.DescribeActivityExecutionRequest_builder{
 			Namespace:     s.Namespace().String(),
 			ActivityId:    activityID,
-			RunId:         startResp.RunId,
-			LongPollToken: describeResp.LongPollToken,
-		})
+			RunId:         startResp.GetRunId(),
+			LongPollToken: describeResp.GetLongPollToken(),
+		}.Build())
 		require.NoError(t, err)
 		require.Empty(t, describeResp.GetInfo())
 	})
@@ -2784,9 +2782,9 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_NotFound() {
 
 	existingActivityID := s.tv.ActivityID()
 	tq := s.tv.TaskQueue()
-	startResp, err := s.startActivity(ctx, existingActivityID, tq.Name)
+	startResp, err := s.startActivity(ctx, existingActivityID, tq.GetName())
 	require.NoError(t, err)
-	existingRunID := startResp.RunId
+	existingRunID := startResp.GetRunId()
 	require.NotEmpty(t, existingRunID)
 	existingNamespace := s.Namespace().String()
 
@@ -2801,31 +2799,31 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_NotFound() {
 	}{
 		{
 			name: "NonExistentNamespace",
-			request: &workflowservice.DescribeActivityExecutionRequest{
+			request: workflowservice.DescribeActivityExecutionRequest_builder{
 				Namespace:  "non-existent-namespace",
 				ActivityId: existingActivityID,
 				RunId:      existingRunID,
-			},
+			}.Build(),
 			expectedErr:    namespaceNotFoundErr,
 			expectedErrMsg: "Namespace non-existent-namespace is not found.",
 		},
 		{
 			name: "NonExistentActivityID",
-			request: &workflowservice.DescribeActivityExecutionRequest{
+			request: workflowservice.DescribeActivityExecutionRequest_builder{
 				Namespace:  existingNamespace,
 				ActivityId: "non-existent-activity",
 				RunId:      existingRunID,
-			},
+			}.Build(),
 			expectedErr:    notFoundErr,
 			expectedErrMsg: "activity execution not found",
 		},
 		{
 			name: "NonExistentRunID",
-			request: &workflowservice.DescribeActivityExecutionRequest{
+			request: workflowservice.DescribeActivityExecutionRequest_builder{
 				Namespace:  existingNamespace,
 				ActivityId: existingActivityID,
 				RunId:      "11111111-2222-3333-4444-555555555555",
-			},
+			}.Build(),
 			expectedErr:    notFoundErr,
 			expectedErrMsg: "activity execution not found",
 		},
@@ -2841,20 +2839,20 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_NotFound() {
 
 	t.Run("LongPollNonExistentActivity", func(t *testing.T) {
 		// Poll to get a token
-		validPollResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+		validPollResp, err := s.FrontendClient().DescribeActivityExecution(ctx, workflowservice.DescribeActivityExecutionRequest_builder{
 			Namespace:  existingNamespace,
 			ActivityId: existingActivityID,
 			RunId:      existingRunID,
-		})
+		}.Build())
 		require.NoError(t, err)
 
 		// Use the token with a non-existent activity
-		_, err = s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+		_, err = s.FrontendClient().DescribeActivityExecution(ctx, workflowservice.DescribeActivityExecutionRequest_builder{
 			Namespace:     existingNamespace,
 			ActivityId:    "non-existent-activity",
 			RunId:         existingRunID,
-			LongPollToken: validPollResp.LongPollToken,
-		})
+			LongPollToken: validPollResp.GetLongPollToken(),
+		}.Build())
 		var notFoundErr *serviceerror.NotFound
 		require.ErrorAs(t, err, &notFoundErr)
 		require.Equal(t, "activity execution not found", notFoundErr.Message)
@@ -2868,9 +2866,9 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_InvalidArgum
 
 	existingActivityID := s.tv.ActivityID()
 	tq := s.tv.TaskQueue()
-	startResp, err := s.startActivity(ctx, existingActivityID, tq.Name)
+	startResp, err := s.startActivity(ctx, existingActivityID, tq.GetName())
 	require.NoError(t, err)
-	existingRunID := startResp.RunId
+	existingRunID := startResp.GetRunId()
 	require.NotEmpty(t, existingRunID)
 	existingNamespace := s.Namespace().String()
 
@@ -2884,76 +2882,76 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_InvalidArgum
 	}{
 		{
 			name: "EmptyNamespace",
-			request: &workflowservice.DescribeActivityExecutionRequest{
+			request: workflowservice.DescribeActivityExecutionRequest_builder{
 				Namespace:  "",
 				ActivityId: validActivityID,
 				RunId:      validRunID,
-			},
+			}.Build(),
 			expectedErr: "Namespace is empty",
 		},
 		{
 			name: "EmptyActivityID",
-			request: &workflowservice.DescribeActivityExecutionRequest{
+			request: workflowservice.DescribeActivityExecutionRequest_builder{
 				Namespace:  existingNamespace,
 				ActivityId: "",
 				RunId:      validRunID,
-			},
+			}.Build(),
 			expectedErr: "activity ID is required",
 		},
 		{
 			name: "ActivityIDTooLong",
-			request: &workflowservice.DescribeActivityExecutionRequest{
+			request: workflowservice.DescribeActivityExecutionRequest_builder{
 				Namespace:  existingNamespace,
 				ActivityId: string(make([]byte, 2000)),
 				RunId:      validRunID,
-			},
+			}.Build(),
 			expectedErr: "activity ID exceeds length limit",
 		},
 		{
 			name: "InvalidRunID",
-			request: &workflowservice.DescribeActivityExecutionRequest{
+			request: workflowservice.DescribeActivityExecutionRequest_builder{
 				Namespace:  existingNamespace,
 				ActivityId: validActivityID,
 				RunId:      "invalid-uuid",
-			},
+			}.Build(),
 			expectedErr: "invalid run id",
 		},
 		{
 			name: "RunIdNotRequiredWhenWaitPolicyAbsent",
-			request: &workflowservice.DescribeActivityExecutionRequest{
+			request: workflowservice.DescribeActivityExecutionRequest_builder{
 				Namespace:  existingNamespace,
 				ActivityId: existingActivityID,
 				RunId:      "",
-			},
+			}.Build(),
 			expectedErr: "",
 		},
 		{
 			name: "RunIdNotRequiredWhenLongPollTokenAbsent",
-			request: &workflowservice.DescribeActivityExecutionRequest{
+			request: workflowservice.DescribeActivityExecutionRequest_builder{
 				Namespace:  existingNamespace,
 				ActivityId: existingActivityID,
 				RunId:      "",
-			},
+			}.Build(),
 			expectedErr: "",
 		},
 		{
 			name: "RunIdRequiredWhenLongPollTokenPresent",
-			request: &workflowservice.DescribeActivityExecutionRequest{
+			request: workflowservice.DescribeActivityExecutionRequest_builder{
 				Namespace:     existingNamespace,
 				ActivityId:    validActivityID,
 				RunId:         "",
 				LongPollToken: []byte("doesn't-matter"),
-			},
+			}.Build(),
 			expectedErr: "run id is required",
 		},
 		{
 			name: "MalformedLongPollToken",
-			request: &workflowservice.DescribeActivityExecutionRequest{
+			request: workflowservice.DescribeActivityExecutionRequest_builder{
 				Namespace:     existingNamespace,
 				ActivityId:    existingActivityID,
 				RunId:         existingRunID,
 				LongPollToken: []byte("invalid-token"),
-			},
+			}.Build(),
 			expectedErr: "invalid long poll token",
 		},
 	}
@@ -2972,25 +2970,25 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_InvalidArgum
 	}
 
 	t.Run("LongPollTokenFromWrongExecution", func(t *testing.T) {
-		validPollResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+		validPollResp, err := s.FrontendClient().DescribeActivityExecution(ctx, workflowservice.DescribeActivityExecutionRequest_builder{
 			Namespace:  existingNamespace,
 			ActivityId: existingActivityID,
 			RunId:      existingRunID,
-		})
+		}.Build())
 		require.NoError(t, err)
-		require.NotEmpty(t, validPollResp.LongPollToken)
+		require.NotEmpty(t, validPollResp.GetLongPollToken())
 
 		activityID2 := s.tv.Any().String()
-		startResp2, err := s.startActivity(ctx, activityID2, tq.Name)
+		startResp2, err := s.startActivity(ctx, activityID2, tq.GetName())
 		require.NoError(t, err)
 		require.NotEmpty(t, startResp2.GetRunId())
 
-		_, err = s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+		_, err = s.FrontendClient().DescribeActivityExecution(ctx, workflowservice.DescribeActivityExecutionRequest_builder{
 			Namespace:     existingNamespace,
 			ActivityId:    activityID2,
 			RunId:         startResp2.GetRunId(),
-			LongPollToken: validPollResp.LongPollToken,
-		})
+			LongPollToken: validPollResp.GetLongPollToken(),
+		}.Build())
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
 		require.Equal(t, "long poll token does not match execution", invalidArgErr.Message)
@@ -2998,39 +2996,39 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_InvalidArgum
 
 	t.Run("LongPollTokenFromDifferentNamespace", func(t *testing.T) {
 		// Get a valid poll token from activity in main namespace
-		validPollResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+		validPollResp, err := s.FrontendClient().DescribeActivityExecution(ctx, workflowservice.DescribeActivityExecutionRequest_builder{
 			Namespace:  existingNamespace,
 			ActivityId: existingActivityID,
 			RunId:      existingRunID,
-		})
+		}.Build())
 		require.NoError(t, err)
-		require.NotEmpty(t, validPollResp.LongPollToken)
+		require.NotEmpty(t, validPollResp.GetLongPollToken())
 
 		// Start an activity in a different namespace
 		externalNamespace := s.ExternalNamespace().String()
 		externalActivityID := s.tv.Any().String()
-		externalStartResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+		externalStartResp, err := s.FrontendClient().StartActivityExecution(ctx, workflowservice.StartActivityExecutionRequest_builder{
 			Namespace:    externalNamespace,
 			ActivityId:   externalActivityID,
 			ActivityType: s.tv.ActivityType(),
 			Identity:     s.tv.WorkerIdentity(),
 			Input:        defaultInput,
-			TaskQueue: &taskqueuepb.TaskQueue{
-				Name: tq.Name,
-			},
+			TaskQueue: taskqueuepb.TaskQueue_builder{
+				Name: tq.GetName(),
+			}.Build(),
 			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
 			RequestId:           s.tv.Any().String(),
-		})
+		}.Build())
 		require.NoError(t, err)
 		require.NotEmpty(t, externalStartResp.GetRunId())
 
 		// Try to use main namespace's poll token with external namespace's activity
-		_, err = s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+		_, err = s.FrontendClient().DescribeActivityExecution(ctx, workflowservice.DescribeActivityExecutionRequest_builder{
 			Namespace:     externalNamespace,
 			ActivityId:    externalActivityID,
 			RunId:         externalStartResp.GetRunId(),
-			LongPollToken: validPollResp.LongPollToken,
-		})
+			LongPollToken: validPollResp.GetLongPollToken(),
+		}.Build())
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
 		require.Equal(t, "long poll token does not match execution", invalidArgErr.Message)
@@ -3062,11 +3060,11 @@ func (s *standaloneActivityTestSuite) TestHeartbeat() {
 
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
-				_, err := s.FrontendClient().RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
+				_, err := s.FrontendClient().RecordActivityTaskHeartbeat(ctx, workflowservice.RecordActivityTaskHeartbeatRequest_builder{
 					Namespace: s.Namespace().String(),
 					TaskToken: tc.taskToken,
 					Details:   heartbeatDetails,
-				})
+				}.Build())
 				require.Error(t, err)
 				statusErr := serviceerror.ToStatus(err)
 				require.NotNil(t, statusErr)
@@ -3083,25 +3081,25 @@ func (s *standaloneActivityTestSuite) TestHeartbeat() {
 		_, err := s.startActivity(ctx, activityID, taskQueue)
 		require.NoError(t, err)
 
-		pollResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+		pollResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, workflowservice.PollActivityTaskQueueRequest_builder{
 			Namespace: s.Namespace().String(),
-			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		})
+			TaskQueue: taskqueuepb.TaskQueue_builder{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
+		}.Build())
 		require.NoError(t, err)
 
-		_, err = s.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+		_, err = s.FrontendClient().RespondActivityTaskCompleted(ctx, workflowservice.RespondActivityTaskCompletedRequest_builder{
 			Namespace: s.Namespace().String(),
-			TaskToken: pollResp.TaskToken,
+			TaskToken: pollResp.GetTaskToken(),
 			Result:    defaultResult,
-		})
+		}.Build())
 		require.NoError(t, err)
 
 		// Heartbeat with stale token (activity already completed)
-		_, err = s.FrontendClient().RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
+		_, err = s.FrontendClient().RecordActivityTaskHeartbeat(ctx, workflowservice.RecordActivityTaskHeartbeatRequest_builder{
 			Namespace: s.Namespace().String(),
-			TaskToken: pollResp.TaskToken,
+			TaskToken: pollResp.GetTaskToken(),
 			Details:   heartbeatDetails,
-		})
+		}.Build())
 		require.Error(t, err)
 		statusErr := serviceerror.ToStatus(err)
 		require.Equal(t, codes.NotFound, statusErr.Code())
@@ -3114,62 +3112,62 @@ func (s *standaloneActivityTestSuite) TestHeartbeat() {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
 
-		_, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+		_, err := s.FrontendClient().StartActivityExecution(ctx, workflowservice.StartActivityExecutionRequest_builder{
 			Namespace:              s.Namespace().String(),
 			ActivityId:             activityID,
 			ActivityType:           s.tv.ActivityType(),
-			TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue},
+			TaskQueue:              taskqueuepb.TaskQueue_builder{Name: taskQueue}.Build(),
 			ScheduleToCloseTimeout: durationpb.New(1 * time.Minute),
-			RetryPolicy: &commonpb.RetryPolicy{
+			RetryPolicy: commonpb.RetryPolicy_builder{
 				MaximumAttempts: 3,
-			},
-		})
+			}.Build(),
+		}.Build())
 		require.NoError(t, err)
 
 		// Poll and get task token for attempt 1
-		attempt1Resp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+		attempt1Resp, err := s.FrontendClient().PollActivityTaskQueue(ctx, workflowservice.PollActivityTaskQueueRequest_builder{
 			Namespace: s.Namespace().String(),
-			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		})
+			TaskQueue: taskqueuepb.TaskQueue_builder{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
+		}.Build())
 		require.NoError(t, err)
-		require.EqualValues(t, 1, attempt1Resp.Attempt)
+		require.EqualValues(t, 1, attempt1Resp.GetAttempt())
 
 		// Fail the task with NextRetryDelay to control retry timing
-		_, err = s.FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
+		_, err = s.FrontendClient().RespondActivityTaskFailed(ctx, workflowservice.RespondActivityTaskFailedRequest_builder{
 			Namespace: s.Namespace().String(),
-			TaskToken: attempt1Resp.TaskToken,
-			Failure: &failurepb.Failure{
+			TaskToken: attempt1Resp.GetTaskToken(),
+			Failure: failurepb.Failure_builder{
 				Message: "retryable failure",
-				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+				ApplicationFailureInfo: failurepb.ApplicationFailureInfo_builder{
 					NonRetryable:   false,
 					NextRetryDelay: durationpb.New(1 * time.Second),
-				}},
-			},
-		})
+				}.Build(),
+			}.Build(),
+		}.Build())
 		require.NoError(t, err)
 
 		// Poll to get attempt 2 (ensures retry has happened)
-		attempt2Resp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+		attempt2Resp, err := s.FrontendClient().PollActivityTaskQueue(ctx, workflowservice.PollActivityTaskQueueRequest_builder{
 			Namespace: s.Namespace().String(),
-			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		})
+			TaskQueue: taskqueuepb.TaskQueue_builder{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
+		}.Build())
 		require.NoError(t, err)
-		require.EqualValues(t, 2, attempt2Resp.Attempt)
+		require.EqualValues(t, 2, attempt2Resp.GetAttempt())
 
 		// Heartbeat with the attempt 2 token
-		_, err = s.FrontendClient().RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
+		_, err = s.FrontendClient().RecordActivityTaskHeartbeat(ctx, workflowservice.RecordActivityTaskHeartbeatRequest_builder{
 			Namespace: s.Namespace().String(),
-			TaskToken: attempt2Resp.TaskToken,
+			TaskToken: attempt2Resp.GetTaskToken(),
 			Details:   heartbeatDetails,
-		})
+		}.Build())
 		require.NoError(t, err)
 
 		// Try to heartbeat with the old attempt 1 token - should fail with NotFound
-		_, err = s.FrontendClient().RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
+		_, err = s.FrontendClient().RecordActivityTaskHeartbeat(ctx, workflowservice.RecordActivityTaskHeartbeatRequest_builder{
 			Namespace: s.Namespace().String(),
-			TaskToken: attempt1Resp.TaskToken,
+			TaskToken: attempt1Resp.GetTaskToken(),
 			Details:   heartbeatDetails,
-		})
+		}.Build())
 		require.Error(t, err)
 		statusErr := serviceerror.ToStatus(err)
 		require.Equal(t, codes.NotFound, statusErr.Code())
@@ -3184,33 +3182,33 @@ func (s *standaloneActivityTestSuite) TestHeartbeat() {
 		_, err := s.startActivity(ctx, activityID, taskQueue)
 		require.NoError(t, err)
 
-		pollResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+		pollResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, workflowservice.PollActivityTaskQueueRequest_builder{
 			Namespace: existingNamespace,
-			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		})
+			TaskQueue: taskqueuepb.TaskQueue_builder{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
+		}.Build())
 		require.NoError(t, err)
 
 		// Start an activity in a different namespace and try to heartbeat with existing token
 		externalNamespace := s.ExternalNamespace().String()
-		_, err = s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+		_, err = s.FrontendClient().StartActivityExecution(ctx, workflowservice.StartActivityExecutionRequest_builder{
 			Namespace:    externalNamespace,
 			ActivityId:   activityID,
 			ActivityType: s.tv.ActivityType(),
 			Identity:     s.tv.WorkerIdentity(),
 			Input:        defaultInput,
-			TaskQueue: &taskqueuepb.TaskQueue{
+			TaskQueue: taskqueuepb.TaskQueue_builder{
 				Name: taskQueue,
-			},
+			}.Build(),
 			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
 			RequestId:           s.tv.Any().String(),
-		})
+		}.Build())
 		require.NoError(t, err)
 
-		_, err = s.FrontendClient().RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
+		_, err = s.FrontendClient().RecordActivityTaskHeartbeat(ctx, workflowservice.RecordActivityTaskHeartbeatRequest_builder{
 			Namespace: externalNamespace,
-			TaskToken: pollResp.TaskToken,
+			TaskToken: pollResp.GetTaskToken(),
 			Details:   heartbeatDetails,
-		})
+		}.Build())
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
 		require.Equal(t, "Operation requested with a token from a different namespace.", invalidArgErr.Message)
@@ -3228,53 +3226,53 @@ func (s *standaloneActivityTestSuite) TestHeartbeat() {
 		_, err := s.startActivity(ctx, activityID, taskQueue)
 		require.NoError(t, err)
 
-		pollResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+		pollResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, workflowservice.PollActivityTaskQueueRequest_builder{
 			Namespace: existingNamespace,
-			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		})
+			TaskQueue: taskqueuepb.TaskQueue_builder{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
+		}.Build())
 		require.NoError(t, err)
 
 		// Start another activity in namespace B with the same activity ID
 		// (different namespaces allow same activity IDs)
 		externalNamespace := s.ExternalNamespace().String()
-		_, err = s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+		_, err = s.FrontendClient().StartActivityExecution(ctx, workflowservice.StartActivityExecutionRequest_builder{
 			Namespace:    externalNamespace,
 			ActivityId:   activityID,
 			ActivityType: s.tv.ActivityType(),
 			Identity:     s.tv.WorkerIdentity(),
 			Input:        defaultInput,
-			TaskQueue: &taskqueuepb.TaskQueue{
+			TaskQueue: taskqueuepb.TaskQueue_builder{
 				Name: taskQueue,
-			},
+			}.Build(),
 			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
 			RequestId:           s.tv.Any().String(),
-		})
+		}.Build())
 		require.NoError(t, err)
 
 		// Poll for the task from namespace B
-		externalPollResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+		externalPollResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, workflowservice.PollActivityTaskQueueRequest_builder{
 			Namespace: externalNamespace,
-			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		})
+			TaskQueue: taskqueuepb.TaskQueue_builder{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
+		}.Build())
 		require.NoError(t, err)
 
 		// Deserialize both task tokens
-		existingTask, err := tasktoken.NewSerializer().Deserialize(pollResp.TaskToken)
+		existingTask, err := tasktoken.NewSerializer().Deserialize(pollResp.GetTaskToken())
 		require.NoError(t, err)
 
-		externalTask, err := tasktoken.NewSerializer().Deserialize(externalPollResp.TaskToken)
+		externalTask, err := tasktoken.NewSerializer().Deserialize(externalPollResp.GetTaskToken())
 		require.NoError(t, err)
 
 		// Tamper with namespace A's token by replacing its ComponentRef with namespace B's ComponentRef
-		existingTask.ComponentRef = externalTask.GetComponentRef()
+		existingTask.SetComponentRef(externalTask.GetComponentRef())
 		existingTaskToken, err := tasktoken.NewSerializer().Serialize(existingTask)
 		require.NoError(t, err)
 
-		_, err = s.FrontendClient().RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
+		_, err = s.FrontendClient().RecordActivityTaskHeartbeat(ctx, workflowservice.RecordActivityTaskHeartbeatRequest_builder{
 			Namespace: existingNamespace,
 			TaskToken: existingTaskToken,
 			Details:   heartbeatDetails,
-		})
+		}.Build())
 
 		// Verify that the request is rejected with the correct error
 		var invalidArgErr *serviceerror.InvalidArgument
@@ -3288,50 +3286,50 @@ func (s *standaloneActivityTestSuite) TestHeartbeat() {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
 
-		startResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+		startResp, err := s.FrontendClient().StartActivityExecution(ctx, workflowservice.StartActivityExecutionRequest_builder{
 			Namespace:           s.Namespace().String(),
 			ActivityId:          activityID,
 			ActivityType:        s.tv.ActivityType(),
-			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+			TaskQueue:           taskqueuepb.TaskQueue_builder{Name: taskQueue}.Build(),
 			StartToCloseTimeout: durationpb.New(1 * time.Minute),
-		})
+		}.Build())
 		require.NoError(t, err)
-		runID := startResp.RunId
+		runID := startResp.GetRunId()
 
 		// Worker accepts task
-		pollResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+		pollResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, workflowservice.PollActivityTaskQueueRequest_builder{
 			Namespace: s.Namespace().String(),
-			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		})
+			TaskQueue: taskqueuepb.TaskQueue_builder{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
+		}.Build())
 		require.NoError(t, err)
 
 		// Heartbeat before cancellation - cancel_requested should be false
-		hbResp, err := s.FrontendClient().RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
+		hbResp, err := s.FrontendClient().RecordActivityTaskHeartbeat(ctx, workflowservice.RecordActivityTaskHeartbeatRequest_builder{
 			Namespace: s.Namespace().String(),
-			TaskToken: pollResp.TaskToken,
+			TaskToken: pollResp.GetTaskToken(),
 			Details:   heartbeatDetails,
-		})
+		}.Build())
 		require.NoError(t, err)
-		require.False(t, hbResp.CancelRequested)
+		require.False(t, hbResp.GetCancelRequested())
 
 		// Request cancellation
-		_, err = s.FrontendClient().RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
+		_, err = s.FrontendClient().RequestCancelActivityExecution(ctx, workflowservice.RequestCancelActivityExecutionRequest_builder{
 			Namespace:  s.Namespace().String(),
 			ActivityId: activityID,
 			RunId:      runID,
 			RequestId:  s.tv.RequestID(),
 			Reason:     "test cancellation",
-		})
+		}.Build())
 		require.NoError(t, err)
 
 		// Heartbeat after cancellation - cancel_requested should be true
-		hbResp, err = s.FrontendClient().RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
+		hbResp, err = s.FrontendClient().RecordActivityTaskHeartbeat(ctx, workflowservice.RecordActivityTaskHeartbeatRequest_builder{
 			Namespace: s.Namespace().String(),
-			TaskToken: pollResp.TaskToken,
+			TaskToken: pollResp.GetTaskToken(),
 			Details:   heartbeatDetails,
-		})
+		}.Build())
 		require.NoError(t, err)
-		require.True(t, hbResp.CancelRequested)
+		require.True(t, hbResp.GetCancelRequested())
 	})
 
 	t.Run("HeartbeatDetailsAvailableOnRetry", func(t *testing.T) {
@@ -3341,62 +3339,60 @@ func (s *standaloneActivityTestSuite) TestHeartbeat() {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
 
-		_, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+		_, err := s.FrontendClient().StartActivityExecution(ctx, workflowservice.StartActivityExecutionRequest_builder{
 			Namespace:              s.Namespace().String(),
 			ActivityId:             activityID,
 			ActivityType:           s.tv.ActivityType(),
-			TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue},
+			TaskQueue:              taskqueuepb.TaskQueue_builder{Name: taskQueue}.Build(),
 			StartToCloseTimeout:    durationpb.New(1 * time.Minute),
 			ScheduleToCloseTimeout: durationpb.New(5 * time.Minute),
-			RetryPolicy: &commonpb.RetryPolicy{
+			RetryPolicy: commonpb.RetryPolicy_builder{
 				InitialInterval: durationpb.New(1 * time.Millisecond),
 				MaximumAttempts: 3,
-			},
-		})
+			}.Build(),
+		}.Build())
 		require.NoError(t, err)
 
 		// First attempt: worker accepts task
-		pollResp1, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+		pollResp1, err := s.FrontendClient().PollActivityTaskQueue(ctx, workflowservice.PollActivityTaskQueueRequest_builder{
 			Namespace: s.Namespace().String(),
-			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		})
+			TaskQueue: taskqueuepb.TaskQueue_builder{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
+		}.Build())
 		require.NoError(t, err)
-		require.EqualValues(t, 1, pollResp1.Attempt)
-		require.Nil(t, pollResp1.HeartbeatDetails) // No heartbeat details on first attempt
+		require.EqualValues(t, 1, pollResp1.GetAttempt())
+		require.Nil(t, pollResp1.GetHeartbeatDetails()) // No heartbeat details on first attempt
 
 		// Worker heartbeats with details
-		_, err = s.FrontendClient().RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
+		_, err = s.FrontendClient().RecordActivityTaskHeartbeat(ctx, workflowservice.RecordActivityTaskHeartbeatRequest_builder{
 			Namespace: s.Namespace().String(),
-			TaskToken: pollResp1.TaskToken,
+			TaskToken: pollResp1.GetTaskToken(),
 			Details:   heartbeatDetails,
-		})
+		}.Build())
 		require.NoError(t, err)
 
 		// Worker fails with retryable error
-		_, err = s.FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
+		_, err = s.FrontendClient().RespondActivityTaskFailed(ctx, workflowservice.RespondActivityTaskFailedRequest_builder{
 			Namespace: s.Namespace().String(),
-			TaskToken: pollResp1.TaskToken,
-			Failure: &failurepb.Failure{
+			TaskToken: pollResp1.GetTaskToken(),
+			Failure: failurepb.Failure_builder{
 				Message: "retryable failure",
-				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
-					ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
-						NonRetryable: false,
-					},
-				},
-			},
-		})
+				ApplicationFailureInfo: failurepb.ApplicationFailureInfo_builder{
+					NonRetryable: false,
+				}.Build(),
+			}.Build(),
+		}.Build())
 		require.NoError(t, err)
 
 		// Second attempt: worker accepts retry task
-		pollResp2, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+		pollResp2, err := s.FrontendClient().PollActivityTaskQueue(ctx, workflowservice.PollActivityTaskQueueRequest_builder{
 			Namespace: s.Namespace().String(),
-			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		})
+			TaskQueue: taskqueuepb.TaskQueue_builder{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
+		}.Build())
 		require.NoError(t, err)
-		require.EqualValues(t, 2, pollResp2.Attempt)
+		require.EqualValues(t, 2, pollResp2.GetAttempt())
 
 		// Verify: heartbeat details from first attempt are available
-		protorequire.ProtoEqual(t, heartbeatDetails, pollResp2.HeartbeatDetails)
+		protorequire.ProtoEqual(t, heartbeatDetails, pollResp2.GetHeartbeatDetails())
 	})
 
 	t.Run("ActivityTimesOutWithoutHeartbeat", func(t *testing.T) {
@@ -3406,33 +3402,33 @@ func (s *standaloneActivityTestSuite) TestHeartbeat() {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
 
-		startResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+		startResp, err := s.FrontendClient().StartActivityExecution(ctx, workflowservice.StartActivityExecutionRequest_builder{
 			Namespace:           s.Namespace().String(),
 			ActivityId:          activityID,
 			ActivityType:        s.tv.ActivityType(),
-			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+			TaskQueue:           taskqueuepb.TaskQueue_builder{Name: taskQueue}.Build(),
 			StartToCloseTimeout: durationpb.New(1 * time.Minute),
 			HeartbeatTimeout:    durationpb.New(1 * time.Second),
-			RetryPolicy: &commonpb.RetryPolicy{
+			RetryPolicy: commonpb.RetryPolicy_builder{
 				MaximumAttempts: 1, // No retries
-			},
-		})
+			}.Build(),
+		}.Build())
 		require.NoError(t, err)
 
 		// Worker accepts task (starts the activity)
-		pollTaskResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+		pollTaskResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, workflowservice.PollActivityTaskQueueRequest_builder{
 			Namespace: s.Namespace().String(),
-			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		})
+			TaskQueue: taskqueuepb.TaskQueue_builder{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
+		}.Build())
 		require.NoError(t, err)
-		require.NotEmpty(t, pollTaskResp.TaskToken)
+		require.NotEmpty(t, pollTaskResp.GetTaskToken())
 
 		// Long poll for completion (heartbeat timeout will fire)
-		pollResp, err := s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
+		pollResp, err := s.FrontendClient().PollActivityExecution(ctx, workflowservice.PollActivityExecutionRequest_builder{
 			Namespace:  s.Namespace().String(),
 			ActivityId: activityID,
-			RunId:      startResp.RunId,
-		})
+			RunId:      startResp.GetRunId(),
+		}.Build())
 		require.NoError(t, err)
 		require.Equal(t, enumspb.TIMEOUT_TYPE_HEARTBEAT, pollResp.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType(),
 			"expected timeout type=Heartbeat but is %s", pollResp.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType())
@@ -3445,37 +3441,37 @@ func (s *standaloneActivityTestSuite) TestHeartbeat() {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
 
-		_, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+		_, err := s.FrontendClient().StartActivityExecution(ctx, workflowservice.StartActivityExecutionRequest_builder{
 			Namespace:              s.Namespace().String(),
 			ActivityId:             activityID,
 			ActivityType:           s.tv.ActivityType(),
-			TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue},
+			TaskQueue:              taskqueuepb.TaskQueue_builder{Name: taskQueue}.Build(),
 			StartToCloseTimeout:    durationpb.New(1 * time.Minute),
 			ScheduleToCloseTimeout: durationpb.New(5 * time.Minute),
 			HeartbeatTimeout:       durationpb.New(1 * time.Second),
-			RetryPolicy: &commonpb.RetryPolicy{
+			RetryPolicy: commonpb.RetryPolicy_builder{
 				InitialInterval: durationpb.New(1 * time.Millisecond),
 				MaximumAttempts: 2,
-			},
-		})
+			}.Build(),
+		}.Build())
 		require.NoError(t, err)
 
 		// Attempt 1: worker accepts task
-		pollTaskResp1, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+		pollTaskResp1, err := s.FrontendClient().PollActivityTaskQueue(ctx, workflowservice.PollActivityTaskQueueRequest_builder{
 			Namespace: s.Namespace().String(),
-			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		})
+			TaskQueue: taskqueuepb.TaskQueue_builder{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
+		}.Build())
 		require.NoError(t, err)
-		require.EqualValues(t, 1, pollTaskResp1.Attempt)
+		require.EqualValues(t, 1, pollTaskResp1.GetAttempt())
 
 		// Don't heartbeat - let it timeout and retry
 		// Second attempt: worker accepts retry task
-		pollTaskResp2, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+		pollTaskResp2, err := s.FrontendClient().PollActivityTaskQueue(ctx, workflowservice.PollActivityTaskQueueRequest_builder{
 			Namespace: s.Namespace().String(),
-			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		})
+			TaskQueue: taskqueuepb.TaskQueue_builder{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
+		}.Build())
 		require.NoError(t, err)
-		require.EqualValues(t, 2, pollTaskResp2.Attempt)
+		require.EqualValues(t, 2, pollTaskResp2.GetAttempt())
 	})
 
 	t.Run("HeartbeatKeepsActivityAlive", func(t *testing.T) {
@@ -3485,60 +3481,60 @@ func (s *standaloneActivityTestSuite) TestHeartbeat() {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
 
-		startResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+		startResp, err := s.FrontendClient().StartActivityExecution(ctx, workflowservice.StartActivityExecutionRequest_builder{
 			Namespace:           s.Namespace().String(),
 			ActivityId:          activityID,
 			ActivityType:        s.tv.ActivityType(),
-			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+			TaskQueue:           taskqueuepb.TaskQueue_builder{Name: taskQueue}.Build(),
 			StartToCloseTimeout: durationpb.New(1 * time.Minute),
 			HeartbeatTimeout:    durationpb.New(1 * time.Second),
-			RetryPolicy: &commonpb.RetryPolicy{
+			RetryPolicy: commonpb.RetryPolicy_builder{
 				MaximumAttempts: 1, // No retries - timeout would be terminal
-			},
-		})
+			}.Build(),
+		}.Build())
 		require.NoError(t, err)
 
 		// Worker accepts task
-		pollTaskResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+		pollTaskResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, workflowservice.PollActivityTaskQueueRequest_builder{
 			Namespace: s.Namespace().String(),
-			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		})
+			TaskQueue: taskqueuepb.TaskQueue_builder{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
+		}.Build())
 		require.NoError(t, err)
-		require.NotEmpty(t, pollTaskResp.TaskToken)
+		require.NotEmpty(t, pollTaskResp.GetTaskToken())
 
 		// Heartbeat before timeout
 		time.Sleep(600 * time.Millisecond) //nolint:forbidigo
-		_, err = s.FrontendClient().RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
+		_, err = s.FrontendClient().RecordActivityTaskHeartbeat(ctx, workflowservice.RecordActivityTaskHeartbeatRequest_builder{
 			Namespace: s.Namespace().String(),
-			TaskToken: pollTaskResp.TaskToken,
+			TaskToken: pollTaskResp.GetTaskToken(),
 			Details:   heartbeatDetails,
-		})
+		}.Build())
 		require.NoError(t, err)
 
 		// Wait again, then heartbeat again
 		time.Sleep(600 * time.Millisecond) //nolint:forbidigo
-		_, err = s.FrontendClient().RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
+		_, err = s.FrontendClient().RecordActivityTaskHeartbeat(ctx, workflowservice.RecordActivityTaskHeartbeatRequest_builder{
 			Namespace: s.Namespace().String(),
-			TaskToken: pollTaskResp.TaskToken,
+			TaskToken: pollTaskResp.GetTaskToken(),
 			Details:   heartbeatDetails,
-		})
+		}.Build())
 		require.NoError(t, err)
 
 		// Complete the activity
-		_, err = s.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+		_, err = s.FrontendClient().RespondActivityTaskCompleted(ctx, workflowservice.RespondActivityTaskCompletedRequest_builder{
 			Namespace: s.Namespace().String(),
-			TaskToken: pollTaskResp.TaskToken,
+			TaskToken: pollTaskResp.GetTaskToken(),
 			Result:    defaultResult,
-		})
+		}.Build())
 		require.NoError(t, err)
 
 		// Verify activity completed successfully (didn't timeout)
-		pollResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+		pollResp, err := s.FrontendClient().DescribeActivityExecution(ctx, workflowservice.DescribeActivityExecutionRequest_builder{
 			Namespace:      s.Namespace().String(),
 			ActivityId:     activityID,
-			RunId:          startResp.RunId,
+			RunId:          startResp.GetRunId(),
 			IncludeOutcome: true,
-		})
+		}.Build())
 		require.NoError(t, err)
 		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, pollResp.GetInfo().GetStatus(),
 			"expected status=Completed but is %s", pollResp.GetInfo().GetStatus())
@@ -3552,51 +3548,51 @@ func (s *standaloneActivityTestSuite) TestHeartbeat() {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
 
-		startResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+		startResp, err := s.FrontendClient().StartActivityExecution(ctx, workflowservice.StartActivityExecutionRequest_builder{
 			Namespace:           s.Namespace().String(),
 			ActivityId:          activityID,
 			ActivityType:        s.tv.ActivityType(),
-			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+			TaskQueue:           taskqueuepb.TaskQueue_builder{Name: taskQueue}.Build(),
 			StartToCloseTimeout: durationpb.New(1 * time.Minute),
 			HeartbeatTimeout:    durationpb.New(1 * time.Second),
-			RetryPolicy: &commonpb.RetryPolicy{
+			RetryPolicy: commonpb.RetryPolicy_builder{
 				MaximumAttempts: 1, // No retries - timeout would be terminal
-			},
-		})
+			}.Build(),
+		}.Build())
 		require.NoError(t, err)
 
 		// Worker accepts task
-		pollTaskResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+		pollTaskResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, workflowservice.PollActivityTaskQueueRequest_builder{
 			Namespace: s.Namespace().String(),
-			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		})
+			TaskQueue: taskqueuepb.TaskQueue_builder{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
+		}.Build())
 		require.NoError(t, err)
-		require.NotEmpty(t, pollTaskResp.TaskToken)
+		require.NotEmpty(t, pollTaskResp.GetTaskToken())
 
 		// Heartbeat before timeout
-		_, err = s.FrontendClient().RecordActivityTaskHeartbeatById(ctx, &workflowservice.RecordActivityTaskHeartbeatByIdRequest{
+		_, err = s.FrontendClient().RecordActivityTaskHeartbeatById(ctx, workflowservice.RecordActivityTaskHeartbeatByIdRequest_builder{
 			Namespace:  s.Namespace().String(),
 			ActivityId: activityID,
-			RunId:      startResp.RunId,
+			RunId:      startResp.GetRunId(),
 			Details:    heartbeatDetails,
-		})
+		}.Build())
 		require.NoError(t, err)
 
 		// Complete the activity
-		_, err = s.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+		_, err = s.FrontendClient().RespondActivityTaskCompleted(ctx, workflowservice.RespondActivityTaskCompletedRequest_builder{
 			Namespace: s.Namespace().String(),
-			TaskToken: pollTaskResp.TaskToken,
+			TaskToken: pollTaskResp.GetTaskToken(),
 			Result:    defaultResult,
-		})
+		}.Build())
 		require.NoError(t, err)
 
 		// Verify activity completed successfully (didn't timeout)
-		pollResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+		pollResp, err := s.FrontendClient().DescribeActivityExecution(ctx, workflowservice.DescribeActivityExecutionRequest_builder{
 			Namespace:      s.Namespace().String(),
 			ActivityId:     activityID,
-			RunId:          startResp.RunId,
+			RunId:          startResp.GetRunId(),
 			IncludeOutcome: true,
-		})
+		}.Build())
 		require.NoError(t, err)
 		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, pollResp.GetInfo().GetStatus(),
 			"expected status=Completed but is %s", pollResp.GetInfo().GetStatus())
@@ -3605,14 +3601,14 @@ func (s *standaloneActivityTestSuite) TestHeartbeat() {
 }
 
 func (s *standaloneActivityTestSuite) pollActivityTaskQueue(ctx context.Context, taskQueue string) (*workflowservice.PollActivityTaskQueueResponse, error) {
-	return s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+	return s.FrontendClient().PollActivityTaskQueue(ctx, workflowservice.PollActivityTaskQueueRequest_builder{
 		Namespace: s.Namespace().String(),
-		TaskQueue: &taskqueuepb.TaskQueue{
+		TaskQueue: taskqueuepb.TaskQueue_builder{
 			Name: taskQueue,
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-		},
+		}.Build(),
 		Identity: defaultIdentity,
-	})
+	}.Build())
 }
 
 func (s *standaloneActivityTestSuite) startAndValidateActivity(
@@ -3625,26 +3621,26 @@ func (s *standaloneActivityTestSuite) startAndValidateActivity(
 
 	require.NoError(t, err)
 	require.NotNil(t, startResponse.GetRunId())
-	require.True(t, startResponse.Started)
+	require.True(t, startResponse.GetStarted())
 
-	activityResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+	activityResp, err := s.FrontendClient().DescribeActivityExecution(ctx, workflowservice.DescribeActivityExecutionRequest_builder{
 		Namespace:      s.Namespace().String(),
 		ActivityId:     activityID,
-		RunId:          startResponse.RunId,
+		RunId:          startResponse.GetRunId(),
 		IncludeInput:   true,
 		IncludeOutcome: true,
-	})
+	}.Build())
 
 	info := activityResp.GetInfo()
 
 	require.NoError(t, err)
-	s.validateBaseActivityResponse(t, activityID, startResponse.RunId, activityResp)
+	s.validateBaseActivityResponse(t, activityID, startResponse.GetRunId(), activityResp)
 	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING, info.GetStatus(),
 		"expected Running but is %s", info.GetStatus())
 	require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, info.GetRunState(),
 		"expected Scheduled but is %s", info.GetRunState())
 	require.EqualValues(t, 1, info.GetAttempt())
-	require.Nil(t, activityResp.Outcome)
+	require.Nil(t, activityResp.GetOutcome())
 	require.Nil(t, info.GetLastFailure())
 	require.Nil(t, info.GetHeartbeatDetails())
 	require.Nil(t, info.GetLastHeartbeatTime())
@@ -3659,26 +3655,26 @@ func (s *standaloneActivityTestSuite) pollActivityTaskAndValidate(
 	taskQueue string,
 	runID string,
 ) *workflowservice.PollActivityTaskQueueResponse {
-	pollTaskResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+	pollTaskResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, workflowservice.PollActivityTaskQueueRequest_builder{
 		Namespace: s.Namespace().String(),
-		TaskQueue: &taskqueuepb.TaskQueue{
+		TaskQueue: taskqueuepb.TaskQueue_builder{
 			Name: taskQueue,
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-		},
+		}.Build(),
 		Identity: s.tv.WorkerIdentity(),
-	})
+	}.Build())
 	require.NoError(t, err)
 	require.Equal(t, activityID, pollTaskResp.GetActivityId())
 	protorequire.ProtoEqual(t, s.tv.ActivityType(), pollTaskResp.GetActivityType())
-	require.EqualValues(t, 1, pollTaskResp.Attempt)
+	require.EqualValues(t, 1, pollTaskResp.GetAttempt())
 
-	activityResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+	activityResp, err := s.FrontendClient().DescribeActivityExecution(ctx, workflowservice.DescribeActivityExecutionRequest_builder{
 		Namespace:      s.Namespace().String(),
 		ActivityId:     activityID,
 		RunId:          runID,
 		IncludeInput:   true,
 		IncludeOutcome: true,
-	})
+	}.Build())
 
 	info := activityResp.GetInfo()
 
@@ -3691,7 +3687,7 @@ func (s *standaloneActivityTestSuite) pollActivityTaskAndValidate(
 	require.EqualValues(t, 1, info.GetAttempt())
 	require.Equal(t, s.tv.WorkerIdentity(), info.GetLastWorkerIdentity())
 	require.NotNil(t, info.GetLastStartedTime())
-	require.Nil(t, activityResp.Outcome)
+	require.Nil(t, activityResp.GetOutcome())
 	require.Nil(t, info.GetLastFailure())
 	require.Nil(t, info.GetHeartbeatDetails())
 	require.Nil(t, info.GetLastHeartbeatTime())
@@ -3706,13 +3702,13 @@ func (s *standaloneActivityTestSuite) validateCompletion(
 	runID string,
 	workerIdentity string,
 ) {
-	activityResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+	activityResp, err := s.FrontendClient().DescribeActivityExecution(ctx, workflowservice.DescribeActivityExecutionRequest_builder{
 		Namespace:      s.Namespace().String(),
 		ActivityId:     activityID,
 		RunId:          runID,
 		IncludeInput:   true,
 		IncludeOutcome: true,
-	})
+	}.Build())
 
 	info := activityResp.GetInfo()
 
@@ -3741,13 +3737,13 @@ func (s *standaloneActivityTestSuite) validateFailure(
 	expectedHeartbeatDetails *commonpb.Payloads,
 	workerIdentity string,
 ) {
-	activityResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+	activityResp, err := s.FrontendClient().DescribeActivityExecution(ctx, workflowservice.DescribeActivityExecutionRequest_builder{
 		Namespace:      s.Namespace().String(),
 		ActivityId:     activityID,
 		RunId:          runID,
 		IncludeInput:   true,
 		IncludeOutcome: true,
-	})
+	}.Build())
 
 	info := activityResp.GetInfo()
 
@@ -3776,10 +3772,10 @@ func (s *standaloneActivityTestSuite) validateBaseActivityResponse(
 	expectedRunID string,
 	response *workflowservice.DescribeActivityExecutionResponse,
 ) {
-	require.NotNil(t, response.LongPollToken)
+	require.NotNil(t, response.GetLongPollToken())
 	require.Equal(t, activityID, response.GetInfo().GetActivityId())
 	require.Equal(t, s.tv.ActivityType(), response.GetInfo().GetActivityType())
-	require.Equal(t, expectedRunID, response.RunId)
+	require.Equal(t, expectedRunID, response.GetRunId())
 	require.NotNil(t, response.GetInfo().GetScheduleTime())
 	protorequire.ProtoEqual(t, defaultInput, response.GetInput())
 }
@@ -3789,16 +3785,16 @@ func (s *standaloneActivityTestSuite) startActivity(ctx context.Context, activit
 }
 
 func (s *standaloneActivityTestSuite) startActivityWithType(ctx context.Context, activityID string, taskQueue string, activityType *commonpb.ActivityType) (*workflowservice.StartActivityExecutionResponse, error) {
-	return s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+	return s.FrontendClient().StartActivityExecution(ctx, workflowservice.StartActivityExecutionRequest_builder{
 		Namespace:    s.Namespace().String(),
 		ActivityId:   activityID,
 		ActivityType: activityType,
 		Identity:     s.tv.WorkerIdentity(),
 		Input:        defaultInput,
-		TaskQueue: &taskqueuepb.TaskQueue{
+		TaskQueue: taskqueuepb.TaskQueue_builder{
 			Name: taskQueue,
-		},
+		}.Build(),
 		StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
 		RequestId:           s.tv.RequestID(),
-	})
+	}.Build())
 }

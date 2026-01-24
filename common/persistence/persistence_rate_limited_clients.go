@@ -243,7 +243,7 @@ func (p *shardRateLimitedPersistenceClient) UpdateShard(
 	ctx context.Context,
 	request *UpdateShardRequest,
 ) error {
-	if err := allow(ctx, "UpdateShard", request.ShardInfo.ShardId, p.systemRateLimiter, p.namespaceRateLimiter, p.shardRateLimiter); err != nil {
+	if err := allow(ctx, "UpdateShard", request.ShardInfo.GetShardId(), p.systemRateLimiter, p.namespaceRateLimiter, p.shardRateLimiter); err != nil {
 		return err
 	}
 

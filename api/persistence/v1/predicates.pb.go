@@ -8,7 +8,7 @@ package persistence
 
 import (
 	reflect "reflect"
-	sync "sync"
+	"strconv"
 	unsafe "unsafe"
 
 	v1 "go.temporal.io/server/api/enums/v1"
@@ -24,23 +24,11 @@ const (
 )
 
 type Predicate struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	PredicateType v1.PredicateType       `protobuf:"varint,1,opt,name=predicate_type,json=predicateType,proto3,enum=temporal.server.api.enums.v1.PredicateType" json:"predicate_type,omitempty"`
-	// Types that are valid to be assigned to Attributes:
-	//
-	//	*Predicate_UniversalPredicateAttributes
-	//	*Predicate_EmptyPredicateAttributes
-	//	*Predicate_AndPredicateAttributes
-	//	*Predicate_OrPredicateAttributes
-	//	*Predicate_NotPredicateAttributes
-	//	*Predicate_NamespaceIdPredicateAttributes
-	//	*Predicate_TaskTypePredicateAttributes
-	//	*Predicate_DestinationPredicateAttributes
-	//	*Predicate_OutboundTaskGroupPredicateAttributes
-	//	*Predicate_OutboundTaskPredicateAttributes
-	Attributes    isPredicate_Attributes `protobuf_oneof:"attributes"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                    protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_PredicateType v1.PredicateType       `protobuf:"varint,1,opt,name=predicate_type,json=predicateType,proto3,enum=temporal.server.api.enums.v1.PredicateType"`
+	xxx_hidden_Attributes    isPredicate_Attributes `protobuf_oneof:"attributes"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *Predicate) Reset() {
@@ -68,28 +56,16 @@ func (x *Predicate) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use Predicate.ProtoReflect.Descriptor instead.
-func (*Predicate) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_predicates_proto_rawDescGZIP(), []int{0}
-}
-
 func (x *Predicate) GetPredicateType() v1.PredicateType {
 	if x != nil {
-		return x.PredicateType
+		return x.xxx_hidden_PredicateType
 	}
 	return v1.PredicateType(0)
 }
 
-func (x *Predicate) GetAttributes() isPredicate_Attributes {
-	if x != nil {
-		return x.Attributes
-	}
-	return nil
-}
-
 func (x *Predicate) GetUniversalPredicateAttributes() *UniversalPredicateAttributes {
 	if x != nil {
-		if x, ok := x.Attributes.(*Predicate_UniversalPredicateAttributes); ok {
+		if x, ok := x.xxx_hidden_Attributes.(*predicate_UniversalPredicateAttributes); ok {
 			return x.UniversalPredicateAttributes
 		}
 	}
@@ -98,7 +74,7 @@ func (x *Predicate) GetUniversalPredicateAttributes() *UniversalPredicateAttribu
 
 func (x *Predicate) GetEmptyPredicateAttributes() *EmptyPredicateAttributes {
 	if x != nil {
-		if x, ok := x.Attributes.(*Predicate_EmptyPredicateAttributes); ok {
+		if x, ok := x.xxx_hidden_Attributes.(*predicate_EmptyPredicateAttributes); ok {
 			return x.EmptyPredicateAttributes
 		}
 	}
@@ -107,7 +83,7 @@ func (x *Predicate) GetEmptyPredicateAttributes() *EmptyPredicateAttributes {
 
 func (x *Predicate) GetAndPredicateAttributes() *AndPredicateAttributes {
 	if x != nil {
-		if x, ok := x.Attributes.(*Predicate_AndPredicateAttributes); ok {
+		if x, ok := x.xxx_hidden_Attributes.(*predicate_AndPredicateAttributes); ok {
 			return x.AndPredicateAttributes
 		}
 	}
@@ -116,7 +92,7 @@ func (x *Predicate) GetAndPredicateAttributes() *AndPredicateAttributes {
 
 func (x *Predicate) GetOrPredicateAttributes() *OrPredicateAttributes {
 	if x != nil {
-		if x, ok := x.Attributes.(*Predicate_OrPredicateAttributes); ok {
+		if x, ok := x.xxx_hidden_Attributes.(*predicate_OrPredicateAttributes); ok {
 			return x.OrPredicateAttributes
 		}
 	}
@@ -125,7 +101,7 @@ func (x *Predicate) GetOrPredicateAttributes() *OrPredicateAttributes {
 
 func (x *Predicate) GetNotPredicateAttributes() *NotPredicateAttributes {
 	if x != nil {
-		if x, ok := x.Attributes.(*Predicate_NotPredicateAttributes); ok {
+		if x, ok := x.xxx_hidden_Attributes.(*predicate_NotPredicateAttributes); ok {
 			return x.NotPredicateAttributes
 		}
 	}
@@ -134,7 +110,7 @@ func (x *Predicate) GetNotPredicateAttributes() *NotPredicateAttributes {
 
 func (x *Predicate) GetNamespaceIdPredicateAttributes() *NamespaceIdPredicateAttributes {
 	if x != nil {
-		if x, ok := x.Attributes.(*Predicate_NamespaceIdPredicateAttributes); ok {
+		if x, ok := x.xxx_hidden_Attributes.(*predicate_NamespaceIdPredicateAttributes); ok {
 			return x.NamespaceIdPredicateAttributes
 		}
 	}
@@ -143,7 +119,7 @@ func (x *Predicate) GetNamespaceIdPredicateAttributes() *NamespaceIdPredicateAtt
 
 func (x *Predicate) GetTaskTypePredicateAttributes() *TaskTypePredicateAttributes {
 	if x != nil {
-		if x, ok := x.Attributes.(*Predicate_TaskTypePredicateAttributes); ok {
+		if x, ok := x.xxx_hidden_Attributes.(*predicate_TaskTypePredicateAttributes); ok {
 			return x.TaskTypePredicateAttributes
 		}
 	}
@@ -152,7 +128,7 @@ func (x *Predicate) GetTaskTypePredicateAttributes() *TaskTypePredicateAttribute
 
 func (x *Predicate) GetDestinationPredicateAttributes() *DestinationPredicateAttributes {
 	if x != nil {
-		if x, ok := x.Attributes.(*Predicate_DestinationPredicateAttributes); ok {
+		if x, ok := x.xxx_hidden_Attributes.(*predicate_DestinationPredicateAttributes); ok {
 			return x.DestinationPredicateAttributes
 		}
 	}
@@ -161,7 +137,7 @@ func (x *Predicate) GetDestinationPredicateAttributes() *DestinationPredicateAtt
 
 func (x *Predicate) GetOutboundTaskGroupPredicateAttributes() *OutboundTaskGroupPredicateAttributes {
 	if x != nil {
-		if x, ok := x.Attributes.(*Predicate_OutboundTaskGroupPredicateAttributes); ok {
+		if x, ok := x.xxx_hidden_Attributes.(*predicate_OutboundTaskGroupPredicateAttributes); ok {
 			return x.OutboundTaskGroupPredicateAttributes
 		}
 	}
@@ -170,79 +146,444 @@ func (x *Predicate) GetOutboundTaskGroupPredicateAttributes() *OutboundTaskGroup
 
 func (x *Predicate) GetOutboundTaskPredicateAttributes() *OutboundTaskPredicateAttributes {
 	if x != nil {
-		if x, ok := x.Attributes.(*Predicate_OutboundTaskPredicateAttributes); ok {
+		if x, ok := x.xxx_hidden_Attributes.(*predicate_OutboundTaskPredicateAttributes); ok {
 			return x.OutboundTaskPredicateAttributes
 		}
 	}
 	return nil
 }
 
+func (x *Predicate) SetPredicateType(v v1.PredicateType) {
+	x.xxx_hidden_PredicateType = v
+}
+
+func (x *Predicate) SetUniversalPredicateAttributes(v *UniversalPredicateAttributes) {
+	if v == nil {
+		x.xxx_hidden_Attributes = nil
+		return
+	}
+	x.xxx_hidden_Attributes = &predicate_UniversalPredicateAttributes{v}
+}
+
+func (x *Predicate) SetEmptyPredicateAttributes(v *EmptyPredicateAttributes) {
+	if v == nil {
+		x.xxx_hidden_Attributes = nil
+		return
+	}
+	x.xxx_hidden_Attributes = &predicate_EmptyPredicateAttributes{v}
+}
+
+func (x *Predicate) SetAndPredicateAttributes(v *AndPredicateAttributes) {
+	if v == nil {
+		x.xxx_hidden_Attributes = nil
+		return
+	}
+	x.xxx_hidden_Attributes = &predicate_AndPredicateAttributes{v}
+}
+
+func (x *Predicate) SetOrPredicateAttributes(v *OrPredicateAttributes) {
+	if v == nil {
+		x.xxx_hidden_Attributes = nil
+		return
+	}
+	x.xxx_hidden_Attributes = &predicate_OrPredicateAttributes{v}
+}
+
+func (x *Predicate) SetNotPredicateAttributes(v *NotPredicateAttributes) {
+	if v == nil {
+		x.xxx_hidden_Attributes = nil
+		return
+	}
+	x.xxx_hidden_Attributes = &predicate_NotPredicateAttributes{v}
+}
+
+func (x *Predicate) SetNamespaceIdPredicateAttributes(v *NamespaceIdPredicateAttributes) {
+	if v == nil {
+		x.xxx_hidden_Attributes = nil
+		return
+	}
+	x.xxx_hidden_Attributes = &predicate_NamespaceIdPredicateAttributes{v}
+}
+
+func (x *Predicate) SetTaskTypePredicateAttributes(v *TaskTypePredicateAttributes) {
+	if v == nil {
+		x.xxx_hidden_Attributes = nil
+		return
+	}
+	x.xxx_hidden_Attributes = &predicate_TaskTypePredicateAttributes{v}
+}
+
+func (x *Predicate) SetDestinationPredicateAttributes(v *DestinationPredicateAttributes) {
+	if v == nil {
+		x.xxx_hidden_Attributes = nil
+		return
+	}
+	x.xxx_hidden_Attributes = &predicate_DestinationPredicateAttributes{v}
+}
+
+func (x *Predicate) SetOutboundTaskGroupPredicateAttributes(v *OutboundTaskGroupPredicateAttributes) {
+	if v == nil {
+		x.xxx_hidden_Attributes = nil
+		return
+	}
+	x.xxx_hidden_Attributes = &predicate_OutboundTaskGroupPredicateAttributes{v}
+}
+
+func (x *Predicate) SetOutboundTaskPredicateAttributes(v *OutboundTaskPredicateAttributes) {
+	if v == nil {
+		x.xxx_hidden_Attributes = nil
+		return
+	}
+	x.xxx_hidden_Attributes = &predicate_OutboundTaskPredicateAttributes{v}
+}
+
+func (x *Predicate) HasAttributes() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Attributes != nil
+}
+
+func (x *Predicate) HasUniversalPredicateAttributes() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_Attributes.(*predicate_UniversalPredicateAttributes)
+	return ok
+}
+
+func (x *Predicate) HasEmptyPredicateAttributes() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_Attributes.(*predicate_EmptyPredicateAttributes)
+	return ok
+}
+
+func (x *Predicate) HasAndPredicateAttributes() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_Attributes.(*predicate_AndPredicateAttributes)
+	return ok
+}
+
+func (x *Predicate) HasOrPredicateAttributes() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_Attributes.(*predicate_OrPredicateAttributes)
+	return ok
+}
+
+func (x *Predicate) HasNotPredicateAttributes() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_Attributes.(*predicate_NotPredicateAttributes)
+	return ok
+}
+
+func (x *Predicate) HasNamespaceIdPredicateAttributes() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_Attributes.(*predicate_NamespaceIdPredicateAttributes)
+	return ok
+}
+
+func (x *Predicate) HasTaskTypePredicateAttributes() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_Attributes.(*predicate_TaskTypePredicateAttributes)
+	return ok
+}
+
+func (x *Predicate) HasDestinationPredicateAttributes() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_Attributes.(*predicate_DestinationPredicateAttributes)
+	return ok
+}
+
+func (x *Predicate) HasOutboundTaskGroupPredicateAttributes() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_Attributes.(*predicate_OutboundTaskGroupPredicateAttributes)
+	return ok
+}
+
+func (x *Predicate) HasOutboundTaskPredicateAttributes() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_Attributes.(*predicate_OutboundTaskPredicateAttributes)
+	return ok
+}
+
+func (x *Predicate) ClearAttributes() {
+	x.xxx_hidden_Attributes = nil
+}
+
+func (x *Predicate) ClearUniversalPredicateAttributes() {
+	if _, ok := x.xxx_hidden_Attributes.(*predicate_UniversalPredicateAttributes); ok {
+		x.xxx_hidden_Attributes = nil
+	}
+}
+
+func (x *Predicate) ClearEmptyPredicateAttributes() {
+	if _, ok := x.xxx_hidden_Attributes.(*predicate_EmptyPredicateAttributes); ok {
+		x.xxx_hidden_Attributes = nil
+	}
+}
+
+func (x *Predicate) ClearAndPredicateAttributes() {
+	if _, ok := x.xxx_hidden_Attributes.(*predicate_AndPredicateAttributes); ok {
+		x.xxx_hidden_Attributes = nil
+	}
+}
+
+func (x *Predicate) ClearOrPredicateAttributes() {
+	if _, ok := x.xxx_hidden_Attributes.(*predicate_OrPredicateAttributes); ok {
+		x.xxx_hidden_Attributes = nil
+	}
+}
+
+func (x *Predicate) ClearNotPredicateAttributes() {
+	if _, ok := x.xxx_hidden_Attributes.(*predicate_NotPredicateAttributes); ok {
+		x.xxx_hidden_Attributes = nil
+	}
+}
+
+func (x *Predicate) ClearNamespaceIdPredicateAttributes() {
+	if _, ok := x.xxx_hidden_Attributes.(*predicate_NamespaceIdPredicateAttributes); ok {
+		x.xxx_hidden_Attributes = nil
+	}
+}
+
+func (x *Predicate) ClearTaskTypePredicateAttributes() {
+	if _, ok := x.xxx_hidden_Attributes.(*predicate_TaskTypePredicateAttributes); ok {
+		x.xxx_hidden_Attributes = nil
+	}
+}
+
+func (x *Predicate) ClearDestinationPredicateAttributes() {
+	if _, ok := x.xxx_hidden_Attributes.(*predicate_DestinationPredicateAttributes); ok {
+		x.xxx_hidden_Attributes = nil
+	}
+}
+
+func (x *Predicate) ClearOutboundTaskGroupPredicateAttributes() {
+	if _, ok := x.xxx_hidden_Attributes.(*predicate_OutboundTaskGroupPredicateAttributes); ok {
+		x.xxx_hidden_Attributes = nil
+	}
+}
+
+func (x *Predicate) ClearOutboundTaskPredicateAttributes() {
+	if _, ok := x.xxx_hidden_Attributes.(*predicate_OutboundTaskPredicateAttributes); ok {
+		x.xxx_hidden_Attributes = nil
+	}
+}
+
+const Predicate_Attributes_not_set_case case_Predicate_Attributes = 0
+const Predicate_UniversalPredicateAttributes_case case_Predicate_Attributes = 2
+const Predicate_EmptyPredicateAttributes_case case_Predicate_Attributes = 3
+const Predicate_AndPredicateAttributes_case case_Predicate_Attributes = 4
+const Predicate_OrPredicateAttributes_case case_Predicate_Attributes = 5
+const Predicate_NotPredicateAttributes_case case_Predicate_Attributes = 6
+const Predicate_NamespaceIdPredicateAttributes_case case_Predicate_Attributes = 7
+const Predicate_TaskTypePredicateAttributes_case case_Predicate_Attributes = 8
+const Predicate_DestinationPredicateAttributes_case case_Predicate_Attributes = 9
+const Predicate_OutboundTaskGroupPredicateAttributes_case case_Predicate_Attributes = 10
+const Predicate_OutboundTaskPredicateAttributes_case case_Predicate_Attributes = 11
+
+func (x *Predicate) WhichAttributes() case_Predicate_Attributes {
+	if x == nil {
+		return Predicate_Attributes_not_set_case
+	}
+	switch x.xxx_hidden_Attributes.(type) {
+	case *predicate_UniversalPredicateAttributes:
+		return Predicate_UniversalPredicateAttributes_case
+	case *predicate_EmptyPredicateAttributes:
+		return Predicate_EmptyPredicateAttributes_case
+	case *predicate_AndPredicateAttributes:
+		return Predicate_AndPredicateAttributes_case
+	case *predicate_OrPredicateAttributes:
+		return Predicate_OrPredicateAttributes_case
+	case *predicate_NotPredicateAttributes:
+		return Predicate_NotPredicateAttributes_case
+	case *predicate_NamespaceIdPredicateAttributes:
+		return Predicate_NamespaceIdPredicateAttributes_case
+	case *predicate_TaskTypePredicateAttributes:
+		return Predicate_TaskTypePredicateAttributes_case
+	case *predicate_DestinationPredicateAttributes:
+		return Predicate_DestinationPredicateAttributes_case
+	case *predicate_OutboundTaskGroupPredicateAttributes:
+		return Predicate_OutboundTaskGroupPredicateAttributes_case
+	case *predicate_OutboundTaskPredicateAttributes:
+		return Predicate_OutboundTaskPredicateAttributes_case
+	default:
+		return Predicate_Attributes_not_set_case
+	}
+}
+
+type Predicate_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	PredicateType v1.PredicateType
+	// Fields of oneof xxx_hidden_Attributes:
+	UniversalPredicateAttributes         *UniversalPredicateAttributes
+	EmptyPredicateAttributes             *EmptyPredicateAttributes
+	AndPredicateAttributes               *AndPredicateAttributes
+	OrPredicateAttributes                *OrPredicateAttributes
+	NotPredicateAttributes               *NotPredicateAttributes
+	NamespaceIdPredicateAttributes       *NamespaceIdPredicateAttributes
+	TaskTypePredicateAttributes          *TaskTypePredicateAttributes
+	DestinationPredicateAttributes       *DestinationPredicateAttributes
+	OutboundTaskGroupPredicateAttributes *OutboundTaskGroupPredicateAttributes
+	OutboundTaskPredicateAttributes      *OutboundTaskPredicateAttributes
+	// -- end of xxx_hidden_Attributes
+}
+
+func (b0 Predicate_builder) Build() *Predicate {
+	m0 := &Predicate{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_PredicateType = b.PredicateType
+	if b.UniversalPredicateAttributes != nil {
+		x.xxx_hidden_Attributes = &predicate_UniversalPredicateAttributes{b.UniversalPredicateAttributes}
+	}
+	if b.EmptyPredicateAttributes != nil {
+		x.xxx_hidden_Attributes = &predicate_EmptyPredicateAttributes{b.EmptyPredicateAttributes}
+	}
+	if b.AndPredicateAttributes != nil {
+		x.xxx_hidden_Attributes = &predicate_AndPredicateAttributes{b.AndPredicateAttributes}
+	}
+	if b.OrPredicateAttributes != nil {
+		x.xxx_hidden_Attributes = &predicate_OrPredicateAttributes{b.OrPredicateAttributes}
+	}
+	if b.NotPredicateAttributes != nil {
+		x.xxx_hidden_Attributes = &predicate_NotPredicateAttributes{b.NotPredicateAttributes}
+	}
+	if b.NamespaceIdPredicateAttributes != nil {
+		x.xxx_hidden_Attributes = &predicate_NamespaceIdPredicateAttributes{b.NamespaceIdPredicateAttributes}
+	}
+	if b.TaskTypePredicateAttributes != nil {
+		x.xxx_hidden_Attributes = &predicate_TaskTypePredicateAttributes{b.TaskTypePredicateAttributes}
+	}
+	if b.DestinationPredicateAttributes != nil {
+		x.xxx_hidden_Attributes = &predicate_DestinationPredicateAttributes{b.DestinationPredicateAttributes}
+	}
+	if b.OutboundTaskGroupPredicateAttributes != nil {
+		x.xxx_hidden_Attributes = &predicate_OutboundTaskGroupPredicateAttributes{b.OutboundTaskGroupPredicateAttributes}
+	}
+	if b.OutboundTaskPredicateAttributes != nil {
+		x.xxx_hidden_Attributes = &predicate_OutboundTaskPredicateAttributes{b.OutboundTaskPredicateAttributes}
+	}
+	return m0
+}
+
+type case_Predicate_Attributes protoreflect.FieldNumber
+
+func (x case_Predicate_Attributes) String() string {
+	switch x {
+	case Predicate_Attributes_not_set_case:
+		return "PredicateAttributesNotSetCase"
+	case Predicate_UniversalPredicateAttributes_case:
+		return "PredicateUniversalPredicateAttributesCase"
+	case Predicate_EmptyPredicateAttributes_case:
+		return "PredicateEmptyPredicateAttributesCase"
+	case Predicate_AndPredicateAttributes_case:
+		return "PredicateAndPredicateAttributesCase"
+	case Predicate_OrPredicateAttributes_case:
+		return "PredicateOrPredicateAttributesCase"
+	case Predicate_NotPredicateAttributes_case:
+		return "PredicateNotPredicateAttributesCase"
+	case Predicate_NamespaceIdPredicateAttributes_case:
+		return "PredicateNamespaceIdPredicateAttributesCase"
+	case Predicate_TaskTypePredicateAttributes_case:
+		return "PredicateTaskTypePredicateAttributesCase"
+	case Predicate_DestinationPredicateAttributes_case:
+		return "PredicateDestinationPredicateAttributesCase"
+	case Predicate_OutboundTaskGroupPredicateAttributes_case:
+		return "PredicateOutboundTaskGroupPredicateAttributesCase"
+	case Predicate_OutboundTaskPredicateAttributes_case:
+		return "PredicateOutboundTaskPredicateAttributesCase"
+	default:
+		return strconv.Itoa(int(x))
+	}
+
+}
+
 type isPredicate_Attributes interface {
 	isPredicate_Attributes()
 }
 
-type Predicate_UniversalPredicateAttributes struct {
+type predicate_UniversalPredicateAttributes struct {
 	UniversalPredicateAttributes *UniversalPredicateAttributes `protobuf:"bytes,2,opt,name=universal_predicate_attributes,json=universalPredicateAttributes,proto3,oneof"`
 }
 
-type Predicate_EmptyPredicateAttributes struct {
+type predicate_EmptyPredicateAttributes struct {
 	EmptyPredicateAttributes *EmptyPredicateAttributes `protobuf:"bytes,3,opt,name=empty_predicate_attributes,json=emptyPredicateAttributes,proto3,oneof"`
 }
 
-type Predicate_AndPredicateAttributes struct {
+type predicate_AndPredicateAttributes struct {
 	AndPredicateAttributes *AndPredicateAttributes `protobuf:"bytes,4,opt,name=and_predicate_attributes,json=andPredicateAttributes,proto3,oneof"`
 }
 
-type Predicate_OrPredicateAttributes struct {
+type predicate_OrPredicateAttributes struct {
 	OrPredicateAttributes *OrPredicateAttributes `protobuf:"bytes,5,opt,name=or_predicate_attributes,json=orPredicateAttributes,proto3,oneof"`
 }
 
-type Predicate_NotPredicateAttributes struct {
+type predicate_NotPredicateAttributes struct {
 	NotPredicateAttributes *NotPredicateAttributes `protobuf:"bytes,6,opt,name=not_predicate_attributes,json=notPredicateAttributes,proto3,oneof"`
 }
 
-type Predicate_NamespaceIdPredicateAttributes struct {
+type predicate_NamespaceIdPredicateAttributes struct {
 	NamespaceIdPredicateAttributes *NamespaceIdPredicateAttributes `protobuf:"bytes,7,opt,name=namespace_id_predicate_attributes,json=namespaceIdPredicateAttributes,proto3,oneof"`
 }
 
-type Predicate_TaskTypePredicateAttributes struct {
+type predicate_TaskTypePredicateAttributes struct {
 	TaskTypePredicateAttributes *TaskTypePredicateAttributes `protobuf:"bytes,8,opt,name=task_type_predicate_attributes,json=taskTypePredicateAttributes,proto3,oneof"`
 }
 
-type Predicate_DestinationPredicateAttributes struct {
+type predicate_DestinationPredicateAttributes struct {
 	DestinationPredicateAttributes *DestinationPredicateAttributes `protobuf:"bytes,9,opt,name=destination_predicate_attributes,json=destinationPredicateAttributes,proto3,oneof"`
 }
 
-type Predicate_OutboundTaskGroupPredicateAttributes struct {
+type predicate_OutboundTaskGroupPredicateAttributes struct {
 	OutboundTaskGroupPredicateAttributes *OutboundTaskGroupPredicateAttributes `protobuf:"bytes,10,opt,name=outbound_task_group_predicate_attributes,json=outboundTaskGroupPredicateAttributes,proto3,oneof"`
 }
 
-type Predicate_OutboundTaskPredicateAttributes struct {
+type predicate_OutboundTaskPredicateAttributes struct {
 	OutboundTaskPredicateAttributes *OutboundTaskPredicateAttributes `protobuf:"bytes,11,opt,name=outbound_task_predicate_attributes,json=outboundTaskPredicateAttributes,proto3,oneof"`
 }
 
-func (*Predicate_UniversalPredicateAttributes) isPredicate_Attributes() {}
+func (*predicate_UniversalPredicateAttributes) isPredicate_Attributes() {}
 
-func (*Predicate_EmptyPredicateAttributes) isPredicate_Attributes() {}
+func (*predicate_EmptyPredicateAttributes) isPredicate_Attributes() {}
 
-func (*Predicate_AndPredicateAttributes) isPredicate_Attributes() {}
+func (*predicate_AndPredicateAttributes) isPredicate_Attributes() {}
 
-func (*Predicate_OrPredicateAttributes) isPredicate_Attributes() {}
+func (*predicate_OrPredicateAttributes) isPredicate_Attributes() {}
 
-func (*Predicate_NotPredicateAttributes) isPredicate_Attributes() {}
+func (*predicate_NotPredicateAttributes) isPredicate_Attributes() {}
 
-func (*Predicate_NamespaceIdPredicateAttributes) isPredicate_Attributes() {}
+func (*predicate_NamespaceIdPredicateAttributes) isPredicate_Attributes() {}
 
-func (*Predicate_TaskTypePredicateAttributes) isPredicate_Attributes() {}
+func (*predicate_TaskTypePredicateAttributes) isPredicate_Attributes() {}
 
-func (*Predicate_DestinationPredicateAttributes) isPredicate_Attributes() {}
+func (*predicate_DestinationPredicateAttributes) isPredicate_Attributes() {}
 
-func (*Predicate_OutboundTaskGroupPredicateAttributes) isPredicate_Attributes() {}
+func (*predicate_OutboundTaskGroupPredicateAttributes) isPredicate_Attributes() {}
 
-func (*Predicate_OutboundTaskPredicateAttributes) isPredicate_Attributes() {}
+func (*predicate_OutboundTaskPredicateAttributes) isPredicate_Attributes() {}
 
 type UniversalPredicateAttributes struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -272,13 +613,20 @@ func (x *UniversalPredicateAttributes) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use UniversalPredicateAttributes.ProtoReflect.Descriptor instead.
-func (*UniversalPredicateAttributes) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_predicates_proto_rawDescGZIP(), []int{1}
+type UniversalPredicateAttributes_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+}
+
+func (b0 UniversalPredicateAttributes_builder) Build() *UniversalPredicateAttributes {
+	m0 := &UniversalPredicateAttributes{}
+	b, x := &b0, m0
+	_, _ = b, x
+	return m0
 }
 
 type EmptyPredicateAttributes struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -308,16 +656,23 @@ func (x *EmptyPredicateAttributes) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use EmptyPredicateAttributes.ProtoReflect.Descriptor instead.
-func (*EmptyPredicateAttributes) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_predicates_proto_rawDescGZIP(), []int{2}
+type EmptyPredicateAttributes_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+}
+
+func (b0 EmptyPredicateAttributes_builder) Build() *EmptyPredicateAttributes {
+	m0 := &EmptyPredicateAttributes{}
+	b, x := &b0, m0
+	_, _ = b, x
+	return m0
 }
 
 type AndPredicateAttributes struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Predicates    []*Predicate           `protobuf:"bytes,1,rep,name=predicates,proto3" json:"predicates,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                 protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Predicates *[]*Predicate          `protobuf:"bytes,1,rep,name=predicates,proto3"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
 }
 
 func (x *AndPredicateAttributes) Reset() {
@@ -345,23 +700,38 @@ func (x *AndPredicateAttributes) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use AndPredicateAttributes.ProtoReflect.Descriptor instead.
-func (*AndPredicateAttributes) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_predicates_proto_rawDescGZIP(), []int{3}
-}
-
 func (x *AndPredicateAttributes) GetPredicates() []*Predicate {
 	if x != nil {
-		return x.Predicates
+		if x.xxx_hidden_Predicates != nil {
+			return *x.xxx_hidden_Predicates
+		}
 	}
 	return nil
 }
 
+func (x *AndPredicateAttributes) SetPredicates(v []*Predicate) {
+	x.xxx_hidden_Predicates = &v
+}
+
+type AndPredicateAttributes_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Predicates []*Predicate
+}
+
+func (b0 AndPredicateAttributes_builder) Build() *AndPredicateAttributes {
+	m0 := &AndPredicateAttributes{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Predicates = &b.Predicates
+	return m0
+}
+
 type OrPredicateAttributes struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Predicates    []*Predicate           `protobuf:"bytes,1,rep,name=predicates,proto3" json:"predicates,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                 protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Predicates *[]*Predicate          `protobuf:"bytes,1,rep,name=predicates,proto3"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
 }
 
 func (x *OrPredicateAttributes) Reset() {
@@ -389,23 +759,38 @@ func (x *OrPredicateAttributes) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use OrPredicateAttributes.ProtoReflect.Descriptor instead.
-func (*OrPredicateAttributes) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_predicates_proto_rawDescGZIP(), []int{4}
-}
-
 func (x *OrPredicateAttributes) GetPredicates() []*Predicate {
 	if x != nil {
-		return x.Predicates
+		if x.xxx_hidden_Predicates != nil {
+			return *x.xxx_hidden_Predicates
+		}
 	}
 	return nil
 }
 
+func (x *OrPredicateAttributes) SetPredicates(v []*Predicate) {
+	x.xxx_hidden_Predicates = &v
+}
+
+type OrPredicateAttributes_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Predicates []*Predicate
+}
+
+func (b0 OrPredicateAttributes_builder) Build() *OrPredicateAttributes {
+	m0 := &OrPredicateAttributes{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Predicates = &b.Predicates
+	return m0
+}
+
 type NotPredicateAttributes struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Predicate     *Predicate             `protobuf:"bytes,1,opt,name=predicate,proto3" json:"predicate,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Predicate *Predicate             `protobuf:"bytes,1,opt,name=predicate,proto3"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *NotPredicateAttributes) Reset() {
@@ -433,23 +818,47 @@ func (x *NotPredicateAttributes) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use NotPredicateAttributes.ProtoReflect.Descriptor instead.
-func (*NotPredicateAttributes) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_predicates_proto_rawDescGZIP(), []int{5}
-}
-
 func (x *NotPredicateAttributes) GetPredicate() *Predicate {
 	if x != nil {
-		return x.Predicate
+		return x.xxx_hidden_Predicate
 	}
 	return nil
 }
 
+func (x *NotPredicateAttributes) SetPredicate(v *Predicate) {
+	x.xxx_hidden_Predicate = v
+}
+
+func (x *NotPredicateAttributes) HasPredicate() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Predicate != nil
+}
+
+func (x *NotPredicateAttributes) ClearPredicate() {
+	x.xxx_hidden_Predicate = nil
+}
+
+type NotPredicateAttributes_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Predicate *Predicate
+}
+
+func (b0 NotPredicateAttributes_builder) Build() *NotPredicateAttributes {
+	m0 := &NotPredicateAttributes{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Predicate = b.Predicate
+	return m0
+}
+
 type NamespaceIdPredicateAttributes struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	NamespaceIds  []string               `protobuf:"bytes,1,rep,name=namespace_ids,json=namespaceIds,proto3" json:"namespace_ids,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                   protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceIds []string               `protobuf:"bytes,1,rep,name=namespace_ids,json=namespaceIds,proto3"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
 }
 
 func (x *NamespaceIdPredicateAttributes) Reset() {
@@ -477,23 +886,36 @@ func (x *NamespaceIdPredicateAttributes) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use NamespaceIdPredicateAttributes.ProtoReflect.Descriptor instead.
-func (*NamespaceIdPredicateAttributes) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_predicates_proto_rawDescGZIP(), []int{6}
-}
-
 func (x *NamespaceIdPredicateAttributes) GetNamespaceIds() []string {
 	if x != nil {
-		return x.NamespaceIds
+		return x.xxx_hidden_NamespaceIds
 	}
 	return nil
 }
 
+func (x *NamespaceIdPredicateAttributes) SetNamespaceIds(v []string) {
+	x.xxx_hidden_NamespaceIds = v
+}
+
+type NamespaceIdPredicateAttributes_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceIds []string
+}
+
+func (b0 NamespaceIdPredicateAttributes_builder) Build() *NamespaceIdPredicateAttributes {
+	m0 := &NamespaceIdPredicateAttributes{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceIds = b.NamespaceIds
+	return m0
+}
+
 type TaskTypePredicateAttributes struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	TaskTypes     []v1.TaskType          `protobuf:"varint,1,rep,packed,name=task_types,json=taskTypes,proto3,enum=temporal.server.api.enums.v1.TaskType" json:"task_types,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_TaskTypes []v1.TaskType          `protobuf:"varint,1,rep,packed,name=task_types,json=taskTypes,proto3,enum=temporal.server.api.enums.v1.TaskType"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *TaskTypePredicateAttributes) Reset() {
@@ -521,23 +943,36 @@ func (x *TaskTypePredicateAttributes) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use TaskTypePredicateAttributes.ProtoReflect.Descriptor instead.
-func (*TaskTypePredicateAttributes) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_predicates_proto_rawDescGZIP(), []int{7}
-}
-
 func (x *TaskTypePredicateAttributes) GetTaskTypes() []v1.TaskType {
 	if x != nil {
-		return x.TaskTypes
+		return x.xxx_hidden_TaskTypes
 	}
 	return nil
 }
 
+func (x *TaskTypePredicateAttributes) SetTaskTypes(v []v1.TaskType) {
+	x.xxx_hidden_TaskTypes = v
+}
+
+type TaskTypePredicateAttributes_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	TaskTypes []v1.TaskType
+}
+
+func (b0 TaskTypePredicateAttributes_builder) Build() *TaskTypePredicateAttributes {
+	m0 := &TaskTypePredicateAttributes{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_TaskTypes = b.TaskTypes
+	return m0
+}
+
 type DestinationPredicateAttributes struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Destinations  []string               `protobuf:"bytes,1,rep,name=destinations,proto3" json:"destinations,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                   protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Destinations []string               `protobuf:"bytes,1,rep,name=destinations,proto3"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
 }
 
 func (x *DestinationPredicateAttributes) Reset() {
@@ -565,23 +1000,36 @@ func (x *DestinationPredicateAttributes) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DestinationPredicateAttributes.ProtoReflect.Descriptor instead.
-func (*DestinationPredicateAttributes) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_predicates_proto_rawDescGZIP(), []int{8}
-}
-
 func (x *DestinationPredicateAttributes) GetDestinations() []string {
 	if x != nil {
-		return x.Destinations
+		return x.xxx_hidden_Destinations
 	}
 	return nil
 }
 
+func (x *DestinationPredicateAttributes) SetDestinations(v []string) {
+	x.xxx_hidden_Destinations = v
+}
+
+type DestinationPredicateAttributes_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Destinations []string
+}
+
+func (b0 DestinationPredicateAttributes_builder) Build() *DestinationPredicateAttributes {
+	m0 := &DestinationPredicateAttributes{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Destinations = b.Destinations
+	return m0
+}
+
 type OutboundTaskGroupPredicateAttributes struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Groups        []string               `protobuf:"bytes,1,rep,name=groups,proto3" json:"groups,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state             protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Groups []string               `protobuf:"bytes,1,rep,name=groups,proto3"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *OutboundTaskGroupPredicateAttributes) Reset() {
@@ -609,23 +1057,36 @@ func (x *OutboundTaskGroupPredicateAttributes) ProtoReflect() protoreflect.Messa
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use OutboundTaskGroupPredicateAttributes.ProtoReflect.Descriptor instead.
-func (*OutboundTaskGroupPredicateAttributes) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_predicates_proto_rawDescGZIP(), []int{9}
-}
-
 func (x *OutboundTaskGroupPredicateAttributes) GetGroups() []string {
 	if x != nil {
-		return x.Groups
+		return x.xxx_hidden_Groups
 	}
 	return nil
 }
 
+func (x *OutboundTaskGroupPredicateAttributes) SetGroups(v []string) {
+	x.xxx_hidden_Groups = v
+}
+
+type OutboundTaskGroupPredicateAttributes_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Groups []string
+}
+
+func (b0 OutboundTaskGroupPredicateAttributes_builder) Build() *OutboundTaskGroupPredicateAttributes {
+	m0 := &OutboundTaskGroupPredicateAttributes{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Groups = b.Groups
+	return m0
+}
+
 type OutboundTaskPredicateAttributes struct {
-	state         protoimpl.MessageState                   `protogen:"open.v1"`
-	Groups        []*OutboundTaskPredicateAttributes_Group `protobuf:"bytes,1,rep,name=groups,proto3" json:"groups,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state             protoimpl.MessageState                    `protogen:"opaque.v1"`
+	xxx_hidden_Groups *[]*OutboundTaskPredicateAttributes_Group `protobuf:"bytes,1,rep,name=groups,proto3"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *OutboundTaskPredicateAttributes) Reset() {
@@ -653,25 +1114,40 @@ func (x *OutboundTaskPredicateAttributes) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use OutboundTaskPredicateAttributes.ProtoReflect.Descriptor instead.
-func (*OutboundTaskPredicateAttributes) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_predicates_proto_rawDescGZIP(), []int{10}
-}
-
 func (x *OutboundTaskPredicateAttributes) GetGroups() []*OutboundTaskPredicateAttributes_Group {
 	if x != nil {
-		return x.Groups
+		if x.xxx_hidden_Groups != nil {
+			return *x.xxx_hidden_Groups
+		}
 	}
 	return nil
 }
 
+func (x *OutboundTaskPredicateAttributes) SetGroups(v []*OutboundTaskPredicateAttributes_Group) {
+	x.xxx_hidden_Groups = &v
+}
+
+type OutboundTaskPredicateAttributes_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Groups []*OutboundTaskPredicateAttributes_Group
+}
+
+func (b0 OutboundTaskPredicateAttributes_builder) Build() *OutboundTaskPredicateAttributes {
+	m0 := &OutboundTaskPredicateAttributes{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Groups = &b.Groups
+	return m0
+}
+
 type OutboundTaskPredicateAttributes_Group struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	TaskGroup     string                 `protobuf:"bytes,1,opt,name=task_group,json=taskGroup,proto3" json:"task_group,omitempty"`
-	NamespaceId   string                 `protobuf:"bytes,2,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	Destination   string                 `protobuf:"bytes,3,opt,name=destination,proto3" json:"destination,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                  protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_TaskGroup   string                 `protobuf:"bytes,1,opt,name=task_group,json=taskGroup,proto3"`
+	xxx_hidden_NamespaceId string                 `protobuf:"bytes,2,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_Destination string                 `protobuf:"bytes,3,opt,name=destination,proto3"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *OutboundTaskPredicateAttributes_Group) Reset() {
@@ -699,30 +1175,55 @@ func (x *OutboundTaskPredicateAttributes_Group) ProtoReflect() protoreflect.Mess
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use OutboundTaskPredicateAttributes_Group.ProtoReflect.Descriptor instead.
-func (*OutboundTaskPredicateAttributes_Group) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_predicates_proto_rawDescGZIP(), []int{10, 0}
-}
-
 func (x *OutboundTaskPredicateAttributes_Group) GetTaskGroup() string {
 	if x != nil {
-		return x.TaskGroup
+		return x.xxx_hidden_TaskGroup
 	}
 	return ""
 }
 
 func (x *OutboundTaskPredicateAttributes_Group) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *OutboundTaskPredicateAttributes_Group) GetDestination() string {
 	if x != nil {
-		return x.Destination
+		return x.xxx_hidden_Destination
 	}
 	return ""
+}
+
+func (x *OutboundTaskPredicateAttributes_Group) SetTaskGroup(v string) {
+	x.xxx_hidden_TaskGroup = v
+}
+
+func (x *OutboundTaskPredicateAttributes_Group) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *OutboundTaskPredicateAttributes_Group) SetDestination(v string) {
+	x.xxx_hidden_Destination = v
+}
+
+type OutboundTaskPredicateAttributes_Group_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	TaskGroup   string
+	NamespaceId string
+	Destination string
+}
+
+func (b0 OutboundTaskPredicateAttributes_Group_builder) Build() *OutboundTaskPredicateAttributes_Group {
+	m0 := &OutboundTaskPredicateAttributes_Group{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_TaskGroup = b.TaskGroup
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_Destination = b.Destination
+	return m0
 }
 
 var File_temporal_server_api_persistence_v1_predicates_proto protoreflect.FileDescriptor
@@ -774,18 +1275,6 @@ const file_temporal_server_api_persistence_v1_predicates_proto_rawDesc = "" +
 	"\fnamespace_id\x18\x02 \x01(\tR\vnamespaceId\x12 \n" +
 	"\vdestination\x18\x03 \x01(\tR\vdestinationB6Z4go.temporal.io/server/api/persistence/v1;persistenceb\x06proto3"
 
-var (
-	file_temporal_server_api_persistence_v1_predicates_proto_rawDescOnce sync.Once
-	file_temporal_server_api_persistence_v1_predicates_proto_rawDescData []byte
-)
-
-func file_temporal_server_api_persistence_v1_predicates_proto_rawDescGZIP() []byte {
-	file_temporal_server_api_persistence_v1_predicates_proto_rawDescOnce.Do(func() {
-		file_temporal_server_api_persistence_v1_predicates_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_api_persistence_v1_predicates_proto_rawDesc), len(file_temporal_server_api_persistence_v1_predicates_proto_rawDesc)))
-	})
-	return file_temporal_server_api_persistence_v1_predicates_proto_rawDescData
-}
-
 var file_temporal_server_api_persistence_v1_predicates_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
 var file_temporal_server_api_persistence_v1_predicates_proto_goTypes = []any{
 	(*Predicate)(nil),                             // 0: temporal.server.api.persistence.v1.Predicate
@@ -833,16 +1322,16 @@ func file_temporal_server_api_persistence_v1_predicates_proto_init() {
 		return
 	}
 	file_temporal_server_api_persistence_v1_predicates_proto_msgTypes[0].OneofWrappers = []any{
-		(*Predicate_UniversalPredicateAttributes)(nil),
-		(*Predicate_EmptyPredicateAttributes)(nil),
-		(*Predicate_AndPredicateAttributes)(nil),
-		(*Predicate_OrPredicateAttributes)(nil),
-		(*Predicate_NotPredicateAttributes)(nil),
-		(*Predicate_NamespaceIdPredicateAttributes)(nil),
-		(*Predicate_TaskTypePredicateAttributes)(nil),
-		(*Predicate_DestinationPredicateAttributes)(nil),
-		(*Predicate_OutboundTaskGroupPredicateAttributes)(nil),
-		(*Predicate_OutboundTaskPredicateAttributes)(nil),
+		(*predicate_UniversalPredicateAttributes)(nil),
+		(*predicate_EmptyPredicateAttributes)(nil),
+		(*predicate_AndPredicateAttributes)(nil),
+		(*predicate_OrPredicateAttributes)(nil),
+		(*predicate_NotPredicateAttributes)(nil),
+		(*predicate_NamespaceIdPredicateAttributes)(nil),
+		(*predicate_TaskTypePredicateAttributes)(nil),
+		(*predicate_DestinationPredicateAttributes)(nil),
+		(*predicate_OutboundTaskGroupPredicateAttributes)(nil),
+		(*predicate_OutboundTaskPredicateAttributes)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{

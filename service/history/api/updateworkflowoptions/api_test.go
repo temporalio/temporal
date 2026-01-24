@@ -55,23 +55,23 @@ func (noopVersionMembershipCache) Put(
 
 var (
 	emptyOptions            = &workflowpb.WorkflowExecutionOptions{}
-	unpinnedOverrideOptions = &workflowpb.WorkflowExecutionOptions{
-		VersioningOverride: &workflowpb.VersioningOverride{
+	unpinnedOverrideOptions = workflowpb.WorkflowExecutionOptions_builder{
+		VersioningOverride: workflowpb.VersioningOverride_builder{
 			Behavior: enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE,
-		},
-	}
-	pinnedOverrideOptionsA = &workflowpb.WorkflowExecutionOptions{
-		VersioningOverride: &workflowpb.VersioningOverride{
+		}.Build(),
+	}.Build()
+	pinnedOverrideOptionsA = workflowpb.WorkflowExecutionOptions_builder{
+		VersioningOverride: workflowpb.VersioningOverride_builder{
 			Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
 			PinnedVersion: "X.A",
-		},
-	}
-	pinnedOverrideOptionsB = &workflowpb.WorkflowExecutionOptions{
-		VersioningOverride: &workflowpb.VersioningOverride{
+		}.Build(),
+	}.Build()
+	pinnedOverrideOptionsB = workflowpb.WorkflowExecutionOptions_builder{
+		VersioningOverride: workflowpb.VersioningOverride_builder{
 			Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
 			PinnedVersion: "X.B",
-		},
-	}
+		}.Build(),
+	}.Build()
 )
 
 func TestMergeOptions_VersionOverrideMask(t *testing.T) {
@@ -187,18 +187,18 @@ func (s *updateWorkflowOptionsSuite) SetupTest() {
 
 	// mock a mutable state with an existing versioning override
 	s.currentMutableState = historyi.NewMockMutableState(s.controller)
-	s.currentMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+	s.currentMutableState.EXPECT().GetExecutionInfo().Return(persistencespb.WorkflowExecutionInfo_builder{
 		WorkflowId: tests.WorkflowID,
-		VersioningInfo: &workflowpb.WorkflowExecutionVersioningInfo{
-			VersioningOverride: &workflowpb.VersioningOverride{
+		VersioningInfo: workflowpb.WorkflowExecutionVersioningInfo_builder{
+			VersioningOverride: workflowpb.VersioningOverride_builder{
 				Behavior:      enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE,
 				PinnedVersion: "X.123",
-			},
-		},
-	}).AnyTimes()
-	s.currentMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+			}.Build(),
+		}.Build(),
+	}.Build()).AnyTimes()
+	s.currentMutableState.EXPECT().GetExecutionState().Return(persistencespb.WorkflowExecutionState_builder{
 		RunId: tests.RunID,
-	}).AnyTimes()
+	}.Build()).AnyTimes()
 
 	s.currentContext = historyi.NewMockWorkflowContext(s.controller)
 	s.currentContext.EXPECT().LoadMutableState(gomock.Any(), s.shardContext).Return(s.currentMutableState, nil)
@@ -221,41 +221,39 @@ func (s *updateWorkflowOptionsSuite) TearDownTest() {
 
 func (s *updateWorkflowOptionsSuite) TestInvoke_Success() {
 
-	expectedOverrideOptions := &workflowpb.WorkflowExecutionOptions{
-		VersioningOverride: &workflowpb.VersioningOverride{
-			Override: &workflowpb.VersioningOverride_Pinned{
-				Pinned: &workflowpb.VersioningOverride_PinnedOverride{
-					Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
-					Version: &deploymentpb.WorkerDeploymentVersion{
-						DeploymentName: "X",
-						BuildId:        "A",
-					},
-				},
-			},
-		},
-	}
+	expectedOverrideOptions := workflowpb.WorkflowExecutionOptions_builder{
+		VersioningOverride: workflowpb.VersioningOverride_builder{
+			Pinned: workflowpb.VersioningOverride_PinnedOverride_builder{
+				Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
+				Version: deploymentpb.WorkerDeploymentVersion_builder{
+					DeploymentName: "X",
+					BuildId:        "A",
+				}.Build(),
+			}.Build(),
+		}.Build(),
+	}.Build()
 	s.currentMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true)
 	s.mockMatchingClient.EXPECT().CheckTaskQueueVersionMembership(
 		gomock.Any(),
 		gomock.Any(),
-	).Return(&matchingservice.CheckTaskQueueVersionMembershipResponse{
+	).Return(matchingservice.CheckTaskQueueVersionMembershipResponse_builder{
 		IsMember: true,
-	}, nil)
-	s.currentMutableState.EXPECT().AddWorkflowExecutionOptionsUpdatedEvent(expectedOverrideOptions.VersioningOverride, false, "", nil, nil, "", expectedOverrideOptions.Priority).Return(&historypb.HistoryEvent{}, nil)
+	}.Build(), nil)
+	s.currentMutableState.EXPECT().AddWorkflowExecutionOptionsUpdatedEvent(expectedOverrideOptions.GetVersioningOverride(), false, "", nil, nil, "", expectedOverrideOptions.GetPriority()).Return(&historypb.HistoryEvent{}, nil)
 	s.currentContext.EXPECT().UpdateWorkflowExecutionAsActive(gomock.Any(), s.shardContext).Return(nil)
 
-	updateReq := &historyservice.UpdateWorkflowExecutionOptionsRequest{
+	updateReq := historyservice.UpdateWorkflowExecutionOptionsRequest_builder{
 		NamespaceId: tests.NamespaceID.String(),
-		UpdateRequest: &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+		UpdateRequest: workflowservice.UpdateWorkflowExecutionOptionsRequest_builder{
 			Namespace: tests.Namespace.String(),
-			WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowExecution: commonpb.WorkflowExecution_builder{
 				WorkflowId: tests.WorkflowID,
 				RunId:      tests.RunID,
-			},
+			}.Build(),
 			WorkflowExecutionOptions: expectedOverrideOptions,
 			UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
-		},
-	}
+		}.Build(),
+	}.Build()
 
 	resp, err := Invoke(
 		context.Background(),

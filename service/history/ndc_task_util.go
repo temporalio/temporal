@@ -233,10 +233,10 @@ func validateTaskGeneration(
 	mutableState historyi.MutableState,
 	taskID int64,
 ) error {
-	tgClock := mutableState.GetExecutionInfo().TaskGenerationShardClockTimestamp
+	tgClock := mutableState.GetExecutionInfo().GetTaskGenerationShardClockTimestamp()
 	if tgClock != 0 && taskID != 0 && taskID < tgClock {
 
-		currentClock := shardContext.CurrentVectorClock().Clock
+		currentClock := shardContext.CurrentVectorClock().GetClock()
 		if tgClock > currentClock {
 			if err := workflowContext.RefreshTasks(ctx, shardContext); err != nil {
 				return err
@@ -263,8 +263,8 @@ func transferTaskMutableStateStaleChecker(
 		return true
 	}
 
-	isTransientWorkflowTask := executionInfo.WorkflowTaskAttempt > 1
-	if isTransientWorkflowTask && executionInfo.WorkflowTaskScheduledEventId == wt.ScheduledEventID {
+	isTransientWorkflowTask := executionInfo.GetWorkflowTaskAttempt() > 1
+	if isTransientWorkflowTask && executionInfo.GetWorkflowTaskScheduledEventId() == wt.ScheduledEventID {
 		return false
 	}
 
@@ -291,8 +291,8 @@ func timerTaskMutableStateStaleChecker(
 		return false
 	}
 
-	isTransientWorkflowTask := executionInfo.WorkflowTaskAttempt > 1
-	if isTransientWorkflowTask && executionInfo.WorkflowTaskScheduledEventId == wttt.EventID {
+	isTransientWorkflowTask := executionInfo.GetWorkflowTaskAttempt() > 1
+	if isTransientWorkflowTask && executionInfo.GetWorkflowTaskScheduledEventId() == wttt.EventID {
 		return false
 	}
 

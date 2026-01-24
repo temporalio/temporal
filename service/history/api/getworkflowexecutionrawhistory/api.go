@@ -37,18 +37,18 @@ func Invoke(
 		return nil, err
 	}
 
-	req := request.Request
-	execution := req.Execution
+	req := request.GetRequest()
+	execution := req.GetExecution()
 	var pageToken *tokenspb.RawHistoryContinuation
 	var targetVersionHistory *historyspb.VersionHistory
-	if req.NextPageToken == nil {
+	if len(req.GetNextPageToken()) == 0 {
 		response, err := api.GetOrPollWorkflowMutableState(
 			ctx,
 			shardContext,
-			&historyservice.GetMutableStateRequest{
+			historyservice.GetMutableStateRequest_builder{
 				NamespaceId: ns.ID().String(),
 				Execution:   execution,
-			},
+			}.Build(),
 			workflowConsistencyChecker,
 			eventNotifier,
 		)
@@ -66,7 +66,7 @@ func Invoke(
 
 		pageToken = api.GeneratePaginationToken(request, response.GetVersionHistories())
 	} else {
-		pageToken, err = api.DeserializeRawHistoryToken(req.NextPageToken)
+		pageToken, err = api.DeserializeRawHistoryToken(req.GetNextPageToken())
 		if err != nil {
 			return nil, err
 		}
@@ -103,25 +103,25 @@ func Invoke(
 		MinEventID:    pageToken.GetStartEventId(),
 		MaxEventID:    pageToken.GetEndEventId() + 1,
 		PageSize:      pageSize,
-		NextPageToken: pageToken.PersistenceToken,
+		NextPageToken: pageToken.GetPersistenceToken(),
 		ShardID:       shardID,
 	})
 	if err != nil {
 		if common.IsNotFoundError(err) {
 			// when no events can be returned from DB, DB layer will return
 			// EntityNotExistsError, this API shall return empty response
-			return &historyservice.GetWorkflowExecutionRawHistoryResponse{
-				Response: &adminservice.GetWorkflowExecutionRawHistoryResponse{
+			return historyservice.GetWorkflowExecutionRawHistoryResponse_builder{
+				Response: adminservice.GetWorkflowExecutionRawHistoryResponse_builder{
 					HistoryBatches: []*commonpb.DataBlob{},
 					NextPageToken:  nil, // no further pagination
 					VersionHistory: targetVersionHistory,
-				},
-			}, nil
+				}.Build(),
+			}.Build(), nil
 		}
 		return nil, err
 	}
 
-	pageToken.PersistenceToken = rawHistoryResponse.NextPageToken
+	pageToken.SetPersistenceToken(rawHistoryResponse.NextPageToken)
 	size := rawHistoryResponse.Size
 	metricsHandler := interceptor.GetMetricsHandlerFromContext(ctx, shardContext.GetLogger()).WithTags(metrics.OperationTag(metrics.HistoryGetWorkflowExecutionRawHistoryScope))
 	metrics.HistorySize.With(metricsHandler).Record(
@@ -131,31 +131,32 @@ func Invoke(
 	)
 
 	result :=
-		&adminservice.GetWorkflowExecutionRawHistoryResponse{
+		adminservice.GetWorkflowExecutionRawHistoryResponse_builder{
 			HistoryBatches: rawHistoryResponse.HistoryEventBlobs,
 			VersionHistory: targetVersionHistory,
 			HistoryNodeIds: rawHistoryResponse.NodeIDs,
-		}
-	if len(pageToken.PersistenceToken) == 0 {
-		result.NextPageToken = nil
+		}.Build()
+	if len(pageToken.GetPersistenceToken()) == 0 {
+		result.SetNextPageToken(nil)
 	} else {
-		result.NextPageToken, err = api.SerializeRawHistoryToken(pageToken)
+		nextPageToken, err := api.SerializeRawHistoryToken(pageToken)
 		if err != nil {
 			return nil, err
 		}
+		result.SetNextPageToken(nextPageToken)
 	}
 
-	return &historyservice.GetWorkflowExecutionRawHistoryResponse{
+	return historyservice.GetWorkflowExecutionRawHistoryResponse_builder{
 		Response: result,
-	}, nil
+	}.Build(), nil
 }
 
 func validateGetWorkflowExecutionRawHistoryRequest(
 	request *historyservice.GetWorkflowExecutionRawHistoryRequest,
 ) error {
 
-	req := request.Request
-	execution := req.Execution
+	req := request.GetRequest()
+	execution := req.GetExecution()
 	if execution.GetWorkflowId() == "" {
 		return consts.ErrWorkflowIDNotSet
 	}
@@ -184,7 +185,7 @@ func setRequestDefaultValueAndGetTargetVersionHistory(
 	versionHistories *historyspb.VersionHistories,
 ) (*historyspb.VersionHistory, error) {
 
-	req := request.Request
+	req := request.GetRequest()
 
 	targetBranch, err := versionhistory.GetCurrentVersionHistory(versionHistories)
 	if err != nil {
@@ -242,8 +243,8 @@ func setRequestDefaultValueAndGetTargetVersionHistory(
 			if err != nil {
 				return nil, err
 			}
-			req.StartEventId = startItem.GetEventId()
-			req.StartEventVersion = startItem.GetVersion()
+			req.SetStartEventId(startItem.GetEventId())
+			req.SetStartEventVersion(startItem.GetVersion())
 		}
 	}
 
@@ -257,12 +258,12 @@ func setDefaultStartAndEndEvent(
 ) {
 	if req.GetStartEventId() == common.EmptyEventID || req.GetStartEventVersion() == common.EmptyVersion {
 		// If start event is not set, get the events from the first event
-		req.StartEventId = common.FirstEventID
-		req.StartEventVersion = firstItem.GetVersion()
+		req.SetStartEventId(common.FirstEventID)
+		req.SetStartEventVersion(firstItem.GetVersion())
 	}
 	if req.GetEndEventId() == common.EmptyEventID || req.GetEndEventVersion() == common.EmptyVersion {
 		// If end event is not set, get the events until the end event
-		req.EndEventId = lastItem.GetEventId()
-		req.EndEventVersion = lastItem.GetVersion()
+		req.SetEndEventId(lastItem.GetEventId())
+		req.SetEndEventVersion(lastItem.GetVersion())
 	}
 }

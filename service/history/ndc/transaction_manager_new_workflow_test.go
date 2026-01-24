@@ -61,13 +61,13 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Dup() {
 	mutableState := historyi.NewMockMutableState(s.controller)
 	newWorkflow.EXPECT().GetMutableState().Return(mutableState).AnyTimes()
 
-	mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+	mutableState.EXPECT().GetExecutionInfo().Return(persistencespb.WorkflowExecutionInfo_builder{
 		NamespaceId: namespaceID.String(),
 		WorkflowId:  workflowID,
-	}).AnyTimes()
-	mutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+	}.Build()).AnyTimes()
+	mutableState.EXPECT().GetExecutionState().Return(persistencespb.WorkflowExecutionState_builder{
 		RunId: runID,
-	}).AnyTimes()
+	}.Build()).AnyTimes()
 
 	s.mockTransactionMgr.EXPECT().GetCurrentWorkflowRunID(ctx, namespaceID, workflowID, chasm.WorkflowArchetypeID).Return(runID, nil)
 
@@ -94,17 +94,17 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_BrandNew(
 
 	workflowSnapshot := &persistence.WorkflowSnapshot{}
 	workflowEventsSeq := []*persistence.WorkflowEvents{{
-		Events: []*historypb.HistoryEvent{{
+		Events: []*historypb.HistoryEvent{historypb.HistoryEvent_builder{
 			EventId: common.FirstEventID + rand.Int63(),
-		}},
+		}.Build()},
 	}}
-	mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+	mutableState.EXPECT().GetExecutionInfo().Return(persistencespb.WorkflowExecutionInfo_builder{
 		NamespaceId: namespaceID.String(),
 		WorkflowId:  workflowID,
-	}).AnyTimes()
-	mutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+	}.Build()).AnyTimes()
+	mutableState.EXPECT().GetExecutionState().Return(persistencespb.WorkflowExecutionState_builder{
 		RunId: runID,
-	}).AnyTimes()
+	}.Build()).AnyTimes()
 	mutableState.EXPECT().CloseTransactionAsSnapshot(context.Background(), historyi.TransactionPolicyPassive).Return(
 		workflowSnapshot, workflowEventsSeq, nil,
 	)
@@ -157,17 +157,17 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsC
 
 	targetWorkflowSnapshot := &persistence.WorkflowSnapshot{}
 	targetWorkflowEventsSeq := []*persistence.WorkflowEvents{{
-		Events: []*historypb.HistoryEvent{{
+		Events: []*historypb.HistoryEvent{historypb.HistoryEvent_builder{
 			EventId: common.FirstEventID + rand.Int63(),
-		}},
+		}.Build()},
 	}}
-	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+	targetMutableState.EXPECT().GetExecutionInfo().Return(persistencespb.WorkflowExecutionInfo_builder{
 		NamespaceId: namespaceID.String(),
 		WorkflowId:  workflowID,
-	}).AnyTimes()
-	targetMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+	}.Build()).AnyTimes()
+	targetMutableState.EXPECT().GetExecutionState().Return(persistencespb.WorkflowExecutionState_builder{
 		RunId: targetRunID,
-	}).AnyTimes()
+	}.Build()).AnyTimes()
 	targetMutableState.EXPECT().CloseTransactionAsSnapshot(context.Background(), historyi.TransactionPolicyPassive).Return(
 		targetWorkflowSnapshot, targetWorkflowEventsSeq, nil,
 	)
@@ -177,13 +177,13 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsC
 
 	targetWorkflow.EXPECT().HappensAfter(currentWorkflow).Return(true, nil)
 	currentMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
-	currentMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+	currentMutableState.EXPECT().GetExecutionInfo().Return(persistencespb.WorkflowExecutionInfo_builder{
 		NamespaceId: namespaceID.String(),
 		WorkflowId:  workflowID,
-	}).AnyTimes()
-	currentMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+	}.Build()).AnyTimes()
+	currentMutableState.EXPECT().GetExecutionState().Return(persistencespb.WorkflowExecutionState_builder{
 		RunId: currentRunID,
-	}).AnyTimes()
+	}.Build()).AnyTimes()
 	currentWorkflow.EXPECT().GetVectorClock().Return(currentLastWriteVersion, int64(0), nil)
 
 	targetContext.EXPECT().CreateWorkflowExecution(
@@ -227,23 +227,23 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsZ
 	currentWorkflow.EXPECT().GetReleaseFn().Return(currentReleaseFn).AnyTimes()
 
 	targetWorkflowSnapshot := &persistence.WorkflowSnapshot{
-		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+		ExecutionInfo: persistencespb.WorkflowExecutionInfo_builder{
 			NamespaceId: namespaceID.String(),
 			WorkflowId:  workflowID,
-		},
+		}.Build(),
 	}
 	targetWorkflowEventsSeq := []*persistence.WorkflowEvents{{
-		Events: []*historypb.HistoryEvent{{
+		Events: []*historypb.HistoryEvent{historypb.HistoryEvent_builder{
 			EventId: common.FirstEventID + rand.Int63(),
-		}},
+		}.Build()},
 	}}
-	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+	targetMutableState.EXPECT().GetExecutionInfo().Return(persistencespb.WorkflowExecutionInfo_builder{
 		NamespaceId: namespaceID.String(),
 		WorkflowId:  workflowID,
-	}).AnyTimes()
-	targetMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+	}.Build()).AnyTimes()
+	targetMutableState.EXPECT().GetExecutionState().Return(persistencespb.WorkflowExecutionState_builder{
 		RunId: targetRunID,
-	}).AnyTimes()
+	}.Build()).AnyTimes()
 	targetMutableState.EXPECT().CloseTransactionAsSnapshot(context.Background(), historyi.TransactionPolicyPassive).Return(
 		targetWorkflowSnapshot, targetWorkflowEventsSeq, nil,
 	)
@@ -297,27 +297,27 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsZ
 	currentWorkflow.EXPECT().GetReleaseFn().Return(currentReleaseFn).AnyTimes()
 
 	targetWorkflowSnapshot := &persistence.WorkflowSnapshot{
-		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+		ExecutionInfo: persistencespb.WorkflowExecutionInfo_builder{
 			NamespaceId: namespaceID.String(),
 			WorkflowId:  workflowID,
-		},
+		}.Build(),
 	}
 	targetWorkflowEventsSeq := []*persistence.WorkflowEvents{}
 
-	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+	targetMutableState.EXPECT().GetExecutionInfo().Return(persistencespb.WorkflowExecutionInfo_builder{
 		NamespaceId: namespaceID.String(),
 		WorkflowId:  workflowID,
-	}).AnyTimes()
-	targetMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+	}.Build()).AnyTimes()
+	targetMutableState.EXPECT().GetExecutionState().Return(persistencespb.WorkflowExecutionState_builder{
 		RunId: targetRunID,
-	}).AnyTimes()
+	}.Build()).AnyTimes()
 	targetMutableState.EXPECT().CloseTransactionAsSnapshot(context.Background(), historyi.TransactionPolicyPassive).Return(
 		targetWorkflowSnapshot, targetWorkflowEventsSeq, nil,
 	)
 
-	eventReapplyCandidates := []*historypb.HistoryEvent{{
+	eventReapplyCandidates := []*historypb.HistoryEvent{historypb.HistoryEvent_builder{
 		EventId: common.FirstEventID + rand.Int63(),
-	}}
+	}.Build()}
 	eventsToApply := []*persistence.WorkflowEvents{
 		{
 			NamespaceID: namespaceID.String(),
@@ -376,23 +376,23 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsZ
 	currentWorkflow.EXPECT().GetReleaseFn().Return(currentReleaseFn).AnyTimes()
 
 	targetWorkflowSnapshot := &persistence.WorkflowSnapshot{
-		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+		ExecutionInfo: persistencespb.WorkflowExecutionInfo_builder{
 			NamespaceId: namespaceID.String(),
 			WorkflowId:  workflowID,
-		},
+		}.Build(),
 	}
 	targetWorkflowEventsSeq := []*persistence.WorkflowEvents{{
-		Events: []*historypb.HistoryEvent{{
+		Events: []*historypb.HistoryEvent{historypb.HistoryEvent_builder{
 			EventId: common.FirstEventID + rand.Int63(),
-		}},
+		}.Build()},
 	}}
-	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+	targetMutableState.EXPECT().GetExecutionInfo().Return(persistencespb.WorkflowExecutionInfo_builder{
 		NamespaceId: namespaceID.String(),
 		WorkflowId:  workflowID,
-	}).AnyTimes()
-	targetMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+	}.Build()).AnyTimes()
+	targetMutableState.EXPECT().GetExecutionState().Return(persistencespb.WorkflowExecutionState_builder{
 		RunId: targetRunID,
-	}).AnyTimes()
+	}.Build()).AnyTimes()
 	targetMutableState.EXPECT().CloseTransactionAsSnapshot(context.Background(), historyi.TransactionPolicyPassive).Return(
 		targetWorkflowSnapshot, targetWorkflowEventsSeq, nil,
 	)
@@ -449,13 +449,13 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_SuppressC
 	currentWorkflow.EXPECT().GetMutableState().Return(currentMutableState).AnyTimes()
 	currentWorkflow.EXPECT().GetReleaseFn().Return(currentReleaseFn).AnyTimes()
 
-	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+	targetMutableState.EXPECT().GetExecutionInfo().Return(persistencespb.WorkflowExecutionInfo_builder{
 		NamespaceId: namespaceID.String(),
 		WorkflowId:  workflowID,
-	}).AnyTimes()
-	targetMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+	}.Build()).AnyTimes()
+	targetMutableState.EXPECT().GetExecutionState().Return(persistencespb.WorkflowExecutionState_builder{
 		RunId: targetRunID,
-	}).AnyTimes()
+	}.Build()).AnyTimes()
 
 	s.mockTransactionMgr.EXPECT().GetCurrentWorkflowRunID(ctx, namespaceID, workflowID, chasm.WorkflowArchetypeID).Return(currentRunID, nil)
 	s.mockTransactionMgr.EXPECT().LoadWorkflow(ctx, namespaceID, workflowID, currentRunID, chasm.WorkflowArchetypeID).Return(currentWorkflow, nil)

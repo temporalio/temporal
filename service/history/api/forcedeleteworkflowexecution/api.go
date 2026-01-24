@@ -25,13 +25,13 @@ func Invoke(
 	persistenceVisibilityMgr manager.VisibilityManager,
 	logger log.Logger,
 ) (_ *historyservice.ForceDeleteWorkflowExecutionResponse, retError error) {
-	req := request.Request
-	execution := req.Execution
+	req := request.GetRequest()
+	execution := req.GetExecution()
 
 	logger = log.With(logger,
-		tag.WorkflowNamespaceID(request.NamespaceId),
-		tag.WorkflowID(execution.WorkflowId),
-		tag.WorkflowRunID(execution.RunId),
+		tag.WorkflowNamespaceID(request.GetNamespaceId()),
+		tag.WorkflowID(execution.GetWorkflowId()),
+		tag.WorkflowRunID(execution.GetRunId()),
 	)
 
 	archetypeID := request.GetArchetypeId()
@@ -39,17 +39,17 @@ func Invoke(
 		archetypeID = chasm.WorkflowArchetypeID
 	}
 
-	if execution.RunId == "" {
+	if execution.GetRunId() == "" {
 		resp, err := persistenceExecutionMgr.GetCurrentExecution(ctx, &persistence.GetCurrentExecutionRequest{
 			ShardID:     shardID,
-			NamespaceID: request.NamespaceId,
-			WorkflowID:  execution.WorkflowId,
+			NamespaceID: request.GetNamespaceId(),
+			WorkflowID:  execution.GetWorkflowId(),
 			ArchetypeID: archetypeID,
 		})
 		if err != nil {
 			return nil, err
 		}
-		execution.RunId = resp.RunID
+		execution.SetRunId(resp.RunID)
 	}
 
 	var warnings []string
@@ -57,9 +57,9 @@ func Invoke(
 
 	resp, err := persistenceExecutionMgr.GetWorkflowExecution(ctx, &persistence.GetWorkflowExecutionRequest{
 		ShardID:     shardID,
-		NamespaceID: request.NamespaceId,
-		WorkflowID:  execution.WorkflowId,
-		RunID:       execution.RunId,
+		NamespaceID: request.GetNamespaceId(),
+		WorkflowID:  execution.GetWorkflowId(),
+		RunID:       execution.GetRunId(),
 		ArchetypeID: archetypeID,
 	})
 	if err != nil {
@@ -99,9 +99,9 @@ func Invoke(
 
 	if err := persistenceExecutionMgr.DeleteCurrentWorkflowExecution(ctx, &persistence.DeleteCurrentWorkflowExecutionRequest{
 		ShardID:     shardID,
-		NamespaceID: request.NamespaceId,
-		WorkflowID:  execution.WorkflowId,
-		RunID:       execution.RunId,
+		NamespaceID: request.GetNamespaceId(),
+		WorkflowID:  execution.GetWorkflowId(),
+		RunID:       execution.GetRunId(),
 		ArchetypeID: archetypeID,
 	}); err != nil {
 		return nil, err
@@ -109,9 +109,9 @@ func Invoke(
 
 	if err := persistenceExecutionMgr.DeleteWorkflowExecution(ctx, &persistence.DeleteWorkflowExecutionRequest{
 		ShardID:     shardID,
-		NamespaceID: request.NamespaceId,
-		WorkflowID:  execution.WorkflowId,
-		RunID:       execution.RunId,
+		NamespaceID: request.GetNamespaceId(),
+		WorkflowID:  execution.GetWorkflowId(),
+		RunID:       execution.GetRunId(),
 		ArchetypeID: archetypeID,
 	}); err != nil {
 		return nil, err
@@ -128,9 +128,9 @@ func Invoke(
 		}
 	}
 
-	return &historyservice.ForceDeleteWorkflowExecutionResponse{
-		Response: &adminservice.DeleteWorkflowExecutionResponse{
+	return historyservice.ForceDeleteWorkflowExecutionResponse_builder{
+		Response: adminservice.DeleteWorkflowExecutionResponse_builder{
 			Warnings: warnings,
-		},
-	}, nil
+		}.Build(),
+	}.Build(), nil
 }

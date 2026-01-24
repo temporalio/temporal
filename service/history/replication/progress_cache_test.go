@@ -51,10 +51,10 @@ func (s *progressCacheSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockShard = shard.NewTestContext(
 		s.controller,
-		&persistencespb.ShardInfo{
+		persistencespb.ShardInfo_builder{
 			ShardId: 0,
 			RangeId: 1,
-		},
+		}.Build(),
 		tests.NewDynamicConfig(),
 	)
 
@@ -62,11 +62,11 @@ func (s *progressCacheSuite) SetupTest() {
 
 	s.shardContext = shard.NewTestContext(
 		s.controller,
-		&persistencespb.ShardInfo{
+		persistencespb.ShardInfo_builder{
 			ShardId: 0,
 			RangeId: 1,
 			Owner:   "test-shard-owner",
-		},
+		}.Build(),
 		tests.NewDynamicConfig(),
 	)
 	s.progressCache = NewProgressCache(s.shardContext.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler)
@@ -84,13 +84,13 @@ func (s *progressCacheSuite) TearDownTest() {
 func (s *progressCacheSuite) TestProgressCache() {
 	targetClusterID := rand.Int31()
 	firstEventID := int64(999)
-	versionedTransition := &persistencespb.VersionedTransition{
+	versionedTransition := persistencespb.VersionedTransition_builder{
 		NamespaceFailoverVersion: 80,
 		TransitionCount:          10,
-	}
+	}.Build()
 	versionedTransitions := []*persistencespb.VersionedTransition{versionedTransition}
 	versionHistoryItems := []*historyspb.VersionHistoryItem{
-		versionhistory.NewVersionHistoryItem(firstEventID, versionedTransition.NamespaceFailoverVersion),
+		versionhistory.NewVersionHistoryItem(firstEventID, versionedTransition.GetNamespaceFailoverVersion()),
 	}
 	expected := &ReplicationProgress{
 		versionedTransitions:       [][]*persistencespb.VersionedTransition{versionedTransitions},
@@ -111,13 +111,13 @@ func (s *progressCacheSuite) TestProgressCache() {
 
 	// update existing versioned transition and version history
 	versionedTransitions2 := []*persistencespb.VersionedTransition{
-		{
+		persistencespb.VersionedTransition_builder{
 			NamespaceFailoverVersion: 80,
 			TransitionCount:          20,
-		},
+		}.Build(),
 	}
 	versionHistoryItems2 := []*historyspb.VersionHistoryItem{
-		versionhistory.NewVersionHistoryItem(firstEventID+1, versionedTransition.NamespaceFailoverVersion),
+		versionhistory.NewVersionHistoryItem(firstEventID+1, versionedTransition.GetNamespaceFailoverVersion()),
 	}
 	err = s.progressCache.Update(s.runID, targetClusterID, versionedTransitions2, versionHistoryItems2)
 	s.Nil(err)
@@ -133,14 +133,14 @@ func (s *progressCacheSuite) TestProgressCache() {
 
 	// add new versioned transition and version history
 	versionedTransitions3 := []*persistencespb.VersionedTransition{
-		{
+		persistencespb.VersionedTransition_builder{
 			NamespaceFailoverVersion: 90,
 			TransitionCount:          15,
-		},
+		}.Build(),
 	}
 	versionHistoryItems3 := []*historyspb.VersionHistoryItem{
-		versionhistory.NewVersionHistoryItem(firstEventID, versionedTransition.NamespaceFailoverVersion),
-		versionhistory.NewVersionHistoryItem(firstEventID+1, versionedTransition.NamespaceFailoverVersion+1),
+		versionhistory.NewVersionHistoryItem(firstEventID, versionedTransition.GetNamespaceFailoverVersion()),
+		versionhistory.NewVersionHistoryItem(firstEventID+1, versionedTransition.GetNamespaceFailoverVersion()+1),
 	}
 	err = s.progressCache.Update(s.runID, targetClusterID, versionedTransitions3, versionHistoryItems3)
 	s.Nil(err)

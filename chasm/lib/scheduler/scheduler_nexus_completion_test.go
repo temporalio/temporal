@@ -65,14 +65,14 @@ func executeNexusCompletion(t *testing.T, tc nexusCompletionTestCase) {
 		require.NotNil(t, lastCompletion.GetFailure())
 	}
 
-	require.Equal(t, tc.expectPaused, sched.Schedule.State.Paused)
+	require.Equal(t, tc.expectPaused, sched.Schedule.GetState().GetPaused())
 	if tc.expectPaused {
-		require.NotEmpty(t, sched.Schedule.State.Notes)
-		require.Contains(t, sched.Schedule.State.Notes, "wf-1")
+		require.NotEmpty(t, sched.Schedule.GetState().GetNotes())
+		require.Contains(t, sched.Schedule.GetState().GetNotes(), "wf-1")
 	}
 
 	// Check that workflow ID lookup now returns empty (request completed)
-	require.Empty(t, invoker.RunningWorkflowID(tc.completion.RequestId))
+	require.Empty(t, invoker.RunningWorkflowID(tc.completion.GetRequestId()))
 
 	// If we expect a specific status, verify the BufferedStart has Completed set
 	if tc.expectStatus != enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED {
@@ -102,23 +102,21 @@ func TestHandleNexusCompletion_Success(t *testing.T) {
 		name: "successful completion",
 		setupInvoker: func(invoker *scheduler.Invoker) {
 			invoker.BufferedStarts = []*schedulespb.BufferedStart{
-				{
+				schedulespb.BufferedStart_builder{
 					RequestId:  "req-1",
 					WorkflowId: "wf-1",
 					RunId:      "run-1",
 					Attempt:    1,
 					ActualTime: timestamppb.New(time.Now().Add(-1 * time.Minute)),
 					StartTime:  timestamppb.New(time.Now().Add(-30 * time.Second)),
-				},
+				}.Build(),
 			}
 		},
-		completion: &persistencespb.ChasmNexusCompletion{
+		completion: persistencespb.ChasmNexusCompletion_builder{
 			RequestId: "req-1",
-			Outcome: &persistencespb.ChasmNexusCompletion_Success{
-				Success: &commonpb.Payload{Data: []byte("success-data")},
-			},
+			Success:   commonpb.Payload_builder{Data: []byte("success-data")}.Build(),
 			CloseTime: timestamppb.New(time.Now()),
-		},
+		}.Build(),
 		expectPaused: false,
 		expectStatus: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 	}
@@ -133,25 +131,23 @@ func TestHandleNexusCompletion_Failure(t *testing.T) {
 		name: "failed completion",
 		setupInvoker: func(invoker *scheduler.Invoker) {
 			invoker.BufferedStarts = []*schedulespb.BufferedStart{
-				{
+				schedulespb.BufferedStart_builder{
 					RequestId:  "req-1",
 					WorkflowId: "wf-1",
 					RunId:      "run-1",
 					Attempt:    1,
 					ActualTime: timestamppb.New(time.Now().Add(-1 * time.Minute)),
 					StartTime:  timestamppb.New(time.Now().Add(-30 * time.Second)),
-				},
+				}.Build(),
 			}
 		},
-		completion: &persistencespb.ChasmNexusCompletion{
+		completion: persistencespb.ChasmNexusCompletion_builder{
 			RequestId: "req-1",
-			Outcome: &persistencespb.ChasmNexusCompletion_Failure{
-				Failure: &failurepb.Failure{
-					Message: "workflow failed",
-				},
-			},
+			Failure: failurepb.Failure_builder{
+				Message: "workflow failed",
+			}.Build(),
 			CloseTime: timestamppb.New(time.Now()),
-		},
+		}.Build(),
 		expectPaused: false,
 		expectStatus: enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
 	}
@@ -166,28 +162,26 @@ func TestHandleNexusCompletion_PauseOnFailure(t *testing.T) {
 		name: "pause on failure",
 		setupInvoker: func(invoker *scheduler.Invoker) {
 			invoker.BufferedStarts = []*schedulespb.BufferedStart{
-				{
+				schedulespb.BufferedStart_builder{
 					RequestId:  "req-1",
 					WorkflowId: "wf-1",
 					RunId:      "run-1",
 					Attempt:    1,
 					ActualTime: timestamppb.New(time.Now().Add(-1 * time.Minute)),
 					StartTime:  timestamppb.New(time.Now().Add(-30 * time.Second)),
-				},
+				}.Build(),
 			}
 		},
 		setupScheduler: func(sched *scheduler.Scheduler) {
-			sched.Schedule.Policies.PauseOnFailure = true
+			sched.Schedule.GetPolicies().SetPauseOnFailure(true)
 		},
-		completion: &persistencespb.ChasmNexusCompletion{
+		completion: persistencespb.ChasmNexusCompletion_builder{
 			RequestId: "req-1",
-			Outcome: &persistencespb.ChasmNexusCompletion_Failure{
-				Failure: &failurepb.Failure{
-					Message: "workflow failed",
-				},
-			},
+			Failure: failurepb.Failure_builder{
+				Message: "workflow failed",
+			}.Build(),
 			CloseTime: timestamppb.New(time.Now()),
-		},
+		}.Build(),
 		expectPaused: true,
 		expectStatus: enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
 	}
@@ -204,13 +198,11 @@ func TestHandleNexusCompletion_Idempotent(t *testing.T) {
 			// Empty BufferedStarts - request was already processed
 			invoker.BufferedStarts = []*schedulespb.BufferedStart{}
 		},
-		completion: &persistencespb.ChasmNexusCompletion{
+		completion: persistencespb.ChasmNexusCompletion_builder{
 			RequestId: "req-1",
-			Outcome: &persistencespb.ChasmNexusCompletion_Success{
-				Success: &commonpb.Payload{Data: []byte("success-data")},
-			},
+			Success:   commonpb.Payload_builder{Data: []byte("success-data")}.Build(),
 			CloseTime: timestamppb.New(time.Now()),
-		},
+		}.Build(),
 		expectNoOp: true,
 	}
 
@@ -224,28 +216,24 @@ func TestHandleNexusCompletion_Canceled(t *testing.T) {
 		name: "canceled completion",
 		setupInvoker: func(invoker *scheduler.Invoker) {
 			invoker.BufferedStarts = []*schedulespb.BufferedStart{
-				{
+				schedulespb.BufferedStart_builder{
 					RequestId:  "req-1",
 					WorkflowId: "wf-1",
 					RunId:      "run-1",
 					Attempt:    1,
 					ActualTime: timestamppb.New(time.Now().Add(-1 * time.Minute)),
 					StartTime:  timestamppb.New(time.Now().Add(-30 * time.Second)),
-				},
+				}.Build(),
 			}
 		},
-		completion: &persistencespb.ChasmNexusCompletion{
+		completion: persistencespb.ChasmNexusCompletion_builder{
 			RequestId: "req-1",
-			Outcome: &persistencespb.ChasmNexusCompletion_Failure{
-				Failure: &failurepb.Failure{
-					Message: "workflow canceled",
-					FailureInfo: &failurepb.Failure_CanceledFailureInfo{
-						CanceledFailureInfo: &failurepb.CanceledFailureInfo{},
-					},
-				},
-			},
+			Failure: failurepb.Failure_builder{
+				Message:             "workflow canceled",
+				CanceledFailureInfo: &failurepb.CanceledFailureInfo{},
+			}.Build(),
 			CloseTime: timestamppb.New(time.Now()),
-		},
+		}.Build(),
 		expectPaused: false,
 		expectStatus: enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED,
 	}
@@ -261,28 +249,26 @@ func TestHandleNexusCompletion_CompletionBeforeStart(t *testing.T) {
 		name: "completion before start",
 		setupInvoker: func(invoker *scheduler.Invoker) {
 			invoker.BufferedStarts = []*schedulespb.BufferedStart{
-				{
+				schedulespb.BufferedStart_builder{
 					RequestId:   "req-1",
 					WorkflowId:  "wf-1",
 					Attempt:     1,
 					ActualTime:  timestamppb.New(desiredTime),
 					DesiredTime: timestamppb.New(desiredTime),
 					// No RunId - workflow hasn't been started yet in our records
-				},
+				}.Build(),
 			}
 		},
-		completion: &persistencespb.ChasmNexusCompletion{
+		completion: persistencespb.ChasmNexusCompletion_builder{
 			RequestId: "req-1",
-			Outcome: &persistencespb.ChasmNexusCompletion_Success{
-				Success: &commonpb.Payload{Data: []byte("success-data")},
-			},
+			Success:   commonpb.Payload_builder{Data: []byte("success-data")}.Build(),
 			CloseTime: timestamppb.New(time.Now()),
-		},
+		}.Build(),
 		expectPaused: false,
 		expectStatus: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 		validateInvoker: func(t *testing.T, invoker *scheduler.Invoker) {
 			require.Len(t, invoker.BufferedStarts, 1)
-			require.NotNil(t, invoker.BufferedStarts[0].Completed)
+			require.NotNil(t, invoker.BufferedStarts[0].GetCompleted())
 		},
 	}
 

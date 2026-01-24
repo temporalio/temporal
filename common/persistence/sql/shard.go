@@ -62,8 +62,8 @@ func (m *sqlShardStore) GetOrCreateShard(
 	row = &sqlplugin.ShardsRow{
 		ShardID:      request.ShardID,
 		RangeID:      rangeID,
-		Data:         shardInfo.Data,
-		DataEncoding: shardInfo.EncodingType.String(),
+		Data:         shardInfo.GetData(),
+		DataEncoding: shardInfo.GetEncodingType().String(),
 	}
 	_, err = m.DB.InsertIntoShards(ctx, row)
 	if err == nil {
@@ -95,8 +95,8 @@ func (m *sqlShardStore) UpdateShard(
 		result, err := tx.UpdateShards(ctx, &sqlplugin.ShardsRow{
 			ShardID:      request.ShardID,
 			RangeID:      request.RangeID,
-			Data:         request.ShardInfo.Data,
-			DataEncoding: request.ShardInfo.EncodingType.String(),
+			Data:         request.ShardInfo.GetData(),
+			DataEncoding: request.ShardInfo.GetEncodingType().String(),
 		})
 		if err != nil {
 			return err

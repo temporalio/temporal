@@ -164,19 +164,19 @@ func (s *metadataSuite) Test_RefreshClusterMetadata_Success() {
 			ClusterMetadata: []*persistence.GetClusterMetadataResponse{
 				{
 					// No change and not include in callback
-					ClusterMetadata: &persistencespb.ClusterMetadata{
+					ClusterMetadata: persistencespb.ClusterMetadata_builder{
 						ClusterName:            s.clusterName,
 						IsConnectionEnabled:    true,
 						InitialFailoverVersion: 1,
 						HistoryShardCount:      1,
 						ClusterAddress:         uuid.NewString(),
 						HttpAddress:            uuid.NewString(),
-					},
+					}.Build(),
 					Version: 1,
 				},
 				{
 					// Updated, included in callback
-					ClusterMetadata: &persistencespb.ClusterMetadata{
+					ClusterMetadata: persistencespb.ClusterMetadata_builder{
 						ClusterName:            s.thirdClusterName,
 						IsConnectionEnabled:    true,
 						InitialFailoverVersion: 1,
@@ -184,12 +184,12 @@ func (s *metadataSuite) Test_RefreshClusterMetadata_Success() {
 						ClusterAddress:         uuid.NewString(),
 						HttpAddress:            uuid.NewString(),
 						Tags:                   map[string]string{"test": "test"},
-					},
+					}.Build(),
 					Version: 2,
 				},
 				{
 					// Newly added, included in callback
-					ClusterMetadata: &persistencespb.ClusterMetadata{
+					ClusterMetadata: persistencespb.ClusterMetadata_builder{
 						ClusterName:            id,
 						IsConnectionEnabled:    true,
 						InitialFailoverVersion: 2,
@@ -197,7 +197,7 @@ func (s *metadataSuite) Test_RefreshClusterMetadata_Success() {
 						ClusterAddress:         uuid.NewString(),
 						HttpAddress:            uuid.NewString(),
 						Tags:                   map[string]string{"test": "test"},
-					},
+					}.Build(),
 					Version: 2,
 				},
 			},
@@ -219,14 +219,14 @@ func (s *metadataSuite) Test_ListAllClusterMetadataFromDB_Success() {
 		&persistence.ListClusterMetadataResponse{
 			ClusterMetadata: []*persistence.GetClusterMetadataResponse{
 				{
-					ClusterMetadata: &persistencespb.ClusterMetadata{
+					ClusterMetadata: persistencespb.ClusterMetadata_builder{
 						ClusterName:            s.clusterName,
 						IsConnectionEnabled:    true,
 						InitialFailoverVersion: 1,
 						HistoryShardCount:      1,
 						ClusterAddress:         uuid.NewString(),
 						HttpAddress:            uuid.NewString(),
-					},
+					}.Build(),
 					Version: 1,
 				},
 			},
@@ -239,14 +239,14 @@ func (s *metadataSuite) Test_ListAllClusterMetadataFromDB_Success() {
 		&persistence.ListClusterMetadataResponse{
 			ClusterMetadata: []*persistence.GetClusterMetadataResponse{
 				{
-					ClusterMetadata: &persistencespb.ClusterMetadata{
+					ClusterMetadata: persistencespb.ClusterMetadata_builder{
 						ClusterName:            newClusterName,
 						IsConnectionEnabled:    true,
 						InitialFailoverVersion: 2,
 						HistoryShardCount:      2,
 						ClusterAddress:         uuid.NewString(),
 						HttpAddress:            uuid.NewString(),
-					},
+					}.Build(),
 					Version: 2,
 				},
 			},

@@ -570,7 +570,7 @@ func (r *registry) refreshNamespaces(ctx context.Context) (err error) {
 				return err
 			}
 			namespacesDb = append(namespacesDb, ns)
-			namespaceIDsDb[namespace.ID(namespaceDb.Namespace.Info.Id)] = struct{}{}
+			namespaceIDsDb[namespace.ID(namespaceDb.Namespace.GetInfo().GetId())] = struct{}{}
 		}
 		if len(response.NextPageToken) == 0 {
 			break

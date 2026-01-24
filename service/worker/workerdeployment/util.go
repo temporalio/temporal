@@ -143,19 +143,19 @@ func GetDeploymentNameFromWorkflowID(workflowID string) string {
 // GenerateVersionWorkflowID is a helper that generates a system accepted
 // workflowID which are used in our Worker Deployment Version workflows
 func GenerateVersionWorkflowID(deploymentName string, buildID string) string {
-	versionString := worker_versioning.ExternalWorkerDeploymentVersionToString(&deploymentpb.WorkerDeploymentVersion{
+	versionString := worker_versioning.ExternalWorkerDeploymentVersionToString(deploymentpb.WorkerDeploymentVersion_builder{
 		DeploymentName: deploymentName,
 		BuildId:        buildID,
-	})
+	}.Build())
 	return worker_versioning.WorkerDeploymentVersionWorkflowIDPrefix + worker_versioning.WorkerDeploymentVersionDelimiter + versionString
 }
 
 func DecodeWorkerDeploymentMemo(memo *commonpb.Memo) (*deploymentspb.WorkerDeploymentWorkflowMemo, error) {
-	if memo == nil || memo.Fields == nil {
+	if memo == nil || memo.GetFields() == nil {
 		return nil, errors.New("decoding WorkerDeploymentMemo failed: Memo or it's fields are nil")
 	}
 	var workerDeploymentWorkflowMemo deploymentspb.WorkerDeploymentWorkflowMemo
-	err := sdk.PreferProtoDataConverter.FromPayload(memo.Fields[WorkerDeploymentMemoField], &workerDeploymentWorkflowMemo)
+	err := sdk.PreferProtoDataConverter.FromPayload(memo.GetFields()[WorkerDeploymentMemoField], &workerDeploymentWorkflowMemo)
 	if err != nil {
 		return nil, err
 	}
@@ -191,17 +191,17 @@ func updateWorkflow(
 	workflowID string,
 	updateRequest *updatepb.Request,
 ) (*updatepb.Outcome, error) {
-	updateReq := &historyservice.UpdateWorkflowExecutionRequest{
+	updateReq := historyservice.UpdateWorkflowExecutionRequest_builder{
 		NamespaceId: namespaceEntry.ID().String(),
-		Request: &workflowservice.UpdateWorkflowExecutionRequest{
+		Request: workflowservice.UpdateWorkflowExecutionRequest_builder{
 			Namespace: namespaceEntry.Name().String(),
-			WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowExecution: commonpb.WorkflowExecution_builder{
 				WorkflowId: workflowID,
-			},
+			}.Build(),
 			Request:    updateRequest,
-			WaitPolicy: &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED},
-		},
-	}
+			WaitPolicy: updatepb.WaitPolicy_builder{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED}.Build(),
+		}.Build(),
+	}.Build()
 
 	var outcome *updatepb.Outcome
 	err := backoff.ThrottleRetryContext(ctx, func(ctx context.Context) error {
@@ -233,7 +233,7 @@ func extractApplicationErrorOrInternal(failure *failurepb.Failure) error {
 			}
 			return temporal.NewApplicationError(failure.GetMessage(), af.GetType(), nil)
 		}
-		return serviceerror.NewInternal(failure.Message)
+		return serviceerror.NewInternal(failure.GetMessage())
 	}
 	return nil
 }
@@ -253,38 +253,34 @@ func updateWorkflowWithStart(
 	// Start workflow execution, if it hasn't already
 	startReq := makeStartRequest(requestID, workflowID, identity, workflowType, namespaceEntry, memo, input)
 
-	updateReq := &workflowservice.UpdateWorkflowExecutionRequest{
+	updateReq := workflowservice.UpdateWorkflowExecutionRequest_builder{
 		Namespace: namespaceEntry.Name().String(),
-		WorkflowExecution: &commonpb.WorkflowExecution{
+		WorkflowExecution: commonpb.WorkflowExecution_builder{
 			WorkflowId: workflowID,
-		},
+		}.Build(),
 		Request:    updateRequest,
-		WaitPolicy: &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED},
-	}
+		WaitPolicy: updatepb.WaitPolicy_builder{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED}.Build(),
+	}.Build()
 
 	// This is an atomic operation; if one operation fails, both will.
-	multiOpReq := &historyservice.ExecuteMultiOperationRequest{
+	multiOpReq := historyservice.ExecuteMultiOperationRequest_builder{
 		NamespaceId: namespaceEntry.ID().String(),
 		WorkflowId:  workflowID,
 		Operations: []*historyservice.ExecuteMultiOperationRequest_Operation{
-			{
-				Operation: &historyservice.ExecuteMultiOperationRequest_Operation_StartWorkflow{
-					StartWorkflow: &historyservice.StartWorkflowExecutionRequest{
-						NamespaceId:  namespaceEntry.ID().String(),
-						StartRequest: startReq,
-					},
-				},
-			},
-			{
-				Operation: &historyservice.ExecuteMultiOperationRequest_Operation_UpdateWorkflow{
-					UpdateWorkflow: &historyservice.UpdateWorkflowExecutionRequest{
-						NamespaceId: namespaceEntry.ID().String(),
-						Request:     updateReq,
-					},
-				},
-			},
+			historyservice.ExecuteMultiOperationRequest_Operation_builder{
+				StartWorkflow: historyservice.StartWorkflowExecutionRequest_builder{
+					NamespaceId:  namespaceEntry.ID().String(),
+					StartRequest: startReq,
+				}.Build(),
+			}.Build(),
+			historyservice.ExecuteMultiOperationRequest_Operation_builder{
+				UpdateWorkflow: historyservice.UpdateWorkflowExecutionRequest_builder{
+					NamespaceId: namespaceEntry.ID().String(),
+					Request:     updateReq,
+				}.Build(),
+			}.Build(),
 		},
-	}
+	}.Build()
 
 	var outcome *updatepb.Outcome
 
@@ -299,7 +295,7 @@ func updateWorkflowWithStart(
 		// we should get exactly one of each of these
 		var startRes *historyservice.StartWorkflowExecutionResponse
 		var updateRes *workflowservice.UpdateWorkflowExecutionResponse
-		for _, response := range res.Responses {
+		for _, response := range res.GetResponses() {
 			if sr := response.GetStartWorkflow(); sr != nil {
 				startRes = sr
 			} else if ur := response.GetUpdateWorkflow().GetResponse(); ur != nil {
@@ -326,7 +322,7 @@ func convertUpdateFailure(updateRes *workflowservice.UpdateWorkflowExecutionResp
 		return serviceerror.NewInternal("failed to update deployment workflow")
 	}
 
-	if updateRes.Stage != enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED {
+	if updateRes.GetStage() != enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED {
 		// update not completed, try again
 		return errUpdateInProgress
 	}
@@ -405,19 +401,19 @@ func makeStartRequest(
 	memo *commonpb.Memo,
 	input *commonpb.Payloads,
 ) *workflowservice.StartWorkflowExecutionRequest {
-	return &workflowservice.StartWorkflowExecutionRequest{
+	return workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:                requestID,
 		Namespace:                namespaceEntry.Name().String(),
 		WorkflowId:               workflowID,
-		WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
-		TaskQueue:                &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
+		WorkflowType:             commonpb.WorkflowType_builder{Name: workflowType}.Build(),
+		TaskQueue:                taskqueuepb.TaskQueue_builder{Name: primitives.PerNSWorkerTaskQueue}.Build(),
 		Input:                    input,
 		WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
 		SearchAttributes:         buildSearchAttributes(),
 		Memo:                     memo,
 		Identity:                 identity,
-	}
+	}.Build()
 }
 
 func buildSearchAttributes() *commonpb.SearchAttributes {

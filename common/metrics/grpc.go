@@ -66,7 +66,7 @@ func NewClientMetricsTrailerPropagatorInterceptor(logger log.Logger) grpc.UnaryC
 				logger.Error("unable to unmarshal metrics baggage from trailer", tag.Error(unmarshalErr))
 				continue
 			}
-			for counterName, counterValue := range metricsBaggage.CountersInt {
+			for counterName, counterValue := range metricsBaggage.GetCountersInt() {
 				ContextCounterAdd(ctx, counterName, counterValue)
 			}
 		}
@@ -98,11 +98,11 @@ func NewServerMetricsTrailerPropagatorInterceptor(logger log.Logger) grpc.UnaryS
 			return resp, err
 		}
 
-		metricsBaggage := &metricsspb.Baggage{CountersInt: make(map[string]int64)}
+		metricsBaggage := metricsspb.Baggage_builder{CountersInt: make(map[string]int64)}.Build()
 
 		metricsCtx.Lock()
 		for k, v := range metricsCtx.CountersInt {
-			metricsBaggage.CountersInt[k] = v
+			metricsBaggage.GetCountersInt()[k] = v
 		}
 		metricsCtx.Unlock()
 

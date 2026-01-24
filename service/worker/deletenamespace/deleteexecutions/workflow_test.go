@@ -258,20 +258,20 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_ManyExecutions(t *testing.T) 
 		Query:         sadefs.QueryWithAnyNamespaceDivision(""),
 	}).Return(&manager.ListWorkflowExecutionsResponse{
 		Executions: []*workflowpb.WorkflowExecutionInfo{
-			{
+			workflowpb.WorkflowExecutionInfo_builder{
 				Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-				Execution: &commonpb.WorkflowExecution{
+				Execution: commonpb.WorkflowExecution_builder{
 					WorkflowId: "workflow-id-1",
 					RunId:      "run-id-1",
-				},
-			},
-			{
+				}.Build(),
+			}.Build(),
+			workflowpb.WorkflowExecutionInfo_builder{
 				Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
-				Execution: &commonpb.WorkflowExecution{
+				Execution: commonpb.WorkflowExecution_builder{
 					WorkflowId: "workflow-id-2",
 					RunId:      "run-id-2",
-				},
-			},
+				}.Build(),
+			}.Build(),
 		},
 		NextPageToken: []byte{22, 8, 78},
 	}, nil).Times(2)
@@ -285,20 +285,20 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_ManyExecutions(t *testing.T) 
 		Query:         sadefs.QueryWithAnyNamespaceDivision(""),
 	}).Return(&manager.ListWorkflowExecutionsResponse{
 		Executions: []*workflowpb.WorkflowExecutionInfo{
-			{
+			workflowpb.WorkflowExecutionInfo_builder{
 				Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
-				Execution: &commonpb.WorkflowExecution{
+				Execution: commonpb.WorkflowExecution_builder{
 					WorkflowId: "workflow-id-1",
 					RunId:      "run-id-1",
-				},
-			},
-			{
+				}.Build(),
+			}.Build(),
+			workflowpb.WorkflowExecutionInfo_builder{
 				Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-				Execution: &commonpb.WorkflowExecution{
+				Execution: commonpb.WorkflowExecution_builder{
 					WorkflowId: "workflow-id-2",
 					RunId:      "run-id-2",
-				},
-			},
+				}.Build(),
+			}.Build(),
 		},
 		NextPageToken: nil,
 	}, nil).Times(2)
@@ -352,15 +352,15 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_ChasmExecutions(t *testing.T)
 	testSuite.SetLogger(log.NewSdkLogger(log.NewTestLogger()))
 	env := testSuite.NewTestWorkflowEnvironment()
 
-	execution1 := &commonpb.WorkflowExecution{
+	execution1 := commonpb.WorkflowExecution_builder{
 		WorkflowId: "workflow-id-1",
 		RunId:      "run-id-1",
-	}
+	}.Build()
 	archetypeID1 := 12345
-	execution2 := &commonpb.WorkflowExecution{
+	execution2 := commonpb.WorkflowExecution_builder{
 		WorkflowId: "workflow-id-2",
 		RunId:      "run-id-2",
-	}
+	}.Build()
 	archetypeID2 := 54321
 
 	ctrl := gomock.NewController(t)
@@ -373,42 +373,42 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_ChasmExecutions(t *testing.T)
 		Query:         sadefs.QueryWithAnyNamespaceDivision(""),
 	}).Return(&manager.ListWorkflowExecutionsResponse{
 		Executions: []*workflowpb.WorkflowExecutionInfo{
-			{
+			workflowpb.WorkflowExecutionInfo_builder{
 				Status:    enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 				Execution: execution1,
-				SearchAttributes: &commonpb.SearchAttributes{
+				SearchAttributes: commonpb.SearchAttributes_builder{
 					IndexedFields: map[string]*commonpb.Payload{
 						sadefs.TemporalNamespaceDivision: payload.EncodeString(strconv.FormatUint(uint64(archetypeID1), 10)),
 					},
-				},
-			},
-			{
+				}.Build(),
+			}.Build(),
+			workflowpb.WorkflowExecutionInfo_builder{
 				Status:    enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 				Execution: execution2,
-				SearchAttributes: &commonpb.SearchAttributes{
+				SearchAttributes: commonpb.SearchAttributes_builder{
 					IndexedFields: map[string]*commonpb.Payload{
 						sadefs.TemporalNamespaceDivision: payload.EncodeString(strconv.FormatUint(uint64(archetypeID2), 10)),
 					},
-				},
-			},
+				}.Build(),
+			}.Build(),
 		},
 	}, nil).Times(2)
 
 	historyClient := historyservicemock.NewMockHistoryServiceClient(ctrl)
-	historyClient.EXPECT().ForceDeleteWorkflowExecution(gomock.Any(), &historyservice.ForceDeleteWorkflowExecutionRequest{
+	historyClient.EXPECT().ForceDeleteWorkflowExecution(gomock.Any(), historyservice.ForceDeleteWorkflowExecutionRequest_builder{
 		NamespaceId: "namespace-id",
 		ArchetypeId: uint32(archetypeID1),
-		Request: &adminservice.DeleteWorkflowExecutionRequest{
+		Request: adminservice.DeleteWorkflowExecutionRequest_builder{
 			Execution: execution1,
-		},
-	}).Return(nil, nil).Times(1)
-	historyClient.EXPECT().ForceDeleteWorkflowExecution(gomock.Any(), &historyservice.ForceDeleteWorkflowExecutionRequest{
+		}.Build(),
+	}.Build()).Return(nil, nil).Times(1)
+	historyClient.EXPECT().ForceDeleteWorkflowExecution(gomock.Any(), historyservice.ForceDeleteWorkflowExecutionRequest_builder{
 		NamespaceId: "namespace-id",
 		ArchetypeId: uint32(archetypeID2),
-		Request: &adminservice.DeleteWorkflowExecutionRequest{
+		Request: adminservice.DeleteWorkflowExecutionRequest_builder{
 			Execution: execution2,
-		},
-	}).Return(nil, nil).Times(1)
+		}.Build(),
+	}.Build()).Return(nil, nil).Times(1)
 
 	a := &Activities{
 		visibilityManager: visibilityManager,
@@ -461,20 +461,20 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_HistoryClientError(t *testing
 		Query:         sadefs.QueryWithAnyNamespaceDivision(""),
 	}).Return(&manager.ListWorkflowExecutionsResponse{
 		Executions: []*workflowpb.WorkflowExecutionInfo{
-			{
+			workflowpb.WorkflowExecutionInfo_builder{
 				Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-				Execution: &commonpb.WorkflowExecution{
+				Execution: commonpb.WorkflowExecution_builder{
 					WorkflowId: "workflow-id-1",
 					RunId:      "run-id-1",
-				},
-			},
-			{
+				}.Build(),
+			}.Build(),
+			workflowpb.WorkflowExecutionInfo_builder{
 				Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
-				Execution: &commonpb.WorkflowExecution{
+				Execution: commonpb.WorkflowExecution_builder{
 					WorkflowId: "workflow-id-2",
 					RunId:      "run-id-2",
-				},
-			},
+				}.Build(),
+			}.Build(),
 		},
 		NextPageToken: []byte{22, 8, 78},
 	}, nil).Times(2)
@@ -488,20 +488,20 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_HistoryClientError(t *testing
 		Query:         sadefs.QueryWithAnyNamespaceDivision(""),
 	}).Return(&manager.ListWorkflowExecutionsResponse{
 		Executions: []*workflowpb.WorkflowExecutionInfo{
-			{
+			workflowpb.WorkflowExecutionInfo_builder{
 				Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
-				Execution: &commonpb.WorkflowExecution{
+				Execution: commonpb.WorkflowExecution_builder{
 					WorkflowId: "workflow-id-1",
 					RunId:      "run-id-1",
-				},
-			},
-			{
+				}.Build(),
+			}.Build(),
+			workflowpb.WorkflowExecutionInfo_builder{
 				Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-				Execution: &commonpb.WorkflowExecution{
+				Execution: commonpb.WorkflowExecution_builder{
 					WorkflowId: "workflow-id-2",
 					RunId:      "run-id-2",
-				},
-			},
+				}.Build(),
+			}.Build(),
 		},
 		NextPageToken: nil,
 	}, nil).Times(2)

@@ -81,10 +81,10 @@ func (s *parentClosePolicyWorkflowSuite) TestProcessorActivity_SameCluster() {
 	env.RegisterActivity(ProcessorActivity)
 
 	request := Request{
-		ParentExecution: &commonpb.WorkflowExecution{
+		ParentExecution: commonpb.WorkflowExecution_builder{
 			WorkflowId: "parent workflowID",
 			RunId:      "parent runID",
-		},
+		}.Build(),
 		Executions: []RequestDetail{
 			{
 				Namespace:   tests.ChildNamespace.String(),
@@ -125,10 +125,10 @@ func (s *parentClosePolicyWorkflowSuite) TestProcessorActivity_RemoteCluster() {
 	env.RegisterActivity(ProcessorActivity)
 
 	request := Request{
-		ParentExecution: &commonpb.WorkflowExecution{
+		ParentExecution: commonpb.WorkflowExecution_builder{
 			WorkflowId: "parent workflowID",
 			RunId:      "parent runID",
-		},
+		}.Build(),
 		Executions: []RequestDetail{
 			{
 				Namespace:   tests.ChildNamespace.String(),
@@ -157,11 +157,11 @@ func (s *parentClosePolicyWorkflowSuite) TestProcessorActivity_RemoteCluster() {
 			request *workflowservice.SignalWithStartWorkflowExecutionRequest,
 			_ ...grpc.CallOption,
 		) (*workflowservice.SignalWithStartWorkflowExecutionResponse, error) {
-			s.Equal(primitives.SystemLocalNamespace, request.Namespace)
-			s.Equal(processorWFTypeName, request.WorkflowType.Name)
-			s.Equal(processorTaskQueueName, request.TaskQueue.Name)
-			s.Equal(workflowIDReusePolicy, request.WorkflowIdReusePolicy)
-			s.Equal(processorChannelName, request.SignalName)
+			s.Equal(primitives.SystemLocalNamespace, request.GetNamespace())
+			s.Equal(processorWFTypeName, request.GetWorkflowType().GetName())
+			s.Equal(processorTaskQueueName, request.GetTaskQueue().GetName())
+			s.Equal(workflowIDReusePolicy, request.GetWorkflowIdReusePolicy())
+			s.Equal(processorChannelName, request.GetSignalName())
 			return &workflowservice.SignalWithStartWorkflowExecutionResponse{}, nil
 		},
 	).Times(2)

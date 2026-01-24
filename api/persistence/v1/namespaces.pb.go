@@ -8,7 +8,6 @@ package persistence
 
 import (
 	reflect "reflect"
-	sync "sync"
 	unsafe "unsafe"
 
 	v1 "go.temporal.io/api/enums/v1"
@@ -29,16 +28,16 @@ const (
 
 // detail column
 type NamespaceDetail struct {
-	state                       protoimpl.MessageState      `protogen:"open.v1"`
-	Info                        *NamespaceInfo              `protobuf:"bytes,1,opt,name=info,proto3" json:"info,omitempty"`
-	Config                      *NamespaceConfig            `protobuf:"bytes,2,opt,name=config,proto3" json:"config,omitempty"`
-	ReplicationConfig           *NamespaceReplicationConfig `protobuf:"bytes,3,opt,name=replication_config,json=replicationConfig,proto3" json:"replication_config,omitempty"`
-	ConfigVersion               int64                       `protobuf:"varint,4,opt,name=config_version,json=configVersion,proto3" json:"config_version,omitempty"`
-	FailoverNotificationVersion int64                       `protobuf:"varint,5,opt,name=failover_notification_version,json=failoverNotificationVersion,proto3" json:"failover_notification_version,omitempty"`
-	FailoverVersion             int64                       `protobuf:"varint,6,opt,name=failover_version,json=failoverVersion,proto3" json:"failover_version,omitempty"`
-	FailoverEndTime             *timestamppb.Timestamp      `protobuf:"bytes,7,opt,name=failover_end_time,json=failoverEndTime,proto3" json:"failover_end_time,omitempty"`
-	unknownFields               protoimpl.UnknownFields
-	sizeCache                   protoimpl.SizeCache
+	state                                  protoimpl.MessageState      `protogen:"opaque.v1"`
+	xxx_hidden_Info                        *NamespaceInfo              `protobuf:"bytes,1,opt,name=info,proto3"`
+	xxx_hidden_Config                      *NamespaceConfig            `protobuf:"bytes,2,opt,name=config,proto3"`
+	xxx_hidden_ReplicationConfig           *NamespaceReplicationConfig `protobuf:"bytes,3,opt,name=replication_config,json=replicationConfig,proto3"`
+	xxx_hidden_ConfigVersion               int64                       `protobuf:"varint,4,opt,name=config_version,json=configVersion,proto3"`
+	xxx_hidden_FailoverNotificationVersion int64                       `protobuf:"varint,5,opt,name=failover_notification_version,json=failoverNotificationVersion,proto3"`
+	xxx_hidden_FailoverVersion             int64                       `protobuf:"varint,6,opt,name=failover_version,json=failoverVersion,proto3"`
+	xxx_hidden_FailoverEndTime             *timestamppb.Timestamp      `protobuf:"bytes,7,opt,name=failover_end_time,json=failoverEndTime,proto3"`
+	unknownFields                          protoimpl.UnknownFields
+	sizeCache                              protoimpl.SizeCache
 }
 
 func (x *NamespaceDetail) Reset() {
@@ -66,70 +65,163 @@ func (x *NamespaceDetail) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use NamespaceDetail.ProtoReflect.Descriptor instead.
-func (*NamespaceDetail) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_namespaces_proto_rawDescGZIP(), []int{0}
-}
-
 func (x *NamespaceDetail) GetInfo() *NamespaceInfo {
 	if x != nil {
-		return x.Info
+		return x.xxx_hidden_Info
 	}
 	return nil
 }
 
 func (x *NamespaceDetail) GetConfig() *NamespaceConfig {
 	if x != nil {
-		return x.Config
+		return x.xxx_hidden_Config
 	}
 	return nil
 }
 
 func (x *NamespaceDetail) GetReplicationConfig() *NamespaceReplicationConfig {
 	if x != nil {
-		return x.ReplicationConfig
+		return x.xxx_hidden_ReplicationConfig
 	}
 	return nil
 }
 
 func (x *NamespaceDetail) GetConfigVersion() int64 {
 	if x != nil {
-		return x.ConfigVersion
+		return x.xxx_hidden_ConfigVersion
 	}
 	return 0
 }
 
 func (x *NamespaceDetail) GetFailoverNotificationVersion() int64 {
 	if x != nil {
-		return x.FailoverNotificationVersion
+		return x.xxx_hidden_FailoverNotificationVersion
 	}
 	return 0
 }
 
 func (x *NamespaceDetail) GetFailoverVersion() int64 {
 	if x != nil {
-		return x.FailoverVersion
+		return x.xxx_hidden_FailoverVersion
 	}
 	return 0
 }
 
 func (x *NamespaceDetail) GetFailoverEndTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.FailoverEndTime
+		return x.xxx_hidden_FailoverEndTime
 	}
 	return nil
 }
 
+func (x *NamespaceDetail) SetInfo(v *NamespaceInfo) {
+	x.xxx_hidden_Info = v
+}
+
+func (x *NamespaceDetail) SetConfig(v *NamespaceConfig) {
+	x.xxx_hidden_Config = v
+}
+
+func (x *NamespaceDetail) SetReplicationConfig(v *NamespaceReplicationConfig) {
+	x.xxx_hidden_ReplicationConfig = v
+}
+
+func (x *NamespaceDetail) SetConfigVersion(v int64) {
+	x.xxx_hidden_ConfigVersion = v
+}
+
+func (x *NamespaceDetail) SetFailoverNotificationVersion(v int64) {
+	x.xxx_hidden_FailoverNotificationVersion = v
+}
+
+func (x *NamespaceDetail) SetFailoverVersion(v int64) {
+	x.xxx_hidden_FailoverVersion = v
+}
+
+func (x *NamespaceDetail) SetFailoverEndTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_FailoverEndTime = v
+}
+
+func (x *NamespaceDetail) HasInfo() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Info != nil
+}
+
+func (x *NamespaceDetail) HasConfig() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Config != nil
+}
+
+func (x *NamespaceDetail) HasReplicationConfig() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_ReplicationConfig != nil
+}
+
+func (x *NamespaceDetail) HasFailoverEndTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_FailoverEndTime != nil
+}
+
+func (x *NamespaceDetail) ClearInfo() {
+	x.xxx_hidden_Info = nil
+}
+
+func (x *NamespaceDetail) ClearConfig() {
+	x.xxx_hidden_Config = nil
+}
+
+func (x *NamespaceDetail) ClearReplicationConfig() {
+	x.xxx_hidden_ReplicationConfig = nil
+}
+
+func (x *NamespaceDetail) ClearFailoverEndTime() {
+	x.xxx_hidden_FailoverEndTime = nil
+}
+
+type NamespaceDetail_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Info                        *NamespaceInfo
+	Config                      *NamespaceConfig
+	ReplicationConfig           *NamespaceReplicationConfig
+	ConfigVersion               int64
+	FailoverNotificationVersion int64
+	FailoverVersion             int64
+	FailoverEndTime             *timestamppb.Timestamp
+}
+
+func (b0 NamespaceDetail_builder) Build() *NamespaceDetail {
+	m0 := &NamespaceDetail{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Info = b.Info
+	x.xxx_hidden_Config = b.Config
+	x.xxx_hidden_ReplicationConfig = b.ReplicationConfig
+	x.xxx_hidden_ConfigVersion = b.ConfigVersion
+	x.xxx_hidden_FailoverNotificationVersion = b.FailoverNotificationVersion
+	x.xxx_hidden_FailoverVersion = b.FailoverVersion
+	x.xxx_hidden_FailoverEndTime = b.FailoverEndTime
+	return m0
+}
+
 type NamespaceInfo struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	State         v1.NamespaceState      `protobuf:"varint,2,opt,name=state,proto3,enum=temporal.api.enums.v1.NamespaceState" json:"state,omitempty"`
-	Name          string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
-	Description   string                 `protobuf:"bytes,4,opt,name=description,proto3" json:"description,omitempty"`
-	Owner         string                 `protobuf:"bytes,5,opt,name=owner,proto3" json:"owner,omitempty"`
-	Data          map[string]string      `protobuf:"bytes,6,rep,name=data,proto3" json:"data,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                  protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Id          string                 `protobuf:"bytes,1,opt,name=id,proto3"`
+	xxx_hidden_State       v1.NamespaceState      `protobuf:"varint,2,opt,name=state,proto3,enum=temporal.api.enums.v1.NamespaceState"`
+	xxx_hidden_Name        string                 `protobuf:"bytes,3,opt,name=name,proto3"`
+	xxx_hidden_Description string                 `protobuf:"bytes,4,opt,name=description,proto3"`
+	xxx_hidden_Owner       string                 `protobuf:"bytes,5,opt,name=owner,proto3"`
+	xxx_hidden_Data        map[string]string      `protobuf:"bytes,6,rep,name=data,proto3" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *NamespaceInfo) Reset() {
@@ -157,66 +249,109 @@ func (x *NamespaceInfo) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use NamespaceInfo.ProtoReflect.Descriptor instead.
-func (*NamespaceInfo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_namespaces_proto_rawDescGZIP(), []int{1}
-}
-
 func (x *NamespaceInfo) GetId() string {
 	if x != nil {
-		return x.Id
+		return x.xxx_hidden_Id
 	}
 	return ""
 }
 
 func (x *NamespaceInfo) GetState() v1.NamespaceState {
 	if x != nil {
-		return x.State
+		return x.xxx_hidden_State
 	}
 	return v1.NamespaceState(0)
 }
 
 func (x *NamespaceInfo) GetName() string {
 	if x != nil {
-		return x.Name
+		return x.xxx_hidden_Name
 	}
 	return ""
 }
 
 func (x *NamespaceInfo) GetDescription() string {
 	if x != nil {
-		return x.Description
+		return x.xxx_hidden_Description
 	}
 	return ""
 }
 
 func (x *NamespaceInfo) GetOwner() string {
 	if x != nil {
-		return x.Owner
+		return x.xxx_hidden_Owner
 	}
 	return ""
 }
 
 func (x *NamespaceInfo) GetData() map[string]string {
 	if x != nil {
-		return x.Data
+		return x.xxx_hidden_Data
 	}
 	return nil
 }
 
+func (x *NamespaceInfo) SetId(v string) {
+	x.xxx_hidden_Id = v
+}
+
+func (x *NamespaceInfo) SetState(v v1.NamespaceState) {
+	x.xxx_hidden_State = v
+}
+
+func (x *NamespaceInfo) SetName(v string) {
+	x.xxx_hidden_Name = v
+}
+
+func (x *NamespaceInfo) SetDescription(v string) {
+	x.xxx_hidden_Description = v
+}
+
+func (x *NamespaceInfo) SetOwner(v string) {
+	x.xxx_hidden_Owner = v
+}
+
+func (x *NamespaceInfo) SetData(v map[string]string) {
+	x.xxx_hidden_Data = v
+}
+
+type NamespaceInfo_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Id          string
+	State       v1.NamespaceState
+	Name        string
+	Description string
+	Owner       string
+	Data        map[string]string
+}
+
+func (b0 NamespaceInfo_builder) Build() *NamespaceInfo {
+	m0 := &NamespaceInfo{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Id = b.Id
+	x.xxx_hidden_State = b.State
+	x.xxx_hidden_Name = b.Name
+	x.xxx_hidden_Description = b.Description
+	x.xxx_hidden_Owner = b.Owner
+	x.xxx_hidden_Data = b.Data
+	return m0
+}
+
 type NamespaceConfig struct {
-	state                        protoimpl.MessageState       `protogen:"open.v1"`
-	Retention                    *durationpb.Duration         `protobuf:"bytes,1,opt,name=retention,proto3" json:"retention,omitempty"`
-	ArchivalBucket               string                       `protobuf:"bytes,2,opt,name=archival_bucket,json=archivalBucket,proto3" json:"archival_bucket,omitempty"`
-	BadBinaries                  *v11.BadBinaries             `protobuf:"bytes,3,opt,name=bad_binaries,json=badBinaries,proto3" json:"bad_binaries,omitempty"`
-	HistoryArchivalState         v1.ArchivalState             `protobuf:"varint,4,opt,name=history_archival_state,json=historyArchivalState,proto3,enum=temporal.api.enums.v1.ArchivalState" json:"history_archival_state,omitempty"`
-	HistoryArchivalUri           string                       `protobuf:"bytes,5,opt,name=history_archival_uri,json=historyArchivalUri,proto3" json:"history_archival_uri,omitempty"`
-	VisibilityArchivalState      v1.ArchivalState             `protobuf:"varint,6,opt,name=visibility_archival_state,json=visibilityArchivalState,proto3,enum=temporal.api.enums.v1.ArchivalState" json:"visibility_archival_state,omitempty"`
-	VisibilityArchivalUri        string                       `protobuf:"bytes,7,opt,name=visibility_archival_uri,json=visibilityArchivalUri,proto3" json:"visibility_archival_uri,omitempty"`
-	CustomSearchAttributeAliases map[string]string            `protobuf:"bytes,8,rep,name=custom_search_attribute_aliases,json=customSearchAttributeAliases,proto3" json:"custom_search_attribute_aliases,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	WorkflowRules                map[string]*v12.WorkflowRule `protobuf:"bytes,9,rep,name=workflow_rules,json=workflowRules,proto3" json:"workflow_rules,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	unknownFields                protoimpl.UnknownFields
-	sizeCache                    protoimpl.SizeCache
+	state                                   protoimpl.MessageState       `protogen:"opaque.v1"`
+	xxx_hidden_Retention                    *durationpb.Duration         `protobuf:"bytes,1,opt,name=retention,proto3"`
+	xxx_hidden_ArchivalBucket               string                       `protobuf:"bytes,2,opt,name=archival_bucket,json=archivalBucket,proto3"`
+	xxx_hidden_BadBinaries                  *v11.BadBinaries             `protobuf:"bytes,3,opt,name=bad_binaries,json=badBinaries,proto3"`
+	xxx_hidden_HistoryArchivalState         v1.ArchivalState             `protobuf:"varint,4,opt,name=history_archival_state,json=historyArchivalState,proto3,enum=temporal.api.enums.v1.ArchivalState"`
+	xxx_hidden_HistoryArchivalUri           string                       `protobuf:"bytes,5,opt,name=history_archival_uri,json=historyArchivalUri,proto3"`
+	xxx_hidden_VisibilityArchivalState      v1.ArchivalState             `protobuf:"varint,6,opt,name=visibility_archival_state,json=visibilityArchivalState,proto3,enum=temporal.api.enums.v1.ArchivalState"`
+	xxx_hidden_VisibilityArchivalUri        string                       `protobuf:"bytes,7,opt,name=visibility_archival_uri,json=visibilityArchivalUri,proto3"`
+	xxx_hidden_CustomSearchAttributeAliases map[string]string            `protobuf:"bytes,8,rep,name=custom_search_attribute_aliases,json=customSearchAttributeAliases,proto3" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	xxx_hidden_WorkflowRules                map[string]*v12.WorkflowRule `protobuf:"bytes,9,rep,name=workflow_rules,json=workflowRules,proto3" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields                           protoimpl.UnknownFields
+	sizeCache                               protoimpl.SizeCache
 }
 
 func (x *NamespaceConfig) Reset() {
@@ -244,82 +379,165 @@ func (x *NamespaceConfig) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use NamespaceConfig.ProtoReflect.Descriptor instead.
-func (*NamespaceConfig) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_namespaces_proto_rawDescGZIP(), []int{2}
-}
-
 func (x *NamespaceConfig) GetRetention() *durationpb.Duration {
 	if x != nil {
-		return x.Retention
+		return x.xxx_hidden_Retention
 	}
 	return nil
 }
 
 func (x *NamespaceConfig) GetArchivalBucket() string {
 	if x != nil {
-		return x.ArchivalBucket
+		return x.xxx_hidden_ArchivalBucket
 	}
 	return ""
 }
 
 func (x *NamespaceConfig) GetBadBinaries() *v11.BadBinaries {
 	if x != nil {
-		return x.BadBinaries
+		return x.xxx_hidden_BadBinaries
 	}
 	return nil
 }
 
 func (x *NamespaceConfig) GetHistoryArchivalState() v1.ArchivalState {
 	if x != nil {
-		return x.HistoryArchivalState
+		return x.xxx_hidden_HistoryArchivalState
 	}
 	return v1.ArchivalState(0)
 }
 
 func (x *NamespaceConfig) GetHistoryArchivalUri() string {
 	if x != nil {
-		return x.HistoryArchivalUri
+		return x.xxx_hidden_HistoryArchivalUri
 	}
 	return ""
 }
 
 func (x *NamespaceConfig) GetVisibilityArchivalState() v1.ArchivalState {
 	if x != nil {
-		return x.VisibilityArchivalState
+		return x.xxx_hidden_VisibilityArchivalState
 	}
 	return v1.ArchivalState(0)
 }
 
 func (x *NamespaceConfig) GetVisibilityArchivalUri() string {
 	if x != nil {
-		return x.VisibilityArchivalUri
+		return x.xxx_hidden_VisibilityArchivalUri
 	}
 	return ""
 }
 
 func (x *NamespaceConfig) GetCustomSearchAttributeAliases() map[string]string {
 	if x != nil {
-		return x.CustomSearchAttributeAliases
+		return x.xxx_hidden_CustomSearchAttributeAliases
 	}
 	return nil
 }
 
 func (x *NamespaceConfig) GetWorkflowRules() map[string]*v12.WorkflowRule {
 	if x != nil {
-		return x.WorkflowRules
+		return x.xxx_hidden_WorkflowRules
 	}
 	return nil
 }
 
+func (x *NamespaceConfig) SetRetention(v *durationpb.Duration) {
+	x.xxx_hidden_Retention = v
+}
+
+func (x *NamespaceConfig) SetArchivalBucket(v string) {
+	x.xxx_hidden_ArchivalBucket = v
+}
+
+func (x *NamespaceConfig) SetBadBinaries(v *v11.BadBinaries) {
+	x.xxx_hidden_BadBinaries = v
+}
+
+func (x *NamespaceConfig) SetHistoryArchivalState(v v1.ArchivalState) {
+	x.xxx_hidden_HistoryArchivalState = v
+}
+
+func (x *NamespaceConfig) SetHistoryArchivalUri(v string) {
+	x.xxx_hidden_HistoryArchivalUri = v
+}
+
+func (x *NamespaceConfig) SetVisibilityArchivalState(v v1.ArchivalState) {
+	x.xxx_hidden_VisibilityArchivalState = v
+}
+
+func (x *NamespaceConfig) SetVisibilityArchivalUri(v string) {
+	x.xxx_hidden_VisibilityArchivalUri = v
+}
+
+func (x *NamespaceConfig) SetCustomSearchAttributeAliases(v map[string]string) {
+	x.xxx_hidden_CustomSearchAttributeAliases = v
+}
+
+func (x *NamespaceConfig) SetWorkflowRules(v map[string]*v12.WorkflowRule) {
+	x.xxx_hidden_WorkflowRules = v
+}
+
+func (x *NamespaceConfig) HasRetention() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Retention != nil
+}
+
+func (x *NamespaceConfig) HasBadBinaries() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_BadBinaries != nil
+}
+
+func (x *NamespaceConfig) ClearRetention() {
+	x.xxx_hidden_Retention = nil
+}
+
+func (x *NamespaceConfig) ClearBadBinaries() {
+	x.xxx_hidden_BadBinaries = nil
+}
+
+type NamespaceConfig_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Retention                    *durationpb.Duration
+	ArchivalBucket               string
+	BadBinaries                  *v11.BadBinaries
+	HistoryArchivalState         v1.ArchivalState
+	HistoryArchivalUri           string
+	VisibilityArchivalState      v1.ArchivalState
+	VisibilityArchivalUri        string
+	CustomSearchAttributeAliases map[string]string
+	WorkflowRules                map[string]*v12.WorkflowRule
+}
+
+func (b0 NamespaceConfig_builder) Build() *NamespaceConfig {
+	m0 := &NamespaceConfig{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Retention = b.Retention
+	x.xxx_hidden_ArchivalBucket = b.ArchivalBucket
+	x.xxx_hidden_BadBinaries = b.BadBinaries
+	x.xxx_hidden_HistoryArchivalState = b.HistoryArchivalState
+	x.xxx_hidden_HistoryArchivalUri = b.HistoryArchivalUri
+	x.xxx_hidden_VisibilityArchivalState = b.VisibilityArchivalState
+	x.xxx_hidden_VisibilityArchivalUri = b.VisibilityArchivalUri
+	x.xxx_hidden_CustomSearchAttributeAliases = b.CustomSearchAttributeAliases
+	x.xxx_hidden_WorkflowRules = b.WorkflowRules
+	return m0
+}
+
 type NamespaceReplicationConfig struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	ActiveClusterName string                 `protobuf:"bytes,1,opt,name=active_cluster_name,json=activeClusterName,proto3" json:"active_cluster_name,omitempty"`
-	Clusters          []string               `protobuf:"bytes,2,rep,name=clusters,proto3" json:"clusters,omitempty"`
-	State             v1.ReplicationState    `protobuf:"varint,3,opt,name=state,proto3,enum=temporal.api.enums.v1.ReplicationState" json:"state,omitempty"`
-	FailoverHistory   []*FailoverStatus      `protobuf:"bytes,8,rep,name=failover_history,json=failoverHistory,proto3" json:"failover_history,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state                        protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_ActiveClusterName string                 `protobuf:"bytes,1,opt,name=active_cluster_name,json=activeClusterName,proto3"`
+	xxx_hidden_Clusters          []string               `protobuf:"bytes,2,rep,name=clusters,proto3"`
+	xxx_hidden_State             v1.ReplicationState    `protobuf:"varint,3,opt,name=state,proto3,enum=temporal.api.enums.v1.ReplicationState"`
+	xxx_hidden_FailoverHistory   *[]*FailoverStatus     `protobuf:"bytes,8,rep,name=failover_history,json=failoverHistory,proto3"`
+	unknownFields                protoimpl.UnknownFields
+	sizeCache                    protoimpl.SizeCache
 }
 
 func (x *NamespaceReplicationConfig) Reset() {
@@ -347,46 +565,79 @@ func (x *NamespaceReplicationConfig) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use NamespaceReplicationConfig.ProtoReflect.Descriptor instead.
-func (*NamespaceReplicationConfig) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_namespaces_proto_rawDescGZIP(), []int{3}
-}
-
 func (x *NamespaceReplicationConfig) GetActiveClusterName() string {
 	if x != nil {
-		return x.ActiveClusterName
+		return x.xxx_hidden_ActiveClusterName
 	}
 	return ""
 }
 
 func (x *NamespaceReplicationConfig) GetClusters() []string {
 	if x != nil {
-		return x.Clusters
+		return x.xxx_hidden_Clusters
 	}
 	return nil
 }
 
 func (x *NamespaceReplicationConfig) GetState() v1.ReplicationState {
 	if x != nil {
-		return x.State
+		return x.xxx_hidden_State
 	}
 	return v1.ReplicationState(0)
 }
 
 func (x *NamespaceReplicationConfig) GetFailoverHistory() []*FailoverStatus {
 	if x != nil {
-		return x.FailoverHistory
+		if x.xxx_hidden_FailoverHistory != nil {
+			return *x.xxx_hidden_FailoverHistory
+		}
 	}
 	return nil
 }
 
+func (x *NamespaceReplicationConfig) SetActiveClusterName(v string) {
+	x.xxx_hidden_ActiveClusterName = v
+}
+
+func (x *NamespaceReplicationConfig) SetClusters(v []string) {
+	x.xxx_hidden_Clusters = v
+}
+
+func (x *NamespaceReplicationConfig) SetState(v v1.ReplicationState) {
+	x.xxx_hidden_State = v
+}
+
+func (x *NamespaceReplicationConfig) SetFailoverHistory(v []*FailoverStatus) {
+	x.xxx_hidden_FailoverHistory = &v
+}
+
+type NamespaceReplicationConfig_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	ActiveClusterName string
+	Clusters          []string
+	State             v1.ReplicationState
+	FailoverHistory   []*FailoverStatus
+}
+
+func (b0 NamespaceReplicationConfig_builder) Build() *NamespaceReplicationConfig {
+	m0 := &NamespaceReplicationConfig{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_ActiveClusterName = b.ActiveClusterName
+	x.xxx_hidden_Clusters = b.Clusters
+	x.xxx_hidden_State = b.State
+	x.xxx_hidden_FailoverHistory = &b.FailoverHistory
+	return m0
+}
+
 // Represents a historical replication status of a Namespace
 type FailoverStatus struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	FailoverTime    *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=failover_time,json=failoverTime,proto3" json:"failover_time,omitempty"`
-	FailoverVersion int64                  `protobuf:"varint,2,opt,name=failover_version,json=failoverVersion,proto3" json:"failover_version,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state                      protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_FailoverTime    *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=failover_time,json=failoverTime,proto3"`
+	xxx_hidden_FailoverVersion int64                  `protobuf:"varint,2,opt,name=failover_version,json=failoverVersion,proto3"`
+	unknownFields              protoimpl.UnknownFields
+	sizeCache                  protoimpl.SizeCache
 }
 
 func (x *FailoverStatus) Reset() {
@@ -414,23 +665,53 @@ func (x *FailoverStatus) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use FailoverStatus.ProtoReflect.Descriptor instead.
-func (*FailoverStatus) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_namespaces_proto_rawDescGZIP(), []int{4}
-}
-
 func (x *FailoverStatus) GetFailoverTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.FailoverTime
+		return x.xxx_hidden_FailoverTime
 	}
 	return nil
 }
 
 func (x *FailoverStatus) GetFailoverVersion() int64 {
 	if x != nil {
-		return x.FailoverVersion
+		return x.xxx_hidden_FailoverVersion
 	}
 	return 0
+}
+
+func (x *FailoverStatus) SetFailoverTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_FailoverTime = v
+}
+
+func (x *FailoverStatus) SetFailoverVersion(v int64) {
+	x.xxx_hidden_FailoverVersion = v
+}
+
+func (x *FailoverStatus) HasFailoverTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_FailoverTime != nil
+}
+
+func (x *FailoverStatus) ClearFailoverTime() {
+	x.xxx_hidden_FailoverTime = nil
+}
+
+type FailoverStatus_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	FailoverTime    *timestamppb.Timestamp
+	FailoverVersion int64
+}
+
+func (b0 FailoverStatus_builder) Build() *FailoverStatus {
+	m0 := &FailoverStatus{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_FailoverTime = b.FailoverTime
+	x.xxx_hidden_FailoverVersion = b.FailoverVersion
+	return m0
 }
 
 var File_temporal_server_api_persistence_v1_namespaces_proto protoreflect.FileDescriptor
@@ -480,18 +761,6 @@ const file_temporal_server_api_persistence_v1_namespaces_proto_rawDesc = "" +
 	"\x0eFailoverStatus\x12?\n" +
 	"\rfailover_time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\ffailoverTime\x12)\n" +
 	"\x10failover_version\x18\x02 \x01(\x03R\x0ffailoverVersionB6Z4go.temporal.io/server/api/persistence/v1;persistenceb\x06proto3"
-
-var (
-	file_temporal_server_api_persistence_v1_namespaces_proto_rawDescOnce sync.Once
-	file_temporal_server_api_persistence_v1_namespaces_proto_rawDescData []byte
-)
-
-func file_temporal_server_api_persistence_v1_namespaces_proto_rawDescGZIP() []byte {
-	file_temporal_server_api_persistence_v1_namespaces_proto_rawDescOnce.Do(func() {
-		file_temporal_server_api_persistence_v1_namespaces_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_api_persistence_v1_namespaces_proto_rawDesc), len(file_temporal_server_api_persistence_v1_namespaces_proto_rawDesc)))
-	})
-	return file_temporal_server_api_persistence_v1_namespaces_proto_rawDescData
-}
 
 var file_temporal_server_api_persistence_v1_namespaces_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_temporal_server_api_persistence_v1_namespaces_proto_goTypes = []any{

@@ -14,20 +14,18 @@ import (
 
 func TestCalculateExternalPayloadSize_NoExternalPayloads(t *testing.T) {
 	events := []*historypb.HistoryEvent{
-		{
+		historypb.HistoryEvent_builder{
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
-			Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
-				WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
-					Input: &commonpb.Payloads{
-						Payloads: []*commonpb.Payload{
-							{
-								Data: []byte("test data"),
-							},
-						},
+			WorkflowExecutionStartedEventAttributes: historypb.WorkflowExecutionStartedEventAttributes_builder{
+				Input: commonpb.Payloads_builder{
+					Payloads: []*commonpb.Payload{
+						commonpb.Payload_builder{
+							Data: []byte("test data"),
+						}.Build(),
 					},
-				},
-			},
-		},
+				}.Build(),
+			}.Build(),
+		}.Build(),
 	}
 
 	size, count, err := CalculateExternalPayloadSize(events, metrics.NoopMetricsHandler)
@@ -42,47 +40,43 @@ func TestCalculateExternalPayloadSize_WithExternalPayloads(t *testing.T) {
 	defer metricsHandler.StopCapture(capture)
 
 	events := []*historypb.HistoryEvent{
-		{
+		historypb.HistoryEvent_builder{
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
-			Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
-				WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
-					Input: &commonpb.Payloads{
-						Payloads: []*commonpb.Payload{
-							{
-								Data: []byte("reference"),
-								ExternalPayloads: []*commonpb.Payload_ExternalPayloadDetails{
-									{
-										SizeBytes: 1024,
-									},
-									{
-										SizeBytes: 2048,
-									},
-								},
+			WorkflowExecutionStartedEventAttributes: historypb.WorkflowExecutionStartedEventAttributes_builder{
+				Input: commonpb.Payloads_builder{
+					Payloads: []*commonpb.Payload{
+						commonpb.Payload_builder{
+							Data: []byte("reference"),
+							ExternalPayloads: []*commonpb.Payload_ExternalPayloadDetails{
+								commonpb.Payload_ExternalPayloadDetails_builder{
+									SizeBytes: 1024,
+								}.Build(),
+								commonpb.Payload_ExternalPayloadDetails_builder{
+									SizeBytes: 2048,
+								}.Build(),
 							},
-						},
+						}.Build(),
 					},
-				},
-			},
-		},
-		{
+				}.Build(),
+			}.Build(),
+		}.Build(),
+		historypb.HistoryEvent_builder{
 			EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED,
-			Attributes: &historypb.HistoryEvent_ActivityTaskCompletedEventAttributes{
-				ActivityTaskCompletedEventAttributes: &historypb.ActivityTaskCompletedEventAttributes{
-					Result: &commonpb.Payloads{
-						Payloads: []*commonpb.Payload{
-							{
-								Data: []byte("result"),
-								ExternalPayloads: []*commonpb.Payload_ExternalPayloadDetails{
-									{
-										SizeBytes: 512,
-									},
-								},
+			ActivityTaskCompletedEventAttributes: historypb.ActivityTaskCompletedEventAttributes_builder{
+				Result: commonpb.Payloads_builder{
+					Payloads: []*commonpb.Payload{
+						commonpb.Payload_builder{
+							Data: []byte("result"),
+							ExternalPayloads: []*commonpb.Payload_ExternalPayloadDetails{
+								commonpb.Payload_ExternalPayloadDetails_builder{
+									SizeBytes: 512,
+								}.Build(),
 							},
-						},
+						}.Build(),
 					},
-				},
-			},
-		},
+				}.Build(),
+			}.Build(),
+		}.Build(),
 	}
 
 	size, count, err := CalculateExternalPayloadSize(events, metricsHandler)

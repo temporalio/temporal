@@ -98,9 +98,9 @@ func (s *FunctionalClustersTestSuite) TestNamespaceFailover() {
 	wt := "functional-namespace-failover-test-type"
 	tq := "functional-namespace-failover-test-taskqueue"
 	identity := "worker1"
-	workflowType := &commonpb.WorkflowType{Name: wt}
-	taskQueue := &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
-	startReq := &workflowservice.StartWorkflowExecutionRequest{
+	workflowType := commonpb.WorkflowType_builder{Name: wt}.Build()
+	taskQueue := taskqueuepb.TaskQueue_builder{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build()
+	startReq := workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:           uuid.NewString(),
 		Namespace:           namespace,
 		WorkflowId:          id,
@@ -110,7 +110,7 @@ func (s *FunctionalClustersTestSuite) TestNamespaceFailover() {
 		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
-	}
+	}.Build()
 	we, err := s.clusters[1].FrontendClient().StartWorkflowExecution(testcore.NewContext(), startReq)
 	s.NoError(err)
 	s.NotNil(we.GetRunId())
@@ -126,9 +126,9 @@ func (s *FunctionalClustersTestSuite) TestSimpleWorkflowFailover() {
 	wt := "functional-simple-workflow-failover-test-type"
 	tq := "functional-simple-workflow-failover-test-taskqueue"
 	identity := "worker1"
-	workflowType := &commonpb.WorkflowType{Name: wt}
-	taskQueue := &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
-	startReq := &workflowservice.StartWorkflowExecutionRequest{
+	workflowType := commonpb.WorkflowType_builder{Name: wt}.Build()
+	taskQueue := taskqueuepb.TaskQueue_builder{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build()
+	startReq := workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:           uuid.NewString(),
 		Namespace:           namespaceName,
 		WorkflowId:          id,
@@ -138,7 +138,7 @@ func (s *FunctionalClustersTestSuite) TestSimpleWorkflowFailover() {
 		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
-	}
+	}.Build()
 	we, err := client0.StartWorkflowExecution(testcore.NewContext(), startReq)
 	s.NoError(err)
 	s.NotNil(we.GetRunId())
@@ -156,28 +156,28 @@ func (s *FunctionalClustersTestSuite) TestSimpleWorkflowFailover() {
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
-			return []*commandpb.Command{{
+			return []*commandpb.Command{commandpb.Command_builder{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+				ScheduleActivityTaskCommandAttributes: commandpb.ScheduleActivityTaskCommandAttributes_builder{
 					ActivityId:             convert.Int32ToString(activityCounter),
-					ActivityType:           &commonpb.ActivityType{Name: activityName},
-					TaskQueue:              &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+					ActivityType:           commonpb.ActivityType_builder{Name: activityName}.Build(),
+					TaskQueue:              taskqueuepb.TaskQueue_builder{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeout: durationpb.New(100 * time.Second),
 					ScheduleToStartTimeout: durationpb.New(30 * time.Second),
 					StartToCloseTimeout:    durationpb.New(50 * time.Second),
 					HeartbeatTimeout:       durationpb.New(20 * time.Second),
-				}},
-			}}, nil
+				}.Build(),
+			}.Build()}, nil
 		}
 
 		workflowComplete = true
-		return []*commandpb.Command{{
+		return []*commandpb.Command{commandpb.Command_builder{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+			CompleteWorkflowExecutionCommandAttributes: commandpb.CompleteWorkflowExecutionCommandAttributes_builder{
 				Result: payloads.EncodeString("Done"),
-			}},
-		}}, nil
+			}.Build(),
+		}.Build()}, nil
 	}
 
 	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
@@ -187,9 +187,9 @@ func (s *FunctionalClustersTestSuite) TestSimpleWorkflowFailover() {
 
 	queryType := "test-query"
 	queryHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (*commonpb.Payloads, error) {
-		s.NotNil(task.Query)
-		s.NotNil(task.Query.QueryType)
-		if task.Query.QueryType == queryType {
+		s.NotNil(task.GetQuery())
+		s.NotNil(task.GetQuery().GetQueryType())
+		if task.GetQuery().GetQueryType() == queryType {
 			return payloads.EncodeString("query-result"), nil
 		}
 
@@ -233,16 +233,16 @@ func (s *FunctionalClustersTestSuite) TestSimpleWorkflowFailover() {
 	}
 	queryResultCh := make(chan QueryResult)
 	queryWorkflowFn := func(client workflowservice.WorkflowServiceClient, queryType string) {
-		queryResp, err := client.QueryWorkflow(testcore.NewContext(), &workflowservice.QueryWorkflowRequest{
+		queryResp, err := client.QueryWorkflow(testcore.NewContext(), workflowservice.QueryWorkflowRequest_builder{
 			Namespace: namespaceName,
-			Execution: &commonpb.WorkflowExecution{
+			Execution: commonpb.WorkflowExecution_builder{
 				WorkflowId: id,
-				RunId:      we.RunId,
-			},
-			Query: &querypb.WorkflowQuery{
+				RunId:      we.GetRunId(),
+			}.Build(),
+			Query: querypb.WorkflowQuery_builder{
 				QueryType: queryType,
-			},
-		})
+			}.Build(),
+		}.Build())
 		queryResultCh <- QueryResult{Resp: queryResp, Err: err}
 	}
 
@@ -262,7 +262,7 @@ func (s *FunctionalClustersTestSuite) TestSimpleWorkflowFailover() {
 	queryResult := <-queryResultCh
 	s.NoError(queryResult.Err)
 	s.NotNil(queryResult.Resp)
-	s.NotNil(queryResult.Resp.QueryResult)
+	s.NotNil(queryResult.Resp.GetQueryResult())
 	s.Equal("query-result", s.decodePayloadsString(queryResult.Resp.GetQueryResult()))
 
 	// Wait a while so the events are replicated.
@@ -284,19 +284,19 @@ func (s *FunctionalClustersTestSuite) TestSimpleWorkflowFailover() {
 	queryResult = <-queryResultCh
 	s.NoError(queryResult.Err)
 	s.NotNil(queryResult.Resp)
-	s.NotNil(queryResult.Resp.QueryResult)
+	s.NotNil(queryResult.Resp.GetQueryResult())
 	s.Equal("query-result", s.decodePayloadsString(queryResult.Resp.GetQueryResult()))
 
 	s.failover(namespaceName, 0, s.clusters[1].ClusterName(), 2)
 
 	// check history matched
-	getHistoryReq := &workflowservice.GetWorkflowExecutionHistoryRequest{
+	getHistoryReq := workflowservice.GetWorkflowExecutionHistoryRequest_builder{
 		Namespace: namespaceName,
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: id,
 			RunId:      rid,
-		},
-	}
+		}.Build(),
+	}.Build()
 	// TODO (alex): this shouldn't be WaitForHistory anymore (just EqualHistory)
 	s.WaitForHistory(`
   1 v1 WorkflowExecutionStarted
@@ -309,7 +309,7 @@ func (s *FunctionalClustersTestSuite) TestSimpleWorkflowFailover() {
 			if err != nil {
 				return nil
 			}
-			return historyResponse.History
+			return historyResponse.GetHistory()
 		}, replicationWaitTime, replicationCheckInterval,
 	)
 
@@ -330,7 +330,7 @@ func (s *FunctionalClustersTestSuite) TestSimpleWorkflowFailover() {
 	queryResult = <-queryResultCh
 	s.NoError(queryResult.Err)
 	s.NotNil(queryResult.Resp)
-	s.NotNil(queryResult.Resp.QueryResult)
+	s.NotNil(queryResult.Resp.GetQueryResult())
 	s.Equal("query-result", s.decodePayloadsString(queryResult.Resp.GetQueryResult()))
 
 	// call QueryWorkflow in separate goroutinue (because it is blocking). That will generate a query task
@@ -349,7 +349,7 @@ func (s *FunctionalClustersTestSuite) TestSimpleWorkflowFailover() {
 	queryResult = <-queryResultCh
 	s.NoError(queryResult.Err)
 	s.NotNil(queryResult.Resp)
-	s.NotNil(queryResult.Resp.QueryResult)
+	s.NotNil(queryResult.Resp.GetQueryResult())
 	s.Equal("query-result", s.decodePayloadsString(queryResult.Resp.GetQueryResult()))
 
 	// make process in cluster1
@@ -381,7 +381,7 @@ func (s *FunctionalClustersTestSuite) TestSimpleWorkflowFailover() {
 			if err != nil {
 				return nil
 			}
-			return historyResponse.History
+			return historyResponse.GetHistory()
 		}, replicationWaitTime, replicationCheckInterval,
 	)
 }
@@ -400,12 +400,12 @@ func (s *FunctionalClustersTestSuite) TestStickyWorkflowTaskFailover() {
 	identity1 := "worker1"
 	identity2 := "worker2"
 
-	workflowType := &commonpb.WorkflowType{Name: wt}
-	taskQueue := &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
-	stickyTaskQueue1 := &taskqueuepb.TaskQueue{Name: stq1, Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: tq}
-	stickyTaskQueue2 := &taskqueuepb.TaskQueue{Name: stq2, Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: tq}
+	workflowType := commonpb.WorkflowType_builder{Name: wt}.Build()
+	taskQueue := taskqueuepb.TaskQueue_builder{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build()
+	stickyTaskQueue1 := taskqueuepb.TaskQueue_builder{Name: stq1, Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: tq}.Build()
+	stickyTaskQueue2 := taskqueuepb.TaskQueue_builder{Name: stq2, Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: tq}.Build()
 	stickyTaskTimeout := 100 * time.Second
-	startReq := &workflowservice.StartWorkflowExecutionRequest{
+	startReq := workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:           uuid.NewString(),
 		Namespace:           namespace,
 		WorkflowId:          id,
@@ -415,7 +415,7 @@ func (s *FunctionalClustersTestSuite) TestStickyWorkflowTaskFailover() {
 		WorkflowRunTimeout:  durationpb.New(2592000 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(60 * time.Second),
 		Identity:            identity1,
-	}
+	}.Build()
 	we, err := client0.StartWorkflowExecution(testcore.NewContext(), startReq)
 	s.NoError(err)
 	s.NotNil(we.GetRunId())
@@ -437,12 +437,12 @@ func (s *FunctionalClustersTestSuite) TestStickyWorkflowTaskFailover() {
 		}
 
 		workflowCompleted = true
-		return []*commandpb.Command{{
+		return []*commandpb.Command{commandpb.Command_builder{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+			CompleteWorkflowExecutionCommandAttributes: commandpb.CompleteWorkflowExecutionCommandAttributes_builder{
 				Result: payloads.EncodeString("Done"),
-			}},
-		}}, nil
+			}.Build(),
+		}.Build()}, nil
 	}
 
 	// nolint
@@ -479,16 +479,16 @@ func (s *FunctionalClustersTestSuite) TestStickyWorkflowTaskFailover() {
 	// Send a signal in cluster
 	signalName := "my signal"
 	signalInput := payloads.EncodeString("my signal input")
-	_, err = client0.SignalWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+	_, err = client0.SignalWorkflowExecution(testcore.NewContext(), workflowservice.SignalWorkflowExecutionRequest_builder{
 		Namespace: namespace,
-		WorkflowExecution: &commonpb.WorkflowExecution{
+		WorkflowExecution: commonpb.WorkflowExecution_builder{
 			WorkflowId: id,
 			RunId:      we.GetRunId(),
-		},
+		}.Build(),
 		SignalName: signalName,
 		Input:      signalInput,
 		Identity:   identity1,
-	})
+	}.Build())
 	s.NoError(err)
 
 	s.failover(namespace, 0, s.clusters[1].ClusterName(), 2)
@@ -498,16 +498,16 @@ func (s *FunctionalClustersTestSuite) TestStickyWorkflowTaskFailover() {
 	s.NoError(err)
 	s.True(secondCommandMade)
 
-	_, err = client1.SignalWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+	_, err = client1.SignalWorkflowExecution(testcore.NewContext(), workflowservice.SignalWorkflowExecutionRequest_builder{
 		Namespace: namespace,
-		WorkflowExecution: &commonpb.WorkflowExecution{
+		WorkflowExecution: commonpb.WorkflowExecution_builder{
 			WorkflowId: id,
 			RunId:      we.GetRunId(),
-		},
+		}.Build(),
 		SignalName: signalName,
 		Input:      signalInput,
 		Identity:   identity2,
-	})
+	}.Build())
 	s.NoError(err)
 
 	s.failover(namespace, 1, s.clusters[0].ClusterName(), 11)
@@ -528,9 +528,9 @@ func (s *FunctionalClustersTestSuite) TestStartWorkflowExecution_Failover_Workfl
 	wt := "functional-start-workflow-failover-ID-reuse-policy-test-type"
 	tl := "functional-start-workflow-failover-ID-reuse-policy-test-taskqueue"
 	identity := "worker1"
-	workflowType := &commonpb.WorkflowType{Name: wt}
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
-	startReq := &workflowservice.StartWorkflowExecutionRequest{
+	workflowType := commonpb.WorkflowType_builder{Name: wt}.Build()
+	taskQueue := taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build()
+	startReq := workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:             uuid.NewString(),
 		Namespace:             namespaceName,
 		WorkflowId:            id,
@@ -541,7 +541,7 @@ func (s *FunctionalClustersTestSuite) TestStartWorkflowExecution_Failover_Workfl
 		WorkflowTaskTimeout:   durationpb.New(1 * time.Second),
 		Identity:              identity,
 		WorkflowIdReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
-	}
+	}.Build()
 	we, err := client0.StartWorkflowExecution(testcore.NewContext(), startReq)
 	s.NoError(err)
 	s.NotNil(we.GetRunId())
@@ -551,12 +551,12 @@ func (s *FunctionalClustersTestSuite) TestStartWorkflowExecution_Failover_Workfl
 	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 
 		workflowCompleteTimes++
-		return []*commandpb.Command{{
+		return []*commandpb.Command{commandpb.Command_builder{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+			CompleteWorkflowExecutionCommandAttributes: commandpb.CompleteWorkflowExecutionCommandAttributes_builder{
 				Result: payloads.EncodeString("Done"),
-			}},
-		}}, nil
+			}.Build(),
+		}.Build()}, nil
 	}
 
 	// nolint
@@ -592,22 +592,22 @@ func (s *FunctionalClustersTestSuite) TestStartWorkflowExecution_Failover_Workfl
 	s.failover(namespaceName, 0, s.clusters[1].ClusterName(), 2)
 
 	// start the same workflow in cluster1 is not allowed if policy is AllowDuplicateFailedOnly
-	startReq.RequestId = uuid.NewString()
-	startReq.WorkflowIdReusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY
+	startReq.SetRequestId(uuid.NewString())
+	startReq.SetWorkflowIdReusePolicy(enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY)
 	we, err = client1.StartWorkflowExecution(testcore.NewContext(), startReq)
 	s.IsType(&serviceerror.WorkflowExecutionAlreadyStarted{}, err)
 	s.Nil(we)
 
 	// start the same workflow in cluster1 is not allowed if policy is RejectDuplicate
-	startReq.RequestId = uuid.NewString()
-	startReq.WorkflowIdReusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE
+	startReq.SetRequestId(uuid.NewString())
+	startReq.SetWorkflowIdReusePolicy(enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE)
 	we, err = client1.StartWorkflowExecution(testcore.NewContext(), startReq)
 	s.IsType(&serviceerror.WorkflowExecutionAlreadyStarted{}, err)
 	s.Nil(we)
 
 	// start the workflow in cluster1
-	startReq.RequestId = uuid.NewString()
-	startReq.WorkflowIdReusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE
+	startReq.SetRequestId(uuid.NewString())
+	startReq.SetWorkflowIdReusePolicy(enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE)
 	we, err = client1.StartWorkflowExecution(testcore.NewContext(), startReq)
 	s.NoError(err)
 	s.NotNil(we.GetRunId())
@@ -629,9 +629,9 @@ func (s *FunctionalClustersTestSuite) TestStartWorkflowExecution_Failover_Workfl
 	wt := "functional-start-workflow-failover-ID-conflict-policy-test-type"
 	tl := "functional-start-workflow-failover-ID-conflict-policy-test-taskqueue"
 	identity := "worker1"
-	workflowType := &commonpb.WorkflowType{Name: wt}
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
-	startReq := &workflowservice.StartWorkflowExecutionRequest{
+	workflowType := commonpb.WorkflowType_builder{Name: wt}.Build()
+	taskQueue := taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build()
+	startReq := workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:             uuid.NewString(),
 		Namespace:             namespaceName,
 		WorkflowId:            id,
@@ -642,7 +642,7 @@ func (s *FunctionalClustersTestSuite) TestStartWorkflowExecution_Failover_Workfl
 		WorkflowTaskTimeout:   durationpb.New(1 * time.Second),
 		Identity:              identity,
 		WorkflowIdReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
-	}
+	}.Build()
 	we, err := client0.StartWorkflowExecution(testcore.NewContext(), startReq)
 	s.NoError(err)
 	s.NotNil(we.GetRunId())
@@ -652,19 +652,19 @@ func (s *FunctionalClustersTestSuite) TestStartWorkflowExecution_Failover_Workfl
 	firstCommandMade := false
 	var executions []*commonpb.WorkflowExecution
 	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
-		executions = append(executions, task.WorkflowExecution)
+		executions = append(executions, task.GetWorkflowExecution())
 		if !firstCommandMade {
 			firstCommandMade = true
 			return []*commandpb.Command{}, nil
 		}
 
 		workflowCompleteTimes++
-		return []*commandpb.Command{{
+		return []*commandpb.Command{commandpb.Command_builder{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+			CompleteWorkflowExecutionCommandAttributes: commandpb.CompleteWorkflowExecutionCommandAttributes_builder{
 				Result: payloads.EncodeString("Done"),
-			}},
-		}}, nil
+			}.Build(),
+		}.Build()}, nil
 	}
 
 	// nolint
@@ -697,8 +697,8 @@ func (s *FunctionalClustersTestSuite) TestStartWorkflowExecution_Failover_Workfl
 	s.NoError(err)
 
 	// start the same workflow in cluster0 and terminate the existing workflow
-	startReq.RequestId = uuid.NewString()
-	startReq.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING
+	startReq.SetRequestId(uuid.NewString())
+	startReq.SetWorkflowIdConflictPolicy(enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING)
 	we, err = client0.StartWorkflowExecution(testcore.NewContext(), startReq)
 	s.NoError(err)
 	s.NotNil(we.GetRunId())
@@ -724,9 +724,9 @@ func (s *FunctionalClustersTestSuite) TestTerminateFailover() {
 	wt := "functional-terminate-workflow-failover-test-type"
 	tl := "functional-terminate-workflow-failover-test-taskqueue"
 	identity := "worker1"
-	workflowType := &commonpb.WorkflowType{Name: wt}
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
-	startReq := &workflowservice.StartWorkflowExecutionRequest{
+	workflowType := commonpb.WorkflowType_builder{Name: wt}.Build()
+	taskQueue := taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build()
+	startReq := workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:           uuid.NewString(),
 		Namespace:           namespace,
 		WorkflowId:          id,
@@ -736,7 +736,7 @@ func (s *FunctionalClustersTestSuite) TestTerminateFailover() {
 		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
-	}
+	}.Build()
 	we, err := client0.StartWorkflowExecution(testcore.NewContext(), startReq)
 	s.NoError(err)
 	s.NotNil(we.GetRunId())
@@ -750,26 +750,26 @@ func (s *FunctionalClustersTestSuite) TestTerminateFailover() {
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
-			return []*commandpb.Command{{
+			return []*commandpb.Command{commandpb.Command_builder{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+				ScheduleActivityTaskCommandAttributes: commandpb.ScheduleActivityTaskCommandAttributes_builder{
 					ActivityId:             convert.Int32ToString(activityCounter),
-					ActivityType:           &commonpb.ActivityType{Name: activityName},
-					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+					ActivityType:           commonpb.ActivityType_builder{Name: activityName}.Build(),
+					TaskQueue:              taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeout: durationpb.New(100 * time.Second),
 					ScheduleToStartTimeout: durationpb.New(50 * time.Second),
 					StartToCloseTimeout:    durationpb.New(50 * time.Second),
-				}},
-			}}, nil
+				}.Build(),
+			}.Build()}, nil
 		}
 
-		return []*commandpb.Command{{
+		return []*commandpb.Command{commandpb.Command_builder{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+			CompleteWorkflowExecutionCommandAttributes: commandpb.CompleteWorkflowExecutionCommandAttributes_builder{
 				Result: payloads.EncodeString("Done"),
-			}},
-		}}, nil
+			}.Build(),
+		}.Build()}, nil
 	}
 
 	// nolint
@@ -789,12 +789,12 @@ func (s *FunctionalClustersTestSuite) TestTerminateFailover() {
 	s.NoError(err)
 
 	// check terminate done
-	getHistoryReq := &workflowservice.GetWorkflowExecutionHistoryRequest{
+	getHistoryReq := workflowservice.GetWorkflowExecutionHistoryRequest_builder{
 		Namespace: namespace,
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: id,
-		},
-	}
+		}.Build(),
+	}.Build()
 
 	s.WaitForHistory(`
   1 v1 WorkflowExecutionStarted
@@ -805,7 +805,7 @@ func (s *FunctionalClustersTestSuite) TestTerminateFailover() {
 		func() *historypb.History {
 			historyResponse, err := client0.GetWorkflowExecutionHistory(testcore.NewContext(), getHistoryReq)
 			s.NoError(err)
-			return historyResponse.History
+			return historyResponse.GetHistory()
 		}, 1*time.Second, 100*time.Millisecond,
 	)
 
@@ -820,22 +820,22 @@ func (s *FunctionalClustersTestSuite) TestTerminateFailover() {
 		func() *historypb.History {
 			historyResponse, err := client1.GetWorkflowExecutionHistory(testcore.NewContext(), getHistoryReq)
 			s.NoError(err)
-			return historyResponse.History
+			return historyResponse.GetHistory()
 		}, 5*time.Second, 100*time.Millisecond,
 	)
 
 	// terminate workflow at cluster1
 	terminateReason := "terminate reason"
 	terminateDetails := payloads.EncodeString("terminate details")
-	_, err = client1.TerminateWorkflowExecution(testcore.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
+	_, err = client1.TerminateWorkflowExecution(testcore.NewContext(), workflowservice.TerminateWorkflowExecutionRequest_builder{
 		Namespace: namespace,
-		WorkflowExecution: &commonpb.WorkflowExecution{
+		WorkflowExecution: commonpb.WorkflowExecution_builder{
 			WorkflowId: id,
-		},
+		}.Build(),
 		Reason:   terminateReason,
 		Details:  terminateDetails,
 		Identity: identity,
-	})
+	}.Build())
 	s.NoError(err)
 
 	// check terminate done
@@ -849,7 +849,7 @@ func (s *FunctionalClustersTestSuite) TestTerminateFailover() {
 		func() *historypb.History {
 			historyResponse, err := client1.GetWorkflowExecutionHistory(testcore.NewContext(), getHistoryReq)
 			s.NoError(err)
-			return historyResponse.History
+			return historyResponse.GetHistory()
 		}, 1*time.Second, 100*time.Millisecond,
 	)
 
@@ -866,7 +866,7 @@ func (s *FunctionalClustersTestSuite) TestTerminateFailover() {
 			if err != nil {
 				return nil
 			}
-			return historyResponse.History
+			return historyResponse.GetHistory()
 		}, replicationWaitTime, replicationCheckInterval,
 	)
 }
@@ -881,9 +881,9 @@ func (s *FunctionalClustersTestSuite) TestResetWorkflowFailover() {
 	wt := "functional-reset-workflow-failover-test-type"
 	tl := "functional-reset-workflow-failover-test-taskqueue"
 	identity := "worker1"
-	workflowType := &commonpb.WorkflowType{Name: wt}
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
-	startReq := &workflowservice.StartWorkflowExecutionRequest{
+	workflowType := commonpb.WorkflowType_builder{Name: wt}.Build()
+	taskQueue := taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build()
+	startReq := workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:           uuid.NewString(),
 		Namespace:           namespace,
 		WorkflowId:          id,
@@ -893,23 +893,23 @@ func (s *FunctionalClustersTestSuite) TestResetWorkflowFailover() {
 		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
-	}
+	}.Build()
 	we, err := client0.StartWorkflowExecution(testcore.NewContext(), startReq)
 	s.NoError(err)
 	s.NotNil(we.GetRunId())
 
-	_, err = client0.SignalWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+	_, err = client0.SignalWorkflowExecution(testcore.NewContext(), workflowservice.SignalWorkflowExecutionRequest_builder{
 		Namespace: namespace,
-		WorkflowExecution: &commonpb.WorkflowExecution{
+		WorkflowExecution: commonpb.WorkflowExecution_builder{
 			WorkflowId: id,
-			RunId:      we.RunId,
-		},
+			RunId:      we.GetRunId(),
+		}.Build(),
 		SignalName: "random signal name",
-		Input: &commonpb.Payloads{Payloads: []*commonpb.Payload{
-			{Data: []byte("random signal payload")},
-		}},
+		Input: commonpb.Payloads_builder{Payloads: []*commonpb.Payload{
+			commonpb.Payload_builder{Data: []byte("random signal payload")}.Build(),
+		}}.Build(),
 		Identity: identity,
-	})
+	}.Build())
 	s.NoError(err)
 
 	// workflow logic
@@ -924,13 +924,12 @@ func (s *FunctionalClustersTestSuite) TestResetWorkflowFailover() {
 
 		// Complete workflow after reset
 		workflowComplete = true
-		return []*commandpb.Command{{
+		return []*commandpb.Command{commandpb.Command_builder{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
-				CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
-					Result: payloads.EncodeString("Done"),
-				}},
-		}}, nil
+			CompleteWorkflowExecutionCommandAttributes: commandpb.CompleteWorkflowExecutionCommandAttributes_builder{
+				Result: payloads.EncodeString("Done"),
+			}.Build(),
+		}.Build()}, nil
 
 	}
 
@@ -971,16 +970,16 @@ func (s *FunctionalClustersTestSuite) TestResetWorkflowFailover() {
 	//  5. WorkflowTaskCompleted
 
 	// Reset workflow execution
-	resetResp, err := client0.ResetWorkflowExecution(testcore.NewContext(), &workflowservice.ResetWorkflowExecutionRequest{
+	resetResp, err := client0.ResetWorkflowExecution(testcore.NewContext(), workflowservice.ResetWorkflowExecutionRequest_builder{
 		Namespace: namespace,
-		WorkflowExecution: &commonpb.WorkflowExecution{
+		WorkflowExecution: commonpb.WorkflowExecution_builder{
 			WorkflowId: id,
-			RunId:      we.RunId,
-		},
+			RunId:      we.GetRunId(),
+		}.Build(),
 		Reason:                    "reset execution from test",
 		WorkflowTaskFinishEventId: 4, // before WorkflowTaskStarted
 		RequestId:                 uuid.NewString(),
-	})
+	}.Build())
 	s.NoError(err)
 
 	s.failover(namespace, 0, s.clusters[1].ClusterName(), 2)
@@ -992,13 +991,13 @@ func (s *FunctionalClustersTestSuite) TestResetWorkflowFailover() {
 
 	s.waitForClusterSynced()
 
-	getHistoryReq := &workflowservice.GetWorkflowExecutionHistoryRequest{
+	getHistoryReq := workflowservice.GetWorkflowExecutionHistoryRequest_builder{
 		Namespace: namespace,
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: id,
-			RunId:      resetResp.RunId,
-		},
-	}
+			RunId:      resetResp.GetRunId(),
+		}.Build(),
+	}.Build()
 
 	getHistoryResp, err := client0.GetWorkflowExecutionHistory(testcore.NewContext(), getHistoryReq)
 	s.NoError(err)
@@ -1011,7 +1010,7 @@ func (s *FunctionalClustersTestSuite) TestResetWorkflowFailover() {
   6 v1 WorkflowTaskScheduled
   7 v2 WorkflowTaskStarted
   8 v2 WorkflowTaskCompleted
-  9 v2 WorkflowExecutionCompleted`, getHistoryResp.History)
+  9 v2 WorkflowExecutionCompleted`, getHistoryResp.GetHistory())
 
 	getHistoryResp, err = client1.GetWorkflowExecutionHistory(testcore.NewContext(), getHistoryReq)
 	s.NoError(err)
@@ -1024,7 +1023,7 @@ func (s *FunctionalClustersTestSuite) TestResetWorkflowFailover() {
   6 v1 WorkflowTaskScheduled
   7 v2 WorkflowTaskStarted
   8 v2 WorkflowTaskCompleted
-  9 v2 WorkflowExecutionCompleted`, getHistoryResp.History)
+  9 v2 WorkflowExecutionCompleted`, getHistoryResp.GetHistory())
 }
 
 func (s *FunctionalClustersTestSuite) TestContinueAsNewFailover() {
@@ -1037,9 +1036,9 @@ func (s *FunctionalClustersTestSuite) TestContinueAsNewFailover() {
 	wt := "functional-continueAsNew-workflow-failover-test-type"
 	tl := "functional-continueAsNew-workflow-failover-test-taskqueue"
 	identity := "worker1"
-	workflowType := &commonpb.WorkflowType{Name: wt}
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
-	startReq := &workflowservice.StartWorkflowExecutionRequest{
+	workflowType := commonpb.WorkflowType_builder{Name: wt}.Build()
+	taskQueue := taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build()
+	startReq := workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:           uuid.NewString(),
 		Namespace:           namespace,
 		WorkflowId:          id,
@@ -1049,7 +1048,7 @@ func (s *FunctionalClustersTestSuite) TestContinueAsNewFailover() {
 		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
-	}
+	}.Build()
 	we, err := client0.StartWorkflowExecution(testcore.NewContext(), startReq)
 	s.NoError(err)
 	s.NotNil(we.GetRunId())
@@ -1061,31 +1060,31 @@ func (s *FunctionalClustersTestSuite) TestContinueAsNewFailover() {
 	var lastRunStartedEvent *historypb.HistoryEvent
 	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		if continueAsNewCounter < continueAsNewCount {
-			previousRunID = task.WorkflowExecution.GetRunId()
+			previousRunID = task.GetWorkflowExecution().GetRunId()
 			continueAsNewCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, continueAsNewCounter))
 
-			return []*commandpb.Command{{
+			return []*commandpb.Command{commandpb.Command_builder{
 				CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
-				Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
+				ContinueAsNewWorkflowExecutionCommandAttributes: commandpb.ContinueAsNewWorkflowExecutionCommandAttributes_builder{
 					WorkflowType:        workflowType,
-					TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+					TaskQueue:           taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 					Input:               payloads.EncodeBytes(buf.Bytes()),
 					WorkflowRunTimeout:  durationpb.New(100 * time.Second),
 					WorkflowTaskTimeout: durationpb.New(10 * time.Second),
-				}},
-			}}, nil
+				}.Build(),
+			}.Build()}, nil
 		}
 
-		lastRunStartedEvent = task.History.Events[0]
+		lastRunStartedEvent = task.GetHistory().GetEvents()[0]
 		workflowComplete = true
-		return []*commandpb.Command{{
+		return []*commandpb.Command{commandpb.Command_builder{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+			CompleteWorkflowExecutionCommandAttributes: commandpb.CompleteWorkflowExecutionCommandAttributes_builder{
 				Result: payloads.EncodeString("Done"),
-			}},
-		}}, nil
+			}.Build(),
+		}.Build()}, nil
 	}
 
 	// nolint
@@ -1143,9 +1142,9 @@ func (s *FunctionalClustersTestSuite) TestSignalFailover() {
 	wt := "functional-signal-workflow-failover-test-type"
 	tl := "functional-signal-workflow-failover-test-taskqueue"
 	identity := "worker1"
-	workflowType := &commonpb.WorkflowType{Name: wt}
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
-	startReq := &workflowservice.StartWorkflowExecutionRequest{
+	workflowType := commonpb.WorkflowType_builder{Name: wt}.Build()
+	taskQueue := taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build()
+	startReq := workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:           uuid.NewString(),
 		Namespace:           namespace,
 		WorkflowId:          id,
@@ -1155,7 +1154,7 @@ func (s *FunctionalClustersTestSuite) TestSignalFailover() {
 		WorkflowRunTimeout:  durationpb.New(300 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
-	}
+	}.Build()
 	we, err := client0.StartWorkflowExecution(testcore.NewContext(), startReq)
 	s.NoError(err)
 	s.NotNil(we.GetRunId())
@@ -1164,24 +1163,24 @@ func (s *FunctionalClustersTestSuite) TestSignalFailover() {
 
 	eventSignaled := false
 	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
-		if task.PreviousStartedEventId == 0 {
+		if task.GetPreviousStartedEventId() == 0 {
 			return []*commandpb.Command{}, nil
 		}
 		if !eventSignaled {
-			for _, event := range task.History.Events[task.PreviousStartedEventId:] {
-				if event.EventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
+			for _, event := range task.GetHistory().GetEvents()[task.GetPreviousStartedEventId():] {
+				if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
 					eventSignaled = true
 					return []*commandpb.Command{}, nil
 				}
 			}
 		}
 
-		return []*commandpb.Command{{
+		return []*commandpb.Command{commandpb.Command_builder{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+			CompleteWorkflowExecutionCommandAttributes: commandpb.CompleteWorkflowExecutionCommandAttributes_builder{
 				Result: payloads.EncodeString("Done"),
-			}},
-		}}, nil
+			}.Build(),
+		}.Build()}, nil
 	}
 
 	// nolint
@@ -1214,16 +1213,16 @@ func (s *FunctionalClustersTestSuite) TestSignalFailover() {
 	// Send a signal in cluster0
 	signalName := "my signal"
 	signalInput := payloads.EncodeString("my signal input")
-	_, err = client0.SignalWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+	_, err = client0.SignalWorkflowExecution(testcore.NewContext(), workflowservice.SignalWorkflowExecutionRequest_builder{
 		Namespace: namespace,
-		WorkflowExecution: &commonpb.WorkflowExecution{
+		WorkflowExecution: commonpb.WorkflowExecution_builder{
 			WorkflowId: id,
 			RunId:      we.GetRunId(),
-		},
+		}.Build(),
 		SignalName: signalName,
 		Input:      signalInput,
 		Identity:   identity,
-	})
+	}.Build())
 	s.NoError(err)
 
 	// Process signal in cluster0
@@ -1236,12 +1235,12 @@ func (s *FunctionalClustersTestSuite) TestSignalFailover() {
 	s.failover(namespace, 0, s.clusters[1].ClusterName(), 2)
 
 	// check history matched
-	getHistoryReq := &workflowservice.GetWorkflowExecutionHistoryRequest{
+	getHistoryReq := workflowservice.GetWorkflowExecutionHistoryRequest_builder{
 		Namespace: namespace,
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: id,
-		},
-	}
+		}.Build(),
+	}.Build()
 	// TODO (alex): this shouldn't be WaitForHistory anymore (just EqualHistory)
 	s.WaitForHistory(`
   1 v1 WorkflowExecutionStarted
@@ -1257,22 +1256,22 @@ func (s *FunctionalClustersTestSuite) TestSignalFailover() {
 			if err != nil {
 				return nil
 			}
-			return historyResponse.History
+			return historyResponse.GetHistory()
 		}, replicationWaitTime, replicationCheckInterval,
 	)
 
 	// Send another signal in cluster1
 	signalName2 := "my signal 2"
 	signalInput2 := payloads.EncodeString("my signal input 2")
-	_, err = client1.SignalWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+	_, err = client1.SignalWorkflowExecution(testcore.NewContext(), workflowservice.SignalWorkflowExecutionRequest_builder{
 		Namespace: namespace,
-		WorkflowExecution: &commonpb.WorkflowExecution{
+		WorkflowExecution: commonpb.WorkflowExecution_builder{
 			WorkflowId: id,
-		},
+		}.Build(),
 		SignalName: signalName2,
 		Input:      signalInput2,
 		Identity:   identity,
-	})
+	}.Build())
 	s.NoError(err)
 
 	// Process signal in cluster1
@@ -1301,7 +1300,7 @@ func (s *FunctionalClustersTestSuite) TestSignalFailover() {
 			if err != nil {
 				return nil
 			}
-			return historyResponse.History
+			return historyResponse.GetHistory()
 		}, replicationWaitTime, replicationCheckInterval)
 }
 
@@ -1315,9 +1314,9 @@ func (s *FunctionalClustersTestSuite) TestUserTimerFailover() {
 	wt := "functional-user-timer-workflow-failover-test-type"
 	tl := "functional-user-timer-workflow-failover-test-taskqueue"
 	identity := "worker1"
-	workflowType := &commonpb.WorkflowType{Name: wt}
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
-	startReq := &workflowservice.StartWorkflowExecutionRequest{
+	workflowType := commonpb.WorkflowType_builder{Name: wt}.Build()
+	taskQueue := taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build()
+	startReq := workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:           uuid.NewString(),
 		Namespace:           namespace,
 		WorkflowId:          id,
@@ -1327,7 +1326,7 @@ func (s *FunctionalClustersTestSuite) TestUserTimerFailover() {
 		WorkflowRunTimeout:  durationpb.New(300 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
 		Identity:            identity,
-	}
+	}.Build()
 	we, err := client0.StartWorkflowExecution(testcore.NewContext(), startReq)
 	s.NoError(err)
 	s.NotNil(we.GetRunId())
@@ -1345,36 +1344,36 @@ func (s *FunctionalClustersTestSuite) TestUserTimerFailover() {
 			// Send a signal in cluster
 			signalName := "my signal"
 			signalInput := payloads.EncodeString("my signal input")
-			_, err = client0.SignalWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+			_, err = client0.SignalWorkflowExecution(testcore.NewContext(), workflowservice.SignalWorkflowExecutionRequest_builder{
 				Namespace: namespace,
-				WorkflowExecution: &commonpb.WorkflowExecution{
+				WorkflowExecution: commonpb.WorkflowExecution_builder{
 					WorkflowId: id,
 					RunId:      we.GetRunId(),
-				},
+				}.Build(),
 				SignalName: signalName,
 				Input:      signalInput,
 				Identity:   "",
-			})
+			}.Build())
 			s.NoError(err)
-			return []*commandpb.Command{{
+			return []*commandpb.Command{commandpb.Command_builder{
 				CommandType: enumspb.COMMAND_TYPE_START_TIMER,
-				Attributes: &commandpb.Command_StartTimerCommandAttributes{StartTimerCommandAttributes: &commandpb.StartTimerCommandAttributes{
+				StartTimerCommandAttributes: commandpb.StartTimerCommandAttributes_builder{
 					TimerId:            "timer-id",
 					StartToFireTimeout: durationpb.New(2 * time.Second),
-				}},
-			}}, nil
+				}.Build(),
+			}.Build()}, nil
 		}
 
 		if !timerFired {
-			resp, err := client1.GetWorkflowExecutionHistory(testcore.NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+			resp, err := client1.GetWorkflowExecutionHistory(testcore.NewContext(), workflowservice.GetWorkflowExecutionHistoryRequest_builder{
 				Namespace: namespace,
-				Execution: &commonpb.WorkflowExecution{
+				Execution: commonpb.WorkflowExecution_builder{
 					WorkflowId: id,
 					RunId:      we.GetRunId(),
-				},
-			})
+				}.Build(),
+			}.Build())
 			s.NoError(err)
-			for _, event := range resp.History.Events {
+			for _, event := range resp.GetHistory().GetEvents() {
 				if event.GetEventType() == enumspb.EVENT_TYPE_TIMER_FIRED {
 					timerFired = true
 				}
@@ -1385,12 +1384,12 @@ func (s *FunctionalClustersTestSuite) TestUserTimerFailover() {
 		}
 
 		workflowCompleted = true
-		return []*commandpb.Command{{
+		return []*commandpb.Command{commandpb.Command_builder{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+			CompleteWorkflowExecutionCommandAttributes: commandpb.CompleteWorkflowExecutionCommandAttributes_builder{
 				Result: payloads.EncodeString("Done"),
-			}},
-		}}, nil
+			}.Build(),
+		}.Build()}, nil
 	}
 
 	// nolint
@@ -1448,9 +1447,9 @@ func (s *FunctionalClustersTestSuite) TestForceWorkflowTaskClose_WithClusterReco
 	wt := "test-force-workflow-task-close-test-type"
 	tl := "test-force-workflow-task-close-test-taskqueue"
 	identity := "worker1"
-	workflowType := &commonpb.WorkflowType{Name: wt}
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
-	startReq := &workflowservice.StartWorkflowExecutionRequest{
+	workflowType := commonpb.WorkflowType_builder{Name: wt}.Build()
+	taskQueue := taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build()
+	startReq := workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:           uuid.NewString(),
 		Namespace:           namespace,
 		WorkflowId:          id,
@@ -1460,7 +1459,7 @@ func (s *FunctionalClustersTestSuite) TestForceWorkflowTaskClose_WithClusterReco
 		WorkflowRunTimeout:  durationpb.New(300 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(60 * time.Second),
 		Identity:            identity,
-	}
+	}.Build()
 	we, err := client0.StartWorkflowExecution(testcore.NewContext(), startReq)
 	s.NoError(err)
 	s.NotNil(we.GetRunId())
@@ -1468,12 +1467,12 @@ func (s *FunctionalClustersTestSuite) TestForceWorkflowTaskClose_WithClusterReco
 	s.logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.GetRunId()))
 
 	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
-		return []*commandpb.Command{{
+		return []*commandpb.Command{commandpb.Command_builder{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+			CompleteWorkflowExecutionCommandAttributes: commandpb.CompleteWorkflowExecutionCommandAttributes_builder{
 				Result: payloads.EncodeString("Done"),
-			}},
-		}}, nil
+			}.Build(),
+		}.Build()}, nil
 	}
 
 	// nolint
@@ -1499,36 +1498,36 @@ func (s *FunctionalClustersTestSuite) TestForceWorkflowTaskClose_WithClusterReco
 	// Send a signal to cluster1, namespace contains one cluster
 	signalName := "my signal"
 	signalInput := payloads.EncodeString("my signal input")
-	_, err = client1.SignalWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+	_, err = client1.SignalWorkflowExecution(testcore.NewContext(), workflowservice.SignalWorkflowExecutionRequest_builder{
 		Namespace: namespace,
-		WorkflowExecution: &commonpb.WorkflowExecution{
+		WorkflowExecution: commonpb.WorkflowExecution_builder{
 			WorkflowId: id,
 			RunId:      we.GetRunId(),
-		},
+		}.Build(),
 		SignalName: signalName,
 		Input:      signalInput,
-	})
+	}.Build())
 	s.NoError(err)
 
 	// No error is expected with single cluster namespace.
-	_, err = client1.DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+	_, err = client1.DescribeWorkflowExecution(testcore.NewContext(), workflowservice.DescribeWorkflowExecutionRequest_builder{
 		Namespace: namespace,
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: id,
-		},
-	})
+		}.Build(),
+	}.Build())
 	s.NoError(err)
 
 	// Update the namespace in cluster1 to be a multi cluster namespace
 	s.updateNamespaceClusters(namespace, 1, s.clusters)
 
 	// No error is expected with multi cluster namespace.
-	_, err = client1.DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+	_, err = client1.DescribeWorkflowExecution(testcore.NewContext(), workflowservice.DescribeWorkflowExecutionRequest_builder{
 		Namespace: namespace,
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: id,
-		},
-	})
+		}.Build(),
+	}.Build())
 	s.NoError(err)
 }
 
@@ -1542,9 +1541,9 @@ func (s *FunctionalClustersTestSuite) TestTransientWorkflowTaskFailover() {
 	wt := "functional-transient-workflow-task-workflow-failover-test-type"
 	tl := "functional-transient-workflow-task-workflow-failover-test-taskqueue"
 	identity := "worker1"
-	workflowType := &commonpb.WorkflowType{Name: wt}
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
-	startReq := &workflowservice.StartWorkflowExecutionRequest{
+	workflowType := commonpb.WorkflowType_builder{Name: wt}.Build()
+	taskQueue := taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build()
+	startReq := workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:           uuid.NewString(),
 		Namespace:           namespace,
 		WorkflowId:          id,
@@ -1554,7 +1553,7 @@ func (s *FunctionalClustersTestSuite) TestTransientWorkflowTaskFailover() {
 		WorkflowRunTimeout:  durationpb.New(300 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(8 * time.Second),
 		Identity:            identity,
-	}
+	}.Build()
 	we, err := client0.StartWorkflowExecution(testcore.NewContext(), startReq)
 	s.NoError(err)
 	s.NotNil(we.GetRunId())
@@ -1570,12 +1569,12 @@ func (s *FunctionalClustersTestSuite) TestTransientWorkflowTaskFailover() {
 		}
 
 		workflowFinished = true
-		return []*commandpb.Command{{
+		return []*commandpb.Command{commandpb.Command_builder{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+			CompleteWorkflowExecutionCommandAttributes: commandpb.CompleteWorkflowExecutionCommandAttributes_builder{
 				Result: payloads.EncodeString("Done"),
-			}},
-		}}, nil
+			}.Build(),
+		}.Build()}, nil
 	}
 
 	// nolint
@@ -1624,9 +1623,9 @@ func (s *FunctionalClustersTestSuite) TestCronWorkflowStartAndFailover() {
 	wt := "functional-cron-workflow-start-and-failover-test-type"
 	tl := "functional-cron-workflow-start-and-failover-test-taskqueue"
 	identity := "worker1"
-	workflowType := &commonpb.WorkflowType{Name: wt}
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
-	startReq := &workflowservice.StartWorkflowExecutionRequest{
+	workflowType := commonpb.WorkflowType_builder{Name: wt}.Build()
+	taskQueue := taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build()
+	startReq := workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:           uuid.NewString(),
 		Namespace:           namespace,
 		WorkflowId:          id,
@@ -1637,7 +1636,7 @@ func (s *FunctionalClustersTestSuite) TestCronWorkflowStartAndFailover() {
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 		CronSchedule:        "@every 5s",
-	}
+	}.Build()
 	we, err := client0.StartWorkflowExecution(testcore.NewContext(), startReq)
 	s.NoError(err)
 	s.NotNil(we.GetRunId())
@@ -1645,15 +1644,15 @@ func (s *FunctionalClustersTestSuite) TestCronWorkflowStartAndFailover() {
 	wfCompleted := false
 	var executions []*commonpb.WorkflowExecution
 	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
-		executions = append(executions, task.WorkflowExecution)
+		executions = append(executions, task.GetWorkflowExecution())
 		wfCompleted = true
 		return []*commandpb.Command{
-			{
+			commandpb.Command_builder{
 				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+				CompleteWorkflowExecutionCommandAttributes: commandpb.CompleteWorkflowExecutionCommandAttributes_builder{
 					Result: payloads.EncodeString("cron-test-result"),
-				}},
-			}}, nil
+				}.Build(),
+			}.Build()}, nil
 	}
 
 	// nolint
@@ -1681,12 +1680,12 @@ func (s *FunctionalClustersTestSuite) TestCronWorkflowStartAndFailover() {
   5 v2 WorkflowExecutionCompleted`, events)
 
 	// terminate the remaining cron
-	_, err = client1.TerminateWorkflowExecution(testcore.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
+	_, err = client1.TerminateWorkflowExecution(testcore.NewContext(), workflowservice.TerminateWorkflowExecutionRequest_builder{
 		Namespace: namespace,
-		WorkflowExecution: &commonpb.WorkflowExecution{
+		WorkflowExecution: commonpb.WorkflowExecution_builder{
 			WorkflowId: id,
-		},
-	})
+		}.Build(),
+	}.Build())
 	s.NoError(err)
 }
 
@@ -1696,15 +1695,15 @@ func (s *FunctionalClustersTestSuite) getLastEvent(
 	execution *commonpb.WorkflowExecution,
 ) *historypb.HistoryEvent {
 
-	resp, err := client.GetWorkflowExecutionHistory(testcore.NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+	resp, err := client.GetWorkflowExecutionHistory(testcore.NewContext(), workflowservice.GetWorkflowExecutionHistoryRequest_builder{
 		Namespace: namespace,
 		Execution: execution,
-	})
+	}.Build())
 	s.NoError(err)
-	s.NotNil(resp.History)
-	s.NotEmpty(resp.History.Events)
+	s.NotNil(resp.GetHistory())
+	s.NotEmpty(resp.GetHistory().GetEvents())
 
-	return resp.History.Events[len(resp.History.Events)-1]
+	return resp.GetHistory().GetEvents()[len(resp.GetHistory().GetEvents())-1]
 }
 
 func (s *FunctionalClustersTestSuite) getNewExecutionRunIdFromLastEvent(
@@ -1748,9 +1747,9 @@ func (s *FunctionalClustersTestSuite) TestCronWorkflowCompleteAndFailover() {
 	wt := "functional-cron-workflow-complete-andfailover-test-type"
 	tl := "functional-cron-workflow-complete-andfailover-test-taskqueue"
 	identity := "worker1"
-	workflowType := &commonpb.WorkflowType{Name: wt}
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
-	startReq := &workflowservice.StartWorkflowExecutionRequest{
+	workflowType := commonpb.WorkflowType_builder{Name: wt}.Build()
+	taskQueue := taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build()
+	startReq := workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:           uuid.NewString(),
 		Namespace:           namespace,
 		WorkflowId:          id,
@@ -1761,7 +1760,7 @@ func (s *FunctionalClustersTestSuite) TestCronWorkflowCompleteAndFailover() {
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 		CronSchedule:        "@every 5s",
-	}
+	}.Build()
 	we, err := client0.StartWorkflowExecution(testcore.NewContext(), startReq)
 	s.NoError(err)
 	s.NotNil(we.GetRunId())
@@ -1770,14 +1769,14 @@ func (s *FunctionalClustersTestSuite) TestCronWorkflowCompleteAndFailover() {
 	var executions []*commonpb.WorkflowExecution
 	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		wfCompletionCount += 1
-		executions = append(executions, task.WorkflowExecution)
+		executions = append(executions, task.GetWorkflowExecution())
 		return []*commandpb.Command{
-			{
+			commandpb.Command_builder{
 				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+				CompleteWorkflowExecutionCommandAttributes: commandpb.CompleteWorkflowExecutionCommandAttributes_builder{
 					Result: payloads.EncodeString("cron-test-result"),
-				}},
-			}}, nil
+				}.Build(),
+			}.Build()}, nil
 	}
 
 	// nolint
@@ -1828,12 +1827,12 @@ func (s *FunctionalClustersTestSuite) TestCronWorkflowCompleteAndFailover() {
   4 v2 WorkflowTaskCompleted
   5 v2 WorkflowExecutionCompleted`, events)
 
-	_, err = client1.TerminateWorkflowExecution(testcore.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
+	_, err = client1.TerminateWorkflowExecution(testcore.NewContext(), workflowservice.TerminateWorkflowExecutionRequest_builder{
 		Namespace: namespace,
-		WorkflowExecution: &commonpb.WorkflowExecution{
+		WorkflowExecution: commonpb.WorkflowExecution_builder{
 			WorkflowId: id,
-		},
-	})
+		}.Build(),
+	}.Build())
 	s.NoError(err)
 }
 
@@ -1847,9 +1846,9 @@ func (s *FunctionalClustersTestSuite) TestWorkflowRetryStartAndFailover() {
 	wt := "functional-workflow-retry-start-and-failover-test-type"
 	tl := "functional-workflow-retry-start-and-failover-test-taskqueue"
 	identity := "worker1"
-	workflowType := &commonpb.WorkflowType{Name: wt}
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
-	startReq := &workflowservice.StartWorkflowExecutionRequest{
+	workflowType := commonpb.WorkflowType_builder{Name: wt}.Build()
+	taskQueue := taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build()
+	startReq := workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:           uuid.NewString(),
 		Namespace:           namespace,
 		WorkflowId:          id,
@@ -1859,28 +1858,28 @@ func (s *FunctionalClustersTestSuite) TestWorkflowRetryStartAndFailover() {
 		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
-		RetryPolicy: &commonpb.RetryPolicy{
+		RetryPolicy: commonpb.RetryPolicy_builder{
 			InitialInterval:        durationpb.New(1 * time.Second),
 			MaximumAttempts:        3,
 			MaximumInterval:        durationpb.New(1 * time.Second),
 			NonRetryableErrorTypes: []string{"bad-bug"},
 			BackoffCoefficient:     1,
-		},
-	}
+		}.Build(),
+	}.Build()
 	we, err := client0.StartWorkflowExecution(testcore.NewContext(), startReq)
 	s.NoError(err)
 	s.NotNil(we.GetRunId())
 
 	var executions []*commonpb.WorkflowExecution
 	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
-		executions = append(executions, task.WorkflowExecution)
+		executions = append(executions, task.GetWorkflowExecution())
 		return []*commandpb.Command{
-			{
+			commandpb.Command_builder{
 				CommandType: enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION,
-				Attributes: &commandpb.Command_FailWorkflowExecutionCommandAttributes{FailWorkflowExecutionCommandAttributes: &commandpb.FailWorkflowExecutionCommandAttributes{
+				FailWorkflowExecutionCommandAttributes: commandpb.FailWorkflowExecutionCommandAttributes_builder{
 					Failure: failure.NewServerFailure("retryable-error", false),
-				}},
-			}}, nil
+				}.Build(),
+			}.Build()}, nil
 	}
 
 	// nolint
@@ -1929,9 +1928,9 @@ func (s *FunctionalClustersTestSuite) TestWorkflowRetryFailAndFailover() {
 	wt := "functional-workflow-retry-fail-and-failover-test-type"
 	tl := "functional-workflow-retry-fail-and-failover-test-taskqueue"
 	identity := "worker1"
-	workflowType := &commonpb.WorkflowType{Name: wt}
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
-	startReq := &workflowservice.StartWorkflowExecutionRequest{
+	workflowType := commonpb.WorkflowType_builder{Name: wt}.Build()
+	taskQueue := taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build()
+	startReq := workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:           uuid.NewString(),
 		Namespace:           namespace,
 		WorkflowId:          id,
@@ -1941,28 +1940,28 @@ func (s *FunctionalClustersTestSuite) TestWorkflowRetryFailAndFailover() {
 		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
-		RetryPolicy: &commonpb.RetryPolicy{
+		RetryPolicy: commonpb.RetryPolicy_builder{
 			InitialInterval:        durationpb.New(1 * time.Second),
 			MaximumAttempts:        3,
 			MaximumInterval:        durationpb.New(1 * time.Second),
 			NonRetryableErrorTypes: []string{"bad-bug"},
 			BackoffCoefficient:     1,
-		},
-	}
+		}.Build(),
+	}.Build()
 	we, err := client0.StartWorkflowExecution(testcore.NewContext(), startReq)
 	s.NoError(err)
 	s.NotNil(we.GetRunId())
 
 	var executions []*commonpb.WorkflowExecution
 	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
-		executions = append(executions, task.WorkflowExecution)
+		executions = append(executions, task.GetWorkflowExecution())
 		return []*commandpb.Command{
-			{
+			commandpb.Command_builder{
 				CommandType: enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION,
-				Attributes: &commandpb.Command_FailWorkflowExecutionCommandAttributes{FailWorkflowExecutionCommandAttributes: &commandpb.FailWorkflowExecutionCommandAttributes{
+				FailWorkflowExecutionCommandAttributes: commandpb.FailWorkflowExecutionCommandAttributes_builder{
 					Failure: failure.NewServerFailure("retryable-error", false),
-				}},
-			}}, nil
+				}.Build(),
+			}.Build()}, nil
 	}
 
 	// nolint
@@ -2373,63 +2372,62 @@ func (s *FunctionalClustersTestSuite) TestLocalNamespaceMigration() {
 
 	// at this point ns migration is done.
 	// verify namespace is now active in cluster2
-	nsResp2, err := s.clusters[0].FrontendClient().DescribeNamespace(testCtx, &workflowservice.DescribeNamespaceRequest{
+	nsResp2, err := s.clusters[0].FrontendClient().DescribeNamespace(testCtx, workflowservice.DescribeNamespaceRequest_builder{
 		Namespace: namespace,
-	})
+	}.Build())
 	s.NoError(err)
-	s.True(nsResp2.IsGlobalNamespace)
-	s.Equal(2, len(nsResp2.ReplicationConfig.Clusters))
-	s.Equal(s.clusters[1].ClusterName(), nsResp2.ReplicationConfig.ActiveClusterName)
+	s.True(nsResp2.GetIsGlobalNamespace())
+	s.Equal(2, len(nsResp2.GetReplicationConfig().GetClusters()))
+	s.Equal(s.clusters[1].ClusterName(), nsResp2.GetReplicationConfig().GetActiveClusterName())
 
 	// verify all wf in ns is now available in cluster2
 	feClient1 := s.clusters[1].FrontendClient()
 	adminClient1 := s.clusters[1].AdminClient()
 	verify := func(wfID string, expectedRunID string) {
-		desc1, err := adminClient1.DescribeMutableState(testCtx, &adminservice.DescribeMutableStateRequest{
+		desc1, err := adminClient1.DescribeMutableState(testCtx, adminservice.DescribeMutableStateRequest_builder{
 			Namespace: namespace,
-			Execution: &commonpb.WorkflowExecution{
+			Execution: commonpb.WorkflowExecution_builder{
 				WorkflowId: wfID,
-			},
+			}.Build(),
 			Archetype: chasm.WorkflowArchetype,
-		})
+		}.Build())
 		s.NoError(err)
-		s.Equal(expectedRunID, desc1.DatabaseMutableState.ExecutionState.RunId)
-		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, desc1.DatabaseMutableState.ExecutionState.Status)
-		expectedEventId := desc1.DatabaseMutableState.NextEventId - 1
+		s.Equal(expectedRunID, desc1.GetDatabaseMutableState().GetExecutionState().GetRunId())
+		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, desc1.GetDatabaseMutableState().GetExecutionState().GetStatus())
+		expectedEventId := desc1.GetDatabaseMutableState().GetNextEventId() - 1
 		var nextPageToken []byte
 		for {
-			resp, err := feClient1.GetWorkflowExecutionHistoryReverse(testCtx, &workflowservice.GetWorkflowExecutionHistoryReverseRequest{
+			resp, err := feClient1.GetWorkflowExecutionHistoryReverse(testCtx, workflowservice.GetWorkflowExecutionHistoryReverseRequest_builder{
 				Namespace: namespace,
-				Execution: &commonpb.WorkflowExecution{
+				Execution: commonpb.WorkflowExecution_builder{
 					WorkflowId: wfID,
 					RunId:      expectedRunID,
-				},
+				}.Build(),
 				MaximumPageSize: 256,
 				NextPageToken:   nil,
-			})
+			}.Build())
 			s.NoError(err)
 			for _, event := range resp.GetHistory().GetEvents() {
-				s.Equal(expectedEventId, event.EventId)
+				s.Equal(expectedEventId, event.GetEventId())
 				expectedEventId--
 			}
 			if len(nextPageToken) <= 0 {
 				break
 			}
-			nextPageToken = resp.NextPageToken
+			nextPageToken = resp.GetNextPageToken()
 		}
 		s.Equal(int64(0), expectedEventId)
 		s.NoError(err)
 
 		listWorkflowResp, err := feClient1.ListClosedWorkflowExecutions(
 			testCtx,
-			&workflowservice.ListClosedWorkflowExecutionsRequest{
+			workflowservice.ListClosedWorkflowExecutionsRequest_builder{
 				Namespace:       namespace,
 				MaximumPageSize: 1000,
-				Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{
-					ExecutionFilter: &filterpb.WorkflowExecutionFilter{
-						WorkflowId: wfID,
-					}},
-			},
+				ExecutionFilter: filterpb.WorkflowExecutionFilter_builder{
+					WorkflowId: wfID,
+				}.Build(),
+			}.Build(),
 		)
 		s.NoError(err)
 		s.True(len(listWorkflowResp.GetExecutions()) > 0)
@@ -2500,8 +2498,8 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ClosedWorkflow() {
 	verify := func(wfID string, expectedRunID string) {
 		desc1, err := client1.DescribeWorkflowExecution(testCtx, wfID, "")
 		s.NoError(err)
-		s.Equal(expectedRunID, desc1.WorkflowExecutionInfo.Execution.RunId)
-		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, desc1.WorkflowExecutionInfo.Status)
+		s.Equal(expectedRunID, desc1.GetWorkflowExecutionInfo().GetExecution().GetRunId())
+		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, desc1.GetWorkflowExecutionInfo().GetStatus())
 	}
 	verify(workflowID, run1.GetRunID())
 
@@ -2512,16 +2510,16 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ClosedWorkflow() {
 	defer worker1.Stop()
 
 	// Test reset workflow in cluster1
-	resetResp, err := client1.ResetWorkflowExecution(testCtx, &workflowservice.ResetWorkflowExecutionRequest{
+	resetResp, err := client1.ResetWorkflowExecution(testCtx, workflowservice.ResetWorkflowExecutionRequest_builder{
 		Namespace: namespace,
-		WorkflowExecution: &commonpb.WorkflowExecution{
+		WorkflowExecution: commonpb.WorkflowExecution_builder{
 			WorkflowId: workflowID,
 			RunId:      run1.GetRunID(),
-		},
+		}.Build(),
 		Reason:                    "force-replication-test",
 		WorkflowTaskFinishEventId: 3,
 		RequestId:                 uuid.NewString(),
-	})
+	}.Build())
 	s.NoError(err)
 
 	resetRun := client1.GetWorkflow(testCtx, workflowID, resetResp.GetRunId())
@@ -2530,7 +2528,7 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ClosedWorkflow() {
 
 	descResp, err := client1.DescribeWorkflowExecution(testCtx, workflowID, resetResp.GetRunId())
 	s.NoError(err)
-	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, descResp.GetWorkflowExecutionInfo().Status)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, descResp.GetWorkflowExecutionInfo().GetStatus())
 }
 
 func (s *FunctionalClustersTestSuite) TestForceMigration_ResetWorkflow() {
@@ -2565,16 +2563,16 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ResetWorkflow() {
 	err = run1.Get(testCtx, nil)
 	s.NoError(err)
 
-	resp, err := client0.ResetWorkflowExecution(testCtx, &workflowservice.ResetWorkflowExecutionRequest{
+	resp, err := client0.ResetWorkflowExecution(testCtx, workflowservice.ResetWorkflowExecutionRequest_builder{
 		Namespace: namespace,
-		WorkflowExecution: &commonpb.WorkflowExecution{
+		WorkflowExecution: commonpb.WorkflowExecution_builder{
 			WorkflowId: workflowID,
 			RunId:      run1.GetRunID(),
-		},
+		}.Build(),
 		Reason:                    "test",
 		WorkflowTaskFinishEventId: 3,
 		RequestId:                 uuid.NewString(),
-	})
+	}.Build())
 	s.NoError(err)
 	resetRun := client0.GetWorkflow(testCtx, workflowID, resp.GetRunId())
 	err = resetRun.Get(testCtx, nil)
@@ -2629,9 +2627,9 @@ func (s *FunctionalClustersTestSuite) TestBlockNamespaceDeleteInPassiveCluster()
 	// cluster2 is passive.
 	resp, err := s.clusters[1].OperatorClient().DeleteNamespace(
 		testcore.NewContext(),
-		&operatorservice.DeleteNamespaceRequest{
+		operatorservice.DeleteNamespaceRequest_builder{
 			Namespace: namespace,
-		})
+		}.Build())
 	s.Error(err)
 	s.Nil(resp)
 	s.Contains(err.Error(), "is passive in current cluster")
@@ -2639,22 +2637,22 @@ func (s *FunctionalClustersTestSuite) TestBlockNamespaceDeleteInPassiveCluster()
 }
 
 func (s *FunctionalClustersTestSuite) getHistory(client workflowservice.WorkflowServiceClient, namespace string, execution *commonpb.WorkflowExecution) []*historypb.HistoryEvent {
-	historyResponse, err := client.GetWorkflowExecutionHistory(testcore.NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+	historyResponse, err := client.GetWorkflowExecutionHistory(testcore.NewContext(), workflowservice.GetWorkflowExecutionHistoryRequest_builder{
 		Namespace:       namespace,
 		Execution:       execution,
 		MaximumPageSize: 5, // Use small page size to force pagination code path
-	})
+	}.Build())
 	s.NoError(err)
 
-	events := historyResponse.History.Events
-	for historyResponse.NextPageToken != nil {
-		historyResponse, err = client.GetWorkflowExecutionHistory(testcore.NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+	events := historyResponse.GetHistory().GetEvents()
+	for len(historyResponse.GetNextPageToken()) != 0 {
+		historyResponse, err = client.GetWorkflowExecutionHistory(testcore.NewContext(), workflowservice.GetWorkflowExecutionHistoryRequest_builder{
 			Namespace:     namespace,
 			Execution:     execution,
-			NextPageToken: historyResponse.NextPageToken,
-		})
+			NextPageToken: historyResponse.GetNextPageToken(),
+		}.Build())
 		s.NoError(err)
-		events = append(events, historyResponse.History.Events...)
+		events = append(events, historyResponse.GetHistory().GetEvents()...)
 	}
 
 	return events
@@ -2783,7 +2781,7 @@ func (s *FunctionalClustersWithRedirectionTestSuite) TestActivityMultipleHeartbe
 			return false
 		}
 		hbVal = 0
-		if err := payloads.Decode(desc0.PendingActivities[0].GetHeartbeatDetails(), &hbVal); err != nil {
+		if err := payloads.Decode(desc0.GetPendingActivities()[0].GetHeartbeatDetails(), &hbVal); err != nil {
 			return false
 		}
 		return hbVal == hb1Val
@@ -2805,7 +2803,7 @@ func (s *FunctionalClustersWithRedirectionTestSuite) TestActivityMultipleHeartbe
 			return false
 		}
 		hbVal = 0
-		if err := payloads.Decode(desc1.PendingActivities[0].GetHeartbeatDetails(), &hbVal); err != nil {
+		if err := payloads.Decode(desc1.GetPendingActivities()[0].GetHeartbeatDetails(), &hbVal); err != nil {
 			return false
 		}
 		return hbVal == hb3Val

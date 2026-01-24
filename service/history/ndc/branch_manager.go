@@ -173,9 +173,9 @@ func (r *BranchMgrImpl) verifyEventsOrder(
 		executionState := r.mutableState.GetExecutionState()
 		return false, serviceerrors.NewRetryReplication(
 			outOfOrderDeliveryMessage,
-			executionInfo.NamespaceId,
-			executionInfo.WorkflowId,
-			executionState.RunId,
+			executionInfo.GetNamespaceId(),
+			executionInfo.GetWorkflowId(),
+			executionState.GetRunId(),
 			lastVersionHistoryItem.GetEventId(),
 			lastVersionHistoryItem.GetVersion(),
 			incomingFirstEventID,
@@ -194,9 +194,9 @@ func (r *BranchMgrImpl) createNewBranch(
 
 	shardID := r.shard.GetShardID()
 	executionInfo := r.mutableState.GetExecutionInfo()
-	namespaceID := executionInfo.NamespaceId
-	workflowID := executionInfo.WorkflowId
-	runID := r.mutableState.GetExecutionState().RunId
+	namespaceID := executionInfo.GetNamespaceId()
+	workflowID := executionInfo.GetWorkflowId()
+	runID := r.mutableState.GetExecutionState().GetRunId()
 
 	resp, err := r.executionMgr.ForkHistoryBranch(ctx, &persistence.ForkHistoryBranchRequest{
 		ForkBranchToken: baseBranchToken,

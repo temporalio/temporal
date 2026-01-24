@@ -8,7 +8,7 @@ package adminservice
 
 import (
 	reflect "reflect"
-	sync "sync"
+	"strconv"
 	unsafe "unsafe"
 
 	v1 "go.temporal.io/api/common/v1"
@@ -40,11 +40,11 @@ const (
 )
 
 type RebuildMutableStateRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Namespace     string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
-	Execution     *v1.WorkflowExecution  `protobuf:"bytes,2,opt,name=execution,proto3" json:"execution,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Namespace string                 `protobuf:"bytes,1,opt,name=namespace,proto3"`
+	xxx_hidden_Execution *v1.WorkflowExecution  `protobuf:"bytes,2,opt,name=execution,proto3"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *RebuildMutableStateRequest) Reset() {
@@ -72,27 +72,57 @@ func (x *RebuildMutableStateRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RebuildMutableStateRequest.ProtoReflect.Descriptor instead.
-func (*RebuildMutableStateRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{0}
-}
-
 func (x *RebuildMutableStateRequest) GetNamespace() string {
 	if x != nil {
-		return x.Namespace
+		return x.xxx_hidden_Namespace
 	}
 	return ""
 }
 
 func (x *RebuildMutableStateRequest) GetExecution() *v1.WorkflowExecution {
 	if x != nil {
-		return x.Execution
+		return x.xxx_hidden_Execution
 	}
 	return nil
 }
 
+func (x *RebuildMutableStateRequest) SetNamespace(v string) {
+	x.xxx_hidden_Namespace = v
+}
+
+func (x *RebuildMutableStateRequest) SetExecution(v *v1.WorkflowExecution) {
+	x.xxx_hidden_Execution = v
+}
+
+func (x *RebuildMutableStateRequest) HasExecution() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Execution != nil
+}
+
+func (x *RebuildMutableStateRequest) ClearExecution() {
+	x.xxx_hidden_Execution = nil
+}
+
+type RebuildMutableStateRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Namespace string
+	Execution *v1.WorkflowExecution
+}
+
+func (b0 RebuildMutableStateRequest_builder) Build() *RebuildMutableStateRequest {
+	m0 := &RebuildMutableStateRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Namespace = b.Namespace
+	x.xxx_hidden_Execution = b.Execution
+	return m0
+}
+
 type RebuildMutableStateResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -122,20 +152,27 @@ func (x *RebuildMutableStateResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RebuildMutableStateResponse.ProtoReflect.Descriptor instead.
-func (*RebuildMutableStateResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{1}
+type RebuildMutableStateResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+}
+
+func (b0 RebuildMutableStateResponse_builder) Build() *RebuildMutableStateResponse {
+	m0 := &RebuildMutableStateResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	return m0
 }
 
 type ImportWorkflowExecutionRequest struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	Namespace      string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
-	Execution      *v1.WorkflowExecution  `protobuf:"bytes,2,opt,name=execution,proto3" json:"execution,omitempty"`
-	HistoryBatches []*v1.DataBlob         `protobuf:"bytes,3,rep,name=history_batches,json=historyBatches,proto3" json:"history_batches,omitempty"`
-	VersionHistory *v11.VersionHistory    `protobuf:"bytes,4,opt,name=version_history,json=versionHistory,proto3" json:"version_history,omitempty"`
-	Token          []byte                 `protobuf:"bytes,5,opt,name=token,proto3" json:"token,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state                     protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Namespace      string                 `protobuf:"bytes,1,opt,name=namespace,proto3"`
+	xxx_hidden_Execution      *v1.WorkflowExecution  `protobuf:"bytes,2,opt,name=execution,proto3"`
+	xxx_hidden_HistoryBatches *[]*v1.DataBlob        `protobuf:"bytes,3,rep,name=history_batches,json=historyBatches,proto3"`
+	xxx_hidden_VersionHistory *v11.VersionHistory    `protobuf:"bytes,4,opt,name=version_history,json=versionHistory,proto3"`
+	xxx_hidden_Token          []byte                 `protobuf:"bytes,5,opt,name=token,proto3"`
+	unknownFields             protoimpl.UnknownFields
+	sizeCache                 protoimpl.SizeCache
 }
 
 func (x *ImportWorkflowExecutionRequest) Reset() {
@@ -163,51 +200,115 @@ func (x *ImportWorkflowExecutionRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ImportWorkflowExecutionRequest.ProtoReflect.Descriptor instead.
-func (*ImportWorkflowExecutionRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{2}
-}
-
 func (x *ImportWorkflowExecutionRequest) GetNamespace() string {
 	if x != nil {
-		return x.Namespace
+		return x.xxx_hidden_Namespace
 	}
 	return ""
 }
 
 func (x *ImportWorkflowExecutionRequest) GetExecution() *v1.WorkflowExecution {
 	if x != nil {
-		return x.Execution
+		return x.xxx_hidden_Execution
 	}
 	return nil
 }
 
 func (x *ImportWorkflowExecutionRequest) GetHistoryBatches() []*v1.DataBlob {
 	if x != nil {
-		return x.HistoryBatches
+		if x.xxx_hidden_HistoryBatches != nil {
+			return *x.xxx_hidden_HistoryBatches
+		}
 	}
 	return nil
 }
 
 func (x *ImportWorkflowExecutionRequest) GetVersionHistory() *v11.VersionHistory {
 	if x != nil {
-		return x.VersionHistory
+		return x.xxx_hidden_VersionHistory
 	}
 	return nil
 }
 
 func (x *ImportWorkflowExecutionRequest) GetToken() []byte {
 	if x != nil {
-		return x.Token
+		return x.xxx_hidden_Token
 	}
 	return nil
 }
 
+func (x *ImportWorkflowExecutionRequest) SetNamespace(v string) {
+	x.xxx_hidden_Namespace = v
+}
+
+func (x *ImportWorkflowExecutionRequest) SetExecution(v *v1.WorkflowExecution) {
+	x.xxx_hidden_Execution = v
+}
+
+func (x *ImportWorkflowExecutionRequest) SetHistoryBatches(v []*v1.DataBlob) {
+	x.xxx_hidden_HistoryBatches = &v
+}
+
+func (x *ImportWorkflowExecutionRequest) SetVersionHistory(v *v11.VersionHistory) {
+	x.xxx_hidden_VersionHistory = v
+}
+
+func (x *ImportWorkflowExecutionRequest) SetToken(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_Token = v
+}
+
+func (x *ImportWorkflowExecutionRequest) HasExecution() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Execution != nil
+}
+
+func (x *ImportWorkflowExecutionRequest) HasVersionHistory() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_VersionHistory != nil
+}
+
+func (x *ImportWorkflowExecutionRequest) ClearExecution() {
+	x.xxx_hidden_Execution = nil
+}
+
+func (x *ImportWorkflowExecutionRequest) ClearVersionHistory() {
+	x.xxx_hidden_VersionHistory = nil
+}
+
+type ImportWorkflowExecutionRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Namespace      string
+	Execution      *v1.WorkflowExecution
+	HistoryBatches []*v1.DataBlob
+	VersionHistory *v11.VersionHistory
+	Token          []byte
+}
+
+func (b0 ImportWorkflowExecutionRequest_builder) Build() *ImportWorkflowExecutionRequest {
+	m0 := &ImportWorkflowExecutionRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Namespace = b.Namespace
+	x.xxx_hidden_Execution = b.Execution
+	x.xxx_hidden_HistoryBatches = &b.HistoryBatches
+	x.xxx_hidden_VersionHistory = b.VersionHistory
+	x.xxx_hidden_Token = b.Token
+	return m0
+}
+
 type ImportWorkflowExecutionResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Token         []byte                 `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state            protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Token []byte                 `protobuf:"bytes,1,opt,name=token,proto3"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *ImportWorkflowExecutionResponse) Reset() {
@@ -235,26 +336,42 @@ func (x *ImportWorkflowExecutionResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ImportWorkflowExecutionResponse.ProtoReflect.Descriptor instead.
-func (*ImportWorkflowExecutionResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{3}
-}
-
 func (x *ImportWorkflowExecutionResponse) GetToken() []byte {
 	if x != nil {
-		return x.Token
+		return x.xxx_hidden_Token
 	}
 	return nil
 }
 
+func (x *ImportWorkflowExecutionResponse) SetToken(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_Token = v
+}
+
+type ImportWorkflowExecutionResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Token []byte
+}
+
+func (b0 ImportWorkflowExecutionResponse_builder) Build() *ImportWorkflowExecutionResponse {
+	m0 := &ImportWorkflowExecutionResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Token = b.Token
+	return m0
+}
+
 type DescribeMutableStateRequest struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	Namespace       string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
-	Execution       *v1.WorkflowExecution  `protobuf:"bytes,2,opt,name=execution,proto3" json:"execution,omitempty"`
-	SkipForceReload bool                   `protobuf:"varint,3,opt,name=skip_force_reload,json=skipForceReload,proto3" json:"skip_force_reload,omitempty"`
-	Archetype       string                 `protobuf:"bytes,4,opt,name=archetype,proto3" json:"archetype,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state                      protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Namespace       string                 `protobuf:"bytes,1,opt,name=namespace,proto3"`
+	xxx_hidden_Execution       *v1.WorkflowExecution  `protobuf:"bytes,2,opt,name=execution,proto3"`
+	xxx_hidden_SkipForceReload bool                   `protobuf:"varint,3,opt,name=skip_force_reload,json=skipForceReload,proto3"`
+	xxx_hidden_Archetype       string                 `protobuf:"bytes,4,opt,name=archetype,proto3"`
+	unknownFields              protoimpl.UnknownFields
+	sizeCache                  protoimpl.SizeCache
 }
 
 func (x *DescribeMutableStateRequest) Reset() {
@@ -282,50 +399,89 @@ func (x *DescribeMutableStateRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DescribeMutableStateRequest.ProtoReflect.Descriptor instead.
-func (*DescribeMutableStateRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{4}
-}
-
 func (x *DescribeMutableStateRequest) GetNamespace() string {
 	if x != nil {
-		return x.Namespace
+		return x.xxx_hidden_Namespace
 	}
 	return ""
 }
 
 func (x *DescribeMutableStateRequest) GetExecution() *v1.WorkflowExecution {
 	if x != nil {
-		return x.Execution
+		return x.xxx_hidden_Execution
 	}
 	return nil
 }
 
 func (x *DescribeMutableStateRequest) GetSkipForceReload() bool {
 	if x != nil {
-		return x.SkipForceReload
+		return x.xxx_hidden_SkipForceReload
 	}
 	return false
 }
 
 func (x *DescribeMutableStateRequest) GetArchetype() string {
 	if x != nil {
-		return x.Archetype
+		return x.xxx_hidden_Archetype
 	}
 	return ""
 }
 
+func (x *DescribeMutableStateRequest) SetNamespace(v string) {
+	x.xxx_hidden_Namespace = v
+}
+
+func (x *DescribeMutableStateRequest) SetExecution(v *v1.WorkflowExecution) {
+	x.xxx_hidden_Execution = v
+}
+
+func (x *DescribeMutableStateRequest) SetSkipForceReload(v bool) {
+	x.xxx_hidden_SkipForceReload = v
+}
+
+func (x *DescribeMutableStateRequest) SetArchetype(v string) {
+	x.xxx_hidden_Archetype = v
+}
+
+func (x *DescribeMutableStateRequest) HasExecution() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Execution != nil
+}
+
+func (x *DescribeMutableStateRequest) ClearExecution() {
+	x.xxx_hidden_Execution = nil
+}
+
+type DescribeMutableStateRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Namespace       string
+	Execution       *v1.WorkflowExecution
+	SkipForceReload bool
+	Archetype       string
+}
+
+func (b0 DescribeMutableStateRequest_builder) Build() *DescribeMutableStateRequest {
+	m0 := &DescribeMutableStateRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Namespace = b.Namespace
+	x.xxx_hidden_Execution = b.Execution
+	x.xxx_hidden_SkipForceReload = b.SkipForceReload
+	x.xxx_hidden_Archetype = b.Archetype
+	return m0
+}
+
 type DescribeMutableStateResponse struct {
-	state       protoimpl.MessageState `protogen:"open.v1"`
-	ShardId     string                 `protobuf:"bytes,1,opt,name=shard_id,json=shardId,proto3" json:"shard_id,omitempty"`
-	HistoryAddr string                 `protobuf:"bytes,2,opt,name=history_addr,json=historyAddr,proto3" json:"history_addr,omitempty"`
-	// CacheMutableState is only available when mutable state is in cache.
-	CacheMutableState *v12.WorkflowMutableState `protobuf:"bytes,3,opt,name=cache_mutable_state,json=cacheMutableState,proto3" json:"cache_mutable_state,omitempty"`
-	// DatabaseMutableState is always available,
-	// but only loaded from database when mutable state is NOT in cache or skip_force_reload is false.
-	DatabaseMutableState *v12.WorkflowMutableState `protobuf:"bytes,4,opt,name=database_mutable_state,json=databaseMutableState,proto3" json:"database_mutable_state,omitempty"`
-	unknownFields        protoimpl.UnknownFields
-	sizeCache            protoimpl.SizeCache
+	state                           protoimpl.MessageState    `protogen:"opaque.v1"`
+	xxx_hidden_ShardId              string                    `protobuf:"bytes,1,opt,name=shard_id,json=shardId,proto3"`
+	xxx_hidden_HistoryAddr          string                    `protobuf:"bytes,2,opt,name=history_addr,json=historyAddr,proto3"`
+	xxx_hidden_CacheMutableState    *v12.WorkflowMutableState `protobuf:"bytes,3,opt,name=cache_mutable_state,json=cacheMutableState,proto3"`
+	xxx_hidden_DatabaseMutableState *v12.WorkflowMutableState `protobuf:"bytes,4,opt,name=database_mutable_state,json=databaseMutableState,proto3"`
+	unknownFields                   protoimpl.UnknownFields
+	sizeCache                       protoimpl.SizeCache
 }
 
 func (x *DescribeMutableStateResponse) Reset() {
@@ -353,49 +509,104 @@ func (x *DescribeMutableStateResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DescribeMutableStateResponse.ProtoReflect.Descriptor instead.
-func (*DescribeMutableStateResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{5}
-}
-
 func (x *DescribeMutableStateResponse) GetShardId() string {
 	if x != nil {
-		return x.ShardId
+		return x.xxx_hidden_ShardId
 	}
 	return ""
 }
 
 func (x *DescribeMutableStateResponse) GetHistoryAddr() string {
 	if x != nil {
-		return x.HistoryAddr
+		return x.xxx_hidden_HistoryAddr
 	}
 	return ""
 }
 
 func (x *DescribeMutableStateResponse) GetCacheMutableState() *v12.WorkflowMutableState {
 	if x != nil {
-		return x.CacheMutableState
+		return x.xxx_hidden_CacheMutableState
 	}
 	return nil
 }
 
 func (x *DescribeMutableStateResponse) GetDatabaseMutableState() *v12.WorkflowMutableState {
 	if x != nil {
-		return x.DatabaseMutableState
+		return x.xxx_hidden_DatabaseMutableState
 	}
 	return nil
 }
 
+func (x *DescribeMutableStateResponse) SetShardId(v string) {
+	x.xxx_hidden_ShardId = v
+}
+
+func (x *DescribeMutableStateResponse) SetHistoryAddr(v string) {
+	x.xxx_hidden_HistoryAddr = v
+}
+
+func (x *DescribeMutableStateResponse) SetCacheMutableState(v *v12.WorkflowMutableState) {
+	x.xxx_hidden_CacheMutableState = v
+}
+
+func (x *DescribeMutableStateResponse) SetDatabaseMutableState(v *v12.WorkflowMutableState) {
+	x.xxx_hidden_DatabaseMutableState = v
+}
+
+func (x *DescribeMutableStateResponse) HasCacheMutableState() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_CacheMutableState != nil
+}
+
+func (x *DescribeMutableStateResponse) HasDatabaseMutableState() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_DatabaseMutableState != nil
+}
+
+func (x *DescribeMutableStateResponse) ClearCacheMutableState() {
+	x.xxx_hidden_CacheMutableState = nil
+}
+
+func (x *DescribeMutableStateResponse) ClearDatabaseMutableState() {
+	x.xxx_hidden_DatabaseMutableState = nil
+}
+
+type DescribeMutableStateResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	ShardId     string
+	HistoryAddr string
+	// CacheMutableState is only available when mutable state is in cache.
+	CacheMutableState *v12.WorkflowMutableState
+	// DatabaseMutableState is always available,
+	// but only loaded from database when mutable state is NOT in cache or skip_force_reload is false.
+	DatabaseMutableState *v12.WorkflowMutableState
+}
+
+func (b0 DescribeMutableStateResponse_builder) Build() *DescribeMutableStateResponse {
+	m0 := &DescribeMutableStateResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_ShardId = b.ShardId
+	x.xxx_hidden_HistoryAddr = b.HistoryAddr
+	x.xxx_hidden_CacheMutableState = b.CacheMutableState
+	x.xxx_hidden_DatabaseMutableState = b.DatabaseMutableState
+	return m0
+}
+
 // At least one of the parameters needs to be provided.
 type DescribeHistoryHostRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	//ip:port
-	HostAddress       string                `protobuf:"bytes,1,opt,name=host_address,json=hostAddress,proto3" json:"host_address,omitempty"`
-	ShardId           int32                 `protobuf:"varint,2,opt,name=shard_id,json=shardId,proto3" json:"shard_id,omitempty"`
-	Namespace         string                `protobuf:"bytes,3,opt,name=namespace,proto3" json:"namespace,omitempty"`
-	WorkflowExecution *v1.WorkflowExecution `protobuf:"bytes,4,opt,name=workflow_execution,json=workflowExecution,proto3" json:"workflow_execution,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state                        protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_HostAddress       string                 `protobuf:"bytes,1,opt,name=host_address,json=hostAddress,proto3"`
+	xxx_hidden_ShardId           int32                  `protobuf:"varint,2,opt,name=shard_id,json=shardId,proto3"`
+	xxx_hidden_Namespace         string                 `protobuf:"bytes,3,opt,name=namespace,proto3"`
+	xxx_hidden_WorkflowExecution *v1.WorkflowExecution  `protobuf:"bytes,4,opt,name=workflow_execution,json=workflowExecution,proto3"`
+	unknownFields                protoimpl.UnknownFields
+	sizeCache                    protoimpl.SizeCache
 }
 
 func (x *DescribeHistoryHostRequest) Reset() {
@@ -423,47 +634,90 @@ func (x *DescribeHistoryHostRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DescribeHistoryHostRequest.ProtoReflect.Descriptor instead.
-func (*DescribeHistoryHostRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{6}
-}
-
 func (x *DescribeHistoryHostRequest) GetHostAddress() string {
 	if x != nil {
-		return x.HostAddress
+		return x.xxx_hidden_HostAddress
 	}
 	return ""
 }
 
 func (x *DescribeHistoryHostRequest) GetShardId() int32 {
 	if x != nil {
-		return x.ShardId
+		return x.xxx_hidden_ShardId
 	}
 	return 0
 }
 
 func (x *DescribeHistoryHostRequest) GetNamespace() string {
 	if x != nil {
-		return x.Namespace
+		return x.xxx_hidden_Namespace
 	}
 	return ""
 }
 
 func (x *DescribeHistoryHostRequest) GetWorkflowExecution() *v1.WorkflowExecution {
 	if x != nil {
-		return x.WorkflowExecution
+		return x.xxx_hidden_WorkflowExecution
 	}
 	return nil
 }
 
+func (x *DescribeHistoryHostRequest) SetHostAddress(v string) {
+	x.xxx_hidden_HostAddress = v
+}
+
+func (x *DescribeHistoryHostRequest) SetShardId(v int32) {
+	x.xxx_hidden_ShardId = v
+}
+
+func (x *DescribeHistoryHostRequest) SetNamespace(v string) {
+	x.xxx_hidden_Namespace = v
+}
+
+func (x *DescribeHistoryHostRequest) SetWorkflowExecution(v *v1.WorkflowExecution) {
+	x.xxx_hidden_WorkflowExecution = v
+}
+
+func (x *DescribeHistoryHostRequest) HasWorkflowExecution() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_WorkflowExecution != nil
+}
+
+func (x *DescribeHistoryHostRequest) ClearWorkflowExecution() {
+	x.xxx_hidden_WorkflowExecution = nil
+}
+
+type DescribeHistoryHostRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	//ip:port
+	HostAddress       string
+	ShardId           int32
+	Namespace         string
+	WorkflowExecution *v1.WorkflowExecution
+}
+
+func (b0 DescribeHistoryHostRequest_builder) Build() *DescribeHistoryHostRequest {
+	m0 := &DescribeHistoryHostRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_HostAddress = b.HostAddress
+	x.xxx_hidden_ShardId = b.ShardId
+	x.xxx_hidden_Namespace = b.Namespace
+	x.xxx_hidden_WorkflowExecution = b.WorkflowExecution
+	return m0
+}
+
 type DescribeHistoryHostResponse struct {
-	state          protoimpl.MessageState  `protogen:"open.v1"`
-	ShardsNumber   int32                   `protobuf:"varint,1,opt,name=shards_number,json=shardsNumber,proto3" json:"shards_number,omitempty"`
-	ShardIds       []int32                 `protobuf:"varint,2,rep,packed,name=shard_ids,json=shardIds,proto3" json:"shard_ids,omitempty"`
-	NamespaceCache *v13.NamespaceCacheInfo `protobuf:"bytes,3,opt,name=namespace_cache,json=namespaceCache,proto3" json:"namespace_cache,omitempty"`
-	Address        string                  `protobuf:"bytes,5,opt,name=address,proto3" json:"address,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state                     protoimpl.MessageState  `protogen:"opaque.v1"`
+	xxx_hidden_ShardsNumber   int32                   `protobuf:"varint,1,opt,name=shards_number,json=shardsNumber,proto3"`
+	xxx_hidden_ShardIds       []int32                 `protobuf:"varint,2,rep,packed,name=shard_ids,json=shardIds,proto3"`
+	xxx_hidden_NamespaceCache *v13.NamespaceCacheInfo `protobuf:"bytes,3,opt,name=namespace_cache,json=namespaceCache,proto3"`
+	xxx_hidden_Address        string                  `protobuf:"bytes,5,opt,name=address,proto3"`
+	unknownFields             protoimpl.UnknownFields
+	sizeCache                 protoimpl.SizeCache
 }
 
 func (x *DescribeHistoryHostResponse) Reset() {
@@ -491,44 +745,86 @@ func (x *DescribeHistoryHostResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DescribeHistoryHostResponse.ProtoReflect.Descriptor instead.
-func (*DescribeHistoryHostResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{7}
-}
-
 func (x *DescribeHistoryHostResponse) GetShardsNumber() int32 {
 	if x != nil {
-		return x.ShardsNumber
+		return x.xxx_hidden_ShardsNumber
 	}
 	return 0
 }
 
 func (x *DescribeHistoryHostResponse) GetShardIds() []int32 {
 	if x != nil {
-		return x.ShardIds
+		return x.xxx_hidden_ShardIds
 	}
 	return nil
 }
 
 func (x *DescribeHistoryHostResponse) GetNamespaceCache() *v13.NamespaceCacheInfo {
 	if x != nil {
-		return x.NamespaceCache
+		return x.xxx_hidden_NamespaceCache
 	}
 	return nil
 }
 
 func (x *DescribeHistoryHostResponse) GetAddress() string {
 	if x != nil {
-		return x.Address
+		return x.xxx_hidden_Address
 	}
 	return ""
 }
 
+func (x *DescribeHistoryHostResponse) SetShardsNumber(v int32) {
+	x.xxx_hidden_ShardsNumber = v
+}
+
+func (x *DescribeHistoryHostResponse) SetShardIds(v []int32) {
+	x.xxx_hidden_ShardIds = v
+}
+
+func (x *DescribeHistoryHostResponse) SetNamespaceCache(v *v13.NamespaceCacheInfo) {
+	x.xxx_hidden_NamespaceCache = v
+}
+
+func (x *DescribeHistoryHostResponse) SetAddress(v string) {
+	x.xxx_hidden_Address = v
+}
+
+func (x *DescribeHistoryHostResponse) HasNamespaceCache() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_NamespaceCache != nil
+}
+
+func (x *DescribeHistoryHostResponse) ClearNamespaceCache() {
+	x.xxx_hidden_NamespaceCache = nil
+}
+
+type DescribeHistoryHostResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	ShardsNumber   int32
+	ShardIds       []int32
+	NamespaceCache *v13.NamespaceCacheInfo
+	Address        string
+}
+
+func (b0 DescribeHistoryHostResponse_builder) Build() *DescribeHistoryHostResponse {
+	m0 := &DescribeHistoryHostResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_ShardsNumber = b.ShardsNumber
+	x.xxx_hidden_ShardIds = b.ShardIds
+	x.xxx_hidden_NamespaceCache = b.NamespaceCache
+	x.xxx_hidden_Address = b.Address
+	return m0
+}
+
 type CloseShardRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ShardId       int32                  `protobuf:"varint,1,opt,name=shard_id,json=shardId,proto3" json:"shard_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state              protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_ShardId int32                  `protobuf:"varint,1,opt,name=shard_id,json=shardId,proto3"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *CloseShardRequest) Reset() {
@@ -556,20 +852,33 @@ func (x *CloseShardRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CloseShardRequest.ProtoReflect.Descriptor instead.
-func (*CloseShardRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{8}
-}
-
 func (x *CloseShardRequest) GetShardId() int32 {
 	if x != nil {
-		return x.ShardId
+		return x.xxx_hidden_ShardId
 	}
 	return 0
 }
 
+func (x *CloseShardRequest) SetShardId(v int32) {
+	x.xxx_hidden_ShardId = v
+}
+
+type CloseShardRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	ShardId int32
+}
+
+func (b0 CloseShardRequest_builder) Build() *CloseShardRequest {
+	m0 := &CloseShardRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_ShardId = b.ShardId
+	return m0
+}
+
 type CloseShardResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -599,16 +908,23 @@ func (x *CloseShardResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CloseShardResponse.ProtoReflect.Descriptor instead.
-func (*CloseShardResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{9}
+type CloseShardResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+}
+
+func (b0 CloseShardResponse_builder) Build() *CloseShardResponse {
+	m0 := &CloseShardResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	return m0
 }
 
 type GetShardRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ShardId       int32                  `protobuf:"varint,1,opt,name=shard_id,json=shardId,proto3" json:"shard_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state              protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_ShardId int32                  `protobuf:"varint,1,opt,name=shard_id,json=shardId,proto3"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *GetShardRequest) Reset() {
@@ -636,23 +952,36 @@ func (x *GetShardRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetShardRequest.ProtoReflect.Descriptor instead.
-func (*GetShardRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{10}
-}
-
 func (x *GetShardRequest) GetShardId() int32 {
 	if x != nil {
-		return x.ShardId
+		return x.xxx_hidden_ShardId
 	}
 	return 0
 }
 
+func (x *GetShardRequest) SetShardId(v int32) {
+	x.xxx_hidden_ShardId = v
+}
+
+type GetShardRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	ShardId int32
+}
+
+func (b0 GetShardRequest_builder) Build() *GetShardRequest {
+	m0 := &GetShardRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_ShardId = b.ShardId
+	return m0
+}
+
 type GetShardResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ShardInfo     *v12.ShardInfo         `protobuf:"bytes,1,opt,name=shard_info,json=shardInfo,proto3" json:"shard_info,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_ShardInfo *v12.ShardInfo         `protobuf:"bytes,1,opt,name=shard_info,json=shardInfo,proto3"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *GetShardResponse) Reset() {
@@ -680,28 +1009,51 @@ func (x *GetShardResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetShardResponse.ProtoReflect.Descriptor instead.
-func (*GetShardResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{11}
-}
-
 func (x *GetShardResponse) GetShardInfo() *v12.ShardInfo {
 	if x != nil {
-		return x.ShardInfo
+		return x.xxx_hidden_ShardInfo
 	}
 	return nil
 }
 
+func (x *GetShardResponse) SetShardInfo(v *v12.ShardInfo) {
+	x.xxx_hidden_ShardInfo = v
+}
+
+func (x *GetShardResponse) HasShardInfo() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_ShardInfo != nil
+}
+
+func (x *GetShardResponse) ClearShardInfo() {
+	x.xxx_hidden_ShardInfo = nil
+}
+
+type GetShardResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	ShardInfo *v12.ShardInfo
+}
+
+func (b0 GetShardResponse_builder) Build() *GetShardResponse {
+	m0 := &GetShardResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_ShardInfo = b.ShardInfo
+	return m0
+}
+
 type ListHistoryTasksRequest struct {
-	state   protoimpl.MessageState `protogen:"open.v1"`
-	ShardId int32                  `protobuf:"varint,1,opt,name=shard_id,json=shardId,proto3" json:"shard_id,omitempty"`
-	// The task category. See tasks.TaskCategoryRegistry for more.
-	Category      int32          `protobuf:"varint,2,opt,name=category,proto3" json:"category,omitempty"`
-	TaskRange     *v11.TaskRange `protobuf:"bytes,3,opt,name=task_range,json=taskRange,proto3" json:"task_range,omitempty"`
-	BatchSize     int32          `protobuf:"varint,4,opt,name=batch_size,json=batchSize,proto3" json:"batch_size,omitempty"`
-	NextPageToken []byte         `protobuf:"bytes,5,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                    protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_ShardId       int32                  `protobuf:"varint,1,opt,name=shard_id,json=shardId,proto3"`
+	xxx_hidden_Category      int32                  `protobuf:"varint,2,opt,name=category,proto3"`
+	xxx_hidden_TaskRange     *v11.TaskRange         `protobuf:"bytes,3,opt,name=task_range,json=taskRange,proto3"`
+	xxx_hidden_BatchSize     int32                  `protobuf:"varint,4,opt,name=batch_size,json=batchSize,proto3"`
+	xxx_hidden_NextPageToken []byte                 `protobuf:"bytes,5,opt,name=next_page_token,json=nextPageToken,proto3"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *ListHistoryTasksRequest) Reset() {
@@ -729,52 +1081,104 @@ func (x *ListHistoryTasksRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListHistoryTasksRequest.ProtoReflect.Descriptor instead.
-func (*ListHistoryTasksRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{12}
-}
-
 func (x *ListHistoryTasksRequest) GetShardId() int32 {
 	if x != nil {
-		return x.ShardId
+		return x.xxx_hidden_ShardId
 	}
 	return 0
 }
 
 func (x *ListHistoryTasksRequest) GetCategory() int32 {
 	if x != nil {
-		return x.Category
+		return x.xxx_hidden_Category
 	}
 	return 0
 }
 
 func (x *ListHistoryTasksRequest) GetTaskRange() *v11.TaskRange {
 	if x != nil {
-		return x.TaskRange
+		return x.xxx_hidden_TaskRange
 	}
 	return nil
 }
 
 func (x *ListHistoryTasksRequest) GetBatchSize() int32 {
 	if x != nil {
-		return x.BatchSize
+		return x.xxx_hidden_BatchSize
 	}
 	return 0
 }
 
 func (x *ListHistoryTasksRequest) GetNextPageToken() []byte {
 	if x != nil {
-		return x.NextPageToken
+		return x.xxx_hidden_NextPageToken
 	}
 	return nil
 }
 
+func (x *ListHistoryTasksRequest) SetShardId(v int32) {
+	x.xxx_hidden_ShardId = v
+}
+
+func (x *ListHistoryTasksRequest) SetCategory(v int32) {
+	x.xxx_hidden_Category = v
+}
+
+func (x *ListHistoryTasksRequest) SetTaskRange(v *v11.TaskRange) {
+	x.xxx_hidden_TaskRange = v
+}
+
+func (x *ListHistoryTasksRequest) SetBatchSize(v int32) {
+	x.xxx_hidden_BatchSize = v
+}
+
+func (x *ListHistoryTasksRequest) SetNextPageToken(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_NextPageToken = v
+}
+
+func (x *ListHistoryTasksRequest) HasTaskRange() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_TaskRange != nil
+}
+
+func (x *ListHistoryTasksRequest) ClearTaskRange() {
+	x.xxx_hidden_TaskRange = nil
+}
+
+type ListHistoryTasksRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	ShardId int32
+	// The task category. See tasks.TaskCategoryRegistry for more.
+	Category      int32
+	TaskRange     *v11.TaskRange
+	BatchSize     int32
+	NextPageToken []byte
+}
+
+func (b0 ListHistoryTasksRequest_builder) Build() *ListHistoryTasksRequest {
+	m0 := &ListHistoryTasksRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_ShardId = b.ShardId
+	x.xxx_hidden_Category = b.Category
+	x.xxx_hidden_TaskRange = b.TaskRange
+	x.xxx_hidden_BatchSize = b.BatchSize
+	x.xxx_hidden_NextPageToken = b.NextPageToken
+	return m0
+}
+
 type ListHistoryTasksResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Tasks         []*Task                `protobuf:"bytes,1,rep,name=tasks,proto3" json:"tasks,omitempty"`
-	NextPageToken []byte                 `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                    protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Tasks         *[]*Task               `protobuf:"bytes,1,rep,name=tasks,proto3"`
+	xxx_hidden_NextPageToken []byte                 `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *ListHistoryTasksResponse) Reset() {
@@ -802,36 +1206,60 @@ func (x *ListHistoryTasksResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListHistoryTasksResponse.ProtoReflect.Descriptor instead.
-func (*ListHistoryTasksResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{13}
-}
-
 func (x *ListHistoryTasksResponse) GetTasks() []*Task {
 	if x != nil {
-		return x.Tasks
+		if x.xxx_hidden_Tasks != nil {
+			return *x.xxx_hidden_Tasks
+		}
 	}
 	return nil
 }
 
 func (x *ListHistoryTasksResponse) GetNextPageToken() []byte {
 	if x != nil {
-		return x.NextPageToken
+		return x.xxx_hidden_NextPageToken
 	}
 	return nil
 }
 
+func (x *ListHistoryTasksResponse) SetTasks(v []*Task) {
+	x.xxx_hidden_Tasks = &v
+}
+
+func (x *ListHistoryTasksResponse) SetNextPageToken(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_NextPageToken = v
+}
+
+type ListHistoryTasksResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Tasks         []*Task
+	NextPageToken []byte
+}
+
+func (b0 ListHistoryTasksResponse_builder) Build() *ListHistoryTasksResponse {
+	m0 := &ListHistoryTasksResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Tasks = &b.Tasks
+	x.xxx_hidden_NextPageToken = b.NextPageToken
+	return m0
+}
+
 type Task struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	NamespaceId   string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	WorkflowId    string                 `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
-	RunId         string                 `protobuf:"bytes,3,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	TaskId        int64                  `protobuf:"varint,4,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
-	TaskType      v14.TaskType           `protobuf:"varint,5,opt,name=task_type,json=taskType,proto3,enum=temporal.server.api.enums.v1.TaskType" json:"task_type,omitempty"`
-	FireTime      *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=fire_time,json=fireTime,proto3" json:"fire_time,omitempty"`
-	Version       int64                  `protobuf:"varint,7,opt,name=version,proto3" json:"version,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                  protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_WorkflowId  string                 `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3"`
+	xxx_hidden_RunId       string                 `protobuf:"bytes,3,opt,name=run_id,json=runId,proto3"`
+	xxx_hidden_TaskId      int64                  `protobuf:"varint,4,opt,name=task_id,json=taskId,proto3"`
+	xxx_hidden_TaskType    v14.TaskType           `protobuf:"varint,5,opt,name=task_type,json=taskType,proto3,enum=temporal.server.api.enums.v1.TaskType"`
+	xxx_hidden_FireTime    *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=fire_time,json=fireTime,proto3"`
+	xxx_hidden_Version     int64                  `protobuf:"varint,7,opt,name=version,proto3"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *Task) Reset() {
@@ -859,69 +1287,128 @@ func (x *Task) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use Task.ProtoReflect.Descriptor instead.
-func (*Task) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{14}
-}
-
 func (x *Task) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *Task) GetWorkflowId() string {
 	if x != nil {
-		return x.WorkflowId
+		return x.xxx_hidden_WorkflowId
 	}
 	return ""
 }
 
 func (x *Task) GetRunId() string {
 	if x != nil {
-		return x.RunId
+		return x.xxx_hidden_RunId
 	}
 	return ""
 }
 
 func (x *Task) GetTaskId() int64 {
 	if x != nil {
-		return x.TaskId
+		return x.xxx_hidden_TaskId
 	}
 	return 0
 }
 
 func (x *Task) GetTaskType() v14.TaskType {
 	if x != nil {
-		return x.TaskType
+		return x.xxx_hidden_TaskType
 	}
 	return v14.TaskType(0)
 }
 
 func (x *Task) GetFireTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.FireTime
+		return x.xxx_hidden_FireTime
 	}
 	return nil
 }
 
 func (x *Task) GetVersion() int64 {
 	if x != nil {
-		return x.Version
+		return x.xxx_hidden_Version
 	}
 	return 0
 }
 
+func (x *Task) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *Task) SetWorkflowId(v string) {
+	x.xxx_hidden_WorkflowId = v
+}
+
+func (x *Task) SetRunId(v string) {
+	x.xxx_hidden_RunId = v
+}
+
+func (x *Task) SetTaskId(v int64) {
+	x.xxx_hidden_TaskId = v
+}
+
+func (x *Task) SetTaskType(v v14.TaskType) {
+	x.xxx_hidden_TaskType = v
+}
+
+func (x *Task) SetFireTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_FireTime = v
+}
+
+func (x *Task) SetVersion(v int64) {
+	x.xxx_hidden_Version = v
+}
+
+func (x *Task) HasFireTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_FireTime != nil
+}
+
+func (x *Task) ClearFireTime() {
+	x.xxx_hidden_FireTime = nil
+}
+
+type Task_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId string
+	WorkflowId  string
+	RunId       string
+	TaskId      int64
+	TaskType    v14.TaskType
+	FireTime    *timestamppb.Timestamp
+	Version     int64
+}
+
+func (b0 Task_builder) Build() *Task {
+	m0 := &Task{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_WorkflowId = b.WorkflowId
+	x.xxx_hidden_RunId = b.RunId
+	x.xxx_hidden_TaskId = b.TaskId
+	x.xxx_hidden_TaskType = b.TaskType
+	x.xxx_hidden_FireTime = b.FireTime
+	x.xxx_hidden_Version = b.Version
+	return m0
+}
+
 type RemoveTaskRequest struct {
-	state   protoimpl.MessageState `protogen:"open.v1"`
-	ShardId int32                  `protobuf:"varint,1,opt,name=shard_id,json=shardId,proto3" json:"shard_id,omitempty"`
-	// The task category. See tasks.TaskCategoryRegistry for more.
-	Category       int32                  `protobuf:"varint,2,opt,name=category,proto3" json:"category,omitempty"`
-	TaskId         int64                  `protobuf:"varint,3,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
-	VisibilityTime *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=visibility_time,json=visibilityTime,proto3" json:"visibility_time,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state                     protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_ShardId        int32                  `protobuf:"varint,1,opt,name=shard_id,json=shardId,proto3"`
+	xxx_hidden_Category       int32                  `protobuf:"varint,2,opt,name=category,proto3"`
+	xxx_hidden_TaskId         int64                  `protobuf:"varint,3,opt,name=task_id,json=taskId,proto3"`
+	xxx_hidden_VisibilityTime *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=visibility_time,json=visibilityTime,proto3"`
+	unknownFields             protoimpl.UnknownFields
+	sizeCache                 protoimpl.SizeCache
 }
 
 func (x *RemoveTaskRequest) Reset() {
@@ -949,41 +1436,84 @@ func (x *RemoveTaskRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RemoveTaskRequest.ProtoReflect.Descriptor instead.
-func (*RemoveTaskRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{15}
-}
-
 func (x *RemoveTaskRequest) GetShardId() int32 {
 	if x != nil {
-		return x.ShardId
+		return x.xxx_hidden_ShardId
 	}
 	return 0
 }
 
 func (x *RemoveTaskRequest) GetCategory() int32 {
 	if x != nil {
-		return x.Category
+		return x.xxx_hidden_Category
 	}
 	return 0
 }
 
 func (x *RemoveTaskRequest) GetTaskId() int64 {
 	if x != nil {
-		return x.TaskId
+		return x.xxx_hidden_TaskId
 	}
 	return 0
 }
 
 func (x *RemoveTaskRequest) GetVisibilityTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.VisibilityTime
+		return x.xxx_hidden_VisibilityTime
 	}
 	return nil
 }
 
+func (x *RemoveTaskRequest) SetShardId(v int32) {
+	x.xxx_hidden_ShardId = v
+}
+
+func (x *RemoveTaskRequest) SetCategory(v int32) {
+	x.xxx_hidden_Category = v
+}
+
+func (x *RemoveTaskRequest) SetTaskId(v int64) {
+	x.xxx_hidden_TaskId = v
+}
+
+func (x *RemoveTaskRequest) SetVisibilityTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_VisibilityTime = v
+}
+
+func (x *RemoveTaskRequest) HasVisibilityTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_VisibilityTime != nil
+}
+
+func (x *RemoveTaskRequest) ClearVisibilityTime() {
+	x.xxx_hidden_VisibilityTime = nil
+}
+
+type RemoveTaskRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	ShardId int32
+	// The task category. See tasks.TaskCategoryRegistry for more.
+	Category       int32
+	TaskId         int64
+	VisibilityTime *timestamppb.Timestamp
+}
+
+func (b0 RemoveTaskRequest_builder) Build() *RemoveTaskRequest {
+	m0 := &RemoveTaskRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_ShardId = b.ShardId
+	x.xxx_hidden_Category = b.Category
+	x.xxx_hidden_TaskId = b.TaskId
+	x.xxx_hidden_VisibilityTime = b.VisibilityTime
+	return m0
+}
+
 type RemoveTaskResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1013,26 +1543,33 @@ func (x *RemoveTaskResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RemoveTaskResponse.ProtoReflect.Descriptor instead.
-func (*RemoveTaskResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{16}
+type RemoveTaskResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+}
+
+func (b0 RemoveTaskResponse_builder) Build() *RemoveTaskResponse {
+	m0 := &RemoveTaskResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	return m0
 }
 
 // *
 // StartEventId defines the beginning of the event to fetch. The first event is exclusive.
 // EndEventId and EndEventVersion defines the end of the event to fetch. The end event is exclusive.
 type GetWorkflowExecutionRawHistoryV2Request struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	NamespaceId       string                 `protobuf:"bytes,9,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	Execution         *v1.WorkflowExecution  `protobuf:"bytes,2,opt,name=execution,proto3" json:"execution,omitempty"`
-	StartEventId      int64                  `protobuf:"varint,3,opt,name=start_event_id,json=startEventId,proto3" json:"start_event_id,omitempty"`
-	StartEventVersion int64                  `protobuf:"varint,4,opt,name=start_event_version,json=startEventVersion,proto3" json:"start_event_version,omitempty"`
-	EndEventId        int64                  `protobuf:"varint,5,opt,name=end_event_id,json=endEventId,proto3" json:"end_event_id,omitempty"`
-	EndEventVersion   int64                  `protobuf:"varint,6,opt,name=end_event_version,json=endEventVersion,proto3" json:"end_event_version,omitempty"`
-	MaximumPageSize   int32                  `protobuf:"varint,7,opt,name=maximum_page_size,json=maximumPageSize,proto3" json:"maximum_page_size,omitempty"`
-	NextPageToken     []byte                 `protobuf:"bytes,8,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state                        protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId       string                 `protobuf:"bytes,9,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_Execution         *v1.WorkflowExecution  `protobuf:"bytes,2,opt,name=execution,proto3"`
+	xxx_hidden_StartEventId      int64                  `protobuf:"varint,3,opt,name=start_event_id,json=startEventId,proto3"`
+	xxx_hidden_StartEventVersion int64                  `protobuf:"varint,4,opt,name=start_event_version,json=startEventVersion,proto3"`
+	xxx_hidden_EndEventId        int64                  `protobuf:"varint,5,opt,name=end_event_id,json=endEventId,proto3"`
+	xxx_hidden_EndEventVersion   int64                  `protobuf:"varint,6,opt,name=end_event_version,json=endEventVersion,proto3"`
+	xxx_hidden_MaximumPageSize   int32                  `protobuf:"varint,7,opt,name=maximum_page_size,json=maximumPageSize,proto3"`
+	xxx_hidden_NextPageToken     []byte                 `protobuf:"bytes,8,opt,name=next_page_token,json=nextPageToken,proto3"`
+	unknownFields                protoimpl.UnknownFields
+	sizeCache                    protoimpl.SizeCache
 }
 
 func (x *GetWorkflowExecutionRawHistoryV2Request) Reset() {
@@ -1060,75 +1597,144 @@ func (x *GetWorkflowExecutionRawHistoryV2Request) ProtoReflect() protoreflect.Me
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetWorkflowExecutionRawHistoryV2Request.ProtoReflect.Descriptor instead.
-func (*GetWorkflowExecutionRawHistoryV2Request) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{17}
-}
-
 func (x *GetWorkflowExecutionRawHistoryV2Request) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *GetWorkflowExecutionRawHistoryV2Request) GetExecution() *v1.WorkflowExecution {
 	if x != nil {
-		return x.Execution
+		return x.xxx_hidden_Execution
 	}
 	return nil
 }
 
 func (x *GetWorkflowExecutionRawHistoryV2Request) GetStartEventId() int64 {
 	if x != nil {
-		return x.StartEventId
+		return x.xxx_hidden_StartEventId
 	}
 	return 0
 }
 
 func (x *GetWorkflowExecutionRawHistoryV2Request) GetStartEventVersion() int64 {
 	if x != nil {
-		return x.StartEventVersion
+		return x.xxx_hidden_StartEventVersion
 	}
 	return 0
 }
 
 func (x *GetWorkflowExecutionRawHistoryV2Request) GetEndEventId() int64 {
 	if x != nil {
-		return x.EndEventId
+		return x.xxx_hidden_EndEventId
 	}
 	return 0
 }
 
 func (x *GetWorkflowExecutionRawHistoryV2Request) GetEndEventVersion() int64 {
 	if x != nil {
-		return x.EndEventVersion
+		return x.xxx_hidden_EndEventVersion
 	}
 	return 0
 }
 
 func (x *GetWorkflowExecutionRawHistoryV2Request) GetMaximumPageSize() int32 {
 	if x != nil {
-		return x.MaximumPageSize
+		return x.xxx_hidden_MaximumPageSize
 	}
 	return 0
 }
 
 func (x *GetWorkflowExecutionRawHistoryV2Request) GetNextPageToken() []byte {
 	if x != nil {
-		return x.NextPageToken
+		return x.xxx_hidden_NextPageToken
 	}
 	return nil
 }
 
+func (x *GetWorkflowExecutionRawHistoryV2Request) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *GetWorkflowExecutionRawHistoryV2Request) SetExecution(v *v1.WorkflowExecution) {
+	x.xxx_hidden_Execution = v
+}
+
+func (x *GetWorkflowExecutionRawHistoryV2Request) SetStartEventId(v int64) {
+	x.xxx_hidden_StartEventId = v
+}
+
+func (x *GetWorkflowExecutionRawHistoryV2Request) SetStartEventVersion(v int64) {
+	x.xxx_hidden_StartEventVersion = v
+}
+
+func (x *GetWorkflowExecutionRawHistoryV2Request) SetEndEventId(v int64) {
+	x.xxx_hidden_EndEventId = v
+}
+
+func (x *GetWorkflowExecutionRawHistoryV2Request) SetEndEventVersion(v int64) {
+	x.xxx_hidden_EndEventVersion = v
+}
+
+func (x *GetWorkflowExecutionRawHistoryV2Request) SetMaximumPageSize(v int32) {
+	x.xxx_hidden_MaximumPageSize = v
+}
+
+func (x *GetWorkflowExecutionRawHistoryV2Request) SetNextPageToken(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_NextPageToken = v
+}
+
+func (x *GetWorkflowExecutionRawHistoryV2Request) HasExecution() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Execution != nil
+}
+
+func (x *GetWorkflowExecutionRawHistoryV2Request) ClearExecution() {
+	x.xxx_hidden_Execution = nil
+}
+
+type GetWorkflowExecutionRawHistoryV2Request_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId       string
+	Execution         *v1.WorkflowExecution
+	StartEventId      int64
+	StartEventVersion int64
+	EndEventId        int64
+	EndEventVersion   int64
+	MaximumPageSize   int32
+	NextPageToken     []byte
+}
+
+func (b0 GetWorkflowExecutionRawHistoryV2Request_builder) Build() *GetWorkflowExecutionRawHistoryV2Request {
+	m0 := &GetWorkflowExecutionRawHistoryV2Request{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_Execution = b.Execution
+	x.xxx_hidden_StartEventId = b.StartEventId
+	x.xxx_hidden_StartEventVersion = b.StartEventVersion
+	x.xxx_hidden_EndEventId = b.EndEventId
+	x.xxx_hidden_EndEventVersion = b.EndEventVersion
+	x.xxx_hidden_MaximumPageSize = b.MaximumPageSize
+	x.xxx_hidden_NextPageToken = b.NextPageToken
+	return m0
+}
+
 type GetWorkflowExecutionRawHistoryV2Response struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	NextPageToken  []byte                 `protobuf:"bytes,1,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
-	HistoryBatches []*v1.DataBlob         `protobuf:"bytes,2,rep,name=history_batches,json=historyBatches,proto3" json:"history_batches,omitempty"`
-	VersionHistory *v11.VersionHistory    `protobuf:"bytes,3,opt,name=version_history,json=versionHistory,proto3" json:"version_history,omitempty"`
-	HistoryNodeIds []int64                `protobuf:"varint,4,rep,packed,name=history_node_ids,json=historyNodeIds,proto3" json:"history_node_ids,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state                     protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_NextPageToken  []byte                 `protobuf:"bytes,1,opt,name=next_page_token,json=nextPageToken,proto3"`
+	xxx_hidden_HistoryBatches *[]*v1.DataBlob        `protobuf:"bytes,2,rep,name=history_batches,json=historyBatches,proto3"`
+	xxx_hidden_VersionHistory *v11.VersionHistory    `protobuf:"bytes,3,opt,name=version_history,json=versionHistory,proto3"`
+	xxx_hidden_HistoryNodeIds []int64                `protobuf:"varint,4,rep,packed,name=history_node_ids,json=historyNodeIds,proto3"`
+	unknownFields             protoimpl.UnknownFields
+	sizeCache                 protoimpl.SizeCache
 }
 
 func (x *GetWorkflowExecutionRawHistoryV2Response) Reset() {
@@ -1156,51 +1762,98 @@ func (x *GetWorkflowExecutionRawHistoryV2Response) ProtoReflect() protoreflect.M
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetWorkflowExecutionRawHistoryV2Response.ProtoReflect.Descriptor instead.
-func (*GetWorkflowExecutionRawHistoryV2Response) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{18}
-}
-
 func (x *GetWorkflowExecutionRawHistoryV2Response) GetNextPageToken() []byte {
 	if x != nil {
-		return x.NextPageToken
+		return x.xxx_hidden_NextPageToken
 	}
 	return nil
 }
 
 func (x *GetWorkflowExecutionRawHistoryV2Response) GetHistoryBatches() []*v1.DataBlob {
 	if x != nil {
-		return x.HistoryBatches
+		if x.xxx_hidden_HistoryBatches != nil {
+			return *x.xxx_hidden_HistoryBatches
+		}
 	}
 	return nil
 }
 
 func (x *GetWorkflowExecutionRawHistoryV2Response) GetVersionHistory() *v11.VersionHistory {
 	if x != nil {
-		return x.VersionHistory
+		return x.xxx_hidden_VersionHistory
 	}
 	return nil
 }
 
 func (x *GetWorkflowExecutionRawHistoryV2Response) GetHistoryNodeIds() []int64 {
 	if x != nil {
-		return x.HistoryNodeIds
+		return x.xxx_hidden_HistoryNodeIds
 	}
 	return nil
 }
 
+func (x *GetWorkflowExecutionRawHistoryV2Response) SetNextPageToken(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_NextPageToken = v
+}
+
+func (x *GetWorkflowExecutionRawHistoryV2Response) SetHistoryBatches(v []*v1.DataBlob) {
+	x.xxx_hidden_HistoryBatches = &v
+}
+
+func (x *GetWorkflowExecutionRawHistoryV2Response) SetVersionHistory(v *v11.VersionHistory) {
+	x.xxx_hidden_VersionHistory = v
+}
+
+func (x *GetWorkflowExecutionRawHistoryV2Response) SetHistoryNodeIds(v []int64) {
+	x.xxx_hidden_HistoryNodeIds = v
+}
+
+func (x *GetWorkflowExecutionRawHistoryV2Response) HasVersionHistory() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_VersionHistory != nil
+}
+
+func (x *GetWorkflowExecutionRawHistoryV2Response) ClearVersionHistory() {
+	x.xxx_hidden_VersionHistory = nil
+}
+
+type GetWorkflowExecutionRawHistoryV2Response_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NextPageToken  []byte
+	HistoryBatches []*v1.DataBlob
+	VersionHistory *v11.VersionHistory
+	HistoryNodeIds []int64
+}
+
+func (b0 GetWorkflowExecutionRawHistoryV2Response_builder) Build() *GetWorkflowExecutionRawHistoryV2Response {
+	m0 := &GetWorkflowExecutionRawHistoryV2Response{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NextPageToken = b.NextPageToken
+	x.xxx_hidden_HistoryBatches = &b.HistoryBatches
+	x.xxx_hidden_VersionHistory = b.VersionHistory
+	x.xxx_hidden_HistoryNodeIds = b.HistoryNodeIds
+	return m0
+}
+
 type GetWorkflowExecutionRawHistoryRequest struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	NamespaceId       string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	Execution         *v1.WorkflowExecution  `protobuf:"bytes,2,opt,name=execution,proto3" json:"execution,omitempty"`
-	StartEventId      int64                  `protobuf:"varint,3,opt,name=start_event_id,json=startEventId,proto3" json:"start_event_id,omitempty"`
-	StartEventVersion int64                  `protobuf:"varint,4,opt,name=start_event_version,json=startEventVersion,proto3" json:"start_event_version,omitempty"`
-	EndEventId        int64                  `protobuf:"varint,5,opt,name=end_event_id,json=endEventId,proto3" json:"end_event_id,omitempty"`
-	EndEventVersion   int64                  `protobuf:"varint,6,opt,name=end_event_version,json=endEventVersion,proto3" json:"end_event_version,omitempty"`
-	MaximumPageSize   int32                  `protobuf:"varint,7,opt,name=maximum_page_size,json=maximumPageSize,proto3" json:"maximum_page_size,omitempty"`
-	NextPageToken     []byte                 `protobuf:"bytes,8,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state                        protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId       string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_Execution         *v1.WorkflowExecution  `protobuf:"bytes,2,opt,name=execution,proto3"`
+	xxx_hidden_StartEventId      int64                  `protobuf:"varint,3,opt,name=start_event_id,json=startEventId,proto3"`
+	xxx_hidden_StartEventVersion int64                  `protobuf:"varint,4,opt,name=start_event_version,json=startEventVersion,proto3"`
+	xxx_hidden_EndEventId        int64                  `protobuf:"varint,5,opt,name=end_event_id,json=endEventId,proto3"`
+	xxx_hidden_EndEventVersion   int64                  `protobuf:"varint,6,opt,name=end_event_version,json=endEventVersion,proto3"`
+	xxx_hidden_MaximumPageSize   int32                  `protobuf:"varint,7,opt,name=maximum_page_size,json=maximumPageSize,proto3"`
+	xxx_hidden_NextPageToken     []byte                 `protobuf:"bytes,8,opt,name=next_page_token,json=nextPageToken,proto3"`
+	unknownFields                protoimpl.UnknownFields
+	sizeCache                    protoimpl.SizeCache
 }
 
 func (x *GetWorkflowExecutionRawHistoryRequest) Reset() {
@@ -1228,75 +1881,144 @@ func (x *GetWorkflowExecutionRawHistoryRequest) ProtoReflect() protoreflect.Mess
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetWorkflowExecutionRawHistoryRequest.ProtoReflect.Descriptor instead.
-func (*GetWorkflowExecutionRawHistoryRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{19}
-}
-
 func (x *GetWorkflowExecutionRawHistoryRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *GetWorkflowExecutionRawHistoryRequest) GetExecution() *v1.WorkflowExecution {
 	if x != nil {
-		return x.Execution
+		return x.xxx_hidden_Execution
 	}
 	return nil
 }
 
 func (x *GetWorkflowExecutionRawHistoryRequest) GetStartEventId() int64 {
 	if x != nil {
-		return x.StartEventId
+		return x.xxx_hidden_StartEventId
 	}
 	return 0
 }
 
 func (x *GetWorkflowExecutionRawHistoryRequest) GetStartEventVersion() int64 {
 	if x != nil {
-		return x.StartEventVersion
+		return x.xxx_hidden_StartEventVersion
 	}
 	return 0
 }
 
 func (x *GetWorkflowExecutionRawHistoryRequest) GetEndEventId() int64 {
 	if x != nil {
-		return x.EndEventId
+		return x.xxx_hidden_EndEventId
 	}
 	return 0
 }
 
 func (x *GetWorkflowExecutionRawHistoryRequest) GetEndEventVersion() int64 {
 	if x != nil {
-		return x.EndEventVersion
+		return x.xxx_hidden_EndEventVersion
 	}
 	return 0
 }
 
 func (x *GetWorkflowExecutionRawHistoryRequest) GetMaximumPageSize() int32 {
 	if x != nil {
-		return x.MaximumPageSize
+		return x.xxx_hidden_MaximumPageSize
 	}
 	return 0
 }
 
 func (x *GetWorkflowExecutionRawHistoryRequest) GetNextPageToken() []byte {
 	if x != nil {
-		return x.NextPageToken
+		return x.xxx_hidden_NextPageToken
 	}
 	return nil
 }
 
+func (x *GetWorkflowExecutionRawHistoryRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *GetWorkflowExecutionRawHistoryRequest) SetExecution(v *v1.WorkflowExecution) {
+	x.xxx_hidden_Execution = v
+}
+
+func (x *GetWorkflowExecutionRawHistoryRequest) SetStartEventId(v int64) {
+	x.xxx_hidden_StartEventId = v
+}
+
+func (x *GetWorkflowExecutionRawHistoryRequest) SetStartEventVersion(v int64) {
+	x.xxx_hidden_StartEventVersion = v
+}
+
+func (x *GetWorkflowExecutionRawHistoryRequest) SetEndEventId(v int64) {
+	x.xxx_hidden_EndEventId = v
+}
+
+func (x *GetWorkflowExecutionRawHistoryRequest) SetEndEventVersion(v int64) {
+	x.xxx_hidden_EndEventVersion = v
+}
+
+func (x *GetWorkflowExecutionRawHistoryRequest) SetMaximumPageSize(v int32) {
+	x.xxx_hidden_MaximumPageSize = v
+}
+
+func (x *GetWorkflowExecutionRawHistoryRequest) SetNextPageToken(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_NextPageToken = v
+}
+
+func (x *GetWorkflowExecutionRawHistoryRequest) HasExecution() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Execution != nil
+}
+
+func (x *GetWorkflowExecutionRawHistoryRequest) ClearExecution() {
+	x.xxx_hidden_Execution = nil
+}
+
+type GetWorkflowExecutionRawHistoryRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId       string
+	Execution         *v1.WorkflowExecution
+	StartEventId      int64
+	StartEventVersion int64
+	EndEventId        int64
+	EndEventVersion   int64
+	MaximumPageSize   int32
+	NextPageToken     []byte
+}
+
+func (b0 GetWorkflowExecutionRawHistoryRequest_builder) Build() *GetWorkflowExecutionRawHistoryRequest {
+	m0 := &GetWorkflowExecutionRawHistoryRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_Execution = b.Execution
+	x.xxx_hidden_StartEventId = b.StartEventId
+	x.xxx_hidden_StartEventVersion = b.StartEventVersion
+	x.xxx_hidden_EndEventId = b.EndEventId
+	x.xxx_hidden_EndEventVersion = b.EndEventVersion
+	x.xxx_hidden_MaximumPageSize = b.MaximumPageSize
+	x.xxx_hidden_NextPageToken = b.NextPageToken
+	return m0
+}
+
 type GetWorkflowExecutionRawHistoryResponse struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	NextPageToken  []byte                 `protobuf:"bytes,1,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
-	HistoryBatches []*v1.DataBlob         `protobuf:"bytes,2,rep,name=history_batches,json=historyBatches,proto3" json:"history_batches,omitempty"`
-	VersionHistory *v11.VersionHistory    `protobuf:"bytes,3,opt,name=version_history,json=versionHistory,proto3" json:"version_history,omitempty"`
-	HistoryNodeIds []int64                `protobuf:"varint,4,rep,packed,name=history_node_ids,json=historyNodeIds,proto3" json:"history_node_ids,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state                     protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_NextPageToken  []byte                 `protobuf:"bytes,1,opt,name=next_page_token,json=nextPageToken,proto3"`
+	xxx_hidden_HistoryBatches *[]*v1.DataBlob        `protobuf:"bytes,2,rep,name=history_batches,json=historyBatches,proto3"`
+	xxx_hidden_VersionHistory *v11.VersionHistory    `protobuf:"bytes,3,opt,name=version_history,json=versionHistory,proto3"`
+	xxx_hidden_HistoryNodeIds []int64                `protobuf:"varint,4,rep,packed,name=history_node_ids,json=historyNodeIds,proto3"`
+	unknownFields             protoimpl.UnknownFields
+	sizeCache                 protoimpl.SizeCache
 }
 
 func (x *GetWorkflowExecutionRawHistoryResponse) Reset() {
@@ -1324,45 +2046,92 @@ func (x *GetWorkflowExecutionRawHistoryResponse) ProtoReflect() protoreflect.Mes
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetWorkflowExecutionRawHistoryResponse.ProtoReflect.Descriptor instead.
-func (*GetWorkflowExecutionRawHistoryResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{20}
-}
-
 func (x *GetWorkflowExecutionRawHistoryResponse) GetNextPageToken() []byte {
 	if x != nil {
-		return x.NextPageToken
+		return x.xxx_hidden_NextPageToken
 	}
 	return nil
 }
 
 func (x *GetWorkflowExecutionRawHistoryResponse) GetHistoryBatches() []*v1.DataBlob {
 	if x != nil {
-		return x.HistoryBatches
+		if x.xxx_hidden_HistoryBatches != nil {
+			return *x.xxx_hidden_HistoryBatches
+		}
 	}
 	return nil
 }
 
 func (x *GetWorkflowExecutionRawHistoryResponse) GetVersionHistory() *v11.VersionHistory {
 	if x != nil {
-		return x.VersionHistory
+		return x.xxx_hidden_VersionHistory
 	}
 	return nil
 }
 
 func (x *GetWorkflowExecutionRawHistoryResponse) GetHistoryNodeIds() []int64 {
 	if x != nil {
-		return x.HistoryNodeIds
+		return x.xxx_hidden_HistoryNodeIds
 	}
 	return nil
 }
 
+func (x *GetWorkflowExecutionRawHistoryResponse) SetNextPageToken(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_NextPageToken = v
+}
+
+func (x *GetWorkflowExecutionRawHistoryResponse) SetHistoryBatches(v []*v1.DataBlob) {
+	x.xxx_hidden_HistoryBatches = &v
+}
+
+func (x *GetWorkflowExecutionRawHistoryResponse) SetVersionHistory(v *v11.VersionHistory) {
+	x.xxx_hidden_VersionHistory = v
+}
+
+func (x *GetWorkflowExecutionRawHistoryResponse) SetHistoryNodeIds(v []int64) {
+	x.xxx_hidden_HistoryNodeIds = v
+}
+
+func (x *GetWorkflowExecutionRawHistoryResponse) HasVersionHistory() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_VersionHistory != nil
+}
+
+func (x *GetWorkflowExecutionRawHistoryResponse) ClearVersionHistory() {
+	x.xxx_hidden_VersionHistory = nil
+}
+
+type GetWorkflowExecutionRawHistoryResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NextPageToken  []byte
+	HistoryBatches []*v1.DataBlob
+	VersionHistory *v11.VersionHistory
+	HistoryNodeIds []int64
+}
+
+func (b0 GetWorkflowExecutionRawHistoryResponse_builder) Build() *GetWorkflowExecutionRawHistoryResponse {
+	m0 := &GetWorkflowExecutionRawHistoryResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NextPageToken = b.NextPageToken
+	x.xxx_hidden_HistoryBatches = &b.HistoryBatches
+	x.xxx_hidden_VersionHistory = b.VersionHistory
+	x.xxx_hidden_HistoryNodeIds = b.HistoryNodeIds
+	return m0
+}
+
 type GetReplicationMessagesRequest struct {
-	state         protoimpl.MessageState  `protogen:"open.v1"`
-	Tokens        []*v15.ReplicationToken `protobuf:"bytes,1,rep,name=tokens,proto3" json:"tokens,omitempty"`
-	ClusterName   string                  `protobuf:"bytes,2,opt,name=cluster_name,json=clusterName,proto3" json:"cluster_name,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                  protoimpl.MessageState   `protogen:"opaque.v1"`
+	xxx_hidden_Tokens      *[]*v15.ReplicationToken `protobuf:"bytes,1,rep,name=tokens,proto3"`
+	xxx_hidden_ClusterName string                   `protobuf:"bytes,2,opt,name=cluster_name,json=clusterName,proto3"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *GetReplicationMessagesRequest) Reset() {
@@ -1390,30 +2159,51 @@ func (x *GetReplicationMessagesRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetReplicationMessagesRequest.ProtoReflect.Descriptor instead.
-func (*GetReplicationMessagesRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{21}
-}
-
 func (x *GetReplicationMessagesRequest) GetTokens() []*v15.ReplicationToken {
 	if x != nil {
-		return x.Tokens
+		if x.xxx_hidden_Tokens != nil {
+			return *x.xxx_hidden_Tokens
+		}
 	}
 	return nil
 }
 
 func (x *GetReplicationMessagesRequest) GetClusterName() string {
 	if x != nil {
-		return x.ClusterName
+		return x.xxx_hidden_ClusterName
 	}
 	return ""
 }
 
+func (x *GetReplicationMessagesRequest) SetTokens(v []*v15.ReplicationToken) {
+	x.xxx_hidden_Tokens = &v
+}
+
+func (x *GetReplicationMessagesRequest) SetClusterName(v string) {
+	x.xxx_hidden_ClusterName = v
+}
+
+type GetReplicationMessagesRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Tokens      []*v15.ReplicationToken
+	ClusterName string
+}
+
+func (b0 GetReplicationMessagesRequest_builder) Build() *GetReplicationMessagesRequest {
+	m0 := &GetReplicationMessagesRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Tokens = &b.Tokens
+	x.xxx_hidden_ClusterName = b.ClusterName
+	return m0
+}
+
 type GetReplicationMessagesResponse struct {
-	state         protoimpl.MessageState             `protogen:"open.v1"`
-	ShardMessages map[int32]*v15.ReplicationMessages `protobuf:"bytes,1,rep,name=shard_messages,json=shardMessages,proto3" json:"shard_messages,omitempty" protobuf_key:"varint,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                    protoimpl.MessageState             `protogen:"opaque.v1"`
+	xxx_hidden_ShardMessages map[int32]*v15.ReplicationMessages `protobuf:"bytes,1,rep,name=shard_messages,json=shardMessages,proto3" protobuf_key:"varint,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *GetReplicationMessagesResponse) Reset() {
@@ -1441,29 +2231,38 @@ func (x *GetReplicationMessagesResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetReplicationMessagesResponse.ProtoReflect.Descriptor instead.
-func (*GetReplicationMessagesResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{22}
-}
-
 func (x *GetReplicationMessagesResponse) GetShardMessages() map[int32]*v15.ReplicationMessages {
 	if x != nil {
-		return x.ShardMessages
+		return x.xxx_hidden_ShardMessages
 	}
 	return nil
 }
 
+func (x *GetReplicationMessagesResponse) SetShardMessages(v map[int32]*v15.ReplicationMessages) {
+	x.xxx_hidden_ShardMessages = v
+}
+
+type GetReplicationMessagesResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	ShardMessages map[int32]*v15.ReplicationMessages
+}
+
+func (b0 GetReplicationMessagesResponse_builder) Build() *GetReplicationMessagesResponse {
+	m0 := &GetReplicationMessagesResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_ShardMessages = b.ShardMessages
+	return m0
+}
+
 type GetNamespaceReplicationMessagesRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// lastRetrievedMessageId is where the next fetch should begin with.
-	LastRetrievedMessageId int64 `protobuf:"varint,1,opt,name=last_retrieved_message_id,json=lastRetrievedMessageId,proto3" json:"last_retrieved_message_id,omitempty"`
-	// lastProcessedMessageId is the last messageId that is processed on the passive side.
-	// This can be different than lastRetrievedMessageId if passive side supports prefetching messages.
-	LastProcessedMessageId int64 `protobuf:"varint,2,opt,name=last_processed_message_id,json=lastProcessedMessageId,proto3" json:"last_processed_message_id,omitempty"`
-	// clusterName is the name of the pulling cluster.
-	ClusterName   string `protobuf:"bytes,3,opt,name=cluster_name,json=clusterName,proto3" json:"cluster_name,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                             protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_LastRetrievedMessageId int64                  `protobuf:"varint,1,opt,name=last_retrieved_message_id,json=lastRetrievedMessageId,proto3"`
+	xxx_hidden_LastProcessedMessageId int64                  `protobuf:"varint,2,opt,name=last_processed_message_id,json=lastProcessedMessageId,proto3"`
+	xxx_hidden_ClusterName            string                 `protobuf:"bytes,3,opt,name=cluster_name,json=clusterName,proto3"`
+	unknownFields                     protoimpl.UnknownFields
+	sizeCache                         protoimpl.SizeCache
 }
 
 func (x *GetNamespaceReplicationMessagesRequest) Reset() {
@@ -1491,37 +2290,66 @@ func (x *GetNamespaceReplicationMessagesRequest) ProtoReflect() protoreflect.Mes
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetNamespaceReplicationMessagesRequest.ProtoReflect.Descriptor instead.
-func (*GetNamespaceReplicationMessagesRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{23}
-}
-
 func (x *GetNamespaceReplicationMessagesRequest) GetLastRetrievedMessageId() int64 {
 	if x != nil {
-		return x.LastRetrievedMessageId
+		return x.xxx_hidden_LastRetrievedMessageId
 	}
 	return 0
 }
 
 func (x *GetNamespaceReplicationMessagesRequest) GetLastProcessedMessageId() int64 {
 	if x != nil {
-		return x.LastProcessedMessageId
+		return x.xxx_hidden_LastProcessedMessageId
 	}
 	return 0
 }
 
 func (x *GetNamespaceReplicationMessagesRequest) GetClusterName() string {
 	if x != nil {
-		return x.ClusterName
+		return x.xxx_hidden_ClusterName
 	}
 	return ""
 }
 
+func (x *GetNamespaceReplicationMessagesRequest) SetLastRetrievedMessageId(v int64) {
+	x.xxx_hidden_LastRetrievedMessageId = v
+}
+
+func (x *GetNamespaceReplicationMessagesRequest) SetLastProcessedMessageId(v int64) {
+	x.xxx_hidden_LastProcessedMessageId = v
+}
+
+func (x *GetNamespaceReplicationMessagesRequest) SetClusterName(v string) {
+	x.xxx_hidden_ClusterName = v
+}
+
+type GetNamespaceReplicationMessagesRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// lastRetrievedMessageId is where the next fetch should begin with.
+	LastRetrievedMessageId int64
+	// lastProcessedMessageId is the last messageId that is processed on the passive side.
+	// This can be different than lastRetrievedMessageId if passive side supports prefetching messages.
+	LastProcessedMessageId int64
+	// clusterName is the name of the pulling cluster.
+	ClusterName string
+}
+
+func (b0 GetNamespaceReplicationMessagesRequest_builder) Build() *GetNamespaceReplicationMessagesRequest {
+	m0 := &GetNamespaceReplicationMessagesRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_LastRetrievedMessageId = b.LastRetrievedMessageId
+	x.xxx_hidden_LastProcessedMessageId = b.LastProcessedMessageId
+	x.xxx_hidden_ClusterName = b.ClusterName
+	return m0
+}
+
 type GetNamespaceReplicationMessagesResponse struct {
-	state         protoimpl.MessageState   `protogen:"open.v1"`
-	Messages      *v15.ReplicationMessages `protobuf:"bytes,1,opt,name=messages,proto3" json:"messages,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state               protoimpl.MessageState   `protogen:"opaque.v1"`
+	xxx_hidden_Messages *v15.ReplicationMessages `protobuf:"bytes,1,opt,name=messages,proto3"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *GetNamespaceReplicationMessagesResponse) Reset() {
@@ -1549,23 +2377,47 @@ func (x *GetNamespaceReplicationMessagesResponse) ProtoReflect() protoreflect.Me
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetNamespaceReplicationMessagesResponse.ProtoReflect.Descriptor instead.
-func (*GetNamespaceReplicationMessagesResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{24}
-}
-
 func (x *GetNamespaceReplicationMessagesResponse) GetMessages() *v15.ReplicationMessages {
 	if x != nil {
-		return x.Messages
+		return x.xxx_hidden_Messages
 	}
 	return nil
 }
 
+func (x *GetNamespaceReplicationMessagesResponse) SetMessages(v *v15.ReplicationMessages) {
+	x.xxx_hidden_Messages = v
+}
+
+func (x *GetNamespaceReplicationMessagesResponse) HasMessages() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Messages != nil
+}
+
+func (x *GetNamespaceReplicationMessagesResponse) ClearMessages() {
+	x.xxx_hidden_Messages = nil
+}
+
+type GetNamespaceReplicationMessagesResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Messages *v15.ReplicationMessages
+}
+
+func (b0 GetNamespaceReplicationMessagesResponse_builder) Build() *GetNamespaceReplicationMessagesResponse {
+	m0 := &GetNamespaceReplicationMessagesResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Messages = b.Messages
+	return m0
+}
+
 type GetDLQReplicationMessagesRequest struct {
-	state         protoimpl.MessageState     `protogen:"open.v1"`
-	TaskInfos     []*v15.ReplicationTaskInfo `protobuf:"bytes,1,rep,name=task_infos,json=taskInfos,proto3" json:"task_infos,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                protoimpl.MessageState      `protogen:"opaque.v1"`
+	xxx_hidden_TaskInfos *[]*v15.ReplicationTaskInfo `protobuf:"bytes,1,rep,name=task_infos,json=taskInfos,proto3"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *GetDLQReplicationMessagesRequest) Reset() {
@@ -1593,23 +2445,38 @@ func (x *GetDLQReplicationMessagesRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetDLQReplicationMessagesRequest.ProtoReflect.Descriptor instead.
-func (*GetDLQReplicationMessagesRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{25}
-}
-
 func (x *GetDLQReplicationMessagesRequest) GetTaskInfos() []*v15.ReplicationTaskInfo {
 	if x != nil {
-		return x.TaskInfos
+		if x.xxx_hidden_TaskInfos != nil {
+			return *x.xxx_hidden_TaskInfos
+		}
 	}
 	return nil
 }
 
+func (x *GetDLQReplicationMessagesRequest) SetTaskInfos(v []*v15.ReplicationTaskInfo) {
+	x.xxx_hidden_TaskInfos = &v
+}
+
+type GetDLQReplicationMessagesRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	TaskInfos []*v15.ReplicationTaskInfo
+}
+
+func (b0 GetDLQReplicationMessagesRequest_builder) Build() *GetDLQReplicationMessagesRequest {
+	m0 := &GetDLQReplicationMessagesRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_TaskInfos = &b.TaskInfos
+	return m0
+}
+
 type GetDLQReplicationMessagesResponse struct {
-	state            protoimpl.MessageState `protogen:"open.v1"`
-	ReplicationTasks []*v15.ReplicationTask `protobuf:"bytes,1,rep,name=replication_tasks,json=replicationTasks,proto3" json:"replication_tasks,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	state                       protoimpl.MessageState  `protogen:"opaque.v1"`
+	xxx_hidden_ReplicationTasks *[]*v15.ReplicationTask `protobuf:"bytes,1,rep,name=replication_tasks,json=replicationTasks,proto3"`
+	unknownFields               protoimpl.UnknownFields
+	sizeCache                   protoimpl.SizeCache
 }
 
 func (x *GetDLQReplicationMessagesResponse) Reset() {
@@ -1637,26 +2504,41 @@ func (x *GetDLQReplicationMessagesResponse) ProtoReflect() protoreflect.Message 
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetDLQReplicationMessagesResponse.ProtoReflect.Descriptor instead.
-func (*GetDLQReplicationMessagesResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{26}
-}
-
 func (x *GetDLQReplicationMessagesResponse) GetReplicationTasks() []*v15.ReplicationTask {
 	if x != nil {
-		return x.ReplicationTasks
+		if x.xxx_hidden_ReplicationTasks != nil {
+			return *x.xxx_hidden_ReplicationTasks
+		}
 	}
 	return nil
 }
 
+func (x *GetDLQReplicationMessagesResponse) SetReplicationTasks(v []*v15.ReplicationTask) {
+	x.xxx_hidden_ReplicationTasks = &v
+}
+
+type GetDLQReplicationMessagesResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	ReplicationTasks []*v15.ReplicationTask
+}
+
+func (b0 GetDLQReplicationMessagesResponse_builder) Build() *GetDLQReplicationMessagesResponse {
+	m0 := &GetDLQReplicationMessagesResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_ReplicationTasks = &b.ReplicationTasks
+	return m0
+}
+
 // ReapplyEventsRequest is the request for reapply events API.
 type ReapplyEventsRequest struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	NamespaceId       string                 `protobuf:"bytes,4,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	WorkflowExecution *v1.WorkflowExecution  `protobuf:"bytes,2,opt,name=workflow_execution,json=workflowExecution,proto3" json:"workflow_execution,omitempty"`
-	Events            *v1.DataBlob           `protobuf:"bytes,3,opt,name=events,proto3" json:"events,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state                        protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId       string                 `protobuf:"bytes,4,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_WorkflowExecution *v1.WorkflowExecution  `protobuf:"bytes,2,opt,name=workflow_execution,json=workflowExecution,proto3"`
+	xxx_hidden_Events            *v1.DataBlob           `protobuf:"bytes,3,opt,name=events,proto3"`
+	unknownFields                protoimpl.UnknownFields
+	sizeCache                    protoimpl.SizeCache
 }
 
 func (x *ReapplyEventsRequest) Reset() {
@@ -1684,34 +2566,81 @@ func (x *ReapplyEventsRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ReapplyEventsRequest.ProtoReflect.Descriptor instead.
-func (*ReapplyEventsRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{27}
-}
-
 func (x *ReapplyEventsRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *ReapplyEventsRequest) GetWorkflowExecution() *v1.WorkflowExecution {
 	if x != nil {
-		return x.WorkflowExecution
+		return x.xxx_hidden_WorkflowExecution
 	}
 	return nil
 }
 
 func (x *ReapplyEventsRequest) GetEvents() *v1.DataBlob {
 	if x != nil {
-		return x.Events
+		return x.xxx_hidden_Events
 	}
 	return nil
 }
 
+func (x *ReapplyEventsRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *ReapplyEventsRequest) SetWorkflowExecution(v *v1.WorkflowExecution) {
+	x.xxx_hidden_WorkflowExecution = v
+}
+
+func (x *ReapplyEventsRequest) SetEvents(v *v1.DataBlob) {
+	x.xxx_hidden_Events = v
+}
+
+func (x *ReapplyEventsRequest) HasWorkflowExecution() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_WorkflowExecution != nil
+}
+
+func (x *ReapplyEventsRequest) HasEvents() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Events != nil
+}
+
+func (x *ReapplyEventsRequest) ClearWorkflowExecution() {
+	x.xxx_hidden_WorkflowExecution = nil
+}
+
+func (x *ReapplyEventsRequest) ClearEvents() {
+	x.xxx_hidden_Events = nil
+}
+
+type ReapplyEventsRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId       string
+	WorkflowExecution *v1.WorkflowExecution
+	Events            *v1.DataBlob
+}
+
+func (b0 ReapplyEventsRequest_builder) Build() *ReapplyEventsRequest {
+	m0 := &ReapplyEventsRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_WorkflowExecution = b.WorkflowExecution
+	x.xxx_hidden_Events = b.Events
+	return m0
+}
+
 type ReapplyEventsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1741,19 +2670,26 @@ func (x *ReapplyEventsResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ReapplyEventsResponse.ProtoReflect.Descriptor instead.
-func (*ReapplyEventsResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{28}
+type ReapplyEventsResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+}
+
+func (b0 ReapplyEventsResponse_builder) Build() *ReapplyEventsResponse {
+	m0 := &ReapplyEventsResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	return m0
 }
 
 type AddSearchAttributesRequest struct {
-	state            protoimpl.MessageState          `protogen:"open.v1"`
-	SearchAttributes map[string]v16.IndexedValueType `protobuf:"bytes,1,rep,name=search_attributes,json=searchAttributes,proto3" json:"search_attributes,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value,enum=temporal.api.enums.v1.IndexedValueType"`
-	IndexName        string                          `protobuf:"bytes,2,opt,name=index_name,json=indexName,proto3" json:"index_name,omitempty"`
-	SkipSchemaUpdate bool                            `protobuf:"varint,3,opt,name=skip_schema_update,json=skipSchemaUpdate,proto3" json:"skip_schema_update,omitempty"`
-	Namespace        string                          `protobuf:"bytes,4,opt,name=namespace,proto3" json:"namespace,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	state                       protoimpl.MessageState          `protogen:"opaque.v1"`
+	xxx_hidden_SearchAttributes map[string]v16.IndexedValueType `protobuf:"bytes,1,rep,name=search_attributes,json=searchAttributes,proto3" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value,enum=temporal.api.enums.v1.IndexedValueType"`
+	xxx_hidden_IndexName        string                          `protobuf:"bytes,2,opt,name=index_name,json=indexName,proto3"`
+	xxx_hidden_SkipSchemaUpdate bool                            `protobuf:"varint,3,opt,name=skip_schema_update,json=skipSchemaUpdate,proto3"`
+	xxx_hidden_Namespace        string                          `protobuf:"bytes,4,opt,name=namespace,proto3"`
+	unknownFields               protoimpl.UnknownFields
+	sizeCache                   protoimpl.SizeCache
 }
 
 func (x *AddSearchAttributesRequest) Reset() {
@@ -1781,41 +2717,72 @@ func (x *AddSearchAttributesRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use AddSearchAttributesRequest.ProtoReflect.Descriptor instead.
-func (*AddSearchAttributesRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{29}
-}
-
 func (x *AddSearchAttributesRequest) GetSearchAttributes() map[string]v16.IndexedValueType {
 	if x != nil {
-		return x.SearchAttributes
+		return x.xxx_hidden_SearchAttributes
 	}
 	return nil
 }
 
 func (x *AddSearchAttributesRequest) GetIndexName() string {
 	if x != nil {
-		return x.IndexName
+		return x.xxx_hidden_IndexName
 	}
 	return ""
 }
 
 func (x *AddSearchAttributesRequest) GetSkipSchemaUpdate() bool {
 	if x != nil {
-		return x.SkipSchemaUpdate
+		return x.xxx_hidden_SkipSchemaUpdate
 	}
 	return false
 }
 
 func (x *AddSearchAttributesRequest) GetNamespace() string {
 	if x != nil {
-		return x.Namespace
+		return x.xxx_hidden_Namespace
 	}
 	return ""
 }
 
+func (x *AddSearchAttributesRequest) SetSearchAttributes(v map[string]v16.IndexedValueType) {
+	x.xxx_hidden_SearchAttributes = v
+}
+
+func (x *AddSearchAttributesRequest) SetIndexName(v string) {
+	x.xxx_hidden_IndexName = v
+}
+
+func (x *AddSearchAttributesRequest) SetSkipSchemaUpdate(v bool) {
+	x.xxx_hidden_SkipSchemaUpdate = v
+}
+
+func (x *AddSearchAttributesRequest) SetNamespace(v string) {
+	x.xxx_hidden_Namespace = v
+}
+
+type AddSearchAttributesRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	SearchAttributes map[string]v16.IndexedValueType
+	IndexName        string
+	SkipSchemaUpdate bool
+	Namespace        string
+}
+
+func (b0 AddSearchAttributesRequest_builder) Build() *AddSearchAttributesRequest {
+	m0 := &AddSearchAttributesRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_SearchAttributes = b.SearchAttributes
+	x.xxx_hidden_IndexName = b.IndexName
+	x.xxx_hidden_SkipSchemaUpdate = b.SkipSchemaUpdate
+	x.xxx_hidden_Namespace = b.Namespace
+	return m0
+}
+
 type AddSearchAttributesResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1845,18 +2812,25 @@ func (x *AddSearchAttributesResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use AddSearchAttributesResponse.ProtoReflect.Descriptor instead.
-func (*AddSearchAttributesResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{30}
+type AddSearchAttributesResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+}
+
+func (b0 AddSearchAttributesResponse_builder) Build() *AddSearchAttributesResponse {
+	m0 := &AddSearchAttributesResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	return m0
 }
 
 type RemoveSearchAttributesRequest struct {
-	state            protoimpl.MessageState `protogen:"open.v1"`
-	SearchAttributes []string               `protobuf:"bytes,1,rep,name=search_attributes,json=searchAttributes,proto3" json:"search_attributes,omitempty"`
-	IndexName        string                 `protobuf:"bytes,2,opt,name=index_name,json=indexName,proto3" json:"index_name,omitempty"`
-	Namespace        string                 `protobuf:"bytes,3,opt,name=namespace,proto3" json:"namespace,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	state                       protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_SearchAttributes []string               `protobuf:"bytes,1,rep,name=search_attributes,json=searchAttributes,proto3"`
+	xxx_hidden_IndexName        string                 `protobuf:"bytes,2,opt,name=index_name,json=indexName,proto3"`
+	xxx_hidden_Namespace        string                 `protobuf:"bytes,3,opt,name=namespace,proto3"`
+	unknownFields               protoimpl.UnknownFields
+	sizeCache                   protoimpl.SizeCache
 }
 
 func (x *RemoveSearchAttributesRequest) Reset() {
@@ -1884,34 +2858,59 @@ func (x *RemoveSearchAttributesRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RemoveSearchAttributesRequest.ProtoReflect.Descriptor instead.
-func (*RemoveSearchAttributesRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{31}
-}
-
 func (x *RemoveSearchAttributesRequest) GetSearchAttributes() []string {
 	if x != nil {
-		return x.SearchAttributes
+		return x.xxx_hidden_SearchAttributes
 	}
 	return nil
 }
 
 func (x *RemoveSearchAttributesRequest) GetIndexName() string {
 	if x != nil {
-		return x.IndexName
+		return x.xxx_hidden_IndexName
 	}
 	return ""
 }
 
 func (x *RemoveSearchAttributesRequest) GetNamespace() string {
 	if x != nil {
-		return x.Namespace
+		return x.xxx_hidden_Namespace
 	}
 	return ""
 }
 
+func (x *RemoveSearchAttributesRequest) SetSearchAttributes(v []string) {
+	x.xxx_hidden_SearchAttributes = v
+}
+
+func (x *RemoveSearchAttributesRequest) SetIndexName(v string) {
+	x.xxx_hidden_IndexName = v
+}
+
+func (x *RemoveSearchAttributesRequest) SetNamespace(v string) {
+	x.xxx_hidden_Namespace = v
+}
+
+type RemoveSearchAttributesRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	SearchAttributes []string
+	IndexName        string
+	Namespace        string
+}
+
+func (b0 RemoveSearchAttributesRequest_builder) Build() *RemoveSearchAttributesRequest {
+	m0 := &RemoveSearchAttributesRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_SearchAttributes = b.SearchAttributes
+	x.xxx_hidden_IndexName = b.IndexName
+	x.xxx_hidden_Namespace = b.Namespace
+	return m0
+}
+
 type RemoveSearchAttributesResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1941,17 +2940,24 @@ func (x *RemoveSearchAttributesResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RemoveSearchAttributesResponse.ProtoReflect.Descriptor instead.
-func (*RemoveSearchAttributesResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{32}
+type RemoveSearchAttributesResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+}
+
+func (b0 RemoveSearchAttributesResponse_builder) Build() *RemoveSearchAttributesResponse {
+	m0 := &RemoveSearchAttributesResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	return m0
 }
 
 type GetSearchAttributesRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	IndexName     string                 `protobuf:"bytes,1,opt,name=index_name,json=indexName,proto3" json:"index_name,omitempty"`
-	Namespace     string                 `protobuf:"bytes,2,opt,name=namespace,proto3" json:"namespace,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_IndexName string                 `protobuf:"bytes,1,opt,name=index_name,json=indexName,proto3"`
+	xxx_hidden_Namespace string                 `protobuf:"bytes,2,opt,name=namespace,proto3"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *GetSearchAttributesRequest) Reset() {
@@ -1979,34 +2985,52 @@ func (x *GetSearchAttributesRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetSearchAttributesRequest.ProtoReflect.Descriptor instead.
-func (*GetSearchAttributesRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{33}
-}
-
 func (x *GetSearchAttributesRequest) GetIndexName() string {
 	if x != nil {
-		return x.IndexName
+		return x.xxx_hidden_IndexName
 	}
 	return ""
 }
 
 func (x *GetSearchAttributesRequest) GetNamespace() string {
 	if x != nil {
-		return x.Namespace
+		return x.xxx_hidden_Namespace
 	}
 	return ""
 }
 
+func (x *GetSearchAttributesRequest) SetIndexName(v string) {
+	x.xxx_hidden_IndexName = v
+}
+
+func (x *GetSearchAttributesRequest) SetNamespace(v string) {
+	x.xxx_hidden_Namespace = v
+}
+
+type GetSearchAttributesRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	IndexName string
+	Namespace string
+}
+
+func (b0 GetSearchAttributesRequest_builder) Build() *GetSearchAttributesRequest {
+	m0 := &GetSearchAttributesRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_IndexName = b.IndexName
+	x.xxx_hidden_Namespace = b.Namespace
+	return m0
+}
+
 type GetSearchAttributesResponse struct {
-	state            protoimpl.MessageState          `protogen:"open.v1"`
-	CustomAttributes map[string]v16.IndexedValueType `protobuf:"bytes,1,rep,name=custom_attributes,json=customAttributes,proto3" json:"custom_attributes,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value,enum=temporal.api.enums.v1.IndexedValueType"`
-	SystemAttributes map[string]v16.IndexedValueType `protobuf:"bytes,2,rep,name=system_attributes,json=systemAttributes,proto3" json:"system_attributes,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value,enum=temporal.api.enums.v1.IndexedValueType"`
-	Mapping          map[string]string               `protobuf:"bytes,3,rep,name=mapping,proto3" json:"mapping,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	// State of the workflow that adds search attributes to the system.
-	AddWorkflowExecutionInfo *v17.WorkflowExecutionInfo `protobuf:"bytes,4,opt,name=add_workflow_execution_info,json=addWorkflowExecutionInfo,proto3" json:"add_workflow_execution_info,omitempty"`
-	unknownFields            protoimpl.UnknownFields
-	sizeCache                protoimpl.SizeCache
+	state                               protoimpl.MessageState          `protogen:"opaque.v1"`
+	xxx_hidden_CustomAttributes         map[string]v16.IndexedValueType `protobuf:"bytes,1,rep,name=custom_attributes,json=customAttributes,proto3" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value,enum=temporal.api.enums.v1.IndexedValueType"`
+	xxx_hidden_SystemAttributes         map[string]v16.IndexedValueType `protobuf:"bytes,2,rep,name=system_attributes,json=systemAttributes,proto3" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value,enum=temporal.api.enums.v1.IndexedValueType"`
+	xxx_hidden_Mapping                  map[string]string               `protobuf:"bytes,3,rep,name=mapping,proto3" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	xxx_hidden_AddWorkflowExecutionInfo *v17.WorkflowExecutionInfo      `protobuf:"bytes,4,opt,name=add_workflow_execution_info,json=addWorkflowExecutionInfo,proto3"`
+	unknownFields                       protoimpl.UnknownFields
+	sizeCache                           protoimpl.SizeCache
 }
 
 func (x *GetSearchAttributesResponse) Reset() {
@@ -2034,44 +3058,87 @@ func (x *GetSearchAttributesResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetSearchAttributesResponse.ProtoReflect.Descriptor instead.
-func (*GetSearchAttributesResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{34}
-}
-
 func (x *GetSearchAttributesResponse) GetCustomAttributes() map[string]v16.IndexedValueType {
 	if x != nil {
-		return x.CustomAttributes
+		return x.xxx_hidden_CustomAttributes
 	}
 	return nil
 }
 
 func (x *GetSearchAttributesResponse) GetSystemAttributes() map[string]v16.IndexedValueType {
 	if x != nil {
-		return x.SystemAttributes
+		return x.xxx_hidden_SystemAttributes
 	}
 	return nil
 }
 
 func (x *GetSearchAttributesResponse) GetMapping() map[string]string {
 	if x != nil {
-		return x.Mapping
+		return x.xxx_hidden_Mapping
 	}
 	return nil
 }
 
 func (x *GetSearchAttributesResponse) GetAddWorkflowExecutionInfo() *v17.WorkflowExecutionInfo {
 	if x != nil {
-		return x.AddWorkflowExecutionInfo
+		return x.xxx_hidden_AddWorkflowExecutionInfo
 	}
 	return nil
 }
 
+func (x *GetSearchAttributesResponse) SetCustomAttributes(v map[string]v16.IndexedValueType) {
+	x.xxx_hidden_CustomAttributes = v
+}
+
+func (x *GetSearchAttributesResponse) SetSystemAttributes(v map[string]v16.IndexedValueType) {
+	x.xxx_hidden_SystemAttributes = v
+}
+
+func (x *GetSearchAttributesResponse) SetMapping(v map[string]string) {
+	x.xxx_hidden_Mapping = v
+}
+
+func (x *GetSearchAttributesResponse) SetAddWorkflowExecutionInfo(v *v17.WorkflowExecutionInfo) {
+	x.xxx_hidden_AddWorkflowExecutionInfo = v
+}
+
+func (x *GetSearchAttributesResponse) HasAddWorkflowExecutionInfo() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_AddWorkflowExecutionInfo != nil
+}
+
+func (x *GetSearchAttributesResponse) ClearAddWorkflowExecutionInfo() {
+	x.xxx_hidden_AddWorkflowExecutionInfo = nil
+}
+
+type GetSearchAttributesResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	CustomAttributes map[string]v16.IndexedValueType
+	SystemAttributes map[string]v16.IndexedValueType
+	Mapping          map[string]string
+	// State of the workflow that adds search attributes to the system.
+	AddWorkflowExecutionInfo *v17.WorkflowExecutionInfo
+}
+
+func (b0 GetSearchAttributesResponse_builder) Build() *GetSearchAttributesResponse {
+	m0 := &GetSearchAttributesResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_CustomAttributes = b.CustomAttributes
+	x.xxx_hidden_SystemAttributes = b.SystemAttributes
+	x.xxx_hidden_Mapping = b.Mapping
+	x.xxx_hidden_AddWorkflowExecutionInfo = b.AddWorkflowExecutionInfo
+	return m0
+}
+
 type DescribeClusterRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ClusterName   string                 `protobuf:"bytes,1,opt,name=cluster_name,json=clusterName,proto3" json:"cluster_name,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                  protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_ClusterName string                 `protobuf:"bytes,1,opt,name=cluster_name,json=clusterName,proto3"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *DescribeClusterRequest) Reset() {
@@ -2099,36 +3166,49 @@ func (x *DescribeClusterRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DescribeClusterRequest.ProtoReflect.Descriptor instead.
-func (*DescribeClusterRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{35}
-}
-
 func (x *DescribeClusterRequest) GetClusterName() string {
 	if x != nil {
-		return x.ClusterName
+		return x.xxx_hidden_ClusterName
 	}
 	return ""
 }
 
+func (x *DescribeClusterRequest) SetClusterName(v string) {
+	x.xxx_hidden_ClusterName = v
+}
+
+type DescribeClusterRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	ClusterName string
+}
+
+func (b0 DescribeClusterRequest_builder) Build() *DescribeClusterRequest {
+	m0 := &DescribeClusterRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_ClusterName = b.ClusterName
+	return m0
+}
+
 type DescribeClusterResponse struct {
-	state                    protoimpl.MessageState `protogen:"open.v1"`
-	SupportedClients         map[string]string      `protobuf:"bytes,1,rep,name=supported_clients,json=supportedClients,proto3" json:"supported_clients,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	ServerVersion            string                 `protobuf:"bytes,2,opt,name=server_version,json=serverVersion,proto3" json:"server_version,omitempty"`
-	MembershipInfo           *v18.MembershipInfo    `protobuf:"bytes,3,opt,name=membership_info,json=membershipInfo,proto3" json:"membership_info,omitempty"`
-	ClusterId                string                 `protobuf:"bytes,4,opt,name=cluster_id,json=clusterId,proto3" json:"cluster_id,omitempty"`
-	ClusterName              string                 `protobuf:"bytes,5,opt,name=cluster_name,json=clusterName,proto3" json:"cluster_name,omitempty"`
-	HistoryShardCount        int32                  `protobuf:"varint,6,opt,name=history_shard_count,json=historyShardCount,proto3" json:"history_shard_count,omitempty"`
-	PersistenceStore         string                 `protobuf:"bytes,7,opt,name=persistence_store,json=persistenceStore,proto3" json:"persistence_store,omitempty"`
-	VisibilityStore          string                 `protobuf:"bytes,8,opt,name=visibility_store,json=visibilityStore,proto3" json:"visibility_store,omitempty"`
-	VersionInfo              *v19.VersionInfo       `protobuf:"bytes,9,opt,name=version_info,json=versionInfo,proto3" json:"version_info,omitempty"`
-	FailoverVersionIncrement int64                  `protobuf:"varint,10,opt,name=failover_version_increment,json=failoverVersionIncrement,proto3" json:"failover_version_increment,omitempty"`
-	InitialFailoverVersion   int64                  `protobuf:"varint,11,opt,name=initial_failover_version,json=initialFailoverVersion,proto3" json:"initial_failover_version,omitempty"`
-	IsGlobalNamespaceEnabled bool                   `protobuf:"varint,12,opt,name=is_global_namespace_enabled,json=isGlobalNamespaceEnabled,proto3" json:"is_global_namespace_enabled,omitempty"`
-	Tags                     map[string]string      `protobuf:"bytes,13,rep,name=tags,proto3" json:"tags,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	HttpAddress              string                 `protobuf:"bytes,14,opt,name=http_address,json=httpAddress,proto3" json:"http_address,omitempty"`
-	unknownFields            protoimpl.UnknownFields
-	sizeCache                protoimpl.SizeCache
+	state                               protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_SupportedClients         map[string]string      `protobuf:"bytes,1,rep,name=supported_clients,json=supportedClients,proto3" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	xxx_hidden_ServerVersion            string                 `protobuf:"bytes,2,opt,name=server_version,json=serverVersion,proto3"`
+	xxx_hidden_MembershipInfo           *v18.MembershipInfo    `protobuf:"bytes,3,opt,name=membership_info,json=membershipInfo,proto3"`
+	xxx_hidden_ClusterId                string                 `protobuf:"bytes,4,opt,name=cluster_id,json=clusterId,proto3"`
+	xxx_hidden_ClusterName              string                 `protobuf:"bytes,5,opt,name=cluster_name,json=clusterName,proto3"`
+	xxx_hidden_HistoryShardCount        int32                  `protobuf:"varint,6,opt,name=history_shard_count,json=historyShardCount,proto3"`
+	xxx_hidden_PersistenceStore         string                 `protobuf:"bytes,7,opt,name=persistence_store,json=persistenceStore,proto3"`
+	xxx_hidden_VisibilityStore          string                 `protobuf:"bytes,8,opt,name=visibility_store,json=visibilityStore,proto3"`
+	xxx_hidden_VersionInfo              *v19.VersionInfo       `protobuf:"bytes,9,opt,name=version_info,json=versionInfo,proto3"`
+	xxx_hidden_FailoverVersionIncrement int64                  `protobuf:"varint,10,opt,name=failover_version_increment,json=failoverVersionIncrement,proto3"`
+	xxx_hidden_InitialFailoverVersion   int64                  `protobuf:"varint,11,opt,name=initial_failover_version,json=initialFailoverVersion,proto3"`
+	xxx_hidden_IsGlobalNamespaceEnabled bool                   `protobuf:"varint,12,opt,name=is_global_namespace_enabled,json=isGlobalNamespaceEnabled,proto3"`
+	xxx_hidden_Tags                     map[string]string      `protobuf:"bytes,13,rep,name=tags,proto3" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	xxx_hidden_HttpAddress              string                 `protobuf:"bytes,14,opt,name=http_address,json=httpAddress,proto3"`
+	unknownFields                       protoimpl.UnknownFields
+	sizeCache                           protoimpl.SizeCache
 }
 
 func (x *DescribeClusterResponse) Reset() {
@@ -2156,115 +3236,228 @@ func (x *DescribeClusterResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DescribeClusterResponse.ProtoReflect.Descriptor instead.
-func (*DescribeClusterResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{36}
-}
-
 func (x *DescribeClusterResponse) GetSupportedClients() map[string]string {
 	if x != nil {
-		return x.SupportedClients
+		return x.xxx_hidden_SupportedClients
 	}
 	return nil
 }
 
 func (x *DescribeClusterResponse) GetServerVersion() string {
 	if x != nil {
-		return x.ServerVersion
+		return x.xxx_hidden_ServerVersion
 	}
 	return ""
 }
 
 func (x *DescribeClusterResponse) GetMembershipInfo() *v18.MembershipInfo {
 	if x != nil {
-		return x.MembershipInfo
+		return x.xxx_hidden_MembershipInfo
 	}
 	return nil
 }
 
 func (x *DescribeClusterResponse) GetClusterId() string {
 	if x != nil {
-		return x.ClusterId
+		return x.xxx_hidden_ClusterId
 	}
 	return ""
 }
 
 func (x *DescribeClusterResponse) GetClusterName() string {
 	if x != nil {
-		return x.ClusterName
+		return x.xxx_hidden_ClusterName
 	}
 	return ""
 }
 
 func (x *DescribeClusterResponse) GetHistoryShardCount() int32 {
 	if x != nil {
-		return x.HistoryShardCount
+		return x.xxx_hidden_HistoryShardCount
 	}
 	return 0
 }
 
 func (x *DescribeClusterResponse) GetPersistenceStore() string {
 	if x != nil {
-		return x.PersistenceStore
+		return x.xxx_hidden_PersistenceStore
 	}
 	return ""
 }
 
 func (x *DescribeClusterResponse) GetVisibilityStore() string {
 	if x != nil {
-		return x.VisibilityStore
+		return x.xxx_hidden_VisibilityStore
 	}
 	return ""
 }
 
 func (x *DescribeClusterResponse) GetVersionInfo() *v19.VersionInfo {
 	if x != nil {
-		return x.VersionInfo
+		return x.xxx_hidden_VersionInfo
 	}
 	return nil
 }
 
 func (x *DescribeClusterResponse) GetFailoverVersionIncrement() int64 {
 	if x != nil {
-		return x.FailoverVersionIncrement
+		return x.xxx_hidden_FailoverVersionIncrement
 	}
 	return 0
 }
 
 func (x *DescribeClusterResponse) GetInitialFailoverVersion() int64 {
 	if x != nil {
-		return x.InitialFailoverVersion
+		return x.xxx_hidden_InitialFailoverVersion
 	}
 	return 0
 }
 
 func (x *DescribeClusterResponse) GetIsGlobalNamespaceEnabled() bool {
 	if x != nil {
-		return x.IsGlobalNamespaceEnabled
+		return x.xxx_hidden_IsGlobalNamespaceEnabled
 	}
 	return false
 }
 
 func (x *DescribeClusterResponse) GetTags() map[string]string {
 	if x != nil {
-		return x.Tags
+		return x.xxx_hidden_Tags
 	}
 	return nil
 }
 
 func (x *DescribeClusterResponse) GetHttpAddress() string {
 	if x != nil {
-		return x.HttpAddress
+		return x.xxx_hidden_HttpAddress
 	}
 	return ""
 }
 
+func (x *DescribeClusterResponse) SetSupportedClients(v map[string]string) {
+	x.xxx_hidden_SupportedClients = v
+}
+
+func (x *DescribeClusterResponse) SetServerVersion(v string) {
+	x.xxx_hidden_ServerVersion = v
+}
+
+func (x *DescribeClusterResponse) SetMembershipInfo(v *v18.MembershipInfo) {
+	x.xxx_hidden_MembershipInfo = v
+}
+
+func (x *DescribeClusterResponse) SetClusterId(v string) {
+	x.xxx_hidden_ClusterId = v
+}
+
+func (x *DescribeClusterResponse) SetClusterName(v string) {
+	x.xxx_hidden_ClusterName = v
+}
+
+func (x *DescribeClusterResponse) SetHistoryShardCount(v int32) {
+	x.xxx_hidden_HistoryShardCount = v
+}
+
+func (x *DescribeClusterResponse) SetPersistenceStore(v string) {
+	x.xxx_hidden_PersistenceStore = v
+}
+
+func (x *DescribeClusterResponse) SetVisibilityStore(v string) {
+	x.xxx_hidden_VisibilityStore = v
+}
+
+func (x *DescribeClusterResponse) SetVersionInfo(v *v19.VersionInfo) {
+	x.xxx_hidden_VersionInfo = v
+}
+
+func (x *DescribeClusterResponse) SetFailoverVersionIncrement(v int64) {
+	x.xxx_hidden_FailoverVersionIncrement = v
+}
+
+func (x *DescribeClusterResponse) SetInitialFailoverVersion(v int64) {
+	x.xxx_hidden_InitialFailoverVersion = v
+}
+
+func (x *DescribeClusterResponse) SetIsGlobalNamespaceEnabled(v bool) {
+	x.xxx_hidden_IsGlobalNamespaceEnabled = v
+}
+
+func (x *DescribeClusterResponse) SetTags(v map[string]string) {
+	x.xxx_hidden_Tags = v
+}
+
+func (x *DescribeClusterResponse) SetHttpAddress(v string) {
+	x.xxx_hidden_HttpAddress = v
+}
+
+func (x *DescribeClusterResponse) HasMembershipInfo() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_MembershipInfo != nil
+}
+
+func (x *DescribeClusterResponse) HasVersionInfo() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_VersionInfo != nil
+}
+
+func (x *DescribeClusterResponse) ClearMembershipInfo() {
+	x.xxx_hidden_MembershipInfo = nil
+}
+
+func (x *DescribeClusterResponse) ClearVersionInfo() {
+	x.xxx_hidden_VersionInfo = nil
+}
+
+type DescribeClusterResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	SupportedClients         map[string]string
+	ServerVersion            string
+	MembershipInfo           *v18.MembershipInfo
+	ClusterId                string
+	ClusterName              string
+	HistoryShardCount        int32
+	PersistenceStore         string
+	VisibilityStore          string
+	VersionInfo              *v19.VersionInfo
+	FailoverVersionIncrement int64
+	InitialFailoverVersion   int64
+	IsGlobalNamespaceEnabled bool
+	Tags                     map[string]string
+	HttpAddress              string
+}
+
+func (b0 DescribeClusterResponse_builder) Build() *DescribeClusterResponse {
+	m0 := &DescribeClusterResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_SupportedClients = b.SupportedClients
+	x.xxx_hidden_ServerVersion = b.ServerVersion
+	x.xxx_hidden_MembershipInfo = b.MembershipInfo
+	x.xxx_hidden_ClusterId = b.ClusterId
+	x.xxx_hidden_ClusterName = b.ClusterName
+	x.xxx_hidden_HistoryShardCount = b.HistoryShardCount
+	x.xxx_hidden_PersistenceStore = b.PersistenceStore
+	x.xxx_hidden_VisibilityStore = b.VisibilityStore
+	x.xxx_hidden_VersionInfo = b.VersionInfo
+	x.xxx_hidden_FailoverVersionIncrement = b.FailoverVersionIncrement
+	x.xxx_hidden_InitialFailoverVersion = b.InitialFailoverVersion
+	x.xxx_hidden_IsGlobalNamespaceEnabled = b.IsGlobalNamespaceEnabled
+	x.xxx_hidden_Tags = b.Tags
+	x.xxx_hidden_HttpAddress = b.HttpAddress
+	return m0
+}
+
 type ListClustersRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	PageSize      int32                  `protobuf:"varint,1,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
-	NextPageToken []byte                 `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                    protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_PageSize      int32                  `protobuf:"varint,1,opt,name=page_size,json=pageSize,proto3"`
+	xxx_hidden_NextPageToken []byte                 `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *ListClustersRequest) Reset() {
@@ -2292,31 +3485,53 @@ func (x *ListClustersRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListClustersRequest.ProtoReflect.Descriptor instead.
-func (*ListClustersRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{37}
-}
-
 func (x *ListClustersRequest) GetPageSize() int32 {
 	if x != nil {
-		return x.PageSize
+		return x.xxx_hidden_PageSize
 	}
 	return 0
 }
 
 func (x *ListClustersRequest) GetNextPageToken() []byte {
 	if x != nil {
-		return x.NextPageToken
+		return x.xxx_hidden_NextPageToken
 	}
 	return nil
 }
 
+func (x *ListClustersRequest) SetPageSize(v int32) {
+	x.xxx_hidden_PageSize = v
+}
+
+func (x *ListClustersRequest) SetNextPageToken(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_NextPageToken = v
+}
+
+type ListClustersRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	PageSize      int32
+	NextPageToken []byte
+}
+
+func (b0 ListClustersRequest_builder) Build() *ListClustersRequest {
+	m0 := &ListClustersRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_PageSize = b.PageSize
+	x.xxx_hidden_NextPageToken = b.NextPageToken
+	return m0
+}
+
 type ListClustersResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Clusters      []*v12.ClusterMetadata `protobuf:"bytes,1,rep,name=clusters,proto3" json:"clusters,omitempty"`
-	NextPageToken []byte                 `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                    protoimpl.MessageState  `protogen:"opaque.v1"`
+	xxx_hidden_Clusters      *[]*v12.ClusterMetadata `protobuf:"bytes,1,rep,name=clusters,proto3"`
+	xxx_hidden_NextPageToken []byte                  `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *ListClustersResponse) Reset() {
@@ -2344,35 +3559,57 @@ func (x *ListClustersResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListClustersResponse.ProtoReflect.Descriptor instead.
-func (*ListClustersResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{38}
-}
-
 func (x *ListClustersResponse) GetClusters() []*v12.ClusterMetadata {
 	if x != nil {
-		return x.Clusters
+		if x.xxx_hidden_Clusters != nil {
+			return *x.xxx_hidden_Clusters
+		}
 	}
 	return nil
 }
 
 func (x *ListClustersResponse) GetNextPageToken() []byte {
 	if x != nil {
-		return x.NextPageToken
+		return x.xxx_hidden_NextPageToken
 	}
 	return nil
 }
 
+func (x *ListClustersResponse) SetClusters(v []*v12.ClusterMetadata) {
+	x.xxx_hidden_Clusters = &v
+}
+
+func (x *ListClustersResponse) SetNextPageToken(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_NextPageToken = v
+}
+
+type ListClustersResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Clusters      []*v12.ClusterMetadata
+	NextPageToken []byte
+}
+
+func (b0 ListClustersResponse_builder) Build() *ListClustersResponse {
+	m0 := &ListClustersResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Clusters = &b.Clusters
+	x.xxx_hidden_NextPageToken = b.NextPageToken
+	return m0
+}
+
 type AddOrUpdateRemoteClusterRequest struct {
-	state                         protoimpl.MessageState `protogen:"open.v1"`
-	FrontendAddress               string                 `protobuf:"bytes,1,opt,name=frontend_address,json=frontendAddress,proto3" json:"frontend_address,omitempty"`
-	EnableRemoteClusterConnection bool                   `protobuf:"varint,2,opt,name=enable_remote_cluster_connection,json=enableRemoteClusterConnection,proto3" json:"enable_remote_cluster_connection,omitempty"`
-	// Deprecated: Marked as deprecated in temporal/server/api/adminservice/v1/request_response.proto.
-	FrontendHttpAddress string `protobuf:"bytes,3,opt,name=frontend_http_address,json=frontendHttpAddress,proto3" json:"frontend_http_address,omitempty"`
-	// enable_replication controls whether replication streams are active.
-	EnableReplication bool `protobuf:"varint,4,opt,name=enable_replication,json=enableReplication,proto3" json:"enable_replication,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state                                    protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_FrontendAddress               string                 `protobuf:"bytes,1,opt,name=frontend_address,json=frontendAddress,proto3"`
+	xxx_hidden_EnableRemoteClusterConnection bool                   `protobuf:"varint,2,opt,name=enable_remote_cluster_connection,json=enableRemoteClusterConnection,proto3"`
+	xxx_hidden_FrontendHttpAddress           string                 `protobuf:"bytes,3,opt,name=frontend_http_address,json=frontendHttpAddress,proto3"`
+	xxx_hidden_EnableReplication             bool                   `protobuf:"varint,4,opt,name=enable_replication,json=enableReplication,proto3"`
+	unknownFields                            protoimpl.UnknownFields
+	sizeCache                                protoimpl.SizeCache
 }
 
 func (x *AddOrUpdateRemoteClusterRequest) Reset() {
@@ -2400,21 +3637,16 @@ func (x *AddOrUpdateRemoteClusterRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use AddOrUpdateRemoteClusterRequest.ProtoReflect.Descriptor instead.
-func (*AddOrUpdateRemoteClusterRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{39}
-}
-
 func (x *AddOrUpdateRemoteClusterRequest) GetFrontendAddress() string {
 	if x != nil {
-		return x.FrontendAddress
+		return x.xxx_hidden_FrontendAddress
 	}
 	return ""
 }
 
 func (x *AddOrUpdateRemoteClusterRequest) GetEnableRemoteClusterConnection() bool {
 	if x != nil {
-		return x.EnableRemoteClusterConnection
+		return x.xxx_hidden_EnableRemoteClusterConnection
 	}
 	return false
 }
@@ -2422,20 +3654,59 @@ func (x *AddOrUpdateRemoteClusterRequest) GetEnableRemoteClusterConnection() boo
 // Deprecated: Marked as deprecated in temporal/server/api/adminservice/v1/request_response.proto.
 func (x *AddOrUpdateRemoteClusterRequest) GetFrontendHttpAddress() string {
 	if x != nil {
-		return x.FrontendHttpAddress
+		return x.xxx_hidden_FrontendHttpAddress
 	}
 	return ""
 }
 
 func (x *AddOrUpdateRemoteClusterRequest) GetEnableReplication() bool {
 	if x != nil {
-		return x.EnableReplication
+		return x.xxx_hidden_EnableReplication
 	}
 	return false
 }
 
+func (x *AddOrUpdateRemoteClusterRequest) SetFrontendAddress(v string) {
+	x.xxx_hidden_FrontendAddress = v
+}
+
+func (x *AddOrUpdateRemoteClusterRequest) SetEnableRemoteClusterConnection(v bool) {
+	x.xxx_hidden_EnableRemoteClusterConnection = v
+}
+
+// Deprecated: Marked as deprecated in temporal/server/api/adminservice/v1/request_response.proto.
+func (x *AddOrUpdateRemoteClusterRequest) SetFrontendHttpAddress(v string) {
+	x.xxx_hidden_FrontendHttpAddress = v
+}
+
+func (x *AddOrUpdateRemoteClusterRequest) SetEnableReplication(v bool) {
+	x.xxx_hidden_EnableReplication = v
+}
+
+type AddOrUpdateRemoteClusterRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	FrontendAddress               string
+	EnableRemoteClusterConnection bool
+	// Deprecated: Marked as deprecated in temporal/server/api/adminservice/v1/request_response.proto.
+	FrontendHttpAddress string
+	// enable_replication controls whether replication streams are active.
+	EnableReplication bool
+}
+
+func (b0 AddOrUpdateRemoteClusterRequest_builder) Build() *AddOrUpdateRemoteClusterRequest {
+	m0 := &AddOrUpdateRemoteClusterRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_FrontendAddress = b.FrontendAddress
+	x.xxx_hidden_EnableRemoteClusterConnection = b.EnableRemoteClusterConnection
+	x.xxx_hidden_FrontendHttpAddress = b.FrontendHttpAddress
+	x.xxx_hidden_EnableReplication = b.EnableReplication
+	return m0
+}
+
 type AddOrUpdateRemoteClusterResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2465,16 +3736,23 @@ func (x *AddOrUpdateRemoteClusterResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use AddOrUpdateRemoteClusterResponse.ProtoReflect.Descriptor instead.
-func (*AddOrUpdateRemoteClusterResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{40}
+type AddOrUpdateRemoteClusterResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+}
+
+func (b0 AddOrUpdateRemoteClusterResponse_builder) Build() *AddOrUpdateRemoteClusterResponse {
+	m0 := &AddOrUpdateRemoteClusterResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	return m0
 }
 
 type RemoveRemoteClusterRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ClusterName   string                 `protobuf:"bytes,1,opt,name=cluster_name,json=clusterName,proto3" json:"cluster_name,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                  protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_ClusterName string                 `protobuf:"bytes,1,opt,name=cluster_name,json=clusterName,proto3"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *RemoveRemoteClusterRequest) Reset() {
@@ -2502,20 +3780,33 @@ func (x *RemoveRemoteClusterRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RemoveRemoteClusterRequest.ProtoReflect.Descriptor instead.
-func (*RemoveRemoteClusterRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{41}
-}
-
 func (x *RemoveRemoteClusterRequest) GetClusterName() string {
 	if x != nil {
-		return x.ClusterName
+		return x.xxx_hidden_ClusterName
 	}
 	return ""
 }
 
+func (x *RemoveRemoteClusterRequest) SetClusterName(v string) {
+	x.xxx_hidden_ClusterName = v
+}
+
+type RemoveRemoteClusterRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	ClusterName string
+}
+
+func (b0 RemoveRemoteClusterRequest_builder) Build() *RemoveRemoteClusterRequest {
+	m0 := &RemoveRemoteClusterRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_ClusterName = b.ClusterName
+	return m0
+}
+
 type RemoveRemoteClusterResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2545,28 +3836,29 @@ func (x *RemoveRemoteClusterResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RemoveRemoteClusterResponse.ProtoReflect.Descriptor instead.
-func (*RemoveRemoteClusterResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{42}
+type RemoveRemoteClusterResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+}
+
+func (b0 RemoveRemoteClusterResponse_builder) Build() *RemoveRemoteClusterResponse {
+	m0 := &RemoveRemoteClusterResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	return m0
 }
 
 type ListClusterMembersRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// (-- api-linter: core::0140::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: "within" is used to indicate a time range. --)
-	LastHeartbeatWithin *durationpb.Duration  `protobuf:"bytes,1,opt,name=last_heartbeat_within,json=lastHeartbeatWithin,proto3" json:"last_heartbeat_within,omitempty"`
-	RpcAddress          string                `protobuf:"bytes,2,opt,name=rpc_address,json=rpcAddress,proto3" json:"rpc_address,omitempty"`
-	HostId              string                `protobuf:"bytes,3,opt,name=host_id,json=hostId,proto3" json:"host_id,omitempty"`
-	Role                v14.ClusterMemberRole `protobuf:"varint,4,opt,name=role,proto3,enum=temporal.server.api.enums.v1.ClusterMemberRole" json:"role,omitempty"`
-	// (-- api-linter: core::0140::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: "after" is used to indicate a time range. --)
-	SessionStartedAfterTime *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=session_started_after_time,json=sessionStartedAfterTime,proto3" json:"session_started_after_time,omitempty"`
-	PageSize                int32                  `protobuf:"varint,6,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
-	NextPageToken           []byte                 `protobuf:"bytes,7,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
-	unknownFields           protoimpl.UnknownFields
-	sizeCache               protoimpl.SizeCache
+	state                              protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_LastHeartbeatWithin     *durationpb.Duration   `protobuf:"bytes,1,opt,name=last_heartbeat_within,json=lastHeartbeatWithin,proto3"`
+	xxx_hidden_RpcAddress              string                 `protobuf:"bytes,2,opt,name=rpc_address,json=rpcAddress,proto3"`
+	xxx_hidden_HostId                  string                 `protobuf:"bytes,3,opt,name=host_id,json=hostId,proto3"`
+	xxx_hidden_Role                    v14.ClusterMemberRole  `protobuf:"varint,4,opt,name=role,proto3,enum=temporal.server.api.enums.v1.ClusterMemberRole"`
+	xxx_hidden_SessionStartedAfterTime *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=session_started_after_time,json=sessionStartedAfterTime,proto3"`
+	xxx_hidden_PageSize                int32                  `protobuf:"varint,6,opt,name=page_size,json=pageSize,proto3"`
+	xxx_hidden_NextPageToken           []byte                 `protobuf:"bytes,7,opt,name=next_page_token,json=nextPageToken,proto3"`
+	unknownFields                      protoimpl.UnknownFields
+	sizeCache                          protoimpl.SizeCache
 }
 
 func (x *ListClusterMembersRequest) Reset() {
@@ -2594,66 +3886,146 @@ func (x *ListClusterMembersRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListClusterMembersRequest.ProtoReflect.Descriptor instead.
-func (*ListClusterMembersRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{43}
-}
-
 func (x *ListClusterMembersRequest) GetLastHeartbeatWithin() *durationpb.Duration {
 	if x != nil {
-		return x.LastHeartbeatWithin
+		return x.xxx_hidden_LastHeartbeatWithin
 	}
 	return nil
 }
 
 func (x *ListClusterMembersRequest) GetRpcAddress() string {
 	if x != nil {
-		return x.RpcAddress
+		return x.xxx_hidden_RpcAddress
 	}
 	return ""
 }
 
 func (x *ListClusterMembersRequest) GetHostId() string {
 	if x != nil {
-		return x.HostId
+		return x.xxx_hidden_HostId
 	}
 	return ""
 }
 
 func (x *ListClusterMembersRequest) GetRole() v14.ClusterMemberRole {
 	if x != nil {
-		return x.Role
+		return x.xxx_hidden_Role
 	}
 	return v14.ClusterMemberRole(0)
 }
 
 func (x *ListClusterMembersRequest) GetSessionStartedAfterTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.SessionStartedAfterTime
+		return x.xxx_hidden_SessionStartedAfterTime
 	}
 	return nil
 }
 
 func (x *ListClusterMembersRequest) GetPageSize() int32 {
 	if x != nil {
-		return x.PageSize
+		return x.xxx_hidden_PageSize
 	}
 	return 0
 }
 
 func (x *ListClusterMembersRequest) GetNextPageToken() []byte {
 	if x != nil {
-		return x.NextPageToken
+		return x.xxx_hidden_NextPageToken
 	}
 	return nil
 }
 
+func (x *ListClusterMembersRequest) SetLastHeartbeatWithin(v *durationpb.Duration) {
+	x.xxx_hidden_LastHeartbeatWithin = v
+}
+
+func (x *ListClusterMembersRequest) SetRpcAddress(v string) {
+	x.xxx_hidden_RpcAddress = v
+}
+
+func (x *ListClusterMembersRequest) SetHostId(v string) {
+	x.xxx_hidden_HostId = v
+}
+
+func (x *ListClusterMembersRequest) SetRole(v v14.ClusterMemberRole) {
+	x.xxx_hidden_Role = v
+}
+
+func (x *ListClusterMembersRequest) SetSessionStartedAfterTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_SessionStartedAfterTime = v
+}
+
+func (x *ListClusterMembersRequest) SetPageSize(v int32) {
+	x.xxx_hidden_PageSize = v
+}
+
+func (x *ListClusterMembersRequest) SetNextPageToken(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_NextPageToken = v
+}
+
+func (x *ListClusterMembersRequest) HasLastHeartbeatWithin() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_LastHeartbeatWithin != nil
+}
+
+func (x *ListClusterMembersRequest) HasSessionStartedAfterTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_SessionStartedAfterTime != nil
+}
+
+func (x *ListClusterMembersRequest) ClearLastHeartbeatWithin() {
+	x.xxx_hidden_LastHeartbeatWithin = nil
+}
+
+func (x *ListClusterMembersRequest) ClearSessionStartedAfterTime() {
+	x.xxx_hidden_SessionStartedAfterTime = nil
+}
+
+type ListClusterMembersRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// (-- api-linter: core::0140::prepositions=disabled
+	//
+	//	aip.dev/not-precedent: "within" is used to indicate a time range. --)
+	LastHeartbeatWithin *durationpb.Duration
+	RpcAddress          string
+	HostId              string
+	Role                v14.ClusterMemberRole
+	// (-- api-linter: core::0140::prepositions=disabled
+	//
+	//	aip.dev/not-precedent: "after" is used to indicate a time range. --)
+	SessionStartedAfterTime *timestamppb.Timestamp
+	PageSize                int32
+	NextPageToken           []byte
+}
+
+func (b0 ListClusterMembersRequest_builder) Build() *ListClusterMembersRequest {
+	m0 := &ListClusterMembersRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_LastHeartbeatWithin = b.LastHeartbeatWithin
+	x.xxx_hidden_RpcAddress = b.RpcAddress
+	x.xxx_hidden_HostId = b.HostId
+	x.xxx_hidden_Role = b.Role
+	x.xxx_hidden_SessionStartedAfterTime = b.SessionStartedAfterTime
+	x.xxx_hidden_PageSize = b.PageSize
+	x.xxx_hidden_NextPageToken = b.NextPageToken
+	return m0
+}
+
 type ListClusterMembersResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ActiveMembers []*v18.ClusterMember   `protobuf:"bytes,1,rep,name=active_members,json=activeMembers,proto3" json:"active_members,omitempty"`
-	NextPageToken []byte                 `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                    protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_ActiveMembers *[]*v18.ClusterMember  `protobuf:"bytes,1,rep,name=active_members,json=activeMembers,proto3"`
+	xxx_hidden_NextPageToken []byte                 `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *ListClusterMembersResponse) Reset() {
@@ -2681,35 +4053,59 @@ func (x *ListClusterMembersResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListClusterMembersResponse.ProtoReflect.Descriptor instead.
-func (*ListClusterMembersResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{44}
-}
-
 func (x *ListClusterMembersResponse) GetActiveMembers() []*v18.ClusterMember {
 	if x != nil {
-		return x.ActiveMembers
+		if x.xxx_hidden_ActiveMembers != nil {
+			return *x.xxx_hidden_ActiveMembers
+		}
 	}
 	return nil
 }
 
 func (x *ListClusterMembersResponse) GetNextPageToken() []byte {
 	if x != nil {
-		return x.NextPageToken
+		return x.xxx_hidden_NextPageToken
 	}
 	return nil
 }
 
+func (x *ListClusterMembersResponse) SetActiveMembers(v []*v18.ClusterMember) {
+	x.xxx_hidden_ActiveMembers = &v
+}
+
+func (x *ListClusterMembersResponse) SetNextPageToken(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_NextPageToken = v
+}
+
+type ListClusterMembersResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	ActiveMembers []*v18.ClusterMember
+	NextPageToken []byte
+}
+
+func (b0 ListClusterMembersResponse_builder) Build() *ListClusterMembersResponse {
+	m0 := &ListClusterMembersResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_ActiveMembers = &b.ActiveMembers
+	x.xxx_hidden_NextPageToken = b.NextPageToken
+	return m0
+}
+
 type GetDLQMessagesRequest struct {
-	state                 protoimpl.MessageState  `protogen:"open.v1"`
-	Type                  v14.DeadLetterQueueType `protobuf:"varint,1,opt,name=type,proto3,enum=temporal.server.api.enums.v1.DeadLetterQueueType" json:"type,omitempty"`
-	ShardId               int32                   `protobuf:"varint,2,opt,name=shard_id,json=shardId,proto3" json:"shard_id,omitempty"`
-	SourceCluster         string                  `protobuf:"bytes,3,opt,name=source_cluster,json=sourceCluster,proto3" json:"source_cluster,omitempty"`
-	InclusiveEndMessageId int64                   `protobuf:"varint,4,opt,name=inclusive_end_message_id,json=inclusiveEndMessageId,proto3" json:"inclusive_end_message_id,omitempty"`
-	MaximumPageSize       int32                   `protobuf:"varint,5,opt,name=maximum_page_size,json=maximumPageSize,proto3" json:"maximum_page_size,omitempty"`
-	NextPageToken         []byte                  `protobuf:"bytes,6,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
-	unknownFields         protoimpl.UnknownFields
-	sizeCache             protoimpl.SizeCache
+	state                            protoimpl.MessageState  `protogen:"opaque.v1"`
+	xxx_hidden_Type                  v14.DeadLetterQueueType `protobuf:"varint,1,opt,name=type,proto3,enum=temporal.server.api.enums.v1.DeadLetterQueueType"`
+	xxx_hidden_ShardId               int32                   `protobuf:"varint,2,opt,name=shard_id,json=shardId,proto3"`
+	xxx_hidden_SourceCluster         string                  `protobuf:"bytes,3,opt,name=source_cluster,json=sourceCluster,proto3"`
+	xxx_hidden_InclusiveEndMessageId int64                   `protobuf:"varint,4,opt,name=inclusive_end_message_id,json=inclusiveEndMessageId,proto3"`
+	xxx_hidden_MaximumPageSize       int32                   `protobuf:"varint,5,opt,name=maximum_page_size,json=maximumPageSize,proto3"`
+	xxx_hidden_NextPageToken         []byte                  `protobuf:"bytes,6,opt,name=next_page_token,json=nextPageToken,proto3"`
+	unknownFields                    protoimpl.UnknownFields
+	sizeCache                        protoimpl.SizeCache
 }
 
 func (x *GetDLQMessagesRequest) Reset() {
@@ -2737,61 +4133,107 @@ func (x *GetDLQMessagesRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetDLQMessagesRequest.ProtoReflect.Descriptor instead.
-func (*GetDLQMessagesRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{45}
-}
-
 func (x *GetDLQMessagesRequest) GetType() v14.DeadLetterQueueType {
 	if x != nil {
-		return x.Type
+		return x.xxx_hidden_Type
 	}
 	return v14.DeadLetterQueueType(0)
 }
 
 func (x *GetDLQMessagesRequest) GetShardId() int32 {
 	if x != nil {
-		return x.ShardId
+		return x.xxx_hidden_ShardId
 	}
 	return 0
 }
 
 func (x *GetDLQMessagesRequest) GetSourceCluster() string {
 	if x != nil {
-		return x.SourceCluster
+		return x.xxx_hidden_SourceCluster
 	}
 	return ""
 }
 
 func (x *GetDLQMessagesRequest) GetInclusiveEndMessageId() int64 {
 	if x != nil {
-		return x.InclusiveEndMessageId
+		return x.xxx_hidden_InclusiveEndMessageId
 	}
 	return 0
 }
 
 func (x *GetDLQMessagesRequest) GetMaximumPageSize() int32 {
 	if x != nil {
-		return x.MaximumPageSize
+		return x.xxx_hidden_MaximumPageSize
 	}
 	return 0
 }
 
 func (x *GetDLQMessagesRequest) GetNextPageToken() []byte {
 	if x != nil {
-		return x.NextPageToken
+		return x.xxx_hidden_NextPageToken
 	}
 	return nil
 }
 
+func (x *GetDLQMessagesRequest) SetType(v v14.DeadLetterQueueType) {
+	x.xxx_hidden_Type = v
+}
+
+func (x *GetDLQMessagesRequest) SetShardId(v int32) {
+	x.xxx_hidden_ShardId = v
+}
+
+func (x *GetDLQMessagesRequest) SetSourceCluster(v string) {
+	x.xxx_hidden_SourceCluster = v
+}
+
+func (x *GetDLQMessagesRequest) SetInclusiveEndMessageId(v int64) {
+	x.xxx_hidden_InclusiveEndMessageId = v
+}
+
+func (x *GetDLQMessagesRequest) SetMaximumPageSize(v int32) {
+	x.xxx_hidden_MaximumPageSize = v
+}
+
+func (x *GetDLQMessagesRequest) SetNextPageToken(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_NextPageToken = v
+}
+
+type GetDLQMessagesRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Type                  v14.DeadLetterQueueType
+	ShardId               int32
+	SourceCluster         string
+	InclusiveEndMessageId int64
+	MaximumPageSize       int32
+	NextPageToken         []byte
+}
+
+func (b0 GetDLQMessagesRequest_builder) Build() *GetDLQMessagesRequest {
+	m0 := &GetDLQMessagesRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Type = b.Type
+	x.xxx_hidden_ShardId = b.ShardId
+	x.xxx_hidden_SourceCluster = b.SourceCluster
+	x.xxx_hidden_InclusiveEndMessageId = b.InclusiveEndMessageId
+	x.xxx_hidden_MaximumPageSize = b.MaximumPageSize
+	x.xxx_hidden_NextPageToken = b.NextPageToken
+	return m0
+}
+
 type GetDLQMessagesResponse struct {
-	state                protoimpl.MessageState     `protogen:"open.v1"`
-	Type                 v14.DeadLetterQueueType    `protobuf:"varint,1,opt,name=type,proto3,enum=temporal.server.api.enums.v1.DeadLetterQueueType" json:"type,omitempty"`
-	ReplicationTasks     []*v15.ReplicationTask     `protobuf:"bytes,2,rep,name=replication_tasks,json=replicationTasks,proto3" json:"replication_tasks,omitempty"`
-	NextPageToken        []byte                     `protobuf:"bytes,3,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
-	ReplicationTasksInfo []*v15.ReplicationTaskInfo `protobuf:"bytes,4,rep,name=replication_tasks_info,json=replicationTasksInfo,proto3" json:"replication_tasks_info,omitempty"`
-	unknownFields        protoimpl.UnknownFields
-	sizeCache            protoimpl.SizeCache
+	state                           protoimpl.MessageState      `protogen:"opaque.v1"`
+	xxx_hidden_Type                 v14.DeadLetterQueueType     `protobuf:"varint,1,opt,name=type,proto3,enum=temporal.server.api.enums.v1.DeadLetterQueueType"`
+	xxx_hidden_ReplicationTasks     *[]*v15.ReplicationTask     `protobuf:"bytes,2,rep,name=replication_tasks,json=replicationTasks,proto3"`
+	xxx_hidden_NextPageToken        []byte                      `protobuf:"bytes,3,opt,name=next_page_token,json=nextPageToken,proto3"`
+	xxx_hidden_ReplicationTasksInfo *[]*v15.ReplicationTaskInfo `protobuf:"bytes,4,rep,name=replication_tasks_info,json=replicationTasksInfo,proto3"`
+	unknownFields                   protoimpl.UnknownFields
+	sizeCache                       protoimpl.SizeCache
 }
 
 func (x *GetDLQMessagesResponse) Reset() {
@@ -2819,47 +4261,85 @@ func (x *GetDLQMessagesResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetDLQMessagesResponse.ProtoReflect.Descriptor instead.
-func (*GetDLQMessagesResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{46}
-}
-
 func (x *GetDLQMessagesResponse) GetType() v14.DeadLetterQueueType {
 	if x != nil {
-		return x.Type
+		return x.xxx_hidden_Type
 	}
 	return v14.DeadLetterQueueType(0)
 }
 
 func (x *GetDLQMessagesResponse) GetReplicationTasks() []*v15.ReplicationTask {
 	if x != nil {
-		return x.ReplicationTasks
+		if x.xxx_hidden_ReplicationTasks != nil {
+			return *x.xxx_hidden_ReplicationTasks
+		}
 	}
 	return nil
 }
 
 func (x *GetDLQMessagesResponse) GetNextPageToken() []byte {
 	if x != nil {
-		return x.NextPageToken
+		return x.xxx_hidden_NextPageToken
 	}
 	return nil
 }
 
 func (x *GetDLQMessagesResponse) GetReplicationTasksInfo() []*v15.ReplicationTaskInfo {
 	if x != nil {
-		return x.ReplicationTasksInfo
+		if x.xxx_hidden_ReplicationTasksInfo != nil {
+			return *x.xxx_hidden_ReplicationTasksInfo
+		}
 	}
 	return nil
 }
 
+func (x *GetDLQMessagesResponse) SetType(v v14.DeadLetterQueueType) {
+	x.xxx_hidden_Type = v
+}
+
+func (x *GetDLQMessagesResponse) SetReplicationTasks(v []*v15.ReplicationTask) {
+	x.xxx_hidden_ReplicationTasks = &v
+}
+
+func (x *GetDLQMessagesResponse) SetNextPageToken(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_NextPageToken = v
+}
+
+func (x *GetDLQMessagesResponse) SetReplicationTasksInfo(v []*v15.ReplicationTaskInfo) {
+	x.xxx_hidden_ReplicationTasksInfo = &v
+}
+
+type GetDLQMessagesResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Type                 v14.DeadLetterQueueType
+	ReplicationTasks     []*v15.ReplicationTask
+	NextPageToken        []byte
+	ReplicationTasksInfo []*v15.ReplicationTaskInfo
+}
+
+func (b0 GetDLQMessagesResponse_builder) Build() *GetDLQMessagesResponse {
+	m0 := &GetDLQMessagesResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Type = b.Type
+	x.xxx_hidden_ReplicationTasks = &b.ReplicationTasks
+	x.xxx_hidden_NextPageToken = b.NextPageToken
+	x.xxx_hidden_ReplicationTasksInfo = &b.ReplicationTasksInfo
+	return m0
+}
+
 type PurgeDLQMessagesRequest struct {
-	state                 protoimpl.MessageState  `protogen:"open.v1"`
-	Type                  v14.DeadLetterQueueType `protobuf:"varint,1,opt,name=type,proto3,enum=temporal.server.api.enums.v1.DeadLetterQueueType" json:"type,omitempty"`
-	ShardId               int32                   `protobuf:"varint,2,opt,name=shard_id,json=shardId,proto3" json:"shard_id,omitempty"`
-	SourceCluster         string                  `protobuf:"bytes,3,opt,name=source_cluster,json=sourceCluster,proto3" json:"source_cluster,omitempty"`
-	InclusiveEndMessageId int64                   `protobuf:"varint,4,opt,name=inclusive_end_message_id,json=inclusiveEndMessageId,proto3" json:"inclusive_end_message_id,omitempty"`
-	unknownFields         protoimpl.UnknownFields
-	sizeCache             protoimpl.SizeCache
+	state                            protoimpl.MessageState  `protogen:"opaque.v1"`
+	xxx_hidden_Type                  v14.DeadLetterQueueType `protobuf:"varint,1,opt,name=type,proto3,enum=temporal.server.api.enums.v1.DeadLetterQueueType"`
+	xxx_hidden_ShardId               int32                   `protobuf:"varint,2,opt,name=shard_id,json=shardId,proto3"`
+	xxx_hidden_SourceCluster         string                  `protobuf:"bytes,3,opt,name=source_cluster,json=sourceCluster,proto3"`
+	xxx_hidden_InclusiveEndMessageId int64                   `protobuf:"varint,4,opt,name=inclusive_end_message_id,json=inclusiveEndMessageId,proto3"`
+	unknownFields                    protoimpl.UnknownFields
+	sizeCache                        protoimpl.SizeCache
 }
 
 func (x *PurgeDLQMessagesRequest) Reset() {
@@ -2887,41 +4367,72 @@ func (x *PurgeDLQMessagesRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use PurgeDLQMessagesRequest.ProtoReflect.Descriptor instead.
-func (*PurgeDLQMessagesRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{47}
-}
-
 func (x *PurgeDLQMessagesRequest) GetType() v14.DeadLetterQueueType {
 	if x != nil {
-		return x.Type
+		return x.xxx_hidden_Type
 	}
 	return v14.DeadLetterQueueType(0)
 }
 
 func (x *PurgeDLQMessagesRequest) GetShardId() int32 {
 	if x != nil {
-		return x.ShardId
+		return x.xxx_hidden_ShardId
 	}
 	return 0
 }
 
 func (x *PurgeDLQMessagesRequest) GetSourceCluster() string {
 	if x != nil {
-		return x.SourceCluster
+		return x.xxx_hidden_SourceCluster
 	}
 	return ""
 }
 
 func (x *PurgeDLQMessagesRequest) GetInclusiveEndMessageId() int64 {
 	if x != nil {
-		return x.InclusiveEndMessageId
+		return x.xxx_hidden_InclusiveEndMessageId
 	}
 	return 0
 }
 
+func (x *PurgeDLQMessagesRequest) SetType(v v14.DeadLetterQueueType) {
+	x.xxx_hidden_Type = v
+}
+
+func (x *PurgeDLQMessagesRequest) SetShardId(v int32) {
+	x.xxx_hidden_ShardId = v
+}
+
+func (x *PurgeDLQMessagesRequest) SetSourceCluster(v string) {
+	x.xxx_hidden_SourceCluster = v
+}
+
+func (x *PurgeDLQMessagesRequest) SetInclusiveEndMessageId(v int64) {
+	x.xxx_hidden_InclusiveEndMessageId = v
+}
+
+type PurgeDLQMessagesRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Type                  v14.DeadLetterQueueType
+	ShardId               int32
+	SourceCluster         string
+	InclusiveEndMessageId int64
+}
+
+func (b0 PurgeDLQMessagesRequest_builder) Build() *PurgeDLQMessagesRequest {
+	m0 := &PurgeDLQMessagesRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Type = b.Type
+	x.xxx_hidden_ShardId = b.ShardId
+	x.xxx_hidden_SourceCluster = b.SourceCluster
+	x.xxx_hidden_InclusiveEndMessageId = b.InclusiveEndMessageId
+	return m0
+}
+
 type PurgeDLQMessagesResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2951,21 +4462,28 @@ func (x *PurgeDLQMessagesResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use PurgeDLQMessagesResponse.ProtoReflect.Descriptor instead.
-func (*PurgeDLQMessagesResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{48}
+type PurgeDLQMessagesResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+}
+
+func (b0 PurgeDLQMessagesResponse_builder) Build() *PurgeDLQMessagesResponse {
+	m0 := &PurgeDLQMessagesResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	return m0
 }
 
 type MergeDLQMessagesRequest struct {
-	state                 protoimpl.MessageState  `protogen:"open.v1"`
-	Type                  v14.DeadLetterQueueType `protobuf:"varint,1,opt,name=type,proto3,enum=temporal.server.api.enums.v1.DeadLetterQueueType" json:"type,omitempty"`
-	ShardId               int32                   `protobuf:"varint,2,opt,name=shard_id,json=shardId,proto3" json:"shard_id,omitempty"`
-	SourceCluster         string                  `protobuf:"bytes,3,opt,name=source_cluster,json=sourceCluster,proto3" json:"source_cluster,omitempty"`
-	InclusiveEndMessageId int64                   `protobuf:"varint,4,opt,name=inclusive_end_message_id,json=inclusiveEndMessageId,proto3" json:"inclusive_end_message_id,omitempty"`
-	MaximumPageSize       int32                   `protobuf:"varint,5,opt,name=maximum_page_size,json=maximumPageSize,proto3" json:"maximum_page_size,omitempty"`
-	NextPageToken         []byte                  `protobuf:"bytes,6,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
-	unknownFields         protoimpl.UnknownFields
-	sizeCache             protoimpl.SizeCache
+	state                            protoimpl.MessageState  `protogen:"opaque.v1"`
+	xxx_hidden_Type                  v14.DeadLetterQueueType `protobuf:"varint,1,opt,name=type,proto3,enum=temporal.server.api.enums.v1.DeadLetterQueueType"`
+	xxx_hidden_ShardId               int32                   `protobuf:"varint,2,opt,name=shard_id,json=shardId,proto3"`
+	xxx_hidden_SourceCluster         string                  `protobuf:"bytes,3,opt,name=source_cluster,json=sourceCluster,proto3"`
+	xxx_hidden_InclusiveEndMessageId int64                   `protobuf:"varint,4,opt,name=inclusive_end_message_id,json=inclusiveEndMessageId,proto3"`
+	xxx_hidden_MaximumPageSize       int32                   `protobuf:"varint,5,opt,name=maximum_page_size,json=maximumPageSize,proto3"`
+	xxx_hidden_NextPageToken         []byte                  `protobuf:"bytes,6,opt,name=next_page_token,json=nextPageToken,proto3"`
+	unknownFields                    protoimpl.UnknownFields
+	sizeCache                        protoimpl.SizeCache
 }
 
 func (x *MergeDLQMessagesRequest) Reset() {
@@ -2993,58 +4511,104 @@ func (x *MergeDLQMessagesRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use MergeDLQMessagesRequest.ProtoReflect.Descriptor instead.
-func (*MergeDLQMessagesRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{49}
-}
-
 func (x *MergeDLQMessagesRequest) GetType() v14.DeadLetterQueueType {
 	if x != nil {
-		return x.Type
+		return x.xxx_hidden_Type
 	}
 	return v14.DeadLetterQueueType(0)
 }
 
 func (x *MergeDLQMessagesRequest) GetShardId() int32 {
 	if x != nil {
-		return x.ShardId
+		return x.xxx_hidden_ShardId
 	}
 	return 0
 }
 
 func (x *MergeDLQMessagesRequest) GetSourceCluster() string {
 	if x != nil {
-		return x.SourceCluster
+		return x.xxx_hidden_SourceCluster
 	}
 	return ""
 }
 
 func (x *MergeDLQMessagesRequest) GetInclusiveEndMessageId() int64 {
 	if x != nil {
-		return x.InclusiveEndMessageId
+		return x.xxx_hidden_InclusiveEndMessageId
 	}
 	return 0
 }
 
 func (x *MergeDLQMessagesRequest) GetMaximumPageSize() int32 {
 	if x != nil {
-		return x.MaximumPageSize
+		return x.xxx_hidden_MaximumPageSize
 	}
 	return 0
 }
 
 func (x *MergeDLQMessagesRequest) GetNextPageToken() []byte {
 	if x != nil {
-		return x.NextPageToken
+		return x.xxx_hidden_NextPageToken
 	}
 	return nil
 }
 
+func (x *MergeDLQMessagesRequest) SetType(v v14.DeadLetterQueueType) {
+	x.xxx_hidden_Type = v
+}
+
+func (x *MergeDLQMessagesRequest) SetShardId(v int32) {
+	x.xxx_hidden_ShardId = v
+}
+
+func (x *MergeDLQMessagesRequest) SetSourceCluster(v string) {
+	x.xxx_hidden_SourceCluster = v
+}
+
+func (x *MergeDLQMessagesRequest) SetInclusiveEndMessageId(v int64) {
+	x.xxx_hidden_InclusiveEndMessageId = v
+}
+
+func (x *MergeDLQMessagesRequest) SetMaximumPageSize(v int32) {
+	x.xxx_hidden_MaximumPageSize = v
+}
+
+func (x *MergeDLQMessagesRequest) SetNextPageToken(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_NextPageToken = v
+}
+
+type MergeDLQMessagesRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Type                  v14.DeadLetterQueueType
+	ShardId               int32
+	SourceCluster         string
+	InclusiveEndMessageId int64
+	MaximumPageSize       int32
+	NextPageToken         []byte
+}
+
+func (b0 MergeDLQMessagesRequest_builder) Build() *MergeDLQMessagesRequest {
+	m0 := &MergeDLQMessagesRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Type = b.Type
+	x.xxx_hidden_ShardId = b.ShardId
+	x.xxx_hidden_SourceCluster = b.SourceCluster
+	x.xxx_hidden_InclusiveEndMessageId = b.InclusiveEndMessageId
+	x.xxx_hidden_MaximumPageSize = b.MaximumPageSize
+	x.xxx_hidden_NextPageToken = b.NextPageToken
+	return m0
+}
+
 type MergeDLQMessagesResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	NextPageToken []byte                 `protobuf:"bytes,1,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                    protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_NextPageToken []byte                 `protobuf:"bytes,1,opt,name=next_page_token,json=nextPageToken,proto3"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *MergeDLQMessagesResponse) Reset() {
@@ -3072,25 +4636,41 @@ func (x *MergeDLQMessagesResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use MergeDLQMessagesResponse.ProtoReflect.Descriptor instead.
-func (*MergeDLQMessagesResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{50}
-}
-
 func (x *MergeDLQMessagesResponse) GetNextPageToken() []byte {
 	if x != nil {
-		return x.NextPageToken
+		return x.xxx_hidden_NextPageToken
 	}
 	return nil
 }
 
+func (x *MergeDLQMessagesResponse) SetNextPageToken(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_NextPageToken = v
+}
+
+type MergeDLQMessagesResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NextPageToken []byte
+}
+
+func (b0 MergeDLQMessagesResponse_builder) Build() *MergeDLQMessagesResponse {
+	m0 := &MergeDLQMessagesResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NextPageToken = b.NextPageToken
+	return m0
+}
+
 type RefreshWorkflowTasksRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	NamespaceId   string                 `protobuf:"bytes,3,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	Execution     *v1.WorkflowExecution  `protobuf:"bytes,2,opt,name=execution,proto3" json:"execution,omitempty"`
-	Archetype     string                 `protobuf:"bytes,4,opt,name=archetype,proto3" json:"archetype,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                  protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId string                 `protobuf:"bytes,3,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_Execution   *v1.WorkflowExecution  `protobuf:"bytes,2,opt,name=execution,proto3"`
+	xxx_hidden_Archetype   string                 `protobuf:"bytes,4,opt,name=archetype,proto3"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *RefreshWorkflowTasksRequest) Reset() {
@@ -3118,34 +4698,70 @@ func (x *RefreshWorkflowTasksRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RefreshWorkflowTasksRequest.ProtoReflect.Descriptor instead.
-func (*RefreshWorkflowTasksRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{51}
-}
-
 func (x *RefreshWorkflowTasksRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *RefreshWorkflowTasksRequest) GetExecution() *v1.WorkflowExecution {
 	if x != nil {
-		return x.Execution
+		return x.xxx_hidden_Execution
 	}
 	return nil
 }
 
 func (x *RefreshWorkflowTasksRequest) GetArchetype() string {
 	if x != nil {
-		return x.Archetype
+		return x.xxx_hidden_Archetype
 	}
 	return ""
 }
 
+func (x *RefreshWorkflowTasksRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *RefreshWorkflowTasksRequest) SetExecution(v *v1.WorkflowExecution) {
+	x.xxx_hidden_Execution = v
+}
+
+func (x *RefreshWorkflowTasksRequest) SetArchetype(v string) {
+	x.xxx_hidden_Archetype = v
+}
+
+func (x *RefreshWorkflowTasksRequest) HasExecution() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Execution != nil
+}
+
+func (x *RefreshWorkflowTasksRequest) ClearExecution() {
+	x.xxx_hidden_Execution = nil
+}
+
+type RefreshWorkflowTasksRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId string
+	Execution   *v1.WorkflowExecution
+	Archetype   string
+}
+
+func (b0 RefreshWorkflowTasksRequest_builder) Build() *RefreshWorkflowTasksRequest {
+	m0 := &RefreshWorkflowTasksRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_Execution = b.Execution
+	x.xxx_hidden_Archetype = b.Archetype
+	return m0
+}
+
 type RefreshWorkflowTasksResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3175,23 +4791,30 @@ func (x *RefreshWorkflowTasksResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RefreshWorkflowTasksResponse.ProtoReflect.Descriptor instead.
-func (*RefreshWorkflowTasksResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{52}
+type RefreshWorkflowTasksResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+}
+
+func (b0 RefreshWorkflowTasksResponse_builder) Build() *RefreshWorkflowTasksResponse {
+	m0 := &RefreshWorkflowTasksResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	return m0
 }
 
 type ResendReplicationTasksRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	NamespaceId   string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	WorkflowId    string                 `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
-	RunId         string                 `protobuf:"bytes,3,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	RemoteCluster string                 `protobuf:"bytes,4,opt,name=remote_cluster,json=remoteCluster,proto3" json:"remote_cluster,omitempty"`
-	StartEventId  int64                  `protobuf:"varint,5,opt,name=start_event_id,json=startEventId,proto3" json:"start_event_id,omitempty"`
-	StartVersion  int64                  `protobuf:"varint,6,opt,name=start_version,json=startVersion,proto3" json:"start_version,omitempty"`
-	EndEventId    int64                  `protobuf:"varint,7,opt,name=end_event_id,json=endEventId,proto3" json:"end_event_id,omitempty"`
-	EndVersion    int64                  `protobuf:"varint,8,opt,name=end_version,json=endVersion,proto3" json:"end_version,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                    protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId   string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_WorkflowId    string                 `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3"`
+	xxx_hidden_RunId         string                 `protobuf:"bytes,3,opt,name=run_id,json=runId,proto3"`
+	xxx_hidden_RemoteCluster string                 `protobuf:"bytes,4,opt,name=remote_cluster,json=remoteCluster,proto3"`
+	xxx_hidden_StartEventId  int64                  `protobuf:"varint,5,opt,name=start_event_id,json=startEventId,proto3"`
+	xxx_hidden_StartVersion  int64                  `protobuf:"varint,6,opt,name=start_version,json=startVersion,proto3"`
+	xxx_hidden_EndEventId    int64                  `protobuf:"varint,7,opt,name=end_event_id,json=endEventId,proto3"`
+	xxx_hidden_EndVersion    int64                  `protobuf:"varint,8,opt,name=end_version,json=endVersion,proto3"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *ResendReplicationTasksRequest) Reset() {
@@ -3219,69 +4842,124 @@ func (x *ResendReplicationTasksRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ResendReplicationTasksRequest.ProtoReflect.Descriptor instead.
-func (*ResendReplicationTasksRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{53}
-}
-
 func (x *ResendReplicationTasksRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *ResendReplicationTasksRequest) GetWorkflowId() string {
 	if x != nil {
-		return x.WorkflowId
+		return x.xxx_hidden_WorkflowId
 	}
 	return ""
 }
 
 func (x *ResendReplicationTasksRequest) GetRunId() string {
 	if x != nil {
-		return x.RunId
+		return x.xxx_hidden_RunId
 	}
 	return ""
 }
 
 func (x *ResendReplicationTasksRequest) GetRemoteCluster() string {
 	if x != nil {
-		return x.RemoteCluster
+		return x.xxx_hidden_RemoteCluster
 	}
 	return ""
 }
 
 func (x *ResendReplicationTasksRequest) GetStartEventId() int64 {
 	if x != nil {
-		return x.StartEventId
+		return x.xxx_hidden_StartEventId
 	}
 	return 0
 }
 
 func (x *ResendReplicationTasksRequest) GetStartVersion() int64 {
 	if x != nil {
-		return x.StartVersion
+		return x.xxx_hidden_StartVersion
 	}
 	return 0
 }
 
 func (x *ResendReplicationTasksRequest) GetEndEventId() int64 {
 	if x != nil {
-		return x.EndEventId
+		return x.xxx_hidden_EndEventId
 	}
 	return 0
 }
 
 func (x *ResendReplicationTasksRequest) GetEndVersion() int64 {
 	if x != nil {
-		return x.EndVersion
+		return x.xxx_hidden_EndVersion
 	}
 	return 0
 }
 
+func (x *ResendReplicationTasksRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *ResendReplicationTasksRequest) SetWorkflowId(v string) {
+	x.xxx_hidden_WorkflowId = v
+}
+
+func (x *ResendReplicationTasksRequest) SetRunId(v string) {
+	x.xxx_hidden_RunId = v
+}
+
+func (x *ResendReplicationTasksRequest) SetRemoteCluster(v string) {
+	x.xxx_hidden_RemoteCluster = v
+}
+
+func (x *ResendReplicationTasksRequest) SetStartEventId(v int64) {
+	x.xxx_hidden_StartEventId = v
+}
+
+func (x *ResendReplicationTasksRequest) SetStartVersion(v int64) {
+	x.xxx_hidden_StartVersion = v
+}
+
+func (x *ResendReplicationTasksRequest) SetEndEventId(v int64) {
+	x.xxx_hidden_EndEventId = v
+}
+
+func (x *ResendReplicationTasksRequest) SetEndVersion(v int64) {
+	x.xxx_hidden_EndVersion = v
+}
+
+type ResendReplicationTasksRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId   string
+	WorkflowId    string
+	RunId         string
+	RemoteCluster string
+	StartEventId  int64
+	StartVersion  int64
+	EndEventId    int64
+	EndVersion    int64
+}
+
+func (b0 ResendReplicationTasksRequest_builder) Build() *ResendReplicationTasksRequest {
+	m0 := &ResendReplicationTasksRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_WorkflowId = b.WorkflowId
+	x.xxx_hidden_RunId = b.RunId
+	x.xxx_hidden_RemoteCluster = b.RemoteCluster
+	x.xxx_hidden_StartEventId = b.StartEventId
+	x.xxx_hidden_StartVersion = b.StartVersion
+	x.xxx_hidden_EndEventId = b.EndEventId
+	x.xxx_hidden_EndVersion = b.EndVersion
+	return m0
+}
+
 type ResendReplicationTasksResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3311,24 +4989,31 @@ func (x *ResendReplicationTasksResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ResendReplicationTasksResponse.ProtoReflect.Descriptor instead.
-func (*ResendReplicationTasksResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{54}
+type ResendReplicationTasksResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+}
+
+func (b0 ResendReplicationTasksResponse_builder) Build() *ResendReplicationTasksResponse {
+	m0 := &ResendReplicationTasksResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	return m0
 }
 
 type GetTaskQueueTasksRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Namespace     string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
-	TaskQueue     string                 `protobuf:"bytes,2,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
-	TaskQueueType v16.TaskQueueType      `protobuf:"varint,3,opt,name=task_queue_type,json=taskQueueType,proto3,enum=temporal.api.enums.v1.TaskQueueType" json:"task_queue_type,omitempty"`
-	MinPass       int64                  `protobuf:"varint,9,opt,name=min_pass,json=minPass,proto3" json:"min_pass,omitempty"`
-	MinTaskId     int64                  `protobuf:"varint,4,opt,name=min_task_id,json=minTaskId,proto3" json:"min_task_id,omitempty"`
-	MaxTaskId     int64                  `protobuf:"varint,5,opt,name=max_task_id,json=maxTaskId,proto3" json:"max_task_id,omitempty"`
-	BatchSize     int32                  `protobuf:"varint,6,opt,name=batch_size,json=batchSize,proto3" json:"batch_size,omitempty"`
-	NextPageToken []byte                 `protobuf:"bytes,7,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
-	Subqueue      int32                  `protobuf:"varint,8,opt,name=subqueue,proto3" json:"subqueue,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                    protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Namespace     string                 `protobuf:"bytes,1,opt,name=namespace,proto3"`
+	xxx_hidden_TaskQueue     string                 `protobuf:"bytes,2,opt,name=task_queue,json=taskQueue,proto3"`
+	xxx_hidden_TaskQueueType v16.TaskQueueType      `protobuf:"varint,3,opt,name=task_queue_type,json=taskQueueType,proto3,enum=temporal.api.enums.v1.TaskQueueType"`
+	xxx_hidden_MinPass       int64                  `protobuf:"varint,9,opt,name=min_pass,json=minPass,proto3"`
+	xxx_hidden_MinTaskId     int64                  `protobuf:"varint,4,opt,name=min_task_id,json=minTaskId,proto3"`
+	xxx_hidden_MaxTaskId     int64                  `protobuf:"varint,5,opt,name=max_task_id,json=maxTaskId,proto3"`
+	xxx_hidden_BatchSize     int32                  `protobuf:"varint,6,opt,name=batch_size,json=batchSize,proto3"`
+	xxx_hidden_NextPageToken []byte                 `protobuf:"bytes,7,opt,name=next_page_token,json=nextPageToken,proto3"`
+	xxx_hidden_Subqueue      int32                  `protobuf:"varint,8,opt,name=subqueue,proto3"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *GetTaskQueueTasksRequest) Reset() {
@@ -3356,80 +5041,144 @@ func (x *GetTaskQueueTasksRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetTaskQueueTasksRequest.ProtoReflect.Descriptor instead.
-func (*GetTaskQueueTasksRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{55}
-}
-
 func (x *GetTaskQueueTasksRequest) GetNamespace() string {
 	if x != nil {
-		return x.Namespace
+		return x.xxx_hidden_Namespace
 	}
 	return ""
 }
 
 func (x *GetTaskQueueTasksRequest) GetTaskQueue() string {
 	if x != nil {
-		return x.TaskQueue
+		return x.xxx_hidden_TaskQueue
 	}
 	return ""
 }
 
 func (x *GetTaskQueueTasksRequest) GetTaskQueueType() v16.TaskQueueType {
 	if x != nil {
-		return x.TaskQueueType
+		return x.xxx_hidden_TaskQueueType
 	}
 	return v16.TaskQueueType(0)
 }
 
 func (x *GetTaskQueueTasksRequest) GetMinPass() int64 {
 	if x != nil {
-		return x.MinPass
+		return x.xxx_hidden_MinPass
 	}
 	return 0
 }
 
 func (x *GetTaskQueueTasksRequest) GetMinTaskId() int64 {
 	if x != nil {
-		return x.MinTaskId
+		return x.xxx_hidden_MinTaskId
 	}
 	return 0
 }
 
 func (x *GetTaskQueueTasksRequest) GetMaxTaskId() int64 {
 	if x != nil {
-		return x.MaxTaskId
+		return x.xxx_hidden_MaxTaskId
 	}
 	return 0
 }
 
 func (x *GetTaskQueueTasksRequest) GetBatchSize() int32 {
 	if x != nil {
-		return x.BatchSize
+		return x.xxx_hidden_BatchSize
 	}
 	return 0
 }
 
 func (x *GetTaskQueueTasksRequest) GetNextPageToken() []byte {
 	if x != nil {
-		return x.NextPageToken
+		return x.xxx_hidden_NextPageToken
 	}
 	return nil
 }
 
 func (x *GetTaskQueueTasksRequest) GetSubqueue() int32 {
 	if x != nil {
-		return x.Subqueue
+		return x.xxx_hidden_Subqueue
 	}
 	return 0
 }
 
+func (x *GetTaskQueueTasksRequest) SetNamespace(v string) {
+	x.xxx_hidden_Namespace = v
+}
+
+func (x *GetTaskQueueTasksRequest) SetTaskQueue(v string) {
+	x.xxx_hidden_TaskQueue = v
+}
+
+func (x *GetTaskQueueTasksRequest) SetTaskQueueType(v v16.TaskQueueType) {
+	x.xxx_hidden_TaskQueueType = v
+}
+
+func (x *GetTaskQueueTasksRequest) SetMinPass(v int64) {
+	x.xxx_hidden_MinPass = v
+}
+
+func (x *GetTaskQueueTasksRequest) SetMinTaskId(v int64) {
+	x.xxx_hidden_MinTaskId = v
+}
+
+func (x *GetTaskQueueTasksRequest) SetMaxTaskId(v int64) {
+	x.xxx_hidden_MaxTaskId = v
+}
+
+func (x *GetTaskQueueTasksRequest) SetBatchSize(v int32) {
+	x.xxx_hidden_BatchSize = v
+}
+
+func (x *GetTaskQueueTasksRequest) SetNextPageToken(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_NextPageToken = v
+}
+
+func (x *GetTaskQueueTasksRequest) SetSubqueue(v int32) {
+	x.xxx_hidden_Subqueue = v
+}
+
+type GetTaskQueueTasksRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Namespace     string
+	TaskQueue     string
+	TaskQueueType v16.TaskQueueType
+	MinPass       int64
+	MinTaskId     int64
+	MaxTaskId     int64
+	BatchSize     int32
+	NextPageToken []byte
+	Subqueue      int32
+}
+
+func (b0 GetTaskQueueTasksRequest_builder) Build() *GetTaskQueueTasksRequest {
+	m0 := &GetTaskQueueTasksRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Namespace = b.Namespace
+	x.xxx_hidden_TaskQueue = b.TaskQueue
+	x.xxx_hidden_TaskQueueType = b.TaskQueueType
+	x.xxx_hidden_MinPass = b.MinPass
+	x.xxx_hidden_MinTaskId = b.MinTaskId
+	x.xxx_hidden_MaxTaskId = b.MaxTaskId
+	x.xxx_hidden_BatchSize = b.BatchSize
+	x.xxx_hidden_NextPageToken = b.NextPageToken
+	x.xxx_hidden_Subqueue = b.Subqueue
+	return m0
+}
+
 type GetTaskQueueTasksResponse struct {
-	state         protoimpl.MessageState   `protogen:"open.v1"`
-	Tasks         []*v12.AllocatedTaskInfo `protobuf:"bytes,1,rep,name=tasks,proto3" json:"tasks,omitempty"`
-	NextPageToken []byte                   `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                    protoimpl.MessageState    `protogen:"opaque.v1"`
+	xxx_hidden_Tasks         *[]*v12.AllocatedTaskInfo `protobuf:"bytes,1,rep,name=tasks,proto3"`
+	xxx_hidden_NextPageToken []byte                    `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *GetTaskQueueTasksResponse) Reset() {
@@ -3457,32 +5206,56 @@ func (x *GetTaskQueueTasksResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetTaskQueueTasksResponse.ProtoReflect.Descriptor instead.
-func (*GetTaskQueueTasksResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{56}
-}
-
 func (x *GetTaskQueueTasksResponse) GetTasks() []*v12.AllocatedTaskInfo {
 	if x != nil {
-		return x.Tasks
+		if x.xxx_hidden_Tasks != nil {
+			return *x.xxx_hidden_Tasks
+		}
 	}
 	return nil
 }
 
 func (x *GetTaskQueueTasksResponse) GetNextPageToken() []byte {
 	if x != nil {
-		return x.NextPageToken
+		return x.xxx_hidden_NextPageToken
 	}
 	return nil
 }
 
+func (x *GetTaskQueueTasksResponse) SetTasks(v []*v12.AllocatedTaskInfo) {
+	x.xxx_hidden_Tasks = &v
+}
+
+func (x *GetTaskQueueTasksResponse) SetNextPageToken(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_NextPageToken = v
+}
+
+type GetTaskQueueTasksResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Tasks         []*v12.AllocatedTaskInfo
+	NextPageToken []byte
+}
+
+func (b0 GetTaskQueueTasksResponse_builder) Build() *GetTaskQueueTasksResponse {
+	m0 := &GetTaskQueueTasksResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Tasks = &b.Tasks
+	x.xxx_hidden_NextPageToken = b.NextPageToken
+	return m0
+}
+
 type DeleteWorkflowExecutionRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Namespace     string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
-	Execution     *v1.WorkflowExecution  `protobuf:"bytes,2,opt,name=execution,proto3" json:"execution,omitempty"`
-	Archetype     string                 `protobuf:"bytes,3,opt,name=archetype,proto3" json:"archetype,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Namespace string                 `protobuf:"bytes,1,opt,name=namespace,proto3"`
+	xxx_hidden_Execution *v1.WorkflowExecution  `protobuf:"bytes,2,opt,name=execution,proto3"`
+	xxx_hidden_Archetype string                 `protobuf:"bytes,3,opt,name=archetype,proto3"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *DeleteWorkflowExecutionRequest) Reset() {
@@ -3510,37 +5283,73 @@ func (x *DeleteWorkflowExecutionRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DeleteWorkflowExecutionRequest.ProtoReflect.Descriptor instead.
-func (*DeleteWorkflowExecutionRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{57}
-}
-
 func (x *DeleteWorkflowExecutionRequest) GetNamespace() string {
 	if x != nil {
-		return x.Namespace
+		return x.xxx_hidden_Namespace
 	}
 	return ""
 }
 
 func (x *DeleteWorkflowExecutionRequest) GetExecution() *v1.WorkflowExecution {
 	if x != nil {
-		return x.Execution
+		return x.xxx_hidden_Execution
 	}
 	return nil
 }
 
 func (x *DeleteWorkflowExecutionRequest) GetArchetype() string {
 	if x != nil {
-		return x.Archetype
+		return x.xxx_hidden_Archetype
 	}
 	return ""
 }
 
+func (x *DeleteWorkflowExecutionRequest) SetNamespace(v string) {
+	x.xxx_hidden_Namespace = v
+}
+
+func (x *DeleteWorkflowExecutionRequest) SetExecution(v *v1.WorkflowExecution) {
+	x.xxx_hidden_Execution = v
+}
+
+func (x *DeleteWorkflowExecutionRequest) SetArchetype(v string) {
+	x.xxx_hidden_Archetype = v
+}
+
+func (x *DeleteWorkflowExecutionRequest) HasExecution() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Execution != nil
+}
+
+func (x *DeleteWorkflowExecutionRequest) ClearExecution() {
+	x.xxx_hidden_Execution = nil
+}
+
+type DeleteWorkflowExecutionRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Namespace string
+	Execution *v1.WorkflowExecution
+	Archetype string
+}
+
+func (b0 DeleteWorkflowExecutionRequest_builder) Build() *DeleteWorkflowExecutionRequest {
+	m0 := &DeleteWorkflowExecutionRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Namespace = b.Namespace
+	x.xxx_hidden_Execution = b.Execution
+	x.xxx_hidden_Archetype = b.Archetype
+	return m0
+}
+
 type DeleteWorkflowExecutionResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Warnings      []string               `protobuf:"bytes,1,rep,name=warnings,proto3" json:"warnings,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state               protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Warnings []string               `protobuf:"bytes,1,rep,name=warnings,proto3"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *DeleteWorkflowExecutionResponse) Reset() {
@@ -3568,26 +5377,36 @@ func (x *DeleteWorkflowExecutionResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DeleteWorkflowExecutionResponse.ProtoReflect.Descriptor instead.
-func (*DeleteWorkflowExecutionResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{58}
-}
-
 func (x *DeleteWorkflowExecutionResponse) GetWarnings() []string {
 	if x != nil {
-		return x.Warnings
+		return x.xxx_hidden_Warnings
 	}
 	return nil
 }
 
+func (x *DeleteWorkflowExecutionResponse) SetWarnings(v []string) {
+	x.xxx_hidden_Warnings = v
+}
+
+type DeleteWorkflowExecutionResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Warnings []string
+}
+
+func (b0 DeleteWorkflowExecutionResponse_builder) Build() *DeleteWorkflowExecutionResponse {
+	m0 := &DeleteWorkflowExecutionResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Warnings = b.Warnings
+	return m0
+}
+
 type StreamWorkflowReplicationMessagesRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Types that are valid to be assigned to Attributes:
-	//
-	//	*StreamWorkflowReplicationMessagesRequest_SyncReplicationState
-	Attributes    isStreamWorkflowReplicationMessagesRequest_Attributes `protobuf_oneof:"attributes"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                 protoimpl.MessageState                                `protogen:"opaque.v1"`
+	xxx_hidden_Attributes isStreamWorkflowReplicationMessagesRequest_Attributes `protobuf_oneof:"attributes"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
 }
 
 func (x *StreamWorkflowReplicationMessagesRequest) Reset() {
@@ -3615,46 +5434,111 @@ func (x *StreamWorkflowReplicationMessagesRequest) ProtoReflect() protoreflect.M
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use StreamWorkflowReplicationMessagesRequest.ProtoReflect.Descriptor instead.
-func (*StreamWorkflowReplicationMessagesRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{59}
-}
-
-func (x *StreamWorkflowReplicationMessagesRequest) GetAttributes() isStreamWorkflowReplicationMessagesRequest_Attributes {
-	if x != nil {
-		return x.Attributes
-	}
-	return nil
-}
-
 func (x *StreamWorkflowReplicationMessagesRequest) GetSyncReplicationState() *v15.SyncReplicationState {
 	if x != nil {
-		if x, ok := x.Attributes.(*StreamWorkflowReplicationMessagesRequest_SyncReplicationState); ok {
+		if x, ok := x.xxx_hidden_Attributes.(*streamWorkflowReplicationMessagesRequest_SyncReplicationState); ok {
 			return x.SyncReplicationState
 		}
 	}
 	return nil
 }
 
+func (x *StreamWorkflowReplicationMessagesRequest) SetSyncReplicationState(v *v15.SyncReplicationState) {
+	if v == nil {
+		x.xxx_hidden_Attributes = nil
+		return
+	}
+	x.xxx_hidden_Attributes = &streamWorkflowReplicationMessagesRequest_SyncReplicationState{v}
+}
+
+func (x *StreamWorkflowReplicationMessagesRequest) HasAttributes() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Attributes != nil
+}
+
+func (x *StreamWorkflowReplicationMessagesRequest) HasSyncReplicationState() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_Attributes.(*streamWorkflowReplicationMessagesRequest_SyncReplicationState)
+	return ok
+}
+
+func (x *StreamWorkflowReplicationMessagesRequest) ClearAttributes() {
+	x.xxx_hidden_Attributes = nil
+}
+
+func (x *StreamWorkflowReplicationMessagesRequest) ClearSyncReplicationState() {
+	if _, ok := x.xxx_hidden_Attributes.(*streamWorkflowReplicationMessagesRequest_SyncReplicationState); ok {
+		x.xxx_hidden_Attributes = nil
+	}
+}
+
+const StreamWorkflowReplicationMessagesRequest_Attributes_not_set_case case_StreamWorkflowReplicationMessagesRequest_Attributes = 0
+const StreamWorkflowReplicationMessagesRequest_SyncReplicationState_case case_StreamWorkflowReplicationMessagesRequest_Attributes = 1
+
+func (x *StreamWorkflowReplicationMessagesRequest) WhichAttributes() case_StreamWorkflowReplicationMessagesRequest_Attributes {
+	if x == nil {
+		return StreamWorkflowReplicationMessagesRequest_Attributes_not_set_case
+	}
+	switch x.xxx_hidden_Attributes.(type) {
+	case *streamWorkflowReplicationMessagesRequest_SyncReplicationState:
+		return StreamWorkflowReplicationMessagesRequest_SyncReplicationState_case
+	default:
+		return StreamWorkflowReplicationMessagesRequest_Attributes_not_set_case
+	}
+}
+
+type StreamWorkflowReplicationMessagesRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Fields of oneof xxx_hidden_Attributes:
+	SyncReplicationState *v15.SyncReplicationState
+	// -- end of xxx_hidden_Attributes
+}
+
+func (b0 StreamWorkflowReplicationMessagesRequest_builder) Build() *StreamWorkflowReplicationMessagesRequest {
+	m0 := &StreamWorkflowReplicationMessagesRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	if b.SyncReplicationState != nil {
+		x.xxx_hidden_Attributes = &streamWorkflowReplicationMessagesRequest_SyncReplicationState{b.SyncReplicationState}
+	}
+	return m0
+}
+
+type case_StreamWorkflowReplicationMessagesRequest_Attributes protoreflect.FieldNumber
+
+func (x case_StreamWorkflowReplicationMessagesRequest_Attributes) String() string {
+	switch x {
+	case StreamWorkflowReplicationMessagesRequest_Attributes_not_set_case:
+		return "StreamWorkflowReplicationMessagesRequestAttributesNotSetCase"
+	case StreamWorkflowReplicationMessagesRequest_SyncReplicationState_case:
+		return "StreamWorkflowReplicationMessagesRequestSyncReplicationStateCase"
+	default:
+		return strconv.Itoa(int(x))
+	}
+
+}
+
 type isStreamWorkflowReplicationMessagesRequest_Attributes interface {
 	isStreamWorkflowReplicationMessagesRequest_Attributes()
 }
 
-type StreamWorkflowReplicationMessagesRequest_SyncReplicationState struct {
+type streamWorkflowReplicationMessagesRequest_SyncReplicationState struct {
 	SyncReplicationState *v15.SyncReplicationState `protobuf:"bytes,1,opt,name=sync_replication_state,json=syncReplicationState,proto3,oneof"`
 }
 
-func (*StreamWorkflowReplicationMessagesRequest_SyncReplicationState) isStreamWorkflowReplicationMessagesRequest_Attributes() {
+func (*streamWorkflowReplicationMessagesRequest_SyncReplicationState) isStreamWorkflowReplicationMessagesRequest_Attributes() {
 }
 
 type StreamWorkflowReplicationMessagesResponse struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Types that are valid to be assigned to Attributes:
-	//
-	//	*StreamWorkflowReplicationMessagesResponse_Messages
-	Attributes    isStreamWorkflowReplicationMessagesResponse_Attributes `protobuf_oneof:"attributes"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                 protoimpl.MessageState                                 `protogen:"opaque.v1"`
+	xxx_hidden_Attributes isStreamWorkflowReplicationMessagesResponse_Attributes `protobuf_oneof:"attributes"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
 }
 
 func (x *StreamWorkflowReplicationMessagesResponse) Reset() {
@@ -3682,47 +5566,111 @@ func (x *StreamWorkflowReplicationMessagesResponse) ProtoReflect() protoreflect.
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use StreamWorkflowReplicationMessagesResponse.ProtoReflect.Descriptor instead.
-func (*StreamWorkflowReplicationMessagesResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{60}
-}
-
-func (x *StreamWorkflowReplicationMessagesResponse) GetAttributes() isStreamWorkflowReplicationMessagesResponse_Attributes {
-	if x != nil {
-		return x.Attributes
-	}
-	return nil
-}
-
 func (x *StreamWorkflowReplicationMessagesResponse) GetMessages() *v15.WorkflowReplicationMessages {
 	if x != nil {
-		if x, ok := x.Attributes.(*StreamWorkflowReplicationMessagesResponse_Messages); ok {
+		if x, ok := x.xxx_hidden_Attributes.(*streamWorkflowReplicationMessagesResponse_Messages); ok {
 			return x.Messages
 		}
 	}
 	return nil
 }
 
+func (x *StreamWorkflowReplicationMessagesResponse) SetMessages(v *v15.WorkflowReplicationMessages) {
+	if v == nil {
+		x.xxx_hidden_Attributes = nil
+		return
+	}
+	x.xxx_hidden_Attributes = &streamWorkflowReplicationMessagesResponse_Messages{v}
+}
+
+func (x *StreamWorkflowReplicationMessagesResponse) HasAttributes() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Attributes != nil
+}
+
+func (x *StreamWorkflowReplicationMessagesResponse) HasMessages() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_Attributes.(*streamWorkflowReplicationMessagesResponse_Messages)
+	return ok
+}
+
+func (x *StreamWorkflowReplicationMessagesResponse) ClearAttributes() {
+	x.xxx_hidden_Attributes = nil
+}
+
+func (x *StreamWorkflowReplicationMessagesResponse) ClearMessages() {
+	if _, ok := x.xxx_hidden_Attributes.(*streamWorkflowReplicationMessagesResponse_Messages); ok {
+		x.xxx_hidden_Attributes = nil
+	}
+}
+
+const StreamWorkflowReplicationMessagesResponse_Attributes_not_set_case case_StreamWorkflowReplicationMessagesResponse_Attributes = 0
+const StreamWorkflowReplicationMessagesResponse_Messages_case case_StreamWorkflowReplicationMessagesResponse_Attributes = 1
+
+func (x *StreamWorkflowReplicationMessagesResponse) WhichAttributes() case_StreamWorkflowReplicationMessagesResponse_Attributes {
+	if x == nil {
+		return StreamWorkflowReplicationMessagesResponse_Attributes_not_set_case
+	}
+	switch x.xxx_hidden_Attributes.(type) {
+	case *streamWorkflowReplicationMessagesResponse_Messages:
+		return StreamWorkflowReplicationMessagesResponse_Messages_case
+	default:
+		return StreamWorkflowReplicationMessagesResponse_Attributes_not_set_case
+	}
+}
+
+type StreamWorkflowReplicationMessagesResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Fields of oneof xxx_hidden_Attributes:
+	Messages *v15.WorkflowReplicationMessages
+	// -- end of xxx_hidden_Attributes
+}
+
+func (b0 StreamWorkflowReplicationMessagesResponse_builder) Build() *StreamWorkflowReplicationMessagesResponse {
+	m0 := &StreamWorkflowReplicationMessagesResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	if b.Messages != nil {
+		x.xxx_hidden_Attributes = &streamWorkflowReplicationMessagesResponse_Messages{b.Messages}
+	}
+	return m0
+}
+
+type case_StreamWorkflowReplicationMessagesResponse_Attributes protoreflect.FieldNumber
+
+func (x case_StreamWorkflowReplicationMessagesResponse_Attributes) String() string {
+	switch x {
+	case StreamWorkflowReplicationMessagesResponse_Attributes_not_set_case:
+		return "StreamWorkflowReplicationMessagesResponseAttributesNotSetCase"
+	case StreamWorkflowReplicationMessagesResponse_Messages_case:
+		return "StreamWorkflowReplicationMessagesResponseMessagesCase"
+	default:
+		return strconv.Itoa(int(x))
+	}
+
+}
+
 type isStreamWorkflowReplicationMessagesResponse_Attributes interface {
 	isStreamWorkflowReplicationMessagesResponse_Attributes()
 }
 
-type StreamWorkflowReplicationMessagesResponse_Messages struct {
+type streamWorkflowReplicationMessagesResponse_Messages struct {
 	Messages *v15.WorkflowReplicationMessages `protobuf:"bytes,1,opt,name=messages,proto3,oneof"`
 }
 
-func (*StreamWorkflowReplicationMessagesResponse_Messages) isStreamWorkflowReplicationMessagesResponse_Attributes() {
+func (*streamWorkflowReplicationMessagesResponse_Messages) isStreamWorkflowReplicationMessagesResponse_Attributes() {
 }
 
 type GetNamespaceRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Types that are valid to be assigned to Attributes:
-	//
-	//	*GetNamespaceRequest_Namespace
-	//	*GetNamespaceRequest_Id
-	Attributes    isGetNamespaceRequest_Attributes `protobuf_oneof:"attributes"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                 protoimpl.MessageState           `protogen:"opaque.v1"`
+	xxx_hidden_Attributes isGetNamespaceRequest_Attributes `protobuf_oneof:"attributes"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
 }
 
 func (x *GetNamespaceRequest) Reset() {
@@ -3750,21 +5698,9 @@ func (x *GetNamespaceRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetNamespaceRequest.ProtoReflect.Descriptor instead.
-func (*GetNamespaceRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{61}
-}
-
-func (x *GetNamespaceRequest) GetAttributes() isGetNamespaceRequest_Attributes {
-	if x != nil {
-		return x.Attributes
-	}
-	return nil
-}
-
 func (x *GetNamespaceRequest) GetNamespace() string {
 	if x != nil {
-		if x, ok := x.Attributes.(*GetNamespaceRequest_Namespace); ok {
+		if x, ok := x.xxx_hidden_Attributes.(*getNamespaceRequest_Namespace); ok {
 			return x.Namespace
 		}
 	}
@@ -3773,40 +5709,143 @@ func (x *GetNamespaceRequest) GetNamespace() string {
 
 func (x *GetNamespaceRequest) GetId() string {
 	if x != nil {
-		if x, ok := x.Attributes.(*GetNamespaceRequest_Id); ok {
+		if x, ok := x.xxx_hidden_Attributes.(*getNamespaceRequest_Id); ok {
 			return x.Id
 		}
 	}
 	return ""
 }
 
+func (x *GetNamespaceRequest) SetNamespace(v string) {
+	x.xxx_hidden_Attributes = &getNamespaceRequest_Namespace{v}
+}
+
+func (x *GetNamespaceRequest) SetId(v string) {
+	x.xxx_hidden_Attributes = &getNamespaceRequest_Id{v}
+}
+
+func (x *GetNamespaceRequest) HasAttributes() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Attributes != nil
+}
+
+func (x *GetNamespaceRequest) HasNamespace() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_Attributes.(*getNamespaceRequest_Namespace)
+	return ok
+}
+
+func (x *GetNamespaceRequest) HasId() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_Attributes.(*getNamespaceRequest_Id)
+	return ok
+}
+
+func (x *GetNamespaceRequest) ClearAttributes() {
+	x.xxx_hidden_Attributes = nil
+}
+
+func (x *GetNamespaceRequest) ClearNamespace() {
+	if _, ok := x.xxx_hidden_Attributes.(*getNamespaceRequest_Namespace); ok {
+		x.xxx_hidden_Attributes = nil
+	}
+}
+
+func (x *GetNamespaceRequest) ClearId() {
+	if _, ok := x.xxx_hidden_Attributes.(*getNamespaceRequest_Id); ok {
+		x.xxx_hidden_Attributes = nil
+	}
+}
+
+const GetNamespaceRequest_Attributes_not_set_case case_GetNamespaceRequest_Attributes = 0
+const GetNamespaceRequest_Namespace_case case_GetNamespaceRequest_Attributes = 1
+const GetNamespaceRequest_Id_case case_GetNamespaceRequest_Attributes = 2
+
+func (x *GetNamespaceRequest) WhichAttributes() case_GetNamespaceRequest_Attributes {
+	if x == nil {
+		return GetNamespaceRequest_Attributes_not_set_case
+	}
+	switch x.xxx_hidden_Attributes.(type) {
+	case *getNamespaceRequest_Namespace:
+		return GetNamespaceRequest_Namespace_case
+	case *getNamespaceRequest_Id:
+		return GetNamespaceRequest_Id_case
+	default:
+		return GetNamespaceRequest_Attributes_not_set_case
+	}
+}
+
+type GetNamespaceRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Fields of oneof xxx_hidden_Attributes:
+	Namespace *string
+	Id        *string
+	// -- end of xxx_hidden_Attributes
+}
+
+func (b0 GetNamespaceRequest_builder) Build() *GetNamespaceRequest {
+	m0 := &GetNamespaceRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	if b.Namespace != nil {
+		x.xxx_hidden_Attributes = &getNamespaceRequest_Namespace{*b.Namespace}
+	}
+	if b.Id != nil {
+		x.xxx_hidden_Attributes = &getNamespaceRequest_Id{*b.Id}
+	}
+	return m0
+}
+
+type case_GetNamespaceRequest_Attributes protoreflect.FieldNumber
+
+func (x case_GetNamespaceRequest_Attributes) String() string {
+	switch x {
+	case GetNamespaceRequest_Attributes_not_set_case:
+		return "GetNamespaceRequestAttributesNotSetCase"
+	case GetNamespaceRequest_Namespace_case:
+		return "GetNamespaceRequestNamespaceCase"
+	case GetNamespaceRequest_Id_case:
+		return "GetNamespaceRequestIdCase"
+	default:
+		return strconv.Itoa(int(x))
+	}
+
+}
+
 type isGetNamespaceRequest_Attributes interface {
 	isGetNamespaceRequest_Attributes()
 }
 
-type GetNamespaceRequest_Namespace struct {
+type getNamespaceRequest_Namespace struct {
 	Namespace string `protobuf:"bytes,1,opt,name=namespace,proto3,oneof"`
 }
 
-type GetNamespaceRequest_Id struct {
+type getNamespaceRequest_Id struct {
 	Id string `protobuf:"bytes,2,opt,name=id,proto3,oneof"`
 }
 
-func (*GetNamespaceRequest_Namespace) isGetNamespaceRequest_Attributes() {}
+func (*getNamespaceRequest_Namespace) isGetNamespaceRequest_Attributes() {}
 
-func (*GetNamespaceRequest_Id) isGetNamespaceRequest_Attributes() {}
+func (*getNamespaceRequest_Id) isGetNamespaceRequest_Attributes() {}
 
 type GetNamespaceResponse struct {
-	state             protoimpl.MessageState           `protogen:"open.v1"`
-	Info              *v110.NamespaceInfo              `protobuf:"bytes,3,opt,name=info,proto3" json:"info,omitempty"`
-	Config            *v110.NamespaceConfig            `protobuf:"bytes,4,opt,name=config,proto3" json:"config,omitempty"`
-	ReplicationConfig *v111.NamespaceReplicationConfig `protobuf:"bytes,5,opt,name=replication_config,json=replicationConfig,proto3" json:"replication_config,omitempty"`
-	ConfigVersion     int64                            `protobuf:"varint,6,opt,name=config_version,json=configVersion,proto3" json:"config_version,omitempty"`
-	FailoverVersion   int64                            `protobuf:"varint,7,opt,name=failover_version,json=failoverVersion,proto3" json:"failover_version,omitempty"`
-	FailoverHistory   []*v111.FailoverStatus           `protobuf:"bytes,8,rep,name=failover_history,json=failoverHistory,proto3" json:"failover_history,omitempty"`
-	IsGlobalNamespace bool                             `protobuf:"varint,9,opt,name=is_global_namespace,json=isGlobalNamespace,proto3" json:"is_global_namespace,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state                        protoimpl.MessageState           `protogen:"opaque.v1"`
+	xxx_hidden_Info              *v110.NamespaceInfo              `protobuf:"bytes,3,opt,name=info,proto3"`
+	xxx_hidden_Config            *v110.NamespaceConfig            `protobuf:"bytes,4,opt,name=config,proto3"`
+	xxx_hidden_ReplicationConfig *v111.NamespaceReplicationConfig `protobuf:"bytes,5,opt,name=replication_config,json=replicationConfig,proto3"`
+	xxx_hidden_ConfigVersion     int64                            `protobuf:"varint,6,opt,name=config_version,json=configVersion,proto3"`
+	xxx_hidden_FailoverVersion   int64                            `protobuf:"varint,7,opt,name=failover_version,json=failoverVersion,proto3"`
+	xxx_hidden_FailoverHistory   *[]*v111.FailoverStatus          `protobuf:"bytes,8,rep,name=failover_history,json=failoverHistory,proto3"`
+	xxx_hidden_IsGlobalNamespace bool                             `protobuf:"varint,9,opt,name=is_global_namespace,json=isGlobalNamespace,proto3"`
+	unknownFields                protoimpl.UnknownFields
+	sizeCache                    protoimpl.SizeCache
 }
 
 func (x *GetNamespaceResponse) Reset() {
@@ -3834,68 +5873,151 @@ func (x *GetNamespaceResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetNamespaceResponse.ProtoReflect.Descriptor instead.
-func (*GetNamespaceResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{62}
-}
-
 func (x *GetNamespaceResponse) GetInfo() *v110.NamespaceInfo {
 	if x != nil {
-		return x.Info
+		return x.xxx_hidden_Info
 	}
 	return nil
 }
 
 func (x *GetNamespaceResponse) GetConfig() *v110.NamespaceConfig {
 	if x != nil {
-		return x.Config
+		return x.xxx_hidden_Config
 	}
 	return nil
 }
 
 func (x *GetNamespaceResponse) GetReplicationConfig() *v111.NamespaceReplicationConfig {
 	if x != nil {
-		return x.ReplicationConfig
+		return x.xxx_hidden_ReplicationConfig
 	}
 	return nil
 }
 
 func (x *GetNamespaceResponse) GetConfigVersion() int64 {
 	if x != nil {
-		return x.ConfigVersion
+		return x.xxx_hidden_ConfigVersion
 	}
 	return 0
 }
 
 func (x *GetNamespaceResponse) GetFailoverVersion() int64 {
 	if x != nil {
-		return x.FailoverVersion
+		return x.xxx_hidden_FailoverVersion
 	}
 	return 0
 }
 
 func (x *GetNamespaceResponse) GetFailoverHistory() []*v111.FailoverStatus {
 	if x != nil {
-		return x.FailoverHistory
+		if x.xxx_hidden_FailoverHistory != nil {
+			return *x.xxx_hidden_FailoverHistory
+		}
 	}
 	return nil
 }
 
 func (x *GetNamespaceResponse) GetIsGlobalNamespace() bool {
 	if x != nil {
-		return x.IsGlobalNamespace
+		return x.xxx_hidden_IsGlobalNamespace
 	}
 	return false
 }
 
+func (x *GetNamespaceResponse) SetInfo(v *v110.NamespaceInfo) {
+	x.xxx_hidden_Info = v
+}
+
+func (x *GetNamespaceResponse) SetConfig(v *v110.NamespaceConfig) {
+	x.xxx_hidden_Config = v
+}
+
+func (x *GetNamespaceResponse) SetReplicationConfig(v *v111.NamespaceReplicationConfig) {
+	x.xxx_hidden_ReplicationConfig = v
+}
+
+func (x *GetNamespaceResponse) SetConfigVersion(v int64) {
+	x.xxx_hidden_ConfigVersion = v
+}
+
+func (x *GetNamespaceResponse) SetFailoverVersion(v int64) {
+	x.xxx_hidden_FailoverVersion = v
+}
+
+func (x *GetNamespaceResponse) SetFailoverHistory(v []*v111.FailoverStatus) {
+	x.xxx_hidden_FailoverHistory = &v
+}
+
+func (x *GetNamespaceResponse) SetIsGlobalNamespace(v bool) {
+	x.xxx_hidden_IsGlobalNamespace = v
+}
+
+func (x *GetNamespaceResponse) HasInfo() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Info != nil
+}
+
+func (x *GetNamespaceResponse) HasConfig() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Config != nil
+}
+
+func (x *GetNamespaceResponse) HasReplicationConfig() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_ReplicationConfig != nil
+}
+
+func (x *GetNamespaceResponse) ClearInfo() {
+	x.xxx_hidden_Info = nil
+}
+
+func (x *GetNamespaceResponse) ClearConfig() {
+	x.xxx_hidden_Config = nil
+}
+
+func (x *GetNamespaceResponse) ClearReplicationConfig() {
+	x.xxx_hidden_ReplicationConfig = nil
+}
+
+type GetNamespaceResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Info              *v110.NamespaceInfo
+	Config            *v110.NamespaceConfig
+	ReplicationConfig *v111.NamespaceReplicationConfig
+	ConfigVersion     int64
+	FailoverVersion   int64
+	FailoverHistory   []*v111.FailoverStatus
+	IsGlobalNamespace bool
+}
+
+func (b0 GetNamespaceResponse_builder) Build() *GetNamespaceResponse {
+	m0 := &GetNamespaceResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Info = b.Info
+	x.xxx_hidden_Config = b.Config
+	x.xxx_hidden_ReplicationConfig = b.ReplicationConfig
+	x.xxx_hidden_ConfigVersion = b.ConfigVersion
+	x.xxx_hidden_FailoverVersion = b.FailoverVersion
+	x.xxx_hidden_FailoverHistory = &b.FailoverHistory
+	x.xxx_hidden_IsGlobalNamespace = b.IsGlobalNamespace
+	return m0
+}
+
 type GetDLQTasksRequest struct {
-	state  protoimpl.MessageState `protogen:"open.v1"`
-	DlqKey *v112.HistoryDLQKey    `protobuf:"bytes,1,opt,name=dlq_key,json=dlqKey,proto3" json:"dlq_key,omitempty"`
-	// page_size must be positive. Up to this many tasks will be returned.
-	PageSize      int32  `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
-	NextPageToken []byte `protobuf:"bytes,3,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                    protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_DlqKey        *v112.HistoryDLQKey    `protobuf:"bytes,1,opt,name=dlq_key,json=dlqKey,proto3"`
+	xxx_hidden_PageSize      int32                  `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3"`
+	xxx_hidden_NextPageToken []byte                 `protobuf:"bytes,3,opt,name=next_page_token,json=nextPageToken,proto3"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *GetDLQTasksRequest) Reset() {
@@ -3923,41 +6045,78 @@ func (x *GetDLQTasksRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetDLQTasksRequest.ProtoReflect.Descriptor instead.
-func (*GetDLQTasksRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{63}
-}
-
 func (x *GetDLQTasksRequest) GetDlqKey() *v112.HistoryDLQKey {
 	if x != nil {
-		return x.DlqKey
+		return x.xxx_hidden_DlqKey
 	}
 	return nil
 }
 
 func (x *GetDLQTasksRequest) GetPageSize() int32 {
 	if x != nil {
-		return x.PageSize
+		return x.xxx_hidden_PageSize
 	}
 	return 0
 }
 
 func (x *GetDLQTasksRequest) GetNextPageToken() []byte {
 	if x != nil {
-		return x.NextPageToken
+		return x.xxx_hidden_NextPageToken
 	}
 	return nil
 }
 
+func (x *GetDLQTasksRequest) SetDlqKey(v *v112.HistoryDLQKey) {
+	x.xxx_hidden_DlqKey = v
+}
+
+func (x *GetDLQTasksRequest) SetPageSize(v int32) {
+	x.xxx_hidden_PageSize = v
+}
+
+func (x *GetDLQTasksRequest) SetNextPageToken(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_NextPageToken = v
+}
+
+func (x *GetDLQTasksRequest) HasDlqKey() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_DlqKey != nil
+}
+
+func (x *GetDLQTasksRequest) ClearDlqKey() {
+	x.xxx_hidden_DlqKey = nil
+}
+
+type GetDLQTasksRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	DlqKey *v112.HistoryDLQKey
+	// page_size must be positive. Up to this many tasks will be returned.
+	PageSize      int32
+	NextPageToken []byte
+}
+
+func (b0 GetDLQTasksRequest_builder) Build() *GetDLQTasksRequest {
+	m0 := &GetDLQTasksRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_DlqKey = b.DlqKey
+	x.xxx_hidden_PageSize = b.PageSize
+	x.xxx_hidden_NextPageToken = b.NextPageToken
+	return m0
+}
+
 type GetDLQTasksResponse struct {
-	state    protoimpl.MessageState `protogen:"open.v1"`
-	DlqTasks []*v112.HistoryDLQTask `protobuf:"bytes,1,rep,name=dlq_tasks,json=dlqTasks,proto3" json:"dlq_tasks,omitempty"`
-	// next_page_token is empty if there are no more results. However, the converse is not true. If there are no more
-	// results, this field may still be non-empty. This is to avoid having to do a count query to determine whether
-	// there are more results.
-	NextPageToken []byte `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                    protoimpl.MessageState  `protogen:"opaque.v1"`
+	xxx_hidden_DlqTasks      *[]*v112.HistoryDLQTask `protobuf:"bytes,1,rep,name=dlq_tasks,json=dlqTasks,proto3"`
+	xxx_hidden_NextPageToken []byte                  `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *GetDLQTasksResponse) Reset() {
@@ -3985,31 +6144,58 @@ func (x *GetDLQTasksResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetDLQTasksResponse.ProtoReflect.Descriptor instead.
-func (*GetDLQTasksResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{64}
-}
-
 func (x *GetDLQTasksResponse) GetDlqTasks() []*v112.HistoryDLQTask {
 	if x != nil {
-		return x.DlqTasks
+		if x.xxx_hidden_DlqTasks != nil {
+			return *x.xxx_hidden_DlqTasks
+		}
 	}
 	return nil
 }
 
 func (x *GetDLQTasksResponse) GetNextPageToken() []byte {
 	if x != nil {
-		return x.NextPageToken
+		return x.xxx_hidden_NextPageToken
 	}
 	return nil
 }
 
+func (x *GetDLQTasksResponse) SetDlqTasks(v []*v112.HistoryDLQTask) {
+	x.xxx_hidden_DlqTasks = &v
+}
+
+func (x *GetDLQTasksResponse) SetNextPageToken(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_NextPageToken = v
+}
+
+type GetDLQTasksResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	DlqTasks []*v112.HistoryDLQTask
+	// next_page_token is empty if there are no more results. However, the converse is not true. If there are no more
+	// results, this field may still be non-empty. This is to avoid having to do a count query to determine whether
+	// there are more results.
+	NextPageToken []byte
+}
+
+func (b0 GetDLQTasksResponse_builder) Build() *GetDLQTasksResponse {
+	m0 := &GetDLQTasksResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_DlqTasks = &b.DlqTasks
+	x.xxx_hidden_NextPageToken = b.NextPageToken
+	return m0
+}
+
 type PurgeDLQTasksRequest struct {
-	state                    protoimpl.MessageState       `protogen:"open.v1"`
-	DlqKey                   *v112.HistoryDLQKey          `protobuf:"bytes,1,opt,name=dlq_key,json=dlqKey,proto3" json:"dlq_key,omitempty"`
-	InclusiveMaxTaskMetadata *v112.HistoryDLQTaskMetadata `protobuf:"bytes,2,opt,name=inclusive_max_task_metadata,json=inclusiveMaxTaskMetadata,proto3" json:"inclusive_max_task_metadata,omitempty"`
-	unknownFields            protoimpl.UnknownFields
-	sizeCache                protoimpl.SizeCache
+	state                               protoimpl.MessageState       `protogen:"opaque.v1"`
+	xxx_hidden_DlqKey                   *v112.HistoryDLQKey          `protobuf:"bytes,1,opt,name=dlq_key,json=dlqKey,proto3"`
+	xxx_hidden_InclusiveMaxTaskMetadata *v112.HistoryDLQTaskMetadata `protobuf:"bytes,2,opt,name=inclusive_max_task_metadata,json=inclusiveMaxTaskMetadata,proto3"`
+	unknownFields                       protoimpl.UnknownFields
+	sizeCache                           protoimpl.SizeCache
 }
 
 func (x *PurgeDLQTasksRequest) Reset() {
@@ -4037,31 +6223,71 @@ func (x *PurgeDLQTasksRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use PurgeDLQTasksRequest.ProtoReflect.Descriptor instead.
-func (*PurgeDLQTasksRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{65}
-}
-
 func (x *PurgeDLQTasksRequest) GetDlqKey() *v112.HistoryDLQKey {
 	if x != nil {
-		return x.DlqKey
+		return x.xxx_hidden_DlqKey
 	}
 	return nil
 }
 
 func (x *PurgeDLQTasksRequest) GetInclusiveMaxTaskMetadata() *v112.HistoryDLQTaskMetadata {
 	if x != nil {
-		return x.InclusiveMaxTaskMetadata
+		return x.xxx_hidden_InclusiveMaxTaskMetadata
 	}
 	return nil
 }
 
+func (x *PurgeDLQTasksRequest) SetDlqKey(v *v112.HistoryDLQKey) {
+	x.xxx_hidden_DlqKey = v
+}
+
+func (x *PurgeDLQTasksRequest) SetInclusiveMaxTaskMetadata(v *v112.HistoryDLQTaskMetadata) {
+	x.xxx_hidden_InclusiveMaxTaskMetadata = v
+}
+
+func (x *PurgeDLQTasksRequest) HasDlqKey() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_DlqKey != nil
+}
+
+func (x *PurgeDLQTasksRequest) HasInclusiveMaxTaskMetadata() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_InclusiveMaxTaskMetadata != nil
+}
+
+func (x *PurgeDLQTasksRequest) ClearDlqKey() {
+	x.xxx_hidden_DlqKey = nil
+}
+
+func (x *PurgeDLQTasksRequest) ClearInclusiveMaxTaskMetadata() {
+	x.xxx_hidden_InclusiveMaxTaskMetadata = nil
+}
+
+type PurgeDLQTasksRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	DlqKey                   *v112.HistoryDLQKey
+	InclusiveMaxTaskMetadata *v112.HistoryDLQTaskMetadata
+}
+
+func (b0 PurgeDLQTasksRequest_builder) Build() *PurgeDLQTasksRequest {
+	m0 := &PurgeDLQTasksRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_DlqKey = b.DlqKey
+	x.xxx_hidden_InclusiveMaxTaskMetadata = b.InclusiveMaxTaskMetadata
+	return m0
+}
+
 type PurgeDLQTasksResponse struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// job_token is a token that can be used to query the status of the purge operation.
-	JobToken      []byte `protobuf:"bytes,1,opt,name=job_token,json=jobToken,proto3" json:"job_token,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state               protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_JobToken []byte                 `protobuf:"bytes,1,opt,name=job_token,json=jobToken,proto3"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *PurgeDLQTasksResponse) Reset() {
@@ -4089,25 +6315,42 @@ func (x *PurgeDLQTasksResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use PurgeDLQTasksResponse.ProtoReflect.Descriptor instead.
-func (*PurgeDLQTasksResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{66}
-}
-
 func (x *PurgeDLQTasksResponse) GetJobToken() []byte {
 	if x != nil {
-		return x.JobToken
+		return x.xxx_hidden_JobToken
 	}
 	return nil
 }
 
+func (x *PurgeDLQTasksResponse) SetJobToken(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_JobToken = v
+}
+
+type PurgeDLQTasksResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// job_token is a token that can be used to query the status of the purge operation.
+	JobToken []byte
+}
+
+func (b0 PurgeDLQTasksResponse_builder) Build() *PurgeDLQTasksResponse {
+	m0 := &PurgeDLQTasksResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_JobToken = b.JobToken
+	return m0
+}
+
 // DLQJobToken identifies a DLQ job. This proto is for internal use only and clients should not use it.
 type DLQJobToken struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	WorkflowId    string                 `protobuf:"bytes,1,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
-	RunId         string                 `protobuf:"bytes,2,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                 protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_WorkflowId string                 `protobuf:"bytes,1,opt,name=workflow_id,json=workflowId,proto3"`
+	xxx_hidden_RunId      string                 `protobuf:"bytes,2,opt,name=run_id,json=runId,proto3"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
 }
 
 func (x *DLQJobToken) Reset() {
@@ -4135,37 +6378,51 @@ func (x *DLQJobToken) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DLQJobToken.ProtoReflect.Descriptor instead.
-func (*DLQJobToken) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{67}
-}
-
 func (x *DLQJobToken) GetWorkflowId() string {
 	if x != nil {
-		return x.WorkflowId
+		return x.xxx_hidden_WorkflowId
 	}
 	return ""
 }
 
 func (x *DLQJobToken) GetRunId() string {
 	if x != nil {
-		return x.RunId
+		return x.xxx_hidden_RunId
 	}
 	return ""
 }
 
+func (x *DLQJobToken) SetWorkflowId(v string) {
+	x.xxx_hidden_WorkflowId = v
+}
+
+func (x *DLQJobToken) SetRunId(v string) {
+	x.xxx_hidden_RunId = v
+}
+
+type DLQJobToken_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	WorkflowId string
+	RunId      string
+}
+
+func (b0 DLQJobToken_builder) Build() *DLQJobToken {
+	m0 := &DLQJobToken{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_WorkflowId = b.WorkflowId
+	x.xxx_hidden_RunId = b.RunId
+	return m0
+}
+
 type MergeDLQTasksRequest struct {
-	state                    protoimpl.MessageState       `protogen:"open.v1"`
-	DlqKey                   *v112.HistoryDLQKey          `protobuf:"bytes,1,opt,name=dlq_key,json=dlqKey,proto3" json:"dlq_key,omitempty"`
-	InclusiveMaxTaskMetadata *v112.HistoryDLQTaskMetadata `protobuf:"bytes,2,opt,name=inclusive_max_task_metadata,json=inclusiveMaxTaskMetadata,proto3" json:"inclusive_max_task_metadata,omitempty"`
-	// batch_size controls how many tasks to merge at a time. The default can be found in the dlq package of the server.
-	// - If this is negative, an error will be returned.
-	// - If this is 0, the default will be used.
-	// - If this is greater than the maximum allowed batch size, an error will be returned.
-	// - Otherwise, the specified batch size will be used.
-	BatchSize     int32 `protobuf:"varint,3,opt,name=batch_size,json=batchSize,proto3" json:"batch_size,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                               protoimpl.MessageState       `protogen:"opaque.v1"`
+	xxx_hidden_DlqKey                   *v112.HistoryDLQKey          `protobuf:"bytes,1,opt,name=dlq_key,json=dlqKey,proto3"`
+	xxx_hidden_InclusiveMaxTaskMetadata *v112.HistoryDLQTaskMetadata `protobuf:"bytes,2,opt,name=inclusive_max_task_metadata,json=inclusiveMaxTaskMetadata,proto3"`
+	xxx_hidden_BatchSize                int32                        `protobuf:"varint,3,opt,name=batch_size,json=batchSize,proto3"`
+	unknownFields                       protoimpl.UnknownFields
+	sizeCache                           protoimpl.SizeCache
 }
 
 func (x *MergeDLQTasksRequest) Reset() {
@@ -4193,37 +6450,89 @@ func (x *MergeDLQTasksRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use MergeDLQTasksRequest.ProtoReflect.Descriptor instead.
-func (*MergeDLQTasksRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{68}
-}
-
 func (x *MergeDLQTasksRequest) GetDlqKey() *v112.HistoryDLQKey {
 	if x != nil {
-		return x.DlqKey
+		return x.xxx_hidden_DlqKey
 	}
 	return nil
 }
 
 func (x *MergeDLQTasksRequest) GetInclusiveMaxTaskMetadata() *v112.HistoryDLQTaskMetadata {
 	if x != nil {
-		return x.InclusiveMaxTaskMetadata
+		return x.xxx_hidden_InclusiveMaxTaskMetadata
 	}
 	return nil
 }
 
 func (x *MergeDLQTasksRequest) GetBatchSize() int32 {
 	if x != nil {
-		return x.BatchSize
+		return x.xxx_hidden_BatchSize
 	}
 	return 0
 }
 
+func (x *MergeDLQTasksRequest) SetDlqKey(v *v112.HistoryDLQKey) {
+	x.xxx_hidden_DlqKey = v
+}
+
+func (x *MergeDLQTasksRequest) SetInclusiveMaxTaskMetadata(v *v112.HistoryDLQTaskMetadata) {
+	x.xxx_hidden_InclusiveMaxTaskMetadata = v
+}
+
+func (x *MergeDLQTasksRequest) SetBatchSize(v int32) {
+	x.xxx_hidden_BatchSize = v
+}
+
+func (x *MergeDLQTasksRequest) HasDlqKey() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_DlqKey != nil
+}
+
+func (x *MergeDLQTasksRequest) HasInclusiveMaxTaskMetadata() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_InclusiveMaxTaskMetadata != nil
+}
+
+func (x *MergeDLQTasksRequest) ClearDlqKey() {
+	x.xxx_hidden_DlqKey = nil
+}
+
+func (x *MergeDLQTasksRequest) ClearInclusiveMaxTaskMetadata() {
+	x.xxx_hidden_InclusiveMaxTaskMetadata = nil
+}
+
+type MergeDLQTasksRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	DlqKey                   *v112.HistoryDLQKey
+	InclusiveMaxTaskMetadata *v112.HistoryDLQTaskMetadata
+	// batch_size controls how many tasks to merge at a time. The default can be found in the dlq package of the server.
+	// - If this is negative, an error will be returned.
+	// - If this is 0, the default will be used.
+	// - If this is greater than the maximum allowed batch size, an error will be returned.
+	// - Otherwise, the specified batch size will be used.
+	BatchSize int32
+}
+
+func (b0 MergeDLQTasksRequest_builder) Build() *MergeDLQTasksRequest {
+	m0 := &MergeDLQTasksRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_DlqKey = b.DlqKey
+	x.xxx_hidden_InclusiveMaxTaskMetadata = b.InclusiveMaxTaskMetadata
+	x.xxx_hidden_BatchSize = b.BatchSize
+	return m0
+}
+
 type MergeDLQTasksResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	JobToken      []byte                 `protobuf:"bytes,1,opt,name=job_token,json=jobToken,proto3" json:"job_token,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state               protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_JobToken []byte                 `protobuf:"bytes,1,opt,name=job_token,json=jobToken,proto3"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *MergeDLQTasksResponse) Reset() {
@@ -4251,24 +6560,39 @@ func (x *MergeDLQTasksResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use MergeDLQTasksResponse.ProtoReflect.Descriptor instead.
-func (*MergeDLQTasksResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{69}
-}
-
 func (x *MergeDLQTasksResponse) GetJobToken() []byte {
 	if x != nil {
-		return x.JobToken
+		return x.xxx_hidden_JobToken
 	}
 	return nil
 }
 
+func (x *MergeDLQTasksResponse) SetJobToken(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_JobToken = v
+}
+
+type MergeDLQTasksResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	JobToken []byte
+}
+
+func (b0 MergeDLQTasksResponse_builder) Build() *MergeDLQTasksResponse {
+	m0 := &MergeDLQTasksResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_JobToken = b.JobToken
+	return m0
+}
+
 type DescribeDLQJobRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Job token of MergeDLQTasks or PurgeDLQTasks job.
-	JobToken      []byte `protobuf:"bytes,1,opt,name=job_token,json=jobToken,proto3" json:"job_token,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state               protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_JobToken []byte                 `protobuf:"bytes,1,opt,name=job_token,json=jobToken,proto3"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *DescribeDLQJobRequest) Reset() {
@@ -4296,35 +6620,47 @@ func (x *DescribeDLQJobRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DescribeDLQJobRequest.ProtoReflect.Descriptor instead.
-func (*DescribeDLQJobRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{70}
-}
-
 func (x *DescribeDLQJobRequest) GetJobToken() []byte {
 	if x != nil {
-		return x.JobToken
+		return x.xxx_hidden_JobToken
 	}
 	return nil
 }
 
+func (x *DescribeDLQJobRequest) SetJobToken(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_JobToken = v
+}
+
+type DescribeDLQJobRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Job token of MergeDLQTasks or PurgeDLQTasks job.
+	JobToken []byte
+}
+
+func (b0 DescribeDLQJobRequest_builder) Build() *DescribeDLQJobRequest {
+	m0 := &DescribeDLQJobRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_JobToken = b.JobToken
+	return m0
+}
+
 type DescribeDLQJobResponse struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	DlqKey         *v112.HistoryDLQKey    `protobuf:"bytes,1,opt,name=dlq_key,json=dlqKey,proto3" json:"dlq_key,omitempty"`
-	OperationType  v14.DLQOperationType   `protobuf:"varint,2,opt,name=operation_type,json=operationType,proto3,enum=temporal.server.api.enums.v1.DLQOperationType" json:"operation_type,omitempty"`
-	OperationState v14.DLQOperationState  `protobuf:"varint,3,opt,name=operation_state,json=operationState,proto3,enum=temporal.server.api.enums.v1.DLQOperationState" json:"operation_state,omitempty"`
-	StartTime      *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
-	EndTime        *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=end_time,json=endTime,proto3" json:"end_time,omitempty"`
-	// max_message_id is the ID of the last message(inclusive) to be processed as part of this job.
-	MaxMessageId int64 `protobuf:"varint,6,opt,name=max_message_id,json=maxMessageId,proto3" json:"max_message_id,omitempty"`
-	// last_processed_message_id is the ID of the last message that has been processed.
-	// For PurgeDLQTasks job, it the ID of the last message that was purged.
-	// For MergeDLQTasks job, it is the ID of the last message that was re-enqueued and removed from the DLQ.
-	LastProcessedMessageId int64 `protobuf:"varint,7,opt,name=last_processed_message_id,json=lastProcessedMessageId,proto3" json:"last_processed_message_id,omitempty"`
-	// messages_processed is the total number of messages that are re-enqueued and deleted from the DLQ so far by the DLQ job.
-	MessagesProcessed int64 `protobuf:"varint,8,opt,name=messages_processed,json=messagesProcessed,proto3" json:"messages_processed,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state                             protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_DlqKey                 *v112.HistoryDLQKey    `protobuf:"bytes,1,opt,name=dlq_key,json=dlqKey,proto3"`
+	xxx_hidden_OperationType          v14.DLQOperationType   `protobuf:"varint,2,opt,name=operation_type,json=operationType,proto3,enum=temporal.server.api.enums.v1.DLQOperationType"`
+	xxx_hidden_OperationState         v14.DLQOperationState  `protobuf:"varint,3,opt,name=operation_state,json=operationState,proto3,enum=temporal.server.api.enums.v1.DLQOperationState"`
+	xxx_hidden_StartTime              *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=start_time,json=startTime,proto3"`
+	xxx_hidden_EndTime                *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=end_time,json=endTime,proto3"`
+	xxx_hidden_MaxMessageId           int64                  `protobuf:"varint,6,opt,name=max_message_id,json=maxMessageId,proto3"`
+	xxx_hidden_LastProcessedMessageId int64                  `protobuf:"varint,7,opt,name=last_processed_message_id,json=lastProcessedMessageId,proto3"`
+	xxx_hidden_MessagesProcessed      int64                  `protobuf:"varint,8,opt,name=messages_processed,json=messagesProcessed,proto3"`
+	unknownFields                     protoimpl.UnknownFields
+	sizeCache                         protoimpl.SizeCache
 }
 
 func (x *DescribeDLQJobResponse) Reset() {
@@ -4352,75 +6688,166 @@ func (x *DescribeDLQJobResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DescribeDLQJobResponse.ProtoReflect.Descriptor instead.
-func (*DescribeDLQJobResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{71}
-}
-
 func (x *DescribeDLQJobResponse) GetDlqKey() *v112.HistoryDLQKey {
 	if x != nil {
-		return x.DlqKey
+		return x.xxx_hidden_DlqKey
 	}
 	return nil
 }
 
 func (x *DescribeDLQJobResponse) GetOperationType() v14.DLQOperationType {
 	if x != nil {
-		return x.OperationType
+		return x.xxx_hidden_OperationType
 	}
 	return v14.DLQOperationType(0)
 }
 
 func (x *DescribeDLQJobResponse) GetOperationState() v14.DLQOperationState {
 	if x != nil {
-		return x.OperationState
+		return x.xxx_hidden_OperationState
 	}
 	return v14.DLQOperationState(0)
 }
 
 func (x *DescribeDLQJobResponse) GetStartTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.StartTime
+		return x.xxx_hidden_StartTime
 	}
 	return nil
 }
 
 func (x *DescribeDLQJobResponse) GetEndTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.EndTime
+		return x.xxx_hidden_EndTime
 	}
 	return nil
 }
 
 func (x *DescribeDLQJobResponse) GetMaxMessageId() int64 {
 	if x != nil {
-		return x.MaxMessageId
+		return x.xxx_hidden_MaxMessageId
 	}
 	return 0
 }
 
 func (x *DescribeDLQJobResponse) GetLastProcessedMessageId() int64 {
 	if x != nil {
-		return x.LastProcessedMessageId
+		return x.xxx_hidden_LastProcessedMessageId
 	}
 	return 0
 }
 
 func (x *DescribeDLQJobResponse) GetMessagesProcessed() int64 {
 	if x != nil {
-		return x.MessagesProcessed
+		return x.xxx_hidden_MessagesProcessed
 	}
 	return 0
 }
 
+func (x *DescribeDLQJobResponse) SetDlqKey(v *v112.HistoryDLQKey) {
+	x.xxx_hidden_DlqKey = v
+}
+
+func (x *DescribeDLQJobResponse) SetOperationType(v v14.DLQOperationType) {
+	x.xxx_hidden_OperationType = v
+}
+
+func (x *DescribeDLQJobResponse) SetOperationState(v v14.DLQOperationState) {
+	x.xxx_hidden_OperationState = v
+}
+
+func (x *DescribeDLQJobResponse) SetStartTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_StartTime = v
+}
+
+func (x *DescribeDLQJobResponse) SetEndTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_EndTime = v
+}
+
+func (x *DescribeDLQJobResponse) SetMaxMessageId(v int64) {
+	x.xxx_hidden_MaxMessageId = v
+}
+
+func (x *DescribeDLQJobResponse) SetLastProcessedMessageId(v int64) {
+	x.xxx_hidden_LastProcessedMessageId = v
+}
+
+func (x *DescribeDLQJobResponse) SetMessagesProcessed(v int64) {
+	x.xxx_hidden_MessagesProcessed = v
+}
+
+func (x *DescribeDLQJobResponse) HasDlqKey() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_DlqKey != nil
+}
+
+func (x *DescribeDLQJobResponse) HasStartTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_StartTime != nil
+}
+
+func (x *DescribeDLQJobResponse) HasEndTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_EndTime != nil
+}
+
+func (x *DescribeDLQJobResponse) ClearDlqKey() {
+	x.xxx_hidden_DlqKey = nil
+}
+
+func (x *DescribeDLQJobResponse) ClearStartTime() {
+	x.xxx_hidden_StartTime = nil
+}
+
+func (x *DescribeDLQJobResponse) ClearEndTime() {
+	x.xxx_hidden_EndTime = nil
+}
+
+type DescribeDLQJobResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	DlqKey         *v112.HistoryDLQKey
+	OperationType  v14.DLQOperationType
+	OperationState v14.DLQOperationState
+	StartTime      *timestamppb.Timestamp
+	EndTime        *timestamppb.Timestamp
+	// max_message_id is the ID of the last message(inclusive) to be processed as part of this job.
+	MaxMessageId int64
+	// last_processed_message_id is the ID of the last message that has been processed.
+	// For PurgeDLQTasks job, it the ID of the last message that was purged.
+	// For MergeDLQTasks job, it is the ID of the last message that was re-enqueued and removed from the DLQ.
+	LastProcessedMessageId int64
+	// messages_processed is the total number of messages that are re-enqueued and deleted from the DLQ so far by the DLQ job.
+	MessagesProcessed int64
+}
+
+func (b0 DescribeDLQJobResponse_builder) Build() *DescribeDLQJobResponse {
+	m0 := &DescribeDLQJobResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_DlqKey = b.DlqKey
+	x.xxx_hidden_OperationType = b.OperationType
+	x.xxx_hidden_OperationState = b.OperationState
+	x.xxx_hidden_StartTime = b.StartTime
+	x.xxx_hidden_EndTime = b.EndTime
+	x.xxx_hidden_MaxMessageId = b.MaxMessageId
+	x.xxx_hidden_LastProcessedMessageId = b.LastProcessedMessageId
+	x.xxx_hidden_MessagesProcessed = b.MessagesProcessed
+	return m0
+}
+
 type CancelDLQJobRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Job token of MergeDLQTasks or PurgeDLQTasks job to cancel.
-	JobToken []byte `protobuf:"bytes,1,opt,name=job_token,json=jobToken,proto3" json:"job_token,omitempty"`
-	// The reason for cancellation.
-	Reason        string `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state               protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_JobToken []byte                 `protobuf:"bytes,1,opt,name=job_token,json=jobToken,proto3"`
+	xxx_hidden_Reason   string                 `protobuf:"bytes,2,opt,name=reason,proto3"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *CancelDLQJobRequest) Reset() {
@@ -4448,32 +6875,54 @@ func (x *CancelDLQJobRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CancelDLQJobRequest.ProtoReflect.Descriptor instead.
-func (*CancelDLQJobRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{72}
-}
-
 func (x *CancelDLQJobRequest) GetJobToken() []byte {
 	if x != nil {
-		return x.JobToken
+		return x.xxx_hidden_JobToken
 	}
 	return nil
 }
 
 func (x *CancelDLQJobRequest) GetReason() string {
 	if x != nil {
-		return x.Reason
+		return x.xxx_hidden_Reason
 	}
 	return ""
 }
 
+func (x *CancelDLQJobRequest) SetJobToken(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_JobToken = v
+}
+
+func (x *CancelDLQJobRequest) SetReason(v string) {
+	x.xxx_hidden_Reason = v
+}
+
+type CancelDLQJobRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Job token of MergeDLQTasks or PurgeDLQTasks job to cancel.
+	JobToken []byte
+	// The reason for cancellation.
+	Reason string
+}
+
+func (b0 CancelDLQJobRequest_builder) Build() *CancelDLQJobRequest {
+	m0 := &CancelDLQJobRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_JobToken = b.JobToken
+	x.xxx_hidden_Reason = b.Reason
+	return m0
+}
+
 type CancelDLQJobResponse struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// This is true if the workflow was successfully terminated by this request and false if
-	// the workflow was already completed or terminated.
-	Canceled      bool `protobuf:"varint,1,opt,name=canceled,proto3" json:"canceled,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state               protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Canceled bool                   `protobuf:"varint,1,opt,name=canceled,proto3"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *CancelDLQJobResponse) Reset() {
@@ -4501,27 +6950,42 @@ func (x *CancelDLQJobResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CancelDLQJobResponse.ProtoReflect.Descriptor instead.
-func (*CancelDLQJobResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{73}
-}
-
 func (x *CancelDLQJobResponse) GetCanceled() bool {
 	if x != nil {
-		return x.Canceled
+		return x.xxx_hidden_Canceled
 	}
 	return false
+}
+
+func (x *CancelDLQJobResponse) SetCanceled(v bool) {
+	x.xxx_hidden_Canceled = v
+}
+
+type CancelDLQJobResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// This is true if the workflow was successfully terminated by this request and false if
+	// the workflow was already completed or terminated.
+	Canceled bool
+}
+
+func (b0 CancelDLQJobResponse_builder) Build() *CancelDLQJobResponse {
+	m0 := &CancelDLQJobResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Canceled = b.Canceled
+	return m0
 }
 
 // This is a direct copy of the same proto in the history service. We can't import it, though because of a circular
 // dependency. In addition, we can't extract a common request proto because the shard_id needs to be present in the top
 // proto layer, so we duplicate it. It shouldn't be a big deal because this proto is not very big.
 type AddTasksRequest struct {
-	state         protoimpl.MessageState  `protogen:"open.v1"`
-	ShardId       int32                   `protobuf:"varint,1,opt,name=shard_id,json=shardId,proto3" json:"shard_id,omitempty"`
-	Tasks         []*AddTasksRequest_Task `protobuf:"bytes,2,rep,name=tasks,proto3" json:"tasks,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state              protoimpl.MessageState   `protogen:"opaque.v1"`
+	xxx_hidden_ShardId int32                    `protobuf:"varint,1,opt,name=shard_id,json=shardId,proto3"`
+	xxx_hidden_Tasks   *[]*AddTasksRequest_Task `protobuf:"bytes,2,rep,name=tasks,proto3"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *AddTasksRequest) Reset() {
@@ -4549,27 +7013,48 @@ func (x *AddTasksRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use AddTasksRequest.ProtoReflect.Descriptor instead.
-func (*AddTasksRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{74}
-}
-
 func (x *AddTasksRequest) GetShardId() int32 {
 	if x != nil {
-		return x.ShardId
+		return x.xxx_hidden_ShardId
 	}
 	return 0
 }
 
 func (x *AddTasksRequest) GetTasks() []*AddTasksRequest_Task {
 	if x != nil {
-		return x.Tasks
+		if x.xxx_hidden_Tasks != nil {
+			return *x.xxx_hidden_Tasks
+		}
 	}
 	return nil
 }
 
+func (x *AddTasksRequest) SetShardId(v int32) {
+	x.xxx_hidden_ShardId = v
+}
+
+func (x *AddTasksRequest) SetTasks(v []*AddTasksRequest_Task) {
+	x.xxx_hidden_Tasks = &v
+}
+
+type AddTasksRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	ShardId int32
+	Tasks   []*AddTasksRequest_Task
+}
+
+func (b0 AddTasksRequest_builder) Build() *AddTasksRequest {
+	m0 := &AddTasksRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_ShardId = b.ShardId
+	x.xxx_hidden_Tasks = &b.Tasks
+	return m0
+}
+
 type AddTasksResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4599,18 +7084,25 @@ func (x *AddTasksResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use AddTasksResponse.ProtoReflect.Descriptor instead.
-func (*AddTasksResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{75}
+type AddTasksResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+}
+
+func (b0 AddTasksResponse_builder) Build() *AddTasksResponse {
+	m0 := &AddTasksResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	return m0
 }
 
 type ListQueuesRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	QueueType     int32                  `protobuf:"varint,1,opt,name=queue_type,json=queueType,proto3" json:"queue_type,omitempty"`
-	PageSize      int32                  `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
-	NextPageToken []byte                 `protobuf:"bytes,3,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                    protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_QueueType     int32                  `protobuf:"varint,1,opt,name=queue_type,json=queueType,proto3"`
+	xxx_hidden_PageSize      int32                  `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3"`
+	xxx_hidden_NextPageToken []byte                 `protobuf:"bytes,3,opt,name=next_page_token,json=nextPageToken,proto3"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *ListQueuesRequest) Reset() {
@@ -4638,38 +7130,66 @@ func (x *ListQueuesRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListQueuesRequest.ProtoReflect.Descriptor instead.
-func (*ListQueuesRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{76}
-}
-
 func (x *ListQueuesRequest) GetQueueType() int32 {
 	if x != nil {
-		return x.QueueType
+		return x.xxx_hidden_QueueType
 	}
 	return 0
 }
 
 func (x *ListQueuesRequest) GetPageSize() int32 {
 	if x != nil {
-		return x.PageSize
+		return x.xxx_hidden_PageSize
 	}
 	return 0
 }
 
 func (x *ListQueuesRequest) GetNextPageToken() []byte {
 	if x != nil {
-		return x.NextPageToken
+		return x.xxx_hidden_NextPageToken
 	}
 	return nil
 }
 
+func (x *ListQueuesRequest) SetQueueType(v int32) {
+	x.xxx_hidden_QueueType = v
+}
+
+func (x *ListQueuesRequest) SetPageSize(v int32) {
+	x.xxx_hidden_PageSize = v
+}
+
+func (x *ListQueuesRequest) SetNextPageToken(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_NextPageToken = v
+}
+
+type ListQueuesRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	QueueType     int32
+	PageSize      int32
+	NextPageToken []byte
+}
+
+func (b0 ListQueuesRequest_builder) Build() *ListQueuesRequest {
+	m0 := &ListQueuesRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_QueueType = b.QueueType
+	x.xxx_hidden_PageSize = b.PageSize
+	x.xxx_hidden_NextPageToken = b.NextPageToken
+	return m0
+}
+
 type ListQueuesResponse struct {
-	state         protoimpl.MessageState          `protogen:"open.v1"`
-	Queues        []*ListQueuesResponse_QueueInfo `protobuf:"bytes,1,rep,name=queues,proto3" json:"queues,omitempty"`
-	NextPageToken []byte                          `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                    protoimpl.MessageState           `protogen:"opaque.v1"`
+	xxx_hidden_Queues        *[]*ListQueuesResponse_QueueInfo `protobuf:"bytes,1,rep,name=queues,proto3"`
+	xxx_hidden_NextPageToken []byte                           `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *ListQueuesResponse) Reset() {
@@ -4697,27 +7217,51 @@ func (x *ListQueuesResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListQueuesResponse.ProtoReflect.Descriptor instead.
-func (*ListQueuesResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{77}
-}
-
 func (x *ListQueuesResponse) GetQueues() []*ListQueuesResponse_QueueInfo {
 	if x != nil {
-		return x.Queues
+		if x.xxx_hidden_Queues != nil {
+			return *x.xxx_hidden_Queues
+		}
 	}
 	return nil
 }
 
 func (x *ListQueuesResponse) GetNextPageToken() []byte {
 	if x != nil {
-		return x.NextPageToken
+		return x.xxx_hidden_NextPageToken
 	}
 	return nil
 }
 
+func (x *ListQueuesResponse) SetQueues(v []*ListQueuesResponse_QueueInfo) {
+	x.xxx_hidden_Queues = &v
+}
+
+func (x *ListQueuesResponse) SetNextPageToken(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_NextPageToken = v
+}
+
+type ListQueuesResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Queues        []*ListQueuesResponse_QueueInfo
+	NextPageToken []byte
+}
+
+func (b0 ListQueuesResponse_builder) Build() *ListQueuesResponse {
+	m0 := &ListQueuesResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Queues = &b.Queues
+	x.xxx_hidden_NextPageToken = b.NextPageToken
+	return m0
+}
+
 type DeepHealthCheckRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4747,16 +7291,23 @@ func (x *DeepHealthCheckRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DeepHealthCheckRequest.ProtoReflect.Descriptor instead.
-func (*DeepHealthCheckRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{78}
+type DeepHealthCheckRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+}
+
+func (b0 DeepHealthCheckRequest_builder) Build() *DeepHealthCheckRequest {
+	m0 := &DeepHealthCheckRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	return m0
 }
 
 type DeepHealthCheckResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	State         v14.HealthState        `protobuf:"varint,1,opt,name=state,proto3,enum=temporal.server.api.enums.v1.HealthState" json:"state,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state            protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_State v14.HealthState        `protobuf:"varint,1,opt,name=state,proto3,enum=temporal.server.api.enums.v1.HealthState"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *DeepHealthCheckResponse) Reset() {
@@ -4784,29 +7335,41 @@ func (x *DeepHealthCheckResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DeepHealthCheckResponse.ProtoReflect.Descriptor instead.
-func (*DeepHealthCheckResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{79}
-}
-
 func (x *DeepHealthCheckResponse) GetState() v14.HealthState {
 	if x != nil {
-		return x.State
+		return x.xxx_hidden_State
 	}
 	return v14.HealthState(0)
 }
 
+func (x *DeepHealthCheckResponse) SetState(v v14.HealthState) {
+	x.xxx_hidden_State = v
+}
+
+type DeepHealthCheckResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	State v14.HealthState
+}
+
+func (b0 DeepHealthCheckResponse_builder) Build() *DeepHealthCheckResponse {
+	m0 := &DeepHealthCheckResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_State = b.State
+	return m0
+}
+
 type SyncWorkflowStateRequest struct {
-	state               protoimpl.MessageState   `protogen:"open.v1"`
-	NamespaceId         string                   `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	Execution           *v1.WorkflowExecution    `protobuf:"bytes,2,opt,name=execution,proto3" json:"execution,omitempty"`
-	VersionedTransition *v12.VersionedTransition `protobuf:"bytes,3,opt,name=versioned_transition,json=versionedTransition,proto3" json:"versioned_transition,omitempty"`
-	VersionHistories    *v11.VersionHistories    `protobuf:"bytes,4,opt,name=version_histories,json=versionHistories,proto3" json:"version_histories,omitempty"`
-	TargetClusterId     int32                    `protobuf:"varint,5,opt,name=target_cluster_id,json=targetClusterId,proto3" json:"target_cluster_id,omitempty"`
-	// (-- api-linter: core::0141::forbidden-types=disabled --)
-	ArchetypeId   uint32 `protobuf:"varint,6,opt,name=archetype_id,json=archetypeId,proto3" json:"archetype_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                          protoimpl.MessageState   `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId         string                   `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_Execution           *v1.WorkflowExecution    `protobuf:"bytes,2,opt,name=execution,proto3"`
+	xxx_hidden_VersionedTransition *v12.VersionedTransition `protobuf:"bytes,3,opt,name=versioned_transition,json=versionedTransition,proto3"`
+	xxx_hidden_VersionHistories    *v11.VersionHistories    `protobuf:"bytes,4,opt,name=version_histories,json=versionHistories,proto3"`
+	xxx_hidden_TargetClusterId     int32                    `protobuf:"varint,5,opt,name=target_cluster_id,json=targetClusterId,proto3"`
+	xxx_hidden_ArchetypeId         uint32                   `protobuf:"varint,6,opt,name=archetype_id,json=archetypeId,proto3"`
+	unknownFields                  protoimpl.UnknownFields
+	sizeCache                      protoimpl.SizeCache
 }
 
 func (x *SyncWorkflowStateRequest) Reset() {
@@ -4834,58 +7397,135 @@ func (x *SyncWorkflowStateRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SyncWorkflowStateRequest.ProtoReflect.Descriptor instead.
-func (*SyncWorkflowStateRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{80}
-}
-
 func (x *SyncWorkflowStateRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *SyncWorkflowStateRequest) GetExecution() *v1.WorkflowExecution {
 	if x != nil {
-		return x.Execution
+		return x.xxx_hidden_Execution
 	}
 	return nil
 }
 
 func (x *SyncWorkflowStateRequest) GetVersionedTransition() *v12.VersionedTransition {
 	if x != nil {
-		return x.VersionedTransition
+		return x.xxx_hidden_VersionedTransition
 	}
 	return nil
 }
 
 func (x *SyncWorkflowStateRequest) GetVersionHistories() *v11.VersionHistories {
 	if x != nil {
-		return x.VersionHistories
+		return x.xxx_hidden_VersionHistories
 	}
 	return nil
 }
 
 func (x *SyncWorkflowStateRequest) GetTargetClusterId() int32 {
 	if x != nil {
-		return x.TargetClusterId
+		return x.xxx_hidden_TargetClusterId
 	}
 	return 0
 }
 
 func (x *SyncWorkflowStateRequest) GetArchetypeId() uint32 {
 	if x != nil {
-		return x.ArchetypeId
+		return x.xxx_hidden_ArchetypeId
 	}
 	return 0
 }
 
+func (x *SyncWorkflowStateRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *SyncWorkflowStateRequest) SetExecution(v *v1.WorkflowExecution) {
+	x.xxx_hidden_Execution = v
+}
+
+func (x *SyncWorkflowStateRequest) SetVersionedTransition(v *v12.VersionedTransition) {
+	x.xxx_hidden_VersionedTransition = v
+}
+
+func (x *SyncWorkflowStateRequest) SetVersionHistories(v *v11.VersionHistories) {
+	x.xxx_hidden_VersionHistories = v
+}
+
+func (x *SyncWorkflowStateRequest) SetTargetClusterId(v int32) {
+	x.xxx_hidden_TargetClusterId = v
+}
+
+func (x *SyncWorkflowStateRequest) SetArchetypeId(v uint32) {
+	x.xxx_hidden_ArchetypeId = v
+}
+
+func (x *SyncWorkflowStateRequest) HasExecution() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Execution != nil
+}
+
+func (x *SyncWorkflowStateRequest) HasVersionedTransition() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_VersionedTransition != nil
+}
+
+func (x *SyncWorkflowStateRequest) HasVersionHistories() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_VersionHistories != nil
+}
+
+func (x *SyncWorkflowStateRequest) ClearExecution() {
+	x.xxx_hidden_Execution = nil
+}
+
+func (x *SyncWorkflowStateRequest) ClearVersionedTransition() {
+	x.xxx_hidden_VersionedTransition = nil
+}
+
+func (x *SyncWorkflowStateRequest) ClearVersionHistories() {
+	x.xxx_hidden_VersionHistories = nil
+}
+
+type SyncWorkflowStateRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId         string
+	Execution           *v1.WorkflowExecution
+	VersionedTransition *v12.VersionedTransition
+	VersionHistories    *v11.VersionHistories
+	TargetClusterId     int32
+	// (-- api-linter: core::0141::forbidden-types=disabled --)
+	ArchetypeId uint32
+}
+
+func (b0 SyncWorkflowStateRequest_builder) Build() *SyncWorkflowStateRequest {
+	m0 := &SyncWorkflowStateRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_Execution = b.Execution
+	x.xxx_hidden_VersionedTransition = b.VersionedTransition
+	x.xxx_hidden_VersionHistories = b.VersionHistories
+	x.xxx_hidden_TargetClusterId = b.TargetClusterId
+	x.xxx_hidden_ArchetypeId = b.ArchetypeId
+	return m0
+}
+
 type SyncWorkflowStateResponse struct {
-	state                       protoimpl.MessageState           `protogen:"open.v1"`
-	VersionedTransitionArtifact *v15.VersionedTransitionArtifact `protobuf:"bytes,5,opt,name=versioned_transition_artifact,json=versionedTransitionArtifact,proto3" json:"versioned_transition_artifact,omitempty"`
-	unknownFields               protoimpl.UnknownFields
-	sizeCache                   protoimpl.SizeCache
+	state                                  protoimpl.MessageState           `protogen:"opaque.v1"`
+	xxx_hidden_VersionedTransitionArtifact *v15.VersionedTransitionArtifact `protobuf:"bytes,5,opt,name=versioned_transition_artifact,json=versionedTransitionArtifact,proto3"`
+	unknownFields                          protoimpl.UnknownFields
+	sizeCache                              protoimpl.SizeCache
 }
 
 func (x *SyncWorkflowStateResponse) Reset() {
@@ -4913,26 +7553,50 @@ func (x *SyncWorkflowStateResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SyncWorkflowStateResponse.ProtoReflect.Descriptor instead.
-func (*SyncWorkflowStateResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{81}
-}
-
 func (x *SyncWorkflowStateResponse) GetVersionedTransitionArtifact() *v15.VersionedTransitionArtifact {
 	if x != nil {
-		return x.VersionedTransitionArtifact
+		return x.xxx_hidden_VersionedTransitionArtifact
 	}
 	return nil
 }
 
+func (x *SyncWorkflowStateResponse) SetVersionedTransitionArtifact(v *v15.VersionedTransitionArtifact) {
+	x.xxx_hidden_VersionedTransitionArtifact = v
+}
+
+func (x *SyncWorkflowStateResponse) HasVersionedTransitionArtifact() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_VersionedTransitionArtifact != nil
+}
+
+func (x *SyncWorkflowStateResponse) ClearVersionedTransitionArtifact() {
+	x.xxx_hidden_VersionedTransitionArtifact = nil
+}
+
+type SyncWorkflowStateResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	VersionedTransitionArtifact *v15.VersionedTransitionArtifact
+}
+
+func (b0 SyncWorkflowStateResponse_builder) Build() *SyncWorkflowStateResponse {
+	m0 := &SyncWorkflowStateResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_VersionedTransitionArtifact = b.VersionedTransitionArtifact
+	return m0
+}
+
 type GenerateLastHistoryReplicationTasksRequest struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	Namespace      string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
-	Execution      *v1.WorkflowExecution  `protobuf:"bytes,2,opt,name=execution,proto3" json:"execution,omitempty"`
-	TargetClusters []string               `protobuf:"bytes,3,rep,name=target_clusters,json=targetClusters,proto3" json:"target_clusters,omitempty"`
-	Archetype      string                 `protobuf:"bytes,4,opt,name=archetype,proto3" json:"archetype,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state                     protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Namespace      string                 `protobuf:"bytes,1,opt,name=namespace,proto3"`
+	xxx_hidden_Execution      *v1.WorkflowExecution  `protobuf:"bytes,2,opt,name=execution,proto3"`
+	xxx_hidden_TargetClusters []string               `protobuf:"bytes,3,rep,name=target_clusters,json=targetClusters,proto3"`
+	xxx_hidden_Archetype      string                 `protobuf:"bytes,4,opt,name=archetype,proto3"`
+	unknownFields             protoimpl.UnknownFields
+	sizeCache                 protoimpl.SizeCache
 }
 
 func (x *GenerateLastHistoryReplicationTasksRequest) Reset() {
@@ -4960,45 +7624,87 @@ func (x *GenerateLastHistoryReplicationTasksRequest) ProtoReflect() protoreflect
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GenerateLastHistoryReplicationTasksRequest.ProtoReflect.Descriptor instead.
-func (*GenerateLastHistoryReplicationTasksRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{82}
-}
-
 func (x *GenerateLastHistoryReplicationTasksRequest) GetNamespace() string {
 	if x != nil {
-		return x.Namespace
+		return x.xxx_hidden_Namespace
 	}
 	return ""
 }
 
 func (x *GenerateLastHistoryReplicationTasksRequest) GetExecution() *v1.WorkflowExecution {
 	if x != nil {
-		return x.Execution
+		return x.xxx_hidden_Execution
 	}
 	return nil
 }
 
 func (x *GenerateLastHistoryReplicationTasksRequest) GetTargetClusters() []string {
 	if x != nil {
-		return x.TargetClusters
+		return x.xxx_hidden_TargetClusters
 	}
 	return nil
 }
 
 func (x *GenerateLastHistoryReplicationTasksRequest) GetArchetype() string {
 	if x != nil {
-		return x.Archetype
+		return x.xxx_hidden_Archetype
 	}
 	return ""
 }
 
+func (x *GenerateLastHistoryReplicationTasksRequest) SetNamespace(v string) {
+	x.xxx_hidden_Namespace = v
+}
+
+func (x *GenerateLastHistoryReplicationTasksRequest) SetExecution(v *v1.WorkflowExecution) {
+	x.xxx_hidden_Execution = v
+}
+
+func (x *GenerateLastHistoryReplicationTasksRequest) SetTargetClusters(v []string) {
+	x.xxx_hidden_TargetClusters = v
+}
+
+func (x *GenerateLastHistoryReplicationTasksRequest) SetArchetype(v string) {
+	x.xxx_hidden_Archetype = v
+}
+
+func (x *GenerateLastHistoryReplicationTasksRequest) HasExecution() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Execution != nil
+}
+
+func (x *GenerateLastHistoryReplicationTasksRequest) ClearExecution() {
+	x.xxx_hidden_Execution = nil
+}
+
+type GenerateLastHistoryReplicationTasksRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Namespace      string
+	Execution      *v1.WorkflowExecution
+	TargetClusters []string
+	Archetype      string
+}
+
+func (b0 GenerateLastHistoryReplicationTasksRequest_builder) Build() *GenerateLastHistoryReplicationTasksRequest {
+	m0 := &GenerateLastHistoryReplicationTasksRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Namespace = b.Namespace
+	x.xxx_hidden_Execution = b.Execution
+	x.xxx_hidden_TargetClusters = b.TargetClusters
+	x.xxx_hidden_Archetype = b.Archetype
+	return m0
+}
+
 type GenerateLastHistoryReplicationTasksResponse struct {
-	state                protoimpl.MessageState `protogen:"open.v1"`
-	StateTransitionCount int64                  `protobuf:"varint,1,opt,name=state_transition_count,json=stateTransitionCount,proto3" json:"state_transition_count,omitempty"`
-	HistoryLength        int64                  `protobuf:"varint,2,opt,name=history_length,json=historyLength,proto3" json:"history_length,omitempty"`
-	unknownFields        protoimpl.UnknownFields
-	sizeCache            protoimpl.SizeCache
+	state                           protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_StateTransitionCount int64                  `protobuf:"varint,1,opt,name=state_transition_count,json=stateTransitionCount,proto3"`
+	xxx_hidden_HistoryLength        int64                  `protobuf:"varint,2,opt,name=history_length,json=historyLength,proto3"`
+	unknownFields                   protoimpl.UnknownFields
+	sizeCache                       protoimpl.SizeCache
 }
 
 func (x *GenerateLastHistoryReplicationTasksResponse) Reset() {
@@ -5026,33 +7732,51 @@ func (x *GenerateLastHistoryReplicationTasksResponse) ProtoReflect() protoreflec
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GenerateLastHistoryReplicationTasksResponse.ProtoReflect.Descriptor instead.
-func (*GenerateLastHistoryReplicationTasksResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{83}
-}
-
 func (x *GenerateLastHistoryReplicationTasksResponse) GetStateTransitionCount() int64 {
 	if x != nil {
-		return x.StateTransitionCount
+		return x.xxx_hidden_StateTransitionCount
 	}
 	return 0
 }
 
 func (x *GenerateLastHistoryReplicationTasksResponse) GetHistoryLength() int64 {
 	if x != nil {
-		return x.HistoryLength
+		return x.xxx_hidden_HistoryLength
 	}
 	return 0
 }
 
+func (x *GenerateLastHistoryReplicationTasksResponse) SetStateTransitionCount(v int64) {
+	x.xxx_hidden_StateTransitionCount = v
+}
+
+func (x *GenerateLastHistoryReplicationTasksResponse) SetHistoryLength(v int64) {
+	x.xxx_hidden_HistoryLength = v
+}
+
+type GenerateLastHistoryReplicationTasksResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	StateTransitionCount int64
+	HistoryLength        int64
+}
+
+func (b0 GenerateLastHistoryReplicationTasksResponse_builder) Build() *GenerateLastHistoryReplicationTasksResponse {
+	m0 := &GenerateLastHistoryReplicationTasksResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_StateTransitionCount = b.StateTransitionCount
+	x.xxx_hidden_HistoryLength = b.HistoryLength
+	return m0
+}
+
 type DescribeTaskQueuePartitionRequest struct {
-	state              protoimpl.MessageState   `protogen:"open.v1"`
-	Namespace          string                   `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
-	TaskQueuePartition *v113.TaskQueuePartition `protobuf:"bytes,2,opt,name=task_queue_partition,json=taskQueuePartition,proto3" json:"task_queue_partition,omitempty"`
-	// Absent means unversioned queue. Ignored for sticky partitions.
-	BuildIds      *v114.TaskQueueVersionSelection `protobuf:"bytes,3,opt,name=build_ids,json=buildIds,proto3" json:"build_ids,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                         protoimpl.MessageState          `protogen:"opaque.v1"`
+	xxx_hidden_Namespace          string                          `protobuf:"bytes,1,opt,name=namespace,proto3"`
+	xxx_hidden_TaskQueuePartition *v113.TaskQueuePartition        `protobuf:"bytes,2,opt,name=task_queue_partition,json=taskQueuePartition,proto3"`
+	xxx_hidden_BuildIds           *v114.TaskQueueVersionSelection `protobuf:"bytes,3,opt,name=build_ids,json=buildIds,proto3"`
+	unknownFields                 protoimpl.UnknownFields
+	sizeCache                     protoimpl.SizeCache
 }
 
 func (x *DescribeTaskQueuePartitionRequest) Reset() {
@@ -5080,38 +7804,85 @@ func (x *DescribeTaskQueuePartitionRequest) ProtoReflect() protoreflect.Message 
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DescribeTaskQueuePartitionRequest.ProtoReflect.Descriptor instead.
-func (*DescribeTaskQueuePartitionRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{84}
-}
-
 func (x *DescribeTaskQueuePartitionRequest) GetNamespace() string {
 	if x != nil {
-		return x.Namespace
+		return x.xxx_hidden_Namespace
 	}
 	return ""
 }
 
 func (x *DescribeTaskQueuePartitionRequest) GetTaskQueuePartition() *v113.TaskQueuePartition {
 	if x != nil {
-		return x.TaskQueuePartition
+		return x.xxx_hidden_TaskQueuePartition
 	}
 	return nil
 }
 
 func (x *DescribeTaskQueuePartitionRequest) GetBuildIds() *v114.TaskQueueVersionSelection {
 	if x != nil {
-		return x.BuildIds
+		return x.xxx_hidden_BuildIds
 	}
 	return nil
 }
 
+func (x *DescribeTaskQueuePartitionRequest) SetNamespace(v string) {
+	x.xxx_hidden_Namespace = v
+}
+
+func (x *DescribeTaskQueuePartitionRequest) SetTaskQueuePartition(v *v113.TaskQueuePartition) {
+	x.xxx_hidden_TaskQueuePartition = v
+}
+
+func (x *DescribeTaskQueuePartitionRequest) SetBuildIds(v *v114.TaskQueueVersionSelection) {
+	x.xxx_hidden_BuildIds = v
+}
+
+func (x *DescribeTaskQueuePartitionRequest) HasTaskQueuePartition() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_TaskQueuePartition != nil
+}
+
+func (x *DescribeTaskQueuePartitionRequest) HasBuildIds() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_BuildIds != nil
+}
+
+func (x *DescribeTaskQueuePartitionRequest) ClearTaskQueuePartition() {
+	x.xxx_hidden_TaskQueuePartition = nil
+}
+
+func (x *DescribeTaskQueuePartitionRequest) ClearBuildIds() {
+	x.xxx_hidden_BuildIds = nil
+}
+
+type DescribeTaskQueuePartitionRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Namespace          string
+	TaskQueuePartition *v113.TaskQueuePartition
+	// Absent means unversioned queue. Ignored for sticky partitions.
+	BuildIds *v114.TaskQueueVersionSelection
+}
+
+func (b0 DescribeTaskQueuePartitionRequest_builder) Build() *DescribeTaskQueuePartitionRequest {
+	m0 := &DescribeTaskQueuePartitionRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Namespace = b.Namespace
+	x.xxx_hidden_TaskQueuePartition = b.TaskQueuePartition
+	x.xxx_hidden_BuildIds = b.BuildIds
+	return m0
+}
+
 type DescribeTaskQueuePartitionResponse struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// contains k-v pairs of the type: buildID -> TaskQueueVersionInfoInternal
-	VersionsInfoInternal map[string]*v113.TaskQueueVersionInfoInternal `protobuf:"bytes,1,rep,name=versions_info_internal,json=versionsInfoInternal,proto3" json:"versions_info_internal,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	unknownFields        protoimpl.UnknownFields
-	sizeCache            protoimpl.SizeCache
+	state                           protoimpl.MessageState                        `protogen:"opaque.v1"`
+	xxx_hidden_VersionsInfoInternal map[string]*v113.TaskQueueVersionInfoInternal `protobuf:"bytes,1,rep,name=versions_info_internal,json=versionsInfoInternal,proto3" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields                   protoimpl.UnknownFields
+	sizeCache                       protoimpl.SizeCache
 }
 
 func (x *DescribeTaskQueuePartitionResponse) Reset() {
@@ -5139,24 +7910,38 @@ func (x *DescribeTaskQueuePartitionResponse) ProtoReflect() protoreflect.Message
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DescribeTaskQueuePartitionResponse.ProtoReflect.Descriptor instead.
-func (*DescribeTaskQueuePartitionResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{85}
-}
-
 func (x *DescribeTaskQueuePartitionResponse) GetVersionsInfoInternal() map[string]*v113.TaskQueueVersionInfoInternal {
 	if x != nil {
-		return x.VersionsInfoInternal
+		return x.xxx_hidden_VersionsInfoInternal
 	}
 	return nil
 }
 
+func (x *DescribeTaskQueuePartitionResponse) SetVersionsInfoInternal(v map[string]*v113.TaskQueueVersionInfoInternal) {
+	x.xxx_hidden_VersionsInfoInternal = v
+}
+
+type DescribeTaskQueuePartitionResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// contains k-v pairs of the type: buildID -> TaskQueueVersionInfoInternal
+	VersionsInfoInternal map[string]*v113.TaskQueueVersionInfoInternal
+}
+
+func (b0 DescribeTaskQueuePartitionResponse_builder) Build() *DescribeTaskQueuePartitionResponse {
+	m0 := &DescribeTaskQueuePartitionResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_VersionsInfoInternal = b.VersionsInfoInternal
+	return m0
+}
+
 type ForceUnloadTaskQueuePartitionRequest struct {
-	state              protoimpl.MessageState   `protogen:"open.v1"`
-	Namespace          string                   `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
-	TaskQueuePartition *v113.TaskQueuePartition `protobuf:"bytes,2,opt,name=task_queue_partition,json=taskQueuePartition,proto3" json:"task_queue_partition,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	state                         protoimpl.MessageState   `protogen:"opaque.v1"`
+	xxx_hidden_Namespace          string                   `protobuf:"bytes,1,opt,name=namespace,proto3"`
+	xxx_hidden_TaskQueuePartition *v113.TaskQueuePartition `protobuf:"bytes,2,opt,name=task_queue_partition,json=taskQueuePartition,proto3"`
+	unknownFields                 protoimpl.UnknownFields
+	sizeCache                     protoimpl.SizeCache
 }
 
 func (x *ForceUnloadTaskQueuePartitionRequest) Reset() {
@@ -5184,30 +7969,60 @@ func (x *ForceUnloadTaskQueuePartitionRequest) ProtoReflect() protoreflect.Messa
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ForceUnloadTaskQueuePartitionRequest.ProtoReflect.Descriptor instead.
-func (*ForceUnloadTaskQueuePartitionRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{86}
-}
-
 func (x *ForceUnloadTaskQueuePartitionRequest) GetNamespace() string {
 	if x != nil {
-		return x.Namespace
+		return x.xxx_hidden_Namespace
 	}
 	return ""
 }
 
 func (x *ForceUnloadTaskQueuePartitionRequest) GetTaskQueuePartition() *v113.TaskQueuePartition {
 	if x != nil {
-		return x.TaskQueuePartition
+		return x.xxx_hidden_TaskQueuePartition
 	}
 	return nil
 }
 
+func (x *ForceUnloadTaskQueuePartitionRequest) SetNamespace(v string) {
+	x.xxx_hidden_Namespace = v
+}
+
+func (x *ForceUnloadTaskQueuePartitionRequest) SetTaskQueuePartition(v *v113.TaskQueuePartition) {
+	x.xxx_hidden_TaskQueuePartition = v
+}
+
+func (x *ForceUnloadTaskQueuePartitionRequest) HasTaskQueuePartition() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_TaskQueuePartition != nil
+}
+
+func (x *ForceUnloadTaskQueuePartitionRequest) ClearTaskQueuePartition() {
+	x.xxx_hidden_TaskQueuePartition = nil
+}
+
+type ForceUnloadTaskQueuePartitionRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Namespace          string
+	TaskQueuePartition *v113.TaskQueuePartition
+}
+
+func (b0 ForceUnloadTaskQueuePartitionRequest_builder) Build() *ForceUnloadTaskQueuePartitionRequest {
+	m0 := &ForceUnloadTaskQueuePartitionRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Namespace = b.Namespace
+	x.xxx_hidden_TaskQueuePartition = b.TaskQueuePartition
+	return m0
+}
+
 type ForceUnloadTaskQueuePartitionResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	WasLoaded     bool                   `protobuf:"varint,1,opt,name=was_loaded,json=wasLoaded,proto3" json:"was_loaded,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_WasLoaded bool                   `protobuf:"varint,1,opt,name=was_loaded,json=wasLoaded,proto3"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *ForceUnloadTaskQueuePartitionResponse) Reset() {
@@ -5235,44 +8050,44 @@ func (x *ForceUnloadTaskQueuePartitionResponse) ProtoReflect() protoreflect.Mess
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ForceUnloadTaskQueuePartitionResponse.ProtoReflect.Descriptor instead.
-func (*ForceUnloadTaskQueuePartitionResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{87}
-}
-
 func (x *ForceUnloadTaskQueuePartitionResponse) GetWasLoaded() bool {
 	if x != nil {
-		return x.WasLoaded
+		return x.xxx_hidden_WasLoaded
 	}
 	return false
+}
+
+func (x *ForceUnloadTaskQueuePartitionResponse) SetWasLoaded(v bool) {
+	x.xxx_hidden_WasLoaded = v
+}
+
+type ForceUnloadTaskQueuePartitionResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	WasLoaded bool
+}
+
+func (b0 ForceUnloadTaskQueuePartitionResponse_builder) Build() *ForceUnloadTaskQueuePartitionResponse {
+	m0 := &ForceUnloadTaskQueuePartitionResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_WasLoaded = b.WasLoaded
+	return m0
 }
 
 // StartAdminBatchOperationRequest starts an admin batch operation.
 // WARNING: Batch Operations are exposed to all users of the namespace. Admin Batch Operations should be exercised with caution.
 type StartAdminBatchOperationRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Namespace that contains the batch operation.
-	Namespace string `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
-	// Visibility query defines the group of workflows to apply the batch operation.
-	// This field and `executions` are mutually exclusive.
-	VisibilityQuery string `protobuf:"bytes,2,opt,name=visibility_query,json=visibilityQuery,proto3" json:"visibility_query,omitempty"`
-	// A unique job identifier for this batch operation.
-	JobId string `protobuf:"bytes,3,opt,name=job_id,json=jobId,proto3" json:"job_id,omitempty"`
-	// Reason for the operation.
-	Reason string `protobuf:"bytes,4,opt,name=reason,proto3" json:"reason,omitempty"`
-	// List of workflow executions to apply the batch operation to.
-	// This field and `visibility_query` are mutually exclusive.
-	Executions []*v1.WorkflowExecution `protobuf:"bytes,5,rep,name=executions,proto3" json:"executions,omitempty"`
-	// The identity of the worker/client.
-	Identity string `protobuf:"bytes,6,opt,name=identity,proto3" json:"identity,omitempty"`
-	// The admin batch operation to perform.
-	//
-	// Types that are valid to be assigned to Operation:
-	//
-	//	*StartAdminBatchOperationRequest_RefreshTasksOperation
-	Operation     isStartAdminBatchOperationRequest_Operation `protobuf_oneof:"operation"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                      protoimpl.MessageState                      `protogen:"opaque.v1"`
+	xxx_hidden_Namespace       string                                      `protobuf:"bytes,1,opt,name=namespace,proto3"`
+	xxx_hidden_VisibilityQuery string                                      `protobuf:"bytes,2,opt,name=visibility_query,json=visibilityQuery,proto3"`
+	xxx_hidden_JobId           string                                      `protobuf:"bytes,3,opt,name=job_id,json=jobId,proto3"`
+	xxx_hidden_Reason          string                                      `protobuf:"bytes,4,opt,name=reason,proto3"`
+	xxx_hidden_Executions      *[]*v1.WorkflowExecution                    `protobuf:"bytes,5,rep,name=executions,proto3"`
+	xxx_hidden_Identity        string                                      `protobuf:"bytes,6,opt,name=identity,proto3"`
+	xxx_hidden_Operation       isStartAdminBatchOperationRequest_Operation `protobuf_oneof:"operation"`
+	unknownFields              protoimpl.UnknownFields
+	sizeCache                  protoimpl.SizeCache
 }
 
 func (x *StartAdminBatchOperationRequest) Reset() {
@@ -5300,82 +8115,198 @@ func (x *StartAdminBatchOperationRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use StartAdminBatchOperationRequest.ProtoReflect.Descriptor instead.
-func (*StartAdminBatchOperationRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{88}
-}
-
 func (x *StartAdminBatchOperationRequest) GetNamespace() string {
 	if x != nil {
-		return x.Namespace
+		return x.xxx_hidden_Namespace
 	}
 	return ""
 }
 
 func (x *StartAdminBatchOperationRequest) GetVisibilityQuery() string {
 	if x != nil {
-		return x.VisibilityQuery
+		return x.xxx_hidden_VisibilityQuery
 	}
 	return ""
 }
 
 func (x *StartAdminBatchOperationRequest) GetJobId() string {
 	if x != nil {
-		return x.JobId
+		return x.xxx_hidden_JobId
 	}
 	return ""
 }
 
 func (x *StartAdminBatchOperationRequest) GetReason() string {
 	if x != nil {
-		return x.Reason
+		return x.xxx_hidden_Reason
 	}
 	return ""
 }
 
 func (x *StartAdminBatchOperationRequest) GetExecutions() []*v1.WorkflowExecution {
 	if x != nil {
-		return x.Executions
+		if x.xxx_hidden_Executions != nil {
+			return *x.xxx_hidden_Executions
+		}
 	}
 	return nil
 }
 
 func (x *StartAdminBatchOperationRequest) GetIdentity() string {
 	if x != nil {
-		return x.Identity
+		return x.xxx_hidden_Identity
 	}
 	return ""
 }
 
-func (x *StartAdminBatchOperationRequest) GetOperation() isStartAdminBatchOperationRequest_Operation {
-	if x != nil {
-		return x.Operation
-	}
-	return nil
-}
-
 func (x *StartAdminBatchOperationRequest) GetRefreshTasksOperation() *BatchOperationRefreshTasks {
 	if x != nil {
-		if x, ok := x.Operation.(*StartAdminBatchOperationRequest_RefreshTasksOperation); ok {
+		if x, ok := x.xxx_hidden_Operation.(*startAdminBatchOperationRequest_RefreshTasksOperation); ok {
 			return x.RefreshTasksOperation
 		}
 	}
 	return nil
 }
 
+func (x *StartAdminBatchOperationRequest) SetNamespace(v string) {
+	x.xxx_hidden_Namespace = v
+}
+
+func (x *StartAdminBatchOperationRequest) SetVisibilityQuery(v string) {
+	x.xxx_hidden_VisibilityQuery = v
+}
+
+func (x *StartAdminBatchOperationRequest) SetJobId(v string) {
+	x.xxx_hidden_JobId = v
+}
+
+func (x *StartAdminBatchOperationRequest) SetReason(v string) {
+	x.xxx_hidden_Reason = v
+}
+
+func (x *StartAdminBatchOperationRequest) SetExecutions(v []*v1.WorkflowExecution) {
+	x.xxx_hidden_Executions = &v
+}
+
+func (x *StartAdminBatchOperationRequest) SetIdentity(v string) {
+	x.xxx_hidden_Identity = v
+}
+
+func (x *StartAdminBatchOperationRequest) SetRefreshTasksOperation(v *BatchOperationRefreshTasks) {
+	if v == nil {
+		x.xxx_hidden_Operation = nil
+		return
+	}
+	x.xxx_hidden_Operation = &startAdminBatchOperationRequest_RefreshTasksOperation{v}
+}
+
+func (x *StartAdminBatchOperationRequest) HasOperation() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Operation != nil
+}
+
+func (x *StartAdminBatchOperationRequest) HasRefreshTasksOperation() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_Operation.(*startAdminBatchOperationRequest_RefreshTasksOperation)
+	return ok
+}
+
+func (x *StartAdminBatchOperationRequest) ClearOperation() {
+	x.xxx_hidden_Operation = nil
+}
+
+func (x *StartAdminBatchOperationRequest) ClearRefreshTasksOperation() {
+	if _, ok := x.xxx_hidden_Operation.(*startAdminBatchOperationRequest_RefreshTasksOperation); ok {
+		x.xxx_hidden_Operation = nil
+	}
+}
+
+const StartAdminBatchOperationRequest_Operation_not_set_case case_StartAdminBatchOperationRequest_Operation = 0
+const StartAdminBatchOperationRequest_RefreshTasksOperation_case case_StartAdminBatchOperationRequest_Operation = 10
+
+func (x *StartAdminBatchOperationRequest) WhichOperation() case_StartAdminBatchOperationRequest_Operation {
+	if x == nil {
+		return StartAdminBatchOperationRequest_Operation_not_set_case
+	}
+	switch x.xxx_hidden_Operation.(type) {
+	case *startAdminBatchOperationRequest_RefreshTasksOperation:
+		return StartAdminBatchOperationRequest_RefreshTasksOperation_case
+	default:
+		return StartAdminBatchOperationRequest_Operation_not_set_case
+	}
+}
+
+type StartAdminBatchOperationRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Namespace that contains the batch operation.
+	Namespace string
+	// Visibility query defines the group of workflows to apply the batch operation.
+	// This field and `executions` are mutually exclusive.
+	VisibilityQuery string
+	// A unique job identifier for this batch operation.
+	JobId string
+	// Reason for the operation.
+	Reason string
+	// List of workflow executions to apply the batch operation to.
+	// This field and `visibility_query` are mutually exclusive.
+	Executions []*v1.WorkflowExecution
+	// The identity of the worker/client.
+	Identity string
+	// The admin batch operation to perform.
+
+	// Fields of oneof xxx_hidden_Operation:
+	RefreshTasksOperation *BatchOperationRefreshTasks
+	// -- end of xxx_hidden_Operation
+}
+
+func (b0 StartAdminBatchOperationRequest_builder) Build() *StartAdminBatchOperationRequest {
+	m0 := &StartAdminBatchOperationRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Namespace = b.Namespace
+	x.xxx_hidden_VisibilityQuery = b.VisibilityQuery
+	x.xxx_hidden_JobId = b.JobId
+	x.xxx_hidden_Reason = b.Reason
+	x.xxx_hidden_Executions = &b.Executions
+	x.xxx_hidden_Identity = b.Identity
+	if b.RefreshTasksOperation != nil {
+		x.xxx_hidden_Operation = &startAdminBatchOperationRequest_RefreshTasksOperation{b.RefreshTasksOperation}
+	}
+	return m0
+}
+
+type case_StartAdminBatchOperationRequest_Operation protoreflect.FieldNumber
+
+func (x case_StartAdminBatchOperationRequest_Operation) String() string {
+	switch x {
+	case StartAdminBatchOperationRequest_Operation_not_set_case:
+		return "StartAdminBatchOperationRequestOperationNotSetCase"
+	case StartAdminBatchOperationRequest_RefreshTasksOperation_case:
+		return "StartAdminBatchOperationRequestRefreshTasksOperationCase"
+	default:
+		return strconv.Itoa(int(x))
+	}
+
+}
+
 type isStartAdminBatchOperationRequest_Operation interface {
 	isStartAdminBatchOperationRequest_Operation()
 }
 
-type StartAdminBatchOperationRequest_RefreshTasksOperation struct {
+type startAdminBatchOperationRequest_RefreshTasksOperation struct {
 	RefreshTasksOperation *BatchOperationRefreshTasks `protobuf:"bytes,10,opt,name=refresh_tasks_operation,json=refreshTasksOperation,proto3,oneof"`
 }
 
-func (*StartAdminBatchOperationRequest_RefreshTasksOperation) isStartAdminBatchOperationRequest_Operation() {
+func (*startAdminBatchOperationRequest_RefreshTasksOperation) isStartAdminBatchOperationRequest_Operation() {
 }
 
 type StartAdminBatchOperationResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -5405,15 +8336,22 @@ func (x *StartAdminBatchOperationResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use StartAdminBatchOperationResponse.ProtoReflect.Descriptor instead.
-func (*StartAdminBatchOperationResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{89}
+type StartAdminBatchOperationResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+}
+
+func (b0 StartAdminBatchOperationResponse_builder) Build() *StartAdminBatchOperationResponse {
+	m0 := &StartAdminBatchOperationResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	return m0
 }
 
 // BatchOperationRefreshTasks refreshes tasks for batch executions.
 // This regenerates all pending tasks for each execution.
 type BatchOperationRefreshTasks struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -5443,17 +8381,24 @@ func (x *BatchOperationRefreshTasks) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use BatchOperationRefreshTasks.ProtoReflect.Descriptor instead.
-func (*BatchOperationRefreshTasks) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{90}
+type BatchOperationRefreshTasks_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+}
+
+func (b0 BatchOperationRefreshTasks_builder) Build() *BatchOperationRefreshTasks {
+	m0 := &BatchOperationRefreshTasks{}
+	b, x := &b0, m0
+	_, _ = b, x
+	return m0
 }
 
 type AddTasksRequest_Task struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	CategoryId    int32                  `protobuf:"varint,1,opt,name=category_id,json=categoryId,proto3" json:"category_id,omitempty"`
-	Blob          *v1.DataBlob           `protobuf:"bytes,2,opt,name=blob,proto3" json:"blob,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                 protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_CategoryId int32                  `protobuf:"varint,1,opt,name=category_id,json=categoryId,proto3"`
+	xxx_hidden_Blob       *v1.DataBlob           `protobuf:"bytes,2,opt,name=blob,proto3"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
 }
 
 func (x *AddTasksRequest_Task) Reset() {
@@ -5481,32 +8426,62 @@ func (x *AddTasksRequest_Task) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use AddTasksRequest_Task.ProtoReflect.Descriptor instead.
-func (*AddTasksRequest_Task) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{74, 0}
-}
-
 func (x *AddTasksRequest_Task) GetCategoryId() int32 {
 	if x != nil {
-		return x.CategoryId
+		return x.xxx_hidden_CategoryId
 	}
 	return 0
 }
 
 func (x *AddTasksRequest_Task) GetBlob() *v1.DataBlob {
 	if x != nil {
-		return x.Blob
+		return x.xxx_hidden_Blob
 	}
 	return nil
 }
 
+func (x *AddTasksRequest_Task) SetCategoryId(v int32) {
+	x.xxx_hidden_CategoryId = v
+}
+
+func (x *AddTasksRequest_Task) SetBlob(v *v1.DataBlob) {
+	x.xxx_hidden_Blob = v
+}
+
+func (x *AddTasksRequest_Task) HasBlob() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Blob != nil
+}
+
+func (x *AddTasksRequest_Task) ClearBlob() {
+	x.xxx_hidden_Blob = nil
+}
+
+type AddTasksRequest_Task_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	CategoryId int32
+	Blob       *v1.DataBlob
+}
+
+func (b0 AddTasksRequest_Task_builder) Build() *AddTasksRequest_Task {
+	m0 := &AddTasksRequest_Task{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_CategoryId = b.CategoryId
+	x.xxx_hidden_Blob = b.Blob
+	return m0
+}
+
 type ListQueuesResponse_QueueInfo struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	QueueName     string                 `protobuf:"bytes,1,opt,name=queue_name,json=queueName,proto3" json:"queue_name,omitempty"`
-	MessageCount  int64                  `protobuf:"varint,2,opt,name=message_count,json=messageCount,proto3" json:"message_count,omitempty"`
-	LastMessageId int64                  `protobuf:"varint,3,opt,name=last_message_id,json=lastMessageId,proto3" json:"last_message_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                    protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_QueueName     string                 `protobuf:"bytes,1,opt,name=queue_name,json=queueName,proto3"`
+	xxx_hidden_MessageCount  int64                  `protobuf:"varint,2,opt,name=message_count,json=messageCount,proto3"`
+	xxx_hidden_LastMessageId int64                  `protobuf:"varint,3,opt,name=last_message_id,json=lastMessageId,proto3"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *ListQueuesResponse_QueueInfo) Reset() {
@@ -5534,30 +8509,55 @@ func (x *ListQueuesResponse_QueueInfo) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListQueuesResponse_QueueInfo.ProtoReflect.Descriptor instead.
-func (*ListQueuesResponse_QueueInfo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{77, 0}
-}
-
 func (x *ListQueuesResponse_QueueInfo) GetQueueName() string {
 	if x != nil {
-		return x.QueueName
+		return x.xxx_hidden_QueueName
 	}
 	return ""
 }
 
 func (x *ListQueuesResponse_QueueInfo) GetMessageCount() int64 {
 	if x != nil {
-		return x.MessageCount
+		return x.xxx_hidden_MessageCount
 	}
 	return 0
 }
 
 func (x *ListQueuesResponse_QueueInfo) GetLastMessageId() int64 {
 	if x != nil {
-		return x.LastMessageId
+		return x.xxx_hidden_LastMessageId
 	}
 	return 0
+}
+
+func (x *ListQueuesResponse_QueueInfo) SetQueueName(v string) {
+	x.xxx_hidden_QueueName = v
+}
+
+func (x *ListQueuesResponse_QueueInfo) SetMessageCount(v int64) {
+	x.xxx_hidden_MessageCount = v
+}
+
+func (x *ListQueuesResponse_QueueInfo) SetLastMessageId(v int64) {
+	x.xxx_hidden_LastMessageId = v
+}
+
+type ListQueuesResponse_QueueInfo_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	QueueName     string
+	MessageCount  int64
+	LastMessageId int64
+}
+
+func (b0 ListQueuesResponse_QueueInfo_builder) Build() *ListQueuesResponse_QueueInfo {
+	m0 := &ListQueuesResponse_QueueInfo{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_QueueName = b.QueueName
+	x.xxx_hidden_MessageCount = b.MessageCount
+	x.xxx_hidden_LastMessageId = b.LastMessageId
+	return m0
 }
 
 var File_temporal_server_api_adminservice_v1_request_response_proto protoreflect.FileDescriptor
@@ -5969,18 +8969,6 @@ const file_temporal_server_api_adminservice_v1_request_response_proto_rawDesc = 
 	" StartAdminBatchOperationResponse\"\x1c\n" +
 	"\x1aBatchOperationRefreshTasksB8Z6go.temporal.io/server/api/adminservice/v1;adminserviceb\x06proto3"
 
-var (
-	file_temporal_server_api_adminservice_v1_request_response_proto_rawDescOnce sync.Once
-	file_temporal_server_api_adminservice_v1_request_response_proto_rawDescData []byte
-)
-
-func file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP() []byte {
-	file_temporal_server_api_adminservice_v1_request_response_proto_rawDescOnce.Do(func() {
-		file_temporal_server_api_adminservice_v1_request_response_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_api_adminservice_v1_request_response_proto_rawDesc), len(file_temporal_server_api_adminservice_v1_request_response_proto_rawDesc)))
-	})
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescData
-}
-
 var file_temporal_server_api_adminservice_v1_request_response_proto_msgTypes = make([]protoimpl.MessageInfo, 101)
 var file_temporal_server_api_adminservice_v1_request_response_proto_goTypes = []any{
 	(*RebuildMutableStateRequest)(nil),                  // 0: temporal.server.api.adminservice.v1.RebuildMutableStateRequest
@@ -6230,17 +9218,17 @@ func file_temporal_server_api_adminservice_v1_request_response_proto_init() {
 		return
 	}
 	file_temporal_server_api_adminservice_v1_request_response_proto_msgTypes[59].OneofWrappers = []any{
-		(*StreamWorkflowReplicationMessagesRequest_SyncReplicationState)(nil),
+		(*streamWorkflowReplicationMessagesRequest_SyncReplicationState)(nil),
 	}
 	file_temporal_server_api_adminservice_v1_request_response_proto_msgTypes[60].OneofWrappers = []any{
-		(*StreamWorkflowReplicationMessagesResponse_Messages)(nil),
+		(*streamWorkflowReplicationMessagesResponse_Messages)(nil),
 	}
 	file_temporal_server_api_adminservice_v1_request_response_proto_msgTypes[61].OneofWrappers = []any{
-		(*GetNamespaceRequest_Namespace)(nil),
-		(*GetNamespaceRequest_Id)(nil),
+		(*getNamespaceRequest_Namespace)(nil),
+		(*getNamespaceRequest_Id)(nil),
 	}
 	file_temporal_server_api_adminservice_v1_request_response_proto_msgTypes[88].OneofWrappers = []any{
-		(*StartAdminBatchOperationRequest_RefreshTasksOperation)(nil),
+		(*startAdminBatchOperationRequest_RefreshTasksOperation)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{

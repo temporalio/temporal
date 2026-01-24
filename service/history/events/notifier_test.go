@@ -61,10 +61,10 @@ func (s *notifierSuite) TearDownTest() {
 
 func (s *notifierSuite) TestSingleSubscriberWatchingEvents() {
 	namespaceID := "namespace ID"
-	execution := &commonpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution_builder{
 		WorkflowId: "workflow ID",
 		RunId:      "run ID",
-	}
+	}.Build()
 	lastFirstEventID := int64(3)
 	lastFirstEventTxnID := int64(398)
 	previousStartedEventID := int64(5)
@@ -76,8 +76,8 @@ func (s *notifierSuite) TestSingleSubscriberWatchingEvents() {
 	currentVersionHistory := versionhistory.NewVersionHistory(branchToken, []*historyspb.VersionHistoryItem{versionHistoryItem})
 	versionHistories := versionhistory.NewVersionHistories(currentVersionHistory)
 	transitionHistory := []*persistencespb.VersionedTransition{
-		{NamespaceFailoverVersion: 1234, TransitionCount: 1024},
-		{TransitionCount: 1025},
+		persistencespb.VersionedTransition_builder{NamespaceFailoverVersion: 1234, TransitionCount: 1024}.Build(),
+		persistencespb.VersionedTransition_builder{TransitionCount: 1025}.Build(),
 	}
 	historyEvent := NewNotification(namespaceID, execution, lastFirstEventID, lastFirstEventTxnID, nextEventID, previousStartedEventID, workflowState, workflowStatus, versionHistories, transitionHistory)
 	timerChan := time.NewTimer(time.Second * 2).C
@@ -99,10 +99,10 @@ func (s *notifierSuite) TestSingleSubscriberWatchingEvents() {
 
 func (s *notifierSuite) TestMultipleSubscriberWatchingEvents() {
 	namespaceID := "namespace ID"
-	execution := &commonpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution_builder{
 		WorkflowId: "workflow ID",
 		RunId:      "run ID",
-	}
+	}.Build()
 
 	lastFirstEventID := int64(3)
 	lastFirstEventTxnID := int64(3980)
@@ -115,8 +115,8 @@ func (s *notifierSuite) TestMultipleSubscriberWatchingEvents() {
 	currentVersionHistory := versionhistory.NewVersionHistory(branchToken, []*historyspb.VersionHistoryItem{versionHistoryItem})
 	versionHistories := versionhistory.NewVersionHistories(currentVersionHistory)
 	transitionHistory := []*persistencespb.VersionedTransition{
-		{NamespaceFailoverVersion: 1234, TransitionCount: 1024},
-		{TransitionCount: 1025},
+		persistencespb.VersionedTransition_builder{NamespaceFailoverVersion: 1234, TransitionCount: 1024}.Build(),
+		persistencespb.VersionedTransition_builder{TransitionCount: 1025}.Build(),
 	}
 	historyEvent := NewNotification(namespaceID, execution, lastFirstEventID, lastFirstEventTxnID, nextEventID, previousStartedEventID, workflowState, workflowStatus, versionHistories, transitionHistory)
 	timerChan := time.NewTimer(time.Second * 5).C

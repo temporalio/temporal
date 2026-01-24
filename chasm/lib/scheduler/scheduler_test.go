@@ -20,10 +20,10 @@ func TestListInfo(t *testing.T) {
 
 	// Should return a populated info block.
 	require.NotNil(t, listInfo)
-	require.NotNil(t, listInfo.Spec)
-	require.NotEmpty(t, listInfo.Spec.Interval)
-	protorequire.ProtoEqual(t, listInfo.Spec.Interval[0], scheduler.Schedule.Spec.Interval[0])
-	require.NotNil(t, listInfo.WorkflowType)
-	require.NotEmpty(t, listInfo.FutureActionTimes)
-	require.Equal(t, expectedFutureTimes, listInfo.FutureActionTimes)
+	require.NotNil(t, listInfo.GetSpec())
+	require.NotEmpty(t, listInfo.GetSpec().GetInterval())
+	protorequire.ProtoEqual(t, listInfo.GetSpec().GetInterval()[0], scheduler.Schedule.GetSpec().GetInterval()[0])
+	require.NotNil(t, listInfo.GetWorkflowType())
+	require.NotEmpty(t, listInfo.GetFutureActionTimes())
+	require.Equal(t, expectedFutureTimes, listInfo.GetFutureActionTimes())
 }

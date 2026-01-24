@@ -8,7 +8,6 @@ package persistence
 
 import (
 	reflect "reflect"
-	sync "sync"
 	unsafe "unsafe"
 
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -25,18 +24,13 @@ const (
 
 // branch column
 type HistoryTreeInfo struct {
-	state      protoimpl.MessageState `protogen:"open.v1"`
-	BranchInfo *HistoryBranch         `protobuf:"bytes,1,opt,name=branch_info,json=branchInfo,proto3" json:"branch_info,omitempty"`
-	// For fork operation to prevent race condition of leaking event data when forking branches fail. Also can be used for clean up leaked data.
-	ForkTime *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=fork_time,json=forkTime,proto3" json:"fork_time,omitempty"`
-	// For lookup back to workflow during debugging, also background cleanup when fork operation cannot finish self cleanup due to crash.
-	Info string `protobuf:"bytes,3,opt,name=info,proto3" json:"info,omitempty"`
-	// Deprecating branch token in favor of branch info.
-	//
-	// Deprecated: Marked as deprecated in temporal/server/api/persistence/v1/history_tree.proto.
-	BranchToken   []byte `protobuf:"bytes,4,opt,name=branch_token,json=branchToken,proto3" json:"branch_token,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                  protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_BranchInfo  *HistoryBranch         `protobuf:"bytes,1,opt,name=branch_info,json=branchInfo,proto3"`
+	xxx_hidden_ForkTime    *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=fork_time,json=forkTime,proto3"`
+	xxx_hidden_Info        string                 `protobuf:"bytes,3,opt,name=info,proto3"`
+	xxx_hidden_BranchToken []byte                 `protobuf:"bytes,4,opt,name=branch_token,json=branchToken,proto3"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *HistoryTreeInfo) Reset() {
@@ -64,28 +58,23 @@ func (x *HistoryTreeInfo) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use HistoryTreeInfo.ProtoReflect.Descriptor instead.
-func (*HistoryTreeInfo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_history_tree_proto_rawDescGZIP(), []int{0}
-}
-
 func (x *HistoryTreeInfo) GetBranchInfo() *HistoryBranch {
 	if x != nil {
-		return x.BranchInfo
+		return x.xxx_hidden_BranchInfo
 	}
 	return nil
 }
 
 func (x *HistoryTreeInfo) GetForkTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.ForkTime
+		return x.xxx_hidden_ForkTime
 	}
 	return nil
 }
 
 func (x *HistoryTreeInfo) GetInfo() string {
 	if x != nil {
-		return x.Info
+		return x.xxx_hidden_Info
 	}
 	return ""
 }
@@ -93,19 +82,86 @@ func (x *HistoryTreeInfo) GetInfo() string {
 // Deprecated: Marked as deprecated in temporal/server/api/persistence/v1/history_tree.proto.
 func (x *HistoryTreeInfo) GetBranchToken() []byte {
 	if x != nil {
-		return x.BranchToken
+		return x.xxx_hidden_BranchToken
 	}
 	return nil
 }
 
+func (x *HistoryTreeInfo) SetBranchInfo(v *HistoryBranch) {
+	x.xxx_hidden_BranchInfo = v
+}
+
+func (x *HistoryTreeInfo) SetForkTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_ForkTime = v
+}
+
+func (x *HistoryTreeInfo) SetInfo(v string) {
+	x.xxx_hidden_Info = v
+}
+
+// Deprecated: Marked as deprecated in temporal/server/api/persistence/v1/history_tree.proto.
+func (x *HistoryTreeInfo) SetBranchToken(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_BranchToken = v
+}
+
+func (x *HistoryTreeInfo) HasBranchInfo() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_BranchInfo != nil
+}
+
+func (x *HistoryTreeInfo) HasForkTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_ForkTime != nil
+}
+
+func (x *HistoryTreeInfo) ClearBranchInfo() {
+	x.xxx_hidden_BranchInfo = nil
+}
+
+func (x *HistoryTreeInfo) ClearForkTime() {
+	x.xxx_hidden_ForkTime = nil
+}
+
+type HistoryTreeInfo_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	BranchInfo *HistoryBranch
+	// For fork operation to prevent race condition of leaking event data when forking branches fail. Also can be used for clean up leaked data.
+	ForkTime *timestamppb.Timestamp
+	// For lookup back to workflow during debugging, also background cleanup when fork operation cannot finish self cleanup due to crash.
+	Info string
+	// Deprecating branch token in favor of branch info.
+	//
+	// Deprecated: Marked as deprecated in temporal/server/api/persistence/v1/history_tree.proto.
+	BranchToken []byte
+}
+
+func (b0 HistoryTreeInfo_builder) Build() *HistoryTreeInfo {
+	m0 := &HistoryTreeInfo{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_BranchInfo = b.BranchInfo
+	x.xxx_hidden_ForkTime = b.ForkTime
+	x.xxx_hidden_Info = b.Info
+	x.xxx_hidden_BranchToken = b.BranchToken
+	return m0
+}
+
 // For history persistence to serialize/deserialize branch details.
 type HistoryBranch struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	TreeId        string                 `protobuf:"bytes,1,opt,name=tree_id,json=treeId,proto3" json:"tree_id,omitempty"`
-	BranchId      string                 `protobuf:"bytes,2,opt,name=branch_id,json=branchId,proto3" json:"branch_id,omitempty"`
-	Ancestors     []*HistoryBranchRange  `protobuf:"bytes,3,rep,name=ancestors,proto3" json:"ancestors,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_TreeId    string                 `protobuf:"bytes,1,opt,name=tree_id,json=treeId,proto3"`
+	xxx_hidden_BranchId  string                 `protobuf:"bytes,2,opt,name=branch_id,json=branchId,proto3"`
+	xxx_hidden_Ancestors *[]*HistoryBranchRange `protobuf:"bytes,3,rep,name=ancestors,proto3"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *HistoryBranch) Reset() {
@@ -133,43 +189,67 @@ func (x *HistoryBranch) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use HistoryBranch.ProtoReflect.Descriptor instead.
-func (*HistoryBranch) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_history_tree_proto_rawDescGZIP(), []int{1}
-}
-
 func (x *HistoryBranch) GetTreeId() string {
 	if x != nil {
-		return x.TreeId
+		return x.xxx_hidden_TreeId
 	}
 	return ""
 }
 
 func (x *HistoryBranch) GetBranchId() string {
 	if x != nil {
-		return x.BranchId
+		return x.xxx_hidden_BranchId
 	}
 	return ""
 }
 
 func (x *HistoryBranch) GetAncestors() []*HistoryBranchRange {
 	if x != nil {
-		return x.Ancestors
+		if x.xxx_hidden_Ancestors != nil {
+			return *x.xxx_hidden_Ancestors
+		}
 	}
 	return nil
 }
 
+func (x *HistoryBranch) SetTreeId(v string) {
+	x.xxx_hidden_TreeId = v
+}
+
+func (x *HistoryBranch) SetBranchId(v string) {
+	x.xxx_hidden_BranchId = v
+}
+
+func (x *HistoryBranch) SetAncestors(v []*HistoryBranchRange) {
+	x.xxx_hidden_Ancestors = &v
+}
+
+type HistoryBranch_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	TreeId    string
+	BranchId  string
+	Ancestors []*HistoryBranchRange
+}
+
+func (b0 HistoryBranch_builder) Build() *HistoryBranch {
+	m0 := &HistoryBranch{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_TreeId = b.TreeId
+	x.xxx_hidden_BranchId = b.BranchId
+	x.xxx_hidden_Ancestors = &b.Ancestors
+	return m0
+}
+
 // HistoryBranchRange represents a piece of range for a branch.
 type HistoryBranchRange struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// BranchId of original branch forked from.
-	BranchId string `protobuf:"bytes,1,opt,name=branch_id,json=branchId,proto3" json:"branch_id,omitempty"`
-	// Beginning node for the range, inclusive.
-	BeginNodeId int64 `protobuf:"varint,2,opt,name=begin_node_id,json=beginNodeId,proto3" json:"begin_node_id,omitempty"`
-	// Ending node for the range, exclusive.
-	EndNodeId     int64 `protobuf:"varint,3,opt,name=end_node_id,json=endNodeId,proto3" json:"end_node_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                  protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_BranchId    string                 `protobuf:"bytes,1,opt,name=branch_id,json=branchId,proto3"`
+	xxx_hidden_BeginNodeId int64                  `protobuf:"varint,2,opt,name=begin_node_id,json=beginNodeId,proto3"`
+	xxx_hidden_EndNodeId   int64                  `protobuf:"varint,3,opt,name=end_node_id,json=endNodeId,proto3"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *HistoryBranchRange) Reset() {
@@ -197,30 +277,58 @@ func (x *HistoryBranchRange) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use HistoryBranchRange.ProtoReflect.Descriptor instead.
-func (*HistoryBranchRange) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_history_tree_proto_rawDescGZIP(), []int{2}
-}
-
 func (x *HistoryBranchRange) GetBranchId() string {
 	if x != nil {
-		return x.BranchId
+		return x.xxx_hidden_BranchId
 	}
 	return ""
 }
 
 func (x *HistoryBranchRange) GetBeginNodeId() int64 {
 	if x != nil {
-		return x.BeginNodeId
+		return x.xxx_hidden_BeginNodeId
 	}
 	return 0
 }
 
 func (x *HistoryBranchRange) GetEndNodeId() int64 {
 	if x != nil {
-		return x.EndNodeId
+		return x.xxx_hidden_EndNodeId
 	}
 	return 0
+}
+
+func (x *HistoryBranchRange) SetBranchId(v string) {
+	x.xxx_hidden_BranchId = v
+}
+
+func (x *HistoryBranchRange) SetBeginNodeId(v int64) {
+	x.xxx_hidden_BeginNodeId = v
+}
+
+func (x *HistoryBranchRange) SetEndNodeId(v int64) {
+	x.xxx_hidden_EndNodeId = v
+}
+
+type HistoryBranchRange_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// BranchId of original branch forked from.
+	BranchId string
+	// Beginning node for the range, inclusive.
+	BeginNodeId int64
+	// Ending node for the range, exclusive.
+	EndNodeId int64
+}
+
+func (b0 HistoryBranchRange_builder) Build() *HistoryBranchRange {
+	m0 := &HistoryBranchRange{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_BranchId = b.BranchId
+	x.xxx_hidden_BeginNodeId = b.BeginNodeId
+	x.xxx_hidden_EndNodeId = b.EndNodeId
+	return m0
 }
 
 var File_temporal_server_api_persistence_v1_history_tree_proto protoreflect.FileDescriptor
@@ -242,18 +350,6 @@ const file_temporal_server_api_persistence_v1_history_tree_proto_rawDesc = "" +
 	"\tbranch_id\x18\x01 \x01(\tR\bbranchId\x12\"\n" +
 	"\rbegin_node_id\x18\x02 \x01(\x03R\vbeginNodeId\x12\x1e\n" +
 	"\vend_node_id\x18\x03 \x01(\x03R\tendNodeIdB6Z4go.temporal.io/server/api/persistence/v1;persistenceb\x06proto3"
-
-var (
-	file_temporal_server_api_persistence_v1_history_tree_proto_rawDescOnce sync.Once
-	file_temporal_server_api_persistence_v1_history_tree_proto_rawDescData []byte
-)
-
-func file_temporal_server_api_persistence_v1_history_tree_proto_rawDescGZIP() []byte {
-	file_temporal_server_api_persistence_v1_history_tree_proto_rawDescOnce.Do(func() {
-		file_temporal_server_api_persistence_v1_history_tree_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_api_persistence_v1_history_tree_proto_rawDesc), len(file_temporal_server_api_persistence_v1_history_tree_proto_rawDesc)))
-	})
-	return file_temporal_server_api_persistence_v1_history_tree_proto_rawDescData
-}
 
 var file_temporal_server_api_persistence_v1_history_tree_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
 var file_temporal_server_api_persistence_v1_history_tree_proto_goTypes = []any{

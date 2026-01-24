@@ -480,20 +480,20 @@ func (s *FunctionalTestBase) RegisterNamespace(
 	currentClusterName := s.testCluster.testBase.ClusterMetadata.GetCurrentClusterName()
 	nsID := namespace.ID(uuid.NewString())
 	namespaceRequest := &persistence.CreateNamespaceRequest{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
+		Namespace: persistencespb.NamespaceDetail_builder{
+			Info: persistencespb.NamespaceInfo_builder{
 				Id:          nsID.String(),
 				Name:        nsName.String(),
 				State:       enumspb.NAMESPACE_STATE_REGISTERED,
 				Description: "namespace for functional tests",
-			},
-			Config: &persistencespb.NamespaceConfig{
+			}.Build(),
+			Config: persistencespb.NamespaceConfig_builder{
 				Retention:               timestamp.DurationFromDays(retentionDays),
 				HistoryArchivalState:    archivalState,
 				HistoryArchivalUri:      historyArchivalURI,
 				VisibilityArchivalState: archivalState,
 				VisibilityArchivalUri:   visibilityArchivalURI,
-				BadBinaries:             &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
+				BadBinaries:             namespacepb.BadBinaries_builder{Binaries: map[string]*namespacepb.BadBinaryInfo{}}.Build(),
 				CustomSearchAttributeAliases: map[string]string{
 					"Bool01":     "CustomBoolField",
 					"Datetime01": "CustomDatetimeField",
@@ -502,16 +502,16 @@ func (s *FunctionalTestBase) RegisterNamespace(
 					"Keyword01":  "CustomKeywordField",
 					"Text01":     "CustomTextField",
 				},
-			},
-			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+			}.Build(),
+			ReplicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 				ActiveClusterName: currentClusterName,
 				Clusters: []string{
 					currentClusterName,
 				},
-			},
+			}.Build(),
 
 			FailoverVersion: common.EmptyVersion,
-		},
+		}.Build(),
 		IsGlobalNamespace: false,
 	}
 	_, err := s.testCluster.testBase.MetadataManager.CreateNamespace(context.Background(), namespaceRequest)
@@ -532,34 +532,34 @@ func (s *FunctionalTestBase) MarkNamespaceAsDeleted(
 ) error {
 	ctx, cancel := rpc.NewContextWithTimeoutAndVersionHeaders(10000 * time.Second)
 	defer cancel()
-	_, err := s.FrontendClient().UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
+	_, err := s.FrontendClient().UpdateNamespace(ctx, workflowservice.UpdateNamespaceRequest_builder{
 		Namespace: nsName.String(),
-		UpdateInfo: &namespacepb.UpdateNamespaceInfo{
+		UpdateInfo: namespacepb.UpdateNamespaceInfo_builder{
 			State: enumspb.NAMESPACE_STATE_DELETED,
-		},
-	})
+		}.Build(),
+	}.Build())
 
 	return err
 }
 
 func (s *FunctionalTestBase) GetHistoryFunc(namespace string, execution *commonpb.WorkflowExecution) func() []*historypb.HistoryEvent {
 	return func() []*historypb.HistoryEvent {
-		historyResponse, err := s.FrontendClient().GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+		historyResponse, err := s.FrontendClient().GetWorkflowExecutionHistory(NewContext(), workflowservice.GetWorkflowExecutionHistoryRequest_builder{
 			Namespace:       namespace,
 			Execution:       execution,
 			MaximumPageSize: 5, // Use small page size to force pagination code path
-		})
+		}.Build())
 		require.NoError(s.T(), err)
 
-		events := historyResponse.History.Events
-		for historyResponse.NextPageToken != nil {
-			historyResponse, err = s.FrontendClient().GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+		events := historyResponse.GetHistory().GetEvents()
+		for len(historyResponse.GetNextPageToken()) != 0 {
+			historyResponse, err = s.FrontendClient().GetWorkflowExecutionHistory(NewContext(), workflowservice.GetWorkflowExecutionHistoryRequest_builder{
 				Namespace:     namespace,
 				Execution:     execution,
-				NextPageToken: historyResponse.NextPageToken,
-			})
+				NextPageToken: historyResponse.GetNextPageToken(),
+			}.Build())
 			require.NoError(s.T(), err)
-			events = append(events, historyResponse.History.Events...)
+			events = append(events, historyResponse.GetHistory().GetEvents()...)
 		}
 
 		return events
@@ -616,18 +616,18 @@ func (s *FunctionalTestBase) CloseShard(namespaceID string, workflowID string) {
 		s.T().Fatalf("CloseShard cannot be called on a shared cluster; use testcore.WithDedicatedCluster()")
 	}
 	shardID := common.WorkflowIDToHistoryShard(namespaceID, workflowID, s.testClusterConfig.HistoryConfig.NumHistoryShards)
-	_, err := s.AdminClient().CloseShard(NewContext(), &adminservice.CloseShardRequest{
+	_, err := s.AdminClient().CloseShard(NewContext(), adminservice.CloseShardRequest_builder{
 		ShardId: shardID,
-	})
+	}.Build())
 	s.Require().NoError(err)
 }
 
 func (s *FunctionalTestBase) GetNamespaceID(namespace string) string {
-	namespaceResp, err := s.FrontendClient().DescribeNamespace(NewContext(), &workflowservice.DescribeNamespaceRequest{
+	namespaceResp, err := s.FrontendClient().DescribeNamespace(NewContext(), workflowservice.DescribeNamespaceRequest_builder{
 		Namespace: namespace,
-	})
+	}.Build())
 	s.NoError(err)
-	return namespaceResp.NamespaceInfo.GetId()
+	return namespaceResp.GetNamespaceInfo().GetId()
 }
 
 func (s *FunctionalTestBase) RunTestWithMatchingBehavior(subtest func()) {
@@ -695,13 +695,13 @@ func (s *FunctionalTestBase) WaitForChannel(ctx context.Context, ch chan struct{
 // TODO (alex): change to nsName namespace.Name
 func (s *FunctionalTestBase) SendSignal(nsName string, execution *commonpb.WorkflowExecution, signalName string,
 	input *commonpb.Payloads, identity string) error {
-	_, err := s.FrontendClient().SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+	_, err := s.FrontendClient().SignalWorkflowExecution(NewContext(), workflowservice.SignalWorkflowExecutionRequest_builder{
 		Namespace:         nsName,
 		WorkflowExecution: execution,
 		SignalName:        signalName,
 		Input:             input,
 		Identity:          identity,
-	})
+	}.Build())
 
 	return err
 }

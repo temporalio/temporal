@@ -44,13 +44,13 @@ func TestApplyRequest_RejectsUpdateOnPausedWorkflow(t *testing.T) {
 }
 
 func createUpdateRequest(updateID string) *historyservice.UpdateWorkflowExecutionRequest {
-	return &historyservice.UpdateWorkflowExecutionRequest{
-		Request: &workflowservice.UpdateWorkflowExecutionRequest{
-			Request: &updatepb.Request{
-				Meta: &updatepb.Meta{
+	return historyservice.UpdateWorkflowExecutionRequest_builder{
+		Request: workflowservice.UpdateWorkflowExecutionRequest_builder{
+			Request: updatepb.Request_builder{
+				Meta: updatepb.Meta_builder{
 					UpdateId: updateID,
-				},
-			},
-		},
-	}
+				}.Build(),
+			}.Build(),
+		}.Build(),
+	}.Build()
 }

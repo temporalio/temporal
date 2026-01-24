@@ -20,14 +20,14 @@ func Invoke(
 	isValid := false
 	err := api.GetAndUpdateWorkflowWithNew(
 		ctx,
-		req.Clock,
+		req.GetClock(),
 		definition.NewWorkflowKey(
-			req.NamespaceId,
-			req.Execution.WorkflowId,
-			req.Execution.RunId,
+			req.GetNamespaceId(),
+			req.GetExecution().GetWorkflowId(),
+			req.GetExecution().GetRunId(),
 		),
 		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
-			isTaskValid, err := isActivityTaskValid(workflowLease, req.ScheduledEventId, req.GetStamp())
+			isTaskValid, err := isActivityTaskValid(workflowLease, req.GetScheduledEventId(), req.GetStamp())
 			if err != nil {
 				return nil, err
 			}
@@ -41,9 +41,9 @@ func Invoke(
 		shardContext,
 		workflowConsistencyChecker,
 	)
-	return &historyservice.IsActivityTaskValidResponse{
+	return historyservice.IsActivityTaskValidResponse_builder{
 		IsValid: isValid,
-	}, err
+	}.Build(), err
 }
 
 func isActivityTaskValid(
@@ -57,7 +57,7 @@ func isActivityTaskValid(
 	}
 
 	ai, ok := mutableState.GetActivityInfo(scheduledEventID)
-	if ok && ai.StartedEventId == common.EmptyEventID && ai.GetStamp() == stamp {
+	if ok && ai.GetStartedEventId() == common.EmptyEventID && ai.GetStamp() == stamp {
 		return true, nil
 	}
 	return false, nil

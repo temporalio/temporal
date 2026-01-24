@@ -324,22 +324,22 @@ func (s *historyArchiverSuite) TestArchive_Fail_TimeoutWhenReadingHistory() {
 func (s *historyArchiverSuite) TestArchive_Fail_HistoryMutated() {
 	historyIterator := archiver.NewMockHistoryIterator(s.controller)
 	historyBatches := []*historypb.History{
-		{
+		historypb.History_builder{
 			Events: []*historypb.HistoryEvent{
-				{
+				historypb.HistoryEvent_builder{
 					EventId:   common.FirstEventID + 1,
 					EventTime: timestamppb.New(time.Now().UTC()),
 					Version:   testCloseFailoverVersion + 1,
-				},
+				}.Build(),
 			},
-		},
+		}.Build(),
 	}
-	historyBlob := &archiverspb.HistoryBlob{
-		Header: &archiverspb.HistoryBlobHeader{
+	historyBlob := archiverspb.HistoryBlob_builder{
+		Header: archiverspb.HistoryBlobHeader_builder{
 			IsLast: true,
-		},
+		}.Build(),
 		Body: historyBatches,
-	}
+	}.Build()
 	gomock.InOrder(
 		historyIterator.EXPECT().HasNext().Return(true),
 		historyIterator.EXPECT().Next(gomock.Any()).Return(historyBlob, nil),
@@ -383,22 +383,22 @@ func (s *historyArchiverSuite) TestArchive_Fail_NonRetryableErrorOption() {
 
 func (s *historyArchiverSuite) TestArchive_Skip() {
 	historyIterator := archiver.NewMockHistoryIterator(s.controller)
-	historyBlob := &archiverspb.HistoryBlob{
-		Header: &archiverspb.HistoryBlobHeader{
+	historyBlob := archiverspb.HistoryBlob_builder{
+		Header: archiverspb.HistoryBlobHeader_builder{
 			IsLast: false,
-		},
+		}.Build(),
 		Body: []*historypb.History{
-			{
+			historypb.History_builder{
 				Events: []*historypb.HistoryEvent{
-					{
+					historypb.HistoryEvent_builder{
 						EventId:   common.FirstEventID,
 						EventTime: timestamppb.New(time.Now().UTC()),
 						Version:   testCloseFailoverVersion,
-					},
+					}.Build(),
 				},
-			},
+			}.Build(),
 		},
-	}
+	}.Build()
 	gomock.InOrder(
 		historyIterator.EXPECT().HasNext().Return(true),
 		historyIterator.EXPECT().Next(gomock.Any()).Return(historyBlob, nil),
@@ -428,36 +428,36 @@ func (s *historyArchiverSuite) TestArchive_Skip() {
 func (s *historyArchiverSuite) TestArchive_Success() {
 	historyIterator := archiver.NewMockHistoryIterator(s.controller)
 	historyBatches := []*historypb.History{
-		{
+		historypb.History_builder{
 			Events: []*historypb.HistoryEvent{
-				{
+				historypb.HistoryEvent_builder{
 					EventId:   common.FirstEventID + 1,
 					EventTime: timestamppb.New(time.Now().UTC()),
 					Version:   testCloseFailoverVersion,
-				},
-				{
+				}.Build(),
+				historypb.HistoryEvent_builder{
 					EventId:   common.FirstEventID + 2,
 					EventTime: timestamppb.New(time.Now().UTC()),
 					Version:   testCloseFailoverVersion,
-				},
+				}.Build(),
 			},
-		},
-		{
+		}.Build(),
+		historypb.History_builder{
 			Events: []*historypb.HistoryEvent{
-				{
+				historypb.HistoryEvent_builder{
 					EventId:   testNextEventID - 1,
 					EventTime: timestamppb.New(time.Now().UTC()),
 					Version:   testCloseFailoverVersion,
-				},
+				}.Build(),
 			},
-		},
+		}.Build(),
 	}
-	historyBlob := &archiverspb.HistoryBlob{
-		Header: &archiverspb.HistoryBlobHeader{
+	historyBlob := archiverspb.HistoryBlob_builder{
+		Header: archiverspb.HistoryBlobHeader_builder{
 			IsLast: true,
-		},
+		}.Build(),
 		Body: historyBatches,
-	}
+	}.Build()
 	gomock.InOrder(
 		historyIterator.EXPECT().HasNext().Return(true),
 		historyIterator.EXPECT().Next(gomock.Any()).Return(historyBlob, nil),
@@ -560,7 +560,7 @@ func (s *historyArchiverSuite) TestGet_Success_PickHighestVersion() {
 	response, err := historyArchiver.Get(context.Background(), URI, request)
 	s.NoError(err)
 	s.Nil(response.NextPageToken)
-	s.Equal(append(s.historyBatchesV100[0].Body, s.historyBatchesV100[1].Body...), response.HistoryBatches)
+	s.Equal(append(s.historyBatchesV100[0].GetBody(), s.historyBatchesV100[1].GetBody()...), response.HistoryBatches)
 }
 
 func (s *historyArchiverSuite) TestGet_Success_UseProvidedVersion() {
@@ -578,7 +578,7 @@ func (s *historyArchiverSuite) TestGet_Success_UseProvidedVersion() {
 	response, err := historyArchiver.Get(context.Background(), URI, request)
 	s.NoError(err)
 	s.Nil(response.NextPageToken)
-	s.Equal(s.historyBatchesV1[0].Body, response.HistoryBatches)
+	s.Equal(s.historyBatchesV1[0].GetBody(), response.HistoryBatches)
 }
 
 func (s *historyArchiverSuite) TestGet_Success_SmallPageSize() {
@@ -612,7 +612,7 @@ func (s *historyArchiverSuite) TestGet_Success_SmallPageSize() {
 	s.Len(response.HistoryBatches, 1)
 	combinedHistory = append(combinedHistory, response.HistoryBatches...)
 
-	s.Equal(append(s.historyBatchesV100[0].Body, s.historyBatchesV100[1].Body...), combinedHistory)
+	s.Equal(append(s.historyBatchesV100[0].GetBody(), s.historyBatchesV100[1].GetBody()...), combinedHistory)
 }
 
 func (s *historyArchiverSuite) TestGet_EmptyHistory_ReturnsNotFoundError() {
@@ -667,7 +667,7 @@ func (s *historyArchiverSuite) TestArchiveAndGet() {
 	s.NoError(err)
 	s.NotNil(response)
 	s.Nil(response.NextPageToken)
-	s.Equal(append(s.historyBatchesV100[0].Body, s.historyBatchesV100[1].Body...), response.HistoryBatches)
+	s.Equal(append(s.historyBatchesV100[0].GetBody(), s.historyBatchesV100[1].GetBody()...), response.HistoryBatches)
 }
 
 func (s *historyArchiverSuite) newTestHistoryArchiver(historyIterator archiver.HistoryIterator) *historyArchiver {
@@ -685,62 +685,62 @@ func (s *historyArchiverSuite) setupHistoryDirectory() {
 	now := time.Date(2020, 8, 22, 1, 2, 3, 4, time.UTC)
 
 	s.historyBatchesV1 = []*archiverspb.HistoryBlob{
-		{
-			Header: &archiverspb.HistoryBlobHeader{
+		archiverspb.HistoryBlob_builder{
+			Header: archiverspb.HistoryBlobHeader_builder{
 				IsLast: true,
-			},
+			}.Build(),
 			Body: []*historypb.History{
-				{
+				historypb.History_builder{
 					Events: []*historypb.HistoryEvent{
-						{
+						historypb.HistoryEvent_builder{
 							EventId:   testNextEventID - 1,
 							EventTime: timestamppb.New(now),
 							Version:   1,
-						},
+						}.Build(),
 					},
-				},
+				}.Build(),
 			},
-		},
+		}.Build(),
 	}
 
 	s.historyBatchesV100 = []*archiverspb.HistoryBlob{
-		{
-			Header: &archiverspb.HistoryBlobHeader{
+		archiverspb.HistoryBlob_builder{
+			Header: archiverspb.HistoryBlobHeader_builder{
 				IsLast: false,
-			},
+			}.Build(),
 			Body: []*historypb.History{
-				{
+				historypb.History_builder{
 					Events: []*historypb.HistoryEvent{
-						{
+						historypb.HistoryEvent_builder{
 							EventId:   common.FirstEventID + 1,
 							EventTime: timestamppb.New(now),
 							Version:   testCloseFailoverVersion,
-						},
-						{
+						}.Build(),
+						historypb.HistoryEvent_builder{
 							EventId:   common.FirstEventID + 1,
 							EventTime: timestamppb.New(now),
 							Version:   testCloseFailoverVersion,
-						},
+						}.Build(),
 					},
-				},
+				}.Build(),
 			},
-		},
-		{
-			Header: &archiverspb.HistoryBlobHeader{
+		}.Build(),
+		archiverspb.HistoryBlob_builder{
+			Header: archiverspb.HistoryBlobHeader_builder{
 				IsLast: true,
-			},
+			}.Build(),
 			Body: []*historypb.History{
-				{
+				historypb.History_builder{
 					Events: []*historypb.HistoryEvent{
-						{
+						historypb.HistoryEvent_builder{
 							EventId:   testNextEventID - 1,
 							EventTime: timestamppb.New(now),
 							Version:   testCloseFailoverVersion,
-						},
+						}.Build(),
 					},
-				},
+				}.Build(),
 			},
-		},
+		}.Build(),
 	}
 
 	s.writeHistoryBatchesForGetTest(s.historyBatchesV1, int64(1))

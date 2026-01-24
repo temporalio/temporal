@@ -153,7 +153,7 @@ func (tr *fairTaskReader) completeTask(task *internalTask, res taskResponse) {
 	}
 
 	// On other errors: ask backlog manager to re-spool to persistence
-	if tr.backlogMgr.respoolTaskAfterError(task.event.Data) != nil {
+	if tr.backlogMgr.respoolTaskAfterError(task.event.GetData()) != nil {
 		return // task queue will unload now
 	}
 
@@ -164,7 +164,7 @@ func (tr *fairTaskReader) completeTask(task *internalTask, res taskResponse) {
 }
 
 func (tr *fairTaskReader) completeTaskLocked(task *internalTask) {
-	tr.backlogAge.record(task.event.Data.CreateTime, -1)
+	tr.backlogAge.record(task.event.GetData().GetCreateTime(), -1)
 	tr.outstandingTasks.Put(fairLevelFromAllocatedTask(task.event.AllocatedTaskInfo), nil)
 	tr.loadedTasks--
 	softassert.That(tr.logger, tr.loadedTasks >= 0, "loadedTasks went negative")
@@ -430,7 +430,7 @@ func (tr *fairTaskReader) mergeTasksLocked(tasks []*persistencespb.AllocatedTask
 		evictedAnyTasks = true
 		if task, ok := it.Value().(*internalTask); ok {
 			// task that was in the matcher that we have to remove
-			tr.backlogAge.record(task.event.Data.CreateTime, -1)
+			tr.backlogAge.record(task.event.GetData().GetCreateTime(), -1)
 			tr.loadedTasks--
 			softassert.That(tr.logger, tr.loadedTasks >= 0, "loadedTasks went negative")
 			tr.outstandingTasks.Remove(it.Key().(fairLevel))
@@ -463,7 +463,7 @@ func (tr *fairTaskReader) mergeTasksLocked(tasks []*persistencespb.AllocatedTask
 		// task.finishForwarded, which will call tr.completeTask.
 		tr.outstandingTasks.Put(level, internalTasks[i])
 		tr.loadedTasks++
-		tr.backlogAge.record(t.Data.CreateTime, 1)
+		tr.backlogAge.record(t.GetData().GetCreateTime(), 1)
 	}
 
 	// Update atEnd:

@@ -36,7 +36,7 @@ func (c *ClusterMetadataLoader) LoadAndMergeWithStaticConfig(ctx context.Context
 			return err
 		}
 		newMetadata := cluster.ClusterInformationFromDB(item)
-		c.mergeMetadataFromDBWithStaticConfig(svc, item.ClusterName, newMetadata)
+		c.mergeMetadataFromDBWithStaticConfig(svc, item.GetClusterName(), newMetadata)
 	}
 	return nil
 }

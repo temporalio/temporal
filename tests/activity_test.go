@@ -358,15 +358,15 @@ func (s *ActivityTestSuite) TestActivityHeartBeatWorkflow_Success() {
 	identity := "worker1"
 	activityName := "activity_timer"
 
-	workflowType := &commonpb.WorkflowType{Name: wt}
+	workflowType := commonpb.WorkflowType_builder{Name: wt}.Build()
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	taskQueue := taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build()
 
-	header := &commonpb.Header{
+	header := commonpb.Header_builder{
 		Fields: map[string]*commonpb.Payload{"tracing": payload.EncodeString("sample data")},
-	}
+	}.Build()
 
-	request := &workflowservice.StartWorkflowExecutionRequest{
+	request := workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
@@ -377,12 +377,12 @@ func (s *ActivityTestSuite) TestActivityHeartBeatWorkflow_Success() {
 		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
-	}
+	}.Build()
 
 	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
 
-	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.GetRunId()))
 
 	workflowComplete := false
 	activityCount := int32(1)
@@ -392,44 +392,44 @@ func (s *ActivityTestSuite) TestActivityHeartBeatWorkflow_Success() {
 		if activityCounter < activityCount {
 			activityCounter++
 
-			return []*commandpb.Command{{
+			return []*commandpb.Command{commandpb.Command_builder{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+				ScheduleActivityTaskCommandAttributes: commandpb.ScheduleActivityTaskCommandAttributes_builder{
 					ActivityId:             convert.Int32ToString(activityCounter),
-					ActivityType:           &commonpb.ActivityType{Name: activityName},
-					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+					ActivityType:           commonpb.ActivityType_builder{Name: activityName}.Build(),
+					TaskQueue:              taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 					Input:                  payloads.EncodeString("activity-input"),
 					Header:                 header,
 					ScheduleToCloseTimeout: durationpb.New(15 * time.Second),
 					ScheduleToStartTimeout: durationpb.New(1 * time.Second),
 					StartToCloseTimeout:    durationpb.New(15 * time.Second),
 					HeartbeatTimeout:       durationpb.New(1 * time.Second),
-				}},
-			}}, nil
+				}.Build(),
+			}.Build()}, nil
 		}
 
 		s.Logger.Info("Completing Workflow")
 
 		workflowComplete = true
-		return []*commandpb.Command{{
+		return []*commandpb.Command{commandpb.Command_builder{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+			CompleteWorkflowExecutionCommandAttributes: commandpb.CompleteWorkflowExecutionCommandAttributes_builder{
 				Result: payloads.EncodeString("Done"),
-			}},
-		}}, nil
+			}.Build(),
+		}.Build()}, nil
 	}
 
 	activityExecutedCount := 0
 	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
-		s.Equal(id, task.WorkflowExecution.GetWorkflowId())
-		s.Equal(activityName, task.ActivityType.GetName())
+		s.Equal(id, task.GetWorkflowExecution().GetWorkflowId())
+		s.Equal(activityName, task.GetActivityType().GetName())
 		for i := 0; i < 10; i++ {
-			s.Logger.Info("Heartbeating for activity", tag.WorkflowActivityID(task.ActivityId), tag.Counter(i))
-			_, err := s.FrontendClient().RecordActivityTaskHeartbeat(testcore.NewContext(), &workflowservice.RecordActivityTaskHeartbeatRequest{
+			s.Logger.Info("Heartbeating for activity", tag.WorkflowActivityID(task.GetActivityId()), tag.Counter(i))
+			_, err := s.FrontendClient().RecordActivityTaskHeartbeat(testcore.NewContext(), workflowservice.RecordActivityTaskHeartbeatRequest_builder{
 				Namespace: s.Namespace().String(),
-				TaskToken: task.TaskToken,
+				TaskToken: task.GetTaskToken(),
 				Details:   payloads.EncodeString("details"),
-			})
+			}.Build())
 			s.NoError(err)
 			time.Sleep(10 * time.Millisecond) //nolint:forbidigo
 		}
@@ -454,7 +454,7 @@ func (s *ActivityTestSuite) TestActivityHeartBeatWorkflow_Success() {
 	err = poller.PollAndProcessActivityTask(false)
 	s.True(err == nil || errors.Is(err, testcore.ErrNoTasks))
 
-	s.Logger.Info("Waiting for workflow to complete", tag.WorkflowRunID(we.RunId))
+	s.Logger.Info("Waiting for workflow to complete", tag.WorkflowRunID(we.GetRunId()))
 
 	s.False(workflowComplete)
 	_, err = poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory)
@@ -463,10 +463,10 @@ func (s *ActivityTestSuite) TestActivityHeartBeatWorkflow_Success() {
 	s.Equal(1, activityExecutedCount)
 
 	// go over history and verify that the activity task scheduled event has header on it
-	events := s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{
+	events := s.GetHistory(s.Namespace().String(), commonpb.WorkflowExecution_builder{
 		WorkflowId: id,
 		RunId:      we.GetRunId(),
-	})
+	}.Build())
 
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
@@ -487,7 +487,7 @@ func (s *ActivityTestSuite) TestActivityRetry() {
 
 	activityName := "activity_retry"
 	timeoutActivityName := "timeout_activity"
-	request := &workflowservice.StartWorkflowExecutionRequest{
+	request := workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          tv.WorkflowID(),
@@ -497,12 +497,12 @@ func (s *ActivityTestSuite) TestActivityRetry() {
 		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            tv.WorkerIdentity(),
-	}
+	}.Build()
 
 	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
 
-	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.GetRunId()))
 
 	workflowComplete := false
 	activitiesScheduled := false
@@ -513,40 +513,40 @@ func (s *ActivityTestSuite) TestActivityRetry() {
 			activitiesScheduled = true
 
 			return []*commandpb.Command{
-				{
+				commandpb.Command_builder{
 					CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-					Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+					ScheduleActivityTaskCommandAttributes: commandpb.ScheduleActivityTaskCommandAttributes_builder{
 						ActivityId:             "A",
-						ActivityType:           &commonpb.ActivityType{Name: activityName},
+						ActivityType:           commonpb.ActivityType_builder{Name: activityName}.Build(),
 						TaskQueue:              tv.TaskQueue(),
 						Input:                  payloads.EncodeString("1"),
 						ScheduleToCloseTimeout: durationpb.New(4 * time.Second),
 						ScheduleToStartTimeout: durationpb.New(4 * time.Second),
 						StartToCloseTimeout:    durationpb.New(4 * time.Second),
 						HeartbeatTimeout:       durationpb.New(1 * time.Second),
-						RetryPolicy: &commonpb.RetryPolicy{
+						RetryPolicy: commonpb.RetryPolicy_builder{
 							InitialInterval:        durationpb.New(1 * time.Second),
 							MaximumAttempts:        3,
 							MaximumInterval:        durationpb.New(1 * time.Second),
 							NonRetryableErrorTypes: []string{"bad-bug"},
 							BackoffCoefficient:     1,
-						},
-					}}},
-				{
+						}.Build(),
+					}.Build()}.Build(),
+				commandpb.Command_builder{
 					CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-					Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+					ScheduleActivityTaskCommandAttributes: commandpb.ScheduleActivityTaskCommandAttributes_builder{
 						ActivityId:             "B",
-						ActivityType:           &commonpb.ActivityType{Name: timeoutActivityName},
-						TaskQueue:              &taskqueuepb.TaskQueue{Name: "no_worker_taskqueue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+						ActivityType:           commonpb.ActivityType_builder{Name: timeoutActivityName}.Build(),
+						TaskQueue:              taskqueuepb.TaskQueue_builder{Name: "no_worker_taskqueue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 						Input:                  payloads.EncodeString("2"),
 						ScheduleToCloseTimeout: durationpb.New(5 * time.Second),
 						ScheduleToStartTimeout: durationpb.New(5 * time.Second),
 						StartToCloseTimeout:    durationpb.New(5 * time.Second),
 						HeartbeatTimeout:       durationpb.New(0 * time.Second),
-					}}},
+					}.Build()}.Build(),
 			}, nil
-		} else if task.PreviousStartedEventId > 0 {
-			for _, event := range task.History.Events[task.PreviousStartedEventId:] {
+		} else if task.GetPreviousStartedEventId() > 0 {
+			for _, event := range task.GetHistory().GetEvents()[task.GetPreviousStartedEventId():] {
 				switch event.GetEventType() { // nolint:exhaustive
 				case enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED:
 					switch event.GetActivityTaskScheduledEventAttributes().GetActivityId() {
@@ -572,12 +572,12 @@ func (s *ActivityTestSuite) TestActivityRetry() {
 		if activityAFailed != nil && activityBTimeout != nil {
 			s.Logger.Info("Completing Workflow")
 			workflowComplete = true
-			return []*commandpb.Command{{
+			return []*commandpb.Command{commandpb.Command_builder{
 				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+				CompleteWorkflowExecutionCommandAttributes: commandpb.CompleteWorkflowExecutionCommandAttributes_builder{
 					Result: payloads.EncodeString("Done"),
-				}},
-			}}, nil
+				}.Build(),
+			}.Build()}, nil
 		}
 
 		return []*commandpb.Command{}, nil
@@ -585,8 +585,8 @@ func (s *ActivityTestSuite) TestActivityRetry() {
 
 	activityExecutedCount := 0
 	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
-		s.Equal(tv.WorkflowID(), task.WorkflowExecution.GetWorkflowId())
-		s.Equal(activityName, task.ActivityType.GetName())
+		s.Equal(tv.WorkflowID(), task.GetWorkflowExecution().GetWorkflowId())
+		s.Equal(activityName, task.GetActivityType().GetName())
 		var err error
 		if activityExecutedCount == 0 {
 			err = errors.New("bad-luck-please-retry") //nolint:err113
@@ -609,13 +609,13 @@ func (s *ActivityTestSuite) TestActivityRetry() {
 	}
 
 	describeWorkflowExecution := func() (*workflowservice.DescribeWorkflowExecutionResponse, error) {
-		return s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+		return s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), workflowservice.DescribeWorkflowExecutionRequest_builder{
 			Namespace: s.Namespace().String(),
-			Execution: &commonpb.WorkflowExecution{
+			Execution: commonpb.WorkflowExecution_builder{
 				WorkflowId: tv.WorkflowID(),
-				RunId:      we.RunId,
-			},
-		})
+				RunId:      we.GetRunId(),
+			}.Build(),
+		}.Build())
 	}
 
 	_, err := poller.PollAndProcessWorkflowTask()
@@ -623,8 +623,8 @@ func (s *ActivityTestSuite) TestActivityRetry() {
 
 	_, err = s.TaskPoller().PollAndHandleActivityTask(tv,
 		func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
-			s.Equal(tv.WorkflowID(), task.WorkflowExecution.GetWorkflowId())
-			s.Equal(activityName, task.ActivityType.GetName())
+			s.Equal(tv.WorkflowID(), task.GetWorkflowExecution().GetWorkflowId())
+			s.Equal(activityName, task.GetActivityType().GetName())
 			return nil, errors.New("bad-luck-please-retry")
 		})
 	s.NoError(err)
@@ -643,8 +643,8 @@ func (s *ActivityTestSuite) TestActivityRetry() {
 
 	_, err = s.TaskPoller().PollAndHandleActivityTask(tv,
 		func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
-			s.Equal(tv.WorkflowID(), task.WorkflowExecution.GetWorkflowId())
-			s.Equal(activityName, task.ActivityType.GetName())
+			s.Equal(tv.WorkflowID(), task.GetWorkflowExecution().GetWorkflowId())
+			s.Equal(activityName, task.GetActivityType().GetName())
 			return nil, temporal.NewNonRetryableApplicationError("bad-bug", "", nil)
 		})
 	s.NoError(err)
@@ -654,17 +654,17 @@ func (s *ActivityTestSuite) TestActivityRetry() {
 	s.Len(descResp.GetPendingActivities(), 1)
 	s.Equal(descResp.GetPendingActivities()[0].GetActivityId(), "B")
 
-	s.Logger.Info("Waiting for workflow to complete", tag.WorkflowRunID(we.RunId))
+	s.Logger.Info("Waiting for workflow to complete", tag.WorkflowRunID(we.GetRunId()))
 	for i := 0; i < 3; i++ {
 		s.False(workflowComplete)
 
 		s.Logger.Info("Processing workflow task:", tag.Counter(i))
 		_, err := poller.PollAndProcessWorkflowTask(testcore.WithRetries(1))
 		if err != nil {
-			s.PrintHistoryEvents(s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{
+			s.PrintHistoryEvents(s.GetHistory(s.Namespace().String(), commonpb.WorkflowExecution_builder{
 				WorkflowId: tv.WorkflowID(),
 				RunId:      we.GetRunId(),
-			}))
+			}.Build()))
 		}
 		s.NoError(err, "Poll for workflow task failed")
 
@@ -683,11 +683,11 @@ func (s *ActivityTestSuite) TestActivityRetry_Infinite() {
 	identity := "worker1"
 	activityName := "activity_retry"
 
-	workflowType := &commonpb.WorkflowType{Name: wt}
+	workflowType := commonpb.WorkflowType_builder{Name: wt}.Build()
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	taskQueue := taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build()
 
-	request := &workflowservice.StartWorkflowExecutionRequest{
+	request := workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
@@ -697,12 +697,12 @@ func (s *ActivityTestSuite) TestActivityRetry_Infinite() {
 		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
-	}
+	}.Build()
 
 	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
 
-	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.GetRunId()))
 
 	workflowComplete := false
 	activitiesScheduled := false
@@ -711,39 +711,36 @@ func (s *ActivityTestSuite) TestActivityRetry_Infinite() {
 		if !activitiesScheduled {
 			activitiesScheduled = true
 
-			return []*commandpb.Command{{
+			return []*commandpb.Command{commandpb.Command_builder{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{
-					ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-						ActivityId:          "A",
-						ActivityType:        &commonpb.ActivityType{Name: activityName},
-						TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-						Input:               payloads.EncodeString("1"),
-						StartToCloseTimeout: durationpb.New(100 * time.Second),
-						RetryPolicy: &commonpb.RetryPolicy{
-							MaximumAttempts:    0,
-							BackoffCoefficient: 1,
-						},
-					}},
-			}}, nil
+				ScheduleActivityTaskCommandAttributes: commandpb.ScheduleActivityTaskCommandAttributes_builder{
+					ActivityId:          "A",
+					ActivityType:        commonpb.ActivityType_builder{Name: activityName}.Build(),
+					TaskQueue:           taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
+					Input:               payloads.EncodeString("1"),
+					StartToCloseTimeout: durationpb.New(100 * time.Second),
+					RetryPolicy: commonpb.RetryPolicy_builder{
+						MaximumAttempts:    0,
+						BackoffCoefficient: 1,
+					}.Build(),
+				}.Build(),
+			}.Build()}, nil
 		}
 
 		workflowComplete = true
-		return []*commandpb.Command{{
+		return []*commandpb.Command{commandpb.Command_builder{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
-				CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
-					Result: payloads.EncodeString("Done"),
-				},
-			},
-		}}, nil
+			CompleteWorkflowExecutionCommandAttributes: commandpb.CompleteWorkflowExecutionCommandAttributes_builder{
+				Result: payloads.EncodeString("Done"),
+			}.Build(),
+		}.Build()}, nil
 	}
 
 	activityExecutedCount := 0
 	activityExecutedLimit := 4
 	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
-		s.Equal(id, task.WorkflowExecution.GetWorkflowId())
-		s.Equal(activityName, task.ActivityType.GetName())
+		s.Equal(id, task.GetWorkflowExecution().GetWorkflowId())
+		s.Equal(activityName, task.GetActivityType().GetName())
 
 		var err error
 		if activityExecutedCount < activityExecutedLimit {
@@ -786,11 +783,11 @@ func (s *ActivityTestSuite) TestActivityHeartBeatWorkflow_Timeout() {
 	identity := "worker1"
 	activityName := "activity_timer"
 
-	workflowType := &commonpb.WorkflowType{Name: wt}
+	workflowType := commonpb.WorkflowType_builder{Name: wt}.Build()
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	taskQueue := taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build()
 
-	request := &workflowservice.StartWorkflowExecutionRequest{
+	request := workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
@@ -800,12 +797,12 @@ func (s *ActivityTestSuite) TestActivityHeartBeatWorkflow_Timeout() {
 		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
-	}
+	}.Build()
 
 	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
 
-	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.GetRunId()))
 
 	workflowComplete := false
 	activityCount := int32(1)
@@ -820,34 +817,34 @@ func (s *ActivityTestSuite) TestActivityHeartBeatWorkflow_Timeout() {
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
-			return []*commandpb.Command{{
+			return []*commandpb.Command{commandpb.Command_builder{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+				ScheduleActivityTaskCommandAttributes: commandpb.ScheduleActivityTaskCommandAttributes_builder{
 					ActivityId:             convert.Int32ToString(activityCounter),
-					ActivityType:           &commonpb.ActivityType{Name: activityName},
-					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+					ActivityType:           commonpb.ActivityType_builder{Name: activityName}.Build(),
+					TaskQueue:              taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeout: durationpb.New(15 * time.Second),
 					ScheduleToStartTimeout: durationpb.New(1 * time.Second),
 					StartToCloseTimeout:    durationpb.New(15 * time.Second),
 					HeartbeatTimeout:       durationpb.New(1 * time.Second),
-				}},
-			}}, nil
+				}.Build(),
+			}.Build()}, nil
 		}
 
 		workflowComplete = true
-		return []*commandpb.Command{{
+		return []*commandpb.Command{commandpb.Command_builder{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+			CompleteWorkflowExecutionCommandAttributes: commandpb.CompleteWorkflowExecutionCommandAttributes_builder{
 				Result: payloads.EncodeString("Done"),
-			}},
-		}}, nil
+			}.Build(),
+		}.Build()}, nil
 	}
 
 	activityExecutedCount := 0
 	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
-		s.Equal(id, task.WorkflowExecution.GetWorkflowId())
-		s.Equal(activityName, task.ActivityType.GetName())
+		s.Equal(id, task.GetWorkflowExecution().GetWorkflowId())
+		s.Equal(activityName, task.GetActivityType().GetName())
 		// Timing out more than HB time.
 		time.Sleep(2 * time.Second) //nolint:forbidigo
 		activityExecutedCount++
@@ -873,7 +870,7 @@ func (s *ActivityTestSuite) TestActivityHeartBeatWorkflow_Timeout() {
 	s.IsType(consts.ErrActivityTaskNotFound, err)
 	s.Equal(consts.ErrActivityTaskNotFound.Error(), err.Error())
 
-	s.Logger.Info("Waiting for workflow to complete", tag.WorkflowRunID(we.RunId))
+	s.Logger.Info("Waiting for workflow to complete", tag.WorkflowRunID(we.GetRunId()))
 
 	s.False(workflowComplete)
 	_, err = poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory)
@@ -888,11 +885,11 @@ func (s *ActivityTestSuite) TestTryActivityCancellationFromWorkflow() {
 	identity := "worker1"
 	activityName := "activity_timer"
 
-	workflowType := &commonpb.WorkflowType{Name: wt}
+	workflowType := commonpb.WorkflowType_builder{Name: wt}.Build()
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	taskQueue := taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build()
 
-	request := &workflowservice.StartWorkflowExecutionRequest{
+	request := workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
@@ -902,7 +899,7 @@ func (s *ActivityTestSuite) TestTryActivityCancellationFromWorkflow() {
 		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
-	}
+	}.Build()
 
 	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
@@ -920,54 +917,54 @@ func (s *ActivityTestSuite) TestTryActivityCancellationFromWorkflow() {
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
-			activityScheduledID = task.StartedEventId + 2
-			return []*commandpb.Command{{
+			activityScheduledID = task.GetStartedEventId() + 2
+			return []*commandpb.Command{commandpb.Command_builder{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+				ScheduleActivityTaskCommandAttributes: commandpb.ScheduleActivityTaskCommandAttributes_builder{
 					ActivityId:             convert.Int32ToString(activityCounter),
-					ActivityType:           &commonpb.ActivityType{Name: activityName},
-					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+					ActivityType:           commonpb.ActivityType_builder{Name: activityName}.Build(),
+					TaskQueue:              taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeout: durationpb.New(15 * time.Second),
 					ScheduleToStartTimeout: durationpb.New(10 * time.Second),
 					StartToCloseTimeout:    durationpb.New(15 * time.Second),
 					HeartbeatTimeout:       durationpb.New(0 * time.Second),
-				}},
-			}}, nil
+				}.Build(),
+			}.Build()}, nil
 		}
 
 		if requestCancellation {
-			return []*commandpb.Command{{
+			return []*commandpb.Command{commandpb.Command_builder{
 				CommandType: enumspb.COMMAND_TYPE_REQUEST_CANCEL_ACTIVITY_TASK,
-				Attributes: &commandpb.Command_RequestCancelActivityTaskCommandAttributes{RequestCancelActivityTaskCommandAttributes: &commandpb.RequestCancelActivityTaskCommandAttributes{
+				RequestCancelActivityTaskCommandAttributes: commandpb.RequestCancelActivityTaskCommandAttributes_builder{
 					ScheduledEventId: activityScheduledID,
-				}},
-			}}, nil
+				}.Build(),
+			}.Build()}, nil
 		}
 
 		s.Logger.Info("Completing Workflow")
 
-		return []*commandpb.Command{{
+		return []*commandpb.Command{commandpb.Command_builder{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+			CompleteWorkflowExecutionCommandAttributes: commandpb.CompleteWorkflowExecutionCommandAttributes_builder{
 				Result: payloads.EncodeString("Done"),
-			}},
-		}}, nil
+			}.Build(),
+		}.Build()}, nil
 	}
 
 	activityCanceled := false
 	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
-		s.Equal(id, task.WorkflowExecution.GetWorkflowId())
-		s.Equal(activityName, task.ActivityType.GetName())
+		s.Equal(id, task.GetWorkflowExecution().GetWorkflowId())
+		s.Equal(activityName, task.GetActivityType().GetName())
 		for i := 0; i < 10; i++ {
-			s.Logger.Info("Heartbeating for activity", tag.WorkflowActivityID(task.ActivityId), tag.Counter(i))
+			s.Logger.Info("Heartbeating for activity", tag.WorkflowActivityID(task.GetActivityId()), tag.Counter(i))
 			response, err := s.FrontendClient().RecordActivityTaskHeartbeat(testcore.NewContext(),
-				&workflowservice.RecordActivityTaskHeartbeatRequest{
+				workflowservice.RecordActivityTaskHeartbeatRequest_builder{
 					Namespace: s.Namespace().String(),
-					TaskToken: task.TaskToken,
+					TaskToken: task.GetTaskToken(),
 					Details:   payloads.EncodeString("details"),
-				})
-			if response != nil && response.CancelRequested {
+				}.Build())
+			if response != nil && response.GetCancelRequested() {
 				activityCanceled = true
 				return payloads.EncodeString("Activity Cancelled"), true, nil
 			}
@@ -995,16 +992,16 @@ func (s *ActivityTestSuite) TestTryActivityCancellationFromWorkflow() {
 	go func() {
 		s.Logger.Info("Trying to cancel the task in a different thread")
 		// Send signal so that worker can send an activity cancel
-		_, err1 := s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+		_, err1 := s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), workflowservice.SignalWorkflowExecutionRequest_builder{
 			Namespace: s.Namespace().String(),
-			WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowExecution: commonpb.WorkflowExecution_builder{
 				WorkflowId: id,
-				RunId:      we.RunId,
-			},
+				RunId:      we.GetRunId(),
+			}.Build(),
 			SignalName: "my signal",
 			Input:      nil,
 			Identity:   identity,
-		})
+		}.Build())
 		s.NoError(err1)
 
 		scheduleActivity = false
@@ -1018,10 +1015,10 @@ func (s *ActivityTestSuite) TestTryActivityCancellationFromWorkflow() {
 	err = poller.PollAndProcessActivityTask(false)
 	s.True(err == nil || errors.Is(err, testcore.ErrNoTasks))
 
-	s.Logger.Info("Waiting for cancel to complete.", tag.WorkflowRunID(we.RunId))
+	s.Logger.Info("Waiting for cancel to complete.", tag.WorkflowRunID(we.GetRunId()))
 	<-cancelCh
 	s.True(activityCanceled, "Activity was not cancelled.")
-	s.Logger.Info("Activity cancelled.", tag.WorkflowRunID(we.RunId))
+	s.Logger.Info("Activity cancelled.", tag.WorkflowRunID(we.GetRunId()))
 }
 
 func (s *ActivityTestSuite) TestActivityCancellationNotStarted() {
@@ -1031,11 +1028,11 @@ func (s *ActivityTestSuite) TestActivityCancellationNotStarted() {
 	identity := "worker1"
 	activityName := "activity_notstarted"
 
-	workflowType := &commonpb.WorkflowType{Name: wt}
+	workflowType := commonpb.WorkflowType_builder{Name: wt}.Build()
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	taskQueue := taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build()
 
-	request := &workflowservice.StartWorkflowExecutionRequest{
+	request := workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
@@ -1045,7 +1042,7 @@ func (s *ActivityTestSuite) TestActivityCancellationNotStarted() {
 		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
-	}
+	}.Build()
 
 	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
@@ -1063,39 +1060,39 @@ func (s *ActivityTestSuite) TestActivityCancellationNotStarted() {
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 			s.Logger.Info("Scheduling activity")
-			activityScheduledID = task.StartedEventId + 2
-			return []*commandpb.Command{{
+			activityScheduledID = task.GetStartedEventId() + 2
+			return []*commandpb.Command{commandpb.Command_builder{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+				ScheduleActivityTaskCommandAttributes: commandpb.ScheduleActivityTaskCommandAttributes_builder{
 					ActivityId:             convert.Int32ToString(activityCounter),
-					ActivityType:           &commonpb.ActivityType{Name: activityName},
-					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+					ActivityType:           commonpb.ActivityType_builder{Name: activityName}.Build(),
+					TaskQueue:              taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeout: durationpb.New(15 * time.Second),
 					ScheduleToStartTimeout: durationpb.New(2 * time.Second),
 					StartToCloseTimeout:    durationpb.New(15 * time.Second),
 					HeartbeatTimeout:       durationpb.New(0 * time.Second),
-				}},
-			}}, nil
+				}.Build(),
+			}.Build()}, nil
 		}
 
 		if requestCancellation {
 			s.Logger.Info("Requesting cancellation")
-			return []*commandpb.Command{{
+			return []*commandpb.Command{commandpb.Command_builder{
 				CommandType: enumspb.COMMAND_TYPE_REQUEST_CANCEL_ACTIVITY_TASK,
-				Attributes: &commandpb.Command_RequestCancelActivityTaskCommandAttributes{RequestCancelActivityTaskCommandAttributes: &commandpb.RequestCancelActivityTaskCommandAttributes{
+				RequestCancelActivityTaskCommandAttributes: commandpb.RequestCancelActivityTaskCommandAttributes_builder{
 					ScheduledEventId: activityScheduledID,
-				}},
-			}}, nil
+				}.Build(),
+			}.Build()}, nil
 		}
 
 		s.Logger.Info("Completing Workflow")
-		return []*commandpb.Command{{
+		return []*commandpb.Command{commandpb.Command_builder{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+			CompleteWorkflowExecutionCommandAttributes: commandpb.CompleteWorkflowExecutionCommandAttributes_builder{
 				Result: payloads.EncodeString("Done"),
-			}},
-		}}, nil
+			}.Build(),
+		}.Build()}, nil
 	}
 
 	// dummy activity handler
@@ -1121,16 +1118,16 @@ func (s *ActivityTestSuite) TestActivityCancellationNotStarted() {
 	// Send signal so that worker can send an activity cancel
 	signalName := "my signal"
 	signalInput := payloads.EncodeString("my signal input")
-	_, err = s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+	_, err = s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), workflowservice.SignalWorkflowExecutionRequest_builder{
 		Namespace: s.Namespace().String(),
-		WorkflowExecution: &commonpb.WorkflowExecution{
+		WorkflowExecution: commonpb.WorkflowExecution_builder{
 			WorkflowId: id,
-			RunId:      we.RunId,
-		},
+			RunId:      we.GetRunId(),
+		}.Build(),
 		SignalName: signalName,
 		Input:      signalInput,
 		Identity:   identity,
-	})
+	}.Build())
 	s.NoError(err)
 
 	// Process signal in workflow and send request cancellation
@@ -1225,13 +1222,13 @@ func (s *ActivityClientTestSuite) TestActivityHeartbeatDetailsDuringRetry() {
 	runId := workflowRun.GetRunID()
 
 	describeWorkflowExecution := func() (*workflowservice.DescribeWorkflowExecutionResponse, error) {
-		return s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+		return s.FrontendClient().DescribeWorkflowExecution(ctx, workflowservice.DescribeWorkflowExecutionRequest_builder{
 			Namespace: s.Namespace().String(),
-			Execution: &commonpb.WorkflowExecution{
+			Execution: commonpb.WorkflowExecution_builder{
 				WorkflowId: wfId,
 				RunId:      runId,
-			},
-		})
+			}.Build(),
+		}.Build())
 	}
 
 	//nolint:forbidigo
@@ -1240,10 +1237,10 @@ func (s *ActivityClientTestSuite) TestActivityHeartbeatDetailsDuringRetry() {
 	for dweResult, dweErr := describeWorkflowExecution(); dweResult.GetWorkflowExecutionInfo().GetCloseTime() == nil; dweResult, dweErr = describeWorkflowExecution() {
 		s.NoError(dweErr)
 		s.NotNil(dweResult.GetWorkflowExecutionInfo())
-		s.LessOrEqual(len(dweResult.PendingActivities), 1)
+		s.LessOrEqual(len(dweResult.GetPendingActivities()), 1)
 
-		if dweResult.PendingActivities != nil && len(dweResult.PendingActivities) == 1 {
-			details := dweResult.PendingActivities[0].GetHeartbeatDetails()
+		if dweResult.GetPendingActivities() != nil && len(dweResult.GetPendingActivities()) == 1 {
+			details := dweResult.GetPendingActivities()[0].GetHeartbeatDetails()
 			s.Equal(heartbeatDetailsPayload, details)
 		}
 
@@ -1264,24 +1261,24 @@ func (s *ActivityTestSuite) TestActivityHeartBeat_RecordIdentity() {
 	workerIdentity := "70df788a-b0b2-4113-a0d5-130f13889e35"
 	activityName := "activity_timer"
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: "functional-heartbeat-identity-record-taskqueue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	taskQueue := taskqueuepb.TaskQueue_builder{Name: "functional-heartbeat-identity-record-taskqueue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build()
 
-	header := &commonpb.Header{
+	header := commonpb.Header_builder{
 		Fields: map[string]*commonpb.Payload{"tracing": payload.EncodeString("sample data")},
-	}
+	}.Build()
 
-	request := &workflowservice.StartWorkflowExecutionRequest{
+	request := workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
-		WorkflowType:        &commonpb.WorkflowType{Name: "functional-heartbeat-identity-record-type"},
+		WorkflowType:        commonpb.WorkflowType_builder{Name: "functional-heartbeat-identity-record-type"}.Build(),
 		TaskQueue:           taskQueue,
 		Input:               nil,
 		Header:              header,
 		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(60 * time.Second),
 		Identity:            workerIdentity,
-	}
+	}.Build()
 
 	we, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err)
@@ -1292,11 +1289,11 @@ func (s *ActivityTestSuite) TestActivityHeartBeat_RecordIdentity() {
 		switch workflowNextCmd { // nolint:exhaustive
 		case enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK:
 			workflowNextCmd = enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION
-			return []*commandpb.Command{{
+			return []*commandpb.Command{commandpb.Command_builder{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+				ScheduleActivityTaskCommandAttributes: commandpb.ScheduleActivityTaskCommandAttributes_builder{
 					ActivityId:             convert.IntToString(rand.Int()),
-					ActivityType:           &commonpb.ActivityType{Name: activityName},
+					ActivityType:           commonpb.ActivityType_builder{Name: activityName}.Build(),
 					TaskQueue:              taskQueue,
 					Input:                  payloads.EncodeString("activity-input"),
 					Header:                 header,
@@ -1304,16 +1301,16 @@ func (s *ActivityTestSuite) TestActivityHeartBeat_RecordIdentity() {
 					ScheduleToStartTimeout: durationpb.New(60 * time.Second),
 					StartToCloseTimeout:    durationpb.New(15 * time.Second),
 					HeartbeatTimeout:       durationpb.New(60 * time.Second),
-				}},
-			}}, nil
+				}.Build(),
+			}.Build()}, nil
 		case enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION:
 			workflowComplete = true
-			return []*commandpb.Command{{
+			return []*commandpb.Command{commandpb.Command_builder{
 				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+				CompleteWorkflowExecutionCommandAttributes: commandpb.CompleteWorkflowExecutionCommandAttributes_builder{
 					Result: payloads.EncodeString("Done"),
-				}},
-			}}, nil
+				}.Build(),
+			}.Build()}, nil
 		}
 		panic("Unexpected workflow state")
 	}
@@ -1324,12 +1321,12 @@ func (s *ActivityTestSuite) TestActivityHeartBeat_RecordIdentity() {
 	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
 		activityStartedSignal <- true // signal the start of activity task.
 		<-heartbeatSignalChan         // wait for signal before sending heartbeat.
-		_, err := s.FrontendClient().RecordActivityTaskHeartbeat(testcore.NewContext(), &workflowservice.RecordActivityTaskHeartbeatRequest{
+		_, err := s.FrontendClient().RecordActivityTaskHeartbeat(testcore.NewContext(), workflowservice.RecordActivityTaskHeartbeatRequest_builder{
 			Namespace: s.Namespace().String(),
-			TaskToken: task.TaskToken,
+			TaskToken: task.GetTaskToken(),
 			Details:   payloads.EncodeString("details"),
 			Identity:  workerIdentity, // explicitly set the worker identity in the heartbeat request
-		})
+		}.Build())
 		s.NoError(err)
 		heartbeatSignalChan <- true // signal that the heartbeat is sent.
 
@@ -1359,20 +1356,20 @@ func (s *ActivityTestSuite) TestActivityHeartBeat_RecordIdentity() {
 	}()
 
 	describeWorkflowExecution := func() (*workflowservice.DescribeWorkflowExecutionResponse, error) {
-		return s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+		return s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), workflowservice.DescribeWorkflowExecutionRequest_builder{
 			Namespace: s.Namespace().String(),
-			Execution: &commonpb.WorkflowExecution{
+			Execution: commonpb.WorkflowExecution_builder{
 				WorkflowId: id,
-				RunId:      we.RunId,
-			},
-		})
+				RunId:      we.GetRunId(),
+			}.Build(),
+		}.Build())
 	}
 	<-activityStartedSignal // wait for the activity to start
 
 	// Verify that the worker identity is empty.
 	descRespBeforeHeartbeat, err := describeWorkflowExecution()
 	s.NoError(err)
-	s.Empty(descRespBeforeHeartbeat.PendingActivities[0].LastWorkerIdentity)
+	s.Empty(descRespBeforeHeartbeat.GetPendingActivities()[0].GetLastWorkerIdentity())
 
 	heartbeatSignalChan <- true // ask the activity to send a heartbeat.
 	<-heartbeatSignalChan       // wait for the heartbeat to be sent (to prevent the test from racing to describe the workflow before the heartbeat is sent)
@@ -1380,7 +1377,7 @@ func (s *ActivityTestSuite) TestActivityHeartBeat_RecordIdentity() {
 	// Verify that the worker identity is set now.
 	descRespAfterHeartbeat, err := describeWorkflowExecution()
 	s.NoError(err)
-	s.Equal(workerIdentity, descRespAfterHeartbeat.PendingActivities[0].LastWorkerIdentity)
+	s.Equal(workerIdentity, descRespAfterHeartbeat.GetPendingActivities()[0].GetLastWorkerIdentity())
 
 	// unblock the activity task
 	endActivityTask <- true
@@ -1409,8 +1406,8 @@ func (s *ActivityTestSuite) TestActivityTaskCompleteForceCompletion() {
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
 		require.NoError(t, err)
-		require.Equal(t, 1, len(description.PendingActivities))
-		require.Equal(t, "mock error of an activity", description.PendingActivities[0].LastFailure.Message)
+		require.Equal(t, 1, len(description.GetPendingActivities()))
+		require.Equal(t, "mock error of an activity", description.GetPendingActivities()[0].GetLastFailure().GetMessage())
 	},
 		10*time.Second,
 		500*time.Millisecond)
@@ -1440,8 +1437,8 @@ func (s *ActivityTestSuite) TestActivityTaskCompleteRejectCompletion() {
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
 		require.NoError(t, err)
-		require.Equal(t, 1, len(description.PendingActivities))
-		require.Equal(t, "mock error of an activity", description.PendingActivities[0].LastFailure.Message)
+		require.Equal(t, 1, len(description.GetPendingActivities()))
+		require.Equal(t, "mock error of an activity", description.GetPendingActivities()[0].GetLastFailure().GetMessage())
 	},
 		10*time.Second,
 		500*time.Millisecond)

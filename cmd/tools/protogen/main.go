@@ -241,6 +241,9 @@ func (g *generator) runProtogen(ctx context.Context) error {
 		"-p", "go-grpc_out=paths=source_relative:" + g.tempOut,
 		"-p", "go-helpers_out=paths=source_relative:" + g.tempOut,
 		"-p", "go-chasm_out=paths=source_relative:" + g.tempOut,
+		// Enable Opaque API for better performance
+		// See: https://go.dev/blog/protobuf-opaque
+		"-p", "go_opt=default_api_level=API_OPAQUE",
 	}
 	if err := runCommand(ctx, g.protogenBin, protoArgs...); err != nil {
 		return fmt.Errorf("error running protogen: %w", err)

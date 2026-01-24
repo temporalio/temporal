@@ -8,7 +8,6 @@ package testspb
 
 import (
 	reflect "reflect"
-	sync "sync"
 	unsafe "unsafe"
 
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -24,14 +23,13 @@ const (
 )
 
 type TestPayloadStore struct {
-	state      protoimpl.MessageState `protogen:"open.v1"`
-	TotalCount int64                  `protobuf:"varint,1,opt,name=total_count,json=totalCount,proto3" json:"total_count,omitempty"`
-	TotalSize  int64                  `protobuf:"varint,2,opt,name=total_size,json=totalSize,proto3" json:"total_size,omitempty"`
-	// (-- api-linter: core::0142::time-field-type=disabled --)
-	ExpirationTimes map[string]*timestamppb.Timestamp `protobuf:"bytes,3,rep,name=expiration_times,json=expirationTimes,proto3" json:"expiration_times,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	Closed          bool                              `protobuf:"varint,4,opt,name=closed,proto3" json:"closed,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state                      protoimpl.MessageState            `protogen:"opaque.v1"`
+	xxx_hidden_TotalCount      int64                             `protobuf:"varint,1,opt,name=total_count,json=totalCount,proto3"`
+	xxx_hidden_TotalSize       int64                             `protobuf:"varint,2,opt,name=total_size,json=totalSize,proto3"`
+	xxx_hidden_ExpirationTimes map[string]*timestamppb.Timestamp `protobuf:"bytes,3,rep,name=expiration_times,json=expirationTimes,proto3" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	xxx_hidden_Closed          bool                              `protobuf:"varint,4,opt,name=closed,proto3"`
+	unknownFields              protoimpl.UnknownFields
+	sizeCache                  protoimpl.SizeCache
 }
 
 func (x *TestPayloadStore) Reset() {
@@ -59,44 +57,76 @@ func (x *TestPayloadStore) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use TestPayloadStore.ProtoReflect.Descriptor instead.
-func (*TestPayloadStore) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_tests_proto_v1_message_proto_rawDescGZIP(), []int{0}
-}
-
 func (x *TestPayloadStore) GetTotalCount() int64 {
 	if x != nil {
-		return x.TotalCount
+		return x.xxx_hidden_TotalCount
 	}
 	return 0
 }
 
 func (x *TestPayloadStore) GetTotalSize() int64 {
 	if x != nil {
-		return x.TotalSize
+		return x.xxx_hidden_TotalSize
 	}
 	return 0
 }
 
 func (x *TestPayloadStore) GetExpirationTimes() map[string]*timestamppb.Timestamp {
 	if x != nil {
-		return x.ExpirationTimes
+		return x.xxx_hidden_ExpirationTimes
 	}
 	return nil
 }
 
 func (x *TestPayloadStore) GetClosed() bool {
 	if x != nil {
-		return x.Closed
+		return x.xxx_hidden_Closed
 	}
 	return false
 }
 
+func (x *TestPayloadStore) SetTotalCount(v int64) {
+	x.xxx_hidden_TotalCount = v
+}
+
+func (x *TestPayloadStore) SetTotalSize(v int64) {
+	x.xxx_hidden_TotalSize = v
+}
+
+func (x *TestPayloadStore) SetExpirationTimes(v map[string]*timestamppb.Timestamp) {
+	x.xxx_hidden_ExpirationTimes = v
+}
+
+func (x *TestPayloadStore) SetClosed(v bool) {
+	x.xxx_hidden_Closed = v
+}
+
+type TestPayloadStore_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	TotalCount int64
+	TotalSize  int64
+	// (-- api-linter: core::0142::time-field-type=disabled --)
+	ExpirationTimes map[string]*timestamppb.Timestamp
+	Closed          bool
+}
+
+func (b0 TestPayloadStore_builder) Build() *TestPayloadStore {
+	m0 := &TestPayloadStore{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_TotalCount = b.TotalCount
+	x.xxx_hidden_TotalSize = b.TotalSize
+	x.xxx_hidden_ExpirationTimes = b.ExpirationTimes
+	x.xxx_hidden_Closed = b.Closed
+	return m0
+}
+
 type TestPayloadTTLPureTask struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	PayloadKey    string                 `protobuf:"bytes,1,opt,name=payload_key,json=payloadKey,proto3" json:"payload_key,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                 protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_PayloadKey string                 `protobuf:"bytes,1,opt,name=payload_key,json=payloadKey,proto3"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
 }
 
 func (x *TestPayloadTTLPureTask) Reset() {
@@ -124,23 +154,36 @@ func (x *TestPayloadTTLPureTask) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use TestPayloadTTLPureTask.ProtoReflect.Descriptor instead.
-func (*TestPayloadTTLPureTask) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_tests_proto_v1_message_proto_rawDescGZIP(), []int{1}
-}
-
 func (x *TestPayloadTTLPureTask) GetPayloadKey() string {
 	if x != nil {
-		return x.PayloadKey
+		return x.xxx_hidden_PayloadKey
 	}
 	return ""
 }
 
+func (x *TestPayloadTTLPureTask) SetPayloadKey(v string) {
+	x.xxx_hidden_PayloadKey = v
+}
+
+type TestPayloadTTLPureTask_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	PayloadKey string
+}
+
+func (b0 TestPayloadTTLPureTask_builder) Build() *TestPayloadTTLPureTask {
+	m0 := &TestPayloadTTLPureTask{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_PayloadKey = b.PayloadKey
+	return m0
+}
+
 type TestPayloadTTLSideEffectTask struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	PayloadKey    string                 `protobuf:"bytes,1,opt,name=payload_key,json=payloadKey,proto3" json:"payload_key,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                 protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_PayloadKey string                 `protobuf:"bytes,1,opt,name=payload_key,json=payloadKey,proto3"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
 }
 
 func (x *TestPayloadTTLSideEffectTask) Reset() {
@@ -168,16 +211,29 @@ func (x *TestPayloadTTLSideEffectTask) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use TestPayloadTTLSideEffectTask.ProtoReflect.Descriptor instead.
-func (*TestPayloadTTLSideEffectTask) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_tests_proto_v1_message_proto_rawDescGZIP(), []int{2}
-}
-
 func (x *TestPayloadTTLSideEffectTask) GetPayloadKey() string {
 	if x != nil {
-		return x.PayloadKey
+		return x.xxx_hidden_PayloadKey
 	}
 	return ""
+}
+
+func (x *TestPayloadTTLSideEffectTask) SetPayloadKey(v string) {
+	x.xxx_hidden_PayloadKey = v
+}
+
+type TestPayloadTTLSideEffectTask_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	PayloadKey string
+}
+
+func (b0 TestPayloadTTLSideEffectTask_builder) Build() *TestPayloadTTLSideEffectTask {
+	m0 := &TestPayloadTTLSideEffectTask{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_PayloadKey = b.PayloadKey
+	return m0
 }
 
 var File_temporal_server_chasm_lib_tests_proto_v1_message_proto protoreflect.FileDescriptor
@@ -201,18 +257,6 @@ const file_temporal_server_chasm_lib_tests_proto_v1_message_proto_rawDesc = "" +
 	"\x1cTestPayloadTTLSideEffectTask\x12\x1f\n" +
 	"\vpayload_key\x18\x01 \x01(\tR\n" +
 	"payloadKeyB;Z9go.temporal.io/server/chasm/lib/tests/gen/testspb;testspbb\x06proto3"
-
-var (
-	file_temporal_server_chasm_lib_tests_proto_v1_message_proto_rawDescOnce sync.Once
-	file_temporal_server_chasm_lib_tests_proto_v1_message_proto_rawDescData []byte
-)
-
-func file_temporal_server_chasm_lib_tests_proto_v1_message_proto_rawDescGZIP() []byte {
-	file_temporal_server_chasm_lib_tests_proto_v1_message_proto_rawDescOnce.Do(func() {
-		file_temporal_server_chasm_lib_tests_proto_v1_message_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_chasm_lib_tests_proto_v1_message_proto_rawDesc), len(file_temporal_server_chasm_lib_tests_proto_v1_message_proto_rawDesc)))
-	})
-	return file_temporal_server_chasm_lib_tests_proto_v1_message_proto_rawDescData
-}
 
 var file_temporal_server_chasm_lib_tests_proto_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_temporal_server_chasm_lib_tests_proto_v1_message_proto_goTypes = []any{

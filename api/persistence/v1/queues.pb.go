@@ -8,7 +8,6 @@ package persistence
 
 import (
 	reflect "reflect"
-	sync "sync"
 	unsafe "unsafe"
 
 	v1 "go.temporal.io/api/common/v1"
@@ -24,11 +23,11 @@ const (
 )
 
 type QueueState struct {
-	state                        protoimpl.MessageState      `protogen:"open.v1"`
-	ReaderStates                 map[int64]*QueueReaderState `protobuf:"bytes,1,rep,name=reader_states,json=readerStates,proto3" json:"reader_states,omitempty" protobuf_key:"varint,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	ExclusiveReaderHighWatermark *TaskKey                    `protobuf:"bytes,2,opt,name=exclusive_reader_high_watermark,json=exclusiveReaderHighWatermark,proto3" json:"exclusive_reader_high_watermark,omitempty"`
-	unknownFields                protoimpl.UnknownFields
-	sizeCache                    protoimpl.SizeCache
+	state                                   protoimpl.MessageState      `protogen:"opaque.v1"`
+	xxx_hidden_ReaderStates                 map[int64]*QueueReaderState `protobuf:"bytes,1,rep,name=reader_states,json=readerStates,proto3" protobuf_key:"varint,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	xxx_hidden_ExclusiveReaderHighWatermark *TaskKey                    `protobuf:"bytes,2,opt,name=exclusive_reader_high_watermark,json=exclusiveReaderHighWatermark,proto3"`
+	unknownFields                           protoimpl.UnknownFields
+	sizeCache                               protoimpl.SizeCache
 }
 
 func (x *QueueState) Reset() {
@@ -56,30 +55,60 @@ func (x *QueueState) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use QueueState.ProtoReflect.Descriptor instead.
-func (*QueueState) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_queues_proto_rawDescGZIP(), []int{0}
-}
-
 func (x *QueueState) GetReaderStates() map[int64]*QueueReaderState {
 	if x != nil {
-		return x.ReaderStates
+		return x.xxx_hidden_ReaderStates
 	}
 	return nil
 }
 
 func (x *QueueState) GetExclusiveReaderHighWatermark() *TaskKey {
 	if x != nil {
-		return x.ExclusiveReaderHighWatermark
+		return x.xxx_hidden_ExclusiveReaderHighWatermark
 	}
 	return nil
 }
 
+func (x *QueueState) SetReaderStates(v map[int64]*QueueReaderState) {
+	x.xxx_hidden_ReaderStates = v
+}
+
+func (x *QueueState) SetExclusiveReaderHighWatermark(v *TaskKey) {
+	x.xxx_hidden_ExclusiveReaderHighWatermark = v
+}
+
+func (x *QueueState) HasExclusiveReaderHighWatermark() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_ExclusiveReaderHighWatermark != nil
+}
+
+func (x *QueueState) ClearExclusiveReaderHighWatermark() {
+	x.xxx_hidden_ExclusiveReaderHighWatermark = nil
+}
+
+type QueueState_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	ReaderStates                 map[int64]*QueueReaderState
+	ExclusiveReaderHighWatermark *TaskKey
+}
+
+func (b0 QueueState_builder) Build() *QueueState {
+	m0 := &QueueState{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_ReaderStates = b.ReaderStates
+	x.xxx_hidden_ExclusiveReaderHighWatermark = b.ExclusiveReaderHighWatermark
+	return m0
+}
+
 type QueueReaderState struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Scopes        []*QueueSliceScope     `protobuf:"bytes,1,rep,name=scopes,proto3" json:"scopes,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state             protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Scopes *[]*QueueSliceScope    `protobuf:"bytes,1,rep,name=scopes,proto3"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *QueueReaderState) Reset() {
@@ -107,24 +136,39 @@ func (x *QueueReaderState) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use QueueReaderState.ProtoReflect.Descriptor instead.
-func (*QueueReaderState) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_queues_proto_rawDescGZIP(), []int{1}
-}
-
 func (x *QueueReaderState) GetScopes() []*QueueSliceScope {
 	if x != nil {
-		return x.Scopes
+		if x.xxx_hidden_Scopes != nil {
+			return *x.xxx_hidden_Scopes
+		}
 	}
 	return nil
 }
 
+func (x *QueueReaderState) SetScopes(v []*QueueSliceScope) {
+	x.xxx_hidden_Scopes = &v
+}
+
+type QueueReaderState_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Scopes []*QueueSliceScope
+}
+
+func (b0 QueueReaderState_builder) Build() *QueueReaderState {
+	m0 := &QueueReaderState{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Scopes = &b.Scopes
+	return m0
+}
+
 type QueueSliceScope struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Range         *QueueSliceRange       `protobuf:"bytes,1,opt,name=range,proto3" json:"range,omitempty"`
-	Predicate     *Predicate             `protobuf:"bytes,2,opt,name=predicate,proto3" json:"predicate,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Range     *QueueSliceRange       `protobuf:"bytes,1,opt,name=range,proto3"`
+	xxx_hidden_Predicate *Predicate             `protobuf:"bytes,2,opt,name=predicate,proto3"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *QueueSliceScope) Reset() {
@@ -152,31 +196,72 @@ func (x *QueueSliceScope) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use QueueSliceScope.ProtoReflect.Descriptor instead.
-func (*QueueSliceScope) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_queues_proto_rawDescGZIP(), []int{2}
-}
-
 func (x *QueueSliceScope) GetRange() *QueueSliceRange {
 	if x != nil {
-		return x.Range
+		return x.xxx_hidden_Range
 	}
 	return nil
 }
 
 func (x *QueueSliceScope) GetPredicate() *Predicate {
 	if x != nil {
-		return x.Predicate
+		return x.xxx_hidden_Predicate
 	}
 	return nil
 }
 
+func (x *QueueSliceScope) SetRange(v *QueueSliceRange) {
+	x.xxx_hidden_Range = v
+}
+
+func (x *QueueSliceScope) SetPredicate(v *Predicate) {
+	x.xxx_hidden_Predicate = v
+}
+
+func (x *QueueSliceScope) HasRange() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Range != nil
+}
+
+func (x *QueueSliceScope) HasPredicate() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Predicate != nil
+}
+
+func (x *QueueSliceScope) ClearRange() {
+	x.xxx_hidden_Range = nil
+}
+
+func (x *QueueSliceScope) ClearPredicate() {
+	x.xxx_hidden_Predicate = nil
+}
+
+type QueueSliceScope_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Range     *QueueSliceRange
+	Predicate *Predicate
+}
+
+func (b0 QueueSliceScope_builder) Build() *QueueSliceScope {
+	m0 := &QueueSliceScope{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Range = b.Range
+	x.xxx_hidden_Predicate = b.Predicate
+	return m0
+}
+
 type QueueSliceRange struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	InclusiveMin  *TaskKey               `protobuf:"bytes,1,opt,name=inclusive_min,json=inclusiveMin,proto3" json:"inclusive_min,omitempty"`
-	ExclusiveMax  *TaskKey               `protobuf:"bytes,2,opt,name=exclusive_max,json=exclusiveMax,proto3" json:"exclusive_max,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                   protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_InclusiveMin *TaskKey               `protobuf:"bytes,1,opt,name=inclusive_min,json=inclusiveMin,proto3"`
+	xxx_hidden_ExclusiveMax *TaskKey               `protobuf:"bytes,2,opt,name=exclusive_max,json=exclusiveMax,proto3"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
 }
 
 func (x *QueueSliceRange) Reset() {
@@ -204,30 +289,71 @@ func (x *QueueSliceRange) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use QueueSliceRange.ProtoReflect.Descriptor instead.
-func (*QueueSliceRange) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_queues_proto_rawDescGZIP(), []int{3}
-}
-
 func (x *QueueSliceRange) GetInclusiveMin() *TaskKey {
 	if x != nil {
-		return x.InclusiveMin
+		return x.xxx_hidden_InclusiveMin
 	}
 	return nil
 }
 
 func (x *QueueSliceRange) GetExclusiveMax() *TaskKey {
 	if x != nil {
-		return x.ExclusiveMax
+		return x.xxx_hidden_ExclusiveMax
 	}
 	return nil
 }
 
+func (x *QueueSliceRange) SetInclusiveMin(v *TaskKey) {
+	x.xxx_hidden_InclusiveMin = v
+}
+
+func (x *QueueSliceRange) SetExclusiveMax(v *TaskKey) {
+	x.xxx_hidden_ExclusiveMax = v
+}
+
+func (x *QueueSliceRange) HasInclusiveMin() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_InclusiveMin != nil
+}
+
+func (x *QueueSliceRange) HasExclusiveMax() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_ExclusiveMax != nil
+}
+
+func (x *QueueSliceRange) ClearInclusiveMin() {
+	x.xxx_hidden_InclusiveMin = nil
+}
+
+func (x *QueueSliceRange) ClearExclusiveMax() {
+	x.xxx_hidden_ExclusiveMax = nil
+}
+
+type QueueSliceRange_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	InclusiveMin *TaskKey
+	ExclusiveMax *TaskKey
+}
+
+func (b0 QueueSliceRange_builder) Build() *QueueSliceRange {
+	m0 := &QueueSliceRange{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_InclusiveMin = b.InclusiveMin
+	x.xxx_hidden_ExclusiveMax = b.ExclusiveMax
+	return m0
+}
+
 type ReadQueueMessagesNextPageToken struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	LastReadMessageId int64                  `protobuf:"varint,1,opt,name=last_read_message_id,json=lastReadMessageId,proto3" json:"last_read_message_id,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state                        protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_LastReadMessageId int64                  `protobuf:"varint,1,opt,name=last_read_message_id,json=lastReadMessageId,proto3"`
+	unknownFields                protoimpl.UnknownFields
+	sizeCache                    protoimpl.SizeCache
 }
 
 func (x *ReadQueueMessagesNextPageToken) Reset() {
@@ -255,23 +381,36 @@ func (x *ReadQueueMessagesNextPageToken) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ReadQueueMessagesNextPageToken.ProtoReflect.Descriptor instead.
-func (*ReadQueueMessagesNextPageToken) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_queues_proto_rawDescGZIP(), []int{4}
-}
-
 func (x *ReadQueueMessagesNextPageToken) GetLastReadMessageId() int64 {
 	if x != nil {
-		return x.LastReadMessageId
+		return x.xxx_hidden_LastReadMessageId
 	}
 	return 0
 }
 
+func (x *ReadQueueMessagesNextPageToken) SetLastReadMessageId(v int64) {
+	x.xxx_hidden_LastReadMessageId = v
+}
+
+type ReadQueueMessagesNextPageToken_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	LastReadMessageId int64
+}
+
+func (b0 ReadQueueMessagesNextPageToken_builder) Build() *ReadQueueMessagesNextPageToken {
+	m0 := &ReadQueueMessagesNextPageToken{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_LastReadMessageId = b.LastReadMessageId
+	return m0
+}
+
 type ListQueuesNextPageToken struct {
-	state               protoimpl.MessageState `protogen:"open.v1"`
-	LastReadQueueNumber int64                  `protobuf:"varint,1,opt,name=last_read_queue_number,json=lastReadQueueNumber,proto3" json:"last_read_queue_number,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	state                          protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_LastReadQueueNumber int64                  `protobuf:"varint,1,opt,name=last_read_queue_number,json=lastReadQueueNumber,proto3"`
+	unknownFields                  protoimpl.UnknownFields
+	sizeCache                      protoimpl.SizeCache
 }
 
 func (x *ListQueuesNextPageToken) Reset() {
@@ -299,33 +438,39 @@ func (x *ListQueuesNextPageToken) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListQueuesNextPageToken.ProtoReflect.Descriptor instead.
-func (*ListQueuesNextPageToken) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_queues_proto_rawDescGZIP(), []int{5}
-}
-
 func (x *ListQueuesNextPageToken) GetLastReadQueueNumber() int64 {
 	if x != nil {
-		return x.LastReadQueueNumber
+		return x.xxx_hidden_LastReadQueueNumber
 	}
 	return 0
+}
+
+func (x *ListQueuesNextPageToken) SetLastReadQueueNumber(v int64) {
+	x.xxx_hidden_LastReadQueueNumber = v
+}
+
+type ListQueuesNextPageToken_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	LastReadQueueNumber int64
+}
+
+func (b0 ListQueuesNextPageToken_builder) Build() *ListQueuesNextPageToken {
+	m0 := &ListQueuesNextPageToken{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_LastReadQueueNumber = b.LastReadQueueNumber
+	return m0
 }
 
 // HistoryTask represents an internal history service task for a particular shard. We use a blob because there is no
 // common proto for all task proto types.
 type HistoryTask struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// shard_id that this task belonged to when it was created. Technically, you can derive this from the task data
-	// blob, but it's useful to have it here for quick access and to avoid deserializing the blob. Note that this may be
-	// different from the shard id of this task in the current cluster because it could have come from a cluster with a
-	// different shard id. This will always be the shard id of the task in its original cluster.
-	ShardId int32 `protobuf:"varint,1,opt,name=shard_id,json=shardId,proto3" json:"shard_id,omitempty"`
-	// blob that contains the history task proto. There is a GoLang-specific generic deserializer for this blob, but
-	// there is no common proto for all task proto types, so deserializing in other languages will require a custom
-	// switch on the task category, which should be available from the metadata for the queue that this task came from.
-	Blob          *v1.DataBlob `protobuf:"bytes,2,opt,name=blob,proto3" json:"blob,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state              protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_ShardId int32                  `protobuf:"varint,1,opt,name=shard_id,json=shardId,proto3"`
+	xxx_hidden_Blob    *v1.DataBlob           `protobuf:"bytes,2,opt,name=blob,proto3"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *HistoryTask) Reset() {
@@ -353,41 +498,67 @@ func (x *HistoryTask) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use HistoryTask.ProtoReflect.Descriptor instead.
-func (*HistoryTask) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_queues_proto_rawDescGZIP(), []int{6}
-}
-
 func (x *HistoryTask) GetShardId() int32 {
 	if x != nil {
-		return x.ShardId
+		return x.xxx_hidden_ShardId
 	}
 	return 0
 }
 
 func (x *HistoryTask) GetBlob() *v1.DataBlob {
 	if x != nil {
-		return x.Blob
+		return x.xxx_hidden_Blob
 	}
 	return nil
 }
 
+func (x *HistoryTask) SetShardId(v int32) {
+	x.xxx_hidden_ShardId = v
+}
+
+func (x *HistoryTask) SetBlob(v *v1.DataBlob) {
+	x.xxx_hidden_Blob = v
+}
+
+func (x *HistoryTask) HasBlob() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Blob != nil
+}
+
+func (x *HistoryTask) ClearBlob() {
+	x.xxx_hidden_Blob = nil
+}
+
+type HistoryTask_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// shard_id that this task belonged to when it was created. Technically, you can derive this from the task data
+	// blob, but it's useful to have it here for quick access and to avoid deserializing the blob. Note that this may be
+	// different from the shard id of this task in the current cluster because it could have come from a cluster with a
+	// different shard id. This will always be the shard id of the task in its original cluster.
+	ShardId int32
+	// blob that contains the history task proto. There is a GoLang-specific generic deserializer for this blob, but
+	// there is no common proto for all task proto types, so deserializing in other languages will require a custom
+	// switch on the task category, which should be available from the metadata for the queue that this task came from.
+	Blob *v1.DataBlob
+}
+
+func (b0 HistoryTask_builder) Build() *HistoryTask {
+	m0 := &HistoryTask{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_ShardId = b.ShardId
+	x.xxx_hidden_Blob = b.Blob
+	return m0
+}
+
 type QueuePartition struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// min_message_id is less than or equal to the id of every message in the queue. The min_message_id is mainly used to
-	// skip over tombstones in Cassandra: let's say we deleted the first 1K messages from a queue with 1.1K messages. If
-	//
-	//	an operator asked for the first 100 messages, without the min_message_id, we would have to scan over the 1K
-	//
-	// tombstone rows before we could return the 100 messages. With the min_message_id, we can skip over all of the
-	// tombstones by specifying message_id >= queue.min_message_id. Note: it is possible for this to be less than the id
-	// of the lowest message in the queue temporarily because we delete messages before we update the queue metadata.
-	// However, such errors surface to clients with an "Unavailable" code, so clients retry, and the id should be updated
-	// soon. Additionally, we only use min_message_id to skip over tombstones, so it will only affect read performance,
-	// not correctness.
-	MinMessageId  int64 `protobuf:"varint,1,opt,name=min_message_id,json=minMessageId,proto3" json:"min_message_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                   protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_MinMessageId int64                  `protobuf:"varint,1,opt,name=min_message_id,json=minMessageId,proto3"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
 }
 
 func (x *QueuePartition) Reset() {
@@ -415,24 +586,47 @@ func (x *QueuePartition) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use QueuePartition.ProtoReflect.Descriptor instead.
-func (*QueuePartition) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_queues_proto_rawDescGZIP(), []int{7}
-}
-
 func (x *QueuePartition) GetMinMessageId() int64 {
 	if x != nil {
-		return x.MinMessageId
+		return x.xxx_hidden_MinMessageId
 	}
 	return 0
 }
 
+func (x *QueuePartition) SetMinMessageId(v int64) {
+	x.xxx_hidden_MinMessageId = v
+}
+
+type QueuePartition_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// min_message_id is less than or equal to the id of every message in the queue. The min_message_id is mainly used to
+	// skip over tombstones in Cassandra: let's say we deleted the first 1K messages from a queue with 1.1K messages. If
+	//
+	//	an operator asked for the first 100 messages, without the min_message_id, we would have to scan over the 1K
+	//
+	// tombstone rows before we could return the 100 messages. With the min_message_id, we can skip over all of the
+	// tombstones by specifying message_id >= queue.min_message_id. Note: it is possible for this to be less than the id
+	// of the lowest message in the queue temporarily because we delete messages before we update the queue metadata.
+	// However, such errors surface to clients with an "Unavailable" code, so clients retry, and the id should be updated
+	// soon. Additionally, we only use min_message_id to skip over tombstones, so it will only affect read performance,
+	// not correctness.
+	MinMessageId int64
+}
+
+func (b0 QueuePartition_builder) Build() *QueuePartition {
+	m0 := &QueuePartition{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_MinMessageId = b.MinMessageId
+	return m0
+}
+
 type Queue struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// A map from partition index (0-based) to the partition metadata.
-	Partitions    map[int32]*QueuePartition `protobuf:"bytes,1,rep,name=partitions,proto3" json:"partitions,omitempty" protobuf_key:"varint,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                 protoimpl.MessageState    `protogen:"opaque.v1"`
+	xxx_hidden_Partitions map[int32]*QueuePartition `protobuf:"bytes,1,rep,name=partitions,proto3" protobuf_key:"varint,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
 }
 
 func (x *Queue) Reset() {
@@ -460,16 +654,30 @@ func (x *Queue) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use Queue.ProtoReflect.Descriptor instead.
-func (*Queue) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_queues_proto_rawDescGZIP(), []int{8}
-}
-
 func (x *Queue) GetPartitions() map[int32]*QueuePartition {
 	if x != nil {
-		return x.Partitions
+		return x.xxx_hidden_Partitions
 	}
 	return nil
+}
+
+func (x *Queue) SetPartitions(v map[int32]*QueuePartition) {
+	x.xxx_hidden_Partitions = v
+}
+
+type Queue_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// A map from partition index (0-based) to the partition metadata.
+	Partitions map[int32]*QueuePartition
+}
+
+func (b0 Queue_builder) Build() *Queue {
+	m0 := &Queue{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Partitions = b.Partitions
+	return m0
 }
 
 var File_temporal_server_api_persistence_v1_queues_proto protoreflect.FileDescriptor
@@ -508,18 +716,6 @@ const file_temporal_server_api_persistence_v1_queues_proto_rawDesc = "" +
 	"\x0fPartitionsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\x05R\x03key\x12H\n" +
 	"\x05value\x18\x02 \x01(\v22.temporal.server.api.persistence.v1.QueuePartitionR\x05value:\x028\x01B6Z4go.temporal.io/server/api/persistence/v1;persistenceb\x06proto3"
-
-var (
-	file_temporal_server_api_persistence_v1_queues_proto_rawDescOnce sync.Once
-	file_temporal_server_api_persistence_v1_queues_proto_rawDescData []byte
-)
-
-func file_temporal_server_api_persistence_v1_queues_proto_rawDescGZIP() []byte {
-	file_temporal_server_api_persistence_v1_queues_proto_rawDescOnce.Do(func() {
-		file_temporal_server_api_persistence_v1_queues_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_api_persistence_v1_queues_proto_rawDesc), len(file_temporal_server_api_persistence_v1_queues_proto_rawDesc)))
-	})
-	return file_temporal_server_api_persistence_v1_queues_proto_rawDescData
-}
 
 var file_temporal_server_api_persistence_v1_queues_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_temporal_server_api_persistence_v1_queues_proto_goTypes = []any{

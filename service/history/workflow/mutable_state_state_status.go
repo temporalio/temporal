@@ -119,8 +119,8 @@ func setStateStatus(
 		return serviceerror.NewInternalf("unknown workflow state: %v", state)
 	}
 
-	e.State = state
-	e.Status = status
+	e.SetState(state)
+	e.SetStatus(status)
 	return nil
 }
 

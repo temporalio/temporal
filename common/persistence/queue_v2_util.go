@@ -21,9 +21,9 @@ func GetNextPageTokenForReadMessages(result []QueueV2Message) []byte {
 		return nil
 	}
 	lastReadMessageID := result[len(result)-1].MetaData.ID
-	token := &persistencespb.ReadQueueMessagesNextPageToken{
+	token := persistencespb.ReadQueueMessagesNextPageToken_builder{
 		LastReadMessageId: lastReadMessageID,
-	}
+	}.Build()
 	// This can never fail if you inspect the implementation.
 	b, _ := token.Marshal()
 
@@ -42,7 +42,7 @@ func GetMinMessageIDToReadForQueueV2(
 		if err != nil {
 			return 0, err
 		}
-		return partition.MinMessageId, nil
+		return partition.GetMinMessageId(), nil
 	}
 	var token persistencespb.ReadQueueMessagesNextPageToken
 
@@ -56,13 +56,13 @@ func GetMinMessageIDToReadForQueueV2(
 			err,
 		)
 	}
-	return token.LastReadMessageId + 1, nil
+	return token.GetLastReadMessageId() + 1, nil
 }
 
 func GetNextPageTokenForListQueues(queueNumber int64) []byte {
-	token := &persistencespb.ListQueuesNextPageToken{
+	token := persistencespb.ListQueuesNextPageToken_builder{
 		LastReadQueueNumber: queueNumber,
-	}
+	}.Build()
 	// This can never fail if you inspect the implementation.
 	b, _ := token.Marshal()
 
@@ -88,7 +88,7 @@ func GetOffsetForListQueues(
 			err,
 		)
 	}
-	return token.LastReadQueueNumber, nil
+	return token.GetLastReadQueueNumber(), nil
 }
 
 func GetPartitionForQueueV2(
@@ -99,7 +99,7 @@ func GetPartitionForQueueV2(
 	// Currently, we only have one partition for each queue. However, that might change in the future. If a queue is
 	// created with more than 1 partition by a server on a future release, and then that server is downgraded, we
 	// will need to handle this case. Since all DLQ tasks are retried infinitely, we just return an error.
-	numPartitions := len(queue.Partitions)
+	numPartitions := len(queue.GetPartitions())
 	if numPartitions != 1 {
 		return nil, serviceerror.NewInternal(
 			fmt.Sprintf(
@@ -111,7 +111,7 @@ func GetPartitionForQueueV2(
 			),
 		)
 	}
-	partition := queue.Partitions[0]
+	partition := queue.GetPartitions()[0]
 	return partition, nil
 }
 

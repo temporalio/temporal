@@ -70,7 +70,7 @@ func Invoke(
 				if !ok { // this will never happen, but linter wants me to check the casting, so do it just in case
 					return nil, serviceerror.NewInternalf("failed to copy workflow options to workflow options: %+v", requestedOptions)
 				}
-				requestedOptions.GetVersioningOverride().GetPinned().Version = currentVersion
+				requestedOptions.GetVersioningOverride().GetPinned().SetVersion(currentVersion)
 			}
 
 			// Validate versioning override, if any.
@@ -84,7 +84,7 @@ func Invoke(
 				return nil, err
 			}
 			// Set options for gRPC response
-			ret.WorkflowExecutionOptions = mergedOpts
+			ret.SetWorkflowExecutionOptions(mergedOpts)
 
 			// If there is no mutable state change at all, return with no new history event and Noop=true
 			if !hasChanges {
@@ -152,11 +152,11 @@ func getOptionsFromMutableState(ms historyi.MutableState) *workflowpb.WorkflowEx
 		if !ok {
 			return nil
 		}
-		opts.VersioningOverride = override
+		opts.SetVersioningOverride(override)
 	}
 	if priority := ms.GetExecutionInfo().GetPriority(); priority != nil {
 		if cloned, ok := proto.Clone(priority).(*commonpb.Priority); ok {
-			opts.Priority = cloned
+			opts.SetPriority(cloned)
 		}
 	}
 	return opts
@@ -173,48 +173,48 @@ func mergeWorkflowExecutionOptions(
 	}
 	updateFields := util.ParseFieldMask(updateMask)
 	if _, ok := updateFields["versioningOverride"]; ok {
-		mergeInto.VersioningOverride = mergeFrom.GetVersioningOverride()
+		mergeInto.SetVersioningOverride(mergeFrom.GetVersioningOverride())
 	}
 
 	if _, ok := updateFields["versioningOverride.deployment"]; ok {
 		if _, ok := updateFields["versioningOverride.behavior"]; !ok {
 			return nil, serviceerror.NewInvalidArgument("versioning_override fields must be updated together")
 		}
-		mergeInto.VersioningOverride = mergeFrom.GetVersioningOverride()
+		mergeInto.SetVersioningOverride(mergeFrom.GetVersioningOverride())
 	}
 
 	if _, ok := updateFields["versioningOverride.behavior"]; ok {
 		if _, ok := updateFields["versioningOverride.deployment"]; !ok {
 			return nil, serviceerror.NewInvalidArgument("versioning_override fields must be updated together")
 		}
-		mergeInto.VersioningOverride = mergeFrom.GetVersioningOverride()
+		mergeInto.SetVersioningOverride(mergeFrom.GetVersioningOverride())
 	}
 
 	// ==== Priority
 
 	if _, ok := updateFields["priority"]; ok {
-		mergeInto.Priority = mergeFrom.GetPriority()
+		mergeInto.SetPriority(mergeFrom.GetPriority())
 	}
 
 	if _, ok := updateFields["priority.priorityKey"]; ok {
-		if mergeInto.Priority == nil {
-			mergeInto.Priority = &commonpb.Priority{}
+		if !mergeInto.HasPriority() {
+			mergeInto.SetPriority(&commonpb.Priority{})
 		}
-		mergeInto.Priority.PriorityKey = mergeFrom.GetPriority().GetPriorityKey()
+		mergeInto.GetPriority().SetPriorityKey(mergeFrom.GetPriority().GetPriorityKey())
 	}
 
 	if _, ok := updateFields["priority.fairnessKey"]; ok {
-		if mergeInto.Priority == nil {
-			mergeInto.Priority = &commonpb.Priority{}
+		if !mergeInto.HasPriority() {
+			mergeInto.SetPriority(&commonpb.Priority{})
 		}
-		mergeInto.Priority.FairnessKey = mergeFrom.Priority.GetFairnessKey()
+		mergeInto.GetPriority().SetFairnessKey(mergeFrom.GetPriority().GetFairnessKey())
 	}
 
 	if _, ok := updateFields["priority.fairnessWeight"]; ok {
-		if mergeInto.Priority == nil {
-			mergeInto.Priority = &commonpb.Priority{}
+		if !mergeInto.HasPriority() {
+			mergeInto.SetPriority(&commonpb.Priority{})
 		}
-		mergeInto.Priority.FairnessWeight = mergeFrom.Priority.GetFairnessWeight()
+		mergeInto.GetPriority().SetFairnessWeight(mergeFrom.GetPriority().GetFairnessWeight())
 	}
 
 	return mergeInto, nil

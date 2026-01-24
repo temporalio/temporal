@@ -21,5 +21,5 @@ func SetMetadataType(p *commonpb.Payload, t enumspb.IndexedValueType) {
 		// nolint: forbidigo
 		panic(fmt.Sprintf("unknown index value type %v", t))
 	}
-	p.Metadata[MetadataType] = []byte(enumspb.IndexedValueType(t).String())
+	p.GetMetadata()[MetadataType] = []byte(enumspb.IndexedValueType(t).String())
 }

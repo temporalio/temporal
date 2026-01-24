@@ -31,23 +31,23 @@ import (
 
 var (
 	nonTerminalCommands = []*commandpb.Command{
-		{CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK},
-		{CommandType: enumspb.COMMAND_TYPE_REQUEST_CANCEL_ACTIVITY_TASK},
-		{CommandType: enumspb.COMMAND_TYPE_CANCEL_TIMER},
-		{CommandType: enumspb.COMMAND_TYPE_CANCEL_TIMER},
-		{CommandType: enumspb.COMMAND_TYPE_RECORD_MARKER},
-		{CommandType: enumspb.COMMAND_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION},
-		{CommandType: enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION},
-		{CommandType: enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION},
-		{CommandType: enumspb.COMMAND_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES},
-		{CommandType: enumspb.COMMAND_TYPE_MODIFY_WORKFLOW_PROPERTIES},
+		commandpb.Command_builder{CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK}.Build(),
+		commandpb.Command_builder{CommandType: enumspb.COMMAND_TYPE_REQUEST_CANCEL_ACTIVITY_TASK}.Build(),
+		commandpb.Command_builder{CommandType: enumspb.COMMAND_TYPE_CANCEL_TIMER}.Build(),
+		commandpb.Command_builder{CommandType: enumspb.COMMAND_TYPE_CANCEL_TIMER}.Build(),
+		commandpb.Command_builder{CommandType: enumspb.COMMAND_TYPE_RECORD_MARKER}.Build(),
+		commandpb.Command_builder{CommandType: enumspb.COMMAND_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION}.Build(),
+		commandpb.Command_builder{CommandType: enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION}.Build(),
+		commandpb.Command_builder{CommandType: enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION}.Build(),
+		commandpb.Command_builder{CommandType: enumspb.COMMAND_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES}.Build(),
+		commandpb.Command_builder{CommandType: enumspb.COMMAND_TYPE_MODIFY_WORKFLOW_PROPERTIES}.Build(),
 	}
 
 	terminalCommands = []*commandpb.Command{
-		{CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION},
-		{CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION},
-		{CommandType: enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION},
-		{CommandType: enumspb.COMMAND_TYPE_CANCEL_WORKFLOW_EXECUTION},
+		commandpb.Command_builder{CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION}.Build(),
+		commandpb.Command_builder{CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION}.Build(),
+		commandpb.Command_builder{CommandType: enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION}.Build(),
+		commandpb.Command_builder{CommandType: enumspb.COMMAND_TYPE_CANCEL_WORKFLOW_EXECUTION}.Build(),
 	}
 )
 
@@ -128,12 +128,12 @@ func (s *commandAttrValidatorSuite) TearDownTest() {
 
 func (s *commandAttrValidatorSuite) TestValidateSignalExternalWorkflowExecutionAttributes() {
 	namespaceEntry := namespace.NewLocalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testNamespaceID.String()},
+		persistencespb.NamespaceInfo_builder{Name: s.testNamespaceID.String()}.Build(),
 		nil,
 		cluster.TestCurrentClusterName,
 	)
 	targetNamespaceEntry := namespace.NewLocalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testTargetNamespaceID.String()},
+		persistencespb.NamespaceInfo_builder{Name: s.testTargetNamespaceID.String()}.Build(),
 		nil,
 		cluster.TestCurrentClusterName,
 	)
@@ -152,24 +152,24 @@ func (s *commandAttrValidatorSuite) TestValidateSignalExternalWorkflowExecutionA
 	s.EqualError(err, "Execution is not set on SignalExternalWorkflowExecutionCommand.")
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SIGNAL_WORKFLOW_EXECUTION_ATTRIBUTES, fc)
 
-	attributes.Execution = &commonpb.WorkflowExecution{}
-	attributes.Execution.WorkflowId = "workflow-id"
+	attributes.SetExecution(&commonpb.WorkflowExecution{})
+	attributes.GetExecution().SetWorkflowId("workflow-id")
 	fc, err = s.validator.ValidateSignalExternalWorkflowExecutionAttributes(s.testNamespaceID, "test-workflow-id", s.testTargetNamespaceID, attributes)
 	s.EqualError(err, "SignalName is not set on SignalExternalWorkflowExecutionCommand. WorkflowId=workflow-id Namespace= RunId=")
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SIGNAL_WORKFLOW_EXECUTION_ATTRIBUTES, fc)
 
-	attributes.Execution.RunId = "run-id"
+	attributes.GetExecution().SetRunId("run-id")
 	fc, err = s.validator.ValidateSignalExternalWorkflowExecutionAttributes(s.testNamespaceID, "test-workflow-id", s.testTargetNamespaceID, attributes)
 	s.EqualError(err, "Invalid RunId set on SignalExternalWorkflowExecutionCommand. WorkflowId=workflow-id Namespace= RunId=run-id SignalName=")
-	attributes.Execution.RunId = tests.RunID
+	attributes.GetExecution().SetRunId(tests.RunID)
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SIGNAL_WORKFLOW_EXECUTION_ATTRIBUTES, fc)
 
-	attributes.SignalName = "my signal name"
+	attributes.SetSignalName("my signal name")
 	fc, err = s.validator.ValidateSignalExternalWorkflowExecutionAttributes(s.testNamespaceID, "test-workflow-id", s.testTargetNamespaceID, attributes)
 	s.NoError(err)
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, fc)
 
-	attributes.Input = payloads.EncodeString("test input")
+	attributes.SetInput(payloads.EncodeString("test input"))
 	fc, err = s.validator.ValidateSignalExternalWorkflowExecutionAttributes(s.testNamespaceID, "test-workflow-id", s.testTargetNamespaceID, attributes)
 	s.NoError(err)
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, fc)
@@ -188,16 +188,16 @@ func (s *commandAttrValidatorSuite) TestValidateUpsertWorkflowSearchAttributes()
 	s.EqualError(err, "SearchAttributes is not set on UpsertWorkflowSearchAttributesCommand.")
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, fc)
 
-	attributes.SearchAttributes = &commonpb.SearchAttributes{}
+	attributes.SetSearchAttributes(&commonpb.SearchAttributes{})
 	fc, err = s.validator.ValidateUpsertWorkflowSearchAttributes(namespaceName, attributes)
 	s.EqualError(err, "IndexedFields is not set on UpsertWorkflowSearchAttributesCommand.")
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, fc)
 
 	saPayload, err := searchattribute.EncodeValue("bytes", enumspb.INDEXED_VALUE_TYPE_KEYWORD)
 	s.NoError(err)
-	attributes.SearchAttributes.IndexedFields = map[string]*commonpb.Payload{
+	attributes.GetSearchAttributes().SetIndexedFields(map[string]*commonpb.Payload{
 		"Keyword01": saPayload,
-	}
+	})
 	fc, err = s.validator.ValidateUpsertWorkflowSearchAttributes(namespaceName, attributes)
 	s.NoError(err)
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, fc)
@@ -210,9 +210,9 @@ func (s *commandAttrValidatorSuite) TestValidateUpsertWorkflowSearchAttributes()
 	}
 
 	for _, attr := range deploymentRestrictedAttributes {
-		attributes.SearchAttributes.IndexedFields = map[string]*commonpb.Payload{
+		attributes.GetSearchAttributes().SetIndexedFields(map[string]*commonpb.Payload{
 			attr: saPayload,
-		}
+		})
 		fc, err = s.validator.ValidateUpsertWorkflowSearchAttributes(namespaceName, attributes)
 		s.EqualError(err, fmt.Sprintf("%s attribute can't be set in SearchAttributes", attr))
 		s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, fc)
@@ -224,20 +224,20 @@ func (s *commandAttrValidatorSuite) TestValidateContinueAsNewWorkflowExecutionAt
 	workflowTypeName := "workflowType"
 	taskQueue := "taskQueue"
 
-	attributes := &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
+	attributes := commandpb.ContinueAsNewWorkflowExecutionCommandAttributes_builder{
 		// workflow type name and task queue name should be retrieved from existing workflow info
 
 		// WorkflowRunTimeout should be shorten to execution timeout
 		WorkflowRunTimeout: durationpb.New(executionTimeout * 2),
 		// WorkflowTaskTimeout should be shorten to max workflow task timeout
 		WorkflowTaskTimeout: durationpb.New(maxWorkflowTaskStartToCloseTimeout * 2),
-	}
+	}.Build()
 
-	executionInfo := &persistencespb.WorkflowExecutionInfo{
+	executionInfo := persistencespb.WorkflowExecutionInfo_builder{
 		WorkflowTypeName:         workflowTypeName,
 		TaskQueue:                taskQueue,
 		WorkflowExecutionTimeout: durationpb.New(executionTimeout),
-	}
+	}.Build()
 
 	fc, err := s.validator.ValidateContinueAsNewWorkflowExecutionAttributes(
 		tests.Namespace,
@@ -254,7 +254,7 @@ func (s *commandAttrValidatorSuite) TestValidateContinueAsNewWorkflowExecutionAt
 
 	// Predefined Worker-Deployment related SA's should be rejected when they are attempted to be set during CAN
 	saPayload, _ := searchattribute.EncodeValue([]string{"a"}, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
-	attributes.SearchAttributes = &commonpb.SearchAttributes{}
+	attributes.SetSearchAttributes(&commonpb.SearchAttributes{})
 
 	deploymentRestrictedAttributes := []string{
 		sadefs.TemporalWorkerDeploymentVersion,
@@ -263,9 +263,9 @@ func (s *commandAttrValidatorSuite) TestValidateContinueAsNewWorkflowExecutionAt
 	}
 
 	for _, attr := range deploymentRestrictedAttributes {
-		attributes.SearchAttributes.IndexedFields = map[string]*commonpb.Payload{
+		attributes.GetSearchAttributes().SetIndexedFields(map[string]*commonpb.Payload{
 			attr: saPayload,
-		}
+		})
 		fc, err = s.validator.ValidateContinueAsNewWorkflowExecutionAttributes(
 			tests.Namespace,
 			attributes,
@@ -273,7 +273,7 @@ func (s *commandAttrValidatorSuite) TestValidateContinueAsNewWorkflowExecutionAt
 		)
 		s.EqualError(err, fmt.Sprintf("invalid SearchAttributes on ContinueAsNewWorkflowExecutionCommand: %s attribute "+
 			"can't be set in SearchAttributes. WorkflowType=%s TaskQueue=%s",
-			attr, workflowTypeName, attributes.TaskQueue))
+			attr, workflowTypeName, attributes.GetTaskQueue()))
 		s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, fc)
 	}
 }
@@ -292,9 +292,9 @@ func (s *commandAttrValidatorSuite) TestValidateModifyWorkflowProperties() {
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_MODIFY_WORKFLOW_PROPERTIES_ATTRIBUTES, fc)
 
 	// test UpsertedMemo cannot be an empty map
-	attributes = &commandpb.ModifyWorkflowPropertiesCommandAttributes{
+	attributes = commandpb.ModifyWorkflowPropertiesCommandAttributes_builder{
 		UpsertedMemo: &commonpb.Memo{},
-	}
+	}.Build()
 	fc, err = s.validator.ValidateModifyWorkflowProperties(attributes)
 	s.EqualError(err, "UpsertedMemo.Fields is not set on ModifyWorkflowPropertiesCommand.")
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_MODIFY_WORKFLOW_PROPERTIES_ATTRIBUTES, fc)
@@ -302,12 +302,12 @@ func (s *commandAttrValidatorSuite) TestValidateModifyWorkflowProperties() {
 
 func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_LocalToLocal() {
 	namespaceEntry := namespace.NewLocalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testNamespaceID.String()},
+		persistencespb.NamespaceInfo_builder{Name: s.testNamespaceID.String()}.Build(),
 		nil,
 		cluster.TestCurrentClusterName,
 	)
 	targetNamespaceEntry := namespace.NewLocalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testTargetNamespaceID.String()},
+		persistencespb.NamespaceInfo_builder{Name: s.testTargetNamespaceID.String()}.Build(),
 		nil,
 		cluster.TestCurrentClusterName,
 	)
@@ -321,17 +321,17 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_LocalToLocal(
 
 func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_LocalToEffectiveLocal_SameCluster() {
 	namespaceEntry := namespace.NewLocalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testNamespaceID.String()},
+		persistencespb.NamespaceInfo_builder{Name: s.testNamespaceID.String()}.Build(),
 		nil,
 		cluster.TestCurrentClusterName,
 	)
 	targetNamespaceEntry := namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testTargetNamespaceID.String()},
+		persistencespb.NamespaceInfo_builder{Name: s.testTargetNamespaceID.String()}.Build(),
 		nil,
-		&persistencespb.NamespaceReplicationConfig{
+		persistencespb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters:          []string{cluster.TestCurrentClusterName},
-		},
+		}.Build(),
 		1234,
 	)
 
@@ -344,17 +344,17 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_LocalToEffect
 
 func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_LocalToEffectiveLocal_DiffCluster() {
 	namespaceEntry := namespace.NewLocalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testNamespaceID.String()},
+		persistencespb.NamespaceInfo_builder{Name: s.testNamespaceID.String()}.Build(),
 		nil,
 		cluster.TestCurrentClusterName,
 	)
 	targetNamespaceEntry := namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testTargetNamespaceID.String()},
+		persistencespb.NamespaceInfo_builder{Name: s.testTargetNamespaceID.String()}.Build(),
 		nil,
-		&persistencespb.NamespaceReplicationConfig{
+		persistencespb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
 			Clusters:          []string{cluster.TestAlternativeClusterName},
-		},
+		}.Build(),
 		1234,
 	)
 
@@ -367,20 +367,20 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_LocalToEffect
 
 func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_LocalToGlobal() {
 	namespaceEntry := namespace.NewLocalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testNamespaceID.String()},
+		persistencespb.NamespaceInfo_builder{Name: s.testNamespaceID.String()}.Build(),
 		nil,
 		cluster.TestCurrentClusterName,
 	)
 	targetNamespaceEntry := namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testTargetNamespaceID.String()},
+		persistencespb.NamespaceInfo_builder{Name: s.testTargetNamespaceID.String()}.Build(),
 		nil,
-		&persistencespb.NamespaceReplicationConfig{
+		persistencespb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []string{
 				cluster.TestCurrentClusterName,
 				cluster.TestAlternativeClusterName,
 			},
-		},
+		}.Build(),
 		1234,
 	)
 
@@ -393,16 +393,16 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_LocalToGlobal
 
 func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLocalToLocal_SameCluster() {
 	namespaceEntry := namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testNamespaceID.String()},
+		persistencespb.NamespaceInfo_builder{Name: s.testNamespaceID.String()}.Build(),
 		nil,
-		&persistencespb.NamespaceReplicationConfig{
+		persistencespb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters:          []string{cluster.TestCurrentClusterName},
-		},
+		}.Build(),
 		1234,
 	)
 	targetNamespaceEntry := namespace.NewLocalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testTargetNamespaceID.String()},
+		persistencespb.NamespaceInfo_builder{Name: s.testTargetNamespaceID.String()}.Build(),
 		nil,
 		cluster.TestCurrentClusterName,
 	)
@@ -416,16 +416,16 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLoca
 
 func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLocalToLocal_DiffCluster() {
 	namespaceEntry := namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testNamespaceID.String()},
+		persistencespb.NamespaceInfo_builder{Name: s.testNamespaceID.String()}.Build(),
 		nil,
-		&persistencespb.NamespaceReplicationConfig{
+		persistencespb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
 			Clusters:          []string{cluster.TestAlternativeClusterName},
-		},
+		}.Build(),
 		1234,
 	)
 	targetNamespaceEntry := namespace.NewLocalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testTargetNamespaceID.String()},
+		persistencespb.NamespaceInfo_builder{Name: s.testTargetNamespaceID.String()}.Build(),
 		nil,
 		cluster.TestCurrentClusterName,
 	)
@@ -439,21 +439,21 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLoca
 
 func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLocalToEffectiveLocal_SameCluster() {
 	namespaceEntry := namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testNamespaceID.String()},
+		persistencespb.NamespaceInfo_builder{Name: s.testNamespaceID.String()}.Build(),
 		nil,
-		&persistencespb.NamespaceReplicationConfig{
+		persistencespb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters:          []string{cluster.TestCurrentClusterName},
-		},
+		}.Build(),
 		1234,
 	)
 	targetNamespaceEntry := namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testTargetNamespaceID.String()},
+		persistencespb.NamespaceInfo_builder{Name: s.testTargetNamespaceID.String()}.Build(),
 		nil,
-		&persistencespb.NamespaceReplicationConfig{
+		persistencespb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters:          []string{cluster.TestCurrentClusterName},
-		},
+		}.Build(),
 		5678,
 	)
 
@@ -466,21 +466,21 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLoca
 
 func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLocalToEffectiveLocal_DiffCluster() {
 	namespaceEntry := namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testNamespaceID.String()},
+		persistencespb.NamespaceInfo_builder{Name: s.testNamespaceID.String()}.Build(),
 		nil,
-		&persistencespb.NamespaceReplicationConfig{
+		persistencespb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters:          []string{cluster.TestCurrentClusterName},
-		},
+		}.Build(),
 		1234,
 	)
 	targetNamespaceEntry := namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testTargetNamespaceID.String()},
+		persistencespb.NamespaceInfo_builder{Name: s.testTargetNamespaceID.String()}.Build(),
 		nil,
-		&persistencespb.NamespaceReplicationConfig{
+		persistencespb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
 			Clusters:          []string{cluster.TestAlternativeClusterName},
-		},
+		}.Build(),
 		5678,
 	)
 
@@ -493,26 +493,26 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLoca
 
 func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLocalToGlobal() {
 	namespaceEntry := namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testNamespaceID.String()},
+		persistencespb.NamespaceInfo_builder{Name: s.testNamespaceID.String()}.Build(),
 		nil,
-		&persistencespb.NamespaceReplicationConfig{
+		persistencespb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []string{
 				cluster.TestCurrentClusterName,
 			},
-		},
+		}.Build(),
 		5678,
 	)
 	targetNamespaceEntry := namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testTargetNamespaceID.String()},
+		persistencespb.NamespaceInfo_builder{Name: s.testTargetNamespaceID.String()}.Build(),
 		nil,
-		&persistencespb.NamespaceReplicationConfig{
+		persistencespb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []string{
 				cluster.TestCurrentClusterName,
 				cluster.TestAlternativeClusterName,
 			},
-		},
+		}.Build(),
 		1234,
 	)
 
@@ -525,19 +525,19 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLoca
 
 func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_GlobalToLocal() {
 	namespaceEntry := namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testNamespaceID.String()},
+		persistencespb.NamespaceInfo_builder{Name: s.testNamespaceID.String()}.Build(),
 		nil,
-		&persistencespb.NamespaceReplicationConfig{
+		persistencespb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []string{
 				cluster.TestCurrentClusterName,
 				cluster.TestAlternativeClusterName,
 			},
-		},
+		}.Build(),
 		1234,
 	)
 	targetNamespaceEntry := namespace.NewLocalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testTargetNamespaceID.String()},
+		persistencespb.NamespaceInfo_builder{Name: s.testTargetNamespaceID.String()}.Build(),
 		nil,
 		cluster.TestCurrentClusterName,
 	)
@@ -551,26 +551,26 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_GlobalToLocal
 
 func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_GlobalToEffectiveLocal() {
 	namespaceEntry := namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testNamespaceID.String()},
+		persistencespb.NamespaceInfo_builder{Name: s.testNamespaceID.String()}.Build(),
 		nil,
-		&persistencespb.NamespaceReplicationConfig{
+		persistencespb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []string{
 				cluster.TestCurrentClusterName,
 				cluster.TestAlternativeClusterName,
 			},
-		},
+		}.Build(),
 		5678,
 	)
 	targetNamespaceEntry := namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testTargetNamespaceID.String()},
+		persistencespb.NamespaceInfo_builder{Name: s.testTargetNamespaceID.String()}.Build(),
 		nil,
-		&persistencespb.NamespaceReplicationConfig{
+		persistencespb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []string{
 				cluster.TestCurrentClusterName,
 			},
-		},
+		}.Build(),
 		1234,
 	)
 
@@ -583,27 +583,27 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_GlobalToEffec
 
 func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_GlobalToGlobal_DiffNamespace() {
 	namespaceEntry := namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testNamespaceID.String()},
+		persistencespb.NamespaceInfo_builder{Name: s.testNamespaceID.String()}.Build(),
 		nil,
-		&persistencespb.NamespaceReplicationConfig{
+		persistencespb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []string{
 				cluster.TestAlternativeClusterName,
 				cluster.TestCurrentClusterName,
 			},
-		},
+		}.Build(),
 		1234,
 	)
 	targetNamespaceEntry := namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testTargetNamespaceID.String()},
+		persistencespb.NamespaceInfo_builder{Name: s.testTargetNamespaceID.String()}.Build(),
 		nil,
-		&persistencespb.NamespaceReplicationConfig{
+		persistencespb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []string{
 				cluster.TestCurrentClusterName,
 				cluster.TestAlternativeClusterName,
 			},
-		},
+		}.Build(),
 		1234,
 	)
 
@@ -630,82 +630,82 @@ func (s *commandAttrValidatorSuite) TestValidateActivityRetryPolicy() {
 		{
 			name:  "override non-set policy",
 			input: &commonpb.RetryPolicy{},
-			want: &commonpb.RetryPolicy{
+			want: commonpb.RetryPolicy_builder{
 				InitialInterval:    durationpb.New(1 * time.Second),
 				BackoffCoefficient: 2,
 				MaximumInterval:    durationpb.New(100 * time.Second),
 				MaximumAttempts:    0,
-			},
+			}.Build(),
 		},
 		{
 			name: "do not override fully set policy",
-			input: &commonpb.RetryPolicy{
+			input: commonpb.RetryPolicy_builder{
 				InitialInterval:    durationpb.New(5 * time.Second),
 				BackoffCoefficient: 10,
 				MaximumInterval:    durationpb.New(20 * time.Second),
 				MaximumAttempts:    8,
-			},
-			want: &commonpb.RetryPolicy{
+			}.Build(),
+			want: commonpb.RetryPolicy_builder{
 				InitialInterval:    durationpb.New(5 * time.Second),
 				BackoffCoefficient: 10,
 				MaximumInterval:    durationpb.New(20 * time.Second),
 				MaximumAttempts:    8,
-			},
+			}.Build(),
 		},
 		{
 			name: "partial override of fields",
-			input: &commonpb.RetryPolicy{
+			input: commonpb.RetryPolicy_builder{
 				InitialInterval:    durationpb.New(0 * time.Second),
 				BackoffCoefficient: 1.2,
 				MaximumInterval:    durationpb.New(0 * time.Second),
 				MaximumAttempts:    7,
-			},
-			want: &commonpb.RetryPolicy{
+			}.Build(),
+			want: commonpb.RetryPolicy_builder{
 				InitialInterval:    durationpb.New(1 * time.Second),
 				BackoffCoefficient: 1.2,
 				MaximumInterval:    durationpb.New(100 * time.Second),
 				MaximumAttempts:    7,
-			},
+			}.Build(),
 		},
 		{
 			name: "set expected max interval if only init interval set",
-			input: &commonpb.RetryPolicy{
+			input: commonpb.RetryPolicy_builder{
 				InitialInterval: durationpb.New(3 * time.Second),
 				MaximumInterval: durationpb.New(0 * time.Second),
-			},
-			want: &commonpb.RetryPolicy{
+			}.Build(),
+			want: commonpb.RetryPolicy_builder{
 				InitialInterval:    durationpb.New(3 * time.Second),
 				BackoffCoefficient: 2,
 				MaximumInterval:    durationpb.New(300 * time.Second),
 				MaximumAttempts:    0,
-			},
+			}.Build(),
 		},
 		{
 			name: "override all defaults",
-			input: &commonpb.RetryPolicy{
+			input: commonpb.RetryPolicy_builder{
 				InitialInterval:    durationpb.New(0 * time.Second),
 				BackoffCoefficient: 0,
 				MaximumInterval:    durationpb.New(0 * time.Second),
 				MaximumAttempts:    0,
-			},
-			want: &commonpb.RetryPolicy{
+			}.Build(),
+			want: commonpb.RetryPolicy_builder{
 				InitialInterval:    durationpb.New(1 * time.Second),
 				BackoffCoefficient: 2,
 				MaximumInterval:    durationpb.New(100 * time.Second),
 				MaximumAttempts:    0,
-			},
+			}.Build(),
 		},
 	}
 
 	for _, tt := range testCases {
 		s.Run(tt.name, func() {
-			attr := &commandpb.ScheduleActivityTaskCommandAttributes{
+			attr := commandpb.ScheduleActivityTaskCommandAttributes_builder{
 				RetryPolicy: tt.input,
-			}
+			}.Build()
 
 			err := s.validator.validateActivityRetryPolicy(s.testNamespaceID, attr.GetRetryPolicy())
 			assert.Nil(s.T(), err, "expected no error")
-			assert.Equal(s.T(), tt.want, attr.RetryPolicy, "unexpected retry policy")
+			assert.Equal(s.T(), tt.want, attr.GetRetryPolicy(), "unexpected retry policy")
 		})
 	}
 }

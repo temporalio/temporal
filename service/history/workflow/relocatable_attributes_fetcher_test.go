@@ -21,20 +21,20 @@ import (
 
 func TestRelocatableAttributesFetcher_Fetch(t *testing.T) {
 	mutableStateAttributes := &RelocatableAttributes{
-		Memo: &commonpb.Memo{Fields: map[string]*commonpb.Payload{
-			"memoLocation": {Data: []byte("mutableState")},
-		}},
-		SearchAttributes: &commonpb.SearchAttributes{IndexedFields: map[string]*commonpb.Payload{
-			"searchAttributesLocation": {Data: []byte("mutableState")},
-		}},
+		Memo: commonpb.Memo_builder{Fields: map[string]*commonpb.Payload{
+			"memoLocation": commonpb.Payload_builder{Data: []byte("mutableState")}.Build(),
+		}}.Build(),
+		SearchAttributes: commonpb.SearchAttributes_builder{IndexedFields: map[string]*commonpb.Payload{
+			"searchAttributesLocation": commonpb.Payload_builder{Data: []byte("mutableState")}.Build(),
+		}}.Build(),
 	}
 	persistenceAttributes := &RelocatableAttributes{
-		Memo: &commonpb.Memo{Fields: map[string]*commonpb.Payload{
-			"memoLocation": {Data: []byte("persistence")},
-		}},
-		SearchAttributes: &commonpb.SearchAttributes{IndexedFields: map[string]*commonpb.Payload{
-			"searchAttributesLocation": {Data: []byte("persistence")},
-		}},
+		Memo: commonpb.Memo_builder{Fields: map[string]*commonpb.Payload{
+			"memoLocation": commonpb.Payload_builder{Data: []byte("persistence")}.Build(),
+		}}.Build(),
+		SearchAttributes: commonpb.SearchAttributes_builder{IndexedFields: map[string]*commonpb.Payload{
+			"searchAttributesLocation": commonpb.Payload_builder{Data: []byte("persistence")}.Build(),
+		}}.Build(),
 	}
 
 	emptyAttributes := &RelocatableAttributes{}
@@ -82,16 +82,16 @@ func TestRelocatableAttributesFetcher_Fetch(t *testing.T) {
 		t.Run(c.Name, func(t *testing.T) {
 			t.Parallel()
 			closeTime := time.Unix(100, 0).UTC()
-			executionInfo := &persistencespb.WorkflowExecutionInfo{
-				Memo:                         mutableStateAttributes.Memo.Fields,
-				SearchAttributes:             mutableStateAttributes.SearchAttributes.IndexedFields,
+			executionInfo := persistencespb.WorkflowExecutionInfo_builder{
+				Memo:                         mutableStateAttributes.Memo.GetFields(),
+				SearchAttributes:             mutableStateAttributes.SearchAttributes.GetIndexedFields(),
 				RelocatableAttributesRemoved: c.RelocatableAttributesRemoved,
 				CloseTime:                    timestamppb.New(closeTime),
 				WorkflowId:                   tests.WorkflowID,
-			}
-			executionState := &persistencespb.WorkflowExecutionState{
+			}.Build()
+			executionState := persistencespb.WorkflowExecutionState_builder{
 				RunId: tests.RunID,
-			}
+			}.Build()
 			namespaceEntry := tests.GlobalNamespaceEntry
 			ctrl := gomock.NewController(t)
 			visibilityManager := manager.NewMockVisibilityManager(ctrl)
@@ -106,10 +106,10 @@ func TestRelocatableAttributesFetcher_Fetch(t *testing.T) {
 					RunID:       tests.RunID,
 					WorkflowID:  tests.WorkflowID,
 				}).Return(&manager.GetWorkflowExecutionResponse{
-					Execution: &workflowpb.WorkflowExecutionInfo{
+					Execution: workflowpb.WorkflowExecutionInfo_builder{
 						Memo:             persistenceAttributes.Memo,
 						SearchAttributes: persistenceAttributes.SearchAttributes,
-					},
+					}.Build(),
 				}, c.GetWorkflowExecutionErr)
 			}
 			ctx := context.Background()

@@ -190,17 +190,17 @@ func (c *cacheImpl) GetOrCreateCurrentExecution(
 	start := time.Now()
 	defer func() { metrics.CacheLatency.With(handler).Record(time.Since(start)) }()
 
-	execution := commonpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution_builder{
 		WorkflowId: workflowID,
 		// using empty run ID as current workflow run ID
 		RunId: "",
-	}
+	}.Build()
 
 	_, weReleaseFn, err := c.getOrCreateWorkflowExecutionInternal(
 		ctx,
 		shardContext,
 		namespaceID,
-		&execution,
+		execution,
 		archetypeID,
 		handler,
 		true,
@@ -423,7 +423,7 @@ func (c *cacheImpl) validateWorkflowExecutionInfo(
 			return err
 		}
 
-		execution.RunId = runID
+		execution.SetRunId(runID)
 	} else if uuid.Validate(execution.GetRunId()) != nil { // immediately return if invalid runID
 		return serviceerror.NewInvalidArgument("RunId is not valid UUID.")
 	}

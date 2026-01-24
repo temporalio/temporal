@@ -40,10 +40,10 @@ func (s *QueryRegistrySuite) TestQueryRegistry() {
 	for i := 0; i < 25; i++ {
 		err := qr.SetCompletionState(ids[i], &historyi.QueryCompletionState{
 			Type: QueryCompletionTypeSucceeded,
-			Result: &querypb.WorkflowQueryResult{
+			Result: querypb.WorkflowQueryResult_builder{
 				ResultType: enumspb.QUERY_RESULT_TYPE_ANSWERED,
 				Answer:     payloads.EncodeBytes([]byte{1, 2, 3}),
-			},
+			}.Build(),
 		})
 		s.NoError(err)
 	}

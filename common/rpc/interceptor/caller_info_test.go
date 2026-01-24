@@ -57,9 +57,9 @@ func (s *callerInfoSuite) TestIntercept_CallerName() {
 			setupIncomingCtx: func() context.Context {
 				return context.Background()
 			},
-			request: &workflowservice.StartWorkflowExecutionRequest{
+			request: workflowservice.StartWorkflowExecutionRequest_builder{
 				Namespace: testNamespaceName,
-			},
+			}.Build(),
 			expectedCallerName: testNamespaceName,
 		},
 		{
@@ -67,9 +67,9 @@ func (s *callerInfoSuite) TestIntercept_CallerName() {
 			setupIncomingCtx: func() context.Context {
 				return headers.SetCallerType(context.Background(), headers.CallerTypeBackgroundHigh)
 			},
-			request: &workflowservice.StartWorkflowExecutionRequest{
+			request: workflowservice.StartWorkflowExecutionRequest_builder{
 				Namespace: testNamespaceName,
-			},
+			}.Build(),
 			expectedCallerName: testNamespaceName,
 		},
 		{
@@ -77,9 +77,9 @@ func (s *callerInfoSuite) TestIntercept_CallerName() {
 			setupIncomingCtx: func() context.Context {
 				return headers.SetCallerName(context.Background(), testNamespaceName)
 			},
-			request: &workflowservice.StartWorkflowExecutionRequest{
+			request: workflowservice.StartWorkflowExecutionRequest_builder{
 				Namespace: testNamespaceName,
-			},
+			}.Build(),
 			expectedCallerName: testNamespaceName,
 		},
 		{
@@ -87,9 +87,9 @@ func (s *callerInfoSuite) TestIntercept_CallerName() {
 			setupIncomingCtx: func() context.Context {
 				return headers.SetCallerName(context.Background(), "")
 			},
-			request: &workflowservice.StartWorkflowExecutionRequest{
+			request: workflowservice.StartWorkflowExecutionRequest_builder{
 				Namespace: testNamespaceName,
-			},
+			}.Build(),
 			expectedCallerName: testNamespaceName,
 		},
 		{
@@ -97,9 +97,9 @@ func (s *callerInfoSuite) TestIntercept_CallerName() {
 			setupIncomingCtx: func() context.Context {
 				return headers.SetCallerName(context.Background(), "some-random-value")
 			},
-			request: &workflowservice.StartWorkflowExecutionRequest{
+			request: workflowservice.StartWorkflowExecutionRequest_builder{
 				Namespace: testNamespaceName,
-			},
+			}.Build(),
 			expectedCallerName: testNamespaceName,
 		},
 	}

@@ -30,9 +30,9 @@ func NewNamespaceReplicationQueue(
 ) (NamespaceReplicationQueue, error) {
 
 	blob, err := serializer.QueueMetadataToBlob(
-		&persistencespb.QueueMetadata{
+		persistencespb.QueueMetadata_builder{
 			ClusterAckLevels: make(map[string]int64),
-		})
+		}.Build())
 	if err != nil {
 		return nil, err
 	}
@@ -209,9 +209,9 @@ func (q *namespaceReplicationQueueImpl) updateAckLevel(
 
 	// update ack level
 	ackLevels[clusterName] = lastProcessedMessageID
-	blob, err := q.serializer.QueueMetadataToBlob(&persistencespb.QueueMetadata{
+	blob, err := q.serializer.QueueMetadataToBlob(persistencespb.QueueMetadata_builder{
 		ClusterAckLevels: ackLevels,
-	})
+	}.Build())
 	if err != nil {
 		return err
 	}
@@ -248,7 +248,7 @@ func (q *namespaceReplicationQueueImpl) ackLevelsFromBlob(blob *commonpb.DataBlo
 	if err != nil {
 		return nil, err
 	}
-	ackLevels := metadata.ClusterAckLevels
+	ackLevels := metadata.GetClusterAckLevels()
 	if ackLevels == nil {
 		ackLevels = make(map[string]int64)
 	}
@@ -276,7 +276,7 @@ func (q *namespaceReplicationQueueImpl) GetMessagesFromDLQ(
 		}
 
 		// Overwrite to local cluster message id
-		replicationTask.SourceTaskId = message.ID
+		replicationTask.SetSourceTaskId(message.ID)
 		replicationTasks = append(replicationTasks, replicationTask)
 	}
 

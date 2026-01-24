@@ -78,7 +78,7 @@ func (s *generatorTasksSuite) TestExecuteBufferTask_Basic() {
 
 	// Validate RequestId -> WorkflowId mapping
 	for _, start := range invoker.BufferedStarts {
-		s.Equal(start.WorkflowId, invoker.RunningWorkflowID(start.RequestId))
+		s.Equal(start.GetWorkflowId(), invoker.RunningWorkflowID(start.GetRequestId()))
 	}
 
 	// Generator's high water mark should have advanced.
@@ -112,8 +112,8 @@ func (s *generatorTasksSuite) TestUpdateFutureActionTimes_LimitedActions() {
 	sched := s.scheduler
 	generator := sched.Generator.Get(ctx)
 
-	sched.Schedule.State.LimitedActions = true
-	sched.Schedule.State.RemainingActions = 2
+	sched.Schedule.GetState().SetLimitedActions(true)
+	sched.Schedule.GetState().SetRemainingActions(2)
 	s.executor.SpecProcessor = newTestSpecProcessor(s.controller)
 
 	err := s.executor.Execute(ctx, generator, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{})
@@ -132,7 +132,7 @@ func (s *generatorTasksSuite) TestUpdateFutureActionTimes_SkipsBeforeUpdateTime(
 	// UpdateTime acts as a floor - action times at or before it are skipped.
 	baseTime := ctx.Now(generator).UTC()
 	updateTime := baseTime.Add(defaultInterval / 2)
-	sched.Info.UpdateTime = timestamppb.New(updateTime)
+	sched.Info.SetUpdateTime(timestamppb.New(updateTime))
 
 	err := s.executor.Execute(ctx, generator, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{})
 	s.NoError(err)

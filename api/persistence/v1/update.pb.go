@@ -8,7 +8,7 @@ package persistence
 
 import (
 	reflect "reflect"
-	sync "sync"
+	"strconv"
 	unsafe "unsafe"
 
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -28,13 +28,10 @@ const (
 // created when an accepted update (on one branch of workflow history) is converted into an admitted update (on another
 // branch).
 type UpdateAdmissionInfo struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Types that are valid to be assigned to Location:
-	//
-	//	*UpdateAdmissionInfo_HistoryPointer_
-	Location      isUpdateAdmissionInfo_Location `protobuf_oneof:"location"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state               protoimpl.MessageState         `protogen:"opaque.v1"`
+	xxx_hidden_Location isUpdateAdmissionInfo_Location `protobuf_oneof:"location"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *UpdateAdmissionInfo) Reset() {
@@ -62,44 +59,111 @@ func (x *UpdateAdmissionInfo) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use UpdateAdmissionInfo.ProtoReflect.Descriptor instead.
-func (*UpdateAdmissionInfo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_update_proto_rawDescGZIP(), []int{0}
-}
-
-func (x *UpdateAdmissionInfo) GetLocation() isUpdateAdmissionInfo_Location {
-	if x != nil {
-		return x.Location
-	}
-	return nil
-}
-
 func (x *UpdateAdmissionInfo) GetHistoryPointer() *UpdateAdmissionInfo_HistoryPointer {
 	if x != nil {
-		if x, ok := x.Location.(*UpdateAdmissionInfo_HistoryPointer_); ok {
+		if x, ok := x.xxx_hidden_Location.(*updateAdmissionInfo_HistoryPointer_); ok {
 			return x.HistoryPointer
 		}
 	}
 	return nil
 }
 
+func (x *UpdateAdmissionInfo) SetHistoryPointer(v *UpdateAdmissionInfo_HistoryPointer) {
+	if v == nil {
+		x.xxx_hidden_Location = nil
+		return
+	}
+	x.xxx_hidden_Location = &updateAdmissionInfo_HistoryPointer_{v}
+}
+
+func (x *UpdateAdmissionInfo) HasLocation() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Location != nil
+}
+
+func (x *UpdateAdmissionInfo) HasHistoryPointer() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_Location.(*updateAdmissionInfo_HistoryPointer_)
+	return ok
+}
+
+func (x *UpdateAdmissionInfo) ClearLocation() {
+	x.xxx_hidden_Location = nil
+}
+
+func (x *UpdateAdmissionInfo) ClearHistoryPointer() {
+	if _, ok := x.xxx_hidden_Location.(*updateAdmissionInfo_HistoryPointer_); ok {
+		x.xxx_hidden_Location = nil
+	}
+}
+
+const UpdateAdmissionInfo_Location_not_set_case case_UpdateAdmissionInfo_Location = 0
+const UpdateAdmissionInfo_HistoryPointer_case case_UpdateAdmissionInfo_Location = 1
+
+func (x *UpdateAdmissionInfo) WhichLocation() case_UpdateAdmissionInfo_Location {
+	if x == nil {
+		return UpdateAdmissionInfo_Location_not_set_case
+	}
+	switch x.xxx_hidden_Location.(type) {
+	case *updateAdmissionInfo_HistoryPointer_:
+		return UpdateAdmissionInfo_HistoryPointer_case
+	default:
+		return UpdateAdmissionInfo_Location_not_set_case
+	}
+}
+
+type UpdateAdmissionInfo_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Fields of oneof xxx_hidden_Location:
+	HistoryPointer *UpdateAdmissionInfo_HistoryPointer
+	// -- end of xxx_hidden_Location
+}
+
+func (b0 UpdateAdmissionInfo_builder) Build() *UpdateAdmissionInfo {
+	m0 := &UpdateAdmissionInfo{}
+	b, x := &b0, m0
+	_, _ = b, x
+	if b.HistoryPointer != nil {
+		x.xxx_hidden_Location = &updateAdmissionInfo_HistoryPointer_{b.HistoryPointer}
+	}
+	return m0
+}
+
+type case_UpdateAdmissionInfo_Location protoreflect.FieldNumber
+
+func (x case_UpdateAdmissionInfo_Location) String() string {
+	switch x {
+	case UpdateAdmissionInfo_Location_not_set_case:
+		return "UpdateAdmissionInfoLocationNotSetCase"
+	case UpdateAdmissionInfo_HistoryPointer_case:
+		return "UpdateAdmissionInfoHistoryPointerCase"
+	default:
+		return strconv.Itoa(int(x))
+	}
+
+}
+
 type isUpdateAdmissionInfo_Location interface {
 	isUpdateAdmissionInfo_Location()
 }
 
-type UpdateAdmissionInfo_HistoryPointer_ struct {
+type updateAdmissionInfo_HistoryPointer_ struct {
 	HistoryPointer *UpdateAdmissionInfo_HistoryPointer `protobuf:"bytes,1,opt,name=history_pointer,json=historyPointer,proto3,oneof"`
 }
 
-func (*UpdateAdmissionInfo_HistoryPointer_) isUpdateAdmissionInfo_Location() {}
+func (*updateAdmissionInfo_HistoryPointer_) isUpdateAdmissionInfo_Location() {}
 
 // UpdateAcceptanceInfo contains information about an accepted update
 type UpdateAcceptanceInfo struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// the event ID of the WorkflowExecutionUpdateAcceptedEvent
-	EventId       int64 `protobuf:"varint,1,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state              protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_EventId int64                  `protobuf:"varint,1,opt,name=event_id,json=eventId,proto3"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *UpdateAcceptanceInfo) Reset() {
@@ -127,27 +191,39 @@ func (x *UpdateAcceptanceInfo) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use UpdateAcceptanceInfo.ProtoReflect.Descriptor instead.
-func (*UpdateAcceptanceInfo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_update_proto_rawDescGZIP(), []int{1}
-}
-
 func (x *UpdateAcceptanceInfo) GetEventId() int64 {
 	if x != nil {
-		return x.EventId
+		return x.xxx_hidden_EventId
 	}
 	return 0
 }
 
+func (x *UpdateAcceptanceInfo) SetEventId(v int64) {
+	x.xxx_hidden_EventId = v
+}
+
+type UpdateAcceptanceInfo_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// the event ID of the WorkflowExecutionUpdateAcceptedEvent
+	EventId int64
+}
+
+func (b0 UpdateAcceptanceInfo_builder) Build() *UpdateAcceptanceInfo {
+	m0 := &UpdateAcceptanceInfo{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_EventId = b.EventId
+	return m0
+}
+
 // UpdateCompletionInfo contains information about a completed update
 type UpdateCompletionInfo struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// the event ID of the WorkflowExecutionUpdateCompletedEvent
-	EventId int64 `protobuf:"varint,1,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
-	// the ID of the event batch containing the event_id above
-	EventBatchId  int64 `protobuf:"varint,2,opt,name=event_batch_id,json=eventBatchId,proto3" json:"event_batch_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                   protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_EventId      int64                  `protobuf:"varint,1,opt,name=event_id,json=eventId,proto3"`
+	xxx_hidden_EventBatchId int64                  `protobuf:"varint,2,opt,name=event_batch_id,json=eventBatchId,proto3"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
 }
 
 func (x *UpdateCompletionInfo) Reset() {
@@ -175,37 +251,53 @@ func (x *UpdateCompletionInfo) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use UpdateCompletionInfo.ProtoReflect.Descriptor instead.
-func (*UpdateCompletionInfo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_update_proto_rawDescGZIP(), []int{2}
-}
-
 func (x *UpdateCompletionInfo) GetEventId() int64 {
 	if x != nil {
-		return x.EventId
+		return x.xxx_hidden_EventId
 	}
 	return 0
 }
 
 func (x *UpdateCompletionInfo) GetEventBatchId() int64 {
 	if x != nil {
-		return x.EventBatchId
+		return x.xxx_hidden_EventBatchId
 	}
 	return 0
 }
 
+func (x *UpdateCompletionInfo) SetEventId(v int64) {
+	x.xxx_hidden_EventId = v
+}
+
+func (x *UpdateCompletionInfo) SetEventBatchId(v int64) {
+	x.xxx_hidden_EventBatchId = v
+}
+
+type UpdateCompletionInfo_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// the event ID of the WorkflowExecutionUpdateCompletedEvent
+	EventId int64
+	// the ID of the event batch containing the event_id above
+	EventBatchId int64
+}
+
+func (b0 UpdateCompletionInfo_builder) Build() *UpdateCompletionInfo {
+	m0 := &UpdateCompletionInfo{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_EventId = b.EventId
+	x.xxx_hidden_EventBatchId = b.EventBatchId
+	return m0
+}
+
 // UpdateInfo is the persistent state of a single update
 type UpdateInfo struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Types that are valid to be assigned to Value:
-	//
-	//	*UpdateInfo_Acceptance
-	//	*UpdateInfo_Completion
-	//	*UpdateInfo_Admission
-	Value                         isUpdateInfo_Value   `protobuf_oneof:"value"`
-	LastUpdateVersionedTransition *VersionedTransition `protobuf:"bytes,4,opt,name=last_update_versioned_transition,json=lastUpdateVersionedTransition,proto3" json:"last_update_versioned_transition,omitempty"`
-	unknownFields                 protoimpl.UnknownFields
-	sizeCache                     protoimpl.SizeCache
+	state                                    protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Value                         isUpdateInfo_Value     `protobuf_oneof:"value"`
+	xxx_hidden_LastUpdateVersionedTransition *VersionedTransition   `protobuf:"bytes,4,opt,name=last_update_versioned_transition,json=lastUpdateVersionedTransition,proto3"`
+	unknownFields                            protoimpl.UnknownFields
+	sizeCache                                protoimpl.SizeCache
 }
 
 func (x *UpdateInfo) Reset() {
@@ -233,21 +325,9 @@ func (x *UpdateInfo) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use UpdateInfo.ProtoReflect.Descriptor instead.
-func (*UpdateInfo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_update_proto_rawDescGZIP(), []int{3}
-}
-
-func (x *UpdateInfo) GetValue() isUpdateInfo_Value {
-	if x != nil {
-		return x.Value
-	}
-	return nil
-}
-
 func (x *UpdateInfo) GetAcceptance() *UpdateAcceptanceInfo {
 	if x != nil {
-		if x, ok := x.Value.(*UpdateInfo_Acceptance); ok {
+		if x, ok := x.xxx_hidden_Value.(*updateInfo_Acceptance); ok {
 			return x.Acceptance
 		}
 	}
@@ -256,7 +336,7 @@ func (x *UpdateInfo) GetAcceptance() *UpdateAcceptanceInfo {
 
 func (x *UpdateInfo) GetCompletion() *UpdateCompletionInfo {
 	if x != nil {
-		if x, ok := x.Value.(*UpdateInfo_Completion); ok {
+		if x, ok := x.xxx_hidden_Value.(*updateInfo_Completion); ok {
 			return x.Completion
 		}
 	}
@@ -265,7 +345,7 @@ func (x *UpdateInfo) GetCompletion() *UpdateCompletionInfo {
 
 func (x *UpdateInfo) GetAdmission() *UpdateAdmissionInfo {
 	if x != nil {
-		if x, ok := x.Value.(*UpdateInfo_Admission); ok {
+		if x, ok := x.xxx_hidden_Value.(*updateInfo_Admission); ok {
 			return x.Admission
 		}
 	}
@@ -274,44 +354,204 @@ func (x *UpdateInfo) GetAdmission() *UpdateAdmissionInfo {
 
 func (x *UpdateInfo) GetLastUpdateVersionedTransition() *VersionedTransition {
 	if x != nil {
-		return x.LastUpdateVersionedTransition
+		return x.xxx_hidden_LastUpdateVersionedTransition
 	}
 	return nil
+}
+
+func (x *UpdateInfo) SetAcceptance(v *UpdateAcceptanceInfo) {
+	if v == nil {
+		x.xxx_hidden_Value = nil
+		return
+	}
+	x.xxx_hidden_Value = &updateInfo_Acceptance{v}
+}
+
+func (x *UpdateInfo) SetCompletion(v *UpdateCompletionInfo) {
+	if v == nil {
+		x.xxx_hidden_Value = nil
+		return
+	}
+	x.xxx_hidden_Value = &updateInfo_Completion{v}
+}
+
+func (x *UpdateInfo) SetAdmission(v *UpdateAdmissionInfo) {
+	if v == nil {
+		x.xxx_hidden_Value = nil
+		return
+	}
+	x.xxx_hidden_Value = &updateInfo_Admission{v}
+}
+
+func (x *UpdateInfo) SetLastUpdateVersionedTransition(v *VersionedTransition) {
+	x.xxx_hidden_LastUpdateVersionedTransition = v
+}
+
+func (x *UpdateInfo) HasValue() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Value != nil
+}
+
+func (x *UpdateInfo) HasAcceptance() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_Value.(*updateInfo_Acceptance)
+	return ok
+}
+
+func (x *UpdateInfo) HasCompletion() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_Value.(*updateInfo_Completion)
+	return ok
+}
+
+func (x *UpdateInfo) HasAdmission() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_Value.(*updateInfo_Admission)
+	return ok
+}
+
+func (x *UpdateInfo) HasLastUpdateVersionedTransition() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_LastUpdateVersionedTransition != nil
+}
+
+func (x *UpdateInfo) ClearValue() {
+	x.xxx_hidden_Value = nil
+}
+
+func (x *UpdateInfo) ClearAcceptance() {
+	if _, ok := x.xxx_hidden_Value.(*updateInfo_Acceptance); ok {
+		x.xxx_hidden_Value = nil
+	}
+}
+
+func (x *UpdateInfo) ClearCompletion() {
+	if _, ok := x.xxx_hidden_Value.(*updateInfo_Completion); ok {
+		x.xxx_hidden_Value = nil
+	}
+}
+
+func (x *UpdateInfo) ClearAdmission() {
+	if _, ok := x.xxx_hidden_Value.(*updateInfo_Admission); ok {
+		x.xxx_hidden_Value = nil
+	}
+}
+
+func (x *UpdateInfo) ClearLastUpdateVersionedTransition() {
+	x.xxx_hidden_LastUpdateVersionedTransition = nil
+}
+
+const UpdateInfo_Value_not_set_case case_UpdateInfo_Value = 0
+const UpdateInfo_Acceptance_case case_UpdateInfo_Value = 1
+const UpdateInfo_Completion_case case_UpdateInfo_Value = 2
+const UpdateInfo_Admission_case case_UpdateInfo_Value = 3
+
+func (x *UpdateInfo) WhichValue() case_UpdateInfo_Value {
+	if x == nil {
+		return UpdateInfo_Value_not_set_case
+	}
+	switch x.xxx_hidden_Value.(type) {
+	case *updateInfo_Acceptance:
+		return UpdateInfo_Acceptance_case
+	case *updateInfo_Completion:
+		return UpdateInfo_Completion_case
+	case *updateInfo_Admission:
+		return UpdateInfo_Admission_case
+	default:
+		return UpdateInfo_Value_not_set_case
+	}
+}
+
+type UpdateInfo_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Fields of oneof xxx_hidden_Value:
+	// update has been accepted and this is the acceptance metadata
+	Acceptance *UpdateAcceptanceInfo
+	// update has been completed and this is the completion metadata
+	Completion *UpdateCompletionInfo
+	// update has been admitted and this is the admission metadata
+	Admission *UpdateAdmissionInfo
+	// -- end of xxx_hidden_Value
+	LastUpdateVersionedTransition *VersionedTransition
+}
+
+func (b0 UpdateInfo_builder) Build() *UpdateInfo {
+	m0 := &UpdateInfo{}
+	b, x := &b0, m0
+	_, _ = b, x
+	if b.Acceptance != nil {
+		x.xxx_hidden_Value = &updateInfo_Acceptance{b.Acceptance}
+	}
+	if b.Completion != nil {
+		x.xxx_hidden_Value = &updateInfo_Completion{b.Completion}
+	}
+	if b.Admission != nil {
+		x.xxx_hidden_Value = &updateInfo_Admission{b.Admission}
+	}
+	x.xxx_hidden_LastUpdateVersionedTransition = b.LastUpdateVersionedTransition
+	return m0
+}
+
+type case_UpdateInfo_Value protoreflect.FieldNumber
+
+func (x case_UpdateInfo_Value) String() string {
+	switch x {
+	case UpdateInfo_Value_not_set_case:
+		return "UpdateInfoValueNotSetCase"
+	case UpdateInfo_Acceptance_case:
+		return "UpdateInfoAcceptanceCase"
+	case UpdateInfo_Completion_case:
+		return "UpdateInfoCompletionCase"
+	case UpdateInfo_Admission_case:
+		return "UpdateInfoAdmissionCase"
+	default:
+		return strconv.Itoa(int(x))
+	}
+
 }
 
 type isUpdateInfo_Value interface {
 	isUpdateInfo_Value()
 }
 
-type UpdateInfo_Acceptance struct {
+type updateInfo_Acceptance struct {
 	// update has been accepted and this is the acceptance metadata
 	Acceptance *UpdateAcceptanceInfo `protobuf:"bytes,1,opt,name=acceptance,proto3,oneof"`
 }
 
-type UpdateInfo_Completion struct {
+type updateInfo_Completion struct {
 	// update has been completed and this is the completion metadata
 	Completion *UpdateCompletionInfo `protobuf:"bytes,2,opt,name=completion,proto3,oneof"`
 }
 
-type UpdateInfo_Admission struct {
+type updateInfo_Admission struct {
 	// update has been admitted and this is the admission metadata
 	Admission *UpdateAdmissionInfo `protobuf:"bytes,3,opt,name=admission,proto3,oneof"`
 }
 
-func (*UpdateInfo_Acceptance) isUpdateInfo_Value() {}
+func (*updateInfo_Acceptance) isUpdateInfo_Value() {}
 
-func (*UpdateInfo_Completion) isUpdateInfo_Value() {}
+func (*updateInfo_Completion) isUpdateInfo_Value() {}
 
-func (*UpdateInfo_Admission) isUpdateInfo_Value() {}
+func (*updateInfo_Admission) isUpdateInfo_Value() {}
 
 type UpdateAdmissionInfo_HistoryPointer struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// the event ID of the WorkflowExecutionUpdateAdmittedEvent
-	EventId int64 `protobuf:"varint,1,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
-	// the ID of the event batch containing the event_id
-	EventBatchId  int64 `protobuf:"varint,2,opt,name=event_batch_id,json=eventBatchId,proto3" json:"event_batch_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                   protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_EventId      int64                  `protobuf:"varint,1,opt,name=event_id,json=eventId,proto3"`
+	xxx_hidden_EventBatchId int64                  `protobuf:"varint,2,opt,name=event_batch_id,json=eventBatchId,proto3"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
 }
 
 func (x *UpdateAdmissionInfo_HistoryPointer) Reset() {
@@ -339,23 +579,44 @@ func (x *UpdateAdmissionInfo_HistoryPointer) ProtoReflect() protoreflect.Message
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use UpdateAdmissionInfo_HistoryPointer.ProtoReflect.Descriptor instead.
-func (*UpdateAdmissionInfo_HistoryPointer) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_update_proto_rawDescGZIP(), []int{0, 0}
-}
-
 func (x *UpdateAdmissionInfo_HistoryPointer) GetEventId() int64 {
 	if x != nil {
-		return x.EventId
+		return x.xxx_hidden_EventId
 	}
 	return 0
 }
 
 func (x *UpdateAdmissionInfo_HistoryPointer) GetEventBatchId() int64 {
 	if x != nil {
-		return x.EventBatchId
+		return x.xxx_hidden_EventBatchId
 	}
 	return 0
+}
+
+func (x *UpdateAdmissionInfo_HistoryPointer) SetEventId(v int64) {
+	x.xxx_hidden_EventId = v
+}
+
+func (x *UpdateAdmissionInfo_HistoryPointer) SetEventBatchId(v int64) {
+	x.xxx_hidden_EventBatchId = v
+}
+
+type UpdateAdmissionInfo_HistoryPointer_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// the event ID of the WorkflowExecutionUpdateAdmittedEvent
+	EventId int64
+	// the ID of the event batch containing the event_id
+	EventBatchId int64
+}
+
+func (b0 UpdateAdmissionInfo_HistoryPointer_builder) Build() *UpdateAdmissionInfo_HistoryPointer {
+	m0 := &UpdateAdmissionInfo_HistoryPointer{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_EventId = b.EventId
+	x.xxx_hidden_EventBatchId = b.EventBatchId
+	return m0
 }
 
 var File_temporal_server_api_persistence_v1_update_proto protoreflect.FileDescriptor
@@ -387,18 +648,6 @@ const file_temporal_server_api_persistence_v1_update_proto_rawDesc = "" +
 	" last_update_versioned_transition\x18\x04 \x01(\v27.temporal.server.api.persistence.v1.VersionedTransitionR\x1dlastUpdateVersionedTransitionB\a\n" +
 	"\x05valueB6Z4go.temporal.io/server/api/persistence/v1;persistenceb\x06proto3"
 
-var (
-	file_temporal_server_api_persistence_v1_update_proto_rawDescOnce sync.Once
-	file_temporal_server_api_persistence_v1_update_proto_rawDescData []byte
-)
-
-func file_temporal_server_api_persistence_v1_update_proto_rawDescGZIP() []byte {
-	file_temporal_server_api_persistence_v1_update_proto_rawDescOnce.Do(func() {
-		file_temporal_server_api_persistence_v1_update_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_api_persistence_v1_update_proto_rawDesc), len(file_temporal_server_api_persistence_v1_update_proto_rawDesc)))
-	})
-	return file_temporal_server_api_persistence_v1_update_proto_rawDescData
-}
-
 var file_temporal_server_api_persistence_v1_update_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_temporal_server_api_persistence_v1_update_proto_goTypes = []any{
 	(*UpdateAdmissionInfo)(nil),                // 0: temporal.server.api.persistence.v1.UpdateAdmissionInfo
@@ -428,12 +677,12 @@ func file_temporal_server_api_persistence_v1_update_proto_init() {
 	}
 	file_temporal_server_api_persistence_v1_hsm_proto_init()
 	file_temporal_server_api_persistence_v1_update_proto_msgTypes[0].OneofWrappers = []any{
-		(*UpdateAdmissionInfo_HistoryPointer_)(nil),
+		(*updateAdmissionInfo_HistoryPointer_)(nil),
 	}
 	file_temporal_server_api_persistence_v1_update_proto_msgTypes[3].OneofWrappers = []any{
-		(*UpdateInfo_Acceptance)(nil),
-		(*UpdateInfo_Completion)(nil),
-		(*UpdateInfo_Admission)(nil),
+		(*updateInfo_Acceptance)(nil),
+		(*updateInfo_Completion)(nil),
+		(*updateInfo_Admission)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{

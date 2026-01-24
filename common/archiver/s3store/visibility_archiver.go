@@ -90,7 +90,7 @@ func (v *visibilityArchiver) Archive(
 	request *archiverspb.VisibilityRecord,
 	opts ...archiver.ArchiveOption,
 ) (err error) {
-	handler := v.metricsHandler.WithTags(metrics.OperationTag(metrics.VisibilityArchiverScope), metrics.NamespaceTag(request.Namespace))
+	handler := v.metricsHandler.WithTags(metrics.OperationTag(metrics.VisibilityArchiverScope), metrics.NamespaceTag(request.GetNamespace()))
 	featureCatalog := archiver.GetFeatureCatalog(opts...)
 	startTime := time.Now().UTC()
 	logger := archiver.TagLoggerWithArchiveVisibilityRequestAndURI(v.logger, request, URI.String())
@@ -141,10 +141,10 @@ func (v *visibilityArchiver) Archive(
 
 func createIndexesToArchive(request *archiverspb.VisibilityRecord) []indexToArchive {
 	return []indexToArchive{
-		{primaryIndexKeyWorkflowTypeName, request.WorkflowTypeName, secondaryIndexKeyCloseTimeout, timestamp.TimeValue(request.CloseTime)},
-		{primaryIndexKeyWorkflowTypeName, request.WorkflowTypeName, secondaryIndexKeyStartTimeout, timestamp.TimeValue(request.StartTime)},
-		{primaryIndexKeyWorkflowID, request.GetWorkflowId(), secondaryIndexKeyCloseTimeout, timestamp.TimeValue(request.CloseTime)},
-		{primaryIndexKeyWorkflowID, request.GetWorkflowId(), secondaryIndexKeyStartTimeout, timestamp.TimeValue(request.StartTime)},
+		{primaryIndexKeyWorkflowTypeName, request.GetWorkflowTypeName(), secondaryIndexKeyCloseTimeout, timestamp.TimeValue(request.GetCloseTime())},
+		{primaryIndexKeyWorkflowTypeName, request.GetWorkflowTypeName(), secondaryIndexKeyStartTimeout, timestamp.TimeValue(request.GetStartTime())},
+		{primaryIndexKeyWorkflowID, request.GetWorkflowId(), secondaryIndexKeyCloseTimeout, timestamp.TimeValue(request.GetCloseTime())},
+		{primaryIndexKeyWorkflowID, request.GetWorkflowId(), secondaryIndexKeyStartTimeout, timestamp.TimeValue(request.GetStartTime())},
 	}
 }
 

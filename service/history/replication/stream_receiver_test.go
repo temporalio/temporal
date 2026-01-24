@@ -151,14 +151,12 @@ func (s *streamReceiverSuite) TestAckMessage_SyncStatus_ReceiverModeSingleStack(
 
 	_, err := s.streamReceiver.ackMessage(s.stream)
 	s.NoError(err)
-	s.Equal([]*adminservice.StreamWorkflowReplicationMessagesRequest{{
-		Attributes: &adminservice.StreamWorkflowReplicationMessagesRequest_SyncReplicationState{
-			SyncReplicationState: &replicationspb.SyncReplicationState{
-				InclusiveLowWatermark:     watermarkInfo.Watermark,
-				InclusiveLowWatermarkTime: timestamppb.New(watermarkInfo.Timestamp),
-			},
-		},
-	},
+	s.Equal([]*adminservice.StreamWorkflowReplicationMessagesRequest{adminservice.StreamWorkflowReplicationMessagesRequest_builder{
+		SyncReplicationState: replicationspb.SyncReplicationState_builder{
+			InclusiveLowWatermark:     watermarkInfo.Watermark,
+			InclusiveLowWatermarkTime: timestamppb.New(watermarkInfo.Timestamp),
+		}.Build(),
+	}.Build(),
 	}, s.stream.requests)
 }
 
@@ -244,44 +242,40 @@ func (s *streamReceiverSuite) TestAckMessage_SyncStatus_ReceiverModeTieredStack(
 	s.lowPriorityTaskTracker.EXPECT().Size().Return(0).AnyTimes()
 	_, err := s.streamReceiver.ackMessage(s.stream)
 	s.NoError(err)
-	s.Equal([]*adminservice.StreamWorkflowReplicationMessagesRequest{{
-		Attributes: &adminservice.StreamWorkflowReplicationMessagesRequest_SyncReplicationState{
-			SyncReplicationState: &replicationspb.SyncReplicationState{
+	s.Equal([]*adminservice.StreamWorkflowReplicationMessagesRequest{adminservice.StreamWorkflowReplicationMessagesRequest_builder{
+		SyncReplicationState: replicationspb.SyncReplicationState_builder{
+			InclusiveLowWatermark:     highWatermarkInfo.Watermark,
+			InclusiveLowWatermarkTime: timestamppb.New(highWatermarkInfo.Timestamp),
+			HighPriorityState: replicationspb.ReplicationState_builder{
 				InclusiveLowWatermark:     highWatermarkInfo.Watermark,
 				InclusiveLowWatermarkTime: timestamppb.New(highWatermarkInfo.Timestamp),
-				HighPriorityState: &replicationspb.ReplicationState{
-					InclusiveLowWatermark:     highWatermarkInfo.Watermark,
-					InclusiveLowWatermarkTime: timestamppb.New(highWatermarkInfo.Timestamp),
-					FlowControlCommand:        enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_RESUME,
-				},
-				LowPriorityState: &replicationspb.ReplicationState{
-					InclusiveLowWatermark:     lowWatermarkInfo.Watermark,
-					InclusiveLowWatermarkTime: timestamppb.New(lowWatermarkInfo.Timestamp),
-					FlowControlCommand:        enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE,
-				},
-			},
-		},
-	},
+				FlowControlCommand:        enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_RESUME,
+			}.Build(),
+			LowPriorityState: replicationspb.ReplicationState_builder{
+				InclusiveLowWatermark:     lowWatermarkInfo.Watermark,
+				InclusiveLowWatermarkTime: timestamppb.New(lowWatermarkInfo.Timestamp),
+				FlowControlCommand:        enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE,
+			}.Build(),
+		}.Build(),
+	}.Build(),
 	}, s.stream.requests)
 }
 
 func (s *streamReceiverSuite) TestProcessMessage_TrackSubmit_SingleStack() {
-	replicationTask := &replicationspb.ReplicationTask{
+	replicationTask := replicationspb.ReplicationTask_builder{
 		TaskType:       enumsspb.ReplicationTaskType(-1),
 		SourceTaskId:   rand.Int63(),
 		VisibilityTime: timestamppb.New(time.Unix(0, rand.Int63())),
 		Priority:       enumsspb.TASK_PRIORITY_LOW,
-	}
+	}.Build()
 	streamResp := StreamResp[*adminservice.StreamWorkflowReplicationMessagesResponse]{
-		Resp: &adminservice.StreamWorkflowReplicationMessagesResponse{
-			Attributes: &adminservice.StreamWorkflowReplicationMessagesResponse_Messages{
-				Messages: &replicationspb.WorkflowReplicationMessages{
-					ReplicationTasks:           []*replicationspb.ReplicationTask{replicationTask},
-					ExclusiveHighWatermark:     rand.Int63(),
-					ExclusiveHighWatermarkTime: timestamppb.New(time.Unix(0, rand.Int63())),
-				},
-			},
-		},
+		Resp: adminservice.StreamWorkflowReplicationMessagesResponse_builder{
+			Messages: replicationspb.WorkflowReplicationMessages_builder{
+				ReplicationTasks:           []*replicationspb.ReplicationTask{replicationTask},
+				ExclusiveHighWatermark:     rand.Int63(),
+				ExclusiveHighWatermarkTime: timestamppb.New(time.Unix(0, rand.Int63())),
+			}.Build(),
+		}.Build(),
 		Err: nil,
 	}
 	s.stream.respChan <- streamResp
@@ -289,8 +283,8 @@ func (s *streamReceiverSuite) TestProcessMessage_TrackSubmit_SingleStack() {
 
 	s.highPriorityTaskTracker.EXPECT().TrackTasks(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(highWatermarkInfo WatermarkInfo, tasks ...TrackableExecutableTask) []TrackableExecutableTask {
-			s.Equal(streamResp.Resp.GetMessages().ExclusiveHighWatermark, highWatermarkInfo.Watermark)
-			s.Equal(streamResp.Resp.GetMessages().ExclusiveHighWatermarkTime.AsTime(), highWatermarkInfo.Timestamp)
+			s.Equal(streamResp.Resp.GetMessages().GetExclusiveHighWatermark(), highWatermarkInfo.Watermark)
+			s.Equal(streamResp.Resp.GetMessages().GetExclusiveHighWatermarkTime().AsTime(), highWatermarkInfo.Timestamp)
 			s.Equal(1, len(tasks))
 			s.IsType(&ExecutableUnknownTask{}, tasks[0])
 			return []TrackableExecutableTask{tasks[0]}
@@ -306,23 +300,21 @@ func (s *streamReceiverSuite) TestProcessMessage_TrackSubmit_SingleStack() {
 
 func (s *streamReceiverSuite) TestProcessMessage_TrackSubmit_SingleStack_ReceivedPrioritizedTask() {
 	s.streamReceiver.receiverMode = ReceiverModeSingleStack
-	replicationTask := &replicationspb.ReplicationTask{
+	replicationTask := replicationspb.ReplicationTask_builder{
 		TaskType:       enumsspb.ReplicationTaskType(-1),
 		SourceTaskId:   rand.Int63(),
 		VisibilityTime: timestamppb.New(time.Unix(0, rand.Int63())),
 		Priority:       enumsspb.TASK_PRIORITY_HIGH,
-	}
+	}.Build()
 	streamResp := StreamResp[*adminservice.StreamWorkflowReplicationMessagesResponse]{
-		Resp: &adminservice.StreamWorkflowReplicationMessagesResponse{
-			Attributes: &adminservice.StreamWorkflowReplicationMessagesResponse_Messages{
-				Messages: &replicationspb.WorkflowReplicationMessages{
-					ReplicationTasks:           []*replicationspb.ReplicationTask{replicationTask},
-					ExclusiveHighWatermark:     rand.Int63(),
-					ExclusiveHighWatermarkTime: timestamppb.New(time.Unix(0, rand.Int63())),
-					Priority:                   enumsspb.TASK_PRIORITY_HIGH,
-				},
-			},
-		},
+		Resp: adminservice.StreamWorkflowReplicationMessagesResponse_builder{
+			Messages: replicationspb.WorkflowReplicationMessages_builder{
+				ReplicationTasks:           []*replicationspb.ReplicationTask{replicationTask},
+				ExclusiveHighWatermark:     rand.Int63(),
+				ExclusiveHighWatermarkTime: timestamppb.New(time.Unix(0, rand.Int63())),
+				Priority:                   enumsspb.TASK_PRIORITY_HIGH,
+			}.Build(),
+		}.Build(),
 		Err: nil,
 	}
 	s.stream.respChan <- streamResp
@@ -335,21 +327,19 @@ func (s *streamReceiverSuite) TestProcessMessage_TrackSubmit_SingleStack_Receive
 
 func (s *streamReceiverSuite) TestProcessMessage_TrackSubmit_TieredStack_ReceivedNonPrioritizedTask() {
 	s.streamReceiver.receiverMode = ReceiverModeTieredStack
-	replicationTask := &replicationspb.ReplicationTask{
+	replicationTask := replicationspb.ReplicationTask_builder{
 		TaskType:       enumsspb.ReplicationTaskType(-1),
 		SourceTaskId:   rand.Int63(),
 		VisibilityTime: timestamppb.New(time.Unix(0, rand.Int63())),
-	}
+	}.Build()
 	streamResp := StreamResp[*adminservice.StreamWorkflowReplicationMessagesResponse]{
-		Resp: &adminservice.StreamWorkflowReplicationMessagesResponse{
-			Attributes: &adminservice.StreamWorkflowReplicationMessagesResponse_Messages{
-				Messages: &replicationspb.WorkflowReplicationMessages{
-					ReplicationTasks:           []*replicationspb.ReplicationTask{replicationTask},
-					ExclusiveHighWatermark:     rand.Int63(),
-					ExclusiveHighWatermarkTime: timestamppb.New(time.Unix(0, rand.Int63())),
-				},
-			},
-		},
+		Resp: adminservice.StreamWorkflowReplicationMessagesResponse_builder{
+			Messages: replicationspb.WorkflowReplicationMessages_builder{
+				ReplicationTasks:           []*replicationspb.ReplicationTask{replicationTask},
+				ExclusiveHighWatermark:     rand.Int63(),
+				ExclusiveHighWatermarkTime: timestamppb.New(time.Unix(0, rand.Int63())),
+			}.Build(),
+		}.Build(),
 		Err: nil,
 	}
 	s.stream.respChan <- streamResp
@@ -361,43 +351,39 @@ func (s *streamReceiverSuite) TestProcessMessage_TrackSubmit_TieredStack_Receive
 }
 
 func (s *streamReceiverSuite) TestProcessMessage_TrackSubmit_TieredStack() {
-	replicationTask := &replicationspb.ReplicationTask{
+	replicationTask := replicationspb.ReplicationTask_builder{
 		TaskType:       enumsspb.ReplicationTaskType(-1),
 		SourceTaskId:   rand.Int63(),
 		VisibilityTime: timestamppb.New(time.Unix(0, rand.Int63())),
 		Priority:       enumsspb.TASK_PRIORITY_HIGH,
-	}
+	}.Build()
 	streamResp1 := StreamResp[*adminservice.StreamWorkflowReplicationMessagesResponse]{
-		Resp: &adminservice.StreamWorkflowReplicationMessagesResponse{
-			Attributes: &adminservice.StreamWorkflowReplicationMessagesResponse_Messages{
-				Messages: &replicationspb.WorkflowReplicationMessages{
-					ReplicationTasks:           []*replicationspb.ReplicationTask{replicationTask},
-					ExclusiveHighWatermark:     rand.Int63(),
-					ExclusiveHighWatermarkTime: timestamppb.New(time.Unix(0, rand.Int63())),
-					Priority:                   enumsspb.TASK_PRIORITY_HIGH,
-				},
-			},
-		},
+		Resp: adminservice.StreamWorkflowReplicationMessagesResponse_builder{
+			Messages: replicationspb.WorkflowReplicationMessages_builder{
+				ReplicationTasks:           []*replicationspb.ReplicationTask{replicationTask},
+				ExclusiveHighWatermark:     rand.Int63(),
+				ExclusiveHighWatermarkTime: timestamppb.New(time.Unix(0, rand.Int63())),
+				Priority:                   enumsspb.TASK_PRIORITY_HIGH,
+			}.Build(),
+		}.Build(),
 		Err: nil,
 	}
 	streamResp2 := StreamResp[*adminservice.StreamWorkflowReplicationMessagesResponse]{
-		Resp: &adminservice.StreamWorkflowReplicationMessagesResponse{
-			Attributes: &adminservice.StreamWorkflowReplicationMessagesResponse_Messages{
-				Messages: &replicationspb.WorkflowReplicationMessages{
-					ReplicationTasks: []*replicationspb.ReplicationTask{
-						{
-							TaskType:       enumsspb.ReplicationTaskType(-1),
-							SourceTaskId:   rand.Int63(),
-							VisibilityTime: timestamppb.New(time.Unix(0, rand.Int63())),
-							Priority:       enumsspb.TASK_PRIORITY_LOW,
-						},
-					},
-					ExclusiveHighWatermark:     rand.Int63(),
-					ExclusiveHighWatermarkTime: timestamppb.New(time.Unix(0, rand.Int63())),
-					Priority:                   enumsspb.TASK_PRIORITY_LOW,
+		Resp: adminservice.StreamWorkflowReplicationMessagesResponse_builder{
+			Messages: replicationspb.WorkflowReplicationMessages_builder{
+				ReplicationTasks: []*replicationspb.ReplicationTask{
+					replicationspb.ReplicationTask_builder{
+						TaskType:       enumsspb.ReplicationTaskType(-1),
+						SourceTaskId:   rand.Int63(),
+						VisibilityTime: timestamppb.New(time.Unix(0, rand.Int63())),
+						Priority:       enumsspb.TASK_PRIORITY_LOW,
+					}.Build(),
 				},
-			},
-		},
+				ExclusiveHighWatermark:     rand.Int63(),
+				ExclusiveHighWatermarkTime: timestamppb.New(time.Unix(0, rand.Int63())),
+				Priority:                   enumsspb.TASK_PRIORITY_LOW,
+			}.Build(),
+		}.Build(),
 		Err: nil,
 	}
 	s.stream.respChan <- streamResp1
@@ -406,8 +392,8 @@ func (s *streamReceiverSuite) TestProcessMessage_TrackSubmit_TieredStack() {
 
 	s.highPriorityTaskTracker.EXPECT().TrackTasks(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(highWatermarkInfo WatermarkInfo, tasks ...TrackableExecutableTask) []TrackableExecutableTask {
-			s.Equal(streamResp1.Resp.GetMessages().ExclusiveHighWatermark, highWatermarkInfo.Watermark)
-			s.Equal(streamResp1.Resp.GetMessages().ExclusiveHighWatermarkTime.AsTime(), highWatermarkInfo.Timestamp)
+			s.Equal(streamResp1.Resp.GetMessages().GetExclusiveHighWatermark(), highWatermarkInfo.Watermark)
+			s.Equal(streamResp1.Resp.GetMessages().GetExclusiveHighWatermarkTime().AsTime(), highWatermarkInfo.Timestamp)
 			s.Equal(1, len(tasks))
 			s.IsType(&ExecutableUnknownTask{}, tasks[0])
 			return []TrackableExecutableTask{tasks[0]}
@@ -415,8 +401,8 @@ func (s *streamReceiverSuite) TestProcessMessage_TrackSubmit_TieredStack() {
 	)
 	s.lowPriorityTaskTracker.EXPECT().TrackTasks(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(highWatermarkInfo WatermarkInfo, tasks ...TrackableExecutableTask) []TrackableExecutableTask {
-			s.Equal(streamResp2.Resp.GetMessages().ExclusiveHighWatermark, highWatermarkInfo.Watermark)
-			s.Equal(streamResp2.Resp.GetMessages().ExclusiveHighWatermarkTime.AsTime(), highWatermarkInfo.Timestamp)
+			s.Equal(streamResp2.Resp.GetMessages().GetExclusiveHighWatermark(), highWatermarkInfo.Watermark)
+			s.Equal(streamResp2.Resp.GetMessages().GetExclusiveHighWatermarkTime().AsTime(), highWatermarkInfo.Timestamp)
 			s.Equal(1, len(tasks))
 			s.IsType(&ExecutableUnknownTask{}, tasks[0])
 			return []TrackableExecutableTask{tasks[0]}

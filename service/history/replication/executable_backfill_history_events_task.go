@@ -50,7 +50,7 @@ func NewExecutableBackfillHistoryEventsTask(
 	return &ExecutableBackfillHistoryEventsTask{
 		ProcessToolBox: processToolBox,
 
-		WorkflowKey: definition.NewWorkflowKey(task.NamespaceId, task.WorkflowId, task.RunId),
+		WorkflowKey: definition.NewWorkflowKey(task.GetNamespaceId(), task.GetWorkflowId(), task.GetRunId()),
 		ExecutableTask: NewExecutableTask(
 			processToolBox,
 			taskID,
@@ -122,11 +122,11 @@ func (e *ExecutableBackfillHistoryEventsTask) Execute() error {
 	return engine.BackfillHistoryEvents(ctx, &historyi.BackfillHistoryEventsRequest{
 		WorkflowKey:         e.WorkflowKey,
 		SourceClusterName:   e.SourceClusterName(),
-		VersionedHistory:    e.ReplicationTask().VersionedTransition,
-		VersionHistoryItems: e.taskAttr.EventVersionHistory,
+		VersionedHistory:    e.ReplicationTask().GetVersionedTransition(),
+		VersionHistoryItems: e.taskAttr.GetEventVersionHistory(),
 		Events:              events,
 		NewEvents:           newRunEvents,
-		NewRunID:            e.taskAttr.NewRunInfo.RunId,
+		NewRunID:            e.taskAttr.GetNewRunInfo().GetRunId(),
 	})
 
 }
@@ -192,9 +192,9 @@ func (e *ExecutableBackfillHistoryEventsTask) HandleErr(err error) error {
 		}
 		ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout(), callerInfo)
 		defer cancel()
-		history := &historyspb.VersionHistory{
-			Items: e.taskAttr.EventVersionHistory,
-		}
+		history := historyspb.VersionHistory_builder{
+			Items: e.taskAttr.GetEventVersionHistory(),
+		}.Build()
 		startEvent := taskErr.StartEventId + 1
 		endEvent := taskErr.EndEventId - 1
 		startEventVersion, err := versionhistory.GetVersionHistoryEventVersion(history, startEvent)
@@ -232,7 +232,7 @@ func (e *ExecutableBackfillHistoryEventsTask) HandleErr(err error) error {
 
 func (e *ExecutableBackfillHistoryEventsTask) getDeserializedEvents() (_ [][]*historypb.HistoryEvent, _ []*historypb.HistoryEvent, retError error) {
 	eventBatches := [][]*historypb.HistoryEvent{}
-	for _, eventsBlob := range e.taskAttr.EventBatches {
+	for _, eventsBlob := range e.taskAttr.GetEventBatches() {
 		events, err := e.Serializer.DeserializeEvents(eventsBlob)
 		if err != nil {
 			e.Logger.Error("unable to deserialize history events",
@@ -247,7 +247,7 @@ func (e *ExecutableBackfillHistoryEventsTask) getDeserializedEvents() (_ [][]*hi
 		eventBatches = append(eventBatches, events)
 	}
 
-	newRunEvents, err := e.Serializer.DeserializeEvents(e.taskAttr.NewRunInfo.EventBatch)
+	newRunEvents, err := e.Serializer.DeserializeEvents(e.taskAttr.GetNewRunInfo().GetEventBatch())
 	if err != nil {
 		e.Logger.Error("unable to deserialize new run history events",
 			tag.WorkflowNamespaceID(e.NamespaceID),

@@ -19,12 +19,12 @@ func TestGenerateWorkflowID(t *testing.T) {
 
 func TestGenerateRequestID(t *testing.T) {
 	scheduler := &Scheduler{
-		SchedulerState: &schedulespb.SchedulerState{
+		SchedulerState: schedulespb.SchedulerState_builder{
 			Namespace:     "ns",
 			NamespaceId:   "nsid",
 			ScheduleId:    "mysched",
 			ConflictToken: 10,
-		},
+		}.Build(),
 	}
 	nominalTime := time.Now()
 	actualTime := time.Now()

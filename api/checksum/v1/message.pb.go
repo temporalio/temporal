@@ -8,7 +8,6 @@ package checksum
 
 import (
 	reflect "reflect"
-	sync "sync"
 	unsafe "unsafe"
 
 	v11 "go.temporal.io/api/enums/v1"
@@ -26,35 +25,35 @@ const (
 )
 
 type MutableStateChecksumPayload struct {
-	state                             protoimpl.MessageState      `protogen:"open.v1"`
-	CancelRequested                   bool                        `protobuf:"varint,1,opt,name=cancel_requested,json=cancelRequested,proto3" json:"cancel_requested,omitempty"`
-	State                             v1.WorkflowExecutionState   `protobuf:"varint,2,opt,name=state,proto3,enum=temporal.server.api.enums.v1.WorkflowExecutionState" json:"state,omitempty"`
-	Status                            v11.WorkflowExecutionStatus `protobuf:"varint,3,opt,name=status,proto3,enum=temporal.api.enums.v1.WorkflowExecutionStatus" json:"status,omitempty"`
-	LastWriteVersion                  int64                       `protobuf:"varint,4,opt,name=last_write_version,json=lastWriteVersion,proto3" json:"last_write_version,omitempty"`
-	LastWriteEventId                  int64                       `protobuf:"varint,5,opt,name=last_write_event_id,json=lastWriteEventId,proto3" json:"last_write_event_id,omitempty"`
-	LastFirstEventId                  int64                       `protobuf:"varint,6,opt,name=last_first_event_id,json=lastFirstEventId,proto3" json:"last_first_event_id,omitempty"`
-	NextEventId                       int64                       `protobuf:"varint,7,opt,name=next_event_id,json=nextEventId,proto3" json:"next_event_id,omitempty"`
-	LastProcessedEventId              int64                       `protobuf:"varint,8,opt,name=last_processed_event_id,json=lastProcessedEventId,proto3" json:"last_processed_event_id,omitempty"`
-	SignalCount                       int64                       `protobuf:"varint,9,opt,name=signal_count,json=signalCount,proto3" json:"signal_count,omitempty"`
-	ActivityCount                     int64                       `protobuf:"varint,21,opt,name=activity_count,json=activityCount,proto3" json:"activity_count,omitempty"`
-	ChildExecutionCount               int64                       `protobuf:"varint,22,opt,name=child_execution_count,json=childExecutionCount,proto3" json:"child_execution_count,omitempty"`
-	UserTimerCount                    int64                       `protobuf:"varint,23,opt,name=user_timer_count,json=userTimerCount,proto3" json:"user_timer_count,omitempty"`
-	RequestCancelExternalCount        int64                       `protobuf:"varint,24,opt,name=request_cancel_external_count,json=requestCancelExternalCount,proto3" json:"request_cancel_external_count,omitempty"`
-	SignalExternalCount               int64                       `protobuf:"varint,25,opt,name=signal_external_count,json=signalExternalCount,proto3" json:"signal_external_count,omitempty"`
-	WorkflowTaskAttempt               int32                       `protobuf:"varint,10,opt,name=workflow_task_attempt,json=workflowTaskAttempt,proto3" json:"workflow_task_attempt,omitempty"`
-	WorkflowTaskVersion               int64                       `protobuf:"varint,11,opt,name=workflow_task_version,json=workflowTaskVersion,proto3" json:"workflow_task_version,omitempty"`
-	WorkflowTaskScheduledEventId      int64                       `protobuf:"varint,12,opt,name=workflow_task_scheduled_event_id,json=workflowTaskScheduledEventId,proto3" json:"workflow_task_scheduled_event_id,omitempty"`
-	WorkflowTaskStartedEventId        int64                       `protobuf:"varint,13,opt,name=workflow_task_started_event_id,json=workflowTaskStartedEventId,proto3" json:"workflow_task_started_event_id,omitempty"`
-	PendingTimerStartedEventIds       []int64                     `protobuf:"varint,14,rep,packed,name=pending_timer_started_event_ids,json=pendingTimerStartedEventIds,proto3" json:"pending_timer_started_event_ids,omitempty"`
-	PendingActivityScheduledEventIds  []int64                     `protobuf:"varint,15,rep,packed,name=pending_activity_scheduled_event_ids,json=pendingActivityScheduledEventIds,proto3" json:"pending_activity_scheduled_event_ids,omitempty"`
-	PendingSignalInitiatedEventIds    []int64                     `protobuf:"varint,16,rep,packed,name=pending_signal_initiated_event_ids,json=pendingSignalInitiatedEventIds,proto3" json:"pending_signal_initiated_event_ids,omitempty"`
-	PendingReqCancelInitiatedEventIds []int64                     `protobuf:"varint,17,rep,packed,name=pending_req_cancel_initiated_event_ids,json=pendingReqCancelInitiatedEventIds,proto3" json:"pending_req_cancel_initiated_event_ids,omitempty"`
-	PendingChildInitiatedEventIds     []int64                     `protobuf:"varint,18,rep,packed,name=pending_child_initiated_event_ids,json=pendingChildInitiatedEventIds,proto3" json:"pending_child_initiated_event_ids,omitempty"`
-	PendingChasmNodePaths             []string                    `protobuf:"bytes,26,rep,name=pending_chasm_node_paths,json=pendingChasmNodePaths,proto3" json:"pending_chasm_node_paths,omitempty"`
-	StickyTaskQueueName               string                      `protobuf:"bytes,19,opt,name=sticky_task_queue_name,json=stickyTaskQueueName,proto3" json:"sticky_task_queue_name,omitempty"`
-	VersionHistories                  *v12.VersionHistories       `protobuf:"bytes,20,opt,name=version_histories,json=versionHistories,proto3" json:"version_histories,omitempty"`
-	unknownFields                     protoimpl.UnknownFields
-	sizeCache                         protoimpl.SizeCache
+	state                                        protoimpl.MessageState      `protogen:"opaque.v1"`
+	xxx_hidden_CancelRequested                   bool                        `protobuf:"varint,1,opt,name=cancel_requested,json=cancelRequested,proto3"`
+	xxx_hidden_State                             v1.WorkflowExecutionState   `protobuf:"varint,2,opt,name=state,proto3,enum=temporal.server.api.enums.v1.WorkflowExecutionState"`
+	xxx_hidden_Status                            v11.WorkflowExecutionStatus `protobuf:"varint,3,opt,name=status,proto3,enum=temporal.api.enums.v1.WorkflowExecutionStatus"`
+	xxx_hidden_LastWriteVersion                  int64                       `protobuf:"varint,4,opt,name=last_write_version,json=lastWriteVersion,proto3"`
+	xxx_hidden_LastWriteEventId                  int64                       `protobuf:"varint,5,opt,name=last_write_event_id,json=lastWriteEventId,proto3"`
+	xxx_hidden_LastFirstEventId                  int64                       `protobuf:"varint,6,opt,name=last_first_event_id,json=lastFirstEventId,proto3"`
+	xxx_hidden_NextEventId                       int64                       `protobuf:"varint,7,opt,name=next_event_id,json=nextEventId,proto3"`
+	xxx_hidden_LastProcessedEventId              int64                       `protobuf:"varint,8,opt,name=last_processed_event_id,json=lastProcessedEventId,proto3"`
+	xxx_hidden_SignalCount                       int64                       `protobuf:"varint,9,opt,name=signal_count,json=signalCount,proto3"`
+	xxx_hidden_ActivityCount                     int64                       `protobuf:"varint,21,opt,name=activity_count,json=activityCount,proto3"`
+	xxx_hidden_ChildExecutionCount               int64                       `protobuf:"varint,22,opt,name=child_execution_count,json=childExecutionCount,proto3"`
+	xxx_hidden_UserTimerCount                    int64                       `protobuf:"varint,23,opt,name=user_timer_count,json=userTimerCount,proto3"`
+	xxx_hidden_RequestCancelExternalCount        int64                       `protobuf:"varint,24,opt,name=request_cancel_external_count,json=requestCancelExternalCount,proto3"`
+	xxx_hidden_SignalExternalCount               int64                       `protobuf:"varint,25,opt,name=signal_external_count,json=signalExternalCount,proto3"`
+	xxx_hidden_WorkflowTaskAttempt               int32                       `protobuf:"varint,10,opt,name=workflow_task_attempt,json=workflowTaskAttempt,proto3"`
+	xxx_hidden_WorkflowTaskVersion               int64                       `protobuf:"varint,11,opt,name=workflow_task_version,json=workflowTaskVersion,proto3"`
+	xxx_hidden_WorkflowTaskScheduledEventId      int64                       `protobuf:"varint,12,opt,name=workflow_task_scheduled_event_id,json=workflowTaskScheduledEventId,proto3"`
+	xxx_hidden_WorkflowTaskStartedEventId        int64                       `protobuf:"varint,13,opt,name=workflow_task_started_event_id,json=workflowTaskStartedEventId,proto3"`
+	xxx_hidden_PendingTimerStartedEventIds       []int64                     `protobuf:"varint,14,rep,packed,name=pending_timer_started_event_ids,json=pendingTimerStartedEventIds,proto3"`
+	xxx_hidden_PendingActivityScheduledEventIds  []int64                     `protobuf:"varint,15,rep,packed,name=pending_activity_scheduled_event_ids,json=pendingActivityScheduledEventIds,proto3"`
+	xxx_hidden_PendingSignalInitiatedEventIds    []int64                     `protobuf:"varint,16,rep,packed,name=pending_signal_initiated_event_ids,json=pendingSignalInitiatedEventIds,proto3"`
+	xxx_hidden_PendingReqCancelInitiatedEventIds []int64                     `protobuf:"varint,17,rep,packed,name=pending_req_cancel_initiated_event_ids,json=pendingReqCancelInitiatedEventIds,proto3"`
+	xxx_hidden_PendingChildInitiatedEventIds     []int64                     `protobuf:"varint,18,rep,packed,name=pending_child_initiated_event_ids,json=pendingChildInitiatedEventIds,proto3"`
+	xxx_hidden_PendingChasmNodePaths             []string                    `protobuf:"bytes,26,rep,name=pending_chasm_node_paths,json=pendingChasmNodePaths,proto3"`
+	xxx_hidden_StickyTaskQueueName               string                      `protobuf:"bytes,19,opt,name=sticky_task_queue_name,json=stickyTaskQueueName,proto3"`
+	xxx_hidden_VersionHistories                  *v12.VersionHistories       `protobuf:"bytes,20,opt,name=version_histories,json=versionHistories,proto3"`
+	unknownFields                                protoimpl.UnknownFields
+	sizeCache                                    protoimpl.SizeCache
 }
 
 func (x *MutableStateChecksumPayload) Reset() {
@@ -82,191 +81,365 @@ func (x *MutableStateChecksumPayload) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use MutableStateChecksumPayload.ProtoReflect.Descriptor instead.
-func (*MutableStateChecksumPayload) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_checksum_v1_message_proto_rawDescGZIP(), []int{0}
-}
-
 func (x *MutableStateChecksumPayload) GetCancelRequested() bool {
 	if x != nil {
-		return x.CancelRequested
+		return x.xxx_hidden_CancelRequested
 	}
 	return false
 }
 
 func (x *MutableStateChecksumPayload) GetState() v1.WorkflowExecutionState {
 	if x != nil {
-		return x.State
+		return x.xxx_hidden_State
 	}
 	return v1.WorkflowExecutionState(0)
 }
 
 func (x *MutableStateChecksumPayload) GetStatus() v11.WorkflowExecutionStatus {
 	if x != nil {
-		return x.Status
+		return x.xxx_hidden_Status
 	}
 	return v11.WorkflowExecutionStatus(0)
 }
 
 func (x *MutableStateChecksumPayload) GetLastWriteVersion() int64 {
 	if x != nil {
-		return x.LastWriteVersion
+		return x.xxx_hidden_LastWriteVersion
 	}
 	return 0
 }
 
 func (x *MutableStateChecksumPayload) GetLastWriteEventId() int64 {
 	if x != nil {
-		return x.LastWriteEventId
+		return x.xxx_hidden_LastWriteEventId
 	}
 	return 0
 }
 
 func (x *MutableStateChecksumPayload) GetLastFirstEventId() int64 {
 	if x != nil {
-		return x.LastFirstEventId
+		return x.xxx_hidden_LastFirstEventId
 	}
 	return 0
 }
 
 func (x *MutableStateChecksumPayload) GetNextEventId() int64 {
 	if x != nil {
-		return x.NextEventId
+		return x.xxx_hidden_NextEventId
 	}
 	return 0
 }
 
 func (x *MutableStateChecksumPayload) GetLastProcessedEventId() int64 {
 	if x != nil {
-		return x.LastProcessedEventId
+		return x.xxx_hidden_LastProcessedEventId
 	}
 	return 0
 }
 
 func (x *MutableStateChecksumPayload) GetSignalCount() int64 {
 	if x != nil {
-		return x.SignalCount
+		return x.xxx_hidden_SignalCount
 	}
 	return 0
 }
 
 func (x *MutableStateChecksumPayload) GetActivityCount() int64 {
 	if x != nil {
-		return x.ActivityCount
+		return x.xxx_hidden_ActivityCount
 	}
 	return 0
 }
 
 func (x *MutableStateChecksumPayload) GetChildExecutionCount() int64 {
 	if x != nil {
-		return x.ChildExecutionCount
+		return x.xxx_hidden_ChildExecutionCount
 	}
 	return 0
 }
 
 func (x *MutableStateChecksumPayload) GetUserTimerCount() int64 {
 	if x != nil {
-		return x.UserTimerCount
+		return x.xxx_hidden_UserTimerCount
 	}
 	return 0
 }
 
 func (x *MutableStateChecksumPayload) GetRequestCancelExternalCount() int64 {
 	if x != nil {
-		return x.RequestCancelExternalCount
+		return x.xxx_hidden_RequestCancelExternalCount
 	}
 	return 0
 }
 
 func (x *MutableStateChecksumPayload) GetSignalExternalCount() int64 {
 	if x != nil {
-		return x.SignalExternalCount
+		return x.xxx_hidden_SignalExternalCount
 	}
 	return 0
 }
 
 func (x *MutableStateChecksumPayload) GetWorkflowTaskAttempt() int32 {
 	if x != nil {
-		return x.WorkflowTaskAttempt
+		return x.xxx_hidden_WorkflowTaskAttempt
 	}
 	return 0
 }
 
 func (x *MutableStateChecksumPayload) GetWorkflowTaskVersion() int64 {
 	if x != nil {
-		return x.WorkflowTaskVersion
+		return x.xxx_hidden_WorkflowTaskVersion
 	}
 	return 0
 }
 
 func (x *MutableStateChecksumPayload) GetWorkflowTaskScheduledEventId() int64 {
 	if x != nil {
-		return x.WorkflowTaskScheduledEventId
+		return x.xxx_hidden_WorkflowTaskScheduledEventId
 	}
 	return 0
 }
 
 func (x *MutableStateChecksumPayload) GetWorkflowTaskStartedEventId() int64 {
 	if x != nil {
-		return x.WorkflowTaskStartedEventId
+		return x.xxx_hidden_WorkflowTaskStartedEventId
 	}
 	return 0
 }
 
 func (x *MutableStateChecksumPayload) GetPendingTimerStartedEventIds() []int64 {
 	if x != nil {
-		return x.PendingTimerStartedEventIds
+		return x.xxx_hidden_PendingTimerStartedEventIds
 	}
 	return nil
 }
 
 func (x *MutableStateChecksumPayload) GetPendingActivityScheduledEventIds() []int64 {
 	if x != nil {
-		return x.PendingActivityScheduledEventIds
+		return x.xxx_hidden_PendingActivityScheduledEventIds
 	}
 	return nil
 }
 
 func (x *MutableStateChecksumPayload) GetPendingSignalInitiatedEventIds() []int64 {
 	if x != nil {
-		return x.PendingSignalInitiatedEventIds
+		return x.xxx_hidden_PendingSignalInitiatedEventIds
 	}
 	return nil
 }
 
 func (x *MutableStateChecksumPayload) GetPendingReqCancelInitiatedEventIds() []int64 {
 	if x != nil {
-		return x.PendingReqCancelInitiatedEventIds
+		return x.xxx_hidden_PendingReqCancelInitiatedEventIds
 	}
 	return nil
 }
 
 func (x *MutableStateChecksumPayload) GetPendingChildInitiatedEventIds() []int64 {
 	if x != nil {
-		return x.PendingChildInitiatedEventIds
+		return x.xxx_hidden_PendingChildInitiatedEventIds
 	}
 	return nil
 }
 
 func (x *MutableStateChecksumPayload) GetPendingChasmNodePaths() []string {
 	if x != nil {
-		return x.PendingChasmNodePaths
+		return x.xxx_hidden_PendingChasmNodePaths
 	}
 	return nil
 }
 
 func (x *MutableStateChecksumPayload) GetStickyTaskQueueName() string {
 	if x != nil {
-		return x.StickyTaskQueueName
+		return x.xxx_hidden_StickyTaskQueueName
 	}
 	return ""
 }
 
 func (x *MutableStateChecksumPayload) GetVersionHistories() *v12.VersionHistories {
 	if x != nil {
-		return x.VersionHistories
+		return x.xxx_hidden_VersionHistories
 	}
 	return nil
+}
+
+func (x *MutableStateChecksumPayload) SetCancelRequested(v bool) {
+	x.xxx_hidden_CancelRequested = v
+}
+
+func (x *MutableStateChecksumPayload) SetState(v v1.WorkflowExecutionState) {
+	x.xxx_hidden_State = v
+}
+
+func (x *MutableStateChecksumPayload) SetStatus(v v11.WorkflowExecutionStatus) {
+	x.xxx_hidden_Status = v
+}
+
+func (x *MutableStateChecksumPayload) SetLastWriteVersion(v int64) {
+	x.xxx_hidden_LastWriteVersion = v
+}
+
+func (x *MutableStateChecksumPayload) SetLastWriteEventId(v int64) {
+	x.xxx_hidden_LastWriteEventId = v
+}
+
+func (x *MutableStateChecksumPayload) SetLastFirstEventId(v int64) {
+	x.xxx_hidden_LastFirstEventId = v
+}
+
+func (x *MutableStateChecksumPayload) SetNextEventId(v int64) {
+	x.xxx_hidden_NextEventId = v
+}
+
+func (x *MutableStateChecksumPayload) SetLastProcessedEventId(v int64) {
+	x.xxx_hidden_LastProcessedEventId = v
+}
+
+func (x *MutableStateChecksumPayload) SetSignalCount(v int64) {
+	x.xxx_hidden_SignalCount = v
+}
+
+func (x *MutableStateChecksumPayload) SetActivityCount(v int64) {
+	x.xxx_hidden_ActivityCount = v
+}
+
+func (x *MutableStateChecksumPayload) SetChildExecutionCount(v int64) {
+	x.xxx_hidden_ChildExecutionCount = v
+}
+
+func (x *MutableStateChecksumPayload) SetUserTimerCount(v int64) {
+	x.xxx_hidden_UserTimerCount = v
+}
+
+func (x *MutableStateChecksumPayload) SetRequestCancelExternalCount(v int64) {
+	x.xxx_hidden_RequestCancelExternalCount = v
+}
+
+func (x *MutableStateChecksumPayload) SetSignalExternalCount(v int64) {
+	x.xxx_hidden_SignalExternalCount = v
+}
+
+func (x *MutableStateChecksumPayload) SetWorkflowTaskAttempt(v int32) {
+	x.xxx_hidden_WorkflowTaskAttempt = v
+}
+
+func (x *MutableStateChecksumPayload) SetWorkflowTaskVersion(v int64) {
+	x.xxx_hidden_WorkflowTaskVersion = v
+}
+
+func (x *MutableStateChecksumPayload) SetWorkflowTaskScheduledEventId(v int64) {
+	x.xxx_hidden_WorkflowTaskScheduledEventId = v
+}
+
+func (x *MutableStateChecksumPayload) SetWorkflowTaskStartedEventId(v int64) {
+	x.xxx_hidden_WorkflowTaskStartedEventId = v
+}
+
+func (x *MutableStateChecksumPayload) SetPendingTimerStartedEventIds(v []int64) {
+	x.xxx_hidden_PendingTimerStartedEventIds = v
+}
+
+func (x *MutableStateChecksumPayload) SetPendingActivityScheduledEventIds(v []int64) {
+	x.xxx_hidden_PendingActivityScheduledEventIds = v
+}
+
+func (x *MutableStateChecksumPayload) SetPendingSignalInitiatedEventIds(v []int64) {
+	x.xxx_hidden_PendingSignalInitiatedEventIds = v
+}
+
+func (x *MutableStateChecksumPayload) SetPendingReqCancelInitiatedEventIds(v []int64) {
+	x.xxx_hidden_PendingReqCancelInitiatedEventIds = v
+}
+
+func (x *MutableStateChecksumPayload) SetPendingChildInitiatedEventIds(v []int64) {
+	x.xxx_hidden_PendingChildInitiatedEventIds = v
+}
+
+func (x *MutableStateChecksumPayload) SetPendingChasmNodePaths(v []string) {
+	x.xxx_hidden_PendingChasmNodePaths = v
+}
+
+func (x *MutableStateChecksumPayload) SetStickyTaskQueueName(v string) {
+	x.xxx_hidden_StickyTaskQueueName = v
+}
+
+func (x *MutableStateChecksumPayload) SetVersionHistories(v *v12.VersionHistories) {
+	x.xxx_hidden_VersionHistories = v
+}
+
+func (x *MutableStateChecksumPayload) HasVersionHistories() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_VersionHistories != nil
+}
+
+func (x *MutableStateChecksumPayload) ClearVersionHistories() {
+	x.xxx_hidden_VersionHistories = nil
+}
+
+type MutableStateChecksumPayload_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	CancelRequested                   bool
+	State                             v1.WorkflowExecutionState
+	Status                            v11.WorkflowExecutionStatus
+	LastWriteVersion                  int64
+	LastWriteEventId                  int64
+	LastFirstEventId                  int64
+	NextEventId                       int64
+	LastProcessedEventId              int64
+	SignalCount                       int64
+	ActivityCount                     int64
+	ChildExecutionCount               int64
+	UserTimerCount                    int64
+	RequestCancelExternalCount        int64
+	SignalExternalCount               int64
+	WorkflowTaskAttempt               int32
+	WorkflowTaskVersion               int64
+	WorkflowTaskScheduledEventId      int64
+	WorkflowTaskStartedEventId        int64
+	PendingTimerStartedEventIds       []int64
+	PendingActivityScheduledEventIds  []int64
+	PendingSignalInitiatedEventIds    []int64
+	PendingReqCancelInitiatedEventIds []int64
+	PendingChildInitiatedEventIds     []int64
+	PendingChasmNodePaths             []string
+	StickyTaskQueueName               string
+	VersionHistories                  *v12.VersionHistories
+}
+
+func (b0 MutableStateChecksumPayload_builder) Build() *MutableStateChecksumPayload {
+	m0 := &MutableStateChecksumPayload{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_CancelRequested = b.CancelRequested
+	x.xxx_hidden_State = b.State
+	x.xxx_hidden_Status = b.Status
+	x.xxx_hidden_LastWriteVersion = b.LastWriteVersion
+	x.xxx_hidden_LastWriteEventId = b.LastWriteEventId
+	x.xxx_hidden_LastFirstEventId = b.LastFirstEventId
+	x.xxx_hidden_NextEventId = b.NextEventId
+	x.xxx_hidden_LastProcessedEventId = b.LastProcessedEventId
+	x.xxx_hidden_SignalCount = b.SignalCount
+	x.xxx_hidden_ActivityCount = b.ActivityCount
+	x.xxx_hidden_ChildExecutionCount = b.ChildExecutionCount
+	x.xxx_hidden_UserTimerCount = b.UserTimerCount
+	x.xxx_hidden_RequestCancelExternalCount = b.RequestCancelExternalCount
+	x.xxx_hidden_SignalExternalCount = b.SignalExternalCount
+	x.xxx_hidden_WorkflowTaskAttempt = b.WorkflowTaskAttempt
+	x.xxx_hidden_WorkflowTaskVersion = b.WorkflowTaskVersion
+	x.xxx_hidden_WorkflowTaskScheduledEventId = b.WorkflowTaskScheduledEventId
+	x.xxx_hidden_WorkflowTaskStartedEventId = b.WorkflowTaskStartedEventId
+	x.xxx_hidden_PendingTimerStartedEventIds = b.PendingTimerStartedEventIds
+	x.xxx_hidden_PendingActivityScheduledEventIds = b.PendingActivityScheduledEventIds
+	x.xxx_hidden_PendingSignalInitiatedEventIds = b.PendingSignalInitiatedEventIds
+	x.xxx_hidden_PendingReqCancelInitiatedEventIds = b.PendingReqCancelInitiatedEventIds
+	x.xxx_hidden_PendingChildInitiatedEventIds = b.PendingChildInitiatedEventIds
+	x.xxx_hidden_PendingChasmNodePaths = b.PendingChasmNodePaths
+	x.xxx_hidden_StickyTaskQueueName = b.StickyTaskQueueName
+	x.xxx_hidden_VersionHistories = b.VersionHistories
+	return m0
 }
 
 var File_temporal_server_api_checksum_v1_message_proto protoreflect.FileDescriptor
@@ -302,18 +475,6 @@ const file_temporal_server_api_checksum_v1_message_proto_rawDesc = "" +
 	"\x18pending_chasm_node_paths\x18\x1a \x03(\tR\x15pendingChasmNodePaths\x123\n" +
 	"\x16sticky_task_queue_name\x18\x13 \x01(\tR\x13stickyTaskQueueName\x12]\n" +
 	"\x11version_histories\x18\x14 \x01(\v20.temporal.server.api.history.v1.VersionHistoriesR\x10versionHistoriesB0Z.go.temporal.io/server/api/checksum/v1;checksumb\x06proto3"
-
-var (
-	file_temporal_server_api_checksum_v1_message_proto_rawDescOnce sync.Once
-	file_temporal_server_api_checksum_v1_message_proto_rawDescData []byte
-)
-
-func file_temporal_server_api_checksum_v1_message_proto_rawDescGZIP() []byte {
-	file_temporal_server_api_checksum_v1_message_proto_rawDescOnce.Do(func() {
-		file_temporal_server_api_checksum_v1_message_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_api_checksum_v1_message_proto_rawDesc), len(file_temporal_server_api_checksum_v1_message_proto_rawDesc)))
-	})
-	return file_temporal_server_api_checksum_v1_message_proto_rawDescData
-}
 
 var file_temporal_server_api_checksum_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
 var file_temporal_server_api_checksum_v1_message_proto_goTypes = []any{

@@ -94,10 +94,10 @@ func (s *workflowResetterSuite) SetupTest() {
 
 	s.mockShard = shard.NewTestContext(
 		s.controller,
-		&persistencespb.ShardInfo{
+		persistencespb.ShardInfo_builder{
 			ShardId: 0,
 			RangeId: 1,
-		},
+		}.Build(),
 		tests.NewDynamicConfig(),
 	)
 	s.mockExecutionMgr = s.mockShard.Resource.ExecutionMgr
@@ -132,31 +132,31 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentTerminated() {
 	currentWorkflow.EXPECT().GetContext().Return(currentContext).AnyTimes()
 	currentWorkflow.EXPECT().GetMutableState().Return(currentMutableState).AnyTimes()
 	currentWorkflow.EXPECT().GetReleaseFn().Return(currentReleaseFn).AnyTimes()
-	currentMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+	currentMutableState.EXPECT().GetExecutionState().Return(persistencespb.WorkflowExecutionState_builder{
 		RunId: s.currentRunID,
-	}).AnyTimes()
+	}.Build()).AnyTimes()
 
 	currentMutableState.EXPECT().GetCurrentVersion().Return(int64(0)).AnyTimes()
 	currentMutableState.EXPECT().IsWorkflow().Return(true).AnyTimes()
 	currentNewEventsSize := int64(3444)
 	currentMutation := &persistence.WorkflowMutation{
-		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
-			VersionHistories: versionhistory.NewVersionHistories(&historyspb.VersionHistory{
+		ExecutionInfo: persistencespb.WorkflowExecutionInfo_builder{
+			VersionHistories: versionhistory.NewVersionHistories(historyspb.VersionHistory_builder{
 				BranchToken: []byte{1, 2, 3},
 				Items: []*historyspb.VersionHistoryItem{
-					{EventId: 234, Version: 0},
+					historyspb.VersionHistoryItem_builder{EventId: 234, Version: 0}.Build(),
 				},
-			}),
-		},
+			}.Build()),
+		}.Build(),
 	}
 	currentEventsSeq := []*persistence.WorkflowEvents{{
 		NamespaceID: s.namespaceID.String(),
 		WorkflowID:  s.workflowID,
 		RunID:       s.currentRunID,
 		BranchToken: []byte("some random current branch token"),
-		Events: []*historypb.HistoryEvent{{
+		Events: []*historypb.HistoryEvent{historypb.HistoryEvent_builder{
 			EventId: 234,
-		}},
+		}.Build()},
 	}}
 
 	resetWorkflow := NewMockWorkflow(s.controller)
@@ -171,23 +171,23 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentTerminated() {
 	resetMutableState.EXPECT().GetCurrentVersion().Return(int64(0)).AnyTimes()
 	resetNewEventsSize := int64(4321)
 	resetSnapshot := &persistence.WorkflowSnapshot{
-		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
-			VersionHistories: versionhistory.NewVersionHistories(&historyspb.VersionHistory{
+		ExecutionInfo: persistencespb.WorkflowExecutionInfo_builder{
+			VersionHistories: versionhistory.NewVersionHistories(historyspb.VersionHistory_builder{
 				BranchToken: []byte{1, 2, 3},
 				Items: []*historyspb.VersionHistoryItem{
-					{EventId: 123, Version: 0},
+					historyspb.VersionHistoryItem_builder{EventId: 123, Version: 0}.Build(),
 				},
-			}),
-		},
+			}.Build()),
+		}.Build(),
 	}
 	resetEventsSeq := []*persistence.WorkflowEvents{{
 		NamespaceID: s.namespaceID.String(),
 		WorkflowID:  s.workflowID,
 		RunID:       s.resetRunID,
 		BranchToken: []byte("some random reset branch token"),
-		Events: []*historypb.HistoryEvent{{
+		Events: []*historypb.HistoryEvent{historypb.HistoryEvent_builder{
 			EventId: 123,
-		}},
+		}.Build()},
 	}}
 	resetMutableState.EXPECT().CloseTransactionAsSnapshot(
 		context.Background(),
@@ -223,9 +223,9 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentNotTerminated() {
 	currentWorkflow.EXPECT().GetContext().Return(currentContext).AnyTimes()
 	currentWorkflow.EXPECT().GetMutableState().Return(currentMutableState).AnyTimes()
 	currentWorkflow.EXPECT().GetReleaseFn().Return(currentReleaseFn).AnyTimes()
-	currentMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+	currentMutableState.EXPECT().GetExecutionState().Return(persistencespb.WorkflowExecutionState_builder{
 		RunId: s.currentRunID,
-	}).AnyTimes()
+	}.Build()).AnyTimes()
 
 	currentMutation := &persistence.WorkflowMutation{}
 	currentEventsSeq := []*persistence.WorkflowEvents{{}}
@@ -251,9 +251,9 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentNotTerminated() {
 		WorkflowID:  s.workflowID,
 		RunID:       s.resetRunID,
 		BranchToken: []byte("some random reset branch token"),
-		Events: []*historypb.HistoryEvent{{
+		Events: []*historypb.HistoryEvent{historypb.HistoryEvent_builder{
 			EventId: 123,
-		}},
+		}.Build()},
 	}}
 	resetMutableState.EXPECT().CloseTransactionAsSnapshot(
 		context.Background(),
@@ -375,10 +375,10 @@ func (s *workflowResetterSuite) TestFailWorkflowTask_WorkflowTaskScheduled() {
 		ScheduledEventID: baseRebuildLastEventID - 12,
 		StartedEventID:   common.EmptyEventID,
 		RequestID:        uuid.NewString(),
-		TaskQueue: &taskqueuepb.TaskQueue{
+		TaskQueue: taskqueuepb.TaskQueue_builder{
 			Name: "random task queue name",
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-		},
+		}.Build(),
 	}
 	workflowTaskStart := &historyi.WorkflowTaskInfo{
 		ScheduledEventID: workflowTaskSchedule.ScheduledEventID,
@@ -433,10 +433,10 @@ func (s *workflowResetterSuite) TestFailWorkflowTask_WorkflowTaskStarted() {
 		ScheduledEventID: baseRebuildLastEventID - 12,
 		StartedEventID:   baseRebuildLastEventID - 10,
 		RequestID:        uuid.NewString(),
-		TaskQueue: &taskqueuepb.TaskQueue{
+		TaskQueue: taskqueuepb.TaskQueue_builder{
 			Name: "random task queue name",
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-		},
+		}.Build(),
 	}
 	mutableState.EXPECT().GetPendingWorkflowTask().Return(workflowTask).AnyTimes()
 	mutableState.EXPECT().AddWorkflowTaskFailedEvent(
@@ -468,7 +468,7 @@ func (s *workflowResetterSuite) TestFailInflightActivity() {
 
 	mutableState := historyi.NewMockMutableState(s.controller)
 
-	activity1 := &persistencespb.ActivityInfo{
+	activity1 := persistencespb.ActivityInfo_builder{
 		Version:              12,
 		ScheduledEventId:     123,
 		ScheduledTime:        timestamppb.New(now.Add(-10 * time.Second)),
@@ -476,26 +476,26 @@ func (s *workflowResetterSuite) TestFailInflightActivity() {
 		StartedEventId:       124,
 		LastHeartbeatDetails: payloads.EncodeString("some random activity 1 details"),
 		StartedIdentity:      "some random activity 1 started identity",
-	}
-	activity2 := &persistencespb.ActivityInfo{
+	}.Build()
+	activity2 := persistencespb.ActivityInfo_builder{
 		Version:            12,
 		ScheduledEventId:   456,
 		ScheduledTime:      timestamppb.New(now.Add(-10 * time.Second)),
 		FirstScheduledTime: timestamppb.New(now.Add(-10 * time.Second)),
 		StartedEventId:     common.EmptyEventID,
-	}
+	}.Build()
 	mutableState.EXPECT().GetPendingActivityInfos().Return(map[int64]*persistencespb.ActivityInfo{
-		activity1.ScheduledEventId: activity1,
-		activity2.ScheduledEventId: activity2,
+		activity1.GetScheduledEventId(): activity1,
+		activity2.GetScheduledEventId(): activity2,
 	}).AnyTimes()
 
 	mutableState.EXPECT().AddActivityTaskFailedEvent(
-		activity1.ScheduledEventId,
-		activity1.StartedEventId,
-		failure.NewResetWorkflowFailure(terminateReason, activity1.LastHeartbeatDetails),
+		activity1.GetScheduledEventId(),
+		activity1.GetStartedEventId(),
+		failure.NewResetWorkflowFailure(terminateReason, activity1.GetLastHeartbeatDetails()),
 		enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE,
-		activity1.StartedIdentity,
-		activity1.LastWorkerVersionStamp,
+		activity1.GetStartedIdentity(),
+		activity1.GetLastWorkerVersionStamp(),
 	).Return(&historypb.HistoryEvent{}, nil)
 
 	mutableState.EXPECT().UpdateActivity(gomock.Any(), gomock.Any()).Return(nil)
@@ -551,7 +551,7 @@ func (s *workflowResetterSuite) TestTerminateWorkflow() {
 		"",
 		"",
 		int64(0),
-	).Return(&historypb.HistoryEvent{EventId: wtFailedEventID}, nil)
+	).Return(historypb.HistoryEvent_builder{EventId: wtFailedEventID}.Build(), nil)
 	mutableState.EXPECT().FlushBufferedEvents()
 	mutableState.EXPECT().AddWorkflowExecutionTerminatedEvent(
 		wtFailedEventID,
@@ -572,26 +572,26 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_WithOutCo
 	baseNextEventID := int64(456)
 	baseBranchToken := []byte("some random base branch token")
 
-	baseEvent1 := &historypb.HistoryEvent{
-		EventId:    124,
-		EventType:  enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
-		Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{}},
-	}
-	baseEvent2 := &historypb.HistoryEvent{
-		EventId:    125,
-		EventType:  enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
-		Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{}},
-	}
-	baseEvent3 := &historypb.HistoryEvent{
-		EventId:    126,
-		EventType:  enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
-		Attributes: &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{}},
-	}
-	baseEvent4 := &historypb.HistoryEvent{
-		EventId:    127,
-		EventType:  enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED,
-		Attributes: &historypb.HistoryEvent_WorkflowExecutionFailedEventAttributes{WorkflowExecutionFailedEventAttributes: &historypb.WorkflowExecutionFailedEventAttributes{}},
-	}
+	baseEvent1 := historypb.HistoryEvent_builder{
+		EventId:                              124,
+		EventType:                            enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+		WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{},
+	}.Build()
+	baseEvent2 := historypb.HistoryEvent_builder{
+		EventId:                            125,
+		EventType:                          enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
+		WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{},
+	}.Build()
+	baseEvent3 := historypb.HistoryEvent_builder{
+		EventId:                              126,
+		EventType:                            enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
+		WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{},
+	}.Build()
+	baseEvent4 := historypb.HistoryEvent_builder{
+		EventId:                                127,
+		EventType:                              enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED,
+		WorkflowExecutionFailedEventAttributes: &historypb.WorkflowExecutionFailedEventAttributes{},
+	}.Build()
 
 	baseEvents := []*historypb.HistoryEvent{baseEvent1, baseEvent2, baseEvent3, baseEvent4}
 	shardID := s.mockShard.GetShardID()
@@ -603,7 +603,7 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_WithOutCo
 		NextPageToken: nil,
 		ShardID:       shardID,
 	}).Return(&persistence.ReadHistoryBranchByBatchResponse{
-		History:       []*historypb.History{{Events: baseEvents}},
+		History:       []*historypb.History{historypb.History_builder{Events: baseEvents}.Build()},
 		NextPageToken: nil,
 	}, nil)
 
@@ -643,54 +643,54 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_WithConti
 	newNextEventID := int64(6)
 	newBranchToken := []byte("some random new branch token")
 
-	baseEvent1 := &historypb.HistoryEvent{
-		EventId:    124,
-		EventType:  enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
-		Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{}},
-	}
-	baseEvent2 := &historypb.HistoryEvent{
-		EventId:    125,
-		EventType:  enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
-		Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{}},
-	}
-	baseEvent3 := &historypb.HistoryEvent{
-		EventId:    126,
-		EventType:  enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
-		Attributes: &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{}},
-	}
-	baseEvent4 := &historypb.HistoryEvent{
+	baseEvent1 := historypb.HistoryEvent_builder{
+		EventId:                              124,
+		EventType:                            enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+		WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{},
+	}.Build()
+	baseEvent2 := historypb.HistoryEvent_builder{
+		EventId:                            125,
+		EventType:                          enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
+		WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{},
+	}.Build()
+	baseEvent3 := historypb.HistoryEvent_builder{
+		EventId:                              126,
+		EventType:                            enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
+		WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{},
+	}.Build()
+	baseEvent4 := historypb.HistoryEvent_builder{
 		EventId:   127,
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW,
-		Attributes: &historypb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{WorkflowExecutionContinuedAsNewEventAttributes: &historypb.WorkflowExecutionContinuedAsNewEventAttributes{
+		WorkflowExecutionContinuedAsNewEventAttributes: historypb.WorkflowExecutionContinuedAsNewEventAttributes_builder{
 			NewExecutionRunId: newRunID,
-		}},
-	}
+		}.Build(),
+	}.Build()
 
-	newEvent1 := &historypb.HistoryEvent{
-		EventId:    1,
-		EventType:  enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
-		Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{}},
-	}
-	newEvent2 := &historypb.HistoryEvent{
-		EventId:    2,
-		EventType:  enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
-		Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{}},
-	}
-	newEvent3 := &historypb.HistoryEvent{
-		EventId:    3,
-		EventType:  enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
-		Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{}},
-	}
-	newEvent4 := &historypb.HistoryEvent{
-		EventId:    4,
-		EventType:  enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
-		Attributes: &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{}},
-	}
-	newEvent5 := &historypb.HistoryEvent{
-		EventId:    5,
-		EventType:  enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED,
-		Attributes: &historypb.HistoryEvent_WorkflowExecutionFailedEventAttributes{WorkflowExecutionFailedEventAttributes: &historypb.WorkflowExecutionFailedEventAttributes{}},
-	}
+	newEvent1 := historypb.HistoryEvent_builder{
+		EventId:                                 1,
+		EventType:                               enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+		WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{},
+	}.Build()
+	newEvent2 := historypb.HistoryEvent_builder{
+		EventId:                              2,
+		EventType:                            enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+		WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{},
+	}.Build()
+	newEvent3 := historypb.HistoryEvent_builder{
+		EventId:                            3,
+		EventType:                          enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
+		WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{},
+	}.Build()
+	newEvent4 := historypb.HistoryEvent_builder{
+		EventId:                              4,
+		EventType:                            enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
+		WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{},
+	}.Build()
+	newEvent5 := historypb.HistoryEvent_builder{
+		EventId:                                5,
+		EventType:                              enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED,
+		WorkflowExecutionFailedEventAttributes: &historypb.WorkflowExecutionFailedEventAttributes{},
+	}.Build()
 
 	baseEvents := []*historypb.HistoryEvent{baseEvent1, baseEvent2, baseEvent3, baseEvent4}
 	shardID := s.mockShard.GetShardID()
@@ -702,7 +702,7 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_WithConti
 		NextPageToken: nil,
 		ShardID:       shardID,
 	}).Return(&persistence.ReadHistoryBranchByBatchResponse{
-		History:       []*historypb.History{{Events: baseEvents}},
+		History:       []*historypb.History{historypb.History_builder{Events: baseEvents}.Build()},
 		NextPageToken: nil,
 	}, nil)
 
@@ -715,7 +715,7 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_WithConti
 		NextPageToken: nil,
 		ShardID:       shardID,
 	}).Return(&persistence.ReadHistoryBranchByBatchResponse{
-		History:       []*historypb.History{{Events: newEvents}},
+		History:       []*historypb.History{historypb.History_builder{Events: newEvents}.Build()},
 		NextPageToken: nil,
 	}, nil)
 
@@ -768,33 +768,33 @@ func (s *workflowResetterSuite) TestReapplyWorkflowEvents() {
 	branchToken := []byte("some random branch token")
 
 	newRunID := uuid.NewString()
-	event1 := &historypb.HistoryEvent{
-		EventId:    1,
-		EventType:  enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
-		Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{}},
-	}
-	event2 := &historypb.HistoryEvent{
-		EventId:    2,
-		EventType:  enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
-		Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{}},
-	}
-	event3 := &historypb.HistoryEvent{
-		EventId:    3,
-		EventType:  enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
-		Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{}},
-	}
-	event4 := &historypb.HistoryEvent{
-		EventId:    4,
-		EventType:  enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
-		Attributes: &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{}},
-	}
-	event5 := &historypb.HistoryEvent{
+	event1 := historypb.HistoryEvent_builder{
+		EventId:                                 1,
+		EventType:                               enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+		WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{},
+	}.Build()
+	event2 := historypb.HistoryEvent_builder{
+		EventId:                              2,
+		EventType:                            enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+		WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{},
+	}.Build()
+	event3 := historypb.HistoryEvent_builder{
+		EventId:                            3,
+		EventType:                          enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
+		WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{},
+	}.Build()
+	event4 := historypb.HistoryEvent_builder{
+		EventId:                              4,
+		EventType:                            enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
+		WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{},
+	}.Build()
+	event5 := historypb.HistoryEvent_builder{
 		EventId:   5,
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW,
-		Attributes: &historypb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{WorkflowExecutionContinuedAsNewEventAttributes: &historypb.WorkflowExecutionContinuedAsNewEventAttributes{
+		WorkflowExecutionContinuedAsNewEventAttributes: historypb.WorkflowExecutionContinuedAsNewEventAttributes_builder{
 			NewExecutionRunId: newRunID,
-		}},
-	}
+		}.Build(),
+	}.Build()
 	events := []*historypb.HistoryEvent{event1, event2, event3, event4, event5}
 	shardID := s.mockShard.GetShardID()
 	s.mockExecutionMgr.EXPECT().ReadHistoryBranchByBatch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
@@ -805,7 +805,7 @@ func (s *workflowResetterSuite) TestReapplyWorkflowEvents() {
 		NextPageToken: nil,
 		ShardID:       shardID,
 	}).Return(&persistence.ReadHistoryBranchByBatchResponse{
-		History:       []*historypb.History{{Events: events}},
+		History:       []*historypb.History{historypb.History_builder{Events: events}.Build()},
 		NextPageToken: nil,
 	}, nil)
 
@@ -833,73 +833,73 @@ func (s *workflowResetterSuite) TestReapplyWorkflowEvents() {
 // TestReapplyEvents_WithPendingChildren tests applying events related to child workflow.
 // It asserts that reapplyEvents() function checks mutableState.GetChildExecutionInfo() before applying the event.
 func (s *workflowResetterSuite) TestReapplyEvents_WithPendingChildren() {
-	testChildClock := &clockspb.VectorClock{ShardId: 1, Clock: 10, ClusterId: 1}
+	testChildClock := clockspb.VectorClock_builder{ShardId: 1, Clock: 10, ClusterId: 1}.Build()
 	testInitiatedEventID := int64(123)
-	testChildWFType := &commonpb.WorkflowType{Name: "TEST-CHILD-WF-TYPE"}
-	testChildWFExecution := &commonpb.WorkflowExecution{
+	testChildWFType := commonpb.WorkflowType_builder{Name: "TEST-CHILD-WF-TYPE"}.Build()
+	testChildWFExecution := commonpb.WorkflowExecution_builder{
 		WorkflowId: uuid.NewString(),
 		RunId:      uuid.NewString(),
-	}
+	}.Build()
 
 	testStartEventHeader := &commonpb.Header{}
-	startedEvent := &historypb.HistoryEvent{
+	startedEvent := historypb.HistoryEvent_builder{
 		EventType: enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED,
-		Attributes: &historypb.HistoryEvent_ChildWorkflowExecutionStartedEventAttributes{ChildWorkflowExecutionStartedEventAttributes: &historypb.ChildWorkflowExecutionStartedEventAttributes{
+		ChildWorkflowExecutionStartedEventAttributes: historypb.ChildWorkflowExecutionStartedEventAttributes_builder{
 			InitiatedEventId:  testInitiatedEventID,
 			WorkflowExecution: testChildWFExecution,
 			WorkflowType:      testChildWFType,
 			Header:            testStartEventHeader,
-		}},
-	}
+		}.Build(),
+	}.Build()
 	testCompletedEventResult := &commonpb.Payloads{}
-	completedEvent := &historypb.HistoryEvent{
+	completedEvent := historypb.HistoryEvent_builder{
 		EventType: enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED,
-		Attributes: &historypb.HistoryEvent_ChildWorkflowExecutionCompletedEventAttributes{ChildWorkflowExecutionCompletedEventAttributes: &historypb.ChildWorkflowExecutionCompletedEventAttributes{
+		ChildWorkflowExecutionCompletedEventAttributes: historypb.ChildWorkflowExecutionCompletedEventAttributes_builder{
 			InitiatedEventId:  testInitiatedEventID,
 			WorkflowExecution: testChildWFExecution,
 			Result:            testCompletedEventResult,
-		}},
-	}
-	startFailedEvent := &historypb.HistoryEvent{
+		}.Build(),
+	}.Build()
+	startFailedEvent := historypb.HistoryEvent_builder{
 		EventType: enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_FAILED,
-		Attributes: &historypb.HistoryEvent_StartChildWorkflowExecutionFailedEventAttributes{StartChildWorkflowExecutionFailedEventAttributes: &historypb.StartChildWorkflowExecutionFailedEventAttributes{
+		StartChildWorkflowExecutionFailedEventAttributes: historypb.StartChildWorkflowExecutionFailedEventAttributes_builder{
 			InitiatedEventId: testInitiatedEventID,
-			WorkflowId:       testChildWFExecution.WorkflowId,
+			WorkflowId:       testChildWFExecution.GetWorkflowId(),
 			Cause:            enumspb.START_CHILD_WORKFLOW_EXECUTION_FAILED_CAUSE_NAMESPACE_NOT_FOUND,
-		}},
-	}
-	childExecutionFailedEvent := &historypb.HistoryEvent{
+		}.Build(),
+	}.Build()
+	childExecutionFailedEvent := historypb.HistoryEvent_builder{
 		EventType: enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_FAILED,
-		Attributes: &historypb.HistoryEvent_ChildWorkflowExecutionFailedEventAttributes{ChildWorkflowExecutionFailedEventAttributes: &historypb.ChildWorkflowExecutionFailedEventAttributes{
+		ChildWorkflowExecutionFailedEventAttributes: historypb.ChildWorkflowExecutionFailedEventAttributes_builder{
 			InitiatedEventId:  testInitiatedEventID,
 			WorkflowExecution: testChildWFExecution,
 			Failure:           &failurepb.Failure{},
 			RetryState:        enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE,
-		}},
-	}
-	childExecutionCancelledEvent := &historypb.HistoryEvent{
+		}.Build(),
+	}.Build()
+	childExecutionCancelledEvent := historypb.HistoryEvent_builder{
 		EventType: enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_CANCELED,
-		Attributes: &historypb.HistoryEvent_ChildWorkflowExecutionCanceledEventAttributes{ChildWorkflowExecutionCanceledEventAttributes: &historypb.ChildWorkflowExecutionCanceledEventAttributes{
+		ChildWorkflowExecutionCanceledEventAttributes: historypb.ChildWorkflowExecutionCanceledEventAttributes_builder{
 			InitiatedEventId:  testInitiatedEventID,
 			WorkflowExecution: testChildWFExecution,
 			Details:           &commonpb.Payloads{},
-		}},
-	}
-	childExecutionTimeoutEvent := &historypb.HistoryEvent{
+		}.Build(),
+	}.Build()
+	childExecutionTimeoutEvent := historypb.HistoryEvent_builder{
 		EventType: enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TIMED_OUT,
-		Attributes: &historypb.HistoryEvent_ChildWorkflowExecutionTimedOutEventAttributes{ChildWorkflowExecutionTimedOutEventAttributes: &historypb.ChildWorkflowExecutionTimedOutEventAttributes{
+		ChildWorkflowExecutionTimedOutEventAttributes: historypb.ChildWorkflowExecutionTimedOutEventAttributes_builder{
 			InitiatedEventId:  testInitiatedEventID,
 			WorkflowExecution: testChildWFExecution,
 			RetryState:        enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE,
-		}},
-	}
-	childExecutionTerminatedEvent := &historypb.HistoryEvent{
+		}.Build(),
+	}.Build()
+	childExecutionTerminatedEvent := historypb.HistoryEvent_builder{
 		EventType: enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TERMINATED,
-		Attributes: &historypb.HistoryEvent_ChildWorkflowExecutionTerminatedEventAttributes{ChildWorkflowExecutionTerminatedEventAttributes: &historypb.ChildWorkflowExecutionTerminatedEventAttributes{
+		ChildWorkflowExecutionTerminatedEventAttributes: historypb.ChildWorkflowExecutionTerminatedEventAttributes_builder{
 			InitiatedEventId:  testInitiatedEventID,
 			WorkflowExecution: testChildWFExecution,
-		}},
-	}
+		}.Build(),
+	}.Build()
 
 	testcases := []struct {
 		name   string
@@ -924,34 +924,34 @@ func (s *workflowResetterSuite) TestReapplyEvents_WithPendingChildren() {
 		mutableState := historyi.NewMockMutableState(s.controller)
 		mutableState.EXPECT().GetChildExecutionInfo(testInitiatedEventID).
 			Times(len(testcases)). // GetChildExecutionInfo should be called exactly once for each test case.
-			Return(&persistencespb.ChildExecutionInfo{Clock: testChildClock}, true)
+			Return(persistencespb.ChildExecutionInfo_builder{Clock: testChildClock}.Build(), true)
 
 		// Each of the events must be picked with the correct args exactly once.
 		mutableState.EXPECT().AddChildWorkflowExecutionStartedEvent(testChildWFExecution, testChildWFType, testInitiatedEventID, testStartEventHeader, testChildClock).Return(nil, nil).Times(1)
 		mutableState.EXPECT().AddChildWorkflowExecutionCompletedEvent(
 			testInitiatedEventID,
 			testChildWFExecution,
-			&historypb.WorkflowExecutionCompletedEventAttributes{Result: testCompletedEventResult},
+			historypb.WorkflowExecutionCompletedEventAttributes_builder{Result: testCompletedEventResult}.Build(),
 		).Return(nil, nil).Times(1)
 		mutableState.EXPECT().AddStartChildWorkflowExecutionFailedEvent(
 			testInitiatedEventID,
 			enumspb.START_CHILD_WORKFLOW_EXECUTION_FAILED_CAUSE_NAMESPACE_NOT_FOUND,
-			&historypb.StartChildWorkflowExecutionInitiatedEventAttributes{WorkflowId: testChildWFExecution.WorkflowId},
+			historypb.StartChildWorkflowExecutionInitiatedEventAttributes_builder{WorkflowId: testChildWFExecution.GetWorkflowId()}.Build(),
 		).Return(nil, nil).Times(1)
 		mutableState.EXPECT().AddChildWorkflowExecutionFailedEvent(
 			testInitiatedEventID,
 			testChildWFExecution,
-			&historypb.WorkflowExecutionFailedEventAttributes{Failure: &failurepb.Failure{}, RetryState: enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE},
+			historypb.WorkflowExecutionFailedEventAttributes_builder{Failure: &failurepb.Failure{}, RetryState: enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE}.Build(),
 		).Return(nil, nil).Times(1)
 		mutableState.EXPECT().AddChildWorkflowExecutionCanceledEvent(
 			testInitiatedEventID,
 			testChildWFExecution,
-			&historypb.WorkflowExecutionCanceledEventAttributes{Details: &commonpb.Payloads{}},
+			historypb.WorkflowExecutionCanceledEventAttributes_builder{Details: &commonpb.Payloads{}}.Build(),
 		).Return(nil, nil).Times(1)
 		mutableState.EXPECT().AddChildWorkflowExecutionTimedOutEvent(
 			testInitiatedEventID,
 			testChildWFExecution,
-			&historypb.WorkflowExecutionTimedOutEventAttributes{RetryState: enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE},
+			historypb.WorkflowExecutionTimedOutEventAttributes_builder{RetryState: enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE}.Build(),
 		).Return(nil, nil).Times(1)
 		mutableState.EXPECT().AddChildWorkflowExecutionTerminatedEvent(
 			testInitiatedEventID,
@@ -970,34 +970,34 @@ func (s *workflowResetterSuite) TestReapplyEvents_WithPendingChildren() {
 // TestReapplyEvents_WithNoPendingChildren asserts that none of the child events are picked when there is no pending child correspondng to the init event ID.
 func (s *workflowResetterSuite) TestReapplyEvents_WithNoPendingChildren() {
 	testInitiatedEventID := int64(123)
-	startedEvent := &historypb.HistoryEvent{
-		EventType:  enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED,
-		Attributes: &historypb.HistoryEvent_ChildWorkflowExecutionStartedEventAttributes{ChildWorkflowExecutionStartedEventAttributes: &historypb.ChildWorkflowExecutionStartedEventAttributes{InitiatedEventId: testInitiatedEventID}},
-	}
-	completedEvent := &historypb.HistoryEvent{
-		EventType:  enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED,
-		Attributes: &historypb.HistoryEvent_ChildWorkflowExecutionCompletedEventAttributes{ChildWorkflowExecutionCompletedEventAttributes: &historypb.ChildWorkflowExecutionCompletedEventAttributes{InitiatedEventId: testInitiatedEventID}},
-	}
-	startFailedEvent := &historypb.HistoryEvent{
-		EventType:  enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_FAILED,
-		Attributes: &historypb.HistoryEvent_StartChildWorkflowExecutionFailedEventAttributes{StartChildWorkflowExecutionFailedEventAttributes: &historypb.StartChildWorkflowExecutionFailedEventAttributes{InitiatedEventId: testInitiatedEventID}},
-	}
-	childExecutionFailedEvent := &historypb.HistoryEvent{
-		EventType:  enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_FAILED,
-		Attributes: &historypb.HistoryEvent_ChildWorkflowExecutionFailedEventAttributes{ChildWorkflowExecutionFailedEventAttributes: &historypb.ChildWorkflowExecutionFailedEventAttributes{InitiatedEventId: testInitiatedEventID}},
-	}
-	childExecutionCancelledEvent := &historypb.HistoryEvent{
-		EventType:  enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_CANCELED,
-		Attributes: &historypb.HistoryEvent_ChildWorkflowExecutionCanceledEventAttributes{ChildWorkflowExecutionCanceledEventAttributes: &historypb.ChildWorkflowExecutionCanceledEventAttributes{InitiatedEventId: testInitiatedEventID}},
-	}
-	childExecutionTimeoutEvent := &historypb.HistoryEvent{
-		EventType:  enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TIMED_OUT,
-		Attributes: &historypb.HistoryEvent_ChildWorkflowExecutionTimedOutEventAttributes{ChildWorkflowExecutionTimedOutEventAttributes: &historypb.ChildWorkflowExecutionTimedOutEventAttributes{InitiatedEventId: testInitiatedEventID}},
-	}
-	childExecutionTerminatedEvent := &historypb.HistoryEvent{
-		EventType:  enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TERMINATED,
-		Attributes: &historypb.HistoryEvent_ChildWorkflowExecutionTerminatedEventAttributes{ChildWorkflowExecutionTerminatedEventAttributes: &historypb.ChildWorkflowExecutionTerminatedEventAttributes{InitiatedEventId: testInitiatedEventID}},
-	}
+	startedEvent := historypb.HistoryEvent_builder{
+		EventType: enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED,
+		ChildWorkflowExecutionStartedEventAttributes: historypb.ChildWorkflowExecutionStartedEventAttributes_builder{InitiatedEventId: testInitiatedEventID}.Build(),
+	}.Build()
+	completedEvent := historypb.HistoryEvent_builder{
+		EventType: enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED,
+		ChildWorkflowExecutionCompletedEventAttributes: historypb.ChildWorkflowExecutionCompletedEventAttributes_builder{InitiatedEventId: testInitiatedEventID}.Build(),
+	}.Build()
+	startFailedEvent := historypb.HistoryEvent_builder{
+		EventType: enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_FAILED,
+		StartChildWorkflowExecutionFailedEventAttributes: historypb.StartChildWorkflowExecutionFailedEventAttributes_builder{InitiatedEventId: testInitiatedEventID}.Build(),
+	}.Build()
+	childExecutionFailedEvent := historypb.HistoryEvent_builder{
+		EventType: enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_FAILED,
+		ChildWorkflowExecutionFailedEventAttributes: historypb.ChildWorkflowExecutionFailedEventAttributes_builder{InitiatedEventId: testInitiatedEventID}.Build(),
+	}.Build()
+	childExecutionCancelledEvent := historypb.HistoryEvent_builder{
+		EventType: enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_CANCELED,
+		ChildWorkflowExecutionCanceledEventAttributes: historypb.ChildWorkflowExecutionCanceledEventAttributes_builder{InitiatedEventId: testInitiatedEventID}.Build(),
+	}.Build()
+	childExecutionTimeoutEvent := historypb.HistoryEvent_builder{
+		EventType: enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TIMED_OUT,
+		ChildWorkflowExecutionTimedOutEventAttributes: historypb.ChildWorkflowExecutionTimedOutEventAttributes_builder{InitiatedEventId: testInitiatedEventID}.Build(),
+	}.Build()
+	childExecutionTerminatedEvent := historypb.HistoryEvent_builder{
+		EventType: enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TERMINATED,
+		ChildWorkflowExecutionTerminatedEventAttributes: historypb.ChildWorkflowExecutionTerminatedEventAttributes_builder{InitiatedEventId: testInitiatedEventID}.Build(),
+	}.Build()
 
 	testCases := []struct {
 		name   string
@@ -1036,126 +1036,104 @@ func (s *workflowResetterSuite) TestReapplyEvents_WithNoPendingChildren() {
 
 func (s *workflowResetterSuite) TestReapplyEvents() {
 
-	event1 := &historypb.HistoryEvent{
+	event1 := historypb.HistoryEvent_builder{
 		EventId:   101,
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
-		Attributes: &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{
+		WorkflowExecutionSignaledEventAttributes: historypb.WorkflowExecutionSignaledEventAttributes_builder{
 			SignalName: "signal-name-1",
 			Input:      payloads.EncodeString("signal-input-1"),
 			Identity:   "signal-identity-1",
-			Header:     &commonpb.Header{Fields: map[string]*commonpb.Payload{"myheader": {Data: []byte("myheader")}}},
-		}},
-	}
+			Header:     commonpb.Header_builder{Fields: map[string]*commonpb.Payload{"myheader": commonpb.Payload_builder{Data: []byte("myheader")}.Build()}}.Build(),
+		}.Build(),
+	}.Build()
 	// This event is not reapplied
-	event2 := &historypb.HistoryEvent{
-		EventId:   102,
-		EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
-		Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{
-			WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{},
-		},
-	}
-	event3 := &historypb.HistoryEvent{
+	event2 := historypb.HistoryEvent_builder{
+		EventId:                              102,
+		EventType:                            enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+		WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{},
+	}.Build()
+	event3 := historypb.HistoryEvent_builder{
 		EventId:   103,
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
-		Attributes: &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{
-			WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{
-				SignalName: "signal-name-2",
-				Input:      payloads.EncodeString("signal-input-2"),
-				Identity:   "signal-identity-2",
-			},
-		},
-	}
-	event4 := &historypb.HistoryEvent{
+		WorkflowExecutionSignaledEventAttributes: historypb.WorkflowExecutionSignaledEventAttributes_builder{
+			SignalName: "signal-name-2",
+			Input:      payloads.EncodeString("signal-input-2"),
+			Identity:   "signal-identity-2",
+		}.Build(),
+	}.Build()
+	event4 := historypb.HistoryEvent_builder{
 		EventId:   104,
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED,
-		Attributes: &historypb.HistoryEvent_WorkflowExecutionUpdateAdmittedEventAttributes{
-			WorkflowExecutionUpdateAdmittedEventAttributes: &historypb.WorkflowExecutionUpdateAdmittedEventAttributes{
-				Request: &updatepb.Request{Input: &updatepb.Input{Args: payloads.EncodeString("update-request-payload-1")}},
-				Origin:  enumspb.UPDATE_ADMITTED_EVENT_ORIGIN_UNSPECIFIED,
-			},
-		},
-	}
-	event5 := &historypb.HistoryEvent{
+		WorkflowExecutionUpdateAdmittedEventAttributes: historypb.WorkflowExecutionUpdateAdmittedEventAttributes_builder{
+			Request: updatepb.Request_builder{Input: updatepb.Input_builder{Args: payloads.EncodeString("update-request-payload-1")}.Build()}.Build(),
+			Origin:  enumspb.UPDATE_ADMITTED_EVENT_ORIGIN_UNSPECIFIED,
+		}.Build(),
+	}.Build()
+	event5 := historypb.HistoryEvent_builder{
 		EventId:   105,
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED,
-		Attributes: &historypb.HistoryEvent_WorkflowExecutionUpdateAcceptedEventAttributes{
-			WorkflowExecutionUpdateAcceptedEventAttributes: &historypb.WorkflowExecutionUpdateAcceptedEventAttributes{
-				AcceptedRequest: &updatepb.Request{Input: &updatepb.Input{Args: payloads.EncodeString("update-request-payload-1")}},
-			},
-		},
-	}
+		WorkflowExecutionUpdateAcceptedEventAttributes: historypb.WorkflowExecutionUpdateAcceptedEventAttributes_builder{
+			AcceptedRequest: updatepb.Request_builder{Input: updatepb.Input_builder{Args: payloads.EncodeString("update-request-payload-1")}.Build()}.Build(),
+		}.Build(),
+	}.Build()
 	// This event is not reapplied
-	event6 := &historypb.HistoryEvent{
+	event6 := historypb.HistoryEvent_builder{
 		EventId:   106,
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_COMPLETED,
-		Attributes: &historypb.HistoryEvent_WorkflowExecutionUpdateCompletedEventAttributes{
-			WorkflowExecutionUpdateCompletedEventAttributes: &historypb.WorkflowExecutionUpdateCompletedEventAttributes{},
-		},
-	}
-	event7 := &historypb.HistoryEvent{
+		WorkflowExecutionUpdateCompletedEventAttributes: &historypb.WorkflowExecutionUpdateCompletedEventAttributes{},
+	}.Build()
+	event7 := historypb.HistoryEvent_builder{
 		EventId:   107,
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCEL_REQUESTED,
-		Attributes: &historypb.HistoryEvent_WorkflowExecutionCancelRequestedEventAttributes{
-			WorkflowExecutionCancelRequestedEventAttributes: &historypb.WorkflowExecutionCancelRequestedEventAttributes{
-				Cause:    testRequestReason,
-				Identity: testIdentity,
-			},
-		},
-	}
-	event8 := &historypb.HistoryEvent{
+		WorkflowExecutionCancelRequestedEventAttributes: historypb.WorkflowExecutionCancelRequestedEventAttributes_builder{
+			Cause:    testRequestReason,
+			Identity: testIdentity,
+		}.Build(),
+	}.Build()
+	event8 := historypb.HistoryEvent_builder{
 		EventId:   108,
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCEL_REQUESTED,
-		Attributes: &historypb.HistoryEvent_WorkflowExecutionCancelRequestedEventAttributes{
-			WorkflowExecutionCancelRequestedEventAttributes: &historypb.WorkflowExecutionCancelRequestedEventAttributes{
-				Cause:    "duplicated cancel cause",
-				Identity: "duplicated cancel identity",
-			},
-		},
-	}
-	event9 := &historypb.HistoryEvent{
+		WorkflowExecutionCancelRequestedEventAttributes: historypb.WorkflowExecutionCancelRequestedEventAttributes_builder{
+			Cause:    "duplicated cancel cause",
+			Identity: "duplicated cancel identity",
+		}.Build(),
+	}.Build()
+	event9 := historypb.HistoryEvent_builder{
 		EventId:   109,
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED,
-		Attributes: &historypb.HistoryEvent_WorkflowExecutionTerminatedEventAttributes{
-			WorkflowExecutionTerminatedEventAttributes: &historypb.WorkflowExecutionTerminatedEventAttributes{
-				Reason:   testRequestReason,
-				Details:  payloads.EncodeString("test details"),
-				Identity: testIdentity,
-			},
-		},
-	}
-	event10 := &historypb.HistoryEvent{
+		WorkflowExecutionTerminatedEventAttributes: historypb.WorkflowExecutionTerminatedEventAttributes_builder{
+			Reason:   testRequestReason,
+			Details:  payloads.EncodeString("test details"),
+			Identity: testIdentity,
+		}.Build(),
+	}.Build()
+	event10 := historypb.HistoryEvent_builder{
 		EventId:   110,
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
-		Attributes: &historypb.HistoryEvent_WorkflowExecutionOptionsUpdatedEventAttributes{
-			WorkflowExecutionOptionsUpdatedEventAttributes: &historypb.WorkflowExecutionOptionsUpdatedEventAttributes{
-				AttachedRequestId: "test attached request id",
-			},
-		},
-	}
+		WorkflowExecutionOptionsUpdatedEventAttributes: historypb.WorkflowExecutionOptionsUpdatedEventAttributes_builder{
+			AttachedRequestId: "test attached request id",
+		}.Build(),
+	}.Build()
 	// This event is not reapplied
-	event11 := &historypb.HistoryEvent{
+	event11 := historypb.HistoryEvent_builder{
 		EventId:   111,
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED,
-		Attributes: &historypb.HistoryEvent_WorkflowExecutionTerminatedEventAttributes{
-			WorkflowExecutionTerminatedEventAttributes: &historypb.WorkflowExecutionTerminatedEventAttributes{
-				Reason:   testRequestReason,
-				Details:  payloads.EncodeString("test details"),
-				Identity: consts.IdentityHistoryService,
-			},
-		},
-	}
+		WorkflowExecutionTerminatedEventAttributes: historypb.WorkflowExecutionTerminatedEventAttributes_builder{
+			Reason:   testRequestReason,
+			Details:  payloads.EncodeString("test details"),
+			Identity: consts.IdentityHistoryService,
+		}.Build(),
+	}.Build()
 	// This event is not reapplied
-	event12 := &historypb.HistoryEvent{
+	event12 := historypb.HistoryEvent_builder{
 		EventId:   112,
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED,
-		Attributes: &historypb.HistoryEvent_WorkflowExecutionTerminatedEventAttributes{
-			WorkflowExecutionTerminatedEventAttributes: &historypb.WorkflowExecutionTerminatedEventAttributes{
-				Reason:   testRequestReason,
-				Details:  payloads.EncodeString("test details"),
-				Identity: consts.IdentityResetter,
-			},
-		},
-	}
+		WorkflowExecutionTerminatedEventAttributes: historypb.WorkflowExecutionTerminatedEventAttributes_builder{
+			Reason:   testRequestReason,
+			Details:  payloads.EncodeString("test details"),
+			Identity: consts.IdentityResetter,
+		}.Build(),
+	}.Build()
 	events := []*historypb.HistoryEvent{event1, event2, event3, event4, event5, event6, event7, event8, event9, event10, event11, event12}
 
 	testcases := []struct {
@@ -1200,7 +1178,7 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 						attr.GetUnsetVersioningOverride(),
 						attr.GetAttachedRequestId(),
 						attr.GetAttachedCompletionCallbacks(),
-						event.Links,
+						event.GetLinks(),
 						attr.GetIdentity(),
 						attr.GetPriority(),
 					).Return(&historypb.HistoryEvent{}, nil)
@@ -1211,7 +1189,7 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 						attr.GetInput(),
 						attr.GetIdentity(),
 						attr.GetHeader(),
-						event.Links,
+						event.GetLinks(),
 					).Return(&historypb.HistoryEvent{}, nil)
 				case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED:
 					attr := event.GetWorkflowExecutionUpdateAdmittedEventAttributes()
@@ -1230,15 +1208,15 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 						attr := event.GetWorkflowExecutionCancelRequestedEventAttributes()
 						ms.EXPECT().IsCancelRequested().Return(false)
 						ms.EXPECT().AddWorkflowExecutionCancelRequestedEvent(
-							&historyservice.RequestCancelWorkflowExecutionRequest{
-								CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{
+							historyservice.RequestCancelWorkflowExecutionRequest_builder{
+								CancelRequest: workflowservice.RequestCancelWorkflowExecutionRequest_builder{
 									Reason:   attr.GetCause(),
 									Identity: attr.GetIdentity(),
-									Links:    event.Links,
-								},
+									Links:    event.GetLinks(),
+								}.Build(),
 								ExternalInitiatedEventId:  attr.GetExternalInitiatedEventId(),
 								ExternalWorkflowExecution: attr.GetExternalWorkflowExecution(),
-							},
+							}.Build(),
 						).Return(&historypb.HistoryEvent{}, nil)
 					}
 				case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:
@@ -1252,7 +1230,7 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 							attr.GetDetails(),
 							attr.GetIdentity(),
 							false,
-							event.Links,
+							event.GetLinks(),
 						).Return(&historypb.HistoryEvent{}, nil)
 					}
 				}
@@ -1267,47 +1245,43 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 }
 
 func (s *workflowResetterSuite) TestReapplyEvents_Excludes() {
-	event1 := &historypb.HistoryEvent{
+	event1 := historypb.HistoryEvent_builder{
 		EventId:   101,
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
-		Attributes: &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{
+		WorkflowExecutionSignaledEventAttributes: historypb.WorkflowExecutionSignaledEventAttributes_builder{
 			SignalName: "signal-name-1",
 			Input:      payloads.EncodeString("signal-input-1"),
 			Identity:   "signal-identity-1",
-			Header:     &commonpb.Header{Fields: map[string]*commonpb.Payload{"myheader": {Data: []byte("myheader")}}},
-		}},
-	}
-	event2 := &historypb.HistoryEvent{
+			Header:     commonpb.Header_builder{Fields: map[string]*commonpb.Payload{"myheader": commonpb.Payload_builder{Data: []byte("myheader")}.Build()}}.Build(),
+		}.Build(),
+	}.Build()
+	event2 := historypb.HistoryEvent_builder{
 		EventId:   102,
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED,
-		Attributes: &historypb.HistoryEvent_WorkflowExecutionUpdateAdmittedEventAttributes{
-			WorkflowExecutionUpdateAdmittedEventAttributes: &historypb.WorkflowExecutionUpdateAdmittedEventAttributes{
-				Request: &updatepb.Request{Input: &updatepb.Input{Args: payloads.EncodeString("update-request-payload-1")}},
-				Origin:  enumspb.UPDATE_ADMITTED_EVENT_ORIGIN_UNSPECIFIED,
-			},
-		},
-	}
-	event3 := &historypb.HistoryEvent{
+		WorkflowExecutionUpdateAdmittedEventAttributes: historypb.WorkflowExecutionUpdateAdmittedEventAttributes_builder{
+			Request: updatepb.Request_builder{Input: updatepb.Input_builder{Args: payloads.EncodeString("update-request-payload-1")}.Build()}.Build(),
+			Origin:  enumspb.UPDATE_ADMITTED_EVENT_ORIGIN_UNSPECIFIED,
+		}.Build(),
+	}.Build()
+	event3 := historypb.HistoryEvent_builder{
 		EventId:   103,
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED,
-		Attributes: &historypb.HistoryEvent_WorkflowExecutionUpdateAcceptedEventAttributes{
-			WorkflowExecutionUpdateAcceptedEventAttributes: &historypb.WorkflowExecutionUpdateAcceptedEventAttributes{
-				AcceptedRequest: &updatepb.Request{Input: &updatepb.Input{Args: payloads.EncodeString("update-request-payload-1")}},
-			},
-		},
-	}
-	event4 := &historypb.HistoryEvent{
+		WorkflowExecutionUpdateAcceptedEventAttributes: historypb.WorkflowExecutionUpdateAcceptedEventAttributes_builder{
+			AcceptedRequest: updatepb.Request_builder{Input: updatepb.Input_builder{Args: payloads.EncodeString("update-request-payload-1")}.Build()}.Build(),
+		}.Build(),
+	}.Build()
+	event4 := historypb.HistoryEvent_builder{
 		EventId:   104,
 		EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED,
-	}
-	event5 := &historypb.HistoryEvent{
+	}.Build()
+	event5 := historypb.HistoryEvent_builder{
 		EventId:   105,
 		EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED,
-	}
-	event6 := &historypb.HistoryEvent{
+	}.Build()
+	event6 := historypb.HistoryEvent_builder{
 		EventId:   106,
 		EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED,
-	}
+	}.Build()
 	events := []*historypb.HistoryEvent{event1, event2, event3, event4, event5, event6}
 
 	ms := historyi.NewMockMutableState(s.controller)
@@ -1333,27 +1307,23 @@ func (s *workflowResetterSuite) TestReapplyEvents_Excludes() {
 	s.Empty(reappliedEvents)
 	s.NoError(err)
 
-	event7 := &historypb.HistoryEvent{
+	event7 := historypb.HistoryEvent_builder{
 		EventId:   107,
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCEL_REQUESTED,
-		Attributes: &historypb.HistoryEvent_WorkflowExecutionCancelRequestedEventAttributes{
-			WorkflowExecutionCancelRequestedEventAttributes: &historypb.WorkflowExecutionCancelRequestedEventAttributes{
-				Cause:    testRequestReason,
-				Identity: testIdentity,
-			},
-		},
-	}
-	event8 := &historypb.HistoryEvent{
+		WorkflowExecutionCancelRequestedEventAttributes: historypb.WorkflowExecutionCancelRequestedEventAttributes_builder{
+			Cause:    testRequestReason,
+			Identity: testIdentity,
+		}.Build(),
+	}.Build()
+	event8 := historypb.HistoryEvent_builder{
 		EventId:   108,
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED,
-		Attributes: &historypb.HistoryEvent_WorkflowExecutionTerminatedEventAttributes{
-			WorkflowExecutionTerminatedEventAttributes: &historypb.WorkflowExecutionTerminatedEventAttributes{
-				Reason:   testRequestReason,
-				Details:  payloads.EncodeString("test details"),
-				Identity: testIdentity,
-			},
-		},
-	}
+		WorkflowExecutionTerminatedEventAttributes: historypb.WorkflowExecutionTerminatedEventAttributes_builder{
+			Reason:   testRequestReason,
+			Details:  payloads.EncodeString("test details"),
+			Identity: testIdentity,
+		}.Build(),
+	}.Build()
 	events = append(events, event7, event8)
 	reappliedEvents, err = reapplyEvents(context.Background(), ms, nil, smReg, events, excludes, "", true)
 	s.Empty(reappliedEvents)
@@ -1402,33 +1372,33 @@ func (s *workflowResetterSuite) TestPagination() {
 	nextEventID := int64(101)
 	branchToken := []byte("some random branch token")
 
-	event1 := &historypb.HistoryEvent{
-		EventId:    1,
-		EventType:  enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
-		Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{}},
-	}
-	event2 := &historypb.HistoryEvent{
-		EventId:    2,
-		EventType:  enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
-		Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{}},
-	}
-	event3 := &historypb.HistoryEvent{
-		EventId:    3,
-		EventType:  enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
-		Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{}},
-	}
-	event4 := &historypb.HistoryEvent{
-		EventId:    4,
-		EventType:  enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
-		Attributes: &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{}},
-	}
-	event5 := &historypb.HistoryEvent{
-		EventId:    5,
-		EventType:  enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
-		Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{}},
-	}
-	history1 := []*historypb.History{{Events: []*historypb.HistoryEvent{event1, event2, event3}}}
-	history2 := []*historypb.History{{Events: []*historypb.HistoryEvent{event4, event5}}}
+	event1 := historypb.HistoryEvent_builder{
+		EventId:                                 1,
+		EventType:                               enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+		WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{},
+	}.Build()
+	event2 := historypb.HistoryEvent_builder{
+		EventId:                              2,
+		EventType:                            enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+		WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{},
+	}.Build()
+	event3 := historypb.HistoryEvent_builder{
+		EventId:                            3,
+		EventType:                          enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
+		WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{},
+	}.Build()
+	event4 := historypb.HistoryEvent_builder{
+		EventId:                              4,
+		EventType:                            enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
+		WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{},
+	}.Build()
+	event5 := historypb.HistoryEvent_builder{
+		EventId:                              5,
+		EventType:                            enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
+		ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{},
+	}.Build()
+	history1 := []*historypb.History{historypb.History_builder{Events: []*historypb.HistoryEvent{event1, event2, event3}}.Build()}
+	history2 := []*historypb.History{historypb.History_builder{Events: []*historypb.HistoryEvent{event4, event5}}.Build()}
 	history := append(history1, history2...)
 	pageToken := []byte("some random token")
 
@@ -1493,10 +1463,10 @@ func (s *workflowResetterSuite) TestWorkflowRestartAfterExecutionTimeout() {
 		ScheduledEventID: baseRebuildLastEventID - 12,
 		StartedEventID:   common.EmptyEventID,
 		RequestID:        uuid.NewString(),
-		TaskQueue: &taskqueuepb.TaskQueue{
+		TaskQueue: taskqueuepb.TaskQueue_builder{
 			Name: "random task queue name",
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-		},
+		}.Build(),
 	}
 
 	s.mockExecutionMgr.EXPECT().ForkHistoryBranch(gomock.Any(), gomock.Any()).Return(
@@ -1521,10 +1491,10 @@ func (s *workflowResetterSuite) TestWorkflowRestartAfterExecutionTimeout() {
 	resetMutableState.EXPECT().AddExternalPayloadCount(resetStats.ExternalPayloadCount)
 	resetMutableState.EXPECT().GetCurrentVersion().Return(resetWorkflowVersion).AnyTimes()
 	resetMutableState.EXPECT().UpdateCurrentVersion(resetWorkflowVersion, false).Return(nil).AnyTimes()
-	resetMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+	resetMutableState.EXPECT().GetExecutionState().Return(persistencespb.WorkflowExecutionState_builder{
 		RunId:  resetRequestID,
 		Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-	}).AnyTimes()
+	}.Build()).AnyTimes()
 	resetMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{}).AnyTimes()
 	resetMutableState.EXPECT().GetPendingActivityInfos().Return(map[int64]*persistencespb.ActivityInfo{})
 	resetMutableState.EXPECT().RefreshExpirationTimeoutTask(ctx).Return(nil).AnyTimes()
@@ -1613,35 +1583,31 @@ func (s *workflowResetterSuite) TestReapplyEvents_WorkflowOptionsUpdated_Complet
 			// Create completion callbacks
 			callbacks := make([]*commonpb.Callback, tc.totalCallbacks)
 			for i := 0; i < tc.totalCallbacks; i++ {
-				callbacks[i] = &commonpb.Callback{
-					Variant: &commonpb.Callback_Nexus_{
-						Nexus: &commonpb.Callback_Nexus{
-							Url: "http://example.com",
-							Header: map[string]string{
-								"test": "value",
-							},
+				callbacks[i] = commonpb.Callback_builder{
+					Nexus: commonpb.Callback_Nexus_builder{
+						Url: "http://example.com",
+						Header: map[string]string{
+							"test": "value",
 						},
-					},
-				}
+					}.Build(),
+				}.Build()
 			}
 
 			// Create the event
-			event := &historypb.HistoryEvent{
+			event := historypb.HistoryEvent_builder{
 				EventId:   101,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
-				Attributes: &historypb.HistoryEvent_WorkflowExecutionOptionsUpdatedEventAttributes{
-					WorkflowExecutionOptionsUpdatedEventAttributes: &historypb.WorkflowExecutionOptionsUpdatedEventAttributes{
-						AttachedRequestId:           "test-request-id",
-						AttachedCompletionCallbacks: callbacks,
-					},
-				},
-			}
+				WorkflowExecutionOptionsUpdatedEventAttributes: historypb.WorkflowExecutionOptionsUpdatedEventAttributes_builder{
+					AttachedRequestId:           "test-request-id",
+					AttachedCompletionCallbacks: callbacks,
+				}.Build(),
+			}.Build()
 
 			// Add versioning override if specified
 			if tc.hasVersioningOverride {
-				event.GetWorkflowExecutionOptionsUpdatedEventAttributes().VersioningOverride = &workflowpb.VersioningOverride{
+				event.GetWorkflowExecutionOptionsUpdatedEventAttributes().SetVersioningOverride(workflowpb.VersioningOverride_builder{
 					Behavior: enumspb.VERSIONING_BEHAVIOR_PINNED,
-				}
+				}.Build())
 			}
 
 			ms.EXPECT().HasRequestID("test-request-id").Return(tc.requestIDExists)
@@ -1667,30 +1633,26 @@ func (s *workflowResetterSuite) TestReapplyEvents_WorkflowOptionsUpdated_Complet
 
 	// Create completion callbacks
 	callbacks := []*commonpb.Callback{
-		{
-			Variant: &commonpb.Callback_Nexus_{
-				Nexus: &commonpb.Callback_Nexus{
-					Url: "http://example.com",
-					Header: map[string]string{
-						"test": "value",
-					},
+		commonpb.Callback_builder{
+			Nexus: commonpb.Callback_Nexus_builder{
+				Url: "http://example.com",
+				Header: map[string]string{
+					"test": "value",
 				},
-			},
-		},
+			}.Build(),
+		}.Build(),
 	}
 
 	// Create the event where all callbacks exist but no other updates
-	event := &historypb.HistoryEvent{
+	event := historypb.HistoryEvent_builder{
 		EventId:   101,
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
-		Attributes: &historypb.HistoryEvent_WorkflowExecutionOptionsUpdatedEventAttributes{
-			WorkflowExecutionOptionsUpdatedEventAttributes: &historypb.WorkflowExecutionOptionsUpdatedEventAttributes{
-				AttachedRequestId:           "test-request-id",
-				AttachedCompletionCallbacks: callbacks,
-				// No VersioningOverride and UnsetVersioningOverride is false
-			},
-		},
-	}
+		WorkflowExecutionOptionsUpdatedEventAttributes: historypb.WorkflowExecutionOptionsUpdatedEventAttributes_builder{
+			AttachedRequestId:           "test-request-id",
+			AttachedCompletionCallbacks: callbacks,
+			// No VersioningOverride and UnsetVersioningOverride is false
+		}.Build(),
+	}.Build()
 
 	ms.EXPECT().HasRequestID("test-request-id").Return(true)
 

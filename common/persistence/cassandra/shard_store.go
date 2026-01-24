@@ -96,8 +96,8 @@ func (d *ShardStore) GetOrCreateShard(
 		rowTypeShardRunID,
 		defaultVisibilityTimestamp,
 		rowTypeShardTaskID,
-		shardInfo.Data,
-		shardInfo.EncodingType.String(),
+		shardInfo.GetData(),
+		shardInfo.GetEncodingType().String(),
 		rangeID,
 	).WithContext(ctx)
 
@@ -121,8 +121,8 @@ func (d *ShardStore) UpdateShard(
 	request *p.InternalUpdateShardRequest,
 ) error {
 	query := d.Session.Query(templateUpdateShardQuery,
-		request.ShardInfo.Data,
-		request.ShardInfo.EncodingType.String(),
+		request.ShardInfo.GetData(),
+		request.ShardInfo.GetEncodingType().String(),
 		request.RangeID,
 		request.ShardID,
 		rowTypeShard,

@@ -373,12 +373,12 @@ forLoop:
 }
 
 func (tm *TaskMatcher) emitDispatchLatency(task *internalTask, forwarded bool) {
-	if task.event.Data.CreateTime == nil {
+	if !task.event.GetData().HasCreateTime() {
 		return // should not happen but for safety
 	}
 
 	metrics.TaskDispatchLatencyPerTaskQueue.With(tm.metricsHandler).Record(
-		time.Since(timestamp.TimeValue(task.event.Data.CreateTime)),
+		time.Since(timestamp.TimeValue(task.event.GetData().GetCreateTime())),
 		metrics.StringTag("source", task.source.String()),
 		metrics.StringTag("forwarded", strconv.FormatBool(forwarded)),
 		metrics.StringTag(metrics.TaskPriorityTagName, ""),
@@ -542,26 +542,26 @@ func (tm *TaskMatcher) isBacklogNegligible() bool {
 }
 
 func (tm *TaskMatcher) registerBacklogTask(task *internalTask) {
-	if task.event.Data.CreateTime == nil {
+	if !task.event.GetData().HasCreateTime() {
 		return // should not happen but for safety
 	}
 
 	tm.backlogTasksLock.Lock()
 	defer tm.backlogTasksLock.Unlock()
 
-	ts := timestamp.TimeValue(task.event.Data.CreateTime).UnixNano()
+	ts := timestamp.TimeValue(task.event.GetData().GetCreateTime()).UnixNano()
 	tm.backlogTasksCreateTime[ts] += 1
 }
 
 func (tm *TaskMatcher) unregisterBacklogTask(task *internalTask) {
-	if task.event.Data.CreateTime == nil {
+	if !task.event.GetData().HasCreateTime() {
 		return // should not happen but for safety
 	}
 
 	tm.backlogTasksLock.Lock()
 	defer tm.backlogTasksLock.Unlock()
 
-	ts := timestamp.TimeValue(task.event.Data.CreateTime).UnixNano()
+	ts := timestamp.TimeValue(task.event.GetData().GetCreateTime()).UnixNano()
 	counter := tm.backlogTasksCreateTime[ts]
 	if counter == 1 {
 		delete(tm.backlogTasksCreateTime, ts)

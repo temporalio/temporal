@@ -647,7 +647,7 @@ type (
 	// InternalCompleteForkBranchRequest is used to update some tree/branch meta data for forking
 	InternalCompleteForkBranchRequest struct {
 		// branch to be updated
-		BranchInfo persistencespb.HistoryBranch
+		BranchInfo *persistencespb.HistoryBranch
 		// whether fork is successful
 		Success bool
 		// Used in sharded data stores to identify which shard to use

@@ -8,7 +8,6 @@ package metrics
 
 import (
 	reflect "reflect"
-	sync "sync"
 	unsafe "unsafe"
 
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -23,10 +22,10 @@ const (
 )
 
 type Baggage struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	CountersInt   map[string]int64       `protobuf:"bytes,1,rep,name=counters_int,json=countersInt,proto3" json:"counters_int,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                  protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_CountersInt map[string]int64       `protobuf:"bytes,1,rep,name=counters_int,json=countersInt,proto3" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *Baggage) Reset() {
@@ -54,16 +53,29 @@ func (x *Baggage) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use Baggage.ProtoReflect.Descriptor instead.
-func (*Baggage) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_metrics_v1_message_proto_rawDescGZIP(), []int{0}
-}
-
 func (x *Baggage) GetCountersInt() map[string]int64 {
 	if x != nil {
-		return x.CountersInt
+		return x.xxx_hidden_CountersInt
 	}
 	return nil
+}
+
+func (x *Baggage) SetCountersInt(v map[string]int64) {
+	x.xxx_hidden_CountersInt = v
+}
+
+type Baggage_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	CountersInt map[string]int64
+}
+
+func (b0 Baggage_builder) Build() *Baggage {
+	m0 := &Baggage{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_CountersInt = b.CountersInt
+	return m0
 }
 
 var File_temporal_server_api_metrics_v1_message_proto protoreflect.FileDescriptor
@@ -76,18 +88,6 @@ const file_temporal_server_api_metrics_v1_message_proto_rawDesc = "" +
 	"\x10CountersIntEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\x03R\x05value:\x028\x01B.Z,go.temporal.io/server/api/metrics/v1;metricsb\x06proto3"
-
-var (
-	file_temporal_server_api_metrics_v1_message_proto_rawDescOnce sync.Once
-	file_temporal_server_api_metrics_v1_message_proto_rawDescData []byte
-)
-
-func file_temporal_server_api_metrics_v1_message_proto_rawDescGZIP() []byte {
-	file_temporal_server_api_metrics_v1_message_proto_rawDescOnce.Do(func() {
-		file_temporal_server_api_metrics_v1_message_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_api_metrics_v1_message_proto_rawDesc), len(file_temporal_server_api_metrics_v1_message_proto_rawDesc)))
-	})
-	return file_temporal_server_api_metrics_v1_message_proto_rawDescData
-}
 
 var file_temporal_server_api_metrics_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
 var file_temporal_server_api_metrics_v1_message_proto_goTypes = []any{

@@ -71,10 +71,10 @@ func (s *outboundQueueStandbyTaskExecutorSuite) SetupTest() {
 
 	s.mockShard = shard.NewTestContext(
 		s.controller,
-		&persistencespb.ShardInfo{
+		persistencespb.ShardInfo_builder{
 			ShardId: 1,
 			RangeId: 1,
-		},
+		}.Build(),
 		tests.NewDynamicConfig(),
 	)
 	s.mockWorkflowCache = cache.NewMockCache(s.controller)
@@ -89,10 +89,10 @@ func (s *outboundQueueStandbyTaskExecutorSuite) SetupTest() {
 	s.logger = s.mockShard.GetLogger()
 	s.metricsHandler = s.mockShard.GetMetricsHandler()
 
-	ns := namespace.NewLocalNamespaceForTest(&persistencespb.NamespaceInfo{
+	ns := namespace.NewLocalNamespaceForTest(persistencespb.NamespaceInfo_builder{
 		Name: s.namespaceEntry.Name().String(),
 		Id:   string(s.namespaceID),
-	}, nil, "")
+	}.Build(), nil, "")
 	s.mockNamespaceRegistry.EXPECT().GetNamespaceByID(gomock.Any()).Return(ns, nil).AnyTimes()
 	s.mockNamespaceRegistry.EXPECT().GetNamespaceName(gomock.Any()).Return(ns.Name(), nil).AnyTimes()
 
@@ -116,9 +116,9 @@ func (s *outboundQueueStandbyTaskExecutorSuite) SetupTest() {
 	s.mockMutableState.EXPECT().GetCurrentVersion().Return(int64(1)).AnyTimes()
 	s.mockMutableState.EXPECT().NextTransitionCount().Return(int64(0)).AnyTimes()
 	s.mockMutableState.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).AnyTimes()
-	s.mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+	s.mockMutableState.EXPECT().GetExecutionState().Return(persistencespb.WorkflowExecutionState_builder{
 		State: enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-	}).AnyTimes()
+	}.Build()).AnyTimes()
 
 	s.executor = newOutboundQueueStandbyTaskExecutor(
 		s.mockShard,
@@ -195,10 +195,10 @@ func (s *outboundQueueStandbyTaskExecutorSuite) TestExecute_ChasmTask() {
 				TaskID:      s.mustGenerateTaskID(),
 				Category:    tasks.CategoryOutbound,
 				Destination: tv.Any().String(),
-				Info: &persistencespb.ChasmTaskInfo{
+				Info: persistencespb.ChasmTaskInfo_builder{
 					TypeId:      tv.Any().UInt32(),
 					ArchetypeId: tests.ArchetypeID,
-				},
+				}.Build(),
 				VisibilityTimestamp: s.now,
 			}
 

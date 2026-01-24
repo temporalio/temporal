@@ -24,14 +24,14 @@ func Invoke(
 	shard historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (resp *historyservice.RespondActivityTaskFailedResponse, retError error) {
-	request := req.FailedRequest
+	request := req.GetFailedRequest()
 	tokenSerializer := tasktoken.NewSerializer()
-	token, err0 := tokenSerializer.Deserialize(request.TaskToken)
+	token, err0 := tokenSerializer.Deserialize(request.GetTaskToken())
 	if err0 != nil {
 		return nil, consts.ErrDeserializingToken
 	}
 
-	namespaceEntry, err := api.GetActiveNamespace(shard, namespace.ID(req.GetNamespaceId()), token.WorkflowId)
+	namespaceEntry, err := api.GetActiveNamespace(shard, namespace.ID(req.GetNamespaceId()), token.GetWorkflowId())
 	if err != nil {
 		return nil, err
 	}
@@ -48,11 +48,11 @@ func Invoke(
 	var versioningBehavior enumspb.VersioningBehavior
 	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
-		token.Clock,
+		token.GetClock(),
 		definition.NewWorkflowKey(
-			token.NamespaceId,
-			token.WorkflowId,
-			token.RunId,
+			token.GetNamespaceId(),
+			token.GetWorkflowId(),
+			token.GetRunId(),
 		),
 		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
 			mutableState := workflowLease.GetMutableState()
@@ -85,12 +85,12 @@ func Invoke(
 
 			if request.GetLastHeartbeatDetails() != nil {
 				// Save heartbeat details as progress
-				mutableState.UpdateActivityProgress(ai, &workflowservice.RecordActivityTaskHeartbeatRequest{
+				mutableState.UpdateActivityProgress(ai, workflowservice.RecordActivityTaskHeartbeatRequest_builder{
 					TaskToken: request.GetTaskToken(),
 					Details:   request.GetLastHeartbeatDetails(),
 					Identity:  request.GetIdentity(),
 					Namespace: request.GetNamespace(),
-				})
+				}.Build())
 			}
 
 			postActions := &api.UpdateWorkflowAction{}
@@ -104,7 +104,7 @@ func Invoke(
 			// if retryState != enumspb.RETRY_STATE_IN_PROGRESS && retryState != enumspb.RETRY_STATE_PAUSED {
 			if retryState != enumspb.RETRY_STATE_IN_PROGRESS {
 				// no more retry, and we want to record the failure event
-				if _, err := mutableState.AddActivityTaskFailedEvent(scheduledEventID, ai.StartedEventId, failure, retryState, request.GetIdentity(), request.GetWorkerVersion()); err != nil {
+				if _, err := mutableState.AddActivityTaskFailedEvent(scheduledEventID, ai.GetStartedEventId(), failure, retryState, request.GetIdentity(), request.GetWorkerVersion()); err != nil {
 					// Unable to add ActivityTaskFailed event to history
 					return nil, err
 				}
@@ -114,9 +114,9 @@ func Invoke(
 				closed = false
 			}
 
-			attemptStartedTime = ai.StartedTime.AsTime()
-			firstScheduledTime = ai.FirstScheduledTime.AsTime()
-			taskQueue = ai.TaskQueue
+			attemptStartedTime = ai.GetStartedTime().AsTime()
+			firstScheduledTime = ai.GetFirstScheduledTime().AsTime()
+			taskQueue = ai.GetTaskQueue()
 			versioningBehavior = mutableState.GetEffectiveVersioningBehavior()
 			return postActions, nil
 		},
@@ -138,7 +138,7 @@ func Invoke(
 			completionMetrics,
 			metrics.OperationTag(metrics.HistoryRespondActivityTaskFailedScope),
 			metrics.WorkflowTypeTag(workflowTypeName),
-			metrics.ActivityTypeTag(token.ActivityType),
+			metrics.ActivityTypeTag(token.GetActivityType()),
 			metrics.VersioningBehaviorTag(versioningBehavior))
 	}
 	return &historyservice.RespondActivityTaskFailedResponse{}, err

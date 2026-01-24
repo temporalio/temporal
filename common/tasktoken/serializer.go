@@ -33,9 +33,9 @@ func (s *Serializer) SerializeQueryTaskToken(taskToken *tokenspb.QueryTask) ([]b
 }
 
 func (s *Serializer) DeserializeQueryTaskToken(data []byte) (*tokenspb.QueryTask, error) {
-	taskToken := tokenspb.QueryTask{}
+	taskToken := &tokenspb.QueryTask{}
 	err := taskToken.Unmarshal(data)
-	return &taskToken, err
+	return taskToken, err
 }
 
 func (s *Serializer) SerializeNexusTaskToken(taskToken *tokenspb.NexusTask) ([]byte, error) {
@@ -46,13 +46,13 @@ func (s *Serializer) SerializeNexusTaskToken(taskToken *tokenspb.NexusTask) ([]b
 }
 
 func (s *Serializer) DeserializeNexusTaskToken(data []byte) (*tokenspb.NexusTask, error) {
-	taskToken := tokenspb.NexusTask{}
+	taskToken := &tokenspb.NexusTask{}
 	err := taskToken.Unmarshal(data)
-	return &taskToken, err
+	return taskToken, err
 }
 
 func (s *Serializer) DeserializeChasmComponentRef(data []byte) (*persistencespb.ChasmComponentRef, error) {
-	token := persistencespb.ChasmComponentRef{}
+	token := &persistencespb.ChasmComponentRef{}
 	err := token.Unmarshal(data)
-	return &token, err
+	return token, err
 }

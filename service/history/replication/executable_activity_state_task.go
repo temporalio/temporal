@@ -50,7 +50,7 @@ func NewExecutableActivityStateTask(
 	return &ExecutableActivityStateTask{
 		ProcessToolBox: processToolBox,
 
-		WorkflowKey: definition.NewWorkflowKey(task.NamespaceId, task.WorkflowId, task.RunId),
+		WorkflowKey: definition.NewWorkflowKey(task.GetNamespaceId(), task.GetWorkflowId(), task.GetRunId()),
 		ExecutableTask: NewExecutableTask(
 			processToolBox,
 			taskID,
@@ -61,60 +61,60 @@ func NewExecutableActivityStateTask(
 			sourceShardKey,
 			replicationTask,
 		),
-		req: &historyservice.SyncActivityRequest{
-			NamespaceId:                task.NamespaceId,
-			WorkflowId:                 task.WorkflowId,
-			RunId:                      task.RunId,
-			Version:                    task.Version,
-			ScheduledEventId:           task.ScheduledEventId,
-			ScheduledTime:              task.ScheduledTime,
-			StartedEventId:             task.StartedEventId,
-			StartVersion:               task.StartVersion,
-			StartedTime:                task.StartedTime,
-			LastHeartbeatTime:          task.LastHeartbeatTime,
-			Details:                    task.Details,
-			Attempt:                    task.Attempt,
-			LastFailure:                task.LastFailure,
-			LastWorkerIdentity:         task.LastWorkerIdentity,
-			LastStartedBuildId:         task.LastStartedBuildId,
-			LastStartedRedirectCounter: task.LastStartedRedirectCounter,
-			BaseExecutionInfo:          task.BaseExecutionInfo,
-			VersionHistory:             task.VersionHistory,
-			FirstScheduledTime:         task.FirstScheduledTime,
-			LastAttemptCompleteTime:    task.LastAttemptCompleteTime,
-			Stamp:                      task.Stamp,
-			Paused:                     task.Paused,
-			RetryInitialInterval:       task.RetryInitialInterval,
-			RetryMaximumInterval:       task.RetryMaximumInterval,
-			RetryMaximumAttempts:       task.RetryMaximumAttempts,
-			RetryBackoffCoefficient:    task.RetryBackoffCoefficient,
-		},
+		req: historyservice.SyncActivityRequest_builder{
+			NamespaceId:                task.GetNamespaceId(),
+			WorkflowId:                 task.GetWorkflowId(),
+			RunId:                      task.GetRunId(),
+			Version:                    task.GetVersion(),
+			ScheduledEventId:           task.GetScheduledEventId(),
+			ScheduledTime:              task.GetScheduledTime(),
+			StartedEventId:             task.GetStartedEventId(),
+			StartVersion:               task.GetStartVersion(),
+			StartedTime:                task.GetStartedTime(),
+			LastHeartbeatTime:          task.GetLastHeartbeatTime(),
+			Details:                    task.GetDetails(),
+			Attempt:                    task.GetAttempt(),
+			LastFailure:                task.GetLastFailure(),
+			LastWorkerIdentity:         task.GetLastWorkerIdentity(),
+			LastStartedBuildId:         task.GetLastStartedBuildId(),
+			LastStartedRedirectCounter: task.GetLastStartedRedirectCounter(),
+			BaseExecutionInfo:          task.GetBaseExecutionInfo(),
+			VersionHistory:             task.GetVersionHistory(),
+			FirstScheduledTime:         task.GetFirstScheduledTime(),
+			LastAttemptCompleteTime:    task.GetLastAttemptCompleteTime(),
+			Stamp:                      task.GetStamp(),
+			Paused:                     task.GetPaused(),
+			RetryInitialInterval:       task.GetRetryInitialInterval(),
+			RetryMaximumInterval:       task.GetRetryMaximumInterval(),
+			RetryMaximumAttempts:       task.GetRetryMaximumAttempts(),
+			RetryBackoffCoefficient:    task.GetRetryBackoffCoefficient(),
+		}.Build(),
 
 		batchable: true,
-		activityInfos: append(make([]*historyservice.ActivitySyncInfo, 0, 1), &historyservice.ActivitySyncInfo{
-			Version:                    task.Version,
-			ScheduledEventId:           task.ScheduledEventId,
-			ScheduledTime:              task.ScheduledTime,
-			StartedEventId:             task.StartedEventId,
-			StartVersion:               task.StartVersion,
-			StartedTime:                task.StartedTime,
-			LastHeartbeatTime:          task.LastHeartbeatTime,
-			Details:                    task.Details,
-			Attempt:                    task.Attempt,
-			LastFailure:                task.LastFailure,
-			LastWorkerIdentity:         task.LastWorkerIdentity,
-			VersionHistory:             task.VersionHistory,
-			LastStartedBuildId:         task.LastStartedBuildId,
-			LastStartedRedirectCounter: task.LastStartedRedirectCounter,
-			FirstScheduledTime:         task.FirstScheduledTime,
-			LastAttemptCompleteTime:    task.LastAttemptCompleteTime,
-			Stamp:                      task.Stamp,
-			Paused:                     task.Paused,
-			RetryInitialInterval:       task.RetryInitialInterval,
-			RetryMaximumInterval:       task.RetryMaximumInterval,
-			RetryMaximumAttempts:       task.RetryMaximumAttempts,
-			RetryBackoffCoefficient:    task.RetryBackoffCoefficient,
-		}),
+		activityInfos: append(make([]*historyservice.ActivitySyncInfo, 0, 1), historyservice.ActivitySyncInfo_builder{
+			Version:                    task.GetVersion(),
+			ScheduledEventId:           task.GetScheduledEventId(),
+			ScheduledTime:              task.GetScheduledTime(),
+			StartedEventId:             task.GetStartedEventId(),
+			StartVersion:               task.GetStartVersion(),
+			StartedTime:                task.GetStartedTime(),
+			LastHeartbeatTime:          task.GetLastHeartbeatTime(),
+			Details:                    task.GetDetails(),
+			Attempt:                    task.GetAttempt(),
+			LastFailure:                task.GetLastFailure(),
+			LastWorkerIdentity:         task.GetLastWorkerIdentity(),
+			VersionHistory:             task.GetVersionHistory(),
+			LastStartedBuildId:         task.GetLastStartedBuildId(),
+			LastStartedRedirectCounter: task.GetLastStartedRedirectCounter(),
+			FirstScheduledTime:         task.GetFirstScheduledTime(),
+			LastAttemptCompleteTime:    task.GetLastAttemptCompleteTime(),
+			Stamp:                      task.GetStamp(),
+			Paused:                     task.GetPaused(),
+			RetryInitialInterval:       task.GetRetryInitialInterval(),
+			RetryMaximumInterval:       task.GetRetryMaximumInterval(),
+			RetryMaximumAttempts:       task.GetRetryMaximumAttempts(),
+			RetryBackoffCoefficient:    task.GetRetryBackoffCoefficient(),
+		}.Build()),
 	}
 }
 
@@ -164,12 +164,12 @@ func (e *ExecutableActivityStateTask) Execute() error {
 		return err
 	}
 	if e.Config.EnableReplicationTaskBatching() {
-		return engine.SyncActivities(ctx, &historyservice.SyncActivitiesRequest{
+		return engine.SyncActivities(ctx, historyservice.SyncActivitiesRequest_builder{
 			NamespaceId:    e.NamespaceID,
 			WorkflowId:     e.WorkflowID,
 			RunId:          e.RunID,
 			ActivitiesInfo: e.activityInfos,
-		})
+		}.Build())
 	}
 
 	return engine.SyncActivity(ctx, e.req)
@@ -224,15 +224,15 @@ func (e *ExecutableActivityStateTask) HandleErr(err error) error {
 
 func (e *ExecutableActivityStateTask) MarkPoisonPill() error {
 	if e.ReplicationTask().GetRawTaskInfo() == nil {
-		e.ReplicationTask().RawTaskInfo = &persistencespb.ReplicationTaskInfo{
+		e.ReplicationTask().SetRawTaskInfo(persistencespb.ReplicationTaskInfo_builder{
 			NamespaceId:      e.NamespaceID,
 			WorkflowId:       e.WorkflowID,
 			RunId:            e.RunID,
 			TaskId:           e.ExecutableTask.TaskID(),
 			TaskType:         enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
-			ScheduledEventId: e.req.ScheduledEventId,
-			Version:          e.req.Version,
-		}
+			ScheduledEventId: e.req.GetScheduledEventId(),
+			Version:          e.req.GetVersion(),
+		}.Build())
 	}
 
 	return e.ExecutableTask.MarkPoisonPill()

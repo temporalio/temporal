@@ -143,16 +143,16 @@ func (s *PurgeDLQTasksSuite) TestPurgeDLQTasks() {
 			}
 			s.enqueueTasks(ctx, queueKey, &tasks.WorkflowTask{})
 
-			purgeDLQTasksResponse, err := s.AdminClient().PurgeDLQTasks(ctx, &adminservice.PurgeDLQTasksRequest{
-				DlqKey: &commonspb.HistoryDLQKey{
+			purgeDLQTasksResponse, err := s.AdminClient().PurgeDLQTasks(ctx, adminservice.PurgeDLQTasksRequest_builder{
+				DlqKey: commonspb.HistoryDLQKey_builder{
 					TaskCategory:  int32(params.category.ID()),
 					SourceCluster: params.sourceCluster,
 					TargetCluster: params.targetCluster,
-				},
-				InclusiveMaxTaskMetadata: &commonspb.HistoryDLQTaskMetadata{
+				}.Build(),
+				InclusiveMaxTaskMetadata: commonspb.HistoryDLQTaskMetadata_builder{
 					MessageId: persistence.FirstQueueMessageID + 1,
-				},
-			})
+				}.Build(),
+			}.Build())
 			if params.apiCallErrorExpectation != nil {
 				params.apiCallErrorExpectation(err)
 				return
@@ -162,10 +162,10 @@ func (s *PurgeDLQTasksSuite) TestPurgeDLQTasks() {
 			client := s.sdkClientFactory.GetSystemClient()
 
 			var jobToken adminservice.DLQJobToken
-			err = jobToken.Unmarshal(purgeDLQTasksResponse.JobToken)
+			err = jobToken.Unmarshal(purgeDLQTasksResponse.GetJobToken())
 			s.NoError(err)
 
-			workflow := client.GetWorkflow(ctx, jobToken.WorkflowId, jobToken.RunId)
+			workflow := client.GetWorkflow(ctx, jobToken.GetWorkflowId(), jobToken.GetRunId())
 
 			err = workflow.Get(ctx, nil)
 			if params.workflowErrorExpectation != nil {

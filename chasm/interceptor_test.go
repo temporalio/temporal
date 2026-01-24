@@ -25,10 +25,10 @@ func (h ServiceHandler) Test(
 ) (resp *testspb.TestResponse, err error) {
 	hasEngineCtx := chasm.EngineFromContext(ctx) != nil
 
-	return &testspb.TestResponse{
-		RequestId:    req.RequestId,
+	return testspb.TestResponse_builder{
+		RequestId:    req.GetRequestId(),
 		HasEngineCtx: hasEngineCtx,
-	}, nil
+	}.Build(), nil
 }
 
 type ServiceLibrary struct {
@@ -57,7 +57,7 @@ func TestChasmEngineInterceptor_ShouldRespond(t *testing.T) {
 	defer server.Stop()
 
 	response := testRoundTrip(t, address)
-	require.True(t, response.HasEngineCtx)
+	require.True(t, response.GetHasEngineCtx())
 }
 
 func TestChasmVisibilityInterceptor_ShouldRespond(t *testing.T) {
@@ -85,9 +85,9 @@ func testRoundTrip(t *testing.T, address string) *testspb.TestResponse {
 	client := testspb.NewTestServiceClient(conn)
 
 	var response *testspb.TestResponse
-	response, err = client.Test(context.Background(), &testspb.TestRequest{
+	response, err = client.Test(context.Background(), testspb.TestRequest_builder{
 		RequestId: "test-request-id",
-	})
+	}.Build())
 	require.NoError(t, err)
 	require.Equal(t, "test-request-id", response.GetRequestId())
 

@@ -24,9 +24,9 @@ type Generator struct {
 // be parented under a Scheduler root node.
 func NewGenerator(ctx chasm.MutableContext) *Generator {
 	generator := &Generator{
-		GeneratorState: &schedulerpb.GeneratorState{
+		GeneratorState: schedulerpb.GeneratorState_builder{
 			LastProcessedTime: nil,
-		},
+		}.Build(),
 	}
 
 	// Kick off initial generator run as an immediate task.
@@ -64,14 +64,14 @@ func (g *Generator) UpdateFutureActionTimes(
 	}
 
 	count := recentActionCount
-	if sched.Schedule.State.LimitedActions {
-		count = min(int(sched.Schedule.State.RemainingActions), recentActionCount)
+	if sched.GetSchedule().GetState().GetLimitedActions() {
+		count = min(int(sched.GetSchedule().GetState().GetRemainingActions()), recentActionCount)
 	}
 
 	futureTimes := make([]*timestamppb.Timestamp, 0, count)
 	// Start from max(now, updateTime) to ensure we skip times before the last update.
 	t := ctx.Now(g)
-	if updateTime := sched.Info.GetUpdateTime().AsTime(); updateTime.After(t) {
+	if updateTime := sched.GetInfo().GetUpdateTime().AsTime(); updateTime.After(t) {
 		t = updateTime
 	}
 	for len(futureTimes) < count {
@@ -82,5 +82,5 @@ func (g *Generator) UpdateFutureActionTimes(
 		futureTimes = append(futureTimes, timestamppb.New(t))
 	}
 
-	g.FutureActionTimes = futureTimes
+	g.SetFutureActionTimes(futureTimes)
 }

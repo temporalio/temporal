@@ -65,10 +65,10 @@ func (s *VerifyFirstWorkflowTaskScheduledSuite) SetupTest() {
 	config := tests.NewDynamicConfig()
 	s.shardContext = shard.NewTestContext(
 		s.controller,
-		&persistencespb.ShardInfo{
+		persistencespb.ShardInfo_builder{
 			ShardId: 1,
 			RangeId: 1,
-		},
+		}.Build(),
 		config,
 	)
 
@@ -99,13 +99,13 @@ func (s *VerifyFirstWorkflowTaskScheduledSuite) TearDownTest() {
 }
 
 func (s *VerifyFirstWorkflowTaskScheduledSuite) TestVerifyFirstWorkflowTaskScheduled_WorkflowNotFound() {
-	request := &historyservice.VerifyFirstWorkflowTaskScheduledRequest{
+	request := historyservice.VerifyFirstWorkflowTaskScheduledRequest_builder{
 		NamespaceId: tests.NamespaceID.String(),
-		WorkflowExecution: &commonpb.WorkflowExecution{
+		WorkflowExecution: commonpb.WorkflowExecution_builder{
 			WorkflowId: tests.WorkflowID,
 			RunId:      tests.RunID,
-		},
-	}
+		}.Build(),
+	}.Build()
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, &serviceerror.NotFound{})
 
@@ -114,21 +114,21 @@ func (s *VerifyFirstWorkflowTaskScheduledSuite) TestVerifyFirstWorkflowTaskSched
 }
 
 func (s *VerifyFirstWorkflowTaskScheduledSuite) TestVerifyFirstWorkflowTaskScheduled_WorkflowCompleted() {
-	request := &historyservice.VerifyFirstWorkflowTaskScheduledRequest{
+	request := historyservice.VerifyFirstWorkflowTaskScheduledRequest_builder{
 		NamespaceId: tests.NamespaceID.String(),
-		WorkflowExecution: &commonpb.WorkflowExecution{
+		WorkflowExecution: commonpb.WorkflowExecution_builder{
 			WorkflowId: tests.WorkflowID,
 			RunId:      tests.RunID,
-		},
-	}
+		}.Build(),
+	}.Build()
 
 	ms := workflow.TestGlobalMutableState(s.shardContext, s.mockEventsCache, s.logger, tests.Version, tests.WorkflowID, tests.RunID)
 
 	addWorkflowExecutionStartedEventWithParent(ms,
-		&commonpb.WorkflowExecution{
+		commonpb.WorkflowExecution_builder{
 			WorkflowId: tests.WorkflowID,
 			RunId:      tests.RunID,
-		}, "wType", "testTaskQueue", payloads.EncodeString("input"),
+		}.Build(), "wType", "testTaskQueue", payloads.EncodeString("input"),
 		25*time.Second, 20*time.Second, 200*time.Second, nil, "identity")
 
 	_, err := ms.AddTimeoutWorkflowEvent(
@@ -147,21 +147,21 @@ func (s *VerifyFirstWorkflowTaskScheduledSuite) TestVerifyFirstWorkflowTaskSched
 }
 
 func (s *VerifyFirstWorkflowTaskScheduledSuite) TestVerifyFirstWorkflowTaskScheduled_WorkflowZombie() {
-	request := &historyservice.VerifyFirstWorkflowTaskScheduledRequest{
+	request := historyservice.VerifyFirstWorkflowTaskScheduledRequest_builder{
 		NamespaceId: tests.NamespaceID.String(),
-		WorkflowExecution: &commonpb.WorkflowExecution{
+		WorkflowExecution: commonpb.WorkflowExecution_builder{
 			WorkflowId: tests.WorkflowID,
 			RunId:      tests.RunID,
-		},
-	}
+		}.Build(),
+	}.Build()
 
 	ms := workflow.TestGlobalMutableState(s.shardContext, s.mockEventsCache, s.logger, tests.Version, tests.WorkflowID, tests.RunID)
 
 	addWorkflowExecutionStartedEventWithParent(ms,
-		&commonpb.WorkflowExecution{
+		commonpb.WorkflowExecution_builder{
 			WorkflowId: tests.WorkflowID,
 			RunId:      tests.RunID,
-		}, "wType", "testTaskQueue", payloads.EncodeString("input"),
+		}.Build(), "wType", "testTaskQueue", payloads.EncodeString("input"),
 		25*time.Second, 20*time.Second, 200*time.Second, nil, "identity")
 
 	// zombie state should be treated as open
@@ -180,21 +180,21 @@ func (s *VerifyFirstWorkflowTaskScheduledSuite) TestVerifyFirstWorkflowTaskSched
 }
 
 func (s *VerifyFirstWorkflowTaskScheduledSuite) TestVerifyFirstWorkflowTaskScheduled_WorkflowRunning_TaskPending() {
-	request := &historyservice.VerifyFirstWorkflowTaskScheduledRequest{
+	request := historyservice.VerifyFirstWorkflowTaskScheduledRequest_builder{
 		NamespaceId: tests.NamespaceID.String(),
-		WorkflowExecution: &commonpb.WorkflowExecution{
+		WorkflowExecution: commonpb.WorkflowExecution_builder{
 			WorkflowId: tests.WorkflowID,
 			RunId:      tests.RunID,
-		},
-	}
+		}.Build(),
+	}.Build()
 
 	ms := workflow.TestGlobalMutableState(s.shardContext, s.mockEventsCache, s.logger, tests.Version, tests.WorkflowID, tests.RunID)
 
 	addWorkflowExecutionStartedEventWithParent(ms,
-		&commonpb.WorkflowExecution{
+		commonpb.WorkflowExecution_builder{
 			WorkflowId: tests.WorkflowID,
 			RunId:      tests.RunID,
-		}, "wType", "testTaskQueue", payloads.EncodeString("input"),
+		}.Build(), "wType", "testTaskQueue", payloads.EncodeString("input"),
 		25*time.Second, 20*time.Second, 200*time.Second, nil, "identity")
 	_, _ = ms.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
 
@@ -207,21 +207,21 @@ func (s *VerifyFirstWorkflowTaskScheduledSuite) TestVerifyFirstWorkflowTaskSched
 }
 
 func (s *VerifyFirstWorkflowTaskScheduledSuite) TestVerifyFirstWorkflowTaskScheduled_WorkflowRunning_TaskProcessed() {
-	request := &historyservice.VerifyFirstWorkflowTaskScheduledRequest{
+	request := historyservice.VerifyFirstWorkflowTaskScheduledRequest_builder{
 		NamespaceId: tests.NamespaceID.String(),
-		WorkflowExecution: &commonpb.WorkflowExecution{
+		WorkflowExecution: commonpb.WorkflowExecution_builder{
 			WorkflowId: tests.WorkflowID,
 			RunId:      tests.RunID,
-		},
-	}
+		}.Build(),
+	}.Build()
 
 	ms := workflow.TestGlobalMutableState(s.shardContext, s.mockEventsCache, s.logger, tests.Version, tests.WorkflowID, tests.RunID)
 
 	addWorkflowExecutionStartedEventWithParent(ms,
-		&commonpb.WorkflowExecution{
+		commonpb.WorkflowExecution_builder{
 			WorkflowId: tests.WorkflowID,
 			RunId:      tests.RunID,
-		}, "wType", "testTaskQueue", payloads.EncodeString("input"),
+		}.Build(), "wType", "testTaskQueue", payloads.EncodeString("input"),
 		25*time.Second, 20*time.Second, 200*time.Second, nil, "identity")
 
 	// Schedule WFT
@@ -231,7 +231,7 @@ func (s *VerifyFirstWorkflowTaskScheduledSuite) TestVerifyFirstWorkflowTaskSched
 	workflowTasksStartEvent, _, _ := ms.AddWorkflowTaskStartedEvent(
 		wt.ScheduledEventID,
 		tests.RunID,
-		&taskqueuepb.TaskQueue{Name: "testTaskQueue"},
+		taskqueuepb.TaskQueue_builder{Name: "testTaskQueue"}.Build(),
 		uuid.NewString(),
 		nil,
 		nil,
@@ -246,7 +246,7 @@ func (s *VerifyFirstWorkflowTaskScheduledSuite) TestVerifyFirstWorkflowTaskSched
 	s.NotNil(workflowTask)
 	s.Equal(wt.StartedEventID, workflowTask.StartedEventID)
 	_, _ = ms.AddWorkflowTaskCompletedEvent(workflowTask,
-		&workflowservice.RespondWorkflowTaskCompletedRequest{Identity: "some random identity"}, defaultWorkflowTaskCompletionLimits)
+		workflowservice.RespondWorkflowTaskCompletedRequest_builder{Identity: "some random identity"}.Build(), defaultWorkflowTaskCompletionLimits)
 	ms.FlushBufferedEvents()
 
 	wfMs := workflow.TestCloneToProto(context.Background(), ms)
@@ -266,25 +266,25 @@ func addWorkflowExecutionStartedEventWithParent(
 	parentInfo *workflowspb.ParentExecutionInfo,
 	identity string,
 ) *historypb.HistoryEvent {
-	startRequest := &workflowservice.StartWorkflowExecutionRequest{
-		WorkflowId:               workflowExecution.WorkflowId,
-		WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
-		TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueue},
+	startRequest := workflowservice.StartWorkflowExecutionRequest_builder{
+		WorkflowId:               workflowExecution.GetWorkflowId(),
+		WorkflowType:             commonpb.WorkflowType_builder{Name: workflowType}.Build(),
+		TaskQueue:                taskqueuepb.TaskQueue_builder{Name: taskQueue}.Build(),
 		Input:                    input,
 		WorkflowExecutionTimeout: durationpb.New(executionTimeout),
 		WorkflowRunTimeout:       durationpb.New(runTimeout),
 		WorkflowTaskTimeout:      durationpb.New(taskTimeout),
 		Identity:                 identity,
-	}
+	}.Build()
 
 	event, _ := ms.AddWorkflowExecutionStartedEvent(
 		workflowExecution,
-		&historyservice.StartWorkflowExecutionRequest{
+		historyservice.StartWorkflowExecutionRequest_builder{
 			Attempt:             1,
 			NamespaceId:         tests.NamespaceID.String(),
 			StartRequest:        startRequest,
 			ParentExecutionInfo: parentInfo,
-		},
+		}.Build(),
 	)
 
 	return event

@@ -227,14 +227,14 @@ func (t *task) handleFailures(
 
 			// TODO: consider using history force delete api directly and extract correct archetypeID from mutableState.
 			// Currently, checks on chasm executions are bypassed and we don't reach here for chasm executions.
-			_, err = t.adminClient.DeleteWorkflowExecution(t.ctx, &adminservice.DeleteWorkflowExecutionRequest{
+			_, err = t.adminClient.DeleteWorkflowExecution(t.ctx, adminservice.DeleteWorkflowExecutionRequest_builder{
 				Namespace: ns.Name().String(),
-				Execution: &commonpb.WorkflowExecution{
+				Execution: commonpb.WorkflowExecution_builder{
 					WorkflowId: executionInfo.GetWorkflowId(),
 					RunId:      runID,
-				},
+				}.Build(),
 				Archetype: chasm.WorkflowArchetype,
-			})
+			}.Build())
 			switch err.(type) {
 			case *serviceerror.NotFound,
 				*serviceerror.NamespaceNotFound:

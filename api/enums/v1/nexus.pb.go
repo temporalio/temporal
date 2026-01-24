@@ -9,7 +9,6 @@ package enums
 import (
 	reflect "reflect"
 	"strconv"
-	sync "sync"
 	unsafe "unsafe"
 
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -113,11 +112,6 @@ func (x NexusOperationState) Number() protoreflect.EnumNumber {
 	return protoreflect.EnumNumber(x)
 }
 
-// Deprecated: Use NexusOperationState.Descriptor instead.
-func (NexusOperationState) EnumDescriptor() ([]byte, []int) {
-	return file_temporal_server_api_enums_v1_nexus_proto_rawDescGZIP(), []int{0}
-}
-
 var File_temporal_server_api_enums_v1_nexus_proto protoreflect.FileDescriptor
 
 const file_temporal_server_api_enums_v1_nexus_proto_rawDesc = "" +
@@ -132,18 +126,6 @@ const file_temporal_server_api_enums_v1_nexus_proto_rawDesc = "" +
 	"\x1cNEXUS_OPERATION_STATE_FAILED\x10\x05\x12\"\n" +
 	"\x1eNEXUS_OPERATION_STATE_CANCELED\x10\x06\x12#\n" +
 	"\x1fNEXUS_OPERATION_STATE_TIMED_OUT\x10\aB*Z(go.temporal.io/server/api/enums/v1;enumsb\x06proto3"
-
-var (
-	file_temporal_server_api_enums_v1_nexus_proto_rawDescOnce sync.Once
-	file_temporal_server_api_enums_v1_nexus_proto_rawDescData []byte
-)
-
-func file_temporal_server_api_enums_v1_nexus_proto_rawDescGZIP() []byte {
-	file_temporal_server_api_enums_v1_nexus_proto_rawDescOnce.Do(func() {
-		file_temporal_server_api_enums_v1_nexus_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_api_enums_v1_nexus_proto_rawDesc), len(file_temporal_server_api_enums_v1_nexus_proto_rawDesc)))
-	})
-	return file_temporal_server_api_enums_v1_nexus_proto_rawDescData
-}
 
 var file_temporal_server_api_enums_v1_nexus_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
 var file_temporal_server_api_enums_v1_nexus_proto_goTypes = []any{

@@ -56,22 +56,22 @@ func (g *GeneratorTaskExecutor) Execute(
 	invoker := scheduler.Invoker.Get(ctx)
 
 	// If we have no last processed time, this is a new schedule.
-	if generator.LastProcessedTime == nil {
+	if generator.GetLastProcessedTime() == nil {
 		createdAt := timestamppb.New(ctx.Now(generator))
-		generator.LastProcessedTime = createdAt
-		scheduler.Info.CreateTime = createdAt
+		generator.SetLastProcessedTime(createdAt)
+		scheduler.GetInfo().SetCreateTime(createdAt)
 
 		g.logSchedule(logger, "starting schedule", scheduler)
 	}
 
 	// If the high water mark is earlier than when a schedule was updated, we must skip any actions that hadn't
 	// yet been processed.
-	if scheduler.Info.GetUpdateTime().AsTime().After(generator.LastProcessedTime.AsTime()) {
-		generator.LastProcessedTime = scheduler.Info.GetUpdateTime()
+	if scheduler.GetInfo().GetUpdateTime().AsTime().After(generator.GetLastProcessedTime().AsTime()) {
+		generator.SetLastProcessedTime(scheduler.GetInfo().GetUpdateTime())
 	}
 
 	// Process time range between last high water mark and system time.
-	t1 := generator.LastProcessedTime.AsTime()
+	t1 := generator.GetLastProcessedTime().AsTime()
 	t2 := ctx.Now(generator).UTC()
 	if t2.Before(t1) {
 		logger.Warn("time went backwards",
@@ -100,7 +100,7 @@ func (g *GeneratorTaskExecutor) Execute(
 		logger.Warn("Buffer overrun, dropping actions",
 			tag.NewInt64("dropped-count", result.DroppedCount))
 		g.metricsHandler.Counter(metrics.ScheduleBufferOverruns.Name()).Record(result.DroppedCount)
-		scheduler.Info.BufferDropped += result.DroppedCount
+		scheduler.GetInfo().SetBufferDropped(scheduler.GetInfo().GetBufferDropped() + result.DroppedCount)
 	}
 
 	// Enqueue newly-generated buffered starts.
@@ -109,11 +109,11 @@ func (g *GeneratorTaskExecutor) Execute(
 	}
 
 	// Write the new high water mark and future action times.
-	generator.LastProcessedTime = timestamppb.New(result.LastActionTime)
+	generator.SetLastProcessedTime(timestamppb.New(result.LastActionTime))
 	generator.UpdateFutureActionTimes(ctx, g.specBuilder)
 
 	// Check if the schedule has gone idle.
-	idleTimeTotal := g.config.Tweakables(scheduler.Namespace).IdleTime
+	idleTimeTotal := g.config.Tweakables(scheduler.GetNamespace()).IdleTime
 	idleExpiration, isIdle := scheduler.getIdleExpiration(ctx, idleTimeTotal, result.NextWakeupTime)
 	if isIdle {
 		// Schedule is complete, no need for another buffer task. We keep the schedule's
@@ -123,14 +123,14 @@ func (g *GeneratorTaskExecutor) Execute(
 		// Once the idle timer expires, we close the component.
 		ctx.AddTask(scheduler, chasm.TaskAttributes{
 			ScheduledTime: idleExpiration,
-		}, &schedulerpb.SchedulerIdleTask{
+		}, schedulerpb.SchedulerIdleTask_builder{
 			IdleTimeTotal: durationpb.New(idleTimeTotal),
-		})
+		}.Build())
 		return nil
 	}
 
 	// No more tasks if we're paused.
-	if scheduler.Schedule.State.Paused {
+	if scheduler.GetSchedule().GetState().GetPaused() {
 		return nil
 	}
 
@@ -142,8 +142,8 @@ func (g *GeneratorTaskExecutor) Execute(
 
 func (g *GeneratorTaskExecutor) logSchedule(logger log.Logger, msg string, scheduler *Scheduler) {
 	logger.Debug(msg,
-		tag.NewStringerTag("spec", jsonStringer{scheduler.Schedule.Spec}),
-		tag.NewStringerTag("policies", jsonStringer{scheduler.Schedule.Policies}))
+		tag.NewStringerTag("spec", jsonStringer{scheduler.GetSchedule().GetSpec()}),
+		tag.NewStringerTag("policies", jsonStringer{scheduler.GetSchedule().GetPolicies()}))
 }
 
 func (g *GeneratorTaskExecutor) Validate(

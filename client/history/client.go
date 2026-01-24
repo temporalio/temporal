@@ -117,20 +117,20 @@ func (c *clientImpl) GetReplicationMessages(
 ) (*historyservice.GetReplicationMessagesResponse, error) {
 	requestsByClient := make(map[historyservice.HistoryServiceClient]*historyservice.GetReplicationMessagesRequest)
 
-	for _, token := range request.Tokens {
+	for _, token := range request.GetTokens() {
 		client, err := c.redirector.clientForShardID(token.GetShardId())
 		if err != nil {
 			return nil, err
 		}
 
 		if _, ok := requestsByClient[client]; !ok {
-			requestsByClient[client] = &historyservice.GetReplicationMessagesRequest{
-				ClusterName: request.ClusterName,
-			}
+			requestsByClient[client] = historyservice.GetReplicationMessagesRequest_builder{
+				ClusterName: request.GetClusterName(),
+			}.Build()
 		}
 
 		req := requestsByClient[client]
-		req.Tokens = append(req.Tokens, token)
+		req.SetTokens(append(req.GetTokens(), token))
 	}
 
 	var wg sync.WaitGroup
@@ -163,10 +163,10 @@ func (c *clientImpl) GetReplicationMessages(
 	close(respChan)
 	close(errChan)
 
-	response := &historyservice.GetReplicationMessagesResponse{ShardMessages: make(map[int32]*replicationspb.ReplicationMessages)}
+	response := historyservice.GetReplicationMessagesResponse_builder{ShardMessages: make(map[int32]*replicationspb.ReplicationMessages)}.Build()
 	for resp := range respChan {
-		for shardID, tasks := range resp.ShardMessages {
-			response.ShardMessages[shardID] = tasks
+		for shardID, tasks := range resp.GetShardMessages() {
+			response.GetShardMessages()[shardID] = tasks
 		}
 	}
 	var err error
@@ -207,7 +207,7 @@ func (c *clientImpl) GetReplicationStatus(
 
 	response := &historyservice.GetReplicationStatusResponse{}
 	for resp := range respChan {
-		response.Shards = append(response.Shards, resp.Shards...)
+		response.SetShards(append(response.GetShards(), resp.GetShards()...))
 	}
 
 	if len(errChan) > 0 {

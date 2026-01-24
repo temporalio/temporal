@@ -30,6 +30,7 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -83,7 +84,7 @@ func (s *executableActivityStateTaskSuite) SetupTest() {
 	s.executableTask = NewMockExecutableTask(s.controller)
 	s.EagerNamespaceRefresher = NewMockEagerNamespaceRefresher(s.controller)
 	s.config = tests.NewDynamicConfig()
-	s.replicationTask = &replicationspb.SyncActivityTaskAttributes{
+	s.replicationTask = replicationspb.SyncActivityTaskAttributes_builder{
 		NamespaceId:        uuid.NewString(),
 		WorkflowId:         uuid.NewString(),
 		RunId:              uuid.NewString(),
@@ -99,7 +100,7 @@ func (s *executableActivityStateTaskSuite) SetupTest() {
 		LastWorkerIdentity: uuid.NewString(),
 		BaseExecutionInfo:  &workflowspb.BaseExecutionInfo{},
 		VersionHistory:     &historyspb.VersionHistory{},
-	}
+	}.Build()
 	s.sourceClusterName = cluster.TestCurrentClusterName
 	s.sourceShardKey = ClusterShardKey{
 		ClusterID: int32(cluster.TestCurrentClusterInitialFailoverVersion),
@@ -123,9 +124,9 @@ func (s *executableActivityStateTaskSuite) SetupTest() {
 		s.replicationTask,
 		s.sourceClusterName,
 		s.sourceShardKey,
-		&replicationspb.ReplicationTask{
+		replicationspb.ReplicationTask_builder{
 			Priority: enumsspb.TASK_PRIORITY_HIGH,
-		},
+		}.Build(),
 	)
 	s.task.ExecutableTask = s.executableTask
 	s.executableTask.EXPECT().TaskID().Return(s.taskID).AnyTimes()
@@ -151,24 +152,24 @@ func (s *executableActivityStateTaskSuite) TestExecute_Process() {
 		s.task.WorkflowID,
 	).Return(shardContext, nil).AnyTimes()
 	shardContext.EXPECT().GetEngine(gomock.Any()).Return(engine, nil).AnyTimes()
-	engine.EXPECT().SyncActivity(gomock.Any(), &historyservice.SyncActivityRequest{
-		NamespaceId:        s.replicationTask.NamespaceId,
-		WorkflowId:         s.replicationTask.WorkflowId,
-		RunId:              s.replicationTask.RunId,
-		Version:            s.replicationTask.Version,
-		ScheduledEventId:   s.replicationTask.ScheduledEventId,
-		ScheduledTime:      s.replicationTask.ScheduledTime,
-		StartedEventId:     s.replicationTask.StartedEventId,
-		StartVersion:       s.replicationTask.StartVersion,
-		StartedTime:        s.replicationTask.StartedTime,
-		LastHeartbeatTime:  s.replicationTask.LastHeartbeatTime,
-		Details:            s.replicationTask.Details,
-		Attempt:            s.replicationTask.Attempt,
-		LastFailure:        s.replicationTask.LastFailure,
-		LastWorkerIdentity: s.replicationTask.LastWorkerIdentity,
-		BaseExecutionInfo:  s.replicationTask.BaseExecutionInfo,
+	engine.EXPECT().SyncActivity(gomock.Any(), historyservice.SyncActivityRequest_builder{
+		NamespaceId:        s.replicationTask.GetNamespaceId(),
+		WorkflowId:         s.replicationTask.GetWorkflowId(),
+		RunId:              s.replicationTask.GetRunId(),
+		Version:            s.replicationTask.GetVersion(),
+		ScheduledEventId:   s.replicationTask.GetScheduledEventId(),
+		ScheduledTime:      s.replicationTask.GetScheduledTime(),
+		StartedEventId:     s.replicationTask.GetStartedEventId(),
+		StartVersion:       s.replicationTask.GetStartVersion(),
+		StartedTime:        s.replicationTask.GetStartedTime(),
+		LastHeartbeatTime:  s.replicationTask.GetLastHeartbeatTime(),
+		Details:            s.replicationTask.GetDetails(),
+		Attempt:            s.replicationTask.GetAttempt(),
+		LastFailure:        s.replicationTask.GetLastFailure(),
+		LastWorkerIdentity: s.replicationTask.GetLastWorkerIdentity(),
+		BaseExecutionInfo:  s.replicationTask.GetBaseExecutionInfo(),
 		VersionHistory:     s.replicationTask.GetVersionHistory(),
-	}).Return(nil)
+	}.Build()).Return(nil)
 
 	err := s.task.Execute()
 	s.NoError(err)
@@ -217,24 +218,24 @@ func (s *executableActivityStateTaskSuite) TestHandleErr_Resend_Success() {
 		s.task.WorkflowID,
 	).Return(shardContext, nil).AnyTimes()
 	shardContext.EXPECT().GetEngine(gomock.Any()).Return(engine, nil).AnyTimes()
-	engine.EXPECT().SyncActivity(gomock.Any(), &historyservice.SyncActivityRequest{
-		NamespaceId:        s.replicationTask.NamespaceId,
-		WorkflowId:         s.replicationTask.WorkflowId,
-		RunId:              s.replicationTask.RunId,
-		Version:            s.replicationTask.Version,
-		ScheduledEventId:   s.replicationTask.ScheduledEventId,
-		ScheduledTime:      s.replicationTask.ScheduledTime,
-		StartedEventId:     s.replicationTask.StartedEventId,
-		StartVersion:       s.replicationTask.StartVersion,
-		StartedTime:        s.replicationTask.StartedTime,
-		LastHeartbeatTime:  s.replicationTask.LastHeartbeatTime,
-		Details:            s.replicationTask.Details,
-		Attempt:            s.replicationTask.Attempt,
-		LastFailure:        s.replicationTask.LastFailure,
-		LastWorkerIdentity: s.replicationTask.LastWorkerIdentity,
-		BaseExecutionInfo:  s.replicationTask.BaseExecutionInfo,
+	engine.EXPECT().SyncActivity(gomock.Any(), historyservice.SyncActivityRequest_builder{
+		NamespaceId:        s.replicationTask.GetNamespaceId(),
+		WorkflowId:         s.replicationTask.GetWorkflowId(),
+		RunId:              s.replicationTask.GetRunId(),
+		Version:            s.replicationTask.GetVersion(),
+		ScheduledEventId:   s.replicationTask.GetScheduledEventId(),
+		ScheduledTime:      s.replicationTask.GetScheduledTime(),
+		StartedEventId:     s.replicationTask.GetStartedEventId(),
+		StartVersion:       s.replicationTask.GetStartVersion(),
+		StartedTime:        s.replicationTask.GetStartedTime(),
+		LastHeartbeatTime:  s.replicationTask.GetLastHeartbeatTime(),
+		Details:            s.replicationTask.GetDetails(),
+		Attempt:            s.replicationTask.GetAttempt(),
+		LastFailure:        s.replicationTask.GetLastFailure(),
+		LastWorkerIdentity: s.replicationTask.GetLastWorkerIdentity(),
+		BaseExecutionInfo:  s.replicationTask.GetBaseExecutionInfo(),
 		VersionHistory:     s.replicationTask.GetVersionHistory(),
-	}).Return(nil)
+	}.Build()).Return(nil)
 
 	err := serviceerrors.NewRetryReplication(
 		"",
@@ -284,29 +285,27 @@ func (s *executableActivityStateTaskSuite) TestHandleErr_Other() {
 }
 
 func (s *executableActivityStateTaskSuite) TestMarkPoisonPill() {
-	replicationTask := &replicationspb.ReplicationTask{
-		TaskType:     enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK,
-		SourceTaskId: s.taskID,
-		Attributes: &replicationspb.ReplicationTask_SyncActivityTaskAttributes{
-			SyncActivityTaskAttributes: s.replicationTask,
-		},
-		RawTaskInfo: nil,
-	}
+	replicationTask := replicationspb.ReplicationTask_builder{
+		TaskType:                   enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK,
+		SourceTaskId:               s.taskID,
+		SyncActivityTaskAttributes: proto.ValueOrDefault(s.replicationTask),
+		RawTaskInfo:                nil,
+	}.Build()
 	s.executableTask.EXPECT().ReplicationTask().Return(replicationTask).AnyTimes()
 	s.executableTask.EXPECT().MarkPoisonPill().Times(1)
 
 	err := s.task.MarkPoisonPill()
 	s.NoError(err)
 
-	s.Equal(&persistencespb.ReplicationTaskInfo{
+	s.Equal(persistencespb.ReplicationTaskInfo_builder{
 		NamespaceId:      s.task.NamespaceID,
 		WorkflowId:       s.task.WorkflowID,
 		RunId:            s.task.RunID,
 		TaskId:           s.task.ExecutableTask.TaskID(),
 		TaskType:         enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
-		ScheduledEventId: s.task.req.ScheduledEventId,
-		Version:          s.task.req.Version,
-	}, replicationTask.RawTaskInfo)
+		ScheduledEventId: s.task.req.GetScheduledEventId(),
+		Version:          s.task.req.GetVersion(),
+	}.Build(), replicationTask.GetRawTaskInfo())
 }
 
 func (s *executableActivityStateTaskSuite) TestBatchedTask_ShouldBatchTogether_AndExecute() {
@@ -334,9 +333,9 @@ func (s *executableActivityStateTaskSuite) TestBatchedTask_ShouldBatchTogether_A
 		replicationAttribute1,
 		s.sourceClusterName,
 		s.sourceShardKey,
-		&replicationspb.ReplicationTask{
+		replicationspb.ReplicationTask_builder{
 			Priority: enumsspb.TASK_PRIORITY_HIGH,
-		},
+		}.Build(),
 	)
 	task1.ExecutableTask = s.executableTask
 
@@ -357,9 +356,9 @@ func (s *executableActivityStateTaskSuite) TestBatchedTask_ShouldBatchTogether_A
 		replicationAttribute2,
 		s.sourceClusterName,
 		s.sourceShardKey,
-		&replicationspb.ReplicationTask{
+		replicationspb.ReplicationTask_builder{
 			Priority: enumsspb.TASK_PRIORITY_HIGH,
-		},
+		}.Build(),
 	)
 	task2.ExecutableTask = s.executableTask
 
@@ -383,12 +382,12 @@ func (s *executableActivityStateTaskSuite) TestBatchedTask_ShouldBatchTogether_A
 	).Return(shardContext, nil).AnyTimes()
 	shardContext.EXPECT().GetEngine(gomock.Any()).Return(engine, nil).AnyTimes()
 
-	engine.EXPECT().SyncActivities(gomock.Any(), &historyservice.SyncActivitiesRequest{
+	engine.EXPECT().SyncActivities(gomock.Any(), historyservice.SyncActivitiesRequest_builder{
 		NamespaceId:    namespaceId,
 		WorkflowId:     workflowId,
 		RunId:          runId,
 		ActivitiesInfo: activityTask.activityInfos,
-	})
+	}.Build())
 	err := batchResult.Execute()
 	s.Nil(err)
 }
@@ -413,9 +412,9 @@ func (s *executableActivityStateTaskSuite) TestBatchWith_InvalidBatchTask_Should
 		replicationAttribute1,
 		s.sourceClusterName,
 		s.sourceShardKey,
-		&replicationspb.ReplicationTask{
+		replicationspb.ReplicationTask_builder{
 			Priority: enumsspb.TASK_PRIORITY_HIGH,
-		},
+		}.Build(),
 	)
 
 	replicationAttribute2 := s.generateReplicationAttribute(namespaceId, "wf_2", runId) //
@@ -435,9 +434,9 @@ func (s *executableActivityStateTaskSuite) TestBatchWith_InvalidBatchTask_Should
 		replicationAttribute2,
 		s.sourceClusterName,
 		s.sourceShardKey,
-		&replicationspb.ReplicationTask{
+		replicationspb.ReplicationTask_builder{
 			Priority: enumsspb.TASK_PRIORITY_HIGH,
-		},
+		}.Build(),
 	)
 	batchResult, batched := task1.BatchWith(task2)
 	s.False(batched)
@@ -449,7 +448,7 @@ func (s *executableActivityStateTaskSuite) generateReplicationAttribute(
 	workflowId string,
 	runId string,
 ) *replicationspb.SyncActivityTaskAttributes {
-	return &replicationspb.SyncActivityTaskAttributes{
+	return replicationspb.SyncActivityTaskAttributes_builder{
 		NamespaceId:        namespaceId,
 		WorkflowId:         workflowId,
 		RunId:              runId,
@@ -465,22 +464,22 @@ func (s *executableActivityStateTaskSuite) generateReplicationAttribute(
 		LastWorkerIdentity: uuid.NewString(),
 		BaseExecutionInfo:  &workflowspb.BaseExecutionInfo{},
 		VersionHistory:     &historyspb.VersionHistory{},
-	}
+	}.Build()
 }
 
 func (s *executableActivityStateTaskSuite) assertAttributeEqual(
 	expected *replicationspb.SyncActivityTaskAttributes,
 	actual *historyservice.ActivitySyncInfo,
 ) {
-	s.Equal(expected.Version, actual.Version)
-	s.Equal(expected.ScheduledEventId, actual.ScheduledEventId)
-	s.Equal(expected.ScheduledTime, actual.ScheduledTime)
-	s.Equal(expected.StartedEventId, actual.StartedEventId)
-	s.Equal(expected.StartedTime, actual.StartedTime)
-	s.Equal(expected.LastHeartbeatTime, actual.LastHeartbeatTime)
-	s.Equal(expected.Details, actual.Details)
-	s.Equal(expected.Attempt, actual.Attempt)
-	s.Equal(expected.LastFailure, actual.LastFailure)
-	s.Equal(expected.LastWorkerIdentity, actual.LastWorkerIdentity)
-	s.Equal(expected.VersionHistory, actual.VersionHistory)
+	s.Equal(expected.GetVersion(), actual.GetVersion())
+	s.Equal(expected.GetScheduledEventId(), actual.GetScheduledEventId())
+	s.Equal(expected.GetScheduledTime(), actual.GetScheduledTime())
+	s.Equal(expected.GetStartedEventId(), actual.GetStartedEventId())
+	s.Equal(expected.GetStartedTime(), actual.GetStartedTime())
+	s.Equal(expected.GetLastHeartbeatTime(), actual.GetLastHeartbeatTime())
+	s.Equal(expected.GetDetails(), actual.GetDetails())
+	s.Equal(expected.GetAttempt(), actual.GetAttempt())
+	s.Equal(expected.GetLastFailure(), actual.GetLastFailure())
+	s.Equal(expected.GetLastWorkerIdentity(), actual.GetLastWorkerIdentity())
+	s.Equal(expected.GetVersionHistory(), actual.GetVersionHistory())
 }

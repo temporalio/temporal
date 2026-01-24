@@ -36,8 +36,8 @@ func GenerateTask(
 		nil,
 		definition.NewWorkflowKey(
 			namespaceID.String(),
-			request.Execution.WorkflowId,
-			request.Execution.RunId,
+			request.GetExecution().GetWorkflowId(),
+			request.GetExecution().GetRunId(),
 		),
 		archetypeID,
 		locks.PriorityHigh,
@@ -57,7 +57,7 @@ func GenerateTask(
 		ShardID: shardContext.GetShardID(),
 		// RangeID is set by shard
 		NamespaceID: string(namespaceID),
-		WorkflowID:  request.Execution.WorkflowId,
+		WorkflowID:  request.GetExecution().GetWorkflowId(),
 		ArchetypeID: archetypeID,
 		Tasks: map[tasks.Category][]tasks.Task{
 			tasks.CategoryReplication: replicationTasks,
@@ -68,8 +68,8 @@ func GenerateTask(
 	}
 
 	historyLength := max(mutableState.GetNextEventID()-1, 0)
-	return &historyservice.GenerateLastHistoryReplicationTasksResponse{
+	return historyservice.GenerateLastHistoryReplicationTasksResponse_builder{
 		StateTransitionCount: stateTransitionCount,
 		HistoryLength:        historyLength,
-	}, nil
+	}.Build(), nil
 }

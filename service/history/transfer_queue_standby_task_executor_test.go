@@ -123,9 +123,9 @@ func (s *transferQueueStandbyTaskExecutorSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockShard = shard.NewTestContextWithTimeSource(
 		s.controller,
-		&persistencespb.ShardInfo{
+		persistencespb.ShardInfo_builder{
 			RangeId: 1,
-		},
+		}.Build(),
 		config,
 		s.timeSource,
 	)
@@ -216,26 +216,26 @@ func (s *transferQueueStandbyTaskExecutorSuite) TearDownTest() {
 }
 
 func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Pending() {
-	execution := &commonpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution_builder{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.NewString(),
-	}
+	}.Build()
 	workflowType := "some random workflow type"
 	taskQueueName := "some random task queue"
 
 	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
-		&historyservice.StartWorkflowExecutionRequest{
+		historyservice.StartWorkflowExecutionRequest_builder{
 			Attempt:     1,
 			NamespaceId: s.namespaceID.String(),
-			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
-				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+			StartRequest: workflowservice.StartWorkflowExecutionRequest_builder{
+				WorkflowType:             commonpb.WorkflowType_builder{Name: workflowType}.Build(),
+				TaskQueue:                taskqueuepb.TaskQueue_builder{Name: taskQueueName}.Build(),
 				WorkflowExecutionTimeout: durationpb.New(2 * time.Second),
 				WorkflowTaskTimeout:      durationpb.New(1 * time.Second),
-			},
-		},
+			}.Build(),
+		}.Build(),
 	)
 	s.NoError(err)
 
@@ -284,10 +284,10 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Pending(
 }
 
 func (s *transferQueueStandbyTaskExecutorSuite) TestExecuteChasmSideEffectTransferTask_ExecutesTask() {
-	execution := &commonpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution_builder{
 		WorkflowId: tests.WorkflowKey.WorkflowID,
 		RunId:      tests.WorkflowKey.RunID,
-	}
+	}.Build()
 
 	// Mock the CHASM tree.
 	chasmTree := historyi.NewMockChasmTree(s.controller)
@@ -307,7 +307,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestExecuteChasmSideEffectTransf
 	ms.EXPECT().GetExecutionInfo().Return(info).AnyTimes()
 	ms.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).AnyTimes()
 	ms.EXPECT().GetExecutionState().Return(
-		&persistencespb.WorkflowExecutionState{Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING},
+		persistencespb.WorkflowExecutionState_builder{Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING}.Build(),
 	).AnyTimes()
 	ms.EXPECT().ChasmTree().Return(chasmTree).AnyTimes()
 
@@ -320,9 +320,9 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestExecuteChasmSideEffectTransf
 		),
 		VisibilityTimestamp: s.now,
 		TaskID:              s.mustGenerateTaskID(),
-		Info: &persistencespb.ChasmTaskInfo{
+		Info: persistencespb.ChasmTaskInfo_builder{
 			ArchetypeId: tests.ArchetypeID,
-		},
+		}.Build(),
 	}
 
 	wfCtx := historyi.NewMockWorkflowContext(s.controller)
@@ -368,29 +368,29 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestExecuteChasmSideEffectTransf
 }
 
 func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Success() {
-	execution := &commonpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution_builder{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.NewString(),
-	}
+	}.Build()
 	workflowType := "some random workflow type"
 	taskQueueName := "some random task queue"
 
 	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
-		&historyservice.StartWorkflowExecutionRequest{
+		historyservice.StartWorkflowExecutionRequest_builder{
 			Attempt:     1,
 			NamespaceId: s.namespaceID.String(),
-			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType: &commonpb.WorkflowType{Name: workflowType},
-				TaskQueue: &taskqueuepb.TaskQueue{
+			StartRequest: workflowservice.StartWorkflowExecutionRequest_builder{
+				WorkflowType: commonpb.WorkflowType_builder{Name: workflowType}.Build(),
+				TaskQueue: taskqueuepb.TaskQueue_builder{
 					Name: taskQueueName,
 					Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-				},
+				}.Build(),
 				WorkflowExecutionTimeout: durationpb.New(2 * time.Second),
 				WorkflowTaskTimeout:      durationpb.New(1 * time.Second),
-			},
-		},
+			}.Build(),
+		}.Build(),
 	)
 	s.NoError(err)
 
@@ -431,29 +431,29 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Success(
 }
 
 func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Paused() {
-	execution := &commonpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution_builder{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.NewString(),
-	}
+	}.Build()
 	workflowType := "some random workflow type"
 	taskQueueName := "some random task queue"
 
 	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
-		&historyservice.StartWorkflowExecutionRequest{
+		historyservice.StartWorkflowExecutionRequest_builder{
 			Attempt:     1,
 			NamespaceId: s.namespaceID.String(),
-			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType: &commonpb.WorkflowType{Name: workflowType},
-				TaskQueue: &taskqueuepb.TaskQueue{
+			StartRequest: workflowservice.StartWorkflowExecutionRequest_builder{
+				WorkflowType: commonpb.WorkflowType_builder{Name: workflowType}.Build(),
+				TaskQueue: taskqueuepb.TaskQueue_builder{
 					Name: taskQueueName,
 					Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-				},
+				}.Build(),
 				WorkflowExecutionTimeout: durationpb.New(2 * time.Second),
 				WorkflowTaskTimeout:      durationpb.New(1 * time.Second),
-			},
-		},
+			}.Build(),
+		}.Build(),
 	)
 	s.NoError(err)
 
@@ -468,7 +468,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Paused()
 	event, ai := addActivityTaskScheduledEvent(mutableState, event.GetEventId(), activityID, activityType, taskQueueName, &commonpb.Payloads{}, 1*time.Second, 1*time.Second, 1*time.Second, 1*time.Second)
 
 	// Set the activity as paused without starting it
-	ai.Paused = true
+	ai.SetPaused(true)
 
 	now := time.Now().UTC()
 	transferTask := &tasks.ActivityTask{
@@ -482,7 +482,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Paused()
 		TaskID:              taskID,
 		TaskQueue:           taskQueueName,
 		ScheduledEventID:    event.GetEventId(),
-		Stamp:               ai.Stamp, // Ensure stamp matches
+		Stamp:               ai.GetStamp(), // Ensure stamp matches
 	}
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
@@ -493,26 +493,26 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Paused()
 }
 
 func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_Pending() {
-	execution := &commonpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution_builder{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.NewString(),
-	}
+	}.Build()
 	workflowType := "some random workflow type"
 	taskQueueName := "some random task queue"
 
 	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
-		&historyservice.StartWorkflowExecutionRequest{
+		historyservice.StartWorkflowExecutionRequest_builder{
 			Attempt:     1,
 			NamespaceId: s.namespaceID.String(),
-			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
-				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+			StartRequest: workflowservice.StartWorkflowExecutionRequest_builder{
+				WorkflowType:             commonpb.WorkflowType_builder{Name: workflowType}.Build(),
+				TaskQueue:                taskqueuepb.TaskQueue_builder{Name: taskQueueName}.Build(),
 				WorkflowExecutionTimeout: durationpb.New(2 * time.Second),
 				WorkflowTaskTimeout:      durationpb.New(1 * time.Second),
-			},
-		},
+			}.Build(),
+		}.Build(),
 	)
 	s.NoError(err)
 
@@ -554,26 +554,26 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_Pending(
 }
 
 func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_Success_FirstWorkflowTask() {
-	execution := &commonpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution_builder{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.NewString(),
-	}
+	}.Build()
 	workflowType := "some random workflow type"
 	taskQueueName := "some random task queue"
 
 	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
-		&historyservice.StartWorkflowExecutionRequest{
+		historyservice.StartWorkflowExecutionRequest_builder{
 			Attempt:     1,
 			NamespaceId: s.namespaceID.String(),
-			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
-				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+			StartRequest: workflowservice.StartWorkflowExecutionRequest_builder{
+				WorkflowType:             commonpb.WorkflowType_builder{Name: workflowType}.Build(),
+				TaskQueue:                taskqueuepb.TaskQueue_builder{Name: taskQueueName}.Build(),
 				WorkflowExecutionTimeout: durationpb.New(2 * time.Second),
 				WorkflowTaskTimeout:      durationpb.New(1 * time.Second),
-			},
-		},
+			}.Build(),
+		}.Build(),
 	)
 	s.NoError(err)
 
@@ -606,26 +606,26 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_Success_
 }
 
 func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_Success_NonFirstWorkflowTask() {
-	execution := &commonpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution_builder{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.NewString(),
-	}
+	}.Build()
 	workflowType := "some random workflow type"
 	taskQueueName := "some random task queue"
 
 	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
-		&historyservice.StartWorkflowExecutionRequest{
+		historyservice.StartWorkflowExecutionRequest_builder{
 			Attempt:     1,
 			NamespaceId: s.namespaceID.String(),
-			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
-				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+			StartRequest: workflowservice.StartWorkflowExecutionRequest_builder{
+				WorkflowType:             commonpb.WorkflowType_builder{Name: workflowType}.Build(),
+				TaskQueue:                taskqueuepb.TaskQueue_builder{Name: taskQueueName}.Build(),
 				WorkflowExecutionTimeout: durationpb.New(2 * time.Second),
 				WorkflowTaskTimeout:      durationpb.New(1 * time.Second),
-			},
-		},
+			}.Build(),
+		}.Build(),
 	)
 	s.NoError(err)
 
@@ -663,10 +663,10 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_Success_
 }
 
 func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_StampMismatch() {
-	execution := &commonpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution_builder{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.NewString(),
-	}
+	}.Build()
 	workflowType := "some random workflow type"
 	taskQueueName := "some random task queue"
 	now := time.Now().UTC().Add(-10 * time.Second)
@@ -674,16 +674,16 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_StampMis
 	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
-		&historyservice.StartWorkflowExecutionRequest{
+		historyservice.StartWorkflowExecutionRequest_builder{
 			Attempt:     1,
 			NamespaceId: s.namespaceID.String(),
-			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
-				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+			StartRequest: workflowservice.StartWorkflowExecutionRequest_builder{
+				WorkflowType:             commonpb.WorkflowType_builder{Name: workflowType}.Build(),
+				TaskQueue:                taskqueuepb.TaskQueue_builder{Name: taskQueueName}.Build(),
 				WorkflowExecutionTimeout: durationpb.New(2 * time.Second),
 				WorkflowTaskTimeout:      durationpb.New(1 * time.Second),
-			},
-		},
+			}.Build(),
+		}.Build(),
 	)
 	s.NoError(err)
 
@@ -704,7 +704,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_StampMis
 	}
 
 	// Modify the workflow task stamp in mutable state to create mismatch
-	mutableState.GetExecutionInfo().WorkflowTaskStamp = wt.Stamp + 1
+	mutableState.GetExecutionInfo().SetWorkflowTaskStamp(wt.Stamp + 1)
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, wt.ScheduledEventID, s.version)
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
@@ -715,10 +715,10 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_StampMis
 }
 
 func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCloseExecution() {
-	execution := &commonpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution_builder{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.NewString(),
-	}
+	}.Build()
 	workflowType := "some random workflow type"
 	taskQueueName := "some random task queue"
 
@@ -726,33 +726,33 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCloseExecution() {
 	parentInitiatedID := int64(3222)
 	parentInitiatedVersion := int64(1234)
 	parentNamespace := "some random parent namespace Name"
-	parentExecution := &commonpb.WorkflowExecution{
+	parentExecution := commonpb.WorkflowExecution_builder{
 		WorkflowId: "some random parent workflow ID",
 		RunId:      uuid.NewString(),
-	}
+	}.Build()
 	parentClock := vclock.NewVectorClock(rand.Int63(), rand.Int31(), rand.Int63())
 
 	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
-		&historyservice.StartWorkflowExecutionRequest{
+		historyservice.StartWorkflowExecutionRequest_builder{
 			Attempt:     1,
 			NamespaceId: s.namespaceID.String(),
-			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
-				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+			StartRequest: workflowservice.StartWorkflowExecutionRequest_builder{
+				WorkflowType:             commonpb.WorkflowType_builder{Name: workflowType}.Build(),
+				TaskQueue:                taskqueuepb.TaskQueue_builder{Name: taskQueueName}.Build(),
 				WorkflowExecutionTimeout: durationpb.New(2 * time.Second),
 				WorkflowTaskTimeout:      durationpb.New(1 * time.Second),
-			},
-			ParentExecutionInfo: &workflowspb.ParentExecutionInfo{
+			}.Build(),
+			ParentExecutionInfo: workflowspb.ParentExecutionInfo_builder{
 				NamespaceId:      parentNamespaceID,
 				Namespace:        parentNamespace,
 				Execution:        parentExecution,
 				InitiatedId:      parentInitiatedID,
 				InitiatedVersion: parentInitiatedVersion,
 				Clock:            parentClock,
-			},
-		},
+			}.Build(),
+		}.Build(),
 	)
 	s.NoError(err)
 
@@ -776,16 +776,16 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCloseExecution() {
 		TaskID:              taskID,
 	}
 
-	expectedVerificationRequest := protomock.Eq(&historyservice.VerifyChildExecutionCompletionRecordedRequest{
+	expectedVerificationRequest := protomock.Eq(historyservice.VerifyChildExecutionCompletionRecordedRequest_builder{
 		NamespaceId:            parentNamespaceID,
 		ParentExecution:        parentExecution,
 		ChildExecution:         execution,
 		ParentInitiatedId:      parentInitiatedID,
 		ParentInitiatedVersion: parentInitiatedVersion,
 		Clock:                  parentClock,
-	})
+	}.Build())
 
-	expectedVerificationWithResendParentRequest := protomock.Eq(&historyservice.VerifyChildExecutionCompletionRecordedRequest{
+	expectedVerificationWithResendParentRequest := protomock.Eq(historyservice.VerifyChildExecutionCompletionRecordedRequest_builder{
 		NamespaceId:            parentNamespaceID,
 		ParentExecution:        parentExecution,
 		ChildExecution:         execution,
@@ -793,16 +793,16 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCloseExecution() {
 		ParentInitiatedVersion: parentInitiatedVersion,
 		Clock:                  parentClock,
 		ResendParent:           true,
-	})
+	}.Build())
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespace.ID(parentNamespaceID)).Return(tests.GlobalParentNamespaceEntry, nil).AnyTimes()
-	s.clientBean.EXPECT().GetRemoteAdminClient(tests.GlobalChildNamespaceEntry.ActiveClusterName(parentExecution.WorkflowId)).Return(s.mockRemoteAdminClient, nil).AnyTimes()
-	s.mockRemoteAdminClient.EXPECT().DescribeMutableState(gomock.Any(), protomock.Eq(&adminservice.DescribeMutableStateRequest{
+	s.clientBean.EXPECT().GetRemoteAdminClient(tests.GlobalChildNamespaceEntry.ActiveClusterName(parentExecution.GetWorkflowId())).Return(s.mockRemoteAdminClient, nil).AnyTimes()
+	s.mockRemoteAdminClient.EXPECT().DescribeMutableState(gomock.Any(), protomock.Eq(adminservice.DescribeMutableStateRequest_builder{
 		Namespace:       tests.ParentNamespace.String(),
 		Execution:       parentExecution,
 		SkipForceReload: true,
 		Archetype:       chasm.WorkflowArchetype,
-	})).Return(nil, serviceerror.NewInternal("some error")).AnyTimes()
+	}.Build())).Return(nil, serviceerror.NewInternal("some error")).AnyTimes()
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
@@ -855,31 +855,31 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCloseExecution() {
 }
 
 func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCancelExecution_Pending() {
-	execution := &commonpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution_builder{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.NewString(),
-	}
+	}.Build()
 	workflowType := "some random workflow type"
 	taskQueueName := "some random task queue"
 
-	targetExecution := &commonpb.WorkflowExecution{
+	targetExecution := commonpb.WorkflowExecution_builder{
 		WorkflowId: "some random target workflow ID",
 		RunId:      uuid.NewString(),
-	}
+	}.Build()
 
 	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
-		&historyservice.StartWorkflowExecutionRequest{
+		historyservice.StartWorkflowExecutionRequest_builder{
 			Attempt:     1,
 			NamespaceId: s.namespaceID.String(),
-			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
-				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+			StartRequest: workflowservice.StartWorkflowExecutionRequest_builder{
+				WorkflowType:             commonpb.WorkflowType_builder{Name: workflowType}.Build(),
+				TaskQueue:                taskqueuepb.TaskQueue_builder{Name: taskQueueName}.Build(),
 				WorkflowExecutionTimeout: durationpb.New(2 * time.Second),
 				WorkflowTaskTimeout:      durationpb.New(1 * time.Second),
-			},
-		},
+			}.Build(),
+		}.Build(),
 	)
 	s.NoError(err)
 
@@ -921,31 +921,31 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCancelExecution_Pendi
 }
 
 func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCancelExecution_Success() {
-	execution := &commonpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution_builder{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.NewString(),
-	}
+	}.Build()
 	workflowType := "some random workflow type"
 	taskQueueName := "some random task queue"
 
-	targetExecution := &commonpb.WorkflowExecution{
+	targetExecution := commonpb.WorkflowExecution_builder{
 		WorkflowId: "some random target workflow ID",
 		RunId:      uuid.NewString(),
-	}
+	}.Build()
 
 	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
-		&historyservice.StartWorkflowExecutionRequest{
+		historyservice.StartWorkflowExecutionRequest_builder{
 			Attempt:     1,
 			NamespaceId: s.namespaceID.String(),
-			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
-				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+			StartRequest: workflowservice.StartWorkflowExecutionRequest_builder{
+				WorkflowType:             commonpb.WorkflowType_builder{Name: workflowType}.Build(),
+				TaskQueue:                taskqueuepb.TaskQueue_builder{Name: taskQueueName}.Build(),
 				WorkflowExecutionTimeout: durationpb.New(2 * time.Second),
 				WorkflowTaskTimeout:      durationpb.New(1 * time.Second),
-			},
-		},
+			}.Build(),
+		}.Build(),
 	)
 	s.NoError(err)
 
@@ -983,32 +983,32 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCancelExecution_Succe
 }
 
 func (s *transferQueueStandbyTaskExecutorSuite) TestProcessSignalExecution_Pending() {
-	execution := &commonpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution_builder{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.NewString(),
-	}
+	}.Build()
 	workflowType := "some random workflow type"
 	taskQueueName := "some random task queue"
 
-	targetExecution := &commonpb.WorkflowExecution{
+	targetExecution := commonpb.WorkflowExecution_builder{
 		WorkflowId: "some random target workflow ID",
 		RunId:      uuid.NewString(),
-	}
+	}.Build()
 	signalName := "some random signal name"
 
 	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
-		&historyservice.StartWorkflowExecutionRequest{
+		historyservice.StartWorkflowExecutionRequest_builder{
 			Attempt:     1,
 			NamespaceId: s.namespaceID.String(),
-			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
-				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+			StartRequest: workflowservice.StartWorkflowExecutionRequest_builder{
+				WorkflowType:             commonpb.WorkflowType_builder{Name: workflowType}.Build(),
+				TaskQueue:                taskqueuepb.TaskQueue_builder{Name: taskQueueName}.Build(),
 				WorkflowExecutionTimeout: durationpb.New(2 * time.Second),
 				WorkflowTaskTimeout:      durationpb.New(1 * time.Second),
-			},
-		},
+			}.Build(),
+		}.Build(),
 	)
 	s.NoError(err)
 
@@ -1051,32 +1051,32 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessSignalExecution_Pendi
 }
 
 func (s *transferQueueStandbyTaskExecutorSuite) TestProcessSignalExecution_Success() {
-	execution := &commonpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution_builder{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.NewString(),
-	}
+	}.Build()
 	workflowType := "some random workflow type"
 	taskQueueName := "some random task queue"
 
-	targetExecution := &commonpb.WorkflowExecution{
+	targetExecution := commonpb.WorkflowExecution_builder{
 		WorkflowId: "some random target workflow ID",
 		RunId:      uuid.NewString(),
-	}
+	}.Build()
 	signalName := "some random signal name"
 
 	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
-		&historyservice.StartWorkflowExecutionRequest{
+		historyservice.StartWorkflowExecutionRequest_builder{
 			Attempt:     1,
 			NamespaceId: s.namespaceID.String(),
-			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
-				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+			StartRequest: workflowservice.StartWorkflowExecutionRequest_builder{
+				WorkflowType:             commonpb.WorkflowType_builder{Name: workflowType}.Build(),
+				TaskQueue:                taskqueuepb.TaskQueue_builder{Name: taskQueueName}.Build(),
 				WorkflowExecutionTimeout: durationpb.New(2 * time.Second),
 				WorkflowTaskTimeout:      durationpb.New(1 * time.Second),
-			},
-		},
+			}.Build(),
+		}.Build(),
 	)
 	s.NoError(err)
 
@@ -1115,10 +1115,10 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessSignalExecution_Succe
 }
 
 func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_Pending() {
-	execution := &commonpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution_builder{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.NewString(),
-	}
+	}.Build()
 	workflowType := "some random workflow type"
 	taskQueueName := "some random task queue"
 
@@ -1129,16 +1129,16 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_P
 	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
-		&historyservice.StartWorkflowExecutionRequest{
+		historyservice.StartWorkflowExecutionRequest_builder{
 			Attempt:     1,
 			NamespaceId: s.namespaceID.String(),
-			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
-				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+			StartRequest: workflowservice.StartWorkflowExecutionRequest_builder{
+				WorkflowType:             commonpb.WorkflowType_builder{Name: workflowType}.Build(),
+				TaskQueue:                taskqueuepb.TaskQueue_builder{Name: taskQueueName}.Build(),
 				WorkflowExecutionTimeout: durationpb.New(2 * time.Second),
 				WorkflowTaskTimeout:      durationpb.New(1 * time.Second),
-			},
-		},
+			}.Build(),
+		}.Build(),
 	)
 	s.NoError(err)
 
@@ -1223,10 +1223,10 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_P
 }
 
 func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_Success() {
-	execution := &commonpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution_builder{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.NewString(),
-	}
+	}.Build()
 	workflowType := "some random workflow type"
 	taskQueueName := "some random task queue"
 
@@ -1237,17 +1237,17 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_S
 	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
-		&historyservice.StartWorkflowExecutionRequest{
+		historyservice.StartWorkflowExecutionRequest_builder{
 			Attempt:     1,
 			NamespaceId: s.namespaceID.String(),
-			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
-				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+			StartRequest: workflowservice.StartWorkflowExecutionRequest_builder{
+				WorkflowType:             commonpb.WorkflowType_builder{Name: workflowType}.Build(),
+				TaskQueue:                taskqueuepb.TaskQueue_builder{Name: taskQueueName}.Build(),
 				WorkflowExecutionTimeout: durationpb.New(2 * time.Second),
 				WorkflowTaskTimeout:      durationpb.New(1 * time.Second),
-			},
+			}.Build(),
 			ContinueAsNewInitiator: enumspb.CONTINUE_AS_NEW_INITIATOR_UNSPECIFIED,
-		},
+		}.Build(),
 	)
 	s.NoError(err)
 
@@ -1275,7 +1275,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_S
 	event = addChildWorkflowExecutionStartedEvent(mutableState, event.GetEventId(), childWorkflowID, uuid.NewString(), childWorkflowType, nil)
 	// Flush buffered events so real IDs get assigned
 	mutableState.FlushBufferedEvents()
-	childInfo.StartedEventId = event.GetEventId()
+	childInfo.SetStartedEventId(event.GetEventId())
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)

@@ -18,16 +18,14 @@ func TestValidTransitions(t *testing.T) {
 	// Setup
 	currentTime := time.Now().UTC()
 	callback := callbacks.Callback{
-		&persistencespb.CallbackInfo{
-			Callback: &persistencespb.Callback{
-				Variant: &persistencespb.Callback_Nexus_{
-					Nexus: &persistencespb.Callback_Nexus{
-						Url: "http://address:666/path/to/callback?query=string",
-					},
-				},
-			},
+		persistencespb.CallbackInfo_builder{
+			Callback: persistencespb.Callback_builder{
+				Nexus: persistencespb.Callback_Nexus_builder{
+					Url: "http://address:666/path/to/callback?query=string",
+				}.Build(),
+			}.Build(),
 			State: enumsspb.CALLBACK_STATE_SCHEDULED,
-		},
+		}.Build(),
 	}
 	// AttemptFailed
 	out, err := callbacks.TransitionAttemptFailed.Apply(callback, callbacks.EventAttemptFailed{
@@ -40,8 +38,8 @@ func TestValidTransitions(t *testing.T) {
 	// Assert info object is updated
 	require.Equal(t, enumsspb.CALLBACK_STATE_BACKING_OFF, callback.State())
 	require.Equal(t, int32(1), callback.Attempt)
-	require.Equal(t, "test", callback.LastAttemptFailure.Message)
-	require.False(t, callback.LastAttemptFailure.GetApplicationFailureInfo().NonRetryable)
+	require.Equal(t, "test", callback.LastAttemptFailure.GetMessage())
+	require.False(t, callback.LastAttemptFailure.GetApplicationFailureInfo().GetNonRetryable())
 	require.Equal(t, currentTime, callback.LastAttemptCompleteTime.AsTime())
 	dt := currentTime.Add(time.Second).Sub(callback.NextAttemptScheduleTime.AsTime())
 	require.True(t, dt < time.Millisecond*200)
@@ -58,7 +56,7 @@ func TestValidTransitions(t *testing.T) {
 	// Assert info object is updated only where needed
 	require.Equal(t, enumsspb.CALLBACK_STATE_SCHEDULED, callback.State())
 	require.Equal(t, int32(1), callback.Attempt)
-	require.Equal(t, "test", callback.LastAttemptFailure.Message)
+	require.Equal(t, "test", callback.LastAttemptFailure.GetMessage())
 	// Remains unmodified
 	require.Equal(t, currentTime, callback.LastAttemptCompleteTime.AsTime())
 	require.Nil(t, callback.NextAttemptScheduleTime)
@@ -98,8 +96,8 @@ func TestValidTransitions(t *testing.T) {
 	// Assert info object is updated only where needed
 	require.Equal(t, enumsspb.CALLBACK_STATE_FAILED, callback.State())
 	require.Equal(t, int32(2), callback.Attempt)
-	require.Equal(t, "failed", callback.LastAttemptFailure.Message)
-	require.True(t, callback.LastAttemptFailure.GetApplicationFailureInfo().NonRetryable)
+	require.Equal(t, "failed", callback.LastAttemptFailure.GetMessage())
+	require.True(t, callback.LastAttemptFailure.GetApplicationFailureInfo().GetNonRetryable())
 	require.Equal(t, currentTime, callback.LastAttemptCompleteTime.AsTime())
 	require.Nil(t, callback.NextAttemptScheduleTime)
 
@@ -165,16 +163,16 @@ func TestCompareState(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			s1 := callbacks.Callback{
-				CallbackInfo: &persistencespb.CallbackInfo{
+				CallbackInfo: persistencespb.CallbackInfo_builder{
 					State:   tc.s1,
 					Attempt: tc.attempts1,
-				},
+				}.Build(),
 			}
 			s2 := callbacks.Callback{
-				CallbackInfo: &persistencespb.CallbackInfo{
+				CallbackInfo: persistencespb.CallbackInfo_builder{
 					State:   tc.s2,
 					Attempt: tc.attempts2,
-				},
+				}.Build(),
 			}
 			res, err := def.CompareState(s1, s2)
 			if tc.expectError {

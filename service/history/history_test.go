@@ -75,9 +75,9 @@ func (s *historyAPISuite) TearDownTest() {
 	s.controller.Finish()
 }
 func (s *historyAPISuite) TestDeleteWorkflowExecution_DeleteCurrentExecution() {
-	execution := commonpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution_builder{
 		WorkflowId: "workflowID",
-	}
+	}.Build()
 
 	shardID := common.WorkflowIDToHistoryShard(
 		tests.NamespaceID.String(),
@@ -85,14 +85,14 @@ func (s *historyAPISuite) TestDeleteWorkflowExecution_DeleteCurrentExecution() {
 		1,
 	)
 
-	request := &historyservice.ForceDeleteWorkflowExecutionRequest{
+	request := historyservice.ForceDeleteWorkflowExecutionRequest_builder{
 		NamespaceId: tests.NamespaceID.String(),
 		ArchetypeId: chasm.WorkflowArchetypeID,
-		Request: &adminservice.DeleteWorkflowExecutionRequest{
-			Execution: &execution,
+		Request: adminservice.DeleteWorkflowExecutionRequest_builder{
+			Execution: execution,
 			Archetype: chasm.WorkflowArchetype,
-		},
-	}
+		}.Build(),
+	}.Build()
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(tests.Namespace).Return(tests.NamespaceID, nil).AnyTimes()
 	s.mockVisibilityMgr.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).AnyTimes()
@@ -110,19 +110,19 @@ func (s *historyAPISuite) TestDeleteWorkflowExecution_DeleteCurrentExecution() {
 	s.Nil(resp)
 	s.Error(err)
 
-	mutableState := &persistencespb.WorkflowMutableState{
-		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
-			VersionHistories: &historyspb.VersionHistories{
+	mutableState := persistencespb.WorkflowMutableState_builder{
+		ExecutionInfo: persistencespb.WorkflowExecutionInfo_builder{
+			VersionHistories: historyspb.VersionHistories_builder{
 				CurrentVersionHistoryIndex: 0,
 				Histories: []*historyspb.VersionHistory{
-					{BranchToken: []byte("branch1")},
-					{BranchToken: []byte("branch2")},
-					{BranchToken: []byte("branch3")},
-					{BranchToken: []byte{}},
+					historyspb.VersionHistory_builder{BranchToken: []byte("branch1")}.Build(),
+					historyspb.VersionHistory_builder{BranchToken: []byte("branch2")}.Build(),
+					historyspb.VersionHistory_builder{BranchToken: []byte("branch3")}.Build(),
+					historyspb.VersionHistory_builder{BranchToken: []byte{}}.Build(),
 				},
-			},
-		},
-	}
+			}.Build(),
+		}.Build(),
+	}.Build()
 
 	runID := uuid.NewString()
 	s.mockExecutionMgr.EXPECT().GetCurrentExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetCurrentExecutionResponse{
@@ -134,21 +134,21 @@ func (s *historyAPISuite) TestDeleteWorkflowExecution_DeleteCurrentExecution() {
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), &persistence.GetWorkflowExecutionRequest{
 		ShardID:     shardID,
 		NamespaceID: tests.NamespaceID.String(),
-		WorkflowID:  execution.WorkflowId,
+		WorkflowID:  execution.GetWorkflowId(),
 		RunID:       runID,
 		ArchetypeID: chasm.WorkflowArchetypeID,
 	}).Return(&persistence.GetWorkflowExecutionResponse{State: mutableState}, nil)
 	s.mockExecutionMgr.EXPECT().DeleteCurrentWorkflowExecution(gomock.Any(), &persistence.DeleteCurrentWorkflowExecutionRequest{
 		ShardID:     shardID,
 		NamespaceID: tests.NamespaceID.String(),
-		WorkflowID:  execution.WorkflowId,
+		WorkflowID:  execution.GetWorkflowId(),
 		RunID:       runID,
 		ArchetypeID: chasm.WorkflowArchetypeID,
 	}).Return(nil)
 	s.mockExecutionMgr.EXPECT().DeleteWorkflowExecution(gomock.Any(), &persistence.DeleteWorkflowExecutionRequest{
 		ShardID:     shardID,
 		NamespaceID: tests.NamespaceID.String(),
-		WorkflowID:  execution.WorkflowId,
+		WorkflowID:  execution.GetWorkflowId(),
 		RunID:       runID,
 		ArchetypeID: chasm.WorkflowArchetypeID,
 	}).Return(nil)
@@ -167,10 +167,10 @@ func (s *historyAPISuite) TestDeleteWorkflowExecution_DeleteCurrentExecution() {
 }
 
 func (s *historyAPISuite) TestDeleteWorkflowExecution_LoadMutableStateFailed() {
-	execution := commonpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution_builder{
 		WorkflowId: "workflowID",
 		RunId:      uuid.NewString(),
-	}
+	}.Build()
 
 	shardID := common.WorkflowIDToHistoryShard(
 		tests.NamespaceID.String(),
@@ -178,14 +178,14 @@ func (s *historyAPISuite) TestDeleteWorkflowExecution_LoadMutableStateFailed() {
 		1,
 	)
 
-	request := &historyservice.ForceDeleteWorkflowExecutionRequest{
+	request := historyservice.ForceDeleteWorkflowExecutionRequest_builder{
 		NamespaceId: tests.NamespaceID.String(),
 		ArchetypeId: chasm.WorkflowArchetypeID,
-		Request: &adminservice.DeleteWorkflowExecutionRequest{
-			Execution: &execution,
+		Request: adminservice.DeleteWorkflowExecutionRequest_builder{
+			Execution: execution,
 			Archetype: chasm.WorkflowArchetype,
-		},
-	}
+		}.Build(),
+	}.Build()
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(tests.Namespace).Return(tests.NamespaceID, nil).AnyTimes()
 	s.mockVisibilityMgr.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).AnyTimes()

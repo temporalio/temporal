@@ -84,9 +84,9 @@ func Parse(searchAttributesStr map[string]string, typeMap *NameTypeMap) (*common
 		return nil, nil
 	}
 
-	searchAttributes := &commonpb.SearchAttributes{
+	searchAttributes := commonpb.SearchAttributes_builder{
 		IndexedFields: make(map[string]*commonpb.Payload, len(searchAttributesStr)),
-	}
+	}.Build()
 	var lastErr error
 
 	for saName, saValStr := range searchAttributesStr {
@@ -98,7 +98,7 @@ func Parse(searchAttributesStr map[string]string, typeMap *NameTypeMap) (*common
 		if err != nil {
 			lastErr = err
 		}
-		searchAttributes.IndexedFields[saName] = saValPayload
+		searchAttributes.GetIndexedFields()[saName] = saValPayload
 	}
 
 	return searchAttributes, lastErr

@@ -8,7 +8,7 @@ package persistence
 
 import (
 	reflect "reflect"
-	sync "sync"
+	"strconv"
 	unsafe "unsafe"
 
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -25,36 +25,14 @@ const (
 
 // A node in a hierarchical state machine tree.
 type StateMachineNode struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Serialized data of the underlying state machine.
-	Data []byte `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
-	// Map of state machine type to a map of machines by ID.
-	Children map[string]*StateMachineMap `protobuf:"bytes,2,rep,name=children,proto3" json:"children,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	// Versioned transition when the node was instantiated.
-	// This field, plus node path uniquely identifies a state machine node in a mutable state instance.
-	// This field will always be set even when transition history is disabled.
-	// NOTE: If transition history is disabled, the transition_count field will be 0 and
-	// cannot be used to uniquely identify a node.
-	// NOTE: Node deletion is not yet implemented at the time of writing so we can still uniquely identify a node just
-	// with the initial namespace failover version.
-	InitialVersionedTransition *VersionedTransition `protobuf:"bytes,3,opt,name=initial_versioned_transition,json=initialVersionedTransition,proto3" json:"initial_versioned_transition,omitempty"`
-	// Versioned transition when the node was last updated.
-	// This field will always be set even when transition history is disabled.
-	// NOTE: If transition history is disabled, the transition_count field will be 0 and
-	// cannot be used for non-concurrent task staleness check or to determine whether this node should be synced
-	// during state replication.
-	LastUpdateVersionedTransition *VersionedTransition `protobuf:"bytes,4,opt,name=last_update_versioned_transition,json=lastUpdateVersionedTransition,proto3" json:"last_update_versioned_transition,omitempty"`
-	// Number of transitions on this state machine object.
-	// Used to verify that a task is not stale if the state machine does not allow concurrent task execution.
-	// The transition count monotonically increases with each state transition and only resets when the entire
-	// mutable state was rebuilt. This case is handled by the task_generation_shard_clock_timestamp field in
-	// WorkflowExecutionInfo.
-	// NOTE: This field is cluster specific and cannot be replicated.
-	// NOTE: This field will be made obsolete when transition history is enabled in favor of
-	// last_update_versioned_transition.
-	TransitionCount int64 `protobuf:"varint,100,opt,name=transition_count,json=transitionCount,proto3" json:"transition_count,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state                                    protoimpl.MessageState      `protogen:"opaque.v1"`
+	xxx_hidden_Data                          []byte                      `protobuf:"bytes,1,opt,name=data,proto3"`
+	xxx_hidden_Children                      map[string]*StateMachineMap `protobuf:"bytes,2,rep,name=children,proto3" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	xxx_hidden_InitialVersionedTransition    *VersionedTransition        `protobuf:"bytes,3,opt,name=initial_versioned_transition,json=initialVersionedTransition,proto3"`
+	xxx_hidden_LastUpdateVersionedTransition *VersionedTransition        `protobuf:"bytes,4,opt,name=last_update_versioned_transition,json=lastUpdateVersionedTransition,proto3"`
+	xxx_hidden_TransitionCount               int64                       `protobuf:"varint,100,opt,name=transition_count,json=transitionCount,proto3"`
+	unknownFields                            protoimpl.UnknownFields
+	sizeCache                                protoimpl.SizeCache
 }
 
 func (x *StateMachineNode) Reset() {
@@ -82,55 +60,136 @@ func (x *StateMachineNode) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use StateMachineNode.ProtoReflect.Descriptor instead.
-func (*StateMachineNode) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_hsm_proto_rawDescGZIP(), []int{0}
-}
-
 func (x *StateMachineNode) GetData() []byte {
 	if x != nil {
-		return x.Data
+		return x.xxx_hidden_Data
 	}
 	return nil
 }
 
 func (x *StateMachineNode) GetChildren() map[string]*StateMachineMap {
 	if x != nil {
-		return x.Children
+		return x.xxx_hidden_Children
 	}
 	return nil
 }
 
 func (x *StateMachineNode) GetInitialVersionedTransition() *VersionedTransition {
 	if x != nil {
-		return x.InitialVersionedTransition
+		return x.xxx_hidden_InitialVersionedTransition
 	}
 	return nil
 }
 
 func (x *StateMachineNode) GetLastUpdateVersionedTransition() *VersionedTransition {
 	if x != nil {
-		return x.LastUpdateVersionedTransition
+		return x.xxx_hidden_LastUpdateVersionedTransition
 	}
 	return nil
 }
 
 func (x *StateMachineNode) GetTransitionCount() int64 {
 	if x != nil {
-		return x.TransitionCount
+		return x.xxx_hidden_TransitionCount
 	}
 	return 0
 }
 
+func (x *StateMachineNode) SetData(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_Data = v
+}
+
+func (x *StateMachineNode) SetChildren(v map[string]*StateMachineMap) {
+	x.xxx_hidden_Children = v
+}
+
+func (x *StateMachineNode) SetInitialVersionedTransition(v *VersionedTransition) {
+	x.xxx_hidden_InitialVersionedTransition = v
+}
+
+func (x *StateMachineNode) SetLastUpdateVersionedTransition(v *VersionedTransition) {
+	x.xxx_hidden_LastUpdateVersionedTransition = v
+}
+
+func (x *StateMachineNode) SetTransitionCount(v int64) {
+	x.xxx_hidden_TransitionCount = v
+}
+
+func (x *StateMachineNode) HasInitialVersionedTransition() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_InitialVersionedTransition != nil
+}
+
+func (x *StateMachineNode) HasLastUpdateVersionedTransition() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_LastUpdateVersionedTransition != nil
+}
+
+func (x *StateMachineNode) ClearInitialVersionedTransition() {
+	x.xxx_hidden_InitialVersionedTransition = nil
+}
+
+func (x *StateMachineNode) ClearLastUpdateVersionedTransition() {
+	x.xxx_hidden_LastUpdateVersionedTransition = nil
+}
+
+type StateMachineNode_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Serialized data of the underlying state machine.
+	Data []byte
+	// Map of state machine type to a map of machines by ID.
+	Children map[string]*StateMachineMap
+	// Versioned transition when the node was instantiated.
+	// This field, plus node path uniquely identifies a state machine node in a mutable state instance.
+	// This field will always be set even when transition history is disabled.
+	// NOTE: If transition history is disabled, the transition_count field will be 0 and
+	// cannot be used to uniquely identify a node.
+	// NOTE: Node deletion is not yet implemented at the time of writing so we can still uniquely identify a node just
+	// with the initial namespace failover version.
+	InitialVersionedTransition *VersionedTransition
+	// Versioned transition when the node was last updated.
+	// This field will always be set even when transition history is disabled.
+	// NOTE: If transition history is disabled, the transition_count field will be 0 and
+	// cannot be used for non-concurrent task staleness check or to determine whether this node should be synced
+	// during state replication.
+	LastUpdateVersionedTransition *VersionedTransition
+	// Number of transitions on this state machine object.
+	// Used to verify that a task is not stale if the state machine does not allow concurrent task execution.
+	// The transition count monotonically increases with each state transition and only resets when the entire
+	// mutable state was rebuilt. This case is handled by the task_generation_shard_clock_timestamp field in
+	// WorkflowExecutionInfo.
+	// NOTE: This field is cluster specific and cannot be replicated.
+	// NOTE: This field will be made obsolete when transition history is enabled in favor of
+	// last_update_versioned_transition.
+	TransitionCount int64
+}
+
+func (b0 StateMachineNode_builder) Build() *StateMachineNode {
+	m0 := &StateMachineNode{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Data = b.Data
+	x.xxx_hidden_Children = b.Children
+	x.xxx_hidden_InitialVersionedTransition = b.InitialVersionedTransition
+	x.xxx_hidden_LastUpdateVersionedTransition = b.LastUpdateVersionedTransition
+	x.xxx_hidden_TransitionCount = b.TransitionCount
+	return m0
+}
+
 // Map of state machine ID to StateMachineNode.
 type StateMachineMap struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// (-- api-linter: core::0140::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: "by" is used to clarify the keys and values. --)
-	MachinesById  map[string]*StateMachineNode `protobuf:"bytes,1,rep,name=machines_by_id,json=machinesById,proto3" json:"machines_by_id,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                   protoimpl.MessageState       `protogen:"opaque.v1"`
+	xxx_hidden_MachinesById map[string]*StateMachineNode `protobuf:"bytes,1,rep,name=machines_by_id,json=machinesById,proto3" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
 }
 
 func (x *StateMachineMap) Reset() {
@@ -158,26 +217,40 @@ func (x *StateMachineMap) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use StateMachineMap.ProtoReflect.Descriptor instead.
-func (*StateMachineMap) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_hsm_proto_rawDescGZIP(), []int{1}
-}
-
 func (x *StateMachineMap) GetMachinesById() map[string]*StateMachineNode {
 	if x != nil {
-		return x.MachinesById
+		return x.xxx_hidden_MachinesById
 	}
 	return nil
 }
 
+func (x *StateMachineMap) SetMachinesById(v map[string]*StateMachineNode) {
+	x.xxx_hidden_MachinesById = v
+}
+
+type StateMachineMap_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// (-- api-linter: core::0140::prepositions=disabled
+	//
+	//	aip.dev/not-precedent: "by" is used to clarify the keys and values. --)
+	MachinesById map[string]*StateMachineNode
+}
+
+func (b0 StateMachineMap_builder) Build() *StateMachineMap {
+	m0 := &StateMachineMap{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_MachinesById = b.MachinesById
+	return m0
+}
+
 type StateMachineKey struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Addressable type of the corresponding state machine in a single tree level.
-	Type string `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
-	// Addressable ID of the corresponding state machine in a single tree level.
-	Id            string `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Type string                 `protobuf:"bytes,1,opt,name=type,proto3"`
+	xxx_hidden_Id   string                 `protobuf:"bytes,2,opt,name=id,proto3"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *StateMachineKey) Reset() {
@@ -205,57 +278,56 @@ func (x *StateMachineKey) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use StateMachineKey.ProtoReflect.Descriptor instead.
-func (*StateMachineKey) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_hsm_proto_rawDescGZIP(), []int{2}
-}
-
 func (x *StateMachineKey) GetType() string {
 	if x != nil {
-		return x.Type
+		return x.xxx_hidden_Type
 	}
 	return ""
 }
 
 func (x *StateMachineKey) GetId() string {
 	if x != nil {
-		return x.Id
+		return x.xxx_hidden_Id
 	}
 	return ""
 }
 
+func (x *StateMachineKey) SetType(v string) {
+	x.xxx_hidden_Type = v
+}
+
+func (x *StateMachineKey) SetId(v string) {
+	x.xxx_hidden_Id = v
+}
+
+type StateMachineKey_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Addressable type of the corresponding state machine in a single tree level.
+	Type string
+	// Addressable ID of the corresponding state machine in a single tree level.
+	Id string
+}
+
+func (b0 StateMachineKey_builder) Build() *StateMachineKey {
+	m0 := &StateMachineKey{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Type = b.Type
+	x.xxx_hidden_Id = b.Id
+	return m0
+}
+
 // A reference to a state machine at a point in time.
 type StateMachineRef struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Nested path to a state machine.
-	Path []*StateMachineKey `protobuf:"bytes,1,rep,name=path,proto3" json:"path,omitempty"`
-	// Versioned transition of the ref was instantiated.
-	// Used to verify that the ref is not referencing a stale state or, in some situations,
-	// that the ref itself is not stale.
-	// NOTE: If transition history is disabled, the field will not be specified and
-	// cannot be used for staleness check.
-	MutableStateVersionedTransition *VersionedTransition `protobuf:"bytes,2,opt,name=mutable_state_versioned_transition,json=mutableStateVersionedTransition,proto3" json:"mutable_state_versioned_transition,omitempty"`
-	// Versioned transition when the state machine node was instantiated.
-	// This field, plus node path uniquely identifies a state machine node in a mutable state instance.
-	// This field will always be set even when transition history is disabled.
-	// NOTE: If transition history is disabled, the transition_count field will be 0 and
-	// cannot be used to uniquely identify a node.
-	// NOTE: Node deletion is not yet implemented at the time of writing so we can still uniquely identify a node just
-	// with the initial namespace failover version.
-	MachineInitialVersionedTransition *VersionedTransition `protobuf:"bytes,3,opt,name=machine_initial_versioned_transition,json=machineInitialVersionedTransition,proto3" json:"machine_initial_versioned_transition,omitempty"`
-	// Versioned transition when the state machine node was last updated.
-	// If not specified, this reference is considered non-concurrent,
-	// and should match the last_update_versioned_transition on the corresponding state machine node.
-	// NOTE: If transition history is disabled, the transition_count field will be 0 and
-	// cannot be used for non-concurrent task staleness check.
-	MachineLastUpdateVersionedTransition *VersionedTransition `protobuf:"bytes,4,opt,name=machine_last_update_versioned_transition,json=machineLastUpdateVersionedTransition,proto3" json:"machine_last_update_versioned_transition,omitempty"`
-	// Number of transitions executed on the referenced state machine node at the time this Ref is instantiated.
-	// If non-zero, this reference is considered non-concurrent and this number should match the number of state
-	// transitions on the corresponding state machine node.
-	// This field will be obsolete once mutable state transition history is productionized.
-	MachineTransitionCount int64 `protobuf:"varint,100,opt,name=machine_transition_count,json=machineTransitionCount,proto3" json:"machine_transition_count,omitempty"`
-	unknownFields          protoimpl.UnknownFields
-	sizeCache              protoimpl.SizeCache
+	state                                           protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Path                                 *[]*StateMachineKey    `protobuf:"bytes,1,rep,name=path,proto3"`
+	xxx_hidden_MutableStateVersionedTransition      *VersionedTransition   `protobuf:"bytes,2,opt,name=mutable_state_versioned_transition,json=mutableStateVersionedTransition,proto3"`
+	xxx_hidden_MachineInitialVersionedTransition    *VersionedTransition   `protobuf:"bytes,3,opt,name=machine_initial_versioned_transition,json=machineInitialVersionedTransition,proto3"`
+	xxx_hidden_MachineLastUpdateVersionedTransition *VersionedTransition   `protobuf:"bytes,4,opt,name=machine_last_update_versioned_transition,json=machineLastUpdateVersionedTransition,proto3"`
+	xxx_hidden_MachineTransitionCount               int64                  `protobuf:"varint,100,opt,name=machine_transition_count,json=machineTransitionCount,proto3"`
+	unknownFields                                   protoimpl.UnknownFields
+	sizeCache                                       protoimpl.SizeCache
 }
 
 func (x *StateMachineRef) Reset() {
@@ -283,56 +355,147 @@ func (x *StateMachineRef) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use StateMachineRef.ProtoReflect.Descriptor instead.
-func (*StateMachineRef) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_hsm_proto_rawDescGZIP(), []int{3}
-}
-
 func (x *StateMachineRef) GetPath() []*StateMachineKey {
 	if x != nil {
-		return x.Path
+		if x.xxx_hidden_Path != nil {
+			return *x.xxx_hidden_Path
+		}
 	}
 	return nil
 }
 
 func (x *StateMachineRef) GetMutableStateVersionedTransition() *VersionedTransition {
 	if x != nil {
-		return x.MutableStateVersionedTransition
+		return x.xxx_hidden_MutableStateVersionedTransition
 	}
 	return nil
 }
 
 func (x *StateMachineRef) GetMachineInitialVersionedTransition() *VersionedTransition {
 	if x != nil {
-		return x.MachineInitialVersionedTransition
+		return x.xxx_hidden_MachineInitialVersionedTransition
 	}
 	return nil
 }
 
 func (x *StateMachineRef) GetMachineLastUpdateVersionedTransition() *VersionedTransition {
 	if x != nil {
-		return x.MachineLastUpdateVersionedTransition
+		return x.xxx_hidden_MachineLastUpdateVersionedTransition
 	}
 	return nil
 }
 
 func (x *StateMachineRef) GetMachineTransitionCount() int64 {
 	if x != nil {
-		return x.MachineTransitionCount
+		return x.xxx_hidden_MachineTransitionCount
 	}
 	return 0
 }
 
+func (x *StateMachineRef) SetPath(v []*StateMachineKey) {
+	x.xxx_hidden_Path = &v
+}
+
+func (x *StateMachineRef) SetMutableStateVersionedTransition(v *VersionedTransition) {
+	x.xxx_hidden_MutableStateVersionedTransition = v
+}
+
+func (x *StateMachineRef) SetMachineInitialVersionedTransition(v *VersionedTransition) {
+	x.xxx_hidden_MachineInitialVersionedTransition = v
+}
+
+func (x *StateMachineRef) SetMachineLastUpdateVersionedTransition(v *VersionedTransition) {
+	x.xxx_hidden_MachineLastUpdateVersionedTransition = v
+}
+
+func (x *StateMachineRef) SetMachineTransitionCount(v int64) {
+	x.xxx_hidden_MachineTransitionCount = v
+}
+
+func (x *StateMachineRef) HasMutableStateVersionedTransition() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_MutableStateVersionedTransition != nil
+}
+
+func (x *StateMachineRef) HasMachineInitialVersionedTransition() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_MachineInitialVersionedTransition != nil
+}
+
+func (x *StateMachineRef) HasMachineLastUpdateVersionedTransition() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_MachineLastUpdateVersionedTransition != nil
+}
+
+func (x *StateMachineRef) ClearMutableStateVersionedTransition() {
+	x.xxx_hidden_MutableStateVersionedTransition = nil
+}
+
+func (x *StateMachineRef) ClearMachineInitialVersionedTransition() {
+	x.xxx_hidden_MachineInitialVersionedTransition = nil
+}
+
+func (x *StateMachineRef) ClearMachineLastUpdateVersionedTransition() {
+	x.xxx_hidden_MachineLastUpdateVersionedTransition = nil
+}
+
+type StateMachineRef_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Nested path to a state machine.
+	Path []*StateMachineKey
+	// Versioned transition of the ref was instantiated.
+	// Used to verify that the ref is not referencing a stale state or, in some situations,
+	// that the ref itself is not stale.
+	// NOTE: If transition history is disabled, the field will not be specified and
+	// cannot be used for staleness check.
+	MutableStateVersionedTransition *VersionedTransition
+	// Versioned transition when the state machine node was instantiated.
+	// This field, plus node path uniquely identifies a state machine node in a mutable state instance.
+	// This field will always be set even when transition history is disabled.
+	// NOTE: If transition history is disabled, the transition_count field will be 0 and
+	// cannot be used to uniquely identify a node.
+	// NOTE: Node deletion is not yet implemented at the time of writing so we can still uniquely identify a node just
+	// with the initial namespace failover version.
+	MachineInitialVersionedTransition *VersionedTransition
+	// Versioned transition when the state machine node was last updated.
+	// If not specified, this reference is considered non-concurrent,
+	// and should match the last_update_versioned_transition on the corresponding state machine node.
+	// NOTE: If transition history is disabled, the transition_count field will be 0 and
+	// cannot be used for non-concurrent task staleness check.
+	MachineLastUpdateVersionedTransition *VersionedTransition
+	// Number of transitions executed on the referenced state machine node at the time this Ref is instantiated.
+	// If non-zero, this reference is considered non-concurrent and this number should match the number of state
+	// transitions on the corresponding state machine node.
+	// This field will be obsolete once mutable state transition history is productionized.
+	MachineTransitionCount int64
+}
+
+func (b0 StateMachineRef_builder) Build() *StateMachineRef {
+	m0 := &StateMachineRef{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Path = &b.Path
+	x.xxx_hidden_MutableStateVersionedTransition = b.MutableStateVersionedTransition
+	x.xxx_hidden_MachineInitialVersionedTransition = b.MachineInitialVersionedTransition
+	x.xxx_hidden_MachineLastUpdateVersionedTransition = b.MachineLastUpdateVersionedTransition
+	x.xxx_hidden_MachineTransitionCount = b.MachineTransitionCount
+	return m0
+}
+
 type StateMachineTaskInfo struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Reference to a state machine.
-	Ref *StateMachineRef `protobuf:"bytes,1,opt,name=ref,proto3" json:"ref,omitempty"`
-	// Task type. Not to be confused with the state machine's type in the `ref` field.
-	Type string `protobuf:"bytes,2,opt,name=type,proto3" json:"type,omitempty"`
-	// Opaque data attached to this task. May be nil. Deserialized by a registered TaskSerializer for this type.
-	Data          []byte `protobuf:"bytes,3,opt,name=data,proto3" json:"data,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Ref  *StateMachineRef       `protobuf:"bytes,1,opt,name=ref,proto3"`
+	xxx_hidden_Type string                 `protobuf:"bytes,2,opt,name=type,proto3"`
+	xxx_hidden_Data []byte                 `protobuf:"bytes,3,opt,name=data,proto3"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *StateMachineTaskInfo) Reset() {
@@ -360,46 +523,82 @@ func (x *StateMachineTaskInfo) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use StateMachineTaskInfo.ProtoReflect.Descriptor instead.
-func (*StateMachineTaskInfo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_hsm_proto_rawDescGZIP(), []int{4}
-}
-
 func (x *StateMachineTaskInfo) GetRef() *StateMachineRef {
 	if x != nil {
-		return x.Ref
+		return x.xxx_hidden_Ref
 	}
 	return nil
 }
 
 func (x *StateMachineTaskInfo) GetType() string {
 	if x != nil {
-		return x.Type
+		return x.xxx_hidden_Type
 	}
 	return ""
 }
 
 func (x *StateMachineTaskInfo) GetData() []byte {
 	if x != nil {
-		return x.Data
+		return x.xxx_hidden_Data
 	}
 	return nil
 }
 
+func (x *StateMachineTaskInfo) SetRef(v *StateMachineRef) {
+	x.xxx_hidden_Ref = v
+}
+
+func (x *StateMachineTaskInfo) SetType(v string) {
+	x.xxx_hidden_Type = v
+}
+
+func (x *StateMachineTaskInfo) SetData(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_Data = v
+}
+
+func (x *StateMachineTaskInfo) HasRef() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Ref != nil
+}
+
+func (x *StateMachineTaskInfo) ClearRef() {
+	x.xxx_hidden_Ref = nil
+}
+
+type StateMachineTaskInfo_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Reference to a state machine.
+	Ref *StateMachineRef
+	// Task type. Not to be confused with the state machine's type in the `ref` field.
+	Type string
+	// Opaque data attached to this task. May be nil. Deserialized by a registered TaskSerializer for this type.
+	Data []byte
+}
+
+func (b0 StateMachineTaskInfo_builder) Build() *StateMachineTaskInfo {
+	m0 := &StateMachineTaskInfo{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Ref = b.Ref
+	x.xxx_hidden_Type = b.Type
+	x.xxx_hidden_Data = b.Data
+	return m0
+}
+
 // A group of state machine timer tasks for a given deadline, used for collapsing state machine timer tasks.
 type StateMachineTimerGroup struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Task information.
-	Infos []*StateMachineTaskInfo `protobuf:"bytes,1,rep,name=infos,proto3" json:"infos,omitempty"`
-	// When this timer should be fired.
-	// (-- api-linter: core::0142::time-field-names=disabled
-	//
-	//	aip.dev/not-precedent: Ignoring lint rules. --)
-	Deadline *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=deadline,proto3" json:"deadline,omitempty"`
-	// Whether or not a task was put in the queue for this group's deadline.
-	Scheduled     bool `protobuf:"varint,3,opt,name=scheduled,proto3" json:"scheduled,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                protoimpl.MessageState   `protogen:"opaque.v1"`
+	xxx_hidden_Infos     *[]*StateMachineTaskInfo `protobuf:"bytes,1,rep,name=infos,proto3"`
+	xxx_hidden_Deadline  *timestamppb.Timestamp   `protobuf:"bytes,2,opt,name=deadline,proto3"`
+	xxx_hidden_Scheduled bool                     `protobuf:"varint,3,opt,name=scheduled,proto3"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *StateMachineTimerGroup) Reset() {
@@ -427,41 +626,83 @@ func (x *StateMachineTimerGroup) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use StateMachineTimerGroup.ProtoReflect.Descriptor instead.
-func (*StateMachineTimerGroup) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_hsm_proto_rawDescGZIP(), []int{5}
-}
-
 func (x *StateMachineTimerGroup) GetInfos() []*StateMachineTaskInfo {
 	if x != nil {
-		return x.Infos
+		if x.xxx_hidden_Infos != nil {
+			return *x.xxx_hidden_Infos
+		}
 	}
 	return nil
 }
 
 func (x *StateMachineTimerGroup) GetDeadline() *timestamppb.Timestamp {
 	if x != nil {
-		return x.Deadline
+		return x.xxx_hidden_Deadline
 	}
 	return nil
 }
 
 func (x *StateMachineTimerGroup) GetScheduled() bool {
 	if x != nil {
-		return x.Scheduled
+		return x.xxx_hidden_Scheduled
 	}
 	return false
 }
 
+func (x *StateMachineTimerGroup) SetInfos(v []*StateMachineTaskInfo) {
+	x.xxx_hidden_Infos = &v
+}
+
+func (x *StateMachineTimerGroup) SetDeadline(v *timestamppb.Timestamp) {
+	x.xxx_hidden_Deadline = v
+}
+
+func (x *StateMachineTimerGroup) SetScheduled(v bool) {
+	x.xxx_hidden_Scheduled = v
+}
+
+func (x *StateMachineTimerGroup) HasDeadline() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Deadline != nil
+}
+
+func (x *StateMachineTimerGroup) ClearDeadline() {
+	x.xxx_hidden_Deadline = nil
+}
+
+type StateMachineTimerGroup_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Task information.
+	Infos []*StateMachineTaskInfo
+	// When this timer should be fired.
+	// (-- api-linter: core::0142::time-field-names=disabled
+	//
+	//	aip.dev/not-precedent: Ignoring lint rules. --)
+	Deadline *timestamppb.Timestamp
+	// Whether or not a task was put in the queue for this group's deadline.
+	Scheduled bool
+}
+
+func (b0 StateMachineTimerGroup_builder) Build() *StateMachineTimerGroup {
+	m0 := &StateMachineTimerGroup{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Infos = &b.Infos
+	x.xxx_hidden_Deadline = b.Deadline
+	x.xxx_hidden_Scheduled = b.Scheduled
+	return m0
+}
+
 // VersionedTransition is a unique identifier for a specific mutable state transition.
 type VersionedTransition struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// The namespace failover version at transition time.
-	NamespaceFailoverVersion int64 `protobuf:"varint,1,opt,name=namespace_failover_version,json=namespaceFailoverVersion,proto3" json:"namespace_failover_version,omitempty"`
-	// State transition count perceived during the specified namespace_failover_version.
-	TransitionCount int64 `protobuf:"varint,2,opt,name=transition_count,json=transitionCount,proto3" json:"transition_count,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state                               protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceFailoverVersion int64                  `protobuf:"varint,1,opt,name=namespace_failover_version,json=namespaceFailoverVersion,proto3"`
+	xxx_hidden_TransitionCount          int64                  `protobuf:"varint,2,opt,name=transition_count,json=transitionCount,proto3"`
+	unknownFields                       protoimpl.UnknownFields
+	sizeCache                           protoimpl.SizeCache
 }
 
 func (x *VersionedTransition) Reset() {
@@ -489,32 +730,52 @@ func (x *VersionedTransition) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use VersionedTransition.ProtoReflect.Descriptor instead.
-func (*VersionedTransition) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_hsm_proto_rawDescGZIP(), []int{6}
-}
-
 func (x *VersionedTransition) GetNamespaceFailoverVersion() int64 {
 	if x != nil {
-		return x.NamespaceFailoverVersion
+		return x.xxx_hidden_NamespaceFailoverVersion
 	}
 	return 0
 }
 
 func (x *VersionedTransition) GetTransitionCount() int64 {
 	if x != nil {
-		return x.TransitionCount
+		return x.xxx_hidden_TransitionCount
 	}
 	return 0
 }
 
+func (x *VersionedTransition) SetNamespaceFailoverVersion(v int64) {
+	x.xxx_hidden_NamespaceFailoverVersion = v
+}
+
+func (x *VersionedTransition) SetTransitionCount(v int64) {
+	x.xxx_hidden_TransitionCount = v
+}
+
+type VersionedTransition_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// The namespace failover version at transition time.
+	NamespaceFailoverVersion int64
+	// State transition count perceived during the specified namespace_failover_version.
+	TransitionCount int64
+}
+
+func (b0 VersionedTransition_builder) Build() *VersionedTransition {
+	m0 := &VersionedTransition{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceFailoverVersion = b.NamespaceFailoverVersion
+	x.xxx_hidden_TransitionCount = b.TransitionCount
+	return m0
+}
+
 type StateMachineTombstoneBatch struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// The versioned transition in which the tombstones were created.
-	VersionedTransition    *VersionedTransition     `protobuf:"bytes,1,opt,name=versioned_transition,json=versionedTransition,proto3" json:"versioned_transition,omitempty"`
-	StateMachineTombstones []*StateMachineTombstone `protobuf:"bytes,2,rep,name=state_machine_tombstones,json=stateMachineTombstones,proto3" json:"state_machine_tombstones,omitempty"`
-	unknownFields          protoimpl.UnknownFields
-	sizeCache              protoimpl.SizeCache
+	state                             protoimpl.MessageState    `protogen:"opaque.v1"`
+	xxx_hidden_VersionedTransition    *VersionedTransition      `protobuf:"bytes,1,opt,name=versioned_transition,json=versionedTransition,proto3"`
+	xxx_hidden_StateMachineTombstones *[]*StateMachineTombstone `protobuf:"bytes,2,rep,name=state_machine_tombstones,json=stateMachineTombstones,proto3"`
+	unknownFields                     protoimpl.UnknownFields
+	sizeCache                         protoimpl.SizeCache
 }
 
 func (x *StateMachineTombstoneBatch) Reset() {
@@ -542,40 +803,63 @@ func (x *StateMachineTombstoneBatch) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use StateMachineTombstoneBatch.ProtoReflect.Descriptor instead.
-func (*StateMachineTombstoneBatch) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_hsm_proto_rawDescGZIP(), []int{7}
-}
-
 func (x *StateMachineTombstoneBatch) GetVersionedTransition() *VersionedTransition {
 	if x != nil {
-		return x.VersionedTransition
+		return x.xxx_hidden_VersionedTransition
 	}
 	return nil
 }
 
 func (x *StateMachineTombstoneBatch) GetStateMachineTombstones() []*StateMachineTombstone {
 	if x != nil {
-		return x.StateMachineTombstones
+		if x.xxx_hidden_StateMachineTombstones != nil {
+			return *x.xxx_hidden_StateMachineTombstones
+		}
 	}
 	return nil
 }
 
+func (x *StateMachineTombstoneBatch) SetVersionedTransition(v *VersionedTransition) {
+	x.xxx_hidden_VersionedTransition = v
+}
+
+func (x *StateMachineTombstoneBatch) SetStateMachineTombstones(v []*StateMachineTombstone) {
+	x.xxx_hidden_StateMachineTombstones = &v
+}
+
+func (x *StateMachineTombstoneBatch) HasVersionedTransition() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_VersionedTransition != nil
+}
+
+func (x *StateMachineTombstoneBatch) ClearVersionedTransition() {
+	x.xxx_hidden_VersionedTransition = nil
+}
+
+type StateMachineTombstoneBatch_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// The versioned transition in which the tombstones were created.
+	VersionedTransition    *VersionedTransition
+	StateMachineTombstones []*StateMachineTombstone
+}
+
+func (b0 StateMachineTombstoneBatch_builder) Build() *StateMachineTombstoneBatch {
+	m0 := &StateMachineTombstoneBatch{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_VersionedTransition = b.VersionedTransition
+	x.xxx_hidden_StateMachineTombstones = &b.StateMachineTombstones
+	return m0
+}
+
 type StateMachineTombstone struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Types that are valid to be assigned to StateMachineKey:
-	//
-	//	*StateMachineTombstone_ActivityScheduledEventId
-	//	*StateMachineTombstone_TimerId
-	//	*StateMachineTombstone_ChildExecutionInitiatedEventId
-	//	*StateMachineTombstone_RequestCancelInitiatedEventId
-	//	*StateMachineTombstone_SignalExternalInitiatedEventId
-	//	*StateMachineTombstone_UpdateId
-	//	*StateMachineTombstone_StateMachinePath
-	//	*StateMachineTombstone_ChasmNodePath
-	StateMachineKey isStateMachineTombstone_StateMachineKey `protobuf_oneof:"state_machine_key"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state                      protoimpl.MessageState                  `protogen:"opaque.v1"`
+	xxx_hidden_StateMachineKey isStateMachineTombstone_StateMachineKey `protobuf_oneof:"state_machine_key"`
+	unknownFields              protoimpl.UnknownFields
+	sizeCache                  protoimpl.SizeCache
 }
 
 func (x *StateMachineTombstone) Reset() {
@@ -603,21 +887,9 @@ func (x *StateMachineTombstone) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use StateMachineTombstone.ProtoReflect.Descriptor instead.
-func (*StateMachineTombstone) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_hsm_proto_rawDescGZIP(), []int{8}
-}
-
-func (x *StateMachineTombstone) GetStateMachineKey() isStateMachineTombstone_StateMachineKey {
-	if x != nil {
-		return x.StateMachineKey
-	}
-	return nil
-}
-
 func (x *StateMachineTombstone) GetActivityScheduledEventId() int64 {
 	if x != nil {
-		if x, ok := x.StateMachineKey.(*StateMachineTombstone_ActivityScheduledEventId); ok {
+		if x, ok := x.xxx_hidden_StateMachineKey.(*stateMachineTombstone_ActivityScheduledEventId); ok {
 			return x.ActivityScheduledEventId
 		}
 	}
@@ -626,7 +898,7 @@ func (x *StateMachineTombstone) GetActivityScheduledEventId() int64 {
 
 func (x *StateMachineTombstone) GetTimerId() string {
 	if x != nil {
-		if x, ok := x.StateMachineKey.(*StateMachineTombstone_TimerId); ok {
+		if x, ok := x.xxx_hidden_StateMachineKey.(*stateMachineTombstone_TimerId); ok {
 			return x.TimerId
 		}
 	}
@@ -635,7 +907,7 @@ func (x *StateMachineTombstone) GetTimerId() string {
 
 func (x *StateMachineTombstone) GetChildExecutionInitiatedEventId() int64 {
 	if x != nil {
-		if x, ok := x.StateMachineKey.(*StateMachineTombstone_ChildExecutionInitiatedEventId); ok {
+		if x, ok := x.xxx_hidden_StateMachineKey.(*stateMachineTombstone_ChildExecutionInitiatedEventId); ok {
 			return x.ChildExecutionInitiatedEventId
 		}
 	}
@@ -644,7 +916,7 @@ func (x *StateMachineTombstone) GetChildExecutionInitiatedEventId() int64 {
 
 func (x *StateMachineTombstone) GetRequestCancelInitiatedEventId() int64 {
 	if x != nil {
-		if x, ok := x.StateMachineKey.(*StateMachineTombstone_RequestCancelInitiatedEventId); ok {
+		if x, ok := x.xxx_hidden_StateMachineKey.(*stateMachineTombstone_RequestCancelInitiatedEventId); ok {
 			return x.RequestCancelInitiatedEventId
 		}
 	}
@@ -653,7 +925,7 @@ func (x *StateMachineTombstone) GetRequestCancelInitiatedEventId() int64 {
 
 func (x *StateMachineTombstone) GetSignalExternalInitiatedEventId() int64 {
 	if x != nil {
-		if x, ok := x.StateMachineKey.(*StateMachineTombstone_SignalExternalInitiatedEventId); ok {
+		if x, ok := x.xxx_hidden_StateMachineKey.(*stateMachineTombstone_SignalExternalInitiatedEventId); ok {
 			return x.SignalExternalInitiatedEventId
 		}
 	}
@@ -662,7 +934,7 @@ func (x *StateMachineTombstone) GetSignalExternalInitiatedEventId() int64 {
 
 func (x *StateMachineTombstone) GetUpdateId() string {
 	if x != nil {
-		if x, ok := x.StateMachineKey.(*StateMachineTombstone_UpdateId); ok {
+		if x, ok := x.xxx_hidden_StateMachineKey.(*stateMachineTombstone_UpdateId); ok {
 			return x.UpdateId
 		}
 	}
@@ -671,7 +943,7 @@ func (x *StateMachineTombstone) GetUpdateId() string {
 
 func (x *StateMachineTombstone) GetStateMachinePath() *StateMachinePath {
 	if x != nil {
-		if x, ok := x.StateMachineKey.(*StateMachineTombstone_StateMachinePath); ok {
+		if x, ok := x.xxx_hidden_StateMachineKey.(*stateMachineTombstone_StateMachinePath); ok {
 			return x.StateMachinePath
 		}
 	}
@@ -680,73 +952,342 @@ func (x *StateMachineTombstone) GetStateMachinePath() *StateMachinePath {
 
 func (x *StateMachineTombstone) GetChasmNodePath() string {
 	if x != nil {
-		if x, ok := x.StateMachineKey.(*StateMachineTombstone_ChasmNodePath); ok {
+		if x, ok := x.xxx_hidden_StateMachineKey.(*stateMachineTombstone_ChasmNodePath); ok {
 			return x.ChasmNodePath
 		}
 	}
 	return ""
 }
 
+func (x *StateMachineTombstone) SetActivityScheduledEventId(v int64) {
+	x.xxx_hidden_StateMachineKey = &stateMachineTombstone_ActivityScheduledEventId{v}
+}
+
+func (x *StateMachineTombstone) SetTimerId(v string) {
+	x.xxx_hidden_StateMachineKey = &stateMachineTombstone_TimerId{v}
+}
+
+func (x *StateMachineTombstone) SetChildExecutionInitiatedEventId(v int64) {
+	x.xxx_hidden_StateMachineKey = &stateMachineTombstone_ChildExecutionInitiatedEventId{v}
+}
+
+func (x *StateMachineTombstone) SetRequestCancelInitiatedEventId(v int64) {
+	x.xxx_hidden_StateMachineKey = &stateMachineTombstone_RequestCancelInitiatedEventId{v}
+}
+
+func (x *StateMachineTombstone) SetSignalExternalInitiatedEventId(v int64) {
+	x.xxx_hidden_StateMachineKey = &stateMachineTombstone_SignalExternalInitiatedEventId{v}
+}
+
+func (x *StateMachineTombstone) SetUpdateId(v string) {
+	x.xxx_hidden_StateMachineKey = &stateMachineTombstone_UpdateId{v}
+}
+
+func (x *StateMachineTombstone) SetStateMachinePath(v *StateMachinePath) {
+	if v == nil {
+		x.xxx_hidden_StateMachineKey = nil
+		return
+	}
+	x.xxx_hidden_StateMachineKey = &stateMachineTombstone_StateMachinePath{v}
+}
+
+func (x *StateMachineTombstone) SetChasmNodePath(v string) {
+	x.xxx_hidden_StateMachineKey = &stateMachineTombstone_ChasmNodePath{v}
+}
+
+func (x *StateMachineTombstone) HasStateMachineKey() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_StateMachineKey != nil
+}
+
+func (x *StateMachineTombstone) HasActivityScheduledEventId() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_StateMachineKey.(*stateMachineTombstone_ActivityScheduledEventId)
+	return ok
+}
+
+func (x *StateMachineTombstone) HasTimerId() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_StateMachineKey.(*stateMachineTombstone_TimerId)
+	return ok
+}
+
+func (x *StateMachineTombstone) HasChildExecutionInitiatedEventId() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_StateMachineKey.(*stateMachineTombstone_ChildExecutionInitiatedEventId)
+	return ok
+}
+
+func (x *StateMachineTombstone) HasRequestCancelInitiatedEventId() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_StateMachineKey.(*stateMachineTombstone_RequestCancelInitiatedEventId)
+	return ok
+}
+
+func (x *StateMachineTombstone) HasSignalExternalInitiatedEventId() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_StateMachineKey.(*stateMachineTombstone_SignalExternalInitiatedEventId)
+	return ok
+}
+
+func (x *StateMachineTombstone) HasUpdateId() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_StateMachineKey.(*stateMachineTombstone_UpdateId)
+	return ok
+}
+
+func (x *StateMachineTombstone) HasStateMachinePath() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_StateMachineKey.(*stateMachineTombstone_StateMachinePath)
+	return ok
+}
+
+func (x *StateMachineTombstone) HasChasmNodePath() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_StateMachineKey.(*stateMachineTombstone_ChasmNodePath)
+	return ok
+}
+
+func (x *StateMachineTombstone) ClearStateMachineKey() {
+	x.xxx_hidden_StateMachineKey = nil
+}
+
+func (x *StateMachineTombstone) ClearActivityScheduledEventId() {
+	if _, ok := x.xxx_hidden_StateMachineKey.(*stateMachineTombstone_ActivityScheduledEventId); ok {
+		x.xxx_hidden_StateMachineKey = nil
+	}
+}
+
+func (x *StateMachineTombstone) ClearTimerId() {
+	if _, ok := x.xxx_hidden_StateMachineKey.(*stateMachineTombstone_TimerId); ok {
+		x.xxx_hidden_StateMachineKey = nil
+	}
+}
+
+func (x *StateMachineTombstone) ClearChildExecutionInitiatedEventId() {
+	if _, ok := x.xxx_hidden_StateMachineKey.(*stateMachineTombstone_ChildExecutionInitiatedEventId); ok {
+		x.xxx_hidden_StateMachineKey = nil
+	}
+}
+
+func (x *StateMachineTombstone) ClearRequestCancelInitiatedEventId() {
+	if _, ok := x.xxx_hidden_StateMachineKey.(*stateMachineTombstone_RequestCancelInitiatedEventId); ok {
+		x.xxx_hidden_StateMachineKey = nil
+	}
+}
+
+func (x *StateMachineTombstone) ClearSignalExternalInitiatedEventId() {
+	if _, ok := x.xxx_hidden_StateMachineKey.(*stateMachineTombstone_SignalExternalInitiatedEventId); ok {
+		x.xxx_hidden_StateMachineKey = nil
+	}
+}
+
+func (x *StateMachineTombstone) ClearUpdateId() {
+	if _, ok := x.xxx_hidden_StateMachineKey.(*stateMachineTombstone_UpdateId); ok {
+		x.xxx_hidden_StateMachineKey = nil
+	}
+}
+
+func (x *StateMachineTombstone) ClearStateMachinePath() {
+	if _, ok := x.xxx_hidden_StateMachineKey.(*stateMachineTombstone_StateMachinePath); ok {
+		x.xxx_hidden_StateMachineKey = nil
+	}
+}
+
+func (x *StateMachineTombstone) ClearChasmNodePath() {
+	if _, ok := x.xxx_hidden_StateMachineKey.(*stateMachineTombstone_ChasmNodePath); ok {
+		x.xxx_hidden_StateMachineKey = nil
+	}
+}
+
+const StateMachineTombstone_StateMachineKey_not_set_case case_StateMachineTombstone_StateMachineKey = 0
+const StateMachineTombstone_ActivityScheduledEventId_case case_StateMachineTombstone_StateMachineKey = 1
+const StateMachineTombstone_TimerId_case case_StateMachineTombstone_StateMachineKey = 2
+const StateMachineTombstone_ChildExecutionInitiatedEventId_case case_StateMachineTombstone_StateMachineKey = 3
+const StateMachineTombstone_RequestCancelInitiatedEventId_case case_StateMachineTombstone_StateMachineKey = 4
+const StateMachineTombstone_SignalExternalInitiatedEventId_case case_StateMachineTombstone_StateMachineKey = 5
+const StateMachineTombstone_UpdateId_case case_StateMachineTombstone_StateMachineKey = 6
+const StateMachineTombstone_StateMachinePath_case case_StateMachineTombstone_StateMachineKey = 7
+const StateMachineTombstone_ChasmNodePath_case case_StateMachineTombstone_StateMachineKey = 8
+
+func (x *StateMachineTombstone) WhichStateMachineKey() case_StateMachineTombstone_StateMachineKey {
+	if x == nil {
+		return StateMachineTombstone_StateMachineKey_not_set_case
+	}
+	switch x.xxx_hidden_StateMachineKey.(type) {
+	case *stateMachineTombstone_ActivityScheduledEventId:
+		return StateMachineTombstone_ActivityScheduledEventId_case
+	case *stateMachineTombstone_TimerId:
+		return StateMachineTombstone_TimerId_case
+	case *stateMachineTombstone_ChildExecutionInitiatedEventId:
+		return StateMachineTombstone_ChildExecutionInitiatedEventId_case
+	case *stateMachineTombstone_RequestCancelInitiatedEventId:
+		return StateMachineTombstone_RequestCancelInitiatedEventId_case
+	case *stateMachineTombstone_SignalExternalInitiatedEventId:
+		return StateMachineTombstone_SignalExternalInitiatedEventId_case
+	case *stateMachineTombstone_UpdateId:
+		return StateMachineTombstone_UpdateId_case
+	case *stateMachineTombstone_StateMachinePath:
+		return StateMachineTombstone_StateMachinePath_case
+	case *stateMachineTombstone_ChasmNodePath:
+		return StateMachineTombstone_ChasmNodePath_case
+	default:
+		return StateMachineTombstone_StateMachineKey_not_set_case
+	}
+}
+
+type StateMachineTombstone_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Fields of oneof xxx_hidden_StateMachineKey:
+	ActivityScheduledEventId       *int64
+	TimerId                        *string
+	ChildExecutionInitiatedEventId *int64
+	RequestCancelInitiatedEventId  *int64
+	SignalExternalInitiatedEventId *int64
+	UpdateId                       *string
+	StateMachinePath               *StateMachinePath
+	ChasmNodePath                  *string
+	// -- end of xxx_hidden_StateMachineKey
+}
+
+func (b0 StateMachineTombstone_builder) Build() *StateMachineTombstone {
+	m0 := &StateMachineTombstone{}
+	b, x := &b0, m0
+	_, _ = b, x
+	if b.ActivityScheduledEventId != nil {
+		x.xxx_hidden_StateMachineKey = &stateMachineTombstone_ActivityScheduledEventId{*b.ActivityScheduledEventId}
+	}
+	if b.TimerId != nil {
+		x.xxx_hidden_StateMachineKey = &stateMachineTombstone_TimerId{*b.TimerId}
+	}
+	if b.ChildExecutionInitiatedEventId != nil {
+		x.xxx_hidden_StateMachineKey = &stateMachineTombstone_ChildExecutionInitiatedEventId{*b.ChildExecutionInitiatedEventId}
+	}
+	if b.RequestCancelInitiatedEventId != nil {
+		x.xxx_hidden_StateMachineKey = &stateMachineTombstone_RequestCancelInitiatedEventId{*b.RequestCancelInitiatedEventId}
+	}
+	if b.SignalExternalInitiatedEventId != nil {
+		x.xxx_hidden_StateMachineKey = &stateMachineTombstone_SignalExternalInitiatedEventId{*b.SignalExternalInitiatedEventId}
+	}
+	if b.UpdateId != nil {
+		x.xxx_hidden_StateMachineKey = &stateMachineTombstone_UpdateId{*b.UpdateId}
+	}
+	if b.StateMachinePath != nil {
+		x.xxx_hidden_StateMachineKey = &stateMachineTombstone_StateMachinePath{b.StateMachinePath}
+	}
+	if b.ChasmNodePath != nil {
+		x.xxx_hidden_StateMachineKey = &stateMachineTombstone_ChasmNodePath{*b.ChasmNodePath}
+	}
+	return m0
+}
+
+type case_StateMachineTombstone_StateMachineKey protoreflect.FieldNumber
+
+func (x case_StateMachineTombstone_StateMachineKey) String() string {
+	switch x {
+	case StateMachineTombstone_StateMachineKey_not_set_case:
+		return "StateMachineTombstoneStateMachineKeyNotSetCase"
+	case StateMachineTombstone_ActivityScheduledEventId_case:
+		return "StateMachineTombstoneActivityScheduledEventIdCase"
+	case StateMachineTombstone_TimerId_case:
+		return "StateMachineTombstoneTimerIdCase"
+	case StateMachineTombstone_ChildExecutionInitiatedEventId_case:
+		return "StateMachineTombstoneChildExecutionInitiatedEventIdCase"
+	case StateMachineTombstone_RequestCancelInitiatedEventId_case:
+		return "StateMachineTombstoneRequestCancelInitiatedEventIdCase"
+	case StateMachineTombstone_SignalExternalInitiatedEventId_case:
+		return "StateMachineTombstoneSignalExternalInitiatedEventIdCase"
+	case StateMachineTombstone_UpdateId_case:
+		return "StateMachineTombstoneUpdateIdCase"
+	case StateMachineTombstone_StateMachinePath_case:
+		return "StateMachineTombstoneStateMachinePathCase"
+	case StateMachineTombstone_ChasmNodePath_case:
+		return "StateMachineTombstoneChasmNodePathCase"
+	default:
+		return strconv.Itoa(int(x))
+	}
+
+}
+
 type isStateMachineTombstone_StateMachineKey interface {
 	isStateMachineTombstone_StateMachineKey()
 }
 
-type StateMachineTombstone_ActivityScheduledEventId struct {
+type stateMachineTombstone_ActivityScheduledEventId struct {
 	ActivityScheduledEventId int64 `protobuf:"varint,1,opt,name=activity_scheduled_event_id,json=activityScheduledEventId,proto3,oneof"`
 }
 
-type StateMachineTombstone_TimerId struct {
+type stateMachineTombstone_TimerId struct {
 	TimerId string `protobuf:"bytes,2,opt,name=timer_id,json=timerId,proto3,oneof"`
 }
 
-type StateMachineTombstone_ChildExecutionInitiatedEventId struct {
+type stateMachineTombstone_ChildExecutionInitiatedEventId struct {
 	ChildExecutionInitiatedEventId int64 `protobuf:"varint,3,opt,name=child_execution_initiated_event_id,json=childExecutionInitiatedEventId,proto3,oneof"`
 }
 
-type StateMachineTombstone_RequestCancelInitiatedEventId struct {
+type stateMachineTombstone_RequestCancelInitiatedEventId struct {
 	RequestCancelInitiatedEventId int64 `protobuf:"varint,4,opt,name=request_cancel_initiated_event_id,json=requestCancelInitiatedEventId,proto3,oneof"`
 }
 
-type StateMachineTombstone_SignalExternalInitiatedEventId struct {
+type stateMachineTombstone_SignalExternalInitiatedEventId struct {
 	SignalExternalInitiatedEventId int64 `protobuf:"varint,5,opt,name=signal_external_initiated_event_id,json=signalExternalInitiatedEventId,proto3,oneof"`
 }
 
-type StateMachineTombstone_UpdateId struct {
+type stateMachineTombstone_UpdateId struct {
 	UpdateId string `protobuf:"bytes,6,opt,name=update_id,json=updateId,proto3,oneof"`
 }
 
-type StateMachineTombstone_StateMachinePath struct {
+type stateMachineTombstone_StateMachinePath struct {
 	StateMachinePath *StateMachinePath `protobuf:"bytes,7,opt,name=state_machine_path,json=stateMachinePath,proto3,oneof"`
 }
 
-type StateMachineTombstone_ChasmNodePath struct {
+type stateMachineTombstone_ChasmNodePath struct {
 	ChasmNodePath string `protobuf:"bytes,8,opt,name=chasm_node_path,json=chasmNodePath,proto3,oneof"`
 }
 
-func (*StateMachineTombstone_ActivityScheduledEventId) isStateMachineTombstone_StateMachineKey() {}
+func (*stateMachineTombstone_ActivityScheduledEventId) isStateMachineTombstone_StateMachineKey() {}
 
-func (*StateMachineTombstone_TimerId) isStateMachineTombstone_StateMachineKey() {}
+func (*stateMachineTombstone_TimerId) isStateMachineTombstone_StateMachineKey() {}
 
-func (*StateMachineTombstone_ChildExecutionInitiatedEventId) isStateMachineTombstone_StateMachineKey() {
+func (*stateMachineTombstone_ChildExecutionInitiatedEventId) isStateMachineTombstone_StateMachineKey() {
 }
 
-func (*StateMachineTombstone_RequestCancelInitiatedEventId) isStateMachineTombstone_StateMachineKey() {
+func (*stateMachineTombstone_RequestCancelInitiatedEventId) isStateMachineTombstone_StateMachineKey() {
 }
 
-func (*StateMachineTombstone_SignalExternalInitiatedEventId) isStateMachineTombstone_StateMachineKey() {
+func (*stateMachineTombstone_SignalExternalInitiatedEventId) isStateMachineTombstone_StateMachineKey() {
 }
 
-func (*StateMachineTombstone_UpdateId) isStateMachineTombstone_StateMachineKey() {}
+func (*stateMachineTombstone_UpdateId) isStateMachineTombstone_StateMachineKey() {}
 
-func (*StateMachineTombstone_StateMachinePath) isStateMachineTombstone_StateMachineKey() {}
+func (*stateMachineTombstone_StateMachinePath) isStateMachineTombstone_StateMachineKey() {}
 
-func (*StateMachineTombstone_ChasmNodePath) isStateMachineTombstone_StateMachineKey() {}
+func (*stateMachineTombstone_ChasmNodePath) isStateMachineTombstone_StateMachineKey() {}
 
 type StateMachinePath struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Path          []*StateMachineKey     `protobuf:"bytes,1,rep,name=path,proto3" json:"path,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Path *[]*StateMachineKey    `protobuf:"bytes,1,rep,name=path,proto3"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *StateMachinePath) Reset() {
@@ -774,16 +1315,31 @@ func (x *StateMachinePath) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use StateMachinePath.ProtoReflect.Descriptor instead.
-func (*StateMachinePath) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_hsm_proto_rawDescGZIP(), []int{9}
-}
-
 func (x *StateMachinePath) GetPath() []*StateMachineKey {
 	if x != nil {
-		return x.Path
+		if x.xxx_hidden_Path != nil {
+			return *x.xxx_hidden_Path
+		}
 	}
 	return nil
+}
+
+func (x *StateMachinePath) SetPath(v []*StateMachineKey) {
+	x.xxx_hidden_Path = &v
+}
+
+type StateMachinePath_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Path []*StateMachineKey
+}
+
+func (b0 StateMachinePath_builder) Build() *StateMachinePath {
+	m0 := &StateMachinePath{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Path = &b.Path
+	return m0
 }
 
 var File_temporal_server_api_persistence_v1_hsm_proto protoreflect.FileDescriptor
@@ -841,18 +1397,6 @@ const file_temporal_server_api_persistence_v1_hsm_proto_rawDesc = "" +
 	"\x10StateMachinePath\x12G\n" +
 	"\x04path\x18\x01 \x03(\v23.temporal.server.api.persistence.v1.StateMachineKeyR\x04pathB6Z4go.temporal.io/server/api/persistence/v1;persistenceb\x06proto3"
 
-var (
-	file_temporal_server_api_persistence_v1_hsm_proto_rawDescOnce sync.Once
-	file_temporal_server_api_persistence_v1_hsm_proto_rawDescData []byte
-)
-
-func file_temporal_server_api_persistence_v1_hsm_proto_rawDescGZIP() []byte {
-	file_temporal_server_api_persistence_v1_hsm_proto_rawDescOnce.Do(func() {
-		file_temporal_server_api_persistence_v1_hsm_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_api_persistence_v1_hsm_proto_rawDesc), len(file_temporal_server_api_persistence_v1_hsm_proto_rawDesc)))
-	})
-	return file_temporal_server_api_persistence_v1_hsm_proto_rawDescData
-}
-
 var file_temporal_server_api_persistence_v1_hsm_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
 var file_temporal_server_api_persistence_v1_hsm_proto_goTypes = []any{
 	(*StateMachineNode)(nil),           // 0: temporal.server.api.persistence.v1.StateMachineNode
@@ -900,14 +1444,14 @@ func file_temporal_server_api_persistence_v1_hsm_proto_init() {
 		return
 	}
 	file_temporal_server_api_persistence_v1_hsm_proto_msgTypes[8].OneofWrappers = []any{
-		(*StateMachineTombstone_ActivityScheduledEventId)(nil),
-		(*StateMachineTombstone_TimerId)(nil),
-		(*StateMachineTombstone_ChildExecutionInitiatedEventId)(nil),
-		(*StateMachineTombstone_RequestCancelInitiatedEventId)(nil),
-		(*StateMachineTombstone_SignalExternalInitiatedEventId)(nil),
-		(*StateMachineTombstone_UpdateId)(nil),
-		(*StateMachineTombstone_StateMachinePath)(nil),
-		(*StateMachineTombstone_ChasmNodePath)(nil),
+		(*stateMachineTombstone_ActivityScheduledEventId)(nil),
+		(*stateMachineTombstone_TimerId)(nil),
+		(*stateMachineTombstone_ChildExecutionInitiatedEventId)(nil),
+		(*stateMachineTombstone_RequestCancelInitiatedEventId)(nil),
+		(*stateMachineTombstone_SignalExternalInitiatedEventId)(nil),
+		(*stateMachineTombstone_UpdateId)(nil),
+		(*stateMachineTombstone_StateMachinePath)(nil),
+		(*stateMachineTombstone_ChasmNodePath)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{

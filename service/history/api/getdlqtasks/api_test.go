@@ -27,11 +27,11 @@ func TestInvoke_InvalidTaskCategory(t *testing.T) {
 	_, err := getdlqtasks.Invoke(context.Background(),
 		nil,
 		tasks.NewDefaultTaskCategoryRegistry(),
-		&historyservice.GetDLQTasksRequest{
-			DlqKey: &commonspb.HistoryDLQKey{
+		historyservice.GetDLQTasksRequest_builder{
+			DlqKey: commonspb.HistoryDLQKey_builder{
 				TaskCategory: -1,
-			},
-		})
+			}.Build(),
+		}.Build())
 
 	var invalidArgErr *serviceerror.InvalidArgument
 
@@ -47,12 +47,12 @@ func TestInvoke_ZeroPageSize(t *testing.T) {
 		context.Background(),
 		new(persistence.HistoryTaskQueueManagerImpl),
 		tasks.NewDefaultTaskCategoryRegistry(),
-		&historyservice.GetDLQTasksRequest{
-			DlqKey: &commonspb.HistoryDLQKey{
+		historyservice.GetDLQTasksRequest_builder{
+			DlqKey: commonspb.HistoryDLQKey_builder{
 				TaskCategory: int32(tasks.CategoryTransfer.ID()),
-			},
+			}.Build(),
 			PageSize: 0,
-		},
+		}.Build(),
 	)
 
 	assert.ErrorIs(t, err, consts.ErrInvalidPageSize)
@@ -65,12 +65,12 @@ func TestInvoke_UnavailableError(t *testing.T) {
 		context.Background(),
 		failingHistoryTaskQueueManager{},
 		tasks.NewDefaultTaskCategoryRegistry(),
-		&historyservice.GetDLQTasksRequest{
-			DlqKey: &commonspb.HistoryDLQKey{
+		historyservice.GetDLQTasksRequest_builder{
+			DlqKey: commonspb.HistoryDLQKey_builder{
 				TaskCategory: int32(tasks.CategoryTransfer.ID()),
-			},
+			}.Build(),
 			PageSize: 0,
-		},
+		}.Build(),
 	)
 
 	var unavailableErr *serviceerror.Unavailable

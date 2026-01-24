@@ -80,15 +80,15 @@ func (d *matchingTaskStoreV2) CreateTasks(
 			rowTypeTaskInSubqueue(task.Subqueue),
 			task.TaskPass,
 			task.TaskId,
-			task.Task.Data,
-			task.Task.EncodingType.String())
+			task.Task.GetData(),
+			task.Task.GetEncodingType().String())
 	}
 
 	// The following query is used to ensure that range_id didn't change
 	batch.Query(switchTasksTable(templateUpdateTaskQueueQuery, matchingTaskVersion2),
 		request.RangeID,
-		request.TaskQueueInfo.Data,
-		request.TaskQueueInfo.EncodingType.String(),
+		request.TaskQueueInfo.GetData(),
+		request.TaskQueueInfo.GetEncodingType().String(),
 		namespaceID,
 		taskQueue,
 		taskQueueType,

@@ -62,11 +62,11 @@ func (m *nexusEndpointManagerImpl) GetNexusEndpoint(
 		return nil, err
 	}
 
-	return &persistencespb.NexusEndpointEntry{
+	return persistencespb.NexusEndpointEntry_builder{
 		Id:       internalEndpoint.ID,
 		Version:  internalEndpoint.Version,
 		Endpoint: endpoint,
-	}, nil
+	}.Build(), nil
 }
 
 func (m *nexusEndpointManagerImpl) ListNexusEndpoints(
@@ -94,11 +94,11 @@ func (m *nexusEndpointManagerImpl) ListNexusEndpoints(
 			m.logger.Error(fmt.Sprintf("error deserializing nexus endpoint with ID: %v", entry.ID), tag.Error(err))
 			return nil, err
 		}
-		entries[i] = &persistencespb.NexusEndpointEntry{
+		entries[i] = persistencespb.NexusEndpointEntry_builder{
 			Id:       entry.ID,
 			Version:  entry.Version,
 			Endpoint: endpoint,
-		}
+		}.Build()
 	}
 
 	result.NextPageToken = resp.NextPageToken
@@ -110,7 +110,7 @@ func (m *nexusEndpointManagerImpl) CreateOrUpdateNexusEndpoint(
 	ctx context.Context,
 	request *CreateOrUpdateNexusEndpointRequest,
 ) (*CreateOrUpdateNexusEndpointResponse, error) {
-	blob, err := m.serializer.NexusEndpointToBlob(request.Entry.Endpoint)
+	blob, err := m.serializer.NexusEndpointToBlob(request.Entry.GetEndpoint())
 	if err != nil {
 		return nil, err
 	}
@@ -118,8 +118,8 @@ func (m *nexusEndpointManagerImpl) CreateOrUpdateNexusEndpoint(
 	err = m.persistence.CreateOrUpdateNexusEndpoint(ctx, &InternalCreateOrUpdateNexusEndpointRequest{
 		LastKnownTableVersion: request.LastKnownTableVersion,
 		Endpoint: InternalNexusEndpoint{
-			ID:      request.Entry.Id,
-			Version: request.Entry.Version,
+			ID:      request.Entry.GetId(),
+			Version: request.Entry.GetVersion(),
 			Data:    blob,
 		},
 	})
@@ -127,7 +127,7 @@ func (m *nexusEndpointManagerImpl) CreateOrUpdateNexusEndpoint(
 		return nil, err
 	}
 
-	return &CreateOrUpdateNexusEndpointResponse{Version: request.Entry.Version + 1}, nil
+	return &CreateOrUpdateNexusEndpointResponse{Version: request.Entry.GetVersion() + 1}, nil
 }
 
 func (m *nexusEndpointManagerImpl) DeleteNexusEndpoint(

@@ -91,10 +91,10 @@ func (r *MutableStateInitializerImpl) InitializeFromDB(
 		ctx,
 		r.shardContext,
 		namespace.ID(workflowKey.NamespaceID),
-		&commonpb.WorkflowExecution{
+		commonpb.WorkflowExecution_builder{
 			WorkflowId: workflowKey.WorkflowID,
 			RunId:      workflowKey.RunID,
-		},
+		}.Build(),
 		locks.PriorityHigh,
 	)
 	if err != nil {
@@ -228,7 +228,7 @@ func (r *MutableStateInitializerImpl) serializeBackfillToken(
 func (r *MutableStateInitializerImpl) deserializeBackfillToken(
 	token []byte,
 ) (_ *persistencespb.WorkflowMutableState, _ int64, _ int64, _ bool, _ error) {
-	mutableState := &persistencespb.WorkflowMutableState{
+	mutableState := persistencespb.WorkflowMutableState_builder{
 		ActivityInfos:       make(map[int64]*persistencespb.ActivityInfo),
 		TimerInfos:          make(map[string]*persistencespb.TimerInfo),
 		ChildExecutionInfos: make(map[int64]*persistencespb.ChildExecutionInfo),
@@ -241,7 +241,7 @@ func (r *MutableStateInitializerImpl) deserializeBackfillToken(
 		NextEventId:    0,
 		BufferedEvents: make([]*historypb.HistoryEvent, 0),
 		Checksum:       nil,
-	}
+	}.Build()
 
 	historyBackfillToken := &MutableStateToken{}
 	if err := json.Unmarshal(token, historyBackfillToken); err != nil {

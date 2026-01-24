@@ -57,8 +57,8 @@ func Invoke(
 
 			// Check if workflow is already paused
 			if mutableState.GetExecutionState().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED {
-				pauseInfo := mutableState.GetExecutionInfo().PauseInfo
-				if pauseInfo != nil && pauseInfo.RequestId != "" && pauseInfo.RequestId == pauseRequest.GetRequestId() {
+				pauseInfo := mutableState.GetExecutionInfo().GetPauseInfo()
+				if pauseInfo != nil && pauseInfo.GetRequestId() != "" && pauseInfo.GetRequestId() == pauseRequest.GetRequestId() {
 					// Already paused with the same request id, nothing to do
 					return &api.UpdateWorkflowAction{
 						Noop:               true,

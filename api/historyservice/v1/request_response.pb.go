@@ -8,7 +8,7 @@ package historyservice
 
 import (
 	reflect "reflect"
-	sync "sync"
+	"strconv"
 	unsafe "unsafe"
 
 	v122 "go.temporal.io/api/activity/v1"
@@ -50,26 +50,17 @@ const (
 
 // RoutingOptions define how a request is routed to the appropriate host.
 type RoutingOptions struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Routing is custom and implemented in the non-generated client/history/client.go.
-	Custom bool `protobuf:"varint,1,opt,name=custom,proto3" json:"custom,omitempty"`
-	// Request will be routed to a random host.
-	AnyHost bool `protobuf:"varint,2,opt,name=any_host,json=anyHost,proto3" json:"any_host,omitempty"`
-	// Request will be routed according to the specified shard ID field.
-	ShardId string `protobuf:"bytes,3,opt,name=shard_id,json=shardId,proto3" json:"shard_id,omitempty"`
-	// Requested routed by task token or workflow ID may also specify how to obtain the namespace ID. Defaults to the
-	// "namespace_id" field.
-	NamespaceId string `protobuf:"bytes,4,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	// Request will be routed by resolving the namespace ID and workflow ID to a given shard.
-	WorkflowId string `protobuf:"bytes,5,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
-	// Request will be routed by resolving the namespace ID and the workflow ID from this task token to a given shard.
-	TaskToken string `protobuf:"bytes,6,opt,name=task_token,json=taskToken,proto3" json:"task_token,omitempty"`
-	// Request will be routed by resolving the namespace ID and the workflow ID from the first task info element.
-	TaskInfos string `protobuf:"bytes,7,opt,name=task_infos,json=taskInfos,proto3" json:"task_infos,omitempty"`
-	// Request will be routed by resolving the namespace ID and the workflow ID from this chasm ref to a given shard.
-	ChasmComponentRef string `protobuf:"bytes,8,opt,name=chasm_component_ref,json=chasmComponentRef,proto3" json:"chasm_component_ref,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state                        protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Custom            bool                   `protobuf:"varint,1,opt,name=custom,proto3"`
+	xxx_hidden_AnyHost           bool                   `protobuf:"varint,2,opt,name=any_host,json=anyHost,proto3"`
+	xxx_hidden_ShardId           string                 `protobuf:"bytes,3,opt,name=shard_id,json=shardId,proto3"`
+	xxx_hidden_NamespaceId       string                 `protobuf:"bytes,4,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_WorkflowId        string                 `protobuf:"bytes,5,opt,name=workflow_id,json=workflowId,proto3"`
+	xxx_hidden_TaskToken         string                 `protobuf:"bytes,6,opt,name=task_token,json=taskToken,proto3"`
+	xxx_hidden_TaskInfos         string                 `protobuf:"bytes,7,opt,name=task_infos,json=taskInfos,proto3"`
+	xxx_hidden_ChasmComponentRef string                 `protobuf:"bytes,8,opt,name=chasm_component_ref,json=chasmComponentRef,proto3"`
+	unknownFields                protoimpl.UnknownFields
+	sizeCache                    protoimpl.SizeCache
 }
 
 func (x *RoutingOptions) Reset() {
@@ -97,105 +88,151 @@ func (x *RoutingOptions) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RoutingOptions.ProtoReflect.Descriptor instead.
-func (*RoutingOptions) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{0}
-}
-
 func (x *RoutingOptions) GetCustom() bool {
 	if x != nil {
-		return x.Custom
+		return x.xxx_hidden_Custom
 	}
 	return false
 }
 
 func (x *RoutingOptions) GetAnyHost() bool {
 	if x != nil {
-		return x.AnyHost
+		return x.xxx_hidden_AnyHost
 	}
 	return false
 }
 
 func (x *RoutingOptions) GetShardId() string {
 	if x != nil {
-		return x.ShardId
+		return x.xxx_hidden_ShardId
 	}
 	return ""
 }
 
 func (x *RoutingOptions) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *RoutingOptions) GetWorkflowId() string {
 	if x != nil {
-		return x.WorkflowId
+		return x.xxx_hidden_WorkflowId
 	}
 	return ""
 }
 
 func (x *RoutingOptions) GetTaskToken() string {
 	if x != nil {
-		return x.TaskToken
+		return x.xxx_hidden_TaskToken
 	}
 	return ""
 }
 
 func (x *RoutingOptions) GetTaskInfos() string {
 	if x != nil {
-		return x.TaskInfos
+		return x.xxx_hidden_TaskInfos
 	}
 	return ""
 }
 
 func (x *RoutingOptions) GetChasmComponentRef() string {
 	if x != nil {
-		return x.ChasmComponentRef
+		return x.xxx_hidden_ChasmComponentRef
 	}
 	return ""
 }
 
+func (x *RoutingOptions) SetCustom(v bool) {
+	x.xxx_hidden_Custom = v
+}
+
+func (x *RoutingOptions) SetAnyHost(v bool) {
+	x.xxx_hidden_AnyHost = v
+}
+
+func (x *RoutingOptions) SetShardId(v string) {
+	x.xxx_hidden_ShardId = v
+}
+
+func (x *RoutingOptions) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *RoutingOptions) SetWorkflowId(v string) {
+	x.xxx_hidden_WorkflowId = v
+}
+
+func (x *RoutingOptions) SetTaskToken(v string) {
+	x.xxx_hidden_TaskToken = v
+}
+
+func (x *RoutingOptions) SetTaskInfos(v string) {
+	x.xxx_hidden_TaskInfos = v
+}
+
+func (x *RoutingOptions) SetChasmComponentRef(v string) {
+	x.xxx_hidden_ChasmComponentRef = v
+}
+
+type RoutingOptions_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Routing is custom and implemented in the non-generated client/history/client.go.
+	Custom bool
+	// Request will be routed to a random host.
+	AnyHost bool
+	// Request will be routed according to the specified shard ID field.
+	ShardId string
+	// Requested routed by task token or workflow ID may also specify how to obtain the namespace ID. Defaults to the
+	// "namespace_id" field.
+	NamespaceId string
+	// Request will be routed by resolving the namespace ID and workflow ID to a given shard.
+	WorkflowId string
+	// Request will be routed by resolving the namespace ID and the workflow ID from this task token to a given shard.
+	TaskToken string
+	// Request will be routed by resolving the namespace ID and the workflow ID from the first task info element.
+	TaskInfos string
+	// Request will be routed by resolving the namespace ID and the workflow ID from this chasm ref to a given shard.
+	ChasmComponentRef string
+}
+
+func (b0 RoutingOptions_builder) Build() *RoutingOptions {
+	m0 := &RoutingOptions{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Custom = b.Custom
+	x.xxx_hidden_AnyHost = b.AnyHost
+	x.xxx_hidden_ShardId = b.ShardId
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_WorkflowId = b.WorkflowId
+	x.xxx_hidden_TaskToken = b.TaskToken
+	x.xxx_hidden_TaskInfos = b.TaskInfos
+	x.xxx_hidden_ChasmComponentRef = b.ChasmComponentRef
+	return m0
+}
+
 type StartWorkflowExecutionRequest struct {
-	state                           protoimpl.MessageState            `protogen:"open.v1"`
-	NamespaceId                     string                            `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	StartRequest                    *v1.StartWorkflowExecutionRequest `protobuf:"bytes,2,opt,name=start_request,json=startRequest,proto3" json:"start_request,omitempty"`
-	ParentExecutionInfo             *v11.ParentExecutionInfo          `protobuf:"bytes,3,opt,name=parent_execution_info,json=parentExecutionInfo,proto3" json:"parent_execution_info,omitempty"`
-	Attempt                         int32                             `protobuf:"varint,4,opt,name=attempt,proto3" json:"attempt,omitempty"`
-	WorkflowExecutionExpirationTime *timestamppb.Timestamp            `protobuf:"bytes,5,opt,name=workflow_execution_expiration_time,json=workflowExecutionExpirationTime,proto3" json:"workflow_execution_expiration_time,omitempty"`
-	ContinueAsNewInitiator          v12.ContinueAsNewInitiator        `protobuf:"varint,6,opt,name=continue_as_new_initiator,json=continueAsNewInitiator,proto3,enum=temporal.api.enums.v1.ContinueAsNewInitiator" json:"continue_as_new_initiator,omitempty"`
-	// History service should use the values of continued_failure and last_completion_result
-	// here, not the ones in start_request (those are moved into here in the frontend).
-	ContinuedFailure         *v13.Failure         `protobuf:"bytes,7,opt,name=continued_failure,json=continuedFailure,proto3" json:"continued_failure,omitempty"`
-	LastCompletionResult     *v14.Payloads        `protobuf:"bytes,8,opt,name=last_completion_result,json=lastCompletionResult,proto3" json:"last_completion_result,omitempty"`
-	FirstWorkflowTaskBackoff *durationpb.Duration `protobuf:"bytes,9,opt,name=first_workflow_task_backoff,json=firstWorkflowTaskBackoff,proto3" json:"first_workflow_task_backoff,omitempty"`
-	// For child or continued-as-new workflows, including a version here from the source
-	// (parent/previous) will set the initial version stamp of this workflow.
-	// Deprecated. use `inherited_build_id`
-	SourceVersionStamp *v14.WorkerVersionStamp `protobuf:"bytes,10,opt,name=source_version_stamp,json=sourceVersionStamp,proto3" json:"source_version_stamp,omitempty"`
-	// The root execution info of the new workflow.
-	// For top-level workflows (ie., without parent), this field must be nil.
-	RootExecutionInfo *v11.RootExecutionInfo `protobuf:"bytes,11,opt,name=root_execution_info,json=rootExecutionInfo,proto3" json:"root_execution_info,omitempty"`
-	// inherited build ID from parent/previous execution
-	// Deprecated. Use behavior, version, and task queue fields in `parent_execution_info`.
-	InheritedBuildId string `protobuf:"bytes,12,opt,name=inherited_build_id,json=inheritedBuildId,proto3" json:"inherited_build_id,omitempty"`
-	// If set, takes precedence over the Versioning Behavior sent by the SDK on Workflow Task completion.
-	// To unset the override after the workflow is running, use UpdateWorkflowExecutionOptions.
-	VersioningOverride *v15.VersioningOverride `protobuf:"bytes,13,opt,name=versioning_override,json=versioningOverride,proto3" json:"versioning_override,omitempty"`
-	// If set, we verify the parent-child relationship before applying ID conflict policy WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING
-	ChildWorkflowOnly bool `protobuf:"varint,14,opt,name=child_workflow_only,json=childWorkflowOnly,proto3" json:"child_workflow_only,omitempty"`
-	// If present, the new workflow should start on this version with pinned base behavior.
-	InheritedPinnedVersion *v16.WorkerDeploymentVersion `protobuf:"bytes,15,opt,name=inherited_pinned_version,json=inheritedPinnedVersion,proto3" json:"inherited_pinned_version,omitempty"`
-	// Passes deployment version and revision number from a parent/previous workflow with AutoUpgrade behavior
-	// to its child/continued-as-new workflow. The first workflow task of the child/CAN workflow is dispatched to
-	// either this deployment version or the current version of the task queue, depending on which is the more recent version.
-	// After the first workflow task, the effective behavior of the workflow is determined by worker-sent values in
-	// subsequent workflow tasks.
-	InheritedAutoUpgradeInfo *v16.InheritedAutoUpgradeInfo `protobuf:"bytes,16,opt,name=inherited_auto_upgrade_info,json=inheritedAutoUpgradeInfo,proto3" json:"inherited_auto_upgrade_info,omitempty"`
-	unknownFields            protoimpl.UnknownFields
-	sizeCache                protoimpl.SizeCache
+	state                                      protoimpl.MessageState            `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId                     string                            `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_StartRequest                    *v1.StartWorkflowExecutionRequest `protobuf:"bytes,2,opt,name=start_request,json=startRequest,proto3"`
+	xxx_hidden_ParentExecutionInfo             *v11.ParentExecutionInfo          `protobuf:"bytes,3,opt,name=parent_execution_info,json=parentExecutionInfo,proto3"`
+	xxx_hidden_Attempt                         int32                             `protobuf:"varint,4,opt,name=attempt,proto3"`
+	xxx_hidden_WorkflowExecutionExpirationTime *timestamppb.Timestamp            `protobuf:"bytes,5,opt,name=workflow_execution_expiration_time,json=workflowExecutionExpirationTime,proto3"`
+	xxx_hidden_ContinueAsNewInitiator          v12.ContinueAsNewInitiator        `protobuf:"varint,6,opt,name=continue_as_new_initiator,json=continueAsNewInitiator,proto3,enum=temporal.api.enums.v1.ContinueAsNewInitiator"`
+	xxx_hidden_ContinuedFailure                *v13.Failure                      `protobuf:"bytes,7,opt,name=continued_failure,json=continuedFailure,proto3"`
+	xxx_hidden_LastCompletionResult            *v14.Payloads                     `protobuf:"bytes,8,opt,name=last_completion_result,json=lastCompletionResult,proto3"`
+	xxx_hidden_FirstWorkflowTaskBackoff        *durationpb.Duration              `protobuf:"bytes,9,opt,name=first_workflow_task_backoff,json=firstWorkflowTaskBackoff,proto3"`
+	xxx_hidden_SourceVersionStamp              *v14.WorkerVersionStamp           `protobuf:"bytes,10,opt,name=source_version_stamp,json=sourceVersionStamp,proto3"`
+	xxx_hidden_RootExecutionInfo               *v11.RootExecutionInfo            `protobuf:"bytes,11,opt,name=root_execution_info,json=rootExecutionInfo,proto3"`
+	xxx_hidden_InheritedBuildId                string                            `protobuf:"bytes,12,opt,name=inherited_build_id,json=inheritedBuildId,proto3"`
+	xxx_hidden_VersioningOverride              *v15.VersioningOverride           `protobuf:"bytes,13,opt,name=versioning_override,json=versioningOverride,proto3"`
+	xxx_hidden_ChildWorkflowOnly               bool                              `protobuf:"varint,14,opt,name=child_workflow_only,json=childWorkflowOnly,proto3"`
+	xxx_hidden_InheritedPinnedVersion          *v16.WorkerDeploymentVersion      `protobuf:"bytes,15,opt,name=inherited_pinned_version,json=inheritedPinnedVersion,proto3"`
+	xxx_hidden_InheritedAutoUpgradeInfo        *v16.InheritedAutoUpgradeInfo     `protobuf:"bytes,16,opt,name=inherited_auto_upgrade_info,json=inheritedAutoUpgradeInfo,proto3"`
+	unknownFields                              protoimpl.UnknownFields
+	sizeCache                                  protoimpl.SizeCache
 }
 
 func (x *StartWorkflowExecutionRequest) Reset() {
@@ -223,134 +260,375 @@ func (x *StartWorkflowExecutionRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use StartWorkflowExecutionRequest.ProtoReflect.Descriptor instead.
-func (*StartWorkflowExecutionRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{1}
-}
-
 func (x *StartWorkflowExecutionRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *StartWorkflowExecutionRequest) GetStartRequest() *v1.StartWorkflowExecutionRequest {
 	if x != nil {
-		return x.StartRequest
+		return x.xxx_hidden_StartRequest
 	}
 	return nil
 }
 
 func (x *StartWorkflowExecutionRequest) GetParentExecutionInfo() *v11.ParentExecutionInfo {
 	if x != nil {
-		return x.ParentExecutionInfo
+		return x.xxx_hidden_ParentExecutionInfo
 	}
 	return nil
 }
 
 func (x *StartWorkflowExecutionRequest) GetAttempt() int32 {
 	if x != nil {
-		return x.Attempt
+		return x.xxx_hidden_Attempt
 	}
 	return 0
 }
 
 func (x *StartWorkflowExecutionRequest) GetWorkflowExecutionExpirationTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.WorkflowExecutionExpirationTime
+		return x.xxx_hidden_WorkflowExecutionExpirationTime
 	}
 	return nil
 }
 
 func (x *StartWorkflowExecutionRequest) GetContinueAsNewInitiator() v12.ContinueAsNewInitiator {
 	if x != nil {
-		return x.ContinueAsNewInitiator
+		return x.xxx_hidden_ContinueAsNewInitiator
 	}
 	return v12.ContinueAsNewInitiator(0)
 }
 
 func (x *StartWorkflowExecutionRequest) GetContinuedFailure() *v13.Failure {
 	if x != nil {
-		return x.ContinuedFailure
+		return x.xxx_hidden_ContinuedFailure
 	}
 	return nil
 }
 
 func (x *StartWorkflowExecutionRequest) GetLastCompletionResult() *v14.Payloads {
 	if x != nil {
-		return x.LastCompletionResult
+		return x.xxx_hidden_LastCompletionResult
 	}
 	return nil
 }
 
 func (x *StartWorkflowExecutionRequest) GetFirstWorkflowTaskBackoff() *durationpb.Duration {
 	if x != nil {
-		return x.FirstWorkflowTaskBackoff
+		return x.xxx_hidden_FirstWorkflowTaskBackoff
 	}
 	return nil
 }
 
 func (x *StartWorkflowExecutionRequest) GetSourceVersionStamp() *v14.WorkerVersionStamp {
 	if x != nil {
-		return x.SourceVersionStamp
+		return x.xxx_hidden_SourceVersionStamp
 	}
 	return nil
 }
 
 func (x *StartWorkflowExecutionRequest) GetRootExecutionInfo() *v11.RootExecutionInfo {
 	if x != nil {
-		return x.RootExecutionInfo
+		return x.xxx_hidden_RootExecutionInfo
 	}
 	return nil
 }
 
 func (x *StartWorkflowExecutionRequest) GetInheritedBuildId() string {
 	if x != nil {
-		return x.InheritedBuildId
+		return x.xxx_hidden_InheritedBuildId
 	}
 	return ""
 }
 
 func (x *StartWorkflowExecutionRequest) GetVersioningOverride() *v15.VersioningOverride {
 	if x != nil {
-		return x.VersioningOverride
+		return x.xxx_hidden_VersioningOverride
 	}
 	return nil
 }
 
 func (x *StartWorkflowExecutionRequest) GetChildWorkflowOnly() bool {
 	if x != nil {
-		return x.ChildWorkflowOnly
+		return x.xxx_hidden_ChildWorkflowOnly
 	}
 	return false
 }
 
 func (x *StartWorkflowExecutionRequest) GetInheritedPinnedVersion() *v16.WorkerDeploymentVersion {
 	if x != nil {
-		return x.InheritedPinnedVersion
+		return x.xxx_hidden_InheritedPinnedVersion
 	}
 	return nil
 }
 
 func (x *StartWorkflowExecutionRequest) GetInheritedAutoUpgradeInfo() *v16.InheritedAutoUpgradeInfo {
 	if x != nil {
-		return x.InheritedAutoUpgradeInfo
+		return x.xxx_hidden_InheritedAutoUpgradeInfo
 	}
 	return nil
 }
 
+func (x *StartWorkflowExecutionRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *StartWorkflowExecutionRequest) SetStartRequest(v *v1.StartWorkflowExecutionRequest) {
+	x.xxx_hidden_StartRequest = v
+}
+
+func (x *StartWorkflowExecutionRequest) SetParentExecutionInfo(v *v11.ParentExecutionInfo) {
+	x.xxx_hidden_ParentExecutionInfo = v
+}
+
+func (x *StartWorkflowExecutionRequest) SetAttempt(v int32) {
+	x.xxx_hidden_Attempt = v
+}
+
+func (x *StartWorkflowExecutionRequest) SetWorkflowExecutionExpirationTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_WorkflowExecutionExpirationTime = v
+}
+
+func (x *StartWorkflowExecutionRequest) SetContinueAsNewInitiator(v v12.ContinueAsNewInitiator) {
+	x.xxx_hidden_ContinueAsNewInitiator = v
+}
+
+func (x *StartWorkflowExecutionRequest) SetContinuedFailure(v *v13.Failure) {
+	x.xxx_hidden_ContinuedFailure = v
+}
+
+func (x *StartWorkflowExecutionRequest) SetLastCompletionResult(v *v14.Payloads) {
+	x.xxx_hidden_LastCompletionResult = v
+}
+
+func (x *StartWorkflowExecutionRequest) SetFirstWorkflowTaskBackoff(v *durationpb.Duration) {
+	x.xxx_hidden_FirstWorkflowTaskBackoff = v
+}
+
+func (x *StartWorkflowExecutionRequest) SetSourceVersionStamp(v *v14.WorkerVersionStamp) {
+	x.xxx_hidden_SourceVersionStamp = v
+}
+
+func (x *StartWorkflowExecutionRequest) SetRootExecutionInfo(v *v11.RootExecutionInfo) {
+	x.xxx_hidden_RootExecutionInfo = v
+}
+
+func (x *StartWorkflowExecutionRequest) SetInheritedBuildId(v string) {
+	x.xxx_hidden_InheritedBuildId = v
+}
+
+func (x *StartWorkflowExecutionRequest) SetVersioningOverride(v *v15.VersioningOverride) {
+	x.xxx_hidden_VersioningOverride = v
+}
+
+func (x *StartWorkflowExecutionRequest) SetChildWorkflowOnly(v bool) {
+	x.xxx_hidden_ChildWorkflowOnly = v
+}
+
+func (x *StartWorkflowExecutionRequest) SetInheritedPinnedVersion(v *v16.WorkerDeploymentVersion) {
+	x.xxx_hidden_InheritedPinnedVersion = v
+}
+
+func (x *StartWorkflowExecutionRequest) SetInheritedAutoUpgradeInfo(v *v16.InheritedAutoUpgradeInfo) {
+	x.xxx_hidden_InheritedAutoUpgradeInfo = v
+}
+
+func (x *StartWorkflowExecutionRequest) HasStartRequest() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_StartRequest != nil
+}
+
+func (x *StartWorkflowExecutionRequest) HasParentExecutionInfo() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_ParentExecutionInfo != nil
+}
+
+func (x *StartWorkflowExecutionRequest) HasWorkflowExecutionExpirationTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_WorkflowExecutionExpirationTime != nil
+}
+
+func (x *StartWorkflowExecutionRequest) HasContinuedFailure() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_ContinuedFailure != nil
+}
+
+func (x *StartWorkflowExecutionRequest) HasLastCompletionResult() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_LastCompletionResult != nil
+}
+
+func (x *StartWorkflowExecutionRequest) HasFirstWorkflowTaskBackoff() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_FirstWorkflowTaskBackoff != nil
+}
+
+func (x *StartWorkflowExecutionRequest) HasSourceVersionStamp() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_SourceVersionStamp != nil
+}
+
+func (x *StartWorkflowExecutionRequest) HasRootExecutionInfo() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_RootExecutionInfo != nil
+}
+
+func (x *StartWorkflowExecutionRequest) HasVersioningOverride() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_VersioningOverride != nil
+}
+
+func (x *StartWorkflowExecutionRequest) HasInheritedPinnedVersion() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_InheritedPinnedVersion != nil
+}
+
+func (x *StartWorkflowExecutionRequest) HasInheritedAutoUpgradeInfo() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_InheritedAutoUpgradeInfo != nil
+}
+
+func (x *StartWorkflowExecutionRequest) ClearStartRequest() {
+	x.xxx_hidden_StartRequest = nil
+}
+
+func (x *StartWorkflowExecutionRequest) ClearParentExecutionInfo() {
+	x.xxx_hidden_ParentExecutionInfo = nil
+}
+
+func (x *StartWorkflowExecutionRequest) ClearWorkflowExecutionExpirationTime() {
+	x.xxx_hidden_WorkflowExecutionExpirationTime = nil
+}
+
+func (x *StartWorkflowExecutionRequest) ClearContinuedFailure() {
+	x.xxx_hidden_ContinuedFailure = nil
+}
+
+func (x *StartWorkflowExecutionRequest) ClearLastCompletionResult() {
+	x.xxx_hidden_LastCompletionResult = nil
+}
+
+func (x *StartWorkflowExecutionRequest) ClearFirstWorkflowTaskBackoff() {
+	x.xxx_hidden_FirstWorkflowTaskBackoff = nil
+}
+
+func (x *StartWorkflowExecutionRequest) ClearSourceVersionStamp() {
+	x.xxx_hidden_SourceVersionStamp = nil
+}
+
+func (x *StartWorkflowExecutionRequest) ClearRootExecutionInfo() {
+	x.xxx_hidden_RootExecutionInfo = nil
+}
+
+func (x *StartWorkflowExecutionRequest) ClearVersioningOverride() {
+	x.xxx_hidden_VersioningOverride = nil
+}
+
+func (x *StartWorkflowExecutionRequest) ClearInheritedPinnedVersion() {
+	x.xxx_hidden_InheritedPinnedVersion = nil
+}
+
+func (x *StartWorkflowExecutionRequest) ClearInheritedAutoUpgradeInfo() {
+	x.xxx_hidden_InheritedAutoUpgradeInfo = nil
+}
+
+type StartWorkflowExecutionRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId                     string
+	StartRequest                    *v1.StartWorkflowExecutionRequest
+	ParentExecutionInfo             *v11.ParentExecutionInfo
+	Attempt                         int32
+	WorkflowExecutionExpirationTime *timestamppb.Timestamp
+	ContinueAsNewInitiator          v12.ContinueAsNewInitiator
+	// History service should use the values of continued_failure and last_completion_result
+	// here, not the ones in start_request (those are moved into here in the frontend).
+	ContinuedFailure         *v13.Failure
+	LastCompletionResult     *v14.Payloads
+	FirstWorkflowTaskBackoff *durationpb.Duration
+	// For child or continued-as-new workflows, including a version here from the source
+	// (parent/previous) will set the initial version stamp of this workflow.
+	// Deprecated. use `inherited_build_id`
+	SourceVersionStamp *v14.WorkerVersionStamp
+	// The root execution info of the new workflow.
+	// For top-level workflows (ie., without parent), this field must be nil.
+	RootExecutionInfo *v11.RootExecutionInfo
+	// inherited build ID from parent/previous execution
+	// Deprecated. Use behavior, version, and task queue fields in `parent_execution_info`.
+	InheritedBuildId string
+	// If set, takes precedence over the Versioning Behavior sent by the SDK on Workflow Task completion.
+	// To unset the override after the workflow is running, use UpdateWorkflowExecutionOptions.
+	VersioningOverride *v15.VersioningOverride
+	// If set, we verify the parent-child relationship before applying ID conflict policy WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING
+	ChildWorkflowOnly bool
+	// If present, the new workflow should start on this version with pinned base behavior.
+	InheritedPinnedVersion *v16.WorkerDeploymentVersion
+	// Passes deployment version and revision number from a parent/previous workflow with AutoUpgrade behavior
+	// to its child/continued-as-new workflow. The first workflow task of the child/CAN workflow is dispatched to
+	// either this deployment version or the current version of the task queue, depending on which is the more recent version.
+	// After the first workflow task, the effective behavior of the workflow is determined by worker-sent values in
+	// subsequent workflow tasks.
+	InheritedAutoUpgradeInfo *v16.InheritedAutoUpgradeInfo
+}
+
+func (b0 StartWorkflowExecutionRequest_builder) Build() *StartWorkflowExecutionRequest {
+	m0 := &StartWorkflowExecutionRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_StartRequest = b.StartRequest
+	x.xxx_hidden_ParentExecutionInfo = b.ParentExecutionInfo
+	x.xxx_hidden_Attempt = b.Attempt
+	x.xxx_hidden_WorkflowExecutionExpirationTime = b.WorkflowExecutionExpirationTime
+	x.xxx_hidden_ContinueAsNewInitiator = b.ContinueAsNewInitiator
+	x.xxx_hidden_ContinuedFailure = b.ContinuedFailure
+	x.xxx_hidden_LastCompletionResult = b.LastCompletionResult
+	x.xxx_hidden_FirstWorkflowTaskBackoff = b.FirstWorkflowTaskBackoff
+	x.xxx_hidden_SourceVersionStamp = b.SourceVersionStamp
+	x.xxx_hidden_RootExecutionInfo = b.RootExecutionInfo
+	x.xxx_hidden_InheritedBuildId = b.InheritedBuildId
+	x.xxx_hidden_VersioningOverride = b.VersioningOverride
+	x.xxx_hidden_ChildWorkflowOnly = b.ChildWorkflowOnly
+	x.xxx_hidden_InheritedPinnedVersion = b.InheritedPinnedVersion
+	x.xxx_hidden_InheritedAutoUpgradeInfo = b.InheritedAutoUpgradeInfo
+	return m0
+}
+
 type StartWorkflowExecutionResponse struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	RunId string                 `protobuf:"bytes,1,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	Clock *v17.VectorClock       `protobuf:"bytes,2,opt,name=clock,proto3" json:"clock,omitempty"`
-	// Set if request_eager_execution is set on the start request
-	EagerWorkflowTask *v1.PollWorkflowTaskQueueResponse `protobuf:"bytes,3,opt,name=eager_workflow_task,json=eagerWorkflowTask,proto3" json:"eager_workflow_task,omitempty"`
-	Started           bool                              `protobuf:"varint,4,opt,name=started,proto3" json:"started,omitempty"`
-	Status            v12.WorkflowExecutionStatus       `protobuf:"varint,5,opt,name=status,proto3,enum=temporal.api.enums.v1.WorkflowExecutionStatus" json:"status,omitempty"`
-	Link              *v14.Link                         `protobuf:"bytes,6,opt,name=link,proto3" json:"link,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state                        protoimpl.MessageState            `protogen:"opaque.v1"`
+	xxx_hidden_RunId             string                            `protobuf:"bytes,1,opt,name=run_id,json=runId,proto3"`
+	xxx_hidden_Clock             *v17.VectorClock                  `protobuf:"bytes,2,opt,name=clock,proto3"`
+	xxx_hidden_EagerWorkflowTask *v1.PollWorkflowTaskQueueResponse `protobuf:"bytes,3,opt,name=eager_workflow_task,json=eagerWorkflowTask,proto3"`
+	xxx_hidden_Started           bool                              `protobuf:"varint,4,opt,name=started,proto3"`
+	xxx_hidden_Status            v12.WorkflowExecutionStatus       `protobuf:"varint,5,opt,name=status,proto3,enum=temporal.api.enums.v1.WorkflowExecutionStatus"`
+	xxx_hidden_Link              *v14.Link                         `protobuf:"bytes,6,opt,name=link,proto3"`
+	unknownFields                protoimpl.UnknownFields
+	sizeCache                    protoimpl.SizeCache
 }
 
 func (x *StartWorkflowExecutionResponse) Reset() {
@@ -378,63 +656,140 @@ func (x *StartWorkflowExecutionResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use StartWorkflowExecutionResponse.ProtoReflect.Descriptor instead.
-func (*StartWorkflowExecutionResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{2}
-}
-
 func (x *StartWorkflowExecutionResponse) GetRunId() string {
 	if x != nil {
-		return x.RunId
+		return x.xxx_hidden_RunId
 	}
 	return ""
 }
 
 func (x *StartWorkflowExecutionResponse) GetClock() *v17.VectorClock {
 	if x != nil {
-		return x.Clock
+		return x.xxx_hidden_Clock
 	}
 	return nil
 }
 
 func (x *StartWorkflowExecutionResponse) GetEagerWorkflowTask() *v1.PollWorkflowTaskQueueResponse {
 	if x != nil {
-		return x.EagerWorkflowTask
+		return x.xxx_hidden_EagerWorkflowTask
 	}
 	return nil
 }
 
 func (x *StartWorkflowExecutionResponse) GetStarted() bool {
 	if x != nil {
-		return x.Started
+		return x.xxx_hidden_Started
 	}
 	return false
 }
 
 func (x *StartWorkflowExecutionResponse) GetStatus() v12.WorkflowExecutionStatus {
 	if x != nil {
-		return x.Status
+		return x.xxx_hidden_Status
 	}
 	return v12.WorkflowExecutionStatus(0)
 }
 
 func (x *StartWorkflowExecutionResponse) GetLink() *v14.Link {
 	if x != nil {
-		return x.Link
+		return x.xxx_hidden_Link
 	}
 	return nil
 }
 
+func (x *StartWorkflowExecutionResponse) SetRunId(v string) {
+	x.xxx_hidden_RunId = v
+}
+
+func (x *StartWorkflowExecutionResponse) SetClock(v *v17.VectorClock) {
+	x.xxx_hidden_Clock = v
+}
+
+func (x *StartWorkflowExecutionResponse) SetEagerWorkflowTask(v *v1.PollWorkflowTaskQueueResponse) {
+	x.xxx_hidden_EagerWorkflowTask = v
+}
+
+func (x *StartWorkflowExecutionResponse) SetStarted(v bool) {
+	x.xxx_hidden_Started = v
+}
+
+func (x *StartWorkflowExecutionResponse) SetStatus(v v12.WorkflowExecutionStatus) {
+	x.xxx_hidden_Status = v
+}
+
+func (x *StartWorkflowExecutionResponse) SetLink(v *v14.Link) {
+	x.xxx_hidden_Link = v
+}
+
+func (x *StartWorkflowExecutionResponse) HasClock() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Clock != nil
+}
+
+func (x *StartWorkflowExecutionResponse) HasEagerWorkflowTask() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_EagerWorkflowTask != nil
+}
+
+func (x *StartWorkflowExecutionResponse) HasLink() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Link != nil
+}
+
+func (x *StartWorkflowExecutionResponse) ClearClock() {
+	x.xxx_hidden_Clock = nil
+}
+
+func (x *StartWorkflowExecutionResponse) ClearEagerWorkflowTask() {
+	x.xxx_hidden_EagerWorkflowTask = nil
+}
+
+func (x *StartWorkflowExecutionResponse) ClearLink() {
+	x.xxx_hidden_Link = nil
+}
+
+type StartWorkflowExecutionResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	RunId string
+	Clock *v17.VectorClock
+	// Set if request_eager_execution is set on the start request
+	EagerWorkflowTask *v1.PollWorkflowTaskQueueResponse
+	Started           bool
+	Status            v12.WorkflowExecutionStatus
+	Link              *v14.Link
+}
+
+func (b0 StartWorkflowExecutionResponse_builder) Build() *StartWorkflowExecutionResponse {
+	m0 := &StartWorkflowExecutionResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_RunId = b.RunId
+	x.xxx_hidden_Clock = b.Clock
+	x.xxx_hidden_EagerWorkflowTask = b.EagerWorkflowTask
+	x.xxx_hidden_Started = b.Started
+	x.xxx_hidden_Status = b.Status
+	x.xxx_hidden_Link = b.Link
+	return m0
+}
+
 type GetMutableStateRequest struct {
-	state               protoimpl.MessageState   `protogen:"open.v1"`
-	NamespaceId         string                   `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	Execution           *v14.WorkflowExecution   `protobuf:"bytes,2,opt,name=execution,proto3" json:"execution,omitempty"`
-	ExpectedNextEventId int64                    `protobuf:"varint,3,opt,name=expected_next_event_id,json=expectedNextEventId,proto3" json:"expected_next_event_id,omitempty"`
-	CurrentBranchToken  []byte                   `protobuf:"bytes,4,opt,name=current_branch_token,json=currentBranchToken,proto3" json:"current_branch_token,omitempty"`
-	VersionHistoryItem  *v18.VersionHistoryItem  `protobuf:"bytes,5,opt,name=version_history_item,json=versionHistoryItem,proto3" json:"version_history_item,omitempty"`
-	VersionedTransition *v19.VersionedTransition `protobuf:"bytes,6,opt,name=versioned_transition,json=versionedTransition,proto3" json:"versioned_transition,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	state                          protoimpl.MessageState   `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId         string                   `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_Execution           *v14.WorkflowExecution   `protobuf:"bytes,2,opt,name=execution,proto3"`
+	xxx_hidden_ExpectedNextEventId int64                    `protobuf:"varint,3,opt,name=expected_next_event_id,json=expectedNextEventId,proto3"`
+	xxx_hidden_CurrentBranchToken  []byte                   `protobuf:"bytes,4,opt,name=current_branch_token,json=currentBranchToken,proto3"`
+	xxx_hidden_VersionHistoryItem  *v18.VersionHistoryItem  `protobuf:"bytes,5,opt,name=version_history_item,json=versionHistoryItem,proto3"`
+	xxx_hidden_VersionedTransition *v19.VersionedTransition `protobuf:"bytes,6,opt,name=versioned_transition,json=versionedTransition,proto3"`
+	unknownFields                  protoimpl.UnknownFields
+	sizeCache                      protoimpl.SizeCache
 }
 
 func (x *GetMutableStateRequest) Reset() {
@@ -462,84 +817,156 @@ func (x *GetMutableStateRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetMutableStateRequest.ProtoReflect.Descriptor instead.
-func (*GetMutableStateRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{3}
-}
-
 func (x *GetMutableStateRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *GetMutableStateRequest) GetExecution() *v14.WorkflowExecution {
 	if x != nil {
-		return x.Execution
+		return x.xxx_hidden_Execution
 	}
 	return nil
 }
 
 func (x *GetMutableStateRequest) GetExpectedNextEventId() int64 {
 	if x != nil {
-		return x.ExpectedNextEventId
+		return x.xxx_hidden_ExpectedNextEventId
 	}
 	return 0
 }
 
 func (x *GetMutableStateRequest) GetCurrentBranchToken() []byte {
 	if x != nil {
-		return x.CurrentBranchToken
+		return x.xxx_hidden_CurrentBranchToken
 	}
 	return nil
 }
 
 func (x *GetMutableStateRequest) GetVersionHistoryItem() *v18.VersionHistoryItem {
 	if x != nil {
-		return x.VersionHistoryItem
+		return x.xxx_hidden_VersionHistoryItem
 	}
 	return nil
 }
 
 func (x *GetMutableStateRequest) GetVersionedTransition() *v19.VersionedTransition {
 	if x != nil {
-		return x.VersionedTransition
+		return x.xxx_hidden_VersionedTransition
 	}
 	return nil
 }
 
+func (x *GetMutableStateRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *GetMutableStateRequest) SetExecution(v *v14.WorkflowExecution) {
+	x.xxx_hidden_Execution = v
+}
+
+func (x *GetMutableStateRequest) SetExpectedNextEventId(v int64) {
+	x.xxx_hidden_ExpectedNextEventId = v
+}
+
+func (x *GetMutableStateRequest) SetCurrentBranchToken(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_CurrentBranchToken = v
+}
+
+func (x *GetMutableStateRequest) SetVersionHistoryItem(v *v18.VersionHistoryItem) {
+	x.xxx_hidden_VersionHistoryItem = v
+}
+
+func (x *GetMutableStateRequest) SetVersionedTransition(v *v19.VersionedTransition) {
+	x.xxx_hidden_VersionedTransition = v
+}
+
+func (x *GetMutableStateRequest) HasExecution() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Execution != nil
+}
+
+func (x *GetMutableStateRequest) HasVersionHistoryItem() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_VersionHistoryItem != nil
+}
+
+func (x *GetMutableStateRequest) HasVersionedTransition() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_VersionedTransition != nil
+}
+
+func (x *GetMutableStateRequest) ClearExecution() {
+	x.xxx_hidden_Execution = nil
+}
+
+func (x *GetMutableStateRequest) ClearVersionHistoryItem() {
+	x.xxx_hidden_VersionHistoryItem = nil
+}
+
+func (x *GetMutableStateRequest) ClearVersionedTransition() {
+	x.xxx_hidden_VersionedTransition = nil
+}
+
+type GetMutableStateRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId         string
+	Execution           *v14.WorkflowExecution
+	ExpectedNextEventId int64
+	CurrentBranchToken  []byte
+	VersionHistoryItem  *v18.VersionHistoryItem
+	VersionedTransition *v19.VersionedTransition
+}
+
+func (b0 GetMutableStateRequest_builder) Build() *GetMutableStateRequest {
+	m0 := &GetMutableStateRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_Execution = b.Execution
+	x.xxx_hidden_ExpectedNextEventId = b.ExpectedNextEventId
+	x.xxx_hidden_CurrentBranchToken = b.CurrentBranchToken
+	x.xxx_hidden_VersionHistoryItem = b.VersionHistoryItem
+	x.xxx_hidden_VersionedTransition = b.VersionedTransition
+	return m0
+}
+
 type GetMutableStateResponse struct {
-	state                  protoimpl.MessageState `protogen:"open.v1"`
-	Execution              *v14.WorkflowExecution `protobuf:"bytes,1,opt,name=execution,proto3" json:"execution,omitempty"`
-	WorkflowType           *v14.WorkflowType      `protobuf:"bytes,2,opt,name=workflow_type,json=workflowType,proto3" json:"workflow_type,omitempty"`
-	NextEventId            int64                  `protobuf:"varint,3,opt,name=next_event_id,json=nextEventId,proto3" json:"next_event_id,omitempty"`
-	PreviousStartedEventId int64                  `protobuf:"varint,4,opt,name=previous_started_event_id,json=previousStartedEventId,proto3" json:"previous_started_event_id,omitempty"`
-	LastFirstEventId       int64                  `protobuf:"varint,5,opt,name=last_first_event_id,json=lastFirstEventId,proto3" json:"last_first_event_id,omitempty"`
-	TaskQueue              *v110.TaskQueue        `protobuf:"bytes,6,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
-	StickyTaskQueue        *v110.TaskQueue        `protobuf:"bytes,7,opt,name=sticky_task_queue,json=stickyTaskQueue,proto3" json:"sticky_task_queue,omitempty"`
-	// (-- api-linter: core::0140::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: "to" is used to indicate interval. --)
-	StickyTaskQueueScheduleToStartTimeout *durationpb.Duration        `protobuf:"bytes,11,opt,name=sticky_task_queue_schedule_to_start_timeout,json=stickyTaskQueueScheduleToStartTimeout,proto3" json:"sticky_task_queue_schedule_to_start_timeout,omitempty"`
-	CurrentBranchToken                    []byte                      `protobuf:"bytes,13,opt,name=current_branch_token,json=currentBranchToken,proto3" json:"current_branch_token,omitempty"`
-	WorkflowState                         v111.WorkflowExecutionState `protobuf:"varint,15,opt,name=workflow_state,json=workflowState,proto3,enum=temporal.server.api.enums.v1.WorkflowExecutionState" json:"workflow_state,omitempty"`
-	WorkflowStatus                        v12.WorkflowExecutionStatus `protobuf:"varint,16,opt,name=workflow_status,json=workflowStatus,proto3,enum=temporal.api.enums.v1.WorkflowExecutionStatus" json:"workflow_status,omitempty"`
-	VersionHistories                      *v18.VersionHistories       `protobuf:"bytes,17,opt,name=version_histories,json=versionHistories,proto3" json:"version_histories,omitempty"`
-	IsStickyTaskQueueEnabled              bool                        `protobuf:"varint,18,opt,name=is_sticky_task_queue_enabled,json=isStickyTaskQueueEnabled,proto3" json:"is_sticky_task_queue_enabled,omitempty"`
-	LastFirstEventTxnId                   int64                       `protobuf:"varint,19,opt,name=last_first_event_txn_id,json=lastFirstEventTxnId,proto3" json:"last_first_event_txn_id,omitempty"`
-	FirstExecutionRunId                   string                      `protobuf:"bytes,20,opt,name=first_execution_run_id,json=firstExecutionRunId,proto3" json:"first_execution_run_id,omitempty"`
-	// If using build-id based versioning: version stamp of last worker to complete a workflow
-	// task for this workflow.
-	MostRecentWorkerVersionStamp *v14.WorkerVersionStamp `protobuf:"bytes,21,opt,name=most_recent_worker_version_stamp,json=mostRecentWorkerVersionStamp,proto3" json:"most_recent_worker_version_stamp,omitempty"`
-	// The currently assigned build ID for this execution. Presence of this value means worker versioning is used
-	// for this execution.
-	AssignedBuildId   string                               `protobuf:"bytes,22,opt,name=assigned_build_id,json=assignedBuildId,proto3" json:"assigned_build_id,omitempty"`
-	InheritedBuildId  string                               `protobuf:"bytes,23,opt,name=inherited_build_id,json=inheritedBuildId,proto3" json:"inherited_build_id,omitempty"`
-	TransitionHistory []*v19.VersionedTransition           `protobuf:"bytes,24,rep,name=transition_history,json=transitionHistory,proto3" json:"transition_history,omitempty"`
-	VersioningInfo    *v15.WorkflowExecutionVersioningInfo `protobuf:"bytes,25,opt,name=versioning_info,json=versioningInfo,proto3" json:"versioning_info,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state                                            protoimpl.MessageState               `protogen:"opaque.v1"`
+	xxx_hidden_Execution                             *v14.WorkflowExecution               `protobuf:"bytes,1,opt,name=execution,proto3"`
+	xxx_hidden_WorkflowType                          *v14.WorkflowType                    `protobuf:"bytes,2,opt,name=workflow_type,json=workflowType,proto3"`
+	xxx_hidden_NextEventId                           int64                                `protobuf:"varint,3,opt,name=next_event_id,json=nextEventId,proto3"`
+	xxx_hidden_PreviousStartedEventId                int64                                `protobuf:"varint,4,opt,name=previous_started_event_id,json=previousStartedEventId,proto3"`
+	xxx_hidden_LastFirstEventId                      int64                                `protobuf:"varint,5,opt,name=last_first_event_id,json=lastFirstEventId,proto3"`
+	xxx_hidden_TaskQueue                             *v110.TaskQueue                      `protobuf:"bytes,6,opt,name=task_queue,json=taskQueue,proto3"`
+	xxx_hidden_StickyTaskQueue                       *v110.TaskQueue                      `protobuf:"bytes,7,opt,name=sticky_task_queue,json=stickyTaskQueue,proto3"`
+	xxx_hidden_StickyTaskQueueScheduleToStartTimeout *durationpb.Duration                 `protobuf:"bytes,11,opt,name=sticky_task_queue_schedule_to_start_timeout,json=stickyTaskQueueScheduleToStartTimeout,proto3"`
+	xxx_hidden_CurrentBranchToken                    []byte                               `protobuf:"bytes,13,opt,name=current_branch_token,json=currentBranchToken,proto3"`
+	xxx_hidden_WorkflowState                         v111.WorkflowExecutionState          `protobuf:"varint,15,opt,name=workflow_state,json=workflowState,proto3,enum=temporal.server.api.enums.v1.WorkflowExecutionState"`
+	xxx_hidden_WorkflowStatus                        v12.WorkflowExecutionStatus          `protobuf:"varint,16,opt,name=workflow_status,json=workflowStatus,proto3,enum=temporal.api.enums.v1.WorkflowExecutionStatus"`
+	xxx_hidden_VersionHistories                      *v18.VersionHistories                `protobuf:"bytes,17,opt,name=version_histories,json=versionHistories,proto3"`
+	xxx_hidden_IsStickyTaskQueueEnabled              bool                                 `protobuf:"varint,18,opt,name=is_sticky_task_queue_enabled,json=isStickyTaskQueueEnabled,proto3"`
+	xxx_hidden_LastFirstEventTxnId                   int64                                `protobuf:"varint,19,opt,name=last_first_event_txn_id,json=lastFirstEventTxnId,proto3"`
+	xxx_hidden_FirstExecutionRunId                   string                               `protobuf:"bytes,20,opt,name=first_execution_run_id,json=firstExecutionRunId,proto3"`
+	xxx_hidden_MostRecentWorkerVersionStamp          *v14.WorkerVersionStamp              `protobuf:"bytes,21,opt,name=most_recent_worker_version_stamp,json=mostRecentWorkerVersionStamp,proto3"`
+	xxx_hidden_AssignedBuildId                       string                               `protobuf:"bytes,22,opt,name=assigned_build_id,json=assignedBuildId,proto3"`
+	xxx_hidden_InheritedBuildId                      string                               `protobuf:"bytes,23,opt,name=inherited_build_id,json=inheritedBuildId,proto3"`
+	xxx_hidden_TransitionHistory                     *[]*v19.VersionedTransition          `protobuf:"bytes,24,rep,name=transition_history,json=transitionHistory,proto3"`
+	xxx_hidden_VersioningInfo                        *v15.WorkflowExecutionVersioningInfo `protobuf:"bytes,25,opt,name=versioning_info,json=versioningInfo,proto3"`
+	unknownFields                                    protoimpl.UnknownFields
+	sizeCache                                        protoimpl.SizeCache
 }
 
 func (x *GetMutableStateResponse) Reset() {
@@ -567,160 +994,387 @@ func (x *GetMutableStateResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetMutableStateResponse.ProtoReflect.Descriptor instead.
-func (*GetMutableStateResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{4}
-}
-
 func (x *GetMutableStateResponse) GetExecution() *v14.WorkflowExecution {
 	if x != nil {
-		return x.Execution
+		return x.xxx_hidden_Execution
 	}
 	return nil
 }
 
 func (x *GetMutableStateResponse) GetWorkflowType() *v14.WorkflowType {
 	if x != nil {
-		return x.WorkflowType
+		return x.xxx_hidden_WorkflowType
 	}
 	return nil
 }
 
 func (x *GetMutableStateResponse) GetNextEventId() int64 {
 	if x != nil {
-		return x.NextEventId
+		return x.xxx_hidden_NextEventId
 	}
 	return 0
 }
 
 func (x *GetMutableStateResponse) GetPreviousStartedEventId() int64 {
 	if x != nil {
-		return x.PreviousStartedEventId
+		return x.xxx_hidden_PreviousStartedEventId
 	}
 	return 0
 }
 
 func (x *GetMutableStateResponse) GetLastFirstEventId() int64 {
 	if x != nil {
-		return x.LastFirstEventId
+		return x.xxx_hidden_LastFirstEventId
 	}
 	return 0
 }
 
 func (x *GetMutableStateResponse) GetTaskQueue() *v110.TaskQueue {
 	if x != nil {
-		return x.TaskQueue
+		return x.xxx_hidden_TaskQueue
 	}
 	return nil
 }
 
 func (x *GetMutableStateResponse) GetStickyTaskQueue() *v110.TaskQueue {
 	if x != nil {
-		return x.StickyTaskQueue
+		return x.xxx_hidden_StickyTaskQueue
 	}
 	return nil
 }
 
 func (x *GetMutableStateResponse) GetStickyTaskQueueScheduleToStartTimeout() *durationpb.Duration {
 	if x != nil {
-		return x.StickyTaskQueueScheduleToStartTimeout
+		return x.xxx_hidden_StickyTaskQueueScheduleToStartTimeout
 	}
 	return nil
 }
 
 func (x *GetMutableStateResponse) GetCurrentBranchToken() []byte {
 	if x != nil {
-		return x.CurrentBranchToken
+		return x.xxx_hidden_CurrentBranchToken
 	}
 	return nil
 }
 
 func (x *GetMutableStateResponse) GetWorkflowState() v111.WorkflowExecutionState {
 	if x != nil {
-		return x.WorkflowState
+		return x.xxx_hidden_WorkflowState
 	}
 	return v111.WorkflowExecutionState(0)
 }
 
 func (x *GetMutableStateResponse) GetWorkflowStatus() v12.WorkflowExecutionStatus {
 	if x != nil {
-		return x.WorkflowStatus
+		return x.xxx_hidden_WorkflowStatus
 	}
 	return v12.WorkflowExecutionStatus(0)
 }
 
 func (x *GetMutableStateResponse) GetVersionHistories() *v18.VersionHistories {
 	if x != nil {
-		return x.VersionHistories
+		return x.xxx_hidden_VersionHistories
 	}
 	return nil
 }
 
 func (x *GetMutableStateResponse) GetIsStickyTaskQueueEnabled() bool {
 	if x != nil {
-		return x.IsStickyTaskQueueEnabled
+		return x.xxx_hidden_IsStickyTaskQueueEnabled
 	}
 	return false
 }
 
 func (x *GetMutableStateResponse) GetLastFirstEventTxnId() int64 {
 	if x != nil {
-		return x.LastFirstEventTxnId
+		return x.xxx_hidden_LastFirstEventTxnId
 	}
 	return 0
 }
 
 func (x *GetMutableStateResponse) GetFirstExecutionRunId() string {
 	if x != nil {
-		return x.FirstExecutionRunId
+		return x.xxx_hidden_FirstExecutionRunId
 	}
 	return ""
 }
 
 func (x *GetMutableStateResponse) GetMostRecentWorkerVersionStamp() *v14.WorkerVersionStamp {
 	if x != nil {
-		return x.MostRecentWorkerVersionStamp
+		return x.xxx_hidden_MostRecentWorkerVersionStamp
 	}
 	return nil
 }
 
 func (x *GetMutableStateResponse) GetAssignedBuildId() string {
 	if x != nil {
-		return x.AssignedBuildId
+		return x.xxx_hidden_AssignedBuildId
 	}
 	return ""
 }
 
 func (x *GetMutableStateResponse) GetInheritedBuildId() string {
 	if x != nil {
-		return x.InheritedBuildId
+		return x.xxx_hidden_InheritedBuildId
 	}
 	return ""
 }
 
 func (x *GetMutableStateResponse) GetTransitionHistory() []*v19.VersionedTransition {
 	if x != nil {
-		return x.TransitionHistory
+		if x.xxx_hidden_TransitionHistory != nil {
+			return *x.xxx_hidden_TransitionHistory
+		}
 	}
 	return nil
 }
 
 func (x *GetMutableStateResponse) GetVersioningInfo() *v15.WorkflowExecutionVersioningInfo {
 	if x != nil {
-		return x.VersioningInfo
+		return x.xxx_hidden_VersioningInfo
 	}
 	return nil
 }
 
+func (x *GetMutableStateResponse) SetExecution(v *v14.WorkflowExecution) {
+	x.xxx_hidden_Execution = v
+}
+
+func (x *GetMutableStateResponse) SetWorkflowType(v *v14.WorkflowType) {
+	x.xxx_hidden_WorkflowType = v
+}
+
+func (x *GetMutableStateResponse) SetNextEventId(v int64) {
+	x.xxx_hidden_NextEventId = v
+}
+
+func (x *GetMutableStateResponse) SetPreviousStartedEventId(v int64) {
+	x.xxx_hidden_PreviousStartedEventId = v
+}
+
+func (x *GetMutableStateResponse) SetLastFirstEventId(v int64) {
+	x.xxx_hidden_LastFirstEventId = v
+}
+
+func (x *GetMutableStateResponse) SetTaskQueue(v *v110.TaskQueue) {
+	x.xxx_hidden_TaskQueue = v
+}
+
+func (x *GetMutableStateResponse) SetStickyTaskQueue(v *v110.TaskQueue) {
+	x.xxx_hidden_StickyTaskQueue = v
+}
+
+func (x *GetMutableStateResponse) SetStickyTaskQueueScheduleToStartTimeout(v *durationpb.Duration) {
+	x.xxx_hidden_StickyTaskQueueScheduleToStartTimeout = v
+}
+
+func (x *GetMutableStateResponse) SetCurrentBranchToken(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_CurrentBranchToken = v
+}
+
+func (x *GetMutableStateResponse) SetWorkflowState(v v111.WorkflowExecutionState) {
+	x.xxx_hidden_WorkflowState = v
+}
+
+func (x *GetMutableStateResponse) SetWorkflowStatus(v v12.WorkflowExecutionStatus) {
+	x.xxx_hidden_WorkflowStatus = v
+}
+
+func (x *GetMutableStateResponse) SetVersionHistories(v *v18.VersionHistories) {
+	x.xxx_hidden_VersionHistories = v
+}
+
+func (x *GetMutableStateResponse) SetIsStickyTaskQueueEnabled(v bool) {
+	x.xxx_hidden_IsStickyTaskQueueEnabled = v
+}
+
+func (x *GetMutableStateResponse) SetLastFirstEventTxnId(v int64) {
+	x.xxx_hidden_LastFirstEventTxnId = v
+}
+
+func (x *GetMutableStateResponse) SetFirstExecutionRunId(v string) {
+	x.xxx_hidden_FirstExecutionRunId = v
+}
+
+func (x *GetMutableStateResponse) SetMostRecentWorkerVersionStamp(v *v14.WorkerVersionStamp) {
+	x.xxx_hidden_MostRecentWorkerVersionStamp = v
+}
+
+func (x *GetMutableStateResponse) SetAssignedBuildId(v string) {
+	x.xxx_hidden_AssignedBuildId = v
+}
+
+func (x *GetMutableStateResponse) SetInheritedBuildId(v string) {
+	x.xxx_hidden_InheritedBuildId = v
+}
+
+func (x *GetMutableStateResponse) SetTransitionHistory(v []*v19.VersionedTransition) {
+	x.xxx_hidden_TransitionHistory = &v
+}
+
+func (x *GetMutableStateResponse) SetVersioningInfo(v *v15.WorkflowExecutionVersioningInfo) {
+	x.xxx_hidden_VersioningInfo = v
+}
+
+func (x *GetMutableStateResponse) HasExecution() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Execution != nil
+}
+
+func (x *GetMutableStateResponse) HasWorkflowType() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_WorkflowType != nil
+}
+
+func (x *GetMutableStateResponse) HasTaskQueue() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_TaskQueue != nil
+}
+
+func (x *GetMutableStateResponse) HasStickyTaskQueue() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_StickyTaskQueue != nil
+}
+
+func (x *GetMutableStateResponse) HasStickyTaskQueueScheduleToStartTimeout() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_StickyTaskQueueScheduleToStartTimeout != nil
+}
+
+func (x *GetMutableStateResponse) HasVersionHistories() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_VersionHistories != nil
+}
+
+func (x *GetMutableStateResponse) HasMostRecentWorkerVersionStamp() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_MostRecentWorkerVersionStamp != nil
+}
+
+func (x *GetMutableStateResponse) HasVersioningInfo() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_VersioningInfo != nil
+}
+
+func (x *GetMutableStateResponse) ClearExecution() {
+	x.xxx_hidden_Execution = nil
+}
+
+func (x *GetMutableStateResponse) ClearWorkflowType() {
+	x.xxx_hidden_WorkflowType = nil
+}
+
+func (x *GetMutableStateResponse) ClearTaskQueue() {
+	x.xxx_hidden_TaskQueue = nil
+}
+
+func (x *GetMutableStateResponse) ClearStickyTaskQueue() {
+	x.xxx_hidden_StickyTaskQueue = nil
+}
+
+func (x *GetMutableStateResponse) ClearStickyTaskQueueScheduleToStartTimeout() {
+	x.xxx_hidden_StickyTaskQueueScheduleToStartTimeout = nil
+}
+
+func (x *GetMutableStateResponse) ClearVersionHistories() {
+	x.xxx_hidden_VersionHistories = nil
+}
+
+func (x *GetMutableStateResponse) ClearMostRecentWorkerVersionStamp() {
+	x.xxx_hidden_MostRecentWorkerVersionStamp = nil
+}
+
+func (x *GetMutableStateResponse) ClearVersioningInfo() {
+	x.xxx_hidden_VersioningInfo = nil
+}
+
+type GetMutableStateResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Execution              *v14.WorkflowExecution
+	WorkflowType           *v14.WorkflowType
+	NextEventId            int64
+	PreviousStartedEventId int64
+	LastFirstEventId       int64
+	TaskQueue              *v110.TaskQueue
+	StickyTaskQueue        *v110.TaskQueue
+	// (-- api-linter: core::0140::prepositions=disabled
+	//
+	//	aip.dev/not-precedent: "to" is used to indicate interval. --)
+	StickyTaskQueueScheduleToStartTimeout *durationpb.Duration
+	CurrentBranchToken                    []byte
+	WorkflowState                         v111.WorkflowExecutionState
+	WorkflowStatus                        v12.WorkflowExecutionStatus
+	VersionHistories                      *v18.VersionHistories
+	IsStickyTaskQueueEnabled              bool
+	LastFirstEventTxnId                   int64
+	FirstExecutionRunId                   string
+	// If using build-id based versioning: version stamp of last worker to complete a workflow
+	// task for this workflow.
+	MostRecentWorkerVersionStamp *v14.WorkerVersionStamp
+	// The currently assigned build ID for this execution. Presence of this value means worker versioning is used
+	// for this execution.
+	AssignedBuildId   string
+	InheritedBuildId  string
+	TransitionHistory []*v19.VersionedTransition
+	VersioningInfo    *v15.WorkflowExecutionVersioningInfo
+}
+
+func (b0 GetMutableStateResponse_builder) Build() *GetMutableStateResponse {
+	m0 := &GetMutableStateResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Execution = b.Execution
+	x.xxx_hidden_WorkflowType = b.WorkflowType
+	x.xxx_hidden_NextEventId = b.NextEventId
+	x.xxx_hidden_PreviousStartedEventId = b.PreviousStartedEventId
+	x.xxx_hidden_LastFirstEventId = b.LastFirstEventId
+	x.xxx_hidden_TaskQueue = b.TaskQueue
+	x.xxx_hidden_StickyTaskQueue = b.StickyTaskQueue
+	x.xxx_hidden_StickyTaskQueueScheduleToStartTimeout = b.StickyTaskQueueScheduleToStartTimeout
+	x.xxx_hidden_CurrentBranchToken = b.CurrentBranchToken
+	x.xxx_hidden_WorkflowState = b.WorkflowState
+	x.xxx_hidden_WorkflowStatus = b.WorkflowStatus
+	x.xxx_hidden_VersionHistories = b.VersionHistories
+	x.xxx_hidden_IsStickyTaskQueueEnabled = b.IsStickyTaskQueueEnabled
+	x.xxx_hidden_LastFirstEventTxnId = b.LastFirstEventTxnId
+	x.xxx_hidden_FirstExecutionRunId = b.FirstExecutionRunId
+	x.xxx_hidden_MostRecentWorkerVersionStamp = b.MostRecentWorkerVersionStamp
+	x.xxx_hidden_AssignedBuildId = b.AssignedBuildId
+	x.xxx_hidden_InheritedBuildId = b.InheritedBuildId
+	x.xxx_hidden_TransitionHistory = &b.TransitionHistory
+	x.xxx_hidden_VersioningInfo = b.VersioningInfo
+	return m0
+}
+
 type PollMutableStateRequest struct {
-	state               protoimpl.MessageState  `protogen:"open.v1"`
-	NamespaceId         string                  `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	Execution           *v14.WorkflowExecution  `protobuf:"bytes,2,opt,name=execution,proto3" json:"execution,omitempty"`
-	ExpectedNextEventId int64                   `protobuf:"varint,3,opt,name=expected_next_event_id,json=expectedNextEventId,proto3" json:"expected_next_event_id,omitempty"`
-	CurrentBranchToken  []byte                  `protobuf:"bytes,4,opt,name=current_branch_token,json=currentBranchToken,proto3" json:"current_branch_token,omitempty"`
-	VersionHistoryItem  *v18.VersionHistoryItem `protobuf:"bytes,5,opt,name=version_history_item,json=versionHistoryItem,proto3" json:"version_history_item,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	state                          protoimpl.MessageState  `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId         string                  `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_Execution           *v14.WorkflowExecution  `protobuf:"bytes,2,opt,name=execution,proto3"`
+	xxx_hidden_ExpectedNextEventId int64                   `protobuf:"varint,3,opt,name=expected_next_event_id,json=expectedNextEventId,proto3"`
+	xxx_hidden_CurrentBranchToken  []byte                  `protobuf:"bytes,4,opt,name=current_branch_token,json=currentBranchToken,proto3"`
+	xxx_hidden_VersionHistoryItem  *v18.VersionHistoryItem `protobuf:"bytes,5,opt,name=version_history_item,json=versionHistoryItem,proto3"`
+	unknownFields                  protoimpl.UnknownFields
+	sizeCache                      protoimpl.SizeCache
 }
 
 func (x *PollMutableStateRequest) Reset() {
@@ -748,67 +1402,126 @@ func (x *PollMutableStateRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use PollMutableStateRequest.ProtoReflect.Descriptor instead.
-func (*PollMutableStateRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{5}
-}
-
 func (x *PollMutableStateRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *PollMutableStateRequest) GetExecution() *v14.WorkflowExecution {
 	if x != nil {
-		return x.Execution
+		return x.xxx_hidden_Execution
 	}
 	return nil
 }
 
 func (x *PollMutableStateRequest) GetExpectedNextEventId() int64 {
 	if x != nil {
-		return x.ExpectedNextEventId
+		return x.xxx_hidden_ExpectedNextEventId
 	}
 	return 0
 }
 
 func (x *PollMutableStateRequest) GetCurrentBranchToken() []byte {
 	if x != nil {
-		return x.CurrentBranchToken
+		return x.xxx_hidden_CurrentBranchToken
 	}
 	return nil
 }
 
 func (x *PollMutableStateRequest) GetVersionHistoryItem() *v18.VersionHistoryItem {
 	if x != nil {
-		return x.VersionHistoryItem
+		return x.xxx_hidden_VersionHistoryItem
 	}
 	return nil
 }
 
+func (x *PollMutableStateRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *PollMutableStateRequest) SetExecution(v *v14.WorkflowExecution) {
+	x.xxx_hidden_Execution = v
+}
+
+func (x *PollMutableStateRequest) SetExpectedNextEventId(v int64) {
+	x.xxx_hidden_ExpectedNextEventId = v
+}
+
+func (x *PollMutableStateRequest) SetCurrentBranchToken(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_CurrentBranchToken = v
+}
+
+func (x *PollMutableStateRequest) SetVersionHistoryItem(v *v18.VersionHistoryItem) {
+	x.xxx_hidden_VersionHistoryItem = v
+}
+
+func (x *PollMutableStateRequest) HasExecution() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Execution != nil
+}
+
+func (x *PollMutableStateRequest) HasVersionHistoryItem() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_VersionHistoryItem != nil
+}
+
+func (x *PollMutableStateRequest) ClearExecution() {
+	x.xxx_hidden_Execution = nil
+}
+
+func (x *PollMutableStateRequest) ClearVersionHistoryItem() {
+	x.xxx_hidden_VersionHistoryItem = nil
+}
+
+type PollMutableStateRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId         string
+	Execution           *v14.WorkflowExecution
+	ExpectedNextEventId int64
+	CurrentBranchToken  []byte
+	VersionHistoryItem  *v18.VersionHistoryItem
+}
+
+func (b0 PollMutableStateRequest_builder) Build() *PollMutableStateRequest {
+	m0 := &PollMutableStateRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_Execution = b.Execution
+	x.xxx_hidden_ExpectedNextEventId = b.ExpectedNextEventId
+	x.xxx_hidden_CurrentBranchToken = b.CurrentBranchToken
+	x.xxx_hidden_VersionHistoryItem = b.VersionHistoryItem
+	return m0
+}
+
 type PollMutableStateResponse struct {
-	state                  protoimpl.MessageState `protogen:"open.v1"`
-	Execution              *v14.WorkflowExecution `protobuf:"bytes,1,opt,name=execution,proto3" json:"execution,omitempty"`
-	WorkflowType           *v14.WorkflowType      `protobuf:"bytes,2,opt,name=workflow_type,json=workflowType,proto3" json:"workflow_type,omitempty"`
-	NextEventId            int64                  `protobuf:"varint,3,opt,name=next_event_id,json=nextEventId,proto3" json:"next_event_id,omitempty"`
-	PreviousStartedEventId int64                  `protobuf:"varint,4,opt,name=previous_started_event_id,json=previousStartedEventId,proto3" json:"previous_started_event_id,omitempty"`
-	LastFirstEventId       int64                  `protobuf:"varint,5,opt,name=last_first_event_id,json=lastFirstEventId,proto3" json:"last_first_event_id,omitempty"`
-	TaskQueue              *v110.TaskQueue        `protobuf:"bytes,6,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
-	StickyTaskQueue        *v110.TaskQueue        `protobuf:"bytes,7,opt,name=sticky_task_queue,json=stickyTaskQueue,proto3" json:"sticky_task_queue,omitempty"`
-	// (-- api-linter: core::0140::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: "to" is used to indicate interval. --)
-	StickyTaskQueueScheduleToStartTimeout *durationpb.Duration        `protobuf:"bytes,11,opt,name=sticky_task_queue_schedule_to_start_timeout,json=stickyTaskQueueScheduleToStartTimeout,proto3" json:"sticky_task_queue_schedule_to_start_timeout,omitempty"`
-	CurrentBranchToken                    []byte                      `protobuf:"bytes,12,opt,name=current_branch_token,json=currentBranchToken,proto3" json:"current_branch_token,omitempty"`
-	VersionHistories                      *v18.VersionHistories       `protobuf:"bytes,14,opt,name=version_histories,json=versionHistories,proto3" json:"version_histories,omitempty"`
-	WorkflowState                         v111.WorkflowExecutionState `protobuf:"varint,15,opt,name=workflow_state,json=workflowState,proto3,enum=temporal.server.api.enums.v1.WorkflowExecutionState" json:"workflow_state,omitempty"`
-	WorkflowStatus                        v12.WorkflowExecutionStatus `protobuf:"varint,16,opt,name=workflow_status,json=workflowStatus,proto3,enum=temporal.api.enums.v1.WorkflowExecutionStatus" json:"workflow_status,omitempty"`
-	LastFirstEventTxnId                   int64                       `protobuf:"varint,17,opt,name=last_first_event_txn_id,json=lastFirstEventTxnId,proto3" json:"last_first_event_txn_id,omitempty"`
-	FirstExecutionRunId                   string                      `protobuf:"bytes,18,opt,name=first_execution_run_id,json=firstExecutionRunId,proto3" json:"first_execution_run_id,omitempty"`
-	unknownFields                         protoimpl.UnknownFields
-	sizeCache                             protoimpl.SizeCache
+	state                                            protoimpl.MessageState      `protogen:"opaque.v1"`
+	xxx_hidden_Execution                             *v14.WorkflowExecution      `protobuf:"bytes,1,opt,name=execution,proto3"`
+	xxx_hidden_WorkflowType                          *v14.WorkflowType           `protobuf:"bytes,2,opt,name=workflow_type,json=workflowType,proto3"`
+	xxx_hidden_NextEventId                           int64                       `protobuf:"varint,3,opt,name=next_event_id,json=nextEventId,proto3"`
+	xxx_hidden_PreviousStartedEventId                int64                       `protobuf:"varint,4,opt,name=previous_started_event_id,json=previousStartedEventId,proto3"`
+	xxx_hidden_LastFirstEventId                      int64                       `protobuf:"varint,5,opt,name=last_first_event_id,json=lastFirstEventId,proto3"`
+	xxx_hidden_TaskQueue                             *v110.TaskQueue             `protobuf:"bytes,6,opt,name=task_queue,json=taskQueue,proto3"`
+	xxx_hidden_StickyTaskQueue                       *v110.TaskQueue             `protobuf:"bytes,7,opt,name=sticky_task_queue,json=stickyTaskQueue,proto3"`
+	xxx_hidden_StickyTaskQueueScheduleToStartTimeout *durationpb.Duration        `protobuf:"bytes,11,opt,name=sticky_task_queue_schedule_to_start_timeout,json=stickyTaskQueueScheduleToStartTimeout,proto3"`
+	xxx_hidden_CurrentBranchToken                    []byte                      `protobuf:"bytes,12,opt,name=current_branch_token,json=currentBranchToken,proto3"`
+	xxx_hidden_VersionHistories                      *v18.VersionHistories       `protobuf:"bytes,14,opt,name=version_histories,json=versionHistories,proto3"`
+	xxx_hidden_WorkflowState                         v111.WorkflowExecutionState `protobuf:"varint,15,opt,name=workflow_state,json=workflowState,proto3,enum=temporal.server.api.enums.v1.WorkflowExecutionState"`
+	xxx_hidden_WorkflowStatus                        v12.WorkflowExecutionStatus `protobuf:"varint,16,opt,name=workflow_status,json=workflowStatus,proto3,enum=temporal.api.enums.v1.WorkflowExecutionStatus"`
+	xxx_hidden_LastFirstEventTxnId                   int64                       `protobuf:"varint,17,opt,name=last_first_event_txn_id,json=lastFirstEventTxnId,proto3"`
+	xxx_hidden_FirstExecutionRunId                   string                      `protobuf:"bytes,18,opt,name=first_execution_run_id,json=firstExecutionRunId,proto3"`
+	unknownFields                                    protoimpl.UnknownFields
+	sizeCache                                        protoimpl.SizeCache
 }
 
 func (x *PollMutableStateResponse) Reset() {
@@ -836,115 +1549,278 @@ func (x *PollMutableStateResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use PollMutableStateResponse.ProtoReflect.Descriptor instead.
-func (*PollMutableStateResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{6}
-}
-
 func (x *PollMutableStateResponse) GetExecution() *v14.WorkflowExecution {
 	if x != nil {
-		return x.Execution
+		return x.xxx_hidden_Execution
 	}
 	return nil
 }
 
 func (x *PollMutableStateResponse) GetWorkflowType() *v14.WorkflowType {
 	if x != nil {
-		return x.WorkflowType
+		return x.xxx_hidden_WorkflowType
 	}
 	return nil
 }
 
 func (x *PollMutableStateResponse) GetNextEventId() int64 {
 	if x != nil {
-		return x.NextEventId
+		return x.xxx_hidden_NextEventId
 	}
 	return 0
 }
 
 func (x *PollMutableStateResponse) GetPreviousStartedEventId() int64 {
 	if x != nil {
-		return x.PreviousStartedEventId
+		return x.xxx_hidden_PreviousStartedEventId
 	}
 	return 0
 }
 
 func (x *PollMutableStateResponse) GetLastFirstEventId() int64 {
 	if x != nil {
-		return x.LastFirstEventId
+		return x.xxx_hidden_LastFirstEventId
 	}
 	return 0
 }
 
 func (x *PollMutableStateResponse) GetTaskQueue() *v110.TaskQueue {
 	if x != nil {
-		return x.TaskQueue
+		return x.xxx_hidden_TaskQueue
 	}
 	return nil
 }
 
 func (x *PollMutableStateResponse) GetStickyTaskQueue() *v110.TaskQueue {
 	if x != nil {
-		return x.StickyTaskQueue
+		return x.xxx_hidden_StickyTaskQueue
 	}
 	return nil
 }
 
 func (x *PollMutableStateResponse) GetStickyTaskQueueScheduleToStartTimeout() *durationpb.Duration {
 	if x != nil {
-		return x.StickyTaskQueueScheduleToStartTimeout
+		return x.xxx_hidden_StickyTaskQueueScheduleToStartTimeout
 	}
 	return nil
 }
 
 func (x *PollMutableStateResponse) GetCurrentBranchToken() []byte {
 	if x != nil {
-		return x.CurrentBranchToken
+		return x.xxx_hidden_CurrentBranchToken
 	}
 	return nil
 }
 
 func (x *PollMutableStateResponse) GetVersionHistories() *v18.VersionHistories {
 	if x != nil {
-		return x.VersionHistories
+		return x.xxx_hidden_VersionHistories
 	}
 	return nil
 }
 
 func (x *PollMutableStateResponse) GetWorkflowState() v111.WorkflowExecutionState {
 	if x != nil {
-		return x.WorkflowState
+		return x.xxx_hidden_WorkflowState
 	}
 	return v111.WorkflowExecutionState(0)
 }
 
 func (x *PollMutableStateResponse) GetWorkflowStatus() v12.WorkflowExecutionStatus {
 	if x != nil {
-		return x.WorkflowStatus
+		return x.xxx_hidden_WorkflowStatus
 	}
 	return v12.WorkflowExecutionStatus(0)
 }
 
 func (x *PollMutableStateResponse) GetLastFirstEventTxnId() int64 {
 	if x != nil {
-		return x.LastFirstEventTxnId
+		return x.xxx_hidden_LastFirstEventTxnId
 	}
 	return 0
 }
 
 func (x *PollMutableStateResponse) GetFirstExecutionRunId() string {
 	if x != nil {
-		return x.FirstExecutionRunId
+		return x.xxx_hidden_FirstExecutionRunId
 	}
 	return ""
 }
 
+func (x *PollMutableStateResponse) SetExecution(v *v14.WorkflowExecution) {
+	x.xxx_hidden_Execution = v
+}
+
+func (x *PollMutableStateResponse) SetWorkflowType(v *v14.WorkflowType) {
+	x.xxx_hidden_WorkflowType = v
+}
+
+func (x *PollMutableStateResponse) SetNextEventId(v int64) {
+	x.xxx_hidden_NextEventId = v
+}
+
+func (x *PollMutableStateResponse) SetPreviousStartedEventId(v int64) {
+	x.xxx_hidden_PreviousStartedEventId = v
+}
+
+func (x *PollMutableStateResponse) SetLastFirstEventId(v int64) {
+	x.xxx_hidden_LastFirstEventId = v
+}
+
+func (x *PollMutableStateResponse) SetTaskQueue(v *v110.TaskQueue) {
+	x.xxx_hidden_TaskQueue = v
+}
+
+func (x *PollMutableStateResponse) SetStickyTaskQueue(v *v110.TaskQueue) {
+	x.xxx_hidden_StickyTaskQueue = v
+}
+
+func (x *PollMutableStateResponse) SetStickyTaskQueueScheduleToStartTimeout(v *durationpb.Duration) {
+	x.xxx_hidden_StickyTaskQueueScheduleToStartTimeout = v
+}
+
+func (x *PollMutableStateResponse) SetCurrentBranchToken(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_CurrentBranchToken = v
+}
+
+func (x *PollMutableStateResponse) SetVersionHistories(v *v18.VersionHistories) {
+	x.xxx_hidden_VersionHistories = v
+}
+
+func (x *PollMutableStateResponse) SetWorkflowState(v v111.WorkflowExecutionState) {
+	x.xxx_hidden_WorkflowState = v
+}
+
+func (x *PollMutableStateResponse) SetWorkflowStatus(v v12.WorkflowExecutionStatus) {
+	x.xxx_hidden_WorkflowStatus = v
+}
+
+func (x *PollMutableStateResponse) SetLastFirstEventTxnId(v int64) {
+	x.xxx_hidden_LastFirstEventTxnId = v
+}
+
+func (x *PollMutableStateResponse) SetFirstExecutionRunId(v string) {
+	x.xxx_hidden_FirstExecutionRunId = v
+}
+
+func (x *PollMutableStateResponse) HasExecution() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Execution != nil
+}
+
+func (x *PollMutableStateResponse) HasWorkflowType() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_WorkflowType != nil
+}
+
+func (x *PollMutableStateResponse) HasTaskQueue() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_TaskQueue != nil
+}
+
+func (x *PollMutableStateResponse) HasStickyTaskQueue() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_StickyTaskQueue != nil
+}
+
+func (x *PollMutableStateResponse) HasStickyTaskQueueScheduleToStartTimeout() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_StickyTaskQueueScheduleToStartTimeout != nil
+}
+
+func (x *PollMutableStateResponse) HasVersionHistories() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_VersionHistories != nil
+}
+
+func (x *PollMutableStateResponse) ClearExecution() {
+	x.xxx_hidden_Execution = nil
+}
+
+func (x *PollMutableStateResponse) ClearWorkflowType() {
+	x.xxx_hidden_WorkflowType = nil
+}
+
+func (x *PollMutableStateResponse) ClearTaskQueue() {
+	x.xxx_hidden_TaskQueue = nil
+}
+
+func (x *PollMutableStateResponse) ClearStickyTaskQueue() {
+	x.xxx_hidden_StickyTaskQueue = nil
+}
+
+func (x *PollMutableStateResponse) ClearStickyTaskQueueScheduleToStartTimeout() {
+	x.xxx_hidden_StickyTaskQueueScheduleToStartTimeout = nil
+}
+
+func (x *PollMutableStateResponse) ClearVersionHistories() {
+	x.xxx_hidden_VersionHistories = nil
+}
+
+type PollMutableStateResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Execution              *v14.WorkflowExecution
+	WorkflowType           *v14.WorkflowType
+	NextEventId            int64
+	PreviousStartedEventId int64
+	LastFirstEventId       int64
+	TaskQueue              *v110.TaskQueue
+	StickyTaskQueue        *v110.TaskQueue
+	// (-- api-linter: core::0140::prepositions=disabled
+	//
+	//	aip.dev/not-precedent: "to" is used to indicate interval. --)
+	StickyTaskQueueScheduleToStartTimeout *durationpb.Duration
+	CurrentBranchToken                    []byte
+	VersionHistories                      *v18.VersionHistories
+	WorkflowState                         v111.WorkflowExecutionState
+	WorkflowStatus                        v12.WorkflowExecutionStatus
+	LastFirstEventTxnId                   int64
+	FirstExecutionRunId                   string
+}
+
+func (b0 PollMutableStateResponse_builder) Build() *PollMutableStateResponse {
+	m0 := &PollMutableStateResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Execution = b.Execution
+	x.xxx_hidden_WorkflowType = b.WorkflowType
+	x.xxx_hidden_NextEventId = b.NextEventId
+	x.xxx_hidden_PreviousStartedEventId = b.PreviousStartedEventId
+	x.xxx_hidden_LastFirstEventId = b.LastFirstEventId
+	x.xxx_hidden_TaskQueue = b.TaskQueue
+	x.xxx_hidden_StickyTaskQueue = b.StickyTaskQueue
+	x.xxx_hidden_StickyTaskQueueScheduleToStartTimeout = b.StickyTaskQueueScheduleToStartTimeout
+	x.xxx_hidden_CurrentBranchToken = b.CurrentBranchToken
+	x.xxx_hidden_VersionHistories = b.VersionHistories
+	x.xxx_hidden_WorkflowState = b.WorkflowState
+	x.xxx_hidden_WorkflowStatus = b.WorkflowStatus
+	x.xxx_hidden_LastFirstEventTxnId = b.LastFirstEventTxnId
+	x.xxx_hidden_FirstExecutionRunId = b.FirstExecutionRunId
+	return m0
+}
+
 type ResetStickyTaskQueueRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	NamespaceId   string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	Execution     *v14.WorkflowExecution `protobuf:"bytes,2,opt,name=execution,proto3" json:"execution,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                  protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_Execution   *v14.WorkflowExecution `protobuf:"bytes,2,opt,name=execution,proto3"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *ResetStickyTaskQueueRequest) Reset() {
@@ -972,27 +1848,57 @@ func (x *ResetStickyTaskQueueRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ResetStickyTaskQueueRequest.ProtoReflect.Descriptor instead.
-func (*ResetStickyTaskQueueRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{7}
-}
-
 func (x *ResetStickyTaskQueueRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *ResetStickyTaskQueueRequest) GetExecution() *v14.WorkflowExecution {
 	if x != nil {
-		return x.Execution
+		return x.xxx_hidden_Execution
 	}
 	return nil
 }
 
+func (x *ResetStickyTaskQueueRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *ResetStickyTaskQueueRequest) SetExecution(v *v14.WorkflowExecution) {
+	x.xxx_hidden_Execution = v
+}
+
+func (x *ResetStickyTaskQueueRequest) HasExecution() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Execution != nil
+}
+
+func (x *ResetStickyTaskQueueRequest) ClearExecution() {
+	x.xxx_hidden_Execution = nil
+}
+
+type ResetStickyTaskQueueRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId string
+	Execution   *v14.WorkflowExecution
+}
+
+func (b0 ResetStickyTaskQueueRequest_builder) Build() *ResetStickyTaskQueueRequest {
+	m0 := &ResetStickyTaskQueueRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_Execution = b.Execution
+	return m0
+}
+
 type ResetStickyTaskQueueResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1022,18 +1928,25 @@ func (x *ResetStickyTaskQueueResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ResetStickyTaskQueueResponse.ProtoReflect.Descriptor instead.
-func (*ResetStickyTaskQueueResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{8}
+type ResetStickyTaskQueueResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+}
+
+func (b0 ResetStickyTaskQueueResponse_builder) Build() *ResetStickyTaskQueueResponse {
+	m0 := &ResetStickyTaskQueueResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	return m0
 }
 
 type ExecuteMultiOperationRequest struct {
-	state         protoimpl.MessageState                    `protogen:"open.v1"`
-	NamespaceId   string                                    `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	WorkflowId    string                                    `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
-	Operations    []*ExecuteMultiOperationRequest_Operation `protobuf:"bytes,3,rep,name=operations,proto3" json:"operations,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                  protoimpl.MessageState                     `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId string                                     `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_WorkflowId  string                                     `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3"`
+	xxx_hidden_Operations  *[]*ExecuteMultiOperationRequest_Operation `protobuf:"bytes,3,rep,name=operations,proto3"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *ExecuteMultiOperationRequest) Reset() {
@@ -1061,37 +1974,64 @@ func (x *ExecuteMultiOperationRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ExecuteMultiOperationRequest.ProtoReflect.Descriptor instead.
-func (*ExecuteMultiOperationRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{9}
-}
-
 func (x *ExecuteMultiOperationRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *ExecuteMultiOperationRequest) GetWorkflowId() string {
 	if x != nil {
-		return x.WorkflowId
+		return x.xxx_hidden_WorkflowId
 	}
 	return ""
 }
 
 func (x *ExecuteMultiOperationRequest) GetOperations() []*ExecuteMultiOperationRequest_Operation {
 	if x != nil {
-		return x.Operations
+		if x.xxx_hidden_Operations != nil {
+			return *x.xxx_hidden_Operations
+		}
 	}
 	return nil
 }
 
+func (x *ExecuteMultiOperationRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *ExecuteMultiOperationRequest) SetWorkflowId(v string) {
+	x.xxx_hidden_WorkflowId = v
+}
+
+func (x *ExecuteMultiOperationRequest) SetOperations(v []*ExecuteMultiOperationRequest_Operation) {
+	x.xxx_hidden_Operations = &v
+}
+
+type ExecuteMultiOperationRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId string
+	WorkflowId  string
+	Operations  []*ExecuteMultiOperationRequest_Operation
+}
+
+func (b0 ExecuteMultiOperationRequest_builder) Build() *ExecuteMultiOperationRequest {
+	m0 := &ExecuteMultiOperationRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_WorkflowId = b.WorkflowId
+	x.xxx_hidden_Operations = &b.Operations
+	return m0
+}
+
 type ExecuteMultiOperationResponse struct {
-	state         protoimpl.MessageState                    `protogen:"open.v1"`
-	Responses     []*ExecuteMultiOperationResponse_Response `protobuf:"bytes,1,rep,name=responses,proto3" json:"responses,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                protoimpl.MessageState                     `protogen:"opaque.v1"`
+	xxx_hidden_Responses *[]*ExecuteMultiOperationResponse_Response `protobuf:"bytes,1,rep,name=responses,proto3"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *ExecuteMultiOperationResponse) Reset() {
@@ -1119,44 +2059,49 @@ func (x *ExecuteMultiOperationResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ExecuteMultiOperationResponse.ProtoReflect.Descriptor instead.
-func (*ExecuteMultiOperationResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{10}
-}
-
 func (x *ExecuteMultiOperationResponse) GetResponses() []*ExecuteMultiOperationResponse_Response {
 	if x != nil {
-		return x.Responses
+		if x.xxx_hidden_Responses != nil {
+			return *x.xxx_hidden_Responses
+		}
 	}
 	return nil
 }
 
+func (x *ExecuteMultiOperationResponse) SetResponses(v []*ExecuteMultiOperationResponse_Response) {
+	x.xxx_hidden_Responses = &v
+}
+
+type ExecuteMultiOperationResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Responses []*ExecuteMultiOperationResponse_Response
+}
+
+func (b0 ExecuteMultiOperationResponse_builder) Build() *ExecuteMultiOperationResponse {
+	m0 := &ExecuteMultiOperationResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Responses = &b.Responses
+	return m0
+}
+
 type RecordWorkflowTaskStartedRequest struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	NamespaceId       string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	WorkflowExecution *v14.WorkflowExecution `protobuf:"bytes,2,opt,name=workflow_execution,json=workflowExecution,proto3" json:"workflow_execution,omitempty"`
-	ScheduledEventId  int64                  `protobuf:"varint,3,opt,name=scheduled_event_id,json=scheduledEventId,proto3" json:"scheduled_event_id,omitempty"`
-	// Unique id of each poll request. Used to ensure at most once delivery of tasks.
-	RequestId           string                           `protobuf:"bytes,5,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
-	PollRequest         *v1.PollWorkflowTaskQueueRequest `protobuf:"bytes,6,opt,name=poll_request,json=pollRequest,proto3" json:"poll_request,omitempty"`
-	Clock               *v17.VectorClock                 `protobuf:"bytes,7,opt,name=clock,proto3" json:"clock,omitempty"`
-	BuildIdRedirectInfo *v112.BuildIdRedirectInfo        `protobuf:"bytes,8,opt,name=build_id_redirect_info,json=buildIdRedirectInfo,proto3" json:"build_id_redirect_info,omitempty"`
-	// The deployment passed by History when the task was scheduled.
-	// Deprecated. use `version_directive.deployment`.
-	ScheduledDeployment *v16.Deployment `protobuf:"bytes,9,opt,name=scheduled_deployment,json=scheduledDeployment,proto3" json:"scheduled_deployment,omitempty"`
-	// Versioning directive that was sent by history when scheduling the task.
-	VersionDirective *v112.TaskVersionDirective `protobuf:"bytes,10,opt,name=version_directive,json=versionDirective,proto3" json:"version_directive,omitempty"`
-	// Stamp value from when the workflow task was scheduled. Used to validate the task is still relevant.
-	Stamp int32 `protobuf:"varint,11,opt,name=stamp,proto3" json:"stamp,omitempty"`
-	// Revision number that was sent by matching when the task was dispatched. Used to resolve eventual consistency issues
-	// that may arise due to stale routing configs in task queue partitions.
-	TaskDispatchRevisionNumber int64 `protobuf:"varint,12,opt,name=task_dispatch_revision_number,json=taskDispatchRevisionNumber,proto3" json:"task_dispatch_revision_number,omitempty"`
-	// Target worker deployment version according to matching when starting the task.
-	// Computed after matching with a poller, right before calling RecordWorkflowTaskStarted.
-	// Sent only if the target version is different from the poller's version.
-	TargetDeploymentVersion *v16.WorkerDeploymentVersion `protobuf:"bytes,13,opt,name=target_deployment_version,json=targetDeploymentVersion,proto3" json:"target_deployment_version,omitempty"`
-	unknownFields           protoimpl.UnknownFields
-	sizeCache               protoimpl.SizeCache
+	state                                 protoimpl.MessageState           `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId                string                           `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_WorkflowExecution          *v14.WorkflowExecution           `protobuf:"bytes,2,opt,name=workflow_execution,json=workflowExecution,proto3"`
+	xxx_hidden_ScheduledEventId           int64                            `protobuf:"varint,3,opt,name=scheduled_event_id,json=scheduledEventId,proto3"`
+	xxx_hidden_RequestId                  string                           `protobuf:"bytes,5,opt,name=request_id,json=requestId,proto3"`
+	xxx_hidden_PollRequest                *v1.PollWorkflowTaskQueueRequest `protobuf:"bytes,6,opt,name=poll_request,json=pollRequest,proto3"`
+	xxx_hidden_Clock                      *v17.VectorClock                 `protobuf:"bytes,7,opt,name=clock,proto3"`
+	xxx_hidden_BuildIdRedirectInfo        *v112.BuildIdRedirectInfo        `protobuf:"bytes,8,opt,name=build_id_redirect_info,json=buildIdRedirectInfo,proto3"`
+	xxx_hidden_ScheduledDeployment        *v16.Deployment                  `protobuf:"bytes,9,opt,name=scheduled_deployment,json=scheduledDeployment,proto3"`
+	xxx_hidden_VersionDirective           *v112.TaskVersionDirective       `protobuf:"bytes,10,opt,name=version_directive,json=versionDirective,proto3"`
+	xxx_hidden_Stamp                      int32                            `protobuf:"varint,11,opt,name=stamp,proto3"`
+	xxx_hidden_TaskDispatchRevisionNumber int64                            `protobuf:"varint,12,opt,name=task_dispatch_revision_number,json=taskDispatchRevisionNumber,proto3"`
+	xxx_hidden_TargetDeploymentVersion    *v16.WorkerDeploymentVersion     `protobuf:"bytes,13,opt,name=target_deployment_version,json=targetDeploymentVersion,proto3"`
+	unknownFields                         protoimpl.UnknownFields
+	sizeCache                             protoimpl.SizeCache
 }
 
 func (x *RecordWorkflowTaskStartedRequest) Reset() {
@@ -1184,118 +2129,284 @@ func (x *RecordWorkflowTaskStartedRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RecordWorkflowTaskStartedRequest.ProtoReflect.Descriptor instead.
-func (*RecordWorkflowTaskStartedRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{11}
-}
-
 func (x *RecordWorkflowTaskStartedRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *RecordWorkflowTaskStartedRequest) GetWorkflowExecution() *v14.WorkflowExecution {
 	if x != nil {
-		return x.WorkflowExecution
+		return x.xxx_hidden_WorkflowExecution
 	}
 	return nil
 }
 
 func (x *RecordWorkflowTaskStartedRequest) GetScheduledEventId() int64 {
 	if x != nil {
-		return x.ScheduledEventId
+		return x.xxx_hidden_ScheduledEventId
 	}
 	return 0
 }
 
 func (x *RecordWorkflowTaskStartedRequest) GetRequestId() string {
 	if x != nil {
-		return x.RequestId
+		return x.xxx_hidden_RequestId
 	}
 	return ""
 }
 
 func (x *RecordWorkflowTaskStartedRequest) GetPollRequest() *v1.PollWorkflowTaskQueueRequest {
 	if x != nil {
-		return x.PollRequest
+		return x.xxx_hidden_PollRequest
 	}
 	return nil
 }
 
 func (x *RecordWorkflowTaskStartedRequest) GetClock() *v17.VectorClock {
 	if x != nil {
-		return x.Clock
+		return x.xxx_hidden_Clock
 	}
 	return nil
 }
 
 func (x *RecordWorkflowTaskStartedRequest) GetBuildIdRedirectInfo() *v112.BuildIdRedirectInfo {
 	if x != nil {
-		return x.BuildIdRedirectInfo
+		return x.xxx_hidden_BuildIdRedirectInfo
 	}
 	return nil
 }
 
 func (x *RecordWorkflowTaskStartedRequest) GetScheduledDeployment() *v16.Deployment {
 	if x != nil {
-		return x.ScheduledDeployment
+		return x.xxx_hidden_ScheduledDeployment
 	}
 	return nil
 }
 
 func (x *RecordWorkflowTaskStartedRequest) GetVersionDirective() *v112.TaskVersionDirective {
 	if x != nil {
-		return x.VersionDirective
+		return x.xxx_hidden_VersionDirective
 	}
 	return nil
 }
 
 func (x *RecordWorkflowTaskStartedRequest) GetStamp() int32 {
 	if x != nil {
-		return x.Stamp
+		return x.xxx_hidden_Stamp
 	}
 	return 0
 }
 
 func (x *RecordWorkflowTaskStartedRequest) GetTaskDispatchRevisionNumber() int64 {
 	if x != nil {
-		return x.TaskDispatchRevisionNumber
+		return x.xxx_hidden_TaskDispatchRevisionNumber
 	}
 	return 0
 }
 
 func (x *RecordWorkflowTaskStartedRequest) GetTargetDeploymentVersion() *v16.WorkerDeploymentVersion {
 	if x != nil {
-		return x.TargetDeploymentVersion
+		return x.xxx_hidden_TargetDeploymentVersion
 	}
 	return nil
 }
 
+func (x *RecordWorkflowTaskStartedRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *RecordWorkflowTaskStartedRequest) SetWorkflowExecution(v *v14.WorkflowExecution) {
+	x.xxx_hidden_WorkflowExecution = v
+}
+
+func (x *RecordWorkflowTaskStartedRequest) SetScheduledEventId(v int64) {
+	x.xxx_hidden_ScheduledEventId = v
+}
+
+func (x *RecordWorkflowTaskStartedRequest) SetRequestId(v string) {
+	x.xxx_hidden_RequestId = v
+}
+
+func (x *RecordWorkflowTaskStartedRequest) SetPollRequest(v *v1.PollWorkflowTaskQueueRequest) {
+	x.xxx_hidden_PollRequest = v
+}
+
+func (x *RecordWorkflowTaskStartedRequest) SetClock(v *v17.VectorClock) {
+	x.xxx_hidden_Clock = v
+}
+
+func (x *RecordWorkflowTaskStartedRequest) SetBuildIdRedirectInfo(v *v112.BuildIdRedirectInfo) {
+	x.xxx_hidden_BuildIdRedirectInfo = v
+}
+
+func (x *RecordWorkflowTaskStartedRequest) SetScheduledDeployment(v *v16.Deployment) {
+	x.xxx_hidden_ScheduledDeployment = v
+}
+
+func (x *RecordWorkflowTaskStartedRequest) SetVersionDirective(v *v112.TaskVersionDirective) {
+	x.xxx_hidden_VersionDirective = v
+}
+
+func (x *RecordWorkflowTaskStartedRequest) SetStamp(v int32) {
+	x.xxx_hidden_Stamp = v
+}
+
+func (x *RecordWorkflowTaskStartedRequest) SetTaskDispatchRevisionNumber(v int64) {
+	x.xxx_hidden_TaskDispatchRevisionNumber = v
+}
+
+func (x *RecordWorkflowTaskStartedRequest) SetTargetDeploymentVersion(v *v16.WorkerDeploymentVersion) {
+	x.xxx_hidden_TargetDeploymentVersion = v
+}
+
+func (x *RecordWorkflowTaskStartedRequest) HasWorkflowExecution() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_WorkflowExecution != nil
+}
+
+func (x *RecordWorkflowTaskStartedRequest) HasPollRequest() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_PollRequest != nil
+}
+
+func (x *RecordWorkflowTaskStartedRequest) HasClock() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Clock != nil
+}
+
+func (x *RecordWorkflowTaskStartedRequest) HasBuildIdRedirectInfo() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_BuildIdRedirectInfo != nil
+}
+
+func (x *RecordWorkflowTaskStartedRequest) HasScheduledDeployment() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_ScheduledDeployment != nil
+}
+
+func (x *RecordWorkflowTaskStartedRequest) HasVersionDirective() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_VersionDirective != nil
+}
+
+func (x *RecordWorkflowTaskStartedRequest) HasTargetDeploymentVersion() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_TargetDeploymentVersion != nil
+}
+
+func (x *RecordWorkflowTaskStartedRequest) ClearWorkflowExecution() {
+	x.xxx_hidden_WorkflowExecution = nil
+}
+
+func (x *RecordWorkflowTaskStartedRequest) ClearPollRequest() {
+	x.xxx_hidden_PollRequest = nil
+}
+
+func (x *RecordWorkflowTaskStartedRequest) ClearClock() {
+	x.xxx_hidden_Clock = nil
+}
+
+func (x *RecordWorkflowTaskStartedRequest) ClearBuildIdRedirectInfo() {
+	x.xxx_hidden_BuildIdRedirectInfo = nil
+}
+
+func (x *RecordWorkflowTaskStartedRequest) ClearScheduledDeployment() {
+	x.xxx_hidden_ScheduledDeployment = nil
+}
+
+func (x *RecordWorkflowTaskStartedRequest) ClearVersionDirective() {
+	x.xxx_hidden_VersionDirective = nil
+}
+
+func (x *RecordWorkflowTaskStartedRequest) ClearTargetDeploymentVersion() {
+	x.xxx_hidden_TargetDeploymentVersion = nil
+}
+
+type RecordWorkflowTaskStartedRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId       string
+	WorkflowExecution *v14.WorkflowExecution
+	ScheduledEventId  int64
+	// Unique id of each poll request. Used to ensure at most once delivery of tasks.
+	RequestId           string
+	PollRequest         *v1.PollWorkflowTaskQueueRequest
+	Clock               *v17.VectorClock
+	BuildIdRedirectInfo *v112.BuildIdRedirectInfo
+	// The deployment passed by History when the task was scheduled.
+	// Deprecated. use `version_directive.deployment`.
+	ScheduledDeployment *v16.Deployment
+	// Versioning directive that was sent by history when scheduling the task.
+	VersionDirective *v112.TaskVersionDirective
+	// Stamp value from when the workflow task was scheduled. Used to validate the task is still relevant.
+	Stamp int32
+	// Revision number that was sent by matching when the task was dispatched. Used to resolve eventual consistency issues
+	// that may arise due to stale routing configs in task queue partitions.
+	TaskDispatchRevisionNumber int64
+	// Target worker deployment version according to matching when starting the task.
+	// Computed after matching with a poller, right before calling RecordWorkflowTaskStarted.
+	// Sent only if the target version is different from the poller's version.
+	TargetDeploymentVersion *v16.WorkerDeploymentVersion
+}
+
+func (b0 RecordWorkflowTaskStartedRequest_builder) Build() *RecordWorkflowTaskStartedRequest {
+	m0 := &RecordWorkflowTaskStartedRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_WorkflowExecution = b.WorkflowExecution
+	x.xxx_hidden_ScheduledEventId = b.ScheduledEventId
+	x.xxx_hidden_RequestId = b.RequestId
+	x.xxx_hidden_PollRequest = b.PollRequest
+	x.xxx_hidden_Clock = b.Clock
+	x.xxx_hidden_BuildIdRedirectInfo = b.BuildIdRedirectInfo
+	x.xxx_hidden_ScheduledDeployment = b.ScheduledDeployment
+	x.xxx_hidden_VersionDirective = b.VersionDirective
+	x.xxx_hidden_Stamp = b.Stamp
+	x.xxx_hidden_TaskDispatchRevisionNumber = b.TaskDispatchRevisionNumber
+	x.xxx_hidden_TargetDeploymentVersion = b.TargetDeploymentVersion
+	return m0
+}
+
 type RecordWorkflowTaskStartedResponse struct {
-	state                      protoimpl.MessageState         `protogen:"open.v1"`
-	WorkflowType               *v14.WorkflowType              `protobuf:"bytes,1,opt,name=workflow_type,json=workflowType,proto3" json:"workflow_type,omitempty"`
-	PreviousStartedEventId     int64                          `protobuf:"varint,2,opt,name=previous_started_event_id,json=previousStartedEventId,proto3" json:"previous_started_event_id,omitempty"`
-	ScheduledEventId           int64                          `protobuf:"varint,3,opt,name=scheduled_event_id,json=scheduledEventId,proto3" json:"scheduled_event_id,omitempty"`
-	StartedEventId             int64                          `protobuf:"varint,4,opt,name=started_event_id,json=startedEventId,proto3" json:"started_event_id,omitempty"`
-	NextEventId                int64                          `protobuf:"varint,5,opt,name=next_event_id,json=nextEventId,proto3" json:"next_event_id,omitempty"`
-	Attempt                    int32                          `protobuf:"varint,6,opt,name=attempt,proto3" json:"attempt,omitempty"`
-	StickyExecutionEnabled     bool                           `protobuf:"varint,7,opt,name=sticky_execution_enabled,json=stickyExecutionEnabled,proto3" json:"sticky_execution_enabled,omitempty"`
-	TransientWorkflowTask      *v18.TransientWorkflowTaskInfo `protobuf:"bytes,8,opt,name=transient_workflow_task,json=transientWorkflowTask,proto3" json:"transient_workflow_task,omitempty"`
-	WorkflowExecutionTaskQueue *v110.TaskQueue                `protobuf:"bytes,9,opt,name=workflow_execution_task_queue,json=workflowExecutionTaskQueue,proto3" json:"workflow_execution_task_queue,omitempty"`
-	BranchToken                []byte                         `protobuf:"bytes,11,opt,name=branch_token,json=branchToken,proto3" json:"branch_token,omitempty"`
-	ScheduledTime              *timestamppb.Timestamp         `protobuf:"bytes,12,opt,name=scheduled_time,json=scheduledTime,proto3" json:"scheduled_time,omitempty"`
-	StartedTime                *timestamppb.Timestamp         `protobuf:"bytes,13,opt,name=started_time,json=startedTime,proto3" json:"started_time,omitempty"`
-	Queries                    map[string]*v113.WorkflowQuery `protobuf:"bytes,14,rep,name=queries,proto3" json:"queries,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	Clock                      *v17.VectorClock               `protobuf:"bytes,15,opt,name=clock,proto3" json:"clock,omitempty"`
-	Messages                   []*v114.Message                `protobuf:"bytes,16,rep,name=messages,proto3" json:"messages,omitempty"`
-	Version                    int64                          `protobuf:"varint,17,opt,name=version,proto3" json:"version,omitempty"`
-	History                    *v115.History                  `protobuf:"bytes,18,opt,name=history,proto3" json:"history,omitempty"`
-	NextPageToken              []byte                         `protobuf:"bytes,19,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
-	RawHistory                 *v115.History                  `protobuf:"bytes,20,opt,name=raw_history,json=rawHistory,proto3" json:"raw_history,omitempty"`
-	unknownFields              protoimpl.UnknownFields
-	sizeCache                  protoimpl.SizeCache
+	state                                 protoimpl.MessageState         `protogen:"opaque.v1"`
+	xxx_hidden_WorkflowType               *v14.WorkflowType              `protobuf:"bytes,1,opt,name=workflow_type,json=workflowType,proto3"`
+	xxx_hidden_PreviousStartedEventId     int64                          `protobuf:"varint,2,opt,name=previous_started_event_id,json=previousStartedEventId,proto3"`
+	xxx_hidden_ScheduledEventId           int64                          `protobuf:"varint,3,opt,name=scheduled_event_id,json=scheduledEventId,proto3"`
+	xxx_hidden_StartedEventId             int64                          `protobuf:"varint,4,opt,name=started_event_id,json=startedEventId,proto3"`
+	xxx_hidden_NextEventId                int64                          `protobuf:"varint,5,opt,name=next_event_id,json=nextEventId,proto3"`
+	xxx_hidden_Attempt                    int32                          `protobuf:"varint,6,opt,name=attempt,proto3"`
+	xxx_hidden_StickyExecutionEnabled     bool                           `protobuf:"varint,7,opt,name=sticky_execution_enabled,json=stickyExecutionEnabled,proto3"`
+	xxx_hidden_TransientWorkflowTask      *v18.TransientWorkflowTaskInfo `protobuf:"bytes,8,opt,name=transient_workflow_task,json=transientWorkflowTask,proto3"`
+	xxx_hidden_WorkflowExecutionTaskQueue *v110.TaskQueue                `protobuf:"bytes,9,opt,name=workflow_execution_task_queue,json=workflowExecutionTaskQueue,proto3"`
+	xxx_hidden_BranchToken                []byte                         `protobuf:"bytes,11,opt,name=branch_token,json=branchToken,proto3"`
+	xxx_hidden_ScheduledTime              *timestamppb.Timestamp         `protobuf:"bytes,12,opt,name=scheduled_time,json=scheduledTime,proto3"`
+	xxx_hidden_StartedTime                *timestamppb.Timestamp         `protobuf:"bytes,13,opt,name=started_time,json=startedTime,proto3"`
+	xxx_hidden_Queries                    map[string]*v113.WorkflowQuery `protobuf:"bytes,14,rep,name=queries,proto3" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	xxx_hidden_Clock                      *v17.VectorClock               `protobuf:"bytes,15,opt,name=clock,proto3"`
+	xxx_hidden_Messages                   *[]*v114.Message               `protobuf:"bytes,16,rep,name=messages,proto3"`
+	xxx_hidden_Version                    int64                          `protobuf:"varint,17,opt,name=version,proto3"`
+	xxx_hidden_History                    *v115.History                  `protobuf:"bytes,18,opt,name=history,proto3"`
+	xxx_hidden_NextPageToken              []byte                         `protobuf:"bytes,19,opt,name=next_page_token,json=nextPageToken,proto3"`
+	xxx_hidden_RawHistory                 *v115.History                  `protobuf:"bytes,20,opt,name=raw_history,json=rawHistory,proto3"`
+	unknownFields                         protoimpl.UnknownFields
+	sizeCache                             protoimpl.SizeCache
 }
 
 func (x *RecordWorkflowTaskStartedResponse) Reset() {
@@ -1323,142 +2434,359 @@ func (x *RecordWorkflowTaskStartedResponse) ProtoReflect() protoreflect.Message 
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RecordWorkflowTaskStartedResponse.ProtoReflect.Descriptor instead.
-func (*RecordWorkflowTaskStartedResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{12}
-}
-
 func (x *RecordWorkflowTaskStartedResponse) GetWorkflowType() *v14.WorkflowType {
 	if x != nil {
-		return x.WorkflowType
+		return x.xxx_hidden_WorkflowType
 	}
 	return nil
 }
 
 func (x *RecordWorkflowTaskStartedResponse) GetPreviousStartedEventId() int64 {
 	if x != nil {
-		return x.PreviousStartedEventId
+		return x.xxx_hidden_PreviousStartedEventId
 	}
 	return 0
 }
 
 func (x *RecordWorkflowTaskStartedResponse) GetScheduledEventId() int64 {
 	if x != nil {
-		return x.ScheduledEventId
+		return x.xxx_hidden_ScheduledEventId
 	}
 	return 0
 }
 
 func (x *RecordWorkflowTaskStartedResponse) GetStartedEventId() int64 {
 	if x != nil {
-		return x.StartedEventId
+		return x.xxx_hidden_StartedEventId
 	}
 	return 0
 }
 
 func (x *RecordWorkflowTaskStartedResponse) GetNextEventId() int64 {
 	if x != nil {
-		return x.NextEventId
+		return x.xxx_hidden_NextEventId
 	}
 	return 0
 }
 
 func (x *RecordWorkflowTaskStartedResponse) GetAttempt() int32 {
 	if x != nil {
-		return x.Attempt
+		return x.xxx_hidden_Attempt
 	}
 	return 0
 }
 
 func (x *RecordWorkflowTaskStartedResponse) GetStickyExecutionEnabled() bool {
 	if x != nil {
-		return x.StickyExecutionEnabled
+		return x.xxx_hidden_StickyExecutionEnabled
 	}
 	return false
 }
 
 func (x *RecordWorkflowTaskStartedResponse) GetTransientWorkflowTask() *v18.TransientWorkflowTaskInfo {
 	if x != nil {
-		return x.TransientWorkflowTask
+		return x.xxx_hidden_TransientWorkflowTask
 	}
 	return nil
 }
 
 func (x *RecordWorkflowTaskStartedResponse) GetWorkflowExecutionTaskQueue() *v110.TaskQueue {
 	if x != nil {
-		return x.WorkflowExecutionTaskQueue
+		return x.xxx_hidden_WorkflowExecutionTaskQueue
 	}
 	return nil
 }
 
 func (x *RecordWorkflowTaskStartedResponse) GetBranchToken() []byte {
 	if x != nil {
-		return x.BranchToken
+		return x.xxx_hidden_BranchToken
 	}
 	return nil
 }
 
 func (x *RecordWorkflowTaskStartedResponse) GetScheduledTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.ScheduledTime
+		return x.xxx_hidden_ScheduledTime
 	}
 	return nil
 }
 
 func (x *RecordWorkflowTaskStartedResponse) GetStartedTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.StartedTime
+		return x.xxx_hidden_StartedTime
 	}
 	return nil
 }
 
 func (x *RecordWorkflowTaskStartedResponse) GetQueries() map[string]*v113.WorkflowQuery {
 	if x != nil {
-		return x.Queries
+		return x.xxx_hidden_Queries
 	}
 	return nil
 }
 
 func (x *RecordWorkflowTaskStartedResponse) GetClock() *v17.VectorClock {
 	if x != nil {
-		return x.Clock
+		return x.xxx_hidden_Clock
 	}
 	return nil
 }
 
 func (x *RecordWorkflowTaskStartedResponse) GetMessages() []*v114.Message {
 	if x != nil {
-		return x.Messages
+		if x.xxx_hidden_Messages != nil {
+			return *x.xxx_hidden_Messages
+		}
 	}
 	return nil
 }
 
 func (x *RecordWorkflowTaskStartedResponse) GetVersion() int64 {
 	if x != nil {
-		return x.Version
+		return x.xxx_hidden_Version
 	}
 	return 0
 }
 
 func (x *RecordWorkflowTaskStartedResponse) GetHistory() *v115.History {
 	if x != nil {
-		return x.History
+		return x.xxx_hidden_History
 	}
 	return nil
 }
 
 func (x *RecordWorkflowTaskStartedResponse) GetNextPageToken() []byte {
 	if x != nil {
-		return x.NextPageToken
+		return x.xxx_hidden_NextPageToken
 	}
 	return nil
 }
 
 func (x *RecordWorkflowTaskStartedResponse) GetRawHistory() *v115.History {
 	if x != nil {
-		return x.RawHistory
+		return x.xxx_hidden_RawHistory
 	}
 	return nil
+}
+
+func (x *RecordWorkflowTaskStartedResponse) SetWorkflowType(v *v14.WorkflowType) {
+	x.xxx_hidden_WorkflowType = v
+}
+
+func (x *RecordWorkflowTaskStartedResponse) SetPreviousStartedEventId(v int64) {
+	x.xxx_hidden_PreviousStartedEventId = v
+}
+
+func (x *RecordWorkflowTaskStartedResponse) SetScheduledEventId(v int64) {
+	x.xxx_hidden_ScheduledEventId = v
+}
+
+func (x *RecordWorkflowTaskStartedResponse) SetStartedEventId(v int64) {
+	x.xxx_hidden_StartedEventId = v
+}
+
+func (x *RecordWorkflowTaskStartedResponse) SetNextEventId(v int64) {
+	x.xxx_hidden_NextEventId = v
+}
+
+func (x *RecordWorkflowTaskStartedResponse) SetAttempt(v int32) {
+	x.xxx_hidden_Attempt = v
+}
+
+func (x *RecordWorkflowTaskStartedResponse) SetStickyExecutionEnabled(v bool) {
+	x.xxx_hidden_StickyExecutionEnabled = v
+}
+
+func (x *RecordWorkflowTaskStartedResponse) SetTransientWorkflowTask(v *v18.TransientWorkflowTaskInfo) {
+	x.xxx_hidden_TransientWorkflowTask = v
+}
+
+func (x *RecordWorkflowTaskStartedResponse) SetWorkflowExecutionTaskQueue(v *v110.TaskQueue) {
+	x.xxx_hidden_WorkflowExecutionTaskQueue = v
+}
+
+func (x *RecordWorkflowTaskStartedResponse) SetBranchToken(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_BranchToken = v
+}
+
+func (x *RecordWorkflowTaskStartedResponse) SetScheduledTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_ScheduledTime = v
+}
+
+func (x *RecordWorkflowTaskStartedResponse) SetStartedTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_StartedTime = v
+}
+
+func (x *RecordWorkflowTaskStartedResponse) SetQueries(v map[string]*v113.WorkflowQuery) {
+	x.xxx_hidden_Queries = v
+}
+
+func (x *RecordWorkflowTaskStartedResponse) SetClock(v *v17.VectorClock) {
+	x.xxx_hidden_Clock = v
+}
+
+func (x *RecordWorkflowTaskStartedResponse) SetMessages(v []*v114.Message) {
+	x.xxx_hidden_Messages = &v
+}
+
+func (x *RecordWorkflowTaskStartedResponse) SetVersion(v int64) {
+	x.xxx_hidden_Version = v
+}
+
+func (x *RecordWorkflowTaskStartedResponse) SetHistory(v *v115.History) {
+	x.xxx_hidden_History = v
+}
+
+func (x *RecordWorkflowTaskStartedResponse) SetNextPageToken(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_NextPageToken = v
+}
+
+func (x *RecordWorkflowTaskStartedResponse) SetRawHistory(v *v115.History) {
+	x.xxx_hidden_RawHistory = v
+}
+
+func (x *RecordWorkflowTaskStartedResponse) HasWorkflowType() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_WorkflowType != nil
+}
+
+func (x *RecordWorkflowTaskStartedResponse) HasTransientWorkflowTask() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_TransientWorkflowTask != nil
+}
+
+func (x *RecordWorkflowTaskStartedResponse) HasWorkflowExecutionTaskQueue() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_WorkflowExecutionTaskQueue != nil
+}
+
+func (x *RecordWorkflowTaskStartedResponse) HasScheduledTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_ScheduledTime != nil
+}
+
+func (x *RecordWorkflowTaskStartedResponse) HasStartedTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_StartedTime != nil
+}
+
+func (x *RecordWorkflowTaskStartedResponse) HasClock() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Clock != nil
+}
+
+func (x *RecordWorkflowTaskStartedResponse) HasHistory() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_History != nil
+}
+
+func (x *RecordWorkflowTaskStartedResponse) HasRawHistory() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_RawHistory != nil
+}
+
+func (x *RecordWorkflowTaskStartedResponse) ClearWorkflowType() {
+	x.xxx_hidden_WorkflowType = nil
+}
+
+func (x *RecordWorkflowTaskStartedResponse) ClearTransientWorkflowTask() {
+	x.xxx_hidden_TransientWorkflowTask = nil
+}
+
+func (x *RecordWorkflowTaskStartedResponse) ClearWorkflowExecutionTaskQueue() {
+	x.xxx_hidden_WorkflowExecutionTaskQueue = nil
+}
+
+func (x *RecordWorkflowTaskStartedResponse) ClearScheduledTime() {
+	x.xxx_hidden_ScheduledTime = nil
+}
+
+func (x *RecordWorkflowTaskStartedResponse) ClearStartedTime() {
+	x.xxx_hidden_StartedTime = nil
+}
+
+func (x *RecordWorkflowTaskStartedResponse) ClearClock() {
+	x.xxx_hidden_Clock = nil
+}
+
+func (x *RecordWorkflowTaskStartedResponse) ClearHistory() {
+	x.xxx_hidden_History = nil
+}
+
+func (x *RecordWorkflowTaskStartedResponse) ClearRawHistory() {
+	x.xxx_hidden_RawHistory = nil
+}
+
+type RecordWorkflowTaskStartedResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	WorkflowType               *v14.WorkflowType
+	PreviousStartedEventId     int64
+	ScheduledEventId           int64
+	StartedEventId             int64
+	NextEventId                int64
+	Attempt                    int32
+	StickyExecutionEnabled     bool
+	TransientWorkflowTask      *v18.TransientWorkflowTaskInfo
+	WorkflowExecutionTaskQueue *v110.TaskQueue
+	BranchToken                []byte
+	ScheduledTime              *timestamppb.Timestamp
+	StartedTime                *timestamppb.Timestamp
+	Queries                    map[string]*v113.WorkflowQuery
+	Clock                      *v17.VectorClock
+	Messages                   []*v114.Message
+	Version                    int64
+	History                    *v115.History
+	NextPageToken              []byte
+	RawHistory                 *v115.History
+}
+
+func (b0 RecordWorkflowTaskStartedResponse_builder) Build() *RecordWorkflowTaskStartedResponse {
+	m0 := &RecordWorkflowTaskStartedResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_WorkflowType = b.WorkflowType
+	x.xxx_hidden_PreviousStartedEventId = b.PreviousStartedEventId
+	x.xxx_hidden_ScheduledEventId = b.ScheduledEventId
+	x.xxx_hidden_StartedEventId = b.StartedEventId
+	x.xxx_hidden_NextEventId = b.NextEventId
+	x.xxx_hidden_Attempt = b.Attempt
+	x.xxx_hidden_StickyExecutionEnabled = b.StickyExecutionEnabled
+	x.xxx_hidden_TransientWorkflowTask = b.TransientWorkflowTask
+	x.xxx_hidden_WorkflowExecutionTaskQueue = b.WorkflowExecutionTaskQueue
+	x.xxx_hidden_BranchToken = b.BranchToken
+	x.xxx_hidden_ScheduledTime = b.ScheduledTime
+	x.xxx_hidden_StartedTime = b.StartedTime
+	x.xxx_hidden_Queries = b.Queries
+	x.xxx_hidden_Clock = b.Clock
+	x.xxx_hidden_Messages = &b.Messages
+	x.xxx_hidden_Version = b.Version
+	x.xxx_hidden_History = b.History
+	x.xxx_hidden_NextPageToken = b.NextPageToken
+	x.xxx_hidden_RawHistory = b.RawHistory
+	return m0
 }
 
 // RecordWorkflowTaskStartedResponseWithRawHistory should be wire compatible with RecordWorkflowTaskStartedResponse.
@@ -1466,28 +2794,28 @@ func (x *RecordWorkflowTaskStartedResponse) GetRawHistory() *v115.History {
 // raw history batches. RecordWorkflowTaskStartedResponseWithRawHistory will be returned by history service.
 // History client will deserialize this message to RecordWorkflowTaskStartedResponse.
 type RecordWorkflowTaskStartedResponseWithRawHistory struct {
-	state                      protoimpl.MessageState         `protogen:"open.v1"`
-	WorkflowType               *v14.WorkflowType              `protobuf:"bytes,1,opt,name=workflow_type,json=workflowType,proto3" json:"workflow_type,omitempty"`
-	PreviousStartedEventId     int64                          `protobuf:"varint,2,opt,name=previous_started_event_id,json=previousStartedEventId,proto3" json:"previous_started_event_id,omitempty"`
-	ScheduledEventId           int64                          `protobuf:"varint,3,opt,name=scheduled_event_id,json=scheduledEventId,proto3" json:"scheduled_event_id,omitempty"`
-	StartedEventId             int64                          `protobuf:"varint,4,opt,name=started_event_id,json=startedEventId,proto3" json:"started_event_id,omitempty"`
-	NextEventId                int64                          `protobuf:"varint,5,opt,name=next_event_id,json=nextEventId,proto3" json:"next_event_id,omitempty"`
-	Attempt                    int32                          `protobuf:"varint,6,opt,name=attempt,proto3" json:"attempt,omitempty"`
-	StickyExecutionEnabled     bool                           `protobuf:"varint,7,opt,name=sticky_execution_enabled,json=stickyExecutionEnabled,proto3" json:"sticky_execution_enabled,omitempty"`
-	TransientWorkflowTask      *v18.TransientWorkflowTaskInfo `protobuf:"bytes,8,opt,name=transient_workflow_task,json=transientWorkflowTask,proto3" json:"transient_workflow_task,omitempty"`
-	WorkflowExecutionTaskQueue *v110.TaskQueue                `protobuf:"bytes,9,opt,name=workflow_execution_task_queue,json=workflowExecutionTaskQueue,proto3" json:"workflow_execution_task_queue,omitempty"`
-	BranchToken                []byte                         `protobuf:"bytes,11,opt,name=branch_token,json=branchToken,proto3" json:"branch_token,omitempty"`
-	ScheduledTime              *timestamppb.Timestamp         `protobuf:"bytes,12,opt,name=scheduled_time,json=scheduledTime,proto3" json:"scheduled_time,omitempty"`
-	StartedTime                *timestamppb.Timestamp         `protobuf:"bytes,13,opt,name=started_time,json=startedTime,proto3" json:"started_time,omitempty"`
-	Queries                    map[string]*v113.WorkflowQuery `protobuf:"bytes,14,rep,name=queries,proto3" json:"queries,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	Clock                      *v17.VectorClock               `protobuf:"bytes,15,opt,name=clock,proto3" json:"clock,omitempty"`
-	Messages                   []*v114.Message                `protobuf:"bytes,16,rep,name=messages,proto3" json:"messages,omitempty"`
-	Version                    int64                          `protobuf:"varint,17,opt,name=version,proto3" json:"version,omitempty"`
-	History                    *v115.History                  `protobuf:"bytes,18,opt,name=history,proto3" json:"history,omitempty"`
-	NextPageToken              []byte                         `protobuf:"bytes,19,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
-	RawHistory                 [][]byte                       `protobuf:"bytes,20,rep,name=raw_history,json=rawHistory,proto3" json:"raw_history,omitempty"`
-	unknownFields              protoimpl.UnknownFields
-	sizeCache                  protoimpl.SizeCache
+	state                                 protoimpl.MessageState         `protogen:"opaque.v1"`
+	xxx_hidden_WorkflowType               *v14.WorkflowType              `protobuf:"bytes,1,opt,name=workflow_type,json=workflowType,proto3"`
+	xxx_hidden_PreviousStartedEventId     int64                          `protobuf:"varint,2,opt,name=previous_started_event_id,json=previousStartedEventId,proto3"`
+	xxx_hidden_ScheduledEventId           int64                          `protobuf:"varint,3,opt,name=scheduled_event_id,json=scheduledEventId,proto3"`
+	xxx_hidden_StartedEventId             int64                          `protobuf:"varint,4,opt,name=started_event_id,json=startedEventId,proto3"`
+	xxx_hidden_NextEventId                int64                          `protobuf:"varint,5,opt,name=next_event_id,json=nextEventId,proto3"`
+	xxx_hidden_Attempt                    int32                          `protobuf:"varint,6,opt,name=attempt,proto3"`
+	xxx_hidden_StickyExecutionEnabled     bool                           `protobuf:"varint,7,opt,name=sticky_execution_enabled,json=stickyExecutionEnabled,proto3"`
+	xxx_hidden_TransientWorkflowTask      *v18.TransientWorkflowTaskInfo `protobuf:"bytes,8,opt,name=transient_workflow_task,json=transientWorkflowTask,proto3"`
+	xxx_hidden_WorkflowExecutionTaskQueue *v110.TaskQueue                `protobuf:"bytes,9,opt,name=workflow_execution_task_queue,json=workflowExecutionTaskQueue,proto3"`
+	xxx_hidden_BranchToken                []byte                         `protobuf:"bytes,11,opt,name=branch_token,json=branchToken,proto3"`
+	xxx_hidden_ScheduledTime              *timestamppb.Timestamp         `protobuf:"bytes,12,opt,name=scheduled_time,json=scheduledTime,proto3"`
+	xxx_hidden_StartedTime                *timestamppb.Timestamp         `protobuf:"bytes,13,opt,name=started_time,json=startedTime,proto3"`
+	xxx_hidden_Queries                    map[string]*v113.WorkflowQuery `protobuf:"bytes,14,rep,name=queries,proto3" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	xxx_hidden_Clock                      *v17.VectorClock               `protobuf:"bytes,15,opt,name=clock,proto3"`
+	xxx_hidden_Messages                   *[]*v114.Message               `protobuf:"bytes,16,rep,name=messages,proto3"`
+	xxx_hidden_Version                    int64                          `protobuf:"varint,17,opt,name=version,proto3"`
+	xxx_hidden_History                    *v115.History                  `protobuf:"bytes,18,opt,name=history,proto3"`
+	xxx_hidden_NextPageToken              []byte                         `protobuf:"bytes,19,opt,name=next_page_token,json=nextPageToken,proto3"`
+	xxx_hidden_RawHistory                 [][]byte                       `protobuf:"bytes,20,rep,name=raw_history,json=rawHistory,proto3"`
+	unknownFields                         protoimpl.UnknownFields
+	sizeCache                             protoimpl.SizeCache
 }
 
 func (x *RecordWorkflowTaskStartedResponseWithRawHistory) Reset() {
@@ -1515,170 +2843,366 @@ func (x *RecordWorkflowTaskStartedResponseWithRawHistory) ProtoReflect() protore
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RecordWorkflowTaskStartedResponseWithRawHistory.ProtoReflect.Descriptor instead.
-func (*RecordWorkflowTaskStartedResponseWithRawHistory) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{13}
-}
-
 func (x *RecordWorkflowTaskStartedResponseWithRawHistory) GetWorkflowType() *v14.WorkflowType {
 	if x != nil {
-		return x.WorkflowType
+		return x.xxx_hidden_WorkflowType
 	}
 	return nil
 }
 
 func (x *RecordWorkflowTaskStartedResponseWithRawHistory) GetPreviousStartedEventId() int64 {
 	if x != nil {
-		return x.PreviousStartedEventId
+		return x.xxx_hidden_PreviousStartedEventId
 	}
 	return 0
 }
 
 func (x *RecordWorkflowTaskStartedResponseWithRawHistory) GetScheduledEventId() int64 {
 	if x != nil {
-		return x.ScheduledEventId
+		return x.xxx_hidden_ScheduledEventId
 	}
 	return 0
 }
 
 func (x *RecordWorkflowTaskStartedResponseWithRawHistory) GetStartedEventId() int64 {
 	if x != nil {
-		return x.StartedEventId
+		return x.xxx_hidden_StartedEventId
 	}
 	return 0
 }
 
 func (x *RecordWorkflowTaskStartedResponseWithRawHistory) GetNextEventId() int64 {
 	if x != nil {
-		return x.NextEventId
+		return x.xxx_hidden_NextEventId
 	}
 	return 0
 }
 
 func (x *RecordWorkflowTaskStartedResponseWithRawHistory) GetAttempt() int32 {
 	if x != nil {
-		return x.Attempt
+		return x.xxx_hidden_Attempt
 	}
 	return 0
 }
 
 func (x *RecordWorkflowTaskStartedResponseWithRawHistory) GetStickyExecutionEnabled() bool {
 	if x != nil {
-		return x.StickyExecutionEnabled
+		return x.xxx_hidden_StickyExecutionEnabled
 	}
 	return false
 }
 
 func (x *RecordWorkflowTaskStartedResponseWithRawHistory) GetTransientWorkflowTask() *v18.TransientWorkflowTaskInfo {
 	if x != nil {
-		return x.TransientWorkflowTask
+		return x.xxx_hidden_TransientWorkflowTask
 	}
 	return nil
 }
 
 func (x *RecordWorkflowTaskStartedResponseWithRawHistory) GetWorkflowExecutionTaskQueue() *v110.TaskQueue {
 	if x != nil {
-		return x.WorkflowExecutionTaskQueue
+		return x.xxx_hidden_WorkflowExecutionTaskQueue
 	}
 	return nil
 }
 
 func (x *RecordWorkflowTaskStartedResponseWithRawHistory) GetBranchToken() []byte {
 	if x != nil {
-		return x.BranchToken
+		return x.xxx_hidden_BranchToken
 	}
 	return nil
 }
 
 func (x *RecordWorkflowTaskStartedResponseWithRawHistory) GetScheduledTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.ScheduledTime
+		return x.xxx_hidden_ScheduledTime
 	}
 	return nil
 }
 
 func (x *RecordWorkflowTaskStartedResponseWithRawHistory) GetStartedTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.StartedTime
+		return x.xxx_hidden_StartedTime
 	}
 	return nil
 }
 
 func (x *RecordWorkflowTaskStartedResponseWithRawHistory) GetQueries() map[string]*v113.WorkflowQuery {
 	if x != nil {
-		return x.Queries
+		return x.xxx_hidden_Queries
 	}
 	return nil
 }
 
 func (x *RecordWorkflowTaskStartedResponseWithRawHistory) GetClock() *v17.VectorClock {
 	if x != nil {
-		return x.Clock
+		return x.xxx_hidden_Clock
 	}
 	return nil
 }
 
 func (x *RecordWorkflowTaskStartedResponseWithRawHistory) GetMessages() []*v114.Message {
 	if x != nil {
-		return x.Messages
+		if x.xxx_hidden_Messages != nil {
+			return *x.xxx_hidden_Messages
+		}
 	}
 	return nil
 }
 
 func (x *RecordWorkflowTaskStartedResponseWithRawHistory) GetVersion() int64 {
 	if x != nil {
-		return x.Version
+		return x.xxx_hidden_Version
 	}
 	return 0
 }
 
 func (x *RecordWorkflowTaskStartedResponseWithRawHistory) GetHistory() *v115.History {
 	if x != nil {
-		return x.History
+		return x.xxx_hidden_History
 	}
 	return nil
 }
 
 func (x *RecordWorkflowTaskStartedResponseWithRawHistory) GetNextPageToken() []byte {
 	if x != nil {
-		return x.NextPageToken
+		return x.xxx_hidden_NextPageToken
 	}
 	return nil
 }
 
 func (x *RecordWorkflowTaskStartedResponseWithRawHistory) GetRawHistory() [][]byte {
 	if x != nil {
-		return x.RawHistory
+		return x.xxx_hidden_RawHistory
 	}
 	return nil
 }
 
+func (x *RecordWorkflowTaskStartedResponseWithRawHistory) SetWorkflowType(v *v14.WorkflowType) {
+	x.xxx_hidden_WorkflowType = v
+}
+
+func (x *RecordWorkflowTaskStartedResponseWithRawHistory) SetPreviousStartedEventId(v int64) {
+	x.xxx_hidden_PreviousStartedEventId = v
+}
+
+func (x *RecordWorkflowTaskStartedResponseWithRawHistory) SetScheduledEventId(v int64) {
+	x.xxx_hidden_ScheduledEventId = v
+}
+
+func (x *RecordWorkflowTaskStartedResponseWithRawHistory) SetStartedEventId(v int64) {
+	x.xxx_hidden_StartedEventId = v
+}
+
+func (x *RecordWorkflowTaskStartedResponseWithRawHistory) SetNextEventId(v int64) {
+	x.xxx_hidden_NextEventId = v
+}
+
+func (x *RecordWorkflowTaskStartedResponseWithRawHistory) SetAttempt(v int32) {
+	x.xxx_hidden_Attempt = v
+}
+
+func (x *RecordWorkflowTaskStartedResponseWithRawHistory) SetStickyExecutionEnabled(v bool) {
+	x.xxx_hidden_StickyExecutionEnabled = v
+}
+
+func (x *RecordWorkflowTaskStartedResponseWithRawHistory) SetTransientWorkflowTask(v *v18.TransientWorkflowTaskInfo) {
+	x.xxx_hidden_TransientWorkflowTask = v
+}
+
+func (x *RecordWorkflowTaskStartedResponseWithRawHistory) SetWorkflowExecutionTaskQueue(v *v110.TaskQueue) {
+	x.xxx_hidden_WorkflowExecutionTaskQueue = v
+}
+
+func (x *RecordWorkflowTaskStartedResponseWithRawHistory) SetBranchToken(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_BranchToken = v
+}
+
+func (x *RecordWorkflowTaskStartedResponseWithRawHistory) SetScheduledTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_ScheduledTime = v
+}
+
+func (x *RecordWorkflowTaskStartedResponseWithRawHistory) SetStartedTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_StartedTime = v
+}
+
+func (x *RecordWorkflowTaskStartedResponseWithRawHistory) SetQueries(v map[string]*v113.WorkflowQuery) {
+	x.xxx_hidden_Queries = v
+}
+
+func (x *RecordWorkflowTaskStartedResponseWithRawHistory) SetClock(v *v17.VectorClock) {
+	x.xxx_hidden_Clock = v
+}
+
+func (x *RecordWorkflowTaskStartedResponseWithRawHistory) SetMessages(v []*v114.Message) {
+	x.xxx_hidden_Messages = &v
+}
+
+func (x *RecordWorkflowTaskStartedResponseWithRawHistory) SetVersion(v int64) {
+	x.xxx_hidden_Version = v
+}
+
+func (x *RecordWorkflowTaskStartedResponseWithRawHistory) SetHistory(v *v115.History) {
+	x.xxx_hidden_History = v
+}
+
+func (x *RecordWorkflowTaskStartedResponseWithRawHistory) SetNextPageToken(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_NextPageToken = v
+}
+
+func (x *RecordWorkflowTaskStartedResponseWithRawHistory) SetRawHistory(v [][]byte) {
+	x.xxx_hidden_RawHistory = v
+}
+
+func (x *RecordWorkflowTaskStartedResponseWithRawHistory) HasWorkflowType() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_WorkflowType != nil
+}
+
+func (x *RecordWorkflowTaskStartedResponseWithRawHistory) HasTransientWorkflowTask() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_TransientWorkflowTask != nil
+}
+
+func (x *RecordWorkflowTaskStartedResponseWithRawHistory) HasWorkflowExecutionTaskQueue() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_WorkflowExecutionTaskQueue != nil
+}
+
+func (x *RecordWorkflowTaskStartedResponseWithRawHistory) HasScheduledTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_ScheduledTime != nil
+}
+
+func (x *RecordWorkflowTaskStartedResponseWithRawHistory) HasStartedTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_StartedTime != nil
+}
+
+func (x *RecordWorkflowTaskStartedResponseWithRawHistory) HasClock() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Clock != nil
+}
+
+func (x *RecordWorkflowTaskStartedResponseWithRawHistory) HasHistory() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_History != nil
+}
+
+func (x *RecordWorkflowTaskStartedResponseWithRawHistory) ClearWorkflowType() {
+	x.xxx_hidden_WorkflowType = nil
+}
+
+func (x *RecordWorkflowTaskStartedResponseWithRawHistory) ClearTransientWorkflowTask() {
+	x.xxx_hidden_TransientWorkflowTask = nil
+}
+
+func (x *RecordWorkflowTaskStartedResponseWithRawHistory) ClearWorkflowExecutionTaskQueue() {
+	x.xxx_hidden_WorkflowExecutionTaskQueue = nil
+}
+
+func (x *RecordWorkflowTaskStartedResponseWithRawHistory) ClearScheduledTime() {
+	x.xxx_hidden_ScheduledTime = nil
+}
+
+func (x *RecordWorkflowTaskStartedResponseWithRawHistory) ClearStartedTime() {
+	x.xxx_hidden_StartedTime = nil
+}
+
+func (x *RecordWorkflowTaskStartedResponseWithRawHistory) ClearClock() {
+	x.xxx_hidden_Clock = nil
+}
+
+func (x *RecordWorkflowTaskStartedResponseWithRawHistory) ClearHistory() {
+	x.xxx_hidden_History = nil
+}
+
+type RecordWorkflowTaskStartedResponseWithRawHistory_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	WorkflowType               *v14.WorkflowType
+	PreviousStartedEventId     int64
+	ScheduledEventId           int64
+	StartedEventId             int64
+	NextEventId                int64
+	Attempt                    int32
+	StickyExecutionEnabled     bool
+	TransientWorkflowTask      *v18.TransientWorkflowTaskInfo
+	WorkflowExecutionTaskQueue *v110.TaskQueue
+	BranchToken                []byte
+	ScheduledTime              *timestamppb.Timestamp
+	StartedTime                *timestamppb.Timestamp
+	Queries                    map[string]*v113.WorkflowQuery
+	Clock                      *v17.VectorClock
+	Messages                   []*v114.Message
+	Version                    int64
+	History                    *v115.History
+	NextPageToken              []byte
+	RawHistory                 [][]byte
+}
+
+func (b0 RecordWorkflowTaskStartedResponseWithRawHistory_builder) Build() *RecordWorkflowTaskStartedResponseWithRawHistory {
+	m0 := &RecordWorkflowTaskStartedResponseWithRawHistory{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_WorkflowType = b.WorkflowType
+	x.xxx_hidden_PreviousStartedEventId = b.PreviousStartedEventId
+	x.xxx_hidden_ScheduledEventId = b.ScheduledEventId
+	x.xxx_hidden_StartedEventId = b.StartedEventId
+	x.xxx_hidden_NextEventId = b.NextEventId
+	x.xxx_hidden_Attempt = b.Attempt
+	x.xxx_hidden_StickyExecutionEnabled = b.StickyExecutionEnabled
+	x.xxx_hidden_TransientWorkflowTask = b.TransientWorkflowTask
+	x.xxx_hidden_WorkflowExecutionTaskQueue = b.WorkflowExecutionTaskQueue
+	x.xxx_hidden_BranchToken = b.BranchToken
+	x.xxx_hidden_ScheduledTime = b.ScheduledTime
+	x.xxx_hidden_StartedTime = b.StartedTime
+	x.xxx_hidden_Queries = b.Queries
+	x.xxx_hidden_Clock = b.Clock
+	x.xxx_hidden_Messages = &b.Messages
+	x.xxx_hidden_Version = b.Version
+	x.xxx_hidden_History = b.History
+	x.xxx_hidden_NextPageToken = b.NextPageToken
+	x.xxx_hidden_RawHistory = b.RawHistory
+	return m0
+}
+
 type RecordActivityTaskStartedRequest struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	NamespaceId       string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	WorkflowExecution *v14.WorkflowExecution `protobuf:"bytes,2,opt,name=workflow_execution,json=workflowExecution,proto3" json:"workflow_execution,omitempty"`
-	ScheduledEventId  int64                  `protobuf:"varint,3,opt,name=scheduled_event_id,json=scheduledEventId,proto3" json:"scheduled_event_id,omitempty"`
-	// Unique id of each poll request. Used to ensure at most once delivery of tasks.
-	RequestId           string                           `protobuf:"bytes,5,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
-	PollRequest         *v1.PollActivityTaskQueueRequest `protobuf:"bytes,6,opt,name=poll_request,json=pollRequest,proto3" json:"poll_request,omitempty"`
-	Clock               *v17.VectorClock                 `protobuf:"bytes,7,opt,name=clock,proto3" json:"clock,omitempty"`
-	BuildIdRedirectInfo *v112.BuildIdRedirectInfo        `protobuf:"bytes,8,opt,name=build_id_redirect_info,json=buildIdRedirectInfo,proto3" json:"build_id_redirect_info,omitempty"`
-	// Stamp represents the internal “version” of the activity options and can/will be changed with Activity API.
-	Stamp int32 `protobuf:"varint,9,opt,name=stamp,proto3" json:"stamp,omitempty"`
-	// The deployment passed by History when the task was scheduled.
-	// Deprecated. use `version_directive.deployment`.
-	ScheduledDeployment *v16.Deployment `protobuf:"bytes,10,opt,name=scheduled_deployment,json=scheduledDeployment,proto3" json:"scheduled_deployment,omitempty"`
-	// Versioning directive that was sent by history when scheduling the task.
-	VersionDirective *v112.TaskVersionDirective `protobuf:"bytes,12,opt,name=version_directive,json=versionDirective,proto3" json:"version_directive,omitempty"`
-	// Revision number that was sent by matching when the task was dispatched. Used to resolve eventual consistency issues
-	// that may arise due to stale routing configs in task queue partitions.
-	TaskDispatchRevisionNumber int64 `protobuf:"varint,13,opt,name=task_dispatch_revision_number,json=taskDispatchRevisionNumber,proto3" json:"task_dispatch_revision_number,omitempty"`
-	// Reference to the Chasm component for activity execution (if applicable). For standalone activities, all necessary
-	// start information is carried within this component, obviating the need to use the fields that apply to embedded
-	// activities with the exception of version_directive.
-	ComponentRef  []byte `protobuf:"bytes,14,opt,name=component_ref,json=componentRef,proto3" json:"component_ref,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                                 protoimpl.MessageState           `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId                string                           `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_WorkflowExecution          *v14.WorkflowExecution           `protobuf:"bytes,2,opt,name=workflow_execution,json=workflowExecution,proto3"`
+	xxx_hidden_ScheduledEventId           int64                            `protobuf:"varint,3,opt,name=scheduled_event_id,json=scheduledEventId,proto3"`
+	xxx_hidden_RequestId                  string                           `protobuf:"bytes,5,opt,name=request_id,json=requestId,proto3"`
+	xxx_hidden_PollRequest                *v1.PollActivityTaskQueueRequest `protobuf:"bytes,6,opt,name=poll_request,json=pollRequest,proto3"`
+	xxx_hidden_Clock                      *v17.VectorClock                 `protobuf:"bytes,7,opt,name=clock,proto3"`
+	xxx_hidden_BuildIdRedirectInfo        *v112.BuildIdRedirectInfo        `protobuf:"bytes,8,opt,name=build_id_redirect_info,json=buildIdRedirectInfo,proto3"`
+	xxx_hidden_Stamp                      int32                            `protobuf:"varint,9,opt,name=stamp,proto3"`
+	xxx_hidden_ScheduledDeployment        *v16.Deployment                  `protobuf:"bytes,10,opt,name=scheduled_deployment,json=scheduledDeployment,proto3"`
+	xxx_hidden_VersionDirective           *v112.TaskVersionDirective       `protobuf:"bytes,12,opt,name=version_directive,json=versionDirective,proto3"`
+	xxx_hidden_TaskDispatchRevisionNumber int64                            `protobuf:"varint,13,opt,name=task_dispatch_revision_number,json=taskDispatchRevisionNumber,proto3"`
+	xxx_hidden_ComponentRef               []byte                           `protobuf:"bytes,14,opt,name=component_ref,json=componentRef,proto3"`
+	unknownFields                         protoimpl.UnknownFields
+	sizeCache                             protoimpl.SizeCache
 }
 
 func (x *RecordActivityTaskStartedRequest) Reset() {
@@ -1706,113 +3230,270 @@ func (x *RecordActivityTaskStartedRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RecordActivityTaskStartedRequest.ProtoReflect.Descriptor instead.
-func (*RecordActivityTaskStartedRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{14}
-}
-
 func (x *RecordActivityTaskStartedRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *RecordActivityTaskStartedRequest) GetWorkflowExecution() *v14.WorkflowExecution {
 	if x != nil {
-		return x.WorkflowExecution
+		return x.xxx_hidden_WorkflowExecution
 	}
 	return nil
 }
 
 func (x *RecordActivityTaskStartedRequest) GetScheduledEventId() int64 {
 	if x != nil {
-		return x.ScheduledEventId
+		return x.xxx_hidden_ScheduledEventId
 	}
 	return 0
 }
 
 func (x *RecordActivityTaskStartedRequest) GetRequestId() string {
 	if x != nil {
-		return x.RequestId
+		return x.xxx_hidden_RequestId
 	}
 	return ""
 }
 
 func (x *RecordActivityTaskStartedRequest) GetPollRequest() *v1.PollActivityTaskQueueRequest {
 	if x != nil {
-		return x.PollRequest
+		return x.xxx_hidden_PollRequest
 	}
 	return nil
 }
 
 func (x *RecordActivityTaskStartedRequest) GetClock() *v17.VectorClock {
 	if x != nil {
-		return x.Clock
+		return x.xxx_hidden_Clock
 	}
 	return nil
 }
 
 func (x *RecordActivityTaskStartedRequest) GetBuildIdRedirectInfo() *v112.BuildIdRedirectInfo {
 	if x != nil {
-		return x.BuildIdRedirectInfo
+		return x.xxx_hidden_BuildIdRedirectInfo
 	}
 	return nil
 }
 
 func (x *RecordActivityTaskStartedRequest) GetStamp() int32 {
 	if x != nil {
-		return x.Stamp
+		return x.xxx_hidden_Stamp
 	}
 	return 0
 }
 
 func (x *RecordActivityTaskStartedRequest) GetScheduledDeployment() *v16.Deployment {
 	if x != nil {
-		return x.ScheduledDeployment
+		return x.xxx_hidden_ScheduledDeployment
 	}
 	return nil
 }
 
 func (x *RecordActivityTaskStartedRequest) GetVersionDirective() *v112.TaskVersionDirective {
 	if x != nil {
-		return x.VersionDirective
+		return x.xxx_hidden_VersionDirective
 	}
 	return nil
 }
 
 func (x *RecordActivityTaskStartedRequest) GetTaskDispatchRevisionNumber() int64 {
 	if x != nil {
-		return x.TaskDispatchRevisionNumber
+		return x.xxx_hidden_TaskDispatchRevisionNumber
 	}
 	return 0
 }
 
 func (x *RecordActivityTaskStartedRequest) GetComponentRef() []byte {
 	if x != nil {
-		return x.ComponentRef
+		return x.xxx_hidden_ComponentRef
 	}
 	return nil
 }
 
+func (x *RecordActivityTaskStartedRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *RecordActivityTaskStartedRequest) SetWorkflowExecution(v *v14.WorkflowExecution) {
+	x.xxx_hidden_WorkflowExecution = v
+}
+
+func (x *RecordActivityTaskStartedRequest) SetScheduledEventId(v int64) {
+	x.xxx_hidden_ScheduledEventId = v
+}
+
+func (x *RecordActivityTaskStartedRequest) SetRequestId(v string) {
+	x.xxx_hidden_RequestId = v
+}
+
+func (x *RecordActivityTaskStartedRequest) SetPollRequest(v *v1.PollActivityTaskQueueRequest) {
+	x.xxx_hidden_PollRequest = v
+}
+
+func (x *RecordActivityTaskStartedRequest) SetClock(v *v17.VectorClock) {
+	x.xxx_hidden_Clock = v
+}
+
+func (x *RecordActivityTaskStartedRequest) SetBuildIdRedirectInfo(v *v112.BuildIdRedirectInfo) {
+	x.xxx_hidden_BuildIdRedirectInfo = v
+}
+
+func (x *RecordActivityTaskStartedRequest) SetStamp(v int32) {
+	x.xxx_hidden_Stamp = v
+}
+
+func (x *RecordActivityTaskStartedRequest) SetScheduledDeployment(v *v16.Deployment) {
+	x.xxx_hidden_ScheduledDeployment = v
+}
+
+func (x *RecordActivityTaskStartedRequest) SetVersionDirective(v *v112.TaskVersionDirective) {
+	x.xxx_hidden_VersionDirective = v
+}
+
+func (x *RecordActivityTaskStartedRequest) SetTaskDispatchRevisionNumber(v int64) {
+	x.xxx_hidden_TaskDispatchRevisionNumber = v
+}
+
+func (x *RecordActivityTaskStartedRequest) SetComponentRef(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_ComponentRef = v
+}
+
+func (x *RecordActivityTaskStartedRequest) HasWorkflowExecution() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_WorkflowExecution != nil
+}
+
+func (x *RecordActivityTaskStartedRequest) HasPollRequest() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_PollRequest != nil
+}
+
+func (x *RecordActivityTaskStartedRequest) HasClock() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Clock != nil
+}
+
+func (x *RecordActivityTaskStartedRequest) HasBuildIdRedirectInfo() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_BuildIdRedirectInfo != nil
+}
+
+func (x *RecordActivityTaskStartedRequest) HasScheduledDeployment() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_ScheduledDeployment != nil
+}
+
+func (x *RecordActivityTaskStartedRequest) HasVersionDirective() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_VersionDirective != nil
+}
+
+func (x *RecordActivityTaskStartedRequest) ClearWorkflowExecution() {
+	x.xxx_hidden_WorkflowExecution = nil
+}
+
+func (x *RecordActivityTaskStartedRequest) ClearPollRequest() {
+	x.xxx_hidden_PollRequest = nil
+}
+
+func (x *RecordActivityTaskStartedRequest) ClearClock() {
+	x.xxx_hidden_Clock = nil
+}
+
+func (x *RecordActivityTaskStartedRequest) ClearBuildIdRedirectInfo() {
+	x.xxx_hidden_BuildIdRedirectInfo = nil
+}
+
+func (x *RecordActivityTaskStartedRequest) ClearScheduledDeployment() {
+	x.xxx_hidden_ScheduledDeployment = nil
+}
+
+func (x *RecordActivityTaskStartedRequest) ClearVersionDirective() {
+	x.xxx_hidden_VersionDirective = nil
+}
+
+type RecordActivityTaskStartedRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId       string
+	WorkflowExecution *v14.WorkflowExecution
+	ScheduledEventId  int64
+	// Unique id of each poll request. Used to ensure at most once delivery of tasks.
+	RequestId           string
+	PollRequest         *v1.PollActivityTaskQueueRequest
+	Clock               *v17.VectorClock
+	BuildIdRedirectInfo *v112.BuildIdRedirectInfo
+	// Stamp represents the internal “version” of the activity options and can/will be changed with Activity API.
+	Stamp int32
+	// The deployment passed by History when the task was scheduled.
+	// Deprecated. use `version_directive.deployment`.
+	ScheduledDeployment *v16.Deployment
+	// Versioning directive that was sent by history when scheduling the task.
+	VersionDirective *v112.TaskVersionDirective
+	// Revision number that was sent by matching when the task was dispatched. Used to resolve eventual consistency issues
+	// that may arise due to stale routing configs in task queue partitions.
+	TaskDispatchRevisionNumber int64
+	// Reference to the Chasm component for activity execution (if applicable). For standalone activities, all necessary
+	// start information is carried within this component, obviating the need to use the fields that apply to embedded
+	// activities with the exception of version_directive.
+	ComponentRef []byte
+}
+
+func (b0 RecordActivityTaskStartedRequest_builder) Build() *RecordActivityTaskStartedRequest {
+	m0 := &RecordActivityTaskStartedRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_WorkflowExecution = b.WorkflowExecution
+	x.xxx_hidden_ScheduledEventId = b.ScheduledEventId
+	x.xxx_hidden_RequestId = b.RequestId
+	x.xxx_hidden_PollRequest = b.PollRequest
+	x.xxx_hidden_Clock = b.Clock
+	x.xxx_hidden_BuildIdRedirectInfo = b.BuildIdRedirectInfo
+	x.xxx_hidden_Stamp = b.Stamp
+	x.xxx_hidden_ScheduledDeployment = b.ScheduledDeployment
+	x.xxx_hidden_VersionDirective = b.VersionDirective
+	x.xxx_hidden_TaskDispatchRevisionNumber = b.TaskDispatchRevisionNumber
+	x.xxx_hidden_ComponentRef = b.ComponentRef
+	return m0
+}
+
 type RecordActivityTaskStartedResponse struct {
-	state                       protoimpl.MessageState `protogen:"open.v1"`
-	ScheduledEvent              *v115.HistoryEvent     `protobuf:"bytes,1,opt,name=scheduled_event,json=scheduledEvent,proto3" json:"scheduled_event,omitempty"`
-	StartedTime                 *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=started_time,json=startedTime,proto3" json:"started_time,omitempty"`
-	Attempt                     int32                  `protobuf:"varint,3,opt,name=attempt,proto3" json:"attempt,omitempty"`
-	CurrentAttemptScheduledTime *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=current_attempt_scheduled_time,json=currentAttemptScheduledTime,proto3" json:"current_attempt_scheduled_time,omitempty"`
-	HeartbeatDetails            *v14.Payloads          `protobuf:"bytes,5,opt,name=heartbeat_details,json=heartbeatDetails,proto3" json:"heartbeat_details,omitempty"`
-	WorkflowType                *v14.WorkflowType      `protobuf:"bytes,6,opt,name=workflow_type,json=workflowType,proto3" json:"workflow_type,omitempty"`
-	WorkflowNamespace           string                 `protobuf:"bytes,7,opt,name=workflow_namespace,json=workflowNamespace,proto3" json:"workflow_namespace,omitempty"`
-	Clock                       *v17.VectorClock       `protobuf:"bytes,8,opt,name=clock,proto3" json:"clock,omitempty"`
-	Version                     int64                  `protobuf:"varint,9,opt,name=version,proto3" json:"version,omitempty"`
-	Priority                    *v14.Priority          `protobuf:"bytes,10,opt,name=priority,proto3" json:"priority,omitempty"`
-	RetryPolicy                 *v14.RetryPolicy       `protobuf:"bytes,11,opt,name=retry_policy,json=retryPolicy,proto3" json:"retry_policy,omitempty"`
-	StartVersion                int64                  `protobuf:"varint,12,opt,name=start_version,json=startVersion,proto3" json:"start_version,omitempty"`
-	// ID of the activity run (applicable for standalone activities only)
-	ActivityRunId string `protobuf:"bytes,13,opt,name=activity_run_id,json=activityRunId,proto3" json:"activity_run_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                                  protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_ScheduledEvent              *v115.HistoryEvent     `protobuf:"bytes,1,opt,name=scheduled_event,json=scheduledEvent,proto3"`
+	xxx_hidden_StartedTime                 *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=started_time,json=startedTime,proto3"`
+	xxx_hidden_Attempt                     int32                  `protobuf:"varint,3,opt,name=attempt,proto3"`
+	xxx_hidden_CurrentAttemptScheduledTime *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=current_attempt_scheduled_time,json=currentAttemptScheduledTime,proto3"`
+	xxx_hidden_HeartbeatDetails            *v14.Payloads          `protobuf:"bytes,5,opt,name=heartbeat_details,json=heartbeatDetails,proto3"`
+	xxx_hidden_WorkflowType                *v14.WorkflowType      `protobuf:"bytes,6,opt,name=workflow_type,json=workflowType,proto3"`
+	xxx_hidden_WorkflowNamespace           string                 `protobuf:"bytes,7,opt,name=workflow_namespace,json=workflowNamespace,proto3"`
+	xxx_hidden_Clock                       *v17.VectorClock       `protobuf:"bytes,8,opt,name=clock,proto3"`
+	xxx_hidden_Version                     int64                  `protobuf:"varint,9,opt,name=version,proto3"`
+	xxx_hidden_Priority                    *v14.Priority          `protobuf:"bytes,10,opt,name=priority,proto3"`
+	xxx_hidden_RetryPolicy                 *v14.RetryPolicy       `protobuf:"bytes,11,opt,name=retry_policy,json=retryPolicy,proto3"`
+	xxx_hidden_StartVersion                int64                  `protobuf:"varint,12,opt,name=start_version,json=startVersion,proto3"`
+	xxx_hidden_ActivityRunId               string                 `protobuf:"bytes,13,opt,name=activity_run_id,json=activityRunId,proto3"`
+	unknownFields                          protoimpl.UnknownFields
+	sizeCache                              protoimpl.SizeCache
 }
 
 func (x *RecordActivityTaskStartedResponse) Reset() {
@@ -1840,108 +3521,282 @@ func (x *RecordActivityTaskStartedResponse) ProtoReflect() protoreflect.Message 
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RecordActivityTaskStartedResponse.ProtoReflect.Descriptor instead.
-func (*RecordActivityTaskStartedResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{15}
-}
-
 func (x *RecordActivityTaskStartedResponse) GetScheduledEvent() *v115.HistoryEvent {
 	if x != nil {
-		return x.ScheduledEvent
+		return x.xxx_hidden_ScheduledEvent
 	}
 	return nil
 }
 
 func (x *RecordActivityTaskStartedResponse) GetStartedTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.StartedTime
+		return x.xxx_hidden_StartedTime
 	}
 	return nil
 }
 
 func (x *RecordActivityTaskStartedResponse) GetAttempt() int32 {
 	if x != nil {
-		return x.Attempt
+		return x.xxx_hidden_Attempt
 	}
 	return 0
 }
 
 func (x *RecordActivityTaskStartedResponse) GetCurrentAttemptScheduledTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.CurrentAttemptScheduledTime
+		return x.xxx_hidden_CurrentAttemptScheduledTime
 	}
 	return nil
 }
 
 func (x *RecordActivityTaskStartedResponse) GetHeartbeatDetails() *v14.Payloads {
 	if x != nil {
-		return x.HeartbeatDetails
+		return x.xxx_hidden_HeartbeatDetails
 	}
 	return nil
 }
 
 func (x *RecordActivityTaskStartedResponse) GetWorkflowType() *v14.WorkflowType {
 	if x != nil {
-		return x.WorkflowType
+		return x.xxx_hidden_WorkflowType
 	}
 	return nil
 }
 
 func (x *RecordActivityTaskStartedResponse) GetWorkflowNamespace() string {
 	if x != nil {
-		return x.WorkflowNamespace
+		return x.xxx_hidden_WorkflowNamespace
 	}
 	return ""
 }
 
 func (x *RecordActivityTaskStartedResponse) GetClock() *v17.VectorClock {
 	if x != nil {
-		return x.Clock
+		return x.xxx_hidden_Clock
 	}
 	return nil
 }
 
 func (x *RecordActivityTaskStartedResponse) GetVersion() int64 {
 	if x != nil {
-		return x.Version
+		return x.xxx_hidden_Version
 	}
 	return 0
 }
 
 func (x *RecordActivityTaskStartedResponse) GetPriority() *v14.Priority {
 	if x != nil {
-		return x.Priority
+		return x.xxx_hidden_Priority
 	}
 	return nil
 }
 
 func (x *RecordActivityTaskStartedResponse) GetRetryPolicy() *v14.RetryPolicy {
 	if x != nil {
-		return x.RetryPolicy
+		return x.xxx_hidden_RetryPolicy
 	}
 	return nil
 }
 
 func (x *RecordActivityTaskStartedResponse) GetStartVersion() int64 {
 	if x != nil {
-		return x.StartVersion
+		return x.xxx_hidden_StartVersion
 	}
 	return 0
 }
 
 func (x *RecordActivityTaskStartedResponse) GetActivityRunId() string {
 	if x != nil {
-		return x.ActivityRunId
+		return x.xxx_hidden_ActivityRunId
 	}
 	return ""
 }
 
+func (x *RecordActivityTaskStartedResponse) SetScheduledEvent(v *v115.HistoryEvent) {
+	x.xxx_hidden_ScheduledEvent = v
+}
+
+func (x *RecordActivityTaskStartedResponse) SetStartedTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_StartedTime = v
+}
+
+func (x *RecordActivityTaskStartedResponse) SetAttempt(v int32) {
+	x.xxx_hidden_Attempt = v
+}
+
+func (x *RecordActivityTaskStartedResponse) SetCurrentAttemptScheduledTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_CurrentAttemptScheduledTime = v
+}
+
+func (x *RecordActivityTaskStartedResponse) SetHeartbeatDetails(v *v14.Payloads) {
+	x.xxx_hidden_HeartbeatDetails = v
+}
+
+func (x *RecordActivityTaskStartedResponse) SetWorkflowType(v *v14.WorkflowType) {
+	x.xxx_hidden_WorkflowType = v
+}
+
+func (x *RecordActivityTaskStartedResponse) SetWorkflowNamespace(v string) {
+	x.xxx_hidden_WorkflowNamespace = v
+}
+
+func (x *RecordActivityTaskStartedResponse) SetClock(v *v17.VectorClock) {
+	x.xxx_hidden_Clock = v
+}
+
+func (x *RecordActivityTaskStartedResponse) SetVersion(v int64) {
+	x.xxx_hidden_Version = v
+}
+
+func (x *RecordActivityTaskStartedResponse) SetPriority(v *v14.Priority) {
+	x.xxx_hidden_Priority = v
+}
+
+func (x *RecordActivityTaskStartedResponse) SetRetryPolicy(v *v14.RetryPolicy) {
+	x.xxx_hidden_RetryPolicy = v
+}
+
+func (x *RecordActivityTaskStartedResponse) SetStartVersion(v int64) {
+	x.xxx_hidden_StartVersion = v
+}
+
+func (x *RecordActivityTaskStartedResponse) SetActivityRunId(v string) {
+	x.xxx_hidden_ActivityRunId = v
+}
+
+func (x *RecordActivityTaskStartedResponse) HasScheduledEvent() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_ScheduledEvent != nil
+}
+
+func (x *RecordActivityTaskStartedResponse) HasStartedTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_StartedTime != nil
+}
+
+func (x *RecordActivityTaskStartedResponse) HasCurrentAttemptScheduledTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_CurrentAttemptScheduledTime != nil
+}
+
+func (x *RecordActivityTaskStartedResponse) HasHeartbeatDetails() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_HeartbeatDetails != nil
+}
+
+func (x *RecordActivityTaskStartedResponse) HasWorkflowType() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_WorkflowType != nil
+}
+
+func (x *RecordActivityTaskStartedResponse) HasClock() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Clock != nil
+}
+
+func (x *RecordActivityTaskStartedResponse) HasPriority() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Priority != nil
+}
+
+func (x *RecordActivityTaskStartedResponse) HasRetryPolicy() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_RetryPolicy != nil
+}
+
+func (x *RecordActivityTaskStartedResponse) ClearScheduledEvent() {
+	x.xxx_hidden_ScheduledEvent = nil
+}
+
+func (x *RecordActivityTaskStartedResponse) ClearStartedTime() {
+	x.xxx_hidden_StartedTime = nil
+}
+
+func (x *RecordActivityTaskStartedResponse) ClearCurrentAttemptScheduledTime() {
+	x.xxx_hidden_CurrentAttemptScheduledTime = nil
+}
+
+func (x *RecordActivityTaskStartedResponse) ClearHeartbeatDetails() {
+	x.xxx_hidden_HeartbeatDetails = nil
+}
+
+func (x *RecordActivityTaskStartedResponse) ClearWorkflowType() {
+	x.xxx_hidden_WorkflowType = nil
+}
+
+func (x *RecordActivityTaskStartedResponse) ClearClock() {
+	x.xxx_hidden_Clock = nil
+}
+
+func (x *RecordActivityTaskStartedResponse) ClearPriority() {
+	x.xxx_hidden_Priority = nil
+}
+
+func (x *RecordActivityTaskStartedResponse) ClearRetryPolicy() {
+	x.xxx_hidden_RetryPolicy = nil
+}
+
+type RecordActivityTaskStartedResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	ScheduledEvent              *v115.HistoryEvent
+	StartedTime                 *timestamppb.Timestamp
+	Attempt                     int32
+	CurrentAttemptScheduledTime *timestamppb.Timestamp
+	HeartbeatDetails            *v14.Payloads
+	WorkflowType                *v14.WorkflowType
+	WorkflowNamespace           string
+	Clock                       *v17.VectorClock
+	Version                     int64
+	Priority                    *v14.Priority
+	RetryPolicy                 *v14.RetryPolicy
+	StartVersion                int64
+	// ID of the activity run (applicable for standalone activities only)
+	ActivityRunId string
+}
+
+func (b0 RecordActivityTaskStartedResponse_builder) Build() *RecordActivityTaskStartedResponse {
+	m0 := &RecordActivityTaskStartedResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_ScheduledEvent = b.ScheduledEvent
+	x.xxx_hidden_StartedTime = b.StartedTime
+	x.xxx_hidden_Attempt = b.Attempt
+	x.xxx_hidden_CurrentAttemptScheduledTime = b.CurrentAttemptScheduledTime
+	x.xxx_hidden_HeartbeatDetails = b.HeartbeatDetails
+	x.xxx_hidden_WorkflowType = b.WorkflowType
+	x.xxx_hidden_WorkflowNamespace = b.WorkflowNamespace
+	x.xxx_hidden_Clock = b.Clock
+	x.xxx_hidden_Version = b.Version
+	x.xxx_hidden_Priority = b.Priority
+	x.xxx_hidden_RetryPolicy = b.RetryPolicy
+	x.xxx_hidden_StartVersion = b.StartVersion
+	x.xxx_hidden_ActivityRunId = b.ActivityRunId
+	return m0
+}
+
 type RespondWorkflowTaskCompletedRequest struct {
-	state           protoimpl.MessageState                  `protogen:"open.v1"`
-	NamespaceId     string                                  `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	CompleteRequest *v1.RespondWorkflowTaskCompletedRequest `protobuf:"bytes,2,opt,name=complete_request,json=completeRequest,proto3" json:"complete_request,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state                      protoimpl.MessageState                  `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId     string                                  `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_CompleteRequest *v1.RespondWorkflowTaskCompletedRequest `protobuf:"bytes,2,opt,name=complete_request,json=completeRequest,proto3"`
+	unknownFields              protoimpl.UnknownFields
+	sizeCache                  protoimpl.SizeCache
 }
 
 func (x *RespondWorkflowTaskCompletedRequest) Reset() {
@@ -1969,34 +3824,63 @@ func (x *RespondWorkflowTaskCompletedRequest) ProtoReflect() protoreflect.Messag
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RespondWorkflowTaskCompletedRequest.ProtoReflect.Descriptor instead.
-func (*RespondWorkflowTaskCompletedRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{16}
-}
-
 func (x *RespondWorkflowTaskCompletedRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *RespondWorkflowTaskCompletedRequest) GetCompleteRequest() *v1.RespondWorkflowTaskCompletedRequest {
 	if x != nil {
-		return x.CompleteRequest
+		return x.xxx_hidden_CompleteRequest
 	}
 	return nil
 }
 
+func (x *RespondWorkflowTaskCompletedRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *RespondWorkflowTaskCompletedRequest) SetCompleteRequest(v *v1.RespondWorkflowTaskCompletedRequest) {
+	x.xxx_hidden_CompleteRequest = v
+}
+
+func (x *RespondWorkflowTaskCompletedRequest) HasCompleteRequest() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_CompleteRequest != nil
+}
+
+func (x *RespondWorkflowTaskCompletedRequest) ClearCompleteRequest() {
+	x.xxx_hidden_CompleteRequest = nil
+}
+
+type RespondWorkflowTaskCompletedRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId     string
+	CompleteRequest *v1.RespondWorkflowTaskCompletedRequest
+}
+
+func (b0 RespondWorkflowTaskCompletedRequest_builder) Build() *RespondWorkflowTaskCompletedRequest {
+	m0 := &RespondWorkflowTaskCompletedRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_CompleteRequest = b.CompleteRequest
+	return m0
+}
+
 type RespondWorkflowTaskCompletedResponse struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Deprecated: Marked as deprecated in temporal/server/api/historyservice/v1/request_response.proto.
-	StartedResponse     *RecordWorkflowTaskStartedResponse  `protobuf:"bytes,1,opt,name=started_response,json=startedResponse,proto3" json:"started_response,omitempty"`
-	ActivityTasks       []*v1.PollActivityTaskQueueResponse `protobuf:"bytes,2,rep,name=activity_tasks,json=activityTasks,proto3" json:"activity_tasks,omitempty"`
-	ResetHistoryEventId int64                               `protobuf:"varint,3,opt,name=reset_history_event_id,json=resetHistoryEventId,proto3" json:"reset_history_event_id,omitempty"`
-	NewWorkflowTask     *v1.PollWorkflowTaskQueueResponse   `protobuf:"bytes,4,opt,name=new_workflow_task,json=newWorkflowTask,proto3" json:"new_workflow_task,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	state                          protoimpl.MessageState               `protogen:"opaque.v1"`
+	xxx_hidden_StartedResponse     *RecordWorkflowTaskStartedResponse   `protobuf:"bytes,1,opt,name=started_response,json=startedResponse,proto3"`
+	xxx_hidden_ActivityTasks       *[]*v1.PollActivityTaskQueueResponse `protobuf:"bytes,2,rep,name=activity_tasks,json=activityTasks,proto3"`
+	xxx_hidden_ResetHistoryEventId int64                                `protobuf:"varint,3,opt,name=reset_history_event_id,json=resetHistoryEventId,proto3"`
+	xxx_hidden_NewWorkflowTask     *v1.PollWorkflowTaskQueueResponse    `protobuf:"bytes,4,opt,name=new_workflow_task,json=newWorkflowTask,proto3"`
+	unknownFields                  protoimpl.UnknownFields
+	sizeCache                      protoimpl.SizeCache
 }
 
 func (x *RespondWorkflowTaskCompletedResponse) Reset() {
@@ -2024,46 +3908,105 @@ func (x *RespondWorkflowTaskCompletedResponse) ProtoReflect() protoreflect.Messa
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RespondWorkflowTaskCompletedResponse.ProtoReflect.Descriptor instead.
-func (*RespondWorkflowTaskCompletedResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{17}
-}
-
 // Deprecated: Marked as deprecated in temporal/server/api/historyservice/v1/request_response.proto.
 func (x *RespondWorkflowTaskCompletedResponse) GetStartedResponse() *RecordWorkflowTaskStartedResponse {
 	if x != nil {
-		return x.StartedResponse
+		return x.xxx_hidden_StartedResponse
 	}
 	return nil
 }
 
 func (x *RespondWorkflowTaskCompletedResponse) GetActivityTasks() []*v1.PollActivityTaskQueueResponse {
 	if x != nil {
-		return x.ActivityTasks
+		if x.xxx_hidden_ActivityTasks != nil {
+			return *x.xxx_hidden_ActivityTasks
+		}
 	}
 	return nil
 }
 
 func (x *RespondWorkflowTaskCompletedResponse) GetResetHistoryEventId() int64 {
 	if x != nil {
-		return x.ResetHistoryEventId
+		return x.xxx_hidden_ResetHistoryEventId
 	}
 	return 0
 }
 
 func (x *RespondWorkflowTaskCompletedResponse) GetNewWorkflowTask() *v1.PollWorkflowTaskQueueResponse {
 	if x != nil {
-		return x.NewWorkflowTask
+		return x.xxx_hidden_NewWorkflowTask
 	}
 	return nil
 }
 
+// Deprecated: Marked as deprecated in temporal/server/api/historyservice/v1/request_response.proto.
+func (x *RespondWorkflowTaskCompletedResponse) SetStartedResponse(v *RecordWorkflowTaskStartedResponse) {
+	x.xxx_hidden_StartedResponse = v
+}
+
+func (x *RespondWorkflowTaskCompletedResponse) SetActivityTasks(v []*v1.PollActivityTaskQueueResponse) {
+	x.xxx_hidden_ActivityTasks = &v
+}
+
+func (x *RespondWorkflowTaskCompletedResponse) SetResetHistoryEventId(v int64) {
+	x.xxx_hidden_ResetHistoryEventId = v
+}
+
+func (x *RespondWorkflowTaskCompletedResponse) SetNewWorkflowTask(v *v1.PollWorkflowTaskQueueResponse) {
+	x.xxx_hidden_NewWorkflowTask = v
+}
+
+// Deprecated: Marked as deprecated in temporal/server/api/historyservice/v1/request_response.proto.
+func (x *RespondWorkflowTaskCompletedResponse) HasStartedResponse() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_StartedResponse != nil
+}
+
+func (x *RespondWorkflowTaskCompletedResponse) HasNewWorkflowTask() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_NewWorkflowTask != nil
+}
+
+// Deprecated: Marked as deprecated in temporal/server/api/historyservice/v1/request_response.proto.
+func (x *RespondWorkflowTaskCompletedResponse) ClearStartedResponse() {
+	x.xxx_hidden_StartedResponse = nil
+}
+
+func (x *RespondWorkflowTaskCompletedResponse) ClearNewWorkflowTask() {
+	x.xxx_hidden_NewWorkflowTask = nil
+}
+
+type RespondWorkflowTaskCompletedResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Deprecated: Marked as deprecated in temporal/server/api/historyservice/v1/request_response.proto.
+	StartedResponse     *RecordWorkflowTaskStartedResponse
+	ActivityTasks       []*v1.PollActivityTaskQueueResponse
+	ResetHistoryEventId int64
+	NewWorkflowTask     *v1.PollWorkflowTaskQueueResponse
+}
+
+func (b0 RespondWorkflowTaskCompletedResponse_builder) Build() *RespondWorkflowTaskCompletedResponse {
+	m0 := &RespondWorkflowTaskCompletedResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_StartedResponse = b.StartedResponse
+	x.xxx_hidden_ActivityTasks = &b.ActivityTasks
+	x.xxx_hidden_ResetHistoryEventId = b.ResetHistoryEventId
+	x.xxx_hidden_NewWorkflowTask = b.NewWorkflowTask
+	return m0
+}
+
 type RespondWorkflowTaskFailedRequest struct {
-	state         protoimpl.MessageState               `protogen:"open.v1"`
-	NamespaceId   string                               `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	FailedRequest *v1.RespondWorkflowTaskFailedRequest `protobuf:"bytes,2,opt,name=failed_request,json=failedRequest,proto3" json:"failed_request,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                    protoimpl.MessageState               `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId   string                               `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_FailedRequest *v1.RespondWorkflowTaskFailedRequest `protobuf:"bytes,2,opt,name=failed_request,json=failedRequest,proto3"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *RespondWorkflowTaskFailedRequest) Reset() {
@@ -2091,27 +4034,57 @@ func (x *RespondWorkflowTaskFailedRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RespondWorkflowTaskFailedRequest.ProtoReflect.Descriptor instead.
-func (*RespondWorkflowTaskFailedRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{18}
-}
-
 func (x *RespondWorkflowTaskFailedRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *RespondWorkflowTaskFailedRequest) GetFailedRequest() *v1.RespondWorkflowTaskFailedRequest {
 	if x != nil {
-		return x.FailedRequest
+		return x.xxx_hidden_FailedRequest
 	}
 	return nil
 }
 
+func (x *RespondWorkflowTaskFailedRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *RespondWorkflowTaskFailedRequest) SetFailedRequest(v *v1.RespondWorkflowTaskFailedRequest) {
+	x.xxx_hidden_FailedRequest = v
+}
+
+func (x *RespondWorkflowTaskFailedRequest) HasFailedRequest() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_FailedRequest != nil
+}
+
+func (x *RespondWorkflowTaskFailedRequest) ClearFailedRequest() {
+	x.xxx_hidden_FailedRequest = nil
+}
+
+type RespondWorkflowTaskFailedRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId   string
+	FailedRequest *v1.RespondWorkflowTaskFailedRequest
+}
+
+func (b0 RespondWorkflowTaskFailedRequest_builder) Build() *RespondWorkflowTaskFailedRequest {
+	m0 := &RespondWorkflowTaskFailedRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_FailedRequest = b.FailedRequest
+	return m0
+}
+
 type RespondWorkflowTaskFailedResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2141,20 +4114,27 @@ func (x *RespondWorkflowTaskFailedResponse) ProtoReflect() protoreflect.Message 
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RespondWorkflowTaskFailedResponse.ProtoReflect.Descriptor instead.
-func (*RespondWorkflowTaskFailedResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{19}
+type RespondWorkflowTaskFailedResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+}
+
+func (b0 RespondWorkflowTaskFailedResponse_builder) Build() *RespondWorkflowTaskFailedResponse {
+	m0 := &RespondWorkflowTaskFailedResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	return m0
 }
 
 type IsWorkflowTaskValidRequest struct {
-	state            protoimpl.MessageState `protogen:"open.v1"`
-	NamespaceId      string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	Execution        *v14.WorkflowExecution `protobuf:"bytes,2,opt,name=execution,proto3" json:"execution,omitempty"`
-	Clock            *v17.VectorClock       `protobuf:"bytes,3,opt,name=clock,proto3" json:"clock,omitempty"`
-	ScheduledEventId int64                  `protobuf:"varint,4,opt,name=scheduled_event_id,json=scheduledEventId,proto3" json:"scheduled_event_id,omitempty"`
-	Stamp            int32                  `protobuf:"varint,5,opt,name=stamp,proto3" json:"stamp,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	state                       protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId      string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_Execution        *v14.WorkflowExecution `protobuf:"bytes,2,opt,name=execution,proto3"`
+	xxx_hidden_Clock            *v17.VectorClock       `protobuf:"bytes,3,opt,name=clock,proto3"`
+	xxx_hidden_ScheduledEventId int64                  `protobuf:"varint,4,opt,name=scheduled_event_id,json=scheduledEventId,proto3"`
+	xxx_hidden_Stamp            int32                  `protobuf:"varint,5,opt,name=stamp,proto3"`
+	unknownFields               protoimpl.UnknownFields
+	sizeCache                   protoimpl.SizeCache
 }
 
 func (x *IsWorkflowTaskValidRequest) Reset() {
@@ -2182,52 +4162,110 @@ func (x *IsWorkflowTaskValidRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use IsWorkflowTaskValidRequest.ProtoReflect.Descriptor instead.
-func (*IsWorkflowTaskValidRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{20}
-}
-
 func (x *IsWorkflowTaskValidRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *IsWorkflowTaskValidRequest) GetExecution() *v14.WorkflowExecution {
 	if x != nil {
-		return x.Execution
+		return x.xxx_hidden_Execution
 	}
 	return nil
 }
 
 func (x *IsWorkflowTaskValidRequest) GetClock() *v17.VectorClock {
 	if x != nil {
-		return x.Clock
+		return x.xxx_hidden_Clock
 	}
 	return nil
 }
 
 func (x *IsWorkflowTaskValidRequest) GetScheduledEventId() int64 {
 	if x != nil {
-		return x.ScheduledEventId
+		return x.xxx_hidden_ScheduledEventId
 	}
 	return 0
 }
 
 func (x *IsWorkflowTaskValidRequest) GetStamp() int32 {
 	if x != nil {
-		return x.Stamp
+		return x.xxx_hidden_Stamp
 	}
 	return 0
 }
 
+func (x *IsWorkflowTaskValidRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *IsWorkflowTaskValidRequest) SetExecution(v *v14.WorkflowExecution) {
+	x.xxx_hidden_Execution = v
+}
+
+func (x *IsWorkflowTaskValidRequest) SetClock(v *v17.VectorClock) {
+	x.xxx_hidden_Clock = v
+}
+
+func (x *IsWorkflowTaskValidRequest) SetScheduledEventId(v int64) {
+	x.xxx_hidden_ScheduledEventId = v
+}
+
+func (x *IsWorkflowTaskValidRequest) SetStamp(v int32) {
+	x.xxx_hidden_Stamp = v
+}
+
+func (x *IsWorkflowTaskValidRequest) HasExecution() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Execution != nil
+}
+
+func (x *IsWorkflowTaskValidRequest) HasClock() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Clock != nil
+}
+
+func (x *IsWorkflowTaskValidRequest) ClearExecution() {
+	x.xxx_hidden_Execution = nil
+}
+
+func (x *IsWorkflowTaskValidRequest) ClearClock() {
+	x.xxx_hidden_Clock = nil
+}
+
+type IsWorkflowTaskValidRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId      string
+	Execution        *v14.WorkflowExecution
+	Clock            *v17.VectorClock
+	ScheduledEventId int64
+	Stamp            int32
+}
+
+func (b0 IsWorkflowTaskValidRequest_builder) Build() *IsWorkflowTaskValidRequest {
+	m0 := &IsWorkflowTaskValidRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_Execution = b.Execution
+	x.xxx_hidden_Clock = b.Clock
+	x.xxx_hidden_ScheduledEventId = b.ScheduledEventId
+	x.xxx_hidden_Stamp = b.Stamp
+	return m0
+}
+
 type IsWorkflowTaskValidResponse struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// whether matching service can call history service to start the workflow task
-	IsValid       bool `protobuf:"varint,1,opt,name=is_valid,json=isValid,proto3" json:"is_valid,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state              protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_IsValid bool                   `protobuf:"varint,1,opt,name=is_valid,json=isValid,proto3"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *IsWorkflowTaskValidResponse) Reset() {
@@ -2255,24 +4293,38 @@ func (x *IsWorkflowTaskValidResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use IsWorkflowTaskValidResponse.ProtoReflect.Descriptor instead.
-func (*IsWorkflowTaskValidResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{21}
-}
-
 func (x *IsWorkflowTaskValidResponse) GetIsValid() bool {
 	if x != nil {
-		return x.IsValid
+		return x.xxx_hidden_IsValid
 	}
 	return false
 }
 
+func (x *IsWorkflowTaskValidResponse) SetIsValid(v bool) {
+	x.xxx_hidden_IsValid = v
+}
+
+type IsWorkflowTaskValidResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// whether matching service can call history service to start the workflow task
+	IsValid bool
+}
+
+func (b0 IsWorkflowTaskValidResponse_builder) Build() *IsWorkflowTaskValidResponse {
+	m0 := &IsWorkflowTaskValidResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_IsValid = b.IsValid
+	return m0
+}
+
 type RecordActivityTaskHeartbeatRequest struct {
-	state            protoimpl.MessageState                 `protogen:"open.v1"`
-	NamespaceId      string                                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	HeartbeatRequest *v1.RecordActivityTaskHeartbeatRequest `protobuf:"bytes,2,opt,name=heartbeat_request,json=heartbeatRequest,proto3" json:"heartbeat_request,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	state                       protoimpl.MessageState                 `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId      string                                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_HeartbeatRequest *v1.RecordActivityTaskHeartbeatRequest `protobuf:"bytes,2,opt,name=heartbeat_request,json=heartbeatRequest,proto3"`
+	unknownFields               protoimpl.UnknownFields
+	sizeCache                   protoimpl.SizeCache
 }
 
 func (x *RecordActivityTaskHeartbeatRequest) Reset() {
@@ -2300,32 +4352,62 @@ func (x *RecordActivityTaskHeartbeatRequest) ProtoReflect() protoreflect.Message
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RecordActivityTaskHeartbeatRequest.ProtoReflect.Descriptor instead.
-func (*RecordActivityTaskHeartbeatRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{22}
-}
-
 func (x *RecordActivityTaskHeartbeatRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *RecordActivityTaskHeartbeatRequest) GetHeartbeatRequest() *v1.RecordActivityTaskHeartbeatRequest {
 	if x != nil {
-		return x.HeartbeatRequest
+		return x.xxx_hidden_HeartbeatRequest
 	}
 	return nil
 }
 
+func (x *RecordActivityTaskHeartbeatRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *RecordActivityTaskHeartbeatRequest) SetHeartbeatRequest(v *v1.RecordActivityTaskHeartbeatRequest) {
+	x.xxx_hidden_HeartbeatRequest = v
+}
+
+func (x *RecordActivityTaskHeartbeatRequest) HasHeartbeatRequest() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_HeartbeatRequest != nil
+}
+
+func (x *RecordActivityTaskHeartbeatRequest) ClearHeartbeatRequest() {
+	x.xxx_hidden_HeartbeatRequest = nil
+}
+
+type RecordActivityTaskHeartbeatRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId      string
+	HeartbeatRequest *v1.RecordActivityTaskHeartbeatRequest
+}
+
+func (b0 RecordActivityTaskHeartbeatRequest_builder) Build() *RecordActivityTaskHeartbeatRequest {
+	m0 := &RecordActivityTaskHeartbeatRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_HeartbeatRequest = b.HeartbeatRequest
+	return m0
+}
+
 type RecordActivityTaskHeartbeatResponse struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	CancelRequested bool                   `protobuf:"varint,1,opt,name=cancel_requested,json=cancelRequested,proto3" json:"cancel_requested,omitempty"`
-	ActivityPaused  bool                   `protobuf:"varint,2,opt,name=activity_paused,json=activityPaused,proto3" json:"activity_paused,omitempty"`
-	ActivityReset   bool                   `protobuf:"varint,3,opt,name=activity_reset,json=activityReset,proto3" json:"activity_reset,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state                      protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_CancelRequested bool                   `protobuf:"varint,1,opt,name=cancel_requested,json=cancelRequested,proto3"`
+	xxx_hidden_ActivityPaused  bool                   `protobuf:"varint,2,opt,name=activity_paused,json=activityPaused,proto3"`
+	xxx_hidden_ActivityReset   bool                   `protobuf:"varint,3,opt,name=activity_reset,json=activityReset,proto3"`
+	unknownFields              protoimpl.UnknownFields
+	sizeCache                  protoimpl.SizeCache
 }
 
 func (x *RecordActivityTaskHeartbeatResponse) Reset() {
@@ -2353,38 +4435,63 @@ func (x *RecordActivityTaskHeartbeatResponse) ProtoReflect() protoreflect.Messag
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RecordActivityTaskHeartbeatResponse.ProtoReflect.Descriptor instead.
-func (*RecordActivityTaskHeartbeatResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{23}
-}
-
 func (x *RecordActivityTaskHeartbeatResponse) GetCancelRequested() bool {
 	if x != nil {
-		return x.CancelRequested
+		return x.xxx_hidden_CancelRequested
 	}
 	return false
 }
 
 func (x *RecordActivityTaskHeartbeatResponse) GetActivityPaused() bool {
 	if x != nil {
-		return x.ActivityPaused
+		return x.xxx_hidden_ActivityPaused
 	}
 	return false
 }
 
 func (x *RecordActivityTaskHeartbeatResponse) GetActivityReset() bool {
 	if x != nil {
-		return x.ActivityReset
+		return x.xxx_hidden_ActivityReset
 	}
 	return false
 }
 
+func (x *RecordActivityTaskHeartbeatResponse) SetCancelRequested(v bool) {
+	x.xxx_hidden_CancelRequested = v
+}
+
+func (x *RecordActivityTaskHeartbeatResponse) SetActivityPaused(v bool) {
+	x.xxx_hidden_ActivityPaused = v
+}
+
+func (x *RecordActivityTaskHeartbeatResponse) SetActivityReset(v bool) {
+	x.xxx_hidden_ActivityReset = v
+}
+
+type RecordActivityTaskHeartbeatResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	CancelRequested bool
+	ActivityPaused  bool
+	ActivityReset   bool
+}
+
+func (b0 RecordActivityTaskHeartbeatResponse_builder) Build() *RecordActivityTaskHeartbeatResponse {
+	m0 := &RecordActivityTaskHeartbeatResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_CancelRequested = b.CancelRequested
+	x.xxx_hidden_ActivityPaused = b.ActivityPaused
+	x.xxx_hidden_ActivityReset = b.ActivityReset
+	return m0
+}
+
 type RespondActivityTaskCompletedRequest struct {
-	state           protoimpl.MessageState                  `protogen:"open.v1"`
-	NamespaceId     string                                  `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	CompleteRequest *v1.RespondActivityTaskCompletedRequest `protobuf:"bytes,2,opt,name=complete_request,json=completeRequest,proto3" json:"complete_request,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state                      protoimpl.MessageState                  `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId     string                                  `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_CompleteRequest *v1.RespondActivityTaskCompletedRequest `protobuf:"bytes,2,opt,name=complete_request,json=completeRequest,proto3"`
+	unknownFields              protoimpl.UnknownFields
+	sizeCache                  protoimpl.SizeCache
 }
 
 func (x *RespondActivityTaskCompletedRequest) Reset() {
@@ -2412,27 +4519,57 @@ func (x *RespondActivityTaskCompletedRequest) ProtoReflect() protoreflect.Messag
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RespondActivityTaskCompletedRequest.ProtoReflect.Descriptor instead.
-func (*RespondActivityTaskCompletedRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{24}
-}
-
 func (x *RespondActivityTaskCompletedRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *RespondActivityTaskCompletedRequest) GetCompleteRequest() *v1.RespondActivityTaskCompletedRequest {
 	if x != nil {
-		return x.CompleteRequest
+		return x.xxx_hidden_CompleteRequest
 	}
 	return nil
 }
 
+func (x *RespondActivityTaskCompletedRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *RespondActivityTaskCompletedRequest) SetCompleteRequest(v *v1.RespondActivityTaskCompletedRequest) {
+	x.xxx_hidden_CompleteRequest = v
+}
+
+func (x *RespondActivityTaskCompletedRequest) HasCompleteRequest() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_CompleteRequest != nil
+}
+
+func (x *RespondActivityTaskCompletedRequest) ClearCompleteRequest() {
+	x.xxx_hidden_CompleteRequest = nil
+}
+
+type RespondActivityTaskCompletedRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId     string
+	CompleteRequest *v1.RespondActivityTaskCompletedRequest
+}
+
+func (b0 RespondActivityTaskCompletedRequest_builder) Build() *RespondActivityTaskCompletedRequest {
+	m0 := &RespondActivityTaskCompletedRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_CompleteRequest = b.CompleteRequest
+	return m0
+}
+
 type RespondActivityTaskCompletedResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2462,17 +4599,24 @@ func (x *RespondActivityTaskCompletedResponse) ProtoReflect() protoreflect.Messa
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RespondActivityTaskCompletedResponse.ProtoReflect.Descriptor instead.
-func (*RespondActivityTaskCompletedResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{25}
+type RespondActivityTaskCompletedResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+}
+
+func (b0 RespondActivityTaskCompletedResponse_builder) Build() *RespondActivityTaskCompletedResponse {
+	m0 := &RespondActivityTaskCompletedResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	return m0
 }
 
 type RespondActivityTaskFailedRequest struct {
-	state         protoimpl.MessageState               `protogen:"open.v1"`
-	NamespaceId   string                               `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	FailedRequest *v1.RespondActivityTaskFailedRequest `protobuf:"bytes,2,opt,name=failed_request,json=failedRequest,proto3" json:"failed_request,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                    protoimpl.MessageState               `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId   string                               `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_FailedRequest *v1.RespondActivityTaskFailedRequest `protobuf:"bytes,2,opt,name=failed_request,json=failedRequest,proto3"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *RespondActivityTaskFailedRequest) Reset() {
@@ -2500,27 +4644,57 @@ func (x *RespondActivityTaskFailedRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RespondActivityTaskFailedRequest.ProtoReflect.Descriptor instead.
-func (*RespondActivityTaskFailedRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{26}
-}
-
 func (x *RespondActivityTaskFailedRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *RespondActivityTaskFailedRequest) GetFailedRequest() *v1.RespondActivityTaskFailedRequest {
 	if x != nil {
-		return x.FailedRequest
+		return x.xxx_hidden_FailedRequest
 	}
 	return nil
 }
 
+func (x *RespondActivityTaskFailedRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *RespondActivityTaskFailedRequest) SetFailedRequest(v *v1.RespondActivityTaskFailedRequest) {
+	x.xxx_hidden_FailedRequest = v
+}
+
+func (x *RespondActivityTaskFailedRequest) HasFailedRequest() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_FailedRequest != nil
+}
+
+func (x *RespondActivityTaskFailedRequest) ClearFailedRequest() {
+	x.xxx_hidden_FailedRequest = nil
+}
+
+type RespondActivityTaskFailedRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId   string
+	FailedRequest *v1.RespondActivityTaskFailedRequest
+}
+
+func (b0 RespondActivityTaskFailedRequest_builder) Build() *RespondActivityTaskFailedRequest {
+	m0 := &RespondActivityTaskFailedRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_FailedRequest = b.FailedRequest
+	return m0
+}
+
 type RespondActivityTaskFailedResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2550,17 +4724,24 @@ func (x *RespondActivityTaskFailedResponse) ProtoReflect() protoreflect.Message 
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RespondActivityTaskFailedResponse.ProtoReflect.Descriptor instead.
-func (*RespondActivityTaskFailedResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{27}
+type RespondActivityTaskFailedResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+}
+
+func (b0 RespondActivityTaskFailedResponse_builder) Build() *RespondActivityTaskFailedResponse {
+	m0 := &RespondActivityTaskFailedResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	return m0
 }
 
 type RespondActivityTaskCanceledRequest struct {
-	state         protoimpl.MessageState                 `protogen:"open.v1"`
-	NamespaceId   string                                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	CancelRequest *v1.RespondActivityTaskCanceledRequest `protobuf:"bytes,2,opt,name=cancel_request,json=cancelRequest,proto3" json:"cancel_request,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                    protoimpl.MessageState                 `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId   string                                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_CancelRequest *v1.RespondActivityTaskCanceledRequest `protobuf:"bytes,2,opt,name=cancel_request,json=cancelRequest,proto3"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *RespondActivityTaskCanceledRequest) Reset() {
@@ -2588,27 +4769,57 @@ func (x *RespondActivityTaskCanceledRequest) ProtoReflect() protoreflect.Message
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RespondActivityTaskCanceledRequest.ProtoReflect.Descriptor instead.
-func (*RespondActivityTaskCanceledRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{28}
-}
-
 func (x *RespondActivityTaskCanceledRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *RespondActivityTaskCanceledRequest) GetCancelRequest() *v1.RespondActivityTaskCanceledRequest {
 	if x != nil {
-		return x.CancelRequest
+		return x.xxx_hidden_CancelRequest
 	}
 	return nil
 }
 
+func (x *RespondActivityTaskCanceledRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *RespondActivityTaskCanceledRequest) SetCancelRequest(v *v1.RespondActivityTaskCanceledRequest) {
+	x.xxx_hidden_CancelRequest = v
+}
+
+func (x *RespondActivityTaskCanceledRequest) HasCancelRequest() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_CancelRequest != nil
+}
+
+func (x *RespondActivityTaskCanceledRequest) ClearCancelRequest() {
+	x.xxx_hidden_CancelRequest = nil
+}
+
+type RespondActivityTaskCanceledRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId   string
+	CancelRequest *v1.RespondActivityTaskCanceledRequest
+}
+
+func (b0 RespondActivityTaskCanceledRequest_builder) Build() *RespondActivityTaskCanceledRequest {
+	m0 := &RespondActivityTaskCanceledRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_CancelRequest = b.CancelRequest
+	return m0
+}
+
 type RespondActivityTaskCanceledResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2638,21 +4849,27 @@ func (x *RespondActivityTaskCanceledResponse) ProtoReflect() protoreflect.Messag
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RespondActivityTaskCanceledResponse.ProtoReflect.Descriptor instead.
-func (*RespondActivityTaskCanceledResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{29}
+type RespondActivityTaskCanceledResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+}
+
+func (b0 RespondActivityTaskCanceledResponse_builder) Build() *RespondActivityTaskCanceledResponse {
+	m0 := &RespondActivityTaskCanceledResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	return m0
 }
 
 type IsActivityTaskValidRequest struct {
-	state            protoimpl.MessageState `protogen:"open.v1"`
-	NamespaceId      string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	Execution        *v14.WorkflowExecution `protobuf:"bytes,2,opt,name=execution,proto3" json:"execution,omitempty"`
-	Clock            *v17.VectorClock       `protobuf:"bytes,3,opt,name=clock,proto3" json:"clock,omitempty"`
-	ScheduledEventId int64                  `protobuf:"varint,4,opt,name=scheduled_event_id,json=scheduledEventId,proto3" json:"scheduled_event_id,omitempty"`
-	// Stamp represents the internal “version” of the activity options and can/will be changed with Activity API.
-	Stamp         int32 `protobuf:"varint,5,opt,name=stamp,proto3" json:"stamp,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                       protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId      string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_Execution        *v14.WorkflowExecution `protobuf:"bytes,2,opt,name=execution,proto3"`
+	xxx_hidden_Clock            *v17.VectorClock       `protobuf:"bytes,3,opt,name=clock,proto3"`
+	xxx_hidden_ScheduledEventId int64                  `protobuf:"varint,4,opt,name=scheduled_event_id,json=scheduledEventId,proto3"`
+	xxx_hidden_Stamp            int32                  `protobuf:"varint,5,opt,name=stamp,proto3"`
+	unknownFields               protoimpl.UnknownFields
+	sizeCache                   protoimpl.SizeCache
 }
 
 func (x *IsActivityTaskValidRequest) Reset() {
@@ -2680,52 +4897,111 @@ func (x *IsActivityTaskValidRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use IsActivityTaskValidRequest.ProtoReflect.Descriptor instead.
-func (*IsActivityTaskValidRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{30}
-}
-
 func (x *IsActivityTaskValidRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *IsActivityTaskValidRequest) GetExecution() *v14.WorkflowExecution {
 	if x != nil {
-		return x.Execution
+		return x.xxx_hidden_Execution
 	}
 	return nil
 }
 
 func (x *IsActivityTaskValidRequest) GetClock() *v17.VectorClock {
 	if x != nil {
-		return x.Clock
+		return x.xxx_hidden_Clock
 	}
 	return nil
 }
 
 func (x *IsActivityTaskValidRequest) GetScheduledEventId() int64 {
 	if x != nil {
-		return x.ScheduledEventId
+		return x.xxx_hidden_ScheduledEventId
 	}
 	return 0
 }
 
 func (x *IsActivityTaskValidRequest) GetStamp() int32 {
 	if x != nil {
-		return x.Stamp
+		return x.xxx_hidden_Stamp
 	}
 	return 0
 }
 
+func (x *IsActivityTaskValidRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *IsActivityTaskValidRequest) SetExecution(v *v14.WorkflowExecution) {
+	x.xxx_hidden_Execution = v
+}
+
+func (x *IsActivityTaskValidRequest) SetClock(v *v17.VectorClock) {
+	x.xxx_hidden_Clock = v
+}
+
+func (x *IsActivityTaskValidRequest) SetScheduledEventId(v int64) {
+	x.xxx_hidden_ScheduledEventId = v
+}
+
+func (x *IsActivityTaskValidRequest) SetStamp(v int32) {
+	x.xxx_hidden_Stamp = v
+}
+
+func (x *IsActivityTaskValidRequest) HasExecution() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Execution != nil
+}
+
+func (x *IsActivityTaskValidRequest) HasClock() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Clock != nil
+}
+
+func (x *IsActivityTaskValidRequest) ClearExecution() {
+	x.xxx_hidden_Execution = nil
+}
+
+func (x *IsActivityTaskValidRequest) ClearClock() {
+	x.xxx_hidden_Clock = nil
+}
+
+type IsActivityTaskValidRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId      string
+	Execution        *v14.WorkflowExecution
+	Clock            *v17.VectorClock
+	ScheduledEventId int64
+	// Stamp represents the internal “version” of the activity options and can/will be changed with Activity API.
+	Stamp int32
+}
+
+func (b0 IsActivityTaskValidRequest_builder) Build() *IsActivityTaskValidRequest {
+	m0 := &IsActivityTaskValidRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_Execution = b.Execution
+	x.xxx_hidden_Clock = b.Clock
+	x.xxx_hidden_ScheduledEventId = b.ScheduledEventId
+	x.xxx_hidden_Stamp = b.Stamp
+	return m0
+}
+
 type IsActivityTaskValidResponse struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// whether matching service can call history service to start the activity task
-	IsValid       bool `protobuf:"varint,1,opt,name=is_valid,json=isValid,proto3" json:"is_valid,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state              protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_IsValid bool                   `protobuf:"varint,1,opt,name=is_valid,json=isValid,proto3"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *IsActivityTaskValidResponse) Reset() {
@@ -2753,26 +5029,40 @@ func (x *IsActivityTaskValidResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use IsActivityTaskValidResponse.ProtoReflect.Descriptor instead.
-func (*IsActivityTaskValidResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{31}
-}
-
 func (x *IsActivityTaskValidResponse) GetIsValid() bool {
 	if x != nil {
-		return x.IsValid
+		return x.xxx_hidden_IsValid
 	}
 	return false
 }
 
+func (x *IsActivityTaskValidResponse) SetIsValid(v bool) {
+	x.xxx_hidden_IsValid = v
+}
+
+type IsActivityTaskValidResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// whether matching service can call history service to start the activity task
+	IsValid bool
+}
+
+func (b0 IsActivityTaskValidResponse_builder) Build() *IsActivityTaskValidResponse {
+	m0 := &IsActivityTaskValidResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_IsValid = b.IsValid
+	return m0
+}
+
 type SignalWorkflowExecutionRequest struct {
-	state                     protoimpl.MessageState             `protogen:"open.v1"`
-	NamespaceId               string                             `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	SignalRequest             *v1.SignalWorkflowExecutionRequest `protobuf:"bytes,2,opt,name=signal_request,json=signalRequest,proto3" json:"signal_request,omitempty"`
-	ExternalWorkflowExecution *v14.WorkflowExecution             `protobuf:"bytes,3,opt,name=external_workflow_execution,json=externalWorkflowExecution,proto3" json:"external_workflow_execution,omitempty"`
-	ChildWorkflowOnly         bool                               `protobuf:"varint,4,opt,name=child_workflow_only,json=childWorkflowOnly,proto3" json:"child_workflow_only,omitempty"`
-	unknownFields             protoimpl.UnknownFields
-	sizeCache                 protoimpl.SizeCache
+	state                                protoimpl.MessageState             `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId               string                             `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_SignalRequest             *v1.SignalWorkflowExecutionRequest `protobuf:"bytes,2,opt,name=signal_request,json=signalRequest,proto3"`
+	xxx_hidden_ExternalWorkflowExecution *v14.WorkflowExecution             `protobuf:"bytes,3,opt,name=external_workflow_execution,json=externalWorkflowExecution,proto3"`
+	xxx_hidden_ChildWorkflowOnly         bool                               `protobuf:"varint,4,opt,name=child_workflow_only,json=childWorkflowOnly,proto3"`
+	unknownFields                        protoimpl.UnknownFields
+	sizeCache                            protoimpl.SizeCache
 }
 
 func (x *SignalWorkflowExecutionRequest) Reset() {
@@ -2800,41 +5090,94 @@ func (x *SignalWorkflowExecutionRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SignalWorkflowExecutionRequest.ProtoReflect.Descriptor instead.
-func (*SignalWorkflowExecutionRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{32}
-}
-
 func (x *SignalWorkflowExecutionRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *SignalWorkflowExecutionRequest) GetSignalRequest() *v1.SignalWorkflowExecutionRequest {
 	if x != nil {
-		return x.SignalRequest
+		return x.xxx_hidden_SignalRequest
 	}
 	return nil
 }
 
 func (x *SignalWorkflowExecutionRequest) GetExternalWorkflowExecution() *v14.WorkflowExecution {
 	if x != nil {
-		return x.ExternalWorkflowExecution
+		return x.xxx_hidden_ExternalWorkflowExecution
 	}
 	return nil
 }
 
 func (x *SignalWorkflowExecutionRequest) GetChildWorkflowOnly() bool {
 	if x != nil {
-		return x.ChildWorkflowOnly
+		return x.xxx_hidden_ChildWorkflowOnly
 	}
 	return false
 }
 
+func (x *SignalWorkflowExecutionRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *SignalWorkflowExecutionRequest) SetSignalRequest(v *v1.SignalWorkflowExecutionRequest) {
+	x.xxx_hidden_SignalRequest = v
+}
+
+func (x *SignalWorkflowExecutionRequest) SetExternalWorkflowExecution(v *v14.WorkflowExecution) {
+	x.xxx_hidden_ExternalWorkflowExecution = v
+}
+
+func (x *SignalWorkflowExecutionRequest) SetChildWorkflowOnly(v bool) {
+	x.xxx_hidden_ChildWorkflowOnly = v
+}
+
+func (x *SignalWorkflowExecutionRequest) HasSignalRequest() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_SignalRequest != nil
+}
+
+func (x *SignalWorkflowExecutionRequest) HasExternalWorkflowExecution() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_ExternalWorkflowExecution != nil
+}
+
+func (x *SignalWorkflowExecutionRequest) ClearSignalRequest() {
+	x.xxx_hidden_SignalRequest = nil
+}
+
+func (x *SignalWorkflowExecutionRequest) ClearExternalWorkflowExecution() {
+	x.xxx_hidden_ExternalWorkflowExecution = nil
+}
+
+type SignalWorkflowExecutionRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId               string
+	SignalRequest             *v1.SignalWorkflowExecutionRequest
+	ExternalWorkflowExecution *v14.WorkflowExecution
+	ChildWorkflowOnly         bool
+}
+
+func (b0 SignalWorkflowExecutionRequest_builder) Build() *SignalWorkflowExecutionRequest {
+	m0 := &SignalWorkflowExecutionRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_SignalRequest = b.SignalRequest
+	x.xxx_hidden_ExternalWorkflowExecution = b.ExternalWorkflowExecution
+	x.xxx_hidden_ChildWorkflowOnly = b.ChildWorkflowOnly
+	return m0
+}
+
 type SignalWorkflowExecutionResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2864,20 +5207,24 @@ func (x *SignalWorkflowExecutionResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SignalWorkflowExecutionResponse.ProtoReflect.Descriptor instead.
-func (*SignalWorkflowExecutionResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{33}
+type SignalWorkflowExecutionResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+}
+
+func (b0 SignalWorkflowExecutionResponse_builder) Build() *SignalWorkflowExecutionResponse {
+	m0 := &SignalWorkflowExecutionResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	return m0
 }
 
 type SignalWithStartWorkflowExecutionRequest struct {
-	state       protoimpl.MessageState `protogen:"open.v1"`
-	NamespaceId string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	// (-- api-linter: core::0140::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: "with" is needed here. --)
-	SignalWithStartRequest *v1.SignalWithStartWorkflowExecutionRequest `protobuf:"bytes,2,opt,name=signal_with_start_request,json=signalWithStartRequest,proto3" json:"signal_with_start_request,omitempty"`
-	unknownFields          protoimpl.UnknownFields
-	sizeCache              protoimpl.SizeCache
+	state                             protoimpl.MessageState                      `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId            string                                      `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_SignalWithStartRequest *v1.SignalWithStartWorkflowExecutionRequest `protobuf:"bytes,2,opt,name=signal_with_start_request,json=signalWithStartRequest,proto3"`
+	unknownFields                     protoimpl.UnknownFields
+	sizeCache                         protoimpl.SizeCache
 }
 
 func (x *SignalWithStartWorkflowExecutionRequest) Reset() {
@@ -2905,31 +5252,64 @@ func (x *SignalWithStartWorkflowExecutionRequest) ProtoReflect() protoreflect.Me
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SignalWithStartWorkflowExecutionRequest.ProtoReflect.Descriptor instead.
-func (*SignalWithStartWorkflowExecutionRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{34}
-}
-
 func (x *SignalWithStartWorkflowExecutionRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *SignalWithStartWorkflowExecutionRequest) GetSignalWithStartRequest() *v1.SignalWithStartWorkflowExecutionRequest {
 	if x != nil {
-		return x.SignalWithStartRequest
+		return x.xxx_hidden_SignalWithStartRequest
 	}
 	return nil
 }
 
+func (x *SignalWithStartWorkflowExecutionRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *SignalWithStartWorkflowExecutionRequest) SetSignalWithStartRequest(v *v1.SignalWithStartWorkflowExecutionRequest) {
+	x.xxx_hidden_SignalWithStartRequest = v
+}
+
+func (x *SignalWithStartWorkflowExecutionRequest) HasSignalWithStartRequest() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_SignalWithStartRequest != nil
+}
+
+func (x *SignalWithStartWorkflowExecutionRequest) ClearSignalWithStartRequest() {
+	x.xxx_hidden_SignalWithStartRequest = nil
+}
+
+type SignalWithStartWorkflowExecutionRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId string
+	// (-- api-linter: core::0140::prepositions=disabled
+	//
+	//	aip.dev/not-precedent: "with" is needed here. --)
+	SignalWithStartRequest *v1.SignalWithStartWorkflowExecutionRequest
+}
+
+func (b0 SignalWithStartWorkflowExecutionRequest_builder) Build() *SignalWithStartWorkflowExecutionRequest {
+	m0 := &SignalWithStartWorkflowExecutionRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_SignalWithStartRequest = b.SignalWithStartRequest
+	return m0
+}
+
 type SignalWithStartWorkflowExecutionResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	RunId         string                 `protobuf:"bytes,1,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	Started       bool                   `protobuf:"varint,2,opt,name=started,proto3" json:"started,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state              protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_RunId   string                 `protobuf:"bytes,1,opt,name=run_id,json=runId,proto3"`
+	xxx_hidden_Started bool                   `protobuf:"varint,2,opt,name=started,proto3"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *SignalWithStartWorkflowExecutionResponse) Reset() {
@@ -2957,32 +5337,51 @@ func (x *SignalWithStartWorkflowExecutionResponse) ProtoReflect() protoreflect.M
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SignalWithStartWorkflowExecutionResponse.ProtoReflect.Descriptor instead.
-func (*SignalWithStartWorkflowExecutionResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{35}
-}
-
 func (x *SignalWithStartWorkflowExecutionResponse) GetRunId() string {
 	if x != nil {
-		return x.RunId
+		return x.xxx_hidden_RunId
 	}
 	return ""
 }
 
 func (x *SignalWithStartWorkflowExecutionResponse) GetStarted() bool {
 	if x != nil {
-		return x.Started
+		return x.xxx_hidden_Started
 	}
 	return false
 }
 
+func (x *SignalWithStartWorkflowExecutionResponse) SetRunId(v string) {
+	x.xxx_hidden_RunId = v
+}
+
+func (x *SignalWithStartWorkflowExecutionResponse) SetStarted(v bool) {
+	x.xxx_hidden_Started = v
+}
+
+type SignalWithStartWorkflowExecutionResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	RunId   string
+	Started bool
+}
+
+func (b0 SignalWithStartWorkflowExecutionResponse_builder) Build() *SignalWithStartWorkflowExecutionResponse {
+	m0 := &SignalWithStartWorkflowExecutionResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_RunId = b.RunId
+	x.xxx_hidden_Started = b.Started
+	return m0
+}
+
 type RemoveSignalMutableStateRequest struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	NamespaceId       string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	WorkflowExecution *v14.WorkflowExecution `protobuf:"bytes,2,opt,name=workflow_execution,json=workflowExecution,proto3" json:"workflow_execution,omitempty"`
-	RequestId         string                 `protobuf:"bytes,3,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state                        protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId       string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_WorkflowExecution *v14.WorkflowExecution `protobuf:"bytes,2,opt,name=workflow_execution,json=workflowExecution,proto3"`
+	xxx_hidden_RequestId         string                 `protobuf:"bytes,3,opt,name=request_id,json=requestId,proto3"`
+	unknownFields                protoimpl.UnknownFields
+	sizeCache                    protoimpl.SizeCache
 }
 
 func (x *RemoveSignalMutableStateRequest) Reset() {
@@ -3010,34 +5409,70 @@ func (x *RemoveSignalMutableStateRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RemoveSignalMutableStateRequest.ProtoReflect.Descriptor instead.
-func (*RemoveSignalMutableStateRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{36}
-}
-
 func (x *RemoveSignalMutableStateRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *RemoveSignalMutableStateRequest) GetWorkflowExecution() *v14.WorkflowExecution {
 	if x != nil {
-		return x.WorkflowExecution
+		return x.xxx_hidden_WorkflowExecution
 	}
 	return nil
 }
 
 func (x *RemoveSignalMutableStateRequest) GetRequestId() string {
 	if x != nil {
-		return x.RequestId
+		return x.xxx_hidden_RequestId
 	}
 	return ""
 }
 
+func (x *RemoveSignalMutableStateRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *RemoveSignalMutableStateRequest) SetWorkflowExecution(v *v14.WorkflowExecution) {
+	x.xxx_hidden_WorkflowExecution = v
+}
+
+func (x *RemoveSignalMutableStateRequest) SetRequestId(v string) {
+	x.xxx_hidden_RequestId = v
+}
+
+func (x *RemoveSignalMutableStateRequest) HasWorkflowExecution() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_WorkflowExecution != nil
+}
+
+func (x *RemoveSignalMutableStateRequest) ClearWorkflowExecution() {
+	x.xxx_hidden_WorkflowExecution = nil
+}
+
+type RemoveSignalMutableStateRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId       string
+	WorkflowExecution *v14.WorkflowExecution
+	RequestId         string
+}
+
+func (b0 RemoveSignalMutableStateRequest_builder) Build() *RemoveSignalMutableStateRequest {
+	m0 := &RemoveSignalMutableStateRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_WorkflowExecution = b.WorkflowExecution
+	x.xxx_hidden_RequestId = b.RequestId
+	return m0
+}
+
 type RemoveSignalMutableStateResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3067,19 +5502,26 @@ func (x *RemoveSignalMutableStateResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RemoveSignalMutableStateResponse.ProtoReflect.Descriptor instead.
-func (*RemoveSignalMutableStateResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{37}
+type RemoveSignalMutableStateResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+}
+
+func (b0 RemoveSignalMutableStateResponse_builder) Build() *RemoveSignalMutableStateResponse {
+	m0 := &RemoveSignalMutableStateResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	return m0
 }
 
 type TerminateWorkflowExecutionRequest struct {
-	state                     protoimpl.MessageState                `protogen:"open.v1"`
-	NamespaceId               string                                `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	TerminateRequest          *v1.TerminateWorkflowExecutionRequest `protobuf:"bytes,2,opt,name=terminate_request,json=terminateRequest,proto3" json:"terminate_request,omitempty"`
-	ExternalWorkflowExecution *v14.WorkflowExecution                `protobuf:"bytes,3,opt,name=external_workflow_execution,json=externalWorkflowExecution,proto3" json:"external_workflow_execution,omitempty"`
-	ChildWorkflowOnly         bool                                  `protobuf:"varint,4,opt,name=child_workflow_only,json=childWorkflowOnly,proto3" json:"child_workflow_only,omitempty"`
-	unknownFields             protoimpl.UnknownFields
-	sizeCache                 protoimpl.SizeCache
+	state                                protoimpl.MessageState                `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId               string                                `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_TerminateRequest          *v1.TerminateWorkflowExecutionRequest `protobuf:"bytes,2,opt,name=terminate_request,json=terminateRequest,proto3"`
+	xxx_hidden_ExternalWorkflowExecution *v14.WorkflowExecution                `protobuf:"bytes,3,opt,name=external_workflow_execution,json=externalWorkflowExecution,proto3"`
+	xxx_hidden_ChildWorkflowOnly         bool                                  `protobuf:"varint,4,opt,name=child_workflow_only,json=childWorkflowOnly,proto3"`
+	unknownFields                        protoimpl.UnknownFields
+	sizeCache                            protoimpl.SizeCache
 }
 
 func (x *TerminateWorkflowExecutionRequest) Reset() {
@@ -3107,41 +5549,94 @@ func (x *TerminateWorkflowExecutionRequest) ProtoReflect() protoreflect.Message 
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use TerminateWorkflowExecutionRequest.ProtoReflect.Descriptor instead.
-func (*TerminateWorkflowExecutionRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{38}
-}
-
 func (x *TerminateWorkflowExecutionRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *TerminateWorkflowExecutionRequest) GetTerminateRequest() *v1.TerminateWorkflowExecutionRequest {
 	if x != nil {
-		return x.TerminateRequest
+		return x.xxx_hidden_TerminateRequest
 	}
 	return nil
 }
 
 func (x *TerminateWorkflowExecutionRequest) GetExternalWorkflowExecution() *v14.WorkflowExecution {
 	if x != nil {
-		return x.ExternalWorkflowExecution
+		return x.xxx_hidden_ExternalWorkflowExecution
 	}
 	return nil
 }
 
 func (x *TerminateWorkflowExecutionRequest) GetChildWorkflowOnly() bool {
 	if x != nil {
-		return x.ChildWorkflowOnly
+		return x.xxx_hidden_ChildWorkflowOnly
 	}
 	return false
 }
 
+func (x *TerminateWorkflowExecutionRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *TerminateWorkflowExecutionRequest) SetTerminateRequest(v *v1.TerminateWorkflowExecutionRequest) {
+	x.xxx_hidden_TerminateRequest = v
+}
+
+func (x *TerminateWorkflowExecutionRequest) SetExternalWorkflowExecution(v *v14.WorkflowExecution) {
+	x.xxx_hidden_ExternalWorkflowExecution = v
+}
+
+func (x *TerminateWorkflowExecutionRequest) SetChildWorkflowOnly(v bool) {
+	x.xxx_hidden_ChildWorkflowOnly = v
+}
+
+func (x *TerminateWorkflowExecutionRequest) HasTerminateRequest() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_TerminateRequest != nil
+}
+
+func (x *TerminateWorkflowExecutionRequest) HasExternalWorkflowExecution() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_ExternalWorkflowExecution != nil
+}
+
+func (x *TerminateWorkflowExecutionRequest) ClearTerminateRequest() {
+	x.xxx_hidden_TerminateRequest = nil
+}
+
+func (x *TerminateWorkflowExecutionRequest) ClearExternalWorkflowExecution() {
+	x.xxx_hidden_ExternalWorkflowExecution = nil
+}
+
+type TerminateWorkflowExecutionRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId               string
+	TerminateRequest          *v1.TerminateWorkflowExecutionRequest
+	ExternalWorkflowExecution *v14.WorkflowExecution
+	ChildWorkflowOnly         bool
+}
+
+func (b0 TerminateWorkflowExecutionRequest_builder) Build() *TerminateWorkflowExecutionRequest {
+	m0 := &TerminateWorkflowExecutionRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_TerminateRequest = b.TerminateRequest
+	x.xxx_hidden_ExternalWorkflowExecution = b.ExternalWorkflowExecution
+	x.xxx_hidden_ChildWorkflowOnly = b.ChildWorkflowOnly
+	return m0
+}
+
 type TerminateWorkflowExecutionResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3171,18 +5666,25 @@ func (x *TerminateWorkflowExecutionResponse) ProtoReflect() protoreflect.Message
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use TerminateWorkflowExecutionResponse.ProtoReflect.Descriptor instead.
-func (*TerminateWorkflowExecutionResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{39}
+type TerminateWorkflowExecutionResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+}
+
+func (b0 TerminateWorkflowExecutionResponse_builder) Build() *TerminateWorkflowExecutionResponse {
+	m0 := &TerminateWorkflowExecutionResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	return m0
 }
 
 type DeleteWorkflowExecutionRequest struct {
-	state              protoimpl.MessageState `protogen:"open.v1"`
-	NamespaceId        string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	WorkflowExecution  *v14.WorkflowExecution `protobuf:"bytes,2,opt,name=workflow_execution,json=workflowExecution,proto3" json:"workflow_execution,omitempty"`
-	ClosedWorkflowOnly bool                   `protobuf:"varint,4,opt,name=closed_workflow_only,json=closedWorkflowOnly,proto3" json:"closed_workflow_only,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	state                         protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId        string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_WorkflowExecution  *v14.WorkflowExecution `protobuf:"bytes,2,opt,name=workflow_execution,json=workflowExecution,proto3"`
+	xxx_hidden_ClosedWorkflowOnly bool                   `protobuf:"varint,4,opt,name=closed_workflow_only,json=closedWorkflowOnly,proto3"`
+	unknownFields                 protoimpl.UnknownFields
+	sizeCache                     protoimpl.SizeCache
 }
 
 func (x *DeleteWorkflowExecutionRequest) Reset() {
@@ -3210,34 +5712,70 @@ func (x *DeleteWorkflowExecutionRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DeleteWorkflowExecutionRequest.ProtoReflect.Descriptor instead.
-func (*DeleteWorkflowExecutionRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{40}
-}
-
 func (x *DeleteWorkflowExecutionRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *DeleteWorkflowExecutionRequest) GetWorkflowExecution() *v14.WorkflowExecution {
 	if x != nil {
-		return x.WorkflowExecution
+		return x.xxx_hidden_WorkflowExecution
 	}
 	return nil
 }
 
 func (x *DeleteWorkflowExecutionRequest) GetClosedWorkflowOnly() bool {
 	if x != nil {
-		return x.ClosedWorkflowOnly
+		return x.xxx_hidden_ClosedWorkflowOnly
 	}
 	return false
 }
 
+func (x *DeleteWorkflowExecutionRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *DeleteWorkflowExecutionRequest) SetWorkflowExecution(v *v14.WorkflowExecution) {
+	x.xxx_hidden_WorkflowExecution = v
+}
+
+func (x *DeleteWorkflowExecutionRequest) SetClosedWorkflowOnly(v bool) {
+	x.xxx_hidden_ClosedWorkflowOnly = v
+}
+
+func (x *DeleteWorkflowExecutionRequest) HasWorkflowExecution() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_WorkflowExecution != nil
+}
+
+func (x *DeleteWorkflowExecutionRequest) ClearWorkflowExecution() {
+	x.xxx_hidden_WorkflowExecution = nil
+}
+
+type DeleteWorkflowExecutionRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId        string
+	WorkflowExecution  *v14.WorkflowExecution
+	ClosedWorkflowOnly bool
+}
+
+func (b0 DeleteWorkflowExecutionRequest_builder) Build() *DeleteWorkflowExecutionRequest {
+	m0 := &DeleteWorkflowExecutionRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_WorkflowExecution = b.WorkflowExecution
+	x.xxx_hidden_ClosedWorkflowOnly = b.ClosedWorkflowOnly
+	return m0
+}
+
 type DeleteWorkflowExecutionResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3267,17 +5805,24 @@ func (x *DeleteWorkflowExecutionResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DeleteWorkflowExecutionResponse.ProtoReflect.Descriptor instead.
-func (*DeleteWorkflowExecutionResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{41}
+type DeleteWorkflowExecutionResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+}
+
+func (b0 DeleteWorkflowExecutionResponse_builder) Build() *DeleteWorkflowExecutionResponse {
+	m0 := &DeleteWorkflowExecutionResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	return m0
 }
 
 type ResetWorkflowExecutionRequest struct {
-	state         protoimpl.MessageState            `protogen:"open.v1"`
-	NamespaceId   string                            `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	ResetRequest  *v1.ResetWorkflowExecutionRequest `protobuf:"bytes,2,opt,name=reset_request,json=resetRequest,proto3" json:"reset_request,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                   protoimpl.MessageState            `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId  string                            `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_ResetRequest *v1.ResetWorkflowExecutionRequest `protobuf:"bytes,2,opt,name=reset_request,json=resetRequest,proto3"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
 }
 
 func (x *ResetWorkflowExecutionRequest) Reset() {
@@ -3305,30 +5850,60 @@ func (x *ResetWorkflowExecutionRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ResetWorkflowExecutionRequest.ProtoReflect.Descriptor instead.
-func (*ResetWorkflowExecutionRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{42}
-}
-
 func (x *ResetWorkflowExecutionRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *ResetWorkflowExecutionRequest) GetResetRequest() *v1.ResetWorkflowExecutionRequest {
 	if x != nil {
-		return x.ResetRequest
+		return x.xxx_hidden_ResetRequest
 	}
 	return nil
 }
 
+func (x *ResetWorkflowExecutionRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *ResetWorkflowExecutionRequest) SetResetRequest(v *v1.ResetWorkflowExecutionRequest) {
+	x.xxx_hidden_ResetRequest = v
+}
+
+func (x *ResetWorkflowExecutionRequest) HasResetRequest() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_ResetRequest != nil
+}
+
+func (x *ResetWorkflowExecutionRequest) ClearResetRequest() {
+	x.xxx_hidden_ResetRequest = nil
+}
+
+type ResetWorkflowExecutionRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId  string
+	ResetRequest *v1.ResetWorkflowExecutionRequest
+}
+
+func (b0 ResetWorkflowExecutionRequest_builder) Build() *ResetWorkflowExecutionRequest {
+	m0 := &ResetWorkflowExecutionRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_ResetRequest = b.ResetRequest
+	return m0
+}
+
 type ResetWorkflowExecutionResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	RunId         string                 `protobuf:"bytes,1,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state            protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_RunId string                 `protobuf:"bytes,1,opt,name=run_id,json=runId,proto3"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *ResetWorkflowExecutionResponse) Reset() {
@@ -3356,27 +5931,40 @@ func (x *ResetWorkflowExecutionResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ResetWorkflowExecutionResponse.ProtoReflect.Descriptor instead.
-func (*ResetWorkflowExecutionResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{43}
-}
-
 func (x *ResetWorkflowExecutionResponse) GetRunId() string {
 	if x != nil {
-		return x.RunId
+		return x.xxx_hidden_RunId
 	}
 	return ""
 }
 
+func (x *ResetWorkflowExecutionResponse) SetRunId(v string) {
+	x.xxx_hidden_RunId = v
+}
+
+type ResetWorkflowExecutionResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	RunId string
+}
+
+func (b0 ResetWorkflowExecutionResponse_builder) Build() *ResetWorkflowExecutionResponse {
+	m0 := &ResetWorkflowExecutionResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_RunId = b.RunId
+	return m0
+}
+
 type RequestCancelWorkflowExecutionRequest struct {
-	state                     protoimpl.MessageState                    `protogen:"open.v1"`
-	NamespaceId               string                                    `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	CancelRequest             *v1.RequestCancelWorkflowExecutionRequest `protobuf:"bytes,2,opt,name=cancel_request,json=cancelRequest,proto3" json:"cancel_request,omitempty"`
-	ExternalInitiatedEventId  int64                                     `protobuf:"varint,3,opt,name=external_initiated_event_id,json=externalInitiatedEventId,proto3" json:"external_initiated_event_id,omitempty"`
-	ExternalWorkflowExecution *v14.WorkflowExecution                    `protobuf:"bytes,4,opt,name=external_workflow_execution,json=externalWorkflowExecution,proto3" json:"external_workflow_execution,omitempty"`
-	ChildWorkflowOnly         bool                                      `protobuf:"varint,5,opt,name=child_workflow_only,json=childWorkflowOnly,proto3" json:"child_workflow_only,omitempty"`
-	unknownFields             protoimpl.UnknownFields
-	sizeCache                 protoimpl.SizeCache
+	state                                protoimpl.MessageState                    `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId               string                                    `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_CancelRequest             *v1.RequestCancelWorkflowExecutionRequest `protobuf:"bytes,2,opt,name=cancel_request,json=cancelRequest,proto3"`
+	xxx_hidden_ExternalInitiatedEventId  int64                                     `protobuf:"varint,3,opt,name=external_initiated_event_id,json=externalInitiatedEventId,proto3"`
+	xxx_hidden_ExternalWorkflowExecution *v14.WorkflowExecution                    `protobuf:"bytes,4,opt,name=external_workflow_execution,json=externalWorkflowExecution,proto3"`
+	xxx_hidden_ChildWorkflowOnly         bool                                      `protobuf:"varint,5,opt,name=child_workflow_only,json=childWorkflowOnly,proto3"`
+	unknownFields                        protoimpl.UnknownFields
+	sizeCache                            protoimpl.SizeCache
 }
 
 func (x *RequestCancelWorkflowExecutionRequest) Reset() {
@@ -3404,48 +5992,107 @@ func (x *RequestCancelWorkflowExecutionRequest) ProtoReflect() protoreflect.Mess
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RequestCancelWorkflowExecutionRequest.ProtoReflect.Descriptor instead.
-func (*RequestCancelWorkflowExecutionRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{44}
-}
-
 func (x *RequestCancelWorkflowExecutionRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *RequestCancelWorkflowExecutionRequest) GetCancelRequest() *v1.RequestCancelWorkflowExecutionRequest {
 	if x != nil {
-		return x.CancelRequest
+		return x.xxx_hidden_CancelRequest
 	}
 	return nil
 }
 
 func (x *RequestCancelWorkflowExecutionRequest) GetExternalInitiatedEventId() int64 {
 	if x != nil {
-		return x.ExternalInitiatedEventId
+		return x.xxx_hidden_ExternalInitiatedEventId
 	}
 	return 0
 }
 
 func (x *RequestCancelWorkflowExecutionRequest) GetExternalWorkflowExecution() *v14.WorkflowExecution {
 	if x != nil {
-		return x.ExternalWorkflowExecution
+		return x.xxx_hidden_ExternalWorkflowExecution
 	}
 	return nil
 }
 
 func (x *RequestCancelWorkflowExecutionRequest) GetChildWorkflowOnly() bool {
 	if x != nil {
-		return x.ChildWorkflowOnly
+		return x.xxx_hidden_ChildWorkflowOnly
 	}
 	return false
 }
 
+func (x *RequestCancelWorkflowExecutionRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *RequestCancelWorkflowExecutionRequest) SetCancelRequest(v *v1.RequestCancelWorkflowExecutionRequest) {
+	x.xxx_hidden_CancelRequest = v
+}
+
+func (x *RequestCancelWorkflowExecutionRequest) SetExternalInitiatedEventId(v int64) {
+	x.xxx_hidden_ExternalInitiatedEventId = v
+}
+
+func (x *RequestCancelWorkflowExecutionRequest) SetExternalWorkflowExecution(v *v14.WorkflowExecution) {
+	x.xxx_hidden_ExternalWorkflowExecution = v
+}
+
+func (x *RequestCancelWorkflowExecutionRequest) SetChildWorkflowOnly(v bool) {
+	x.xxx_hidden_ChildWorkflowOnly = v
+}
+
+func (x *RequestCancelWorkflowExecutionRequest) HasCancelRequest() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_CancelRequest != nil
+}
+
+func (x *RequestCancelWorkflowExecutionRequest) HasExternalWorkflowExecution() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_ExternalWorkflowExecution != nil
+}
+
+func (x *RequestCancelWorkflowExecutionRequest) ClearCancelRequest() {
+	x.xxx_hidden_CancelRequest = nil
+}
+
+func (x *RequestCancelWorkflowExecutionRequest) ClearExternalWorkflowExecution() {
+	x.xxx_hidden_ExternalWorkflowExecution = nil
+}
+
+type RequestCancelWorkflowExecutionRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId               string
+	CancelRequest             *v1.RequestCancelWorkflowExecutionRequest
+	ExternalInitiatedEventId  int64
+	ExternalWorkflowExecution *v14.WorkflowExecution
+	ChildWorkflowOnly         bool
+}
+
+func (b0 RequestCancelWorkflowExecutionRequest_builder) Build() *RequestCancelWorkflowExecutionRequest {
+	m0 := &RequestCancelWorkflowExecutionRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_CancelRequest = b.CancelRequest
+	x.xxx_hidden_ExternalInitiatedEventId = b.ExternalInitiatedEventId
+	x.xxx_hidden_ExternalWorkflowExecution = b.ExternalWorkflowExecution
+	x.xxx_hidden_ChildWorkflowOnly = b.ChildWorkflowOnly
+	return m0
+}
+
 type RequestCancelWorkflowExecutionResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3475,20 +6122,27 @@ func (x *RequestCancelWorkflowExecutionResponse) ProtoReflect() protoreflect.Mes
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RequestCancelWorkflowExecutionResponse.ProtoReflect.Descriptor instead.
-func (*RequestCancelWorkflowExecutionResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{45}
+type RequestCancelWorkflowExecutionResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+}
+
+func (b0 RequestCancelWorkflowExecutionResponse_builder) Build() *RequestCancelWorkflowExecutionResponse {
+	m0 := &RequestCancelWorkflowExecutionResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	return m0
 }
 
 type ScheduleWorkflowTaskRequest struct {
-	state               protoimpl.MessageState `protogen:"open.v1"`
-	NamespaceId         string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	WorkflowExecution   *v14.WorkflowExecution `protobuf:"bytes,2,opt,name=workflow_execution,json=workflowExecution,proto3" json:"workflow_execution,omitempty"`
-	IsFirstWorkflowTask bool                   `protobuf:"varint,3,opt,name=is_first_workflow_task,json=isFirstWorkflowTask,proto3" json:"is_first_workflow_task,omitempty"`
-	ChildClock          *v17.VectorClock       `protobuf:"bytes,4,opt,name=child_clock,json=childClock,proto3" json:"child_clock,omitempty"`
-	ParentClock         *v17.VectorClock       `protobuf:"bytes,5,opt,name=parent_clock,json=parentClock,proto3" json:"parent_clock,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	state                          protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId         string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_WorkflowExecution   *v14.WorkflowExecution `protobuf:"bytes,2,opt,name=workflow_execution,json=workflowExecution,proto3"`
+	xxx_hidden_IsFirstWorkflowTask bool                   `protobuf:"varint,3,opt,name=is_first_workflow_task,json=isFirstWorkflowTask,proto3"`
+	xxx_hidden_ChildClock          *v17.VectorClock       `protobuf:"bytes,4,opt,name=child_clock,json=childClock,proto3"`
+	xxx_hidden_ParentClock         *v17.VectorClock       `protobuf:"bytes,5,opt,name=parent_clock,json=parentClock,proto3"`
+	unknownFields                  protoimpl.UnknownFields
+	sizeCache                      protoimpl.SizeCache
 }
 
 func (x *ScheduleWorkflowTaskRequest) Reset() {
@@ -3516,48 +6170,118 @@ func (x *ScheduleWorkflowTaskRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ScheduleWorkflowTaskRequest.ProtoReflect.Descriptor instead.
-func (*ScheduleWorkflowTaskRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{46}
-}
-
 func (x *ScheduleWorkflowTaskRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *ScheduleWorkflowTaskRequest) GetWorkflowExecution() *v14.WorkflowExecution {
 	if x != nil {
-		return x.WorkflowExecution
+		return x.xxx_hidden_WorkflowExecution
 	}
 	return nil
 }
 
 func (x *ScheduleWorkflowTaskRequest) GetIsFirstWorkflowTask() bool {
 	if x != nil {
-		return x.IsFirstWorkflowTask
+		return x.xxx_hidden_IsFirstWorkflowTask
 	}
 	return false
 }
 
 func (x *ScheduleWorkflowTaskRequest) GetChildClock() *v17.VectorClock {
 	if x != nil {
-		return x.ChildClock
+		return x.xxx_hidden_ChildClock
 	}
 	return nil
 }
 
 func (x *ScheduleWorkflowTaskRequest) GetParentClock() *v17.VectorClock {
 	if x != nil {
-		return x.ParentClock
+		return x.xxx_hidden_ParentClock
 	}
 	return nil
 }
 
+func (x *ScheduleWorkflowTaskRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *ScheduleWorkflowTaskRequest) SetWorkflowExecution(v *v14.WorkflowExecution) {
+	x.xxx_hidden_WorkflowExecution = v
+}
+
+func (x *ScheduleWorkflowTaskRequest) SetIsFirstWorkflowTask(v bool) {
+	x.xxx_hidden_IsFirstWorkflowTask = v
+}
+
+func (x *ScheduleWorkflowTaskRequest) SetChildClock(v *v17.VectorClock) {
+	x.xxx_hidden_ChildClock = v
+}
+
+func (x *ScheduleWorkflowTaskRequest) SetParentClock(v *v17.VectorClock) {
+	x.xxx_hidden_ParentClock = v
+}
+
+func (x *ScheduleWorkflowTaskRequest) HasWorkflowExecution() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_WorkflowExecution != nil
+}
+
+func (x *ScheduleWorkflowTaskRequest) HasChildClock() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_ChildClock != nil
+}
+
+func (x *ScheduleWorkflowTaskRequest) HasParentClock() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_ParentClock != nil
+}
+
+func (x *ScheduleWorkflowTaskRequest) ClearWorkflowExecution() {
+	x.xxx_hidden_WorkflowExecution = nil
+}
+
+func (x *ScheduleWorkflowTaskRequest) ClearChildClock() {
+	x.xxx_hidden_ChildClock = nil
+}
+
+func (x *ScheduleWorkflowTaskRequest) ClearParentClock() {
+	x.xxx_hidden_ParentClock = nil
+}
+
+type ScheduleWorkflowTaskRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId         string
+	WorkflowExecution   *v14.WorkflowExecution
+	IsFirstWorkflowTask bool
+	ChildClock          *v17.VectorClock
+	ParentClock         *v17.VectorClock
+}
+
+func (b0 ScheduleWorkflowTaskRequest_builder) Build() *ScheduleWorkflowTaskRequest {
+	m0 := &ScheduleWorkflowTaskRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_WorkflowExecution = b.WorkflowExecution
+	x.xxx_hidden_IsFirstWorkflowTask = b.IsFirstWorkflowTask
+	x.xxx_hidden_ChildClock = b.ChildClock
+	x.xxx_hidden_ParentClock = b.ParentClock
+	return m0
+}
+
 type ScheduleWorkflowTaskResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3587,18 +6311,25 @@ func (x *ScheduleWorkflowTaskResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ScheduleWorkflowTaskResponse.ProtoReflect.Descriptor instead.
-func (*ScheduleWorkflowTaskResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{47}
+type ScheduleWorkflowTaskResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+}
+
+func (b0 ScheduleWorkflowTaskResponse_builder) Build() *ScheduleWorkflowTaskResponse {
+	m0 := &ScheduleWorkflowTaskResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	return m0
 }
 
 type VerifyFirstWorkflowTaskScheduledRequest struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	NamespaceId       string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	WorkflowExecution *v14.WorkflowExecution `protobuf:"bytes,2,opt,name=workflow_execution,json=workflowExecution,proto3" json:"workflow_execution,omitempty"`
-	Clock             *v17.VectorClock       `protobuf:"bytes,3,opt,name=clock,proto3" json:"clock,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state                        protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId       string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_WorkflowExecution *v14.WorkflowExecution `protobuf:"bytes,2,opt,name=workflow_execution,json=workflowExecution,proto3"`
+	xxx_hidden_Clock             *v17.VectorClock       `protobuf:"bytes,3,opt,name=clock,proto3"`
+	unknownFields                protoimpl.UnknownFields
+	sizeCache                    protoimpl.SizeCache
 }
 
 func (x *VerifyFirstWorkflowTaskScheduledRequest) Reset() {
@@ -3626,34 +6357,81 @@ func (x *VerifyFirstWorkflowTaskScheduledRequest) ProtoReflect() protoreflect.Me
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use VerifyFirstWorkflowTaskScheduledRequest.ProtoReflect.Descriptor instead.
-func (*VerifyFirstWorkflowTaskScheduledRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{48}
-}
-
 func (x *VerifyFirstWorkflowTaskScheduledRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *VerifyFirstWorkflowTaskScheduledRequest) GetWorkflowExecution() *v14.WorkflowExecution {
 	if x != nil {
-		return x.WorkflowExecution
+		return x.xxx_hidden_WorkflowExecution
 	}
 	return nil
 }
 
 func (x *VerifyFirstWorkflowTaskScheduledRequest) GetClock() *v17.VectorClock {
 	if x != nil {
-		return x.Clock
+		return x.xxx_hidden_Clock
 	}
 	return nil
 }
 
+func (x *VerifyFirstWorkflowTaskScheduledRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *VerifyFirstWorkflowTaskScheduledRequest) SetWorkflowExecution(v *v14.WorkflowExecution) {
+	x.xxx_hidden_WorkflowExecution = v
+}
+
+func (x *VerifyFirstWorkflowTaskScheduledRequest) SetClock(v *v17.VectorClock) {
+	x.xxx_hidden_Clock = v
+}
+
+func (x *VerifyFirstWorkflowTaskScheduledRequest) HasWorkflowExecution() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_WorkflowExecution != nil
+}
+
+func (x *VerifyFirstWorkflowTaskScheduledRequest) HasClock() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Clock != nil
+}
+
+func (x *VerifyFirstWorkflowTaskScheduledRequest) ClearWorkflowExecution() {
+	x.xxx_hidden_WorkflowExecution = nil
+}
+
+func (x *VerifyFirstWorkflowTaskScheduledRequest) ClearClock() {
+	x.xxx_hidden_Clock = nil
+}
+
+type VerifyFirstWorkflowTaskScheduledRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId       string
+	WorkflowExecution *v14.WorkflowExecution
+	Clock             *v17.VectorClock
+}
+
+func (b0 VerifyFirstWorkflowTaskScheduledRequest_builder) Build() *VerifyFirstWorkflowTaskScheduledRequest {
+	m0 := &VerifyFirstWorkflowTaskScheduledRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_WorkflowExecution = b.WorkflowExecution
+	x.xxx_hidden_Clock = b.Clock
+	return m0
+}
+
 type VerifyFirstWorkflowTaskScheduledResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3683,9 +6461,16 @@ func (x *VerifyFirstWorkflowTaskScheduledResponse) ProtoReflect() protoreflect.M
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use VerifyFirstWorkflowTaskScheduledResponse.ProtoReflect.Descriptor instead.
-func (*VerifyFirstWorkflowTaskScheduledResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{49}
+type VerifyFirstWorkflowTaskScheduledResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+}
+
+func (b0 VerifyFirstWorkflowTaskScheduledResponse_builder) Build() *VerifyFirstWorkflowTaskScheduledResponse {
+	m0 := &VerifyFirstWorkflowTaskScheduledResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	return m0
 }
 
 // *
@@ -3695,17 +6480,17 @@ func (*VerifyFirstWorkflowTaskScheduledResponse) Descriptor() ([]byte, []int) {
 // child as it could potentially be different than the ChildExecutionStartedEvent of parent in the situation when
 // child creates multiple runs through ContinueAsNew before finally completing.
 type RecordChildExecutionCompletedRequest struct {
-	state                    protoimpl.MessageState `protogen:"open.v1"`
-	NamespaceId              string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	ParentExecution          *v14.WorkflowExecution `protobuf:"bytes,2,opt,name=parent_execution,json=parentExecution,proto3" json:"parent_execution,omitempty"`
-	ParentInitiatedId        int64                  `protobuf:"varint,3,opt,name=parent_initiated_id,json=parentInitiatedId,proto3" json:"parent_initiated_id,omitempty"`
-	ChildExecution           *v14.WorkflowExecution `protobuf:"bytes,4,opt,name=child_execution,json=childExecution,proto3" json:"child_execution,omitempty"`
-	CompletionEvent          *v115.HistoryEvent     `protobuf:"bytes,5,opt,name=completion_event,json=completionEvent,proto3" json:"completion_event,omitempty"`
-	Clock                    *v17.VectorClock       `protobuf:"bytes,6,opt,name=clock,proto3" json:"clock,omitempty"`
-	ParentInitiatedVersion   int64                  `protobuf:"varint,7,opt,name=parent_initiated_version,json=parentInitiatedVersion,proto3" json:"parent_initiated_version,omitempty"`
-	ChildFirstExecutionRunId string                 `protobuf:"bytes,8,opt,name=child_first_execution_run_id,json=childFirstExecutionRunId,proto3" json:"child_first_execution_run_id,omitempty"`
-	unknownFields            protoimpl.UnknownFields
-	sizeCache                protoimpl.SizeCache
+	state                               protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId              string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_ParentExecution          *v14.WorkflowExecution `protobuf:"bytes,2,opt,name=parent_execution,json=parentExecution,proto3"`
+	xxx_hidden_ParentInitiatedId        int64                  `protobuf:"varint,3,opt,name=parent_initiated_id,json=parentInitiatedId,proto3"`
+	xxx_hidden_ChildExecution           *v14.WorkflowExecution `protobuf:"bytes,4,opt,name=child_execution,json=childExecution,proto3"`
+	xxx_hidden_CompletionEvent          *v115.HistoryEvent     `protobuf:"bytes,5,opt,name=completion_event,json=completionEvent,proto3"`
+	xxx_hidden_Clock                    *v17.VectorClock       `protobuf:"bytes,6,opt,name=clock,proto3"`
+	xxx_hidden_ParentInitiatedVersion   int64                  `protobuf:"varint,7,opt,name=parent_initiated_version,json=parentInitiatedVersion,proto3"`
+	xxx_hidden_ChildFirstExecutionRunId string                 `protobuf:"bytes,8,opt,name=child_first_execution_run_id,json=childFirstExecutionRunId,proto3"`
+	unknownFields                       protoimpl.UnknownFields
+	sizeCache                           protoimpl.SizeCache
 }
 
 func (x *RecordChildExecutionCompletedRequest) Reset() {
@@ -3733,69 +6518,168 @@ func (x *RecordChildExecutionCompletedRequest) ProtoReflect() protoreflect.Messa
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RecordChildExecutionCompletedRequest.ProtoReflect.Descriptor instead.
-func (*RecordChildExecutionCompletedRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{50}
-}
-
 func (x *RecordChildExecutionCompletedRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *RecordChildExecutionCompletedRequest) GetParentExecution() *v14.WorkflowExecution {
 	if x != nil {
-		return x.ParentExecution
+		return x.xxx_hidden_ParentExecution
 	}
 	return nil
 }
 
 func (x *RecordChildExecutionCompletedRequest) GetParentInitiatedId() int64 {
 	if x != nil {
-		return x.ParentInitiatedId
+		return x.xxx_hidden_ParentInitiatedId
 	}
 	return 0
 }
 
 func (x *RecordChildExecutionCompletedRequest) GetChildExecution() *v14.WorkflowExecution {
 	if x != nil {
-		return x.ChildExecution
+		return x.xxx_hidden_ChildExecution
 	}
 	return nil
 }
 
 func (x *RecordChildExecutionCompletedRequest) GetCompletionEvent() *v115.HistoryEvent {
 	if x != nil {
-		return x.CompletionEvent
+		return x.xxx_hidden_CompletionEvent
 	}
 	return nil
 }
 
 func (x *RecordChildExecutionCompletedRequest) GetClock() *v17.VectorClock {
 	if x != nil {
-		return x.Clock
+		return x.xxx_hidden_Clock
 	}
 	return nil
 }
 
 func (x *RecordChildExecutionCompletedRequest) GetParentInitiatedVersion() int64 {
 	if x != nil {
-		return x.ParentInitiatedVersion
+		return x.xxx_hidden_ParentInitiatedVersion
 	}
 	return 0
 }
 
 func (x *RecordChildExecutionCompletedRequest) GetChildFirstExecutionRunId() string {
 	if x != nil {
-		return x.ChildFirstExecutionRunId
+		return x.xxx_hidden_ChildFirstExecutionRunId
 	}
 	return ""
 }
 
+func (x *RecordChildExecutionCompletedRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *RecordChildExecutionCompletedRequest) SetParentExecution(v *v14.WorkflowExecution) {
+	x.xxx_hidden_ParentExecution = v
+}
+
+func (x *RecordChildExecutionCompletedRequest) SetParentInitiatedId(v int64) {
+	x.xxx_hidden_ParentInitiatedId = v
+}
+
+func (x *RecordChildExecutionCompletedRequest) SetChildExecution(v *v14.WorkflowExecution) {
+	x.xxx_hidden_ChildExecution = v
+}
+
+func (x *RecordChildExecutionCompletedRequest) SetCompletionEvent(v *v115.HistoryEvent) {
+	x.xxx_hidden_CompletionEvent = v
+}
+
+func (x *RecordChildExecutionCompletedRequest) SetClock(v *v17.VectorClock) {
+	x.xxx_hidden_Clock = v
+}
+
+func (x *RecordChildExecutionCompletedRequest) SetParentInitiatedVersion(v int64) {
+	x.xxx_hidden_ParentInitiatedVersion = v
+}
+
+func (x *RecordChildExecutionCompletedRequest) SetChildFirstExecutionRunId(v string) {
+	x.xxx_hidden_ChildFirstExecutionRunId = v
+}
+
+func (x *RecordChildExecutionCompletedRequest) HasParentExecution() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_ParentExecution != nil
+}
+
+func (x *RecordChildExecutionCompletedRequest) HasChildExecution() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_ChildExecution != nil
+}
+
+func (x *RecordChildExecutionCompletedRequest) HasCompletionEvent() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_CompletionEvent != nil
+}
+
+func (x *RecordChildExecutionCompletedRequest) HasClock() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Clock != nil
+}
+
+func (x *RecordChildExecutionCompletedRequest) ClearParentExecution() {
+	x.xxx_hidden_ParentExecution = nil
+}
+
+func (x *RecordChildExecutionCompletedRequest) ClearChildExecution() {
+	x.xxx_hidden_ChildExecution = nil
+}
+
+func (x *RecordChildExecutionCompletedRequest) ClearCompletionEvent() {
+	x.xxx_hidden_CompletionEvent = nil
+}
+
+func (x *RecordChildExecutionCompletedRequest) ClearClock() {
+	x.xxx_hidden_Clock = nil
+}
+
+type RecordChildExecutionCompletedRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId              string
+	ParentExecution          *v14.WorkflowExecution
+	ParentInitiatedId        int64
+	ChildExecution           *v14.WorkflowExecution
+	CompletionEvent          *v115.HistoryEvent
+	Clock                    *v17.VectorClock
+	ParentInitiatedVersion   int64
+	ChildFirstExecutionRunId string
+}
+
+func (b0 RecordChildExecutionCompletedRequest_builder) Build() *RecordChildExecutionCompletedRequest {
+	m0 := &RecordChildExecutionCompletedRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_ParentExecution = b.ParentExecution
+	x.xxx_hidden_ParentInitiatedId = b.ParentInitiatedId
+	x.xxx_hidden_ChildExecution = b.ChildExecution
+	x.xxx_hidden_CompletionEvent = b.CompletionEvent
+	x.xxx_hidden_Clock = b.Clock
+	x.xxx_hidden_ParentInitiatedVersion = b.ParentInitiatedVersion
+	x.xxx_hidden_ChildFirstExecutionRunId = b.ChildFirstExecutionRunId
+	return m0
+}
+
 type RecordChildExecutionCompletedResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3825,22 +6709,29 @@ func (x *RecordChildExecutionCompletedResponse) ProtoReflect() protoreflect.Mess
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RecordChildExecutionCompletedResponse.ProtoReflect.Descriptor instead.
-func (*RecordChildExecutionCompletedResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{51}
+type RecordChildExecutionCompletedResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+}
+
+func (b0 RecordChildExecutionCompletedResponse_builder) Build() *RecordChildExecutionCompletedResponse {
+	m0 := &RecordChildExecutionCompletedResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	return m0
 }
 
 type VerifyChildExecutionCompletionRecordedRequest struct {
-	state                  protoimpl.MessageState `protogen:"open.v1"`
-	NamespaceId            string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	ParentExecution        *v14.WorkflowExecution `protobuf:"bytes,2,opt,name=parent_execution,json=parentExecution,proto3" json:"parent_execution,omitempty"`
-	ChildExecution         *v14.WorkflowExecution `protobuf:"bytes,3,opt,name=child_execution,json=childExecution,proto3" json:"child_execution,omitempty"`
-	ParentInitiatedId      int64                  `protobuf:"varint,4,opt,name=parent_initiated_id,json=parentInitiatedId,proto3" json:"parent_initiated_id,omitempty"`
-	ParentInitiatedVersion int64                  `protobuf:"varint,5,opt,name=parent_initiated_version,json=parentInitiatedVersion,proto3" json:"parent_initiated_version,omitempty"`
-	Clock                  *v17.VectorClock       `protobuf:"bytes,6,opt,name=clock,proto3" json:"clock,omitempty"`
-	ResendParent           bool                   `protobuf:"varint,7,opt,name=resend_parent,json=resendParent,proto3" json:"resend_parent,omitempty"`
-	unknownFields          protoimpl.UnknownFields
-	sizeCache              protoimpl.SizeCache
+	state                             protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId            string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_ParentExecution        *v14.WorkflowExecution `protobuf:"bytes,2,opt,name=parent_execution,json=parentExecution,proto3"`
+	xxx_hidden_ChildExecution         *v14.WorkflowExecution `protobuf:"bytes,3,opt,name=child_execution,json=childExecution,proto3"`
+	xxx_hidden_ParentInitiatedId      int64                  `protobuf:"varint,4,opt,name=parent_initiated_id,json=parentInitiatedId,proto3"`
+	xxx_hidden_ParentInitiatedVersion int64                  `protobuf:"varint,5,opt,name=parent_initiated_version,json=parentInitiatedVersion,proto3"`
+	xxx_hidden_Clock                  *v17.VectorClock       `protobuf:"bytes,6,opt,name=clock,proto3"`
+	xxx_hidden_ResendParent           bool                   `protobuf:"varint,7,opt,name=resend_parent,json=resendParent,proto3"`
+	unknownFields                     protoimpl.UnknownFields
+	sizeCache                         protoimpl.SizeCache
 }
 
 func (x *VerifyChildExecutionCompletionRecordedRequest) Reset() {
@@ -3868,62 +6759,144 @@ func (x *VerifyChildExecutionCompletionRecordedRequest) ProtoReflect() protorefl
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use VerifyChildExecutionCompletionRecordedRequest.ProtoReflect.Descriptor instead.
-func (*VerifyChildExecutionCompletionRecordedRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{52}
-}
-
 func (x *VerifyChildExecutionCompletionRecordedRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *VerifyChildExecutionCompletionRecordedRequest) GetParentExecution() *v14.WorkflowExecution {
 	if x != nil {
-		return x.ParentExecution
+		return x.xxx_hidden_ParentExecution
 	}
 	return nil
 }
 
 func (x *VerifyChildExecutionCompletionRecordedRequest) GetChildExecution() *v14.WorkflowExecution {
 	if x != nil {
-		return x.ChildExecution
+		return x.xxx_hidden_ChildExecution
 	}
 	return nil
 }
 
 func (x *VerifyChildExecutionCompletionRecordedRequest) GetParentInitiatedId() int64 {
 	if x != nil {
-		return x.ParentInitiatedId
+		return x.xxx_hidden_ParentInitiatedId
 	}
 	return 0
 }
 
 func (x *VerifyChildExecutionCompletionRecordedRequest) GetParentInitiatedVersion() int64 {
 	if x != nil {
-		return x.ParentInitiatedVersion
+		return x.xxx_hidden_ParentInitiatedVersion
 	}
 	return 0
 }
 
 func (x *VerifyChildExecutionCompletionRecordedRequest) GetClock() *v17.VectorClock {
 	if x != nil {
-		return x.Clock
+		return x.xxx_hidden_Clock
 	}
 	return nil
 }
 
 func (x *VerifyChildExecutionCompletionRecordedRequest) GetResendParent() bool {
 	if x != nil {
-		return x.ResendParent
+		return x.xxx_hidden_ResendParent
 	}
 	return false
 }
 
+func (x *VerifyChildExecutionCompletionRecordedRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *VerifyChildExecutionCompletionRecordedRequest) SetParentExecution(v *v14.WorkflowExecution) {
+	x.xxx_hidden_ParentExecution = v
+}
+
+func (x *VerifyChildExecutionCompletionRecordedRequest) SetChildExecution(v *v14.WorkflowExecution) {
+	x.xxx_hidden_ChildExecution = v
+}
+
+func (x *VerifyChildExecutionCompletionRecordedRequest) SetParentInitiatedId(v int64) {
+	x.xxx_hidden_ParentInitiatedId = v
+}
+
+func (x *VerifyChildExecutionCompletionRecordedRequest) SetParentInitiatedVersion(v int64) {
+	x.xxx_hidden_ParentInitiatedVersion = v
+}
+
+func (x *VerifyChildExecutionCompletionRecordedRequest) SetClock(v *v17.VectorClock) {
+	x.xxx_hidden_Clock = v
+}
+
+func (x *VerifyChildExecutionCompletionRecordedRequest) SetResendParent(v bool) {
+	x.xxx_hidden_ResendParent = v
+}
+
+func (x *VerifyChildExecutionCompletionRecordedRequest) HasParentExecution() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_ParentExecution != nil
+}
+
+func (x *VerifyChildExecutionCompletionRecordedRequest) HasChildExecution() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_ChildExecution != nil
+}
+
+func (x *VerifyChildExecutionCompletionRecordedRequest) HasClock() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Clock != nil
+}
+
+func (x *VerifyChildExecutionCompletionRecordedRequest) ClearParentExecution() {
+	x.xxx_hidden_ParentExecution = nil
+}
+
+func (x *VerifyChildExecutionCompletionRecordedRequest) ClearChildExecution() {
+	x.xxx_hidden_ChildExecution = nil
+}
+
+func (x *VerifyChildExecutionCompletionRecordedRequest) ClearClock() {
+	x.xxx_hidden_Clock = nil
+}
+
+type VerifyChildExecutionCompletionRecordedRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId            string
+	ParentExecution        *v14.WorkflowExecution
+	ChildExecution         *v14.WorkflowExecution
+	ParentInitiatedId      int64
+	ParentInitiatedVersion int64
+	Clock                  *v17.VectorClock
+	ResendParent           bool
+}
+
+func (b0 VerifyChildExecutionCompletionRecordedRequest_builder) Build() *VerifyChildExecutionCompletionRecordedRequest {
+	m0 := &VerifyChildExecutionCompletionRecordedRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_ParentExecution = b.ParentExecution
+	x.xxx_hidden_ChildExecution = b.ChildExecution
+	x.xxx_hidden_ParentInitiatedId = b.ParentInitiatedId
+	x.xxx_hidden_ParentInitiatedVersion = b.ParentInitiatedVersion
+	x.xxx_hidden_Clock = b.Clock
+	x.xxx_hidden_ResendParent = b.ResendParent
+	return m0
+}
+
 type VerifyChildExecutionCompletionRecordedResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3953,17 +6926,24 @@ func (x *VerifyChildExecutionCompletionRecordedResponse) ProtoReflect() protoref
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use VerifyChildExecutionCompletionRecordedResponse.ProtoReflect.Descriptor instead.
-func (*VerifyChildExecutionCompletionRecordedResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{53}
+type VerifyChildExecutionCompletionRecordedResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+}
+
+func (b0 VerifyChildExecutionCompletionRecordedResponse_builder) Build() *VerifyChildExecutionCompletionRecordedResponse {
+	m0 := &VerifyChildExecutionCompletionRecordedResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	return m0
 }
 
 type DescribeWorkflowExecutionRequest struct {
-	state         protoimpl.MessageState               `protogen:"open.v1"`
-	NamespaceId   string                               `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	Request       *v1.DescribeWorkflowExecutionRequest `protobuf:"bytes,2,opt,name=request,proto3" json:"request,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                  protoimpl.MessageState               `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId string                               `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_Request     *v1.DescribeWorkflowExecutionRequest `protobuf:"bytes,2,opt,name=request,proto3"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *DescribeWorkflowExecutionRequest) Reset() {
@@ -3991,37 +6971,67 @@ func (x *DescribeWorkflowExecutionRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DescribeWorkflowExecutionRequest.ProtoReflect.Descriptor instead.
-func (*DescribeWorkflowExecutionRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{54}
-}
-
 func (x *DescribeWorkflowExecutionRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *DescribeWorkflowExecutionRequest) GetRequest() *v1.DescribeWorkflowExecutionRequest {
 	if x != nil {
-		return x.Request
+		return x.xxx_hidden_Request
 	}
 	return nil
 }
 
+func (x *DescribeWorkflowExecutionRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *DescribeWorkflowExecutionRequest) SetRequest(v *v1.DescribeWorkflowExecutionRequest) {
+	x.xxx_hidden_Request = v
+}
+
+func (x *DescribeWorkflowExecutionRequest) HasRequest() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Request != nil
+}
+
+func (x *DescribeWorkflowExecutionRequest) ClearRequest() {
+	x.xxx_hidden_Request = nil
+}
+
+type DescribeWorkflowExecutionRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId string
+	Request     *v1.DescribeWorkflowExecutionRequest
+}
+
+func (b0 DescribeWorkflowExecutionRequest_builder) Build() *DescribeWorkflowExecutionRequest {
+	m0 := &DescribeWorkflowExecutionRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_Request = b.Request
+	return m0
+}
+
 type DescribeWorkflowExecutionResponse struct {
-	state                  protoimpl.MessageState             `protogen:"open.v1"`
-	ExecutionConfig        *v15.WorkflowExecutionConfig       `protobuf:"bytes,1,opt,name=execution_config,json=executionConfig,proto3" json:"execution_config,omitempty"`
-	WorkflowExecutionInfo  *v15.WorkflowExecutionInfo         `protobuf:"bytes,2,opt,name=workflow_execution_info,json=workflowExecutionInfo,proto3" json:"workflow_execution_info,omitempty"`
-	PendingActivities      []*v15.PendingActivityInfo         `protobuf:"bytes,3,rep,name=pending_activities,json=pendingActivities,proto3" json:"pending_activities,omitempty"`
-	PendingChildren        []*v15.PendingChildExecutionInfo   `protobuf:"bytes,4,rep,name=pending_children,json=pendingChildren,proto3" json:"pending_children,omitempty"`
-	PendingWorkflowTask    *v15.PendingWorkflowTaskInfo       `protobuf:"bytes,5,opt,name=pending_workflow_task,json=pendingWorkflowTask,proto3" json:"pending_workflow_task,omitempty"`
-	Callbacks              []*v15.CallbackInfo                `protobuf:"bytes,6,rep,name=callbacks,proto3" json:"callbacks,omitempty"`
-	PendingNexusOperations []*v15.PendingNexusOperationInfo   `protobuf:"bytes,7,rep,name=pending_nexus_operations,json=pendingNexusOperations,proto3" json:"pending_nexus_operations,omitempty"`
-	WorkflowExtendedInfo   *v15.WorkflowExecutionExtendedInfo `protobuf:"bytes,8,opt,name=workflow_extended_info,json=workflowExtendedInfo,proto3" json:"workflow_extended_info,omitempty"`
-	unknownFields          protoimpl.UnknownFields
-	sizeCache              protoimpl.SizeCache
+	state                             protoimpl.MessageState             `protogen:"opaque.v1"`
+	xxx_hidden_ExecutionConfig        *v15.WorkflowExecutionConfig       `protobuf:"bytes,1,opt,name=execution_config,json=executionConfig,proto3"`
+	xxx_hidden_WorkflowExecutionInfo  *v15.WorkflowExecutionInfo         `protobuf:"bytes,2,opt,name=workflow_execution_info,json=workflowExecutionInfo,proto3"`
+	xxx_hidden_PendingActivities      *[]*v15.PendingActivityInfo        `protobuf:"bytes,3,rep,name=pending_activities,json=pendingActivities,proto3"`
+	xxx_hidden_PendingChildren        *[]*v15.PendingChildExecutionInfo  `protobuf:"bytes,4,rep,name=pending_children,json=pendingChildren,proto3"`
+	xxx_hidden_PendingWorkflowTask    *v15.PendingWorkflowTaskInfo       `protobuf:"bytes,5,opt,name=pending_workflow_task,json=pendingWorkflowTask,proto3"`
+	xxx_hidden_Callbacks              *[]*v15.CallbackInfo               `protobuf:"bytes,6,rep,name=callbacks,proto3"`
+	xxx_hidden_PendingNexusOperations *[]*v15.PendingNexusOperationInfo  `protobuf:"bytes,7,rep,name=pending_nexus_operations,json=pendingNexusOperations,proto3"`
+	xxx_hidden_WorkflowExtendedInfo   *v15.WorkflowExecutionExtendedInfo `protobuf:"bytes,8,opt,name=workflow_extended_info,json=workflowExtendedInfo,proto3"`
+	unknownFields                     protoimpl.UnknownFields
+	sizeCache                         protoimpl.SizeCache
 }
 
 func (x *DescribeWorkflowExecutionResponse) Reset() {
@@ -4049,79 +7059,185 @@ func (x *DescribeWorkflowExecutionResponse) ProtoReflect() protoreflect.Message 
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DescribeWorkflowExecutionResponse.ProtoReflect.Descriptor instead.
-func (*DescribeWorkflowExecutionResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{55}
-}
-
 func (x *DescribeWorkflowExecutionResponse) GetExecutionConfig() *v15.WorkflowExecutionConfig {
 	if x != nil {
-		return x.ExecutionConfig
+		return x.xxx_hidden_ExecutionConfig
 	}
 	return nil
 }
 
 func (x *DescribeWorkflowExecutionResponse) GetWorkflowExecutionInfo() *v15.WorkflowExecutionInfo {
 	if x != nil {
-		return x.WorkflowExecutionInfo
+		return x.xxx_hidden_WorkflowExecutionInfo
 	}
 	return nil
 }
 
 func (x *DescribeWorkflowExecutionResponse) GetPendingActivities() []*v15.PendingActivityInfo {
 	if x != nil {
-		return x.PendingActivities
+		if x.xxx_hidden_PendingActivities != nil {
+			return *x.xxx_hidden_PendingActivities
+		}
 	}
 	return nil
 }
 
 func (x *DescribeWorkflowExecutionResponse) GetPendingChildren() []*v15.PendingChildExecutionInfo {
 	if x != nil {
-		return x.PendingChildren
+		if x.xxx_hidden_PendingChildren != nil {
+			return *x.xxx_hidden_PendingChildren
+		}
 	}
 	return nil
 }
 
 func (x *DescribeWorkflowExecutionResponse) GetPendingWorkflowTask() *v15.PendingWorkflowTaskInfo {
 	if x != nil {
-		return x.PendingWorkflowTask
+		return x.xxx_hidden_PendingWorkflowTask
 	}
 	return nil
 }
 
 func (x *DescribeWorkflowExecutionResponse) GetCallbacks() []*v15.CallbackInfo {
 	if x != nil {
-		return x.Callbacks
+		if x.xxx_hidden_Callbacks != nil {
+			return *x.xxx_hidden_Callbacks
+		}
 	}
 	return nil
 }
 
 func (x *DescribeWorkflowExecutionResponse) GetPendingNexusOperations() []*v15.PendingNexusOperationInfo {
 	if x != nil {
-		return x.PendingNexusOperations
+		if x.xxx_hidden_PendingNexusOperations != nil {
+			return *x.xxx_hidden_PendingNexusOperations
+		}
 	}
 	return nil
 }
 
 func (x *DescribeWorkflowExecutionResponse) GetWorkflowExtendedInfo() *v15.WorkflowExecutionExtendedInfo {
 	if x != nil {
-		return x.WorkflowExtendedInfo
+		return x.xxx_hidden_WorkflowExtendedInfo
 	}
 	return nil
 }
 
+func (x *DescribeWorkflowExecutionResponse) SetExecutionConfig(v *v15.WorkflowExecutionConfig) {
+	x.xxx_hidden_ExecutionConfig = v
+}
+
+func (x *DescribeWorkflowExecutionResponse) SetWorkflowExecutionInfo(v *v15.WorkflowExecutionInfo) {
+	x.xxx_hidden_WorkflowExecutionInfo = v
+}
+
+func (x *DescribeWorkflowExecutionResponse) SetPendingActivities(v []*v15.PendingActivityInfo) {
+	x.xxx_hidden_PendingActivities = &v
+}
+
+func (x *DescribeWorkflowExecutionResponse) SetPendingChildren(v []*v15.PendingChildExecutionInfo) {
+	x.xxx_hidden_PendingChildren = &v
+}
+
+func (x *DescribeWorkflowExecutionResponse) SetPendingWorkflowTask(v *v15.PendingWorkflowTaskInfo) {
+	x.xxx_hidden_PendingWorkflowTask = v
+}
+
+func (x *DescribeWorkflowExecutionResponse) SetCallbacks(v []*v15.CallbackInfo) {
+	x.xxx_hidden_Callbacks = &v
+}
+
+func (x *DescribeWorkflowExecutionResponse) SetPendingNexusOperations(v []*v15.PendingNexusOperationInfo) {
+	x.xxx_hidden_PendingNexusOperations = &v
+}
+
+func (x *DescribeWorkflowExecutionResponse) SetWorkflowExtendedInfo(v *v15.WorkflowExecutionExtendedInfo) {
+	x.xxx_hidden_WorkflowExtendedInfo = v
+}
+
+func (x *DescribeWorkflowExecutionResponse) HasExecutionConfig() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_ExecutionConfig != nil
+}
+
+func (x *DescribeWorkflowExecutionResponse) HasWorkflowExecutionInfo() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_WorkflowExecutionInfo != nil
+}
+
+func (x *DescribeWorkflowExecutionResponse) HasPendingWorkflowTask() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_PendingWorkflowTask != nil
+}
+
+func (x *DescribeWorkflowExecutionResponse) HasWorkflowExtendedInfo() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_WorkflowExtendedInfo != nil
+}
+
+func (x *DescribeWorkflowExecutionResponse) ClearExecutionConfig() {
+	x.xxx_hidden_ExecutionConfig = nil
+}
+
+func (x *DescribeWorkflowExecutionResponse) ClearWorkflowExecutionInfo() {
+	x.xxx_hidden_WorkflowExecutionInfo = nil
+}
+
+func (x *DescribeWorkflowExecutionResponse) ClearPendingWorkflowTask() {
+	x.xxx_hidden_PendingWorkflowTask = nil
+}
+
+func (x *DescribeWorkflowExecutionResponse) ClearWorkflowExtendedInfo() {
+	x.xxx_hidden_WorkflowExtendedInfo = nil
+}
+
+type DescribeWorkflowExecutionResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	ExecutionConfig        *v15.WorkflowExecutionConfig
+	WorkflowExecutionInfo  *v15.WorkflowExecutionInfo
+	PendingActivities      []*v15.PendingActivityInfo
+	PendingChildren        []*v15.PendingChildExecutionInfo
+	PendingWorkflowTask    *v15.PendingWorkflowTaskInfo
+	Callbacks              []*v15.CallbackInfo
+	PendingNexusOperations []*v15.PendingNexusOperationInfo
+	WorkflowExtendedInfo   *v15.WorkflowExecutionExtendedInfo
+}
+
+func (b0 DescribeWorkflowExecutionResponse_builder) Build() *DescribeWorkflowExecutionResponse {
+	m0 := &DescribeWorkflowExecutionResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_ExecutionConfig = b.ExecutionConfig
+	x.xxx_hidden_WorkflowExecutionInfo = b.WorkflowExecutionInfo
+	x.xxx_hidden_PendingActivities = &b.PendingActivities
+	x.xxx_hidden_PendingChildren = &b.PendingChildren
+	x.xxx_hidden_PendingWorkflowTask = b.PendingWorkflowTask
+	x.xxx_hidden_Callbacks = &b.Callbacks
+	x.xxx_hidden_PendingNexusOperations = &b.PendingNexusOperations
+	x.xxx_hidden_WorkflowExtendedInfo = b.WorkflowExtendedInfo
+	return m0
+}
+
 type ReplicateEventsV2Request struct {
-	state               protoimpl.MessageState    `protogen:"open.v1"`
-	NamespaceId         string                    `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	WorkflowExecution   *v14.WorkflowExecution    `protobuf:"bytes,2,opt,name=workflow_execution,json=workflowExecution,proto3" json:"workflow_execution,omitempty"`
-	VersionHistoryItems []*v18.VersionHistoryItem `protobuf:"bytes,3,rep,name=version_history_items,json=versionHistoryItems,proto3" json:"version_history_items,omitempty"`
-	Events              *v14.DataBlob             `protobuf:"bytes,4,opt,name=events,proto3" json:"events,omitempty"`
-	// New run events does not need version history since there is no prior events.
-	NewRunEvents      *v14.DataBlob          `protobuf:"bytes,5,opt,name=new_run_events,json=newRunEvents,proto3" json:"new_run_events,omitempty"`
-	BaseExecutionInfo *v11.BaseExecutionInfo `protobuf:"bytes,6,opt,name=base_execution_info,json=baseExecutionInfo,proto3" json:"base_execution_info,omitempty"`
-	NewRunId          string                 `protobuf:"bytes,7,opt,name=new_run_id,json=newRunId,proto3" json:"new_run_id,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state                          protoimpl.MessageState     `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId         string                     `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_WorkflowExecution   *v14.WorkflowExecution     `protobuf:"bytes,2,opt,name=workflow_execution,json=workflowExecution,proto3"`
+	xxx_hidden_VersionHistoryItems *[]*v18.VersionHistoryItem `protobuf:"bytes,3,rep,name=version_history_items,json=versionHistoryItems,proto3"`
+	xxx_hidden_Events              *v14.DataBlob              `protobuf:"bytes,4,opt,name=events,proto3"`
+	xxx_hidden_NewRunEvents        *v14.DataBlob              `protobuf:"bytes,5,opt,name=new_run_events,json=newRunEvents,proto3"`
+	xxx_hidden_BaseExecutionInfo   *v11.BaseExecutionInfo     `protobuf:"bytes,6,opt,name=base_execution_info,json=baseExecutionInfo,proto3"`
+	xxx_hidden_NewRunId            string                     `protobuf:"bytes,7,opt,name=new_run_id,json=newRunId,proto3"`
+	unknownFields                  protoimpl.UnknownFields
+	sizeCache                      protoimpl.SizeCache
 }
 
 func (x *ReplicateEventsV2Request) Reset() {
@@ -4149,62 +7265,158 @@ func (x *ReplicateEventsV2Request) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ReplicateEventsV2Request.ProtoReflect.Descriptor instead.
-func (*ReplicateEventsV2Request) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{56}
-}
-
 func (x *ReplicateEventsV2Request) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *ReplicateEventsV2Request) GetWorkflowExecution() *v14.WorkflowExecution {
 	if x != nil {
-		return x.WorkflowExecution
+		return x.xxx_hidden_WorkflowExecution
 	}
 	return nil
 }
 
 func (x *ReplicateEventsV2Request) GetVersionHistoryItems() []*v18.VersionHistoryItem {
 	if x != nil {
-		return x.VersionHistoryItems
+		if x.xxx_hidden_VersionHistoryItems != nil {
+			return *x.xxx_hidden_VersionHistoryItems
+		}
 	}
 	return nil
 }
 
 func (x *ReplicateEventsV2Request) GetEvents() *v14.DataBlob {
 	if x != nil {
-		return x.Events
+		return x.xxx_hidden_Events
 	}
 	return nil
 }
 
 func (x *ReplicateEventsV2Request) GetNewRunEvents() *v14.DataBlob {
 	if x != nil {
-		return x.NewRunEvents
+		return x.xxx_hidden_NewRunEvents
 	}
 	return nil
 }
 
 func (x *ReplicateEventsV2Request) GetBaseExecutionInfo() *v11.BaseExecutionInfo {
 	if x != nil {
-		return x.BaseExecutionInfo
+		return x.xxx_hidden_BaseExecutionInfo
 	}
 	return nil
 }
 
 func (x *ReplicateEventsV2Request) GetNewRunId() string {
 	if x != nil {
-		return x.NewRunId
+		return x.xxx_hidden_NewRunId
 	}
 	return ""
 }
 
+func (x *ReplicateEventsV2Request) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *ReplicateEventsV2Request) SetWorkflowExecution(v *v14.WorkflowExecution) {
+	x.xxx_hidden_WorkflowExecution = v
+}
+
+func (x *ReplicateEventsV2Request) SetVersionHistoryItems(v []*v18.VersionHistoryItem) {
+	x.xxx_hidden_VersionHistoryItems = &v
+}
+
+func (x *ReplicateEventsV2Request) SetEvents(v *v14.DataBlob) {
+	x.xxx_hidden_Events = v
+}
+
+func (x *ReplicateEventsV2Request) SetNewRunEvents(v *v14.DataBlob) {
+	x.xxx_hidden_NewRunEvents = v
+}
+
+func (x *ReplicateEventsV2Request) SetBaseExecutionInfo(v *v11.BaseExecutionInfo) {
+	x.xxx_hidden_BaseExecutionInfo = v
+}
+
+func (x *ReplicateEventsV2Request) SetNewRunId(v string) {
+	x.xxx_hidden_NewRunId = v
+}
+
+func (x *ReplicateEventsV2Request) HasWorkflowExecution() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_WorkflowExecution != nil
+}
+
+func (x *ReplicateEventsV2Request) HasEvents() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Events != nil
+}
+
+func (x *ReplicateEventsV2Request) HasNewRunEvents() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_NewRunEvents != nil
+}
+
+func (x *ReplicateEventsV2Request) HasBaseExecutionInfo() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_BaseExecutionInfo != nil
+}
+
+func (x *ReplicateEventsV2Request) ClearWorkflowExecution() {
+	x.xxx_hidden_WorkflowExecution = nil
+}
+
+func (x *ReplicateEventsV2Request) ClearEvents() {
+	x.xxx_hidden_Events = nil
+}
+
+func (x *ReplicateEventsV2Request) ClearNewRunEvents() {
+	x.xxx_hidden_NewRunEvents = nil
+}
+
+func (x *ReplicateEventsV2Request) ClearBaseExecutionInfo() {
+	x.xxx_hidden_BaseExecutionInfo = nil
+}
+
+type ReplicateEventsV2Request_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId         string
+	WorkflowExecution   *v14.WorkflowExecution
+	VersionHistoryItems []*v18.VersionHistoryItem
+	Events              *v14.DataBlob
+	// New run events does not need version history since there is no prior events.
+	NewRunEvents      *v14.DataBlob
+	BaseExecutionInfo *v11.BaseExecutionInfo
+	NewRunId          string
+}
+
+func (b0 ReplicateEventsV2Request_builder) Build() *ReplicateEventsV2Request {
+	m0 := &ReplicateEventsV2Request{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_WorkflowExecution = b.WorkflowExecution
+	x.xxx_hidden_VersionHistoryItems = &b.VersionHistoryItems
+	x.xxx_hidden_Events = b.Events
+	x.xxx_hidden_NewRunEvents = b.NewRunEvents
+	x.xxx_hidden_BaseExecutionInfo = b.BaseExecutionInfo
+	x.xxx_hidden_NewRunId = b.NewRunId
+	return m0
+}
+
 type ReplicateEventsV2Response struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4234,20 +7446,27 @@ func (x *ReplicateEventsV2Response) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ReplicateEventsV2Response.ProtoReflect.Descriptor instead.
-func (*ReplicateEventsV2Response) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{57}
+type ReplicateEventsV2Response_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+}
+
+func (b0 ReplicateEventsV2Response_builder) Build() *ReplicateEventsV2Response {
+	m0 := &ReplicateEventsV2Response{}
+	b, x := &b0, m0
+	_, _ = b, x
+	return m0
 }
 
 type ReplicateWorkflowStateRequest struct {
-	state                    protoimpl.MessageState    `protogen:"open.v1"`
-	WorkflowState            *v19.WorkflowMutableState `protobuf:"bytes,1,opt,name=workflow_state,json=workflowState,proto3" json:"workflow_state,omitempty"`
-	RemoteCluster            string                    `protobuf:"bytes,2,opt,name=remote_cluster,json=remoteCluster,proto3" json:"remote_cluster,omitempty"`
-	NamespaceId              string                    `protobuf:"bytes,3,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	IsForceReplication       bool                      `protobuf:"varint,4,opt,name=is_force_replication,json=isForceReplication,proto3" json:"is_force_replication,omitempty"`
-	IsCloseTransferTaskAcked bool                      `protobuf:"varint,5,opt,name=is_close_transfer_task_acked,json=isCloseTransferTaskAcked,proto3" json:"is_close_transfer_task_acked,omitempty"`
-	unknownFields            protoimpl.UnknownFields
-	sizeCache                protoimpl.SizeCache
+	state                               protoimpl.MessageState    `protogen:"opaque.v1"`
+	xxx_hidden_WorkflowState            *v19.WorkflowMutableState `protobuf:"bytes,1,opt,name=workflow_state,json=workflowState,proto3"`
+	xxx_hidden_RemoteCluster            string                    `protobuf:"bytes,2,opt,name=remote_cluster,json=remoteCluster,proto3"`
+	xxx_hidden_NamespaceId              string                    `protobuf:"bytes,3,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_IsForceReplication       bool                      `protobuf:"varint,4,opt,name=is_force_replication,json=isForceReplication,proto3"`
+	xxx_hidden_IsCloseTransferTaskAcked bool                      `protobuf:"varint,5,opt,name=is_close_transfer_task_acked,json=isCloseTransferTaskAcked,proto3"`
+	unknownFields                       protoimpl.UnknownFields
+	sizeCache                           protoimpl.SizeCache
 }
 
 func (x *ReplicateWorkflowStateRequest) Reset() {
@@ -4275,48 +7494,96 @@ func (x *ReplicateWorkflowStateRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ReplicateWorkflowStateRequest.ProtoReflect.Descriptor instead.
-func (*ReplicateWorkflowStateRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{58}
-}
-
 func (x *ReplicateWorkflowStateRequest) GetWorkflowState() *v19.WorkflowMutableState {
 	if x != nil {
-		return x.WorkflowState
+		return x.xxx_hidden_WorkflowState
 	}
 	return nil
 }
 
 func (x *ReplicateWorkflowStateRequest) GetRemoteCluster() string {
 	if x != nil {
-		return x.RemoteCluster
+		return x.xxx_hidden_RemoteCluster
 	}
 	return ""
 }
 
 func (x *ReplicateWorkflowStateRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *ReplicateWorkflowStateRequest) GetIsForceReplication() bool {
 	if x != nil {
-		return x.IsForceReplication
+		return x.xxx_hidden_IsForceReplication
 	}
 	return false
 }
 
 func (x *ReplicateWorkflowStateRequest) GetIsCloseTransferTaskAcked() bool {
 	if x != nil {
-		return x.IsCloseTransferTaskAcked
+		return x.xxx_hidden_IsCloseTransferTaskAcked
 	}
 	return false
 }
 
+func (x *ReplicateWorkflowStateRequest) SetWorkflowState(v *v19.WorkflowMutableState) {
+	x.xxx_hidden_WorkflowState = v
+}
+
+func (x *ReplicateWorkflowStateRequest) SetRemoteCluster(v string) {
+	x.xxx_hidden_RemoteCluster = v
+}
+
+func (x *ReplicateWorkflowStateRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *ReplicateWorkflowStateRequest) SetIsForceReplication(v bool) {
+	x.xxx_hidden_IsForceReplication = v
+}
+
+func (x *ReplicateWorkflowStateRequest) SetIsCloseTransferTaskAcked(v bool) {
+	x.xxx_hidden_IsCloseTransferTaskAcked = v
+}
+
+func (x *ReplicateWorkflowStateRequest) HasWorkflowState() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_WorkflowState != nil
+}
+
+func (x *ReplicateWorkflowStateRequest) ClearWorkflowState() {
+	x.xxx_hidden_WorkflowState = nil
+}
+
+type ReplicateWorkflowStateRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	WorkflowState            *v19.WorkflowMutableState
+	RemoteCluster            string
+	NamespaceId              string
+	IsForceReplication       bool
+	IsCloseTransferTaskAcked bool
+}
+
+func (b0 ReplicateWorkflowStateRequest_builder) Build() *ReplicateWorkflowStateRequest {
+	m0 := &ReplicateWorkflowStateRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_WorkflowState = b.WorkflowState
+	x.xxx_hidden_RemoteCluster = b.RemoteCluster
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_IsForceReplication = b.IsForceReplication
+	x.xxx_hidden_IsCloseTransferTaskAcked = b.IsCloseTransferTaskAcked
+	return m0
+}
+
 type ReplicateWorkflowStateResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4346,18 +7613,25 @@ func (x *ReplicateWorkflowStateResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ReplicateWorkflowStateResponse.ProtoReflect.Descriptor instead.
-func (*ReplicateWorkflowStateResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{59}
+type ReplicateWorkflowStateResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+}
+
+func (b0 ReplicateWorkflowStateResponse_builder) Build() *ReplicateWorkflowStateResponse {
+	m0 := &ReplicateWorkflowStateResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	return m0
 }
 
 type SyncShardStatusRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	SourceCluster string                 `protobuf:"bytes,1,opt,name=source_cluster,json=sourceCluster,proto3" json:"source_cluster,omitempty"`
-	ShardId       int32                  `protobuf:"varint,2,opt,name=shard_id,json=shardId,proto3" json:"shard_id,omitempty"`
-	StatusTime    *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=status_time,json=statusTime,proto3" json:"status_time,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                    protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_SourceCluster string                 `protobuf:"bytes,1,opt,name=source_cluster,json=sourceCluster,proto3"`
+	xxx_hidden_ShardId       int32                  `protobuf:"varint,2,opt,name=shard_id,json=shardId,proto3"`
+	xxx_hidden_StatusTime    *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=status_time,json=statusTime,proto3"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *SyncShardStatusRequest) Reset() {
@@ -4385,34 +7659,70 @@ func (x *SyncShardStatusRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SyncShardStatusRequest.ProtoReflect.Descriptor instead.
-func (*SyncShardStatusRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{60}
-}
-
 func (x *SyncShardStatusRequest) GetSourceCluster() string {
 	if x != nil {
-		return x.SourceCluster
+		return x.xxx_hidden_SourceCluster
 	}
 	return ""
 }
 
 func (x *SyncShardStatusRequest) GetShardId() int32 {
 	if x != nil {
-		return x.ShardId
+		return x.xxx_hidden_ShardId
 	}
 	return 0
 }
 
 func (x *SyncShardStatusRequest) GetStatusTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.StatusTime
+		return x.xxx_hidden_StatusTime
 	}
 	return nil
 }
 
+func (x *SyncShardStatusRequest) SetSourceCluster(v string) {
+	x.xxx_hidden_SourceCluster = v
+}
+
+func (x *SyncShardStatusRequest) SetShardId(v int32) {
+	x.xxx_hidden_ShardId = v
+}
+
+func (x *SyncShardStatusRequest) SetStatusTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_StatusTime = v
+}
+
+func (x *SyncShardStatusRequest) HasStatusTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_StatusTime != nil
+}
+
+func (x *SyncShardStatusRequest) ClearStatusTime() {
+	x.xxx_hidden_StatusTime = nil
+}
+
+type SyncShardStatusRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	SourceCluster string
+	ShardId       int32
+	StatusTime    *timestamppb.Timestamp
+}
+
+func (b0 SyncShardStatusRequest_builder) Build() *SyncShardStatusRequest {
+	m0 := &SyncShardStatusRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_SourceCluster = b.SourceCluster
+	x.xxx_hidden_ShardId = b.ShardId
+	x.xxx_hidden_StatusTime = b.StatusTime
+	return m0
+}
+
 type SyncShardStatusResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4442,48 +7752,48 @@ func (x *SyncShardStatusResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SyncShardStatusResponse.ProtoReflect.Descriptor instead.
-func (*SyncShardStatusResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{61}
+type SyncShardStatusResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+}
+
+func (b0 SyncShardStatusResponse_builder) Build() *SyncShardStatusResponse {
+	m0 := &SyncShardStatusResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	return m0
 }
 
 type SyncActivityRequest struct {
-	state              protoimpl.MessageState `protogen:"open.v1"`
-	NamespaceId        string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	WorkflowId         string                 `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
-	RunId              string                 `protobuf:"bytes,3,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	Version            int64                  `protobuf:"varint,4,opt,name=version,proto3" json:"version,omitempty"`
-	ScheduledEventId   int64                  `protobuf:"varint,5,opt,name=scheduled_event_id,json=scheduledEventId,proto3" json:"scheduled_event_id,omitempty"`
-	ScheduledTime      *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=scheduled_time,json=scheduledTime,proto3" json:"scheduled_time,omitempty"`
-	StartedEventId     int64                  `protobuf:"varint,7,opt,name=started_event_id,json=startedEventId,proto3" json:"started_event_id,omitempty"`
-	StartedTime        *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=started_time,json=startedTime,proto3" json:"started_time,omitempty"`
-	LastHeartbeatTime  *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=last_heartbeat_time,json=lastHeartbeatTime,proto3" json:"last_heartbeat_time,omitempty"`
-	Details            *v14.Payloads          `protobuf:"bytes,10,opt,name=details,proto3" json:"details,omitempty"`
-	Attempt            int32                  `protobuf:"varint,11,opt,name=attempt,proto3" json:"attempt,omitempty"`
-	LastFailure        *v13.Failure           `protobuf:"bytes,12,opt,name=last_failure,json=lastFailure,proto3" json:"last_failure,omitempty"`
-	LastWorkerIdentity string                 `protobuf:"bytes,13,opt,name=last_worker_identity,json=lastWorkerIdentity,proto3" json:"last_worker_identity,omitempty"`
-	VersionHistory     *v18.VersionHistory    `protobuf:"bytes,14,opt,name=version_history,json=versionHistory,proto3" json:"version_history,omitempty"`
-	BaseExecutionInfo  *v11.BaseExecutionInfo `protobuf:"bytes,15,opt,name=base_execution_info,json=baseExecutionInfo,proto3" json:"base_execution_info,omitempty"`
-	// build ID of the worker who received this activity last time
-	LastStartedBuildId string `protobuf:"bytes,16,opt,name=last_started_build_id,json=lastStartedBuildId,proto3" json:"last_started_build_id,omitempty"`
-	// workflows redirect_counter value when this activity started last time
-	LastStartedRedirectCounter int64 `protobuf:"varint,17,opt,name=last_started_redirect_counter,json=lastStartedRedirectCounter,proto3" json:"last_started_redirect_counter,omitempty"`
-	// The first time the activity was scheduled.
-	FirstScheduledTime *timestamppb.Timestamp `protobuf:"bytes,18,opt,name=first_scheduled_time,json=firstScheduledTime,proto3" json:"first_scheduled_time,omitempty"`
-	// The last time an activity attempt completion was recorded by the server.
-	LastAttemptCompleteTime *timestamppb.Timestamp `protobuf:"bytes,19,opt,name=last_attempt_complete_time,json=lastAttemptCompleteTime,proto3" json:"last_attempt_complete_time,omitempty"`
-	// Stamp represents the internal “version” of the activity options and can/will be changed with Activity API.
-	Stamp int32 `protobuf:"varint,20,opt,name=stamp,proto3" json:"stamp,omitempty"`
-	// Indicates if the activity is paused.
-	Paused bool `protobuf:"varint,21,opt,name=paused,proto3" json:"paused,omitempty"`
-	// Retry policy for the activity.
-	RetryInitialInterval    *durationpb.Duration `protobuf:"bytes,22,opt,name=retry_initial_interval,json=retryInitialInterval,proto3" json:"retry_initial_interval,omitempty"`
-	RetryMaximumInterval    *durationpb.Duration `protobuf:"bytes,23,opt,name=retry_maximum_interval,json=retryMaximumInterval,proto3" json:"retry_maximum_interval,omitempty"`
-	RetryMaximumAttempts    int32                `protobuf:"varint,24,opt,name=retry_maximum_attempts,json=retryMaximumAttempts,proto3" json:"retry_maximum_attempts,omitempty"`
-	RetryBackoffCoefficient float64              `protobuf:"fixed64,25,opt,name=retry_backoff_coefficient,json=retryBackoffCoefficient,proto3" json:"retry_backoff_coefficient,omitempty"`
-	StartVersion            int64                `protobuf:"varint,26,opt,name=start_version,json=startVersion,proto3" json:"start_version,omitempty"`
-	unknownFields           protoimpl.UnknownFields
-	sizeCache               protoimpl.SizeCache
+	state                                 protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId                string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_WorkflowId                 string                 `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3"`
+	xxx_hidden_RunId                      string                 `protobuf:"bytes,3,opt,name=run_id,json=runId,proto3"`
+	xxx_hidden_Version                    int64                  `protobuf:"varint,4,opt,name=version,proto3"`
+	xxx_hidden_ScheduledEventId           int64                  `protobuf:"varint,5,opt,name=scheduled_event_id,json=scheduledEventId,proto3"`
+	xxx_hidden_ScheduledTime              *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=scheduled_time,json=scheduledTime,proto3"`
+	xxx_hidden_StartedEventId             int64                  `protobuf:"varint,7,opt,name=started_event_id,json=startedEventId,proto3"`
+	xxx_hidden_StartedTime                *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=started_time,json=startedTime,proto3"`
+	xxx_hidden_LastHeartbeatTime          *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=last_heartbeat_time,json=lastHeartbeatTime,proto3"`
+	xxx_hidden_Details                    *v14.Payloads          `protobuf:"bytes,10,opt,name=details,proto3"`
+	xxx_hidden_Attempt                    int32                  `protobuf:"varint,11,opt,name=attempt,proto3"`
+	xxx_hidden_LastFailure                *v13.Failure           `protobuf:"bytes,12,opt,name=last_failure,json=lastFailure,proto3"`
+	xxx_hidden_LastWorkerIdentity         string                 `protobuf:"bytes,13,opt,name=last_worker_identity,json=lastWorkerIdentity,proto3"`
+	xxx_hidden_VersionHistory             *v18.VersionHistory    `protobuf:"bytes,14,opt,name=version_history,json=versionHistory,proto3"`
+	xxx_hidden_BaseExecutionInfo          *v11.BaseExecutionInfo `protobuf:"bytes,15,opt,name=base_execution_info,json=baseExecutionInfo,proto3"`
+	xxx_hidden_LastStartedBuildId         string                 `protobuf:"bytes,16,opt,name=last_started_build_id,json=lastStartedBuildId,proto3"`
+	xxx_hidden_LastStartedRedirectCounter int64                  `protobuf:"varint,17,opt,name=last_started_redirect_counter,json=lastStartedRedirectCounter,proto3"`
+	xxx_hidden_FirstScheduledTime         *timestamppb.Timestamp `protobuf:"bytes,18,opt,name=first_scheduled_time,json=firstScheduledTime,proto3"`
+	xxx_hidden_LastAttemptCompleteTime    *timestamppb.Timestamp `protobuf:"bytes,19,opt,name=last_attempt_complete_time,json=lastAttemptCompleteTime,proto3"`
+	xxx_hidden_Stamp                      int32                  `protobuf:"varint,20,opt,name=stamp,proto3"`
+	xxx_hidden_Paused                     bool                   `protobuf:"varint,21,opt,name=paused,proto3"`
+	xxx_hidden_RetryInitialInterval       *durationpb.Duration   `protobuf:"bytes,22,opt,name=retry_initial_interval,json=retryInitialInterval,proto3"`
+	xxx_hidden_RetryMaximumInterval       *durationpb.Duration   `protobuf:"bytes,23,opt,name=retry_maximum_interval,json=retryMaximumInterval,proto3"`
+	xxx_hidden_RetryMaximumAttempts       int32                  `protobuf:"varint,24,opt,name=retry_maximum_attempts,json=retryMaximumAttempts,proto3"`
+	xxx_hidden_RetryBackoffCoefficient    float64                `protobuf:"fixed64,25,opt,name=retry_backoff_coefficient,json=retryBackoffCoefficient,proto3"`
+	xxx_hidden_StartVersion               int64                  `protobuf:"varint,26,opt,name=start_version,json=startVersion,proto3"`
+	unknownFields                         protoimpl.UnknownFields
+	sizeCache                             protoimpl.SizeCache
 }
 
 func (x *SyncActivityRequest) Reset() {
@@ -4511,201 +7821,492 @@ func (x *SyncActivityRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SyncActivityRequest.ProtoReflect.Descriptor instead.
-func (*SyncActivityRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{62}
-}
-
 func (x *SyncActivityRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *SyncActivityRequest) GetWorkflowId() string {
 	if x != nil {
-		return x.WorkflowId
+		return x.xxx_hidden_WorkflowId
 	}
 	return ""
 }
 
 func (x *SyncActivityRequest) GetRunId() string {
 	if x != nil {
-		return x.RunId
+		return x.xxx_hidden_RunId
 	}
 	return ""
 }
 
 func (x *SyncActivityRequest) GetVersion() int64 {
 	if x != nil {
-		return x.Version
+		return x.xxx_hidden_Version
 	}
 	return 0
 }
 
 func (x *SyncActivityRequest) GetScheduledEventId() int64 {
 	if x != nil {
-		return x.ScheduledEventId
+		return x.xxx_hidden_ScheduledEventId
 	}
 	return 0
 }
 
 func (x *SyncActivityRequest) GetScheduledTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.ScheduledTime
+		return x.xxx_hidden_ScheduledTime
 	}
 	return nil
 }
 
 func (x *SyncActivityRequest) GetStartedEventId() int64 {
 	if x != nil {
-		return x.StartedEventId
+		return x.xxx_hidden_StartedEventId
 	}
 	return 0
 }
 
 func (x *SyncActivityRequest) GetStartedTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.StartedTime
+		return x.xxx_hidden_StartedTime
 	}
 	return nil
 }
 
 func (x *SyncActivityRequest) GetLastHeartbeatTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.LastHeartbeatTime
+		return x.xxx_hidden_LastHeartbeatTime
 	}
 	return nil
 }
 
 func (x *SyncActivityRequest) GetDetails() *v14.Payloads {
 	if x != nil {
-		return x.Details
+		return x.xxx_hidden_Details
 	}
 	return nil
 }
 
 func (x *SyncActivityRequest) GetAttempt() int32 {
 	if x != nil {
-		return x.Attempt
+		return x.xxx_hidden_Attempt
 	}
 	return 0
 }
 
 func (x *SyncActivityRequest) GetLastFailure() *v13.Failure {
 	if x != nil {
-		return x.LastFailure
+		return x.xxx_hidden_LastFailure
 	}
 	return nil
 }
 
 func (x *SyncActivityRequest) GetLastWorkerIdentity() string {
 	if x != nil {
-		return x.LastWorkerIdentity
+		return x.xxx_hidden_LastWorkerIdentity
 	}
 	return ""
 }
 
 func (x *SyncActivityRequest) GetVersionHistory() *v18.VersionHistory {
 	if x != nil {
-		return x.VersionHistory
+		return x.xxx_hidden_VersionHistory
 	}
 	return nil
 }
 
 func (x *SyncActivityRequest) GetBaseExecutionInfo() *v11.BaseExecutionInfo {
 	if x != nil {
-		return x.BaseExecutionInfo
+		return x.xxx_hidden_BaseExecutionInfo
 	}
 	return nil
 }
 
 func (x *SyncActivityRequest) GetLastStartedBuildId() string {
 	if x != nil {
-		return x.LastStartedBuildId
+		return x.xxx_hidden_LastStartedBuildId
 	}
 	return ""
 }
 
 func (x *SyncActivityRequest) GetLastStartedRedirectCounter() int64 {
 	if x != nil {
-		return x.LastStartedRedirectCounter
+		return x.xxx_hidden_LastStartedRedirectCounter
 	}
 	return 0
 }
 
 func (x *SyncActivityRequest) GetFirstScheduledTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.FirstScheduledTime
+		return x.xxx_hidden_FirstScheduledTime
 	}
 	return nil
 }
 
 func (x *SyncActivityRequest) GetLastAttemptCompleteTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.LastAttemptCompleteTime
+		return x.xxx_hidden_LastAttemptCompleteTime
 	}
 	return nil
 }
 
 func (x *SyncActivityRequest) GetStamp() int32 {
 	if x != nil {
-		return x.Stamp
+		return x.xxx_hidden_Stamp
 	}
 	return 0
 }
 
 func (x *SyncActivityRequest) GetPaused() bool {
 	if x != nil {
-		return x.Paused
+		return x.xxx_hidden_Paused
 	}
 	return false
 }
 
 func (x *SyncActivityRequest) GetRetryInitialInterval() *durationpb.Duration {
 	if x != nil {
-		return x.RetryInitialInterval
+		return x.xxx_hidden_RetryInitialInterval
 	}
 	return nil
 }
 
 func (x *SyncActivityRequest) GetRetryMaximumInterval() *durationpb.Duration {
 	if x != nil {
-		return x.RetryMaximumInterval
+		return x.xxx_hidden_RetryMaximumInterval
 	}
 	return nil
 }
 
 func (x *SyncActivityRequest) GetRetryMaximumAttempts() int32 {
 	if x != nil {
-		return x.RetryMaximumAttempts
+		return x.xxx_hidden_RetryMaximumAttempts
 	}
 	return 0
 }
 
 func (x *SyncActivityRequest) GetRetryBackoffCoefficient() float64 {
 	if x != nil {
-		return x.RetryBackoffCoefficient
+		return x.xxx_hidden_RetryBackoffCoefficient
 	}
 	return 0
 }
 
 func (x *SyncActivityRequest) GetStartVersion() int64 {
 	if x != nil {
-		return x.StartVersion
+		return x.xxx_hidden_StartVersion
 	}
 	return 0
 }
 
+func (x *SyncActivityRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *SyncActivityRequest) SetWorkflowId(v string) {
+	x.xxx_hidden_WorkflowId = v
+}
+
+func (x *SyncActivityRequest) SetRunId(v string) {
+	x.xxx_hidden_RunId = v
+}
+
+func (x *SyncActivityRequest) SetVersion(v int64) {
+	x.xxx_hidden_Version = v
+}
+
+func (x *SyncActivityRequest) SetScheduledEventId(v int64) {
+	x.xxx_hidden_ScheduledEventId = v
+}
+
+func (x *SyncActivityRequest) SetScheduledTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_ScheduledTime = v
+}
+
+func (x *SyncActivityRequest) SetStartedEventId(v int64) {
+	x.xxx_hidden_StartedEventId = v
+}
+
+func (x *SyncActivityRequest) SetStartedTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_StartedTime = v
+}
+
+func (x *SyncActivityRequest) SetLastHeartbeatTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_LastHeartbeatTime = v
+}
+
+func (x *SyncActivityRequest) SetDetails(v *v14.Payloads) {
+	x.xxx_hidden_Details = v
+}
+
+func (x *SyncActivityRequest) SetAttempt(v int32) {
+	x.xxx_hidden_Attempt = v
+}
+
+func (x *SyncActivityRequest) SetLastFailure(v *v13.Failure) {
+	x.xxx_hidden_LastFailure = v
+}
+
+func (x *SyncActivityRequest) SetLastWorkerIdentity(v string) {
+	x.xxx_hidden_LastWorkerIdentity = v
+}
+
+func (x *SyncActivityRequest) SetVersionHistory(v *v18.VersionHistory) {
+	x.xxx_hidden_VersionHistory = v
+}
+
+func (x *SyncActivityRequest) SetBaseExecutionInfo(v *v11.BaseExecutionInfo) {
+	x.xxx_hidden_BaseExecutionInfo = v
+}
+
+func (x *SyncActivityRequest) SetLastStartedBuildId(v string) {
+	x.xxx_hidden_LastStartedBuildId = v
+}
+
+func (x *SyncActivityRequest) SetLastStartedRedirectCounter(v int64) {
+	x.xxx_hidden_LastStartedRedirectCounter = v
+}
+
+func (x *SyncActivityRequest) SetFirstScheduledTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_FirstScheduledTime = v
+}
+
+func (x *SyncActivityRequest) SetLastAttemptCompleteTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_LastAttemptCompleteTime = v
+}
+
+func (x *SyncActivityRequest) SetStamp(v int32) {
+	x.xxx_hidden_Stamp = v
+}
+
+func (x *SyncActivityRequest) SetPaused(v bool) {
+	x.xxx_hidden_Paused = v
+}
+
+func (x *SyncActivityRequest) SetRetryInitialInterval(v *durationpb.Duration) {
+	x.xxx_hidden_RetryInitialInterval = v
+}
+
+func (x *SyncActivityRequest) SetRetryMaximumInterval(v *durationpb.Duration) {
+	x.xxx_hidden_RetryMaximumInterval = v
+}
+
+func (x *SyncActivityRequest) SetRetryMaximumAttempts(v int32) {
+	x.xxx_hidden_RetryMaximumAttempts = v
+}
+
+func (x *SyncActivityRequest) SetRetryBackoffCoefficient(v float64) {
+	x.xxx_hidden_RetryBackoffCoefficient = v
+}
+
+func (x *SyncActivityRequest) SetStartVersion(v int64) {
+	x.xxx_hidden_StartVersion = v
+}
+
+func (x *SyncActivityRequest) HasScheduledTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_ScheduledTime != nil
+}
+
+func (x *SyncActivityRequest) HasStartedTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_StartedTime != nil
+}
+
+func (x *SyncActivityRequest) HasLastHeartbeatTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_LastHeartbeatTime != nil
+}
+
+func (x *SyncActivityRequest) HasDetails() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Details != nil
+}
+
+func (x *SyncActivityRequest) HasLastFailure() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_LastFailure != nil
+}
+
+func (x *SyncActivityRequest) HasVersionHistory() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_VersionHistory != nil
+}
+
+func (x *SyncActivityRequest) HasBaseExecutionInfo() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_BaseExecutionInfo != nil
+}
+
+func (x *SyncActivityRequest) HasFirstScheduledTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_FirstScheduledTime != nil
+}
+
+func (x *SyncActivityRequest) HasLastAttemptCompleteTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_LastAttemptCompleteTime != nil
+}
+
+func (x *SyncActivityRequest) HasRetryInitialInterval() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_RetryInitialInterval != nil
+}
+
+func (x *SyncActivityRequest) HasRetryMaximumInterval() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_RetryMaximumInterval != nil
+}
+
+func (x *SyncActivityRequest) ClearScheduledTime() {
+	x.xxx_hidden_ScheduledTime = nil
+}
+
+func (x *SyncActivityRequest) ClearStartedTime() {
+	x.xxx_hidden_StartedTime = nil
+}
+
+func (x *SyncActivityRequest) ClearLastHeartbeatTime() {
+	x.xxx_hidden_LastHeartbeatTime = nil
+}
+
+func (x *SyncActivityRequest) ClearDetails() {
+	x.xxx_hidden_Details = nil
+}
+
+func (x *SyncActivityRequest) ClearLastFailure() {
+	x.xxx_hidden_LastFailure = nil
+}
+
+func (x *SyncActivityRequest) ClearVersionHistory() {
+	x.xxx_hidden_VersionHistory = nil
+}
+
+func (x *SyncActivityRequest) ClearBaseExecutionInfo() {
+	x.xxx_hidden_BaseExecutionInfo = nil
+}
+
+func (x *SyncActivityRequest) ClearFirstScheduledTime() {
+	x.xxx_hidden_FirstScheduledTime = nil
+}
+
+func (x *SyncActivityRequest) ClearLastAttemptCompleteTime() {
+	x.xxx_hidden_LastAttemptCompleteTime = nil
+}
+
+func (x *SyncActivityRequest) ClearRetryInitialInterval() {
+	x.xxx_hidden_RetryInitialInterval = nil
+}
+
+func (x *SyncActivityRequest) ClearRetryMaximumInterval() {
+	x.xxx_hidden_RetryMaximumInterval = nil
+}
+
+type SyncActivityRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId        string
+	WorkflowId         string
+	RunId              string
+	Version            int64
+	ScheduledEventId   int64
+	ScheduledTime      *timestamppb.Timestamp
+	StartedEventId     int64
+	StartedTime        *timestamppb.Timestamp
+	LastHeartbeatTime  *timestamppb.Timestamp
+	Details            *v14.Payloads
+	Attempt            int32
+	LastFailure        *v13.Failure
+	LastWorkerIdentity string
+	VersionHistory     *v18.VersionHistory
+	BaseExecutionInfo  *v11.BaseExecutionInfo
+	// build ID of the worker who received this activity last time
+	LastStartedBuildId string
+	// workflows redirect_counter value when this activity started last time
+	LastStartedRedirectCounter int64
+	// The first time the activity was scheduled.
+	FirstScheduledTime *timestamppb.Timestamp
+	// The last time an activity attempt completion was recorded by the server.
+	LastAttemptCompleteTime *timestamppb.Timestamp
+	// Stamp represents the internal “version” of the activity options and can/will be changed with Activity API.
+	Stamp int32
+	// Indicates if the activity is paused.
+	Paused bool
+	// Retry policy for the activity.
+	RetryInitialInterval    *durationpb.Duration
+	RetryMaximumInterval    *durationpb.Duration
+	RetryMaximumAttempts    int32
+	RetryBackoffCoefficient float64
+	StartVersion            int64
+}
+
+func (b0 SyncActivityRequest_builder) Build() *SyncActivityRequest {
+	m0 := &SyncActivityRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_WorkflowId = b.WorkflowId
+	x.xxx_hidden_RunId = b.RunId
+	x.xxx_hidden_Version = b.Version
+	x.xxx_hidden_ScheduledEventId = b.ScheduledEventId
+	x.xxx_hidden_ScheduledTime = b.ScheduledTime
+	x.xxx_hidden_StartedEventId = b.StartedEventId
+	x.xxx_hidden_StartedTime = b.StartedTime
+	x.xxx_hidden_LastHeartbeatTime = b.LastHeartbeatTime
+	x.xxx_hidden_Details = b.Details
+	x.xxx_hidden_Attempt = b.Attempt
+	x.xxx_hidden_LastFailure = b.LastFailure
+	x.xxx_hidden_LastWorkerIdentity = b.LastWorkerIdentity
+	x.xxx_hidden_VersionHistory = b.VersionHistory
+	x.xxx_hidden_BaseExecutionInfo = b.BaseExecutionInfo
+	x.xxx_hidden_LastStartedBuildId = b.LastStartedBuildId
+	x.xxx_hidden_LastStartedRedirectCounter = b.LastStartedRedirectCounter
+	x.xxx_hidden_FirstScheduledTime = b.FirstScheduledTime
+	x.xxx_hidden_LastAttemptCompleteTime = b.LastAttemptCompleteTime
+	x.xxx_hidden_Stamp = b.Stamp
+	x.xxx_hidden_Paused = b.Paused
+	x.xxx_hidden_RetryInitialInterval = b.RetryInitialInterval
+	x.xxx_hidden_RetryMaximumInterval = b.RetryMaximumInterval
+	x.xxx_hidden_RetryMaximumAttempts = b.RetryMaximumAttempts
+	x.xxx_hidden_RetryBackoffCoefficient = b.RetryBackoffCoefficient
+	x.xxx_hidden_StartVersion = b.StartVersion
+	return m0
+}
+
 type SyncActivitiesRequest struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	NamespaceId    string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	WorkflowId     string                 `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
-	RunId          string                 `protobuf:"bytes,3,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	ActivitiesInfo []*ActivitySyncInfo    `protobuf:"bytes,4,rep,name=activities_info,json=activitiesInfo,proto3" json:"activities_info,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state                     protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId    string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_WorkflowId     string                 `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3"`
+	xxx_hidden_RunId          string                 `protobuf:"bytes,3,opt,name=run_id,json=runId,proto3"`
+	xxx_hidden_ActivitiesInfo *[]*ActivitySyncInfo   `protobuf:"bytes,4,rep,name=activities_info,json=activitiesInfo,proto3"`
+	unknownFields             protoimpl.UnknownFields
+	sizeCache                 protoimpl.SizeCache
 }
 
 func (x *SyncActivitiesRequest) Reset() {
@@ -4733,72 +8334,98 @@ func (x *SyncActivitiesRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SyncActivitiesRequest.ProtoReflect.Descriptor instead.
-func (*SyncActivitiesRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{63}
-}
-
 func (x *SyncActivitiesRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *SyncActivitiesRequest) GetWorkflowId() string {
 	if x != nil {
-		return x.WorkflowId
+		return x.xxx_hidden_WorkflowId
 	}
 	return ""
 }
 
 func (x *SyncActivitiesRequest) GetRunId() string {
 	if x != nil {
-		return x.RunId
+		return x.xxx_hidden_RunId
 	}
 	return ""
 }
 
 func (x *SyncActivitiesRequest) GetActivitiesInfo() []*ActivitySyncInfo {
 	if x != nil {
-		return x.ActivitiesInfo
+		if x.xxx_hidden_ActivitiesInfo != nil {
+			return *x.xxx_hidden_ActivitiesInfo
+		}
 	}
 	return nil
 }
 
+func (x *SyncActivitiesRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *SyncActivitiesRequest) SetWorkflowId(v string) {
+	x.xxx_hidden_WorkflowId = v
+}
+
+func (x *SyncActivitiesRequest) SetRunId(v string) {
+	x.xxx_hidden_RunId = v
+}
+
+func (x *SyncActivitiesRequest) SetActivitiesInfo(v []*ActivitySyncInfo) {
+	x.xxx_hidden_ActivitiesInfo = &v
+}
+
+type SyncActivitiesRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId    string
+	WorkflowId     string
+	RunId          string
+	ActivitiesInfo []*ActivitySyncInfo
+}
+
+func (b0 SyncActivitiesRequest_builder) Build() *SyncActivitiesRequest {
+	m0 := &SyncActivitiesRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_WorkflowId = b.WorkflowId
+	x.xxx_hidden_RunId = b.RunId
+	x.xxx_hidden_ActivitiesInfo = &b.ActivitiesInfo
+	return m0
+}
+
 type ActivitySyncInfo struct {
-	state              protoimpl.MessageState `protogen:"open.v1"`
-	Version            int64                  `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
-	ScheduledEventId   int64                  `protobuf:"varint,2,opt,name=scheduled_event_id,json=scheduledEventId,proto3" json:"scheduled_event_id,omitempty"`
-	ScheduledTime      *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=scheduled_time,json=scheduledTime,proto3" json:"scheduled_time,omitempty"`
-	StartedEventId     int64                  `protobuf:"varint,4,opt,name=started_event_id,json=startedEventId,proto3" json:"started_event_id,omitempty"`
-	StartedTime        *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=started_time,json=startedTime,proto3" json:"started_time,omitempty"`
-	LastHeartbeatTime  *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=last_heartbeat_time,json=lastHeartbeatTime,proto3" json:"last_heartbeat_time,omitempty"`
-	Details            *v14.Payloads          `protobuf:"bytes,7,opt,name=details,proto3" json:"details,omitempty"`
-	Attempt            int32                  `protobuf:"varint,8,opt,name=attempt,proto3" json:"attempt,omitempty"`
-	LastFailure        *v13.Failure           `protobuf:"bytes,9,opt,name=last_failure,json=lastFailure,proto3" json:"last_failure,omitempty"`
-	LastWorkerIdentity string                 `protobuf:"bytes,10,opt,name=last_worker_identity,json=lastWorkerIdentity,proto3" json:"last_worker_identity,omitempty"`
-	VersionHistory     *v18.VersionHistory    `protobuf:"bytes,11,opt,name=version_history,json=versionHistory,proto3" json:"version_history,omitempty"`
-	// build ID of the worker who received this activity last time
-	LastStartedBuildId string `protobuf:"bytes,12,opt,name=last_started_build_id,json=lastStartedBuildId,proto3" json:"last_started_build_id,omitempty"`
-	// workflows redirect_counter value when this activity started last time
-	LastStartedRedirectCounter int64 `protobuf:"varint,13,opt,name=last_started_redirect_counter,json=lastStartedRedirectCounter,proto3" json:"last_started_redirect_counter,omitempty"`
-	// The first time the activity was scheduled.
-	FirstScheduledTime *timestamppb.Timestamp `protobuf:"bytes,18,opt,name=first_scheduled_time,json=firstScheduledTime,proto3" json:"first_scheduled_time,omitempty"`
-	// The last time an activity attempt completion was recorded by the server.
-	LastAttemptCompleteTime *timestamppb.Timestamp `protobuf:"bytes,19,opt,name=last_attempt_complete_time,json=lastAttemptCompleteTime,proto3" json:"last_attempt_complete_time,omitempty"`
-	// Stamp represents the internal “version” of the activity options and can/will be changed with Activity API.
-	Stamp int32 `protobuf:"varint,20,opt,name=stamp,proto3" json:"stamp,omitempty"`
-	// Indicates if the activity is paused.
-	Paused bool `protobuf:"varint,21,opt,name=paused,proto3" json:"paused,omitempty"`
-	// Retry policy for the activity. It needs to be replicated now, since the activity properties can be updated.
-	RetryInitialInterval    *durationpb.Duration `protobuf:"bytes,22,opt,name=retry_initial_interval,json=retryInitialInterval,proto3" json:"retry_initial_interval,omitempty"`
-	RetryMaximumInterval    *durationpb.Duration `protobuf:"bytes,23,opt,name=retry_maximum_interval,json=retryMaximumInterval,proto3" json:"retry_maximum_interval,omitempty"`
-	RetryMaximumAttempts    int32                `protobuf:"varint,24,opt,name=retry_maximum_attempts,json=retryMaximumAttempts,proto3" json:"retry_maximum_attempts,omitempty"`
-	RetryBackoffCoefficient float64              `protobuf:"fixed64,25,opt,name=retry_backoff_coefficient,json=retryBackoffCoefficient,proto3" json:"retry_backoff_coefficient,omitempty"`
-	StartVersion            int64                `protobuf:"varint,26,opt,name=start_version,json=startVersion,proto3" json:"start_version,omitempty"`
-	unknownFields           protoimpl.UnknownFields
-	sizeCache               protoimpl.SizeCache
+	state                                 protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Version                    int64                  `protobuf:"varint,1,opt,name=version,proto3"`
+	xxx_hidden_ScheduledEventId           int64                  `protobuf:"varint,2,opt,name=scheduled_event_id,json=scheduledEventId,proto3"`
+	xxx_hidden_ScheduledTime              *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=scheduled_time,json=scheduledTime,proto3"`
+	xxx_hidden_StartedEventId             int64                  `protobuf:"varint,4,opt,name=started_event_id,json=startedEventId,proto3"`
+	xxx_hidden_StartedTime                *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=started_time,json=startedTime,proto3"`
+	xxx_hidden_LastHeartbeatTime          *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=last_heartbeat_time,json=lastHeartbeatTime,proto3"`
+	xxx_hidden_Details                    *v14.Payloads          `protobuf:"bytes,7,opt,name=details,proto3"`
+	xxx_hidden_Attempt                    int32                  `protobuf:"varint,8,opt,name=attempt,proto3"`
+	xxx_hidden_LastFailure                *v13.Failure           `protobuf:"bytes,9,opt,name=last_failure,json=lastFailure,proto3"`
+	xxx_hidden_LastWorkerIdentity         string                 `protobuf:"bytes,10,opt,name=last_worker_identity,json=lastWorkerIdentity,proto3"`
+	xxx_hidden_VersionHistory             *v18.VersionHistory    `protobuf:"bytes,11,opt,name=version_history,json=versionHistory,proto3"`
+	xxx_hidden_LastStartedBuildId         string                 `protobuf:"bytes,12,opt,name=last_started_build_id,json=lastStartedBuildId,proto3"`
+	xxx_hidden_LastStartedRedirectCounter int64                  `protobuf:"varint,13,opt,name=last_started_redirect_counter,json=lastStartedRedirectCounter,proto3"`
+	xxx_hidden_FirstScheduledTime         *timestamppb.Timestamp `protobuf:"bytes,18,opt,name=first_scheduled_time,json=firstScheduledTime,proto3"`
+	xxx_hidden_LastAttemptCompleteTime    *timestamppb.Timestamp `protobuf:"bytes,19,opt,name=last_attempt_complete_time,json=lastAttemptCompleteTime,proto3"`
+	xxx_hidden_Stamp                      int32                  `protobuf:"varint,20,opt,name=stamp,proto3"`
+	xxx_hidden_Paused                     bool                   `protobuf:"varint,21,opt,name=paused,proto3"`
+	xxx_hidden_RetryInitialInterval       *durationpb.Duration   `protobuf:"bytes,22,opt,name=retry_initial_interval,json=retryInitialInterval,proto3"`
+	xxx_hidden_RetryMaximumInterval       *durationpb.Duration   `protobuf:"bytes,23,opt,name=retry_maximum_interval,json=retryMaximumInterval,proto3"`
+	xxx_hidden_RetryMaximumAttempts       int32                  `protobuf:"varint,24,opt,name=retry_maximum_attempts,json=retryMaximumAttempts,proto3"`
+	xxx_hidden_RetryBackoffCoefficient    float64                `protobuf:"fixed64,25,opt,name=retry_backoff_coefficient,json=retryBackoffCoefficient,proto3"`
+	xxx_hidden_StartVersion               int64                  `protobuf:"varint,26,opt,name=start_version,json=startVersion,proto3"`
+	unknownFields                         protoimpl.UnknownFields
+	sizeCache                             protoimpl.SizeCache
 }
 
 func (x *ActivitySyncInfo) Reset() {
@@ -4826,167 +8453,423 @@ func (x *ActivitySyncInfo) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ActivitySyncInfo.ProtoReflect.Descriptor instead.
-func (*ActivitySyncInfo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{64}
-}
-
 func (x *ActivitySyncInfo) GetVersion() int64 {
 	if x != nil {
-		return x.Version
+		return x.xxx_hidden_Version
 	}
 	return 0
 }
 
 func (x *ActivitySyncInfo) GetScheduledEventId() int64 {
 	if x != nil {
-		return x.ScheduledEventId
+		return x.xxx_hidden_ScheduledEventId
 	}
 	return 0
 }
 
 func (x *ActivitySyncInfo) GetScheduledTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.ScheduledTime
+		return x.xxx_hidden_ScheduledTime
 	}
 	return nil
 }
 
 func (x *ActivitySyncInfo) GetStartedEventId() int64 {
 	if x != nil {
-		return x.StartedEventId
+		return x.xxx_hidden_StartedEventId
 	}
 	return 0
 }
 
 func (x *ActivitySyncInfo) GetStartedTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.StartedTime
+		return x.xxx_hidden_StartedTime
 	}
 	return nil
 }
 
 func (x *ActivitySyncInfo) GetLastHeartbeatTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.LastHeartbeatTime
+		return x.xxx_hidden_LastHeartbeatTime
 	}
 	return nil
 }
 
 func (x *ActivitySyncInfo) GetDetails() *v14.Payloads {
 	if x != nil {
-		return x.Details
+		return x.xxx_hidden_Details
 	}
 	return nil
 }
 
 func (x *ActivitySyncInfo) GetAttempt() int32 {
 	if x != nil {
-		return x.Attempt
+		return x.xxx_hidden_Attempt
 	}
 	return 0
 }
 
 func (x *ActivitySyncInfo) GetLastFailure() *v13.Failure {
 	if x != nil {
-		return x.LastFailure
+		return x.xxx_hidden_LastFailure
 	}
 	return nil
 }
 
 func (x *ActivitySyncInfo) GetLastWorkerIdentity() string {
 	if x != nil {
-		return x.LastWorkerIdentity
+		return x.xxx_hidden_LastWorkerIdentity
 	}
 	return ""
 }
 
 func (x *ActivitySyncInfo) GetVersionHistory() *v18.VersionHistory {
 	if x != nil {
-		return x.VersionHistory
+		return x.xxx_hidden_VersionHistory
 	}
 	return nil
 }
 
 func (x *ActivitySyncInfo) GetLastStartedBuildId() string {
 	if x != nil {
-		return x.LastStartedBuildId
+		return x.xxx_hidden_LastStartedBuildId
 	}
 	return ""
 }
 
 func (x *ActivitySyncInfo) GetLastStartedRedirectCounter() int64 {
 	if x != nil {
-		return x.LastStartedRedirectCounter
+		return x.xxx_hidden_LastStartedRedirectCounter
 	}
 	return 0
 }
 
 func (x *ActivitySyncInfo) GetFirstScheduledTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.FirstScheduledTime
+		return x.xxx_hidden_FirstScheduledTime
 	}
 	return nil
 }
 
 func (x *ActivitySyncInfo) GetLastAttemptCompleteTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.LastAttemptCompleteTime
+		return x.xxx_hidden_LastAttemptCompleteTime
 	}
 	return nil
 }
 
 func (x *ActivitySyncInfo) GetStamp() int32 {
 	if x != nil {
-		return x.Stamp
+		return x.xxx_hidden_Stamp
 	}
 	return 0
 }
 
 func (x *ActivitySyncInfo) GetPaused() bool {
 	if x != nil {
-		return x.Paused
+		return x.xxx_hidden_Paused
 	}
 	return false
 }
 
 func (x *ActivitySyncInfo) GetRetryInitialInterval() *durationpb.Duration {
 	if x != nil {
-		return x.RetryInitialInterval
+		return x.xxx_hidden_RetryInitialInterval
 	}
 	return nil
 }
 
 func (x *ActivitySyncInfo) GetRetryMaximumInterval() *durationpb.Duration {
 	if x != nil {
-		return x.RetryMaximumInterval
+		return x.xxx_hidden_RetryMaximumInterval
 	}
 	return nil
 }
 
 func (x *ActivitySyncInfo) GetRetryMaximumAttempts() int32 {
 	if x != nil {
-		return x.RetryMaximumAttempts
+		return x.xxx_hidden_RetryMaximumAttempts
 	}
 	return 0
 }
 
 func (x *ActivitySyncInfo) GetRetryBackoffCoefficient() float64 {
 	if x != nil {
-		return x.RetryBackoffCoefficient
+		return x.xxx_hidden_RetryBackoffCoefficient
 	}
 	return 0
 }
 
 func (x *ActivitySyncInfo) GetStartVersion() int64 {
 	if x != nil {
-		return x.StartVersion
+		return x.xxx_hidden_StartVersion
 	}
 	return 0
 }
 
+func (x *ActivitySyncInfo) SetVersion(v int64) {
+	x.xxx_hidden_Version = v
+}
+
+func (x *ActivitySyncInfo) SetScheduledEventId(v int64) {
+	x.xxx_hidden_ScheduledEventId = v
+}
+
+func (x *ActivitySyncInfo) SetScheduledTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_ScheduledTime = v
+}
+
+func (x *ActivitySyncInfo) SetStartedEventId(v int64) {
+	x.xxx_hidden_StartedEventId = v
+}
+
+func (x *ActivitySyncInfo) SetStartedTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_StartedTime = v
+}
+
+func (x *ActivitySyncInfo) SetLastHeartbeatTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_LastHeartbeatTime = v
+}
+
+func (x *ActivitySyncInfo) SetDetails(v *v14.Payloads) {
+	x.xxx_hidden_Details = v
+}
+
+func (x *ActivitySyncInfo) SetAttempt(v int32) {
+	x.xxx_hidden_Attempt = v
+}
+
+func (x *ActivitySyncInfo) SetLastFailure(v *v13.Failure) {
+	x.xxx_hidden_LastFailure = v
+}
+
+func (x *ActivitySyncInfo) SetLastWorkerIdentity(v string) {
+	x.xxx_hidden_LastWorkerIdentity = v
+}
+
+func (x *ActivitySyncInfo) SetVersionHistory(v *v18.VersionHistory) {
+	x.xxx_hidden_VersionHistory = v
+}
+
+func (x *ActivitySyncInfo) SetLastStartedBuildId(v string) {
+	x.xxx_hidden_LastStartedBuildId = v
+}
+
+func (x *ActivitySyncInfo) SetLastStartedRedirectCounter(v int64) {
+	x.xxx_hidden_LastStartedRedirectCounter = v
+}
+
+func (x *ActivitySyncInfo) SetFirstScheduledTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_FirstScheduledTime = v
+}
+
+func (x *ActivitySyncInfo) SetLastAttemptCompleteTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_LastAttemptCompleteTime = v
+}
+
+func (x *ActivitySyncInfo) SetStamp(v int32) {
+	x.xxx_hidden_Stamp = v
+}
+
+func (x *ActivitySyncInfo) SetPaused(v bool) {
+	x.xxx_hidden_Paused = v
+}
+
+func (x *ActivitySyncInfo) SetRetryInitialInterval(v *durationpb.Duration) {
+	x.xxx_hidden_RetryInitialInterval = v
+}
+
+func (x *ActivitySyncInfo) SetRetryMaximumInterval(v *durationpb.Duration) {
+	x.xxx_hidden_RetryMaximumInterval = v
+}
+
+func (x *ActivitySyncInfo) SetRetryMaximumAttempts(v int32) {
+	x.xxx_hidden_RetryMaximumAttempts = v
+}
+
+func (x *ActivitySyncInfo) SetRetryBackoffCoefficient(v float64) {
+	x.xxx_hidden_RetryBackoffCoefficient = v
+}
+
+func (x *ActivitySyncInfo) SetStartVersion(v int64) {
+	x.xxx_hidden_StartVersion = v
+}
+
+func (x *ActivitySyncInfo) HasScheduledTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_ScheduledTime != nil
+}
+
+func (x *ActivitySyncInfo) HasStartedTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_StartedTime != nil
+}
+
+func (x *ActivitySyncInfo) HasLastHeartbeatTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_LastHeartbeatTime != nil
+}
+
+func (x *ActivitySyncInfo) HasDetails() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Details != nil
+}
+
+func (x *ActivitySyncInfo) HasLastFailure() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_LastFailure != nil
+}
+
+func (x *ActivitySyncInfo) HasVersionHistory() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_VersionHistory != nil
+}
+
+func (x *ActivitySyncInfo) HasFirstScheduledTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_FirstScheduledTime != nil
+}
+
+func (x *ActivitySyncInfo) HasLastAttemptCompleteTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_LastAttemptCompleteTime != nil
+}
+
+func (x *ActivitySyncInfo) HasRetryInitialInterval() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_RetryInitialInterval != nil
+}
+
+func (x *ActivitySyncInfo) HasRetryMaximumInterval() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_RetryMaximumInterval != nil
+}
+
+func (x *ActivitySyncInfo) ClearScheduledTime() {
+	x.xxx_hidden_ScheduledTime = nil
+}
+
+func (x *ActivitySyncInfo) ClearStartedTime() {
+	x.xxx_hidden_StartedTime = nil
+}
+
+func (x *ActivitySyncInfo) ClearLastHeartbeatTime() {
+	x.xxx_hidden_LastHeartbeatTime = nil
+}
+
+func (x *ActivitySyncInfo) ClearDetails() {
+	x.xxx_hidden_Details = nil
+}
+
+func (x *ActivitySyncInfo) ClearLastFailure() {
+	x.xxx_hidden_LastFailure = nil
+}
+
+func (x *ActivitySyncInfo) ClearVersionHistory() {
+	x.xxx_hidden_VersionHistory = nil
+}
+
+func (x *ActivitySyncInfo) ClearFirstScheduledTime() {
+	x.xxx_hidden_FirstScheduledTime = nil
+}
+
+func (x *ActivitySyncInfo) ClearLastAttemptCompleteTime() {
+	x.xxx_hidden_LastAttemptCompleteTime = nil
+}
+
+func (x *ActivitySyncInfo) ClearRetryInitialInterval() {
+	x.xxx_hidden_RetryInitialInterval = nil
+}
+
+func (x *ActivitySyncInfo) ClearRetryMaximumInterval() {
+	x.xxx_hidden_RetryMaximumInterval = nil
+}
+
+type ActivitySyncInfo_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Version            int64
+	ScheduledEventId   int64
+	ScheduledTime      *timestamppb.Timestamp
+	StartedEventId     int64
+	StartedTime        *timestamppb.Timestamp
+	LastHeartbeatTime  *timestamppb.Timestamp
+	Details            *v14.Payloads
+	Attempt            int32
+	LastFailure        *v13.Failure
+	LastWorkerIdentity string
+	VersionHistory     *v18.VersionHistory
+	// build ID of the worker who received this activity last time
+	LastStartedBuildId string
+	// workflows redirect_counter value when this activity started last time
+	LastStartedRedirectCounter int64
+	// The first time the activity was scheduled.
+	FirstScheduledTime *timestamppb.Timestamp
+	// The last time an activity attempt completion was recorded by the server.
+	LastAttemptCompleteTime *timestamppb.Timestamp
+	// Stamp represents the internal “version” of the activity options and can/will be changed with Activity API.
+	Stamp int32
+	// Indicates if the activity is paused.
+	Paused bool
+	// Retry policy for the activity. It needs to be replicated now, since the activity properties can be updated.
+	RetryInitialInterval    *durationpb.Duration
+	RetryMaximumInterval    *durationpb.Duration
+	RetryMaximumAttempts    int32
+	RetryBackoffCoefficient float64
+	StartVersion            int64
+}
+
+func (b0 ActivitySyncInfo_builder) Build() *ActivitySyncInfo {
+	m0 := &ActivitySyncInfo{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Version = b.Version
+	x.xxx_hidden_ScheduledEventId = b.ScheduledEventId
+	x.xxx_hidden_ScheduledTime = b.ScheduledTime
+	x.xxx_hidden_StartedEventId = b.StartedEventId
+	x.xxx_hidden_StartedTime = b.StartedTime
+	x.xxx_hidden_LastHeartbeatTime = b.LastHeartbeatTime
+	x.xxx_hidden_Details = b.Details
+	x.xxx_hidden_Attempt = b.Attempt
+	x.xxx_hidden_LastFailure = b.LastFailure
+	x.xxx_hidden_LastWorkerIdentity = b.LastWorkerIdentity
+	x.xxx_hidden_VersionHistory = b.VersionHistory
+	x.xxx_hidden_LastStartedBuildId = b.LastStartedBuildId
+	x.xxx_hidden_LastStartedRedirectCounter = b.LastStartedRedirectCounter
+	x.xxx_hidden_FirstScheduledTime = b.FirstScheduledTime
+	x.xxx_hidden_LastAttemptCompleteTime = b.LastAttemptCompleteTime
+	x.xxx_hidden_Stamp = b.Stamp
+	x.xxx_hidden_Paused = b.Paused
+	x.xxx_hidden_RetryInitialInterval = b.RetryInitialInterval
+	x.xxx_hidden_RetryMaximumInterval = b.RetryMaximumInterval
+	x.xxx_hidden_RetryMaximumAttempts = b.RetryMaximumAttempts
+	x.xxx_hidden_RetryBackoffCoefficient = b.RetryBackoffCoefficient
+	x.xxx_hidden_StartVersion = b.StartVersion
+	return m0
+}
+
 type SyncActivityResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -5016,20 +8899,26 @@ func (x *SyncActivityResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SyncActivityResponse.ProtoReflect.Descriptor instead.
-func (*SyncActivityResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{65}
+type SyncActivityResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+}
+
+func (b0 SyncActivityResponse_builder) Build() *SyncActivityResponse {
+	m0 := &SyncActivityResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	return m0
 }
 
 type DescribeMutableStateRequest struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	NamespaceId     string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	Execution       *v14.WorkflowExecution `protobuf:"bytes,2,opt,name=execution,proto3" json:"execution,omitempty"`
-	SkipForceReload bool                   `protobuf:"varint,3,opt,name=skip_force_reload,json=skipForceReload,proto3" json:"skip_force_reload,omitempty"`
-	// (-- api-linter: core::0141::forbidden-types=disabled --)
-	ArchetypeId   uint32 `protobuf:"varint,4,opt,name=archetype_id,json=archetypeId,proto3" json:"archetype_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                      protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId     string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_Execution       *v14.WorkflowExecution `protobuf:"bytes,2,opt,name=execution,proto3"`
+	xxx_hidden_SkipForceReload bool                   `protobuf:"varint,3,opt,name=skip_force_reload,json=skipForceReload,proto3"`
+	xxx_hidden_ArchetypeId     uint32                 `protobuf:"varint,4,opt,name=archetype_id,json=archetypeId,proto3"`
+	unknownFields              protoimpl.UnknownFields
+	sizeCache                  protoimpl.SizeCache
 }
 
 func (x *DescribeMutableStateRequest) Reset() {
@@ -5057,48 +8946,88 @@ func (x *DescribeMutableStateRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DescribeMutableStateRequest.ProtoReflect.Descriptor instead.
-func (*DescribeMutableStateRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{66}
-}
-
 func (x *DescribeMutableStateRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *DescribeMutableStateRequest) GetExecution() *v14.WorkflowExecution {
 	if x != nil {
-		return x.Execution
+		return x.xxx_hidden_Execution
 	}
 	return nil
 }
 
 func (x *DescribeMutableStateRequest) GetSkipForceReload() bool {
 	if x != nil {
-		return x.SkipForceReload
+		return x.xxx_hidden_SkipForceReload
 	}
 	return false
 }
 
 func (x *DescribeMutableStateRequest) GetArchetypeId() uint32 {
 	if x != nil {
-		return x.ArchetypeId
+		return x.xxx_hidden_ArchetypeId
 	}
 	return 0
 }
 
+func (x *DescribeMutableStateRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *DescribeMutableStateRequest) SetExecution(v *v14.WorkflowExecution) {
+	x.xxx_hidden_Execution = v
+}
+
+func (x *DescribeMutableStateRequest) SetSkipForceReload(v bool) {
+	x.xxx_hidden_SkipForceReload = v
+}
+
+func (x *DescribeMutableStateRequest) SetArchetypeId(v uint32) {
+	x.xxx_hidden_ArchetypeId = v
+}
+
+func (x *DescribeMutableStateRequest) HasExecution() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Execution != nil
+}
+
+func (x *DescribeMutableStateRequest) ClearExecution() {
+	x.xxx_hidden_Execution = nil
+}
+
+type DescribeMutableStateRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId     string
+	Execution       *v14.WorkflowExecution
+	SkipForceReload bool
+	// (-- api-linter: core::0141::forbidden-types=disabled --)
+	ArchetypeId uint32
+}
+
+func (b0 DescribeMutableStateRequest_builder) Build() *DescribeMutableStateRequest {
+	m0 := &DescribeMutableStateRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_Execution = b.Execution
+	x.xxx_hidden_SkipForceReload = b.SkipForceReload
+	x.xxx_hidden_ArchetypeId = b.ArchetypeId
+	return m0
+}
+
 type DescribeMutableStateResponse struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// CacheMutableState is only available when mutable state is in cache.
-	CacheMutableState *v19.WorkflowMutableState `protobuf:"bytes,1,opt,name=cache_mutable_state,json=cacheMutableState,proto3" json:"cache_mutable_state,omitempty"`
-	// DatabaseMutableState is always available,
-	// but only loaded from database when mutable state is NOT in cache or skip_force_reload is false.
-	DatabaseMutableState *v19.WorkflowMutableState `protobuf:"bytes,2,opt,name=database_mutable_state,json=databaseMutableState,proto3" json:"database_mutable_state,omitempty"`
-	unknownFields        protoimpl.UnknownFields
-	sizeCache            protoimpl.SizeCache
+	state                           protoimpl.MessageState    `protogen:"opaque.v1"`
+	xxx_hidden_CacheMutableState    *v19.WorkflowMutableState `protobuf:"bytes,1,opt,name=cache_mutable_state,json=cacheMutableState,proto3"`
+	xxx_hidden_DatabaseMutableState *v19.WorkflowMutableState `protobuf:"bytes,2,opt,name=database_mutable_state,json=databaseMutableState,proto3"`
+	unknownFields                   protoimpl.UnknownFields
+	sizeCache                       protoimpl.SizeCache
 }
 
 func (x *DescribeMutableStateResponse) Reset() {
@@ -5126,35 +9055,78 @@ func (x *DescribeMutableStateResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DescribeMutableStateResponse.ProtoReflect.Descriptor instead.
-func (*DescribeMutableStateResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{67}
-}
-
 func (x *DescribeMutableStateResponse) GetCacheMutableState() *v19.WorkflowMutableState {
 	if x != nil {
-		return x.CacheMutableState
+		return x.xxx_hidden_CacheMutableState
 	}
 	return nil
 }
 
 func (x *DescribeMutableStateResponse) GetDatabaseMutableState() *v19.WorkflowMutableState {
 	if x != nil {
-		return x.DatabaseMutableState
+		return x.xxx_hidden_DatabaseMutableState
 	}
 	return nil
 }
 
+func (x *DescribeMutableStateResponse) SetCacheMutableState(v *v19.WorkflowMutableState) {
+	x.xxx_hidden_CacheMutableState = v
+}
+
+func (x *DescribeMutableStateResponse) SetDatabaseMutableState(v *v19.WorkflowMutableState) {
+	x.xxx_hidden_DatabaseMutableState = v
+}
+
+func (x *DescribeMutableStateResponse) HasCacheMutableState() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_CacheMutableState != nil
+}
+
+func (x *DescribeMutableStateResponse) HasDatabaseMutableState() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_DatabaseMutableState != nil
+}
+
+func (x *DescribeMutableStateResponse) ClearCacheMutableState() {
+	x.xxx_hidden_CacheMutableState = nil
+}
+
+func (x *DescribeMutableStateResponse) ClearDatabaseMutableState() {
+	x.xxx_hidden_DatabaseMutableState = nil
+}
+
+type DescribeMutableStateResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// CacheMutableState is only available when mutable state is in cache.
+	CacheMutableState *v19.WorkflowMutableState
+	// DatabaseMutableState is always available,
+	// but only loaded from database when mutable state is NOT in cache or skip_force_reload is false.
+	DatabaseMutableState *v19.WorkflowMutableState
+}
+
+func (b0 DescribeMutableStateResponse_builder) Build() *DescribeMutableStateResponse {
+	m0 := &DescribeMutableStateResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_CacheMutableState = b.CacheMutableState
+	x.xxx_hidden_DatabaseMutableState = b.DatabaseMutableState
+	return m0
+}
+
 // At least one of the parameters needs to be provided.
 type DescribeHistoryHostRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	//ip:port
-	HostAddress       string                 `protobuf:"bytes,1,opt,name=host_address,json=hostAddress,proto3" json:"host_address,omitempty"`
-	ShardId           int32                  `protobuf:"varint,2,opt,name=shard_id,json=shardId,proto3" json:"shard_id,omitempty"`
-	NamespaceId       string                 `protobuf:"bytes,3,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	WorkflowExecution *v14.WorkflowExecution `protobuf:"bytes,4,opt,name=workflow_execution,json=workflowExecution,proto3" json:"workflow_execution,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state                        protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_HostAddress       string                 `protobuf:"bytes,1,opt,name=host_address,json=hostAddress,proto3"`
+	xxx_hidden_ShardId           int32                  `protobuf:"varint,2,opt,name=shard_id,json=shardId,proto3"`
+	xxx_hidden_NamespaceId       string                 `protobuf:"bytes,3,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_WorkflowExecution *v14.WorkflowExecution `protobuf:"bytes,4,opt,name=workflow_execution,json=workflowExecution,proto3"`
+	unknownFields                protoimpl.UnknownFields
+	sizeCache                    protoimpl.SizeCache
 }
 
 func (x *DescribeHistoryHostRequest) Reset() {
@@ -5182,47 +9154,90 @@ func (x *DescribeHistoryHostRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DescribeHistoryHostRequest.ProtoReflect.Descriptor instead.
-func (*DescribeHistoryHostRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{68}
-}
-
 func (x *DescribeHistoryHostRequest) GetHostAddress() string {
 	if x != nil {
-		return x.HostAddress
+		return x.xxx_hidden_HostAddress
 	}
 	return ""
 }
 
 func (x *DescribeHistoryHostRequest) GetShardId() int32 {
 	if x != nil {
-		return x.ShardId
+		return x.xxx_hidden_ShardId
 	}
 	return 0
 }
 
 func (x *DescribeHistoryHostRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *DescribeHistoryHostRequest) GetWorkflowExecution() *v14.WorkflowExecution {
 	if x != nil {
-		return x.WorkflowExecution
+		return x.xxx_hidden_WorkflowExecution
 	}
 	return nil
 }
 
+func (x *DescribeHistoryHostRequest) SetHostAddress(v string) {
+	x.xxx_hidden_HostAddress = v
+}
+
+func (x *DescribeHistoryHostRequest) SetShardId(v int32) {
+	x.xxx_hidden_ShardId = v
+}
+
+func (x *DescribeHistoryHostRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *DescribeHistoryHostRequest) SetWorkflowExecution(v *v14.WorkflowExecution) {
+	x.xxx_hidden_WorkflowExecution = v
+}
+
+func (x *DescribeHistoryHostRequest) HasWorkflowExecution() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_WorkflowExecution != nil
+}
+
+func (x *DescribeHistoryHostRequest) ClearWorkflowExecution() {
+	x.xxx_hidden_WorkflowExecution = nil
+}
+
+type DescribeHistoryHostRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	//ip:port
+	HostAddress       string
+	ShardId           int32
+	NamespaceId       string
+	WorkflowExecution *v14.WorkflowExecution
+}
+
+func (b0 DescribeHistoryHostRequest_builder) Build() *DescribeHistoryHostRequest {
+	m0 := &DescribeHistoryHostRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_HostAddress = b.HostAddress
+	x.xxx_hidden_ShardId = b.ShardId
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_WorkflowExecution = b.WorkflowExecution
+	return m0
+}
+
 type DescribeHistoryHostResponse struct {
-	state          protoimpl.MessageState   `protogen:"open.v1"`
-	ShardsNumber   int32                    `protobuf:"varint,1,opt,name=shards_number,json=shardsNumber,proto3" json:"shards_number,omitempty"`
-	ShardIds       []int32                  `protobuf:"varint,2,rep,packed,name=shard_ids,json=shardIds,proto3" json:"shard_ids,omitempty"`
-	NamespaceCache *v116.NamespaceCacheInfo `protobuf:"bytes,3,opt,name=namespace_cache,json=namespaceCache,proto3" json:"namespace_cache,omitempty"`
-	Address        string                   `protobuf:"bytes,5,opt,name=address,proto3" json:"address,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state                     protoimpl.MessageState   `protogen:"opaque.v1"`
+	xxx_hidden_ShardsNumber   int32                    `protobuf:"varint,1,opt,name=shards_number,json=shardsNumber,proto3"`
+	xxx_hidden_ShardIds       []int32                  `protobuf:"varint,2,rep,packed,name=shard_ids,json=shardIds,proto3"`
+	xxx_hidden_NamespaceCache *v116.NamespaceCacheInfo `protobuf:"bytes,3,opt,name=namespace_cache,json=namespaceCache,proto3"`
+	xxx_hidden_Address        string                   `protobuf:"bytes,5,opt,name=address,proto3"`
+	unknownFields             protoimpl.UnknownFields
+	sizeCache                 protoimpl.SizeCache
 }
 
 func (x *DescribeHistoryHostResponse) Reset() {
@@ -5250,44 +9265,86 @@ func (x *DescribeHistoryHostResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DescribeHistoryHostResponse.ProtoReflect.Descriptor instead.
-func (*DescribeHistoryHostResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{69}
-}
-
 func (x *DescribeHistoryHostResponse) GetShardsNumber() int32 {
 	if x != nil {
-		return x.ShardsNumber
+		return x.xxx_hidden_ShardsNumber
 	}
 	return 0
 }
 
 func (x *DescribeHistoryHostResponse) GetShardIds() []int32 {
 	if x != nil {
-		return x.ShardIds
+		return x.xxx_hidden_ShardIds
 	}
 	return nil
 }
 
 func (x *DescribeHistoryHostResponse) GetNamespaceCache() *v116.NamespaceCacheInfo {
 	if x != nil {
-		return x.NamespaceCache
+		return x.xxx_hidden_NamespaceCache
 	}
 	return nil
 }
 
 func (x *DescribeHistoryHostResponse) GetAddress() string {
 	if x != nil {
-		return x.Address
+		return x.xxx_hidden_Address
 	}
 	return ""
 }
 
+func (x *DescribeHistoryHostResponse) SetShardsNumber(v int32) {
+	x.xxx_hidden_ShardsNumber = v
+}
+
+func (x *DescribeHistoryHostResponse) SetShardIds(v []int32) {
+	x.xxx_hidden_ShardIds = v
+}
+
+func (x *DescribeHistoryHostResponse) SetNamespaceCache(v *v116.NamespaceCacheInfo) {
+	x.xxx_hidden_NamespaceCache = v
+}
+
+func (x *DescribeHistoryHostResponse) SetAddress(v string) {
+	x.xxx_hidden_Address = v
+}
+
+func (x *DescribeHistoryHostResponse) HasNamespaceCache() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_NamespaceCache != nil
+}
+
+func (x *DescribeHistoryHostResponse) ClearNamespaceCache() {
+	x.xxx_hidden_NamespaceCache = nil
+}
+
+type DescribeHistoryHostResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	ShardsNumber   int32
+	ShardIds       []int32
+	NamespaceCache *v116.NamespaceCacheInfo
+	Address        string
+}
+
+func (b0 DescribeHistoryHostResponse_builder) Build() *DescribeHistoryHostResponse {
+	m0 := &DescribeHistoryHostResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_ShardsNumber = b.ShardsNumber
+	x.xxx_hidden_ShardIds = b.ShardIds
+	x.xxx_hidden_NamespaceCache = b.NamespaceCache
+	x.xxx_hidden_Address = b.Address
+	return m0
+}
+
 type CloseShardRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ShardId       int32                  `protobuf:"varint,1,opt,name=shard_id,json=shardId,proto3" json:"shard_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state              protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_ShardId int32                  `protobuf:"varint,1,opt,name=shard_id,json=shardId,proto3"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *CloseShardRequest) Reset() {
@@ -5315,20 +9372,33 @@ func (x *CloseShardRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CloseShardRequest.ProtoReflect.Descriptor instead.
-func (*CloseShardRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{70}
-}
-
 func (x *CloseShardRequest) GetShardId() int32 {
 	if x != nil {
-		return x.ShardId
+		return x.xxx_hidden_ShardId
 	}
 	return 0
 }
 
+func (x *CloseShardRequest) SetShardId(v int32) {
+	x.xxx_hidden_ShardId = v
+}
+
+type CloseShardRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	ShardId int32
+}
+
+func (b0 CloseShardRequest_builder) Build() *CloseShardRequest {
+	m0 := &CloseShardRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_ShardId = b.ShardId
+	return m0
+}
+
 type CloseShardResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -5358,16 +9428,23 @@ func (x *CloseShardResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CloseShardResponse.ProtoReflect.Descriptor instead.
-func (*CloseShardResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{71}
+type CloseShardResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+}
+
+func (b0 CloseShardResponse_builder) Build() *CloseShardResponse {
+	m0 := &CloseShardResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	return m0
 }
 
 type GetShardRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ShardId       int32                  `protobuf:"varint,1,opt,name=shard_id,json=shardId,proto3" json:"shard_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state              protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_ShardId int32                  `protobuf:"varint,1,opt,name=shard_id,json=shardId,proto3"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *GetShardRequest) Reset() {
@@ -5395,23 +9472,36 @@ func (x *GetShardRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetShardRequest.ProtoReflect.Descriptor instead.
-func (*GetShardRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{72}
-}
-
 func (x *GetShardRequest) GetShardId() int32 {
 	if x != nil {
-		return x.ShardId
+		return x.xxx_hidden_ShardId
 	}
 	return 0
 }
 
+func (x *GetShardRequest) SetShardId(v int32) {
+	x.xxx_hidden_ShardId = v
+}
+
+type GetShardRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	ShardId int32
+}
+
+func (b0 GetShardRequest_builder) Build() *GetShardRequest {
+	m0 := &GetShardRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_ShardId = b.ShardId
+	return m0
+}
+
 type GetShardResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ShardInfo     *v19.ShardInfo         `protobuf:"bytes,1,opt,name=shard_info,json=shardInfo,proto3" json:"shard_info,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_ShardInfo *v19.ShardInfo         `protobuf:"bytes,1,opt,name=shard_info,json=shardInfo,proto3"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *GetShardResponse) Reset() {
@@ -5439,27 +9529,50 @@ func (x *GetShardResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetShardResponse.ProtoReflect.Descriptor instead.
-func (*GetShardResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{73}
-}
-
 func (x *GetShardResponse) GetShardInfo() *v19.ShardInfo {
 	if x != nil {
-		return x.ShardInfo
+		return x.xxx_hidden_ShardInfo
 	}
 	return nil
 }
 
+func (x *GetShardResponse) SetShardInfo(v *v19.ShardInfo) {
+	x.xxx_hidden_ShardInfo = v
+}
+
+func (x *GetShardResponse) HasShardInfo() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_ShardInfo != nil
+}
+
+func (x *GetShardResponse) ClearShardInfo() {
+	x.xxx_hidden_ShardInfo = nil
+}
+
+type GetShardResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	ShardInfo *v19.ShardInfo
+}
+
+func (b0 GetShardResponse_builder) Build() *GetShardResponse {
+	m0 := &GetShardResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_ShardInfo = b.ShardInfo
+	return m0
+}
+
 type RemoveTaskRequest struct {
-	state   protoimpl.MessageState `protogen:"open.v1"`
-	ShardId int32                  `protobuf:"varint,1,opt,name=shard_id,json=shardId,proto3" json:"shard_id,omitempty"`
-	// The task category. See tasks.TaskCategoryRegistry for more.
-	Category       int32                  `protobuf:"varint,2,opt,name=category,proto3" json:"category,omitempty"`
-	TaskId         int64                  `protobuf:"varint,3,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
-	VisibilityTime *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=visibility_time,json=visibilityTime,proto3" json:"visibility_time,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state                     protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_ShardId        int32                  `protobuf:"varint,1,opt,name=shard_id,json=shardId,proto3"`
+	xxx_hidden_Category       int32                  `protobuf:"varint,2,opt,name=category,proto3"`
+	xxx_hidden_TaskId         int64                  `protobuf:"varint,3,opt,name=task_id,json=taskId,proto3"`
+	xxx_hidden_VisibilityTime *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=visibility_time,json=visibilityTime,proto3"`
+	unknownFields             protoimpl.UnknownFields
+	sizeCache                 protoimpl.SizeCache
 }
 
 func (x *RemoveTaskRequest) Reset() {
@@ -5487,41 +9600,84 @@ func (x *RemoveTaskRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RemoveTaskRequest.ProtoReflect.Descriptor instead.
-func (*RemoveTaskRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{74}
-}
-
 func (x *RemoveTaskRequest) GetShardId() int32 {
 	if x != nil {
-		return x.ShardId
+		return x.xxx_hidden_ShardId
 	}
 	return 0
 }
 
 func (x *RemoveTaskRequest) GetCategory() int32 {
 	if x != nil {
-		return x.Category
+		return x.xxx_hidden_Category
 	}
 	return 0
 }
 
 func (x *RemoveTaskRequest) GetTaskId() int64 {
 	if x != nil {
-		return x.TaskId
+		return x.xxx_hidden_TaskId
 	}
 	return 0
 }
 
 func (x *RemoveTaskRequest) GetVisibilityTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.VisibilityTime
+		return x.xxx_hidden_VisibilityTime
 	}
 	return nil
 }
 
+func (x *RemoveTaskRequest) SetShardId(v int32) {
+	x.xxx_hidden_ShardId = v
+}
+
+func (x *RemoveTaskRequest) SetCategory(v int32) {
+	x.xxx_hidden_Category = v
+}
+
+func (x *RemoveTaskRequest) SetTaskId(v int64) {
+	x.xxx_hidden_TaskId = v
+}
+
+func (x *RemoveTaskRequest) SetVisibilityTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_VisibilityTime = v
+}
+
+func (x *RemoveTaskRequest) HasVisibilityTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_VisibilityTime != nil
+}
+
+func (x *RemoveTaskRequest) ClearVisibilityTime() {
+	x.xxx_hidden_VisibilityTime = nil
+}
+
+type RemoveTaskRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	ShardId int32
+	// The task category. See tasks.TaskCategoryRegistry for more.
+	Category       int32
+	TaskId         int64
+	VisibilityTime *timestamppb.Timestamp
+}
+
+func (b0 RemoveTaskRequest_builder) Build() *RemoveTaskRequest {
+	m0 := &RemoveTaskRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_ShardId = b.ShardId
+	x.xxx_hidden_Category = b.Category
+	x.xxx_hidden_TaskId = b.TaskId
+	x.xxx_hidden_VisibilityTime = b.VisibilityTime
+	return m0
+}
+
 type RemoveTaskResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -5551,17 +9707,24 @@ func (x *RemoveTaskResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RemoveTaskResponse.ProtoReflect.Descriptor instead.
-func (*RemoveTaskResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{75}
+type RemoveTaskResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+}
+
+func (b0 RemoveTaskResponse_builder) Build() *RemoveTaskResponse {
+	m0 := &RemoveTaskResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	return m0
 }
 
 type GetReplicationMessagesRequest struct {
-	state         protoimpl.MessageState   `protogen:"open.v1"`
-	Tokens        []*v117.ReplicationToken `protobuf:"bytes,1,rep,name=tokens,proto3" json:"tokens,omitempty"`
-	ClusterName   string                   `protobuf:"bytes,2,opt,name=cluster_name,json=clusterName,proto3" json:"cluster_name,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                  protoimpl.MessageState    `protogen:"opaque.v1"`
+	xxx_hidden_Tokens      *[]*v117.ReplicationToken `protobuf:"bytes,1,rep,name=tokens,proto3"`
+	xxx_hidden_ClusterName string                    `protobuf:"bytes,2,opt,name=cluster_name,json=clusterName,proto3"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *GetReplicationMessagesRequest) Reset() {
@@ -5589,30 +9752,51 @@ func (x *GetReplicationMessagesRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetReplicationMessagesRequest.ProtoReflect.Descriptor instead.
-func (*GetReplicationMessagesRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{76}
-}
-
 func (x *GetReplicationMessagesRequest) GetTokens() []*v117.ReplicationToken {
 	if x != nil {
-		return x.Tokens
+		if x.xxx_hidden_Tokens != nil {
+			return *x.xxx_hidden_Tokens
+		}
 	}
 	return nil
 }
 
 func (x *GetReplicationMessagesRequest) GetClusterName() string {
 	if x != nil {
-		return x.ClusterName
+		return x.xxx_hidden_ClusterName
 	}
 	return ""
 }
 
+func (x *GetReplicationMessagesRequest) SetTokens(v []*v117.ReplicationToken) {
+	x.xxx_hidden_Tokens = &v
+}
+
+func (x *GetReplicationMessagesRequest) SetClusterName(v string) {
+	x.xxx_hidden_ClusterName = v
+}
+
+type GetReplicationMessagesRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Tokens      []*v117.ReplicationToken
+	ClusterName string
+}
+
+func (b0 GetReplicationMessagesRequest_builder) Build() *GetReplicationMessagesRequest {
+	m0 := &GetReplicationMessagesRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Tokens = &b.Tokens
+	x.xxx_hidden_ClusterName = b.ClusterName
+	return m0
+}
+
 type GetReplicationMessagesResponse struct {
-	state         protoimpl.MessageState              `protogen:"open.v1"`
-	ShardMessages map[int32]*v117.ReplicationMessages `protobuf:"bytes,1,rep,name=shard_messages,json=shardMessages,proto3" json:"shard_messages,omitempty" protobuf_key:"varint,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                    protoimpl.MessageState              `protogen:"opaque.v1"`
+	xxx_hidden_ShardMessages map[int32]*v117.ReplicationMessages `protobuf:"bytes,1,rep,name=shard_messages,json=shardMessages,proto3" protobuf_key:"varint,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *GetReplicationMessagesResponse) Reset() {
@@ -5640,23 +9824,36 @@ func (x *GetReplicationMessagesResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetReplicationMessagesResponse.ProtoReflect.Descriptor instead.
-func (*GetReplicationMessagesResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{77}
-}
-
 func (x *GetReplicationMessagesResponse) GetShardMessages() map[int32]*v117.ReplicationMessages {
 	if x != nil {
-		return x.ShardMessages
+		return x.xxx_hidden_ShardMessages
 	}
 	return nil
 }
 
+func (x *GetReplicationMessagesResponse) SetShardMessages(v map[int32]*v117.ReplicationMessages) {
+	x.xxx_hidden_ShardMessages = v
+}
+
+type GetReplicationMessagesResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	ShardMessages map[int32]*v117.ReplicationMessages
+}
+
+func (b0 GetReplicationMessagesResponse_builder) Build() *GetReplicationMessagesResponse {
+	m0 := &GetReplicationMessagesResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_ShardMessages = b.ShardMessages
+	return m0
+}
+
 type GetDLQReplicationMessagesRequest struct {
-	state         protoimpl.MessageState      `protogen:"open.v1"`
-	TaskInfos     []*v117.ReplicationTaskInfo `protobuf:"bytes,1,rep,name=task_infos,json=taskInfos,proto3" json:"task_infos,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                protoimpl.MessageState       `protogen:"opaque.v1"`
+	xxx_hidden_TaskInfos *[]*v117.ReplicationTaskInfo `protobuf:"bytes,1,rep,name=task_infos,json=taskInfos,proto3"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *GetDLQReplicationMessagesRequest) Reset() {
@@ -5684,23 +9881,38 @@ func (x *GetDLQReplicationMessagesRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetDLQReplicationMessagesRequest.ProtoReflect.Descriptor instead.
-func (*GetDLQReplicationMessagesRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{78}
-}
-
 func (x *GetDLQReplicationMessagesRequest) GetTaskInfos() []*v117.ReplicationTaskInfo {
 	if x != nil {
-		return x.TaskInfos
+		if x.xxx_hidden_TaskInfos != nil {
+			return *x.xxx_hidden_TaskInfos
+		}
 	}
 	return nil
 }
 
+func (x *GetDLQReplicationMessagesRequest) SetTaskInfos(v []*v117.ReplicationTaskInfo) {
+	x.xxx_hidden_TaskInfos = &v
+}
+
+type GetDLQReplicationMessagesRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	TaskInfos []*v117.ReplicationTaskInfo
+}
+
+func (b0 GetDLQReplicationMessagesRequest_builder) Build() *GetDLQReplicationMessagesRequest {
+	m0 := &GetDLQReplicationMessagesRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_TaskInfos = &b.TaskInfos
+	return m0
+}
+
 type GetDLQReplicationMessagesResponse struct {
-	state            protoimpl.MessageState  `protogen:"open.v1"`
-	ReplicationTasks []*v117.ReplicationTask `protobuf:"bytes,1,rep,name=replication_tasks,json=replicationTasks,proto3" json:"replication_tasks,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	state                       protoimpl.MessageState   `protogen:"opaque.v1"`
+	xxx_hidden_ReplicationTasks *[]*v117.ReplicationTask `protobuf:"bytes,1,rep,name=replication_tasks,json=replicationTasks,proto3"`
+	unknownFields               protoimpl.UnknownFields
+	sizeCache                   protoimpl.SizeCache
 }
 
 func (x *GetDLQReplicationMessagesResponse) Reset() {
@@ -5728,24 +9940,39 @@ func (x *GetDLQReplicationMessagesResponse) ProtoReflect() protoreflect.Message 
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetDLQReplicationMessagesResponse.ProtoReflect.Descriptor instead.
-func (*GetDLQReplicationMessagesResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{79}
-}
-
 func (x *GetDLQReplicationMessagesResponse) GetReplicationTasks() []*v117.ReplicationTask {
 	if x != nil {
-		return x.ReplicationTasks
+		if x.xxx_hidden_ReplicationTasks != nil {
+			return *x.xxx_hidden_ReplicationTasks
+		}
 	}
 	return nil
 }
 
+func (x *GetDLQReplicationMessagesResponse) SetReplicationTasks(v []*v117.ReplicationTask) {
+	x.xxx_hidden_ReplicationTasks = &v
+}
+
+type GetDLQReplicationMessagesResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	ReplicationTasks []*v117.ReplicationTask
+}
+
+func (b0 GetDLQReplicationMessagesResponse_builder) Build() *GetDLQReplicationMessagesResponse {
+	m0 := &GetDLQReplicationMessagesResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_ReplicationTasks = &b.ReplicationTasks
+	return m0
+}
+
 type QueryWorkflowRequest struct {
-	state         protoimpl.MessageState   `protogen:"open.v1"`
-	NamespaceId   string                   `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	Request       *v1.QueryWorkflowRequest `protobuf:"bytes,2,opt,name=request,proto3" json:"request,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                  protoimpl.MessageState   `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId string                   `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_Request     *v1.QueryWorkflowRequest `protobuf:"bytes,2,opt,name=request,proto3"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *QueryWorkflowRequest) Reset() {
@@ -5773,30 +10000,60 @@ func (x *QueryWorkflowRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use QueryWorkflowRequest.ProtoReflect.Descriptor instead.
-func (*QueryWorkflowRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{80}
-}
-
 func (x *QueryWorkflowRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *QueryWorkflowRequest) GetRequest() *v1.QueryWorkflowRequest {
 	if x != nil {
-		return x.Request
+		return x.xxx_hidden_Request
 	}
 	return nil
 }
 
+func (x *QueryWorkflowRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *QueryWorkflowRequest) SetRequest(v *v1.QueryWorkflowRequest) {
+	x.xxx_hidden_Request = v
+}
+
+func (x *QueryWorkflowRequest) HasRequest() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Request != nil
+}
+
+func (x *QueryWorkflowRequest) ClearRequest() {
+	x.xxx_hidden_Request = nil
+}
+
+type QueryWorkflowRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId string
+	Request     *v1.QueryWorkflowRequest
+}
+
+func (b0 QueryWorkflowRequest_builder) Build() *QueryWorkflowRequest {
+	m0 := &QueryWorkflowRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_Request = b.Request
+	return m0
+}
+
 type QueryWorkflowResponse struct {
-	state         protoimpl.MessageState    `protogen:"open.v1"`
-	Response      *v1.QueryWorkflowResponse `protobuf:"bytes,1,opt,name=response,proto3" json:"response,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state               protoimpl.MessageState    `protogen:"opaque.v1"`
+	xxx_hidden_Response *v1.QueryWorkflowResponse `protobuf:"bytes,1,opt,name=response,proto3"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *QueryWorkflowResponse) Reset() {
@@ -5824,24 +10081,48 @@ func (x *QueryWorkflowResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use QueryWorkflowResponse.ProtoReflect.Descriptor instead.
-func (*QueryWorkflowResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{81}
-}
-
 func (x *QueryWorkflowResponse) GetResponse() *v1.QueryWorkflowResponse {
 	if x != nil {
-		return x.Response
+		return x.xxx_hidden_Response
 	}
 	return nil
 }
 
+func (x *QueryWorkflowResponse) SetResponse(v *v1.QueryWorkflowResponse) {
+	x.xxx_hidden_Response = v
+}
+
+func (x *QueryWorkflowResponse) HasResponse() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Response != nil
+}
+
+func (x *QueryWorkflowResponse) ClearResponse() {
+	x.xxx_hidden_Response = nil
+}
+
+type QueryWorkflowResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Response *v1.QueryWorkflowResponse
+}
+
+func (b0 QueryWorkflowResponse_builder) Build() *QueryWorkflowResponse {
+	m0 := &QueryWorkflowResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Response = b.Response
+	return m0
+}
+
 type ReapplyEventsRequest struct {
-	state         protoimpl.MessageState     `protogen:"open.v1"`
-	NamespaceId   string                     `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	Request       *v118.ReapplyEventsRequest `protobuf:"bytes,2,opt,name=request,proto3" json:"request,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                  protoimpl.MessageState     `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId string                     `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_Request     *v118.ReapplyEventsRequest `protobuf:"bytes,2,opt,name=request,proto3"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *ReapplyEventsRequest) Reset() {
@@ -5869,27 +10150,57 @@ func (x *ReapplyEventsRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ReapplyEventsRequest.ProtoReflect.Descriptor instead.
-func (*ReapplyEventsRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{82}
-}
-
 func (x *ReapplyEventsRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *ReapplyEventsRequest) GetRequest() *v118.ReapplyEventsRequest {
 	if x != nil {
-		return x.Request
+		return x.xxx_hidden_Request
 	}
 	return nil
 }
 
+func (x *ReapplyEventsRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *ReapplyEventsRequest) SetRequest(v *v118.ReapplyEventsRequest) {
+	x.xxx_hidden_Request = v
+}
+
+func (x *ReapplyEventsRequest) HasRequest() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Request != nil
+}
+
+func (x *ReapplyEventsRequest) ClearRequest() {
+	x.xxx_hidden_Request = nil
+}
+
+type ReapplyEventsRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId string
+	Request     *v118.ReapplyEventsRequest
+}
+
+func (b0 ReapplyEventsRequest_builder) Build() *ReapplyEventsRequest {
+	m0 := &ReapplyEventsRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_Request = b.Request
+	return m0
+}
+
 type ReapplyEventsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -5919,21 +10230,28 @@ func (x *ReapplyEventsResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ReapplyEventsResponse.ProtoReflect.Descriptor instead.
-func (*ReapplyEventsResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{83}
+type ReapplyEventsResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+}
+
+func (b0 ReapplyEventsResponse_builder) Build() *ReapplyEventsResponse {
+	m0 := &ReapplyEventsResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	return m0
 }
 
 type GetDLQMessagesRequest struct {
-	state                 protoimpl.MessageState   `protogen:"open.v1"`
-	Type                  v111.DeadLetterQueueType `protobuf:"varint,1,opt,name=type,proto3,enum=temporal.server.api.enums.v1.DeadLetterQueueType" json:"type,omitempty"`
-	ShardId               int32                    `protobuf:"varint,2,opt,name=shard_id,json=shardId,proto3" json:"shard_id,omitempty"`
-	SourceCluster         string                   `protobuf:"bytes,3,opt,name=source_cluster,json=sourceCluster,proto3" json:"source_cluster,omitempty"`
-	InclusiveEndMessageId int64                    `protobuf:"varint,4,opt,name=inclusive_end_message_id,json=inclusiveEndMessageId,proto3" json:"inclusive_end_message_id,omitempty"`
-	MaximumPageSize       int32                    `protobuf:"varint,5,opt,name=maximum_page_size,json=maximumPageSize,proto3" json:"maximum_page_size,omitempty"`
-	NextPageToken         []byte                   `protobuf:"bytes,6,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
-	unknownFields         protoimpl.UnknownFields
-	sizeCache             protoimpl.SizeCache
+	state                            protoimpl.MessageState   `protogen:"opaque.v1"`
+	xxx_hidden_Type                  v111.DeadLetterQueueType `protobuf:"varint,1,opt,name=type,proto3,enum=temporal.server.api.enums.v1.DeadLetterQueueType"`
+	xxx_hidden_ShardId               int32                    `protobuf:"varint,2,opt,name=shard_id,json=shardId,proto3"`
+	xxx_hidden_SourceCluster         string                   `protobuf:"bytes,3,opt,name=source_cluster,json=sourceCluster,proto3"`
+	xxx_hidden_InclusiveEndMessageId int64                    `protobuf:"varint,4,opt,name=inclusive_end_message_id,json=inclusiveEndMessageId,proto3"`
+	xxx_hidden_MaximumPageSize       int32                    `protobuf:"varint,5,opt,name=maximum_page_size,json=maximumPageSize,proto3"`
+	xxx_hidden_NextPageToken         []byte                   `protobuf:"bytes,6,opt,name=next_page_token,json=nextPageToken,proto3"`
+	unknownFields                    protoimpl.UnknownFields
+	sizeCache                        protoimpl.SizeCache
 }
 
 func (x *GetDLQMessagesRequest) Reset() {
@@ -5961,61 +10279,107 @@ func (x *GetDLQMessagesRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetDLQMessagesRequest.ProtoReflect.Descriptor instead.
-func (*GetDLQMessagesRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{84}
-}
-
 func (x *GetDLQMessagesRequest) GetType() v111.DeadLetterQueueType {
 	if x != nil {
-		return x.Type
+		return x.xxx_hidden_Type
 	}
 	return v111.DeadLetterQueueType(0)
 }
 
 func (x *GetDLQMessagesRequest) GetShardId() int32 {
 	if x != nil {
-		return x.ShardId
+		return x.xxx_hidden_ShardId
 	}
 	return 0
 }
 
 func (x *GetDLQMessagesRequest) GetSourceCluster() string {
 	if x != nil {
-		return x.SourceCluster
+		return x.xxx_hidden_SourceCluster
 	}
 	return ""
 }
 
 func (x *GetDLQMessagesRequest) GetInclusiveEndMessageId() int64 {
 	if x != nil {
-		return x.InclusiveEndMessageId
+		return x.xxx_hidden_InclusiveEndMessageId
 	}
 	return 0
 }
 
 func (x *GetDLQMessagesRequest) GetMaximumPageSize() int32 {
 	if x != nil {
-		return x.MaximumPageSize
+		return x.xxx_hidden_MaximumPageSize
 	}
 	return 0
 }
 
 func (x *GetDLQMessagesRequest) GetNextPageToken() []byte {
 	if x != nil {
-		return x.NextPageToken
+		return x.xxx_hidden_NextPageToken
 	}
 	return nil
 }
 
+func (x *GetDLQMessagesRequest) SetType(v v111.DeadLetterQueueType) {
+	x.xxx_hidden_Type = v
+}
+
+func (x *GetDLQMessagesRequest) SetShardId(v int32) {
+	x.xxx_hidden_ShardId = v
+}
+
+func (x *GetDLQMessagesRequest) SetSourceCluster(v string) {
+	x.xxx_hidden_SourceCluster = v
+}
+
+func (x *GetDLQMessagesRequest) SetInclusiveEndMessageId(v int64) {
+	x.xxx_hidden_InclusiveEndMessageId = v
+}
+
+func (x *GetDLQMessagesRequest) SetMaximumPageSize(v int32) {
+	x.xxx_hidden_MaximumPageSize = v
+}
+
+func (x *GetDLQMessagesRequest) SetNextPageToken(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_NextPageToken = v
+}
+
+type GetDLQMessagesRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Type                  v111.DeadLetterQueueType
+	ShardId               int32
+	SourceCluster         string
+	InclusiveEndMessageId int64
+	MaximumPageSize       int32
+	NextPageToken         []byte
+}
+
+func (b0 GetDLQMessagesRequest_builder) Build() *GetDLQMessagesRequest {
+	m0 := &GetDLQMessagesRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Type = b.Type
+	x.xxx_hidden_ShardId = b.ShardId
+	x.xxx_hidden_SourceCluster = b.SourceCluster
+	x.xxx_hidden_InclusiveEndMessageId = b.InclusiveEndMessageId
+	x.xxx_hidden_MaximumPageSize = b.MaximumPageSize
+	x.xxx_hidden_NextPageToken = b.NextPageToken
+	return m0
+}
+
 type GetDLQMessagesResponse struct {
-	state                protoimpl.MessageState      `protogen:"open.v1"`
-	Type                 v111.DeadLetterQueueType    `protobuf:"varint,1,opt,name=type,proto3,enum=temporal.server.api.enums.v1.DeadLetterQueueType" json:"type,omitempty"`
-	ReplicationTasks     []*v117.ReplicationTask     `protobuf:"bytes,2,rep,name=replication_tasks,json=replicationTasks,proto3" json:"replication_tasks,omitempty"`
-	NextPageToken        []byte                      `protobuf:"bytes,3,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
-	ReplicationTasksInfo []*v117.ReplicationTaskInfo `protobuf:"bytes,4,rep,name=replication_tasks_info,json=replicationTasksInfo,proto3" json:"replication_tasks_info,omitempty"`
-	unknownFields        protoimpl.UnknownFields
-	sizeCache            protoimpl.SizeCache
+	state                           protoimpl.MessageState       `protogen:"opaque.v1"`
+	xxx_hidden_Type                 v111.DeadLetterQueueType     `protobuf:"varint,1,opt,name=type,proto3,enum=temporal.server.api.enums.v1.DeadLetterQueueType"`
+	xxx_hidden_ReplicationTasks     *[]*v117.ReplicationTask     `protobuf:"bytes,2,rep,name=replication_tasks,json=replicationTasks,proto3"`
+	xxx_hidden_NextPageToken        []byte                       `protobuf:"bytes,3,opt,name=next_page_token,json=nextPageToken,proto3"`
+	xxx_hidden_ReplicationTasksInfo *[]*v117.ReplicationTaskInfo `protobuf:"bytes,4,rep,name=replication_tasks_info,json=replicationTasksInfo,proto3"`
+	unknownFields                   protoimpl.UnknownFields
+	sizeCache                       protoimpl.SizeCache
 }
 
 func (x *GetDLQMessagesResponse) Reset() {
@@ -6043,47 +10407,85 @@ func (x *GetDLQMessagesResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetDLQMessagesResponse.ProtoReflect.Descriptor instead.
-func (*GetDLQMessagesResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{85}
-}
-
 func (x *GetDLQMessagesResponse) GetType() v111.DeadLetterQueueType {
 	if x != nil {
-		return x.Type
+		return x.xxx_hidden_Type
 	}
 	return v111.DeadLetterQueueType(0)
 }
 
 func (x *GetDLQMessagesResponse) GetReplicationTasks() []*v117.ReplicationTask {
 	if x != nil {
-		return x.ReplicationTasks
+		if x.xxx_hidden_ReplicationTasks != nil {
+			return *x.xxx_hidden_ReplicationTasks
+		}
 	}
 	return nil
 }
 
 func (x *GetDLQMessagesResponse) GetNextPageToken() []byte {
 	if x != nil {
-		return x.NextPageToken
+		return x.xxx_hidden_NextPageToken
 	}
 	return nil
 }
 
 func (x *GetDLQMessagesResponse) GetReplicationTasksInfo() []*v117.ReplicationTaskInfo {
 	if x != nil {
-		return x.ReplicationTasksInfo
+		if x.xxx_hidden_ReplicationTasksInfo != nil {
+			return *x.xxx_hidden_ReplicationTasksInfo
+		}
 	}
 	return nil
 }
 
+func (x *GetDLQMessagesResponse) SetType(v v111.DeadLetterQueueType) {
+	x.xxx_hidden_Type = v
+}
+
+func (x *GetDLQMessagesResponse) SetReplicationTasks(v []*v117.ReplicationTask) {
+	x.xxx_hidden_ReplicationTasks = &v
+}
+
+func (x *GetDLQMessagesResponse) SetNextPageToken(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_NextPageToken = v
+}
+
+func (x *GetDLQMessagesResponse) SetReplicationTasksInfo(v []*v117.ReplicationTaskInfo) {
+	x.xxx_hidden_ReplicationTasksInfo = &v
+}
+
+type GetDLQMessagesResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Type                 v111.DeadLetterQueueType
+	ReplicationTasks     []*v117.ReplicationTask
+	NextPageToken        []byte
+	ReplicationTasksInfo []*v117.ReplicationTaskInfo
+}
+
+func (b0 GetDLQMessagesResponse_builder) Build() *GetDLQMessagesResponse {
+	m0 := &GetDLQMessagesResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Type = b.Type
+	x.xxx_hidden_ReplicationTasks = &b.ReplicationTasks
+	x.xxx_hidden_NextPageToken = b.NextPageToken
+	x.xxx_hidden_ReplicationTasksInfo = &b.ReplicationTasksInfo
+	return m0
+}
+
 type PurgeDLQMessagesRequest struct {
-	state                 protoimpl.MessageState   `protogen:"open.v1"`
-	Type                  v111.DeadLetterQueueType `protobuf:"varint,1,opt,name=type,proto3,enum=temporal.server.api.enums.v1.DeadLetterQueueType" json:"type,omitempty"`
-	ShardId               int32                    `protobuf:"varint,2,opt,name=shard_id,json=shardId,proto3" json:"shard_id,omitempty"`
-	SourceCluster         string                   `protobuf:"bytes,3,opt,name=source_cluster,json=sourceCluster,proto3" json:"source_cluster,omitempty"`
-	InclusiveEndMessageId int64                    `protobuf:"varint,4,opt,name=inclusive_end_message_id,json=inclusiveEndMessageId,proto3" json:"inclusive_end_message_id,omitempty"`
-	unknownFields         protoimpl.UnknownFields
-	sizeCache             protoimpl.SizeCache
+	state                            protoimpl.MessageState   `protogen:"opaque.v1"`
+	xxx_hidden_Type                  v111.DeadLetterQueueType `protobuf:"varint,1,opt,name=type,proto3,enum=temporal.server.api.enums.v1.DeadLetterQueueType"`
+	xxx_hidden_ShardId               int32                    `protobuf:"varint,2,opt,name=shard_id,json=shardId,proto3"`
+	xxx_hidden_SourceCluster         string                   `protobuf:"bytes,3,opt,name=source_cluster,json=sourceCluster,proto3"`
+	xxx_hidden_InclusiveEndMessageId int64                    `protobuf:"varint,4,opt,name=inclusive_end_message_id,json=inclusiveEndMessageId,proto3"`
+	unknownFields                    protoimpl.UnknownFields
+	sizeCache                        protoimpl.SizeCache
 }
 
 func (x *PurgeDLQMessagesRequest) Reset() {
@@ -6111,41 +10513,72 @@ func (x *PurgeDLQMessagesRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use PurgeDLQMessagesRequest.ProtoReflect.Descriptor instead.
-func (*PurgeDLQMessagesRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{86}
-}
-
 func (x *PurgeDLQMessagesRequest) GetType() v111.DeadLetterQueueType {
 	if x != nil {
-		return x.Type
+		return x.xxx_hidden_Type
 	}
 	return v111.DeadLetterQueueType(0)
 }
 
 func (x *PurgeDLQMessagesRequest) GetShardId() int32 {
 	if x != nil {
-		return x.ShardId
+		return x.xxx_hidden_ShardId
 	}
 	return 0
 }
 
 func (x *PurgeDLQMessagesRequest) GetSourceCluster() string {
 	if x != nil {
-		return x.SourceCluster
+		return x.xxx_hidden_SourceCluster
 	}
 	return ""
 }
 
 func (x *PurgeDLQMessagesRequest) GetInclusiveEndMessageId() int64 {
 	if x != nil {
-		return x.InclusiveEndMessageId
+		return x.xxx_hidden_InclusiveEndMessageId
 	}
 	return 0
 }
 
+func (x *PurgeDLQMessagesRequest) SetType(v v111.DeadLetterQueueType) {
+	x.xxx_hidden_Type = v
+}
+
+func (x *PurgeDLQMessagesRequest) SetShardId(v int32) {
+	x.xxx_hidden_ShardId = v
+}
+
+func (x *PurgeDLQMessagesRequest) SetSourceCluster(v string) {
+	x.xxx_hidden_SourceCluster = v
+}
+
+func (x *PurgeDLQMessagesRequest) SetInclusiveEndMessageId(v int64) {
+	x.xxx_hidden_InclusiveEndMessageId = v
+}
+
+type PurgeDLQMessagesRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Type                  v111.DeadLetterQueueType
+	ShardId               int32
+	SourceCluster         string
+	InclusiveEndMessageId int64
+}
+
+func (b0 PurgeDLQMessagesRequest_builder) Build() *PurgeDLQMessagesRequest {
+	m0 := &PurgeDLQMessagesRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Type = b.Type
+	x.xxx_hidden_ShardId = b.ShardId
+	x.xxx_hidden_SourceCluster = b.SourceCluster
+	x.xxx_hidden_InclusiveEndMessageId = b.InclusiveEndMessageId
+	return m0
+}
+
 type PurgeDLQMessagesResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -6175,21 +10608,28 @@ func (x *PurgeDLQMessagesResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use PurgeDLQMessagesResponse.ProtoReflect.Descriptor instead.
-func (*PurgeDLQMessagesResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{87}
+type PurgeDLQMessagesResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+}
+
+func (b0 PurgeDLQMessagesResponse_builder) Build() *PurgeDLQMessagesResponse {
+	m0 := &PurgeDLQMessagesResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	return m0
 }
 
 type MergeDLQMessagesRequest struct {
-	state                 protoimpl.MessageState   `protogen:"open.v1"`
-	Type                  v111.DeadLetterQueueType `protobuf:"varint,1,opt,name=type,proto3,enum=temporal.server.api.enums.v1.DeadLetterQueueType" json:"type,omitempty"`
-	ShardId               int32                    `protobuf:"varint,2,opt,name=shard_id,json=shardId,proto3" json:"shard_id,omitempty"`
-	SourceCluster         string                   `protobuf:"bytes,3,opt,name=source_cluster,json=sourceCluster,proto3" json:"source_cluster,omitempty"`
-	InclusiveEndMessageId int64                    `protobuf:"varint,4,opt,name=inclusive_end_message_id,json=inclusiveEndMessageId,proto3" json:"inclusive_end_message_id,omitempty"`
-	MaximumPageSize       int32                    `protobuf:"varint,5,opt,name=maximum_page_size,json=maximumPageSize,proto3" json:"maximum_page_size,omitempty"`
-	NextPageToken         []byte                   `protobuf:"bytes,6,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
-	unknownFields         protoimpl.UnknownFields
-	sizeCache             protoimpl.SizeCache
+	state                            protoimpl.MessageState   `protogen:"opaque.v1"`
+	xxx_hidden_Type                  v111.DeadLetterQueueType `protobuf:"varint,1,opt,name=type,proto3,enum=temporal.server.api.enums.v1.DeadLetterQueueType"`
+	xxx_hidden_ShardId               int32                    `protobuf:"varint,2,opt,name=shard_id,json=shardId,proto3"`
+	xxx_hidden_SourceCluster         string                   `protobuf:"bytes,3,opt,name=source_cluster,json=sourceCluster,proto3"`
+	xxx_hidden_InclusiveEndMessageId int64                    `protobuf:"varint,4,opt,name=inclusive_end_message_id,json=inclusiveEndMessageId,proto3"`
+	xxx_hidden_MaximumPageSize       int32                    `protobuf:"varint,5,opt,name=maximum_page_size,json=maximumPageSize,proto3"`
+	xxx_hidden_NextPageToken         []byte                   `protobuf:"bytes,6,opt,name=next_page_token,json=nextPageToken,proto3"`
+	unknownFields                    protoimpl.UnknownFields
+	sizeCache                        protoimpl.SizeCache
 }
 
 func (x *MergeDLQMessagesRequest) Reset() {
@@ -6217,58 +10657,104 @@ func (x *MergeDLQMessagesRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use MergeDLQMessagesRequest.ProtoReflect.Descriptor instead.
-func (*MergeDLQMessagesRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{88}
-}
-
 func (x *MergeDLQMessagesRequest) GetType() v111.DeadLetterQueueType {
 	if x != nil {
-		return x.Type
+		return x.xxx_hidden_Type
 	}
 	return v111.DeadLetterQueueType(0)
 }
 
 func (x *MergeDLQMessagesRequest) GetShardId() int32 {
 	if x != nil {
-		return x.ShardId
+		return x.xxx_hidden_ShardId
 	}
 	return 0
 }
 
 func (x *MergeDLQMessagesRequest) GetSourceCluster() string {
 	if x != nil {
-		return x.SourceCluster
+		return x.xxx_hidden_SourceCluster
 	}
 	return ""
 }
 
 func (x *MergeDLQMessagesRequest) GetInclusiveEndMessageId() int64 {
 	if x != nil {
-		return x.InclusiveEndMessageId
+		return x.xxx_hidden_InclusiveEndMessageId
 	}
 	return 0
 }
 
 func (x *MergeDLQMessagesRequest) GetMaximumPageSize() int32 {
 	if x != nil {
-		return x.MaximumPageSize
+		return x.xxx_hidden_MaximumPageSize
 	}
 	return 0
 }
 
 func (x *MergeDLQMessagesRequest) GetNextPageToken() []byte {
 	if x != nil {
-		return x.NextPageToken
+		return x.xxx_hidden_NextPageToken
 	}
 	return nil
 }
 
+func (x *MergeDLQMessagesRequest) SetType(v v111.DeadLetterQueueType) {
+	x.xxx_hidden_Type = v
+}
+
+func (x *MergeDLQMessagesRequest) SetShardId(v int32) {
+	x.xxx_hidden_ShardId = v
+}
+
+func (x *MergeDLQMessagesRequest) SetSourceCluster(v string) {
+	x.xxx_hidden_SourceCluster = v
+}
+
+func (x *MergeDLQMessagesRequest) SetInclusiveEndMessageId(v int64) {
+	x.xxx_hidden_InclusiveEndMessageId = v
+}
+
+func (x *MergeDLQMessagesRequest) SetMaximumPageSize(v int32) {
+	x.xxx_hidden_MaximumPageSize = v
+}
+
+func (x *MergeDLQMessagesRequest) SetNextPageToken(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_NextPageToken = v
+}
+
+type MergeDLQMessagesRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Type                  v111.DeadLetterQueueType
+	ShardId               int32
+	SourceCluster         string
+	InclusiveEndMessageId int64
+	MaximumPageSize       int32
+	NextPageToken         []byte
+}
+
+func (b0 MergeDLQMessagesRequest_builder) Build() *MergeDLQMessagesRequest {
+	m0 := &MergeDLQMessagesRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Type = b.Type
+	x.xxx_hidden_ShardId = b.ShardId
+	x.xxx_hidden_SourceCluster = b.SourceCluster
+	x.xxx_hidden_InclusiveEndMessageId = b.InclusiveEndMessageId
+	x.xxx_hidden_MaximumPageSize = b.MaximumPageSize
+	x.xxx_hidden_NextPageToken = b.NextPageToken
+	return m0
+}
+
 type MergeDLQMessagesResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	NextPageToken []byte                 `protobuf:"bytes,1,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                    protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_NextPageToken []byte                 `protobuf:"bytes,1,opt,name=next_page_token,json=nextPageToken,proto3"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *MergeDLQMessagesResponse) Reset() {
@@ -6296,26 +10782,41 @@ func (x *MergeDLQMessagesResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use MergeDLQMessagesResponse.ProtoReflect.Descriptor instead.
-func (*MergeDLQMessagesResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{89}
-}
-
 func (x *MergeDLQMessagesResponse) GetNextPageToken() []byte {
 	if x != nil {
-		return x.NextPageToken
+		return x.xxx_hidden_NextPageToken
 	}
 	return nil
 }
 
+func (x *MergeDLQMessagesResponse) SetNextPageToken(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_NextPageToken = v
+}
+
+type MergeDLQMessagesResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NextPageToken []byte
+}
+
+func (b0 MergeDLQMessagesResponse_builder) Build() *MergeDLQMessagesResponse {
+	m0 := &MergeDLQMessagesResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NextPageToken = b.NextPageToken
+	return m0
+}
+
 type RefreshWorkflowTasksRequest struct {
-	state       protoimpl.MessageState `protogen:"open.v1"`
-	NamespaceId string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	// (-- api-linter: core::0141::forbidden-types=disabled --)
-	ArchetypeId   uint32                            `protobuf:"varint,3,opt,name=archetype_id,json=archetypeId,proto3" json:"archetype_id,omitempty"`
-	Request       *v118.RefreshWorkflowTasksRequest `protobuf:"bytes,2,opt,name=request,proto3" json:"request,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                  protoimpl.MessageState            `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId string                            `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_ArchetypeId uint32                            `protobuf:"varint,3,opt,name=archetype_id,json=archetypeId,proto3"`
+	xxx_hidden_Request     *v118.RefreshWorkflowTasksRequest `protobuf:"bytes,2,opt,name=request,proto3"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *RefreshWorkflowTasksRequest) Reset() {
@@ -6343,34 +10844,71 @@ func (x *RefreshWorkflowTasksRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RefreshWorkflowTasksRequest.ProtoReflect.Descriptor instead.
-func (*RefreshWorkflowTasksRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{90}
-}
-
 func (x *RefreshWorkflowTasksRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *RefreshWorkflowTasksRequest) GetArchetypeId() uint32 {
 	if x != nil {
-		return x.ArchetypeId
+		return x.xxx_hidden_ArchetypeId
 	}
 	return 0
 }
 
 func (x *RefreshWorkflowTasksRequest) GetRequest() *v118.RefreshWorkflowTasksRequest {
 	if x != nil {
-		return x.Request
+		return x.xxx_hidden_Request
 	}
 	return nil
 }
 
+func (x *RefreshWorkflowTasksRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *RefreshWorkflowTasksRequest) SetArchetypeId(v uint32) {
+	x.xxx_hidden_ArchetypeId = v
+}
+
+func (x *RefreshWorkflowTasksRequest) SetRequest(v *v118.RefreshWorkflowTasksRequest) {
+	x.xxx_hidden_Request = v
+}
+
+func (x *RefreshWorkflowTasksRequest) HasRequest() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Request != nil
+}
+
+func (x *RefreshWorkflowTasksRequest) ClearRequest() {
+	x.xxx_hidden_Request = nil
+}
+
+type RefreshWorkflowTasksRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId string
+	// (-- api-linter: core::0141::forbidden-types=disabled --)
+	ArchetypeId uint32
+	Request     *v118.RefreshWorkflowTasksRequest
+}
+
+func (b0 RefreshWorkflowTasksRequest_builder) Build() *RefreshWorkflowTasksRequest {
+	m0 := &RefreshWorkflowTasksRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_ArchetypeId = b.ArchetypeId
+	x.xxx_hidden_Request = b.Request
+	return m0
+}
+
 type RefreshWorkflowTasksResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -6400,20 +10938,26 @@ func (x *RefreshWorkflowTasksResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RefreshWorkflowTasksResponse.ProtoReflect.Descriptor instead.
-func (*RefreshWorkflowTasksResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{91}
+type RefreshWorkflowTasksResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+}
+
+func (b0 RefreshWorkflowTasksResponse_builder) Build() *RefreshWorkflowTasksResponse {
+	m0 := &RefreshWorkflowTasksResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	return m0
 }
 
 type GenerateLastHistoryReplicationTasksRequest struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	NamespaceId    string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	Execution      *v14.WorkflowExecution `protobuf:"bytes,2,opt,name=execution,proto3" json:"execution,omitempty"`
-	TargetClusters []string               `protobuf:"bytes,3,rep,name=target_clusters,json=targetClusters,proto3" json:"target_clusters,omitempty"`
-	// (-- api-linter: core::0141::forbidden-types=disabled --)
-	ArchetypeId   uint32 `protobuf:"varint,4,opt,name=archetype_id,json=archetypeId,proto3" json:"archetype_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                     protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId    string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_Execution      *v14.WorkflowExecution `protobuf:"bytes,2,opt,name=execution,proto3"`
+	xxx_hidden_TargetClusters []string               `protobuf:"bytes,3,rep,name=target_clusters,json=targetClusters,proto3"`
+	xxx_hidden_ArchetypeId    uint32                 `protobuf:"varint,4,opt,name=archetype_id,json=archetypeId,proto3"`
+	unknownFields             protoimpl.UnknownFields
+	sizeCache                 protoimpl.SizeCache
 }
 
 func (x *GenerateLastHistoryReplicationTasksRequest) Reset() {
@@ -6441,45 +10985,88 @@ func (x *GenerateLastHistoryReplicationTasksRequest) ProtoReflect() protoreflect
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GenerateLastHistoryReplicationTasksRequest.ProtoReflect.Descriptor instead.
-func (*GenerateLastHistoryReplicationTasksRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{92}
-}
-
 func (x *GenerateLastHistoryReplicationTasksRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *GenerateLastHistoryReplicationTasksRequest) GetExecution() *v14.WorkflowExecution {
 	if x != nil {
-		return x.Execution
+		return x.xxx_hidden_Execution
 	}
 	return nil
 }
 
 func (x *GenerateLastHistoryReplicationTasksRequest) GetTargetClusters() []string {
 	if x != nil {
-		return x.TargetClusters
+		return x.xxx_hidden_TargetClusters
 	}
 	return nil
 }
 
 func (x *GenerateLastHistoryReplicationTasksRequest) GetArchetypeId() uint32 {
 	if x != nil {
-		return x.ArchetypeId
+		return x.xxx_hidden_ArchetypeId
 	}
 	return 0
 }
 
+func (x *GenerateLastHistoryReplicationTasksRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *GenerateLastHistoryReplicationTasksRequest) SetExecution(v *v14.WorkflowExecution) {
+	x.xxx_hidden_Execution = v
+}
+
+func (x *GenerateLastHistoryReplicationTasksRequest) SetTargetClusters(v []string) {
+	x.xxx_hidden_TargetClusters = v
+}
+
+func (x *GenerateLastHistoryReplicationTasksRequest) SetArchetypeId(v uint32) {
+	x.xxx_hidden_ArchetypeId = v
+}
+
+func (x *GenerateLastHistoryReplicationTasksRequest) HasExecution() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Execution != nil
+}
+
+func (x *GenerateLastHistoryReplicationTasksRequest) ClearExecution() {
+	x.xxx_hidden_Execution = nil
+}
+
+type GenerateLastHistoryReplicationTasksRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId    string
+	Execution      *v14.WorkflowExecution
+	TargetClusters []string
+	// (-- api-linter: core::0141::forbidden-types=disabled --)
+	ArchetypeId uint32
+}
+
+func (b0 GenerateLastHistoryReplicationTasksRequest_builder) Build() *GenerateLastHistoryReplicationTasksRequest {
+	m0 := &GenerateLastHistoryReplicationTasksRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_Execution = b.Execution
+	x.xxx_hidden_TargetClusters = b.TargetClusters
+	x.xxx_hidden_ArchetypeId = b.ArchetypeId
+	return m0
+}
+
 type GenerateLastHistoryReplicationTasksResponse struct {
-	state                protoimpl.MessageState `protogen:"open.v1"`
-	StateTransitionCount int64                  `protobuf:"varint,1,opt,name=state_transition_count,json=stateTransitionCount,proto3" json:"state_transition_count,omitempty"`
-	HistoryLength        int64                  `protobuf:"varint,2,opt,name=history_length,json=historyLength,proto3" json:"history_length,omitempty"`
-	unknownFields        protoimpl.UnknownFields
-	sizeCache            protoimpl.SizeCache
+	state                           protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_StateTransitionCount int64                  `protobuf:"varint,1,opt,name=state_transition_count,json=stateTransitionCount,proto3"`
+	xxx_hidden_HistoryLength        int64                  `protobuf:"varint,2,opt,name=history_length,json=historyLength,proto3"`
+	unknownFields                   protoimpl.UnknownFields
+	sizeCache                       protoimpl.SizeCache
 }
 
 func (x *GenerateLastHistoryReplicationTasksResponse) Reset() {
@@ -6507,31 +11094,49 @@ func (x *GenerateLastHistoryReplicationTasksResponse) ProtoReflect() protoreflec
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GenerateLastHistoryReplicationTasksResponse.ProtoReflect.Descriptor instead.
-func (*GenerateLastHistoryReplicationTasksResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{93}
-}
-
 func (x *GenerateLastHistoryReplicationTasksResponse) GetStateTransitionCount() int64 {
 	if x != nil {
-		return x.StateTransitionCount
+		return x.xxx_hidden_StateTransitionCount
 	}
 	return 0
 }
 
 func (x *GenerateLastHistoryReplicationTasksResponse) GetHistoryLength() int64 {
 	if x != nil {
-		return x.HistoryLength
+		return x.xxx_hidden_HistoryLength
 	}
 	return 0
 }
 
+func (x *GenerateLastHistoryReplicationTasksResponse) SetStateTransitionCount(v int64) {
+	x.xxx_hidden_StateTransitionCount = v
+}
+
+func (x *GenerateLastHistoryReplicationTasksResponse) SetHistoryLength(v int64) {
+	x.xxx_hidden_HistoryLength = v
+}
+
+type GenerateLastHistoryReplicationTasksResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	StateTransitionCount int64
+	HistoryLength        int64
+}
+
+func (b0 GenerateLastHistoryReplicationTasksResponse_builder) Build() *GenerateLastHistoryReplicationTasksResponse {
+	m0 := &GenerateLastHistoryReplicationTasksResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_StateTransitionCount = b.StateTransitionCount
+	x.xxx_hidden_HistoryLength = b.HistoryLength
+	return m0
+}
+
 type GetReplicationStatusRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Remote cluster names to query for. If omit, will return for all remote clusters.
-	RemoteClusters []string `protobuf:"bytes,1,rep,name=remote_clusters,json=remoteClusters,proto3" json:"remote_clusters,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state                     protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_RemoteClusters []string               `protobuf:"bytes,1,rep,name=remote_clusters,json=remoteClusters,proto3"`
+	unknownFields             protoimpl.UnknownFields
+	sizeCache                 protoimpl.SizeCache
 }
 
 func (x *GetReplicationStatusRequest) Reset() {
@@ -6559,23 +11164,37 @@ func (x *GetReplicationStatusRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetReplicationStatusRequest.ProtoReflect.Descriptor instead.
-func (*GetReplicationStatusRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{94}
-}
-
 func (x *GetReplicationStatusRequest) GetRemoteClusters() []string {
 	if x != nil {
-		return x.RemoteClusters
+		return x.xxx_hidden_RemoteClusters
 	}
 	return nil
 }
 
+func (x *GetReplicationStatusRequest) SetRemoteClusters(v []string) {
+	x.xxx_hidden_RemoteClusters = v
+}
+
+type GetReplicationStatusRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Remote cluster names to query for. If omit, will return for all remote clusters.
+	RemoteClusters []string
+}
+
+func (b0 GetReplicationStatusRequest_builder) Build() *GetReplicationStatusRequest {
+	m0 := &GetReplicationStatusRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_RemoteClusters = b.RemoteClusters
+	return m0
+}
+
 type GetReplicationStatusResponse struct {
-	state         protoimpl.MessageState    `protogen:"open.v1"`
-	Shards        []*ShardReplicationStatus `protobuf:"bytes,1,rep,name=shards,proto3" json:"shards,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state             protoimpl.MessageState     `protogen:"opaque.v1"`
+	xxx_hidden_Shards *[]*ShardReplicationStatus `protobuf:"bytes,1,rep,name=shards,proto3"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *GetReplicationStatusResponse) Reset() {
@@ -6603,30 +11222,43 @@ func (x *GetReplicationStatusResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetReplicationStatusResponse.ProtoReflect.Descriptor instead.
-func (*GetReplicationStatusResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{95}
-}
-
 func (x *GetReplicationStatusResponse) GetShards() []*ShardReplicationStatus {
 	if x != nil {
-		return x.Shards
+		if x.xxx_hidden_Shards != nil {
+			return *x.xxx_hidden_Shards
+		}
 	}
 	return nil
 }
 
+func (x *GetReplicationStatusResponse) SetShards(v []*ShardReplicationStatus) {
+	x.xxx_hidden_Shards = &v
+}
+
+type GetReplicationStatusResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Shards []*ShardReplicationStatus
+}
+
+func (b0 GetReplicationStatusResponse_builder) Build() *GetReplicationStatusResponse {
+	m0 := &GetReplicationStatusResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Shards = &b.Shards
+	return m0
+}
+
 type ShardReplicationStatus struct {
-	state   protoimpl.MessageState `protogen:"open.v1"`
-	ShardId int32                  `protobuf:"varint,1,opt,name=shard_id,json=shardId,proto3" json:"shard_id,omitempty"`
-	// Max replication task id of current cluster
-	MaxReplicationTaskId int64 `protobuf:"varint,2,opt,name=max_replication_task_id,json=maxReplicationTaskId,proto3" json:"max_replication_task_id,omitempty"`
-	// Local time on this shard
-	ShardLocalTime                   *timestamppb.Timestamp                       `protobuf:"bytes,3,opt,name=shard_local_time,json=shardLocalTime,proto3" json:"shard_local_time,omitempty"`
-	RemoteClusters                   map[string]*ShardReplicationStatusPerCluster `protobuf:"bytes,4,rep,name=remote_clusters,json=remoteClusters,proto3" json:"remote_clusters,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	HandoverNamespaces               map[string]*HandoverNamespaceInfo            `protobuf:"bytes,5,rep,name=handover_namespaces,json=handoverNamespaces,proto3" json:"handover_namespaces,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	MaxReplicationTaskVisibilityTime *timestamppb.Timestamp                       `protobuf:"bytes,6,opt,name=max_replication_task_visibility_time,json=maxReplicationTaskVisibilityTime,proto3" json:"max_replication_task_visibility_time,omitempty"`
-	unknownFields                    protoimpl.UnknownFields
-	sizeCache                        protoimpl.SizeCache
+	state                                       protoimpl.MessageState                       `protogen:"opaque.v1"`
+	xxx_hidden_ShardId                          int32                                        `protobuf:"varint,1,opt,name=shard_id,json=shardId,proto3"`
+	xxx_hidden_MaxReplicationTaskId             int64                                        `protobuf:"varint,2,opt,name=max_replication_task_id,json=maxReplicationTaskId,proto3"`
+	xxx_hidden_ShardLocalTime                   *timestamppb.Timestamp                       `protobuf:"bytes,3,opt,name=shard_local_time,json=shardLocalTime,proto3"`
+	xxx_hidden_RemoteClusters                   map[string]*ShardReplicationStatusPerCluster `protobuf:"bytes,4,rep,name=remote_clusters,json=remoteClusters,proto3" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	xxx_hidden_HandoverNamespaces               map[string]*HandoverNamespaceInfo            `protobuf:"bytes,5,rep,name=handover_namespaces,json=handoverNamespaces,proto3" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	xxx_hidden_MaxReplicationTaskVisibilityTime *timestamppb.Timestamp                       `protobuf:"bytes,6,opt,name=max_replication_task_visibility_time,json=maxReplicationTaskVisibilityTime,proto3"`
+	unknownFields                               protoimpl.UnknownFields
+	sizeCache                                   protoimpl.SizeCache
 }
 
 func (x *ShardReplicationStatus) Reset() {
@@ -6654,59 +11286,125 @@ func (x *ShardReplicationStatus) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ShardReplicationStatus.ProtoReflect.Descriptor instead.
-func (*ShardReplicationStatus) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{96}
-}
-
 func (x *ShardReplicationStatus) GetShardId() int32 {
 	if x != nil {
-		return x.ShardId
+		return x.xxx_hidden_ShardId
 	}
 	return 0
 }
 
 func (x *ShardReplicationStatus) GetMaxReplicationTaskId() int64 {
 	if x != nil {
-		return x.MaxReplicationTaskId
+		return x.xxx_hidden_MaxReplicationTaskId
 	}
 	return 0
 }
 
 func (x *ShardReplicationStatus) GetShardLocalTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.ShardLocalTime
+		return x.xxx_hidden_ShardLocalTime
 	}
 	return nil
 }
 
 func (x *ShardReplicationStatus) GetRemoteClusters() map[string]*ShardReplicationStatusPerCluster {
 	if x != nil {
-		return x.RemoteClusters
+		return x.xxx_hidden_RemoteClusters
 	}
 	return nil
 }
 
 func (x *ShardReplicationStatus) GetHandoverNamespaces() map[string]*HandoverNamespaceInfo {
 	if x != nil {
-		return x.HandoverNamespaces
+		return x.xxx_hidden_HandoverNamespaces
 	}
 	return nil
 }
 
 func (x *ShardReplicationStatus) GetMaxReplicationTaskVisibilityTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.MaxReplicationTaskVisibilityTime
+		return x.xxx_hidden_MaxReplicationTaskVisibilityTime
 	}
 	return nil
 }
 
+func (x *ShardReplicationStatus) SetShardId(v int32) {
+	x.xxx_hidden_ShardId = v
+}
+
+func (x *ShardReplicationStatus) SetMaxReplicationTaskId(v int64) {
+	x.xxx_hidden_MaxReplicationTaskId = v
+}
+
+func (x *ShardReplicationStatus) SetShardLocalTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_ShardLocalTime = v
+}
+
+func (x *ShardReplicationStatus) SetRemoteClusters(v map[string]*ShardReplicationStatusPerCluster) {
+	x.xxx_hidden_RemoteClusters = v
+}
+
+func (x *ShardReplicationStatus) SetHandoverNamespaces(v map[string]*HandoverNamespaceInfo) {
+	x.xxx_hidden_HandoverNamespaces = v
+}
+
+func (x *ShardReplicationStatus) SetMaxReplicationTaskVisibilityTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_MaxReplicationTaskVisibilityTime = v
+}
+
+func (x *ShardReplicationStatus) HasShardLocalTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_ShardLocalTime != nil
+}
+
+func (x *ShardReplicationStatus) HasMaxReplicationTaskVisibilityTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_MaxReplicationTaskVisibilityTime != nil
+}
+
+func (x *ShardReplicationStatus) ClearShardLocalTime() {
+	x.xxx_hidden_ShardLocalTime = nil
+}
+
+func (x *ShardReplicationStatus) ClearMaxReplicationTaskVisibilityTime() {
+	x.xxx_hidden_MaxReplicationTaskVisibilityTime = nil
+}
+
+type ShardReplicationStatus_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	ShardId int32
+	// Max replication task id of current cluster
+	MaxReplicationTaskId int64
+	// Local time on this shard
+	ShardLocalTime                   *timestamppb.Timestamp
+	RemoteClusters                   map[string]*ShardReplicationStatusPerCluster
+	HandoverNamespaces               map[string]*HandoverNamespaceInfo
+	MaxReplicationTaskVisibilityTime *timestamppb.Timestamp
+}
+
+func (b0 ShardReplicationStatus_builder) Build() *ShardReplicationStatus {
+	m0 := &ShardReplicationStatus{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_ShardId = b.ShardId
+	x.xxx_hidden_MaxReplicationTaskId = b.MaxReplicationTaskId
+	x.xxx_hidden_ShardLocalTime = b.ShardLocalTime
+	x.xxx_hidden_RemoteClusters = b.RemoteClusters
+	x.xxx_hidden_HandoverNamespaces = b.HandoverNamespaces
+	x.xxx_hidden_MaxReplicationTaskVisibilityTime = b.MaxReplicationTaskVisibilityTime
+	return m0
+}
+
 type HandoverNamespaceInfo struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// max replication task id when namespace transition to Handover state
-	HandoverReplicationTaskId int64 `protobuf:"varint,1,opt,name=handover_replication_task_id,json=handoverReplicationTaskId,proto3" json:"handover_replication_task_id,omitempty"`
-	unknownFields             protoimpl.UnknownFields
-	sizeCache                 protoimpl.SizeCache
+	state                                protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_HandoverReplicationTaskId int64                  `protobuf:"varint,1,opt,name=handover_replication_task_id,json=handoverReplicationTaskId,proto3"`
+	unknownFields                        protoimpl.UnknownFields
+	sizeCache                            protoimpl.SizeCache
 }
 
 func (x *HandoverNamespaceInfo) Reset() {
@@ -6734,26 +11432,38 @@ func (x *HandoverNamespaceInfo) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use HandoverNamespaceInfo.ProtoReflect.Descriptor instead.
-func (*HandoverNamespaceInfo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{97}
-}
-
 func (x *HandoverNamespaceInfo) GetHandoverReplicationTaskId() int64 {
 	if x != nil {
-		return x.HandoverReplicationTaskId
+		return x.xxx_hidden_HandoverReplicationTaskId
 	}
 	return 0
 }
 
+func (x *HandoverNamespaceInfo) SetHandoverReplicationTaskId(v int64) {
+	x.xxx_hidden_HandoverReplicationTaskId = v
+}
+
+type HandoverNamespaceInfo_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// max replication task id when namespace transition to Handover state
+	HandoverReplicationTaskId int64
+}
+
+func (b0 HandoverNamespaceInfo_builder) Build() *HandoverNamespaceInfo {
+	m0 := &HandoverNamespaceInfo{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_HandoverReplicationTaskId = b.HandoverReplicationTaskId
+	return m0
+}
+
 type ShardReplicationStatusPerCluster struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Acked replication task id
-	AckedTaskId int64 `protobuf:"varint,1,opt,name=acked_task_id,json=ackedTaskId,proto3" json:"acked_task_id,omitempty"`
-	// Acked replication task creation time
-	AckedTaskVisibilityTime *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=acked_task_visibility_time,json=ackedTaskVisibilityTime,proto3" json:"acked_task_visibility_time,omitempty"`
-	unknownFields           protoimpl.UnknownFields
-	sizeCache               protoimpl.SizeCache
+	state                              protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_AckedTaskId             int64                  `protobuf:"varint,1,opt,name=acked_task_id,json=ackedTaskId,proto3"`
+	xxx_hidden_AckedTaskVisibilityTime *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=acked_task_visibility_time,json=ackedTaskVisibilityTime,proto3"`
+	unknownFields                      protoimpl.UnknownFields
+	sizeCache                          protoimpl.SizeCache
 }
 
 func (x *ShardReplicationStatusPerCluster) Reset() {
@@ -6781,31 +11491,63 @@ func (x *ShardReplicationStatusPerCluster) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ShardReplicationStatusPerCluster.ProtoReflect.Descriptor instead.
-func (*ShardReplicationStatusPerCluster) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{98}
-}
-
 func (x *ShardReplicationStatusPerCluster) GetAckedTaskId() int64 {
 	if x != nil {
-		return x.AckedTaskId
+		return x.xxx_hidden_AckedTaskId
 	}
 	return 0
 }
 
 func (x *ShardReplicationStatusPerCluster) GetAckedTaskVisibilityTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.AckedTaskVisibilityTime
+		return x.xxx_hidden_AckedTaskVisibilityTime
 	}
 	return nil
 }
 
+func (x *ShardReplicationStatusPerCluster) SetAckedTaskId(v int64) {
+	x.xxx_hidden_AckedTaskId = v
+}
+
+func (x *ShardReplicationStatusPerCluster) SetAckedTaskVisibilityTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_AckedTaskVisibilityTime = v
+}
+
+func (x *ShardReplicationStatusPerCluster) HasAckedTaskVisibilityTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_AckedTaskVisibilityTime != nil
+}
+
+func (x *ShardReplicationStatusPerCluster) ClearAckedTaskVisibilityTime() {
+	x.xxx_hidden_AckedTaskVisibilityTime = nil
+}
+
+type ShardReplicationStatusPerCluster_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Acked replication task id
+	AckedTaskId int64
+	// Acked replication task creation time
+	AckedTaskVisibilityTime *timestamppb.Timestamp
+}
+
+func (b0 ShardReplicationStatusPerCluster_builder) Build() *ShardReplicationStatusPerCluster {
+	m0 := &ShardReplicationStatusPerCluster{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_AckedTaskId = b.AckedTaskId
+	x.xxx_hidden_AckedTaskVisibilityTime = b.AckedTaskVisibilityTime
+	return m0
+}
+
 type RebuildMutableStateRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	NamespaceId   string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	Execution     *v14.WorkflowExecution `protobuf:"bytes,2,opt,name=execution,proto3" json:"execution,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                  protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_Execution   *v14.WorkflowExecution `protobuf:"bytes,2,opt,name=execution,proto3"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *RebuildMutableStateRequest) Reset() {
@@ -6833,27 +11575,57 @@ func (x *RebuildMutableStateRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RebuildMutableStateRequest.ProtoReflect.Descriptor instead.
-func (*RebuildMutableStateRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{99}
-}
-
 func (x *RebuildMutableStateRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *RebuildMutableStateRequest) GetExecution() *v14.WorkflowExecution {
 	if x != nil {
-		return x.Execution
+		return x.xxx_hidden_Execution
 	}
 	return nil
 }
 
+func (x *RebuildMutableStateRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *RebuildMutableStateRequest) SetExecution(v *v14.WorkflowExecution) {
+	x.xxx_hidden_Execution = v
+}
+
+func (x *RebuildMutableStateRequest) HasExecution() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Execution != nil
+}
+
+func (x *RebuildMutableStateRequest) ClearExecution() {
+	x.xxx_hidden_Execution = nil
+}
+
+type RebuildMutableStateRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId string
+	Execution   *v14.WorkflowExecution
+}
+
+func (b0 RebuildMutableStateRequest_builder) Build() *RebuildMutableStateRequest {
+	m0 := &RebuildMutableStateRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_Execution = b.Execution
+	return m0
+}
+
 type RebuildMutableStateResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -6883,20 +11655,27 @@ func (x *RebuildMutableStateResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RebuildMutableStateResponse.ProtoReflect.Descriptor instead.
-func (*RebuildMutableStateResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{100}
+type RebuildMutableStateResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+}
+
+func (b0 RebuildMutableStateResponse_builder) Build() *RebuildMutableStateResponse {
+	m0 := &RebuildMutableStateResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	return m0
 }
 
 type ImportWorkflowExecutionRequest struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	NamespaceId    string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	Execution      *v14.WorkflowExecution `protobuf:"bytes,2,opt,name=execution,proto3" json:"execution,omitempty"`
-	HistoryBatches []*v14.DataBlob        `protobuf:"bytes,3,rep,name=history_batches,json=historyBatches,proto3" json:"history_batches,omitempty"`
-	VersionHistory *v18.VersionHistory    `protobuf:"bytes,4,opt,name=version_history,json=versionHistory,proto3" json:"version_history,omitempty"`
-	Token          []byte                 `protobuf:"bytes,5,opt,name=token,proto3" json:"token,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state                     protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId    string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_Execution      *v14.WorkflowExecution `protobuf:"bytes,2,opt,name=execution,proto3"`
+	xxx_hidden_HistoryBatches *[]*v14.DataBlob       `protobuf:"bytes,3,rep,name=history_batches,json=historyBatches,proto3"`
+	xxx_hidden_VersionHistory *v18.VersionHistory    `protobuf:"bytes,4,opt,name=version_history,json=versionHistory,proto3"`
+	xxx_hidden_Token          []byte                 `protobuf:"bytes,5,opt,name=token,proto3"`
+	unknownFields             protoimpl.UnknownFields
+	sizeCache                 protoimpl.SizeCache
 }
 
 func (x *ImportWorkflowExecutionRequest) Reset() {
@@ -6924,52 +11703,116 @@ func (x *ImportWorkflowExecutionRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ImportWorkflowExecutionRequest.ProtoReflect.Descriptor instead.
-func (*ImportWorkflowExecutionRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{101}
-}
-
 func (x *ImportWorkflowExecutionRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *ImportWorkflowExecutionRequest) GetExecution() *v14.WorkflowExecution {
 	if x != nil {
-		return x.Execution
+		return x.xxx_hidden_Execution
 	}
 	return nil
 }
 
 func (x *ImportWorkflowExecutionRequest) GetHistoryBatches() []*v14.DataBlob {
 	if x != nil {
-		return x.HistoryBatches
+		if x.xxx_hidden_HistoryBatches != nil {
+			return *x.xxx_hidden_HistoryBatches
+		}
 	}
 	return nil
 }
 
 func (x *ImportWorkflowExecutionRequest) GetVersionHistory() *v18.VersionHistory {
 	if x != nil {
-		return x.VersionHistory
+		return x.xxx_hidden_VersionHistory
 	}
 	return nil
 }
 
 func (x *ImportWorkflowExecutionRequest) GetToken() []byte {
 	if x != nil {
-		return x.Token
+		return x.xxx_hidden_Token
 	}
 	return nil
 }
 
+func (x *ImportWorkflowExecutionRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *ImportWorkflowExecutionRequest) SetExecution(v *v14.WorkflowExecution) {
+	x.xxx_hidden_Execution = v
+}
+
+func (x *ImportWorkflowExecutionRequest) SetHistoryBatches(v []*v14.DataBlob) {
+	x.xxx_hidden_HistoryBatches = &v
+}
+
+func (x *ImportWorkflowExecutionRequest) SetVersionHistory(v *v18.VersionHistory) {
+	x.xxx_hidden_VersionHistory = v
+}
+
+func (x *ImportWorkflowExecutionRequest) SetToken(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_Token = v
+}
+
+func (x *ImportWorkflowExecutionRequest) HasExecution() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Execution != nil
+}
+
+func (x *ImportWorkflowExecutionRequest) HasVersionHistory() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_VersionHistory != nil
+}
+
+func (x *ImportWorkflowExecutionRequest) ClearExecution() {
+	x.xxx_hidden_Execution = nil
+}
+
+func (x *ImportWorkflowExecutionRequest) ClearVersionHistory() {
+	x.xxx_hidden_VersionHistory = nil
+}
+
+type ImportWorkflowExecutionRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId    string
+	Execution      *v14.WorkflowExecution
+	HistoryBatches []*v14.DataBlob
+	VersionHistory *v18.VersionHistory
+	Token          []byte
+}
+
+func (b0 ImportWorkflowExecutionRequest_builder) Build() *ImportWorkflowExecutionRequest {
+	m0 := &ImportWorkflowExecutionRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_Execution = b.Execution
+	x.xxx_hidden_HistoryBatches = &b.HistoryBatches
+	x.xxx_hidden_VersionHistory = b.VersionHistory
+	x.xxx_hidden_Token = b.Token
+	return m0
+}
+
 type ImportWorkflowExecutionResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Token         []byte                 `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
-	EventsApplied bool                   `protobuf:"varint,2,opt,name=events_applied,json=eventsApplied,proto3" json:"events_applied,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                    protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Token         []byte                 `protobuf:"bytes,1,opt,name=token,proto3"`
+	xxx_hidden_EventsApplied bool                   `protobuf:"varint,2,opt,name=events_applied,json=eventsApplied,proto3"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *ImportWorkflowExecutionResponse) Reset() {
@@ -6997,33 +11840,55 @@ func (x *ImportWorkflowExecutionResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ImportWorkflowExecutionResponse.ProtoReflect.Descriptor instead.
-func (*ImportWorkflowExecutionResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{102}
-}
-
 func (x *ImportWorkflowExecutionResponse) GetToken() []byte {
 	if x != nil {
-		return x.Token
+		return x.xxx_hidden_Token
 	}
 	return nil
 }
 
 func (x *ImportWorkflowExecutionResponse) GetEventsApplied() bool {
 	if x != nil {
-		return x.EventsApplied
+		return x.xxx_hidden_EventsApplied
 	}
 	return false
 }
 
+func (x *ImportWorkflowExecutionResponse) SetToken(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_Token = v
+}
+
+func (x *ImportWorkflowExecutionResponse) SetEventsApplied(v bool) {
+	x.xxx_hidden_EventsApplied = v
+}
+
+type ImportWorkflowExecutionResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Token         []byte
+	EventsApplied bool
+}
+
+func (b0 ImportWorkflowExecutionResponse_builder) Build() *ImportWorkflowExecutionResponse {
+	m0 := &ImportWorkflowExecutionResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Token = b.Token
+	x.xxx_hidden_EventsApplied = b.EventsApplied
+	return m0
+}
+
 type DeleteWorkflowVisibilityRecordRequest struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	NamespaceId       string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	Execution         *v14.WorkflowExecution `protobuf:"bytes,2,opt,name=execution,proto3" json:"execution,omitempty"`
-	WorkflowStartTime *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=workflow_start_time,json=workflowStartTime,proto3" json:"workflow_start_time,omitempty"`
-	WorkflowCloseTime *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=workflow_close_time,json=workflowCloseTime,proto3" json:"workflow_close_time,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state                        protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId       string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_Execution         *v14.WorkflowExecution `protobuf:"bytes,2,opt,name=execution,proto3"`
+	xxx_hidden_WorkflowStartTime *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=workflow_start_time,json=workflowStartTime,proto3"`
+	xxx_hidden_WorkflowCloseTime *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=workflow_close_time,json=workflowCloseTime,proto3"`
+	unknownFields                protoimpl.UnknownFields
+	sizeCache                    protoimpl.SizeCache
 }
 
 func (x *DeleteWorkflowVisibilityRecordRequest) Reset() {
@@ -7051,41 +11916,105 @@ func (x *DeleteWorkflowVisibilityRecordRequest) ProtoReflect() protoreflect.Mess
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DeleteWorkflowVisibilityRecordRequest.ProtoReflect.Descriptor instead.
-func (*DeleteWorkflowVisibilityRecordRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{103}
-}
-
 func (x *DeleteWorkflowVisibilityRecordRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *DeleteWorkflowVisibilityRecordRequest) GetExecution() *v14.WorkflowExecution {
 	if x != nil {
-		return x.Execution
+		return x.xxx_hidden_Execution
 	}
 	return nil
 }
 
 func (x *DeleteWorkflowVisibilityRecordRequest) GetWorkflowStartTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.WorkflowStartTime
+		return x.xxx_hidden_WorkflowStartTime
 	}
 	return nil
 }
 
 func (x *DeleteWorkflowVisibilityRecordRequest) GetWorkflowCloseTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.WorkflowCloseTime
+		return x.xxx_hidden_WorkflowCloseTime
 	}
 	return nil
 }
 
+func (x *DeleteWorkflowVisibilityRecordRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *DeleteWorkflowVisibilityRecordRequest) SetExecution(v *v14.WorkflowExecution) {
+	x.xxx_hidden_Execution = v
+}
+
+func (x *DeleteWorkflowVisibilityRecordRequest) SetWorkflowStartTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_WorkflowStartTime = v
+}
+
+func (x *DeleteWorkflowVisibilityRecordRequest) SetWorkflowCloseTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_WorkflowCloseTime = v
+}
+
+func (x *DeleteWorkflowVisibilityRecordRequest) HasExecution() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Execution != nil
+}
+
+func (x *DeleteWorkflowVisibilityRecordRequest) HasWorkflowStartTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_WorkflowStartTime != nil
+}
+
+func (x *DeleteWorkflowVisibilityRecordRequest) HasWorkflowCloseTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_WorkflowCloseTime != nil
+}
+
+func (x *DeleteWorkflowVisibilityRecordRequest) ClearExecution() {
+	x.xxx_hidden_Execution = nil
+}
+
+func (x *DeleteWorkflowVisibilityRecordRequest) ClearWorkflowStartTime() {
+	x.xxx_hidden_WorkflowStartTime = nil
+}
+
+func (x *DeleteWorkflowVisibilityRecordRequest) ClearWorkflowCloseTime() {
+	x.xxx_hidden_WorkflowCloseTime = nil
+}
+
+type DeleteWorkflowVisibilityRecordRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId       string
+	Execution         *v14.WorkflowExecution
+	WorkflowStartTime *timestamppb.Timestamp
+	WorkflowCloseTime *timestamppb.Timestamp
+}
+
+func (b0 DeleteWorkflowVisibilityRecordRequest_builder) Build() *DeleteWorkflowVisibilityRecordRequest {
+	m0 := &DeleteWorkflowVisibilityRecordRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_Execution = b.Execution
+	x.xxx_hidden_WorkflowStartTime = b.WorkflowStartTime
+	x.xxx_hidden_WorkflowCloseTime = b.WorkflowCloseTime
+	return m0
+}
+
 type DeleteWorkflowVisibilityRecordResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -7115,20 +12044,27 @@ func (x *DeleteWorkflowVisibilityRecordResponse) ProtoReflect() protoreflect.Mes
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DeleteWorkflowVisibilityRecordResponse.ProtoReflect.Descriptor instead.
-func (*DeleteWorkflowVisibilityRecordResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{104}
+type DeleteWorkflowVisibilityRecordResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+}
+
+func (b0 DeleteWorkflowVisibilityRecordResponse_builder) Build() *DeleteWorkflowVisibilityRecordResponse {
+	m0 := &DeleteWorkflowVisibilityRecordResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	return m0
 }
 
 // (-- api-linter: core::0134=disabled
 //
 //	aip.dev/not-precedent: This service does not follow the update method AIP --)
 type UpdateWorkflowExecutionRequest struct {
-	state         protoimpl.MessageState             `protogen:"open.v1"`
-	NamespaceId   string                             `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	Request       *v1.UpdateWorkflowExecutionRequest `protobuf:"bytes,2,opt,name=request,proto3" json:"request,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                  protoimpl.MessageState             `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId string                             `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_Request     *v1.UpdateWorkflowExecutionRequest `protobuf:"bytes,2,opt,name=request,proto3"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *UpdateWorkflowExecutionRequest) Reset() {
@@ -7156,30 +12092,60 @@ func (x *UpdateWorkflowExecutionRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use UpdateWorkflowExecutionRequest.ProtoReflect.Descriptor instead.
-func (*UpdateWorkflowExecutionRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{105}
-}
-
 func (x *UpdateWorkflowExecutionRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *UpdateWorkflowExecutionRequest) GetRequest() *v1.UpdateWorkflowExecutionRequest {
 	if x != nil {
-		return x.Request
+		return x.xxx_hidden_Request
 	}
 	return nil
 }
 
+func (x *UpdateWorkflowExecutionRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *UpdateWorkflowExecutionRequest) SetRequest(v *v1.UpdateWorkflowExecutionRequest) {
+	x.xxx_hidden_Request = v
+}
+
+func (x *UpdateWorkflowExecutionRequest) HasRequest() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Request != nil
+}
+
+func (x *UpdateWorkflowExecutionRequest) ClearRequest() {
+	x.xxx_hidden_Request = nil
+}
+
+type UpdateWorkflowExecutionRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId string
+	Request     *v1.UpdateWorkflowExecutionRequest
+}
+
+func (b0 UpdateWorkflowExecutionRequest_builder) Build() *UpdateWorkflowExecutionRequest {
+	m0 := &UpdateWorkflowExecutionRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_Request = b.Request
+	return m0
+}
+
 type UpdateWorkflowExecutionResponse struct {
-	state         protoimpl.MessageState              `protogen:"open.v1"`
-	Response      *v1.UpdateWorkflowExecutionResponse `protobuf:"bytes,1,opt,name=response,proto3" json:"response,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state               protoimpl.MessageState              `protogen:"opaque.v1"`
+	xxx_hidden_Response *v1.UpdateWorkflowExecutionResponse `protobuf:"bytes,1,opt,name=response,proto3"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *UpdateWorkflowExecutionResponse) Reset() {
@@ -7207,26 +12173,47 @@ func (x *UpdateWorkflowExecutionResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use UpdateWorkflowExecutionResponse.ProtoReflect.Descriptor instead.
-func (*UpdateWorkflowExecutionResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{106}
-}
-
 func (x *UpdateWorkflowExecutionResponse) GetResponse() *v1.UpdateWorkflowExecutionResponse {
 	if x != nil {
-		return x.Response
+		return x.xxx_hidden_Response
 	}
 	return nil
 }
 
+func (x *UpdateWorkflowExecutionResponse) SetResponse(v *v1.UpdateWorkflowExecutionResponse) {
+	x.xxx_hidden_Response = v
+}
+
+func (x *UpdateWorkflowExecutionResponse) HasResponse() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Response != nil
+}
+
+func (x *UpdateWorkflowExecutionResponse) ClearResponse() {
+	x.xxx_hidden_Response = nil
+}
+
+type UpdateWorkflowExecutionResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Response *v1.UpdateWorkflowExecutionResponse
+}
+
+func (b0 UpdateWorkflowExecutionResponse_builder) Build() *UpdateWorkflowExecutionResponse {
+	m0 := &UpdateWorkflowExecutionResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Response = b.Response
+	return m0
+}
+
 type StreamWorkflowReplicationMessagesRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Types that are valid to be assigned to Attributes:
-	//
-	//	*StreamWorkflowReplicationMessagesRequest_SyncReplicationState
-	Attributes    isStreamWorkflowReplicationMessagesRequest_Attributes `protobuf_oneof:"attributes"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                 protoimpl.MessageState                                `protogen:"opaque.v1"`
+	xxx_hidden_Attributes isStreamWorkflowReplicationMessagesRequest_Attributes `protobuf_oneof:"attributes"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
 }
 
 func (x *StreamWorkflowReplicationMessagesRequest) Reset() {
@@ -7254,46 +12241,111 @@ func (x *StreamWorkflowReplicationMessagesRequest) ProtoReflect() protoreflect.M
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use StreamWorkflowReplicationMessagesRequest.ProtoReflect.Descriptor instead.
-func (*StreamWorkflowReplicationMessagesRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{107}
-}
-
-func (x *StreamWorkflowReplicationMessagesRequest) GetAttributes() isStreamWorkflowReplicationMessagesRequest_Attributes {
-	if x != nil {
-		return x.Attributes
-	}
-	return nil
-}
-
 func (x *StreamWorkflowReplicationMessagesRequest) GetSyncReplicationState() *v117.SyncReplicationState {
 	if x != nil {
-		if x, ok := x.Attributes.(*StreamWorkflowReplicationMessagesRequest_SyncReplicationState); ok {
+		if x, ok := x.xxx_hidden_Attributes.(*streamWorkflowReplicationMessagesRequest_SyncReplicationState); ok {
 			return x.SyncReplicationState
 		}
 	}
 	return nil
 }
 
+func (x *StreamWorkflowReplicationMessagesRequest) SetSyncReplicationState(v *v117.SyncReplicationState) {
+	if v == nil {
+		x.xxx_hidden_Attributes = nil
+		return
+	}
+	x.xxx_hidden_Attributes = &streamWorkflowReplicationMessagesRequest_SyncReplicationState{v}
+}
+
+func (x *StreamWorkflowReplicationMessagesRequest) HasAttributes() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Attributes != nil
+}
+
+func (x *StreamWorkflowReplicationMessagesRequest) HasSyncReplicationState() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_Attributes.(*streamWorkflowReplicationMessagesRequest_SyncReplicationState)
+	return ok
+}
+
+func (x *StreamWorkflowReplicationMessagesRequest) ClearAttributes() {
+	x.xxx_hidden_Attributes = nil
+}
+
+func (x *StreamWorkflowReplicationMessagesRequest) ClearSyncReplicationState() {
+	if _, ok := x.xxx_hidden_Attributes.(*streamWorkflowReplicationMessagesRequest_SyncReplicationState); ok {
+		x.xxx_hidden_Attributes = nil
+	}
+}
+
+const StreamWorkflowReplicationMessagesRequest_Attributes_not_set_case case_StreamWorkflowReplicationMessagesRequest_Attributes = 0
+const StreamWorkflowReplicationMessagesRequest_SyncReplicationState_case case_StreamWorkflowReplicationMessagesRequest_Attributes = 1
+
+func (x *StreamWorkflowReplicationMessagesRequest) WhichAttributes() case_StreamWorkflowReplicationMessagesRequest_Attributes {
+	if x == nil {
+		return StreamWorkflowReplicationMessagesRequest_Attributes_not_set_case
+	}
+	switch x.xxx_hidden_Attributes.(type) {
+	case *streamWorkflowReplicationMessagesRequest_SyncReplicationState:
+		return StreamWorkflowReplicationMessagesRequest_SyncReplicationState_case
+	default:
+		return StreamWorkflowReplicationMessagesRequest_Attributes_not_set_case
+	}
+}
+
+type StreamWorkflowReplicationMessagesRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Fields of oneof xxx_hidden_Attributes:
+	SyncReplicationState *v117.SyncReplicationState
+	// -- end of xxx_hidden_Attributes
+}
+
+func (b0 StreamWorkflowReplicationMessagesRequest_builder) Build() *StreamWorkflowReplicationMessagesRequest {
+	m0 := &StreamWorkflowReplicationMessagesRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	if b.SyncReplicationState != nil {
+		x.xxx_hidden_Attributes = &streamWorkflowReplicationMessagesRequest_SyncReplicationState{b.SyncReplicationState}
+	}
+	return m0
+}
+
+type case_StreamWorkflowReplicationMessagesRequest_Attributes protoreflect.FieldNumber
+
+func (x case_StreamWorkflowReplicationMessagesRequest_Attributes) String() string {
+	switch x {
+	case StreamWorkflowReplicationMessagesRequest_Attributes_not_set_case:
+		return "StreamWorkflowReplicationMessagesRequestAttributesNotSetCase"
+	case StreamWorkflowReplicationMessagesRequest_SyncReplicationState_case:
+		return "StreamWorkflowReplicationMessagesRequestSyncReplicationStateCase"
+	default:
+		return strconv.Itoa(int(x))
+	}
+
+}
+
 type isStreamWorkflowReplicationMessagesRequest_Attributes interface {
 	isStreamWorkflowReplicationMessagesRequest_Attributes()
 }
 
-type StreamWorkflowReplicationMessagesRequest_SyncReplicationState struct {
+type streamWorkflowReplicationMessagesRequest_SyncReplicationState struct {
 	SyncReplicationState *v117.SyncReplicationState `protobuf:"bytes,1,opt,name=sync_replication_state,json=syncReplicationState,proto3,oneof"`
 }
 
-func (*StreamWorkflowReplicationMessagesRequest_SyncReplicationState) isStreamWorkflowReplicationMessagesRequest_Attributes() {
+func (*streamWorkflowReplicationMessagesRequest_SyncReplicationState) isStreamWorkflowReplicationMessagesRequest_Attributes() {
 }
 
 type StreamWorkflowReplicationMessagesResponse struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Types that are valid to be assigned to Attributes:
-	//
-	//	*StreamWorkflowReplicationMessagesResponse_Messages
-	Attributes    isStreamWorkflowReplicationMessagesResponse_Attributes `protobuf_oneof:"attributes"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                 protoimpl.MessageState                                 `protogen:"opaque.v1"`
+	xxx_hidden_Attributes isStreamWorkflowReplicationMessagesResponse_Attributes `protobuf_oneof:"attributes"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
 }
 
 func (x *StreamWorkflowReplicationMessagesResponse) Reset() {
@@ -7321,44 +12373,112 @@ func (x *StreamWorkflowReplicationMessagesResponse) ProtoReflect() protoreflect.
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use StreamWorkflowReplicationMessagesResponse.ProtoReflect.Descriptor instead.
-func (*StreamWorkflowReplicationMessagesResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{108}
-}
-
-func (x *StreamWorkflowReplicationMessagesResponse) GetAttributes() isStreamWorkflowReplicationMessagesResponse_Attributes {
-	if x != nil {
-		return x.Attributes
-	}
-	return nil
-}
-
 func (x *StreamWorkflowReplicationMessagesResponse) GetMessages() *v117.WorkflowReplicationMessages {
 	if x != nil {
-		if x, ok := x.Attributes.(*StreamWorkflowReplicationMessagesResponse_Messages); ok {
+		if x, ok := x.xxx_hidden_Attributes.(*streamWorkflowReplicationMessagesResponse_Messages); ok {
 			return x.Messages
 		}
 	}
 	return nil
 }
 
+func (x *StreamWorkflowReplicationMessagesResponse) SetMessages(v *v117.WorkflowReplicationMessages) {
+	if v == nil {
+		x.xxx_hidden_Attributes = nil
+		return
+	}
+	x.xxx_hidden_Attributes = &streamWorkflowReplicationMessagesResponse_Messages{v}
+}
+
+func (x *StreamWorkflowReplicationMessagesResponse) HasAttributes() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Attributes != nil
+}
+
+func (x *StreamWorkflowReplicationMessagesResponse) HasMessages() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_Attributes.(*streamWorkflowReplicationMessagesResponse_Messages)
+	return ok
+}
+
+func (x *StreamWorkflowReplicationMessagesResponse) ClearAttributes() {
+	x.xxx_hidden_Attributes = nil
+}
+
+func (x *StreamWorkflowReplicationMessagesResponse) ClearMessages() {
+	if _, ok := x.xxx_hidden_Attributes.(*streamWorkflowReplicationMessagesResponse_Messages); ok {
+		x.xxx_hidden_Attributes = nil
+	}
+}
+
+const StreamWorkflowReplicationMessagesResponse_Attributes_not_set_case case_StreamWorkflowReplicationMessagesResponse_Attributes = 0
+const StreamWorkflowReplicationMessagesResponse_Messages_case case_StreamWorkflowReplicationMessagesResponse_Attributes = 1
+
+func (x *StreamWorkflowReplicationMessagesResponse) WhichAttributes() case_StreamWorkflowReplicationMessagesResponse_Attributes {
+	if x == nil {
+		return StreamWorkflowReplicationMessagesResponse_Attributes_not_set_case
+	}
+	switch x.xxx_hidden_Attributes.(type) {
+	case *streamWorkflowReplicationMessagesResponse_Messages:
+		return StreamWorkflowReplicationMessagesResponse_Messages_case
+	default:
+		return StreamWorkflowReplicationMessagesResponse_Attributes_not_set_case
+	}
+}
+
+type StreamWorkflowReplicationMessagesResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Fields of oneof xxx_hidden_Attributes:
+	Messages *v117.WorkflowReplicationMessages
+	// -- end of xxx_hidden_Attributes
+}
+
+func (b0 StreamWorkflowReplicationMessagesResponse_builder) Build() *StreamWorkflowReplicationMessagesResponse {
+	m0 := &StreamWorkflowReplicationMessagesResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	if b.Messages != nil {
+		x.xxx_hidden_Attributes = &streamWorkflowReplicationMessagesResponse_Messages{b.Messages}
+	}
+	return m0
+}
+
+type case_StreamWorkflowReplicationMessagesResponse_Attributes protoreflect.FieldNumber
+
+func (x case_StreamWorkflowReplicationMessagesResponse_Attributes) String() string {
+	switch x {
+	case StreamWorkflowReplicationMessagesResponse_Attributes_not_set_case:
+		return "StreamWorkflowReplicationMessagesResponseAttributesNotSetCase"
+	case StreamWorkflowReplicationMessagesResponse_Messages_case:
+		return "StreamWorkflowReplicationMessagesResponseMessagesCase"
+	default:
+		return strconv.Itoa(int(x))
+	}
+
+}
+
 type isStreamWorkflowReplicationMessagesResponse_Attributes interface {
 	isStreamWorkflowReplicationMessagesResponse_Attributes()
 }
 
-type StreamWorkflowReplicationMessagesResponse_Messages struct {
+type streamWorkflowReplicationMessagesResponse_Messages struct {
 	Messages *v117.WorkflowReplicationMessages `protobuf:"bytes,1,opt,name=messages,proto3,oneof"`
 }
 
-func (*StreamWorkflowReplicationMessagesResponse_Messages) isStreamWorkflowReplicationMessagesResponse_Attributes() {
+func (*streamWorkflowReplicationMessagesResponse_Messages) isStreamWorkflowReplicationMessagesResponse_Attributes() {
 }
 
 type PollWorkflowExecutionUpdateRequest struct {
-	state         protoimpl.MessageState                 `protogen:"open.v1"`
-	NamespaceId   string                                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	Request       *v1.PollWorkflowExecutionUpdateRequest `protobuf:"bytes,2,opt,name=request,proto3" json:"request,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                  protoimpl.MessageState                 `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId string                                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_Request     *v1.PollWorkflowExecutionUpdateRequest `protobuf:"bytes,2,opt,name=request,proto3"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *PollWorkflowExecutionUpdateRequest) Reset() {
@@ -7386,30 +12506,60 @@ func (x *PollWorkflowExecutionUpdateRequest) ProtoReflect() protoreflect.Message
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use PollWorkflowExecutionUpdateRequest.ProtoReflect.Descriptor instead.
-func (*PollWorkflowExecutionUpdateRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{109}
-}
-
 func (x *PollWorkflowExecutionUpdateRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *PollWorkflowExecutionUpdateRequest) GetRequest() *v1.PollWorkflowExecutionUpdateRequest {
 	if x != nil {
-		return x.Request
+		return x.xxx_hidden_Request
 	}
 	return nil
 }
 
+func (x *PollWorkflowExecutionUpdateRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *PollWorkflowExecutionUpdateRequest) SetRequest(v *v1.PollWorkflowExecutionUpdateRequest) {
+	x.xxx_hidden_Request = v
+}
+
+func (x *PollWorkflowExecutionUpdateRequest) HasRequest() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Request != nil
+}
+
+func (x *PollWorkflowExecutionUpdateRequest) ClearRequest() {
+	x.xxx_hidden_Request = nil
+}
+
+type PollWorkflowExecutionUpdateRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId string
+	Request     *v1.PollWorkflowExecutionUpdateRequest
+}
+
+func (b0 PollWorkflowExecutionUpdateRequest_builder) Build() *PollWorkflowExecutionUpdateRequest {
+	m0 := &PollWorkflowExecutionUpdateRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_Request = b.Request
+	return m0
+}
+
 type PollWorkflowExecutionUpdateResponse struct {
-	state         protoimpl.MessageState                  `protogen:"open.v1"`
-	Response      *v1.PollWorkflowExecutionUpdateResponse `protobuf:"bytes,1,opt,name=response,proto3" json:"response,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state               protoimpl.MessageState                  `protogen:"opaque.v1"`
+	xxx_hidden_Response *v1.PollWorkflowExecutionUpdateResponse `protobuf:"bytes,1,opt,name=response,proto3"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *PollWorkflowExecutionUpdateResponse) Reset() {
@@ -7437,24 +12587,48 @@ func (x *PollWorkflowExecutionUpdateResponse) ProtoReflect() protoreflect.Messag
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use PollWorkflowExecutionUpdateResponse.ProtoReflect.Descriptor instead.
-func (*PollWorkflowExecutionUpdateResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{110}
-}
-
 func (x *PollWorkflowExecutionUpdateResponse) GetResponse() *v1.PollWorkflowExecutionUpdateResponse {
 	if x != nil {
-		return x.Response
+		return x.xxx_hidden_Response
 	}
 	return nil
 }
 
+func (x *PollWorkflowExecutionUpdateResponse) SetResponse(v *v1.PollWorkflowExecutionUpdateResponse) {
+	x.xxx_hidden_Response = v
+}
+
+func (x *PollWorkflowExecutionUpdateResponse) HasResponse() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Response != nil
+}
+
+func (x *PollWorkflowExecutionUpdateResponse) ClearResponse() {
+	x.xxx_hidden_Response = nil
+}
+
+type PollWorkflowExecutionUpdateResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Response *v1.PollWorkflowExecutionUpdateResponse
+}
+
+func (b0 PollWorkflowExecutionUpdateResponse_builder) Build() *PollWorkflowExecutionUpdateResponse {
+	m0 := &PollWorkflowExecutionUpdateResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Response = b.Response
+	return m0
+}
+
 type GetWorkflowExecutionHistoryRequest struct {
-	state         protoimpl.MessageState                 `protogen:"open.v1"`
-	NamespaceId   string                                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	Request       *v1.GetWorkflowExecutionHistoryRequest `protobuf:"bytes,2,opt,name=request,proto3" json:"request,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                  protoimpl.MessageState                 `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId string                                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_Request     *v1.GetWorkflowExecutionHistoryRequest `protobuf:"bytes,2,opt,name=request,proto3"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *GetWorkflowExecutionHistoryRequest) Reset() {
@@ -7482,31 +12656,61 @@ func (x *GetWorkflowExecutionHistoryRequest) ProtoReflect() protoreflect.Message
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetWorkflowExecutionHistoryRequest.ProtoReflect.Descriptor instead.
-func (*GetWorkflowExecutionHistoryRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{111}
-}
-
 func (x *GetWorkflowExecutionHistoryRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *GetWorkflowExecutionHistoryRequest) GetRequest() *v1.GetWorkflowExecutionHistoryRequest {
 	if x != nil {
-		return x.Request
+		return x.xxx_hidden_Request
 	}
 	return nil
 }
 
+func (x *GetWorkflowExecutionHistoryRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *GetWorkflowExecutionHistoryRequest) SetRequest(v *v1.GetWorkflowExecutionHistoryRequest) {
+	x.xxx_hidden_Request = v
+}
+
+func (x *GetWorkflowExecutionHistoryRequest) HasRequest() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Request != nil
+}
+
+func (x *GetWorkflowExecutionHistoryRequest) ClearRequest() {
+	x.xxx_hidden_Request = nil
+}
+
+type GetWorkflowExecutionHistoryRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId string
+	Request     *v1.GetWorkflowExecutionHistoryRequest
+}
+
+func (b0 GetWorkflowExecutionHistoryRequest_builder) Build() *GetWorkflowExecutionHistoryRequest {
+	m0 := &GetWorkflowExecutionHistoryRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_Request = b.Request
+	return m0
+}
+
 type GetWorkflowExecutionHistoryResponse struct {
-	state         protoimpl.MessageState                  `protogen:"open.v1"`
-	Response      *v1.GetWorkflowExecutionHistoryResponse `protobuf:"bytes,1,opt,name=response,proto3" json:"response,omitempty"`
-	History       *v115.History                           `protobuf:"bytes,2,opt,name=history,proto3" json:"history,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state               protoimpl.MessageState                  `protogen:"opaque.v1"`
+	xxx_hidden_Response *v1.GetWorkflowExecutionHistoryResponse `protobuf:"bytes,1,opt,name=response,proto3"`
+	xxx_hidden_History  *v115.History                           `protobuf:"bytes,2,opt,name=history,proto3"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *GetWorkflowExecutionHistoryResponse) Reset() {
@@ -7534,32 +12738,73 @@ func (x *GetWorkflowExecutionHistoryResponse) ProtoReflect() protoreflect.Messag
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetWorkflowExecutionHistoryResponse.ProtoReflect.Descriptor instead.
-func (*GetWorkflowExecutionHistoryResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{112}
-}
-
 func (x *GetWorkflowExecutionHistoryResponse) GetResponse() *v1.GetWorkflowExecutionHistoryResponse {
 	if x != nil {
-		return x.Response
+		return x.xxx_hidden_Response
 	}
 	return nil
 }
 
 func (x *GetWorkflowExecutionHistoryResponse) GetHistory() *v115.History {
 	if x != nil {
-		return x.History
+		return x.xxx_hidden_History
 	}
 	return nil
 }
 
+func (x *GetWorkflowExecutionHistoryResponse) SetResponse(v *v1.GetWorkflowExecutionHistoryResponse) {
+	x.xxx_hidden_Response = v
+}
+
+func (x *GetWorkflowExecutionHistoryResponse) SetHistory(v *v115.History) {
+	x.xxx_hidden_History = v
+}
+
+func (x *GetWorkflowExecutionHistoryResponse) HasResponse() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Response != nil
+}
+
+func (x *GetWorkflowExecutionHistoryResponse) HasHistory() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_History != nil
+}
+
+func (x *GetWorkflowExecutionHistoryResponse) ClearResponse() {
+	x.xxx_hidden_Response = nil
+}
+
+func (x *GetWorkflowExecutionHistoryResponse) ClearHistory() {
+	x.xxx_hidden_History = nil
+}
+
+type GetWorkflowExecutionHistoryResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Response *v1.GetWorkflowExecutionHistoryResponse
+	History  *v115.History
+}
+
+func (b0 GetWorkflowExecutionHistoryResponse_builder) Build() *GetWorkflowExecutionHistoryResponse {
+	m0 := &GetWorkflowExecutionHistoryResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Response = b.Response
+	x.xxx_hidden_History = b.History
+	return m0
+}
+
 // This message must be wire compatible with GetWorkflowExecutionHistoryResponse.
 type GetWorkflowExecutionHistoryResponseWithRaw struct {
-	state         protoimpl.MessageState                  `protogen:"open.v1"`
-	Response      *v1.GetWorkflowExecutionHistoryResponse `protobuf:"bytes,1,opt,name=response,proto3" json:"response,omitempty"`
-	History       [][]byte                                `protobuf:"bytes,2,rep,name=history,proto3" json:"history,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state               protoimpl.MessageState                  `protogen:"opaque.v1"`
+	xxx_hidden_Response *v1.GetWorkflowExecutionHistoryResponse `protobuf:"bytes,1,opt,name=response,proto3"`
+	xxx_hidden_History  [][]byte                                `protobuf:"bytes,2,rep,name=history,proto3"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *GetWorkflowExecutionHistoryResponseWithRaw) Reset() {
@@ -7587,31 +12832,61 @@ func (x *GetWorkflowExecutionHistoryResponseWithRaw) ProtoReflect() protoreflect
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetWorkflowExecutionHistoryResponseWithRaw.ProtoReflect.Descriptor instead.
-func (*GetWorkflowExecutionHistoryResponseWithRaw) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{113}
-}
-
 func (x *GetWorkflowExecutionHistoryResponseWithRaw) GetResponse() *v1.GetWorkflowExecutionHistoryResponse {
 	if x != nil {
-		return x.Response
+		return x.xxx_hidden_Response
 	}
 	return nil
 }
 
 func (x *GetWorkflowExecutionHistoryResponseWithRaw) GetHistory() [][]byte {
 	if x != nil {
-		return x.History
+		return x.xxx_hidden_History
 	}
 	return nil
 }
 
+func (x *GetWorkflowExecutionHistoryResponseWithRaw) SetResponse(v *v1.GetWorkflowExecutionHistoryResponse) {
+	x.xxx_hidden_Response = v
+}
+
+func (x *GetWorkflowExecutionHistoryResponseWithRaw) SetHistory(v [][]byte) {
+	x.xxx_hidden_History = v
+}
+
+func (x *GetWorkflowExecutionHistoryResponseWithRaw) HasResponse() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Response != nil
+}
+
+func (x *GetWorkflowExecutionHistoryResponseWithRaw) ClearResponse() {
+	x.xxx_hidden_Response = nil
+}
+
+type GetWorkflowExecutionHistoryResponseWithRaw_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Response *v1.GetWorkflowExecutionHistoryResponse
+	History  [][]byte
+}
+
+func (b0 GetWorkflowExecutionHistoryResponseWithRaw_builder) Build() *GetWorkflowExecutionHistoryResponseWithRaw {
+	m0 := &GetWorkflowExecutionHistoryResponseWithRaw{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Response = b.Response
+	x.xxx_hidden_History = b.History
+	return m0
+}
+
 type GetWorkflowExecutionHistoryReverseRequest struct {
-	state         protoimpl.MessageState                        `protogen:"open.v1"`
-	NamespaceId   string                                        `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	Request       *v1.GetWorkflowExecutionHistoryReverseRequest `protobuf:"bytes,2,opt,name=request,proto3" json:"request,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                  protoimpl.MessageState                        `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId string                                        `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_Request     *v1.GetWorkflowExecutionHistoryReverseRequest `protobuf:"bytes,2,opt,name=request,proto3"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *GetWorkflowExecutionHistoryReverseRequest) Reset() {
@@ -7639,30 +12914,60 @@ func (x *GetWorkflowExecutionHistoryReverseRequest) ProtoReflect() protoreflect.
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetWorkflowExecutionHistoryReverseRequest.ProtoReflect.Descriptor instead.
-func (*GetWorkflowExecutionHistoryReverseRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{114}
-}
-
 func (x *GetWorkflowExecutionHistoryReverseRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *GetWorkflowExecutionHistoryReverseRequest) GetRequest() *v1.GetWorkflowExecutionHistoryReverseRequest {
 	if x != nil {
-		return x.Request
+		return x.xxx_hidden_Request
 	}
 	return nil
 }
 
+func (x *GetWorkflowExecutionHistoryReverseRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *GetWorkflowExecutionHistoryReverseRequest) SetRequest(v *v1.GetWorkflowExecutionHistoryReverseRequest) {
+	x.xxx_hidden_Request = v
+}
+
+func (x *GetWorkflowExecutionHistoryReverseRequest) HasRequest() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Request != nil
+}
+
+func (x *GetWorkflowExecutionHistoryReverseRequest) ClearRequest() {
+	x.xxx_hidden_Request = nil
+}
+
+type GetWorkflowExecutionHistoryReverseRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId string
+	Request     *v1.GetWorkflowExecutionHistoryReverseRequest
+}
+
+func (b0 GetWorkflowExecutionHistoryReverseRequest_builder) Build() *GetWorkflowExecutionHistoryReverseRequest {
+	m0 := &GetWorkflowExecutionHistoryReverseRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_Request = b.Request
+	return m0
+}
+
 type GetWorkflowExecutionHistoryReverseResponse struct {
-	state         protoimpl.MessageState                         `protogen:"open.v1"`
-	Response      *v1.GetWorkflowExecutionHistoryReverseResponse `protobuf:"bytes,1,opt,name=response,proto3" json:"response,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state               protoimpl.MessageState                         `protogen:"opaque.v1"`
+	xxx_hidden_Response *v1.GetWorkflowExecutionHistoryReverseResponse `protobuf:"bytes,1,opt,name=response,proto3"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *GetWorkflowExecutionHistoryReverseResponse) Reset() {
@@ -7690,27 +12995,51 @@ func (x *GetWorkflowExecutionHistoryReverseResponse) ProtoReflect() protoreflect
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetWorkflowExecutionHistoryReverseResponse.ProtoReflect.Descriptor instead.
-func (*GetWorkflowExecutionHistoryReverseResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{115}
-}
-
 func (x *GetWorkflowExecutionHistoryReverseResponse) GetResponse() *v1.GetWorkflowExecutionHistoryReverseResponse {
 	if x != nil {
-		return x.Response
+		return x.xxx_hidden_Response
 	}
 	return nil
+}
+
+func (x *GetWorkflowExecutionHistoryReverseResponse) SetResponse(v *v1.GetWorkflowExecutionHistoryReverseResponse) {
+	x.xxx_hidden_Response = v
+}
+
+func (x *GetWorkflowExecutionHistoryReverseResponse) HasResponse() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Response != nil
+}
+
+func (x *GetWorkflowExecutionHistoryReverseResponse) ClearResponse() {
+	x.xxx_hidden_Response = nil
+}
+
+type GetWorkflowExecutionHistoryReverseResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Response *v1.GetWorkflowExecutionHistoryReverseResponse
+}
+
+func (b0 GetWorkflowExecutionHistoryReverseResponse_builder) Build() *GetWorkflowExecutionHistoryReverseResponse {
+	m0 := &GetWorkflowExecutionHistoryReverseResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Response = b.Response
+	return m0
 }
 
 // *
 // StartEventId defines the beginning of the event to fetch. The first event is exclusive.
 // EndEventId and EndEventVersion defines the end of the event to fetch. The end event is exclusive.
 type GetWorkflowExecutionRawHistoryV2Request struct {
-	state         protoimpl.MessageState                        `protogen:"open.v1"`
-	NamespaceId   string                                        `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	Request       *v118.GetWorkflowExecutionRawHistoryV2Request `protobuf:"bytes,2,opt,name=request,proto3" json:"request,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                  protoimpl.MessageState                        `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId string                                        `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_Request     *v118.GetWorkflowExecutionRawHistoryV2Request `protobuf:"bytes,2,opt,name=request,proto3"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *GetWorkflowExecutionRawHistoryV2Request) Reset() {
@@ -7738,30 +13067,60 @@ func (x *GetWorkflowExecutionRawHistoryV2Request) ProtoReflect() protoreflect.Me
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetWorkflowExecutionRawHistoryV2Request.ProtoReflect.Descriptor instead.
-func (*GetWorkflowExecutionRawHistoryV2Request) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{116}
-}
-
 func (x *GetWorkflowExecutionRawHistoryV2Request) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *GetWorkflowExecutionRawHistoryV2Request) GetRequest() *v118.GetWorkflowExecutionRawHistoryV2Request {
 	if x != nil {
-		return x.Request
+		return x.xxx_hidden_Request
 	}
 	return nil
 }
 
+func (x *GetWorkflowExecutionRawHistoryV2Request) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *GetWorkflowExecutionRawHistoryV2Request) SetRequest(v *v118.GetWorkflowExecutionRawHistoryV2Request) {
+	x.xxx_hidden_Request = v
+}
+
+func (x *GetWorkflowExecutionRawHistoryV2Request) HasRequest() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Request != nil
+}
+
+func (x *GetWorkflowExecutionRawHistoryV2Request) ClearRequest() {
+	x.xxx_hidden_Request = nil
+}
+
+type GetWorkflowExecutionRawHistoryV2Request_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId string
+	Request     *v118.GetWorkflowExecutionRawHistoryV2Request
+}
+
+func (b0 GetWorkflowExecutionRawHistoryV2Request_builder) Build() *GetWorkflowExecutionRawHistoryV2Request {
+	m0 := &GetWorkflowExecutionRawHistoryV2Request{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_Request = b.Request
+	return m0
+}
+
 type GetWorkflowExecutionRawHistoryV2Response struct {
-	state         protoimpl.MessageState                         `protogen:"open.v1"`
-	Response      *v118.GetWorkflowExecutionRawHistoryV2Response `protobuf:"bytes,1,opt,name=response,proto3" json:"response,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state               protoimpl.MessageState                         `protogen:"opaque.v1"`
+	xxx_hidden_Response *v118.GetWorkflowExecutionRawHistoryV2Response `protobuf:"bytes,1,opt,name=response,proto3"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *GetWorkflowExecutionRawHistoryV2Response) Reset() {
@@ -7789,24 +13148,48 @@ func (x *GetWorkflowExecutionRawHistoryV2Response) ProtoReflect() protoreflect.M
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetWorkflowExecutionRawHistoryV2Response.ProtoReflect.Descriptor instead.
-func (*GetWorkflowExecutionRawHistoryV2Response) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{117}
-}
-
 func (x *GetWorkflowExecutionRawHistoryV2Response) GetResponse() *v118.GetWorkflowExecutionRawHistoryV2Response {
 	if x != nil {
-		return x.Response
+		return x.xxx_hidden_Response
 	}
 	return nil
 }
 
+func (x *GetWorkflowExecutionRawHistoryV2Response) SetResponse(v *v118.GetWorkflowExecutionRawHistoryV2Response) {
+	x.xxx_hidden_Response = v
+}
+
+func (x *GetWorkflowExecutionRawHistoryV2Response) HasResponse() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Response != nil
+}
+
+func (x *GetWorkflowExecutionRawHistoryV2Response) ClearResponse() {
+	x.xxx_hidden_Response = nil
+}
+
+type GetWorkflowExecutionRawHistoryV2Response_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Response *v118.GetWorkflowExecutionRawHistoryV2Response
+}
+
+func (b0 GetWorkflowExecutionRawHistoryV2Response_builder) Build() *GetWorkflowExecutionRawHistoryV2Response {
+	m0 := &GetWorkflowExecutionRawHistoryV2Response{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Response = b.Response
+	return m0
+}
+
 type GetWorkflowExecutionRawHistoryRequest struct {
-	state         protoimpl.MessageState                      `protogen:"open.v1"`
-	NamespaceId   string                                      `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	Request       *v118.GetWorkflowExecutionRawHistoryRequest `protobuf:"bytes,2,opt,name=request,proto3" json:"request,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                  protoimpl.MessageState                      `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId string                                      `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_Request     *v118.GetWorkflowExecutionRawHistoryRequest `protobuf:"bytes,2,opt,name=request,proto3"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *GetWorkflowExecutionRawHistoryRequest) Reset() {
@@ -7834,30 +13217,60 @@ func (x *GetWorkflowExecutionRawHistoryRequest) ProtoReflect() protoreflect.Mess
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetWorkflowExecutionRawHistoryRequest.ProtoReflect.Descriptor instead.
-func (*GetWorkflowExecutionRawHistoryRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{118}
-}
-
 func (x *GetWorkflowExecutionRawHistoryRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *GetWorkflowExecutionRawHistoryRequest) GetRequest() *v118.GetWorkflowExecutionRawHistoryRequest {
 	if x != nil {
-		return x.Request
+		return x.xxx_hidden_Request
 	}
 	return nil
 }
 
+func (x *GetWorkflowExecutionRawHistoryRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *GetWorkflowExecutionRawHistoryRequest) SetRequest(v *v118.GetWorkflowExecutionRawHistoryRequest) {
+	x.xxx_hidden_Request = v
+}
+
+func (x *GetWorkflowExecutionRawHistoryRequest) HasRequest() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Request != nil
+}
+
+func (x *GetWorkflowExecutionRawHistoryRequest) ClearRequest() {
+	x.xxx_hidden_Request = nil
+}
+
+type GetWorkflowExecutionRawHistoryRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId string
+	Request     *v118.GetWorkflowExecutionRawHistoryRequest
+}
+
+func (b0 GetWorkflowExecutionRawHistoryRequest_builder) Build() *GetWorkflowExecutionRawHistoryRequest {
+	m0 := &GetWorkflowExecutionRawHistoryRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_Request = b.Request
+	return m0
+}
+
 type GetWorkflowExecutionRawHistoryResponse struct {
-	state         protoimpl.MessageState                       `protogen:"open.v1"`
-	Response      *v118.GetWorkflowExecutionRawHistoryResponse `protobuf:"bytes,1,opt,name=response,proto3" json:"response,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state               protoimpl.MessageState                       `protogen:"opaque.v1"`
+	xxx_hidden_Response *v118.GetWorkflowExecutionRawHistoryResponse `protobuf:"bytes,1,opt,name=response,proto3"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *GetWorkflowExecutionRawHistoryResponse) Reset() {
@@ -7885,26 +13298,49 @@ func (x *GetWorkflowExecutionRawHistoryResponse) ProtoReflect() protoreflect.Mes
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetWorkflowExecutionRawHistoryResponse.ProtoReflect.Descriptor instead.
-func (*GetWorkflowExecutionRawHistoryResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{119}
-}
-
 func (x *GetWorkflowExecutionRawHistoryResponse) GetResponse() *v118.GetWorkflowExecutionRawHistoryResponse {
 	if x != nil {
-		return x.Response
+		return x.xxx_hidden_Response
 	}
 	return nil
 }
 
+func (x *GetWorkflowExecutionRawHistoryResponse) SetResponse(v *v118.GetWorkflowExecutionRawHistoryResponse) {
+	x.xxx_hidden_Response = v
+}
+
+func (x *GetWorkflowExecutionRawHistoryResponse) HasResponse() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Response != nil
+}
+
+func (x *GetWorkflowExecutionRawHistoryResponse) ClearResponse() {
+	x.xxx_hidden_Response = nil
+}
+
+type GetWorkflowExecutionRawHistoryResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Response *v118.GetWorkflowExecutionRawHistoryResponse
+}
+
+func (b0 GetWorkflowExecutionRawHistoryResponse_builder) Build() *GetWorkflowExecutionRawHistoryResponse {
+	m0 := &GetWorkflowExecutionRawHistoryResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Response = b.Response
+	return m0
+}
+
 type ForceDeleteWorkflowExecutionRequest struct {
-	state       protoimpl.MessageState `protogen:"open.v1"`
-	NamespaceId string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	// (-- api-linter: core::0141::forbidden-types=disabled --)
-	ArchetypeId   uint32                               `protobuf:"varint,3,opt,name=archetype_id,json=archetypeId,proto3" json:"archetype_id,omitempty"`
-	Request       *v118.DeleteWorkflowExecutionRequest `protobuf:"bytes,2,opt,name=request,proto3" json:"request,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                  protoimpl.MessageState               `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId string                               `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_ArchetypeId uint32                               `protobuf:"varint,3,opt,name=archetype_id,json=archetypeId,proto3"`
+	xxx_hidden_Request     *v118.DeleteWorkflowExecutionRequest `protobuf:"bytes,2,opt,name=request,proto3"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *ForceDeleteWorkflowExecutionRequest) Reset() {
@@ -7932,37 +13368,74 @@ func (x *ForceDeleteWorkflowExecutionRequest) ProtoReflect() protoreflect.Messag
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ForceDeleteWorkflowExecutionRequest.ProtoReflect.Descriptor instead.
-func (*ForceDeleteWorkflowExecutionRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{120}
-}
-
 func (x *ForceDeleteWorkflowExecutionRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *ForceDeleteWorkflowExecutionRequest) GetArchetypeId() uint32 {
 	if x != nil {
-		return x.ArchetypeId
+		return x.xxx_hidden_ArchetypeId
 	}
 	return 0
 }
 
 func (x *ForceDeleteWorkflowExecutionRequest) GetRequest() *v118.DeleteWorkflowExecutionRequest {
 	if x != nil {
-		return x.Request
+		return x.xxx_hidden_Request
 	}
 	return nil
 }
 
+func (x *ForceDeleteWorkflowExecutionRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *ForceDeleteWorkflowExecutionRequest) SetArchetypeId(v uint32) {
+	x.xxx_hidden_ArchetypeId = v
+}
+
+func (x *ForceDeleteWorkflowExecutionRequest) SetRequest(v *v118.DeleteWorkflowExecutionRequest) {
+	x.xxx_hidden_Request = v
+}
+
+func (x *ForceDeleteWorkflowExecutionRequest) HasRequest() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Request != nil
+}
+
+func (x *ForceDeleteWorkflowExecutionRequest) ClearRequest() {
+	x.xxx_hidden_Request = nil
+}
+
+type ForceDeleteWorkflowExecutionRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId string
+	// (-- api-linter: core::0141::forbidden-types=disabled --)
+	ArchetypeId uint32
+	Request     *v118.DeleteWorkflowExecutionRequest
+}
+
+func (b0 ForceDeleteWorkflowExecutionRequest_builder) Build() *ForceDeleteWorkflowExecutionRequest {
+	m0 := &ForceDeleteWorkflowExecutionRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_ArchetypeId = b.ArchetypeId
+	x.xxx_hidden_Request = b.Request
+	return m0
+}
+
 type ForceDeleteWorkflowExecutionResponse struct {
-	state         protoimpl.MessageState                `protogen:"open.v1"`
-	Response      *v118.DeleteWorkflowExecutionResponse `protobuf:"bytes,1,opt,name=response,proto3" json:"response,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state               protoimpl.MessageState                `protogen:"opaque.v1"`
+	xxx_hidden_Response *v118.DeleteWorkflowExecutionResponse `protobuf:"bytes,1,opt,name=response,proto3"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *ForceDeleteWorkflowExecutionResponse) Reset() {
@@ -7990,26 +13463,49 @@ func (x *ForceDeleteWorkflowExecutionResponse) ProtoReflect() protoreflect.Messa
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ForceDeleteWorkflowExecutionResponse.ProtoReflect.Descriptor instead.
-func (*ForceDeleteWorkflowExecutionResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{121}
-}
-
 func (x *ForceDeleteWorkflowExecutionResponse) GetResponse() *v118.DeleteWorkflowExecutionResponse {
 	if x != nil {
-		return x.Response
+		return x.xxx_hidden_Response
 	}
 	return nil
 }
 
+func (x *ForceDeleteWorkflowExecutionResponse) SetResponse(v *v118.DeleteWorkflowExecutionResponse) {
+	x.xxx_hidden_Response = v
+}
+
+func (x *ForceDeleteWorkflowExecutionResponse) HasResponse() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Response != nil
+}
+
+func (x *ForceDeleteWorkflowExecutionResponse) ClearResponse() {
+	x.xxx_hidden_Response = nil
+}
+
+type ForceDeleteWorkflowExecutionResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Response *v118.DeleteWorkflowExecutionResponse
+}
+
+func (b0 ForceDeleteWorkflowExecutionResponse_builder) Build() *ForceDeleteWorkflowExecutionResponse {
+	m0 := &ForceDeleteWorkflowExecutionResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Response = b.Response
+	return m0
+}
+
 type GetDLQTasksRequest struct {
-	state  protoimpl.MessageState `protogen:"open.v1"`
-	DlqKey *v119.HistoryDLQKey    `protobuf:"bytes,1,opt,name=dlq_key,json=dlqKey,proto3" json:"dlq_key,omitempty"`
-	// page_size must be positive. Up to this many tasks will be returned.
-	PageSize      int32  `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
-	NextPageToken []byte `protobuf:"bytes,3,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                    protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_DlqKey        *v119.HistoryDLQKey    `protobuf:"bytes,1,opt,name=dlq_key,json=dlqKey,proto3"`
+	xxx_hidden_PageSize      int32                  `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3"`
+	xxx_hidden_NextPageToken []byte                 `protobuf:"bytes,3,opt,name=next_page_token,json=nextPageToken,proto3"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *GetDLQTasksRequest) Reset() {
@@ -8037,41 +13533,78 @@ func (x *GetDLQTasksRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetDLQTasksRequest.ProtoReflect.Descriptor instead.
-func (*GetDLQTasksRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{122}
-}
-
 func (x *GetDLQTasksRequest) GetDlqKey() *v119.HistoryDLQKey {
 	if x != nil {
-		return x.DlqKey
+		return x.xxx_hidden_DlqKey
 	}
 	return nil
 }
 
 func (x *GetDLQTasksRequest) GetPageSize() int32 {
 	if x != nil {
-		return x.PageSize
+		return x.xxx_hidden_PageSize
 	}
 	return 0
 }
 
 func (x *GetDLQTasksRequest) GetNextPageToken() []byte {
 	if x != nil {
-		return x.NextPageToken
+		return x.xxx_hidden_NextPageToken
 	}
 	return nil
 }
 
+func (x *GetDLQTasksRequest) SetDlqKey(v *v119.HistoryDLQKey) {
+	x.xxx_hidden_DlqKey = v
+}
+
+func (x *GetDLQTasksRequest) SetPageSize(v int32) {
+	x.xxx_hidden_PageSize = v
+}
+
+func (x *GetDLQTasksRequest) SetNextPageToken(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_NextPageToken = v
+}
+
+func (x *GetDLQTasksRequest) HasDlqKey() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_DlqKey != nil
+}
+
+func (x *GetDLQTasksRequest) ClearDlqKey() {
+	x.xxx_hidden_DlqKey = nil
+}
+
+type GetDLQTasksRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	DlqKey *v119.HistoryDLQKey
+	// page_size must be positive. Up to this many tasks will be returned.
+	PageSize      int32
+	NextPageToken []byte
+}
+
+func (b0 GetDLQTasksRequest_builder) Build() *GetDLQTasksRequest {
+	m0 := &GetDLQTasksRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_DlqKey = b.DlqKey
+	x.xxx_hidden_PageSize = b.PageSize
+	x.xxx_hidden_NextPageToken = b.NextPageToken
+	return m0
+}
+
 type GetDLQTasksResponse struct {
-	state    protoimpl.MessageState `protogen:"open.v1"`
-	DlqTasks []*v119.HistoryDLQTask `protobuf:"bytes,1,rep,name=dlq_tasks,json=dlqTasks,proto3" json:"dlq_tasks,omitempty"`
-	// next_page_token is empty if there are no more results. However, the converse is not true. If there are no more
-	// results, this field may still be non-empty. This is to avoid having to do a count query to determine whether
-	// there are more results.
-	NextPageToken []byte `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                    protoimpl.MessageState  `protogen:"opaque.v1"`
+	xxx_hidden_DlqTasks      *[]*v119.HistoryDLQTask `protobuf:"bytes,1,rep,name=dlq_tasks,json=dlqTasks,proto3"`
+	xxx_hidden_NextPageToken []byte                  `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *GetDLQTasksResponse) Reset() {
@@ -8099,31 +13632,58 @@ func (x *GetDLQTasksResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetDLQTasksResponse.ProtoReflect.Descriptor instead.
-func (*GetDLQTasksResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{123}
-}
-
 func (x *GetDLQTasksResponse) GetDlqTasks() []*v119.HistoryDLQTask {
 	if x != nil {
-		return x.DlqTasks
+		if x.xxx_hidden_DlqTasks != nil {
+			return *x.xxx_hidden_DlqTasks
+		}
 	}
 	return nil
 }
 
 func (x *GetDLQTasksResponse) GetNextPageToken() []byte {
 	if x != nil {
-		return x.NextPageToken
+		return x.xxx_hidden_NextPageToken
 	}
 	return nil
 }
 
+func (x *GetDLQTasksResponse) SetDlqTasks(v []*v119.HistoryDLQTask) {
+	x.xxx_hidden_DlqTasks = &v
+}
+
+func (x *GetDLQTasksResponse) SetNextPageToken(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_NextPageToken = v
+}
+
+type GetDLQTasksResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	DlqTasks []*v119.HistoryDLQTask
+	// next_page_token is empty if there are no more results. However, the converse is not true. If there are no more
+	// results, this field may still be non-empty. This is to avoid having to do a count query to determine whether
+	// there are more results.
+	NextPageToken []byte
+}
+
+func (b0 GetDLQTasksResponse_builder) Build() *GetDLQTasksResponse {
+	m0 := &GetDLQTasksResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_DlqTasks = &b.DlqTasks
+	x.xxx_hidden_NextPageToken = b.NextPageToken
+	return m0
+}
+
 type DeleteDLQTasksRequest struct {
-	state                    protoimpl.MessageState       `protogen:"open.v1"`
-	DlqKey                   *v119.HistoryDLQKey          `protobuf:"bytes,1,opt,name=dlq_key,json=dlqKey,proto3" json:"dlq_key,omitempty"`
-	InclusiveMaxTaskMetadata *v119.HistoryDLQTaskMetadata `protobuf:"bytes,2,opt,name=inclusive_max_task_metadata,json=inclusiveMaxTaskMetadata,proto3" json:"inclusive_max_task_metadata,omitempty"`
-	unknownFields            protoimpl.UnknownFields
-	sizeCache                protoimpl.SizeCache
+	state                               protoimpl.MessageState       `protogen:"opaque.v1"`
+	xxx_hidden_DlqKey                   *v119.HistoryDLQKey          `protobuf:"bytes,1,opt,name=dlq_key,json=dlqKey,proto3"`
+	xxx_hidden_InclusiveMaxTaskMetadata *v119.HistoryDLQTaskMetadata `protobuf:"bytes,2,opt,name=inclusive_max_task_metadata,json=inclusiveMaxTaskMetadata,proto3"`
+	unknownFields                       protoimpl.UnknownFields
+	sizeCache                           protoimpl.SizeCache
 }
 
 func (x *DeleteDLQTasksRequest) Reset() {
@@ -8151,31 +13711,71 @@ func (x *DeleteDLQTasksRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DeleteDLQTasksRequest.ProtoReflect.Descriptor instead.
-func (*DeleteDLQTasksRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{124}
-}
-
 func (x *DeleteDLQTasksRequest) GetDlqKey() *v119.HistoryDLQKey {
 	if x != nil {
-		return x.DlqKey
+		return x.xxx_hidden_DlqKey
 	}
 	return nil
 }
 
 func (x *DeleteDLQTasksRequest) GetInclusiveMaxTaskMetadata() *v119.HistoryDLQTaskMetadata {
 	if x != nil {
-		return x.InclusiveMaxTaskMetadata
+		return x.xxx_hidden_InclusiveMaxTaskMetadata
 	}
 	return nil
 }
 
+func (x *DeleteDLQTasksRequest) SetDlqKey(v *v119.HistoryDLQKey) {
+	x.xxx_hidden_DlqKey = v
+}
+
+func (x *DeleteDLQTasksRequest) SetInclusiveMaxTaskMetadata(v *v119.HistoryDLQTaskMetadata) {
+	x.xxx_hidden_InclusiveMaxTaskMetadata = v
+}
+
+func (x *DeleteDLQTasksRequest) HasDlqKey() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_DlqKey != nil
+}
+
+func (x *DeleteDLQTasksRequest) HasInclusiveMaxTaskMetadata() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_InclusiveMaxTaskMetadata != nil
+}
+
+func (x *DeleteDLQTasksRequest) ClearDlqKey() {
+	x.xxx_hidden_DlqKey = nil
+}
+
+func (x *DeleteDLQTasksRequest) ClearInclusiveMaxTaskMetadata() {
+	x.xxx_hidden_InclusiveMaxTaskMetadata = nil
+}
+
+type DeleteDLQTasksRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	DlqKey                   *v119.HistoryDLQKey
+	InclusiveMaxTaskMetadata *v119.HistoryDLQTaskMetadata
+}
+
+func (b0 DeleteDLQTasksRequest_builder) Build() *DeleteDLQTasksRequest {
+	m0 := &DeleteDLQTasksRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_DlqKey = b.DlqKey
+	x.xxx_hidden_InclusiveMaxTaskMetadata = b.InclusiveMaxTaskMetadata
+	return m0
+}
+
 type DeleteDLQTasksResponse struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// messages_deleted is the total number of messages deleted in DeleteDLQTasks operation.
-	MessagesDeleted int64 `protobuf:"varint,1,opt,name=messages_deleted,json=messagesDeleted,proto3" json:"messages_deleted,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state                      protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_MessagesDeleted int64                  `protobuf:"varint,1,opt,name=messages_deleted,json=messagesDeleted,proto3"`
+	unknownFields              protoimpl.UnknownFields
+	sizeCache                  protoimpl.SizeCache
 }
 
 func (x *DeleteDLQTasksResponse) Reset() {
@@ -8203,25 +13803,39 @@ func (x *DeleteDLQTasksResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DeleteDLQTasksResponse.ProtoReflect.Descriptor instead.
-func (*DeleteDLQTasksResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{125}
-}
-
 func (x *DeleteDLQTasksResponse) GetMessagesDeleted() int64 {
 	if x != nil {
-		return x.MessagesDeleted
+		return x.xxx_hidden_MessagesDeleted
 	}
 	return 0
 }
 
+func (x *DeleteDLQTasksResponse) SetMessagesDeleted(v int64) {
+	x.xxx_hidden_MessagesDeleted = v
+}
+
+type DeleteDLQTasksResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// messages_deleted is the total number of messages deleted in DeleteDLQTasks operation.
+	MessagesDeleted int64
+}
+
+func (b0 DeleteDLQTasksResponse_builder) Build() *DeleteDLQTasksResponse {
+	m0 := &DeleteDLQTasksResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_MessagesDeleted = b.MessagesDeleted
+	return m0
+}
+
 type ListQueuesRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	QueueType     int32                  `protobuf:"varint,1,opt,name=queue_type,json=queueType,proto3" json:"queue_type,omitempty"`
-	PageSize      int32                  `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
-	NextPageToken []byte                 `protobuf:"bytes,3,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                    protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_QueueType     int32                  `protobuf:"varint,1,opt,name=queue_type,json=queueType,proto3"`
+	xxx_hidden_PageSize      int32                  `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3"`
+	xxx_hidden_NextPageToken []byte                 `protobuf:"bytes,3,opt,name=next_page_token,json=nextPageToken,proto3"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *ListQueuesRequest) Reset() {
@@ -8249,38 +13863,66 @@ func (x *ListQueuesRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListQueuesRequest.ProtoReflect.Descriptor instead.
-func (*ListQueuesRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{126}
-}
-
 func (x *ListQueuesRequest) GetQueueType() int32 {
 	if x != nil {
-		return x.QueueType
+		return x.xxx_hidden_QueueType
 	}
 	return 0
 }
 
 func (x *ListQueuesRequest) GetPageSize() int32 {
 	if x != nil {
-		return x.PageSize
+		return x.xxx_hidden_PageSize
 	}
 	return 0
 }
 
 func (x *ListQueuesRequest) GetNextPageToken() []byte {
 	if x != nil {
-		return x.NextPageToken
+		return x.xxx_hidden_NextPageToken
 	}
 	return nil
 }
 
+func (x *ListQueuesRequest) SetQueueType(v int32) {
+	x.xxx_hidden_QueueType = v
+}
+
+func (x *ListQueuesRequest) SetPageSize(v int32) {
+	x.xxx_hidden_PageSize = v
+}
+
+func (x *ListQueuesRequest) SetNextPageToken(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_NextPageToken = v
+}
+
+type ListQueuesRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	QueueType     int32
+	PageSize      int32
+	NextPageToken []byte
+}
+
+func (b0 ListQueuesRequest_builder) Build() *ListQueuesRequest {
+	m0 := &ListQueuesRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_QueueType = b.QueueType
+	x.xxx_hidden_PageSize = b.PageSize
+	x.xxx_hidden_NextPageToken = b.NextPageToken
+	return m0
+}
+
 type ListQueuesResponse struct {
-	state         protoimpl.MessageState          `protogen:"open.v1"`
-	Queues        []*ListQueuesResponse_QueueInfo `protobuf:"bytes,1,rep,name=queues,proto3" json:"queues,omitempty"`
-	NextPageToken []byte                          `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                    protoimpl.MessageState           `protogen:"opaque.v1"`
+	xxx_hidden_Queues        *[]*ListQueuesResponse_QueueInfo `protobuf:"bytes,1,rep,name=queues,proto3"`
+	xxx_hidden_NextPageToken []byte                           `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *ListQueuesResponse) Reset() {
@@ -8308,35 +13950,55 @@ func (x *ListQueuesResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListQueuesResponse.ProtoReflect.Descriptor instead.
-func (*ListQueuesResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{127}
-}
-
 func (x *ListQueuesResponse) GetQueues() []*ListQueuesResponse_QueueInfo {
 	if x != nil {
-		return x.Queues
+		if x.xxx_hidden_Queues != nil {
+			return *x.xxx_hidden_Queues
+		}
 	}
 	return nil
 }
 
 func (x *ListQueuesResponse) GetNextPageToken() []byte {
 	if x != nil {
-		return x.NextPageToken
+		return x.xxx_hidden_NextPageToken
 	}
 	return nil
 }
 
+func (x *ListQueuesResponse) SetQueues(v []*ListQueuesResponse_QueueInfo) {
+	x.xxx_hidden_Queues = &v
+}
+
+func (x *ListQueuesResponse) SetNextPageToken(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_NextPageToken = v
+}
+
+type ListQueuesResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Queues        []*ListQueuesResponse_QueueInfo
+	NextPageToken []byte
+}
+
+func (b0 ListQueuesResponse_builder) Build() *ListQueuesResponse {
+	m0 := &ListQueuesResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Queues = &b.Queues
+	x.xxx_hidden_NextPageToken = b.NextPageToken
+	return m0
+}
+
 type AddTasksRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Even though we can obtain the shard ID from the tasks, we still need the shard_id in the request for routing. If
-	// not, it would be possible to include tasks for shards that belong to different hosts, and we'd need to fan-out the
-	// request, which would be more complicated.
-	ShardId int32 `protobuf:"varint,1,opt,name=shard_id,json=shardId,proto3" json:"shard_id,omitempty"`
-	// A list of tasks to enqueue or re-enqueue.
-	Tasks         []*AddTasksRequest_Task `protobuf:"bytes,2,rep,name=tasks,proto3" json:"tasks,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state              protoimpl.MessageState   `protogen:"opaque.v1"`
+	xxx_hidden_ShardId int32                    `protobuf:"varint,1,opt,name=shard_id,json=shardId,proto3"`
+	xxx_hidden_Tasks   *[]*AddTasksRequest_Task `protobuf:"bytes,2,rep,name=tasks,proto3"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *AddTasksRequest) Reset() {
@@ -8364,27 +14026,52 @@ func (x *AddTasksRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use AddTasksRequest.ProtoReflect.Descriptor instead.
-func (*AddTasksRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{128}
-}
-
 func (x *AddTasksRequest) GetShardId() int32 {
 	if x != nil {
-		return x.ShardId
+		return x.xxx_hidden_ShardId
 	}
 	return 0
 }
 
 func (x *AddTasksRequest) GetTasks() []*AddTasksRequest_Task {
 	if x != nil {
-		return x.Tasks
+		if x.xxx_hidden_Tasks != nil {
+			return *x.xxx_hidden_Tasks
+		}
 	}
 	return nil
 }
 
+func (x *AddTasksRequest) SetShardId(v int32) {
+	x.xxx_hidden_ShardId = v
+}
+
+func (x *AddTasksRequest) SetTasks(v []*AddTasksRequest_Task) {
+	x.xxx_hidden_Tasks = &v
+}
+
+type AddTasksRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Even though we can obtain the shard ID from the tasks, we still need the shard_id in the request for routing. If
+	// not, it would be possible to include tasks for shards that belong to different hosts, and we'd need to fan-out the
+	// request, which would be more complicated.
+	ShardId int32
+	// A list of tasks to enqueue or re-enqueue.
+	Tasks []*AddTasksRequest_Task
+}
+
+func (b0 AddTasksRequest_builder) Build() *AddTasksRequest {
+	m0 := &AddTasksRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_ShardId = b.ShardId
+	x.xxx_hidden_Tasks = &b.Tasks
+	return m0
+}
+
 type AddTasksResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -8414,16 +14101,23 @@ func (x *AddTasksResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use AddTasksResponse.ProtoReflect.Descriptor instead.
-func (*AddTasksResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{129}
+type AddTasksResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+}
+
+func (b0 AddTasksResponse_builder) Build() *AddTasksResponse {
+	m0 := &AddTasksResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	return m0
 }
 
 type ListTasksRequest struct {
-	state         protoimpl.MessageState        `protogen:"open.v1"`
-	Request       *v118.ListHistoryTasksRequest `protobuf:"bytes,1,opt,name=request,proto3" json:"request,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state              protoimpl.MessageState        `protogen:"opaque.v1"`
+	xxx_hidden_Request *v118.ListHistoryTasksRequest `protobuf:"bytes,1,opt,name=request,proto3"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *ListTasksRequest) Reset() {
@@ -8451,23 +14145,47 @@ func (x *ListTasksRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListTasksRequest.ProtoReflect.Descriptor instead.
-func (*ListTasksRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{130}
-}
-
 func (x *ListTasksRequest) GetRequest() *v118.ListHistoryTasksRequest {
 	if x != nil {
-		return x.Request
+		return x.xxx_hidden_Request
 	}
 	return nil
 }
 
+func (x *ListTasksRequest) SetRequest(v *v118.ListHistoryTasksRequest) {
+	x.xxx_hidden_Request = v
+}
+
+func (x *ListTasksRequest) HasRequest() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Request != nil
+}
+
+func (x *ListTasksRequest) ClearRequest() {
+	x.xxx_hidden_Request = nil
+}
+
+type ListTasksRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Request *v118.ListHistoryTasksRequest
+}
+
+func (b0 ListTasksRequest_builder) Build() *ListTasksRequest {
+	m0 := &ListTasksRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Request = b.Request
+	return m0
+}
+
 type ListTasksResponse struct {
-	state         protoimpl.MessageState         `protogen:"open.v1"`
-	Response      *v118.ListHistoryTasksResponse `protobuf:"bytes,1,opt,name=response,proto3" json:"response,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state               protoimpl.MessageState         `protogen:"opaque.v1"`
+	xxx_hidden_Response *v118.ListHistoryTasksResponse `protobuf:"bytes,1,opt,name=response,proto3"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *ListTasksResponse) Reset() {
@@ -8495,31 +14213,49 @@ func (x *ListTasksResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListTasksResponse.ProtoReflect.Descriptor instead.
-func (*ListTasksResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{131}
-}
-
 func (x *ListTasksResponse) GetResponse() *v118.ListHistoryTasksResponse {
 	if x != nil {
-		return x.Response
+		return x.xxx_hidden_Response
 	}
 	return nil
 }
 
+func (x *ListTasksResponse) SetResponse(v *v118.ListHistoryTasksResponse) {
+	x.xxx_hidden_Response = v
+}
+
+func (x *ListTasksResponse) HasResponse() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Response != nil
+}
+
+func (x *ListTasksResponse) ClearResponse() {
+	x.xxx_hidden_Response = nil
+}
+
+type ListTasksResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Response *v118.ListHistoryTasksResponse
+}
+
+func (b0 ListTasksResponse_builder) Build() *ListTasksResponse {
+	m0 := &ListTasksResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Response = b.Response
+	return m0
+}
+
 type CompleteNexusOperationChasmRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Completion token - holds information for locating an entity and the corresponding component.
-	Completion *v120.NexusOperationCompletion `protobuf:"bytes,1,opt,name=completion,proto3" json:"completion,omitempty"`
-	// Types that are valid to be assigned to Outcome:
-	//
-	//	*CompleteNexusOperationChasmRequest_Success
-	//	*CompleteNexusOperationChasmRequest_Failure
-	Outcome isCompleteNexusOperationChasmRequest_Outcome `protobuf_oneof:"outcome"`
-	// Time when the operation was closed.
-	CloseTime     *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=close_time,json=closeTime,proto3" json:"close_time,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                 protoimpl.MessageState                       `protogen:"opaque.v1"`
+	xxx_hidden_Completion *v120.NexusOperationCompletion               `protobuf:"bytes,1,opt,name=completion,proto3"`
+	xxx_hidden_Outcome    isCompleteNexusOperationChasmRequest_Outcome `protobuf_oneof:"outcome"`
+	xxx_hidden_CloseTime  *timestamppb.Timestamp                       `protobuf:"bytes,4,opt,name=close_time,json=closeTime,proto3"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
 }
 
 func (x *CompleteNexusOperationChasmRequest) Reset() {
@@ -8547,28 +14283,16 @@ func (x *CompleteNexusOperationChasmRequest) ProtoReflect() protoreflect.Message
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CompleteNexusOperationChasmRequest.ProtoReflect.Descriptor instead.
-func (*CompleteNexusOperationChasmRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{132}
-}
-
 func (x *CompleteNexusOperationChasmRequest) GetCompletion() *v120.NexusOperationCompletion {
 	if x != nil {
-		return x.Completion
-	}
-	return nil
-}
-
-func (x *CompleteNexusOperationChasmRequest) GetOutcome() isCompleteNexusOperationChasmRequest_Outcome {
-	if x != nil {
-		return x.Outcome
+		return x.xxx_hidden_Completion
 	}
 	return nil
 }
 
 func (x *CompleteNexusOperationChasmRequest) GetSuccess() *v14.Payload {
 	if x != nil {
-		if x, ok := x.Outcome.(*CompleteNexusOperationChasmRequest_Success); ok {
+		if x, ok := x.xxx_hidden_Outcome.(*completeNexusOperationChasmRequest_Success); ok {
 			return x.Success
 		}
 	}
@@ -8577,7 +14301,7 @@ func (x *CompleteNexusOperationChasmRequest) GetSuccess() *v14.Payload {
 
 func (x *CompleteNexusOperationChasmRequest) GetFailure() *v13.Failure {
 	if x != nil {
-		if x, ok := x.Outcome.(*CompleteNexusOperationChasmRequest_Failure); ok {
+		if x, ok := x.xxx_hidden_Outcome.(*completeNexusOperationChasmRequest_Failure); ok {
 			return x.Failure
 		}
 	}
@@ -8586,31 +14310,180 @@ func (x *CompleteNexusOperationChasmRequest) GetFailure() *v13.Failure {
 
 func (x *CompleteNexusOperationChasmRequest) GetCloseTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.CloseTime
+		return x.xxx_hidden_CloseTime
 	}
 	return nil
+}
+
+func (x *CompleteNexusOperationChasmRequest) SetCompletion(v *v120.NexusOperationCompletion) {
+	x.xxx_hidden_Completion = v
+}
+
+func (x *CompleteNexusOperationChasmRequest) SetSuccess(v *v14.Payload) {
+	if v == nil {
+		x.xxx_hidden_Outcome = nil
+		return
+	}
+	x.xxx_hidden_Outcome = &completeNexusOperationChasmRequest_Success{v}
+}
+
+func (x *CompleteNexusOperationChasmRequest) SetFailure(v *v13.Failure) {
+	if v == nil {
+		x.xxx_hidden_Outcome = nil
+		return
+	}
+	x.xxx_hidden_Outcome = &completeNexusOperationChasmRequest_Failure{v}
+}
+
+func (x *CompleteNexusOperationChasmRequest) SetCloseTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_CloseTime = v
+}
+
+func (x *CompleteNexusOperationChasmRequest) HasCompletion() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Completion != nil
+}
+
+func (x *CompleteNexusOperationChasmRequest) HasOutcome() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Outcome != nil
+}
+
+func (x *CompleteNexusOperationChasmRequest) HasSuccess() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_Outcome.(*completeNexusOperationChasmRequest_Success)
+	return ok
+}
+
+func (x *CompleteNexusOperationChasmRequest) HasFailure() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_Outcome.(*completeNexusOperationChasmRequest_Failure)
+	return ok
+}
+
+func (x *CompleteNexusOperationChasmRequest) HasCloseTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_CloseTime != nil
+}
+
+func (x *CompleteNexusOperationChasmRequest) ClearCompletion() {
+	x.xxx_hidden_Completion = nil
+}
+
+func (x *CompleteNexusOperationChasmRequest) ClearOutcome() {
+	x.xxx_hidden_Outcome = nil
+}
+
+func (x *CompleteNexusOperationChasmRequest) ClearSuccess() {
+	if _, ok := x.xxx_hidden_Outcome.(*completeNexusOperationChasmRequest_Success); ok {
+		x.xxx_hidden_Outcome = nil
+	}
+}
+
+func (x *CompleteNexusOperationChasmRequest) ClearFailure() {
+	if _, ok := x.xxx_hidden_Outcome.(*completeNexusOperationChasmRequest_Failure); ok {
+		x.xxx_hidden_Outcome = nil
+	}
+}
+
+func (x *CompleteNexusOperationChasmRequest) ClearCloseTime() {
+	x.xxx_hidden_CloseTime = nil
+}
+
+const CompleteNexusOperationChasmRequest_Outcome_not_set_case case_CompleteNexusOperationChasmRequest_Outcome = 0
+const CompleteNexusOperationChasmRequest_Success_case case_CompleteNexusOperationChasmRequest_Outcome = 2
+const CompleteNexusOperationChasmRequest_Failure_case case_CompleteNexusOperationChasmRequest_Outcome = 3
+
+func (x *CompleteNexusOperationChasmRequest) WhichOutcome() case_CompleteNexusOperationChasmRequest_Outcome {
+	if x == nil {
+		return CompleteNexusOperationChasmRequest_Outcome_not_set_case
+	}
+	switch x.xxx_hidden_Outcome.(type) {
+	case *completeNexusOperationChasmRequest_Success:
+		return CompleteNexusOperationChasmRequest_Success_case
+	case *completeNexusOperationChasmRequest_Failure:
+		return CompleteNexusOperationChasmRequest_Failure_case
+	default:
+		return CompleteNexusOperationChasmRequest_Outcome_not_set_case
+	}
+}
+
+type CompleteNexusOperationChasmRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Completion token - holds information for locating an entity and the corresponding component.
+	Completion *v120.NexusOperationCompletion
+	// Fields of oneof xxx_hidden_Outcome:
+	// Result of a successful operation, only set if state == successful.
+	Success *v14.Payload
+	// Operation failure, only set if state != successful.
+	Failure *v13.Failure
+	// -- end of xxx_hidden_Outcome
+	// Time when the operation was closed.
+	CloseTime *timestamppb.Timestamp
+}
+
+func (b0 CompleteNexusOperationChasmRequest_builder) Build() *CompleteNexusOperationChasmRequest {
+	m0 := &CompleteNexusOperationChasmRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Completion = b.Completion
+	if b.Success != nil {
+		x.xxx_hidden_Outcome = &completeNexusOperationChasmRequest_Success{b.Success}
+	}
+	if b.Failure != nil {
+		x.xxx_hidden_Outcome = &completeNexusOperationChasmRequest_Failure{b.Failure}
+	}
+	x.xxx_hidden_CloseTime = b.CloseTime
+	return m0
+}
+
+type case_CompleteNexusOperationChasmRequest_Outcome protoreflect.FieldNumber
+
+func (x case_CompleteNexusOperationChasmRequest_Outcome) String() string {
+	switch x {
+	case CompleteNexusOperationChasmRequest_Outcome_not_set_case:
+		return "CompleteNexusOperationChasmRequestOutcomeNotSetCase"
+	case CompleteNexusOperationChasmRequest_Success_case:
+		return "CompleteNexusOperationChasmRequestSuccessCase"
+	case CompleteNexusOperationChasmRequest_Failure_case:
+		return "CompleteNexusOperationChasmRequestFailureCase"
+	default:
+		return strconv.Itoa(int(x))
+	}
+
 }
 
 type isCompleteNexusOperationChasmRequest_Outcome interface {
 	isCompleteNexusOperationChasmRequest_Outcome()
 }
 
-type CompleteNexusOperationChasmRequest_Success struct {
+type completeNexusOperationChasmRequest_Success struct {
 	// Result of a successful operation, only set if state == successful.
 	Success *v14.Payload `protobuf:"bytes,2,opt,name=success,proto3,oneof"`
 }
 
-type CompleteNexusOperationChasmRequest_Failure struct {
+type completeNexusOperationChasmRequest_Failure struct {
 	// Operation failure, only set if state != successful.
 	Failure *v13.Failure `protobuf:"bytes,3,opt,name=failure,proto3,oneof"`
 }
 
-func (*CompleteNexusOperationChasmRequest_Success) isCompleteNexusOperationChasmRequest_Outcome() {}
+func (*completeNexusOperationChasmRequest_Success) isCompleteNexusOperationChasmRequest_Outcome() {}
 
-func (*CompleteNexusOperationChasmRequest_Failure) isCompleteNexusOperationChasmRequest_Outcome() {}
+func (*completeNexusOperationChasmRequest_Failure) isCompleteNexusOperationChasmRequest_Outcome() {}
 
 type CompleteNexusOperationChasmResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -8640,30 +14513,28 @@ func (x *CompleteNexusOperationChasmResponse) ProtoReflect() protoreflect.Messag
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CompleteNexusOperationChasmResponse.ProtoReflect.Descriptor instead.
-func (*CompleteNexusOperationChasmResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{133}
+type CompleteNexusOperationChasmResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+}
+
+func (b0 CompleteNexusOperationChasmResponse_builder) Build() *CompleteNexusOperationChasmResponse {
+	m0 := &CompleteNexusOperationChasmResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	return m0
 }
 
 type CompleteNexusOperationRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Completion token - holds information for locating a run and the corresponding operation state machine.
-	Completion *v120.NexusOperationCompletion `protobuf:"bytes,1,opt,name=completion,proto3" json:"completion,omitempty"`
-	// Operation state - may only be successful / failed / canceled.
-	State string `protobuf:"bytes,2,opt,name=state,proto3" json:"state,omitempty"`
-	// Types that are valid to be assigned to Outcome:
-	//
-	//	*CompleteNexusOperationRequest_Success
-	//	*CompleteNexusOperationRequest_Failure
-	Outcome isCompleteNexusOperationRequest_Outcome `protobuf_oneof:"outcome"`
-	// Operation token - used when the completion is received before the started response.
-	OperationToken string `protobuf:"bytes,5,opt,name=operation_token,json=operationToken,proto3" json:"operation_token,omitempty"`
-	// Time the operation was started. Used when completion is received before the started response.
-	StartTime *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
-	// Links to be attached to a fabricated start event if completion is received before started response.
-	Links         []*v14.Link `protobuf:"bytes,7,rep,name=links,proto3" json:"links,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                     protoimpl.MessageState                  `protogen:"opaque.v1"`
+	xxx_hidden_Completion     *v120.NexusOperationCompletion          `protobuf:"bytes,1,opt,name=completion,proto3"`
+	xxx_hidden_State          string                                  `protobuf:"bytes,2,opt,name=state,proto3"`
+	xxx_hidden_Outcome        isCompleteNexusOperationRequest_Outcome `protobuf_oneof:"outcome"`
+	xxx_hidden_OperationToken string                                  `protobuf:"bytes,5,opt,name=operation_token,json=operationToken,proto3"`
+	xxx_hidden_StartTime      *timestamppb.Timestamp                  `protobuf:"bytes,6,opt,name=start_time,json=startTime,proto3"`
+	xxx_hidden_Links          *[]*v14.Link                            `protobuf:"bytes,7,rep,name=links,proto3"`
+	unknownFields             protoimpl.UnknownFields
+	sizeCache                 protoimpl.SizeCache
 }
 
 func (x *CompleteNexusOperationRequest) Reset() {
@@ -8691,35 +14562,23 @@ func (x *CompleteNexusOperationRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CompleteNexusOperationRequest.ProtoReflect.Descriptor instead.
-func (*CompleteNexusOperationRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{134}
-}
-
 func (x *CompleteNexusOperationRequest) GetCompletion() *v120.NexusOperationCompletion {
 	if x != nil {
-		return x.Completion
+		return x.xxx_hidden_Completion
 	}
 	return nil
 }
 
 func (x *CompleteNexusOperationRequest) GetState() string {
 	if x != nil {
-		return x.State
+		return x.xxx_hidden_State
 	}
 	return ""
 }
 
-func (x *CompleteNexusOperationRequest) GetOutcome() isCompleteNexusOperationRequest_Outcome {
-	if x != nil {
-		return x.Outcome
-	}
-	return nil
-}
-
 func (x *CompleteNexusOperationRequest) GetSuccess() *v14.Payload {
 	if x != nil {
-		if x, ok := x.Outcome.(*CompleteNexusOperationRequest_Success); ok {
+		if x, ok := x.xxx_hidden_Outcome.(*completeNexusOperationRequest_Success); ok {
 			return x.Success
 		}
 	}
@@ -8728,7 +14587,7 @@ func (x *CompleteNexusOperationRequest) GetSuccess() *v14.Payload {
 
 func (x *CompleteNexusOperationRequest) GetFailure() *v121.Failure {
 	if x != nil {
-		if x, ok := x.Outcome.(*CompleteNexusOperationRequest_Failure); ok {
+		if x, ok := x.xxx_hidden_Outcome.(*completeNexusOperationRequest_Failure); ok {
 			return x.Failure
 		}
 	}
@@ -8737,45 +14596,217 @@ func (x *CompleteNexusOperationRequest) GetFailure() *v121.Failure {
 
 func (x *CompleteNexusOperationRequest) GetOperationToken() string {
 	if x != nil {
-		return x.OperationToken
+		return x.xxx_hidden_OperationToken
 	}
 	return ""
 }
 
 func (x *CompleteNexusOperationRequest) GetStartTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.StartTime
+		return x.xxx_hidden_StartTime
 	}
 	return nil
 }
 
 func (x *CompleteNexusOperationRequest) GetLinks() []*v14.Link {
 	if x != nil {
-		return x.Links
+		if x.xxx_hidden_Links != nil {
+			return *x.xxx_hidden_Links
+		}
 	}
 	return nil
+}
+
+func (x *CompleteNexusOperationRequest) SetCompletion(v *v120.NexusOperationCompletion) {
+	x.xxx_hidden_Completion = v
+}
+
+func (x *CompleteNexusOperationRequest) SetState(v string) {
+	x.xxx_hidden_State = v
+}
+
+func (x *CompleteNexusOperationRequest) SetSuccess(v *v14.Payload) {
+	if v == nil {
+		x.xxx_hidden_Outcome = nil
+		return
+	}
+	x.xxx_hidden_Outcome = &completeNexusOperationRequest_Success{v}
+}
+
+func (x *CompleteNexusOperationRequest) SetFailure(v *v121.Failure) {
+	if v == nil {
+		x.xxx_hidden_Outcome = nil
+		return
+	}
+	x.xxx_hidden_Outcome = &completeNexusOperationRequest_Failure{v}
+}
+
+func (x *CompleteNexusOperationRequest) SetOperationToken(v string) {
+	x.xxx_hidden_OperationToken = v
+}
+
+func (x *CompleteNexusOperationRequest) SetStartTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_StartTime = v
+}
+
+func (x *CompleteNexusOperationRequest) SetLinks(v []*v14.Link) {
+	x.xxx_hidden_Links = &v
+}
+
+func (x *CompleteNexusOperationRequest) HasCompletion() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Completion != nil
+}
+
+func (x *CompleteNexusOperationRequest) HasOutcome() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Outcome != nil
+}
+
+func (x *CompleteNexusOperationRequest) HasSuccess() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_Outcome.(*completeNexusOperationRequest_Success)
+	return ok
+}
+
+func (x *CompleteNexusOperationRequest) HasFailure() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_Outcome.(*completeNexusOperationRequest_Failure)
+	return ok
+}
+
+func (x *CompleteNexusOperationRequest) HasStartTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_StartTime != nil
+}
+
+func (x *CompleteNexusOperationRequest) ClearCompletion() {
+	x.xxx_hidden_Completion = nil
+}
+
+func (x *CompleteNexusOperationRequest) ClearOutcome() {
+	x.xxx_hidden_Outcome = nil
+}
+
+func (x *CompleteNexusOperationRequest) ClearSuccess() {
+	if _, ok := x.xxx_hidden_Outcome.(*completeNexusOperationRequest_Success); ok {
+		x.xxx_hidden_Outcome = nil
+	}
+}
+
+func (x *CompleteNexusOperationRequest) ClearFailure() {
+	if _, ok := x.xxx_hidden_Outcome.(*completeNexusOperationRequest_Failure); ok {
+		x.xxx_hidden_Outcome = nil
+	}
+}
+
+func (x *CompleteNexusOperationRequest) ClearStartTime() {
+	x.xxx_hidden_StartTime = nil
+}
+
+const CompleteNexusOperationRequest_Outcome_not_set_case case_CompleteNexusOperationRequest_Outcome = 0
+const CompleteNexusOperationRequest_Success_case case_CompleteNexusOperationRequest_Outcome = 3
+const CompleteNexusOperationRequest_Failure_case case_CompleteNexusOperationRequest_Outcome = 4
+
+func (x *CompleteNexusOperationRequest) WhichOutcome() case_CompleteNexusOperationRequest_Outcome {
+	if x == nil {
+		return CompleteNexusOperationRequest_Outcome_not_set_case
+	}
+	switch x.xxx_hidden_Outcome.(type) {
+	case *completeNexusOperationRequest_Success:
+		return CompleteNexusOperationRequest_Success_case
+	case *completeNexusOperationRequest_Failure:
+		return CompleteNexusOperationRequest_Failure_case
+	default:
+		return CompleteNexusOperationRequest_Outcome_not_set_case
+	}
+}
+
+type CompleteNexusOperationRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Completion token - holds information for locating a run and the corresponding operation state machine.
+	Completion *v120.NexusOperationCompletion
+	// Operation state - may only be successful / failed / canceled.
+	State string
+	// Fields of oneof xxx_hidden_Outcome:
+	// Result of a successful operation, only set if state == successful.
+	Success *v14.Payload
+	// Operation failure, only set if state != successful.
+	Failure *v121.Failure
+	// -- end of xxx_hidden_Outcome
+	// Operation token - used when the completion is received before the started response.
+	OperationToken string
+	// Time the operation was started. Used when completion is received before the started response.
+	StartTime *timestamppb.Timestamp
+	// Links to be attached to a fabricated start event if completion is received before started response.
+	Links []*v14.Link
+}
+
+func (b0 CompleteNexusOperationRequest_builder) Build() *CompleteNexusOperationRequest {
+	m0 := &CompleteNexusOperationRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Completion = b.Completion
+	x.xxx_hidden_State = b.State
+	if b.Success != nil {
+		x.xxx_hidden_Outcome = &completeNexusOperationRequest_Success{b.Success}
+	}
+	if b.Failure != nil {
+		x.xxx_hidden_Outcome = &completeNexusOperationRequest_Failure{b.Failure}
+	}
+	x.xxx_hidden_OperationToken = b.OperationToken
+	x.xxx_hidden_StartTime = b.StartTime
+	x.xxx_hidden_Links = &b.Links
+	return m0
+}
+
+type case_CompleteNexusOperationRequest_Outcome protoreflect.FieldNumber
+
+func (x case_CompleteNexusOperationRequest_Outcome) String() string {
+	switch x {
+	case CompleteNexusOperationRequest_Outcome_not_set_case:
+		return "CompleteNexusOperationRequestOutcomeNotSetCase"
+	case CompleteNexusOperationRequest_Success_case:
+		return "CompleteNexusOperationRequestSuccessCase"
+	case CompleteNexusOperationRequest_Failure_case:
+		return "CompleteNexusOperationRequestFailureCase"
+	default:
+		return strconv.Itoa(int(x))
+	}
+
 }
 
 type isCompleteNexusOperationRequest_Outcome interface {
 	isCompleteNexusOperationRequest_Outcome()
 }
 
-type CompleteNexusOperationRequest_Success struct {
+type completeNexusOperationRequest_Success struct {
 	// Result of a successful operation, only set if state == successful.
 	Success *v14.Payload `protobuf:"bytes,3,opt,name=success,proto3,oneof"`
 }
 
-type CompleteNexusOperationRequest_Failure struct {
+type completeNexusOperationRequest_Failure struct {
 	// Operation failure, only set if state != successful.
 	Failure *v121.Failure `protobuf:"bytes,4,opt,name=failure,proto3,oneof"`
 }
 
-func (*CompleteNexusOperationRequest_Success) isCompleteNexusOperationRequest_Outcome() {}
+func (*completeNexusOperationRequest_Success) isCompleteNexusOperationRequest_Outcome() {}
 
-func (*CompleteNexusOperationRequest_Failure) isCompleteNexusOperationRequest_Outcome() {}
+func (*completeNexusOperationRequest_Failure) isCompleteNexusOperationRequest_Outcome() {}
 
 type CompleteNexusOperationResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -8805,32 +14836,28 @@ func (x *CompleteNexusOperationResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CompleteNexusOperationResponse.ProtoReflect.Descriptor instead.
-func (*CompleteNexusOperationResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{135}
+type CompleteNexusOperationResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+}
+
+func (b0 CompleteNexusOperationResponse_builder) Build() *CompleteNexusOperationResponse {
+	m0 := &CompleteNexusOperationResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	return m0
 }
 
 type InvokeStateMachineMethodRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// TODO(Tianyu): This is the same as NexusOperationsCompletion but obviously is not about Nexus. This is because
-	// State machine signaling is a generalization of the Nexus mechanisms. Perhaps eventually they should be merged.
-	// Namespace UUID.
-	NamespaceId string `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	// Workflow ID.
-	WorkflowId string `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
-	// Run ID at the time this token was generated.
-	RunId string `protobuf:"bytes,3,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	// Reference including the path to the backing Operation state machine and a version + transition count for
-	// staleness checks.
-	Ref *v19.StateMachineRef `protobuf:"bytes,4,opt,name=ref,proto3" json:"ref,omitempty"`
-	// The method name to invoke. Methods must be explicitly registered for the target state machine in the state
-	// machine registry, and accept an argument type of HistoryEvent that is the completion event of the completed
-	// workflow.
-	MethodName string `protobuf:"bytes,5,opt,name=method_name,json=methodName,proto3" json:"method_name,omitempty"`
-	// Input, in serialized bytes, to the method. Users specify a deserializer during method registration for each state machine.
-	Input         []byte `protobuf:"bytes,6,opt,name=input,proto3" json:"input,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                  protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_WorkflowId  string                 `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3"`
+	xxx_hidden_RunId       string                 `protobuf:"bytes,3,opt,name=run_id,json=runId,proto3"`
+	xxx_hidden_Ref         *v19.StateMachineRef   `protobuf:"bytes,4,opt,name=ref,proto3"`
+	xxx_hidden_MethodName  string                 `protobuf:"bytes,5,opt,name=method_name,json=methodName,proto3"`
+	xxx_hidden_Input       []byte                 `protobuf:"bytes,6,opt,name=input,proto3"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *InvokeStateMachineMethodRequest) Reset() {
@@ -8858,59 +14885,126 @@ func (x *InvokeStateMachineMethodRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use InvokeStateMachineMethodRequest.ProtoReflect.Descriptor instead.
-func (*InvokeStateMachineMethodRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{136}
-}
-
 func (x *InvokeStateMachineMethodRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *InvokeStateMachineMethodRequest) GetWorkflowId() string {
 	if x != nil {
-		return x.WorkflowId
+		return x.xxx_hidden_WorkflowId
 	}
 	return ""
 }
 
 func (x *InvokeStateMachineMethodRequest) GetRunId() string {
 	if x != nil {
-		return x.RunId
+		return x.xxx_hidden_RunId
 	}
 	return ""
 }
 
 func (x *InvokeStateMachineMethodRequest) GetRef() *v19.StateMachineRef {
 	if x != nil {
-		return x.Ref
+		return x.xxx_hidden_Ref
 	}
 	return nil
 }
 
 func (x *InvokeStateMachineMethodRequest) GetMethodName() string {
 	if x != nil {
-		return x.MethodName
+		return x.xxx_hidden_MethodName
 	}
 	return ""
 }
 
 func (x *InvokeStateMachineMethodRequest) GetInput() []byte {
 	if x != nil {
-		return x.Input
+		return x.xxx_hidden_Input
 	}
 	return nil
 }
 
+func (x *InvokeStateMachineMethodRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *InvokeStateMachineMethodRequest) SetWorkflowId(v string) {
+	x.xxx_hidden_WorkflowId = v
+}
+
+func (x *InvokeStateMachineMethodRequest) SetRunId(v string) {
+	x.xxx_hidden_RunId = v
+}
+
+func (x *InvokeStateMachineMethodRequest) SetRef(v *v19.StateMachineRef) {
+	x.xxx_hidden_Ref = v
+}
+
+func (x *InvokeStateMachineMethodRequest) SetMethodName(v string) {
+	x.xxx_hidden_MethodName = v
+}
+
+func (x *InvokeStateMachineMethodRequest) SetInput(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_Input = v
+}
+
+func (x *InvokeStateMachineMethodRequest) HasRef() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Ref != nil
+}
+
+func (x *InvokeStateMachineMethodRequest) ClearRef() {
+	x.xxx_hidden_Ref = nil
+}
+
+type InvokeStateMachineMethodRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// TODO(Tianyu): This is the same as NexusOperationsCompletion but obviously is not about Nexus. This is because
+	// State machine signaling is a generalization of the Nexus mechanisms. Perhaps eventually they should be merged.
+	// Namespace UUID.
+	NamespaceId string
+	// Workflow ID.
+	WorkflowId string
+	// Run ID at the time this token was generated.
+	RunId string
+	// Reference including the path to the backing Operation state machine and a version + transition count for
+	// staleness checks.
+	Ref *v19.StateMachineRef
+	// The method name to invoke. Methods must be explicitly registered for the target state machine in the state
+	// machine registry, and accept an argument type of HistoryEvent that is the completion event of the completed
+	// workflow.
+	MethodName string
+	// Input, in serialized bytes, to the method. Users specify a deserializer during method registration for each state machine.
+	Input []byte
+}
+
+func (b0 InvokeStateMachineMethodRequest_builder) Build() *InvokeStateMachineMethodRequest {
+	m0 := &InvokeStateMachineMethodRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_WorkflowId = b.WorkflowId
+	x.xxx_hidden_RunId = b.RunId
+	x.xxx_hidden_Ref = b.Ref
+	x.xxx_hidden_MethodName = b.MethodName
+	x.xxx_hidden_Input = b.Input
+	return m0
+}
+
 type InvokeStateMachineMethodResponse struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Output, in serialized bytes, of the method. Users specify a serializer during method registration for each state machine.
-	Output        []byte `protobuf:"bytes,1,opt,name=output,proto3" json:"output,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state             protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Output []byte                 `protobuf:"bytes,1,opt,name=output,proto3"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *InvokeStateMachineMethodResponse) Reset() {
@@ -8938,23 +15032,40 @@ func (x *InvokeStateMachineMethodResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use InvokeStateMachineMethodResponse.ProtoReflect.Descriptor instead.
-func (*InvokeStateMachineMethodResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{137}
-}
-
 func (x *InvokeStateMachineMethodResponse) GetOutput() []byte {
 	if x != nil {
-		return x.Output
+		return x.xxx_hidden_Output
 	}
 	return nil
 }
 
+func (x *InvokeStateMachineMethodResponse) SetOutput(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_Output = v
+}
+
+type InvokeStateMachineMethodResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Output, in serialized bytes, of the method. Users specify a serializer during method registration for each state machine.
+	Output []byte
+}
+
+func (b0 InvokeStateMachineMethodResponse_builder) Build() *InvokeStateMachineMethodResponse {
+	m0 := &InvokeStateMachineMethodResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Output = b.Output
+	return m0
+}
+
 type DeepHealthCheckRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	HostAddress   string                 `protobuf:"bytes,1,opt,name=host_address,json=hostAddress,proto3" json:"host_address,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                  protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_HostAddress string                 `protobuf:"bytes,1,opt,name=host_address,json=hostAddress,proto3"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *DeepHealthCheckRequest) Reset() {
@@ -8982,23 +15093,36 @@ func (x *DeepHealthCheckRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DeepHealthCheckRequest.ProtoReflect.Descriptor instead.
-func (*DeepHealthCheckRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{138}
-}
-
 func (x *DeepHealthCheckRequest) GetHostAddress() string {
 	if x != nil {
-		return x.HostAddress
+		return x.xxx_hidden_HostAddress
 	}
 	return ""
 }
 
+func (x *DeepHealthCheckRequest) SetHostAddress(v string) {
+	x.xxx_hidden_HostAddress = v
+}
+
+type DeepHealthCheckRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	HostAddress string
+}
+
+func (b0 DeepHealthCheckRequest_builder) Build() *DeepHealthCheckRequest {
+	m0 := &DeepHealthCheckRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_HostAddress = b.HostAddress
+	return m0
+}
+
 type DeepHealthCheckResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	State         v111.HealthState       `protobuf:"varint,1,opt,name=state,proto3,enum=temporal.server.api.enums.v1.HealthState" json:"state,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state            protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_State v111.HealthState       `protobuf:"varint,1,opt,name=state,proto3,enum=temporal.server.api.enums.v1.HealthState"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *DeepHealthCheckResponse) Reset() {
@@ -9026,29 +15150,41 @@ func (x *DeepHealthCheckResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DeepHealthCheckResponse.ProtoReflect.Descriptor instead.
-func (*DeepHealthCheckResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{139}
-}
-
 func (x *DeepHealthCheckResponse) GetState() v111.HealthState {
 	if x != nil {
-		return x.State
+		return x.xxx_hidden_State
 	}
 	return v111.HealthState(0)
 }
 
+func (x *DeepHealthCheckResponse) SetState(v v111.HealthState) {
+	x.xxx_hidden_State = v
+}
+
+type DeepHealthCheckResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	State v111.HealthState
+}
+
+func (b0 DeepHealthCheckResponse_builder) Build() *DeepHealthCheckResponse {
+	m0 := &DeepHealthCheckResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_State = b.State
+	return m0
+}
+
 type SyncWorkflowStateRequest struct {
-	state               protoimpl.MessageState   `protogen:"open.v1"`
-	NamespaceId         string                   `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	Execution           *v14.WorkflowExecution   `protobuf:"bytes,2,opt,name=execution,proto3" json:"execution,omitempty"`
-	VersionedTransition *v19.VersionedTransition `protobuf:"bytes,3,opt,name=versioned_transition,json=versionedTransition,proto3" json:"versioned_transition,omitempty"`
-	VersionHistories    *v18.VersionHistories    `protobuf:"bytes,4,opt,name=version_histories,json=versionHistories,proto3" json:"version_histories,omitempty"`
-	TargetClusterId     int32                    `protobuf:"varint,5,opt,name=target_cluster_id,json=targetClusterId,proto3" json:"target_cluster_id,omitempty"`
-	// (-- api-linter: core::0141::forbidden-types=disabled --)
-	ArchetypeId   uint32 `protobuf:"varint,6,opt,name=archetype_id,json=archetypeId,proto3" json:"archetype_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                          protoimpl.MessageState   `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId         string                   `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_Execution           *v14.WorkflowExecution   `protobuf:"bytes,2,opt,name=execution,proto3"`
+	xxx_hidden_VersionedTransition *v19.VersionedTransition `protobuf:"bytes,3,opt,name=versioned_transition,json=versionedTransition,proto3"`
+	xxx_hidden_VersionHistories    *v18.VersionHistories    `protobuf:"bytes,4,opt,name=version_histories,json=versionHistories,proto3"`
+	xxx_hidden_TargetClusterId     int32                    `protobuf:"varint,5,opt,name=target_cluster_id,json=targetClusterId,proto3"`
+	xxx_hidden_ArchetypeId         uint32                   `protobuf:"varint,6,opt,name=archetype_id,json=archetypeId,proto3"`
+	unknownFields                  protoimpl.UnknownFields
+	sizeCache                      protoimpl.SizeCache
 }
 
 func (x *SyncWorkflowStateRequest) Reset() {
@@ -9076,58 +15212,135 @@ func (x *SyncWorkflowStateRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SyncWorkflowStateRequest.ProtoReflect.Descriptor instead.
-func (*SyncWorkflowStateRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{140}
-}
-
 func (x *SyncWorkflowStateRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *SyncWorkflowStateRequest) GetExecution() *v14.WorkflowExecution {
 	if x != nil {
-		return x.Execution
+		return x.xxx_hidden_Execution
 	}
 	return nil
 }
 
 func (x *SyncWorkflowStateRequest) GetVersionedTransition() *v19.VersionedTransition {
 	if x != nil {
-		return x.VersionedTransition
+		return x.xxx_hidden_VersionedTransition
 	}
 	return nil
 }
 
 func (x *SyncWorkflowStateRequest) GetVersionHistories() *v18.VersionHistories {
 	if x != nil {
-		return x.VersionHistories
+		return x.xxx_hidden_VersionHistories
 	}
 	return nil
 }
 
 func (x *SyncWorkflowStateRequest) GetTargetClusterId() int32 {
 	if x != nil {
-		return x.TargetClusterId
+		return x.xxx_hidden_TargetClusterId
 	}
 	return 0
 }
 
 func (x *SyncWorkflowStateRequest) GetArchetypeId() uint32 {
 	if x != nil {
-		return x.ArchetypeId
+		return x.xxx_hidden_ArchetypeId
 	}
 	return 0
 }
 
+func (x *SyncWorkflowStateRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *SyncWorkflowStateRequest) SetExecution(v *v14.WorkflowExecution) {
+	x.xxx_hidden_Execution = v
+}
+
+func (x *SyncWorkflowStateRequest) SetVersionedTransition(v *v19.VersionedTransition) {
+	x.xxx_hidden_VersionedTransition = v
+}
+
+func (x *SyncWorkflowStateRequest) SetVersionHistories(v *v18.VersionHistories) {
+	x.xxx_hidden_VersionHistories = v
+}
+
+func (x *SyncWorkflowStateRequest) SetTargetClusterId(v int32) {
+	x.xxx_hidden_TargetClusterId = v
+}
+
+func (x *SyncWorkflowStateRequest) SetArchetypeId(v uint32) {
+	x.xxx_hidden_ArchetypeId = v
+}
+
+func (x *SyncWorkflowStateRequest) HasExecution() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Execution != nil
+}
+
+func (x *SyncWorkflowStateRequest) HasVersionedTransition() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_VersionedTransition != nil
+}
+
+func (x *SyncWorkflowStateRequest) HasVersionHistories() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_VersionHistories != nil
+}
+
+func (x *SyncWorkflowStateRequest) ClearExecution() {
+	x.xxx_hidden_Execution = nil
+}
+
+func (x *SyncWorkflowStateRequest) ClearVersionedTransition() {
+	x.xxx_hidden_VersionedTransition = nil
+}
+
+func (x *SyncWorkflowStateRequest) ClearVersionHistories() {
+	x.xxx_hidden_VersionHistories = nil
+}
+
+type SyncWorkflowStateRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId         string
+	Execution           *v14.WorkflowExecution
+	VersionedTransition *v19.VersionedTransition
+	VersionHistories    *v18.VersionHistories
+	TargetClusterId     int32
+	// (-- api-linter: core::0141::forbidden-types=disabled --)
+	ArchetypeId uint32
+}
+
+func (b0 SyncWorkflowStateRequest_builder) Build() *SyncWorkflowStateRequest {
+	m0 := &SyncWorkflowStateRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_Execution = b.Execution
+	x.xxx_hidden_VersionedTransition = b.VersionedTransition
+	x.xxx_hidden_VersionHistories = b.VersionHistories
+	x.xxx_hidden_TargetClusterId = b.TargetClusterId
+	x.xxx_hidden_ArchetypeId = b.ArchetypeId
+	return m0
+}
+
 type SyncWorkflowStateResponse struct {
-	state                       protoimpl.MessageState            `protogen:"open.v1"`
-	VersionedTransitionArtifact *v117.VersionedTransitionArtifact `protobuf:"bytes,5,opt,name=versioned_transition_artifact,json=versionedTransitionArtifact,proto3" json:"versioned_transition_artifact,omitempty"`
-	unknownFields               protoimpl.UnknownFields
-	sizeCache                   protoimpl.SizeCache
+	state                                  protoimpl.MessageState            `protogen:"opaque.v1"`
+	xxx_hidden_VersionedTransitionArtifact *v117.VersionedTransitionArtifact `protobuf:"bytes,5,opt,name=versioned_transition_artifact,json=versionedTransitionArtifact,proto3"`
+	unknownFields                          protoimpl.UnknownFields
+	sizeCache                              protoimpl.SizeCache
 }
 
 func (x *SyncWorkflowStateResponse) Reset() {
@@ -9155,27 +15368,50 @@ func (x *SyncWorkflowStateResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SyncWorkflowStateResponse.ProtoReflect.Descriptor instead.
-func (*SyncWorkflowStateResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{141}
-}
-
 func (x *SyncWorkflowStateResponse) GetVersionedTransitionArtifact() *v117.VersionedTransitionArtifact {
 	if x != nil {
-		return x.VersionedTransitionArtifact
+		return x.xxx_hidden_VersionedTransitionArtifact
 	}
 	return nil
+}
+
+func (x *SyncWorkflowStateResponse) SetVersionedTransitionArtifact(v *v117.VersionedTransitionArtifact) {
+	x.xxx_hidden_VersionedTransitionArtifact = v
+}
+
+func (x *SyncWorkflowStateResponse) HasVersionedTransitionArtifact() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_VersionedTransitionArtifact != nil
+}
+
+func (x *SyncWorkflowStateResponse) ClearVersionedTransitionArtifact() {
+	x.xxx_hidden_VersionedTransitionArtifact = nil
+}
+
+type SyncWorkflowStateResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	VersionedTransitionArtifact *v117.VersionedTransitionArtifact
+}
+
+func (b0 SyncWorkflowStateResponse_builder) Build() *SyncWorkflowStateResponse {
+	m0 := &SyncWorkflowStateResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_VersionedTransitionArtifact = b.VersionedTransitionArtifact
+	return m0
 }
 
 // (-- api-linter: core::0134::request-mask-required=disabled
 // (-- api-linter: core::0134::request-resource-required=disabled
 type UpdateActivityOptionsRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Namespace ID of the workflow which scheduled this activity
-	NamespaceId   string                           `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	UpdateRequest *v1.UpdateActivityOptionsRequest `protobuf:"bytes,2,opt,name=update_request,json=updateRequest,proto3" json:"update_request,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                    protoimpl.MessageState           `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId   string                           `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_UpdateRequest *v1.UpdateActivityOptionsRequest `protobuf:"bytes,2,opt,name=update_request,json=updateRequest,proto3"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *UpdateActivityOptionsRequest) Reset() {
@@ -9203,31 +15439,61 @@ func (x *UpdateActivityOptionsRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use UpdateActivityOptionsRequest.ProtoReflect.Descriptor instead.
-func (*UpdateActivityOptionsRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{142}
-}
-
 func (x *UpdateActivityOptionsRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *UpdateActivityOptionsRequest) GetUpdateRequest() *v1.UpdateActivityOptionsRequest {
 	if x != nil {
-		return x.UpdateRequest
+		return x.xxx_hidden_UpdateRequest
 	}
 	return nil
 }
 
+func (x *UpdateActivityOptionsRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *UpdateActivityOptionsRequest) SetUpdateRequest(v *v1.UpdateActivityOptionsRequest) {
+	x.xxx_hidden_UpdateRequest = v
+}
+
+func (x *UpdateActivityOptionsRequest) HasUpdateRequest() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_UpdateRequest != nil
+}
+
+func (x *UpdateActivityOptionsRequest) ClearUpdateRequest() {
+	x.xxx_hidden_UpdateRequest = nil
+}
+
+type UpdateActivityOptionsRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Namespace ID of the workflow which scheduled this activity
+	NamespaceId   string
+	UpdateRequest *v1.UpdateActivityOptionsRequest
+}
+
+func (b0 UpdateActivityOptionsRequest_builder) Build() *UpdateActivityOptionsRequest {
+	m0 := &UpdateActivityOptionsRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_UpdateRequest = b.UpdateRequest
+	return m0
+}
+
 type UpdateActivityOptionsResponse struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Activity options after an update
-	ActivityOptions *v122.ActivityOptions `protobuf:"bytes,1,opt,name=activity_options,json=activityOptions,proto3" json:"activity_options,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state                      protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_ActivityOptions *v122.ActivityOptions  `protobuf:"bytes,1,opt,name=activity_options,json=activityOptions,proto3"`
+	unknownFields              protoimpl.UnknownFields
+	sizeCache                  protoimpl.SizeCache
 }
 
 func (x *UpdateActivityOptionsResponse) Reset() {
@@ -9255,25 +15521,49 @@ func (x *UpdateActivityOptionsResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use UpdateActivityOptionsResponse.ProtoReflect.Descriptor instead.
-func (*UpdateActivityOptionsResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{143}
-}
-
 func (x *UpdateActivityOptionsResponse) GetActivityOptions() *v122.ActivityOptions {
 	if x != nil {
-		return x.ActivityOptions
+		return x.xxx_hidden_ActivityOptions
 	}
 	return nil
 }
 
+func (x *UpdateActivityOptionsResponse) SetActivityOptions(v *v122.ActivityOptions) {
+	x.xxx_hidden_ActivityOptions = v
+}
+
+func (x *UpdateActivityOptionsResponse) HasActivityOptions() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_ActivityOptions != nil
+}
+
+func (x *UpdateActivityOptionsResponse) ClearActivityOptions() {
+	x.xxx_hidden_ActivityOptions = nil
+}
+
+type UpdateActivityOptionsResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Activity options after an update
+	ActivityOptions *v122.ActivityOptions
+}
+
+func (b0 UpdateActivityOptionsResponse_builder) Build() *UpdateActivityOptionsResponse {
+	m0 := &UpdateActivityOptionsResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_ActivityOptions = b.ActivityOptions
+	return m0
+}
+
 type PauseActivityRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Namespace ID of the workflow which scheduled this activity
-	NamespaceId     string                   `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	FrontendRequest *v1.PauseActivityRequest `protobuf:"bytes,2,opt,name=frontend_request,json=frontendRequest,proto3" json:"frontend_request,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state                      protoimpl.MessageState   `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId     string                   `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_FrontendRequest *v1.PauseActivityRequest `protobuf:"bytes,2,opt,name=frontend_request,json=frontendRequest,proto3"`
+	unknownFields              protoimpl.UnknownFields
+	sizeCache                  protoimpl.SizeCache
 }
 
 func (x *PauseActivityRequest) Reset() {
@@ -9301,27 +15591,58 @@ func (x *PauseActivityRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use PauseActivityRequest.ProtoReflect.Descriptor instead.
-func (*PauseActivityRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{144}
-}
-
 func (x *PauseActivityRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *PauseActivityRequest) GetFrontendRequest() *v1.PauseActivityRequest {
 	if x != nil {
-		return x.FrontendRequest
+		return x.xxx_hidden_FrontendRequest
 	}
 	return nil
 }
 
+func (x *PauseActivityRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *PauseActivityRequest) SetFrontendRequest(v *v1.PauseActivityRequest) {
+	x.xxx_hidden_FrontendRequest = v
+}
+
+func (x *PauseActivityRequest) HasFrontendRequest() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_FrontendRequest != nil
+}
+
+func (x *PauseActivityRequest) ClearFrontendRequest() {
+	x.xxx_hidden_FrontendRequest = nil
+}
+
+type PauseActivityRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Namespace ID of the workflow which scheduled this activity
+	NamespaceId     string
+	FrontendRequest *v1.PauseActivityRequest
+}
+
+func (b0 PauseActivityRequest_builder) Build() *PauseActivityRequest {
+	m0 := &PauseActivityRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_FrontendRequest = b.FrontendRequest
+	return m0
+}
+
 type PauseActivityResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -9351,18 +15672,24 @@ func (x *PauseActivityResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use PauseActivityResponse.ProtoReflect.Descriptor instead.
-func (*PauseActivityResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{145}
+type PauseActivityResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+}
+
+func (b0 PauseActivityResponse_builder) Build() *PauseActivityResponse {
+	m0 := &PauseActivityResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	return m0
 }
 
 type UnpauseActivityRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Namespace ID of the workflow which scheduled this activity
-	NamespaceId     string                     `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	FrontendRequest *v1.UnpauseActivityRequest `protobuf:"bytes,2,opt,name=frontend_request,json=frontendRequest,proto3" json:"frontend_request,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state                      protoimpl.MessageState     `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId     string                     `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_FrontendRequest *v1.UnpauseActivityRequest `protobuf:"bytes,2,opt,name=frontend_request,json=frontendRequest,proto3"`
+	unknownFields              protoimpl.UnknownFields
+	sizeCache                  protoimpl.SizeCache
 }
 
 func (x *UnpauseActivityRequest) Reset() {
@@ -9390,27 +15717,58 @@ func (x *UnpauseActivityRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use UnpauseActivityRequest.ProtoReflect.Descriptor instead.
-func (*UnpauseActivityRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{146}
-}
-
 func (x *UnpauseActivityRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *UnpauseActivityRequest) GetFrontendRequest() *v1.UnpauseActivityRequest {
 	if x != nil {
-		return x.FrontendRequest
+		return x.xxx_hidden_FrontendRequest
 	}
 	return nil
 }
 
+func (x *UnpauseActivityRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *UnpauseActivityRequest) SetFrontendRequest(v *v1.UnpauseActivityRequest) {
+	x.xxx_hidden_FrontendRequest = v
+}
+
+func (x *UnpauseActivityRequest) HasFrontendRequest() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_FrontendRequest != nil
+}
+
+func (x *UnpauseActivityRequest) ClearFrontendRequest() {
+	x.xxx_hidden_FrontendRequest = nil
+}
+
+type UnpauseActivityRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Namespace ID of the workflow which scheduled this activity
+	NamespaceId     string
+	FrontendRequest *v1.UnpauseActivityRequest
+}
+
+func (b0 UnpauseActivityRequest_builder) Build() *UnpauseActivityRequest {
+	m0 := &UnpauseActivityRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_FrontendRequest = b.FrontendRequest
+	return m0
+}
+
 type UnpauseActivityResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -9440,18 +15798,24 @@ func (x *UnpauseActivityResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use UnpauseActivityResponse.ProtoReflect.Descriptor instead.
-func (*UnpauseActivityResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{147}
+type UnpauseActivityResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+}
+
+func (b0 UnpauseActivityResponse_builder) Build() *UnpauseActivityResponse {
+	m0 := &UnpauseActivityResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	return m0
 }
 
 type ResetActivityRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Namespace ID of the workflow which scheduled this activity
-	NamespaceId     string                   `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	FrontendRequest *v1.ResetActivityRequest `protobuf:"bytes,2,opt,name=frontend_request,json=frontendRequest,proto3" json:"frontend_request,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state                      protoimpl.MessageState   `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId     string                   `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_FrontendRequest *v1.ResetActivityRequest `protobuf:"bytes,2,opt,name=frontend_request,json=frontendRequest,proto3"`
+	unknownFields              protoimpl.UnknownFields
+	sizeCache                  protoimpl.SizeCache
 }
 
 func (x *ResetActivityRequest) Reset() {
@@ -9479,27 +15843,58 @@ func (x *ResetActivityRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ResetActivityRequest.ProtoReflect.Descriptor instead.
-func (*ResetActivityRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{148}
-}
-
 func (x *ResetActivityRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *ResetActivityRequest) GetFrontendRequest() *v1.ResetActivityRequest {
 	if x != nil {
-		return x.FrontendRequest
+		return x.xxx_hidden_FrontendRequest
 	}
 	return nil
 }
 
+func (x *ResetActivityRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *ResetActivityRequest) SetFrontendRequest(v *v1.ResetActivityRequest) {
+	x.xxx_hidden_FrontendRequest = v
+}
+
+func (x *ResetActivityRequest) HasFrontendRequest() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_FrontendRequest != nil
+}
+
+func (x *ResetActivityRequest) ClearFrontendRequest() {
+	x.xxx_hidden_FrontendRequest = nil
+}
+
+type ResetActivityRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Namespace ID of the workflow which scheduled this activity
+	NamespaceId     string
+	FrontendRequest *v1.ResetActivityRequest
+}
+
+func (b0 ResetActivityRequest_builder) Build() *ResetActivityRequest {
+	m0 := &ResetActivityRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_FrontendRequest = b.FrontendRequest
+	return m0
+}
+
 type ResetActivityResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -9529,19 +15924,26 @@ func (x *ResetActivityResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ResetActivityResponse.ProtoReflect.Descriptor instead.
-func (*ResetActivityResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{149}
+type ResetActivityResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+}
+
+func (b0 ResetActivityResponse_builder) Build() *ResetActivityResponse {
+	m0 := &ResetActivityResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	return m0
 }
 
 // (-- api-linter: core::0134::request-mask-required=disabled
 // (-- api-linter: core::0134::request-resource-required=disabled
 type UpdateWorkflowExecutionOptionsRequest struct {
-	state         protoimpl.MessageState                    `protogen:"open.v1"`
-	NamespaceId   string                                    `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	UpdateRequest *v1.UpdateWorkflowExecutionOptionsRequest `protobuf:"bytes,2,opt,name=update_request,json=updateRequest,proto3" json:"update_request,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                    protoimpl.MessageState                    `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId   string                                    `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_UpdateRequest *v1.UpdateWorkflowExecutionOptionsRequest `protobuf:"bytes,2,opt,name=update_request,json=updateRequest,proto3"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *UpdateWorkflowExecutionOptionsRequest) Reset() {
@@ -9569,31 +15971,60 @@ func (x *UpdateWorkflowExecutionOptionsRequest) ProtoReflect() protoreflect.Mess
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use UpdateWorkflowExecutionOptionsRequest.ProtoReflect.Descriptor instead.
-func (*UpdateWorkflowExecutionOptionsRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{150}
-}
-
 func (x *UpdateWorkflowExecutionOptionsRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *UpdateWorkflowExecutionOptionsRequest) GetUpdateRequest() *v1.UpdateWorkflowExecutionOptionsRequest {
 	if x != nil {
-		return x.UpdateRequest
+		return x.xxx_hidden_UpdateRequest
 	}
 	return nil
 }
 
+func (x *UpdateWorkflowExecutionOptionsRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *UpdateWorkflowExecutionOptionsRequest) SetUpdateRequest(v *v1.UpdateWorkflowExecutionOptionsRequest) {
+	x.xxx_hidden_UpdateRequest = v
+}
+
+func (x *UpdateWorkflowExecutionOptionsRequest) HasUpdateRequest() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_UpdateRequest != nil
+}
+
+func (x *UpdateWorkflowExecutionOptionsRequest) ClearUpdateRequest() {
+	x.xxx_hidden_UpdateRequest = nil
+}
+
+type UpdateWorkflowExecutionOptionsRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId   string
+	UpdateRequest *v1.UpdateWorkflowExecutionOptionsRequest
+}
+
+func (b0 UpdateWorkflowExecutionOptionsRequest_builder) Build() *UpdateWorkflowExecutionOptionsRequest {
+	m0 := &UpdateWorkflowExecutionOptionsRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_UpdateRequest = b.UpdateRequest
+	return m0
+}
+
 type UpdateWorkflowExecutionOptionsResponse struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Workflow Execution options after update.
-	WorkflowExecutionOptions *v15.WorkflowExecutionOptions `protobuf:"bytes,1,opt,name=workflow_execution_options,json=workflowExecutionOptions,proto3" json:"workflow_execution_options,omitempty"`
-	unknownFields            protoimpl.UnknownFields
-	sizeCache                protoimpl.SizeCache
+	state                               protoimpl.MessageState        `protogen:"opaque.v1"`
+	xxx_hidden_WorkflowExecutionOptions *v15.WorkflowExecutionOptions `protobuf:"bytes,1,opt,name=workflow_execution_options,json=workflowExecutionOptions,proto3"`
+	unknownFields                       protoimpl.UnknownFields
+	sizeCache                           protoimpl.SizeCache
 }
 
 func (x *UpdateWorkflowExecutionOptionsResponse) Reset() {
@@ -9621,25 +16052,49 @@ func (x *UpdateWorkflowExecutionOptionsResponse) ProtoReflect() protoreflect.Mes
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use UpdateWorkflowExecutionOptionsResponse.ProtoReflect.Descriptor instead.
-func (*UpdateWorkflowExecutionOptionsResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{151}
-}
-
 func (x *UpdateWorkflowExecutionOptionsResponse) GetWorkflowExecutionOptions() *v15.WorkflowExecutionOptions {
 	if x != nil {
-		return x.WorkflowExecutionOptions
+		return x.xxx_hidden_WorkflowExecutionOptions
 	}
 	return nil
 }
 
+func (x *UpdateWorkflowExecutionOptionsResponse) SetWorkflowExecutionOptions(v *v15.WorkflowExecutionOptions) {
+	x.xxx_hidden_WorkflowExecutionOptions = v
+}
+
+func (x *UpdateWorkflowExecutionOptionsResponse) HasWorkflowExecutionOptions() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_WorkflowExecutionOptions != nil
+}
+
+func (x *UpdateWorkflowExecutionOptionsResponse) ClearWorkflowExecutionOptions() {
+	x.xxx_hidden_WorkflowExecutionOptions = nil
+}
+
+type UpdateWorkflowExecutionOptionsResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Workflow Execution options after update.
+	WorkflowExecutionOptions *v15.WorkflowExecutionOptions
+}
+
+func (b0 UpdateWorkflowExecutionOptionsResponse_builder) Build() *UpdateWorkflowExecutionOptionsResponse {
+	m0 := &UpdateWorkflowExecutionOptionsResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_WorkflowExecutionOptions = b.WorkflowExecutionOptions
+	return m0
+}
+
 type PauseWorkflowExecutionRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Namespace ID of the workflow which is being paused
-	NamespaceId   string                            `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	PauseRequest  *v1.PauseWorkflowExecutionRequest `protobuf:"bytes,2,opt,name=pause_request,json=pauseRequest,proto3" json:"pause_request,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                   protoimpl.MessageState            `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId  string                            `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_PauseRequest *v1.PauseWorkflowExecutionRequest `protobuf:"bytes,2,opt,name=pause_request,json=pauseRequest,proto3"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
 }
 
 func (x *PauseWorkflowExecutionRequest) Reset() {
@@ -9667,27 +16122,58 @@ func (x *PauseWorkflowExecutionRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use PauseWorkflowExecutionRequest.ProtoReflect.Descriptor instead.
-func (*PauseWorkflowExecutionRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{152}
-}
-
 func (x *PauseWorkflowExecutionRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *PauseWorkflowExecutionRequest) GetPauseRequest() *v1.PauseWorkflowExecutionRequest {
 	if x != nil {
-		return x.PauseRequest
+		return x.xxx_hidden_PauseRequest
 	}
 	return nil
 }
 
+func (x *PauseWorkflowExecutionRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *PauseWorkflowExecutionRequest) SetPauseRequest(v *v1.PauseWorkflowExecutionRequest) {
+	x.xxx_hidden_PauseRequest = v
+}
+
+func (x *PauseWorkflowExecutionRequest) HasPauseRequest() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_PauseRequest != nil
+}
+
+func (x *PauseWorkflowExecutionRequest) ClearPauseRequest() {
+	x.xxx_hidden_PauseRequest = nil
+}
+
+type PauseWorkflowExecutionRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Namespace ID of the workflow which is being paused
+	NamespaceId  string
+	PauseRequest *v1.PauseWorkflowExecutionRequest
+}
+
+func (b0 PauseWorkflowExecutionRequest_builder) Build() *PauseWorkflowExecutionRequest {
+	m0 := &PauseWorkflowExecutionRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_PauseRequest = b.PauseRequest
+	return m0
+}
+
 type PauseWorkflowExecutionResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -9717,18 +16203,24 @@ func (x *PauseWorkflowExecutionResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use PauseWorkflowExecutionResponse.ProtoReflect.Descriptor instead.
-func (*PauseWorkflowExecutionResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{153}
+type PauseWorkflowExecutionResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+}
+
+func (b0 PauseWorkflowExecutionResponse_builder) Build() *PauseWorkflowExecutionResponse {
+	m0 := &PauseWorkflowExecutionResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	return m0
 }
 
 type UnpauseWorkflowExecutionRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Namespace ID of the workflow which is being unpaused
-	NamespaceId    string                              `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	UnpauseRequest *v1.UnpauseWorkflowExecutionRequest `protobuf:"bytes,2,opt,name=unpause_request,json=unpauseRequest,proto3" json:"unpause_request,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state                     protoimpl.MessageState              `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId    string                              `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_UnpauseRequest *v1.UnpauseWorkflowExecutionRequest `protobuf:"bytes,2,opt,name=unpause_request,json=unpauseRequest,proto3"`
+	unknownFields             protoimpl.UnknownFields
+	sizeCache                 protoimpl.SizeCache
 }
 
 func (x *UnpauseWorkflowExecutionRequest) Reset() {
@@ -9756,27 +16248,58 @@ func (x *UnpauseWorkflowExecutionRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use UnpauseWorkflowExecutionRequest.ProtoReflect.Descriptor instead.
-func (*UnpauseWorkflowExecutionRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{154}
-}
-
 func (x *UnpauseWorkflowExecutionRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *UnpauseWorkflowExecutionRequest) GetUnpauseRequest() *v1.UnpauseWorkflowExecutionRequest {
 	if x != nil {
-		return x.UnpauseRequest
+		return x.xxx_hidden_UnpauseRequest
 	}
 	return nil
 }
 
+func (x *UnpauseWorkflowExecutionRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *UnpauseWorkflowExecutionRequest) SetUnpauseRequest(v *v1.UnpauseWorkflowExecutionRequest) {
+	x.xxx_hidden_UnpauseRequest = v
+}
+
+func (x *UnpauseWorkflowExecutionRequest) HasUnpauseRequest() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_UnpauseRequest != nil
+}
+
+func (x *UnpauseWorkflowExecutionRequest) ClearUnpauseRequest() {
+	x.xxx_hidden_UnpauseRequest = nil
+}
+
+type UnpauseWorkflowExecutionRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Namespace ID of the workflow which is being unpaused
+	NamespaceId    string
+	UnpauseRequest *v1.UnpauseWorkflowExecutionRequest
+}
+
+func (b0 UnpauseWorkflowExecutionRequest_builder) Build() *UnpauseWorkflowExecutionRequest {
+	m0 := &UnpauseWorkflowExecutionRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_UnpauseRequest = b.UnpauseRequest
+	return m0
+}
+
 type UnpauseWorkflowExecutionResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -9806,20 +16329,23 @@ func (x *UnpauseWorkflowExecutionResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use UnpauseWorkflowExecutionResponse.ProtoReflect.Descriptor instead.
-func (*UnpauseWorkflowExecutionResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{155}
+type UnpauseWorkflowExecutionResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+}
+
+func (b0 UnpauseWorkflowExecutionResponse_builder) Build() *UnpauseWorkflowExecutionResponse {
+	m0 := &UnpauseWorkflowExecutionResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	return m0
 }
 
 type ExecuteMultiOperationRequest_Operation struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Types that are valid to be assigned to Operation:
-	//
-	//	*ExecuteMultiOperationRequest_Operation_StartWorkflow
-	//	*ExecuteMultiOperationRequest_Operation_UpdateWorkflow
-	Operation     isExecuteMultiOperationRequest_Operation_Operation `protobuf_oneof:"operation"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                protoimpl.MessageState                             `protogen:"opaque.v1"`
+	xxx_hidden_Operation isExecuteMultiOperationRequest_Operation_Operation `protobuf_oneof:"operation"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *ExecuteMultiOperationRequest_Operation) Reset() {
@@ -9847,21 +16373,9 @@ func (x *ExecuteMultiOperationRequest_Operation) ProtoReflect() protoreflect.Mes
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ExecuteMultiOperationRequest_Operation.ProtoReflect.Descriptor instead.
-func (*ExecuteMultiOperationRequest_Operation) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{9, 0}
-}
-
-func (x *ExecuteMultiOperationRequest_Operation) GetOperation() isExecuteMultiOperationRequest_Operation_Operation {
-	if x != nil {
-		return x.Operation
-	}
-	return nil
-}
-
 func (x *ExecuteMultiOperationRequest_Operation) GetStartWorkflow() *StartWorkflowExecutionRequest {
 	if x != nil {
-		if x, ok := x.Operation.(*ExecuteMultiOperationRequest_Operation_StartWorkflow); ok {
+		if x, ok := x.xxx_hidden_Operation.(*executeMultiOperationRequest_Operation_StartWorkflow); ok {
 			return x.StartWorkflow
 		}
 	}
@@ -9870,40 +16384,147 @@ func (x *ExecuteMultiOperationRequest_Operation) GetStartWorkflow() *StartWorkfl
 
 func (x *ExecuteMultiOperationRequest_Operation) GetUpdateWorkflow() *UpdateWorkflowExecutionRequest {
 	if x != nil {
-		if x, ok := x.Operation.(*ExecuteMultiOperationRequest_Operation_UpdateWorkflow); ok {
+		if x, ok := x.xxx_hidden_Operation.(*executeMultiOperationRequest_Operation_UpdateWorkflow); ok {
 			return x.UpdateWorkflow
 		}
 	}
 	return nil
 }
 
+func (x *ExecuteMultiOperationRequest_Operation) SetStartWorkflow(v *StartWorkflowExecutionRequest) {
+	if v == nil {
+		x.xxx_hidden_Operation = nil
+		return
+	}
+	x.xxx_hidden_Operation = &executeMultiOperationRequest_Operation_StartWorkflow{v}
+}
+
+func (x *ExecuteMultiOperationRequest_Operation) SetUpdateWorkflow(v *UpdateWorkflowExecutionRequest) {
+	if v == nil {
+		x.xxx_hidden_Operation = nil
+		return
+	}
+	x.xxx_hidden_Operation = &executeMultiOperationRequest_Operation_UpdateWorkflow{v}
+}
+
+func (x *ExecuteMultiOperationRequest_Operation) HasOperation() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Operation != nil
+}
+
+func (x *ExecuteMultiOperationRequest_Operation) HasStartWorkflow() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_Operation.(*executeMultiOperationRequest_Operation_StartWorkflow)
+	return ok
+}
+
+func (x *ExecuteMultiOperationRequest_Operation) HasUpdateWorkflow() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_Operation.(*executeMultiOperationRequest_Operation_UpdateWorkflow)
+	return ok
+}
+
+func (x *ExecuteMultiOperationRequest_Operation) ClearOperation() {
+	x.xxx_hidden_Operation = nil
+}
+
+func (x *ExecuteMultiOperationRequest_Operation) ClearStartWorkflow() {
+	if _, ok := x.xxx_hidden_Operation.(*executeMultiOperationRequest_Operation_StartWorkflow); ok {
+		x.xxx_hidden_Operation = nil
+	}
+}
+
+func (x *ExecuteMultiOperationRequest_Operation) ClearUpdateWorkflow() {
+	if _, ok := x.xxx_hidden_Operation.(*executeMultiOperationRequest_Operation_UpdateWorkflow); ok {
+		x.xxx_hidden_Operation = nil
+	}
+}
+
+const ExecuteMultiOperationRequest_Operation_Operation_not_set_case case_ExecuteMultiOperationRequest_Operation_Operation = 0
+const ExecuteMultiOperationRequest_Operation_StartWorkflow_case case_ExecuteMultiOperationRequest_Operation_Operation = 1
+const ExecuteMultiOperationRequest_Operation_UpdateWorkflow_case case_ExecuteMultiOperationRequest_Operation_Operation = 2
+
+func (x *ExecuteMultiOperationRequest_Operation) WhichOperation() case_ExecuteMultiOperationRequest_Operation_Operation {
+	if x == nil {
+		return ExecuteMultiOperationRequest_Operation_Operation_not_set_case
+	}
+	switch x.xxx_hidden_Operation.(type) {
+	case *executeMultiOperationRequest_Operation_StartWorkflow:
+		return ExecuteMultiOperationRequest_Operation_StartWorkflow_case
+	case *executeMultiOperationRequest_Operation_UpdateWorkflow:
+		return ExecuteMultiOperationRequest_Operation_UpdateWorkflow_case
+	default:
+		return ExecuteMultiOperationRequest_Operation_Operation_not_set_case
+	}
+}
+
+type ExecuteMultiOperationRequest_Operation_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Fields of oneof xxx_hidden_Operation:
+	StartWorkflow  *StartWorkflowExecutionRequest
+	UpdateWorkflow *UpdateWorkflowExecutionRequest
+	// -- end of xxx_hidden_Operation
+}
+
+func (b0 ExecuteMultiOperationRequest_Operation_builder) Build() *ExecuteMultiOperationRequest_Operation {
+	m0 := &ExecuteMultiOperationRequest_Operation{}
+	b, x := &b0, m0
+	_, _ = b, x
+	if b.StartWorkflow != nil {
+		x.xxx_hidden_Operation = &executeMultiOperationRequest_Operation_StartWorkflow{b.StartWorkflow}
+	}
+	if b.UpdateWorkflow != nil {
+		x.xxx_hidden_Operation = &executeMultiOperationRequest_Operation_UpdateWorkflow{b.UpdateWorkflow}
+	}
+	return m0
+}
+
+type case_ExecuteMultiOperationRequest_Operation_Operation protoreflect.FieldNumber
+
+func (x case_ExecuteMultiOperationRequest_Operation_Operation) String() string {
+	switch x {
+	case ExecuteMultiOperationRequest_Operation_Operation_not_set_case:
+		return "ExecuteMultiOperationRequestOperationOperationNotSetCase"
+	case ExecuteMultiOperationRequest_Operation_StartWorkflow_case:
+		return "ExecuteMultiOperationRequestOperationStartWorkflowCase"
+	case ExecuteMultiOperationRequest_Operation_UpdateWorkflow_case:
+		return "ExecuteMultiOperationRequestOperationUpdateWorkflowCase"
+	default:
+		return strconv.Itoa(int(x))
+	}
+
+}
+
 type isExecuteMultiOperationRequest_Operation_Operation interface {
 	isExecuteMultiOperationRequest_Operation_Operation()
 }
 
-type ExecuteMultiOperationRequest_Operation_StartWorkflow struct {
+type executeMultiOperationRequest_Operation_StartWorkflow struct {
 	StartWorkflow *StartWorkflowExecutionRequest `protobuf:"bytes,1,opt,name=start_workflow,json=startWorkflow,proto3,oneof"`
 }
 
-type ExecuteMultiOperationRequest_Operation_UpdateWorkflow struct {
+type executeMultiOperationRequest_Operation_UpdateWorkflow struct {
 	UpdateWorkflow *UpdateWorkflowExecutionRequest `protobuf:"bytes,2,opt,name=update_workflow,json=updateWorkflow,proto3,oneof"`
 }
 
-func (*ExecuteMultiOperationRequest_Operation_StartWorkflow) isExecuteMultiOperationRequest_Operation_Operation() {
+func (*executeMultiOperationRequest_Operation_StartWorkflow) isExecuteMultiOperationRequest_Operation_Operation() {
 }
 
-func (*ExecuteMultiOperationRequest_Operation_UpdateWorkflow) isExecuteMultiOperationRequest_Operation_Operation() {
+func (*executeMultiOperationRequest_Operation_UpdateWorkflow) isExecuteMultiOperationRequest_Operation_Operation() {
 }
 
 type ExecuteMultiOperationResponse_Response struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Types that are valid to be assigned to Response:
-	//
-	//	*ExecuteMultiOperationResponse_Response_StartWorkflow
-	//	*ExecuteMultiOperationResponse_Response_UpdateWorkflow
-	Response      isExecuteMultiOperationResponse_Response_Response `protobuf_oneof:"response"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state               protoimpl.MessageState                            `protogen:"opaque.v1"`
+	xxx_hidden_Response isExecuteMultiOperationResponse_Response_Response `protobuf_oneof:"response"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *ExecuteMultiOperationResponse_Response) Reset() {
@@ -9931,21 +16552,9 @@ func (x *ExecuteMultiOperationResponse_Response) ProtoReflect() protoreflect.Mes
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ExecuteMultiOperationResponse_Response.ProtoReflect.Descriptor instead.
-func (*ExecuteMultiOperationResponse_Response) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{10, 0}
-}
-
-func (x *ExecuteMultiOperationResponse_Response) GetResponse() isExecuteMultiOperationResponse_Response_Response {
-	if x != nil {
-		return x.Response
-	}
-	return nil
-}
-
 func (x *ExecuteMultiOperationResponse_Response) GetStartWorkflow() *StartWorkflowExecutionResponse {
 	if x != nil {
-		if x, ok := x.Response.(*ExecuteMultiOperationResponse_Response_StartWorkflow); ok {
+		if x, ok := x.xxx_hidden_Response.(*executeMultiOperationResponse_Response_StartWorkflow); ok {
 			return x.StartWorkflow
 		}
 	}
@@ -9954,38 +16563,149 @@ func (x *ExecuteMultiOperationResponse_Response) GetStartWorkflow() *StartWorkfl
 
 func (x *ExecuteMultiOperationResponse_Response) GetUpdateWorkflow() *UpdateWorkflowExecutionResponse {
 	if x != nil {
-		if x, ok := x.Response.(*ExecuteMultiOperationResponse_Response_UpdateWorkflow); ok {
+		if x, ok := x.xxx_hidden_Response.(*executeMultiOperationResponse_Response_UpdateWorkflow); ok {
 			return x.UpdateWorkflow
 		}
 	}
 	return nil
 }
 
+func (x *ExecuteMultiOperationResponse_Response) SetStartWorkflow(v *StartWorkflowExecutionResponse) {
+	if v == nil {
+		x.xxx_hidden_Response = nil
+		return
+	}
+	x.xxx_hidden_Response = &executeMultiOperationResponse_Response_StartWorkflow{v}
+}
+
+func (x *ExecuteMultiOperationResponse_Response) SetUpdateWorkflow(v *UpdateWorkflowExecutionResponse) {
+	if v == nil {
+		x.xxx_hidden_Response = nil
+		return
+	}
+	x.xxx_hidden_Response = &executeMultiOperationResponse_Response_UpdateWorkflow{v}
+}
+
+func (x *ExecuteMultiOperationResponse_Response) HasResponse() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Response != nil
+}
+
+func (x *ExecuteMultiOperationResponse_Response) HasStartWorkflow() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_Response.(*executeMultiOperationResponse_Response_StartWorkflow)
+	return ok
+}
+
+func (x *ExecuteMultiOperationResponse_Response) HasUpdateWorkflow() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_Response.(*executeMultiOperationResponse_Response_UpdateWorkflow)
+	return ok
+}
+
+func (x *ExecuteMultiOperationResponse_Response) ClearResponse() {
+	x.xxx_hidden_Response = nil
+}
+
+func (x *ExecuteMultiOperationResponse_Response) ClearStartWorkflow() {
+	if _, ok := x.xxx_hidden_Response.(*executeMultiOperationResponse_Response_StartWorkflow); ok {
+		x.xxx_hidden_Response = nil
+	}
+}
+
+func (x *ExecuteMultiOperationResponse_Response) ClearUpdateWorkflow() {
+	if _, ok := x.xxx_hidden_Response.(*executeMultiOperationResponse_Response_UpdateWorkflow); ok {
+		x.xxx_hidden_Response = nil
+	}
+}
+
+const ExecuteMultiOperationResponse_Response_Response_not_set_case case_ExecuteMultiOperationResponse_Response_Response = 0
+const ExecuteMultiOperationResponse_Response_StartWorkflow_case case_ExecuteMultiOperationResponse_Response_Response = 1
+const ExecuteMultiOperationResponse_Response_UpdateWorkflow_case case_ExecuteMultiOperationResponse_Response_Response = 2
+
+func (x *ExecuteMultiOperationResponse_Response) WhichResponse() case_ExecuteMultiOperationResponse_Response_Response {
+	if x == nil {
+		return ExecuteMultiOperationResponse_Response_Response_not_set_case
+	}
+	switch x.xxx_hidden_Response.(type) {
+	case *executeMultiOperationResponse_Response_StartWorkflow:
+		return ExecuteMultiOperationResponse_Response_StartWorkflow_case
+	case *executeMultiOperationResponse_Response_UpdateWorkflow:
+		return ExecuteMultiOperationResponse_Response_UpdateWorkflow_case
+	default:
+		return ExecuteMultiOperationResponse_Response_Response_not_set_case
+	}
+}
+
+type ExecuteMultiOperationResponse_Response_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Fields of oneof xxx_hidden_Response:
+	StartWorkflow  *StartWorkflowExecutionResponse
+	UpdateWorkflow *UpdateWorkflowExecutionResponse
+	// -- end of xxx_hidden_Response
+}
+
+func (b0 ExecuteMultiOperationResponse_Response_builder) Build() *ExecuteMultiOperationResponse_Response {
+	m0 := &ExecuteMultiOperationResponse_Response{}
+	b, x := &b0, m0
+	_, _ = b, x
+	if b.StartWorkflow != nil {
+		x.xxx_hidden_Response = &executeMultiOperationResponse_Response_StartWorkflow{b.StartWorkflow}
+	}
+	if b.UpdateWorkflow != nil {
+		x.xxx_hidden_Response = &executeMultiOperationResponse_Response_UpdateWorkflow{b.UpdateWorkflow}
+	}
+	return m0
+}
+
+type case_ExecuteMultiOperationResponse_Response_Response protoreflect.FieldNumber
+
+func (x case_ExecuteMultiOperationResponse_Response_Response) String() string {
+	switch x {
+	case ExecuteMultiOperationResponse_Response_Response_not_set_case:
+		return "ExecuteMultiOperationResponseResponseResponseNotSetCase"
+	case ExecuteMultiOperationResponse_Response_StartWorkflow_case:
+		return "ExecuteMultiOperationResponseResponseStartWorkflowCase"
+	case ExecuteMultiOperationResponse_Response_UpdateWorkflow_case:
+		return "ExecuteMultiOperationResponseResponseUpdateWorkflowCase"
+	default:
+		return strconv.Itoa(int(x))
+	}
+
+}
+
 type isExecuteMultiOperationResponse_Response_Response interface {
 	isExecuteMultiOperationResponse_Response_Response()
 }
 
-type ExecuteMultiOperationResponse_Response_StartWorkflow struct {
+type executeMultiOperationResponse_Response_StartWorkflow struct {
 	StartWorkflow *StartWorkflowExecutionResponse `protobuf:"bytes,1,opt,name=start_workflow,json=startWorkflow,proto3,oneof"`
 }
 
-type ExecuteMultiOperationResponse_Response_UpdateWorkflow struct {
+type executeMultiOperationResponse_Response_UpdateWorkflow struct {
 	UpdateWorkflow *UpdateWorkflowExecutionResponse `protobuf:"bytes,2,opt,name=update_workflow,json=updateWorkflow,proto3,oneof"`
 }
 
-func (*ExecuteMultiOperationResponse_Response_StartWorkflow) isExecuteMultiOperationResponse_Response_Response() {
+func (*executeMultiOperationResponse_Response_StartWorkflow) isExecuteMultiOperationResponse_Response_Response() {
 }
 
-func (*ExecuteMultiOperationResponse_Response_UpdateWorkflow) isExecuteMultiOperationResponse_Response_Response() {
+func (*executeMultiOperationResponse_Response_UpdateWorkflow) isExecuteMultiOperationResponse_Response_Response() {
 }
 
 type ListQueuesResponse_QueueInfo struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	QueueName     string                 `protobuf:"bytes,1,opt,name=queue_name,json=queueName,proto3" json:"queue_name,omitempty"`
-	MessageCount  int64                  `protobuf:"varint,2,opt,name=message_count,json=messageCount,proto3" json:"message_count,omitempty"`
-	LastMessageId int64                  `protobuf:"varint,3,opt,name=last_message_id,json=lastMessageId,proto3" json:"last_message_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                    protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_QueueName     string                 `protobuf:"bytes,1,opt,name=queue_name,json=queueName,proto3"`
+	xxx_hidden_MessageCount  int64                  `protobuf:"varint,2,opt,name=message_count,json=messageCount,proto3"`
+	xxx_hidden_LastMessageId int64                  `protobuf:"varint,3,opt,name=last_message_id,json=lastMessageId,proto3"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *ListQueuesResponse_QueueInfo) Reset() {
@@ -10013,42 +16733,63 @@ func (x *ListQueuesResponse_QueueInfo) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListQueuesResponse_QueueInfo.ProtoReflect.Descriptor instead.
-func (*ListQueuesResponse_QueueInfo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{127, 0}
-}
-
 func (x *ListQueuesResponse_QueueInfo) GetQueueName() string {
 	if x != nil {
-		return x.QueueName
+		return x.xxx_hidden_QueueName
 	}
 	return ""
 }
 
 func (x *ListQueuesResponse_QueueInfo) GetMessageCount() int64 {
 	if x != nil {
-		return x.MessageCount
+		return x.xxx_hidden_MessageCount
 	}
 	return 0
 }
 
 func (x *ListQueuesResponse_QueueInfo) GetLastMessageId() int64 {
 	if x != nil {
-		return x.LastMessageId
+		return x.xxx_hidden_LastMessageId
 	}
 	return 0
 }
 
+func (x *ListQueuesResponse_QueueInfo) SetQueueName(v string) {
+	x.xxx_hidden_QueueName = v
+}
+
+func (x *ListQueuesResponse_QueueInfo) SetMessageCount(v int64) {
+	x.xxx_hidden_MessageCount = v
+}
+
+func (x *ListQueuesResponse_QueueInfo) SetLastMessageId(v int64) {
+	x.xxx_hidden_LastMessageId = v
+}
+
+type ListQueuesResponse_QueueInfo_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	QueueName     string
+	MessageCount  int64
+	LastMessageId int64
+}
+
+func (b0 ListQueuesResponse_QueueInfo_builder) Build() *ListQueuesResponse_QueueInfo {
+	m0 := &ListQueuesResponse_QueueInfo{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_QueueName = b.QueueName
+	x.xxx_hidden_MessageCount = b.MessageCount
+	x.xxx_hidden_LastMessageId = b.LastMessageId
+	return m0
+}
+
 type AddTasksRequest_Task struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// category_id is needed to deserialize the tasks. See TaskCategory for a list of options here. However, keep in mind
-	// that the list of valid options is registered dynamically with the server in the history/tasks package, so that
-	// enum is not comprehensive.
-	CategoryId int32 `protobuf:"varint,1,opt,name=category_id,json=categoryId,proto3" json:"category_id,omitempty"`
-	// blob is the serialized task.
-	Blob          *v14.DataBlob `protobuf:"bytes,2,opt,name=blob,proto3" json:"blob,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                 protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_CategoryId int32                  `protobuf:"varint,1,opt,name=category_id,json=categoryId,proto3"`
+	xxx_hidden_Blob       *v14.DataBlob          `protobuf:"bytes,2,opt,name=blob,proto3"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
 }
 
 func (x *AddTasksRequest_Task) Reset() {
@@ -10076,23 +16817,57 @@ func (x *AddTasksRequest_Task) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use AddTasksRequest_Task.ProtoReflect.Descriptor instead.
-func (*AddTasksRequest_Task) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{128, 0}
-}
-
 func (x *AddTasksRequest_Task) GetCategoryId() int32 {
 	if x != nil {
-		return x.CategoryId
+		return x.xxx_hidden_CategoryId
 	}
 	return 0
 }
 
 func (x *AddTasksRequest_Task) GetBlob() *v14.DataBlob {
 	if x != nil {
-		return x.Blob
+		return x.xxx_hidden_Blob
 	}
 	return nil
+}
+
+func (x *AddTasksRequest_Task) SetCategoryId(v int32) {
+	x.xxx_hidden_CategoryId = v
+}
+
+func (x *AddTasksRequest_Task) SetBlob(v *v14.DataBlob) {
+	x.xxx_hidden_Blob = v
+}
+
+func (x *AddTasksRequest_Task) HasBlob() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Blob != nil
+}
+
+func (x *AddTasksRequest_Task) ClearBlob() {
+	x.xxx_hidden_Blob = nil
+}
+
+type AddTasksRequest_Task_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// category_id is needed to deserialize the tasks. See TaskCategory for a list of options here. However, keep in mind
+	// that the list of valid options is registered dynamically with the server in the history/tasks package, so that
+	// enum is not comprehensive.
+	CategoryId int32
+	// blob is the serialized task.
+	Blob *v14.DataBlob
+}
+
+func (b0 AddTasksRequest_Task_builder) Build() *AddTasksRequest_Task {
+	m0 := &AddTasksRequest_Task{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_CategoryId = b.CategoryId
+	x.xxx_hidden_Blob = b.Blob
+	return m0
 }
 
 var file_temporal_server_api_historyservice_v1_request_response_proto_extTypes = []protoimpl.ExtensionInfo{
@@ -10851,18 +17626,6 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	" UnpauseWorkflowExecutionResponse:t\n" +
 	"\arouting\x12\x1f.google.protobuf.MessageOptions\x18\xc28 \x01(\v25.temporal.server.api.historyservice.v1.RoutingOptionsR\arouting\x88\x01\x01B<Z:go.temporal.io/server/api/historyservice/v1;historyserviceb\x06proto3"
 
-var (
-	file_temporal_server_api_historyservice_v1_request_response_proto_rawDescOnce sync.Once
-	file_temporal_server_api_historyservice_v1_request_response_proto_rawDescData []byte
-)
-
-func file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP() []byte {
-	file_temporal_server_api_historyservice_v1_request_response_proto_rawDescOnce.Do(func() {
-		file_temporal_server_api_historyservice_v1_request_response_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc), len(file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc)))
-	})
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescData
-}
-
 var file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes = make([]protoimpl.MessageInfo, 165)
 var file_temporal_server_api_historyservice_v1_request_response_proto_goTypes = []any{
 	(*RoutingOptions)(nil),                                  // 0: temporal.server.api.historyservice.v1.RoutingOptions
@@ -11407,26 +18170,26 @@ func file_temporal_server_api_historyservice_v1_request_response_proto_init() {
 		return
 	}
 	file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[107].OneofWrappers = []any{
-		(*StreamWorkflowReplicationMessagesRequest_SyncReplicationState)(nil),
+		(*streamWorkflowReplicationMessagesRequest_SyncReplicationState)(nil),
 	}
 	file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[108].OneofWrappers = []any{
-		(*StreamWorkflowReplicationMessagesResponse_Messages)(nil),
+		(*streamWorkflowReplicationMessagesResponse_Messages)(nil),
 	}
 	file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[132].OneofWrappers = []any{
-		(*CompleteNexusOperationChasmRequest_Success)(nil),
-		(*CompleteNexusOperationChasmRequest_Failure)(nil),
+		(*completeNexusOperationChasmRequest_Success)(nil),
+		(*completeNexusOperationChasmRequest_Failure)(nil),
 	}
 	file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[134].OneofWrappers = []any{
-		(*CompleteNexusOperationRequest_Success)(nil),
-		(*CompleteNexusOperationRequest_Failure)(nil),
+		(*completeNexusOperationRequest_Success)(nil),
+		(*completeNexusOperationRequest_Failure)(nil),
 	}
 	file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[156].OneofWrappers = []any{
-		(*ExecuteMultiOperationRequest_Operation_StartWorkflow)(nil),
-		(*ExecuteMultiOperationRequest_Operation_UpdateWorkflow)(nil),
+		(*executeMultiOperationRequest_Operation_StartWorkflow)(nil),
+		(*executeMultiOperationRequest_Operation_UpdateWorkflow)(nil),
 	}
 	file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[157].OneofWrappers = []any{
-		(*ExecuteMultiOperationResponse_Response_StartWorkflow)(nil),
-		(*ExecuteMultiOperationResponse_Response_UpdateWorkflow)(nil),
+		(*executeMultiOperationResponse_Response_StartWorkflow)(nil),
+		(*executeMultiOperationResponse_Response_UpdateWorkflow)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{

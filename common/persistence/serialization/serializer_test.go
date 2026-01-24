@@ -57,21 +57,19 @@ func (s *temporalSerializerSuite) TestSerializer() {
 	doneWG.Add(concurrency)
 
 	eventType := enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED
-	event0 := &historypb.HistoryEvent{
+	event0 := historypb.HistoryEvent_builder{
 		EventId:   999,
 		EventTime: timestamppb.New(time.Date(2020, 8, 22, 0, 0, 0, 0, time.UTC)),
 		EventType: eventType,
-		Attributes: &historypb.HistoryEvent_ActivityTaskCompletedEventAttributes{
-			ActivityTaskCompletedEventAttributes: &historypb.ActivityTaskCompletedEventAttributes{
-				Result:           payloads.EncodeString("result-1-event-1"),
-				ScheduledEventId: 4,
-				StartedEventId:   5,
-				Identity:         "event-1",
-			},
-		},
-	}
+		ActivityTaskCompletedEventAttributes: historypb.ActivityTaskCompletedEventAttributes_builder{
+			Result:           payloads.EncodeString("result-1-event-1"),
+			ScheduledEventId: 4,
+			StartedEventId:   5,
+			Identity:         "event-1",
+		}.Build(),
+	}.Build()
 
-	history0 := &historypb.History{Events: []*historypb.HistoryEvent{event0, event0}}
+	history0 := historypb.History_builder{Events: []*historypb.HistoryEvent{event0, event0}}.Build()
 
 	for i := 0; i < concurrency; i++ {
 
@@ -93,7 +91,7 @@ func (s *temporalSerializerSuite) TestSerializer() {
 			s.Nil(err)
 			s.NotNil(nilEvents)
 
-			dsProto, err := s.serializer.SerializeEvents(history0.Events)
+			dsProto, err := s.serializer.SerializeEvents(history0.GetEvents())
 			s.Nil(err)
 			s.NotNil(dsProto)
 
@@ -112,7 +110,7 @@ func (s *temporalSerializerSuite) TestSerializer() {
 			s.Nil(dNilEvents)
 
 			events, err := s.serializer.DeserializeEvents(dsProto)
-			history2 := &historypb.History{Events: events}
+			history2 := historypb.History_builder{Events: events}.Build()
 			s.Nil(err)
 			s.ProtoEqual(history0, history2)
 		}()
@@ -126,18 +124,18 @@ func (s *temporalSerializerSuite) TestSerializer() {
 func (s *temporalSerializerSuite) TestSerializeShardInfo_EmptyMapSlice() {
 	var shardInfo persistencespb.ShardInfo
 
-	shardInfo.ShardId = rand.Int31()
-	shardInfo.RangeId = rand.Int63()
+	shardInfo.SetShardId(rand.Int31())
+	shardInfo.SetRangeId(rand.Int63())
 
 	categoryID := rand.Int31()
-	shardInfo.QueueStates = make(map[int32]*persistencespb.QueueState)
-	shardInfo.QueueStates[categoryID] = &persistencespb.QueueState{
+	shardInfo.SetQueueStates(make(map[int32]*persistencespb.QueueState))
+	shardInfo.GetQueueStates()[categoryID] = persistencespb.QueueState_builder{
 		ReaderStates: make(map[int64]*persistencespb.QueueReaderState),
-	}
-	shardInfo.QueueStates[categoryID].ReaderStates[rand.Int63()] = &persistencespb.QueueReaderState{
+	}.Build()
+	shardInfo.GetQueueStates()[categoryID].GetReaderStates()[rand.Int63()] = persistencespb.QueueReaderState_builder{
 		Scopes: make([]*persistencespb.QueueSliceScope, 0),
-	}
-	shardInfo.ReplicationDlqAckLevel = make(map[string]int64)
+	}.Build()
+	shardInfo.SetReplicationDlqAckLevel(make(map[string]int64))
 
 	blob, err := s.serializer.ShardInfoToBlob(&shardInfo)
 	s.NoError(err)
@@ -175,28 +173,28 @@ func (s *temporalSerializerSuite) TestDeserializeStrippedEvents() {
 	// 2. Empty data
 	s.Run("EmptyDataBlob", func() {
 		// Data is nil
-		events, err := s.serializer.DeserializeStrippedEvents(&commonpb.DataBlob{
+		events, err := s.serializer.DeserializeStrippedEvents(commonpb.DataBlob_builder{
 			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 			Data:         nil,
-		})
+		}.Build())
 		s.NoError(err)
 		s.Nil(events)
 
 		// Data is empty byte array
-		events, err = s.serializer.DeserializeStrippedEvents(&commonpb.DataBlob{
+		events, err = s.serializer.DeserializeStrippedEvents(commonpb.DataBlob_builder{
 			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 			Data:         []byte{},
-		})
+		}.Build())
 		s.NoError(err)
 		s.Nil(events)
 	})
 
 	// 3. Unknown encoding type
 	s.Run("UnknownEncodingType", func() {
-		_, err := s.serializer.DeserializeStrippedEvents(&commonpb.DataBlob{
+		_, err := s.serializer.DeserializeStrippedEvents(commonpb.DataBlob_builder{
 			EncodingType: enumspb.ENCODING_TYPE_UNSPECIFIED,
 			Data:         []byte("irrelevant-data"),
-		})
+		}.Build())
 		s.Error(err)
 		s.Contains(err.Error(), "unknown or unsupported encoding type")
 	})
@@ -204,30 +202,28 @@ func (s *temporalSerializerSuite) TestDeserializeStrippedEvents() {
 	// 4. Proper proto decoding, discarding unknown fields
 	s.Run("ProtoDiscardUnknownFields", func() {
 		// Build a HistoryEvent that contains fields *not* present in StrippedHistoryEvent
-		historyEvent := &historypb.HistoryEvent{
+		historyEvent := historypb.HistoryEvent_builder{
 			EventId:   123,
 			Version:   456,
 			EventTime: nil, // or a valid timestamp
 			// This is an extra field not present in StrippedHistoryEvent
-			Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
-				WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
-					WorkflowType: &commonpb.WorkflowType{Name: "some-workflow-type"},
-				},
-			},
-		}
+			WorkflowExecutionStartedEventAttributes: historypb.WorkflowExecutionStartedEventAttributes_builder{
+				WorkflowType: commonpb.WorkflowType_builder{Name: "some-workflow-type"}.Build(),
+			}.Build(),
+		}.Build()
 
-		historyEvents := &historypb.History{
+		historyEvents := historypb.History_builder{
 			Events: []*historypb.HistoryEvent{historyEvent},
-		}
+		}.Build()
 
 		// Marshal to protobuf
 		data, err := historyEvents.Marshal()
 		s.Require().NoError(err)
 
-		dataBlob := &commonpb.DataBlob{
+		dataBlob := commonpb.DataBlob_builder{
 			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 			Data:         data,
-		}
+		}.Build()
 
 		// Deserialize into StrippedHistoryEvents (should drop unknown fields)
 		deserializedEvents, err := s.serializer.DeserializeStrippedEvents(dataBlob)
@@ -235,8 +231,8 @@ func (s *temporalSerializerSuite) TestDeserializeStrippedEvents() {
 		s.Require().Len(deserializedEvents, 1)
 
 		// Known fields should be preserved
-		s.EqualValues(123, deserializedEvents[0].EventId)
-		s.EqualValues(456, deserializedEvents[0].Version)
+		s.EqualValues(123, deserializedEvents[0].GetEventId())
+		s.EqualValues(456, deserializedEvents[0].GetVersion())
 
 		reflectMsg := deserializedEvents[0].ProtoReflect()
 		s.Empty(reflectMsg.GetUnknown(), "Unknown fields should have been discarded")
@@ -244,9 +240,9 @@ func (s *temporalSerializerSuite) TestDeserializeStrippedEvents() {
 }
 
 func (s *temporalSerializerSuite) TestSerializeWorkflowExecutionState() {
-	state := &persistencespb.WorkflowExecutionState{
+	state := persistencespb.WorkflowExecutionState_builder{
 		RequestIds: make(map[string]*persistencespb.RequestIDInfo),
-	}
+	}.Build()
 	err := fakedata.FakeStruct(state)
 	s.NoError(err)
 
@@ -258,10 +254,10 @@ func (s *temporalSerializerSuite) TestSerializeWorkflowExecutionState() {
 	s.NotNil(deserializedState)
 
 	// Deserialization adds the CreateRequestId to the Details.RequestIds map.
-	state.RequestIds[state.CreateRequestId] = &persistencespb.RequestIDInfo{
+	state.GetRequestIds()[state.GetCreateRequestId()] = persistencespb.RequestIDInfo_builder{
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 		EventId:   common.FirstEventID,
-	}
+	}.Build()
 	s.ProtoEqual(state, deserializedState)
 
 	blob, err = s.serializer.WorkflowExecutionStateToBlob(state)
@@ -280,59 +276,59 @@ func (s *temporalSerializerSuite) TestSerializeWorkflowExecutionState() {
 // GetWorkflowExecutionHistoryResponseWithRaw is correctly deserialized to GetWorkflowExecutionHistoryResponse.
 func (s *temporalSerializerSuite) TestGetWorkflowExecutionHistoryResponseWithRawHistoryEvents() {
 	// Create history events and batches
-	fullHistory := &historypb.History{
+	fullHistory := historypb.History_builder{
 		Events: []*historypb.HistoryEvent{
-			{
+			historypb.HistoryEvent_builder{
 				EventId:   1,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 				Version:   100,
-			},
-			{
+			}.Build(),
+			historypb.HistoryEvent_builder{
 				EventId:   2,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 				Version:   101,
-			},
-			{
+			}.Build(),
+			historypb.HistoryEvent_builder{
 				EventId:   3,
 				EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED,
 				Version:   102,
-			},
-			{
+			}.Build(),
+			historypb.HistoryEvent_builder{
 				EventId:   4,
 				EventType: enumspb.EVENT_TYPE_TIMER_FIRED,
 				Version:   103,
-			},
+			}.Build(),
 		},
-	}
+	}.Build()
 
-	batch1 := &historypb.History{
-		Events: fullHistory.Events[:2],
-	}
+	batch1 := historypb.History_builder{
+		Events: fullHistory.GetEvents()[:2],
+	}.Build()
 
-	batch2 := &historypb.History{
-		Events: fullHistory.Events[2:],
-	}
+	batch2 := historypb.History_builder{
+		Events: fullHistory.GetEvents()[2:],
+	}.Build()
 
 	// Marshal each batch
 	rawHistory1, err := batch1.Marshal()
 	s.Require().NoError(err)
 
-	db1 := &commonpb.DataBlob{
+	db1 := commonpb.DataBlob_builder{
 		EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 		Data:         rawHistory1,
-	}
+	}.Build()
 
 	rawHistory2, err := batch2.Marshal()
 	s.Require().NoError(err)
 
-	db2 := &commonpb.DataBlob{
+	db2 := commonpb.DataBlob_builder{
 		EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 		Data:         rawHistory2,
-	}
+	}.Build()
 
-	rawResp := &historyservice.GetWorkflowExecutionHistoryResponseWithRaw{
-		History: [][]byte{db1.Data, db2.Data},
-	}
+	rawResp := historyservice.GetWorkflowExecutionHistoryResponseWithRaw_builder{
+		History: [][]byte{db1.GetData(), db2.GetData()},
+	}.Build()
 
 	serializedRawResp, err := rawResp.Marshal()
 	s.Require().NoError(err)
@@ -342,10 +338,10 @@ func (s *temporalSerializerSuite) TestGetWorkflowExecutionHistoryResponseWithRaw
 	s.Require().NoError(err)
 
 	// Verify resp has same list of history events as fullHistory
-	for i, event := range resp.History.Events {
-		s.Equal(fullHistory.Events[i].EventId, event.EventId)
-		s.Equal(fullHistory.Events[i].Version, event.Version)
-		s.Equal(fullHistory.Events[i].EventType, event.EventType)
+	for i, event := range resp.GetHistory().GetEvents() {
+		s.Equal(fullHistory.GetEvents()[i].GetEventId(), event.GetEventId())
+		s.Equal(fullHistory.GetEvents()[i].GetVersion(), event.GetVersion())
+		s.Equal(fullHistory.GetEvents()[i].GetEventType(), event.GetEventType())
 		s.Nil(event.Attributes)
 	}
 }

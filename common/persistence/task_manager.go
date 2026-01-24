@@ -45,10 +45,10 @@ func (m *taskManagerImpl) CreateTaskQueue(
 	request *CreateTaskQueueRequest,
 ) (*CreateTaskQueueResponse, error) {
 	taskQueueInfo := request.TaskQueueInfo
-	if taskQueueInfo.LastUpdateTime == nil {
+	if !taskQueueInfo.HasLastUpdateTime() {
 		panic("CreateTaskQueue encountered LastUpdateTime not set")
 	}
-	if taskQueueInfo.ExpiryTime == nil && taskQueueInfo.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY {
+	if !taskQueueInfo.HasExpiryTime() && taskQueueInfo.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY {
 		panic("CreateTaskQueue encountered ExpiryTime not set for sticky task queue")
 	}
 	taskQueueInfoBlob, err := m.serializer.TaskQueueInfoToBlob(taskQueueInfo)
@@ -62,7 +62,7 @@ func (m *taskManagerImpl) CreateTaskQueue(
 		TaskType:      request.TaskQueueInfo.GetTaskType(),
 		TaskQueueKind: request.TaskQueueInfo.GetKind(),
 		RangeID:       request.RangeID,
-		ExpiryTime:    taskQueueInfo.ExpiryTime,
+		ExpiryTime:    taskQueueInfo.GetExpiryTime(),
 		TaskQueueInfo: taskQueueInfoBlob,
 	}
 	if err := m.taskStore.CreateTaskQueue(ctx, internalRequest); err != nil {
@@ -76,10 +76,10 @@ func (m *taskManagerImpl) UpdateTaskQueue(
 	request *UpdateTaskQueueRequest,
 ) (*UpdateTaskQueueResponse, error) {
 	taskQueueInfo := request.TaskQueueInfo
-	if taskQueueInfo.LastUpdateTime == nil {
+	if !taskQueueInfo.HasLastUpdateTime() {
 		panic("UpdateTaskQueue encountered LastUpdateTime not set")
 	}
-	if taskQueueInfo.ExpiryTime == nil && taskQueueInfo.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY {
+	if !taskQueueInfo.HasExpiryTime() && taskQueueInfo.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY {
 		panic("UpdateTaskQueue encountered ExpiryTime not set for sticky task queue")
 	}
 	taskQueueInfoBlob, err := m.serializer.TaskQueueInfoToBlob(taskQueueInfo)
@@ -95,7 +95,7 @@ func (m *taskManagerImpl) UpdateTaskQueue(
 		TaskQueueInfo: taskQueueInfoBlob,
 
 		TaskQueueKind: request.TaskQueueInfo.GetKind(),
-		ExpiryTime:    taskQueueInfo.ExpiryTime,
+		ExpiryTime:    taskQueueInfo.GetExpiryTime(),
 
 		PrevRangeID: request.PrevRangeID,
 	}
@@ -163,7 +163,7 @@ func (m *taskManagerImpl) CreateTasks(
 	request *CreateTasksRequest,
 ) (*CreateTasksResponse, error) {
 	taskQueueInfo := request.TaskQueueInfo.Data
-	taskQueueInfo.LastUpdateTime = timestamp.TimeNowPtrUtc()
+	taskQueueInfo.SetLastUpdateTime(timestamp.TimeNowPtrUtc())
 	taskQueueInfoBlob, err := m.serializer.TaskQueueInfoToBlob(taskQueueInfo)
 	if err != nil {
 		return nil, err
@@ -176,9 +176,9 @@ func (m *taskManagerImpl) CreateTasks(
 			return nil, serviceerror.NewUnavailablef("CreateTasks operation failed during serialization. Error : %v", err)
 		}
 		tasks[i] = &InternalCreateTask{
-			TaskPass:   task.TaskPass,
-			TaskId:     task.TaskId,
-			ExpiryTime: task.Data.ExpiryTime,
+			TaskPass:   task.GetTaskPass(),
+			TaskId:     task.GetTaskId(),
+			ExpiryTime: task.GetData().GetExpiryTime(),
 			Task:       taskBlob,
 		}
 		if i < len(request.Subqueues) {
@@ -236,7 +236,7 @@ func (m *taskManagerImpl) GetTaskQueueUserData(ctx context.Context, request *Get
 	if err != nil {
 		return nil, err
 	}
-	return &GetTaskQueueUserDataResponse{UserData: &persistencespb.VersionedTaskQueueUserData{Version: response.Version, Data: data}}, nil
+	return &GetTaskQueueUserDataResponse{UserData: persistencespb.VersionedTaskQueueUserData_builder{Version: response.Version, Data: data}.Build()}, nil
 }
 
 // UpdateTaskQueueUserData implements TaskManager
@@ -246,12 +246,12 @@ func (m *taskManagerImpl) UpdateTaskQueueUserData(ctx context.Context, request *
 		Updates:     make(map[string]*InternalSingleTaskQueueUserDataUpdate, len(request.Updates)),
 	}
 	for taskQueue, update := range request.Updates {
-		userData, err := m.serializer.TaskQueueUserDataToBlob(update.UserData.Data)
+		userData, err := m.serializer.TaskQueueUserDataToBlob(update.UserData.GetData())
 		if err != nil {
 			return err
 		}
 		internalRequest.Updates[taskQueue] = &InternalSingleTaskQueueUserDataUpdate{
-			Version:         update.UserData.Version,
+			Version:         update.UserData.GetVersion(),
 			UserData:        userData,
 			BuildIdsAdded:   update.BuildIdsAdded,
 			BuildIdsRemoved: update.BuildIdsRemoved,
@@ -275,10 +275,10 @@ func (m *taskManagerImpl) ListTaskQueueUserDataEntries(ctx context.Context, requ
 		}
 		entries[i] = &TaskQueueUserDataEntry{
 			TaskQueue: entry.TaskQueue,
-			UserData: &persistencespb.VersionedTaskQueueUserData{
+			UserData: persistencespb.VersionedTaskQueueUserData_builder{
 				Data:    data,
 				Version: entry.Version,
-			},
+			}.Build(),
 		}
 	}
 	return &ListTaskQueueUserDataEntriesResponse{

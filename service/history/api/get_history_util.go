@@ -26,6 +26,7 @@ import (
 	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
+	"google.golang.org/protobuf/proto"
 )
 
 func GetRawHistory(
@@ -127,8 +128,8 @@ func GetRawHistory(
 			return nil, nil, err
 		}
 
-		if len(transientWorkflowTaskInfo.HistorySuffix) > 0 {
-			blob, err := shardContext.GetPayloadSerializer().SerializeEvents(transientWorkflowTaskInfo.HistorySuffix)
+		if len(transientWorkflowTaskInfo.GetHistorySuffix()) > 0 {
+			blob, err := shardContext.GetPayloadSerializer().SerializeEvents(transientWorkflowTaskInfo.GetHistorySuffix())
 			if err != nil {
 				return nil, nil, err
 			}
@@ -202,12 +203,12 @@ func GetHistory(
 	isLastPage := len(nextPageToken) == 0
 	var firstEvent, lastEvent *historyspb.StrippedHistoryEvent
 	if len(historyEvents) > 0 {
-		firstEvent = &historyspb.StrippedHistoryEvent{
+		firstEvent = historyspb.StrippedHistoryEvent_builder{
 			EventId: historyEvents[0].GetEventId(),
-		}
-		lastEvent = &historyspb.StrippedHistoryEvent{
+		}.Build()
+		lastEvent = historyspb.StrippedHistoryEvent_builder{
 			EventId: historyEvents[len(historyEvents)-1].GetEventId(),
-		}
+		}.Build()
 	}
 	if err := VerifyHistoryIsComplete(
 		shardContext.GetLogger(),
@@ -236,7 +237,7 @@ func GetHistory(
 				tag.Error(err))
 		}
 		// Append the transient workflow task events once we are done enumerating everything from the events table
-		historyEvents = append(historyEvents, transientWorkflowTaskInfo.HistorySuffix...)
+		historyEvents = append(historyEvents, transientWorkflowTaskInfo.GetHistorySuffix()...)
 	}
 
 	if err := ProcessOutgoingSearchAttributes(
@@ -248,9 +249,9 @@ func GetHistory(
 		return nil, nil, err
 	}
 
-	executionHistory := &historypb.History{
+	executionHistory := historypb.History_builder{
 		Events: historyEvents,
-	}
+	}.Build()
 	return executionHistory, nextPageToken, nil
 }
 
@@ -326,13 +327,13 @@ func GetHistoryReverse(
 		return nil, nil, 0, err
 	}
 
-	executionHistory := &historypb.History{
+	executionHistory := historypb.History_builder{
 		Events: historyEvents,
-	}
+	}.Build()
 
 	var newNextEventID int64
 	if len(historyEvents) > 0 {
-		newNextEventID = historyEvents[len(historyEvents)-1].EventId - 1
+		newNextEventID = historyEvents[len(historyEvents)-1].GetEventId() - 1
 	} else {
 		newNextEventID = nextEventID
 	}
@@ -353,7 +354,7 @@ func ProcessOutgoingSearchAttributes(
 	}
 	for _, event := range events {
 		var searchAttributes *commonpb.SearchAttributes
-		switch event.EventType {
+		switch event.GetEventType() {
 		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED:
 			searchAttributes = event.GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes()
 		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW:
@@ -370,7 +371,7 @@ func ProcessOutgoingSearchAttributes(
 				return err
 			}
 			if aliasedSas != searchAttributes {
-				searchAttributes.IndexedFields = aliasedSas.IndexedFields
+				searchAttributes.SetIndexedFields(aliasedSas.GetIndexedFields())
 			}
 		}
 	}
@@ -382,7 +383,7 @@ func validateTransientWorkflowTaskEvents(
 	eventIDOffset int64,
 	transientWorkflowTaskInfo *historyspb.TransientWorkflowTaskInfo,
 ) error {
-	for i, event := range transientWorkflowTaskInfo.HistorySuffix {
+	for i, event := range transientWorkflowTaskInfo.GetHistorySuffix() {
 		expectedEventID := eventIDOffset + int64(i)
 		if event.GetEventId() != expectedEventID {
 			return serviceerror.NewInternalf(
@@ -469,24 +470,24 @@ func ProcessInternalRawHistory(
 	ns namespace.Name,
 	isCloseEventOnly bool,
 ) error {
-	if response == nil || response.History == nil {
+	if response == nil || !response.HasHistory() {
 		return nil
 	}
-	response.Response.History = response.History
-	if isCloseEventOnly && len(response.Response.History.Events) > 0 {
-		response.Response.History.Events = response.Response.History.Events[len(response.Response.History.Events)-1:]
+	response.GetResponse().SetHistory(response.GetHistory())
+	if isCloseEventOnly && len(response.GetResponse().GetHistory().GetEvents()) > 0 {
+		response.GetResponse().GetHistory().SetEvents(response.GetResponse().GetHistory().GetEvents()[len(response.GetResponse().GetHistory().GetEvents())-1:])
 	}
 	err := ProcessOutgoingSearchAttributes(
 		saProvider,
 		saMapperProvider,
-		response.Response.History.Events,
+		response.GetResponse().GetHistory().GetEvents(),
 		ns,
 		visibilityManager,
 	)
 	if err != nil {
 		return err
 	}
-	err = FixFollowEvents(requestContext, versionChecker, isCloseEventOnly, response.Response.History)
+	err = FixFollowEvents(requestContext, versionChecker, isCloseEventOnly, response.GetResponse().GetHistory())
 	if err != nil {
 		return err
 	}
@@ -513,14 +514,14 @@ func FixFollowEvents(
 	// TODO: We can remove this once we no longer support SDK versions prior to around September 2021.
 	// Revisit this once we have an SDK deprecation policy.
 	followsNextRunId := versionChecker.ClientSupportsFeature(ctx, headers.FeatureFollowsNextRunID)
-	if isCloseEventOnly && !followsNextRunId && len(history.Events) > 0 {
-		lastEvent := history.Events[len(history.Events)-1]
+	if isCloseEventOnly && !followsNextRunId && len(history.GetEvents()) > 0 {
+		lastEvent := history.GetEvents()[len(history.GetEvents())-1]
 		fakeEvent, err := makeFakeContinuedAsNewEvent(ctx, lastEvent)
 		if err != nil {
 			return err
 		}
 		if fakeEvent != nil {
-			history.Events[len(history.Events)-1] = fakeEvent
+			history.GetEvents()[len(history.GetEvents())-1] = fakeEvent
 		}
 	}
 	return nil
@@ -530,7 +531,7 @@ func makeFakeContinuedAsNewEvent(
 	_ context.Context,
 	lastEvent *historypb.HistoryEvent,
 ) (*historypb.HistoryEvent, error) {
-	switch lastEvent.EventType { // nolint:exhaustive
+	switch lastEvent.GetEventType() { // nolint:exhaustive
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:
 		if lastEvent.GetWorkflowExecutionCompletedEventAttributes().GetNewExecutionRunId() == "" {
 			return nil, nil
@@ -552,29 +553,27 @@ func makeFakeContinuedAsNewEvent(
 	// the client looks at in this case, but copy the last result or failure from the real completed
 	// event just so it's clear what the result was.
 	newAttrs := &historypb.WorkflowExecutionContinuedAsNewEventAttributes{}
-	switch lastEvent.EventType { // nolint:exhaustive
+	switch lastEvent.GetEventType() { // nolint:exhaustive
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:
 		attrs := lastEvent.GetWorkflowExecutionCompletedEventAttributes()
-		newAttrs.NewExecutionRunId = attrs.NewExecutionRunId
-		newAttrs.LastCompletionResult = attrs.Result
+		newAttrs.SetNewExecutionRunId(attrs.GetNewExecutionRunId())
+		newAttrs.SetLastCompletionResult(attrs.GetResult())
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED:
 		attrs := lastEvent.GetWorkflowExecutionFailedEventAttributes()
-		newAttrs.NewExecutionRunId = attrs.NewExecutionRunId
-		newAttrs.Failure = attrs.Failure
+		newAttrs.SetNewExecutionRunId(attrs.GetNewExecutionRunId())
+		newAttrs.SetFailure(attrs.GetFailure())
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT:
 		attrs := lastEvent.GetWorkflowExecutionTimedOutEventAttributes()
-		newAttrs.NewExecutionRunId = attrs.NewExecutionRunId
-		newAttrs.Failure = failure.NewTimeoutFailure("workflow timeout", enumspb.TIMEOUT_TYPE_START_TO_CLOSE)
+		newAttrs.SetNewExecutionRunId(attrs.GetNewExecutionRunId())
+		newAttrs.SetFailure(failure.NewTimeoutFailure("workflow timeout", enumspb.TIMEOUT_TYPE_START_TO_CLOSE))
 	}
 
-	return &historypb.HistoryEvent{
-		EventId:   lastEvent.EventId,
-		EventTime: lastEvent.EventTime,
+	return historypb.HistoryEvent_builder{
+		EventId:   lastEvent.GetEventId(),
+		EventTime: lastEvent.GetEventTime(),
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW,
-		Version:   lastEvent.Version,
-		TaskId:    lastEvent.TaskId,
-		Attributes: &historypb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{
-			WorkflowExecutionContinuedAsNewEventAttributes: newAttrs,
-		},
-	}, nil
+		Version:   lastEvent.GetVersion(),
+		TaskId:    lastEvent.GetTaskId(),
+		WorkflowExecutionContinuedAsNewEventAttributes: proto.ValueOrDefault(newAttrs),
+	}.Build(), nil
 }

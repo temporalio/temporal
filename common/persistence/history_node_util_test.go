@@ -39,10 +39,10 @@ func (s *historyNodeMetadataSuite) TearDownTest() {
 }
 
 func (s *historyNodeMetadataSuite) TestIndexNodeIDToNode() {
-	branch := &persistencespb.HistoryBranch{
+	branch := persistencespb.HistoryBranch_builder{
 		TreeId:   uuid.NewString(),
 		BranchId: uuid.NewString(),
-	}
+	}.Build()
 	numNodeIDs := 10
 	nodePerNodeID := 10
 
@@ -71,10 +71,10 @@ func (s *historyNodeMetadataSuite) TestIndexNodeIDToNode() {
 }
 
 func (s *historyNodeMetadataSuite) TestReverselyLinkNode() {
-	branch := &persistencespb.HistoryBranch{
+	branch := persistencespb.HistoryBranch_builder{
 		TreeId:   uuid.NewString(),
 		BranchId: uuid.NewString(),
-	}
+	}.Build()
 	numNodeIDs := 10
 	nodePerNodeID := 10
 
@@ -104,10 +104,10 @@ func (s *historyNodeMetadataSuite) TestReverselyLinkNode() {
 }
 
 func (s *historyNodeMetadataSuite) TestTrimNodes() {
-	branch := &persistencespb.HistoryBranch{
+	branch := persistencespb.HistoryBranch_builder{
 		TreeId:   uuid.NewString(),
 		BranchId: uuid.NewString(),
-	}
+	}.Build()
 
 	node1Valid := s.newRandomHistoryNodeMetadata(branch, 1, rand.Int63(), 0)
 	node1Stale0 := s.newRandomHistoryNodeMetadata(branch, 1, node1Valid.transactionID-11, 0)

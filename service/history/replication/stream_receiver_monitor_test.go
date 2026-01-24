@@ -80,15 +80,13 @@ func (s *streamReceiverMonitorSuite) SetupTest() {
 	)
 	streamClient := adminservicemock.NewMockAdminService_StreamWorkflowReplicationMessagesClient(s.controller)
 	streamClient.EXPECT().Send(gomock.Any()).Return(nil).AnyTimes()
-	streamClient.EXPECT().Recv().Return(&adminservice.StreamWorkflowReplicationMessagesResponse{
-		Attributes: &adminservice.StreamWorkflowReplicationMessagesResponse_Messages{
-			Messages: &replicationspb.WorkflowReplicationMessages{
-				ReplicationTasks:           []*replicationspb.ReplicationTask{},
-				ExclusiveHighWatermark:     100,
-				ExclusiveHighWatermarkTime: timestamppb.New(time.Unix(0, 100)),
-			},
-		},
-	}, nil).AnyTimes()
+	streamClient.EXPECT().Recv().Return(adminservice.StreamWorkflowReplicationMessagesResponse_builder{
+		Messages: replicationspb.WorkflowReplicationMessages_builder{
+			ReplicationTasks:           []*replicationspb.ReplicationTask{},
+			ExclusiveHighWatermark:     100,
+			ExclusiveHighWatermarkTime: timestamppb.New(time.Unix(0, 100)),
+		}.Build(),
+	}.Build(), nil).AnyTimes()
 	streamClient.EXPECT().CloseSend().Return(nil).AnyTimes()
 	adminClient := adminservicemock.NewMockAdminServiceClient(s.controller)
 	adminClient.EXPECT().StreamWorkflowReplicationMessages(gomock.Any()).Return(streamClient, nil).AnyTimes()
@@ -485,64 +483,64 @@ func (s *streamReceiverMonitorSuite) TestGenerateStatusMap_Success() {
 	ackLevel3 := int64(300)
 	readerId2 := shard.ReplicationReaderIDFromClusterShardID(int64(key2.Client.ClusterID), key2.Client.ShardID)
 	readerId3 := shard.ReplicationReaderIDFromClusterShardID(int64(key3.Client.ClusterID), key3.Client.ShardID)
-	queueState1 := &persistencespb.QueueState{
+	queueState1 := persistencespb.QueueState_builder{
 		ExclusiveReaderHighWatermark: nil,
 		ReaderStates: map[int64]*persistencespb.QueueReaderState{
-			readerId1: {
-				Scopes: []*persistencespb.QueueSliceScope{{
-					Range: &persistencespb.QueueSliceRange{
+			readerId1: persistencespb.QueueReaderState_builder{
+				Scopes: []*persistencespb.QueueSliceScope{persistencespb.QueueSliceScope_builder{
+					Range: persistencespb.QueueSliceRange_builder{
 						InclusiveMin: shard.ConvertToPersistenceTaskKey(
 							tasks.NewImmediateKey(ackLevel1),
 						),
 						ExclusiveMax: shard.ConvertToPersistenceTaskKey(
 							tasks.NewImmediateKey(math.MaxInt64),
 						),
-					},
-					Predicate: &persistencespb.Predicate{
-						PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
-						Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
-					},
-				}},
-			},
-			readerId2: {
-				Scopes: []*persistencespb.QueueSliceScope{{
-					Range: &persistencespb.QueueSliceRange{
+					}.Build(),
+					Predicate: persistencespb.Predicate_builder{
+						PredicateType:                enumsspb.PREDICATE_TYPE_UNIVERSAL,
+						UniversalPredicateAttributes: &persistencespb.UniversalPredicateAttributes{},
+					}.Build(),
+				}.Build()},
+			}.Build(),
+			readerId2: persistencespb.QueueReaderState_builder{
+				Scopes: []*persistencespb.QueueSliceScope{persistencespb.QueueSliceScope_builder{
+					Range: persistencespb.QueueSliceRange_builder{
 						InclusiveMin: shard.ConvertToPersistenceTaskKey(
 							tasks.NewImmediateKey(ackLevel2),
 						),
 						ExclusiveMax: shard.ConvertToPersistenceTaskKey(
 							tasks.NewImmediateKey(math.MaxInt64),
 						),
-					},
-					Predicate: &persistencespb.Predicate{
-						PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
-						Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
-					},
-				}},
-			},
+					}.Build(),
+					Predicate: persistencespb.Predicate_builder{
+						PredicateType:                enumsspb.PREDICATE_TYPE_UNIVERSAL,
+						UniversalPredicateAttributes: &persistencespb.UniversalPredicateAttributes{},
+					}.Build(),
+				}.Build()},
+			}.Build(),
 		},
-	}
-	queueState2 := &persistencespb.QueueState{
+	}.Build()
+	queueState2 := persistencespb.QueueState_builder{
 		ExclusiveReaderHighWatermark: nil,
 		ReaderStates: map[int64]*persistencespb.QueueReaderState{
-			readerId3: {
-				Scopes: []*persistencespb.QueueSliceScope{{
-					Range: &persistencespb.QueueSliceRange{
+			readerId3: persistencespb.QueueReaderState_builder{
+				Scopes: []*persistencespb.QueueSliceScope{persistencespb.QueueSliceScope_builder{
+					Range: persistencespb.QueueSliceRange_builder{
 						InclusiveMin: shard.ConvertToPersistenceTaskKey(
 							tasks.NewImmediateKey(ackLevel3),
 						),
 						ExclusiveMax: shard.ConvertToPersistenceTaskKey(
 							tasks.NewImmediateKey(math.MaxInt64),
 						),
-					},
-					Predicate: &persistencespb.Predicate{
-						PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
-						Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
-					},
-				}},
-			},
+					}.Build(),
+					Predicate: persistencespb.Predicate_builder{
+						PredicateType:                enumsspb.PREDICATE_TYPE_UNIVERSAL,
+						UniversalPredicateAttributes: &persistencespb.UniversalPredicateAttributes{},
+					}.Build(),
+				}.Build()},
+			}.Build(),
 		},
-	}
+	}.Build()
 	ctx1.EXPECT().GetQueueState(tasks.CategoryReplication).Return(queueState1, true)
 	ctx2.EXPECT().GetQueueState(tasks.CategoryReplication).Return(queueState2, true)
 	s.shardController.EXPECT().GetShardByID(int32(1)).Return(ctx1, nil)

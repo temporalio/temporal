@@ -33,8 +33,8 @@ func updateActivityInfos(
 				WorkflowID:   workflowID,
 				RunID:        runID,
 				ScheduleID:   scheduledEventId,
-				Data:         blob.Data,
-				DataEncoding: blob.EncodingType.String(),
+				Data:         blob.GetData(),
+				DataEncoding: blob.GetEncodingType().String(),
 			})
 		}
 
@@ -124,8 +124,8 @@ func updateTimerInfos(
 				WorkflowID:   workflowID,
 				RunID:        runID,
 				TimerID:      timerID,
-				Data:         blob.Data,
-				DataEncoding: blob.EncodingType.String(),
+				Data:         blob.GetData(),
+				DataEncoding: blob.GetEncodingType().String(),
 			})
 		}
 		if _, err := tx.ReplaceIntoTimerInfoMaps(ctx, rows); err != nil {
@@ -213,8 +213,8 @@ func updateChildExecutionInfos(
 				WorkflowID:   workflowID,
 				RunID:        runID,
 				InitiatedID:  initiatedID,
-				Data:         blob.Data,
-				DataEncoding: blob.EncodingType.String(),
+				Data:         blob.GetData(),
+				DataEncoding: blob.GetEncodingType().String(),
 			})
 		}
 		if _, err := tx.ReplaceIntoChildExecutionInfoMaps(ctx, rows); err != nil {
@@ -303,8 +303,8 @@ func updateRequestCancelInfos(
 				WorkflowID:   workflowID,
 				RunID:        runID,
 				InitiatedID:  initiatedID,
-				Data:         blob.Data,
-				DataEncoding: blob.EncodingType.String(),
+				Data:         blob.GetData(),
+				DataEncoding: blob.GetEncodingType().String(),
 			})
 		}
 
@@ -394,8 +394,8 @@ func updateSignalInfos(
 				WorkflowID:   workflowID,
 				RunID:        runID,
 				InitiatedID:  initiatedId,
-				Data:         blob.Data,
-				DataEncoding: blob.EncodingType.String(),
+				Data:         blob.GetData(),
+				DataEncoding: blob.GetEncodingType().String(),
 			})
 		}
 
@@ -484,12 +484,12 @@ func updateChasmNodes(
 				WorkflowID:       workflowID,
 				RunID:            runID,
 				ChasmPath:        path,
-				Metadata:         node.Metadata.Data,
-				MetadataEncoding: node.Metadata.EncodingType.String(),
+				Metadata:         node.Metadata.GetData(),
+				MetadataEncoding: node.Metadata.GetEncodingType().String(),
 			}
 			if node.Data != nil {
-				row.Data = node.Data.Data
-				row.DataEncoding = node.Data.EncodingType.String()
+				row.Data = node.Data.GetData()
+				row.DataEncoding = node.Data.GetEncodingType().String()
 			}
 			rows = append(rows, row)
 		}

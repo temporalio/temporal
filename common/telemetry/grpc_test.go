@@ -34,12 +34,12 @@ func Test_ServerStatsHandler(t *testing.T) {
 			FullMethodName: api.WorkflowServicePrefix,
 		})
 		otelStatsHandler.HandleRPC(ctx, &stats.InPayload{
-			Payload: &workflowservice.TerminateWorkflowExecutionRequest{
-				WorkflowExecution: &commonpb.WorkflowExecution{
+			Payload: workflowservice.TerminateWorkflowExecutionRequest_builder{
+				WorkflowExecution: commonpb.WorkflowExecution_builder{
 					WorkflowId: "WF-ID",
 					RunId:      "RUN-ID",
-				},
-			},
+				}.Build(),
+			}.Build(),
 		})
 		if responseErr == nil {
 			otelStatsHandler.HandleRPC(ctx, &stats.OutPayload{

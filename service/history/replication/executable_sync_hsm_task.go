@@ -53,7 +53,7 @@ func NewExecutableSyncHSMTask(
 	return &ExecutableSyncHSMTask{
 		ProcessToolBox: processToolBox,
 
-		WorkflowKey: definition.NewWorkflowKey(task.NamespaceId, task.WorkflowId, task.RunId),
+		WorkflowKey: definition.NewWorkflowKey(task.GetNamespaceId(), task.GetWorkflowId(), task.GetRunId()),
 		ExecutableTask: NewExecutableTask(
 			processToolBox,
 			taskID,
@@ -115,8 +115,8 @@ func (e *ExecutableSyncHSMTask) Execute() error {
 	}
 	return engine.SyncHSM(ctx, &historyi.SyncHSMRequest{
 		WorkflowKey:         e.WorkflowKey,
-		StateMachineNode:    e.taskAttr.StateMachineNode,
-		EventVersionHistory: e.taskAttr.VersionHistory,
+		StateMachineNode:    e.taskAttr.GetStateMachineNode(),
+		EventVersionHistory: e.taskAttr.GetVersionHistory(),
 	})
 
 }
@@ -171,14 +171,14 @@ func (e *ExecutableSyncHSMTask) HandleErr(err error) error {
 func (e *ExecutableSyncHSMTask) MarkPoisonPill() error {
 
 	if e.ReplicationTask().GetRawTaskInfo() == nil {
-		e.ReplicationTask().RawTaskInfo = &persistencespb.ReplicationTaskInfo{
+		e.ReplicationTask().SetRawTaskInfo(persistencespb.ReplicationTaskInfo_builder{
 			NamespaceId:    e.NamespaceID,
 			WorkflowId:     e.WorkflowID,
 			RunId:          e.RunID,
 			TaskType:       enumsspb.TASK_TYPE_REPLICATION_SYNC_HSM,
 			TaskId:         e.ExecutableTask.TaskID(),
 			VisibilityTime: timestamppb.New(e.TaskCreationTime()),
-		}
+		}.Build())
 	}
 
 	return e.ExecutableTask.MarkPoisonPill()

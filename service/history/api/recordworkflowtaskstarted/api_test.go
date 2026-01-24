@@ -29,7 +29,7 @@ type mutableStateModifier func(*historyi.MockMutableState)
 func TestRecordWorkflowTaskStarted_Errors(t *testing.T) {
 	t.Run("Stamp Mismatch", func(t *testing.T) {
 		resp, err := invoke(t, func(mutableState *historyi.MockMutableState) {
-			executionInfo := &persistencespb.WorkflowExecutionInfo{WorkflowTaskStamp: 1}
+			executionInfo := persistencespb.WorkflowExecutionInfo_builder{WorkflowTaskStamp: 1}.Build()
 			mutableState.EXPECT().GetExecutionInfo().Return(executionInfo).Times(1)
 		})()
 
@@ -73,22 +73,22 @@ func invoke(t *testing.T, modifyMutableState mutableStateModifier) func() (*hist
 	runID := uuid.NewString()
 	scheduledEventID := int64(42)
 
-	request := &historyservice.RecordWorkflowTaskStartedRequest{
+	request := historyservice.RecordWorkflowTaskStartedRequest_builder{
 		NamespaceId: testNamespaceID.String(),
-		WorkflowExecution: &commonpb.WorkflowExecution{
+		WorkflowExecution: commonpb.WorkflowExecution_builder{
 			WorkflowId: workflowID,
 			RunId:      runID,
-		},
+		}.Build(),
 		ScheduledEventId: scheduledEventID,
 		RequestId:        "test-request",
-		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
+		PollRequest: workflowservice.PollWorkflowTaskQueueRequest_builder{
 			Identity: "test-worker",
-			TaskQueue: &taskqueuepb.TaskQueue{
+			TaskQueue: taskqueuepb.TaskQueue_builder{
 				Name: "test-tq",
 				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-			},
-		},
-	}
+			}.Build(),
+		}.Build(),
+	}.Build()
 
 	mockNamespaceRegistry := namespace.NewMockRegistry(ctrl)
 	mockNamespaceRegistry.EXPECT().GetNamespaceByID(testNamespaceID).Return(tests.GlobalNamespaceEntry, nil).AnyTimes()

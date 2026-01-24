@@ -64,7 +64,7 @@ func (v *CommandAttrValidator) ValidateProtocolMessageAttributes(
 		return failedCause, serviceerror.NewInvalidArgument("ProtocolMessageCommandAttributes is not set on ProtocolMessageCommand.")
 	}
 
-	if attributes.MessageId == "" {
+	if attributes.GetMessageId() == "" {
 		return failedCause, serviceerror.NewInvalidArgument("MessageID is not set on ProtocolMessageCommand.")
 	}
 
@@ -91,22 +91,22 @@ func (v *CommandAttrValidator) ValidateActivityScheduleAttributes(
 
 	activityID := attributes.GetActivityId()
 	activityType := ""
-	if attributes.ActivityType != nil {
-		activityType = attributes.ActivityType.GetName()
+	if attributes.HasActivityType() {
+		activityType = attributes.GetActivityType().GetName()
 	}
 
-	if attributes.RetryPolicy == nil {
-		attributes.RetryPolicy = &commonpb.RetryPolicy{}
+	if !attributes.HasRetryPolicy() {
+		attributes.SetRetryPolicy(&commonpb.RetryPolicy{})
 	}
 
-	opts := &activitypb.ActivityOptions{
-		TaskQueue:              attributes.TaskQueue,
+	opts := activitypb.ActivityOptions_builder{
+		TaskQueue:              attributes.GetTaskQueue(),
 		ScheduleToCloseTimeout: attributes.GetScheduleToCloseTimeout(),
 		ScheduleToStartTimeout: attributes.GetScheduleToStartTimeout(),
 		StartToCloseTimeout:    attributes.GetStartToCloseTimeout(),
 		HeartbeatTimeout:       attributes.GetHeartbeatTimeout(),
-		RetryPolicy:            attributes.RetryPolicy,
-	}
+		RetryPolicy:            attributes.GetRetryPolicy(),
+	}.Build()
 
 	err := activity.ValidateAndNormalizeActivityAttributes(
 		activityID,
@@ -122,11 +122,11 @@ func (v *CommandAttrValidator) ValidateActivityScheduleAttributes(
 		return failedCause, err
 	}
 
-	attributes.ScheduleToCloseTimeout = opts.ScheduleToCloseTimeout
-	attributes.ScheduleToStartTimeout = opts.ScheduleToStartTimeout
-	attributes.StartToCloseTimeout = opts.StartToCloseTimeout
-	attributes.HeartbeatTimeout = opts.HeartbeatTimeout
-	attributes.RetryPolicy = opts.RetryPolicy
+	attributes.SetScheduleToCloseTimeout(opts.GetScheduleToCloseTimeout())
+	attributes.SetScheduleToStartTimeout(opts.GetScheduleToStartTimeout())
+	attributes.SetStartToCloseTimeout(opts.GetStartToCloseTimeout())
+	attributes.SetHeartbeatTimeout(opts.GetHeartbeatTimeout())
+	attributes.SetRetryPolicy(opts.GetRetryPolicy())
 
 	return enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, nil
 }
@@ -303,11 +303,11 @@ func (v *CommandAttrValidator) ValidateSignalExternalWorkflowExecutionAttributes
 	if attributes == nil {
 		return failedCause, serviceerror.NewInvalidArgument("SignalExternalWorkflowExecutionCommandAttributes is not set on SignalExternalWorkflowExecutionCommand.")
 	}
-	if attributes.Execution == nil {
+	if !attributes.HasExecution() {
 		return failedCause, serviceerror.NewInvalidArgument("Execution is not set on SignalExternalWorkflowExecutionCommand.")
 	}
 
-	targetWorkflowID := attributes.Execution.GetWorkflowId()
+	targetWorkflowID := attributes.GetExecution().GetWorkflowId()
 
 	if err := v.validateCrossNamespaceCall(
 		namespaceID,
@@ -318,7 +318,7 @@ func (v *CommandAttrValidator) ValidateSignalExternalWorkflowExecutionAttributes
 		return failedCause, err
 	}
 	ns := attributes.GetNamespace()
-	targetRunID := attributes.Execution.GetRunId()
+	targetRunID := attributes.GetExecution().GetRunId()
 	signalName := attributes.GetSignalName()
 
 	if targetWorkflowID == "" {
@@ -349,7 +349,7 @@ func (v *CommandAttrValidator) ValidateUpsertWorkflowSearchAttributes(
 	if attributes == nil {
 		return failedCause, serviceerror.NewInvalidArgument("UpsertWorkflowSearchAttributesCommandAttributes is not set on UpsertWorkflowSearchAttributesCommand.")
 	}
-	if attributes.SearchAttributes == nil {
+	if !attributes.HasSearchAttributes() {
 		return failedCause, serviceerror.NewInvalidArgument("SearchAttributes is not set on UpsertWorkflowSearchAttributesCommand.")
 	}
 	if len(attributes.GetSearchAttributes().GetIndexedFields()) == 0 {
@@ -370,7 +370,7 @@ func (v *CommandAttrValidator) ValidateModifyWorkflowProperties(
 		return failedCause, serviceerror.NewInvalidArgument("ModifyWorkflowPropertiesCommandAttributes is not set on ModifyWorkflowPropertiesCommand.")
 	}
 
-	if attributes.UpsertedMemo == nil {
+	if !attributes.HasUpsertedMemo() {
 		return failedCause, serviceerror.NewInvalidArgument("UpsertedMemo is not set on ModifyWorkflowPropertiesCommand.")
 	}
 
@@ -393,55 +393,55 @@ func (v *CommandAttrValidator) ValidateContinueAsNewWorkflowExecutionAttributes(
 	}
 
 	// Inherit workflow type from previous execution if not provided on command
-	if attributes.WorkflowType == nil || attributes.WorkflowType.GetName() == "" {
-		attributes.WorkflowType = &commonpb.WorkflowType{Name: executionInfo.WorkflowTypeName}
+	if !attributes.HasWorkflowType() || attributes.GetWorkflowType().GetName() == "" {
+		attributes.SetWorkflowType(commonpb.WorkflowType_builder{Name: executionInfo.GetWorkflowTypeName()}.Build())
 	}
 
-	wfType := attributes.WorkflowType.GetName()
+	wfType := attributes.GetWorkflowType().GetName()
 	if len(wfType) > v.maxIDLengthLimit {
 		return failedCause, serviceerror.NewInvalidArgumentf("WorkflowType on ContinueAsNewWorkflowExecutionCommand exceeds length limit. WorkflowType=%s Length=%d Limit=%d", wfType, len(wfType), v.maxIDLengthLimit)
 	}
 
 	// Inherit task queue from previous execution if not provided on command
-	if attributes.TaskQueue == nil {
-		attributes.TaskQueue = &taskqueuepb.TaskQueue{
+	if !attributes.HasTaskQueue() {
+		attributes.SetTaskQueue(taskqueuepb.TaskQueue_builder{
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-		}
+		}.Build())
 	}
-	if err := tqid.NormalizeAndValidate(attributes.TaskQueue, executionInfo.TaskQueue, v.maxIDLengthLimit); err != nil {
-		return failedCause, fmt.Errorf("error validating ContinueAsNewWorkflowExecutionCommand TaskQueue: %w. WorkflowType=%s TaskQueue=%s", err, wfType, attributes.TaskQueue)
+	if err := tqid.NormalizeAndValidate(attributes.GetTaskQueue(), executionInfo.GetTaskQueue(), v.maxIDLengthLimit); err != nil {
+		return failedCause, fmt.Errorf("error validating ContinueAsNewWorkflowExecutionCommand TaskQueue: %w. WorkflowType=%s TaskQueue=%s", err, wfType, attributes.GetTaskQueue())
 	}
 
 	if err := timestamp.ValidateAndCapProtoDuration(attributes.GetWorkflowRunTimeout()); err != nil {
-		return failedCause, serviceerror.NewInvalidArgumentf("Invalid WorkflowRunTimeout on ContinueAsNewWorkflowExecutionCommand: %v. WorkflowType=%s TaskQueue=%s", err, wfType, attributes.TaskQueue)
+		return failedCause, serviceerror.NewInvalidArgumentf("Invalid WorkflowRunTimeout on ContinueAsNewWorkflowExecutionCommand: %v. WorkflowType=%s TaskQueue=%s", err, wfType, attributes.GetTaskQueue())
 	}
 
 	if err := timestamp.ValidateAndCapProtoDuration(attributes.GetWorkflowTaskTimeout()); err != nil {
-		return failedCause, serviceerror.NewInvalidArgumentf("Invalid WorkflowTaskTimeout on ContinueAsNewWorkflowExecutionCommand: %v. WorkflowType=%s TaskQueue=%s", err, wfType, attributes.TaskQueue)
+		return failedCause, serviceerror.NewInvalidArgumentf("Invalid WorkflowTaskTimeout on ContinueAsNewWorkflowExecutionCommand: %v. WorkflowType=%s TaskQueue=%s", err, wfType, attributes.GetTaskQueue())
 	}
 
 	if err := timestamp.ValidateAndCapProtoDuration(attributes.GetBackoffStartInterval()); err != nil {
-		return failedCause, serviceerror.NewInvalidArgumentf("Invalid BackoffStartInterval on ContinueAsNewWorkflowExecutionCommand: %v. WorkflowType=%s TaskQueue=%s", err, wfType, attributes.TaskQueue)
+		return failedCause, serviceerror.NewInvalidArgumentf("Invalid BackoffStartInterval on ContinueAsNewWorkflowExecutionCommand: %v. WorkflowType=%s TaskQueue=%s", err, wfType, attributes.GetTaskQueue())
 	}
 
 	if attributes.GetWorkflowRunTimeout().AsDuration() == 0 {
-		attributes.WorkflowRunTimeout = executionInfo.WorkflowRunTimeout
+		attributes.SetWorkflowRunTimeout(executionInfo.GetWorkflowRunTimeout())
 	}
 
 	if attributes.GetWorkflowTaskTimeout().AsDuration() == 0 {
-		attributes.WorkflowTaskTimeout = executionInfo.DefaultWorkflowTaskTimeout
+		attributes.SetWorkflowTaskTimeout(executionInfo.GetDefaultWorkflowTaskTimeout())
 	}
 
-	attributes.WorkflowRunTimeout = durationpb.New(overrideWorkflowRunTimeout(attributes.GetWorkflowRunTimeout().AsDuration(), executionInfo.GetWorkflowExecutionTimeout().AsDuration()))
+	attributes.SetWorkflowRunTimeout(durationpb.New(overrideWorkflowRunTimeout(attributes.GetWorkflowRunTimeout().AsDuration(), executionInfo.GetWorkflowExecutionTimeout().AsDuration())))
 
-	attributes.WorkflowTaskTimeout = durationpb.New(overrideWorkflowTaskTimeout(namespaceName, attributes.GetWorkflowTaskTimeout().AsDuration(), attributes.GetWorkflowRunTimeout().AsDuration(), v.config.DefaultWorkflowTaskTimeout))
+	attributes.SetWorkflowTaskTimeout(durationpb.New(overrideWorkflowTaskTimeout(namespaceName, attributes.GetWorkflowTaskTimeout().AsDuration(), attributes.GetWorkflowRunTimeout().AsDuration(), v.config.DefaultWorkflowTaskTimeout)))
 
-	if err := v.validateWorkflowRetryPolicy(namespaceName, attributes.RetryPolicy); err != nil {
-		return failedCause, fmt.Errorf("invalid WorkflowRetryPolicy on ContinueAsNewWorkflowExecutionCommand: %w. WorkflowType=%s TaskQueue=%s", err, wfType, attributes.TaskQueue)
+	if err := v.validateWorkflowRetryPolicy(namespaceName, attributes.GetRetryPolicy()); err != nil {
+		return failedCause, fmt.Errorf("invalid WorkflowRetryPolicy on ContinueAsNewWorkflowExecutionCommand: %w. WorkflowType=%s TaskQueue=%s", err, wfType, attributes.GetTaskQueue())
 	}
 
 	if err := v.searchAttributesValidator.Validate(attributes.GetSearchAttributes(), namespaceName.String()); err != nil {
-		return enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, fmt.Errorf("invalid SearchAttributes on ContinueAsNewWorkflowExecutionCommand: %w. WorkflowType=%s TaskQueue=%s", err, wfType, attributes.TaskQueue)
+		return enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, fmt.Errorf("invalid SearchAttributes on ContinueAsNewWorkflowExecutionCommand: %w. WorkflowType=%s TaskQueue=%s", err, wfType, attributes.GetTaskQueue())
 	}
 
 	return enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, nil
@@ -466,15 +466,15 @@ func (v *CommandAttrValidator) ValidateStartChildExecutionAttributes(
 
 	if err := v.validateCrossNamespaceCall(
 		namespaceID,
-		parentInfo.WorkflowId,
+		parentInfo.GetWorkflowId(),
 		targetNamespaceID,
 		wfID,
 	); err != nil {
 		return failedCause, err
 	}
 	wfType := ""
-	if attributes.WorkflowType != nil {
-		wfType = attributes.WorkflowType.GetName()
+	if attributes.HasWorkflowType() {
+		wfType = attributes.GetWorkflowType().GetName()
 	}
 	ns := attributes.GetNamespace()
 
@@ -510,7 +510,7 @@ func (v *CommandAttrValidator) ValidateStartChildExecutionAttributes(
 		return failedCause, serviceerror.NewInvalidArgumentf("Invalid WorkflowTaskTimeout on StartChildWorkflowExecutionCommand: %v. WorkflowId=%s WorkflowType=%s Namespace=%s", err, wfID, wfType, ns)
 	}
 
-	if err := v.validateWorkflowRetryPolicy(namespace.Name(attributes.GetNamespace()), attributes.RetryPolicy); err != nil {
+	if err := v.validateWorkflowRetryPolicy(namespace.Name(attributes.GetNamespace()), attributes.GetRetryPolicy()); err != nil {
 		return failedCause, fmt.Errorf("invalid WorkflowRetryPolicy on StartChildWorkflowExecutionCommand: %w. WorkflowId=%s WorkflowType=%s Namespace=%s", err, wfID, wfType, ns)
 	}
 
@@ -522,26 +522,26 @@ func (v *CommandAttrValidator) ValidateStartChildExecutionAttributes(
 		return enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, fmt.Errorf("invalid SearchAttributes on StartChildWorkflowCommand: %w. WorkflowId=%s WorkflowType=%s Namespace=%s", err, wfID, wfType, ns)
 	}
 
-	if err := priorities.Validate(attributes.Priority); err != nil {
+	if err := priorities.Validate(attributes.GetPriority()); err != nil {
 		return failedCause, err
 	}
 
 	// Inherit taskqueue from parent workflow execution if not provided on command
-	if attributes.TaskQueue == nil {
-		attributes.TaskQueue = &taskqueuepb.TaskQueue{
+	if !attributes.HasTaskQueue() {
+		attributes.SetTaskQueue(taskqueuepb.TaskQueue_builder{
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-		}
+		}.Build())
 	}
-	if err := tqid.NormalizeAndValidate(attributes.TaskQueue, parentInfo.TaskQueue, v.maxIDLengthLimit); err != nil {
-		return failedCause, fmt.Errorf("invalid TaskQueue on StartChildWorkflowExecutionCommand: %w. WorkflowId=%s WorkflowType=%s Namespace=%s TaskQueue=%s", err, wfID, wfType, ns, attributes.TaskQueue)
+	if err := tqid.NormalizeAndValidate(attributes.GetTaskQueue(), parentInfo.GetTaskQueue(), v.maxIDLengthLimit); err != nil {
+		return failedCause, fmt.Errorf("invalid TaskQueue on StartChildWorkflowExecutionCommand: %w. WorkflowId=%s WorkflowType=%s Namespace=%s TaskQueue=%s", err, wfID, wfType, ns, attributes.GetTaskQueue())
 	}
 
 	// workflow execution timeout is left as is
 	//  if workflow execution timeout == 0 -> infinity
 
-	attributes.WorkflowRunTimeout = durationpb.New(overrideWorkflowRunTimeout(attributes.GetWorkflowRunTimeout().AsDuration(), attributes.GetWorkflowExecutionTimeout().AsDuration()))
+	attributes.SetWorkflowRunTimeout(durationpb.New(overrideWorkflowRunTimeout(attributes.GetWorkflowRunTimeout().AsDuration(), attributes.GetWorkflowExecutionTimeout().AsDuration())))
 
-	attributes.WorkflowTaskTimeout = durationpb.New(overrideWorkflowTaskTimeout(targetNamespace, attributes.GetWorkflowTaskTimeout().AsDuration(), attributes.GetWorkflowRunTimeout().AsDuration(), defaultWorkflowTaskTimeoutFn))
+	attributes.SetWorkflowTaskTimeout(durationpb.New(overrideWorkflowTaskTimeout(targetNamespace, attributes.GetWorkflowTaskTimeout().AsDuration(), attributes.GetWorkflowRunTimeout().AsDuration(), defaultWorkflowTaskTimeoutFn)))
 
 	return enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, nil
 }

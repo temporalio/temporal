@@ -29,90 +29,90 @@ func TestProtoElementsMatch(t *testing.T) {
 		B    any
 	}{{
 		Name: "Shallow proto object - in order",
-		A: []*commonpb.WorkflowExecution{{
+		A: []*commonpb.WorkflowExecution{commonpb.WorkflowExecution_builder{
 			WorkflowId: "some random workflow ID",
 			RunId:      myUUID,
-		}, {
+		}.Build(), commonpb.WorkflowExecution_builder{
 			WorkflowId: "second workflow",
 			RunId:      myUUID,
-		}},
-		B: []*commonpb.WorkflowExecution{{
+		}.Build()},
+		B: []*commonpb.WorkflowExecution{commonpb.WorkflowExecution_builder{
 			WorkflowId: "some random workflow ID",
 			RunId:      myUUID,
-		}, {
+		}.Build(), commonpb.WorkflowExecution_builder{
 			WorkflowId: "second workflow",
 			RunId:      myUUID,
-		}},
+		}.Build()},
 	}, {
 		Name: "Shallow proto object - out of order",
-		A: []*commonpb.WorkflowExecution{{
+		A: []*commonpb.WorkflowExecution{commonpb.WorkflowExecution_builder{
 			WorkflowId: "some random workflow ID",
 			RunId:      myUUID,
-		}, {
+		}.Build(), commonpb.WorkflowExecution_builder{
 			WorkflowId: "second workflow",
 			RunId:      myUUID,
-		}},
-		B: []*commonpb.WorkflowExecution{{
+		}.Build()},
+		B: []*commonpb.WorkflowExecution{commonpb.WorkflowExecution_builder{
 			WorkflowId: "second workflow",
 			RunId:      myUUID,
-		}, {
+		}.Build(), commonpb.WorkflowExecution_builder{
 			WorkflowId: "some random workflow ID",
 			RunId:      myUUID,
-		}},
+		}.Build()},
 	}, {
 		Name: "Structs containing proto",
 		A: []canHazProto{{
 			A: 13,
-			B: &commonpb.WorkflowExecution{
+			B: commonpb.WorkflowExecution_builder{
 				WorkflowId: "some random workflow ID",
 				RunId:      myUUID,
-			},
+			}.Build(),
 		}, {
 			A: 12,
-			B: &commonpb.WorkflowExecution{
+			B: commonpb.WorkflowExecution_builder{
 				WorkflowId: "second random workflow ID",
 				RunId:      myUUID,
-			},
+			}.Build(),
 		}},
 		B: []canHazProto{{
 			A: 12,
-			B: &commonpb.WorkflowExecution{
+			B: commonpb.WorkflowExecution_builder{
 				WorkflowId: "second random workflow ID",
 				RunId:      myUUID,
-			},
+			}.Build(),
 		}, {
 			A: 13,
-			B: &commonpb.WorkflowExecution{
+			B: commonpb.WorkflowExecution_builder{
 				WorkflowId: "some random workflow ID",
 				RunId:      myUUID,
-			},
+			}.Build(),
 		}},
 	}, {
 		Name: "Nested proto struct",
 		A: []*workflowpb.WorkflowExecutionInfo{
-			{
-				Execution: &commonpb.WorkflowExecution{
+			workflowpb.WorkflowExecutionInfo_builder{
+				Execution: commonpb.WorkflowExecution_builder{
 					WorkflowId: "some random workflow ID",
 					RunId:      myUUID,
-				},
-			}, {
-				Execution: &commonpb.WorkflowExecution{
+				}.Build(),
+			}.Build(), workflowpb.WorkflowExecutionInfo_builder{
+				Execution: commonpb.WorkflowExecution_builder{
 					WorkflowId: "second random workflow ID",
 					RunId:      myUUID,
-				},
-			}},
+				}.Build(),
+			}.Build()},
 		B: []*workflowpb.WorkflowExecutionInfo{
-			{
-				Execution: &commonpb.WorkflowExecution{
+			workflowpb.WorkflowExecutionInfo_builder{
+				Execution: commonpb.WorkflowExecution_builder{
 					WorkflowId: "second random workflow ID",
 					RunId:      myUUID,
-				},
-			}, {
-				Execution: &commonpb.WorkflowExecution{
+				}.Build(),
+			}.Build(), workflowpb.WorkflowExecutionInfo_builder{
+				Execution: commonpb.WorkflowExecution_builder{
 					WorkflowId: "some random workflow ID",
 					RunId:      myUUID,
-				},
-			}},
+				}.Build(),
+			}.Build()},
 	}} {
 		if !assert.ProtoElementsMatch(tc.A, tc.B) {
 			t.Errorf("%s: expected equality", tc.Name)

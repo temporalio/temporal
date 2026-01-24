@@ -43,8 +43,8 @@ func (m *sqlExecutionStore) AppendHistoryNodes(
 		NodeID:       node.NodeID,
 		PrevTxnID:    node.PrevTransactionID,
 		TxnID:        node.TransactionID,
-		Data:         node.Events.Data,
-		DataEncoding: node.Events.EncodingType.String(),
+		Data:         node.Events.GetData(),
+		DataEncoding: node.Events.GetEncodingType().String(),
 		ShardID:      request.ShardID,
 	}
 
@@ -70,8 +70,8 @@ func (m *sqlExecutionStore) AppendHistoryNodes(
 		ShardID:      request.ShardID,
 		TreeID:       treeIDBytes,
 		BranchID:     branchIDBytes,
-		Data:         treeInfoBlob.Data,
-		DataEncoding: treeInfoBlob.EncodingType.String(),
+		Data:         treeInfoBlob.GetData(),
+		DataEncoding: treeInfoBlob.GetEncodingType().String(),
 	}
 
 	return m.txExecute(ctx, "AppendHistoryNodes", func(tx sqlplugin.Tx) error {
@@ -165,7 +165,7 @@ func (m *sqlExecutionStore) ReadHistoryBranch(
 	if err != nil {
 		return nil, err
 	}
-	treeIDBytes, err := primitives.ParseUUID(branch.TreeId)
+	treeIDBytes, err := primitives.ParseUUID(branch.GetTreeId())
 	if err != nil {
 		return nil, err
 	}
@@ -311,8 +311,8 @@ func (m *sqlExecutionStore) ForkHistoryBranch(
 		ShardID:      request.ShardID,
 		TreeID:       treeIDBytes,
 		BranchID:     newBranchIdBytes,
-		Data:         treeInfoBlob.Data,
-		DataEncoding: treeInfoBlob.EncodingType.String(),
+		Data:         treeInfoBlob.GetData(),
+		DataEncoding: treeInfoBlob.GetEncodingType().String(),
 	}
 
 	result, err := m.DB.InsertIntoHistoryTree(ctx, row)
@@ -335,11 +335,11 @@ func (m *sqlExecutionStore) DeleteHistoryBranch(
 	ctx context.Context,
 	request *p.InternalDeleteHistoryBranchRequest,
 ) error {
-	branchIDBytes, err := primitives.ParseUUID(request.BranchInfo.BranchId)
+	branchIDBytes, err := primitives.ParseUUID(request.BranchInfo.GetBranchId())
 	if err != nil {
 		return err
 	}
-	treeIDBytes, err := primitives.ParseUUID(request.BranchInfo.TreeId)
+	treeIDBytes, err := primitives.ParseUUID(request.BranchInfo.GetTreeId())
 	if err != nil {
 		return err
 	}
@@ -454,7 +454,7 @@ func (m *sqlExecutionStore) GetHistoryTreeContainingBranch(
 		return nil, err
 	}
 
-	treeID, err := primitives.ParseUUID(branch.TreeId)
+	treeID, err := primitives.ParseUUID(branch.GetTreeId())
 	if err != nil {
 		return nil, err
 	}

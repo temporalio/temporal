@@ -95,7 +95,7 @@ func (r *ComponentRef) Serialize(
 		return nil, err
 	}
 
-	pRef := persistencespb.ChasmComponentRef{
+	pRef := persistencespb.ChasmComponentRef_builder{
 		NamespaceId:                         r.NamespaceID,
 		BusinessId:                          r.BusinessID,
 		RunId:                               r.RunID,
@@ -103,7 +103,7 @@ func (r *ComponentRef) Serialize(
 		ExecutionVersionedTransition:        r.executionLastUpdateVT,
 		ComponentPath:                       r.componentPath,
 		ComponentInitialVersionedTransition: r.componentInitialVT,
-	}
+	}.Build()
 	return pRef.Marshal()
 }
 
@@ -131,13 +131,13 @@ func DeserializeComponentRef(data []byte) (ComponentRef, error) {
 func ProtoRefToComponentRef(pRef *persistencespb.ChasmComponentRef) ComponentRef {
 	return ComponentRef{
 		ExecutionKey: ExecutionKey{
-			NamespaceID: pRef.NamespaceId,
-			BusinessID:  pRef.BusinessId,
-			RunID:       pRef.RunId,
+			NamespaceID: pRef.GetNamespaceId(),
+			BusinessID:  pRef.GetBusinessId(),
+			RunID:       pRef.GetRunId(),
 		},
-		archetypeID:           pRef.ArchetypeId,
-		executionLastUpdateVT: pRef.ExecutionVersionedTransition,
-		componentPath:         pRef.ComponentPath,
-		componentInitialVT:    pRef.ComponentInitialVersionedTransition,
+		archetypeID:           pRef.GetArchetypeId(),
+		executionLastUpdateVT: pRef.GetExecutionVersionedTransition(),
+		componentPath:         pRef.GetComponentPath(),
+		componentInitialVT:    pRef.GetComponentInitialVersionedTransition(),
 	}
 }

@@ -20,6 +20,7 @@ import (
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
@@ -71,17 +72,17 @@ func (s *ActivityApiBatchUpdateOptionsClientTestSuite) TestActivityBatchUpdateOp
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// pause activities in both workflows
-	pauseRequest := &workflowservice.PauseActivityRequest{
+	pauseRequest := workflowservice.PauseActivityRequest_builder{
 		Namespace: s.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{},
-		Activity:  &workflowservice.PauseActivityRequest_Id{Id: "activity-id"},
-	}
-	pauseRequest.Execution.WorkflowId = workflowRun1.GetID()
+		Id:        proto.String("activity-id"),
+	}.Build()
+	pauseRequest.GetExecution().SetWorkflowId(workflowRun1.GetID())
 	resp, err := s.FrontendClient().PauseActivity(ctx, pauseRequest)
 	s.NoError(err)
 	s.NotNil(resp)
 
-	pauseRequest.Execution.WorkflowId = workflowRun2.GetID()
+	pauseRequest.GetExecution().SetWorkflowId(workflowRun2.GetID())
 	resp, err = s.FrontendClient().PauseActivity(ctx, pauseRequest)
 	s.NoError(err)
 	s.NotNil(resp)
@@ -91,7 +92,7 @@ func (s *ActivityApiBatchUpdateOptionsClientTestSuite) TestActivityBatchUpdateOp
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun1.GetID(), workflowRun1.GetRunID())
 		require.NoError(t, err)
 		require.Len(t, description.GetPendingActivities(), 1)
-		require.True(t, description.PendingActivities[0].Paused)
+		require.True(t, description.GetPendingActivities()[0].GetPaused())
 	}, 5*time.Second, 100*time.Millisecond)
 
 	workflowTypeName := "WorkflowFunc"
@@ -104,78 +105,74 @@ func (s *ActivityApiBatchUpdateOptionsClientTestSuite) TestActivityBatchUpdateOp
 	query := fmt.Sprintf("(WorkflowType='%s' AND %s)", workflowTypeName, unpauseCause)
 
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		listResp, err = s.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+		listResp, err = s.FrontendClient().ListWorkflowExecutions(ctx, workflowservice.ListWorkflowExecutionsRequest_builder{
 			Namespace: s.Namespace().String(),
 			PageSize:  10,
 			Query:     query,
-		})
+		}.Build())
 		require.NoError(t, err)
 		require.NotNil(t, listResp)
 		require.Len(t, listResp.GetExecutions(), 2)
 	}, 5*time.Second, 500*time.Millisecond)
 
 	// unpause the activities in both workflows with batch unpause
-	_, err = s.SdkClient().WorkflowService().StartBatchOperation(context.Background(), &workflowservice.StartBatchOperationRequest{
+	_, err = s.SdkClient().WorkflowService().StartBatchOperation(context.Background(), workflowservice.StartBatchOperationRequest_builder{
 		Namespace: s.Namespace().String(),
-		Operation: &workflowservice.StartBatchOperationRequest_UpdateActivityOptionsOperation{
-			UpdateActivityOptionsOperation: &batchpb.BatchOperationUpdateActivityOptions{
-				Activity: &batchpb.BatchOperationUpdateActivityOptions_Type{Type: activityTypeName},
-				ActivityOptions: &activitypb.ActivityOptions{
-					ScheduleToCloseTimeout: durationpb.New(10 * time.Second),
-				},
-				UpdateMask: &fieldmaskpb.FieldMask{
-					Paths: []string{"schedule_to_close_timeout"},
-				},
+		UpdateActivityOptionsOperation: batchpb.BatchOperationUpdateActivityOptions_builder{
+			Type: proto.String(activityTypeName),
+			ActivityOptions: activitypb.ActivityOptions_builder{
+				ScheduleToCloseTimeout: durationpb.New(10 * time.Second),
+			}.Build(),
+			UpdateMask: &fieldmaskpb.FieldMask{
+				Paths: []string{"schedule_to_close_timeout"},
 			},
-		},
+		}.Build(),
 		VisibilityQuery: fmt.Sprintf("WorkflowType='%s'", workflowTypeName),
 		JobId:           uuid.NewString(),
 		Reason:          "test",
-	})
+	}.Build())
 	s.NoError(err)
 
 	// make sure activities are unpaused
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun1.GetID(), workflowRun1.GetRunID())
 		require.NoError(t, err)
-		require.Len(t, description.PendingActivities, 1)
-		require.Equal(t, description.PendingActivities[0].ActivityOptions.ScheduleToCloseTimeout.AsDuration(), 10*time.Second)
-		require.True(t, description.PendingActivities[0].Paused)
+		require.Len(t, description.GetPendingActivities(), 1)
+		require.Equal(t, description.GetPendingActivities()[0].GetActivityOptions().GetScheduleToCloseTimeout().AsDuration(), 10*time.Second)
+		require.True(t, description.GetPendingActivities()[0].GetPaused())
 
 		description, err = s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun2.GetID(), workflowRun2.GetRunID())
 		require.NoError(t, err)
-		require.Len(t, description.PendingActivities, 1)
-		require.Equal(t, description.PendingActivities[0].ActivityOptions.ScheduleToCloseTimeout.AsDuration(), 10*time.Second)
-		require.True(t, description.PendingActivities[0].Paused)
+		require.Len(t, description.GetPendingActivities(), 1)
+		require.Equal(t, description.GetPendingActivities()[0].GetActivityOptions().GetScheduleToCloseTimeout().AsDuration(), 10*time.Second)
+		require.True(t, description.GetPendingActivities()[0].GetPaused())
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// unpause the activities in both workflows with batch unpause
-	_, err = s.SdkClient().WorkflowService().StartBatchOperation(context.Background(), &workflowservice.StartBatchOperationRequest{
+	_, err = s.SdkClient().WorkflowService().StartBatchOperation(context.Background(), workflowservice.StartBatchOperationRequest_builder{
 		Namespace: s.Namespace().String(),
-		Operation: &workflowservice.StartBatchOperationRequest_UnpauseActivitiesOperation{
-			UnpauseActivitiesOperation: &batchpb.BatchOperationUnpauseActivities{
-				Activity: &batchpb.BatchOperationUnpauseActivities_Type{Type: activityTypeName},
-			},
-		},
+		UnpauseActivitiesOperation: batchpb.BatchOperationUnpauseActivities_builder{
+			Type: proto.String(activityTypeName),
+		}.Build(),
 		VisibilityQuery: fmt.Sprintf("WorkflowType='%s'", workflowTypeName),
 		JobId:           uuid.NewString(),
 		Reason:          "test",
-	})
+	}.Build())
 	s.NoError(err)
 
 	// make sure activities are unpaused
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun1.GetID(), workflowRun1.GetRunID())
 		require.NoError(t, err)
-		require.Len(t, description.PendingActivities, 1)
-		require.Equal(t, description.PendingActivities[0].ActivityOptions.ScheduleToCloseTimeout.AsDuration(), 10*time.Second)
-		require.Equal(t, description.PendingActivities[0].Paused, false)
+		require.Len(t, description.GetPendingActivities(), 1)
+		require.Equal(t, description.GetPendingActivities()[0].GetActivityOptions().GetScheduleToCloseTimeout().AsDuration(), 10*time.Second)
+		require.Equal(t, description.GetPendingActivities()[0].GetPaused(), false)
 
 		description, err = s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun2.GetID(), workflowRun2.GetRunID())
 		require.NoError(t, err)
-		require.Len(t, description.PendingActivities, 1)
-		require.Equal(t, description.PendingActivities[0].ActivityOptions.ScheduleToCloseTimeout.AsDuration(), 10*time.Second)
-		require.Equal(t, description.PendingActivities[0].Paused, false)
+		require.Len(t, description.GetPendingActivities(), 1)
+		require.Equal(t, description.GetPendingActivities()[0].GetActivityOptions().GetScheduleToCloseTimeout().AsDuration(), 10*time.Second)
+		require.Equal(t, description.GetPendingActivities()[0].GetPaused(), false)
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// let both of the activities succeed
@@ -191,51 +188,45 @@ func (s *ActivityApiBatchUpdateOptionsClientTestSuite) TestActivityBatchUpdateOp
 
 func (s *ActivityApiBatchUpdateOptionsClientTestSuite) TestActivityBatchUpdateOptions_Failed() {
 	// neither activity type nor "match all" is provided
-	_, err := s.SdkClient().WorkflowService().StartBatchOperation(context.Background(), &workflowservice.StartBatchOperationRequest{
-		Namespace: s.Namespace().String(),
-		Operation: &workflowservice.StartBatchOperationRequest_UpdateActivityOptionsOperation{
-			UpdateActivityOptionsOperation: &batchpb.BatchOperationUpdateActivityOptions{},
-		},
-		VisibilityQuery: fmt.Sprintf("WorkflowType='%s'", "WorkflowFunc"),
-		JobId:           uuid.NewString(),
-		Reason:          "test",
-	})
+	_, err := s.SdkClient().WorkflowService().StartBatchOperation(context.Background(), workflowservice.StartBatchOperationRequest_builder{
+		Namespace:                      s.Namespace().String(),
+		UpdateActivityOptionsOperation: &batchpb.BatchOperationUpdateActivityOptions{},
+		VisibilityQuery:                fmt.Sprintf("WorkflowType='%s'", "WorkflowFunc"),
+		JobId:                          uuid.NewString(),
+		Reason:                         "test",
+	}.Build())
 	s.Error(err)
 	s.Equal(codes.InvalidArgument, serviceerror.ToStatus(err).Code())
 	s.ErrorAs(err, new(*serviceerror.InvalidArgument))
 
 	// neither activity type nor "match all" is provided
-	_, err = s.SdkClient().WorkflowService().StartBatchOperation(context.Background(), &workflowservice.StartBatchOperationRequest{
+	_, err = s.SdkClient().WorkflowService().StartBatchOperation(context.Background(), workflowservice.StartBatchOperationRequest_builder{
 		Namespace: s.Namespace().String(),
-		Operation: &workflowservice.StartBatchOperationRequest_UpdateActivityOptionsOperation{
-			UpdateActivityOptionsOperation: &batchpb.BatchOperationUpdateActivityOptions{
-				Activity: &batchpb.BatchOperationUpdateActivityOptions_Type{Type: ""},
-			},
-		},
+		UpdateActivityOptionsOperation: batchpb.BatchOperationUpdateActivityOptions_builder{
+			Type: proto.String(""),
+		}.Build(),
 		VisibilityQuery: fmt.Sprintf("WorkflowType='%s'", "WorkflowFunc"),
 		JobId:           uuid.NewString(),
 		Reason:          "test",
-	})
+	}.Build())
 	s.Error(err)
 	s.Equal(codes.InvalidArgument, serviceerror.ToStatus(err).Code())
 	s.ErrorAs(err, new(*serviceerror.InvalidArgument))
 
 	// cannot set activity options and restore original
-	_, err = s.SdkClient().WorkflowService().StartBatchOperation(context.Background(), &workflowservice.StartBatchOperationRequest{
+	_, err = s.SdkClient().WorkflowService().StartBatchOperation(context.Background(), workflowservice.StartBatchOperationRequest_builder{
 		Namespace: s.Namespace().String(),
-		Operation: &workflowservice.StartBatchOperationRequest_UpdateActivityOptionsOperation{
-			UpdateActivityOptionsOperation: &batchpb.BatchOperationUpdateActivityOptions{
-				Activity: &batchpb.BatchOperationUpdateActivityOptions_Type{Type: "activity-type"},
-				ActivityOptions: &activitypb.ActivityOptions{
-					ScheduleToCloseTimeout: durationpb.New(1 * time.Second),
-				},
-				RestoreOriginal: true,
-			},
-		},
+		UpdateActivityOptionsOperation: batchpb.BatchOperationUpdateActivityOptions_builder{
+			Type: proto.String("activity-type"),
+			ActivityOptions: activitypb.ActivityOptions_builder{
+				ScheduleToCloseTimeout: durationpb.New(1 * time.Second),
+			}.Build(),
+			RestoreOriginal: true,
+		}.Build(),
 		VisibilityQuery: fmt.Sprintf("WorkflowType='%s'", "WorkflowFunc"),
 		JobId:           uuid.NewString(),
 		Reason:          "test",
-	})
+	}.Build())
 	s.Error(err)
 	s.Equal(codes.InvalidArgument, serviceerror.ToStatus(err).Code())
 	s.ErrorAs(err, new(*serviceerror.InvalidArgument))

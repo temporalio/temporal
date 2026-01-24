@@ -75,11 +75,11 @@ func (s *eventsCacheSuite) TestEventsCacheHitSuccess() {
 	runID := "events-cache-hit-success-run-id"
 	eventID := int64(23)
 	shardID := int32(10)
-	event := &historypb.HistoryEvent{
-		EventId:    eventID,
-		EventType:  enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED,
-		Attributes: &historypb.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &historypb.ActivityTaskStartedEventAttributes{}},
-	}
+	event := historypb.HistoryEvent_builder{
+		EventId:                            eventID,
+		EventType:                          enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED,
+		ActivityTaskStartedEventAttributes: &historypb.ActivityTaskStartedEventAttributes{},
+	}.Build()
 
 	s.cache.PutEvent(
 		EventKey{namespaceID, workflowID, runID, eventID, common.EmptyVersion},
@@ -97,36 +97,36 @@ func (s *eventsCacheSuite) TestEventsCacheMissMultiEventsBatchV2Success() {
 	namespaceID := namespace.ID("events-cache-miss-multi-events-batch-v2-success-namespace")
 	workflowID := "events-cache-miss-multi-events-batch-v2-success-workflow-id"
 	runID := "events-cache-miss-multi-events-batch-v2-success-run-id"
-	event1 := &historypb.HistoryEvent{
-		EventId:    11,
-		EventType:  enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
-		Attributes: &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{}},
-	}
-	event2 := &historypb.HistoryEvent{
-		EventId:    12,
-		EventType:  enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
-		Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{}},
-	}
-	event3 := &historypb.HistoryEvent{
-		EventId:    13,
-		EventType:  enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
-		Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{}},
-	}
-	event4 := &historypb.HistoryEvent{
-		EventId:    14,
-		EventType:  enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
-		Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{}},
-	}
-	event5 := &historypb.HistoryEvent{
-		EventId:    15,
-		EventType:  enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
-		Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{}},
-	}
-	event6 := &historypb.HistoryEvent{
-		EventId:    16,
-		EventType:  enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
-		Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{}},
-	}
+	event1 := historypb.HistoryEvent_builder{
+		EventId:                              11,
+		EventType:                            enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
+		WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{},
+	}.Build()
+	event2 := historypb.HistoryEvent_builder{
+		EventId:                              12,
+		EventType:                            enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
+		ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{},
+	}.Build()
+	event3 := historypb.HistoryEvent_builder{
+		EventId:                              13,
+		EventType:                            enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
+		ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{},
+	}.Build()
+	event4 := historypb.HistoryEvent_builder{
+		EventId:                              14,
+		EventType:                            enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
+		ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{},
+	}.Build()
+	event5 := historypb.HistoryEvent_builder{
+		EventId:                              15,
+		EventType:                            enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
+		ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{},
+	}.Build()
+	event6 := historypb.HistoryEvent_builder{
+		EventId:                              16,
+		EventType:                            enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
+		ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{},
+	}.Build()
 
 	shardID := int32(10)
 	s.mockExecutionManager.EXPECT().ReadHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
@@ -182,16 +182,16 @@ func (s *eventsCacheSuite) TestEventsCacheDisableSuccess() {
 	namespaceID := namespace.ID("events-cache-disable-success-namespace")
 	workflowID := "events-cache-disable-success-workflow-id"
 	runID := "events-cache-disable-success-run-id"
-	event1 := &historypb.HistoryEvent{
-		EventId:    23,
-		EventType:  enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED,
-		Attributes: &historypb.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &historypb.ActivityTaskStartedEventAttributes{}},
-	}
-	event2 := &historypb.HistoryEvent{
-		EventId:    32,
-		EventType:  enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED,
-		Attributes: &historypb.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &historypb.ActivityTaskStartedEventAttributes{}},
-	}
+	event1 := historypb.HistoryEvent_builder{
+		EventId:                            23,
+		EventType:                          enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED,
+		ActivityTaskStartedEventAttributes: &historypb.ActivityTaskStartedEventAttributes{},
+	}.Build()
+	event2 := historypb.HistoryEvent_builder{
+		EventId:                            32,
+		EventType:                          enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED,
+		ActivityTaskStartedEventAttributes: &historypb.ActivityTaskStartedEventAttributes{},
+	}.Build()
 
 	shardID := int32(10)
 	s.mockExecutionManager.EXPECT().ReadHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
@@ -229,10 +229,10 @@ func (s *eventsCacheSuite) TestEventsCacheGetCachesResult() {
 	branchToken := []byte("store_token")
 
 	shardID := int32(10)
-	event1 := &historypb.HistoryEvent{
+	event1 := historypb.HistoryEvent_builder{
 		EventId:   14,
 		EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED,
-	}
+	}.Build()
 	s.mockExecutionManager.EXPECT().ReadHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,
 		MinEventID:    int64(11),
@@ -266,10 +266,10 @@ func (s *eventsCacheSuite) TestEventsCacheInvalidKey() {
 	branchToken := []byte("store_token")
 
 	shardID := int32(10)
-	event1 := &historypb.HistoryEvent{
+	event1 := historypb.HistoryEvent_builder{
 		EventId:   14,
 		EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED,
-	}
+	}.Build()
 	s.mockExecutionManager.EXPECT().ReadHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,
 		MinEventID:    int64(11),
@@ -283,7 +283,7 @@ func (s *eventsCacheSuite) TestEventsCacheInvalidKey() {
 	}, nil).Times(2) // will be called twice since the key is invalid
 
 	s.cache.PutEvent(
-		EventKey{namespaceID, workflowID, runID, event1.EventId, common.EmptyVersion},
+		EventKey{namespaceID, workflowID, runID, event1.GetEventId(), common.EmptyVersion},
 		event1)
 
 	gotEvent1, _ := s.cache.GetEvent(

@@ -97,22 +97,22 @@ func newOperationContext(options contextOptions) *operationContext {
 		activeClusterName = cluster.TestAlternativeClusterName
 	}
 	oc.namespace = namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{
+		persistencespb.NamespaceInfo_builder{
 			Id:    uuid.NewString(),
 			Name:  oc.namespaceName,
 			State: options.namespaceState,
-		},
-		&persistencespb.NamespaceConfig{
+		}.Build(),
+		persistencespb.NamespaceConfig_builder{
 			Retention:                    timestamp.DurationFromDays(1),
 			CustomSearchAttributeAliases: make(map[string]string),
-		},
-		&persistencespb.NamespaceReplicationConfig{
+		}.Build(),
+		persistencespb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: activeClusterName,
 			Clusters: []string{
 				cluster.TestCurrentClusterName,
 				cluster.TestAlternativeClusterName,
 			},
-		},
+		}.Build(),
 		1,
 	)
 
@@ -366,11 +366,11 @@ func TestNexusInterceptRequest_HeadersSanitization(t *testing.T) {
 	}
 	header := util.CloneMapNonNil(initialHeader)
 	ctx = oc.augmentContext(ctx, header)
-	request := &matchingservice.DispatchNexusTaskRequest{
-		Request: &nexuspb.Request{Header: header},
-	}
+	request := matchingservice.DispatchNexusTaskRequest_builder{
+		Request: nexuspb.Request_builder{Header: header}.Build(),
+	}.Build()
 	err = oc.interceptRequest(ctx, request, header)
 	require.NoError(t, err)
 	require.Equal(t, initialHeader, header)
-	require.Equal(t, map[string]string{"ok-header": "ok"}, request.Request.Header)
+	require.Equal(t, map[string]string{"ok-header": "ok"}, request.GetRequest().GetHeader())
 }

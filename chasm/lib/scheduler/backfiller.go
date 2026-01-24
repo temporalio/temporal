@@ -35,10 +35,10 @@ func addBackfiller(
 ) *Backfiller {
 	id := uuid.NewString()
 	backfiller := &Backfiller{
-		BackfillerState: &schedulerpb.BackfillerState{
+		BackfillerState: schedulerpb.BackfillerState_builder{
 			BackfillId:        id,
 			LastProcessedTime: timestamppb.New(ctx.Now(scheduler)),
-		},
+		}.Build(),
 	}
 
 	if scheduler.Backfillers == nil {

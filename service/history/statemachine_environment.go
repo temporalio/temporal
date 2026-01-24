@@ -79,10 +79,10 @@ func getWorkflowExecutionContext(
 	}
 
 	namespaceID := namespace.ID(key.GetNamespaceID())
-	execution := &commonpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution_builder{
 		WorkflowId: key.GetWorkflowID(),
 		RunId:      key.GetRunID(),
-	}
+	}.Build()
 	// workflowCache will automatically use short context timeout when
 	// locking workflow for all background calls, we don't need a separate context here
 	weContext, release, err := workflowCache.GetOrCreateChasmExecution(
@@ -231,11 +231,11 @@ func (e *stateMachineEnvironment) validateStateMachineRef(
 		return err
 	}
 
-	if ref.StateMachineRef.MutableStateVersionedTransition == nil ||
-		ref.StateMachineRef.MachineInitialVersionedTransition.TransitionCount == 0 ||
-		(ref.StateMachineRef.MachineLastUpdateVersionedTransition != nil &&
-			ref.StateMachineRef.MachineLastUpdateVersionedTransition.TransitionCount == 0) ||
-		len(ms.GetExecutionInfo().TransitionHistory) == 0 {
+	if !ref.StateMachineRef.HasMutableStateVersionedTransition() ||
+		ref.StateMachineRef.GetMachineInitialVersionedTransition().GetTransitionCount() == 0 ||
+		(ref.StateMachineRef.HasMachineLastUpdateVersionedTransition() &&
+			ref.StateMachineRef.GetMachineLastUpdateVersionedTransition().GetTransitionCount() == 0) ||
+		len(ms.GetExecutionInfo().GetTransitionHistory()) == 0 {
 		// Transtion history was disabled when the ref is generated,
 		// fallback to the old validation logic.
 		return e.validateStateMachineRefWithoutTransitionHistory(ms, ref, potentialStaleState)
@@ -243,7 +243,7 @@ func (e *stateMachineEnvironment) validateStateMachineRef(
 
 	err := transitionhistory.StalenessCheck(
 		ms.GetExecutionInfo().GetTransitionHistory(),
-		ref.StateMachineRef.MutableStateVersionedTransition,
+		ref.StateMachineRef.GetMutableStateVersionedTransition(),
 	)
 	if err != nil {
 		return err
@@ -256,14 +256,14 @@ func (e *stateMachineEnvironment) validateStateMachineRef(
 		return fmt.Errorf("%w: %w", serviceerror.NewInternal("node lookup failed"), err)
 	}
 
-	if node.InternalRepr().GetInitialVersionedTransition().TransitionCount == 0 {
+	if node.InternalRepr().GetInitialVersionedTransition().GetTransitionCount() == 0 {
 		// transition history was disabled after the ref was generated and mutable state got rebuilt.
 		// fallback to the old validation logic.
 		return e.validateStateMachineRefWithoutTransitionHistory(ms, ref, potentialStaleState)
 	}
 
 	if transitionhistory.Compare(
-		ref.StateMachineRef.MachineInitialVersionedTransition,
+		ref.StateMachineRef.GetMachineInitialVersionedTransition(),
 		node.InternalRepr().GetInitialVersionedTransition(),
 	) != 0 {
 		return fmt.Errorf("%w: initial versioned transition mismatch", consts.ErrStaleReference)
@@ -309,8 +309,8 @@ func (e *stateMachineEnvironment) validateStateMachineRefWithoutTransitionHistor
 		return fmt.Errorf("%w: %w", serviceerror.NewInternal("node lookup failed"), err)
 	}
 
-	if node.InternalRepr().InitialVersionedTransition.NamespaceFailoverVersion !=
-		ref.StateMachineRef.MachineInitialVersionedTransition.NamespaceFailoverVersion {
+	if node.InternalRepr().GetInitialVersionedTransition().GetNamespaceFailoverVersion() !=
+		ref.StateMachineRef.GetMachineInitialVersionedTransition().GetNamespaceFailoverVersion() {
 		if potentialStaleState {
 			return fmt.Errorf("%w: state machine ref initial failover version mismatch", consts.ErrStaleState)
 		}
@@ -354,7 +354,7 @@ func (e *stateMachineEnvironment) validateNotZombieWorkflow(
 	// or not since zombie workflows are considered as not running but closed workflow
 	// can still be updated
 	if accessType == hsm.AccessWrite &&
-		ms.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
+		ms.GetExecutionState().GetState() == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
 		return consts.ErrWorkflowZombie
 	}
 	return nil
@@ -402,7 +402,7 @@ func (e *stateMachineEnvironment) Access(ctx context.Context, ref hsm.Ref, acces
 	}
 
 	// TODO: remove following code once EnableUpdateWorkflowModeIgnoreCurrent config is deprecated.
-	if ms.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+	if ms.GetExecutionState().GetState() == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		// Can't use UpdateWorkflowExecutionAsActive since it updates the current run, and we are operating on closed
 		// workflows.
 		return wfCtx.SubmitClosedWorkflowSnapshot(ctx, e.shardContext, historyi.TransactionPolicyActive)

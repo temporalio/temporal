@@ -181,12 +181,12 @@ func (m *mutableStateMatchEvaluator) evaluateRange(expr *sqlparser.RangeCond) (b
 }
 
 func (m *mutableStateMatchEvaluator) compareWorkflowType(workflowType string, operation string) (bool, error) {
-	existingWorkflowType := m.executionInfo.WorkflowTypeName
+	existingWorkflowType := m.executionInfo.GetWorkflowTypeName()
 	return compareQueryString(existingWorkflowType, workflowType, operation, workflowTypeNameColName)
 }
 
 func (m *mutableStateMatchEvaluator) compareWorkflowID(workflowID string, operation string) (bool, error) {
-	existingWorkflowId := m.executionInfo.WorkflowId
+	existingWorkflowId := m.executionInfo.GetWorkflowId()
 	return compareQueryString(workflowID, existingWorkflowId, operation, workflowIDColName)
 }
 
@@ -194,7 +194,7 @@ func (m *mutableStateMatchEvaluator) compareWorkflowStatus(status string, operat
 	if len(status) == 0 {
 		return false, NewMatcherError("workflow status cannot be empty")
 	}
-	msStatus := m.executionState.Status.String()
+	msStatus := m.executionState.GetStatus().String()
 	switch operation {
 	case sqlparser.EqualStr:
 		return msStatus == status, nil
@@ -210,7 +210,7 @@ func (m *mutableStateMatchEvaluator) compareStartTime(val string, operation stri
 	if err != nil {
 		return false, err
 	}
-	startTime := m.executionState.StartTime.AsTime()
+	startTime := m.executionState.GetStartTime().AsTime()
 	switch operation {
 	case sqlparser.GreaterEqualStr:
 		return startTime.Compare(expectedTime) >= 0, nil
@@ -230,7 +230,7 @@ func (m *mutableStateMatchEvaluator) compareStartTime(val string, operation stri
 }
 
 func (m *mutableStateMatchEvaluator) compareStartTimeBetween(fromTime time.Time, toTime time.Time) (bool, error) {
-	startTime := m.executionState.StartTime.AsTime()
+	startTime := m.executionState.GetStartTime().AsTime()
 	lc := startTime.Compare(fromTime)
 	rc := startTime.Compare(toTime)
 	return lc >= 0 && rc <= 0, nil

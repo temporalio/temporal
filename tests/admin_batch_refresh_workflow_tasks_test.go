@@ -74,19 +74,17 @@ func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_R
 	s.NoError(err)
 
 	// Start admin batch operation to refresh workflow tasks using executions list
-	resp, err := s.AdminClient().StartAdminBatchOperation(ctx, &adminservice.StartAdminBatchOperationRequest{
+	resp, err := s.AdminClient().StartAdminBatchOperation(ctx, adminservice.StartAdminBatchOperationRequest_builder{
 		Namespace: s.Namespace().String(),
 		JobId:     uuid.NewString(),
 		Reason:    "test refresh workflow tasks",
 		Identity:  "test-identity",
 		Executions: []*commonpb.WorkflowExecution{
-			{WorkflowId: workflowRun1.GetID(), RunId: workflowRun1.GetRunID()},
-			{WorkflowId: workflowRun2.GetID(), RunId: workflowRun2.GetRunID()},
+			commonpb.WorkflowExecution_builder{WorkflowId: workflowRun1.GetID(), RunId: workflowRun1.GetRunID()}.Build(),
+			commonpb.WorkflowExecution_builder{WorkflowId: workflowRun2.GetID(), RunId: workflowRun2.GetRunID()}.Build(),
 		},
-		Operation: &adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation{
-			RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{},
-		},
-	})
+		RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{},
+	}.Build())
 	s.NoError(err)
 	s.NotNil(resp)
 }
@@ -110,25 +108,23 @@ func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_R
 
 	// Wait for workflows to be visible
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		resp, err := s.FrontendClient().CountWorkflowExecutions(ctx, &workflowservice.CountWorkflowExecutionsRequest{
+		resp, err := s.FrontendClient().CountWorkflowExecutions(ctx, workflowservice.CountWorkflowExecutionsRequest_builder{
 			Namespace: s.Namespace().String(),
 			Query:     "WorkflowType='simpleWorkflow'",
-		})
+		}.Build())
 		require.NoError(t, err)
 		require.GreaterOrEqual(t, resp.GetCount(), int64(2))
 	}, 10*time.Second, 500*time.Millisecond)
 
 	// Start admin batch operation using visibility query
-	resp, err := s.AdminClient().StartAdminBatchOperation(ctx, &adminservice.StartAdminBatchOperationRequest{
-		Namespace:       s.Namespace().String(),
-		VisibilityQuery: "WorkflowType='simpleWorkflow'",
-		JobId:           uuid.NewString(),
-		Reason:          "test refresh workflow tasks with query",
-		Identity:        "test-identity",
-		Operation: &adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation{
-			RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{},
-		},
-	})
+	resp, err := s.AdminClient().StartAdminBatchOperation(ctx, adminservice.StartAdminBatchOperationRequest_builder{
+		Namespace:             s.Namespace().String(),
+		VisibilityQuery:       "WorkflowType='simpleWorkflow'",
+		JobId:                 uuid.NewString(),
+		Reason:                "test refresh workflow tasks with query",
+		Identity:              "test-identity",
+		RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{},
+	}.Build())
 	s.NoError(err)
 	s.NotNil(resp)
 }
@@ -138,14 +134,14 @@ func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_I
 	defer cancel()
 
 	// Request without operation should fail
-	_, err := s.AdminClient().StartAdminBatchOperation(ctx, &adminservice.StartAdminBatchOperationRequest{
+	_, err := s.AdminClient().StartAdminBatchOperation(ctx, adminservice.StartAdminBatchOperationRequest_builder{
 		Namespace: s.Namespace().String(),
 		JobId:     uuid.NewString(),
 		Reason:    "test",
 		Executions: []*commonpb.WorkflowExecution{
-			{WorkflowId: "test-wf-id", RunId: "test-run-id"},
+			commonpb.WorkflowExecution_builder{WorkflowId: "test-wf-id", RunId: "test-run-id"}.Build(),
 		},
-	})
+	}.Build())
 	s.Error(err)
 	s.Equal(codes.InvalidArgument, serviceerror.ToStatus(err).Code())
 }
@@ -155,17 +151,15 @@ func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_I
 	defer cancel()
 
 	// Request without namespace should fail
-	_, err := s.AdminClient().StartAdminBatchOperation(ctx, &adminservice.StartAdminBatchOperationRequest{
+	_, err := s.AdminClient().StartAdminBatchOperation(ctx, adminservice.StartAdminBatchOperationRequest_builder{
 		JobId:    uuid.NewString(),
 		Reason:   "test",
 		Identity: "test-identity",
 		Executions: []*commonpb.WorkflowExecution{
-			{WorkflowId: "test-wf-id", RunId: "test-run-id"},
+			commonpb.WorkflowExecution_builder{WorkflowId: "test-wf-id", RunId: "test-run-id"}.Build(),
 		},
-		Operation: &adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation{
-			RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{},
-		},
-	})
+		RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{},
+	}.Build())
 	s.Error(err)
 	s.Equal(codes.InvalidArgument, serviceerror.ToStatus(err).Code())
 }
@@ -175,17 +169,15 @@ func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_I
 	defer cancel()
 
 	// Request without job_id should fail
-	_, err := s.AdminClient().StartAdminBatchOperation(ctx, &adminservice.StartAdminBatchOperationRequest{
+	_, err := s.AdminClient().StartAdminBatchOperation(ctx, adminservice.StartAdminBatchOperationRequest_builder{
 		Namespace: s.Namespace().String(),
 		Reason:    "test",
 		Identity:  "test-identity",
 		Executions: []*commonpb.WorkflowExecution{
-			{WorkflowId: "test-wf-id", RunId: "test-run-id"},
+			commonpb.WorkflowExecution_builder{WorkflowId: "test-wf-id", RunId: "test-run-id"}.Build(),
 		},
-		Operation: &adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation{
-			RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{},
-		},
-	})
+		RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{},
+	}.Build())
 	s.Error(err)
 	s.Equal(codes.InvalidArgument, serviceerror.ToStatus(err).Code())
 }
@@ -195,15 +187,13 @@ func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_I
 	defer cancel()
 
 	// Request without executions or visibility_query should fail
-	_, err := s.AdminClient().StartAdminBatchOperation(ctx, &adminservice.StartAdminBatchOperationRequest{
-		Namespace: s.Namespace().String(),
-		JobId:     uuid.NewString(),
-		Reason:    "test",
-		Identity:  "test-identity",
-		Operation: &adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation{
-			RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{},
-		},
-	})
+	_, err := s.AdminClient().StartAdminBatchOperation(ctx, adminservice.StartAdminBatchOperationRequest_builder{
+		Namespace:             s.Namespace().String(),
+		JobId:                 uuid.NewString(),
+		Reason:                "test",
+		Identity:              "test-identity",
+		RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{},
+	}.Build())
 	s.Error(err)
 	s.Equal(codes.InvalidArgument, serviceerror.ToStatus(err).Code())
 }
@@ -228,34 +218,30 @@ func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_0
 	err = workflowRun2.Get(ctx, &out)
 	s.NoError(err)
 
-	_, err = s.FrontendClient().StartBatchOperation(ctx, &workflowservice.StartBatchOperationRequest{
+	_, err = s.FrontendClient().StartBatchOperation(ctx, workflowservice.StartBatchOperationRequest_builder{
 		Namespace: s.Namespace().String(),
 		Executions: []*commonpb.WorkflowExecution{
-			{WorkflowId: workflowRun1.GetID(), RunId: workflowRun1.GetRunID()},
+			commonpb.WorkflowExecution_builder{WorkflowId: workflowRun1.GetID(), RunId: workflowRun1.GetRunID()}.Build(),
 		},
 		JobId:  uuid.NewString(),
 		Reason: "test frontend batch",
-		Operation: &workflowservice.StartBatchOperationRequest_SignalOperation{
-			SignalOperation: &batchpb.BatchOperationSignal{
-				Signal:   "test-signal",
-				Input:    payloads.EncodeString("test-input"),
-				Identity: "test-identity",
-			},
-		},
-	})
+		SignalOperation: batchpb.BatchOperationSignal_builder{
+			Signal:   "test-signal",
+			Input:    payloads.EncodeString("test-input"),
+			Identity: "test-identity",
+		}.Build(),
+	}.Build())
 	s.NoError(err, "frontend batch operation should succeed")
 
-	_, err = s.AdminClient().StartAdminBatchOperation(ctx, &adminservice.StartAdminBatchOperationRequest{
+	_, err = s.AdminClient().StartAdminBatchOperation(ctx, adminservice.StartAdminBatchOperationRequest_builder{
 		Namespace: s.Namespace().String(),
 		Executions: []*commonpb.WorkflowExecution{
-			{WorkflowId: workflowRun2.GetID(), RunId: workflowRun2.GetRunID()},
+			commonpb.WorkflowExecution_builder{WorkflowId: workflowRun2.GetID(), RunId: workflowRun2.GetRunID()}.Build(),
 		},
-		JobId:    uuid.NewString(),
-		Reason:   "test admin batch",
-		Identity: "test-identity",
-		Operation: &adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation{
-			RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{},
-		},
-	})
+		JobId:                 uuid.NewString(),
+		Reason:                "test admin batch",
+		Identity:              "test-identity",
+		RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{},
+	}.Build())
 	s.NoError(err, "admin batch operation should succeed because it uses a separate limit")
 }

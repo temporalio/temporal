@@ -8,7 +8,6 @@ package callbackspb
 
 import (
 	reflect "reflect"
-	sync "sync"
 	unsafe "unsafe"
 
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -23,11 +22,10 @@ const (
 )
 
 type InvocationTask struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// The attempt number for this invocation.
-	Attempt       int32 `protobuf:"varint,1,opt,name=attempt,proto3" json:"attempt,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state              protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Attempt int32                  `protobuf:"varint,1,opt,name=attempt,proto3"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *InvocationTask) Reset() {
@@ -55,24 +53,37 @@ func (x *InvocationTask) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use InvocationTask.ProtoReflect.Descriptor instead.
-func (*InvocationTask) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_callback_proto_v1_tasks_proto_rawDescGZIP(), []int{0}
-}
-
 func (x *InvocationTask) GetAttempt() int32 {
 	if x != nil {
-		return x.Attempt
+		return x.xxx_hidden_Attempt
 	}
 	return 0
 }
 
-type BackoffTask struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
+func (x *InvocationTask) SetAttempt(v int32) {
+	x.xxx_hidden_Attempt = v
+}
+
+type InvocationTask_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
 	// The attempt number for this invocation.
-	Attempt       int32 `protobuf:"varint,1,opt,name=attempt,proto3" json:"attempt,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Attempt int32
+}
+
+func (b0 InvocationTask_builder) Build() *InvocationTask {
+	m0 := &InvocationTask{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Attempt = b.Attempt
+	return m0
+}
+
+type BackoffTask struct {
+	state              protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Attempt int32                  `protobuf:"varint,1,opt,name=attempt,proto3"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *BackoffTask) Reset() {
@@ -100,16 +111,30 @@ func (x *BackoffTask) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use BackoffTask.ProtoReflect.Descriptor instead.
-func (*BackoffTask) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_callback_proto_v1_tasks_proto_rawDescGZIP(), []int{1}
-}
-
 func (x *BackoffTask) GetAttempt() int32 {
 	if x != nil {
-		return x.Attempt
+		return x.xxx_hidden_Attempt
 	}
 	return 0
+}
+
+func (x *BackoffTask) SetAttempt(v int32) {
+	x.xxx_hidden_Attempt = v
+}
+
+type BackoffTask_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// The attempt number for this invocation.
+	Attempt int32
+}
+
+func (b0 BackoffTask_builder) Build() *BackoffTask {
+	m0 := &BackoffTask{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Attempt = b.Attempt
+	return m0
 }
 
 var File_temporal_server_chasm_lib_callback_proto_v1_tasks_proto protoreflect.FileDescriptor
@@ -121,18 +146,6 @@ const file_temporal_server_chasm_lib_callback_proto_v1_tasks_proto_rawDesc = "" 
 	"\aattempt\x18\x01 \x01(\x05R\aattempt\"'\n" +
 	"\vBackoffTask\x12\x18\n" +
 	"\aattempt\x18\x01 \x01(\x05R\aattemptBGZEgo.temporal.io/server/chasm/lib/callbacks/gen/callbackspb;callbackspbb\x06proto3"
-
-var (
-	file_temporal_server_chasm_lib_callback_proto_v1_tasks_proto_rawDescOnce sync.Once
-	file_temporal_server_chasm_lib_callback_proto_v1_tasks_proto_rawDescData []byte
-)
-
-func file_temporal_server_chasm_lib_callback_proto_v1_tasks_proto_rawDescGZIP() []byte {
-	file_temporal_server_chasm_lib_callback_proto_v1_tasks_proto_rawDescOnce.Do(func() {
-		file_temporal_server_chasm_lib_callback_proto_v1_tasks_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_chasm_lib_callback_proto_v1_tasks_proto_rawDesc), len(file_temporal_server_chasm_lib_callback_proto_v1_tasks_proto_rawDesc)))
-	})
-	return file_temporal_server_chasm_lib_callback_proto_v1_tasks_proto_rawDescData
-}
 
 var file_temporal_server_chasm_lib_callback_proto_v1_tasks_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
 var file_temporal_server_chasm_lib_callback_proto_v1_tasks_proto_goTypes = []any{

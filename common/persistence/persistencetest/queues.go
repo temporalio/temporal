@@ -70,10 +70,10 @@ func EnqueueMessage(
 	return queue.EnqueueMessage(ctx, &persistence.InternalEnqueueMessageRequest{
 		QueueType: queueType,
 		QueueName: queueName,
-		Blob: &commonpb.DataBlob{
+		Blob: commonpb.DataBlob_builder{
 			EncodingType: enumspb.EncodingType(params.EncodingType),
 			Data:         params.Data,
-		},
+		}.Build(),
 	})
 }
 

@@ -13,9 +13,9 @@ func GeneratePaginationTokenV2Request(
 	versionHistories *historyspb.VersionHistories,
 ) *tokenspb.RawHistoryContinuation {
 
-	req := request.Request
-	execution := req.Execution
-	return &tokenspb.RawHistoryContinuation{
+	req := request.GetRequest()
+	execution := req.GetExecution()
+	return tokenspb.RawHistoryContinuation_builder{
 		NamespaceId:       req.GetNamespaceId(),
 		WorkflowId:        execution.GetWorkflowId(),
 		RunId:             execution.GetRunId(),
@@ -25,7 +25,7 @@ func GeneratePaginationTokenV2Request(
 		EndEventVersion:   req.GetEndEventVersion(),
 		VersionHistories:  versionHistories,
 		PersistenceToken:  nil, // this is the initialized value
-	}
+	}.Build()
 }
 
 // NOTE: DO NOT MODIFY UNLESS ALSO APPLIED TO ./service/frontend/token_deprecated.go
@@ -34,8 +34,8 @@ func ValidatePaginationTokenV2Request(
 	token *tokenspb.RawHistoryContinuation,
 ) error {
 
-	req := request.Request
-	execution := req.Execution
+	req := request.GetRequest()
+	execution := req.GetExecution()
 	if req.GetNamespaceId() != token.GetNamespaceId() ||
 		execution.GetWorkflowId() != token.GetWorkflowId() ||
 		execution.GetRunId() != token.GetRunId() ||
@@ -83,9 +83,9 @@ func GeneratePaginationToken(
 	versionHistories *historyspb.VersionHistories,
 ) *tokenspb.RawHistoryContinuation {
 
-	req := request.Request
-	execution := req.Execution
-	return &tokenspb.RawHistoryContinuation{
+	req := request.GetRequest()
+	execution := req.GetExecution()
+	return tokenspb.RawHistoryContinuation_builder{
 		NamespaceId:       req.GetNamespaceId(),
 		WorkflowId:        execution.GetWorkflowId(),
 		RunId:             execution.GetRunId(),
@@ -95,7 +95,7 @@ func GeneratePaginationToken(
 		EndEventVersion:   req.GetEndEventVersion(),
 		VersionHistories:  versionHistories,
 		PersistenceToken:  nil, // this is the initialized value
-	}
+	}.Build()
 }
 
 func ValidatePaginationToken(
@@ -103,8 +103,8 @@ func ValidatePaginationToken(
 	token *tokenspb.RawHistoryContinuation,
 ) error {
 
-	req := request.Request
-	execution := req.Execution
+	req := request.GetRequest()
+	execution := req.GetExecution()
 	if req.GetNamespaceId() != token.GetNamespaceId() ||
 		execution.GetWorkflowId() != token.GetWorkflowId() ||
 		execution.GetRunId() != token.GetRunId() ||

@@ -125,7 +125,7 @@ func getTargetCluster(c *cli.Context, clientFactory ClientFactory) (string, DLQS
 				err,
 			)
 		}
-		targetCluster = cluster.ClusterName
+		targetCluster = cluster.GetClusterName()
 	}
 	return targetCluster, nil, nil
 }

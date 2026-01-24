@@ -55,9 +55,9 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) dispatchForNewWorkflow(
 
 	targetExecutionInfo := targetWorkflow.GetMutableState().GetExecutionInfo()
 	targetExecutionState := targetWorkflow.GetMutableState().GetExecutionState()
-	namespaceID := namespace.ID(targetExecutionInfo.NamespaceId)
-	workflowID := targetExecutionInfo.WorkflowId
-	targetRunID := targetExecutionState.RunId
+	namespaceID := namespace.ID(targetExecutionInfo.GetNamespaceId())
+	workflowID := targetExecutionInfo.GetWorkflowId()
+	targetRunID := targetExecutionState.GetRunId()
 
 	// we need to check the current workflow execution
 	currentRunID, err := r.transactionMgr.GetCurrentWorkflowRunID(
@@ -226,9 +226,9 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
 	} else if len(eventReapplyCandidates) != 0 {
 		eventsToApply := []*persistence.WorkflowEvents{
 			{
-				NamespaceID: ms.GetExecutionInfo().NamespaceId,
-				WorkflowID:  ms.GetExecutionInfo().WorkflowId,
-				RunID:       ms.GetExecutionState().RunId,
+				NamespaceID: ms.GetExecutionInfo().GetNamespaceId(),
+				WorkflowID:  ms.GetExecutionInfo().GetWorkflowId(),
+				RunID:       ms.GetExecutionState().GetRunId(),
 				Events:      eventReapplyCandidates,
 			},
 		}

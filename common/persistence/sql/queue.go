@@ -121,8 +121,8 @@ func (q *sqlQueue) UpdateAckLevel(
 	err := q.txExecute(ctx, "UpdateAckLevel", func(tx sqlplugin.Tx) error {
 		result, err := tx.UpdateQueueMetadata(ctx, &sqlplugin.QueueMetadataRow{
 			QueueType:    q.queueType,
-			Data:         metadata.Blob.Data,
-			DataEncoding: metadata.Blob.EncodingType.String(),
+			Data:         metadata.Blob.GetData(),
+			DataEncoding: metadata.Blob.GetEncodingType().String(),
 			Version:      metadata.Version,
 		})
 		if err != nil {
@@ -270,8 +270,8 @@ func (q *sqlQueue) UpdateDLQAckLevel(
 
 		result, err := tx.UpdateQueueMetadata(ctx, &sqlplugin.QueueMetadataRow{
 			QueueType:    q.getDLQTypeFromQueueType(),
-			Data:         metadata.Blob.Data,
-			DataEncoding: metadata.Blob.EncodingType.String(),
+			Data:         metadata.Blob.GetData(),
+			DataEncoding: metadata.Blob.GetEncodingType().String(),
 		})
 		if err != nil {
 			return serviceerror.NewUnavailablef("UpdateDLQAckLevel operation failed. Error %v", err)
@@ -325,8 +325,8 @@ func (q *sqlQueue) initializeQueueMetadata(
 	case sql.ErrNoRows:
 		result, err := q.DB.InsertIntoQueueMetadata(ctx, &sqlplugin.QueueMetadataRow{
 			QueueType:    q.queueType,
-			Data:         blob.Data,
-			DataEncoding: blob.EncodingType.String(),
+			Data:         blob.GetData(),
+			DataEncoding: blob.GetEncodingType().String(),
 		})
 		if err != nil {
 			return serviceerror.NewUnavailablef("initializeQueueMetadata operation failed. Error %v", err)
@@ -357,8 +357,8 @@ func (q *sqlQueue) initializeDLQMetadata(
 	case sql.ErrNoRows:
 		result, err := q.DB.InsertIntoQueueMetadata(ctx, &sqlplugin.QueueMetadataRow{
 			QueueType:    q.getDLQTypeFromQueueType(),
-			Data:         blob.Data,
-			DataEncoding: blob.EncodingType.String(),
+			Data:         blob.GetData(),
+			DataEncoding: blob.GetEncodingType().String(),
 		})
 		if err != nil {
 			return serviceerror.NewUnavailablef("initializeDLQMetadata operation failed. Error %v", err)
@@ -385,7 +385,7 @@ func newQueueRow(
 	return sqlplugin.QueueMessageRow{
 		QueueType:       queueType,
 		MessageID:       messageID,
-		MessagePayload:  blob.Data,
-		MessageEncoding: blob.EncodingType.String(),
+		MessagePayload:  blob.GetData(),
+		MessageEncoding: blob.GetEncodingType().String(),
 	}
 }

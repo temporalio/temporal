@@ -20,20 +20,20 @@ func Invoke(
 	executionManager persistence.ExecutionManager,
 	request *historyservice.ListTasksRequest,
 ) (*historyservice.ListTasksResponse, error) {
-	adminRequest := request.Request
-	taskCategory, ok := taskCategoryRegistry.GetCategoryByID(int(adminRequest.Category))
+	adminRequest := request.GetRequest()
+	taskCategory, ok := taskCategoryRegistry.GetCategoryByID(int(adminRequest.GetCategory()))
 	if !ok {
 		return nil, &serviceerror.InvalidArgument{
-			Message: fmt.Sprintf("unknown task category: %v", adminRequest.Category),
+			Message: fmt.Sprintf("unknown task category: %v", adminRequest.GetCategory()),
 		}
 	}
 
 	taskRange := adminRequest.GetTaskRange()
 	var minTaskKey, maxTaskKey tasks.Key
-	if taskRange.InclusiveMinTaskKey != nil {
+	if taskRange.HasInclusiveMinTaskKey() {
 		minTaskKey = tasks.NewKey(
-			timestamp.TimeValue(taskRange.InclusiveMinTaskKey.FireTime),
-			taskRange.InclusiveMinTaskKey.TaskId,
+			timestamp.TimeValue(taskRange.GetInclusiveMinTaskKey().GetFireTime()),
+			taskRange.GetInclusiveMinTaskKey().GetTaskId(),
 		)
 		if err := tasks.ValidateKey(minTaskKey); err != nil {
 			return nil, &serviceerror.InvalidArgument{
@@ -41,10 +41,10 @@ func Invoke(
 			}
 		}
 	}
-	if taskRange.ExclusiveMaxTaskKey != nil {
+	if taskRange.HasExclusiveMaxTaskKey() {
 		maxTaskKey = tasks.NewKey(
-			timestamp.TimeValue(taskRange.ExclusiveMaxTaskKey.FireTime),
-			taskRange.ExclusiveMaxTaskKey.TaskId,
+			timestamp.TimeValue(taskRange.GetExclusiveMaxTaskKey().GetFireTime()),
+			taskRange.GetExclusiveMaxTaskKey().GetTaskId(),
 		)
 		if err := tasks.ValidateKey(maxTaskKey); err != nil {
 			return nil, &serviceerror.InvalidArgument{
@@ -54,23 +54,23 @@ func Invoke(
 	}
 
 	resp, err := executionManager.GetHistoryTasks(ctx, &persistence.GetHistoryTasksRequest{
-		ShardID:             adminRequest.ShardId,
+		ShardID:             adminRequest.GetShardId(),
 		TaskCategory:        taskCategory,
 		InclusiveMinTaskKey: minTaskKey,
 		ExclusiveMaxTaskKey: maxTaskKey,
-		BatchSize:           int(adminRequest.BatchSize),
-		NextPageToken:       adminRequest.NextPageToken,
+		BatchSize:           int(adminRequest.GetBatchSize()),
+		NextPageToken:       adminRequest.GetNextPageToken(),
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	return &historyservice.ListTasksResponse{
-		Response: &adminservice.ListHistoryTasksResponse{
+	return historyservice.ListTasksResponse_builder{
+		Response: adminservice.ListHistoryTasksResponse_builder{
 			Tasks:         toAdminTask(resp.Tasks),
 			NextPageToken: resp.NextPageToken,
-		},
-	}, nil
+		}.Build(),
+	}.Build(), nil
 }
 
 func toAdminTask(historyTasks []tasks.Task) []*adminservice.Task {
@@ -81,7 +81,7 @@ func toAdminTask(historyTasks []tasks.Task) []*adminservice.Task {
 			historyTaskVersion = taskWithVersion.GetVersion()
 		}
 
-		adminTasks = append(adminTasks, &adminservice.Task{
+		adminTasks = append(adminTasks, adminservice.Task_builder{
 			NamespaceId: historyTask.GetNamespaceID(),
 			WorkflowId:  historyTask.GetWorkflowID(),
 			RunId:       historyTask.GetRunID(),
@@ -89,7 +89,7 @@ func toAdminTask(historyTasks []tasks.Task) []*adminservice.Task {
 			TaskType:    historyTask.GetType(),
 			FireTime:    timestamppb.New(historyTask.GetKey().FireTime),
 			Version:     historyTaskVersion,
-		})
+		}.Build())
 	}
 	return adminTasks
 }

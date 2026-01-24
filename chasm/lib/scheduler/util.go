@@ -33,9 +33,9 @@ func generateRequestID(scheduler *Scheduler, backfillID string, nominal, actual 
 	return fmt.Sprintf(
 		"sched-%s-%s-%s-%d-%d-%d",
 		backfillID,
-		scheduler.NamespaceId,
-		scheduler.ScheduleId,
-		scheduler.ConflictToken,
+		scheduler.GetNamespaceId(),
+		scheduler.GetScheduleId(),
+		scheduler.GetConflictToken(),
 		nominal.UnixMilli(),
 		actual.UnixMilli(),
 	)
@@ -45,8 +45,8 @@ func generateRequestID(scheduler *Scheduler, backfillID string, nominal, actual 
 func newTaggedLogger(baseLogger log.Logger, scheduler *Scheduler) log.Logger {
 	return log.With(
 		baseLogger,
-		tag.WorkflowNamespace(scheduler.Namespace),
-		tag.ScheduleID(scheduler.ScheduleId),
+		tag.WorkflowNamespace(scheduler.GetNamespace()),
+		tag.ScheduleID(scheduler.GetScheduleId()),
 	)
 }
 

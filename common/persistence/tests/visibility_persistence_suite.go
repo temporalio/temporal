@@ -823,11 +823,11 @@ func (s *VisibilityPersistenceSuite) TestUpsertWorkflowExecution() {
 					ExecutionTime:    time.Time{},
 					TaskID:           0,
 					Memo:             nil,
-					SearchAttributes: &commonpb.SearchAttributes{
+					SearchAttributes: commonpb.SearchAttributes_builder{
 						IndexedFields: map[string]*commonpb.Payload{
 							sadefs.TemporalChangeVersion: temporalChangeVersionPayload,
 						},
-					},
+					}.Build(),
 					Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 				},
 			},
@@ -885,7 +885,7 @@ func (s *VisibilityPersistenceSuite) TestGetWorkflowExecution() {
 			s.ctx,
 			&manager.GetWorkflowExecutionRequest{
 				NamespaceID: testNamespaceUUID,
-				RunID:       req.Execution.RunId,
+				RunID:       req.Execution.GetRunId(),
 			},
 		)
 		s.NoError(err)
@@ -904,7 +904,7 @@ func (s *VisibilityPersistenceSuite) TestGetWorkflowExecution() {
 			s.ctx,
 			&manager.GetWorkflowExecutionRequest{
 				NamespaceID: testNamespaceUUID,
-				RunID:       req.Execution.RunId,
+				RunID:       req.Execution.GetRunId(),
 			},
 		)
 		s.NoError(err)
@@ -1029,10 +1029,10 @@ func (s *VisibilityPersistenceSuite) TestCountGroupByWorkflowExecutions() {
 	s.Equal(int64(5), resp.Count)
 	s.Equal(
 		[]*workflowservice.CountWorkflowExecutionsResponse_AggregationGroup{
-			{
+			workflowservice.CountWorkflowExecutionsResponse_AggregationGroup_builder{
 				GroupValues: []*commonpb.Payload{runningStatusPayload},
 				Count:       int64(5),
-			},
+			}.Build(),
 		},
 		resp.Groups,
 	)
@@ -1114,14 +1114,14 @@ func (s *VisibilityPersistenceSuite) createOpenWorkflowRecord(
 	taskQueue string,
 ) *manager.RecordWorkflowExecutionStartedRequest {
 	s.taskID++
-	workflowExecution := commonpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution_builder{
 		WorkflowId: workflowID,
 		RunId:      uuid.NewString(),
-	}
+	}.Build()
 	startReq := &manager.RecordWorkflowExecutionStartedRequest{
 		VisibilityRequestBase: &manager.VisibilityRequestBase{
 			NamespaceID:      namespaceID,
-			Execution:        &workflowExecution,
+			Execution:        workflowExecution,
 			WorkflowTypeName: workflowType,
 			StartTime:        startTime,
 			ExecutionTime:    executionTime,
@@ -1137,22 +1137,22 @@ func (s *VisibilityPersistenceSuite) createOpenWorkflowRecord(
 
 func (s *VisibilityPersistenceSuite) assertClosedExecutionEquals(
 	req *manager.RecordWorkflowExecutionClosedRequest, resp *workflowpb.WorkflowExecutionInfo) {
-	s.Equal(req.Execution.RunId, resp.Execution.RunId)
-	s.Equal(req.Execution.WorkflowId, resp.Execution.WorkflowId)
+	s.Equal(req.Execution.GetRunId(), resp.GetExecution().GetRunId())
+	s.Equal(req.Execution.GetWorkflowId(), resp.GetExecution().GetWorkflowId())
 	s.Equal(req.WorkflowTypeName, resp.GetType().GetName())
 	s.Equal(persistence.UnixMilliseconds(req.StartTime), persistence.UnixMilliseconds(timestamp.TimeValue(resp.GetStartTime())))
 	s.Equal(persistence.UnixMilliseconds(req.CloseTime), persistence.UnixMilliseconds(timestamp.TimeValue(resp.GetCloseTime())))
 	s.Equal(req.Status, resp.GetStatus())
-	s.Equal(req.HistoryLength, resp.HistoryLength)
+	s.Equal(req.HistoryLength, resp.GetHistoryLength())
 }
 
 func (s *VisibilityPersistenceSuite) assertOpenExecutionEquals(
 	req *manager.RecordWorkflowExecutionStartedRequest, resp *workflowpb.WorkflowExecutionInfo) {
-	s.Equal(req.Execution.GetRunId(), resp.Execution.GetRunId())
-	s.Equal(req.Execution.WorkflowId, resp.Execution.WorkflowId)
+	s.Equal(req.Execution.GetRunId(), resp.GetExecution().GetRunId())
+	s.Equal(req.Execution.GetWorkflowId(), resp.GetExecution().GetWorkflowId())
 	s.Equal(req.WorkflowTypeName, resp.GetType().GetName())
 	s.Equal(persistence.UnixMilliseconds(req.StartTime), persistence.UnixMilliseconds(timestamp.TimeValue(resp.GetStartTime())))
-	s.Nil(resp.CloseTime)
-	s.Equal(resp.Status, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)
-	s.Zero(resp.HistoryLength)
+	s.Nil(resp.GetCloseTime())
+	s.Equal(resp.GetStatus(), enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)
+	s.Zero(resp.GetHistoryLength())
 }

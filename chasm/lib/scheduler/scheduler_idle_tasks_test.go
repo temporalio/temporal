@@ -58,7 +58,7 @@ func (s *idleTasksSuite) TestValidate_SchedulerNotIdle() {
 		scheduledTime:     now,
 		setupScheduler: func(sched *scheduler.Scheduler, ctx chasm.Context) {
 			// Make scheduler not idle by setting it as paused
-			sched.Schedule.State.Paused = true
+			sched.Schedule.GetState().SetPaused(true)
 		},
 		expectedValid: false,
 	})
@@ -109,15 +109,15 @@ func (s *idleTasksSuite) runValidateTestCase(c *idleValidateTestCase) {
 		Config: config,
 	})
 
-	task := &schedulerpb.SchedulerIdleTask{
+	task := schedulerpb.SchedulerIdleTask_builder{
 		IdleTimeTotal: durationpb.New(c.taskIdleTimeTotal),
-	}
+	}.Build()
 
 	scheduledTime := c.scheduledTime
 	if c.idleMatchesScheduledTime {
 		lastEventTime := scheduledTime.Add(-c.configIdleTime)
-		sched.Info.UpdateTime = timestamppb.New(lastEventTime)
-		sched.Info.CreateTime = timestamppb.New(lastEventTime)
+		sched.Info.SetUpdateTime(timestamppb.New(lastEventTime))
+		sched.Info.SetCreateTime(timestamppb.New(lastEventTime))
 	}
 
 	taskAttrs := chasm.TaskAttributes{

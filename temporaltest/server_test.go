@@ -263,12 +263,12 @@ func TestSearchAttributeRegistration(t *testing.T) {
 	testSearchAttr := "MySearchAttr"
 
 	// Create a search attribute
-	if _, err := ts.GetDefaultClient().OperatorService().AddSearchAttributes(ctx, &operatorservice.AddSearchAttributesRequest{
+	if _, err := ts.GetDefaultClient().OperatorService().AddSearchAttributes(ctx, operatorservice.AddSearchAttributesRequest_builder{
 		SearchAttributes: map[string]enumspb.IndexedValueType{
 			testSearchAttr: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		},
 		Namespace: ts.GetDefaultNamespace(),
-	}); err != nil {
+	}.Build()); err != nil {
 		t.Fatal(err)
 	}
 	// Confirm search attribute is registered immediately
@@ -307,10 +307,10 @@ func TestSearchAttributeRegistration(t *testing.T) {
 	assert.Eventually(t, func() bool {
 		// Confirm workflow has search attribute and shows up in custom list query
 		listFilter := fmt.Sprintf("%s=%q", testSearchAttr, "foo")
-		workflowList, err := c.ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+		workflowList, err := c.ListWorkflow(ctx, workflowservice.ListWorkflowExecutionsRequest_builder{
 			Namespace: ts.GetDefaultNamespace(),
 			Query:     listFilter,
-		})
+		}.Build())
 		if err != nil {
 			t.Fatal(err)
 		}

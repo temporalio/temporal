@@ -174,10 +174,10 @@ func (m *managerImpl) SaveSearchAttributes(
 	}
 
 	clusterMetadata := clusterMetadataResponse.ClusterMetadata
-	if clusterMetadata.IndexSearchAttributes == nil {
-		clusterMetadata.IndexSearchAttributes = map[string]*persistencespb.IndexSearchAttributes{indexName: nil}
+	if clusterMetadata.GetIndexSearchAttributes() == nil {
+		clusterMetadata.SetIndexSearchAttributes(map[string]*persistencespb.IndexSearchAttributes{indexName: nil})
 	}
-	clusterMetadata.IndexSearchAttributes[indexName] = &persistencespb.IndexSearchAttributes{CustomSearchAttributes: newCustomSearchAttributes}
+	clusterMetadata.GetIndexSearchAttributes()[indexName] = persistencespb.IndexSearchAttributes_builder{CustomSearchAttributes: newCustomSearchAttributes}.Build()
 	_, err = m.clusterMetadataManager.SaveClusterMetadata(ctx, &persistence.SaveClusterMetadataRequest{
 		ClusterMetadata: clusterMetadata,
 		Version:         clusterMetadataResponse.Version,

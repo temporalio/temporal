@@ -41,29 +41,29 @@ func (s *WorkflowMemoTestSuite) TestStartWithMemo() {
 	tl := "functional-start-with-memo-test-taskqueue"
 	identity := "worker1"
 
-	memo := &commonpb.Memo{
+	memo := commonpb.Memo_builder{
 		Fields: map[string]*commonpb.Payload{
 			"Info": payload.EncodeString("memo-value"),
 		},
-	}
+	}.Build()
 
-	request := &workflowservice.StartWorkflowExecutionRequest{
+	request := workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
-		WorkflowType:        &commonpb.WorkflowType{Name: wt},
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		WorkflowType:        commonpb.WorkflowType_builder{Name: wt}.Build(),
+		TaskQueue:           taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 		Input:               nil,
 		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 		Memo:                memo,
-	}
+	}.Build()
 
 	fn := func() (RunIdGetter, error) {
 		return s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	}
-	s.startWithMemoHelper(fn, id, &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}, memo, `
+	s.startWithMemoHelper(fn, id, taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(), memo, `
   1 WorkflowExecutionStarted {"Memo":{"Fields":{"Info":{"Data":"\"memo-value\""}}}}
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
@@ -77,20 +77,20 @@ func (s *WorkflowMemoTestSuite) TestSignalWithStartWithMemo() {
 	tl := "functional-signal-with-start-with-memo-test-taskqueue"
 	identity := "worker1"
 
-	memo := &commonpb.Memo{
+	memo := commonpb.Memo_builder{
 		Fields: map[string]*commonpb.Payload{
 			"Info": payload.EncodeString("memo-value"),
 		},
-	}
+	}.Build()
 
 	signalName := "my signal"
 	signalInput := payloads.EncodeString("my signal input")
-	request := &workflowservice.SignalWithStartWorkflowExecutionRequest{
+	request := workflowservice.SignalWithStartWorkflowExecutionRequest_builder{
 		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
-		WorkflowType:        &commonpb.WorkflowType{Name: wt},
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		WorkflowType:        commonpb.WorkflowType_builder{Name: wt}.Build(),
+		TaskQueue:           taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 		Input:               nil,
 		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
@@ -98,12 +98,12 @@ func (s *WorkflowMemoTestSuite) TestSignalWithStartWithMemo() {
 		SignalInput:         signalInput,
 		Identity:            identity,
 		Memo:                memo,
-	}
+	}.Build()
 
 	fn := func() (RunIdGetter, error) {
 		return s.FrontendClient().SignalWithStartWorkflowExecution(testcore.NewContext(), request)
 	}
-	s.startWithMemoHelper(fn, id, &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}, memo, `
+	s.startWithMemoHelper(fn, id, taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(), memo, `
   1 WorkflowExecutionStarted {"Memo":{"Fields":{"Info":{"Data":"\"memo-value\""}}}}
   2 WorkflowExecutionSignaled
   3 WorkflowTaskScheduled
@@ -122,12 +122,12 @@ func (s *WorkflowMemoTestSuite) startWithMemoHelper(startFn startFunc, id string
 	s.Logger.Info("StartWorkflowExecution: response", tag.WorkflowRunID(we.GetRunId()))
 
 	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
-		return []*commandpb.Command{{
+		return []*commandpb.Command{commandpb.Command_builder{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+			CompleteWorkflowExecutionCommandAttributes: commandpb.CompleteWorkflowExecutionCommandAttributes_builder{
 				Result: payloads.EncodeString("Done"),
-			}},
-		}}, nil
+			}.Build(),
+		}.Build()}, nil
 	}
 
 	poller := &testcore.TaskPoller{
@@ -144,20 +144,20 @@ func (s *WorkflowMemoTestSuite) startWithMemoHelper(startFn startFunc, id string
 	var openExecutionInfo *workflowpb.WorkflowExecutionInfo
 	s.Eventually(
 		func() bool {
-			resp, err1 := s.FrontendClient().ListOpenWorkflowExecutions(testcore.NewContext(), &workflowservice.ListOpenWorkflowExecutionsRequest{
+			resp, err1 := s.FrontendClient().ListOpenWorkflowExecutions(testcore.NewContext(), workflowservice.ListOpenWorkflowExecutionsRequest_builder{
 				Namespace:       s.Namespace().String(),
 				MaximumPageSize: 100,
-				StartTimeFilter: &filterpb.StartTimeFilter{
+				StartTimeFilter: filterpb.StartTimeFilter_builder{
 					EarliestTime: nil,
 					LatestTime:   timestamppb.New(time.Now().UTC()),
-				},
-				Filters: &workflowservice.ListOpenWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
+				}.Build(),
+				ExecutionFilter: filterpb.WorkflowExecutionFilter_builder{
 					WorkflowId: id,
-				}},
-			})
+				}.Build(),
+			}.Build())
 			s.NoError(err1)
-			if len(resp.Executions) == 1 {
-				openExecutionInfo = resp.Executions[0]
+			if len(resp.GetExecutions()) == 1 {
+				openExecutionInfo = resp.GetExecutions()[0]
 				return true
 			}
 			s.Logger.Info("Open WorkflowExecution is not yet visible")
@@ -167,21 +167,21 @@ func (s *WorkflowMemoTestSuite) startWithMemoHelper(startFn startFunc, id string
 		100*time.Millisecond,
 	)
 	s.NotNil(openExecutionInfo)
-	s.ProtoEqual(memo, openExecutionInfo.Memo)
+	s.ProtoEqual(memo, openExecutionInfo.GetMemo())
 
-	execution := &commonpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution_builder{
 		WorkflowId: id,
 		RunId:      we.GetRunId(),
-	}
+	}.Build()
 
 	// verify DescribeWorkflowExecution result: workflow running
-	descRequest := &workflowservice.DescribeWorkflowExecutionRequest{
+	descRequest := workflowservice.DescribeWorkflowExecutionRequest_builder{
 		Namespace: s.Namespace().String(),
 		Execution: execution,
-	}
+	}.Build()
 	descResp, err := s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), descRequest)
 	s.NoError(err)
-	s.ProtoEqual(memo, descResp.WorkflowExecutionInfo.Memo)
+	s.ProtoEqual(memo, descResp.GetWorkflowExecutionInfo().GetMemo())
 
 	// make progress of workflow
 	_, err = poller.PollAndProcessWorkflowTask()
@@ -195,26 +195,26 @@ func (s *WorkflowMemoTestSuite) startWithMemoHelper(startFn startFunc, id string
 	// verify DescribeWorkflowExecution result: workflow closed, but close visibility task not completed
 	descResp, err = s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), descRequest)
 	s.NoError(err)
-	s.ProtoEqual(memo, descResp.WorkflowExecutionInfo.Memo)
+	s.ProtoEqual(memo, descResp.GetWorkflowExecutionInfo().GetMemo())
 
 	// verify closed visibility
 	var closedExecutionInfo *workflowpb.WorkflowExecutionInfo
 	s.Eventually(
 		func() bool {
-			resp, err1 := s.FrontendClient().ListClosedWorkflowExecutions(testcore.NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
+			resp, err1 := s.FrontendClient().ListClosedWorkflowExecutions(testcore.NewContext(), workflowservice.ListClosedWorkflowExecutionsRequest_builder{
 				Namespace:       s.Namespace().String(),
 				MaximumPageSize: 100,
-				StartTimeFilter: &filterpb.StartTimeFilter{
+				StartTimeFilter: filterpb.StartTimeFilter_builder{
 					EarliestTime: nil,
 					LatestTime:   timestamppb.New(time.Now().UTC()),
-				},
-				Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
+				}.Build(),
+				ExecutionFilter: filterpb.WorkflowExecutionFilter_builder{
 					WorkflowId: id,
-				}},
-			})
+				}.Build(),
+			}.Build())
 			s.NoError(err1)
-			if len(resp.Executions) == 1 {
-				closedExecutionInfo = resp.Executions[0]
+			if len(resp.GetExecutions()) == 1 {
+				closedExecutionInfo = resp.GetExecutions()[0]
 				return true
 			}
 			s.Logger.Info("Closed WorkflowExecution is not yet visible")
@@ -224,10 +224,10 @@ func (s *WorkflowMemoTestSuite) startWithMemoHelper(startFn startFunc, id string
 		100*time.Millisecond,
 	)
 	s.NotNil(closedExecutionInfo)
-	s.ProtoEqual(memo, closedExecutionInfo.Memo)
+	s.ProtoEqual(memo, closedExecutionInfo.GetMemo())
 
 	// verify DescribeWorkflowExecution result: workflow closed and close visibility task completed
 	descResp, err = s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), descRequest)
 	s.NoError(err)
-	s.ProtoEqual(memo, descResp.WorkflowExecutionInfo.Memo)
+	s.ProtoEqual(memo, descResp.GetWorkflowExecutionInfo().GetMemo())
 }

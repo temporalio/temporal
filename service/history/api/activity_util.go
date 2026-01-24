@@ -23,20 +23,20 @@ func SetActivityTaskRunID(
 	//  * RespondActivityTaskFailedById
 	//  * RespondActivityTaskCompletedById
 
-	if len(token.RunId) != 0 {
+	if len(token.GetRunId()) != 0 {
 		return nil
 	}
 
 	runID, err := workflowConsistencyChecker.GetCurrentWorkflowRunID(
 		ctx,
-		token.NamespaceId,
-		token.WorkflowId,
+		token.GetNamespaceId(),
+		token.GetWorkflowId(),
 		locks.PriorityHigh,
 	)
 	if err != nil {
 		return err
 	}
-	token.RunId = runID
+	token.SetRunId(runID)
 	return nil
 }
 
@@ -52,7 +52,7 @@ func GetActivityScheduledEventID(
 	if !ok {
 		return 0, serviceerror.NewNotFoundf("cannot find pending activity with ActivityID %s, check workflow execution history for more details", activityID)
 	}
-	return activityInfo.ScheduledEventId, nil
+	return activityInfo.GetScheduledEventId(), nil
 }
 
 func IsActivityTaskNotFoundForToken(
@@ -61,11 +61,11 @@ func IsActivityTaskNotFoundForToken(
 	isCompletedByID *bool,
 ) bool {
 	if isCompletedByID == nil || !*isCompletedByID {
-		if ai.StartedEventId == common.EmptyEventID {
+		if ai.GetStartedEventId() == common.EmptyEventID {
 			return true
 		}
 	}
-	if token.GetScheduledEventId() != common.EmptyEventID && token.Attempt != ai.Attempt {
+	if token.GetScheduledEventId() != common.EmptyEventID && token.GetAttempt() != ai.GetAttempt() {
 		return true
 	}
 	if token.GetStartVersion() != common.EmptyVersion && ai.GetStartVersion() != common.EmptyVersion {

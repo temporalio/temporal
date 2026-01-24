@@ -45,21 +45,21 @@ func TestInvoke(t *testing.T, manager persistence.HistoryTaskQueueManager) {
 		context.Background(),
 		manager,
 		tasks.NewDefaultTaskCategoryRegistry(),
-		&historyservice.GetDLQTasksRequest{
-			DlqKey: &commonspb.HistoryDLQKey{
+		historyservice.GetDLQTasksRequest_builder{
+			DlqKey: commonspb.HistoryDLQKey_builder{
 				TaskCategory:  int32(tasks.CategoryTransfer.ID()),
 				SourceCluster: sourceCluster,
 				TargetCluster: targetCluster,
-			},
+			}.Build(),
 			PageSize: 1,
-		},
+		}.Build(),
 	)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(res.DlqTasks))
-	assert.Equal(t, int64(persistence.FirstQueueMessageID), res.DlqTasks[0].Metadata.MessageId)
-	assert.Equal(t, 1, int(res.DlqTasks[0].Payload.ShardId))
+	require.Equal(t, 1, len(res.GetDlqTasks()))
+	assert.Equal(t, int64(persistence.FirstQueueMessageID), res.GetDlqTasks()[0].GetMetadata().GetMessageId())
+	assert.Equal(t, 1, int(res.GetDlqTasks()[0].GetPayload().GetShardId()))
 	serializer := serialization.NewSerializer()
-	outTask, err := serializer.DeserializeTask(tasks.CategoryTransfer, res.DlqTasks[0].Payload.Blob)
+	outTask, err := serializer.DeserializeTask(tasks.CategoryTransfer, res.GetDlqTasks()[0].GetPayload().GetBlob())
 	require.NoError(t, err)
 	assert.Equal(t, inTask, outTask)
 }

@@ -31,18 +31,18 @@ func ConvertFromPersistenceTaskKey(
 	key *persistencespb.TaskKey,
 ) tasks.Key {
 	return tasks.NewKey(
-		timestamp.TimeValue(key.FireTime),
-		key.TaskId,
+		timestamp.TimeValue(key.GetFireTime()),
+		key.GetTaskId(),
 	)
 }
 
 func ConvertToPersistenceTaskKey(
 	key tasks.Key,
 ) *persistencespb.TaskKey {
-	return &persistencespb.TaskKey{
+	return persistencespb.TaskKey_builder{
 		FireTime: timestamppb.New(key.FireTime),
 		TaskId:   key.TaskID,
-	}
+	}.Build()
 }
 
 // ReplicationReaderIDFromClusterShardID convert from cluster ID & shard ID to reader ID
@@ -69,12 +69,12 @@ func getMinTaskKey(
 	queueState *persistencespb.QueueState,
 ) *tasks.Key {
 	var minTaskKey *tasks.Key
-	if queueState.ExclusiveReaderHighWatermark != nil {
-		taskKey := ConvertFromPersistenceTaskKey(queueState.ExclusiveReaderHighWatermark)
+	if queueState.HasExclusiveReaderHighWatermark() {
+		taskKey := ConvertFromPersistenceTaskKey(queueState.GetExclusiveReaderHighWatermark())
 		minTaskKey = &taskKey
 	}
-	for _, readerState := range queueState.ReaderStates {
-		taskKey := ConvertFromPersistenceTaskKey(readerState.Scopes[0].Range.InclusiveMin)
+	for _, readerState := range queueState.GetReaderStates() {
+		taskKey := ConvertFromPersistenceTaskKey(readerState.GetScopes()[0].GetRange().GetInclusiveMin())
 		if minTaskKey == nil || taskKey.CompareTo(*minTaskKey) < 0 {
 			minTaskKey = &taskKey
 		}

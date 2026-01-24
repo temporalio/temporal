@@ -187,15 +187,15 @@ func (s *AddTasksSuite) TestAddTasks_Ok() {
 			blob, err := serialization.NewSerializer().SerializeTask(task)
 			s.NoError(err)
 			shardID := tasks.GetShardIDForTask(task, int(s.GetTestClusterConfig().HistoryConfig.NumHistoryShards))
-			request := &adminservice.AddTasksRequest{
+			request := adminservice.AddTasksRequest_builder{
 				ShardId: int32(shardID),
 				Tasks: []*adminservice.AddTasksRequest_Task{
-					{
+					adminservice.AddTasksRequest_Task_builder{
 						CategoryId: int32(task.GetCategory().ID()),
 						Blob:       blob,
-					},
+					}.Build(),
 				},
-			}
+			}.Build()
 			if tc.shouldCallAddTasks {
 				_, err = s.GetTestCluster().AdminClient().AddTasks(ctx, request)
 				s.NoError(err)
@@ -217,9 +217,9 @@ func (s *AddTasksSuite) TestAddTasks_Ok() {
 var ExampleShardEngineErr = errors.New("example shard engine error")
 
 func (s *AddTasksSuite) TestAddTasks_ErrGetShardByID() {
-	_, err := s.GetTestCluster().HistoryClient().AddTasks(context.Background(), &historyservice.AddTasksRequest{
+	_, err := s.GetTestCluster().HistoryClient().AddTasks(context.Background(), historyservice.AddTasksRequest_builder{
 		ShardId: 0,
-	})
+	}.Build())
 	s.Error(err)
 	s.Contains(strings.ToLower(err.Error()), "invalid shardid")
 }
@@ -229,9 +229,9 @@ func (s *AddTasksSuite) TestAddTasks_GetEngineErr() {
 		s.getEngineErr.Store(nil)
 	}()
 	s.getEngineErr.Store(&ExampleShardEngineErr)
-	_, err := s.GetTestCluster().HistoryClient().AddTasks(context.Background(), &historyservice.AddTasksRequest{
+	_, err := s.GetTestCluster().HistoryClient().AddTasks(context.Background(), historyservice.AddTasksRequest_builder{
 		ShardId: 1,
-	})
+	}.Build())
 	s.Error(err)
 	s.ErrorContains(err, (*s.getEngineErr.Load()).Error())
 }

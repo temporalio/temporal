@@ -216,7 +216,7 @@ func (m *activityMatchEvaluator) compareActivityId(activityId string, operation 
 }
 
 func (m *activityMatchEvaluator) compareActivityState(status string, operator string) (bool, error) {
-	if m.ai.Paused {
+	if m.ai.GetPaused() {
 		return compareQueryString(status, "Paused", operator, activityStateColName)
 	}
 
@@ -233,33 +233,33 @@ func (m *activityMatchEvaluator) compareActivityState(status string, operator st
 }
 
 func (m *activityMatchEvaluator) compareActivityTaskQueue(taskQueue string, operator string) (bool, error) {
-	existingTaskQueue := m.ai.TaskQueue
+	existingTaskQueue := m.ai.GetTaskQueue()
 	return compareQueryString(taskQueue, existingTaskQueue, operator, activityTaskQueueColName)
 }
 
 func (m *activityMatchEvaluator) compareActivityAttempts(attempts int, operator string) (bool, error) {
-	existingAttempts := m.ai.Attempt
+	existingAttempts := m.ai.GetAttempt()
 	return compareQueryInt(attempts, int(existingAttempts), operator, activityAttemptsColName)
 }
 
 func (m *activityMatchEvaluator) compareBackoffInterval(intervalInSec int, operator string) (bool, error) {
-	if m.ai.Attempt < 2 {
+	if m.ai.GetAttempt() < 2 {
 		// no backoff interval for first attempt
 		return false, nil
 	}
 
-	backoffIntervalSec := int(m.ai.ScheduledTime.AsTime().Sub(m.ai.LastAttemptCompleteTime.AsTime()).Seconds())
+	backoffIntervalSec := int(m.ai.GetScheduledTime().AsTime().Sub(m.ai.GetLastAttemptCompleteTime().AsTime()).Seconds())
 	return compareQueryInt(intervalInSec, backoffIntervalSec, operator, activityBackoffIntervalColName)
 }
 
 func (m *activityMatchEvaluator) compareLastFailure(val string, operator string) (bool, error) {
-	if m.ai.RetryLastFailure == nil || m.ai.RetryLastFailure.Message == "" {
+	if !m.ai.HasRetryLastFailure() || m.ai.GetRetryLastFailure().GetMessage() == "" {
 		return false, nil
 	}
 	if operator != "contains" {
 		return false, NewMatcherError("unsupported operator for LastFailure column: %s", operator)
 	}
-	return strings.Contains(m.ai.RetryLastFailure.Message, val), nil
+	return strings.Contains(m.ai.GetRetryLastFailure().GetMessage(), val), nil
 }
 
 func (m *activityMatchEvaluator) compareStartTime(val string, operation string) (bool, error) {
@@ -296,10 +296,10 @@ func (m *activityMatchEvaluator) compareStartTimeBetween(fromTime time.Time, toT
 
 func getActivityState(ai *persistencespb.ActivityInfo) enumspb.PendingActivityState {
 	activityState := enumspb.PENDING_ACTIVITY_STATE_SCHEDULED
-	if ai.CancelRequested {
+	if ai.GetCancelRequested() {
 		activityState = enumspb.PENDING_ACTIVITY_STATE_CANCEL_REQUESTED
 	}
-	if ai.StartedEventId != common.EmptyEventID {
+	if ai.GetStartedEventId() != common.EmptyEventID {
 		activityState = enumspb.PENDING_ACTIVITY_STATE_STARTED
 	}
 	return activityState

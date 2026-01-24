@@ -153,30 +153,30 @@ func (s *UtilSuite) TestListFilesByPrefix() {
 func (s *UtilSuite) TestEncodeDecodeHistoryBatches() {
 	now := time.Date(2020, 8, 22, 1, 2, 3, 4, time.UTC)
 	historyBatches := []*historypb.History{
-		{
+		historypb.History_builder{
 			Events: []*historypb.HistoryEvent{
-				{
+				historypb.HistoryEvent_builder{
 					EventId: common.FirstEventID,
 					Version: 1,
-				},
+				}.Build(),
 			},
-		},
-		{
+		}.Build(),
+		historypb.History_builder{
 			Events: []*historypb.HistoryEvent{
-				{
+				historypb.HistoryEvent_builder{
 					EventId:   common.FirstEventID + 1,
 					EventTime: timestamppb.New(now),
 					Version:   1,
-				},
-				{
+				}.Build(),
+				historypb.HistoryEvent_builder{
 					EventId: common.FirstEventID + 2,
 					Version: 2,
-					Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{
+					WorkflowTaskStartedEventAttributes: historypb.WorkflowTaskStartedEventAttributes_builder{
 						Identity: "some random identity",
-					}},
-				},
+					}.Build(),
+				}.Build(),
 			},
-		},
+		}.Build(),
 	}
 
 	encoder := codec.NewJSONPBEncoder()
@@ -300,13 +300,13 @@ func (s *UtilSuite) TestHistoryMutated() {
 	}{
 		{
 			historyBatches: []*historypb.History{
-				{
+				historypb.History_builder{
 					Events: []*historypb.HistoryEvent{
-						{
+						historypb.HistoryEvent_builder{
 							Version: 15,
-						},
+						}.Build(),
 					},
-				},
+				}.Build(),
 			},
 			request: &archiver.ArchiveHistoryRequest{
 				CloseFailoverVersion: 3,
@@ -315,26 +315,26 @@ func (s *UtilSuite) TestHistoryMutated() {
 		},
 		{
 			historyBatches: []*historypb.History{
-				{
+				historypb.History_builder{
 					Events: []*historypb.HistoryEvent{
-						{
+						historypb.HistoryEvent_builder{
 							EventId: 33,
 							Version: 10,
-						},
+						}.Build(),
 					},
-				},
-				{
+				}.Build(),
+				historypb.History_builder{
 					Events: []*historypb.HistoryEvent{
-						{
+						historypb.HistoryEvent_builder{
 							EventId: 49,
 							Version: 10,
-						},
-						{
+						}.Build(),
+						historypb.HistoryEvent_builder{
 							EventId: 50,
 							Version: 10,
-						},
+						}.Build(),
 					},
-				},
+				}.Build(),
 			},
 			request: &archiver.ArchiveHistoryRequest{
 				CloseFailoverVersion: 10,
@@ -345,13 +345,13 @@ func (s *UtilSuite) TestHistoryMutated() {
 		},
 		{
 			historyBatches: []*historypb.History{
-				{
+				historypb.History_builder{
 					Events: []*historypb.HistoryEvent{
-						{
+						historypb.HistoryEvent_builder{
 							Version: 9,
-						},
+						}.Build(),
 					},
-				},
+				}.Build(),
 			},
 			request: &archiver.ArchiveHistoryRequest{
 				CloseFailoverVersion: 10,
@@ -361,22 +361,22 @@ func (s *UtilSuite) TestHistoryMutated() {
 		},
 		{
 			historyBatches: []*historypb.History{
-				{
+				historypb.History_builder{
 					Events: []*historypb.HistoryEvent{
-						{
+						historypb.HistoryEvent_builder{
 							EventId: 20,
 							Version: 10,
-						},
+						}.Build(),
 					},
-				},
-				{
+				}.Build(),
+				historypb.History_builder{
 					Events: []*historypb.HistoryEvent{
-						{
+						historypb.HistoryEvent_builder{
 							EventId: 33,
 							Version: 10,
-						},
+						}.Build(),
 					},
-				},
+				}.Build(),
 			},
 			request: &archiver.ArchiveHistoryRequest{
 				CloseFailoverVersion: 10,

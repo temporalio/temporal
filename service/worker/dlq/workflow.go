@@ -230,7 +230,7 @@ func (c *workerComponent) workflow(ctx workflow.Context, params WorkflowParams) 
 			return err
 		}
 		queryResponse.LastProcessedMessageID = params.DeleteParams.MaxMessageID
-		queryResponse.NumberOfMessagesProcessed = response.MessagesDeleted
+		queryResponse.NumberOfMessagesProcessed = response.GetMessagesDeleted()
 		return nil
 	} else if params.WorkflowType == WorkflowTypeMerge {
 		queryResponse.MaxMessageIDToProcess = params.MergeParams.MaxMessageID
@@ -246,16 +246,16 @@ func (c *workerComponent) workflow(ctx workflow.Context, params WorkflowParams) 
 }
 
 func (c *workerComponent) deleteTasks(ctx context.Context, params DeleteParams) (*historyservice.DeleteDLQTasksResponse, error) {
-	req := &historyservice.DeleteDLQTasksRequest{
-		DlqKey: &commonspb.HistoryDLQKey{
+	req := historyservice.DeleteDLQTasksRequest_builder{
+		DlqKey: commonspb.HistoryDLQKey_builder{
 			TaskCategory:  int32(params.TaskCategoryID),
 			SourceCluster: params.SourceCluster,
 			TargetCluster: params.TargetCluster,
-		},
-		InclusiveMaxTaskMetadata: &commonspb.HistoryDLQTaskMetadata{
+		}.Build(),
+		InclusiveMaxTaskMetadata: commonspb.HistoryDLQTaskMetadata_builder{
 			MessageId: params.MaxMessageID,
-		},
-	}
+		}.Build(),
+	}.Build()
 
 	resp, err := c.historyClient.DeleteDLQTasks(ctx, req)
 	if err != nil {
@@ -294,20 +294,20 @@ func (c *workerComponent) mergeTasks(
 			return err
 		}
 
-		if len(response.DlqTasks) == 0 {
+		if len(response.GetDlqTasks()) == 0 {
 			return nil
 		}
 
-		nextPageToken = response.NextPageToken
+		nextPageToken = response.GetNextPageToken()
 
 		// 1.b. Filter out tasks from messages beyond the last-desired message.
-		historyTasks := make([]*commonspb.HistoryTask, 0, len(response.DlqTasks))
+		historyTasks := make([]*commonspb.HistoryTask, 0, len(response.GetDlqTasks()))
 		maxBatchMessageID := int64(persistence.FirstQueueMessageID)
 
-		for _, task := range response.DlqTasks {
-			if task.Metadata.MessageId <= params.MaxMessageID {
-				historyTasks = append(historyTasks, task.Payload)
-				maxBatchMessageID = max(maxBatchMessageID, task.Metadata.MessageId)
+		for _, task := range response.GetDlqTasks() {
+			if task.GetMetadata().GetMessageId() <= params.MaxMessageID {
+				historyTasks = append(historyTasks, task.GetPayload())
+				maxBatchMessageID = max(maxBatchMessageID, task.GetMetadata().GetMessageId())
 			}
 		}
 
@@ -384,11 +384,11 @@ func (c *workerComponent) reEnqueueTasks(
 	// Group tasks by shard ID.
 	tasksByShard := make(map[int32][]*adminservice.AddTasksRequest_Task)
 	for _, task := range historyTasks {
-		newTask := &adminservice.AddTasksRequest_Task{
+		newTask := adminservice.AddTasksRequest_Task_builder{
 			CategoryId: int32(params.TaskCategoryID),
-			Blob:       task.Blob,
-		}
-		tasksByShard[task.ShardId] = append(tasksByShard[task.ShardId], newTask)
+			Blob:       task.GetBlob(),
+		}.Build()
+		tasksByShard[task.GetShardId()] = append(tasksByShard[task.GetShardId()], newTask)
 	}
 
 	// Connect to the admin service with the source cluster.
@@ -398,10 +398,10 @@ func (c *workerComponent) reEnqueueTasks(
 	}
 
 	for shardID, batch := range tasksByShard {
-		_, err := taskClient.AddTasks(ctx, &adminservice.AddTasksRequest{
+		_, err := taskClient.AddTasks(ctx, adminservice.AddTasksRequest_builder{
 			ShardId: shardID,
 			Tasks:   batch,
-		})
+		}.Build())
 		if err != nil {
 			return c.convertServerErr(err, fmt.Sprintf(
 				"AddTasks failed while re-enqueuing tasks to shard %d", shardID,
@@ -429,15 +429,15 @@ func (c *workerComponent) readTasks(
 	params MergeParams,
 	nextPageToken []byte,
 ) (*historyservice.GetDLQTasksResponse, error) {
-	req := &historyservice.GetDLQTasksRequest{
-		DlqKey: &commonspb.HistoryDLQKey{
+	req := historyservice.GetDLQTasksRequest_builder{
+		DlqKey: commonspb.HistoryDLQKey_builder{
 			TaskCategory:  int32(params.TaskCategoryID),
 			SourceCluster: params.SourceCluster,
 			TargetCluster: params.TargetCluster,
-		},
+		}.Build(),
 		PageSize:      int32(params.BatchSize),
 		NextPageToken: nextPageToken,
-	}
+	}.Build()
 
 	resp, err := c.historyClient.GetDLQTasks(ctx, req)
 	if err != nil {

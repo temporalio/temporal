@@ -115,28 +115,28 @@ func deserializeQueryVisibilityToken(bytes []byte) (*queryVisibilityToken, error
 }
 
 func convertToExecutionInfo(record *archiverspb.VisibilityRecord, saTypeMap searchattribute.NameTypeMap) (*workflowpb.WorkflowExecutionInfo, error) {
-	searchAttributes, err := searchattribute.Parse(record.SearchAttributes, &saTypeMap)
+	searchAttributes, err := searchattribute.Parse(record.GetSearchAttributes(), &saTypeMap)
 	if err != nil {
 		return nil, err
 	}
 
-	return &workflowpb.WorkflowExecutionInfo{
-		Execution: &commonpb.WorkflowExecution{
+	return workflowpb.WorkflowExecutionInfo_builder{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: record.GetWorkflowId(),
 			RunId:      record.GetRunId(),
-		},
-		Type: &commonpb.WorkflowType{
-			Name: record.WorkflowTypeName,
-		},
-		StartTime:         record.StartTime,
-		ExecutionTime:     record.ExecutionTime,
-		CloseTime:         record.CloseTime,
-		ExecutionDuration: record.ExecutionDuration,
-		Status:            record.Status,
-		HistoryLength:     record.HistoryLength,
-		Memo:              record.Memo,
+		}.Build(),
+		Type: commonpb.WorkflowType_builder{
+			Name: record.GetWorkflowTypeName(),
+		}.Build(),
+		StartTime:         record.GetStartTime(),
+		ExecutionTime:     record.GetExecutionTime(),
+		CloseTime:         record.GetCloseTime(),
+		ExecutionDuration: record.GetExecutionDuration(),
+		Status:            record.GetStatus(),
+		HistoryLength:     record.GetHistoryLength(),
+		Memo:              record.GetMemo(),
 		SearchAttributes:  searchAttributes,
-	}, nil
+	}.Build(), nil
 }
 
 func newRunIDPrecondition(runID string) connector.Precondition {

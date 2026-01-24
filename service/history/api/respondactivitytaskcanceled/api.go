@@ -23,14 +23,14 @@ func Invoke(
 	shard historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (resp *historyservice.RespondActivityTaskCanceledResponse, retError error) {
-	request := req.CancelRequest
+	request := req.GetCancelRequest()
 	tokenSerializer := tasktoken.NewSerializer()
-	token, err0 := tokenSerializer.Deserialize(request.TaskToken)
+	token, err0 := tokenSerializer.Deserialize(request.GetTaskToken())
 	if err0 != nil {
 		return nil, consts.ErrDeserializingToken
 	}
 
-	namespaceEntry, err := api.GetActiveNamespace(shard, namespace.ID(req.GetNamespaceId()), token.WorkflowId)
+	namespaceEntry, err := api.GetActiveNamespace(shard, namespace.ID(req.GetNamespaceId()), token.GetWorkflowId())
 	if err != nil {
 		return nil, err
 	}
@@ -46,11 +46,11 @@ func Invoke(
 	var versioningBehavior enumspb.VersioningBehavior
 	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
-		token.Clock,
+		token.GetClock(),
 		definition.NewWorkflowKey(
-			token.NamespaceId,
-			token.WorkflowId,
-			token.RunId,
+			token.GetNamespaceId(),
+			token.GetWorkflowId(),
+			token.GetRunId(),
 		),
 		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
 			mutableState := workflowLease.GetMutableState()
@@ -82,23 +82,23 @@ func Invoke(
 			}
 
 			// sanity check if activity is requested to be cancelled
-			if !ai.CancelRequested {
+			if !ai.GetCancelRequested() {
 				return nil, consts.ErrActivityTaskNotCancelRequested
 			}
 
 			if _, err := mutableState.AddActivityTaskCanceledEvent(
 				scheduledEventID,
-				ai.StartedEventId,
-				ai.CancelRequestId,
-				request.Details,
-				request.Identity); err != nil {
+				ai.GetStartedEventId(),
+				ai.GetCancelRequestId(),
+				request.GetDetails(),
+				request.GetIdentity()); err != nil {
 				// Unable to add ActivityTaskCanceled event to history
 				return nil, err
 			}
 
-			attemptStartedTime = ai.StartedTime.AsTime()
-			firstScheduledTime = ai.FirstScheduledTime.AsTime()
-			taskQueue = ai.TaskQueue
+			attemptStartedTime = ai.GetStartedTime().AsTime()
+			firstScheduledTime = ai.GetFirstScheduledTime().AsTime()
+			taskQueue = ai.GetTaskQueue()
 			versioningBehavior = mutableState.GetEffectiveVersioningBehavior()
 			return &api.UpdateWorkflowAction{
 				Noop:               false,
@@ -123,7 +123,7 @@ func Invoke(
 			},
 			metrics.OperationTag(metrics.HistoryRespondActivityTaskCanceledScope),
 			metrics.WorkflowTypeTag(workflowTypeName),
-			metrics.ActivityTypeTag(token.ActivityType),
+			metrics.ActivityTypeTag(token.GetActivityType()),
 			metrics.VersioningBehaviorTag(versioningBehavior))
 	}
 	return &historyservice.RespondActivityTaskCanceledResponse{}, err

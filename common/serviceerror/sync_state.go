@@ -58,14 +58,14 @@ func (e *SyncState) Status() *status.Status {
 
 	st := status.New(codes.Aborted, e.Message)
 	st, _ = st.WithDetails(
-		&errordetailsspb.SyncStateFailure{
+		errordetailsspb.SyncStateFailure_builder{
 			NamespaceId:         e.NamespaceId,
 			WorkflowId:          e.WorkflowId,
 			RunId:               e.RunId,
 			ArchetypeId:         e.ArchetypeId,
 			VersionedTransition: e.VersionedTransition,
 			VersionHistories:    e.VersionHistories,
-		},
+		}.Build(),
 	)
 	return st
 }

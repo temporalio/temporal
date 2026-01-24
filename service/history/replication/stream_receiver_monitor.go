@@ -408,17 +408,17 @@ func (m *StreamReceiverMonitorImpl) fillStatusMap(statusMap map[ClusterShardKeyP
 			}
 			continue
 		}
-		if len(readerState.Scopes) == 3 {
+		if len(readerState.GetScopes()) == 3 {
 			statusMap[ClusterShardKeyPair{Client: clientKey, Server: serverKey}] = &streamStatus{
-				defaultAckLevel:      readerState.Scopes[0].Range.InclusiveMin.TaskId,
-				highPriorityAckLevel: readerState.Scopes[1].Range.InclusiveMin.TaskId,
-				lowPriorityAckLevel:  readerState.Scopes[2].Range.InclusiveMin.TaskId,
+				defaultAckLevel:      readerState.GetScopes()[0].GetRange().GetInclusiveMin().GetTaskId(),
+				highPriorityAckLevel: readerState.GetScopes()[1].GetRange().GetInclusiveMin().GetTaskId(),
+				lowPriorityAckLevel:  readerState.GetScopes()[2].GetRange().GetInclusiveMin().GetTaskId(),
 				maxReplicationTaskId: maxTaskId,
 				isTieredStackEnabled: true,
 			}
-		} else if len(readerState.Scopes) == 1 {
+		} else if len(readerState.GetScopes()) == 1 {
 			statusMap[ClusterShardKeyPair{Client: clientKey, Server: serverKey}] = &streamStatus{
-				defaultAckLevel:      readerState.Scopes[0].Range.InclusiveMin.TaskId,
+				defaultAckLevel:      readerState.GetScopes()[0].GetRange().GetInclusiveMin().GetTaskId(),
 				highPriorityAckLevel: 0,
 				lowPriorityAckLevel:  0,
 				maxReplicationTaskId: maxTaskId,

@@ -36,6 +36,7 @@ import (
 	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -80,11 +81,11 @@ func ConvertLinkWorkflowEventToNexusLink(we *commonpb.Link_WorkflowEvent) nexus.
 		),
 	}
 
-	switch ref := we.GetReference().(type) {
-	case *commonpb.Link_WorkflowEvent_EventRef:
-		u.RawQuery = convertLinkWorkflowEventEventReferenceToURLQuery(ref.EventRef)
-	case *commonpb.Link_WorkflowEvent_RequestIdRef:
-		u.RawQuery = convertLinkWorkflowEventRequestIdReferenceToURLQuery(ref.RequestIdRef)
+	switch we.WhichReference() {
+	case commonpb.Link_WorkflowEvent_EventRef_case:
+		u.RawQuery = convertLinkWorkflowEventEventReferenceToURLQuery(we.GetEventRef())
+	case commonpb.Link_WorkflowEvent_RequestIdRef_case:
+		u.RawQuery = convertLinkWorkflowEventRequestIdReferenceToURLQuery(we.GetRequestIdRef())
 	}
 	return nexus.Link{
 		URL:  u,
@@ -117,21 +118,23 @@ func ConvertNexusLinkToLinkWorkflowEvent(link nexus.Link) (*commonpb.Link_Workfl
 		return nil, errors.New("failed to parse link to Link_WorkflowEvent: malformed URL path")
 	}
 
-	var err error
-	we.Namespace, err = url.PathUnescape(matches[urlPathRE.SubexpIndex(urlPathNamespaceKey)])
+	namespace, err := url.PathUnescape(matches[urlPathRE.SubexpIndex(urlPathNamespaceKey)])
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse link to Link_WorkflowEvent: %w", err)
 	}
+	we.SetNamespace(namespace)
 
-	we.WorkflowId, err = url.PathUnescape(matches[urlPathRE.SubexpIndex(urlPathWorkflowIDKey)])
+	workflowId, err := url.PathUnescape(matches[urlPathRE.SubexpIndex(urlPathWorkflowIDKey)])
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse link to Link_WorkflowEvent: %w", err)
 	}
+	we.SetWorkflowId(workflowId)
 
-	we.RunId, err = url.PathUnescape(matches[urlPathRE.SubexpIndex(urlPathRunIDKey)])
+	runId, err := url.PathUnescape(matches[urlPathRE.SubexpIndex(urlPathRunIDKey)])
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse link to Link_WorkflowEvent: %w", err)
 	}
+	we.SetRunId(runId)
 
 	switch refType := link.URL.Query().Get(linkWorkflowEventReferenceTypeKey); refType {
 	case eventReferenceType:
@@ -139,17 +142,13 @@ func ConvertNexusLinkToLinkWorkflowEvent(link nexus.Link) (*commonpb.Link_Workfl
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse link to Link_WorkflowEvent: %w", err)
 		}
-		we.Reference = &commonpb.Link_WorkflowEvent_EventRef{
-			EventRef: eventRef,
-		}
+		we.SetEventRef(proto.ValueOrDefault(eventRef))
 	case requestIDReferenceType:
 		requestIDRef, err := convertURLQueryToLinkWorkflowEventRequestIdReference(link.URL.Query())
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse link to Link_WorkflowEvent: %w", err)
 		}
-		we.Reference = &commonpb.Link_WorkflowEvent_RequestIdRef{
-			RequestIdRef: requestIDRef,
-		}
+		we.SetRequestIdRef(proto.ValueOrDefault(requestIDRef))
 	default:
 		return nil, fmt.Errorf(
 			"failed to parse link to Link_WorkflowEvent: unknown reference type: %q",
@@ -171,19 +170,20 @@ func convertLinkWorkflowEventEventReferenceToURLQuery(eventRef *commonpb.Link_Wo
 }
 
 func convertURLQueryToLinkWorkflowEventEventReference(queryValues url.Values) (*commonpb.Link_WorkflowEvent_EventReference, error) {
-	var err error
 	eventRef := &commonpb.Link_WorkflowEvent_EventReference{}
 	eventIDValue := queryValues.Get(linkEventIDKey)
 	if eventIDValue != "" {
-		eventRef.EventId, err = strconv.ParseInt(queryValues.Get(linkEventIDKey), 10, 64)
+		eventId, err := strconv.ParseInt(queryValues.Get(linkEventIDKey), 10, 64)
 		if err != nil {
 			return nil, err
 		}
+		eventRef.SetEventId(eventId)
 	}
-	eventRef.EventType, err = enumspb.EventTypeFromString(queryValues.Get(linkEventTypeKey))
+	eventType, err := enumspb.EventTypeFromString(queryValues.Get(linkEventTypeKey))
 	if err != nil {
 		return nil, err
 	}
+	eventRef.SetEventType(eventType)
 	return eventRef, nil
 }
 
@@ -196,13 +196,13 @@ func convertLinkWorkflowEventRequestIdReferenceToURLQuery(requestIDRef *commonpb
 }
 
 func convertURLQueryToLinkWorkflowEventRequestIdReference(queryValues url.Values) (*commonpb.Link_WorkflowEvent_RequestIdReference, error) {
-	var err error
-	requestIDRef := &commonpb.Link_WorkflowEvent_RequestIdReference{
-		RequestId: queryValues.Get(linkRequestIDKey),
-	}
-	requestIDRef.EventType, err = enumspb.EventTypeFromString(queryValues.Get(linkEventTypeKey))
+	eventType, err := enumspb.EventTypeFromString(queryValues.Get(linkEventTypeKey))
 	if err != nil {
 		return nil, err
 	}
+	requestIDRef := commonpb.Link_WorkflowEvent_RequestIdReference_builder{
+		RequestId: queryValues.Get(linkRequestIDKey),
+		EventType: eventType,
+	}.Build()
 	return requestIDRef, nil
 }

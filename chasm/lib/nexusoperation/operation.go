@@ -20,7 +20,7 @@ func NewOperation() *Operation {
 }
 
 func (o *Operation) LifecycleState(_ chasm.Context) chasm.LifecycleState {
-	switch o.Status {
+	switch o.GetStatus() {
 	case nexusoperationpb.OPERATION_STATUS_SUCCEEDED:
 		return chasm.LifecycleStateCompleted
 	case nexusoperationpb.OPERATION_STATUS_FAILED,
@@ -33,9 +33,9 @@ func (o *Operation) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 }
 
 func (o *Operation) StateMachineState() nexusoperationpb.OperationStatus {
-	return o.Status
+	return o.GetStatus()
 }
 
 func (o *Operation) SetStateMachineState(status nexusoperationpb.OperationStatus) {
-	o.Status = status
+	o.SetStatus(status)
 }

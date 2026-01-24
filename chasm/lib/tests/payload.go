@@ -47,11 +47,11 @@ func NewPayloadStore(
 	mutableContext chasm.MutableContext,
 ) (*PayloadStore, error) {
 	store := &PayloadStore{
-		State: &testspb.TestPayloadStore{
+		State: testspb.TestPayloadStore_builder{
 			TotalCount:      0,
 			TotalSize:       0,
 			ExpirationTimes: make(map[string]*timestamppb.Timestamp),
-		},
+		}.Build(),
 		Visibility: chasm.NewComponentField(
 			mutableContext,
 			chasm.NewVisibility(mutableContext),
@@ -71,7 +71,7 @@ func (s *PayloadStore) Close(
 	_ chasm.MutableContext,
 	_ ClosePayloadStoreRequest,
 ) (ClosePayloadStoreResponse, error) {
-	s.State.Closed = true
+	s.State.SetClosed(true)
 	return ClosePayloadStoreResponse{}, nil
 }
 
@@ -87,22 +87,22 @@ func (s *PayloadStore) AddPayload(
 		s.Payloads = make(chasm.Map[string, *commonpb.Payload])
 	}
 	s.Payloads[request.PayloadKey] = chasm.NewDataField(mutableContext, request.Payload)
-	s.State.TotalCount++
-	s.State.TotalSize += int64(len(request.Payload.Data))
+	s.State.SetTotalCount(s.State.GetTotalCount() + 1)
+	s.State.SetTotalSize(s.State.GetTotalSize() + int64(len(request.Payload.GetData())))
 
 	if request.TTL > 0 {
 		expirationTime := mutableContext.Now(s).Add(request.TTL)
-		if s.State.ExpirationTimes == nil {
-			s.State.ExpirationTimes = make(map[string]*timestamppb.Timestamp)
+		if s.State.GetExpirationTimes() == nil {
+			s.State.SetExpirationTimes(make(map[string]*timestamppb.Timestamp))
 		}
-		s.State.ExpirationTimes[request.PayloadKey] = timestamppb.New(expirationTime)
+		s.State.GetExpirationTimes()[request.PayloadKey] = timestamppb.New(expirationTime)
 		mutableContext.AddTask(
 			s,
 			chasm.TaskAttributes{ScheduledTime: expirationTime},
 			// You can switch between TestPayloadTTLPureTask & TestPayloadTTLSideEffectTask
-			&testspb.TestPayloadTTLPureTask{
+			testspb.TestPayloadTTLPureTask_builder{
 				PayloadKey: request.PayloadKey,
-			},
+			}.Build(),
 		)
 	}
 
@@ -129,10 +129,10 @@ func (s *PayloadStore) RemovePayload(
 
 	field := s.Payloads[key]
 	payload := field.Get(mutableContext)
-	s.State.TotalCount--
-	s.State.TotalSize -= int64(len(payload.Data))
+	s.State.SetTotalCount(s.State.GetTotalCount() - 1)
+	s.State.SetTotalSize(s.State.GetTotalSize() - int64(len(payload.GetData())))
 	delete(s.Payloads, key)
-	delete(s.State.ExpirationTimes, key)
+	delete(s.State.GetExpirationTimes(), key)
 
 	return s.Describe(mutableContext, DescribePayloadStoreRequest{})
 }
@@ -140,7 +140,7 @@ func (s *PayloadStore) RemovePayload(
 func (s *PayloadStore) LifecycleState(
 	_ chasm.Context,
 ) chasm.LifecycleState {
-	if s.State.Closed {
+	if s.State.GetClosed() {
 		return chasm.LifecycleStateCompleted
 	}
 	return chasm.LifecycleStateRunning
@@ -151,8 +151,8 @@ func (s *PayloadStore) SearchAttributes(
 	ctx chasm.Context,
 ) []chasm.SearchAttributeKeyValue {
 	return []chasm.SearchAttributeKeyValue{
-		PayloadTotalCountSearchAttribute.Value(s.State.TotalCount),
-		PayloadTotalSizeSearchAttribute.Value(s.State.TotalSize),
+		PayloadTotalCountSearchAttribute.Value(s.State.GetTotalCount()),
+		PayloadTotalSizeSearchAttribute.Value(s.State.GetTotalSize()),
 		ExecutionStatusSearchAttribute.Value(s.LifecycleState(ctx).String()),
 		chasm.SearchAttributeTemporalScheduledByID.Value(TestScheduleID),
 		chasm.SearchAttributeTaskQueue.Value(DefaultPayloadStoreTaskQueue),

@@ -109,7 +109,7 @@ func (e *taskExecutorImpl) handleActivityTask(
 ) error {
 
 	attr := task.GetSyncActivityTaskAttributes()
-	doContinue, err := e.filterTask(namespace.ID(attr.GetNamespaceId()), attr.WorkflowId, forceApply)
+	doContinue, err := e.filterTask(namespace.ID(attr.GetNamespaceId()), attr.GetWorkflowId(), forceApply)
 	if err != nil || !doContinue {
 		return err
 	}
@@ -123,26 +123,26 @@ func (e *taskExecutorImpl) handleActivityTask(
 		)
 	}()
 
-	request := &historyservice.SyncActivityRequest{
-		NamespaceId:                attr.NamespaceId,
-		WorkflowId:                 attr.WorkflowId,
-		RunId:                      attr.RunId,
-		Version:                    attr.Version,
-		ScheduledEventId:           attr.ScheduledEventId,
-		ScheduledTime:              attr.ScheduledTime,
-		StartedEventId:             attr.StartedEventId,
-		StartVersion:               attr.StartVersion,
-		StartedTime:                attr.StartedTime,
-		LastHeartbeatTime:          attr.LastHeartbeatTime,
-		Details:                    attr.Details,
-		Attempt:                    attr.Attempt,
-		LastFailure:                attr.LastFailure,
-		LastWorkerIdentity:         attr.LastWorkerIdentity,
-		LastStartedBuildId:         attr.LastStartedBuildId,
-		LastStartedRedirectCounter: attr.LastStartedRedirectCounter,
+	request := historyservice.SyncActivityRequest_builder{
+		NamespaceId:                attr.GetNamespaceId(),
+		WorkflowId:                 attr.GetWorkflowId(),
+		RunId:                      attr.GetRunId(),
+		Version:                    attr.GetVersion(),
+		ScheduledEventId:           attr.GetScheduledEventId(),
+		ScheduledTime:              attr.GetScheduledTime(),
+		StartedEventId:             attr.GetStartedEventId(),
+		StartVersion:               attr.GetStartVersion(),
+		StartedTime:                attr.GetStartedTime(),
+		LastHeartbeatTime:          attr.GetLastHeartbeatTime(),
+		Details:                    attr.GetDetails(),
+		Attempt:                    attr.GetAttempt(),
+		LastFailure:                attr.GetLastFailure(),
+		LastWorkerIdentity:         attr.GetLastWorkerIdentity(),
+		LastStartedBuildId:         attr.GetLastStartedBuildId(),
+		LastStartedRedirectCounter: attr.GetLastStartedRedirectCounter(),
 		VersionHistory:             attr.GetVersionHistory(),
-	}
-	namespaceName, _ := e.namespaceRegistry.GetNamespaceName(namespace.ID(attr.NamespaceId))
+	}.Build()
+	namespaceName, _ := e.namespaceRegistry.GetNamespaceName(namespace.ID(attr.GetNamespaceId()))
 	ctx, cancel := e.newTaskContext(ctx, namespaceName)
 	defer cancel()
 
@@ -211,7 +211,7 @@ func (e *taskExecutorImpl) handleHistoryReplicationTask(
 ) error {
 
 	attr := task.GetHistoryTaskAttributes()
-	doContinue, err := e.filterTask(namespace.ID(attr.GetNamespaceId()), attr.WorkflowId, forceApply)
+	doContinue, err := e.filterTask(namespace.ID(attr.GetNamespaceId()), attr.GetWorkflowId(), forceApply)
 	if err != nil || !doContinue {
 		return err
 	}
@@ -225,19 +225,19 @@ func (e *taskExecutorImpl) handleHistoryReplicationTask(
 		)
 	}()
 
-	request := &historyservice.ReplicateEventsV2Request{
-		NamespaceId: attr.NamespaceId,
-		WorkflowExecution: &commonpb.WorkflowExecution{
-			WorkflowId: attr.WorkflowId,
-			RunId:      attr.RunId,
-		},
-		VersionHistoryItems: attr.VersionHistoryItems,
-		Events:              attr.Events,
+	request := historyservice.ReplicateEventsV2Request_builder{
+		NamespaceId: attr.GetNamespaceId(),
+		WorkflowExecution: commonpb.WorkflowExecution_builder{
+			WorkflowId: attr.GetWorkflowId(),
+			RunId:      attr.GetRunId(),
+		}.Build(),
+		VersionHistoryItems: attr.GetVersionHistoryItems(),
+		Events:              attr.GetEvents(),
 		// new run events does not need version history since there is no prior events
-		NewRunEvents: attr.NewRunEvents,
-		NewRunId:     attr.NewRunId,
-	}
-	namespaceName, _ := e.namespaceRegistry.GetNamespaceName(namespace.ID(attr.NamespaceId))
+		NewRunEvents: attr.GetNewRunEvents(),
+		NewRunId:     attr.GetNewRunId(),
+	}.Build()
+	namespaceName, _ := e.namespaceRegistry.GetNamespaceName(namespace.ID(attr.GetNamespaceId()))
 	ctx, cancel := e.newTaskContext(ctx, namespaceName)
 	defer cancel()
 
@@ -313,17 +313,17 @@ func (e *taskExecutorImpl) handleSyncWorkflowStateTask(
 		return err
 	}
 
-	namespaceName, _ := e.namespaceRegistry.GetNamespaceName(namespace.ID(executionInfo.NamespaceId))
+	namespaceName, _ := e.namespaceRegistry.GetNamespaceName(namespace.ID(executionInfo.GetNamespaceId()))
 	ctx, cancel := e.newTaskContext(ctx, namespaceName)
 	defer cancel()
 
 	// This might be extra cost if the workflow belongs to local shard.
 	// Add a wrapper of the history client to call history engine directly if it becomes an issue.
-	request := &historyservice.ReplicateWorkflowStateRequest{
+	request := historyservice.ReplicateWorkflowStateRequest_builder{
 		NamespaceId:   namespaceID.String(),
 		WorkflowState: attr.GetWorkflowState(),
 		RemoteCluster: e.remoteCluster,
-	}
+	}.Build()
 	_, err = e.shardContext.GetHistoryClient().ReplicateWorkflowState(ctx, request)
 	switch retryErr := err.(type) {
 	case nil:
@@ -391,13 +391,13 @@ FilterLoop:
 
 func (e *taskExecutorImpl) cleanupWorkflowExecution(ctx context.Context, namespaceID string, workflowID string, runID string) (retErr error) {
 	nsID := namespace.ID(namespaceID)
-	ex := commonpb.WorkflowExecution{
+	ex := commonpb.WorkflowExecution_builder{
 		WorkflowId: workflowID,
 		RunId:      runID,
-	}
+	}.Build()
 	// CHASM runs only uses state based replication logic and should never reach here.
 	// Can continue to use GetOrCreateWorkflowExecution.
-	wfCtx, releaseFn, err := e.workflowCache.GetOrCreateWorkflowExecution(ctx, e.shardContext, nsID, &ex, locks.PriorityLow)
+	wfCtx, releaseFn, err := e.workflowCache.GetOrCreateWorkflowExecution(ctx, e.shardContext, nsID, ex, locks.PriorityLow)
 	if err != nil {
 		return err
 	}
@@ -410,7 +410,7 @@ func (e *taskExecutorImpl) cleanupWorkflowExecution(ctx context.Context, namespa
 	return e.deleteManager.DeleteWorkflowExecution(
 		ctx,
 		nsID,
-		&ex,
+		ex,
 		wfCtx,
 		mutableState,
 		nil, // stage is not stored during cleanup process.
@@ -453,15 +453,15 @@ func (e *taskExecutorImpl) resend(
 		if err != nil {
 			return err
 		}
-		replicateRequest := &historyservice.ReplicateEventsV2Request{
+		replicateRequest := historyservice.ReplicateEventsV2Request_builder{
 			NamespaceId: namespaceID.String(),
-			WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowExecution: commonpb.WorkflowExecution_builder{
 				WorkflowId: workflowID,
 				RunId:      runID,
-			},
+			}.Build(),
 			Events:              historyBatch.RawEventBatch,
 			VersionHistoryItems: historyBatch.VersionHistory.GetItems(),
-		}
+		}.Build()
 		_, err = e.shardContext.GetHistoryClient().ReplicateEventsV2(ctx, replicateRequest)
 		if err != nil {
 			return err

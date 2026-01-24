@@ -106,34 +106,34 @@ func (s *streamSenderSuite) TestRecvSyncReplicationState_SingleStack_Success() {
 		int64(s.clientShardKey.ClusterID),
 		s.clientShardKey.ShardID,
 	)
-	replicationState := &replicationspb.SyncReplicationState{
+	replicationState := replicationspb.SyncReplicationState_builder{
 		InclusiveLowWatermark:     rand.Int63(),
 		InclusiveLowWatermarkTime: timestamppb.New(time.Unix(0, rand.Int63())),
-	}
+	}.Build()
 
 	s.shardContext.EXPECT().UpdateReplicationQueueReaderState(
 		readerID,
-		&persistencespb.QueueReaderState{
-			Scopes: []*persistencespb.QueueSliceScope{{
-				Range: &persistencespb.QueueSliceRange{
+		persistencespb.QueueReaderState_builder{
+			Scopes: []*persistencespb.QueueSliceScope{persistencespb.QueueSliceScope_builder{
+				Range: persistencespb.QueueSliceRange_builder{
 					InclusiveMin: shard.ConvertToPersistenceTaskKey(
-						tasks.NewImmediateKey(replicationState.InclusiveLowWatermark),
+						tasks.NewImmediateKey(replicationState.GetInclusiveLowWatermark()),
 					),
 					ExclusiveMax: shard.ConvertToPersistenceTaskKey(
 						tasks.NewImmediateKey(math.MaxInt64),
 					),
-				},
-				Predicate: &persistencespb.Predicate{
-					PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
-					Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
-				},
-			}},
-		},
+				}.Build(),
+				Predicate: persistencespb.Predicate_builder{
+					PredicateType:                enumsspb.PREDICATE_TYPE_UNIVERSAL,
+					UniversalPredicateAttributes: &persistencespb.UniversalPredicateAttributes{},
+				}.Build(),
+			}.Build()},
+		}.Build(),
 	).Return(nil)
 	s.shardContext.EXPECT().UpdateRemoteReaderInfo(
 		readerID,
-		replicationState.InclusiveLowWatermark-1,
-		replicationState.InclusiveLowWatermarkTime.AsTime(),
+		replicationState.GetInclusiveLowWatermark()-1,
+		replicationState.GetInclusiveLowWatermarkTime().AsTime(),
 	).Return(nil)
 
 	err := s.streamSender.recvSyncReplicationState(replicationState)
@@ -146,10 +146,10 @@ func (s *streamSenderSuite) TestRecvSyncReplicationState_SingleStack_Error() {
 		int64(s.clientShardKey.ClusterID),
 		s.clientShardKey.ShardID,
 	)
-	replicationState := &replicationspb.SyncReplicationState{
+	replicationState := replicationspb.SyncReplicationState_builder{
 		InclusiveLowWatermark:     rand.Int63(),
 		InclusiveLowWatermarkTime: timestamppb.New(time.Unix(0, rand.Int63())),
-	}
+	}.Build()
 
 	var ownershipLost error
 	if rand.Float64() < 0.5 {
@@ -160,22 +160,22 @@ func (s *streamSenderSuite) TestRecvSyncReplicationState_SingleStack_Error() {
 
 	s.shardContext.EXPECT().UpdateReplicationQueueReaderState(
 		readerID,
-		&persistencespb.QueueReaderState{
-			Scopes: []*persistencespb.QueueSliceScope{{
-				Range: &persistencespb.QueueSliceRange{
+		persistencespb.QueueReaderState_builder{
+			Scopes: []*persistencespb.QueueSliceScope{persistencespb.QueueSliceScope_builder{
+				Range: persistencespb.QueueSliceRange_builder{
 					InclusiveMin: shard.ConvertToPersistenceTaskKey(
-						tasks.NewImmediateKey(replicationState.InclusiveLowWatermark),
+						tasks.NewImmediateKey(replicationState.GetInclusiveLowWatermark()),
 					),
 					ExclusiveMax: shard.ConvertToPersistenceTaskKey(
 						tasks.NewImmediateKey(math.MaxInt64),
 					),
-				},
-				Predicate: &persistencespb.Predicate{
-					PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
-					Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
-				},
-			}},
-		},
+				}.Build(),
+				Predicate: persistencespb.Predicate_builder{
+					PredicateType:                enumsspb.PREDICATE_TYPE_UNIVERSAL,
+					UniversalPredicateAttributes: &persistencespb.UniversalPredicateAttributes{},
+				}.Build(),
+			}.Build()},
+		}.Build(),
 	).Return(ownershipLost)
 
 	err := s.streamSender.recvSyncReplicationState(replicationState)
@@ -193,73 +193,73 @@ func (s *streamSenderSuite) TestRecvSyncReplicationState_TieredStack_Success() {
 	highPriorityInclusiveWatermark := lowPriorityInclusiveWatermark + 10
 
 	timestamp := timestamppb.New(time.Unix(0, rand.Int63()))
-	replicationState := &replicationspb.SyncReplicationState{
+	replicationState := replicationspb.SyncReplicationState_builder{
 		InclusiveLowWatermark:     lowPriorityInclusiveWatermark,
 		InclusiveLowWatermarkTime: timestamp,
-		HighPriorityState: &replicationspb.ReplicationState{
+		HighPriorityState: replicationspb.ReplicationState_builder{
 			InclusiveLowWatermark:     highPriorityInclusiveWatermark,
 			InclusiveLowWatermarkTime: timestamp,
-		},
-		LowPriorityState: &replicationspb.ReplicationState{
+		}.Build(),
+		LowPriorityState: replicationspb.ReplicationState_builder{
 			InclusiveLowWatermark:     lowPriorityInclusiveWatermark,
 			InclusiveLowWatermarkTime: timestamp,
-		},
-	}
+		}.Build(),
+	}.Build()
 	s.senderFlowController.EXPECT().RefreshReceiverFlowControlInfo(replicationState).Return().Times(1)
 
 	s.shardContext.EXPECT().UpdateReplicationQueueReaderState(
 		readerID,
-		&persistencespb.QueueReaderState{
+		persistencespb.QueueReaderState_builder{
 			Scopes: []*persistencespb.QueueSliceScope{
-				{
-					Range: &persistencespb.QueueSliceRange{
+				persistencespb.QueueSliceScope_builder{
+					Range: persistencespb.QueueSliceRange_builder{
 						InclusiveMin: shard.ConvertToPersistenceTaskKey(
-							tasks.NewImmediateKey(replicationState.InclusiveLowWatermark),
+							tasks.NewImmediateKey(replicationState.GetInclusiveLowWatermark()),
 						),
 						ExclusiveMax: shard.ConvertToPersistenceTaskKey(
 							tasks.NewImmediateKey(math.MaxInt64),
 						),
-					},
-					Predicate: &persistencespb.Predicate{
-						PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
-						Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
-					},
-				},
-				{
-					Range: &persistencespb.QueueSliceRange{
+					}.Build(),
+					Predicate: persistencespb.Predicate_builder{
+						PredicateType:                enumsspb.PREDICATE_TYPE_UNIVERSAL,
+						UniversalPredicateAttributes: &persistencespb.UniversalPredicateAttributes{},
+					}.Build(),
+				}.Build(),
+				persistencespb.QueueSliceScope_builder{
+					Range: persistencespb.QueueSliceRange_builder{
 						InclusiveMin: shard.ConvertToPersistenceTaskKey(
-							tasks.NewImmediateKey(replicationState.HighPriorityState.InclusiveLowWatermark),
+							tasks.NewImmediateKey(replicationState.GetHighPriorityState().GetInclusiveLowWatermark()),
 						),
 						ExclusiveMax: shard.ConvertToPersistenceTaskKey(
 							tasks.NewImmediateKey(math.MaxInt64),
 						),
-					},
-					Predicate: &persistencespb.Predicate{
-						PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
-						Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
-					},
-				},
-				{
-					Range: &persistencespb.QueueSliceRange{
+					}.Build(),
+					Predicate: persistencespb.Predicate_builder{
+						PredicateType:                enumsspb.PREDICATE_TYPE_UNIVERSAL,
+						UniversalPredicateAttributes: &persistencespb.UniversalPredicateAttributes{},
+					}.Build(),
+				}.Build(),
+				persistencespb.QueueSliceScope_builder{
+					Range: persistencespb.QueueSliceRange_builder{
 						InclusiveMin: shard.ConvertToPersistenceTaskKey(
-							tasks.NewImmediateKey(replicationState.LowPriorityState.InclusiveLowWatermark),
+							tasks.NewImmediateKey(replicationState.GetLowPriorityState().GetInclusiveLowWatermark()),
 						),
 						ExclusiveMax: shard.ConvertToPersistenceTaskKey(
 							tasks.NewImmediateKey(math.MaxInt64),
 						),
-					},
-					Predicate: &persistencespb.Predicate{
-						PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
-						Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
-					},
-				},
+					}.Build(),
+					Predicate: persistencespb.Predicate_builder{
+						PredicateType:                enumsspb.PREDICATE_TYPE_UNIVERSAL,
+						UniversalPredicateAttributes: &persistencespb.UniversalPredicateAttributes{},
+					}.Build(),
+				}.Build(),
 			},
-		},
+		}.Build(),
 	).Return(nil)
 	s.shardContext.EXPECT().UpdateRemoteReaderInfo(
 		readerID,
-		replicationState.HighPriorityState.InclusiveLowWatermark-1,
-		replicationState.InclusiveLowWatermarkTime.AsTime(),
+		replicationState.GetHighPriorityState().GetInclusiveLowWatermark()-1,
+		replicationState.GetInclusiveLowWatermarkTime().AsTime(),
 	).Return(nil)
 
 	err := s.streamSender.recvSyncReplicationState(replicationState)
@@ -274,18 +274,18 @@ func (s *streamSenderSuite) TestRecvSyncReplicationState_TieredStack_Error() {
 	)
 	inclusiveWatermark := int64(1234)
 	timestamp := timestamppb.New(time.Unix(0, rand.Int63()))
-	replicationState := &replicationspb.SyncReplicationState{
+	replicationState := replicationspb.SyncReplicationState_builder{
 		InclusiveLowWatermark:     inclusiveWatermark,
 		InclusiveLowWatermarkTime: timestamp,
-		HighPriorityState: &replicationspb.ReplicationState{
+		HighPriorityState: replicationspb.ReplicationState_builder{
 			InclusiveLowWatermark:     inclusiveWatermark,
 			InclusiveLowWatermarkTime: timestamp,
-		},
-		LowPriorityState: &replicationspb.ReplicationState{
+		}.Build(),
+		LowPriorityState: replicationspb.ReplicationState_builder{
 			InclusiveLowWatermark:     inclusiveWatermark + 10,
 			InclusiveLowWatermarkTime: timestamp,
-		},
-	}
+		}.Build(),
+	}.Build()
 
 	var ownershipLost error
 	if rand.Float64() < 0.5 {
@@ -297,52 +297,52 @@ func (s *streamSenderSuite) TestRecvSyncReplicationState_TieredStack_Error() {
 
 	s.shardContext.EXPECT().UpdateReplicationQueueReaderState(
 		readerID,
-		&persistencespb.QueueReaderState{
+		persistencespb.QueueReaderState_builder{
 			Scopes: []*persistencespb.QueueSliceScope{
-				{
-					Range: &persistencespb.QueueSliceRange{
+				persistencespb.QueueSliceScope_builder{
+					Range: persistencespb.QueueSliceRange_builder{
 						InclusiveMin: shard.ConvertToPersistenceTaskKey(
-							tasks.NewImmediateKey(replicationState.InclusiveLowWatermark),
+							tasks.NewImmediateKey(replicationState.GetInclusiveLowWatermark()),
 						),
 						ExclusiveMax: shard.ConvertToPersistenceTaskKey(
 							tasks.NewImmediateKey(math.MaxInt64),
 						),
-					},
-					Predicate: &persistencespb.Predicate{
-						PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
-						Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
-					},
-				},
-				{
-					Range: &persistencespb.QueueSliceRange{
+					}.Build(),
+					Predicate: persistencespb.Predicate_builder{
+						PredicateType:                enumsspb.PREDICATE_TYPE_UNIVERSAL,
+						UniversalPredicateAttributes: &persistencespb.UniversalPredicateAttributes{},
+					}.Build(),
+				}.Build(),
+				persistencespb.QueueSliceScope_builder{
+					Range: persistencespb.QueueSliceRange_builder{
 						InclusiveMin: shard.ConvertToPersistenceTaskKey(
-							tasks.NewImmediateKey(replicationState.HighPriorityState.InclusiveLowWatermark),
+							tasks.NewImmediateKey(replicationState.GetHighPriorityState().GetInclusiveLowWatermark()),
 						),
 						ExclusiveMax: shard.ConvertToPersistenceTaskKey(
 							tasks.NewImmediateKey(math.MaxInt64),
 						),
-					},
-					Predicate: &persistencespb.Predicate{
-						PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
-						Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
-					},
-				},
-				{
-					Range: &persistencespb.QueueSliceRange{
+					}.Build(),
+					Predicate: persistencespb.Predicate_builder{
+						PredicateType:                enumsspb.PREDICATE_TYPE_UNIVERSAL,
+						UniversalPredicateAttributes: &persistencespb.UniversalPredicateAttributes{},
+					}.Build(),
+				}.Build(),
+				persistencespb.QueueSliceScope_builder{
+					Range: persistencespb.QueueSliceRange_builder{
 						InclusiveMin: shard.ConvertToPersistenceTaskKey(
-							tasks.NewImmediateKey(replicationState.LowPriorityState.InclusiveLowWatermark),
+							tasks.NewImmediateKey(replicationState.GetLowPriorityState().GetInclusiveLowWatermark()),
 						),
 						ExclusiveMax: shard.ConvertToPersistenceTaskKey(
 							tasks.NewImmediateKey(math.MaxInt64),
 						),
-					},
-					Predicate: &persistencespb.Predicate{
-						PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
-						Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
-					},
-				},
+					}.Build(),
+					Predicate: persistencespb.Predicate_builder{
+						PredicateType:                enumsspb.PREDICATE_TYPE_UNIVERSAL,
+						UniversalPredicateAttributes: &persistencespb.UniversalPredicateAttributes{},
+					}.Build(),
+				}.Build(),
 			},
-		},
+		}.Build(),
 	).Return(ownershipLost)
 
 	err := s.streamSender.recvSyncReplicationState(replicationState)
@@ -359,27 +359,27 @@ func (s *streamSenderSuite) TestSendCatchUp_SingleStack() {
 	endExclusiveWatermark := beginInclusiveWatermark + 1
 	s.shardContext.EXPECT().GetQueueState(
 		tasks.CategoryReplication,
-	).Return(&persistencespb.QueueState{
+	).Return(persistencespb.QueueState_builder{
 		ExclusiveReaderHighWatermark: nil,
 		ReaderStates: map[int64]*persistencespb.QueueReaderState{
-			readerID: {
-				Scopes: []*persistencespb.QueueSliceScope{{
-					Range: &persistencespb.QueueSliceRange{
+			readerID: persistencespb.QueueReaderState_builder{
+				Scopes: []*persistencespb.QueueSliceScope{persistencespb.QueueSliceScope_builder{
+					Range: persistencespb.QueueSliceRange_builder{
 						InclusiveMin: shard.ConvertToPersistenceTaskKey(
 							tasks.NewImmediateKey(beginInclusiveWatermark),
 						),
 						ExclusiveMax: shard.ConvertToPersistenceTaskKey(
 							tasks.NewImmediateKey(math.MaxInt64),
 						),
-					},
-					Predicate: &persistencespb.Predicate{
-						PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
-						Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
-					},
-				}},
-			},
+					}.Build(),
+					Predicate: persistencespb.Predicate_builder{
+						PredicateType:                enumsspb.PREDICATE_TYPE_UNIVERSAL,
+						UniversalPredicateAttributes: &persistencespb.UniversalPredicateAttributes{},
+					}.Build(),
+				}.Build()},
+			}.Build(),
 		},
-	}, true)
+	}.Build(), true)
 	s.shardContext.EXPECT().GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Return(
 		tasks.NewImmediateKey(endExclusiveWatermark),
 	)
@@ -396,8 +396,8 @@ func (s *streamSenderSuite) TestSendCatchUp_SingleStack() {
 		endExclusiveWatermark,
 	).Return(iter, nil)
 	s.server.EXPECT().Send(gomock.Any()).DoAndReturn(func(resp *historyservice.StreamWorkflowReplicationMessagesResponse) error {
-		s.Equal(endExclusiveWatermark, resp.GetMessages().ExclusiveHighWatermark)
-		s.NotNil(resp.GetMessages().ExclusiveHighWatermarkTime)
+		s.Equal(endExclusiveWatermark, resp.GetMessages().GetExclusiveHighWatermark())
+		s.NotNil(resp.GetMessages().GetExclusiveHighWatermarkTime())
 		return nil
 	})
 
@@ -416,27 +416,27 @@ func (s *streamSenderSuite) TestSendCatchUp_TieredStack_SingleReaderScope() {
 	endExclusiveWatermark := beginInclusiveWatermark + 1
 	s.shardContext.EXPECT().GetQueueState(
 		tasks.CategoryReplication,
-	).Return(&persistencespb.QueueState{
+	).Return(persistencespb.QueueState_builder{
 		ExclusiveReaderHighWatermark: nil,
 		ReaderStates: map[int64]*persistencespb.QueueReaderState{
-			readerID: {
-				Scopes: []*persistencespb.QueueSliceScope{{ // only has one scope
-					Range: &persistencespb.QueueSliceRange{
+			readerID: persistencespb.QueueReaderState_builder{
+				Scopes: []*persistencespb.QueueSliceScope{persistencespb.QueueSliceScope_builder{ // only has one scope
+					Range: persistencespb.QueueSliceRange_builder{
 						InclusiveMin: shard.ConvertToPersistenceTaskKey(
 							tasks.NewImmediateKey(beginInclusiveWatermark),
 						),
 						ExclusiveMax: shard.ConvertToPersistenceTaskKey(
 							tasks.NewImmediateKey(math.MaxInt64),
 						),
-					},
-					Predicate: &persistencespb.Predicate{
-						PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
-						Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
-					},
-				}},
-			},
+					}.Build(),
+					Predicate: persistencespb.Predicate_builder{
+						PredicateType:                enumsspb.PREDICATE_TYPE_UNIVERSAL,
+						UniversalPredicateAttributes: &persistencespb.UniversalPredicateAttributes{},
+					}.Build(),
+				}.Build()},
+			}.Build(),
 		},
-	}, true).Times(2)
+	}.Build(), true).Times(2)
 	s.shardContext.EXPECT().GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Return(
 		tasks.NewImmediateKey(endExclusiveWatermark),
 	).Times(2)
@@ -453,8 +453,8 @@ func (s *streamSenderSuite) TestSendCatchUp_TieredStack_SingleReaderScope() {
 		endExclusiveWatermark,
 	).Return(iter, nil).Times(2)
 	s.server.EXPECT().Send(gomock.Any()).DoAndReturn(func(resp *historyservice.StreamWorkflowReplicationMessagesResponse) error {
-		s.Equal(endExclusiveWatermark, resp.GetMessages().ExclusiveHighWatermark)
-		s.NotNil(resp.GetMessages().ExclusiveHighWatermarkTime)
+		s.Equal(endExclusiveWatermark, resp.GetMessages().GetExclusiveHighWatermark())
+		s.NotNil(resp.GetMessages().GetExclusiveHighWatermarkTime())
 		return nil
 	}).Times(2)
 
@@ -477,57 +477,57 @@ func (s *streamSenderSuite) TestSendCatchUp_TieredStack_TieredReaderScope() {
 	beginInclusiveWatermarkLowPriority := beginInclusiveWatermarkHighPriority - 100
 	s.shardContext.EXPECT().GetQueueState(
 		tasks.CategoryReplication,
-	).Return(&persistencespb.QueueState{
+	).Return(persistencespb.QueueState_builder{
 		ExclusiveReaderHighWatermark: nil,
 		ReaderStates: map[int64]*persistencespb.QueueReaderState{
-			readerID: {
+			readerID: persistencespb.QueueReaderState_builder{
 				Scopes: []*persistencespb.QueueSliceScope{
-					{
-						Range: &persistencespb.QueueSliceRange{
+					persistencespb.QueueSliceScope_builder{
+						Range: persistencespb.QueueSliceRange_builder{
 							InclusiveMin: shard.ConvertToPersistenceTaskKey(
 								tasks.NewImmediateKey(beginInclusiveWatermarkLowPriority),
 							),
 							ExclusiveMax: shard.ConvertToPersistenceTaskKey(
 								tasks.NewImmediateKey(math.MaxInt64),
 							),
-						},
-						Predicate: &persistencespb.Predicate{
-							PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
-							Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
-						},
-					},
-					{
-						Range: &persistencespb.QueueSliceRange{
+						}.Build(),
+						Predicate: persistencespb.Predicate_builder{
+							PredicateType:                enumsspb.PREDICATE_TYPE_UNIVERSAL,
+							UniversalPredicateAttributes: &persistencespb.UniversalPredicateAttributes{},
+						}.Build(),
+					}.Build(),
+					persistencespb.QueueSliceScope_builder{
+						Range: persistencespb.QueueSliceRange_builder{
 							InclusiveMin: shard.ConvertToPersistenceTaskKey(
 								tasks.NewImmediateKey(beginInclusiveWatermarkHighPriority),
 							),
 							ExclusiveMax: shard.ConvertToPersistenceTaskKey(
 								tasks.NewImmediateKey(math.MaxInt64),
 							),
-						},
-						Predicate: &persistencespb.Predicate{
-							PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
-							Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
-						},
-					},
-					{
-						Range: &persistencespb.QueueSliceRange{
+						}.Build(),
+						Predicate: persistencespb.Predicate_builder{
+							PredicateType:                enumsspb.PREDICATE_TYPE_UNIVERSAL,
+							UniversalPredicateAttributes: &persistencespb.UniversalPredicateAttributes{},
+						}.Build(),
+					}.Build(),
+					persistencespb.QueueSliceScope_builder{
+						Range: persistencespb.QueueSliceRange_builder{
 							InclusiveMin: shard.ConvertToPersistenceTaskKey(
 								tasks.NewImmediateKey(beginInclusiveWatermarkLowPriority),
 							),
 							ExclusiveMax: shard.ConvertToPersistenceTaskKey(
 								tasks.NewImmediateKey(math.MaxInt64),
 							),
-						},
-						Predicate: &persistencespb.Predicate{
-							PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
-							Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
-						},
-					},
+						}.Build(),
+						Predicate: persistencespb.Predicate_builder{
+							PredicateType:                enumsspb.PREDICATE_TYPE_UNIVERSAL,
+							UniversalPredicateAttributes: &persistencespb.UniversalPredicateAttributes{},
+						}.Build(),
+					}.Build(),
 				},
-			},
+			}.Build(),
 		},
-	}, true).Times(2)
+	}.Build(), true).Times(2)
 	s.shardContext.EXPECT().GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Return(
 		tasks.NewImmediateKey(endExclusiveWatermark),
 	).Times(2)
@@ -553,8 +553,8 @@ func (s *streamSenderSuite) TestSendCatchUp_TieredStack_TieredReaderScope() {
 	).Return(iter, nil).Times(1)
 
 	s.server.EXPECT().Send(gomock.Any()).DoAndReturn(func(resp *historyservice.StreamWorkflowReplicationMessagesResponse) error {
-		s.Equal(endExclusiveWatermark, resp.GetMessages().ExclusiveHighWatermark)
-		s.NotNil(resp.GetMessages().ExclusiveHighWatermarkTime)
+		s.Equal(endExclusiveWatermark, resp.GetMessages().GetExclusiveHighWatermark())
+		s.NotNil(resp.GetMessages().GetExclusiveHighWatermarkTime())
 		return nil
 	}).Times(2)
 
@@ -570,17 +570,17 @@ func (s *streamSenderSuite) TestSendCatchUp_SingleStack_NoReaderState() {
 	endExclusiveWatermark := int64(1234)
 	s.shardContext.EXPECT().GetQueueState(
 		tasks.CategoryReplication,
-	).Return(&persistencespb.QueueState{
+	).Return(persistencespb.QueueState_builder{
 		ExclusiveReaderHighWatermark: nil,
 		ReaderStates:                 map[int64]*persistencespb.QueueReaderState{},
-	}, true)
+	}.Build(), true)
 	s.shardContext.EXPECT().GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Return(
 		tasks.NewImmediateKey(endExclusiveWatermark),
 	)
 
 	s.server.EXPECT().Send(gomock.Any()).DoAndReturn(func(resp *historyservice.StreamWorkflowReplicationMessagesResponse) error {
-		s.Equal(endExclusiveWatermark, resp.GetMessages().ExclusiveHighWatermark)
-		s.NotNil(resp.GetMessages().ExclusiveHighWatermarkTime)
+		s.Equal(endExclusiveWatermark, resp.GetMessages().GetExclusiveHighWatermark())
+		s.NotNil(resp.GetMessages().GetExclusiveHighWatermarkTime())
 		return nil
 	})
 
@@ -594,17 +594,17 @@ func (s *streamSenderSuite) TestSendCatchUp_TieredStack_NoReaderState() {
 	endExclusiveWatermark := int64(1234)
 	s.shardContext.EXPECT().GetQueueState(
 		tasks.CategoryReplication,
-	).Return(&persistencespb.QueueState{
+	).Return(persistencespb.QueueState_builder{
 		ExclusiveReaderHighWatermark: nil,
 		ReaderStates:                 map[int64]*persistencespb.QueueReaderState{},
-	}, true).Times(2)
+	}.Build(), true).Times(2)
 	s.shardContext.EXPECT().GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Return(
 		tasks.NewImmediateKey(endExclusiveWatermark),
 	).Times(2)
 
 	s.server.EXPECT().Send(gomock.Any()).DoAndReturn(func(resp *historyservice.StreamWorkflowReplicationMessagesResponse) error {
-		s.Equal(endExclusiveWatermark, resp.GetMessages().ExclusiveHighWatermark)
-		s.NotNil(resp.GetMessages().ExclusiveHighWatermarkTime)
+		s.Equal(endExclusiveWatermark, resp.GetMessages().GetExclusiveHighWatermark())
+		s.NotNil(resp.GetMessages().GetExclusiveHighWatermarkTime())
 		return nil
 	}).Times(2)
 
@@ -626,8 +626,8 @@ func (s *streamSenderSuite) TestSendCatchUp_SingleStack_NoQueueState() {
 	)
 
 	s.server.EXPECT().Send(gomock.Any()).DoAndReturn(func(resp *historyservice.StreamWorkflowReplicationMessagesResponse) error {
-		s.Equal(endExclusiveWatermark, resp.GetMessages().ExclusiveHighWatermark)
-		s.NotNil(resp.GetMessages().ExclusiveHighWatermarkTime)
+		s.Equal(endExclusiveWatermark, resp.GetMessages().GetExclusiveHighWatermark())
+		s.NotNil(resp.GetMessages().GetExclusiveHighWatermarkTime())
 		return nil
 	})
 
@@ -671,13 +671,13 @@ func (s *streamSenderSuite) TestSendLive() {
 	)
 	gomock.InOrder(
 		s.server.EXPECT().Send(gomock.Any()).DoAndReturn(func(resp *historyservice.StreamWorkflowReplicationMessagesResponse) error {
-			s.Equal(watermark1, resp.GetMessages().ExclusiveHighWatermark)
-			s.NotNil(resp.GetMessages().ExclusiveHighWatermarkTime)
+			s.Equal(watermark1, resp.GetMessages().GetExclusiveHighWatermark())
+			s.NotNil(resp.GetMessages().GetExclusiveHighWatermarkTime())
 			return nil
 		}),
 		s.server.EXPECT().Send(gomock.Any()).DoAndReturn(func(resp *historyservice.StreamWorkflowReplicationMessagesResponse) error {
-			s.Equal(watermark2, resp.GetMessages().ExclusiveHighWatermark)
-			s.NotNil(resp.GetMessages().ExclusiveHighWatermarkTime)
+			s.Equal(watermark2, resp.GetMessages().GetExclusiveHighWatermark())
+			s.NotNil(resp.GetMessages().GetExclusiveHighWatermarkTime())
 			return nil
 		}),
 	)
@@ -700,8 +700,8 @@ func (s *streamSenderSuite) TestSendTasks_Noop() {
 	endExclusiveWatermark := beginInclusiveWatermark
 
 	s.server.EXPECT().Send(gomock.Any()).DoAndReturn(func(resp *historyservice.StreamWorkflowReplicationMessagesResponse) error {
-		s.Equal(endExclusiveWatermark, resp.GetMessages().ExclusiveHighWatermark)
-		s.NotNil(resp.GetMessages().ExclusiveHighWatermarkTime)
+		s.Equal(endExclusiveWatermark, resp.GetMessages().GetExclusiveHighWatermark())
+		s.NotNil(resp.GetMessages().GetExclusiveHighWatermarkTime())
 		return nil
 	})
 
@@ -729,8 +729,8 @@ func (s *streamSenderSuite) TestSendTasks_WithoutTasks() {
 		endExclusiveWatermark,
 	).Return(iter, nil)
 	s.server.EXPECT().Send(gomock.Any()).DoAndReturn(func(resp *historyservice.StreamWorkflowReplicationMessagesResponse) error {
-		s.Equal(endExclusiveWatermark, resp.GetMessages().ExclusiveHighWatermark)
-		s.NotNil(resp.GetMessages().ExclusiveHighWatermarkTime)
+		s.Equal(endExclusiveWatermark, resp.GetMessages().GetExclusiveHighWatermark())
+		s.NotNil(resp.GetMessages().GetExclusiveHighWatermarkTime())
 		return nil
 	})
 
@@ -766,14 +766,14 @@ func (s *streamSenderSuite) TestSendTasks_WithTasks() {
 	item1.EXPECT().GetType().Return(enumsspb.TASK_TYPE_REPLICATION_HISTORY).AnyTimes()
 	item2.EXPECT().GetType().Return(enumsspb.TASK_TYPE_REPLICATION_HISTORY).AnyTimes()
 	item3.EXPECT().GetType().Return(enumsspb.TASK_TYPE_REPLICATION_HISTORY).AnyTimes()
-	task0 := &replicationspb.ReplicationTask{
+	task0 := replicationspb.ReplicationTask_builder{
 		SourceTaskId:   beginInclusiveWatermark,
 		VisibilityTime: timestamppb.New(time.Unix(0, rand.Int63())),
-	}
-	task2 := &replicationspb.ReplicationTask{
+	}.Build()
+	task2 := replicationspb.ReplicationTask_builder{
 		SourceTaskId:   beginInclusiveWatermark + 2,
 		VisibilityTime: timestamppb.New(time.Unix(0, rand.Int63())),
-	}
+	}.Build()
 
 	iter := collection.NewPagingIterator[tasks.Task](
 		func(paginationToken []byte) ([]tasks.Task, []byte, error) {
@@ -782,13 +782,13 @@ func (s *streamSenderSuite) TestSendTasks_WithTasks() {
 	)
 	mockRegistry := namespace.NewMockRegistry(s.controller)
 	mockRegistry.EXPECT().GetNamespaceByID(namespace.ID("1")).Return(namespace.NewGlobalNamespaceForTest(
-		nil, nil, &persistencespb.NamespaceReplicationConfig{
+		nil, nil, persistencespb.NamespaceReplicationConfig_builder{
 			Clusters: []string{"source_cluster", "target_cluster"},
-		}, 100), nil).AnyTimes()
+		}.Build(), 100), nil).AnyTimes()
 	mockRegistry.EXPECT().GetNamespaceByID(namespace.ID("2")).Return(namespace.NewGlobalNamespaceForTest(
-		nil, nil, &persistencespb.NamespaceReplicationConfig{
+		nil, nil, persistencespb.NamespaceReplicationConfig_builder{
 			Clusters: []string{"source_cluster"},
-		}, 100), nil).AnyTimes()
+		}.Build(), 100), nil).AnyTimes()
 	s.shardContext.EXPECT().GetNamespaceRegistry().Return(mockRegistry).AnyTimes()
 	s.historyEngine.EXPECT().GetReplicationTasksIter(
 		gomock.Any(),
@@ -801,27 +801,23 @@ func (s *streamSenderSuite) TestSendTasks_WithTasks() {
 	s.taskConverter.EXPECT().Convert(item2, s.clientShardKey.ClusterID, enumsspb.TASK_PRIORITY_UNSPECIFIED).Return(task2, nil)
 	s.taskConverter.EXPECT().Convert(item3, s.clientShardKey.ClusterID, gomock.Any()).Times(0)
 	gomock.InOrder(
-		s.server.EXPECT().Send(&historyservice.StreamWorkflowReplicationMessagesResponse{
-			Attributes: &historyservice.StreamWorkflowReplicationMessagesResponse_Messages{
-				Messages: &replicationspb.WorkflowReplicationMessages{
-					ReplicationTasks:           []*replicationspb.ReplicationTask{task0},
-					ExclusiveHighWatermark:     task0.SourceTaskId + 1,
-					ExclusiveHighWatermarkTime: task0.VisibilityTime,
-				},
-			},
-		}).Return(nil),
-		s.server.EXPECT().Send(&historyservice.StreamWorkflowReplicationMessagesResponse{
-			Attributes: &historyservice.StreamWorkflowReplicationMessagesResponse_Messages{
-				Messages: &replicationspb.WorkflowReplicationMessages{
-					ReplicationTasks:           []*replicationspb.ReplicationTask{task2},
-					ExclusiveHighWatermark:     task2.SourceTaskId + 1,
-					ExclusiveHighWatermarkTime: task2.VisibilityTime,
-				},
-			},
-		}).Return(nil),
+		s.server.EXPECT().Send(historyservice.StreamWorkflowReplicationMessagesResponse_builder{
+			Messages: replicationspb.WorkflowReplicationMessages_builder{
+				ReplicationTasks:           []*replicationspb.ReplicationTask{task0},
+				ExclusiveHighWatermark:     task0.GetSourceTaskId() + 1,
+				ExclusiveHighWatermarkTime: task0.GetVisibilityTime(),
+			}.Build(),
+		}.Build()).Return(nil),
+		s.server.EXPECT().Send(historyservice.StreamWorkflowReplicationMessagesResponse_builder{
+			Messages: replicationspb.WorkflowReplicationMessages_builder{
+				ReplicationTasks:           []*replicationspb.ReplicationTask{task2},
+				ExclusiveHighWatermark:     task2.GetSourceTaskId() + 1,
+				ExclusiveHighWatermarkTime: task2.GetVisibilityTime(),
+			}.Build(),
+		}.Build()).Return(nil),
 		s.server.EXPECT().Send(gomock.Any()).DoAndReturn(func(resp *historyservice.StreamWorkflowReplicationMessagesResponse) error {
-			s.Equal(endExclusiveWatermark, resp.GetMessages().ExclusiveHighWatermark)
-			s.NotNil(resp.GetMessages().ExclusiveHighWatermarkTime)
+			s.Equal(endExclusiveWatermark, resp.GetMessages().GetExclusiveHighWatermark())
+			s.NotNil(resp.GetMessages().GetExclusiveHighWatermarkTime())
 			return nil
 		}),
 	)
@@ -860,16 +856,16 @@ func (s *streamSenderSuite) TestSendTasks_TieredStack_HighPriority() {
 		},
 		Priority: enumsspb.TASK_PRIORITY_LOW,
 	}
-	task1 := &replicationspb.ReplicationTask{
+	task1 := replicationspb.ReplicationTask_builder{
 		SourceTaskId:   beginInclusiveWatermark,
 		VisibilityTime: timestamppb.New(time.Unix(0, rand.Int63())),
 		Priority:       enumsspb.TASK_PRIORITY_HIGH,
-	}
+	}.Build()
 	mockRegistry := namespace.NewMockRegistry(s.controller)
 	mockRegistry.EXPECT().GetNamespaceByID(namespace.ID("1")).Return(namespace.NewGlobalNamespaceForTest(
-		nil, nil, &persistencespb.NamespaceReplicationConfig{
+		nil, nil, persistencespb.NamespaceReplicationConfig_builder{
 			Clusters: []string{"source_cluster", "target_cluster"},
-		}, 100), nil).AnyTimes()
+		}.Build(), 100), nil).AnyTimes()
 	s.shardContext.EXPECT().GetNamespaceRegistry().Return(mockRegistry).AnyTimes()
 	iter := collection.NewPagingIterator[tasks.Task](
 		func(paginationToken []byte) ([]tasks.Task, []byte, error) {
@@ -886,20 +882,18 @@ func (s *streamSenderSuite) TestSendTasks_TieredStack_HighPriority() {
 	s.taskConverter.EXPECT().Convert(item1, s.clientShardKey.ClusterID, item1.Priority).Return(task1, nil)
 
 	gomock.InOrder(
-		s.server.EXPECT().Send(&historyservice.StreamWorkflowReplicationMessagesResponse{
-			Attributes: &historyservice.StreamWorkflowReplicationMessagesResponse_Messages{
-				Messages: &replicationspb.WorkflowReplicationMessages{
-					ReplicationTasks:           []*replicationspb.ReplicationTask{task1},
-					ExclusiveHighWatermark:     task1.SourceTaskId + 1,
-					ExclusiveHighWatermarkTime: task1.VisibilityTime,
-					Priority:                   enumsspb.TASK_PRIORITY_HIGH,
-				},
-			},
-		}).Return(nil),
+		s.server.EXPECT().Send(historyservice.StreamWorkflowReplicationMessagesResponse_builder{
+			Messages: replicationspb.WorkflowReplicationMessages_builder{
+				ReplicationTasks:           []*replicationspb.ReplicationTask{task1},
+				ExclusiveHighWatermark:     task1.GetSourceTaskId() + 1,
+				ExclusiveHighWatermarkTime: task1.GetVisibilityTime(),
+				Priority:                   enumsspb.TASK_PRIORITY_HIGH,
+			}.Build(),
+		}.Build()).Return(nil),
 		s.server.EXPECT().Send(gomock.Any()).DoAndReturn(func(resp *historyservice.StreamWorkflowReplicationMessagesResponse) error {
-			s.Equal(endExclusiveWatermark, resp.GetMessages().ExclusiveHighWatermark)
-			s.Equal(enumsspb.TASK_PRIORITY_HIGH, resp.GetMessages().Priority)
-			s.NotNil(resp.GetMessages().ExclusiveHighWatermarkTime)
+			s.Equal(endExclusiveWatermark, resp.GetMessages().GetExclusiveHighWatermark())
+			s.Equal(enumsspb.TASK_PRIORITY_HIGH, resp.GetMessages().GetPriority())
+			s.NotNil(resp.GetMessages().GetExclusiveHighWatermarkTime())
 			return nil
 		}),
 	)
@@ -938,21 +932,21 @@ func (s *streamSenderSuite) TestSendTasks_TieredStack_LowPriority() {
 		Priority: enumsspb.TASK_PRIORITY_LOW,
 	}
 
-	task0 := &replicationspb.ReplicationTask{
+	task0 := replicationspb.ReplicationTask_builder{
 		SourceTaskId:   beginInclusiveWatermark,
 		VisibilityTime: timestamppb.New(time.Unix(0, rand.Int63())),
 		Priority:       enumsspb.TASK_PRIORITY_LOW,
-	}
-	task2 := &replicationspb.ReplicationTask{
+	}.Build()
+	task2 := replicationspb.ReplicationTask_builder{
 		SourceTaskId:   beginInclusiveWatermark,
 		VisibilityTime: timestamppb.New(time.Unix(0, rand.Int63())),
 		Priority:       enumsspb.TASK_PRIORITY_LOW,
-	}
+	}.Build()
 	mockRegistry := namespace.NewMockRegistry(s.controller)
 	mockRegistry.EXPECT().GetNamespaceByID(namespace.ID("1")).Return(namespace.NewGlobalNamespaceForTest(
-		nil, nil, &persistencespb.NamespaceReplicationConfig{
+		nil, nil, persistencespb.NamespaceReplicationConfig_builder{
 			Clusters: []string{"source_cluster", "target_cluster"},
-		}, 100), nil).AnyTimes()
+		}.Build(), 100), nil).AnyTimes()
 	mockRegistry.EXPECT().GetNamespaceName(namespace.ID("1")).Return(namespace.Name("test"), nil).AnyTimes()
 	s.shardContext.EXPECT().GetNamespaceRegistry().Return(mockRegistry).AnyTimes()
 	iter := collection.NewPagingIterator[tasks.Task](
@@ -971,30 +965,26 @@ func (s *streamSenderSuite) TestSendTasks_TieredStack_LowPriority() {
 	s.taskConverter.EXPECT().Convert(item0, s.clientShardKey.ClusterID, item0.Priority).Return(task2, nil)
 
 	gomock.InOrder(
-		s.server.EXPECT().Send(&historyservice.StreamWorkflowReplicationMessagesResponse{
-			Attributes: &historyservice.StreamWorkflowReplicationMessagesResponse_Messages{
-				Messages: &replicationspb.WorkflowReplicationMessages{
-					ReplicationTasks:           []*replicationspb.ReplicationTask{task0},
-					ExclusiveHighWatermark:     task0.SourceTaskId + 1,
-					ExclusiveHighWatermarkTime: task0.VisibilityTime,
-					Priority:                   enumsspb.TASK_PRIORITY_LOW,
-				},
-			},
-		}).Return(nil),
-		s.server.EXPECT().Send(&historyservice.StreamWorkflowReplicationMessagesResponse{
-			Attributes: &historyservice.StreamWorkflowReplicationMessagesResponse_Messages{
-				Messages: &replicationspb.WorkflowReplicationMessages{
-					ReplicationTasks:           []*replicationspb.ReplicationTask{task2},
-					ExclusiveHighWatermark:     task2.SourceTaskId + 1,
-					ExclusiveHighWatermarkTime: task2.VisibilityTime,
-					Priority:                   enumsspb.TASK_PRIORITY_LOW,
-				},
-			},
-		}).Return(nil),
+		s.server.EXPECT().Send(historyservice.StreamWorkflowReplicationMessagesResponse_builder{
+			Messages: replicationspb.WorkflowReplicationMessages_builder{
+				ReplicationTasks:           []*replicationspb.ReplicationTask{task0},
+				ExclusiveHighWatermark:     task0.GetSourceTaskId() + 1,
+				ExclusiveHighWatermarkTime: task0.GetVisibilityTime(),
+				Priority:                   enumsspb.TASK_PRIORITY_LOW,
+			}.Build(),
+		}.Build()).Return(nil),
+		s.server.EXPECT().Send(historyservice.StreamWorkflowReplicationMessagesResponse_builder{
+			Messages: replicationspb.WorkflowReplicationMessages_builder{
+				ReplicationTasks:           []*replicationspb.ReplicationTask{task2},
+				ExclusiveHighWatermark:     task2.GetSourceTaskId() + 1,
+				ExclusiveHighWatermarkTime: task2.GetVisibilityTime(),
+				Priority:                   enumsspb.TASK_PRIORITY_LOW,
+			}.Build(),
+		}.Build()).Return(nil),
 		s.server.EXPECT().Send(gomock.Any()).DoAndReturn(func(resp *historyservice.StreamWorkflowReplicationMessagesResponse) error {
-			s.Equal(endExclusiveWatermark, resp.GetMessages().ExclusiveHighWatermark)
-			s.Equal(enumsspb.TASK_PRIORITY_LOW, resp.GetMessages().Priority)
-			s.NotNil(resp.GetMessages().ExclusiveHighWatermarkTime)
+			s.Equal(endExclusiveWatermark, resp.GetMessages().GetExclusiveHighWatermark())
+			s.Equal(enumsspb.TASK_PRIORITY_LOW, resp.GetMessages().GetPriority())
+			s.NotNil(resp.GetMessages().GetExclusiveHighWatermarkTime())
 			return nil
 		}),
 	)
@@ -1026,8 +1016,8 @@ func (s *streamSenderSuite) TestSendEventLoop_StreamSendError_ShouldReturnStream
 	endExclusiveWatermark := beginInclusiveWatermark
 
 	s.server.EXPECT().Send(gomock.Any()).DoAndReturn(func(resp *historyservice.StreamWorkflowReplicationMessagesResponse) error {
-		s.Equal(endExclusiveWatermark, resp.GetMessages().ExclusiveHighWatermark)
-		s.NotNil(resp.GetMessages().ExclusiveHighWatermarkTime)
+		s.Equal(endExclusiveWatermark, resp.GetMessages().GetExclusiveHighWatermark())
+		s.NotNil(resp.GetMessages().GetExclusiveHighWatermarkTime())
 		return errors.New("rpc error")
 	})
 

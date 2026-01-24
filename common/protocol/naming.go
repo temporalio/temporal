@@ -44,11 +44,11 @@ func (pt Type) String() string {
 func Identify(msg *protocolpb.Message) (Type, MessageType, error) {
 	if msg == nil {
 		return TypeUnknown, MessageTypeUnknown, errNilMsg
-	} else if msg.Body == nil {
+	} else if !msg.HasBody() {
 		return TypeUnknown, MessageTypeUnknown, errNilBody
 	}
 
-	bodyTypeName := string(msg.Body.MessageName())
+	bodyTypeName := string(msg.GetBody().MessageName())
 	if bodyTypeName == "" {
 		return TypeUnknown, MessageTypeUnknown, errNoName
 	}

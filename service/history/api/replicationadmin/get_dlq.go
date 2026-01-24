@@ -30,10 +30,10 @@ func GetDLQ(
 	if err != nil {
 		return nil, err
 	}
-	return &historyservice.GetDLQMessagesResponse{
+	return historyservice.GetDLQMessagesResponse_builder{
 		Type:                 request.GetType(),
 		ReplicationTasks:     tasks,
 		ReplicationTasksInfo: tasksInfo,
 		NextPageToken:        token,
-	}, nil
+	}.Build(), nil
 }

@@ -80,10 +80,10 @@ func (s *backfillerTasksSuite) SetupTest() {
 		HandleGetWorkflowKey:      tv.Any().WorkflowKey,
 		HandleIsWorkflow:          func() bool { return false },
 		HandleCurrentVersionedTransition: func() *persistencespb.VersionedTransition {
-			return &persistencespb.VersionedTransition{
+			return persistencespb.VersionedTransition_builder{
 				NamespaceFailoverVersion: 1,
 				TransitionCount:          1,
-			}
+			}.Build()
 		},
 	}
 
@@ -119,17 +119,17 @@ type backfillTestCase struct {
 // An immediately-triggered run should result in the machine being deleted after
 // completion.
 func (s *backfillerTasksSuite) TestBackfillTask_TriggerImmediate() {
-	request := &schedulepb.TriggerImmediatelyRequest{
+	request := schedulepb.TriggerImmediatelyRequest_builder{
 		OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
-	}
+	}.Build()
 	s.runTestCase(&backfillTestCase{
 		InitialTriggerRequest:  request,
 		ExpectedBufferedStarts: 1,
 		ExpectedComplete:       true,
 		ValidateInvoker: func(invoker *scheduler.Invoker) {
 			start := invoker.GetBufferedStarts()[0]
-			s.Equal(request.OverlapPolicy, start.OverlapPolicy)
-			s.True(start.Manual)
+			s.Equal(request.GetOverlapPolicy(), start.GetOverlapPolicy())
+			s.True(start.GetManual())
 		},
 	})
 }
@@ -159,22 +159,22 @@ func (s *backfillerTasksSuite) TestBackfillTask_TriggerImmediateFullBuffer() {
 func (s *backfillerTasksSuite) TestBackfillTask_CompleteFill() {
 	startTime := s.timeSource.Now()
 	endTime := startTime.Add(5 * defaultInterval)
-	request := &schedulepb.BackfillRequest{
+	request := schedulepb.BackfillRequest_builder{
 		StartTime:     timestamppb.New(startTime),
 		EndTime:       timestamppb.New(endTime),
 		OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
-	}
+	}.Build()
 	s.runTestCase(&backfillTestCase{
 		InitialBackfillRequest: request,
 		ExpectedBufferedStarts: 5,
 		ExpectedComplete:       true,
 		ValidateInvoker: func(invoker *scheduler.Invoker) {
 			for _, start := range invoker.GetBufferedStarts() {
-				s.Equal(request.OverlapPolicy, start.OverlapPolicy)
+				s.Equal(request.GetOverlapPolicy(), start.GetOverlapPolicy())
 				startAt := start.GetActualTime().AsTime()
 				s.True(startAt.After(startTime))
 				s.True(startAt.Before(endTime))
-				s.True(start.Manual)
+				s.True(start.GetManual())
 			}
 		},
 	})
@@ -186,10 +186,10 @@ func (s *backfillerTasksSuite) TestBackfillTask_CompleteFill() {
 func (s *backfillerTasksSuite) TestBackfillTask_InclusiveStartEnd() {
 	// Set an identical start and end time, landing on the calendar spec's interval.
 	backfillTime := s.timeSource.Now().Truncate(defaultInterval)
-	request := &schedulepb.BackfillRequest{
+	request := schedulepb.BackfillRequest_builder{
 		StartTime: timestamppb.New(backfillTime),
 		EndTime:   timestamppb.New(backfillTime),
-	}
+	}.Build()
 	s.runTestCase(&backfillTestCase{
 		InitialBackfillRequest: request,
 		ExpectedBufferedStarts: 1,
@@ -203,10 +203,10 @@ func (s *backfillerTasksSuite) TestBackfillTask_InclusiveStartEnd() {
 
 	// A hair off and the action won't fire.
 	backfillTime = backfillTime.Add(1 * time.Millisecond)
-	request = &schedulepb.BackfillRequest{
+	request = schedulepb.BackfillRequest_builder{
 		StartTime: timestamppb.New(backfillTime),
 		EndTime:   timestamppb.New(backfillTime),
-	}
+	}.Build()
 	s.runTestCase(&backfillTestCase{
 		InitialBackfillRequest: request,
 		ExpectedBufferedStarts: 0,
@@ -226,10 +226,10 @@ func (s *backfillerTasksSuite) TestBackfillTask_BufferCompletelyFull() {
 
 	startTime := s.timeSource.Now()
 	endTime := startTime.Add(5 * defaultInterval)
-	request := &schedulepb.BackfillRequest{
+	request := schedulepb.BackfillRequest_builder{
 		StartTime: timestamppb.New(startTime),
 		EndTime:   timestamppb.New(endTime),
-	}
+	}.Build()
 	s.runTestCase(&backfillTestCase{
 		InitialBackfillRequest:    request,
 		ExpectedBufferedStarts:    1000,
@@ -246,11 +246,11 @@ func (s *backfillerTasksSuite) TestBackfillTask_PartialFill() {
 	// buffer limit (MaxBufferSize/2 = 500).
 	startTime := s.timeSource.Now()
 	endTime := startTime.Add(1000 * defaultInterval)
-	request := &schedulepb.BackfillRequest{
+	request := schedulepb.BackfillRequest_builder{
 		StartTime:     timestamppb.New(startTime),
 		EndTime:       timestamppb.New(endTime),
 		OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
-	}
+	}.Build()
 
 	ctx := s.newMutableContext()
 	schedComponent, err := s.node.Component(ctx, chasm.ComponentRef{})
@@ -335,7 +335,7 @@ func (s *backfillerTasksSuite) runTestCase(c *backfillTestCase) {
 
 	// Validate RequestId -> WorkflowId mapping
 	for _, start := range invoker.GetBufferedStarts() {
-		s.Equal(start.WorkflowId, invoker.RunningWorkflowID(start.RequestId))
+		s.Equal(start.GetWorkflowId(), invoker.RunningWorkflowID(start.GetRequestId()))
 	}
 
 	// Callbacks.

@@ -166,7 +166,7 @@ func (h *historyArchiver) Archive(
 			return err
 		}
 
-		if historyMutated(request, historyBlob.Body, historyBlob.Header.IsLast) {
+		if historyMutated(request, historyBlob.GetBody(), historyBlob.GetHeader().GetIsLast()) {
 			logger.Error(archiver.ArchiveNonRetryableErrorMsg, tag.ArchivalArchiveFailReason(archiver.ErrReasonHistoryMutated))
 			return archiver.ErrHistoryMutated
 		}
@@ -309,18 +309,18 @@ func (h *historyArchiver) Get(
 			}
 		}
 
-		historyBlob := archiverspb.HistoryBlob{}
-		err = encoder.Decode(encodedRecord, &historyBlob)
+		historyBlob := &archiverspb.HistoryBlob{}
+		err = encoder.Decode(encodedRecord, historyBlob)
 		if err != nil {
 			return nil, serviceerror.NewInternal(err.Error())
 		}
 
-		for _, batch := range historyBlob.Body {
+		for _, batch := range historyBlob.GetBody() {
 			response.HistoryBatches = append(response.HistoryBatches, batch)
-			numOfEvents += len(batch.Events)
+			numOfEvents += len(batch.GetEvents())
 		}
 
-		if historyBlob.Header.IsLast {
+		if historyBlob.GetHeader().GetIsLast() {
 			break
 		}
 		token.BatchIdx++

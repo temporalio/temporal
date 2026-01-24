@@ -60,11 +60,11 @@ func (s *apiSuite) TestWorkflowRunning_ActivityTaskNotStarted() {
 	s.mutableState.EXPECT().IsWorkflowExecutionRunning().Return(true)
 	activityScheduleEventID := rand.Int63()
 	stamp := rand.Int31()
-	s.mutableState.EXPECT().GetActivityInfo(activityScheduleEventID).Return(&persistencespb.ActivityInfo{
+	s.mutableState.EXPECT().GetActivityInfo(activityScheduleEventID).Return(persistencespb.ActivityInfo_builder{
 		ScheduledEventId: activityScheduleEventID,
 		StartedEventId:   common.EmptyEventID,
 		Stamp:            stamp,
-	}, true)
+	}.Build(), true)
 
 	valid, err := isActivityTaskValid(s.workflowLease, activityScheduleEventID, stamp)
 	s.NoError(err)
@@ -75,11 +75,11 @@ func (s *apiSuite) TestWorkflowRunning_ActivityTaskStarted() {
 	s.mutableState.EXPECT().IsWorkflowExecutionRunning().Return(true)
 	activityScheduleEventID := rand.Int63()
 	stamp := rand.Int31()
-	s.mutableState.EXPECT().GetActivityInfo(activityScheduleEventID).Return(&persistencespb.ActivityInfo{
+	s.mutableState.EXPECT().GetActivityInfo(activityScheduleEventID).Return(persistencespb.ActivityInfo_builder{
 		ScheduledEventId: activityScheduleEventID,
 		StartedEventId:   activityScheduleEventID + 1,
 		Stamp:            stamp,
-	}, true)
+	}.Build(), true)
 
 	valid, err := isActivityTaskValid(s.workflowLease, activityScheduleEventID, stamp)
 	s.NoError(err)
@@ -90,11 +90,11 @@ func (s *apiSuite) TestWorkflowRunning_ActivityTaskStampMismatch() {
 	s.mutableState.EXPECT().IsWorkflowExecutionRunning().Return(true)
 	activityScheduleEventID := rand.Int63()
 	const storedStamp = int32(456)
-	s.mutableState.EXPECT().GetActivityInfo(activityScheduleEventID).Return(&persistencespb.ActivityInfo{
+	s.mutableState.EXPECT().GetActivityInfo(activityScheduleEventID).Return(persistencespb.ActivityInfo_builder{
 		ScheduledEventId: activityScheduleEventID,
 		StartedEventId:   common.EmptyEventID,
 		Stamp:            storedStamp,
-	}, true)
+	}.Build(), true)
 
 	valid, err := isActivityTaskValid(s.workflowLease, activityScheduleEventID, storedStamp+1)
 	s.NoError(err)
@@ -104,11 +104,11 @@ func (s *apiSuite) TestWorkflowRunning_ActivityTaskStampMismatch() {
 func (s *apiSuite) TestWorkflowRunning_ActivityTaskStampLegacy() {
 	s.mutableState.EXPECT().IsWorkflowExecutionRunning().Return(true)
 	activityScheduleEventID := rand.Int63()
-	s.mutableState.EXPECT().GetActivityInfo(activityScheduleEventID).Return(&persistencespb.ActivityInfo{
+	s.mutableState.EXPECT().GetActivityInfo(activityScheduleEventID).Return(persistencespb.ActivityInfo_builder{
 		ScheduledEventId: activityScheduleEventID,
 		StartedEventId:   common.EmptyEventID,
 		Stamp:            0,
-	}, true)
+	}.Build(), true)
 
 	valid, err := isActivityTaskValid(s.workflowLease, activityScheduleEventID, 0)
 	s.NoError(err)

@@ -897,11 +897,11 @@ func newDecodeCommands(
 				if err != nil {
 					return fmt.Errorf("failed to read file: %w", err)
 				}
-				blob := commonpb.DataBlob{
+				blob := commonpb.DataBlob_builder{
 					EncodingType: encodingType,
 					Data:         b,
-				}
-				if err := taskBlobEncoder.Encode(c.App.Writer, taskCategoryID, &blob); err != nil {
+				}.Build()
+				if err := taskBlobEncoder.Encode(c.App.Writer, taskCategoryID, blob); err != nil {
 					return fmt.Errorf("failed to decode task blob: %w", err)
 				}
 				return nil

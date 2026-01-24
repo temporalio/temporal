@@ -51,50 +51,50 @@ func (s *QuerySuite) TestValidateCompletionState() {
 		{
 			ts: &historyi.QueryCompletionState{
 				Type: QueryCompletionTypeSucceeded,
-				Result: &querypb.WorkflowQueryResult{
+				Result: querypb.WorkflowQueryResult_builder{
 					ResultType: enumspb.QUERY_RESULT_TYPE_ANSWERED,
-				},
+				}.Build(),
 			},
 			expectErr: true,
 		},
 		{
 			ts: &historyi.QueryCompletionState{
 				Type: QueryCompletionTypeSucceeded,
-				Result: &querypb.WorkflowQueryResult{
+				Result: querypb.WorkflowQueryResult_builder{
 					ResultType:   enumspb.QUERY_RESULT_TYPE_ANSWERED,
 					Answer:       payloads.EncodeBytes([]byte{1, 2, 3}),
 					ErrorMessage: "err",
-				},
+				}.Build(),
 			},
 			expectErr: true,
 		},
 		{
 			ts: &historyi.QueryCompletionState{
 				Type: QueryCompletionTypeSucceeded,
-				Result: &querypb.WorkflowQueryResult{
+				Result: querypb.WorkflowQueryResult_builder{
 					ResultType: enumspb.QUERY_RESULT_TYPE_FAILED,
 					Answer:     payloads.EncodeBytes([]byte{1, 2, 3}),
-				},
+				}.Build(),
 			},
 			expectErr: true,
 		},
 		{
 			ts: &historyi.QueryCompletionState{
 				Type: QueryCompletionTypeSucceeded,
-				Result: &querypb.WorkflowQueryResult{
+				Result: querypb.WorkflowQueryResult_builder{
 					ResultType:   enumspb.QUERY_RESULT_TYPE_FAILED,
 					ErrorMessage: "err",
-				},
+				}.Build(),
 			},
 			expectErr: false,
 		},
 		{
 			ts: &historyi.QueryCompletionState{
 				Type: QueryCompletionTypeSucceeded,
-				Result: &querypb.WorkflowQueryResult{
+				Result: querypb.WorkflowQueryResult_builder{
 					ResultType: enumspb.QUERY_RESULT_TYPE_ANSWERED,
 					Answer:     payloads.EncodeBytes([]byte{1, 2, 3}),
-				},
+				}.Build(),
 			},
 			expectErr: false,
 		},
@@ -161,10 +161,10 @@ func (s *QuerySuite) TestCompletionState_Failed() {
 func (s *QuerySuite) TestCompletionState_Completed() {
 	answeredCompletionState := &historyi.QueryCompletionState{
 		Type: QueryCompletionTypeSucceeded,
-		Result: &querypb.WorkflowQueryResult{
+		Result: querypb.WorkflowQueryResult_builder{
 			ResultType: enumspb.QUERY_RESULT_TYPE_ANSWERED,
 			Answer:     payloads.EncodeBytes([]byte{1, 2, 3}),
-		},
+		}.Build(),
 	}
 	s.testSetCompletionState(answeredCompletionState)
 }

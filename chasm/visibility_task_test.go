@@ -10,16 +10,16 @@ import (
 func TestTaskValidator(t *testing.T) {
 	ctx := &MockMutableContext{}
 	visibility := NewVisibility(ctx)
-	task := &persistencespb.ChasmVisibilityTaskData{
+	task := persistencespb.ChasmVisibilityTaskData_builder{
 		TransitionCount: 3,
-	}
+	}.Build()
 
-	visibility.Data.TransitionCount = 1
+	visibility.Data.SetTransitionCount(1)
 	valid, err := defaultVisibilityTaskHandler.Validate(ctx, visibility, TaskAttributes{}, task)
 	require.NoError(t, err)
 	require.False(t, valid)
 
-	visibility.Data.TransitionCount = task.TransitionCount
+	visibility.Data.SetTransitionCount(task.GetTransitionCount())
 	valid, err = defaultVisibilityTaskHandler.Validate(ctx, visibility, TaskAttributes{}, task)
 	require.NoError(t, err)
 	require.True(t, valid)

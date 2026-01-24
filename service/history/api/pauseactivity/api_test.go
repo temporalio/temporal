@@ -63,10 +63,10 @@ func (s *pauseActivitySuite) SetupTest() {
 
 	s.mockShard = shard.NewTestContext(
 		s.controller,
-		&persistencespb.ShardInfo{
+		persistencespb.ShardInfo_builder{
 			ShardId: 0,
 			RangeId: 1,
-		},
+		}.Build(),
 		tests.NewDynamicConfig(),
 	)
 
@@ -79,11 +79,11 @@ func (s *pauseActivitySuite) SetupTest() {
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
 
 	s.logger = s.mockShard.GetLogger()
-	s.executionInfo = &persistencespb.WorkflowExecutionInfo{
+	s.executionInfo = persistencespb.WorkflowExecutionInfo_builder{
 		VersionHistories:                 versionhistory.NewVersionHistories(&historyspb.VersionHistory{}),
 		FirstExecutionRunId:              uuid.NewString(),
 		WorkflowExecutionTimerTaskStatus: workflow.TimerTaskStatusCreated,
-	}
+	}.Build()
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(s.executionInfo).AnyTimes()
 	s.mockMutableState.EXPECT().GetCurrentVersion().Return(int64(1)).AnyTimes()
 
@@ -101,13 +101,13 @@ func (s *pauseActivitySuite) TearDownTest() {
 
 func (s *pauseActivitySuite) TestPauseActivityAcceptance() {
 	activityId := "activity_id"
-	activityInfo := &persistencespb.ActivityInfo{
+	activityInfo := persistencespb.ActivityInfo_builder{
 		TaskQueue:  "task_queue_name",
 		ActivityId: activityId,
-		ActivityType: &commonpb.ActivityType{
+		ActivityType: commonpb.ActivityType_builder{
 			Name: "activity_type",
-		},
-	}
+		}.Build(),
+	}.Build()
 
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true)
 	s.mockMutableState.EXPECT().GetActivityByActivityID(gomock.Any()).Return(activityInfo, true)

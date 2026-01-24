@@ -136,20 +136,20 @@ func (s *BacklogManagerTestSuite) TestReadLevelForAllExpiredTasksInBatch() {
 
 	// Add all expired tasks
 	tasks := []*persistencespb.AllocatedTaskInfo{
-		{
-			Data: &persistencespb.TaskInfo{
+		persistencespb.AllocatedTaskInfo_builder{
+			Data: persistencespb.TaskInfo_builder{
 				ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(-60),
 				CreateTime: timestamp.TimeNowPtrUtcAddSeconds(-60 * 60),
-			},
+			}.Build(),
 			TaskId: 11,
-		},
-		{
-			Data: &persistencespb.TaskInfo{
+		}.Build(),
+		persistencespb.AllocatedTaskInfo_builder{
+			Data: persistencespb.TaskInfo_builder{
 				ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(-60),
 				CreateTime: timestamp.TimeNowPtrUtcAddSeconds(-60 * 60),
-			},
+			}.Build(),
 			TaskId: 12,
-		},
+		}.Build(),
 	}
 
 	s.NoError(blm.taskReader.addTasksToBuffer(context.TODO(), tasks))
@@ -158,20 +158,20 @@ func (s *BacklogManagerTestSuite) TestReadLevelForAllExpiredTasksInBatch() {
 
 	// Now add a mix of valid and expired tasks
 	s.NoError(blm.taskReader.addTasksToBuffer(context.TODO(), []*persistencespb.AllocatedTaskInfo{
-		{
-			Data: &persistencespb.TaskInfo{
+		persistencespb.AllocatedTaskInfo_builder{
+			Data: persistencespb.TaskInfo_builder{
 				ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(-60),
 				CreateTime: timestamp.TimeNowPtrUtcAddSeconds(-60 * 60),
-			},
+			}.Build(),
 			TaskId: 13,
-		},
-		{
-			Data: &persistencespb.TaskInfo{
+		}.Build(),
+		persistencespb.AllocatedTaskInfo_builder{
+			Data: persistencespb.TaskInfo_builder{
 				ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(-60),
 				CreateTime: timestamp.TimeNowPtrUtcAddSeconds(-60 * 60),
-			},
+			}.Build(),
 			TaskId: 14,
-		},
+		}.Build(),
 	}))
 	s.Equal(int64(0), blm.taskAckManager.getAckLevel())
 	s.Equal(int64(14), blm.taskAckManager.getReadLevel())
@@ -233,10 +233,10 @@ func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_IncrementedByAppen
 
 	// Add tasks on the taskWriters channel
 	blm.taskWriter.appendCh <- &writeTaskRequest{
-		taskInfo: &persistencespb.TaskInfo{
+		taskInfo: persistencespb.TaskInfo_builder{
 			ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(3000),
 			CreateTime: timestamp.TimeNowPtrUtc(),
-		},
+		}.Build(),
 		responseCh: make(chan<- error),
 	}
 
@@ -292,10 +292,10 @@ func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_IncrementedBySpool
 	taskCount := 10
 	s.ptqMgr.EXPECT().AddSpooledTask(gomock.Any()).Return(nil).AnyTimes()
 	for i := 0; i < taskCount; i++ {
-		s.NoError(s.blm.SpoolTask(&persistencespb.TaskInfo{
+		s.NoError(s.blm.SpoolTask(persistencespb.TaskInfo_builder{
 			ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(3000),
 			CreateTime: timestamp.TimeNowPtrUtc(),
-		}))
+		}.Build()))
 	}
 	s.Equal(int64(taskCount), totalApproximateBacklogCount(s.blm),
 		"backlog count should match the number of tasks")
@@ -319,10 +319,10 @@ func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_IncrementedBySpool
 	taskCount := 10
 	s.ptqMgr.EXPECT().AddSpooledTask(gomock.Any()).Return(nil).AnyTimes()
 	for i := 0; i < taskCount; i++ {
-		s.Error(s.blm.SpoolTask(&persistencespb.TaskInfo{
+		s.Error(s.blm.SpoolTask(persistencespb.TaskInfo_builder{
 			ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(3000),
 			CreateTime: timestamp.TimeNowPtrUtc(),
-		}))
+		}.Build()))
 	}
 	s.Equal(int64(taskCount), totalApproximateBacklogCount(s.blm),
 		"backlog count should match the number of tasks despite the errors")
@@ -344,10 +344,10 @@ func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_NotIncrementedBySp
 		Do(func(_ any) { cancel() }).
 		AnyTimes()
 
-	s.Error(s.blm.SpoolTask(&persistencespb.TaskInfo{
+	s.Error(s.blm.SpoolTask(persistencespb.TaskInfo_builder{
 		ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(3000),
 		CreateTime: timestamp.TimeNowPtrUtc(),
-	}))
+	}.Build()))
 
 	<-ctx.Done()
 
@@ -357,7 +357,7 @@ func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_NotIncrementedBySp
 
 func totalApproximateBacklogCount(c backlogManager) (total int64) {
 	for _, stats := range c.BacklogStatsByPriority() {
-		total += stats.ApproximateBacklogCount
+		total += stats.GetApproximateBacklogCount()
 	}
 	return total
 }
@@ -503,14 +503,14 @@ func (s *BacklogManagerTestSuite) testStandingBacklog(p standingBacklogParams) {
 		return t
 	}
 	makeNewTask := func() *persistencespb.TaskInfo {
-		return &persistencespb.TaskInfo{
+		return persistencespb.TaskInfo_builder{
 			CreateTime:       timestamppb.Now(),
 			ScheduledEventId: index.Add(1),
-			Priority: &commonpb.Priority{
+			Priority: commonpb.Priority_builder{
 				// TODO: add priority key option too
 				FairnessKey: fmt.Sprintf("fkey-%02d", zipf.Uint64()),
-			},
-		}
+			}.Build(),
+		}.Build()
 	}
 	delta := func() int64 {
 		return inflight.Load() - target.Load()
@@ -538,13 +538,13 @@ func (s *BacklogManagerTestSuite) testStandingBacklog(p standingBacklogParams) {
 		defer wg.Done()
 		for sleepUntil(func() bool { return delta() <= p.gap }) {
 			info := makeNewTask()
-			tracker.Store(info.ScheduledEventId, info.Priority.FairnessKey)
+			tracker.Store(info.GetScheduledEventId(), info.GetPriority().GetFairnessKey())
 			inflight.Add(1)
 			if s.blm.SpoolTask(info) == nil {
-				log("spool %5d -> %3d\n", info.ScheduledEventId, inflight.Load())
+				log("spool %5d -> %3d\n", info.GetScheduledEventId(), inflight.Load())
 			} else {
-				log("spool %5d failed\n", info.ScheduledEventId, inflight.Load())
-				tracker.Delete(info.ScheduledEventId)
+				log("spool %5d failed\n", info.GetScheduledEventId(), inflight.Load())
+				tracker.Delete(info.GetScheduledEventId())
 				inflight.Add(-1)
 				sleep()
 			}
@@ -560,7 +560,7 @@ func (s *BacklogManagerTestSuite) testStandingBacklog(p standingBacklogParams) {
 				// TODO: error sometimes?
 				t.finish(nil, true)
 
-				tindex := t.event.Data.ScheduledEventId
+				tindex := t.event.Data.GetScheduledEventId()
 				if _, loaded := tracker.LoadAndDelete(tindex); loaded {
 					inflight.Add(-1)
 				} else {

@@ -25,6 +25,7 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/proto"
 )
 
 type (
@@ -76,17 +77,17 @@ func (s *executableWorkflowStateTaskSuite) SetupTest() {
 	s.logger = log.NewNoopLogger()
 	s.executableTask = NewMockExecutableTask(s.controller)
 	s.eagerNamespaceRefresher = NewMockEagerNamespaceRefresher(s.controller)
-	s.replicationTask = &replicationspb.SyncWorkflowStateTaskAttributes{
-		WorkflowState: &persistencespb.WorkflowMutableState{
-			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+	s.replicationTask = replicationspb.SyncWorkflowStateTaskAttributes_builder{
+		WorkflowState: persistencespb.WorkflowMutableState_builder{
+			ExecutionInfo: persistencespb.WorkflowExecutionInfo_builder{
 				NamespaceId: uuid.NewString(),
 				WorkflowId:  uuid.NewString(),
-			},
-			ExecutionState: &persistencespb.WorkflowExecutionState{
+			}.Build(),
+			ExecutionState: persistencespb.WorkflowExecutionState_builder{
 				RunId: uuid.NewString(),
-			},
-		},
-	}
+			}.Build(),
+		}.Build(),
+	}.Build()
 	s.sourceClusterName = cluster.TestCurrentClusterName
 	s.sourceShardKey = ClusterShardKey{
 		ClusterID: int32(cluster.TestCurrentClusterInitialFailoverVersion),
@@ -113,9 +114,9 @@ func (s *executableWorkflowStateTaskSuite) SetupTest() {
 		s.replicationTask,
 		s.sourceClusterName,
 		s.sourceShardKey,
-		&replicationspb.ReplicationTask{
+		replicationspb.ReplicationTask_builder{
 			Priority: enumsspb.TASK_PRIORITY_HIGH,
-		},
+		}.Build(),
 	)
 	s.task.ExecutableTask = s.executableTask
 	s.executableTask.EXPECT().TaskID().Return(s.taskID).AnyTimes()
@@ -141,11 +142,11 @@ func (s *executableWorkflowStateTaskSuite) TestExecute_Process() {
 		s.task.WorkflowID,
 	).Return(shardContext, nil).AnyTimes()
 	shardContext.EXPECT().GetEngine(gomock.Any()).Return(engine, nil).AnyTimes()
-	engine.EXPECT().ReplicateWorkflowState(gomock.Any(), &historyservice.ReplicateWorkflowStateRequest{
+	engine.EXPECT().ReplicateWorkflowState(gomock.Any(), historyservice.ReplicateWorkflowStateRequest_builder{
 		NamespaceId:   s.task.NamespaceID,
 		WorkflowState: s.replicationTask.GetWorkflowState(),
 		RemoteCluster: s.sourceClusterName,
-	}).Return(nil)
+	}.Build()).Return(nil)
 
 	err := s.task.Execute()
 	s.NoError(err)
@@ -230,25 +231,23 @@ func (s *executableWorkflowStateTaskSuite) TestHandleErr_Resend_Error() {
 }
 
 func (s *executableWorkflowStateTaskSuite) TestMarkPoisonPill() {
-	replicationTask := &replicationspb.ReplicationTask{
-		TaskType:     enumsspb.REPLICATION_TASK_TYPE_SYNC_WORKFLOW_STATE_TASK,
-		SourceTaskId: s.taskID,
-		Attributes: &replicationspb.ReplicationTask_SyncWorkflowStateTaskAttributes{
-			SyncWorkflowStateTaskAttributes: s.replicationTask,
-		},
-		RawTaskInfo: nil,
-	}
+	replicationTask := replicationspb.ReplicationTask_builder{
+		TaskType:                        enumsspb.REPLICATION_TASK_TYPE_SYNC_WORKFLOW_STATE_TASK,
+		SourceTaskId:                    s.taskID,
+		SyncWorkflowStateTaskAttributes: proto.ValueOrDefault(s.replicationTask),
+		RawTaskInfo:                     nil,
+	}.Build()
 	s.executableTask.EXPECT().ReplicationTask().Return(replicationTask).AnyTimes()
 	s.executableTask.EXPECT().MarkPoisonPill().Times(1)
 
 	err := s.task.MarkPoisonPill()
 	s.NoError(err)
 
-	s.Equal(&persistencespb.ReplicationTaskInfo{
+	s.Equal(persistencespb.ReplicationTaskInfo_builder{
 		NamespaceId: s.task.NamespaceID,
 		WorkflowId:  s.task.WorkflowID,
 		RunId:       s.task.RunID,
 		TaskId:      s.task.ExecutableTask.TaskID(),
 		TaskType:    enumsspb.TASK_TYPE_REPLICATION_SYNC_WORKFLOW_STATE,
-	}, replicationTask.RawTaskInfo)
+	}.Build(), replicationTask.GetRawTaskInfo())
 }

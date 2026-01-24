@@ -13,14 +13,15 @@ import (
 	commonclock "go.temporal.io/server/common/clock"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/testing/protoassert"
+	"google.golang.org/protobuf/proto"
 )
 
 func mkNewSet(id string, clock *clockspb.HybridLogicalClock) *persistencespb.CompatibleVersionSet {
-	return &persistencespb.CompatibleVersionSet{
+	return persistencespb.CompatibleVersionSet_builder{
 		SetIds:                 []string{hashBuildId(id)},
-		BuildIds:               []*persistencespb.BuildId{{Id: id, State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: clock, BecameDefaultTimestamp: clock}},
+		BuildIds:               []*persistencespb.BuildId{persistencespb.BuildId_builder{Id: id, State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: clock, BecameDefaultTimestamp: clock}.Build()},
 		BecameDefaultTimestamp: clock,
-	}
+	}.Build()
 }
 
 func mkInitialData(numSets int, clock *clockspb.HybridLogicalClock) *persistencespb.VersioningData {
@@ -28,77 +29,67 @@ func mkInitialData(numSets int, clock *clockspb.HybridLogicalClock) *persistence
 	for i := 0; i < numSets; i++ {
 		sets[i] = mkNewSet(fmt.Sprintf("%v", i), clock)
 	}
-	return &persistencespb.VersioningData{
+	return persistencespb.VersioningData_builder{
 		VersionSets: sets,
-	}
+	}.Build()
 }
 
 func mkUserData(numSets int) *persistencespb.TaskQueueUserData {
 	clock := hlc.Zero(1)
-	return &persistencespb.TaskQueueUserData{
+	return persistencespb.TaskQueueUserData_builder{
 		Clock:          clock,
 		VersioningData: mkInitialData(numSets, clock),
-	}
+	}.Build()
 }
 
 func mkNewDefReq(id string) *workflowservice.UpdateWorkerBuildIdCompatibilityRequest {
-	return &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
-		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
-			AddNewBuildIdInNewDefaultSet: id,
-		},
-	}
+	return workflowservice.UpdateWorkerBuildIdCompatibilityRequest_builder{
+		AddNewBuildIdInNewDefaultSet: proto.String(id),
+	}.Build()
 }
 func mkNewCompatReq(id, compat string, becomeDefault bool) *workflowservice.UpdateWorkerBuildIdCompatibilityRequest {
-	return &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
-		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewCompatibleBuildId{
-			AddNewCompatibleBuildId: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewCompatibleVersion{
-				NewBuildId:                id,
-				ExistingCompatibleBuildId: compat,
-				MakeSetDefault:            becomeDefault,
-			},
-		},
-	}
+	return workflowservice.UpdateWorkerBuildIdCompatibilityRequest_builder{
+		AddNewCompatibleBuildId: workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewCompatibleVersion_builder{
+			NewBuildId:                id,
+			ExistingCompatibleBuildId: compat,
+			MakeSetDefault:            becomeDefault,
+		}.Build(),
+	}.Build()
 }
 func mkExistingDefault(id string) *workflowservice.UpdateWorkerBuildIdCompatibilityRequest {
-	return &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
-		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_PromoteSetByBuildId{
-			PromoteSetByBuildId: id,
-		},
-	}
+	return workflowservice.UpdateWorkerBuildIdCompatibilityRequest_builder{
+		PromoteSetByBuildId: proto.String(id),
+	}.Build()
 }
 func mkPromoteInSet(id string) *workflowservice.UpdateWorkerBuildIdCompatibilityRequest {
-	return &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
-		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_PromoteBuildIdWithinSet{
-			PromoteBuildIdWithinSet: id,
-		},
-	}
+	return workflowservice.UpdateWorkerBuildIdCompatibilityRequest_builder{
+		PromoteBuildIdWithinSet: proto.String(id),
+	}.Build()
 }
 func mkMergeSet(primaryId string, secondaryId string) *workflowservice.UpdateWorkerBuildIdCompatibilityRequest {
-	return &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
-		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_MergeSets_{
-			MergeSets: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_MergeSets{
-				PrimarySetBuildId:   primaryId,
-				SecondarySetBuildId: secondaryId,
-			},
-		},
-	}
+	return workflowservice.UpdateWorkerBuildIdCompatibilityRequest_builder{
+		MergeSets: workflowservice.UpdateWorkerBuildIdCompatibilityRequest_MergeSets_builder{
+			PrimarySetBuildId:   primaryId,
+			SecondarySetBuildId: secondaryId,
+		}.Build(),
+	}.Build()
 }
 
 func mkBuildId(id string, clock *hlc.Clock) *persistencespb.BuildId {
-	return &persistencespb.BuildId{
+	return persistencespb.BuildId_builder{
 		Id:                     id,
 		State:                  persistencespb.STATE_ACTIVE,
 		StateUpdateTimestamp:   clock,
 		BecameDefaultTimestamp: clock,
-	}
+	}.Build()
 }
 
 func mkSingleBuildIdSet(id string, clock *hlc.Clock) *persistencespb.CompatibleVersionSet {
-	return &persistencespb.CompatibleVersionSet{
+	return persistencespb.CompatibleVersionSet_builder{
 		SetIds:                 []string{hashBuildId(id)},
 		BuildIds:               []*persistencespb.BuildId{mkBuildId(id, clock)},
 		BecameDefaultTimestamp: clock,
-	}
+	}.Build()
 }
 
 func TestNewDefaultUpdate(t *testing.T) {
@@ -112,17 +103,17 @@ func TestNewDefaultUpdate(t *testing.T) {
 	assert.NoError(t, err)
 	protoassert.ProtoEqual(t, mkInitialData(2, clock), initialData)
 
-	expected := &persistencespb.VersioningData{
+	expected := persistencespb.VersioningData_builder{
 		VersionSets: []*persistencespb.CompatibleVersionSet{
 			mkSingleBuildIdSet("0", clock),
 			mkSingleBuildIdSet("1", clock),
 			mkSingleBuildIdSet("2", nextClock),
 		},
-	}
+	}.Build()
 	protoassert.ProtoEqual(t, expected, updatedData)
 
 	asResp := ToBuildIdOrderingResponse(updatedData, 0)
-	assert.Equal(t, "2", asResp.MajorVersionSets[2].BuildIds[0])
+	assert.Equal(t, "2", asResp.GetMajorVersionSets()[2].GetBuildIds()[0])
 }
 
 func TestNewDefaultSetUpdateOfEmptyData(t *testing.T) {
@@ -136,11 +127,11 @@ func TestNewDefaultSetUpdateOfEmptyData(t *testing.T) {
 	assert.NoError(t, err)
 	protoassert.ProtoEqual(t, mkInitialData(0, clock), initialData)
 
-	expected := &persistencespb.VersioningData{
+	expected := persistencespb.VersioningData_builder{
 		VersionSets: []*persistencespb.CompatibleVersionSet{
 			mkSingleBuildIdSet("1", nextClock),
 		},
-	}
+	}.Build()
 	protoassert.ProtoEqual(t, expected, updatedData)
 }
 
@@ -155,19 +146,19 @@ func TestNewDefaultSetUpdateCompatWithCurDefault(t *testing.T) {
 	assert.NoError(t, err)
 	protoassert.ProtoEqual(t, mkInitialData(2, clock), initialData)
 
-	expected := &persistencespb.VersioningData{
+	expected := persistencespb.VersioningData_builder{
 		VersionSets: []*persistencespb.CompatibleVersionSet{
 			mkSingleBuildIdSet("0", clock),
-			{
+			persistencespb.CompatibleVersionSet_builder{
 				SetIds: []string{hashBuildId("1")},
 				BuildIds: []*persistencespb.BuildId{
 					mkBuildId("1", clock),
 					mkBuildId("1.1", nextClock),
 				},
 				BecameDefaultTimestamp: nextClock,
-			},
+			}.Build(),
 		},
-	}
+	}.Build()
 	protoassert.ProtoEqual(t, expected, updatedData)
 }
 
@@ -182,19 +173,19 @@ func TestNewDefaultSetUpdateCompatWithNonDefaultSet(t *testing.T) {
 	assert.NoError(t, err)
 	protoassert.ProtoEqual(t, mkInitialData(2, clock), initialData)
 
-	expected := &persistencespb.VersioningData{
+	expected := persistencespb.VersioningData_builder{
 		VersionSets: []*persistencespb.CompatibleVersionSet{
 			mkSingleBuildIdSet("1", clock),
-			{
+			persistencespb.CompatibleVersionSet_builder{
 				SetIds: []string{hashBuildId("0")},
 				BuildIds: []*persistencespb.BuildId{
 					mkBuildId("0", clock),
 					mkBuildId("0.1", nextClock),
 				},
 				BecameDefaultTimestamp: nextClock,
-			},
+			}.Build(),
 		},
-	}
+	}.Build()
 	protoassert.ProtoEqual(t, expected, updatedData)
 }
 
@@ -209,23 +200,23 @@ func TestNewCompatibleWithVerInOlderSet(t *testing.T) {
 	assert.NoError(t, err)
 	protoassert.ProtoEqual(t, mkInitialData(2, clock), initialData)
 
-	expected := &persistencespb.VersioningData{
+	expected := persistencespb.VersioningData_builder{
 		VersionSets: []*persistencespb.CompatibleVersionSet{
-			{
+			persistencespb.CompatibleVersionSet_builder{
 				SetIds: []string{hashBuildId("0")},
 				BuildIds: []*persistencespb.BuildId{
 					mkBuildId("0", clock),
 					mkBuildId("0.1", nextClock),
 				},
 				BecameDefaultTimestamp: clock,
-			},
+			}.Build(),
 			mkSingleBuildIdSet("1", clock),
 		},
-	}
+	}.Build()
 
 	protoassert.ProtoEqual(t, expected, updatedData)
 	asResp := ToBuildIdOrderingResponse(updatedData, 0)
-	assert.Equal(t, "0.1", asResp.MajorVersionSets[0].BuildIds[1])
+	assert.Equal(t, "0.1", asResp.GetMajorVersionSets()[0].GetBuildIds()[1])
 }
 
 func TestNewCompatibleWithNonDefaultSetUpdate(t *testing.T) {
@@ -243,9 +234,9 @@ func TestNewCompatibleWithNonDefaultSetUpdate(t *testing.T) {
 	data, err = UpdateVersionSets(clock2, data, req, 0, 0)
 	assert.NoError(t, err)
 
-	expected := &persistencespb.VersioningData{
+	expected := persistencespb.VersioningData_builder{
 		VersionSets: []*persistencespb.CompatibleVersionSet{
-			{
+			persistencespb.CompatibleVersionSet_builder{
 				SetIds: []string{hashBuildId("0")},
 				BuildIds: []*persistencespb.BuildId{
 					mkBuildId("0", clock0),
@@ -253,10 +244,10 @@ func TestNewCompatibleWithNonDefaultSetUpdate(t *testing.T) {
 					mkBuildId("0.2", clock2),
 				},
 				BecameDefaultTimestamp: clock0,
-			},
+			}.Build(),
 			mkSingleBuildIdSet("1", clock0),
 		},
-	}
+	}.Build()
 
 	protoassert.ProtoEqual(t, expected, data)
 	// Ensure setting a compatible version which targets a non-leaf compat version ends up without a branch
@@ -265,9 +256,9 @@ func TestNewCompatibleWithNonDefaultSetUpdate(t *testing.T) {
 	data, err = UpdateVersionSets(clock3, data, req, 0, 0)
 	assert.NoError(t, err)
 
-	expected = &persistencespb.VersioningData{
+	expected = persistencespb.VersioningData_builder{
 		VersionSets: []*persistencespb.CompatibleVersionSet{
-			{
+			persistencespb.CompatibleVersionSet_builder{
 				SetIds: []string{hashBuildId("0")},
 				BuildIds: []*persistencespb.BuildId{
 					mkBuildId("0", clock0),
@@ -276,10 +267,10 @@ func TestNewCompatibleWithNonDefaultSetUpdate(t *testing.T) {
 					mkBuildId("0.3", clock3),
 				},
 				BecameDefaultTimestamp: clock0,
-			},
+			}.Build(),
 			mkSingleBuildIdSet("1", clock0),
 		},
-	}
+	}.Build()
 
 	protoassert.ProtoEqual(t, expected, data)
 }
@@ -306,17 +297,17 @@ func TestMakeExistingSetDefault(t *testing.T) {
 	data, err := UpdateVersionSets(clock1, data, req, 0, 0)
 	assert.NoError(t, err)
 
-	expected := &persistencespb.VersioningData{
+	expected := persistencespb.VersioningData_builder{
 		VersionSets: []*persistencespb.CompatibleVersionSet{
 			mkSingleBuildIdSet("0", clock0),
 			mkSingleBuildIdSet("2", clock0),
-			{
+			persistencespb.CompatibleVersionSet_builder{
 				SetIds:                 []string{hashBuildId("1")},
 				BuildIds:               []*persistencespb.BuildId{mkBuildId("1", clock0)},
 				BecameDefaultTimestamp: clock1,
-			},
+			}.Build(),
 		},
-	}
+	}.Build()
 
 	protoassert.ProtoEqual(t, expected, data)
 	// Add a compatible version to a set and then make that set the default via the compatible version
@@ -326,24 +317,24 @@ func TestMakeExistingSetDefault(t *testing.T) {
 	data, err = UpdateVersionSets(clock2, data, req, 0, 0)
 	assert.NoError(t, err)
 
-	expected = &persistencespb.VersioningData{
+	expected = persistencespb.VersioningData_builder{
 		VersionSets: []*persistencespb.CompatibleVersionSet{
 			mkSingleBuildIdSet("2", clock0),
-			{
+			persistencespb.CompatibleVersionSet_builder{
 				SetIds:                 []string{hashBuildId("1")},
 				BuildIds:               []*persistencespb.BuildId{mkBuildId("1", clock0)},
 				BecameDefaultTimestamp: clock1,
-			},
-			{
+			}.Build(),
+			persistencespb.CompatibleVersionSet_builder{
 				SetIds: []string{hashBuildId("0")},
 				BuildIds: []*persistencespb.BuildId{
 					mkBuildId("0", clock0),
 					mkBuildId("0.1", clock2),
 				},
 				BecameDefaultTimestamp: clock2,
-			},
+			}.Build(),
 		},
-	}
+	}.Build()
 	protoassert.ProtoEqual(t, expected, data)
 }
 
@@ -404,20 +395,20 @@ func TestPromoteWithinVersion(t *testing.T) {
 	data, err = UpdateVersionSets(clock3, data, req, 0, 0)
 	assert.NoError(t, err)
 
-	expected := &persistencespb.VersioningData{
+	expected := persistencespb.VersioningData_builder{
 		VersionSets: []*persistencespb.CompatibleVersionSet{
-			{
+			persistencespb.CompatibleVersionSet_builder{
 				SetIds: []string{hashBuildId("0")},
 				BuildIds: []*persistencespb.BuildId{
 					mkBuildId("0", clock0),
 					mkBuildId("0.2", clock2),
-					{Id: "0.1", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: clock1, BecameDefaultTimestamp: clock3},
+					persistencespb.BuildId_builder{Id: "0.1", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: clock1, BecameDefaultTimestamp: clock3}.Build(),
 				},
 				BecameDefaultTimestamp: clock0,
-			},
+			}.Build(),
 			mkSingleBuildIdSet("1", clock0),
 		},
-	}
+	}.Build()
 	protoassert.ProtoEqual(t, expected, data)
 }
 
@@ -538,28 +529,28 @@ func TestToBuildIdOrderingResponseTrimsResponse(t *testing.T) {
 	clock := hlc.Zero(1)
 	data := mkInitialData(3, clock)
 	actual := ToBuildIdOrderingResponse(data, 2)
-	expected := []*taskqueuepb.CompatibleVersionSet{{BuildIds: []string{"1"}}, {BuildIds: []string{"2"}}}
-	protoassert.ProtoSliceEqual(t, expected, actual.MajorVersionSets)
+	expected := []*taskqueuepb.CompatibleVersionSet{taskqueuepb.CompatibleVersionSet_builder{BuildIds: []string{"1"}}.Build(), taskqueuepb.CompatibleVersionSet_builder{BuildIds: []string{"2"}}.Build()}
+	protoassert.ProtoSliceEqual(t, expected, actual.GetMajorVersionSets())
 }
 
 func TestToBuildIdOrderingResponseOmitsDeleted(t *testing.T) {
 	t.Parallel()
 	clock := hlc.Zero(1)
-	data := &persistencespb.VersioningData{
+	data := persistencespb.VersioningData_builder{
 		VersionSets: []*persistencespb.CompatibleVersionSet{
-			{
+			persistencespb.CompatibleVersionSet_builder{
 				SetIds: []string{hashBuildId("0")},
 				BuildIds: []*persistencespb.BuildId{
-					{Id: "0", State: persistencespb.STATE_DELETED, StateUpdateTimestamp: clock, BecameDefaultTimestamp: clock},
-					{Id: "0.1", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: clock, BecameDefaultTimestamp: clock},
+					persistencespb.BuildId_builder{Id: "0", State: persistencespb.STATE_DELETED, StateUpdateTimestamp: clock, BecameDefaultTimestamp: clock}.Build(),
+					persistencespb.BuildId_builder{Id: "0.1", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: clock, BecameDefaultTimestamp: clock}.Build(),
 				},
 				BecameDefaultTimestamp: clock,
-			},
+			}.Build(),
 		},
-	}
+	}.Build()
 	actual := ToBuildIdOrderingResponse(data, 0)
-	expected := []*taskqueuepb.CompatibleVersionSet{{BuildIds: []string{"0.1"}}}
-	protoassert.ProtoSliceEqual(t, expected, actual.MajorVersionSets)
+	expected := []*taskqueuepb.CompatibleVersionSet{taskqueuepb.CompatibleVersionSet_builder{BuildIds: []string{"0.1"}}.Build()}
+	protoassert.ProtoSliceEqual(t, expected, actual.GetMajorVersionSets())
 }
 
 func TestHashBuildId(t *testing.T) {
@@ -571,34 +562,34 @@ func TestHashBuildId(t *testing.T) {
 func TestGetBuildIdDeltas(t *testing.T) {
 	t.Parallel()
 	clock := hlc.Zero(0)
-	prev := &persistencespb.VersioningData{
+	prev := persistencespb.VersioningData_builder{
 		VersionSets: []*persistencespb.CompatibleVersionSet{
-			{
+			persistencespb.CompatibleVersionSet_builder{
 				SetIds:                 []string{hashBuildId("0")},
-				BuildIds:               []*persistencespb.BuildId{{Id: "0", State: persistencespb.STATE_DELETED}, {Id: "0.1", State: persistencespb.STATE_ACTIVE}},
+				BuildIds:               []*persistencespb.BuildId{persistencespb.BuildId_builder{Id: "0", State: persistencespb.STATE_DELETED}.Build(), persistencespb.BuildId_builder{Id: "0.1", State: persistencespb.STATE_ACTIVE}.Build()},
 				BecameDefaultTimestamp: clock,
-			},
-			{
+			}.Build(),
+			persistencespb.CompatibleVersionSet_builder{
 				SetIds:                 []string{hashBuildId("1")},
-				BuildIds:               []*persistencespb.BuildId{{Id: "1", State: persistencespb.STATE_ACTIVE}},
+				BuildIds:               []*persistencespb.BuildId{persistencespb.BuildId_builder{Id: "1", State: persistencespb.STATE_ACTIVE}.Build()},
 				BecameDefaultTimestamp: clock,
-			},
+			}.Build(),
 		},
-	}
-	curr := &persistencespb.VersioningData{
+	}.Build()
+	curr := persistencespb.VersioningData_builder{
 		VersionSets: []*persistencespb.CompatibleVersionSet{
-			{
+			persistencespb.CompatibleVersionSet_builder{
 				SetIds:                 []string{hashBuildId("0")},
-				BuildIds:               []*persistencespb.BuildId{{Id: "0.1", State: persistencespb.STATE_ACTIVE}},
+				BuildIds:               []*persistencespb.BuildId{persistencespb.BuildId_builder{Id: "0.1", State: persistencespb.STATE_ACTIVE}.Build()},
 				BecameDefaultTimestamp: clock,
-			},
-			{
+			}.Build(),
+			persistencespb.CompatibleVersionSet_builder{
 				SetIds:                 []string{hashBuildId("1")},
-				BuildIds:               []*persistencespb.BuildId{{Id: "1", State: persistencespb.STATE_DELETED}, {Id: "1.1", State: persistencespb.STATE_ACTIVE}},
+				BuildIds:               []*persistencespb.BuildId{persistencespb.BuildId_builder{Id: "1", State: persistencespb.STATE_DELETED}.Build(), persistencespb.BuildId_builder{Id: "1.1", State: persistencespb.STATE_ACTIVE}.Build()},
 				BecameDefaultTimestamp: clock,
-			},
+			}.Build(),
 		},
-	}
+	}.Build()
 	added, removed := GetBuildIdDeltas(prev, curr)
 	assert.Equal(t, []string{"1"}, removed)
 	assert.Equal(t, []string{"1.1"}, added)
@@ -616,48 +607,48 @@ func Test_RemoveBuildIds_PutsTombstonesOnSuppliedBuildIds(t *testing.T) {
 	c0 := hlc.Zero(0)
 	data := mkInitialData(3, c0)
 	c1 := c0
-	c1.Version++
+	c1.SetVersion(c1.GetVersion() + 1)
 
-	expected := &persistencespb.VersioningData{
+	expected := persistencespb.VersioningData_builder{
 		VersionSets: []*persistencespb.CompatibleVersionSet{
-			{
+			persistencespb.CompatibleVersionSet_builder{
 				SetIds: []string{hashBuildId("0")},
 				BuildIds: []*persistencespb.BuildId{
-					{
+					persistencespb.BuildId_builder{
 						Id:                     "0",
 						State:                  persistencespb.STATE_DELETED,
 						StateUpdateTimestamp:   c1,
 						BecameDefaultTimestamp: c0,
-					},
+					}.Build(),
 				},
 				BecameDefaultTimestamp: c0,
-			},
-			{
+			}.Build(),
+			persistencespb.CompatibleVersionSet_builder{
 				SetIds: []string{hashBuildId("1")},
 				BuildIds: []*persistencespb.BuildId{
-					{
+					persistencespb.BuildId_builder{
 						Id:                     "1",
 						State:                  persistencespb.STATE_DELETED,
 						StateUpdateTimestamp:   c1,
 						BecameDefaultTimestamp: c0,
-					},
+					}.Build(),
 				},
 				BecameDefaultTimestamp: c0,
-			},
-			{
+			}.Build(),
+			persistencespb.CompatibleVersionSet_builder{
 				SetIds: []string{hashBuildId("2")},
 				BuildIds: []*persistencespb.BuildId{
-					{
+					persistencespb.BuildId_builder{
 						Id:                     "2",
 						State:                  persistencespb.STATE_ACTIVE,
 						StateUpdateTimestamp:   c0,
 						BecameDefaultTimestamp: c0,
-					},
+					}.Build(),
 				},
 				BecameDefaultTimestamp: c0,
-			},
+			}.Build(),
 		},
-	}
+	}.Build()
 
 	actual := RemoveBuildIds(c1, data, []string{"0", "1"})
 	protoassert.ProtoEqual(t, expected, actual)
@@ -670,81 +661,81 @@ func Test_ClearTombstones(t *testing.T) {
 	c0 := hlc.Zero(0)
 
 	makeData := func() *persistencespb.VersioningData {
-		return &persistencespb.VersioningData{
+		return persistencespb.VersioningData_builder{
 			VersionSets: []*persistencespb.CompatibleVersionSet{
-				{
+				persistencespb.CompatibleVersionSet_builder{
 					SetIds: []string{hashBuildId("0")},
 					BuildIds: []*persistencespb.BuildId{
-						{
+						persistencespb.BuildId_builder{
 							Id:                     "0",
 							State:                  persistencespb.STATE_DELETED,
 							StateUpdateTimestamp:   c0,
 							BecameDefaultTimestamp: c0,
-						},
+						}.Build(),
 					},
 					BecameDefaultTimestamp: c0,
-				},
-				{
+				}.Build(),
+				persistencespb.CompatibleVersionSet_builder{
 					SetIds: []string{hashBuildId("1")},
 					BuildIds: []*persistencespb.BuildId{
-						{
+						persistencespb.BuildId_builder{
 							Id:                     "1",
 							State:                  persistencespb.STATE_DELETED,
 							StateUpdateTimestamp:   c0,
 							BecameDefaultTimestamp: c0,
-						},
-						{
+						}.Build(),
+						persistencespb.BuildId_builder{
 							Id:                     "1.1",
 							State:                  persistencespb.STATE_ACTIVE,
 							StateUpdateTimestamp:   c0,
 							BecameDefaultTimestamp: c0,
-						},
+						}.Build(),
 					},
 					BecameDefaultTimestamp: c0,
-				},
-				{
+				}.Build(),
+				persistencespb.CompatibleVersionSet_builder{
 					SetIds: []string{hashBuildId("2")},
 					BuildIds: []*persistencespb.BuildId{
-						{
+						persistencespb.BuildId_builder{
 							Id:                     "2",
 							State:                  persistencespb.STATE_ACTIVE,
 							StateUpdateTimestamp:   c0,
 							BecameDefaultTimestamp: c0,
-						},
+						}.Build(),
 					},
 					BecameDefaultTimestamp: c0,
-				},
+				}.Build(),
 			},
-		}
+		}.Build()
 	}
-	expected := &persistencespb.VersioningData{
+	expected := persistencespb.VersioningData_builder{
 		VersionSets: []*persistencespb.CompatibleVersionSet{
-			{
+			persistencespb.CompatibleVersionSet_builder{
 				SetIds: []string{hashBuildId("1")},
 				BuildIds: []*persistencespb.BuildId{
-					{
+					persistencespb.BuildId_builder{
 						Id:                     "1.1",
 						State:                  persistencespb.STATE_ACTIVE,
 						StateUpdateTimestamp:   c0,
 						BecameDefaultTimestamp: c0,
-					},
+					}.Build(),
 				},
 				BecameDefaultTimestamp: c0,
-			},
-			{
+			}.Build(),
+			persistencespb.CompatibleVersionSet_builder{
 				SetIds: []string{hashBuildId("2")},
 				BuildIds: []*persistencespb.BuildId{
-					{
+					persistencespb.BuildId_builder{
 						Id:                     "2",
 						State:                  persistencespb.STATE_ACTIVE,
 						StateUpdateTimestamp:   c0,
 						BecameDefaultTimestamp: c0,
-					},
+					}.Build(),
 				},
 				BecameDefaultTimestamp: c0,
-			},
+			}.Build(),
 		},
-	}
+	}.Build()
 	original := makeData()
 	actual := ClearTombstones(original)
 	protoassert.ProtoEqual(t, expected, actual)
@@ -759,30 +750,30 @@ func TestMergeSets(t *testing.T) {
 	initialData := mkInitialData(4, clock)
 
 	// Make sure the clocks are incrementing per version set for the merge to be predictable
-	initialData.VersionSets[1].BecameDefaultTimestamp = hlc.Next(clock, commonclock.NewRealTimeSource())
-	initialData.VersionSets[2].BecameDefaultTimestamp = hlc.Next(initialData.VersionSets[1].BecameDefaultTimestamp, commonclock.NewRealTimeSource())
-	initialData.VersionSets[3].BecameDefaultTimestamp = hlc.Next(initialData.VersionSets[2].BecameDefaultTimestamp, commonclock.NewRealTimeSource())
+	initialData.GetVersionSets()[1].SetBecameDefaultTimestamp(hlc.Next(clock, commonclock.NewRealTimeSource()))
+	initialData.GetVersionSets()[2].SetBecameDefaultTimestamp(hlc.Next(initialData.GetVersionSets()[1].GetBecameDefaultTimestamp(), commonclock.NewRealTimeSource()))
+	initialData.GetVersionSets()[3].SetBecameDefaultTimestamp(hlc.Next(initialData.GetVersionSets()[2].GetBecameDefaultTimestamp(), commonclock.NewRealTimeSource()))
 
 	req := mkMergeSet("1", "2")
 	nextClock := hlc.Next(clockQueueDefault, commonclock.NewRealTimeSource())
 	updatedData, err := UpdateVersionSets(nextClock, initialData, req, 0, 0)
 	assert.NoError(t, err)
 	// Should only be three sets now
-	assert.Len(t, updatedData.VersionSets, 3)
+	assert.Len(t, updatedData.GetVersionSets(), 3)
 	// The overall default set should not have changed
-	assert.Equal(t, "3", updatedData.GetVersionSets()[2].GetBuildIds()[0].Id)
+	assert.Equal(t, "3", updatedData.GetVersionSets()[2].GetBuildIds()[0].GetId())
 	// But set 1 should now have 2, maintaining 1 as the default ID
-	assert.Equal(t, "1", updatedData.GetVersionSets()[1].GetBuildIds()[1].Id)
-	assert.Equal(t, "2", updatedData.GetVersionSets()[1].GetBuildIds()[0].Id)
+	assert.Equal(t, "1", updatedData.GetVersionSets()[1].GetBuildIds()[1].GetId())
+	assert.Equal(t, "2", updatedData.GetVersionSets()[1].GetBuildIds()[0].GetId())
 	// Ensure it has the set ids of both sets
 	bothSetIds := mergeSetIDs([]string{hashBuildId("1")}, []string{hashBuildId("2")})
 	assert.Equal(t, bothSetIds, updatedData.GetVersionSets()[1].GetSetIds())
-	assert.Equal(t, initialData.GetVersionSets()[2].BecameDefaultTimestamp, updatedData.GetVersionSets()[1].BecameDefaultTimestamp)
-	buildIds := updatedData.VersionSets[1].BuildIds
-	protoassert.ProtoEqual(t, nextClock, buildIds[len(buildIds)-1].BecameDefaultTimestamp)
+	assert.Equal(t, initialData.GetVersionSets()[2].GetBecameDefaultTimestamp(), updatedData.GetVersionSets()[1].GetBecameDefaultTimestamp())
+	buildIds := updatedData.GetVersionSets()[1].GetBuildIds()
+	protoassert.ProtoEqual(t, nextClock, buildIds[len(buildIds)-1].GetBecameDefaultTimestamp())
 	// Initial data should not have changed
-	assert.Len(t, initialData.VersionSets, 4)
-	for _, set := range initialData.VersionSets {
+	assert.Len(t, initialData.GetVersionSets(), 4)
+	for _, set := range initialData.GetVersionSets() {
 		assert.Len(t, set.GetSetIds(), 1)
 	}
 
@@ -790,28 +781,28 @@ func TestMergeSets(t *testing.T) {
 	nextClock2 := hlc.Next(nextClock, commonclock.NewRealTimeSource())
 	updatedData2, err := UpdateVersionSets(nextClock2, updatedData, req, 0, 0)
 	assert.NoError(t, err)
-	assert.Len(t, updatedData2.VersionSets, 3)
-	assert.Equal(t, "3", updatedData2.GetVersionSets()[2].GetBuildIds()[0].Id)
-	assert.Equal(t, "1", updatedData2.GetVersionSets()[1].GetBuildIds()[1].Id)
-	assert.Equal(t, "2", updatedData2.GetVersionSets()[1].GetBuildIds()[0].Id)
-	assert.Equal(t, initialData.GetVersionSets()[2].BecameDefaultTimestamp, updatedData2.GetVersionSets()[1].BecameDefaultTimestamp)
+	assert.Len(t, updatedData2.GetVersionSets(), 3)
+	assert.Equal(t, "3", updatedData2.GetVersionSets()[2].GetBuildIds()[0].GetId())
+	assert.Equal(t, "1", updatedData2.GetVersionSets()[1].GetBuildIds()[1].GetId())
+	assert.Equal(t, "2", updatedData2.GetVersionSets()[1].GetBuildIds()[0].GetId())
+	assert.Equal(t, initialData.GetVersionSets()[2].GetBecameDefaultTimestamp(), updatedData2.GetVersionSets()[1].GetBecameDefaultTimestamp())
 	// Clock shouldn't have changed
-	buildIds = updatedData2.VersionSets[1].BuildIds
-	protoassert.ProtoEqual(t, nextClock, buildIds[len(buildIds)-1].BecameDefaultTimestamp)
+	buildIds = updatedData2.GetVersionSets()[1].GetBuildIds()
+	protoassert.ProtoEqual(t, nextClock, buildIds[len(buildIds)-1].GetBecameDefaultTimestamp())
 
 	// Verify merging into the current default maintains that set as the default
 	req = mkMergeSet("3", "0")
 	nextClock3 := hlc.Next(nextClock2, commonclock.NewRealTimeSource())
 	updatedData3, err := UpdateVersionSets(nextClock3, updatedData2, req, 0, 0)
 	assert.NoError(t, err)
-	assert.Len(t, updatedData3.VersionSets, 2)
-	assert.Equal(t, "3", updatedData3.GetVersionSets()[1].GetBuildIds()[1].Id)
-	assert.Equal(t, "0", updatedData3.GetVersionSets()[1].GetBuildIds()[0].Id)
-	assert.Equal(t, "1", updatedData3.GetVersionSets()[0].GetBuildIds()[1].Id)
-	assert.Equal(t, "2", updatedData3.GetVersionSets()[0].GetBuildIds()[0].Id)
-	assert.Equal(t, initialData.GetVersionSets()[3].BecameDefaultTimestamp, updatedData3.GetVersionSets()[1].BecameDefaultTimestamp)
-	buildIds = updatedData3.VersionSets[1].BuildIds
-	protoassert.ProtoEqual(t, nextClock3, buildIds[len(buildIds)-1].BecameDefaultTimestamp)
+	assert.Len(t, updatedData3.GetVersionSets(), 2)
+	assert.Equal(t, "3", updatedData3.GetVersionSets()[1].GetBuildIds()[1].GetId())
+	assert.Equal(t, "0", updatedData3.GetVersionSets()[1].GetBuildIds()[0].GetId())
+	assert.Equal(t, "1", updatedData3.GetVersionSets()[0].GetBuildIds()[1].GetId())
+	assert.Equal(t, "2", updatedData3.GetVersionSets()[0].GetBuildIds()[0].GetId())
+	assert.Equal(t, initialData.GetVersionSets()[3].GetBecameDefaultTimestamp(), updatedData3.GetVersionSets()[1].GetBecameDefaultTimestamp())
+	buildIds = updatedData3.GetVersionSets()[1].GetBuildIds()
+	protoassert.ProtoEqual(t, nextClock3, buildIds[len(buildIds)-1].GetBecameDefaultTimestamp())
 }
 
 func TestMergeInvalidTargets(t *testing.T) {
@@ -835,39 +826,39 @@ func TestPersistUnknownBuildId(t *testing.T) {
 	initialData := mkInitialData(2, clock)
 
 	actual := PersistUnknownBuildId(clock, initialData, "new-build-id")
-	assert.Len(t, actual.VersionSets, 3)
-	newSet := actual.VersionSets[0]
-	assert.Len(t, newSet.BuildIds, 1)
-	assert.Equal(t, "new-build-id", newSet.BuildIds[0].Id)
+	assert.Len(t, actual.GetVersionSets(), 3)
+	newSet := actual.GetVersionSets()[0]
+	assert.Len(t, newSet.GetBuildIds(), 1)
+	assert.Equal(t, "new-build-id", newSet.GetBuildIds()[0].GetId())
 }
 
 func TestPersistUnknownBuildIdAlreadyThere(t *testing.T) {
 	t.Parallel()
 	clock := hlc.Next(hlc.Zero(1), commonclock.NewRealTimeSource())
 
-	initial := &persistencespb.VersioningData{
+	initial := persistencespb.VersioningData_builder{
 		VersionSets: []*persistencespb.CompatibleVersionSet{
-			{
+			persistencespb.CompatibleVersionSet_builder{
 				SetIds:                 []string{hashBuildId("1")},
 				BuildIds:               []*persistencespb.BuildId{mkBuildId("1", clock), mkBuildId("2", clock)},
 				BecameDefaultTimestamp: clock,
-			},
+			}.Build(),
 		},
-	}
+	}.Build()
 
 	actual := PersistUnknownBuildId(clock, initial, "1")
 	protoassert.ProtoEqual(t, initial, actual)
 
 	// build ID is already there but adds set id
 	actual = PersistUnknownBuildId(clock, initial, "2")
-	expected := &persistencespb.VersioningData{
+	expected := persistencespb.VersioningData_builder{
 		VersionSets: []*persistencespb.CompatibleVersionSet{
-			{
+			persistencespb.CompatibleVersionSet_builder{
 				SetIds:                 []string{hashBuildId("1"), hashBuildId("2")},
 				BuildIds:               []*persistencespb.BuildId{mkBuildId("1", clock), mkBuildId("2", clock)},
 				BecameDefaultTimestamp: clock,
-			},
+			}.Build(),
 		},
-	}
+	}.Build()
 	protoassert.ProtoEqual(t, expected, actual)
 }

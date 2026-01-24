@@ -209,7 +209,7 @@ func extractCloseFailoverVersion(filename string) (int64, error) {
 }
 
 func historyMutated(request *archiver.ArchiveHistoryRequest, historyBatches []*historypb.History, isLast bool) bool {
-	lastBatch := historyBatches[len(historyBatches)-1].Events
+	lastBatch := historyBatches[len(historyBatches)-1].GetEvents()
 	lastEvent := lastBatch[len(lastBatch)-1]
 	lastFailoverVersion := lastEvent.GetVersion()
 	if lastFailoverVersion > request.CloseFailoverVersion {

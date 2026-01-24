@@ -90,13 +90,13 @@ func updateIndependentActivityBuildId(
 		return nil
 	}
 
-	err = CheckTaskVersion(shardContext, logger, mutableState.GetNamespaceEntry(), ai.Version, taskVersion, task)
+	err = CheckTaskVersion(shardContext, logger, mutableState.GetNamespaceEntry(), ai.GetVersion(), taskVersion, task)
 	if err != nil {
 		return err
 	}
 
-	err = mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ historyi.MutableState) error {
-		activityInfo.BuildIdInfo = &persistencespb.ActivityInfo_LastIndependentlyAssignedBuildId{LastIndependentlyAssignedBuildId: buildId}
+	err = mutableState.UpdateActivity(ai.GetScheduledEventId(), func(activityInfo *persistencespb.ActivityInfo, _ historyi.MutableState) error {
+		activityInfo.SetLastIndependentlyAssignedBuildId(buildId)
 		return nil
 	})
 	if err != nil {
@@ -212,12 +212,12 @@ func MakeDirectiveForWorkflowTask(ms historyi.MutableState) *taskqueuespb.TaskVe
 func MakeDirectiveForActivityTask(mutableState historyi.MutableState, activityInfo *persistencespb.ActivityInfo) *taskqueuespb.TaskVersionDirective {
 	if behavior := mutableState.GetEffectiveVersioningBehavior(); behavior != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
 		d := mutableState.GetEffectiveDeployment()
-		return &taskqueuespb.TaskVersionDirective{Behavior: behavior,
+		return taskqueuespb.TaskVersionDirective_builder{Behavior: behavior,
 			DeploymentVersion: worker_versioning.DeploymentVersionFromDeployment(d),
 			RevisionNumber:    mutableState.GetVersioningRevisionNumber(),
-		}
+		}.Build()
 	}
-	if !activityInfo.UseCompatibleVersion && activityInfo.GetUseWorkflowBuildIdInfo() == nil {
+	if !activityInfo.GetUseCompatibleVersion() && activityInfo.GetUseWorkflowBuildIdInfo() == nil {
 		return worker_versioning.MakeUseAssignmentRulesDirective()
 	} else if id := mutableState.GetAssignedBuildId(); id != "" {
 		return worker_versioning.MakeBuildIdDirective(id)

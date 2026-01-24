@@ -30,7 +30,7 @@ func SignalWithStartWorkflow(
 	// workflow is running and restart was not requested
 	if currentWorkflowLease != nil &&
 		currentWorkflowLease.GetMutableState().IsWorkflowExecutionRunning() &&
-		signalWithStartRequest.WorkflowIdConflictPolicy != enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING {
+		signalWithStartRequest.GetWorkflowIdConflictPolicy() != enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING {
 
 		// current workflow exists & running
 		if err := signalWorkflow(
@@ -125,7 +125,7 @@ func startAndSignalWorkflow(
 		shard,
 		vrid,
 		newWorkflowLease,
-		signalWithStartRequest.RequestId,
+		signalWithStartRequest.GetRequestId(),
 	)
 }
 
@@ -144,7 +144,7 @@ func createWorkflowMutationFunction(
 	currentExecutionState := currentMutableState.GetExecutionState()
 	currentWorkflowStartTime := time.Time{}
 	if shardContext.GetConfig().EnableWorkflowIdReuseStartTimeValidation(namespaceEntry.Name().String()) {
-		currentWorkflowStartTime = currentExecutionState.StartTime.AsTime()
+		currentWorkflowStartTime = currentExecutionState.GetStartTime().AsTime()
 	}
 
 	// It is unclear if currentExecutionState.RunId is the same as
@@ -152,7 +152,7 @@ func createWorkflowMutationFunction(
 	workflowKey := definition.WorkflowKey{
 		NamespaceID: currentWorkflowLease.GetContext().GetWorkflowKey().NamespaceID,
 		WorkflowID:  currentWorkflowLease.GetContext().GetWorkflowKey().WorkflowID,
-		RunID:       currentExecutionState.RunId,
+		RunID:       currentExecutionState.GetRunId(),
 	}
 
 	workflowMutationFunc, err := api.ResolveDuplicateWorkflowID(
@@ -160,9 +160,9 @@ func createWorkflowMutationFunction(
 		workflowKey,
 		namespaceEntry,
 		newRunID,
-		currentExecutionState.State,
-		currentExecutionState.Status,
-		currentExecutionState.RequestIds,
+		currentExecutionState.GetState(),
+		currentExecutionState.GetStatus(),
+		currentExecutionState.GetRequestIds(),
 		workflowIDReusePolicy,
 		workflowIDConflictPolicy,
 		currentWorkflowStartTime,
@@ -182,7 +182,7 @@ func createVersionedRunID(currentWorkflowLease api.WorkflowLease) (*api.Versione
 		return nil, err
 	}
 	id := api.VersionedRunID{
-		RunID: currentExecutionState.RunId,
+		RunID: currentExecutionState.GetRunId(),
 		// we stop updating last write version in the current record after workflow is closed
 		// so workflow close version is the last write version for the current record
 		LastWriteVersion: currentCloseVersion,
@@ -316,7 +316,7 @@ func signalWorkflow(
 
 		executionInfo := mutableState.GetExecutionInfo()
 		executionState := mutableState.GetExecutionState()
-		if !mutableState.HadOrHasWorkflowTask() && !executionInfo.ExecutionTime.AsTime().Equal(executionState.StartTime.AsTime()) {
+		if !mutableState.HadOrHasWorkflowTask() && !executionInfo.GetExecutionTime().AsTime().Equal(executionState.GetStartTime().AsTime()) {
 			metrics.SignalWithStartSkipDelayCounter.With(shardContext.GetMetricsHandler()).Record(1, metrics.NamespaceTag(request.GetNamespace()))
 
 			workflowKey := workflowLease.GetContext().GetWorkflowKey()

@@ -25,27 +25,27 @@ func Test_Next_ReturnsGreaterClock(t *testing.T) {
 
 func Test_Compare(t *testing.T) {
 	t.Parallel()
-	t0 := Clock{WallClock: 1, Version: 1, ClusterId: 1}
-	t1 := Clock{WallClock: 1, Version: 1, ClusterId: 1}
-	assert.Equal(t, 0, Compare(&t0, &t1))
-	assert.True(t, Equal(&t0, &t1))
+	t0 := Clock_builder{WallClock: 1, Version: 1, ClusterId: 1}.Build()
+	t1 := Clock_builder{WallClock: 1, Version: 1, ClusterId: 1}.Build()
+	assert.Equal(t, 0, Compare(t0, t1))
+	assert.True(t, Equal(t0, t1))
 
-	t0 = Clock{WallClock: 1, Version: 1, ClusterId: 1}
-	t1 = Clock{WallClock: 1, Version: 1, ClusterId: 2}
-	assert.Equal(t, 1, Compare(&t0, &t1))
+	t0 = Clock_builder{WallClock: 1, Version: 1, ClusterId: 1}.Build()
+	t1 = Clock_builder{WallClock: 1, Version: 1, ClusterId: 2}.Build()
+	assert.Equal(t, 1, Compare(t0, t1))
 	// Let's get a -1 in there for sanity
-	assert.Equal(t, -1, Compare(&t1, &t0))
+	assert.Equal(t, -1, Compare(t1, t0))
 
-	t0 = Clock{WallClock: 1, Version: 1, ClusterId: 1}
-	t1 = Clock{WallClock: 1, Version: 2, ClusterId: 1}
-	assert.Equal(t, 1, Compare(&t0, &t1))
+	t0 = Clock_builder{WallClock: 1, Version: 1, ClusterId: 1}.Build()
+	t1 = Clock_builder{WallClock: 1, Version: 2, ClusterId: 1}.Build()
+	assert.Equal(t, 1, Compare(t0, t1))
 
-	t0 = Clock{WallClock: 1, Version: 1, ClusterId: 1}
-	t1 = Clock{WallClock: 2, Version: 1, ClusterId: 1}
-	assert.Equal(t, 1, Compare(&t0, &t1))
+	t0 = Clock_builder{WallClock: 1, Version: 1, ClusterId: 1}.Build()
+	t1 = Clock_builder{WallClock: 2, Version: 1, ClusterId: 1}.Build()
+	assert.Equal(t, 1, Compare(t0, t1))
 
-	assert.True(t, Greater(&t1, &t0))
-	assert.True(t, Less(&t0, &t1))
+	assert.True(t, Greater(t1, t0))
+	assert.True(t, Less(t0, t1))
 }
 
 func Test_Max_ReturnsMaximum(t *testing.T) {

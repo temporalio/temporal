@@ -24,10 +24,10 @@ func TestInvoke_UnavailableError(t *testing.T) {
 	_, err := listqueues.Invoke(
 		context.Background(),
 		failingHistoryTaskQueueManager{},
-		&historyservice.ListQueuesRequest{
+		historyservice.ListQueuesRequest_builder{
 			QueueType: int32(persistence.QueueTypeHistoryDLQ),
 			PageSize:  0,
-		},
+		}.Build(),
 	)
 	var unavailableErr *serviceerror.Unavailable
 	require.ErrorAs(t, err, &unavailableErr)

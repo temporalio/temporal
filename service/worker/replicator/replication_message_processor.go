@@ -133,11 +133,11 @@ func (p *replicationMessageProcessor) handleReplicationTasks() {
 
 	ctx, cancel := rpc.NewContextWithTimeoutAndVersionHeaders(fetchTaskRequestTimeout)
 	ctx = headers.SetCallerInfo(ctx, headers.SystemPreemptableCallerInfo)
-	request := &adminservice.GetNamespaceReplicationMessagesRequest{
+	request := adminservice.GetNamespaceReplicationMessagesRequest_builder{
 		ClusterName:            p.currentCluster,
 		LastRetrievedMessageId: p.lastRetrievedMessageID,
 		LastProcessedMessageId: p.lastProcessedMessageID,
-	}
+	}.Build()
 	response, err := p.remotePeer.GetNamespaceReplicationMessages(ctx, request)
 	defer cancel()
 
@@ -146,12 +146,12 @@ func (p *replicationMessageProcessor) handleReplicationTasks() {
 		return
 	}
 
-	p.logger.Debug("Successfully fetched namespace replication tasks", tag.Counter(len(response.Messages.ReplicationTasks)))
+	p.logger.Debug("Successfully fetched namespace replication tasks", tag.Counter(len(response.GetMessages().GetReplicationTasks())))
 
 	// TODO: specify a timeout for processing namespace replication tasks
 	taskCtx := headers.SetCallerInfo(context.TODO(), headers.SystemPreemptableCallerInfo)
-	for taskIndex := range response.Messages.ReplicationTasks {
-		task := response.Messages.ReplicationTasks[taskIndex]
+	for taskIndex := range response.GetMessages().GetReplicationTasks() {
+		task := response.GetMessages().GetReplicationTasks()[taskIndex]
 		err := backoff.ThrottleRetry(func() error {
 			return p.handleReplicationTask(taskCtx, task)
 		}, p.retryPolicy, isTransientRetryableError)
@@ -172,19 +172,19 @@ func (p *replicationMessageProcessor) handleReplicationTasks() {
 		}
 	}
 
-	p.lastProcessedMessageID = response.Messages.GetLastRetrievedMessageId()
-	p.lastRetrievedMessageID = response.Messages.GetLastRetrievedMessageId()
+	p.lastProcessedMessageID = response.GetMessages().GetLastRetrievedMessageId()
+	p.lastRetrievedMessageID = response.GetMessages().GetLastRetrievedMessageId()
 }
 
 func (p *replicationMessageProcessor) putNamespaceReplicationTaskToDLQ(
 	ctx context.Context,
 	task *replicationspb.ReplicationTask,
 ) error {
-	switch task.TaskType {
+	switch task.GetTaskType() {
 	case enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK:
 		metrics.NamespaceReplicationEnqueueDLQCount.With(p.metricsHandler).
 			Record(1,
-				metrics.ReplicationTaskTypeTag(task.TaskType),
+				metrics.ReplicationTaskTypeTag(task.GetTaskType()),
 				metrics.NamespaceTag(task.GetNamespaceTaskAttributes().GetInfo().GetName()),
 			)
 	case enumsspb.REPLICATION_TASK_TYPE_TASK_QUEUE_USER_DATA:
@@ -194,12 +194,12 @@ func (p *replicationMessageProcessor) putNamespaceReplicationTaskToDLQ(
 		}
 		metrics.NamespaceReplicationEnqueueDLQCount.With(p.metricsHandler).
 			Record(1,
-				metrics.ReplicationTaskTypeTag(task.TaskType),
+				metrics.ReplicationTaskTypeTag(task.GetTaskType()),
 				metrics.NamespaceTag(ns.Name().String()),
 			)
 	default:
 		return serviceerror.NewUnavailable(
-			fmt.Sprintf("Namespace replication task type not supported: %v", task.TaskType),
+			fmt.Sprintf("Namespace replication task type not supported: %v", task.GetTaskType()),
 		)
 	}
 	return p.namespaceReplicationQueue.PublishToDLQ(ctx, task)
@@ -209,20 +209,20 @@ func (p *replicationMessageProcessor) handleReplicationTask(
 	ctx context.Context,
 	task *replicationspb.ReplicationTask,
 ) error {
-	metricsTag := metrics.ReplicationTaskTypeTag(task.TaskType)
+	metricsTag := metrics.ReplicationTaskTypeTag(task.GetTaskType())
 	metrics.ReplicatorMessages.With(p.metricsHandler).Record(1, metricsTag)
 	startTime := time.Now().UTC()
 	defer func() {
 		metrics.ReplicatorLatency.With(p.metricsHandler).Record(time.Since(startTime), metricsTag)
 	}()
 
-	switch task.TaskType {
+	switch task.GetTaskType() {
 	case enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK:
 		attr := task.GetNamespaceTaskAttributes()
 		err := p.namespaceTaskExecutor.Execute(ctx, attr)
 		if err != nil {
 			p.logger.Error("unable to process namespace replication task",
-				tag.WorkflowNamespaceID(attr.Id),
+				tag.WorkflowNamespaceID(attr.GetId()),
 				tag.Error(err))
 		}
 		return err
@@ -230,13 +230,13 @@ func (p *replicationMessageProcessor) handleReplicationTask(
 		attr := task.GetTaskQueueUserDataAttributes()
 		err := p.handleTaskQueueUserDataReplicationTask(ctx, attr)
 		if err != nil {
-			p.logger.Error(fmt.Sprintf("unable to process task queue metadata replication task, %v", attr.TaskQueueName),
-				tag.WorkflowNamespaceID(attr.NamespaceId),
+			p.logger.Error(fmt.Sprintf("unable to process task queue metadata replication task, %v", attr.GetTaskQueueName()),
+				tag.WorkflowNamespaceID(attr.GetNamespaceId()),
 				tag.Error(err))
 		}
 		return err
 	default:
-		return fmt.Errorf("cannot handle replication task of type %v", task.TaskType)
+		return fmt.Errorf("cannot handle replication task of type %v", task.GetTaskType())
 	}
 }
 
@@ -260,11 +260,11 @@ func (p *replicationMessageProcessor) handleTaskQueueUserDataReplicationTask(
 		return err
 	}
 
-	_, err = p.matchingClient.ApplyTaskQueueUserDataReplicationEvent(ctx, &matchingservice.ApplyTaskQueueUserDataReplicationEventRequest{
+	_, err = p.matchingClient.ApplyTaskQueueUserDataReplicationEvent(ctx, matchingservice.ApplyTaskQueueUserDataReplicationEventRequest_builder{
 		NamespaceId: attrs.GetNamespaceId(),
 		TaskQueue:   attrs.GetTaskQueueName(),
 		UserData:    attrs.GetUserData(),
-	})
+	}.Build())
 	return err
 }
 

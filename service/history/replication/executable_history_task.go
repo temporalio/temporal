@@ -69,7 +69,7 @@ func NewExecutableHistoryTask(
 	return &ExecutableHistoryTask{
 		ProcessToolBox: processToolBox,
 
-		WorkflowKey: definition.NewWorkflowKey(task.NamespaceId, task.WorkflowId, task.RunId),
+		WorkflowKey: definition.NewWorkflowKey(task.GetNamespaceId(), task.GetWorkflowId(), task.GetRunId()),
 		ExecutableTask: NewExecutableTask(
 			processToolBox,
 			taskID,
@@ -81,8 +81,8 @@ func NewExecutableHistoryTask(
 			replicationTask,
 		),
 
-		baseExecutionInfo:   task.BaseExecutionInfo,
-		versionHistoryItems: task.VersionHistoryItems,
+		baseExecutionInfo:   task.GetBaseExecutionInfo(),
+		versionHistoryItems: task.GetVersionHistoryItems(),
 		eventsBlobs:         eventBatches,
 		newRunEventsBlob:    task.GetNewRunEvents(),
 		newRunID:            task.GetNewRunId(),
@@ -226,7 +226,7 @@ func (e *ExecutableHistoryTask) MarkPoisonPill() error {
 			eventBatches = append(eventBatches, events)
 		}
 
-		e.ReplicationTask().RawTaskInfo = &persistencespb.ReplicationTaskInfo{
+		e.ReplicationTask().SetRawTaskInfo(persistencespb.ReplicationTaskInfo_builder{
 			NamespaceId:  e.NamespaceID,
 			WorkflowId:   e.WorkflowID,
 			RunId:        e.RunID,
@@ -235,7 +235,7 @@ func (e *ExecutableHistoryTask) MarkPoisonPill() error {
 			FirstEventId: eventBatches[0][0].GetEventId(),
 			NextEventId:  eventBatches[len(eventBatches)-1][len(eventBatches[len(eventBatches)-1])-1].GetEventId() + 1,
 			Version:      eventBatches[0][0].GetVersion(),
-		}
+		}.Build())
 	}
 
 	return e.ExecutableTask.MarkPoisonPill()
@@ -436,10 +436,10 @@ func (e *ExecutableHistoryTask) checkEvents(
 	incomingFirstBatch := incomingEventBatches[0]
 	incomingFirstEvent := incomingFirstBatch[0]
 
-	if currentLastEvent.Version != incomingFirstEvent.Version {
+	if currentLastEvent.GetVersion() != incomingFirstEvent.GetVersion() {
 		return serviceerror.NewInvalidArgument("events version does not match")
 	}
-	if currentLastEvent.EventId+1 != incomingFirstEvent.EventId {
+	if currentLastEvent.GetEventId()+1 != incomingFirstEvent.GetEventId() {
 		return serviceerror.NewInvalidArgument("events id is not consecutive")
 	}
 

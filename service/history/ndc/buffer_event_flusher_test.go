@@ -57,10 +57,10 @@ func (s *bufferEventFlusherSuite) SetupTest() {
 
 	s.mockShard = shard.NewTestContext(
 		s.controller,
-		&persistencespb.ShardInfo{
+		persistencespb.ShardInfo_builder{
 			ShardId: 10,
 			RangeId: 1,
-		},
+		}.Build(),
 		tests.NewDynamicConfig(),
 	)
 	s.mockClusterMetadata = s.mockShard.Resource.ClusterMetadata
@@ -103,14 +103,14 @@ func (s *bufferEventFlusherSuite) TestClearTransientWorkflowTask() {
 	s.mockMutableState.EXPECT().IsTransientWorkflowTask().Return(true).AnyTimes()
 	s.mockMutableState.EXPECT().ClearTransientWorkflowTask().Return(nil).AnyTimes()
 
-	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+	s.mockMutableState.EXPECT().GetExecutionInfo().Return(persistencespb.WorkflowExecutionInfo_builder{
 		NamespaceId:      s.namespaceID,
 		WorkflowId:       s.workflowID,
 		VersionHistories: versionHistories,
-	}).AnyTimes()
-	s.mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+	}.Build()).AnyTimes()
+	s.mockMutableState.EXPECT().GetExecutionState().Return(persistencespb.WorkflowExecutionState_builder{
 		RunId: s.runID,
-	}).AnyTimes()
+	}.Build()).AnyTimes()
 
 	_, _, err = s.nDCBufferEventFlusher.flush(context.Background())
 	s.NoError(err)
@@ -144,9 +144,9 @@ func (s *bufferEventFlusherSuite) TestFlushBufferedEvents() {
 		StartedEventID:   2345,
 	}
 	s.mockMutableState.EXPECT().GetStartedWorkflowTask().Return(workflowTask)
-	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+	s.mockMutableState.EXPECT().GetExecutionInfo().Return(persistencespb.WorkflowExecutionInfo_builder{
 		VersionHistories: versionHistories,
-	}).AnyTimes()
+	}.Build()).AnyTimes()
 	s.mockMutableState.EXPECT().AddWorkflowTaskFailedEvent(
 		workflowTask,
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_FAILOVER_CLOSE_COMMAND,

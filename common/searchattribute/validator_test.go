@@ -63,9 +63,9 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate() {
 	fields := map[string]*commonpb.Payload{
 		"Int01": intPayload,
 	}
-	attr = &commonpb.SearchAttributes{
+	attr = commonpb.SearchAttributes_builder{
 		IndexedFields: fields,
-	}
+	}.Build()
 	err = saValidator.Validate(attr, namespace)
 	s.NoError(err)
 
@@ -74,7 +74,7 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate() {
 		"Keyword01": payload.EncodeString("keyword"),
 		"Bool01":    payload.EncodeString("true"),
 	}
-	attr.IndexedFields = fields
+	attr.SetIndexedFields(fields)
 	err = saValidator.Validate(attr, namespace)
 	s.Error(err)
 	s.Equal("number of search attributes 3 exceeds limit 2", err.Error())
@@ -82,7 +82,7 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate() {
 	fields = map[string]*commonpb.Payload{
 		"InvalidKey": payload.EncodeString("1"),
 	}
-	attr.IndexedFields = fields
+	attr.SetIndexedFields(fields)
 	err = saValidator.Validate(attr, namespace)
 	s.Error(err)
 	s.Equal("search attribute InvalidKey is not defined", err.Error())
@@ -91,7 +91,7 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate() {
 		"Text01": payload.EncodeString("1"),
 		"Bool01": payload.EncodeString("123"),
 	}
-	attr.IndexedFields = fields
+	attr.SetIndexedFields(fields)
 	err = saValidator.Validate(attr, namespace)
 	s.Error(err)
 	s.Equal("invalid value for search attribute Bool01 of type Bool: 123", err.Error())
@@ -101,14 +101,14 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate() {
 	fields = map[string]*commonpb.Payload{
 		"Int01": intArrayPayload,
 	}
-	attr.IndexedFields = fields
+	attr.SetIndexedFields(fields)
 	err = saValidator.Validate(attr, namespace)
 	s.NoError(err)
 
 	fields = map[string]*commonpb.Payload{
 		"StartTime": intPayload,
 	}
-	attr.IndexedFields = fields
+	attr.SetIndexedFields(fields)
 	err = saValidator.Validate(attr, namespace)
 	s.Error(err)
 	s.Equal("StartTime attribute can't be set in SearchAttributes", err.Error())
@@ -124,7 +124,7 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate() {
 		fields = map[string]*commonpb.Payload{
 			restrictedAttr: payload.EncodeString("1.0.0"),
 		}
-		attr.IndexedFields = fields
+		attr.SetIndexedFields(fields)
 		err = saValidator.Validate(attr, namespace)
 		s.Error(err)
 		s.Equal(fmt.Sprintf("%s attribute can't be set in SearchAttributes", restrictedAttr), err.Error())
@@ -148,11 +148,11 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate_SuppressEr
 	)
 
 	namespace := "namespace"
-	attr := &commonpb.SearchAttributes{
+	attr := commonpb.SearchAttributes_builder{
 		IndexedFields: map[string]*commonpb.Payload{
 			"ParentWorkflowId": payload.EncodeString("foo"),
 		},
-	}
+	}.Build()
 
 	err := saValidator.Validate(attr, namespace)
 	s.NoError(err)
@@ -185,25 +185,25 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate_Mapper() {
 	fields := map[string]*commonpb.Payload{
 		"Int01": intPayload,
 	}
-	attr = &commonpb.SearchAttributes{
+	attr = commonpb.SearchAttributes_builder{
 		IndexedFields: fields,
-	}
+	}.Build()
 	err = saValidator.Validate(attr, namespace)
 	s.NoError(err)
 
 	fields = map[string]*commonpb.Payload{
 		"Int01": intPayload,
 	}
-	attr = &commonpb.SearchAttributes{
+	attr = commonpb.SearchAttributes_builder{
 		IndexedFields: fields,
-	}
+	}.Build()
 	err = saValidator.Validate(attr, "test-namespace")
 	s.NoError(err)
 
 	fields = map[string]*commonpb.Payload{
 		"InvalidKey": payload.EncodeString("1"),
 	}
-	attr.IndexedFields = fields
+	attr.SetIndexedFields(fields)
 	err = saValidator.Validate(attr, namespace)
 	s.Error(err)
 	s.Equal("search attribute AliasForInvalidKey is not defined", err.Error())
@@ -216,7 +216,7 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate_Mapper() {
 		"Text01": payload.EncodeString("1"),
 		"Bool01": payload.EncodeString("123"),
 	}
-	attr.IndexedFields = fields
+	attr.SetIndexedFields(fields)
 	err = saValidator.Validate(attr, namespace)
 	s.Error(err)
 	s.Equal("invalid value for search attribute AliasForBool01 of type Bool: 123", err.Error())
@@ -243,11 +243,11 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidateSize() {
 	fields := map[string]*commonpb.Payload{
 		"Keyword01": payload.EncodeString("123456"),
 	}
-	attr := &commonpb.SearchAttributes{
+	attr := commonpb.SearchAttributes_builder{
 		IndexedFields: fields,
-	}
+	}.Build()
 
-	attr.IndexedFields = fields
+	attr.SetIndexedFields(fields)
 	err := saValidator.ValidateSize(attr, namespace)
 	s.Error(err)
 	s.Equal("search attribute Keyword01 value size 8 exceeds size limit 5", err.Error())
@@ -256,7 +256,7 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidateSize() {
 		"Keyword01": payload.EncodeString("123"),
 		"Text01":    payload.EncodeString("12"),
 	}
-	attr.IndexedFields = fields
+	attr.SetIndexedFields(fields)
 	err = saValidator.ValidateSize(attr, namespace)
 	s.Error(err)
 	s.Equal("total size of search attributes 88 exceeds size limit 20", err.Error())
@@ -283,11 +283,11 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidateSize_Mapper
 	fields := map[string]*commonpb.Payload{
 		"Keyword01": payload.EncodeString("123456"),
 	}
-	attr := &commonpb.SearchAttributes{
+	attr := commonpb.SearchAttributes_builder{
 		IndexedFields: fields,
-	}
+	}.Build()
 
-	attr.IndexedFields = fields
+	attr.SetIndexedFields(fields)
 	err := saValidator.ValidateSize(attr, namespace)
 	s.Error(err)
 	s.Equal("search attribute AliasForKeyword01 value size 8 exceeds size limit 5", err.Error())
@@ -296,7 +296,7 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidateSize_Mapper
 		"Keyword01": payload.EncodeString("123"),
 		"Text01":    payload.EncodeString("12"),
 	}
-	attr.IndexedFields = fields
+	attr.SetIndexedFields(fields)
 	err = saValidator.ValidateSize(attr, namespace)
 	s.Error(err)
 	s.Equal("total size of search attributes 88 exceeds size limit 20", err.Error())

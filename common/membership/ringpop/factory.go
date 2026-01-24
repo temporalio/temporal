@@ -99,7 +99,7 @@ func (factory *factory) getMonitor() *monitor {
 		}
 
 		appName := "temporal"
-		if currentClusterMetadata.UseClusterIdMembership {
+		if currentClusterMetadata.GetUseClusterIdMembership() {
 			appName = fmt.Sprintf("temporal-%s", currentClusterMetadata.GetClusterId())
 		}
 		rp, err := ringpop.New(appName, ringpop.Channel(factory.getTChannel()), ringpop.AddressResolverFunc(factory.broadcastAddressResolver))

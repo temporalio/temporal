@@ -8,7 +8,6 @@ package persistence
 
 import (
 	reflect "reflect"
-	sync "sync"
 	unsafe "unsafe"
 
 	v11 "go.temporal.io/api/enums/v1"
@@ -26,24 +25,23 @@ const (
 
 // data column
 type ClusterMetadata struct {
-	state                    protoimpl.MessageState            `protogen:"open.v1"`
-	ClusterName              string                            `protobuf:"bytes,1,opt,name=cluster_name,json=clusterName,proto3" json:"cluster_name,omitempty"`
-	HistoryShardCount        int32                             `protobuf:"varint,2,opt,name=history_shard_count,json=historyShardCount,proto3" json:"history_shard_count,omitempty"`
-	ClusterId                string                            `protobuf:"bytes,3,opt,name=cluster_id,json=clusterId,proto3" json:"cluster_id,omitempty"`
-	VersionInfo              *v1.VersionInfo                   `protobuf:"bytes,4,opt,name=version_info,json=versionInfo,proto3" json:"version_info,omitempty"`
-	IndexSearchAttributes    map[string]*IndexSearchAttributes `protobuf:"bytes,5,rep,name=index_search_attributes,json=indexSearchAttributes,proto3" json:"index_search_attributes,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	ClusterAddress           string                            `protobuf:"bytes,6,opt,name=cluster_address,json=clusterAddress,proto3" json:"cluster_address,omitempty"`
-	HttpAddress              string                            `protobuf:"bytes,13,opt,name=http_address,json=httpAddress,proto3" json:"http_address,omitempty"`
-	FailoverVersionIncrement int64                             `protobuf:"varint,7,opt,name=failover_version_increment,json=failoverVersionIncrement,proto3" json:"failover_version_increment,omitempty"`
-	InitialFailoverVersion   int64                             `protobuf:"varint,8,opt,name=initial_failover_version,json=initialFailoverVersion,proto3" json:"initial_failover_version,omitempty"`
-	IsGlobalNamespaceEnabled bool                              `protobuf:"varint,9,opt,name=is_global_namespace_enabled,json=isGlobalNamespaceEnabled,proto3" json:"is_global_namespace_enabled,omitempty"`
-	IsConnectionEnabled      bool                              `protobuf:"varint,10,opt,name=is_connection_enabled,json=isConnectionEnabled,proto3" json:"is_connection_enabled,omitempty"`
-	UseClusterIdMembership   bool                              `protobuf:"varint,11,opt,name=use_cluster_id_membership,json=useClusterIdMembership,proto3" json:"use_cluster_id_membership,omitempty"`
-	Tags                     map[string]string                 `protobuf:"bytes,12,rep,name=tags,proto3" json:"tags,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	// is_replication_enabled controls whether replication streams are active.
-	IsReplicationEnabled bool `protobuf:"varint,14,opt,name=is_replication_enabled,json=isReplicationEnabled,proto3" json:"is_replication_enabled,omitempty"`
-	unknownFields        protoimpl.UnknownFields
-	sizeCache            protoimpl.SizeCache
+	state                               protoimpl.MessageState            `protogen:"opaque.v1"`
+	xxx_hidden_ClusterName              string                            `protobuf:"bytes,1,opt,name=cluster_name,json=clusterName,proto3"`
+	xxx_hidden_HistoryShardCount        int32                             `protobuf:"varint,2,opt,name=history_shard_count,json=historyShardCount,proto3"`
+	xxx_hidden_ClusterId                string                            `protobuf:"bytes,3,opt,name=cluster_id,json=clusterId,proto3"`
+	xxx_hidden_VersionInfo              *v1.VersionInfo                   `protobuf:"bytes,4,opt,name=version_info,json=versionInfo,proto3"`
+	xxx_hidden_IndexSearchAttributes    map[string]*IndexSearchAttributes `protobuf:"bytes,5,rep,name=index_search_attributes,json=indexSearchAttributes,proto3" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	xxx_hidden_ClusterAddress           string                            `protobuf:"bytes,6,opt,name=cluster_address,json=clusterAddress,proto3"`
+	xxx_hidden_HttpAddress              string                            `protobuf:"bytes,13,opt,name=http_address,json=httpAddress,proto3"`
+	xxx_hidden_FailoverVersionIncrement int64                             `protobuf:"varint,7,opt,name=failover_version_increment,json=failoverVersionIncrement,proto3"`
+	xxx_hidden_InitialFailoverVersion   int64                             `protobuf:"varint,8,opt,name=initial_failover_version,json=initialFailoverVersion,proto3"`
+	xxx_hidden_IsGlobalNamespaceEnabled bool                              `protobuf:"varint,9,opt,name=is_global_namespace_enabled,json=isGlobalNamespaceEnabled,proto3"`
+	xxx_hidden_IsConnectionEnabled      bool                              `protobuf:"varint,10,opt,name=is_connection_enabled,json=isConnectionEnabled,proto3"`
+	xxx_hidden_UseClusterIdMembership   bool                              `protobuf:"varint,11,opt,name=use_cluster_id_membership,json=useClusterIdMembership,proto3"`
+	xxx_hidden_Tags                     map[string]string                 `protobuf:"bytes,12,rep,name=tags,proto3" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	xxx_hidden_IsReplicationEnabled     bool                              `protobuf:"varint,14,opt,name=is_replication_enabled,json=isReplicationEnabled,proto3"`
+	unknownFields                       protoimpl.UnknownFields
+	sizeCache                           protoimpl.SizeCache
 }
 
 func (x *ClusterMetadata) Reset() {
@@ -71,114 +69,217 @@ func (x *ClusterMetadata) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ClusterMetadata.ProtoReflect.Descriptor instead.
-func (*ClusterMetadata) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_cluster_metadata_proto_rawDescGZIP(), []int{0}
-}
-
 func (x *ClusterMetadata) GetClusterName() string {
 	if x != nil {
-		return x.ClusterName
+		return x.xxx_hidden_ClusterName
 	}
 	return ""
 }
 
 func (x *ClusterMetadata) GetHistoryShardCount() int32 {
 	if x != nil {
-		return x.HistoryShardCount
+		return x.xxx_hidden_HistoryShardCount
 	}
 	return 0
 }
 
 func (x *ClusterMetadata) GetClusterId() string {
 	if x != nil {
-		return x.ClusterId
+		return x.xxx_hidden_ClusterId
 	}
 	return ""
 }
 
 func (x *ClusterMetadata) GetVersionInfo() *v1.VersionInfo {
 	if x != nil {
-		return x.VersionInfo
+		return x.xxx_hidden_VersionInfo
 	}
 	return nil
 }
 
 func (x *ClusterMetadata) GetIndexSearchAttributes() map[string]*IndexSearchAttributes {
 	if x != nil {
-		return x.IndexSearchAttributes
+		return x.xxx_hidden_IndexSearchAttributes
 	}
 	return nil
 }
 
 func (x *ClusterMetadata) GetClusterAddress() string {
 	if x != nil {
-		return x.ClusterAddress
+		return x.xxx_hidden_ClusterAddress
 	}
 	return ""
 }
 
 func (x *ClusterMetadata) GetHttpAddress() string {
 	if x != nil {
-		return x.HttpAddress
+		return x.xxx_hidden_HttpAddress
 	}
 	return ""
 }
 
 func (x *ClusterMetadata) GetFailoverVersionIncrement() int64 {
 	if x != nil {
-		return x.FailoverVersionIncrement
+		return x.xxx_hidden_FailoverVersionIncrement
 	}
 	return 0
 }
 
 func (x *ClusterMetadata) GetInitialFailoverVersion() int64 {
 	if x != nil {
-		return x.InitialFailoverVersion
+		return x.xxx_hidden_InitialFailoverVersion
 	}
 	return 0
 }
 
 func (x *ClusterMetadata) GetIsGlobalNamespaceEnabled() bool {
 	if x != nil {
-		return x.IsGlobalNamespaceEnabled
+		return x.xxx_hidden_IsGlobalNamespaceEnabled
 	}
 	return false
 }
 
 func (x *ClusterMetadata) GetIsConnectionEnabled() bool {
 	if x != nil {
-		return x.IsConnectionEnabled
+		return x.xxx_hidden_IsConnectionEnabled
 	}
 	return false
 }
 
 func (x *ClusterMetadata) GetUseClusterIdMembership() bool {
 	if x != nil {
-		return x.UseClusterIdMembership
+		return x.xxx_hidden_UseClusterIdMembership
 	}
 	return false
 }
 
 func (x *ClusterMetadata) GetTags() map[string]string {
 	if x != nil {
-		return x.Tags
+		return x.xxx_hidden_Tags
 	}
 	return nil
 }
 
 func (x *ClusterMetadata) GetIsReplicationEnabled() bool {
 	if x != nil {
-		return x.IsReplicationEnabled
+		return x.xxx_hidden_IsReplicationEnabled
 	}
 	return false
 }
 
+func (x *ClusterMetadata) SetClusterName(v string) {
+	x.xxx_hidden_ClusterName = v
+}
+
+func (x *ClusterMetadata) SetHistoryShardCount(v int32) {
+	x.xxx_hidden_HistoryShardCount = v
+}
+
+func (x *ClusterMetadata) SetClusterId(v string) {
+	x.xxx_hidden_ClusterId = v
+}
+
+func (x *ClusterMetadata) SetVersionInfo(v *v1.VersionInfo) {
+	x.xxx_hidden_VersionInfo = v
+}
+
+func (x *ClusterMetadata) SetIndexSearchAttributes(v map[string]*IndexSearchAttributes) {
+	x.xxx_hidden_IndexSearchAttributes = v
+}
+
+func (x *ClusterMetadata) SetClusterAddress(v string) {
+	x.xxx_hidden_ClusterAddress = v
+}
+
+func (x *ClusterMetadata) SetHttpAddress(v string) {
+	x.xxx_hidden_HttpAddress = v
+}
+
+func (x *ClusterMetadata) SetFailoverVersionIncrement(v int64) {
+	x.xxx_hidden_FailoverVersionIncrement = v
+}
+
+func (x *ClusterMetadata) SetInitialFailoverVersion(v int64) {
+	x.xxx_hidden_InitialFailoverVersion = v
+}
+
+func (x *ClusterMetadata) SetIsGlobalNamespaceEnabled(v bool) {
+	x.xxx_hidden_IsGlobalNamespaceEnabled = v
+}
+
+func (x *ClusterMetadata) SetIsConnectionEnabled(v bool) {
+	x.xxx_hidden_IsConnectionEnabled = v
+}
+
+func (x *ClusterMetadata) SetUseClusterIdMembership(v bool) {
+	x.xxx_hidden_UseClusterIdMembership = v
+}
+
+func (x *ClusterMetadata) SetTags(v map[string]string) {
+	x.xxx_hidden_Tags = v
+}
+
+func (x *ClusterMetadata) SetIsReplicationEnabled(v bool) {
+	x.xxx_hidden_IsReplicationEnabled = v
+}
+
+func (x *ClusterMetadata) HasVersionInfo() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_VersionInfo != nil
+}
+
+func (x *ClusterMetadata) ClearVersionInfo() {
+	x.xxx_hidden_VersionInfo = nil
+}
+
+type ClusterMetadata_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	ClusterName              string
+	HistoryShardCount        int32
+	ClusterId                string
+	VersionInfo              *v1.VersionInfo
+	IndexSearchAttributes    map[string]*IndexSearchAttributes
+	ClusterAddress           string
+	HttpAddress              string
+	FailoverVersionIncrement int64
+	InitialFailoverVersion   int64
+	IsGlobalNamespaceEnabled bool
+	IsConnectionEnabled      bool
+	UseClusterIdMembership   bool
+	Tags                     map[string]string
+	// is_replication_enabled controls whether replication streams are active.
+	IsReplicationEnabled bool
+}
+
+func (b0 ClusterMetadata_builder) Build() *ClusterMetadata {
+	m0 := &ClusterMetadata{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_ClusterName = b.ClusterName
+	x.xxx_hidden_HistoryShardCount = b.HistoryShardCount
+	x.xxx_hidden_ClusterId = b.ClusterId
+	x.xxx_hidden_VersionInfo = b.VersionInfo
+	x.xxx_hidden_IndexSearchAttributes = b.IndexSearchAttributes
+	x.xxx_hidden_ClusterAddress = b.ClusterAddress
+	x.xxx_hidden_HttpAddress = b.HttpAddress
+	x.xxx_hidden_FailoverVersionIncrement = b.FailoverVersionIncrement
+	x.xxx_hidden_InitialFailoverVersion = b.InitialFailoverVersion
+	x.xxx_hidden_IsGlobalNamespaceEnabled = b.IsGlobalNamespaceEnabled
+	x.xxx_hidden_IsConnectionEnabled = b.IsConnectionEnabled
+	x.xxx_hidden_UseClusterIdMembership = b.UseClusterIdMembership
+	x.xxx_hidden_Tags = b.Tags
+	x.xxx_hidden_IsReplicationEnabled = b.IsReplicationEnabled
+	return m0
+}
+
 type IndexSearchAttributes struct {
-	state                  protoimpl.MessageState          `protogen:"open.v1"`
-	CustomSearchAttributes map[string]v11.IndexedValueType `protobuf:"bytes,1,rep,name=custom_search_attributes,json=customSearchAttributes,proto3" json:"custom_search_attributes,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value,enum=temporal.api.enums.v1.IndexedValueType"`
-	unknownFields          protoimpl.UnknownFields
-	sizeCache              protoimpl.SizeCache
+	state                             protoimpl.MessageState          `protogen:"opaque.v1"`
+	xxx_hidden_CustomSearchAttributes map[string]v11.IndexedValueType `protobuf:"bytes,1,rep,name=custom_search_attributes,json=customSearchAttributes,proto3" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value,enum=temporal.api.enums.v1.IndexedValueType"`
+	unknownFields                     protoimpl.UnknownFields
+	sizeCache                         protoimpl.SizeCache
 }
 
 func (x *IndexSearchAttributes) Reset() {
@@ -206,16 +307,29 @@ func (x *IndexSearchAttributes) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use IndexSearchAttributes.ProtoReflect.Descriptor instead.
-func (*IndexSearchAttributes) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_cluster_metadata_proto_rawDescGZIP(), []int{1}
-}
-
 func (x *IndexSearchAttributes) GetCustomSearchAttributes() map[string]v11.IndexedValueType {
 	if x != nil {
-		return x.CustomSearchAttributes
+		return x.xxx_hidden_CustomSearchAttributes
 	}
 	return nil
+}
+
+func (x *IndexSearchAttributes) SetCustomSearchAttributes(v map[string]v11.IndexedValueType) {
+	x.xxx_hidden_CustomSearchAttributes = v
+}
+
+type IndexSearchAttributes_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	CustomSearchAttributes map[string]v11.IndexedValueType
+}
+
+func (b0 IndexSearchAttributes_builder) Build() *IndexSearchAttributes {
+	m0 := &IndexSearchAttributes{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_CustomSearchAttributes = b.CustomSearchAttributes
+	return m0
 }
 
 var File_temporal_server_api_persistence_v1_cluster_metadata_proto protoreflect.FileDescriptor
@@ -251,18 +365,6 @@ const file_temporal_server_api_persistence_v1_cluster_metadata_proto_rawDesc = "
 	"\x1bCustomSearchAttributesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12=\n" +
 	"\x05value\x18\x02 \x01(\x0e2'.temporal.api.enums.v1.IndexedValueTypeR\x05value:\x028\x01B6Z4go.temporal.io/server/api/persistence/v1;persistenceb\x06proto3"
-
-var (
-	file_temporal_server_api_persistence_v1_cluster_metadata_proto_rawDescOnce sync.Once
-	file_temporal_server_api_persistence_v1_cluster_metadata_proto_rawDescData []byte
-)
-
-func file_temporal_server_api_persistence_v1_cluster_metadata_proto_rawDescGZIP() []byte {
-	file_temporal_server_api_persistence_v1_cluster_metadata_proto_rawDescOnce.Do(func() {
-		file_temporal_server_api_persistence_v1_cluster_metadata_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_api_persistence_v1_cluster_metadata_proto_rawDesc), len(file_temporal_server_api_persistence_v1_cluster_metadata_proto_rawDesc)))
-	})
-	return file_temporal_server_api_persistence_v1_cluster_metadata_proto_rawDescData
-}
 
 var file_temporal_server_api_persistence_v1_cluster_metadata_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_temporal_server_api_persistence_v1_cluster_metadata_proto_goTypes = []any{

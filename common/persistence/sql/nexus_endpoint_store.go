@@ -71,8 +71,8 @@ func (s *sqlNexusEndpointStore) CreateOrUpdateNexusEndpoint(
 		row := sqlplugin.NexusEndpointsRow{
 			ID:           id,
 			Version:      request.Endpoint.Version,
-			Data:         request.Endpoint.Data.Data,
-			DataEncoding: request.Endpoint.Data.EncodingType.String(),
+			Data:         request.Endpoint.Data.GetData(),
+			DataEncoding: request.Endpoint.Data.GetEncodingType().String(),
 		}
 		if request.Endpoint.Version == 0 {
 			result, err = tx.InsertIntoNexusEndpoints(ctx, &row)

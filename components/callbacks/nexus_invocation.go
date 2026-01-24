@@ -77,7 +77,7 @@ func (n nexusInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e 
 		}
 	}
 
-	request, err := nexusrpc.NewCompletionHTTPRequest(ctx, n.nexus.Url, n.completion)
+	request, err := nexusrpc.NewCompletionHTTPRequest(ctx, n.nexus.GetUrl(), n.completion)
 	if err != nil {
 		return invocationResultFail{queueserrors.NewUnprocessableTaskError(
 			fmt.Sprintf("failed to construct Nexus request: %v", err),
@@ -86,7 +86,7 @@ func (n nexusInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e 
 	if request.Header == nil {
 		request.Header = make(http.Header)
 	}
-	for k, v := range n.nexus.Header {
+	for k, v := range n.nexus.GetHeader() {
 		request.Header.Set(k, v)
 	}
 

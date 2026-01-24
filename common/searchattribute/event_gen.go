@@ -8,18 +8,18 @@ import (
 )
 
 func SetToEvent(event *historypb.HistoryEvent, sas *commonpb.SearchAttributes) bool {
-	switch e := event.GetAttributes().(type) {
-	case *historypb.HistoryEvent_StartChildWorkflowExecutionInitiatedEventAttributes:
-		e.StartChildWorkflowExecutionInitiatedEventAttributes.SearchAttributes = sas
+	switch event.WhichAttributes() {
+	case historypb.HistoryEvent_StartChildWorkflowExecutionInitiatedEventAttributes_case:
+		event.GetStartChildWorkflowExecutionInitiatedEventAttributes().SetSearchAttributes(sas)
 		return true
-	case *historypb.HistoryEvent_UpsertWorkflowSearchAttributesEventAttributes:
-		e.UpsertWorkflowSearchAttributesEventAttributes.SearchAttributes = sas
+	case historypb.HistoryEvent_UpsertWorkflowSearchAttributesEventAttributes_case:
+		event.GetUpsertWorkflowSearchAttributesEventAttributes().SetSearchAttributes(sas)
 		return true
-	case *historypb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes:
-		e.WorkflowExecutionContinuedAsNewEventAttributes.SearchAttributes = sas
+	case historypb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes_case:
+		event.GetWorkflowExecutionContinuedAsNewEventAttributes().SetSearchAttributes(sas)
 		return true
-	case *historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes:
-		e.WorkflowExecutionStartedEventAttributes.SearchAttributes = sas
+	case historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes_case:
+		event.GetWorkflowExecutionStartedEventAttributes().SetSearchAttributes(sas)
 		return true
 	default:
 		return false
@@ -27,15 +27,15 @@ func SetToEvent(event *historypb.HistoryEvent, sas *commonpb.SearchAttributes) b
 }
 
 func GetFromEvent(event *historypb.HistoryEvent) (*commonpb.SearchAttributes, bool) {
-	switch e := event.GetAttributes().(type) {
-	case *historypb.HistoryEvent_StartChildWorkflowExecutionInitiatedEventAttributes:
-		return e.StartChildWorkflowExecutionInitiatedEventAttributes.GetSearchAttributes(), true
-	case *historypb.HistoryEvent_UpsertWorkflowSearchAttributesEventAttributes:
-		return e.UpsertWorkflowSearchAttributesEventAttributes.GetSearchAttributes(), true
-	case *historypb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes:
-		return e.WorkflowExecutionContinuedAsNewEventAttributes.GetSearchAttributes(), true
-	case *historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes:
-		return e.WorkflowExecutionStartedEventAttributes.GetSearchAttributes(), true
+	switch event.WhichAttributes() {
+	case historypb.HistoryEvent_StartChildWorkflowExecutionInitiatedEventAttributes_case:
+		return event.GetStartChildWorkflowExecutionInitiatedEventAttributes().GetSearchAttributes(), true
+	case historypb.HistoryEvent_UpsertWorkflowSearchAttributesEventAttributes_case:
+		return event.GetUpsertWorkflowSearchAttributesEventAttributes().GetSearchAttributes(), true
+	case historypb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes_case:
+		return event.GetWorkflowExecutionContinuedAsNewEventAttributes().GetSearchAttributes(), true
+	case historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes_case:
+		return event.GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes(), true
 	default:
 		return nil, false
 	}

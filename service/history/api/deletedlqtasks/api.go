@@ -16,12 +16,12 @@ func Invoke(
 	req *historyservice.DeleteDLQTasksRequest,
 	registry tasks.TaskCategoryRegistry,
 ) (*historyservice.DeleteDLQTasksResponse, error) {
-	category, err := api.GetTaskCategory(int(req.DlqKey.TaskCategory), registry)
+	category, err := api.GetTaskCategory(int(req.GetDlqKey().GetTaskCategory()), registry)
 	if err != nil {
 		return nil, err
 	}
 
-	if req.InclusiveMaxTaskMetadata == nil {
+	if !req.HasInclusiveMaxTaskMetadata() {
 		return nil, serviceerror.NewInvalidArgument("must supply inclusive_max_task_metadata")
 	}
 
@@ -29,16 +29,16 @@ func Invoke(
 		QueueKey: persistence.QueueKey{
 			QueueType:     persistence.QueueTypeHistoryDLQ,
 			Category:      category,
-			SourceCluster: req.DlqKey.SourceCluster,
-			TargetCluster: req.DlqKey.TargetCluster,
+			SourceCluster: req.GetDlqKey().GetSourceCluster(),
+			TargetCluster: req.GetDlqKey().GetTargetCluster(),
 		},
 		InclusiveMaxMessageMetadata: persistence.MessageMetadata{
-			ID: req.InclusiveMaxTaskMetadata.MessageId,
+			ID: req.GetInclusiveMaxTaskMetadata().GetMessageId(),
 		},
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	return &historyservice.DeleteDLQTasksResponse{MessagesDeleted: resp.MessagesDeleted}, nil
+	return historyservice.DeleteDLQTasksResponse_builder{MessagesDeleted: resp.MessagesDeleted}.Build(), nil
 }

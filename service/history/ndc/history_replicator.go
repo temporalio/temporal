@@ -298,7 +298,7 @@ func (r *HistoryReplicatorImpl) applyBackfillEvents(
 				task.getRunID(),
 				chasm.WorkflowArchetypeID,
 				task.getVersionedTransition(),
-				mutableState.GetExecutionInfo().VersionHistories,
+				mutableState.GetExecutionInfo().GetVersionHistories(),
 			)
 		}
 		err := transitionhistory.StalenessCheck(transitionHistory, versionedTransition)
@@ -591,9 +591,9 @@ func (r *HistoryReplicatorImpl) applyNonStartEventsToCurrentBranch(
 		newContext := workflow.NewContext(
 			r.shardContext.GetConfig(),
 			definition.NewWorkflowKey(
-				newExecutionInfo.NamespaceId,
-				newExecutionInfo.WorkflowId,
-				newExecutionState.RunId,
+				newExecutionInfo.GetNamespaceId(),
+				newExecutionInfo.GetWorkflowId(),
+				newExecutionState.GetRunId(),
 			),
 			chasm.WorkflowArchetypeID,
 			r.logger,
@@ -768,8 +768,8 @@ func (r *HistoryReplicatorImpl) applyNonStartEventsMissingMutableState(
 		startEventId := common.EmptyEventID
 		startEventVersion := common.EmptyVersion
 		if task.getBaseWorkflowInfo() != nil {
-			startEventId = task.getBaseWorkflowInfo().LowestCommonAncestorEventId
-			startEventVersion = task.getBaseWorkflowInfo().LowestCommonAncestorEventVersion
+			startEventId = task.getBaseWorkflowInfo().GetLowestCommonAncestorEventId()
+			startEventVersion = task.getBaseWorkflowInfo().GetLowestCommonAncestorEventVersion()
 		}
 		firstEvent := task.getFirstEvent()
 		endEventId := firstEvent.GetEventId()
@@ -787,9 +787,9 @@ func (r *HistoryReplicatorImpl) applyNonStartEventsMissingMutableState(
 	}
 
 	baseWorkflowInfo := task.getBaseWorkflowInfo()
-	baseRunID := baseWorkflowInfo.RunId
-	baseEventID := baseWorkflowInfo.LowestCommonAncestorEventId
-	baseEventVersion := baseWorkflowInfo.LowestCommonAncestorEventVersion
+	baseRunID := baseWorkflowInfo.GetRunId()
+	baseEventID := baseWorkflowInfo.GetLowestCommonAncestorEventId()
+	baseEventVersion := baseWorkflowInfo.GetLowestCommonAncestorEventVersion()
 	newRunID := newWFContext.GetWorkflowKey().RunID
 
 	workflowResetter := r.newResetter(

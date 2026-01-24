@@ -181,42 +181,42 @@ func (c *backlogManagerImpl) BacklogCountHint() int64 {
 
 func (c *backlogManagerImpl) BacklogStatus() *taskqueuepb.TaskQueueStatus {
 	taskIDBlock := rangeIDToTaskIDBlock(c.db.RangeID(), c.config.RangeSize)
-	return &taskqueuepb.TaskQueueStatus{
+	return taskqueuepb.TaskQueueStatus_builder{
 		ReadLevel: c.taskAckManager.getReadLevel(),
 		AckLevel:  c.taskAckManager.getAckLevel(),
 		// use getTotalApproximateBacklogCount instead of BacklogCountHint since it's more accurate
 		BacklogCountHint: c.db.getTotalApproximateBacklogCount(),
-		TaskIdBlock: &taskqueuepb.TaskIdBlock{
+		TaskIdBlock: taskqueuepb.TaskIdBlock_builder{
 			StartId: taskIDBlock.start,
 			EndId:   taskIDBlock.end,
-		},
-	}
+		}.Build(),
+	}.Build()
 }
 
 func (c *backlogManagerImpl) BacklogStatsByPriority() map[int32]*taskqueuepb.TaskQueueStats {
 	defaultPriority := int32(c.config.DefaultPriorityKey)
 	return map[int32]*taskqueuepb.TaskQueueStats{
-		defaultPriority: &taskqueuepb.TaskQueueStats{
+		defaultPriority: taskqueuepb.TaskQueueStats_builder{
 			ApproximateBacklogCount: c.db.getTotalApproximateBacklogCount(),
 			ApproximateBacklogAge:   durationpb.New(c.taskReader.getBacklogHeadAge()),
-		},
+		}.Build(),
 	}
 }
 
 func (c *backlogManagerImpl) InternalStatus() []*taskqueuespb.InternalTaskQueueStatus {
 	currentTaskIDBlock := c.taskWriter.getCurrentTaskIDBlock()
 	return []*taskqueuespb.InternalTaskQueueStatus{
-		&taskqueuespb.InternalTaskQueueStatus{
+		taskqueuespb.InternalTaskQueueStatus_builder{
 			ReadLevel: c.taskAckManager.getReadLevel(),
 			AckLevel:  c.taskAckManager.getAckLevel(),
-			TaskIdBlock: &taskqueuepb.TaskIdBlock{
+			TaskIdBlock: taskqueuepb.TaskIdBlock_builder{
 				StartId: currentTaskIDBlock.start,
 				EndId:   currentTaskIDBlock.end,
-			},
+			}.Build(),
 			LoadedTasks:             c.taskAckManager.getBacklogCountHint(),
 			MaxReadLevel:            c.db.GetMaxReadLevel(subqueueZero),
 			ApproximateBacklogCount: c.db.getTotalApproximateBacklogCount(),
-		},
+		}.Build(),
 	}
 }
 
@@ -234,7 +234,7 @@ func (c *backlogManagerImpl) completeTask(itask *internalTask, err error) {
 		// again the underlying reason for failing to start will be resolved.
 		metrics.TaskRewrites.With(c.metricsHandler).Record(1)
 		err = executeWithRetry(context.Background(), func(_ context.Context) error {
-			return c.taskWriter.appendTask(task.Data)
+			return c.taskWriter.appendTask(task.GetData())
 		})
 
 		if err != nil {

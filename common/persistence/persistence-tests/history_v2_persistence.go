@@ -127,15 +127,15 @@ func (s *HistoryV2PersistenceSuite) TestScanAllTrees() {
 		})
 		s.Nil(err)
 		for _, br := range resp.Branches {
-			uuidTreeId := br.BranchInfo.TreeId
+			uuidTreeId := br.BranchInfo.GetTreeId()
 			if trees[uuidTreeId] {
 				delete(trees, uuidTreeId)
 
 				s.True(br.ForkTime.AsTime().UnixNano() > 0)
-				s.True(len(br.BranchInfo.BranchId) > 0)
+				s.True(len(br.BranchInfo.GetBranchId()) > 0)
 				s.Equal("branchInfo", br.Info)
 			} else {
-				s.Fail("treeID not found", br.BranchInfo.TreeId)
+				s.Fail("treeID not found", br.BranchInfo.GetTreeId())
 			}
 		}
 
@@ -158,17 +158,17 @@ func (s *HistoryV2PersistenceSuite) TestReadBranchByPagination() {
 	events := s.genRandomEvents([]int64{1, 2, 3}, 0)
 	err = s.appendNewBranchAndFirstNode(bi, events, 1, "branchInfo")
 	s.Nil(err)
-	historyW.Events = events
+	historyW.SetEvents(events)
 
 	events = s.genRandomEvents([]int64{4}, 0)
 	err = s.appendNewNode(bi, events, 2)
 	s.Nil(err)
-	historyW.Events = append(historyW.Events, events...)
+	historyW.SetEvents(append(historyW.GetEvents(), events...))
 
 	events = s.genRandomEvents([]int64{5, 6, 7, 8}, 4)
 	err = s.appendNewNode(bi, events, 6)
 	s.Nil(err)
-	historyW.Events = append(historyW.Events, events...)
+	historyW.SetEvents(append(historyW.GetEvents(), events...))
 
 	// stale event batch
 	events = s.genRandomEvents([]int64{6, 7, 8}, 1)
@@ -186,7 +186,7 @@ func (s *HistoryV2PersistenceSuite) TestReadBranchByPagination() {
 	events = s.genRandomEvents([]int64{9}, 4)
 	err = s.appendNewNode(bi, events, 7)
 	s.Nil(err)
-	historyW.Events = append(historyW.Events, events...)
+	historyW.SetEvents(append(historyW.GetEvents(), events...))
 
 	// Start to read from middle, should not return error, but the first batch should be ignored by application layer
 	req := &p.ReadHistoryBranchRequest{
@@ -206,17 +206,17 @@ func (s *HistoryV2PersistenceSuite) TestReadBranchByPagination() {
 	events = s.genRandomEvents([]int64{10}, 4)
 	err = s.appendNewNode(bi, events, 8)
 	s.Nil(err)
-	historyW.Events = append(historyW.Events, events...)
+	historyW.SetEvents(append(historyW.GetEvents(), events...))
 
 	events = s.genRandomEvents([]int64{11}, 4)
 	err = s.appendNewNode(bi, events, 9)
 	s.Nil(err)
-	historyW.Events = append(historyW.Events, events...)
+	historyW.SetEvents(append(historyW.GetEvents(), events...))
 
 	events = s.genRandomEvents([]int64{12}, 4)
 	err = s.appendNewNode(bi, events, 10)
 	s.Nil(err)
-	historyW.Events = append(historyW.Events, events...)
+	historyW.SetEvents(append(historyW.GetEvents(), events...))
 
 	events = s.genRandomEvents([]int64{13, 14, 15}, 4)
 	err = s.appendNewNode(bi, events, 11)
@@ -231,22 +231,22 @@ func (s *HistoryV2PersistenceSuite) TestReadBranchByPagination() {
 	events = s.genRandomEvents([]int64{13}, 4)
 	err = s.appendNewNode(bi2, events, 12)
 	s.Nil(err)
-	historyW.Events = append(historyW.Events, events...)
+	historyW.SetEvents(append(historyW.GetEvents(), events...))
 
 	events = s.genRandomEvents([]int64{14}, 4)
 	err = s.appendNewNode(bi2, events, 13)
 	s.Nil(err)
-	historyW.Events = append(historyW.Events, events...)
+	historyW.SetEvents(append(historyW.GetEvents(), events...))
 
 	events = s.genRandomEvents([]int64{15, 16, 17}, 4)
 	err = s.appendNewNode(bi2, events, 14)
 	s.Nil(err)
-	historyW.Events = append(historyW.Events, events...)
+	historyW.SetEvents(append(historyW.GetEvents(), events...))
 
 	events = s.genRandomEvents([]int64{18, 19, 20}, 4)
 	err = s.appendNewNode(bi2, events, 15)
 	s.Nil(err)
-	historyW.Events = append(historyW.Events, events...)
+	historyW.SetEvents(append(historyW.GetEvents(), events...))
 
 	// read branch to verify
 	historyR := &historypb.History{}
@@ -265,7 +265,7 @@ func (s *HistoryV2PersistenceSuite) TestReadBranchByPagination() {
 	s.Nil(err)
 
 	s.Equal(8, len(resp.HistoryEvents))
-	historyR.Events = append(historyR.Events, resp.HistoryEvents...)
+	historyR.SetEvents(append(historyR.GetEvents(), resp.HistoryEvents...))
 	req.NextPageToken = resp.NextPageToken
 
 	// this page is all stale batches
@@ -273,14 +273,14 @@ func (s *HistoryV2PersistenceSuite) TestReadBranchByPagination() {
 	// the stale event batch may get returned
 	resp, err = s.ExecutionManager.ReadHistoryBranch(s.ctx, req)
 	s.Nil(err)
-	historyR.Events = append(historyR.Events, resp.HistoryEvents...)
+	historyR.SetEvents(append(historyR.GetEvents(), resp.HistoryEvents...))
 	req.NextPageToken = resp.NextPageToken
 	if len(resp.HistoryEvents) == 0 {
 		// second page
 		resp, err = s.ExecutionManager.ReadHistoryBranch(s.ctx, req)
 		s.Nil(err)
 		s.Equal(3, len(resp.HistoryEvents))
-		historyR.Events = append(historyR.Events, resp.HistoryEvents...)
+		historyR.SetEvents(append(historyR.GetEvents(), resp.HistoryEvents...))
 		req.NextPageToken = resp.NextPageToken
 	} else if len(resp.HistoryEvents) == 3 {
 		// no op
@@ -292,14 +292,14 @@ func (s *HistoryV2PersistenceSuite) TestReadBranchByPagination() {
 	resp, err = s.ExecutionManager.ReadHistoryBranch(s.ctx, req)
 	s.Nil(err)
 	s.Equal(1, len(resp.HistoryEvents))
-	historyR.Events = append(historyR.Events, resp.HistoryEvents...)
+	historyR.SetEvents(append(historyR.GetEvents(), resp.HistoryEvents...))
 	req.NextPageToken = resp.NextPageToken
 
 	// 4th page, 13~17
 	resp, err = s.ExecutionManager.ReadHistoryBranch(s.ctx, req)
 	s.Nil(err)
 	s.Equal(5, len(resp.HistoryEvents))
-	historyR.Events = append(historyR.Events, resp.HistoryEvents...)
+	historyR.SetEvents(append(historyR.GetEvents(), resp.HistoryEvents...))
 	req.NextPageToken = resp.NextPageToken
 
 	// last page: one batch of 18-20
@@ -311,7 +311,7 @@ func (s *HistoryV2PersistenceSuite) TestReadBranchByPagination() {
 	resp, err = s.ExecutionManager.ReadHistoryBranch(s.ctx, req)
 	s.Nil(err)
 	s.Equal(3, len(resp.HistoryEvents))
-	historyR.Events = append(historyR.Events, resp.HistoryEvents...)
+	historyR.SetEvents(append(historyR.GetEvents(), resp.HistoryEvents...))
 	req.NextPageToken = resp.NextPageToken
 	if len(resp.NextPageToken) != 0 {
 		resp, err = s.ExecutionManager.ReadHistoryBranch(s.ctx, req)
@@ -357,28 +357,28 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyCreateAndAppendBranches() {
 			events := s.genRandomEvents([]int64{1, 2, 3}, 1)
 			err = s.appendNewBranchAndFirstNode(bi, events, 1, "branchInfo")
 			s.Nil(err)
-			historyW.Events = events
+			historyW.SetEvents(events)
 
 			events = s.genRandomEvents([]int64{4}, 1)
 			err = s.appendNewNode(bi, events, 2)
 			s.Nil(err)
-			historyW.Events = append(historyW.Events, events...)
+			historyW.SetEvents(append(historyW.GetEvents(), events...))
 
 			events = s.genRandomEvents([]int64{5, 6, 7, 8}, 1)
 			err = s.appendNewNode(bi, events, 3)
 			s.Nil(err)
-			historyW.Events = append(historyW.Events, events...)
+			historyW.SetEvents(append(historyW.GetEvents(), events...))
 
 			events = s.genRandomEvents([]int64{9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20}, 1)
 			err = s.appendNewNode(bi, events, 4000)
 			s.Nil(err)
-			historyW.Events = append(historyW.Events, events...)
+			historyW.SetEvents(append(historyW.GetEvents(), events...))
 
 			// read branch to verify
 			historyR := &historypb.History{}
 			events = s.read(bi, 1, 21)
 			s.Equal(20, len(events))
-			historyR.Events = events
+			historyR.SetEvents(events)
 
 			s.ProtoEqual(historyW, historyR)
 		}(i)
@@ -484,7 +484,7 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyForkAndAppendBranches() {
 
 	branches = s.descTree(treeID)
 	s.Equal(1, len(branches))
-	mbrID := branches[0].BranchId
+	mbrID := branches[0].GetBranchId()
 
 	txn := int64(1)
 	getTxnLock := sync.Mutex{}
@@ -615,13 +615,13 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyForkAndAppendBranches() {
 	actualForkOnLevel1 := int32(0)
 	masterCnt := 0
 	for _, b := range branches {
-		if len(b.Ancestors) == 2 {
+		if len(b.GetAncestors()) == 2 {
 			actualForkOnLevel1++
-		} else if len(b.Ancestors) == 0 {
+		} else if len(b.GetAncestors()) == 0 {
 			masterCnt++
 		} else {
-			s.Equal(1, len(b.Ancestors))
-			s.Equal(mbrID, b.Ancestors[0].GetBranchId())
+			s.Equal(1, len(b.GetAncestors()))
+			s.Equal(mbrID, b.GetAncestors()[0].GetBranchId())
 		}
 	}
 	s.Equal(forkOnLevel1, actualForkOnLevel1)
@@ -671,7 +671,7 @@ func (s *HistoryV2PersistenceSuite) genRandomEvents(eventIDs []int64, version in
 
 	now := time.Date(2020, 8, 22, 0, 0, 0, 0, time.UTC)
 	for _, eid := range eventIDs {
-		e := &historypb.HistoryEvent{EventId: eid, Version: version, EventTime: timestamppb.New(now)}
+		e := historypb.HistoryEvent_builder{EventId: eid, Version: version, EventTime: timestamppb.New(now)}.Build()
 		events = append(events, e)
 	}
 
@@ -719,7 +719,7 @@ func (s *HistoryV2PersistenceSuite) descTree(treeID string) []*persistencespb.Hi
 		s.NoError(err)
 
 		for _, branch := range resp.Branches {
-			if branch.BranchInfo.TreeId == treeID {
+			if branch.BranchInfo.GetTreeId() == treeID {
 				branches = append(branches, branch.BranchInfo)
 			}
 		}

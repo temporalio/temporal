@@ -14,7 +14,7 @@ func ConvertToStartRequest(
 	request *workflowservice.SignalWithStartWorkflowExecutionRequest,
 	now time.Time,
 ) *historyservice.StartWorkflowExecutionRequest {
-	req := &workflowservice.StartWorkflowExecutionRequest{
+	req := workflowservice.StartWorkflowExecutionRequest_builder{
 		Namespace:                request.GetNamespace(),
 		WorkflowId:               request.GetWorkflowId(),
 		WorkflowType:             request.GetWorkflowType(),
@@ -33,11 +33,11 @@ func ConvertToStartRequest(
 		SearchAttributes:         request.GetSearchAttributes(),
 		Header:                   request.GetHeader(),
 		WorkflowStartDelay:       request.GetWorkflowStartDelay(),
-		UserMetadata:             request.UserMetadata,
+		UserMetadata:             request.GetUserMetadata(),
 		Links:                    request.GetLinks(),
 		VersioningOverride:       request.GetVersioningOverride(),
 		Priority:                 request.GetPriority(),
-	}
+	}.Build()
 
 	return common.CreateHistoryStartWorkflowRequest(namespaceID.String(), req, nil, nil, now)
 }

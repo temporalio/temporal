@@ -72,14 +72,14 @@ func (s *NexusEndpointStore) CreateOrUpdateNexusEndpoint(
 		batch.Query(templateCreateEndpointQuery,
 			rowTypeNexusEndpoint,
 			request.Endpoint.ID,
-			request.Endpoint.Data.Data,
-			request.Endpoint.Data.EncodingType.String(),
+			request.Endpoint.Data.GetData(),
+			request.Endpoint.Data.GetEncodingType().String(),
 			1,
 		)
 	} else {
 		batch.Query(templateUpdateEndpointQuery,
-			request.Endpoint.Data.Data,
-			request.Endpoint.Data.EncodingType.String(),
+			request.Endpoint.Data.GetData(),
+			request.Endpoint.Data.GetEncodingType().String(),
 			request.Endpoint.Version+1,
 			rowTypeNexusEndpoint,
 			request.Endpoint.ID,

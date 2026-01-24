@@ -107,8 +107,8 @@ func NewStubContext(
 func newTestContext(t *resourcetest.Test, eventsCache events.Cache, config ContextConfigOverrides) *ContextImpl {
 	hostInfoProvider := t.GetHostInfoProvider()
 	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
-	if config.ShardInfo.QueueStates == nil {
-		config.ShardInfo.QueueStates = make(map[int32]*persistencespb.QueueState)
+	if config.ShardInfo.GetQueueStates() == nil {
+		config.ShardInfo.SetQueueStates(make(map[int32]*persistencespb.QueueState))
 	}
 	registry := config.Registry
 	if registry == nil {
@@ -170,7 +170,7 @@ func newTestContext(t *resourcetest.Test, eventsCache events.Cache, config Conte
 			return ctx.renewRangeLocked(false)
 		},
 	)
-	ctx.taskKeyManager.setRangeID(config.ShardInfo.RangeId)
+	ctx.taskKeyManager.setRangeID(config.ShardInfo.GetRangeId())
 	return ctx
 }
 

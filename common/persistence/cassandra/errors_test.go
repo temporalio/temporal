@@ -211,23 +211,23 @@ func (s *cassandraErrorsSuite) TestExtractCurrentWorkflowConflictError_Success()
 	runID, _ := uuid.Parse(permanentRunID)
 	currentRunID := uuid.New()
 	startTime := time.Now().UTC()
-	workflowState := &persistencespb.WorkflowExecutionState{
+	workflowState := persistencespb.WorkflowExecutionState_builder{
 		CreateRequestId: requestID.String(),
 		RunId:           currentRunID.String(),
 		State:           enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		Status:          enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		StartTime:       timestamp.TimePtr(startTime),
 		RequestIds: map[string]*persistencespb.RequestIDInfo{
-			requestID.String(): {
+			requestID.String(): persistencespb.RequestIDInfo_builder{
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 				EventId:   common.FirstEventID,
-			},
-			uuid.NewString(): {
+			}.Build(),
+			uuid.NewString(): persistencespb.RequestIDInfo_builder{
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
 				EventId:   common.BufferedEventID,
-			},
+			}.Build(),
 		},
-	}
+	}.Build()
 	blob, err := serialization.NewSerializer().WorkflowExecutionStateToBlob(workflowState)
 	lastWriteVersion := rand.Int63()
 	s.NoError(err)
@@ -236,8 +236,8 @@ func (s *cassandraErrorsSuite) TestExtractCurrentWorkflowConflictError_Success()
 		"type":                        &t,
 		"run_id":                      gocql.UUID(runID),
 		"current_run_id":              gocql.UUID(currentRunID),
-		"execution_state":             blob.Data,
-		"execution_state_encoding":    blob.EncodingType.String(),
+		"execution_state":             blob.GetData(),
+		"execution_state_encoding":    blob.GetEncodingType().String(),
 		"workflow_last_write_version": lastWriteVersion,
 	}
 
@@ -248,10 +248,10 @@ func (s *cassandraErrorsSuite) TestExtractCurrentWorkflowConflictError_Success()
 	s.DeepEqual(
 		&p.CurrentWorkflowConditionFailedError{
 			Msg:              "",
-			RequestIDs:       workflowState.RequestIds,
-			RunID:            workflowState.RunId,
-			State:            workflowState.State,
-			Status:           workflowState.Status,
+			RequestIDs:       workflowState.GetRequestIds(),
+			RunID:            workflowState.GetRunId(),
+			State:            workflowState.GetState(),
+			Status:           workflowState.GetStatus(),
 			LastWriteVersion: lastWriteVersion,
 			StartTime:        &startTime,
 		},

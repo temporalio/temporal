@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/workflow/update"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 )
 
@@ -30,11 +31,11 @@ const (
 )
 
 var (
-	rejectionFailure = &failurepb.Failure{Message: "rejection failure"}
-	rejectionOutcome = &updatepb.Outcome{Value: &updatepb.Outcome_Failure{Failure: rejectionFailure}}
-	failureOutcome   = &updatepb.Outcome{Value: &updatepb.Outcome_Failure{Failure: &failurepb.Failure{Message: "outcome failure"}}}
-	successOutcome   = &updatepb.Outcome{Value: &updatepb.Outcome_Success{Success: payloads.EncodeString("success")}}
-	abortedOutcome   = &updatepb.Outcome{Value: &updatepb.Outcome_Failure{Failure: update.AbortFailure}}
+	rejectionFailure = failurepb.Failure_builder{Message: "rejection failure"}.Build()
+	rejectionOutcome = updatepb.Outcome_builder{Failure: proto.ValueOrDefault(rejectionFailure)}.Build()
+	failureOutcome   = updatepb.Outcome_builder{Failure: failurepb.Failure_builder{Message: "outcome failure"}.Build()}.Build()
+	successOutcome   = updatepb.Outcome_builder{Success: proto.ValueOrDefault(payloads.EncodeString("success"))}.Build()
+	abortedOutcome   = updatepb.Outcome_builder{Failure: proto.ValueOrDefault(update.AbortFailure)}.Build()
 	immediateTimeout = time.Duration(0)
 	immediateCtx, _  = context.WithTimeout(context.Background(), immediateTimeout)
 )
@@ -122,15 +123,15 @@ func TestUpdateState(t *testing.T) {
 					require.ErrorAs(t, err, &invalidArg)
 					require.ErrorContains(t, err, "meta is not set")
 
-					err = upd.Admit(&updatepb.Request{Meta: &updatepb.Meta{}}, nil)
+					err = upd.Admit(updatepb.Request_builder{Meta: &updatepb.Meta{}}.Build(), nil)
 					require.ErrorAs(t, err, &invalidArg)
 					require.ErrorContains(t, err, "meta.update_id is not set")
 
-					err = upd.Admit(&updatepb.Request{Meta: &updatepb.Meta{UpdateId: tv.UpdateID()}}, nil)
+					err = upd.Admit(updatepb.Request_builder{Meta: updatepb.Meta_builder{UpdateId: tv.UpdateID()}.Build()}.Build(), nil)
 					require.ErrorAs(t, err, &invalidArg)
 					require.ErrorContains(t, err, "input is not set")
 
-					err = upd.Admit(&updatepb.Request{Meta: &updatepb.Meta{UpdateId: tv.UpdateID()}, Input: &updatepb.Input{}}, nil)
+					err = upd.Admit(updatepb.Request_builder{Meta: updatepb.Meta_builder{UpdateId: tv.UpdateID()}.Build(), Input: &updatepb.Input{}}.Build(), nil)
 					require.ErrorAs(t, err, &invalidArg)
 					require.ErrorContains(t, err, "input.name is not set")
 				},
@@ -405,19 +406,19 @@ func TestUpdateState(t *testing.T) {
 				apply: func() {
 					var invalidArg *serviceerror.InvalidArgument
 
-					err := upd.OnProtocolMessage(&protocolpb.Message{
-						Body: MarshalAny(t, &updatepb.Acceptance{
+					err := upd.OnProtocolMessage(protocolpb.Message_builder{
+						Body: MarshalAny(t, updatepb.Acceptance_builder{
 							AcceptedRequestSequencingEventId: testSequencingEventID,
-						}),
-					}, store)
+						}.Build()),
+					}.Build(), store)
 					require.ErrorAs(t, err, &invalidArg)
 					require.ErrorContains(t, err, "accepted_request_message_id is not set")
 
-					err = upd.OnProtocolMessage(&protocolpb.Message{
-						Body: MarshalAny(t, &updatepb.Acceptance{
+					err = upd.OnProtocolMessage(protocolpb.Message_builder{
+						Body: MarshalAny(t, updatepb.Acceptance_builder{
 							AcceptedRequestMessageId: tv.MessageID(),
-						}),
-					}, store)
+						}.Build()),
+					}.Build(), store)
 					require.ErrorAs(t, err, &invalidArg)
 					require.ErrorContains(t, err, "accepted_request_sequencing_event_id is not set")
 				},
@@ -751,33 +752,33 @@ func TestUpdateState(t *testing.T) {
 				apply: func() {
 					var invalidArg *serviceerror.InvalidArgument
 
-					err := upd.OnProtocolMessage(&protocolpb.Message{
+					err := upd.OnProtocolMessage(protocolpb.Message_builder{
 						Body: MarshalAny(t, &updatepb.Response{}),
-					}, store)
+					}.Build(), store)
 					require.ErrorAs(t, err, &invalidArg)
 					require.ErrorContains(t, err, "meta is not set")
 
-					err = upd.OnProtocolMessage(&protocolpb.Message{
-						Body: MarshalAny(t, &updatepb.Response{
+					err = upd.OnProtocolMessage(protocolpb.Message_builder{
+						Body: MarshalAny(t, updatepb.Response_builder{
 							Outcome: failureOutcome,
-						}),
-					}, store)
+						}.Build()),
+					}.Build(), store)
 					require.ErrorAs(t, err, &invalidArg)
 					require.ErrorContains(t, err, "meta is not set")
 
-					err = upd.OnProtocolMessage(&protocolpb.Message{
-						Body: MarshalAny(t, &updatepb.Response{
+					err = upd.OnProtocolMessage(protocolpb.Message_builder{
+						Body: MarshalAny(t, updatepb.Response_builder{
 							Meta: &updatepb.Meta{},
-						}),
-					}, store)
+						}.Build()),
+					}.Build(), store)
 					require.ErrorAs(t, err, &invalidArg)
 					require.ErrorContains(t, err, "update_id is not set")
 
-					err = upd.OnProtocolMessage(&protocolpb.Message{
-						Body: MarshalAny(t, &updatepb.Response{
-							Meta: &updatepb.Meta{UpdateId: upd.ID()},
-						}),
-					}, store)
+					err = upd.OnProtocolMessage(protocolpb.Message_builder{
+						Body: MarshalAny(t, updatepb.Response_builder{
+							Meta: updatepb.Meta_builder{UpdateId: upd.ID()}.Build(),
+						}.Build()),
+					}.Build(), store)
 					require.ErrorAs(t, err, &invalidArg)
 					require.ErrorContains(t, err, "outcome is not set")
 				},
@@ -802,7 +803,7 @@ func TestUpdateState(t *testing.T) {
 					status, err := upd.WaitLifecycleStage(immediateCtx, UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, immediateTimeout)
 					require.NoError(t, err)
 					require.NotNil(t, status)
-					require.Equal(t, "Workflow Update failed because the Workflow completed before the Update completed.", status.Outcome.GetFailure().Message)
+					require.Equal(t, "Workflow Update failed because the Workflow completed before the Update completed.", status.Outcome.GetFailure().GetMessage())
 				},
 			}, {
 				title: "fail to transition to stateCompleted on store write failure",
@@ -976,12 +977,12 @@ func TestOnProtocolMessage(t *testing.T) {
 
 	t.Run("junk message", func(t *testing.T) {
 		upd := update.New(tv.UpdateID())
-		err := upd.OnProtocolMessage(&protocolpb.Message{
+		err := upd.OnProtocolMessage(protocolpb.Message_builder{
 			Body: &anypb.Any{
 				TypeUrl: "nonsense",
 				Value:   []byte("even more nonsense"),
 			},
-		}, nil)
+		}.Build(), nil)
 		require.Error(t, err)
 	})
 
@@ -1006,9 +1007,9 @@ func TestOnProtocolMessage(t *testing.T) {
 
 	t.Run("unsupported message type", func(t *testing.T) {
 		upd := update.New(tv.UpdateID())
-		msg := protocolpb.Message{}
-		msg.Body = MarshalAny(t, &historypb.HistoryEvent{})
-		err := upd.OnProtocolMessage(&msg, mockEventStore{})
+		msg := &protocolpb.Message{}
+		msg.SetBody(MarshalAny(t, &historypb.HistoryEvent{}))
+		err := upd.OnProtocolMessage(msg, mockEventStore{})
 
 		var invalidArg *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArg)
@@ -1038,10 +1039,10 @@ func assertAdmitted(t *testing.T, upd *update.Update) {
 
 func admit(t *testing.T, store mockEventStore, upd *update.Update) error {
 	t.Helper()
-	return upd.Admit(&updatepb.Request{
-		Meta:  &updatepb.Meta{UpdateId: upd.ID()},
-		Input: &updatepb.Input{Name: "not_empty"},
-	}, store)
+	return upd.Admit(updatepb.Request_builder{
+		Meta:  updatepb.Meta_builder{UpdateId: upd.ID()}.Build(),
+		Input: updatepb.Input_builder{Name: "not_empty"}.Build(),
+	}.Build(), store)
 }
 
 func send(t *testing.T, upd *update.Update, includeAlreadySent bool) *protocolpb.Message {
@@ -1051,15 +1052,15 @@ func send(t *testing.T, upd *update.Update, includeAlreadySent bool) *protocolpb
 
 func reject(t *testing.T, store mockEventStore, upd *update.Update) error {
 	t.Helper()
-	return upd.OnProtocolMessage(&protocolpb.Message{
-		Body: MarshalAny(t, &updatepb.Rejection{
+	return upd.OnProtocolMessage(protocolpb.Message_builder{
+		Body: MarshalAny(t, updatepb.Rejection_builder{
 			RejectedRequestMessageId: "update1/request",
-			RejectedRequest: &updatepb.Request{
-				Meta:  &updatepb.Meta{UpdateId: upd.ID()},
-				Input: &updatepb.Input{Name: "not_empty"},
-			},
+			RejectedRequest: updatepb.Request_builder{
+				Meta:  updatepb.Meta_builder{UpdateId: upd.ID()}.Build(),
+				Input: updatepb.Input_builder{Name: "not_empty"}.Build(),
+			}.Build(),
 			Failure: rejectionFailure,
-		})}, store)
+		}.Build())}.Build(), store)
 }
 
 func mustAccept(t *testing.T, store mockEventStore, upd *update.Update) {
@@ -1070,11 +1071,11 @@ func mustAccept(t *testing.T, store mockEventStore, upd *update.Update) {
 
 func accept(t *testing.T, store mockEventStore, upd *update.Update) error {
 	tv := testvars.New(t)
-	return upd.OnProtocolMessage(&protocolpb.Message{
-		Body: MarshalAny(t, &updatepb.Acceptance{
+	return upd.OnProtocolMessage(protocolpb.Message_builder{
+		Body: MarshalAny(t, updatepb.Acceptance_builder{
 			AcceptedRequestMessageId:         tv.MessageID(),
 			AcceptedRequestSequencingEventId: testSequencingEventID,
-		})}, store)
+		}.Build())}.Build(), store)
 }
 
 func assertAccepted(t *testing.T, upd *update.Update) {
@@ -1112,20 +1113,20 @@ func assertNotAcceptedYet(t *testing.T, upd *update.Update) {
 
 func respondSuccess(t *testing.T, store mockEventStore, upd *update.Update) error {
 	t.Helper()
-	return upd.OnProtocolMessage(&protocolpb.Message{
-		Body: MarshalAny(t, &updatepb.Response{
-			Meta:    &updatepb.Meta{UpdateId: upd.ID()},
+	return upd.OnProtocolMessage(protocolpb.Message_builder{
+		Body: MarshalAny(t, updatepb.Response_builder{
+			Meta:    updatepb.Meta_builder{UpdateId: upd.ID()}.Build(),
 			Outcome: successOutcome,
-		})}, store)
+		}.Build())}.Build(), store)
 }
 
 func respondFailure(t *testing.T, store mockEventStore, upd *update.Update) error {
 	t.Helper()
-	return upd.OnProtocolMessage(&protocolpb.Message{
-		Body: MarshalAny(t, &updatepb.Response{
-			Meta:    &updatepb.Meta{UpdateId: upd.ID()},
+	return upd.OnProtocolMessage(protocolpb.Message_builder{
+		Body: MarshalAny(t, updatepb.Response_builder{
+			Meta:    updatepb.Meta_builder{UpdateId: upd.ID()}.Build(),
 			Outcome: failureOutcome,
-		})}, store)
+		}.Build())}.Build(), store)
 }
 
 func assertCompleted(t *testing.T, upd *update.Update, outcome *updatepb.Outcome) {

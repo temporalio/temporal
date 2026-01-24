@@ -144,11 +144,11 @@ func TestReaderSignaling(t *testing.T) {
 */
 
 func makePollMetadata(rps float64) *pollMetadata {
-	return &pollMetadata{taskQueueMetadata: &taskqueuepb.TaskQueueMetadata{
+	return &pollMetadata{taskQueueMetadata: taskqueuepb.TaskQueueMetadata_builder{
 		MaxTasksPerSecond: &wrapperspb.DoubleValue{
 			Value: rps,
 		},
-	}}
+	}.Build()}
 }
 
 // runOneShotPoller spawns a goroutine to call tqMgr.PollTask on the provided tqMgr.
@@ -214,17 +214,17 @@ func randomTaskInfoWithAgeTaskID(age time.Duration, TaskID int64) *persistencesp
 	rt1 := time.Now().Add(-age)
 	rt2 := rt1.Add(time.Hour)
 
-	return &persistencespb.AllocatedTaskInfo{
-		Data: &persistencespb.TaskInfo{
+	return persistencespb.AllocatedTaskInfo_builder{
+		Data: persistencespb.TaskInfo_builder{
 			NamespaceId:      uuid.NewString(),
 			WorkflowId:       uuid.NewString(),
 			RunId:            uuid.NewString(),
 			ScheduledEventId: rand.Int63(),
 			CreateTime:       timestamppb.New(rt1),
 			ExpiryTime:       timestamppb.New(rt2),
-		},
+		}.Build(),
 		TaskId: TaskID,
-	}
+	}.Build()
 }
 
 // TODO(pri): old matcher cleanup
@@ -250,11 +250,11 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestLegacyDescribeTaskQueue() {
 
 	includeTaskStatus := false
 	descResp := s.tqMgr.LegacyDescribeTaskQueue(includeTaskStatus)
-	s.Equal(0, len(descResp.DescResponse.GetPollers()))
-	s.Nil(descResp.DescResponse.GetTaskQueueStatus())
+	s.Equal(0, len(descResp.GetDescResponse().GetPollers()))
+	s.Nil(descResp.GetDescResponse().GetTaskQueueStatus())
 
 	includeTaskStatus = true
-	taskQueueStatus := s.tqMgr.LegacyDescribeTaskQueue(includeTaskStatus).DescResponse.GetTaskQueueStatus()
+	taskQueueStatus := s.tqMgr.LegacyDescribeTaskQueue(includeTaskStatus).GetDescResponse().GetTaskQueueStatus()
 	s.NotNil(taskQueueStatus)
 	s.Zero(taskQueueStatus.GetAckLevel())
 	s.Equal(taskCount, taskQueueStatus.GetReadLevel())
@@ -272,18 +272,18 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestLegacyDescribeTaskQueue() {
 	}
 
 	descResp = s.tqMgr.LegacyDescribeTaskQueue(includeTaskStatus)
-	s.Equal(1, len(descResp.DescResponse.GetPollers()))
-	s.Equal(string(pollerIdent), descResp.DescResponse.Pollers[0].GetIdentity())
-	s.NotEmpty(descResp.DescResponse.Pollers[0].GetLastAccessTime())
+	s.Equal(1, len(descResp.GetDescResponse().GetPollers()))
+	s.Equal(string(pollerIdent), descResp.GetDescResponse().GetPollers()[0].GetIdentity())
+	s.NotEmpty(descResp.GetDescResponse().GetPollers()[0].GetLastAccessTime())
 
 	rps := 5.0
 	s.tqMgr.pollerHistory.updatePollerInfo(pollerIdent, makePollMetadata(rps))
 	descResp = s.tqMgr.LegacyDescribeTaskQueue(includeTaskStatus)
-	s.Equal(1, len(descResp.DescResponse.GetPollers()))
-	s.Equal(string(pollerIdent), descResp.DescResponse.Pollers[0].GetIdentity())
-	s.True(descResp.DescResponse.Pollers[0].GetRatePerSecond() > 4.0 && descResp.DescResponse.Pollers[0].GetRatePerSecond() < 6.0)
+	s.Equal(1, len(descResp.GetDescResponse().GetPollers()))
+	s.Equal(string(pollerIdent), descResp.GetDescResponse().GetPollers()[0].GetIdentity())
+	s.True(descResp.GetDescResponse().GetPollers()[0].GetRatePerSecond() > 4.0 && descResp.GetDescResponse().GetPollers()[0].GetRatePerSecond() < 6.0)
 
-	taskQueueStatus = descResp.DescResponse.GetTaskQueueStatus()
+	taskQueueStatus = descResp.GetDescResponse().GetTaskQueueStatus()
 	s.NotNil(taskQueueStatus)
 	s.Equal(taskCount, taskQueueStatus.GetAckLevel())
 	s.Zero(taskQueueStatus.GetBacklogCountHint())
@@ -323,9 +323,9 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestAddTaskStandby() {
 	ns := namespace.NewGlobalNamespaceForTest(
 		&persistencespb.NamespaceInfo{},
 		&persistencespb.NamespaceConfig{},
-		&persistencespb.NamespaceReplicationConfig{
+		persistencespb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
-		},
+		}.Build(),
 		cluster.TestAlternativeClusterInitialFailoverVersion,
 	)
 
@@ -346,9 +346,9 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestAddTaskStandby() {
 	// otherwise the task persist process is async and hard to test
 	s.tqMgr.tqCtxCancel()
 
-	err = s.tqMgr.SpoolTask(&persistencespb.TaskInfo{
+	err = s.tqMgr.SpoolTask(persistencespb.TaskInfo_builder{
 		CreateTime: timestamp.TimePtr(time.Now().UTC()),
-	})
+	}.Build())
 	s.Equal(errShutdown, err) // task writer was stopped above
 }
 
@@ -421,14 +421,14 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingUpOnBacklog() {
 	rl.EXPECT().AllowN(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
 	s.tqMgr.pollerScalingRateLimiter = rl
 
-	fakeStats := &taskqueuepb.TaskQueueStats{
+	fakeStats := taskqueuepb.TaskQueueStats_builder{
 		ApproximateBacklogCount: 100,
 		ApproximateBacklogAge:   durationpb.New(1 * time.Minute),
-	}
+	}.Build()
 
 	decision := s.tqMgr.makePollerScalingDecisionImpl(time.Now(), func() *taskqueuepb.TaskQueueStats { return fakeStats })
 	s.NotNil(decision)
-	s.GreaterOrEqual(decision.PollRequestDeltaSuggestion, int32(1))
+	s.GreaterOrEqual(decision.GetPollRequestDeltaSuggestion(), int32(1))
 }
 
 func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingUpAddRateExceedsDispatchRate() {
@@ -436,21 +436,21 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingUpAddRateExceedsDispa
 	rl.EXPECT().AllowN(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
 	s.tqMgr.pollerScalingRateLimiter = rl
 
-	fakeStats := &taskqueuepb.TaskQueueStats{
+	fakeStats := taskqueuepb.TaskQueueStats_builder{
 		TasksAddRate:      100,
 		TasksDispatchRate: 10,
-	}
+	}.Build()
 
 	decision := s.tqMgr.makePollerScalingDecisionImpl(time.Now(), func() *taskqueuepb.TaskQueueStats { return fakeStats })
 	s.NotNil(decision)
-	s.GreaterOrEqual(decision.PollRequestDeltaSuggestion, int32(1))
+	s.GreaterOrEqual(decision.GetPollRequestDeltaSuggestion(), int32(1))
 }
 
 func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingNoChangeOnNoBacklogFastMatch() {
-	fakeStats := &taskqueuepb.TaskQueueStats{
+	fakeStats := taskqueuepb.TaskQueueStats_builder{
 		ApproximateBacklogCount: 0,
 		ApproximateBacklogAge:   durationpb.New(0),
-	}
+	}.Build()
 	decision := s.tqMgr.makePollerScalingDecisionImpl(time.Now(), func() *taskqueuepb.TaskQueueStats { return fakeStats })
 	s.Nil(decision)
 }
@@ -466,25 +466,25 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingNonRootPartition() {
 	rl.EXPECT().AllowN(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
 	s.tqMgr.pollerScalingRateLimiter = rl
 
-	fakeStats := &taskqueuepb.TaskQueueStats{
+	fakeStats := taskqueuepb.TaskQueueStats_builder{
 		ApproximateBacklogCount: 100,
 		ApproximateBacklogAge:   durationpb.New(1 * time.Minute),
-	}
+	}.Build()
 	decision := s.tqMgr.makePollerScalingDecisionImpl(time.Now(), func() *taskqueuepb.TaskQueueStats { return fakeStats })
 	s.NotNil(decision)
-	s.GreaterOrEqual(decision.PollRequestDeltaSuggestion, int32(1))
+	s.GreaterOrEqual(decision.GetPollRequestDeltaSuggestion(), int32(1))
 
-	fakeStats.ApproximateBacklogCount = 0
+	fakeStats.SetApproximateBacklogCount(0)
 	decision = s.tqMgr.makePollerScalingDecisionImpl(time.Now(), func() *taskqueuepb.TaskQueueStats { return fakeStats })
 	s.Nil(decision)
 }
 
 func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingDownOnLongSyncMatch() {
-	fakeStats := &taskqueuepb.TaskQueueStats{
+	fakeStats := taskqueuepb.TaskQueueStats_builder{
 		ApproximateBacklogCount: 0,
-	}
+	}.Build()
 	decision := s.tqMgr.makePollerScalingDecisionImpl(time.Now().Add(-2*time.Second), func() *taskqueuepb.TaskQueueStats { return fakeStats })
-	s.LessOrEqual(decision.PollRequestDeltaSuggestion, int32(-1))
+	s.LessOrEqual(decision.GetPollRequestDeltaSuggestion(), int32(-1))
 }
 
 func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingDecisionsAreRateLimited() {
@@ -493,12 +493,12 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingDecisionsAreRateLimit
 	rl.EXPECT().AllowN(gomock.Any(), gomock.Any()).Return(false).Times(1)
 	s.tqMgr.pollerScalingRateLimiter = rl
 
-	fakeStats := &taskqueuepb.TaskQueueStats{
+	fakeStats := taskqueuepb.TaskQueueStats_builder{
 		ApproximateBacklogCount: 100,
 		ApproximateBacklogAge:   durationpb.New(1 * time.Minute),
-	}
+	}.Build()
 	decision := s.tqMgr.makePollerScalingDecisionImpl(time.Now(), func() *taskqueuepb.TaskQueueStats { return fakeStats })
-	s.GreaterOrEqual(decision.PollRequestDeltaSuggestion, int32(1))
+	s.GreaterOrEqual(decision.GetPollRequestDeltaSuggestion(), int32(1))
 
 	decision = s.tqMgr.makePollerScalingDecisionImpl(time.Now(), func() *taskqueuepb.TaskQueueStats { return fakeStats })
 	s.Nil(decision)

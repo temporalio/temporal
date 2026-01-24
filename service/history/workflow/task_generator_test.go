@@ -183,48 +183,48 @@ func TestTaskGeneratorImpl_GenerateWorkflowCloseTasks(t *testing.T) {
 			c.ConfigFn(&p)
 			namespaceRegistry := namespace.NewMockRegistry(ctrl)
 
-			namespaceConfig := &persistencespb.NamespaceConfig{
+			namespaceConfig := persistencespb.NamespaceConfig_builder{
 				Retention:             durationpb.New(p.Retention),
 				HistoryArchivalUri:    "test:///history/archival/",
 				VisibilityArchivalUri: "test:///visibility/archival",
-			}
+			}.Build()
 			if p.HistoryArchivalEnabledInNamespace {
-				namespaceConfig.HistoryArchivalState = enumspb.ARCHIVAL_STATE_ENABLED
+				namespaceConfig.SetHistoryArchivalState(enumspb.ARCHIVAL_STATE_ENABLED)
 			} else {
-				namespaceConfig.HistoryArchivalState = enumspb.ARCHIVAL_STATE_DISABLED
+				namespaceConfig.SetHistoryArchivalState(enumspb.ARCHIVAL_STATE_DISABLED)
 			}
 			if p.VisibilityArchivalEnabledInNamespace {
-				namespaceConfig.VisibilityArchivalState = enumspb.ARCHIVAL_STATE_ENABLED
+				namespaceConfig.SetVisibilityArchivalState(enumspb.ARCHIVAL_STATE_ENABLED)
 			} else {
-				namespaceConfig.VisibilityArchivalState = enumspb.ARCHIVAL_STATE_DISABLED
+				namespaceConfig.SetVisibilityArchivalState(enumspb.ARCHIVAL_STATE_DISABLED)
 			}
 			namespaceEntry := namespace.NewGlobalNamespaceForTest(
-				&persistencespb.NamespaceInfo{Id: tests.NamespaceID.String(), Name: tests.Namespace.String()},
+				persistencespb.NamespaceInfo_builder{Id: tests.NamespaceID.String(), Name: tests.Namespace.String()}.Build(),
 				namespaceConfig,
-				&persistencespb.NamespaceReplicationConfig{
+				persistencespb.NamespaceReplicationConfig_builder{
 					ActiveClusterName: cluster.TestCurrentClusterName,
 					Clusters: []string{
 						cluster.TestCurrentClusterName,
 						cluster.TestAlternativeClusterName,
 					},
-				},
+				}.Build(),
 				tests.Version,
 			)
 			namespaceRegistry.EXPECT().GetNamespaceID(gomock.Any()).Return(namespaceEntry.ID(), nil).AnyTimes()
 			namespaceRegistry.EXPECT().GetNamespaceByID(namespaceEntry.ID()).Return(namespaceEntry, nil).AnyTimes()
 
 			mutableState := historyi.NewMockMutableState(ctrl)
-			execState := &persistencespb.WorkflowExecutionState{
+			execState := persistencespb.WorkflowExecutionState_builder{
 				State:  enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 				Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
-			}
+			}.Build()
 			mutableState.EXPECT().GetExecutionState().Return(execState).AnyTimes()
 			mutableState.EXPECT().GetNamespaceEntry().Return(namespaceEntry).AnyTimes()
 			mutableState.EXPECT().GetCloseVersion().Return(int64(0), nil).AnyTimes()
 			mutableState.EXPECT().GetExecutionInfo().DoAndReturn(func() *persistencespb.WorkflowExecutionInfo {
-				return &persistencespb.WorkflowExecutionInfo{
+				return persistencespb.WorkflowExecutionInfo_builder{
 					NamespaceId: namespaceEntry.ID().String(),
-				}
+				}.Build()
 			}).AnyTimes()
 			mutableState.EXPECT().GetWorkflowKey().Return(definition.NewWorkflowKey(
 				namespaceEntry.ID().String(), tests.WorkflowID, tests.RunID,
@@ -335,13 +335,11 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 	callbackToSchedule := callbacks.NewCallback(
 		"request-id-1",
 		timestamppb.Now(),
-		callbacks.NewWorkflowClosedTrigger(), &persistencespb.Callback{
-			Variant: &persistencespb.Callback_Nexus_{
-				Nexus: &persistencespb.Callback_Nexus{
-					Url: "http://localhost?foo=bar",
-				},
-			},
-		},
+		callbacks.NewWorkflowClosedTrigger(), persistencespb.Callback_builder{
+			Nexus: persistencespb.Callback_Nexus_builder{
+				Url: "http://localhost?foo=bar",
+			}.Build(),
+		}.Build(),
 	)
 	_, err = coll.Add("sched", callbackToSchedule)
 	require.NoError(t, err)
@@ -353,15 +351,13 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 	callbackToBackoff := callbacks.NewCallback(
 		"request-id-2",
 		timestamppb.Now(),
-		callbacks.NewWorkflowClosedTrigger(), &persistencespb.Callback{
-			Variant: &persistencespb.Callback_Nexus_{
-				Nexus: &persistencespb.Callback_Nexus{
-					Url: "http://localhost?foo=bar",
-				},
-			},
-		},
+		callbacks.NewWorkflowClosedTrigger(), persistencespb.Callback_builder{
+			Nexus: persistencespb.Callback_Nexus_builder{
+				Url: "http://localhost?foo=bar",
+			}.Build(),
+		}.Build(),
 	)
-	callbackToBackoff.CallbackInfo.State = enumsspb.CALLBACK_STATE_SCHEDULED
+	callbackToBackoff.CallbackInfo.SetState(enumsspb.CALLBACK_STATE_SCHEDULED)
 	_, err = coll.Add("backoff", callbackToBackoff)
 	require.NoError(t, err)
 	err = coll.Transition("backoff", func(cb callbacks.Callback) (hsm.TransitionOutput, error) {
@@ -374,14 +370,14 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 	require.NoError(t, err)
 
 	mutableState.EXPECT().HSM().DoAndReturn(func() *hsm.Node { return node }).AnyTimes()
-	mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+	mutableState.EXPECT().GetExecutionInfo().Return(persistencespb.WorkflowExecutionInfo_builder{
 		TransitionHistory: []*persistencespb.VersionedTransition{
-			{NamespaceFailoverVersion: 3, TransitionCount: 3},
+			persistencespb.VersionedTransition_builder{NamespaceFailoverVersion: 3, TransitionCount: 3}.Build(),
 		},
-	}).AnyTimes()
-	mutableState.EXPECT().CurrentVersionedTransition().Return(&persistencespb.VersionedTransition{
+	}.Build()).AnyTimes()
+	mutableState.EXPECT().CurrentVersionedTransition().Return(persistencespb.VersionedTransition_builder{
 		NamespaceFailoverVersion: 3, TransitionCount: 3,
-	}).AnyTimes()
+	}.Build()).AnyTimes()
 	mutableState.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).AnyTimes()
 
 	cfg := &configs.Config{}
@@ -407,84 +403,82 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 	}
 	require.Equal(t, tests.WorkflowKey, invocationTask.WorkflowKey)
 	require.Equal(t, "http://localhost", invocationTask.Destination)
-	protorequire.ProtoEqual(t, &persistencespb.StateMachineTaskInfo{
-		Ref: &persistencespb.StateMachineRef{
+	protorequire.ProtoEqual(t, persistencespb.StateMachineTaskInfo_builder{
+		Ref: persistencespb.StateMachineRef_builder{
 			Path: []*persistencespb.StateMachineKey{
-				{
+				persistencespb.StateMachineKey_builder{
 					Type: callbacks.StateMachineType,
 					Id:   "sched",
-				},
+				}.Build(),
 			},
-			MutableStateVersionedTransition: &persistencespb.VersionedTransition{
+			MutableStateVersionedTransition: persistencespb.VersionedTransition_builder{
 				NamespaceFailoverVersion: 3,
 				TransitionCount:          3,
-			},
-			MachineInitialVersionedTransition: &persistencespb.VersionedTransition{
+			}.Build(),
+			MachineInitialVersionedTransition: persistencespb.VersionedTransition_builder{
 				NamespaceFailoverVersion: 3,
 				TransitionCount:          3,
-			},
-			MachineLastUpdateVersionedTransition: &persistencespb.VersionedTransition{
+			}.Build(),
+			MachineLastUpdateVersionedTransition: persistencespb.VersionedTransition_builder{
 				NamespaceFailoverVersion: 3,
 				TransitionCount:          3,
-			},
+			}.Build(),
 			MachineTransitionCount: 1,
-		},
+		}.Build(),
 		Type: callbacks.TaskTypeInvocation,
 		Data: nil,
-	}, invocationTask.Info)
+	}.Build(), invocationTask.Info)
 
 	require.Equal(t, tests.WorkflowKey, backoffTask.WorkflowKey)
 	require.Equal(t, int64(3), backoffTask.Version)
 
-	timers := mutableState.GetExecutionInfo().StateMachineTimers
+	timers := mutableState.GetExecutionInfo().GetStateMachineTimers()
 	require.Equal(t, 1, len(timers))
-	protorequire.ProtoEqual(t, &persistencespb.StateMachineTimerGroup{
+	protorequire.ProtoEqual(t, persistencespb.StateMachineTimerGroup_builder{
 		Deadline:  callbackToBackoff.NextAttemptScheduleTime,
 		Scheduled: true,
 		Infos: []*persistencespb.StateMachineTaskInfo{
-			{
-				Ref: &persistencespb.StateMachineRef{
+			persistencespb.StateMachineTaskInfo_builder{
+				Ref: persistencespb.StateMachineRef_builder{
 					Path: []*persistencespb.StateMachineKey{
-						{
+						persistencespb.StateMachineKey_builder{
 							Type: callbacks.StateMachineType,
 							Id:   "backoff",
-						},
+						}.Build(),
 					},
-					MutableStateVersionedTransition: &persistencespb.VersionedTransition{
+					MutableStateVersionedTransition: persistencespb.VersionedTransition_builder{
 						NamespaceFailoverVersion: 3,
 						TransitionCount:          3,
-					},
-					MachineInitialVersionedTransition: &persistencespb.VersionedTransition{
+					}.Build(),
+					MachineInitialVersionedTransition: persistencespb.VersionedTransition_builder{
 						NamespaceFailoverVersion: 3,
 						TransitionCount:          3,
-					},
-					MachineLastUpdateVersionedTransition: &persistencespb.VersionedTransition{
+					}.Build(),
+					MachineLastUpdateVersionedTransition: persistencespb.VersionedTransition_builder{
 						NamespaceFailoverVersion: 3,
 						TransitionCount:          3,
-					},
+					}.Build(),
 					MachineTransitionCount: 1,
-				},
+				}.Build(),
 				Type: callbacks.TaskTypeBackoff,
 				Data: nil,
-			},
+			}.Build(),
 		},
-	}, timers[0])
+	}.Build(), timers[0])
 
 	// Reset and test another timer task (nexusoperations.TimeoutTask)
 	node.ClearTransactionState()
 	genTasks = nil
-	opNode, err := nexusoperations.AddChild(node, "ID", &historypb.HistoryEvent{
+	opNode, err := nexusoperations.AddChild(node, "ID", historypb.HistoryEvent_builder{
 		EventTime: timestamppb.Now(),
-		Attributes: &historypb.HistoryEvent_NexusOperationScheduledEventAttributes{
-			NexusOperationScheduledEventAttributes: &historypb.NexusOperationScheduledEventAttributes{
-				Endpoint:               "endpoint",
-				EndpointId:             "endpoint-id",
-				Service:                "some-service",
-				Operation:              "some-op",
-				ScheduleToCloseTimeout: durationpb.New(time.Hour),
-			},
-		},
-	}, []byte("token"))
+		NexusOperationScheduledEventAttributes: historypb.NexusOperationScheduledEventAttributes_builder{
+			Endpoint:               "endpoint",
+			EndpointId:             "endpoint-id",
+			Service:                "some-service",
+			Operation:              "some-op",
+			ScheduleToCloseTimeout: durationpb.New(time.Hour),
+		}.Build(),
+	}.Build(), []byte("token"))
 	require.NoError(t, err)
 	err = taskGenerator.GenerateDirtySubStateMachineTasks(reg)
 	require.NoError(t, err)
@@ -495,34 +489,34 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 	_, ok = genTasks[0].(*tasks.StateMachineOutboundTask)
 	require.True(t, ok)
 
-	timers = mutableState.GetExecutionInfo().StateMachineTimers
+	timers = mutableState.GetExecutionInfo().GetStateMachineTimers()
 	require.Equal(t, 2, len(timers))
 
-	protorequire.ProtoEqual(t, &persistencespb.StateMachineTaskInfo{
-		Ref: &persistencespb.StateMachineRef{
+	protorequire.ProtoEqual(t, persistencespb.StateMachineTaskInfo_builder{
+		Ref: persistencespb.StateMachineRef_builder{
 			Path: []*persistencespb.StateMachineKey{
-				{
+				persistencespb.StateMachineKey_builder{
 					Type: opNode.Key.Type,
 					Id:   opNode.Key.ID,
-				},
+				}.Build(),
 			},
-			MutableStateVersionedTransition: &persistencespb.VersionedTransition{
+			MutableStateVersionedTransition: persistencespb.VersionedTransition_builder{
 				NamespaceFailoverVersion: 3,
 				TransitionCount:          3,
-			},
-			MachineInitialVersionedTransition: &persistencespb.VersionedTransition{
+			}.Build(),
+			MachineInitialVersionedTransition: persistencespb.VersionedTransition_builder{
 				NamespaceFailoverVersion: 3,
 				TransitionCount:          3,
-			},
-			MachineLastUpdateVersionedTransition: &persistencespb.VersionedTransition{
+			}.Build(),
+			MachineLastUpdateVersionedTransition: persistencespb.VersionedTransition_builder{
 				NamespaceFailoverVersion: 3,
 				TransitionCount:          3,
-			},
+			}.Build(),
 			MachineTransitionCount: 1,
-		},
+		}.Build(),
 		Type: nexusoperations.TaskTypeTimeout,
 		Data: nil,
-	}, timers[1].Infos[0])
+	}.Build(), timers[1].GetInfos()[0])
 }
 
 func TestTaskGenerator_GenerateWorkflowStartTasks(t *testing.T) {
@@ -651,10 +645,10 @@ func TestTaskGenerator_GenerateWorkflowStartTasks(t *testing.T) {
 
 			mockShard := shard.NewTestContext(
 				controller,
-				&persistencespb.ShardInfo{
+				persistencespb.ShardInfo_builder{
 					ShardId: 1,
 					RangeId: 1,
-				},
+				}.Build(),
 				config,
 			)
 
@@ -669,17 +663,17 @@ func TestTaskGenerator_GenerateWorkflowStartTasks(t *testing.T) {
 
 			workflowKey := tests.WorkflowKey
 			mockMutableState.EXPECT().GetWorkflowKey().Return(workflowKey).AnyTimes()
-			mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+			mockMutableState.EXPECT().GetExecutionInfo().Return(persistencespb.WorkflowExecutionInfo_builder{
 				NamespaceId:                      workflowKey.NamespaceID,
 				WorkflowId:                       workflowKey.WorkflowID,
 				WorkflowExecutionTimerTaskStatus: tc.existingExecutionTimerStatus,
 				WorkflowExecutionExpirationTime:  timestamppb.New(tc.executionExpirationTime),
 				WorkflowRunExpirationTime:        timestamppb.New(tc.runExpirationTime),
 				FirstExecutionRunId:              firstRunID,
-			}).AnyTimes()
-			mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+			}.Build()).AnyTimes()
+			mockMutableState.EXPECT().GetExecutionState().Return(persistencespb.WorkflowExecutionState_builder{
 				RunId: currentRunID,
-			}).AnyTimes()
+			}.Build()).AnyTimes()
 
 			var generatedTaskTypes []enumsspb.TaskType
 			mockMutableState.EXPECT().AddTasks(gomock.Any()).Do(func(newTasks ...tasks.Task) {
@@ -696,18 +690,16 @@ func TestTaskGenerator_GenerateWorkflowStartTasks(t *testing.T) {
 				log.NewTestLogger(),
 			)
 
-			actualExecutionTimerTaskStatus, err := taskGenerator.GenerateWorkflowStartTasks(&historypb.HistoryEvent{
+			actualExecutionTimerTaskStatus, err := taskGenerator.GenerateWorkflowStartTasks(historypb.HistoryEvent_builder{
 				EventId:   1,
 				EventTime: timestamppb.Now(),
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 				Version:   1,
 				TaskId:    123,
-				Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
-					WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
-						WorkflowExecutionExpirationTime: timestamppb.New(tc.executionExpirationTime),
-					},
-				},
-			})
+				WorkflowExecutionStartedEventAttributes: historypb.WorkflowExecutionStartedEventAttributes_builder{
+					WorkflowExecutionExpirationTime: timestamppb.New(tc.executionExpirationTime),
+				}.Build(),
+			}.Build())
 			require.NoError(t, err)
 			require.Equal(t, tc.expectedExecutionTimerStatus, actualExecutionTimerTaskStatus)
 			require.ElementsMatch(t, tc.expectedTaskTypes, generatedTaskTypes)
@@ -744,14 +736,14 @@ func TestTaskGeneratorImpl_GenerateMigrationTasks(t *testing.T) {
 			transitionHistoryEnabled: true,
 			workflowState:            enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 			pendingActivityInfo: map[int64]*persistencespb.ActivityInfo{
-				1: {
+				1: persistencespb.ActivityInfo_builder{
 					Version:          1,
 					ScheduledEventId: 1,
-				},
-				2: {
+				}.Build(),
+				2: persistencespb.ActivityInfo_builder{
 					Version:          1,
 					ScheduledEventId: 2,
-				},
+				}.Build(),
 			},
 			expectedTaskTypes:           []enumsspb.TaskType{enumsspb.TASK_TYPE_REPLICATION_SYNC_VERSIONED_TRANSITION},
 			expectedTaskEquivalentTypes: []enumsspb.TaskType{enumsspb.TASK_TYPE_REPLICATION_HISTORY, enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY, enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY, enumsspb.TASK_TYPE_REPLICATION_SYNC_HSM},
@@ -761,14 +753,14 @@ func TestTaskGeneratorImpl_GenerateMigrationTasks(t *testing.T) {
 			transitionHistoryEnabled: false,
 			workflowState:            enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 			pendingActivityInfo: map[int64]*persistencespb.ActivityInfo{
-				1: {
+				1: persistencespb.ActivityInfo_builder{
 					Version:          1,
 					ScheduledEventId: 1,
-				},
-				2: {
+				}.Build(),
+				2: persistencespb.ActivityInfo_builder{
 					Version:          1,
 					ScheduledEventId: 2,
-				},
+				}.Build(),
 			},
 			expectedTaskTypes: []enumsspb.TaskType{enumsspb.TASK_TYPE_REPLICATION_HISTORY, enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY, enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY, enumsspb.TASK_TYPE_REPLICATION_SYNC_HSM},
 		},
@@ -777,42 +769,42 @@ func TestTaskGeneratorImpl_GenerateMigrationTasks(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			controller := gomock.NewController(t)
 			mockMutableState := historyi.NewMockMutableState(controller)
-			executionInfo := &persistencespb.WorkflowExecutionInfo{
-				VersionHistories: &historyspb.VersionHistories{
+			executionInfo := persistencespb.WorkflowExecutionInfo_builder{
+				VersionHistories: historyspb.VersionHistories_builder{
 					CurrentVersionHistoryIndex: 0,
 					Histories: []*historyspb.VersionHistory{
-						{
+						historyspb.VersionHistory_builder{
 							BranchToken: []byte{1},
 							Items: []*historyspb.VersionHistoryItem{
-								{
+								historyspb.VersionHistoryItem_builder{
 									EventId: 10,
 									Version: 1,
-								},
+								}.Build(),
 							},
-						},
+						}.Build(),
 					},
-				},
+				}.Build(),
 				TransitionHistory: []*persistencespb.VersionedTransition{
-					{
+					persistencespb.VersionedTransition_builder{
 						NamespaceFailoverVersion: 1,
 						TransitionCount:          5,
-					},
+					}.Build(),
 				},
-			}
+			}.Build()
 			mockMutableState.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 			mockMutableState.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).AnyTimes()
 			mockMutableState.EXPECT().GetPendingActivityInfos().Return(tc.pendingActivityInfo).AnyTimes()
-			mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+			mockMutableState.EXPECT().GetExecutionState().Return(persistencespb.WorkflowExecutionState_builder{
 				State: tc.workflowState,
-			}).AnyTimes()
+			}.Build()).AnyTimes()
 			mockMutableState.EXPECT().IsTransitionHistoryEnabled().Return(tc.transitionHistoryEnabled).AnyTimes()
 			mockMutableState.EXPECT().ChasmTree().Return(NoopChasmTree).AnyTimes()
 			mockShard := shard.NewTestContext(
 				controller,
-				&persistencespb.ShardInfo{
+				persistencespb.ShardInfo_builder{
 					ShardId: 1,
 					RangeId: 1,
-				},
+				}.Build(),
 				tests.NewDynamicConfig(),
 			)
 			taskGenerator := NewTaskGenerator(
@@ -857,28 +849,28 @@ func TestTaskGeneratorImpl_GenerateDirtySubStateMachineTasks_TrimsTimersForDelet
 	ms.EXPECT().IsTransitionHistoryEnabled().Return(true).AnyTimes()
 	ms.EXPECT().GetCurrentVersion().Return(int64(3)).AnyTimes()
 
-	currentTransition := &persistencespb.VersionedTransition{
+	currentTransition := persistencespb.VersionedTransition_builder{
 		NamespaceFailoverVersion: 3,
 		TransitionCount:          3,
-	}
-	executionInfo := &persistencespb.WorkflowExecutionInfo{
+	}.Build()
+	executionInfo := persistencespb.WorkflowExecutionInfo_builder{
 		TransitionHistory: []*persistencespb.VersionedTransition{currentTransition},
 		StateMachineTimers: []*persistencespb.StateMachineTimerGroup{
-			{
+			persistencespb.StateMachineTimerGroup_builder{
 				Deadline: timestamppb.New(time.Now().Add(time.Hour)),
 				Infos: []*persistencespb.StateMachineTaskInfo{
-					{
-						Ref: &persistencespb.StateMachineRef{
+					persistencespb.StateMachineTaskInfo_builder{
+						Ref: persistencespb.StateMachineRef_builder{
 							Path: []*persistencespb.StateMachineKey{
-								{Type: callbacks.StateMachineType, Id: "test-callback"},
+								persistencespb.StateMachineKey_builder{Type: callbacks.StateMachineType, Id: "test-callback"}.Build(),
 							},
-						},
+						}.Build(),
 						Type: callbacks.TaskTypeBackoff,
-					},
+					}.Build(),
 				},
-			},
+			}.Build(),
 		},
-	}
+	}.Build()
 	ms.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 
 	reg := hsm.NewRegistry()
@@ -917,7 +909,7 @@ func TestTaskGeneratorImpl_GenerateDirtySubStateMachineTasks_TrimsTimersForDelet
 	require.NoError(t, err)
 
 	require.Empty(t, genTasks)
-	require.Empty(t, ms.GetExecutionInfo().StateMachineTimers) // Timer should be trimmed
+	require.Empty(t, ms.GetExecutionInfo().GetStateMachineTimers()) // Timer should be trimmed
 }
 
 func TestTaskGeneratorImpl_GenerateDeleteHistoryEventTask_ActivityRetention(t *testing.T) {
@@ -952,18 +944,18 @@ func TestTaskGeneratorImpl_GenerateDeleteHistoryEventTask_ActivityRetention(t *t
 			expectedMinRetention: 7 * 24 * time.Hour,
 			expectedMaxRetention: 7*24*time.Hour + retentionJitterDuration*2,
 			setupNamespaceRegistry: func(nr *namespace.MockRegistry) {
-				namespaceConfig := &persistencespb.NamespaceConfig{
+				namespaceConfig := persistencespb.NamespaceConfig_builder{
 					Retention: durationpb.New(7 * 24 * time.Hour),
-				}
+				}.Build()
 				namespaceEntry := namespace.NewGlobalNamespaceForTest(
-					&persistencespb.NamespaceInfo{Id: tests.NamespaceID.String(), Name: tests.Namespace.String()},
+					persistencespb.NamespaceInfo_builder{Id: tests.NamespaceID.String(), Name: tests.Namespace.String()}.Build(),
 					namespaceConfig,
-					&persistencespb.NamespaceReplicationConfig{
+					persistencespb.NamespaceReplicationConfig_builder{
 						ActiveClusterName: cluster.TestCurrentClusterName,
 						Clusters: []string{
 							cluster.TestCurrentClusterName,
 						},
-					},
+					}.Build(),
 					tests.Version,
 				)
 				nr.EXPECT().GetNamespaceByID(namespaceEntry.ID()).Return(namespaceEntry, nil).AnyTimes()
@@ -976,18 +968,18 @@ func TestTaskGeneratorImpl_GenerateDeleteHistoryEventTask_ActivityRetention(t *t
 			expectedMinRetention: 30 * 24 * time.Hour,
 			expectedMaxRetention: 30*24*time.Hour + retentionJitterDuration*2,
 			setupNamespaceRegistry: func(nr *namespace.MockRegistry) {
-				namespaceConfig := &persistencespb.NamespaceConfig{
+				namespaceConfig := persistencespb.NamespaceConfig_builder{
 					Retention: durationpb.New(30 * 24 * time.Hour),
-				}
+				}.Build()
 				namespaceEntry := namespace.NewGlobalNamespaceForTest(
-					&persistencespb.NamespaceInfo{Id: tests.NamespaceID.String(), Name: tests.Namespace.String()},
+					persistencespb.NamespaceInfo_builder{Id: tests.NamespaceID.String(), Name: tests.Namespace.String()}.Build(),
 					namespaceConfig,
-					&persistencespb.NamespaceReplicationConfig{
+					persistencespb.NamespaceReplicationConfig_builder{
 						ActiveClusterName: cluster.TestCurrentClusterName,
 						Clusters: []string{
 							cluster.TestCurrentClusterName,
 						},
-					},
+					}.Build(),
 					tests.Version,
 				)
 				nr.EXPECT().GetNamespaceByID(namespaceEntry.ID()).Return(namespaceEntry, nil).AnyTimes()
@@ -1005,9 +997,9 @@ func TestTaskGeneratorImpl_GenerateDeleteHistoryEventTask_ActivityRetention(t *t
 
 			mutableState := historyi.NewMockMutableState(ctrl)
 			mutableState.EXPECT().GetExecutionInfo().DoAndReturn(func() *persistencespb.WorkflowExecutionInfo {
-				return &persistencespb.WorkflowExecutionInfo{
+				return persistencespb.WorkflowExecutionInfo_builder{
 					NamespaceId: tests.NamespaceID.String(),
-				}
+				}.Build()
 			}).AnyTimes()
 			mutableState.EXPECT().GetWorkflowKey().Return(definition.NewWorkflowKey(
 				tests.NamespaceID.String(), tests.WorkflowID, tests.RunID,

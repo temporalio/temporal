@@ -105,34 +105,34 @@ func ProcessorActivity(ctx context.Context, request Request) error {
 			// no-op
 			continue
 		case enumspb.PARENT_CLOSE_POLICY_TERMINATE:
-			_, err = client.TerminateWorkflowExecution(requestCtx, &historyservice.TerminateWorkflowExecutionRequest{
+			_, err = client.TerminateWorkflowExecution(requestCtx, historyservice.TerminateWorkflowExecutionRequest_builder{
 				NamespaceId: execution.NamespaceID,
-				TerminateRequest: &workflowservice.TerminateWorkflowExecutionRequest{
+				TerminateRequest: workflowservice.TerminateWorkflowExecutionRequest_builder{
 					Namespace: execution.Namespace,
-					WorkflowExecution: &commonpb.WorkflowExecution{
+					WorkflowExecution: commonpb.WorkflowExecution_builder{
 						WorkflowId: execution.WorkflowID,
-					},
+					}.Build(),
 					Reason:              "by parent close policy",
 					Identity:            processorWFTypeName,
 					FirstExecutionRunId: execution.RunID,
-				},
+				}.Build(),
 				ExternalWorkflowExecution: request.ParentExecution,
 				ChildWorkflowOnly:         childWorkflowOnly,
-			})
+			}.Build())
 		case enumspb.PARENT_CLOSE_POLICY_REQUEST_CANCEL:
-			_, err = client.RequestCancelWorkflowExecution(requestCtx, &historyservice.RequestCancelWorkflowExecutionRequest{
+			_, err = client.RequestCancelWorkflowExecution(requestCtx, historyservice.RequestCancelWorkflowExecutionRequest_builder{
 				NamespaceId: execution.NamespaceID,
-				CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{
+				CancelRequest: workflowservice.RequestCancelWorkflowExecutionRequest_builder{
 					Namespace: execution.Namespace,
-					WorkflowExecution: &commonpb.WorkflowExecution{
+					WorkflowExecution: commonpb.WorkflowExecution_builder{
 						WorkflowId: execution.WorkflowID,
-					},
+					}.Build(),
 					Identity:            processorWFTypeName,
 					FirstExecutionRunId: execution.RunID,
-				},
+				}.Build(),
 				ExternalWorkflowExecution: request.ParentExecution,
 				ChildWorkflowOnly:         childWorkflowOnly,
-			})
+			}.Build())
 		}
 
 		switch typedErr := err.(type) {
@@ -189,23 +189,23 @@ func signalRemoteCluster(
 		signalCtx, cancel := context.WithTimeout(ctx, signalTimeout)
 		_, err = remoteClient.SignalWithStartWorkflowExecution(
 			signalCtx,
-			&workflowservice.SignalWithStartWorkflowExecutionRequest{
+			workflowservice.SignalWithStartWorkflowExecutionRequest_builder{
 				Namespace:  primitives.SystemLocalNamespace,
 				RequestId:  uuid.NewString(),
 				WorkflowId: getWorkflowID(numWorkflows),
-				WorkflowType: &commonpb.WorkflowType{
+				WorkflowType: commonpb.WorkflowType_builder{
 					Name: processorWFTypeName,
-				},
-				TaskQueue: &taskqueuepb.TaskQueue{
+				}.Build(),
+				TaskQueue: taskqueuepb.TaskQueue_builder{
 					Name: processorTaskQueueName,
-				},
+				}.Build(),
 				Input:                 nil,
 				WorkflowTaskTimeout:   durationpb.New(workflowTaskTimeout),
 				Identity:              currentCluster + "-" + string(primitives.WorkerService) + "-service",
 				WorkflowIdReusePolicy: workflowIDReusePolicy,
 				SignalName:            processorChannelName,
 				SignalInput:           signalInput,
-			},
+			}.Build(),
 		)
 		cancel()
 

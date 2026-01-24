@@ -27,7 +27,7 @@ func mergeSetIDs(a []string, b []string) []string {
 // Check if a set contains any of the given set IDs.
 func setContainsSetIDs(set *persistencespb.CompatibleVersionSet, ids []string) bool {
 	for _, needle := range ids {
-		for _, id := range set.SetIds {
+		for _, id := range set.GetSetIds() {
 			if needle == id {
 				return true
 			}
@@ -56,29 +56,29 @@ type buildIDInfo struct {
 func collectBuildIdInfo(sets []*persistencespb.CompatibleVersionSet) map[string]buildIDInfo {
 	buildIDToInfo := make(map[string]buildIDInfo, 0)
 	for _, set := range sets {
-		for _, buildID := range set.BuildIds {
-			if info, found := buildIDToInfo[buildID.Id]; found {
+		for _, buildID := range set.GetBuildIds() {
+			if info, found := buildIDToInfo[buildID.GetId()]; found {
 				// A build ID appears in more than one source, merge its information, and track it
 				state := info.state
-				stateUpdateTimestamp := hlc.Max(buildID.StateUpdateTimestamp, info.stateUpdateTimestamp)
-				if hlc.Equal(stateUpdateTimestamp, buildID.StateUpdateTimestamp) {
-					state = buildID.State
+				stateUpdateTimestamp := hlc.Max(buildID.GetStateUpdateTimestamp(), info.stateUpdateTimestamp)
+				if hlc.Equal(stateUpdateTimestamp, buildID.GetStateUpdateTimestamp()) {
+					state = buildID.GetState()
 				}
-				buildIDToInfo[buildID.Id] = buildIDInfo{
+				buildIDToInfo[buildID.GetId()] = buildIDInfo{
 					state:                state,
 					stateUpdateTimestamp: stateUpdateTimestamp,
-					setIDs:               mergeSetIDs(info.setIDs, set.SetIds),
-					madeDefaultAt:        hlc.Max(buildID.BecameDefaultTimestamp, info.madeDefaultAt),
-					setMadeDefaultAt:     hlc.Max(set.BecameDefaultTimestamp, info.setMadeDefaultAt),
+					setIDs:               mergeSetIDs(info.setIDs, set.GetSetIds()),
+					madeDefaultAt:        hlc.Max(buildID.GetBecameDefaultTimestamp(), info.madeDefaultAt),
+					setMadeDefaultAt:     hlc.Max(set.GetBecameDefaultTimestamp(), info.setMadeDefaultAt),
 				}
 			} else {
 				// A build ID was seen for the first time, track it
-				buildIDToInfo[buildID.Id] = buildIDInfo{
-					state:                buildID.State,
-					stateUpdateTimestamp: buildID.StateUpdateTimestamp,
-					setIDs:               set.SetIds,
-					madeDefaultAt:        buildID.BecameDefaultTimestamp,
-					setMadeDefaultAt:     set.BecameDefaultTimestamp,
+				buildIDToInfo[buildID.GetId()] = buildIDInfo{
+					state:                buildID.GetState(),
+					stateUpdateTimestamp: buildID.GetStateUpdateTimestamp(),
+					setIDs:               set.GetSetIds(),
+					madeDefaultAt:        buildID.GetBecameDefaultTimestamp(),
+					setMadeDefaultAt:     set.GetBecameDefaultTimestamp(),
 				}
 			}
 		}
@@ -92,41 +92,41 @@ func intoVersionSets(buildIDToInfo map[string]buildIDInfo) []*persistencespb.Com
 		info := info
 		set := findSetWithSetIDs(sets, info.setIDs)
 		if set == nil {
-			set = &persistencespb.CompatibleVersionSet{
+			set = persistencespb.CompatibleVersionSet_builder{
 				SetIds:                 info.setIDs,
 				BuildIds:               make([]*persistencespb.BuildId, 0),
 				BecameDefaultTimestamp: info.setMadeDefaultAt,
-			}
+			}.Build()
 			sets = append(sets, set)
 		} else {
-			set.SetIds = mergeSetIDs(set.SetIds, info.setIDs)
-			set.BecameDefaultTimestamp = hlc.Max(info.setMadeDefaultAt, set.BecameDefaultTimestamp)
+			set.SetSetIds(mergeSetIDs(set.GetSetIds(), info.setIDs))
+			set.SetBecameDefaultTimestamp(hlc.Max(info.setMadeDefaultAt, set.GetBecameDefaultTimestamp()))
 		}
-		buildID := &persistencespb.BuildId{
+		buildID := persistencespb.BuildId_builder{
 			Id:                     id,
 			State:                  info.state,
 			StateUpdateTimestamp:   info.stateUpdateTimestamp,
 			BecameDefaultTimestamp: info.madeDefaultAt,
-		}
-		set.BuildIds = append(set.BuildIds, buildID)
+		}.Build()
+		set.SetBuildIds(append(set.GetBuildIds(), buildID))
 	}
 	// Sort the sets based on their default update timestamp, ensuring the default set comes last
 	sortSets(sets)
 	for _, set := range sets {
-		sortBuildIds(set.BuildIds)
+		sortBuildIds(set.GetBuildIds())
 	}
 	return sets
 }
 
 func sortSets(sets []*persistencespb.CompatibleVersionSet) {
 	sort.Slice(sets, func(i, j int) bool {
-		return hlc.Less(sets[i].BecameDefaultTimestamp, sets[j].BecameDefaultTimestamp)
+		return hlc.Less(sets[i].GetBecameDefaultTimestamp(), sets[j].GetBecameDefaultTimestamp())
 	})
 }
 
 func sortBuildIds(buildIds []*persistencespb.BuildId) {
 	sort.Slice(buildIds, func(i, j int) bool {
-		return hlc.Less(buildIds[i].BecameDefaultTimestamp, buildIds[j].BecameDefaultTimestamp)
+		return hlc.Less(buildIds[i].GetBecameDefaultTimestamp(), buildIds[j].GetBecameDefaultTimestamp())
 	})
 }
 
@@ -143,11 +143,11 @@ func MergeVersioningData(a *persistencespb.VersioningData, b *persistencespb.Ver
 	}
 
 	// Collect information about each build ID from both sources
-	buildIDToInfo := collectBuildIdInfo(append(a.VersionSets, b.VersionSets...))
+	buildIDToInfo := collectBuildIdInfo(append(a.GetVersionSets(), b.GetVersionSets()...))
 	// Build the merged compatible sets using collected build ID information
 	sets := intoVersionSets(buildIDToInfo)
 
-	return &persistencespb.VersioningData{
+	return persistencespb.VersioningData_builder{
 		VersionSets: sets,
-	}
+	}.Build()
 }

@@ -8,7 +8,6 @@ package persistence
 
 import (
 	reflect "reflect"
-	sync "sync"
 	unsafe "unsafe"
 
 	v1 "go.temporal.io/api/history/v1"
@@ -24,21 +23,21 @@ const (
 )
 
 type WorkflowMutableState struct {
-	state               protoimpl.MessageState        `protogen:"open.v1"`
-	ActivityInfos       map[int64]*ActivityInfo       `protobuf:"bytes,1,rep,name=activity_infos,json=activityInfos,proto3" json:"activity_infos,omitempty" protobuf_key:"varint,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	TimerInfos          map[string]*TimerInfo         `protobuf:"bytes,2,rep,name=timer_infos,json=timerInfos,proto3" json:"timer_infos,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	ChildExecutionInfos map[int64]*ChildExecutionInfo `protobuf:"bytes,3,rep,name=child_execution_infos,json=childExecutionInfos,proto3" json:"child_execution_infos,omitempty" protobuf_key:"varint,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	RequestCancelInfos  map[int64]*RequestCancelInfo  `protobuf:"bytes,4,rep,name=request_cancel_infos,json=requestCancelInfos,proto3" json:"request_cancel_infos,omitempty" protobuf_key:"varint,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	SignalInfos         map[int64]*SignalInfo         `protobuf:"bytes,5,rep,name=signal_infos,json=signalInfos,proto3" json:"signal_infos,omitempty" protobuf_key:"varint,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	ChasmNodes          map[string]*ChasmNode         `protobuf:"bytes,12,rep,name=chasm_nodes,json=chasmNodes,proto3" json:"chasm_nodes,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	SignalRequestedIds  []string                      `protobuf:"bytes,6,rep,name=signal_requested_ids,json=signalRequestedIds,proto3" json:"signal_requested_ids,omitempty"`
-	ExecutionInfo       *WorkflowExecutionInfo        `protobuf:"bytes,7,opt,name=execution_info,json=executionInfo,proto3" json:"execution_info,omitempty"`
-	ExecutionState      *WorkflowExecutionState       `protobuf:"bytes,8,opt,name=execution_state,json=executionState,proto3" json:"execution_state,omitempty"`
-	NextEventId         int64                         `protobuf:"varint,9,opt,name=next_event_id,json=nextEventId,proto3" json:"next_event_id,omitempty"`
-	BufferedEvents      []*v1.HistoryEvent            `protobuf:"bytes,10,rep,name=buffered_events,json=bufferedEvents,proto3" json:"buffered_events,omitempty"`
-	Checksum            *Checksum                     `protobuf:"bytes,11,opt,name=checksum,proto3" json:"checksum,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	state                          protoimpl.MessageState        `protogen:"opaque.v1"`
+	xxx_hidden_ActivityInfos       map[int64]*ActivityInfo       `protobuf:"bytes,1,rep,name=activity_infos,json=activityInfos,proto3" protobuf_key:"varint,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	xxx_hidden_TimerInfos          map[string]*TimerInfo         `protobuf:"bytes,2,rep,name=timer_infos,json=timerInfos,proto3" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	xxx_hidden_ChildExecutionInfos map[int64]*ChildExecutionInfo `protobuf:"bytes,3,rep,name=child_execution_infos,json=childExecutionInfos,proto3" protobuf_key:"varint,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	xxx_hidden_RequestCancelInfos  map[int64]*RequestCancelInfo  `protobuf:"bytes,4,rep,name=request_cancel_infos,json=requestCancelInfos,proto3" protobuf_key:"varint,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	xxx_hidden_SignalInfos         map[int64]*SignalInfo         `protobuf:"bytes,5,rep,name=signal_infos,json=signalInfos,proto3" protobuf_key:"varint,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	xxx_hidden_ChasmNodes          map[string]*ChasmNode         `protobuf:"bytes,12,rep,name=chasm_nodes,json=chasmNodes,proto3" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	xxx_hidden_SignalRequestedIds  []string                      `protobuf:"bytes,6,rep,name=signal_requested_ids,json=signalRequestedIds,proto3"`
+	xxx_hidden_ExecutionInfo       *WorkflowExecutionInfo        `protobuf:"bytes,7,opt,name=execution_info,json=executionInfo,proto3"`
+	xxx_hidden_ExecutionState      *WorkflowExecutionState       `protobuf:"bytes,8,opt,name=execution_state,json=executionState,proto3"`
+	xxx_hidden_NextEventId         int64                         `protobuf:"varint,9,opt,name=next_event_id,json=nextEventId,proto3"`
+	xxx_hidden_BufferedEvents      *[]*v1.HistoryEvent           `protobuf:"bytes,10,rep,name=buffered_events,json=bufferedEvents,proto3"`
+	xxx_hidden_Checksum            *Checksum                     `protobuf:"bytes,11,opt,name=checksum,proto3"`
+	unknownFields                  protoimpl.UnknownFields
+	sizeCache                      protoimpl.SizeCache
 }
 
 func (x *WorkflowMutableState) Reset() {
@@ -66,116 +65,225 @@ func (x *WorkflowMutableState) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use WorkflowMutableState.ProtoReflect.Descriptor instead.
-func (*WorkflowMutableState) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_workflow_mutable_state_proto_rawDescGZIP(), []int{0}
-}
-
 func (x *WorkflowMutableState) GetActivityInfos() map[int64]*ActivityInfo {
 	if x != nil {
-		return x.ActivityInfos
+		return x.xxx_hidden_ActivityInfos
 	}
 	return nil
 }
 
 func (x *WorkflowMutableState) GetTimerInfos() map[string]*TimerInfo {
 	if x != nil {
-		return x.TimerInfos
+		return x.xxx_hidden_TimerInfos
 	}
 	return nil
 }
 
 func (x *WorkflowMutableState) GetChildExecutionInfos() map[int64]*ChildExecutionInfo {
 	if x != nil {
-		return x.ChildExecutionInfos
+		return x.xxx_hidden_ChildExecutionInfos
 	}
 	return nil
 }
 
 func (x *WorkflowMutableState) GetRequestCancelInfos() map[int64]*RequestCancelInfo {
 	if x != nil {
-		return x.RequestCancelInfos
+		return x.xxx_hidden_RequestCancelInfos
 	}
 	return nil
 }
 
 func (x *WorkflowMutableState) GetSignalInfos() map[int64]*SignalInfo {
 	if x != nil {
-		return x.SignalInfos
+		return x.xxx_hidden_SignalInfos
 	}
 	return nil
 }
 
 func (x *WorkflowMutableState) GetChasmNodes() map[string]*ChasmNode {
 	if x != nil {
-		return x.ChasmNodes
+		return x.xxx_hidden_ChasmNodes
 	}
 	return nil
 }
 
 func (x *WorkflowMutableState) GetSignalRequestedIds() []string {
 	if x != nil {
-		return x.SignalRequestedIds
+		return x.xxx_hidden_SignalRequestedIds
 	}
 	return nil
 }
 
 func (x *WorkflowMutableState) GetExecutionInfo() *WorkflowExecutionInfo {
 	if x != nil {
-		return x.ExecutionInfo
+		return x.xxx_hidden_ExecutionInfo
 	}
 	return nil
 }
 
 func (x *WorkflowMutableState) GetExecutionState() *WorkflowExecutionState {
 	if x != nil {
-		return x.ExecutionState
+		return x.xxx_hidden_ExecutionState
 	}
 	return nil
 }
 
 func (x *WorkflowMutableState) GetNextEventId() int64 {
 	if x != nil {
-		return x.NextEventId
+		return x.xxx_hidden_NextEventId
 	}
 	return 0
 }
 
 func (x *WorkflowMutableState) GetBufferedEvents() []*v1.HistoryEvent {
 	if x != nil {
-		return x.BufferedEvents
+		if x.xxx_hidden_BufferedEvents != nil {
+			return *x.xxx_hidden_BufferedEvents
+		}
 	}
 	return nil
 }
 
 func (x *WorkflowMutableState) GetChecksum() *Checksum {
 	if x != nil {
-		return x.Checksum
+		return x.xxx_hidden_Checksum
 	}
 	return nil
 }
 
+func (x *WorkflowMutableState) SetActivityInfos(v map[int64]*ActivityInfo) {
+	x.xxx_hidden_ActivityInfos = v
+}
+
+func (x *WorkflowMutableState) SetTimerInfos(v map[string]*TimerInfo) {
+	x.xxx_hidden_TimerInfos = v
+}
+
+func (x *WorkflowMutableState) SetChildExecutionInfos(v map[int64]*ChildExecutionInfo) {
+	x.xxx_hidden_ChildExecutionInfos = v
+}
+
+func (x *WorkflowMutableState) SetRequestCancelInfos(v map[int64]*RequestCancelInfo) {
+	x.xxx_hidden_RequestCancelInfos = v
+}
+
+func (x *WorkflowMutableState) SetSignalInfos(v map[int64]*SignalInfo) {
+	x.xxx_hidden_SignalInfos = v
+}
+
+func (x *WorkflowMutableState) SetChasmNodes(v map[string]*ChasmNode) {
+	x.xxx_hidden_ChasmNodes = v
+}
+
+func (x *WorkflowMutableState) SetSignalRequestedIds(v []string) {
+	x.xxx_hidden_SignalRequestedIds = v
+}
+
+func (x *WorkflowMutableState) SetExecutionInfo(v *WorkflowExecutionInfo) {
+	x.xxx_hidden_ExecutionInfo = v
+}
+
+func (x *WorkflowMutableState) SetExecutionState(v *WorkflowExecutionState) {
+	x.xxx_hidden_ExecutionState = v
+}
+
+func (x *WorkflowMutableState) SetNextEventId(v int64) {
+	x.xxx_hidden_NextEventId = v
+}
+
+func (x *WorkflowMutableState) SetBufferedEvents(v []*v1.HistoryEvent) {
+	x.xxx_hidden_BufferedEvents = &v
+}
+
+func (x *WorkflowMutableState) SetChecksum(v *Checksum) {
+	x.xxx_hidden_Checksum = v
+}
+
+func (x *WorkflowMutableState) HasExecutionInfo() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_ExecutionInfo != nil
+}
+
+func (x *WorkflowMutableState) HasExecutionState() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_ExecutionState != nil
+}
+
+func (x *WorkflowMutableState) HasChecksum() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Checksum != nil
+}
+
+func (x *WorkflowMutableState) ClearExecutionInfo() {
+	x.xxx_hidden_ExecutionInfo = nil
+}
+
+func (x *WorkflowMutableState) ClearExecutionState() {
+	x.xxx_hidden_ExecutionState = nil
+}
+
+func (x *WorkflowMutableState) ClearChecksum() {
+	x.xxx_hidden_Checksum = nil
+}
+
+type WorkflowMutableState_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	ActivityInfos       map[int64]*ActivityInfo
+	TimerInfos          map[string]*TimerInfo
+	ChildExecutionInfos map[int64]*ChildExecutionInfo
+	RequestCancelInfos  map[int64]*RequestCancelInfo
+	SignalInfos         map[int64]*SignalInfo
+	ChasmNodes          map[string]*ChasmNode
+	SignalRequestedIds  []string
+	ExecutionInfo       *WorkflowExecutionInfo
+	ExecutionState      *WorkflowExecutionState
+	NextEventId         int64
+	BufferedEvents      []*v1.HistoryEvent
+	Checksum            *Checksum
+}
+
+func (b0 WorkflowMutableState_builder) Build() *WorkflowMutableState {
+	m0 := &WorkflowMutableState{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_ActivityInfos = b.ActivityInfos
+	x.xxx_hidden_TimerInfos = b.TimerInfos
+	x.xxx_hidden_ChildExecutionInfos = b.ChildExecutionInfos
+	x.xxx_hidden_RequestCancelInfos = b.RequestCancelInfos
+	x.xxx_hidden_SignalInfos = b.SignalInfos
+	x.xxx_hidden_ChasmNodes = b.ChasmNodes
+	x.xxx_hidden_SignalRequestedIds = b.SignalRequestedIds
+	x.xxx_hidden_ExecutionInfo = b.ExecutionInfo
+	x.xxx_hidden_ExecutionState = b.ExecutionState
+	x.xxx_hidden_NextEventId = b.NextEventId
+	x.xxx_hidden_BufferedEvents = &b.BufferedEvents
+	x.xxx_hidden_Checksum = b.Checksum
+	return m0
+}
+
 type WorkflowMutableStateMutation struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// The following updated_* fields are computed based on the
-	// lastUpdateVersionedTransition field of each sub state machine.
-	UpdatedActivityInfos       map[int64]*ActivityInfo                                  `protobuf:"bytes,1,rep,name=updated_activity_infos,json=updatedActivityInfos,proto3" json:"updated_activity_infos,omitempty" protobuf_key:"varint,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	UpdatedTimerInfos          map[string]*TimerInfo                                    `protobuf:"bytes,2,rep,name=updated_timer_infos,json=updatedTimerInfos,proto3" json:"updated_timer_infos,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	UpdatedChildExecutionInfos map[int64]*ChildExecutionInfo                            `protobuf:"bytes,3,rep,name=updated_child_execution_infos,json=updatedChildExecutionInfos,proto3" json:"updated_child_execution_infos,omitempty" protobuf_key:"varint,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	UpdatedRequestCancelInfos  map[int64]*RequestCancelInfo                             `protobuf:"bytes,4,rep,name=updated_request_cancel_infos,json=updatedRequestCancelInfos,proto3" json:"updated_request_cancel_infos,omitempty" protobuf_key:"varint,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	UpdatedSignalInfos         map[int64]*SignalInfo                                    `protobuf:"bytes,5,rep,name=updated_signal_infos,json=updatedSignalInfos,proto3" json:"updated_signal_infos,omitempty" protobuf_key:"varint,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	UpdatedUpdateInfos         map[string]*UpdateInfo                                   `protobuf:"bytes,6,rep,name=updated_update_infos,json=updatedUpdateInfos,proto3" json:"updated_update_infos,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	UpdatedSubStateMachines    []*WorkflowMutableStateMutation_StateMachineNodeMutation `protobuf:"bytes,7,rep,name=updated_sub_state_machines,json=updatedSubStateMachines,proto3" json:"updated_sub_state_machines,omitempty"`
-	UpdatedChasmNodes          map[string]*ChasmNode                                    `protobuf:"bytes,19,rep,name=updated_chasm_nodes,json=updatedChasmNodes,proto3" json:"updated_chasm_nodes,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	SignalRequestedIds         []string                                                 `protobuf:"bytes,15,rep,name=signal_requested_ids,json=signalRequestedIds,proto3" json:"signal_requested_ids,omitempty"`
-	// Partial WorkflowExecutionInfo. Some fields, such as
-	// update_infos and sub_state_machines_by_type, are not populated here.
-	// Instead, only diffs are synced in the deleted_* and updated_* fields above.
-	ExecutionInfo                   *WorkflowExecutionInfo        `protobuf:"bytes,16,opt,name=execution_info,json=executionInfo,proto3" json:"execution_info,omitempty"`
-	ExecutionState                  *WorkflowExecutionState       `protobuf:"bytes,17,opt,name=execution_state,json=executionState,proto3" json:"execution_state,omitempty"`
-	SubStateMachineTombstoneBatches []*StateMachineTombstoneBatch `protobuf:"bytes,18,rep,name=sub_state_machine_tombstone_batches,json=subStateMachineTombstoneBatches,proto3" json:"sub_state_machine_tombstone_batches,omitempty"`
-	unknownFields                   protoimpl.UnknownFields
-	sizeCache                       protoimpl.SizeCache
+	state                                      protoimpl.MessageState                                    `protogen:"opaque.v1"`
+	xxx_hidden_UpdatedActivityInfos            map[int64]*ActivityInfo                                   `protobuf:"bytes,1,rep,name=updated_activity_infos,json=updatedActivityInfos,proto3" protobuf_key:"varint,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	xxx_hidden_UpdatedTimerInfos               map[string]*TimerInfo                                     `protobuf:"bytes,2,rep,name=updated_timer_infos,json=updatedTimerInfos,proto3" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	xxx_hidden_UpdatedChildExecutionInfos      map[int64]*ChildExecutionInfo                             `protobuf:"bytes,3,rep,name=updated_child_execution_infos,json=updatedChildExecutionInfos,proto3" protobuf_key:"varint,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	xxx_hidden_UpdatedRequestCancelInfos       map[int64]*RequestCancelInfo                              `protobuf:"bytes,4,rep,name=updated_request_cancel_infos,json=updatedRequestCancelInfos,proto3" protobuf_key:"varint,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	xxx_hidden_UpdatedSignalInfos              map[int64]*SignalInfo                                     `protobuf:"bytes,5,rep,name=updated_signal_infos,json=updatedSignalInfos,proto3" protobuf_key:"varint,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	xxx_hidden_UpdatedUpdateInfos              map[string]*UpdateInfo                                    `protobuf:"bytes,6,rep,name=updated_update_infos,json=updatedUpdateInfos,proto3" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	xxx_hidden_UpdatedSubStateMachines         *[]*WorkflowMutableStateMutation_StateMachineNodeMutation `protobuf:"bytes,7,rep,name=updated_sub_state_machines,json=updatedSubStateMachines,proto3"`
+	xxx_hidden_UpdatedChasmNodes               map[string]*ChasmNode                                     `protobuf:"bytes,19,rep,name=updated_chasm_nodes,json=updatedChasmNodes,proto3" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	xxx_hidden_SignalRequestedIds              []string                                                  `protobuf:"bytes,15,rep,name=signal_requested_ids,json=signalRequestedIds,proto3"`
+	xxx_hidden_ExecutionInfo                   *WorkflowExecutionInfo                                    `protobuf:"bytes,16,opt,name=execution_info,json=executionInfo,proto3"`
+	xxx_hidden_ExecutionState                  *WorkflowExecutionState                                   `protobuf:"bytes,17,opt,name=execution_state,json=executionState,proto3"`
+	xxx_hidden_SubStateMachineTombstoneBatches *[]*StateMachineTombstoneBatch                            `protobuf:"bytes,18,rep,name=sub_state_machine_tombstone_batches,json=subStateMachineTombstoneBatches,proto3"`
+	unknownFields                              protoimpl.UnknownFields
+	sizeCache                                  protoimpl.SizeCache
 }
 
 func (x *WorkflowMutableStateMutation) Reset() {
@@ -203,103 +311,213 @@ func (x *WorkflowMutableStateMutation) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use WorkflowMutableStateMutation.ProtoReflect.Descriptor instead.
-func (*WorkflowMutableStateMutation) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_workflow_mutable_state_proto_rawDescGZIP(), []int{1}
-}
-
 func (x *WorkflowMutableStateMutation) GetUpdatedActivityInfos() map[int64]*ActivityInfo {
 	if x != nil {
-		return x.UpdatedActivityInfos
+		return x.xxx_hidden_UpdatedActivityInfos
 	}
 	return nil
 }
 
 func (x *WorkflowMutableStateMutation) GetUpdatedTimerInfos() map[string]*TimerInfo {
 	if x != nil {
-		return x.UpdatedTimerInfos
+		return x.xxx_hidden_UpdatedTimerInfos
 	}
 	return nil
 }
 
 func (x *WorkflowMutableStateMutation) GetUpdatedChildExecutionInfos() map[int64]*ChildExecutionInfo {
 	if x != nil {
-		return x.UpdatedChildExecutionInfos
+		return x.xxx_hidden_UpdatedChildExecutionInfos
 	}
 	return nil
 }
 
 func (x *WorkflowMutableStateMutation) GetUpdatedRequestCancelInfos() map[int64]*RequestCancelInfo {
 	if x != nil {
-		return x.UpdatedRequestCancelInfos
+		return x.xxx_hidden_UpdatedRequestCancelInfos
 	}
 	return nil
 }
 
 func (x *WorkflowMutableStateMutation) GetUpdatedSignalInfos() map[int64]*SignalInfo {
 	if x != nil {
-		return x.UpdatedSignalInfos
+		return x.xxx_hidden_UpdatedSignalInfos
 	}
 	return nil
 }
 
 func (x *WorkflowMutableStateMutation) GetUpdatedUpdateInfos() map[string]*UpdateInfo {
 	if x != nil {
-		return x.UpdatedUpdateInfos
+		return x.xxx_hidden_UpdatedUpdateInfos
 	}
 	return nil
 }
 
 func (x *WorkflowMutableStateMutation) GetUpdatedSubStateMachines() []*WorkflowMutableStateMutation_StateMachineNodeMutation {
 	if x != nil {
-		return x.UpdatedSubStateMachines
+		if x.xxx_hidden_UpdatedSubStateMachines != nil {
+			return *x.xxx_hidden_UpdatedSubStateMachines
+		}
 	}
 	return nil
 }
 
 func (x *WorkflowMutableStateMutation) GetUpdatedChasmNodes() map[string]*ChasmNode {
 	if x != nil {
-		return x.UpdatedChasmNodes
+		return x.xxx_hidden_UpdatedChasmNodes
 	}
 	return nil
 }
 
 func (x *WorkflowMutableStateMutation) GetSignalRequestedIds() []string {
 	if x != nil {
-		return x.SignalRequestedIds
+		return x.xxx_hidden_SignalRequestedIds
 	}
 	return nil
 }
 
 func (x *WorkflowMutableStateMutation) GetExecutionInfo() *WorkflowExecutionInfo {
 	if x != nil {
-		return x.ExecutionInfo
+		return x.xxx_hidden_ExecutionInfo
 	}
 	return nil
 }
 
 func (x *WorkflowMutableStateMutation) GetExecutionState() *WorkflowExecutionState {
 	if x != nil {
-		return x.ExecutionState
+		return x.xxx_hidden_ExecutionState
 	}
 	return nil
 }
 
 func (x *WorkflowMutableStateMutation) GetSubStateMachineTombstoneBatches() []*StateMachineTombstoneBatch {
 	if x != nil {
-		return x.SubStateMachineTombstoneBatches
+		if x.xxx_hidden_SubStateMachineTombstoneBatches != nil {
+			return *x.xxx_hidden_SubStateMachineTombstoneBatches
+		}
 	}
 	return nil
 }
 
+func (x *WorkflowMutableStateMutation) SetUpdatedActivityInfos(v map[int64]*ActivityInfo) {
+	x.xxx_hidden_UpdatedActivityInfos = v
+}
+
+func (x *WorkflowMutableStateMutation) SetUpdatedTimerInfos(v map[string]*TimerInfo) {
+	x.xxx_hidden_UpdatedTimerInfos = v
+}
+
+func (x *WorkflowMutableStateMutation) SetUpdatedChildExecutionInfos(v map[int64]*ChildExecutionInfo) {
+	x.xxx_hidden_UpdatedChildExecutionInfos = v
+}
+
+func (x *WorkflowMutableStateMutation) SetUpdatedRequestCancelInfos(v map[int64]*RequestCancelInfo) {
+	x.xxx_hidden_UpdatedRequestCancelInfos = v
+}
+
+func (x *WorkflowMutableStateMutation) SetUpdatedSignalInfos(v map[int64]*SignalInfo) {
+	x.xxx_hidden_UpdatedSignalInfos = v
+}
+
+func (x *WorkflowMutableStateMutation) SetUpdatedUpdateInfos(v map[string]*UpdateInfo) {
+	x.xxx_hidden_UpdatedUpdateInfos = v
+}
+
+func (x *WorkflowMutableStateMutation) SetUpdatedSubStateMachines(v []*WorkflowMutableStateMutation_StateMachineNodeMutation) {
+	x.xxx_hidden_UpdatedSubStateMachines = &v
+}
+
+func (x *WorkflowMutableStateMutation) SetUpdatedChasmNodes(v map[string]*ChasmNode) {
+	x.xxx_hidden_UpdatedChasmNodes = v
+}
+
+func (x *WorkflowMutableStateMutation) SetSignalRequestedIds(v []string) {
+	x.xxx_hidden_SignalRequestedIds = v
+}
+
+func (x *WorkflowMutableStateMutation) SetExecutionInfo(v *WorkflowExecutionInfo) {
+	x.xxx_hidden_ExecutionInfo = v
+}
+
+func (x *WorkflowMutableStateMutation) SetExecutionState(v *WorkflowExecutionState) {
+	x.xxx_hidden_ExecutionState = v
+}
+
+func (x *WorkflowMutableStateMutation) SetSubStateMachineTombstoneBatches(v []*StateMachineTombstoneBatch) {
+	x.xxx_hidden_SubStateMachineTombstoneBatches = &v
+}
+
+func (x *WorkflowMutableStateMutation) HasExecutionInfo() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_ExecutionInfo != nil
+}
+
+func (x *WorkflowMutableStateMutation) HasExecutionState() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_ExecutionState != nil
+}
+
+func (x *WorkflowMutableStateMutation) ClearExecutionInfo() {
+	x.xxx_hidden_ExecutionInfo = nil
+}
+
+func (x *WorkflowMutableStateMutation) ClearExecutionState() {
+	x.xxx_hidden_ExecutionState = nil
+}
+
+type WorkflowMutableStateMutation_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// The following updated_* fields are computed based on the
+	// lastUpdateVersionedTransition field of each sub state machine.
+	UpdatedActivityInfos       map[int64]*ActivityInfo
+	UpdatedTimerInfos          map[string]*TimerInfo
+	UpdatedChildExecutionInfos map[int64]*ChildExecutionInfo
+	UpdatedRequestCancelInfos  map[int64]*RequestCancelInfo
+	UpdatedSignalInfos         map[int64]*SignalInfo
+	UpdatedUpdateInfos         map[string]*UpdateInfo
+	UpdatedSubStateMachines    []*WorkflowMutableStateMutation_StateMachineNodeMutation
+	UpdatedChasmNodes          map[string]*ChasmNode
+	SignalRequestedIds         []string
+	// Partial WorkflowExecutionInfo. Some fields, such as
+	// update_infos and sub_state_machines_by_type, are not populated here.
+	// Instead, only diffs are synced in the deleted_* and updated_* fields above.
+	ExecutionInfo                   *WorkflowExecutionInfo
+	ExecutionState                  *WorkflowExecutionState
+	SubStateMachineTombstoneBatches []*StateMachineTombstoneBatch
+}
+
+func (b0 WorkflowMutableStateMutation_builder) Build() *WorkflowMutableStateMutation {
+	m0 := &WorkflowMutableStateMutation{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_UpdatedActivityInfos = b.UpdatedActivityInfos
+	x.xxx_hidden_UpdatedTimerInfos = b.UpdatedTimerInfos
+	x.xxx_hidden_UpdatedChildExecutionInfos = b.UpdatedChildExecutionInfos
+	x.xxx_hidden_UpdatedRequestCancelInfos = b.UpdatedRequestCancelInfos
+	x.xxx_hidden_UpdatedSignalInfos = b.UpdatedSignalInfos
+	x.xxx_hidden_UpdatedUpdateInfos = b.UpdatedUpdateInfos
+	x.xxx_hidden_UpdatedSubStateMachines = &b.UpdatedSubStateMachines
+	x.xxx_hidden_UpdatedChasmNodes = b.UpdatedChasmNodes
+	x.xxx_hidden_SignalRequestedIds = b.SignalRequestedIds
+	x.xxx_hidden_ExecutionInfo = b.ExecutionInfo
+	x.xxx_hidden_ExecutionState = b.ExecutionState
+	x.xxx_hidden_SubStateMachineTombstoneBatches = &b.SubStateMachineTombstoneBatches
+	return m0
+}
+
 type WorkflowMutableStateMutation_StateMachineNodeMutation struct {
-	state                         protoimpl.MessageState `protogen:"open.v1"`
-	Path                          *StateMachinePath      `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
-	Data                          []byte                 `protobuf:"bytes,2,opt,name=data,proto3" json:"data,omitempty"`
-	InitialVersionedTransition    *VersionedTransition   `protobuf:"bytes,3,opt,name=initial_versioned_transition,json=initialVersionedTransition,proto3" json:"initial_versioned_transition,omitempty"`
-	LastUpdateVersionedTransition *VersionedTransition   `protobuf:"bytes,4,opt,name=last_update_versioned_transition,json=lastUpdateVersionedTransition,proto3" json:"last_update_versioned_transition,omitempty"`
-	unknownFields                 protoimpl.UnknownFields
-	sizeCache                     protoimpl.SizeCache
+	state                                    protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Path                          *StateMachinePath      `protobuf:"bytes,1,opt,name=path,proto3"`
+	xxx_hidden_Data                          []byte                 `protobuf:"bytes,2,opt,name=data,proto3"`
+	xxx_hidden_InitialVersionedTransition    *VersionedTransition   `protobuf:"bytes,3,opt,name=initial_versioned_transition,json=initialVersionedTransition,proto3"`
+	xxx_hidden_LastUpdateVersionedTransition *VersionedTransition   `protobuf:"bytes,4,opt,name=last_update_versioned_transition,json=lastUpdateVersionedTransition,proto3"`
+	unknownFields                            protoimpl.UnknownFields
+	sizeCache                                protoimpl.SizeCache
 }
 
 func (x *WorkflowMutableStateMutation_StateMachineNodeMutation) Reset() {
@@ -327,37 +545,104 @@ func (x *WorkflowMutableStateMutation_StateMachineNodeMutation) ProtoReflect() p
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use WorkflowMutableStateMutation_StateMachineNodeMutation.ProtoReflect.Descriptor instead.
-func (*WorkflowMutableStateMutation_StateMachineNodeMutation) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_workflow_mutable_state_proto_rawDescGZIP(), []int{1, 0}
-}
-
 func (x *WorkflowMutableStateMutation_StateMachineNodeMutation) GetPath() *StateMachinePath {
 	if x != nil {
-		return x.Path
+		return x.xxx_hidden_Path
 	}
 	return nil
 }
 
 func (x *WorkflowMutableStateMutation_StateMachineNodeMutation) GetData() []byte {
 	if x != nil {
-		return x.Data
+		return x.xxx_hidden_Data
 	}
 	return nil
 }
 
 func (x *WorkflowMutableStateMutation_StateMachineNodeMutation) GetInitialVersionedTransition() *VersionedTransition {
 	if x != nil {
-		return x.InitialVersionedTransition
+		return x.xxx_hidden_InitialVersionedTransition
 	}
 	return nil
 }
 
 func (x *WorkflowMutableStateMutation_StateMachineNodeMutation) GetLastUpdateVersionedTransition() *VersionedTransition {
 	if x != nil {
-		return x.LastUpdateVersionedTransition
+		return x.xxx_hidden_LastUpdateVersionedTransition
 	}
 	return nil
+}
+
+func (x *WorkflowMutableStateMutation_StateMachineNodeMutation) SetPath(v *StateMachinePath) {
+	x.xxx_hidden_Path = v
+}
+
+func (x *WorkflowMutableStateMutation_StateMachineNodeMutation) SetData(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_Data = v
+}
+
+func (x *WorkflowMutableStateMutation_StateMachineNodeMutation) SetInitialVersionedTransition(v *VersionedTransition) {
+	x.xxx_hidden_InitialVersionedTransition = v
+}
+
+func (x *WorkflowMutableStateMutation_StateMachineNodeMutation) SetLastUpdateVersionedTransition(v *VersionedTransition) {
+	x.xxx_hidden_LastUpdateVersionedTransition = v
+}
+
+func (x *WorkflowMutableStateMutation_StateMachineNodeMutation) HasPath() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Path != nil
+}
+
+func (x *WorkflowMutableStateMutation_StateMachineNodeMutation) HasInitialVersionedTransition() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_InitialVersionedTransition != nil
+}
+
+func (x *WorkflowMutableStateMutation_StateMachineNodeMutation) HasLastUpdateVersionedTransition() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_LastUpdateVersionedTransition != nil
+}
+
+func (x *WorkflowMutableStateMutation_StateMachineNodeMutation) ClearPath() {
+	x.xxx_hidden_Path = nil
+}
+
+func (x *WorkflowMutableStateMutation_StateMachineNodeMutation) ClearInitialVersionedTransition() {
+	x.xxx_hidden_InitialVersionedTransition = nil
+}
+
+func (x *WorkflowMutableStateMutation_StateMachineNodeMutation) ClearLastUpdateVersionedTransition() {
+	x.xxx_hidden_LastUpdateVersionedTransition = nil
+}
+
+type WorkflowMutableStateMutation_StateMachineNodeMutation_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Path                          *StateMachinePath
+	Data                          []byte
+	InitialVersionedTransition    *VersionedTransition
+	LastUpdateVersionedTransition *VersionedTransition
+}
+
+func (b0 WorkflowMutableStateMutation_StateMachineNodeMutation_builder) Build() *WorkflowMutableStateMutation_StateMachineNodeMutation {
+	m0 := &WorkflowMutableStateMutation_StateMachineNodeMutation{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Path = b.Path
+	x.xxx_hidden_Data = b.Data
+	x.xxx_hidden_InitialVersionedTransition = b.InitialVersionedTransition
+	x.xxx_hidden_LastUpdateVersionedTransition = b.LastUpdateVersionedTransition
+	return m0
 }
 
 var File_temporal_server_api_persistence_v1_workflow_mutable_state_proto protoreflect.FileDescriptor
@@ -440,18 +725,6 @@ const file_temporal_server_api_persistence_v1_workflow_mutable_state_proto_rawDe
 	"\x05value\x18\x02 \x01(\v2-.temporal.server.api.persistence.v1.ChasmNodeR\x05value:\x028\x01J\x04\b\b\x10\tJ\x04\b\t\x10\n" +
 	"J\x04\b\n" +
 	"\x10\vJ\x04\b\v\x10\fJ\x04\b\f\x10\rJ\x04\b\r\x10\x0eJ\x04\b\x0e\x10\x0fB6Z4go.temporal.io/server/api/persistence/v1;persistenceb\x06proto3"
-
-var (
-	file_temporal_server_api_persistence_v1_workflow_mutable_state_proto_rawDescOnce sync.Once
-	file_temporal_server_api_persistence_v1_workflow_mutable_state_proto_rawDescData []byte
-)
-
-func file_temporal_server_api_persistence_v1_workflow_mutable_state_proto_rawDescGZIP() []byte {
-	file_temporal_server_api_persistence_v1_workflow_mutable_state_proto_rawDescOnce.Do(func() {
-		file_temporal_server_api_persistence_v1_workflow_mutable_state_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_api_persistence_v1_workflow_mutable_state_proto_rawDesc), len(file_temporal_server_api_persistence_v1_workflow_mutable_state_proto_rawDesc)))
-	})
-	return file_temporal_server_api_persistence_v1_workflow_mutable_state_proto_rawDescData
-}
 
 var file_temporal_server_api_persistence_v1_workflow_mutable_state_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
 var file_temporal_server_api_persistence_v1_workflow_mutable_state_proto_goTypes = []any{

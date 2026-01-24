@@ -240,12 +240,12 @@ func (s *workflowSuite) Test_LastHeartBeatDetailsExist_UpdatesMutableState() {
 
 	ctx := context.Background()
 	s.workflowContext.EXPECT().UpdateWorkflowExecutionAsActive(ctx, s.shardContext).Return(nil)
-	s.currentMutableState.EXPECT().UpdateActivityProgress(s.activityInfo, &workflowservice.RecordActivityTaskHeartbeatRequest{
-		TaskToken: request.FailedRequest.GetTaskToken(),
-		Details:   request.FailedRequest.GetLastHeartbeatDetails(),
-		Identity:  request.FailedRequest.GetIdentity(),
-		Namespace: request.FailedRequest.GetNamespace(),
-	})
+	s.currentMutableState.EXPECT().UpdateActivityProgress(s.activityInfo, workflowservice.RecordActivityTaskHeartbeatRequest_builder{
+		TaskToken: request.GetFailedRequest().GetTaskToken(),
+		Details:   request.GetFailedRequest().GetLastHeartbeatDetails(),
+		Identity:  request.GetFailedRequest().GetIdentity(),
+		Namespace: request.GetFailedRequest().GetNamespace(),
+	}.Build())
 	s.currentMutableState.EXPECT().GetEffectiveVersioningBehavior().Return(enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED)
 
 	s.expectTransientFailureMetricsRecorded(uc, s.shardContext)
@@ -300,10 +300,10 @@ func (s *workflowSuite) Test_NoMoreRetriesAndMutableStateHasNoPendingTasks_WillR
 	s.currentMutableState.EXPECT().AddActivityTaskFailedEvent(
 		uc.scheduledEventId,
 		uc.startedEventId,
-		request.FailedRequest.GetFailure(),
+		request.GetFailedRequest().GetFailure(),
 		uc.retryActivityState,
-		request.FailedRequest.GetIdentity(),
-		request.FailedRequest.WorkerVersion,
+		request.GetFailedRequest().GetIdentity(),
+		request.GetFailedRequest().GetWorkerVersion(),
 	).Return(nil, nil)
 	s.currentMutableState.EXPECT().IsWorkflowExecutionStatusPaused().Return(false)
 	s.currentMutableState.EXPECT().AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
@@ -330,10 +330,10 @@ func (s *workflowSuite) Test_AttemptToAddActivityTaskFailedEventFails_ReturnErro
 	s.currentMutableState.EXPECT().AddActivityTaskFailedEvent(
 		uc.scheduledEventId,
 		uc.startedEventId,
-		request.FailedRequest.GetFailure(),
+		request.GetFailedRequest().GetFailure(),
 		uc.retryActivityState,
-		request.FailedRequest.GetIdentity(),
-		request.FailedRequest.WorkerVersion,
+		request.GetFailedRequest().GetIdentity(),
+		request.GetFailedRequest().GetWorkerVersion(),
 	).Return(nil, addTaskError)
 
 	_, err := Invoke(
@@ -352,7 +352,7 @@ func newUseCase(uconfig UsecaseConfig) UsecaseConfig {
 		uconfig.activityId = "activity-1"
 	}
 	if uconfig.wfType == nil {
-		uconfig.wfType = &commonpb.WorkflowType{Name: "workflow-type"}
+		uconfig.wfType = commonpb.WorkflowType_builder{Name: "workflow-type"}.Build()
 	}
 	if uconfig.taskQueueId == "" {
 		uconfig.taskQueueId = "some-task-queue"
@@ -382,7 +382,7 @@ func (s *workflowSuite) setupStubs(uc UsecaseConfig) {
 
 func (s *workflowSuite) newRespondActivityTaskFailedRequest(uc UsecaseConfig) *historyservice.RespondActivityTaskFailedRequest {
 	s.T().Helper()
-	tt := &tokenspb.Task{
+	tt := tokenspb.Task_builder{
 		Attempt:          uc.tokenAttempt,
 		NamespaceId:      uc.namespaceId.String(),
 		WorkflowId:       tests.WorkflowID,
@@ -390,22 +390,22 @@ func (s *workflowSuite) newRespondActivityTaskFailedRequest(uc UsecaseConfig) *h
 		ActivityId:       uc.activityId,
 		ActivityType:     uc.activityType,
 		Version:          uc.tokenVersion,
-	}
+	}.Build()
 	taskToken, err := tt.Marshal()
 	s.NoError(err)
 	var hbDetails *commonpb.Payloads
 	if uc.includeHeartbeat {
 		hbDetails = &commonpb.Payloads{}
 	}
-	request := &historyservice.RespondActivityTaskFailedRequest{
+	request := historyservice.RespondActivityTaskFailedRequest_builder{
 		NamespaceId: uc.namespaceId.String(),
-		FailedRequest: &workflowservice.RespondActivityTaskFailedRequest{
+		FailedRequest: workflowservice.RespondActivityTaskFailedRequest_builder{
 			Identity:             "ID1",
 			Namespace:            uc.namespaceId.String(),
 			TaskToken:            taskToken,
 			LastHeartbeatDetails: hbDetails,
-		},
-	}
+		}.Build(),
+	}.Build()
 	return request
 }
 
@@ -445,7 +445,7 @@ func (s *workflowSuite) expectTransientFailureMetricsRecorded(uc UsecaseConfig, 
 	counter := metrics.NewMockCounterIface(s.controller)
 	tags := []metrics.Tag{
 		metrics.OperationTag(metrics.HistoryRespondActivityTaskFailedScope),
-		metrics.WorkflowTypeTag(uc.wfType.Name),
+		metrics.WorkflowTypeTag(uc.wfType.GetName()),
 		metrics.ActivityTypeTag(uc.activityType),
 		metrics.VersioningBehaviorTag(enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED),
 		metrics.NamespaceTag(uc.namespaceName.String()),
@@ -470,7 +470,7 @@ func (s *workflowSuite) expectTerminalFailureMetricsRecorded(uc UsecaseConfig, s
 	counter := metrics.NewMockCounterIface(s.controller)
 	tags := []metrics.Tag{
 		metrics.OperationTag(metrics.HistoryRespondActivityTaskFailedScope),
-		metrics.WorkflowTypeTag(uc.wfType.Name),
+		metrics.WorkflowTypeTag(uc.wfType.GetName()),
 		metrics.ActivityTypeTag(uc.activityType),
 		metrics.VersioningBehaviorTag(enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED),
 		metrics.NamespaceTag(uc.namespaceName.String()),
@@ -503,22 +503,22 @@ func (s *workflowSuite) expectCounterRecorded(shardContext *historyi.MockShardCo
 
 func (s *workflowSuite) setupNamespaceRegistry(uc UsecaseConfig) *namespace.MockRegistry {
 	namespaceEntry := namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{
+		persistencespb.NamespaceInfo_builder{
 			Id:   uc.namespaceId.String(),
 			Name: uc.namespaceName.String(),
-		},
-		&persistencespb.NamespaceConfig{
+		}.Build(),
+		persistencespb.NamespaceConfig_builder{
 			Retention:               timestamp.DurationFromDays(1),
 			VisibilityArchivalState: enumspb.ARCHIVAL_STATE_ENABLED,
 			VisibilityArchivalUri:   "test:///visibility/archival",
-		},
-		&persistencespb.NamespaceReplicationConfig{
+		}.Build(),
+		persistencespb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []string{
 				cluster.TestCurrentClusterName,
 				cluster.TestAlternativeClusterName,
 			},
-		},
+		}.Build(),
 		1234,
 	)
 	namespaceRegistry := namespace.NewMockRegistry(s.controller)
@@ -529,12 +529,12 @@ func (s *workflowSuite) setupNamespaceRegistry(uc UsecaseConfig) *namespace.Mock
 func (s *workflowSuite) setupMutableState(uc UsecaseConfig, ai *persistencespb.ActivityInfo) *historyi.MockMutableState {
 	currentMutableState := historyi.NewMockMutableState(s.controller)
 	currentMutableState.EXPECT().GetNamespaceEntry().Return(tests.GlobalNamespaceEntry).AnyTimes()
-	currentMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+	currentMutableState.EXPECT().GetExecutionInfo().Return(persistencespb.WorkflowExecutionInfo_builder{
 		WorkflowId: tests.WorkflowID,
-	}).AnyTimes()
-	currentMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+	}.Build()).AnyTimes()
+	currentMutableState.EXPECT().GetExecutionState().Return(persistencespb.WorkflowExecutionState_builder{
 		RunId: tests.RunID,
-	}).AnyTimes()
+	}.Build()).AnyTimes()
 	currentMutableState.EXPECT().IsWorkflowExecutionRunning().Return(uc.isExecutionRunning).AnyTimes()
 
 	currentMutableState.EXPECT().GetActivityByActivityID(uc.activityId).Return(ai, true).AnyTimes()
@@ -557,10 +557,10 @@ func (s *workflowSuite) setupMutableState(uc UsecaseConfig, ai *persistencespb.A
 }
 
 func (s *workflowSuite) setupActivityInfo(uc UsecaseConfig) *persistencespb.ActivityInfo {
-	return &persistencespb.ActivityInfo{
+	return persistencespb.ActivityInfo_builder{
 		ScheduledEventId: uc.scheduledEventId,
 		Attempt:          uc.attempt,
 		StartedEventId:   uc.startedEventId,
 		TaskQueue:        uc.taskQueueId,
-	}
+	}.Build()
 }

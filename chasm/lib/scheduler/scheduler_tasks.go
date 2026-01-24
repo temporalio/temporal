@@ -30,7 +30,7 @@ func (r *SchedulerIdleTaskExecutor) Execute(
 	_ chasm.TaskAttributes,
 	_ *schedulerpb.SchedulerIdleTask,
 ) error {
-	scheduler.Closed = true
+	scheduler.SetClosed(true)
 	return nil
 }
 
@@ -40,7 +40,7 @@ func (r *SchedulerIdleTaskExecutor) Validate(
 	taskAttrs chasm.TaskAttributes,
 	task *schedulerpb.SchedulerIdleTask,
 ) (bool, error) {
-	idleTimeTotal := task.IdleTimeTotal.AsDuration()
+	idleTimeTotal := task.GetIdleTimeTotal().AsDuration()
 	idleExpiration, isIdle := scheduler.getIdleExpiration(ctx, idleTimeTotal, time.Time{})
 
 	// If the scheduler has since woken up, or its idle expiration time changed, this
@@ -49,5 +49,5 @@ func (r *SchedulerIdleTaskExecutor) Validate(
 		return false, nil
 	}
 
-	return !scheduler.Closed, nil
+	return !scheduler.GetClosed(), nil
 }

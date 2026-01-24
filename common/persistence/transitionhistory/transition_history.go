@@ -85,38 +85,38 @@ func StalenessCheck(
 	if len(history) == 0 {
 		return serviceerror.NewInternal("state has empty transition history")
 	}
-	idx, minTransitionCount, maxTransitionCount := transitionHistoryRangeForVersion(history, refVersionedTransition.NamespaceFailoverVersion)
+	idx, minTransitionCount, maxTransitionCount := transitionHistoryRangeForVersion(history, refVersionedTransition.GetNamespaceFailoverVersion())
 	if idx == -1 {
 		lastItem := history[len(history)-1]
-		if lastItem.NamespaceFailoverVersion < refVersionedTransition.NamespaceFailoverVersion {
+		if lastItem.GetNamespaceFailoverVersion() < refVersionedTransition.GetNamespaceFailoverVersion() {
 			return fmt.Errorf(
 				"%w: state namespace failover version < ref namespace failover version: %v < %v",
 				consts.ErrStaleState,
-				lastItem.NamespaceFailoverVersion,
-				refVersionedTransition.NamespaceFailoverVersion,
+				lastItem.GetNamespaceFailoverVersion(),
+				refVersionedTransition.GetNamespaceFailoverVersion(),
 			)
 		}
 		return fmt.Errorf(
 			"%w: state namespace failover version > ref namespace failover version: %v > %v",
 			consts.ErrStaleReference,
-			lastItem.NamespaceFailoverVersion,
-			refVersionedTransition.NamespaceFailoverVersion,
+			lastItem.GetNamespaceFailoverVersion(),
+			refVersionedTransition.GetNamespaceFailoverVersion(),
 		)
 	}
-	if idx == len(history)-1 && maxTransitionCount < refVersionedTransition.TransitionCount {
+	if idx == len(history)-1 && maxTransitionCount < refVersionedTransition.GetTransitionCount() {
 		return fmt.Errorf(
 			"%w: state transition count < ref transition count: %v < %v",
 			consts.ErrStaleState,
 			maxTransitionCount,
-			refVersionedTransition.TransitionCount,
+			refVersionedTransition.GetTransitionCount(),
 		)
 	}
-	if minTransitionCount > refVersionedTransition.TransitionCount || maxTransitionCount < refVersionedTransition.TransitionCount {
+	if minTransitionCount > refVersionedTransition.GetTransitionCount() || maxTransitionCount < refVersionedTransition.GetTransitionCount() {
 		return fmt.Errorf(
 			"%w: ref transition count out of range for version %v: %v not in [%v, %v]",
 			consts.ErrStaleReference,
-			refVersionedTransition.NamespaceFailoverVersion,
-			refVersionedTransition.TransitionCount,
+			refVersionedTransition.GetNamespaceFailoverVersion(),
+			refVersionedTransition.GetTransitionCount(),
 			minTransitionCount,
 			maxTransitionCount,
 		)
@@ -131,10 +131,10 @@ func transitionHistoryRangeForVersion(
 ) (idx int, minTransitionCount int64, maxTransitionCount int64) {
 	prevVersionMaxTransitionCount := int64(-1)
 	for i, item := range history {
-		if item.NamespaceFailoverVersion == version {
-			return i, prevVersionMaxTransitionCount + 1, item.TransitionCount
+		if item.GetNamespaceFailoverVersion() == version {
+			return i, prevVersionMaxTransitionCount + 1, item.GetTransitionCount()
 		}
-		prevVersionMaxTransitionCount = item.TransitionCount
+		prevVersionMaxTransitionCount = item.GetTransitionCount()
 	}
 	return -1, 0, 0
 }

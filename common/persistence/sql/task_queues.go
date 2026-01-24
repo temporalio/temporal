@@ -33,8 +33,8 @@ func (m *taskQueueStore) CreateTaskQueue(
 		RangeHash:    tqHash,
 		TaskQueueID:  tqId,
 		RangeID:      request.RangeID,
-		Data:         request.TaskQueueInfo.Data,
-		DataEncoding: request.TaskQueueInfo.EncodingType.String(),
+		Data:         request.TaskQueueInfo.GetData(),
+		DataEncoding: request.TaskQueueInfo.GetEncodingType().String(),
 	}
 	if _, err := m.DB.InsertIntoTaskQueues(ctx, &row, m.version); err != nil {
 		if m.DB.IsDupEntryError(err) {
@@ -108,8 +108,8 @@ func (m *taskQueueStore) UpdateTaskQueue(
 			RangeHash:    tqHash,
 			TaskQueueID:  tqId,
 			RangeID:      request.RangeID,
-			Data:         request.TaskQueueInfo.Data,
-			DataEncoding: request.TaskQueueInfo.EncodingType.String(),
+			Data:         request.TaskQueueInfo.GetData(),
+			DataEncoding: request.TaskQueueInfo.GetEncodingType().String(),
 		}, m.version)
 		if err != nil {
 			return err

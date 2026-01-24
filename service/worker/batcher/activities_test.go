@@ -57,23 +57,21 @@ func generateEventHistory(pattern string) *historypb.History {
 	for i, char := range pattern {
 		// add a Schedule event independent of type of event
 		scheduledEventId := int64(NumTotalEvents*i + 1)
-		scheduledEvent := historypb.HistoryEvent{EventId: scheduledEventId, EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED}
-		events = append(events, &scheduledEvent)
+		scheduledEvent := historypb.HistoryEvent_builder{EventId: scheduledEventId, EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED}.Build()
+		events = append(events, scheduledEvent)
 
-		event := historypb.HistoryEvent{EventId: int64(NumTotalEvents*i + NumTotalEvents)}
+		event := historypb.HistoryEvent_builder{EventId: int64(NumTotalEvents*i + NumTotalEvents)}.Build()
 		switch unicode.ToLower(char) {
 		case 'c':
-			event.EventType = enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED
-			event.Attributes = &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{
-				WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{ScheduledEventId: scheduledEventId},
-			}
+			event.SetEventType(enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED)
+			event.SetWorkflowTaskCompletedEventAttributes(historypb.WorkflowTaskCompletedEventAttributes_builder{ScheduledEventId: scheduledEventId}.Build())
 		case 'f':
-			event.EventType = enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED
+			event.SetEventType(enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED)
 		}
-		events = append(events, &event)
+		events = append(events, event)
 	}
 
-	return &historypb.History{Events: events}
+	return historypb.History_builder{Events: events}.Build()
 }
 
 func (s *activitiesSuite) TestGetLastWorkflowTaskEventID() {
@@ -113,10 +111,10 @@ func (s *activitiesSuite) TestGetLastWorkflowTaskEventID() {
 	for _, tt := range tests {
 		s.Run(tt.name, func() {
 			ctx := context.Background()
-			slices.Reverse(tt.history.Events)
+			slices.Reverse(tt.history.GetEvents())
 			workflowExecution := &commonpb.WorkflowExecution{}
 			s.mockFrontendClient.EXPECT().GetWorkflowExecutionHistoryReverse(ctx, gomock.Any()).Return(
-				&workflowservice.GetWorkflowExecutionHistoryReverseResponse{History: tt.history, NextPageToken: nil}, nil)
+				workflowservice.GetWorkflowExecutionHistoryReverseResponse_builder{History: tt.history, NextPageToken: nil}.Build(), nil)
 			gotWorkflowTaskEventID, err := getLastWorkflowTaskEventID(ctx, namespaceStr, workflowExecution, s.mockFrontendClient, log.NewTestLogger())
 			s.Equal(tt.wantErr, err != nil)
 			s.Equal(tt.wantWorkflowTaskEventID, gotWorkflowTaskEventID)
@@ -132,7 +130,7 @@ func (s *activitiesSuite) TestGetLastWorkflowTaskEventID() {
 
 func (s *activitiesSuite) TestGetFirstWorkflowTaskEventID() {
 	namespaceStr := "test-namespace"
-	workflowExecution := commonpb.WorkflowExecution{}
+	workflowExecution := &commonpb.WorkflowExecution{}
 	tests := []struct {
 		name                    string
 		history                 *historypb.History
@@ -174,8 +172,8 @@ func (s *activitiesSuite) TestGetFirstWorkflowTaskEventID() {
 		s.Run(tt.name, func() {
 			ctx := context.Background()
 			s.mockFrontendClient.EXPECT().GetWorkflowExecutionHistory(ctx, gomock.Any()).Return(
-				&workflowservice.GetWorkflowExecutionHistoryResponse{History: tt.history, NextPageToken: nil}, nil)
-			gotWorkflowTaskEventID, err := getFirstWorkflowTaskEventID(ctx, namespaceStr, &workflowExecution, s.mockFrontendClient, log.NewTestLogger())
+				workflowservice.GetWorkflowExecutionHistoryResponse_builder{History: tt.history, NextPageToken: nil}.Build(), nil)
+			gotWorkflowTaskEventID, err := getFirstWorkflowTaskEventID(ctx, namespaceStr, workflowExecution, s.mockFrontendClient, log.NewTestLogger())
 			s.Equal(tt.wantErr, err != nil)
 			s.Equal(tt.wantWorkflowTaskEventID, gotWorkflowTaskEventID)
 			if tt.wantErr {
@@ -203,12 +201,12 @@ func (s *activitiesSuite) TestGetResetPoint() {
 		{
 			name: "not found",
 			points: []*workflowpb.ResetPointInfo{
-				{
+				workflowpb.ResetPointInfo_builder{
 					BuildId:                      "build1",
 					RunId:                        "run1",
 					FirstWorkflowTaskCompletedId: 123,
 					Resettable:                   true,
-				},
+				}.Build(),
 			},
 			buildId: "otherbuild",
 			wantErr: true,
@@ -216,12 +214,12 @@ func (s *activitiesSuite) TestGetResetPoint() {
 		{
 			name: "found",
 			points: []*workflowpb.ResetPointInfo{
-				{
+				workflowpb.ResetPointInfo_builder{
 					BuildId:                      "build1",
 					RunId:                        "run1",
 					FirstWorkflowTaskCompletedId: 123,
 					Resettable:                   true,
-				},
+				}.Build(),
 			},
 			buildId:                 "build1",
 			wantWorkflowTaskEventID: 123,
@@ -229,12 +227,12 @@ func (s *activitiesSuite) TestGetResetPoint() {
 		{
 			name: "not resettable",
 			points: []*workflowpb.ResetPointInfo{
-				{
+				workflowpb.ResetPointInfo_builder{
 					BuildId:                      "build1",
 					RunId:                        "run1",
 					FirstWorkflowTaskCompletedId: 123,
 					Resettable:                   false,
-				},
+				}.Build(),
 			},
 			buildId: "build1",
 			wantErr: true,
@@ -242,12 +240,12 @@ func (s *activitiesSuite) TestGetResetPoint() {
 		{
 			name: "from another run",
 			points: []*workflowpb.ResetPointInfo{
-				{
+				workflowpb.ResetPointInfo_builder{
 					BuildId:                      "build1",
 					RunId:                        "run0",
 					FirstWorkflowTaskCompletedId: 34,
 					Resettable:                   true,
-				},
+				}.Build(),
 			},
 			buildId:                 "build1",
 			wantWorkflowTaskEventID: 34,
@@ -256,12 +254,12 @@ func (s *activitiesSuite) TestGetResetPoint() {
 		{
 			name: "from another run but not allowed",
 			points: []*workflowpb.ResetPointInfo{
-				{
+				workflowpb.ResetPointInfo_builder{
 					BuildId:                      "build1",
 					RunId:                        "run0",
 					FirstWorkflowTaskCompletedId: 34,
 					Resettable:                   true,
-				},
+				}.Build(),
 			},
 			buildId:        "build1",
 			currentRunOnly: true,
@@ -270,13 +268,13 @@ func (s *activitiesSuite) TestGetResetPoint() {
 		{
 			name: "expired",
 			points: []*workflowpb.ResetPointInfo{
-				{
+				workflowpb.ResetPointInfo_builder{
 					BuildId:                      "build1",
 					RunId:                        "run1",
 					FirstWorkflowTaskCompletedId: 123,
 					Resettable:                   true,
 					ExpireTime:                   timestamp.TimePtr(time.Now().Add(-1 * time.Hour)),
-				},
+				}.Build(),
 			},
 			buildId: "build1",
 			wantErr: true,
@@ -285,24 +283,24 @@ func (s *activitiesSuite) TestGetResetPoint() {
 	for _, tt := range tests {
 		s.Run(tt.name, func() {
 			s.mockFrontendClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).Return(
-				&workflowservice.DescribeWorkflowExecutionResponse{
-					WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
-						AutoResetPoints: &workflowpb.ResetPoints{
+				workflowservice.DescribeWorkflowExecutionResponse_builder{
+					WorkflowExecutionInfo: workflowpb.WorkflowExecutionInfo_builder{
+						AutoResetPoints: workflowpb.ResetPoints_builder{
 							Points: tt.points,
-						},
-					},
-				},
+						}.Build(),
+					}.Build(),
+				}.Build(),
 				nil,
 			)
-			execution := &commonpb.WorkflowExecution{
+			execution := commonpb.WorkflowExecution_builder{
 				WorkflowId: "wfid",
 				RunId:      "run1",
-			}
+			}.Build()
 			id, err := getResetPoint(ctx, ns, execution, s.mockFrontendClient, tt.buildId, tt.currentRunOnly)
 			s.Equal(tt.wantErr, err != nil)
 			s.Equal(tt.wantWorkflowTaskEventID, id)
 			if tt.wantSetRunId != "" {
-				s.Equal(tt.wantSetRunId, execution.RunId)
+				s.Equal(tt.wantSetRunId, execution.GetRunId())
 			}
 		})
 	}
@@ -371,45 +369,39 @@ func (s *activitiesSuite) TestAdjustQueryAdminBatchType() {
 	a := activities{}
 
 	s.Run("Empty query", func() {
-		adminReq := &adminservice.StartAdminBatchOperationRequest{
-			VisibilityQuery: "",
-			Operation: &adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation{
-				RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{},
-			},
-		}
+		adminReq := adminservice.StartAdminBatchOperationRequest_builder{
+			VisibilityQuery:       "",
+			RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{},
+		}.Build()
 		adjustedQuery := a.adjustQueryAdminBatchType(adminReq)
 		s.Empty(adjustedQuery)
 	})
 
 	s.Run("RefreshWorkflowTasks returns query unchanged", func() {
-		adminReq := &adminservice.StartAdminBatchOperationRequest{
-			VisibilityQuery: "WorkflowType='MyWorkflow'",
-			Identity:        "test",
-			Operation: &adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation{
-				RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{},
-			},
-		}
+		adminReq := adminservice.StartAdminBatchOperationRequest_builder{
+			VisibilityQuery:       "WorkflowType='MyWorkflow'",
+			Identity:              "test",
+			RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{},
+		}.Build()
 		adjustedQuery := a.adjustQueryAdminBatchType(adminReq)
 		// RefreshWorkflowTasks applies to both open and closed workflows, no filter added
 		s.Equal("WorkflowType='MyWorkflow'", adjustedQuery)
 	})
 
 	s.Run("RefreshWorkflowTasks with complex query unchanged", func() {
-		adminReq := &adminservice.StartAdminBatchOperationRequest{
-			VisibilityQuery: "(WorkflowType='MyWorkflow') OR (WorkflowType='OtherWorkflow')",
-			Operation: &adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation{
-				RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{},
-			},
-		}
+		adminReq := adminservice.StartAdminBatchOperationRequest_builder{
+			VisibilityQuery:       "(WorkflowType='MyWorkflow') OR (WorkflowType='OtherWorkflow')",
+			RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{},
+		}.Build()
 		adjustedQuery := a.adjustQueryAdminBatchType(adminReq)
 		// RefreshWorkflowTasks applies to both open and closed workflows, no filter added
 		s.Equal("(WorkflowType='MyWorkflow') OR (WorkflowType='OtherWorkflow')", adjustedQuery)
 	})
 
 	s.Run("Nil operation returns query unchanged", func() {
-		adminReq := &adminservice.StartAdminBatchOperationRequest{
+		adminReq := adminservice.StartAdminBatchOperationRequest_builder{
 			VisibilityQuery: "WorkflowType='MyWorkflow'",
-		}
+		}.Build()
 		adjustedQuery := a.adjustQueryAdminBatchType(adminReq)
 		s.Equal("WorkflowType='MyWorkflow'", adjustedQuery)
 	})
@@ -429,24 +421,22 @@ func (s *activitiesSuite) TestProcessAdminTask_RefreshWorkflowTasks() {
 	workflowID := "test-workflow-id"
 	runID := "test-run-id"
 
-	batchOperation := &batchspb.BatchOperationInput{
+	batchOperation := batchspb.BatchOperationInput_builder{
 		NamespaceId: namespaceID,
-		AdminRequest: &adminservice.StartAdminBatchOperationRequest{
-			Namespace: "test-namespace",
-			Identity:  "test-identity",
-			Operation: &adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation{
-				RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{},
-			},
-		},
-	}
+		AdminRequest: adminservice.StartAdminBatchOperationRequest_builder{
+			Namespace:             "test-namespace",
+			Identity:              "test-identity",
+			RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{},
+		}.Build(),
+	}.Build()
 
 	testTask := task{
-		executionInfo: &workflowpb.WorkflowExecutionInfo{
-			Execution: &commonpb.WorkflowExecution{
+		executionInfo: workflowpb.WorkflowExecutionInfo_builder{
+			Execution: commonpb.WorkflowExecution_builder{
 				WorkflowId: workflowID,
 				RunId:      runID,
-			},
-		},
+			}.Build(),
+		}.Build(),
 	}
 
 	limiter := rate.NewLimiter(rate.Limit(100), 1)
@@ -454,10 +444,10 @@ func (s *activitiesSuite) TestProcessAdminTask_RefreshWorkflowTasks() {
 	// Expect RefreshWorkflowTasks to be called with correct parameters
 	mockHistoryClient.EXPECT().RefreshWorkflowTasks(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, req *historyservice.RefreshWorkflowTasksRequest, _ ...interface{}) (*historyservice.RefreshWorkflowTasksResponse, error) {
-			s.Equal(namespaceID, req.NamespaceId)
-			s.NotZero(req.ArchetypeId) // WorkflowArchetypeID is computed dynamically
-			s.Equal(workflowID, req.Request.Execution.WorkflowId)
-			s.Equal(runID, req.Request.Execution.RunId)
+			s.Equal(namespaceID, req.GetNamespaceId())
+			s.NotZero(req.GetArchetypeId()) // WorkflowArchetypeID is computed dynamically
+			s.Equal(workflowID, req.GetRequest().GetExecution().GetWorkflowId())
+			s.Equal(runID, req.GetRequest().GetExecution().GetRunId())
 			return &historyservice.RefreshWorkflowTasksResponse{}, nil
 		})
 
@@ -475,24 +465,22 @@ func (s *activitiesSuite) TestProcessAdminTask_RefreshWorkflowTasks_Error() {
 		},
 	}
 
-	batchOperation := &batchspb.BatchOperationInput{
+	batchOperation := batchspb.BatchOperationInput_builder{
 		NamespaceId: "test-namespace-id",
-		AdminRequest: &adminservice.StartAdminBatchOperationRequest{
-			Namespace: "test-namespace",
-			Identity:  "test-identity",
-			Operation: &adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation{
-				RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{},
-			},
-		},
-	}
+		AdminRequest: adminservice.StartAdminBatchOperationRequest_builder{
+			Namespace:             "test-namespace",
+			Identity:              "test-identity",
+			RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{},
+		}.Build(),
+	}.Build()
 
 	testTask := task{
-		executionInfo: &workflowpb.WorkflowExecutionInfo{
-			Execution: &commonpb.WorkflowExecution{
+		executionInfo: workflowpb.WorkflowExecutionInfo_builder{
+			Execution: commonpb.WorkflowExecution_builder{
 				WorkflowId: "test-workflow-id",
 				RunId:      "test-run-id",
-			},
-		},
+			}.Build(),
+		}.Build(),
 	}
 
 	limiter := rate.NewLimiter(rate.Limit(100), 1)
@@ -571,20 +559,20 @@ func (s *activitiesSuite) TestProcessAdminTask_UnknownOperation() {
 	a := &activities{}
 
 	// AdminRequest with nil operation
-	batchOperation := &batchspb.BatchOperationInput{
+	batchOperation := batchspb.BatchOperationInput_builder{
 		NamespaceId: "test-namespace-id",
-		AdminRequest: &adminservice.StartAdminBatchOperationRequest{
+		AdminRequest: adminservice.StartAdminBatchOperationRequest_builder{
 			Namespace: "test-namespace",
-		},
-	}
+		}.Build(),
+	}.Build()
 
 	testTask := task{
-		executionInfo: &workflowpb.WorkflowExecutionInfo{
-			Execution: &commonpb.WorkflowExecution{
+		executionInfo: workflowpb.WorkflowExecutionInfo_builder{
+			Execution: commonpb.WorkflowExecution_builder{
 				WorkflowId: "test-workflow-id",
 				RunId:      "test-run-id",
-			},
-		},
+			}.Build(),
+		}.Build(),
 	}
 
 	limiter := rate.NewLimiter(rate.Limit(100), 1)

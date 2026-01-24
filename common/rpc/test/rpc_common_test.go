@@ -49,7 +49,7 @@ type TestFactory struct {
 
 // SendHello implements testservice.TestServiceServer
 func (s *TestServiceServerHandler) SendHello(ctx context.Context, in *testservice.SendHelloRequest) (*testservice.SendHelloResponse, error) {
-	return &testservice.SendHelloResponse{Message: "Hello " + in.Name}, nil
+	return testservice.SendHelloResponse_builder{Message: "Hello " + in.GetName()}.Build(), nil
 }
 
 var (
@@ -162,7 +162,7 @@ func dialTestServiceAndGetTLSInfo(
 
 	client := testservice.NewTestServiceClient(clientConn)
 
-	request := &testservice.SendHelloRequest{Name: convert.Uint64ToString(rand.Uint64())}
+	request := testservice.SendHelloRequest_builder{Name: convert.Uint64ToString(rand.Uint64())}.Build()
 	var reply *testservice.SendHelloResponse
 	peer := new(peer.Peer)
 	reply, err = client.SendHello(context.Background(), request, grpc.Peer(peer))
@@ -170,7 +170,7 @@ func dialTestServiceAndGetTLSInfo(
 
 	if err == nil {
 		s.NotNil(reply)
-		s.True(strings.Contains(reply.Message, request.Name))
+		s.True(strings.Contains(reply.GetMessage(), request.GetName()))
 	}
 
 	_ = clientConn.Close()

@@ -31,19 +31,19 @@ func sendUpdateNoError(s testcore.Env, tv *testvars.TestVars) <-chan *workflowse
 
 func sendUpdateNoErrorWaitPolicyAccepted(s testcore.Env, tv *testvars.TestVars) <-chan *workflowservice.UpdateWorkflowExecutionResponse {
 	s.T().Helper()
-	return sendUpdateNoErrorInternal(s, tv, &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED})
+	return sendUpdateNoErrorInternal(s, tv, updatepb.WaitPolicy_builder{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED}.Build())
 }
 
 func pollUpdate(s testcore.Env, tv *testvars.TestVars, waitPolicy *updatepb.WaitPolicy) (*workflowservice.PollWorkflowExecutionUpdateResponse, error) {
 	s.T().Helper()
-	return s.FrontendClient().PollWorkflowExecutionUpdate(testcore.NewContext(), &workflowservice.PollWorkflowExecutionUpdateRequest{
+	return s.FrontendClient().PollWorkflowExecutionUpdate(testcore.NewContext(), workflowservice.PollWorkflowExecutionUpdateRequest_builder{
 		Namespace: s.Namespace().String(),
-		UpdateRef: &updatepb.UpdateRef{
+		UpdateRef: updatepb.UpdateRef_builder{
 			WorkflowExecution: tv.WorkflowExecution(),
 			UpdateId:          tv.UpdateID(),
-		},
+		}.Build(),
 		WaitPolicy: waitPolicy,
-	})
+	}.Build())
 }
 
 func updateWorkflowRequest(
@@ -51,18 +51,18 @@ func updateWorkflowRequest(
 	tv *testvars.TestVars,
 	waitPolicy *updatepb.WaitPolicy,
 ) *workflowservice.UpdateWorkflowExecutionRequest {
-	return &workflowservice.UpdateWorkflowExecutionRequest{
+	return workflowservice.UpdateWorkflowExecutionRequest_builder{
 		Namespace:         s.Namespace().String(),
 		WorkflowExecution: tv.WorkflowExecution(),
 		WaitPolicy:        waitPolicy,
-		Request: &updatepb.Request{
-			Meta: &updatepb.Meta{UpdateId: tv.UpdateID()},
-			Input: &updatepb.Input{
+		Request: updatepb.Request_builder{
+			Meta: updatepb.Meta_builder{UpdateId: tv.UpdateID()}.Build(),
+			Input: updatepb.Input_builder{
 				Name: tv.HandlerName(),
 				Args: payloads.EncodeString("args-value-of-" + tv.UpdateID()),
-			},
-		},
-	}
+			}.Build(),
+		}.Build(),
+	}.Build()
 }
 
 func sendUpdateNoErrorInternal(s testcore.Env, tv *testvars.TestVars, waitPolicy *updatepb.WaitPolicy) <-chan *workflowservice.UpdateWorkflowExecutionResponse {
@@ -102,11 +102,11 @@ func sendUpdateInternal(
 func waitUpdateAdmitted(s testcore.Env, tv *testvars.TestVars) {
 	s.T().Helper()
 	require.EventuallyWithTf(s.T(), func(collect *assert.CollectT) {
-		pollResp, pollErr := s.FrontendClient().PollWorkflowExecutionUpdate(testcore.NewContext(), &workflowservice.PollWorkflowExecutionUpdateRequest{
+		pollResp, pollErr := s.FrontendClient().PollWorkflowExecutionUpdate(testcore.NewContext(), workflowservice.PollWorkflowExecutionUpdateRequest_builder{
 			Namespace:  s.Namespace().String(),
 			UpdateRef:  tv.UpdateRef(),
-			WaitPolicy: &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED},
-		})
+			WaitPolicy: updatepb.WaitPolicy_builder{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED}.Build(),
+		}.Build())
 
 		require.NoError(collect, pollErr)
 		require.GreaterOrEqual(collect, pollResp.GetStage(), enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED)

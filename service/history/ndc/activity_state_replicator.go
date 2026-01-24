@@ -77,16 +77,16 @@ func (r *ActivityStateReplicatorImpl) SyncActivityState(
 	// 3. activity heart beat
 	// no sync activity task will be sent when active side fail / timeout activity,
 	namespaceID := namespace.ID(request.GetNamespaceId())
-	execution := commonpb.WorkflowExecution{
-		WorkflowId: request.WorkflowId,
-		RunId:      request.RunId,
-	}
+	execution := commonpb.WorkflowExecution_builder{
+		WorkflowId: request.GetWorkflowId(),
+		RunId:      request.GetRunId(),
+	}.Build()
 
 	executionContext, release, err := r.workflowCache.GetOrCreateWorkflowExecution(
 		ctx,
 		r.shardContext,
 		namespaceID,
-		&execution,
+		execution,
 		locks.PriorityHigh,
 	)
 	if err != nil {
@@ -109,35 +109,35 @@ func (r *ActivityStateReplicatorImpl) SyncActivityState(
 	}
 	applied, err := r.syncSingleActivityState(
 		&definition.WorkflowKey{
-			NamespaceID: request.NamespaceId,
-			WorkflowID:  request.WorkflowId,
-			RunID:       request.RunId,
+			NamespaceID: request.GetNamespaceId(),
+			WorkflowID:  request.GetWorkflowId(),
+			RunID:       request.GetRunId(),
 		},
 		mutableState,
-		&historyservice.ActivitySyncInfo{
-			Version:                    request.Version,
-			ScheduledEventId:           request.ScheduledEventId,
-			ScheduledTime:              request.ScheduledTime,
-			StartedEventId:             request.StartedEventId,
-			StartVersion:               request.StartVersion,
-			StartedTime:                request.StartedTime,
-			LastHeartbeatTime:          request.LastHeartbeatTime,
-			Details:                    request.Details,
-			Attempt:                    request.Attempt,
-			LastFailure:                request.LastFailure,
-			LastWorkerIdentity:         request.LastWorkerIdentity,
-			LastStartedBuildId:         request.LastStartedBuildId,
-			LastStartedRedirectCounter: request.LastStartedRedirectCounter,
-			VersionHistory:             request.VersionHistory,
-			FirstScheduledTime:         request.FirstScheduledTime,
-			LastAttemptCompleteTime:    request.LastAttemptCompleteTime,
-			Stamp:                      request.Stamp,
-			Paused:                     request.Paused,
-			RetryInitialInterval:       request.RetryInitialInterval,
-			RetryMaximumInterval:       request.RetryMaximumInterval,
-			RetryMaximumAttempts:       request.RetryMaximumAttempts,
-			RetryBackoffCoefficient:    request.RetryBackoffCoefficient,
-		},
+		historyservice.ActivitySyncInfo_builder{
+			Version:                    request.GetVersion(),
+			ScheduledEventId:           request.GetScheduledEventId(),
+			ScheduledTime:              request.GetScheduledTime(),
+			StartedEventId:             request.GetStartedEventId(),
+			StartVersion:               request.GetStartVersion(),
+			StartedTime:                request.GetStartedTime(),
+			LastHeartbeatTime:          request.GetLastHeartbeatTime(),
+			Details:                    request.GetDetails(),
+			Attempt:                    request.GetAttempt(),
+			LastFailure:                request.GetLastFailure(),
+			LastWorkerIdentity:         request.GetLastWorkerIdentity(),
+			LastStartedBuildId:         request.GetLastStartedBuildId(),
+			LastStartedRedirectCounter: request.GetLastStartedRedirectCounter(),
+			VersionHistory:             request.GetVersionHistory(),
+			FirstScheduledTime:         request.GetFirstScheduledTime(),
+			LastAttemptCompleteTime:    request.GetLastAttemptCompleteTime(),
+			Stamp:                      request.GetStamp(),
+			Paused:                     request.GetPaused(),
+			RetryInitialInterval:       request.GetRetryInitialInterval(),
+			RetryMaximumInterval:       request.GetRetryMaximumInterval(),
+			RetryMaximumAttempts:       request.GetRetryMaximumAttempts(),
+			RetryBackoffCoefficient:    request.GetRetryBackoffCoefficient(),
+		}.Build(),
 	)
 	if err != nil {
 		return err
@@ -184,10 +184,10 @@ func (r *ActivityStateReplicatorImpl) SyncActivitiesState(
 	// 3. activity heart beat
 	// no sync activity task will be sent when active side fail / timeout activity,
 	namespaceID := namespace.ID(request.GetNamespaceId())
-	execution := &commonpb.WorkflowExecution{
-		WorkflowId: request.WorkflowId,
-		RunId:      request.RunId,
-	}
+	execution := commonpb.WorkflowExecution_builder{
+		WorkflowId: request.GetWorkflowId(),
+		RunId:      request.GetRunId(),
+	}.Build()
 
 	executionContext, release, err := r.workflowCache.GetOrCreateWorkflowExecution(
 		ctx,
@@ -218,12 +218,12 @@ func (r *ActivityStateReplicatorImpl) SyncActivitiesState(
 		return err
 	}
 	anyEventApplied := false
-	for _, syncActivityInfo := range request.ActivitiesInfo {
+	for _, syncActivityInfo := range request.GetActivitiesInfo() {
 		applied, err := r.syncSingleActivityState(
 			&definition.WorkflowKey{
-				NamespaceID: request.NamespaceId,
-				WorkflowID:  request.WorkflowId,
-				RunID:       request.RunId,
+				NamespaceID: request.GetNamespaceId(),
+				WorkflowID:  request.GetWorkflowId(),
+				RunID:       request.GetRunId(),
 			},
 			mutableState,
 			syncActivityInfo,
@@ -301,7 +301,7 @@ func (r *ActivityStateReplicatorImpl) syncSingleActivityState(
 
 	// sync activity with empty started ID means activity retry
 	eventTime := timestamp.TimeValue(activitySyncInfo.GetScheduledTime())
-	if activitySyncInfo.StartedEventId == common.EmptyEventID && activitySyncInfo.Attempt > activityInfo.GetAttempt() {
+	if activitySyncInfo.GetStartedEventId() == common.EmptyEventID && activitySyncInfo.GetAttempt() > activityInfo.GetAttempt() {
 		mutableState.AddTasks(&tasks.ActivityRetryTimerTask{
 			WorkflowKey:         *workflowKey,
 			VisibilityTimestamp: eventTime,
@@ -316,10 +316,10 @@ func (r *ActivityStateReplicatorImpl) syncSingleActivityState(
 		activitySyncInfo,
 		mutableState.ShouldResetActivityTimerTaskMask(
 			activityInfo,
-			&persistencespb.ActivityInfo{
+			persistencespb.ActivityInfo_builder{
 				Version: activitySyncInfo.GetVersion(),
 				Attempt: activitySyncInfo.GetAttempt(),
-			},
+			}.Build(),
 		),
 	); err != nil {
 		return false, err
@@ -336,34 +336,34 @@ func (r *ActivityStateReplicatorImpl) compareActivity(
 	activityInfo *persistencespb.ActivityInfo,
 ) bool {
 
-	if activityInfo.Version > version {
+	if activityInfo.GetVersion() > version {
 		// this should not retry, can be caused by failover or reset
 		return false
 	}
 
-	if activityInfo.Version < version {
+	if activityInfo.GetVersion() < version {
 		// incoming version larger then local version, should update activity
 		return true
 	}
 
-	if activityInfo.Stamp < stamp {
+	if activityInfo.GetStamp() < stamp {
 		// stamp changed, should update activity
 		return true
 	}
 
-	if activityInfo.Stamp > stamp {
+	if activityInfo.GetStamp() > stamp {
 		// stamp is older than we have, should not update activity
 		return false
 	}
 
 	// activityInfo.Version == version
-	if activityInfo.Attempt > attempt {
+	if activityInfo.GetAttempt() > attempt {
 		// this should not retry, can be caused by failover or reset
 		return false
 	}
 
 	// activityInfo.Version == version
-	if activityInfo.Attempt < attempt {
+	if activityInfo.GetAttempt() < attempt {
 		// version equal & attempt larger then existing, should update activity
 		return true
 	}
@@ -371,9 +371,9 @@ func (r *ActivityStateReplicatorImpl) compareActivity(
 	// activityInfo.Version == version & activityInfo.Attempt == attempt
 
 	// last heartbeat after existing heartbeat & should update activity
-	if activityInfo.LastHeartbeatUpdateTime != nil &&
-		!activityInfo.LastHeartbeatUpdateTime.AsTime().IsZero() &&
-		activityInfo.LastHeartbeatUpdateTime.AsTime().After(lastHeartbeatTime) {
+	if activityInfo.HasLastHeartbeatUpdateTime() &&
+		!activityInfo.GetLastHeartbeatUpdateTime().AsTime().IsZero() &&
+		activityInfo.GetLastHeartbeatUpdateTime().AsTime().After(lastHeartbeatTime) {
 		// this should not retry, can be caused by out of order delivery
 		return false
 	}

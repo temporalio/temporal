@@ -29,11 +29,11 @@ func TestDisableEagerActivityDispatchForBuggyClients(t *testing.T) {
 	}
 	for _, testCase := range cases {
 		ctx := headers.SetVersionsForTests(context.Background(), testCase.sdkVersion, testCase.sdkName, headers.SupportedServerVersions, headers.AllFeatures)
-		req := &workflowservice.RespondWorkflowTaskCompletedRequest{
+		req := workflowservice.RespondWorkflowTaskCompletedRequest_builder{
 			Commands: []*commandpb.Command{
-				{Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{RequestEagerExecution: true}}},
+				commandpb.Command_builder{ScheduleActivityTaskCommandAttributes: commandpb.ScheduleActivityTaskCommandAttributes_builder{RequestEagerExecution: true}.Build()}.Build(),
 			},
-		}
+		}.Build()
 		overrides.DisableEagerActivityDispatchForBuggyClients(ctx, req)
 
 		assert.Equal(t, req.GetCommands()[0].GetScheduleActivityTaskCommandAttributes().GetRequestEagerExecution(), testCase.eagerAllowed)

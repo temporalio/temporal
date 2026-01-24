@@ -42,8 +42,8 @@ func (m *shardManagerImpl) GetOrCreateShard(
 		if shardInfo == nil {
 			shardInfo = &persistencespb.ShardInfo{}
 		}
-		shardInfo.ShardId = request.ShardID
-		shardInfo.UpdateTime = timestamp.TimeNowPtrUtc()
+		shardInfo.SetShardId(request.ShardID)
+		shardInfo.SetUpdateTime(timestamp.TimeNowPtrUtc())
 		data, err := m.serializer.ShardInfoToBlob(shardInfo)
 		if err != nil {
 			return 0, nil, err
@@ -72,7 +72,7 @@ func (m *shardManagerImpl) UpdateShard(
 	request *UpdateShardRequest,
 ) error {
 	shardInfo := request.ShardInfo
-	shardInfo.UpdateTime = timestamp.TimeNowPtrUtc()
+	shardInfo.SetUpdateTime(timestamp.TimeNowPtrUtc())
 
 	shardInfoBlob, err := m.serializer.ShardInfoToBlob(shardInfo)
 	if err != nil {

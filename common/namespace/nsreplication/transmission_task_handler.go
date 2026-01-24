@@ -66,51 +66,49 @@ func (r *replicator) HandleTransmissionTask(
 	if !isGlobalNamespace {
 		return nil
 	}
-	if len(replicationConfig.Clusters) <= 1 && !replicationClusterListUpdated {
+	if len(replicationConfig.GetClusters()) <= 1 && !replicationClusterListUpdated {
 		return nil
 	}
-	if info.State == enumspb.NAMESPACE_STATE_DELETED {
+	if info.GetState() == enumspb.NAMESPACE_STATE_DELETED {
 		// Don't replicate deleted namespace changes.
 		return nil
 	}
 
 	taskType := enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK
-	task := &replicationspb.ReplicationTask_NamespaceTaskAttributes{
-		NamespaceTaskAttributes: &replicationspb.NamespaceTaskAttributes{
-			NamespaceOperation: namespaceOperation,
-			Id:                 info.Id,
-			Info: &namespacepb.NamespaceInfo{
-				Name:        info.Name,
-				State:       info.State,
-				Description: info.Description,
-				OwnerEmail:  info.Owner,
-				Data:        info.Data,
-			},
-			Config: &namespacepb.NamespaceConfig{
-				WorkflowExecutionRetentionTtl: config.Retention,
-				HistoryArchivalState:          config.HistoryArchivalState,
-				HistoryArchivalUri:            config.HistoryArchivalUri,
-				VisibilityArchivalState:       config.VisibilityArchivalState,
-				VisibilityArchivalUri:         config.VisibilityArchivalUri,
-				BadBinaries:                   config.BadBinaries,
-				CustomSearchAttributeAliases:  config.CustomSearchAttributeAliases,
-			},
-			ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
-				ActiveClusterName: replicationConfig.ActiveClusterName,
-				Clusters:          convertClusterReplicationConfigToProto(replicationConfig.Clusters),
-			},
-			ConfigVersion:   configVersion,
-			FailoverVersion: failoverVersion,
-			FailoverHistory: convertFailoverHistoryToReplicationProto(failoverHistoy),
-		},
-	}
+	taskAttrs := replicationspb.NamespaceTaskAttributes_builder{
+		NamespaceOperation: namespaceOperation,
+		Id:                 info.GetId(),
+		Info: namespacepb.NamespaceInfo_builder{
+			Name:        info.GetName(),
+			State:       info.GetState(),
+			Description: info.GetDescription(),
+			OwnerEmail:  info.GetOwner(),
+			Data:        info.GetData(),
+		}.Build(),
+		Config: namespacepb.NamespaceConfig_builder{
+			WorkflowExecutionRetentionTtl: config.GetRetention(),
+			HistoryArchivalState:          config.GetHistoryArchivalState(),
+			HistoryArchivalUri:            config.GetHistoryArchivalUri(),
+			VisibilityArchivalState:       config.GetVisibilityArchivalState(),
+			VisibilityArchivalUri:         config.GetVisibilityArchivalUri(),
+			BadBinaries:                   config.GetBadBinaries(),
+			CustomSearchAttributeAliases:  config.GetCustomSearchAttributeAliases(),
+		}.Build(),
+		ReplicationConfig: replicationpb.NamespaceReplicationConfig_builder{
+			ActiveClusterName: replicationConfig.GetActiveClusterName(),
+			Clusters:          convertClusterReplicationConfigToProto(replicationConfig.GetClusters()),
+		}.Build(),
+		ConfigVersion:   configVersion,
+		FailoverVersion: failoverVersion,
+		FailoverHistory: convertFailoverHistoryToReplicationProto(failoverHistoy),
+	}.Build()
 
 	return r.namespaceReplicationQueue.Publish(
 		ctx,
-		&replicationspb.ReplicationTask{
-			TaskType:   taskType,
-			Attributes: task,
-		})
+		replicationspb.ReplicationTask_builder{
+			TaskType:                taskType,
+			NamespaceTaskAttributes: taskAttrs,
+		}.Build())
 }
 
 func convertClusterReplicationConfigToProto(
@@ -118,7 +116,7 @@ func convertClusterReplicationConfigToProto(
 ) []*replicationpb.ClusterReplicationConfig {
 	output := make([]*replicationpb.ClusterReplicationConfig, 0, len(input))
 	for _, clusterName := range input {
-		output = append(output, &replicationpb.ClusterReplicationConfig{ClusterName: clusterName})
+		output = append(output, replicationpb.ClusterReplicationConfig_builder{ClusterName: clusterName}.Build())
 	}
 	return output
 }
@@ -128,10 +126,10 @@ func convertFailoverHistoryToReplicationProto(
 ) []*replicationpb.FailoverStatus {
 	var replicationProto []*replicationpb.FailoverStatus
 	for _, failoverStatus := range failoverHistoy {
-		replicationProto = append(replicationProto, &replicationpb.FailoverStatus{
+		replicationProto = append(replicationProto, replicationpb.FailoverStatus_builder{
 			FailoverTime:    failoverStatus.GetFailoverTime(),
 			FailoverVersion: failoverStatus.GetFailoverVersion(),
-		})
+		}.Build())
 	}
 
 	return replicationProto

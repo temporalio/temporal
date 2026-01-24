@@ -136,14 +136,14 @@ func (c *clientImpl) PollWorkflowTaskQueue(
 
 func (c *clientImpl) QueryWorkflow(ctx context.Context, request *matchingservice.QueryWorkflowRequest, opts ...grpc.CallOption) (*matchingservice.QueryWorkflowResponse, error) {
 	// use shallow copy since QueryRequest may contain a large payload
-	request = &matchingservice.QueryWorkflowRequest{
-		NamespaceId:      request.NamespaceId,
-		TaskQueue:        common.CloneProto(request.TaskQueue),
-		QueryRequest:     request.QueryRequest,
-		VersionDirective: request.VersionDirective,
-		ForwardInfo:      request.ForwardInfo,
-		Priority:         request.Priority,
-	}
+	request = matchingservice.QueryWorkflowRequest_builder{
+		NamespaceId:      request.GetNamespaceId(),
+		TaskQueue:        common.CloneProto(request.GetTaskQueue()),
+		QueryRequest:     request.GetQueryRequest(),
+		VersionDirective: request.GetVersionDirective(),
+		ForwardInfo:      request.GetForwardInfo(),
+		Priority:         request.GetPriority(),
+	}.Build()
 	client, err := c.pickClientForWrite(request.GetTaskQueue(), request.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_WORKFLOW, request.GetForwardInfo().GetSourcePartition())
 	if err != nil {
 		return nil, err
@@ -183,7 +183,7 @@ func (c *clientImpl) pickClientForWrite(proto *taskqueuepb.TaskQueue, nsid strin
 	if tq != nil {
 		p = c.loadBalancer.PickWritePartition(tq)
 	}
-	proto.Name = p.RpcName()
+	proto.SetName(p.RpcName())
 	return c.getClientForTaskQueuePartition(p)
 }
 
@@ -196,7 +196,7 @@ func (c *clientImpl) pickClientForRead(proto *taskqueuepb.TaskQueue, nsid string
 		release = token.Release
 	}
 
-	proto.Name = p.RpcName()
+	proto.SetName(p.RpcName())
 	client, err = c.getClientForTaskQueuePartition(p)
 	return client, release, err
 }

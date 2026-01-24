@@ -254,7 +254,7 @@ func PersistWorkflowEvents(
 			continue // allow update workflow without events
 		}
 
-		firstEventID := workflowEvents.Events[0].EventId
+		firstEventID := workflowEvents.Events[0].GetEventId()
 		if firstEventID == common.FirstEventID {
 			size, err := persistFirstWorkflowEvents(ctx, shardContext, workflowEvents)
 			if err != nil {
@@ -281,10 +281,10 @@ func persistFirstWorkflowEvents(
 	namespaceID := namespace.ID(workflowEvents.NamespaceID)
 	workflowID := workflowEvents.WorkflowID
 	runID := workflowEvents.RunID
-	execution := &commonpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution_builder{
 		WorkflowId: workflowEvents.WorkflowID,
 		RunId:      workflowEvents.RunID,
-	}
+	}.Build()
 	branchToken := workflowEvents.BranchToken
 	events := workflowEvents.Events
 	prevTxnID := workflowEvents.PrevTxnID
@@ -318,10 +318,10 @@ func persistNonFirstWorkflowEvents(
 	}
 
 	namespaceID := namespace.ID(workflowEvents.NamespaceID)
-	execution := commonpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution_builder{
 		WorkflowId: workflowEvents.WorkflowID,
 		RunId:      workflowEvents.RunID,
-	}
+	}.Build()
 	branchToken := workflowEvents.BranchToken
 	events := workflowEvents.Events
 	prevTxnID := workflowEvents.PrevTxnID
@@ -331,7 +331,7 @@ func persistNonFirstWorkflowEvents(
 		ctx,
 		shardContext,
 		namespaceID,
-		&execution,
+		execution,
 		&persistence.AppendHistoryNodesRequest{
 			IsNewBranch:       false,
 			BranchToken:       branchToken,
@@ -376,9 +376,9 @@ func createWorkflowExecution(
 		default:
 			shardContext.GetLogger().Error(
 				"Persistent store operation Failure",
-				tag.WorkflowNamespaceID(request.NewWorkflowSnapshot.ExecutionInfo.NamespaceId),
-				tag.WorkflowID(request.NewWorkflowSnapshot.ExecutionInfo.WorkflowId),
-				tag.WorkflowRunID(request.NewWorkflowSnapshot.ExecutionState.RunId),
+				tag.WorkflowNamespaceID(request.NewWorkflowSnapshot.ExecutionInfo.GetNamespaceId()),
+				tag.WorkflowID(request.NewWorkflowSnapshot.ExecutionInfo.GetWorkflowId()),
+				tag.WorkflowRunID(request.NewWorkflowSnapshot.ExecutionState.GetRunId()),
 				tag.StoreOperationCreateWorkflowExecution,
 				tag.Error(err),
 			)
@@ -387,7 +387,7 @@ func createWorkflowExecution(
 	}
 
 	if namespaceEntry, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(
-		namespace.ID(request.NewWorkflowSnapshot.ExecutionInfo.NamespaceId),
+		namespace.ID(request.NewWorkflowSnapshot.ExecutionInfo.GetNamespaceId()),
 	); err == nil {
 		emitMutationMetrics(
 			shardContext,
@@ -421,9 +421,9 @@ func conflictResolveWorkflowExecution(
 	if err != nil {
 		shardContext.GetLogger().Error(
 			"Persistent store operation Failure",
-			tag.WorkflowNamespaceID(request.ResetWorkflowSnapshot.ExecutionInfo.NamespaceId),
-			tag.WorkflowID(request.ResetWorkflowSnapshot.ExecutionInfo.WorkflowId),
-			tag.WorkflowRunID(request.ResetWorkflowSnapshot.ExecutionState.RunId),
+			tag.WorkflowNamespaceID(request.ResetWorkflowSnapshot.ExecutionInfo.GetNamespaceId()),
+			tag.WorkflowID(request.ResetWorkflowSnapshot.ExecutionInfo.GetWorkflowId()),
+			tag.WorkflowRunID(request.ResetWorkflowSnapshot.ExecutionState.GetRunId()),
 			tag.StoreOperationConflictResolveWorkflowExecution,
 			tag.Error(err),
 		)
@@ -431,7 +431,7 @@ func conflictResolveWorkflowExecution(
 	}
 
 	if namespaceEntry, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(
-		namespace.ID(request.ResetWorkflowSnapshot.ExecutionInfo.NamespaceId),
+		namespace.ID(request.ResetWorkflowSnapshot.ExecutionInfo.GetNamespaceId()),
 	); err == nil {
 		emitMutationMetrics(
 			shardContext,
@@ -489,7 +489,7 @@ func getWorkflowExecution(
 	}
 
 	if namespaceEntry, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(
-		namespace.ID(resp.State.ExecutionInfo.NamespaceId),
+		namespace.ID(resp.State.GetExecutionInfo().GetNamespaceId()),
 	); err == nil {
 		emitGetMetrics(
 			shardContext,
@@ -513,9 +513,9 @@ func updateWorkflowExecution(
 	if err != nil {
 		shardContext.GetLogger().Error(
 			"Update workflow execution operation failed.",
-			tag.WorkflowNamespaceID(request.UpdateWorkflowMutation.ExecutionInfo.NamespaceId),
-			tag.WorkflowID(request.UpdateWorkflowMutation.ExecutionInfo.WorkflowId),
-			tag.WorkflowRunID(request.UpdateWorkflowMutation.ExecutionState.RunId),
+			tag.WorkflowNamespaceID(request.UpdateWorkflowMutation.ExecutionInfo.GetNamespaceId()),
+			tag.WorkflowID(request.UpdateWorkflowMutation.ExecutionInfo.GetWorkflowId()),
+			tag.WorkflowRunID(request.UpdateWorkflowMutation.ExecutionState.GetRunId()),
 			tag.StoreOperationUpdateWorkflowExecution,
 			tag.Error(err),
 		)
@@ -523,7 +523,7 @@ func updateWorkflowExecution(
 	}
 
 	if namespaceEntry, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(
-		namespace.ID(request.UpdateWorkflowMutation.ExecutionInfo.NamespaceId),
+		namespace.ID(request.UpdateWorkflowMutation.ExecutionInfo.GetNamespaceId()),
 	); err == nil {
 		emitMutationMetrics(
 			shardContext,
@@ -570,9 +570,9 @@ func setWorkflowExecution(
 	if err != nil {
 		shardContext.GetLogger().Error(
 			"Set workflow execution operation failed.",
-			tag.WorkflowNamespaceID(request.SetWorkflowSnapshot.ExecutionInfo.NamespaceId),
-			tag.WorkflowID(request.SetWorkflowSnapshot.ExecutionInfo.WorkflowId),
-			tag.WorkflowRunID(request.SetWorkflowSnapshot.ExecutionState.RunId),
+			tag.WorkflowNamespaceID(request.SetWorkflowSnapshot.ExecutionInfo.GetNamespaceId()),
+			tag.WorkflowID(request.SetWorkflowSnapshot.ExecutionInfo.GetWorkflowId()),
+			tag.WorkflowRunID(request.SetWorkflowSnapshot.ExecutionState.GetRunId()),
 			tag.StoreOperationUpdateWorkflowExecution,
 			tag.Error(err),
 		)
@@ -591,9 +591,9 @@ func NotifyOnExecutionSnapshot(
 	engine.NotifyNewTasks(workflowSnapshot.Tasks)
 	if len(workflowSnapshot.ChasmNodes) > 0 {
 		engine.NotifyChasmExecution(chasm.ExecutionKey{
-			NamespaceID: workflowSnapshot.ExecutionInfo.NamespaceId,
-			BusinessID:  workflowSnapshot.ExecutionInfo.WorkflowId,
-			RunID:       workflowSnapshot.ExecutionState.RunId,
+			NamespaceID: workflowSnapshot.ExecutionInfo.GetNamespaceId(),
+			BusinessID:  workflowSnapshot.ExecutionInfo.GetWorkflowId(),
+			RunID:       workflowSnapshot.ExecutionState.GetRunId(),
 		}, nil)
 	}
 }
@@ -609,9 +609,9 @@ func NotifyOnExecutionMutation(
 	if len(workflowMutation.UpsertChasmNodes) > 0 ||
 		len(workflowMutation.DeleteChasmNodes) > 0 {
 		engine.NotifyChasmExecution(chasm.ExecutionKey{
-			NamespaceID: workflowMutation.ExecutionInfo.NamespaceId,
-			BusinessID:  workflowMutation.ExecutionInfo.WorkflowId,
-			RunID:       workflowMutation.ExecutionState.RunId,
+			NamespaceID: workflowMutation.ExecutionInfo.GetNamespaceId(),
+			BusinessID:  workflowMutation.ExecutionInfo.GetWorkflowId(),
+			RunID:       workflowMutation.ExecutionState.GetRunId(),
 		}, nil)
 	}
 }
@@ -628,30 +628,30 @@ func NotifyNewHistorySnapshotEvent(
 	executionInfo := workflowSnapshot.ExecutionInfo
 	executionState := workflowSnapshot.ExecutionState
 
-	namespaceID := executionInfo.NamespaceId
-	workflowID := executionInfo.WorkflowId
-	runID := executionState.RunId
-	workflowState := executionState.State
-	workflowStatus := executionState.Status
-	lastFirstEventID := executionInfo.LastFirstEventId
-	lastFirstEventTxnID := executionInfo.LastFirstEventTxnId
-	lastWorkflowTaskStartEventID := executionInfo.LastCompletedWorkflowTaskStartedEventId
+	namespaceID := executionInfo.GetNamespaceId()
+	workflowID := executionInfo.GetWorkflowId()
+	runID := executionState.GetRunId()
+	workflowState := executionState.GetState()
+	workflowStatus := executionState.GetStatus()
+	lastFirstEventID := executionInfo.GetLastFirstEventId()
+	lastFirstEventTxnID := executionInfo.GetLastFirstEventTxnId()
+	lastWorkflowTaskStartEventID := executionInfo.GetLastCompletedWorkflowTaskStartedEventId()
 	nextEventID := workflowSnapshot.NextEventID
 
 	engine.NotifyNewHistoryEvent(events.NewNotification(
 		namespaceID,
-		&commonpb.WorkflowExecution{
+		commonpb.WorkflowExecution_builder{
 			WorkflowId: workflowID,
 			RunId:      runID,
-		},
+		}.Build(),
 		lastFirstEventID,
 		lastFirstEventTxnID,
 		nextEventID,
 		lastWorkflowTaskStartEventID,
 		workflowState,
 		workflowStatus,
-		executionInfo.VersionHistories,
-		executionInfo.TransitionHistory,
+		executionInfo.GetVersionHistories(),
+		executionInfo.GetTransitionHistory(),
 	))
 	return nil
 }
@@ -668,30 +668,30 @@ func NotifyNewHistoryMutationEvent(
 	executionInfo := workflowMutation.ExecutionInfo
 	executionState := workflowMutation.ExecutionState
 
-	namespaceID := executionInfo.NamespaceId
-	workflowID := executionInfo.WorkflowId
-	runID := executionState.RunId
-	workflowState := executionState.State
-	workflowStatus := executionState.Status
-	lastFirstEventID := executionInfo.LastFirstEventId
-	lastFirstEventTxnID := executionInfo.LastFirstEventTxnId
-	lastWorkflowTaskStartEventID := executionInfo.LastCompletedWorkflowTaskStartedEventId
+	namespaceID := executionInfo.GetNamespaceId()
+	workflowID := executionInfo.GetWorkflowId()
+	runID := executionState.GetRunId()
+	workflowState := executionState.GetState()
+	workflowStatus := executionState.GetStatus()
+	lastFirstEventID := executionInfo.GetLastFirstEventId()
+	lastFirstEventTxnID := executionInfo.GetLastFirstEventTxnId()
+	lastWorkflowTaskStartEventID := executionInfo.GetLastCompletedWorkflowTaskStartedEventId()
 	nextEventID := workflowMutation.NextEventID
 
 	engine.NotifyNewHistoryEvent(events.NewNotification(
 		namespaceID,
-		&commonpb.WorkflowExecution{
+		commonpb.WorkflowExecution_builder{
 			WorkflowId: workflowID,
 			RunId:      runID,
-		},
+		}.Build(),
 		lastFirstEventID,
 		lastFirstEventTxnID,
 		nextEventID,
 		lastWorkflowTaskStartEventID,
 		workflowState,
 		workflowStatus,
-		executionInfo.VersionHistories,
-		executionInfo.TransitionHistory,
+		executionInfo.GetVersionHistories(),
+		executionInfo.GetTransitionHistory(),
 	))
 	return nil
 }
@@ -738,12 +738,12 @@ func snapshotToCompletionMetric(
 	return completionMetric{
 		initialized:      true,
 		isWorkflow:       isWorkflow,
-		taskQueue:        workflowSnapshot.ExecutionInfo.TaskQueue,
+		taskQueue:        workflowSnapshot.ExecutionInfo.GetTaskQueue(),
 		namespaceState:   namespaceState,
-		workflowTypeName: workflowSnapshot.ExecutionInfo.WorkflowTypeName,
-		status:           workflowSnapshot.ExecutionState.Status,
-		startTime:        workflowSnapshot.ExecutionState.StartTime,
-		closeTime:        workflowSnapshot.ExecutionInfo.CloseTime,
+		workflowTypeName: workflowSnapshot.ExecutionInfo.GetWorkflowTypeName(),
+		status:           workflowSnapshot.ExecutionState.GetStatus(),
+		startTime:        workflowSnapshot.ExecutionState.GetStartTime(),
+		closeTime:        workflowSnapshot.ExecutionInfo.GetCloseTime(),
 	}
 }
 
@@ -759,12 +759,12 @@ func mutationToCompletionMetric(
 	return completionMetric{
 		initialized:      true,
 		isWorkflow:       isWorkflow,
-		taskQueue:        workflowMutation.ExecutionInfo.TaskQueue,
+		taskQueue:        workflowMutation.ExecutionInfo.GetTaskQueue(),
 		namespaceState:   namespaceState,
-		workflowTypeName: workflowMutation.ExecutionInfo.WorkflowTypeName,
-		status:           workflowMutation.ExecutionState.Status,
-		startTime:        workflowMutation.ExecutionState.StartTime,
-		closeTime:        workflowMutation.ExecutionInfo.CloseTime,
+		workflowTypeName: workflowMutation.ExecutionInfo.GetWorkflowTypeName(),
+		status:           workflowMutation.ExecutionState.GetStatus(),
+		startTime:        workflowMutation.ExecutionState.GetStartTime(),
+		closeTime:        workflowMutation.ExecutionInfo.GetCloseTime(),
 	}
 }
 

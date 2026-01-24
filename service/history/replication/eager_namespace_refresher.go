@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
+	"google.golang.org/protobuf/proto"
 )
 
 //go:generate mockgen -package $GOPACKAGE -source $GOFILE -destination eager_namespace_refresher_mock.go
@@ -65,11 +66,9 @@ func (e *eagerNamespaceRefresherImpl) SyncNamespaceFromSourceCluster(
 	if err != nil {
 		return nil, err
 	}
-	resp, err := adminClient.GetNamespace(ctx, &adminservice.GetNamespaceRequest{
-		Attributes: &adminservice.GetNamespaceRequest_Id{
-			Id: namespaceId.String(),
-		},
-	})
+	resp, err := adminClient.GetNamespace(ctx, adminservice.GetNamespaceRequest_builder{
+		Id: proto.String(namespaceId.String()),
+	}.Build())
 	if err != nil {
 		return nil, err
 	}
@@ -96,16 +95,16 @@ func (e *eagerNamespaceRefresherImpl) SyncNamespaceFromSourceCluster(
 	default:
 		return nil, err
 	}
-	task := &replicationspb.NamespaceTaskAttributes{
+	task := replicationspb.NamespaceTaskAttributes_builder{
 		NamespaceOperation: operation,
-		Id:                 resp.GetInfo().Id,
+		Id:                 resp.GetInfo().GetId(),
 		Info:               resp.GetInfo(),
 		Config:             resp.GetConfig(),
 		ReplicationConfig:  resp.GetReplicationConfig(),
 		ConfigVersion:      resp.GetConfigVersion(),
 		FailoverVersion:    resp.GetFailoverVersion(),
 		FailoverHistory:    resp.GetFailoverHistory(),
-	}
+	}.Build()
 	err = e.replicationTaskExecutor.Execute(ctx, task)
 	if err != nil {
 		return nil, err

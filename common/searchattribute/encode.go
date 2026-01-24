@@ -36,7 +36,7 @@ func Encode(searchAttributes map[string]interface{}, typeMap *NameTypeMap) (*com
 			sadefs.SetMetadataType(valPayload, saType)
 		}
 	}
-	return &commonpb.SearchAttributes{IndexedFields: indexedFields}, lastErr
+	return commonpb.SearchAttributes_builder{IndexedFields: indexedFields}.Build(), lastErr
 }
 
 // Decode decodes search attributes to the map of search attribute values using (in order):

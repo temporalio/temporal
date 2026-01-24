@@ -16,35 +16,35 @@ func Test_DecodeValue_AllowList_FromMetadata_Success(t *testing.T) {
 	allowList := true
 
 	payloadStr := payload.EncodeString("qwe")
-	payloadStr.Metadata["type"] = []byte("Text")
+	payloadStr.GetMetadata()["type"] = []byte("Text")
 	decodedStr, err := DecodeValue(payloadStr, enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, allowList) // MetadataType is used.
 	s.NoError(err)
 	s.Equal("qwe", decodedStr)
 
 	payloadBool, err := payload.Encode(true)
 	s.NoError(err)
-	payloadBool.Metadata["type"] = []byte("Bool")
+	payloadBool.GetMetadata()["type"] = []byte("Bool")
 	decodedBool, err := DecodeValue(payloadBool, enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, allowList) // MetadataType is used.
 	s.NoError(err)
 	s.Equal(true, decodedBool)
 
 	payloadNil, err := payload.Encode(nil)
 	s.NoError(err)
-	payloadNil.Metadata["type"] = []byte("Double")
+	payloadNil.GetMetadata()["type"] = []byte("Double")
 	decodedNil, err := DecodeValue(payloadNil, enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, allowList)
 	s.NoError(err)
 	s.Nil(decodedNil)
 
 	payloadSlice, err := payload.Encode([]string{"val1", "val2"})
 	s.NoError(err)
-	payloadSlice.Metadata["type"] = []byte("Keyword")
+	payloadSlice.GetMetadata()["type"] = []byte("Keyword")
 	decodedSlice, err := DecodeValue(payloadSlice, enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, allowList)
 	s.NoError(err)
 	s.Equal([]string{"val1", "val2"}, decodedSlice)
 
 	payloadEmptySlice, err := payload.Encode([]string{})
 	s.NoError(err)
-	payloadEmptySlice.Metadata["type"] = []byte("Keyword")
+	payloadEmptySlice.GetMetadata()["type"] = []byte("Keyword")
 	decodedNil, err = DecodeValue(payloadEmptySlice, enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, allowList)
 	s.NoError(err)
 	s.Nil(decodedNil)
@@ -54,7 +54,7 @@ func Test_DecodeValue_AllowList_FromMetadata_Success(t *testing.T) {
 	s.NoError(err)
 	payloadDatetime, err := payload.Encode(timeValue)
 	s.NoError(err)
-	payloadDatetime.Metadata["type"] = []byte("Datetime")
+	payloadDatetime.GetMetadata()["type"] = []byte("Datetime")
 	decodedDatetime, err := DecodeValue(payloadDatetime, enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, allowList)
 	s.NoError(err)
 	s.Equal(timeValue, decodedDatetime)
@@ -104,14 +104,14 @@ func Test_DecodeValue_AllowList_FromParameter_Success(t *testing.T) {
 
 	payloadInt, err = payload.Encode(123)
 	s.NoError(err)
-	payloadInt.Metadata["type"] = []byte("String") // MetadataType is not used.
+	payloadInt.GetMetadata()["type"] = []byte("String") // MetadataType is not used.
 	decodedInt, err = DecodeValue(payloadInt, enumspb.INDEXED_VALUE_TYPE_INT, allowList)
 	s.NoError(err)
 	s.Equal(int64(123), decodedInt)
 
 	payloadInt, err = payload.Encode(123)
 	s.NoError(err)
-	payloadInt.Metadata["type"] = []byte("UnknownType") // MetadataType is not used.
+	payloadInt.GetMetadata()["type"] = []byte("UnknownType") // MetadataType is not used.
 	decodedInt, err = DecodeValue(payloadInt, enumspb.INDEXED_VALUE_TYPE_INT, allowList)
 	s.NoError(err)
 	s.Equal(int64(123), decodedInt)
@@ -135,7 +135,7 @@ func Test_DecodeValue_AllowList_Error(t *testing.T) {
 
 	payloadInt, err := payload.Encode(123)
 	s.NoError(err)
-	payloadInt.Metadata["type"] = []byte("UnknownType")
+	payloadInt.GetMetadata()["type"] = []byte("UnknownType")
 	decodedInt, err := DecodeValue(payloadInt, enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, allowList)
 	s.Error(err)
 	s.ErrorIs(err, ErrInvalidType)
@@ -143,7 +143,7 @@ func Test_DecodeValue_AllowList_Error(t *testing.T) {
 
 	payloadInt, err = payload.Encode(123)
 	s.NoError(err)
-	payloadInt.Metadata["type"] = []byte("Text")
+	payloadInt.GetMetadata()["type"] = []byte("Text")
 	decodedInt, err = DecodeValue(payloadInt, enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, allowList)
 	s.Error(err)
 	s.ErrorIs(err, converter.ErrUnableToDecode, err.Error())
@@ -155,42 +155,42 @@ func Test_DecodeValue_NotAllowList_FromMetadata_Success(t *testing.T) {
 	allowList := false
 
 	payloadStr := payload.EncodeString("qwe")
-	payloadStr.Metadata["type"] = []byte("Text")
+	payloadStr.GetMetadata()["type"] = []byte("Text")
 	decodedStr, err := DecodeValue(payloadStr, enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, allowList)
 	s.NoError(err)
 	s.Equal("qwe", decodedStr)
 
 	payloadBool, err := payload.Encode(true)
 	s.NoError(err)
-	payloadBool.Metadata["type"] = []byte("Bool")
+	payloadBool.GetMetadata()["type"] = []byte("Bool")
 	decodedBool, err := DecodeValue(payloadBool, enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, allowList)
 	s.NoError(err)
 	s.Equal(true, decodedBool)
 
 	payloadNil, err := payload.Encode(nil)
 	s.NoError(err)
-	payloadNil.Metadata["type"] = []byte("Double")
+	payloadNil.GetMetadata()["type"] = []byte("Double")
 	decodedNil, err := DecodeValue(payloadNil, enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, allowList)
 	s.NoError(err)
 	s.Nil(decodedNil)
 
 	payloadKeyword, err := payload.Encode([]string{"Keyword"})
 	s.NoError(err)
-	payloadKeyword.Metadata["type"] = []byte("Keyword")
+	payloadKeyword.GetMetadata()["type"] = []byte("Keyword")
 	decodedKeyword, err := DecodeValue(payloadKeyword, enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, allowList)
 	s.NoError(err)
 	s.Equal("Keyword", decodedKeyword)
 
 	payloadSlice, err := payload.Encode([]string{"val1", "val2"})
 	s.NoError(err)
-	payloadSlice.Metadata["type"] = []byte("KeywordList")
+	payloadSlice.GetMetadata()["type"] = []byte("KeywordList")
 	decodedSlice, err := DecodeValue(payloadSlice, enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, allowList)
 	s.NoError(err)
 	s.Equal([]string{"val1", "val2"}, decodedSlice)
 
 	payloadEmptySlice, err := payload.Encode([]string{})
 	s.NoError(err)
-	payloadEmptySlice.Metadata["type"] = []byte("Keyword")
+	payloadEmptySlice.GetMetadata()["type"] = []byte("Keyword")
 	decodedNil, err = DecodeValue(payloadEmptySlice, enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, allowList)
 	s.NoError(err)
 	s.Nil(decodedNil)
@@ -200,7 +200,7 @@ func Test_DecodeValue_NotAllowList_FromMetadata_Success(t *testing.T) {
 	s.NoError(err)
 	payloadDatetime, err := payload.Encode(timeValue)
 	s.NoError(err)
-	payloadDatetime.Metadata["type"] = []byte("Datetime")
+	payloadDatetime.GetMetadata()["type"] = []byte("Datetime")
 	decodedDatetime, err := DecodeValue(payloadDatetime, enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, allowList)
 	s.NoError(err)
 	s.Equal(timeValue, decodedDatetime)
@@ -256,14 +256,14 @@ func Test_DecodeValue_NotAllowList_FromParameter_Success(t *testing.T) {
 
 	payloadInt, err = payload.Encode(123)
 	s.NoError(err)
-	payloadInt.Metadata["type"] = []byte("String") // MetadataType is not used.
+	payloadInt.GetMetadata()["type"] = []byte("String") // MetadataType is not used.
 	decodedInt, err = DecodeValue(payloadInt, enumspb.INDEXED_VALUE_TYPE_INT, allowList)
 	s.NoError(err)
 	s.Equal(int64(123), decodedInt)
 
 	payloadInt, err = payload.Encode(123)
 	s.NoError(err)
-	payloadInt.Metadata["type"] = []byte("UnknownType") // MetadataType is not used.
+	payloadInt.GetMetadata()["type"] = []byte("UnknownType") // MetadataType is not used.
 	decodedInt, err = DecodeValue(payloadInt, enumspb.INDEXED_VALUE_TYPE_INT, allowList)
 	s.NoError(err)
 	s.Equal(int64(123), decodedInt)
@@ -287,7 +287,7 @@ func Test_DecodeValue_NotAllowList_Error(t *testing.T) {
 
 	payloadInt, err := payload.Encode(123)
 	s.NoError(err)
-	payloadInt.Metadata["type"] = []byte("UnknownType")
+	payloadInt.GetMetadata()["type"] = []byte("UnknownType")
 	decodedInt, err := DecodeValue(payloadInt, enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, allowList)
 	s.Error(err)
 	s.ErrorIs(err, ErrInvalidType)
@@ -295,7 +295,7 @@ func Test_DecodeValue_NotAllowList_Error(t *testing.T) {
 
 	payloadInt, err = payload.Encode(123)
 	s.NoError(err)
-	payloadInt.Metadata["type"] = []byte("Text")
+	payloadInt.GetMetadata()["type"] = []byte("Text")
 	decodedInt, err = DecodeValue(payloadInt, enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, allowList)
 	s.Error(err)
 	s.ErrorIs(err, converter.ErrUnableToDecode, err.Error())
@@ -314,30 +314,30 @@ func Test_EncodeValue(t *testing.T) {
 	encodedPayload, err := EncodeValue(123, enumspb.INDEXED_VALUE_TYPE_INT)
 	s.NoError(err)
 	s.Equal("123", string(encodedPayload.GetData()))
-	s.Equal("Int", string(encodedPayload.Metadata["type"]))
+	s.Equal("Int", string(encodedPayload.GetMetadata()["type"]))
 
 	encodedPayload, err = EncodeValue("qwe", enumspb.INDEXED_VALUE_TYPE_TEXT)
 	s.NoError(err)
 	s.Equal(`"qwe"`, string(encodedPayload.GetData()))
-	s.Equal("Text", string(encodedPayload.Metadata["type"]))
+	s.Equal("Text", string(encodedPayload.GetMetadata()["type"]))
 
 	encodedPayload, err = EncodeValue(nil, enumspb.INDEXED_VALUE_TYPE_DOUBLE)
 	s.NoError(err)
 	s.Equal("", string(encodedPayload.GetData()))
-	s.Equal("Double", string(encodedPayload.Metadata["type"]))
-	s.Equal("binary/null", string(encodedPayload.Metadata["encoding"]))
+	s.Equal("Double", string(encodedPayload.GetMetadata()["type"]))
+	s.Equal("binary/null", string(encodedPayload.GetMetadata()["encoding"]))
 
 	encodedPayload, err = EncodeValue([]string{"val1", "val2"}, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
 	s.NoError(err)
 	s.Equal(`["val1","val2"]`, string(encodedPayload.GetData()))
-	s.Equal("Keyword", string(encodedPayload.Metadata["type"]))
-	s.Equal("json/plain", string(encodedPayload.Metadata["encoding"]))
+	s.Equal("Keyword", string(encodedPayload.GetMetadata()["type"]))
+	s.Equal("json/plain", string(encodedPayload.GetMetadata()["encoding"]))
 
 	encodedPayload, err = EncodeValue([]string{}, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
 	s.NoError(err)
 	s.Equal("[]", string(encodedPayload.GetData()))
-	s.Equal("Keyword", string(encodedPayload.Metadata["type"]))
-	s.Equal("json/plain", string(encodedPayload.Metadata["encoding"]))
+	s.Equal("Keyword", string(encodedPayload.GetMetadata()["type"]))
+	s.Equal("json/plain", string(encodedPayload.GetMetadata()["encoding"]))
 
 	var expectedEncodedRepresentation = "2022-03-07T21:27:35.986848-05:00"
 	timeValue, err := time.Parse(time.RFC3339, expectedEncodedRepresentation)
@@ -346,7 +346,7 @@ func Test_EncodeValue(t *testing.T) {
 	s.NoError(err)
 	s.Equal(`"`+expectedEncodedRepresentation+`"`, string(encodedPayload.GetData()),
 		"Datetime Search Attribute is expected to be encoded in RFC 3339 format")
-	s.Equal("Datetime", string(encodedPayload.Metadata["type"]))
+	s.Equal("Datetime", string(encodedPayload.GetMetadata()["type"]))
 }
 
 func Test_ValidateStrings(t *testing.T) {

@@ -62,7 +62,7 @@ func TestHistoryBuilder_AddWorkflowExecutionStartedEvent(t *testing.T) {
 	t.Run("When ParentExecutionInfo is nil should not include in attributes", func(t *testing.T) {
 		hb := HistoryBuilder{}
 		startReq := &workflowservice.StartWorkflowExecutionRequest{}
-		req := &historyservice.StartWorkflowExecutionRequest{StartRequest: startReq}
+		req := historyservice.StartWorkflowExecutionRequest_builder{StartRequest: startReq}.Build()
 		startTime := time.Date(2023, 12, 27, 1, 11, 00, 00, time.UTC)
 		e := hb.AddWorkflowExecutionStartedEvent(
 			startTime,
@@ -76,10 +76,10 @@ func TestHistoryBuilder_AddWorkflowExecutionStartedEvent(t *testing.T) {
 			t.Fatal("added event is nil")
 		}
 		if attrs, ok := e.Attributes.(*historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes); ok {
-			if attrs.WorkflowExecutionStartedEventAttributes.ParentWorkflowExecution != nil {
+			if attrs.WorkflowExecutionStartedEventAttributes.HasParentWorkflowExecution() {
 				t.Errorf(
 					"expected attributes.ParentWorkflowExecution nil got %v",
-					attrs.WorkflowExecutionStartedEventAttributes.ParentWorkflowExecution,
+					attrs.WorkflowExecutionStartedEventAttributes.GetParentWorkflowExecution(),
 				)
 			}
 		} else {
@@ -89,9 +89,9 @@ func TestHistoryBuilder_AddWorkflowExecutionStartedEvent(t *testing.T) {
 
 	t.Run("When ParentExecutionInfo is not nil should copy values to attributes", func(t *testing.T) {
 		hb := HistoryBuilder{}
-		parentInfo := &workflowspb.ParentExecutionInfo{Namespace: ns}
+		parentInfo := workflowspb.ParentExecutionInfo_builder{Namespace: ns}.Build()
 		startReq := &workflowservice.StartWorkflowExecutionRequest{}
-		req := &historyservice.StartWorkflowExecutionRequest{StartRequest: startReq, ParentExecutionInfo: parentInfo}
+		req := historyservice.StartWorkflowExecutionRequest_builder{StartRequest: startReq, ParentExecutionInfo: parentInfo}.Build()
 
 		startTime := time.Date(2023, 12, 27, 1, 11, 00, 00, time.UTC)
 		e := hb.AddWorkflowExecutionStartedEvent(
@@ -106,10 +106,10 @@ func TestHistoryBuilder_AddWorkflowExecutionStartedEvent(t *testing.T) {
 			t.Fatal("added event is nil")
 		}
 		if attrs, ok := e.Attributes.(*historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes); ok {
-			if attrs.WorkflowExecutionStartedEventAttributes.ParentWorkflowNamespace != ns {
+			if attrs.WorkflowExecutionStartedEventAttributes.GetParentWorkflowNamespace() != ns {
 				t.Errorf("expected attributes.ParentWorkflowNamespace %s got %s",
 					ns,
-					attrs.WorkflowExecutionStartedEventAttributes.ParentWorkflowNamespace,
+					attrs.WorkflowExecutionStartedEventAttributes.GetParentWorkflowNamespace(),
 				)
 			}
 		} else {
@@ -236,13 +236,13 @@ func TestHistoryBuilder_FlushBufferToCurrentBatch(t *testing.T) {
 		if len(hb.memLatestBatch) != 3 {
 			t.Fatalf("wrong length of memLatestBatch after Flush expected 3 got %d", len(hb.memLatestBatch))
 		}
-		if hb.memLatestBatch[2].EventType != enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED {
+		if hb.memLatestBatch[2].GetEventType() != enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED {
 			t.Fatal("ACTIVITY_TASK_COMPLETED was not moved to the end")
 		}
-		if hb.memLatestBatch[0].EventType != enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED {
+		if hb.memLatestBatch[0].GetEventType() != enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED {
 			t.Fatal("ACTIVITY_TASK_SCHEDULED was moved")
 		}
-		if hb.memLatestBatch[1].EventType != enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED {
+		if hb.memLatestBatch[1].GetEventType() != enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED {
 			t.Fatal("ACTIVITY_TASK_SCHEDULED was moved")
 		}
 	})
@@ -305,11 +305,11 @@ func TestHistoryBuilder_GetAndRemoveTimerFireEvent(t *testing.T) {
 		if !ok {
 			t.Fatal("wrong attributes set")
 		}
-		if attrs.TimerFiredEventAttributes.TimerId != timerId {
+		if attrs.TimerFiredEventAttributes.GetTimerId() != timerId {
 			t.Fatalf(
 				"wrong timer event removed, expected %q got %q",
 				timerId,
-				attrs.TimerFiredEventAttributes.TimerId,
+				attrs.TimerFiredEventAttributes.GetTimerId(),
 			)
 		}
 	}
@@ -397,7 +397,7 @@ func TestHistoryBuilder_HasBufferEvents(t *testing.T) {
 
 func TestHistoryBuilder_HasAnyBufferedEvent(t *testing.T) {
 	isTaskStartedEvent := func(e *historypb.HistoryEvent) bool {
-		return e.EventType == enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED
+		return e.GetEventType() == enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED
 	}
 	matching := func(timerId string) func(e *historypb.HistoryEvent) bool {
 		return func(e *historypb.HistoryEvent) bool {
@@ -940,15 +940,15 @@ func TestHistoryBuilder_AddDifferentEvents_AssignmentEventId(t *testing.T) {
 	t.Run("Adding batched event will set event id to next event id allocated by HistoryBuilder", func(t *testing.T) {
 		historyBuilder := newSUTFromConfig(builderConfig{nextEventId: 76})
 		event := historyBuilder.AddWorkflowTaskScheduledEvent()
-		if event.EventId != 76 {
-			t.Fatalf("wrong event id, expected 64 got %d", event.EventId)
+		if event.GetEventId() != 76 {
+			t.Fatalf("wrong event id, expected 64 got %d", event.GetEventId())
 		}
 	})
 	t.Run("Adding buffered event will set event Id to common.BufferedEventID", func(t *testing.T) {
 		historyBuilder := newSUT()
 		event := historyBuilder.AddWorkflowExecutionCancelRequestedEvent()
-		if event.EventId != common.BufferedEventID {
-			t.Fatalf("wrong event id, expected 64 got %d", event.EventId)
+		if event.GetEventId() != common.BufferedEventID {
+			t.Fatalf("wrong event id, expected 64 got %d", event.GetEventId())
 		}
 	})
 }
@@ -958,28 +958,28 @@ func TestHistoryBuilder_FlushBufferToCurrentBatch_WiringEvents(t *testing.T) {
 		sut := newSUTFromConfig(builderConfig{nextEventId: 98})
 		taskStartedEvent := sut.AddActivityTaskStartedEvent()
 		taskCompletedEvent := sut.AddActivityTaskCompletedEvent()
-		if taskStartedEvent.EventId != common.BufferedEventID {
+		if taskStartedEvent.GetEventId() != common.BufferedEventID {
 			t.Errorf(
 				"wrong task started event id, expected %d got %d",
 				common.BufferedEventID,
-				taskStartedEvent.EventId,
+				taskStartedEvent.GetEventId(),
 			)
 		}
-		if taskCompletedEvent.EventId != common.BufferedEventID {
+		if taskCompletedEvent.GetEventId() != common.BufferedEventID {
 			t.Errorf(
 				"wrong task completed event id, expected %d got %d",
 				common.BufferedEventID,
-				taskCompletedEvent.EventId,
+				taskCompletedEvent.GetEventId(),
 			)
 		}
 
 		sut.FlushBufferToCurrentBatch()
 
-		if taskStartedEvent.EventId != 98 {
-			t.Errorf("wrong task started event id, expected 42 got %d", taskStartedEvent.EventId)
+		if taskStartedEvent.GetEventId() != 98 {
+			t.Errorf("wrong task started event id, expected 42 got %d", taskStartedEvent.GetEventId())
 		}
-		if taskCompletedEvent.EventId != 99 {
-			t.Errorf("wrong task completed event id, expected 43 got %d", taskCompletedEvent.EventId)
+		if taskCompletedEvent.GetEventId() != 99 {
+			t.Errorf("wrong task completed event id, expected 43 got %d", taskCompletedEvent.GetEventId())
 		}
 	})
 
@@ -993,42 +993,42 @@ func TestHistoryBuilder_FlushBufferToCurrentBatch_WiringEvents(t *testing.T) {
 
 		scheduledToStarted, _ := sut.FlushBufferToCurrentBatch()
 
-		if scheduledToStarted[2] != started.EventId {
+		if scheduledToStarted[2] != started.GetEventId() {
 			t.Errorf(
 				"wrong in scheduledToStarted[2] expected %d, got %d",
-				started.EventId,
+				started.GetEventId(),
 				scheduledToStarted[2],
 			)
 		}
 		attrs1 := completed.GetActivityTaskCompletedEventAttributes()
-		if attrs1.StartedEventId != started.EventId {
+		if attrs1.GetStartedEventId() != started.GetEventId() {
 			t.Errorf(
 				"wrong started event id in completed event expected 98, got %d",
-				attrs1.StartedEventId,
+				attrs1.GetStartedEventId(),
 			)
 		}
 		attrs2 := failed.GetActivityTaskFailedEventAttributes()
-		if attrs2.StartedEventId != started.EventId {
+		if attrs2.GetStartedEventId() != started.GetEventId() {
 			t.Errorf(
 				"wrong started event id in failed event expected %d, got %d",
-				started.EventId,
-				attrs2.StartedEventId,
+				started.GetEventId(),
+				attrs2.GetStartedEventId(),
 			)
 		}
 		attrs3 := timedOut.GetActivityTaskTimedOutEventAttributes()
-		if attrs3.StartedEventId != started.EventId {
+		if attrs3.GetStartedEventId() != started.GetEventId() {
 			t.Errorf(
 				"wrong started event id in timedOut event expected %d, got %d",
-				started.EventId,
-				attrs3.StartedEventId,
+				started.GetEventId(),
+				attrs3.GetStartedEventId(),
 			)
 		}
 		attrs4 := canceled.GetActivityTaskCanceledEventAttributes()
-		if attrs4 != nil && attrs4.StartedEventId != started.EventId {
+		if attrs4 != nil && attrs4.GetStartedEventId() != started.GetEventId() {
 			t.Errorf(
 				"wrong started event id in canceled event expected %d, got %d",
-				started.EventId,
-				attrs4.StartedEventId,
+				started.GetEventId(),
+				attrs4.GetStartedEventId(),
 			)
 		}
 	})
@@ -1044,51 +1044,51 @@ func TestHistoryBuilder_FlushBufferToCurrentBatch_WiringEvents(t *testing.T) {
 
 		scheduledToStarted, _ := sut.FlushBufferToCurrentBatch()
 
-		if scheduledToStarted[42] != started.EventId {
+		if scheduledToStarted[42] != started.GetEventId() {
 			t.Errorf(
 				"wrong id in scheduledToStarted[2] expected %d, got %d",
-				started.EventId,
+				started.GetEventId(),
 				scheduledToStarted[42],
 			)
 		}
 		attr1 := completed.GetChildWorkflowExecutionCompletedEventAttributes()
-		if attr1.StartedEventId != started.EventId {
+		if attr1.GetStartedEventId() != started.GetEventId() {
 			t.Errorf(
 				"wrong started event id in completed event expected %d, got %d",
-				started.EventId,
-				attr1.StartedEventId,
+				started.GetEventId(),
+				attr1.GetStartedEventId(),
 			)
 		}
 		attr2 := failed.GetChildWorkflowExecutionFailedEventAttributes()
-		if attr2.StartedEventId != started.EventId {
+		if attr2.GetStartedEventId() != started.GetEventId() {
 			t.Errorf(
 				"wrong started event id in failed expected %d, got %d",
-				started.EventId,
-				attr2.StartedEventId,
+				started.GetEventId(),
+				attr2.GetStartedEventId(),
 			)
 		}
 		attr3 := timedOut.GetChildWorkflowExecutionTimedOutEventAttributes()
-		if attr3.StartedEventId != started.EventId {
+		if attr3.GetStartedEventId() != started.GetEventId() {
 			t.Errorf(
 				"wrong started event id in timedOut expected %d, got %d",
-				started.EventId,
-				attr3.StartedEventId,
+				started.GetEventId(),
+				attr3.GetStartedEventId(),
 			)
 		}
 		attr4 := canceled.GetChildWorkflowExecutionCanceledEventAttributes()
-		if attr4.StartedEventId != started.EventId {
+		if attr4.GetStartedEventId() != started.GetEventId() {
 			t.Errorf(
 				"wrong started event id in canceled expected %d, got %d",
-				started.EventId,
-				attr4.StartedEventId,
+				started.GetEventId(),
+				attr4.GetStartedEventId(),
 			)
 		}
 		attr5 := terminated.GetChildWorkflowExecutionTerminatedEventAttributes()
-		if attr5.StartedEventId != started.EventId {
+		if attr5.GetStartedEventId() != started.GetEventId() {
 			t.Errorf(
 				"wrong started event id in terminated expected %d, got %d",
-				started.EventId,
-				attr5.StartedEventId,
+				started.GetEventId(),
+				attr5.GetStartedEventId(),
 			)
 		}
 
@@ -1152,12 +1152,10 @@ func TestHistoryBuilder_HasActivityFinishEvent(t *testing.T) {
 
 func newDbBufferWithTimerEvents(ids ...string) []*historypb.HistoryEvent {
 	timerEvent := func(tid string) *historypb.HistoryEvent {
-		return &historypb.HistoryEvent{
-			EventType: enumspb.EVENT_TYPE_TIMER_FIRED,
-			Attributes: &historypb.HistoryEvent_TimerFiredEventAttributes{
-				TimerFiredEventAttributes: &historypb.TimerFiredEventAttributes{TimerId: tid},
-			},
-		}
+		return historypb.HistoryEvent_builder{
+			EventType:                 enumspb.EVENT_TYPE_TIMER_FIRED,
+			TimerFiredEventAttributes: historypb.TimerFiredEventAttributes_builder{TimerId: tid}.Build(),
+		}.Build()
 	}
 
 	dbBufferBatch := make([]*historypb.HistoryEvent, 0)
@@ -1231,9 +1229,9 @@ func (s *sutTestingAdapter) ResetHistoryBuilder() {
 }
 
 func (s *sutTestingAdapter) AddWorkflowExecutionStartedEvent(_ ...eventConfig) *historypb.HistoryEvent {
-	parentInfo := &workflowspb.ParentExecutionInfo{Namespace: "ns-1"}
+	parentInfo := workflowspb.ParentExecutionInfo_builder{Namespace: "ns-1"}.Build()
 	startReq := &workflowservice.StartWorkflowExecutionRequest{}
-	req := &historyservice.StartWorkflowExecutionRequest{StartRequest: startReq, ParentExecutionInfo: parentInfo}
+	req := historyservice.StartWorkflowExecutionRequest_builder{StartRequest: startReq, ParentExecutionInfo: parentInfo}.Build()
 	return s.HistoryBuilder.AddWorkflowExecutionStartedEvent(s.today, req, nil, "prev-run-1", "first-run-1", "original-run-1")
 }
 
@@ -1313,14 +1311,14 @@ func (s *sutTestingAdapter) AddActivityTaskTimedOutEvent(optionalConfig ...event
 }
 
 func (s *sutTestingAdapter) AddCompletedWorkflowEvent(_ ...eventConfig) *historypb.HistoryEvent {
-	attrs := &commandpb.CompleteWorkflowExecutionCommandAttributes{
+	attrs := commandpb.CompleteWorkflowExecutionCommandAttributes_builder{
 		Result: nil,
-	}
+	}.Build()
 	return s.HistoryBuilder.AddCompletedWorkflowEvent(64, attrs, "new-run-1")
 }
 
 func (s *sutTestingAdapter) AddFailWorkflowEvent(_ ...eventConfig) *historypb.HistoryEvent {
-	attrs := &commandpb.FailWorkflowExecutionCommandAttributes{Failure: nil}
+	attrs := commandpb.FailWorkflowExecutionCommandAttributes_builder{Failure: nil}.Build()
 	event, _ := s.HistoryBuilder.AddFailWorkflowEvent(
 		64,
 		enumspb.RETRY_STATE_IN_PROGRESS,
@@ -1382,9 +1380,9 @@ func (s *sutTestingAdapter) AddTimerCanceledEvent(_ ...eventConfig) *historypb.H
 }
 
 func (s *sutTestingAdapter) AddWorkflowExecutionCancelRequestedEvent(_ ...eventConfig) *historypb.HistoryEvent {
-	request := &historyservice.RequestCancelWorkflowExecutionRequest{
+	request := historyservice.RequestCancelWorkflowExecutionRequest_builder{
 		CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{},
-	}
+	}.Build()
 	return s.HistoryBuilder.AddWorkflowExecutionCancelRequestedEvent(request)
 }
 
@@ -1421,9 +1419,9 @@ func (s *sutTestingAdapter) AddExternalWorkflowExecutionCancelRequested(...event
 }
 
 func (s *sutTestingAdapter) AddSignalExternalWorkflowExecutionInitiatedEvent(_ ...eventConfig) *historypb.HistoryEvent {
-	attrs := &commandpb.SignalExternalWorkflowExecutionCommandAttributes{
+	attrs := commandpb.SignalExternalWorkflowExecutionCommandAttributes_builder{
 		Execution: &commonpb.WorkflowExecution{},
-	}
+	}.Build()
 	return s.HistoryBuilder.AddSignalExternalWorkflowExecutionInitiatedEvent(64, attrs, namespace.ID("ns-target"))
 }
 

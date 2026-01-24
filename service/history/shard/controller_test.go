@@ -520,13 +520,13 @@ func (s *controllerSuite) TestShardExplicitUnloadCancelAcquire() {
 	// return success from GetOrCreateShard
 	s.mockShardManager.EXPECT().GetOrCreateShard(gomock.Any(), getOrCreateShardRequestMatcher(shardID)).Return(
 		&persistence.GetOrCreateShardResponse{
-			ShardInfo: &persistencespb.ShardInfo{
+			ShardInfo: persistencespb.ShardInfo_builder{
 				ShardId:                shardID,
 				Owner:                  s.hostInfo.Identity(),
 				RangeId:                5,
 				ReplicationDlqAckLevel: map[string]int64{},
 				QueueStates:            s.queueStates(),
-			},
+			}.Build(),
 		}, nil)
 
 	// acquire lease (UpdateShard) blocks for 5s
@@ -611,13 +611,13 @@ func (s *controllerSuite) TestShardControllerFuzz() {
 					closeContexts.Add(1)
 				}(req.LifecycleContext)
 				return &persistence.GetOrCreateShardResponse{
-					ShardInfo: &persistencespb.ShardInfo{
+					ShardInfo: persistencespb.ShardInfo_builder{
 						ShardId:                shardID,
 						Owner:                  s.hostInfo.Identity(),
 						RangeId:                5,
 						ReplicationDlqAckLevel: map[string]int64{},
 						QueueStates:            queueStates,
-					},
+					}.Build(),
 				}, nil
 			}).AnyTimes()
 		s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
@@ -768,23 +768,23 @@ func (s *controllerSuite) TestShardLingerSuccess() {
 	s.mockEngineFactory.EXPECT().CreateEngine(contextMatcher(shardID)).Return(mockEngine).MinTimes(1)
 	s.mockShardManager.EXPECT().GetOrCreateShard(gomock.Any(), getOrCreateShardRequestMatcher(shardID)).Return(
 		&persistence.GetOrCreateShardResponse{
-			ShardInfo: &persistencespb.ShardInfo{
+			ShardInfo: persistencespb.ShardInfo_builder{
 				ShardId:                shardID,
 				Owner:                  s.hostInfo.Identity(),
 				RangeId:                5,
 				ReplicationDlqAckLevel: map[string]int64{},
 				QueueStates:            s.queueStates(),
-			},
+			}.Build(),
 		}, nil).MinTimes(1)
 	s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), updateShardRequestMatcher(persistence.UpdateShardRequest{
-		ShardInfo: &persistencespb.ShardInfo{
+		ShardInfo: persistencespb.ShardInfo_builder{
 			ShardId:                shardID,
 			Owner:                  s.hostInfo.Identity(),
 			RangeId:                6,
 			StolenSinceRenew:       1,
 			ReplicationDlqAckLevel: map[string]int64{},
 			QueueStates:            s.queueStates(),
-		},
+		}.Build(),
 		PreviousRangeID: 5,
 	})).Return(nil).MinTimes(1)
 	s.mockShardManager.EXPECT().AssertShardOwnership(gomock.Any(), &persistence.AssertShardOwnershipRequest{
@@ -917,23 +917,23 @@ func (s *controllerSuite) setupMockForReadiness(shardID int32, state *readinessM
 	s.mockEngineFactory.EXPECT().CreateEngine(contextMatcher(shardID)).Return(mockEngine)
 	s.mockShardManager.EXPECT().GetOrCreateShard(gomock.Any(), getOrCreateShardRequestMatcher(shardID)).Return(
 		&persistence.GetOrCreateShardResponse{
-			ShardInfo: &persistencespb.ShardInfo{
+			ShardInfo: persistencespb.ShardInfo_builder{
 				ShardId:                shardID,
 				Owner:                  s.hostInfo.Identity(),
 				RangeId:                5,
 				ReplicationDlqAckLevel: map[string]int64{},
 				QueueStates:            s.queueStates(),
-			},
+			}.Build(),
 		}, nil)
 	s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), updateShardRequestMatcher(persistence.UpdateShardRequest{
-		ShardInfo: &persistencespb.ShardInfo{
+		ShardInfo: persistencespb.ShardInfo_builder{
 			ShardId:                shardID,
 			Owner:                  s.hostInfo.Identity(),
 			RangeId:                6,
 			StolenSinceRenew:       1,
 			ReplicationDlqAckLevel: map[string]int64{},
 			QueueStates:            s.queueStates(),
-		},
+		}.Build(),
 		PreviousRangeID: 5,
 	})).Return(nil)
 
@@ -1069,23 +1069,23 @@ func (s *controllerSuite) setupMocksForAcquireShard(
 	s.mockEngineFactory.EXPECT().CreateEngine(contextMatcher(shardID)).Return(mockEngine).MinTimes(minTimes)
 	s.mockShardManager.EXPECT().GetOrCreateShard(gomock.Any(), getOrCreateShardRequestMatcher(shardID)).Return(
 		&persistence.GetOrCreateShardResponse{
-			ShardInfo: &persistencespb.ShardInfo{
+			ShardInfo: persistencespb.ShardInfo_builder{
 				ShardId:                shardID,
 				Owner:                  s.hostInfo.Identity(),
 				RangeId:                currentRangeID,
 				ReplicationDlqAckLevel: map[string]int64{},
 				QueueStates:            queueStates,
-			},
+			}.Build(),
 		}, nil).MinTimes(minTimes)
 	s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), updateShardRequestMatcher(persistence.UpdateShardRequest{
-		ShardInfo: &persistencespb.ShardInfo{
+		ShardInfo: persistencespb.ShardInfo_builder{
 			ShardId:                shardID,
 			Owner:                  s.hostInfo.Identity(),
 			RangeId:                newRangeID,
 			StolenSinceRenew:       1,
 			ReplicationDlqAckLevel: map[string]int64{},
 			QueueStates:            queueStates,
-		},
+		}.Build(),
 		PreviousRangeID: currentRangeID,
 	})).Return(nil).MinTimes(minTimes)
 	s.mockShardManager.EXPECT().AssertShardOwnership(gomock.Any(), &persistence.AssertShardOwnershipRequest{
@@ -1096,48 +1096,46 @@ func (s *controllerSuite) setupMocksForAcquireShard(
 
 func (s *controllerSuite) queueStates() map[int32]*persistencespb.QueueState {
 	return map[int32]*persistencespb.QueueState{
-		int32(tasks.CategoryTransfer.ID()): {
+		int32(tasks.CategoryTransfer.ID()): persistencespb.QueueState_builder{
 			ReaderStates: nil,
-			ExclusiveReaderHighWatermark: &persistencespb.TaskKey{
+			ExclusiveReaderHighWatermark: persistencespb.TaskKey_builder{
 				FireTime: timestamppb.New(tasks.DefaultFireTime),
 				TaskId:   rand.Int63(),
-			},
-		},
-		int32(tasks.CategoryTimer.ID()): {
+			}.Build(),
+		}.Build(),
+		int32(tasks.CategoryTimer.ID()): persistencespb.QueueState_builder{
 			ReaderStates: make(map[int64]*persistencespb.QueueReaderState),
-			ExclusiveReaderHighWatermark: &persistencespb.TaskKey{
+			ExclusiveReaderHighWatermark: persistencespb.TaskKey_builder{
 				FireTime: timestamp.TimeNowPtrUtc(),
 				TaskId:   rand.Int63(),
-			},
-		},
-		int32(tasks.CategoryReplication.ID()): {
+			}.Build(),
+		}.Build(),
+		int32(tasks.CategoryReplication.ID()): persistencespb.QueueState_builder{
 			ReaderStates: map[int64]*persistencespb.QueueReaderState{
-				0: {
+				0: persistencespb.QueueReaderState_builder{
 					Scopes: []*persistencespb.QueueSliceScope{
-						{
-							Range: &persistencespb.QueueSliceRange{
-								InclusiveMin: &persistencespb.TaskKey{
+						persistencespb.QueueSliceScope_builder{
+							Range: persistencespb.QueueSliceRange_builder{
+								InclusiveMin: persistencespb.TaskKey_builder{
 									FireTime: timestamppb.New(tasks.DefaultFireTime),
 									TaskId:   1000,
-								},
-								ExclusiveMax: &persistencespb.TaskKey{
+								}.Build(),
+								ExclusiveMax: persistencespb.TaskKey_builder{
 									FireTime: timestamppb.New(tasks.DefaultFireTime),
 									TaskId:   2000,
-								},
-							},
-							Predicate: &persistencespb.Predicate{
-								PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
-								Attributes: &persistencespb.Predicate_UniversalPredicateAttributes{
-									UniversalPredicateAttributes: &persistencespb.UniversalPredicateAttributes{},
-								},
-							},
-						},
+								}.Build(),
+							}.Build(),
+							Predicate: persistencespb.Predicate_builder{
+								PredicateType:                enumsspb.PREDICATE_TYPE_UNIVERSAL,
+								UniversalPredicateAttributes: &persistencespb.UniversalPredicateAttributes{},
+							}.Build(),
+						}.Build(),
 					},
-				},
+				}.Build(),
 				1: nil,
 			},
 			ExclusiveReaderHighWatermark: nil,
-		},
+		}.Build(),
 	}
 }
 
@@ -1179,10 +1177,10 @@ func (m updateShardRequestMatcher) Matches(x interface{}) bool {
 	// only compare the essential vars,
 	// other vars like queue state / queue ack level should not be test in this util
 	return m.PreviousRangeID == req.PreviousRangeID &&
-		m.ShardInfo.ShardId == req.ShardInfo.ShardId &&
-		strings.Contains(req.ShardInfo.Owner, m.ShardInfo.Owner) &&
-		m.ShardInfo.RangeId == req.ShardInfo.RangeId &&
-		m.ShardInfo.StolenSinceRenew == req.ShardInfo.StolenSinceRenew
+		m.ShardInfo.GetShardId() == req.ShardInfo.GetShardId() &&
+		strings.Contains(req.ShardInfo.GetOwner(), m.ShardInfo.GetOwner()) &&
+		m.ShardInfo.GetRangeId() == req.ShardInfo.GetRangeId() &&
+		m.ShardInfo.GetStolenSinceRenew() == req.ShardInfo.GetStolenSinceRenew()
 }
 
 func (m updateShardRequestMatcher) String() string {

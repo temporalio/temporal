@@ -20,24 +20,24 @@ func ToPersistenceQueueState(
 		for _, scope := range scopes {
 			persistenceScopes = append(persistenceScopes, ToPersistenceScope(scope))
 		}
-		readerStates[id] = &persistencespb.QueueReaderState{
+		readerStates[id] = persistencespb.QueueReaderState_builder{
 			Scopes: persistenceScopes,
-		}
+		}.Build()
 	}
 
-	return &persistencespb.QueueState{
+	return persistencespb.QueueState_builder{
 		ReaderStates:                 readerStates,
 		ExclusiveReaderHighWatermark: ToPersistenceTaskKey(queueState.exclusiveReaderHighWatermark),
-	}
+	}.Build()
 }
 
 func FromPersistenceQueueState(
 	state *persistencespb.QueueState,
 ) *queueState {
-	readerScopes := make(map[int64][]Scope, len(state.ReaderStates))
-	for id, persistenceReaderState := range state.ReaderStates {
-		scopes := make([]Scope, 0, len(persistenceReaderState.Scopes))
-		for _, persistenceScope := range persistenceReaderState.Scopes {
+	readerScopes := make(map[int64][]Scope, len(state.GetReaderStates()))
+	for id, persistenceReaderState := range state.GetReaderStates() {
+		scopes := make([]Scope, 0, len(persistenceReaderState.GetScopes()))
+		for _, persistenceScope := range persistenceReaderState.GetScopes() {
 			scopes = append(scopes, FromPersistenceScope(persistenceScope))
 		}
 		readerScopes[id] = scopes
@@ -45,59 +45,59 @@ func FromPersistenceQueueState(
 
 	return &queueState{
 		readerScopes:                 readerScopes,
-		exclusiveReaderHighWatermark: FromPersistenceTaskKey(state.ExclusiveReaderHighWatermark),
+		exclusiveReaderHighWatermark: FromPersistenceTaskKey(state.GetExclusiveReaderHighWatermark()),
 	}
 }
 
 func ToPersistenceScope(
 	scope Scope,
 ) *persistencespb.QueueSliceScope {
-	return &persistencespb.QueueSliceScope{
+	return persistencespb.QueueSliceScope_builder{
 		Range:     ToPersistenceRange(scope.Range),
 		Predicate: ToPersistencePredicate(scope.Predicate),
-	}
+	}.Build()
 }
 
 func FromPersistenceScope(
 	scope *persistencespb.QueueSliceScope,
 ) Scope {
 	return NewScope(
-		FromPersistenceRange(scope.Range),
-		FromPersistencePredicate(scope.Predicate),
+		FromPersistenceRange(scope.GetRange()),
+		FromPersistencePredicate(scope.GetPredicate()),
 	)
 }
 
 func ToPersistenceRange(
 	r Range,
 ) *persistencespb.QueueSliceRange {
-	return &persistencespb.QueueSliceRange{
+	return persistencespb.QueueSliceRange_builder{
 		InclusiveMin: ToPersistenceTaskKey(r.InclusiveMin),
 		ExclusiveMax: ToPersistenceTaskKey(r.ExclusiveMax),
-	}
+	}.Build()
 }
 
 func FromPersistenceRange(
 	r *persistencespb.QueueSliceRange,
 ) Range {
 	return NewRange(
-		FromPersistenceTaskKey(r.InclusiveMin),
-		FromPersistenceTaskKey(r.ExclusiveMax),
+		FromPersistenceTaskKey(r.GetInclusiveMin()),
+		FromPersistenceTaskKey(r.GetExclusiveMax()),
 	)
 }
 
 func ToPersistenceTaskKey(
 	key tasks.Key,
 ) *persistencespb.TaskKey {
-	return &persistencespb.TaskKey{
+	return persistencespb.TaskKey_builder{
 		FireTime: timestamppb.New(key.FireTime),
 		TaskId:   key.TaskID,
-	}
+	}.Build()
 }
 
 func FromPersistenceTaskKey(
 	key *persistencespb.TaskKey,
 ) tasks.Key {
-	return tasks.NewKey(key.FireTime.AsTime(), key.TaskId)
+	return tasks.NewKey(key.GetFireTime().AsTime(), key.GetTaskId())
 }
 
 func ToPersistencePredicate(
@@ -161,10 +161,10 @@ func FromPersistencePredicate(
 func ToPersistenceUniversalPredicate(
 	_ *predicates.UniversalImpl[tasks.Task],
 ) *persistencespb.Predicate {
-	return &persistencespb.Predicate{
-		PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
-		Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
-	}
+	return persistencespb.Predicate_builder{
+		PredicateType:                enumsspb.PREDICATE_TYPE_UNIVERSAL,
+		UniversalPredicateAttributes: &persistencespb.UniversalPredicateAttributes{},
+	}.Build()
 }
 
 func FromPersistenceUniversalPredicate(
@@ -176,10 +176,10 @@ func FromPersistenceUniversalPredicate(
 func ToPersistenceEmptyPredicate(
 	_ *predicates.EmptyImpl[tasks.Task],
 ) *persistencespb.Predicate {
-	return &persistencespb.Predicate{
-		PredicateType: enumsspb.PREDICATE_TYPE_EMPTY,
-		Attributes:    &persistencespb.Predicate_EmptyPredicateAttributes{},
-	}
+	return persistencespb.Predicate_builder{
+		PredicateType:            enumsspb.PREDICATE_TYPE_EMPTY,
+		EmptyPredicateAttributes: &persistencespb.EmptyPredicateAttributes{},
+	}.Build()
 }
 
 func FromPersistenceEmptyPredicate(
@@ -196,21 +196,19 @@ func ToPersistenceAndPredicate(
 		persistencePredicates = append(persistencePredicates, ToPersistencePredicate(p))
 	}
 
-	return &persistencespb.Predicate{
+	return persistencespb.Predicate_builder{
 		PredicateType: enumsspb.PREDICATE_TYPE_AND,
-		Attributes: &persistencespb.Predicate_AndPredicateAttributes{
-			AndPredicateAttributes: &persistencespb.AndPredicateAttributes{
-				Predicates: persistencePredicates,
-			},
-		},
-	}
+		AndPredicateAttributes: persistencespb.AndPredicateAttributes_builder{
+			Predicates: persistencePredicates,
+		}.Build(),
+	}.Build()
 }
 
 func FromPersistenceAndPredicate(
 	attributes *persistencespb.AndPredicateAttributes,
 ) tasks.Predicate {
-	taskPredicates := make([]predicates.Predicate[tasks.Task], 0, len(attributes.Predicates))
-	for _, p := range attributes.Predicates {
+	taskPredicates := make([]predicates.Predicate[tasks.Task], 0, len(attributes.GetPredicates()))
+	for _, p := range attributes.GetPredicates() {
 		taskPredicates = append(taskPredicates, FromPersistencePredicate(p))
 	}
 
@@ -225,21 +223,19 @@ func ToPersistenceOrPredicate(
 		persistencePredicates = append(persistencePredicates, ToPersistencePredicate(p))
 	}
 
-	return &persistencespb.Predicate{
+	return persistencespb.Predicate_builder{
 		PredicateType: enumsspb.PREDICATE_TYPE_OR,
-		Attributes: &persistencespb.Predicate_OrPredicateAttributes{
-			OrPredicateAttributes: &persistencespb.OrPredicateAttributes{
-				Predicates: persistencePredicates,
-			},
-		},
-	}
+		OrPredicateAttributes: persistencespb.OrPredicateAttributes_builder{
+			Predicates: persistencePredicates,
+		}.Build(),
+	}.Build()
 }
 
 func FromPersistenceOrPredicate(
 	attributes *persistencespb.OrPredicateAttributes,
 ) tasks.Predicate {
-	taskPredicates := make([]predicates.Predicate[tasks.Task], 0, len(attributes.Predicates))
-	for _, p := range attributes.Predicates {
+	taskPredicates := make([]predicates.Predicate[tasks.Task], 0, len(attributes.GetPredicates()))
+	for _, p := range attributes.GetPredicates() {
 		taskPredicates = append(taskPredicates, FromPersistencePredicate(p))
 	}
 
@@ -249,96 +245,86 @@ func FromPersistenceOrPredicate(
 func ToPersistenceNotPredicate(
 	notPredicate *predicates.NotImpl[tasks.Task],
 ) *persistencespb.Predicate {
-	return &persistencespb.Predicate{
+	return persistencespb.Predicate_builder{
 		PredicateType: enumsspb.PREDICATE_TYPE_NOT,
-		Attributes: &persistencespb.Predicate_NotPredicateAttributes{
-			NotPredicateAttributes: &persistencespb.NotPredicateAttributes{
-				Predicate: ToPersistencePredicate(notPredicate.Predicate),
-			},
-		},
-	}
+		NotPredicateAttributes: persistencespb.NotPredicateAttributes_builder{
+			Predicate: ToPersistencePredicate(notPredicate.Predicate),
+		}.Build(),
+	}.Build()
 }
 
 func FromPersistenceNotPredicate(
 	attributes *persistencespb.NotPredicateAttributes,
 ) tasks.Predicate {
-	return predicates.Not(FromPersistencePredicate(attributes.Predicate))
+	return predicates.Not(FromPersistencePredicate(attributes.GetPredicate()))
 }
 
 func ToPersistenceNamespaceIDPredicate(
 	namespaceIDPredicate *tasks.NamespacePredicate,
 ) *persistencespb.Predicate {
-	return &persistencespb.Predicate{
+	return persistencespb.Predicate_builder{
 		PredicateType: enumsspb.PREDICATE_TYPE_NAMESPACE_ID,
-		Attributes: &persistencespb.Predicate_NamespaceIdPredicateAttributes{
-			NamespaceIdPredicateAttributes: &persistencespb.NamespaceIdPredicateAttributes{
-				NamespaceIds: expmaps.Keys(namespaceIDPredicate.NamespaceIDs),
-			},
-		},
-	}
+		NamespaceIdPredicateAttributes: persistencespb.NamespaceIdPredicateAttributes_builder{
+			NamespaceIds: expmaps.Keys(namespaceIDPredicate.NamespaceIDs),
+		}.Build(),
+	}.Build()
 }
 
 func FromPersistenceNamespaceIDPredicate(
 	attributes *persistencespb.NamespaceIdPredicateAttributes,
 ) tasks.Predicate {
-	return tasks.NewNamespacePredicate(attributes.NamespaceIds)
+	return tasks.NewNamespacePredicate(attributes.GetNamespaceIds())
 }
 
 func ToPersistenceTaskTypePredicate(
 	taskTypePredicate *tasks.TypePredicate,
 ) *persistencespb.Predicate {
-	return &persistencespb.Predicate{
+	return persistencespb.Predicate_builder{
 		PredicateType: enumsspb.PREDICATE_TYPE_TASK_TYPE,
-		Attributes: &persistencespb.Predicate_TaskTypePredicateAttributes{
-			TaskTypePredicateAttributes: &persistencespb.TaskTypePredicateAttributes{
-				TaskTypes: expmaps.Keys(taskTypePredicate.Types),
-			},
-		},
-	}
+		TaskTypePredicateAttributes: persistencespb.TaskTypePredicateAttributes_builder{
+			TaskTypes: expmaps.Keys(taskTypePredicate.Types),
+		}.Build(),
+	}.Build()
 }
 
 func FromPersistenceTaskTypePredicate(
 	attributes *persistencespb.TaskTypePredicateAttributes,
 ) tasks.Predicate {
-	return tasks.NewTypePredicate(attributes.TaskTypes)
+	return tasks.NewTypePredicate(attributes.GetTaskTypes())
 }
 
 func ToPersistenceDestinationPredicate(
 	taskDestinationPredicate *tasks.DestinationPredicate,
 ) *persistencespb.Predicate {
-	return &persistencespb.Predicate{
+	return persistencespb.Predicate_builder{
 		PredicateType: enumsspb.PREDICATE_TYPE_DESTINATION,
-		Attributes: &persistencespb.Predicate_DestinationPredicateAttributes{
-			DestinationPredicateAttributes: &persistencespb.DestinationPredicateAttributes{
-				Destinations: expmaps.Keys(taskDestinationPredicate.Destinations),
-			},
-		},
-	}
+		DestinationPredicateAttributes: persistencespb.DestinationPredicateAttributes_builder{
+			Destinations: expmaps.Keys(taskDestinationPredicate.Destinations),
+		}.Build(),
+	}.Build()
 }
 
 func FromPersistenceDestinationPredicate(
 	attributes *persistencespb.DestinationPredicateAttributes,
 ) tasks.Predicate {
-	return tasks.NewDestinationPredicate(attributes.Destinations)
+	return tasks.NewDestinationPredicate(attributes.GetDestinations())
 }
 
 func ToPersistenceOutboundTaskGroupPredicate(
 	pred *tasks.OutboundTaskGroupPredicate,
 ) *persistencespb.Predicate {
-	return &persistencespb.Predicate{
+	return persistencespb.Predicate_builder{
 		PredicateType: enumsspb.PREDICATE_TYPE_OUTBOUND_TASK_GROUP,
-		Attributes: &persistencespb.Predicate_OutboundTaskGroupPredicateAttributes{
-			OutboundTaskGroupPredicateAttributes: &persistencespb.OutboundTaskGroupPredicateAttributes{
-				Groups: expmaps.Keys(pred.Groups),
-			},
-		},
-	}
+		OutboundTaskGroupPredicateAttributes: persistencespb.OutboundTaskGroupPredicateAttributes_builder{
+			Groups: expmaps.Keys(pred.Groups),
+		}.Build(),
+	}.Build()
 }
 
 func FromPersistenceOutboundTaskGroupPredicate(
 	attributes *persistencespb.OutboundTaskGroupPredicateAttributes,
 ) tasks.Predicate {
-	return tasks.NewOutboundTaskGroupPredicate(attributes.Groups)
+	return tasks.NewOutboundTaskGroupPredicate(attributes.GetGroups())
 }
 
 func ToPersistenceOutboundTaskPredicate(
@@ -346,32 +332,30 @@ func ToPersistenceOutboundTaskPredicate(
 ) *persistencespb.Predicate {
 	groups := make([]*persistencespb.OutboundTaskPredicateAttributes_Group, 0, len(pred.Groups))
 	for g := range pred.Groups {
-		groups = append(groups, &persistencespb.OutboundTaskPredicateAttributes_Group{
+		groups = append(groups, persistencespb.OutboundTaskPredicateAttributes_Group_builder{
 			TaskGroup:   g.TaskGroup,
 			NamespaceId: g.NamespaceID,
 			Destination: g.Destination,
-		})
+		}.Build())
 	}
 
-	return &persistencespb.Predicate{
+	return persistencespb.Predicate_builder{
 		PredicateType: enumsspb.PREDICATE_TYPE_OUTBOUND_TASK,
-		Attributes: &persistencespb.Predicate_OutboundTaskPredicateAttributes{
-			OutboundTaskPredicateAttributes: &persistencespb.OutboundTaskPredicateAttributes{
-				Groups: groups,
-			},
-		},
-	}
+		OutboundTaskPredicateAttributes: persistencespb.OutboundTaskPredicateAttributes_builder{
+			Groups: groups,
+		}.Build(),
+	}.Build()
 }
 
 func FromPersistenceOutboundTaskPredicate(
 	attributes *persistencespb.OutboundTaskPredicateAttributes,
 ) tasks.Predicate {
-	groups := make([]tasks.TaskGroupNamespaceIDAndDestination, len(attributes.Groups))
-	for i, g := range attributes.Groups {
+	groups := make([]tasks.TaskGroupNamespaceIDAndDestination, len(attributes.GetGroups()))
+	for i, g := range attributes.GetGroups() {
 		groups[i] = tasks.TaskGroupNamespaceIDAndDestination{
-			TaskGroup:   g.TaskGroup,
-			NamespaceID: g.NamespaceId,
-			Destination: g.Destination,
+			TaskGroup:   g.GetTaskGroup(),
+			NamespaceID: g.GetNamespaceId(),
+			Destination: g.GetDestination(),
 		}
 	}
 	return tasks.NewOutboundTaskPredicate(groups)

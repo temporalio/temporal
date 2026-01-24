@@ -88,22 +88,22 @@ func (s *ExecutionMutableStateTaskSuite) SetupTest() {
 	s.ShardID++
 	resp, err := s.ShardManager.GetOrCreateShard(s.Ctx, &p.GetOrCreateShardRequest{
 		ShardID: s.ShardID,
-		InitialShardInfo: &persistencespb.ShardInfo{
+		InitialShardInfo: persistencespb.ShardInfo_builder{
 			ShardId: s.ShardID,
 			RangeId: 1,
 			Owner:   "test-shard-owner",
-		},
+		}.Build(),
 	})
 	s.NoError(err)
-	previousRangeID := resp.ShardInfo.RangeId
-	resp.ShardInfo.RangeId++
+	previousRangeID := resp.ShardInfo.GetRangeId()
+	resp.ShardInfo.SetRangeId(resp.ShardInfo.GetRangeId() + 1)
 	err = s.ShardManager.UpdateShard(s.Ctx, &p.UpdateShardRequest{
 		ShardInfo:       resp.ShardInfo,
 		PreviousRangeID: previousRangeID,
 	})
 	s.NoError(err)
-	s.RangeID = resp.ShardInfo.RangeId
-	s.Owner = resp.ShardInfo.Owner
+	s.RangeID = resp.ShardInfo.GetRangeId()
+	s.Owner = resp.ShardInfo.GetOwner()
 
 	s.WorkflowKey = definition.NewWorkflowKey(
 		uuid.New().String(),
@@ -658,7 +658,7 @@ func (s *testSerializer) SerializeTask(
 	task tasks.Task,
 ) (*commonpb.DataBlob, error) {
 	if fakeTask, ok := task.(*tasks.FakeTask); ok {
-		data, err := proto.Marshal(&persistencespb.TransferTaskInfo{
+		data, err := proto.Marshal(persistencespb.TransferTaskInfo_builder{
 			NamespaceId:    fakeTask.WorkflowKey.NamespaceID,
 			WorkflowId:     fakeTask.WorkflowKey.WorkflowID,
 			RunId:          fakeTask.WorkflowKey.RunID,
@@ -666,14 +666,14 @@ func (s *testSerializer) SerializeTask(
 			Version:        fakeTask.Version,
 			TaskId:         fakeTask.TaskID,
 			VisibilityTime: timestamppb.New(fakeTask.VisibilityTimestamp),
-		})
+		}.Build())
 		if err != nil {
 			return nil, err
 		}
-		return &commonpb.DataBlob{
+		return commonpb.DataBlob_builder{
 			Data:         data,
 			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
-		}, nil
+		}.Build(), nil
 	}
 	return s.Serializer.SerializeTask(task)
 }
@@ -689,20 +689,20 @@ func (s *testSerializer) DeserializeTask(
 	}
 
 	taskInfo := &persistencespb.TransferTaskInfo{}
-	if err := proto.Unmarshal(blob.Data, taskInfo); err != nil {
+	if err := proto.Unmarshal(blob.GetData(), taskInfo); err != nil {
 		return nil, serialization.NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, err)
 	}
 
 	fakeTask := tasks.NewFakeTask(
 		definition.NewWorkflowKey(
-			taskInfo.NamespaceId,
-			taskInfo.WorkflowId,
-			taskInfo.RunId,
+			taskInfo.GetNamespaceId(),
+			taskInfo.GetWorkflowId(),
+			taskInfo.GetRunId(),
 		),
 		category,
-		taskInfo.VisibilityTime.AsTime(),
+		taskInfo.GetVisibilityTime().AsTime(),
 	)
-	fakeTask.SetTaskID(taskInfo.TaskId)
+	fakeTask.SetTaskID(taskInfo.GetTaskId())
 
 	return fakeTask, nil
 }

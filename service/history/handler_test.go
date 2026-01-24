@@ -38,35 +38,35 @@ func TestDescribeHistoryHost(t *testing.T) {
 
 	mockShard1 := shard.NewTestContext(
 		ctrl,
-		&persistencespb.ShardInfo{
+		persistencespb.ShardInfo_builder{
 			ShardId: 1,
 			RangeId: 1,
-		},
+		}.Build(),
 		tests.NewDynamicConfig(),
 	)
 	controller.EXPECT().GetShardByID(int32(1)).Return(mockShard1, serviceerror.NewShardOwnershipLost("", ""))
 
-	_, err := h.DescribeHistoryHost(context.Background(), &historyservice.DescribeHistoryHostRequest{
+	_, err := h.DescribeHistoryHost(context.Background(), historyservice.DescribeHistoryHostRequest_builder{
 		ShardId: 1,
-	})
+	}.Build())
 	assert.Error(t, err)
 	var sol *serviceerror.ShardOwnershipLost
 	assert.True(t, errors.As(err, &sol))
 
 	mockShard2 := shard.NewTestContext(
 		ctrl,
-		&persistencespb.ShardInfo{
+		persistencespb.ShardInfo_builder{
 			ShardId: 2,
 			RangeId: 1,
-		},
+		}.Build(),
 		tests.NewDynamicConfig(),
 	)
 	controller.EXPECT().GetShardByID(int32(2)).Return(mockShard2, nil)
 	controller.EXPECT().ShardIDs().Return([]int32{2})
 	namespaceRegistry.EXPECT().GetRegistrySize().Return(int64(0), int64(0))
 	hostInfoProvider.EXPECT().HostInfo().Return(membership.NewHostInfoFromAddress("0.0.0.0"))
-	_, err = h.DescribeHistoryHost(context.Background(), &historyservice.DescribeHistoryHostRequest{
+	_, err = h.DescribeHistoryHost(context.Background(), historyservice.DescribeHistoryHostRequest_builder{
 		ShardId: 2,
-	})
+	}.Build())
 	assert.NoError(t, err)
 }

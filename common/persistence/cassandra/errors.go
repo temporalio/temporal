@@ -223,12 +223,12 @@ func extractCurrentWorkflowConflictError(
 				requestCurrentRunID,
 				actualCurrentRunID,
 			),
-			RequestIDs:       executionState.RequestIds,
-			RunID:            executionState.RunId,
-			State:            executionState.State,
-			Status:           executionState.Status,
+			RequestIDs:       executionState.GetRequestIds(),
+			RunID:            executionState.GetRunId(),
+			State:            executionState.GetState(),
+			Status:           executionState.GetStatus(),
 			LastWriteVersion: lastWriteVersion,
-			StartTime:        timestamp.TimeValuePtr(executionState.StartTime),
+			StartTime:        timestamp.TimeValuePtr(executionState.GetStartTime()),
 		}
 	}
 	return nil

@@ -236,10 +236,10 @@ func (p *executionPersistenceClient) CreateWorkflowExecution(
 		var workflowID, runID string
 		if request != nil {
 			if request.NewWorkflowSnapshot.ExecutionInfo != nil {
-				workflowID = request.NewWorkflowSnapshot.ExecutionInfo.WorkflowId
+				workflowID = request.NewWorkflowSnapshot.ExecutionInfo.GetWorkflowId()
 			}
 			if request.NewWorkflowSnapshot.ExecutionState != nil {
-				runID = request.NewWorkflowSnapshot.ExecutionState.RunId
+				runID = request.NewWorkflowSnapshot.ExecutionState.GetRunId()
 			}
 		}
 		p.recordRequestMetrics(metrics.PersistenceCreateWorkflowExecutionScope, caller, time.Since(startTime), retErr)
@@ -278,10 +278,10 @@ func (p *executionPersistenceClient) SetWorkflowExecution(
 		var workflowID, runID string
 		if request != nil {
 			if request.SetWorkflowSnapshot.ExecutionInfo != nil {
-				workflowID = request.SetWorkflowSnapshot.ExecutionInfo.WorkflowId
+				workflowID = request.SetWorkflowSnapshot.ExecutionInfo.GetWorkflowId()
 			}
 			if request.SetWorkflowSnapshot.ExecutionState != nil {
-				runID = request.SetWorkflowSnapshot.ExecutionState.RunId
+				runID = request.SetWorkflowSnapshot.ExecutionState.GetRunId()
 			}
 		}
 		p.recordRequestMetrics(metrics.PersistenceSetWorkflowExecutionScope, caller, time.Since(startTime), retErr)
@@ -301,10 +301,10 @@ func (p *executionPersistenceClient) UpdateWorkflowExecution(
 		var workflowID, runID string
 		if request != nil {
 			if request.UpdateWorkflowMutation.ExecutionInfo != nil {
-				workflowID = request.UpdateWorkflowMutation.ExecutionInfo.WorkflowId
+				workflowID = request.UpdateWorkflowMutation.ExecutionInfo.GetWorkflowId()
 			}
 			if request.UpdateWorkflowMutation.ExecutionState != nil {
-				runID = request.UpdateWorkflowMutation.ExecutionState.RunId
+				runID = request.UpdateWorkflowMutation.ExecutionState.GetRunId()
 			}
 		}
 		p.recordRequestMetrics(metrics.PersistenceUpdateWorkflowExecutionScope, caller, time.Since(startTime), retErr)
@@ -521,8 +521,8 @@ func (p *executionPersistenceClient) PutReplicationTaskToDLQ(
 		p.healthSignals.Record(request.ShardID, time.Since(startTime), retErr)
 		var workflowID, runID string
 		if request != nil && request.TaskInfo != nil {
-			workflowID = request.TaskInfo.WorkflowId
-			runID = request.TaskInfo.RunId
+			workflowID = request.TaskInfo.GetWorkflowId()
+			runID = request.TaskInfo.GetRunId()
 		}
 		p.recordRequestMetrics(metrics.PersistencePutReplicationTaskToDLQScope, caller, time.Since(startTime), retErr)
 		p.recordDataLossMetrics(metrics.PersistencePutReplicationTaskToDLQScope, caller, retErr, workflowID, runID)

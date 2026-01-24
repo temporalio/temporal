@@ -85,10 +85,10 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
 
-	workflowExecution := &commonpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution_builder{
 		WorkflowId: task.GetWorkflowID(),
 		RunId:      task.GetRunID(),
-	}
+	}.Build()
 
 	if task.ArchetypeID == chasm.UnspecifiedArchetypeID {
 		task.ArchetypeID = chasm.WorkflowArchetypeID
@@ -182,7 +182,7 @@ func (t *timerQueueTaskExecutorBase) isValidWorkflowRunTimeoutTask(
 
 	// Check if workflow execution timeout is not expired
 	// This can happen if the workflow is reset but old timer task is still fired.
-	return t.isValidExpirationTime(mutableState, task, executionInfo.WorkflowRunExpirationTime)
+	return t.isValidExpirationTime(mutableState, task, executionInfo.GetWorkflowRunExpirationTime())
 }
 
 func (t *timerQueueTaskExecutorBase) isValidWorkflowExecutionTimeoutTask(
@@ -191,7 +191,7 @@ func (t *timerQueueTaskExecutorBase) isValidWorkflowExecutionTimeoutTask(
 ) bool {
 
 	executionInfo := mutableState.GetExecutionInfo()
-	if executionInfo.FirstExecutionRunId != task.FirstRunID {
+	if executionInfo.GetFirstExecutionRunId() != task.FirstRunID {
 		// current run does not belong to workflow chain the task is generated for
 		return false
 	}
@@ -199,7 +199,7 @@ func (t *timerQueueTaskExecutorBase) isValidWorkflowExecutionTimeoutTask(
 	// Check if workflow execution timeout is not expired
 	// This can happen if the workflow is reset since reset re-calculates
 	// the execution timeout but shares the same firstRunID as the base run
-	return t.isValidExpirationTime(mutableState, task, executionInfo.WorkflowExecutionExpirationTime)
+	return t.isValidExpirationTime(mutableState, task, executionInfo.GetWorkflowExecutionExpirationTime())
 
 	// NOTE: we don't need to do version check here because if we were to do it, we need to compare the task version
 	// and the start version in the first run. However, failover & conflict resolution will never change
@@ -216,21 +216,21 @@ func (t *timerQueueTaskExecutorBase) executeSingleStateMachineTimer(
 	timer *persistencespb.StateMachineTaskInfo,
 	execute func(node *hsm.Node, task hsm.Task) error,
 ) error {
-	def, ok := t.shardContext.StateMachineRegistry().TaskSerializer(timer.Type)
+	def, ok := t.shardContext.StateMachineRegistry().TaskSerializer(timer.GetType())
 	if !ok {
-		return queueserrors.NewUnprocessableTaskError(fmt.Sprintf("deserializer not registered for task type %v", timer.Type))
+		return queueserrors.NewUnprocessableTaskError(fmt.Sprintf("deserializer not registered for task type %v", timer.GetType()))
 	}
-	smt, err := def.Deserialize(timer.Data, hsm.TaskAttributes{Deadline: deadline})
+	smt, err := def.Deserialize(timer.GetData(), hsm.TaskAttributes{Deadline: deadline})
 	if err != nil {
 		return fmt.Errorf(
 			"%w: %w",
-			queueserrors.NewUnprocessableTaskError(fmt.Sprintf("cannot deserialize task %v", timer.Type)),
+			queueserrors.NewUnprocessableTaskError(fmt.Sprintf("cannot deserialize task %v", timer.GetType())),
 			err,
 		)
 	}
 	ref := hsm.Ref{
 		WorkflowKey:     ms.GetWorkflowKey(),
-		StateMachineRef: timer.Ref,
+		StateMachineRef: timer.GetRef(),
 		Validate:        smt.Validate,
 	}
 	// TODO(bergundy): Duplicated this logic from the Access method. We specify write access here because
@@ -262,7 +262,7 @@ func (t *timerQueueTaskExecutorBase) executeChasmPureTimers(
 	// Because CHASM timers can target closed workflows, we need to specifically
 	// exclude zombie workflows, instead of merely checking that the workflow is
 	// running.
-	if ms.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
+	if ms.GetExecutionState().GetState() == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
 		return consts.ErrWorkflowZombie
 	}
 
@@ -294,22 +294,22 @@ func (t *timerQueueTaskExecutorBase) executeStateMachineTimers(
 	// need to specifically check for zombie workflows here instead of workflow running
 	// or not since zombie workflows are considered as not running but state machine timers
 	// can target closed workflows.
-	if ms.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
+	if ms.GetExecutionState().GetState() == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
 		return 0, consts.ErrWorkflowZombie
 	}
 
-	timers := ms.GetExecutionInfo().StateMachineTimers
+	timers := ms.GetExecutionInfo().GetStateMachineTimers()
 	processedTimers := 0
 
 	// StateMachineTimers are sorted by Deadline, iterate through them as long as the deadline is expired.
 	for len(timers) > 0 {
 		group := timers[0]
-		if !queues.IsTimeExpired(task, t.Now(), group.Deadline.AsTime()) {
+		if !queues.IsTimeExpired(task, t.Now(), group.GetDeadline().AsTime()) {
 			break
 		}
 
-		for _, timer := range group.Infos {
-			err := t.executeSingleStateMachineTimer(ctx, workflowContext, ms, group.Deadline.AsTime(), timer, execute)
+		for _, timer := range group.GetInfos() {
+			err := t.executeSingleStateMachineTimer(ctx, workflowContext, ms, group.GetDeadline().AsTime(), timer, execute)
 			if err != nil {
 				// This includes errors such as ErrStaleReference and ErrWorkflowCompleted.
 				if !errors.As(err, new(*serviceerror.NotFound)) {
@@ -337,7 +337,7 @@ func (t *timerQueueTaskExecutorBase) executeStateMachineTimers(
 
 	if processedTimers > 0 {
 		// Update processed timers.
-		ms.GetExecutionInfo().StateMachineTimers = timers
+		ms.GetExecutionInfo().SetStateMachineTimers(timers)
 	}
 	return processedTimers, nil
 }

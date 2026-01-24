@@ -92,7 +92,7 @@ func (h *taskExecutorImpl) Execute(
 
 func checkClusterIncludedInReplicationConfig(clusterName string, repCfg []*replicationpb.ClusterReplicationConfig) bool {
 	for _, cluster := range repCfg {
-		if clusterName == cluster.ClusterName {
+		if clusterName == cluster.GetClusterName() {
 			return true
 		}
 	}
@@ -101,22 +101,22 @@ func checkClusterIncludedInReplicationConfig(clusterName string, repCfg []*repli
 
 func (h *taskExecutorImpl) shouldProcessTask(ctx context.Context, task *replicationspb.NamespaceTaskAttributes) (bool, error) {
 	resp, err := h.metadataManager.GetNamespace(ctx, &persistence.GetNamespaceRequest{
-		Name: task.Info.GetName(),
+		Name: task.GetInfo().GetName(),
 	})
 	switch err.(type) {
 	case nil:
-		if resp.Namespace.Info.Id != task.GetId() {
+		if resp.Namespace.GetInfo().GetId() != task.GetId() {
 			h.logger.Error(
 				"namespace replication encountered UUID collision processing namespace replication task",
-				tag.WorkflowNamespaceID(resp.Namespace.Info.Id),
+				tag.WorkflowNamespaceID(resp.Namespace.GetInfo().GetId()),
 				tag.NewStringTag("Task Namespace Id", task.GetId()),
-				tag.NewStringTag("Task Namespace Info Id", task.Info.GetId()))
+				tag.NewStringTag("Task Namespace Info Id", task.GetInfo().GetId()))
 			return false, ErrNameUUIDCollision
 		}
 
 		return true, nil
 	case *serviceerror.NamespaceNotFound:
-		return checkClusterIncludedInReplicationConfig(h.currentCluster, task.ReplicationConfig.Clusters), nil
+		return checkClusterIncludedInReplicationConfig(h.currentCluster, task.GetReplicationConfig().GetClusters()), nil
 	default:
 		// return the original err
 		return false, err
@@ -129,37 +129,37 @@ func (h *taskExecutorImpl) handleNamespaceCreationReplicationTask(
 	task *replicationspb.NamespaceTaskAttributes,
 ) error {
 	// task already validated
-	err := h.validateNamespaceStatus(task.Info.State)
+	err := h.validateNamespaceStatus(task.GetInfo().GetState())
 	if err != nil {
 		return err
 	}
 
 	request := &persistence.CreateNamespaceRequest{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
+		Namespace: persistencespb.NamespaceDetail_builder{
+			Info: persistencespb.NamespaceInfo_builder{
 				Id:          task.GetId(),
-				Name:        task.Info.GetName(),
-				State:       task.Info.GetState(),
-				Description: task.Info.GetDescription(),
-				Owner:       task.Info.GetOwnerEmail(),
-				Data:        task.Info.Data,
-			},
-			Config: &persistencespb.NamespaceConfig{
-				Retention:                    task.Config.GetWorkflowExecutionRetentionTtl(),
-				HistoryArchivalState:         task.Config.GetHistoryArchivalState(),
-				HistoryArchivalUri:           task.Config.GetHistoryArchivalUri(),
-				VisibilityArchivalState:      task.Config.GetVisibilityArchivalState(),
-				VisibilityArchivalUri:        task.Config.GetVisibilityArchivalUri(),
-				CustomSearchAttributeAliases: task.Config.GetCustomSearchAttributeAliases(),
-			},
-			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
-				ActiveClusterName: task.ReplicationConfig.GetActiveClusterName(),
-				Clusters:          ConvertClusterReplicationConfigFromProto(task.ReplicationConfig.Clusters),
+				Name:        task.GetInfo().GetName(),
+				State:       task.GetInfo().GetState(),
+				Description: task.GetInfo().GetDescription(),
+				Owner:       task.GetInfo().GetOwnerEmail(),
+				Data:        task.GetInfo().GetData(),
+			}.Build(),
+			Config: persistencespb.NamespaceConfig_builder{
+				Retention:                    task.GetConfig().GetWorkflowExecutionRetentionTtl(),
+				HistoryArchivalState:         task.GetConfig().GetHistoryArchivalState(),
+				HistoryArchivalUri:           task.GetConfig().GetHistoryArchivalUri(),
+				VisibilityArchivalState:      task.GetConfig().GetVisibilityArchivalState(),
+				VisibilityArchivalUri:        task.GetConfig().GetVisibilityArchivalUri(),
+				CustomSearchAttributeAliases: task.GetConfig().GetCustomSearchAttributeAliases(),
+			}.Build(),
+			ReplicationConfig: persistencespb.NamespaceReplicationConfig_builder{
+				ActiveClusterName: task.GetReplicationConfig().GetActiveClusterName(),
+				Clusters:          ConvertClusterReplicationConfigFromProto(task.GetReplicationConfig().GetClusters()),
 				FailoverHistory:   ConvertFailoverHistoryToPersistenceProto(task.GetFailoverHistory()),
-			},
+			}.Build(),
 			ConfigVersion:   task.GetConfigVersion(),
 			FailoverVersion: task.GetFailoverVersion(),
-		},
+		}.Build(),
 		IsGlobalNamespace: true, // local namespace will not be replicated
 	}
 
@@ -171,15 +171,15 @@ func (h *taskExecutorImpl) handleNamespaceCreationReplicationTask(
 
 		recordExists := true
 		resp, getErr := h.metadataManager.GetNamespace(ctx, &persistence.GetNamespaceRequest{
-			Name: task.Info.GetName(),
+			Name: task.GetInfo().GetName(),
 		})
 		switch getErr.(type) {
 		case nil:
-			if resp.Namespace.Info.Id != task.GetId() {
+			if resp.Namespace.GetInfo().GetId() != task.GetId() {
 				h.logger.Error("namespace replication encountered UUID collision during NamespaceCreationReplicationTask",
-					tag.WorkflowNamespaceID(resp.Namespace.Info.Id),
+					tag.WorkflowNamespaceID(resp.Namespace.GetInfo().GetId()),
 					tag.NewStringTag("Task Namespace Id", task.GetId()),
-					tag.NewStringTag("Task Namespace Info Id", task.Info.GetId()),
+					tag.NewStringTag("Task Namespace Info Id", task.GetInfo().GetId()),
 					tag.Error(err))
 				return ErrNameUUIDCollision
 			}
@@ -190,8 +190,8 @@ func (h *taskExecutorImpl) handleNamespaceCreationReplicationTask(
 			// return the original err
 			h.logger.Error(
 				"namespace replication encountered error during NamespaceCreationReplicationTask",
-				tag.WorkflowNamespace(task.Info.GetName()),
-				tag.WorkflowNamespaceID(task.Info.GetId()),
+				tag.WorkflowNamespace(task.GetInfo().GetName()),
+				tag.WorkflowNamespaceID(task.GetInfo().GetId()),
 				tag.Error(err))
 			return err
 		}
@@ -201,11 +201,11 @@ func (h *taskExecutorImpl) handleNamespaceCreationReplicationTask(
 		})
 		switch getErr.(type) {
 		case nil:
-			if resp.Namespace.Info.Name != task.Info.GetName() {
+			if resp.Namespace.GetInfo().GetName() != task.GetInfo().GetName() {
 				h.logger.Error(
 					"namespace replication encountered name collision during NamespaceCreationReplicationTask",
-					tag.WorkflowNamespace(resp.Namespace.Info.Name),
-					tag.NewStringTag("Task Namespace Name", task.Info.GetName()),
+					tag.WorkflowNamespace(resp.Namespace.GetInfo().GetName()),
+					tag.NewStringTag("Task Namespace Name", task.GetInfo().GetName()),
 					tag.Error(err))
 				return ErrNameUUIDCollision
 			}
@@ -233,7 +233,7 @@ func (h *taskExecutorImpl) handleNamespaceUpdateReplicationTask(
 	task *replicationspb.NamespaceTaskAttributes,
 ) error {
 	// task already validated
-	err := h.validateNamespaceStatus(task.Info.State)
+	err := h.validateNamespaceStatus(task.GetInfo().GetState())
 	if err != nil {
 		return err
 	}
@@ -248,7 +248,7 @@ func (h *taskExecutorImpl) handleNamespaceUpdateReplicationTask(
 	// plus, we need to check whether the config version is <= the config version set in the input
 	// plus, we need to check whether the failover version is <= the failover version set in the input
 	resp, err := h.metadataManager.GetNamespace(ctx, &persistence.GetNamespaceRequest{
-		Name: task.Info.GetName(),
+		Name: task.GetInfo().GetName(),
 	})
 	if err != nil {
 		if _, isNotFound := err.(*serviceerror.NamespaceNotFound); isNotFound {
@@ -266,36 +266,36 @@ func (h *taskExecutorImpl) handleNamespaceUpdateReplicationTask(
 		IsGlobalNamespace:   resp.IsGlobalNamespace,
 	}
 
-	if resp.Namespace.ConfigVersion < task.GetConfigVersion() {
+	if resp.Namespace.GetConfigVersion() < task.GetConfigVersion() {
 		recordUpdated = true
-		request.Namespace.Info = &persistencespb.NamespaceInfo{
+		request.Namespace.SetInfo(persistencespb.NamespaceInfo_builder{
 			Id:          task.GetId(),
-			Name:        task.Info.GetName(),
-			State:       task.Info.GetState(),
-			Description: task.Info.GetDescription(),
-			Owner:       task.Info.GetOwnerEmail(),
-			Data:        task.Info.Data,
+			Name:        task.GetInfo().GetName(),
+			State:       task.GetInfo().GetState(),
+			Description: task.GetInfo().GetDescription(),
+			Owner:       task.GetInfo().GetOwnerEmail(),
+			Data:        task.GetInfo().GetData(),
+		}.Build())
+		request.Namespace.SetConfig(persistencespb.NamespaceConfig_builder{
+			Retention:                    task.GetConfig().GetWorkflowExecutionRetentionTtl(),
+			HistoryArchivalState:         task.GetConfig().GetHistoryArchivalState(),
+			HistoryArchivalUri:           task.GetConfig().GetHistoryArchivalUri(),
+			VisibilityArchivalState:      task.GetConfig().GetVisibilityArchivalState(),
+			VisibilityArchivalUri:        task.GetConfig().GetVisibilityArchivalUri(),
+			CustomSearchAttributeAliases: task.GetConfig().GetCustomSearchAttributeAliases(),
+		}.Build())
+		if task.GetConfig().GetBadBinaries() != nil {
+			request.Namespace.GetConfig().SetBadBinaries(task.GetConfig().GetBadBinaries())
 		}
-		request.Namespace.Config = &persistencespb.NamespaceConfig{
-			Retention:                    task.Config.GetWorkflowExecutionRetentionTtl(),
-			HistoryArchivalState:         task.Config.GetHistoryArchivalState(),
-			HistoryArchivalUri:           task.Config.GetHistoryArchivalUri(),
-			VisibilityArchivalState:      task.Config.GetVisibilityArchivalState(),
-			VisibilityArchivalUri:        task.Config.GetVisibilityArchivalUri(),
-			CustomSearchAttributeAliases: task.Config.GetCustomSearchAttributeAliases(),
-		}
-		if task.Config.GetBadBinaries() != nil {
-			request.Namespace.Config.BadBinaries = task.Config.GetBadBinaries()
-		}
-		request.Namespace.ReplicationConfig.Clusters = ConvertClusterReplicationConfigFromProto(task.ReplicationConfig.Clusters)
-		request.Namespace.ConfigVersion = task.GetConfigVersion()
+		request.Namespace.GetReplicationConfig().SetClusters(ConvertClusterReplicationConfigFromProto(task.GetReplicationConfig().GetClusters()))
+		request.Namespace.SetConfigVersion(task.GetConfigVersion())
 	}
-	if resp.Namespace.FailoverVersion < task.GetFailoverVersion() {
+	if resp.Namespace.GetFailoverVersion() < task.GetFailoverVersion() {
 		recordUpdated = true
-		request.Namespace.ReplicationConfig.ActiveClusterName = task.ReplicationConfig.GetActiveClusterName()
-		request.Namespace.FailoverVersion = task.GetFailoverVersion()
-		request.Namespace.FailoverNotificationVersion = notificationVersion
-		request.Namespace.ReplicationConfig.FailoverHistory = ConvertFailoverHistoryToPersistenceProto(task.GetFailoverHistory())
+		request.Namespace.GetReplicationConfig().SetActiveClusterName(task.GetReplicationConfig().GetActiveClusterName())
+		request.Namespace.SetFailoverVersion(task.GetFailoverVersion())
+		request.Namespace.SetFailoverNotificationVersion(notificationVersion)
+		request.Namespace.GetReplicationConfig().SetFailoverHistory(ConvertFailoverHistoryToPersistenceProto(task.GetFailoverHistory()))
 	}
 
 	if !recordUpdated {
@@ -310,13 +310,13 @@ func (h *taskExecutorImpl) validateNamespaceReplicationTask(task *replicationspb
 		return ErrEmptyNamespaceReplicationTask
 	}
 
-	if task.Id == "" {
+	if task.GetId() == "" {
 		return ErrInvalidNamespaceID
-	} else if task.Info == nil {
+	} else if !task.HasInfo() {
 		return ErrInvalidNamespaceInfo
-	} else if task.Config == nil {
+	} else if !task.HasConfig() {
 		return ErrInvalidNamespaceConfig
-	} else if task.ReplicationConfig == nil {
+	} else if !task.HasReplicationConfig() {
 		return ErrInvalidNamespaceReplicationConfig
 	}
 	return nil
@@ -336,10 +336,10 @@ func ConvertClusterReplicationConfigFromProto(
 func ConvertFailoverHistoryToPersistenceProto(failoverHistory []*replicationpb.FailoverStatus) []*persistencespb.FailoverStatus {
 	var res []*persistencespb.FailoverStatus
 	for _, status := range failoverHistory {
-		res = append(res, &persistencespb.FailoverStatus{
+		res = append(res, persistencespb.FailoverStatus_builder{
 			FailoverTime:    status.GetFailoverTime(),
 			FailoverVersion: status.GetFailoverVersion(),
-		})
+		}.Build())
 	}
 	return res
 }

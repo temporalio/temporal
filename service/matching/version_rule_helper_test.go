@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"google.golang.org/protobuf/proto"
 )
 
 func TestFindAssignmentBuildId_NoRules(t *testing.T) {
@@ -85,12 +86,12 @@ func TestCalcRampThresholdDeterministic(t *testing.T) {
 }
 
 func createAssignmentRuleWithoutRamp(buildId string) *persistencespb.AssignmentRule {
-	return &persistencespb.AssignmentRule{Rule: &taskqueuepb.BuildIdAssignmentRule{TargetBuildId: buildId}}
+	return persistencespb.AssignmentRule_builder{Rule: taskqueuepb.BuildIdAssignmentRule_builder{TargetBuildId: buildId}.Build()}.Build()
 }
 
 func createAssignmentRuleWithRamp(buildId string, ramp float32) *persistencespb.AssignmentRule {
-	return &persistencespb.AssignmentRule{Rule: &taskqueuepb.BuildIdAssignmentRule{
-		TargetBuildId: buildId,
-		Ramp:          mkNewAssignmentPercentageRamp(ramp),
-	}}
+	return persistencespb.AssignmentRule_builder{Rule: taskqueuepb.BuildIdAssignmentRule_builder{
+		TargetBuildId:  buildId,
+		PercentageRamp: proto.ValueOrDefault(mkNewAssignmentPercentageRamp(ramp).PercentageRamp),
+	}.Build()}.Build()
 }

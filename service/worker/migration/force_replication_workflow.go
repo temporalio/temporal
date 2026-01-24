@@ -419,12 +419,12 @@ func listExecutionsForReplication(ctx workflow.Context, executionsCh workflow.Ch
 		listFuture := workflow.ExecuteActivity(
 			actx,
 			a.ListWorkflows,
-			&workflowservice.ListWorkflowExecutionsRequest{
+			workflowservice.ListWorkflowExecutionsRequest_builder{
 				Namespace:     params.Namespace,
 				PageSize:      int32(params.ListWorkflowsPageSize),
 				NextPageToken: params.NextPageToken,
 				Query:         params.Query,
-			})
+			}.Build())
 
 		var listResp listWorkflowsResponse
 		if err := listFuture.Get(ctx, &listResp); err != nil {
@@ -456,10 +456,10 @@ func countWorkflowForReplication(ctx workflow.Context, params ForceReplicationPa
 	if err := workflow.ExecuteActivity(
 		workflow.WithActivityOptions(ctx, ao),
 		a.CountWorkflow,
-		&workflowservice.CountWorkflowExecutionsRequest{
+		workflowservice.CountWorkflowExecutionsRequest_builder{
 			Namespace: params.Namespace,
 			Query:     params.Query,
-		}).Get(ctx, &output); err != nil {
+		}.Build()).Get(ctx, &output); err != nil {
 		return 0, err
 	}
 

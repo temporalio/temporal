@@ -71,6 +71,7 @@ import (
 	"go.temporal.io/server/service/history/consts"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
@@ -121,8 +122,8 @@ func createTestMatchingEngine(
 	mockVisibilityManager := manager.NewMockVisibilityManager(controller)
 	mockVisibilityManager.EXPECT().Close().AnyTimes()
 	mockHistoryClient := historyservicemock.NewMockHistoryServiceClient(controller)
-	mockHistoryClient.EXPECT().IsWorkflowTaskValid(gomock.Any(), gomock.Any()).Return(&historyservice.IsWorkflowTaskValidResponse{IsValid: true}, nil).AnyTimes()
-	mockHistoryClient.EXPECT().IsActivityTaskValid(gomock.Any(), gomock.Any()).Return(&historyservice.IsActivityTaskValidResponse{IsValid: true}, nil).AnyTimes()
+	mockHistoryClient.EXPECT().IsWorkflowTaskValid(gomock.Any(), gomock.Any()).Return(historyservice.IsWorkflowTaskValidResponse_builder{IsValid: true}.Build(), nil).AnyTimes()
+	mockHistoryClient.EXPECT().IsActivityTaskValid(gomock.Any(), gomock.Any()).Return(historyservice.IsActivityTaskValidResponse_builder{IsValid: true}.Build(), nil).AnyTimes()
 	mockHostInfoProvider := membership.NewMockHostInfoProvider(controller)
 	hostInfo := membership.NewHostInfoFromAddress("self")
 	mockHostInfoProvider.EXPECT().HostInfo().Return(hostInfo).AnyTimes()
@@ -136,7 +137,7 @@ func createTestMatchingEngine(
 }
 
 func createMockNamespaceCache(controller *gomock.Controller, nsName namespace.Name) (*namespace.Namespace, *namespace.MockRegistry) {
-	ns := namespace.NewLocalNamespaceForTest(&persistencespb.NamespaceInfo{Name: nsName.String(), Id: uuid.NewString()}, nil, "")
+	ns := namespace.NewLocalNamespaceForTest(persistencespb.NamespaceInfo_builder{Name: nsName.String(), Id: uuid.NewString()}.Build(), nil, "")
 	mockNamespaceCache := namespace.NewMockRegistry(controller)
 	mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(ns, nil).AnyTimes()
 	mockNamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(ns.Name(), nil).AnyTimes()
@@ -175,7 +176,7 @@ func (s *matchingEngineSuite) SetupTest() {
 	s.mockMatchingClient.EXPECT().ReplicateTaskQueueUserData(gomock.Any(), gomock.Any()).
 		Return(&matchingservice.ReplicateTaskQueueUserDataResponse{}, nil).AnyTimes()
 	s.mockMatchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any()).
-		Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{WasUnloaded: true}, nil).AnyTimes()
+		Return(matchingservice.ForceLoadTaskQueuePartitionResponse_builder{WasUnloaded: true}.Build(), nil).AnyTimes()
 
 	// create and supply two task managers, but only one is expected to be used at a time since
 	// we run tests with fairness enabled in separate suite.
@@ -307,34 +308,34 @@ func (s *matchingEngineSuite) PollForTasksEmptyResultTest(callContext context.Co
 	tl := "makeToast"
 	identity := "selfDrivingToaster"
 
-	taskQueue := &taskqueuepb.TaskQueue{
+	taskQueue := taskqueuepb.TaskQueue_builder{
 		Name: tl,
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-	}
+	}.Build()
 	var taskQueueType enumspb.TaskQueueType
 	tlID := newUnversionedRootQueueKey(namespaceID, tl, taskType)
 	const pollCount = 10
 	for i := 0; i < pollCount; i++ {
 		if taskType == enumspb.TASK_QUEUE_TYPE_ACTIVITY {
-			pollResp, err := s.matchingEngine.PollActivityTaskQueue(callContext, &matchingservice.PollActivityTaskQueueRequest{
+			pollResp, err := s.matchingEngine.PollActivityTaskQueue(callContext, matchingservice.PollActivityTaskQueueRequest_builder{
 				NamespaceId: namespaceID,
-				PollRequest: &workflowservice.PollActivityTaskQueueRequest{
+				PollRequest: workflowservice.PollActivityTaskQueueRequest_builder{
 					TaskQueue: taskQueue,
 					Identity:  identity,
-				},
-			}, metrics.NoopMetricsHandler)
+				}.Build(),
+			}.Build(), metrics.NoopMetricsHandler)
 			s.NoError(err)
 			s.Equal(emptyPollActivityTaskQueueResponse, pollResp)
 
 			taskQueueType = enumspb.TASK_QUEUE_TYPE_ACTIVITY
 		} else {
-			resp, err := s.matchingEngine.PollWorkflowTaskQueue(callContext, &matchingservice.PollWorkflowTaskQueueRequest{
+			resp, err := s.matchingEngine.PollWorkflowTaskQueue(callContext, matchingservice.PollWorkflowTaskQueueRequest_builder{
 				NamespaceId: namespaceID,
-				PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
+				PollRequest: workflowservice.PollWorkflowTaskQueueRequest_builder{
 					TaskQueue: taskQueue,
 					Identity:  identity,
-				},
-			}, metrics.NoopMetricsHandler)
+				}.Build(),
+			}.Build(), metrics.NoopMetricsHandler)
 			s.NoError(err)
 			s.Equal(emptyPollWorkflowTaskQueueResponse, resp)
 
@@ -346,19 +347,19 @@ func (s *matchingEngineSuite) PollForTasksEmptyResultTest(callContext context.Co
 		default:
 		}
 		// check the poller information
-		descResp, err := s.matchingEngine.DescribeTaskQueue(context.Background(), &matchingservice.DescribeTaskQueueRequest{
+		descResp, err := s.matchingEngine.DescribeTaskQueue(context.Background(), matchingservice.DescribeTaskQueueRequest_builder{
 			NamespaceId: namespaceID,
-			DescRequest: &workflowservice.DescribeTaskQueueRequest{
+			DescRequest: workflowservice.DescribeTaskQueueRequest_builder{
 				TaskQueue:              taskQueue,
 				TaskQueueType:          taskQueueType,
 				IncludeTaskQueueStatus: false,
-			},
-		})
+			}.Build(),
+		}.Build())
 		s.NoError(err)
-		s.Equal(1, len(descResp.DescResponse.Pollers))
-		s.Equal(identity, descResp.DescResponse.Pollers[0].GetIdentity())
-		s.NotEmpty(descResp.DescResponse.Pollers[0].GetLastAccessTime())
-		s.Nil(descResp.DescResponse.GetTaskQueueStatus())
+		s.Equal(1, len(descResp.GetDescResponse().GetPollers()))
+		s.Equal(identity, descResp.GetDescResponse().GetPollers()[0].GetIdentity())
+		s.NotEmpty(descResp.GetDescResponse().GetPollers()[0].GetLastAccessTime())
+		s.Nil(descResp.GetDescResponse().GetTaskQueueStatus())
 	}
 	s.EqualValues(1, s.taskManager.getQueueDataByKey(tlID).RangeID())
 }
@@ -412,35 +413,35 @@ func (s *matchingEngineSuite) testFailAddTaskWithHistoryError(
 	namespaceID := namespace.ID(uuid.NewString())
 	identity := "identity"
 
-	stickyTaskQueue := &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_STICKY}
+	stickyTaskQueue := taskqueuepb.TaskQueue_builder{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_STICKY}.Build()
 
 	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(1 * time.Second)
 
 	runID := uuid.NewString()
 	workflowID := "workflow1"
-	execution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
+	execution := commonpb.WorkflowExecution_builder{RunId: runID, WorkflowId: workflowID}.Build()
 	scheduledEventID := int64(0)
 
-	addRequest := matchingservice.AddWorkflowTaskRequest{
+	addRequest := matchingservice.AddWorkflowTaskRequest_builder{
 		NamespaceId:            namespaceID.String(),
 		Execution:              execution,
 		ScheduledEventId:       scheduledEventID,
 		TaskQueue:              stickyTaskQueue,
 		ScheduleToStartTimeout: timestamp.DurationFromSeconds(100),
-	}
+	}.Build()
 
-	pollRequest := matchingservice.PollWorkflowTaskQueueRequest{
+	pollRequest := matchingservice.PollWorkflowTaskQueueRequest_builder{
 		NamespaceId: namespaceID.String(),
-		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
+		PollRequest: workflowservice.PollWorkflowTaskQueueRequest_builder{
 			TaskQueue: stickyTaskQueue,
 			Identity:  identity,
-		},
-	}
+		}.Build(),
+	}.Build()
 
 	wg := sync.WaitGroup{}
 	wg.Add(1)
 	go func() {
-		_, err := s.matchingEngine.PollWorkflowTaskQueue(context.Background(), &pollRequest, metrics.NoopMetricsHandler)
+		_, err := s.matchingEngine.PollWorkflowTaskQueue(context.Background(), pollRequest, metrics.NoopMetricsHandler)
 		if err != nil {
 			s.logger.Info(err.Error())
 		}
@@ -452,15 +453,15 @@ func (s *matchingEngineSuite) testFailAddTaskWithHistoryError(
 	}
 	s.Eventually(partitionReady, 100*time.Millisecond, 10*time.Millisecond)
 
-	recordWorkflowTaskStartedResponse := &historyservice.RecordWorkflowTaskStartedResponse{
+	recordWorkflowTaskStartedResponse := historyservice.RecordWorkflowTaskStartedResponse_builder{
 		PreviousStartedEventId:     scheduledEventID,
 		ScheduledEventId:           scheduledEventID + 1,
 		Attempt:                    1,
 		StickyExecutionEnabled:     true,
-		WorkflowExecutionTaskQueue: &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		History:                    &historypb.History{Events: []*historypb.HistoryEvent{}},
+		WorkflowExecutionTaskQueue: taskqueuepb.TaskQueue_builder{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
+		History:                    historypb.History_builder{Events: []*historypb.HistoryEvent{}}.Build(),
 		NextPageToken:              nil,
-	}
+	}.Build()
 
 	s.mockHistoryClient.EXPECT().
 		RecordWorkflowTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).
@@ -473,7 +474,7 @@ func (s *matchingEngineSuite) testFailAddTaskWithHistoryError(
 		RecordWorkflowTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(recordWorkflowTaskStartedResponse, nil).AnyTimes()
 
-	_, syncMatch, err := s.matchingEngine.AddWorkflowTask(context.Background(), &addRequest)
+	_, syncMatch, err := s.matchingEngine.AddWorkflowTask(context.Background(), addRequest)
 
 	s.Equal(syncMatch, expectSyncMatch)
 	if expectedError != nil {
@@ -491,73 +492,73 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueues() {
 	stickyTlKind := enumspb.TASK_QUEUE_KIND_STICKY
 	identity := "selfDrivingToaster"
 
-	stickyTaskQueue := &taskqueuepb.TaskQueue{Name: stickyTl, Kind: stickyTlKind}
+	stickyTaskQueue := taskqueuepb.TaskQueue_builder{Name: stickyTl, Kind: stickyTlKind}.Build()
 
 	s.matchingEngine.config.RangeSize = 2 // to test that range is not updated without tasks
 	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(10 * time.Millisecond)
 
 	runID := uuid.NewString()
 	workflowID := "workflow1"
-	workflowType := &commonpb.WorkflowType{
+	workflowType := commonpb.WorkflowType_builder{
 		Name: "workflow",
-	}
-	execution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
+	}.Build()
+	execution := commonpb.WorkflowExecution_builder{RunId: runID, WorkflowId: workflowID}.Build()
 	scheduledEventID := int64(0)
 
 	// History service is using mock
 	s.mockHistoryClient.EXPECT().RecordWorkflowTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, taskRequest *historyservice.RecordWorkflowTaskStartedRequest, arg2 ...interface{}) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
 			s.logger.Debug("Mock Received RecordWorkflowTaskStartedRequest")
-			response := &historyservice.RecordWorkflowTaskStartedResponse{
+			response := historyservice.RecordWorkflowTaskStartedResponse_builder{
 				WorkflowType:               workflowType,
 				PreviousStartedEventId:     scheduledEventID,
 				ScheduledEventId:           scheduledEventID + 1,
 				Attempt:                    1,
 				StickyExecutionEnabled:     true,
-				WorkflowExecutionTaskQueue: &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-				History:                    &historypb.History{Events: []*historypb.HistoryEvent{}},
+				WorkflowExecutionTaskQueue: taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
+				History:                    historypb.History_builder{Events: []*historypb.HistoryEvent{}}.Build(),
 				NextPageToken:              nil,
-			}
+			}.Build()
 			return response, nil
 		}).AnyTimes()
 
-	addRequest := matchingservice.AddWorkflowTaskRequest{
+	addRequest := matchingservice.AddWorkflowTaskRequest_builder{
 		NamespaceId:            namespaceID.String(),
 		Execution:              execution,
 		ScheduledEventId:       scheduledEventID,
 		TaskQueue:              stickyTaskQueue,
 		ScheduleToStartTimeout: timestamp.DurationFromSeconds(100),
-	}
+	}.Build()
 
-	_, _, err := s.matchingEngine.AddWorkflowTask(context.Background(), &addRequest)
+	_, _, err := s.matchingEngine.AddWorkflowTask(context.Background(), addRequest)
 	// fail due to no sticky worker
 	s.ErrorAs(err, new(*serviceerrors.StickyWorkerUnavailable))
 	// poll the sticky queue, should get no result
-	resp, err := s.matchingEngine.PollWorkflowTaskQueue(context.Background(), &matchingservice.PollWorkflowTaskQueueRequest{
+	resp, err := s.matchingEngine.PollWorkflowTaskQueue(context.Background(), matchingservice.PollWorkflowTaskQueueRequest_builder{
 		NamespaceId: namespaceID.String(),
-		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
+		PollRequest: workflowservice.PollWorkflowTaskQueueRequest_builder{
 			TaskQueue: stickyTaskQueue,
 			Identity:  identity,
-		},
-	}, metrics.NoopMetricsHandler)
+		}.Build(),
+	}.Build(), metrics.NoopMetricsHandler)
 	s.NoError(err)
 	s.Equal(emptyPollWorkflowTaskQueueResponse, resp)
 
 	// add task to sticky queue again, this time it should pass
-	_, _, err = s.matchingEngine.AddWorkflowTask(context.Background(), &addRequest)
+	_, _, err = s.matchingEngine.AddWorkflowTask(context.Background(), addRequest)
 	s.NoError(err)
 
-	resp, err = s.matchingEngine.PollWorkflowTaskQueue(context.Background(), &matchingservice.PollWorkflowTaskQueueRequest{
+	resp, err = s.matchingEngine.PollWorkflowTaskQueue(context.Background(), matchingservice.PollWorkflowTaskQueueRequest_builder{
 		NamespaceId: namespaceID.String(),
-		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
+		PollRequest: workflowservice.PollWorkflowTaskQueueRequest_builder{
 			TaskQueue: stickyTaskQueue,
 			Identity:  identity,
-		},
-	}, metrics.NoopMetricsHandler)
+		}.Build(),
+	}.Build(), metrics.NoopMetricsHandler)
 	s.NoError(err)
 
-	expectedResp := &matchingservice.PollWorkflowTaskQueueResponse{
-		TaskToken:              resp.TaskToken,
+	expectedResp := matchingservice.PollWorkflowTaskQueueResponse_builder{
+		TaskToken:              resp.GetTaskToken(),
 		WorkflowExecution:      execution,
 		WorkflowType:           workflowType,
 		PreviousStartedEventId: scheduledEventID,
@@ -568,17 +569,17 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueues() {
 		StickyExecutionEnabled: true,
 		Query:                  nil,
 		TransientWorkflowTask:  nil,
-		WorkflowExecutionTaskQueue: &taskqueuepb.TaskQueue{
+		WorkflowExecutionTaskQueue: taskqueuepb.TaskQueue_builder{
 			Name: tl,
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-		},
+		}.Build(),
 		BranchToken:   nil,
 		ScheduledTime: nil,
 		StartedTime:   nil,
 		Queries:       nil,
-		History:       &historypb.History{Events: []*historypb.HistoryEvent{}},
+		History:       historypb.History_builder{Events: []*historypb.HistoryEvent{}}.Build(),
 		NextPageToken: nil,
-	}
+	}.Build()
 
 	s.Nil(err)
 	s.Equal(expectedResp, resp)
@@ -586,33 +587,33 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueues() {
 
 func (s *matchingEngineSuite) TestPollWorkflowTaskQueues_NamespaceHandover() {
 	namespaceID := uuid.NewString()
-	taskQueue := &taskqueuepb.TaskQueue{Name: "queue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	taskQueue := taskqueuepb.TaskQueue_builder{Name: "queue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build()
 
-	addRequest := matchingservice.AddWorkflowTaskRequest{
+	addRequest := matchingservice.AddWorkflowTaskRequest_builder{
 		NamespaceId:            namespaceID,
-		Execution:              &commonpb.WorkflowExecution{WorkflowId: "workflowID", RunId: uuid.NewString()},
+		Execution:              commonpb.WorkflowExecution_builder{WorkflowId: "workflowID", RunId: uuid.NewString()}.Build(),
 		ScheduledEventId:       int64(0),
 		TaskQueue:              taskQueue,
 		ScheduleToStartTimeout: timestamp.DurationFromSeconds(100),
-	}
+	}.Build()
 
 	// add multiple workflow tasks, but matching should not keep polling new tasks
 	// upon getting namespace handover error when recording start for the first task
-	_, _, err := s.matchingEngine.AddWorkflowTask(context.Background(), &addRequest)
+	_, _, err := s.matchingEngine.AddWorkflowTask(context.Background(), addRequest)
 	s.NoError(err)
-	_, _, err = s.matchingEngine.AddWorkflowTask(context.Background(), &addRequest)
+	_, _, err = s.matchingEngine.AddWorkflowTask(context.Background(), addRequest)
 	s.NoError(err)
 
 	s.mockHistoryClient.EXPECT().RecordWorkflowTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil, common.ErrNamespaceHandover).Times(1)
 
-	resp, err := s.matchingEngine.PollWorkflowTaskQueue(context.Background(), &matchingservice.PollWorkflowTaskQueueRequest{
+	resp, err := s.matchingEngine.PollWorkflowTaskQueue(context.Background(), matchingservice.PollWorkflowTaskQueueRequest_builder{
 		NamespaceId: namespaceID,
-		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
+		PollRequest: workflowservice.PollWorkflowTaskQueueRequest_builder{
 			TaskQueue: taskQueue,
 			Identity:  "identity",
-		},
-	}, metrics.NoopMetricsHandler)
+		}.Build(),
+	}.Build(), metrics.NoopMetricsHandler)
 	s.Nil(resp)
 	s.Equal(common.ErrNamespaceHandover.Error(), err.Error())
 }
@@ -621,31 +622,31 @@ func (s *matchingEngineSuite) TestPollActivityTaskQueues_InternalError() {
 	s.logger.Expect(testlogger.Error, "dropping task due to non-nonretryable errors")
 	namespaceID := uuid.NewString()
 	tl := "queue"
-	taskQueue := &taskqueuepb.TaskQueue{Name: "queue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	taskQueue := taskqueuepb.TaskQueue_builder{Name: "queue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build()
 
-	addRequest := matchingservice.AddActivityTaskRequest{
+	addRequest := matchingservice.AddActivityTaskRequest_builder{
 		NamespaceId:            namespaceID,
-		Execution:              &commonpb.WorkflowExecution{WorkflowId: "workflowID", RunId: uuid.NewString()},
+		Execution:              commonpb.WorkflowExecution_builder{WorkflowId: "workflowID", RunId: uuid.NewString()}.Build(),
 		ScheduledEventId:       int64(5),
 		TaskQueue:              taskQueue,
 		ScheduleToStartTimeout: timestamp.DurationFromSeconds(0),
-	}
+	}.Build()
 
 	// add an activity task
-	_, _, err := s.matchingEngine.AddActivityTask(context.Background(), &addRequest)
+	_, _, err := s.matchingEngine.AddActivityTask(context.Background(), addRequest)
 	s.NoError(err)
 	s.Equal(1, s.taskManager.getTaskCount(newUnversionedRootQueueKey(namespaceID, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)))
 
 	// task is dropped with no retry; RecordActivityTaskStarted should only be called once
 	s.mockHistoryClient.EXPECT().RecordActivityTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil, serviceerror.NewInternal("Internal error")).Times(1)
-	resp, err := s.matchingEngine.PollActivityTaskQueue(context.Background(), &matchingservice.PollActivityTaskQueueRequest{
+	resp, err := s.matchingEngine.PollActivityTaskQueue(context.Background(), matchingservice.PollActivityTaskQueueRequest_builder{
 		NamespaceId: namespaceID,
-		PollRequest: &workflowservice.PollActivityTaskQueueRequest{
+		PollRequest: workflowservice.PollActivityTaskQueueRequest_builder{
 			TaskQueue: taskQueue,
 			Identity:  "identity",
-		},
-	}, metrics.NoopMetricsHandler)
+		}.Build(),
+	}.Build(), metrics.NoopMetricsHandler)
 	protoassert.ProtoEqual(s.T(), emptyPollActivityTaskQueueResponse, resp)
 	s.NoError(err)
 }
@@ -655,18 +656,18 @@ func (s *matchingEngineSuite) TestPollActivityTaskQueues_DataLossError() {
 
 	namespaceID := uuid.NewString()
 	tl := "queue"
-	taskQueue := &taskqueuepb.TaskQueue{Name: "queue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	taskQueue := taskqueuepb.TaskQueue_builder{Name: "queue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build()
 
-	addRequest := matchingservice.AddActivityTaskRequest{
+	addRequest := matchingservice.AddActivityTaskRequest_builder{
 		NamespaceId:            namespaceID,
-		Execution:              &commonpb.WorkflowExecution{WorkflowId: "workflowID", RunId: uuid.NewString()},
+		Execution:              commonpb.WorkflowExecution_builder{WorkflowId: "workflowID", RunId: uuid.NewString()}.Build(),
 		ScheduledEventId:       int64(5),
 		TaskQueue:              taskQueue,
 		ScheduleToStartTimeout: timestamp.DurationFromSeconds(0),
-	}
+	}.Build()
 
 	// add an activity task
-	_, _, err := s.matchingEngine.AddActivityTask(context.Background(), &addRequest)
+	_, _, err := s.matchingEngine.AddActivityTask(context.Background(), addRequest)
 	s.NoError(err)
 	s.Equal(1, s.taskManager.getTaskCount(newUnversionedRootQueueKey(namespaceID, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)))
 
@@ -674,13 +675,13 @@ func (s *matchingEngineSuite) TestPollActivityTaskQueues_DataLossError() {
 	s.mockHistoryClient.EXPECT().RecordActivityTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil, serviceerror.NewDataLoss("DataLoss Error")).Times(1)
 
-	resp, err := s.matchingEngine.PollActivityTaskQueue(context.Background(), &matchingservice.PollActivityTaskQueueRequest{
+	resp, err := s.matchingEngine.PollActivityTaskQueue(context.Background(), matchingservice.PollActivityTaskQueueRequest_builder{
 		NamespaceId: namespaceID,
-		PollRequest: &workflowservice.PollActivityTaskQueueRequest{
+		PollRequest: workflowservice.PollActivityTaskQueueRequest_builder{
 			TaskQueue: taskQueue,
 			Identity:  "identity",
-		},
-	}, metrics.NoopMetricsHandler)
+		}.Build(),
+	}.Build(), metrics.NoopMetricsHandler)
 	protoassert.ProtoEqual(s.T(), emptyPollActivityTaskQueueResponse, resp)
 	s.NoError(err)
 }
@@ -689,8 +690,8 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueues_InternalError() {
 	s.logger.Expect(testlogger.Error, "dropping task due to non-nonretryable errors")
 
 	tqName := "queue"
-	taskQueue := &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
-	wfExecution := &commonpb.WorkflowExecution{WorkflowId: "workflowID", RunId: uuid.NewString()}
+	taskQueue := taskqueuepb.TaskQueue_builder{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build()
+	wfExecution := commonpb.WorkflowExecution_builder{WorkflowId: "workflowID", RunId: uuid.NewString()}.Build()
 
 	// add a wf task
 	s.addWorkflowTask(wfExecution, taskQueue)
@@ -700,13 +701,13 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueues_InternalError() {
 	s.mockHistoryClient.EXPECT().RecordWorkflowTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil, serviceerror.NewInternal("internal error")).Times(1)
 
-	resp, err := s.matchingEngine.PollWorkflowTaskQueue(context.Background(), &matchingservice.PollWorkflowTaskQueueRequest{
+	resp, err := s.matchingEngine.PollWorkflowTaskQueue(context.Background(), matchingservice.PollWorkflowTaskQueueRequest_builder{
 		NamespaceId: namespaceID,
-		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
+		PollRequest: workflowservice.PollWorkflowTaskQueueRequest_builder{
 			TaskQueue: taskQueue,
 			Identity:  "identity",
-		},
-	}, metrics.NoopMetricsHandler)
+		}.Build(),
+	}.Build(), metrics.NoopMetricsHandler)
 	protoassert.ProtoEqual(s.T(), emptyPollWorkflowTaskQueueResponse, resp)
 	s.NoError(err)
 }
@@ -715,8 +716,8 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueues_DataLossError() {
 	s.logger.Expect(testlogger.Error, "dropping task due to non-nonretryable errors")
 
 	tqName := "queue"
-	taskQueue := &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
-	wfExecution := &commonpb.WorkflowExecution{WorkflowId: "workflowID", RunId: uuid.NewString()}
+	taskQueue := taskqueuepb.TaskQueue_builder{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build()
+	wfExecution := commonpb.WorkflowExecution_builder{WorkflowId: "workflowID", RunId: uuid.NewString()}.Build()
 
 	// add a wf task
 	s.addWorkflowTask(wfExecution, taskQueue)
@@ -726,45 +727,45 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueues_DataLossError() {
 	s.mockHistoryClient.EXPECT().RecordWorkflowTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil, serviceerror.NewDataLoss("DataLoss error")).Times(1)
 
-	resp, err := s.matchingEngine.PollWorkflowTaskQueue(context.Background(), &matchingservice.PollWorkflowTaskQueueRequest{
+	resp, err := s.matchingEngine.PollWorkflowTaskQueue(context.Background(), matchingservice.PollWorkflowTaskQueueRequest_builder{
 		NamespaceId: namespaceID,
-		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
+		PollRequest: workflowservice.PollWorkflowTaskQueueRequest_builder{
 			TaskQueue: taskQueue,
 			Identity:  "identity",
-		},
-	}, metrics.NoopMetricsHandler)
+		}.Build(),
+	}.Build(), metrics.NoopMetricsHandler)
 	protoassert.ProtoEqual(s.T(), emptyPollWorkflowTaskQueueResponse, resp)
 	s.NoError(err)
 }
 
 func (s *matchingEngineSuite) TestPollActivityTaskQueues_NamespaceHandover() {
 	namespaceID := uuid.NewString()
-	taskQueue := &taskqueuepb.TaskQueue{Name: "queue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	taskQueue := taskqueuepb.TaskQueue_builder{Name: "queue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build()
 
-	addRequest := matchingservice.AddActivityTaskRequest{
+	addRequest := matchingservice.AddActivityTaskRequest_builder{
 		NamespaceId:            namespaceID,
-		Execution:              &commonpb.WorkflowExecution{WorkflowId: "workflowID", RunId: uuid.NewString()},
+		Execution:              commonpb.WorkflowExecution_builder{WorkflowId: "workflowID", RunId: uuid.NewString()}.Build(),
 		ScheduledEventId:       int64(5),
 		TaskQueue:              taskQueue,
 		ScheduleToStartTimeout: timestamp.DurationFromSeconds(100),
-	}
+	}.Build()
 
 	// add multiple activity tasks, but matching should not keep polling new tasks
 	// upon getting namespace handover error when recording start for the first task
-	_, _, err := s.matchingEngine.AddActivityTask(context.Background(), &addRequest)
+	_, _, err := s.matchingEngine.AddActivityTask(context.Background(), addRequest)
 	s.NoError(err)
-	_, _, err = s.matchingEngine.AddActivityTask(context.Background(), &addRequest)
+	_, _, err = s.matchingEngine.AddActivityTask(context.Background(), addRequest)
 	s.NoError(err)
 
 	s.mockHistoryClient.EXPECT().RecordActivityTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil, common.ErrNamespaceHandover).Times(1)
-	resp, err := s.matchingEngine.PollActivityTaskQueue(context.Background(), &matchingservice.PollActivityTaskQueueRequest{
+	resp, err := s.matchingEngine.PollActivityTaskQueue(context.Background(), matchingservice.PollActivityTaskQueueRequest_builder{
 		NamespaceId: namespaceID,
-		PollRequest: &workflowservice.PollActivityTaskQueueRequest{
+		PollRequest: workflowservice.PollActivityTaskQueueRequest_builder{
 			TaskQueue: taskQueue,
 			Identity:  "identity",
-		},
-	}, metrics.NoopMetricsHandler)
+		}.Build(),
+	}.Build(), metrics.NoopMetricsHandler)
 	s.Nil(resp)
 	s.Equal(common.ErrNamespaceHandover.Error(), err.Error())
 }
@@ -783,12 +784,12 @@ func (s *matchingEngineSuite) TestAddWorkflowTasksForwarded() {
 
 func (s *matchingEngineSuite) TestAddWorkflowAutoEnable() {
 	tv := testvars.New(s.T()).WithNamespaceID(s.ns.ID())
-	req := &matchingservice.UpdateFairnessStateRequest{
+	req := matchingservice.UpdateFairnessStateRequest_builder{
 		NamespaceId:   tv.NamespaceID().String(),
-		TaskQueue:     tv.TaskQueue().Name,
+		TaskQueue:     tv.TaskQueue().GetName(),
 		TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		FairnessState: enumsspb.FAIRNESS_STATE_V2,
-	}
+	}.Build()
 	var didUpdate atomic.Bool
 	s.mockMatchingClient.EXPECT().UpdateFairnessState(context.Background(), req).DoAndReturn(
 		func(ctx context.Context, req *matchingservice.UpdateFairnessStateRequest, opts ...grpc.CallOption) (*matchingservice.UpdateFairnessStateResponse, error) {
@@ -796,7 +797,7 @@ func (s *matchingEngineSuite) TestAddWorkflowAutoEnable() {
 			return s.matchingEngine.UpdateFairnessState(ctx, req)
 		},
 	)
-	dbq := newUnversionedRootQueueKey(tv.NamespaceID().String(), tv.TaskQueue().Name, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	dbq := newUnversionedRootQueueKey(tv.NamespaceID().String(), tv.TaskQueue().GetName(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	mgr := s.newPartitionManager(dbq.partition, s.matchingEngine.config)
 	cMgr := mgr.(*taskQueuePartitionManagerImpl)
 	mgr.GetUserDataManager().(*mockUserDataManager).onChange = cMgr.userDataChanged
@@ -809,15 +810,15 @@ func (s *matchingEngineSuite) TestAddWorkflowAutoEnable() {
 
 	_, _, err = s.matchingEngine.AddWorkflowTask(
 		context.Background(),
-		&matchingservice.AddWorkflowTaskRequest{
+		matchingservice.AddWorkflowTaskRequest_builder{
 			NamespaceId: tv.NamespaceID().String(),
 			Execution:   tv.WorkflowExecution(),
 			TaskQueue:   tv.TaskQueue(),
-			Priority: &commonpb.Priority{
+			Priority: commonpb.Priority_builder{
 				PriorityKey: 3,
 				FairnessKey: "myFairnessKey",
-			},
-		},
+			}.Build(),
+		}.Build(),
 	)
 	// The task may or may not be enqueued before a shutdown, so ignore that error
 	if err != errShutdown {
@@ -827,7 +828,7 @@ func (s *matchingEngineSuite) TestAddWorkflowAutoEnable() {
 
 	// We check the old partition manager for the change because a new partition created will not reference the same mockUserDataManager.
 	data, _, _ := mgr.GetUserDataManager().GetUserData()
-	s.Require().Equal(enumsspb.FAIRNESS_STATE_V2, data.GetData().GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].FairnessState)
+	s.Require().Equal(enumsspb.FAIRNESS_STATE_V2, data.GetData().GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].GetFairnessState())
 	// At this point the partition manager should be unloaded
 	select {
 	case <-cMgr.initCtx.Done():
@@ -851,14 +852,14 @@ func (s *matchingEngineSuite) TestSkipAutoEnable() {
 	tv := testvars.New(s.T())
 	_, _, err := s.matchingEngine.AddWorkflowTask(
 		context.Background(),
-		&matchingservice.AddWorkflowTaskRequest{
+		matchingservice.AddWorkflowTaskRequest_builder{
 			NamespaceId: tv.NamespaceID().String(),
 			Execution:   tv.WorkflowExecution(),
 			TaskQueue:   tv.TaskQueue(),
-			Priority: &commonpb.Priority{
+			Priority: commonpb.Priority_builder{
 				PriorityKey: 3,
-			},
-		},
+			}.Build(),
+		}.Build(),
 	)
 	s.Require().NoError(err)
 }
@@ -870,44 +871,44 @@ func (s *matchingEngineSuite) AddTasksTest(taskType enumspb.TaskQueueType, isFor
 	tl := "makeToast"
 	forwardedFrom := "/_sys/makeToast/1"
 
-	taskQueue := &taskqueuepb.TaskQueue{
+	taskQueue := taskqueuepb.TaskQueue_builder{
 		Name: tl,
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-	}
+	}.Build()
 
 	const taskCount = 111
 
 	runID := uuid.NewString()
 	workflowID := "workflow1"
-	execution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
+	execution := commonpb.WorkflowExecution_builder{RunId: runID, WorkflowId: workflowID}.Build()
 
 	for i := int64(0); i < taskCount; i++ {
 		scheduledEventID := i * 3
 		var err error
 		if taskType == enumspb.TASK_QUEUE_TYPE_ACTIVITY {
-			addRequest := matchingservice.AddActivityTaskRequest{
+			addRequest := matchingservice.AddActivityTaskRequest_builder{
 				NamespaceId:            namespaceID,
 				Execution:              execution,
 				ScheduledEventId:       scheduledEventID,
 				TaskQueue:              taskQueue,
 				ScheduleToStartTimeout: timestamp.DurationFromSeconds(100),
-			}
+			}.Build()
 			if isForwarded {
-				addRequest.ForwardInfo = &taskqueuespb.TaskForwardInfo{SourcePartition: forwardedFrom}
+				addRequest.SetForwardInfo(taskqueuespb.TaskForwardInfo_builder{SourcePartition: forwardedFrom}.Build())
 			}
-			_, _, err = s.matchingEngine.AddActivityTask(context.Background(), &addRequest)
+			_, _, err = s.matchingEngine.AddActivityTask(context.Background(), addRequest)
 		} else {
-			addRequest := matchingservice.AddWorkflowTaskRequest{
+			addRequest := matchingservice.AddWorkflowTaskRequest_builder{
 				NamespaceId:            namespaceID,
 				Execution:              execution,
 				ScheduledEventId:       scheduledEventID,
 				TaskQueue:              taskQueue,
 				ScheduleToStartTimeout: timestamp.DurationFromSeconds(100),
-			}
+			}.Build()
 			if isForwarded {
-				addRequest.ForwardInfo = &taskqueuespb.TaskForwardInfo{SourcePartition: forwardedFrom}
+				addRequest.SetForwardInfo(taskqueuespb.TaskForwardInfo_builder{SourcePartition: forwardedFrom}.Build())
 			}
-			_, _, err = s.matchingEngine.AddWorkflowTask(context.Background(), &addRequest)
+			_, _, err = s.matchingEngine.AddWorkflowTask(context.Background(), addRequest)
 		}
 
 		switch isForwarded {
@@ -927,14 +928,14 @@ func (s *matchingEngineSuite) AddTasksTest(taskType enumspb.TaskQueueType, isFor
 }
 
 func (s *matchingEngineSuite) TestAddWorkflowTaskDoesNotLoadSticky() {
-	addRequest := matchingservice.AddWorkflowTaskRequest{
+	addRequest := matchingservice.AddWorkflowTaskRequest_builder{
 		NamespaceId:            uuid.NewString(),
-		Execution:              &commonpb.WorkflowExecution{RunId: uuid.NewString(), WorkflowId: "wf1"},
+		Execution:              commonpb.WorkflowExecution_builder{RunId: uuid.NewString(), WorkflowId: "wf1"}.Build(),
 		ScheduledEventId:       0,
-		TaskQueue:              &taskqueuepb.TaskQueue{Name: "sticky", Kind: enumspb.TASK_QUEUE_KIND_STICKY},
+		TaskQueue:              taskqueuepb.TaskQueue_builder{Name: "sticky", Kind: enumspb.TASK_QUEUE_KIND_STICKY}.Build(),
 		ScheduleToStartTimeout: timestamp.DurationFromSeconds(100),
-	}
-	_, _, err := s.matchingEngine.AddWorkflowTask(context.Background(), &addRequest)
+	}.Build()
+	_, _, err := s.matchingEngine.AddWorkflowTask(context.Background(), addRequest)
 	s.ErrorAs(err, new(*serviceerrors.StickyWorkerUnavailable))
 	// check loaded queues
 	s.matchingEngine.partitionsLock.RLock()
@@ -943,16 +944,16 @@ func (s *matchingEngineSuite) TestAddWorkflowTaskDoesNotLoadSticky() {
 }
 
 func (s *matchingEngineSuite) TestQueryWorkflowDoesNotLoadSticky() {
-	query := matchingservice.QueryWorkflowRequest{
+	query := matchingservice.QueryWorkflowRequest_builder{
 		NamespaceId: uuid.NewString(),
-		TaskQueue:   &taskqueuepb.TaskQueue{Name: "sticky", Kind: enumspb.TASK_QUEUE_KIND_STICKY},
-		QueryRequest: &workflowservice.QueryWorkflowRequest{
+		TaskQueue:   taskqueuepb.TaskQueue_builder{Name: "sticky", Kind: enumspb.TASK_QUEUE_KIND_STICKY}.Build(),
+		QueryRequest: workflowservice.QueryWorkflowRequest_builder{
 			Namespace: "ns",
-			Execution: &commonpb.WorkflowExecution{RunId: uuid.NewString(), WorkflowId: "wf1"},
-			Query:     &querypb.WorkflowQuery{QueryType: "q"},
-		},
-	}
-	_, err := s.matchingEngine.QueryWorkflow(context.Background(), &query)
+			Execution: commonpb.WorkflowExecution_builder{RunId: uuid.NewString(), WorkflowId: "wf1"}.Build(),
+			Query:     querypb.WorkflowQuery_builder{QueryType: "q"}.Build(),
+		}.Build(),
+	}.Build()
+	_, err := s.matchingEngine.QueryWorkflow(context.Background(), query)
 	s.ErrorAs(err, new(*serviceerrors.StickyWorkerUnavailable))
 	// check loaded queues
 	s.matchingEngine.partitionsLock.RLock()
@@ -969,7 +970,7 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 
 	runID := uuid.NewString()
 	workflowID := "workflow1"
-	workflowExecution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
+	workflowExecution := commonpb.WorkflowExecution_builder{RunId: runID, WorkflowId: workflowID}.Build()
 
 	const taskCount = 1000
 	// TODO: Understand why publish is low when rangeSize is 3
@@ -980,29 +981,29 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 	tlID := newUnversionedRootQueueKey(namespaceID, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 	s.matchingEngine.config.RangeSize = rangeSize // override to low number for the test
 
-	taskQueue := &taskqueuepb.TaskQueue{
+	taskQueue := taskqueuepb.TaskQueue_builder{
 		Name: tl,
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-	}
+	}.Build()
 
 	for i := int64(0); i < taskCount; i++ {
 		scheduledEventID := i * 3
-		addRequest := matchingservice.AddActivityTaskRequest{
+		addRequest := matchingservice.AddActivityTaskRequest_builder{
 			NamespaceId:            namespaceID,
 			Execution:              workflowExecution,
 			ScheduledEventId:       scheduledEventID,
 			TaskQueue:              taskQueue,
 			ScheduleToStartTimeout: timestamp.DurationFromSeconds(100),
-		}
+		}.Build()
 
-		_, _, err := s.matchingEngine.AddActivityTask(context.Background(), &addRequest)
+		_, _, err := s.matchingEngine.AddActivityTask(context.Background(), addRequest)
 		s.NoError(err)
 	}
 	s.EqualValues(taskCount, s.taskManager.getTaskCount(tlID))
 
 	activityTypeName := "activity1"
 	activityID := "activityId1"
-	activityType := &commonpb.ActivityType{Name: activityTypeName}
+	activityType := commonpb.ActivityType_builder{Name: activityTypeName}.Build()
 	activityInput := payloads.EncodeString("Activity1 Input")
 
 	identity := "nobody"
@@ -1011,54 +1012,54 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 	s.mockHistoryClient.EXPECT().RecordActivityTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, taskRequest *historyservice.RecordActivityTaskStartedRequest, arg2 ...interface{}) (*historyservice.RecordActivityTaskStartedResponse, error) {
 			s.logger.Debug("Mock Received RecordActivityTaskStartedRequest")
-			resp := &historyservice.RecordActivityTaskStartedResponse{
+			resp := historyservice.RecordActivityTaskStartedResponse_builder{
 				Attempt: 1,
-				ScheduledEvent: newActivityTaskScheduledEvent(taskRequest.ScheduledEventId, 0,
-					&commandpb.ScheduleActivityTaskCommandAttributes{
+				ScheduledEvent: newActivityTaskScheduledEvent(taskRequest.GetScheduledEventId(), 0,
+					commandpb.ScheduleActivityTaskCommandAttributes_builder{
 						ActivityId: activityID,
-						TaskQueue: &taskqueuepb.TaskQueue{
-							Name: taskQueue.Name,
+						TaskQueue: taskqueuepb.TaskQueue_builder{
+							Name: taskQueue.GetName(),
 							Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-						},
+						}.Build(),
 						ActivityType:           activityType,
 						Input:                  activityInput,
 						ScheduleToCloseTimeout: durationpb.New(100 * time.Second),
 						ScheduleToStartTimeout: durationpb.New(50 * time.Second),
 						StartToCloseTimeout:    durationpb.New(50 * time.Second),
 						HeartbeatTimeout:       durationpb.New(10 * time.Second),
-					}),
-			}
-			resp.StartedTime = timestamp.TimeNowPtrUtc()
+					}.Build()),
+			}.Build()
+			resp.SetStartedTime(timestamp.TimeNowPtrUtc())
 			return resp, nil
 		}).AnyTimes()
 
 	for i := int64(0); i < taskCount; {
 		scheduledEventID := i * 3
 
-		result, err := s.matchingEngine.PollActivityTaskQueue(context.Background(), &matchingservice.PollActivityTaskQueueRequest{
+		result, err := s.matchingEngine.PollActivityTaskQueue(context.Background(), matchingservice.PollActivityTaskQueueRequest_builder{
 			NamespaceId: namespaceID,
-			PollRequest: &workflowservice.PollActivityTaskQueueRequest{
+			PollRequest: workflowservice.PollActivityTaskQueueRequest_builder{
 				TaskQueue: taskQueue,
 				Identity:  identity,
-			},
-		}, metrics.NoopMetricsHandler)
+			}.Build(),
+		}.Build(), metrics.NoopMetricsHandler)
 
 		s.NoError(err)
 		s.NotNil(result)
-		if len(result.TaskToken) == 0 {
+		if len(result.GetTaskToken()) == 0 {
 			s.logger.Debug("empty poll returned")
 			continue
 		}
-		s.EqualValues(activityID, result.ActivityId)
-		s.EqualValues(activityType, result.ActivityType)
-		s.EqualValues(activityInput, result.Input)
-		s.EqualValues(workflowExecution, result.WorkflowExecution)
-		s.Equal(true, validateTimeRange(result.ScheduledTime.AsTime(), time.Minute))
-		s.EqualValues(time.Second*100, result.ScheduleToCloseTimeout.AsDuration())
-		s.Equal(true, validateTimeRange(result.StartedTime.AsTime(), time.Minute))
-		s.EqualValues(time.Second*50, result.StartToCloseTimeout.AsDuration())
-		s.EqualValues(time.Second*10, result.HeartbeatTimeout.AsDuration())
-		taskToken := &tokenspb.Task{
+		s.EqualValues(activityID, result.GetActivityId())
+		s.EqualValues(activityType, result.GetActivityType())
+		s.EqualValues(activityInput, result.GetInput())
+		s.EqualValues(workflowExecution, result.GetWorkflowExecution())
+		s.Equal(true, validateTimeRange(result.GetScheduledTime().AsTime(), time.Minute))
+		s.EqualValues(time.Second*100, result.GetScheduleToCloseTimeout().AsDuration())
+		s.Equal(true, validateTimeRange(result.GetStartedTime().AsTime(), time.Minute))
+		s.EqualValues(time.Second*50, result.GetStartToCloseTimeout().AsDuration())
+		s.EqualValues(time.Second*10, result.GetHeartbeatTimeout().AsDuration())
+		taskToken := tokenspb.Task_builder{
 			Attempt:          1,
 			NamespaceId:      namespaceID,
 			WorkflowId:       workflowID,
@@ -1066,10 +1067,10 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 			ScheduledEventId: scheduledEventID,
 			ActivityId:       activityID,
 			ActivityType:     activityTypeName,
-		}
+		}.Build()
 
 		serializedToken, _ := s.matchingEngine.tokenSerializer.Serialize(taskToken)
-		s.EqualValues(serializedToken, result.TaskToken)
+		s.EqualValues(serializedToken, result.GetTaskToken())
 		i++
 	}
 	s.EqualValues(0, s.taskManager.getTaskCount(tlID))
@@ -1109,13 +1110,13 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	s.matchingEngine.updateTaskQueue(dbq.partition, mgr)
 	mgr.Start()
 
-	taskQueue := &taskqueuepb.TaskQueue{
+	taskQueue := taskqueuepb.TaskQueue_builder{
 		Name: tl,
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-	}
+	}.Build()
 	activityTypeName := "activity1"
 	activityID := "activityId1"
-	activityType := &commonpb.ActivityType{Name: activityTypeName}
+	activityType := commonpb.ActivityType_builder{Name: activityTypeName}.Build()
 	activityInput := payloads.EncodeString("Activity1 Input")
 
 	identity := "nobody"
@@ -1123,38 +1124,38 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	s.mockHistoryClient.EXPECT().RecordActivityTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, taskRequest *historyservice.RecordActivityTaskStartedRequest, arg2 ...interface{}) (*historyservice.RecordActivityTaskStartedResponse, error) {
 			s.logger.Debug("Mock Received RecordActivityTaskStartedRequest")
-			return &historyservice.RecordActivityTaskStartedResponse{
+			return historyservice.RecordActivityTaskStartedResponse_builder{
 				Attempt: 1,
-				ScheduledEvent: newActivityTaskScheduledEvent(taskRequest.ScheduledEventId, 0,
-					&commandpb.ScheduleActivityTaskCommandAttributes{
+				ScheduledEvent: newActivityTaskScheduledEvent(taskRequest.GetScheduledEventId(), 0,
+					commandpb.ScheduleActivityTaskCommandAttributes_builder{
 						ActivityId: activityID,
-						TaskQueue: &taskqueuepb.TaskQueue{
-							Name: taskQueue.Name,
+						TaskQueue: taskqueuepb.TaskQueue_builder{
+							Name: taskQueue.GetName(),
 							Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-						},
+						}.Build(),
 						ActivityType:           activityType,
 						Input:                  activityInput,
 						ScheduleToStartTimeout: durationpb.New(1 * time.Second),
 						ScheduleToCloseTimeout: durationpb.New(2 * time.Second),
 						StartToCloseTimeout:    durationpb.New(1 * time.Second),
 						HeartbeatTimeout:       durationpb.New(1 * time.Second),
-					}),
-			}, nil
+					}.Build()),
+			}.Build(), nil
 		}).AnyTimes()
 
 	const taskCount = 10
 	runID := uuid.NewString()
 	workflowID := "workflow1"
-	workflowExecution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
+	workflowExecution := commonpb.WorkflowExecution_builder{RunId: runID, WorkflowId: workflowID}.Build()
 	pollFunc := func(maxDispatch float64) (*matchingservice.PollActivityTaskQueueResponse, error) {
-		return s.matchingEngine.PollActivityTaskQueue(context.Background(), &matchingservice.PollActivityTaskQueueRequest{
+		return s.matchingEngine.PollActivityTaskQueue(context.Background(), matchingservice.PollActivityTaskQueueRequest_builder{
 			NamespaceId: namespaceID,
-			PollRequest: &workflowservice.PollActivityTaskQueueRequest{
+			PollRequest: workflowservice.PollActivityTaskQueueRequest_builder{
 				TaskQueue:         taskQueue,
 				Identity:          identity,
-				TaskQueueMetadata: &taskqueuepb.TaskQueueMetadata{MaxTasksPerSecond: &wrapperspb.DoubleValue{Value: maxDispatch}},
-			},
-		}, metrics.NoopMetricsHandler)
+				TaskQueueMetadata: taskqueuepb.TaskQueueMetadata_builder{MaxTasksPerSecond: &wrapperspb.DoubleValue{Value: maxDispatch}}.Build(),
+			}.Build(),
+		}.Build(), metrics.NoopMetricsHandler)
 	}
 	for i := int64(0); i < taskCount; i++ {
 		scheduledEventID := i * 3
@@ -1173,20 +1174,20 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 		}()
 		time.Sleep(20 * time.Millisecond) // Necessary for sync match to happen
 
-		addRequest := matchingservice.AddActivityTaskRequest{
+		addRequest := matchingservice.AddActivityTaskRequest_builder{
 			NamespaceId:            namespaceID,
 			Execution:              workflowExecution,
 			ScheduledEventId:       scheduledEventID,
 			TaskQueue:              taskQueue,
 			ScheduleToStartTimeout: timestamp.DurationFromSeconds(100),
-		}
-		_, _, err := s.matchingEngine.AddActivityTask(context.Background(), &addRequest)
+		}.Build()
+		_, _, err := s.matchingEngine.AddActivityTask(context.Background(), addRequest)
 		wg.Wait()
 		s.NoError(err)
 		s.NoError(pollErr)
 		s.NotNil(result)
 
-		if len(result.TaskToken) == 0 {
+		if len(result.GetTaskToken()) == 0 {
 			// when ratelimit is set to zero, poller is expected to return empty result
 			// reset ratelimit, poll again and make sure task is returned this time
 			s.logger.Debug("empty poll returned")
@@ -1201,15 +1202,15 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 			s.NoError(err)
 			s.NoError(pollErr)
 			s.NotNil(result)
-			s.True(len(result.TaskToken) > 0)
+			s.True(len(result.GetTaskToken()) > 0)
 		}
 
-		s.EqualValues(activityID, result.ActivityId)
-		s.EqualValues(activityType, result.ActivityType)
-		s.EqualValues(activityInput, result.Input)
-		s.EqualValues(workflowExecution, result.WorkflowExecution)
+		s.EqualValues(activityID, result.GetActivityId())
+		s.EqualValues(activityType, result.GetActivityType())
+		s.EqualValues(activityInput, result.GetInput())
+		s.EqualValues(workflowExecution, result.GetWorkflowExecution())
 
-		taskToken := &tokenspb.Task{
+		taskToken := tokenspb.Task_builder{
 			Attempt:          1,
 			NamespaceId:      namespaceID,
 			WorkflowId:       workflowID,
@@ -1217,9 +1218,9 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 			ScheduledEventId: scheduledEventID,
 			ActivityId:       activityID,
 			ActivityType:     activityTypeName,
-		}
+		}.Build()
 		serializedToken, _ := s.matchingEngine.tokenSerializer.Serialize(taskToken)
-		s.EqualValues(serializedToken, result.TaskToken)
+		s.EqualValues(serializedToken, result.GetTaskToken())
 	}
 
 	s.EventuallyWithT(func(collect *assert.CollectT) {
@@ -1235,23 +1236,23 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 
 	// check the poller information
 	tlType := enumspb.TASK_QUEUE_TYPE_ACTIVITY
-	descResp, err := s.matchingEngine.DescribeTaskQueue(context.Background(), &matchingservice.DescribeTaskQueueRequest{
+	descResp, err := s.matchingEngine.DescribeTaskQueue(context.Background(), matchingservice.DescribeTaskQueueRequest_builder{
 		NamespaceId: namespaceID,
-		DescRequest: &workflowservice.DescribeTaskQueueRequest{
+		DescRequest: workflowservice.DescribeTaskQueueRequest_builder{
 			TaskQueue:              taskQueue,
 			TaskQueueType:          tlType,
 			IncludeTaskQueueStatus: true,
-		},
-	})
+		}.Build(),
+	}.Build())
 	s.NoError(err)
-	s.Equal(1, len(descResp.DescResponse.Pollers))
-	s.Equal(identity, descResp.DescResponse.Pollers[0].GetIdentity())
-	s.NotEmpty(descResp.DescResponse.Pollers[0].GetLastAccessTime())
-	s.Equal(defaultTaskDispatchRPS, descResp.DescResponse.Pollers[0].GetRatePerSecond())
-	s.NotNil(descResp.DescResponse.GetTaskQueueStatus())
+	s.Equal(1, len(descResp.GetDescResponse().GetPollers()))
+	s.Equal(identity, descResp.GetDescResponse().GetPollers()[0].GetIdentity())
+	s.NotEmpty(descResp.GetDescResponse().GetPollers()[0].GetLastAccessTime())
+	s.Equal(defaultTaskDispatchRPS, descResp.GetDescResponse().GetPollers()[0].GetRatePerSecond())
+	s.NotNil(descResp.GetDescResponse().GetTaskQueueStatus())
 	numPartitions := float64(s.matchingEngine.config.NumTaskqueueWritePartitions("", "", tlType))
 	//nolint:staticcheck // checking deprecated field
-	s.GreaterOrEqual(descResp.DescResponse.GetTaskQueueStatus().GetRatePerSecond()*numPartitions,
+	s.GreaterOrEqual(descResp.GetDescResponse().GetTaskQueueStatus().GetRatePerSecond()*numPartitions,
 		(defaultTaskDispatchRPS - 1))
 }
 
@@ -1286,7 +1287,7 @@ func (s *matchingEngineSuite) TestRateLimiterAcrossVersionedQueues() {
 
 	runID := uuid.NewString()
 	workflowID := "workflow1"
-	workflowExecution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
+	workflowExecution := commonpb.WorkflowExecution_builder{RunId: runID, WorkflowId: workflowID}.Build()
 	deploymentName := "test-deployment"
 
 	mgr := s.newPartitionManager(dbq.partition, s.matchingEngine.config)
@@ -1296,13 +1297,13 @@ func (s *matchingEngineSuite) TestRateLimiterAcrossVersionedQueues() {
 	s.matchingEngine.updateTaskQueue(dbq.partition, mgr)
 	mgr.Start()
 
-	taskQueue := &taskqueuepb.TaskQueue{
+	taskQueue := taskqueuepb.TaskQueue_builder{
 		Name: tl,
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-	}
+	}.Build()
 	activityTypeName := "activity1"
 	activityID := "activityId1"
-	activityType := &commonpb.ActivityType{Name: activityTypeName}
+	activityType := commonpb.ActivityType_builder{Name: activityTypeName}.Build()
 	activityInput := payloads.EncodeString("Activity1 Input")
 
 	identity := "nobody"
@@ -1310,39 +1311,39 @@ func (s *matchingEngineSuite) TestRateLimiterAcrossVersionedQueues() {
 	s.mockHistoryClient.EXPECT().RecordActivityTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, taskRequest *historyservice.RecordActivityTaskStartedRequest, arg2 ...interface{}) (*historyservice.RecordActivityTaskStartedResponse, error) {
 			s.logger.Debug("Mock Received RecordActivityTaskStartedRequest")
-			return &historyservice.RecordActivityTaskStartedResponse{
+			return historyservice.RecordActivityTaskStartedResponse_builder{
 				Attempt: 1,
-				ScheduledEvent: newActivityTaskScheduledEvent(taskRequest.ScheduledEventId, 0,
-					&commandpb.ScheduleActivityTaskCommandAttributes{
+				ScheduledEvent: newActivityTaskScheduledEvent(taskRequest.GetScheduledEventId(), 0,
+					commandpb.ScheduleActivityTaskCommandAttributes_builder{
 						ActivityId: activityID,
-						TaskQueue: &taskqueuepb.TaskQueue{
-							Name: taskQueue.Name,
+						TaskQueue: taskqueuepb.TaskQueue_builder{
+							Name: taskQueue.GetName(),
 							Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-						},
+						}.Build(),
 						ActivityType:           activityType,
 						Input:                  activityInput,
 						ScheduleToStartTimeout: durationpb.New(1 * time.Second),
 						ScheduleToCloseTimeout: durationpb.New(2 * time.Second),
 						StartToCloseTimeout:    durationpb.New(1 * time.Second),
 						HeartbeatTimeout:       durationpb.New(1 * time.Second),
-					}),
-			}, nil
+					}.Build()),
+			}.Build(), nil
 		}).Times(2)
 
 	pollFunc := func(maxDispatch float64, buildID string) (*matchingservice.PollActivityTaskQueueResponse, error) {
-		return s.matchingEngine.PollActivityTaskQueue(context.Background(), &matchingservice.PollActivityTaskQueueRequest{
+		return s.matchingEngine.PollActivityTaskQueue(context.Background(), matchingservice.PollActivityTaskQueueRequest_builder{
 			NamespaceId: namespaceID,
-			PollRequest: &workflowservice.PollActivityTaskQueueRequest{
+			PollRequest: workflowservice.PollActivityTaskQueueRequest_builder{
 				TaskQueue:         taskQueue,
 				Identity:          identity,
-				TaskQueueMetadata: &taskqueuepb.TaskQueueMetadata{MaxTasksPerSecond: &wrapperspb.DoubleValue{Value: maxDispatch}},
-				DeploymentOptions: &deploymentpb.WorkerDeploymentOptions{
+				TaskQueueMetadata: taskqueuepb.TaskQueueMetadata_builder{MaxTasksPerSecond: &wrapperspb.DoubleValue{Value: maxDispatch}}.Build(),
+				DeploymentOptions: deploymentpb.WorkerDeploymentOptions_builder{
 					DeploymentName:       deploymentName,
 					BuildId:              buildID,
 					WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_VERSIONED,
-				},
-			},
-		}, metrics.NoopMetricsHandler)
+				}.Build(),
+			}.Build(),
+		}.Build(), metrics.NoopMetricsHandler)
 	}
 
 	const taskCount = 2
@@ -1368,61 +1369,61 @@ func (s *matchingEngineSuite) TestRateLimiterAcrossVersionedQueues() {
 	updateOptions := UserDataUpdateOptions{Source: "SyncDeploymentUserData"}
 	_, err := tqPTM.GetUserDataManager().UpdateUserData(context.Background(), updateOptions, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
 
-		newData := &persistencespb.TaskQueueUserData{
+		newData := persistencespb.TaskQueueUserData_builder{
 			PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
-				int32(enumspb.TASK_QUEUE_TYPE_ACTIVITY): {
-					DeploymentData: &persistencespb.DeploymentData{
+				int32(enumspb.TASK_QUEUE_TYPE_ACTIVITY): persistencespb.TaskQueueTypeUserData_builder{
+					DeploymentData: persistencespb.DeploymentData_builder{
 						Versions: []*deploymentspb.DeploymentVersionData{
-							{
-								Version: &deploymentspb.WorkerDeploymentVersion{
+							deploymentspb.DeploymentVersionData_builder{
+								Version: deploymentspb.WorkerDeploymentVersion_builder{
 									DeploymentName: deploymentName,
 									BuildId:        strconv.FormatInt(int64(0), 10),
-								},
+								}.Build(),
 								RoutingUpdateTime: timestamppb.Now(),
 								CurrentSinceTime:  timestamppb.Now(),
-							},
-							{
-								Version: &deploymentspb.WorkerDeploymentVersion{
+							}.Build(),
+							deploymentspb.DeploymentVersionData_builder{
+								Version: deploymentspb.WorkerDeploymentVersion_builder{
 									DeploymentName: deploymentName,
 									BuildId:        strconv.FormatInt(int64(1), 10),
-								},
+								}.Build(),
 								RoutingUpdateTime: timestamppb.Now(),
 								RampingSinceTime:  timestamppb.Now(),
-							},
+							}.Build(),
 						},
-					},
-				},
+					}.Build(),
+				}.Build(),
 			},
-		}
+		}.Build()
 		return newData, true, nil
 	})
 	s.NoError(err)
 
 	for i := int64(0); i < taskCount; i++ {
 		scheduledEventID := i * 3
-		addRequest := matchingservice.AddActivityTaskRequest{
+		addRequest := matchingservice.AddActivityTaskRequest_builder{
 			NamespaceId:            namespaceID,
 			Execution:              workflowExecution,
 			ScheduledEventId:       scheduledEventID,
 			TaskQueue:              taskQueue,
 			ScheduleToStartTimeout: timestamp.DurationFromSeconds(100),
-			VersionDirective: &taskqueuespb.TaskVersionDirective{
+			VersionDirective: taskqueuespb.TaskVersionDirective_builder{
 				Behavior: enumspb.VERSIONING_BEHAVIOR_PINNED,
-				DeploymentVersion: &deploymentspb.WorkerDeploymentVersion{
+				DeploymentVersion: deploymentspb.WorkerDeploymentVersion_builder{
 					DeploymentName: deploymentName,
 					BuildId:        strconv.FormatInt(int64(i), 10),
-				},
-			},
-		}
+				}.Build(),
+			}.Build(),
+		}.Build()
 
-		_, _, err = s.matchingEngine.AddActivityTask(context.Background(), &addRequest)
+		_, _, err = s.matchingEngine.AddActivityTask(context.Background(), addRequest)
 		s.NoError(err)
 	}
 
 	// Verifying that both the pollers don't receive any tasks since the overall dispatch rate has been set to 0
 	for i := int64(0); i < taskCount; i++ {
 		receivedResult := <-resultChan
-		s.Nil(receivedResult.TaskToken)
+		s.Nil(receivedResult.GetTaskToken())
 	}
 
 	// Restart the pollers with maxTasksPerSecond = defaultTaskDispatchRPS so that they can receive tasks
@@ -1439,7 +1440,7 @@ func (s *matchingEngineSuite) TestRateLimiterAcrossVersionedQueues() {
 		receivedResult := <-resultChan
 
 		s.NotNil(receivedResult)
-		s.NotNil(receivedResult.TaskToken)
+		s.NotNil(receivedResult.GetTaskToken())
 	}
 }
 
@@ -1486,7 +1487,7 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 
 	runID := uuid.NewString()
 	workflowID := "workflow1"
-	workflowExecution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
+	workflowExecution := commonpb.WorkflowExecution_builder{RunId: runID, WorkflowId: workflowID}.Build()
 
 	const rangeSize = 3
 	var scheduledEventID int64 = 123
@@ -1499,10 +1500,10 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 	s.matchingEngine.updateTaskQueue(dbq.partition, mgr)
 	mgr.Start()
 
-	taskQueue := &taskqueuepb.TaskQueue{
+	taskQueue := taskqueuepb.TaskQueue_builder{
 		Name: tl,
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-	}
+	}.Build()
 	var wg sync.WaitGroup
 	wg.Add(2 * workerCount)
 
@@ -1510,15 +1511,15 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 		go func() {
 			defer wg.Done()
 			for i := int64(0); i < taskCount; i++ {
-				addRequest := matchingservice.AddActivityTaskRequest{
+				addRequest := matchingservice.AddActivityTaskRequest_builder{
 					NamespaceId:            namespaceID,
 					Execution:              workflowExecution,
 					ScheduledEventId:       scheduledEventID,
 					TaskQueue:              taskQueue,
 					ScheduleToStartTimeout: timestamp.DurationFromSeconds(100),
-				}
+				}.Build()
 
-				_, _, err := s.matchingEngine.AddActivityTask(context.Background(), &addRequest)
+				_, _, err := s.matchingEngine.AddActivityTask(context.Background(), addRequest)
 				if err != nil {
 					s.logger.Info("Failure in AddActivityTask", tag.Error(err))
 					i--
@@ -1529,11 +1530,11 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 
 	activityTypeName := "activity1"
 	activityID := "activityId1"
-	activityType := &commonpb.ActivityType{Name: activityTypeName}
+	activityType := commonpb.ActivityType_builder{Name: activityTypeName}.Build()
 	activityInput := payloads.EncodeString("Activity1 Input")
-	activityHeader := &commonpb.Header{
+	activityHeader := commonpb.Header_builder{
 		Fields: map[string]*commonpb.Payload{"tracing": payload.EncodeString("tracing data")},
-	}
+	}.Build()
 
 	identity := "nobody"
 
@@ -1541,15 +1542,15 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 	s.mockHistoryClient.EXPECT().RecordActivityTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, taskRequest *historyservice.RecordActivityTaskStartedRequest, arg2 ...interface{}) (*historyservice.RecordActivityTaskStartedResponse, error) {
 			s.logger.Debug("Mock Received RecordActivityTaskStartedRequest")
-			return &historyservice.RecordActivityTaskStartedResponse{
+			return historyservice.RecordActivityTaskStartedResponse_builder{
 				Attempt: 1,
-				ScheduledEvent: newActivityTaskScheduledEvent(taskRequest.ScheduledEventId, 0,
-					&commandpb.ScheduleActivityTaskCommandAttributes{
+				ScheduledEvent: newActivityTaskScheduledEvent(taskRequest.GetScheduledEventId(), 0,
+					commandpb.ScheduleActivityTaskCommandAttributes_builder{
 						ActivityId: activityID,
-						TaskQueue: &taskqueuepb.TaskQueue{
-							Name: taskQueue.Name,
+						TaskQueue: taskqueuepb.TaskQueue_builder{
+							Name: taskQueue.GetName(),
 							Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-						},
+						}.Build(),
 						ActivityType:           activityType,
 						Input:                  activityInput,
 						Header:                 activityHeader,
@@ -1557,8 +1558,8 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 						ScheduleToCloseTimeout: durationpb.New(2 * time.Second),
 						StartToCloseTimeout:    durationpb.New(1 * time.Second),
 						HeartbeatTimeout:       durationpb.New(1 * time.Second),
-					}),
-			}, nil
+					}.Build()),
+			}.Build(), nil
 		}).AnyTimes()
 
 	for p := 0; p < workerCount; p++ {
@@ -1566,26 +1567,26 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 			defer wg.Done()
 			for i := int64(0); i < taskCount; {
 				maxDispatch := dispatchLimitFn(wNum, i)
-				result, err := s.matchingEngine.PollActivityTaskQueue(context.Background(), &matchingservice.PollActivityTaskQueueRequest{
+				result, err := s.matchingEngine.PollActivityTaskQueue(context.Background(), matchingservice.PollActivityTaskQueueRequest_builder{
 					NamespaceId: namespaceID,
-					PollRequest: &workflowservice.PollActivityTaskQueueRequest{
+					PollRequest: workflowservice.PollActivityTaskQueueRequest_builder{
 						TaskQueue:         taskQueue,
 						Identity:          identity,
-						TaskQueueMetadata: &taskqueuepb.TaskQueueMetadata{MaxTasksPerSecond: &wrapperspb.DoubleValue{Value: maxDispatch}},
-					},
-				}, metrics.NoopMetricsHandler)
+						TaskQueueMetadata: taskqueuepb.TaskQueueMetadata_builder{MaxTasksPerSecond: &wrapperspb.DoubleValue{Value: maxDispatch}}.Build(),
+					}.Build(),
+				}.Build(), metrics.NoopMetricsHandler)
 				s.NoError(err)
 				s.NotNil(result)
-				if len(result.TaskToken) == 0 {
+				if len(result.GetTaskToken()) == 0 {
 					s.logger.Debug("empty poll returned")
 					continue
 				}
-				s.EqualValues(activityID, result.ActivityId)
-				s.EqualValues(activityType, result.ActivityType)
-				s.EqualValues(activityInput, result.Input)
-				s.EqualValues(activityHeader, result.Header)
-				s.EqualValues(workflowExecution, result.WorkflowExecution)
-				taskToken := &tokenspb.Task{
+				s.EqualValues(activityID, result.GetActivityId())
+				s.EqualValues(activityType, result.GetActivityType())
+				s.EqualValues(activityInput, result.GetInput())
+				s.EqualValues(activityHeader, result.GetHeader())
+				s.EqualValues(workflowExecution, result.GetWorkflowExecution())
+				taskToken := tokenspb.Task_builder{
 					Attempt:          1,
 					NamespaceId:      namespaceID,
 					WorkflowId:       workflowID,
@@ -1593,8 +1594,8 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 					ScheduledEventId: scheduledEventID,
 					ActivityId:       activityID,
 					ActivityType:     activityTypeName,
-				}
-				resultToken, err := s.matchingEngine.tokenSerializer.Deserialize(result.TaskToken)
+				}.Build()
+				resultToken, err := s.matchingEngine.tokenSerializer.Deserialize(result.GetTaskToken())
 				s.NoError(err)
 				protoassert.ProtoEqual(s.T(), taskToken, resultToken)
 				i++
@@ -1629,7 +1630,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeWorkflowTasks() {
 
 	runID := uuid.NewString()
 	workflowID := "workflow1"
-	workflowExecution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
+	workflowExecution := commonpb.WorkflowExecution_builder{RunId: runID, WorkflowId: workflowID}.Build()
 
 	const workerCount = 20
 	const taskCount = 100
@@ -1642,25 +1643,25 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeWorkflowTasks() {
 	tlID := newUnversionedRootQueueKey(namespaceID, tl, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	s.matchingEngine.config.RangeSize = rangeSize // override to low number for the test
 
-	taskQueue := &taskqueuepb.TaskQueue{
+	taskQueue := taskqueuepb.TaskQueue_builder{
 		Name: tl,
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-	}
+	}.Build()
 
 	var wg sync.WaitGroup
 	wg.Add(2 * workerCount)
 	for p := 0; p < workerCount; p++ {
 		go func() {
 			for i := int64(0); i < taskCount; i++ {
-				addRequest := matchingservice.AddWorkflowTaskRequest{
+				addRequest := matchingservice.AddWorkflowTaskRequest_builder{
 					NamespaceId:            namespaceID,
 					Execution:              workflowExecution,
 					ScheduledEventId:       scheduledEventID,
 					TaskQueue:              taskQueue,
 					ScheduleToStartTimeout: timestamp.DurationFromSeconds(100),
-				}
+				}.Build()
 
-				_, _, err := s.matchingEngine.AddWorkflowTask(context.Background(), &addRequest)
+				_, _, err := s.matchingEngine.AddWorkflowTask(context.Background(), addRequest)
 				if err != nil {
 					panic(err)
 				}
@@ -1669,7 +1670,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeWorkflowTasks() {
 		}()
 	}
 	workflowTypeName := "workflowType1"
-	workflowType := &commonpb.WorkflowType{Name: workflowTypeName}
+	workflowType := commonpb.WorkflowType_builder{Name: workflowTypeName}.Build()
 
 	identity := "nobody"
 
@@ -1677,48 +1678,48 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeWorkflowTasks() {
 	s.mockHistoryClient.EXPECT().RecordWorkflowTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, taskRequest *historyservice.RecordWorkflowTaskStartedRequest, arg2 ...interface{}) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
 			s.logger.Debug("Mock Received RecordWorkflowTaskStartedRequest")
-			return &historyservice.RecordWorkflowTaskStartedResponse{
+			return historyservice.RecordWorkflowTaskStartedResponse_builder{
 				PreviousStartedEventId: startedEventID,
 				StartedEventId:         startedEventID,
 				ScheduledEventId:       scheduledEventID,
 				WorkflowType:           workflowType,
 				Attempt:                1,
-				History:                &historypb.History{Events: []*historypb.HistoryEvent{}},
+				History:                historypb.History_builder{Events: []*historypb.HistoryEvent{}}.Build(),
 				NextPageToken:          nil,
-			}, nil
+			}.Build(), nil
 		}).AnyTimes()
 
 	for p := 0; p < workerCount; p++ {
 		go func() {
 			for i := int64(0); i < taskCount; {
-				result, err := s.matchingEngine.PollWorkflowTaskQueue(context.Background(), &matchingservice.PollWorkflowTaskQueueRequest{
+				result, err := s.matchingEngine.PollWorkflowTaskQueue(context.Background(), matchingservice.PollWorkflowTaskQueueRequest_builder{
 					NamespaceId: namespaceID,
-					PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
+					PollRequest: workflowservice.PollWorkflowTaskQueueRequest_builder{
 						TaskQueue: taskQueue,
 						Identity:  identity,
-					},
-				}, metrics.NoopMetricsHandler)
+					}.Build(),
+				}.Build(), metrics.NoopMetricsHandler)
 				if err != nil {
 					panic(err)
 				}
 				s.NotNil(result)
-				if len(result.TaskToken) == 0 {
+				if len(result.GetTaskToken()) == 0 {
 					s.logger.Debug("empty poll returned")
 					continue
 				}
-				s.EqualValues(workflowExecution, result.WorkflowExecution)
-				s.EqualValues(workflowType, result.WorkflowType)
-				s.EqualValues(startedEventID, result.StartedEventId)
-				s.EqualValues(workflowExecution, result.WorkflowExecution)
-				taskToken := &tokenspb.Task{
+				s.EqualValues(workflowExecution, result.GetWorkflowExecution())
+				s.EqualValues(workflowType, result.GetWorkflowType())
+				s.EqualValues(startedEventID, result.GetStartedEventId())
+				s.EqualValues(workflowExecution, result.GetWorkflowExecution())
+				taskToken := tokenspb.Task_builder{
 					Attempt:          1,
 					NamespaceId:      namespaceID,
 					WorkflowId:       workflowID,
 					RunId:            runID,
 					ScheduledEventId: scheduledEventID,
 					StartedEventId:   startedEventID,
-				}
-				resultToken, err := s.matchingEngine.tokenSerializer.Deserialize(result.TaskToken)
+				}.Build()
+				resultToken, err := s.matchingEngine.tokenSerializer.Deserialize(result.GetTaskToken())
 				if err != nil {
 					panic(err)
 				}
@@ -1743,34 +1744,34 @@ func (s *matchingEngineSuite) TestPollWithExpiredContext() {
 	namespaceID := namespace.ID(uuid.NewString())
 	tl := "makeToast"
 
-	taskQueue := &taskqueuepb.TaskQueue{
+	taskQueue := taskqueuepb.TaskQueue_builder{
 		Name: tl,
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-	}
+	}.Build()
 
 	// Try with cancelled context
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	cancel()
-	_, err := s.matchingEngine.PollActivityTaskQueue(ctx, &matchingservice.PollActivityTaskQueueRequest{
+	_, err := s.matchingEngine.PollActivityTaskQueue(ctx, matchingservice.PollActivityTaskQueueRequest_builder{
 		NamespaceId: namespaceID.String(),
-		PollRequest: &workflowservice.PollActivityTaskQueueRequest{
+		PollRequest: workflowservice.PollActivityTaskQueueRequest_builder{
 			TaskQueue: taskQueue,
 			Identity:  identity,
-		},
-	}, metrics.NoopMetricsHandler)
+		}.Build(),
+	}.Build(), metrics.NoopMetricsHandler)
 
 	s.Equal(ctx.Err(), err)
 
 	// Try with expired context
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	resp, err := s.matchingEngine.PollActivityTaskQueue(ctx, &matchingservice.PollActivityTaskQueueRequest{
+	resp, err := s.matchingEngine.PollActivityTaskQueue(ctx, matchingservice.PollActivityTaskQueueRequest_builder{
 		NamespaceId: namespaceID.String(),
-		PollRequest: &workflowservice.PollActivityTaskQueueRequest{
+		PollRequest: workflowservice.PollActivityTaskQueueRequest_builder{
 			TaskQueue: taskQueue,
 			Identity:  identity,
-		},
-	}, metrics.NoopMetricsHandler)
+		}.Build(),
+	}.Build(), metrics.NoopMetricsHandler)
 	s.Nil(err)
 	s.Equal(emptyPollActivityTaskQueueResponse, resp)
 }
@@ -1784,44 +1785,44 @@ func (s *matchingEngineSuite) TestForceUnloadTaskQueue() {
 
 	// We unload a sticky queue so that we can verify the unload took effect by
 	// attempting to add a task to it
-	stickyQueue := &taskqueuepb.TaskQueue{Name: "sticky-queue", Kind: enumspb.TASK_QUEUE_KIND_STICKY}
+	stickyQueue := taskqueuepb.TaskQueue_builder{Name: "sticky-queue", Kind: enumspb.TASK_QUEUE_KIND_STICKY}.Build()
 
-	addTaskRequest := matchingservice.AddWorkflowTaskRequest{
+	addTaskRequest := matchingservice.AddWorkflowTaskRequest_builder{
 		NamespaceId:      namespaceID,
-		Execution:        &commonpb.WorkflowExecution{WorkflowId: "workflowID", RunId: uuid.NewString()},
+		Execution:        commonpb.WorkflowExecution_builder{WorkflowId: "workflowID", RunId: uuid.NewString()}.Build(),
 		ScheduledEventId: int64(0),
 		TaskQueue:        stickyQueue,
-	}
+	}.Build()
 
 	// Poll to create the queue
-	pollResp, err := s.matchingEngine.PollWorkflowTaskQueue(ctx, &matchingservice.PollWorkflowTaskQueueRequest{
+	pollResp, err := s.matchingEngine.PollWorkflowTaskQueue(ctx, matchingservice.PollWorkflowTaskQueueRequest_builder{
 		NamespaceId: namespaceID,
-		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
+		PollRequest: workflowservice.PollWorkflowTaskQueueRequest_builder{
 			TaskQueue: stickyQueue,
 			Identity:  identity,
-		}},
+		}.Build()}.Build(),
 		metrics.NoopMetricsHandler)
 	s.Nil(err)
 	s.NotNil(pollResp)
 
 	// Sanity check: adding a task should succeed with the queue loaded
-	_, _, err = s.matchingEngine.AddWorkflowTask(ctx, &addTaskRequest)
+	_, _, err = s.matchingEngine.AddWorkflowTask(ctx, addTaskRequest)
 	s.NoError(err)
 
 	// Force unload the sticky queue
-	unloadResp, err := s.matchingEngine.ForceUnloadTaskQueuePartition(ctx, &matchingservice.ForceUnloadTaskQueuePartitionRequest{
+	unloadResp, err := s.matchingEngine.ForceUnloadTaskQueuePartition(ctx, matchingservice.ForceUnloadTaskQueuePartitionRequest_builder{
 		NamespaceId: namespaceID,
-		TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
-			TaskQueue:     stickyQueue.Name,
+		TaskQueuePartition: taskqueuespb.TaskQueuePartition_builder{
+			TaskQueue:     stickyQueue.GetName(),
 			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-		},
-	})
+		}.Build(),
+	}.Build())
 	s.NoError(err)
 	s.NotNil(unloadResp)
-	s.True(unloadResp.WasLoaded)
+	s.True(unloadResp.GetWasLoaded())
 
 	// Adding a task should now fast fail
-	_, _, err = s.matchingEngine.AddWorkflowTask(ctx, &addTaskRequest)
+	_, _, err = s.matchingEngine.AddWorkflowTask(ctx, addTaskRequest)
 	s.ErrorAs(err, new(*serviceerrors.StickyWorkerUnavailable))
 }
 
@@ -1831,7 +1832,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 	}
 	runID := uuid.NewString()
 	workflowID := "workflow1"
-	workflowExecution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
+	workflowExecution := commonpb.WorkflowExecution_builder{RunId: runID, WorkflowId: workflowID}.Build()
 
 	const engineCount = 2
 	const taskCount = 400
@@ -1844,10 +1845,10 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 	tlID := newUnversionedRootQueueKey(namespaceID, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 	s.matchingEngine.config.RangeSize = rangeSize // override to low number for the test
 
-	taskQueue := &taskqueuepb.TaskQueue{
+	taskQueue := taskqueuepb.TaskQueue_builder{
 		Name: tl,
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-	}
+	}.Build()
 
 	engines := make([]*matchingEngineImpl, engineCount)
 	for p := 0; p < engineCount; p++ {
@@ -1861,18 +1862,18 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 		for p := 0; p < engineCount; p++ {
 			engine := engines[p]
 			for i := int64(0); i < taskCount; i++ {
-				addRequest := matchingservice.AddActivityTaskRequest{
+				addRequest := matchingservice.AddActivityTaskRequest_builder{
 					NamespaceId:            namespaceID,
 					Execution:              workflowExecution,
 					ScheduledEventId:       scheduledEventID,
 					TaskQueue:              taskQueue,
 					ScheduleToStartTimeout: timestamp.DurationFromSeconds(600),
-				}
+				}.Build()
 				// scheduledEventID is the key for the workflow task, so needs a different
 				// scheduledEventID for each task for deduplication logic below
 				scheduledEventID++
 
-				_, _, err := engine.AddActivityTask(context.Background(), &addRequest)
+				_, _, err := engine.AddActivityTask(context.Background(), addRequest)
 				if err != nil {
 					if _, ok := err.(*persistence.ConditionFailedError); ok {
 						i-- // retry adding
@@ -1888,7 +1889,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 
 	activityTypeName := "activity1"
 	activityID := "activityId1"
-	activityType := &commonpb.ActivityType{Name: activityTypeName}
+	activityType := commonpb.ActivityType_builder{Name: activityTypeName}.Build()
 	activityInput := payloads.EncodeString("Activity1 Input")
 
 	identity := "nobody"
@@ -1905,62 +1906,62 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 
 			s.logger.Debug("Mock Received RecordActivityTaskStartedRequest", tag.NewInt64("scheduled-event-id", taskRequest.GetScheduledEventId()))
 			startedTasks[taskRequest.GetScheduledEventId()] = struct{}{}
-			return &historyservice.RecordActivityTaskStartedResponse{
+			return historyservice.RecordActivityTaskStartedResponse_builder{
 				Attempt: 1,
-				ScheduledEvent: newActivityTaskScheduledEvent(taskRequest.ScheduledEventId, 0,
-					&commandpb.ScheduleActivityTaskCommandAttributes{
+				ScheduledEvent: newActivityTaskScheduledEvent(taskRequest.GetScheduledEventId(), 0,
+					commandpb.ScheduleActivityTaskCommandAttributes_builder{
 						ActivityId: activityID,
-						TaskQueue: &taskqueuepb.TaskQueue{
-							Name: taskQueue.Name,
+						TaskQueue: taskqueuepb.TaskQueue_builder{
+							Name: taskQueue.GetName(),
 							Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-						},
+						}.Build(),
 						ActivityType:           activityType,
 						Input:                  activityInput,
 						ScheduleToStartTimeout: durationpb.New(600 * time.Second),
 						ScheduleToCloseTimeout: durationpb.New(2 * time.Second),
 						StartToCloseTimeout:    durationpb.New(1 * time.Second),
 						HeartbeatTimeout:       durationpb.New(1 * time.Second),
-					}),
-			}, nil
+					}.Build()),
+			}.Build(), nil
 		}).AnyTimes()
 	for j := 0; j < iterations; j++ {
 		for p := 0; p < engineCount; p++ {
 			engine := engines[p]
 			for i := int64(0); i < taskCount; /* incremented explicitly to skip empty polls */ {
-				result, err := engine.PollActivityTaskQueue(context.Background(), &matchingservice.PollActivityTaskQueueRequest{
+				result, err := engine.PollActivityTaskQueue(context.Background(), matchingservice.PollActivityTaskQueueRequest_builder{
 					NamespaceId: namespaceID,
-					PollRequest: &workflowservice.PollActivityTaskQueueRequest{
+					PollRequest: workflowservice.PollActivityTaskQueueRequest_builder{
 						TaskQueue: taskQueue,
 						Identity:  identity,
-					},
-				}, metrics.NoopMetricsHandler)
+					}.Build(),
+				}.Build(), metrics.NoopMetricsHandler)
 				if err != nil {
 					panic(err)
 				}
 				s.NotNil(result)
-				if len(result.TaskToken) == 0 {
+				if len(result.GetTaskToken()) == 0 {
 					s.logger.Debug("empty poll returned")
 					continue
 				}
-				s.EqualValues(activityID, result.ActivityId)
-				s.EqualValues(activityType, result.ActivityType)
-				s.EqualValues(activityInput, result.Input)
-				s.EqualValues(workflowExecution, result.WorkflowExecution)
-				taskToken := &tokenspb.Task{
+				s.EqualValues(activityID, result.GetActivityId())
+				s.EqualValues(activityType, result.GetActivityType())
+				s.EqualValues(activityInput, result.GetInput())
+				s.EqualValues(workflowExecution, result.GetWorkflowExecution())
+				taskToken := tokenspb.Task_builder{
 					Attempt:      1,
 					NamespaceId:  namespaceID,
 					WorkflowId:   workflowID,
 					RunId:        runID,
 					ActivityId:   activityID,
 					ActivityType: activityTypeName,
-				}
-				resultToken, err := engine.tokenSerializer.Deserialize(result.TaskToken)
+				}.Build()
+				resultToken, err := engine.tokenSerializer.Deserialize(result.GetTaskToken())
 				if err != nil {
 					panic(err)
 				}
 
 				// we don't know the expected scheduledEventID for the task polled, so just set it to the result
-				taskToken.ScheduledEventId = resultToken.ScheduledEventId
+				taskToken.SetScheduledEventId(resultToken.GetScheduledEventId())
 				protoassert.ProtoEqual(s.T(), taskToken, resultToken)
 				i++
 			}
@@ -1987,7 +1988,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesWorkflowTasksRangeStealing() {
 	}
 	runID := uuid.NewString()
 	workflowID := "workflow1"
-	workflowExecution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
+	workflowExecution := commonpb.WorkflowExecution_builder{RunId: runID, WorkflowId: workflowID}.Build()
 
 	const engineCount = 2
 	const taskCount = 400
@@ -2000,10 +2001,10 @@ func (s *matchingEngineSuite) TestMultipleEnginesWorkflowTasksRangeStealing() {
 	tlID := newUnversionedRootQueueKey(namespaceID, tl, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	s.matchingEngine.config.RangeSize = rangeSize // override to low number for the test
 
-	taskQueue := &taskqueuepb.TaskQueue{
+	taskQueue := taskqueuepb.TaskQueue_builder{
 		Name: tl,
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-	}
+	}.Build()
 
 	engines := make([]*matchingEngineImpl, engineCount)
 	for p := 0; p < engineCount; p++ {
@@ -2017,18 +2018,18 @@ func (s *matchingEngineSuite) TestMultipleEnginesWorkflowTasksRangeStealing() {
 		for p := 0; p < engineCount; p++ {
 			engine := engines[p]
 			for i := int64(0); i < taskCount; i++ {
-				addRequest := matchingservice.AddWorkflowTaskRequest{
+				addRequest := matchingservice.AddWorkflowTaskRequest_builder{
 					NamespaceId:            namespaceID,
 					Execution:              workflowExecution,
 					ScheduledEventId:       scheduledEventID,
 					TaskQueue:              taskQueue,
 					ScheduleToStartTimeout: timestamp.DurationFromSeconds(600),
-				}
+				}.Build()
 				// scheduledEventID is the key for the workflow task, so needs a different
 				// scheduledEventID for each task for deduplication logic below
 				scheduledEventID++
 
-				_, _, err := engine.AddWorkflowTask(context.Background(), &addRequest)
+				_, _, err := engine.AddWorkflowTask(context.Background(), addRequest)
 				if err != nil {
 					if _, ok := err.(*persistence.ConditionFailedError); ok {
 						i-- // retry adding
@@ -2040,7 +2041,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesWorkflowTasksRangeStealing() {
 		}
 	}
 	workflowTypeName := "workflowType1"
-	workflowType := &commonpb.WorkflowType{Name: workflowTypeName}
+	workflowType := commonpb.WorkflowType_builder{Name: workflowTypeName}.Build()
 
 	identity := "nobody"
 	var startedEventID int64 = 1412
@@ -2057,54 +2058,54 @@ func (s *matchingEngineSuite) TestMultipleEnginesWorkflowTasksRangeStealing() {
 
 			s.logger.Debug("Mock Received RecordWorkflowTaskStartedRequest", tag.NewInt64("scheduled-event-id", taskRequest.GetScheduledEventId()))
 			startedTasks[taskRequest.GetScheduledEventId()] = struct{}{}
-			return &historyservice.RecordWorkflowTaskStartedResponse{
+			return historyservice.RecordWorkflowTaskStartedResponse_builder{
 				PreviousStartedEventId: startedEventID,
 				StartedEventId:         startedEventID,
 				ScheduledEventId:       taskRequest.GetScheduledEventId(),
 				WorkflowType:           workflowType,
 				Attempt:                1,
-				History:                &historypb.History{Events: []*historypb.HistoryEvent{}},
+				History:                historypb.History_builder{Events: []*historypb.HistoryEvent{}}.Build(),
 				NextPageToken:          nil,
-			}, nil
+			}.Build(), nil
 		}).AnyTimes()
 
 	for j := 0; j < iterations; j++ {
 		for p := 0; p < engineCount; p++ {
 			engine := engines[p]
 			for i := int64(0); i < taskCount; /* incremented explicitly to skip empty polls */ {
-				result, err := engine.PollWorkflowTaskQueue(context.Background(), &matchingservice.PollWorkflowTaskQueueRequest{
+				result, err := engine.PollWorkflowTaskQueue(context.Background(), matchingservice.PollWorkflowTaskQueueRequest_builder{
 					NamespaceId: namespaceID,
-					PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
+					PollRequest: workflowservice.PollWorkflowTaskQueueRequest_builder{
 						TaskQueue: taskQueue,
 						Identity:  identity,
-					},
-				}, metrics.NoopMetricsHandler)
+					}.Build(),
+				}.Build(), metrics.NoopMetricsHandler)
 				if err != nil {
 					panic(err)
 				}
 				s.NotNil(result)
-				if len(result.TaskToken) == 0 {
+				if len(result.GetTaskToken()) == 0 {
 					s.logger.Debug("empty poll returned")
 					continue
 				}
-				s.EqualValues(workflowExecution, result.WorkflowExecution)
-				s.EqualValues(workflowType, result.WorkflowType)
-				s.EqualValues(startedEventID, result.StartedEventId)
-				s.EqualValues(workflowExecution, result.WorkflowExecution)
-				taskToken := &tokenspb.Task{
+				s.EqualValues(workflowExecution, result.GetWorkflowExecution())
+				s.EqualValues(workflowType, result.GetWorkflowType())
+				s.EqualValues(startedEventID, result.GetStartedEventId())
+				s.EqualValues(workflowExecution, result.GetWorkflowExecution())
+				taskToken := tokenspb.Task_builder{
 					Attempt:        1,
 					NamespaceId:    namespaceID,
 					WorkflowId:     workflowID,
 					RunId:          runID,
 					StartedEventId: startedEventID,
-				}
-				resultToken, err := engine.tokenSerializer.Deserialize(result.TaskToken)
+				}.Build()
+				resultToken, err := engine.tokenSerializer.Deserialize(result.GetTaskToken())
 				if err != nil {
 					panic(err)
 				}
 
 				// we don't know the expected scheduledEventID for the task polled, so just set it to the result
-				taskToken.ScheduledEventId = resultToken.ScheduledEventId
+				taskToken.SetScheduledEventId(resultToken.GetScheduledEventId())
 				protoassert.ProtoEqual(s.T(), taskToken, resultToken)
 				i++
 			}
@@ -2138,16 +2139,16 @@ func (s *matchingEngineSuite) TestAddTaskAfterStartFailure() {
 	dbq := newUnversionedRootQueueKey(namespaceID, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 
 	_, _, err := s.matchingEngine.AddActivityTask(context.Background(),
-		&matchingservice.AddActivityTaskRequest{
+		matchingservice.AddActivityTaskRequest_builder{
 			NamespaceId:      namespaceID,
-			Execution:        &commonpb.WorkflowExecution{RunId: uuid.NewString(), WorkflowId: "workflow1"},
+			Execution:        commonpb.WorkflowExecution_builder{RunId: uuid.NewString(), WorkflowId: "workflow1"}.Build(),
 			ScheduledEventId: int64(0),
-			TaskQueue: &taskqueuepb.TaskQueue{
+			TaskQueue: taskqueuepb.TaskQueue_builder{
 				Name: tl,
 				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-			},
+			}.Build(),
 			ScheduleToStartTimeout: timestamp.DurationFromSeconds(100),
-		})
+		}.Build())
 	s.NoError(err)
 	s.EqualValues(1, s.taskManager.getTaskCount(dbq))
 
@@ -2174,16 +2175,16 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch() {
 
 	runID := uuid.NewString()
 	workflowID := "workflow1"
-	workflowExecution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
+	workflowExecution := commonpb.WorkflowExecution_builder{RunId: runID, WorkflowId: workflowID}.Build()
 
 	namespaceID := uuid.NewString()
 	tl := "makeToast"
 	dbq := newUnversionedRootQueueKey(namespaceID, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 
-	taskQueue := &taskqueuepb.TaskQueue{
+	taskQueue := taskqueuepb.TaskQueue_builder{
 		Name: tl,
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-	}
+	}.Build()
 
 	const taskCount = 1200
 	const rangeSize = 10
@@ -2192,15 +2193,15 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch() {
 	// add taskCount tasks
 	for i := int64(0); i < taskCount; i++ {
 		scheduledEventID := i * 3
-		addRequest := matchingservice.AddActivityTaskRequest{
+		addRequest := matchingservice.AddActivityTaskRequest_builder{
 			NamespaceId:            namespaceID,
 			Execution:              workflowExecution,
 			ScheduledEventId:       scheduledEventID,
 			TaskQueue:              taskQueue,
 			ScheduleToStartTimeout: timestamp.DurationFromSeconds(100),
-		}
+		}.Build()
 
-		_, _, err := s.matchingEngine.AddActivityTask(context.Background(), &addRequest)
+		_, _, err := s.matchingEngine.AddActivityTask(context.Background(), addRequest)
 		s.NoError(err)
 	}
 
@@ -2244,18 +2245,18 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch() {
 	// complete rangeSize events
 	for i := int64(0); i < rangeSize; i++ {
 		identity := "nobody"
-		result, err := s.matchingEngine.PollActivityTaskQueue(context.Background(), &matchingservice.PollActivityTaskQueueRequest{
+		result, err := s.matchingEngine.PollActivityTaskQueue(context.Background(), matchingservice.PollActivityTaskQueueRequest_builder{
 			NamespaceId: namespaceID,
-			PollRequest: &workflowservice.PollActivityTaskQueueRequest{
+			PollRequest: workflowservice.PollActivityTaskQueueRequest_builder{
 				TaskQueue: taskQueue,
 				Identity:  identity,
-			},
-		}, metrics.NoopMetricsHandler)
+			}.Build(),
+		}.Build(), metrics.NoopMetricsHandler)
 
 		s.NoError(err)
 		s.NotNil(result)
 		s.NotEqual(emptyPollActivityTaskQueueResponse, result)
-		if len(result.TaskToken) == 0 {
+		if len(result.GetTaskToken()) == 0 {
 			s.logger.Debug("empty poll returned")
 			continue
 		}
@@ -2293,16 +2294,16 @@ func (s *matchingEngineSuite) TestTaskExpiryAndCompletion() {
 
 	runID := uuid.NewString()
 	workflowID := uuid.NewString()
-	workflowExecution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
+	workflowExecution := commonpb.WorkflowExecution_builder{RunId: runID, WorkflowId: workflowID}.Build()
 
 	namespaceID := uuid.NewString()
 	tl := "task-expiry-completion-tl0"
 	dbq := newUnversionedRootQueueKey(namespaceID, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 
-	taskQueue := &taskqueuepb.TaskQueue{
+	taskQueue := taskqueuepb.TaskQueue_builder{
 		Name: tl,
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-	}
+	}.Build()
 
 	const taskCount = 20 // must be multiple of 4
 	const rangeSize = 10
@@ -2319,22 +2320,22 @@ func (s *matchingEngineSuite) TestTaskExpiryAndCompletion() {
 	for _, tc := range testCases {
 		for i := int64(0); i < taskCount; i++ {
 			scheduledEventID := i * 3
-			addRequest := matchingservice.AddActivityTaskRequest{
+			addRequest := matchingservice.AddActivityTaskRequest_builder{
 				NamespaceId:            namespaceID,
 				Execution:              workflowExecution,
 				ScheduledEventId:       scheduledEventID,
 				TaskQueue:              taskQueue,
 				ScheduleToStartTimeout: timestamp.DurationFromSeconds(100),
-			}
+			}.Build()
 			switch i % 4 {
 			case 0:
 				// simulates creating a task whose scheduledToStartTimeout is already expired
-				addRequest.ScheduleToStartTimeout = timestamp.DurationFromSeconds(-5)
+				addRequest.SetScheduleToStartTimeout(timestamp.DurationFromSeconds(-5))
 			case 2:
 				// simulates creating a task which will time out in the buffer
-				addRequest.ScheduleToStartTimeout = durationpb.New(250 * time.Millisecond)
+				addRequest.SetScheduleToStartTimeout(durationpb.New(250 * time.Millisecond))
 			}
-			_, _, err := s.matchingEngine.AddActivityTask(context.Background(), &addRequest)
+			_, _, err := s.matchingEngine.AddActivityTask(context.Background(), addRequest)
 			s.NoError(err)
 		}
 
@@ -2355,10 +2356,10 @@ func (s *matchingEngineSuite) TestTaskExpiryAndCompletion() {
 
 		s.setupRecordActivityTaskStartedMock(tl)
 
-		pollReq := &matchingservice.PollActivityTaskQueueRequest{
+		pollReq := matchingservice.PollActivityTaskQueueRequest_builder{
 			NamespaceId: namespaceID,
-			PollRequest: &workflowservice.PollActivityTaskQueueRequest{TaskQueue: taskQueue, Identity: "test"},
-		}
+			PollRequest: workflowservice.PollActivityTaskQueueRequest_builder{TaskQueue: taskQueue, Identity: "test"}.Build(),
+		}.Build()
 
 		remaining := taskCount
 		for i := 0; i < 2; i++ {
@@ -2389,35 +2390,31 @@ func (s *matchingEngineSuite) TestGetVersioningData() {
 	tq := "tupac"
 
 	// Ensure we can fetch without first needing to set anything
-	res, err := s.matchingEngine.GetWorkerBuildIdCompatibility(context.Background(), &matchingservice.GetWorkerBuildIdCompatibilityRequest{
+	res, err := s.matchingEngine.GetWorkerBuildIdCompatibility(context.Background(), matchingservice.GetWorkerBuildIdCompatibilityRequest_builder{
 		NamespaceId: namespaceID.String(),
-		Request: &workflowservice.GetWorkerBuildIdCompatibilityRequest{
+		Request: workflowservice.GetWorkerBuildIdCompatibilityRequest_builder{
 			Namespace: namespaceID.String(),
 			TaskQueue: tq,
 			MaxSets:   0,
-		},
-	})
+		}.Build(),
+	}.Build())
 	s.NoError(err)
 	s.NotNil(res)
 
 	// Set a long list of versions
 	for i := 0; i < 10; i++ {
 		id := fmt.Sprintf("%d", i)
-		res, err := s.matchingEngine.UpdateWorkerBuildIdCompatibility(context.Background(), &matchingservice.UpdateWorkerBuildIdCompatibilityRequest{
+		res, err := s.matchingEngine.UpdateWorkerBuildIdCompatibility(context.Background(), matchingservice.UpdateWorkerBuildIdCompatibilityRequest_builder{
 			NamespaceId: namespaceID.String(),
 			TaskQueue:   tq,
-			Operation: &matchingservice.UpdateWorkerBuildIdCompatibilityRequest_ApplyPublicRequest_{
-				ApplyPublicRequest: &matchingservice.UpdateWorkerBuildIdCompatibilityRequest_ApplyPublicRequest{
-					Request: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
-						Namespace: namespaceID.String(),
-						TaskQueue: tq,
-						Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
-							AddNewBuildIdInNewDefaultSet: id,
-						},
-					},
-				},
-			},
-		})
+			ApplyPublicRequest: matchingservice.UpdateWorkerBuildIdCompatibilityRequest_ApplyPublicRequest_builder{
+				Request: workflowservice.UpdateWorkerBuildIdCompatibilityRequest_builder{
+					Namespace:                    namespaceID.String(),
+					TaskQueue:                    tq,
+					AddNewBuildIdInNewDefaultSet: proto.String(id),
+				}.Build(),
+			}.Build(),
+		}.Build())
 		s.NoError(err)
 		s.NotNil(res)
 	}
@@ -2428,38 +2425,34 @@ func (s *matchingEngineSuite) TestGetVersioningData() {
 		if i == 0 {
 			prevCompat = "9"
 		}
-		res, err := s.matchingEngine.UpdateWorkerBuildIdCompatibility(context.Background(), &matchingservice.UpdateWorkerBuildIdCompatibilityRequest{
+		res, err := s.matchingEngine.UpdateWorkerBuildIdCompatibility(context.Background(), matchingservice.UpdateWorkerBuildIdCompatibilityRequest_builder{
 			NamespaceId: namespaceID.String(),
 			TaskQueue:   tq,
-			Operation: &matchingservice.UpdateWorkerBuildIdCompatibilityRequest_ApplyPublicRequest_{
-				ApplyPublicRequest: &matchingservice.UpdateWorkerBuildIdCompatibilityRequest_ApplyPublicRequest{
-					Request: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
-						Namespace: namespaceID.String(),
-						TaskQueue: tq,
-						Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewCompatibleBuildId{
-							AddNewCompatibleBuildId: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewCompatibleVersion{
-								NewBuildId:                id,
-								ExistingCompatibleBuildId: prevCompat,
-								MakeSetDefault:            false,
-							},
-						},
-					},
-				},
-			},
-		})
+			ApplyPublicRequest: matchingservice.UpdateWorkerBuildIdCompatibilityRequest_ApplyPublicRequest_builder{
+				Request: workflowservice.UpdateWorkerBuildIdCompatibilityRequest_builder{
+					Namespace: namespaceID.String(),
+					TaskQueue: tq,
+					AddNewCompatibleBuildId: workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewCompatibleVersion_builder{
+						NewBuildId:                id,
+						ExistingCompatibleBuildId: prevCompat,
+						MakeSetDefault:            false,
+					}.Build(),
+				}.Build(),
+			}.Build(),
+		}.Build())
 		s.NoError(err)
 		s.NotNil(res)
 	}
 
 	// Ensure they all exist
-	res, err = s.matchingEngine.GetWorkerBuildIdCompatibility(context.Background(), &matchingservice.GetWorkerBuildIdCompatibilityRequest{
+	res, err = s.matchingEngine.GetWorkerBuildIdCompatibility(context.Background(), matchingservice.GetWorkerBuildIdCompatibilityRequest_builder{
 		NamespaceId: namespaceID.String(),
-		Request: &workflowservice.GetWorkerBuildIdCompatibilityRequest{
+		Request: workflowservice.GetWorkerBuildIdCompatibilityRequest_builder{
 			Namespace: namespaceID.String(),
 			TaskQueue: tq,
 			MaxSets:   0,
-		},
-	})
+		}.Build(),
+	}.Build())
 	s.NoError(err)
 	majorSets := res.GetResponse().GetMajorVersionSets()
 	curDefault := majorSets[len(majorSets)-1]
@@ -2470,14 +2463,14 @@ func (s *matchingEngineSuite) TestGetVersioningData() {
 	s.Equal("0", majorSets[0].GetBuildIds()[0])
 
 	// Ensure depth limiting works
-	res, err = s.matchingEngine.GetWorkerBuildIdCompatibility(context.Background(), &matchingservice.GetWorkerBuildIdCompatibilityRequest{
+	res, err = s.matchingEngine.GetWorkerBuildIdCompatibility(context.Background(), matchingservice.GetWorkerBuildIdCompatibilityRequest_builder{
 		NamespaceId: namespaceID.String(),
-		Request: &workflowservice.GetWorkerBuildIdCompatibilityRequest{
+		Request: workflowservice.GetWorkerBuildIdCompatibilityRequest_builder{
 			Namespace: namespaceID.String(),
 			TaskQueue: tq,
 			MaxSets:   1,
-		},
-	})
+		}.Build(),
+	}.Build())
 	s.NoError(err)
 	majorSets = res.GetResponse().GetMajorVersionSets()
 	curDefault = majorSets[len(majorSets)-1]
@@ -2486,14 +2479,14 @@ func (s *matchingEngineSuite) TestGetVersioningData() {
 	s.Equal("9.79", lastNode)
 	s.Equal(1, len(majorSets))
 
-	res, err = s.matchingEngine.GetWorkerBuildIdCompatibility(context.Background(), &matchingservice.GetWorkerBuildIdCompatibilityRequest{
+	res, err = s.matchingEngine.GetWorkerBuildIdCompatibility(context.Background(), matchingservice.GetWorkerBuildIdCompatibilityRequest_builder{
 		NamespaceId: namespaceID.String(),
-		Request: &workflowservice.GetWorkerBuildIdCompatibilityRequest{
+		Request: workflowservice.GetWorkerBuildIdCompatibilityRequest_builder{
 			Namespace: namespaceID.String(),
 			TaskQueue: tq,
 			MaxSets:   5,
-		},
-	})
+		}.Build(),
+	}.Build())
 	s.NoError(err)
 	majorSets = res.GetResponse().GetMajorVersionSets()
 	s.Equal("5", majorSets[0].GetBuildIds()[0])
@@ -2503,24 +2496,24 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_NoData() {
 	namespaceID := namespace.ID(uuid.NewString())
 	tq := "tupac"
 
-	res, err := s.matchingEngine.GetTaskQueueUserData(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{
+	res, err := s.matchingEngine.GetTaskQueueUserData(context.Background(), matchingservice.GetTaskQueueUserDataRequest_builder{
 		NamespaceId:              namespaceID.String(),
 		TaskQueue:                tq,
 		TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		LastKnownUserDataVersion: 0,
-	})
+	}.Build())
 	s.NoError(err)
-	s.Nil(res.UserData.GetData())
+	s.Nil(res.GetUserData().GetData())
 }
 
 func (s *matchingEngineSuite) TestGetTaskQueueUserData_ReturnsData() {
 	namespaceID := namespace.ID(uuid.NewString())
 	tq := "tupac"
 
-	userData := &persistencespb.VersionedTaskQueueUserData{
+	userData := persistencespb.VersionedTaskQueueUserData_builder{
 		Version: 1,
-		Data:    &persistencespb.TaskQueueUserData{Clock: &clockspb.HybridLogicalClock{WallClock: 123456}},
-	}
+		Data:    persistencespb.TaskQueueUserData_builder{Clock: clockspb.HybridLogicalClock_builder{WallClock: 123456}.Build()}.Build(),
+	}.Build()
 	s.NoError(s.classicTaskManager.UpdateTaskQueueUserData(context.Background(),
 		&persistence.UpdateTaskQueueUserDataRequest{
 			NamespaceID: namespaceID.String(),
@@ -2530,26 +2523,26 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_ReturnsData() {
 				},
 			},
 		}))
-	userData.Version++
+	userData.SetVersion(userData.GetVersion() + 1)
 
-	res, err := s.matchingEngine.GetTaskQueueUserData(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{
+	res, err := s.matchingEngine.GetTaskQueueUserData(context.Background(), matchingservice.GetTaskQueueUserDataRequest_builder{
 		NamespaceId:              namespaceID.String(),
 		TaskQueue:                tq,
 		TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		LastKnownUserDataVersion: 0,
-	})
+	}.Build())
 	s.NoError(err)
-	protoassert.ProtoEqual(s.T(), res.UserData, userData)
+	protoassert.ProtoEqual(s.T(), res.GetUserData(), userData)
 }
 
 func (s *matchingEngineSuite) TestGetTaskQueueUserData_ReturnsEmpty() {
 	namespaceID := namespace.ID(uuid.NewString())
 	tq := "tupac"
 
-	userData := &persistencespb.VersionedTaskQueueUserData{
+	userData := persistencespb.VersionedTaskQueueUserData_builder{
 		Version: 1,
-		Data:    &persistencespb.TaskQueueUserData{Clock: &clockspb.HybridLogicalClock{WallClock: 123456}},
-	}
+		Data:    persistencespb.TaskQueueUserData_builder{Clock: clockspb.HybridLogicalClock_builder{WallClock: 123456}.Build()}.Build(),
+	}.Build()
 	s.NoError(s.classicTaskManager.UpdateTaskQueueUserData(context.Background(),
 		&persistence.UpdateTaskQueueUserDataRequest{
 			NamespaceID: namespaceID.String(),
@@ -2559,26 +2552,26 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_ReturnsEmpty() {
 				},
 			},
 		}))
-	userData.Version++
+	userData.SetVersion(userData.GetVersion() + 1)
 
-	res, err := s.matchingEngine.GetTaskQueueUserData(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{
+	res, err := s.matchingEngine.GetTaskQueueUserData(context.Background(), matchingservice.GetTaskQueueUserDataRequest_builder{
 		NamespaceId:              namespaceID.String(),
 		TaskQueue:                tq,
 		TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-		LastKnownUserDataVersion: userData.Version,
-	})
+		LastKnownUserDataVersion: userData.GetVersion(),
+	}.Build())
 	s.NoError(err)
-	s.Nil(res.UserData.GetData())
+	s.Nil(res.GetUserData().GetData())
 }
 
 func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_Expires() {
 	namespaceID := namespace.ID(uuid.NewString())
 	tq := "tupac"
 
-	userData := &persistencespb.VersionedTaskQueueUserData{
+	userData := persistencespb.VersionedTaskQueueUserData_builder{
 		Version: 1,
-		Data:    &persistencespb.TaskQueueUserData{Clock: &clockspb.HybridLogicalClock{WallClock: 123456}},
-	}
+		Data:    persistencespb.TaskQueueUserData_builder{Clock: clockspb.HybridLogicalClock_builder{WallClock: 123456}.Build()}.Build(),
+	}.Build()
 	s.NoError(s.classicTaskManager.UpdateTaskQueueUserData(context.Background(),
 		&persistence.UpdateTaskQueueUserDataRequest{
 			NamespaceID: namespaceID.String(),
@@ -2588,22 +2581,22 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_Expires() {
 				},
 			},
 		}))
-	userData.Version++
+	userData.SetVersion(userData.GetVersion() + 1)
 
 	// GetTaskQueueUserData will try to return 5s with a min of 1s before the deadline, so this will block 1s
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
 	start := time.Now()
-	res, err := s.matchingEngine.GetTaskQueueUserData(ctx, &matchingservice.GetTaskQueueUserDataRequest{
+	res, err := s.matchingEngine.GetTaskQueueUserData(ctx, matchingservice.GetTaskQueueUserDataRequest_builder{
 		NamespaceId:              namespaceID.String(),
 		TaskQueue:                tq,
 		TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-		LastKnownUserDataVersion: userData.Version,
+		LastKnownUserDataVersion: userData.GetVersion(),
 		WaitNewData:              true,
-	})
+	}.Build())
 	s.NoError(err)
-	s.Nil(res.UserData.GetData())
+	s.Nil(res.GetUserData().GetData())
 	elapsed := time.Since(start)
 	s.Greater(elapsed, 900*time.Millisecond)
 }
@@ -2618,43 +2611,39 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_WakesUp_FromNoth
 	go func() {
 		time.Sleep(200 * time.Millisecond)
 
-		_, err := s.matchingEngine.UpdateWorkerBuildIdCompatibility(context.Background(), &matchingservice.UpdateWorkerBuildIdCompatibilityRequest{
+		_, err := s.matchingEngine.UpdateWorkerBuildIdCompatibility(context.Background(), matchingservice.UpdateWorkerBuildIdCompatibilityRequest_builder{
 			NamespaceId: namespaceID.String(),
 			TaskQueue:   tq,
-			Operation: &matchingservice.UpdateWorkerBuildIdCompatibilityRequest_ApplyPublicRequest_{
-				ApplyPublicRequest: &matchingservice.UpdateWorkerBuildIdCompatibilityRequest_ApplyPublicRequest{
-					Request: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
-						Namespace: namespaceID.String(),
-						TaskQueue: tq,
-						Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
-							AddNewBuildIdInNewDefaultSet: "v1",
-						},
-					},
-				},
-			},
-		})
+			ApplyPublicRequest: matchingservice.UpdateWorkerBuildIdCompatibilityRequest_ApplyPublicRequest_builder{
+				Request: workflowservice.UpdateWorkerBuildIdCompatibilityRequest_builder{
+					Namespace:                    namespaceID.String(),
+					TaskQueue:                    tq,
+					AddNewBuildIdInNewDefaultSet: proto.String("v1"),
+				}.Build(),
+			}.Build(),
+		}.Build())
 		s.NoError(err)
 	}()
 
-	res, err := s.matchingEngine.GetTaskQueueUserData(ctx, &matchingservice.GetTaskQueueUserDataRequest{
+	res, err := s.matchingEngine.GetTaskQueueUserData(ctx, matchingservice.GetTaskQueueUserDataRequest_builder{
 		NamespaceId:              namespaceID.String(),
 		TaskQueue:                tq,
 		TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		LastKnownUserDataVersion: 0, // must be zero to start
 		WaitNewData:              true,
-	})
+	}.Build())
 	s.NoError(err)
-	s.NotNil(res.UserData.Data.VersioningData)
+	s.NotNil(res.GetUserData().GetData().GetVersioningData())
 }
 
 func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_WakesUp_From2to3() {
 	namespaceID := namespace.ID(uuid.NewString())
 	tq := "tupac"
 
-	userData := &persistencespb.VersionedTaskQueueUserData{
+	userData := persistencespb.VersionedTaskQueueUserData_builder{
 		Version: 1,
-		Data:    &persistencespb.TaskQueueUserData{Clock: &clockspb.HybridLogicalClock{WallClock: 123456}},
-	}
+		Data:    persistencespb.TaskQueueUserData_builder{Clock: clockspb.HybridLogicalClock_builder{WallClock: 123456}.Build()}.Build(),
+	}.Build()
 	s.NoError(s.classicTaskManager.UpdateTaskQueueUserData(context.Background(),
 		&persistence.UpdateTaskQueueUserDataRequest{
 			NamespaceID: namespaceID.String(),
@@ -2664,7 +2653,7 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_WakesUp_From2to3
 				},
 			},
 		}))
-	userData.Version++
+	userData.SetVersion(userData.GetVersion() + 1)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -2672,34 +2661,30 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_WakesUp_From2to3
 	go func() {
 		time.Sleep(200 * time.Millisecond)
 
-		_, err := s.matchingEngine.UpdateWorkerBuildIdCompatibility(context.Background(), &matchingservice.UpdateWorkerBuildIdCompatibilityRequest{
+		_, err := s.matchingEngine.UpdateWorkerBuildIdCompatibility(context.Background(), matchingservice.UpdateWorkerBuildIdCompatibilityRequest_builder{
 			NamespaceId: namespaceID.String(),
 			TaskQueue:   tq,
-			Operation: &matchingservice.UpdateWorkerBuildIdCompatibilityRequest_ApplyPublicRequest_{
-				ApplyPublicRequest: &matchingservice.UpdateWorkerBuildIdCompatibilityRequest_ApplyPublicRequest{
-					Request: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
-						Namespace: namespaceID.String(),
-						TaskQueue: tq,
-						Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
-							AddNewBuildIdInNewDefaultSet: "v1",
-						},
-					},
-				},
-			},
-		})
+			ApplyPublicRequest: matchingservice.UpdateWorkerBuildIdCompatibilityRequest_ApplyPublicRequest_builder{
+				Request: workflowservice.UpdateWorkerBuildIdCompatibilityRequest_builder{
+					Namespace:                    namespaceID.String(),
+					TaskQueue:                    tq,
+					AddNewBuildIdInNewDefaultSet: proto.String("v1"),
+				}.Build(),
+			}.Build(),
+		}.Build())
 		s.NoError(err)
 	}()
 
-	res, err := s.matchingEngine.GetTaskQueueUserData(ctx, &matchingservice.GetTaskQueueUserDataRequest{
+	res, err := s.matchingEngine.GetTaskQueueUserData(ctx, matchingservice.GetTaskQueueUserDataRequest_builder{
 		NamespaceId:              namespaceID.String(),
 		TaskQueue:                tq,
 		TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-		LastKnownUserDataVersion: userData.Version,
+		LastKnownUserDataVersion: userData.GetVersion(),
 		WaitNewData:              true,
-	})
+	}.Build())
 	s.NoError(err)
-	s.True(hlc.Greater(res.UserData.Data.Clock, userData.Data.Clock))
-	s.NotNil(res.UserData.Data.VersioningData)
+	s.True(hlc.Greater(res.GetUserData().GetData().GetClock(), userData.GetData().GetClock()))
+	s.NotNil(res.GetUserData().GetData().GetVersioningData())
 }
 
 func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_Closes() {
@@ -2711,33 +2696,33 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_Closes() {
 
 	go func() {
 		time.Sleep(200 * time.Millisecond)
-		_, _ = s.matchingEngine.ForceUnloadTaskQueuePartition(context.Background(), &matchingservice.ForceUnloadTaskQueuePartitionRequest{
+		_, _ = s.matchingEngine.ForceUnloadTaskQueuePartition(context.Background(), matchingservice.ForceUnloadTaskQueuePartitionRequest_builder{
 			NamespaceId: namespaceID.String(),
-			TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+			TaskQueuePartition: taskqueuespb.TaskQueuePartition_builder{
 				TaskQueue:     tq,
 				TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-			},
-		})
+			}.Build(),
+		}.Build())
 	}()
 
-	res, err := s.matchingEngine.GetTaskQueueUserData(ctx, &matchingservice.GetTaskQueueUserDataRequest{
+	res, err := s.matchingEngine.GetTaskQueueUserData(ctx, matchingservice.GetTaskQueueUserDataRequest_builder{
 		NamespaceId:   namespaceID.String(),
 		TaskQueue:     tq,
 		TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		WaitNewData:   true,
-	})
+	}.Build())
 	s.NoError(err)
-	s.Nil(res.UserData)
+	s.Nil(res.GetUserData())
 }
 
 func (s *matchingEngineSuite) TestUpdateUserData_FailsOnKnownVersionMismatch() {
 	namespaceID := namespace.ID(uuid.NewString())
 	tq := "tupac"
 
-	userData := &persistencespb.VersionedTaskQueueUserData{
+	userData := persistencespb.VersionedTaskQueueUserData_builder{
 		Version: 1,
-		Data:    &persistencespb.TaskQueueUserData{Clock: &clockspb.HybridLogicalClock{WallClock: 123456}},
-	}
+		Data:    persistencespb.TaskQueueUserData_builder{Clock: clockspb.HybridLogicalClock_builder{WallClock: 123456}.Build()}.Build(),
+	}.Build()
 
 	err := s.classicTaskManager.UpdateTaskQueueUserData(context.Background(),
 		&persistence.UpdateTaskQueueUserDataRequest{
@@ -2750,15 +2735,13 @@ func (s *matchingEngineSuite) TestUpdateUserData_FailsOnKnownVersionMismatch() {
 		})
 	s.NoError(err)
 
-	_, err = s.matchingEngine.UpdateWorkerBuildIdCompatibility(context.Background(), &matchingservice.UpdateWorkerBuildIdCompatibilityRequest{
+	_, err = s.matchingEngine.UpdateWorkerBuildIdCompatibility(context.Background(), matchingservice.UpdateWorkerBuildIdCompatibilityRequest_builder{
 		NamespaceId: namespaceID.String(),
 		TaskQueue:   tq,
-		Operation: &matchingservice.UpdateWorkerBuildIdCompatibilityRequest_RemoveBuildIds_{
-			RemoveBuildIds: &matchingservice.UpdateWorkerBuildIdCompatibilityRequest_RemoveBuildIds{
-				KnownUserDataVersion: 1,
-			},
-		},
-	})
+		RemoveBuildIds: matchingservice.UpdateWorkerBuildIdCompatibilityRequest_RemoveBuildIds_builder{
+			KnownUserDataVersion: 1,
+		}.Build(),
+	}.Build())
 	var failedPreconditionError *serviceerror.FailedPrecondition
 	s.ErrorAs(err, &failedPreconditionError)
 }
@@ -2770,27 +2753,25 @@ func (s *matchingEngineSuite) TestUnknownBuildId_Match() {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	s.mockMatchingClient.EXPECT().UpdateWorkerBuildIdCompatibility(gomock.Any(), &matchingservice.UpdateWorkerBuildIdCompatibilityRequest{
-		NamespaceId: namespaceID,
-		TaskQueue:   tq,
-		Operation: &matchingservice.UpdateWorkerBuildIdCompatibilityRequest_PersistUnknownBuildId{
-			PersistUnknownBuildId: "unknown",
-		},
-	}).Return(&matchingservice.UpdateWorkerBuildIdCompatibilityResponse{}, nil).AnyTimes() // might get called again on dispatch from spooled
+	s.mockMatchingClient.EXPECT().UpdateWorkerBuildIdCompatibility(gomock.Any(), matchingservice.UpdateWorkerBuildIdCompatibilityRequest_builder{
+		NamespaceId:           namespaceID,
+		TaskQueue:             tq,
+		PersistUnknownBuildId: proto.String("unknown"),
+	}.Build()).Return(&matchingservice.UpdateWorkerBuildIdCompatibilityResponse{}, nil).AnyTimes() // might get called again on dispatch from spooled
 
 	var wg sync.WaitGroup
 	wg.Add(2)
 
 	go func() {
-		_, _, err := s.matchingEngine.AddWorkflowTask(ctx, &matchingservice.AddWorkflowTaskRequest{
+		_, _, err := s.matchingEngine.AddWorkflowTask(ctx, matchingservice.AddWorkflowTaskRequest_builder{
 			NamespaceId:            namespaceID,
-			Execution:              &commonpb.WorkflowExecution{RunId: "run", WorkflowId: "wf"},
+			Execution:              commonpb.WorkflowExecution_builder{RunId: "run", WorkflowId: "wf"}.Build(),
 			ScheduledEventId:       123,
-			TaskQueue:              &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			TaskQueue:              taskqueuepb.TaskQueue_builder{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 			ScheduleToStartTimeout: timestamp.DurationFromSeconds(100),
 			// do not set ForwardedSource, allow to go to db
 			VersionDirective: worker_versioning.MakeBuildIdDirective("unknown"),
-		})
+		}.Build())
 		s.NoError(err)
 		wg.Done()
 	}()
@@ -2798,14 +2779,14 @@ func (s *matchingEngineSuite) TestUnknownBuildId_Match() {
 	go func() {
 		prtn := newRootPartition(namespaceID, tq, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 		task, _, err := s.matchingEngine.pollTask(ctx, prtn, &pollMetadata{
-			workerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
+			workerVersionCapabilities: commonpb.WorkerVersionCapabilities_builder{
 				BuildId:       "unknown",
 				UseVersioning: true,
-			},
+			}.Build(),
 		})
 		s.NoError(err)
-		s.Equal("wf", task.event.Data.WorkflowId)
-		s.Equal(int64(123), task.event.Data.ScheduledEventId)
+		s.Equal("wf", task.event.Data.GetWorkflowId())
+		s.Equal(int64(123), task.event.Data.GetScheduledEventId())
 		task.finish(nil, true)
 		wg.Done()
 	}()
@@ -2824,42 +2805,42 @@ func (s *matchingEngineSuite) TestDemotedMatch() {
 
 	// add build0 as the overall default
 	clk := hlc.Zero(1)
-	userData := &persistencespb.TaskQueueUserData{
+	userData := persistencespb.TaskQueueUserData_builder{
 		Clock: clk,
-		VersioningData: &persistencespb.VersioningData{
+		VersioningData: persistencespb.VersioningData_builder{
 			VersionSets: []*persistencespb.CompatibleVersionSet{
-				{
+				persistencespb.CompatibleVersionSet_builder{
 					SetIds: []string{hashBuildId(build0)},
 					BuildIds: []*persistencespb.BuildId{
 						mkBuildId(build0, clk),
 					},
 					BecameDefaultTimestamp: clk,
-				},
+				}.Build(),
 			},
-		},
-	}
+		}.Build(),
+	}.Build()
 
 	err := s.classicTaskManager.UpdateTaskQueueUserData(ctx, &persistence.UpdateTaskQueueUserDataRequest{
 		NamespaceID: namespaceID,
 		Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
 			tq: &persistence.SingleTaskQueueUserDataUpdate{
-				UserData: &persistencespb.VersionedTaskQueueUserData{
+				UserData: persistencespb.VersionedTaskQueueUserData_builder{
 					Data:    userData,
 					Version: 34,
-				},
+				}.Build(),
 			},
 		},
 	})
 	s.Assert().NoError(err)
 
 	// add a task for build0, will get spooled in its set
-	_, _, err = s.matchingEngine.AddWorkflowTask(ctx, &matchingservice.AddWorkflowTaskRequest{
+	_, _, err = s.matchingEngine.AddWorkflowTask(ctx, matchingservice.AddWorkflowTaskRequest_builder{
 		NamespaceId:      namespaceID,
-		Execution:        &commonpb.WorkflowExecution{RunId: "run", WorkflowId: "wf"},
+		Execution:        commonpb.WorkflowExecution_builder{RunId: "run", WorkflowId: "wf"}.Build(),
 		ScheduledEventId: 123,
-		TaskQueue:        &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		TaskQueue:        taskqueuepb.TaskQueue_builder{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 		VersionDirective: worker_versioning.MakeBuildIdDirective(build0),
-	})
+	}.Build())
 	s.NoError(err)
 	// allow taskReader to finish starting dispatch loop so that we can unload tqms cleanly
 	time.Sleep(10 * time.Millisecond)
@@ -2874,11 +2855,11 @@ func (s *matchingEngineSuite) TestDemotedMatch() {
 	baseTqm.(*taskQueuePartitionManagerImpl).userDataManager.(*userDataManagerImpl).goroGroup.Wait()
 
 	// both are now unloaded. change versioning data to merge unknown into another set.
-	userData = &persistencespb.TaskQueueUserData{
+	userData = persistencespb.TaskQueueUserData_builder{
 		Clock: clk,
-		VersioningData: &persistencespb.VersioningData{
+		VersioningData: persistencespb.VersioningData_builder{
 			VersionSets: []*persistencespb.CompatibleVersionSet{
-				{
+				persistencespb.CompatibleVersionSet_builder{
 					// make build0 set the demoted one to test demoted set loading.
 					// it works the other way too but doesn't test anything new.
 					SetIds: []string{hashBuildId(build1), hashBuildId(build0)},
@@ -2887,19 +2868,19 @@ func (s *matchingEngineSuite) TestDemotedMatch() {
 						mkBuildId(build1, clk),
 					},
 					BecameDefaultTimestamp: clk,
-				},
+				}.Build(),
 			},
-		},
-	}
+		}.Build(),
+	}.Build()
 
 	err = s.classicTaskManager.UpdateTaskQueueUserData(ctx, &persistence.UpdateTaskQueueUserDataRequest{
 		NamespaceID: namespaceID,
 		Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
 			tq: &persistence.SingleTaskQueueUserDataUpdate{
-				UserData: &persistencespb.VersionedTaskQueueUserData{
+				UserData: persistencespb.VersionedTaskQueueUserData_builder{
 					Data:    userData,
 					Version: 34,
-				},
+				}.Build(),
 			},
 		},
 	})
@@ -2907,14 +2888,14 @@ func (s *matchingEngineSuite) TestDemotedMatch() {
 
 	// now poll for the task
 	task, _, err := s.matchingEngine.pollTask(ctx, prtn, &pollMetadata{
-		workerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
+		workerVersionCapabilities: commonpb.WorkerVersionCapabilities_builder{
 			BuildId:       build1,
 			UseVersioning: true,
-		},
+		}.Build(),
 	})
 	s.Require().NoError(err)
-	s.Equal("wf", task.event.Data.WorkflowId)
-	s.Equal(int64(123), task.event.Data.ScheduledEventId)
+	s.Equal("wf", task.event.Data.GetWorkflowId())
+	s.Equal(int64(123), task.event.Data.GetScheduledEventId())
 	task.finish(nil, true)
 }
 
@@ -3178,25 +3159,25 @@ func (s *matchingEngineSuite) TestUpdatePhysicalTaskQueueGauge_BuildID() {
 func (s *matchingEngineSuite) generateWorkflowExecution() (*commonpb.WorkflowType, *commonpb.WorkflowExecution) {
 	runID := uuid.NewString()
 	workflowID := "workflow1"
-	workflowType := &commonpb.WorkflowType{
+	workflowType := commonpb.WorkflowType_builder{
 		Name: "workflow",
-	}
-	workflowExecution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
+	}.Build()
+	workflowExecution := commonpb.WorkflowExecution_builder{RunId: runID, WorkflowId: workflowID}.Build()
 	return workflowType, workflowExecution
 }
 
 func (s *matchingEngineSuite) mockHistoryWhilePolling(workflowType *commonpb.WorkflowType) {
 	s.mockHistoryClient.EXPECT().RecordWorkflowTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, taskRequest *historyservice.RecordWorkflowTaskStartedRequest, arg2 ...interface{}) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
-			return &historyservice.RecordWorkflowTaskStartedResponse{
+			return historyservice.RecordWorkflowTaskStartedResponse_builder{
 				PreviousStartedEventId: 1,
 				StartedEventId:         1,
 				ScheduledEventId:       1,
 				WorkflowType:           workflowType,
 				Attempt:                1,
-				History:                &historypb.History{Events: []*historypb.HistoryEvent{}},
+				History:                historypb.History_builder{Events: []*historypb.HistoryEvent{}}.Build(),
 				NextPageToken:          nil,
-			}, nil
+			}.Build(), nil
 		}).AnyTimes()
 }
 
@@ -3204,10 +3185,10 @@ func (s *matchingEngineSuite) createTQAndPTQForBacklogTests() (*taskqueuepb.Task
 	s.matchingEngine.config.RangeSize = 10
 	tq := "approximateBacklogCounter"
 	ptq := newUnversionedRootQueueKey(namespaceID, tq, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-	taskQueue := &taskqueuepb.TaskQueue{
+	taskQueue := taskqueuepb.TaskQueue_builder{
 		Name: tq,
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-	}
+	}.Build()
 	return taskQueue, ptq
 }
 
@@ -3216,30 +3197,30 @@ func (s *matchingEngineSuite) addWorkflowTask(
 	taskQueue *taskqueuepb.TaskQueue,
 ) {
 	s.EventuallyWithT(func(c *assert.CollectT) {
-		addRequest := matchingservice.AddWorkflowTaskRequest{
+		addRequest := matchingservice.AddWorkflowTaskRequest_builder{
 			NamespaceId:            namespaceID,
 			Execution:              workflowExecution,
 			ScheduledEventId:       1,
 			TaskQueue:              taskQueue,
 			ScheduleToStartTimeout: timestamp.DurationFromSeconds(100),
-		}
-		_, _, err := s.matchingEngine.AddWorkflowTask(context.Background(), &addRequest)
+		}.Build()
+		_, _, err := s.matchingEngine.AddWorkflowTask(context.Background(), addRequest)
 		require.NoError(c, err)
 	}, 10*time.Second, time.Millisecond, "failed to add workflow task")
 }
 
 func (s *matchingEngineSuite) createPollWorkflowTaskRequestAndPoll(taskQueue *taskqueuepb.TaskQueue) {
 	s.EventuallyWithT(func(c *assert.CollectT) {
-		result, err := s.matchingEngine.PollWorkflowTaskQueue(context.Background(), &matchingservice.PollWorkflowTaskQueueRequest{
+		result, err := s.matchingEngine.PollWorkflowTaskQueue(context.Background(), matchingservice.PollWorkflowTaskQueueRequest_builder{
 			NamespaceId: namespaceID,
-			PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
+			PollRequest: workflowservice.PollWorkflowTaskQueueRequest_builder{
 				TaskQueue: taskQueue,
 				Identity:  "nobody",
-			},
-		}, metrics.NoopMetricsHandler)
+			}.Build(),
+		}.Build(), metrics.NoopMetricsHandler)
 		require.NoError(c, err) // DB could have failed while fetching tasks; try again
-		require.NotEmpty(c, result.TaskToken)
-		require.NotZero(c, result.Attempt)
+		require.NotEmpty(c, result.GetTaskToken())
+		require.NotZero(c, result.GetAttempt())
 	}, 3*time.Second, time.Millisecond, "failed to poll workflow task")
 }
 
@@ -3397,7 +3378,7 @@ func (s *matchingEngineSuite) resetBacklogCounter(numWorkers int, taskCount int,
 	// Stop the backlogManager so that we TTL and the taskReader does not catch this
 	request := &persistence.CompleteTasksLessThanRequest{
 		NamespaceID:        namespaceID,
-		TaskQueueName:      taskQueue.Name,
+		TaskQueueName:      taskQueue.GetName(),
 		TaskType:           enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		ExclusiveMaxTaskID: minTaskID + 1,
 		Limit:              100,
@@ -3585,16 +3566,16 @@ func (s *matchingEngineSuite) TestPollActivityTaskQueueWithRateLimiterError() {
 
 	namespaceID := uuid.NewString()
 	tl := "queue"
-	taskQueue := &taskqueuepb.TaskQueue{Name: "queue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	taskQueue := taskqueuepb.TaskQueue_builder{Name: "queue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build()
 
-	addRequest := matchingservice.AddActivityTaskRequest{
+	addRequest := matchingservice.AddActivityTaskRequest_builder{
 		NamespaceId:      namespaceID,
-		Execution:        &commonpb.WorkflowExecution{WorkflowId: "workflowID", RunId: uuid.NewString()},
+		Execution:        commonpb.WorkflowExecution_builder{WorkflowId: "workflowID", RunId: uuid.NewString()}.Build(),
 		ScheduledEventId: int64(5),
 		TaskQueue:        taskQueue,
-	}
+	}.Build()
 
-	_, _, err := s.matchingEngine.AddActivityTask(context.Background(), &addRequest)
+	_, _, err := s.matchingEngine.AddActivityTask(context.Background(), addRequest)
 	s.NoError(err)
 	s.Equal(1, s.taskManager.getTaskCount(newUnversionedRootQueueKey(namespaceID, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)))
 
@@ -3603,13 +3584,13 @@ func (s *matchingEngineSuite) TestPollActivityTaskQueueWithRateLimiterError() {
 		Return(rateLimiterErr).Times(1)
 	s.matchingEngine.rateLimiter = mockRateLimiter
 
-	_, err = s.matchingEngine.PollActivityTaskQueue(context.Background(), &matchingservice.PollActivityTaskQueueRequest{
+	_, err = s.matchingEngine.PollActivityTaskQueue(context.Background(), matchingservice.PollActivityTaskQueueRequest_builder{
 		NamespaceId: namespaceID,
-		PollRequest: &workflowservice.PollActivityTaskQueueRequest{
+		PollRequest: workflowservice.PollActivityTaskQueueRequest_builder{
 			TaskQueue: taskQueue,
 			Identity:  "identity",
-		},
-	}, metrics.NoopMetricsHandler)
+		}.Build(),
+	}.Build(), metrics.NoopMetricsHandler)
 	s.ErrorIs(err, rateLimiterErr)
 }
 
@@ -3619,16 +3600,16 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueueWithRateLimiterError() {
 
 	namespaceID := uuid.NewString()
 	tl := "queue"
-	taskQueue := &taskqueuepb.TaskQueue{Name: "queue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	taskQueue := taskqueuepb.TaskQueue_builder{Name: "queue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build()
 
-	addRequest := matchingservice.AddWorkflowTaskRequest{
+	addRequest := matchingservice.AddWorkflowTaskRequest_builder{
 		NamespaceId:      namespaceID,
-		Execution:        &commonpb.WorkflowExecution{WorkflowId: "workflowID", RunId: uuid.NewString()},
+		Execution:        commonpb.WorkflowExecution_builder{WorkflowId: "workflowID", RunId: uuid.NewString()}.Build(),
 		ScheduledEventId: int64(5),
 		TaskQueue:        taskQueue,
-	}
+	}.Build()
 
-	_, _, err := s.matchingEngine.AddWorkflowTask(context.Background(), &addRequest)
+	_, _, err := s.matchingEngine.AddWorkflowTask(context.Background(), addRequest)
 	s.NoError(err)
 	s.Equal(1, s.taskManager.getTaskCount(newUnversionedRootQueueKey(namespaceID, tl, enumspb.TASK_QUEUE_TYPE_WORKFLOW)))
 
@@ -3637,13 +3618,13 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueueWithRateLimiterError() {
 		Return(rateLimiterErr).Times(1)
 	s.matchingEngine.rateLimiter = mockRateLimiter
 
-	_, err = s.matchingEngine.PollWorkflowTaskQueue(context.Background(), &matchingservice.PollWorkflowTaskQueueRequest{
+	_, err = s.matchingEngine.PollWorkflowTaskQueue(context.Background(), matchingservice.PollWorkflowTaskQueueRequest_builder{
 		NamespaceId: namespaceID,
-		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
+		PollRequest: workflowservice.PollWorkflowTaskQueueRequest_builder{
 			TaskQueue: taskQueue,
 			Identity:  "identity",
-		},
-	}, metrics.NoopMetricsHandler)
+		}.Build(),
+	}.Build(), metrics.NoopMetricsHandler)
 	s.ErrorIs(err, rateLimiterErr)
 }
 
@@ -3686,18 +3667,18 @@ func (s *matchingEngineSuite) TestDispatchNexusTask_ValidateTimeoutBuffer() {
 
 	testFn := func(t *testing.T, tc testCase) {
 		synctest.Test(t, func(t *testing.T) {
-			nexusRequest := &matchingservice.DispatchNexusTaskRequest{
+			nexusRequest := matchingservice.DispatchNexusTaskRequest_builder{
 				NamespaceId: "my-nsid",
-				TaskQueue: &taskqueuepb.TaskQueue{
+				TaskQueue: taskqueuepb.TaskQueue_builder{
 					Name: "my-tq",
 					Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-				},
-				Request: &nexuspb.Request{
+				}.Build(),
+				Request: nexuspb.Request_builder{
 					Header: map[string]string{
 						"request-timeout": "2s",
 					},
-				},
-			}
+				}.Build(),
+			}.Build()
 
 			mockPartitionManager := NewMocktaskQueuePartitionManager(s.controller)
 			mockPartitionManager.EXPECT().WaitUntilInitialized(gomock.Any()).Return(nil).AnyTimes()
@@ -3717,9 +3698,7 @@ func (s *matchingEngineSuite) TestDispatchNexusTask_ValidateTimeoutBuffer() {
 						return nil, nil
 					}
 
-					return &matchingservice.DispatchNexusTaskResponse{Outcome: &matchingservice.DispatchNexusTaskResponse_Response{
-						Response: &nexuspb.Response{},
-					}}, nil
+					return matchingservice.DispatchNexusTaskResponse_builder{Response: &nexuspb.Response{}}.Build(), nil
 				},
 			).Times(1)
 
@@ -3754,21 +3733,21 @@ func (s *matchingEngineSuite) TestSyncDeploymentUserData_NewDeploymentDataRemove
 
 	// Seed user data with old-format versions across two deployments: foo.A and bar.B
 	t1 := timestamp.TimePtr(time.Now().Add(-time.Hour))
-	userData := &persistencespb.VersionedTaskQueueUserData{
+	userData := persistencespb.VersionedTaskQueueUserData_builder{
 		Version: 1,
-		Data: &persistencespb.TaskQueueUserData{
+		Data: persistencespb.TaskQueueUserData_builder{
 			PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
-				int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {
-					DeploymentData: &persistencespb.DeploymentData{
+				int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): persistencespb.TaskQueueTypeUserData_builder{
+					DeploymentData: persistencespb.DeploymentData_builder{
 						Versions: []*deploymentspb.DeploymentVersionData{
-							{Version: &deploymentspb.WorkerDeploymentVersion{DeploymentName: "foo", BuildId: "A"}, RoutingUpdateTime: t1, CurrentSinceTime: t1},
-							{Version: &deploymentspb.WorkerDeploymentVersion{DeploymentName: "bar", BuildId: "B"}, RoutingUpdateTime: t1, CurrentSinceTime: t1},
+							deploymentspb.DeploymentVersionData_builder{Version: deploymentspb.WorkerDeploymentVersion_builder{DeploymentName: "foo", BuildId: "A"}.Build(), RoutingUpdateTime: t1, CurrentSinceTime: t1}.Build(),
+							deploymentspb.DeploymentVersionData_builder{Version: deploymentspb.WorkerDeploymentVersion_builder{DeploymentName: "bar", BuildId: "B"}.Build(), RoutingUpdateTime: t1, CurrentSinceTime: t1}.Build(),
 						},
-					},
-				},
+					}.Build(),
+				}.Build(),
 			},
-		},
-	}
+		}.Build(),
+	}.Build()
 
 	// Using the lower level UpdateTaskQueueUserData to set the user data for multiple versions at once.
 	s.NoError(s.classicTaskManager.UpdateTaskQueueUserData(context.Background(), &persistence.UpdateTaskQueueUserDataRequest{
@@ -3777,30 +3756,30 @@ func (s *matchingEngineSuite) TestSyncDeploymentUserData_NewDeploymentDataRemove
 			tq: {UserData: userData},
 		},
 	}))
-	userData.Version++
+	userData.SetVersion(userData.GetVersion() + 1)
 
 	// Sync new-format routing config for deployment "foo" with a newer revision to trigger cleanup
-	rc := &deploymentpb.RoutingConfig{
-		CurrentDeploymentVersion:  &deploymentpb.WorkerDeploymentVersion{DeploymentName: "foo", BuildId: "C"},
+	rc := deploymentpb.RoutingConfig_builder{
+		CurrentDeploymentVersion:  deploymentpb.WorkerDeploymentVersion_builder{DeploymentName: "foo", BuildId: "C"}.Build(),
 		CurrentVersionChangedTime: timestamppb.Now(),
 		RevisionNumber:            1,
-	}
-	_, err := s.matchingEngine.SyncDeploymentUserData(context.Background(), &matchingservice.SyncDeploymentUserDataRequest{
+	}.Build()
+	_, err := s.matchingEngine.SyncDeploymentUserData(context.Background(), matchingservice.SyncDeploymentUserDataRequest_builder{
 		NamespaceId:         namespaceID,
 		TaskQueue:           tq,
 		DeploymentName:      "foo",
 		TaskQueueTypes:      []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW, enumspb.TASK_QUEUE_TYPE_ACTIVITY},
 		UpdateRoutingConfig: rc,
-	})
+	}.Build())
 	s.NoError(err)
 
 	// Fetch and verify that old-format versions under the same deployment (foo) are removed, others remain
-	res, err := s.matchingEngine.GetTaskQueueUserData(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{
+	res, err := s.matchingEngine.GetTaskQueueUserData(context.Background(), matchingservice.GetTaskQueueUserDataRequest_builder{
 		NamespaceId:              namespaceID,
 		TaskQueue:                tq,
 		TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		LastKnownUserDataVersion: 0,
-	})
+	}.Build())
 	s.NoError(err)
 	//nolint:staticcheck // SA1019 deprecated versions will clean up later
 	got := res.GetUserData().GetData().GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].GetDeploymentData().GetVersions()
@@ -3814,71 +3793,71 @@ func (s *matchingEngineSuite) TestSyncDeploymentUserData_RoutingConfigRevisionGa
 	namespaceID := tv.NamespaceID().String()
 	tq := tv.TaskQueue().GetName()
 
-	rc1 := &deploymentpb.RoutingConfig{
-		CurrentDeploymentVersion:  &deploymentpb.WorkerDeploymentVersion{DeploymentName: "foo", BuildId: "rev1"},
+	rc1 := deploymentpb.RoutingConfig_builder{
+		CurrentDeploymentVersion:  deploymentpb.WorkerDeploymentVersion_builder{DeploymentName: "foo", BuildId: "rev1"}.Build(),
 		RevisionNumber:            1,
 		CurrentVersionChangedTime: timestamppb.Now(),
-	}
-	resp, err := s.matchingEngine.SyncDeploymentUserData(context.Background(), &matchingservice.SyncDeploymentUserDataRequest{
+	}.Build()
+	resp, err := s.matchingEngine.SyncDeploymentUserData(context.Background(), matchingservice.SyncDeploymentUserDataRequest_builder{
 		NamespaceId:         namespaceID,
 		TaskQueue:           tq,
 		DeploymentName:      "foo",
 		TaskQueueTypes:      []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW},
 		UpdateRoutingConfig: rc1,
-	})
+	}.Build())
 	s.NoError(err)
 	s.True(resp.GetRoutingConfigChanged())
 
 	// Attempt to sync lower revision (0) — should be ignored
-	rc0 := &deploymentpb.RoutingConfig{
-		CurrentDeploymentVersion:  &deploymentpb.WorkerDeploymentVersion{DeploymentName: "foo", BuildId: "rev0"},
+	rc0 := deploymentpb.RoutingConfig_builder{
+		CurrentDeploymentVersion:  deploymentpb.WorkerDeploymentVersion_builder{DeploymentName: "foo", BuildId: "rev0"}.Build(),
 		RevisionNumber:            0,
 		CurrentVersionChangedTime: timestamppb.Now(),
-	}
-	resp, err = s.matchingEngine.SyncDeploymentUserData(context.Background(), &matchingservice.SyncDeploymentUserDataRequest{
+	}.Build()
+	resp, err = s.matchingEngine.SyncDeploymentUserData(context.Background(), matchingservice.SyncDeploymentUserDataRequest_builder{
 		NamespaceId:         namespaceID,
 		TaskQueue:           tq,
 		DeploymentName:      "foo",
 		TaskQueueTypes:      []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW},
 		UpdateRoutingConfig: rc0,
-	})
+	}.Build())
 	s.NoError(err)
 	s.False(resp.GetRoutingConfigChanged())
 
 	// Verify still rev 1
-	res, err := s.matchingEngine.GetTaskQueueUserData(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{
+	res, err := s.matchingEngine.GetTaskQueueUserData(context.Background(), matchingservice.GetTaskQueueUserDataRequest_builder{
 		NamespaceId:              namespaceID,
 		TaskQueue:                tq,
 		TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		LastKnownUserDataVersion: 0,
-	})
+	}.Build())
 	s.NoError(err)
 	gotRC := res.GetUserData().GetData().GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].GetDeploymentData().GetDeploymentsData()["foo"].GetRoutingConfig()
 	s.Equal(int64(1), gotRC.GetRevisionNumber())
 	s.Equal("rev1", gotRC.GetCurrentDeploymentVersion().GetBuildId())
 
 	// Now sync higher revision (2) — should be applied
-	rc2 := &deploymentpb.RoutingConfig{
-		CurrentDeploymentVersion:  &deploymentpb.WorkerDeploymentVersion{DeploymentName: "foo", BuildId: "rev2"},
+	rc2 := deploymentpb.RoutingConfig_builder{
+		CurrentDeploymentVersion:  deploymentpb.WorkerDeploymentVersion_builder{DeploymentName: "foo", BuildId: "rev2"}.Build(),
 		RevisionNumber:            2,
 		CurrentVersionChangedTime: timestamppb.Now(),
-	}
-	resp, err = s.matchingEngine.SyncDeploymentUserData(context.Background(), &matchingservice.SyncDeploymentUserDataRequest{
+	}.Build()
+	resp, err = s.matchingEngine.SyncDeploymentUserData(context.Background(), matchingservice.SyncDeploymentUserDataRequest_builder{
 		NamespaceId:         namespaceID,
 		TaskQueue:           tq,
 		DeploymentName:      "foo",
 		TaskQueueTypes:      []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW},
 		UpdateRoutingConfig: rc2,
-	})
+	}.Build())
 	s.NoError(err)
 	s.True(resp.GetRoutingConfigChanged())
 
-	res, err = s.matchingEngine.GetTaskQueueUserData(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{
+	res, err = s.matchingEngine.GetTaskQueueUserData(context.Background(), matchingservice.GetTaskQueueUserDataRequest_builder{
 		NamespaceId:              namespaceID,
 		TaskQueue:                tq,
 		TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		LastKnownUserDataVersion: 0,
-	})
+	}.Build())
 	s.NoError(err)
 	gotRC = res.GetUserData().GetData().GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].GetDeploymentData().GetDeploymentsData()["foo"].GetRoutingConfig()
 	s.Equal(int64(2), gotRC.GetRevisionNumber())
@@ -3896,24 +3875,24 @@ func (s *matchingEngineSuite) TestSyncDeploymentUserData_UpsertAndForgetVersions
 		"b1": {},
 		"b2": {},
 	}
-	resp, err := s.matchingEngine.SyncDeploymentUserData(context.Background(), &matchingservice.SyncDeploymentUserDataRequest{
+	resp, err := s.matchingEngine.SyncDeploymentUserData(context.Background(), matchingservice.SyncDeploymentUserDataRequest_builder{
 		NamespaceId:        namespaceID,
 		TaskQueue:          tq,
 		DeploymentName:     deploymentName,
 		TaskQueueTypes:     []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW},
 		UpsertVersionsData: upserts1,
 		// No UpdateRoutingConfig provided
-	})
+	}.Build())
 	s.NoError(err)
 	s.False(resp.GetRoutingConfigChanged())
 
 	// Verify both b1 and b2 exist
-	res, err := s.matchingEngine.GetTaskQueueUserData(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{
+	res, err := s.matchingEngine.GetTaskQueueUserData(context.Background(), matchingservice.GetTaskQueueUserDataRequest_builder{
 		NamespaceId:              namespaceID,
 		TaskQueue:                tq,
 		TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		LastKnownUserDataVersion: 0,
-	})
+	}.Build())
 	s.NoError(err)
 	versions := res.GetUserData().GetData().GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].GetDeploymentData().GetDeploymentsData()[deploymentName].GetVersions()
 	s.Contains(versions, "b1")
@@ -3924,7 +3903,7 @@ func (s *matchingEngineSuite) TestSyncDeploymentUserData_UpsertAndForgetVersions
 	upserts2 := map[string]*deploymentspb.WorkerDeploymentVersionData{
 		"b3": {},
 	}
-	resp, err = s.matchingEngine.SyncDeploymentUserData(context.Background(), &matchingservice.SyncDeploymentUserDataRequest{
+	resp, err = s.matchingEngine.SyncDeploymentUserData(context.Background(), matchingservice.SyncDeploymentUserDataRequest_builder{
 		NamespaceId:        namespaceID,
 		TaskQueue:          tq,
 		DeploymentName:     deploymentName,
@@ -3932,17 +3911,17 @@ func (s *matchingEngineSuite) TestSyncDeploymentUserData_UpsertAndForgetVersions
 		UpsertVersionsData: upserts2,
 		ForgetVersions:     []string{"b1"},
 		// No UpdateRoutingConfig provided
-	})
+	}.Build())
 	s.NoError(err)
 	s.False(resp.GetRoutingConfigChanged())
 
 	// Verify b1 removed, b2 remains, b3 added
-	res, err = s.matchingEngine.GetTaskQueueUserData(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{
+	res, err = s.matchingEngine.GetTaskQueueUserData(context.Background(), matchingservice.GetTaskQueueUserDataRequest_builder{
 		NamespaceId:              namespaceID,
 		TaskQueue:                tq,
 		TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		LastKnownUserDataVersion: 0,
-	})
+	}.Build())
 	s.NoError(err)
 	versions = res.GetUserData().GetData().GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].GetDeploymentData().GetDeploymentsData()[deploymentName].GetVersions()
 	s.NotContains(versions, "b1")
@@ -3959,34 +3938,34 @@ func (s *matchingEngineSuite) TestSyncDeploymentUserData_UnsetOldFormatRamp_Clea
 	deploymentName := "foo"
 
 	// New-format ramp for deployment "foo"
-	rc := &deploymentpb.RoutingConfig{
-		RampingDeploymentVersion:            &deploymentpb.WorkerDeploymentVersion{DeploymentName: deploymentName, BuildId: "b1"},
+	rc := deploymentpb.RoutingConfig_builder{
+		RampingDeploymentVersion:            deploymentpb.WorkerDeploymentVersion_builder{DeploymentName: deploymentName, BuildId: "b1"}.Build(),
 		RampingVersionPercentage:            25,
 		RampingVersionPercentageChangedTime: timestamppb.Now(),
 		RevisionNumber:                      1,
-	}
-	resp, err := s.matchingEngine.SyncDeploymentUserData(context.Background(), &matchingservice.SyncDeploymentUserDataRequest{
+	}.Build()
+	resp, err := s.matchingEngine.SyncDeploymentUserData(context.Background(), matchingservice.SyncDeploymentUserDataRequest_builder{
 		NamespaceId:         namespaceID,
 		TaskQueue:           tq,
 		DeploymentName:      deploymentName,
 		TaskQueueTypes:      []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW},
 		UpdateRoutingConfig: rc,
 		UpsertVersionsData: map[string]*deploymentspb.WorkerDeploymentVersionData{
-			"b1": {
+			"b1": deploymentspb.WorkerDeploymentVersionData_builder{
 				Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING,
-			},
+			}.Build(),
 		},
-	})
+	}.Build())
 	s.NoError(err)
 	s.True(resp.GetRoutingConfigChanged())
 
 	// Verify ramp present in new-format data
-	res, err := s.matchingEngine.GetTaskQueueUserData(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{
+	res, err := s.matchingEngine.GetTaskQueueUserData(context.Background(), matchingservice.GetTaskQueueUserDataRequest_builder{
 		NamespaceId:              namespaceID,
 		TaskQueue:                tq,
 		TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		LastKnownUserDataVersion: 0,
-	})
+	}.Build())
 	s.NoError(err)
 	rcGot := res.GetUserData().GetData().GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].GetDeploymentData().GetDeploymentsData()[deploymentName].GetRoutingConfig()
 	s.NotNil(rcGot.GetRampingDeploymentVersion())
@@ -3998,24 +3977,22 @@ func (s *matchingEngineSuite) TestSyncDeploymentUserData_UnsetOldFormatRamp_Clea
 		// Version: nil (unversioned)
 		// RampingSinceTime: nil indicates unset
 	}
-	resp, err = s.matchingEngine.SyncDeploymentUserData(context.Background(), &matchingservice.SyncDeploymentUserDataRequest{
-		NamespaceId:    namespaceID,
-		TaskQueue:      tq,
-		DeploymentName: deploymentName,
-		TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW},
-		Operation: &matchingservice.SyncDeploymentUserDataRequest_UpdateVersionData{
-			UpdateVersionData: unsetVD,
-		},
-	})
+	resp, err = s.matchingEngine.SyncDeploymentUserData(context.Background(), matchingservice.SyncDeploymentUserDataRequest_builder{
+		NamespaceId:       namespaceID,
+		TaskQueue:         tq,
+		DeploymentName:    deploymentName,
+		TaskQueueTypes:    []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW},
+		UpdateVersionData: proto.ValueOrDefault(unsetVD),
+	}.Build())
 	s.NoError(err)
 
 	// Verify unversioned ramp cleared and new-format ramp cleared
-	res, err = s.matchingEngine.GetTaskQueueUserData(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{
+	res, err = s.matchingEngine.GetTaskQueueUserData(context.Background(), matchingservice.GetTaskQueueUserDataRequest_builder{
 		NamespaceId:              namespaceID,
 		TaskQueue:                tq,
 		TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		LastKnownUserDataVersion: 0,
-	})
+	}.Build())
 	s.NoError(err)
 	depData := res.GetUserData().GetData().GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].GetDeploymentData()
 	// old-format unversioned ramp should be nil
@@ -4036,20 +4013,20 @@ func (s *matchingEngineSuite) TestSyncDeploymentUserData_OldFormatSetSameCurrent
 	deploymentName := "foo"
 
 	// set current=v1
-	rc := &deploymentpb.RoutingConfig{
-		CurrentDeploymentVersion:  &deploymentpb.WorkerDeploymentVersion{DeploymentName: deploymentName, BuildId: "v1"},
+	rc := deploymentpb.RoutingConfig_builder{
+		CurrentDeploymentVersion:  deploymentpb.WorkerDeploymentVersion_builder{DeploymentName: deploymentName, BuildId: "v1"}.Build(),
 		CurrentVersionChangedTime: timestamppb.Now(),
 		RevisionNumber:            1,
-	}
+	}.Build()
 	resp, err := s.matchingEngine.SyncDeploymentUserData(
 		context.Background(),
-		&matchingservice.SyncDeploymentUserDataRequest{
+		matchingservice.SyncDeploymentUserDataRequest_builder{
 			NamespaceId:         namespaceID,
 			TaskQueue:           tq,
 			DeploymentName:      deploymentName,
 			TaskQueueTypes:      []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW},
 			UpdateRoutingConfig: rc,
-		},
+		}.Build(),
 	)
 	s.NoError(err)
 	s.True(resp.GetRoutingConfigChanged())
@@ -4057,12 +4034,12 @@ func (s *matchingEngineSuite) TestSyncDeploymentUserData_OldFormatSetSameCurrent
 	// Verify current=v1 present in new-format
 	res, err := s.matchingEngine.GetTaskQueueUserData(
 		context.Background(),
-		&matchingservice.GetTaskQueueUserDataRequest{
+		matchingservice.GetTaskQueueUserDataRequest_builder{
 			NamespaceId:              namespaceID,
 			TaskQueue:                tq,
 			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			LastKnownUserDataVersion: 0,
-		},
+		}.Build(),
 	)
 	s.NoError(err)
 	rcGot := res.GetUserData().GetData().GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].
@@ -4070,34 +4047,32 @@ func (s *matchingEngineSuite) TestSyncDeploymentUserData_OldFormatSetSameCurrent
 	s.Equal("v1", rcGot.GetCurrentDeploymentVersion().GetBuildId())
 
 	// Old-format: set SAME version (v1) as current -> should clear new-format current
-	vdCurrent := &deploymentspb.DeploymentVersionData{
-		Version:           &deploymentspb.WorkerDeploymentVersion{DeploymentName: deploymentName, BuildId: "v1"},
+	vdCurrent := deploymentspb.DeploymentVersionData_builder{
+		Version:           deploymentspb.WorkerDeploymentVersion_builder{DeploymentName: deploymentName, BuildId: "v1"}.Build(),
 		CurrentSinceTime:  timestamppb.Now(),
 		RoutingUpdateTime: timestamppb.Now(),
-	}
+	}.Build()
 	_, err = s.matchingEngine.SyncDeploymentUserData(
 		context.Background(),
-		&matchingservice.SyncDeploymentUserDataRequest{
-			NamespaceId:    namespaceID,
-			TaskQueue:      tq,
-			DeploymentName: deploymentName,
-			TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW},
-			Operation: &matchingservice.SyncDeploymentUserDataRequest_UpdateVersionData{
-				UpdateVersionData: vdCurrent,
-			},
-		},
+		matchingservice.SyncDeploymentUserDataRequest_builder{
+			NamespaceId:       namespaceID,
+			TaskQueue:         tq,
+			DeploymentName:    deploymentName,
+			TaskQueueTypes:    []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW},
+			UpdateVersionData: proto.ValueOrDefault(vdCurrent),
+		}.Build(),
 	)
 	s.NoError(err)
 
 	// Verify new-format current cleared
 	res, err = s.matchingEngine.GetTaskQueueUserData(
 		context.Background(),
-		&matchingservice.GetTaskQueueUserDataRequest{
+		matchingservice.GetTaskQueueUserDataRequest_builder{
 			NamespaceId:              namespaceID,
 			TaskQueue:                tq,
 			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			LastKnownUserDataVersion: 0,
-		},
+		}.Build(),
 	)
 	s.NoError(err)
 	rcGot = res.GetUserData().GetData().GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].
@@ -4114,22 +4089,20 @@ func (s *matchingEngineSuite) TestSyncDeploymentUserData_ForgetNewFormat_Removes
 	buildID := "b1"
 
 	// Upsert b1 using the old format
-	_, err := s.matchingEngine.SyncDeploymentUserData(context.Background(), &matchingservice.SyncDeploymentUserDataRequest{
+	_, err := s.matchingEngine.SyncDeploymentUserData(context.Background(), matchingservice.SyncDeploymentUserDataRequest_builder{
 		NamespaceId:    namespaceID,
 		TaskQueue:      tq,
 		DeploymentName: deploymentName,
 		TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW},
-		Operation: &matchingservice.SyncDeploymentUserDataRequest_UpdateVersionData{
-			UpdateVersionData: &deploymentspb.DeploymentVersionData{
-				Version:           &deploymentspb.WorkerDeploymentVersion{DeploymentName: deploymentName, BuildId: buildID},
-				RoutingUpdateTime: timestamppb.Now(),
-			},
-		},
-	})
+		UpdateVersionData: deploymentspb.DeploymentVersionData_builder{
+			Version:           deploymentspb.WorkerDeploymentVersion_builder{DeploymentName: deploymentName, BuildId: buildID}.Build(),
+			RoutingUpdateTime: timestamppb.Now(),
+		}.Build(),
+	}.Build())
 	s.NoError(err)
 
 	// Upsert b1 using the new format
-	_, err = s.matchingEngine.SyncDeploymentUserData(context.Background(), &matchingservice.SyncDeploymentUserDataRequest{
+	_, err = s.matchingEngine.SyncDeploymentUserData(context.Background(), matchingservice.SyncDeploymentUserDataRequest_builder{
 		NamespaceId:    namespaceID,
 		TaskQueue:      tq,
 		DeploymentName: deploymentName,
@@ -4137,27 +4110,27 @@ func (s *matchingEngineSuite) TestSyncDeploymentUserData_ForgetNewFormat_Removes
 		UpsertVersionsData: map[string]*deploymentspb.WorkerDeploymentVersionData{
 			buildID: {},
 		},
-	})
+	}.Build())
 	s.NoError(err)
 
 	// Forget via new-format
-	_, err = s.matchingEngine.SyncDeploymentUserData(context.Background(), &matchingservice.SyncDeploymentUserDataRequest{
+	_, err = s.matchingEngine.SyncDeploymentUserData(context.Background(), matchingservice.SyncDeploymentUserDataRequest_builder{
 		NamespaceId:         namespaceID,
 		TaskQueue:           tq,
 		DeploymentName:      deploymentName,
 		TaskQueueTypes:      []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW},
 		ForgetVersions:      []string{buildID},
 		UpdateRoutingConfig: nil,
-	})
+	}.Build())
 	s.NoError(err)
 
 	// Verify removal from both formats
-	res, err := s.matchingEngine.GetTaskQueueUserData(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{
+	res, err := s.matchingEngine.GetTaskQueueUserData(context.Background(), matchingservice.GetTaskQueueUserDataRequest_builder{
 		NamespaceId:              namespaceID,
 		TaskQueue:                tq,
 		TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		LastKnownUserDataVersion: 0,
-	})
+	}.Build())
 	s.NoError(err)
 	depData := res.GetUserData().GetData().GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].GetDeploymentData()
 	// new-format membership
@@ -4181,22 +4154,20 @@ func (s *matchingEngineSuite) TestSyncDeploymentUserData_ForgetOldFormat_Removes
 	buildID := "b1"
 
 	// Upsert b1 using the old format
-	_, err := s.matchingEngine.SyncDeploymentUserData(context.Background(), &matchingservice.SyncDeploymentUserDataRequest{
+	_, err := s.matchingEngine.SyncDeploymentUserData(context.Background(), matchingservice.SyncDeploymentUserDataRequest_builder{
 		NamespaceId:    namespaceID,
 		TaskQueue:      tq,
 		DeploymentName: deploymentName,
 		TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW},
-		Operation: &matchingservice.SyncDeploymentUserDataRequest_UpdateVersionData{
-			UpdateVersionData: &deploymentspb.DeploymentVersionData{
-				Version:           &deploymentspb.WorkerDeploymentVersion{DeploymentName: deploymentName, BuildId: buildID},
-				RoutingUpdateTime: timestamppb.Now(),
-			},
-		},
-	})
+		UpdateVersionData: deploymentspb.DeploymentVersionData_builder{
+			Version:           deploymentspb.WorkerDeploymentVersion_builder{DeploymentName: deploymentName, BuildId: buildID}.Build(),
+			RoutingUpdateTime: timestamppb.Now(),
+		}.Build(),
+	}.Build())
 	s.NoError(err)
 
 	// Upsert b1 using the new format (membership map)
-	_, err = s.matchingEngine.SyncDeploymentUserData(context.Background(), &matchingservice.SyncDeploymentUserDataRequest{
+	_, err = s.matchingEngine.SyncDeploymentUserData(context.Background(), matchingservice.SyncDeploymentUserDataRequest_builder{
 		NamespaceId:    namespaceID,
 		TaskQueue:      tq,
 		DeploymentName: deploymentName,
@@ -4204,28 +4175,26 @@ func (s *matchingEngineSuite) TestSyncDeploymentUserData_ForgetOldFormat_Removes
 		UpsertVersionsData: map[string]*deploymentspb.WorkerDeploymentVersionData{
 			buildID: {},
 		},
-	})
+	}.Build())
 	s.NoError(err)
 
 	// Forget via old-format
-	_, err = s.matchingEngine.SyncDeploymentUserData(context.Background(), &matchingservice.SyncDeploymentUserDataRequest{
+	_, err = s.matchingEngine.SyncDeploymentUserData(context.Background(), matchingservice.SyncDeploymentUserDataRequest_builder{
 		NamespaceId:    namespaceID,
 		TaskQueue:      tq,
 		DeploymentName: deploymentName,
 		TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW},
-		Operation: &matchingservice.SyncDeploymentUserDataRequest_ForgetVersion{
-			ForgetVersion: &deploymentspb.WorkerDeploymentVersion{DeploymentName: deploymentName, BuildId: buildID},
-		},
-	})
+		ForgetVersion:  deploymentspb.WorkerDeploymentVersion_builder{DeploymentName: deploymentName, BuildId: buildID}.Build(),
+	}.Build())
 	s.NoError(err)
 
 	// Verify removal from both formats
-	res, err := s.matchingEngine.GetTaskQueueUserData(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{
+	res, err := s.matchingEngine.GetTaskQueueUserData(context.Background(), matchingservice.GetTaskQueueUserDataRequest_builder{
 		NamespaceId:              namespaceID,
 		TaskQueue:                tq,
 		TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		LastKnownUserDataVersion: 0,
-	})
+	}.Build())
 	s.NoError(err)
 	depData := res.GetUserData().GetData().GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].GetDeploymentData()
 	// new-format membership map
@@ -4243,48 +4212,48 @@ func (s *matchingEngineSuite) TestSyncDeploymentUserData_ForgetOldFormat_Removes
 func (s *matchingEngineSuite) setupRecordActivityTaskStartedMock(tlName string) {
 	activityTypeName := "activity1"
 	activityID := "activityId1"
-	activityType := &commonpb.ActivityType{Name: activityTypeName}
+	activityType := commonpb.ActivityType_builder{Name: activityTypeName}.Build()
 	activityInput := payloads.EncodeString("Activity1 Input")
 
 	// History service is using mock
 	s.mockHistoryClient.EXPECT().RecordActivityTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, taskRequest *historyservice.RecordActivityTaskStartedRequest, arg2 ...interface{}) (*historyservice.RecordActivityTaskStartedResponse, error) {
 			s.logger.Debug("Mock Received RecordActivityTaskStartedRequest")
-			return &historyservice.RecordActivityTaskStartedResponse{
+			return historyservice.RecordActivityTaskStartedResponse_builder{
 				Attempt: 1,
-				ScheduledEvent: newActivityTaskScheduledEvent(taskRequest.ScheduledEventId, 0,
-					&commandpb.ScheduleActivityTaskCommandAttributes{
+				ScheduledEvent: newActivityTaskScheduledEvent(taskRequest.GetScheduledEventId(), 0,
+					commandpb.ScheduleActivityTaskCommandAttributes_builder{
 						ActivityId: activityID,
-						TaskQueue: &taskqueuepb.TaskQueue{
+						TaskQueue: taskqueuepb.TaskQueue_builder{
 							Name: tlName,
 							Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-						},
+						}.Build(),
 						ActivityType:           activityType,
 						Input:                  activityInput,
 						ScheduleToCloseTimeout: durationpb.New(100 * time.Second),
 						ScheduleToStartTimeout: durationpb.New(50 * time.Second),
 						StartToCloseTimeout:    durationpb.New(50 * time.Second),
 						HeartbeatTimeout:       durationpb.New(10 * time.Second),
-					}),
-			}, nil
+					}.Build()),
+			}.Build(), nil
 		}).AnyTimes()
 }
 func newActivityTaskScheduledEvent(eventID int64, workflowTaskCompletedEventID int64,
 	scheduleAttributes *commandpb.ScheduleActivityTaskCommandAttributes,
 ) *historypb.HistoryEvent {
 	historyEvent := newHistoryEvent(eventID, enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED)
-	historyEvent.Attributes = &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{
-		ActivityId:                   scheduleAttributes.ActivityId,
-		ActivityType:                 scheduleAttributes.ActivityType,
-		TaskQueue:                    scheduleAttributes.TaskQueue,
-		Input:                        scheduleAttributes.Input,
-		Header:                       scheduleAttributes.Header,
-		ScheduleToCloseTimeout:       scheduleAttributes.ScheduleToCloseTimeout,
-		ScheduleToStartTimeout:       scheduleAttributes.ScheduleToStartTimeout,
-		StartToCloseTimeout:          scheduleAttributes.StartToCloseTimeout,
-		HeartbeatTimeout:             scheduleAttributes.HeartbeatTimeout,
+	historyEvent.SetActivityTaskScheduledEventAttributes(historypb.ActivityTaskScheduledEventAttributes_builder{
+		ActivityId:                   scheduleAttributes.GetActivityId(),
+		ActivityType:                 scheduleAttributes.GetActivityType(),
+		TaskQueue:                    scheduleAttributes.GetTaskQueue(),
+		Input:                        scheduleAttributes.GetInput(),
+		Header:                       scheduleAttributes.GetHeader(),
+		ScheduleToCloseTimeout:       scheduleAttributes.GetScheduleToCloseTimeout(),
+		ScheduleToStartTimeout:       scheduleAttributes.GetScheduleToStartTimeout(),
+		StartToCloseTimeout:          scheduleAttributes.GetStartToCloseTimeout(),
+		HeartbeatTimeout:             scheduleAttributes.GetHeartbeatTimeout(),
 		WorkflowTaskCompletedEventId: workflowTaskCompletedEventID,
-	}}
+	}.Build())
 	return historyEvent
 }
 
@@ -4297,18 +4266,16 @@ func (s *matchingEngineSuite) TestSyncDeploymentUserData_UpdateRoutingConfig_Mig
 
 	// Add old-format versions: foo:A, foo:B, bar:C
 	addOldFormatVersion := func(dep, build string) {
-		_, err := s.matchingEngine.SyncDeploymentUserData(context.Background(), &matchingservice.SyncDeploymentUserDataRequest{
+		_, err := s.matchingEngine.SyncDeploymentUserData(context.Background(), matchingservice.SyncDeploymentUserDataRequest_builder{
 			NamespaceId:    namespaceID,
 			TaskQueue:      tq,
 			DeploymentName: dep,
 			TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW},
-			Operation: &matchingservice.SyncDeploymentUserDataRequest_UpdateVersionData{
-				UpdateVersionData: &deploymentspb.DeploymentVersionData{
-					Version:           &deploymentspb.WorkerDeploymentVersion{DeploymentName: dep, BuildId: build},
-					RoutingUpdateTime: timestamppb.Now(),
-				},
-			},
-		})
+			UpdateVersionData: deploymentspb.DeploymentVersionData_builder{
+				Version:           deploymentspb.WorkerDeploymentVersion_builder{DeploymentName: dep, BuildId: build}.Build(),
+				RoutingUpdateTime: timestamppb.Now(),
+			}.Build(),
+		}.Build())
 		s.NoError(err)
 	}
 	addOldFormatVersion(depFoo, "A")
@@ -4316,27 +4283,27 @@ func (s *matchingEngineSuite) TestSyncDeploymentUserData_UpdateRoutingConfig_Mig
 	addOldFormatVersion(depBar, "C")
 
 	// Apply new-format routing config for foo with higher revision to trigger migration
-	rc := &deploymentpb.RoutingConfig{
-		CurrentDeploymentVersion:  &deploymentpb.WorkerDeploymentVersion{DeploymentName: depFoo, BuildId: "A"},
+	rc := deploymentpb.RoutingConfig_builder{
+		CurrentDeploymentVersion:  deploymentpb.WorkerDeploymentVersion_builder{DeploymentName: depFoo, BuildId: "A"}.Build(),
 		CurrentVersionChangedTime: timestamppb.Now(),
 		RevisionNumber:            1,
-	}
-	_, err := s.matchingEngine.SyncDeploymentUserData(context.Background(), &matchingservice.SyncDeploymentUserDataRequest{
+	}.Build()
+	_, err := s.matchingEngine.SyncDeploymentUserData(context.Background(), matchingservice.SyncDeploymentUserDataRequest_builder{
 		NamespaceId:         namespaceID,
 		TaskQueue:           tq,
 		DeploymentName:      depFoo,
 		TaskQueueTypes:      []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW},
 		UpdateRoutingConfig: rc,
-	})
+	}.Build())
 	s.NoError(err)
 
 	// Verify: old-format slice retains only bar:C; foo:A & foo:B migrated
-	res, err := s.matchingEngine.GetTaskQueueUserData(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{
+	res, err := s.matchingEngine.GetTaskQueueUserData(context.Background(), matchingservice.GetTaskQueueUserDataRequest_builder{
 		NamespaceId:              namespaceID,
 		TaskQueue:                tq,
 		TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		LastKnownUserDataVersion: 0,
-	})
+	}.Build())
 	s.NoError(err)
 	depData := res.GetUserData().GetData().GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].GetDeploymentData()
 
@@ -4371,11 +4338,11 @@ func (s *matchingEngineSuite) TestSyncDeploymentUserData_VersionDataRevisionGati
 	buildID := "v1"
 
 	// Upsert version data with revision 1
-	versionData1 := &deploymentspb.WorkerDeploymentVersionData{
+	versionData1 := deploymentspb.WorkerDeploymentVersionData_builder{
 		RevisionNumber: 1,
 		Status:         enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
-	}
-	_, err := s.matchingEngine.SyncDeploymentUserData(context.Background(), &matchingservice.SyncDeploymentUserDataRequest{
+	}.Build()
+	_, err := s.matchingEngine.SyncDeploymentUserData(context.Background(), matchingservice.SyncDeploymentUserDataRequest_builder{
 		NamespaceId:    namespaceID,
 		TaskQueue:      tq,
 		DeploymentName: deploymentName,
@@ -4383,16 +4350,16 @@ func (s *matchingEngineSuite) TestSyncDeploymentUserData_VersionDataRevisionGati
 		UpsertVersionsData: map[string]*deploymentspb.WorkerDeploymentVersionData{
 			buildID: versionData1,
 		},
-	})
+	}.Build())
 	s.NoError(err)
 
 	// Verify version data is stored
-	res, err := s.matchingEngine.GetTaskQueueUserData(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{
+	res, err := s.matchingEngine.GetTaskQueueUserData(context.Background(), matchingservice.GetTaskQueueUserDataRequest_builder{
 		NamespaceId:              namespaceID,
 		TaskQueue:                tq,
 		TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		LastKnownUserDataVersion: 0,
-	})
+	}.Build())
 	s.NoError(err)
 	versions := res.GetUserData().GetData().GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].GetDeploymentData().GetDeploymentsData()[deploymentName].GetVersions()
 	s.Require().Contains(versions, buildID)
@@ -4400,11 +4367,11 @@ func (s *matchingEngineSuite) TestSyncDeploymentUserData_VersionDataRevisionGati
 	s.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT, versions[buildID].GetStatus())
 
 	// Attempt to upsert with lower revision (0) — should be ignored
-	versionData0 := &deploymentspb.WorkerDeploymentVersionData{
+	versionData0 := deploymentspb.WorkerDeploymentVersionData_builder{
 		RevisionNumber: 0,
 		Status:         enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING,
-	}
-	_, err = s.matchingEngine.SyncDeploymentUserData(context.Background(), &matchingservice.SyncDeploymentUserDataRequest{
+	}.Build()
+	_, err = s.matchingEngine.SyncDeploymentUserData(context.Background(), matchingservice.SyncDeploymentUserDataRequest_builder{
 		NamespaceId:    namespaceID,
 		TaskQueue:      tq,
 		DeploymentName: deploymentName,
@@ -4412,27 +4379,27 @@ func (s *matchingEngineSuite) TestSyncDeploymentUserData_VersionDataRevisionGati
 		UpsertVersionsData: map[string]*deploymentspb.WorkerDeploymentVersionData{
 			buildID: versionData0,
 		},
-	})
+	}.Build())
 	s.NoError(err)
 
 	// Verify revision still 1 and status unchanged
-	res, err = s.matchingEngine.GetTaskQueueUserData(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{
+	res, err = s.matchingEngine.GetTaskQueueUserData(context.Background(), matchingservice.GetTaskQueueUserDataRequest_builder{
 		NamespaceId:              namespaceID,
 		TaskQueue:                tq,
 		TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		LastKnownUserDataVersion: 0,
-	})
+	}.Build())
 	s.NoError(err)
 	versions = res.GetUserData().GetData().GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].GetDeploymentData().GetDeploymentsData()[deploymentName].GetVersions()
 	s.Equal(int64(1), versions[buildID].GetRevisionNumber())
 	s.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT, versions[buildID].GetStatus())
 
 	// Upsert with equal revision (1) — should be accepted
-	versionData1Equal := &deploymentspb.WorkerDeploymentVersionData{
+	versionData1Equal := deploymentspb.WorkerDeploymentVersionData_builder{
 		RevisionNumber: 1,
 		Status:         enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING,
-	}
-	_, err = s.matchingEngine.SyncDeploymentUserData(context.Background(), &matchingservice.SyncDeploymentUserDataRequest{
+	}.Build()
+	_, err = s.matchingEngine.SyncDeploymentUserData(context.Background(), matchingservice.SyncDeploymentUserDataRequest_builder{
 		NamespaceId:    namespaceID,
 		TaskQueue:      tq,
 		DeploymentName: deploymentName,
@@ -4440,27 +4407,27 @@ func (s *matchingEngineSuite) TestSyncDeploymentUserData_VersionDataRevisionGati
 		UpsertVersionsData: map[string]*deploymentspb.WorkerDeploymentVersionData{
 			buildID: versionData1Equal,
 		},
-	})
+	}.Build())
 	s.NoError(err)
 
 	// Verify status changed even though revision is equal
-	res, err = s.matchingEngine.GetTaskQueueUserData(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{
+	res, err = s.matchingEngine.GetTaskQueueUserData(context.Background(), matchingservice.GetTaskQueueUserDataRequest_builder{
 		NamespaceId:              namespaceID,
 		TaskQueue:                tq,
 		TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		LastKnownUserDataVersion: 0,
-	})
+	}.Build())
 	s.NoError(err)
 	versions = res.GetUserData().GetData().GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].GetDeploymentData().GetDeploymentsData()[deploymentName].GetVersions()
 	s.Equal(int64(1), versions[buildID].GetRevisionNumber())
 	s.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING, versions[buildID].GetStatus())
 
 	// Upsert with higher revision (2) — should be accepted
-	versionData2 := &deploymentspb.WorkerDeploymentVersionData{
+	versionData2 := deploymentspb.WorkerDeploymentVersionData_builder{
 		RevisionNumber: 2,
 		Status:         enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
-	}
-	_, err = s.matchingEngine.SyncDeploymentUserData(context.Background(), &matchingservice.SyncDeploymentUserDataRequest{
+	}.Build()
+	_, err = s.matchingEngine.SyncDeploymentUserData(context.Background(), matchingservice.SyncDeploymentUserDataRequest_builder{
 		NamespaceId:    namespaceID,
 		TaskQueue:      tq,
 		DeploymentName: deploymentName,
@@ -4468,16 +4435,16 @@ func (s *matchingEngineSuite) TestSyncDeploymentUserData_VersionDataRevisionGati
 		UpsertVersionsData: map[string]*deploymentspb.WorkerDeploymentVersionData{
 			buildID: versionData2,
 		},
-	})
+	}.Build())
 	s.NoError(err)
 
 	// Verify revision updated
-	res, err = s.matchingEngine.GetTaskQueueUserData(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{
+	res, err = s.matchingEngine.GetTaskQueueUserData(context.Background(), matchingservice.GetTaskQueueUserDataRequest_builder{
 		NamespaceId:              namespaceID,
 		TaskQueue:                tq,
 		TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		LastKnownUserDataVersion: 0,
-	})
+	}.Build())
 	s.NoError(err)
 	versions = res.GetUserData().GetData().GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].GetDeploymentData().GetDeploymentsData()[deploymentName].GetVersions()
 	s.Equal(int64(2), versions[buildID].GetRevisionNumber())
@@ -4494,24 +4461,24 @@ func (s *matchingEngineSuite) TestSyncDeploymentUserData_DeletedVersionRemovesOl
 
 	// Add old-format version
 	t1 := timestamppb.Now()
-	userData := &persistencespb.VersionedTaskQueueUserData{
+	userData := persistencespb.VersionedTaskQueueUserData_builder{
 		Version: 1,
-		Data: &persistencespb.TaskQueueUserData{
+		Data: persistencespb.TaskQueueUserData_builder{
 			PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
-				int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {
-					DeploymentData: &persistencespb.DeploymentData{
+				int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): persistencespb.TaskQueueTypeUserData_builder{
+					DeploymentData: persistencespb.DeploymentData_builder{
 						Versions: []*deploymentspb.DeploymentVersionData{
-							{
-								Version:           &deploymentspb.WorkerDeploymentVersion{DeploymentName: deploymentName, BuildId: buildID},
+							deploymentspb.DeploymentVersionData_builder{
+								Version:           deploymentspb.WorkerDeploymentVersion_builder{DeploymentName: deploymentName, BuildId: buildID}.Build(),
 								RoutingUpdateTime: t1,
 								CurrentSinceTime:  t1,
-							},
+							}.Build(),
 						},
-					},
-				},
+					}.Build(),
+				}.Build(),
 			},
-		},
-	}
+		}.Build(),
+	}.Build()
 
 	s.NoError(s.classicTaskManager.UpdateTaskQueueUserData(context.Background(), &persistence.UpdateTaskQueueUserDataRequest{
 		NamespaceID: namespaceID,
@@ -4521,12 +4488,12 @@ func (s *matchingEngineSuite) TestSyncDeploymentUserData_DeletedVersionRemovesOl
 	}))
 
 	// Verify old-format version exists
-	res, err := s.matchingEngine.GetTaskQueueUserData(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{
+	res, err := s.matchingEngine.GetTaskQueueUserData(context.Background(), matchingservice.GetTaskQueueUserDataRequest_builder{
 		NamespaceId:              namespaceID,
 		TaskQueue:                tq,
 		TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		LastKnownUserDataVersion: 0,
-	})
+	}.Build())
 	s.NoError(err)
 	//nolint:staticcheck // SA1019 deprecated versions will clean up later
 	oldVersions := res.GetUserData().GetData().GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].GetDeploymentData().GetVersions()
@@ -4534,12 +4501,12 @@ func (s *matchingEngineSuite) TestSyncDeploymentUserData_DeletedVersionRemovesOl
 	s.Equal(buildID, oldVersions[0].GetVersion().GetBuildId())
 
 	// Mark version as deleted in new format (with recent update time so it doesn't get cleaned up)
-	deletedVersionData := &deploymentspb.WorkerDeploymentVersionData{
+	deletedVersionData := deploymentspb.WorkerDeploymentVersionData_builder{
 		RevisionNumber: 1,
 		Deleted:        true,
 		UpdateTime:     timestamppb.Now(), // Set recent update time to prevent cleanup
-	}
-	_, err = s.matchingEngine.SyncDeploymentUserData(context.Background(), &matchingservice.SyncDeploymentUserDataRequest{
+	}.Build()
+	_, err = s.matchingEngine.SyncDeploymentUserData(context.Background(), matchingservice.SyncDeploymentUserDataRequest_builder{
 		NamespaceId:    namespaceID,
 		TaskQueue:      tq,
 		DeploymentName: deploymentName,
@@ -4547,16 +4514,16 @@ func (s *matchingEngineSuite) TestSyncDeploymentUserData_DeletedVersionRemovesOl
 		UpsertVersionsData: map[string]*deploymentspb.WorkerDeploymentVersionData{
 			buildID: deletedVersionData,
 		},
-	})
+	}.Build())
 	s.NoError(err)
 
 	// Verify old-format version is removed
-	res, err = s.matchingEngine.GetTaskQueueUserData(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{
+	res, err = s.matchingEngine.GetTaskQueueUserData(context.Background(), matchingservice.GetTaskQueueUserDataRequest_builder{
 		NamespaceId:              namespaceID,
 		TaskQueue:                tq,
 		TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		LastKnownUserDataVersion: 0,
-	})
+	}.Build())
 	s.NoError(err)
 	//nolint:staticcheck // SA1019 deprecated versions will clean up later
 	oldVersions = res.GetUserData().GetData().GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].GetDeploymentData().GetVersions()
@@ -4578,40 +4545,40 @@ func (s *matchingEngineSuite) TestSyncDeploymentUserData_CleanupOldDeletedVersio
 	recentTime := timestamppb.New(time.Now().Add(-6 * 24 * time.Hour)) // 6 days old (should remain)
 
 	versionsData := map[string]*deploymentspb.WorkerDeploymentVersionData{
-		"to-be-old-build": {
+		"to-be-old-build": deploymentspb.WorkerDeploymentVersionData_builder{
 			RevisionNumber: 1,
 			Deleted:        true,
 			UpdateTime:     recentTime, // Start with recent time
-		},
-		"recent-build": {
+		}.Build(),
+		"recent-build": deploymentspb.WorkerDeploymentVersionData_builder{
 			RevisionNumber: 1,
 			Deleted:        true,
 			UpdateTime:     recentTime,
-		},
-		"active-build": {
+		}.Build(),
+		"active-build": deploymentspb.WorkerDeploymentVersionData_builder{
 			RevisionNumber: 1,
 			Status:         enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
 			UpdateTime:     recentTime,
-		},
+		}.Build(),
 	}
 
 	// Insert all versions
-	_, err := s.matchingEngine.SyncDeploymentUserData(context.Background(), &matchingservice.SyncDeploymentUserDataRequest{
+	_, err := s.matchingEngine.SyncDeploymentUserData(context.Background(), matchingservice.SyncDeploymentUserDataRequest_builder{
 		NamespaceId:        namespaceID,
 		TaskQueue:          tq,
 		DeploymentName:     deploymentName,
 		TaskQueueTypes:     []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW},
 		UpsertVersionsData: versionsData,
-	})
+	}.Build())
 	s.NoError(err)
 
 	// Verify all versions are present
-	res, err := s.matchingEngine.GetTaskQueueUserData(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{
+	res, err := s.matchingEngine.GetTaskQueueUserData(context.Background(), matchingservice.GetTaskQueueUserDataRequest_builder{
 		NamespaceId:              namespaceID,
 		TaskQueue:                tq,
 		TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		LastKnownUserDataVersion: 0,
-	})
+	}.Build())
 	s.NoError(err)
 	versions := res.GetUserData().GetData().GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].GetDeploymentData().GetDeploymentsData()[deploymentName].GetVersions()
 	s.Len(versions, 3)
@@ -4621,38 +4588,38 @@ func (s *matchingEngineSuite) TestSyncDeploymentUserData_CleanupOldDeletedVersio
 
 	// Now update "to-be-old-build" to have an old timestamp (8 days)
 	oldTime := timestamppb.New(time.Now().Add(-8 * 24 * time.Hour))
-	_, err = s.matchingEngine.SyncDeploymentUserData(context.Background(), &matchingservice.SyncDeploymentUserDataRequest{
+	_, err = s.matchingEngine.SyncDeploymentUserData(context.Background(), matchingservice.SyncDeploymentUserDataRequest_builder{
 		NamespaceId:    namespaceID,
 		TaskQueue:      tq,
 		DeploymentName: deploymentName,
 		TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW},
 		UpsertVersionsData: map[string]*deploymentspb.WorkerDeploymentVersionData{
-			"to-be-old-build": {
+			"to-be-old-build": deploymentspb.WorkerDeploymentVersionData_builder{
 				RevisionNumber: 2, // Higher revision to allow update
 				Deleted:        true,
 				UpdateTime:     oldTime,
-			},
+			}.Build(),
 		},
-	})
+	}.Build())
 	s.NoError(err)
 
 	// Trigger cleanup by syncing again (cleanupOldDeletedVersions is called during each sync)
-	_, err = s.matchingEngine.SyncDeploymentUserData(context.Background(), &matchingservice.SyncDeploymentUserDataRequest{
+	_, err = s.matchingEngine.SyncDeploymentUserData(context.Background(), matchingservice.SyncDeploymentUserDataRequest_builder{
 		NamespaceId:    namespaceID,
 		TaskQueue:      tq,
 		DeploymentName: deploymentName,
 		TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW},
 		// Empty sync to trigger cleanup
-	})
+	}.Build())
 	s.NoError(err)
 
 	// Verify only old deleted version is removed
-	res, err = s.matchingEngine.GetTaskQueueUserData(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{
+	res, err = s.matchingEngine.GetTaskQueueUserData(context.Background(), matchingservice.GetTaskQueueUserDataRequest_builder{
 		NamespaceId:              namespaceID,
 		TaskQueue:                tq,
 		TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		LastKnownUserDataVersion: 0,
-	})
+	}.Build())
 	s.NoError(err)
 	versions = res.GetUserData().GetData().GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].GetDeploymentData().GetDeploymentsData()[deploymentName].GetVersions()
 	s.Len(versions, 2)
@@ -4670,59 +4637,59 @@ func (s *matchingEngineSuite) TestSyncDeploymentUserData_UpsertedVersionsData() 
 	deploymentName := "foo"
 
 	// Test single upsert
-	_, err := s.matchingEngine.SyncDeploymentUserData(context.Background(), &matchingservice.SyncDeploymentUserDataRequest{
+	_, err := s.matchingEngine.SyncDeploymentUserData(context.Background(), matchingservice.SyncDeploymentUserDataRequest_builder{
 		NamespaceId:    namespaceID,
 		TaskQueue:      tq,
 		DeploymentName: deploymentName,
 		TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW},
 		UpsertVersionsData: map[string]*deploymentspb.WorkerDeploymentVersionData{
-			"v1": {RevisionNumber: 1},
+			"v1": deploymentspb.WorkerDeploymentVersionData_builder{RevisionNumber: 1}.Build(),
 		},
-	})
+	}.Build())
 	s.NoError(err)
 
 	// Test multiple upserts
-	_, err = s.matchingEngine.SyncDeploymentUserData(context.Background(), &matchingservice.SyncDeploymentUserDataRequest{
+	_, err = s.matchingEngine.SyncDeploymentUserData(context.Background(), matchingservice.SyncDeploymentUserDataRequest_builder{
 		NamespaceId:    namespaceID,
 		TaskQueue:      tq,
 		DeploymentName: deploymentName,
 		TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW},
 		UpsertVersionsData: map[string]*deploymentspb.WorkerDeploymentVersionData{
-			"v2": {RevisionNumber: 1},
-			"v3": {RevisionNumber: 1},
+			"v2": deploymentspb.WorkerDeploymentVersionData_builder{RevisionNumber: 1}.Build(),
+			"v3": deploymentspb.WorkerDeploymentVersionData_builder{RevisionNumber: 1}.Build(),
 		},
-	})
+	}.Build())
 	s.NoError(err)
 
 	// Test upsert with one stale version (should not be included in response)
-	_, err = s.matchingEngine.SyncDeploymentUserData(context.Background(), &matchingservice.SyncDeploymentUserDataRequest{
+	_, err = s.matchingEngine.SyncDeploymentUserData(context.Background(), matchingservice.SyncDeploymentUserDataRequest_builder{
 		NamespaceId:    namespaceID,
 		TaskQueue:      tq,
 		DeploymentName: deploymentName,
 		TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW},
 		UpsertVersionsData: map[string]*deploymentspb.WorkerDeploymentVersionData{
-			"v1": {RevisionNumber: 0}, // Stale, should be rejected
-			"v4": {RevisionNumber: 1}, // New, should be accepted
+			"v1": deploymentspb.WorkerDeploymentVersionData_builder{RevisionNumber: 0}.Build(), // Stale, should be rejected
+			"v4": deploymentspb.WorkerDeploymentVersionData_builder{RevisionNumber: 1}.Build(), // New, should be accepted
 		},
-	})
+	}.Build())
 	s.NoError(err)
 
 	// Test no upserts
-	_, err = s.matchingEngine.SyncDeploymentUserData(context.Background(), &matchingservice.SyncDeploymentUserDataRequest{
+	_, err = s.matchingEngine.SyncDeploymentUserData(context.Background(), matchingservice.SyncDeploymentUserDataRequest_builder{
 		NamespaceId:    namespaceID,
 		TaskQueue:      tq,
 		DeploymentName: deploymentName,
 		TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW},
-	})
+	}.Build())
 	s.NoError(err)
 }
 
 func newHistoryEvent(eventID int64, eventType enumspb.EventType) *historypb.HistoryEvent {
-	return &historypb.HistoryEvent{
+	return historypb.HistoryEvent_builder{
 		EventId:   eventID,
 		EventTime: timestamppb.New(time.Now().UTC()),
 		EventType: eventType,
-	}
+	}.Build()
 }
 
 var _ persistence.TaskManager = (*testTaskManager)(nil)     // Asserts that interface is indeed implemented
@@ -4839,7 +4806,7 @@ func (m *testTaskManager) CreateTaskQueue(
 	request *persistence.CreateTaskQueueRequest,
 ) (*persistence.CreateTaskQueueResponse, error) {
 	tli := request.TaskQueueInfo
-	tlm := m.getQueueData(tli.Name, tli.NamespaceId, tli.TaskType)
+	tlm := m.getQueueData(tli.GetName(), tli.GetNamespaceId(), tli.GetTaskType())
 
 	m.delay()
 	defer m.delay()
@@ -4849,7 +4816,7 @@ func (m *testTaskManager) CreateTaskQueue(
 
 	if tlm.rangeID != 0 {
 		return nil, &persistence.ConditionFailedError{
-			Msg: fmt.Sprintf("Failed to create task queue: name=%v, type=%v", tli.Name, tli.TaskType),
+			Msg: fmt.Sprintf("Failed to create task queue: name=%v, type=%v", tli.GetName(), tli.GetTaskType()),
 		}
 	}
 	tlm.rangeID = request.RangeID
@@ -4862,7 +4829,7 @@ func (m *testTaskManager) UpdateTaskQueue(
 	request *persistence.UpdateTaskQueueRequest,
 ) (*persistence.UpdateTaskQueueResponse, error) {
 	tli := request.TaskQueueInfo
-	tlm := m.getQueueData(tli.Name, tli.NamespaceId, tli.TaskType)
+	tlm := m.getQueueData(tli.GetName(), tli.GetNamespaceId(), tli.GetTaskType())
 
 	m.delay()
 	defer m.delay()
@@ -4874,7 +4841,7 @@ func (m *testTaskManager) UpdateTaskQueue(
 
 	if tlm.rangeID != request.PrevRangeID {
 		return nil, &persistence.ConditionFailedError{
-			Msg: fmt.Sprintf("Failed to update task queue: name=%v, type=%v", tli.Name, tli.TaskType),
+			Msg: fmt.Sprintf("Failed to update task queue: name=%v, type=%v", tli.GetName(), tli.GetTaskType()),
 		}
 	}
 	tlm.rangeID = request.RangeID
@@ -4992,8 +4959,8 @@ func (m *testTaskManager) CreateTasks(
 	request *persistence.CreateTasksRequest,
 ) (*persistence.CreateTasksResponse, error) {
 	namespaceID := request.TaskQueueInfo.Data.GetNamespaceId()
-	taskQueue := request.TaskQueueInfo.Data.Name
-	taskType := request.TaskQueueInfo.Data.TaskType
+	taskQueue := request.TaskQueueInfo.Data.GetName()
+	taskType := request.TaskQueueInfo.Data.GetTaskType()
 	rangeID := request.TaskQueueInfo.RangeID
 
 	m.delay()
@@ -5021,14 +4988,14 @@ func (m *testTaskManager) CreateTasks(
 	// First validate the entire batch
 	for _, task := range request.Tasks {
 		level := fairLevelFromAllocatedTask(task)
-		m.logger.Debug("testTaskManager.CreateTask", tag.ShardRangeID(rangeID), tag.TaskKey(level), tag.Value(task.Data))
+		m.logger.Debug("testTaskManager.CreateTask", tag.ShardRangeID(rangeID), tag.TaskKey(level), tag.Value(task.GetData()))
 
 		if task.GetTaskId() <= 0 {
 			panic(fmt.Errorf("invalid taskID=%v", task.GetTaskId()))
 		}
-		if m.fairness && task.TaskPass == 0 {
+		if m.fairness && task.GetTaskPass() == 0 {
 			return nil, serviceerror.NewInternal("invalid fair queue task missing pass number")
-		} else if !m.fairness && task.TaskPass != 0 {
+		} else if !m.fairness && task.GetTaskPass() != 0 {
 			return nil, serviceerror.NewInternal("invalid non-fair queue task with pass number")
 		}
 
@@ -5170,7 +5137,7 @@ func (m *testTaskManager) UpdateTaskQueueUserData(_ context.Context, request *pe
 		tlm := m.getQueueData(tq, request.NamespaceID, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 		tlm.Lock()
 		newData := common.CloneProto(update.UserData)
-		newData.Version++
+		newData.SetVersion(newData.GetVersion() + 1)
 		tlm.userData = newData
 		tlm.Unlock()
 	}

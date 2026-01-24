@@ -153,12 +153,12 @@ func (h *historyArchiver) Archive(
 			return err
 		}
 
-		if historyMutated(request, historyBlob.Body, historyBlob.Header.IsLast) {
+		if historyMutated(request, historyBlob.GetBody(), historyBlob.GetHeader().GetIsLast()) {
 			logger.Error(archiver.ArchiveNonRetryableErrorMsg, tag.ArchivalArchiveFailReason(archiver.ErrReasonHistoryMutated))
 			return archiver.ErrHistoryMutated
 		}
 
-		historyBatches = append(historyBatches, historyBlob.Body...)
+		historyBatches = append(historyBatches, historyBlob.GetBody()...)
 	}
 
 	encoder := codec.NewJSONPBEncoder()
@@ -255,7 +255,7 @@ func (h *historyArchiver) Get(
 	for _, batch := range historyBatches {
 		response.HistoryBatches = append(response.HistoryBatches, batch)
 		numOfBatches++
-		numOfEvents += len(batch.Events)
+		numOfEvents += len(batch.GetEvents())
 		if numOfEvents >= request.PageSize {
 			break
 		}

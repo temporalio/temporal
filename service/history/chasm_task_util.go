@@ -20,7 +20,7 @@ func validateChasmSideEffectTask(
 	// Because CHASM timers can target closed workflows, we need to specifically
 	// exclude zombie workflows, instead of merely checking that the workflow is
 	// running.
-	if ms.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
+	if ms.GetExecutionState().GetState() == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
 		return nil, consts.ErrWorkflowZombie
 	}
 
@@ -60,14 +60,14 @@ func executeChasmSideEffectTask(
 		// Because CHASM timers can target closed workflows, we need to specifically
 		// exclude zombie workflows, instead of merely checking that the workflow is
 		// running.
-		if backend.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
+		if backend.GetExecutionState().GetState() == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
 			return consts.ErrWorkflowZombie
 		}
 
 		// Validate task generation. We don't need to refresh tasks as we re-generate
 		// CHASM tasks on transaction close.
 		taskID := task.TaskID
-		tgClock := backend.GetExecutionInfo().TaskGenerationShardClockTimestamp
+		tgClock := backend.GetExecutionInfo().GetTaskGenerationShardClockTimestamp()
 		if tgClock != 0 && taskID != 0 && taskID < tgClock {
 			return consts.ErrStaleReference
 		}

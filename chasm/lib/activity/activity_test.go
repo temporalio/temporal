@@ -36,7 +36,7 @@ func TestHandleStarted(t *testing.T) {
 			requestStamp:   testStamp,
 			requestID:      testRequestID,
 			checkOutcome: func(t *testing.T, response *historyservice.RecordActivityTaskStartedResponse, err error) {
-				require.Equal(t, int32(1), response.Attempt)
+				require.Equal(t, int32(1), response.GetAttempt())
 				require.NoError(t, err)
 			},
 		},
@@ -48,7 +48,7 @@ func TestHandleStarted(t *testing.T) {
 			startRequestID: testRequestID,
 			requestID:      testRequestID,
 			checkOutcome: func(t *testing.T, response *historyservice.RecordActivityTaskStartedResponse, err error) {
-				require.Equal(t, int32(1), response.Attempt)
+				require.Equal(t, int32(1), response.GetAttempt())
 				require.NoError(t, err)
 			},
 		},
@@ -101,13 +101,13 @@ func TestHandleStarted(t *testing.T) {
 			}
 
 			// Setup activity state
-			attemptState := &activitypb.ActivityAttemptState{
+			attemptState := activitypb.ActivityAttemptState_builder{
 				Count:          1,
 				Stamp:          tc.attemptStamp,
 				StartRequestId: tc.startRequestID,
-			}
+			}.Build()
 			if tc.activityStatus == activitypb.ACTIVITY_EXECUTION_STATUS_STARTED {
-				attemptState.StartedTime = timestamppb.New(testTime.Add(-1 * time.Minute))
+				attemptState.SetStartedTime(timestamppb.New(testTime.Add(-1 * time.Minute)))
 			}
 
 			// Determine heartbeat timeout based on test case
@@ -117,35 +117,35 @@ func TestHandleStarted(t *testing.T) {
 			}
 
 			activity := &Activity{
-				ActivityState: &activitypb.ActivityState{
-					ActivityType:           &commonpb.ActivityType{Name: "test-activity-type"},
+				ActivityState: activitypb.ActivityState_builder{
+					ActivityType:           commonpb.ActivityType_builder{Name: "test-activity-type"}.Build(),
 					Status:                 tc.activityStatus,
-					TaskQueue:              &taskqueuepb.TaskQueue{Name: "test-task-queue"},
+					TaskQueue:              taskqueuepb.TaskQueue_builder{Name: "test-task-queue"}.Build(),
 					ScheduleToCloseTimeout: durationpb.New(10 * time.Minute),
 					ScheduleToStartTimeout: durationpb.New(2 * time.Minute),
 					StartToCloseTimeout:    durationpb.New(3 * time.Minute),
 					HeartbeatTimeout:       durationpb.New(heartbeatTimeout),
 					ScheduleTime:           timestamppb.New(testTime.Add(-30 * time.Second)),
-				},
+				}.Build(),
 				LastAttempt: chasm.NewDataField(ctx, attemptState),
-				RequestData: chasm.NewDataField(ctx, &activitypb.ActivityRequestData{
-					Input: &commonpb.Payloads{
-						Payloads: []*commonpb.Payload{{Data: []byte("test-input")}},
-					},
-					Header: &commonpb.Header{
+				RequestData: chasm.NewDataField(ctx, activitypb.ActivityRequestData_builder{
+					Input: commonpb.Payloads_builder{
+						Payloads: []*commonpb.Payload{commonpb.Payload_builder{Data: []byte("test-input")}.Build()},
+					}.Build(),
+					Header: commonpb.Header_builder{
 						Fields: map[string]*commonpb.Payload{
-							"test-header": {Data: []byte("test-value")},
+							"test-header": commonpb.Payload_builder{Data: []byte("test-value")}.Build(),
 						},
-					},
-				}),
+					}.Build(),
+				}.Build()),
 				Outcome: chasm.NewDataField(ctx, &activitypb.ActivityOutcome{}),
 			}
 
 			// Create request
-			request := &historyservice.RecordActivityTaskStartedRequest{
+			request := historyservice.RecordActivityTaskStartedRequest_builder{
 				Stamp:     tc.requestStamp,
 				RequestId: tc.requestID,
-			}
+			}.Build()
 
 			// Execute HandleStarted
 			response, err := activity.HandleStarted(ctx, request)

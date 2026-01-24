@@ -48,10 +48,10 @@ func clonePayloadMap(source map[string]*commonpb.Payload) map[string]*commonpb.P
 		for mk, mv := range v.GetMetadata() {
 			metadata[mk] = mv
 		}
-		target[k] = &commonpb.Payload{
+		target[k] = commonpb.Payload_builder{
 			Metadata: metadata,
 			Data:     v.GetData(),
-		}
+		}.Build()
 	}
 	return target
 }
@@ -74,9 +74,9 @@ func Invoke(
 		ctx,
 		nil,
 		definition.NewWorkflowKey(
-			req.NamespaceId,
-			req.Request.Execution.WorkflowId,
-			req.Request.Execution.RunId,
+			req.GetNamespaceId(),
+			req.GetRequest().GetExecution().GetWorkflowId(),
+			req.GetRequest().GetExecution().GetRunId(),
 		),
 		locks.PriorityHigh,
 	)
@@ -98,95 +98,95 @@ func Invoke(
 	if err != nil {
 		return nil, err
 	}
-	result := &historyservice.DescribeWorkflowExecutionResponse{
-		ExecutionConfig: &workflowpb.WorkflowExecutionConfig{
-			TaskQueue: &taskqueuepb.TaskQueue{
-				Name: executionInfo.TaskQueue,
+	result := historyservice.DescribeWorkflowExecutionResponse_builder{
+		ExecutionConfig: workflowpb.WorkflowExecutionConfig_builder{
+			TaskQueue: taskqueuepb.TaskQueue_builder{
+				Name: executionInfo.GetTaskQueue(),
 				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-			},
-			WorkflowExecutionTimeout:   executionInfo.WorkflowExecutionTimeout,
-			WorkflowRunTimeout:         executionInfo.WorkflowRunTimeout,
-			DefaultWorkflowTaskTimeout: executionInfo.DefaultWorkflowTaskTimeout,
-			UserMetadata:               startEvent.UserMetadata,
-		},
-		WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
-			Execution: &commonpb.WorkflowExecution{
-				WorkflowId: executionInfo.WorkflowId,
-				RunId:      executionState.RunId,
-			},
-			Type:          &commonpb.WorkflowType{Name: executionInfo.WorkflowTypeName},
-			StartTime:     executionState.StartTime,
-			Status:        executionState.Status,
+			}.Build(),
+			WorkflowExecutionTimeout:   executionInfo.GetWorkflowExecutionTimeout(),
+			WorkflowRunTimeout:         executionInfo.GetWorkflowRunTimeout(),
+			DefaultWorkflowTaskTimeout: executionInfo.GetDefaultWorkflowTaskTimeout(),
+			UserMetadata:               startEvent.GetUserMetadata(),
+		}.Build(),
+		WorkflowExecutionInfo: workflowpb.WorkflowExecutionInfo_builder{
+			Execution: commonpb.WorkflowExecution_builder{
+				WorkflowId: executionInfo.GetWorkflowId(),
+				RunId:      executionState.GetRunId(),
+			}.Build(),
+			Type:          commonpb.WorkflowType_builder{Name: executionInfo.GetWorkflowTypeName()}.Build(),
+			StartTime:     executionState.GetStartTime(),
+			Status:        executionState.GetStatus(),
 			HistoryLength: mutableState.GetNextEventID() - common.FirstEventID,
-			ExecutionTime: executionInfo.ExecutionTime,
+			ExecutionTime: executionInfo.GetExecutionTime(),
 			// Memo and SearchAttributes are set below
-			AutoResetPoints:      common.CloneProto(executionInfo.AutoResetPoints),
-			TaskQueue:            executionInfo.TaskQueue,
-			StateTransitionCount: executionInfo.StateTransitionCount,
+			AutoResetPoints:      common.CloneProto(executionInfo.GetAutoResetPoints()),
+			TaskQueue:            executionInfo.GetTaskQueue(),
+			StateTransitionCount: executionInfo.GetStateTransitionCount(),
 			HistorySizeBytes:     executionInfo.GetExecutionStats().GetHistorySize(),
-			RootExecution: &commonpb.WorkflowExecution{
-				WorkflowId: executionInfo.RootWorkflowId,
-				RunId:      executionInfo.RootRunId,
-			},
+			RootExecution: commonpb.WorkflowExecution_builder{
+				WorkflowId: executionInfo.GetRootWorkflowId(),
+				RunId:      executionInfo.GetRootRunId(),
+			}.Build(),
 
-			MostRecentWorkerVersionStamp: executionInfo.MostRecentWorkerVersionStamp,
-			AssignedBuildId:              executionInfo.AssignedBuildId,
-			InheritedBuildId:             executionInfo.InheritedBuildId,
-			FirstRunId:                   executionInfo.FirstExecutionRunId,
-			VersioningInfo:               common.CloneProto(executionInfo.VersioningInfo),
-			WorkerDeploymentName:         executionInfo.WorkerDeploymentName,
-			Priority:                     executionInfo.Priority,
-		},
-		WorkflowExtendedInfo: &workflowpb.WorkflowExecutionExtendedInfo{
-			ExecutionExpirationTime: executionInfo.WorkflowExecutionExpirationTime,
-			RunExpirationTime:       executionInfo.WorkflowRunExpirationTime,
-			OriginalStartTime:       startEvent.EventTime,
-			CancelRequested:         executionInfo.CancelRequested,
-			ResetRunId:              executionInfo.ResetRunId,
+			MostRecentWorkerVersionStamp: executionInfo.GetMostRecentWorkerVersionStamp(),
+			AssignedBuildId:              executionInfo.GetAssignedBuildId(),
+			InheritedBuildId:             executionInfo.GetInheritedBuildId(),
+			FirstRunId:                   executionInfo.GetFirstExecutionRunId(),
+			VersioningInfo:               common.CloneProto(executionInfo.GetVersioningInfo()),
+			WorkerDeploymentName:         executionInfo.GetWorkerDeploymentName(),
+			Priority:                     executionInfo.GetPriority(),
+		}.Build(),
+		WorkflowExtendedInfo: workflowpb.WorkflowExecutionExtendedInfo_builder{
+			ExecutionExpirationTime: executionInfo.GetWorkflowExecutionExpirationTime(),
+			RunExpirationTime:       executionInfo.GetWorkflowRunExpirationTime(),
+			OriginalStartTime:       startEvent.GetEventTime(),
+			CancelRequested:         executionInfo.GetCancelRequested(),
+			ResetRunId:              executionInfo.GetResetRunId(),
 			RequestIdInfos:          make(map[string]*workflowpb.RequestIdInfo),
-		},
-	}
+		}.Build(),
+	}.Build()
 
 	// copy pause info to the response if it exists
-	if executionInfo.PauseInfo != nil {
-		result.WorkflowExtendedInfo.PauseInfo = &workflowpb.WorkflowExecutionPauseInfo{
-			PausedTime: executionInfo.PauseInfo.PauseTime,
-			Identity:   executionInfo.PauseInfo.Identity,
-			Reason:     executionInfo.PauseInfo.Reason,
-		}
+	if executionInfo.HasPauseInfo() {
+		result.GetWorkflowExtendedInfo().SetPauseInfo(workflowpb.WorkflowExecutionPauseInfo_builder{
+			PausedTime: executionInfo.GetPauseInfo().GetPauseTime(),
+			Identity:   executionInfo.GetPauseInfo().GetIdentity(),
+			Reason:     executionInfo.GetPauseInfo().GetReason(),
+		}.Build())
 	}
 
 	if mutableState.IsResetRun() {
-		result.WorkflowExtendedInfo.LastResetTime = executionState.StartTime
+		result.GetWorkflowExtendedInfo().SetLastResetTime(executionState.GetStartTime())
 	}
 
 	if shard.GetConfig().ExternalPayloadsEnabled(namespaceName) {
 		executionStats := executionInfo.GetExecutionStats()
-		result.WorkflowExecutionInfo.ExternalPayloadSizeBytes = executionStats.GetExternalPayloadSize()
-		result.WorkflowExecutionInfo.ExternalPayloadCount = executionStats.GetExternalPayloadCount()
+		result.GetWorkflowExecutionInfo().SetExternalPayloadSizeBytes(executionStats.GetExternalPayloadSize())
+		result.GetWorkflowExecutionInfo().SetExternalPayloadCount(executionStats.GetExternalPayloadCount())
 	}
 
 	for requestID, requestIDInfo := range mutableState.GetExecutionState().GetRequestIds() {
-		info := &workflowpb.RequestIdInfo{
-			EventType: requestIDInfo.EventType,
-			Buffered:  requestIDInfo.EventId == common.BufferedEventID,
+		info := workflowpb.RequestIdInfo_builder{
+			EventType: requestIDInfo.GetEventType(),
+			Buffered:  requestIDInfo.GetEventId() == common.BufferedEventID,
+		}.Build()
+		if !info.GetBuffered() {
+			info.SetEventId(requestIDInfo.GetEventId())
 		}
-		if !info.Buffered {
-			info.EventId = requestIDInfo.EventId
-		}
-		result.WorkflowExtendedInfo.RequestIdInfos[requestID] = info
+		result.GetWorkflowExtendedInfo().GetRequestIdInfos()[requestID] = info
 	}
 
-	if executionInfo.ParentRunId != "" {
-		result.WorkflowExecutionInfo.ParentExecution = &commonpb.WorkflowExecution{
-			WorkflowId: executionInfo.ParentWorkflowId,
-			RunId:      executionInfo.ParentRunId,
-		}
-		result.WorkflowExecutionInfo.ParentNamespaceId = executionInfo.ParentNamespaceId
+	if executionInfo.GetParentRunId() != "" {
+		result.GetWorkflowExecutionInfo().SetParentExecution(commonpb.WorkflowExecution_builder{
+			WorkflowId: executionInfo.GetParentWorkflowId(),
+			RunId:      executionInfo.GetParentRunId(),
+		}.Build())
+		result.GetWorkflowExecutionInfo().SetParentNamespaceId(executionInfo.GetParentNamespaceId())
 	}
-	if executionState.State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+	if executionState.GetState() == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		// for closed workflow
-		result.WorkflowExecutionInfo.Status = executionState.Status
+		result.GetWorkflowExecutionInfo().SetStatus(executionState.GetStatus())
 		closeTime, err := mutableState.GetWorkflowCloseTime(ctx)
 		if err != nil {
 			return nil, err
@@ -195,8 +195,8 @@ func Invoke(
 		if err != nil {
 			return nil, err
 		}
-		result.WorkflowExecutionInfo.CloseTime = timestamppb.New(closeTime)
-		result.WorkflowExecutionInfo.ExecutionDuration = durationpb.New(executionDuration)
+		result.GetWorkflowExecutionInfo().SetCloseTime(timestamppb.New(closeTime))
+		result.GetWorkflowExecutionInfo().SetExecutionDuration(durationpb.New(executionDuration))
 	}
 
 	for _, ai := range mutableState.GetPendingActivityInfos() {
@@ -205,30 +205,30 @@ func Invoke(
 			return nil, err
 		}
 
-		result.PendingActivities = append(result.PendingActivities, p)
+		result.SetPendingActivities(append(result.GetPendingActivities(), p))
 	}
 
 	for _, ch := range mutableState.GetPendingChildExecutionInfos() {
-		p := &workflowpb.PendingChildExecutionInfo{
-			WorkflowId:        ch.StartedWorkflowId,
-			RunId:             ch.StartedRunId,
-			WorkflowTypeName:  ch.WorkflowTypeName,
-			InitiatedId:       ch.InitiatedEventId,
-			ParentClosePolicy: ch.ParentClosePolicy,
-		}
-		result.PendingChildren = append(result.PendingChildren, p)
+		p := workflowpb.PendingChildExecutionInfo_builder{
+			WorkflowId:        ch.GetStartedWorkflowId(),
+			RunId:             ch.GetStartedRunId(),
+			WorkflowTypeName:  ch.GetWorkflowTypeName(),
+			InitiatedId:       ch.GetInitiatedEventId(),
+			ParentClosePolicy: ch.GetParentClosePolicy(),
+		}.Build()
+		result.SetPendingChildren(append(result.GetPendingChildren(), p))
 	}
 
 	if pendingWorkflowTask := mutableState.GetPendingWorkflowTask(); pendingWorkflowTask != nil {
-		result.PendingWorkflowTask = &workflowpb.PendingWorkflowTaskInfo{
+		result.SetPendingWorkflowTask(workflowpb.PendingWorkflowTaskInfo_builder{
 			State:                 enumspb.PENDING_WORKFLOW_TASK_STATE_SCHEDULED,
 			ScheduledTime:         timestamppb.New(pendingWorkflowTask.ScheduledTime),
 			OriginalScheduledTime: timestamppb.New(pendingWorkflowTask.OriginalScheduledTime),
 			Attempt:               pendingWorkflowTask.Attempt,
-		}
+		}.Build())
 		if pendingWorkflowTask.StartedEventID != common.EmptyEventID {
-			result.PendingWorkflowTask.State = enumspb.PENDING_WORKFLOW_TASK_STATE_STARTED
-			result.PendingWorkflowTask.StartedTime = timestamppb.New(pendingWorkflowTask.StartedTime)
+			result.GetPendingWorkflowTask().SetState(enumspb.PENDING_WORKFLOW_TASK_STATE_STARTED)
+			result.GetPendingWorkflowTask().SetStartedTime(timestamppb.New(pendingWorkflowTask.StartedTime))
 		}
 	}
 
@@ -241,18 +241,18 @@ func Invoke(
 		shard.GetLogger().Error(
 			"Failed to fetch relocatable attributes",
 			tag.WorkflowNamespaceID(namespaceID.String()),
-			tag.WorkflowID(executionInfo.WorkflowId),
-			tag.WorkflowRunID(executionState.RunId),
+			tag.WorkflowID(executionInfo.GetWorkflowId()),
+			tag.WorkflowRunID(executionState.GetRunId()),
 			tag.Error(err),
 		)
 		return nil, serviceerror.NewInternal("Failed to fetch memo and search attributes")
 	}
-	result.WorkflowExecutionInfo.Memo = &commonpb.Memo{
+	result.GetWorkflowExecutionInfo().SetMemo(commonpb.Memo_builder{
 		Fields: clonePayloadMap(relocatableAttributes.Memo.GetFields()),
-	}
-	result.WorkflowExecutionInfo.SearchAttributes = &commonpb.SearchAttributes{
+	}.Build())
+	result.GetWorkflowExecutionInfo().SetSearchAttributes(commonpb.SearchAttributes_builder{
 		IndexedFields: clonePayloadMap(relocatableAttributes.SearchAttributes.GetIndexedFields()),
-	}
+	}.Build())
 
 	// Check for CHASM callbacks (regardless of feature flag setting)
 	// Only process CHASM callbacks if we have an actual chasm.Node (not a noopChasmTree)
@@ -269,7 +269,7 @@ func Invoke(
 		if err != nil {
 			return nil, err
 		}
-		result.Callbacks = append(result.Callbacks, chasmCallbackInfos...)
+		result.SetCallbacks(append(result.GetCallbacks(), chasmCallbackInfos...))
 	}
 
 	// Check for HSM callbacks
@@ -284,19 +284,19 @@ func Invoke(
 	if err != nil {
 		return nil, err
 	}
-	result.Callbacks = append(result.Callbacks, hsmCallbackInfos...)
+	result.SetCallbacks(append(result.GetCallbacks(), hsmCallbackInfos...))
 
 	opColl := nexusoperations.MachineCollection(mutableState.HSM())
 	ops := opColl.List()
-	result.PendingNexusOperations = make([]*workflowpb.PendingNexusOperationInfo, 0, len(ops))
+	result.SetPendingNexusOperations(make([]*workflowpb.PendingNexusOperationInfo, 0, len(ops)))
 	for _, node := range ops {
 		op, err := opColl.Data(node.Key.ID)
 		if err != nil {
 			shard.GetLogger().Error(
 				"failed to load Nexus operation data while building describe response",
 				tag.WorkflowNamespaceID(namespaceID.String()),
-				tag.WorkflowID(executionInfo.WorkflowId),
-				tag.WorkflowRunID(executionState.RunId),
+				tag.WorkflowID(executionInfo.GetWorkflowId()),
+				tag.WorkflowRunID(executionState.GetRunId()),
 				tag.Error(err),
 			)
 			return nil, serviceerror.NewInternal("failed to construct describe response")
@@ -307,8 +307,8 @@ func Invoke(
 			shard.GetLogger().Error(
 				"failed to build Nexus operation info while building describe response",
 				tag.WorkflowNamespaceID(namespaceID.String()),
-				tag.WorkflowID(executionInfo.WorkflowId),
-				tag.WorkflowRunID(executionState.RunId),
+				tag.WorkflowID(executionInfo.GetWorkflowId()),
+				tag.WorkflowRunID(executionState.GetRunId()),
 				tag.Error(err),
 			)
 			return nil, serviceerror.NewInternal("failed to construct describe response")
@@ -317,7 +317,7 @@ func Invoke(
 			// Operation is not pending
 			continue
 		}
-		result.PendingNexusOperations = append(result.PendingNexusOperations, operationInfo)
+		result.SetPendingNexusOperations(append(result.GetPendingNexusOperations(), operationInfo))
 	}
 
 	return result, nil
@@ -333,7 +333,7 @@ func buildCallbackInfoFromHSM(
 		return nil, nil
 	}
 
-	cbSpec, err := workflow.PersistenceCallbackToAPICallback(callback.Callback)
+	cbSpec, err := workflow.PersistenceCallbackToAPICallback(callback.GetCallback())
 	if err != nil {
 		return nil, err
 	}
@@ -369,23 +369,23 @@ func buildCallbackInfoFromHSM(
 		}
 	}
 
-	trigger := &workflowpb.CallbackInfo_Trigger{}
-	switch callback.Trigger.Variant.(type) {
-	case *persistencespb.CallbackInfo_Trigger_WorkflowClosed:
-		trigger.Variant = &workflowpb.CallbackInfo_Trigger_WorkflowClosed{}
+	trigger := workflowpb.CallbackInfo_Trigger_builder{}.Build()
+	switch callback.GetTrigger().WhichVariant() {
+	case persistencespb.CallbackInfo_Trigger_WorkflowClosed_case:
+		trigger.SetWorkflowClosed(&workflowpb.CallbackInfo_WorkflowClosed{})
 	}
 
-	return &workflowpb.CallbackInfo{
+	return workflowpb.CallbackInfo_builder{
 		Callback:                cbSpec,
 		Trigger:                 trigger,
-		RegistrationTime:        callback.RegistrationTime,
+		RegistrationTime:        callback.GetRegistrationTime(),
 		State:                   state,
-		Attempt:                 callback.Attempt,
-		LastAttemptCompleteTime: callback.LastAttemptCompleteTime,
-		LastAttemptFailure:      callback.LastAttemptFailure,
-		NextAttemptScheduleTime: callback.NextAttemptScheduleTime,
+		Attempt:                 callback.GetAttempt(),
+		LastAttemptCompleteTime: callback.GetLastAttemptCompleteTime(),
+		LastAttemptFailure:      callback.GetLastAttemptFailure(),
+		NextAttemptScheduleTime: callback.GetNextAttemptScheduleTime(),
 		BlockedReason:           blockedReason,
-	}, nil
+	}.Build(), nil
 }
 
 // buildCallbackInfosFromHSM reads callbacks from HSM and converts them to API format.
@@ -407,8 +407,8 @@ func buildCallbackInfosFromHSM(
 			logger.Error(
 				"failed to load callback data while building describe response",
 				tag.WorkflowNamespaceID(namespaceID.String()),
-				tag.WorkflowID(executionInfo.WorkflowId),
-				tag.WorkflowRunID(executionState.RunId),
+				tag.WorkflowID(executionInfo.GetWorkflowId()),
+				tag.WorkflowRunID(executionState.GetRunId()),
 				tag.Error(err),
 			)
 			return nil, serviceerror.NewInternal("failed to construct describe response")
@@ -419,8 +419,8 @@ func buildCallbackInfosFromHSM(
 			logger.Error(
 				"failed to build callback info while building describe response",
 				tag.WorkflowNamespaceID(namespaceID.String()),
-				tag.WorkflowID(executionInfo.WorkflowId),
-				tag.WorkflowRunID(executionState.RunId),
+				tag.WorkflowID(executionInfo.GetWorkflowId()),
+				tag.WorkflowRunID(executionState.GetRunId()),
 				tag.Error(err),
 			)
 			return nil, serviceerror.NewInternal("failed to construct describe response")
@@ -449,8 +449,8 @@ func buildCallbackInfosFromChasm(
 		logger.Error(
 			"failed to get workflow component from CHASM tree",
 			tag.WorkflowNamespaceID(namespaceID.String()),
-			tag.WorkflowID(executionInfo.WorkflowId),
-			tag.WorkflowRunID(executionState.RunId),
+			tag.WorkflowID(executionInfo.GetWorkflowId()),
+			tag.WorkflowRunID(executionState.GetRunId()),
 			tag.Error(err),
 		)
 		return nil, serviceerror.NewInternal("failed to construct describe response")
@@ -465,8 +465,8 @@ func buildCallbackInfosFromChasm(
 			logger.Error(
 				"failed to build callback info from CHASM callback",
 				tag.WorkflowNamespaceID(namespaceID.String()),
-				tag.WorkflowID(executionInfo.WorkflowId),
-				tag.WorkflowRunID(executionState.RunId),
+				tag.WorkflowID(executionInfo.GetWorkflowId()),
+				tag.WorkflowRunID(executionState.GetRunId()),
 				tag.Error(err),
 			)
 			return nil, serviceerror.NewInternal("failed to construct describe response")
@@ -520,7 +520,7 @@ func buildChasmCallbackInfo(
 	}
 
 	var state enumspb.CallbackState
-	switch cb.Status {
+	switch cb.GetStatus() {
 	case callbackspb.CALLBACK_STATUS_UNSPECIFIED:
 		return nil, serviceerror.NewInternal("callback with UNSPECIFIED state")
 	case callbackspb.CALLBACK_STATUS_STANDBY:
@@ -534,7 +534,7 @@ func buildChasmCallbackInfo(
 	case callbackspb.CALLBACK_STATUS_SUCCEEDED:
 		state = enumspb.CALLBACK_STATE_SUCCEEDED
 	default:
-		return nil, serviceerror.NewInternalf("unknown callback state: %v", cb.Status)
+		return nil, serviceerror.NewInternalf("unknown callback state: %v", cb.GetStatus())
 	}
 
 	blockedReason := ""
@@ -545,21 +545,21 @@ func buildChasmCallbackInfo(
 		}
 	}
 
-	trigger := &workflowpb.CallbackInfo_Trigger{
-		Variant: &workflowpb.CallbackInfo_Trigger_WorkflowClosed{},
-	}
+	trigger := workflowpb.CallbackInfo_Trigger_builder{
+		WorkflowClosed: &workflowpb.CallbackInfo_WorkflowClosed{},
+	}.Build()
 
-	return &workflowpb.CallbackInfo{
+	return workflowpb.CallbackInfo_builder{
 		Callback:                cbSpec,
 		Trigger:                 trigger,
-		RegistrationTime:        cb.RegistrationTime,
+		RegistrationTime:        cb.GetRegistrationTime(),
 		State:                   state,
-		Attempt:                 cb.Attempt,
-		LastAttemptCompleteTime: cb.LastAttemptCompleteTime,
-		LastAttemptFailure:      cb.LastAttemptFailure,
-		NextAttemptScheduleTime: cb.NextAttemptScheduleTime,
+		Attempt:                 cb.GetAttempt(),
+		LastAttemptCompleteTime: cb.GetLastAttemptCompleteTime(),
+		LastAttemptFailure:      cb.GetLastAttemptFailure(),
+		NextAttemptScheduleTime: cb.GetNextAttemptScheduleTime(),
 		BlockedReason:           blockedReason,
-	}, nil
+	}.Build(), nil
 }
 
 func buildPendingNexusOperationInfo(
@@ -591,7 +591,7 @@ func buildPendingNexusOperationInfo(
 		cb := outboundQueueCBPool.Get(tasks.TaskGroupNamespaceIDAndDestination{
 			TaskGroup:   nexusoperations.TaskTypeInvocation,
 			NamespaceID: namespaceID.String(),
-			Destination: op.Endpoint,
+			Destination: op.GetEndpoint(),
 		})
 		if cb.State() != gobreaker.StateClosed {
 			state = enumspb.PENDING_NEXUS_OPERATION_STATE_BLOCKED
@@ -610,24 +610,24 @@ func buildPendingNexusOperationInfo(
 		return nil, fmt.Errorf("failed to determine Nexus operation scheduled event ID: %w", err)
 	}
 
-	return &workflowpb.PendingNexusOperationInfo{
-		Endpoint:  op.Endpoint,
-		Service:   op.Service,
-		Operation: op.Operation,
+	return workflowpb.PendingNexusOperationInfo_builder{
+		Endpoint:  op.GetEndpoint(),
+		Service:   op.GetService(),
+		Operation: op.GetOperation(),
 		// TODO(bergundy): Remove this fallback after the 1.27 release.
-		OperationId:             op.OperationToken,
-		OperationToken:          op.OperationToken,
+		OperationId:             op.GetOperationToken(),
+		OperationToken:          op.GetOperationToken(),
 		ScheduledEventId:        scheduledEventID,
-		ScheduleToCloseTimeout:  op.ScheduleToCloseTimeout,
-		ScheduledTime:           op.ScheduledTime,
+		ScheduleToCloseTimeout:  op.GetScheduleToCloseTimeout(),
+		ScheduledTime:           op.GetScheduledTime(),
 		State:                   state,
-		Attempt:                 op.Attempt,
-		LastAttemptCompleteTime: op.LastAttemptCompleteTime,
-		LastAttemptFailure:      op.LastAttemptFailure,
-		NextAttemptScheduleTime: op.NextAttemptScheduleTime,
+		Attempt:                 op.GetAttempt(),
+		LastAttemptCompleteTime: op.GetLastAttemptCompleteTime(),
+		LastAttemptFailure:      op.GetLastAttemptFailure(),
+		NextAttemptScheduleTime: op.GetNextAttemptScheduleTime(),
 		CancellationInfo:        cancellationInfo,
 		BlockedReason:           blockedReason,
-	}, nil
+	}.Build(), nil
 }
 
 func buildNexusOperationCancellationInfo(
@@ -650,7 +650,7 @@ func buildNexusOperationCancellationInfo(
 		cb := outboundQueueCBPool.Get(tasks.TaskGroupNamespaceIDAndDestination{
 			TaskGroup:   nexusoperations.TaskTypeCancelation,
 			NamespaceID: namespaceID.String(),
-			Destination: op.Endpoint,
+			Destination: op.GetEndpoint(),
 		})
 		if cb.State() != gobreaker.StateClosed {
 			state = enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BLOCKED
@@ -658,13 +658,13 @@ func buildNexusOperationCancellationInfo(
 		}
 	}
 
-	return &workflowpb.NexusOperationCancellationInfo{
-		RequestedTime:           cancelation.RequestedTime,
+	return workflowpb.NexusOperationCancellationInfo_builder{
+		RequestedTime:           cancelation.GetRequestedTime(),
 		State:                   state,
-		Attempt:                 cancelation.Attempt,
-		LastAttemptCompleteTime: cancelation.LastAttemptCompleteTime,
-		LastAttemptFailure:      cancelation.LastAttemptFailure,
-		NextAttemptScheduleTime: cancelation.NextAttemptScheduleTime,
+		Attempt:                 cancelation.GetAttempt(),
+		LastAttemptCompleteTime: cancelation.GetLastAttemptCompleteTime(),
+		LastAttemptFailure:      cancelation.GetLastAttemptFailure(),
+		NextAttemptScheduleTime: cancelation.GetNextAttemptScheduleTime(),
 		BlockedReason:           blockedReason,
-	}, nil
+	}.Build(), nil
 }

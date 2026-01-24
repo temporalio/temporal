@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"reflect"
 	"slices"
 	"strings"
 
@@ -166,7 +165,7 @@ type NodeBackend interface {
 func EventIDFromToken(token []byte) (int64, error) {
 	ref := &tokenspb.HistoryEventRef{}
 	err := proto.Unmarshal(token, ref)
-	return ref.EventId, err
+	return ref.GetEventId(), err
 }
 
 // Node is a node in a hierarchical state machine tree.
@@ -208,13 +207,13 @@ func NewRoot(
 	return &Node{
 		definition: def,
 		registry:   registry,
-		persistence: &persistencespb.StateMachineNode{
+		persistence: persistencespb.StateMachineNode_builder{
 			Children:                      children,
 			Data:                          serialized,
 			InitialVersionedTransition:    &persistencespb.VersionedTransition{},
 			LastUpdateVersionedTransition: &persistencespb.VersionedTransition{},
 			TransitionCount:               0,
-		},
+		}.Build(),
 		cache: &cachedMachine{
 			dataLoaded: true,
 			data:       data,
@@ -286,7 +285,7 @@ func (n *Node) Walk(fn func(*Node) error) error {
 		return err
 	}
 
-	for childType := range n.persistence.Children {
+	for childType := range n.persistence.GetChildren() {
 		childNodes := NewCollection[any](n, childType).List()
 		for _, child := range childNodes {
 			if err := child.Walk(fn); err != nil {
@@ -311,11 +310,11 @@ func (n *Node) Child(path []Key) (*Node, error) {
 	if !ok {
 		return nil, fmt.Errorf("%w: state machine for type: %v", ErrNotRegistered, key.Type)
 	}
-	machines, ok := n.persistence.Children[key.Type]
+	machines, ok := n.persistence.GetChildren()[key.Type]
 	if !ok {
 		return nil, fmt.Errorf("%w: %v", ErrStateMachineNotFound, key)
 	}
-	machine, ok := machines.MachinesById[key.ID]
+	machine, ok := machines.GetMachinesById()[key.ID]
 	if !ok {
 		return nil, fmt.Errorf("%w: %v", ErrStateMachineNotFound, key)
 	}
@@ -342,9 +341,9 @@ func (n *Node) InvalidateCache() {
 // Returns [ErrStateMachineAlreadyExists] if a child with the given key already exists, [ErrNotRegistered] if the key's
 // type is not found in the node's state machine registry and serialization errors.
 func (n *Node) AddChild(key Key, data any) (*Node, error) {
-	machines, ok := n.persistence.Children[key.Type]
+	machines, ok := n.persistence.GetChildren()[key.Type]
 	if ok {
-		if _, ok = machines.MachinesById[key.ID]; ok {
+		if _, ok = machines.GetMachinesById()[key.ID]; ok {
 			if ok {
 				return nil, fmt.Errorf("%w: %v", ErrStateMachineAlreadyExists, key)
 			}
@@ -359,25 +358,25 @@ func (n *Node) AddChild(key Key, data any) (*Node, error) {
 		return nil, err
 	}
 
-	nextVersionedTransition := &persistencespb.VersionedTransition{
+	nextVersionedTransition := persistencespb.VersionedTransition_builder{
 		NamespaceFailoverVersion: n.backend.GetCurrentVersion(),
 		// The transition count for the backend is only incremented when closing the current transaction,
 		// but any change to state machine node is a state transtion,
 		// so we can safely using next transition count here is safe.
 		TransitionCount: n.backend.NextTransitionCount(),
-	}
+	}.Build()
 	node := &Node{
 		Key:        key,
 		Parent:     n,
 		definition: def,
 		registry:   n.registry,
-		persistence: &persistencespb.StateMachineNode{
+		persistence: persistencespb.StateMachineNode_builder{
 			Children:                      make(map[string]*persistencespb.StateMachineMap),
 			Data:                          serialized,
 			InitialVersionedTransition:    nextVersionedTransition,
 			LastUpdateVersionedTransition: nextVersionedTransition,
 			TransitionCount:               0,
-		},
+		}.Build(),
 		cache: &cachedMachine{
 			dataLoaded: true,
 			data:       data,
@@ -387,16 +386,16 @@ func (n *Node) AddChild(key Key, data any) (*Node, error) {
 		backend: n.backend,
 	}
 	n.cache.children[key] = node
-	children, ok := n.persistence.Children[key.Type]
+	children, ok := n.persistence.GetChildren()[key.Type]
 	if !ok {
-		children = &persistencespb.StateMachineMap{MachinesById: make(map[string]*persistencespb.StateMachineNode)}
+		children = persistencespb.StateMachineMap_builder{MachinesById: make(map[string]*persistencespb.StateMachineNode)}.Build()
 		// Children may be nil if the map was empty and the proto message we serialized and deserialized.
-		if n.persistence.Children == nil {
-			n.persistence.Children = make(map[string]*persistencespb.StateMachineMap, 1)
+		if n.persistence.GetChildren() == nil {
+			n.persistence.SetChildren(make(map[string]*persistencespb.StateMachineMap, 1))
 		}
-		n.persistence.Children[key.Type] = children
+		n.persistence.GetChildren()[key.Type] = children
 	}
-	children.MachinesById[key.ID] = node.persistence
+	children.GetMachinesById()[key.ID] = node.persistence
 	return node, nil
 }
 
@@ -426,11 +425,11 @@ func (n *Node) DeleteChild(key Key) error {
 	})
 
 	// Remove from persistence and cache
-	machinesMap := n.persistence.Children[key.Type]
+	machinesMap := n.persistence.GetChildren()[key.Type]
 	if machinesMap != nil {
-		delete(machinesMap.MachinesById, key.ID)
-		if len(machinesMap.MachinesById) == 0 {
-			delete(n.persistence.Children, key.Type)
+		delete(machinesMap.GetMachinesById(), key.ID)
+		if len(machinesMap.GetMachinesById()) == 0 {
+			delete(n.persistence.GetChildren(), key.Type)
 		}
 	}
 	delete(n.cache.children, key)
@@ -459,7 +458,7 @@ func MachineData[T any](n *Node) (T, error) {
 		}
 		return t, ErrIncompatibleType
 	}
-	a, err := n.definition.Deserialize(n.persistence.Data)
+	a, err := n.definition.Deserialize(n.persistence.GetData())
 	if err != nil {
 		return t, err
 	}
@@ -527,20 +526,20 @@ func (n *Node) CompareState(incomingNode *Node) (int, error) {
 func (n *Node) Sync(incomingNode *Node) error {
 	incomingInternalRepr := incomingNode.InternalRepr()
 
-	currentInitialVersionedTransition := n.InternalRepr().InitialVersionedTransition
-	incomingInitialVersionedTransition := incomingNode.InternalRepr().InitialVersionedTransition
-	if currentInitialVersionedTransition.NamespaceFailoverVersion !=
-		incomingInitialVersionedTransition.NamespaceFailoverVersion {
+	currentInitialVersionedTransition := n.InternalRepr().GetInitialVersionedTransition()
+	incomingInitialVersionedTransition := incomingNode.InternalRepr().GetInitialVersionedTransition()
+	if currentInitialVersionedTransition.GetNamespaceFailoverVersion() !=
+		incomingInitialVersionedTransition.GetNamespaceFailoverVersion() {
 		return ErrInitialTransitionMismatch
 	}
-	if currentInitialVersionedTransition.TransitionCount != 0 &&
-		incomingInitialVersionedTransition.TransitionCount != 0 &&
-		currentInitialVersionedTransition.TransitionCount !=
-			incomingInitialVersionedTransition.TransitionCount {
+	if currentInitialVersionedTransition.GetTransitionCount() != 0 &&
+		incomingInitialVersionedTransition.GetTransitionCount() != 0 &&
+		currentInitialVersionedTransition.GetTransitionCount() !=
+			incomingInitialVersionedTransition.GetTransitionCount() {
 		return ErrInitialTransitionMismatch
 	}
 
-	n.persistence.Data = incomingInternalRepr.Data
+	n.persistence.SetData(incomingInternalRepr.GetData())
 	// do not sync children, we are just syncing the current node
 	// do not sync transitionCount, that is cluster local information
 
@@ -561,7 +560,7 @@ func (n *Node) Sync(incomingNode *Node) error {
 	}
 
 	// sync LastUpdateVersionedTransition last as MachineTransition can't correctly handle it.
-	n.persistence.LastUpdateVersionedTransition = incomingInternalRepr.LastUpdateVersionedTransition
+	n.persistence.SetLastUpdateVersionedTransition(incomingInternalRepr.GetLastUpdateVersionedTransition())
 	return nil
 }
 
@@ -579,20 +578,20 @@ func MachineTransition[T any](n *Node, transitionFn func(T) (TransitionOutput, e
 	}
 	// Update the transition counts before applying the transition function in case the transition function needs to
 	// generate references to this node.
-	n.persistence.TransitionCount++
-	prevLastUpdatedVersionedTransition := n.persistence.LastUpdateVersionedTransition
-	n.persistence.LastUpdateVersionedTransition = &persistencespb.VersionedTransition{
+	n.persistence.SetTransitionCount(n.persistence.GetTransitionCount() + 1)
+	prevLastUpdatedVersionedTransition := n.persistence.GetLastUpdateVersionedTransition()
+	n.persistence.SetLastUpdateVersionedTransition(persistencespb.VersionedTransition_builder{
 		NamespaceFailoverVersion: n.backend.GetCurrentVersion(),
 		// The transition count for the backend is only incremented when closing the current transaction,
 		// but any change to state machine node is a state transtion,
 		// so we can safely using next transition count here.
 		TransitionCount: n.backend.NextTransitionCount(),
-	}
+	}.Build())
 	// Rollback on error
 	defer func() {
 		if retErr != nil {
-			n.persistence.TransitionCount--
-			n.persistence.LastUpdateVersionedTransition = prevLastUpdatedVersionedTransition
+			n.persistence.SetTransitionCount(n.persistence.GetTransitionCount() - 1)
+			n.persistence.SetLastUpdateVersionedTransition(prevLastUpdatedVersionedTransition)
 			// Force reloading data.
 			n.cache.dataLoaded = false
 		}
@@ -605,7 +604,7 @@ func MachineTransition[T any](n *Node, transitionFn func(T) (TransitionOutput, e
 	if err != nil {
 		return err
 	}
-	n.persistence.Data = serialized
+	n.persistence.SetData(serialized)
 	n.cache.dirty = true
 
 	root := n.root()
@@ -613,7 +612,7 @@ func MachineTransition[T any](n *Node, transitionFn func(T) (TransitionOutput, e
 		path: n.Path(),
 		Output: TransitionOutputWithCount{
 			TransitionOutput: output,
-			TransitionCount:  n.persistence.TransitionCount,
+			TransitionCount:  n.persistence.GetTransitionCount(),
 		},
 	})
 
@@ -642,12 +641,12 @@ func (c Collection[T]) Node(stateMachineID string) (*Node, error) {
 
 // List returns all nodes in this collection.
 func (c Collection[T]) List() []*Node {
-	machines, ok := c.node.persistence.Children[c.Type]
+	machines, ok := c.node.persistence.GetChildren()[c.Type]
 	if !ok {
 		return nil
 	}
-	nodes := make([]*Node, 0, len(machines.MachinesById))
-	for id := range machines.MachinesById {
+	nodes := make([]*Node, 0, len(machines.GetMachinesById()))
+	for id := range machines.GetMachinesById() {
 		node, err := c.node.Child([]Key{{Type: c.Type, ID: id}})
 		if err != nil {
 			panic("expected child to be present")
@@ -659,11 +658,11 @@ func (c Collection[T]) List() []*Node {
 
 // Size returns the number of machines in this collection.
 func (c Collection[T]) Size() int {
-	machines, ok := c.node.persistence.Children[c.Type]
+	machines, ok := c.node.persistence.GetChildren()[c.Type]
 	if !ok {
 		return 0
 	}
-	return len(machines.MachinesById)
+	return len(machines.GetMachinesById())
 }
 
 // Add adds a node to the collection as a child of the collection's underlying [Node].
@@ -693,31 +692,40 @@ func (c Collection[T]) Transition(stateMachineID string, transitionFn func(T) (T
 // GenerateEventLoadToken generates a token for loading a history event from an [Environment].
 // Events should typically be immutable making this function safe to call outside of an [Environment.Access] call.
 func GenerateEventLoadToken(event *historypb.HistoryEvent) ([]byte, error) {
-	attrs := reflect.ValueOf(event.Attributes).Elem()
+	var eventBatchID int64
 
-	// Attributes is always a struct with a single field (e.g: HistoryEvent_NexusOperationScheduledEventAttributes)
-	if attrs.Kind() != reflect.Struct || attrs.NumField() != 1 {
-		return nil, serviceerror.NewInternalf("got an invalid event structure: %v", event.EventType)
+	// Use proto reflection to get the attributes oneof value
+	m := event.ProtoReflect()
+	oneofDesc := m.Descriptor().Oneofs().ByName("attributes")
+	if oneofDesc == nil {
+		return nil, serviceerror.NewInternalf("got an invalid event structure: %v", event.GetEventType())
 	}
 
-	f := attrs.Field(0).Interface()
+	fieldDesc := m.WhichOneof(oneofDesc)
+	if fieldDesc == nil {
+		return nil, serviceerror.NewInternalf("got an invalid event structure: %v", event.GetEventType())
+	}
 
-	var eventBatchID int64
-	if getter, ok := f.(interface{ GetWorkflowTaskCompletedEventId() int64 }); ok {
+	attrValue := m.Get(fieldDesc)
+	attrMsg := attrValue.Message()
+
+	// Check if the attributes have a WorkflowTaskCompletedEventId field
+	wtcFieldDesc := attrMsg.Descriptor().Fields().ByName("workflow_task_completed_event_id")
+	if wtcFieldDesc != nil {
 		// Command-Events always have a WorkflowTaskCompletedEventId field that is equal to the batch ID.
-		eventBatchID = getter.GetWorkflowTaskCompletedEventId()
-	} else if attrs := event.GetWorkflowExecutionStartedEventAttributes(); attrs != nil {
+		eventBatchID = attrMsg.Get(wtcFieldDesc).Int()
+	} else if event.GetWorkflowExecutionStartedEventAttributes() != nil {
 		// WFEStarted is always stored in the first batch of events.
 		eventBatchID = 1
 	} else {
 		// By default, events aren't referenceable as they may end up buffered.
 		// This limitation may be relaxed later and the platform would need a way to fix references to buffered events.
-		return nil, serviceerror.NewInternalf("cannot reference event: %v", event.EventType)
+		return nil, serviceerror.NewInternalf("cannot reference event: %v", event.GetEventType())
 	}
-	ref := &tokenspb.HistoryEventRef{
-		EventId:      event.EventId,
+	ref := tokenspb.HistoryEventRef_builder{
+		EventId:      event.GetEventId(),
 		EventBatchId: eventBatchID,
-	}
+	}.Build()
 	return proto.Marshal(ref)
 }
 

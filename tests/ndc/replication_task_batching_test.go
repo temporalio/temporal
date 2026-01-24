@@ -31,6 +31,7 @@ import (
 	"go.temporal.io/server/service/history/replication/eventhandler"
 	"go.temporal.io/server/tests/testcore"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -128,7 +129,7 @@ func (s *NDCReplicationTaskBatchingTestSuite) TestHistoryReplicationTaskAndThenR
 
 			historyEvents := &historypb.History{}
 			for _, event := range events {
-				historyEvents.Events = append(historyEvents.Events, event.GetData().(*historypb.HistoryEvent))
+				historyEvents.SetEvents(append(historyEvents.GetEvents(), event.GetData().(*historypb.HistoryEvent)))
 			}
 			historyBatch = append(historyBatch, historyEvents)
 			history, err := testcore.EventBatchesToVersionHistory(nil, historyBatch)
@@ -137,9 +138,9 @@ func (s *NDCReplicationTaskBatchingTestSuite) TestHistoryReplicationTaskAndThenR
 				s.namespaceID.String(),
 				workflowID,
 				runID,
-				historyEvents.Events,
+				historyEvents.GetEvents(),
 				nil,
-				history.Items,
+				history.GetItems(),
 			)
 		}
 		execution := workflow.Execution{
@@ -184,7 +185,7 @@ func (s *NDCReplicationTaskBatchingTestSuite) assertHistoryEvents(
 		s.True(passiveIterator.HasNext())
 		passiveBatch, err := passiveIterator.Next()
 		s.NoError(err)
-		inputEvents := historyBatch[index].Events
+		inputEvents := historyBatch[index].GetEvents()
 		index++
 		inputBatch, _ := s.serializer.SerializeEvents(inputEvents)
 		s.Equal(inputBatch, passiveBatch.RawEventBatch)
@@ -195,23 +196,23 @@ func (s *NDCReplicationTaskBatchingTestSuite) registerNamespace() {
 	s.namespace = namespace.Name("test-simple-workflow-ndc-" + common.GenerateRandomString(5))
 	passiveFrontend := s.passtiveCluster.FrontendClient() //
 	replicationConfig := []*replicationpb.ClusterReplicationConfig{
-		{ClusterName: clusterName[0]},
-		{ClusterName: clusterName[1]},
+		replicationpb.ClusterReplicationConfig_builder{ClusterName: clusterName[0]}.Build(),
+		replicationpb.ClusterReplicationConfig_builder{ClusterName: clusterName[1]}.Build(),
 	}
-	_, err := passiveFrontend.RegisterNamespace(context.Background(), &workflowservice.RegisterNamespaceRequest{
+	_, err := passiveFrontend.RegisterNamespace(context.Background(), workflowservice.RegisterNamespaceRequest_builder{
 		Namespace:                        s.namespace.String(),
 		IsGlobalNamespace:                true,
 		Clusters:                         replicationConfig,
 		ActiveClusterName:                clusterName[0],
 		WorkflowExecutionRetentionPeriod: durationpb.New(1 * time.Hour * 24),
-	})
+	}.Build())
 	s.Require().NoError(err)
 	// Wait for namespace cache to pick the change
 	time.Sleep(2 * testcore.NamespaceCacheRefreshInterval) //nolint:forbidigo
 
-	descReq := &workflowservice.DescribeNamespaceRequest{
+	descReq := workflowservice.DescribeNamespaceRequest_builder{
 		Namespace: s.namespace.String(),
-	}
+	}.Build()
 	resp, err := passiveFrontend.DescribeNamespace(context.Background(), descReq)
 	s.Require().NoError(err)
 	s.Require().NotNil(resp)
@@ -223,19 +224,17 @@ func (s *NDCReplicationTaskBatchingTestSuite) registerNamespace() {
 func (s *NDCReplicationTaskBatchingTestSuite) GetReplicationMessagesMock() (*adminservice.StreamWorkflowReplicationMessagesResponse, error) {
 	task := <-s.standByReplicationTasksChan
 	taskID := atomic.AddInt64(&s.standByTaskID, 1)
-	task.SourceTaskId = taskID
+	task.SetSourceTaskId(taskID)
 	tasks := []*replicationspb.ReplicationTask{task}
 
-	replicationMessage := &replicationspb.WorkflowReplicationMessages{
+	replicationMessage := replicationspb.WorkflowReplicationMessages_builder{
 		ReplicationTasks:       tasks,
 		ExclusiveHighWatermark: taskID + 1,
-	}
+	}.Build()
 
-	return &adminservice.StreamWorkflowReplicationMessagesResponse{
-		Attributes: &adminservice.StreamWorkflowReplicationMessagesResponse_Messages{
-			Messages: replicationMessage,
-		},
-	}, nil
+	return adminservice.StreamWorkflowReplicationMessagesResponse_builder{
+		Messages: proto.ValueOrDefault(replicationMessage),
+	}.Build(), nil
 }
 
 func (s *NDCReplicationTaskBatchingTestSuite) createHistoryEventReplicationTaskFromHistoryEventBatch(
@@ -254,17 +253,16 @@ func (s *NDCReplicationTaskBatchingTestSuite) createHistoryEventReplicationTaskF
 	}
 	s.NoError(err)
 	taskType := enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK
-	replicationTask := &replicationspb.ReplicationTask{
+	replicationTask := replicationspb.ReplicationTask_builder{
 		TaskType: taskType,
-		Attributes: &replicationspb.ReplicationTask_HistoryTaskAttributes{
-			HistoryTaskAttributes: &replicationspb.HistoryTaskAttributes{
-				NamespaceId:         namespaceId,
-				WorkflowId:          workflowId,
-				RunId:               runId,
-				VersionHistoryItems: versionHistoryItems,
-				Events:              eventBlob,
-				NewRunEvents:        newRunEventBlob,
-			}},
-	}
+		HistoryTaskAttributes: replicationspb.HistoryTaskAttributes_builder{
+			NamespaceId:         namespaceId,
+			WorkflowId:          workflowId,
+			RunId:               runId,
+			VersionHistoryItems: versionHistoryItems,
+			Events:              eventBlob,
+			NewRunEvents:        newRunEventBlob,
+		}.Build(),
+	}.Build()
 	return replicationTask
 }

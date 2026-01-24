@@ -10,7 +10,7 @@ import (
 )
 
 func fromWallClock(wallclock int64) *hlc.Clock {
-	return &hlc.Clock{WallClock: wallclock, Version: 0, ClusterId: 1}
+	return hlc.Clock_builder{WallClock: wallclock, Version: 0, ClusterId: 1}.Build()
 }
 
 func buildID(wallclock int64, id string, optionalState ...persistencespb.BuildId_State) *persistencespb.BuildId {
@@ -19,26 +19,26 @@ func buildID(wallclock int64, id string, optionalState ...persistencespb.BuildId
 		state = optionalState[0]
 	}
 
-	return &persistencespb.BuildId{
+	return persistencespb.BuildId_builder{
 		Id:                     id,
 		State:                  state,
 		StateUpdateTimestamp:   fromWallClock(wallclock),
 		BecameDefaultTimestamp: fromWallClock(wallclock),
-	}
+	}.Build()
 }
 
 func mkSet(setID string, buildIDs ...*persistencespb.BuildId) *persistencespb.CompatibleVersionSet {
-	return &persistencespb.CompatibleVersionSet{
+	return persistencespb.CompatibleVersionSet_builder{
 		SetIds:                 []string{setID},
 		BuildIds:               buildIDs,
-		BecameDefaultTimestamp: buildIDs[len(buildIDs)-1].BecameDefaultTimestamp,
-	}
+		BecameDefaultTimestamp: buildIDs[len(buildIDs)-1].GetBecameDefaultTimestamp(),
+	}.Build()
 }
 
 func mkSingleSetData(setID string, buildIDs ...*persistencespb.BuildId) *persistencespb.VersioningData {
-	return &persistencespb.VersioningData{
+	return persistencespb.VersioningData_builder{
 		VersionSets: []*persistencespb.CompatibleVersionSet{mkSet(setID, buildIDs...)},
-	}
+	}.Build()
 }
 
 func TestSetMerge_IdenticalBuildIdsAndGreaterUpdateTimestamp_SetsMaxUpdateTimestamp(t *testing.T) {
@@ -74,18 +74,18 @@ func TestSetMerge_NewerDefault_PrefersDefaultAndSetsMaxUpdatedAt(t *testing.T) {
 }
 
 func TestDataMerge_PrefersNewerDefaultAndMergesDefault(t *testing.T) {
-	a := &persistencespb.VersioningData{
+	a := persistencespb.VersioningData_builder{
 		VersionSets: []*persistencespb.CompatibleVersionSet{
 			mkSet("0.1", buildID(2, "0.1")),
 			mkSet("1.0", buildID(3, "1.0")),
 		},
-	}
-	b := &persistencespb.VersioningData{
+	}.Build()
+	b := persistencespb.VersioningData_builder{
 		VersionSets: []*persistencespb.CompatibleVersionSet{
 			mkSet("1.0", buildID(3, "1.0")),
 			mkSet("0.1", buildID(2, "0.1"), buildID(4, "0.2")),
 		},
-	}
+	}.Build()
 	assert.Equal(t, b, MergeVersioningData(a, b))
 	assert.Equal(t, b, MergeVersioningData(b, a))
 }
@@ -93,13 +93,13 @@ func TestDataMerge_PrefersNewerDefaultAndMergesDefault(t *testing.T) {
 func TestSetMerge_DifferentSetIDs_MergesSetIDs(t *testing.T) {
 	a := mkSingleSetData("0.1", buildID(1, "0.1"), buildID(6, "0.2"))
 	b := mkSingleSetData("0.2", buildID(3, "0.2"))
-	expected := &persistencespb.VersioningData{
-		VersionSets: []*persistencespb.CompatibleVersionSet{{
+	expected := persistencespb.VersioningData_builder{
+		VersionSets: []*persistencespb.CompatibleVersionSet{persistencespb.CompatibleVersionSet_builder{
 			SetIds:                 []string{"0.1", "0.2"},
 			BuildIds:               []*persistencespb.BuildId{buildID(1, "0.1"), buildID(6, "0.2")},
 			BecameDefaultTimestamp: fromWallClock(6),
-		}},
-	}
+		}.Build()},
+	}.Build()
 	assert.Equal(t, expected, MergeVersioningData(a, b))
 	assert.Equal(t, expected, MergeVersioningData(b, a))
 }
@@ -113,47 +113,47 @@ func TestSetMerge_DifferentStates_UpdatesTimestampsAndState(t *testing.T) {
 
 func TestSetMerge_MultipleMatches_MergesSets(t *testing.T) {
 	a := mkSingleSetData("0.1", buildID(1, "0.1"), buildID(3, "0.2"))
-	b := &persistencespb.VersioningData{
+	b := persistencespb.VersioningData_builder{
 		VersionSets: []*persistencespb.CompatibleVersionSet{
 			mkSet("0.1", buildID(1, "0.1")),
 			mkSet("0.2", buildID(2, "0.2")),
 		},
-	}
-	expected := &persistencespb.VersioningData{
-		VersionSets: []*persistencespb.CompatibleVersionSet{{
+	}.Build()
+	expected := persistencespb.VersioningData_builder{
+		VersionSets: []*persistencespb.CompatibleVersionSet{persistencespb.CompatibleVersionSet_builder{
 			SetIds:                 []string{"0.1", "0.2"},
 			BuildIds:               []*persistencespb.BuildId{buildID(1, "0.1"), buildID(3, "0.2")},
 			BecameDefaultTimestamp: fromWallClock(3),
-		}},
-	}
+		}.Build()},
+	}.Build()
 	assert.Equal(t, expected, MergeVersioningData(a, b))
 	assert.Equal(t, expected, MergeVersioningData(b, a))
 }
 
 func TestSetMerge_BuildIdPromoted_PreservesSetDefault(t *testing.T) {
 	a := mkSingleSetData("0.1", buildID(2, "0.1"), buildID(1, "0.2"))
-	a.VersionSets[0].BuildIds[len(a.VersionSets[0].BuildIds)-1].BecameDefaultTimestamp = fromWallClock(3)
+	a.GetVersionSets()[0].GetBuildIds()[len(a.GetVersionSets()[0].GetBuildIds())-1].SetBecameDefaultTimestamp(fromWallClock(3))
 	b := mkSingleSetData("0.1", buildID(2, "0.1"), buildID(1, "0.2"))
-	b.VersionSets[0].BuildIds[len(b.VersionSets[0].BuildIds)-1].BecameDefaultTimestamp = fromWallClock(3)
+	b.GetVersionSets()[0].GetBuildIds()[len(b.GetVersionSets()[0].GetBuildIds())-1].SetBecameDefaultTimestamp(fromWallClock(3))
 	assert.Equal(t, b, MergeVersioningData(a, b))
 	assert.Equal(t, b, MergeVersioningData(b, a))
 }
 
 func TestSetMerge_SetPromoted_PreservesGlobalDefault(t *testing.T) {
 	set01 := mkSet("0.1", buildID(1, "0.1"))
-	set01.BecameDefaultTimestamp = fromWallClock(3)
-	a := &persistencespb.VersioningData{
+	set01.SetBecameDefaultTimestamp(fromWallClock(3))
+	a := persistencespb.VersioningData_builder{
 		VersionSets: []*persistencespb.CompatibleVersionSet{
 			mkSet("0.2", buildID(2, "0.2")),
 			set01,
 		},
-	}
-	b := &persistencespb.VersioningData{
+	}.Build()
+	b := persistencespb.VersioningData_builder{
 		VersionSets: []*persistencespb.CompatibleVersionSet{
 			mkSet("0.2", buildID(2, "0.2")),
 			set01,
 		},
-	}
+	}.Build()
 	assert.Equal(t, b, MergeVersioningData(a, b))
 	assert.Equal(t, b, MergeVersioningData(b, a))
 }
@@ -174,19 +174,19 @@ func TestPersistUnknownBuildId_Merge(t *testing.T) {
 
 	// now merge them. we should see 1.1 in a set with 1, but it should have two set ids
 	ab := MergeVersioningData(a, b)
-	expected := &persistencespb.VersioningData{
+	expected := persistencespb.VersioningData_builder{
 		VersionSets: []*persistencespb.CompatibleVersionSet{
 			mkSingleBuildIdSet("0", clock),
-			{
+			persistencespb.CompatibleVersionSet_builder{
 				SetIds: []string{hashBuildId("1"), hashBuildId("1.1")},
 				BuildIds: []*persistencespb.BuildId{
 					mkBuildId("1", clock),
 					mkBuildId("1.1", nextClock),
 				},
 				BecameDefaultTimestamp: nextClock,
-			},
+			}.Build(),
 		},
-	}
+	}.Build()
 	assert.Equal(t, expected, ab)
 
 	// the other way too

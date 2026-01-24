@@ -75,8 +75,8 @@ func (d *matchingTaskStoreV1) CreateTasks(
 				taskQueueType,
 				rowTypeTaskInSubqueue(task.Subqueue),
 				task.TaskId,
-				task.Task.Data,
-				task.Task.EncodingType.String())
+				task.Task.GetData(),
+				task.Task.GetEncodingType().String())
 		} else {
 			batch.Query(templateCreateTaskWithTTLQuery,
 				namespaceID,
@@ -84,8 +84,8 @@ func (d *matchingTaskStoreV1) CreateTasks(
 				taskQueueType,
 				rowTypeTaskInSubqueue(task.Subqueue),
 				task.TaskId,
-				task.Task.Data,
-				task.Task.EncodingType.String(),
+				task.Task.GetData(),
+				task.Task.GetEncodingType().String(),
 				ttl)
 		}
 	}
@@ -93,8 +93,8 @@ func (d *matchingTaskStoreV1) CreateTasks(
 	// The following query is used to ensure that range_id didn't change
 	batch.Query(switchTasksTable(templateUpdateTaskQueueQuery, matchingTaskVersion1),
 		request.RangeID,
-		request.TaskQueueInfo.Data,
-		request.TaskQueueInfo.EncodingType.String(),
+		request.TaskQueueInfo.GetData(),
+		request.TaskQueueInfo.GetEncodingType().String(),
 		namespaceID,
 		taskQueue,
 		taskQueueType,

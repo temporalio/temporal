@@ -51,19 +51,19 @@ func (a fairLevel) inc() fairLevel {
 }
 
 func fairLevelFromAllocatedTask(t *persistencespb.AllocatedTaskInfo) fairLevel {
-	return fairLevel{pass: t.TaskPass, id: t.TaskId}
+	return fairLevel{pass: t.GetTaskPass(), id: t.GetTaskId()}
 }
 
 func fairLevelFromProto(l *taskqueuespb.FairLevel) fairLevel {
 	if l == nil {
 		return fairLevel{}
 	}
-	return fairLevel{pass: l.TaskPass, id: l.TaskId}
+	return fairLevel{pass: l.GetTaskPass(), id: l.GetTaskId()}
 }
 
 func (a fairLevel) toProto() *taskqueuespb.FairLevel {
 	if (a == fairLevel{}) {
 		return nil
 	}
-	return &taskqueuespb.FairLevel{TaskPass: a.pass, TaskId: a.id}
+	return taskqueuespb.FairLevel_builder{TaskPass: a.pass, TaskId: a.id}.Build()
 }

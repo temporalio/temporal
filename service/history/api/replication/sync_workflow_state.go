@@ -24,29 +24,29 @@ func SyncWorkflowState(
 	result, err := syncStateRetriever.GetSyncWorkflowStateArtifact(
 		ctx,
 		request.GetNamespaceId(),
-		request.Execution,
+		request.GetExecution(),
 		archetypeID,
-		request.VersionedTransition,
-		request.VersionHistories,
+		request.GetVersionedTransition(),
+		request.GetVersionHistories(),
 	)
 	if err != nil {
-		logger.Error("SyncWorkflowState failed to retrieve sync state artifact", tag.WorkflowNamespaceID(request.NamespaceId),
-			tag.WorkflowID(request.Execution.WorkflowId),
-			tag.WorkflowRunID(request.Execution.RunId),
+		logger.Error("SyncWorkflowState failed to retrieve sync state artifact", tag.WorkflowNamespaceID(request.GetNamespaceId()),
+			tag.WorkflowID(request.GetExecution().GetWorkflowId()),
+			tag.WorkflowRunID(request.GetExecution().GetRunId()),
 			tag.Error(err))
 		return nil, err
 	}
 
-	err = replicationProgressCache.Update(request.Execution.RunId, request.TargetClusterId, result.VersionedTransitionHistory, result.SyncedVersionHistory.Items)
+	err = replicationProgressCache.Update(request.GetExecution().GetRunId(), request.GetTargetClusterId(), result.VersionedTransitionHistory, result.SyncedVersionHistory.GetItems())
 	if err != nil {
 		logger.Error("SyncWorkflowState failed to update progress cache",
-			tag.WorkflowNamespaceID(request.NamespaceId),
-			tag.WorkflowID(request.Execution.WorkflowId),
-			tag.WorkflowRunID(request.Execution.RunId),
+			tag.WorkflowNamespaceID(request.GetNamespaceId()),
+			tag.WorkflowID(request.GetExecution().GetWorkflowId()),
+			tag.WorkflowRunID(request.GetExecution().GetRunId()),
 			tag.Error(err))
 	}
 
-	return &historyservice.SyncWorkflowStateResponse{
+	return historyservice.SyncWorkflowStateResponse_builder{
 		VersionedTransitionArtifact: result.VersionedTransitionArtifact,
-	}, nil
+	}.Build(), nil
 }

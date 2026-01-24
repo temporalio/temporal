@@ -24,8 +24,8 @@ func ValidateSignal(
 	namespaceEntry := mutableState.GetNamespaceEntry()
 	namespaceID := namespaceEntry.ID().String()
 	namespaceName := namespaceEntry.Name().String()
-	workflowID := mutableState.GetExecutionInfo().WorkflowId
-	runID := mutableState.GetExecutionState().RunId
+	workflowID := mutableState.GetExecutionInfo().GetWorkflowId()
+	runID := mutableState.GetExecutionState().GetRunId()
 
 	executionInfo := mutableState.GetExecutionInfo()
 	maxAllowedSignals := config.MaximumSignalsPerExecution(namespaceName)
@@ -50,12 +50,12 @@ func ValidateSignal(
 		return err
 	}
 
-	if maxAllowedSignals > 0 && int(executionInfo.SignalCount) >= maxAllowedSignals {
+	if maxAllowedSignals > 0 && int(executionInfo.GetSignalCount()) >= maxAllowedSignals {
 		shard.GetLogger().Info("Execution limit reached for maximum signals",
 			tag.WorkflowNamespaceID(namespaceID),
 			tag.WorkflowID(workflowID),
 			tag.WorkflowRunID(runID),
-			tag.WorkflowSignalCount(executionInfo.SignalCount),
+			tag.WorkflowSignalCount(executionInfo.GetSignalCount()),
 		)
 		return consts.ErrSignalsLimitExceeded
 	}

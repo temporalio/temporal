@@ -28,10 +28,10 @@ func validateExecution(w *commonpb.WorkflowExecution) error {
 }
 
 func validateRateLimit(update *workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate, label string) error {
-	if update == nil || update.RateLimit == nil {
+	if update == nil || !update.HasRateLimit() {
 		return nil
 	}
-	if update.RateLimit.GetRequestsPerSecond() < 0 {
+	if update.GetRateLimit().GetRequestsPerSecond() < 0 {
 		return serviceerror.NewInvalidArgumentf("RequestsPerSecond for %s rate limit must be non-negative.", label)
 	}
 	return validateStringField(label+".Reason", update.GetReason(), maxReasonLength, false)

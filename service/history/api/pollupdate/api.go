@@ -42,7 +42,7 @@ func Invoke(
 		release := workflowLease.GetReleaseFn()
 		defer release(nil)
 		wfCtx := workflowLease.GetContext()
-		upd := wfCtx.UpdateRegistry(ctx).Find(ctx, updateRef.UpdateId)
+		upd := wfCtx.UpdateRegistry(ctx).Find(ctx, updateRef.GetUpdateId())
 		wfKey := wfCtx.GetWorkflowKey()
 		return &wfKey, upd, nil
 	}()
@@ -66,17 +66,17 @@ func Invoke(
 		return nil, err
 	}
 
-	return &historyservice.PollWorkflowExecutionUpdateResponse{
-		Response: &workflowservice.PollWorkflowExecutionUpdateResponse{
+	return historyservice.PollWorkflowExecutionUpdateResponse_builder{
+		Response: workflowservice.PollWorkflowExecutionUpdateResponse_builder{
 			Outcome: status.Outcome,
 			Stage:   status.Stage,
-			UpdateRef: &updatepb.UpdateRef{
-				WorkflowExecution: &commonpb.WorkflowExecution{
+			UpdateRef: updatepb.UpdateRef_builder{
+				WorkflowExecution: commonpb.WorkflowExecution_builder{
 					WorkflowId: wfKey.WorkflowID,
 					RunId:      wfKey.RunID,
-				},
-				UpdateId: updateRef.UpdateId,
-			},
-		},
-	}, nil
+				}.Build(),
+				UpdateId: updateRef.GetUpdateId(),
+			}.Build(),
+		}.Build(),
+	}.Build(), nil
 }

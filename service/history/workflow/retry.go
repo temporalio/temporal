@@ -55,11 +55,11 @@ func getBackoffInterval(
 
 func nextRetryDelayFrom(failure *failurepb.Failure) *time.Duration {
 	var delay *time.Duration
-	afi, ok := failure.GetFailureInfo().(*failurepb.Failure_ApplicationFailureInfo)
-	if !ok {
+	if failure.WhichFailureInfo() != failurepb.Failure_ApplicationFailureInfo_case {
 		return delay
 	}
-	p := afi.ApplicationFailureInfo.GetNextRetryDelay()
+	afi := failure.GetApplicationFailureInfo()
+	p := afi.GetNextRetryDelay()
 	if p != nil {
 		d := p.AsDuration()
 		delay = &d
@@ -171,55 +171,55 @@ func SetupNewWorkflowForRetryOrCron(
 	var rootInfo *workflowspb.RootExecutionInfo
 	previousExecutionInfo := previousMutableState.GetExecutionInfo()
 	if previousMutableState.HasParentExecution() {
-		parentInfo = &workflowspb.ParentExecutionInfo{
-			NamespaceId: previousExecutionInfo.ParentNamespaceId,
+		parentInfo = workflowspb.ParentExecutionInfo_builder{
+			NamespaceId: previousExecutionInfo.GetParentNamespaceId(),
 			Namespace:   startAttr.GetParentWorkflowNamespace(),
-			Execution: &commonpb.WorkflowExecution{
-				WorkflowId: previousExecutionInfo.ParentWorkflowId,
-				RunId:      previousExecutionInfo.ParentRunId,
-			},
-			InitiatedId:      previousExecutionInfo.ParentInitiatedId,
-			InitiatedVersion: previousExecutionInfo.ParentInitiatedVersion,
-			Clock:            previousExecutionInfo.ParentClock,
-		}
-		rootInfo = &workflowspb.RootExecutionInfo{
-			Execution: &commonpb.WorkflowExecution{
-				WorkflowId: previousExecutionInfo.RootWorkflowId,
-				RunId:      previousExecutionInfo.RootRunId,
-			},
-		}
+			Execution: commonpb.WorkflowExecution_builder{
+				WorkflowId: previousExecutionInfo.GetParentWorkflowId(),
+				RunId:      previousExecutionInfo.GetParentRunId(),
+			}.Build(),
+			InitiatedId:      previousExecutionInfo.GetParentInitiatedId(),
+			InitiatedVersion: previousExecutionInfo.GetParentInitiatedVersion(),
+			Clock:            previousExecutionInfo.GetParentClock(),
+		}.Build()
+		rootInfo = workflowspb.RootExecutionInfo_builder{
+			Execution: commonpb.WorkflowExecution_builder{
+				WorkflowId: previousExecutionInfo.GetRootWorkflowId(),
+				RunId:      previousExecutionInfo.GetRootRunId(),
+			}.Build(),
+		}.Build()
 	}
 
-	newExecution := commonpb.WorkflowExecution{
-		WorkflowId: previousExecutionInfo.WorkflowId,
+	newExecution := commonpb.WorkflowExecution_builder{
+		WorkflowId: previousExecutionInfo.GetWorkflowId(),
 		RunId:      newRunID,
-	}
+	}.Build()
 
 	firstRunID, err := previousMutableState.GetFirstRunID(ctx)
 	if err != nil {
 		return err
 	}
 
-	taskQueue := previousExecutionInfo.TaskQueue
-	if startAttr.TaskQueue != nil {
-		taskQueue = startAttr.TaskQueue.GetName()
+	taskQueue := previousExecutionInfo.GetTaskQueue()
+	if startAttr.HasTaskQueue() {
+		taskQueue = startAttr.GetTaskQueue().GetName()
 	}
-	tq := &taskqueuepb.TaskQueue{
+	tq := taskqueuepb.TaskQueue_builder{
 		Name: taskQueue,
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-	}
+	}.Build()
 
-	workflowType := previousExecutionInfo.WorkflowTypeName
-	if startAttr.WorkflowType != nil {
-		workflowType = startAttr.WorkflowType.GetName()
+	workflowType := previousExecutionInfo.GetWorkflowTypeName()
+	if startAttr.HasWorkflowType() {
+		workflowType = startAttr.GetWorkflowType().GetName()
 	}
-	wType := &commonpb.WorkflowType{
+	wType := commonpb.WorkflowType_builder{
 		Name: workflowType,
-	}
+	}.Build()
 
 	var taskTimeout *durationpb.Duration
 	if timestamp.DurationValue(startAttr.GetWorkflowTaskTimeout()) == 0 {
-		taskTimeout = previousExecutionInfo.DefaultWorkflowTaskTimeout
+		taskTimeout = previousExecutionInfo.GetDefaultWorkflowTaskTimeout()
 	} else {
 		taskTimeout = startAttr.GetWorkflowTaskTimeout()
 	}
@@ -264,42 +264,42 @@ func SetupNewWorkflowForRetryOrCron(
 
 			// Only set inherited auto upgrade info if source deployment version and revision number are not nil.
 			if sourceDeploymentVersion != nil && sourceDeploymentRevisionNumber != 0 {
-				inheritedAutoUpgradeInfo = &deploymentpb.InheritedAutoUpgradeInfo{
+				inheritedAutoUpgradeInfo = deploymentpb.InheritedAutoUpgradeInfo_builder{
 					SourceDeploymentVersion:        sourceDeploymentVersion,
 					SourceDeploymentRevisionNumber: sourceDeploymentRevisionNumber,
-				}
+				}.Build()
 			}
 		}
 	}
 
-	createRequest := &workflowservice.StartWorkflowExecutionRequest{
+	createRequest := workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:                uuid.NewString(),
 		Namespace:                newMutableState.GetNamespaceEntry().Name().String(),
-		WorkflowId:               newExecution.WorkflowId,
+		WorkflowId:               newExecution.GetWorkflowId(),
 		TaskQueue:                tq,
 		WorkflowType:             wType,
-		WorkflowExecutionTimeout: previousExecutionInfo.WorkflowExecutionTimeout,
+		WorkflowExecutionTimeout: previousExecutionInfo.GetWorkflowExecutionTimeout(),
 		WorkflowRunTimeout:       runTimeout,
 		WorkflowTaskTimeout:      taskTimeout,
-		Input:                    startAttr.Input,
-		Header:                   startAttr.Header,
-		RetryPolicy:              startAttr.RetryPolicy,
-		CronSchedule:             startAttr.CronSchedule,
-		Memo:                     startAttr.Memo,
-		SearchAttributes:         startAttr.SearchAttributes,
+		Input:                    startAttr.GetInput(),
+		Header:                   startAttr.GetHeader(),
+		RetryPolicy:              startAttr.GetRetryPolicy(),
+		CronSchedule:             startAttr.GetCronSchedule(),
+		Memo:                     startAttr.GetMemo(),
+		SearchAttributes:         startAttr.GetSearchAttributes(),
 		CompletionCallbacks:      completionCallbacks,
 		Links:                    startLinks,
-		Priority:                 startAttr.Priority,
+		Priority:                 startAttr.GetPriority(),
 		VersioningOverride:       pinnedOverride,
-	}
+	}.Build()
 
 	attempt := int32(1)
 	if initiator == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY {
-		attempt = previousExecutionInfo.Attempt + 1
+		attempt = previousExecutionInfo.GetAttempt() + 1
 	}
 
 	var sourceVersionStamp *commonpb.WorkerVersionStamp
-	if previousExecutionInfo.AssignedBuildId == "" && GetEffectiveVersioningBehavior(previousExecutionInfo.GetVersioningInfo()) == enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
+	if previousExecutionInfo.GetAssignedBuildId() == "" && GetEffectiveVersioningBehavior(previousExecutionInfo.GetVersioningInfo()) == enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
 		// TODO: only keeping this part for old versioning. The desired logic seem to be the same for both cron and
 		// retry: keep originally-inherited build ID. [cleanup-old-wv]
 		// For retry: propagate build-id version info to new workflow.
@@ -309,7 +309,7 @@ func SetupNewWorkflowForRetryOrCron(
 		}
 	}
 
-	req := &historyservice.StartWorkflowExecutionRequest{
+	req := historyservice.StartWorkflowExecutionRequest_builder{
 		NamespaceId:            newMutableState.GetNamespaceEntry().ID().String(),
 		StartRequest:           createRequest,
 		ParentExecutionInfo:    parentInfo,
@@ -321,19 +321,18 @@ func SetupNewWorkflowForRetryOrCron(
 		Attempt:                  attempt,
 		SourceVersionStamp:       sourceVersionStamp,
 		RootExecutionInfo:        rootInfo,
-		InheritedBuildId:         startAttr.InheritedBuildId,
+		InheritedBuildId:         startAttr.GetInheritedBuildId(),
 		InheritedPinnedVersion:   inheritedPinnedVersion,
 		InheritedAutoUpgradeInfo: inheritedAutoUpgradeInfo,
-	}
-	workflowTimeoutTime := timestamp.TimeValue(previousExecutionInfo.WorkflowExecutionExpirationTime)
+	}.Build()
+	workflowTimeoutTime := timestamp.TimeValue(previousExecutionInfo.GetWorkflowExecutionExpirationTime())
 	if !workflowTimeoutTime.IsZero() {
-		req.WorkflowExecutionExpirationTime = timestamppb.New(workflowTimeoutTime)
+		req.SetWorkflowExecutionExpirationTime(timestamppb.New(workflowTimeoutTime))
 	}
 
-	event, err := newMutableState.AddWorkflowExecutionStartedEventWithOptions(
-		&newExecution,
+	event, err := newMutableState.AddWorkflowExecutionStartedEventWithOptions(newExecution,
 		req,
-		previousExecutionInfo.AutoResetPoints,
+		previousExecutionInfo.GetAutoResetPoints(),
 		previousMutableState.GetExecutionState().GetRunId(),
 		firstRunID,
 	)
@@ -342,7 +341,7 @@ func SetupNewWorkflowForRetryOrCron(
 	}
 	var parentClock *clockspb.VectorClock
 	if parentInfo != nil {
-		parentClock = parentInfo.Clock
+		parentClock = parentInfo.GetClock()
 	}
 	if _, err = newMutableState.AddFirstWorkflowTaskScheduled(parentClock, event, false); err != nil {
 		return err

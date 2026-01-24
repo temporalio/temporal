@@ -166,8 +166,8 @@ func testHappyPath(
 	require.NoError(t, err)
 	require.Len(t, response.Messages, 1)
 	assert.Equal(t, int64(persistence.FirstQueueMessageID), response.Messages[0].MetaData.ID)
-	assert.Equal(t, []byte("1"), response.Messages[0].Data.Data)
-	assert.Equal(t, encodingType, response.Messages[0].Data.EncodingType)
+	assert.Equal(t, []byte("1"), response.Messages[0].Data.GetData())
+	assert.Equal(t, encodingType, response.Messages[0].Data.GetEncodingType())
 	assert.NotNil(t, response.NextPageToken)
 
 	response, err = queue.ReadMessages(ctx, &persistence.InternalReadMessagesRequest{
@@ -179,8 +179,8 @@ func testHappyPath(
 	require.NoError(t, err)
 	require.Len(t, response.Messages, 1)
 	assert.Equal(t, int64(persistence.FirstQueueMessageID+1), response.Messages[0].MetaData.ID)
-	assert.Equal(t, []byte("2"), response.Messages[0].Data.Data)
-	assert.Equal(t, encodingType, response.Messages[0].Data.EncodingType)
+	assert.Equal(t, []byte("2"), response.Messages[0].Data.GetData())
+	assert.Equal(t, encodingType, response.Messages[0].Data.GetEncodingType())
 
 	response, err = queue.ReadMessages(ctx, &persistence.InternalReadMessagesRequest{
 		QueueType:     queueType,

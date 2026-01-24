@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/hsm/hsmtest"
 	"go.temporal.io/server/service/history/workflow"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -57,7 +58,7 @@ func newOperationNode(t *testing.T, backend *hsmtest.NodeBackend, event *history
 	root := newRoot(t, backend)
 	token, err := hsm.GenerateEventLoadToken(event)
 	require.NoError(t, err)
-	node, err := nexusoperations.AddChild(root, fmt.Sprintf("%d", event.EventId), event, token)
+	node, err := nexusoperations.AddChild(root, fmt.Sprintf("%d", event.GetEventId()), event, token)
 	require.NoError(t, err)
 	return node
 }
@@ -79,24 +80,22 @@ func mustNewScheduledEvent(schedTime time.Time, timeout time.Duration) *historyp
 		panic(err)
 	}
 
-	attr := &historypb.NexusOperationScheduledEventAttributes{
+	attr := historypb.NexusOperationScheduledEventAttributes_builder{
 		EndpointId: "endpoint-id",
 		Endpoint:   "endpoint",
 		Service:    "service",
 		Operation:  "operation",
 		Input:      payload,
 		RequestId:  uuid.NewString(),
-	}
+	}.Build()
 	if timeout > 0 {
-		attr.ScheduleToCloseTimeout = durationpb.New(timeout)
+		attr.SetScheduleToCloseTimeout(durationpb.New(timeout))
 	}
 
-	return &historypb.HistoryEvent{
-		EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
-		EventId:   1,
-		EventTime: timestamppb.New(schedTime),
-		Attributes: &historypb.HistoryEvent_NexusOperationScheduledEventAttributes{
-			NexusOperationScheduledEventAttributes: attr,
-		},
-	}
+	return historypb.HistoryEvent_builder{
+		EventType:                              enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
+		EventId:                                1,
+		EventTime:                              timestamppb.New(schedTime),
+		NexusOperationScheduledEventAttributes: proto.ValueOrDefault(attr),
+	}.Build()
 }

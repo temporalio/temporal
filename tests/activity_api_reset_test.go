@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/tests/testcore"
+	"google.golang.org/protobuf/proto"
 )
 
 type ActivityApiResetClientTestSuite struct {
@@ -135,13 +136,13 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_AfterRetry() {
 		require.Greater(t, startedActivityCount.Load(), int32(1))
 	}, 5*time.Second, 200*time.Millisecond)
 
-	resetRequest := &workflowservice.ResetActivityRequest{
+	resetRequest := workflowservice.ResetActivityRequest_builder{
 		Namespace: s.Namespace().String(),
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: workflowRun.GetID(),
-		},
-		Activity: &workflowservice.ResetActivityRequest_Id{Id: "activity-id"},
-	}
+		}.Build(),
+		Id: proto.String("activity-id"),
+	}.Build()
 	resp, err := s.FrontendClient().ResetActivity(ctx, resetRequest)
 	s.NoError(err)
 	s.NotNil(resp)
@@ -153,9 +154,9 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_AfterRetry() {
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
 		require.Len(t, description.GetPendingActivities(), 1)
-		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, description.PendingActivities[0].State)
+		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, description.GetPendingActivities()[0].GetState())
 		// also verify that the number of attempts was reset
-		require.Equal(t, int32(1), description.PendingActivities[0].Attempt)
+		require.Equal(t, int32(1), description.GetPendingActivities()[0].GetAttempt())
 
 	}, 5*time.Second, 100*time.Millisecond)
 
@@ -199,16 +200,16 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_WhileRunning() {
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
 		require.Len(t, description.GetPendingActivities(), 1)
-		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, description.PendingActivities[0].State)
+		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, description.GetPendingActivities()[0].GetState())
 	}, 5*time.Second, 200*time.Millisecond)
 
-	resetRequest := &workflowservice.ResetActivityRequest{
+	resetRequest := workflowservice.ResetActivityRequest_builder{
 		Namespace: s.Namespace().String(),
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: workflowRun.GetID(),
-		},
-		Activity: &workflowservice.ResetActivityRequest_Id{Id: "activity-id"},
-	}
+		}.Build(),
+		Id: proto.String("activity-id"),
+	}.Build()
 	resp, err := s.FrontendClient().ResetActivity(ctx, resetRequest)
 	s.NoError(err)
 	s.NotNil(resp)
@@ -221,9 +222,9 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_WhileRunning() {
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
 		require.Len(t, description.GetPendingActivities(), 1)
-		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, description.PendingActivities[0].State)
+		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, description.GetPendingActivities()[0].GetState())
 		// also verify that the number of attempts was reset
-		require.Equal(t, int32(1), description.PendingActivities[0].Attempt)
+		require.Equal(t, int32(1), description.GetPendingActivities()[0].GetAttempt())
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// let activity finish
@@ -282,18 +283,18 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_InRetry() {
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
-		require.Equal(t, 1, len(description.PendingActivities))
-		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, description.PendingActivities[0].State)
+		require.Equal(t, 1, len(description.GetPendingActivities()))
+		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, description.GetPendingActivities()[0].GetState())
 		require.Equal(t, int32(1), startedActivityCount.Load())
 	}, 5*time.Second, 200*time.Millisecond)
 
-	resetRequest := &workflowservice.ResetActivityRequest{
+	resetRequest := workflowservice.ResetActivityRequest_builder{
 		Namespace: s.Namespace().String(),
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: workflowRun.GetID(),
-		},
-		Activity: &workflowservice.ResetActivityRequest_Id{Id: "activity-id"},
-	}
+		}.Build(),
+		Id: proto.String("activity-id"),
+	}.Build()
 	resp, err := s.FrontendClient().ResetActivity(ctx, resetRequest)
 	s.NoError(err)
 	s.NotNil(resp)
@@ -303,10 +304,10 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_InRetry() {
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
 		require.Len(t, description.GetPendingActivities(), 1)
-		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, description.PendingActivities[0].State)
+		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, description.GetPendingActivities()[0].GetState())
 		require.Equal(t, int32(2), startedActivityCount.Load())
 		// also verify that the number of attempts was reset
-		require.Equal(t, int32(1), description.PendingActivities[0].Attempt)
+		require.Equal(t, int32(1), description.GetPendingActivities()[0].GetAttempt())
 	}, 2*time.Second, 200*time.Millisecond)
 
 	// let previous activity complete
@@ -363,19 +364,19 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_KeepPaused() {
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
-		require.Len(t, description.PendingActivities, 1)
-		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, description.PendingActivities[0].State)
-		require.Greater(t, description.PendingActivities[0].Attempt, int32(1))
+		require.Len(t, description.GetPendingActivities(), 1)
+		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, description.GetPendingActivities()[0].GetState())
+		require.Greater(t, description.GetPendingActivities()[0].GetAttempt(), int32(1))
 	}, 5*time.Second, 200*time.Millisecond)
 
 	// pause the activity
-	pauseRequest := &workflowservice.PauseActivityRequest{
+	pauseRequest := workflowservice.PauseActivityRequest_builder{
 		Namespace: s.Namespace().String(),
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: workflowRun.GetID(),
-		},
-		Activity: &workflowservice.PauseActivityRequest_Id{Id: "activity-id"},
-	}
+		}.Build(),
+		Id: proto.String("activity-id"),
+	}.Build()
 	pauseResp, err := s.FrontendClient().PauseActivity(ctx, pauseRequest)
 	s.NoError(err)
 	s.NotNil(pauseResp)
@@ -386,21 +387,21 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_KeepPaused() {
 		require.NoError(t, err)
 		require.NotNil(t, description)
 		require.Len(t, description.GetPendingActivities(), 1)
-		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_PAUSED, description.PendingActivities[0].State)
+		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_PAUSED, description.GetPendingActivities()[0].GetState())
 		// also verify that the number of attempts was not reset
-		require.Greater(t, description.PendingActivities[0].Attempt, int32(1))
-		require.True(t, description.PendingActivities[0].Paused)
+		require.Greater(t, description.GetPendingActivities()[0].GetAttempt(), int32(1))
+		require.True(t, description.GetPendingActivities()[0].GetPaused())
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// reset the activity, while keeping it paused
-	resetRequest := &workflowservice.ResetActivityRequest{
+	resetRequest := workflowservice.ResetActivityRequest_builder{
 		Namespace: s.Namespace().String(),
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: workflowRun.GetID(),
-		},
-		Activity:   &workflowservice.ResetActivityRequest_Id{Id: "activity-id"},
+		}.Build(),
+		Id:         proto.String("activity-id"),
 		KeepPaused: true,
-	}
+	}.Build()
 	resp, err := s.FrontendClient().ResetActivity(ctx, resetRequest)
 	s.NoError(err)
 	s.NotNil(resp)
@@ -411,22 +412,22 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_KeepPaused() {
 		require.NoError(t, err)
 		require.NotNil(t, description)
 		require.Len(t, description.GetPendingActivities(), 1)
-		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_PAUSED, description.PendingActivities[0].State)
+		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_PAUSED, description.GetPendingActivities()[0].GetState())
 		// also verify that the number of attempts was reset
-		require.Equal(t, int32(1), description.PendingActivities[0].Attempt)
+		require.Equal(t, int32(1), description.GetPendingActivities()[0].GetAttempt())
 	}, 2*time.Second, 200*time.Millisecond)
 
 	// let activity stop failing
 	activityWasReset.Store(true)
 
 	// unpause the activity
-	unpauseRequest := &workflowservice.UnpauseActivityRequest{
+	unpauseRequest := workflowservice.UnpauseActivityRequest_builder{
 		Namespace: s.Namespace().String(),
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: workflowRun.GetID(),
-		},
-		Activity: &workflowservice.UnpauseActivityRequest_Id{Id: "activity-id"},
-	}
+		}.Build(),
+		Id: proto.String("activity-id"),
+	}.Build()
 	unpauseResp, err := s.FrontendClient().UnpauseActivity(ctx, unpauseRequest)
 	s.NoError(err)
 	s.NotNil(unpauseResp)
@@ -442,8 +443,8 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_KeepPaused() {
 
 func requirePayload(t require.TestingT, expected string, pls *commonpb.Payloads) {
 	require.NotNil(t, pls)
-	require.NotNil(t, pls.Payloads)
-	require.Len(t, pls.Payloads, 1)
+	require.NotNil(t, pls.GetPayloads())
+	require.Len(t, pls.GetPayloads(), 1)
 	var actual string
 	err := payloads.Decode(pls, &actual)
 	require.NoError(t, err)
@@ -515,20 +516,20 @@ func (s *ActivityApiResetClientTestSuite) TestActivityReset_HeartbeatDetails() {
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
-		require.Len(t, description.PendingActivities, 1)
-		requirePayload(t, "first", description.PendingActivities[0].GetHeartbeatDetails())
+		require.Len(t, description.GetPendingActivities(), 1)
+		requirePayload(t, "first", description.GetPendingActivities()[0].GetHeartbeatDetails())
 		require.Equal(t, int32(0), activityIteration.Load())
 	}, 5*time.Second, 500*time.Millisecond)
 
 	// reset the activity, with heartbeats
-	resetRequest := &workflowservice.ResetActivityRequest{
+	resetRequest := workflowservice.ResetActivityRequest_builder{
 		Namespace: s.Namespace().String(),
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: workflowRun.GetID(),
-		},
-		Activity:       &workflowservice.ResetActivityRequest_Id{Id: activityId},
+		}.Build(),
+		Id:             proto.String(activityId),
 		ResetHeartbeat: true,
-	}
+	}.Build()
 
 	resp, err := s.FrontendClient().ResetActivity(ctx, resetRequest)
 	s.NoError(err)
@@ -541,12 +542,12 @@ func (s *ActivityApiResetClientTestSuite) TestActivityReset_HeartbeatDetails() {
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
-		require.Len(t, description.PendingActivities, 1)
-		ap := description.PendingActivities[0]
+		require.Len(t, description.GetPendingActivities(), 1)
+		ap := description.GetPendingActivities()[0]
 
-		require.Equal(t, int32(2), ap.Attempt)
+		require.Equal(t, int32(2), ap.GetAttempt())
 		// make sure heartbeat was reset
-		require.Nil(t, ap.HeartbeatDetails)
+		require.Nil(t, ap.GetHeartbeatDetails())
 		require.Equal(t, int32(1), activityIteration.Load())
 	}, 5*time.Second, 500*time.Millisecond)
 
@@ -558,8 +559,8 @@ func (s *ActivityApiResetClientTestSuite) TestActivityReset_HeartbeatDetails() {
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
 		require.Equal(t, int32(1), activityIteration.Load())
-		require.Len(t, description.PendingActivities, 1)
-		requirePayload(t, "second", description.PendingActivities[0].GetHeartbeatDetails())
+		require.Len(t, description.GetPendingActivities(), 1)
+		requirePayload(t, "second", description.GetPendingActivities()[0].GetHeartbeatDetails())
 	}, 5*time.Second, 500*time.Millisecond)
 
 	// let activity finish

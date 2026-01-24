@@ -18,7 +18,7 @@ func (e *PayloadTTLPureTaskExecutor) Execute(
 	_ chasm.TaskAttributes,
 	task *testspb.TestPayloadTTLPureTask,
 ) error {
-	_, err := store.RemovePayload(mutableContext, task.PayloadKey)
+	_, err := store.RemovePayload(mutableContext, task.GetPayloadKey())
 	return err
 }
 
@@ -28,7 +28,7 @@ func (v *PayloadTTLPureTaskValidator) Validate(
 	attributes chasm.TaskAttributes,
 	task *testspb.TestPayloadTTLPureTask,
 ) (bool, error) {
-	return validateTask(store, attributes, task.PayloadKey)
+	return validateTask(store, attributes, task.GetPayloadKey())
 }
 
 type (
@@ -46,7 +46,7 @@ func (e *PayloadTTLSideEffectTaskExecutor) Execute(
 		ctx,
 		ref,
 		(*PayloadStore).RemovePayload,
-		task.PayloadKey,
+		task.GetPayloadKey(),
 	)
 	return err
 }
@@ -57,7 +57,7 @@ func (v *PayloadTTLSideEffectTaskValidator) Validate(
 	attributes chasm.TaskAttributes,
 	task *testspb.TestPayloadTTLSideEffectTask,
 ) (bool, error) {
-	return validateTask(store, attributes, task.PayloadKey)
+	return validateTask(store, attributes, task.GetPayloadKey())
 }
 
 func validateTask(
@@ -65,7 +65,7 @@ func validateTask(
 	attributes chasm.TaskAttributes,
 	payloadKey string,
 ) (bool, error) {
-	expirationTime, ok := store.State.ExpirationTimes[payloadKey]
+	expirationTime, ok := store.State.GetExpirationTimes()[payloadKey]
 	if !ok {
 		return false, nil
 	}

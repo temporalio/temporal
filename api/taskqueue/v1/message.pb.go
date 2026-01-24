@@ -8,7 +8,7 @@ package taskqueue
 
 import (
 	reflect "reflect"
-	sync "sync"
+	"strconv"
 	unsafe "unsafe"
 
 	v11 "go.temporal.io/api/deployment/v1"
@@ -30,29 +30,14 @@ const (
 
 // TaskVersionDirective controls how matching should direct a task.
 type TaskVersionDirective struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Default (if build_id is not present) is "unversioned":
-	// Use the unversioned task queue, even if the task queue has versioning data.
-	// Absent value means the task is the non-starting task of an unversioned execution so it should remain unversioned.
-	// Deprecated. Use deployment_version.
-	//
-	// Types that are valid to be assigned to BuildId:
-	//
-	//	*TaskVersionDirective_UseAssignmentRules
-	//	*TaskVersionDirective_AssignedBuildId
-	BuildId isTaskVersionDirective_BuildId `protobuf_oneof:"build_id"`
-	// Workflow's effective behavior when the task is scheduled.
-	Behavior v1.VersioningBehavior `protobuf:"varint,3,opt,name=behavior,proto3,enum=temporal.api.enums.v1.VersioningBehavior" json:"behavior,omitempty"`
-	// Workflow's effective deployment when the task is scheduled.
-	// Deprecated. Use deployment_version.
-	Deployment *v11.Deployment `protobuf:"bytes,4,opt,name=deployment,proto3" json:"deployment,omitempty"`
-	// Workflow's effective deployment version when the task is scheduled.
-	DeploymentVersion *v12.WorkerDeploymentVersion `protobuf:"bytes,5,opt,name=deployment_version,json=deploymentVersion,proto3" json:"deployment_version,omitempty"`
-	// Counter copied from the workflow execution's WorkflowExecutionVersioningInfo
-	// during enqueue time.
-	RevisionNumber int64 `protobuf:"varint,6,opt,name=revision_number,json=revisionNumber,proto3" json:"revision_number,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state                        protoimpl.MessageState         `protogen:"opaque.v1"`
+	xxx_hidden_BuildId           isTaskVersionDirective_BuildId `protobuf_oneof:"build_id"`
+	xxx_hidden_Behavior          v1.VersioningBehavior          `protobuf:"varint,3,opt,name=behavior,proto3,enum=temporal.api.enums.v1.VersioningBehavior"`
+	xxx_hidden_Deployment        *v11.Deployment                `protobuf:"bytes,4,opt,name=deployment,proto3"`
+	xxx_hidden_DeploymentVersion *v12.WorkerDeploymentVersion   `protobuf:"bytes,5,opt,name=deployment_version,json=deploymentVersion,proto3"`
+	xxx_hidden_RevisionNumber    int64                          `protobuf:"varint,6,opt,name=revision_number,json=revisionNumber,proto3"`
+	unknownFields                protoimpl.UnknownFields
+	sizeCache                    protoimpl.SizeCache
 }
 
 func (x *TaskVersionDirective) Reset() {
@@ -80,21 +65,9 @@ func (x *TaskVersionDirective) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use TaskVersionDirective.ProtoReflect.Descriptor instead.
-func (*TaskVersionDirective) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_taskqueue_v1_message_proto_rawDescGZIP(), []int{0}
-}
-
-func (x *TaskVersionDirective) GetBuildId() isTaskVersionDirective_BuildId {
-	if x != nil {
-		return x.BuildId
-	}
-	return nil
-}
-
 func (x *TaskVersionDirective) GetUseAssignmentRules() *emptypb.Empty {
 	if x != nil {
-		if x, ok := x.BuildId.(*TaskVersionDirective_UseAssignmentRules); ok {
+		if x, ok := x.xxx_hidden_BuildId.(*taskVersionDirective_UseAssignmentRules); ok {
 			return x.UseAssignmentRules
 		}
 	}
@@ -103,7 +76,7 @@ func (x *TaskVersionDirective) GetUseAssignmentRules() *emptypb.Empty {
 
 func (x *TaskVersionDirective) GetAssignedBuildId() string {
 	if x != nil {
-		if x, ok := x.BuildId.(*TaskVersionDirective_AssignedBuildId); ok {
+		if x, ok := x.xxx_hidden_BuildId.(*taskVersionDirective_AssignedBuildId); ok {
 			return x.AssignedBuildId
 		}
 	}
@@ -112,60 +85,230 @@ func (x *TaskVersionDirective) GetAssignedBuildId() string {
 
 func (x *TaskVersionDirective) GetBehavior() v1.VersioningBehavior {
 	if x != nil {
-		return x.Behavior
+		return x.xxx_hidden_Behavior
 	}
 	return v1.VersioningBehavior(0)
 }
 
 func (x *TaskVersionDirective) GetDeployment() *v11.Deployment {
 	if x != nil {
-		return x.Deployment
+		return x.xxx_hidden_Deployment
 	}
 	return nil
 }
 
 func (x *TaskVersionDirective) GetDeploymentVersion() *v12.WorkerDeploymentVersion {
 	if x != nil {
-		return x.DeploymentVersion
+		return x.xxx_hidden_DeploymentVersion
 	}
 	return nil
 }
 
 func (x *TaskVersionDirective) GetRevisionNumber() int64 {
 	if x != nil {
-		return x.RevisionNumber
+		return x.xxx_hidden_RevisionNumber
 	}
 	return 0
+}
+
+func (x *TaskVersionDirective) SetUseAssignmentRules(v *emptypb.Empty) {
+	if v == nil {
+		x.xxx_hidden_BuildId = nil
+		return
+	}
+	x.xxx_hidden_BuildId = &taskVersionDirective_UseAssignmentRules{v}
+}
+
+func (x *TaskVersionDirective) SetAssignedBuildId(v string) {
+	x.xxx_hidden_BuildId = &taskVersionDirective_AssignedBuildId{v}
+}
+
+func (x *TaskVersionDirective) SetBehavior(v v1.VersioningBehavior) {
+	x.xxx_hidden_Behavior = v
+}
+
+func (x *TaskVersionDirective) SetDeployment(v *v11.Deployment) {
+	x.xxx_hidden_Deployment = v
+}
+
+func (x *TaskVersionDirective) SetDeploymentVersion(v *v12.WorkerDeploymentVersion) {
+	x.xxx_hidden_DeploymentVersion = v
+}
+
+func (x *TaskVersionDirective) SetRevisionNumber(v int64) {
+	x.xxx_hidden_RevisionNumber = v
+}
+
+func (x *TaskVersionDirective) HasBuildId() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_BuildId != nil
+}
+
+func (x *TaskVersionDirective) HasUseAssignmentRules() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_BuildId.(*taskVersionDirective_UseAssignmentRules)
+	return ok
+}
+
+func (x *TaskVersionDirective) HasAssignedBuildId() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_BuildId.(*taskVersionDirective_AssignedBuildId)
+	return ok
+}
+
+func (x *TaskVersionDirective) HasDeployment() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Deployment != nil
+}
+
+func (x *TaskVersionDirective) HasDeploymentVersion() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_DeploymentVersion != nil
+}
+
+func (x *TaskVersionDirective) ClearBuildId() {
+	x.xxx_hidden_BuildId = nil
+}
+
+func (x *TaskVersionDirective) ClearUseAssignmentRules() {
+	if _, ok := x.xxx_hidden_BuildId.(*taskVersionDirective_UseAssignmentRules); ok {
+		x.xxx_hidden_BuildId = nil
+	}
+}
+
+func (x *TaskVersionDirective) ClearAssignedBuildId() {
+	if _, ok := x.xxx_hidden_BuildId.(*taskVersionDirective_AssignedBuildId); ok {
+		x.xxx_hidden_BuildId = nil
+	}
+}
+
+func (x *TaskVersionDirective) ClearDeployment() {
+	x.xxx_hidden_Deployment = nil
+}
+
+func (x *TaskVersionDirective) ClearDeploymentVersion() {
+	x.xxx_hidden_DeploymentVersion = nil
+}
+
+const TaskVersionDirective_BuildId_not_set_case case_TaskVersionDirective_BuildId = 0
+const TaskVersionDirective_UseAssignmentRules_case case_TaskVersionDirective_BuildId = 1
+const TaskVersionDirective_AssignedBuildId_case case_TaskVersionDirective_BuildId = 2
+
+func (x *TaskVersionDirective) WhichBuildId() case_TaskVersionDirective_BuildId {
+	if x == nil {
+		return TaskVersionDirective_BuildId_not_set_case
+	}
+	switch x.xxx_hidden_BuildId.(type) {
+	case *taskVersionDirective_UseAssignmentRules:
+		return TaskVersionDirective_UseAssignmentRules_case
+	case *taskVersionDirective_AssignedBuildId:
+		return TaskVersionDirective_AssignedBuildId_case
+	default:
+		return TaskVersionDirective_BuildId_not_set_case
+	}
+}
+
+type TaskVersionDirective_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Default (if build_id is not present) is "unversioned":
+	// Use the unversioned task queue, even if the task queue has versioning data.
+	// Absent value means the task is the non-starting task of an unversioned execution so it should remain unversioned.
+	// Deprecated. Use deployment_version.
+
+	// Fields of oneof xxx_hidden_BuildId:
+	// If use_assignment_rules is present, matching should use the assignment rules
+	// to determine the build ID.
+	// WV1: the task should be assigned the default version for the task queue. [cleanup-old-wv]
+	UseAssignmentRules *emptypb.Empty
+	// This means the task is already assigned to `build_id`
+	// WV1: If assigned_build_id is present, use the default version in the compatible set
+	// containing this build ID. [cleanup-old-wv]
+	AssignedBuildId *string
+	// -- end of xxx_hidden_BuildId
+	// Workflow's effective behavior when the task is scheduled.
+	Behavior v1.VersioningBehavior
+	// Workflow's effective deployment when the task is scheduled.
+	// Deprecated. Use deployment_version.
+	Deployment *v11.Deployment
+	// Workflow's effective deployment version when the task is scheduled.
+	DeploymentVersion *v12.WorkerDeploymentVersion
+	// Counter copied from the workflow execution's WorkflowExecutionVersioningInfo
+	// during enqueue time.
+	RevisionNumber int64
+}
+
+func (b0 TaskVersionDirective_builder) Build() *TaskVersionDirective {
+	m0 := &TaskVersionDirective{}
+	b, x := &b0, m0
+	_, _ = b, x
+	if b.UseAssignmentRules != nil {
+		x.xxx_hidden_BuildId = &taskVersionDirective_UseAssignmentRules{b.UseAssignmentRules}
+	}
+	if b.AssignedBuildId != nil {
+		x.xxx_hidden_BuildId = &taskVersionDirective_AssignedBuildId{*b.AssignedBuildId}
+	}
+	x.xxx_hidden_Behavior = b.Behavior
+	x.xxx_hidden_Deployment = b.Deployment
+	x.xxx_hidden_DeploymentVersion = b.DeploymentVersion
+	x.xxx_hidden_RevisionNumber = b.RevisionNumber
+	return m0
+}
+
+type case_TaskVersionDirective_BuildId protoreflect.FieldNumber
+
+func (x case_TaskVersionDirective_BuildId) String() string {
+	switch x {
+	case TaskVersionDirective_BuildId_not_set_case:
+		return "TaskVersionDirectiveBuildIdNotSetCase"
+	case TaskVersionDirective_UseAssignmentRules_case:
+		return "TaskVersionDirectiveUseAssignmentRulesCase"
+	case TaskVersionDirective_AssignedBuildId_case:
+		return "TaskVersionDirectiveAssignedBuildIdCase"
+	default:
+		return strconv.Itoa(int(x))
+	}
+
 }
 
 type isTaskVersionDirective_BuildId interface {
 	isTaskVersionDirective_BuildId()
 }
 
-type TaskVersionDirective_UseAssignmentRules struct {
+type taskVersionDirective_UseAssignmentRules struct {
 	// If use_assignment_rules is present, matching should use the assignment rules
 	// to determine the build ID.
 	// WV1: the task should be assigned the default version for the task queue. [cleanup-old-wv]
 	UseAssignmentRules *emptypb.Empty `protobuf:"bytes,1,opt,name=use_assignment_rules,json=useAssignmentRules,proto3,oneof"`
 }
 
-type TaskVersionDirective_AssignedBuildId struct {
+type taskVersionDirective_AssignedBuildId struct {
 	// This means the task is already assigned to `build_id`
 	// WV1: If assigned_build_id is present, use the default version in the compatible set
 	// containing this build ID. [cleanup-old-wv]
 	AssignedBuildId string `protobuf:"bytes,2,opt,name=assigned_build_id,json=assignedBuildId,proto3,oneof"`
 }
 
-func (*TaskVersionDirective_UseAssignmentRules) isTaskVersionDirective_BuildId() {}
+func (*taskVersionDirective_UseAssignmentRules) isTaskVersionDirective_BuildId() {}
 
-func (*TaskVersionDirective_AssignedBuildId) isTaskVersionDirective_BuildId() {}
+func (*taskVersionDirective_AssignedBuildId) isTaskVersionDirective_BuildId() {}
 
 type FairLevel struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	TaskPass      int64                  `protobuf:"varint,1,opt,name=task_pass,json=taskPass,proto3" json:"task_pass,omitempty"`
-	TaskId        int64                  `protobuf:"varint,2,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state               protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_TaskPass int64                  `protobuf:"varint,1,opt,name=task_pass,json=taskPass,proto3"`
+	xxx_hidden_TaskId   int64                  `protobuf:"varint,2,opt,name=task_id,json=taskId,proto3"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *FairLevel) Reset() {
@@ -193,40 +336,58 @@ func (x *FairLevel) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use FairLevel.ProtoReflect.Descriptor instead.
-func (*FairLevel) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_taskqueue_v1_message_proto_rawDescGZIP(), []int{1}
-}
-
 func (x *FairLevel) GetTaskPass() int64 {
 	if x != nil {
-		return x.TaskPass
+		return x.xxx_hidden_TaskPass
 	}
 	return 0
 }
 
 func (x *FairLevel) GetTaskId() int64 {
 	if x != nil {
-		return x.TaskId
+		return x.xxx_hidden_TaskId
 	}
 	return 0
 }
 
+func (x *FairLevel) SetTaskPass(v int64) {
+	x.xxx_hidden_TaskPass = v
+}
+
+func (x *FairLevel) SetTaskId(v int64) {
+	x.xxx_hidden_TaskId = v
+}
+
+type FairLevel_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	TaskPass int64
+	TaskId   int64
+}
+
+func (b0 FairLevel_builder) Build() *FairLevel {
+	m0 := &FairLevel{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_TaskPass = b.TaskPass
+	x.xxx_hidden_TaskId = b.TaskId
+	return m0
+}
+
 type InternalTaskQueueStatus struct {
-	state                   protoimpl.MessageState `protogen:"open.v1"`
-	ReadLevel               int64                  `protobuf:"varint,1,opt,name=read_level,json=readLevel,proto3" json:"read_level,omitempty"`
-	FairReadLevel           *FairLevel             `protobuf:"bytes,7,opt,name=fair_read_level,json=fairReadLevel,proto3" json:"fair_read_level,omitempty"`
-	AckLevel                int64                  `protobuf:"varint,2,opt,name=ack_level,json=ackLevel,proto3" json:"ack_level,omitempty"`
-	FairAckLevel            *FairLevel             `protobuf:"bytes,8,opt,name=fair_ack_level,json=fairAckLevel,proto3" json:"fair_ack_level,omitempty"`
-	TaskIdBlock             *v13.TaskIdBlock       `protobuf:"bytes,3,opt,name=task_id_block,json=taskIdBlock,proto3" json:"task_id_block,omitempty"`
-	LoadedTasks             int64                  `protobuf:"varint,4,opt,name=loaded_tasks,json=loadedTasks,proto3" json:"loaded_tasks,omitempty"`
-	ApproximateBacklogCount int64                  `protobuf:"varint,5,opt,name=approximate_backlog_count,json=approximateBacklogCount,proto3" json:"approximate_backlog_count,omitempty"`
-	MaxReadLevel            int64                  `protobuf:"varint,6,opt,name=max_read_level,json=maxReadLevel,proto3" json:"max_read_level,omitempty"`
-	FairMaxReadLevel        *FairLevel             `protobuf:"bytes,9,opt,name=fair_max_read_level,json=fairMaxReadLevel,proto3" json:"fair_max_read_level,omitempty"`
-	// Draining means that this status is from a draining queue.
-	Draining      bool `protobuf:"varint,10,opt,name=draining,proto3" json:"draining,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                              protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_ReadLevel               int64                  `protobuf:"varint,1,opt,name=read_level,json=readLevel,proto3"`
+	xxx_hidden_FairReadLevel           *FairLevel             `protobuf:"bytes,7,opt,name=fair_read_level,json=fairReadLevel,proto3"`
+	xxx_hidden_AckLevel                int64                  `protobuf:"varint,2,opt,name=ack_level,json=ackLevel,proto3"`
+	xxx_hidden_FairAckLevel            *FairLevel             `protobuf:"bytes,8,opt,name=fair_ack_level,json=fairAckLevel,proto3"`
+	xxx_hidden_TaskIdBlock             *v13.TaskIdBlock       `protobuf:"bytes,3,opt,name=task_id_block,json=taskIdBlock,proto3"`
+	xxx_hidden_LoadedTasks             int64                  `protobuf:"varint,4,opt,name=loaded_tasks,json=loadedTasks,proto3"`
+	xxx_hidden_ApproximateBacklogCount int64                  `protobuf:"varint,5,opt,name=approximate_backlog_count,json=approximateBacklogCount,proto3"`
+	xxx_hidden_MaxReadLevel            int64                  `protobuf:"varint,6,opt,name=max_read_level,json=maxReadLevel,proto3"`
+	xxx_hidden_FairMaxReadLevel        *FairLevel             `protobuf:"bytes,9,opt,name=fair_max_read_level,json=fairMaxReadLevel,proto3"`
+	xxx_hidden_Draining                bool                   `protobuf:"varint,10,opt,name=draining,proto3"`
+	unknownFields                      protoimpl.UnknownFields
+	sizeCache                          protoimpl.SizeCache
 }
 
 func (x *InternalTaskQueueStatus) Reset() {
@@ -254,86 +415,198 @@ func (x *InternalTaskQueueStatus) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use InternalTaskQueueStatus.ProtoReflect.Descriptor instead.
-func (*InternalTaskQueueStatus) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_taskqueue_v1_message_proto_rawDescGZIP(), []int{2}
-}
-
 func (x *InternalTaskQueueStatus) GetReadLevel() int64 {
 	if x != nil {
-		return x.ReadLevel
+		return x.xxx_hidden_ReadLevel
 	}
 	return 0
 }
 
 func (x *InternalTaskQueueStatus) GetFairReadLevel() *FairLevel {
 	if x != nil {
-		return x.FairReadLevel
+		return x.xxx_hidden_FairReadLevel
 	}
 	return nil
 }
 
 func (x *InternalTaskQueueStatus) GetAckLevel() int64 {
 	if x != nil {
-		return x.AckLevel
+		return x.xxx_hidden_AckLevel
 	}
 	return 0
 }
 
 func (x *InternalTaskQueueStatus) GetFairAckLevel() *FairLevel {
 	if x != nil {
-		return x.FairAckLevel
+		return x.xxx_hidden_FairAckLevel
 	}
 	return nil
 }
 
 func (x *InternalTaskQueueStatus) GetTaskIdBlock() *v13.TaskIdBlock {
 	if x != nil {
-		return x.TaskIdBlock
+		return x.xxx_hidden_TaskIdBlock
 	}
 	return nil
 }
 
 func (x *InternalTaskQueueStatus) GetLoadedTasks() int64 {
 	if x != nil {
-		return x.LoadedTasks
+		return x.xxx_hidden_LoadedTasks
 	}
 	return 0
 }
 
 func (x *InternalTaskQueueStatus) GetApproximateBacklogCount() int64 {
 	if x != nil {
-		return x.ApproximateBacklogCount
+		return x.xxx_hidden_ApproximateBacklogCount
 	}
 	return 0
 }
 
 func (x *InternalTaskQueueStatus) GetMaxReadLevel() int64 {
 	if x != nil {
-		return x.MaxReadLevel
+		return x.xxx_hidden_MaxReadLevel
 	}
 	return 0
 }
 
 func (x *InternalTaskQueueStatus) GetFairMaxReadLevel() *FairLevel {
 	if x != nil {
-		return x.FairMaxReadLevel
+		return x.xxx_hidden_FairMaxReadLevel
 	}
 	return nil
 }
 
 func (x *InternalTaskQueueStatus) GetDraining() bool {
 	if x != nil {
-		return x.Draining
+		return x.xxx_hidden_Draining
 	}
 	return false
 }
 
+func (x *InternalTaskQueueStatus) SetReadLevel(v int64) {
+	x.xxx_hidden_ReadLevel = v
+}
+
+func (x *InternalTaskQueueStatus) SetFairReadLevel(v *FairLevel) {
+	x.xxx_hidden_FairReadLevel = v
+}
+
+func (x *InternalTaskQueueStatus) SetAckLevel(v int64) {
+	x.xxx_hidden_AckLevel = v
+}
+
+func (x *InternalTaskQueueStatus) SetFairAckLevel(v *FairLevel) {
+	x.xxx_hidden_FairAckLevel = v
+}
+
+func (x *InternalTaskQueueStatus) SetTaskIdBlock(v *v13.TaskIdBlock) {
+	x.xxx_hidden_TaskIdBlock = v
+}
+
+func (x *InternalTaskQueueStatus) SetLoadedTasks(v int64) {
+	x.xxx_hidden_LoadedTasks = v
+}
+
+func (x *InternalTaskQueueStatus) SetApproximateBacklogCount(v int64) {
+	x.xxx_hidden_ApproximateBacklogCount = v
+}
+
+func (x *InternalTaskQueueStatus) SetMaxReadLevel(v int64) {
+	x.xxx_hidden_MaxReadLevel = v
+}
+
+func (x *InternalTaskQueueStatus) SetFairMaxReadLevel(v *FairLevel) {
+	x.xxx_hidden_FairMaxReadLevel = v
+}
+
+func (x *InternalTaskQueueStatus) SetDraining(v bool) {
+	x.xxx_hidden_Draining = v
+}
+
+func (x *InternalTaskQueueStatus) HasFairReadLevel() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_FairReadLevel != nil
+}
+
+func (x *InternalTaskQueueStatus) HasFairAckLevel() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_FairAckLevel != nil
+}
+
+func (x *InternalTaskQueueStatus) HasTaskIdBlock() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_TaskIdBlock != nil
+}
+
+func (x *InternalTaskQueueStatus) HasFairMaxReadLevel() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_FairMaxReadLevel != nil
+}
+
+func (x *InternalTaskQueueStatus) ClearFairReadLevel() {
+	x.xxx_hidden_FairReadLevel = nil
+}
+
+func (x *InternalTaskQueueStatus) ClearFairAckLevel() {
+	x.xxx_hidden_FairAckLevel = nil
+}
+
+func (x *InternalTaskQueueStatus) ClearTaskIdBlock() {
+	x.xxx_hidden_TaskIdBlock = nil
+}
+
+func (x *InternalTaskQueueStatus) ClearFairMaxReadLevel() {
+	x.xxx_hidden_FairMaxReadLevel = nil
+}
+
+type InternalTaskQueueStatus_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	ReadLevel               int64
+	FairReadLevel           *FairLevel
+	AckLevel                int64
+	FairAckLevel            *FairLevel
+	TaskIdBlock             *v13.TaskIdBlock
+	LoadedTasks             int64
+	ApproximateBacklogCount int64
+	MaxReadLevel            int64
+	FairMaxReadLevel        *FairLevel
+	// Draining means that this status is from a draining queue.
+	Draining bool
+}
+
+func (b0 InternalTaskQueueStatus_builder) Build() *InternalTaskQueueStatus {
+	m0 := &InternalTaskQueueStatus{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_ReadLevel = b.ReadLevel
+	x.xxx_hidden_FairReadLevel = b.FairReadLevel
+	x.xxx_hidden_AckLevel = b.AckLevel
+	x.xxx_hidden_FairAckLevel = b.FairAckLevel
+	x.xxx_hidden_TaskIdBlock = b.TaskIdBlock
+	x.xxx_hidden_LoadedTasks = b.LoadedTasks
+	x.xxx_hidden_ApproximateBacklogCount = b.ApproximateBacklogCount
+	x.xxx_hidden_MaxReadLevel = b.MaxReadLevel
+	x.xxx_hidden_FairMaxReadLevel = b.FairMaxReadLevel
+	x.xxx_hidden_Draining = b.Draining
+	return m0
+}
+
 type TaskQueueVersionInfoInternal struct {
-	state                 protoimpl.MessageState `protogen:"open.v1"`
-	PhysicalTaskQueueInfo *PhysicalTaskQueueInfo `protobuf:"bytes,2,opt,name=physical_task_queue_info,json=physicalTaskQueueInfo,proto3" json:"physical_task_queue_info,omitempty"`
-	unknownFields         protoimpl.UnknownFields
-	sizeCache             protoimpl.SizeCache
+	state                            protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_PhysicalTaskQueueInfo *PhysicalTaskQueueInfo `protobuf:"bytes,2,opt,name=physical_task_queue_info,json=physicalTaskQueueInfo,proto3"`
+	unknownFields                    protoimpl.UnknownFields
+	sizeCache                        protoimpl.SizeCache
 }
 
 func (x *TaskQueueVersionInfoInternal) Reset() {
@@ -361,30 +634,50 @@ func (x *TaskQueueVersionInfoInternal) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use TaskQueueVersionInfoInternal.ProtoReflect.Descriptor instead.
-func (*TaskQueueVersionInfoInternal) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_taskqueue_v1_message_proto_rawDescGZIP(), []int{3}
-}
-
 func (x *TaskQueueVersionInfoInternal) GetPhysicalTaskQueueInfo() *PhysicalTaskQueueInfo {
 	if x != nil {
-		return x.PhysicalTaskQueueInfo
+		return x.xxx_hidden_PhysicalTaskQueueInfo
 	}
 	return nil
 }
 
+func (x *TaskQueueVersionInfoInternal) SetPhysicalTaskQueueInfo(v *PhysicalTaskQueueInfo) {
+	x.xxx_hidden_PhysicalTaskQueueInfo = v
+}
+
+func (x *TaskQueueVersionInfoInternal) HasPhysicalTaskQueueInfo() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_PhysicalTaskQueueInfo != nil
+}
+
+func (x *TaskQueueVersionInfoInternal) ClearPhysicalTaskQueueInfo() {
+	x.xxx_hidden_PhysicalTaskQueueInfo = nil
+}
+
+type TaskQueueVersionInfoInternal_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	PhysicalTaskQueueInfo *PhysicalTaskQueueInfo
+}
+
+func (b0 TaskQueueVersionInfoInternal_builder) Build() *TaskQueueVersionInfoInternal {
+	m0 := &TaskQueueVersionInfoInternal{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_PhysicalTaskQueueInfo = b.PhysicalTaskQueueInfo
+	return m0
+}
+
 type PhysicalTaskQueueInfo struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Unversioned workers (with `useVersioning=false`) are reported in unversioned result even if they set a Build ID.
-	Pollers                 []*v13.PollerInfo          `protobuf:"bytes,1,rep,name=pollers,proto3" json:"pollers,omitempty"`
-	InternalTaskQueueStatus []*InternalTaskQueueStatus `protobuf:"bytes,3,rep,name=internal_task_queue_status,json=internalTaskQueueStatus,proto3" json:"internal_task_queue_status,omitempty"`
-	TaskQueueStats          *v13.TaskQueueStats        `protobuf:"bytes,2,opt,name=task_queue_stats,json=taskQueueStats,proto3" json:"task_queue_stats,omitempty"`
-	// (-- api-linter: core::0140::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: "by" is used to clarify the keys. --)
-	TaskQueueStatsByPriorityKey map[int32]*v13.TaskQueueStats `protobuf:"bytes,4,rep,name=task_queue_stats_by_priority_key,json=taskQueueStatsByPriorityKey,proto3" json:"task_queue_stats_by_priority_key,omitempty" protobuf_key:"varint,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	unknownFields               protoimpl.UnknownFields
-	sizeCache                   protoimpl.SizeCache
+	state                                  protoimpl.MessageState        `protogen:"opaque.v1"`
+	xxx_hidden_Pollers                     *[]*v13.PollerInfo            `protobuf:"bytes,1,rep,name=pollers,proto3"`
+	xxx_hidden_InternalTaskQueueStatus     *[]*InternalTaskQueueStatus   `protobuf:"bytes,3,rep,name=internal_task_queue_status,json=internalTaskQueueStatus,proto3"`
+	xxx_hidden_TaskQueueStats              *v13.TaskQueueStats           `protobuf:"bytes,2,opt,name=task_queue_stats,json=taskQueueStats,proto3"`
+	xxx_hidden_TaskQueueStatsByPriorityKey map[int32]*v13.TaskQueueStats `protobuf:"bytes,4,rep,name=task_queue_stats_by_priority_key,json=taskQueueStatsByPriorityKey,proto3" protobuf_key:"varint,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields                          protoimpl.UnknownFields
+	sizeCache                              protoimpl.SizeCache
 }
 
 func (x *PhysicalTaskQueueInfo) Reset() {
@@ -412,54 +705,97 @@ func (x *PhysicalTaskQueueInfo) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use PhysicalTaskQueueInfo.ProtoReflect.Descriptor instead.
-func (*PhysicalTaskQueueInfo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_taskqueue_v1_message_proto_rawDescGZIP(), []int{4}
-}
-
 func (x *PhysicalTaskQueueInfo) GetPollers() []*v13.PollerInfo {
 	if x != nil {
-		return x.Pollers
+		if x.xxx_hidden_Pollers != nil {
+			return *x.xxx_hidden_Pollers
+		}
 	}
 	return nil
 }
 
 func (x *PhysicalTaskQueueInfo) GetInternalTaskQueueStatus() []*InternalTaskQueueStatus {
 	if x != nil {
-		return x.InternalTaskQueueStatus
+		if x.xxx_hidden_InternalTaskQueueStatus != nil {
+			return *x.xxx_hidden_InternalTaskQueueStatus
+		}
 	}
 	return nil
 }
 
 func (x *PhysicalTaskQueueInfo) GetTaskQueueStats() *v13.TaskQueueStats {
 	if x != nil {
-		return x.TaskQueueStats
+		return x.xxx_hidden_TaskQueueStats
 	}
 	return nil
 }
 
 func (x *PhysicalTaskQueueInfo) GetTaskQueueStatsByPriorityKey() map[int32]*v13.TaskQueueStats {
 	if x != nil {
-		return x.TaskQueueStatsByPriorityKey
+		return x.xxx_hidden_TaskQueueStatsByPriorityKey
 	}
 	return nil
 }
 
+func (x *PhysicalTaskQueueInfo) SetPollers(v []*v13.PollerInfo) {
+	x.xxx_hidden_Pollers = &v
+}
+
+func (x *PhysicalTaskQueueInfo) SetInternalTaskQueueStatus(v []*InternalTaskQueueStatus) {
+	x.xxx_hidden_InternalTaskQueueStatus = &v
+}
+
+func (x *PhysicalTaskQueueInfo) SetTaskQueueStats(v *v13.TaskQueueStats) {
+	x.xxx_hidden_TaskQueueStats = v
+}
+
+func (x *PhysicalTaskQueueInfo) SetTaskQueueStatsByPriorityKey(v map[int32]*v13.TaskQueueStats) {
+	x.xxx_hidden_TaskQueueStatsByPriorityKey = v
+}
+
+func (x *PhysicalTaskQueueInfo) HasTaskQueueStats() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_TaskQueueStats != nil
+}
+
+func (x *PhysicalTaskQueueInfo) ClearTaskQueueStats() {
+	x.xxx_hidden_TaskQueueStats = nil
+}
+
+type PhysicalTaskQueueInfo_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Unversioned workers (with `useVersioning=false`) are reported in unversioned result even if they set a Build ID.
+	Pollers                 []*v13.PollerInfo
+	InternalTaskQueueStatus []*InternalTaskQueueStatus
+	TaskQueueStats          *v13.TaskQueueStats
+	// (-- api-linter: core::0140::prepositions=disabled
+	//
+	//	aip.dev/not-precedent: "by" is used to clarify the keys. --)
+	TaskQueueStatsByPriorityKey map[int32]*v13.TaskQueueStats
+}
+
+func (b0 PhysicalTaskQueueInfo_builder) Build() *PhysicalTaskQueueInfo {
+	m0 := &PhysicalTaskQueueInfo{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Pollers = &b.Pollers
+	x.xxx_hidden_InternalTaskQueueStatus = &b.InternalTaskQueueStatus
+	x.xxx_hidden_TaskQueueStats = b.TaskQueueStats
+	x.xxx_hidden_TaskQueueStatsByPriorityKey = b.TaskQueueStatsByPriorityKey
+	return m0
+}
+
 // Represents a normal or sticky partition of a task queue.
 type TaskQueuePartition struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// This is the user-facing name for this task queue
-	TaskQueue     string           `protobuf:"bytes,1,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
-	TaskQueueType v1.TaskQueueType `protobuf:"varint,2,opt,name=task_queue_type,json=taskQueueType,proto3,enum=temporal.api.enums.v1.TaskQueueType" json:"task_queue_type,omitempty"`
-	// Absent means normal root partition (normal_partition_id=0)
-	//
-	// Types that are valid to be assigned to PartitionId:
-	//
-	//	*TaskQueuePartition_NormalPartitionId
-	//	*TaskQueuePartition_StickyName
-	PartitionId   isTaskQueuePartition_PartitionId `protobuf_oneof:"partition_id"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                    protoimpl.MessageState           `protogen:"opaque.v1"`
+	xxx_hidden_TaskQueue     string                           `protobuf:"bytes,1,opt,name=task_queue,json=taskQueue,proto3"`
+	xxx_hidden_TaskQueueType v1.TaskQueueType                 `protobuf:"varint,2,opt,name=task_queue_type,json=taskQueueType,proto3,enum=temporal.api.enums.v1.TaskQueueType"`
+	xxx_hidden_PartitionId   isTaskQueuePartition_PartitionId `protobuf_oneof:"partition_id"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *TaskQueuePartition) Reset() {
@@ -487,35 +823,23 @@ func (x *TaskQueuePartition) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use TaskQueuePartition.ProtoReflect.Descriptor instead.
-func (*TaskQueuePartition) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_taskqueue_v1_message_proto_rawDescGZIP(), []int{5}
-}
-
 func (x *TaskQueuePartition) GetTaskQueue() string {
 	if x != nil {
-		return x.TaskQueue
+		return x.xxx_hidden_TaskQueue
 	}
 	return ""
 }
 
 func (x *TaskQueuePartition) GetTaskQueueType() v1.TaskQueueType {
 	if x != nil {
-		return x.TaskQueueType
+		return x.xxx_hidden_TaskQueueType
 	}
 	return v1.TaskQueueType(0)
 }
 
-func (x *TaskQueuePartition) GetPartitionId() isTaskQueuePartition_PartitionId {
-	if x != nil {
-		return x.PartitionId
-	}
-	return nil
-}
-
 func (x *TaskQueuePartition) GetNormalPartitionId() int32 {
 	if x != nil {
-		if x, ok := x.PartitionId.(*TaskQueuePartition_NormalPartitionId); ok {
+		if x, ok := x.xxx_hidden_PartitionId.(*taskQueuePartition_NormalPartitionId); ok {
 			return x.NormalPartitionId
 		}
 	}
@@ -524,39 +848,154 @@ func (x *TaskQueuePartition) GetNormalPartitionId() int32 {
 
 func (x *TaskQueuePartition) GetStickyName() string {
 	if x != nil {
-		if x, ok := x.PartitionId.(*TaskQueuePartition_StickyName); ok {
+		if x, ok := x.xxx_hidden_PartitionId.(*taskQueuePartition_StickyName); ok {
 			return x.StickyName
 		}
 	}
 	return ""
 }
 
+func (x *TaskQueuePartition) SetTaskQueue(v string) {
+	x.xxx_hidden_TaskQueue = v
+}
+
+func (x *TaskQueuePartition) SetTaskQueueType(v v1.TaskQueueType) {
+	x.xxx_hidden_TaskQueueType = v
+}
+
+func (x *TaskQueuePartition) SetNormalPartitionId(v int32) {
+	x.xxx_hidden_PartitionId = &taskQueuePartition_NormalPartitionId{v}
+}
+
+func (x *TaskQueuePartition) SetStickyName(v string) {
+	x.xxx_hidden_PartitionId = &taskQueuePartition_StickyName{v}
+}
+
+func (x *TaskQueuePartition) HasPartitionId() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_PartitionId != nil
+}
+
+func (x *TaskQueuePartition) HasNormalPartitionId() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_PartitionId.(*taskQueuePartition_NormalPartitionId)
+	return ok
+}
+
+func (x *TaskQueuePartition) HasStickyName() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_PartitionId.(*taskQueuePartition_StickyName)
+	return ok
+}
+
+func (x *TaskQueuePartition) ClearPartitionId() {
+	x.xxx_hidden_PartitionId = nil
+}
+
+func (x *TaskQueuePartition) ClearNormalPartitionId() {
+	if _, ok := x.xxx_hidden_PartitionId.(*taskQueuePartition_NormalPartitionId); ok {
+		x.xxx_hidden_PartitionId = nil
+	}
+}
+
+func (x *TaskQueuePartition) ClearStickyName() {
+	if _, ok := x.xxx_hidden_PartitionId.(*taskQueuePartition_StickyName); ok {
+		x.xxx_hidden_PartitionId = nil
+	}
+}
+
+const TaskQueuePartition_PartitionId_not_set_case case_TaskQueuePartition_PartitionId = 0
+const TaskQueuePartition_NormalPartitionId_case case_TaskQueuePartition_PartitionId = 3
+const TaskQueuePartition_StickyName_case case_TaskQueuePartition_PartitionId = 4
+
+func (x *TaskQueuePartition) WhichPartitionId() case_TaskQueuePartition_PartitionId {
+	if x == nil {
+		return TaskQueuePartition_PartitionId_not_set_case
+	}
+	switch x.xxx_hidden_PartitionId.(type) {
+	case *taskQueuePartition_NormalPartitionId:
+		return TaskQueuePartition_NormalPartitionId_case
+	case *taskQueuePartition_StickyName:
+		return TaskQueuePartition_StickyName_case
+	default:
+		return TaskQueuePartition_PartitionId_not_set_case
+	}
+}
+
+type TaskQueuePartition_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// This is the user-facing name for this task queue
+	TaskQueue     string
+	TaskQueueType v1.TaskQueueType
+	// Absent means normal root partition (normal_partition_id=0)
+
+	// Fields of oneof xxx_hidden_PartitionId:
+	NormalPartitionId *int32
+	StickyName        *string
+	// -- end of xxx_hidden_PartitionId
+}
+
+func (b0 TaskQueuePartition_builder) Build() *TaskQueuePartition {
+	m0 := &TaskQueuePartition{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_TaskQueue = b.TaskQueue
+	x.xxx_hidden_TaskQueueType = b.TaskQueueType
+	if b.NormalPartitionId != nil {
+		x.xxx_hidden_PartitionId = &taskQueuePartition_NormalPartitionId{*b.NormalPartitionId}
+	}
+	if b.StickyName != nil {
+		x.xxx_hidden_PartitionId = &taskQueuePartition_StickyName{*b.StickyName}
+	}
+	return m0
+}
+
+type case_TaskQueuePartition_PartitionId protoreflect.FieldNumber
+
+func (x case_TaskQueuePartition_PartitionId) String() string {
+	switch x {
+	case TaskQueuePartition_PartitionId_not_set_case:
+		return "TaskQueuePartitionPartitionIdNotSetCase"
+	case TaskQueuePartition_NormalPartitionId_case:
+		return "TaskQueuePartitionNormalPartitionIdCase"
+	case TaskQueuePartition_StickyName_case:
+		return "TaskQueuePartitionStickyNameCase"
+	default:
+		return strconv.Itoa(int(x))
+	}
+
+}
+
 type isTaskQueuePartition_PartitionId interface {
 	isTaskQueuePartition_PartitionId()
 }
 
-type TaskQueuePartition_NormalPartitionId struct {
+type taskQueuePartition_NormalPartitionId struct {
 	NormalPartitionId int32 `protobuf:"varint,3,opt,name=normal_partition_id,json=normalPartitionId,proto3,oneof"`
 }
 
-type TaskQueuePartition_StickyName struct {
+type taskQueuePartition_StickyName struct {
 	StickyName string `protobuf:"bytes,4,opt,name=sticky_name,json=stickyName,proto3,oneof"`
 }
 
-func (*TaskQueuePartition_NormalPartitionId) isTaskQueuePartition_PartitionId() {}
+func (*taskQueuePartition_NormalPartitionId) isTaskQueuePartition_PartitionId() {}
 
-func (*TaskQueuePartition_StickyName) isTaskQueuePartition_PartitionId() {}
+func (*taskQueuePartition_StickyName) isTaskQueuePartition_PartitionId() {}
 
 // Information about redirect intention sent by Matching to History in Record*TaskStarted calls.
 // Deprecated.
 type BuildIdRedirectInfo struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// build ID asked by History in the directive or the one calculated based on the assignment rules.
-	// this is the source of the redirect rule chain applied. (the target of the redirect rule chain is
-	// the poller's build ID reported in WorkerVersionCapabilities)
-	AssignedBuildId string `protobuf:"bytes,1,opt,name=assigned_build_id,json=assignedBuildId,proto3" json:"assigned_build_id,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state                      protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_AssignedBuildId string                 `protobuf:"bytes,1,opt,name=assigned_build_id,json=assignedBuildId,proto3"`
+	unknownFields              protoimpl.UnknownFields
+	sizeCache                  protoimpl.SizeCache
 }
 
 func (x *BuildIdRedirectInfo) Reset() {
@@ -584,39 +1023,44 @@ func (x *BuildIdRedirectInfo) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use BuildIdRedirectInfo.ProtoReflect.Descriptor instead.
-func (*BuildIdRedirectInfo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_taskqueue_v1_message_proto_rawDescGZIP(), []int{6}
-}
-
 func (x *BuildIdRedirectInfo) GetAssignedBuildId() string {
 	if x != nil {
-		return x.AssignedBuildId
+		return x.xxx_hidden_AssignedBuildId
 	}
 	return ""
 }
 
+func (x *BuildIdRedirectInfo) SetAssignedBuildId(v string) {
+	x.xxx_hidden_AssignedBuildId = v
+}
+
+type BuildIdRedirectInfo_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// build ID asked by History in the directive or the one calculated based on the assignment rules.
+	// this is the source of the redirect rule chain applied. (the target of the redirect rule chain is
+	// the poller's build ID reported in WorkerVersionCapabilities)
+	AssignedBuildId string
+}
+
+func (b0 BuildIdRedirectInfo_builder) Build() *BuildIdRedirectInfo {
+	m0 := &BuildIdRedirectInfo{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_AssignedBuildId = b.AssignedBuildId
+	return m0
+}
+
 // Information about task forwarding from one partition to its parent.
 type TaskForwardInfo struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// RPC name of the partition forwarded the task.
-	// In case of multiple hops, this is the source partition of the last hop.
-	SourcePartition string         `protobuf:"bytes,1,opt,name=source_partition,json=sourcePartition,proto3" json:"source_partition,omitempty"`
-	TaskSource      v14.TaskSource `protobuf:"varint,2,opt,name=task_source,json=taskSource,proto3,enum=temporal.server.api.enums.v1.TaskSource" json:"task_source,omitempty"`
-	// Redirect info is not present for Query and Nexus tasks. Versioning decisions for activity/workflow
-	// tasks are made at the source partition and sent to the parent partition in this message so that parent partition
-	// does not have to make versioning decision again. For Query/Nexus tasks, this works differently as the child's
-	// versioning decision is ignored and the parent partition makes a fresh decision.
-	// Deprecated. [cleanup-old-wv]
-	RedirectInfo *BuildIdRedirectInfo `protobuf:"bytes,3,opt,name=redirect_info,json=redirectInfo,proto3" json:"redirect_info,omitempty"`
-	// Build ID that should be used to dispatch the task to. Ignored in Query and Nexus tasks.
-	// Deprecated. [cleanup-old-wv]
-	DispatchBuildId string `protobuf:"bytes,4,opt,name=dispatch_build_id,json=dispatchBuildId,proto3" json:"dispatch_build_id,omitempty"`
-	// Only used for old versioning. [cleanup-old-wv]
-	// Deprecated. [cleanup-old-wv]
-	DispatchVersionSet string `protobuf:"bytes,5,opt,name=dispatch_version_set,json=dispatchVersionSet,proto3" json:"dispatch_version_set,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	state                         protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_SourcePartition    string                 `protobuf:"bytes,1,opt,name=source_partition,json=sourcePartition,proto3"`
+	xxx_hidden_TaskSource         v14.TaskSource         `protobuf:"varint,2,opt,name=task_source,json=taskSource,proto3,enum=temporal.server.api.enums.v1.TaskSource"`
+	xxx_hidden_RedirectInfo       *BuildIdRedirectInfo   `protobuf:"bytes,3,opt,name=redirect_info,json=redirectInfo,proto3"`
+	xxx_hidden_DispatchBuildId    string                 `protobuf:"bytes,4,opt,name=dispatch_build_id,json=dispatchBuildId,proto3"`
+	xxx_hidden_DispatchVersionSet string                 `protobuf:"bytes,5,opt,name=dispatch_version_set,json=dispatchVersionSet,proto3"`
+	unknownFields                 protoimpl.UnknownFields
+	sizeCache                     protoimpl.SizeCache
 }
 
 func (x *TaskForwardInfo) Reset() {
@@ -644,44 +1088,103 @@ func (x *TaskForwardInfo) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use TaskForwardInfo.ProtoReflect.Descriptor instead.
-func (*TaskForwardInfo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_taskqueue_v1_message_proto_rawDescGZIP(), []int{7}
-}
-
 func (x *TaskForwardInfo) GetSourcePartition() string {
 	if x != nil {
-		return x.SourcePartition
+		return x.xxx_hidden_SourcePartition
 	}
 	return ""
 }
 
 func (x *TaskForwardInfo) GetTaskSource() v14.TaskSource {
 	if x != nil {
-		return x.TaskSource
+		return x.xxx_hidden_TaskSource
 	}
 	return v14.TaskSource(0)
 }
 
 func (x *TaskForwardInfo) GetRedirectInfo() *BuildIdRedirectInfo {
 	if x != nil {
-		return x.RedirectInfo
+		return x.xxx_hidden_RedirectInfo
 	}
 	return nil
 }
 
 func (x *TaskForwardInfo) GetDispatchBuildId() string {
 	if x != nil {
-		return x.DispatchBuildId
+		return x.xxx_hidden_DispatchBuildId
 	}
 	return ""
 }
 
 func (x *TaskForwardInfo) GetDispatchVersionSet() string {
 	if x != nil {
-		return x.DispatchVersionSet
+		return x.xxx_hidden_DispatchVersionSet
 	}
 	return ""
+}
+
+func (x *TaskForwardInfo) SetSourcePartition(v string) {
+	x.xxx_hidden_SourcePartition = v
+}
+
+func (x *TaskForwardInfo) SetTaskSource(v v14.TaskSource) {
+	x.xxx_hidden_TaskSource = v
+}
+
+func (x *TaskForwardInfo) SetRedirectInfo(v *BuildIdRedirectInfo) {
+	x.xxx_hidden_RedirectInfo = v
+}
+
+func (x *TaskForwardInfo) SetDispatchBuildId(v string) {
+	x.xxx_hidden_DispatchBuildId = v
+}
+
+func (x *TaskForwardInfo) SetDispatchVersionSet(v string) {
+	x.xxx_hidden_DispatchVersionSet = v
+}
+
+func (x *TaskForwardInfo) HasRedirectInfo() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_RedirectInfo != nil
+}
+
+func (x *TaskForwardInfo) ClearRedirectInfo() {
+	x.xxx_hidden_RedirectInfo = nil
+}
+
+type TaskForwardInfo_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// RPC name of the partition forwarded the task.
+	// In case of multiple hops, this is the source partition of the last hop.
+	SourcePartition string
+	TaskSource      v14.TaskSource
+	// Redirect info is not present for Query and Nexus tasks. Versioning decisions for activity/workflow
+	// tasks are made at the source partition and sent to the parent partition in this message so that parent partition
+	// does not have to make versioning decision again. For Query/Nexus tasks, this works differently as the child's
+	// versioning decision is ignored and the parent partition makes a fresh decision.
+	// Deprecated. [cleanup-old-wv]
+	RedirectInfo *BuildIdRedirectInfo
+	// Build ID that should be used to dispatch the task to. Ignored in Query and Nexus tasks.
+	// Deprecated. [cleanup-old-wv]
+	DispatchBuildId string
+	// Only used for old versioning. [cleanup-old-wv]
+	// Deprecated. [cleanup-old-wv]
+	DispatchVersionSet string
+}
+
+func (b0 TaskForwardInfo_builder) Build() *TaskForwardInfo {
+	m0 := &TaskForwardInfo{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_SourcePartition = b.SourcePartition
+	x.xxx_hidden_TaskSource = b.TaskSource
+	x.xxx_hidden_RedirectInfo = b.RedirectInfo
+	x.xxx_hidden_DispatchBuildId = b.DispatchBuildId
+	x.xxx_hidden_DispatchVersionSet = b.DispatchVersionSet
+	return m0
 }
 
 // EphemeralData is data that we want to propagate among task queue partitions, but is not persisted.
@@ -689,10 +1192,10 @@ func (x *TaskForwardInfo) GetDispatchVersionSet() string {
 // task queue family (all queues with the same name, across types), ephemeral data applies only to
 // one type at a time.
 type EphemeralData struct {
-	state         protoimpl.MessageState       `protogen:"open.v1"`
-	Partition     []*EphemeralData_ByPartition `protobuf:"bytes,1,rep,name=partition,proto3" json:"partition,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                protoimpl.MessageState        `protogen:"opaque.v1"`
+	xxx_hidden_Partition *[]*EphemeralData_ByPartition `protobuf:"bytes,1,rep,name=partition,proto3"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *EphemeralData) Reset() {
@@ -720,24 +1223,39 @@ func (x *EphemeralData) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use EphemeralData.ProtoReflect.Descriptor instead.
-func (*EphemeralData) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_taskqueue_v1_message_proto_rawDescGZIP(), []int{8}
-}
-
 func (x *EphemeralData) GetPartition() []*EphemeralData_ByPartition {
 	if x != nil {
-		return x.Partition
+		if x.xxx_hidden_Partition != nil {
+			return *x.xxx_hidden_Partition
+		}
 	}
 	return nil
 }
 
+func (x *EphemeralData) SetPartition(v []*EphemeralData_ByPartition) {
+	x.xxx_hidden_Partition = &v
+}
+
+type EphemeralData_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Partition []*EphemeralData_ByPartition
+}
+
+func (b0 EphemeralData_builder) Build() *EphemeralData {
+	m0 := &EphemeralData{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Partition = &b.Partition
+	return m0
+}
+
 type VersionedEphemeralData struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Data          *EphemeralData         `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
-	Version       int64                  `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state              protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Data    *EphemeralData         `protobuf:"bytes,1,opt,name=data,proto3"`
+	xxx_hidden_Version int64                  `protobuf:"varint,2,opt,name=version,proto3"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *VersionedEphemeralData) Reset() {
@@ -765,35 +1283,61 @@ func (x *VersionedEphemeralData) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use VersionedEphemeralData.ProtoReflect.Descriptor instead.
-func (*VersionedEphemeralData) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_taskqueue_v1_message_proto_rawDescGZIP(), []int{9}
-}
-
 func (x *VersionedEphemeralData) GetData() *EphemeralData {
 	if x != nil {
-		return x.Data
+		return x.xxx_hidden_Data
 	}
 	return nil
 }
 
 func (x *VersionedEphemeralData) GetVersion() int64 {
 	if x != nil {
-		return x.Version
+		return x.xxx_hidden_Version
 	}
 	return 0
 }
 
+func (x *VersionedEphemeralData) SetData(v *EphemeralData) {
+	x.xxx_hidden_Data = v
+}
+
+func (x *VersionedEphemeralData) SetVersion(v int64) {
+	x.xxx_hidden_Version = v
+}
+
+func (x *VersionedEphemeralData) HasData() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Data != nil
+}
+
+func (x *VersionedEphemeralData) ClearData() {
+	x.xxx_hidden_Data = nil
+}
+
+type VersionedEphemeralData_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Data    *EphemeralData
+	Version int64
+}
+
+func (b0 VersionedEphemeralData_builder) Build() *VersionedEphemeralData {
+	m0 := &VersionedEphemeralData{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Data = b.Data
+	x.xxx_hidden_Version = b.Version
+	return m0
+}
+
 type EphemeralData_ByVersion struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Key for this data. Data for the unversioned queue has no version field present.
-	// All following fields are data associated with this versioned queue.
-	Version *v12.WorkerDeploymentVersion `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`
-	// This is a bit field of priority levels that have "significant" backlog (defined by
-	// the server configuration). Priority key k corresponds to 1<<k.
-	BacklogPriorityLevels int64 `protobuf:"varint,2,opt,name=backlog_priority_levels,json=backlogPriorityLevels,proto3" json:"backlog_priority_levels,omitempty"`
-	unknownFields         protoimpl.UnknownFields
-	sizeCache             protoimpl.SizeCache
+	state                            protoimpl.MessageState       `protogen:"opaque.v1"`
+	xxx_hidden_Version               *v12.WorkerDeploymentVersion `protobuf:"bytes,1,opt,name=version,proto3"`
+	xxx_hidden_BacklogPriorityLevels int64                        `protobuf:"varint,2,opt,name=backlog_priority_levels,json=backlogPriorityLevels,proto3"`
+	unknownFields                    protoimpl.UnknownFields
+	sizeCache                        protoimpl.SizeCache
 }
 
 func (x *EphemeralData_ByVersion) Reset() {
@@ -821,31 +1365,65 @@ func (x *EphemeralData_ByVersion) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use EphemeralData_ByVersion.ProtoReflect.Descriptor instead.
-func (*EphemeralData_ByVersion) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_taskqueue_v1_message_proto_rawDescGZIP(), []int{8, 0}
-}
-
 func (x *EphemeralData_ByVersion) GetVersion() *v12.WorkerDeploymentVersion {
 	if x != nil {
-		return x.Version
+		return x.xxx_hidden_Version
 	}
 	return nil
 }
 
 func (x *EphemeralData_ByVersion) GetBacklogPriorityLevels() int64 {
 	if x != nil {
-		return x.BacklogPriorityLevels
+		return x.xxx_hidden_BacklogPriorityLevels
 	}
 	return 0
 }
 
+func (x *EphemeralData_ByVersion) SetVersion(v *v12.WorkerDeploymentVersion) {
+	x.xxx_hidden_Version = v
+}
+
+func (x *EphemeralData_ByVersion) SetBacklogPriorityLevels(v int64) {
+	x.xxx_hidden_BacklogPriorityLevels = v
+}
+
+func (x *EphemeralData_ByVersion) HasVersion() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Version != nil
+}
+
+func (x *EphemeralData_ByVersion) ClearVersion() {
+	x.xxx_hidden_Version = nil
+}
+
+type EphemeralData_ByVersion_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Key for this data. Data for the unversioned queue has no version field present.
+	// All following fields are data associated with this versioned queue.
+	Version *v12.WorkerDeploymentVersion
+	// This is a bit field of priority levels that have "significant" backlog (defined by
+	// the server configuration). Priority key k corresponds to 1<<k.
+	BacklogPriorityLevels int64
+}
+
+func (b0 EphemeralData_ByVersion_builder) Build() *EphemeralData_ByVersion {
+	m0 := &EphemeralData_ByVersion{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Version = b.Version
+	x.xxx_hidden_BacklogPriorityLevels = b.BacklogPriorityLevels
+	return m0
+}
+
 type EphemeralData_ByPartition struct {
-	state         protoimpl.MessageState     `protogen:"open.v1"`
-	Partition     int32                      `protobuf:"varint,1,opt,name=partition,proto3" json:"partition,omitempty"`
-	Version       []*EphemeralData_ByVersion `protobuf:"bytes,2,rep,name=version,proto3" json:"version,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                protoimpl.MessageState      `protogen:"opaque.v1"`
+	xxx_hidden_Partition int32                       `protobuf:"varint,1,opt,name=partition,proto3"`
+	xxx_hidden_Version   *[]*EphemeralData_ByVersion `protobuf:"bytes,2,rep,name=version,proto3"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *EphemeralData_ByPartition) Reset() {
@@ -873,23 +1451,44 @@ func (x *EphemeralData_ByPartition) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use EphemeralData_ByPartition.ProtoReflect.Descriptor instead.
-func (*EphemeralData_ByPartition) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_taskqueue_v1_message_proto_rawDescGZIP(), []int{8, 1}
-}
-
 func (x *EphemeralData_ByPartition) GetPartition() int32 {
 	if x != nil {
-		return x.Partition
+		return x.xxx_hidden_Partition
 	}
 	return 0
 }
 
 func (x *EphemeralData_ByPartition) GetVersion() []*EphemeralData_ByVersion {
 	if x != nil {
-		return x.Version
+		if x.xxx_hidden_Version != nil {
+			return *x.xxx_hidden_Version
+		}
 	}
 	return nil
+}
+
+func (x *EphemeralData_ByPartition) SetPartition(v int32) {
+	x.xxx_hidden_Partition = v
+}
+
+func (x *EphemeralData_ByPartition) SetVersion(v []*EphemeralData_ByVersion) {
+	x.xxx_hidden_Version = &v
+}
+
+type EphemeralData_ByPartition_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Partition int32
+	Version   []*EphemeralData_ByVersion
+}
+
+func (b0 EphemeralData_ByPartition_builder) Build() *EphemeralData_ByPartition {
+	m0 := &EphemeralData_ByPartition{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Partition = b.Partition
+	x.xxx_hidden_Version = &b.Version
+	return m0
 }
 
 var File_temporal_server_api_taskqueue_v1_message_proto protoreflect.FileDescriptor
@@ -963,18 +1562,6 @@ const file_temporal_server_api_taskqueue_v1_message_proto_rawDesc = "" +
 	"\x04data\x18\x01 \x01(\v2/.temporal.server.api.taskqueue.v1.EphemeralDataR\x04data\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\x03R\aversionB2Z0go.temporal.io/server/api/taskqueue/v1;taskqueueb\x06proto3"
 
-var (
-	file_temporal_server_api_taskqueue_v1_message_proto_rawDescOnce sync.Once
-	file_temporal_server_api_taskqueue_v1_message_proto_rawDescData []byte
-)
-
-func file_temporal_server_api_taskqueue_v1_message_proto_rawDescGZIP() []byte {
-	file_temporal_server_api_taskqueue_v1_message_proto_rawDescOnce.Do(func() {
-		file_temporal_server_api_taskqueue_v1_message_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_api_taskqueue_v1_message_proto_rawDesc), len(file_temporal_server_api_taskqueue_v1_message_proto_rawDesc)))
-	})
-	return file_temporal_server_api_taskqueue_v1_message_proto_rawDescData
-}
-
 var file_temporal_server_api_taskqueue_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
 var file_temporal_server_api_taskqueue_v1_message_proto_goTypes = []any{
 	(*TaskVersionDirective)(nil),         // 0: temporal.server.api.taskqueue.v1.TaskVersionDirective
@@ -1035,12 +1622,12 @@ func file_temporal_server_api_taskqueue_v1_message_proto_init() {
 		return
 	}
 	file_temporal_server_api_taskqueue_v1_message_proto_msgTypes[0].OneofWrappers = []any{
-		(*TaskVersionDirective_UseAssignmentRules)(nil),
-		(*TaskVersionDirective_AssignedBuildId)(nil),
+		(*taskVersionDirective_UseAssignmentRules)(nil),
+		(*taskVersionDirective_AssignedBuildId)(nil),
 	}
 	file_temporal_server_api_taskqueue_v1_message_proto_msgTypes[5].OneofWrappers = []any{
-		(*TaskQueuePartition_NormalPartitionId)(nil),
-		(*TaskQueuePartition_StickyName)(nil),
+		(*taskQueuePartition_NormalPartitionId)(nil),
+		(*taskQueuePartition_StickyName)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{

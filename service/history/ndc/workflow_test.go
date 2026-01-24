@@ -64,14 +64,14 @@ func (s *workflowSuite) TestGetMethods() {
 	lastEventVersion := int64(12)
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	s.mockMutableState.EXPECT().GetLastWriteVersion().Return(lastEventVersion, nil).AnyTimes()
-	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+	s.mockMutableState.EXPECT().GetExecutionInfo().Return(persistencespb.WorkflowExecutionInfo_builder{
 		NamespaceId:      s.namespaceID,
 		WorkflowId:       s.workflowID,
 		LastRunningClock: lastRunningClock,
-	}).AnyTimes()
-	s.mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+	}.Build()).AnyTimes()
+	s.mockMutableState.EXPECT().GetExecutionState().Return(persistencespb.WorkflowExecutionState_builder{
 		RunId: s.runID,
-	}).AnyTimes()
+	}.Build()).AnyTimes()
 
 	nDCWorkflow := NewWorkflow(
 		s.mockClusterMetadata,
@@ -172,28 +172,28 @@ func (s *workflowSuite) TestSuppressWorkflowBy_Error() {
 	lastEventVersion := int64(12)
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	s.mockMutableState.EXPECT().GetLastWriteVersion().Return(lastEventVersion, nil).AnyTimes()
-	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+	s.mockMutableState.EXPECT().GetExecutionInfo().Return(persistencespb.WorkflowExecutionInfo_builder{
 		NamespaceId:      s.namespaceID,
 		WorkflowId:       s.workflowID,
 		LastRunningClock: lastRunningClock,
-	}).AnyTimes()
-	s.mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+	}.Build()).AnyTimes()
+	s.mockMutableState.EXPECT().GetExecutionState().Return(persistencespb.WorkflowExecutionState_builder{
 		RunId: s.runID,
-	}).AnyTimes()
+	}.Build()).AnyTimes()
 
 	incomingRunID := uuid.NewString()
 	incomingLastRunningClock := int64(144)
 	incomingLastEventVersion := lastEventVersion - 1
 	incomingMockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	incomingMockMutableState.EXPECT().GetLastWriteVersion().Return(incomingLastEventVersion, nil).AnyTimes()
-	incomingMockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+	incomingMockMutableState.EXPECT().GetExecutionInfo().Return(persistencespb.WorkflowExecutionInfo_builder{
 		NamespaceId:      s.namespaceID,
 		WorkflowId:       s.workflowID,
 		LastRunningClock: incomingLastRunningClock,
-	}).AnyTimes()
-	incomingMockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+	}.Build()).AnyTimes()
+	incomingMockMutableState.EXPECT().GetExecutionState().Return(persistencespb.WorkflowExecutionState_builder{
 		RunId: incomingRunID,
-	}).AnyTimes()
+	}.Build()).AnyTimes()
 
 	_, err := nDCWorkflow.SuppressBy(incomingNDCWorkflow)
 	s.Error(err)
@@ -205,14 +205,14 @@ func (s *workflowSuite) TestSuppressWorkflowBy_Terminate() {
 	lastRunningClock := int64(144)
 	lastEventVersion := int64(12)
 	s.mockMutableState.EXPECT().GetNextEventID().Return(randomEventID).AnyTimes() // This doesn't matter, GetNextEventID is not used if there is started WT.
-	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+	s.mockMutableState.EXPECT().GetExecutionInfo().Return(persistencespb.WorkflowExecutionInfo_builder{
 		NamespaceId:      s.namespaceID,
 		WorkflowId:       s.workflowID,
 		LastRunningClock: lastRunningClock,
-	}).AnyTimes()
-	s.mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+	}.Build()).AnyTimes()
+	s.mockMutableState.EXPECT().GetExecutionState().Return(persistencespb.WorkflowExecutionState_builder{
 		RunId: s.runID,
-	}).AnyTimes()
+	}.Build()).AnyTimes()
 	nDCWorkflow := NewWorkflow(
 		s.mockClusterMetadata,
 		s.mockContext,
@@ -233,14 +233,14 @@ func (s *workflowSuite) TestSuppressWorkflowBy_Terminate() {
 	)
 	incomingMockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	incomingMockMutableState.EXPECT().GetLastWriteVersion().Return(incomingLastEventVersion, nil).AnyTimes()
-	incomingMockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+	incomingMockMutableState.EXPECT().GetExecutionInfo().Return(persistencespb.WorkflowExecutionInfo_builder{
 		NamespaceId:      s.namespaceID,
 		WorkflowId:       s.workflowID,
 		LastRunningClock: incomingLastRunningClock,
-	}).AnyTimes()
-	incomingMockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+	}.Build()).AnyTimes()
+	incomingMockMutableState.EXPECT().GetExecutionState().Return(persistencespb.WorkflowExecutionState_builder{
 		RunId: incomingRunID,
-	}).AnyTimes()
+	}.Build()).AnyTimes()
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, lastEventVersion).Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
@@ -262,7 +262,7 @@ func (s *workflowSuite) TestSuppressWorkflowBy_Terminate() {
 		"",
 		"",
 		int64(0),
-	).Return(&historypb.HistoryEvent{EventId: wtFailedEventID}, nil)
+	).Return(historypb.HistoryEvent_builder{EventId: wtFailedEventID}.Build(), nil)
 	s.mockMutableState.EXPECT().FlushBufferedEvents()
 
 	s.mockMutableState.EXPECT().AddWorkflowExecutionTerminatedEvent(
@@ -286,18 +286,19 @@ func (s *workflowSuite) TestSuppressWorkflowBy_Terminate() {
 func (s *workflowSuite) TestSuppressWorkflowBy_Zombiefy() {
 	lastRunningClock := int64(144)
 	lastEventVersion := int64(12)
-	executionInfo := &persistencespb.WorkflowExecutionInfo{
+	executionInfo := persistencespb.WorkflowExecutionInfo_builder{
 		NamespaceId:      s.namespaceID,
 		WorkflowId:       s.workflowID,
 		LastRunningClock: lastRunningClock,
-	}
+	}.Build()
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
-	executionState := &persistencespb.WorkflowExecutionState{
+	executionState := persistencespb.WorkflowExecutionState_builder{
 		RunId: s.runID,
-	}
+	}.Build()
 	s.mockMutableState.EXPECT().UpdateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING).
 		DoAndReturn(func(state enumsspb.WorkflowExecutionState, status enumspb.WorkflowExecutionStatus) (bool, error) {
-			executionState.State, executionState.Status = state, status
+			executionState.SetState(state)
+			executionState.SetStatus(status)
 			return true, nil
 		}).AnyTimes()
 
@@ -321,14 +322,14 @@ func (s *workflowSuite) TestSuppressWorkflowBy_Zombiefy() {
 	)
 	incomingMockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	incomingMockMutableState.EXPECT().GetLastWriteVersion().Return(incomingLastEventVersion, nil).AnyTimes()
-	incomingMockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+	incomingMockMutableState.EXPECT().GetExecutionInfo().Return(persistencespb.WorkflowExecutionInfo_builder{
 		NamespaceId:      s.namespaceID,
 		WorkflowId:       s.workflowID,
 		LastRunningClock: incomingLastRunningClock,
-	}).AnyTimes()
-	incomingMockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+	}.Build()).AnyTimes()
+	incomingMockMutableState.EXPECT().GetExecutionState().Return(persistencespb.WorkflowExecutionState_builder{
 		RunId: incomingRunID,
-	}).AnyTimes()
+	}.Build()).AnyTimes()
 
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, lastEventVersion).Return(cluster.TestAlternativeClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
@@ -345,6 +346,6 @@ func (s *workflowSuite) TestSuppressWorkflowBy_Zombiefy() {
 	policy, err = nDCWorkflow.SuppressBy(incomingNDCWorkflow)
 	s.NoError(err)
 	s.Equal(historyi.TransactionPolicyPassive, policy)
-	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE, executionState.State)
-	s.EqualValues(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, executionState.Status)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE, executionState.GetState())
+	s.EqualValues(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, executionState.GetStatus())
 }

@@ -29,6 +29,7 @@ import (
 	"go.temporal.io/server/service/worker/migration"
 	"go.temporal.io/server/service/worker/scanner/build_ids"
 	"go.temporal.io/server/tests/testcore"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -89,37 +90,37 @@ func (s *UserDataReplicationTestSuite) TestUserDataIsReplicatedFromActiveToPassi
 	namespace := s.T().Name() + "-" + common.GenerateRandomString(5)
 	taskQueue := "versioned"
 	activeFrontendClient := s.clusters[0].FrontendClient()
-	regReq := &workflowservice.RegisterNamespaceRequest{
+	regReq := workflowservice.RegisterNamespaceRequest_builder{
 		Namespace:                        namespace,
 		IsGlobalNamespace:                true,
 		Clusters:                         s.clusterReplicationConfig(),
 		ActiveClusterName:                s.clusters[0].ClusterName(),
 		WorkflowExecutionRetentionPeriod: durationpb.New(7 * time.Hour * 24),
-	}
+	}.Build()
 	_, err := activeFrontendClient.RegisterNamespace(testcore.NewContext(), regReq)
 	s.NoError(err)
 
-	description, err := activeFrontendClient.DescribeNamespace(testcore.NewContext(), &workflowservice.DescribeNamespaceRequest{Namespace: namespace})
+	description, err := activeFrontendClient.DescribeNamespace(testcore.NewContext(), workflowservice.DescribeNamespaceRequest_builder{Namespace: namespace}.Build())
 	s.Require().NoError(err)
 
 	standbyMatchingClient := s.clusters[1].MatchingClient()
 
-	_, err = activeFrontendClient.UpdateWorkerBuildIdCompatibility(testcore.NewContext(), &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
-		Namespace: namespace,
-		TaskQueue: taskQueue,
-		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{AddNewBuildIdInNewDefaultSet: "0.1"},
-	})
+	_, err = activeFrontendClient.UpdateWorkerBuildIdCompatibility(testcore.NewContext(), workflowservice.UpdateWorkerBuildIdCompatibilityRequest_builder{
+		Namespace:                    namespace,
+		TaskQueue:                    taskQueue,
+		AddNewBuildIdInNewDefaultSet: proto.String("0.1"),
+	}.Build())
 	s.Require().NoError(err)
 
 	s.Eventually(func() bool {
 		// Call matching directly in case frontend is configured to redirect API calls to the active cluster
-		response, err := standbyMatchingClient.GetWorkerBuildIdCompatibility(testcore.NewContext(), &matchingservice.GetWorkerBuildIdCompatibilityRequest{
-			NamespaceId: description.GetNamespaceInfo().Id,
-			Request: &workflowservice.GetWorkerBuildIdCompatibilityRequest{
+		response, err := standbyMatchingClient.GetWorkerBuildIdCompatibility(testcore.NewContext(), matchingservice.GetWorkerBuildIdCompatibilityRequest_builder{
+			NamespaceId: description.GetNamespaceInfo().GetId(),
+			Request: workflowservice.GetWorkerBuildIdCompatibilityRequest_builder{
 				Namespace: namespace,
 				TaskQueue: taskQueue,
-			},
-		})
+			}.Build(),
+		}.Build())
 		if err != nil {
 			return false
 		}
@@ -128,21 +129,21 @@ func (s *UserDataReplicationTestSuite) TestUserDataIsReplicatedFromActiveToPassi
 
 	// make another change to test that merging works
 
-	_, err = activeFrontendClient.UpdateWorkerBuildIdCompatibility(testcore.NewContext(), &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
-		Namespace: namespace,
-		TaskQueue: taskQueue,
-		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{AddNewBuildIdInNewDefaultSet: "0.2"},
-	})
+	_, err = activeFrontendClient.UpdateWorkerBuildIdCompatibility(testcore.NewContext(), workflowservice.UpdateWorkerBuildIdCompatibilityRequest_builder{
+		Namespace:                    namespace,
+		TaskQueue:                    taskQueue,
+		AddNewBuildIdInNewDefaultSet: proto.String("0.2"),
+	}.Build())
 	s.Require().NoError(err)
 
 	s.Eventually(func() bool {
-		response, err := standbyMatchingClient.GetWorkerBuildIdCompatibility(testcore.NewContext(), &matchingservice.GetWorkerBuildIdCompatibilityRequest{
-			NamespaceId: description.GetNamespaceInfo().Id,
-			Request: &workflowservice.GetWorkerBuildIdCompatibilityRequest{
+		response, err := standbyMatchingClient.GetWorkerBuildIdCompatibility(testcore.NewContext(), matchingservice.GetWorkerBuildIdCompatibilityRequest_builder{
+			NamespaceId: description.GetNamespaceInfo().GetId(),
+			Request: workflowservice.GetWorkerBuildIdCompatibilityRequest_builder{
 				Namespace: namespace,
 				TaskQueue: taskQueue,
-			},
-		})
+			}.Build(),
+		}.Build())
 		if err != nil {
 			return false
 		}
@@ -156,52 +157,48 @@ func (s *UserDataReplicationTestSuite) TestUserDataIsReplicatedFromActiveToPassi
 	ctx := testcore.NewContext()
 	activeFrontendClient := s.clusters[0].FrontendClient()
 	standbyMatchingClient := s.clusters[1].MatchingClient()
-	regReq := &workflowservice.RegisterNamespaceRequest{
+	regReq := workflowservice.RegisterNamespaceRequest_builder{
 		Namespace:                        namespace,
 		IsGlobalNamespace:                true,
 		Clusters:                         s.clusterReplicationConfig(),
 		ActiveClusterName:                s.clusters[0].ClusterName(),
 		WorkflowExecutionRetentionPeriod: durationpb.New(7 * time.Hour * 24),
-	}
+	}.Build()
 	_, err := activeFrontendClient.RegisterNamespace(ctx, regReq)
 	s.NoError(err)
 
-	description, err := activeFrontendClient.DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{Namespace: namespace})
+	description, err := activeFrontendClient.DescribeNamespace(ctx, workflowservice.DescribeNamespaceRequest_builder{Namespace: namespace}.Build())
 	s.Require().NoError(err)
 
-	rules, err := activeFrontendClient.GetWorkerVersioningRules(ctx, &workflowservice.GetWorkerVersioningRulesRequest{
+	rules, err := activeFrontendClient.GetWorkerVersioningRules(ctx, workflowservice.GetWorkerVersioningRulesRequest_builder{
 		Namespace: namespace,
 		TaskQueue: taskQueue,
-	})
+	}.Build())
 	s.NoError(err)
 	s.NotNil(rules)
 
-	_, err = activeFrontendClient.UpdateWorkerVersioningRules(ctx, &workflowservice.UpdateWorkerVersioningRulesRequest{
+	_, err = activeFrontendClient.UpdateWorkerVersioningRules(ctx, workflowservice.UpdateWorkerVersioningRulesRequest_builder{
 		Namespace:     namespace,
 		TaskQueue:     taskQueue,
-		ConflictToken: rules.ConflictToken,
-		Operation: &workflowservice.UpdateWorkerVersioningRulesRequest_InsertAssignmentRule{
-			InsertAssignmentRule: &workflowservice.UpdateWorkerVersioningRulesRequest_InsertBuildIdAssignmentRule{
-				Rule: &taskqueuepb.BuildIdAssignmentRule{
-					TargetBuildId: "asdf",
-				},
-			},
-		},
-	})
+		ConflictToken: rules.GetConflictToken(),
+		InsertAssignmentRule: workflowservice.UpdateWorkerVersioningRulesRequest_InsertBuildIdAssignmentRule_builder{
+			Rule: taskqueuepb.BuildIdAssignmentRule_builder{
+				TargetBuildId: "asdf",
+			}.Build(),
+		}.Build(),
+	}.Build())
 	s.NoError(err)
 
 	s.Eventually(func() bool {
 		// Call matching directly in case frontend is configured to redirect API calls to the active cluster
-		response, err := standbyMatchingClient.GetWorkerVersioningRules(ctx, &matchingservice.GetWorkerVersioningRulesRequest{
-			NamespaceId: description.GetNamespaceInfo().Id,
+		response, err := standbyMatchingClient.GetWorkerVersioningRules(ctx, matchingservice.GetWorkerVersioningRulesRequest_builder{
+			NamespaceId: description.GetNamespaceInfo().GetId(),
 			TaskQueue:   taskQueue,
-			Command: &matchingservice.GetWorkerVersioningRulesRequest_Request{
-				Request: &workflowservice.GetWorkerVersioningRulesRequest{
-					Namespace: namespace,
-					TaskQueue: taskQueue,
-				},
-			},
-		})
+			Request: workflowservice.GetWorkerVersioningRulesRequest_builder{
+				Namespace: namespace,
+				TaskQueue: taskQueue,
+			}.Build(),
+		}.Build())
 		if err != nil {
 			return false
 		}
@@ -210,40 +207,36 @@ func (s *UserDataReplicationTestSuite) TestUserDataIsReplicatedFromActiveToPassi
 
 	// make another change to test that merging works
 
-	rules, err = activeFrontendClient.GetWorkerVersioningRules(ctx, &workflowservice.GetWorkerVersioningRulesRequest{
+	rules, err = activeFrontendClient.GetWorkerVersioningRules(ctx, workflowservice.GetWorkerVersioningRulesRequest_builder{
 		Namespace: namespace,
 		TaskQueue: taskQueue,
-	})
+	}.Build())
 	s.NoError(err)
 	s.NotNil(rules)
 
-	_, err = activeFrontendClient.UpdateWorkerVersioningRules(ctx, &workflowservice.UpdateWorkerVersioningRulesRequest{
+	_, err = activeFrontendClient.UpdateWorkerVersioningRules(ctx, workflowservice.UpdateWorkerVersioningRulesRequest_builder{
 		Namespace:     namespace,
 		TaskQueue:     taskQueue,
-		ConflictToken: rules.ConflictToken,
-		Operation: &workflowservice.UpdateWorkerVersioningRulesRequest_AddCompatibleRedirectRule{
-			AddCompatibleRedirectRule: &workflowservice.UpdateWorkerVersioningRulesRequest_AddCompatibleBuildIdRedirectRule{
-				Rule: &taskqueuepb.CompatibleBuildIdRedirectRule{
-					SourceBuildId: "asdf",
-					TargetBuildId: "uiop",
-				},
-			},
-		},
-	})
+		ConflictToken: rules.GetConflictToken(),
+		AddCompatibleRedirectRule: workflowservice.UpdateWorkerVersioningRulesRequest_AddCompatibleBuildIdRedirectRule_builder{
+			Rule: taskqueuepb.CompatibleBuildIdRedirectRule_builder{
+				SourceBuildId: "asdf",
+				TargetBuildId: "uiop",
+			}.Build(),
+		}.Build(),
+	}.Build())
 	s.NoError(err)
 
 	s.Eventually(func() bool {
 		// Call matching directly in case frontend is configured to redirect API calls to the active cluster
-		response, err := standbyMatchingClient.GetWorkerVersioningRules(ctx, &matchingservice.GetWorkerVersioningRulesRequest{
-			NamespaceId: description.GetNamespaceInfo().Id,
+		response, err := standbyMatchingClient.GetWorkerVersioningRules(ctx, matchingservice.GetWorkerVersioningRulesRequest_builder{
+			NamespaceId: description.GetNamespaceInfo().GetId(),
 			TaskQueue:   taskQueue,
-			Command: &matchingservice.GetWorkerVersioningRulesRequest_Request{
-				Request: &workflowservice.GetWorkerVersioningRulesRequest{
-					Namespace: namespace,
-					TaskQueue: taskQueue,
-				},
-			},
-		})
+			Request: workflowservice.GetWorkerVersioningRulesRequest_builder{
+				Namespace: namespace,
+				TaskQueue: taskQueue,
+			}.Build(),
+		}.Build())
 		if err != nil {
 			return false
 		}
@@ -259,45 +252,43 @@ func (s *UserDataReplicationTestSuite) TestUserDataIsReplicatedFromActiveToPassi
 	activeFrontendClient := s.clusters[0].FrontendClient()
 	activeMatchingClient := s.clusters[0].MatchingClient()
 	standbyMatchingClient := s.clusters[1].MatchingClient()
-	regReq := &workflowservice.RegisterNamespaceRequest{
+	regReq := workflowservice.RegisterNamespaceRequest_builder{
 		Namespace:                        namespace,
 		IsGlobalNamespace:                true,
 		Clusters:                         s.clusterReplicationConfig(),
 		ActiveClusterName:                s.clusters[0].ClusterName(),
 		WorkflowExecutionRetentionPeriod: durationpb.New(7 * time.Hour * 24),
-	}
+	}.Build()
 	_, err := activeFrontendClient.RegisterNamespace(ctx, regReq)
 	s.NoError(err)
 
-	description, err := activeFrontendClient.DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{Namespace: namespace})
+	description, err := activeFrontendClient.DescribeNamespace(ctx, workflowservice.DescribeNamespaceRequest_builder{Namespace: namespace}.Build())
 	s.Require().NoError(err)
 
-	expectedVersionData := &deploymentspb.DeploymentVersionData{
-		Version: &deploymentspb.WorkerDeploymentVersion{
+	expectedVersionData := deploymentspb.DeploymentVersionData_builder{
+		Version: deploymentspb.WorkerDeploymentVersion_builder{
 			BuildId:        "v1",
 			DeploymentName: "d1",
-		},
+		}.Build(),
 		RampingSinceTime: timestamp.TimePtr(time.Now()),
 		RampPercentage:   10,
-	}
+	}.Build()
 
-	_, err = activeMatchingClient.SyncDeploymentUserData(ctx, &matchingservice.SyncDeploymentUserDataRequest{
-		NamespaceId:    description.GetNamespaceInfo().GetId(),
-		TaskQueue:      taskQueue,
-		TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW, enumspb.TASK_QUEUE_TYPE_ACTIVITY, enumspb.TASK_QUEUE_TYPE_NEXUS},
-		Operation: &matchingservice.SyncDeploymentUserDataRequest_UpdateVersionData{
-			UpdateVersionData: expectedVersionData,
-		},
-	})
+	_, err = activeMatchingClient.SyncDeploymentUserData(ctx, matchingservice.SyncDeploymentUserDataRequest_builder{
+		NamespaceId:       description.GetNamespaceInfo().GetId(),
+		TaskQueue:         taskQueue,
+		TaskQueueTypes:    []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW, enumspb.TASK_QUEUE_TYPE_ACTIVITY, enumspb.TASK_QUEUE_TYPE_NEXUS},
+		UpdateVersionData: proto.ValueOrDefault(expectedVersionData),
+	}.Build())
 	s.NoError(err)
 
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		// Call matching directly in case frontend is configured to redirect API calls to the active cluster
-		response, err := standbyMatchingClient.GetTaskQueueUserData(ctx, &matchingservice.GetTaskQueueUserDataRequest{
-			NamespaceId:   description.GetNamespaceInfo().Id,
+		response, err := standbyMatchingClient.GetTaskQueueUserData(ctx, matchingservice.GetTaskQueueUserDataRequest_builder{
+			NamespaceId:   description.GetNamespaceInfo().GetId(),
 			TaskQueue:     taskQueue,
 			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-		})
+		}.Build())
 		a := assert.New(t)
 		a.NoError(err)
 		if perType := response.GetUserData().GetData().GetPerType(); a.NotNil(perType) {
@@ -312,24 +303,22 @@ func (s *UserDataReplicationTestSuite) TestUserDataIsReplicatedFromActiveToPassi
 
 	// make another change to test that merging works
 
-	expectedVersionData.RampPercentage = 20
-	_, err = activeMatchingClient.SyncDeploymentUserData(ctx, &matchingservice.SyncDeploymentUserDataRequest{
-		NamespaceId:    description.GetNamespaceInfo().GetId(),
-		TaskQueue:      taskQueue,
-		TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW, enumspb.TASK_QUEUE_TYPE_ACTIVITY, enumspb.TASK_QUEUE_TYPE_NEXUS},
-		Operation: &matchingservice.SyncDeploymentUserDataRequest_UpdateVersionData{
-			UpdateVersionData: expectedVersionData,
-		},
-	})
+	expectedVersionData.SetRampPercentage(20)
+	_, err = activeMatchingClient.SyncDeploymentUserData(ctx, matchingservice.SyncDeploymentUserDataRequest_builder{
+		NamespaceId:       description.GetNamespaceInfo().GetId(),
+		TaskQueue:         taskQueue,
+		TaskQueueTypes:    []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW, enumspb.TASK_QUEUE_TYPE_ACTIVITY, enumspb.TASK_QUEUE_TYPE_NEXUS},
+		UpdateVersionData: proto.ValueOrDefault(expectedVersionData),
+	}.Build())
 	s.NoError(err)
 
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		// Call matching directly in case frontend is configured to redirect API calls to the active cluster
-		response, err := standbyMatchingClient.GetTaskQueueUserData(ctx, &matchingservice.GetTaskQueueUserDataRequest{
-			NamespaceId:   description.GetNamespaceInfo().Id,
+		response, err := standbyMatchingClient.GetTaskQueueUserData(ctx, matchingservice.GetTaskQueueUserDataRequest_builder{
+			NamespaceId:   description.GetNamespaceInfo().GetId(),
 			TaskQueue:     taskQueue,
 			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-		})
+		}.Build())
 		a := assert.New(t)
 		a.NoError(err)
 		if perType := response.GetUserData().GetData().GetPerType(); a.NotNil(perType) {
@@ -349,18 +338,18 @@ func (s *UserDataReplicationTestSuite) TestUserDataIsReplicatedFromPassiveToActi
 	activeFrontendClient := s.clusters[0].FrontendClient()
 	standbyFrontendClient := s.clusters[1].FrontendClient()
 
-	_, err := standbyFrontendClient.UpdateWorkerBuildIdCompatibility(testcore.NewContext(), &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
-		Namespace: namespace,
-		TaskQueue: taskQueue,
-		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{AddNewBuildIdInNewDefaultSet: "0.1"},
-	})
+	_, err := standbyFrontendClient.UpdateWorkerBuildIdCompatibility(testcore.NewContext(), workflowservice.UpdateWorkerBuildIdCompatibilityRequest_builder{
+		Namespace:                    namespace,
+		TaskQueue:                    taskQueue,
+		AddNewBuildIdInNewDefaultSet: proto.String("0.1"),
+	}.Build())
 	s.NoError(err)
 
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		response, err := activeFrontendClient.GetWorkerBuildIdCompatibility(testcore.NewContext(), &workflowservice.GetWorkerBuildIdCompatibilityRequest{
+		response, err := activeFrontendClient.GetWorkerBuildIdCompatibility(testcore.NewContext(), workflowservice.GetWorkerBuildIdCompatibilityRequest_builder{
 			Namespace: namespace,
 			TaskQueue: taskQueue,
-		})
+		}.Build())
 		require.NoError(t, err)
 		require.Len(t, response.GetMajorVersionSets(), 1)
 	}, replicationWaitTime, replicationCheckInterval)
@@ -372,52 +361,48 @@ func (s *UserDataReplicationTestSuite) TestUserDataEntriesAreReplicatedOnDemand(
 	adminClient := s.clusters[0].AdminClient()
 	numTaskQueues := 10
 
-	replicationResponse, err := adminClient.GetNamespaceReplicationMessages(ctx, &adminservice.GetNamespaceReplicationMessagesRequest{
+	replicationResponse, err := adminClient.GetNamespaceReplicationMessages(ctx, adminservice.GetNamespaceReplicationMessagesRequest_builder{
 		ClusterName:            "follower",
 		LastRetrievedMessageId: -1,
 		LastProcessedMessageId: -1,
-	})
+	}.Build())
 	s.NoError(err)
 	lastMessageId := replicationResponse.GetMessages().GetLastRetrievedMessageId()
 
 	namespace := s.createNamespaceInCluster0(true)
-	description, err := activeFrontendClient.DescribeNamespace(testcore.NewContext(), &workflowservice.DescribeNamespaceRequest{Namespace: namespace})
+	description, err := activeFrontendClient.DescribeNamespace(testcore.NewContext(), workflowservice.DescribeNamespaceRequest_builder{Namespace: namespace}.Build())
 	s.NoError(err)
 
 	expectedReplicatedTaskQueues := make(map[string]struct{}, numTaskQueues)
 	for i := 0; i < numTaskQueues; i++ {
 		taskQueue := fmt.Sprintf("v1q%v", i)
-		res, err := activeFrontendClient.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
-			Namespace: namespace,
-			TaskQueue: taskQueue,
-			Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
-				AddNewBuildIdInNewDefaultSet: "v0.1",
-			},
-		})
+		res, err := activeFrontendClient.UpdateWorkerBuildIdCompatibility(ctx, workflowservice.UpdateWorkerBuildIdCompatibilityRequest_builder{
+			Namespace:                    namespace,
+			TaskQueue:                    taskQueue,
+			AddNewBuildIdInNewDefaultSet: proto.String("v0.1"),
+		}.Build())
 		s.NoError(err)
 		s.NotNil(res)
 		expectedReplicatedTaskQueues[taskQueue] = struct{}{}
 
 		taskQueue2 := fmt.Sprintf("v2q%v", i)
-		rules, err := activeFrontendClient.GetWorkerVersioningRules(ctx, &workflowservice.GetWorkerVersioningRulesRequest{
+		rules, err := activeFrontendClient.GetWorkerVersioningRules(ctx, workflowservice.GetWorkerVersioningRulesRequest_builder{
 			Namespace: namespace,
 			TaskQueue: taskQueue2,
-		})
+		}.Build())
 		s.NoError(err)
 		s.NotNil(rules)
 
-		rulesRes, err := activeFrontendClient.UpdateWorkerVersioningRules(ctx, &workflowservice.UpdateWorkerVersioningRulesRequest{
+		rulesRes, err := activeFrontendClient.UpdateWorkerVersioningRules(ctx, workflowservice.UpdateWorkerVersioningRulesRequest_builder{
 			Namespace:     namespace,
 			TaskQueue:     taskQueue2,
-			ConflictToken: rules.ConflictToken,
-			Operation: &workflowservice.UpdateWorkerVersioningRulesRequest_InsertAssignmentRule{
-				InsertAssignmentRule: &workflowservice.UpdateWorkerVersioningRulesRequest_InsertBuildIdAssignmentRule{
-					Rule: &taskqueuepb.BuildIdAssignmentRule{
-						TargetBuildId: "asdf",
-					},
-				},
-			},
-		})
+			ConflictToken: rules.GetConflictToken(),
+			InsertAssignmentRule: workflowservice.UpdateWorkerVersioningRulesRequest_InsertBuildIdAssignmentRule_builder{
+				Rule: taskqueuepb.BuildIdAssignmentRule_builder{
+					TargetBuildId: "asdf",
+				}.Build(),
+			}.Build(),
+		}.Build())
 		s.NoError(err)
 		s.NotNil(rulesRes)
 		expectedReplicatedTaskQueues[taskQueue2] = struct{}{}
@@ -427,15 +412,15 @@ func (s *UserDataReplicationTestSuite) TestUserDataEntriesAreReplicatedOnDemand(
 	s.updateNamespaceClusters(namespace, 0, s.clusters)
 
 	// we should see one new namespace task in the replication queue
-	replicationResponse, err = adminClient.GetNamespaceReplicationMessages(ctx, &adminservice.GetNamespaceReplicationMessagesRequest{
+	replicationResponse, err = adminClient.GetNamespaceReplicationMessages(ctx, adminservice.GetNamespaceReplicationMessagesRequest_builder{
 		ClusterName:            "follower",
 		LastRetrievedMessageId: lastMessageId,
 		LastProcessedMessageId: -1,
-	})
+	}.Build())
 	s.NoError(err)
 	lastMessageId = replicationResponse.GetMessages().GetLastRetrievedMessageId()
-	s.Equal(1, len(replicationResponse.GetMessages().ReplicationTasks))
-	task := replicationResponse.GetMessages().ReplicationTasks[0]
+	s.Equal(1, len(replicationResponse.GetMessages().GetReplicationTasks()))
+	task := replicationResponse.GetMessages().GetReplicationTasks()[0]
 	s.Equal(namespace, task.GetNamespaceTaskAttributes().GetInfo().GetName())
 
 	// start force-replicate wf
@@ -456,17 +441,17 @@ func (s *UserDataReplicationTestSuite) TestUserDataEntriesAreReplicatedOnDemand(
 	err = run.Get(ctx, nil)
 	s.NoError(err)
 
-	replicationResponse, err = adminClient.GetNamespaceReplicationMessages(ctx, &adminservice.GetNamespaceReplicationMessagesRequest{
+	replicationResponse, err = adminClient.GetNamespaceReplicationMessages(ctx, adminservice.GetNamespaceReplicationMessagesRequest_builder{
 		ClusterName:            "follower",
 		LastRetrievedMessageId: lastMessageId,
 		LastProcessedMessageId: -1,
-	})
+	}.Build())
 	s.NoError(err)
 
 	// we should see a user data task for all task queues
 	seenTaskQueues := make(map[string]struct{}, numTaskQueues)
-	for _, task := range replicationResponse.GetMessages().ReplicationTasks {
-		if attrs := task.GetTaskQueueUserDataAttributes(); attrs.GetNamespaceId() == description.GetNamespaceInfo().Id {
+	for _, task := range replicationResponse.GetMessages().GetReplicationTasks() {
+		if attrs := task.GetTaskQueueUserDataAttributes(); attrs.GetNamespaceId() == description.GetNamespaceInfo().GetId() {
 			seenTaskQueues[attrs.GetTaskQueueName()] = struct{}{}
 		}
 	}
@@ -479,23 +464,23 @@ func (s *UserDataReplicationTestSuite) TestUserDataEntriesAreReplicatedOnDemand(
 	for i := 0; i < numTaskQueues; i++ {
 		taskQueue := fmt.Sprintf("v1q%v", i)
 
-		get, err := activeFrontendClient.GetWorkerBuildIdCompatibility(ctx, &workflowservice.GetWorkerBuildIdCompatibilityRequest{
+		get, err := activeFrontendClient.GetWorkerBuildIdCompatibility(ctx, workflowservice.GetWorkerBuildIdCompatibilityRequest_builder{
 			Namespace: namespace,
 			TaskQueue: taskQueue,
-		})
+		}.Build())
 		s.NoError(err)
 		s.NotNil(get)
 
-		s.NotEmpty(get.MajorVersionSets)
+		s.NotEmpty(get.GetMajorVersionSets())
 
 		taskQueue2 := fmt.Sprintf("v2q%v", i)
-		rules, err := activeFrontendClient.GetWorkerVersioningRules(ctx, &workflowservice.GetWorkerVersioningRulesRequest{
+		rules, err := activeFrontendClient.GetWorkerVersioningRules(ctx, workflowservice.GetWorkerVersioningRulesRequest_builder{
 			Namespace: namespace,
 			TaskQueue: taskQueue2,
-		})
+		}.Build())
 		s.NoError(err)
 		s.NotNil(rules)
-		s.NotEmpty(rules.AssignmentRules)
+		s.NotEmpty(rules.GetAssignmentRules())
 	}
 }
 
@@ -507,35 +492,33 @@ func (s *UserDataReplicationTestSuite) TestUserDataTombstonesAreReplicated() {
 	standbyAdminClient := s.clusters[1].AdminClient()
 	taskQueue := "test-task-queue"
 
-	replicationResponse, err := activeAdminClient.GetNamespaceReplicationMessages(ctx, &adminservice.GetNamespaceReplicationMessagesRequest{
+	replicationResponse, err := activeAdminClient.GetNamespaceReplicationMessages(ctx, adminservice.GetNamespaceReplicationMessagesRequest_builder{
 		ClusterName:            "follower",
 		LastRetrievedMessageId: -1,
 		LastProcessedMessageId: -1,
-	})
+	}.Build())
 	s.NoError(err)
 	lastMessageIdActive := replicationResponse.GetMessages().GetLastRetrievedMessageId()
 
-	replicationResponse, err = standbyAdminClient.GetNamespaceReplicationMessages(ctx, &adminservice.GetNamespaceReplicationMessagesRequest{
+	replicationResponse, err = standbyAdminClient.GetNamespaceReplicationMessages(ctx, adminservice.GetNamespaceReplicationMessagesRequest_builder{
 		ClusterName:            "follower",
 		LastRetrievedMessageId: -1,
 		LastProcessedMessageId: -1,
-	})
+	}.Build())
 	s.NoError(err)
 	lastMessageIdStandby := replicationResponse.GetMessages().GetLastRetrievedMessageId()
 
 	namespace := s.createGlobalNamespace()
-	description, err := activeFrontendClient.DescribeNamespace(testcore.NewContext(), &workflowservice.DescribeNamespaceRequest{Namespace: namespace})
+	description, err := activeFrontendClient.DescribeNamespace(testcore.NewContext(), workflowservice.DescribeNamespaceRequest_builder{Namespace: namespace}.Build())
 	s.NoError(err)
 
 	for i := 0; i < 3; i++ {
 		buildId := fmt.Sprintf("v%d", i)
-		_, err = activeFrontendClient.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
-			Namespace: namespace,
-			TaskQueue: taskQueue,
-			Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
-				AddNewBuildIdInNewDefaultSet: buildId,
-			},
-		})
+		_, err = activeFrontendClient.UpdateWorkerBuildIdCompatibility(ctx, workflowservice.UpdateWorkerBuildIdCompatibilityRequest_builder{
+			Namespace:                    namespace,
+			TaskQueue:                    taskQueue,
+			AddNewBuildIdInNewDefaultSet: proto.String(buildId),
+		}.Build())
 		s.NoError(err)
 	}
 
@@ -557,100 +540,96 @@ func (s *UserDataReplicationTestSuite) TestUserDataTombstonesAreReplicated() {
 	err = run.Get(ctx, nil)
 	s.NoError(err)
 
-	replicationResponse, err = activeAdminClient.GetNamespaceReplicationMessages(ctx, &adminservice.GetNamespaceReplicationMessagesRequest{
+	replicationResponse, err = activeAdminClient.GetNamespaceReplicationMessages(ctx, adminservice.GetNamespaceReplicationMessagesRequest_builder{
 		ClusterName:            "follower",
 		LastRetrievedMessageId: lastMessageIdActive,
 		LastProcessedMessageId: -1,
-	})
+	}.Build())
 	s.NoError(err)
-	numReplicationTasks := len(replicationResponse.GetMessages().ReplicationTasks)
-	task := replicationResponse.GetMessages().ReplicationTasks[numReplicationTasks-1]
+	numReplicationTasks := len(replicationResponse.GetMessages().GetReplicationTasks())
+	task := replicationResponse.GetMessages().GetReplicationTasks()[numReplicationTasks-1]
 
-	s.Equal(enumsspb.REPLICATION_TASK_TYPE_TASK_QUEUE_USER_DATA, task.TaskType)
+	s.Equal(enumsspb.REPLICATION_TASK_TYPE_TASK_QUEUE_USER_DATA, task.GetTaskType())
 	attrs := task.GetTaskQueueUserDataAttributes()
-	s.Equal(description.GetNamespaceInfo().Id, attrs.NamespaceId)
-	s.Equal(taskQueue, attrs.TaskQueueName)
-	s.Equal(3, len(attrs.UserData.VersioningData.VersionSets))
-	s.Equal("v0", attrs.UserData.VersioningData.VersionSets[0].BuildIds[0].Id)
-	s.Equal(persistencespb.STATE_DELETED, attrs.UserData.VersioningData.VersionSets[0].BuildIds[0].State)
-	s.Equal("v1", attrs.UserData.VersioningData.VersionSets[1].BuildIds[0].Id)
-	s.Equal(persistencespb.STATE_DELETED, attrs.UserData.VersioningData.VersionSets[1].BuildIds[0].State)
-	s.Equal("v2", attrs.UserData.VersioningData.VersionSets[2].BuildIds[0].Id)
-	s.Equal(persistencespb.STATE_ACTIVE, attrs.UserData.VersioningData.VersionSets[2].BuildIds[0].State)
+	s.Equal(description.GetNamespaceInfo().GetId(), attrs.GetNamespaceId())
+	s.Equal(taskQueue, attrs.GetTaskQueueName())
+	s.Equal(3, len(attrs.GetUserData().GetVersioningData().GetVersionSets()))
+	s.Equal("v0", attrs.GetUserData().GetVersioningData().GetVersionSets()[0].GetBuildIds()[0].GetId())
+	s.Equal(persistencespb.STATE_DELETED, attrs.GetUserData().GetVersioningData().GetVersionSets()[0].GetBuildIds()[0].GetState())
+	s.Equal("v1", attrs.GetUserData().GetVersioningData().GetVersionSets()[1].GetBuildIds()[0].GetId())
+	s.Equal(persistencespb.STATE_DELETED, attrs.GetUserData().GetVersioningData().GetVersionSets()[1].GetBuildIds()[0].GetState())
+	s.Equal("v2", attrs.GetUserData().GetVersioningData().GetVersionSets()[2].GetBuildIds()[0].GetId())
+	s.Equal(persistencespb.STATE_ACTIVE, attrs.GetUserData().GetVersioningData().GetVersionSets()[2].GetBuildIds()[0].GetState())
 
 	// Add another build ID to verify that tombstones were deleted after the first scavenger run
-	_, err = activeFrontendClient.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
-		Namespace: namespace,
-		TaskQueue: taskQueue,
-		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
-			AddNewBuildIdInNewDefaultSet: "v3",
-		},
-	})
+	_, err = activeFrontendClient.UpdateWorkerBuildIdCompatibility(ctx, workflowservice.UpdateWorkerBuildIdCompatibilityRequest_builder{
+		Namespace:                    namespace,
+		TaskQueue:                    taskQueue,
+		AddNewBuildIdInNewDefaultSet: proto.String("v3"),
+	}.Build())
 	s.NoError(err)
 
-	replicationResponse, err = activeAdminClient.GetNamespaceReplicationMessages(ctx, &adminservice.GetNamespaceReplicationMessagesRequest{
+	replicationResponse, err = activeAdminClient.GetNamespaceReplicationMessages(ctx, adminservice.GetNamespaceReplicationMessagesRequest_builder{
 		ClusterName:            "follower",
 		LastRetrievedMessageId: lastMessageIdActive,
 		LastProcessedMessageId: -1,
-	})
+	}.Build())
 	s.NoError(err)
-	numReplicationTasks = len(replicationResponse.GetMessages().ReplicationTasks)
-	task = replicationResponse.GetMessages().ReplicationTasks[numReplicationTasks-1]
+	numReplicationTasks = len(replicationResponse.GetMessages().GetReplicationTasks())
+	task = replicationResponse.GetMessages().GetReplicationTasks()[numReplicationTasks-1]
 
-	s.Equal(enumsspb.REPLICATION_TASK_TYPE_TASK_QUEUE_USER_DATA, task.TaskType)
+	s.Equal(enumsspb.REPLICATION_TASK_TYPE_TASK_QUEUE_USER_DATA, task.GetTaskType())
 	attrs = task.GetTaskQueueUserDataAttributes()
-	s.Equal(description.GetNamespaceInfo().Id, attrs.NamespaceId)
-	s.Equal(taskQueue, attrs.TaskQueueName)
-	s.Equal(2, len(attrs.UserData.VersioningData.VersionSets))
-	s.Equal("v2", attrs.UserData.VersioningData.VersionSets[0].BuildIds[0].Id)
-	s.Equal(persistencespb.STATE_ACTIVE, attrs.UserData.VersioningData.VersionSets[0].BuildIds[0].State)
-	s.Equal("v3", attrs.UserData.VersioningData.VersionSets[1].BuildIds[0].Id)
-	s.Equal(persistencespb.STATE_ACTIVE, attrs.UserData.VersioningData.VersionSets[1].BuildIds[0].State)
+	s.Equal(description.GetNamespaceInfo().GetId(), attrs.GetNamespaceId())
+	s.Equal(taskQueue, attrs.GetTaskQueueName())
+	s.Equal(2, len(attrs.GetUserData().GetVersioningData().GetVersionSets()))
+	s.Equal("v2", attrs.GetUserData().GetVersioningData().GetVersionSets()[0].GetBuildIds()[0].GetId())
+	s.Equal(persistencespb.STATE_ACTIVE, attrs.GetUserData().GetVersioningData().GetVersionSets()[0].GetBuildIds()[0].GetState())
+	s.Equal("v3", attrs.GetUserData().GetVersioningData().GetVersionSets()[1].GetBuildIds()[0].GetId())
+	s.Equal(persistencespb.STATE_ACTIVE, attrs.GetUserData().GetVersioningData().GetVersionSets()[1].GetBuildIds()[0].GetState())
 
 	// Add a new build ID in standby cluster to verify it did not persist the replicated tombstones
 	standbyFrontendClient := s.clusters[1].FrontendClient()
 
 	s.Eventually(func() bool {
 		// Wait for propagation
-		response, err := standbyFrontendClient.GetWorkerBuildIdCompatibility(testcore.NewContext(), &workflowservice.GetWorkerBuildIdCompatibilityRequest{
+		response, err := standbyFrontendClient.GetWorkerBuildIdCompatibility(testcore.NewContext(), workflowservice.GetWorkerBuildIdCompatibilityRequest_builder{
 			Namespace: namespace,
 			TaskQueue: taskQueue,
-		})
+		}.Build())
 		if err != nil {
 			return false
 		}
-		return len(response.GetMajorVersionSets()) == 2 && response.MajorVersionSets[1].BuildIds[0] == "v3"
+		return len(response.GetMajorVersionSets()) == 2 && response.GetMajorVersionSets()[1].GetBuildIds()[0] == "v3"
 	}, replicationWaitTime, replicationCheckInterval)
 
-	_, err = standbyFrontendClient.UpdateWorkerBuildIdCompatibility(testcore.NewContext(), &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
-		Namespace: namespace,
-		TaskQueue: taskQueue,
-		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
-			AddNewBuildIdInNewDefaultSet: "v4",
-		},
-	})
+	_, err = standbyFrontendClient.UpdateWorkerBuildIdCompatibility(testcore.NewContext(), workflowservice.UpdateWorkerBuildIdCompatibilityRequest_builder{
+		Namespace:                    namespace,
+		TaskQueue:                    taskQueue,
+		AddNewBuildIdInNewDefaultSet: proto.String("v4"),
+	}.Build())
 	s.Require().NoError(err)
 
-	replicationResponse, err = standbyAdminClient.GetNamespaceReplicationMessages(ctx, &adminservice.GetNamespaceReplicationMessagesRequest{
+	replicationResponse, err = standbyAdminClient.GetNamespaceReplicationMessages(ctx, adminservice.GetNamespaceReplicationMessagesRequest_builder{
 		ClusterName:            "follower",
 		LastRetrievedMessageId: lastMessageIdStandby,
 		LastProcessedMessageId: -1,
-	})
+	}.Build())
 	s.NoError(err)
-	numReplicationTasks = len(replicationResponse.GetMessages().ReplicationTasks)
-	task = replicationResponse.GetMessages().ReplicationTasks[numReplicationTasks-1]
+	numReplicationTasks = len(replicationResponse.GetMessages().GetReplicationTasks())
+	task = replicationResponse.GetMessages().GetReplicationTasks()[numReplicationTasks-1]
 
-	s.Equal(enumsspb.REPLICATION_TASK_TYPE_TASK_QUEUE_USER_DATA, task.TaskType)
+	s.Equal(enumsspb.REPLICATION_TASK_TYPE_TASK_QUEUE_USER_DATA, task.GetTaskType())
 	attrs = task.GetTaskQueueUserDataAttributes()
-	s.Equal(description.GetNamespaceInfo().Id, attrs.NamespaceId)
-	s.Equal(taskQueue, attrs.TaskQueueName)
-	s.Equal(3, len(attrs.UserData.VersioningData.VersionSets))
-	s.Equal("v2", attrs.UserData.VersioningData.VersionSets[0].BuildIds[0].Id)
-	s.Equal(persistencespb.STATE_ACTIVE, attrs.UserData.VersioningData.VersionSets[0].BuildIds[0].State)
-	s.Equal("v3", attrs.UserData.VersioningData.VersionSets[1].BuildIds[0].Id)
-	s.Equal(persistencespb.STATE_ACTIVE, attrs.UserData.VersioningData.VersionSets[1].BuildIds[0].State)
-	s.Equal("v4", attrs.UserData.VersioningData.VersionSets[2].BuildIds[0].Id)
-	s.Equal(persistencespb.STATE_ACTIVE, attrs.UserData.VersioningData.VersionSets[2].BuildIds[0].State)
+	s.Equal(description.GetNamespaceInfo().GetId(), attrs.GetNamespaceId())
+	s.Equal(taskQueue, attrs.GetTaskQueueName())
+	s.Equal(3, len(attrs.GetUserData().GetVersioningData().GetVersionSets()))
+	s.Equal("v2", attrs.GetUserData().GetVersioningData().GetVersionSets()[0].GetBuildIds()[0].GetId())
+	s.Equal(persistencespb.STATE_ACTIVE, attrs.GetUserData().GetVersioningData().GetVersionSets()[0].GetBuildIds()[0].GetState())
+	s.Equal("v3", attrs.GetUserData().GetVersioningData().GetVersionSets()[1].GetBuildIds()[0].GetId())
+	s.Equal(persistencespb.STATE_ACTIVE, attrs.GetUserData().GetVersioningData().GetVersionSets()[1].GetBuildIds()[0].GetState())
+	s.Equal("v4", attrs.GetUserData().GetVersioningData().GetVersionSets()[2].GetBuildIds()[0].GetId())
+	s.Equal(persistencespb.STATE_ACTIVE, attrs.GetUserData().GetVersioningData().GetVersionSets()[2].GetBuildIds()[0].GetState())
 }
 
 func (s *UserDataReplicationTestSuite) TestApplyReplicationEventRevivesInUseTombstones() {
@@ -659,166 +638,156 @@ func (s *UserDataReplicationTestSuite) TestApplyReplicationEventRevivesInUseTomb
 	taskQueue := "test-task-queue"
 	activeFrontendClient := s.clusters[0].FrontendClient()
 
-	_, err := activeFrontendClient.RegisterNamespace(testcore.NewContext(), &workflowservice.RegisterNamespaceRequest{
+	_, err := activeFrontendClient.RegisterNamespace(testcore.NewContext(), workflowservice.RegisterNamespaceRequest_builder{
 		Namespace:                        namespace,
 		IsGlobalNamespace:                true,
 		Clusters:                         s.clusterReplicationConfig(),
 		ActiveClusterName:                s.clusters[0].ClusterName(),
 		WorkflowExecutionRetentionPeriod: durationpb.New(7 * time.Hour * 24),
-	})
+	}.Build())
 	s.Require().NoError(err)
 
 	// Create v0 and process a workflow with it - should be revived
-	_, err = activeFrontendClient.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
-		Namespace: namespace,
-		TaskQueue: taskQueue,
-		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
-			AddNewBuildIdInNewDefaultSet: "v0",
-		},
-	})
+	_, err = activeFrontendClient.UpdateWorkerBuildIdCompatibility(ctx, workflowservice.UpdateWorkerBuildIdCompatibilityRequest_builder{
+		Namespace:                    namespace,
+		TaskQueue:                    taskQueue,
+		AddNewBuildIdInNewDefaultSet: proto.String("v0"),
+	}.Build())
 	s.Require().NoError(err)
 
-	_, err = activeFrontendClient.StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+	_, err = activeFrontendClient.StartWorkflowExecution(ctx, workflowservice.StartWorkflowExecutionRequest_builder{
 		Namespace:    namespace,
 		WorkflowId:   "test",
 		RequestId:    uuid.NewString(),
-		WorkflowType: &commonpb.WorkflowType{Name: "workflow"},
-		TaskQueue:    &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-	})
+		WorkflowType: commonpb.WorkflowType_builder{Name: "workflow"}.Build(),
+		TaskQueue:    taskqueuepb.TaskQueue_builder{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
+	}.Build())
 	s.Require().NoError(err)
-	task, err := activeFrontendClient.PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+	task, err := activeFrontendClient.PollWorkflowTaskQueue(ctx, workflowservice.PollWorkflowTaskQueueRequest_builder{
 		Namespace: namespace,
-		TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		TaskQueue: taskqueuepb.TaskQueue_builder{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 		Identity:  "test",
-		WorkerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
+		WorkerVersionCapabilities: commonpb.WorkerVersionCapabilities_builder{
 			BuildId:       "v0",
 			UseVersioning: true,
-		},
-	})
+		}.Build(),
+	}.Build())
 	s.Require().NoError(err)
-	_, err = activeFrontendClient.RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
-		TaskToken: task.TaskToken,
+	_, err = activeFrontendClient.RespondWorkflowTaskCompleted(ctx, workflowservice.RespondWorkflowTaskCompletedRequest_builder{
+		TaskToken: task.GetTaskToken(),
 		Commands: []*commandpb.Command{
-			{
+			commandpb.Command_builder{
 				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
-					CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{},
-				},
-			},
+				CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{},
+			}.Build(),
 		},
-		WorkerVersionStamp: &commonpb.WorkerVersionStamp{
+		WorkerVersionStamp: commonpb.WorkerVersionStamp_builder{
 			BuildId:       "v0",
 			UseVersioning: true,
-		},
-	})
+		}.Build(),
+	}.Build())
 	s.Require().NoError(err)
 
 	// Create v0.1 as compatible with v0 - should not be revived
-	_, err = activeFrontendClient.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
+	_, err = activeFrontendClient.UpdateWorkerBuildIdCompatibility(ctx, workflowservice.UpdateWorkerBuildIdCompatibilityRequest_builder{
 		Namespace: namespace,
 		TaskQueue: taskQueue,
-		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewCompatibleBuildId{
-			AddNewCompatibleBuildId: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewCompatibleVersion{
-				NewBuildId:                "v0.1",
-				ExistingCompatibleBuildId: "v0",
-			},
-		},
-	})
+		AddNewCompatibleBuildId: workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewCompatibleVersion_builder{
+			NewBuildId:                "v0.1",
+			ExistingCompatibleBuildId: "v0",
+		}.Build(),
+	}.Build())
 	s.Require().NoError(err)
 
 	// Create v0.2 as compatible with v0 - check later that it is revived
-	_, err = activeFrontendClient.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
+	_, err = activeFrontendClient.UpdateWorkerBuildIdCompatibility(ctx, workflowservice.UpdateWorkerBuildIdCompatibilityRequest_builder{
 		Namespace: namespace,
 		TaskQueue: taskQueue,
-		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewCompatibleBuildId{
-			AddNewCompatibleBuildId: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewCompatibleVersion{
-				NewBuildId:                "v0.2",
-				ExistingCompatibleBuildId: "v0",
-			},
-		},
-	})
+		AddNewCompatibleBuildId: workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewCompatibleVersion_builder{
+			NewBuildId:                "v0.2",
+			ExistingCompatibleBuildId: "v0",
+		}.Build(),
+	}.Build())
 	s.Require().NoError(err)
 
 	// Create v1 as queue default - it never gets deleted
-	_, err = activeFrontendClient.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
-		Namespace: namespace,
-		TaskQueue: taskQueue,
-		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
-			AddNewBuildIdInNewDefaultSet: "v1",
-		},
-	})
+	_, err = activeFrontendClient.UpdateWorkerBuildIdCompatibility(ctx, workflowservice.UpdateWorkerBuildIdCompatibilityRequest_builder{
+		Namespace:                    namespace,
+		TaskQueue:                    taskQueue,
+		AddNewBuildIdInNewDefaultSet: proto.String("v1"),
+	}.Build())
 	s.Require().NoError(err)
 
 	// Wait for visibility propagation
 	s.Eventually(func() bool {
-		resp, err := activeFrontendClient.CountWorkflowExecutions(ctx, &workflowservice.CountWorkflowExecutionsRequest{
+		resp, err := activeFrontendClient.CountWorkflowExecutions(ctx, workflowservice.CountWorkflowExecutionsRequest_builder{
 			Namespace: namespace,
 			Query:     fmt.Sprintf("TaskQueue = %q AND BuildIds = %q", taskQueue, worker_versioning.VersionedBuildIdSearchAttribute("v0")),
-		})
+		}.Build())
 		s.Require().NoError(err)
-		return resp.Count == 1
+		return resp.GetCount() == 1
 	}, time.Second*15, time.Millisecond*150)
 
 	adminClient := s.clusters[0].AdminClient()
-	replicationResponse, err := adminClient.GetNamespaceReplicationMessages(ctx, &adminservice.GetNamespaceReplicationMessagesRequest{
+	replicationResponse, err := adminClient.GetNamespaceReplicationMessages(ctx, adminservice.GetNamespaceReplicationMessagesRequest_builder{
 		ClusterName:            "follower",
 		LastRetrievedMessageId: -1,
 		LastProcessedMessageId: -1,
-	})
+	}.Build())
 	s.Require().NoError(err)
-	attrsPreApply := replicationResponse.Messages.ReplicationTasks[len(replicationResponse.Messages.ReplicationTasks)-1].GetTaskQueueUserDataAttributes()
-	preApplyClock := common.CloneProto(attrsPreApply.UserData.Clock)
+	attrsPreApply := replicationResponse.GetMessages().GetReplicationTasks()[len(replicationResponse.GetMessages().GetReplicationTasks())-1].GetTaskQueueUserDataAttributes()
+	preApplyClock := common.CloneProto(attrsPreApply.GetUserData().GetClock())
 
-	attrsPreApply.UserData.Clock.WallClock = time.Now().UnixMilli()
-	attrsPreApply.UserData.Clock.Version++
+	attrsPreApply.GetUserData().GetClock().SetWallClock(time.Now().UnixMilli())
+	attrsPreApply.GetUserData().GetClock().SetVersion(attrsPreApply.GetUserData().GetClock().GetVersion() + 1)
 	// Delete all v0 buildIds
-	attrsPreApply.UserData.VersioningData.VersionSets[0].BuildIds[0].State = persistencespb.STATE_DELETED
-	attrsPreApply.UserData.VersioningData.VersionSets[0].BuildIds[0].StateUpdateTimestamp = attrsPreApply.UserData.Clock
-	attrsPreApply.UserData.VersioningData.VersionSets[0].BuildIds[1].State = persistencespb.STATE_DELETED
-	attrsPreApply.UserData.VersioningData.VersionSets[0].BuildIds[1].StateUpdateTimestamp = attrsPreApply.UserData.Clock
-	attrsPreApply.UserData.VersioningData.VersionSets[0].BuildIds[2].State = persistencespb.STATE_DELETED
-	attrsPreApply.UserData.VersioningData.VersionSets[0].BuildIds[2].StateUpdateTimestamp = attrsPreApply.UserData.Clock
+	attrsPreApply.GetUserData().GetVersioningData().GetVersionSets()[0].GetBuildIds()[0].SetState(persistencespb.STATE_DELETED)
+	attrsPreApply.GetUserData().GetVersioningData().GetVersionSets()[0].GetBuildIds()[0].SetStateUpdateTimestamp(attrsPreApply.GetUserData().GetClock())
+	attrsPreApply.GetUserData().GetVersioningData().GetVersionSets()[0].GetBuildIds()[1].SetState(persistencespb.STATE_DELETED)
+	attrsPreApply.GetUserData().GetVersioningData().GetVersionSets()[0].GetBuildIds()[1].SetStateUpdateTimestamp(attrsPreApply.GetUserData().GetClock())
+	attrsPreApply.GetUserData().GetVersioningData().GetVersionSets()[0].GetBuildIds()[2].SetState(persistencespb.STATE_DELETED)
+	attrsPreApply.GetUserData().GetVersioningData().GetVersionSets()[0].GetBuildIds()[2].SetStateUpdateTimestamp(attrsPreApply.GetUserData().GetClock())
 
 	matchingClient := s.clusters[0].MatchingClient()
-	_, err = matchingClient.ApplyTaskQueueUserDataReplicationEvent(ctx, &matchingservice.ApplyTaskQueueUserDataReplicationEventRequest{
-		NamespaceId: attrsPreApply.NamespaceId,
+	_, err = matchingClient.ApplyTaskQueueUserDataReplicationEvent(ctx, matchingservice.ApplyTaskQueueUserDataReplicationEventRequest_builder{
+		NamespaceId: attrsPreApply.GetNamespaceId(),
 		TaskQueue:   taskQueue,
-		UserData:    attrsPreApply.UserData,
-	})
+		UserData:    attrsPreApply.GetUserData(),
+	}.Build())
 	s.Require().NoError(err)
 
 	// Check that v0 and v2 were revived
-	compat, err := activeFrontendClient.GetWorkerBuildIdCompatibility(ctx, &workflowservice.GetWorkerBuildIdCompatibilityRequest{
+	compat, err := activeFrontendClient.GetWorkerBuildIdCompatibility(ctx, workflowservice.GetWorkerBuildIdCompatibilityRequest_builder{
 		Namespace: namespace,
 		TaskQueue: taskQueue,
-	})
+	}.Build())
 	s.Require().NoError(err)
 	s.Require().Equal([]*taskqueuepb.CompatibleVersionSet{
-		{BuildIds: []string{"v0", "v0.2"}},
-		{BuildIds: []string{"v1"}},
+		taskqueuepb.CompatibleVersionSet_builder{BuildIds: []string{"v0", "v0.2"}}.Build(),
+		taskqueuepb.CompatibleVersionSet_builder{BuildIds: []string{"v1"}}.Build(),
 	}, compat.GetMajorVersionSets())
 
 	// Check that v0 and v2 were revived in the replication event
-	replicationResponse, err = adminClient.GetNamespaceReplicationMessages(ctx, &adminservice.GetNamespaceReplicationMessagesRequest{
+	replicationResponse, err = adminClient.GetNamespaceReplicationMessages(ctx, adminservice.GetNamespaceReplicationMessagesRequest_builder{
 		ClusterName:            "follower",
 		LastRetrievedMessageId: -1,
 		LastProcessedMessageId: -1,
-	})
+	}.Build())
 	s.Require().NoError(err)
 
-	attrsPostApply := replicationResponse.Messages.ReplicationTasks[len(replicationResponse.Messages.ReplicationTasks)-1].GetTaskQueueUserDataAttributes()
+	attrsPostApply := replicationResponse.GetMessages().GetReplicationTasks()[len(replicationResponse.GetMessages().GetReplicationTasks())-1].GetTaskQueueUserDataAttributes()
 
-	s.Require().True(hybrid_logical_clock.Greater(attrsPostApply.UserData.Clock, preApplyClock))
+	s.Require().True(hybrid_logical_clock.Greater(attrsPostApply.GetUserData().GetClock(), preApplyClock))
 
-	s.Require().Equal("v0", attrsPostApply.UserData.VersioningData.VersionSets[0].BuildIds[0].Id)
-	s.Require().Equal(persistencespb.STATE_ACTIVE, attrsPostApply.UserData.VersioningData.VersionSets[0].BuildIds[0].State)
-	s.Require().True(hybrid_logical_clock.Greater(attrsPostApply.UserData.VersioningData.VersionSets[0].BuildIds[0].StateUpdateTimestamp, preApplyClock))
+	s.Require().Equal("v0", attrsPostApply.GetUserData().GetVersioningData().GetVersionSets()[0].GetBuildIds()[0].GetId())
+	s.Require().Equal(persistencespb.STATE_ACTIVE, attrsPostApply.GetUserData().GetVersioningData().GetVersionSets()[0].GetBuildIds()[0].GetState())
+	s.Require().True(hybrid_logical_clock.Greater(attrsPostApply.GetUserData().GetVersioningData().GetVersionSets()[0].GetBuildIds()[0].GetStateUpdateTimestamp(), preApplyClock))
 
-	s.Require().Equal("v0.2", attrsPostApply.UserData.VersioningData.VersionSets[0].BuildIds[1].Id)
-	s.Require().Equal(persistencespb.STATE_ACTIVE, attrsPostApply.UserData.VersioningData.VersionSets[0].BuildIds[1].State)
-	s.Require().True(hybrid_logical_clock.Greater(attrsPostApply.UserData.VersioningData.VersionSets[0].BuildIds[1].StateUpdateTimestamp, preApplyClock))
+	s.Require().Equal("v0.2", attrsPostApply.GetUserData().GetVersioningData().GetVersionSets()[0].GetBuildIds()[1].GetId())
+	s.Require().Equal(persistencespb.STATE_ACTIVE, attrsPostApply.GetUserData().GetVersioningData().GetVersionSets()[0].GetBuildIds()[1].GetState())
+	s.Require().True(hybrid_logical_clock.Greater(attrsPostApply.GetUserData().GetVersioningData().GetVersionSets()[0].GetBuildIds()[1].GetStateUpdateTimestamp(), preApplyClock))
 
-	s.Require().Equal("v1", attrsPostApply.UserData.VersioningData.VersionSets[1].BuildIds[0].Id)
-	s.Require().Equal(persistencespb.STATE_ACTIVE, attrsPostApply.UserData.VersioningData.VersionSets[1].BuildIds[0].State)
-	s.Require().True(hybrid_logical_clock.Equal(attrsPostApply.UserData.VersioningData.VersionSets[1].BuildIds[0].StateUpdateTimestamp, preApplyClock))
+	s.Require().Equal("v1", attrsPostApply.GetUserData().GetVersioningData().GetVersionSets()[1].GetBuildIds()[0].GetId())
+	s.Require().Equal(persistencespb.STATE_ACTIVE, attrsPostApply.GetUserData().GetVersioningData().GetVersionSets()[1].GetBuildIds()[0].GetState())
+	s.Require().True(hybrid_logical_clock.Equal(attrsPostApply.GetUserData().GetVersioningData().GetVersionSets()[1].GetBuildIds()[0].GetStateUpdateTimestamp(), preApplyClock))
 }

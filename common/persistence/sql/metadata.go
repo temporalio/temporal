@@ -49,8 +49,8 @@ func (m *sqlMetadataManagerV2) CreateNamespace(
 		if _, err := tx.InsertIntoNamespace(ctx, &sqlplugin.NamespaceRow{
 			Name:                request.Name,
 			ID:                  idBytes,
-			Data:                request.Namespace.Data,
-			DataEncoding:        request.Namespace.EncodingType.String(),
+			Data:                request.Namespace.GetData(),
+			DataEncoding:        request.Namespace.GetEncodingType().String(),
 			IsGlobal:            request.IsGlobal,
 			NotificationVersion: metadata.NotificationVersion,
 		}); err != nil {
@@ -162,8 +162,8 @@ func (m *sqlMetadataManagerV2) updateNamespace(
 		result, err := tx.UpdateNamespace(ctx, &sqlplugin.NamespaceRow{
 			Name:                request.Name,
 			ID:                  idBytes,
-			Data:                request.Namespace.Data,
-			DataEncoding:        request.Namespace.EncodingType.String(),
+			Data:                request.Namespace.GetData(),
+			DataEncoding:        request.Namespace.GetEncodingType().String(),
 			NotificationVersion: request.NotificationVersion,
 			IsGlobal:            request.IsGlobal,
 		})

@@ -74,10 +74,10 @@ func (s *activityReplicatorStateSuite) SetupTest() {
 	s.mockMutableState = historyi.NewMockMutableState(s.controller)
 	s.mockShard = shard.NewTestContext(
 		s.controller,
-		&persistencespb.ShardInfo{
+		persistencespb.ShardInfo_builder{
 			ShardId: 1,
 			RangeId: 1,
-		},
+		}.Build(),
 		tests.NewDynamicConfig(),
 	)
 
@@ -109,16 +109,16 @@ func (s *activityReplicatorStateSuite) TestActivity_LocalVersionLarger() {
 	attempt := int32(1)
 	stamp := int32(1)
 	lastHeartbeatTime := time.Now()
-	localActivityInfo := &persistencespb.ActivityInfo{
+	localActivityInfo := persistencespb.ActivityInfo_builder{
 		Version: version + 1,
 		Attempt: attempt,
 		Stamp:   stamp,
-	}
+	}.Build()
 
 	apply := s.nDCActivityStateReplicator.compareActivity(
 		version,
 		attempt,
-		localActivityInfo.Stamp,
+		localActivityInfo.GetStamp(),
 		lastHeartbeatTime,
 		localActivityInfo,
 	)
@@ -130,11 +130,11 @@ func (s *activityReplicatorStateSuite) TestActivity_DifferentStamp() {
 	attempt := int32(1)
 	stamp := int32(1)
 	lastHeartbeatTime := time.Now()
-	localActivityInfo := &persistencespb.ActivityInfo{
+	localActivityInfo := persistencespb.ActivityInfo_builder{
 		Version: version,
 		Attempt: attempt,
 		Stamp:   stamp - 1,
-	}
+	}.Build()
 
 	apply := s.nDCActivityStateReplicator.compareActivity(
 		version,
@@ -151,11 +151,11 @@ func (s *activityReplicatorStateSuite) TestActivity_IncomingVersionLarger() {
 	attempt := int32(1)
 	stamp := int32(1)
 	lastHeartbeatTime := time.Now()
-	localActivityInfo := &persistencespb.ActivityInfo{
+	localActivityInfo := persistencespb.ActivityInfo_builder{
 		Version: version - 1,
 		Attempt: attempt,
 		Stamp:   stamp,
-	}
+	}.Build()
 
 	apply := s.nDCActivityStateReplicator.compareActivity(
 		version,
@@ -172,11 +172,11 @@ func (s *activityReplicatorStateSuite) TestActivity_SameVersion_LocalAttemptLarg
 	attempt := int32(1)
 	stamp := int32(1)
 	lastHeartbeatTime := time.Now()
-	localActivityInfo := &persistencespb.ActivityInfo{
+	localActivityInfo := persistencespb.ActivityInfo_builder{
 		Version: version,
 		Attempt: attempt + 1,
 		Stamp:   stamp,
-	}
+	}.Build()
 
 	apply := s.nDCActivityStateReplicator.compareActivity(
 		version,
@@ -193,11 +193,11 @@ func (s *activityReplicatorStateSuite) TestActivity_SameVersion_IncomingAttemptL
 	attempt := int32(1)
 	stamp := int32(1)
 	lastHeartbeatTime := time.Now()
-	localActivityInfo := &persistencespb.ActivityInfo{
+	localActivityInfo := persistencespb.ActivityInfo_builder{
 		Version: version,
 		Attempt: attempt - 1,
 		Stamp:   stamp,
-	}
+	}.Build()
 
 	apply := s.nDCActivityStateReplicator.compareActivity(
 		version,
@@ -214,12 +214,12 @@ func (s *activityReplicatorStateSuite) TestActivity_SameVersion_SameAttempt_Loca
 	attempt := int32(1)
 	stamp := int32(1)
 	lastHeartbeatTime := time.Now()
-	localActivityInfo := &persistencespb.ActivityInfo{
+	localActivityInfo := persistencespb.ActivityInfo_builder{
 		Version:                 version,
 		Attempt:                 attempt,
 		Stamp:                   stamp,
 		LastHeartbeatUpdateTime: timestamppb.New(lastHeartbeatTime.Add(time.Second)),
-	}
+	}.Build()
 
 	apply := s.nDCActivityStateReplicator.compareActivity(
 		version,
@@ -236,12 +236,12 @@ func (s *activityReplicatorStateSuite) TestActivity_SameVersion_SameAttempt_Inco
 	attempt := int32(1)
 	stamp := int32(1)
 	lastHeartbeatTime := time.Now()
-	localActivityInfo := &persistencespb.ActivityInfo{
+	localActivityInfo := persistencespb.ActivityInfo_builder{
 		Version:                 version,
 		Attempt:                 attempt,
 		Stamp:                   stamp,
 		LastHeartbeatUpdateTime: timestamppb.New(lastHeartbeatTime.Add(-time.Second)),
-	}
+	}.Build()
 
 	apply := s.nDCActivityStateReplicator.compareActivity(
 		version,
@@ -260,31 +260,31 @@ func (s *activityReplicatorStateSuite) TestVersionHistory_LocalIsSuperSet() {
 	scheduledEventID := int64(99)
 	version := int64(100)
 
-	localVersionHistories := &historyspb.VersionHistories{
+	localVersionHistories := historyspb.VersionHistories_builder{
 		CurrentVersionHistoryIndex: 0,
-		Histories: []*historyspb.VersionHistory{{
+		Histories: []*historyspb.VersionHistory{historyspb.VersionHistory_builder{
 			BranchToken: []byte{},
 			Items: []*historyspb.VersionHistoryItem{
-				{
+				historyspb.VersionHistoryItem_builder{
 					EventId: scheduledEventID + 10,
 					Version: version,
-				},
+				}.Build(),
 			},
-		}},
-	}
-	incomingVersionHistory := &historyspb.VersionHistory{
+		}.Build()},
+	}.Build()
+	incomingVersionHistory := historyspb.VersionHistory_builder{
 		BranchToken: []byte{},
 		Items: []*historyspb.VersionHistoryItem{
-			{
+			historyspb.VersionHistoryItem_builder{
 				EventId: scheduledEventID,
 				Version: version,
-			},
+			}.Build(),
 		},
-	}
+	}.Build()
 
-	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+	s.mockMutableState.EXPECT().GetExecutionInfo().Return(persistencespb.WorkflowExecutionInfo_builder{
 		VersionHistories: localVersionHistories,
-	}).AnyTimes()
+	}.Build()).AnyTimes()
 	s.mockMutableState.EXPECT().GetWorkflowStateStatus().Return(
 		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	).AnyTimes()
@@ -308,31 +308,31 @@ func (s *activityReplicatorStateSuite) TestVersionHistory_IncomingIsSuperSet_NoR
 	scheduledEventID := int64(99)
 	version := int64(100)
 
-	localVersionHistories := &historyspb.VersionHistories{
+	localVersionHistories := historyspb.VersionHistories_builder{
 		CurrentVersionHistoryIndex: 0,
-		Histories: []*historyspb.VersionHistory{{
+		Histories: []*historyspb.VersionHistory{historyspb.VersionHistory_builder{
 			BranchToken: []byte{},
 			Items: []*historyspb.VersionHistoryItem{
-				{
+				historyspb.VersionHistoryItem_builder{
 					EventId: scheduledEventID,
 					Version: version,
-				},
+				}.Build(),
 			},
-		}},
-	}
-	incomingVersionHistory := &historyspb.VersionHistory{
+		}.Build()},
+	}.Build()
+	incomingVersionHistory := historyspb.VersionHistory_builder{
 		BranchToken: []byte{},
 		Items: []*historyspb.VersionHistoryItem{
-			{
+			historyspb.VersionHistoryItem_builder{
 				EventId: scheduledEventID + 10,
 				Version: version,
-			},
+			}.Build(),
 		},
-	}
+	}.Build()
 
-	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+	s.mockMutableState.EXPECT().GetExecutionInfo().Return(persistencespb.WorkflowExecutionInfo_builder{
 		VersionHistories: localVersionHistories,
-	}).AnyTimes()
+	}.Build()).AnyTimes()
 	s.mockMutableState.EXPECT().GetWorkflowStateStatus().Return(
 		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	).AnyTimes()
@@ -356,31 +356,31 @@ func (s *activityReplicatorStateSuite) TestVersionHistory_IncomingIsSuperSet_Res
 	scheduledEventID := int64(99)
 	version := int64(100)
 
-	localVersionHistories := &historyspb.VersionHistories{
+	localVersionHistories := historyspb.VersionHistories_builder{
 		CurrentVersionHistoryIndex: 0,
-		Histories: []*historyspb.VersionHistory{{
+		Histories: []*historyspb.VersionHistory{historyspb.VersionHistory_builder{
 			BranchToken: []byte{},
 			Items: []*historyspb.VersionHistoryItem{
-				{
+				historyspb.VersionHistoryItem_builder{
 					EventId: scheduledEventID - 1,
 					Version: version,
-				},
+				}.Build(),
 			},
-		}},
-	}
-	incomingVersionHistory := &historyspb.VersionHistory{
+		}.Build()},
+	}.Build()
+	incomingVersionHistory := historyspb.VersionHistory_builder{
 		BranchToken: []byte{},
 		Items: []*historyspb.VersionHistoryItem{
-			{
+			historyspb.VersionHistoryItem_builder{
 				EventId: scheduledEventID + 10,
 				Version: version,
-			},
+			}.Build(),
 		},
-	}
+	}.Build()
 
-	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+	s.mockMutableState.EXPECT().GetExecutionInfo().Return(persistencespb.WorkflowExecutionInfo_builder{
 		VersionHistories: localVersionHistories,
-	}).AnyTimes()
+	}.Build()).AnyTimes()
 	s.mockMutableState.EXPECT().GetWorkflowStateStatus().Return(
 		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	).AnyTimes()
@@ -413,39 +413,39 @@ func (s *activityReplicatorStateSuite) TestVersionHistory_Diverge_LocalLarger() 
 	scheduledEventID := int64(99)
 	version := int64(100)
 
-	localVersionHistories := &historyspb.VersionHistories{
+	localVersionHistories := historyspb.VersionHistories_builder{
 		CurrentVersionHistoryIndex: 0,
-		Histories: []*historyspb.VersionHistory{{
+		Histories: []*historyspb.VersionHistory{historyspb.VersionHistory_builder{
 			BranchToken: []byte{},
 			Items: []*historyspb.VersionHistoryItem{
-				{
+				historyspb.VersionHistoryItem_builder{
 					EventId: scheduledEventID,
 					Version: version,
-				},
-				{
+				}.Build(),
+				historyspb.VersionHistoryItem_builder{
 					EventId: scheduledEventID + 1,
 					Version: version + 2,
-				},
+				}.Build(),
 			},
-		}},
-	}
-	incomingVersionHistory := &historyspb.VersionHistory{
+		}.Build()},
+	}.Build()
+	incomingVersionHistory := historyspb.VersionHistory_builder{
 		BranchToken: []byte{},
 		Items: []*historyspb.VersionHistoryItem{
-			{
+			historyspb.VersionHistoryItem_builder{
 				EventId: scheduledEventID + 10,
 				Version: version,
-			},
-			{
+			}.Build(),
+			historyspb.VersionHistoryItem_builder{
 				EventId: scheduledEventID + 1,
 				Version: version + 1,
-			},
+			}.Build(),
 		},
-	}
+	}.Build()
 
-	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+	s.mockMutableState.EXPECT().GetExecutionInfo().Return(persistencespb.WorkflowExecutionInfo_builder{
 		VersionHistories: localVersionHistories,
-	}).AnyTimes()
+	}.Build()).AnyTimes()
 	s.mockMutableState.EXPECT().GetWorkflowStateStatus().Return(
 		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	).AnyTimes()
@@ -469,39 +469,39 @@ func (s *activityReplicatorStateSuite) TestVersionHistory_Diverge_IncomingLarger
 	scheduledEventID := int64(99)
 	version := int64(100)
 
-	localVersionHistories := &historyspb.VersionHistories{
+	localVersionHistories := historyspb.VersionHistories_builder{
 		CurrentVersionHistoryIndex: 0,
-		Histories: []*historyspb.VersionHistory{{
+		Histories: []*historyspb.VersionHistory{historyspb.VersionHistory_builder{
 			BranchToken: []byte{},
 			Items: []*historyspb.VersionHistoryItem{
-				{
+				historyspb.VersionHistoryItem_builder{
 					EventId: scheduledEventID,
 					Version: version,
-				},
-				{
+				}.Build(),
+				historyspb.VersionHistoryItem_builder{
 					EventId: scheduledEventID + 1,
 					Version: version + 1,
-				},
+				}.Build(),
 			},
-		}},
-	}
-	incomingVersionHistory := &historyspb.VersionHistory{
+		}.Build()},
+	}.Build()
+	incomingVersionHistory := historyspb.VersionHistory_builder{
 		BranchToken: []byte{},
 		Items: []*historyspb.VersionHistoryItem{
-			{
+			historyspb.VersionHistoryItem_builder{
 				EventId: scheduledEventID,
 				Version: version,
-			},
-			{
+			}.Build(),
+			historyspb.VersionHistoryItem_builder{
 				EventId: scheduledEventID + 1,
 				Version: version + 2,
-			},
+			}.Build(),
 		},
-	}
+	}.Build()
 
-	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+	s.mockMutableState.EXPECT().GetExecutionInfo().Return(persistencespb.WorkflowExecutionInfo_builder{
 		VersionHistories: localVersionHistories,
-	}).AnyTimes()
+	}.Build()).AnyTimes()
 	s.mockMutableState.EXPECT().GetWorkflowStateStatus().Return(
 		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	).AnyTimes()
@@ -534,11 +534,11 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_WorkflowNotFound() {
 	runID := uuid.NewString()
 	version := int64(100)
 
-	request := &historyservice.SyncActivityRequest{
+	request := historyservice.SyncActivityRequest_builder{
 		NamespaceId: namespaceID.String(),
 		WorkflowId:  workflowID,
 		RunId:       runID,
-	}
+	}.Build()
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), &persistence.GetWorkflowExecutionRequest{
 		ShardID:     s.mockShard.GetShardID(),
 		NamespaceID: namespaceID.String(),
@@ -548,15 +548,15 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_WorkflowNotFound() {
 	}).Return(nil, serviceerror.NewNotFound(""))
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
 		namespace.NewGlobalNamespaceForTest(
-			&persistencespb.NamespaceInfo{Id: namespaceID.String(), Name: namespaceName.String()},
-			&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
-			&persistencespb.NamespaceReplicationConfig{
+			persistencespb.NamespaceInfo_builder{Id: namespaceID.String(), Name: namespaceName.String()}.Build(),
+			persistencespb.NamespaceConfig_builder{Retention: timestamp.DurationFromDays(1)}.Build(),
+			persistencespb.NamespaceReplicationConfig_builder{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []string{
 					cluster.TestCurrentClusterName,
 					cluster.TestAlternativeClusterName,
 				},
-			},
+			}.Build(),
 			version,
 		), nil,
 	).AnyTimes()
@@ -572,11 +572,11 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_WorkflowNotFound() {
 	runID := uuid.NewString()
 	version := int64(100)
 
-	request := &historyservice.SyncActivitiesRequest{
+	request := historyservice.SyncActivitiesRequest_builder{
 		NamespaceId: namespaceID.String(),
 		WorkflowId:  workflowID,
 		RunId:       runID,
-	}
+	}.Build()
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), &persistence.GetWorkflowExecutionRequest{
 		ShardID:     s.mockShard.GetShardID(),
 		NamespaceID: namespaceID.String(),
@@ -586,15 +586,15 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_WorkflowNotFound() {
 	}).Return(nil, serviceerror.NewNotFound(""))
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
 		namespace.NewGlobalNamespaceForTest(
-			&persistencespb.NamespaceInfo{Id: namespaceID.String(), Name: namespaceName.String()},
-			&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
-			&persistencespb.NamespaceReplicationConfig{
+			persistencespb.NamespaceInfo_builder{Id: namespaceID.String(), Name: namespaceName.String()}.Build(),
+			persistencespb.NamespaceConfig_builder{Retention: timestamp.DurationFromDays(1)}.Build(),
+			persistencespb.NamespaceReplicationConfig_builder{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []string{
 					cluster.TestCurrentClusterName,
 					cluster.TestAlternativeClusterName,
 				},
-			},
+			}.Build(),
 			version,
 		), nil,
 	).AnyTimes()
@@ -612,27 +612,27 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_WorkflowClosed() {
 	version := int64(100)
 	lastWriteVersion := version
 
-	localVersionHistories := &historyspb.VersionHistories{
+	localVersionHistories := historyspb.VersionHistories_builder{
 		CurrentVersionHistoryIndex: 0,
-		Histories: []*historyspb.VersionHistory{{
+		Histories: []*historyspb.VersionHistory{historyspb.VersionHistory_builder{
 			BranchToken: []byte{},
 			Items: []*historyspb.VersionHistoryItem{
-				{
+				historyspb.VersionHistoryItem_builder{
 					EventId: scheduledEventID + 10,
 					Version: version,
-				},
+				}.Build(),
 			},
-		}},
-	}
-	incomingVersionHistory := &historyspb.VersionHistory{
+		}.Build()},
+	}.Build()
+	incomingVersionHistory := historyspb.VersionHistory_builder{
 		BranchToken: []byte{},
 		Items: []*historyspb.VersionHistoryItem{
-			{
+			historyspb.VersionHistoryItem_builder{
 				EventId: scheduledEventID,
 				Version: version,
-			},
+			}.Build(),
 		},
-	}
+	}.Build()
 
 	key := wcache.Key{
 		WorkflowKey: definition.NewWorkflowKey(namespaceID.String(), workflowID, runID),
@@ -649,33 +649,33 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_WorkflowClosed() {
 	err := wcache.PutContextIfNotExist(s.workflowCache, key, weContext)
 	s.NoError(err)
 
-	request := &historyservice.SyncActivityRequest{
+	request := historyservice.SyncActivityRequest_builder{
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       workflowID,
 		RunId:            runID,
 		Version:          version,
 		ScheduledEventId: scheduledEventID,
 		VersionHistory:   incomingVersionHistory,
-	}
+	}.Build()
 
-	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+	s.mockMutableState.EXPECT().GetExecutionInfo().Return(persistencespb.WorkflowExecutionInfo_builder{
 		VersionHistories: localVersionHistories,
-	}).AnyTimes()
+	}.Build()).AnyTimes()
 	s.mockMutableState.EXPECT().GetWorkflowStateStatus().Return(
 		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 	).AnyTimes()
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
 		namespace.NewGlobalNamespaceForTest(
-			&persistencespb.NamespaceInfo{Id: namespaceID.String(), Name: namespaceName.String()},
-			&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
-			&persistencespb.NamespaceReplicationConfig{
+			persistencespb.NamespaceInfo_builder{Id: namespaceID.String(), Name: namespaceName.String()}.Build(),
+			persistencespb.NamespaceConfig_builder{Retention: timestamp.DurationFromDays(1)}.Build(),
+			persistencespb.NamespaceReplicationConfig_builder{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []string{
 					cluster.TestCurrentClusterName,
 					cluster.TestAlternativeClusterName,
 				},
-			},
+			}.Build(),
 			lastWriteVersion,
 		), nil,
 	).AnyTimes()
@@ -693,27 +693,27 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_WorkflowClosed() {
 	version := int64(100)
 	lastWriteVersion := version
 
-	localVersionHistories := &historyspb.VersionHistories{
+	localVersionHistories := historyspb.VersionHistories_builder{
 		CurrentVersionHistoryIndex: 0,
-		Histories: []*historyspb.VersionHistory{{
+		Histories: []*historyspb.VersionHistory{historyspb.VersionHistory_builder{
 			BranchToken: []byte{},
 			Items: []*historyspb.VersionHistoryItem{
-				{
+				historyspb.VersionHistoryItem_builder{
 					EventId: scheduledEventID + 10,
 					Version: version,
-				},
+				}.Build(),
 			},
-		}},
-	}
-	incomingVersionHistory := &historyspb.VersionHistory{
+		}.Build()},
+	}.Build()
+	incomingVersionHistory := historyspb.VersionHistory_builder{
 		BranchToken: []byte{},
 		Items: []*historyspb.VersionHistoryItem{
-			{
+			historyspb.VersionHistoryItem_builder{
 				EventId: scheduledEventID,
 				Version: version,
-			},
+			}.Build(),
 		},
-	}
+	}.Build()
 
 	key := wcache.Key{
 		WorkflowKey: definition.NewWorkflowKey(namespaceID.String(), workflowID, runID),
@@ -730,37 +730,37 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_WorkflowClosed() {
 	err := wcache.PutContextIfNotExist(s.workflowCache, key, weContext)
 	s.NoError(err)
 
-	request := &historyservice.SyncActivitiesRequest{
+	request := historyservice.SyncActivitiesRequest_builder{
 		NamespaceId: namespaceID.String(),
 		WorkflowId:  workflowID,
 		RunId:       runID,
 		ActivitiesInfo: []*historyservice.ActivitySyncInfo{
-			{
+			historyservice.ActivitySyncInfo_builder{
 				Version:          version,
 				ScheduledEventId: scheduledEventID,
 				VersionHistory:   incomingVersionHistory,
-			},
+			}.Build(),
 		},
-	}
+	}.Build()
 
-	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+	s.mockMutableState.EXPECT().GetExecutionInfo().Return(persistencespb.WorkflowExecutionInfo_builder{
 		VersionHistories: localVersionHistories,
-	}).AnyTimes()
+	}.Build()).AnyTimes()
 	s.mockMutableState.EXPECT().GetWorkflowStateStatus().Return(
 		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 	).AnyTimes()
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
 		namespace.NewGlobalNamespaceForTest(
-			&persistencespb.NamespaceInfo{Id: namespaceID.String(), Name: namespaceName.String()},
-			&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
-			&persistencespb.NamespaceReplicationConfig{
+			persistencespb.NamespaceInfo_builder{Id: namespaceID.String(), Name: namespaceName.String()}.Build(),
+			persistencespb.NamespaceConfig_builder{Retention: timestamp.DurationFromDays(1)}.Build(),
+			persistencespb.NamespaceReplicationConfig_builder{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []string{
 					cluster.TestCurrentClusterName,
 					cluster.TestAlternativeClusterName,
 				},
-			},
+			}.Build(),
 			lastWriteVersion,
 		), nil,
 	).AnyTimes()
@@ -778,27 +778,27 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityNotFound() {
 	version := int64(100)
 	lastWriteVersion := version
 
-	localVersionHistories := &historyspb.VersionHistories{
+	localVersionHistories := historyspb.VersionHistories_builder{
 		CurrentVersionHistoryIndex: 0,
-		Histories: []*historyspb.VersionHistory{{
+		Histories: []*historyspb.VersionHistory{historyspb.VersionHistory_builder{
 			BranchToken: []byte{},
 			Items: []*historyspb.VersionHistoryItem{
-				{
+				historyspb.VersionHistoryItem_builder{
 					EventId: scheduledEventID + 10,
 					Version: version,
-				},
+				}.Build(),
 			},
-		}},
-	}
-	incomingVersionHistory := &historyspb.VersionHistory{
+		}.Build()},
+	}.Build()
+	incomingVersionHistory := historyspb.VersionHistory_builder{
 		BranchToken: []byte{},
 		Items: []*historyspb.VersionHistoryItem{
-			{
+			historyspb.VersionHistoryItem_builder{
 				EventId: scheduledEventID,
 				Version: version,
-			},
+			}.Build(),
 		},
-	}
+	}.Build()
 
 	key := wcache.Key{
 		WorkflowKey: definition.NewWorkflowKey(namespaceID.String(), workflowID, runID),
@@ -815,18 +815,18 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityNotFound() {
 	err := wcache.PutContextIfNotExist(s.workflowCache, key, weContext)
 	s.NoError(err)
 
-	request := &historyservice.SyncActivityRequest{
+	request := historyservice.SyncActivityRequest_builder{
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       workflowID,
 		RunId:            runID,
 		Version:          version,
 		ScheduledEventId: scheduledEventID,
 		VersionHistory:   incomingVersionHistory,
-	}
+	}.Build()
 
-	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+	s.mockMutableState.EXPECT().GetExecutionInfo().Return(persistencespb.WorkflowExecutionInfo_builder{
 		VersionHistories: localVersionHistories,
-	}).AnyTimes()
+	}.Build()).AnyTimes()
 	s.mockMutableState.EXPECT().GetWorkflowStateStatus().Return(
 		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	).AnyTimes()
@@ -834,15 +834,15 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityNotFound() {
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
 		namespace.NewGlobalNamespaceForTest(
-			&persistencespb.NamespaceInfo{Id: namespaceID.String(), Name: namespaceName.String()},
-			&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
-			&persistencespb.NamespaceReplicationConfig{
+			persistencespb.NamespaceInfo_builder{Id: namespaceID.String(), Name: namespaceName.String()}.Build(),
+			persistencespb.NamespaceConfig_builder{Retention: timestamp.DurationFromDays(1)}.Build(),
+			persistencespb.NamespaceReplicationConfig_builder{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []string{
 					cluster.TestCurrentClusterName,
 					cluster.TestAlternativeClusterName,
 				},
-			},
+			}.Build(),
 			lastWriteVersion,
 		), nil,
 	).AnyTimes()
@@ -860,27 +860,27 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_ActivityNotFound() {
 	version := int64(100)
 	lastWriteVersion := version
 
-	localVersionHistories := &historyspb.VersionHistories{
+	localVersionHistories := historyspb.VersionHistories_builder{
 		CurrentVersionHistoryIndex: 0,
-		Histories: []*historyspb.VersionHistory{{
+		Histories: []*historyspb.VersionHistory{historyspb.VersionHistory_builder{
 			BranchToken: []byte{},
 			Items: []*historyspb.VersionHistoryItem{
-				{
+				historyspb.VersionHistoryItem_builder{
 					EventId: scheduledEventID + 10,
 					Version: version,
-				},
+				}.Build(),
 			},
-		}},
-	}
-	incomingVersionHistory := &historyspb.VersionHistory{
+		}.Build()},
+	}.Build()
+	incomingVersionHistory := historyspb.VersionHistory_builder{
 		BranchToken: []byte{},
 		Items: []*historyspb.VersionHistoryItem{
-			{
+			historyspb.VersionHistoryItem_builder{
 				EventId: scheduledEventID,
 				Version: version,
-			},
+			}.Build(),
 		},
-	}
+	}.Build()
 
 	key := wcache.Key{
 		WorkflowKey: definition.NewWorkflowKey(namespaceID.String(), workflowID, runID),
@@ -897,22 +897,22 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_ActivityNotFound() {
 	err := wcache.PutContextIfNotExist(s.workflowCache, key, weContext)
 	s.NoError(err)
 
-	request := &historyservice.SyncActivitiesRequest{
+	request := historyservice.SyncActivitiesRequest_builder{
 		NamespaceId: namespaceID.String(),
 		WorkflowId:  workflowID,
 		RunId:       runID,
 		ActivitiesInfo: []*historyservice.ActivitySyncInfo{
-			{
+			historyservice.ActivitySyncInfo_builder{
 				Version:          version,
 				ScheduledEventId: scheduledEventID,
 				VersionHistory:   incomingVersionHistory,
-			},
+			}.Build(),
 		},
-	}
+	}.Build()
 
-	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+	s.mockMutableState.EXPECT().GetExecutionInfo().Return(persistencespb.WorkflowExecutionInfo_builder{
 		VersionHistories: localVersionHistories,
-	}).AnyTimes()
+	}.Build()).AnyTimes()
 	s.mockMutableState.EXPECT().GetWorkflowStateStatus().Return(
 		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	).AnyTimes()
@@ -920,15 +920,15 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_ActivityNotFound() {
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
 		namespace.NewGlobalNamespaceForTest(
-			&persistencespb.NamespaceInfo{Id: namespaceID.String(), Name: namespaceName.String()},
-			&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
-			&persistencespb.NamespaceReplicationConfig{
+			persistencespb.NamespaceInfo_builder{Id: namespaceID.String(), Name: namespaceName.String()}.Build(),
+			persistencespb.NamespaceConfig_builder{Retention: timestamp.DurationFromDays(1)}.Build(),
+			persistencespb.NamespaceReplicationConfig_builder{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []string{
 					cluster.TestCurrentClusterName,
 					cluster.TestAlternativeClusterName,
 				},
-			},
+			}.Build(),
 			lastWriteVersion,
 		), nil,
 	).AnyTimes()
@@ -946,27 +946,27 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityFound_Zombie() {
 	version := int64(100)
 	lastWriteVersion := version
 
-	localVersionHistories := &historyspb.VersionHistories{
+	localVersionHistories := historyspb.VersionHistories_builder{
 		CurrentVersionHistoryIndex: 0,
-		Histories: []*historyspb.VersionHistory{{
+		Histories: []*historyspb.VersionHistory{historyspb.VersionHistory_builder{
 			BranchToken: []byte{},
 			Items: []*historyspb.VersionHistoryItem{
-				{
+				historyspb.VersionHistoryItem_builder{
 					EventId: scheduledEventID + 10,
 					Version: version,
-				},
+				}.Build(),
 			},
-		}},
-	}
-	incomingVersionHistory := &historyspb.VersionHistory{
+		}.Build()},
+	}.Build()
+	incomingVersionHistory := historyspb.VersionHistory_builder{
 		BranchToken: []byte{},
 		Items: []*historyspb.VersionHistoryItem{
-			{
+			historyspb.VersionHistoryItem_builder{
 				EventId: scheduledEventID,
 				Version: version,
-			},
+			}.Build(),
 		},
-	}
+	}.Build()
 
 	key := wcache.Key{
 		WorkflowKey: definition.NewWorkflowKey(namespaceID.String(), workflowID, runID),
@@ -983,7 +983,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityFound_Zombie() {
 	s.NoError(err)
 
 	now := time.Now()
-	request := &historyservice.SyncActivityRequest{
+	request := historyservice.SyncActivityRequest_builder{
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       workflowID,
 		RunId:            runID,
@@ -991,47 +991,47 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityFound_Zombie() {
 		ScheduledEventId: scheduledEventID,
 		ScheduledTime:    timestamppb.New(now),
 		VersionHistory:   incomingVersionHistory,
-	}
+	}.Build()
 
-	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+	s.mockMutableState.EXPECT().GetExecutionInfo().Return(persistencespb.WorkflowExecutionInfo_builder{
 		VersionHistories: localVersionHistories,
-	}).AnyTimes()
+	}.Build()).AnyTimes()
 	s.mockMutableState.EXPECT().GetWorkflowStateStatus().Return(
 		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	).AnyTimes()
-	s.mockMutableState.EXPECT().GetActivityInfo(scheduledEventID).Return(&persistencespb.ActivityInfo{
+	s.mockMutableState.EXPECT().GetActivityInfo(scheduledEventID).Return(persistencespb.ActivityInfo_builder{
 		Version: version,
-	}, true)
+	}.Build(), true)
 
-	s.mockMutableState.EXPECT().UpdateActivityInfo(&historyservice.ActivitySyncInfo{
+	s.mockMutableState.EXPECT().UpdateActivityInfo(historyservice.ActivitySyncInfo_builder{
 		Version:          version,
 		ScheduledEventId: scheduledEventID,
 		ScheduledTime:    timestamppb.New(now),
 		VersionHistory:   incomingVersionHistory,
-	}, false).Return(nil)
+	}.Build(), false).Return(nil)
 	s.mockMutableState.EXPECT().ShouldResetActivityTimerTaskMask(
-		&persistencespb.ActivityInfo{
+		persistencespb.ActivityInfo_builder{
 			Version: version,
-		},
-		&persistencespb.ActivityInfo{
+		}.Build(),
+		persistencespb.ActivityInfo_builder{
 			Version: version,
 			Attempt: 0,
-		}).Return(false)
+		}.Build()).Return(false)
 	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(map[int64]*persistencespb.ActivityInfo{})
 
 	weContext.EXPECT().UpdateWorkflowExecutionAsPassive(gomock.Any(), s.mockShard).Return(nil)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
 		namespace.NewGlobalNamespaceForTest(
-			&persistencespb.NamespaceInfo{Id: namespaceID.String(), Name: namespaceName.String()},
-			&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
-			&persistencespb.NamespaceReplicationConfig{
+			persistencespb.NamespaceInfo_builder{Id: namespaceID.String(), Name: namespaceName.String()}.Build(),
+			persistencespb.NamespaceConfig_builder{Retention: timestamp.DurationFromDays(1)}.Build(),
+			persistencespb.NamespaceReplicationConfig_builder{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []string{
 					cluster.TestCurrentClusterName,
 					cluster.TestAlternativeClusterName,
 				},
-			},
+			}.Build(),
 			lastWriteVersion,
 		), nil,
 	).AnyTimes()
@@ -1049,27 +1049,27 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_ActivityFound_Zombie()
 	version := int64(100)
 	lastWriteVersion := version
 
-	localVersionHistories := &historyspb.VersionHistories{
+	localVersionHistories := historyspb.VersionHistories_builder{
 		CurrentVersionHistoryIndex: 0,
-		Histories: []*historyspb.VersionHistory{{
+		Histories: []*historyspb.VersionHistory{historyspb.VersionHistory_builder{
 			BranchToken: []byte{},
 			Items: []*historyspb.VersionHistoryItem{
-				{
+				historyspb.VersionHistoryItem_builder{
 					EventId: scheduledEventID + 10,
 					Version: version,
-				},
+				}.Build(),
 			},
-		}},
-	}
-	incomingVersionHistory := &historyspb.VersionHistory{
+		}.Build()},
+	}.Build()
+	incomingVersionHistory := historyspb.VersionHistory_builder{
 		BranchToken: []byte{},
 		Items: []*historyspb.VersionHistoryItem{
-			{
+			historyspb.VersionHistoryItem_builder{
 				EventId: scheduledEventID,
 				Version: version,
-			},
+			}.Build(),
 		},
-	}
+	}.Build()
 
 	key := wcache.Key{
 		WorkflowKey: definition.NewWorkflowKey(namespaceID.String(), workflowID, runID),
@@ -1086,58 +1086,58 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_ActivityFound_Zombie()
 	s.NoError(err)
 
 	now := time.Now()
-	request := &historyservice.SyncActivitiesRequest{
+	request := historyservice.SyncActivitiesRequest_builder{
 		NamespaceId: namespaceID.String(),
 		WorkflowId:  workflowID,
 		RunId:       runID,
 		ActivitiesInfo: []*historyservice.ActivitySyncInfo{
-			{
+			historyservice.ActivitySyncInfo_builder{
 				Version:          version,
 				ScheduledEventId: scheduledEventID,
 				VersionHistory:   incomingVersionHistory,
 				ScheduledTime:    timestamppb.New(now),
-			},
+			}.Build(),
 		},
-	}
+	}.Build()
 
-	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+	s.mockMutableState.EXPECT().GetExecutionInfo().Return(persistencespb.WorkflowExecutionInfo_builder{
 		VersionHistories: localVersionHistories,
-	}).AnyTimes()
+	}.Build()).AnyTimes()
 	s.mockMutableState.EXPECT().GetWorkflowStateStatus().Return(
 		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	).AnyTimes()
-	s.mockMutableState.EXPECT().GetActivityInfo(scheduledEventID).Return(&persistencespb.ActivityInfo{
+	s.mockMutableState.EXPECT().GetActivityInfo(scheduledEventID).Return(persistencespb.ActivityInfo_builder{
 		Version: version,
-	}, true)
-	s.mockMutableState.EXPECT().UpdateActivityInfo(&historyservice.ActivitySyncInfo{
+	}.Build(), true)
+	s.mockMutableState.EXPECT().UpdateActivityInfo(historyservice.ActivitySyncInfo_builder{
 		Version:          version,
 		ScheduledEventId: scheduledEventID,
 		ScheduledTime:    timestamppb.New(now),
 		VersionHistory:   incomingVersionHistory,
-	}, false).Return(nil)
+	}.Build(), false).Return(nil)
 	s.mockMutableState.EXPECT().ShouldResetActivityTimerTaskMask(
-		&persistencespb.ActivityInfo{
+		persistencespb.ActivityInfo_builder{
 			Version: version,
-		},
-		&persistencespb.ActivityInfo{
+		}.Build(),
+		persistencespb.ActivityInfo_builder{
 			Version: version,
 			Attempt: 0,
-		}).Return(false)
+		}.Build()).Return(false)
 	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(map[int64]*persistencespb.ActivityInfo{})
 
 	weContext.EXPECT().UpdateWorkflowExecutionAsPassive(gomock.Any(), s.mockShard).Return(nil)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
 		namespace.NewGlobalNamespaceForTest(
-			&persistencespb.NamespaceInfo{Id: namespaceID.String(), Name: namespaceName.String()},
-			&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
-			&persistencespb.NamespaceReplicationConfig{
+			persistencespb.NamespaceInfo_builder{Id: namespaceID.String(), Name: namespaceName.String()}.Build(),
+			persistencespb.NamespaceConfig_builder{Retention: timestamp.DurationFromDays(1)}.Build(),
+			persistencespb.NamespaceReplicationConfig_builder{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []string{
 					cluster.TestCurrentClusterName,
 					cluster.TestAlternativeClusterName,
 				},
-			},
+			}.Build(),
 			lastWriteVersion,
 		), nil,
 	).AnyTimes()
@@ -1155,27 +1155,27 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityFound_NonZombie(
 	version := int64(100)
 	lastWriteVersion := version
 
-	localVersionHistories := &historyspb.VersionHistories{
+	localVersionHistories := historyspb.VersionHistories_builder{
 		CurrentVersionHistoryIndex: 0,
-		Histories: []*historyspb.VersionHistory{{
+		Histories: []*historyspb.VersionHistory{historyspb.VersionHistory_builder{
 			BranchToken: []byte{},
 			Items: []*historyspb.VersionHistoryItem{
-				{
+				historyspb.VersionHistoryItem_builder{
 					EventId: scheduledEventID + 10,
 					Version: version,
-				},
+				}.Build(),
 			},
-		}},
-	}
-	incomingVersionHistory := &historyspb.VersionHistory{
+		}.Build()},
+	}.Build()
+	incomingVersionHistory := historyspb.VersionHistory_builder{
 		BranchToken: []byte{},
 		Items: []*historyspb.VersionHistoryItem{
-			{
+			historyspb.VersionHistoryItem_builder{
 				EventId: scheduledEventID,
 				Version: version,
-			},
+			}.Build(),
 		},
-	}
+	}.Build()
 
 	key := wcache.Key{
 		WorkflowKey: definition.NewWorkflowKey(namespaceID.String(), workflowID, runID),
@@ -1192,7 +1192,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityFound_NonZombie(
 	s.NoError(err)
 
 	now := time.Now()
-	request := &historyservice.SyncActivityRequest{
+	request := historyservice.SyncActivityRequest_builder{
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       workflowID,
 		RunId:            runID,
@@ -1200,46 +1200,46 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityFound_NonZombie(
 		ScheduledEventId: scheduledEventID,
 		ScheduledTime:    timestamppb.New(now),
 		VersionHistory:   incomingVersionHistory,
-	}
+	}.Build()
 
-	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+	s.mockMutableState.EXPECT().GetExecutionInfo().Return(persistencespb.WorkflowExecutionInfo_builder{
 		VersionHistories: localVersionHistories,
-	}).AnyTimes()
+	}.Build()).AnyTimes()
 	s.mockMutableState.EXPECT().GetWorkflowStateStatus().Return(
 		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	).AnyTimes()
-	s.mockMutableState.EXPECT().GetActivityInfo(scheduledEventID).Return(&persistencespb.ActivityInfo{
+	s.mockMutableState.EXPECT().GetActivityInfo(scheduledEventID).Return(persistencespb.ActivityInfo_builder{
 		Version: version,
-	}, true)
-	s.mockMutableState.EXPECT().UpdateActivityInfo(&historyservice.ActivitySyncInfo{
+	}.Build(), true)
+	s.mockMutableState.EXPECT().UpdateActivityInfo(historyservice.ActivitySyncInfo_builder{
 		Version:          version,
 		ScheduledEventId: scheduledEventID,
 		ScheduledTime:    timestamppb.New(now),
 		VersionHistory:   incomingVersionHistory,
-	}, false).Return(nil)
+	}.Build(), false).Return(nil)
 	s.mockMutableState.EXPECT().ShouldResetActivityTimerTaskMask(
-		&persistencespb.ActivityInfo{
+		persistencespb.ActivityInfo_builder{
 			Version: version,
-		},
-		&persistencespb.ActivityInfo{
+		}.Build(),
+		persistencespb.ActivityInfo_builder{
 			Version: version,
 			Attempt: 0,
-		}).Return(false)
+		}.Build()).Return(false)
 	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(map[int64]*persistencespb.ActivityInfo{})
 
 	weContext.EXPECT().UpdateWorkflowExecutionAsPassive(gomock.Any(), s.mockShard).Return(nil)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
 		namespace.NewGlobalNamespaceForTest(
-			&persistencespb.NamespaceInfo{Id: namespaceID.String(), Name: namespaceName.String()},
-			&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
-			&persistencespb.NamespaceReplicationConfig{
+			persistencespb.NamespaceInfo_builder{Id: namespaceID.String(), Name: namespaceName.String()}.Build(),
+			persistencespb.NamespaceConfig_builder{Retention: timestamp.DurationFromDays(1)}.Build(),
+			persistencespb.NamespaceReplicationConfig_builder{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []string{
 					cluster.TestCurrentClusterName,
 					cluster.TestAlternativeClusterName,
 				},
-			},
+			}.Build(),
 			lastWriteVersion,
 		), nil,
 	).AnyTimes()
@@ -1257,27 +1257,27 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_ActivityFound_NonZombi
 	version := int64(100)
 	lastWriteVersion := version
 
-	localVersionHistories := &historyspb.VersionHistories{
+	localVersionHistories := historyspb.VersionHistories_builder{
 		CurrentVersionHistoryIndex: 0,
-		Histories: []*historyspb.VersionHistory{{
+		Histories: []*historyspb.VersionHistory{historyspb.VersionHistory_builder{
 			BranchToken: []byte{},
 			Items: []*historyspb.VersionHistoryItem{
-				{
+				historyspb.VersionHistoryItem_builder{
 					EventId: scheduledEventID + 10,
 					Version: version,
-				},
+				}.Build(),
 			},
-		}},
-	}
-	incomingVersionHistory := &historyspb.VersionHistory{
+		}.Build()},
+	}.Build()
+	incomingVersionHistory := historyspb.VersionHistory_builder{
 		BranchToken: []byte{},
 		Items: []*historyspb.VersionHistoryItem{
-			{
+			historyspb.VersionHistoryItem_builder{
 				EventId: scheduledEventID,
 				Version: version,
-			},
+			}.Build(),
 		},
-	}
+	}.Build()
 
 	key := wcache.Key{
 		WorkflowKey: definition.NewWorkflowKey(namespaceID.String(), workflowID, runID),
@@ -1294,58 +1294,58 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_ActivityFound_NonZombi
 	s.NoError(err)
 
 	now := time.Now()
-	request := &historyservice.SyncActivitiesRequest{
+	request := historyservice.SyncActivitiesRequest_builder{
 		NamespaceId: namespaceID.String(),
 		WorkflowId:  workflowID,
 		RunId:       runID,
 		ActivitiesInfo: []*historyservice.ActivitySyncInfo{
-			{
+			historyservice.ActivitySyncInfo_builder{
 				Version:          version,
 				ScheduledEventId: scheduledEventID,
 				VersionHistory:   incomingVersionHistory,
 				ScheduledTime:    timestamppb.New(now),
-			},
+			}.Build(),
 		},
-	}
+	}.Build()
 
-	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+	s.mockMutableState.EXPECT().GetExecutionInfo().Return(persistencespb.WorkflowExecutionInfo_builder{
 		VersionHistories: localVersionHistories,
-	}).AnyTimes()
+	}.Build()).AnyTimes()
 	s.mockMutableState.EXPECT().GetWorkflowStateStatus().Return(
 		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	).AnyTimes()
-	s.mockMutableState.EXPECT().GetActivityInfo(scheduledEventID).Return(&persistencespb.ActivityInfo{
+	s.mockMutableState.EXPECT().GetActivityInfo(scheduledEventID).Return(persistencespb.ActivityInfo_builder{
 		Version: version,
-	}, true)
-	s.mockMutableState.EXPECT().UpdateActivityInfo(&historyservice.ActivitySyncInfo{
+	}.Build(), true)
+	s.mockMutableState.EXPECT().UpdateActivityInfo(historyservice.ActivitySyncInfo_builder{
 		Version:          version,
 		ScheduledEventId: scheduledEventID,
 		ScheduledTime:    timestamppb.New(now),
 		VersionHistory:   incomingVersionHistory,
-	}, false).Return(nil)
+	}.Build(), false).Return(nil)
 	s.mockMutableState.EXPECT().ShouldResetActivityTimerTaskMask(
-		&persistencespb.ActivityInfo{
+		persistencespb.ActivityInfo_builder{
 			Version: version,
-		},
-		&persistencespb.ActivityInfo{
+		}.Build(),
+		persistencespb.ActivityInfo_builder{
 			Version: version,
 			Attempt: 0,
-		}).Return(false)
+		}.Build()).Return(false)
 	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(map[int64]*persistencespb.ActivityInfo{})
 
 	weContext.EXPECT().UpdateWorkflowExecutionAsPassive(gomock.Any(), s.mockShard).Return(nil)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
 		namespace.NewGlobalNamespaceForTest(
-			&persistencespb.NamespaceInfo{Id: namespaceID.String(), Name: namespaceName.String()},
-			&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
-			&persistencespb.NamespaceReplicationConfig{
+			persistencespb.NamespaceInfo_builder{Id: namespaceID.String(), Name: namespaceName.String()}.Build(),
+			persistencespb.NamespaceConfig_builder{Retention: timestamp.DurationFromDays(1)}.Build(),
+			persistencespb.NamespaceReplicationConfig_builder{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []string{
 					cluster.TestCurrentClusterName,
 					cluster.TestAlternativeClusterName,
 				},
-			},
+			}.Build(),
 			lastWriteVersion,
 		), nil,
 	).AnyTimes()

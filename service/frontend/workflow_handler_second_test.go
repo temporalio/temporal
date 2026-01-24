@@ -59,7 +59,7 @@ func assertScheduledWorkflowSearchAttributeHasAssociatedTypeOf(
 ) {
 	t.Helper()
 	attributes := getScheduledWorkflowSearchAttributes(response)
-	actualAttributeType := attributes.IndexedFields["AliasFor"+searchAttribute].Metadata[searchattribute.MetadataType]
+	actualAttributeType := attributes.GetIndexedFields()["AliasFor"+searchAttribute].GetMetadata()[searchattribute.MetadataType]
 	if string(actualAttributeType) != expectedType.String() {
 		t.Errorf(
 			"expected type %s for attribute %s, got %s",
@@ -71,7 +71,7 @@ func assertScheduledWorkflowSearchAttributeHasAssociatedTypeOf(
 }
 
 func getScheduledWorkflowSearchAttributes(response *schedulespb.DescribeResponse) *commonpb.SearchAttributes {
-	return response.Schedule.Action.Action.(*schedulepb.ScheduleAction_StartWorkflow).StartWorkflow.SearchAttributes
+	return response.GetSchedule().GetAction().Action.(*schedulepb.ScheduleAction_StartWorkflow).StartWorkflow.GetSearchAttributes()
 }
 
 func makeSearchAttributesProviderStub(
@@ -91,23 +91,21 @@ func makeVisibilityManagerStub(controller *gomock.Controller) *manager.MockVisib
 }
 
 func makeResponseWithScheduledWorkflowAttributes(nameValueMap map[string]string) *schedulespb.DescribeResponse {
-	attributes := commonpb.SearchAttributes{
+	attributes := commonpb.SearchAttributes_builder{
 		IndexedFields: map[string]*commonpb.Payload{},
-	}
+	}.Build()
 	for name, value := range nameValueMap {
-		attributes.IndexedFields["AliasFor"+name] = payload.EncodeString(value)
+		attributes.GetIndexedFields()["AliasFor"+name] = payload.EncodeString(value)
 	}
 
-	response := schedulespb.DescribeResponse{
-		Schedule: &schedulepb.Schedule{
-			Action: &schedulepb.ScheduleAction{
-				Action: &schedulepb.ScheduleAction_StartWorkflow{
-					StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
-						SearchAttributes: &attributes,
-					},
-				},
-			},
-		},
-	}
-	return &response
+	response := schedulespb.DescribeResponse_builder{
+		Schedule: schedulepb.Schedule_builder{
+			Action: schedulepb.ScheduleAction_builder{
+				StartWorkflow: workflowpb.NewWorkflowExecutionInfo_builder{
+					SearchAttributes: attributes,
+				}.Build(),
+			}.Build(),
+		}.Build(),
+	}.Build()
+	return response
 }

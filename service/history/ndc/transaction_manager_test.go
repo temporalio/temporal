@@ -66,10 +66,10 @@ func (s *transactionMgrSuite) SetupTest() {
 
 	s.mockShard = shard.NewTestContext(
 		s.controller,
-		&persistencespb.ShardInfo{
+		persistencespb.ShardInfo_builder{
 			ShardId: 10,
 			RangeId: 1,
-		},
+		}.Build(),
 		tests.NewDynamicConfig(),
 	)
 
@@ -136,7 +136,7 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Open()
 	var releaseFn historyi.ReleaseWorkflowContextFunc = func(error) { releaseCalled = true }
 
 	workflowEvents := &persistence.WorkflowEvents{
-		Events: []*historypb.HistoryEvent{{EventId: 1}},
+		Events: []*historypb.HistoryEvent{historypb.HistoryEvent_builder{EventId: 1}.Build()},
 	}
 	historySize := rand.Int63()
 
@@ -153,12 +153,12 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Open()
 	mutableState.EXPECT().IsCurrentWorkflowGuaranteed().Return(true).AnyTimes()
 	mutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	mutableState.EXPECT().GetNamespaceEntry().Return(s.namespaceEntry).AnyTimes()
-	mutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{RunId: runID})
+	mutableState.EXPECT().GetExecutionState().Return(persistencespb.WorkflowExecutionState_builder{RunId: runID}.Build())
 	mutableState.EXPECT().AddHistorySize(historySize)
-	mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+	mutableState.EXPECT().GetExecutionInfo().Return(persistencespb.WorkflowExecutionInfo_builder{
 		NamespaceId: s.namespaceEntry.ID().String(),
 		WorkflowId:  workflowID,
-	})
+	}.Build())
 	weContext.EXPECT().PersistWorkflowEvents(gomock.Any(), s.mockShard, workflowEvents).Return(historySize, nil)
 	weContext.EXPECT().UpdateWorkflowExecutionWithNew(
 		gomock.Any(), s.mockShard, persistence.UpdateWorkflowModeUpdateCurrent, nil, nil, historyi.TransactionPolicyActive, (*historyi.TransactionPolicy)(nil),
@@ -179,7 +179,7 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Closed
 	nextEventID := LastCompletedWorkflowTaskStartedEventId * 2
 	lastWorkflowTaskStartedVersion := s.namespaceEntry.FailoverVersion(workflowID)
 	versionHistory := versionhistory.NewVersionHistory([]byte("branch token"), []*historyspb.VersionHistoryItem{
-		{EventId: LastCompletedWorkflowTaskStartedEventId, Version: lastWorkflowTaskStartedVersion},
+		historyspb.VersionHistoryItem_builder{EventId: LastCompletedWorkflowTaskStartedEventId, Version: lastWorkflowTaskStartedVersion}.Build(),
 	})
 	histories := versionhistory.NewVersionHistories(versionHistory)
 	histroySize := rand.Int63()
@@ -203,14 +203,14 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Closed
 	mutableState.EXPECT().IsCurrentWorkflowGuaranteed().Return(false).AnyTimes()
 	mutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
 	mutableState.EXPECT().GetNamespaceEntry().Return(s.namespaceEntry).AnyTimes()
-	mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+	mutableState.EXPECT().GetExecutionInfo().Return(persistencespb.WorkflowExecutionInfo_builder{
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       workflowID,
 		VersionHistories: histories,
-	}).AnyTimes()
-	mutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+	}.Build()).AnyTimes()
+	mutableState.EXPECT().GetExecutionState().Return(persistencespb.WorkflowExecutionState_builder{
 		RunId: runID,
-	}).AnyTimes()
+	}.Build()).AnyTimes()
 	mutableState.EXPECT().GetNextEventID().Return(nextEventID).AnyTimes()
 	mutableState.EXPECT().GetLastCompletedWorkflowTaskStartedEventId().Return(LastCompletedWorkflowTaskStartedEventId)
 	mutableState.EXPECT().AddHistorySize(histroySize)
@@ -263,7 +263,7 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Closed_ResetF
 	nextEventID := LastCompletedWorkflowTaskStartedEventId * 2
 	lastWorkflowTaskStartedVersion := s.namespaceEntry.FailoverVersion(workflowID)
 	versionHistory := versionhistory.NewVersionHistory([]byte("branch token"), []*historyspb.VersionHistoryItem{
-		{EventId: LastCompletedWorkflowTaskStartedEventId, Version: lastWorkflowTaskStartedVersion},
+		historyspb.VersionHistoryItem_builder{EventId: LastCompletedWorkflowTaskStartedEventId, Version: lastWorkflowTaskStartedVersion}.Build(),
 	})
 	histories := versionhistory.NewVersionHistories(versionHistory)
 
@@ -287,14 +287,14 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Closed_ResetF
 	mutableState.EXPECT().IsCurrentWorkflowGuaranteed().Return(false).AnyTimes()
 	mutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
 	mutableState.EXPECT().GetNamespaceEntry().Return(s.namespaceEntry).AnyTimes()
-	mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+	mutableState.EXPECT().GetExecutionInfo().Return(persistencespb.WorkflowExecutionInfo_builder{
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       workflowID,
 		VersionHistories: histories,
-	}).AnyTimes()
-	mutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+	}.Build()).AnyTimes()
+	mutableState.EXPECT().GetExecutionState().Return(persistencespb.WorkflowExecutionState_builder{
 		RunId: runID,
-	}).AnyTimes()
+	}.Build()).AnyTimes()
 	mutableState.EXPECT().GetNextEventID().Return(nextEventID).AnyTimes()
 	mutableState.EXPECT().GetLastCompletedWorkflowTaskStartedEventId().Return(LastCompletedWorkflowTaskStartedEventId)
 	mutableState.EXPECT().AddHistorySize(historySize)
@@ -347,7 +347,7 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Passive_Open(
 	var releaseFn historyi.ReleaseWorkflowContextFunc = func(error) { releaseCalled = true }
 
 	workflowEvents := &persistence.WorkflowEvents{
-		Events: []*historypb.HistoryEvent{{EventId: 1}},
+		Events: []*historypb.HistoryEvent{historypb.HistoryEvent_builder{EventId: 1}.Build()},
 	}
 	historySize := rand.Int63()
 
@@ -363,10 +363,10 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Passive_Open(
 	mutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	mutableState.EXPECT().GetNamespaceEntry().Return(s.namespaceEntry).AnyTimes()
 	mutableState.EXPECT().AddHistorySize(historySize)
-	mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+	mutableState.EXPECT().GetExecutionInfo().Return(persistencespb.WorkflowExecutionInfo_builder{
 		NamespaceId: s.namespaceEntry.ID().String(),
 		WorkflowId:  workflowID,
-	})
+	}.Build())
 	weContext.EXPECT().ReapplyEvents(gomock.Any(), s.mockShard, []*persistence.WorkflowEvents{workflowEvents})
 	weContext.EXPECT().PersistWorkflowEvents(gomock.Any(), s.mockShard, workflowEvents).Return(historySize, nil)
 	weContext.EXPECT().UpdateWorkflowExecutionWithNew(
@@ -404,13 +404,13 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Passive_Close
 	mutableState.EXPECT().IsCurrentWorkflowGuaranteed().Return(false).AnyTimes()
 	mutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
 	mutableState.EXPECT().GetNamespaceEntry().Return(s.namespaceEntry).AnyTimes()
-	mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+	mutableState.EXPECT().GetExecutionInfo().Return(persistencespb.WorkflowExecutionInfo_builder{
 		NamespaceId: namespaceID.String(),
 		WorkflowId:  workflowID,
-	}).AnyTimes()
-	mutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+	}.Build()).AnyTimes()
+	mutableState.EXPECT().GetExecutionState().Return(persistencespb.WorkflowExecutionState_builder{
 		RunId: runID,
-	}).AnyTimes()
+	}.Build()).AnyTimes()
 	mutableState.EXPECT().AddHistorySize(historySize)
 
 	s.mockExecutionMgr.EXPECT().GetCurrentExecution(gomock.Any(), &persistence.GetCurrentExecutionRequest{
@@ -446,9 +446,9 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_NotCurrentWorkflow_Active() {
 	var releaseFn historyi.ReleaseWorkflowContextFunc = func(error) { releaseCalled = true }
 
 	workflowEvents := &persistence.WorkflowEvents{
-		Events: []*historypb.HistoryEvent{{
+		Events: []*historypb.HistoryEvent{historypb.HistoryEvent_builder{
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
-		}},
+		}.Build()},
 		NamespaceID: namespaceID.String(),
 		WorkflowID:  workflowID,
 	}
@@ -464,13 +464,13 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_NotCurrentWorkflow_Active() {
 	mutableState.EXPECT().IsCurrentWorkflowGuaranteed().Return(false).AnyTimes()
 	mutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
 	mutableState.EXPECT().GetNamespaceEntry().Return(s.namespaceEntry).AnyTimes()
-	mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+	mutableState.EXPECT().GetExecutionInfo().Return(persistencespb.WorkflowExecutionInfo_builder{
 		NamespaceId: namespaceID.String(),
 		WorkflowId:  workflowID,
-	}).AnyTimes()
-	mutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+	}.Build()).AnyTimes()
+	mutableState.EXPECT().GetExecutionState().Return(persistencespb.WorkflowExecutionState_builder{
 		RunId: runID,
-	}).AnyTimes()
+	}.Build()).AnyTimes()
 	mutableState.EXPECT().AddHistorySize(historySize)
 
 	s.mockExecutionMgr.EXPECT().GetCurrentExecution(gomock.Any(), &persistence.GetCurrentExecutionRequest{
@@ -505,9 +505,9 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_NotCurrentWorkflow_Passive() 
 	var releaseFn historyi.ReleaseWorkflowContextFunc = func(error) { releaseCalled = true }
 
 	workflowEvents := &persistence.WorkflowEvents{
-		Events: []*historypb.HistoryEvent{{
+		Events: []*historypb.HistoryEvent{historypb.HistoryEvent_builder{
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
-		}},
+		}.Build()},
 		NamespaceID: namespaceID.String(),
 		WorkflowID:  workflowID,
 	}
@@ -523,13 +523,13 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_NotCurrentWorkflow_Passive() 
 	mutableState.EXPECT().IsCurrentWorkflowGuaranteed().Return(false).AnyTimes()
 	mutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
 	mutableState.EXPECT().GetNamespaceEntry().Return(s.namespaceEntry).AnyTimes()
-	mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+	mutableState.EXPECT().GetExecutionInfo().Return(persistencespb.WorkflowExecutionInfo_builder{
 		NamespaceId: namespaceID.String(),
 		WorkflowId:  workflowID,
-	}).AnyTimes()
-	mutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+	}.Build()).AnyTimes()
+	mutableState.EXPECT().GetExecutionState().Return(persistencespb.WorkflowExecutionState_builder{
 		RunId: runID,
-	}).AnyTimes()
+	}.Build()).AnyTimes()
 	mutableState.EXPECT().AddHistorySize(historySize)
 
 	s.mockExecutionMgr.EXPECT().GetCurrentExecution(gomock.Any(), &persistence.GetCurrentExecutionRequest{

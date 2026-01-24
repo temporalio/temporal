@@ -4,6 +4,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	updatepb "go.temporal.io/api/update/v1"
+	"google.golang.org/protobuf/proto"
 )
 
 type (
@@ -31,9 +32,9 @@ func statusAccepted() *Status {
 func statusRejected(rejection *failurepb.Failure) *Status {
 	return &Status{
 		Stage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED,
-		Outcome: &updatepb.Outcome{
-			Value: &updatepb.Outcome_Failure{Failure: rejection},
-		},
+		Outcome: updatepb.Outcome_builder{
+			Failure: proto.ValueOrDefault(rejection),
+		}.Build(),
 	}
 }
 

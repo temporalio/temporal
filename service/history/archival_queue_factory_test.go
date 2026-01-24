@@ -35,18 +35,18 @@ func TestArchivalQueueFactory(t *testing.T) {
 
 	mockShard := shard.NewTestContext(
 		ctrl,
-		&persistencespb.ShardInfo{
+		persistencespb.ShardInfo_builder{
 			ShardId: 0,
 			RangeId: 1,
 			QueueStates: map[int32]*persistencespb.QueueState{
-				int32(tasks.CategoryIDArchival): {
+				int32(tasks.CategoryIDArchival): persistencespb.QueueState_builder{
 					ReaderStates: nil,
-					ExclusiveReaderHighWatermark: &persistencespb.TaskKey{
+					ExclusiveReaderHighWatermark: persistencespb.TaskKey_builder{
 						FireTime: timestamp.TimeNowPtrUtc(),
-					},
-				},
+					}.Build(),
+				}.Build(),
 			},
-		},
+		}.Build(),
 		tests.NewDynamicConfig(),
 	)
 	mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()

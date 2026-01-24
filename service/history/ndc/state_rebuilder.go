@@ -132,7 +132,7 @@ func (r *StateRebuilderImpl) Rebuild(
 		return nil, RebuildStats{}, err
 	}
 
-	rebuiltMutableState.GetExecutionInfo().LastFirstEventTxnId = lastTxnId
+	rebuiltMutableState.GetExecutionInfo().SetLastFirstEventTxnId(lastTxnId)
 
 	// refresh tasks to be generated
 	// TODO: ideally the executionTimeoutTimerTaskStatus field should be carried over
@@ -181,21 +181,21 @@ func (r *StateRebuilderImpl) RebuildWithCurrentMutableState(
 	if err != nil {
 		return nil, RebuildStats{}, err
 	}
-	items := versionhistory.CopyVersionHistoryItems(currentVersionHistory.Items)
+	items := versionhistory.CopyVersionHistoryItems(currentVersionHistory.GetItems())
 
 	// This is a workaround to bypass the version history update check:
 	// We need to use Active policy to close the transaction. We need to clear the version history items here to
 	// let it pass the version history update logic and then re-assign the version history items after transaction.
-	currentVersionHistory.Items = nil
+	currentVersionHistory.SetItems(nil)
 
 	// close rebuilt mutable state transaction clearing all generated tasks, etc.
 	_, _, err = rebuiltMutableState.CloseTransactionAsSnapshot(ctx, historyi.TransactionPolicyActive)
 	if err != nil {
 		return nil, RebuildStats{}, err
 	}
-	currentVersionHistory.Items = items
+	currentVersionHistory.SetItems(items)
 
-	rebuiltMutableState.GetExecutionInfo().LastFirstEventTxnId = lastTxnId
+	rebuiltMutableState.GetExecutionInfo().SetLastFirstEventTxnId(lastTxnId)
 
 	// refresh tasks to be generated
 	// TODO: ideally the executionTimeoutTimerTaskStatus field should be carried over
@@ -216,9 +216,9 @@ func copyToRebuildMutableState(
 	rebuiltMutableState historyi.MutableState,
 	currentMutableState *persistencespb.WorkflowMutableState,
 ) {
-	rebuiltMutableState.GetExecutionInfo().TransitionHistory = transitionhistory.CopyVersionedTransitions(currentMutableState.GetExecutionInfo().TransitionHistory)
-	rebuiltMutableState.GetExecutionInfo().PreviousTransitionHistory = transitionhistory.CopyVersionedTransitions(currentMutableState.GetExecutionInfo().PreviousTransitionHistory)
-	rebuiltMutableState.GetExecutionInfo().LastTransitionHistoryBreakPoint = transitionhistory.CopyVersionedTransition(currentMutableState.GetExecutionInfo().LastTransitionHistoryBreakPoint)
+	rebuiltMutableState.GetExecutionInfo().SetTransitionHistory(transitionhistory.CopyVersionedTransitions(currentMutableState.GetExecutionInfo().GetTransitionHistory()))
+	rebuiltMutableState.GetExecutionInfo().SetPreviousTransitionHistory(transitionhistory.CopyVersionedTransitions(currentMutableState.GetExecutionInfo().GetPreviousTransitionHistory()))
+	rebuiltMutableState.GetExecutionInfo().SetLastTransitionHistoryBreakPoint(transitionhistory.CopyVersionedTransition(currentMutableState.GetExecutionInfo().GetLastTransitionHistoryBreakPoint()))
 }
 
 func (r *StateRebuilderImpl) buildMutableStateFromEvent(
@@ -268,7 +268,7 @@ func (r *StateRebuilderImpl) buildMutableStateFromEvent(
 			ctx,
 			targetWorkflowIdentifier,
 			stateBuilder,
-			history.History.Events,
+			history.History.GetEvents(),
 			requestID,
 		); err != nil {
 			return nil, 0, err
@@ -338,10 +338,10 @@ func (r *StateRebuilderImpl) applyEvents(
 		ctx,
 		namespace.ID(workflowKey.NamespaceID),
 		requestID,
-		&commonpb.WorkflowExecution{
+		commonpb.WorkflowExecution_builder{
 			WorkflowId: workflowKey.WorkflowID,
 			RunId:      workflowKey.RunID,
-		},
+		}.Build(),
 		[][]*historypb.HistoryEvent{events},
 		nil, // no new run history when rebuilding mutable state
 		"",
@@ -385,7 +385,7 @@ func (r *StateRebuilderImpl) getPaginationFn(
 			// Calculate and accumulate external payload size and count for this batch of history events
 			if r.shard.GetConfig().ExternalPayloadsEnabled(namespaceName) {
 				externalPayloadSize, externalPayloadCount, err := workflow.CalculateExternalPayloadSize(
-					history.Events,
+					history.GetEvents(),
 					metrics.NoopMetricsHandler, // don't record metrics since those are not new uploads
 				)
 				if err != nil {

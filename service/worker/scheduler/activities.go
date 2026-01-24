@@ -68,9 +68,9 @@ func (a *activities) StartWorkflow(ctx context.Context, req *schedulespb.StartWo
 		return nil, err
 	}
 
-	req.Request.Namespace = a.namespace.String()
+	req.GetRequest().SetNamespace(a.namespace.String())
 
-	res, err := a.FrontendClient.StartWorkflowExecution(ctx, req.Request)
+	res, err := a.FrontendClient.StartWorkflowExecution(ctx, req.GetRequest())
 	if err != nil {
 		return nil, translateError(err, "StartWorkflowExecution")
 	}
@@ -79,14 +79,14 @@ func (a *activities) StartWorkflow(ctx context.Context, req *schedulespb.StartWo
 	// exactly, but it's just informational so it's close enough.
 	now := time.Now()
 
-	return &schedulespb.StartWorkflowResponse{
-		RunId:         res.RunId,
+	return schedulespb.StartWorkflowResponse_builder{
+		RunId:         res.GetRunId(),
 		RealStartTime: timestamppb.New(now),
-	}, nil
+	}.Build(), nil
 }
 
 func (a *activities) waitForRateLimiterPermission(req *schedulespb.StartWorkflowRequest) error {
-	if req.CompletedRateLimitSleep {
+	if req.GetCompletedRateLimitSleep() {
 		return nil
 	}
 	reservation := a.startWorkflowRateLimiter.Reserve()
@@ -105,7 +105,7 @@ func (a *activities) waitForRateLimiterPermission(req *schedulespb.StartWorkflow
 }
 
 func (a *activities) tryWatchWorkflow(ctx context.Context, req *schedulespb.WatchWorkflowRequest) (*schedulespb.WatchWorkflowResponse, error) {
-	if req.LongPoll {
+	if req.GetLongPoll() {
 		// make sure we return and heartbeat 5s before the timeout. this is only
 		// for long polls, for refreshes we just use the local activity timeout.
 		var cancel context.CancelFunc
@@ -119,12 +119,12 @@ func (a *activities) tryWatchWorkflow(ctx context.Context, req *schedulespb.Watc
 	// empty, so we'll get the latest run, whatever it is (whether it's part of
 	// the desired chain or not). if we have to follow (unlikely), we'll end up
 	// back here with non-empty RunId.
-	pollReq := &historyservice.PollMutableStateRequest{
+	pollReq := historyservice.PollMutableStateRequest_builder{
 		NamespaceId: a.namespaceID.String(),
-		Execution:   req.Execution,
-	}
-	if req.LongPoll {
-		pollReq.ExpectedNextEventId = common.EndEventID
+		Execution:   req.GetExecution(),
+	}.Build()
+	if req.GetLongPoll() {
+		pollReq.SetExpectedNextEventId(common.EndEventID)
 	}
 	// if long-polling, this will block up for workflow completion to 20s (default) and return
 	// the current mutable state at that point. otherwise it should return immediately.
@@ -133,17 +133,17 @@ func (a *activities) tryWatchWorkflow(ctx context.Context, req *schedulespb.Watc
 		switch err.(type) {
 		case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
 			// just turn this into a success, with unspecified status
-			return &schedulespb.WatchWorkflowResponse{Status: enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED}, nil
+			return schedulespb.WatchWorkflowResponse_builder{Status: enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED}.Build(), nil
 		}
-		a.Logger.Error("error from PollMutableState", tag.Error(err), tag.WorkflowID(req.Execution.WorkflowId))
+		a.Logger.Error("error from PollMutableState", tag.Error(err), tag.WorkflowID(req.GetExecution().GetWorkflowId()))
 		return nil, err
 	}
 
-	if pollRes.FirstExecutionRunId != req.FirstExecutionRunId {
-		if len(req.Execution.RunId) == 0 {
+	if pollRes.GetFirstExecutionRunId() != req.GetFirstExecutionRunId() {
+		if len(req.GetExecution().GetRunId()) == 0 {
 			// there is a workflow running but it's not part of the chain we're
 			// looking for. search for the one we want by runid.
-			return nil, errFollow(req.FirstExecutionRunId)
+			return nil, errFollow(req.GetFirstExecutionRunId())
 		}
 		// we explicitly searched for a chain we started by runid, and found
 		// something that's part of a different chain. this should never happen.
@@ -152,37 +152,37 @@ func (a *activities) tryWatchWorkflow(ctx context.Context, req *schedulespb.Watc
 
 	rb := newResponseBuilder(
 		req,
-		pollRes.WorkflowStatus,
+		pollRes.GetWorkflowStatus(),
 		a.Logger,
 		a.maxBlobSize()-recordOverheadSize,
 	)
-	if pollRes.WorkflowStatus == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+	if pollRes.GetWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 		return rb.Build(nil)
 	}
 
 	// get last event from history
-	histReq := &workflowservice.GetWorkflowExecutionHistoryRequest{
+	histReq := workflowservice.GetWorkflowExecutionHistoryRequest_builder{
 		Namespace: a.namespace.String(),
 
 		// If a workflow is started and completed while we were polling, PollMutableState
 		// may return a different Execution than what we'd requested. Make sure to request
 		// events for the latest.
-		Execution: pollRes.Execution,
+		Execution: pollRes.GetExecution(),
 
 		MaximumPageSize:        1,
 		HistoryEventFilterType: enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT,
 		SkipArchival:           true, // should be recently closed, no need for archival
-	}
+	}.Build()
 	histRes, err := a.FrontendClient.GetWorkflowExecutionHistory(ctx, histReq)
 
 	if err != nil {
-		a.Logger.Error("error from GetWorkflowExecutionHistory", tag.Error(err), tag.WorkflowID(req.Execution.WorkflowId))
+		a.Logger.Error("error from GetWorkflowExecutionHistory", tag.Error(err), tag.WorkflowID(req.GetExecution().GetWorkflowId()))
 		return nil, err
 	}
 
 	events := histRes.GetHistory().GetEvents()
 	if len(events) < 1 {
-		a.Logger.Error("GetWorkflowExecutionHistory returned no events", tag.WorkflowID(req.Execution.WorkflowId))
+		a.Logger.Error("GetWorkflowExecutionHistory returned no events", tag.WorkflowID(req.GetExecution().GetWorkflowId()))
 		return nil, errNoEvents
 	}
 	lastEvent := events[0]
@@ -191,7 +191,7 @@ func (a *activities) tryWatchWorkflow(ctx context.Context, req *schedulespb.Watc
 }
 
 func (a *activities) WatchWorkflow(ctx context.Context, req *schedulespb.WatchWorkflowRequest) (*schedulespb.WatchWorkflowResponse, error) {
-	if !req.LongPoll {
+	if !req.GetLongPoll() {
 		// Go SDK currently doesn't set context timeout based on local activity
 		// StartToCloseTimeout if ScheduleToCloseTimeout is set, so add a timeout here.
 		// TODO: remove after https://github.com/temporalio/sdk-go/issues/1066
@@ -205,11 +205,11 @@ func (a *activities) WatchWorkflow(ctx context.Context, req *schedulespb.WatchWo
 		res, err := a.tryWatchWorkflow(ctx, req)
 		// long poll should return before our deadline, but even if it doesn't,
 		// we can still try again within the same activity
-		if req.LongPoll && (err == errTryAgain || common.IsContextDeadlineExceededErr(err)) {
+		if req.GetLongPoll() && (err == errTryAgain || common.IsContextDeadlineExceededErr(err)) {
 			continue
 		}
 		if newRunID, ok := err.(errFollow); ok {
-			req.Execution.RunId = string(newRunID)
+			req.GetExecution().SetRunId(string(newRunID))
 			continue
 		}
 		return res, translateError(err, "WatchWorkflow")
@@ -223,18 +223,18 @@ func (a *activities) CancelWorkflow(ctx context.Context, req *schedulespb.Cancel
 	ctx, cancel = context.WithTimeout(ctx, defaultLocalActivityOptions.StartToCloseTimeout)
 	defer cancel()
 
-	rreq := &historyservice.RequestCancelWorkflowExecutionRequest{
+	rreq := historyservice.RequestCancelWorkflowExecutionRequest_builder{
 		NamespaceId: a.namespaceID.String(),
-		CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{
+		CancelRequest: workflowservice.RequestCancelWorkflowExecutionRequest_builder{
 			Namespace: a.namespace.String(),
 			// only set WorkflowId so we cancel the latest, but restricted by FirstExecutionRunId
-			WorkflowExecution:   &commonpb.WorkflowExecution{WorkflowId: req.Execution.WorkflowId},
-			Identity:            req.Identity,
-			RequestId:           req.RequestId,
-			FirstExecutionRunId: req.Execution.RunId,
-			Reason:              req.Reason,
-		},
-	}
+			WorkflowExecution:   commonpb.WorkflowExecution_builder{WorkflowId: req.GetExecution().GetWorkflowId()}.Build(),
+			Identity:            req.GetIdentity(),
+			RequestId:           req.GetRequestId(),
+			FirstExecutionRunId: req.GetExecution().GetRunId(),
+			Reason:              req.GetReason(),
+		}.Build(),
+	}.Build()
 	_, err := a.HistoryClient.RequestCancelWorkflowExecution(ctx, rreq)
 
 	return translateError(err, "RequestCancelWorkflowExecution")
@@ -246,17 +246,17 @@ func (a *activities) TerminateWorkflow(ctx context.Context, req *schedulespb.Ter
 	ctx, cancel = context.WithTimeout(ctx, defaultLocalActivityOptions.StartToCloseTimeout)
 	defer cancel()
 
-	rreq := &historyservice.TerminateWorkflowExecutionRequest{
+	rreq := historyservice.TerminateWorkflowExecutionRequest_builder{
 		NamespaceId: a.namespaceID.String(),
-		TerminateRequest: &workflowservice.TerminateWorkflowExecutionRequest{
+		TerminateRequest: workflowservice.TerminateWorkflowExecutionRequest_builder{
 			Namespace: a.namespace.String(),
 			// only set WorkflowId so we cancel the latest, but restricted by FirstExecutionRunId
-			WorkflowExecution:   &commonpb.WorkflowExecution{WorkflowId: req.Execution.WorkflowId},
-			Reason:              req.Reason,
-			Identity:            req.Identity,
-			FirstExecutionRunId: req.Execution.RunId,
-		},
-	}
+			WorkflowExecution:   commonpb.WorkflowExecution_builder{WorkflowId: req.GetExecution().GetWorkflowId()}.Build(),
+			Reason:              req.GetReason(),
+			Identity:            req.GetIdentity(),
+			FirstExecutionRunId: req.GetExecution().GetRunId(),
+		}.Build(),
+	}.Build()
 	_, err := a.HistoryClient.TerminateWorkflowExecution(ctx, rreq)
 
 	return translateError(err, "TerminateWorkflowExecution")
@@ -301,40 +301,40 @@ func newResponseBuilder(
 func (r responseBuilder) Build(event *historypb.HistoryEvent) (*schedulespb.WatchWorkflowResponse, error) {
 	switch r.workflowStatus {
 	case enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING:
-		if r.request.LongPoll {
+		if r.request.GetLongPoll() {
 			return nil, errTryAgain // not closed yet, just try again
 		}
 		return r.makeResponse(nil, nil, nil), nil
 	case enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED:
 		if attrs := event.GetWorkflowExecutionCompletedEventAttributes(); attrs == nil {
 			return nil, errNoAttrs
-		} else if len(attrs.NewExecutionRunId) > 0 {
+		} else if len(attrs.GetNewExecutionRunId()) > 0 {
 			// this shouldn't happen because we don't allow old-cron workflows as scheduled, but follow it anyway
-			return nil, errFollow(attrs.NewExecutionRunId)
+			return nil, errFollow(attrs.GetNewExecutionRunId())
 		} else {
-			result := attrs.Result
+			result := attrs.GetResult()
 			if r.isTooBig(result) {
 				r.logger.Error(
 					fmt.Sprintf("result dropped due to its size %d", proto.Size(result)),
-					tag.WorkflowID(r.request.Execution.WorkflowId))
+					tag.WorkflowID(r.request.GetExecution().GetWorkflowId()))
 				result = nil
 			}
-			return r.makeResponse(result, nil, event.EventTime), nil
+			return r.makeResponse(result, nil, event.GetEventTime()), nil
 		}
 	case enumspb.WORKFLOW_EXECUTION_STATUS_FAILED:
 		if attrs := event.GetWorkflowExecutionFailedEventAttributes(); attrs == nil {
 			return nil, errNoAttrs
-		} else if len(attrs.NewExecutionRunId) > 0 {
-			return nil, errFollow(attrs.NewExecutionRunId)
+		} else if len(attrs.GetNewExecutionRunId()) > 0 {
+			return nil, errFollow(attrs.GetNewExecutionRunId())
 		} else {
-			failure := attrs.Failure
+			failure := attrs.GetFailure()
 			if r.isTooBig(failure) {
 				r.logger.Error(
 					fmt.Sprintf("failure dropped due to its size %d", proto.Size(failure)),
-					tag.WorkflowID(r.request.Execution.WorkflowId))
+					tag.WorkflowID(r.request.GetExecution().GetWorkflowId()))
 				failure = nil
 			}
-			return r.makeResponse(nil, failure, event.EventTime), nil
+			return r.makeResponse(nil, failure, event.GetEventTime()), nil
 		}
 	case enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED, enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED:
 		return r.makeResponse(nil, nil, event.GetEventTime()), nil
@@ -342,15 +342,15 @@ func (r responseBuilder) Build(event *historypb.HistoryEvent) (*schedulespb.Watc
 		if attrs := event.GetWorkflowExecutionContinuedAsNewEventAttributes(); attrs == nil {
 			return nil, errNoAttrs
 		} else {
-			return nil, errFollow(attrs.NewExecutionRunId)
+			return nil, errFollow(attrs.GetNewExecutionRunId())
 		}
 	case enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT:
 		if attrs := event.GetWorkflowExecutionTimedOutEventAttributes(); attrs == nil {
 			return nil, errNoAttrs
-		} else if len(attrs.NewExecutionRunId) > 0 {
-			return nil, errFollow(attrs.NewExecutionRunId)
+		} else if len(attrs.GetNewExecutionRunId()) > 0 {
+			return nil, errFollow(attrs.GetNewExecutionRunId())
 		} else {
-			return r.makeResponse(nil, nil, event.EventTime), nil
+			return r.makeResponse(nil, nil, event.GetEventTime()), nil
 		}
 	}
 	return nil, errUnkownWorkflowStatus
@@ -361,14 +361,14 @@ func (r responseBuilder) isTooBig(m proto.Message) bool {
 }
 
 func (r responseBuilder) makeResponse(result *commonpb.Payloads, failure *failurepb.Failure, closeTime *timestamppb.Timestamp) *schedulespb.WatchWorkflowResponse {
-	res := &schedulespb.WatchWorkflowResponse{
+	res := schedulespb.WatchWorkflowResponse_builder{
 		Status:    r.workflowStatus,
 		CloseTime: closeTime,
-	}
+	}.Build()
 	if result != nil {
-		res.ResultFailure = &schedulespb.WatchWorkflowResponse_Result{Result: result}
+		res.SetResult(proto.ValueOrDefault(result))
 	} else if failure != nil {
-		res.ResultFailure = &schedulespb.WatchWorkflowResponse_Failure{Failure: failure}
+		res.SetFailure(proto.ValueOrDefault(failure))
 	}
 	return res
 }

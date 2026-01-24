@@ -54,118 +54,104 @@ func TestEmitActionMetric(t *testing.T) {
 		{
 			methodName: startWorkflow,
 			fullName:   api.WorkflowServicePrefix + startWorkflow,
-			resp:       &workflowservice.StartWorkflowExecutionResponse{Started: false},
+			resp:       workflowservice.StartWorkflowExecutionResponse_builder{Started: false}.Build(),
 		},
 		{
 			methodName:        startWorkflow,
 			fullName:          api.WorkflowServicePrefix + startWorkflow,
-			resp:              &workflowservice.StartWorkflowExecutionResponse{Started: true},
+			resp:              workflowservice.StartWorkflowExecutionResponse_builder{Started: true}.Build(),
 			expectEmitMetrics: true,
 		},
 		{
 			methodName: startWorkflow,
 			fullName:   api.WorkflowServicePrefix + startWorkflow,
-			req: &workflowservice.StartWorkflowExecutionRequest{
+			req: workflowservice.StartWorkflowExecutionRequest_builder{
 				Namespace:                "test-namespace",
 				OnConflictOptions:        &workflowpb.OnConflictOptions{},
 				WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
-			},
-			resp:              &workflowservice.StartWorkflowExecutionResponse{Started: false},
+			}.Build(),
+			resp:              workflowservice.StartWorkflowExecutionResponse_builder{Started: false}.Build(),
 			expectEmitMetrics: true,
 		},
 		{
 			methodName: executeMultiOps,
 			fullName:   api.WorkflowServicePrefix + executeMultiOps,
-			resp: &workflowservice.ExecuteMultiOperationResponse{
+			resp: workflowservice.ExecuteMultiOperationResponse_builder{
 				Responses: []*workflowservice.ExecuteMultiOperationResponse_Response{
-					{
-						Response: &workflowservice.ExecuteMultiOperationResponse_Response_StartWorkflow{
-							StartWorkflow: &workflowservice.StartWorkflowExecutionResponse{
-								Started: false,
-							},
-						},
-					},
-					{
-						Response: &workflowservice.ExecuteMultiOperationResponse_Response_UpdateWorkflow{
-							UpdateWorkflow: &workflowservice.UpdateWorkflowExecutionResponse{},
-						},
-					},
+					workflowservice.ExecuteMultiOperationResponse_Response_builder{
+						StartWorkflow: workflowservice.StartWorkflowExecutionResponse_builder{
+							Started: false,
+						}.Build(),
+					}.Build(),
+					workflowservice.ExecuteMultiOperationResponse_Response_builder{
+						UpdateWorkflow: &workflowservice.UpdateWorkflowExecutionResponse{},
+					}.Build(),
 				},
-			},
+			}.Build(),
 		},
 		{
 			methodName: executeMultiOps,
 			fullName:   api.WorkflowServicePrefix + executeMultiOps,
-			resp: &workflowservice.ExecuteMultiOperationResponse{
+			resp: workflowservice.ExecuteMultiOperationResponse_builder{
 				Responses: []*workflowservice.ExecuteMultiOperationResponse_Response{
-					{
-						Response: &workflowservice.ExecuteMultiOperationResponse_Response_StartWorkflow{
-							StartWorkflow: &workflowservice.StartWorkflowExecutionResponse{
-								Started: true,
-							},
-						},
-					},
-					{
-						Response: &workflowservice.ExecuteMultiOperationResponse_Response_UpdateWorkflow{
-							UpdateWorkflow: &workflowservice.UpdateWorkflowExecutionResponse{},
-						},
-					},
+					workflowservice.ExecuteMultiOperationResponse_Response_builder{
+						StartWorkflow: workflowservice.StartWorkflowExecutionResponse_builder{
+							Started: true,
+						}.Build(),
+					}.Build(),
+					workflowservice.ExecuteMultiOperationResponse_Response_builder{
+						UpdateWorkflow: &workflowservice.UpdateWorkflowExecutionResponse{},
+					}.Build(),
 				},
-			},
+			}.Build(),
 			expectEmitMetrics: true,
 		},
 		{
 			methodName: executeMultiOps,
 			fullName:   api.WorkflowServicePrefix + executeMultiOps,
-			resp: &workflowservice.ExecuteMultiOperationResponse{
+			resp: workflowservice.ExecuteMultiOperationResponse_builder{
 				Responses: []*workflowservice.ExecuteMultiOperationResponse_Response{
-					{
-						Response: &workflowservice.ExecuteMultiOperationResponse_Response_StartWorkflow{
-							StartWorkflow: &workflowservice.StartWorkflowExecutionResponse{
-								Started: false,
-							},
-						},
-					},
+					workflowservice.ExecuteMultiOperationResponse_Response_builder{
+						StartWorkflow: workflowservice.StartWorkflowExecutionResponse_builder{
+							Started: false,
+						}.Build(),
+					}.Build(),
 				},
-			},
-			req: &workflowservice.ExecuteMultiOperationRequest{
+			}.Build(),
+			req: workflowservice.ExecuteMultiOperationRequest_builder{
 				Namespace: "test-namespace",
 				Operations: []*workflowservice.ExecuteMultiOperationRequest_Operation{
-					{
-						Operation: &workflowservice.ExecuteMultiOperationRequest_Operation_StartWorkflow{
-							StartWorkflow: &workflowservice.StartWorkflowExecutionRequest{
-								Namespace:                "test-namespace",
-								OnConflictOptions:        &workflowpb.OnConflictOptions{},
-								WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
-							},
-						},
-					},
+					workflowservice.ExecuteMultiOperationRequest_Operation_builder{
+						StartWorkflow: workflowservice.StartWorkflowExecutionRequest_builder{
+							Namespace:                "test-namespace",
+							OnConflictOptions:        &workflowpb.OnConflictOptions{},
+							WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
+						}.Build(),
+					}.Build(),
 				},
-			},
+			}.Build(),
 			expectEmitMetrics: true,
 		},
 		{
 			methodName: executeMultiOps,
 			fullName:   api.WorkflowServicePrefix + executeMultiOps,
-			resp: &workflowservice.ExecuteMultiOperationResponse{
+			resp: workflowservice.ExecuteMultiOperationResponse_builder{
 				Responses: []*workflowservice.ExecuteMultiOperationResponse_Response{
 					// missing start response
-					{
-						Response: &workflowservice.ExecuteMultiOperationResponse_Response_UpdateWorkflow{
-							UpdateWorkflow: &workflowservice.UpdateWorkflowExecutionResponse{},
-						},
-					},
+					workflowservice.ExecuteMultiOperationResponse_Response_builder{
+						UpdateWorkflow: &workflowservice.UpdateWorkflowExecutionResponse{},
+					}.Build(),
 				},
-			},
+			}.Build(),
 		},
 		{
 			methodName: executeMultiOps,
 			fullName:   api.WorkflowServicePrefix + executeMultiOps,
-			resp: &workflowservice.ExecuteMultiOperationResponse{
+			resp: workflowservice.ExecuteMultiOperationResponse_builder{
 				Responses: []*workflowservice.ExecuteMultiOperationResponse_Response{
 					// no responses
 				},
-			},
+			}.Build(),
 		},
 		{
 			methodName: queryWorkflow,
@@ -181,89 +167,89 @@ func TestEmitActionMetric(t *testing.T) {
 		}, {
 			methodName: metrics.HistoryRespondWorkflowTaskCompletedScope,
 			fullName:   api.WorkflowServicePrefix + "RespondWorkflowTaskCompleted",
-			req: &workflowservice.RespondWorkflowTaskCompletedRequest{
+			req: workflowservice.RespondWorkflowTaskCompletedRequest_builder{
 				Messages: []*protocolpb.Message{
-					{
+					protocolpb.Message_builder{
 						Id:   "MESSAGE_ID",
 						Body: &updateAcceptanceMessageBody,
-					},
+					}.Build(),
 				},
-			},
+			}.Build(),
 			expectEmitMetrics: true,
 		},
 		{
 			methodName: metrics.HistoryRespondWorkflowTaskCompletedScope,
 			fullName:   api.WorkflowServicePrefix + "RespondWorkflowTaskCompleted",
-			req: &workflowservice.RespondWorkflowTaskCompletedRequest{
+			req: workflowservice.RespondWorkflowTaskCompletedRequest_builder{
 				Commands: []*commandpb.Command{
-					{
+					commandpb.Command_builder{
 						CommandType: enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION,
-					},
+					}.Build(),
 				},
-			},
+			}.Build(),
 			expectEmitMetrics: true,
 		},
 		{
 			methodName: metrics.HistoryRespondWorkflowTaskCompletedScope,
 			fullName:   api.WorkflowServicePrefix + "RespondWorkflowTaskCompleted",
-			req: &workflowservice.RespondWorkflowTaskCompletedRequest{
+			req: workflowservice.RespondWorkflowTaskCompletedRequest_builder{
 				Messages: []*protocolpb.Message{
-					{
+					protocolpb.Message_builder{
 						Id:   "MESSAGE_ID",
 						Body: &updateRejectionMessageBody,
-					},
+					}.Build(),
 				},
-			},
+			}.Build(),
 			expectEmitMetrics: true,
 		},
 		{
 			methodName: metrics.HistoryRespondWorkflowTaskCompletedScope,
 			fullName:   api.WorkflowServicePrefix + "RespondWorkflowTaskCompleted",
-			req: &workflowservice.RespondWorkflowTaskCompletedRequest{
+			req: workflowservice.RespondWorkflowTaskCompletedRequest_builder{
 				Messages: []*protocolpb.Message{
-					{
+					protocolpb.Message_builder{
 						Id:   "MESSAGE_ID",
 						Body: &updateResponseMessageBody,
-					},
+					}.Build(),
 				},
-			},
+			}.Build(),
 		},
 		{
 			methodName: queryWorkflow,
 			fullName:   api.WorkflowServicePrefix + queryWorkflow,
-			req: &workflowservice.QueryWorkflowRequest{
-				Query: &querypb.WorkflowQuery{
+			req: workflowservice.QueryWorkflowRequest_builder{
+				Query: querypb.WorkflowQuery_builder{
 					QueryType: "some_type",
-				},
-			},
+				}.Build(),
+			}.Build(),
 			expectEmitMetrics: true,
 		},
 		{
 			methodName: updateWorkflowExecutionOptions,
 			fullName:   api.WorkflowServicePrefix + updateWorkflowExecutionOptions,
-			req: &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+			req: workflowservice.UpdateWorkflowExecutionOptionsRequest_builder{
 				Namespace: "test-namespace",
-				WorkflowExecution: &commonpb.WorkflowExecution{
+				WorkflowExecution: commonpb.WorkflowExecution_builder{
 					WorkflowId: "test-workflow-id",
 					RunId:      "test-run-id",
-				},
-				WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{
-					VersioningOverride: &workflowpb.VersioningOverride{
+				}.Build(),
+				WorkflowExecutionOptions: workflowpb.WorkflowExecutionOptions_builder{
+					VersioningOverride: workflowpb.VersioningOverride_builder{
 						Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
 						PinnedVersion: "fake-version",
-					},
-				},
-			},
+					}.Build(),
+				}.Build(),
+			}.Build(),
 			expectEmitMetrics: true,
 		},
 		{
 			methodName: queryWorkflow,
 			fullName:   api.WorkflowServicePrefix + queryWorkflow,
-			req: &workflowservice.QueryWorkflowRequest{
-				Query: &querypb.WorkflowQuery{
+			req: workflowservice.QueryWorkflowRequest_builder{
+				Query: querypb.WorkflowQuery_builder{
 					QueryType: "__temporal_workflow_metadata",
-				},
-			},
+				}.Build(),
+			}.Build(),
 		},
 	}
 
@@ -488,53 +474,53 @@ func TestOperationOverride(t *testing.T) {
 		{
 			"GetWorkflowExecutionHistory",
 			api.WorkflowServicePrefix + "GetWorkflowExecutionHistory",
-			&workflowservice.GetWorkflowExecutionHistoryRequest{
-				Execution: &commonpb.WorkflowExecution{
+			workflowservice.GetWorkflowExecutionHistoryRequest_builder{
+				Execution: commonpb.WorkflowExecution_builder{
 					WorkflowId: wid,
 					RunId:      rid,
-				},
+				}.Build(),
 				WaitNewEvent: false,
-			},
+			}.Build(),
 			"GetWorkflowExecutionHistory",
 		},
 		{
 			"GetWorkflowExecutionHistory",
 			api.WorkflowServicePrefix + "GetWorkflowExecutionHistory",
-			&workflowservice.GetWorkflowExecutionHistoryRequest{
-				Execution: &commonpb.WorkflowExecution{
+			workflowservice.GetWorkflowExecutionHistoryRequest_builder{
+				Execution: commonpb.WorkflowExecution_builder{
 					WorkflowId: wid,
 					RunId:      rid,
-				},
+				}.Build(),
 				WaitNewEvent: true,
-			},
+			}.Build(),
 			"PollWorkflowExecutionHistory",
 		},
 		{
 			"GetWorkflowExecutionHistory",
 			api.HistoryServicePrefix + "GetWorkflowExecutionHistory",
-			&historyservice.GetWorkflowExecutionHistoryRequest{
-				Request: &workflowservice.GetWorkflowExecutionHistoryRequest{
-					Execution: &commonpb.WorkflowExecution{
+			historyservice.GetWorkflowExecutionHistoryRequest_builder{
+				Request: workflowservice.GetWorkflowExecutionHistoryRequest_builder{
+					Execution: commonpb.WorkflowExecution_builder{
 						WorkflowId: wid,
 						RunId:      rid,
-					},
+					}.Build(),
 					WaitNewEvent: false,
-				},
-			},
+				}.Build(),
+			}.Build(),
 			"GetWorkflowExecutionHistory",
 		},
 		{
 			"GetWorkflowExecutionHistory",
 			api.HistoryServicePrefix + "GetWorkflowExecutionHistory",
-			&historyservice.GetWorkflowExecutionHistoryRequest{
-				Request: &workflowservice.GetWorkflowExecutionHistoryRequest{
-					Execution: &commonpb.WorkflowExecution{
+			historyservice.GetWorkflowExecutionHistoryRequest_builder{
+				Request: workflowservice.GetWorkflowExecutionHistoryRequest_builder{
+					Execution: commonpb.WorkflowExecution_builder{
 						WorkflowId: wid,
 						RunId:      rid,
-					},
+					}.Build(),
 					WaitNewEvent: true,
-				},
-			},
+				}.Build(),
+			}.Build(),
 			"PollWorkflowExecutionHistory",
 		},
 	}

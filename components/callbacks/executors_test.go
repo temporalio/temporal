@@ -125,13 +125,13 @@ func TestProcessInvocationTaskNexus_Outcomes(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			namespaceRegistryMock := namespace.NewMockRegistry(ctrl)
 			factory := namespace.NewDefaultReplicationResolverFactory()
-			detail := &persistencespb.NamespaceDetail{
-				Info: &persistencespb.NamespaceInfo{
+			detail := persistencespb.NamespaceDetail_builder{
+				Info: persistencespb.NamespaceInfo_builder{
 					Id:   "namespace-id",
 					Name: "namespace-name",
-				},
+				}.Build(),
 				Config: &persistencespb.NamespaceConfig{},
-			}
+			}.Build()
 			ns, err := namespace.FromPersistentState(detail, factory(detail))
 			require.NoError(t, err)
 			namespaceRegistryMock.EXPECT().GetNamespaceByID(namespace.ID("namespace-id")).Return(ns, nil)
@@ -151,16 +151,14 @@ func TestProcessInvocationTaskNexus_Outcomes(t *testing.T) {
 
 			root := newRoot(t)
 			cb := callbacks.Callback{
-				CallbackInfo: &persistencespb.CallbackInfo{
-					Callback: &persistencespb.Callback{
-						Variant: &persistencespb.Callback_Nexus_{
-							Nexus: &persistencespb.Callback_Nexus{
-								Url: "http://localhost",
-							},
-						},
-					},
+				CallbackInfo: persistencespb.CallbackInfo_builder{
+					Callback: persistencespb.Callback_builder{
+						Nexus: persistencespb.Callback_Nexus_builder{
+							Url: "http://localhost",
+						}.Build(),
+					}.Build(),
 					State: enumsspb.CALLBACK_STATE_SCHEDULED,
-				},
+				}.Build(),
 			}
 			coll := callbacks.MachineCollection(root)
 			node, err := coll.Add("ID", cb)
@@ -192,14 +190,14 @@ func TestProcessInvocationTaskNexus_Outcomes(t *testing.T) {
 				env,
 				hsm.Ref{
 					WorkflowKey: key,
-					StateMachineRef: &persistencespb.StateMachineRef{
+					StateMachineRef: persistencespb.StateMachineRef_builder{
 						Path: []*persistencespb.StateMachineKey{
-							{
+							persistencespb.StateMachineKey_builder{
 								Type: callbacks.StateMachineType,
 								Id:   "ID",
-							},
+							}.Build(),
 						},
-					},
+					}.Build(),
 				},
 				callbacks.NewInvocationTask("http://localhost"),
 			)
@@ -221,16 +219,14 @@ func TestProcessInvocationTaskNexus_Outcomes(t *testing.T) {
 func TestProcessBackoffTask(t *testing.T) {
 	root := newRoot(t)
 	cb := callbacks.Callback{
-		CallbackInfo: &persistencespb.CallbackInfo{
-			Callback: &persistencespb.Callback{
-				Variant: &persistencespb.Callback_Nexus_{
-					Nexus: &persistencespb.Callback_Nexus{
-						Url: "http://localhost",
-					},
-				},
-			},
+		CallbackInfo: persistencespb.CallbackInfo_builder{
+			Callback: persistencespb.Callback_builder{
+				Nexus: persistencespb.Callback_Nexus_builder{
+					Url: "http://localhost",
+				}.Build(),
+			}.Build(),
 			State: enumsspb.CALLBACK_STATE_BACKING_OFF,
-		},
+		}.Build(),
 	}
 	coll := callbacks.MachineCollection(root)
 	node, err := coll.Add("ID", cb)
@@ -269,15 +265,15 @@ func TestProcessBackoffTask(t *testing.T) {
 func newMutableState(t *testing.T) mutableState {
 	completionNexus, err := nexusrpc.NewOperationCompletionSuccessful(nil, nexusrpc.OperationCompletionSuccessfulOptions{})
 	require.NoError(t, err)
-	hsmCallbackArg := &persistencespb.HSMCompletionCallbackArg{
+	hsmCallbackArg := persistencespb.HSMCompletionCallbackArg_builder{
 		NamespaceId: "mynsid",
 		WorkflowId:  "mywid",
 		RunId:       "myrid",
-		LastEvent: &historypb.HistoryEvent{
+		LastEvent: historypb.HistoryEvent_builder{
 			EventId:   42,
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
-		},
-	}
+		}.Build(),
+	}.Build()
 	return mutableState{
 		completionNexus: completionNexus,
 		completionHsm:   hsmCallbackArg,
@@ -296,12 +292,12 @@ func newRoot(t *testing.T) *hsm.Node {
 }
 
 func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
-	dummyRef := persistencespb.ChasmComponentRef{
+	dummyRef := persistencespb.ChasmComponentRef_builder{
 		NamespaceId: "namespace-id",
 		BusinessId:  "business-id",
 		RunId:       "run-id",
 		ArchetypeId: 1234,
-	}
+	}.Build()
 
 	serializedRef, err := dummyRef.Marshal()
 	require.NoError(t, err)
@@ -309,7 +305,7 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 	dummyTime := time.Now().UTC()
 
 	createPayload := func(data []byte) *commonpb.Payload {
-		return &commonpb.Payload{Data: data}
+		return commonpb.Payload_builder{Data: data}.Build()
 	}
 
 	cases := []struct {
@@ -329,20 +325,20 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 					gomock.Any(),
 				).DoAndReturn(func(ctx context.Context, req *historyservice.CompleteNexusOperationChasmRequest, opts ...grpc.CallOption) (*historyservice.CompleteNexusOperationChasmResponse, error) {
 					// Verify completion token
-					require.NotNil(t, req.Completion)
-					require.NotNil(t, req.Completion.ComponentRef)
+					require.NotNil(t, req.GetCompletion())
+					require.NotNil(t, req.GetCompletion().GetComponentRef())
 					var ref persistencespb.ChasmComponentRef
-					require.NoError(t, proto.Unmarshal(req.Completion.ComponentRef, &ref))
-					require.Equal(t, "namespace-id", ref.NamespaceId)
-					require.Equal(t, "business-id", ref.BusinessId)
-					require.Equal(t, "run-id", ref.RunId)
-					require.Equal(t, dummyRef.ArchetypeId, ref.ArchetypeId)
-					require.Equal(t, "request-id", req.Completion.RequestId)
+					require.NoError(t, proto.Unmarshal(req.GetCompletion().GetComponentRef(), &ref))
+					require.Equal(t, "namespace-id", ref.GetNamespaceId())
+					require.Equal(t, "business-id", ref.GetBusinessId())
+					require.Equal(t, "run-id", ref.GetRunId())
+					require.Equal(t, dummyRef.GetArchetypeId(), ref.GetArchetypeId())
+					require.Equal(t, "request-id", req.GetCompletion().GetRequestId())
 
 					// Verify successful operation data
 					require.NotNil(t, req.GetSuccess())
-					require.Equal(t, []byte("result-data"), req.GetSuccess().Data)
-					require.Equal(t, req.CloseTime.AsTime(), dummyTime)
+					require.Equal(t, []byte("result-data"), req.GetSuccess().GetData())
+					require.Equal(t, req.GetCloseTime().AsTime(), dummyTime)
 
 					return &historyservice.CompleteNexusOperationChasmResponse{}, nil
 				})
@@ -372,9 +368,9 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 					gomock.Any(),
 					gomock.Any(),
 				).DoAndReturn(func(ctx context.Context, req *historyservice.CompleteNexusOperationChasmRequest, opts ...grpc.CallOption) (*historyservice.CompleteNexusOperationChasmResponse, error) {
-					require.NotNil(t, req.Completion)
+					require.NotNil(t, req.GetCompletion())
 					require.NotNil(t, req.GetFailure())
-					require.Equal(t, req.CloseTime.AsTime(), dummyTime)
+					require.Equal(t, req.GetCloseTime().AsTime(), dummyTime)
 
 					return &historyservice.CompleteNexusOperationChasmResponse{}, nil
 				})
@@ -479,13 +475,13 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			namespaceRegistryMock := namespace.NewMockRegistry(ctrl)
 			factory := namespace.NewDefaultReplicationResolverFactory()
-			detail := &persistencespb.NamespaceDetail{
-				Info: &persistencespb.NamespaceInfo{
+			detail := persistencespb.NamespaceDetail_builder{
+				Info: persistencespb.NamespaceInfo_builder{
 					Id:   "namespace-id",
 					Name: "namespace-name",
-				},
+				}.Build(),
 				Config: &persistencespb.NamespaceConfig{},
-			}
+			}.Build()
 			ns, err := namespace.FromPersistentState(detail, factory(detail))
 			require.NoError(t, err)
 			namespaceRegistryMock.EXPECT().GetNamespaceByID(gomock.Any()).Return(ns, nil)
@@ -509,19 +505,17 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 			require.NoError(t, err)
 
 			cb := callbacks.Callback{
-				CallbackInfo: &persistencespb.CallbackInfo{
-					Callback: &persistencespb.Callback{
-						Variant: &persistencespb.Callback_Nexus_{
-							Nexus: &persistencespb.Callback_Nexus{
-								Url:    chasm.NexusCompletionHandlerURL,
-								Header: headers,
-							},
-						},
-					},
+				CallbackInfo: persistencespb.CallbackInfo_builder{
+					Callback: persistencespb.Callback_builder{
+						Nexus: persistencespb.Callback_Nexus_builder{
+							Url:    chasm.NexusCompletionHandlerURL,
+							Header: headers,
+						}.Build(),
+					}.Build(),
 					State:     enumsspb.CALLBACK_STATE_SCHEDULED,
 					RequestId: "request-id",
 					Attempt:   1,
-				},
+				}.Build(),
 			}
 
 			require.NoError(t, callbacks.RegisterExecutor(reg, callbacks.TaskExecutorOptions{
@@ -547,14 +541,14 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 				env,
 				hsm.Ref{
 					WorkflowKey: definition.NewWorkflowKey("namespace-id", "workflow-id", "run-id"),
-					StateMachineRef: &persistencespb.StateMachineRef{
+					StateMachineRef: persistencespb.StateMachineRef_builder{
 						Path: []*persistencespb.StateMachineKey{
-							{
+							persistencespb.StateMachineKey_builder{
 								Type: callbacks.StateMachineType,
 								Id:   "ID",
-							},
+							}.Build(),
 						},
-					},
+					}.Build(),
 				},
 				callbacks.InvocationTask{},
 			)

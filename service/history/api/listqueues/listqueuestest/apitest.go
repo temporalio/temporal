@@ -44,21 +44,21 @@ func TestInvoke(t *testing.T, manager persistence.HistoryTaskQueueManager) {
 			res, err := listqueues.Invoke(
 				context.Background(),
 				manager,
-				&historyservice.ListQueuesRequest{
+				historyservice.ListQueuesRequest_builder{
 					QueueType:     int32(queueType),
 					PageSize:      i,
 					NextPageToken: nextPageToken,
-				},
+				}.Build(),
 			)
 			require.NoError(t, err)
-			for _, queue := range res.Queues {
-				listedQueueNames = append(listedQueueNames, queue.QueueName)
+			for _, queue := range res.GetQueues() {
+				listedQueueNames = append(listedQueueNames, queue.GetQueueName())
 
 			}
-			if len(res.NextPageToken) == 0 {
+			if len(res.GetNextPageToken()) == 0 {
 				break
 			}
-			nextPageToken = res.NextPageToken
+			nextPageToken = res.GetNextPageToken()
 		}
 		for _, queueKey := range queueKeys {
 			require.Contains(t, listedQueueNames, queueKey.GetQueueName())
@@ -70,10 +70,10 @@ func TestInvoke(t *testing.T, manager persistence.HistoryTaskQueueManager) {
 		_, err := listqueues.Invoke(
 			context.Background(),
 			manager,
-			&historyservice.ListQueuesRequest{
+			historyservice.ListQueuesRequest_builder{
 				QueueType: int32(queueType),
 				PageSize:  0,
-			},
+			}.Build(),
 		)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, consts.ErrInvalidPageSize)
@@ -84,11 +84,11 @@ func TestInvoke(t *testing.T, manager persistence.HistoryTaskQueueManager) {
 		_, err := listqueues.Invoke(
 			context.Background(),
 			manager,
-			&historyservice.ListQueuesRequest{
+			historyservice.ListQueuesRequest_builder{
 				QueueType:     int32(queueType),
 				PageSize:      1,
 				NextPageToken: []byte("invalid_token"),
-			},
+			}.Build(),
 		)
 		require.Error(t, err)
 	})

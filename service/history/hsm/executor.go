@@ -26,9 +26,9 @@ type Ref struct {
 
 // StateMachinePath gets the state machine path for from this reference.
 func (r Ref) StateMachinePath() []Key {
-	path := make([]Key, len(r.StateMachineRef.Path))
-	for i, k := range r.StateMachineRef.Path {
-		path[i] = Key{Type: k.Type, ID: k.Id}
+	path := make([]Key, len(r.StateMachineRef.GetPath()))
+	for i, k := range r.StateMachineRef.GetPath() {
+		path[i] = Key{Type: k.GetType(), ID: k.GetId()}
 	}
 	return path
 }

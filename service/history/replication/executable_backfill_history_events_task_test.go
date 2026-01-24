@@ -94,46 +94,44 @@ func (s *executableBackfillHistoryEventsTaskSuite) SetupTest() {
 	s.firstEventID = int64(10)
 	s.nextEventID = int64(21)
 	s.version = rand.Int63()
-	eventsBlob, _ := s.eventSerializer.SerializeEvents([]*historypb.HistoryEvent{{
+	eventsBlob, _ := s.eventSerializer.SerializeEvents([]*historypb.HistoryEvent{historypb.HistoryEvent_builder{
 		EventId: s.firstEventID,
 		Version: s.version,
-	}})
+	}.Build()})
 	s.events, _ = s.eventSerializer.DeserializeEvents(eventsBlob)
 	s.eventsBatches = [][]*historypb.HistoryEvent{s.events}
-	newEventsBlob, _ := s.eventSerializer.SerializeEvents([]*historypb.HistoryEvent{{
+	newEventsBlob, _ := s.eventSerializer.SerializeEvents([]*historypb.HistoryEvent{historypb.HistoryEvent_builder{
 		EventId: 1,
 		Version: s.version,
-	}})
+	}.Build()})
 	s.newRunEvents, _ = s.eventSerializer.DeserializeEvents(newEventsBlob)
 	s.newRunID = uuid.NewString()
 
 	s.eventsBlobs = []*commonpb.DataBlob{eventsBlob}
 	s.taskID = rand.Int63()
 
-	s.replicationTask = &replicationspb.ReplicationTask{
+	s.replicationTask = replicationspb.ReplicationTask_builder{
 		TaskType:     enumsspb.REPLICATION_TASK_TYPE_BACKFILL_HISTORY_TASK,
 		SourceTaskId: s.taskID,
-		Attributes: &replicationspb.ReplicationTask_BackfillHistoryTaskAttributes{
-			BackfillHistoryTaskAttributes: &replicationspb.BackfillHistoryTaskAttributes{
-				NamespaceId: uuid.NewString(),
-				WorkflowId:  uuid.NewString(),
-				RunId:       uuid.NewString(),
-				EventVersionHistory: []*historyspb.VersionHistoryItem{{
-					EventId: s.nextEventID - 1,
-					Version: s.version,
-				}},
-				EventBatches: s.eventsBlobs,
-				NewRunInfo: &replicationspb.NewRunInfo{
-					RunId:      s.newRunID,
-					EventBatch: newEventsBlob,
-				},
-			},
-		},
-		VersionedTransition: &persistencespb.VersionedTransition{
+		BackfillHistoryTaskAttributes: replicationspb.BackfillHistoryTaskAttributes_builder{
+			NamespaceId: uuid.NewString(),
+			WorkflowId:  uuid.NewString(),
+			RunId:       uuid.NewString(),
+			EventVersionHistory: []*historyspb.VersionHistoryItem{historyspb.VersionHistoryItem_builder{
+				EventId: s.nextEventID - 1,
+				Version: s.version,
+			}.Build()},
+			EventBatches: s.eventsBlobs,
+			NewRunInfo: replicationspb.NewRunInfo_builder{
+				RunId:      s.newRunID,
+				EventBatch: newEventsBlob,
+			}.Build(),
+		}.Build(),
+		VersionedTransition: persistencespb.VersionedTransition_builder{
 			NamespaceFailoverVersion: 3,
 			TransitionCount:          5,
-		},
-	}
+		}.Build(),
+	}.Build()
 	s.sourceClusterName = cluster.TestCurrentClusterName
 	s.sourceShardKey = ClusterShardKey{
 		ClusterID: int32(cluster.TestCurrentClusterInitialFailoverVersion),
@@ -196,8 +194,8 @@ func (s *executableBackfillHistoryEventsTaskSuite) TestExecute_Process() {
 			RunID:       s.task.RunID,
 		},
 		SourceClusterName:   s.sourceClusterName,
-		VersionedHistory:    s.replicationTask.VersionedTransition,
-		VersionHistoryItems: s.replicationTask.GetBackfillHistoryTaskAttributes().EventVersionHistory,
+		VersionedHistory:    s.replicationTask.GetVersionedTransition(),
+		VersionHistoryItems: s.replicationTask.GetBackfillHistoryTaskAttributes().GetEventVersionHistory(),
 		Events:              s.eventsBatches,
 		NewEvents:           s.newRunEvents,
 		NewRunID:            s.newRunID,

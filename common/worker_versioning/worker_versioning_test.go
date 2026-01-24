@@ -18,25 +18,26 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/proto"
 )
 
 var (
-	v1 = &deploymentspb.WorkerDeploymentVersion{
+	v1 = deploymentspb.WorkerDeploymentVersion_builder{
 		BuildId:        "v1",
 		DeploymentName: "foo",
-	}
-	v2 = &deploymentspb.WorkerDeploymentVersion{
+	}.Build()
+	v2 = deploymentspb.WorkerDeploymentVersion_builder{
 		BuildId:        "v2",
 		DeploymentName: "foo",
-	}
-	v3 = &deploymentspb.WorkerDeploymentVersion{
+	}.Build()
+	v3 = deploymentspb.WorkerDeploymentVersion_builder{
 		BuildId:        "v3",
 		DeploymentName: "foo",
-	}
-	v4 = &deploymentspb.WorkerDeploymentVersion{
+	}.Build()
+	v4 = deploymentspb.WorkerDeploymentVersion_builder{
 		BuildId:        "v4",
 		DeploymentName: "bar",
-	}
+	}.Build()
 )
 
 type testVersionMembershipCache struct {
@@ -106,479 +107,479 @@ func TestCalculateTaskQueueVersioningInfo(t *testing.T) {
 			wantCurrent:        v2,
 			wantRamping:        v3,
 			wantRampPercentage: 20,
-			data: &persistencespb.DeploymentData{
+			data: persistencespb.DeploymentData_builder{
 				Versions: []*deploymentspb.DeploymentVersionData{
-					{Version: v1, CurrentSinceTime: t1, RoutingUpdateTime: t1},
-					{Version: v2, CurrentSinceTime: t2, RoutingUpdateTime: t2},
-					{Version: v1, RampPercentage: 50, RoutingUpdateTime: t2, RampingSinceTime: t2},
-					{Version: v3, RampPercentage: 20, RoutingUpdateTime: t3, RampingSinceTime: t1},
+					deploymentspb.DeploymentVersionData_builder{Version: v1, CurrentSinceTime: t1, RoutingUpdateTime: t1}.Build(),
+					deploymentspb.DeploymentVersionData_builder{Version: v2, CurrentSinceTime: t2, RoutingUpdateTime: t2}.Build(),
+					deploymentspb.DeploymentVersionData_builder{Version: v1, RampPercentage: 50, RoutingUpdateTime: t2, RampingSinceTime: t2}.Build(),
+					deploymentspb.DeploymentVersionData_builder{Version: v3, RampPercentage: 20, RoutingUpdateTime: t3, RampingSinceTime: t1}.Build(),
 				},
-			},
+			}.Build(),
 		},
 		{name: "old deployment data: ramp without current", wantRamping: v3, wantRampPercentage: 20,
-			data: &persistencespb.DeploymentData{
+			data: persistencespb.DeploymentData_builder{
 				Versions: []*deploymentspb.DeploymentVersionData{
-					{Version: v1, RampPercentage: 50, RoutingUpdateTime: t2, RampingSinceTime: t2},
-					{Version: v3, RampPercentage: 20, RoutingUpdateTime: t3, RampingSinceTime: t3},
+					deploymentspb.DeploymentVersionData_builder{Version: v1, RampPercentage: 50, RoutingUpdateTime: t2, RampingSinceTime: t2}.Build(),
+					deploymentspb.DeploymentVersionData_builder{Version: v3, RampPercentage: 20, RoutingUpdateTime: t3, RampingSinceTime: t3}.Build(),
 				},
-			},
+			}.Build(),
 		},
 		{name: "old deployment data: ramp to unversioned",
 			wantRamping:        nil,
 			wantRampPercentage: 20,
-			data: &persistencespb.DeploymentData{
+			data: persistencespb.DeploymentData_builder{
 				Versions: []*deploymentspb.DeploymentVersionData{
-					{Version: v1, RampPercentage: 50, RoutingUpdateTime: t1, RampingSinceTime: t1},
+					deploymentspb.DeploymentVersionData_builder{Version: v1, RampPercentage: 50, RoutingUpdateTime: t1, RampingSinceTime: t1}.Build(),
 				},
-				UnversionedRampData: &deploymentspb.DeploymentVersionData{Version: nil, RampPercentage: 20, RoutingUpdateTime: t2, RampingSinceTime: t2},
-			},
+				UnversionedRampData: deploymentspb.DeploymentVersionData_builder{Version: nil, RampPercentage: 20, RoutingUpdateTime: t2, RampingSinceTime: t2}.Build(),
+			}.Build(),
 		},
 		{name: "old deployment data: ramp 100%",
 			wantCurrent:        v1,
 			wantRamping:        v2,
 			wantRampPercentage: 100,
-			data: &persistencespb.DeploymentData{
+			data: persistencespb.DeploymentData_builder{
 				Versions: []*deploymentspb.DeploymentVersionData{
-					{Version: v1, RoutingUpdateTime: t1, CurrentSinceTime: t1},
-					{Version: v2, RampPercentage: 100, RoutingUpdateTime: t2, RampingSinceTime: t2},
+					deploymentspb.DeploymentVersionData_builder{Version: v1, RoutingUpdateTime: t1, CurrentSinceTime: t1}.Build(),
+					deploymentspb.DeploymentVersionData_builder{Version: v2, RampPercentage: 100, RoutingUpdateTime: t2, RampingSinceTime: t2}.Build(),
 				},
-			},
+			}.Build(),
 		},
 		{name: "old deployment data: ramp to unversioned 100%",
 			wantCurrent:        v1,
 			wantRamping:        nil,
 			wantRampPercentage: 100,
-			data: &persistencespb.DeploymentData{
+			data: persistencespb.DeploymentData_builder{
 				Versions: []*deploymentspb.DeploymentVersionData{
-					{Version: v1, RoutingUpdateTime: t1, CurrentSinceTime: t1},
+					deploymentspb.DeploymentVersionData_builder{Version: v1, RoutingUpdateTime: t1, CurrentSinceTime: t1}.Build(),
 				},
-				UnversionedRampData: &deploymentspb.DeploymentVersionData{Version: nil, RampPercentage: 100, RoutingUpdateTime: t2, RampingSinceTime: t2},
-			},
+				UnversionedRampData: deploymentspb.DeploymentVersionData_builder{Version: nil, RampPercentage: 100, RoutingUpdateTime: t2, RampingSinceTime: t2}.Build(),
+			}.Build(),
 		},
 		{name: "old deployment data: ramp to unversioned 100% without current",
 			wantCurrent:        nil,
 			wantRamping:        nil,
 			wantRampPercentage: 100,
-			data: &persistencespb.DeploymentData{
+			data: persistencespb.DeploymentData_builder{
 				Versions: []*deploymentspb.DeploymentVersionData{
-					{Version: v1, RoutingUpdateTime: t1, CurrentSinceTime: nil},
+					deploymentspb.DeploymentVersionData_builder{Version: v1, RoutingUpdateTime: t1, CurrentSinceTime: nil}.Build(),
 				},
-				UnversionedRampData: &deploymentspb.DeploymentVersionData{Version: nil, RampPercentage: 100, RoutingUpdateTime: t2, RampingSinceTime: t2},
-			},
+				UnversionedRampData: deploymentspb.DeploymentVersionData_builder{Version: nil, RampPercentage: 100, RoutingUpdateTime: t2, RampingSinceTime: t2}.Build(),
+			}.Build(),
 		},
 		// Membership related tests
 		{name: "mixed: new RoutingConfig current overrides old when newer in membership",
 			wantCurrent: v2,
-			data: &persistencespb.DeploymentData{
+			data: persistencespb.DeploymentData_builder{
 				Versions: []*deploymentspb.DeploymentVersionData{
 					// Old format: v1 is current at older time t1
-					{Version: v1, CurrentSinceTime: t1, RoutingUpdateTime: t1},
+					deploymentspb.DeploymentVersionData_builder{Version: v1, CurrentSinceTime: t1, RoutingUpdateTime: t1}.Build(),
 				},
 				DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
-					v2.GetDeploymentName(): {
-						RoutingConfig: &deploymentpb.RoutingConfig{
-							CurrentDeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
+					v2.GetDeploymentName(): persistencespb.WorkerDeploymentData_builder{
+						RoutingConfig: deploymentpb.RoutingConfig_builder{
+							CurrentDeploymentVersion: deploymentpb.WorkerDeploymentVersion_builder{
 								DeploymentName: v2.GetDeploymentName(),
 								BuildId:        v2.GetBuildId(),
-							},
+							}.Build(),
 							CurrentVersionChangedTime: t2,
-						},
+						}.Build(),
 						// Membership contains v2 so HasDeploymentVersion() passes
 						Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
 							v2.GetBuildId(): {},
 						},
-					},
+					}.Build(),
 				},
-			},
+			}.Build(),
 		},
 		{name: "mixed: fall back to old current when new current not in membership",
 			wantCurrent: v1,
-			data: &persistencespb.DeploymentData{
+			data: persistencespb.DeploymentData_builder{
 				Versions: []*deploymentspb.DeploymentVersionData{
 					// Old format: v1 is current at older time t1
-					{Version: v1, CurrentSinceTime: t1, RoutingUpdateTime: t1},
+					deploymentspb.DeploymentVersionData_builder{Version: v1, CurrentSinceTime: t1, RoutingUpdateTime: t1}.Build(),
 				},
 				DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
-					v2.GetDeploymentName(): {
-						RoutingConfig: &deploymentpb.RoutingConfig{
-							CurrentDeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
+					v2.GetDeploymentName(): persistencespb.WorkerDeploymentData_builder{
+						RoutingConfig: deploymentpb.RoutingConfig_builder{
+							CurrentDeploymentVersion: deploymentpb.WorkerDeploymentVersion_builder{
 								DeploymentName: v2.GetDeploymentName(),
 								BuildId:        v2.GetBuildId(),
-							},
+							}.Build(),
 							CurrentVersionChangedTime: t2,
-						},
+						}.Build(),
 						// Membership missing v2 -> new format should be ignored for current
 						Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{},
-					},
+					}.Build(),
 				},
-			},
+			}.Build(),
 		},
 		{name: "mixed: new RoutingConfig ramping overrides old when newer in membership",
 			wantRamping:        v3,
 			wantRampPercentage: 20,
-			data: &persistencespb.DeploymentData{
+			data: persistencespb.DeploymentData_builder{
 				Versions: []*deploymentspb.DeploymentVersionData{
 					// Old format: v2 is ramping at older time t1
-					{Version: v2, RampingSinceTime: t1, RoutingUpdateTime: t1, RampPercentage: 30},
+					deploymentspb.DeploymentVersionData_builder{Version: v2, RampingSinceTime: t1, RoutingUpdateTime: t1, RampPercentage: 30}.Build(),
 				},
 				DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
-					v3.GetDeploymentName(): {
-						RoutingConfig: &deploymentpb.RoutingConfig{
-							RampingDeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
+					v3.GetDeploymentName(): persistencespb.WorkerDeploymentData_builder{
+						RoutingConfig: deploymentpb.RoutingConfig_builder{
+							RampingDeploymentVersion: deploymentpb.WorkerDeploymentVersion_builder{
 								DeploymentName: v3.GetDeploymentName(),
 								BuildId:        v3.GetBuildId(),
-							},
+							}.Build(),
 							RampingVersionPercentage:            20,
 							RampingVersionPercentageChangedTime: t2,
-						},
+						}.Build(),
 						// Membership contains v3 so HasDeploymentVersion() passes
 						Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
 							v3.GetBuildId(): {},
 						},
-					},
+					}.Build(),
 				},
-			},
+			}.Build(),
 		},
 		{name: "mixed: fall back to old ramping when new ramping not in membership",
 			wantRamping:        v2,
 			wantRampPercentage: 30,
-			data: &persistencespb.DeploymentData{
+			data: persistencespb.DeploymentData_builder{
 				Versions: []*deploymentspb.DeploymentVersionData{
 					// Old format: v2 is ramping at older time t1
-					{Version: v2, RampingSinceTime: t1, RoutingUpdateTime: t1, RampPercentage: 30},
+					deploymentspb.DeploymentVersionData_builder{Version: v2, RampingSinceTime: t1, RoutingUpdateTime: t1, RampPercentage: 30}.Build(),
 				},
 				DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
-					v3.GetDeploymentName(): {
-						RoutingConfig: &deploymentpb.RoutingConfig{
-							RampingDeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
+					v3.GetDeploymentName(): persistencespb.WorkerDeploymentData_builder{
+						RoutingConfig: deploymentpb.RoutingConfig_builder{
+							RampingDeploymentVersion: deploymentpb.WorkerDeploymentVersion_builder{
 								DeploymentName: v3.GetDeploymentName(),
 								BuildId:        v3.GetBuildId(),
-							},
+							}.Build(),
 							RampingVersionPercentage:            20,
 							RampingVersionPercentageChangedTime: t2,
-						},
+						}.Build(),
 						// Membership missing v3 -> new format should be ignored for ramping
 						Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{},
-					},
+					}.Build(),
 				},
-			},
+			}.Build(),
 		},
 		{name: "mixed: unversioned current newer than older current version -> keep old versioned",
 			wantCurrent: v4,
-			data: &persistencespb.DeploymentData{
+			data: persistencespb.DeploymentData_builder{
 				Versions: []*deploymentspb.DeploymentVersionData{
 					// Old format: v4 is current at older time t1
-					{Version: v4, CurrentSinceTime: t1, RoutingUpdateTime: t1},
+					deploymentspb.DeploymentVersionData_builder{Version: v4, CurrentSinceTime: t1, RoutingUpdateTime: t1}.Build(),
 				},
 				DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
 					// New format: sets current to unversioned at newer time t3
-					"foo": {
-						RoutingConfig: &deploymentpb.RoutingConfig{
+					"foo": persistencespb.WorkerDeploymentData_builder{
+						RoutingConfig: deploymentpb.RoutingConfig_builder{
 							CurrentDeploymentVersion:  nil, // unversioned
 							CurrentVersionChangedTime: t3,
-						},
+						}.Build(),
 						Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
 							// Membership irrelevant for unversioned; keep empty or arbitrary
 						},
-					},
+					}.Build(),
 				},
-			},
+			}.Build(),
 		},
 		{name: "mixed: unversioned current without any other current version -> unversioned",
 			wantCurrent: nil,
-			data: &persistencespb.DeploymentData{
+			data: persistencespb.DeploymentData_builder{
 				Versions: []*deploymentspb.DeploymentVersionData{},
 				DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
-					"foo": {
-						RoutingConfig: &deploymentpb.RoutingConfig{
+					"foo": persistencespb.WorkerDeploymentData_builder{
+						RoutingConfig: deploymentpb.RoutingConfig_builder{
 							CurrentDeploymentVersion:  nil, // unversioned
 							CurrentVersionChangedTime: t3,
-						},
+						}.Build(),
 						Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
 							// Membership irrelevant for unversioned; keep empty or arbitrary
 						},
-					},
+					}.Build(),
 				},
-			},
+			}.Build(),
 		},
 		{name: "mixed: unversioned ramping newer than older ramping version -> keep old versioned",
 			wantRamping:        v4,
 			wantRampPercentage: 30,
-			data: &persistencespb.DeploymentData{
+			data: persistencespb.DeploymentData_builder{
 				Versions: []*deploymentspb.DeploymentVersionData{
 					// Old format: v4 is ramping at older time t1
-					{Version: v4, RampingSinceTime: t1, RoutingUpdateTime: t1, RampPercentage: 30},
+					deploymentspb.DeploymentVersionData_builder{Version: v4, RampingSinceTime: t1, RoutingUpdateTime: t1, RampPercentage: 30}.Build(),
 				},
 				DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
-					"foo": {
-						RoutingConfig: &deploymentpb.RoutingConfig{
+					"foo": persistencespb.WorkerDeploymentData_builder{
+						RoutingConfig: deploymentpb.RoutingConfig_builder{
 							RampingDeploymentVersion:            nil, // unversioned ramp target
 							RampingVersionPercentage:            20,
 							RampingVersionPercentageChangedTime: t3,
-						},
+						}.Build(),
 						Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{},
-					},
+					}.Build(),
 				},
-			},
+			}.Build(),
 		},
 		{name: "mixed: unversioned ramping without any other ramping version -> unversioned",
 			wantRamping:        nil,
 			wantRampPercentage: 25,
-			data: &persistencespb.DeploymentData{
+			data: persistencespb.DeploymentData_builder{
 				Versions: []*deploymentspb.DeploymentVersionData{},
 				DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
-					"foo": {
-						RoutingConfig: &deploymentpb.RoutingConfig{
+					"foo": persistencespb.WorkerDeploymentData_builder{
+						RoutingConfig: deploymentpb.RoutingConfig_builder{
 							RampingDeploymentVersion:            nil, // unversioned ramp target
 							RampingVersionPercentage:            25,
 							RampingVersionPercentageChangedTime: t3,
-						},
+						}.Build(),
 						Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{},
-					},
+					}.Build(),
 				},
-			},
+			}.Build(),
 		},
 		{name: "new format: unversioned current with newer timestamp with another current version in a different deployment -> current is still versioned",
 			wantCurrent: v1,
-			data: &persistencespb.DeploymentData{
+			data: persistencespb.DeploymentData_builder{
 				Versions: []*deploymentspb.DeploymentVersionData{},
 				DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
-					"foo": {
-						RoutingConfig: &deploymentpb.RoutingConfig{
-							CurrentDeploymentVersion:  &deploymentpb.WorkerDeploymentVersion{DeploymentName: "foo", BuildId: "v1"},
+					"foo": persistencespb.WorkerDeploymentData_builder{
+						RoutingConfig: deploymentpb.RoutingConfig_builder{
+							CurrentDeploymentVersion:  deploymentpb.WorkerDeploymentVersion_builder{DeploymentName: "foo", BuildId: "v1"}.Build(),
 							CurrentVersionChangedTime: t2,
-						},
+						}.Build(),
 						Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
 							v1.GetBuildId(): {},
 						},
-					},
-					"bar": {
-						RoutingConfig: &deploymentpb.RoutingConfig{
+					}.Build(),
+					"bar": persistencespb.WorkerDeploymentData_builder{
+						RoutingConfig: deploymentpb.RoutingConfig_builder{
 							CurrentDeploymentVersion:  nil,
 							CurrentVersionChangedTime: t3,
-						},
+						}.Build(),
 						Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{},
-					},
+					}.Build(),
 				},
-			}},
+			}.Build()},
 		{name: "new format: ramping to unversioned ",
 			wantCurrent:        v1,
 			wantRampPercentage: 20,
-			data: &persistencespb.DeploymentData{
+			data: persistencespb.DeploymentData_builder{
 				DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
-					"foo": {
-						RoutingConfig: &deploymentpb.RoutingConfig{
-							CurrentDeploymentVersion:            &deploymentpb.WorkerDeploymentVersion{DeploymentName: "foo", BuildId: v1.GetBuildId()},
+					"foo": persistencespb.WorkerDeploymentData_builder{
+						RoutingConfig: deploymentpb.RoutingConfig_builder{
+							CurrentDeploymentVersion:            deploymentpb.WorkerDeploymentVersion_builder{DeploymentName: "foo", BuildId: v1.GetBuildId()}.Build(),
 							CurrentVersionChangedTime:           t2,
 							RampingDeploymentVersion:            nil,
 							RampingVersionPercentage:            20,
 							RampingVersionPercentageChangedTime: t3,
-						},
+						}.Build(),
 						Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
 							v1.GetBuildId(): {},
 						},
-					},
+					}.Build(),
 				},
-			}},
+			}.Build()},
 		{name: "new format: unversioned ramping with newer timestamp with another ramping version in a different deployment -> ramping is still versioned",
 			wantRamping:        v1,
 			wantRampPercentage: 30,
-			data: &persistencespb.DeploymentData{
+			data: persistencespb.DeploymentData_builder{
 				Versions: []*deploymentspb.DeploymentVersionData{},
 				DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
-					"foo": {
-						RoutingConfig: &deploymentpb.RoutingConfig{
-							RampingDeploymentVersion:            &deploymentpb.WorkerDeploymentVersion{DeploymentName: "foo", BuildId: v1.GetBuildId()},
+					"foo": persistencespb.WorkerDeploymentData_builder{
+						RoutingConfig: deploymentpb.RoutingConfig_builder{
+							RampingDeploymentVersion:            deploymentpb.WorkerDeploymentVersion_builder{DeploymentName: "foo", BuildId: v1.GetBuildId()}.Build(),
 							RampingVersionPercentage:            30,
 							RampingVersionPercentageChangedTime: t2,
-						},
+						}.Build(),
 						Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
 							v1.GetBuildId(): {},
 						},
-					},
-					"bar": {
-						RoutingConfig: &deploymentpb.RoutingConfig{
+					}.Build(),
+					"bar": persistencespb.WorkerDeploymentData_builder{
+						RoutingConfig: deploymentpb.RoutingConfig_builder{
 							RampingDeploymentVersion:            nil,
 							RampingVersionPercentage:            20,
 							RampingVersionPercentageChangedTime: t3,
-						},
+						}.Build(),
 						Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{},
-					},
+					}.Build(),
 				},
-			}},
+			}.Build()},
 		{name: "new format: versioned current with unversioned ramping in same deployment -> current is versioned and ramping is unversioned", wantCurrent: v1, wantRamping: nil, wantRampPercentage: 20,
-			data: &persistencespb.DeploymentData{
+			data: persistencespb.DeploymentData_builder{
 				Versions: []*deploymentspb.DeploymentVersionData{},
 				DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
-					"foo": {
-						RoutingConfig: &deploymentpb.RoutingConfig{
-							CurrentDeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
+					"foo": persistencespb.WorkerDeploymentData_builder{
+						RoutingConfig: deploymentpb.RoutingConfig_builder{
+							CurrentDeploymentVersion: deploymentpb.WorkerDeploymentVersion_builder{
 								DeploymentName: v1.GetDeploymentName(),
 								BuildId:        v1.GetBuildId(),
-							},
+							}.Build(),
 							CurrentVersionChangedTime: t2,
 							RampingDeploymentVersion:  nil, // unversioned ramp target
 							RampingVersionPercentage:  20,
 							// Use a newer timestamp so the unversioned ramping is picked from the new format.
 							RampingVersionPercentageChangedTime: t3,
-						},
+						}.Build(),
 						// Membership contains v1 so HasDeploymentVersion() passes for current.
 						Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
 							v1.GetBuildId(): {},
 						},
-					},
+					}.Build(),
 				},
-			}},
+			}.Build()},
 		// Tests with deleted versions
 		{name: "new format: current version marked as deleted should be ignored",
 			wantCurrent: nil,
-			data: &persistencespb.DeploymentData{
+			data: persistencespb.DeploymentData_builder{
 				DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
-					"foo": {
-						RoutingConfig: &deploymentpb.RoutingConfig{
-							CurrentDeploymentVersion:  &deploymentpb.WorkerDeploymentVersion{DeploymentName: "foo", BuildId: v1.GetBuildId()},
+					"foo": persistencespb.WorkerDeploymentData_builder{
+						RoutingConfig: deploymentpb.RoutingConfig_builder{
+							CurrentDeploymentVersion:  deploymentpb.WorkerDeploymentVersion_builder{DeploymentName: "foo", BuildId: v1.GetBuildId()}.Build(),
 							CurrentVersionChangedTime: t2,
-						},
+						}.Build(),
 						Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
-							v1.GetBuildId(): {Deleted: true},
+							v1.GetBuildId(): deploymentspb.WorkerDeploymentVersionData_builder{Deleted: true}.Build(),
 						},
-					},
+					}.Build(),
 				},
-			}},
+			}.Build()},
 		{name: "new format: ramping version marked as deleted should be ignored",
 			wantRamping: nil,
-			data: &persistencespb.DeploymentData{
+			data: persistencespb.DeploymentData_builder{
 				DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
-					"foo": {
-						RoutingConfig: &deploymentpb.RoutingConfig{
-							RampingDeploymentVersion:            &deploymentpb.WorkerDeploymentVersion{DeploymentName: "foo", BuildId: v2.GetBuildId()},
+					"foo": persistencespb.WorkerDeploymentData_builder{
+						RoutingConfig: deploymentpb.RoutingConfig_builder{
+							RampingDeploymentVersion:            deploymentpb.WorkerDeploymentVersion_builder{DeploymentName: "foo", BuildId: v2.GetBuildId()}.Build(),
 							RampingVersionPercentage:            50,
 							RampingVersionPercentageChangedTime: t2,
-						},
+						}.Build(),
 						Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
-							v2.GetBuildId(): {Deleted: true},
+							v2.GetBuildId(): deploymentspb.WorkerDeploymentVersionData_builder{Deleted: true}.Build(),
 						},
-					},
+					}.Build(),
 				},
-			}},
+			}.Build()},
 		{name: "new format: current deleted, ramping not deleted -> only ramping returned",
 			wantCurrent:        nil,
 			wantRamping:        v2,
 			wantRampPercentage: 30,
-			data: &persistencespb.DeploymentData{
+			data: persistencespb.DeploymentData_builder{
 				DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
-					"foo": {
-						RoutingConfig: &deploymentpb.RoutingConfig{
-							CurrentDeploymentVersion:            &deploymentpb.WorkerDeploymentVersion{DeploymentName: "foo", BuildId: v1.GetBuildId()},
+					"foo": persistencespb.WorkerDeploymentData_builder{
+						RoutingConfig: deploymentpb.RoutingConfig_builder{
+							CurrentDeploymentVersion:            deploymentpb.WorkerDeploymentVersion_builder{DeploymentName: "foo", BuildId: v1.GetBuildId()}.Build(),
 							CurrentVersionChangedTime:           t1,
-							RampingDeploymentVersion:            &deploymentpb.WorkerDeploymentVersion{DeploymentName: "foo", BuildId: v2.GetBuildId()},
+							RampingDeploymentVersion:            deploymentpb.WorkerDeploymentVersion_builder{DeploymentName: "foo", BuildId: v2.GetBuildId()}.Build(),
 							RampingVersionPercentage:            30,
 							RampingVersionPercentageChangedTime: t2,
-						},
+						}.Build(),
 						Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
-							v1.GetBuildId(): {Deleted: true},
-							v2.GetBuildId(): {Deleted: false},
+							v1.GetBuildId(): deploymentspb.WorkerDeploymentVersionData_builder{Deleted: true}.Build(),
+							v2.GetBuildId(): deploymentspb.WorkerDeploymentVersionData_builder{Deleted: false}.Build(),
 						},
-					},
+					}.Build(),
 				},
-			}},
+			}.Build()},
 		{name: "new format: ramping deleted, current not deleted -> only current returned",
 			wantCurrent:        v1,
 			wantRamping:        nil,
 			wantRampPercentage: 0,
-			data: &persistencespb.DeploymentData{
+			data: persistencespb.DeploymentData_builder{
 				DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
-					"foo": {
-						RoutingConfig: &deploymentpb.RoutingConfig{
-							CurrentDeploymentVersion:            &deploymentpb.WorkerDeploymentVersion{DeploymentName: "foo", BuildId: v1.GetBuildId()},
+					"foo": persistencespb.WorkerDeploymentData_builder{
+						RoutingConfig: deploymentpb.RoutingConfig_builder{
+							CurrentDeploymentVersion:            deploymentpb.WorkerDeploymentVersion_builder{DeploymentName: "foo", BuildId: v1.GetBuildId()}.Build(),
 							CurrentVersionChangedTime:           t1,
-							RampingDeploymentVersion:            &deploymentpb.WorkerDeploymentVersion{DeploymentName: "foo", BuildId: v2.GetBuildId()},
+							RampingDeploymentVersion:            deploymentpb.WorkerDeploymentVersion_builder{DeploymentName: "foo", BuildId: v2.GetBuildId()}.Build(),
 							RampingVersionPercentage:            30,
 							RampingVersionPercentageChangedTime: t2,
-						},
+						}.Build(),
 						Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
-							v1.GetBuildId(): {Deleted: false},
-							v2.GetBuildId(): {Deleted: true},
+							v1.GetBuildId(): deploymentspb.WorkerDeploymentVersionData_builder{Deleted: false}.Build(),
+							v2.GetBuildId(): deploymentspb.WorkerDeploymentVersionData_builder{Deleted: true}.Build(),
 						},
-					},
+					}.Build(),
 				},
-			}},
+			}.Build()},
 		{name: "new format: both current and ramping deleted -> both nil",
 			wantCurrent:        nil,
 			wantRamping:        nil,
 			wantRampPercentage: 0,
-			data: &persistencespb.DeploymentData{
+			data: persistencespb.DeploymentData_builder{
 				DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
-					"foo": {
-						RoutingConfig: &deploymentpb.RoutingConfig{
-							CurrentDeploymentVersion:            &deploymentpb.WorkerDeploymentVersion{DeploymentName: "foo", BuildId: v1.GetBuildId()},
+					"foo": persistencespb.WorkerDeploymentData_builder{
+						RoutingConfig: deploymentpb.RoutingConfig_builder{
+							CurrentDeploymentVersion:            deploymentpb.WorkerDeploymentVersion_builder{DeploymentName: "foo", BuildId: v1.GetBuildId()}.Build(),
 							CurrentVersionChangedTime:           t1,
-							RampingDeploymentVersion:            &deploymentpb.WorkerDeploymentVersion{DeploymentName: "foo", BuildId: v2.GetBuildId()},
+							RampingDeploymentVersion:            deploymentpb.WorkerDeploymentVersion_builder{DeploymentName: "foo", BuildId: v2.GetBuildId()}.Build(),
 							RampingVersionPercentage:            30,
 							RampingVersionPercentageChangedTime: t2,
-						},
+						}.Build(),
 						Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
-							v1.GetBuildId(): {Deleted: true},
-							v2.GetBuildId(): {Deleted: true},
+							v1.GetBuildId(): deploymentspb.WorkerDeploymentVersionData_builder{Deleted: true}.Build(),
+							v2.GetBuildId(): deploymentspb.WorkerDeploymentVersionData_builder{Deleted: true}.Build(),
 						},
-					},
+					}.Build(),
 				},
-			}},
+			}.Build()},
 		{name: "mixed: new current deleted falls back to old current",
 			wantCurrent: v1,
-			data: &persistencespb.DeploymentData{
+			data: persistencespb.DeploymentData_builder{
 				Versions: []*deploymentspb.DeploymentVersionData{
-					{Version: v1, CurrentSinceTime: t1, RoutingUpdateTime: t1},
+					deploymentspb.DeploymentVersionData_builder{Version: v1, CurrentSinceTime: t1, RoutingUpdateTime: t1}.Build(),
 				},
 				DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
-					"foo": {
-						RoutingConfig: &deploymentpb.RoutingConfig{
-							CurrentDeploymentVersion:  &deploymentpb.WorkerDeploymentVersion{DeploymentName: "foo", BuildId: v2.GetBuildId()},
+					"foo": persistencespb.WorkerDeploymentData_builder{
+						RoutingConfig: deploymentpb.RoutingConfig_builder{
+							CurrentDeploymentVersion:  deploymentpb.WorkerDeploymentVersion_builder{DeploymentName: "foo", BuildId: v2.GetBuildId()}.Build(),
 							CurrentVersionChangedTime: t2,
-						},
+						}.Build(),
 						Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
-							v2.GetBuildId(): {Deleted: true},
+							v2.GetBuildId(): deploymentspb.WorkerDeploymentVersionData_builder{Deleted: true}.Build(),
 						},
-					},
+					}.Build(),
 				},
-			}},
+			}.Build()},
 		{name: "mixed: new ramping deleted falls back to old ramping",
 			wantRamping:        v1,
 			wantRampPercentage: 40,
-			data: &persistencespb.DeploymentData{
+			data: persistencespb.DeploymentData_builder{
 				Versions: []*deploymentspb.DeploymentVersionData{
-					{Version: v1, RampingSinceTime: t1, RoutingUpdateTime: t1, RampPercentage: 40},
+					deploymentspb.DeploymentVersionData_builder{Version: v1, RampingSinceTime: t1, RoutingUpdateTime: t1, RampPercentage: 40}.Build(),
 				},
 				DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
-					"foo": {
-						RoutingConfig: &deploymentpb.RoutingConfig{
-							RampingDeploymentVersion:            &deploymentpb.WorkerDeploymentVersion{DeploymentName: "foo", BuildId: v2.GetBuildId()},
+					"foo": persistencespb.WorkerDeploymentData_builder{
+						RoutingConfig: deploymentpb.RoutingConfig_builder{
+							RampingDeploymentVersion:            deploymentpb.WorkerDeploymentVersion_builder{DeploymentName: "foo", BuildId: v2.GetBuildId()}.Build(),
 							RampingVersionPercentage:            50,
 							RampingVersionPercentageChangedTime: t2,
-						},
+						}.Build(),
 						Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
-							v2.GetBuildId(): {Deleted: true},
+							v2.GetBuildId(): deploymentspb.WorkerDeploymentVersionData_builder{Deleted: true}.Build(),
 						},
-					},
+					}.Build(),
 				},
-			}},
+			}.Build()},
 		{name: "new format: version exists but marked as deleted alongside non-deleted version",
 			wantCurrent: v2,
-			data: &persistencespb.DeploymentData{
+			data: persistencespb.DeploymentData_builder{
 				DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
-					"foo": {
-						RoutingConfig: &deploymentpb.RoutingConfig{
-							CurrentDeploymentVersion:  &deploymentpb.WorkerDeploymentVersion{DeploymentName: "foo", BuildId: v2.GetBuildId()},
+					"foo": persistencespb.WorkerDeploymentData_builder{
+						RoutingConfig: deploymentpb.RoutingConfig_builder{
+							CurrentDeploymentVersion:  deploymentpb.WorkerDeploymentVersion_builder{DeploymentName: "foo", BuildId: v2.GetBuildId()}.Build(),
 							CurrentVersionChangedTime: t2,
-						},
+						}.Build(),
 						Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
-							v1.GetBuildId(): {Deleted: true},
-							v2.GetBuildId(): {Deleted: false},
-							v3.GetBuildId(): {Deleted: true},
+							v1.GetBuildId(): deploymentspb.WorkerDeploymentVersionData_builder{Deleted: true}.Build(),
+							v2.GetBuildId(): deploymentspb.WorkerDeploymentVersionData_builder{Deleted: false}.Build(),
+							v3.GetBuildId(): deploymentspb.WorkerDeploymentVersionData_builder{Deleted: true}.Build(),
 						},
-					},
+					}.Build(),
 				},
-			}},
+			}.Build()},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -604,10 +605,10 @@ func TestFindDeploymentVersionForWorkflowID(t *testing.T) {
 		want    *deploymentspb.WorkerDeploymentVersion
 	}{
 		{name: "nil current and ramping info", want: nil},
-		{name: "with current version", current: &deploymentspb.DeploymentVersionData{Version: v1, RoutingUpdateTime: timestamp.TimePtr(time.Now())}, want: v1},
-		{name: "with full ramp", current: &deploymentspb.DeploymentVersionData{Version: v1, RoutingUpdateTime: timestamp.TimePtr(time.Now())}, ramping: &deploymentspb.DeploymentVersionData{Version: v2, RampPercentage: 100, RoutingUpdateTime: timestamp.TimePtr(time.Now())}, want: v2},
-		{name: "with full ramp to unversioned", current: &deploymentspb.DeploymentVersionData{Version: v1, RoutingUpdateTime: timestamp.TimePtr(time.Now())}, ramping: &deploymentspb.DeploymentVersionData{RampPercentage: 100, RoutingUpdateTime: timestamp.TimePtr(time.Now())}, want: nil},
-		{name: "with full ramp from unversioned", ramping: &deploymentspb.DeploymentVersionData{Version: v1, RampPercentage: 100, RoutingUpdateTime: timestamp.TimePtr(time.Now())}, want: v1},
+		{name: "with current version", current: deploymentspb.DeploymentVersionData_builder{Version: v1, RoutingUpdateTime: timestamp.TimePtr(time.Now())}.Build(), want: v1},
+		{name: "with full ramp", current: deploymentspb.DeploymentVersionData_builder{Version: v1, RoutingUpdateTime: timestamp.TimePtr(time.Now())}.Build(), ramping: deploymentspb.DeploymentVersionData_builder{Version: v2, RampPercentage: 100, RoutingUpdateTime: timestamp.TimePtr(time.Now())}.Build(), want: v2},
+		{name: "with full ramp to unversioned", current: deploymentspb.DeploymentVersionData_builder{Version: v1, RoutingUpdateTime: timestamp.TimePtr(time.Now())}.Build(), ramping: deploymentspb.DeploymentVersionData_builder{RampPercentage: 100, RoutingUpdateTime: timestamp.TimePtr(time.Now())}.Build(), want: nil},
+		{name: "with full ramp from unversioned", ramping: deploymentspb.DeploymentVersionData_builder{Version: v1, RampPercentage: 100, RoutingUpdateTime: timestamp.TimePtr(time.Now())}.Build(), want: v1},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -633,16 +634,16 @@ func TestFindDeploymentVersionForWorkflowID_PartialRamp(t *testing.T) {
 			var current *deploymentspb.DeploymentVersionData
 			var ramping *deploymentspb.DeploymentVersionData
 			if tt.from != nil {
-				current = &deploymentspb.DeploymentVersionData{
+				current = deploymentspb.DeploymentVersionData_builder{
 					Version:           tt.from,
 					RoutingUpdateTime: timestamp.TimePtr(time.Now()),
-				}
+				}.Build()
 			}
-			ramping = &deploymentspb.DeploymentVersionData{
+			ramping = deploymentspb.DeploymentVersionData_builder{
 				Version:           tt.to,
 				RampPercentage:    30,
 				RoutingUpdateTime: timestamp.TimePtr(time.Now()),
-			}
+			}.Build()
 			histogram := make(map[string]int)
 			runs := 1000000
 			for i := 0; i < runs; i++ {
@@ -721,18 +722,18 @@ func TestWorkerDeploymentVersionFromStringV32(t *testing.T) {
 		{
 			name:  "valid version",
 			input: "my-deployment:build-123",
-			expected: &deploymentspb.WorkerDeploymentVersion{
+			expected: deploymentspb.WorkerDeploymentVersion_builder{
 				DeploymentName: "my-deployment",
 				BuildId:        "build-123",
-			},
+			}.Build(),
 		},
 		{
 			name:  "multiple delimiters",
 			input: "my-deployment:build-123:extra",
-			expected: &deploymentspb.WorkerDeploymentVersion{
+			expected: deploymentspb.WorkerDeploymentVersion_builder{
 				DeploymentName: "my-deployment",
 				BuildId:        "build-123:extra",
-			},
+			}.Build(),
 		},
 		{
 			name:     "skip unversioned",
@@ -783,14 +784,14 @@ func TestWorkerDeploymentVersionFromStringV32(t *testing.T) {
 func TestValidateVersioningOverride(t *testing.T) {
 	testNamespaceID := "test-namespace-id"
 	testTaskQueue := "test-task-queue"
-	testVersion := &deploymentpb.WorkerDeploymentVersion{
+	testVersion := deploymentpb.WorkerDeploymentVersion_builder{
 		DeploymentName: "test-deployment",
 		BuildId:        "test-build-id",
-	}
+	}.Build()
 
 	// Helper function to generate the expected error message for pinned version errors
 	getPinnedVersionErrorMsg := func(version *deploymentpb.WorkerDeploymentVersion, taskQueue string, taskQueueType enumspb.TaskQueueType) string {
-		return FormatPinnedVersionNotInTaskQueueError(version.DeploymentName, version.BuildId, taskQueue, taskQueueType)
+		return FormatPinnedVersionNotInTaskQueueError(version.GetDeploymentName(), version.GetBuildId(), taskQueue, taskQueueType)
 	}
 
 	tests := []struct {
@@ -811,9 +812,9 @@ func TestValidateVersioningOverride(t *testing.T) {
 		},
 		{
 			name: "v0.32: AutoUpgrade override returns nil",
-			override: &workflowpb.VersioningOverride{
-				Override: &workflowpb.VersioningOverride_AutoUpgrade{AutoUpgrade: true},
-			},
+			override: workflowpb.VersioningOverride_builder{
+				AutoUpgrade: proto.Bool(true),
+			}.Build(),
 			setupCache: func(c *testVersionMembershipCache) {},
 			setupMock: func(m *matchingservicemock.MockMatchingServiceClient) {
 				m.EXPECT().CheckTaskQueueVersionMembership(gomock.Any(), gomock.Any()).Times(0) // No RPC call expected!
@@ -822,16 +823,14 @@ func TestValidateVersioningOverride(t *testing.T) {
 		},
 		{
 			name: "v0.32: Pinned override, with cache hit, returns nil",
-			override: &workflowpb.VersioningOverride{
-				Override: &workflowpb.VersioningOverride_Pinned{
-					Pinned: &workflowpb.VersioningOverride_PinnedOverride{
-						Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
-						Version:  testVersion,
-					},
-				},
-			},
+			override: workflowpb.VersioningOverride_builder{
+				Pinned: workflowpb.VersioningOverride_PinnedOverride_builder{
+					Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
+					Version:  testVersion,
+				}.Build(),
+			}.Build(),
 			setupCache: func(c *testVersionMembershipCache) {
-				c.Put(testNamespaceID, testTaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, testVersion.DeploymentName, testVersion.BuildId, true)
+				c.Put(testNamespaceID, testTaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, testVersion.GetDeploymentName(), testVersion.GetBuildId(), true)
 			},
 			setupMock: func(m *matchingservicemock.MockMatchingServiceClient) {
 				m.EXPECT().CheckTaskQueueVersionMembership(gomock.Any(), gomock.Any()).Times(0) // No RPC call expected!
@@ -840,16 +839,14 @@ func TestValidateVersioningOverride(t *testing.T) {
 		},
 		{
 			name: "v0.32: Pinned override, with cache hit, returns error (since version is not present in the task queue)",
-			override: &workflowpb.VersioningOverride{
-				Override: &workflowpb.VersioningOverride_Pinned{
-					Pinned: &workflowpb.VersioningOverride_PinnedOverride{
-						Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
-						Version:  testVersion,
-					},
-				},
-			},
+			override: workflowpb.VersioningOverride_builder{
+				Pinned: workflowpb.VersioningOverride_PinnedOverride_builder{
+					Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
+					Version:  testVersion,
+				}.Build(),
+			}.Build(),
 			setupCache: func(c *testVersionMembershipCache) {
-				c.Put(testNamespaceID, testTaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, testVersion.DeploymentName, testVersion.BuildId, false)
+				c.Put(testNamespaceID, testTaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, testVersion.GetDeploymentName(), testVersion.GetBuildId(), false)
 			},
 			setupMock: func(m *matchingservicemock.MockMatchingServiceClient) {
 				m.EXPECT().CheckTaskQueueVersionMembership(gomock.Any(), gomock.Any()).Times(0) // No RPC call expected!
@@ -860,80 +857,72 @@ func TestValidateVersioningOverride(t *testing.T) {
 		{
 			name:          "v0.32: Pinned override, cache hit for different task queue type does not apply",
 			taskQueueType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
-			override: &workflowpb.VersioningOverride{
-				Override: &workflowpb.VersioningOverride_Pinned{
-					Pinned: &workflowpb.VersioningOverride_PinnedOverride{
-						Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
-						Version:  testVersion,
-					},
-				},
-			},
+			override: workflowpb.VersioningOverride_builder{
+				Pinned: workflowpb.VersioningOverride_PinnedOverride_builder{
+					Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
+					Version:  testVersion,
+				}.Build(),
+			}.Build(),
 			setupCache: func(c *testVersionMembershipCache) {
-				c.Put(testNamespaceID, testTaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, testVersion.DeploymentName, testVersion.BuildId, true)
+				c.Put(testNamespaceID, testTaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, testVersion.GetDeploymentName(), testVersion.GetBuildId(), true)
 			},
 			setupMock: func(m *matchingservicemock.MockMatchingServiceClient) {
 				m.EXPECT().CheckTaskQueueVersionMembership(
 					gomock.Any(),
 					gomock.Any(),
-				).Return(&matchingservice.CheckTaskQueueVersionMembershipResponse{
+				).Return(matchingservice.CheckTaskQueueVersionMembershipResponse_builder{
 					IsMember: true,
-				}, nil)
+				}.Build(), nil)
 			},
 			expectError: false,
 		},
 		{
 			name: "v0.32: Pinned override, with cache miss, calls RPC and caches false",
-			override: &workflowpb.VersioningOverride{
-				Override: &workflowpb.VersioningOverride_Pinned{
-					Pinned: &workflowpb.VersioningOverride_PinnedOverride{
-						Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
-						Version:  testVersion,
-					},
-				},
-			},
+			override: workflowpb.VersioningOverride_builder{
+				Pinned: workflowpb.VersioningOverride_PinnedOverride_builder{
+					Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
+					Version:  testVersion,
+				}.Build(),
+			}.Build(),
 			setupCache: func(c *testVersionMembershipCache) {},
 			setupMock: func(m *matchingservicemock.MockMatchingServiceClient) {
 				m.EXPECT().CheckTaskQueueVersionMembership(
 					gomock.Any(),
 					gomock.Any(),
-				).Return(&matchingservice.CheckTaskQueueVersionMembershipResponse{
+				).Return(matchingservice.CheckTaskQueueVersionMembershipResponse_builder{
 					IsMember: false,
-				}, nil)
+				}.Build(), nil)
 			},
 			expectError:   true,
 			errorContains: getPinnedVersionErrorMsg(testVersion, testTaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW),
 		},
 		{
 			name: "v0.32: Pinned override, with cache miss, calls RPC and caches true",
-			override: &workflowpb.VersioningOverride{
-				Override: &workflowpb.VersioningOverride_Pinned{
-					Pinned: &workflowpb.VersioningOverride_PinnedOverride{
-						Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
-						Version:  testVersion,
-					},
-				},
-			},
+			override: workflowpb.VersioningOverride_builder{
+				Pinned: workflowpb.VersioningOverride_PinnedOverride_builder{
+					Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
+					Version:  testVersion,
+				}.Build(),
+			}.Build(),
 			setupCache: func(c *testVersionMembershipCache) {},
 			setupMock: func(m *matchingservicemock.MockMatchingServiceClient) {
 				m.EXPECT().CheckTaskQueueVersionMembership(
 					gomock.Any(),
 					gomock.Any(),
-				).Return(&matchingservice.CheckTaskQueueVersionMembershipResponse{
+				).Return(matchingservice.CheckTaskQueueVersionMembershipResponse_builder{
 					IsMember: true,
-				}, nil)
+				}.Build(), nil)
 			},
 			expectError: false,
 		},
 		{
 			name: "v0.32: Pinned override, without version, returns error",
-			override: &workflowpb.VersioningOverride{
-				Override: &workflowpb.VersioningOverride_Pinned{
-					Pinned: &workflowpb.VersioningOverride_PinnedOverride{
-						Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
-						Version:  nil,
-					},
-				},
-			},
+			override: workflowpb.VersioningOverride_builder{
+				Pinned: workflowpb.VersioningOverride_PinnedOverride_builder{
+					Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
+					Version:  nil,
+				}.Build(),
+			}.Build(),
 			setupCache:    func(c *testVersionMembershipCache) {},
 			setupMock:     func(m *matchingservicemock.MockMatchingServiceClient) {},
 			expectError:   true,
@@ -941,14 +930,12 @@ func TestValidateVersioningOverride(t *testing.T) {
 		},
 		{
 			name: "v0.32: Pinned override, without behavior, returns error",
-			override: &workflowpb.VersioningOverride{
-				Override: &workflowpb.VersioningOverride_Pinned{
-					Pinned: &workflowpb.VersioningOverride_PinnedOverride{
-						Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_UNSPECIFIED,
-						Version:  testVersion,
-					},
-				},
-			},
+			override: workflowpb.VersioningOverride_builder{
+				Pinned: workflowpb.VersioningOverride_PinnedOverride_builder{
+					Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_UNSPECIFIED,
+					Version:  testVersion,
+				}.Build(),
+			}.Build(),
 			setupCache:    func(c *testVersionMembershipCache) {},
 			setupMock:     func(m *matchingservicemock.MockMatchingServiceClient) {},
 			expectError:   true,
@@ -957,9 +944,9 @@ func TestValidateVersioningOverride(t *testing.T) {
 		// v0.31 tests (deprecated behavior field)
 		{
 			name: "v0.31: AUTO_UPGRADE behavior returns nil",
-			override: &workflowpb.VersioningOverride{
+			override: workflowpb.VersioningOverride_builder{
 				Behavior: enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE,
-			},
+			}.Build(),
 			setupCache: func(c *testVersionMembershipCache) {},
 			setupMock: func(m *matchingservicemock.MockMatchingServiceClient) {
 				m.EXPECT().CheckTaskQueueVersionMembership(gomock.Any(), gomock.Any()).Times(0)
@@ -968,10 +955,10 @@ func TestValidateVersioningOverride(t *testing.T) {
 		},
 		{
 			name: "v0.31: AUTO_UPGRADE with deployment set returns error",
-			override: &workflowpb.VersioningOverride{
+			override: workflowpb.VersioningOverride_builder{
 				Behavior:   enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE,
-				Deployment: &deploymentpb.Deployment{SeriesName: "test", BuildId: "build1"},
-			},
+				Deployment: deploymentpb.Deployment_builder{SeriesName: "test", BuildId: "build1"}.Build(),
+			}.Build(),
 			setupCache:    func(c *testVersionMembershipCache) {},
 			setupMock:     func(m *matchingservicemock.MockMatchingServiceClient) {},
 			expectError:   true,
@@ -979,10 +966,10 @@ func TestValidateVersioningOverride(t *testing.T) {
 		},
 		{
 			name: "v0.31: AUTO_UPGRADE with pinned_version set returns error",
-			override: &workflowpb.VersioningOverride{
+			override: workflowpb.VersioningOverride_builder{
 				Behavior:      enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE,
 				PinnedVersion: "test-deployment.test-build-id",
-			},
+			}.Build(),
 			setupCache:    func(c *testVersionMembershipCache) {},
 			setupMock:     func(m *matchingservicemock.MockMatchingServiceClient) {},
 			expectError:   true,
@@ -990,10 +977,10 @@ func TestValidateVersioningOverride(t *testing.T) {
 		},
 		{
 			name: "v0.31: PINNED behavior with pinned_version, cache hit, returns nil",
-			override: &workflowpb.VersioningOverride{
+			override: workflowpb.VersioningOverride_builder{
 				Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
 				PinnedVersion: "test-deployment.test-build-id",
-			},
+			}.Build(),
 			setupCache: func(c *testVersionMembershipCache) {
 				c.Put(testNamespaceID, testTaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, "test-deployment", "test-build-id", true)
 			},
@@ -1004,10 +991,10 @@ func TestValidateVersioningOverride(t *testing.T) {
 		},
 		{
 			name: "v0.31: PINNED behavior with pinned_version, cache hit, returns error (since version is not present in the task queue)",
-			override: &workflowpb.VersioningOverride{
+			override: workflowpb.VersioningOverride_builder{
 				Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
 				PinnedVersion: "test-deployment.test-build-id",
-			},
+			}.Build(),
 			setupCache: func(c *testVersionMembershipCache) {
 				c.Put(testNamespaceID, testTaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, "test-deployment", "test-build-id", false)
 			},
@@ -1019,44 +1006,44 @@ func TestValidateVersioningOverride(t *testing.T) {
 		},
 		{
 			name: "v0.31: PINNED behavior with pinned_version, cache miss, calls RPC and caches false",
-			override: &workflowpb.VersioningOverride{
+			override: workflowpb.VersioningOverride_builder{
 				Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
 				PinnedVersion: "test-deployment.test-build-id",
-			},
+			}.Build(),
 			setupCache: func(c *testVersionMembershipCache) {},
 			setupMock: func(m *matchingservicemock.MockMatchingServiceClient) {
 				m.EXPECT().CheckTaskQueueVersionMembership(
 					gomock.Any(),
 					gomock.Any(),
-				).Return(&matchingservice.CheckTaskQueueVersionMembershipResponse{
+				).Return(matchingservice.CheckTaskQueueVersionMembershipResponse_builder{
 					IsMember: false,
-				}, nil)
+				}.Build(), nil)
 			},
 			expectError:   true,
 			errorContains: getPinnedVersionErrorMsg(testVersion, testTaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW),
 		},
 		{
 			name: "v0.31: PINNED behavior with pinned_version, cache miss, calls RPC and caches true",
-			override: &workflowpb.VersioningOverride{
+			override: workflowpb.VersioningOverride_builder{
 				Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
 				PinnedVersion: "test-deployment.test-build-id",
-			},
+			}.Build(),
 			setupCache: func(c *testVersionMembershipCache) {},
 			setupMock: func(m *matchingservicemock.MockMatchingServiceClient) {
 				m.EXPECT().CheckTaskQueueVersionMembership(
 					gomock.Any(),
 					gomock.Any(),
-				).Return(&matchingservice.CheckTaskQueueVersionMembershipResponse{
+				).Return(matchingservice.CheckTaskQueueVersionMembershipResponse_builder{
 					IsMember: true,
-				}, nil)
+				}.Build(), nil)
 			},
 			expectError: false,
 		},
 		{
 			name: "v0.31: PINNED behavior without deployment or pinned_version returns error",
-			override: &workflowpb.VersioningOverride{
+			override: workflowpb.VersioningOverride_builder{
 				Behavior: enumspb.VERSIONING_BEHAVIOR_PINNED,
-			},
+			}.Build(),
 			setupCache:    func(c *testVersionMembershipCache) {},
 			setupMock:     func(m *matchingservicemock.MockMatchingServiceClient) {},
 			expectError:   true,
@@ -1064,10 +1051,10 @@ func TestValidateVersioningOverride(t *testing.T) {
 		},
 		{
 			name: "v0.31: PINNED behavior with invalid pinned_version format returns error",
-			override: &workflowpb.VersioningOverride{
+			override: workflowpb.VersioningOverride_builder{
 				Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
 				PinnedVersion: "invalid-no-dot",
-			},
+			}.Build(),
 			setupCache:    func(c *testVersionMembershipCache) {},
 			setupMock:     func(m *matchingservicemock.MockMatchingServiceClient) {},
 			expectError:   true,
@@ -1075,9 +1062,9 @@ func TestValidateVersioningOverride(t *testing.T) {
 		},
 		{
 			name: "v0.31: UNSPECIFIED behavior returns error",
-			override: &workflowpb.VersioningOverride{
+			override: workflowpb.VersioningOverride_builder{
 				Behavior: enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED,
-			},
+			}.Build(),
 			setupCache:    func(c *testVersionMembershipCache) {},
 			setupMock:     func(m *matchingservicemock.MockMatchingServiceClient) {},
 			expectError:   true,
@@ -1139,9 +1126,9 @@ func TestCleanupOldDeletedVersions(t *testing.T) {
 		{
 			name: "removes only deleted versions older than 7 days when not exceeding limit",
 			versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
-				"v1": {Deleted: true, UpdateTime: timestamp.TimePtr(eightDaysAgo)},
-				"v2": {Deleted: true, UpdateTime: timestamp.TimePtr(sixDaysAgo)},
-				"v3": {Deleted: false, UpdateTime: timestamp.TimePtr(oneDayAgo)},
+				"v1": deploymentspb.WorkerDeploymentVersionData_builder{Deleted: true, UpdateTime: timestamp.TimePtr(eightDaysAgo)}.Build(),
+				"v2": deploymentspb.WorkerDeploymentVersionData_builder{Deleted: true, UpdateTime: timestamp.TimePtr(sixDaysAgo)}.Build(),
+				"v3": deploymentspb.WorkerDeploymentVersionData_builder{Deleted: false, UpdateTime: timestamp.TimePtr(oneDayAgo)}.Build(),
 			},
 			maxVersions: 10,
 			wantCleaned: true,
@@ -1150,11 +1137,11 @@ func TestCleanupOldDeletedVersions(t *testing.T) {
 		{
 			name: "removes deleted versions when exceeding limit due to deleted versions",
 			versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
-				"v1": {Deleted: false, UpdateTime: timestamp.TimePtr(eightDaysAgo)},
-				"v2": {Deleted: false, UpdateTime: timestamp.TimePtr(sixDaysAgo)},
-				"v3": {Deleted: false, UpdateTime: timestamp.TimePtr(fiveDaysAgo)},
-				"v4": {Deleted: true, UpdateTime: timestamp.TimePtr(sixDaysAgo)},
-				"v5": {Deleted: true, UpdateTime: timestamp.TimePtr(oneDayAgo)},
+				"v1": deploymentspb.WorkerDeploymentVersionData_builder{Deleted: false, UpdateTime: timestamp.TimePtr(eightDaysAgo)}.Build(),
+				"v2": deploymentspb.WorkerDeploymentVersionData_builder{Deleted: false, UpdateTime: timestamp.TimePtr(sixDaysAgo)}.Build(),
+				"v3": deploymentspb.WorkerDeploymentVersionData_builder{Deleted: false, UpdateTime: timestamp.TimePtr(fiveDaysAgo)}.Build(),
+				"v4": deploymentspb.WorkerDeploymentVersionData_builder{Deleted: true, UpdateTime: timestamp.TimePtr(sixDaysAgo)}.Build(),
+				"v5": deploymentspb.WorkerDeploymentVersionData_builder{Deleted: true, UpdateTime: timestamp.TimePtr(oneDayAgo)}.Build(),
 			},
 			maxVersions: 3,
 			wantCleaned: true,
@@ -1163,11 +1150,11 @@ func TestCleanupOldDeletedVersions(t *testing.T) {
 		{
 			name: "can exceed limit due to undeleted versions",
 			versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
-				"v1": {Deleted: false, UpdateTime: timestamp.TimePtr(eightDaysAgo)},
-				"v2": {Deleted: false, UpdateTime: timestamp.TimePtr(sixDaysAgo)},
-				"v3": {Deleted: false, UpdateTime: timestamp.TimePtr(fiveDaysAgo)},
-				"v4": {Deleted: false, UpdateTime: timestamp.TimePtr(oneDayAgo)},
-				"v5": {Deleted: true, UpdateTime: timestamp.TimePtr(sixDaysAgo)},
+				"v1": deploymentspb.WorkerDeploymentVersionData_builder{Deleted: false, UpdateTime: timestamp.TimePtr(eightDaysAgo)}.Build(),
+				"v2": deploymentspb.WorkerDeploymentVersionData_builder{Deleted: false, UpdateTime: timestamp.TimePtr(sixDaysAgo)}.Build(),
+				"v3": deploymentspb.WorkerDeploymentVersionData_builder{Deleted: false, UpdateTime: timestamp.TimePtr(fiveDaysAgo)}.Build(),
+				"v4": deploymentspb.WorkerDeploymentVersionData_builder{Deleted: false, UpdateTime: timestamp.TimePtr(oneDayAgo)}.Build(),
+				"v5": deploymentspb.WorkerDeploymentVersionData_builder{Deleted: true, UpdateTime: timestamp.TimePtr(sixDaysAgo)}.Build(),
 			},
 			maxVersions: 3,
 			wantCleaned: true,
@@ -1176,10 +1163,10 @@ func TestCleanupOldDeletedVersions(t *testing.T) {
 		{
 			name: "removes deleted versions from oldest to newest",
 			versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
-				"v1": {Deleted: false, UpdateTime: timestamp.TimePtr(now)},
-				"v2": {Deleted: true, UpdateTime: timestamp.TimePtr(oneDayAgo)},
-				"v3": {Deleted: true, UpdateTime: timestamp.TimePtr(fiveDaysAgo)},
-				"v4": {Deleted: true, UpdateTime: timestamp.TimePtr(eightDaysAgo)},
+				"v1": deploymentspb.WorkerDeploymentVersionData_builder{Deleted: false, UpdateTime: timestamp.TimePtr(now)}.Build(),
+				"v2": deploymentspb.WorkerDeploymentVersionData_builder{Deleted: true, UpdateTime: timestamp.TimePtr(oneDayAgo)}.Build(),
+				"v3": deploymentspb.WorkerDeploymentVersionData_builder{Deleted: true, UpdateTime: timestamp.TimePtr(fiveDaysAgo)}.Build(),
+				"v4": deploymentspb.WorkerDeploymentVersionData_builder{Deleted: true, UpdateTime: timestamp.TimePtr(eightDaysAgo)}.Build(),
 			},
 			maxVersions: 2,
 			wantCleaned: true,
@@ -1188,10 +1175,10 @@ func TestCleanupOldDeletedVersions(t *testing.T) {
 		{
 			name: "stops when no deleted version older than 7 days and not exceeding limit",
 			versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
-				"v1": {Deleted: false, UpdateTime: timestamp.TimePtr(now)},
-				"v2": {Deleted: false, UpdateTime: timestamp.TimePtr(oneDayAgo)},
-				"v3": {Deleted: true, UpdateTime: timestamp.TimePtr(sixDaysAgo)},
-				"v4": {Deleted: true, UpdateTime: timestamp.TimePtr(oneDayAgo)},
+				"v1": deploymentspb.WorkerDeploymentVersionData_builder{Deleted: false, UpdateTime: timestamp.TimePtr(now)}.Build(),
+				"v2": deploymentspb.WorkerDeploymentVersionData_builder{Deleted: false, UpdateTime: timestamp.TimePtr(oneDayAgo)}.Build(),
+				"v3": deploymentspb.WorkerDeploymentVersionData_builder{Deleted: true, UpdateTime: timestamp.TimePtr(sixDaysAgo)}.Build(),
+				"v4": deploymentspb.WorkerDeploymentVersionData_builder{Deleted: true, UpdateTime: timestamp.TimePtr(oneDayAgo)}.Build(),
 			},
 			maxVersions: 10,
 			wantCleaned: false,
@@ -1200,8 +1187,8 @@ func TestCleanupOldDeletedVersions(t *testing.T) {
 		{
 			name: "removes nothing when all deleted versions are recent and within limit",
 			versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
-				"v1": {Deleted: true, UpdateTime: timestamp.TimePtr(oneDayAgo)},
-				"v2": {Deleted: false, UpdateTime: timestamp.TimePtr(now)},
+				"v1": deploymentspb.WorkerDeploymentVersionData_builder{Deleted: true, UpdateTime: timestamp.TimePtr(oneDayAgo)}.Build(),
+				"v2": deploymentspb.WorkerDeploymentVersionData_builder{Deleted: false, UpdateTime: timestamp.TimePtr(now)}.Build(),
 			},
 			maxVersions: 10,
 			wantCleaned: false,
@@ -1217,8 +1204,8 @@ func TestCleanupOldDeletedVersions(t *testing.T) {
 		{
 			name: "handles only undeleted versions",
 			versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
-				"v1": {Deleted: false, UpdateTime: timestamp.TimePtr(eightDaysAgo)},
-				"v2": {Deleted: false, UpdateTime: timestamp.TimePtr(now)},
+				"v1": deploymentspb.WorkerDeploymentVersionData_builder{Deleted: false, UpdateTime: timestamp.TimePtr(eightDaysAgo)}.Build(),
+				"v2": deploymentspb.WorkerDeploymentVersionData_builder{Deleted: false, UpdateTime: timestamp.TimePtr(now)}.Build(),
 			},
 			maxVersions: 10,
 			wantCleaned: false,
@@ -1227,12 +1214,12 @@ func TestCleanupOldDeletedVersions(t *testing.T) {
 		{
 			name: "removes enough old deleted versions when significantly exceeding limit",
 			versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
-				"v1": {Deleted: false, UpdateTime: timestamp.TimePtr(now)},
-				"d1": {Deleted: true, UpdateTime: timestamp.TimePtr(eightDaysAgo)},
-				"d2": {Deleted: true, UpdateTime: timestamp.TimePtr(eightDaysAgo.Add(-time.Hour))},
-				"d3": {Deleted: true, UpdateTime: timestamp.TimePtr(eightDaysAgo.Add(-time.Hour * 2))},
-				"d4": {Deleted: true, UpdateTime: timestamp.TimePtr(eightDaysAgo.Add(-time.Hour * 3))},
-				"d5": {Deleted: true, UpdateTime: timestamp.TimePtr(sixDaysAgo)},
+				"v1": deploymentspb.WorkerDeploymentVersionData_builder{Deleted: false, UpdateTime: timestamp.TimePtr(now)}.Build(),
+				"d1": deploymentspb.WorkerDeploymentVersionData_builder{Deleted: true, UpdateTime: timestamp.TimePtr(eightDaysAgo)}.Build(),
+				"d2": deploymentspb.WorkerDeploymentVersionData_builder{Deleted: true, UpdateTime: timestamp.TimePtr(eightDaysAgo.Add(-time.Hour))}.Build(),
+				"d3": deploymentspb.WorkerDeploymentVersionData_builder{Deleted: true, UpdateTime: timestamp.TimePtr(eightDaysAgo.Add(-time.Hour * 2))}.Build(),
+				"d4": deploymentspb.WorkerDeploymentVersionData_builder{Deleted: true, UpdateTime: timestamp.TimePtr(eightDaysAgo.Add(-time.Hour * 3))}.Build(),
+				"d5": deploymentspb.WorkerDeploymentVersionData_builder{Deleted: true, UpdateTime: timestamp.TimePtr(sixDaysAgo)}.Build(),
 			},
 			maxVersions: 2,
 			wantCleaned: true,
@@ -1242,9 +1229,9 @@ func TestCleanupOldDeletedVersions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			deploymentData := &persistencespb.WorkerDeploymentData{
+			deploymentData := persistencespb.WorkerDeploymentData_builder{
 				Versions: tt.versions,
-			}
+			}.Build()
 
 			// Make a copy of the original keys to verify removals
 			originalKeys := make(map[string]bool)
@@ -1259,13 +1246,13 @@ func TestCleanupOldDeletedVersions(t *testing.T) {
 
 			// Check that expected versions were removed
 			for _, removed := range tt.wantRemoved {
-				_, exists := deploymentData.Versions[removed]
+				_, exists := deploymentData.GetVersions()[removed]
 				assert.False(t, exists, "version %s should have been removed but still exists", removed)
 			}
 
 			// Check that only expected versions were removed
 			for k := range originalKeys {
-				_, exists := deploymentData.Versions[k]
+				_, exists := deploymentData.GetVersions()[k]
 				shouldBeRemoved := false
 				for _, removed := range tt.wantRemoved {
 					if k == removed {
@@ -1283,7 +1270,7 @@ func TestCleanupOldDeletedVersions(t *testing.T) {
 			// Verify invariants after cleanup
 			deletedCount := 0
 			undeletedCount := 0
-			for _, v := range deploymentData.Versions {
+			for _, v := range deploymentData.GetVersions() {
 				if v.GetDeleted() {
 					deletedCount++
 				} else {
@@ -1296,7 +1283,7 @@ func TestCleanupOldDeletedVersions(t *testing.T) {
 			if undeletedCount <= tt.maxVersions {
 				// If undeleted count is within limit, check that remaining deleted versions
 				// are either recent (< 30 days) or we're still within total limit
-				for _, v := range deploymentData.Versions {
+				for _, v := range deploymentData.GetVersions() {
 					if v.GetDeleted() {
 						age := now.Sub(v.GetUpdateTime().AsTime())
 						totalCount := undeletedCount + deletedCount

@@ -9,7 +9,6 @@ package enums
 import (
 	reflect "reflect"
 	"strconv"
-	sync "sync"
 	unsafe "unsafe"
 
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -83,11 +82,6 @@ func (x WorkflowTaskType) Number() protoreflect.EnumNumber {
 	return protoreflect.EnumNumber(x)
 }
 
-// Deprecated: Use WorkflowTaskType.Descriptor instead.
-func (WorkflowTaskType) EnumDescriptor() ([]byte, []int) {
-	return file_temporal_server_api_enums_v1_workflow_task_type_proto_rawDescGZIP(), []int{0}
-}
-
 var File_temporal_server_api_enums_v1_workflow_task_type_proto protoreflect.FileDescriptor
 
 const file_temporal_server_api_enums_v1_workflow_task_type_proto_rawDesc = "" +
@@ -98,18 +92,6 @@ const file_temporal_server_api_enums_v1_workflow_task_type_proto_rawDesc = "" +
 	"\x19WORKFLOW_TASK_TYPE_NORMAL\x10\x01\x12 \n" +
 	"\x1cWORKFLOW_TASK_TYPE_TRANSIENT\x10\x02\x12\"\n" +
 	"\x1eWORKFLOW_TASK_TYPE_SPECULATIVE\x10\x03B*Z(go.temporal.io/server/api/enums/v1;enumsb\x06proto3"
-
-var (
-	file_temporal_server_api_enums_v1_workflow_task_type_proto_rawDescOnce sync.Once
-	file_temporal_server_api_enums_v1_workflow_task_type_proto_rawDescData []byte
-)
-
-func file_temporal_server_api_enums_v1_workflow_task_type_proto_rawDescGZIP() []byte {
-	file_temporal_server_api_enums_v1_workflow_task_type_proto_rawDescOnce.Do(func() {
-		file_temporal_server_api_enums_v1_workflow_task_type_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_api_enums_v1_workflow_task_type_proto_rawDesc), len(file_temporal_server_api_enums_v1_workflow_task_type_proto_rawDesc)))
-	})
-	return file_temporal_server_api_enums_v1_workflow_task_type_proto_rawDescData
-}
 
 var file_temporal_server_api_enums_v1_workflow_task_type_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
 var file_temporal_server_api_enums_v1_workflow_task_type_proto_goTypes = []any{

@@ -69,11 +69,11 @@ func (s *dlqHandlerSuite) SetupTest() {
 
 	s.mockShard = shard.NewTestContext(
 		s.controller,
-		&persistencespb.ShardInfo{
+		persistencespb.ShardInfo_builder{
 			ShardId:                0,
 			RangeId:                1,
 			ReplicationDlqAckLevel: map[string]int64{cluster.TestAlternativeClusterName: persistence.EmptyQueueMessageID},
-		},
+		}.Build(),
 		tests.NewDynamicConfig(),
 	)
 	s.mockResource = s.mockShard.Resource
@@ -142,22 +142,20 @@ func (s *dlqHandlerSuite) TestReadMessages_OK() {
 		NextPageToken: pageToken,
 	}
 
-	remoteTask := &replicationspb.ReplicationTask{
+	remoteTask := replicationspb.ReplicationTask_builder{
 		TaskType:     enumsspb.REPLICATION_TASK_TYPE_HISTORY_TASK,
 		SourceTaskId: taskID,
-		Attributes: &replicationspb.ReplicationTask_HistoryTaskAttributes{
-			HistoryTaskAttributes: &replicationspb.HistoryTaskAttributes{
-				NamespaceId: namespaceID,
-				WorkflowId:  workflowID,
-				RunId:       runID,
-				VersionHistoryItems: []*historyspb.VersionHistoryItem{{
-					Version: version,
-					EventId: nextEventID - 1,
-				}},
-				Events: &commonpb.DataBlob{},
-			},
-		},
-	}
+		HistoryTaskAttributes: replicationspb.HistoryTaskAttributes_builder{
+			NamespaceId: namespaceID,
+			WorkflowId:  workflowID,
+			RunId:       runID,
+			VersionHistoryItems: []*historyspb.VersionHistoryItem{historyspb.VersionHistoryItem_builder{
+				Version: version,
+				EventId: nextEventID - 1,
+			}.Build()},
+			Events: &commonpb.DataBlob{},
+		}.Build(),
+	}.Build()
 
 	s.executionManager.EXPECT().GetReplicationTasksFromDLQ(gomock.Any(), &persistence.GetReplicationTasksFromDLQRequest{
 		GetHistoryTasksRequest: persistence.GetHistoryTasksRequest{
@@ -173,9 +171,9 @@ func (s *dlqHandlerSuite) TestReadMessages_OK() {
 
 	s.mockClientBean.EXPECT().GetRemoteAdminClient(s.sourceCluster).Return(s.adminClient, nil).AnyTimes()
 	s.adminClient.EXPECT().GetDLQReplicationMessages(ctx, gomock.Any()).
-		Return(&adminservice.GetDLQReplicationMessagesResponse{
+		Return(adminservice.GetDLQReplicationMessagesResponse_builder{
 			ReplicationTasks: []*replicationspb.ReplicationTask{remoteTask},
-		}, nil)
+		}.Build(), nil)
 	taskList, tasksInfo, token, err := s.replicationMessageHandler.GetMessages(ctx, s.sourceCluster, lastMessageID, pageSize, pageToken)
 	s.NoError(err)
 	s.Equal(pageToken, token)
@@ -237,22 +235,20 @@ func (s *dlqHandlerSuite) TestMergeMessages() {
 		NextPageToken: pageToken,
 	}
 
-	remoteTask := &replicationspb.ReplicationTask{
+	remoteTask := replicationspb.ReplicationTask_builder{
 		TaskType:     enumsspb.REPLICATION_TASK_TYPE_HISTORY_TASK,
 		SourceTaskId: taskID,
-		Attributes: &replicationspb.ReplicationTask_HistoryTaskAttributes{
-			HistoryTaskAttributes: &replicationspb.HistoryTaskAttributes{
-				NamespaceId: namespaceID,
-				WorkflowId:  workflowID,
-				RunId:       runID,
-				VersionHistoryItems: []*historyspb.VersionHistoryItem{{
-					Version: version,
-					EventId: nextEventID - 1,
-				}},
-				Events: &commonpb.DataBlob{},
-			},
-		},
-	}
+		HistoryTaskAttributes: replicationspb.HistoryTaskAttributes_builder{
+			NamespaceId: namespaceID,
+			WorkflowId:  workflowID,
+			RunId:       runID,
+			VersionHistoryItems: []*historyspb.VersionHistoryItem{historyspb.VersionHistoryItem_builder{
+				Version: version,
+				EventId: nextEventID - 1,
+			}.Build()},
+			Events: &commonpb.DataBlob{},
+		}.Build(),
+	}.Build()
 
 	s.executionManager.EXPECT().GetReplicationTasksFromDLQ(gomock.Any(), &persistence.GetReplicationTasksFromDLQRequest{
 		GetHistoryTasksRequest: persistence.GetHistoryTasksRequest{
@@ -268,9 +264,9 @@ func (s *dlqHandlerSuite) TestMergeMessages() {
 
 	s.mockClientBean.EXPECT().GetRemoteAdminClient(s.sourceCluster).Return(s.adminClient, nil).AnyTimes()
 	s.adminClient.EXPECT().GetDLQReplicationMessages(ctx, gomock.Any()).
-		Return(&adminservice.GetDLQReplicationMessagesResponse{
+		Return(adminservice.GetDLQReplicationMessagesResponse_builder{
 			ReplicationTasks: []*replicationspb.ReplicationTask{remoteTask},
-		}, nil)
+		}.Build(), nil)
 	s.taskExecutor.EXPECT().Execute(gomock.Any(), remoteTask, true).Return(nil)
 	s.executionManager.EXPECT().RangeDeleteReplicationTaskFromDLQ(gomock.Any(), &persistence.RangeDeleteReplicationTaskFromDLQRequest{
 		RangeCompleteHistoryTasksRequest: persistence.RangeCompleteHistoryTasksRequest{

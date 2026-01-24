@@ -284,10 +284,10 @@ func (c *WorkflowConsistencyCheckerImpl) getWorkflowLease(
 		ctx,
 		c.shardContext,
 		namespace.ID(workflowKey.NamespaceID),
-		&commonpb.WorkflowExecution{
+		commonpb.WorkflowExecution_builder{
 			WorkflowId: workflowKey.WorkflowID,
 			RunId:      workflowKey.RunID,
-		},
+		}.Build(),
 		archetypeID,
 		lockPriority,
 	)

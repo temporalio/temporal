@@ -8,18 +8,18 @@ import (
 
 // NewVersionHistory create a new instance of VersionHistory.
 func NewVersionHistory(branchToken []byte, items []*historyspb.VersionHistoryItem) *historyspb.VersionHistory {
-	return &historyspb.VersionHistory{
+	return historyspb.VersionHistory_builder{
 		BranchToken: branchToken,
 		Items:       items,
-	}
+	}.Build()
 }
 
 // CopyVersionHistory copies VersionHistory.
 func CopyVersionHistory(v *historyspb.VersionHistory) *historyspb.VersionHistory {
-	token := make([]byte, len(v.BranchToken))
-	copy(token, v.BranchToken)
+	token := make([]byte, len(v.GetBranchToken()))
+	copy(token, v.GetBranchToken())
 
-	items := CopyVersionHistoryItems(v.Items)
+	items := CopyVersionHistoryItems(v.GetItems())
 
 	return NewVersionHistory(token, items)
 }
@@ -36,12 +36,12 @@ func CopyVersionHistoryItems(items []*historyspb.VersionHistoryItem) []*historys
 func CopyVersionHistoryUntilLCAVersionHistoryItem(v *historyspb.VersionHistory, lcaItem *historyspb.VersionHistoryItem) (*historyspb.VersionHistory, error) {
 	versionHistory := &historyspb.VersionHistory{}
 	notFoundErr := serviceerror.NewInternal("version history does not contains the LCA item.")
-	for _, item := range v.Items {
-		if item.Version < lcaItem.Version {
+	for _, item := range v.GetItems() {
+		if item.GetVersion() < lcaItem.GetVersion() {
 			if err := AddOrUpdateVersionHistoryItem(versionHistory, item); err != nil {
 				return nil, err
 			}
-		} else if item.Version == lcaItem.Version {
+		} else if item.GetVersion() == lcaItem.GetVersion() {
 			if lcaItem.GetEventId() > item.GetEventId() {
 				return nil, notFoundErr
 			}
@@ -58,33 +58,33 @@ func CopyVersionHistoryUntilLCAVersionHistoryItem(v *historyspb.VersionHistory, 
 
 // SetVersionHistoryBranchToken sets the branch token.
 func SetVersionHistoryBranchToken(v *historyspb.VersionHistory, branchToken []byte) {
-	v.BranchToken = make([]byte, len(branchToken))
-	copy(v.BranchToken, branchToken)
+	v.SetBranchToken(make([]byte, len(branchToken)))
+	copy(v.GetBranchToken(), branchToken)
 }
 
 // AddOrUpdateVersionHistoryItem updates the VersionHistory with new VersionHistoryItem.
 func AddOrUpdateVersionHistoryItem(v *historyspb.VersionHistory, item *historyspb.VersionHistoryItem) error {
-	if len(v.Items) == 0 {
-		v.Items = []*historyspb.VersionHistoryItem{CopyVersionHistoryItem(item)}
+	if len(v.GetItems()) == 0 {
+		v.SetItems([]*historyspb.VersionHistoryItem{CopyVersionHistoryItem(item)})
 		return nil
 	}
 
-	lastItem := v.Items[len(v.Items)-1]
-	if item.Version < lastItem.Version {
-		return serviceerror.NewInternalf("cannot update version history with a lower version %v. Last version: %v", item.Version, lastItem.Version)
+	lastItem := v.GetItems()[len(v.GetItems())-1]
+	if item.GetVersion() < lastItem.GetVersion() {
+		return serviceerror.NewInternalf("cannot update version history with a lower version %v. Last version: %v", item.GetVersion(), lastItem.GetVersion())
 	}
 
 	if item.GetEventId() <= lastItem.GetEventId() {
 		return serviceerror.NewInternalf("cannot add version history with a lower event id %v. Last event id: %v", item.GetEventId(), lastItem.GetEventId())
 	}
 
-	if item.Version > lastItem.Version {
+	if item.GetVersion() > lastItem.GetVersion() {
 		// Add a new history
-		v.Items = append(v.Items, CopyVersionHistoryItem(item))
+		v.SetItems(append(v.GetItems(), CopyVersionHistoryItem(item)))
 	} else {
 		// item.Version == lastItem.Version && item.EventID > lastItem.EventID
 		// Update event ID
-		lastItem.EventId = item.GetEventId()
+		lastItem.SetEventId(item.GetEventId())
 	}
 	return nil
 }
@@ -92,7 +92,7 @@ func AddOrUpdateVersionHistoryItem(v *historyspb.VersionHistory, item *historysp
 // ContainsVersionHistoryItem check whether VersionHistory has given VersionHistoryItem.
 func ContainsVersionHistoryItem(v *historyspb.VersionHistory, item *historyspb.VersionHistoryItem) bool {
 	prevEventID := common.FirstEventID - 1
-	for _, currentItem := range v.Items {
+	for _, currentItem := range v.GetItems() {
 		if item.GetVersion() == currentItem.GetVersion() {
 			if prevEventID < item.GetEventId() && item.GetEventId() <= currentItem.GetEventId() {
 				return true
@@ -107,7 +107,7 @@ func ContainsVersionHistoryItem(v *historyspb.VersionHistory, item *historyspb.V
 
 // FindLCAVersionHistoryItem returns the lowest common ancestor VersionHistoryItem.
 func FindLCAVersionHistoryItem(v *historyspb.VersionHistory, remote *historyspb.VersionHistory) (*historyspb.VersionHistoryItem, error) {
-	return FindLCAVersionHistoryItemFromItemSlice(v.Items, remote.Items)
+	return FindLCAVersionHistoryItemFromItemSlice(v.GetItems(), remote.GetItems())
 }
 
 func FindLCAVersionHistoryItemFromItemSlice(versionHistoryItemsA []*historyspb.VersionHistoryItem, versionHistoryItemsB []*historyspb.VersionHistoryItem) (*historyspb.VersionHistoryItem, error) {
@@ -118,12 +118,12 @@ func FindLCAVersionHistoryItemFromItemSlice(versionHistoryItemsA []*historyspb.V
 		aVersionItem := versionHistoryItemsA[aIndex]
 		bVersionItem := versionHistoryItemsB[bIndex]
 
-		if aVersionItem.Version == bVersionItem.Version {
+		if aVersionItem.GetVersion() == bVersionItem.GetVersion() {
 			if aVersionItem.GetEventId() > bVersionItem.GetEventId() {
 				return CopyVersionHistoryItem(bVersionItem), nil
 			}
 			return aVersionItem, nil
-		} else if aVersionItem.Version > bVersionItem.Version {
+		} else if aVersionItem.GetVersion() > bVersionItem.GetVersion() {
 			aIndex--
 		} else {
 			// aVersionItem.Version < bVersionItem.Version
@@ -186,7 +186,7 @@ func SplitVersionHistoryByLastLocalGeneratedItem(
 	failoverVersionIncrement int64,
 ) (localItems []*historyspb.VersionHistoryItem, remoteItems []*historyspb.VersionHistoryItem) {
 	for i := len(versionHistoryItems) - 1; i >= 0; i-- {
-		if versionHistoryItems[i].Version%failoverVersionIncrement == initialFailoverVersion {
+		if versionHistoryItems[i].GetVersion()%failoverVersionIncrement == initialFailoverVersion {
 			return versionHistoryItems[:i+1], versionHistoryItems[i+1:]
 		}
 	}
@@ -195,27 +195,27 @@ func SplitVersionHistoryByLastLocalGeneratedItem(
 
 // IsLCAVersionHistoryItemAppendable checks if a LCA VersionHistoryItem is appendable.
 func IsLCAVersionHistoryItemAppendable(v *historyspb.VersionHistory, lcaItem *historyspb.VersionHistoryItem) bool {
-	if len(v.Items) == 0 {
+	if len(v.GetItems()) == 0 {
 		panic("version history not initialized")
 	}
 	if lcaItem == nil {
 		panic("lcaItem is nil")
 	}
 
-	return IsEqualVersionHistoryItem(v.Items[len(v.Items)-1], lcaItem)
+	return IsEqualVersionHistoryItem(v.GetItems()[len(v.GetItems())-1], lcaItem)
 }
 
 // GetFirstVersionHistoryItem return the first VersionHistoryItem.
 func GetFirstVersionHistoryItem(v *historyspb.VersionHistory) (*historyspb.VersionHistoryItem, error) {
-	if len(v.Items) == 0 {
+	if len(v.GetItems()) == 0 {
 		return nil, serviceerror.NewInternal("version history is empty.")
 	}
-	return CopyVersionHistoryItem(v.Items[0]), nil
+	return CopyVersionHistoryItem(v.GetItems()[0]), nil
 }
 
 // GetLastVersionHistoryItem return the last VersionHistoryItem.
 func GetLastVersionHistoryItem(v *historyspb.VersionHistory) (*historyspb.VersionHistoryItem, error) {
-	return getLastVersionHistoryItem(v.Items)
+	return getLastVersionHistoryItem(v.GetItems())
 }
 
 func getLastVersionHistoryItem(v []*historyspb.VersionHistoryItem) (*historyspb.VersionHistoryItem, error) {
@@ -238,7 +238,7 @@ func GetVersionHistoryEventVersion(v *historyspb.VersionHistory, eventID int64) 
 	// items are sorted by eventID & version
 	// so the fist item with item event ID >= input event ID
 	// the item version is the result
-	for _, currentItem := range v.Items {
+	for _, currentItem := range v.GetItems() {
 		if eventID <= currentItem.GetEventId() {
 			return currentItem.GetVersion(), nil
 		}
@@ -248,7 +248,7 @@ func GetVersionHistoryEventVersion(v *historyspb.VersionHistory, eventID int64) 
 
 // IsEmptyVersionHistory indicate whether version history is empty
 func IsEmptyVersionHistory(v *historyspb.VersionHistory) bool {
-	return len(v.Items) == 0
+	return len(v.GetItems()) == 0
 }
 
 // CompareVersionHistory compares 2 version history items

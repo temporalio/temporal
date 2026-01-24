@@ -141,9 +141,9 @@ func NewVisibility(
 	mutableContext MutableContext,
 ) *Visibility {
 	visibility := &Visibility{
-		Data: &persistencespb.ChasmVisibilityData{
+		Data: persistencespb.ChasmVisibilityData_builder{
 			TransitionCount: 0,
-		},
+		}.Build(),
 	}
 
 	visibility.generateTask(mutableContext)
@@ -156,21 +156,21 @@ func NewVisibilityWithData(
 	customMemo map[string]*commonpb.Payload,
 ) *Visibility {
 	visibility := &Visibility{
-		Data: &persistencespb.ChasmVisibilityData{
+		Data: persistencespb.ChasmVisibilityData_builder{
 			TransitionCount: 0,
-		},
+		}.Build(),
 	}
 
 	if len(customSearchAttributes) != 0 {
 		visibility.SA = NewDataField(
 			mutableContext,
-			&commonpb.SearchAttributes{IndexedFields: customSearchAttributes},
+			commonpb.SearchAttributes_builder{IndexedFields: customSearchAttributes}.Build(),
 		)
 	}
 	if len(customMemo) != 0 {
 		visibility.Memo = NewDataField(
 			mutableContext,
-			&commonpb.Memo{Fields: customMemo},
+			commonpb.Memo_builder{Fields: customMemo}.Build(),
 		)
 	}
 
@@ -216,11 +216,11 @@ func (v *Visibility) MergeCustomSearchAttributes(
 		v.SA = NewDataField(mutableContext, currentSA)
 	}
 
-	currentSA.IndexedFields = payload.MergeMapOfPayload(
+	currentSA.SetIndexedFields(payload.MergeMapOfPayload(
 		currentSA.GetIndexedFields(),
 		customSearchAttributes,
-	)
-	if len(currentSA.IndexedFields) == 0 {
+	))
+	if len(currentSA.GetIndexedFields()) == 0 {
 		v.SA = NewEmptyField[*commonpb.SearchAttributes]()
 	}
 
@@ -244,7 +244,7 @@ func (v *Visibility) ReplaceCustomSearchAttributes(
 	} else {
 		v.SA = NewDataField(
 			mutableContext,
-			&commonpb.SearchAttributes{IndexedFields: customSearchAttributes},
+			commonpb.SearchAttributes_builder{IndexedFields: customSearchAttributes}.Build(),
 		)
 	}
 
@@ -285,11 +285,11 @@ func (v *Visibility) MergeCustomMemo(
 		v.Memo = NewDataField(mutableContext, currentMemo)
 	}
 
-	currentMemo.Fields = payload.MergeMapOfPayload(
+	currentMemo.SetFields(payload.MergeMapOfPayload(
 		currentMemo.GetFields(),
 		customMemo,
-	)
-	if len(currentMemo.Fields) == 0 {
+	))
+	if len(currentMemo.GetFields()) == 0 {
 		v.Memo = NewEmptyField[*commonpb.Memo]()
 	}
 	v.generateTask(mutableContext)
@@ -312,7 +312,7 @@ func (v *Visibility) ReplaceCustomMemo(
 	} else {
 		v.Memo = NewDataField(
 			mutableContext,
-			&commonpb.Memo{Fields: customMemo},
+			commonpb.Memo_builder{Fields: customMemo}.Build(),
 		)
 	}
 
@@ -322,11 +322,11 @@ func (v *Visibility) ReplaceCustomMemo(
 func (v *Visibility) generateTask(
 	mutableContext MutableContext,
 ) {
-	v.Data.TransitionCount++
+	v.Data.SetTransitionCount(v.Data.GetTransitionCount() + 1)
 	mutableContext.AddTask(
 		v,
 		TaskAttributes{},
-		&persistencespb.ChasmVisibilityTaskData{TransitionCount: v.Data.TransitionCount},
+		persistencespb.ChasmVisibilityTaskData_builder{TransitionCount: v.Data.GetTransitionCount()}.Build(),
 	)
 }
 
@@ -340,7 +340,7 @@ func (v *visibilityTaskHandler) Validate(
 	_ TaskAttributes,
 	task *persistencespb.ChasmVisibilityTaskData,
 ) (bool, error) {
-	return task.TransitionCount == component.Data.TransitionCount, nil
+	return task.GetTransitionCount() == component.Data.GetTransitionCount(), nil
 }
 
 func (v *visibilityTaskHandler) Execute(

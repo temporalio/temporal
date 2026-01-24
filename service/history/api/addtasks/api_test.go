@@ -80,7 +80,7 @@ func TestInvoke(t *testing.T) {
 					requests = append(requests, req)
 					return nil
 				}).Times(2)
-				params.req.Tasks = nil
+				params.req.SetTasks(nil)
 				for i := 0; i < numWorkflows; i++ {
 					workflowKey := definition.NewWorkflowKey(
 						string(tests.NamespaceID),
@@ -102,10 +102,10 @@ func TestInvoke(t *testing.T) {
 						serializer := serialization.NewSerializer()
 						blob, err := serializer.SerializeTask(task)
 						require.NoError(t, err)
-						params.req.Tasks = append(params.req.Tasks, &historyservice.AddTasksRequest_Task{
+						params.req.SetTasks(append(params.req.GetTasks(), historyservice.AddTasksRequest_Task_builder{
 							CategoryId: int32(task.GetCategory().ID()),
 							Blob:       blob,
-						})
+						}.Build()))
 					}
 				}
 				params.expectation = func(resp *historyservice.AddTasksResponse, err error) {
@@ -130,7 +130,7 @@ func TestInvoke(t *testing.T) {
 		{
 			name: "too many tasks",
 			configure: func(t *testing.T, params *testParams) {
-				params.req.Tasks = make([]*historyservice.AddTasksRequest_Task, 1001)
+				params.req.SetTasks(make([]*historyservice.AddTasksRequest_Task, 1001))
 				params.expectation = func(resp *historyservice.AddTasksResponse, err error) {
 					require.ErrorAs(t, err, new(*serviceerror.InvalidArgument))
 					assert.ErrorContains(t, err, "Too many tasks")
@@ -141,7 +141,7 @@ func TestInvoke(t *testing.T) {
 		{
 			name: "no tasks",
 			configure: func(t *testing.T, params *testParams) {
-				params.req.Tasks = make([]*historyservice.AddTasksRequest_Task, 0)
+				params.req.SetTasks(make([]*historyservice.AddTasksRequest_Task, 0))
 				params.expectation = func(resp *historyservice.AddTasksResponse, err error) {
 					require.ErrorAs(t, err, new(*serviceerror.InvalidArgument))
 					assert.ErrorContains(t, err, "No tasks")
@@ -151,7 +151,7 @@ func TestInvoke(t *testing.T) {
 		{
 			name: "nil task",
 			configure: func(t *testing.T, params *testParams) {
-				params.req.Tasks[0] = nil
+				params.req.GetTasks()[0] = nil
 				params.expectation = func(resp *historyservice.AddTasksResponse, err error) {
 					require.ErrorAs(t, err, new(*serviceerror.InvalidArgument))
 					assert.ErrorContains(t, err, "Nil task")
@@ -161,7 +161,7 @@ func TestInvoke(t *testing.T) {
 		{
 			name: "invalid task category",
 			configure: func(t *testing.T, params *testParams) {
-				params.req.Tasks[0].CategoryId = -1
+				params.req.GetTasks()[0].SetCategoryId(-1)
 				params.expectation = func(resp *historyservice.AddTasksResponse, err error) {
 					require.ErrorAs(t, err, new(*serviceerror.InvalidArgument))
 					assert.ErrorContains(t, err, "Invalid task category")
@@ -172,7 +172,7 @@ func TestInvoke(t *testing.T) {
 		{
 			name: "nil task blob",
 			configure: func(t *testing.T, params *testParams) {
-				params.req.Tasks[0].Blob = nil
+				params.req.GetTasks()[0].ClearBlob()
 				params.expectation = func(resp *historyservice.AddTasksResponse, err error) {
 					require.ErrorAs(t, err, new(*serviceerror.InvalidArgument))
 					assert.ErrorContains(t, err, "Task blob is nil")
@@ -193,7 +193,7 @@ func TestInvoke(t *testing.T) {
 		{
 			name: "wrong shard",
 			configure: func(t *testing.T, params *testParams) {
-				params.req.ShardId = 1
+				params.req.SetShardId(1)
 				params.numShards = 2
 				params.expectation = func(resp *historyservice.AddTasksResponse, err error) {
 					require.ErrorAs(t, err, new(*serviceerror.InvalidArgument))
@@ -248,15 +248,15 @@ func getDefaultTestParams(t *testing.T) *testParams {
 		shardContext: shardContext,
 		numShards:    1,
 		deserializer: serializer,
-		req: &historyservice.AddTasksRequest{
+		req: historyservice.AddTasksRequest_builder{
 			ShardId: 1,
 			Tasks: []*historyservice.AddTasksRequest_Task{
-				{
+				historyservice.AddTasksRequest_Task_builder{
 					CategoryId: int32(tasks.CategoryTransfer.ID()),
 					Blob:       blob,
-				},
+				}.Build(),
 			},
-		},
+		}.Build(),
 		expectation: func(response *historyservice.AddTasksResponse, err error) {},
 	}
 

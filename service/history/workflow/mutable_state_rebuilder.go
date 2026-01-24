@@ -121,7 +121,7 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 	// Need to clear the sticky task queue because workflow turned to passive.
 	b.mutableState.ClearStickyTaskQueue()
 	executionInfo := b.mutableState.GetExecutionInfo()
-	executionInfo.LastFirstEventId = firstEvent.GetEventId()
+	executionInfo.SetLastFirstEventId(firstEvent.GetEventId())
 
 	// Preserve the WorkflowTaskStamp during rebuild to ensure workflow task validation works correctly.
 	// The stamp is used to invalidate stale workflow tasks and must be maintained across rebuilds.
@@ -142,7 +142,7 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 	)); err != nil {
 		return nil, err
 	}
-	executionInfo.LastRunningClock = lastEvent.GetTaskId()
+	executionInfo.SetLastRunningClock(lastEvent.GetTaskId())
 
 	for _, event := range history {
 		switch event.GetEventType() {
@@ -154,7 +154,7 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 				if err != nil {
 					return nil, err
 				}
-				attributes.ParentWorkflowNamespaceId = parentNamespaceEntry.ID().String()
+				attributes.SetParentWorkflowNamespaceId(parentNamespaceEntry.ID().String())
 			}
 
 			if err := b.mutableState.ApplyWorkflowExecutionStartedEvent(
@@ -172,10 +172,10 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 				return nil, err
 			}
 
-			var err error
-			executionInfo.WorkflowExecutionTimerTaskStatus, err = taskGenerator.GenerateWorkflowStartTasks(
+			status, err := taskGenerator.GenerateWorkflowStartTasks(
 				event,
 			)
+			executionInfo.SetWorkflowExecutionTimerTaskStatus(status)
 			if err != nil {
 				return nil, err
 			}
@@ -189,8 +189,8 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 			}
 
 			if err := b.mutableState.SetHistoryTree(
-				executionInfo.WorkflowExecutionTimeout,
-				executionInfo.WorkflowRunTimeout,
+				executionInfo.GetWorkflowExecutionTimeout(),
+				executionInfo.GetWorkflowRunTimeout(),
 				execution.GetRunId(),
 			); err != nil {
 				return nil, err
@@ -203,7 +203,7 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 			workflowTask, err := b.mutableState.ApplyWorkflowTaskScheduledEvent(
 				event.GetVersion(),
 				event.GetEventId(),
-				attributes.TaskQueue,
+				attributes.GetTaskQueue(),
 				attributes.GetStartToCloseTimeout(),
 				attributes.GetAttempt(),
 				event.GetEventTime(),
@@ -688,17 +688,17 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 		return nil, nil
 	}
 
-	if b.mutableState.GetExecutionState().Status == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+	if b.mutableState.GetExecutionState().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 		return nil, serviceerror.NewInternal("Cannot apply events for new run when current run is still running")
 	}
 
 	return b.applyNewRunHistory(
 		ctx,
 		namespaceID,
-		&commonpb.WorkflowExecution{
-			WorkflowId: execution.WorkflowId,
+		commonpb.WorkflowExecution_builder{
+			WorkflowId: execution.GetWorkflowId(),
 			RunId:      newRunID,
-		},
+		}.Build(),
 		newRunHistory,
 	)
 }
@@ -715,8 +715,8 @@ func (b *MutableStateRebuilderImpl) applyNewRunHistory(
 	sameWorkflowChain := false
 	newRunFirstEvent := newRunHistory[0]
 	if newRunFirstEvent.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
-		newRunFirstRunID := newRunFirstEvent.GetWorkflowExecutionStartedEventAttributes().FirstExecutionRunId
-		sameWorkflowChain = newRunFirstRunID == b.mutableState.GetExecutionInfo().FirstExecutionRunId
+		newRunFirstRunID := newRunFirstEvent.GetWorkflowExecutionStartedEventAttributes().GetFirstExecutionRunId()
+		sameWorkflowChain = newRunFirstRunID == b.mutableState.GetExecutionInfo().GetFirstExecutionRunId()
 	}
 
 	var err error
@@ -727,8 +727,8 @@ func (b *MutableStateRebuilderImpl) applyNewRunHistory(
 			b.shard.GetEventsCache(),
 			b.logger,
 			b.mutableState.GetNamespaceEntry(),
-			newExecution.WorkflowId,
-			newExecution.RunId,
+			newExecution.GetWorkflowId(),
+			newExecution.GetRunId(),
 			timestamp.TimeValue(newRunHistory[0].GetEventTime()),
 			b.mutableState,
 		)
@@ -741,8 +741,8 @@ func (b *MutableStateRebuilderImpl) applyNewRunHistory(
 			b.shard.GetEventsCache(),
 			b.logger,
 			b.mutableState.GetNamespaceEntry(),
-			newExecution.WorkflowId,
-			newExecution.RunId,
+			newExecution.GetWorkflowId(),
+			newExecution.GetRunId(),
 			timestamp.TimeValue(newRunHistory[0].GetEventTime()),
 		)
 	}

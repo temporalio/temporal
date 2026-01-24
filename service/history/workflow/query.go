@@ -98,10 +98,9 @@ func (q *queryImpl) validateCompletionState(
 		}
 		queryResult := completionState.Result
 		validAnswered := queryResult.GetResultType() == enumspb.QUERY_RESULT_TYPE_ANSWERED &&
-			queryResult.Answer != nil &&
+			queryResult.HasAnswer() &&
 			queryResult.GetErrorMessage() == ""
-		validFailed := queryResult.GetResultType() == enumspb.QUERY_RESULT_TYPE_FAILED &&
-			queryResult.Answer == nil &&
+		validFailed := queryResult.GetResultType() == enumspb.QUERY_RESULT_TYPE_FAILED && !queryResult.HasAnswer() &&
 			queryResult.GetErrorMessage() != ""
 		if !validAnswered && !validFailed {
 			return errCompletionStateInvalid

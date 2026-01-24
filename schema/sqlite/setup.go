@@ -99,7 +99,7 @@ func CreateNamespaces(cfg *config.SQL, namespaces ...*NamespaceConfig) error {
 
 	for _, ns := range namespaces {
 		if err := createNamespaceIfNotExists(db, ns); err != nil {
-			return fmt.Errorf("error creating namespace %q: %w", ns.Detail.Info.Name, err)
+			return fmt.Errorf("error creating namespace %q: %w", ns.Detail.GetInfo().GetName(), err)
 		}
 	}
 
@@ -116,7 +116,7 @@ func NewNamespaceConfig(
 	global bool,
 	customSearchAttributes map[string]enumspb.IndexedValueType,
 ) (*NamespaceConfig, error) {
-	dbCustomSearchAttributes := sadefs.GetDBIndexSearchAttributes(nil).CustomSearchAttributes
+	dbCustomSearchAttributes := sadefs.GetDBIndexSearchAttributes(nil).GetCustomSearchAttributes()
 	fieldToAliasMap := map[string]string{}
 	for saName, saType := range customSearchAttributes {
 		var targetFieldName string
@@ -141,27 +141,27 @@ func NewNamespaceConfig(
 		fieldToAliasMap[targetFieldName] = saName
 	}
 
-	detail := persistencespb.NamespaceDetail{
-		Info: &persistencespb.NamespaceInfo{
+	detail := persistencespb.NamespaceDetail_builder{
+		Info: persistencespb.NamespaceInfo_builder{
 			Id:    primitives.NewUUID().String(),
 			State: enumspb.NAMESPACE_STATE_REGISTERED,
 			Name:  namespace,
-		},
-		Config: &persistencespb.NamespaceConfig{
+		}.Build(),
+		Config: persistencespb.NamespaceConfig_builder{
 			Retention:                    timestamp.DurationFromHours(24),
 			HistoryArchivalState:         enumspb.ARCHIVAL_STATE_DISABLED,
 			VisibilityArchivalState:      enumspb.ARCHIVAL_STATE_DISABLED,
 			CustomSearchAttributeAliases: fieldToAliasMap,
-		},
-		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+		}.Build(),
+		ReplicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: activeClusterName,
 			Clusters:          []string{activeClusterName},
-		},
+		}.Build(),
 		FailoverVersion:             common.EmptyVersion,
 		FailoverNotificationVersion: -1,
-	}
+	}.Build()
 	return &NamespaceConfig{
-		Detail:   &detail,
+		Detail:   detail,
 		IsGlobal: global,
 	}, nil
 }

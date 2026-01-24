@@ -49,22 +49,22 @@ func (s *apiSuite) SetupTest() {
 
 func (s *apiSuite) TestInvalidTaskCategory() {
 	invalidCategoryID := int32(-1)
-	request := &historyservice.ListTasksRequest{
-		Request: &adminservice.ListHistoryTasksRequest{
+	request := historyservice.ListTasksRequest_builder{
+		Request: adminservice.ListHistoryTasksRequest_builder{
 			ShardId:  1,
 			Category: invalidCategoryID,
-			TaskRange: &historyspb.TaskRange{
-				InclusiveMinTaskKey: &historyspb.TaskKey{
+			TaskRange: historyspb.TaskRange_builder{
+				InclusiveMinTaskKey: historyspb.TaskKey_builder{
 					TaskId: 10,
-				},
-				ExclusiveMaxTaskKey: &historyspb.TaskKey{
+				}.Build(),
+				ExclusiveMaxTaskKey: historyspb.TaskKey_builder{
 					TaskId: 20,
-				},
-			},
+				}.Build(),
+			}.Build(),
 			BatchSize:     100,
 			NextPageToken: nil,
-		},
-	}
+		}.Build(),
+	}.Build()
 
 	_, err := Invoke(
 		context.Background(),
@@ -79,24 +79,24 @@ func (s *apiSuite) TestInvalidTaskCategory() {
 
 func (s *apiSuite) TestInvalidTaskRange() {
 	invalidTaskID := int64(-1)
-	request := &historyservice.ListTasksRequest{
-		Request: &adminservice.ListHistoryTasksRequest{
+	request := historyservice.ListTasksRequest_builder{
+		Request: adminservice.ListHistoryTasksRequest_builder{
 			ShardId:  1,
 			Category: tasks.CategoryIDTransfer,
-			TaskRange: &historyspb.TaskRange{
-				InclusiveMinTaskKey: &historyspb.TaskKey{
+			TaskRange: historyspb.TaskRange_builder{
+				InclusiveMinTaskKey: historyspb.TaskKey_builder{
 					TaskId:   -1,
 					FireTime: timestamppb.New(time.Unix(0, 0)),
-				},
-				ExclusiveMaxTaskKey: &historyspb.TaskKey{
+				}.Build(),
+				ExclusiveMaxTaskKey: historyspb.TaskKey_builder{
 					TaskId:   20,
 					FireTime: timestamppb.New(time.Unix(0, 0)),
-				},
-			},
+				}.Build(),
+			}.Build(),
 			BatchSize:     100,
 			NextPageToken: nil,
-		},
-	}
+		}.Build(),
+	}.Build()
 
 	_, err := Invoke(
 		context.Background(),
@@ -116,24 +116,24 @@ func (s *apiSuite) TestGetHistoryTasks() {
 	maxTaskID := minTaskID + 2*int64(batchSize)
 	taskVersion := int64(123)
 
-	request := &historyservice.ListTasksRequest{
-		Request: &adminservice.ListHistoryTasksRequest{
+	request := historyservice.ListTasksRequest_builder{
+		Request: adminservice.ListHistoryTasksRequest_builder{
 			ShardId:  1,
 			Category: tasks.CategoryIDTransfer,
-			TaskRange: &historyspb.TaskRange{
-				InclusiveMinTaskKey: &historyspb.TaskKey{
+			TaskRange: historyspb.TaskRange_builder{
+				InclusiveMinTaskKey: historyspb.TaskKey_builder{
 					TaskId:   minTaskID,
 					FireTime: timestamppb.New(time.Unix(0, 0)),
-				},
-				ExclusiveMaxTaskKey: &historyspb.TaskKey{
+				}.Build(),
+				ExclusiveMaxTaskKey: historyspb.TaskKey_builder{
 					TaskId:   maxTaskID,
 					FireTime: timestamppb.New(time.Unix(0, 0)),
-				},
-			},
+				}.Build(),
+			}.Build(),
 			BatchSize:     int32(batchSize),
 			NextPageToken: reqNextPageToken,
-		},
-	}
+		}.Build(),
+	}.Build()
 
 	respNextPageToken := []byte("resp-next-page-token")
 	fakeTasks := make([]tasks.Task, 0, batchSize)
@@ -170,7 +170,7 @@ func (s *apiSuite) TestGetHistoryTasks() {
 
 	expectedAdminTasks := make([]*adminservice.Task, 0, batchSize)
 	for i := range fakeTasks {
-		adminTask := &adminservice.Task{
+		adminTask := adminservice.Task_builder{
 			NamespaceId: tests.WorkflowKey.NamespaceID,
 			WorkflowId:  tests.WorkflowKey.WorkflowID,
 			RunId:       tests.WorkflowKey.RunID,
@@ -178,14 +178,14 @@ func (s *apiSuite) TestGetHistoryTasks() {
 			TaskType:    enumsspb.TASK_TYPE_UNSPECIFIED,
 			FireTime:    timestamppb.New(time.Unix(0, 0)),
 			Version:     taskVersion,
-		}
+		}.Build()
 		expectedAdminTasks = append(expectedAdminTasks, adminTask)
 	}
 
-	protoassert.ProtoEqual(s.T(), &historyservice.ListTasksResponse{
-		Response: &adminservice.ListHistoryTasksResponse{
+	protoassert.ProtoEqual(s.T(), historyservice.ListTasksResponse_builder{
+		Response: adminservice.ListHistoryTasksResponse_builder{
 			Tasks:         expectedAdminTasks,
 			NextPageToken: respNextPageToken,
-		},
-	}, resp)
+		}.Build(),
+	}.Build(), resp)
 }

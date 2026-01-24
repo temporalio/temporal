@@ -264,8 +264,8 @@ func (r *EndpointRegistryImpl) loadEndpoints(ctx context.Context) error {
 	endpointsByID := make(map[string]*persistencespb.NexusEndpointEntry, len(endpoints))
 	endpointsByName := make(map[string]*persistencespb.NexusEndpointEntry, len(endpoints))
 	for _, endpoint := range endpoints {
-		endpointsByID[endpoint.Id] = endpoint
-		endpointsByName[endpoint.Endpoint.Spec.Name] = endpoint
+		endpointsByID[endpoint.GetId()] = endpoint
+		endpointsByName[endpoint.GetEndpoint().GetSpec().GetName()] = endpoint
 	}
 
 	r.dataLock.Lock()
@@ -283,12 +283,12 @@ func (r *EndpointRegistryImpl) refreshEndpoints(ctx context.Context) error {
 	currentTableVersion := r.tableVersion
 	r.dataLock.RUnlock()
 
-	resp, err := r.matchingClient.ListNexusEndpoints(ctx, &matchingservice.ListNexusEndpointsRequest{
+	resp, err := r.matchingClient.ListNexusEndpoints(ctx, matchingservice.ListNexusEndpointsRequest_builder{
 		NextPageToken:         nil,
 		PageSize:              int32(r.config.refreshPageSize()),
 		LastKnownTableVersion: currentTableVersion,
 		Wait:                  true,
-	})
+	}.Build())
 	if err != nil {
 		if ctx.Err() == nil {
 			r.logger.Error("long poll to refresh Nexus endpoints returned error", tag.Error(err))
@@ -296,22 +296,22 @@ func (r *EndpointRegistryImpl) refreshEndpoints(ctx context.Context) error {
 		return err
 	}
 
-	if resp.TableVersion == currentTableVersion {
+	if resp.GetTableVersion() == currentTableVersion {
 		// Long poll returned with no changes.
 		return nil
 	}
 
-	currentTableVersion = resp.TableVersion
-	entries := resp.Entries
+	currentTableVersion = resp.GetTableVersion()
+	entries := resp.GetEntries()
 
-	currentPageToken := resp.NextPageToken
+	currentPageToken := resp.GetNextPageToken()
 	for len(currentPageToken) != 0 {
-		resp, err = r.matchingClient.ListNexusEndpoints(ctx, &matchingservice.ListNexusEndpointsRequest{
+		resp, err = r.matchingClient.ListNexusEndpoints(ctx, matchingservice.ListNexusEndpointsRequest_builder{
 			NextPageToken:         currentPageToken,
 			PageSize:              int32(r.config.refreshPageSize()),
 			LastKnownTableVersion: currentTableVersion,
 			Wait:                  false,
-		})
+		}.Build())
 
 		if err != nil {
 			var fpe *serviceerror.FailedPrecondition
@@ -331,15 +331,15 @@ func (r *EndpointRegistryImpl) refreshEndpoints(ctx context.Context) error {
 			return ctx.Err()
 		}
 
-		currentPageToken = resp.NextPageToken
-		entries = append(entries, resp.Entries...)
+		currentPageToken = resp.GetNextPageToken()
+		entries = append(entries, resp.GetEntries()...)
 	}
 
 	endpointsByID := make(map[string]*persistencespb.NexusEndpointEntry, len(entries))
 	endpointsByName := make(map[string]*persistencespb.NexusEndpointEntry, len(entries))
 	for _, entry := range entries {
-		endpointsByID[entry.Id] = entry
-		endpointsByName[entry.Endpoint.Spec.Name] = entry
+		endpointsByID[entry.GetId()] = entry
+		endpointsByName[entry.GetEndpoint().GetSpec().GetName()] = entry
 	}
 
 	r.dataLock.Lock()
@@ -365,16 +365,16 @@ func (r *EndpointRegistryImpl) getAllEndpointsMatchingWithPersistenceFallback(ct
 // getAllEndpointsMatching paginates over all endpoints returned by matching. It always does a simple get.
 func (r *EndpointRegistryImpl) getAllEndpointsMatching(ctx context.Context) (int64, []*persistencespb.NexusEndpointEntry, error) {
 	return r.getAllEndpoints(ctx, func(currentTableVersion int64, currentPageToken []byte) (int64, []byte, []*persistencespb.NexusEndpointEntry, error) {
-		resp, err := r.matchingClient.ListNexusEndpoints(ctx, &matchingservice.ListNexusEndpointsRequest{
+		resp, err := r.matchingClient.ListNexusEndpoints(ctx, matchingservice.ListNexusEndpointsRequest_builder{
 			NextPageToken:         currentPageToken,
 			PageSize:              int32(r.config.refreshPageSize()),
 			LastKnownTableVersion: currentTableVersion,
 			Wait:                  false,
-		})
+		}.Build())
 		if err != nil {
 			return 0, nil, nil, err
 		}
-		return resp.TableVersion, resp.NextPageToken, resp.Entries, nil
+		return resp.GetTableVersion(), resp.GetNextPageToken(), resp.GetEntries(), nil
 	})
 }
 

@@ -14,7 +14,24 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
 )
+
+// getEventAttributes extracts the attributes from a HistoryEvent using proto reflection.
+// This works with both hybrid and opaque proto API.
+func getEventAttributes(event *historypb.HistoryEvent) protoreflect.Message {
+	m := event.ProtoReflect()
+	oneofDesc := m.Descriptor().Oneofs().ByName("attributes")
+	if oneofDesc == nil {
+		return nil
+	}
+	fieldDesc := m.WhichOneof(oneofDesc)
+	if fieldDesc == nil {
+		return nil
+	}
+	value := m.Get(fieldDesc)
+	return value.Message()
+}
 
 type (
 	HistoryRequire struct {
@@ -285,10 +302,10 @@ func (h HistoryRequire) sanitizeActualHistoryEventsForEquals(
 
 		sanitizedActualHistoryEvent := proto.Clone(actualHistoryEvent).(*historypb.HistoryEvent)
 		if sanitizeEventID {
-			sanitizedActualHistoryEvent.EventId = 0
+			sanitizedActualHistoryEvent.SetEventId(0)
 		}
 		if sanitizeVersion {
-			sanitizedActualHistoryEvent.Version = 0
+			sanitizedActualHistoryEvent.SetVersion(0)
 		}
 		sanitizedActualHistoryEvents = append(sanitizedActualHistoryEvents, sanitizedActualHistoryEvent)
 	}
@@ -316,10 +333,10 @@ func (h HistoryRequire) sanitizeActualHistoryEventsForContains(
 	for _, actualHistoryEvent := range actualHistoryEvents {
 		sanitizedActualHistoryEvent := proto.Clone(actualHistoryEvent).(*historypb.HistoryEvent)
 		if sanitizeEventID {
-			sanitizedActualHistoryEvent.EventId = 0
+			sanitizedActualHistoryEvent.SetEventId(0)
 		}
 		if sanitizeVersion {
-			sanitizedActualHistoryEvent.Version = 0
+			sanitizedActualHistoryEvent.SetVersion(0)
 		}
 		sanitizedActualHistoryEvents = append(sanitizedActualHistoryEvents, sanitizedActualHistoryEvent)
 	}
@@ -339,8 +356,9 @@ func (h HistoryRequire) equalHistoryEventsAttributes(
 			continue
 		}
 		actualHistoryEvent := actualHistoryEvents[i]
-		actualEventAttributes := reflect.ValueOf(actualHistoryEvent.Attributes).Elem().Field(0).Elem()
-		h.equalExpectedMapToActualAttributes(expectedEventAttributes, actualEventAttributes, actualHistoryEvent.EventId, "")
+		attrMsg := getEventAttributes(actualHistoryEvent)
+		actualEventAttributes := reflect.ValueOf(attrMsg.Interface()).Elem()
+		h.equalExpectedMapToActualAttributes(expectedEventAttributes, actualEventAttributes, actualHistoryEvent.GetEventId(), "")
 	}
 }
 
@@ -367,11 +385,14 @@ func (h HistoryRequire) formatHistoryEvents(historyEvents []*historypb.HistoryEv
 
 		var eventAttrsJsonStr string
 		if !compact {
-			eventAttrs := reflect.ValueOf(event.Attributes).Elem().Field(0).Elem().Interface()
-			eventAttrsMap := h.structToMap(eventAttrs)
-			eventAttrsJsonBytes, err := json.Marshal(eventAttrsMap)
-			require.NoError(h.t, err)
-			eventAttrsJsonStr = " " + string(eventAttrsJsonBytes)
+			attrMsg := getEventAttributes(event)
+			if attrMsg != nil {
+				eventAttrs := attrMsg.Interface()
+				eventAttrsMap := h.structToMap(eventAttrs)
+				eventAttrsJsonBytes, err := json.Marshal(eventAttrsMap)
+				require.NoError(h.t, err)
+				eventAttrsJsonStr = " " + string(eventAttrsJsonBytes)
+			}
 		}
 		_, _ = sb.WriteString(strings.Join([]string{eventIDStr, versionStr, event.GetEventType().String(), eventAttrsJsonStr, "\n"}, ""))
 	}
@@ -547,11 +568,11 @@ func (h HistoryRequire) parseHistory(history string) ([]*historypb.HistoryEvent,
 		if err != nil {
 			require.FailNowf(h.t, "", "Unknown event type %s for event on line %d", fields[nextFieldIndex], lineNum+1)
 		}
-		historyEvents = append(historyEvents, &historypb.HistoryEvent{
+		historyEvents = append(historyEvents, historypb.HistoryEvent_builder{
 			EventId:   int64(eventID),
 			Version:   int64(eventVersion),
 			EventType: eventType,
-		})
+		}.Build())
 		nextFieldIndex++
 		var jb strings.Builder
 		for i := nextFieldIndex; i < len(fields); i++ {

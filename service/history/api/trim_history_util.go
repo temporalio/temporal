@@ -24,13 +24,13 @@ func TrimHistoryNode(
 	response, err := GetOrPollWorkflowMutableState(
 		ctx,
 		shardContext,
-		&historyservice.GetMutableStateRequest{
+		historyservice.GetMutableStateRequest_builder{
 			NamespaceId: namespaceID,
-			Execution: &commonpb.WorkflowExecution{
+			Execution: commonpb.WorkflowExecution_builder{
 				WorkflowId: workflowID,
 				RunId:      runID,
-			},
-		},
+			}.Build(),
+		}.Build(),
 		workflowConsistencyChecker,
 		eventNotifier,
 	)
@@ -40,7 +40,7 @@ func TrimHistoryNode(
 
 	_, err = shardContext.GetExecutionManager().TrimHistoryBranch(ctx, &persistence.TrimHistoryBranchRequest{
 		ShardID:       common.WorkflowIDToHistoryShard(namespaceID, workflowID, shardContext.GetConfig().NumberOfShards),
-		BranchToken:   response.CurrentBranchToken,
+		BranchToken:   response.GetCurrentBranchToken(),
 		NodeID:        response.GetLastFirstEventId(),
 		TransactionID: response.GetLastFirstEventTxnId(),
 	})

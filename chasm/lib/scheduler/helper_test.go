@@ -34,32 +34,30 @@ const (
 // defaultSchedule returns a protobuf definition for a schedule matching this
 // package's other testing defaults.
 func defaultSchedule() *schedulepb.Schedule {
-	return &schedulepb.Schedule{
-		Spec: &schedulepb.ScheduleSpec{
+	return schedulepb.Schedule_builder{
+		Spec: schedulepb.ScheduleSpec_builder{
 			Interval: []*schedulepb.IntervalSpec{
-				{
+				schedulepb.IntervalSpec_builder{
 					Interval: durationpb.New(defaultInterval),
 					Phase:    durationpb.New(0),
-				},
+				}.Build(),
 			},
-		},
-		Action: &schedulepb.ScheduleAction{
-			Action: &schedulepb.ScheduleAction_StartWorkflow{
-				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
-					WorkflowId:   "scheduled-wf",
-					WorkflowType: &commonpb.WorkflowType{Name: "scheduled-wf-type"},
-				},
-			},
-		},
-		Policies: &schedulepb.SchedulePolicies{
+		}.Build(),
+		Action: schedulepb.ScheduleAction_builder{
+			StartWorkflow: workflowpb.NewWorkflowExecutionInfo_builder{
+				WorkflowId:   "scheduled-wf",
+				WorkflowType: commonpb.WorkflowType_builder{Name: "scheduled-wf-type"}.Build(),
+			}.Build(),
+		}.Build(),
+		Policies: schedulepb.SchedulePolicies_builder{
 			CatchupWindow: durationpb.New(defaultCatchupWindow),
-		},
-		State: &schedulepb.ScheduleState{
+		}.Build(),
+		State: schedulepb.ScheduleState_builder{
 			Paused:           false,
 			LimitedActions:   false,
 			RemainingActions: 0,
-		},
-	}
+		}.Build(),
+	}.Build()
 }
 
 func defaultConfig() *scheduler.Config {
@@ -146,10 +144,10 @@ func setupSchedulerForTest(t *testing.T) (*scheduler.Scheduler, chasm.MutableCon
 	nodeBackend.HandleGetWorkflowKey = tv.Any().WorkflowKey
 	nodeBackend.HandleIsWorkflow = func() bool { return false }
 	nodeBackend.HandleCurrentVersionedTransition = func() *persistencespb.VersionedTransition {
-		return &persistencespb.VersionedTransition{
+		return persistencespb.VersionedTransition_builder{
 			NamespaceFailoverVersion: 1,
 			TransitionCount:          1,
-		}
+		}.Build()
 	}
 
 	node := chasm.NewEmptyTree(registry, timeSource, nodeBackend, nodePathEncoder, logger)

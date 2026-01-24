@@ -46,7 +46,11 @@ var (
 	}
 
 	// Only request fields that match the pattern are eligible for deeper inspection.
-	fieldNameRegex = regexp.MustCompile("^(?:.*Request|Completion|UpdateRef|ParentExecution|WorkflowState|ExecutionInfo|ExecutionState)$")
+	// Also matches opaque API hidden field names like xxx_hidden_Request
+	fieldNameRegex = regexp.MustCompile("^(?:xxx_hidden_)?(?:.*Request|Completion|UpdateRef|ParentExecution|WorkflowState|ExecutionInfo|ExecutionState)$")
+
+	// Prefix used by opaque API for hidden struct fields
+	opaqueFieldPrefix = "xxx_hidden_"
 
 	// These types have task_token field, but it is not of type *tokenspb.Task and doesn't have Workflow tags.
 	excludeTaskTokenTypes = []reflect.Type{
@@ -160,16 +164,22 @@ func workflowTagGetters(messageType reflect.Type, depth int) messageData {
 			continue
 		}
 
+		// Strip opaque API prefix from field name for getter construction
+		fieldName := nestedRequest.Name
+		if len(fieldName) > len(opaqueFieldPrefix) && fieldName[:len(opaqueFieldPrefix)] == opaqueFieldPrefix {
+			fieldName = fieldName[len(opaqueFieldPrefix):]
+		}
+
 		nestedRd := workflowTagGetters(nestedRequest.Type, depth+1)
 		// First match wins: if getter is already set, it won't be overwritten.
 		if pd.WorkflowIdGetter == "" && nestedRd.WorkflowIdGetter != "" {
-			pd.WorkflowIdGetter = fmt.Sprintf("Get%s().%s", nestedRequest.Name, nestedRd.WorkflowIdGetter)
+			pd.WorkflowIdGetter = fmt.Sprintf("Get%s().%s", fieldName, nestedRd.WorkflowIdGetter)
 		}
 		if pd.RunIdGetter == "" && nestedRd.RunIdGetter != "" {
-			pd.RunIdGetter = fmt.Sprintf("Get%s().%s", nestedRequest.Name, nestedRd.RunIdGetter)
+			pd.RunIdGetter = fmt.Sprintf("Get%s().%s", fieldName, nestedRd.RunIdGetter)
 		}
 		if pd.TaskTokenGetter == "" && nestedRd.TaskTokenGetter != "" {
-			pd.TaskTokenGetter = fmt.Sprintf("Get%s().%s", nestedRequest.Name, nestedRd.TaskTokenGetter)
+			pd.TaskTokenGetter = fmt.Sprintf("Get%s().%s", fieldName, nestedRd.TaskTokenGetter)
 		}
 	}
 	return pd

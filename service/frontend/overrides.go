@@ -40,7 +40,7 @@ func (o *Overrides) disableEagerDispatch(
 	for _, cmd := range request.GetCommands() {
 		attrs := cmd.GetScheduleActivityTaskCommandAttributes()
 		if attrs != nil {
-			attrs.RequestEagerExecution = false
+			attrs.SetRequestEagerExecution(false)
 		}
 	}
 }

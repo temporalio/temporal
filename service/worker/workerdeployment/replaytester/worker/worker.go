@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/service/worker/workerdeployment/replaytester"
+	"google.golang.org/protobuf/proto"
 )
 
 func main() {
@@ -71,12 +72,12 @@ func main() {
 	dHandle := deploymentClient.GetHandle(deploymentName)
 
 	// Set Client as the ManagerIdentity so that those validators are exercised
-	_, err = c.WorkflowService().SetWorkerDeploymentManager(context.Background(), &workflowservice.SetWorkerDeploymentManagerRequest{
-		Namespace:          client.DefaultNamespace,
-		DeploymentName:     deploymentName,
-		NewManagerIdentity: &workflowservice.SetWorkerDeploymentManagerRequest_Self{Self: true},
-		Identity:           identity,
-	})
+	_, err = c.WorkflowService().SetWorkerDeploymentManager(context.Background(), workflowservice.SetWorkerDeploymentManagerRequest_builder{
+		Namespace:      client.DefaultNamespace,
+		DeploymentName: deploymentName,
+		Self:           proto.Bool(true),
+		Identity:       identity,
+	}.Build())
 	if err != nil {
 		log.Fatalf("Unable to set deployment manager: %v", err)
 	}

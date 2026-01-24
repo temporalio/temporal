@@ -160,19 +160,19 @@ func (s *namespaceSuite) TestGetNamespace() {
 		namespaceName namespace.Name
 	}{
 		{
-			&workflowservice.DescribeNamespaceRequest{Namespace: "exist"},
+			workflowservice.DescribeNamespaceRequest_builder{Namespace: "exist"}.Build(),
 			namespace.Name("exist"),
 		},
 		{
-			&workflowservice.DescribeNamespaceRequest{Namespace: "nonexist"},
+			workflowservice.DescribeNamespaceRequest_builder{Namespace: "nonexist"}.Build(),
 			namespace.EmptyName,
 		},
 		{
-			&historyservice.DescribeMutableStateRequest{NamespaceId: "exist"},
+			historyservice.DescribeMutableStateRequest_builder{NamespaceId: "exist"}.Build(),
 			namespace.Name("exist"),
 		},
 		{
-			&historyservice.DescribeMutableStateRequest{NamespaceId: "nonexist"},
+			historyservice.DescribeMutableStateRequest_builder{NamespaceId: "nonexist"}.Build(),
 			namespace.EmptyName,
 		},
 	}

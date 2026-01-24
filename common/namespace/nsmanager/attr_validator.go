@@ -23,10 +23,10 @@ func NewValidator(
 }
 
 func (d *Validator) ValidateNamespaceConfig(config *persistencespb.NamespaceConfig) error {
-	if config.HistoryArchivalState == enumspb.ARCHIVAL_STATE_ENABLED && len(config.HistoryArchivalUri) == 0 {
+	if config.GetHistoryArchivalState() == enumspb.ARCHIVAL_STATE_ENABLED && len(config.GetHistoryArchivalUri()) == 0 {
 		return errInvalidArchivalConfig
 	}
-	if config.VisibilityArchivalState == enumspb.ARCHIVAL_STATE_ENABLED && len(config.VisibilityArchivalUri) == 0 {
+	if config.GetVisibilityArchivalState() == enumspb.ARCHIVAL_STATE_ENABLED && len(config.GetVisibilityArchivalUri()) == 0 {
 		return errInvalidArchivalConfig
 	}
 	return nil
@@ -35,8 +35,8 @@ func (d *Validator) ValidateNamespaceConfig(config *persistencespb.NamespaceConf
 func (d *Validator) ValidateNamespaceReplicationConfigForLocalNamespace(
 	replicationConfig *persistencespb.NamespaceReplicationConfig,
 ) error {
-	activeCluster := replicationConfig.ActiveClusterName
-	clusters := replicationConfig.Clusters
+	activeCluster := replicationConfig.GetActiveClusterName()
+	clusters := replicationConfig.GetClusters()
 
 	if err := d.validateClusterName(activeCluster); err != nil {
 		return err
@@ -61,8 +61,8 @@ func (d *Validator) ValidateNamespaceReplicationConfigForLocalNamespace(
 func (d *Validator) ValidateNamespaceReplicationConfigForGlobalNamespace(
 	replicationConfig *persistencespb.NamespaceReplicationConfig,
 ) error {
-	activeCluster := replicationConfig.ActiveClusterName
-	clusters := replicationConfig.Clusters
+	activeCluster := replicationConfig.GetActiveClusterName()
+	clusters := replicationConfig.GetClusters()
 
 	if err := d.validateClusterName(activeCluster); err != nil {
 		return err

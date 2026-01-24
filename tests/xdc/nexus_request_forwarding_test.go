@@ -98,10 +98,10 @@ func (s *NexusRequestForwardingSuite) TestStartOperationForwardedFromStandbyToAc
 	onAuth := func(ctx context.Context, claims *authorization.Claims, target *authorization.CallTarget) (authorization.Result, error) {
 		dispatchNexusRequest, ok := target.Request.(*matchingservice.DispatchNexusTaskRequest)
 		if ok {
-			if _, set := dispatchNexusRequest.Request.Header[testAuthHeader]; !set {
+			if _, set := dispatchNexusRequest.GetRequest().GetHeader()[testAuthHeader]; !set {
 				return authorization.Result{}, errors.New("auth header not set")
 			}
-			delete(dispatchNexusRequest.Request.Header, testAuthHeader)
+			delete(dispatchNexusRequest.GetRequest().GetHeader(), testAuthHeader)
 		}
 		return authorization.Result{Decision: authorization.DecisionAllow}, nil
 	}
@@ -121,16 +121,14 @@ func (s *NexusRequestForwardingSuite) TestStartOperationForwardedFromStandbyToAc
 			name:      "success",
 			taskQueue: fmt.Sprintf("%v-%v", "test-task-queue", uuid.New()),
 			handler: func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
-				s.Equal("true", res.Request.Header["xdc-redirection-api"])
-				_, ok := res.Request.Header[testAuthHeader]
+				s.Equal("true", res.GetRequest().GetHeader()["xdc-redirection-api"])
+				_, ok := res.GetRequest().GetHeader()[testAuthHeader]
 				s.Falsef(ok, "expected test auth header to be stripped")
-				return &nexuspb.Response{
-					Variant: &nexuspb.Response_StartOperation{
-						StartOperation: &nexuspb.StartOperationResponse{
-							Variant: &nexuspb.StartOperationResponse_SyncSuccess{
-								SyncSuccess: &nexuspb.StartOperationResponse_Sync{
-									Payload: res.Request.GetStartOperation().GetPayload()}}}},
-				}, nil
+				return nexuspb.Response_builder{
+					StartOperation: nexuspb.StartOperationResponse_builder{
+						SyncSuccess: nexuspb.StartOperationResponse_Sync_builder{
+							Payload: res.GetRequest().GetStartOperation().GetPayload()}.Build()}.Build(),
+				}.Build(), nil
 			},
 			assertion: func(t *testing.T, result *nexusrpc.ClientStartOperationResponse[string], retErr error, activeSnap map[string][]*metricstest.CapturedRecording, passiveSnap map[string][]*metricstest.CapturedRecording) {
 				require.NoError(t, retErr)
@@ -143,21 +141,19 @@ func (s *NexusRequestForwardingSuite) TestStartOperationForwardedFromStandbyToAc
 			name:      "operation error",
 			taskQueue: fmt.Sprintf("%v-%v", "test-task-queue", uuid.New()),
 			handler: func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
-				s.Equal("true", res.Request.Header["xdc-redirection-api"])
-				_, ok := res.Request.Header[testAuthHeader]
+				s.Equal("true", res.GetRequest().GetHeader()["xdc-redirection-api"])
+				_, ok := res.GetRequest().GetHeader()[testAuthHeader]
 				s.Falsef(ok, "expected test auth header to be stripped")
-				return &nexuspb.Response{
-					Variant: &nexuspb.Response_StartOperation{
-						StartOperation: &nexuspb.StartOperationResponse{
-							Variant: &nexuspb.StartOperationResponse_OperationError{
-								OperationError: &nexuspb.UnsuccessfulOperationError{
-									OperationState: string(nexus.OperationStateFailed),
-									Failure: &nexuspb.Failure{
-										Message:  "deliberate test failure",
-										Metadata: map[string]string{"k": "v"},
-										Details:  []byte(`"details"`),
-									}}}}},
-				}, nil
+				return nexuspb.Response_builder{
+					StartOperation: nexuspb.StartOperationResponse_builder{
+						OperationError: nexuspb.UnsuccessfulOperationError_builder{
+							OperationState: string(nexus.OperationStateFailed),
+							Failure: nexuspb.Failure_builder{
+								Message:  "deliberate test failure",
+								Metadata: map[string]string{"k": "v"},
+								Details:  []byte(`"details"`),
+							}.Build()}.Build()}.Build(),
+				}.Build(), nil
 			},
 			assertion: func(t *testing.T, result *nexusrpc.ClientStartOperationResponse[string], retErr error, activeSnap map[string][]*metricstest.CapturedRecording, passiveSnap map[string][]*metricstest.CapturedRecording) {
 				var operationError *nexus.OperationError
@@ -179,13 +175,13 @@ func (s *NexusRequestForwardingSuite) TestStartOperationForwardedFromStandbyToAc
 			name:      "handler error",
 			taskQueue: fmt.Sprintf("%v-%v", "test-task-queue", uuid.New()),
 			handler: func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
-				s.Equal("true", res.Request.Header["xdc-redirection-api"])
-				_, ok := res.Request.Header[testAuthHeader]
+				s.Equal("true", res.GetRequest().GetHeader()["xdc-redirection-api"])
+				_, ok := res.GetRequest().GetHeader()[testAuthHeader]
 				s.Falsef(ok, "expected test auth header to be stripped")
-				return nil, &nexuspb.HandlerError{
+				return nil, nexuspb.HandlerError_builder{
 					ErrorType: string(nexus.HandlerErrorTypeInternal),
-					Failure:   &nexuspb.Failure{Message: "deliberate internal failure"},
-				}
+					Failure:   nexuspb.Failure_builder{Message: "deliberate internal failure"}.Build(),
+				}.Build()
 			},
 			assertion: func(t *testing.T, result *nexusrpc.ClientStartOperationResponse[string], retErr error, activeSnap map[string][]*metricstest.CapturedRecording, passiveSnap map[string][]*metricstest.CapturedRecording) {
 				var handlerErr *nexus.HandlerError
@@ -202,10 +198,10 @@ func (s *NexusRequestForwardingSuite) TestStartOperationForwardedFromStandbyToAc
 			header:    nexus.Header{"xdc-redirection": "false", testAuthHeader: "stripped"},
 			handler: func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
 				s.FailNow("nexus task handler invoked when redirection should be disabled")
-				return nil, &nexuspb.HandlerError{
+				return nil, nexuspb.HandlerError_builder{
 					ErrorType: string(nexus.HandlerErrorTypeInternal),
-					Failure:   &nexuspb.Failure{Message: "redirection not allowed"},
-				}
+					Failure:   nexuspb.Failure_builder{Message: "redirection not allowed"}.Build(),
+				}.Build()
 			},
 			assertion: func(t *testing.T, result *nexusrpc.ClientStartOperationResponse[string], retErr error, activeSnap map[string][]*metricstest.CapturedRecording, passiveSnap map[string][]*metricstest.CapturedRecording) {
 				var handlerErr *nexus.HandlerError
@@ -261,10 +257,10 @@ func (s *NexusRequestForwardingSuite) TestCancelOperationForwardedFromStandbyToA
 	onAuth := func(ctx context.Context, claims *authorization.Claims, target *authorization.CallTarget) (authorization.Result, error) {
 		dispatchNexusRequest, ok := target.Request.(*matchingservice.DispatchNexusTaskRequest)
 		if ok {
-			if _, set := dispatchNexusRequest.Request.Header[testAuthHeader]; !set {
+			if _, set := dispatchNexusRequest.GetRequest().GetHeader()[testAuthHeader]; !set {
 				return authorization.Result{}, errors.New("auth header not set")
 			}
-			delete(dispatchNexusRequest.Request.Header, testAuthHeader)
+			delete(dispatchNexusRequest.GetRequest().GetHeader(), testAuthHeader)
 		}
 		return authorization.Result{Decision: authorization.DecisionAllow}, nil
 	}
@@ -284,14 +280,12 @@ func (s *NexusRequestForwardingSuite) TestCancelOperationForwardedFromStandbyToA
 			name:      "success",
 			taskQueue: fmt.Sprintf("%v-%v", "test-task-queue", uuid.New()),
 			handler: func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
-				s.Equal("true", res.Request.Header["xdc-redirection-api"])
-				_, ok := res.Request.Header[testAuthHeader]
+				s.Equal("true", res.GetRequest().GetHeader()["xdc-redirection-api"])
+				_, ok := res.GetRequest().GetHeader()[testAuthHeader]
 				s.Falsef(ok, "expected test auth header to be stripped")
-				return &nexuspb.Response{
-					Variant: &nexuspb.Response_CancelOperation{
-						CancelOperation: &nexuspb.CancelOperationResponse{},
-					},
-				}, nil
+				return nexuspb.Response_builder{
+					CancelOperation: &nexuspb.CancelOperationResponse{},
+				}.Build(), nil
 			},
 			assertion: func(t *testing.T, retErr error, activeSnap map[string][]*metricstest.CapturedRecording, passiveSnap map[string][]*metricstest.CapturedRecording) {
 				require.NoError(t, retErr)
@@ -303,13 +297,13 @@ func (s *NexusRequestForwardingSuite) TestCancelOperationForwardedFromStandbyToA
 			name:      "handler error",
 			taskQueue: fmt.Sprintf("%v-%v", "test-task-queue", uuid.New()),
 			handler: func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
-				s.Equal("true", res.Request.Header["xdc-redirection-api"])
-				_, ok := res.Request.Header[testAuthHeader]
+				s.Equal("true", res.GetRequest().GetHeader()["xdc-redirection-api"])
+				_, ok := res.GetRequest().GetHeader()[testAuthHeader]
 				s.Falsef(ok, "expected test auth header to be stripped")
-				return nil, &nexuspb.HandlerError{
+				return nil, nexuspb.HandlerError_builder{
 					ErrorType: string(nexus.HandlerErrorTypeInternal),
-					Failure:   &nexuspb.Failure{Message: "deliberate internal failure"},
-				}
+					Failure:   nexuspb.Failure_builder{Message: "deliberate internal failure"}.Build(),
+				}.Build()
 			},
 			assertion: func(t *testing.T, retErr error, activeSnap map[string][]*metricstest.CapturedRecording, passiveSnap map[string][]*metricstest.CapturedRecording) {
 				var handlerErr *nexus.HandlerError
@@ -326,10 +320,10 @@ func (s *NexusRequestForwardingSuite) TestCancelOperationForwardedFromStandbyToA
 			header:    nexus.Header{"xdc-redirection": "false"},
 			handler: func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
 				s.FailNow("nexus task handler invoked when redirection should be disabled")
-				return nil, &nexuspb.HandlerError{
+				return nil, nexuspb.HandlerError_builder{
 					ErrorType: string(nexus.HandlerErrorTypeInternal),
-					Failure:   &nexuspb.Failure{Message: "redirection should be disabled"},
-				}
+					Failure:   nexuspb.Failure_builder{Message: "redirection should be disabled"}.Build(),
+				}.Build()
 			},
 			assertion: func(t *testing.T, retErr error, activeSnap map[string][]*metricstest.CapturedRecording, passiveSnap map[string][]*metricstest.CapturedRecording) {
 				var handlerErr *nexus.HandlerError
@@ -394,16 +388,15 @@ func (s *NexusRequestForwardingSuite) TestOperationCompletionForwardedFromStandb
 					return e.GetNexusOperationCompletedEventAttributes() != nil
 				})
 				require.Greater(t, completedEventIdx, 0)
-				return &workflowservice.RespondWorkflowTaskCompletedRequest{
+				return workflowservice.RespondWorkflowTaskCompletedRequest_builder{
 					Identity: "test",
-					Commands: []*commandpb.Command{{CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-						Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
-							CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
-								Result: &commonpb.Payloads{
-									Payloads: []*commonpb.Payload{
-										events[completedEventIdx].GetNexusOperationCompletedEventAttributes().Result,
-									}}}}}},
-				}
+					Commands: []*commandpb.Command{commandpb.Command_builder{CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+						CompleteWorkflowExecutionCommandAttributes: commandpb.CompleteWorkflowExecutionCommandAttributes_builder{
+							Result: commonpb.Payloads_builder{
+								Payloads: []*commonpb.Payload{
+									events[completedEventIdx].GetNexusOperationCompletedEventAttributes().GetResult(),
+								}}.Build()}.Build()}.Build()},
+				}.Build()
 			},
 			assertResult: func(t *testing.T, result string) {
 				require.Equal(t, "result", result)
@@ -422,16 +415,15 @@ func (s *NexusRequestForwardingSuite) TestOperationCompletionForwardedFromStandb
 					return e.GetNexusOperationFailedEventAttributes() != nil
 				})
 				require.Greater(t, failedEventIdx, 0)
-				return &workflowservice.RespondWorkflowTaskCompletedRequest{
+				return workflowservice.RespondWorkflowTaskCompletedRequest_builder{
 					Identity: "test",
-					Commands: []*commandpb.Command{{CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-						Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
-							CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
-								Result: &commonpb.Payloads{
-									Payloads: []*commonpb.Payload{
-										payload.EncodeString(events[failedEventIdx].GetNexusOperationFailedEventAttributes().GetFailure().Message),
-									}}}}}},
-				}
+					Commands: []*commandpb.Command{commandpb.Command_builder{CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+						CompleteWorkflowExecutionCommandAttributes: commandpb.CompleteWorkflowExecutionCommandAttributes_builder{
+							Result: commonpb.Payloads_builder{
+								Payloads: []*commonpb.Payload{
+									payload.EncodeString(events[failedEventIdx].GetNexusOperationFailedEventAttributes().GetFailure().GetMessage()),
+								}}.Build()}.Build()}.Build()},
+				}.Build()
 			},
 			assertResult: func(t *testing.T, result string) {
 				require.Equal(t, "intentional operation failure", result)
@@ -450,16 +442,15 @@ func (s *NexusRequestForwardingSuite) TestOperationCompletionForwardedFromStandb
 					return e.GetNexusOperationCanceledEventAttributes() != nil
 				})
 				require.Greater(t, canceledEventIdx, 0)
-				return &workflowservice.RespondWorkflowTaskCompletedRequest{
+				return workflowservice.RespondWorkflowTaskCompletedRequest_builder{
 					Identity: "test",
-					Commands: []*commandpb.Command{{CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-						Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
-							CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
-								Result: &commonpb.Payloads{
-									Payloads: []*commonpb.Payload{
-										payload.EncodeString(events[canceledEventIdx].GetNexusOperationCanceledEventAttributes().GetFailure().Message),
-									}}}}}},
-				}
+					Commands: []*commandpb.Command{commandpb.Command_builder{CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+						CompleteWorkflowExecutionCommandAttributes: commandpb.CompleteWorkflowExecutionCommandAttributes_builder{
+							Result: commonpb.Payloads_builder{
+								Payloads: []*commonpb.Payload{
+									payload.EncodeString(events[canceledEventIdx].GetNexusOperationCanceledEventAttributes().GetFailure().GetMessage()),
+								}}.Build()}.Build()}.Build()},
+				}.Build()
 			},
 			assertResult: func(t *testing.T, result string) {
 				require.Equal(t, "operation canceled", result)
@@ -497,18 +488,16 @@ func (s *NexusRequestForwardingSuite) TestOperationCompletionForwardedFromStandb
 			listenAddr := nexustest.AllocListenAddress()
 			nexustest.NewNexusServer(s.T(), listenAddr, h)
 
-			createEndpointReq := &operatorservice.CreateNexusEndpointRequest{
-				Spec: &nexuspb.EndpointSpec{
+			createEndpointReq := operatorservice.CreateNexusEndpointRequest_builder{
+				Spec: nexuspb.EndpointSpec_builder{
 					Name: endpointName,
-					Target: &nexuspb.EndpointTarget{
-						Variant: &nexuspb.EndpointTarget_External_{
-							External: &nexuspb.EndpointTarget_External{
-								Url: "http://" + listenAddr,
-							},
-						},
-					},
-				},
-			}
+					Target: nexuspb.EndpointTarget_builder{
+						External: nexuspb.EndpointTarget_External_builder{
+							Url: "http://" + listenAddr,
+						}.Build(),
+					}.Build(),
+				}.Build(),
+			}.Build()
 
 			_, err := s.clusters[0].OperatorClient().CreateNexusEndpoint(ctx, createEndpointReq)
 			s.NoError(err)
@@ -531,65 +520,63 @@ func (s *NexusRequestForwardingSuite) TestOperationCompletionForwardedFromStandb
 			feClient0 := s.clusters[0].FrontendClient()
 			feClient1 := s.clusters[1].FrontendClient()
 
-			pollResp, err := feClient0.PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+			pollResp, err := feClient0.PollWorkflowTaskQueue(ctx, workflowservice.PollWorkflowTaskQueueRequest_builder{
 				Namespace: ns,
-				TaskQueue: &taskqueuepb.TaskQueue{
+				TaskQueue: taskqueuepb.TaskQueue_builder{
 					Name: taskQueue,
 					Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-				},
+				}.Build(),
 				Identity: "test",
-			})
+			}.Build())
 			s.NoError(err)
-			_, err = feClient0.RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+			_, err = feClient0.RespondWorkflowTaskCompleted(ctx, workflowservice.RespondWorkflowTaskCompletedRequest_builder{
 				Identity:  "test",
-				TaskToken: pollResp.TaskToken,
+				TaskToken: pollResp.GetTaskToken(),
 				Commands: []*commandpb.Command{
-					{
+					commandpb.Command_builder{
 						CommandType: enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION,
-						Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
-							ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
-								Endpoint:  endpointName,
-								Service:   "service",
-								Operation: "operation",
-								Input:     s.mustToPayload("input"),
-							},
-						},
-					},
+						ScheduleNexusOperationCommandAttributes: commandpb.ScheduleNexusOperationCommandAttributes_builder{
+							Endpoint:  endpointName,
+							Service:   "service",
+							Operation: "operation",
+							Input:     s.mustToPayload("input"),
+						}.Build(),
+					}.Build(),
 				},
-			})
+			}.Build())
 			s.NoError(err)
 
 			// Poll and verify that the "started" event was recorded.
-			pollResp, err = feClient0.PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+			pollResp, err = feClient0.PollWorkflowTaskQueue(ctx, workflowservice.PollWorkflowTaskQueueRequest_builder{
 				Namespace: ns,
-				TaskQueue: &taskqueuepb.TaskQueue{
+				TaskQueue: taskqueuepb.TaskQueue_builder{
 					Name: taskQueue,
 					Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-				},
+				}.Build(),
 				Identity: "test",
-			})
+			}.Build())
 			s.NoError(err)
-			_, err = feClient0.RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+			_, err = feClient0.RespondWorkflowTaskCompleted(ctx, workflowservice.RespondWorkflowTaskCompletedRequest_builder{
 				Identity:  "test",
-				TaskToken: pollResp.TaskToken,
-			})
+				TaskToken: pollResp.GetTaskToken(),
+			}.Build())
 			s.NoError(err)
 
-			startedEventIdx := slices.IndexFunc(pollResp.History.Events, func(e *historypb.HistoryEvent) bool {
+			startedEventIdx := slices.IndexFunc(pollResp.GetHistory().GetEvents(), func(e *historypb.HistoryEvent) bool {
 				return e.GetNexusOperationStartedEventAttributes() != nil
 			})
 			s.Greater(startedEventIdx, 0)
 
 			// Wait for Nexus operation to be replicated
 			s.Eventually(func() bool {
-				resp, err := feClient1.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+				resp, err := feClient1.DescribeWorkflowExecution(ctx, workflowservice.DescribeWorkflowExecutionRequest_builder{
 					Namespace: ns,
-					Execution: &commonpb.WorkflowExecution{
+					Execution: commonpb.WorkflowExecution_builder{
 						WorkflowId: run.GetID(),
 						RunId:      run.GetRunID(),
-					},
-				})
-				return err == nil && len(resp.PendingNexusOperations) > 0
+					}.Build(),
+				}.Build())
+				return err == nil && len(resp.GetPendingNexusOperations()) > 0
 			}, 5*time.Second, 500*time.Millisecond)
 
 			completion, err := tc.getCompletionFn()
@@ -616,17 +603,17 @@ func (s *NexusRequestForwardingSuite) TestOperationCompletionForwardedFromStandb
 			s.Subset(snap["nexus_completion_requests"][0].Tags, map[string]string{"namespace": ns, "outcome": "error_not_found"})
 
 			// Poll active cluster and verify the completion is recorded and triggers workflow progress.
-			pollResp, err = feClient0.PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+			pollResp, err = feClient0.PollWorkflowTaskQueue(ctx, workflowservice.PollWorkflowTaskQueueRequest_builder{
 				Namespace: ns,
-				TaskQueue: &taskqueuepb.TaskQueue{
+				TaskQueue: taskqueuepb.TaskQueue_builder{
 					Name: taskQueue,
 					Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-				},
+				}.Build(),
 				Identity: "test",
-			})
+			}.Build())
 			s.NoError(err)
-			completeWfReq := tc.assertHistoryAndGetCompleteWF(t, pollResp.History.Events)
-			completeWfReq.TaskToken = pollResp.TaskToken
+			completeWfReq := tc.assertHistoryAndGetCompleteWF(t, pollResp.GetHistory().GetEvents())
+			completeWfReq.SetTaskToken(pollResp.GetTaskToken())
 			_, err = feClient0.RespondWorkflowTaskCompleted(ctx, completeWfReq)
 			s.NoError(err)
 			var result string
@@ -636,14 +623,14 @@ func (s *NexusRequestForwardingSuite) TestOperationCompletionForwardedFromStandb
 }
 
 func (s *NexusRequestForwardingSuite) nexusTaskPoller(ctx context.Context, frontendClient workflowservice.WorkflowServiceClient, ns string, taskQueue string, handler func(*workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError)) {
-	res, err := frontendClient.PollNexusTaskQueue(ctx, &workflowservice.PollNexusTaskQueueRequest{
+	res, err := frontendClient.PollNexusTaskQueue(ctx, workflowservice.PollNexusTaskQueueRequest_builder{
 		Namespace: ns,
 		Identity:  uuid.NewString(),
-		TaskQueue: &taskqueuepb.TaskQueue{
+		TaskQueue: taskqueuepb.TaskQueue_builder{
 			Name: taskQueue,
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-		},
-	})
+		}.Build(),
+	}.Build())
 	if ctx.Err() != nil {
 		// Test doesn't expect poll to get unblocked.
 		return
@@ -653,19 +640,19 @@ func (s *NexusRequestForwardingSuite) nexusTaskPoller(ctx context.Context, front
 	response, handlerErr := handler(res)
 
 	if handlerErr != nil {
-		_, err = frontendClient.RespondNexusTaskFailed(ctx, &workflowservice.RespondNexusTaskFailedRequest{
+		_, err = frontendClient.RespondNexusTaskFailed(ctx, workflowservice.RespondNexusTaskFailedRequest_builder{
 			Namespace: ns,
 			Identity:  uuid.NewString(),
-			TaskToken: res.TaskToken,
+			TaskToken: res.GetTaskToken(),
 			Error:     handlerErr,
-		})
+		}.Build())
 	} else if response != nil {
-		_, err = frontendClient.RespondNexusTaskCompleted(ctx, &workflowservice.RespondNexusTaskCompletedRequest{
+		_, err = frontendClient.RespondNexusTaskCompleted(ctx, workflowservice.RespondNexusTaskCompletedRequest_builder{
 			Namespace: ns,
 			Identity:  uuid.NewString(),
-			TaskToken: res.TaskToken,
+			TaskToken: res.GetTaskToken(),
 			Response:  response,
-		})
+		}.Build())
 	}
 
 	if err != nil && ctx.Err() == nil {

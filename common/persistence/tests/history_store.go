@@ -860,10 +860,10 @@ func (s *HistoryEventsSuite) newHistoryEvents(
 
 	events := make([]*historypb.HistoryEvent, len(eventIDs))
 	for index, eventID := range eventIDs {
-		events[index] = &historypb.HistoryEvent{
+		events[index] = historypb.HistoryEvent_builder{
 			EventId:   eventID,
 			EventTime: timestamppb.New(time.Unix(0, rand.Int63()).UTC()),
-		}
+		}.Build()
 	}
 
 	return HistoryEventsPacket{

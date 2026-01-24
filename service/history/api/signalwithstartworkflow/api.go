@@ -25,7 +25,7 @@ func Invoke(
 	matchingClient matchingservice.MatchingServiceClient,
 	versionMembershipCache worker_versioning.VersionMembershipCache,
 ) (_ *historyservice.SignalWithStartWorkflowExecutionResponse, retError error) {
-	namespaceEntry, err := api.GetActiveNamespace(shard, namespace.ID(signalWithStartRequest.GetNamespaceId()), signalWithStartRequest.SignalWithStartRequest.WorkflowId)
+	namespaceEntry, err := api.GetActiveNamespace(shard, namespace.ID(signalWithStartRequest.GetNamespaceId()), signalWithStartRequest.GetSignalWithStartRequest().GetWorkflowId())
 	if err != nil {
 		return nil, err
 	}
@@ -37,7 +37,7 @@ func Invoke(
 		nil,
 		definition.NewWorkflowKey(
 			string(namespaceID),
-			signalWithStartRequest.SignalWithStartRequest.WorkflowId,
+			signalWithStartRequest.GetSignalWithStartRequest().GetWorkflowId(),
 			"",
 		),
 		locks.PriorityHigh,
@@ -52,20 +52,23 @@ func Invoke(
 	}
 
 	// TODO: remove this call in 1.25
-	enums.SetDefaultWorkflowIdConflictPolicy(
-		&signalWithStartRequest.SignalWithStartRequest.WorkflowIdConflictPolicy,
-		enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING)
+	req := signalWithStartRequest.GetSignalWithStartRequest()
+	req.SetWorkflowIdConflictPolicy(enums.DefaultWorkflowIdConflictPolicy(
+		req.GetWorkflowIdConflictPolicy(),
+		enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING))
 
-	api.MigrateWorkflowIdReusePolicyForRunningWorkflow(
-		&signalWithStartRequest.SignalWithStartRequest.WorkflowIdReusePolicy,
-		&signalWithStartRequest.SignalWithStartRequest.WorkflowIdConflictPolicy)
+	reusePolicy, conflictPolicy := api.MigrateWorkflowIdReusePolicyForRunningWorkflow(
+		req.GetWorkflowIdReusePolicy(),
+		req.GetWorkflowIdConflictPolicy())
+	req.SetWorkflowIdReusePolicy(reusePolicy)
+	req.SetWorkflowIdConflictPolicy(conflictPolicy)
 
 	startRequest := ConvertToStartRequest(
 		namespaceID,
-		signalWithStartRequest.SignalWithStartRequest,
+		signalWithStartRequest.GetSignalWithStartRequest(),
 		shard.GetTimeSource().Now(),
 	)
-	request := startRequest.StartRequest
+	request := startRequest.GetStartRequest()
 
 	api.OverrideStartWorkflowExecutionRequest(request, metrics.HistorySignalWithStartWorkflowExecutionScope, shard, shard.GetMetricsHandler())
 
@@ -86,13 +89,13 @@ func Invoke(
 		namespaceEntry,
 		currentWorkflowLease,
 		startRequest,
-		signalWithStartRequest.SignalWithStartRequest,
+		signalWithStartRequest.GetSignalWithStartRequest(),
 	)
 	if err != nil {
 		return nil, err
 	}
-	return &historyservice.SignalWithStartWorkflowExecutionResponse{
+	return historyservice.SignalWithStartWorkflowExecutionResponse_builder{
 		RunId:   runID,
 		Started: started,
-	}, nil
+	}.Build(), nil
 }

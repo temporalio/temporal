@@ -11,32 +11,32 @@ func NewVersionHistories(versionHistory *historyspb.VersionHistory) *historyspb.
 		panic("version history cannot be null")
 	}
 
-	return &historyspb.VersionHistories{
+	return historyspb.VersionHistories_builder{
 		CurrentVersionHistoryIndex: 0,
 		Histories:                  []*historyspb.VersionHistory{versionHistory},
-	}
+	}.Build()
 }
 
 // Copy VersionHistories.
 func CopyVersionHistories(h *historyspb.VersionHistories) *historyspb.VersionHistories {
 	var histories []*historyspb.VersionHistory
-	for _, history := range h.Histories {
+	for _, history := range h.GetHistories() {
 		histories = append(histories, CopyVersionHistory(history))
 	}
 
-	return &historyspb.VersionHistories{
-		CurrentVersionHistoryIndex: h.CurrentVersionHistoryIndex,
+	return historyspb.VersionHistories_builder{
+		CurrentVersionHistoryIndex: h.GetCurrentVersionHistoryIndex(),
 		Histories:                  histories,
-	}
+	}.Build()
 }
 
 // GetVersionHistory gets the VersionHistory according to index provided.
 func GetVersionHistory(h *historyspb.VersionHistories, index int32) (*historyspb.VersionHistory, error) {
-	if index < 0 || index >= int32(len(h.Histories)) {
+	if index < 0 || index >= int32(len(h.GetHistories())) {
 		return nil, serviceerror.NewInternal("version histories index is out of range.")
 	}
 
-	return h.Histories[index], nil
+	return h.GetHistories()[index], nil
 }
 
 // AddEmptyVersionHistory adds an empty VersionHistory to VersionHistories.
@@ -44,14 +44,14 @@ func GetVersionHistory(h *historyspb.VersionHistories, index int32) (*historyspb
 // Returns:
 //   - the index of the newly added or reused empty VersionHistory.
 func AddEmptyVersionHistory(h *historyspb.VersionHistories) int32 {
-	for idx, versionHistory := range h.Histories {
+	for idx, versionHistory := range h.GetHistories() {
 		if IsEmptyVersionHistory(versionHistory) {
 			// already have an empty version history, return its index
 			return int32(idx)
 		}
 	}
-	h.Histories = append(h.Histories, &historyspb.VersionHistory{})
-	return int32(len(h.Histories)) - 1
+	h.SetHistories(append(h.GetHistories(), &historyspb.VersionHistory{}))
+	return int32(len(h.GetHistories())) - 1
 }
 
 // AddVersionHistory adds a VersionHistory to VersionHistories.
@@ -69,7 +69,7 @@ func AddVersionHistory(h *historyspb.VersionHistories, v *historyspb.VersionHist
 		return 0, err
 	}
 
-	currentVersionHistory, err := GetVersionHistory(h, h.CurrentVersionHistoryIndex)
+	currentVersionHistory, err := GetVersionHistory(h, h.GetCurrentVersionHistoryIndex())
 	if err != nil {
 		return 0, err
 	}
@@ -78,15 +78,15 @@ func AddVersionHistory(h *historyspb.VersionHistories, v *historyspb.VersionHist
 		return 0, err
 	}
 
-	if incomingFirstItem.Version != currentFirstItem.Version {
+	if incomingFirstItem.GetVersion() != currentFirstItem.GetVersion() {
 		return 0, serviceerror.NewInternal("version history first item does not match.")
 	}
 
 	// TODO maybe we need more strict validation
 
 	newVersionHistory := CopyVersionHistory(v)
-	h.Histories = append(h.Histories, newVersionHistory)
-	newVersionHistoryIndex := int32(len(h.Histories)) - 1
+	h.SetHistories(append(h.GetHistories(), newVersionHistory))
+	newVersionHistoryIndex := int32(len(h.GetHistories())) - 1
 
 	return newVersionHistoryIndex, nil
 }
@@ -113,7 +113,7 @@ func AddAndSwitchVersionHistory(h *historyspb.VersionHistories, v *historyspb.Ve
 	if err != nil {
 		return false, 0, err
 	}
-	currentVersionHistory, err := GetVersionHistory(h, h.CurrentVersionHistoryIndex)
+	currentVersionHistory, err := GetVersionHistory(h, h.GetCurrentVersionHistoryIndex())
 	if err != nil {
 		return false, 0, err
 	}
@@ -123,9 +123,9 @@ func AddAndSwitchVersionHistory(h *historyspb.VersionHistories, v *historyspb.Ve
 	}
 
 	currentBranchChanged := false
-	if newLastItem.Version > currentLastItem.Version {
+	if newLastItem.GetVersion() > currentLastItem.GetVersion() {
 		currentBranchChanged = true
-		h.CurrentVersionHistoryIndex = newVersionHistoryIndex
+		h.SetCurrentVersionHistoryIndex(newVersionHistoryIndex)
 	}
 	return currentBranchChanged, newVersionHistoryIndex, nil
 }
@@ -136,7 +136,7 @@ func FindLCAVersionHistoryItemAndIndex(h *historyspb.VersionHistories, incomingH
 	var versionHistoryLength int32
 	var versionHistoryItem *historyspb.VersionHistoryItem
 
-	for index, localHistory := range h.Histories {
+	for index, localHistory := range h.GetHistories() {
 		item, err := FindLCAVersionHistoryItem(localHistory, incomingHistory)
 		if err != nil {
 			return nil, 0, err
@@ -147,10 +147,10 @@ func FindLCAVersionHistoryItemAndIndex(h *historyspb.VersionHistories, incomingH
 			// if seeing LCA item with higher event ID
 			item.GetEventId() > versionHistoryItem.GetEventId() ||
 			// if seeing LCA item with equal event ID but shorter history
-			(item.GetEventId() == versionHistoryItem.GetEventId() && int32(len(localHistory.Items)) < versionHistoryLength) {
+			(item.GetEventId() == versionHistoryItem.GetEventId() && int32(len(localHistory.GetItems())) < versionHistoryLength) {
 
 			versionHistoryIndex = int32(index)
-			versionHistoryLength = int32(len(localHistory.Items))
+			versionHistoryLength = int32(len(localHistory.GetItems()))
 			versionHistoryItem = item
 		}
 	}
@@ -159,7 +159,7 @@ func FindLCAVersionHistoryItemAndIndex(h *historyspb.VersionHistories, incomingH
 
 // FindFirstVersionHistoryIndexByVersionHistoryItem find the first VersionHistory index which contains the given version history item.
 func FindFirstVersionHistoryIndexByVersionHistoryItem(h *historyspb.VersionHistories, item *historyspb.VersionHistoryItem) (int32, error) {
-	for versionHistoryIndex, history := range h.Histories {
+	for versionHistoryIndex, history := range h.GetHistories() {
 		if ContainsVersionHistoryItem(history, item) {
 			return int32(versionHistoryIndex), nil
 		}
@@ -169,11 +169,11 @@ func FindFirstVersionHistoryIndexByVersionHistoryItem(h *historyspb.VersionHisto
 
 // SetCurrentVersionHistoryIndex set the current VersionHistory index.
 func SetCurrentVersionHistoryIndex(h *historyspb.VersionHistories, currentVersionHistoryIndex int32) error {
-	if currentVersionHistoryIndex < 0 || currentVersionHistoryIndex >= int32(len(h.Histories)) {
+	if currentVersionHistoryIndex < 0 || currentVersionHistoryIndex >= int32(len(h.GetHistories())) {
 		return serviceerror.NewInternal("invalid current version history index.")
 	}
 
-	h.CurrentVersionHistoryIndex = currentVersionHistoryIndex
+	h.SetCurrentVersionHistoryIndex(currentVersionHistoryIndex)
 	return nil
 }
 

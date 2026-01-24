@@ -38,10 +38,10 @@ func Test_findBuildIdsToRemove_AcceptsNilVersioningData(t *testing.T) {
 
 	ctx := context.Background()
 	c0 := hlc.Zero(0)
-	userData := &persistencespb.TaskQueueUserData{
+	userData := persistencespb.TaskQueueUserData_builder{
 		Clock:          c0,
 		VersioningData: nil,
-	}
+	}.Build()
 
 	buildIdsRemoved, err := a.findBuildIdsToRemove(
 		ctx,
@@ -51,15 +51,15 @@ func Test_findBuildIdsToRemove_AcceptsNilVersioningData(t *testing.T) {
 		namespace.NewNamespaceForTest(nil, nil, false, nil, 0),
 		&persistence.TaskQueueUserDataEntry{
 			TaskQueue: "test",
-			UserData: &persistencespb.VersionedTaskQueueUserData{
+			UserData: persistencespb.VersionedTaskQueueUserData_builder{
 				Version: 0,
 				Data:    userData,
-			},
+			}.Build(),
 		},
 	)
 	require.NoError(t, err)
 	require.Equal(t, []string(nil), buildIdsRemoved)
-	require.True(t, hlc.Equal(c0, userData.Clock))
+	require.True(t, hlc.Equal(c0, userData.GetClock()))
 }
 
 func Test_findBuildIdsToRemove_FindsAllBuildIdsToRemove(t *testing.T) {
@@ -96,112 +96,112 @@ func Test_findBuildIdsToRemove_FindsAllBuildIdsToRemove(t *testing.T) {
 	})
 
 	c0 := hlc.Zero(0)
-	c1 := hlc.Clock{WallClock: time.Now().UnixMilli(), Version: 0, ClusterId: 0}
+	c1 := hlc.Clock_builder{WallClock: time.Now().UnixMilli(), Version: 0, ClusterId: 0}.Build()
 
-	userData := &persistencespb.TaskQueueUserData{
+	userData := persistencespb.TaskQueueUserData_builder{
 		Clock: c0,
-		VersioningData: &persistencespb.VersioningData{
+		VersioningData: persistencespb.VersioningData_builder{
 			VersionSets: []*persistencespb.CompatibleVersionSet{
-				{
+				persistencespb.CompatibleVersionSet_builder{
 					SetIds: []string{"v1"},
 					BuildIds: []*persistencespb.BuildId{
-						{
+						persistencespb.BuildId_builder{
 							Id:                     "v1.0",
 							State:                  persistencespb.STATE_DELETED,
 							StateUpdateTimestamp:   c0,
 							BecameDefaultTimestamp: c0,
-						},
-						{
+						}.Build(),
+						persistencespb.BuildId_builder{
 							Id:                     "v1.1",
 							State:                  persistencespb.STATE_ACTIVE,
 							StateUpdateTimestamp:   c0,
 							BecameDefaultTimestamp: c0,
-						},
-						{
+						}.Build(),
+						persistencespb.BuildId_builder{
 							Id:                     "v1.2",
 							State:                  persistencespb.STATE_ACTIVE,
 							StateUpdateTimestamp:   c0,
 							BecameDefaultTimestamp: c0,
-						},
+						}.Build(),
 					},
 					BecameDefaultTimestamp: c0,
-				},
-				{
+				}.Build(),
+				persistencespb.CompatibleVersionSet_builder{
 					SetIds: []string{"v2"},
 					BuildIds: []*persistencespb.BuildId{
-						{
+						persistencespb.BuildId_builder{
 							Id:                     "v2.0",
 							State:                  persistencespb.STATE_ACTIVE,
 							StateUpdateTimestamp:   c0,
 							BecameDefaultTimestamp: c0,
-						},
+						}.Build(),
 					},
 					BecameDefaultTimestamp: c0,
-				},
-				{
+				}.Build(),
+				persistencespb.CompatibleVersionSet_builder{
 					SetIds: []string{"v3"},
 					BuildIds: []*persistencespb.BuildId{
-						{
+						persistencespb.BuildId_builder{
 							Id:                     "v3.0",
 							State:                  persistencespb.STATE_ACTIVE,
 							StateUpdateTimestamp:   c0,
 							BecameDefaultTimestamp: c0,
-						},
-						{
+						}.Build(),
+						persistencespb.BuildId_builder{
 							Id:                     "v3.1",
 							State:                  persistencespb.STATE_ACTIVE,
 							StateUpdateTimestamp:   c0,
 							BecameDefaultTimestamp: c0,
-						},
+						}.Build(),
 					},
 					BecameDefaultTimestamp: c0,
-				},
-				{
+				}.Build(),
+				persistencespb.CompatibleVersionSet_builder{
 					SetIds: []string{"v4"},
 					BuildIds: []*persistencespb.BuildId{
-						{
+						persistencespb.BuildId_builder{
 							Id:                   "v4.0",
 							State:                persistencespb.STATE_ACTIVE,
 							StateUpdateTimestamp: c0,
 							// This one may have been used recently, it should not be deleted
-							BecameDefaultTimestamp: &c1,
-						},
+							BecameDefaultTimestamp: c1,
+						}.Build(),
 					},
 					BecameDefaultTimestamp: c0,
-				},
-				{
+				}.Build(),
+				persistencespb.CompatibleVersionSet_builder{
 					SetIds: []string{"v4.1"},
 					BuildIds: []*persistencespb.BuildId{
-						{
+						persistencespb.BuildId_builder{
 							Id:    "v4.1",
 							State: persistencespb.STATE_ACTIVE,
 							// We should not even query for this one since we assume it was
 							// used soon after being added
-							StateUpdateTimestamp:   &c1,
+							StateUpdateTimestamp:   c1,
 							BecameDefaultTimestamp: c0,
-						},
+						}.Build(),
 					},
 					BecameDefaultTimestamp: c0,
-				},
-				{
+				}.Build(),
+				persistencespb.CompatibleVersionSet_builder{
 					SetIds: []string{"v5"},
 					BuildIds: []*persistencespb.BuildId{
-						{
+						persistencespb.BuildId_builder{
 							Id:                     "v5.0",
 							State:                  persistencespb.STATE_ACTIVE,
 							StateUpdateTimestamp:   c0,
 							BecameDefaultTimestamp: c0,
-						},
+						}.Build(),
 					},
 					BecameDefaultTimestamp: c0,
-				},
+				}.Build(),
 			},
-		},
-	}
+		}.Build(),
+	}.Build()
 
-	ns := namespace.NewNamespaceForTest(nil, &persistencespb.NamespaceConfig{
+	ns := namespace.NewNamespaceForTest(nil, persistencespb.NamespaceConfig_builder{
 		Retention: durationpb.New(24 * time.Hour),
-	}, false, nil, 0)
+	}.Build(), false, nil, 0)
 	act := func(ctx context.Context) ([]string, error) {
 		return a.findBuildIdsToRemove(
 			ctx,
@@ -211,10 +211,10 @@ func Test_findBuildIdsToRemove_FindsAllBuildIdsToRemove(t *testing.T) {
 			ns,
 			&persistence.TaskQueueUserDataEntry{
 				TaskQueue: "test",
-				UserData: &persistencespb.VersionedTaskQueueUserData{
+				UserData: persistencespb.VersionedTaskQueueUserData_builder{
 					Version: 0,
 					Data:    userData,
-				},
+				}.Build(),
 			},
 		)
 	}
@@ -261,7 +261,7 @@ func Test_ScavengeBuildIds_Heartbeats(t *testing.T) {
 
 	c0 := hlc.Zero(0)
 	c1 := c0
-	c1.Version++
+	c1.SetVersion(c1.GetVersion() + 1)
 
 	initialHeartbeat := heartbeatDetails{
 		NamespaceIdx:           1,
@@ -279,20 +279,20 @@ func Test_ScavengeBuildIds_Heartbeats(t *testing.T) {
 							// skip
 						},
 						{
-							Namespace: &persistencespb.NamespaceDetail{
-								Info: &persistencespb.NamespaceInfo{
+							Namespace: persistencespb.NamespaceDetail_builder{
+								Info: persistencespb.NamespaceInfo_builder{
 									Id:   "local",
 									Name: "local",
-								},
-							},
+								}.Build(),
+							}.Build(),
 						},
 						{
-							Namespace: &persistencespb.NamespaceDetail{
-								Info: &persistencespb.NamespaceInfo{
+							Namespace: persistencespb.NamespaceDetail_builder{
+								Info: persistencespb.NamespaceInfo_builder{
 									Id:   "global",
 									Name: "global",
-								},
-							},
+								}.Build(),
+							}.Build(),
 						},
 					},
 					NextPageToken: namespaceSecondPageToken,
@@ -301,12 +301,12 @@ func Test_ScavengeBuildIds_Heartbeats(t *testing.T) {
 				return &persistence.ListNamespacesResponse{
 					Namespaces: []*persistence.GetNamespaceResponse{
 						{
-							Namespace: &persistencespb.NamespaceDetail{
-								Info: &persistencespb.NamespaceInfo{
+							Namespace: persistencespb.NamespaceDetail_builder{
+								Info: persistencespb.NamespaceInfo_builder{
 									Id:   "global-inactive",
 									Name: "global-inactive",
-								},
-							},
+								}.Build(),
+							}.Build(),
 						},
 					},
 					NextPageToken: []byte{},
@@ -321,11 +321,11 @@ func Test_ScavengeBuildIds_Heartbeats(t *testing.T) {
 		var cfg persistencespb.NamespaceReplicationConfig
 		if id == "global" {
 			global = true
-			cfg.ActiveClusterName = "test-cluster"
+			cfg.SetActiveClusterName("test-cluster")
 		}
 		if id == "global-inactive" {
 			global = true
-			cfg.ActiveClusterName = "not-test-cluster"
+			cfg.SetActiveClusterName("not-test-cluster")
 		}
 		return namespace.NewNamespaceForTest(nil, nil, global, &cfg, 0), nil
 	})
@@ -343,43 +343,43 @@ func Test_ScavengeBuildIds_Heartbeats(t *testing.T) {
 					{
 						// Nothing to do here (skipped for local namespace)
 						TaskQueue: "without-data",
-						UserData: &persistencespb.VersionedTaskQueueUserData{
+						UserData: persistencespb.VersionedTaskQueueUserData_builder{
 							Version: 1,
-							Data: &persistencespb.TaskQueueUserData{
+							Data: persistencespb.TaskQueueUserData_builder{
 								Clock: c0,
-							},
-						},
+							}.Build(),
+						}.Build(),
 					},
 					{
 						// v1.0 should be deleted
 						TaskQueue: "with-data",
-						UserData: &persistencespb.VersionedTaskQueueUserData{
+						UserData: persistencespb.VersionedTaskQueueUserData_builder{
 							Version: 1,
-							Data: &persistencespb.TaskQueueUserData{
+							Data: persistencespb.TaskQueueUserData_builder{
 								Clock: c0,
-								VersioningData: &persistencespb.VersioningData{
+								VersioningData: persistencespb.VersioningData_builder{
 									VersionSets: []*persistencespb.CompatibleVersionSet{
-										{
+										persistencespb.CompatibleVersionSet_builder{
 											SetIds: []string{"v1"},
 											BuildIds: []*persistencespb.BuildId{
-												{
+												persistencespb.BuildId_builder{
 													Id:                     "v1.0",
 													State:                  persistencespb.STATE_ACTIVE,
 													StateUpdateTimestamp:   c0,
 													BecameDefaultTimestamp: c0,
-												},
-												{
+												}.Build(),
+												persistencespb.BuildId_builder{
 													Id:                     "v1.1",
 													State:                  persistencespb.STATE_ACTIVE,
 													StateUpdateTimestamp:   c0,
 													BecameDefaultTimestamp: c0,
-												},
+												}.Build(),
 											},
-										},
+										}.Build(),
 									},
-								},
-							},
-						},
+								}.Build(),
+							}.Build(),
+						}.Build(),
 					},
 				},
 				NextPageToken: []byte{},
@@ -388,7 +388,7 @@ func Test_ScavengeBuildIds_Heartbeats(t *testing.T) {
 	)
 	matchingClient.EXPECT().UpdateWorkerBuildIdCompatibility(gomock.Any(), gomock.Any()).Times(2).DoAndReturn(
 		func(ctx context.Context, in *matchingservice.UpdateWorkerBuildIdCompatibilityRequest, opts ...grpc.CallOption) (*matchingservice.UpdateWorkerBuildIdCompatibilityResponse, error) {
-			require.Equal(t, "with-data", in.TaskQueue)
+			require.Equal(t, "with-data", in.GetTaskQueue())
 			require.Equal(t, []string{"v1.0"}, in.GetRemoveBuildIds().GetBuildIds())
 			require.Equal(t, int64(1), in.GetRemoveBuildIds().GetKnownUserDataVersion())
 			return &matchingservice.UpdateWorkerBuildIdCompatibilityResponse{}, nil

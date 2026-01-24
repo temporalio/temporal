@@ -93,10 +93,10 @@ func (b *bucket) upsertHeartbeats(nsID namespace.ID, heartbeats []*workerpb.Work
 	}
 
 	for _, hb := range heartbeats {
-		key := hb.WorkerInstanceKey
+		key := hb.GetWorkerInstanceKey()
 
 		// If worker is shutting down, remove it immediately
-		if hb.Status == enumspb.WORKER_STATUS_SHUTDOWN {
+		if hb.GetStatus() == enumspb.WORKER_STATUS_SHUTDOWN {
 			if e, exists := mp[key]; exists {
 				b.order.Remove(e.elem)
 				delete(mp, key)
@@ -181,7 +181,7 @@ func (b *bucket) evictByTTL(expireBefore time.Time) int {
 			break
 		}
 		b.order.Remove(front)
-		delete(b.namespaces[e.nsID], e.hb.WorkerInstanceKey)
+		delete(b.namespaces[e.nsID], e.hb.GetWorkerInstanceKey())
 		removed++
 	}
 	return removed
@@ -200,7 +200,7 @@ func (b *bucket) evictByCapacity(threshold time.Time) bool {
 		return false
 	}
 	b.order.Remove(front)
-	delete(b.namespaces[e.nsID], e.hb.WorkerInstanceKey)
+	delete(b.namespaces[e.nsID], e.hb.GetWorkerInstanceKey())
 	return true
 }
 
@@ -287,8 +287,8 @@ func (m *registryImpl) recordPluginMetric(nsName namespace.Name, heartbeats []*w
 	recordedPlugins := make(map[string]bool)
 
 	for _, hb := range heartbeats {
-		for _, pluginInfo := range hb.Plugins {
-			pluginName := pluginInfo.Name
+		for _, pluginInfo := range hb.GetPlugins() {
+			pluginName := pluginInfo.GetName()
 			if !recordedPlugins[pluginName] {
 				metrics.WorkerPluginNameMetric.
 					With(m.metricsHandler).
@@ -395,8 +395,8 @@ func (m *registryImpl) RecordWorkerHeartbeats(nsID namespace.ID, nsName namespac
 // recordActivitySlotsMetric records the distribution of activity slots in use across workers.
 func (m *registryImpl) recordActivitySlotsMetric(heartbeats []*workerpb.WorkerHeartbeat) {
 	for _, hb := range heartbeats {
-		if hb.ActivityTaskSlotsInfo != nil {
-			metrics.WorkerRegistryActivitySlotsUsed.With(m.metricsHandler).Record(int64(hb.ActivityTaskSlotsInfo.CurrentUsedSlots))
+		if hb.HasActivityTaskSlotsInfo() {
+			metrics.WorkerRegistryActivitySlotsUsed.With(m.metricsHandler).Record(int64(hb.GetActivityTaskSlotsInfo().GetCurrentUsedSlots()))
 		}
 	}
 }
@@ -437,7 +437,7 @@ func paginateWorkers(workers []*workerpb.WorkerHeartbeat, pageSize int, nextPage
 
 	// Sort by WorkerInstanceKey for deterministic pagination
 	slices.SortFunc(workers, func(a, b *workerpb.WorkerHeartbeat) int {
-		return strings.Compare(a.WorkerInstanceKey, b.WorkerInstanceKey)
+		return strings.Compare(a.GetWorkerInstanceKey(), b.GetWorkerInstanceKey())
 	})
 
 	// Decode page token to find the cursor
@@ -456,10 +456,10 @@ func paginateWorkers(workers []*workerpb.WorkerHeartbeat, pageSize int, nextPage
 		// BinarySearchFunc returns the index where cursor would be inserted.
 		// We want the first worker with key > cursor.
 		startIdx, _ = slices.BinarySearchFunc(workers, cursor, func(worker *workerpb.WorkerHeartbeat, target string) int {
-			return strings.Compare(worker.WorkerInstanceKey, target)
+			return strings.Compare(worker.GetWorkerInstanceKey(), target)
 		})
 		// If exact match found, move past it to get first key > cursor
-		if startIdx < len(workers) && workers[startIdx].WorkerInstanceKey == cursor {
+		if startIdx < len(workers) && workers[startIdx].GetWorkerInstanceKey() == cursor {
 			startIdx++
 		}
 		// If we've gone past the end, return empty
@@ -480,7 +480,7 @@ func paginateWorkers(workers []*workerpb.WorkerHeartbeat, pageSize int, nextPage
 	var newNextPageToken []byte
 	if endIdx < len(workers) {
 		token := listWorkersPageToken{
-			LastWorkerInstanceKey: result[len(result)-1].WorkerInstanceKey,
+			LastWorkerInstanceKey: result[len(result)-1].GetWorkerInstanceKey(),
 		}
 		newNextPageToken, _ = json.Marshal(token)
 	}

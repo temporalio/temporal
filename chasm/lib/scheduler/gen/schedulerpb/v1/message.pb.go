@@ -8,7 +8,7 @@ package schedulerpb
 
 import (
 	reflect "reflect"
-	sync "sync"
+	"strconv"
 	unsafe "unsafe"
 
 	v12 "go.temporal.io/api/common/v1"
@@ -29,22 +29,16 @@ const (
 
 // CHASM scheduler top-level state.
 type SchedulerState struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Scheduler request parameters and metadata.
-	Schedule *v1.Schedule     `protobuf:"bytes,2,opt,name=schedule,proto3" json:"schedule,omitempty"`
-	Info     *v1.ScheduleInfo `protobuf:"bytes,3,opt,name=info,proto3" json:"info,omitempty"`
-	// State common to all generators is stored in the top-level machine.
-	Namespace   string `protobuf:"bytes,5,opt,name=namespace,proto3" json:"namespace,omitempty"`
-	NamespaceId string `protobuf:"bytes,6,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	ScheduleId  string `protobuf:"bytes,7,opt,name=schedule_id,json=scheduleId,proto3" json:"schedule_id,omitempty"`
-	// Implemented as a sequence number. Used for optimistic locking against
-	// update requests.
-	ConflictToken int64 `protobuf:"varint,8,opt,name=conflict_token,json=conflictToken,proto3" json:"conflict_token,omitempty"`
-	// The closed flag is set true after a schedule completes, and the idle timer
-	// expires.
-	Closed        bool `protobuf:"varint,9,opt,name=closed,proto3" json:"closed,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                    protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Schedule      *v1.Schedule           `protobuf:"bytes,2,opt,name=schedule,proto3"`
+	xxx_hidden_Info          *v1.ScheduleInfo       `protobuf:"bytes,3,opt,name=info,proto3"`
+	xxx_hidden_Namespace     string                 `protobuf:"bytes,5,opt,name=namespace,proto3"`
+	xxx_hidden_NamespaceId   string                 `protobuf:"bytes,6,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_ScheduleId    string                 `protobuf:"bytes,7,opt,name=schedule_id,json=scheduleId,proto3"`
+	xxx_hidden_ConflictToken int64                  `protobuf:"varint,8,opt,name=conflict_token,json=conflictToken,proto3"`
+	xxx_hidden_Closed        bool                   `protobuf:"varint,9,opt,name=closed,proto3"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *SchedulerState) Reset() {
@@ -72,69 +66,144 @@ func (x *SchedulerState) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SchedulerState.ProtoReflect.Descriptor instead.
-func (*SchedulerState) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_rawDescGZIP(), []int{0}
-}
-
 func (x *SchedulerState) GetSchedule() *v1.Schedule {
 	if x != nil {
-		return x.Schedule
+		return x.xxx_hidden_Schedule
 	}
 	return nil
 }
 
 func (x *SchedulerState) GetInfo() *v1.ScheduleInfo {
 	if x != nil {
-		return x.Info
+		return x.xxx_hidden_Info
 	}
 	return nil
 }
 
 func (x *SchedulerState) GetNamespace() string {
 	if x != nil {
-		return x.Namespace
+		return x.xxx_hidden_Namespace
 	}
 	return ""
 }
 
 func (x *SchedulerState) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *SchedulerState) GetScheduleId() string {
 	if x != nil {
-		return x.ScheduleId
+		return x.xxx_hidden_ScheduleId
 	}
 	return ""
 }
 
 func (x *SchedulerState) GetConflictToken() int64 {
 	if x != nil {
-		return x.ConflictToken
+		return x.xxx_hidden_ConflictToken
 	}
 	return 0
 }
 
 func (x *SchedulerState) GetClosed() bool {
 	if x != nil {
-		return x.Closed
+		return x.xxx_hidden_Closed
 	}
 	return false
 }
 
+func (x *SchedulerState) SetSchedule(v *v1.Schedule) {
+	x.xxx_hidden_Schedule = v
+}
+
+func (x *SchedulerState) SetInfo(v *v1.ScheduleInfo) {
+	x.xxx_hidden_Info = v
+}
+
+func (x *SchedulerState) SetNamespace(v string) {
+	x.xxx_hidden_Namespace = v
+}
+
+func (x *SchedulerState) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *SchedulerState) SetScheduleId(v string) {
+	x.xxx_hidden_ScheduleId = v
+}
+
+func (x *SchedulerState) SetConflictToken(v int64) {
+	x.xxx_hidden_ConflictToken = v
+}
+
+func (x *SchedulerState) SetClosed(v bool) {
+	x.xxx_hidden_Closed = v
+}
+
+func (x *SchedulerState) HasSchedule() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Schedule != nil
+}
+
+func (x *SchedulerState) HasInfo() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Info != nil
+}
+
+func (x *SchedulerState) ClearSchedule() {
+	x.xxx_hidden_Schedule = nil
+}
+
+func (x *SchedulerState) ClearInfo() {
+	x.xxx_hidden_Info = nil
+}
+
+type SchedulerState_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Scheduler request parameters and metadata.
+	Schedule *v1.Schedule
+	Info     *v1.ScheduleInfo
+	// State common to all generators is stored in the top-level machine.
+	Namespace   string
+	NamespaceId string
+	ScheduleId  string
+	// Implemented as a sequence number. Used for optimistic locking against
+	// update requests.
+	ConflictToken int64
+	// The closed flag is set true after a schedule completes, and the idle timer
+	// expires.
+	Closed bool
+}
+
+func (b0 SchedulerState_builder) Build() *SchedulerState {
+	m0 := &SchedulerState{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Schedule = b.Schedule
+	x.xxx_hidden_Info = b.Info
+	x.xxx_hidden_Namespace = b.Namespace
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_ScheduleId = b.ScheduleId
+	x.xxx_hidden_ConflictToken = b.ConflictToken
+	x.xxx_hidden_Closed = b.Closed
+	return m0
+}
+
 // CHASM scheduler's Generator internal state.
 type GeneratorState struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// High water mark.
-	LastProcessedTime *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=last_processed_time,json=lastProcessedTime,proto3" json:"last_processed_time,omitempty"`
-	// A list of upcoming times an action will be triggered.
-	FutureActionTimes []*timestamppb.Timestamp `protobuf:"bytes,4,rep,name=future_action_times,json=futureActionTimes,proto3" json:"future_action_times,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state                        protoimpl.MessageState    `protogen:"opaque.v1"`
+	xxx_hidden_LastProcessedTime *timestamppb.Timestamp    `protobuf:"bytes,3,opt,name=last_processed_time,json=lastProcessedTime,proto3"`
+	xxx_hidden_FutureActionTimes *[]*timestamppb.Timestamp `protobuf:"bytes,4,rep,name=future_action_times,json=futureActionTimes,proto3"`
+	unknownFields                protoimpl.UnknownFields
+	sizeCache                    protoimpl.SizeCache
 }
 
 func (x *GeneratorState) Reset() {
@@ -162,42 +231,68 @@ func (x *GeneratorState) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GeneratorState.ProtoReflect.Descriptor instead.
-func (*GeneratorState) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_rawDescGZIP(), []int{1}
-}
-
 func (x *GeneratorState) GetLastProcessedTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.LastProcessedTime
+		return x.xxx_hidden_LastProcessedTime
 	}
 	return nil
 }
 
 func (x *GeneratorState) GetFutureActionTimes() []*timestamppb.Timestamp {
 	if x != nil {
-		return x.FutureActionTimes
+		if x.xxx_hidden_FutureActionTimes != nil {
+			return *x.xxx_hidden_FutureActionTimes
+		}
 	}
 	return nil
 }
 
+func (x *GeneratorState) SetLastProcessedTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_LastProcessedTime = v
+}
+
+func (x *GeneratorState) SetFutureActionTimes(v []*timestamppb.Timestamp) {
+	x.xxx_hidden_FutureActionTimes = &v
+}
+
+func (x *GeneratorState) HasLastProcessedTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_LastProcessedTime != nil
+}
+
+func (x *GeneratorState) ClearLastProcessedTime() {
+	x.xxx_hidden_LastProcessedTime = nil
+}
+
+type GeneratorState_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// High water mark.
+	LastProcessedTime *timestamppb.Timestamp
+	// A list of upcoming times an action will be triggered.
+	FutureActionTimes []*timestamppb.Timestamp
+}
+
+func (b0 GeneratorState_builder) Build() *GeneratorState {
+	m0 := &GeneratorState{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_LastProcessedTime = b.LastProcessedTime
+	x.xxx_hidden_FutureActionTimes = &b.FutureActionTimes
+	return m0
+}
+
 // CHASM scheduler's Invoker internal state.
 type InvokerState struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Buffered starts that will be started by the Invoker.
-	BufferedStarts []*v11.BufferedStart `protobuf:"bytes,2,rep,name=buffered_starts,json=bufferedStarts,proto3" json:"buffered_starts,omitempty"`
-	// Workflow executions that will be cancelled due to overlap policy.
-	CancelWorkflows []*v12.WorkflowExecution `protobuf:"bytes,3,rep,name=cancel_workflows,json=cancelWorkflows,proto3" json:"cancel_workflows,omitempty"`
-	// Workflow executions that will be terminated due to overlap policy.
-	TerminateWorkflows []*v12.WorkflowExecution `protobuf:"bytes,4,rep,name=terminate_workflows,json=terminateWorkflows,proto3" json:"terminate_workflows,omitempty"`
-	// High water mark, used for evaluating when to fire tasks that are backing
-	// off from a retry. LastProcessedTime is stored as state so that task
-	// generation will be consistent, regardless of when generation occurs, such
-	// as after applying a replicated state (as opposed to evaluating based on
-	// present time).
-	LastProcessedTime *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=last_processed_time,json=lastProcessedTime,proto3" json:"last_processed_time,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state                         protoimpl.MessageState    `protogen:"opaque.v1"`
+	xxx_hidden_BufferedStarts     *[]*v11.BufferedStart     `protobuf:"bytes,2,rep,name=buffered_starts,json=bufferedStarts,proto3"`
+	xxx_hidden_CancelWorkflows    *[]*v12.WorkflowExecution `protobuf:"bytes,3,rep,name=cancel_workflows,json=cancelWorkflows,proto3"`
+	xxx_hidden_TerminateWorkflows *[]*v12.WorkflowExecution `protobuf:"bytes,4,rep,name=terminate_workflows,json=terminateWorkflows,proto3"`
+	xxx_hidden_LastProcessedTime  *timestamppb.Timestamp    `protobuf:"bytes,5,opt,name=last_processed_time,json=lastProcessedTime,proto3"`
+	unknownFields                 protoimpl.UnknownFields
+	sizeCache                     protoimpl.SizeCache
 }
 
 func (x *InvokerState) Reset() {
@@ -225,58 +320,105 @@ func (x *InvokerState) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use InvokerState.ProtoReflect.Descriptor instead.
-func (*InvokerState) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_rawDescGZIP(), []int{2}
-}
-
 func (x *InvokerState) GetBufferedStarts() []*v11.BufferedStart {
 	if x != nil {
-		return x.BufferedStarts
+		if x.xxx_hidden_BufferedStarts != nil {
+			return *x.xxx_hidden_BufferedStarts
+		}
 	}
 	return nil
 }
 
 func (x *InvokerState) GetCancelWorkflows() []*v12.WorkflowExecution {
 	if x != nil {
-		return x.CancelWorkflows
+		if x.xxx_hidden_CancelWorkflows != nil {
+			return *x.xxx_hidden_CancelWorkflows
+		}
 	}
 	return nil
 }
 
 func (x *InvokerState) GetTerminateWorkflows() []*v12.WorkflowExecution {
 	if x != nil {
-		return x.TerminateWorkflows
+		if x.xxx_hidden_TerminateWorkflows != nil {
+			return *x.xxx_hidden_TerminateWorkflows
+		}
 	}
 	return nil
 }
 
 func (x *InvokerState) GetLastProcessedTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.LastProcessedTime
+		return x.xxx_hidden_LastProcessedTime
 	}
 	return nil
+}
+
+func (x *InvokerState) SetBufferedStarts(v []*v11.BufferedStart) {
+	x.xxx_hidden_BufferedStarts = &v
+}
+
+func (x *InvokerState) SetCancelWorkflows(v []*v12.WorkflowExecution) {
+	x.xxx_hidden_CancelWorkflows = &v
+}
+
+func (x *InvokerState) SetTerminateWorkflows(v []*v12.WorkflowExecution) {
+	x.xxx_hidden_TerminateWorkflows = &v
+}
+
+func (x *InvokerState) SetLastProcessedTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_LastProcessedTime = v
+}
+
+func (x *InvokerState) HasLastProcessedTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_LastProcessedTime != nil
+}
+
+func (x *InvokerState) ClearLastProcessedTime() {
+	x.xxx_hidden_LastProcessedTime = nil
+}
+
+type InvokerState_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Buffered starts that will be started by the Invoker.
+	BufferedStarts []*v11.BufferedStart
+	// Workflow executions that will be cancelled due to overlap policy.
+	CancelWorkflows []*v12.WorkflowExecution
+	// Workflow executions that will be terminated due to overlap policy.
+	TerminateWorkflows []*v12.WorkflowExecution
+	// High water mark, used for evaluating when to fire tasks that are backing
+	// off from a retry. LastProcessedTime is stored as state so that task
+	// generation will be consistent, regardless of when generation occurs, such
+	// as after applying a replicated state (as opposed to evaluating based on
+	// present time).
+	LastProcessedTime *timestamppb.Timestamp
+}
+
+func (b0 InvokerState_builder) Build() *InvokerState {
+	m0 := &InvokerState{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_BufferedStarts = &b.BufferedStarts
+	x.xxx_hidden_CancelWorkflows = &b.CancelWorkflows
+	x.xxx_hidden_TerminateWorkflows = &b.TerminateWorkflows
+	x.xxx_hidden_LastProcessedTime = b.LastProcessedTime
+	return m0
 }
 
 // CHASM scheduler's Backfiller internal state. Backfill requests are 1:1
 // with Backfiller nodes. Backfiller nodes also handle immediate trigger requests.
 type BackfillerState struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Types that are valid to be assigned to Request:
-	//
-	//	*BackfillerState_BackfillRequest
-	//	*BackfillerState_TriggerRequest
-	Request isBackfillerState_Request `protobuf_oneof:"request"`
-	// Every Backfiller should be assigned a unique ID upon creation, used
-	// for deduplication.
-	BackfillId string `protobuf:"bytes,6,opt,name=backfill_id,json=backfillId,proto3" json:"backfill_id,omitempty"`
-	// High water mark.
-	LastProcessedTime *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=last_processed_time,json=lastProcessedTime,proto3" json:"last_processed_time,omitempty"`
-	// Attempt count, incremented when the buffer is full and the Backfiller
-	// needs to back off before retrying to fill.
-	Attempt       int64 `protobuf:"varint,8,opt,name=attempt,proto3" json:"attempt,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                        protoimpl.MessageState    `protogen:"opaque.v1"`
+	xxx_hidden_Request           isBackfillerState_Request `protobuf_oneof:"request"`
+	xxx_hidden_BackfillId        string                    `protobuf:"bytes,6,opt,name=backfill_id,json=backfillId,proto3"`
+	xxx_hidden_LastProcessedTime *timestamppb.Timestamp    `protobuf:"bytes,7,opt,name=last_processed_time,json=lastProcessedTime,proto3"`
+	xxx_hidden_Attempt           int64                     `protobuf:"varint,8,opt,name=attempt,proto3"`
+	unknownFields                protoimpl.UnknownFields
+	sizeCache                    protoimpl.SizeCache
 }
 
 func (x *BackfillerState) Reset() {
@@ -304,21 +446,9 @@ func (x *BackfillerState) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use BackfillerState.ProtoReflect.Descriptor instead.
-func (*BackfillerState) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_rawDescGZIP(), []int{3}
-}
-
-func (x *BackfillerState) GetRequest() isBackfillerState_Request {
-	if x != nil {
-		return x.Request
-	}
-	return nil
-}
-
 func (x *BackfillerState) GetBackfillRequest() *v1.BackfillRequest {
 	if x != nil {
-		if x, ok := x.Request.(*BackfillerState_BackfillRequest); ok {
+		if x, ok := x.xxx_hidden_Request.(*backfillerState_BackfillRequest); ok {
 			return x.BackfillRequest
 		}
 	}
@@ -327,7 +457,7 @@ func (x *BackfillerState) GetBackfillRequest() *v1.BackfillRequest {
 
 func (x *BackfillerState) GetTriggerRequest() *v1.TriggerImmediatelyRequest {
 	if x != nil {
-		if x, ok := x.Request.(*BackfillerState_TriggerRequest); ok {
+		if x, ok := x.xxx_hidden_Request.(*backfillerState_TriggerRequest); ok {
 			return x.TriggerRequest
 		}
 	}
@@ -336,50 +466,196 @@ func (x *BackfillerState) GetTriggerRequest() *v1.TriggerImmediatelyRequest {
 
 func (x *BackfillerState) GetBackfillId() string {
 	if x != nil {
-		return x.BackfillId
+		return x.xxx_hidden_BackfillId
 	}
 	return ""
 }
 
 func (x *BackfillerState) GetLastProcessedTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.LastProcessedTime
+		return x.xxx_hidden_LastProcessedTime
 	}
 	return nil
 }
 
 func (x *BackfillerState) GetAttempt() int64 {
 	if x != nil {
-		return x.Attempt
+		return x.xxx_hidden_Attempt
 	}
 	return 0
+}
+
+func (x *BackfillerState) SetBackfillRequest(v *v1.BackfillRequest) {
+	if v == nil {
+		x.xxx_hidden_Request = nil
+		return
+	}
+	x.xxx_hidden_Request = &backfillerState_BackfillRequest{v}
+}
+
+func (x *BackfillerState) SetTriggerRequest(v *v1.TriggerImmediatelyRequest) {
+	if v == nil {
+		x.xxx_hidden_Request = nil
+		return
+	}
+	x.xxx_hidden_Request = &backfillerState_TriggerRequest{v}
+}
+
+func (x *BackfillerState) SetBackfillId(v string) {
+	x.xxx_hidden_BackfillId = v
+}
+
+func (x *BackfillerState) SetLastProcessedTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_LastProcessedTime = v
+}
+
+func (x *BackfillerState) SetAttempt(v int64) {
+	x.xxx_hidden_Attempt = v
+}
+
+func (x *BackfillerState) HasRequest() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Request != nil
+}
+
+func (x *BackfillerState) HasBackfillRequest() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_Request.(*backfillerState_BackfillRequest)
+	return ok
+}
+
+func (x *BackfillerState) HasTriggerRequest() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_Request.(*backfillerState_TriggerRequest)
+	return ok
+}
+
+func (x *BackfillerState) HasLastProcessedTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_LastProcessedTime != nil
+}
+
+func (x *BackfillerState) ClearRequest() {
+	x.xxx_hidden_Request = nil
+}
+
+func (x *BackfillerState) ClearBackfillRequest() {
+	if _, ok := x.xxx_hidden_Request.(*backfillerState_BackfillRequest); ok {
+		x.xxx_hidden_Request = nil
+	}
+}
+
+func (x *BackfillerState) ClearTriggerRequest() {
+	if _, ok := x.xxx_hidden_Request.(*backfillerState_TriggerRequest); ok {
+		x.xxx_hidden_Request = nil
+	}
+}
+
+func (x *BackfillerState) ClearLastProcessedTime() {
+	x.xxx_hidden_LastProcessedTime = nil
+}
+
+const BackfillerState_Request_not_set_case case_BackfillerState_Request = 0
+const BackfillerState_BackfillRequest_case case_BackfillerState_Request = 1
+const BackfillerState_TriggerRequest_case case_BackfillerState_Request = 2
+
+func (x *BackfillerState) WhichRequest() case_BackfillerState_Request {
+	if x == nil {
+		return BackfillerState_Request_not_set_case
+	}
+	switch x.xxx_hidden_Request.(type) {
+	case *backfillerState_BackfillRequest:
+		return BackfillerState_BackfillRequest_case
+	case *backfillerState_TriggerRequest:
+		return BackfillerState_TriggerRequest_case
+	default:
+		return BackfillerState_Request_not_set_case
+	}
+}
+
+type BackfillerState_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Fields of oneof xxx_hidden_Request:
+	BackfillRequest *v1.BackfillRequest
+	// When set, immediately buffer a single manual action.
+	TriggerRequest *v1.TriggerImmediatelyRequest
+	// -- end of xxx_hidden_Request
+	// Every Backfiller should be assigned a unique ID upon creation, used
+	// for deduplication.
+	BackfillId string
+	// High water mark.
+	LastProcessedTime *timestamppb.Timestamp
+	// Attempt count, incremented when the buffer is full and the Backfiller
+	// needs to back off before retrying to fill.
+	Attempt int64
+}
+
+func (b0 BackfillerState_builder) Build() *BackfillerState {
+	m0 := &BackfillerState{}
+	b, x := &b0, m0
+	_, _ = b, x
+	if b.BackfillRequest != nil {
+		x.xxx_hidden_Request = &backfillerState_BackfillRequest{b.BackfillRequest}
+	}
+	if b.TriggerRequest != nil {
+		x.xxx_hidden_Request = &backfillerState_TriggerRequest{b.TriggerRequest}
+	}
+	x.xxx_hidden_BackfillId = b.BackfillId
+	x.xxx_hidden_LastProcessedTime = b.LastProcessedTime
+	x.xxx_hidden_Attempt = b.Attempt
+	return m0
+}
+
+type case_BackfillerState_Request protoreflect.FieldNumber
+
+func (x case_BackfillerState_Request) String() string {
+	switch x {
+	case BackfillerState_Request_not_set_case:
+		return "BackfillerStateRequestNotSetCase"
+	case BackfillerState_BackfillRequest_case:
+		return "BackfillerStateBackfillRequestCase"
+	case BackfillerState_TriggerRequest_case:
+		return "BackfillerStateTriggerRequestCase"
+	default:
+		return strconv.Itoa(int(x))
+	}
+
 }
 
 type isBackfillerState_Request interface {
 	isBackfillerState_Request()
 }
 
-type BackfillerState_BackfillRequest struct {
+type backfillerState_BackfillRequest struct {
 	BackfillRequest *v1.BackfillRequest `protobuf:"bytes,1,opt,name=backfill_request,json=backfillRequest,proto3,oneof"`
 }
 
-type BackfillerState_TriggerRequest struct {
+type backfillerState_TriggerRequest struct {
 	// When set, immediately buffer a single manual action.
 	TriggerRequest *v1.TriggerImmediatelyRequest `protobuf:"bytes,2,opt,name=trigger_request,json=triggerRequest,proto3,oneof"`
 }
 
-func (*BackfillerState_BackfillRequest) isBackfillerState_Request() {}
+func (*backfillerState_BackfillRequest) isBackfillerState_Request() {}
 
-func (*BackfillerState_TriggerRequest) isBackfillerState_Request() {}
+func (*backfillerState_TriggerRequest) isBackfillerState_Request() {}
 
 // CHASM scheduler retains the payload data for the last completed workflow. Both
 // last success and failure are stored simultaneously.
 type LastCompletionResult struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       *v12.Payload           `protobuf:"bytes,1,opt,name=success,proto3" json:"success,omitempty"`
-	Failure       *v13.Failure           `protobuf:"bytes,2,opt,name=failure,proto3" json:"failure,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state              protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Success *v12.Payload           `protobuf:"bytes,1,opt,name=success,proto3"`
+	xxx_hidden_Failure *v13.Failure           `protobuf:"bytes,2,opt,name=failure,proto3"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *LastCompletionResult) Reset() {
@@ -407,23 +683,64 @@ func (x *LastCompletionResult) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use LastCompletionResult.ProtoReflect.Descriptor instead.
-func (*LastCompletionResult) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_rawDescGZIP(), []int{4}
-}
-
 func (x *LastCompletionResult) GetSuccess() *v12.Payload {
 	if x != nil {
-		return x.Success
+		return x.xxx_hidden_Success
 	}
 	return nil
 }
 
 func (x *LastCompletionResult) GetFailure() *v13.Failure {
 	if x != nil {
-		return x.Failure
+		return x.xxx_hidden_Failure
 	}
 	return nil
+}
+
+func (x *LastCompletionResult) SetSuccess(v *v12.Payload) {
+	x.xxx_hidden_Success = v
+}
+
+func (x *LastCompletionResult) SetFailure(v *v13.Failure) {
+	x.xxx_hidden_Failure = v
+}
+
+func (x *LastCompletionResult) HasSuccess() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Success != nil
+}
+
+func (x *LastCompletionResult) HasFailure() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Failure != nil
+}
+
+func (x *LastCompletionResult) ClearSuccess() {
+	x.xxx_hidden_Success = nil
+}
+
+func (x *LastCompletionResult) ClearFailure() {
+	x.xxx_hidden_Failure = nil
+}
+
+type LastCompletionResult_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Success *v12.Payload
+	Failure *v13.Failure
+}
+
+func (b0 LastCompletionResult_builder) Build() *LastCompletionResult {
+	m0 := &LastCompletionResult{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Success = b.Success
+	x.xxx_hidden_Failure = b.Failure
+	return m0
 }
 
 var File_temporal_server_chasm_lib_scheduler_proto_v1_message_proto protoreflect.FileDescriptor
@@ -459,18 +776,6 @@ const file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_rawDesc = 
 	"\x14LastCompletionResult\x129\n" +
 	"\asuccess\x18\x01 \x01(\v2\x1f.temporal.api.common.v1.PayloadR\asuccess\x12:\n" +
 	"\afailure\x18\x02 \x01(\v2 .temporal.api.failure.v1.FailureR\afailureBGZEgo.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb;schedulerpbb\x06proto3"
-
-var (
-	file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_rawDescOnce sync.Once
-	file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_rawDescData []byte
-)
-
-func file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_rawDescGZIP() []byte {
-	file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_rawDescOnce.Do(func() {
-		file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_rawDesc), len(file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_rawDesc)))
-	})
-	return file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_rawDescData
-}
 
 var file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_goTypes = []any{
@@ -516,8 +821,8 @@ func file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_init() {
 		return
 	}
 	file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_msgTypes[3].OneofWrappers = []any{
-		(*BackfillerState_BackfillRequest)(nil),
-		(*BackfillerState_TriggerRequest)(nil),
+		(*backfillerState_BackfillRequest)(nil),
+		(*backfillerState_TriggerRequest)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{

@@ -24,22 +24,22 @@ func Test_SetRequestDefaultValueAndGetTargetVersionHistory_DefinedStartAndEnd(t 
 	versionHistory := versionhistory.NewVersionHistory([]byte{}, []*historyspb.VersionHistoryItem{firstItem, endItem})
 	versionHistories := versionhistory.NewVersionHistories(versionHistory)
 	namespaceID := uuid.NewString()
-	request := &adminservice.GetWorkflowExecutionRawHistoryRequest{
+	request := adminservice.GetWorkflowExecutionRawHistoryRequest_builder{
 		NamespaceId: namespaceID,
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: "workflowID",
 			RunId:      uuid.NewString(),
-		},
+		}.Build(),
 		StartEventId:      inputStartEventID,
 		StartEventVersion: inputStartVersion,
 		EndEventId:        inputEndEventID,
 		EndEventVersion:   inputEndVersion,
 		MaximumPageSize:   10,
 		NextPageToken:     nil,
-	}
-	req := &historyservice.GetWorkflowExecutionRawHistoryRequest{
+	}.Build()
+	req := historyservice.GetWorkflowExecutionRawHistoryRequest_builder{
 		Request: request,
-	}
+	}.Build()
 
 	targetVersionHistory, err := setRequestDefaultValueAndGetTargetVersionHistory(
 		req,
@@ -61,22 +61,22 @@ func Test_SetRequestDefaultValueAndGetTargetVersionHistory_DefinedEndEvent(t *te
 	targetItem := versionhistory.NewVersionHistoryItem(inputEndEventID, inputEndVersion)
 	versionHistory := versionhistory.NewVersionHistory([]byte{}, []*historyspb.VersionHistoryItem{firstItem, targetItem})
 	versionHistories := versionhistory.NewVersionHistories(versionHistory)
-	request := &adminservice.GetWorkflowExecutionRawHistoryRequest{
+	request := adminservice.GetWorkflowExecutionRawHistoryRequest_builder{
 		NamespaceId: namespaceID,
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: "workflowID",
 			RunId:      uuid.NewString(),
-		},
+		}.Build(),
 		StartEventId:      common.EmptyEventID,
 		StartEventVersion: common.EmptyVersion,
 		EndEventId:        inputEndEventID,
 		EndEventVersion:   inputEndVersion,
 		MaximumPageSize:   10,
 		NextPageToken:     nil,
-	}
-	req := &historyservice.GetWorkflowExecutionRawHistoryRequest{
+	}.Build()
+	req := historyservice.GetWorkflowExecutionRawHistoryRequest_builder{
 		Request: request,
-	}
+	}.Build()
 	targetVersionHistory, err := setRequestDefaultValueAndGetTargetVersionHistory(
 		req,
 		versionHistories,
@@ -98,22 +98,22 @@ func Test_SetRequestDefaultValueAndGetTargetVersionHistory_DefinedStartEvent(t *
 	versionHistories := versionhistory.NewVersionHistories(versionHistory)
 	namespaceID := uuid.NewString()
 
-	request := &adminservice.GetWorkflowExecutionRawHistoryRequest{
+	request := adminservice.GetWorkflowExecutionRawHistoryRequest_builder{
 		NamespaceId: namespaceID,
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: "workflowID",
 			RunId:      uuid.NewString(),
-		},
+		}.Build(),
 		StartEventId:      inputStartEventID,
 		StartEventVersion: inputStartVersion,
 		EndEventId:        common.EmptyEventID,
 		EndEventVersion:   common.EmptyVersion,
 		MaximumPageSize:   10,
 		NextPageToken:     nil,
-	}
-	req := &historyservice.GetWorkflowExecutionRawHistoryRequest{
+	}.Build()
+	req := historyservice.GetWorkflowExecutionRawHistoryRequest_builder{
 		Request: request,
-	}
+	}.Build()
 	targetVersionHistory, err := setRequestDefaultValueAndGetTargetVersionHistory(
 		req,
 		versionHistories,
@@ -138,23 +138,23 @@ func Test_SetRequestDefaultValueAndGetTargetVersionHistory_NonCurrentBranch(t *t
 	versionHistories := versionhistory.NewVersionHistories(versionHistory1)
 	_, _, err := versionhistory.AddAndSwitchVersionHistory(versionHistories, versionHistory2)
 	assert.NoError(t, err)
-	request := &adminservice.GetWorkflowExecutionRawHistoryRequest{
+	request := adminservice.GetWorkflowExecutionRawHistoryRequest_builder{
 		NamespaceId: uuid.NewString(),
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: "workflowID",
 			RunId:      uuid.NewString(),
-		},
+		}.Build(),
 		StartEventId:      9,
 		StartEventVersion: 20,
 		EndEventId:        inputEndEventID,
 		EndEventVersion:   inputEndVersion,
 		MaximumPageSize:   10,
 		NextPageToken:     nil,
-	}
+	}.Build()
 
-	req := &historyservice.GetWorkflowExecutionRawHistoryRequest{
+	req := historyservice.GetWorkflowExecutionRawHistoryRequest_builder{
 		Request: request,
-	}
+	}.Build()
 	targetVersionHistory, err := setRequestDefaultValueAndGetTargetVersionHistory(
 		req,
 		versionHistories,

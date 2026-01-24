@@ -55,10 +55,10 @@ func (s *executorSuite) TestExecute_Active() {
 	executable := NewMockExecutable(s.ctrl)
 	executable.EXPECT().GetNamespaceID().Return("namespace_id")
 	executable.EXPECT().GetTask().Return(nil)
-	ns := namespace.NewGlobalNamespaceForTest(nil, nil, &persistencespb.NamespaceReplicationConfig{
+	ns := namespace.NewGlobalNamespaceForTest(nil, nil, persistencespb.NamespaceReplicationConfig_builder{
 		ActiveClusterName: currentCluster,
 		Clusters:          []string{currentCluster},
-	}, 1)
+	}.Build(), 1)
 	s.registry.EXPECT().GetNamespaceByID(gomock.Any()).Return(ns, nil)
 	s.activeExecutor.EXPECT().Execute(gomock.Any(), gomock.Any()).Return(ExecuteResponse{
 		ExecutionMetricTags: nil,
@@ -74,10 +74,10 @@ func (s *executorSuite) TestExecute_Standby() {
 	executable := NewMockExecutable(s.ctrl)
 	executable.EXPECT().GetNamespaceID().Return("namespace_id")
 	executable.EXPECT().GetTask().Return(nil)
-	ns := namespace.NewGlobalNamespaceForTest(nil, nil, &persistencespb.NamespaceReplicationConfig{
+	ns := namespace.NewGlobalNamespaceForTest(nil, nil, persistencespb.NamespaceReplicationConfig_builder{
 		ActiveClusterName: nonCurrentCluster,
 		Clusters:          []string{currentCluster, nonCurrentCluster},
-	}, 1)
+	}.Build(), 1)
 	s.registry.EXPECT().GetNamespaceByID(gomock.Any()).Return(ns, nil)
 	s.standbyExecutor.EXPECT().Execute(gomock.Any(), gomock.Any()).Return(ExecuteResponse{
 		ExecutionMetricTags: nil,

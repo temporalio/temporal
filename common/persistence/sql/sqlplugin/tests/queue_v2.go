@@ -387,12 +387,12 @@ func testGetPartitionFailsForRangeDelete(ctx context.Context, t *testing.T, base
 	queueName := "test-queue-" + t.Name()
 	logger := &logRecorder{Logger: log.NewTestLogger()}
 	q := persistencesql.NewQueueV2(baseDB, logger, serialization.NewSerializer())
-	queuePB := persistencespb.Queue{
+	queuePB := persistencespb.Queue_builder{
 		Partitions: map[int32]*persistencespb.QueuePartition{
 			0: {},
 			1: {},
 		},
-	}
+	}.Build()
 	bytes, _ := queuePB.Marshal()
 	row := sqlplugin.QueueV2MetadataRow{
 		QueueType:        queueType,
@@ -645,12 +645,12 @@ func testListQueuesGetPartitionFails(ctx context.Context, t *testing.T, baseDB s
 	queueName := "test-queue-" + t.Name()
 	logger := &logRecorder{Logger: log.NewTestLogger()}
 	q := persistencesql.NewQueueV2(baseDB, logger, serialization.NewSerializer())
-	queuePB := persistencespb.Queue{
+	queuePB := persistencespb.Queue_builder{
 		Partitions: map[int32]*persistencespb.QueuePartition{
 			0: {},
 			1: {},
 		},
-	}
+	}.Build()
 	bytes, _ := queuePB.Marshal()
 	row := sqlplugin.QueueV2MetadataRow{
 		QueueType:        queueType,

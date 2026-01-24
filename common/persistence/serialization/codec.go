@@ -16,10 +16,10 @@ func ProtoEncode(m proto.Message) (*commonpb.DataBlob, error) {
 
 func encodeBlob(m proto.Message, encoding enumspb.EncodingType) (*commonpb.DataBlob, error) {
 	if m == nil {
-		return &commonpb.DataBlob{
+		return commonpb.DataBlob_builder{
 			Data:         nil,
 			EncodingType: encoding,
-		}, nil
+		}.Build(), nil
 	}
 
 	switch encoding {
@@ -28,19 +28,19 @@ func encodeBlob(m proto.Message, encoding enumspb.EncodingType) (*commonpb.DataB
 		if err != nil {
 			return nil, err
 		}
-		return &commonpb.DataBlob{
+		return commonpb.DataBlob_builder{
 			Data:         blob,
 			EncodingType: enumspb.ENCODING_TYPE_JSON,
-		}, nil
+		}.Build(), nil
 	case enumspb.ENCODING_TYPE_PROTO3:
 		data, err := proto.Marshal(m)
 		if err != nil {
 			return nil, NewSerializationError(enumspb.ENCODING_TYPE_PROTO3, err)
 		}
-		return &commonpb.DataBlob{
+		return commonpb.DataBlob_builder{
 			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 			Data:         data,
-		}, nil
+		}.Build(), nil
 	default:
 		return nil, NewUnknownEncodingTypeError(encoding.String(), enumspb.ENCODING_TYPE_JSON, enumspb.ENCODING_TYPE_PROTO3)
 	}
@@ -51,16 +51,16 @@ func Decode(data *commonpb.DataBlob, result proto.Message) error {
 		return NewDeserializationError(enumspb.ENCODING_TYPE_UNSPECIFIED, errors.New("cannot decode nil"))
 	}
 
-	switch data.EncodingType {
+	switch data.GetEncodingType() {
 	case enumspb.ENCODING_TYPE_JSON:
-		return codec.NewJSONPBEncoder().Decode(data.Data, result)
+		return codec.NewJSONPBEncoder().Decode(data.GetData(), result)
 	case enumspb.ENCODING_TYPE_PROTO3:
-		err := proto.Unmarshal(data.Data, result)
+		err := proto.Unmarshal(data.GetData(), result)
 		if err != nil {
 			return NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, err)
 		}
 		return nil
 	default:
-		return NewUnknownEncodingTypeError(data.EncodingType.String(), enumspb.ENCODING_TYPE_JSON, enumspb.ENCODING_TYPE_PROTO3)
+		return NewUnknownEncodingTypeError(data.GetEncodingType().String(), enumspb.ENCODING_TYPE_JSON, enumspb.ENCODING_TYPE_PROTO3)
 	}
 }

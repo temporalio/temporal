@@ -266,7 +266,7 @@ func (r *transactionMgrImpl) backfillWorkflowEventsReapply(
 		return 0, historyi.TransactionPolicyActive, err
 	}
 	isWorkflowRunning := targetWorkflow.GetMutableState().IsWorkflowExecutionRunning()
-	targetWorkflowActiveCluster := targetWorkflow.GetMutableState().GetNamespaceEntry().ActiveClusterName(targetWorkflow.GetMutableState().GetExecutionInfo().WorkflowId)
+	targetWorkflowActiveCluster := targetWorkflow.GetMutableState().GetNamespaceEntry().ActiveClusterName(targetWorkflow.GetMutableState().GetExecutionInfo().GetWorkflowId())
 	currentCluster := r.clusterMetadata.GetCurrentClusterName()
 	isActiveCluster := targetWorkflowActiveCluster == currentCluster
 
@@ -302,8 +302,8 @@ func (r *transactionMgrImpl) backfillWorkflowEventsReapply(
 		// need to reset target workflow (which is also the current workflow)
 		// to accept events to be reapplied
 		baseMutableState := targetWorkflow.GetMutableState()
-		namespaceID := namespace.ID(baseMutableState.GetExecutionInfo().NamespaceId)
-		workflowID := baseMutableState.GetExecutionInfo().WorkflowId
+		namespaceID := namespace.ID(baseMutableState.GetExecutionInfo().GetNamespaceId())
+		workflowID := baseMutableState.GetExecutionInfo().GetWorkflowId()
 		baseRunID := baseMutableState.GetExecutionState().GetRunId()
 		resetRunID := uuid.NewString()
 		baseRebuildLastEventID := baseMutableState.GetLastCompletedWorkflowTaskStartedEventId()
@@ -437,10 +437,10 @@ func (r *transactionMgrImpl) LoadWorkflow(
 		ctx,
 		r.shardContext,
 		namespaceID,
-		&commonpb.WorkflowExecution{
+		commonpb.WorkflowExecution_builder{
 			WorkflowId: workflowID,
 			RunId:      runID,
-		},
+		}.Build(),
 		archetypeID,
 		locks.PriorityHigh,
 	)
@@ -472,9 +472,9 @@ func (r *transactionMgrImpl) isWorkflowCurrent(
 	// target workflow is not guaranteed to be current workflow, do additional check
 	executionInfo := targetWorkflow.GetMutableState().GetExecutionInfo()
 	executionState := targetWorkflow.GetMutableState().GetExecutionState()
-	namespaceID := namespace.ID(executionInfo.NamespaceId)
-	workflowID := executionInfo.WorkflowId
-	runID := executionState.RunId
+	namespaceID := namespace.ID(executionInfo.GetNamespaceId())
+	workflowID := executionInfo.GetWorkflowId()
+	runID := executionState.GetRunId()
 
 	currentRunID, err := r.GetCurrentWorkflowRunID(
 		ctx,

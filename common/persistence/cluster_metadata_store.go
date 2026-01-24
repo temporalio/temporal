@@ -156,7 +156,7 @@ func (m *clusterMetadataManagerImpl) SaveClusterMetadata(
 	oldClusterMetadata, err := m.GetClusterMetadata(ctx, &GetClusterMetadataRequest{ClusterName: request.GetClusterName()})
 	if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
 		return m.persistence.SaveClusterMetadata(ctx, &InternalSaveClusterMetadataRequest{
-			ClusterName:     request.ClusterName,
+			ClusterName:     request.GetClusterName(),
 			ClusterMetadata: mcm,
 			Version:         request.Version,
 		})
@@ -169,7 +169,7 @@ func (m *clusterMetadataManagerImpl) SaveClusterMetadata(
 	}
 
 	return m.persistence.SaveClusterMetadata(ctx, &InternalSaveClusterMetadataRequest{
-		ClusterName:     request.ClusterName,
+		ClusterName:     request.GetClusterName(),
 		ClusterMetadata: mcm,
 		Version:         request.Version,
 	})
@@ -202,15 +202,15 @@ func (m *clusterMetadataManagerImpl) convertInternalGetClusterMetadataResponse(
 
 // immutableFieldsChanged returns true if any of immutable fields changed.
 func immutableFieldsChanged(old *persistencespb.ClusterMetadata, cur *persistencespb.ClusterMetadata) bool {
-	if (old.ClusterName != "" && old.ClusterName != cur.ClusterName) ||
-		(old.ClusterId != "" && old.ClusterId != cur.ClusterId) ||
-		(old.HistoryShardCount != 0 && old.HistoryShardCount != cur.HistoryShardCount) ||
-		(old.IsGlobalNamespaceEnabled && !cur.IsGlobalNamespaceEnabled) {
+	if (old.GetClusterName() != "" && old.GetClusterName() != cur.GetClusterName()) ||
+		(old.GetClusterId() != "" && old.GetClusterId() != cur.GetClusterId()) ||
+		(old.GetHistoryShardCount() != 0 && old.GetHistoryShardCount() != cur.GetHistoryShardCount()) ||
+		(old.GetIsGlobalNamespaceEnabled() && !cur.GetIsGlobalNamespaceEnabled()) {
 		return true
 	}
-	if old.IsGlobalNamespaceEnabled {
-		if (old.FailoverVersionIncrement != 0 && old.FailoverVersionIncrement != cur.FailoverVersionIncrement) ||
-			(old.InitialFailoverVersion != 0 && old.InitialFailoverVersion != cur.InitialFailoverVersion) {
+	if old.GetIsGlobalNamespaceEnabled() {
+		if (old.GetFailoverVersionIncrement() != 0 && old.GetFailoverVersionIncrement() != cur.GetFailoverVersionIncrement()) ||
+			(old.GetInitialFailoverVersion() != 0 && old.GetInitialFailoverVersion() != cur.GetInitialFailoverVersion()) {
 			return true
 		}
 	}

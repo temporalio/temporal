@@ -45,7 +45,7 @@ func TestNormalizeAndValidate(t *testing.T) {
 		},
 		{
 			name:             "Valid name",
-			taskQueue:        &taskqueuepb.TaskQueue{Name: "valid-name"},
+			taskQueue:        taskqueuepb.TaskQueue_builder{Name: "valid-name"}.Build(),
 			defaultVal:       "",
 			maxIDLengthLimit: 100,
 			expectedError:    "",
@@ -53,7 +53,7 @@ func TestNormalizeAndValidate(t *testing.T) {
 		},
 		{
 			name:             "Name exactly at max length",
-			taskQueue:        &taskqueuepb.TaskQueue{Name: strings.Repeat("a", 100)},
+			taskQueue:        taskqueuepb.TaskQueue_builder{Name: strings.Repeat("a", 100)}.Build(),
 			defaultVal:       "",
 			maxIDLengthLimit: 100,
 			expectedError:    "",
@@ -61,7 +61,7 @@ func TestNormalizeAndValidate(t *testing.T) {
 		},
 		{
 			name:             "Name one character over max length",
-			taskQueue:        &taskqueuepb.TaskQueue{Name: strings.Repeat("a", 101)},
+			taskQueue:        taskqueuepb.TaskQueue_builder{Name: strings.Repeat("a", 101)}.Build(),
 			defaultVal:       "",
 			maxIDLengthLimit: 100,
 			expectedError:    "taskQueue length exceeds limit",
@@ -69,7 +69,7 @@ func TestNormalizeAndValidate(t *testing.T) {
 		},
 		{
 			name:             "Reserved prefix",
-			taskQueue:        &taskqueuepb.TaskQueue{Name: reservedTaskQueuePrefix + "name"},
+			taskQueue:        taskqueuepb.TaskQueue_builder{Name: reservedTaskQueuePrefix + "name"}.Build(),
 			defaultVal:       "",
 			maxIDLengthLimit: 100,
 			expectedError:    "task queue name cannot start with reserved prefix /_sys/",
@@ -78,7 +78,7 @@ func TestNormalizeAndValidate(t *testing.T) {
 		},
 		{
 			name:             "Sticky queue with valid normal name",
-			taskQueue:        &taskqueuepb.TaskQueue{Name: "sticky", Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: "normal"},
+			taskQueue:        taskqueuepb.TaskQueue_builder{Name: "sticky", Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: "normal"}.Build(),
 			defaultVal:       "",
 			maxIDLengthLimit: 100,
 			expectedError:    "",
@@ -86,7 +86,7 @@ func TestNormalizeAndValidate(t *testing.T) {
 		},
 		{
 			name:             "Non-sticky queue with normal name set",
-			taskQueue:        &taskqueuepb.TaskQueue{Name: "normal", Kind: enumspb.TASK_QUEUE_KIND_NORMAL, NormalName: "should-be-ignored"},
+			taskQueue:        taskqueuepb.TaskQueue_builder{Name: "normal", Kind: enumspb.TASK_QUEUE_KIND_NORMAL, NormalName: "should-be-ignored"}.Build(),
 			defaultVal:       "",
 			maxIDLengthLimit: 100,
 			expectedError:    "",
@@ -94,7 +94,7 @@ func TestNormalizeAndValidate(t *testing.T) {
 		},
 		{
 			name:             "Task queue with unspecified kind",
-			taskQueue:        &taskqueuepb.TaskQueue{Name: "unspecified", Kind: enumspb.TASK_QUEUE_KIND_UNSPECIFIED},
+			taskQueue:        taskqueuepb.TaskQueue_builder{Name: "unspecified", Kind: enumspb.TASK_QUEUE_KIND_UNSPECIFIED}.Build(),
 			defaultVal:       "",
 			maxIDLengthLimit: 100,
 			expectedError:    "",

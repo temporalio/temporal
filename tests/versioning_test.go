@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/tests/testcore"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -360,10 +361,10 @@ func (s *VersioningIntegSuite) TestBasicVersionUpdate() {
 	foo := s.prefixed("foo")
 	s.addNewDefaultBuildId(ctx, tq, foo)
 
-	res2, err := s.FrontendClient().GetWorkerBuildIdCompatibility(ctx, &workflowservice.GetWorkerBuildIdCompatibilityRequest{
+	res2, err := s.FrontendClient().GetWorkerBuildIdCompatibility(ctx, workflowservice.GetWorkerBuildIdCompatibilityRequest_builder{
 		Namespace: s.Namespace().String(),
 		TaskQueue: tq,
-	})
+	}.Build())
 	s.NoError(err)
 	s.NotNil(res2)
 	s.Equal(foo, getCurrentDefault(res2))
@@ -378,10 +379,10 @@ func (s *VersioningIntegSuite) TestSeriesOfUpdates() {
 	}
 	s.addCompatibleBuildId(ctx, tq, s.prefixed("foo-2.1"), s.prefixed("foo-2"), false)
 
-	res, err := s.FrontendClient().GetWorkerBuildIdCompatibility(ctx, &workflowservice.GetWorkerBuildIdCompatibilityRequest{
+	res, err := s.FrontendClient().GetWorkerBuildIdCompatibility(ctx, workflowservice.GetWorkerBuildIdCompatibilityRequest_builder{
 		Namespace: s.Namespace().String(),
 		TaskQueue: tq,
-	})
+	}.Build())
 	s.NoError(err)
 	s.NotNil(res)
 	s.Equal(s.prefixed("foo-9"), getCurrentDefault(res))
@@ -393,16 +394,14 @@ func (s *VersioningIntegSuite) TestLinkToNonexistentCompatibleVersionReturnsNotF
 	ctx := testcore.NewContext()
 	tq := "functional-versioning-compat-not-found"
 
-	res, err := s.FrontendClient().UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
+	res, err := s.FrontendClient().UpdateWorkerBuildIdCompatibility(ctx, workflowservice.UpdateWorkerBuildIdCompatibilityRequest_builder{
 		Namespace: s.Namespace().String(),
 		TaskQueue: tq,
-		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewCompatibleBuildId{
-			AddNewCompatibleBuildId: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewCompatibleVersion{
-				NewBuildId:                "foo",
-				ExistingCompatibleBuildId: "i don't exist yo",
-			},
-		},
-	})
+		AddNewCompatibleBuildId: workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewCompatibleVersion_builder{
+			NewBuildId:                "foo",
+			ExistingCompatibleBuildId: "i don't exist yo",
+		}.Build(),
+	}.Build())
 	s.Error(err)
 	s.Nil(res)
 	s.IsType(&serviceerror.NotFound{}, err)
@@ -417,10 +416,10 @@ func (s *VersioningIntegSuite) TestVersioningStatePersistsAcrossUnload() {
 	// Unload task queue to make sure the data is there when we load it again.
 	s.unloadTaskQueue(ctx, tq)
 
-	res, err := s.FrontendClient().GetWorkerBuildIdCompatibility(ctx, &workflowservice.GetWorkerBuildIdCompatibilityRequest{
+	res, err := s.FrontendClient().GetWorkerBuildIdCompatibility(ctx, workflowservice.GetWorkerBuildIdCompatibilityRequest_builder{
 		Namespace: s.Namespace().String(),
 		TaskQueue: tq,
-	})
+	}.Build())
 	s.NoError(err)
 	s.NotNil(res)
 	s.Equal(s.prefixed("foo"), getCurrentDefault(res))
@@ -448,25 +447,21 @@ func (s *VersioningIntegSuite) TestMaxTaskQueuesPerBuildIdEnforced() {
 	// Map a 3 task queues to this build ID and verify success
 	for i := 1; i <= 3; i++ {
 		taskQueue := fmt.Sprintf("q-%s-%d", s.T().Name(), i)
-		_, err := s.FrontendClient().UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
-			Namespace: s.Namespace().String(),
-			TaskQueue: taskQueue,
-			Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
-				AddNewBuildIdInNewDefaultSet: buildId,
-			},
-		})
+		_, err := s.FrontendClient().UpdateWorkerBuildIdCompatibility(ctx, workflowservice.UpdateWorkerBuildIdCompatibilityRequest_builder{
+			Namespace:                    s.Namespace().String(),
+			TaskQueue:                    taskQueue,
+			AddNewBuildIdInNewDefaultSet: proto.String(buildId),
+		}.Build())
 		s.NoError(err)
 	}
 
 	// Map a fourth task queue to this build ID and verify it errors
 	taskQueue := fmt.Sprintf("q-%s-%d", s.T().Name(), 4)
-	_, err := s.FrontendClient().UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
-		Namespace: s.Namespace().String(),
-		TaskQueue: taskQueue,
-		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
-			AddNewBuildIdInNewDefaultSet: buildId,
-		},
-	})
+	_, err := s.FrontendClient().UpdateWorkerBuildIdCompatibility(ctx, workflowservice.UpdateWorkerBuildIdCompatibilityRequest_builder{
+		Namespace:                    s.Namespace().String(),
+		TaskQueue:                    taskQueue,
+		AddNewBuildIdInNewDefaultSet: proto.String(buildId),
+	}.Build())
 	var failedPreconditionError *serviceerror.FailedPrecondition
 	s.ErrorAs(err, &failedPreconditionError)
 	s.Equal("Exceeded max task queues allowed to be mapped to a single build ID: 3", failedPreconditionError.Message)
@@ -764,7 +759,7 @@ func (s *VersioningIntegSuite) unversionedWorkflowStaysUnversioned() {
 	dw, err := s.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
 	s.NoError(err)
 	s.Equal(1, len(dw.GetPendingActivities()))
-	s.Nil(dw.GetPendingActivities()[0].GetAssignedBuildId())
+	s.False(dw.GetPendingActivities()[0].HasAssignedBuildId())
 	close(rulesUpdated)
 
 	var out string
@@ -2293,7 +2288,7 @@ func (s *VersioningIntegSuite) TestRedirectWithConcurrentActivities() {
 			if buildId > maxBuildId {
 				redirectAppliedToActivityTask = true
 			}
-			if activityStarted.Attempt > 1 {
+			if activityStarted.GetAttempt() > 1 {
 				activityRetried = true
 			}
 			s.True(taskStartedStamp.GetUseVersioning())
@@ -2308,10 +2303,10 @@ func (s *VersioningIntegSuite) TestRedirectWithConcurrentActivities() {
 				taskRedirectCounter = wfStarted.GetBuildIdRedirectCounter()
 			}
 		}
-		if he.EventTime.AsTime().Before(maxStartedTimestamp) {
+		if he.GetEventTime().AsTime().Before(maxStartedTimestamp) {
 			sawUnorderedEvents = true
 		} else {
-			maxStartedTimestamp = he.EventTime.AsTime()
+			maxStartedTimestamp = he.GetEventTime().AsTime()
 		}
 		if buildId > maxBuildId {
 			maxBuildId = buildId
@@ -2425,64 +2420,60 @@ func (s *VersioningIntegSuite) TestDispatchActivityEager() {
 	_, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
 	s.Require().NoError(err)
 
-	pollResponse, err := s.SdkClient().WorkflowService().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+	pollResponse, err := s.SdkClient().WorkflowService().PollWorkflowTaskQueue(ctx, workflowservice.PollWorkflowTaskQueueRequest_builder{
 		Namespace: s.Namespace().String(),
-		TaskQueue: &taskqueuepb.TaskQueue{Name: tq},
+		TaskQueue: taskqueuepb.TaskQueue_builder{Name: tq}.Build(),
 		Identity:  "test",
-		WorkerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
+		WorkerVersionCapabilities: commonpb.WorkerVersionCapabilities_builder{
 			BuildId: v1,
-		},
-	})
+		}.Build(),
+	}.Build())
 	s.Require().NoError(err)
 	startToCloseTimeout := time.Minute
 
-	completionResponse, err := s.SdkClient().WorkflowService().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+	completionResponse, err := s.SdkClient().WorkflowService().RespondWorkflowTaskCompleted(ctx, workflowservice.RespondWorkflowTaskCompletedRequest_builder{
 		Identity: "test",
-		WorkerVersionStamp: &commonpb.WorkerVersionStamp{
+		WorkerVersionStamp: commonpb.WorkerVersionStamp_builder{
 			BuildId:       v1,
 			UseVersioning: true,
-		},
-		TaskToken: pollResponse.TaskToken,
+		}.Build(),
+		TaskToken: pollResponse.GetTaskToken(),
 		Commands: []*commandpb.Command{
-			{
+			commandpb.Command_builder{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{
-					ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-						ActivityId: "compatible",
-						TaskQueue: &taskqueuepb.TaskQueue{
-							Name: tq,
-						},
-						StartToCloseTimeout: durationpb.New(startToCloseTimeout),
-						ActivityType: &commonpb.ActivityType{
-							Name: "ignore",
-						},
-						RequestEagerExecution: true,
-						UseWorkflowBuildId:    true,
-					},
-				},
-			},
-			{
+				ScheduleActivityTaskCommandAttributes: commandpb.ScheduleActivityTaskCommandAttributes_builder{
+					ActivityId: "compatible",
+					TaskQueue: taskqueuepb.TaskQueue_builder{
+						Name: tq,
+					}.Build(),
+					StartToCloseTimeout: durationpb.New(startToCloseTimeout),
+					ActivityType: commonpb.ActivityType_builder{
+						Name: "ignore",
+					}.Build(),
+					RequestEagerExecution: true,
+					UseWorkflowBuildId:    true,
+				}.Build(),
+			}.Build(),
+			commandpb.Command_builder{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{
-					ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-						ActivityId: "latest",
-						TaskQueue: &taskqueuepb.TaskQueue{
-							Name: tq,
-						},
-						StartToCloseTimeout: durationpb.New(startToCloseTimeout),
-						ActivityType: &commonpb.ActivityType{
-							Name: "ignore",
-						},
-						RequestEagerExecution: true,
-						UseWorkflowBuildId:    false,
-					},
-				},
-			},
+				ScheduleActivityTaskCommandAttributes: commandpb.ScheduleActivityTaskCommandAttributes_builder{
+					ActivityId: "latest",
+					TaskQueue: taskqueuepb.TaskQueue_builder{
+						Name: tq,
+					}.Build(),
+					StartToCloseTimeout: durationpb.New(startToCloseTimeout),
+					ActivityType: commonpb.ActivityType_builder{
+						Name: "ignore",
+					}.Build(),
+					RequestEagerExecution: true,
+					UseWorkflowBuildId:    false,
+				}.Build(),
+			}.Build(),
 		},
-	})
+	}.Build())
 	s.Require().NoError(err)
-	s.Require().Equal(1, len(completionResponse.ActivityTasks))
-	s.Require().Equal("compatible", completionResponse.ActivityTasks[0].ActivityId)
+	s.Require().Equal(1, len(completionResponse.GetActivityTasks()))
+	s.Require().Equal("compatible", completionResponse.GetActivityTasks()[0].GetActivityId())
 }
 
 func (s *VersioningIntegSuite) TestDispatchActivityCrossTQFails() {
@@ -3919,14 +3910,14 @@ func (s *VersioningIntegSuite) validateBuildIdAfterReset(ctx context.Context, wf
 	s.waitForAssignmentRulePropagation(ctx, tq, rule)
 
 	// now reset the wf to first wf task
-	wfr, err := s.SdkClient().ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
+	wfr, err := s.SdkClient().ResetWorkflowExecution(ctx, workflowservice.ResetWorkflowExecutionRequest_builder{
 		Namespace: s.Namespace().String(),
-		WorkflowExecution: &commonpb.WorkflowExecution{
+		WorkflowExecution: commonpb.WorkflowExecution_builder{
 			WorkflowId: run.GetID(),
 			RunId:      run.GetRunID(),
-		},
+		}.Build(),
 		WorkflowTaskFinishEventId: 3,
-	})
+	}.Build())
 	s.NoError(err)
 
 	// if a build ID is inherited, we should keep using that, otherwise should use the latest rules
@@ -3946,14 +3937,14 @@ func (s *VersioningIntegSuite) validateBuildIdAfterReset(ctx context.Context, wf
 		inheritedBuildId)
 
 	// now reset the original wf to second wf task and make sure it remains in v1
-	wfr, err = s.SdkClient().ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
+	wfr, err = s.SdkClient().ResetWorkflowExecution(ctx, workflowservice.ResetWorkflowExecutionRequest_builder{
 		Namespace: s.Namespace().String(),
-		WorkflowExecution: &commonpb.WorkflowExecution{
+		WorkflowExecution: commonpb.WorkflowExecution_builder{
 			WorkflowId: run.GetID(),
 			RunId:      run.GetRunID(),
-		},
+		}.Build(),
 		WorkflowTaskFinishEventId: 9,
-	})
+	}.Build())
 	s.NoError(err)
 
 	run3 := s.SdkClient().GetWorkflow(ctx, run.GetID(), wfr.GetRunId())
@@ -3995,10 +3986,10 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_Reachabil
 	// 2. Wait for visibility to show A as running with BuildId SearchAttribute 'assigned:A'
 	s.Eventually(func() bool {
 		queryARunning := fmt.Sprintf("TaskQueue = '%s' AND BuildIds IN ('assigned:A') AND ExecutionStatus = \"Running\"", tq)
-		resp, err := s.FrontendClient().CountWorkflowExecutions(ctx, &workflowservice.CountWorkflowExecutionsRequest{
+		resp, err := s.FrontendClient().CountWorkflowExecutions(ctx, workflowservice.CountWorkflowExecutionsRequest_builder{
 			Namespace: s.Namespace().String(),
 			Query:     queryARunning,
-		})
+		}.Build())
 		s.Nil(err)
 		return resp.GetCount() > 0
 	}, 5*time.Second, 50*time.Millisecond)
@@ -4007,7 +3998,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_Reachabil
 	s.commitBuildId(ctx, tq, "B", true, s.getVersioningRules(ctx, tq).GetConflictToken(), true)
 
 	// 4. Query reachability(A) --> reachable by visibility db, populating reachability open WF cache with A: true
-	s.getBuildIdReachability(ctx, tq, &taskqueuepb.TaskQueueVersionSelection{BuildIds: []string{"A"}}, map[string]enumspb.BuildIdTaskReachability{
+	s.getBuildIdReachability(ctx, tq, taskqueuepb.TaskQueueVersionSelection_builder{BuildIds: []string{"A"}}.Build(), map[string]enumspb.BuildIdTaskReachability{
 		"A": enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, // reachable by visibility (db)
 	})
 
@@ -4016,7 +4007,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_Reachabil
 
 	// 6. Query reachability(A) --> eventually shows closed_only by visibility db (after TTL passes and A is closed in visibility)
 	s.Eventually(func() bool {
-		return s.checkBuildIdReachability(ctx, tq, &taskqueuepb.TaskQueueVersionSelection{BuildIds: []string{"A"}}, map[string]enumspb.BuildIdTaskReachability{
+		return s.checkBuildIdReachability(ctx, tq, taskqueuepb.TaskQueueVersionSelection_builder{BuildIds: []string{"A"}}.Build(), map[string]enumspb.BuildIdTaskReachability{
 			"A": enumspb.BUILD_ID_TASK_REACHABILITY_CLOSED_WORKFLOWS_ONLY, // closed_only by visibility db (after TTL)
 		})
 	}, 5*time.Second, 50*time.Millisecond)
@@ -4032,7 +4023,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_BasicReac
 	})
 
 	s.addAssignmentRule(ctx, tq, "A")
-	s.getBuildIdReachability(ctx, tq, &taskqueuepb.TaskQueueVersionSelection{BuildIds: []string{"", "A"}}, map[string]enumspb.BuildIdTaskReachability{
+	s.getBuildIdReachability(ctx, tq, taskqueuepb.TaskQueueVersionSelection_builder{BuildIds: []string{"", "A"}}.Build(), map[string]enumspb.BuildIdTaskReachability{
 		"A": enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE,   // reachable by default assignment rule
 		"":  enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE, // unreachable because no longer default
 	})
@@ -4063,10 +4054,10 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_BasicReac
 	// wait for visibility to show A as running with BuildId SearchAttribute 'assigned:A'
 	s.Eventually(func() bool {
 		queryARunning := fmt.Sprintf("TaskQueue = '%s' AND BuildIds IN ('assigned:A') AND ExecutionStatus = \"Running\"", tq)
-		resp, err := s.FrontendClient().CountWorkflowExecutions(ctx, &workflowservice.CountWorkflowExecutionsRequest{
+		resp, err := s.FrontendClient().CountWorkflowExecutions(ctx, workflowservice.CountWorkflowExecutionsRequest_builder{
 			Namespace: s.Namespace().String(),
 			Query:     queryARunning,
-		})
+		}.Build())
 		s.Nil(err)
 		return resp.GetCount() > 0
 	}, 3*time.Second, 50*time.Millisecond)
@@ -4076,7 +4067,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_BasicReac
 	s.getBuildIdReachability(ctx, tq, nil, map[string]enumspb.BuildIdTaskReachability{
 		"B": enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, // reachable by default assignment rule
 	})
-	s.getBuildIdReachability(ctx, tq, &taskqueuepb.TaskQueueVersionSelection{BuildIds: []string{"A", "B"}}, map[string]enumspb.BuildIdTaskReachability{
+	s.getBuildIdReachability(ctx, tq, taskqueuepb.TaskQueueVersionSelection_builder{BuildIds: []string{"A", "B"}}.Build(), map[string]enumspb.BuildIdTaskReachability{
 		"A": enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, // reachable by visibility
 		"B": enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, // reachable by default assignment rule
 	})
@@ -4086,7 +4077,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_BasicReac
 
 	// Query reachability(A) --> eventually shows closed_only by visibility db (after TTL passes and A is closed in visibility)
 	s.Eventually(func() bool {
-		return s.checkBuildIdReachability(ctx, tq, &taskqueuepb.TaskQueueVersionSelection{BuildIds: []string{"A"}}, map[string]enumspb.BuildIdTaskReachability{
+		return s.checkBuildIdReachability(ctx, tq, taskqueuepb.TaskQueueVersionSelection_builder{BuildIds: []string{"A"}}.Build(), map[string]enumspb.BuildIdTaskReachability{
 			"A": enumspb.BUILD_ID_TASK_REACHABILITY_CLOSED_WORKFLOWS_ONLY, // closed_only by visibility db (after TTL)
 			"B": enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE,             // reachable by default assignment rule
 		})
@@ -4114,16 +4105,16 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Unversioned() {
 	}
 
 	s.Eventually(func() bool {
-		resp, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+		resp, err := s.FrontendClient().DescribeTaskQueue(ctx, workflowservice.DescribeTaskQueueRequest_builder{
 			Namespace:              s.Namespace().String(),
-			TaskQueue:              &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			TaskQueue:              taskqueuepb.TaskQueue_builder{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 			ApiMode:                enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED,
 			Versions:               nil, // default version, in this case unversioned queue
 			TaskQueueTypes:         nil, // both types
 			ReportPollers:          true,
 			ReportTaskReachability: true,
 			ReportStats:            false,
-		})
+		}.Build())
 		s.NoError(err)
 		s.NotNil(resp)
 		s.Assert().Equal(1, len(resp.GetVersionsInfo()), "should be 1 because only default/unversioned queue")
@@ -4165,15 +4156,15 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_ReportFlags() {
 
 	// wait for pollers to show up, verify both ReportPollers and ReportTaskReachability
 	s.Eventually(func() bool {
-		resp, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+		resp, err := s.FrontendClient().DescribeTaskQueue(ctx, workflowservice.DescribeTaskQueueRequest_builder{
 			Namespace:              s.Namespace().String(),
-			TaskQueue:              &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			TaskQueue:              taskqueuepb.TaskQueue_builder{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 			ApiMode:                enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED,
 			Versions:               nil, // default version, in this case unversioned queue
 			TaskQueueTypes:         nil, // both types
 			ReportPollers:          true,
 			ReportTaskReachability: true,
-		})
+		}.Build())
 		s.NoError(err)
 		s.NotNil(resp)
 		s.Assert().Equal(1, len(resp.GetVersionsInfo()), "should be 1 because only default/unversioned queue")
@@ -4194,14 +4185,14 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_ReportFlags() {
 	}, 3*time.Second, 50*time.Millisecond)
 
 	// ask for reachability only
-	resp, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+	resp, err := s.FrontendClient().DescribeTaskQueue(ctx, workflowservice.DescribeTaskQueueRequest_builder{
 		Namespace:              s.Namespace().String(),
-		TaskQueue:              &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		TaskQueue:              taskqueuepb.TaskQueue_builder{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 		ApiMode:                enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED,
 		Versions:               nil, // default version, in this case unversioned queue
 		TaskQueueTypes:         nil, // both types
 		ReportTaskReachability: true,
-	})
+	}.Build())
 	s.NoError(err)
 	s.NotNil(resp)
 	s.Assert().Equal(1, len(resp.GetVersionsInfo()), "should be 1 because only default/unversioned queue")
@@ -4212,14 +4203,14 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_ReportFlags() {
 	}
 
 	// ask for pollers only
-	resp, err = s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+	resp, err = s.FrontendClient().DescribeTaskQueue(ctx, workflowservice.DescribeTaskQueueRequest_builder{
 		Namespace:      s.Namespace().String(),
-		TaskQueue:      &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		TaskQueue:      taskqueuepb.TaskQueue_builder{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 		ApiMode:        enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED,
 		Versions:       nil, // default version, in this case unversioned queue
 		TaskQueueTypes: nil, // both types
 		ReportPollers:  true,
-	})
+	}.Build())
 	s.NoError(err)
 	s.NotNil(resp)
 	s.Assert().Equal(1, len(resp.GetVersionsInfo()), "should be 1 because only default/unversioned queue")
@@ -4236,28 +4227,28 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_TooManyBuildIds() {
 	defer cancel()
 
 	buildIds := []string{"A", "B", "C", "D"}
-	resp, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+	resp, err := s.FrontendClient().DescribeTaskQueue(ctx, workflowservice.DescribeTaskQueueRequest_builder{
 		Namespace:              s.Namespace().String(),
-		TaskQueue:              &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		TaskQueue:              taskqueuepb.TaskQueue_builder{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 		ApiMode:                enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED,
-		Versions:               &taskqueuepb.TaskQueueVersionSelection{BuildIds: buildIds},
+		Versions:               taskqueuepb.TaskQueueVersionSelection_builder{BuildIds: buildIds}.Build(),
 		TaskQueueTypes:         nil, // both types
 		ReportPollers:          false,
 		ReportTaskReachability: true,
-	})
+	}.Build())
 	s.NoError(err)
 	s.NotNil(resp)
 
 	buildIds = []string{"A", "B", "C", "D", "E"}
-	resp, err = s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+	resp, err = s.FrontendClient().DescribeTaskQueue(ctx, workflowservice.DescribeTaskQueueRequest_builder{
 		Namespace:              s.Namespace().String(),
-		TaskQueue:              &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		TaskQueue:              taskqueuepb.TaskQueue_builder{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 		ApiMode:                enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED,
-		Versions:               &taskqueuepb.TaskQueueVersionSelection{BuildIds: buildIds},
+		Versions:               taskqueuepb.TaskQueueVersionSelection_builder{BuildIds: buildIds}.Build(),
 		TaskQueueTypes:         nil, // both types
 		ReportPollers:          false,
 		ReportTaskReachability: true,
-	})
+	}.Build())
 	s.Error(err)
 	s.Nil(resp)
 }
@@ -4310,15 +4301,15 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueLegacy_VersionSets() {
 	defer w2.Stop()
 
 	s.Eventually(func() bool {
-		resp, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+		resp, err := s.FrontendClient().DescribeTaskQueue(ctx, workflowservice.DescribeTaskQueueRequest_builder{
 			Namespace:     s.Namespace().String(),
-			TaskQueue:     &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			TaskQueue:     taskqueuepb.TaskQueue_builder{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-		})
+		}.Build())
 		s.NoError(err)
 		havePoller := func(v string) bool {
-			for _, p := range resp.Pollers {
-				if p.WorkerVersionCapabilities.UseVersioning && v == p.WorkerVersionCapabilities.BuildId {
+			for _, p := range resp.GetPollers() {
+				if p.GetWorkerVersionCapabilities().GetUseVersioning() && v == p.GetWorkerVersionCapabilities().GetBuildId() {
 					return true
 				}
 			}
@@ -4417,10 +4408,10 @@ func (s *VersioningIntegSuite) prefixed(buildId string) string {
 // listVersioningRules lists rules and checks that the result is successful, returning the response.
 func (s *VersioningIntegSuite) getVersioningRules(
 	ctx context.Context, tq string) *workflowservice.GetWorkerVersioningRulesResponse {
-	res, err := s.FrontendClient().GetWorkerVersioningRules(ctx, &workflowservice.GetWorkerVersioningRulesRequest{
+	res, err := s.FrontendClient().GetWorkerVersioningRules(ctx, workflowservice.GetWorkerVersioningRulesRequest_builder{
 		Namespace: s.Namespace().String(),
 		TaskQueue: tq,
-	})
+	}.Build())
 	s.NoError(err)
 	s.NotNil(res)
 	return res
@@ -4431,19 +4422,17 @@ func (s *VersioningIntegSuite) getVersioningRules(
 func (s *VersioningIntegSuite) insertAssignmentRule(
 	ctx context.Context, tq, newBuildId string,
 	idx int32, conflictToken []byte, expectSuccess bool) []byte {
-	res, err := s.FrontendClient().UpdateWorkerVersioningRules(ctx, &workflowservice.UpdateWorkerVersioningRulesRequest{
+	res, err := s.FrontendClient().UpdateWorkerVersioningRules(ctx, workflowservice.UpdateWorkerVersioningRulesRequest_builder{
 		Namespace:     s.Namespace().String(),
 		TaskQueue:     tq,
 		ConflictToken: conflictToken,
-		Operation: &workflowservice.UpdateWorkerVersioningRulesRequest_InsertAssignmentRule{
-			InsertAssignmentRule: &workflowservice.UpdateWorkerVersioningRulesRequest_InsertBuildIdAssignmentRule{
-				RuleIndex: idx,
-				Rule: &taskqueuepb.BuildIdAssignmentRule{
-					TargetBuildId: newBuildId,
-				},
-			},
-		},
-	})
+		InsertAssignmentRule: workflowservice.UpdateWorkerVersioningRulesRequest_InsertBuildIdAssignmentRule_builder{
+			RuleIndex: idx,
+			Rule: taskqueuepb.BuildIdAssignmentRule_builder{
+				TargetBuildId: newBuildId,
+			}.Build(),
+		}.Build(),
+	}.Build())
 	if expectSuccess {
 		s.NoError(err)
 		s.NotNil(res)
@@ -4461,19 +4450,17 @@ func (s *VersioningIntegSuite) insertAssignmentRule(
 func (s *VersioningIntegSuite) replaceAssignmentRule(
 	ctx context.Context, tq, newBuildId string,
 	idx int32, conflictToken []byte, expectSuccess bool) []byte {
-	res, err := s.FrontendClient().UpdateWorkerVersioningRules(ctx, &workflowservice.UpdateWorkerVersioningRulesRequest{
+	res, err := s.FrontendClient().UpdateWorkerVersioningRules(ctx, workflowservice.UpdateWorkerVersioningRulesRequest_builder{
 		Namespace:     s.Namespace().String(),
 		TaskQueue:     tq,
 		ConflictToken: conflictToken,
-		Operation: &workflowservice.UpdateWorkerVersioningRulesRequest_ReplaceAssignmentRule{
-			ReplaceAssignmentRule: &workflowservice.UpdateWorkerVersioningRulesRequest_ReplaceBuildIdAssignmentRule{
-				RuleIndex: idx,
-				Rule: &taskqueuepb.BuildIdAssignmentRule{
-					TargetBuildId: newBuildId,
-				},
-			},
-		},
-	})
+		ReplaceAssignmentRule: workflowservice.UpdateWorkerVersioningRulesRequest_ReplaceBuildIdAssignmentRule_builder{
+			RuleIndex: idx,
+			Rule: taskqueuepb.BuildIdAssignmentRule_builder{
+				TargetBuildId: newBuildId,
+			}.Build(),
+		}.Build(),
+	}.Build())
 	if expectSuccess {
 		s.NoError(err)
 		s.NotNil(res)
@@ -4491,10 +4478,10 @@ func (s *VersioningIntegSuite) replaceAssignmentRule(
 func (s *VersioningIntegSuite) deleteAssignmentRule(
 	ctx context.Context, tq string,
 	idx int32, conflictToken []byte, expectSuccess bool) []byte {
-	getResp, err := s.FrontendClient().GetWorkerVersioningRules(ctx, &workflowservice.GetWorkerVersioningRulesRequest{
+	getResp, err := s.FrontendClient().GetWorkerVersioningRules(ctx, workflowservice.GetWorkerVersioningRulesRequest_builder{
 		Namespace: s.Namespace().String(),
 		TaskQueue: tq,
-	})
+	}.Build())
 	s.NoError(err)
 	s.NotNil(getResp)
 
@@ -4503,16 +4490,14 @@ func (s *VersioningIntegSuite) deleteAssignmentRule(
 		prevRule = getResp.GetAssignmentRules()[idx].GetRule()
 	}
 
-	res, err := s.FrontendClient().UpdateWorkerVersioningRules(ctx, &workflowservice.UpdateWorkerVersioningRulesRequest{
+	res, err := s.FrontendClient().UpdateWorkerVersioningRules(ctx, workflowservice.UpdateWorkerVersioningRulesRequest_builder{
 		Namespace:     s.Namespace().String(),
 		TaskQueue:     tq,
 		ConflictToken: conflictToken,
-		Operation: &workflowservice.UpdateWorkerVersioningRulesRequest_DeleteAssignmentRule{
-			DeleteAssignmentRule: &workflowservice.UpdateWorkerVersioningRulesRequest_DeleteBuildIdAssignmentRule{
-				RuleIndex: idx,
-			},
-		},
-	})
+		DeleteAssignmentRule: workflowservice.UpdateWorkerVersioningRulesRequest_DeleteBuildIdAssignmentRule_builder{
+			RuleIndex: idx,
+		}.Build(),
+	}.Build())
 	if expectSuccess {
 		s.NoError(err)
 		s.NotNil(res)
@@ -4537,19 +4522,17 @@ func (s *VersioningIntegSuite) deleteAssignmentRule(
 func (s *VersioningIntegSuite) insertRedirectRule(
 	ctx context.Context, tq, sourceBuildId, targetBuildId string,
 	conflictToken []byte, expectSuccess bool) []byte {
-	res, err := s.FrontendClient().UpdateWorkerVersioningRules(ctx, &workflowservice.UpdateWorkerVersioningRulesRequest{
+	res, err := s.FrontendClient().UpdateWorkerVersioningRules(ctx, workflowservice.UpdateWorkerVersioningRulesRequest_builder{
 		Namespace:     s.Namespace().String(),
 		TaskQueue:     tq,
 		ConflictToken: conflictToken,
-		Operation: &workflowservice.UpdateWorkerVersioningRulesRequest_AddCompatibleRedirectRule{
-			AddCompatibleRedirectRule: &workflowservice.UpdateWorkerVersioningRulesRequest_AddCompatibleBuildIdRedirectRule{
-				Rule: &taskqueuepb.CompatibleBuildIdRedirectRule{
-					SourceBuildId: sourceBuildId,
-					TargetBuildId: targetBuildId,
-				},
-			},
-		},
-	})
+		AddCompatibleRedirectRule: workflowservice.UpdateWorkerVersioningRulesRequest_AddCompatibleBuildIdRedirectRule_builder{
+			Rule: taskqueuepb.CompatibleBuildIdRedirectRule_builder{
+				SourceBuildId: sourceBuildId,
+				TargetBuildId: targetBuildId,
+			}.Build(),
+		}.Build(),
+	}.Build())
 	if expectSuccess {
 		s.NoError(err)
 		s.NotNil(res)
@@ -4574,19 +4557,17 @@ func (s *VersioningIntegSuite) insertRedirectRule(
 func (s *VersioningIntegSuite) replaceRedirectRule(
 	ctx context.Context, tq, sourceBuildId, targetBuildId string,
 	conflictToken []byte, expectSuccess bool) []byte {
-	res, err := s.FrontendClient().UpdateWorkerVersioningRules(ctx, &workflowservice.UpdateWorkerVersioningRulesRequest{
+	res, err := s.FrontendClient().UpdateWorkerVersioningRules(ctx, workflowservice.UpdateWorkerVersioningRulesRequest_builder{
 		Namespace:     s.Namespace().String(),
 		TaskQueue:     tq,
 		ConflictToken: conflictToken,
-		Operation: &workflowservice.UpdateWorkerVersioningRulesRequest_ReplaceCompatibleRedirectRule{
-			ReplaceCompatibleRedirectRule: &workflowservice.UpdateWorkerVersioningRulesRequest_ReplaceCompatibleBuildIdRedirectRule{
-				Rule: &taskqueuepb.CompatibleBuildIdRedirectRule{
-					SourceBuildId: sourceBuildId,
-					TargetBuildId: targetBuildId,
-				},
-			},
-		},
-	})
+		ReplaceCompatibleRedirectRule: workflowservice.UpdateWorkerVersioningRulesRequest_ReplaceCompatibleBuildIdRedirectRule_builder{
+			Rule: taskqueuepb.CompatibleBuildIdRedirectRule_builder{
+				SourceBuildId: sourceBuildId,
+				TargetBuildId: targetBuildId,
+			}.Build(),
+		}.Build(),
+	}.Build())
 	if expectSuccess {
 		s.NoError(err)
 		s.NotNil(res)
@@ -4611,16 +4592,14 @@ func (s *VersioningIntegSuite) replaceRedirectRule(
 func (s *VersioningIntegSuite) deleteRedirectRule(
 	ctx context.Context, tq, sourceBuildId string,
 	conflictToken []byte, expectSuccess bool) []byte {
-	res, err := s.FrontendClient().UpdateWorkerVersioningRules(ctx, &workflowservice.UpdateWorkerVersioningRulesRequest{
+	res, err := s.FrontendClient().UpdateWorkerVersioningRules(ctx, workflowservice.UpdateWorkerVersioningRulesRequest_builder{
 		Namespace:     s.Namespace().String(),
 		TaskQueue:     tq,
 		ConflictToken: conflictToken,
-		Operation: &workflowservice.UpdateWorkerVersioningRulesRequest_DeleteCompatibleRedirectRule{
-			DeleteCompatibleRedirectRule: &workflowservice.UpdateWorkerVersioningRulesRequest_DeleteCompatibleBuildIdRedirectRule{
-				SourceBuildId: sourceBuildId,
-			},
-		},
-	})
+		DeleteCompatibleRedirectRule: workflowservice.UpdateWorkerVersioningRulesRequest_DeleteCompatibleBuildIdRedirectRule_builder{
+			SourceBuildId: sourceBuildId,
+		}.Build(),
+	}.Build())
 	if expectSuccess {
 		s.NoError(err)
 		s.NotNil(res)
@@ -4645,17 +4624,15 @@ func (s *VersioningIntegSuite) deleteRedirectRule(
 func (s *VersioningIntegSuite) commitBuildId(
 	ctx context.Context, tq, targetBuildId string, force bool,
 	conflictToken []byte, expectSuccess bool) []byte {
-	res, err := s.FrontendClient().UpdateWorkerVersioningRules(ctx, &workflowservice.UpdateWorkerVersioningRulesRequest{
+	res, err := s.FrontendClient().UpdateWorkerVersioningRules(ctx, workflowservice.UpdateWorkerVersioningRulesRequest_builder{
 		Namespace:     s.Namespace().String(),
 		TaskQueue:     tq,
 		ConflictToken: conflictToken,
-		Operation: &workflowservice.UpdateWorkerVersioningRulesRequest_CommitBuildId_{
-			CommitBuildId: &workflowservice.UpdateWorkerVersioningRulesRequest_CommitBuildId{
-				TargetBuildId: targetBuildId,
-				Force:         force,
-			},
-		},
-	})
+		CommitBuildId: workflowservice.UpdateWorkerVersioningRulesRequest_CommitBuildId_builder{
+			TargetBuildId: targetBuildId,
+			Force:         force,
+		}.Build(),
+	}.Build())
 	if expectSuccess {
 		s.NoError(err)
 		s.NotNil(res)
@@ -4710,15 +4687,15 @@ func (s *VersioningIntegSuite) getBuildIdReachability(
 	taskQueue string,
 	versions *taskqueuepb.TaskQueueVersionSelection,
 	expectedReachability map[string]enumspb.BuildIdTaskReachability) {
-	resp, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+	resp, err := s.FrontendClient().DescribeTaskQueue(ctx, workflowservice.DescribeTaskQueueRequest_builder{
 		Namespace:              s.Namespace().String(),
-		TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		TaskQueue:              taskqueuepb.TaskQueue_builder{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 		ApiMode:                enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED,
 		Versions:               versions,
 		TaskQueueTypes:         nil, // both types
 		ReportPollers:          false,
 		ReportTaskReachability: true,
-	})
+	}.Build())
 	s.NoError(err)
 	s.NotNil(resp)
 	for buildId, vi := range resp.GetVersionsInfo() {
@@ -4733,15 +4710,15 @@ func (s *VersioningIntegSuite) checkBuildIdReachability(
 	taskQueue string,
 	versions *taskqueuepb.TaskQueueVersionSelection,
 	expectedReachability map[string]enumspb.BuildIdTaskReachability) bool {
-	resp, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+	resp, err := s.FrontendClient().DescribeTaskQueue(ctx, workflowservice.DescribeTaskQueueRequest_builder{
 		Namespace:              s.Namespace().String(),
-		TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		TaskQueue:              taskqueuepb.TaskQueue_builder{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 		ApiMode:                enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED,
 		Versions:               versions,
 		TaskQueueTypes:         nil, // both types
 		ReportPollers:          false,
 		ReportTaskReachability: true,
-	})
+	}.Build())
 	if err != nil {
 		return false
 	}
@@ -4762,13 +4739,11 @@ func (s *VersioningIntegSuite) checkBuildIdReachability(
 
 // addNewDefaultBuildId updates build ID info on a task queue with a new build ID in a new default set.
 func (s *VersioningIntegSuite) addNewDefaultBuildId(ctx context.Context, tq, newBuildId string) {
-	res, err := s.FrontendClient().UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
-		Namespace: s.Namespace().String(),
-		TaskQueue: tq,
-		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
-			AddNewBuildIdInNewDefaultSet: newBuildId,
-		},
-	})
+	res, err := s.FrontendClient().UpdateWorkerBuildIdCompatibility(ctx, workflowservice.UpdateWorkerBuildIdCompatibilityRequest_builder{
+		Namespace:                    s.Namespace().String(),
+		TaskQueue:                    tq,
+		AddNewBuildIdInNewDefaultSet: proto.String(newBuildId),
+	}.Build())
 	s.NoError(err)
 	s.NotNil(res)
 }
@@ -4778,29 +4753,25 @@ func (s *VersioningIntegSuite) addAssignmentRule(ctx context.Context, tq, buildI
 }
 
 func (s *VersioningIntegSuite) addAssignmentRuleWithRamp(ctx context.Context, tq, buildId string, ramp float32) *taskqueuepb.BuildIdAssignmentRule {
-	rule := &taskqueuepb.BuildIdAssignmentRule{
+	rule := taskqueuepb.BuildIdAssignmentRule_builder{
 		TargetBuildId: buildId,
-		Ramp: &taskqueuepb.BuildIdAssignmentRule_PercentageRamp{
-			PercentageRamp: &taskqueuepb.RampByPercentage{
-				RampPercentage: ramp,
-			},
-		},
-	}
+		PercentageRamp: taskqueuepb.RampByPercentage_builder{
+			RampPercentage: ramp,
+		}.Build(),
+	}.Build()
 	return s.doAddAssignmentRule(ctx, tq, rule)
 }
 
 func (s *VersioningIntegSuite) doAddAssignmentRule(ctx context.Context, tq string, rule *taskqueuepb.BuildIdAssignmentRule) *taskqueuepb.BuildIdAssignmentRule {
 	cT := s.getVersioningRules(ctx, tq).GetConflictToken()
-	res, err := s.FrontendClient().UpdateWorkerVersioningRules(ctx, &workflowservice.UpdateWorkerVersioningRulesRequest{
+	res, err := s.FrontendClient().UpdateWorkerVersioningRules(ctx, workflowservice.UpdateWorkerVersioningRulesRequest_builder{
 		Namespace:     s.Namespace().String(),
 		TaskQueue:     tq,
 		ConflictToken: cT,
-		Operation: &workflowservice.UpdateWorkerVersioningRulesRequest_InsertAssignmentRule{
-			InsertAssignmentRule: &workflowservice.UpdateWorkerVersioningRulesRequest_InsertBuildIdAssignmentRule{
-				Rule: rule,
-			},
-		},
-	})
+		InsertAssignmentRule: workflowservice.UpdateWorkerVersioningRulesRequest_InsertBuildIdAssignmentRule_builder{
+			Rule: rule,
+		}.Build(),
+	}.Build())
 	s.NoError(err)
 	s.NotNil(res)
 	return rule
@@ -4808,20 +4779,18 @@ func (s *VersioningIntegSuite) doAddAssignmentRule(ctx context.Context, tq strin
 
 func (s *VersioningIntegSuite) addRedirectRule(ctx context.Context, tq, source string, target string) *taskqueuepb.CompatibleBuildIdRedirectRule {
 	cT := s.getVersioningRules(ctx, tq).GetConflictToken()
-	rule := &taskqueuepb.CompatibleBuildIdRedirectRule{
+	rule := taskqueuepb.CompatibleBuildIdRedirectRule_builder{
 		SourceBuildId: source,
 		TargetBuildId: target,
-	}
-	res, err := s.FrontendClient().UpdateWorkerVersioningRules(ctx, &workflowservice.UpdateWorkerVersioningRulesRequest{
+	}.Build()
+	res, err := s.FrontendClient().UpdateWorkerVersioningRules(ctx, workflowservice.UpdateWorkerVersioningRulesRequest_builder{
 		Namespace:     s.Namespace().String(),
 		TaskQueue:     tq,
 		ConflictToken: cT,
-		Operation: &workflowservice.UpdateWorkerVersioningRulesRequest_AddCompatibleRedirectRule{
-			AddCompatibleRedirectRule: &workflowservice.UpdateWorkerVersioningRulesRequest_AddCompatibleBuildIdRedirectRule{
-				Rule: rule,
-			},
-		},
-	})
+		AddCompatibleRedirectRule: workflowservice.UpdateWorkerVersioningRulesRequest_AddCompatibleBuildIdRedirectRule_builder{
+			Rule: rule,
+		}.Build(),
+	}.Build())
 	s.NoError(err)
 	s.NotNil(res)
 	return rule
@@ -4829,33 +4798,29 @@ func (s *VersioningIntegSuite) addRedirectRule(ctx context.Context, tq, source s
 
 func (s *VersioningIntegSuite) removeRedirectRule(ctx context.Context, tq, source string) {
 	cT := s.getVersioningRules(ctx, tq).GetConflictToken()
-	res, err := s.FrontendClient().UpdateWorkerVersioningRules(ctx, &workflowservice.UpdateWorkerVersioningRulesRequest{
+	res, err := s.FrontendClient().UpdateWorkerVersioningRules(ctx, workflowservice.UpdateWorkerVersioningRulesRequest_builder{
 		Namespace:     s.Namespace().String(),
 		TaskQueue:     tq,
 		ConflictToken: cT,
-		Operation: &workflowservice.UpdateWorkerVersioningRulesRequest_DeleteCompatibleRedirectRule{
-			DeleteCompatibleRedirectRule: &workflowservice.UpdateWorkerVersioningRulesRequest_DeleteCompatibleBuildIdRedirectRule{
-				SourceBuildId: source,
-			},
-		},
-	})
+		DeleteCompatibleRedirectRule: workflowservice.UpdateWorkerVersioningRulesRequest_DeleteCompatibleBuildIdRedirectRule_builder{
+			SourceBuildId: source,
+		}.Build(),
+	}.Build())
 	s.NoError(err)
 	s.NotNil(res)
 }
 
 // addCompatibleBuildId updates build ID info on a task queue with a new compatible build ID.
 func (s *VersioningIntegSuite) addCompatibleBuildId(ctx context.Context, tq, newBuildId, existing string, makeSetDefault bool) {
-	res, err := s.FrontendClient().UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
+	res, err := s.FrontendClient().UpdateWorkerBuildIdCompatibility(ctx, workflowservice.UpdateWorkerBuildIdCompatibilityRequest_builder{
 		Namespace: s.Namespace().String(),
 		TaskQueue: tq,
-		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewCompatibleBuildId{
-			AddNewCompatibleBuildId: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewCompatibleVersion{
-				NewBuildId:                newBuildId,
-				ExistingCompatibleBuildId: existing,
-				MakeSetDefault:            makeSetDefault,
-			},
-		},
-	})
+		AddNewCompatibleBuildId: workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewCompatibleVersion_builder{
+			NewBuildId:                newBuildId,
+			ExistingCompatibleBuildId: existing,
+			MakeSetDefault:            makeSetDefault,
+		}.Build(),
+	}.Build())
 	s.NoError(err)
 	s.NotNil(res)
 }
@@ -4864,8 +4829,8 @@ func (s *VersioningIntegSuite) addCompatibleBuildId(ctx context.Context, tq, new
 func (s *VersioningIntegSuite) waitForVersionSetPropagation(ctx context.Context, taskQueue, newBuildId string) {
 	s.waitForPropagation(ctx, taskQueue, 0, func(vd *persistencespb.VersioningData) bool {
 		for _, set := range vd.GetVersionSets() {
-			for _, id := range set.BuildIds {
-				if id.Id == newBuildId {
+			for _, id := range set.GetBuildIds() {
+				if id.GetId() == newBuildId {
 					return true
 				}
 			}
@@ -4950,11 +4915,11 @@ func (s *VersioningIntegSuite) waitForPropagation(
 			// here so that we can target activity queues.
 			res, err := s.GetTestCluster().Host().MatchingClient().GetTaskQueueUserData(
 				ctx,
-				&matchingservice.GetTaskQueueUserDataRequest{
+				matchingservice.GetTaskQueueUserDataRequest_builder{
 					NamespaceId:   s.NamespaceID().String(),
 					TaskQueue:     partition.RpcName(),
 					TaskQueueType: partition.TaskType(),
-				})
+				}.Build())
 			s.NoError(err)
 			if condition(res.GetUserData().GetData().GetVersioningData()) {
 				delete(remaining, pt)
@@ -4965,24 +4930,24 @@ func (s *VersioningIntegSuite) waitForPropagation(
 }
 
 func (s *VersioningIntegSuite) unloadTaskQueue(ctx context.Context, tq string) {
-	_, err := s.GetTestCluster().MatchingClient().ForceUnloadTaskQueuePartition(ctx, &matchingservice.ForceUnloadTaskQueuePartitionRequest{
+	_, err := s.GetTestCluster().MatchingClient().ForceUnloadTaskQueuePartition(ctx, matchingservice.ForceUnloadTaskQueuePartitionRequest_builder{
 		NamespaceId: s.NamespaceID().String(),
-		TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+		TaskQueuePartition: taskqueuespb.TaskQueuePartition_builder{
 			TaskQueue:     tq,
 			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-		},
-	})
+		}.Build(),
+	}.Build())
 	s.Require().NoError(err)
 }
 
 func (s *VersioningIntegSuite) getStickyQueueName(ctx context.Context, id string) string {
-	ms, err := s.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
+	ms, err := s.AdminClient().DescribeMutableState(ctx, adminservice.DescribeMutableStateRequest_builder{
 		Namespace: s.Namespace().String(),
-		Execution: &commonpb.WorkflowExecution{WorkflowId: id},
+		Execution: commonpb.WorkflowExecution_builder{WorkflowId: id}.Build(),
 		Archetype: chasm.WorkflowArchetype,
-	})
+	}.Build())
 	s.NoError(err)
-	return ms.DatabaseMutableState.ExecutionInfo.StickyTaskQueue
+	return ms.GetDatabaseMutableState().GetExecutionInfo().GetStickyTaskQueue()
 }
 
 func getCurrentDefault(res *workflowservice.GetWorkerBuildIdCompatibilityResponse) string {

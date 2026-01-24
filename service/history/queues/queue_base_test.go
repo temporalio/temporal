@@ -102,10 +102,10 @@ func (s *queueBaseSuite) TearDownTest() {
 func (s *queueBaseSuite) TestNewProcessBase_NoPreviousState() {
 	mockShard := shard.NewTestContext(
 		s.controller,
-		&persistencespb.ShardInfo{
+		persistencespb.ShardInfo_builder{
 			ShardId: 0,
 			RangeId: int64(10),
-		},
+		}.Build(),
 		s.config,
 	)
 
@@ -116,67 +116,63 @@ func (s *queueBaseSuite) TestNewProcessBase_NoPreviousState() {
 }
 
 func (s *queueBaseSuite) TestNewProcessBase_WithPreviousState_RestoreSucceed() {
-	persistenceState := &persistencespb.QueueState{
+	persistenceState := persistencespb.QueueState_builder{
 		ReaderStates: map[int64]*persistencespb.QueueReaderState{
-			DefaultReaderId: {
+			DefaultReaderId: persistencespb.QueueReaderState_builder{
 				Scopes: []*persistencespb.QueueSliceScope{
-					{
-						Range: &persistencespb.QueueSliceRange{
-							InclusiveMin: &persistencespb.TaskKey{FireTime: timestamppb.New(tasks.DefaultFireTime), TaskId: 1000},
-							ExclusiveMax: &persistencespb.TaskKey{FireTime: timestamppb.New(tasks.DefaultFireTime), TaskId: 2000},
-						},
-						Predicate: &persistencespb.Predicate{
-							PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
-							Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
-						},
-					},
-					{
-						Range: &persistencespb.QueueSliceRange{
-							InclusiveMin: &persistencespb.TaskKey{FireTime: timestamppb.New(tasks.DefaultFireTime), TaskId: 2000},
-							ExclusiveMax: &persistencespb.TaskKey{FireTime: timestamppb.New(tasks.DefaultFireTime), TaskId: 3000},
-						},
-						Predicate: &persistencespb.Predicate{
+					persistencespb.QueueSliceScope_builder{
+						Range: persistencespb.QueueSliceRange_builder{
+							InclusiveMin: persistencespb.TaskKey_builder{FireTime: timestamppb.New(tasks.DefaultFireTime), TaskId: 1000}.Build(),
+							ExclusiveMax: persistencespb.TaskKey_builder{FireTime: timestamppb.New(tasks.DefaultFireTime), TaskId: 2000}.Build(),
+						}.Build(),
+						Predicate: persistencespb.Predicate_builder{
+							PredicateType:                enumsspb.PREDICATE_TYPE_UNIVERSAL,
+							UniversalPredicateAttributes: &persistencespb.UniversalPredicateAttributes{},
+						}.Build(),
+					}.Build(),
+					persistencespb.QueueSliceScope_builder{
+						Range: persistencespb.QueueSliceRange_builder{
+							InclusiveMin: persistencespb.TaskKey_builder{FireTime: timestamppb.New(tasks.DefaultFireTime), TaskId: 2000}.Build(),
+							ExclusiveMax: persistencespb.TaskKey_builder{FireTime: timestamppb.New(tasks.DefaultFireTime), TaskId: 3000}.Build(),
+						}.Build(),
+						Predicate: persistencespb.Predicate_builder{
 							PredicateType: enumsspb.PREDICATE_TYPE_TASK_TYPE,
-							Attributes: &persistencespb.Predicate_TaskTypePredicateAttributes{
-								TaskTypePredicateAttributes: &persistencespb.TaskTypePredicateAttributes{
-									TaskTypes: []enumsspb.TaskType{enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER},
-								},
-							},
-						},
-					},
+							TaskTypePredicateAttributes: persistencespb.TaskTypePredicateAttributes_builder{
+								TaskTypes: []enumsspb.TaskType{enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER},
+							}.Build(),
+						}.Build(),
+					}.Build(),
 				},
-			},
-			DefaultReaderId + 1: {
+			}.Build(),
+			DefaultReaderId + 1: persistencespb.QueueReaderState_builder{
 				Scopes: []*persistencespb.QueueSliceScope{
-					{
-						Range: &persistencespb.QueueSliceRange{
-							InclusiveMin: &persistencespb.TaskKey{FireTime: timestamppb.New(tasks.DefaultFireTime), TaskId: 2000},
-							ExclusiveMax: &persistencespb.TaskKey{FireTime: timestamppb.New(tasks.DefaultFireTime), TaskId: 3000},
-						},
-						Predicate: &persistencespb.Predicate{
+					persistencespb.QueueSliceScope_builder{
+						Range: persistencespb.QueueSliceRange_builder{
+							InclusiveMin: persistencespb.TaskKey_builder{FireTime: timestamppb.New(tasks.DefaultFireTime), TaskId: 2000}.Build(),
+							ExclusiveMax: persistencespb.TaskKey_builder{FireTime: timestamppb.New(tasks.DefaultFireTime), TaskId: 3000}.Build(),
+						}.Build(),
+						Predicate: persistencespb.Predicate_builder{
 							PredicateType: enumsspb.PREDICATE_TYPE_NAMESPACE_ID,
-							Attributes: &persistencespb.Predicate_NamespaceIdPredicateAttributes{
-								NamespaceIdPredicateAttributes: &persistencespb.NamespaceIdPredicateAttributes{
-									NamespaceIds: []string{uuid.NewString()},
-								},
-							},
-						},
-					},
+							NamespaceIdPredicateAttributes: persistencespb.NamespaceIdPredicateAttributes_builder{
+								NamespaceIds: []string{uuid.NewString()},
+							}.Build(),
+						}.Build(),
+					}.Build(),
 				},
-			},
+			}.Build(),
 		},
-		ExclusiveReaderHighWatermark: &persistencespb.TaskKey{FireTime: timestamppb.New(tasks.DefaultFireTime), TaskId: 4000},
-	}
+		ExclusiveReaderHighWatermark: persistencespb.TaskKey_builder{FireTime: timestamppb.New(tasks.DefaultFireTime), TaskId: 4000}.Build(),
+	}.Build()
 
 	mockShard := shard.NewTestContext(
 		s.controller,
-		&persistencespb.ShardInfo{
+		persistencespb.ShardInfo_builder{
 			ShardId: 0,
 			RangeId: 10,
 			QueueStates: map[int32]*persistencespb.QueueState{
 				int32(tasks.CategoryIDTransfer): persistenceState,
 			},
-		},
+		}.Build(),
 		s.config,
 	)
 	base := s.newQueueBase(mockShard, tasks.CategoryTransfer, nil)
@@ -195,10 +191,10 @@ func (s *queueBaseSuite) TestNewProcessBase_WithPreviousState_RestoreSucceed() {
 func (s *queueBaseSuite) TestStartStop() {
 	mockShard := shard.NewTestContext(
 		s.controller,
-		&persistencespb.ShardInfo{
+		persistencespb.ShardInfo_builder{
 			ShardId: 0,
 			RangeId: 10,
-		},
+		}.Build(),
 		s.config,
 	)
 	mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
@@ -246,13 +242,13 @@ func (s *queueBaseSuite) TestProcessNewRange() {
 
 	mockShard := shard.NewTestContext(
 		s.controller,
-		&persistencespb.ShardInfo{
+		persistencespb.ShardInfo_builder{
 			ShardId: 0,
 			RangeId: 10,
 			QueueStates: map[int32]*persistencespb.QueueState{
 				int32(tasks.CategoryIDTimer): persistenceState,
 			},
-		},
+		}.Build(),
 		s.config,
 	)
 	mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
@@ -290,13 +286,13 @@ func (s *queueBaseSuite) TestCheckPoint_WithPendingTasks_PerformRangeCompletion(
 
 	mockShard := shard.NewTestContext(
 		s.controller,
-		&persistencespb.ShardInfo{
+		persistencespb.ShardInfo_builder{
 			ShardId: 0,
 			RangeId: 10,
 			QueueStates: map[int32]*persistencespb.QueueState{
 				int32(tasks.CategoryIDTimer): persistenceState,
 			},
-		},
+		}.Build(),
 		s.config,
 	)
 	mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
@@ -329,7 +325,7 @@ func (s *queueBaseSuite) TestCheckPoint_WithPendingTasks_PerformRangeCompletion(
 		).Times(1),
 		mockShard.Resource.ShardMgr.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).DoAndReturn(
 			func(_ context.Context, request *persistence.UpdateShardRequest) error {
-				s.QueueStateEqual(persistenceState, request.ShardInfo.QueueStates[int32(tasks.CategoryIDTimer)])
+				s.QueueStateEqual(persistenceState, request.ShardInfo.GetQueueStates()[int32(tasks.CategoryIDTimer)])
 				return nil
 			},
 		).Times(1),
@@ -359,13 +355,13 @@ func (s *queueBaseSuite) TestCheckPoint_WithPendingTasks_SkipRangeCompletion() {
 
 	mockShard := shard.NewTestContext(
 		s.controller,
-		&persistencespb.ShardInfo{
+		persistencespb.ShardInfo_builder{
 			ShardId: 0,
 			RangeId: 10,
 			QueueStates: map[int32]*persistencespb.QueueState{
 				int32(tasks.CategoryIDTimer): persistenceState,
 			},
-		},
+		}.Build(),
 		s.config,
 	)
 	mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
@@ -382,7 +378,7 @@ func (s *queueBaseSuite) TestCheckPoint_WithPendingTasks_SkipRangeCompletion() {
 
 	mockShard.Resource.ShardMgr.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, request *persistence.UpdateShardRequest) error {
-			s.QueueStateEqual(persistenceState, request.ShardInfo.QueueStates[int32(tasks.CategoryIDTimer)])
+			s.QueueStateEqual(persistenceState, request.ShardInfo.GetQueueStates()[int32(tasks.CategoryIDTimer)])
 			return nil
 		},
 	).Times(1)
@@ -402,13 +398,13 @@ func (s *queueBaseSuite) TestCheckPoint_NoPendingTasks() {
 
 	mockShard := shard.NewTestContext(
 		s.controller,
-		&persistencespb.ShardInfo{
+		persistencespb.ShardInfo_builder{
 			ShardId: 0,
 			RangeId: 10,
 			QueueStates: map[int32]*persistencespb.QueueState{
 				int32(tasks.CategoryIDTimer): persistenceState,
 			},
-		},
+		}.Build(),
 		s.config,
 	)
 	mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
@@ -442,7 +438,7 @@ func (s *queueBaseSuite) TestCheckPoint_NoPendingTasks() {
 		).Times(1),
 		mockShard.Resource.ShardMgr.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).DoAndReturn(
 			func(_ context.Context, request *persistence.UpdateShardRequest) error {
-				s.QueueStateEqual(persistenceState, request.ShardInfo.QueueStates[int32(tasks.CategoryIDTimer)])
+				s.QueueStateEqual(persistenceState, request.ShardInfo.GetQueueStates()[int32(tasks.CategoryIDTimer)])
 				return nil
 			},
 		).Times(1),
@@ -477,13 +473,13 @@ func (s *queueBaseSuite) TestCheckPoint_SlicePredicateAction() {
 
 	mockShard := shard.NewTestContext(
 		s.controller,
-		&persistencespb.ShardInfo{
+		persistencespb.ShardInfo_builder{
 			ShardId: 0,
 			RangeId: 10,
 			QueueStates: map[int32]*persistencespb.QueueState{
 				int32(tasks.CategoryIDTimer): initialPersistenceState,
 			},
-		},
+		}.Build(),
 		s.config,
 	)
 	mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
@@ -503,7 +499,7 @@ func (s *queueBaseSuite) TestCheckPoint_SlicePredicateAction() {
 		mockShard.Resource.ExecutionMgr.EXPECT().RangeCompleteHistoryTasks(gomock.Any(), gomock.Any()).Return(nil).Times(1),
 		mockShard.Resource.ShardMgr.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).DoAndReturn(
 			func(_ context.Context, request *persistence.UpdateShardRequest) error {
-				s.QueueStateEqual(expectedPersistenceState, request.ShardInfo.QueueStates[int32(tasks.CategoryIDTimer)])
+				s.QueueStateEqual(expectedPersistenceState, request.ShardInfo.GetQueueStates()[int32(tasks.CategoryIDTimer)])
 				return nil
 			},
 		).Times(1),
@@ -523,7 +519,7 @@ func (s *queueBaseSuite) TestCheckPoint_MoveTaskGroupAction() {
 
 	mockShard := shard.NewTestContext(
 		s.controller,
-		&persistencespb.ShardInfo{
+		persistencespb.ShardInfo_builder{
 			ShardId: 0,
 			RangeId: 10,
 			QueueStates: map[int32]*persistencespb.QueueState{
@@ -532,7 +528,7 @@ func (s *queueBaseSuite) TestCheckPoint_MoveTaskGroupAction() {
 					exclusiveReaderHighWatermark: tasks.MaximumKey,
 				}),
 			},
-		},
+		}.Build(),
 		s.config,
 	)
 	mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
@@ -605,7 +601,7 @@ func (s *queueBaseSuite) TestCheckPoint_MoveTaskGroupAction() {
 		mockShard.Resource.ExecutionMgr.EXPECT().RangeCompleteHistoryTasks(gomock.Any(), gomock.Any()).Return(nil).Times(1),
 		mockShard.Resource.ShardMgr.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).DoAndReturn(
 			func(_ context.Context, request *persistence.UpdateShardRequest) error {
-				readerScopes := FromPersistenceQueueState(request.ShardInfo.QueueStates[int32(tasks.CategoryIDTimer)]).readerScopes
+				readerScopes := FromPersistenceQueueState(request.ShardInfo.GetQueueStates()[int32(tasks.CategoryIDTimer)]).readerScopes
 				s.Len(readerScopes, 3)
 
 				reader0Scopes := readerScopes[DefaultReaderId]

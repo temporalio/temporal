@@ -14,7 +14,7 @@ func TestIsActivityTaskNotFoundForToken_NotStarted_ReturnsTrue(t *testing.T) {
 	r := require.New(t)
 
 	token := &tokenspb.Task{}
-	ai := &persistencespb.ActivityInfo{StartedEventId: common.EmptyEventID}
+	ai := persistencespb.ActivityInfo_builder{StartedEventId: common.EmptyEventID}.Build()
 
 	// isCompletedByID unset -> treat as false
 	r.True(IsActivityTaskNotFoundForToken(token, ai, nil))
@@ -29,7 +29,7 @@ func TestIsActivityTaskNotFoundForToken_NotStarted_CompletedByID_BypassesCheck(t
 	r := require.New(t)
 
 	token := &tokenspb.Task{}
-	ai := &persistencespb.ActivityInfo{StartedEventId: common.EmptyEventID}
+	ai := persistencespb.ActivityInfo_builder{StartedEventId: common.EmptyEventID}.Build()
 
 	completed := true
 	// When completed-by-ID path, missing StartedEventId should not trigger not-found
@@ -40,13 +40,13 @@ func TestIsActivityTaskNotFoundForToken_AttemptMismatch(t *testing.T) {
 	t.Parallel()
 	r := require.New(t)
 
-	token := &tokenspb.Task{ScheduledEventId: 10, Attempt: 2}
-	ai := &persistencespb.ActivityInfo{StartedEventId: 11, Attempt: 3}
+	token := tokenspb.Task_builder{ScheduledEventId: 10, Attempt: 2}.Build()
+	ai := persistencespb.ActivityInfo_builder{StartedEventId: 11, Attempt: 3}.Build()
 
 	r.True(IsActivityTaskNotFoundForToken(token, ai, nil))
 
 	// Match attempt -> not found should be false (no other mismatches)
-	ai.Attempt = 2
+	ai.SetAttempt(2)
 	r.False(IsActivityTaskNotFoundForToken(token, ai, nil))
 }
 
@@ -54,18 +54,18 @@ func TestIsActivityTaskNotFoundForToken_StartVersionChecks(t *testing.T) {
 	t.Parallel()
 	r := require.New(t)
 
-	token := &tokenspb.Task{StartVersion: 5}
-	ai := &persistencespb.ActivityInfo{StartedEventId: 11, StartVersion: 6}
+	token := tokenspb.Task_builder{StartVersion: 5}.Build()
+	ai := persistencespb.ActivityInfo_builder{StartedEventId: 11, StartVersion: 6}.Build()
 
 	// Both non-empty and different -> true
 	r.True(IsActivityTaskNotFoundForToken(token, ai, nil))
 
 	// Equal -> false
-	ai.StartVersion = 5
+	ai.SetStartVersion(5)
 	r.False(IsActivityTaskNotFoundForToken(token, ai, nil))
 
 	// One side empty -> start-version check is skipped
-	ai.StartVersion = common.EmptyVersion
+	ai.SetStartVersion(common.EmptyVersion)
 	r.False(IsActivityTaskNotFoundForToken(token, ai, nil))
 }
 
@@ -73,16 +73,16 @@ func TestIsActivityTaskNotFoundForToken_VersionChecks(t *testing.T) {
 	t.Parallel()
 	r := require.New(t)
 
-	token := &tokenspb.Task{Version: 7}
-	ai := &persistencespb.ActivityInfo{StartedEventId: 11, Version: 8}
+	token := tokenspb.Task_builder{Version: 7}.Build()
+	ai := persistencespb.ActivityInfo_builder{StartedEventId: 11, Version: 8}.Build()
 
 	r.True(IsActivityTaskNotFoundForToken(token, ai, nil))
 
-	ai.Version = 7
+	ai.SetVersion(7)
 	r.False(IsActivityTaskNotFoundForToken(token, ai, nil))
 
 	// If token.Version is empty, version check is skipped -> false
-	token.Version = common.EmptyVersion
-	ai.Version = 12345
+	token.SetVersion(common.EmptyVersion)
+	ai.SetVersion(12345)
 	r.False(IsActivityTaskNotFoundForToken(token, ai, nil))
 }

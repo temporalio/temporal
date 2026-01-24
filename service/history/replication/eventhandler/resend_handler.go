@@ -128,7 +128,7 @@ func (r *resendHandlerImpl) ResendHistoryEvents(
 	}
 
 	// most common case: no need to handle local portion
-	if len(localVersionHistory) == 0 || startEventID >= localVersionHistory[len(localVersionHistory)-1].EventId {
+	if len(localVersionHistory) == 0 || startEventID >= localVersionHistory[len(localVersionHistory)-1].GetEventId() {
 		return r.replicateRemoteGeneratedEvents(
 			ctx,
 			namespaceID,
@@ -144,12 +144,12 @@ func (r *resendHandlerImpl) ResendHistoryEvents(
 		return serviceerror.NewInvalidArgumentf("Invalid Resend Request: expecting to resend from first event for local generated portion, but startEventID is %v", startEventID)
 	}
 	lastLocalItem := localVersionHistory[len(localVersionHistory)-1]
-	err = r.resendLocalGeneratedHistoryEvents(ctx, remoteClusterName, namespaceID, workflowID, runID, lastLocalItem.EventId, lastLocalItem.Version)
+	err = r.resendLocalGeneratedHistoryEvents(ctx, remoteClusterName, namespaceID, workflowID, runID, lastLocalItem.GetEventId(), lastLocalItem.GetVersion())
 	if err != nil {
 		return err
 	}
 	// no remote portion to resend
-	if endEventID == localVersionHistory[len(localVersionHistory)-1].EventId+1 {
+	if endEventID == localVersionHistory[len(localVersionHistory)-1].GetEventId()+1 {
 		return nil
 	}
 	return r.resendRemoteGeneratedHistoryEvents(
@@ -158,8 +158,8 @@ func (r *resendHandlerImpl) ResendHistoryEvents(
 		namespaceID,
 		workflowID,
 		runID,
-		localVersionHistory[len(localVersionHistory)-1].EventId,
-		localVersionHistory[len(localVersionHistory)-1].Version,
+		localVersionHistory[len(localVersionHistory)-1].GetEventId(),
+		localVersionHistory[len(localVersionHistory)-1].GetVersion(),
 		endEventID,
 		endEventVersion,
 	)
@@ -283,8 +283,8 @@ func (r *resendHandlerImpl) replicateRemoteGeneratedEvents(
 			return serviceerror.NewInvalidArgument("Empty batch received from remote during resend")
 		}
 		if len(eventsBatch) != 0 && len(versionHistory) != 0 {
-			if !versionhistory.IsEqualVersionHistoryItems(versionHistory, batch.VersionHistory.Items) ||
-				(eventsVersion != EmptyVersion && eventsVersion != events[0].Version) {
+			if !versionhistory.IsEqualVersionHistoryItems(versionHistory, batch.VersionHistory.GetItems()) ||
+				(eventsVersion != EmptyVersion && eventsVersion != events[0].GetVersion()) {
 				err := applyFn()
 				if err != nil {
 					return err
@@ -292,8 +292,8 @@ func (r *resendHandlerImpl) replicateRemoteGeneratedEvents(
 			}
 		}
 		eventsBatch = append(eventsBatch, events)
-		versionHistory = batch.VersionHistory.Items
-		eventsVersion = events[0].Version
+		versionHistory = batch.VersionHistory.GetItems()
+		eventsVersion = events[0].GetVersion()
 		if len(eventsBatch) >= r.config.ReplicationResendMaxBatchCount() {
 			err := applyFn()
 			if err != nil {

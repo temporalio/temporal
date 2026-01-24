@@ -216,12 +216,12 @@ func replicationStreamLowPrioritySchedulerProvider(
 		var nsName namespace.Name
 		replicationTask := t.ReplicationTask()
 		if replicationTask != nil {
-			taskType = replicationTask.TaskType.String()
+			taskType = replicationTask.GetTaskType().String()
 
 			rawTaskInfo := replicationTask.GetRawTaskInfo()
 			if rawTaskInfo != nil {
 				var err error
-				nsName, err = nsRegistry.GetNamespaceName(namespace.ID(replicationTask.GetRawTaskInfo().NamespaceId))
+				nsName, err = nsRegistry.GetNamespaceName(namespace.ID(replicationTask.GetRawTaskInfo().GetNamespaceId()))
 				if err != nil {
 					nsName = namespace.EmptyName
 				}
@@ -240,10 +240,10 @@ func replicationStreamLowPrioritySchedulerProvider(
 		var taskType string
 		namespaceTag := metrics.NamespaceUnknownTag()
 		if replicationTask != nil {
-			taskType = replicationTask.TaskType.String()
+			taskType = replicationTask.GetTaskType().String()
 			rawTaskInfo := replicationTask.GetRawTaskInfo()
 			if rawTaskInfo != nil {
-				nsName, err := nsRegistry.GetNamespaceName(namespace.ID(replicationTask.GetRawTaskInfo().NamespaceId))
+				nsName, err := nsRegistry.GetNamespaceName(namespace.ID(replicationTask.GetRawTaskInfo().GetNamespaceId()))
 				if err != nil {
 					namespaceTag = metrics.NamespaceTag(nsName.String())
 				}

@@ -30,13 +30,14 @@ type VisibilityManagerSuite struct {
 	metricsHandler    *metrics.MockHandler
 }
 
+// DO NOT SUBMIT: fix callers to work with a pointer (go/goprotoapi-findings#message-value)
 var (
 	testNamespaceUUID     = namespace.ID("fb15e4b5-356f-466d-8c6d-a29223e5c536")
 	testNamespace         = namespace.Name("test-namespace")
-	testWorkflowExecution = commonpb.WorkflowExecution{
+	testWorkflowExecution = commonpb.WorkflowExecution_builder{
 		WorkflowId: "visibility-workflow-test",
 		RunId:      "843f6fc7-102a-4c63-a2d4-7c653b01bf52",
-	}
+	}.Build()
 	testWorkflowTypeName = "visibility-workflow"
 )
 
@@ -175,8 +176,8 @@ func (s *VisibilityManagerSuite) TestGetWorkflowExecution() {
 	request := &manager.GetWorkflowExecutionRequest{
 		NamespaceID: testNamespaceUUID,
 		Namespace:   testNamespace,
-		RunID:       testWorkflowExecution.RunId,
-		WorkflowID:  testWorkflowExecution.WorkflowId,
+		RunID:       testWorkflowExecution.GetRunId(),
+		WorkflowID:  testWorkflowExecution.GetWorkflowId(),
 	}
 	s.visibilityStore.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(
 		&store.InternalGetWorkflowExecutionResponse{},

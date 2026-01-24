@@ -8,7 +8,6 @@ package cli
 
 import (
 	reflect "reflect"
-	sync "sync"
 	unsafe "unsafe"
 
 	v11 "go.temporal.io/api/common/v1"
@@ -27,14 +26,14 @@ const (
 )
 
 type DescribeWorkflowExecutionResponse struct {
-	state                 protoimpl.MessageState          `protogen:"open.v1"`
-	ExecutionConfig       *v1.WorkflowExecutionConfig     `protobuf:"bytes,1,opt,name=execution_config,json=executionConfig,proto3" json:"execution_config,omitempty"`
-	WorkflowExecutionInfo *WorkflowExecutionInfo          `protobuf:"bytes,2,opt,name=workflow_execution_info,json=workflowExecutionInfo,proto3" json:"workflow_execution_info,omitempty"`
-	PendingActivities     []*PendingActivityInfo          `protobuf:"bytes,3,rep,name=pending_activities,json=pendingActivities,proto3" json:"pending_activities,omitempty"`
-	PendingChildren       []*v1.PendingChildExecutionInfo `protobuf:"bytes,4,rep,name=pending_children,json=pendingChildren,proto3" json:"pending_children,omitempty"`
-	PendingWorkflowTask   *v1.PendingWorkflowTaskInfo     `protobuf:"bytes,5,opt,name=pending_workflow_task,json=pendingWorkflowTask,proto3" json:"pending_workflow_task,omitempty"`
-	unknownFields         protoimpl.UnknownFields
-	sizeCache             protoimpl.SizeCache
+	state                            protoimpl.MessageState           `protogen:"opaque.v1"`
+	xxx_hidden_ExecutionConfig       *v1.WorkflowExecutionConfig      `protobuf:"bytes,1,opt,name=execution_config,json=executionConfig,proto3"`
+	xxx_hidden_WorkflowExecutionInfo *WorkflowExecutionInfo           `protobuf:"bytes,2,opt,name=workflow_execution_info,json=workflowExecutionInfo,proto3"`
+	xxx_hidden_PendingActivities     *[]*PendingActivityInfo          `protobuf:"bytes,3,rep,name=pending_activities,json=pendingActivities,proto3"`
+	xxx_hidden_PendingChildren       *[]*v1.PendingChildExecutionInfo `protobuf:"bytes,4,rep,name=pending_children,json=pendingChildren,proto3"`
+	xxx_hidden_PendingWorkflowTask   *v1.PendingWorkflowTaskInfo      `protobuf:"bytes,5,opt,name=pending_workflow_task,json=pendingWorkflowTask,proto3"`
+	unknownFields                    protoimpl.UnknownFields
+	sizeCache                        protoimpl.SizeCache
 }
 
 func (x *DescribeWorkflowExecutionResponse) Reset() {
@@ -62,65 +61,139 @@ func (x *DescribeWorkflowExecutionResponse) ProtoReflect() protoreflect.Message 
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DescribeWorkflowExecutionResponse.ProtoReflect.Descriptor instead.
-func (*DescribeWorkflowExecutionResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_cli_v1_message_proto_rawDescGZIP(), []int{0}
-}
-
 func (x *DescribeWorkflowExecutionResponse) GetExecutionConfig() *v1.WorkflowExecutionConfig {
 	if x != nil {
-		return x.ExecutionConfig
+		return x.xxx_hidden_ExecutionConfig
 	}
 	return nil
 }
 
 func (x *DescribeWorkflowExecutionResponse) GetWorkflowExecutionInfo() *WorkflowExecutionInfo {
 	if x != nil {
-		return x.WorkflowExecutionInfo
+		return x.xxx_hidden_WorkflowExecutionInfo
 	}
 	return nil
 }
 
 func (x *DescribeWorkflowExecutionResponse) GetPendingActivities() []*PendingActivityInfo {
 	if x != nil {
-		return x.PendingActivities
+		if x.xxx_hidden_PendingActivities != nil {
+			return *x.xxx_hidden_PendingActivities
+		}
 	}
 	return nil
 }
 
 func (x *DescribeWorkflowExecutionResponse) GetPendingChildren() []*v1.PendingChildExecutionInfo {
 	if x != nil {
-		return x.PendingChildren
+		if x.xxx_hidden_PendingChildren != nil {
+			return *x.xxx_hidden_PendingChildren
+		}
 	}
 	return nil
 }
 
 func (x *DescribeWorkflowExecutionResponse) GetPendingWorkflowTask() *v1.PendingWorkflowTaskInfo {
 	if x != nil {
-		return x.PendingWorkflowTask
+		return x.xxx_hidden_PendingWorkflowTask
 	}
 	return nil
 }
 
+func (x *DescribeWorkflowExecutionResponse) SetExecutionConfig(v *v1.WorkflowExecutionConfig) {
+	x.xxx_hidden_ExecutionConfig = v
+}
+
+func (x *DescribeWorkflowExecutionResponse) SetWorkflowExecutionInfo(v *WorkflowExecutionInfo) {
+	x.xxx_hidden_WorkflowExecutionInfo = v
+}
+
+func (x *DescribeWorkflowExecutionResponse) SetPendingActivities(v []*PendingActivityInfo) {
+	x.xxx_hidden_PendingActivities = &v
+}
+
+func (x *DescribeWorkflowExecutionResponse) SetPendingChildren(v []*v1.PendingChildExecutionInfo) {
+	x.xxx_hidden_PendingChildren = &v
+}
+
+func (x *DescribeWorkflowExecutionResponse) SetPendingWorkflowTask(v *v1.PendingWorkflowTaskInfo) {
+	x.xxx_hidden_PendingWorkflowTask = v
+}
+
+func (x *DescribeWorkflowExecutionResponse) HasExecutionConfig() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_ExecutionConfig != nil
+}
+
+func (x *DescribeWorkflowExecutionResponse) HasWorkflowExecutionInfo() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_WorkflowExecutionInfo != nil
+}
+
+func (x *DescribeWorkflowExecutionResponse) HasPendingWorkflowTask() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_PendingWorkflowTask != nil
+}
+
+func (x *DescribeWorkflowExecutionResponse) ClearExecutionConfig() {
+	x.xxx_hidden_ExecutionConfig = nil
+}
+
+func (x *DescribeWorkflowExecutionResponse) ClearWorkflowExecutionInfo() {
+	x.xxx_hidden_WorkflowExecutionInfo = nil
+}
+
+func (x *DescribeWorkflowExecutionResponse) ClearPendingWorkflowTask() {
+	x.xxx_hidden_PendingWorkflowTask = nil
+}
+
+type DescribeWorkflowExecutionResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	ExecutionConfig       *v1.WorkflowExecutionConfig
+	WorkflowExecutionInfo *WorkflowExecutionInfo
+	PendingActivities     []*PendingActivityInfo
+	PendingChildren       []*v1.PendingChildExecutionInfo
+	PendingWorkflowTask   *v1.PendingWorkflowTaskInfo
+}
+
+func (b0 DescribeWorkflowExecutionResponse_builder) Build() *DescribeWorkflowExecutionResponse {
+	m0 := &DescribeWorkflowExecutionResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_ExecutionConfig = b.ExecutionConfig
+	x.xxx_hidden_WorkflowExecutionInfo = b.WorkflowExecutionInfo
+	x.xxx_hidden_PendingActivities = &b.PendingActivities
+	x.xxx_hidden_PendingChildren = &b.PendingChildren
+	x.xxx_hidden_PendingWorkflowTask = b.PendingWorkflowTask
+	return m0
+}
+
 type WorkflowExecutionInfo struct {
-	state                        protoimpl.MessageState      `protogen:"open.v1"`
-	Execution                    *v11.WorkflowExecution      `protobuf:"bytes,1,opt,name=execution,proto3" json:"execution,omitempty"`
-	Type                         *v11.WorkflowType           `protobuf:"bytes,2,opt,name=type,proto3" json:"type,omitempty"`
-	StartTime                    *timestamppb.Timestamp      `protobuf:"bytes,3,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
-	CloseTime                    *timestamppb.Timestamp      `protobuf:"bytes,4,opt,name=close_time,json=closeTime,proto3" json:"close_time,omitempty"`
-	Status                       v12.WorkflowExecutionStatus `protobuf:"varint,5,opt,name=status,proto3,enum=temporal.api.enums.v1.WorkflowExecutionStatus" json:"status,omitempty"`
-	HistoryLength                int64                       `protobuf:"varint,6,opt,name=history_length,json=historyLength,proto3" json:"history_length,omitempty"`
-	ParentNamespaceId            string                      `protobuf:"bytes,7,opt,name=parent_namespace_id,json=parentNamespaceId,proto3" json:"parent_namespace_id,omitempty"`
-	ParentExecution              *v11.WorkflowExecution      `protobuf:"bytes,8,opt,name=parent_execution,json=parentExecution,proto3" json:"parent_execution,omitempty"`
-	ExecutionTime                *timestamppb.Timestamp      `protobuf:"bytes,9,opt,name=execution_time,json=executionTime,proto3" json:"execution_time,omitempty"`
-	Memo                         *v11.Memo                   `protobuf:"bytes,10,opt,name=memo,proto3" json:"memo,omitempty"`
-	SearchAttributes             *SearchAttributes           `protobuf:"bytes,11,opt,name=search_attributes,json=searchAttributes,proto3" json:"search_attributes,omitempty"`
-	AutoResetPoints              *v1.ResetPoints             `protobuf:"bytes,12,opt,name=auto_reset_points,json=autoResetPoints,proto3" json:"auto_reset_points,omitempty"`
-	StateTransitionCount         int64                       `protobuf:"varint,13,opt,name=state_transition_count,json=stateTransitionCount,proto3" json:"state_transition_count,omitempty"`
-	HistorySizeBytes             int64                       `protobuf:"varint,14,opt,name=history_size_bytes,json=historySizeBytes,proto3" json:"history_size_bytes,omitempty"`
-	MostRecentWorkerVersionStamp *v11.WorkerVersionStamp     `protobuf:"bytes,15,opt,name=most_recent_worker_version_stamp,json=mostRecentWorkerVersionStamp,proto3" json:"most_recent_worker_version_stamp,omitempty"`
-	unknownFields                protoimpl.UnknownFields
-	sizeCache                    protoimpl.SizeCache
+	state                                   protoimpl.MessageState      `protogen:"opaque.v1"`
+	xxx_hidden_Execution                    *v11.WorkflowExecution      `protobuf:"bytes,1,opt,name=execution,proto3"`
+	xxx_hidden_Type                         *v11.WorkflowType           `protobuf:"bytes,2,opt,name=type,proto3"`
+	xxx_hidden_StartTime                    *timestamppb.Timestamp      `protobuf:"bytes,3,opt,name=start_time,json=startTime,proto3"`
+	xxx_hidden_CloseTime                    *timestamppb.Timestamp      `protobuf:"bytes,4,opt,name=close_time,json=closeTime,proto3"`
+	xxx_hidden_Status                       v12.WorkflowExecutionStatus `protobuf:"varint,5,opt,name=status,proto3,enum=temporal.api.enums.v1.WorkflowExecutionStatus"`
+	xxx_hidden_HistoryLength                int64                       `protobuf:"varint,6,opt,name=history_length,json=historyLength,proto3"`
+	xxx_hidden_ParentNamespaceId            string                      `protobuf:"bytes,7,opt,name=parent_namespace_id,json=parentNamespaceId,proto3"`
+	xxx_hidden_ParentExecution              *v11.WorkflowExecution      `protobuf:"bytes,8,opt,name=parent_execution,json=parentExecution,proto3"`
+	xxx_hidden_ExecutionTime                *timestamppb.Timestamp      `protobuf:"bytes,9,opt,name=execution_time,json=executionTime,proto3"`
+	xxx_hidden_Memo                         *v11.Memo                   `protobuf:"bytes,10,opt,name=memo,proto3"`
+	xxx_hidden_SearchAttributes             *SearchAttributes           `protobuf:"bytes,11,opt,name=search_attributes,json=searchAttributes,proto3"`
+	xxx_hidden_AutoResetPoints              *v1.ResetPoints             `protobuf:"bytes,12,opt,name=auto_reset_points,json=autoResetPoints,proto3"`
+	xxx_hidden_StateTransitionCount         int64                       `protobuf:"varint,13,opt,name=state_transition_count,json=stateTransitionCount,proto3"`
+	xxx_hidden_HistorySizeBytes             int64                       `protobuf:"varint,14,opt,name=history_size_bytes,json=historySizeBytes,proto3"`
+	xxx_hidden_MostRecentWorkerVersionStamp *v11.WorkerVersionStamp     `protobuf:"bytes,15,opt,name=most_recent_worker_version_stamp,json=mostRecentWorkerVersionStamp,proto3"`
+	unknownFields                           protoimpl.UnknownFields
+	sizeCache                               protoimpl.SizeCache
 }
 
 func (x *WorkflowExecutionInfo) Reset() {
@@ -148,132 +221,339 @@ func (x *WorkflowExecutionInfo) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use WorkflowExecutionInfo.ProtoReflect.Descriptor instead.
-func (*WorkflowExecutionInfo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_cli_v1_message_proto_rawDescGZIP(), []int{1}
-}
-
 func (x *WorkflowExecutionInfo) GetExecution() *v11.WorkflowExecution {
 	if x != nil {
-		return x.Execution
+		return x.xxx_hidden_Execution
 	}
 	return nil
 }
 
 func (x *WorkflowExecutionInfo) GetType() *v11.WorkflowType {
 	if x != nil {
-		return x.Type
+		return x.xxx_hidden_Type
 	}
 	return nil
 }
 
 func (x *WorkflowExecutionInfo) GetStartTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.StartTime
+		return x.xxx_hidden_StartTime
 	}
 	return nil
 }
 
 func (x *WorkflowExecutionInfo) GetCloseTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.CloseTime
+		return x.xxx_hidden_CloseTime
 	}
 	return nil
 }
 
 func (x *WorkflowExecutionInfo) GetStatus() v12.WorkflowExecutionStatus {
 	if x != nil {
-		return x.Status
+		return x.xxx_hidden_Status
 	}
 	return v12.WorkflowExecutionStatus(0)
 }
 
 func (x *WorkflowExecutionInfo) GetHistoryLength() int64 {
 	if x != nil {
-		return x.HistoryLength
+		return x.xxx_hidden_HistoryLength
 	}
 	return 0
 }
 
 func (x *WorkflowExecutionInfo) GetParentNamespaceId() string {
 	if x != nil {
-		return x.ParentNamespaceId
+		return x.xxx_hidden_ParentNamespaceId
 	}
 	return ""
 }
 
 func (x *WorkflowExecutionInfo) GetParentExecution() *v11.WorkflowExecution {
 	if x != nil {
-		return x.ParentExecution
+		return x.xxx_hidden_ParentExecution
 	}
 	return nil
 }
 
 func (x *WorkflowExecutionInfo) GetExecutionTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.ExecutionTime
+		return x.xxx_hidden_ExecutionTime
 	}
 	return nil
 }
 
 func (x *WorkflowExecutionInfo) GetMemo() *v11.Memo {
 	if x != nil {
-		return x.Memo
+		return x.xxx_hidden_Memo
 	}
 	return nil
 }
 
 func (x *WorkflowExecutionInfo) GetSearchAttributes() *SearchAttributes {
 	if x != nil {
-		return x.SearchAttributes
+		return x.xxx_hidden_SearchAttributes
 	}
 	return nil
 }
 
 func (x *WorkflowExecutionInfo) GetAutoResetPoints() *v1.ResetPoints {
 	if x != nil {
-		return x.AutoResetPoints
+		return x.xxx_hidden_AutoResetPoints
 	}
 	return nil
 }
 
 func (x *WorkflowExecutionInfo) GetStateTransitionCount() int64 {
 	if x != nil {
-		return x.StateTransitionCount
+		return x.xxx_hidden_StateTransitionCount
 	}
 	return 0
 }
 
 func (x *WorkflowExecutionInfo) GetHistorySizeBytes() int64 {
 	if x != nil {
-		return x.HistorySizeBytes
+		return x.xxx_hidden_HistorySizeBytes
 	}
 	return 0
 }
 
 func (x *WorkflowExecutionInfo) GetMostRecentWorkerVersionStamp() *v11.WorkerVersionStamp {
 	if x != nil {
-		return x.MostRecentWorkerVersionStamp
+		return x.xxx_hidden_MostRecentWorkerVersionStamp
 	}
 	return nil
 }
 
+func (x *WorkflowExecutionInfo) SetExecution(v *v11.WorkflowExecution) {
+	x.xxx_hidden_Execution = v
+}
+
+func (x *WorkflowExecutionInfo) SetType(v *v11.WorkflowType) {
+	x.xxx_hidden_Type = v
+}
+
+func (x *WorkflowExecutionInfo) SetStartTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_StartTime = v
+}
+
+func (x *WorkflowExecutionInfo) SetCloseTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_CloseTime = v
+}
+
+func (x *WorkflowExecutionInfo) SetStatus(v v12.WorkflowExecutionStatus) {
+	x.xxx_hidden_Status = v
+}
+
+func (x *WorkflowExecutionInfo) SetHistoryLength(v int64) {
+	x.xxx_hidden_HistoryLength = v
+}
+
+func (x *WorkflowExecutionInfo) SetParentNamespaceId(v string) {
+	x.xxx_hidden_ParentNamespaceId = v
+}
+
+func (x *WorkflowExecutionInfo) SetParentExecution(v *v11.WorkflowExecution) {
+	x.xxx_hidden_ParentExecution = v
+}
+
+func (x *WorkflowExecutionInfo) SetExecutionTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_ExecutionTime = v
+}
+
+func (x *WorkflowExecutionInfo) SetMemo(v *v11.Memo) {
+	x.xxx_hidden_Memo = v
+}
+
+func (x *WorkflowExecutionInfo) SetSearchAttributes(v *SearchAttributes) {
+	x.xxx_hidden_SearchAttributes = v
+}
+
+func (x *WorkflowExecutionInfo) SetAutoResetPoints(v *v1.ResetPoints) {
+	x.xxx_hidden_AutoResetPoints = v
+}
+
+func (x *WorkflowExecutionInfo) SetStateTransitionCount(v int64) {
+	x.xxx_hidden_StateTransitionCount = v
+}
+
+func (x *WorkflowExecutionInfo) SetHistorySizeBytes(v int64) {
+	x.xxx_hidden_HistorySizeBytes = v
+}
+
+func (x *WorkflowExecutionInfo) SetMostRecentWorkerVersionStamp(v *v11.WorkerVersionStamp) {
+	x.xxx_hidden_MostRecentWorkerVersionStamp = v
+}
+
+func (x *WorkflowExecutionInfo) HasExecution() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Execution != nil
+}
+
+func (x *WorkflowExecutionInfo) HasType() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Type != nil
+}
+
+func (x *WorkflowExecutionInfo) HasStartTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_StartTime != nil
+}
+
+func (x *WorkflowExecutionInfo) HasCloseTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_CloseTime != nil
+}
+
+func (x *WorkflowExecutionInfo) HasParentExecution() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_ParentExecution != nil
+}
+
+func (x *WorkflowExecutionInfo) HasExecutionTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_ExecutionTime != nil
+}
+
+func (x *WorkflowExecutionInfo) HasMemo() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Memo != nil
+}
+
+func (x *WorkflowExecutionInfo) HasSearchAttributes() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_SearchAttributes != nil
+}
+
+func (x *WorkflowExecutionInfo) HasAutoResetPoints() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_AutoResetPoints != nil
+}
+
+func (x *WorkflowExecutionInfo) HasMostRecentWorkerVersionStamp() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_MostRecentWorkerVersionStamp != nil
+}
+
+func (x *WorkflowExecutionInfo) ClearExecution() {
+	x.xxx_hidden_Execution = nil
+}
+
+func (x *WorkflowExecutionInfo) ClearType() {
+	x.xxx_hidden_Type = nil
+}
+
+func (x *WorkflowExecutionInfo) ClearStartTime() {
+	x.xxx_hidden_StartTime = nil
+}
+
+func (x *WorkflowExecutionInfo) ClearCloseTime() {
+	x.xxx_hidden_CloseTime = nil
+}
+
+func (x *WorkflowExecutionInfo) ClearParentExecution() {
+	x.xxx_hidden_ParentExecution = nil
+}
+
+func (x *WorkflowExecutionInfo) ClearExecutionTime() {
+	x.xxx_hidden_ExecutionTime = nil
+}
+
+func (x *WorkflowExecutionInfo) ClearMemo() {
+	x.xxx_hidden_Memo = nil
+}
+
+func (x *WorkflowExecutionInfo) ClearSearchAttributes() {
+	x.xxx_hidden_SearchAttributes = nil
+}
+
+func (x *WorkflowExecutionInfo) ClearAutoResetPoints() {
+	x.xxx_hidden_AutoResetPoints = nil
+}
+
+func (x *WorkflowExecutionInfo) ClearMostRecentWorkerVersionStamp() {
+	x.xxx_hidden_MostRecentWorkerVersionStamp = nil
+}
+
+type WorkflowExecutionInfo_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Execution                    *v11.WorkflowExecution
+	Type                         *v11.WorkflowType
+	StartTime                    *timestamppb.Timestamp
+	CloseTime                    *timestamppb.Timestamp
+	Status                       v12.WorkflowExecutionStatus
+	HistoryLength                int64
+	ParentNamespaceId            string
+	ParentExecution              *v11.WorkflowExecution
+	ExecutionTime                *timestamppb.Timestamp
+	Memo                         *v11.Memo
+	SearchAttributes             *SearchAttributes
+	AutoResetPoints              *v1.ResetPoints
+	StateTransitionCount         int64
+	HistorySizeBytes             int64
+	MostRecentWorkerVersionStamp *v11.WorkerVersionStamp
+}
+
+func (b0 WorkflowExecutionInfo_builder) Build() *WorkflowExecutionInfo {
+	m0 := &WorkflowExecutionInfo{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Execution = b.Execution
+	x.xxx_hidden_Type = b.Type
+	x.xxx_hidden_StartTime = b.StartTime
+	x.xxx_hidden_CloseTime = b.CloseTime
+	x.xxx_hidden_Status = b.Status
+	x.xxx_hidden_HistoryLength = b.HistoryLength
+	x.xxx_hidden_ParentNamespaceId = b.ParentNamespaceId
+	x.xxx_hidden_ParentExecution = b.ParentExecution
+	x.xxx_hidden_ExecutionTime = b.ExecutionTime
+	x.xxx_hidden_Memo = b.Memo
+	x.xxx_hidden_SearchAttributes = b.SearchAttributes
+	x.xxx_hidden_AutoResetPoints = b.AutoResetPoints
+	x.xxx_hidden_StateTransitionCount = b.StateTransitionCount
+	x.xxx_hidden_HistorySizeBytes = b.HistorySizeBytes
+	x.xxx_hidden_MostRecentWorkerVersionStamp = b.MostRecentWorkerVersionStamp
+	return m0
+}
+
 type PendingActivityInfo struct {
-	state              protoimpl.MessageState   `protogen:"open.v1"`
-	ActivityId         string                   `protobuf:"bytes,1,opt,name=activity_id,json=activityId,proto3" json:"activity_id,omitempty"`
-	ActivityType       *v11.ActivityType        `protobuf:"bytes,2,opt,name=activity_type,json=activityType,proto3" json:"activity_type,omitempty"`
-	State              v12.PendingActivityState `protobuf:"varint,3,opt,name=state,proto3,enum=temporal.api.enums.v1.PendingActivityState" json:"state,omitempty"`
-	HeartbeatDetails   string                   `protobuf:"bytes,4,opt,name=heartbeat_details,json=heartbeatDetails,proto3" json:"heartbeat_details,omitempty"`
-	LastHeartbeatTime  *timestamppb.Timestamp   `protobuf:"bytes,5,opt,name=last_heartbeat_time,json=lastHeartbeatTime,proto3" json:"last_heartbeat_time,omitempty"`
-	LastStartedTime    *timestamppb.Timestamp   `protobuf:"bytes,6,opt,name=last_started_time,json=lastStartedTime,proto3" json:"last_started_time,omitempty"`
-	Attempt            int32                    `protobuf:"varint,7,opt,name=attempt,proto3" json:"attempt,omitempty"`
-	MaximumAttempts    int32                    `protobuf:"varint,8,opt,name=maximum_attempts,json=maximumAttempts,proto3" json:"maximum_attempts,omitempty"`
-	ScheduledTime      *timestamppb.Timestamp   `protobuf:"bytes,9,opt,name=scheduled_time,json=scheduledTime,proto3" json:"scheduled_time,omitempty"`
-	ExpirationTime     *timestamppb.Timestamp   `protobuf:"bytes,10,opt,name=expiration_time,json=expirationTime,proto3" json:"expiration_time,omitempty"`
-	LastFailure        *Failure                 `protobuf:"bytes,11,opt,name=last_failure,json=lastFailure,proto3" json:"last_failure,omitempty"`
-	LastWorkerIdentity string                   `protobuf:"bytes,12,opt,name=last_worker_identity,json=lastWorkerIdentity,proto3" json:"last_worker_identity,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	state                         protoimpl.MessageState   `protogen:"opaque.v1"`
+	xxx_hidden_ActivityId         string                   `protobuf:"bytes,1,opt,name=activity_id,json=activityId,proto3"`
+	xxx_hidden_ActivityType       *v11.ActivityType        `protobuf:"bytes,2,opt,name=activity_type,json=activityType,proto3"`
+	xxx_hidden_State              v12.PendingActivityState `protobuf:"varint,3,opt,name=state,proto3,enum=temporal.api.enums.v1.PendingActivityState"`
+	xxx_hidden_HeartbeatDetails   string                   `protobuf:"bytes,4,opt,name=heartbeat_details,json=heartbeatDetails,proto3"`
+	xxx_hidden_LastHeartbeatTime  *timestamppb.Timestamp   `protobuf:"bytes,5,opt,name=last_heartbeat_time,json=lastHeartbeatTime,proto3"`
+	xxx_hidden_LastStartedTime    *timestamppb.Timestamp   `protobuf:"bytes,6,opt,name=last_started_time,json=lastStartedTime,proto3"`
+	xxx_hidden_Attempt            int32                    `protobuf:"varint,7,opt,name=attempt,proto3"`
+	xxx_hidden_MaximumAttempts    int32                    `protobuf:"varint,8,opt,name=maximum_attempts,json=maximumAttempts,proto3"`
+	xxx_hidden_ScheduledTime      *timestamppb.Timestamp   `protobuf:"bytes,9,opt,name=scheduled_time,json=scheduledTime,proto3"`
+	xxx_hidden_ExpirationTime     *timestamppb.Timestamp   `protobuf:"bytes,10,opt,name=expiration_time,json=expirationTime,proto3"`
+	xxx_hidden_LastFailure        *Failure                 `protobuf:"bytes,11,opt,name=last_failure,json=lastFailure,proto3"`
+	xxx_hidden_LastWorkerIdentity string                   `protobuf:"bytes,12,opt,name=last_worker_identity,json=lastWorkerIdentity,proto3"`
+	unknownFields                 protoimpl.UnknownFields
+	sizeCache                     protoimpl.SizeCache
 }
 
 func (x *PendingActivityInfo) Reset() {
@@ -301,100 +581,245 @@ func (x *PendingActivityInfo) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use PendingActivityInfo.ProtoReflect.Descriptor instead.
-func (*PendingActivityInfo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_cli_v1_message_proto_rawDescGZIP(), []int{2}
-}
-
 func (x *PendingActivityInfo) GetActivityId() string {
 	if x != nil {
-		return x.ActivityId
+		return x.xxx_hidden_ActivityId
 	}
 	return ""
 }
 
 func (x *PendingActivityInfo) GetActivityType() *v11.ActivityType {
 	if x != nil {
-		return x.ActivityType
+		return x.xxx_hidden_ActivityType
 	}
 	return nil
 }
 
 func (x *PendingActivityInfo) GetState() v12.PendingActivityState {
 	if x != nil {
-		return x.State
+		return x.xxx_hidden_State
 	}
 	return v12.PendingActivityState(0)
 }
 
 func (x *PendingActivityInfo) GetHeartbeatDetails() string {
 	if x != nil {
-		return x.HeartbeatDetails
+		return x.xxx_hidden_HeartbeatDetails
 	}
 	return ""
 }
 
 func (x *PendingActivityInfo) GetLastHeartbeatTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.LastHeartbeatTime
+		return x.xxx_hidden_LastHeartbeatTime
 	}
 	return nil
 }
 
 func (x *PendingActivityInfo) GetLastStartedTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.LastStartedTime
+		return x.xxx_hidden_LastStartedTime
 	}
 	return nil
 }
 
 func (x *PendingActivityInfo) GetAttempt() int32 {
 	if x != nil {
-		return x.Attempt
+		return x.xxx_hidden_Attempt
 	}
 	return 0
 }
 
 func (x *PendingActivityInfo) GetMaximumAttempts() int32 {
 	if x != nil {
-		return x.MaximumAttempts
+		return x.xxx_hidden_MaximumAttempts
 	}
 	return 0
 }
 
 func (x *PendingActivityInfo) GetScheduledTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.ScheduledTime
+		return x.xxx_hidden_ScheduledTime
 	}
 	return nil
 }
 
 func (x *PendingActivityInfo) GetExpirationTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.ExpirationTime
+		return x.xxx_hidden_ExpirationTime
 	}
 	return nil
 }
 
 func (x *PendingActivityInfo) GetLastFailure() *Failure {
 	if x != nil {
-		return x.LastFailure
+		return x.xxx_hidden_LastFailure
 	}
 	return nil
 }
 
 func (x *PendingActivityInfo) GetLastWorkerIdentity() string {
 	if x != nil {
-		return x.LastWorkerIdentity
+		return x.xxx_hidden_LastWorkerIdentity
 	}
 	return ""
 }
 
+func (x *PendingActivityInfo) SetActivityId(v string) {
+	x.xxx_hidden_ActivityId = v
+}
+
+func (x *PendingActivityInfo) SetActivityType(v *v11.ActivityType) {
+	x.xxx_hidden_ActivityType = v
+}
+
+func (x *PendingActivityInfo) SetState(v v12.PendingActivityState) {
+	x.xxx_hidden_State = v
+}
+
+func (x *PendingActivityInfo) SetHeartbeatDetails(v string) {
+	x.xxx_hidden_HeartbeatDetails = v
+}
+
+func (x *PendingActivityInfo) SetLastHeartbeatTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_LastHeartbeatTime = v
+}
+
+func (x *PendingActivityInfo) SetLastStartedTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_LastStartedTime = v
+}
+
+func (x *PendingActivityInfo) SetAttempt(v int32) {
+	x.xxx_hidden_Attempt = v
+}
+
+func (x *PendingActivityInfo) SetMaximumAttempts(v int32) {
+	x.xxx_hidden_MaximumAttempts = v
+}
+
+func (x *PendingActivityInfo) SetScheduledTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_ScheduledTime = v
+}
+
+func (x *PendingActivityInfo) SetExpirationTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_ExpirationTime = v
+}
+
+func (x *PendingActivityInfo) SetLastFailure(v *Failure) {
+	x.xxx_hidden_LastFailure = v
+}
+
+func (x *PendingActivityInfo) SetLastWorkerIdentity(v string) {
+	x.xxx_hidden_LastWorkerIdentity = v
+}
+
+func (x *PendingActivityInfo) HasActivityType() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_ActivityType != nil
+}
+
+func (x *PendingActivityInfo) HasLastHeartbeatTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_LastHeartbeatTime != nil
+}
+
+func (x *PendingActivityInfo) HasLastStartedTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_LastStartedTime != nil
+}
+
+func (x *PendingActivityInfo) HasScheduledTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_ScheduledTime != nil
+}
+
+func (x *PendingActivityInfo) HasExpirationTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_ExpirationTime != nil
+}
+
+func (x *PendingActivityInfo) HasLastFailure() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_LastFailure != nil
+}
+
+func (x *PendingActivityInfo) ClearActivityType() {
+	x.xxx_hidden_ActivityType = nil
+}
+
+func (x *PendingActivityInfo) ClearLastHeartbeatTime() {
+	x.xxx_hidden_LastHeartbeatTime = nil
+}
+
+func (x *PendingActivityInfo) ClearLastStartedTime() {
+	x.xxx_hidden_LastStartedTime = nil
+}
+
+func (x *PendingActivityInfo) ClearScheduledTime() {
+	x.xxx_hidden_ScheduledTime = nil
+}
+
+func (x *PendingActivityInfo) ClearExpirationTime() {
+	x.xxx_hidden_ExpirationTime = nil
+}
+
+func (x *PendingActivityInfo) ClearLastFailure() {
+	x.xxx_hidden_LastFailure = nil
+}
+
+type PendingActivityInfo_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	ActivityId         string
+	ActivityType       *v11.ActivityType
+	State              v12.PendingActivityState
+	HeartbeatDetails   string
+	LastHeartbeatTime  *timestamppb.Timestamp
+	LastStartedTime    *timestamppb.Timestamp
+	Attempt            int32
+	MaximumAttempts    int32
+	ScheduledTime      *timestamppb.Timestamp
+	ExpirationTime     *timestamppb.Timestamp
+	LastFailure        *Failure
+	LastWorkerIdentity string
+}
+
+func (b0 PendingActivityInfo_builder) Build() *PendingActivityInfo {
+	m0 := &PendingActivityInfo{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_ActivityId = b.ActivityId
+	x.xxx_hidden_ActivityType = b.ActivityType
+	x.xxx_hidden_State = b.State
+	x.xxx_hidden_HeartbeatDetails = b.HeartbeatDetails
+	x.xxx_hidden_LastHeartbeatTime = b.LastHeartbeatTime
+	x.xxx_hidden_LastStartedTime = b.LastStartedTime
+	x.xxx_hidden_Attempt = b.Attempt
+	x.xxx_hidden_MaximumAttempts = b.MaximumAttempts
+	x.xxx_hidden_ScheduledTime = b.ScheduledTime
+	x.xxx_hidden_ExpirationTime = b.ExpirationTime
+	x.xxx_hidden_LastFailure = b.LastFailure
+	x.xxx_hidden_LastWorkerIdentity = b.LastWorkerIdentity
+	return m0
+}
+
 type SearchAttributes struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	IndexedFields map[string]string      `protobuf:"bytes,1,rep,name=indexed_fields,json=indexedFields,proto3" json:"indexed_fields,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                    protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_IndexedFields map[string]string      `protobuf:"bytes,1,rep,name=indexed_fields,json=indexedFields,proto3" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *SearchAttributes) Reset() {
@@ -422,27 +847,40 @@ func (x *SearchAttributes) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SearchAttributes.ProtoReflect.Descriptor instead.
-func (*SearchAttributes) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_cli_v1_message_proto_rawDescGZIP(), []int{3}
-}
-
 func (x *SearchAttributes) GetIndexedFields() map[string]string {
 	if x != nil {
-		return x.IndexedFields
+		return x.xxx_hidden_IndexedFields
 	}
 	return nil
 }
 
+func (x *SearchAttributes) SetIndexedFields(v map[string]string) {
+	x.xxx_hidden_IndexedFields = v
+}
+
+type SearchAttributes_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	IndexedFields map[string]string
+}
+
+func (b0 SearchAttributes_builder) Build() *SearchAttributes {
+	m0 := &SearchAttributes{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_IndexedFields = b.IndexedFields
+	return m0
+}
+
 type Failure struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Message       string                 `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
-	Source        string                 `protobuf:"bytes,2,opt,name=source,proto3" json:"source,omitempty"`
-	StackTrace    string                 `protobuf:"bytes,3,opt,name=stack_trace,json=stackTrace,proto3" json:"stack_trace,omitempty"`
-	Cause         *Failure               `protobuf:"bytes,4,opt,name=cause,proto3" json:"cause,omitempty"`
-	FailureType   string                 `protobuf:"bytes,5,opt,name=failure_type,json=failureType,proto3" json:"failure_type,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                  protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Message     string                 `protobuf:"bytes,1,opt,name=message,proto3"`
+	xxx_hidden_Source      string                 `protobuf:"bytes,2,opt,name=source,proto3"`
+	xxx_hidden_StackTrace  string                 `protobuf:"bytes,3,opt,name=stack_trace,json=stackTrace,proto3"`
+	xxx_hidden_Cause       *Failure               `protobuf:"bytes,4,opt,name=cause,proto3"`
+	xxx_hidden_FailureType string                 `protobuf:"bytes,5,opt,name=failure_type,json=failureType,proto3"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *Failure) Reset() {
@@ -470,55 +908,103 @@ func (x *Failure) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use Failure.ProtoReflect.Descriptor instead.
-func (*Failure) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_cli_v1_message_proto_rawDescGZIP(), []int{4}
-}
-
 func (x *Failure) GetMessage() string {
 	if x != nil {
-		return x.Message
+		return x.xxx_hidden_Message
 	}
 	return ""
 }
 
 func (x *Failure) GetSource() string {
 	if x != nil {
-		return x.Source
+		return x.xxx_hidden_Source
 	}
 	return ""
 }
 
 func (x *Failure) GetStackTrace() string {
 	if x != nil {
-		return x.StackTrace
+		return x.xxx_hidden_StackTrace
 	}
 	return ""
 }
 
 func (x *Failure) GetCause() *Failure {
 	if x != nil {
-		return x.Cause
+		return x.xxx_hidden_Cause
 	}
 	return nil
 }
 
 func (x *Failure) GetFailureType() string {
 	if x != nil {
-		return x.FailureType
+		return x.xxx_hidden_FailureType
 	}
 	return ""
 }
 
+func (x *Failure) SetMessage(v string) {
+	x.xxx_hidden_Message = v
+}
+
+func (x *Failure) SetSource(v string) {
+	x.xxx_hidden_Source = v
+}
+
+func (x *Failure) SetStackTrace(v string) {
+	x.xxx_hidden_StackTrace = v
+}
+
+func (x *Failure) SetCause(v *Failure) {
+	x.xxx_hidden_Cause = v
+}
+
+func (x *Failure) SetFailureType(v string) {
+	x.xxx_hidden_FailureType = v
+}
+
+func (x *Failure) HasCause() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Cause != nil
+}
+
+func (x *Failure) ClearCause() {
+	x.xxx_hidden_Cause = nil
+}
+
+type Failure_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Message     string
+	Source      string
+	StackTrace  string
+	Cause       *Failure
+	FailureType string
+}
+
+func (b0 Failure_builder) Build() *Failure {
+	m0 := &Failure{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Message = b.Message
+	x.xxx_hidden_Source = b.Source
+	x.xxx_hidden_StackTrace = b.StackTrace
+	x.xxx_hidden_Cause = b.Cause
+	x.xxx_hidden_FailureType = b.FailureType
+	return m0
+}
+
 type AddSearchAttributesResponse struct {
-	state                    protoimpl.MessageState `protogen:"open.v1"`
-	IndexName                string                 `protobuf:"bytes,1,opt,name=index_name,json=indexName,proto3" json:"index_name,omitempty"`
-	CustomSearchAttributes   map[string]string      `protobuf:"bytes,2,rep,name=custom_search_attributes,json=customSearchAttributes,proto3" json:"custom_search_attributes,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	SystemSearchAttributes   map[string]string      `protobuf:"bytes,3,rep,name=system_search_attributes,json=systemSearchAttributes,proto3" json:"system_search_attributes,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	Mapping                  map[string]string      `protobuf:"bytes,4,rep,name=mapping,proto3" json:"mapping,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	AddWorkflowExecutionInfo *WorkflowExecutionInfo `protobuf:"bytes,5,opt,name=add_workflow_execution_info,json=addWorkflowExecutionInfo,proto3" json:"add_workflow_execution_info,omitempty"`
-	unknownFields            protoimpl.UnknownFields
-	sizeCache                protoimpl.SizeCache
+	state                               protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_IndexName                string                 `protobuf:"bytes,1,opt,name=index_name,json=indexName,proto3"`
+	xxx_hidden_CustomSearchAttributes   map[string]string      `protobuf:"bytes,2,rep,name=custom_search_attributes,json=customSearchAttributes,proto3" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	xxx_hidden_SystemSearchAttributes   map[string]string      `protobuf:"bytes,3,rep,name=system_search_attributes,json=systemSearchAttributes,proto3" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	xxx_hidden_Mapping                  map[string]string      `protobuf:"bytes,4,rep,name=mapping,proto3" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	xxx_hidden_AddWorkflowExecutionInfo *WorkflowExecutionInfo `protobuf:"bytes,5,opt,name=add_workflow_execution_info,json=addWorkflowExecutionInfo,proto3"`
+	unknownFields                       protoimpl.UnknownFields
+	sizeCache                           protoimpl.SizeCache
 }
 
 func (x *AddSearchAttributesResponse) Reset() {
@@ -546,44 +1032,92 @@ func (x *AddSearchAttributesResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use AddSearchAttributesResponse.ProtoReflect.Descriptor instead.
-func (*AddSearchAttributesResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_cli_v1_message_proto_rawDescGZIP(), []int{5}
-}
-
 func (x *AddSearchAttributesResponse) GetIndexName() string {
 	if x != nil {
-		return x.IndexName
+		return x.xxx_hidden_IndexName
 	}
 	return ""
 }
 
 func (x *AddSearchAttributesResponse) GetCustomSearchAttributes() map[string]string {
 	if x != nil {
-		return x.CustomSearchAttributes
+		return x.xxx_hidden_CustomSearchAttributes
 	}
 	return nil
 }
 
 func (x *AddSearchAttributesResponse) GetSystemSearchAttributes() map[string]string {
 	if x != nil {
-		return x.SystemSearchAttributes
+		return x.xxx_hidden_SystemSearchAttributes
 	}
 	return nil
 }
 
 func (x *AddSearchAttributesResponse) GetMapping() map[string]string {
 	if x != nil {
-		return x.Mapping
+		return x.xxx_hidden_Mapping
 	}
 	return nil
 }
 
 func (x *AddSearchAttributesResponse) GetAddWorkflowExecutionInfo() *WorkflowExecutionInfo {
 	if x != nil {
-		return x.AddWorkflowExecutionInfo
+		return x.xxx_hidden_AddWorkflowExecutionInfo
 	}
 	return nil
+}
+
+func (x *AddSearchAttributesResponse) SetIndexName(v string) {
+	x.xxx_hidden_IndexName = v
+}
+
+func (x *AddSearchAttributesResponse) SetCustomSearchAttributes(v map[string]string) {
+	x.xxx_hidden_CustomSearchAttributes = v
+}
+
+func (x *AddSearchAttributesResponse) SetSystemSearchAttributes(v map[string]string) {
+	x.xxx_hidden_SystemSearchAttributes = v
+}
+
+func (x *AddSearchAttributesResponse) SetMapping(v map[string]string) {
+	x.xxx_hidden_Mapping = v
+}
+
+func (x *AddSearchAttributesResponse) SetAddWorkflowExecutionInfo(v *WorkflowExecutionInfo) {
+	x.xxx_hidden_AddWorkflowExecutionInfo = v
+}
+
+func (x *AddSearchAttributesResponse) HasAddWorkflowExecutionInfo() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_AddWorkflowExecutionInfo != nil
+}
+
+func (x *AddSearchAttributesResponse) ClearAddWorkflowExecutionInfo() {
+	x.xxx_hidden_AddWorkflowExecutionInfo = nil
+}
+
+type AddSearchAttributesResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	IndexName                string
+	CustomSearchAttributes   map[string]string
+	SystemSearchAttributes   map[string]string
+	Mapping                  map[string]string
+	AddWorkflowExecutionInfo *WorkflowExecutionInfo
+}
+
+func (b0 AddSearchAttributesResponse_builder) Build() *AddSearchAttributesResponse {
+	m0 := &AddSearchAttributesResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_IndexName = b.IndexName
+	x.xxx_hidden_CustomSearchAttributes = b.CustomSearchAttributes
+	x.xxx_hidden_SystemSearchAttributes = b.SystemSearchAttributes
+	x.xxx_hidden_Mapping = b.Mapping
+	x.xxx_hidden_AddWorkflowExecutionInfo = b.AddWorkflowExecutionInfo
+	return m0
 }
 
 var File_temporal_server_api_cli_v1_message_proto protoreflect.FileDescriptor
@@ -659,18 +1193,6 @@ const file_temporal_server_api_cli_v1_message_proto_rawDesc = "" +
 	"\fMappingEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B&Z$go.temporal.io/server/api/cli/v1;clib\x06proto3"
-
-var (
-	file_temporal_server_api_cli_v1_message_proto_rawDescOnce sync.Once
-	file_temporal_server_api_cli_v1_message_proto_rawDescData []byte
-)
-
-func file_temporal_server_api_cli_v1_message_proto_rawDescGZIP() []byte {
-	file_temporal_server_api_cli_v1_message_proto_rawDescOnce.Do(func() {
-		file_temporal_server_api_cli_v1_message_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_api_cli_v1_message_proto_rawDesc), len(file_temporal_server_api_cli_v1_message_proto_rawDesc)))
-	})
-	return file_temporal_server_api_cli_v1_message_proto_rawDescData
-}
 
 var file_temporal_server_api_cli_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
 var file_temporal_server_api_cli_v1_message_proto_goTypes = []any{

@@ -67,33 +67,33 @@ func AdminShowWorkflow(c *cli.Context, clientFactory ClientFactory) error {
 	var histories []*commonpb.DataBlob
 	var token []byte
 	for doContinue := true; doContinue; doContinue = len(token) != 0 {
-		resp, err := client.GetWorkflowExecutionRawHistoryV2(ctx, &adminservice.GetWorkflowExecutionRawHistoryV2Request{
+		resp, err := client.GetWorkflowExecutionRawHistoryV2(ctx, adminservice.GetWorkflowExecutionRawHistoryV2Request_builder{
 			NamespaceId: nsID.String(),
-			Execution: &commonpb.WorkflowExecution{
+			Execution: commonpb.WorkflowExecution_builder{
 				WorkflowId: wid,
 				RunId:      rid,
-			},
+			}.Build(),
 			StartEventId:      startEventId,
 			EndEventId:        endEventId,
 			StartEventVersion: startEventVerion,
 			EndEventVersion:   endEventVersion,
 			MaximumPageSize:   100,
 			NextPageToken:     token,
-		})
+		}.Build())
 		if err != nil {
 			return fmt.Errorf("unable to recv History Branch: %s", err)
 		}
-		histories = append(histories, resp.HistoryBatches...)
-		token = resp.NextPageToken
+		histories = append(histories, resp.GetHistoryBatches()...)
+		token = resp.GetNextPageToken()
 	}
 
 	var historyBatches []*historypb.History
 	totalSize := 0
 	var errs []error
 	for idx, b := range histories {
-		totalSize += len(b.Data)
+		totalSize += len(b.GetData())
 		// nolint:errcheck // assuming that write will succeed.
-		fmt.Fprintf(c.App.Writer, "======== batch %v, blob len: %v ======\n", idx+1, len(b.Data))
+		fmt.Fprintf(c.App.Writer, "======== batch %v, blob len: %v ======\n", idx+1, len(b.GetData()))
 		historyBatch, err := serializer.DeserializeEvents(b)
 		if err != nil {
 			err := fmt.Errorf("unable to deserialize Events: %s", err)
@@ -101,14 +101,14 @@ func AdminShowWorkflow(c *cli.Context, clientFactory ClientFactory) error {
 			errs = append(errs, err)
 			continue
 		}
-		historyBatches = append(historyBatches, &historypb.History{Events: historyBatch})
+		historyBatches = append(historyBatches, historypb.History_builder{Events: historyBatch}.Build())
 		encoder := codec.NewJSONPBEncoder()
 		data, err := encoder.EncodeHistoryEvents(historyBatch)
 		if err != nil {
 			err := fmt.Errorf("unable to encode History Events: %s", err)
 			// nolint:errcheck // assuming that write will succeed.
 			fmt.Fprintln(c.App.Writer, err)
-			text, terr := prototext.Marshal(&historypb.History{Events: historyBatch})
+			text, terr := prototext.Marshal(historypb.History_builder{Events: historyBatch}.Build())
 			if terr == nil {
 				fmt.Fprintln(c.App.Writer, "marshal to text:")
 				fmt.Fprintln(c.App.Writer, string(text))
@@ -174,8 +174,8 @@ func AdminImportWorkflow(c *cli.Context, clientFactory ClientFactory) error {
 
 	versionHistory := &historyspb.VersionHistory{}
 	for _, historyBatch := range historyBatches {
-		for _, event := range historyBatch.Events {
-			item := versionhistory.NewVersionHistoryItem(event.EventId, event.Version)
+		for _, event := range historyBatch.GetEvents() {
+			item := versionhistory.NewVersionHistoryItem(event.GetEventId(), event.GetVersion())
 			if err := versionhistory.AddOrUpdateVersionHistoryItem(versionHistory, item); err != nil {
 				return fmt.Errorf("unable to generate version history: %s", err)
 			}
@@ -188,30 +188,30 @@ func AdminImportWorkflow(c *cli.Context, clientFactory ClientFactory) error {
 	for i := 0; i < len(historyBatches)+1; i++ {
 		if i < len(historyBatches) {
 			historyBatch := historyBatches[i]
-			blob, err := serializer.SerializeEvents(historyBatch.Events)
+			blob, err := serializer.SerializeEvents(historyBatch.GetEvents())
 			if err != nil {
 				return fmt.Errorf("unable to deserialize Events: %s", err)
 			}
-			blobSize += len(blob.Data)
+			blobSize += len(blob.GetData())
 			blobs = append(blobs, blob)
 		}
 		if blobSize >= historyImportBlobSize ||
 			len(blobs) >= historyImportPageSize ||
 			(i == len(historyBatches) && len(blobs) > 0) {
-			resp, err := client.ImportWorkflowExecution(ctx, &adminservice.ImportWorkflowExecutionRequest{
+			resp, err := client.ImportWorkflowExecution(ctx, adminservice.ImportWorkflowExecutionRequest_builder{
 				Namespace: nsName,
-				Execution: &commonpb.WorkflowExecution{
+				Execution: commonpb.WorkflowExecution_builder{
 					WorkflowId: wid,
 					RunId:      rid,
-				},
+				}.Build(),
 				HistoryBatches: blobs,
 				VersionHistory: versionHistory,
 				Token:          token,
-			})
+			}.Build())
 			if err != nil {
 				return fmt.Errorf("unable to send History Branch: %s", err)
 			}
-			token = resp.Token
+			token = resp.GetToken()
 
 			blobs = []*commonpb.DataBlob{}
 			blobSize = 0
@@ -221,20 +221,20 @@ func AdminImportWorkflow(c *cli.Context, clientFactory ClientFactory) error {
 		return errors.New("unable to import workflow events, some events are not sent")
 	}
 	// call with empty history to commit
-	resp, err := client.ImportWorkflowExecution(ctx, &adminservice.ImportWorkflowExecutionRequest{
+	resp, err := client.ImportWorkflowExecution(ctx, adminservice.ImportWorkflowExecutionRequest_builder{
 		Namespace: nsName,
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: wid,
 			RunId:      rid,
-		},
+		}.Build(),
 		HistoryBatches: []*commonpb.DataBlob{},
 		VersionHistory: versionHistory,
 		Token:          token,
-	})
+	}.Build())
 	if err != nil {
 		return fmt.Errorf("unable to import workflow events: %s", err)
 	}
-	if len(resp.Token) != 0 {
+	if len(resp.GetToken()) != 0 {
 		return errors.New("unable to import workflow events, not committed")
 	}
 	return nil
@@ -280,13 +280,13 @@ func AdminDescribeExecution(c *cli.Context, clientFactory ClientFactory) error {
 			// nolint:errcheck // assuming that write will succeed.
 			fmt.Fprintln(c.App.Writer, color.RedString("Unable to get current version history:"), err)
 		} else {
-			currentBranchToken := persistencespb.HistoryBranch{}
-			err := currentBranchToken.Unmarshal(currentVersionHistory.BranchToken)
+			currentBranchToken := &persistencespb.HistoryBranch{}
+			err := currentBranchToken.Unmarshal(currentVersionHistory.GetBranchToken())
 			if err != nil {
 				// nolint:errcheck // assuming that write will succeed.
 				fmt.Fprintln(c.App.Writer, color.RedString("Unable to unmarshal current branch token:"), err)
 			} else {
-				prettyPrintJSONObject(c, &currentBranchToken)
+				prettyPrintJSONObject(c, currentBranchToken)
 			}
 		}
 	}
@@ -338,14 +338,14 @@ func describeMutableState(c *cli.Context, clientFactory ClientFactory) (*adminse
 	ctx, cancel := newContext(c)
 	defer cancel()
 
-	resp, err := adminClient.DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
+	resp, err := adminClient.DescribeMutableState(ctx, adminservice.DescribeMutableStateRequest_builder{
 		Namespace: namespace,
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: bid,
 			RunId:      rid,
-		},
+		}.Build(),
 		Archetype: getArchetypeWithDefault(c, chasm.WorkflowArchetype),
-	})
+	}.Build())
 	if err != nil {
 		return nil, fmt.Errorf("unable to get Mutable State: %s", err)
 	}
@@ -376,22 +376,22 @@ func AdminDeleteWorkflow(c *cli.Context, clientFactory ClientFactory, prompter *
 	ctx, cancel := newContext(c)
 	defer cancel()
 
-	resp, err := adminClient.DeleteWorkflowExecution(ctx, &adminservice.DeleteWorkflowExecutionRequest{
+	resp, err := adminClient.DeleteWorkflowExecution(ctx, adminservice.DeleteWorkflowExecutionRequest_builder{
 		Namespace: namespace,
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: wid,
 			RunId:      rid,
-		},
+		}.Build(),
 		Archetype: getArchetypeWithDefault(c, chasm.WorkflowArchetype),
-	})
+	}.Build())
 	if err != nil {
 		return fmt.Errorf("unable to delete workflow execution: %s", err)
 	}
 
-	if len(resp.Warnings) != 0 {
+	if len(resp.GetWarnings()) != 0 {
 		// nolint:errcheck // assuming that write will succeed.
 		fmt.Fprintln(c.App.Writer, "Warnings:")
-		for _, warning := range resp.Warnings {
+		for _, warning := range resp.GetWarnings() {
 			fmt.Fprintf(c.App.Writer, "- %s\n", warning)
 		}
 		// nolint:errcheck // assuming that write will succeed.
@@ -455,34 +455,34 @@ func AdminListShardTasks(c *cli.Context, clientFactory ClientFactory, registry t
 	if err != nil {
 		return err
 	}
-	req := &adminservice.ListHistoryTasksRequest{
+	req := adminservice.ListHistoryTasksRequest_builder{
 		ShardId:  sid,
 		Category: int32(category.ID()),
-		TaskRange: &historyspb.TaskRange{
-			InclusiveMinTaskKey: &historyspb.TaskKey{
+		TaskRange: historyspb.TaskRange_builder{
+			InclusiveMinTaskKey: historyspb.TaskKey_builder{
 				FireTime: timestamppb.New(minFireTime),
 				TaskId:   c.Int64(FlagMinTaskID),
-			},
-			ExclusiveMaxTaskKey: &historyspb.TaskKey{
+			}.Build(),
+			ExclusiveMaxTaskKey: historyspb.TaskKey_builder{
 				FireTime: timestamppb.New(maxFireTime),
 				TaskId:   c.Int64(FlagMaxTaskID),
-			},
-		},
+			}.Build(),
+		}.Build(),
 		BatchSize: int32(pageSize),
-	}
+	}.Build()
 
 	ctx, cancel := newContext(c)
 	defer cancel()
 	paginationFunc := func(paginationToken []byte) ([]interface{}, []byte, error) {
-		req.NextPageToken = paginationToken
+		req.SetNextPageToken(paginationToken)
 		response, err := client.ListHistoryTasks(ctx, req)
 		if err != nil {
 			return nil, nil, err
 		}
-		token := response.NextPageToken
+		token := response.GetNextPageToken()
 
 		var items []interface{}
-		for _, task := range response.Tasks {
+		for _, task := range response.GetTasks() {
 			items = append(items, task)
 		}
 		return items, token, nil
@@ -518,12 +518,12 @@ func AdminRemoveTask(
 	ctx, cancel := newContext(c)
 	defer cancel()
 
-	req := &adminservice.RemoveTaskRequest{
+	req := adminservice.RemoveTaskRequest_builder{
 		ShardId:        int32(shardID),
 		Category:       int32(category.ID()),
 		TaskId:         taskID,
 		VisibilityTime: timestamppb.New(timestamp.UnixOrZeroTime(visibilityTimestamp)),
-	}
+	}.Build()
 
 	_, err = adminClient.RemoveTask(ctx, req)
 	if err != nil {
@@ -538,13 +538,13 @@ func AdminDescribeShard(c *cli.Context, clientFactory ClientFactory) error {
 	adminClient := clientFactory.AdminClient(c)
 	ctx, cancel := newContext(c)
 	defer cancel()
-	response, err := adminClient.GetShard(ctx, &adminservice.GetShardRequest{ShardId: int32(sid)})
+	response, err := adminClient.GetShard(ctx, adminservice.GetShardRequest_builder{ShardId: int32(sid)}.Build())
 
 	if err != nil {
 		return fmt.Errorf("unable to initialize Shard Manager: %s", err)
 	}
 
-	prettyPrintJSONObject(c, response.ShardInfo)
+	prettyPrintJSONObject(c, response.GetShardInfo())
 	return nil
 }
 
@@ -557,7 +557,7 @@ func AdminShardManagement(c *cli.Context, clientFactory ClientFactory) error {
 	defer cancel()
 
 	req := &adminservice.CloseShardRequest{}
-	req.ShardId = int32(sid)
+	req.SetShardId(int32(sid))
 
 	_, err := adminClient.CloseShard(ctx, req)
 	if err != nil {
@@ -578,13 +578,13 @@ func AdminListGossipMembers(c *cli.Context, clientFactory ClientFactory) error {
 		return fmt.Errorf("unable to describe Cluster: %s", err)
 	}
 
-	members := response.MembershipInfo.Rings
+	members := response.GetMembershipInfo().GetRings()
 	if roleFlag != string(primitives.AllServices) {
 		all := members
 
 		members = members[:0]
 		for _, v := range all {
-			if roleFlag == v.Role {
+			if roleFlag == v.GetRole() {
 				members = append(members, v)
 			}
 		}
@@ -608,17 +608,17 @@ func AdminListClusterMembers(c *cli.Context, clientFactory ClientFactory) error 
 	ctx, cancel := newContext(c)
 	defer cancel()
 
-	req := &adminservice.ListClusterMembersRequest{
+	req := adminservice.ListClusterMembersRequest_builder{
 		Role:                enumsspb.ClusterMemberRole(role),
 		LastHeartbeatWithin: durationpb.New(heartbeat),
-	}
+	}.Build()
 
 	resp, err := adminClient.ListClusterMembers(ctx, req)
 	if err != nil {
 		return fmt.Errorf("unable to list Cluster Members: %s", err)
 	}
 
-	members := resp.ActiveMembers
+	members := resp.GetActiveMembers()
 
 	prettyPrintJSONObject(c, members)
 	return nil
@@ -653,12 +653,12 @@ func AdminDescribeHistoryHost(c *cli.Context, clientFactory ClientFactory) error
 
 	req := &adminservice.DescribeHistoryHostRequest{}
 	if c.IsSet(FlagShardID) {
-		req.ShardId = int32(shardID)
+		req.SetShardId(int32(shardID))
 	} else if c.IsSet(FlagNamespace) && c.IsSet(FlagWorkflowID) {
-		req.Namespace = namespace
-		req.WorkflowExecution = &commonpb.WorkflowExecution{WorkflowId: workflowID}
+		req.SetNamespace(namespace)
+		req.SetWorkflowExecution(commonpb.WorkflowExecution_builder{WorkflowId: workflowID}.Build())
 	} else if c.IsSet(FlagHistoryAddress) {
-		req.HostAddress = historyAddr
+		req.SetHostAddress(historyAddr)
 	}
 
 	resp, err := adminClient.DescribeHistoryHost(ctx, req)
@@ -667,7 +667,7 @@ func AdminDescribeHistoryHost(c *cli.Context, clientFactory ClientFactory) error
 	}
 
 	if !printFully {
-		resp.ShardIds = nil
+		resp.SetShardIds(nil)
 	}
 	prettyPrintJSONObject(c, resp)
 	return nil
@@ -706,14 +706,14 @@ func AdminRefreshWorkflowTasks(c *cli.Context, clientFactory ClientFactory) erro
 		return err
 	}
 
-	_, err = adminClient.RefreshWorkflowTasks(ctx, &adminservice.RefreshWorkflowTasksRequest{
+	_, err = adminClient.RefreshWorkflowTasks(ctx, adminservice.RefreshWorkflowTasksRequest_builder{
 		NamespaceId: nsID.String(),
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: wid,
 			RunId:      rid,
-		},
+		}.Build(),
 		Archetype: getArchetypeWithDefault(c, chasm.WorkflowArchetype),
-	})
+	}.Build())
 	if err != nil {
 		return fmt.Errorf("unable to refresh Workflow Task: %s", err)
 	} else {
@@ -752,10 +752,10 @@ func AdminBatchRefreshWorkflowTasks(c *cli.Context, clientFactory ClientFactory,
 	defer cancel()
 
 	// Count workflows matching the query to confirm with user
-	countResp, err := workflowClient.CountWorkflowExecutions(ctx, &workflowservice.CountWorkflowExecutionsRequest{
+	countResp, err := workflowClient.CountWorkflowExecutions(ctx, workflowservice.CountWorkflowExecutionsRequest_builder{
 		Namespace: nsName,
 		Query:     query,
-	})
+	}.Build())
 	if err != nil {
 		return fmt.Errorf("unable to count workflow executions: %w", err)
 	}
@@ -764,16 +764,14 @@ func AdminBatchRefreshWorkflowTasks(c *cli.Context, clientFactory ClientFactory,
 		countResp.GetCount(), query, nsName)
 	prompter.Prompt(msg)
 
-	_, err = adminClient.StartAdminBatchOperation(ctx, &adminservice.StartAdminBatchOperationRequest{
-		Namespace:       nsName,
-		VisibilityQuery: query,
-		JobId:           jobID,
-		Reason:          reason,
-		Identity:        getCurrentUserFromEnv(),
-		Operation: &adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation{
-			RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{},
-		},
-	})
+	_, err = adminClient.StartAdminBatchOperation(ctx, adminservice.StartAdminBatchOperationRequest_builder{
+		Namespace:             nsName,
+		VisibilityQuery:       query,
+		JobId:                 jobID,
+		Reason:                reason,
+		Identity:              getCurrentUserFromEnv(),
+		RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{},
+	}.Build())
 	if err != nil {
 		return fmt.Errorf("unable to start batch refresh workflow tasks: %w", err)
 	}
@@ -800,13 +798,13 @@ func AdminRebuildMutableState(c *cli.Context, clientFactory ClientFactory) error
 	ctx, cancel := newContext(c)
 	defer cancel()
 
-	_, err = adminClient.RebuildMutableState(ctx, &adminservice.RebuildMutableStateRequest{
+	_, err = adminClient.RebuildMutableState(ctx, adminservice.RebuildMutableStateRequest_builder{
 		Namespace: namespace,
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: wid,
 			RunId:      rid,
-		},
-	})
+		}.Build(),
+	}.Build())
 	if err != nil {
 		return fmt.Errorf("rebuild mutable state failed: %s", err)
 	} else {
@@ -837,14 +835,14 @@ func AdminReplicateWorkflow(
 	ctx, cancel := newContext(c)
 	defer cancel()
 
-	_, err = adminClient.GenerateLastHistoryReplicationTasks(ctx, &adminservice.GenerateLastHistoryReplicationTasksRequest{
+	_, err = adminClient.GenerateLastHistoryReplicationTasks(ctx, adminservice.GenerateLastHistoryReplicationTasksRequest_builder{
 		Namespace: nsName,
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: wid,
 			RunId:      rid,
-		},
+		}.Build(),
 		Archetype: getArchetypeWithDefault(c, chasm.WorkflowArchetype),
-	})
+	}.Build())
 	if err != nil {
 		return fmt.Errorf("unable to replicate workflow: %w", err)
 	}

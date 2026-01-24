@@ -65,8 +65,8 @@ func (f *relocatableAttributesFetcher) Fetch(
 	// and search attributes from the mutable state.
 	if !executionInfo.GetRelocatableAttributesRemoved() {
 		return &RelocatableAttributes{
-			Memo:             &commonpb.Memo{Fields: executionInfo.Memo},
-			SearchAttributes: &commonpb.SearchAttributes{IndexedFields: executionInfo.SearchAttributes},
+			Memo:             commonpb.Memo_builder{Fields: executionInfo.GetMemo()}.Build(),
+			SearchAttributes: commonpb.SearchAttributes_builder{IndexedFields: executionInfo.GetSearchAttributes()}.Build(),
 		}, nil
 	}
 
@@ -90,7 +90,7 @@ func (f *relocatableAttributesFetcher) Fetch(
 		return nil, err
 	}
 	return &RelocatableAttributes{
-		Memo:             visResponse.Execution.Memo,
-		SearchAttributes: visResponse.Execution.SearchAttributes,
+		Memo:             visResponse.Execution.GetMemo(),
+		SearchAttributes: visResponse.Execution.GetSearchAttributes(),
 	}, nil
 }

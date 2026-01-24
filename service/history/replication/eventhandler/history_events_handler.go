@@ -124,19 +124,19 @@ func (h *historyEventsHandlerImpl) splitBatchesToLocalAndRemote(
 	if len(localVersionHistory) == 0 {
 		return nil, eventsBatches, nil
 	}
-	lastLocalEventId := localVersionHistory[len(localVersionHistory)-1].EventId
+	lastLocalEventId := localVersionHistory[len(localVersionHistory)-1].GetEventId()
 	firstBatch := eventsBatches[0]
 	lastBatch := eventsBatches[len(eventsBatches)-1]
 
-	if lastBatch[len(lastBatch)-1].EventId <= lastLocalEventId {
+	if lastBatch[len(lastBatch)-1].GetEventId() <= lastLocalEventId {
 		return eventsBatches, nil, nil
 	}
-	if firstBatch[0].EventId > lastLocalEventId {
+	if firstBatch[0].GetEventId() > lastLocalEventId {
 		return nil, eventsBatches, nil
 	}
 	lastLocalBatchIndex := -1
 	for index, batch := range eventsBatches {
-		if batch[len(batch)-1].EventId == lastLocalEventId {
+		if batch[len(batch)-1].GetEventId() == lastLocalEventId {
 			lastLocalBatchIndex = index
 			break
 		}
@@ -166,20 +166,20 @@ func (h *historyEventsHandlerImpl) handleLocalGeneratedEvent(
 	if err != nil {
 		return err
 	}
-	mu, err := engine.GetMutableState(ctx, &historyservice.GetMutableStateRequest{
+	mu, err := engine.GetMutableState(ctx, historyservice.GetMutableStateRequest_builder{
 		NamespaceId: workflowKey.NamespaceID,
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: workflowKey.WorkflowID,
 			RunId:      workflowKey.RunID,
-		},
-	})
+		}.Build(),
+	}.Build())
 
 	switch err.(type) {
 	case nil:
 		_, err = versionhistory.FindFirstVersionHistoryIndexByVersionHistoryItem(mu.GetVersionHistories(), lastVersionHistoryItem)
 		// if mutable state is found, we expect it should have at least events to the last local generated event, otherwise it is a data lose
 		if err != nil {
-			return serviceerror.NewInvalidArgumentf("Encountered data lose issue when handling local generated events, expected event: %v, version : %v", lastVersionHistoryItem.EventId, lastVersionHistoryItem.Version)
+			return serviceerror.NewInvalidArgumentf("Encountered data lose issue when handling local generated events, expected event: %v, version : %v", lastVersionHistoryItem.GetEventId(), lastVersionHistoryItem.GetVersion())
 		}
 		return nil
 	case *serviceerror.NotFound:
@@ -188,8 +188,8 @@ func (h *historyEventsHandlerImpl) handleLocalGeneratedEvent(
 			ctx,
 			sourceClusterName,
 			workflowKey,
-			lastVersionHistoryItem.EventId,
-			lastVersionHistoryItem.Version,
+			lastVersionHistoryItem.GetEventId(),
+			lastVersionHistoryItem.GetVersion(),
 		)
 	default:
 		return err

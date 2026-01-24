@@ -16,26 +16,26 @@ import (
 
 func TestResponseBuilder(t *testing.T) {
 	nilLogger := log.NewNoopLogger()
-	request := schedulespb.WatchWorkflowRequest{
-		Execution: &commonpb.WorkflowExecution{WorkflowId: "workflow-id-1"},
-	}
+	request := schedulespb.WatchWorkflowRequest_builder{
+		Execution: commonpb.WorkflowExecution_builder{WorkflowId: "workflow-id-1"}.Build(),
+	}.Build()
 	t.Run("when execution status is RUNNING", func(t *testing.T) {
 		status := enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 		t.Run("when LogPoll requested will return errTryAgain", func(t *testing.T) {
-			longPollRequest := schedulespb.WatchWorkflowRequest{LongPoll: true}
-			rb := newResponseBuilder(&longPollRequest, status, nilLogger, eventStorageSize-recordOverheadSize)
-			event := historypb.HistoryEvent{}
+			longPollRequest := schedulespb.WatchWorkflowRequest_builder{LongPoll: true}.Build()
+			rb := newResponseBuilder(longPollRequest, status, nilLogger, eventStorageSize-recordOverheadSize)
+			event := &historypb.HistoryEvent{}
 
-			response, err := rb.Build(&event)
+			response, err := rb.Build(event)
 
 			assertError(t, err, errTryAgain)
 			assertResponseIsNil(t, response)
 		})
 		t.Run("when it is not a LongPoll will return response with nil result", func(t *testing.T) {
-			rb := newResponseBuilder(&request, status, nilLogger, eventStorageSize-recordOverheadSize)
-			event := historypb.HistoryEvent{}
+			rb := newResponseBuilder(request, status, nilLogger, eventStorageSize-recordOverheadSize)
+			event := &historypb.HistoryEvent{}
 
-			response, err := rb.Build(&event)
+			response, err := rb.Build(event)
 
 			assertError(t, err, nil)
 			assertResponseResult(t, response, nil)
@@ -47,70 +47,64 @@ func TestResponseBuilder(t *testing.T) {
 	t.Run("when status is COMPLETED", func(t *testing.T) {
 		status := enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
 		t.Run("when no attrs return errNoAttrs", func(t *testing.T) {
-			rb := newResponseBuilder(&request, status, nilLogger, eventStorageSize-recordOverheadSize)
-			event := historypb.HistoryEvent{}
+			rb := newResponseBuilder(request, status, nilLogger, eventStorageSize-recordOverheadSize)
+			event := &historypb.HistoryEvent{}
 
-			response, err := rb.Build(&event)
+			response, err := rb.Build(event)
 
 			assertError(t, err, errNoAttrs)
 			assertResponseIsNil(t, response)
 		})
 		t.Run("when NewExecutionRunId is non empty returns errFollow", func(t *testing.T) {
-			rb := newResponseBuilder(&request, status, nilLogger, eventStorageSize-recordOverheadSize)
-			event := historypb.HistoryEvent{
-				Attributes: &historypb.HistoryEvent_WorkflowExecutionCompletedEventAttributes{
-					WorkflowExecutionCompletedEventAttributes: &historypb.WorkflowExecutionCompletedEventAttributes{
-						NewExecutionRunId: "some-run-id",
-					},
-				},
-			}
+			rb := newResponseBuilder(request, status, nilLogger, eventStorageSize-recordOverheadSize)
+			event := historypb.HistoryEvent_builder{
+				WorkflowExecutionCompletedEventAttributes: historypb.WorkflowExecutionCompletedEventAttributes_builder{
+					NewExecutionRunId: "some-run-id",
+				}.Build(),
+			}.Build()
 
-			response, err := rb.Build(&event)
+			response, err := rb.Build(event)
 
 			assertError(t, err, errFollow("some-run-id"))
 			assertResponseIsNil(t, response)
 		})
 		t.Run("when result is smaller then maximum should place result in response", func(t *testing.T) {
-			rb := newResponseBuilder(&request, status, nilLogger, eventStorageSize-recordOverheadSize)
+			rb := newResponseBuilder(request, status, nilLogger, eventStorageSize-recordOverheadSize)
 			data1K := make([]byte, 1024)
-			payload := commonpb.Payload{
+			payload := commonpb.Payload_builder{
 				Data: data1K,
-			}
-			payloads := []*commonpb.Payload{&payload}
-			event := historypb.HistoryEvent{
-				Attributes: &historypb.HistoryEvent_WorkflowExecutionCompletedEventAttributes{
-					WorkflowExecutionCompletedEventAttributes: &historypb.WorkflowExecutionCompletedEventAttributes{
-						Result: &commonpb.Payloads{
-							Payloads: payloads,
-						},
-					},
-				},
-			}
+			}.Build()
+			payloads := []*commonpb.Payload{payload}
+			event := historypb.HistoryEvent_builder{
+				WorkflowExecutionCompletedEventAttributes: historypb.WorkflowExecutionCompletedEventAttributes_builder{
+					Result: commonpb.Payloads_builder{
+						Payloads: payloads,
+					}.Build(),
+				}.Build(),
+			}.Build()
 
-			response, err := rb.Build(&event)
+			response, err := rb.Build(event)
 
 			assertError(t, err, nil)
 			assertResponsePayload(t, response, payloads)
 			assertResponseStatus(t, response, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED)
 		})
 		t.Run("when result is bigger then eventStorageSize will drop the result", func(t *testing.T) {
-			rb := newResponseBuilder(&request, status, nilLogger, eventStorageSize-recordOverheadSize)
+			rb := newResponseBuilder(request, status, nilLogger, eventStorageSize-recordOverheadSize)
 			hugeData := make([]byte, eventStorageSize-recordOverheadSize+1)
-			payload := commonpb.Payload{
+			payload := commonpb.Payload_builder{
 				Data: hugeData,
-			}
-			payloads := []*commonpb.Payload{&payload}
-			event := historypb.HistoryEvent{
-				Attributes: &historypb.HistoryEvent_WorkflowExecutionCompletedEventAttributes{
-					WorkflowExecutionCompletedEventAttributes: &historypb.WorkflowExecutionCompletedEventAttributes{
-						Result: &commonpb.Payloads{
-							Payloads: payloads,
-						},
-					},
-				},
-			}
+			}.Build()
+			payloads := []*commonpb.Payload{payload}
+			event := historypb.HistoryEvent_builder{
+				WorkflowExecutionCompletedEventAttributes: historypb.WorkflowExecutionCompletedEventAttributes_builder{
+					Result: commonpb.Payloads_builder{
+						Payloads: payloads,
+					}.Build(),
+				}.Build(),
+			}.Build()
 
-			response, err := rb.Build(&event)
+			response, err := rb.Build(event)
 
 			assertError(t, err, nil)
 			assertResponsePayload(t, response, nil)
@@ -119,43 +113,39 @@ func TestResponseBuilder(t *testing.T) {
 	})
 
 	t.Run("when status is FAILED", func(t *testing.T) {
-		rb := newResponseBuilder(&request, enumspb.WORKFLOW_EXECUTION_STATUS_FAILED, nilLogger, eventStorageSize-recordOverheadSize)
+		rb := newResponseBuilder(request, enumspb.WORKFLOW_EXECUTION_STATUS_FAILED, nilLogger, eventStorageSize-recordOverheadSize)
 		t.Run("when result is nil returns errNoAttrs", func(t *testing.T) {
-			event := historypb.HistoryEvent{
+			event := historypb.HistoryEvent_builder{
 				Attributes: nil,
-			}
+			}.Build()
 
-			response, err := rb.Build(&event)
+			response, err := rb.Build(event)
 
 			assertError(t, err, errNoAttrs)
 			assertResponseIsNil(t, response)
 		})
 
 		t.Run("when NewExecutionRunId not empty returns errFollow", func(t *testing.T) {
-			event := historypb.HistoryEvent{
-				Attributes: &historypb.HistoryEvent_WorkflowExecutionFailedEventAttributes{
-					WorkflowExecutionFailedEventAttributes: &historypb.WorkflowExecutionFailedEventAttributes{
-						NewExecutionRunId: "some-run-id",
-					},
-				},
-			}
+			event := historypb.HistoryEvent_builder{
+				WorkflowExecutionFailedEventAttributes: historypb.WorkflowExecutionFailedEventAttributes_builder{
+					NewExecutionRunId: "some-run-id",
+				}.Build(),
+			}.Build()
 
-			response, err := rb.Build(&event)
+			response, err := rb.Build(event)
 
 			assertError(t, err, errFollow("some-run-id"))
 			assertResponseIsNil(t, response)
 		})
 
 		t.Run("when NewExecutionRunId empty return failure from event", func(t *testing.T) {
-			event := historypb.HistoryEvent{
-				Attributes: &historypb.HistoryEvent_WorkflowExecutionFailedEventAttributes{
-					WorkflowExecutionFailedEventAttributes: &historypb.WorkflowExecutionFailedEventAttributes{
-						Failure: &failurepb.Failure{Message: "some failure"},
-					},
-				},
-			}
+			event := historypb.HistoryEvent_builder{
+				WorkflowExecutionFailedEventAttributes: historypb.WorkflowExecutionFailedEventAttributes_builder{
+					Failure: failurepb.Failure_builder{Message: "some failure"}.Build(),
+				}.Build(),
+			}.Build()
 
-			response, err := rb.Build(&event)
+			response, err := rb.Build(event)
 
 			assertError(t, err, nil)
 			assertResponsePayload(t, response, nil)
@@ -168,10 +158,10 @@ func TestResponseBuilder(t *testing.T) {
 		enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED}
 	for _, status := range cancelledOrTerminated {
 		t.Run(fmt.Sprintf("when status is %v return empty", status), func(t *testing.T) {
-			rb := newResponseBuilder(&request, status, nilLogger, eventStorageSize-recordOverheadSize)
-			event := historypb.HistoryEvent{}
+			rb := newResponseBuilder(request, status, nilLogger, eventStorageSize-recordOverheadSize)
+			event := &historypb.HistoryEvent{}
 
-			response, err := rb.Build(&event)
+			response, err := rb.Build(event)
 
 			assertError(t, err, nil)
 			assertResponseResult(t, response, nil)
@@ -180,32 +170,29 @@ func TestResponseBuilder(t *testing.T) {
 	}
 
 	t.Run("when status CONTINUED_AS_NEW", func(t *testing.T) {
-		rb := newResponseBuilder(
-			&request,
+		rb := newResponseBuilder(request,
 			enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
 			nilLogger,
 			eventStorageSize-recordOverheadSize,
 		)
 
 		t.Run("when scheduled workflow result is nil returns errNoAttr", func(t *testing.T) {
-			event := historypb.HistoryEvent{Attributes: nil}
+			event := historypb.HistoryEvent_builder{Attributes: nil}.Build()
 
-			response, err := rb.Build(&event)
+			response, err := rb.Build(event)
 
 			assertError(t, err, errNoAttrs)
 			assertResponseIsNil(t, response)
 		})
 
 		t.Run("when result not nil will return errFollow", func(t *testing.T) {
-			event := historypb.HistoryEvent{
-				Attributes: &historypb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{
-					WorkflowExecutionContinuedAsNewEventAttributes: &historypb.WorkflowExecutionContinuedAsNewEventAttributes{
-						NewExecutionRunId: "some-run-id",
-					},
-				},
-			}
+			event := historypb.HistoryEvent_builder{
+				WorkflowExecutionContinuedAsNewEventAttributes: historypb.WorkflowExecutionContinuedAsNewEventAttributes_builder{
+					NewExecutionRunId: "some-run-id",
+				}.Build(),
+			}.Build()
 
-			response, err := rb.Build(&event)
+			response, err := rb.Build(event)
 
 			assertError(t, err, errFollow("some-run-id"))
 			assertResponseIsNil(t, response)
@@ -213,38 +200,33 @@ func TestResponseBuilder(t *testing.T) {
 	})
 
 	t.Run("when status TIMED_OUT", func(t *testing.T) {
-		rb := newResponseBuilder(
-			&request, enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT, nilLogger, eventStorageSize-recordOverheadSize)
+		rb := newResponseBuilder(request, enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT, nilLogger, eventStorageSize-recordOverheadSize)
 		t.Run("when scheduled workflow result is nil returns errNoAttr", func(t *testing.T) {
-			event := historypb.HistoryEvent{Attributes: nil}
+			event := historypb.HistoryEvent_builder{Attributes: nil}.Build()
 
-			response, err := rb.Build(&event)
+			response, err := rb.Build(event)
 
 			assertError(t, err, errNoAttrs)
 			assertResponseIsNil(t, response)
 		})
 		t.Run("when newExecutionRunId is not empty will return errFollow", func(t *testing.T) {
-			event := historypb.HistoryEvent{
-				Attributes: &historypb.HistoryEvent_WorkflowExecutionTimedOutEventAttributes{
-					WorkflowExecutionTimedOutEventAttributes: &historypb.WorkflowExecutionTimedOutEventAttributes{
-						NewExecutionRunId: "some-run-id",
-					},
-				},
-			}
+			event := historypb.HistoryEvent_builder{
+				WorkflowExecutionTimedOutEventAttributes: historypb.WorkflowExecutionTimedOutEventAttributes_builder{
+					NewExecutionRunId: "some-run-id",
+				}.Build(),
+			}.Build()
 
-			response, err := rb.Build(&event)
+			response, err := rb.Build(event)
 
 			assertError(t, err, errFollow("some-run-id"))
 			assertResponseIsNil(t, response)
 		})
 		t.Run("when newExecutionRunId is empty will return empty result", func(t *testing.T) {
-			event := historypb.HistoryEvent{
-				Attributes: &historypb.HistoryEvent_WorkflowExecutionTimedOutEventAttributes{
-					WorkflowExecutionTimedOutEventAttributes: &historypb.WorkflowExecutionTimedOutEventAttributes{},
-				},
-			}
+			event := historypb.HistoryEvent_builder{
+				WorkflowExecutionTimedOutEventAttributes: &historypb.WorkflowExecutionTimedOutEventAttributes{},
+			}.Build()
 
-			response, err := rb.Build(&event)
+			response, err := rb.Build(event)
 			assertError(t, err, nil)
 			assertResponseResult(t, response, nil)
 			assertResponseStatus(t, response, enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT)
@@ -252,11 +234,10 @@ func TestResponseBuilder(t *testing.T) {
 		})
 	})
 	t.Run("when status is UNSPECIFIED will return errUnknownFlow", func(t *testing.T) {
-		rb := newResponseBuilder(
-			&request, enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED, nilLogger, eventStorageSize-recordOverheadSize)
-		event := historypb.HistoryEvent{}
+		rb := newResponseBuilder(request, enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED, nilLogger, eventStorageSize-recordOverheadSize)
+		event := &historypb.HistoryEvent{}
 
-		response, err := rb.Build(&event)
+		response, err := rb.Build(event)
 
 		assertError(t, err, errUnkownWorkflowStatus)
 		assertResponseIsNil(t, response)
@@ -290,10 +271,10 @@ func assertResponseStatus(t *testing.T, response *schedulespb.WatchWorkflowRespo
 	require.Equal(
 		t,
 		expectedStatus,
-		response.Status,
+		response.GetStatus(),
 		"wrong response status expected %v, got %v",
 		expectedStatus,
-		response.Status,
+		response.GetStatus(),
 	)
 }
 

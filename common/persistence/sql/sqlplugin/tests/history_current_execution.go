@@ -321,18 +321,18 @@ func (s *historyCurrentExecutionSuite) newRandomCurrentExecutionRow(
 ) sqlplugin.CurrentExecutionsRow {
 	state := testHistoryExecutionStates[rand.Intn(len(testHistoryExecutionStates))]
 	status := testHistoryExecutionStatus[state][rand.Intn(len(testHistoryExecutionStatus[state]))]
-	executionState := &persistencespb.WorkflowExecutionState{
+	executionState := persistencespb.WorkflowExecutionState_builder{
 		CreateRequestId: requestID,
 		RunId:           runID.String(),
 		State:           state,
 		Status:          status,
 		RequestIds: map[string]*persistencespb.RequestIDInfo{
-			uuid.NewString(): {
+			uuid.NewString(): persistencespb.RequestIDInfo_builder{
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
 				EventId:   common.BufferedEventID,
-			},
+			}.Build(),
 		},
-	}
+	}.Build()
 	executionStateBlob, _ := serialization.NewSerializer().WorkflowExecutionStateToBlob(executionState)
 	return sqlplugin.CurrentExecutionsRow{
 		ShardID:          shardID,
@@ -344,7 +344,7 @@ func (s *historyCurrentExecutionSuite) newRandomCurrentExecutionRow(
 		LastWriteVersion: lastWriteVersion,
 		State:            state,
 		Status:           status,
-		Data:             executionStateBlob.Data,
-		DataEncoding:     executionStateBlob.EncodingType.String(),
+		Data:             executionStateBlob.GetData(),
+		DataEncoding:     executionStateBlob.GetEncodingType().String(),
 	}
 }

@@ -134,7 +134,7 @@ func (s *visibilityArchiverSuite) TestArchive_Fail_InvalidURI() {
 	visibilityArchiver := s.newTestVisibilityArchiver()
 	URI, err := archiver.NewURI("wrongscheme://")
 	s.NoError(err)
-	request := &archiverspb.VisibilityRecord{
+	request := archiverspb.VisibilityRecord_builder{
 		Namespace:        testNamespace,
 		NamespaceId:      testNamespaceID,
 		WorkflowId:       testWorkflowID,
@@ -145,7 +145,7 @@ func (s *visibilityArchiverSuite) TestArchive_Fail_InvalidURI() {
 		CloseTime:        timestamp.TimeNowPtrUtc(),
 		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
 		HistoryLength:    int64(101),
-	}
+	}.Build()
 	err = visibilityArchiver.Archive(context.Background(), URI, request)
 	s.Error(err)
 }
@@ -162,9 +162,9 @@ func (s *visibilityArchiverSuite) TestArchive_Fail_NonRetryableErrorOption() {
 	err := visibilityArchiver.Archive(
 		context.Background(),
 		s.testArchivalURI,
-		&archiverspb.VisibilityRecord{
+		archiverspb.VisibilityRecord_builder{
 			NamespaceId: testNamespaceID,
-		},
+		}.Build(),
 		archiver.GetNonRetryableErrorOption(nonRetryableErr),
 	)
 	s.Equal(nonRetryableErr, err)
@@ -173,7 +173,7 @@ func (s *visibilityArchiverSuite) TestArchive_Fail_NonRetryableErrorOption() {
 func (s *visibilityArchiverSuite) TestArchive_Success() {
 	visibilityArchiver := s.newTestVisibilityArchiver()
 	closeTimestamp := timestamp.TimeNowPtrUtc()
-	request := &archiverspb.VisibilityRecord{
+	request := archiverspb.VisibilityRecord_builder{
 		NamespaceId:      testNamespaceID,
 		Namespace:        testNamespace,
 		WorkflowId:       testWorkflowID,
@@ -184,15 +184,15 @@ func (s *visibilityArchiverSuite) TestArchive_Success() {
 		CloseTime:        closeTimestamp,
 		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
 		HistoryLength:    int64(101),
-		Memo: &commonpb.Memo{
+		Memo: commonpb.Memo_builder{
 			Fields: map[string]*commonpb.Payload{
 				"testFields": payload.EncodeBytes([]byte{1, 2, 3}),
 			},
-		},
+		}.Build(),
 		SearchAttributes: map[string]string{
 			"testAttribute": "456",
 		},
-	}
+	}.Build()
 	URI, err := archiver.NewURI(testBucketURI + "/test-archive-success")
 	s.NoError(err)
 	err = visibilityArchiver.Archive(context.Background(), URI, request)
@@ -385,9 +385,9 @@ func (s *visibilityArchiverSuite) TestQuery_EmptyQuery_Pagination() {
 		s.NotNil(response)
 		nextPageToken = response.NextPageToken
 		for _, execution := range response.Executions {
-			key := execution.Execution.GetWorkflowId() +
-				"/" + execution.Execution.GetRunId() +
-				"/" + execution.CloseTime.String()
+			key := execution.GetExecution().GetWorkflowId() +
+				"/" + execution.GetExecution().GetRunId() +
+				"/" + execution.GetCloseTime().String()
 			if executions[key] != nil {
 				s.Fail("duplicate key", key)
 			}
@@ -486,7 +486,7 @@ func (s *visibilityArchiverSuite) TestArchiveAndQueryPrecisions() {
 	s.NoError(err)
 
 	for i, testData := range precisionTests {
-		record := archiverspb.VisibilityRecord{
+		record := archiverspb.VisibilityRecord_builder{
 			NamespaceId:      testNamespaceID,
 			Namespace:        testNamespace,
 			WorkflowId:       testWorkflowID,
@@ -496,8 +496,8 @@ func (s *visibilityArchiverSuite) TestArchiveAndQueryPrecisions() {
 			CloseTime:        timestamppb.New(time.Date(2000, 1, testData.day, testData.hour, testData.minute, testData.second, 0, time.UTC)),
 			Status:           enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
 			HistoryLength:    101,
-		}
-		err := visibilityArchiver.Archive(context.Background(), URI, &record)
+		}.Build()
+		err := visibilityArchiver.Archive(context.Background(), URI, record)
 		s.NoError(err, "case %d", i)
 	}
 
@@ -636,7 +636,7 @@ func (s *visibilityArchiverSuite) TestArchiveAndQuery() {
 
 func (s *visibilityArchiverSuite) setupVisibilityDirectory() {
 	s.visibilityRecords = []*archiverspb.VisibilityRecord{
-		{
+		archiverspb.VisibilityRecord_builder{
 			NamespaceId:      testNamespaceID,
 			Namespace:        testNamespace,
 			WorkflowId:       testWorkflowID,
@@ -646,8 +646,8 @@ func (s *visibilityArchiverSuite) setupVisibilityDirectory() {
 			CloseTime:        timestamp.UnixOrZeroTimePtr(int64(time.Hour)),
 			Status:           enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
 			HistoryLength:    101,
-		},
-		{
+		}.Build(),
+		archiverspb.VisibilityRecord_builder{
 			NamespaceId:      testNamespaceID,
 			Namespace:        testNamespace,
 			WorkflowId:       testWorkflowID,
@@ -657,8 +657,8 @@ func (s *visibilityArchiverSuite) setupVisibilityDirectory() {
 			CloseTime:        timestamp.UnixOrZeroTimePtr(int64(time.Hour + 30*time.Minute)),
 			Status:           enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
 			HistoryLength:    101,
-		},
-		{
+		}.Build(),
+		archiverspb.VisibilityRecord_builder{
 			NamespaceId:      testNamespaceID,
 			Namespace:        testNamespace,
 			WorkflowId:       testWorkflowID,
@@ -668,7 +668,7 @@ func (s *visibilityArchiverSuite) setupVisibilityDirectory() {
 			CloseTime:        timestamp.UnixOrZeroTimePtr(int64(3 * time.Hour)),
 			Status:           enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
 			HistoryLength:    101,
-		},
+		}.Build(),
 	}
 	visibilityArchiver := s.newTestVisibilityArchiver()
 	for _, record := range s.visibilityRecords {

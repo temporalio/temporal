@@ -153,40 +153,40 @@ func (ni *NamespaceValidatorInterceptor) setNamespace(
 ) {
 	switch request := req.(type) {
 	case *workflowservice.RespondQueryTaskCompletedRequest:
-		if request.Namespace == "" {
-			request.Namespace = namespaceEntry.Name().String()
+		if request.GetNamespace() == "" {
+			request.SetNamespace(namespaceEntry.Name().String())
 		}
 	case *workflowservice.RespondWorkflowTaskCompletedRequest:
-		if request.Namespace == "" {
-			request.Namespace = namespaceEntry.Name().String()
+		if request.GetNamespace() == "" {
+			request.SetNamespace(namespaceEntry.Name().String())
 		}
 	case *workflowservice.RespondWorkflowTaskFailedRequest:
-		if request.Namespace == "" {
-			request.Namespace = namespaceEntry.Name().String()
+		if request.GetNamespace() == "" {
+			request.SetNamespace(namespaceEntry.Name().String())
 		}
 	case *workflowservice.RecordActivityTaskHeartbeatRequest:
-		if request.Namespace == "" {
-			request.Namespace = namespaceEntry.Name().String()
+		if request.GetNamespace() == "" {
+			request.SetNamespace(namespaceEntry.Name().String())
 		}
 	case *workflowservice.RespondActivityTaskCanceledRequest:
-		if request.Namespace == "" {
-			request.Namespace = namespaceEntry.Name().String()
+		if request.GetNamespace() == "" {
+			request.SetNamespace(namespaceEntry.Name().String())
 		}
 	case *workflowservice.RespondActivityTaskCompletedRequest:
-		if request.Namespace == "" {
-			request.Namespace = namespaceEntry.Name().String()
+		if request.GetNamespace() == "" {
+			request.SetNamespace(namespaceEntry.Name().String())
 		}
 	case *workflowservice.RespondActivityTaskFailedRequest:
-		if request.Namespace == "" {
-			request.Namespace = namespaceEntry.Name().String()
+		if request.GetNamespace() == "" {
+			request.SetNamespace(namespaceEntry.Name().String())
 		}
 	case *workflowservice.RespondNexusTaskCompletedRequest:
-		if request.Namespace == "" {
-			request.Namespace = namespaceEntry.Name().String()
+		if request.GetNamespace() == "" {
+			request.SetNamespace(namespaceEntry.Name().String())
 		}
 	case *workflowservice.RespondNexusTaskFailedRequest:
-		if request.Namespace == "" {
-			request.Namespace = namespaceEntry.Name().String()
+		if request.GetNamespace() == "" {
+			request.SetNamespace(namespaceEntry.Name().String())
 		}
 	}
 }

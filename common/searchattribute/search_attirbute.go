@@ -35,7 +35,7 @@ var (
 // It doesn't do any validation and just skip invalid or already set search attributes.
 func ApplyTypeMap(searchAttributes *commonpb.SearchAttributes, typeMap NameTypeMap) {
 	for saName, saPayload := range searchAttributes.GetIndexedFields() {
-		_, metadataHasValueType := saPayload.Metadata[MetadataType]
+		_, metadataHasValueType := saPayload.GetMetadata()[MetadataType]
 		if metadataHasValueType {
 			continue
 		}
@@ -52,8 +52,8 @@ func AddSearchAttribute(saPtr **commonpb.SearchAttributes, key string, value *co
 	if *saPtr == nil {
 		*saPtr = &commonpb.SearchAttributes{}
 	}
-	if (*saPtr).IndexedFields == nil {
-		(*saPtr).IndexedFields = make(map[string]*commonpb.Payload)
+	if (*saPtr).GetIndexedFields() == nil {
+		(*saPtr).SetIndexedFields(make(map[string]*commonpb.Payload))
 	}
-	(*saPtr).IndexedFields[key] = value
+	(*saPtr).GetIndexedFields()[key] = value
 }

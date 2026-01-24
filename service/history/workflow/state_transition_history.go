@@ -10,10 +10,10 @@ var (
 	// It's not a valid versioned transition for a workflow, and should only
 	// be used for representing the absence of a versioned transition.
 	// EmptyVersionedTransition is also considered less than any non-empty versioned transition.
-	EmptyVersionedTransition = &persistencespb.VersionedTransition{
+	EmptyVersionedTransition = persistencespb.VersionedTransition_builder{
 		NamespaceFailoverVersion: common.EmptyVersion,
 		TransitionCount:          0,
-	}
+	}.Build()
 )
 
 // UpdatedTransitionHistory takes a slice of transition history and returns a new slice that includes the max state
@@ -27,19 +27,19 @@ func UpdatedTransitionHistory(
 ) []*persistencespb.VersionedTransition {
 	if len(history) == 0 {
 		return []*persistencespb.VersionedTransition{
-			{
+			persistencespb.VersionedTransition_builder{
 				NamespaceFailoverVersion: namespaceFailoverVersion,
 				TransitionCount:          1,
-			},
+			}.Build(),
 		}
 	}
 
-	lastTransitionCount := history[len(history)-1].TransitionCount
-	if history[len(history)-1].NamespaceFailoverVersion == namespaceFailoverVersion {
+	lastTransitionCount := history[len(history)-1].GetTransitionCount()
+	if history[len(history)-1].GetNamespaceFailoverVersion() == namespaceFailoverVersion {
 		history = history[:len(history)-1]
 	}
-	return append(history, &persistencespb.VersionedTransition{
+	return append(history, persistencespb.VersionedTransition_builder{
 		NamespaceFailoverVersion: namespaceFailoverVersion,
 		TransitionCount:          lastTransitionCount + 1,
-	})
+	}.Build())
 }

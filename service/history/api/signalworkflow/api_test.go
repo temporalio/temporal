@@ -72,12 +72,12 @@ func (s *signalWorkflowSuite) SetupTest() {
 
 	s.currentMutableState = historyi.NewMockMutableState(s.controller)
 	s.currentMutableState.EXPECT().GetNamespaceEntry().Return(tests.GlobalNamespaceEntry).AnyTimes()
-	s.currentMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+	s.currentMutableState.EXPECT().GetExecutionInfo().Return(persistencespb.WorkflowExecutionInfo_builder{
 		WorkflowId: tests.WorkflowID,
-	}).AnyTimes()
-	s.currentMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+	}.Build()).AnyTimes()
+	s.currentMutableState.EXPECT().GetExecutionState().Return(persistencespb.WorkflowExecutionState_builder{
 		RunId: tests.RunID,
-	}).AnyTimes()
+	}.Build()).AnyTimes()
 
 	s.currentContext = historyi.NewMockWorkflowContext(s.controller)
 	s.currentContext.EXPECT().LoadMutableState(gomock.Any(), s.shardContext).Return(s.currentMutableState, nil).AnyTimes()
@@ -103,18 +103,18 @@ func (s *signalWorkflowSuite) TestSignalWorkflow_WorkflowCloseAttempted() {
 
 	resp, err := Invoke(
 		context.Background(),
-		&historyservice.SignalWorkflowExecutionRequest{
+		historyservice.SignalWorkflowExecutionRequest_builder{
 			NamespaceId: tests.NamespaceID.String(),
-			SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{
+			SignalRequest: workflowservice.SignalWorkflowExecutionRequest_builder{
 				Namespace: tests.Namespace.String(),
-				WorkflowExecution: &commonpb.WorkflowExecution{
+				WorkflowExecution: commonpb.WorkflowExecution_builder{
 					WorkflowId: tests.WorkflowID,
 					RunId:      tests.RunID,
-				},
+				}.Build(),
 				SignalName: "signal-name",
 				Input:      nil,
-			},
-		},
+			}.Build(),
+		}.Build(),
 		s.shardContext,
 		s.workflowConsistencyChecker,
 	)

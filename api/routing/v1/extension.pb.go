@@ -8,7 +8,6 @@ package routing
 
 import (
 	reflect "reflect"
-	sync "sync"
 	unsafe "unsafe"
 
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -24,15 +23,12 @@ const (
 )
 
 type RoutingOptions struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Requests will be routed to a random shard.
-	Random bool `protobuf:"varint,1,opt,name=random,proto3" json:"random,omitempty"`
-	// Requests may specify how to obtain the namespace ID. Defaults to the "namespace_id" field.
-	NamespaceId string `protobuf:"bytes,2,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	// Request will be routed by resolving the namespace ID and business ID to a given shard.
-	BusinessId    string `protobuf:"bytes,3,opt,name=business_id,json=businessId,proto3" json:"business_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                  protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Random      bool                   `protobuf:"varint,1,opt,name=random,proto3"`
+	xxx_hidden_NamespaceId string                 `protobuf:"bytes,2,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_BusinessId  string                 `protobuf:"bytes,3,opt,name=business_id,json=businessId,proto3"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *RoutingOptions) Reset() {
@@ -60,30 +56,58 @@ func (x *RoutingOptions) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RoutingOptions.ProtoReflect.Descriptor instead.
-func (*RoutingOptions) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_routing_v1_extension_proto_rawDescGZIP(), []int{0}
-}
-
 func (x *RoutingOptions) GetRandom() bool {
 	if x != nil {
-		return x.Random
+		return x.xxx_hidden_Random
 	}
 	return false
 }
 
 func (x *RoutingOptions) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *RoutingOptions) GetBusinessId() string {
 	if x != nil {
-		return x.BusinessId
+		return x.xxx_hidden_BusinessId
 	}
 	return ""
+}
+
+func (x *RoutingOptions) SetRandom(v bool) {
+	x.xxx_hidden_Random = v
+}
+
+func (x *RoutingOptions) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *RoutingOptions) SetBusinessId(v string) {
+	x.xxx_hidden_BusinessId = v
+}
+
+type RoutingOptions_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Requests will be routed to a random shard.
+	Random bool
+	// Requests may specify how to obtain the namespace ID. Defaults to the "namespace_id" field.
+	NamespaceId string
+	// Request will be routed by resolving the namespace ID and business ID to a given shard.
+	BusinessId string
+}
+
+func (b0 RoutingOptions_builder) Build() *RoutingOptions {
+	m0 := &RoutingOptions{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Random = b.Random
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_BusinessId = b.BusinessId
+	return m0
 }
 
 var file_temporal_server_api_routing_v1_extension_proto_extTypes = []protoimpl.ExtensionInfo{
@@ -114,18 +138,6 @@ const file_temporal_server_api_routing_v1_extension_proto_rawDesc = "" +
 	"\vbusiness_id\x18\x03 \x01(\tR\n" +
 	"businessId:l\n" +
 	"\arouting\x12\x1e.google.protobuf.MethodOptions\x18\xc28 \x01(\v2..temporal.server.api.routing.v1.RoutingOptionsR\arouting\x88\x01\x01B.Z,go.temporal.io/server/api/routing/v1;routingb\x06proto3"
-
-var (
-	file_temporal_server_api_routing_v1_extension_proto_rawDescOnce sync.Once
-	file_temporal_server_api_routing_v1_extension_proto_rawDescData []byte
-)
-
-func file_temporal_server_api_routing_v1_extension_proto_rawDescGZIP() []byte {
-	file_temporal_server_api_routing_v1_extension_proto_rawDescOnce.Do(func() {
-		file_temporal_server_api_routing_v1_extension_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_api_routing_v1_extension_proto_rawDesc), len(file_temporal_server_api_routing_v1_extension_proto_rawDesc)))
-	})
-	return file_temporal_server_api_routing_v1_extension_proto_rawDescData
-}
 
 var file_temporal_server_api_routing_v1_extension_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
 var file_temporal_server_api_routing_v1_extension_proto_goTypes = []any{

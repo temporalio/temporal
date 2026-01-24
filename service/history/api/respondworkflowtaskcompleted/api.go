@@ -110,20 +110,20 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 	// then the lease is released without an error, i.e. workflow context and mutable state are NOT cleared.
 	releaseLeaseWithError := true
 
-	request := req.CompleteRequest
-	token, err0 := handler.tokenSerializer.Deserialize(request.TaskToken)
+	request := req.GetCompleteRequest()
+	token, err0 := handler.tokenSerializer.Deserialize(request.GetTaskToken())
 	if err0 != nil {
 		return nil, consts.ErrDeserializingToken
 	}
 
-	namespaceEntry, err := api.GetActiveNamespace(handler.shardContext, namespace.ID(req.GetNamespaceId()), token.WorkflowId)
+	namespaceEntry, err := api.GetActiveNamespace(handler.shardContext, namespace.ID(req.GetNamespaceId()), token.GetWorkflowId())
 	if err != nil {
 		return nil, err
 	}
 
 	workflowLease, err := handler.workflowConsistencyChecker.GetWorkflowLeaseWithConsistencyCheck(
 		ctx,
-		token.Clock,
+		token.GetClock(),
 		func(mutableState historyi.MutableState) bool {
 			workflowTask := mutableState.GetWorkflowTaskByID(token.GetScheduledEventId())
 			if workflowTask == nil && token.GetScheduledEventId() >= mutableState.GetNextEventID() {
@@ -136,8 +136,8 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		},
 		definition.NewWorkflowKey(
 			namespaceEntry.ID().String(),
-			token.WorkflowId,
-			token.RunId,
+			token.GetWorkflowId(),
+			token.GetRunId(),
 		),
 		locks.PriorityHigh,
 	)
@@ -186,10 +186,10 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 	if !ms.IsWorkflowExecutionRunning() ||
 		currentWorkflowTask == nil ||
 		currentWorkflowTask.StartedEventID == common.EmptyEventID ||
-		(token.StartedEventId != common.EmptyEventID && token.StartedEventId != currentWorkflowTask.StartedEventID) ||
-		(token.StartedTime != nil && !currentWorkflowTask.StartedTime.IsZero() && !token.StartedTime.AsTime().Equal(currentWorkflowTask.StartedTime)) ||
-		currentWorkflowTask.Attempt != token.Attempt ||
-		(token.Version != common.EmptyVersion && token.Version != currentWorkflowTask.Version) {
+		(token.GetStartedEventId() != common.EmptyEventID && token.GetStartedEventId() != currentWorkflowTask.StartedEventID) ||
+		(token.HasStartedTime() && !currentWorkflowTask.StartedTime.IsZero() && !token.GetStartedTime().AsTime().Equal(currentWorkflowTask.StartedTime)) ||
+		currentWorkflowTask.Attempt != token.GetAttempt() ||
+		(token.GetVersion() != common.EmptyVersion && token.GetVersion() != currentWorkflowTask.Version) {
 		// Mutable state wasn't changed yet and doesn't have to be cleared.
 		releaseLeaseWithError = false
 		return nil, serviceerror.NewNotFound("Workflow task not found.")
@@ -261,7 +261,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		MaxSearchAttributeValueSize: handler.config.SearchAttributesSizeOfValueLimit(nsName),
 	}
 	// TODO: this metric is inaccurate, it should only be emitted if a new binary checksum (or build ID) is added in this completion.
-	if ms.GetExecutionInfo().AutoResetPoints != nil && limits.MaxResetPoints == len(ms.GetExecutionInfo().AutoResetPoints.Points) {
+	if ms.GetExecutionInfo().HasAutoResetPoints() && limits.MaxResetPoints == len(ms.GetExecutionInfo().GetAutoResetPoints().GetPoints()) {
 		metrics.AutoResetPointsLimitExceededCounter.With(handler.metricsHandler).Record(
 			1,
 			metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedScope))
@@ -274,7 +274,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 	// In a mean time, there might be pending commands and messages on the worker side.
 	// If those commands/messages are sent on the heartbeat WT it means that WF is making progress.
 	// WT heartbeat timeout is applicable only when WF doesn't make any progress and does heartbeats only.
-	checkWTHeartbeatTimeout := request.GetForceCreateNewWorkflowTask() && len(request.Commands) == 0 && len(request.Messages) == 0
+	checkWTHeartbeatTimeout := request.GetForceCreateNewWorkflowTask() && len(request.GetCommands()) == 0 && len(request.GetMessages()) == 0
 
 	if checkWTHeartbeatTimeout {
 		// WorkflowTaskHeartbeatTimeout is a total duration for which workflow is allowed to send continuous heartbeats.
@@ -310,7 +310,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 	// NOTE: completedEvent might be nil if WT was speculative and request has only `update.Rejection` messages.
 	// See workflowTaskStateMachine.skipWorkflowTaskCompletedEvent for more details.
 
-	if request.StickyAttributes == nil || request.StickyAttributes.WorkerTaskQueue == nil {
+	if !request.HasStickyAttributes() || !request.GetStickyAttributes().HasWorkerTaskQueue() {
 		metrics.CompleteWorkflowTaskWithStickyDisabledCounter.With(handler.metricsHandler).Record(
 			1,
 			metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedScope))
@@ -326,7 +326,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			// It is possible that the WF has been redirected to another build ID since this WFT started, in that case
 			// we should not set sticky queue of the old build ID and keep the normal queue to let Matching send the
 			// next WFT to the right build ID.
-			ms.SetStickyTaskQueue(request.StickyAttributes.WorkerTaskQueue.GetName(), request.StickyAttributes.GetScheduleToStartTimeout())
+			ms.SetStickyTaskQueue(request.GetStickyAttributes().GetWorkerTaskQueue().GetName(), request.GetStickyAttributes().GetScheduleToStartTimeout())
 		}
 	}
 
@@ -397,10 +397,10 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 
 		if responseMutations, err = workflowTaskHandler.handleCommands(
 			ctx,
-			request.Commands,
+			request.GetCommands(),
 			collection.NewIndexedTakeList(
-				request.Messages,
-				func(msg *protocolpb.Message) string { return msg.Id },
+				request.GetMessages(),
+				func(msg *protocolpb.Message) string { return msg.GetId() },
 			),
 		); err != nil {
 			return nil, err
@@ -533,7 +533,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 
 	// Speculative workflow task will be created after mutable state is persisted.
 	if newWorkflowTaskType == enumsspb.WORKFLOW_TASK_TYPE_NORMAL {
-		versioningStamp := request.WorkerVersionStamp
+		versioningStamp := request.GetWorkerVersionStamp()
 		if versioningStamp.GetUseVersioning() {
 			if ms.GetAssignedBuildId() == "" {
 				// old versioning is used. making sure the versioning stamp does not go through otherwise the
@@ -579,7 +579,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 				newWorkflowTask.ScheduledEventID,
 				"request-from-RespondWorkflowTaskCompleted",
 				newWorkflowTask.TaskQueue,
-				request.Identity,
+				request.GetIdentity(),
 				versioningStamp,
 				nil,
 				workflowLease.GetContext().UpdateRegistry(ctx),
@@ -602,9 +602,9 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			workflow.NewContext(
 				handler.shardContext.GetConfig(),
 				definition.NewWorkflowKey(
-					newWorkflowExecutionInfo.NamespaceId,
-					newWorkflowExecutionInfo.WorkflowId,
-					newWorkflowExecutionState.RunId,
+					newWorkflowExecutionInfo.GetNamespaceId(),
+					newWorkflowExecutionInfo.GetWorkflowId(),
+					newWorkflowExecutionState.GetRunId(),
 				),
 				chasm.WorkflowArchetypeID,
 				handler.logger,
@@ -693,7 +693,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		if err != nil {
 			return nil, err
 		}
-		versioningStamp := request.WorkerVersionStamp
+		versioningStamp := request.GetWorkerVersionStamp()
 		if versioningStamp.GetUseVersioning() && ms.GetAssignedBuildId() == "" {
 			// old versioning is used. making sure the versioning stamp does not go through otherwise the
 			// workflow will start using new versioning which may surprise users.
@@ -704,7 +704,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			newWorkflowTask.ScheduledEventID,
 			"request-from-RespondWorkflowTaskCompleted",
 			newWorkflowTask.TaskQueue,
-			request.Identity,
+			request.GetIdentity(),
 			versioningStamp,
 			nil,
 			workflowLease.GetContext().UpdateRegistry(ctx),
@@ -733,7 +733,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 	resp := &historyservice.RespondWorkflowTaskCompletedResponse{}
 	//nolint:staticcheck
 	if newWorkflowTask != nil && bypassTaskGeneration {
-		resp.StartedResponse, err = recordworkflowtaskstarted.CreateRecordWorkflowTaskStartedResponse(
+		startedResponse, err := recordworkflowtaskstarted.CreateRecordWorkflowTaskStartedResponse(
 			ctx,
 			ms,
 			updateRegistry,
@@ -744,13 +744,15 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		if err != nil {
 			return nil, err
 		}
+		resp.SetStartedResponse(startedResponse)
 		// sticky is always enabled when worker request for new workflow task from RespondWorkflowTaskCompleted
-		resp.StartedResponse.StickyExecutionEnabled = true
+		resp.GetStartedResponse().SetStickyExecutionEnabled(true)
 
-		resp.NewWorkflowTask, err = handler.withNewWorkflowTask(ctx, namespaceEntry.Name(), req, resp.StartedResponse)
+		newWorkflowTaskResp, err := handler.withNewWorkflowTask(ctx, namespaceEntry.Name(), req, resp.GetStartedResponse())
 		if err != nil {
 			return nil, err
 		}
+		resp.SetNewWorkflowTask(newWorkflowTaskResp)
 	}
 
 	// If completedEvent is nil then it means that WT was speculative and
@@ -758,7 +760,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 	// SDK needs to know where to roll back its history event pointer, i.e. after what event all other events needs to be dropped.
 	// SDK uses WorkflowTaskStartedEventID to do that.
 	if completedEvent == nil {
-		resp.ResetHistoryEventId = ms.GetExecutionInfo().LastCompletedWorkflowTaskStartedEventId
+		resp.SetResetHistoryEventId(ms.GetExecutionInfo().GetLastCompletedWorkflowTaskStartedEventId())
 	}
 
 	for _, mutation := range responseMutations {
@@ -779,7 +781,7 @@ func (handler *WorkflowTaskCompletedHandler) createPollWorkflowTaskQueueResponse
 	maximumPageSize int32,
 ) (_ *workflowservice.PollWorkflowTaskQueueResponse, retError error) {
 
-	if matchingResp.WorkflowExecution == nil {
+	if !matchingResp.HasWorkflowExecution() {
 		// this will happen if there is no workflow task to be send to worker / caller
 		return &workflowservice.PollWorkflowTaskQueueResponse{}, nil
 	}
@@ -788,12 +790,12 @@ func (handler *WorkflowTaskCompletedHandler) createPollWorkflowTaskQueueResponse
 	var continuation []byte
 	var err error
 
-	if matchingResp.GetStickyExecutionEnabled() && matchingResp.Query != nil {
+	if matchingResp.GetStickyExecutionEnabled() && matchingResp.HasQuery() {
 		// meaning sticky query, we should not return any events to worker
 		// since query task only check the current status
-		history = &historypb.History{
+		history = historypb.History_builder{
 			Events: []*historypb.HistoryEvent{},
-		}
+		}.Build()
 	} else {
 		// here we have 3 cases:
 		// 1. sticky && non query task
@@ -822,8 +824,8 @@ func (handler *WorkflowTaskCompletedHandler) createPollWorkflowTaskQueueResponse
 					handler.workflowConsistencyChecker,
 					handler.eventNotifier,
 					namespaceID.String(),
-					matchingResp.WorkflowExecution.GetWorkflowId(),
-					matchingResp.WorkflowExecution.GetRunId(),
+					matchingResp.GetWorkflowExecution().GetWorkflowId(),
+					matchingResp.GetWorkflowExecution().GetRunId(),
 				)
 			}
 		}()
@@ -846,37 +848,37 @@ func (handler *WorkflowTaskCompletedHandler) createPollWorkflowTaskQueueResponse
 		}
 
 		if len(persistenceToken) != 0 {
-			continuation, err = api.SerializeHistoryToken(&tokenspb.HistoryContinuation{
-				RunId:                 matchingResp.WorkflowExecution.GetRunId(),
+			continuation, err = api.SerializeHistoryToken(tokenspb.HistoryContinuation_builder{
+				RunId:                 matchingResp.GetWorkflowExecution().GetRunId(),
 				FirstEventId:          firstEventID,
 				NextEventId:           nextEventID,
 				PersistenceToken:      persistenceToken,
 				TransientWorkflowTask: matchingResp.GetTransientWorkflowTask(),
 				BranchToken:           branchToken,
-			})
+			}.Build())
 			if err != nil {
 				return nil, err
 			}
 		}
 	}
 
-	resp := &workflowservice.PollWorkflowTaskQueueResponse{
-		TaskToken:                  matchingResp.TaskToken,
-		WorkflowExecution:          matchingResp.WorkflowExecution,
-		WorkflowType:               matchingResp.WorkflowType,
-		PreviousStartedEventId:     matchingResp.PreviousStartedEventId,
-		StartedEventId:             matchingResp.StartedEventId,
-		Query:                      matchingResp.Query,
-		BacklogCountHint:           matchingResp.BacklogCountHint,
-		Attempt:                    matchingResp.Attempt,
+	resp := workflowservice.PollWorkflowTaskQueueResponse_builder{
+		TaskToken:                  matchingResp.GetTaskToken(),
+		WorkflowExecution:          matchingResp.GetWorkflowExecution(),
+		WorkflowType:               matchingResp.GetWorkflowType(),
+		PreviousStartedEventId:     matchingResp.GetPreviousStartedEventId(),
+		StartedEventId:             matchingResp.GetStartedEventId(),
+		Query:                      matchingResp.GetQuery(),
+		BacklogCountHint:           matchingResp.GetBacklogCountHint(),
+		Attempt:                    matchingResp.GetAttempt(),
 		History:                    history,
 		NextPageToken:              continuation,
-		WorkflowExecutionTaskQueue: matchingResp.WorkflowExecutionTaskQueue,
-		ScheduledTime:              matchingResp.ScheduledTime,
-		StartedTime:                matchingResp.StartedTime,
-		Queries:                    matchingResp.Queries,
-		Messages:                   matchingResp.Messages,
-	}
+		WorkflowExecutionTaskQueue: matchingResp.GetWorkflowExecutionTaskQueue(),
+		ScheduledTime:              matchingResp.GetScheduledTime(),
+		StartedTime:                matchingResp.GetStartedTime(),
+		Queries:                    matchingResp.GetQueries(),
+		Messages:                   matchingResp.GetMessages(),
+	}.Build()
 
 	return resp, nil
 }
@@ -887,7 +889,7 @@ func (handler *WorkflowTaskCompletedHandler) withNewWorkflowTask(
 	request *historyservice.RespondWorkflowTaskCompletedRequest,
 	response *historyservice.RecordWorkflowTaskStartedResponse,
 ) (*workflowservice.PollWorkflowTaskQueueResponse, error) {
-	taskToken, err := handler.tokenSerializer.Deserialize(request.CompleteRequest.TaskToken)
+	taskToken, err := handler.tokenSerializer.Deserialize(request.GetCompleteRequest().GetTaskToken())
 	if err != nil {
 		return nil, consts.ErrDeserializingToken
 	}
@@ -907,15 +909,15 @@ func (handler *WorkflowTaskCompletedHandler) withNewWorkflowTask(
 	if err != nil {
 		return nil, err
 	}
-	workflowExecution := &commonpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution_builder{
 		WorkflowId: taskToken.GetWorkflowId(),
 		RunId:      taskToken.GetRunId(),
-	}
+	}.Build()
 	matchingResp := common.CreateMatchingPollWorkflowTaskQueueResponse(response, workflowExecution, token)
 	return handler.createPollWorkflowTaskQueueResponse(
 		ctx,
 		namespaceName,
-		namespace.ID(taskToken.NamespaceId),
+		namespace.ID(taskToken.GetNamespaceId()),
 		matchingResp,
 		matchingResp.GetBranchToken(),
 		int32(handler.config.HistoryMaxPageSize(namespaceName.String())),
@@ -934,7 +936,7 @@ func (handler *WorkflowTaskCompletedHandler) handleBufferedQueries(
 	}
 
 	namespaceName := namespaceEntry.Name()
-	workflowID := ms.GetExecutionInfo().WorkflowId
+	workflowID := ms.GetExecutionInfo().GetWorkflowId()
 	runID := ms.GetExecutionState().GetRunId()
 
 	scope := handler.metricsHandler.WithTags(

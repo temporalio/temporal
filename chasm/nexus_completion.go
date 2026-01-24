@@ -36,12 +36,10 @@ func GenerateNexusCallback(ctx Context, component NexusCompletionHandlerComponen
 		"temporal-callback-token": encodedRef,
 	}
 
-	return &commonpb.Callback{
-		Variant: &commonpb.Callback_Nexus_{
-			Nexus: &commonpb.Callback_Nexus{
-				Url:    NexusCompletionHandlerURL,
-				Header: headers,
-			},
-		},
-	}, nil
+	return commonpb.Callback_builder{
+		Nexus: commonpb.Callback_Nexus_builder{
+			Url:    NexusCompletionHandlerURL,
+			Header: headers,
+		}.Build(),
+	}.Build(), nil
 }

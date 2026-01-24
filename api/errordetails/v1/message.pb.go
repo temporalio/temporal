@@ -10,7 +10,6 @@ package errordetails
 
 import (
 	reflect "reflect"
-	sync "sync"
 	unsafe "unsafe"
 
 	v11 "go.temporal.io/server/api/history/v1"
@@ -27,7 +26,7 @@ const (
 )
 
 type TaskAlreadyStartedFailure struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -57,19 +56,26 @@ func (x *TaskAlreadyStartedFailure) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use TaskAlreadyStartedFailure.ProtoReflect.Descriptor instead.
-func (*TaskAlreadyStartedFailure) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_errordetails_v1_message_proto_rawDescGZIP(), []int{0}
+type TaskAlreadyStartedFailure_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+}
+
+func (b0 TaskAlreadyStartedFailure_builder) Build() *TaskAlreadyStartedFailure {
+	m0 := &TaskAlreadyStartedFailure{}
+	b, x := &b0, m0
+	_, _ = b, x
+	return m0
 }
 
 type CurrentBranchChangedFailure struct {
-	state                      protoimpl.MessageState  `protogen:"open.v1"`
-	CurrentBranchToken         []byte                  `protobuf:"bytes,1,opt,name=current_branch_token,json=currentBranchToken,proto3" json:"current_branch_token,omitempty"`
-	RequestBranchToken         []byte                  `protobuf:"bytes,2,opt,name=request_branch_token,json=requestBranchToken,proto3" json:"request_branch_token,omitempty"`
-	CurrentVersionedTransition *v1.VersionedTransition `protobuf:"bytes,3,opt,name=current_versioned_transition,json=currentVersionedTransition,proto3" json:"current_versioned_transition,omitempty"`
-	RequestVersionedTransition *v1.VersionedTransition `protobuf:"bytes,4,opt,name=request_versioned_transition,json=requestVersionedTransition,proto3" json:"request_versioned_transition,omitempty"`
-	unknownFields              protoimpl.UnknownFields
-	sizeCache                  protoimpl.SizeCache
+	state                                 protoimpl.MessageState  `protogen:"opaque.v1"`
+	xxx_hidden_CurrentBranchToken         []byte                  `protobuf:"bytes,1,opt,name=current_branch_token,json=currentBranchToken,proto3"`
+	xxx_hidden_RequestBranchToken         []byte                  `protobuf:"bytes,2,opt,name=request_branch_token,json=requestBranchToken,proto3"`
+	xxx_hidden_CurrentVersionedTransition *v1.VersionedTransition `protobuf:"bytes,3,opt,name=current_versioned_transition,json=currentVersionedTransition,proto3"`
+	xxx_hidden_RequestVersionedTransition *v1.VersionedTransition `protobuf:"bytes,4,opt,name=request_versioned_transition,json=requestVersionedTransition,proto3"`
+	unknownFields                         protoimpl.UnknownFields
+	sizeCache                             protoimpl.SizeCache
 }
 
 func (x *CurrentBranchChangedFailure) Reset() {
@@ -97,45 +103,104 @@ func (x *CurrentBranchChangedFailure) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CurrentBranchChangedFailure.ProtoReflect.Descriptor instead.
-func (*CurrentBranchChangedFailure) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_errordetails_v1_message_proto_rawDescGZIP(), []int{1}
-}
-
 func (x *CurrentBranchChangedFailure) GetCurrentBranchToken() []byte {
 	if x != nil {
-		return x.CurrentBranchToken
+		return x.xxx_hidden_CurrentBranchToken
 	}
 	return nil
 }
 
 func (x *CurrentBranchChangedFailure) GetRequestBranchToken() []byte {
 	if x != nil {
-		return x.RequestBranchToken
+		return x.xxx_hidden_RequestBranchToken
 	}
 	return nil
 }
 
 func (x *CurrentBranchChangedFailure) GetCurrentVersionedTransition() *v1.VersionedTransition {
 	if x != nil {
-		return x.CurrentVersionedTransition
+		return x.xxx_hidden_CurrentVersionedTransition
 	}
 	return nil
 }
 
 func (x *CurrentBranchChangedFailure) GetRequestVersionedTransition() *v1.VersionedTransition {
 	if x != nil {
-		return x.RequestVersionedTransition
+		return x.xxx_hidden_RequestVersionedTransition
 	}
 	return nil
 }
 
+func (x *CurrentBranchChangedFailure) SetCurrentBranchToken(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_CurrentBranchToken = v
+}
+
+func (x *CurrentBranchChangedFailure) SetRequestBranchToken(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_RequestBranchToken = v
+}
+
+func (x *CurrentBranchChangedFailure) SetCurrentVersionedTransition(v *v1.VersionedTransition) {
+	x.xxx_hidden_CurrentVersionedTransition = v
+}
+
+func (x *CurrentBranchChangedFailure) SetRequestVersionedTransition(v *v1.VersionedTransition) {
+	x.xxx_hidden_RequestVersionedTransition = v
+}
+
+func (x *CurrentBranchChangedFailure) HasCurrentVersionedTransition() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_CurrentVersionedTransition != nil
+}
+
+func (x *CurrentBranchChangedFailure) HasRequestVersionedTransition() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_RequestVersionedTransition != nil
+}
+
+func (x *CurrentBranchChangedFailure) ClearCurrentVersionedTransition() {
+	x.xxx_hidden_CurrentVersionedTransition = nil
+}
+
+func (x *CurrentBranchChangedFailure) ClearRequestVersionedTransition() {
+	x.xxx_hidden_RequestVersionedTransition = nil
+}
+
+type CurrentBranchChangedFailure_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	CurrentBranchToken         []byte
+	RequestBranchToken         []byte
+	CurrentVersionedTransition *v1.VersionedTransition
+	RequestVersionedTransition *v1.VersionedTransition
+}
+
+func (b0 CurrentBranchChangedFailure_builder) Build() *CurrentBranchChangedFailure {
+	m0 := &CurrentBranchChangedFailure{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_CurrentBranchToken = b.CurrentBranchToken
+	x.xxx_hidden_RequestBranchToken = b.RequestBranchToken
+	x.xxx_hidden_CurrentVersionedTransition = b.CurrentVersionedTransition
+	x.xxx_hidden_RequestVersionedTransition = b.RequestVersionedTransition
+	return m0
+}
+
 type ShardOwnershipLostFailure struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	OwnerHost     string                 `protobuf:"bytes,1,opt,name=owner_host,json=ownerHost,proto3" json:"owner_host,omitempty"`
-	CurrentHost   string                 `protobuf:"bytes,2,opt,name=current_host,json=currentHost,proto3" json:"current_host,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                  protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_OwnerHost   string                 `protobuf:"bytes,1,opt,name=owner_host,json=ownerHost,proto3"`
+	xxx_hidden_CurrentHost string                 `protobuf:"bytes,2,opt,name=current_host,json=currentHost,proto3"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *ShardOwnershipLostFailure) Reset() {
@@ -163,36 +228,55 @@ func (x *ShardOwnershipLostFailure) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ShardOwnershipLostFailure.ProtoReflect.Descriptor instead.
-func (*ShardOwnershipLostFailure) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_errordetails_v1_message_proto_rawDescGZIP(), []int{2}
-}
-
 func (x *ShardOwnershipLostFailure) GetOwnerHost() string {
 	if x != nil {
-		return x.OwnerHost
+		return x.xxx_hidden_OwnerHost
 	}
 	return ""
 }
 
 func (x *ShardOwnershipLostFailure) GetCurrentHost() string {
 	if x != nil {
-		return x.CurrentHost
+		return x.xxx_hidden_CurrentHost
 	}
 	return ""
 }
 
+func (x *ShardOwnershipLostFailure) SetOwnerHost(v string) {
+	x.xxx_hidden_OwnerHost = v
+}
+
+func (x *ShardOwnershipLostFailure) SetCurrentHost(v string) {
+	x.xxx_hidden_CurrentHost = v
+}
+
+type ShardOwnershipLostFailure_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	OwnerHost   string
+	CurrentHost string
+}
+
+func (b0 ShardOwnershipLostFailure_builder) Build() *ShardOwnershipLostFailure {
+	m0 := &ShardOwnershipLostFailure{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_OwnerHost = b.OwnerHost
+	x.xxx_hidden_CurrentHost = b.CurrentHost
+	return m0
+}
+
 type RetryReplicationFailure struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	NamespaceId       string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	WorkflowId        string                 `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
-	RunId             string                 `protobuf:"bytes,3,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	StartEventId      int64                  `protobuf:"varint,4,opt,name=start_event_id,json=startEventId,proto3" json:"start_event_id,omitempty"`
-	StartEventVersion int64                  `protobuf:"varint,5,opt,name=start_event_version,json=startEventVersion,proto3" json:"start_event_version,omitempty"`
-	EndEventId        int64                  `protobuf:"varint,6,opt,name=end_event_id,json=endEventId,proto3" json:"end_event_id,omitempty"`
-	EndEventVersion   int64                  `protobuf:"varint,7,opt,name=end_event_version,json=endEventVersion,proto3" json:"end_event_version,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state                        protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId       string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_WorkflowId        string                 `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3"`
+	xxx_hidden_RunId             string                 `protobuf:"bytes,3,opt,name=run_id,json=runId,proto3"`
+	xxx_hidden_StartEventId      int64                  `protobuf:"varint,4,opt,name=start_event_id,json=startEventId,proto3"`
+	xxx_hidden_StartEventVersion int64                  `protobuf:"varint,5,opt,name=start_event_version,json=startEventVersion,proto3"`
+	xxx_hidden_EndEventId        int64                  `protobuf:"varint,6,opt,name=end_event_id,json=endEventId,proto3"`
+	xxx_hidden_EndEventVersion   int64                  `protobuf:"varint,7,opt,name=end_event_version,json=endEventVersion,proto3"`
+	unknownFields                protoimpl.UnknownFields
+	sizeCache                    protoimpl.SizeCache
 }
 
 func (x *RetryReplicationFailure) Reset() {
@@ -220,71 +304,119 @@ func (x *RetryReplicationFailure) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RetryReplicationFailure.ProtoReflect.Descriptor instead.
-func (*RetryReplicationFailure) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_errordetails_v1_message_proto_rawDescGZIP(), []int{3}
-}
-
 func (x *RetryReplicationFailure) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *RetryReplicationFailure) GetWorkflowId() string {
 	if x != nil {
-		return x.WorkflowId
+		return x.xxx_hidden_WorkflowId
 	}
 	return ""
 }
 
 func (x *RetryReplicationFailure) GetRunId() string {
 	if x != nil {
-		return x.RunId
+		return x.xxx_hidden_RunId
 	}
 	return ""
 }
 
 func (x *RetryReplicationFailure) GetStartEventId() int64 {
 	if x != nil {
-		return x.StartEventId
+		return x.xxx_hidden_StartEventId
 	}
 	return 0
 }
 
 func (x *RetryReplicationFailure) GetStartEventVersion() int64 {
 	if x != nil {
-		return x.StartEventVersion
+		return x.xxx_hidden_StartEventVersion
 	}
 	return 0
 }
 
 func (x *RetryReplicationFailure) GetEndEventId() int64 {
 	if x != nil {
-		return x.EndEventId
+		return x.xxx_hidden_EndEventId
 	}
 	return 0
 }
 
 func (x *RetryReplicationFailure) GetEndEventVersion() int64 {
 	if x != nil {
-		return x.EndEventVersion
+		return x.xxx_hidden_EndEventVersion
 	}
 	return 0
 }
 
+func (x *RetryReplicationFailure) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *RetryReplicationFailure) SetWorkflowId(v string) {
+	x.xxx_hidden_WorkflowId = v
+}
+
+func (x *RetryReplicationFailure) SetRunId(v string) {
+	x.xxx_hidden_RunId = v
+}
+
+func (x *RetryReplicationFailure) SetStartEventId(v int64) {
+	x.xxx_hidden_StartEventId = v
+}
+
+func (x *RetryReplicationFailure) SetStartEventVersion(v int64) {
+	x.xxx_hidden_StartEventVersion = v
+}
+
+func (x *RetryReplicationFailure) SetEndEventId(v int64) {
+	x.xxx_hidden_EndEventId = v
+}
+
+func (x *RetryReplicationFailure) SetEndEventVersion(v int64) {
+	x.xxx_hidden_EndEventVersion = v
+}
+
+type RetryReplicationFailure_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId       string
+	WorkflowId        string
+	RunId             string
+	StartEventId      int64
+	StartEventVersion int64
+	EndEventId        int64
+	EndEventVersion   int64
+}
+
+func (b0 RetryReplicationFailure_builder) Build() *RetryReplicationFailure {
+	m0 := &RetryReplicationFailure{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_WorkflowId = b.WorkflowId
+	x.xxx_hidden_RunId = b.RunId
+	x.xxx_hidden_StartEventId = b.StartEventId
+	x.xxx_hidden_StartEventVersion = b.StartEventVersion
+	x.xxx_hidden_EndEventId = b.EndEventId
+	x.xxx_hidden_EndEventVersion = b.EndEventVersion
+	return m0
+}
+
 type SyncStateFailure struct {
-	state               protoimpl.MessageState  `protogen:"open.v1"`
-	NamespaceId         string                  `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	WorkflowId          string                  `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
-	RunId               string                  `protobuf:"bytes,3,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	VersionedTransition *v1.VersionedTransition `protobuf:"bytes,4,opt,name=versioned_transition,json=versionedTransition,proto3" json:"versioned_transition,omitempty"`
-	VersionHistories    *v11.VersionHistories   `protobuf:"bytes,5,opt,name=version_histories,json=versionHistories,proto3" json:"version_histories,omitempty"`
-	// (-- api-linter: core::0141::forbidden-types=disabled --)
-	ArchetypeId   uint32 `protobuf:"varint,6,opt,name=archetype_id,json=archetypeId,proto3" json:"archetype_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                          protoimpl.MessageState  `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId         string                  `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_WorkflowId          string                  `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3"`
+	xxx_hidden_RunId               string                  `protobuf:"bytes,3,opt,name=run_id,json=runId,proto3"`
+	xxx_hidden_VersionedTransition *v1.VersionedTransition `protobuf:"bytes,4,opt,name=versioned_transition,json=versionedTransition,proto3"`
+	xxx_hidden_VersionHistories    *v11.VersionHistories   `protobuf:"bytes,5,opt,name=version_histories,json=versionHistories,proto3"`
+	xxx_hidden_ArchetypeId         uint32                  `protobuf:"varint,6,opt,name=archetype_id,json=archetypeId,proto3"`
+	unknownFields                  protoimpl.UnknownFields
+	sizeCache                      protoimpl.SizeCache
 }
 
 func (x *SyncStateFailure) Reset() {
@@ -312,55 +444,121 @@ func (x *SyncStateFailure) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SyncStateFailure.ProtoReflect.Descriptor instead.
-func (*SyncStateFailure) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_errordetails_v1_message_proto_rawDescGZIP(), []int{4}
-}
-
 func (x *SyncStateFailure) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *SyncStateFailure) GetWorkflowId() string {
 	if x != nil {
-		return x.WorkflowId
+		return x.xxx_hidden_WorkflowId
 	}
 	return ""
 }
 
 func (x *SyncStateFailure) GetRunId() string {
 	if x != nil {
-		return x.RunId
+		return x.xxx_hidden_RunId
 	}
 	return ""
 }
 
 func (x *SyncStateFailure) GetVersionedTransition() *v1.VersionedTransition {
 	if x != nil {
-		return x.VersionedTransition
+		return x.xxx_hidden_VersionedTransition
 	}
 	return nil
 }
 
 func (x *SyncStateFailure) GetVersionHistories() *v11.VersionHistories {
 	if x != nil {
-		return x.VersionHistories
+		return x.xxx_hidden_VersionHistories
 	}
 	return nil
 }
 
 func (x *SyncStateFailure) GetArchetypeId() uint32 {
 	if x != nil {
-		return x.ArchetypeId
+		return x.xxx_hidden_ArchetypeId
 	}
 	return 0
 }
 
+func (x *SyncStateFailure) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *SyncStateFailure) SetWorkflowId(v string) {
+	x.xxx_hidden_WorkflowId = v
+}
+
+func (x *SyncStateFailure) SetRunId(v string) {
+	x.xxx_hidden_RunId = v
+}
+
+func (x *SyncStateFailure) SetVersionedTransition(v *v1.VersionedTransition) {
+	x.xxx_hidden_VersionedTransition = v
+}
+
+func (x *SyncStateFailure) SetVersionHistories(v *v11.VersionHistories) {
+	x.xxx_hidden_VersionHistories = v
+}
+
+func (x *SyncStateFailure) SetArchetypeId(v uint32) {
+	x.xxx_hidden_ArchetypeId = v
+}
+
+func (x *SyncStateFailure) HasVersionedTransition() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_VersionedTransition != nil
+}
+
+func (x *SyncStateFailure) HasVersionHistories() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_VersionHistories != nil
+}
+
+func (x *SyncStateFailure) ClearVersionedTransition() {
+	x.xxx_hidden_VersionedTransition = nil
+}
+
+func (x *SyncStateFailure) ClearVersionHistories() {
+	x.xxx_hidden_VersionHistories = nil
+}
+
+type SyncStateFailure_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NamespaceId         string
+	WorkflowId          string
+	RunId               string
+	VersionedTransition *v1.VersionedTransition
+	VersionHistories    *v11.VersionHistories
+	// (-- api-linter: core::0141::forbidden-types=disabled --)
+	ArchetypeId uint32
+}
+
+func (b0 SyncStateFailure_builder) Build() *SyncStateFailure {
+	m0 := &SyncStateFailure{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_WorkflowId = b.WorkflowId
+	x.xxx_hidden_RunId = b.RunId
+	x.xxx_hidden_VersionedTransition = b.VersionedTransition
+	x.xxx_hidden_VersionHistories = b.VersionHistories
+	x.xxx_hidden_ArchetypeId = b.ArchetypeId
+	return m0
+}
+
 type StickyWorkerUnavailableFailure struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -390,14 +588,21 @@ func (x *StickyWorkerUnavailableFailure) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use StickyWorkerUnavailableFailure.ProtoReflect.Descriptor instead.
-func (*StickyWorkerUnavailableFailure) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_errordetails_v1_message_proto_rawDescGZIP(), []int{5}
+type StickyWorkerUnavailableFailure_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+}
+
+func (b0 StickyWorkerUnavailableFailure_builder) Build() *StickyWorkerUnavailableFailure {
+	m0 := &StickyWorkerUnavailableFailure{}
+	b, x := &b0, m0
+	_, _ = b, x
+	return m0
 }
 
 // Deprecated. Only used in WV2. [cleanup-old-wv]
 type ObsoleteDispatchBuildIdFailure struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -427,14 +632,21 @@ func (x *ObsoleteDispatchBuildIdFailure) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ObsoleteDispatchBuildIdFailure.ProtoReflect.Descriptor instead.
-func (*ObsoleteDispatchBuildIdFailure) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_errordetails_v1_message_proto_rawDescGZIP(), []int{6}
+type ObsoleteDispatchBuildIdFailure_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+}
+
+func (b0 ObsoleteDispatchBuildIdFailure_builder) Build() *ObsoleteDispatchBuildIdFailure {
+	m0 := &ObsoleteDispatchBuildIdFailure{}
+	b, x := &b0, m0
+	_, _ = b, x
+	return m0
 }
 
 // Returned when History determines a task that Matching wants to dispatch is no longer valid.
 type ObsoleteMatchingTaskFailure struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -464,15 +676,22 @@ func (x *ObsoleteMatchingTaskFailure) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ObsoleteMatchingTaskFailure.ProtoReflect.Descriptor instead.
-func (*ObsoleteMatchingTaskFailure) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_errordetails_v1_message_proto_rawDescGZIP(), []int{7}
+type ObsoleteMatchingTaskFailure_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+}
+
+func (b0 ObsoleteMatchingTaskFailure_builder) Build() *ObsoleteMatchingTaskFailure {
+	m0 := &ObsoleteMatchingTaskFailure{}
+	b, x := &b0, m0
+	_, _ = b, x
+	return m0
 }
 
 // Returned when an activity start is rejected by History because the workflow is in a transitioning
 // between worker deployments.
 type ActivityStartDuringTransitionFailure struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -502,9 +721,16 @@ func (x *ActivityStartDuringTransitionFailure) ProtoReflect() protoreflect.Messa
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ActivityStartDuringTransitionFailure.ProtoReflect.Descriptor instead.
-func (*ActivityStartDuringTransitionFailure) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_errordetails_v1_message_proto_rawDescGZIP(), []int{8}
+type ActivityStartDuringTransitionFailure_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+}
+
+func (b0 ActivityStartDuringTransitionFailure_builder) Build() *ActivityStartDuringTransitionFailure {
+	m0 := &ActivityStartDuringTransitionFailure{}
+	b, x := &b0, m0
+	_, _ = b, x
+	return m0
 }
 
 var File_temporal_server_api_errordetails_v1_message_proto protoreflect.FileDescriptor
@@ -544,18 +770,6 @@ const file_temporal_server_api_errordetails_v1_message_proto_rawDesc = "" +
 	"\x1eObsoleteDispatchBuildIdFailure\"\x1d\n" +
 	"\x1bObsoleteMatchingTaskFailure\"&\n" +
 	"$ActivityStartDuringTransitionFailureB8Z6go.temporal.io/server/api/errordetails/v1;errordetailsb\x06proto3"
-
-var (
-	file_temporal_server_api_errordetails_v1_message_proto_rawDescOnce sync.Once
-	file_temporal_server_api_errordetails_v1_message_proto_rawDescData []byte
-)
-
-func file_temporal_server_api_errordetails_v1_message_proto_rawDescGZIP() []byte {
-	file_temporal_server_api_errordetails_v1_message_proto_rawDescOnce.Do(func() {
-		file_temporal_server_api_errordetails_v1_message_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_api_errordetails_v1_message_proto_rawDesc), len(file_temporal_server_api_errordetails_v1_message_proto_rawDesc)))
-	})
-	return file_temporal_server_api_errordetails_v1_message_proto_rawDescData
-}
 
 var file_temporal_server_api_errordetails_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
 var file_temporal_server_api_errordetails_v1_message_proto_goTypes = []any{

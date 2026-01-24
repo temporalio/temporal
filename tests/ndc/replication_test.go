@@ -28,14 +28,14 @@ func (s *NDCFunctionalTestSuite) TestReplicationMessageDLQ() {
 	events := s.generator.GetNextVertices()
 	historyEvents := &historypb.History{}
 	for _, event := range events {
-		historyEvents.Events = append(historyEvents.Events, event.GetData().(*historypb.HistoryEvent))
+		historyEvents.SetEvents(append(historyEvents.GetEvents(), event.GetData().(*historypb.HistoryEvent)))
 	}
 	historyBatch = append(historyBatch, historyEvents)
 
 	versionHistory := s.eventBatchesToVersionHistory(nil, historyBatch)
 
 	s.NotNil(historyBatch)
-	historyBatch[0].Events[1].Version = 2
+	historyBatch[0].GetEvents()[1].SetVersion(2)
 
 	s.applyEventsThroughFetcher(
 		workflowID,
@@ -49,7 +49,7 @@ func (s *NDCFunctionalTestSuite) TestReplicationMessageDLQ() {
 	executionManager := s.cluster.ExecutionManager()
 	expectedDLQMsgs := map[int64]bool{}
 	for _, batch := range historyBatch {
-		firstEventID := batch.Events[0].GetEventId()
+		firstEventID := batch.GetEvents()[0].GetEventId()
 		expectedDLQMsgs[firstEventID] = true
 	}
 

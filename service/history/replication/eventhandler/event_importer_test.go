@@ -84,25 +84,25 @@ func (s *eventImporterSuite) TestImportHistoryEvents_ImportAllLocalAndCommit() {
 	workflowId := uuid.NewString()
 	runId := uuid.NewString()
 
-	versionHistory := &historyspb.VersionHistory{
+	versionHistory := historyspb.VersionHistory_builder{
 		Items: []*historyspb.VersionHistoryItem{
-			{EventId: 2, Version: 3},
-			{EventId: 5, Version: 5},
-			{EventId: 7, Version: 1001},
+			historyspb.VersionHistoryItem_builder{EventId: 2, Version: 3}.Build(),
+			historyspb.VersionHistoryItem_builder{EventId: 5, Version: 5}.Build(),
+			historyspb.VersionHistoryItem_builder{EventId: 7, Version: 1001}.Build(),
 		},
-	}
+	}.Build()
 	historyBatch0 := []*historypb.HistoryEvent{
-		{EventId: 1, Version: 3},
-		{EventId: 2, Version: 3},
+		historypb.HistoryEvent_builder{EventId: 1, Version: 3}.Build(),
+		historypb.HistoryEvent_builder{EventId: 2, Version: 3}.Build(),
 	}
 	historyBatch1 := []*historypb.HistoryEvent{
-		{EventId: 3, Version: 5},
-		{EventId: 4, Version: 5},
-		{EventId: 5, Version: 5},
+		historypb.HistoryEvent_builder{EventId: 3, Version: 5}.Build(),
+		historypb.HistoryEvent_builder{EventId: 4, Version: 5}.Build(),
+		historypb.HistoryEvent_builder{EventId: 5, Version: 5}.Build(),
 	}
 	historyBatch2 := []*historypb.HistoryEvent{
-		{EventId: 6, Version: 1001},
-		{EventId: 7, Version: 1001},
+		historypb.HistoryEvent_builder{EventId: 6, Version: 1001}.Build(),
+		historypb.HistoryEvent_builder{EventId: 7, Version: 1001}.Build(),
 	}
 
 	workflowKey := definition.WorkflowKey{
@@ -140,69 +140,69 @@ func (s *eventImporterSuite) TestImportHistoryEvents_ImportAllLocalAndCommit() {
 
 		// import the fetched events inside the fetch loop
 		s.engine.EXPECT().ImportWorkflowExecution(gomock.Any(), &ImportWorkflowExecutionRequestMatcher{
-			ExpectedRequest: &historyservice.ImportWorkflowExecutionRequest{
+			ExpectedRequest: historyservice.ImportWorkflowExecutionRequest_builder{
 				NamespaceId: namespaceId,
-				Execution: &commonpb.WorkflowExecution{
+				Execution: commonpb.WorkflowExecution_builder{
 					WorkflowId: workflowId,
 					RunId:      runId,
-				},
+				}.Build(),
 				HistoryBatches: []*commonpb.DataBlob{rawBatches[0]},
 				VersionHistory: versionHistory,
 				Token:          nil,
-			},
-		}).Return(&historyservice.ImportWorkflowExecutionResponse{
+			}.Build(),
+		}).Return(historyservice.ImportWorkflowExecutionResponse_builder{
 			Token:         returnToken1,
 			EventsApplied: true,
-		}, nil).Times(1),
+		}.Build(), nil).Times(1),
 
 		s.engine.EXPECT().ImportWorkflowExecution(gomock.Any(), &ImportWorkflowExecutionRequestMatcher{
-			ExpectedRequest: &historyservice.ImportWorkflowExecutionRequest{
+			ExpectedRequest: historyservice.ImportWorkflowExecutionRequest_builder{
 				NamespaceId: namespaceId,
-				Execution: &commonpb.WorkflowExecution{
+				Execution: commonpb.WorkflowExecution_builder{
 					WorkflowId: workflowId,
 					RunId:      runId,
-				},
+				}.Build(),
 				HistoryBatches: []*commonpb.DataBlob{rawBatches[1]},
 				VersionHistory: versionHistory,
 				Token:          returnToken1,
-			},
-		}).Return(&historyservice.ImportWorkflowExecutionResponse{
+			}.Build(),
+		}).Return(historyservice.ImportWorkflowExecutionResponse_builder{
 			Token:         returnToken2,
 			EventsApplied: true,
-		}, nil).Times(1),
+		}.Build(), nil).Times(1),
 
 		// import the fetched events outside the loop
 		s.engine.EXPECT().ImportWorkflowExecution(gomock.Any(), &ImportWorkflowExecutionRequestMatcher{
-			ExpectedRequest: &historyservice.ImportWorkflowExecutionRequest{
+			ExpectedRequest: historyservice.ImportWorkflowExecutionRequest_builder{
 				NamespaceId: namespaceId,
-				Execution: &commonpb.WorkflowExecution{
+				Execution: commonpb.WorkflowExecution_builder{
 					WorkflowId: workflowId,
 					RunId:      runId,
-				},
+				}.Build(),
 				HistoryBatches: []*commonpb.DataBlob{rawBatches[2]},
 				VersionHistory: versionHistory,
 				Token:          returnToken2,
-			},
-		}).Return(&historyservice.ImportWorkflowExecutionResponse{
+			}.Build(),
+		}).Return(historyservice.ImportWorkflowExecutionResponse_builder{
 			Token:         returnToken3,
 			EventsApplied: true,
-		}, nil).Times(1),
+		}.Build(), nil).Times(1),
 
 		// commit the import
 		s.engine.EXPECT().ImportWorkflowExecution(gomock.Any(), &ImportWorkflowExecutionRequestMatcher{
-			ExpectedRequest: &historyservice.ImportWorkflowExecutionRequest{
+			ExpectedRequest: historyservice.ImportWorkflowExecutionRequest_builder{
 				NamespaceId: namespaceId,
-				Execution: &commonpb.WorkflowExecution{
+				Execution: commonpb.WorkflowExecution_builder{
 					WorkflowId: workflowId,
 					RunId:      runId,
-				},
+				}.Build(),
 				HistoryBatches: []*commonpb.DataBlob{},
 				VersionHistory: versionHistory,
 				Token:          returnToken3,
-			},
-		}).Return(&historyservice.ImportWorkflowExecutionResponse{
+			}.Build(),
+		}).Return(historyservice.ImportWorkflowExecutionResponse_builder{
 			Token: nil,
-		}, nil).Times(1),
+		}.Build(), nil).Times(1),
 	)
 
 	err := s.eventImporter.ImportHistoryEventsFromBeginning(

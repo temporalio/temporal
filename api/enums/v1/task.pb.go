@@ -9,7 +9,6 @@ package enums
 import (
 	reflect "reflect"
 	"strconv"
-	sync "sync"
 	unsafe "unsafe"
 
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -78,11 +77,6 @@ func (TaskSource) Type() protoreflect.EnumType {
 
 func (x TaskSource) Number() protoreflect.EnumNumber {
 	return protoreflect.EnumNumber(x)
-}
-
-// Deprecated: Use TaskSource.Descriptor instead.
-func (TaskSource) EnumDescriptor() ([]byte, []int) {
-	return file_temporal_server_api_enums_v1_task_proto_rawDescGZIP(), []int{0}
 }
 
 type TaskType int32
@@ -221,29 +215,27 @@ func (x TaskType) String() string {
 	case TASK_TYPE_TRANSFER_CANCEL_EXECUTION:
 		return "TransferCancelExecution"
 
-		// Deprecated: Use TaskType.Descriptor instead.
+		// TaskPriority is only used for replication task as of May 2024
 	case TASK_TYPE_TRANSFER_START_CHILD_EXECUTION:
 		return "TransferStartChildExecution"
 	case TASK_TYPE_TRANSFER_SIGNAL_EXECUTION:
 		return "TransferSignalExecution"
 	case TASK_TYPE_TRANSFER_RESET_WORKFLOW:
-
-		// TaskPriority is only used for replication task as of May 2024
 		return "TransferResetWorkflow"
+
+		// gap between index can be used for future priority levels if needed
 	case TASK_TYPE_WORKFLOW_TASK_TIMEOUT:
 		return "WorkflowTaskTimeout"
 	case TASK_TYPE_ACTIVITY_TIMEOUT:
 		return "ActivityTimeout"
+
+		// Enum value maps for TaskPriority.
 	case TASK_TYPE_USER_TIMER:
 		return "UserTimer"
-
-		// gap between index can be used for future priority levels if needed
 	case TASK_TYPE_WORKFLOW_RUN_TIMEOUT:
 		return "WorkflowRunTimeout"
 	case TASK_TYPE_DELETE_HISTORY_EVENT:
 		return "DeleteHistoryEvent"
-
-		// Enum value maps for TaskPriority.
 	case TASK_TYPE_ACTIVITY_RETRY_TIMER:
 		return "ActivityRetryTimer"
 	case TASK_TYPE_WORKFLOW_BACKOFF_TIMER:
@@ -270,8 +262,6 @@ func (x TaskType) String() string {
 		return "WorkflowExecutionTimeout"
 	case TASK_TYPE_REPLICATION_SYNC_HSM:
 		return "ReplicationSyncHsm"
-
-		// Deprecated: Use TaskPriority.Descriptor instead.
 	case TASK_TYPE_REPLICATION_SYNC_VERSIONED_TRANSITION:
 		return "ReplicationSyncVersionedTransition"
 	case TASK_TYPE_CHASM_PURE:
@@ -294,10 +284,6 @@ func (TaskType) Type() protoreflect.EnumType {
 
 func (x TaskType) Number() protoreflect.EnumNumber {
 	return protoreflect.EnumNumber(x)
-}
-
-func (TaskType) EnumDescriptor() ([]byte, []int) {
-	return file_temporal_server_api_enums_v1_task_proto_rawDescGZIP(), []int{1}
 }
 
 type TaskPriority int32
@@ -354,10 +340,6 @@ func (x TaskPriority) Number() protoreflect.EnumNumber {
 	return protoreflect.EnumNumber(x)
 }
 
-func (TaskPriority) EnumDescriptor() ([]byte, []int) {
-	return file_temporal_server_api_enums_v1_task_proto_rawDescGZIP(), []int{2}
-}
-
 var File_temporal_server_api_enums_v1_task_proto protoreflect.FileDescriptor
 
 const file_temporal_server_api_enums_v1_task_proto_rawDesc = "" +
@@ -406,18 +388,6 @@ const file_temporal_server_api_enums_v1_task_proto_rawDesc = "" +
 	"\x12TASK_PRIORITY_HIGH\x10\x01\x12\x15\n" +
 	"\x11TASK_PRIORITY_LOW\x10\n" +
 	"B*Z(go.temporal.io/server/api/enums/v1;enumsb\x06proto3"
-
-var (
-	file_temporal_server_api_enums_v1_task_proto_rawDescOnce sync.Once
-	file_temporal_server_api_enums_v1_task_proto_rawDescData []byte
-)
-
-func file_temporal_server_api_enums_v1_task_proto_rawDescGZIP() []byte {
-	file_temporal_server_api_enums_v1_task_proto_rawDescOnce.Do(func() {
-		file_temporal_server_api_enums_v1_task_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_api_enums_v1_task_proto_rawDesc), len(file_temporal_server_api_enums_v1_task_proto_rawDesc)))
-	})
-	return file_temporal_server_api_enums_v1_task_proto_rawDescData
-}
 
 var file_temporal_server_api_enums_v1_task_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
 var file_temporal_server_api_enums_v1_task_proto_goTypes = []any{

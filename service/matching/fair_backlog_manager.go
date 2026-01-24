@@ -161,12 +161,12 @@ func (c *fairBacklogManagerImpl) loadSubqueuesLocked(subqueues []persistencespb.
 	for i := range subqueues {
 		subqueueIdx := subqueueIndex(i)
 		if i >= len(c.subqueues) {
-			r := newFairTaskReader(c, subqueueIdx, fairLevelFromProto(subqueues[i].FairAckLevel))
+			r := newFairTaskReader(c, subqueueIdx, fairLevelFromProto(subqueues[i].GetFairAckLevel()))
 			r.Start()
 			c.subqueues = append(c.subqueues, r)
 		}
-		c.subqueuesByPriority[priorityKey(subqueues[i].Key.Priority)] = subqueueIdx
-		c.priorityBySubqueue[subqueueIdx] = priorityKey(subqueues[i].Key.Priority)
+		c.subqueuesByPriority[priorityKey(subqueues[i].GetKey().GetPriority())] = subqueueIdx
+		c.priorityBySubqueue[subqueueIdx] = priorityKey(subqueues[i].GetKey().GetPriority())
 	}
 }
 
@@ -183,9 +183,9 @@ func (c *fairBacklogManagerImpl) getSubqueueForPriority(priority priorityKey) su
 	// We need to allocate a new subqueue. Note this is doing io under subqueueLock,
 	// but we want to serialize these updates.
 	// TODO(pri): maybe we can improve that
-	subqueues, err := c.db.AllocateSubqueue(c.tqCtx, &persistencespb.SubqueueKey{
+	subqueues, err := c.db.AllocateSubqueue(c.tqCtx, persistencespb.SubqueueKey_builder{
 		Priority: int32(priority),
-	})
+	}.Build())
 	if err != nil {
 		c.signalIfFatal(err)
 		// If we failed to write the metadata update, just use subqueueZero.
@@ -220,7 +220,7 @@ func (c *fairBacklogManagerImpl) periodicSync() {
 }
 
 func (c *fairBacklogManagerImpl) SpoolTask(taskInfo *persistencespb.TaskInfo) error {
-	subqueue := c.getSubqueueForPriority(priorityKey(taskInfo.Priority.GetPriorityKey()))
+	subqueue := c.getSubqueueForPriority(priorityKey(taskInfo.GetPriority().GetPriorityKey()))
 	err := c.taskWriter.appendTask(subqueue, taskInfo)
 	c.signalIfFatal(err)
 	return err
@@ -277,22 +277,22 @@ func (c *fairBacklogManagerImpl) BacklogStatsByPriority() map[int32]*taskqueuepb
 
 		// Note that there could be more than one subqueue for the same priority.
 		if _, ok := result[pk]; !ok {
-			result[pk] = &taskqueuepb.TaskQueueStats{
+			result[pk] = taskqueuepb.TaskQueueStats_builder{
 				// TODO(pri): returning 0 to match existing behavior, but maybe emptyBacklogAge would
 				// be more appropriate in the future.
 				ApproximateBacklogAge: durationpb.New(0),
-			}
+			}.Build()
 		}
 
 		// Add backlog counts together across all subqueues for the same priority.
-		result[pk].ApproximateBacklogCount += backlogCounts[subqueueIdx]
+		result[pk].SetApproximateBacklogCount(result[pk].GetApproximateBacklogCount() + backlogCounts[subqueueIdx])
 
 		// Find greatest backlog age for across all subqueues for the same priority.
 		oldestBacklogTime := c.subqueues[subqueueIdx].getOldestBacklogTime()
 		if !oldestBacklogTime.IsZero() {
 			oldestBacklogAge := time.Since(oldestBacklogTime)
-			if oldestBacklogAge > result[pk].ApproximateBacklogAge.AsDuration() {
-				result[pk].ApproximateBacklogAge = durationpb.New(oldestBacklogAge)
+			if oldestBacklogAge > result[pk].GetApproximateBacklogAge().AsDuration() {
+				result[pk].SetApproximateBacklogAge(durationpb.New(oldestBacklogAge))
 			}
 		}
 	}
@@ -311,16 +311,16 @@ func (c *fairBacklogManagerImpl) BacklogStatus() *taskqueuepb.TaskQueueStatus {
 	}
 
 	taskIDBlock := rangeIDToTaskIDBlock(c.db.RangeID(), c.config.RangeSize)
-	return &taskqueuepb.TaskQueueStatus{
+	return taskqueuepb.TaskQueueStatus_builder{
 		ReadLevel: readLevel.id,
 		AckLevel:  ackLevel.id,
 		// use getTotalApproximateBacklogCount instead of BacklogCountHint since it's more accurate
 		BacklogCountHint: c.db.getTotalApproximateBacklogCount(),
-		TaskIdBlock: &taskqueuepb.TaskIdBlock{
+		TaskIdBlock: taskqueuepb.TaskIdBlock_builder{
 			StartId: taskIDBlock.start,
 			EndId:   taskIDBlock.end,
-		},
-	}
+		}.Build(),
+	}.Build()
 }
 
 func (c *fairBacklogManagerImpl) InternalStatus() []*taskqueuespb.InternalTaskQueueStatus {
@@ -333,17 +333,17 @@ func (c *fairBacklogManagerImpl) InternalStatus() []*taskqueuespb.InternalTaskQu
 	for i, r := range c.subqueues {
 		readLevel, ackLevel := r.getLevels()
 		count, maxReadLevel := c.db.getApproximateBacklogCountAndMaxReadLevel(subqueueIndex(i))
-		status[i] = &taskqueuespb.InternalTaskQueueStatus{
+		status[i] = taskqueuespb.InternalTaskQueueStatus_builder{
 			FairReadLevel: readLevel.toProto(),
 			FairAckLevel:  ackLevel.toProto(),
-			TaskIdBlock: &taskqueuepb.TaskIdBlock{
+			TaskIdBlock: taskqueuepb.TaskIdBlock_builder{
 				StartId: currentTaskIDBlock.start,
 				EndId:   currentTaskIDBlock.end,
-			},
+			}.Build(),
 			LoadedTasks:             int64(r.getLoadedTasks()),
 			FairMaxReadLevel:        maxReadLevel.toProto(),
 			ApproximateBacklogCount: count,
-		}
+		}.Build()
 	}
 	return status
 }

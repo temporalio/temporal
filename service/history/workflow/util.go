@@ -156,7 +156,7 @@ func FindAutoResetPoint(
 		return "", nil
 	}
 	now := timeSource.Now()
-	for _, p := range autoResetPoints.Points {
+	for _, p := range autoResetPoints.GetPoints() {
 		if err := verifyChecksum(p.GetBinaryChecksum()); err != nil && p.GetResettable() {
 			expireTime := timestamp.TimeValue(p.GetExpireTime())
 			if !expireTime.IsZero() && now.After(expireTime) {
@@ -288,10 +288,10 @@ func getCompletionCallbacksAsProtoSlice(ctx context.Context, ms historyi.Mutable
 		if err != nil {
 			return nil, err
 		}
-		if _, ok := cb.Trigger.Variant.(*persistencespb.CallbackInfo_Trigger_WorkflowClosed); !ok {
+		if cb.GetTrigger().WhichVariant() != persistencespb.CallbackInfo_Trigger_WorkflowClosed_case {
 			continue
 		}
-		cbSpec, err := PersistenceCallbackToAPICallback(cb.Callback)
+		cbSpec, err := PersistenceCallbackToAPICallback(cb.GetCallback())
 		if err != nil {
 			return nil, err
 		}
@@ -308,7 +308,7 @@ func getCompletionCallbacksAsProtoSlice(ctx context.Context, ms historyi.Mutable
 		for _, field := range wf.Callbacks {
 			cb := field.Get(ctx)
 			// Only include callbacks in STANDBY state (not already triggered)
-			if cb.Status != callbackspb.CALLBACK_STATUS_STANDBY {
+			if cb.GetStatus() != callbackspb.CALLBACK_STATUS_STANDBY {
 				continue
 			}
 			// Convert CHASM callback to API callback
@@ -325,27 +325,23 @@ func getCompletionCallbacksAsProtoSlice(ctx context.Context, ms historyi.Mutable
 }
 
 func PersistenceCallbackToAPICallback(cb *persistencespb.Callback) (*commonpb.Callback, error) {
-	res := &commonpb.Callback{
+	res := commonpb.Callback_builder{
 		Links: cb.GetLinks(),
-	}
-	switch variant := cb.Variant.(type) {
-	case *persistencespb.Callback_Nexus_:
-		res.Variant = &commonpb.Callback_Nexus_{
-			Nexus: &commonpb.Callback_Nexus{
-				Url:    variant.Nexus.GetUrl(),
-				Header: variant.Nexus.GetHeader(),
-			},
-		}
+	}.Build()
+	switch cb.WhichVariant() {
+	case persistencespb.Callback_Nexus_case:
+		res.SetNexus(commonpb.Callback_Nexus_builder{
+			Url:    cb.GetNexus().GetUrl(),
+			Header: cb.GetNexus().GetHeader(),
+		}.Build())
 	default:
 		data, err := proto.Marshal(cb)
 		if err != nil {
 			return nil, err
 		}
-		res.Variant = &commonpb.Callback_Internal_{
-			Internal: &commonpb.Callback_Internal{
-				Data: data,
-			},
-		}
+		res.SetInternal(commonpb.Callback_Internal_builder{
+			Data: data,
+		}.Build())
 	}
 	return res, nil
 }

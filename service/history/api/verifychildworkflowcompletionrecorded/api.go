@@ -31,15 +31,15 @@ func verifyChildExecution(
 	versionHistories *historyspb.VersionHistories, retError error) {
 	workflowLease, err := workflowConsistencyChecker.GetWorkflowLease(
 		ctx,
-		request.Clock,
+		request.GetClock(),
 		// it's ok we have stale state when doing verification,
 		// the logic will return WorkflowNotReady error and the caller will retry
 		// this can prevent keep reloading mutable state when there's a replication lag
 		// in parent shard.
 		definition.NewWorkflowKey(
-			request.NamespaceId,
-			request.ParentExecution.WorkflowId,
-			request.ParentExecution.RunId,
+			request.GetNamespaceId(),
+			request.GetParentExecution().GetWorkflowId(),
+			request.GetParentExecution().GetRunId(),
 		),
 		locks.PriorityLow,
 	)
@@ -50,12 +50,12 @@ func verifyChildExecution(
 
 	mutableState := workflowLease.GetMutableState()
 	if !mutableState.IsWorkflowExecutionRunning() &&
-		mutableState.GetExecutionState().State != enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
+		mutableState.GetExecutionState().GetState() != enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
 		// parent has already completed and can't be blocked after failover.
 		return nil, nil, nil
 	}
 
-	onCurrentBranch, err := api.IsHistoryEventOnCurrentBranch(mutableState, request.ParentInitiatedId, request.ParentInitiatedVersion)
+	onCurrentBranch, err := api.IsHistoryEventOnCurrentBranch(mutableState, request.GetParentInitiatedId(), request.GetParentInitiatedVersion())
 	if err != nil {
 		// initiated event not found on any branch
 		return nil, nil, consts.ErrWorkflowNotReady
@@ -68,10 +68,10 @@ func verifyChildExecution(
 		return nil, nil, consts.ErrChildExecutionNotFound
 	}
 
-	ci, isRunning := mutableState.GetChildExecutionInfo(request.ParentInitiatedId)
+	ci, isRunning := mutableState.GetChildExecutionInfo(request.GetParentInitiatedId())
 	if isRunning {
-		if ci.StartedEventId != common.EmptyEventID &&
-			ci.GetStartedWorkflowId() != request.ChildExecution.GetWorkflowId() {
+		if ci.GetStartedEventId() != common.EmptyEventID &&
+			ci.GetStartedWorkflowId() != request.GetChildExecution().GetWorkflowId() {
 			// this can happen since we may not have the initiated version
 			return nil, nil, consts.ErrChildExecutionNotFound
 		}
@@ -79,8 +79,8 @@ func verifyChildExecution(
 		return nil, nil, consts.ErrWorkflowNotReady
 	}
 
-	versionedTransition = transitionhistory.CopyVersionedTransition(transitionhistory.LastVersionedTransition(mutableState.GetExecutionInfo().TransitionHistory))
-	versionHistories = versionhistory.CopyVersionHistories(mutableState.GetExecutionInfo().VersionHistories)
+	versionedTransition = transitionhistory.CopyVersionedTransition(transitionhistory.LastVersionedTransition(mutableState.GetExecutionInfo().GetTransitionHistory()))
+	versionHistories = versionhistory.CopyVersionHistories(mutableState.GetExecutionInfo().GetVersionHistories())
 	return versionedTransition, versionHistories, nil
 }
 
@@ -117,7 +117,7 @@ func Invoke(
 		return nil, err
 	}
 
-	activeClusterName := namespaceEntry.ActiveClusterName(request.ParentExecution.WorkflowId)
+	activeClusterName := namespaceEntry.ActiveClusterName(request.GetParentExecution().GetWorkflowId())
 	if activeClusterName == clusterMetadata.GetCurrentClusterName() {
 		return nil, errors.New("namespace becomes active when processing task as standby")
 	}
@@ -127,17 +127,17 @@ func Invoke(
 		return nil, err
 	}
 
-	resp, err := remoteAdminClient.SyncWorkflowState(ctx, &adminservice.SyncWorkflowStateRequest{
-		NamespaceId: request.NamespaceId,
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: request.ParentExecution.WorkflowId,
-			RunId:      request.ParentExecution.RunId,
-		},
+	resp, err := remoteAdminClient.SyncWorkflowState(ctx, adminservice.SyncWorkflowStateRequest_builder{
+		NamespaceId: request.GetNamespaceId(),
+		Execution: commonpb.WorkflowExecution_builder{
+			WorkflowId: request.GetParentExecution().GetWorkflowId(),
+			RunId:      request.GetParentExecution().GetRunId(),
+		}.Build(),
 		ArchetypeId:         chasm.WorkflowArchetypeID,
 		VersionedTransition: versionedTransition,
 		VersionHistories:    versionHistories,
 		TargetClusterId:     int32(targetClusterInfo.InitialFailoverVersion),
-	})
+	}.Build())
 
 	if err != nil {
 		if common.IsNotFoundError(err) {
@@ -158,7 +158,7 @@ func Invoke(
 	if err != nil {
 		return nil, err
 	}
-	err = engine.ReplicateVersionedTransition(ctx, chasm.WorkflowArchetypeID, resp.VersionedTransitionArtifact, activeClusterName)
+	err = engine.ReplicateVersionedTransition(ctx, chasm.WorkflowArchetypeID, resp.GetVersionedTransitionArtifact(), activeClusterName)
 	if err != nil {
 		return nil, err
 	}

@@ -77,67 +77,67 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTas
 	configVersion := int64(0)
 	failoverVersion := int64(59)
 	clusters := []*replicationpb.ClusterReplicationConfig{
-		{
+		replicationpb.ClusterReplicationConfig_builder{
 			ClusterName: clusterActive,
-		},
-		{
+		}.Build(),
+		replicationpb.ClusterReplicationConfig_builder{
 			ClusterName: clusterStandby,
-		},
+		}.Build(),
 	}
 
-	task := &replicationspb.NamespaceTaskAttributes{
+	task := replicationspb.NamespaceTaskAttributes_builder{
 		NamespaceOperation: operation,
 		Id:                 id,
-		Info: &namespacepb.NamespaceInfo{
+		Info: namespacepb.NamespaceInfo_builder{
 			Name:        name,
 			State:       state,
 			Description: description,
 			OwnerEmail:  ownerEmail,
 			Data:        data,
-		},
-		Config: &namespacepb.NamespaceConfig{
+		}.Build(),
+		Config: namespacepb.NamespaceConfig_builder{
 			WorkflowExecutionRetentionTtl: durationpb.New(retention),
 			HistoryArchivalState:          historyArchivalState,
 			HistoryArchivalUri:            historyArchivalURI,
 			VisibilityArchivalState:       visibilityArchivalState,
 			VisibilityArchivalUri:         visibilityArchivalURI,
-		},
-		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
+		}.Build(),
+		ReplicationConfig: replicationpb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: clusterActive,
 			Clusters:          clusters,
-		},
+		}.Build(),
 		ConfigVersion:   configVersion,
 		FailoverVersion: failoverVersion,
-	}
+	}.Build()
 	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{
 		Name: name,
-	}).Return(&persistence.GetNamespaceResponse{Namespace: &persistencespb.NamespaceDetail{
-		Info: &persistencespb.NamespaceInfo{
+	}).Return(&persistence.GetNamespaceResponse{Namespace: persistencespb.NamespaceDetail_builder{
+		Info: persistencespb.NamespaceInfo_builder{
 			Id: uuid.NewString(),
-		},
-	}}, nil)
-	task.Id = uuid.NewString()
-	task.Info.Name = name
+		}.Build(),
+	}.Build()}, nil)
+	task.SetId(uuid.NewString())
+	task.GetInfo().SetName(name)
 	err := s.namespaceReplicator.Execute(context.Background(), task)
 	s.NotNil(err)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 
-	task.Id = id
-	task.Info.Name = "other random namespace test name"
+	task.SetId(id)
+	task.GetInfo().SetName("other random namespace test name")
 	var count int
 	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{
-		Name: task.Info.Name,
+		Name: task.GetInfo().GetName(),
 	}).DoAndReturn(func(_ context.Context, request *persistence.GetNamespaceRequest) (*persistence.GetNamespaceResponse, error) {
 		nsID := id
 		if count != 0 {
 			nsID = uuid.NewString()
 		}
 		count++
-		return &persistence.GetNamespaceResponse{Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
+		return &persistence.GetNamespaceResponse{Namespace: persistencespb.NamespaceDetail_builder{
+			Info: persistencespb.NamespaceInfo_builder{
 				Id: nsID,
-			},
-		}}, nil
+			}.Build(),
+		}.Build()}, nil
 	}).Times(2)
 	s.mockMetadataMgr.EXPECT().CreateNamespace(gomock.Any(), gomock.Any()).Return(nil, errors.New("test"))
 	err = s.namespaceReplicator.Execute(context.Background(), task)
@@ -163,87 +163,87 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTas
 	configVersion := int64(0)
 	failoverVersion := int64(59)
 	clusters := []*replicationpb.ClusterReplicationConfig{
-		{
+		replicationpb.ClusterReplicationConfig_builder{
 			ClusterName: clusterActive,
-		},
-		{
+		}.Build(),
+		replicationpb.ClusterReplicationConfig_builder{
 			ClusterName: clusterStandby,
-		},
+		}.Build(),
 	}
 	failoverHistory := []*replicationpb.FailoverStatus{
-		{
+		replicationpb.FailoverStatus_builder{
 			FailoverTime:    timestamppb.New(time.Date(2025, 9, 15, 14, 30, 0, 0, time.UTC)),
 			FailoverVersion: 2,
-		},
-		{
+		}.Build(),
+		replicationpb.FailoverStatus_builder{
 			FailoverTime:    timestamppb.New(time.Date(2025, 10, 1, 16, 45, 30, 0, time.UTC)),
 			FailoverVersion: 11,
-		},
+		}.Build(),
 	}
 
-	task := &replicationspb.NamespaceTaskAttributes{
+	task := replicationspb.NamespaceTaskAttributes_builder{
 		NamespaceOperation: operation,
 		Id:                 id,
-		Info: &namespacepb.NamespaceInfo{
+		Info: namespacepb.NamespaceInfo_builder{
 			Name:        name,
 			State:       state,
 			Description: description,
 			OwnerEmail:  ownerEmail,
 			Data:        data,
-		},
-		Config: &namespacepb.NamespaceConfig{
+		}.Build(),
+		Config: namespacepb.NamespaceConfig_builder{
 			WorkflowExecutionRetentionTtl: durationpb.New(retention),
 			HistoryArchivalState:          historyArchivalState,
 			HistoryArchivalUri:            historyArchivalURI,
 			VisibilityArchivalState:       visibilityArchivalState,
 			VisibilityArchivalUri:         visibilityArchivalURI,
-		},
-		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
+		}.Build(),
+		ReplicationConfig: replicationpb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: clusterActive,
 			Clusters:          clusters,
-		},
+		}.Build(),
 		ConfigVersion:   configVersion,
 		FailoverVersion: failoverVersion,
 		FailoverHistory: failoverHistory,
-	}
+	}.Build()
 
 	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{Name: name}).Return(
 		nil, &serviceerror.NamespaceNotFound{}).Times(1)
 	s.mockMetadataMgr.EXPECT().CreateNamespace(gomock.Any(), &persistence.CreateNamespaceRequest{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
+		Namespace: persistencespb.NamespaceDetail_builder{
+			Info: persistencespb.NamespaceInfo_builder{
 				Id:          id,
-				State:       task.Info.State,
-				Name:        task.Info.Name,
-				Description: task.Info.Description,
-				Owner:       task.Info.OwnerEmail,
-				Data:        task.Info.Data,
-			},
-			Config: &persistencespb.NamespaceConfig{
-				Retention:               task.Config.WorkflowExecutionRetentionTtl,
-				HistoryArchivalState:    task.Config.HistoryArchivalState,
-				HistoryArchivalUri:      task.Config.HistoryArchivalUri,
-				VisibilityArchivalState: task.Config.VisibilityArchivalState,
-				VisibilityArchivalUri:   task.Config.VisibilityArchivalUri,
-			},
-			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
-				ActiveClusterName: task.ReplicationConfig.ActiveClusterName,
+				State:       task.GetInfo().GetState(),
+				Name:        task.GetInfo().GetName(),
+				Description: task.GetInfo().GetDescription(),
+				Owner:       task.GetInfo().GetOwnerEmail(),
+				Data:        task.GetInfo().GetData(),
+			}.Build(),
+			Config: persistencespb.NamespaceConfig_builder{
+				Retention:               task.GetConfig().GetWorkflowExecutionRetentionTtl(),
+				HistoryArchivalState:    task.GetConfig().GetHistoryArchivalState(),
+				HistoryArchivalUri:      task.GetConfig().GetHistoryArchivalUri(),
+				VisibilityArchivalState: task.GetConfig().GetVisibilityArchivalState(),
+				VisibilityArchivalUri:   task.GetConfig().GetVisibilityArchivalUri(),
+			}.Build(),
+			ReplicationConfig: persistencespb.NamespaceReplicationConfig_builder{
+				ActiveClusterName: task.GetReplicationConfig().GetActiveClusterName(),
 				Clusters:          []string{clusterActive, clusterStandby},
 				FailoverHistory: []*persistencespb.FailoverStatus{
-					{
+					persistencespb.FailoverStatus_builder{
 						FailoverTime:    timestamppb.New(time.Date(2025, 9, 15, 14, 30, 0, 0, time.UTC)),
 						FailoverVersion: 2,
-					},
-					{
+					}.Build(),
+					persistencespb.FailoverStatus_builder{
 						FailoverTime:    timestamppb.New(time.Date(2025, 10, 1, 16, 45, 30, 0, time.UTC)),
 						FailoverVersion: 11,
-					},
+					}.Build(),
 				},
-			},
+			}.Build(),
 			ConfigVersion:               configVersion,
 			FailoverNotificationVersion: 0,
 			FailoverVersion:             failoverVersion,
-		},
+		}.Build(),
 		IsGlobalNamespace: true,
 	})
 	err := s.namespaceReplicator.Execute(context.Background(), task)
@@ -256,40 +256,40 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTas
 	clusterActive := "some random active cluster name"
 	clusterStandby := "some random standby cluster name"
 	clusters := []*replicationpb.ClusterReplicationConfig{
-		{
+		replicationpb.ClusterReplicationConfig_builder{
 			ClusterName: clusterActive,
-		},
-		{
+		}.Build(),
+		replicationpb.ClusterReplicationConfig_builder{
 			ClusterName: clusterStandby,
-		},
+		}.Build(),
 	}
-	task := &replicationspb.NamespaceTaskAttributes{
+	task := replicationspb.NamespaceTaskAttributes_builder{
 		Id:                 id,
 		NamespaceOperation: enumsspb.NAMESPACE_OPERATION_CREATE,
-		Info: &namespacepb.NamespaceInfo{
+		Info: namespacepb.NamespaceInfo_builder{
 			Name:  name,
 			State: enumspb.NAMESPACE_STATE_REGISTERED,
-		},
+		}.Build(),
 		Config: &namespacepb.NamespaceConfig{},
-		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
+		ReplicationConfig: replicationpb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: clusterActive,
 			Clusters:          clusters,
-		},
-	}
+		}.Build(),
+	}.Build()
 	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{
 		Name: name,
-	}).Return(&persistence.GetNamespaceResponse{Namespace: &persistencespb.NamespaceDetail{
-		Info: &persistencespb.NamespaceInfo{
+	}).Return(&persistence.GetNamespaceResponse{Namespace: persistencespb.NamespaceDetail_builder{
+		Info: persistencespb.NamespaceInfo_builder{
 			Id: id,
-		},
-	}}, nil).Times(2)
+		}.Build(),
+	}.Build()}, nil).Times(2)
 	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{
 		ID: id,
-	}).Return(&persistence.GetNamespaceResponse{Namespace: &persistencespb.NamespaceDetail{
-		Info: &persistencespb.NamespaceInfo{
+	}).Return(&persistence.GetNamespaceResponse{Namespace: persistencespb.NamespaceDetail_builder{
+		Info: persistencespb.NamespaceInfo_builder{
 			Name: name,
-		},
-	}}, nil).Times(1)
+		}.Build(),
+	}.Build()}, nil).Times(1)
 	s.mockMetadataMgr.EXPECT().CreateNamespace(gomock.Any(), gomock.Any()).Return(nil, errors.New("test"))
 	err := s.namespaceReplicator.Execute(context.Background(), task)
 	s.Nil(err)
@@ -313,67 +313,67 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	failoverVersion := int64(59)
 	namespaceData := map[string]string{"k1": "v1", "k2": "v2"}
 	clusters := []*replicationpb.ClusterReplicationConfig{
-		{
+		replicationpb.ClusterReplicationConfig_builder{
 			ClusterName: clusterActive,
-		},
-		{
+		}.Build(),
+		replicationpb.ClusterReplicationConfig_builder{
 			ClusterName: clusterStandby,
-		},
+		}.Build(),
 	}
 
-	updateTask := &replicationspb.NamespaceTaskAttributes{
+	updateTask := replicationspb.NamespaceTaskAttributes_builder{
 		NamespaceOperation: operation,
 		Id:                 id,
-		Info: &namespacepb.NamespaceInfo{
+		Info: namespacepb.NamespaceInfo_builder{
 			Name:        name,
 			State:       state,
 			Description: description,
 			OwnerEmail:  ownerEmail,
 			Data:        namespaceData,
-		},
-		Config: &namespacepb.NamespaceConfig{
+		}.Build(),
+		Config: namespacepb.NamespaceConfig_builder{
 			WorkflowExecutionRetentionTtl: durationpb.New(retention),
 			HistoryArchivalState:          historyArchivalState,
 			HistoryArchivalUri:            historyArchivalURI,
 			VisibilityArchivalState:       visibilityArchivalState,
 			VisibilityArchivalUri:         visibilityArchivalURI,
-		},
-		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
+		}.Build(),
+		ReplicationConfig: replicationpb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: clusterActive,
 			Clusters:          clusters,
-		},
+		}.Build(),
 		ConfigVersion:   configVersion,
 		FailoverVersion: failoverVersion,
-	}
+	}.Build()
 
 	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{NotificationVersion: 0}, nil)
 	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{Name: name}).Return(
 		nil, &serviceerror.NamespaceNotFound{}).Times(2)
 	s.mockMetadataMgr.EXPECT().CreateNamespace(gomock.Any(), &persistence.CreateNamespaceRequest{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
+		Namespace: persistencespb.NamespaceDetail_builder{
+			Info: persistencespb.NamespaceInfo_builder{
 				Id:          id,
-				State:       updateTask.Info.State,
-				Name:        updateTask.Info.Name,
-				Description: updateTask.Info.Description,
-				Owner:       updateTask.Info.OwnerEmail,
-				Data:        updateTask.Info.Data,
-			},
-			Config: &persistencespb.NamespaceConfig{
-				Retention:               updateTask.Config.WorkflowExecutionRetentionTtl,
-				HistoryArchivalState:    updateTask.Config.HistoryArchivalState,
-				HistoryArchivalUri:      updateTask.Config.HistoryArchivalUri,
-				VisibilityArchivalState: updateTask.Config.VisibilityArchivalState,
-				VisibilityArchivalUri:   updateTask.Config.VisibilityArchivalUri,
-			},
-			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
-				ActiveClusterName: updateTask.ReplicationConfig.ActiveClusterName,
+				State:       updateTask.GetInfo().GetState(),
+				Name:        updateTask.GetInfo().GetName(),
+				Description: updateTask.GetInfo().GetDescription(),
+				Owner:       updateTask.GetInfo().GetOwnerEmail(),
+				Data:        updateTask.GetInfo().GetData(),
+			}.Build(),
+			Config: persistencespb.NamespaceConfig_builder{
+				Retention:               updateTask.GetConfig().GetWorkflowExecutionRetentionTtl(),
+				HistoryArchivalState:    updateTask.GetConfig().GetHistoryArchivalState(),
+				HistoryArchivalUri:      updateTask.GetConfig().GetHistoryArchivalUri(),
+				VisibilityArchivalState: updateTask.GetConfig().GetVisibilityArchivalState(),
+				VisibilityArchivalUri:   updateTask.GetConfig().GetVisibilityArchivalUri(),
+			}.Build(),
+			ReplicationConfig: persistencespb.NamespaceReplicationConfig_builder{
+				ActiveClusterName: updateTask.GetReplicationConfig().GetActiveClusterName(),
 				Clusters:          []string{clusterActive, clusterStandby},
-			},
+			}.Build(),
 			ConfigVersion:               configVersion,
 			FailoverNotificationVersion: 0,
 			FailoverVersion:             failoverVersion,
-		},
+		}.Build(),
 		IsGlobalNamespace: true,
 	})
 	err := s.namespaceReplicator.Execute(context.Background(), updateTask)
@@ -399,83 +399,83 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	updateFailoverVersion := int64(59)
 	failoverTime := time.Now()
 	failoverHistory := []*replicationpb.FailoverStatus{
-		{
+		replicationpb.FailoverStatus_builder{
 			FailoverTime:    timestamppb.New(failoverTime),
 			FailoverVersion: 999,
-		},
+		}.Build(),
 	}
 	updateClusters := []*replicationpb.ClusterReplicationConfig{
-		{
+		replicationpb.ClusterReplicationConfig_builder{
 			ClusterName: updateClusterActive,
-		},
-		{
+		}.Build(),
+		replicationpb.ClusterReplicationConfig_builder{
 			ClusterName: updateClusterStandby,
-		},
+		}.Build(),
 	}
-	updateTask := &replicationspb.NamespaceTaskAttributes{
+	updateTask := replicationspb.NamespaceTaskAttributes_builder{
 		NamespaceOperation: updateOperation,
 		Id:                 id,
-		Info: &namespacepb.NamespaceInfo{
+		Info: namespacepb.NamespaceInfo_builder{
 			Name:        name,
 			State:       updateState,
 			Description: updateDescription,
 			OwnerEmail:  updateOwnerEmail,
 			Data:        updatedData,
-		},
-		Config: &namespacepb.NamespaceConfig{
+		}.Build(),
+		Config: namespacepb.NamespaceConfig_builder{
 			WorkflowExecutionRetentionTtl: durationpb.New(updateRetention),
 			HistoryArchivalState:          updateHistoryArchivalState,
 			HistoryArchivalUri:            updateHistoryArchivalURI,
 			VisibilityArchivalState:       updateVisibilityArchivalState,
 			VisibilityArchivalUri:         updateVisibilityArchivalURI,
-		},
-		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
+		}.Build(),
+		ReplicationConfig: replicationpb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: updateClusterActive,
 			Clusters:          updateClusters,
-		},
+		}.Build(),
 		ConfigVersion:   updateConfigVersion,
 		FailoverVersion: updateFailoverVersion,
 		FailoverHistory: failoverHistory,
-	}
+	}.Build()
 
 	s.namespaceReplicator.currentCluster = updateClusterStandby
 	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{
 		Name: name,
-	}).Return(&persistence.GetNamespaceResponse{Namespace: &persistencespb.NamespaceDetail{
-		Info: &persistencespb.NamespaceInfo{
+	}).Return(&persistence.GetNamespaceResponse{Namespace: persistencespb.NamespaceDetail_builder{
+		Info: persistencespb.NamespaceInfo_builder{
 			Id: id,
-		},
+		}.Build(),
 		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
-	}}, nil).Times(2)
+	}.Build()}, nil).Times(2)
 	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{
 		NotificationVersion: updateFailoverVersion,
 	}, nil).Times(1)
 	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), &persistence.UpdateNamespaceRequest{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
+		Namespace: persistencespb.NamespaceDetail_builder{
+			Info: persistencespb.NamespaceInfo_builder{
 				Id:          id,
-				State:       updateTask.Info.State,
-				Name:        updateTask.Info.Name,
-				Description: updateTask.Info.Description,
-				Owner:       updateTask.Info.OwnerEmail,
-				Data:        updateTask.Info.Data,
-			},
-			Config: &persistencespb.NamespaceConfig{
-				Retention:               updateTask.Config.WorkflowExecutionRetentionTtl,
-				HistoryArchivalState:    updateTask.Config.HistoryArchivalState,
-				HistoryArchivalUri:      updateTask.Config.HistoryArchivalUri,
-				VisibilityArchivalState: updateTask.Config.VisibilityArchivalState,
-				VisibilityArchivalUri:   updateTask.Config.VisibilityArchivalUri,
-			},
-			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
-				ActiveClusterName: updateTask.ReplicationConfig.ActiveClusterName,
+				State:       updateTask.GetInfo().GetState(),
+				Name:        updateTask.GetInfo().GetName(),
+				Description: updateTask.GetInfo().GetDescription(),
+				Owner:       updateTask.GetInfo().GetOwnerEmail(),
+				Data:        updateTask.GetInfo().GetData(),
+			}.Build(),
+			Config: persistencespb.NamespaceConfig_builder{
+				Retention:               updateTask.GetConfig().GetWorkflowExecutionRetentionTtl(),
+				HistoryArchivalState:    updateTask.GetConfig().GetHistoryArchivalState(),
+				HistoryArchivalUri:      updateTask.GetConfig().GetHistoryArchivalUri(),
+				VisibilityArchivalState: updateTask.GetConfig().GetVisibilityArchivalState(),
+				VisibilityArchivalUri:   updateTask.GetConfig().GetVisibilityArchivalUri(),
+			}.Build(),
+			ReplicationConfig: persistencespb.NamespaceReplicationConfig_builder{
+				ActiveClusterName: updateTask.GetReplicationConfig().GetActiveClusterName(),
 				Clusters:          []string{updateClusterActive, updateClusterStandby},
 				FailoverHistory:   ConvertFailoverHistoryToPersistenceProto(failoverHistory),
-			},
+			}.Build(),
 			ConfigVersion:               updateConfigVersion,
 			FailoverNotificationVersion: updateFailoverVersion,
 			FailoverVersion:             updateFailoverVersion,
-		},
+		}.Build(),
 		IsGlobalNamespace:   false,
 		NotificationVersion: updateFailoverVersion,
 	})
@@ -501,75 +501,75 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	updateConfigVersion := int64(1)
 	updateFailoverVersion := int64(59)
 	updateClusters := []*replicationpb.ClusterReplicationConfig{
-		{
+		replicationpb.ClusterReplicationConfig_builder{
 			ClusterName: updateClusterActive,
-		},
-		{
+		}.Build(),
+		replicationpb.ClusterReplicationConfig_builder{
 			ClusterName: updateClusterStandby,
-		},
+		}.Build(),
 	}
-	updateTask := &replicationspb.NamespaceTaskAttributes{
+	updateTask := replicationspb.NamespaceTaskAttributes_builder{
 		NamespaceOperation: updateOperation,
 		Id:                 id,
-		Info: &namespacepb.NamespaceInfo{
+		Info: namespacepb.NamespaceInfo_builder{
 			Name:        name,
 			State:       updateState,
 			Description: updateDescription,
 			OwnerEmail:  updateOwnerEmail,
 			Data:        updatedData,
-		},
-		Config: &namespacepb.NamespaceConfig{
+		}.Build(),
+		Config: namespacepb.NamespaceConfig_builder{
 			WorkflowExecutionRetentionTtl: durationpb.New(updateRetention),
 			HistoryArchivalState:          updateHistoryArchivalState,
 			HistoryArchivalUri:            updateHistoryArchivalURI,
 			VisibilityArchivalState:       updateVisibilityArchivalState,
 			VisibilityArchivalUri:         updateVisibilityArchivalURI,
-		},
-		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
+		}.Build(),
+		ReplicationConfig: replicationpb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: updateClusterActive,
 			Clusters:          updateClusters,
-		},
+		}.Build(),
 		ConfigVersion:   updateConfigVersion,
 		FailoverVersion: updateFailoverVersion,
-	}
+	}.Build()
 
 	s.namespaceReplicator.currentCluster = updateClusterStandby
 	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{
 		Name: name,
-	}).Return(&persistence.GetNamespaceResponse{Namespace: &persistencespb.NamespaceDetail{
-		Info: &persistencespb.NamespaceInfo{
+	}).Return(&persistence.GetNamespaceResponse{Namespace: persistencespb.NamespaceDetail_builder{
+		Info: persistencespb.NamespaceInfo_builder{
 			Id: id,
-		},
+		}.Build(),
 		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
 		FailoverVersion:   updateFailoverVersion + 1,
-	}}, nil).Times(2)
+	}.Build()}, nil).Times(2)
 	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{
 		NotificationVersion: updateFailoverVersion,
 	}, nil).Times(1)
 	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), &persistence.UpdateNamespaceRequest{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
+		Namespace: persistencespb.NamespaceDetail_builder{
+			Info: persistencespb.NamespaceInfo_builder{
 				Id:          id,
-				State:       updateTask.Info.State,
-				Name:        updateTask.Info.Name,
-				Description: updateTask.Info.Description,
-				Owner:       updateTask.Info.OwnerEmail,
-				Data:        updateTask.Info.Data,
-			},
-			Config: &persistencespb.NamespaceConfig{
-				Retention:               updateTask.Config.WorkflowExecutionRetentionTtl,
-				HistoryArchivalState:    updateTask.Config.HistoryArchivalState,
-				HistoryArchivalUri:      updateTask.Config.HistoryArchivalUri,
-				VisibilityArchivalState: updateTask.Config.VisibilityArchivalState,
-				VisibilityArchivalUri:   updateTask.Config.VisibilityArchivalUri,
-			},
-			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+				State:       updateTask.GetInfo().GetState(),
+				Name:        updateTask.GetInfo().GetName(),
+				Description: updateTask.GetInfo().GetDescription(),
+				Owner:       updateTask.GetInfo().GetOwnerEmail(),
+				Data:        updateTask.GetInfo().GetData(),
+			}.Build(),
+			Config: persistencespb.NamespaceConfig_builder{
+				Retention:               updateTask.GetConfig().GetWorkflowExecutionRetentionTtl(),
+				HistoryArchivalState:    updateTask.GetConfig().GetHistoryArchivalState(),
+				HistoryArchivalUri:      updateTask.GetConfig().GetHistoryArchivalUri(),
+				VisibilityArchivalState: updateTask.GetConfig().GetVisibilityArchivalState(),
+				VisibilityArchivalUri:   updateTask.GetConfig().GetVisibilityArchivalUri(),
+			}.Build(),
+			ReplicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 				Clusters: []string{updateClusterActive, updateClusterStandby},
-			},
+			}.Build(),
 			ConfigVersion:               updateConfigVersion,
 			FailoverNotificationVersion: 0,
 			FailoverVersion:             updateFailoverVersion + 1,
-		},
+		}.Build(),
 		IsGlobalNamespace:   false,
 		NotificationVersion: updateFailoverVersion,
 	})
@@ -595,63 +595,63 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	updateConfigVersion := int64(1)
 	updateFailoverVersion := int64(59)
 	updateClusters := []*replicationpb.ClusterReplicationConfig{
-		{
+		replicationpb.ClusterReplicationConfig_builder{
 			ClusterName: updateClusterActive,
-		},
-		{
+		}.Build(),
+		replicationpb.ClusterReplicationConfig_builder{
 			ClusterName: updateClusterStandby,
-		},
+		}.Build(),
 	}
-	updateTask := &replicationspb.NamespaceTaskAttributes{
+	updateTask := replicationspb.NamespaceTaskAttributes_builder{
 		NamespaceOperation: updateOperation,
 		Id:                 id,
-		Info: &namespacepb.NamespaceInfo{
+		Info: namespacepb.NamespaceInfo_builder{
 			Name:        name,
 			State:       updateState,
 			Description: updateDescription,
 			OwnerEmail:  updateOwnerEmail,
 			Data:        updatedData,
-		},
-		Config: &namespacepb.NamespaceConfig{
+		}.Build(),
+		Config: namespacepb.NamespaceConfig_builder{
 			WorkflowExecutionRetentionTtl: durationpb.New(updateRetention),
 			HistoryArchivalState:          updateHistoryArchivalState,
 			HistoryArchivalUri:            updateHistoryArchivalURI,
 			VisibilityArchivalState:       updateVisibilityArchivalState,
 			VisibilityArchivalUri:         updateVisibilityArchivalURI,
-		},
-		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
+		}.Build(),
+		ReplicationConfig: replicationpb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: updateClusterActive,
 			Clusters:          updateClusters,
-		},
+		}.Build(),
 		ConfigVersion:   updateConfigVersion,
 		FailoverVersion: updateFailoverVersion,
-	}
+	}.Build()
 
 	s.namespaceReplicator.currentCluster = updateClusterStandby
 	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{
 		Name: name,
-	}).Return(&persistence.GetNamespaceResponse{Namespace: &persistencespb.NamespaceDetail{
-		Info: &persistencespb.NamespaceInfo{
+	}).Return(&persistence.GetNamespaceResponse{Namespace: persistencespb.NamespaceDetail_builder{
+		Info: persistencespb.NamespaceInfo_builder{
 			Id: id,
-		},
+		}.Build(),
 		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
 		ConfigVersion:     updateConfigVersion + 1,
-	}}, nil).Times(2)
+	}.Build()}, nil).Times(2)
 	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{
 		NotificationVersion: updateFailoverVersion,
 	}, nil).Times(1)
 	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), &persistence.UpdateNamespaceRequest{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
+		Namespace: persistencespb.NamespaceDetail_builder{
+			Info: persistencespb.NamespaceInfo_builder{
 				Id: id,
-			},
-			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+			}.Build(),
+			ReplicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 				ActiveClusterName: updateClusterActive,
-			},
+			}.Build(),
 			ConfigVersion:               updateConfigVersion + 1,
 			FailoverNotificationVersion: updateFailoverVersion,
 			FailoverVersion:             updateFailoverVersion,
-		},
+		}.Build(),
 		IsGlobalNamespace:   false,
 		NotificationVersion: updateFailoverVersion,
 	})
@@ -677,49 +677,49 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	updateConfigVersion := int64(1)
 	updateFailoverVersion := int64(59)
 	updateClusters := []*replicationpb.ClusterReplicationConfig{
-		{
+		replicationpb.ClusterReplicationConfig_builder{
 			ClusterName: updateClusterActive,
-		},
-		{
+		}.Build(),
+		replicationpb.ClusterReplicationConfig_builder{
 			ClusterName: updateClusterStandby,
-		},
+		}.Build(),
 	}
-	updateTask := &replicationspb.NamespaceTaskAttributes{
+	updateTask := replicationspb.NamespaceTaskAttributes_builder{
 		NamespaceOperation: updateOperation,
 		Id:                 id,
-		Info: &namespacepb.NamespaceInfo{
+		Info: namespacepb.NamespaceInfo_builder{
 			Name:        name,
 			State:       updateState,
 			Description: updateDescription,
 			OwnerEmail:  updateOwnerEmail,
 			Data:        updatedData,
-		},
-		Config: &namespacepb.NamespaceConfig{
+		}.Build(),
+		Config: namespacepb.NamespaceConfig_builder{
 			WorkflowExecutionRetentionTtl: durationpb.New(updateRetention),
 			HistoryArchivalState:          updateHistoryArchivalState,
 			HistoryArchivalUri:            updateHistoryArchivalURI,
 			VisibilityArchivalState:       updateVisibilityArchivalState,
 			VisibilityArchivalUri:         updateVisibilityArchivalURI,
-		},
-		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
+		}.Build(),
+		ReplicationConfig: replicationpb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: updateClusterActive,
 			Clusters:          updateClusters,
-		},
+		}.Build(),
 		ConfigVersion:   updateConfigVersion,
 		FailoverVersion: updateFailoverVersion,
-	}
+	}.Build()
 
 	s.namespaceReplicator.currentCluster = updateClusterStandby
 	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{
 		Name: name,
-	}).Return(&persistence.GetNamespaceResponse{Namespace: &persistencespb.NamespaceDetail{
-		Info: &persistencespb.NamespaceInfo{
+	}).Return(&persistence.GetNamespaceResponse{Namespace: persistencespb.NamespaceDetail_builder{
+		Info: persistencespb.NamespaceInfo_builder{
 			Id: id,
-		},
+		}.Build(),
 		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
 		ConfigVersion:     updateConfigVersion + 1,
 		FailoverVersion:   updateFailoverVersion + 1,
-	}}, nil).Times(2)
+	}.Build()}, nil).Times(2)
 	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{
 		NotificationVersion: updateFailoverVersion,
 	}, nil).Times(1)

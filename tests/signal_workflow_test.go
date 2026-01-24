@@ -47,30 +47,30 @@ func (s *SignalWorkflowTestSuite) TestSignalWorkflow() {
 	identity := "worker1"
 	activityName := "activity_type1"
 
-	workflowType := &commonpb.WorkflowType{Name: wt}
+	workflowType := commonpb.WorkflowType_builder{Name: wt}.Build()
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	taskQueue := taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build()
 
 	// Send a signal to non-exist workflow
-	header := &commonpb.Header{
+	header := commonpb.Header_builder{
 		Fields: map[string]*commonpb.Payload{"signal header key": payload.EncodeString("signal header value")},
-	}
-	_, err0 := s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+	}.Build()
+	_, err0 := s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), workflowservice.SignalWorkflowExecutionRequest_builder{
 		Namespace: s.Namespace().String(),
-		WorkflowExecution: &commonpb.WorkflowExecution{
+		WorkflowExecution: commonpb.WorkflowExecution_builder{
 			WorkflowId: id,
 			RunId:      uuid.NewString(),
-		},
+		}.Build(),
 		SignalName: "failed signal",
 		Input:      nil,
 		Identity:   identity,
 		Header:     header,
-	})
+	}.Build())
 	s.NotNil(err0)
 	s.IsType(&serviceerror.NotFound{}, err0)
 
 	// Start workflow execution
-	request := &workflowservice.StartWorkflowExecutionRequest{
+	request := workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
@@ -80,12 +80,12 @@ func (s *SignalWorkflowTestSuite) TestSignalWorkflow() {
 		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
-	}
+	}.Build()
 
 	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
 
-	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.GetRunId()))
 
 	// workflow logic
 	workflowComplete := false
@@ -99,21 +99,21 @@ func (s *SignalWorkflowTestSuite) TestSignalWorkflow() {
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
 
-			return []*commandpb.Command{{
+			return []*commandpb.Command{commandpb.Command_builder{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+				ScheduleActivityTaskCommandAttributes: commandpb.ScheduleActivityTaskCommandAttributes_builder{
 					ActivityId:             strconv.Itoa(1),
-					ActivityType:           &commonpb.ActivityType{Name: activityName},
-					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+					ActivityType:           commonpb.ActivityType_builder{Name: activityName}.Build(),
+					TaskQueue:              taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeout: durationpb.New(100 * time.Second),
 					ScheduleToStartTimeout: durationpb.New(2 * time.Second),
 					StartToCloseTimeout:    durationpb.New(50 * time.Second),
 					HeartbeatTimeout:       durationpb.New(5 * time.Second),
-				}},
-			}}, nil
-		} else if task.PreviousStartedEventId > 0 {
-			for _, event := range task.History.Events[task.PreviousStartedEventId:] {
+				}.Build(),
+			}.Build()}, nil
+		} else if task.GetPreviousStartedEventId() > 0 {
+			for _, event := range task.GetHistory().GetEvents()[task.GetPreviousStartedEventId():] {
 				if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
 					signalEvent = event
 					return []*commandpb.Command{}, nil
@@ -122,12 +122,12 @@ func (s *SignalWorkflowTestSuite) TestSignalWorkflow() {
 		}
 
 		workflowComplete = true
-		return []*commandpb.Command{{
+		return []*commandpb.Command{commandpb.Command_builder{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+			CompleteWorkflowExecutionCommandAttributes: commandpb.CompleteWorkflowExecutionCommandAttributes_builder{
 				Result: payloads.EncodeString("Done"),
-			}},
-		}}, nil
+			}.Build(),
+		}.Build()}, nil
 	}
 
 	// activity handler
@@ -155,17 +155,17 @@ func (s *SignalWorkflowTestSuite) TestSignalWorkflow() {
 	// Send first signal using RunID
 	signalName := "my signal"
 	signalInput := payloads.EncodeString("my signal input")
-	_, err = s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+	_, err = s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), workflowservice.SignalWorkflowExecutionRequest_builder{
 		Namespace: s.Namespace().String(),
-		WorkflowExecution: &commonpb.WorkflowExecution{
+		WorkflowExecution: commonpb.WorkflowExecution_builder{
 			WorkflowId: id,
-			RunId:      we.RunId,
-		},
+			RunId:      we.GetRunId(),
+		}.Build(),
 		SignalName: signalName,
 		Input:      signalInput,
 		Identity:   identity,
 		Header:     header,
-	})
+	}.Build())
 	s.NoError(err)
 
 	// Process signal in workflow
@@ -175,23 +175,23 @@ func (s *SignalWorkflowTestSuite) TestSignalWorkflow() {
 
 	s.False(workflowComplete)
 	s.True(signalEvent != nil)
-	s.Equal(signalName, signalEvent.GetWorkflowExecutionSignaledEventAttributes().SignalName)
-	s.ProtoEqual(signalInput, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Input)
-	s.Equal(identity, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Identity)
-	s.ProtoEqual(header, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Header)
+	s.Equal(signalName, signalEvent.GetWorkflowExecutionSignaledEventAttributes().GetSignalName())
+	s.ProtoEqual(signalInput, signalEvent.GetWorkflowExecutionSignaledEventAttributes().GetInput())
+	s.Equal(identity, signalEvent.GetWorkflowExecutionSignaledEventAttributes().GetIdentity())
+	s.ProtoEqual(header, signalEvent.GetWorkflowExecutionSignaledEventAttributes().GetHeader())
 
 	// Send another signal without RunID
 	signalName = "another signal"
 	signalInput = payloads.EncodeString("another signal input")
-	_, err = s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+	_, err = s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), workflowservice.SignalWorkflowExecutionRequest_builder{
 		Namespace: s.Namespace().String(),
-		WorkflowExecution: &commonpb.WorkflowExecution{
+		WorkflowExecution: commonpb.WorkflowExecution_builder{
 			WorkflowId: id,
-		},
+		}.Build(),
 		SignalName: signalName,
 		Input:      signalInput,
 		Identity:   identity,
-	})
+	}.Build())
 	s.NoError(err)
 
 	// Process signal in workflow
@@ -201,33 +201,33 @@ func (s *SignalWorkflowTestSuite) TestSignalWorkflow() {
 
 	s.False(workflowComplete)
 	s.True(signalEvent != nil)
-	s.Equal(signalName, signalEvent.GetWorkflowExecutionSignaledEventAttributes().SignalName)
-	s.ProtoEqual(signalInput, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Input)
-	s.Equal(identity, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Identity)
+	s.Equal(signalName, signalEvent.GetWorkflowExecutionSignaledEventAttributes().GetSignalName())
+	s.ProtoEqual(signalInput, signalEvent.GetWorkflowExecutionSignaledEventAttributes().GetInput())
+	s.Equal(identity, signalEvent.GetWorkflowExecutionSignaledEventAttributes().GetIdentity())
 
 	// Terminate workflow execution
-	_, err = s.FrontendClient().TerminateWorkflowExecution(testcore.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
+	_, err = s.FrontendClient().TerminateWorkflowExecution(testcore.NewContext(), workflowservice.TerminateWorkflowExecutionRequest_builder{
 		Namespace: s.Namespace().String(),
-		WorkflowExecution: &commonpb.WorkflowExecution{
+		WorkflowExecution: commonpb.WorkflowExecution_builder{
 			WorkflowId: id,
-		},
+		}.Build(),
 		Reason:   "test signal",
 		Details:  nil,
 		Identity: identity,
-	})
+	}.Build())
 	s.NoError(err)
 
 	// Send signal to terminated workflow
-	_, err = s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+	_, err = s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), workflowservice.SignalWorkflowExecutionRequest_builder{
 		Namespace: s.Namespace().String(),
-		WorkflowExecution: &commonpb.WorkflowExecution{
+		WorkflowExecution: commonpb.WorkflowExecution_builder{
 			WorkflowId: id,
-			RunId:      we.RunId,
-		},
+			RunId:      we.GetRunId(),
+		}.Build(),
 		SignalName: "failed signal 1",
 		Input:      nil,
 		Identity:   identity,
-	})
+	}.Build())
 	s.NotNil(err)
 	s.IsType(&serviceerror.NotFound{}, err)
 }
@@ -239,12 +239,12 @@ func (s *SignalWorkflowTestSuite) TestSignalWorkflow_DuplicateRequest() {
 	identity := "worker1"
 	activityName := "activity_type1"
 
-	workflowType := &commonpb.WorkflowType{Name: wt}
+	workflowType := commonpb.WorkflowType_builder{Name: wt}.Build()
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	taskQueue := taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build()
 
 	// Start workflow execution
-	request := &workflowservice.StartWorkflowExecutionRequest{
+	request := workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
@@ -254,11 +254,11 @@ func (s *SignalWorkflowTestSuite) TestSignalWorkflow_DuplicateRequest() {
 		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
-	}
+	}.Build()
 
 	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
-	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.GetRunId()))
 
 	// workflow logic
 	workflowComplete := false
@@ -273,22 +273,22 @@ func (s *SignalWorkflowTestSuite) TestSignalWorkflow_DuplicateRequest() {
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
 
-			return []*commandpb.Command{{
+			return []*commandpb.Command{commandpb.Command_builder{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+				ScheduleActivityTaskCommandAttributes: commandpb.ScheduleActivityTaskCommandAttributes_builder{
 					ActivityId:             strconv.Itoa(1),
-					ActivityType:           &commonpb.ActivityType{Name: activityName},
-					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+					ActivityType:           commonpb.ActivityType_builder{Name: activityName}.Build(),
+					TaskQueue:              taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeout: durationpb.New(100 * time.Second),
 					ScheduleToStartTimeout: durationpb.New(2 * time.Second),
 					StartToCloseTimeout:    durationpb.New(50 * time.Second),
 					HeartbeatTimeout:       durationpb.New(5 * time.Second),
-				}},
-			}}, nil
-		} else if task.PreviousStartedEventId > 0 {
+				}.Build(),
+			}.Build()}, nil
+		} else if task.GetPreviousStartedEventId() > 0 {
 			numOfSignaledEvent = 0
-			for _, event := range task.History.Events[task.PreviousStartedEventId:] {
+			for _, event := range task.GetHistory().GetEvents()[task.GetPreviousStartedEventId():] {
 				if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
 					signalEvent = event
 					numOfSignaledEvent++
@@ -298,12 +298,12 @@ func (s *SignalWorkflowTestSuite) TestSignalWorkflow_DuplicateRequest() {
 		}
 
 		workflowComplete = true
-		return []*commandpb.Command{{
+		return []*commandpb.Command{commandpb.Command_builder{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+			CompleteWorkflowExecutionCommandAttributes: commandpb.CompleteWorkflowExecutionCommandAttributes_builder{
 				Result: payloads.EncodeString("Done"),
-			}},
-		}}, nil
+			}.Build(),
+		}.Build()}, nil
 	}
 
 	// activity handler
@@ -332,17 +332,17 @@ func (s *SignalWorkflowTestSuite) TestSignalWorkflow_DuplicateRequest() {
 	signalName := "my signal"
 	signalInput := payloads.EncodeString("my signal input")
 	requestID := uuid.NewString()
-	signalReqest := &workflowservice.SignalWorkflowExecutionRequest{
+	signalReqest := workflowservice.SignalWorkflowExecutionRequest_builder{
 		Namespace: s.Namespace().String(),
-		WorkflowExecution: &commonpb.WorkflowExecution{
+		WorkflowExecution: commonpb.WorkflowExecution_builder{
 			WorkflowId: id,
-			RunId:      we.RunId,
-		},
+			RunId:      we.GetRunId(),
+		}.Build(),
 		SignalName: signalName,
 		Input:      signalInput,
 		Identity:   identity,
 		RequestId:  requestID,
-	}
+	}.Build()
 	_, err = s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), signalReqest)
 	s.NoError(err)
 
@@ -353,9 +353,9 @@ func (s *SignalWorkflowTestSuite) TestSignalWorkflow_DuplicateRequest() {
 
 	s.False(workflowComplete)
 	s.True(signalEvent != nil)
-	s.Equal(signalName, signalEvent.GetWorkflowExecutionSignaledEventAttributes().SignalName)
-	s.ProtoEqual(signalInput, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Input)
-	s.Equal(identity, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Identity)
+	s.Equal(signalName, signalEvent.GetWorkflowExecutionSignaledEventAttributes().GetSignalName())
+	s.ProtoEqual(signalInput, signalEvent.GetWorkflowExecutionSignaledEventAttributes().GetInput())
+	s.Equal(identity, signalEvent.GetWorkflowExecutionSignaledEventAttributes().GetIdentity())
 	s.Equal(1, numOfSignaledEvent)
 
 	// Send another signal with same request id
@@ -380,11 +380,11 @@ func (s *SignalWorkflowTestSuite) TestSignalExternalWorkflowCommand() {
 	identity := "worker1"
 	activityName := "activity_type1"
 
-	workflowType := &commonpb.WorkflowType{Name: wt}
+	workflowType := commonpb.WorkflowType_builder{Name: wt}.Build()
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	taskQueue := taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build()
 
-	request := &workflowservice.StartWorkflowExecutionRequest{
+	request := workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
@@ -394,13 +394,13 @@ func (s *SignalWorkflowTestSuite) TestSignalExternalWorkflowCommand() {
 		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
-	}
+	}.Build()
 
 	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
-	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.GetRunId()))
 
-	externalRequest := &workflowservice.StartWorkflowExecutionRequest{
+	externalRequest := workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:           uuid.NewString(),
 		Namespace:           s.ExternalNamespace().String(),
 		WorkflowId:          id,
@@ -410,52 +410,52 @@ func (s *SignalWorkflowTestSuite) TestSignalExternalWorkflowCommand() {
 		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
-	}
+	}.Build()
 	we2, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), externalRequest)
 	s.NoError(err0)
-	s.Logger.Info("StartWorkflowExecution on external Namespace", tag.WorkflowNamespace(s.ExternalNamespace().String()), tag.WorkflowRunID(we2.RunId))
+	s.Logger.Info("StartWorkflowExecution on external Namespace", tag.WorkflowNamespace(s.ExternalNamespace().String()), tag.WorkflowRunID(we2.GetRunId()))
 
 	activityCount := int32(1)
 	activityCounter := int32(0)
 	signalName := "my signal"
 	signalInput := payloads.EncodeString("my signal input")
-	signalHeader := &commonpb.Header{
+	signalHeader := commonpb.Header_builder{
 		Fields: map[string]*commonpb.Payload{"signal header key": payload.EncodeString("signal header value")},
-	}
+	}.Build()
 	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
-			return []*commandpb.Command{{
+			return []*commandpb.Command{commandpb.Command_builder{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+				ScheduleActivityTaskCommandAttributes: commandpb.ScheduleActivityTaskCommandAttributes_builder{
 					ActivityId:             convert.Int32ToString(activityCounter),
-					ActivityType:           &commonpb.ActivityType{Name: activityName},
-					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+					ActivityType:           commonpb.ActivityType_builder{Name: activityName}.Build(),
+					TaskQueue:              taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeout: durationpb.New(100 * time.Second),
 					ScheduleToStartTimeout: durationpb.New(10 * time.Second),
 					StartToCloseTimeout:    durationpb.New(50 * time.Second),
 					HeartbeatTimeout:       durationpb.New(5 * time.Second),
-				}},
-			}}, nil
+				}.Build(),
+			}.Build()}, nil
 		}
 
-		return []*commandpb.Command{{
+		return []*commandpb.Command{commandpb.Command_builder{
 			CommandType: enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION,
-			Attributes: &commandpb.Command_SignalExternalWorkflowExecutionCommandAttributes{SignalExternalWorkflowExecutionCommandAttributes: &commandpb.SignalExternalWorkflowExecutionCommandAttributes{
+			SignalExternalWorkflowExecutionCommandAttributes: commandpb.SignalExternalWorkflowExecutionCommandAttributes_builder{
 				Namespace: s.ExternalNamespace().String(),
-				Execution: &commonpb.WorkflowExecution{
+				Execution: commonpb.WorkflowExecution_builder{
 					WorkflowId: id,
 					RunId:      we2.GetRunId(),
-				},
+				}.Build(),
 				SignalName: signalName,
 				Input:      signalInput,
 				Header:     signalHeader,
-			}},
-		}}, nil
+			}.Build(),
+		}.Build()}, nil
 	}
 
 	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
@@ -483,21 +483,21 @@ func (s *SignalWorkflowTestSuite) TestSignalExternalWorkflowCommand() {
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, externalActivityCounter))
 
-			return []*commandpb.Command{{
+			return []*commandpb.Command{commandpb.Command_builder{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+				ScheduleActivityTaskCommandAttributes: commandpb.ScheduleActivityTaskCommandAttributes_builder{
 					ActivityId:             convert.Int32ToString(externalActivityCounter),
-					ActivityType:           &commonpb.ActivityType{Name: activityName},
-					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+					ActivityType:           commonpb.ActivityType_builder{Name: activityName}.Build(),
+					TaskQueue:              taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeout: durationpb.New(100 * time.Second),
 					ScheduleToStartTimeout: durationpb.New(10 * time.Second),
 					StartToCloseTimeout:    durationpb.New(50 * time.Second),
 					HeartbeatTimeout:       durationpb.New(5 * time.Second),
-				}},
-			}}, nil
-		} else if task.PreviousStartedEventId > 0 {
-			for _, event := range task.History.Events[task.PreviousStartedEventId:] {
+				}.Build(),
+			}.Build()}, nil
+		} else if task.GetPreviousStartedEventId() > 0 {
+			for _, event := range task.GetHistory().GetEvents()[task.GetPreviousStartedEventId():] {
 				if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
 					signalEvent = event
 					return []*commandpb.Command{}, nil
@@ -506,12 +506,12 @@ func (s *SignalWorkflowTestSuite) TestSignalExternalWorkflowCommand() {
 		}
 
 		workflowComplete = true
-		return []*commandpb.Command{{
+		return []*commandpb.Command{commandpb.Command_builder{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+			CompleteWorkflowExecutionCommandAttributes: commandpb.CompleteWorkflowExecutionCommandAttributes_builder{
 				Result: payloads.EncodeString("Done"),
-			}},
-		}}, nil
+			}.Build(),
+		}.Build()}, nil
 	}
 
 	//nolint:staticcheck // SA1019 TaskPoller replacement needs to be done holistically.
@@ -548,10 +548,10 @@ func (s *SignalWorkflowTestSuite) TestSignalExternalWorkflowCommand() {
 	var historyEvents []*historypb.HistoryEvent
 CheckHistoryLoopForSignalSent:
 	for i := 1; i < 10; i++ {
-		historyEvents = s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{
+		historyEvents = s.GetHistory(s.Namespace().String(), commonpb.WorkflowExecution_builder{
 			WorkflowId: id,
-			RunId:      we.RunId,
-		})
+			RunId:      we.GetRunId(),
+		}.Build())
 
 		signalRequestedEvent := historyEvents[len(historyEvents)-2]
 		if signalRequestedEvent.GetEventType() != enumspb.EVENT_TYPE_EXTERNAL_WORKFLOW_EXECUTION_SIGNALED {
@@ -574,7 +574,7 @@ CheckHistoryLoopForSignalSent:
   9 WorkflowTaskCompleted
  10 SignalExternalWorkflowExecutionInitiated
  11 ExternalWorkflowExecutionSignaled {"InitiatedEventId":10,"WorkflowExecution":{"RunId":"%s","WorkflowId":"%s"}}
- 12 WorkflowTaskScheduled`, we2.RunId, id), historyEvents)
+ 12 WorkflowTaskScheduled`, we2.GetRunId(), id), historyEvents)
 
 	// Process signal in workflow for external workflow
 	_, err = externalPoller.PollAndProcessWorkflowTask(testcore.WithDumpHistory)
@@ -583,10 +583,10 @@ CheckHistoryLoopForSignalSent:
 
 	s.False(workflowComplete)
 	s.NotNil(signalEvent)
-	s.Equal(signalName, signalEvent.GetWorkflowExecutionSignaledEventAttributes().SignalName)
-	s.ProtoEqual(signalInput, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Input)
-	s.ProtoEqual(signalHeader, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Header)
-	s.Equal("history-service", signalEvent.GetWorkflowExecutionSignaledEventAttributes().Identity)
+	s.Equal(signalName, signalEvent.GetWorkflowExecutionSignaledEventAttributes().GetSignalName())
+	s.ProtoEqual(signalInput, signalEvent.GetWorkflowExecutionSignaledEventAttributes().GetInput())
+	s.ProtoEqual(signalHeader, signalEvent.GetWorkflowExecutionSignaledEventAttributes().GetHeader())
+	s.Equal("history-service", signalEvent.GetWorkflowExecutionSignaledEventAttributes().GetIdentity())
 }
 
 func (s *SignalWorkflowTestSuite) TestSignalWorkflow_Cron_NoWorkflowTaskCreated() {
@@ -596,12 +596,12 @@ func (s *SignalWorkflowTestSuite) TestSignalWorkflow_Cron_NoWorkflowTaskCreated(
 	identity := "worker1"
 	cronSpec := "@every 2s"
 
-	workflowType := &commonpb.WorkflowType{Name: wt}
+	workflowType := commonpb.WorkflowType_builder{Name: wt}.Build()
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	taskQueue := taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build()
 
 	// Start workflow execution
-	request := &workflowservice.StartWorkflowExecutionRequest{
+	request := workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
@@ -612,27 +612,27 @@ func (s *SignalWorkflowTestSuite) TestSignalWorkflow_Cron_NoWorkflowTaskCreated(
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 		CronSchedule:        cronSpec,
-	}
+	}.Build()
 	now := time.Now().UTC()
 
 	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
 
-	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.GetRunId()))
 
 	// Send first signal using RunID
 	signalName := "my signal"
 	signalInput := payloads.EncodeString("my signal input")
-	_, err := s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+	_, err := s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), workflowservice.SignalWorkflowExecutionRequest_builder{
 		Namespace: s.Namespace().String(),
-		WorkflowExecution: &commonpb.WorkflowExecution{
+		WorkflowExecution: commonpb.WorkflowExecution_builder{
 			WorkflowId: id,
-			RunId:      we.RunId,
-		},
+			RunId:      we.GetRunId(),
+		}.Build(),
 		SignalName: signalName,
 		Input:      signalInput,
 		Identity:   identity,
-	})
+	}.Build())
 	s.NoError(err)
 
 	// workflow logic
@@ -640,12 +640,12 @@ func (s *SignalWorkflowTestSuite) TestSignalWorkflow_Cron_NoWorkflowTaskCreated(
 	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		workflowTaskDelay = time.Now().UTC().Sub(now)
 
-		return []*commandpb.Command{{
+		return []*commandpb.Command{commandpb.Command_builder{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+			CompleteWorkflowExecutionCommandAttributes: commandpb.CompleteWorkflowExecutionCommandAttributes_builder{
 				Result: payloads.EncodeString("Done"),
-			}},
-		}}, nil
+			}.Build(),
+		}.Build()}, nil
 	}
 
 	poller := &testcore.TaskPoller{
@@ -670,10 +670,10 @@ func (s *SignalWorkflowTestSuite) TestSignalWorkflow_WorkflowCloseAttempted() {
 	wt := "functional-signal-workflow-workflow-close-attempted-test-type"
 	tl := "functional-signal-workflow-workflow-close-attempted-test-taskqueue"
 	identity := "worker1"
-	workflowType := &commonpb.WorkflowType{Name: wt}
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	workflowType := commonpb.WorkflowType_builder{Name: wt}.Build()
+	taskQueue := taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build()
 
-	we, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), &workflowservice.StartWorkflowExecutionRequest{
+	we, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
@@ -683,48 +683,48 @@ func (s *SignalWorkflowTestSuite) TestSignalWorkflow_WorkflowCloseAttempted() {
 		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(3 * time.Second),
 		Identity:            identity,
-	})
+	}.Build())
 	s.NoError(err)
 
 	attemptCount := 1
 	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		if attemptCount == 1 {
-			_, err := s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+			_, err := s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), workflowservice.SignalWorkflowExecutionRequest_builder{
 				Namespace: s.Namespace().String(),
-				WorkflowExecution: &commonpb.WorkflowExecution{
+				WorkflowExecution: commonpb.WorkflowExecution_builder{
 					WorkflowId: id,
-					RunId:      we.RunId,
-				},
+					RunId:      we.GetRunId(),
+				}.Build(),
 				SignalName: "buffered-signal",
 				Identity:   identity,
 				RequestId:  uuid.NewString(),
-			})
+			}.Build())
 			s.NoError(err)
 		}
 
 		if attemptCount == 2 {
 			ctx, _ := rpc.NewContextWithTimeoutAndVersionHeaders(time.Second)
-			_, err := s.FrontendClient().SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
+			_, err := s.FrontendClient().SignalWorkflowExecution(ctx, workflowservice.SignalWorkflowExecutionRequest_builder{
 				Namespace: s.Namespace().String(),
-				WorkflowExecution: &commonpb.WorkflowExecution{
+				WorkflowExecution: commonpb.WorkflowExecution_builder{
 					WorkflowId: id,
-					RunId:      we.RunId,
-				},
+					RunId:      we.GetRunId(),
+				}.Build(),
 				SignalName: "rejected-signal",
 				Identity:   identity,
 				RequestId:  uuid.NewString(),
-			})
+			}.Build())
 			s.Error(err)
 			s.Error(consts.ErrWorkflowClosing, err)
 		}
 
 		attemptCount++
-		return []*commandpb.Command{{
+		return []*commandpb.Command{commandpb.Command_builder{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+			CompleteWorkflowExecutionCommandAttributes: commandpb.CompleteWorkflowExecutionCommandAttributes_builder{
 				Result: payloads.EncodeString("Done"),
-			}},
-		}}, nil
+			}.Build(),
+		}.Build()}, nil
 	}
 
 	poller := &testcore.TaskPoller{
@@ -754,11 +754,11 @@ func (s *SignalWorkflowTestSuite) TestSignalExternalWorkflowCommand_WithoutRunID
 	identity := "worker1"
 	activityName := "activity_type1"
 
-	workflowType := &commonpb.WorkflowType{Name: wt}
+	workflowType := commonpb.WorkflowType_builder{Name: wt}.Build()
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	taskQueue := taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build()
 
-	request := &workflowservice.StartWorkflowExecutionRequest{
+	request := workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
@@ -768,13 +768,13 @@ func (s *SignalWorkflowTestSuite) TestSignalExternalWorkflowCommand_WithoutRunID
 		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
-	}
+	}.Build()
 
 	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
-	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.GetRunId()))
 
-	externalRequest := &workflowservice.StartWorkflowExecutionRequest{
+	externalRequest := workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:           uuid.NewString(),
 		Namespace:           s.ExternalNamespace().String(),
 		WorkflowId:          id,
@@ -784,10 +784,10 @@ func (s *SignalWorkflowTestSuite) TestSignalExternalWorkflowCommand_WithoutRunID
 		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
-	}
+	}.Build()
 	we2, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), externalRequest)
 	s.NoError(err0)
-	s.Logger.Info("StartWorkflowExecution on external Namespace", tag.WorkflowNamespace(s.ExternalNamespace().String()), tag.WorkflowRunID(we2.RunId))
+	s.Logger.Info("StartWorkflowExecution on external Namespace", tag.WorkflowNamespace(s.ExternalNamespace().String()), tag.WorkflowRunID(we2.GetRunId()))
 
 	activityCount := int32(1)
 	activityCounter := int32(0)
@@ -799,33 +799,33 @@ func (s *SignalWorkflowTestSuite) TestSignalExternalWorkflowCommand_WithoutRunID
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
-			return []*commandpb.Command{{
+			return []*commandpb.Command{commandpb.Command_builder{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+				ScheduleActivityTaskCommandAttributes: commandpb.ScheduleActivityTaskCommandAttributes_builder{
 					ActivityId:             convert.Int32ToString(activityCounter),
-					ActivityType:           &commonpb.ActivityType{Name: activityName},
-					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+					ActivityType:           commonpb.ActivityType_builder{Name: activityName}.Build(),
+					TaskQueue:              taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeout: durationpb.New(100 * time.Second),
 					ScheduleToStartTimeout: durationpb.New(10 * time.Second),
 					StartToCloseTimeout:    durationpb.New(50 * time.Second),
 					HeartbeatTimeout:       durationpb.New(5 * time.Second),
-				}},
-			}}, nil
+				}.Build(),
+			}.Build()}, nil
 		}
 
-		return []*commandpb.Command{{
+		return []*commandpb.Command{commandpb.Command_builder{
 			CommandType: enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION,
-			Attributes: &commandpb.Command_SignalExternalWorkflowExecutionCommandAttributes{SignalExternalWorkflowExecutionCommandAttributes: &commandpb.SignalExternalWorkflowExecutionCommandAttributes{
+			SignalExternalWorkflowExecutionCommandAttributes: commandpb.SignalExternalWorkflowExecutionCommandAttributes_builder{
 				Namespace: s.ExternalNamespace().String(),
-				Execution: &commonpb.WorkflowExecution{
+				Execution: commonpb.WorkflowExecution_builder{
 					WorkflowId: id,
 					// No RunID in command
-				},
+				}.Build(),
 				SignalName: signalName,
 				Input:      signalInput,
-			}},
-		}}, nil
+			}.Build(),
+		}.Build()}, nil
 	}
 
 	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
@@ -853,21 +853,21 @@ func (s *SignalWorkflowTestSuite) TestSignalExternalWorkflowCommand_WithoutRunID
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, externalActivityCounter))
 
-			return []*commandpb.Command{{
+			return []*commandpb.Command{commandpb.Command_builder{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+				ScheduleActivityTaskCommandAttributes: commandpb.ScheduleActivityTaskCommandAttributes_builder{
 					ActivityId:             convert.Int32ToString(externalActivityCounter),
-					ActivityType:           &commonpb.ActivityType{Name: activityName},
-					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+					ActivityType:           commonpb.ActivityType_builder{Name: activityName}.Build(),
+					TaskQueue:              taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeout: durationpb.New(100 * time.Second),
 					ScheduleToStartTimeout: durationpb.New(10 * time.Second),
 					StartToCloseTimeout:    durationpb.New(50 * time.Second),
 					HeartbeatTimeout:       durationpb.New(5 * time.Second),
-				}},
-			}}, nil
-		} else if task.PreviousStartedEventId > 0 {
-			for _, event := range task.History.Events[task.PreviousStartedEventId:] {
+				}.Build(),
+			}.Build()}, nil
+		} else if task.GetPreviousStartedEventId() > 0 {
+			for _, event := range task.GetHistory().GetEvents()[task.GetPreviousStartedEventId():] {
 				if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
 					signalEvent = event
 					return []*commandpb.Command{}, nil
@@ -876,12 +876,12 @@ func (s *SignalWorkflowTestSuite) TestSignalExternalWorkflowCommand_WithoutRunID
 		}
 
 		workflowComplete = true
-		return []*commandpb.Command{{
+		return []*commandpb.Command{commandpb.Command_builder{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+			CompleteWorkflowExecutionCommandAttributes: commandpb.CompleteWorkflowExecutionCommandAttributes_builder{
 				Result: payloads.EncodeString("Done"),
-			}},
-		}}, nil
+			}.Build(),
+		}.Build()}, nil
 	}
 
 	//nolint:staticcheck // SA1019 TaskPoller replacement needs to be done holistically.
@@ -918,10 +918,10 @@ func (s *SignalWorkflowTestSuite) TestSignalExternalWorkflowCommand_WithoutRunID
 	var historyEvents []*historypb.HistoryEvent
 CheckHistoryLoopForSignalSent:
 	for i := 1; i < 10; i++ {
-		historyEvents = s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{
+		historyEvents = s.GetHistory(s.Namespace().String(), commonpb.WorkflowExecution_builder{
 			WorkflowId: id,
-			RunId:      we.RunId,
-		})
+			RunId:      we.GetRunId(),
+		}.Build())
 
 		signalRequestedEvent := historyEvents[len(historyEvents)-2]
 		if signalRequestedEvent.GetEventType() != enumspb.EVENT_TYPE_EXTERNAL_WORKFLOW_EXECUTION_SIGNALED {
@@ -954,9 +954,9 @@ CheckHistoryLoopForSignalSent:
 
 	s.False(workflowComplete)
 	s.True(signalEvent != nil)
-	s.Equal(signalName, signalEvent.GetWorkflowExecutionSignaledEventAttributes().SignalName)
-	s.ProtoEqual(signalInput, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Input)
-	s.Equal("history-service", signalEvent.GetWorkflowExecutionSignaledEventAttributes().Identity)
+	s.Equal(signalName, signalEvent.GetWorkflowExecutionSignaledEventAttributes().GetSignalName())
+	s.ProtoEqual(signalInput, signalEvent.GetWorkflowExecutionSignaledEventAttributes().GetInput())
+	s.Equal("history-service", signalEvent.GetWorkflowExecutionSignaledEventAttributes().GetIdentity())
 }
 
 func (s *SignalWorkflowTestSuite) TestSignalExternalWorkflowCommand_UnKnownTarget() {
@@ -967,11 +967,11 @@ func (s *SignalWorkflowTestSuite) TestSignalExternalWorkflowCommand_UnKnownTarge
 	identity := "worker1"
 	activityName := "activity_type1"
 
-	workflowType := &commonpb.WorkflowType{Name: wt}
+	workflowType := commonpb.WorkflowType_builder{Name: wt}.Build()
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	taskQueue := taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build()
 
-	request := &workflowservice.StartWorkflowExecutionRequest{
+	request := workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
@@ -981,10 +981,10 @@ func (s *SignalWorkflowTestSuite) TestSignalExternalWorkflowCommand_UnKnownTarge
 		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
-	}
+	}.Build()
 	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
-	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.GetRunId()))
 
 	activityCount := int32(1)
 	activityCounter := int32(0)
@@ -996,33 +996,33 @@ func (s *SignalWorkflowTestSuite) TestSignalExternalWorkflowCommand_UnKnownTarge
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
-			return []*commandpb.Command{{
+			return []*commandpb.Command{commandpb.Command_builder{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+				ScheduleActivityTaskCommandAttributes: commandpb.ScheduleActivityTaskCommandAttributes_builder{
 					ActivityId:             convert.Int32ToString(activityCounter),
-					ActivityType:           &commonpb.ActivityType{Name: activityName},
-					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+					ActivityType:           commonpb.ActivityType_builder{Name: activityName}.Build(),
+					TaskQueue:              taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeout: durationpb.New(100 * time.Second),
 					ScheduleToStartTimeout: durationpb.New(10 * time.Second),
 					StartToCloseTimeout:    durationpb.New(50 * time.Second),
 					HeartbeatTimeout:       durationpb.New(5 * time.Second),
-				}},
-			}}, nil
+				}.Build(),
+			}.Build()}, nil
 		}
 
-		return []*commandpb.Command{{
+		return []*commandpb.Command{commandpb.Command_builder{
 			CommandType: enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION,
-			Attributes: &commandpb.Command_SignalExternalWorkflowExecutionCommandAttributes{SignalExternalWorkflowExecutionCommandAttributes: &commandpb.SignalExternalWorkflowExecutionCommandAttributes{
+			SignalExternalWorkflowExecutionCommandAttributes: commandpb.SignalExternalWorkflowExecutionCommandAttributes_builder{
 				Namespace: s.ExternalNamespace().String(),
-				Execution: &commonpb.WorkflowExecution{
+				Execution: commonpb.WorkflowExecution_builder{
 					WorkflowId: "workflow_not_exist",
 					RunId:      we.GetRunId(),
-				},
+				}.Build(),
 				SignalName: signalName,
 				Input:      signalInput,
-			}},
-		}}, nil
+			}.Build(),
+		}.Build()}, nil
 	}
 
 	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
@@ -1053,10 +1053,10 @@ func (s *SignalWorkflowTestSuite) TestSignalExternalWorkflowCommand_UnKnownTarge
 	var historyEvents []*historypb.HistoryEvent
 CheckHistoryLoopForCancelSent:
 	for i := 1; i < 10; i++ {
-		historyEvents = s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{
+		historyEvents = s.GetHistory(s.Namespace().String(), commonpb.WorkflowExecution_builder{
 			WorkflowId: id,
-			RunId:      we.RunId,
-		})
+			RunId:      we.GetRunId(),
+		}.Build())
 
 		signalFailedEvent := historyEvents[len(historyEvents)-2]
 		if signalFailedEvent.GetEventType() != enumspb.EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED {
@@ -1079,7 +1079,7 @@ CheckHistoryLoopForCancelSent:
   9 WorkflowTaskCompleted
  10 SignalExternalWorkflowExecutionInitiated
  11 SignalExternalWorkflowExecutionFailed {"InitiatedEventId":10,"WorkflowExecution":{"RunId":"%s","WorkflowId":"workflow_not_exist"}}
- 12 WorkflowTaskScheduled`, we.RunId), historyEvents)
+ 12 WorkflowTaskScheduled`, we.GetRunId()), historyEvents)
 }
 
 func (s *SignalWorkflowTestSuite) TestSignalExternalWorkflowCommand_SignalSelf() {
@@ -1089,11 +1089,11 @@ func (s *SignalWorkflowTestSuite) TestSignalExternalWorkflowCommand_SignalSelf()
 	identity := "worker1"
 	activityName := "activity_type1"
 
-	workflowType := &commonpb.WorkflowType{Name: wt}
+	workflowType := commonpb.WorkflowType_builder{Name: wt}.Build()
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	taskQueue := taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build()
 
-	request := &workflowservice.StartWorkflowExecutionRequest{
+	request := workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
@@ -1103,10 +1103,10 @@ func (s *SignalWorkflowTestSuite) TestSignalExternalWorkflowCommand_SignalSelf()
 		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
-	}
+	}.Build()
 	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
-	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.GetRunId()))
 
 	activityCount := int32(1)
 	activityCounter := int32(0)
@@ -1118,33 +1118,33 @@ func (s *SignalWorkflowTestSuite) TestSignalExternalWorkflowCommand_SignalSelf()
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
-			return []*commandpb.Command{{
+			return []*commandpb.Command{commandpb.Command_builder{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+				ScheduleActivityTaskCommandAttributes: commandpb.ScheduleActivityTaskCommandAttributes_builder{
 					ActivityId:             convert.Int32ToString(activityCounter),
-					ActivityType:           &commonpb.ActivityType{Name: activityName},
-					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+					ActivityType:           commonpb.ActivityType_builder{Name: activityName}.Build(),
+					TaskQueue:              taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeout: durationpb.New(100 * time.Second),
 					ScheduleToStartTimeout: durationpb.New(10 * time.Second),
 					StartToCloseTimeout:    durationpb.New(50 * time.Second),
 					HeartbeatTimeout:       durationpb.New(5 * time.Second),
-				}},
-			}}, nil
+				}.Build(),
+			}.Build()}, nil
 		}
 
-		return []*commandpb.Command{{
+		return []*commandpb.Command{commandpb.Command_builder{
 			CommandType: enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION,
-			Attributes: &commandpb.Command_SignalExternalWorkflowExecutionCommandAttributes{SignalExternalWorkflowExecutionCommandAttributes: &commandpb.SignalExternalWorkflowExecutionCommandAttributes{
+			SignalExternalWorkflowExecutionCommandAttributes: commandpb.SignalExternalWorkflowExecutionCommandAttributes_builder{
 				Namespace: s.Namespace().String(),
-				Execution: &commonpb.WorkflowExecution{
+				Execution: commonpb.WorkflowExecution_builder{
 					WorkflowId: id,
 					RunId:      we.GetRunId(),
-				},
+				}.Build(),
 				SignalName: signalName,
 				Input:      signalInput,
-			}},
-		}}, nil
+			}.Build(),
+		}.Build()}, nil
 	}
 
 	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
@@ -1175,10 +1175,10 @@ func (s *SignalWorkflowTestSuite) TestSignalExternalWorkflowCommand_SignalSelf()
 	var historyEvents []*historypb.HistoryEvent
 CheckHistoryLoopForCancelSent:
 	for i := 1; i < 10; i++ {
-		historyEvents = s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{
+		historyEvents = s.GetHistory(s.Namespace().String(), commonpb.WorkflowExecution_builder{
 			WorkflowId: id,
-			RunId:      we.RunId,
-		})
+			RunId:      we.GetRunId(),
+		}.Build())
 
 		signalFailedEvent := historyEvents[len(historyEvents)-2]
 		if signalFailedEvent.GetEventType() != enumspb.EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED {
@@ -1201,7 +1201,7 @@ CheckHistoryLoopForCancelSent:
   9 WorkflowTaskCompleted
  10 SignalExternalWorkflowExecutionInitiated
  11 SignalExternalWorkflowExecutionFailed {"InitiatedEventId":10,"WorkflowExecution":{"RunId":"%s","WorkflowId":"%s"}}
- 12 WorkflowTaskScheduled`, we.RunId, id), historyEvents)
+ 12 WorkflowTaskScheduled`, we.GetRunId(), id), historyEvents)
 }
 
 func (s *SignalWorkflowTestSuite) TestSignalWithStartWorkflow() {
@@ -1211,16 +1211,16 @@ func (s *SignalWorkflowTestSuite) TestSignalWithStartWorkflow() {
 	identity := "worker1"
 	activityName := "activity_type1"
 
-	workflowType := &commonpb.WorkflowType{Name: wt}
+	workflowType := commonpb.WorkflowType_builder{Name: wt}.Build()
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	taskQueue := taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build()
 
-	header := &commonpb.Header{
+	header := commonpb.Header_builder{
 		Fields: map[string]*commonpb.Payload{"tracing": payload.EncodeString("sample data")},
-	}
+	}.Build()
 
 	// Start a workflow
-	request := &workflowservice.StartWorkflowExecutionRequest{
+	request := workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
@@ -1230,12 +1230,12 @@ func (s *SignalWorkflowTestSuite) TestSignalWithStartWorkflow() {
 		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
-	}
+	}.Build()
 
 	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
 
-	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.GetRunId()))
 
 	// workflow logic
 	workflowComplete := false
@@ -1250,21 +1250,21 @@ func (s *SignalWorkflowTestSuite) TestSignalWithStartWorkflow() {
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
 
-			return []*commandpb.Command{{
+			return []*commandpb.Command{commandpb.Command_builder{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+				ScheduleActivityTaskCommandAttributes: commandpb.ScheduleActivityTaskCommandAttributes_builder{
 					ActivityId:             strconv.Itoa(1),
-					ActivityType:           &commonpb.ActivityType{Name: activityName},
-					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+					ActivityType:           commonpb.ActivityType_builder{Name: activityName}.Build(),
+					TaskQueue:              taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeout: durationpb.New(100 * time.Second),
 					ScheduleToStartTimeout: durationpb.New(2 * time.Second),
 					StartToCloseTimeout:    durationpb.New(50 * time.Second),
 					HeartbeatTimeout:       durationpb.New(5 * time.Second),
-				}},
-			}}, nil
-		} else if task.PreviousStartedEventId > 0 {
-			for _, event := range task.History.Events[task.PreviousStartedEventId:] {
+				}.Build(),
+			}.Build()}, nil
+		} else if task.GetPreviousStartedEventId() > 0 {
+			for _, event := range task.GetHistory().GetEvents()[task.GetPreviousStartedEventId():] {
 				if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
 					signalEvent = event
 					return []*commandpb.Command{}, nil
@@ -1274,7 +1274,7 @@ func (s *SignalWorkflowTestSuite) TestSignalWithStartWorkflow() {
 			newWorkflowStarted = false
 			signalEvent = nil
 			startedEvent = nil
-			for _, event := range task.History.Events[task.PreviousStartedEventId:] {
+			for _, event := range task.GetHistory().GetEvents()[task.GetPreviousStartedEventId():] {
 				if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
 					signalEvent = event
 				}
@@ -1288,12 +1288,12 @@ func (s *SignalWorkflowTestSuite) TestSignalWithStartWorkflow() {
 		}
 
 		workflowComplete = true
-		return []*commandpb.Command{{
+		return []*commandpb.Command{commandpb.Command_builder{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+			CompleteWorkflowExecutionCommandAttributes: commandpb.CompleteWorkflowExecutionCommandAttributes_builder{
 				Result: payloads.EncodeString("Done"),
-			}},
-		}}, nil
+			}.Build(),
+		}.Build()}, nil
 	}
 
 	// activity handler
@@ -1322,7 +1322,7 @@ func (s *SignalWorkflowTestSuite) TestSignalWithStartWorkflow() {
 	signalName := "my signal"
 	signalInput := payloads.EncodeString("my signal input")
 	wfIDReusePolicy := enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE
-	sRequest := &workflowservice.SignalWithStartWorkflowExecutionRequest{
+	sRequest := workflowservice.SignalWithStartWorkflowExecutionRequest_builder{
 		RequestId:             uuid.NewString(),
 		Namespace:             s.Namespace().String(),
 		WorkflowId:            id,
@@ -1336,10 +1336,10 @@ func (s *SignalWorkflowTestSuite) TestSignalWithStartWorkflow() {
 		SignalInput:           signalInput,
 		Identity:              identity,
 		WorkflowIdReusePolicy: wfIDReusePolicy,
-	}
+	}.Build()
 	resp, err := s.FrontendClient().SignalWithStartWorkflowExecution(testcore.NewContext(), sRequest)
 	s.NoError(err)
-	s.False(resp.Started)
+	s.False(resp.GetStarted())
 	s.Equal(we.GetRunId(), resp.GetRunId())
 
 	// Process signal in workflow
@@ -1349,32 +1349,32 @@ func (s *SignalWorkflowTestSuite) TestSignalWithStartWorkflow() {
 
 	s.False(workflowComplete)
 	s.True(signalEvent != nil)
-	s.Equal(signalName, signalEvent.GetWorkflowExecutionSignaledEventAttributes().SignalName)
-	s.ProtoEqual(signalInput, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Input)
-	s.Equal(identity, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Identity)
+	s.Equal(signalName, signalEvent.GetWorkflowExecutionSignaledEventAttributes().GetSignalName())
+	s.ProtoEqual(signalInput, signalEvent.GetWorkflowExecutionSignaledEventAttributes().GetInput())
+	s.Equal(identity, signalEvent.GetWorkflowExecutionSignaledEventAttributes().GetIdentity())
 
 	// Terminate workflow execution
-	_, err = s.FrontendClient().TerminateWorkflowExecution(testcore.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
+	_, err = s.FrontendClient().TerminateWorkflowExecution(testcore.NewContext(), workflowservice.TerminateWorkflowExecutionRequest_builder{
 		Namespace: s.Namespace().String(),
-		WorkflowExecution: &commonpb.WorkflowExecution{
+		WorkflowExecution: commonpb.WorkflowExecution_builder{
 			WorkflowId: id,
-		},
+		}.Build(),
 		Reason:   "test signal",
 		Details:  nil,
 		Identity: identity,
-	})
+	}.Build())
 	s.NoError(err)
 
 	// Send signal to terminated workflow
 	signalName = "signal to terminate"
 	signalInput = payloads.EncodeString("signal to terminate input")
-	sRequest.SignalName = signalName
-	sRequest.SignalInput = signalInput
-	sRequest.WorkflowId = id
+	sRequest.SetSignalName(signalName)
+	sRequest.SetSignalInput(signalInput)
+	sRequest.SetWorkflowId(id)
 
 	resp, err = s.FrontendClient().SignalWithStartWorkflowExecution(testcore.NewContext(), sRequest)
 	s.NoError(err)
-	s.True(resp.Started)
+	s.True(resp.GetStarted())
 	s.NotNil(resp.GetRunId())
 	s.NotEqual(we.GetRunId(), resp.GetRunId())
 	newWorkflowStarted = true
@@ -1386,23 +1386,23 @@ func (s *SignalWorkflowTestSuite) TestSignalWithStartWorkflow() {
 
 	s.False(workflowComplete)
 	s.True(signalEvent != nil)
-	s.Equal(signalName, signalEvent.GetWorkflowExecutionSignaledEventAttributes().SignalName)
-	s.ProtoEqual(signalInput, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Input)
-	s.Equal(identity, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Identity)
+	s.Equal(signalName, signalEvent.GetWorkflowExecutionSignaledEventAttributes().GetSignalName())
+	s.ProtoEqual(signalInput, signalEvent.GetWorkflowExecutionSignaledEventAttributes().GetInput())
+	s.Equal(identity, signalEvent.GetWorkflowExecutionSignaledEventAttributes().GetIdentity())
 	s.True(startedEvent != nil)
-	s.ProtoEqual(header, startedEvent.GetWorkflowExecutionStartedEventAttributes().Header)
+	s.ProtoEqual(header, startedEvent.GetWorkflowExecutionStartedEventAttributes().GetHeader())
 
 	// Send signal to not existed workflow
 	id = "functional-signal-with-start-workflow-test-non-exist"
 	signalName = "signal to non exist"
 	signalInput = payloads.EncodeString("signal to non exist input")
-	sRequest.SignalName = signalName
-	sRequest.SignalInput = signalInput
-	sRequest.WorkflowId = id
+	sRequest.SetSignalName(signalName)
+	sRequest.SetSignalInput(signalInput)
+	sRequest.SetWorkflowId(id)
 	resp, err = s.FrontendClient().SignalWithStartWorkflowExecution(testcore.NewContext(), sRequest)
 	s.NoError(err)
 	s.NotNil(resp.GetRunId())
-	s.True(resp.Started)
+	s.True(resp.GetStarted())
 	newWorkflowStarted = true
 
 	// Process signal in workflow
@@ -1412,71 +1412,69 @@ func (s *SignalWorkflowTestSuite) TestSignalWithStartWorkflow() {
 
 	s.False(workflowComplete)
 	s.True(signalEvent != nil)
-	s.Equal(signalName, signalEvent.GetWorkflowExecutionSignaledEventAttributes().SignalName)
-	s.ProtoEqual(signalInput, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Input)
-	s.Equal(identity, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Identity)
+	s.Equal(signalName, signalEvent.GetWorkflowExecutionSignaledEventAttributes().GetSignalName())
+	s.ProtoEqual(signalInput, signalEvent.GetWorkflowExecutionSignaledEventAttributes().GetInput())
+	s.Equal(identity, signalEvent.GetWorkflowExecutionSignaledEventAttributes().GetIdentity())
 
-	listOpenRequest := &workflowservice.ListOpenWorkflowExecutionsRequest{
+	listOpenRequest := workflowservice.ListOpenWorkflowExecutionsRequest_builder{
 		Namespace:       s.Namespace().String(),
 		MaximumPageSize: 100,
-		StartTimeFilter: &filterpb.StartTimeFilter{
+		StartTimeFilter: filterpb.StartTimeFilter_builder{
 			EarliestTime: nil,
 			LatestTime:   timestamppb.New(time.Now().UTC()),
-		},
-		Filters: &workflowservice.ListOpenWorkflowExecutionsRequest_ExecutionFilter{
-			ExecutionFilter: &filterpb.WorkflowExecutionFilter{
-				WorkflowId: id,
-			},
-		},
-	}
+		}.Build(),
+		ExecutionFilter: filterpb.WorkflowExecutionFilter_builder{
+			WorkflowId: id,
+		}.Build(),
+	}.Build()
 
 	// Assert visibility is correct
 	s.Eventually(
 		func() bool {
 			listResp, err := s.FrontendClient().ListOpenWorkflowExecutions(testcore.NewContext(), listOpenRequest)
 			s.NoError(err)
-			return len(listResp.Executions) == 1
+			return len(listResp.GetExecutions()) == 1
 		},
 		testcore.WaitForESToSettle,
 		100*time.Millisecond,
 	)
 
 	// Terminate workflow execution and assert visibility is correct
-	_, err = s.FrontendClient().TerminateWorkflowExecution(testcore.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
+	_, err = s.FrontendClient().TerminateWorkflowExecution(testcore.NewContext(), workflowservice.TerminateWorkflowExecutionRequest_builder{
 		Namespace: s.Namespace().String(),
-		WorkflowExecution: &commonpb.WorkflowExecution{
+		WorkflowExecution: commonpb.WorkflowExecution_builder{
 			WorkflowId: id,
-		},
+		}.Build(),
 		Reason:   "kill workflow",
 		Details:  nil,
 		Identity: identity,
-	})
+	}.Build())
 	s.NoError(err)
 
 	s.Eventually(
 		func() bool {
 			listResp, err := s.FrontendClient().ListOpenWorkflowExecutions(testcore.NewContext(), listOpenRequest)
 			s.NoError(err)
-			return len(listResp.Executions) == 0
+			return len(listResp.GetExecutions()) == 0
 		},
 		testcore.WaitForESToSettle,
 		100*time.Millisecond,
 	)
 
-	listClosedRequest := &workflowservice.ListClosedWorkflowExecutionsRequest{
+	listClosedRequest := workflowservice.ListClosedWorkflowExecutionsRequest_builder{
 		Namespace:       s.Namespace().String(),
 		MaximumPageSize: 100,
-		StartTimeFilter: &filterpb.StartTimeFilter{
+		StartTimeFilter: filterpb.StartTimeFilter_builder{
 			EarliestTime: nil,
 			LatestTime:   timestamppb.New(time.Now().UTC()),
-		},
-		Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
+		}.Build(),
+		ExecutionFilter: filterpb.WorkflowExecutionFilter_builder{
 			WorkflowId: id,
-		}},
-	}
+		}.Build(),
+	}.Build()
 	listClosedResp, err := s.FrontendClient().ListClosedWorkflowExecutions(testcore.NewContext(), listClosedRequest)
 	s.NoError(err)
-	s.Equal(1, len(listClosedResp.Executions))
+	s.Equal(1, len(listClosedResp.GetExecutions()))
 }
 
 func (s *SignalWorkflowTestSuite) TestSignalWithStartWorkflow_ResolveIDDeduplication() {
@@ -1490,12 +1488,12 @@ func (s *SignalWorkflowTestSuite) TestSignalWithStartWorkflow_ResolveIDDeduplica
 	identity := "worker1"
 	activityName := "activity_type1"
 
-	workflowType := &commonpb.WorkflowType{Name: wt}
+	workflowType := commonpb.WorkflowType_builder{Name: wt}.Build()
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	taskQueue := taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build()
 
 	// Start a workflow
-	request := &workflowservice.StartWorkflowExecutionRequest{
+	request := workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
@@ -1505,12 +1503,12 @@ func (s *SignalWorkflowTestSuite) TestSignalWithStartWorkflow_ResolveIDDeduplica
 		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
-	}
+	}.Build()
 
 	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
 
-	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.GetRunId()))
 
 	workflowComplete := false
 	activityCount := int32(1)
@@ -1521,28 +1519,28 @@ func (s *SignalWorkflowTestSuite) TestSignalWithStartWorkflow_ResolveIDDeduplica
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
-			return []*commandpb.Command{{
+			return []*commandpb.Command{commandpb.Command_builder{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+				ScheduleActivityTaskCommandAttributes: commandpb.ScheduleActivityTaskCommandAttributes_builder{
 					ActivityId:             convert.Int32ToString(activityCounter),
-					ActivityType:           &commonpb.ActivityType{Name: activityName},
-					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+					ActivityType:           commonpb.ActivityType_builder{Name: activityName}.Build(),
+					TaskQueue:              taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeout: durationpb.New(100 * time.Second),
 					ScheduleToStartTimeout: durationpb.New(10 * time.Second),
 					StartToCloseTimeout:    durationpb.New(50 * time.Second),
 					HeartbeatTimeout:       durationpb.New(5 * time.Second),
-				}},
-			}}, nil
+				}.Build(),
+			}.Build()}, nil
 		}
 
 		workflowComplete = true
-		return []*commandpb.Command{{
+		return []*commandpb.Command{commandpb.Command_builder{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+			CompleteWorkflowExecutionCommandAttributes: commandpb.CompleteWorkflowExecutionCommandAttributes_builder{
 				Result: payloads.EncodeString("Done"),
-			}},
-		}}, nil
+			}.Build(),
+		}.Build()}, nil
 	}
 
 	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
@@ -1572,7 +1570,7 @@ func (s *SignalWorkflowTestSuite) TestSignalWithStartWorkflow_ResolveIDDeduplica
 	// test WorkflowIdReusePolicy: RejectDuplicate
 	signalName := "my signal"
 	signalInput := payloads.EncodeString("my signal input")
-	sRequest := &workflowservice.SignalWithStartWorkflowExecutionRequest{
+	sRequest := workflowservice.SignalWithStartWorkflowExecutionRequest_builder{
 		RequestId:             uuid.NewString(),
 		Namespace:             s.Namespace().String(),
 		WorkflowId:            id,
@@ -1585,7 +1583,7 @@ func (s *SignalWorkflowTestSuite) TestSignalWithStartWorkflow_ResolveIDDeduplica
 		SignalInput:           signalInput,
 		Identity:              identity,
 		WorkflowIdReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
-	}
+	}.Build()
 	ctx, _ := rpc.NewContextWithTimeoutAndVersionHeaders(5 * time.Second)
 	resp, err := s.FrontendClient().SignalWithStartWorkflowExecution(ctx, sRequest)
 	s.Nil(resp)
@@ -1594,7 +1592,7 @@ func (s *SignalWorkflowTestSuite) TestSignalWithStartWorkflow_ResolveIDDeduplica
 	s.IsType(&serviceerror.WorkflowExecutionAlreadyStarted{}, err)
 
 	// test WorkflowIdReusePolicy: AllowDuplicateFailedOnly
-	sRequest.WorkflowIdReusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY
+	sRequest.SetWorkflowIdReusePolicy(enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY)
 	ctx, _ = rpc.NewContextWithTimeoutAndVersionHeaders(5 * time.Second)
 	resp, err = s.FrontendClient().SignalWithStartWorkflowExecution(ctx, sRequest)
 	s.Nil(resp)
@@ -1603,74 +1601,74 @@ func (s *SignalWorkflowTestSuite) TestSignalWithStartWorkflow_ResolveIDDeduplica
 	s.IsType(&serviceerror.WorkflowExecutionAlreadyStarted{}, err)
 
 	// test WorkflowIdReusePolicy: AllowDuplicate
-	sRequest.WorkflowIdReusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE
+	sRequest.SetWorkflowIdReusePolicy(enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE)
 	ctx, _ = rpc.NewContextWithTimeoutAndVersionHeaders(5 * time.Second)
 	resp, err = s.FrontendClient().SignalWithStartWorkflowExecution(ctx, sRequest)
 	s.NoError(err)
 	s.NotEmpty(resp.GetRunId())
-	s.True(resp.Started)
+	s.True(resp.GetStarted())
 
 	// Terminate workflow execution
-	_, err = s.FrontendClient().TerminateWorkflowExecution(testcore.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
+	_, err = s.FrontendClient().TerminateWorkflowExecution(testcore.NewContext(), workflowservice.TerminateWorkflowExecutionRequest_builder{
 		Namespace: s.Namespace().String(),
-		WorkflowExecution: &commonpb.WorkflowExecution{
+		WorkflowExecution: commonpb.WorkflowExecution_builder{
 			WorkflowId: id,
-		},
+		}.Build(),
 		Reason:   "test WorkflowIdReusePolicyAllowDuplicateFailedOnly",
 		Details:  nil,
 		Identity: identity,
-	})
+	}.Build())
 	s.NoError(err)
 
 	// test WorkflowIdReusePolicy: AllowDuplicateFailedOnly
-	sRequest.WorkflowIdReusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY
+	sRequest.SetWorkflowIdReusePolicy(enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY)
 	resp, err = s.FrontendClient().SignalWithStartWorkflowExecution(testcore.NewContext(), sRequest)
 	s.NoError(err)
 	s.NotEmpty(resp.GetRunId())
-	s.True(resp.Started)
+	s.True(resp.GetStarted())
 
 	// test WorkflowIdReusePolicy: TerminateIfRunning (for backwards compatibility)
-	prevRunID := resp.RunId
-	sRequest.WorkflowIdReusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING
+	prevRunID := resp.GetRunId()
+	sRequest.SetWorkflowIdReusePolicy(enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING)
 	resp, err = s.FrontendClient().SignalWithStartWorkflowExecution(testcore.NewContext(), sRequest)
 	s.NoError(err)
 	s.NotEmpty(resp.GetRunId())
 	s.NotEqual(prevRunID, resp.GetRunId())
-	s.True(resp.Started)
+	s.True(resp.GetStarted())
 
-	descResp, err := s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+	descResp, err := s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), workflowservice.DescribeWorkflowExecutionRequest_builder{
 		Namespace: s.Namespace().String(),
-		Execution: &commonpb.WorkflowExecution{WorkflowId: id, RunId: prevRunID},
-	})
+		Execution: commonpb.WorkflowExecution_builder{WorkflowId: id, RunId: prevRunID}.Build(),
+	}.Build())
 	s.NoError(err)
-	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, descResp.WorkflowExecutionInfo.Status)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, descResp.GetWorkflowExecutionInfo().GetStatus())
 
 	// test WorkflowIdConflictPolicy: TerminateExisting (replaced TerminateIfRunning)
-	prevRunID = resp.RunId
-	sRequest.WorkflowIdReusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE
-	sRequest.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING
+	prevRunID = resp.GetRunId()
+	sRequest.SetWorkflowIdReusePolicy(enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE)
+	sRequest.SetWorkflowIdConflictPolicy(enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING)
 	resp, err = s.FrontendClient().SignalWithStartWorkflowExecution(testcore.NewContext(), sRequest)
 	s.NoError(err)
 	s.NotEmpty(resp.GetRunId())
 	s.NotEqual(prevRunID, resp.GetRunId())
-	s.True(resp.Started)
+	s.True(resp.GetStarted())
 
-	descResp, err = s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+	descResp, err = s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), workflowservice.DescribeWorkflowExecutionRequest_builder{
 		Namespace: s.Namespace().String(),
-		Execution: &commonpb.WorkflowExecution{WorkflowId: id, RunId: prevRunID},
-	})
+		Execution: commonpb.WorkflowExecution_builder{WorkflowId: id, RunId: prevRunID}.Build(),
+	}.Build())
 	s.NoError(err)
-	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, descResp.WorkflowExecutionInfo.Status)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, descResp.GetWorkflowExecutionInfo().GetStatus())
 
-	descResp, err = s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+	descResp, err = s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), workflowservice.DescribeWorkflowExecutionRequest_builder{
 		Namespace: s.Namespace().String(),
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: id,
 			RunId:      resp.GetRunId(),
-		},
-	})
+		}.Build(),
+	}.Build())
 	s.NoError(err)
-	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, descResp.WorkflowExecutionInfo.Status)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, descResp.GetWorkflowExecutionInfo().GetStatus())
 }
 
 func (s *SignalWorkflowTestSuite) TestSignalWithStartWorkflow_StartDelay() {
@@ -1685,12 +1683,12 @@ func (s *SignalWorkflowTestSuite) TestSignalWithStartWorkflow_StartDelay() {
 	signalName := "my signal"
 	signalInput := payloads.EncodeString("my signal input")
 
-	sRequest := &workflowservice.SignalWithStartWorkflowExecutionRequest{
+	sRequest := workflowservice.SignalWithStartWorkflowExecutionRequest_builder{
 		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
-		WorkflowType:        &commonpb.WorkflowType{Name: wt},
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		WorkflowType:        commonpb.WorkflowType_builder{Name: wt}.Build(),
+		TaskQueue:           taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 		Input:               nil,
 		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
@@ -1698,7 +1696,7 @@ func (s *SignalWorkflowTestSuite) TestSignalWithStartWorkflow_StartDelay() {
 		SignalInput:         signalInput,
 		Identity:            identity,
 		WorkflowStartDelay:  durationpb.New(startDelay),
-	}
+	}.Build()
 
 	reqStartTime := time.Now()
 	we0, startErr := s.FrontendClient().SignalWithStartWorkflowExecution(testcore.NewContext(), sRequest)
@@ -1711,25 +1709,25 @@ func (s *SignalWorkflowTestSuite) TestSignalWithStartWorkflow_StartDelay() {
 
 		delayEndTime = time.Now()
 
-		for _, event := range task.History.Events[task.PreviousStartedEventId:] {
+		for _, event := range task.GetHistory().GetEvents()[task.GetPreviousStartedEventId():] {
 			if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
 				signalEvent = event
 			}
 		}
 
-		return []*commandpb.Command{{
+		return []*commandpb.Command{commandpb.Command_builder{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+			CompleteWorkflowExecutionCommandAttributes: commandpb.CompleteWorkflowExecutionCommandAttributes_builder{
 				Result: payloads.EncodeString("Done"),
-			}},
-		}}, nil
+			}.Build(),
+		}.Build()}, nil
 	}
 
 	poller := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
 		Namespace:           s.Namespace().String(),
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		StickyTaskQueue:     &taskqueuepb.TaskQueue{Name: stickyTq, Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: tl},
+		TaskQueue:           taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
+		StickyTaskQueue:     taskqueuepb.TaskQueue_builder{Name: stickyTq, Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: tl}.Build(),
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
 		Logger:              s.Logger,
@@ -1740,17 +1738,17 @@ func (s *SignalWorkflowTestSuite) TestSignalWithStartWorkflow_StartDelay() {
 	s.NoError(pollErr)
 	s.GreaterOrEqual(delayEndTime.Sub(reqStartTime), startDelay)
 	s.NotNil(signalEvent)
-	s.Equal(signalName, signalEvent.GetWorkflowExecutionSignaledEventAttributes().SignalName)
-	s.ProtoEqual(signalInput, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Input)
-	s.Equal(identity, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Identity)
+	s.Equal(signalName, signalEvent.GetWorkflowExecutionSignaledEventAttributes().GetSignalName())
+	s.ProtoEqual(signalInput, signalEvent.GetWorkflowExecutionSignaledEventAttributes().GetInput())
+	s.Equal(identity, signalEvent.GetWorkflowExecutionSignaledEventAttributes().GetIdentity())
 
-	descResp, descErr := s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+	descResp, descErr := s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), workflowservice.DescribeWorkflowExecutionRequest_builder{
 		Namespace: s.Namespace().String(),
-		Execution: &commonpb.WorkflowExecution{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: id,
-			RunId:      we0.RunId,
-		},
-	})
+			RunId:      we0.GetRunId(),
+		}.Build(),
+	}.Build())
 	s.NoError(descErr)
-	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, descResp.WorkflowExecutionInfo.Status)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, descResp.GetWorkflowExecutionInfo().GetStatus())
 }

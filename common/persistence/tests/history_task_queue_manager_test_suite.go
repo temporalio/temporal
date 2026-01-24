@@ -277,18 +277,18 @@ func enqueueAndDeserializeBlob(
 		QueueName: queueKey.GetQueueName(),
 	})
 	require.NoError(t, err)
-	historyTask := persistencespb.HistoryTask{
+	historyTask := persistencespb.HistoryTask_builder{
 		ShardId: 1,
 		Blob:    blob,
-	}
+	}.Build()
 	historyTaskBytes, _ := historyTask.Marshal()
 	_, err = queue.EnqueueMessage(ctx, &persistence.InternalEnqueueMessageRequest{
 		QueueType: queueType,
 		QueueName: queueName,
-		Blob: &commonpb.DataBlob{
+		Blob: commonpb.DataBlob_builder{
 			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 			Data:         historyTaskBytes,
-		},
+		}.Build(),
 	})
 	require.NoError(t, err)
 

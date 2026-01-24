@@ -24,7 +24,7 @@ func Invoke(
 		ctx,
 		nil,
 		definition.NewWorkflowKey(
-			request.NamespaceId,
+			request.GetNamespaceId(),
 			request.GetFrontendRequest().GetExecution().GetWorkflowId(),
 			request.GetFrontendRequest().GetExecution().GetRunId(),
 		),
@@ -63,14 +63,14 @@ func processUnpauseActivityRequest(
 	}
 	frontendRequest := request.GetFrontendRequest()
 	var activityIDs []string
-	switch a := frontendRequest.GetActivity().(type) {
-	case *workflowservice.UnpauseActivityRequest_Id:
-		activityIDs = append(activityIDs, a.Id)
-	case *workflowservice.UnpauseActivityRequest_Type:
-		activityType := a.Type
+	switch frontendRequest.WhichActivity() {
+	case workflowservice.UnpauseActivityRequest_Id_case:
+		activityIDs = append(activityIDs, frontendRequest.GetId())
+	case workflowservice.UnpauseActivityRequest_Type_case:
+		activityType := frontendRequest.GetType()
 		for _, ai := range mutableState.GetPendingActivityInfos() {
-			if ai.ActivityType.Name == activityType {
-				activityIDs = append(activityIDs, ai.ActivityId)
+			if ai.GetActivityType().GetName() == activityType {
+				activityIDs = append(activityIDs, ai.GetActivityId())
 			}
 		}
 	}
@@ -87,7 +87,7 @@ func processUnpauseActivityRequest(
 			return nil, consts.ErrActivityNotFound
 		}
 
-		if !ai.Paused {
+		if !ai.GetPaused() {
 			// do nothing
 			continue
 		}

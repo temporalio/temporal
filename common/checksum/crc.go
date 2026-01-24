@@ -35,11 +35,11 @@ func GenerateCRC32(
 	crc := crc32.ChecksumIEEE(payloadBytes)
 	checksum := make([]byte, 4)
 	binary.BigEndian.PutUint32(checksum, crc)
-	return &persistencespb.Checksum{
+	return persistencespb.Checksum_builder{
 		Value:   checksum,
 		Version: payloadVersion,
 		Flavor:  enumsspb.CHECKSUM_FLAVOR_IEEE_CRC32_OVER_PROTO3_BINARY,
-	}, nil
+	}.Build(), nil
 }
 
 // Verify verifies that the checksum generated from the
@@ -50,11 +50,11 @@ func Verify(
 	checksum *persistencespb.Checksum,
 ) error {
 
-	if checksum.Flavor != enumsspb.CHECKSUM_FLAVOR_IEEE_CRC32_OVER_PROTO3_BINARY {
-		return fmt.Errorf("unknown checksum flavor %v", checksum.Flavor)
+	if checksum.GetFlavor() != enumsspb.CHECKSUM_FLAVOR_IEEE_CRC32_OVER_PROTO3_BINARY {
+		return fmt.Errorf("unknown checksum flavor %v", checksum.GetFlavor())
 	}
 
-	expected, err := GenerateCRC32(payload, checksum.Version)
+	expected, err := GenerateCRC32(payload, checksum.GetVersion())
 	if err != nil {
 		return err
 	}

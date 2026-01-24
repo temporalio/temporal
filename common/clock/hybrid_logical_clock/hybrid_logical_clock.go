@@ -9,6 +9,7 @@ import (
 )
 
 type Clock = clockspb.HybridLogicalClock
+type Clock_builder = clockspb.HybridLogicalClock_builder
 
 // Next generates the next clock timestamp given the current clock.
 // HybridLogicalClock requires the previous clock to ensure that time doesn't move backwards and the next clock is
@@ -25,12 +26,12 @@ func Next(prior *Clock, source commonclock.TimeSource) *Clock {
 		version = prior.GetVersion() + 1
 	}
 
-	return &Clock{WallClock: wallclock, Version: version, ClusterId: prior.ClusterId}
+	return Clock_builder{WallClock: wallclock, Version: version, ClusterId: prior.GetClusterId()}.Build()
 }
 
 // Zero generates a zeroed logical clock for the cluster ID.
 func Zero(clusterID int64) *Clock {
-	return &Clock{WallClock: 0, Version: 0, ClusterId: clusterID}
+	return Clock_builder{WallClock: 0, Version: 0, ClusterId: clusterID}.Build()
 }
 
 func sign[T int64 | int32](x T) int {
@@ -45,13 +46,13 @@ func sign[T int64 | int32](x T) int {
 
 // Compare 2 Clocks, returns 0 if a == b, -1 if a > b, 1 if a < b
 func Compare(a *Clock, b *Clock) int {
-	if a.WallClock == b.WallClock {
-		if a.Version == b.Version {
-			return sign(b.ClusterId - a.ClusterId)
+	if a.GetWallClock() == b.GetWallClock() {
+		if a.GetVersion() == b.GetVersion() {
+			return sign(b.GetClusterId() - a.GetClusterId())
 		}
-		return sign(b.Version - a.Version)
+		return sign(b.GetVersion() - a.GetVersion())
 	}
-	return sign(b.WallClock - a.WallClock)
+	return sign(b.GetWallClock() - a.GetWallClock())
 }
 
 // Greater returns true if a is greater than b
@@ -90,7 +91,7 @@ func UTC(c *Clock) time.Time {
 	if c == nil {
 		return time.Unix(0, 0).UTC()
 	}
-	return time.Unix(c.WallClock/1000, c.WallClock%1000*1000000).UTC()
+	return time.Unix(c.GetWallClock()/1000, c.GetWallClock()%1000*1000000).UTC()
 }
 
 // Since returns time.Since(UTC(c))

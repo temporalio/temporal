@@ -309,10 +309,10 @@ func (tm *priTaskMatcher) forwardPolls(
 			// This is a forwarder for high-priority backlog on another partition. Override the min
 			// priority so we get only that backlog and not any other tasks.
 			pmCopy := *meta
-			pmCopy.conditions = &matchingservice.PollConditions{
+			pmCopy.conditions = matchingservice.PollConditions_builder{
 				MinPriority: int32(targetPriority),
 				NoWait:      true,
-			}
+			}.Build()
 			meta = &pmCopy
 		}
 		// We need to use the real source poller context since it has the poller id and
@@ -499,12 +499,12 @@ func (tm *priTaskMatcher) AddTask(task *internalTask) {
 }
 
 func (tm *priTaskMatcher) emitDispatchLatency(task *internalTask, forwarded bool) {
-	if task.event.Data.CreateTime == nil {
+	if !task.event.GetData().HasCreateTime() {
 		return // should not happen but for safety
 	}
 
 	metrics.TaskDispatchLatencyPerTaskQueue.With(tm.metricsHandler).Record(
-		time.Since(timestamp.TimeValue(task.event.Data.CreateTime)),
+		time.Since(timestamp.TimeValue(task.event.GetData().GetCreateTime())),
 		metrics.StringTag("source", task.source.String()),
 		metrics.StringTag("forwarded", strconv.FormatBool(forwarded)),
 		metrics.MatchingTaskPriorityTag(task.getPriority().GetPriorityKey()),
@@ -655,5 +655,5 @@ func (p *waitingPoller) minPriority() priorityKey {
 	if p.pollMetadata == nil || p.pollMetadata.conditions == nil {
 		return 0
 	}
-	return priorityKey(p.pollMetadata.conditions.MinPriority)
+	return priorityKey(p.pollMetadata.conditions.GetMinPriority())
 }

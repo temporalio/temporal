@@ -12,47 +12,47 @@ func TestDefaultPathEncoder_EncodeDecode(t *testing.T) {
 
 	root := &Node{
 		nodeName: "",
-		serializedNode: &persistencespb.ChasmNode{
-			Metadata: &persistencespb.ChasmNodeMetadata{
-				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{ComponentAttributes: &persistencespb.ChasmComponentAttributes{}},
-			},
-		},
+		serializedNode: persistencespb.ChasmNode_builder{
+			Metadata: persistencespb.ChasmNodeMetadata_builder{
+				ComponentAttributes: &persistencespb.ChasmComponentAttributes{},
+			}.Build(),
+		}.Build(),
 	}
 	child := &Node{
 		parent:   root,
 		nodeName: "child",
-		serializedNode: &persistencespb.ChasmNode{
-			Metadata: &persistencespb.ChasmNodeMetadata{
-				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{ComponentAttributes: &persistencespb.ChasmComponentAttributes{}},
-			},
-		},
+		serializedNode: persistencespb.ChasmNode_builder{
+			Metadata: persistencespb.ChasmNodeMetadata_builder{
+				ComponentAttributes: &persistencespb.ChasmComponentAttributes{},
+			}.Build(),
+		}.Build(),
 	}
 	collection := &Node{
 		parent:   root,
 		nodeName: "collection",
-		serializedNode: &persistencespb.ChasmNode{
-			Metadata: &persistencespb.ChasmNodeMetadata{
-				Attributes: &persistencespb.ChasmNodeMetadata_CollectionAttributes{CollectionAttributes: &persistencespb.ChasmCollectionAttributes{}},
-			},
-		},
+		serializedNode: persistencespb.ChasmNode_builder{
+			Metadata: persistencespb.ChasmNodeMetadata_builder{
+				CollectionAttributes: &persistencespb.ChasmCollectionAttributes{},
+			}.Build(),
+		}.Build(),
 	}
 	collectionItem := &Node{
 		parent:   collection,
 		nodeName: "item",
-		serializedNode: &persistencespb.ChasmNode{
-			Metadata: &persistencespb.ChasmNodeMetadata{
-				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{ComponentAttributes: &persistencespb.ChasmComponentAttributes{}},
-			},
-		},
+		serializedNode: persistencespb.ChasmNode_builder{
+			Metadata: persistencespb.ChasmNodeMetadata_builder{
+				ComponentAttributes: &persistencespb.ChasmComponentAttributes{},
+			}.Build(),
+		}.Build(),
 	}
 	collectionItemData := &Node{
 		parent:   collectionItem,
 		nodeName: "data",
-		serializedNode: &persistencespb.ChasmNode{
-			Metadata: &persistencespb.ChasmNodeMetadata{
-				Attributes: &persistencespb.ChasmNodeMetadata_DataAttributes{},
-			},
-		},
+		serializedNode: persistencespb.ChasmNode_builder{
+			Metadata: persistencespb.ChasmNodeMetadata_builder{
+				DataAttributes: &persistencespb.ChasmDataAttributes{},
+			}.Build(),
+		}.Build(),
 	}
 
 	tests := []struct {

@@ -57,8 +57,8 @@ func (e *executableTaskConverterImpl) convertOne(
 	replicationTask *replicationspb.ReplicationTask,
 ) TrackableExecutableTask {
 	var taskCreationTime time.Time
-	if replicationTask.VisibilityTime != nil {
-		taskCreationTime = replicationTask.VisibilityTime.AsTime()
+	if replicationTask.HasVisibilityTime() {
+		taskCreationTime = replicationTask.GetVisibilityTime().AsTime()
 	} else {
 		taskCreationTime = time.Now().UTC()
 	}
@@ -67,7 +67,7 @@ func (e *executableTaskConverterImpl) convertOne(
 	case enumsspb.REPLICATION_TASK_TYPE_SYNC_SHARD_STATUS_TASK: // TODO to be deprecated
 		return NewExecutableNoopTask(
 			e.processToolBox,
-			replicationTask.SourceTaskId,
+			replicationTask.GetSourceTaskId(),
 			taskCreationTime,
 			sourceClusterName,
 			sourceShardKey,
@@ -75,7 +75,7 @@ func (e *executableTaskConverterImpl) convertOne(
 	case enumsspb.REPLICATION_TASK_TYPE_HISTORY_METADATA_TASK: // TODO to be deprecated
 		return NewExecutableNoopTask(
 			e.processToolBox,
-			replicationTask.SourceTaskId,
+			replicationTask.GetSourceTaskId(),
 			taskCreationTime,
 			sourceClusterName,
 			sourceShardKey,
@@ -83,7 +83,7 @@ func (e *executableTaskConverterImpl) convertOne(
 	case enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK:
 		return NewExecutableActivityStateTask(
 			e.processToolBox,
-			replicationTask.SourceTaskId,
+			replicationTask.GetSourceTaskId(),
 			taskCreationTime,
 			replicationTask.GetSyncActivityTaskAttributes(),
 			sourceClusterName,
@@ -93,7 +93,7 @@ func (e *executableTaskConverterImpl) convertOne(
 	case enumsspb.REPLICATION_TASK_TYPE_SYNC_WORKFLOW_STATE_TASK:
 		return NewExecutableWorkflowStateTask(
 			e.processToolBox,
-			replicationTask.SourceTaskId,
+			replicationTask.GetSourceTaskId(),
 			taskCreationTime,
 			replicationTask.GetSyncWorkflowStateTaskAttributes(),
 			sourceClusterName,
@@ -103,7 +103,7 @@ func (e *executableTaskConverterImpl) convertOne(
 	case enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK:
 		return NewExecutableHistoryTask(
 			e.processToolBox,
-			replicationTask.SourceTaskId,
+			replicationTask.GetSourceTaskId(),
 			taskCreationTime,
 			replicationTask.GetHistoryTaskAttributes(),
 			sourceClusterName,
@@ -113,7 +113,7 @@ func (e *executableTaskConverterImpl) convertOne(
 	case enumsspb.REPLICATION_TASK_TYPE_SYNC_HSM_TASK:
 		return NewExecutableSyncHSMTask(
 			e.processToolBox,
-			replicationTask.SourceTaskId,
+			replicationTask.GetSourceTaskId(),
 			taskCreationTime,
 			replicationTask.GetSyncHsmAttributes(),
 			sourceClusterName,
@@ -123,7 +123,7 @@ func (e *executableTaskConverterImpl) convertOne(
 	case enumsspb.REPLICATION_TASK_TYPE_BACKFILL_HISTORY_TASK:
 		return NewExecutableBackfillHistoryEventsTask(
 			e.processToolBox,
-			replicationTask.SourceTaskId,
+			replicationTask.GetSourceTaskId(),
 			taskCreationTime,
 			sourceClusterName,
 			sourceShardKey,
@@ -132,7 +132,7 @@ func (e *executableTaskConverterImpl) convertOne(
 	case enumsspb.REPLICATION_TASK_TYPE_VERIFY_VERSIONED_TRANSITION_TASK:
 		return NewExecutableVerifyVersionedTransitionTask(
 			e.processToolBox,
-			replicationTask.SourceTaskId,
+			replicationTask.GetSourceTaskId(),
 			taskCreationTime,
 			sourceClusterName,
 			sourceShardKey,
@@ -141,7 +141,7 @@ func (e *executableTaskConverterImpl) convertOne(
 	case enumsspb.REPLICATION_TASK_TYPE_SYNC_VERSIONED_TRANSITION_TASK:
 		return NewExecutableSyncVersionedTransitionTask(
 			e.processToolBox,
-			replicationTask.SourceTaskId,
+			replicationTask.GetSourceTaskId(),
 			taskCreationTime,
 			sourceClusterName,
 			sourceShardKey,
@@ -151,7 +151,7 @@ func (e *executableTaskConverterImpl) convertOne(
 		e.processToolBox.Logger.Error(fmt.Sprintf("unknown replication task: %v", replicationTask))
 		return NewExecutableUnknownTask(
 			e.processToolBox,
-			replicationTask.SourceTaskId,
+			replicationTask.GetSourceTaskId(),
 			taskCreationTime,
 			replicationTask,
 		)

@@ -8,7 +8,6 @@ package schedulerpb
 
 import (
 	reflect "reflect"
-	sync "sync"
 	unsafe "unsafe"
 
 	v1 "go.temporal.io/api/workflowservice/v1"
@@ -24,12 +23,11 @@ const (
 )
 
 type CreateScheduleRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Internal namespace ID (UUID).
-	NamespaceId     string                    `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	FrontendRequest *v1.CreateScheduleRequest `protobuf:"bytes,2,opt,name=frontend_request,json=frontendRequest,proto3" json:"frontend_request,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state                      protoimpl.MessageState    `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId     string                    `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_FrontendRequest *v1.CreateScheduleRequest `protobuf:"bytes,2,opt,name=frontend_request,json=frontendRequest,proto3"`
+	unknownFields              protoimpl.UnknownFields
+	sizeCache                  protoimpl.SizeCache
 }
 
 func (x *CreateScheduleRequest) Reset() {
@@ -57,30 +55,61 @@ func (x *CreateScheduleRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CreateScheduleRequest.ProtoReflect.Descriptor instead.
-func (*CreateScheduleRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_scheduler_proto_v1_request_response_proto_rawDescGZIP(), []int{0}
-}
-
 func (x *CreateScheduleRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *CreateScheduleRequest) GetFrontendRequest() *v1.CreateScheduleRequest {
 	if x != nil {
-		return x.FrontendRequest
+		return x.xxx_hidden_FrontendRequest
 	}
 	return nil
 }
 
+func (x *CreateScheduleRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *CreateScheduleRequest) SetFrontendRequest(v *v1.CreateScheduleRequest) {
+	x.xxx_hidden_FrontendRequest = v
+}
+
+func (x *CreateScheduleRequest) HasFrontendRequest() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_FrontendRequest != nil
+}
+
+func (x *CreateScheduleRequest) ClearFrontendRequest() {
+	x.xxx_hidden_FrontendRequest = nil
+}
+
+type CreateScheduleRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Internal namespace ID (UUID).
+	NamespaceId     string
+	FrontendRequest *v1.CreateScheduleRequest
+}
+
+func (b0 CreateScheduleRequest_builder) Build() *CreateScheduleRequest {
+	m0 := &CreateScheduleRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_FrontendRequest = b.FrontendRequest
+	return m0
+}
+
 type CreateScheduleResponse struct {
-	state            protoimpl.MessageState     `protogen:"open.v1"`
-	FrontendResponse *v1.CreateScheduleResponse `protobuf:"bytes,1,opt,name=frontend_response,json=frontendResponse,proto3" json:"frontend_response,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	state                       protoimpl.MessageState     `protogen:"opaque.v1"`
+	xxx_hidden_FrontendResponse *v1.CreateScheduleResponse `protobuf:"bytes,1,opt,name=frontend_response,json=frontendResponse,proto3"`
+	unknownFields               protoimpl.UnknownFields
+	sizeCache                   protoimpl.SizeCache
 }
 
 func (x *CreateScheduleResponse) Reset() {
@@ -108,25 +137,48 @@ func (x *CreateScheduleResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CreateScheduleResponse.ProtoReflect.Descriptor instead.
-func (*CreateScheduleResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_scheduler_proto_v1_request_response_proto_rawDescGZIP(), []int{1}
-}
-
 func (x *CreateScheduleResponse) GetFrontendResponse() *v1.CreateScheduleResponse {
 	if x != nil {
-		return x.FrontendResponse
+		return x.xxx_hidden_FrontendResponse
 	}
 	return nil
 }
 
+func (x *CreateScheduleResponse) SetFrontendResponse(v *v1.CreateScheduleResponse) {
+	x.xxx_hidden_FrontendResponse = v
+}
+
+func (x *CreateScheduleResponse) HasFrontendResponse() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_FrontendResponse != nil
+}
+
+func (x *CreateScheduleResponse) ClearFrontendResponse() {
+	x.xxx_hidden_FrontendResponse = nil
+}
+
+type CreateScheduleResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	FrontendResponse *v1.CreateScheduleResponse
+}
+
+func (b0 CreateScheduleResponse_builder) Build() *CreateScheduleResponse {
+	m0 := &CreateScheduleResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_FrontendResponse = b.FrontendResponse
+	return m0
+}
+
 type UpdateScheduleRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Internal namespace ID (UUID).
-	NamespaceId     string                    `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	FrontendRequest *v1.UpdateScheduleRequest `protobuf:"bytes,2,opt,name=frontend_request,json=frontendRequest,proto3" json:"frontend_request,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state                      protoimpl.MessageState    `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId     string                    `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_FrontendRequest *v1.UpdateScheduleRequest `protobuf:"bytes,2,opt,name=frontend_request,json=frontendRequest,proto3"`
+	unknownFields              protoimpl.UnknownFields
+	sizeCache                  protoimpl.SizeCache
 }
 
 func (x *UpdateScheduleRequest) Reset() {
@@ -154,30 +206,61 @@ func (x *UpdateScheduleRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use UpdateScheduleRequest.ProtoReflect.Descriptor instead.
-func (*UpdateScheduleRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_scheduler_proto_v1_request_response_proto_rawDescGZIP(), []int{2}
-}
-
 func (x *UpdateScheduleRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *UpdateScheduleRequest) GetFrontendRequest() *v1.UpdateScheduleRequest {
 	if x != nil {
-		return x.FrontendRequest
+		return x.xxx_hidden_FrontendRequest
 	}
 	return nil
 }
 
+func (x *UpdateScheduleRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *UpdateScheduleRequest) SetFrontendRequest(v *v1.UpdateScheduleRequest) {
+	x.xxx_hidden_FrontendRequest = v
+}
+
+func (x *UpdateScheduleRequest) HasFrontendRequest() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_FrontendRequest != nil
+}
+
+func (x *UpdateScheduleRequest) ClearFrontendRequest() {
+	x.xxx_hidden_FrontendRequest = nil
+}
+
+type UpdateScheduleRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Internal namespace ID (UUID).
+	NamespaceId     string
+	FrontendRequest *v1.UpdateScheduleRequest
+}
+
+func (b0 UpdateScheduleRequest_builder) Build() *UpdateScheduleRequest {
+	m0 := &UpdateScheduleRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_FrontendRequest = b.FrontendRequest
+	return m0
+}
+
 type UpdateScheduleResponse struct {
-	state            protoimpl.MessageState     `protogen:"open.v1"`
-	FrontendResponse *v1.UpdateScheduleResponse `protobuf:"bytes,1,opt,name=frontend_response,json=frontendResponse,proto3" json:"frontend_response,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	state                       protoimpl.MessageState     `protogen:"opaque.v1"`
+	xxx_hidden_FrontendResponse *v1.UpdateScheduleResponse `protobuf:"bytes,1,opt,name=frontend_response,json=frontendResponse,proto3"`
+	unknownFields               protoimpl.UnknownFields
+	sizeCache                   protoimpl.SizeCache
 }
 
 func (x *UpdateScheduleResponse) Reset() {
@@ -205,25 +288,48 @@ func (x *UpdateScheduleResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use UpdateScheduleResponse.ProtoReflect.Descriptor instead.
-func (*UpdateScheduleResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_scheduler_proto_v1_request_response_proto_rawDescGZIP(), []int{3}
-}
-
 func (x *UpdateScheduleResponse) GetFrontendResponse() *v1.UpdateScheduleResponse {
 	if x != nil {
-		return x.FrontendResponse
+		return x.xxx_hidden_FrontendResponse
 	}
 	return nil
 }
 
+func (x *UpdateScheduleResponse) SetFrontendResponse(v *v1.UpdateScheduleResponse) {
+	x.xxx_hidden_FrontendResponse = v
+}
+
+func (x *UpdateScheduleResponse) HasFrontendResponse() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_FrontendResponse != nil
+}
+
+func (x *UpdateScheduleResponse) ClearFrontendResponse() {
+	x.xxx_hidden_FrontendResponse = nil
+}
+
+type UpdateScheduleResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	FrontendResponse *v1.UpdateScheduleResponse
+}
+
+func (b0 UpdateScheduleResponse_builder) Build() *UpdateScheduleResponse {
+	m0 := &UpdateScheduleResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_FrontendResponse = b.FrontendResponse
+	return m0
+}
+
 type PatchScheduleRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Internal namespace ID (UUID).
-	NamespaceId     string                   `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	FrontendRequest *v1.PatchScheduleRequest `protobuf:"bytes,2,opt,name=frontend_request,json=frontendRequest,proto3" json:"frontend_request,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state                      protoimpl.MessageState   `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId     string                   `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_FrontendRequest *v1.PatchScheduleRequest `protobuf:"bytes,2,opt,name=frontend_request,json=frontendRequest,proto3"`
+	unknownFields              protoimpl.UnknownFields
+	sizeCache                  protoimpl.SizeCache
 }
 
 func (x *PatchScheduleRequest) Reset() {
@@ -251,30 +357,61 @@ func (x *PatchScheduleRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use PatchScheduleRequest.ProtoReflect.Descriptor instead.
-func (*PatchScheduleRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_scheduler_proto_v1_request_response_proto_rawDescGZIP(), []int{4}
-}
-
 func (x *PatchScheduleRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *PatchScheduleRequest) GetFrontendRequest() *v1.PatchScheduleRequest {
 	if x != nil {
-		return x.FrontendRequest
+		return x.xxx_hidden_FrontendRequest
 	}
 	return nil
 }
 
+func (x *PatchScheduleRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *PatchScheduleRequest) SetFrontendRequest(v *v1.PatchScheduleRequest) {
+	x.xxx_hidden_FrontendRequest = v
+}
+
+func (x *PatchScheduleRequest) HasFrontendRequest() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_FrontendRequest != nil
+}
+
+func (x *PatchScheduleRequest) ClearFrontendRequest() {
+	x.xxx_hidden_FrontendRequest = nil
+}
+
+type PatchScheduleRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Internal namespace ID (UUID).
+	NamespaceId     string
+	FrontendRequest *v1.PatchScheduleRequest
+}
+
+func (b0 PatchScheduleRequest_builder) Build() *PatchScheduleRequest {
+	m0 := &PatchScheduleRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_FrontendRequest = b.FrontendRequest
+	return m0
+}
+
 type PatchScheduleResponse struct {
-	state            protoimpl.MessageState    `protogen:"open.v1"`
-	FrontendResponse *v1.PatchScheduleResponse `protobuf:"bytes,1,opt,name=frontend_response,json=frontendResponse,proto3" json:"frontend_response,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	state                       protoimpl.MessageState    `protogen:"opaque.v1"`
+	xxx_hidden_FrontendResponse *v1.PatchScheduleResponse `protobuf:"bytes,1,opt,name=frontend_response,json=frontendResponse,proto3"`
+	unknownFields               protoimpl.UnknownFields
+	sizeCache                   protoimpl.SizeCache
 }
 
 func (x *PatchScheduleResponse) Reset() {
@@ -302,25 +439,48 @@ func (x *PatchScheduleResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use PatchScheduleResponse.ProtoReflect.Descriptor instead.
-func (*PatchScheduleResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_scheduler_proto_v1_request_response_proto_rawDescGZIP(), []int{5}
-}
-
 func (x *PatchScheduleResponse) GetFrontendResponse() *v1.PatchScheduleResponse {
 	if x != nil {
-		return x.FrontendResponse
+		return x.xxx_hidden_FrontendResponse
 	}
 	return nil
 }
 
+func (x *PatchScheduleResponse) SetFrontendResponse(v *v1.PatchScheduleResponse) {
+	x.xxx_hidden_FrontendResponse = v
+}
+
+func (x *PatchScheduleResponse) HasFrontendResponse() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_FrontendResponse != nil
+}
+
+func (x *PatchScheduleResponse) ClearFrontendResponse() {
+	x.xxx_hidden_FrontendResponse = nil
+}
+
+type PatchScheduleResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	FrontendResponse *v1.PatchScheduleResponse
+}
+
+func (b0 PatchScheduleResponse_builder) Build() *PatchScheduleResponse {
+	m0 := &PatchScheduleResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_FrontendResponse = b.FrontendResponse
+	return m0
+}
+
 type DeleteScheduleRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Internal namespace ID (UUID).
-	NamespaceId     string                    `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	FrontendRequest *v1.DeleteScheduleRequest `protobuf:"bytes,2,opt,name=frontend_request,json=frontendRequest,proto3" json:"frontend_request,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state                      protoimpl.MessageState    `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId     string                    `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_FrontendRequest *v1.DeleteScheduleRequest `protobuf:"bytes,2,opt,name=frontend_request,json=frontendRequest,proto3"`
+	unknownFields              protoimpl.UnknownFields
+	sizeCache                  protoimpl.SizeCache
 }
 
 func (x *DeleteScheduleRequest) Reset() {
@@ -348,30 +508,61 @@ func (x *DeleteScheduleRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DeleteScheduleRequest.ProtoReflect.Descriptor instead.
-func (*DeleteScheduleRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_scheduler_proto_v1_request_response_proto_rawDescGZIP(), []int{6}
-}
-
 func (x *DeleteScheduleRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *DeleteScheduleRequest) GetFrontendRequest() *v1.DeleteScheduleRequest {
 	if x != nil {
-		return x.FrontendRequest
+		return x.xxx_hidden_FrontendRequest
 	}
 	return nil
 }
 
+func (x *DeleteScheduleRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *DeleteScheduleRequest) SetFrontendRequest(v *v1.DeleteScheduleRequest) {
+	x.xxx_hidden_FrontendRequest = v
+}
+
+func (x *DeleteScheduleRequest) HasFrontendRequest() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_FrontendRequest != nil
+}
+
+func (x *DeleteScheduleRequest) ClearFrontendRequest() {
+	x.xxx_hidden_FrontendRequest = nil
+}
+
+type DeleteScheduleRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Internal namespace ID (UUID).
+	NamespaceId     string
+	FrontendRequest *v1.DeleteScheduleRequest
+}
+
+func (b0 DeleteScheduleRequest_builder) Build() *DeleteScheduleRequest {
+	m0 := &DeleteScheduleRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_FrontendRequest = b.FrontendRequest
+	return m0
+}
+
 type DeleteScheduleResponse struct {
-	state            protoimpl.MessageState     `protogen:"open.v1"`
-	FrontendResponse *v1.DeleteScheduleResponse `protobuf:"bytes,1,opt,name=frontend_response,json=frontendResponse,proto3" json:"frontend_response,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	state                       protoimpl.MessageState     `protogen:"opaque.v1"`
+	xxx_hidden_FrontendResponse *v1.DeleteScheduleResponse `protobuf:"bytes,1,opt,name=frontend_response,json=frontendResponse,proto3"`
+	unknownFields               protoimpl.UnknownFields
+	sizeCache                   protoimpl.SizeCache
 }
 
 func (x *DeleteScheduleResponse) Reset() {
@@ -399,25 +590,48 @@ func (x *DeleteScheduleResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DeleteScheduleResponse.ProtoReflect.Descriptor instead.
-func (*DeleteScheduleResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_scheduler_proto_v1_request_response_proto_rawDescGZIP(), []int{7}
-}
-
 func (x *DeleteScheduleResponse) GetFrontendResponse() *v1.DeleteScheduleResponse {
 	if x != nil {
-		return x.FrontendResponse
+		return x.xxx_hidden_FrontendResponse
 	}
 	return nil
 }
 
+func (x *DeleteScheduleResponse) SetFrontendResponse(v *v1.DeleteScheduleResponse) {
+	x.xxx_hidden_FrontendResponse = v
+}
+
+func (x *DeleteScheduleResponse) HasFrontendResponse() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_FrontendResponse != nil
+}
+
+func (x *DeleteScheduleResponse) ClearFrontendResponse() {
+	x.xxx_hidden_FrontendResponse = nil
+}
+
+type DeleteScheduleResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	FrontendResponse *v1.DeleteScheduleResponse
+}
+
+func (b0 DeleteScheduleResponse_builder) Build() *DeleteScheduleResponse {
+	m0 := &DeleteScheduleResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_FrontendResponse = b.FrontendResponse
+	return m0
+}
+
 type DescribeScheduleRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Internal namespace ID (UUID).
-	NamespaceId     string                      `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	FrontendRequest *v1.DescribeScheduleRequest `protobuf:"bytes,2,opt,name=frontend_request,json=frontendRequest,proto3" json:"frontend_request,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state                      protoimpl.MessageState      `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId     string                      `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_FrontendRequest *v1.DescribeScheduleRequest `protobuf:"bytes,2,opt,name=frontend_request,json=frontendRequest,proto3"`
+	unknownFields              protoimpl.UnknownFields
+	sizeCache                  protoimpl.SizeCache
 }
 
 func (x *DescribeScheduleRequest) Reset() {
@@ -445,30 +659,61 @@ func (x *DescribeScheduleRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DescribeScheduleRequest.ProtoReflect.Descriptor instead.
-func (*DescribeScheduleRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_scheduler_proto_v1_request_response_proto_rawDescGZIP(), []int{8}
-}
-
 func (x *DescribeScheduleRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *DescribeScheduleRequest) GetFrontendRequest() *v1.DescribeScheduleRequest {
 	if x != nil {
-		return x.FrontendRequest
+		return x.xxx_hidden_FrontendRequest
 	}
 	return nil
 }
 
+func (x *DescribeScheduleRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *DescribeScheduleRequest) SetFrontendRequest(v *v1.DescribeScheduleRequest) {
+	x.xxx_hidden_FrontendRequest = v
+}
+
+func (x *DescribeScheduleRequest) HasFrontendRequest() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_FrontendRequest != nil
+}
+
+func (x *DescribeScheduleRequest) ClearFrontendRequest() {
+	x.xxx_hidden_FrontendRequest = nil
+}
+
+type DescribeScheduleRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Internal namespace ID (UUID).
+	NamespaceId     string
+	FrontendRequest *v1.DescribeScheduleRequest
+}
+
+func (b0 DescribeScheduleRequest_builder) Build() *DescribeScheduleRequest {
+	m0 := &DescribeScheduleRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_FrontendRequest = b.FrontendRequest
+	return m0
+}
+
 type DescribeScheduleResponse struct {
-	state            protoimpl.MessageState       `protogen:"open.v1"`
-	FrontendResponse *v1.DescribeScheduleResponse `protobuf:"bytes,1,opt,name=frontend_response,json=frontendResponse,proto3" json:"frontend_response,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	state                       protoimpl.MessageState       `protogen:"opaque.v1"`
+	xxx_hidden_FrontendResponse *v1.DescribeScheduleResponse `protobuf:"bytes,1,opt,name=frontend_response,json=frontendResponse,proto3"`
+	unknownFields               protoimpl.UnknownFields
+	sizeCache                   protoimpl.SizeCache
 }
 
 func (x *DescribeScheduleResponse) Reset() {
@@ -496,25 +741,48 @@ func (x *DescribeScheduleResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DescribeScheduleResponse.ProtoReflect.Descriptor instead.
-func (*DescribeScheduleResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_scheduler_proto_v1_request_response_proto_rawDescGZIP(), []int{9}
-}
-
 func (x *DescribeScheduleResponse) GetFrontendResponse() *v1.DescribeScheduleResponse {
 	if x != nil {
-		return x.FrontendResponse
+		return x.xxx_hidden_FrontendResponse
 	}
 	return nil
 }
 
+func (x *DescribeScheduleResponse) SetFrontendResponse(v *v1.DescribeScheduleResponse) {
+	x.xxx_hidden_FrontendResponse = v
+}
+
+func (x *DescribeScheduleResponse) HasFrontendResponse() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_FrontendResponse != nil
+}
+
+func (x *DescribeScheduleResponse) ClearFrontendResponse() {
+	x.xxx_hidden_FrontendResponse = nil
+}
+
+type DescribeScheduleResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	FrontendResponse *v1.DescribeScheduleResponse
+}
+
+func (b0 DescribeScheduleResponse_builder) Build() *DescribeScheduleResponse {
+	m0 := &DescribeScheduleResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_FrontendResponse = b.FrontendResponse
+	return m0
+}
+
 type ListScheduleMatchingTimesRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Internal namespace ID (UUID).
-	NamespaceId     string                               `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	FrontendRequest *v1.ListScheduleMatchingTimesRequest `protobuf:"bytes,2,opt,name=frontend_request,json=frontendRequest,proto3" json:"frontend_request,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state                      protoimpl.MessageState               `protogen:"opaque.v1"`
+	xxx_hidden_NamespaceId     string                               `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_FrontendRequest *v1.ListScheduleMatchingTimesRequest `protobuf:"bytes,2,opt,name=frontend_request,json=frontendRequest,proto3"`
+	unknownFields              protoimpl.UnknownFields
+	sizeCache                  protoimpl.SizeCache
 }
 
 func (x *ListScheduleMatchingTimesRequest) Reset() {
@@ -542,30 +810,61 @@ func (x *ListScheduleMatchingTimesRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListScheduleMatchingTimesRequest.ProtoReflect.Descriptor instead.
-func (*ListScheduleMatchingTimesRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_scheduler_proto_v1_request_response_proto_rawDescGZIP(), []int{10}
-}
-
 func (x *ListScheduleMatchingTimesRequest) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *ListScheduleMatchingTimesRequest) GetFrontendRequest() *v1.ListScheduleMatchingTimesRequest {
 	if x != nil {
-		return x.FrontendRequest
+		return x.xxx_hidden_FrontendRequest
 	}
 	return nil
 }
 
+func (x *ListScheduleMatchingTimesRequest) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *ListScheduleMatchingTimesRequest) SetFrontendRequest(v *v1.ListScheduleMatchingTimesRequest) {
+	x.xxx_hidden_FrontendRequest = v
+}
+
+func (x *ListScheduleMatchingTimesRequest) HasFrontendRequest() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_FrontendRequest != nil
+}
+
+func (x *ListScheduleMatchingTimesRequest) ClearFrontendRequest() {
+	x.xxx_hidden_FrontendRequest = nil
+}
+
+type ListScheduleMatchingTimesRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Internal namespace ID (UUID).
+	NamespaceId     string
+	FrontendRequest *v1.ListScheduleMatchingTimesRequest
+}
+
+func (b0 ListScheduleMatchingTimesRequest_builder) Build() *ListScheduleMatchingTimesRequest {
+	m0 := &ListScheduleMatchingTimesRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_FrontendRequest = b.FrontendRequest
+	return m0
+}
+
 type ListScheduleMatchingTimesResponse struct {
-	state            protoimpl.MessageState                `protogen:"open.v1"`
-	FrontendResponse *v1.ListScheduleMatchingTimesResponse `protobuf:"bytes,1,opt,name=frontend_response,json=frontendResponse,proto3" json:"frontend_response,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	state                       protoimpl.MessageState                `protogen:"opaque.v1"`
+	xxx_hidden_FrontendResponse *v1.ListScheduleMatchingTimesResponse `protobuf:"bytes,1,opt,name=frontend_response,json=frontendResponse,proto3"`
+	unknownFields               protoimpl.UnknownFields
+	sizeCache                   protoimpl.SizeCache
 }
 
 func (x *ListScheduleMatchingTimesResponse) Reset() {
@@ -593,16 +892,40 @@ func (x *ListScheduleMatchingTimesResponse) ProtoReflect() protoreflect.Message 
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListScheduleMatchingTimesResponse.ProtoReflect.Descriptor instead.
-func (*ListScheduleMatchingTimesResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_scheduler_proto_v1_request_response_proto_rawDescGZIP(), []int{11}
-}
-
 func (x *ListScheduleMatchingTimesResponse) GetFrontendResponse() *v1.ListScheduleMatchingTimesResponse {
 	if x != nil {
-		return x.FrontendResponse
+		return x.xxx_hidden_FrontendResponse
 	}
 	return nil
+}
+
+func (x *ListScheduleMatchingTimesResponse) SetFrontendResponse(v *v1.ListScheduleMatchingTimesResponse) {
+	x.xxx_hidden_FrontendResponse = v
+}
+
+func (x *ListScheduleMatchingTimesResponse) HasFrontendResponse() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_FrontendResponse != nil
+}
+
+func (x *ListScheduleMatchingTimesResponse) ClearFrontendResponse() {
+	x.xxx_hidden_FrontendResponse = nil
+}
+
+type ListScheduleMatchingTimesResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	FrontendResponse *v1.ListScheduleMatchingTimesResponse
+}
+
+func (b0 ListScheduleMatchingTimesResponse_builder) Build() *ListScheduleMatchingTimesResponse {
+	m0 := &ListScheduleMatchingTimesResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_FrontendResponse = b.FrontendResponse
+	return m0
 }
 
 var File_temporal_server_chasm_lib_scheduler_proto_v1_request_response_proto protoreflect.FileDescriptor
@@ -640,18 +963,6 @@ const file_temporal_server_chasm_lib_scheduler_proto_v1_request_response_proto_r
 	"\x10frontend_request\x18\x02 \x01(\v2A.temporal.api.workflowservice.v1.ListScheduleMatchingTimesRequestR\x0ffrontendRequest\"\x94\x01\n" +
 	"!ListScheduleMatchingTimesResponse\x12o\n" +
 	"\x11frontend_response\x18\x01 \x01(\v2B.temporal.api.workflowservice.v1.ListScheduleMatchingTimesResponseR\x10frontendResponseBGZEgo.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb;schedulerpbb\x06proto3"
-
-var (
-	file_temporal_server_chasm_lib_scheduler_proto_v1_request_response_proto_rawDescOnce sync.Once
-	file_temporal_server_chasm_lib_scheduler_proto_v1_request_response_proto_rawDescData []byte
-)
-
-func file_temporal_server_chasm_lib_scheduler_proto_v1_request_response_proto_rawDescGZIP() []byte {
-	file_temporal_server_chasm_lib_scheduler_proto_v1_request_response_proto_rawDescOnce.Do(func() {
-		file_temporal_server_chasm_lib_scheduler_proto_v1_request_response_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_chasm_lib_scheduler_proto_v1_request_response_proto_rawDesc), len(file_temporal_server_chasm_lib_scheduler_proto_v1_request_response_proto_rawDesc)))
-	})
-	return file_temporal_server_chasm_lib_scheduler_proto_v1_request_response_proto_rawDescData
-}
 
 var file_temporal_server_chasm_lib_scheduler_proto_v1_request_response_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
 var file_temporal_server_chasm_lib_scheduler_proto_v1_request_response_proto_goTypes = []any{

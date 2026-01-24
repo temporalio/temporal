@@ -500,25 +500,25 @@ func GenerateRandomString(n int) string {
 
 // CreateMatchingPollWorkflowTaskQueueResponse create response for matching's PollWorkflowTaskQueue
 func CreateMatchingPollWorkflowTaskQueueResponse(historyResponse *historyservice.RecordWorkflowTaskStartedResponse, workflowExecution *commonpb.WorkflowExecution, token []byte) *matchingservice.PollWorkflowTaskQueueResponse {
-	matchingResp := &matchingservice.PollWorkflowTaskQueueResponse{
+	matchingResp := matchingservice.PollWorkflowTaskQueueResponse_builder{
 		TaskToken:                  token,
 		WorkflowExecution:          workflowExecution,
-		WorkflowType:               historyResponse.WorkflowType,
-		PreviousStartedEventId:     historyResponse.PreviousStartedEventId,
-		StartedEventId:             historyResponse.StartedEventId,
+		WorkflowType:               historyResponse.GetWorkflowType(),
+		PreviousStartedEventId:     historyResponse.GetPreviousStartedEventId(),
+		StartedEventId:             historyResponse.GetStartedEventId(),
 		Attempt:                    historyResponse.GetAttempt(),
-		NextEventId:                historyResponse.NextEventId,
-		StickyExecutionEnabled:     historyResponse.StickyExecutionEnabled,
-		TransientWorkflowTask:      historyResponse.TransientWorkflowTask,
-		WorkflowExecutionTaskQueue: historyResponse.WorkflowExecutionTaskQueue,
-		BranchToken:                historyResponse.BranchToken,
-		ScheduledTime:              historyResponse.ScheduledTime,
-		StartedTime:                historyResponse.StartedTime,
-		Queries:                    historyResponse.Queries,
-		Messages:                   historyResponse.Messages,
-		History:                    historyResponse.History,
-		NextPageToken:              historyResponse.NextPageToken,
-	}
+		NextEventId:                historyResponse.GetNextEventId(),
+		StickyExecutionEnabled:     historyResponse.GetStickyExecutionEnabled(),
+		TransientWorkflowTask:      historyResponse.GetTransientWorkflowTask(),
+		WorkflowExecutionTaskQueue: historyResponse.GetWorkflowExecutionTaskQueue(),
+		BranchToken:                historyResponse.GetBranchToken(),
+		ScheduledTime:              historyResponse.GetScheduledTime(),
+		StartedTime:                historyResponse.GetStartedTime(),
+		Queries:                    historyResponse.GetQueries(),
+		Messages:                   historyResponse.GetMessages(),
+		History:                    historyResponse.GetHistory(),
+		NextPageToken:              historyResponse.GetNextPageToken(),
+	}.Build()
 
 	return matchingResp
 }
@@ -535,36 +535,36 @@ func CreateHistoryStartWorkflowRequest(
 	// We include the original startRequest in the forwarded request to History, but
 	// we don't want to send workflow payloads twice. We deep copy to a new struct,
 	// rather than mutate the request, to accommodate internal retries.
-	if startRequest.ContinuedFailure != nil || startRequest.LastCompletionResult != nil {
+	if startRequest.HasContinuedFailure() || startRequest.HasLastCompletionResult() {
 		startRequest = CloneProto(startRequest)
 	}
-	histRequest := &historyservice.StartWorkflowExecutionRequest{
+	histRequest := historyservice.StartWorkflowExecutionRequest_builder{
 		NamespaceId:              namespaceID,
 		StartRequest:             startRequest,
 		ContinueAsNewInitiator:   enumspb.CONTINUE_AS_NEW_INITIATOR_UNSPECIFIED,
 		Attempt:                  1,
 		ParentExecutionInfo:      parentExecutionInfo,
 		FirstWorkflowTaskBackoff: durationpb.New(backoff.GetBackoffForNextScheduleNonNegative(startRequest.GetCronSchedule(), now, now)),
-		ContinuedFailure:         startRequest.ContinuedFailure,
-		LastCompletionResult:     startRequest.LastCompletionResult,
+		ContinuedFailure:         startRequest.GetContinuedFailure(),
+		LastCompletionResult:     startRequest.GetLastCompletionResult(),
 		RootExecutionInfo:        rootExecutionInfo,
 		VersioningOverride:       startRequest.GetVersioningOverride(),
-	}
-	startRequest.ContinuedFailure = nil
-	startRequest.LastCompletionResult = nil
+	}.Build()
+	startRequest.ClearContinuedFailure()
+	startRequest.ClearLastCompletionResult()
 
 	if timestamp.DurationValue(startRequest.GetWorkflowExecutionTimeout()) > 0 {
 		deadline := now.Add(timestamp.DurationValue(startRequest.GetWorkflowExecutionTimeout()))
-		histRequest.WorkflowExecutionExpirationTime = timestamppb.New(deadline.Round(time.Millisecond))
+		histRequest.SetWorkflowExecutionExpirationTime(timestamppb.New(deadline.Round(time.Millisecond)))
 	}
 
 	// CronSchedule and WorkflowStartDelay should not both be set on the same request
-	if len(startRequest.CronSchedule) != 0 {
-		histRequest.ContinueAsNewInitiator = enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE
+	if len(startRequest.GetCronSchedule()) != 0 {
+		histRequest.SetContinueAsNewInitiator(enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE)
 	}
 
 	if timestamp.DurationValue(startRequest.GetWorkflowStartDelay()) > 0 {
-		histRequest.FirstWorkflowTaskBackoff = startRequest.GetWorkflowStartDelay()
+		histRequest.SetFirstWorkflowTaskBackoff(startRequest.GetWorkflowStartDelay())
 	}
 
 	return histRequest
@@ -686,8 +686,8 @@ func DiscardUnknownProto(m proto.Message) error {
 }
 
 // MergeProtoExcludingFields merges fields from source into target, excluding specific fields.
-// The fields to exclude are specified as pointers to fields in the target struct.
-func MergeProtoExcludingFields(target, source proto.Message, doNotSyncFunc func(v any) []interface{}) error {
+// The doNotSyncFunc should return field names (strings) to exclude from the merge.
+func MergeProtoExcludingFields(target, source proto.Message, doNotSyncFunc func(v any) []string) error {
 	if target == nil || source == nil {
 		return serviceerror.NewInvalidArgument("target and source cannot be nil")
 	}
@@ -698,11 +698,7 @@ func MergeProtoExcludingFields(target, source proto.Message, doNotSyncFunc func(
 
 	excludeFields := doNotSyncFunc(target)
 	excludeSet := make(map[string]struct{}, len(excludeFields))
-	for _, fieldPtr := range excludeFields {
-		fieldName, err := getFieldNameFromStruct(target, fieldPtr)
-		if err != nil {
-			return err
-		}
+	for _, fieldName := range excludeFields {
 		excludeSet[fieldName] = struct{}{}
 	}
 
@@ -720,15 +716,4 @@ func MergeProtoExcludingFields(target, source proto.Message, doNotSyncFunc func(
 	}
 
 	return nil
-}
-
-func getFieldNameFromStruct(structPtr interface{}, fieldPtr interface{}) (string, error) {
-	structVal := reflect.ValueOf(structPtr).Elem()
-	for i := 0; i < structVal.NumField(); i++ {
-		field := structVal.Field(i)
-		if field.CanSet() && field.Addr().Interface() == fieldPtr {
-			return structVal.Type().Field(i).Name, nil
-		}
-	}
-	return "", serviceerror.NewInternal("field not found in the struct")
 }

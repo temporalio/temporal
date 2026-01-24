@@ -32,8 +32,8 @@ func TestVersionHistoriesSuite(t *testing.T) {
 func (s *versionHistorySuite) TestDuplicateUntilLCAItem_Success() {
 	BranchToken := []byte("some random branch token")
 	Items := []*historyspb.VersionHistoryItem{
-		{EventId: 3, Version: 0},
-		{EventId: 6, Version: 4},
+		historyspb.VersionHistoryItem_builder{EventId: 3, Version: 0}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 6, Version: 4}.Build(),
 	}
 
 	history := NewVersionHistory(BranchToken, Items)
@@ -42,22 +42,22 @@ func (s *versionHistorySuite) TestDuplicateUntilLCAItem_Success() {
 	s.NoError(err)
 	newBranchToken := []byte("other random branch token")
 	SetVersionHistoryBranchToken(newHistory, newBranchToken)
-	s.Equal(newBranchToken, newHistory.BranchToken)
+	s.Equal(newBranchToken, newHistory.GetBranchToken())
 	s.Equal(NewVersionHistory(
 		newBranchToken,
-		[]*historyspb.VersionHistoryItem{{EventId: 2, Version: 0}},
+		[]*historyspb.VersionHistoryItem{historyspb.VersionHistoryItem_builder{EventId: 2, Version: 0}.Build()},
 	), newHistory)
 
 	newHistory, err = CopyVersionHistoryUntilLCAVersionHistoryItem(history, NewVersionHistoryItem(5, 4))
 	s.NoError(err)
 	newBranchToken = []byte("another random branch token")
 	SetVersionHistoryBranchToken(newHistory, newBranchToken)
-	s.Equal(newBranchToken, newHistory.BranchToken)
+	s.Equal(newBranchToken, newHistory.GetBranchToken())
 	s.Equal(NewVersionHistory(
 		newBranchToken,
 		[]*historyspb.VersionHistoryItem{
-			{EventId: 3, Version: 0},
-			{EventId: 5, Version: 4},
+			historyspb.VersionHistoryItem_builder{EventId: 3, Version: 0}.Build(),
+			historyspb.VersionHistoryItem_builder{EventId: 5, Version: 4}.Build(),
 		},
 	), newHistory)
 
@@ -65,12 +65,12 @@ func (s *versionHistorySuite) TestDuplicateUntilLCAItem_Success() {
 	s.NoError(err)
 	newBranchToken = []byte("yet another random branch token")
 	SetVersionHistoryBranchToken(newHistory, newBranchToken)
-	s.Equal(newBranchToken, newHistory.BranchToken)
+	s.Equal(newBranchToken, newHistory.GetBranchToken())
 	s.Equal(NewVersionHistory(
 		newBranchToken,
 		[]*historyspb.VersionHistoryItem{
-			{EventId: 3, Version: 0},
-			{EventId: 6, Version: 4},
+			historyspb.VersionHistoryItem_builder{EventId: 3, Version: 0}.Build(),
+			historyspb.VersionHistoryItem_builder{EventId: 6, Version: 4}.Build(),
 		},
 	), newHistory)
 }
@@ -78,8 +78,8 @@ func (s *versionHistorySuite) TestDuplicateUntilLCAItem_Success() {
 func (s *versionHistorySuite) TestDuplicateUntilLCAItem_Failure() {
 	BranchToken := []byte("some random branch token")
 	Items := []*historyspb.VersionHistoryItem{
-		{EventId: 3, Version: 0},
-		{EventId: 6, Version: 4},
+		historyspb.VersionHistoryItem_builder{EventId: 3, Version: 0}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 6, Version: 4}.Build(),
 	}
 
 	history := NewVersionHistory(BranchToken, Items)
@@ -105,8 +105,8 @@ func (s *versionHistorySuite) TestDuplicateUntilLCAItem_Failure() {
 
 func (s *versionHistorySuite) TestSetBranchToken() {
 	Items := []*historyspb.VersionHistoryItem{
-		{EventId: 3, Version: 0},
-		{EventId: 6, Version: 4},
+		historyspb.VersionHistoryItem_builder{EventId: 3, Version: 0}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 6, Version: 4}.Build(),
 	}
 	history := NewVersionHistory(nil, Items)
 
@@ -116,24 +116,24 @@ func (s *versionHistorySuite) TestSetBranchToken() {
 func (s *versionHistorySuite) TestAddOrUpdateItem_VersionIncrease() {
 	BranchToken := []byte("some random branch token")
 	Items := []*historyspb.VersionHistoryItem{
-		{EventId: 3, Version: 0},
-		{EventId: 6, Version: 4},
+		historyspb.VersionHistoryItem_builder{EventId: 3, Version: 0}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 6, Version: 4}.Build(),
 	}
 	history := NewVersionHistory(BranchToken, Items)
 
-	item := &historyspb.VersionHistoryItem{
+	item := historyspb.VersionHistoryItem_builder{
 		EventId: 8,
 		Version: 5,
-	}
+	}.Build()
 	err := AddOrUpdateVersionHistoryItem(history, item)
 	s.NoError(err)
 
 	s.Equal(NewVersionHistory(
 		BranchToken,
 		[]*historyspb.VersionHistoryItem{
-			{EventId: 3, Version: 0},
-			{EventId: 6, Version: 4},
-			{EventId: 8, Version: 5},
+			historyspb.VersionHistoryItem_builder{EventId: 3, Version: 0}.Build(),
+			historyspb.VersionHistoryItem_builder{EventId: 6, Version: 4}.Build(),
+			historyspb.VersionHistoryItem_builder{EventId: 8, Version: 5}.Build(),
 		},
 	), history)
 
@@ -142,23 +142,23 @@ func (s *versionHistorySuite) TestAddOrUpdateItem_VersionIncrease() {
 func (s *versionHistorySuite) TestAddOrUpdateItem_EventIDIncrease() {
 	BranchToken := []byte("some random branch token")
 	Items := []*historyspb.VersionHistoryItem{
-		{EventId: 3, Version: 0},
-		{EventId: 6, Version: 4},
+		historyspb.VersionHistoryItem_builder{EventId: 3, Version: 0}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 6, Version: 4}.Build(),
 	}
 	history := NewVersionHistory(BranchToken, Items)
 
-	item := &historyspb.VersionHistoryItem{
+	item := historyspb.VersionHistoryItem_builder{
 		EventId: 8,
 		Version: 4,
-	}
+	}.Build()
 	err := AddOrUpdateVersionHistoryItem(history, item)
 	s.NoError(err)
 
 	s.Equal(NewVersionHistory(
 		BranchToken,
 		[]*historyspb.VersionHistoryItem{
-			{EventId: 3, Version: 0},
-			{EventId: 8, Version: 4},
+			historyspb.VersionHistoryItem_builder{EventId: 3, Version: 0}.Build(),
+			historyspb.VersionHistoryItem_builder{EventId: 8, Version: 4}.Build(),
 		},
 	), history)
 }
@@ -166,8 +166,8 @@ func (s *versionHistorySuite) TestAddOrUpdateItem_EventIDIncrease() {
 func (s *versionHistorySuite) TestAddOrUpdateItem_Failed_LowerVersion() {
 	BranchToken := []byte("some random branch token")
 	Items := []*historyspb.VersionHistoryItem{
-		{EventId: 3, Version: 0},
-		{EventId: 6, Version: 4},
+		historyspb.VersionHistoryItem_builder{EventId: 3, Version: 0}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 6, Version: 4}.Build(),
 	}
 	history := NewVersionHistory(BranchToken, Items)
 
@@ -178,8 +178,8 @@ func (s *versionHistorySuite) TestAddOrUpdateItem_Failed_LowerVersion() {
 func (s *versionHistorySuite) TestAddOrUpdateItem_Failed_SameVersion_EventIDNotIncreasing() {
 	BranchToken := []byte("some random branch token")
 	Items := []*historyspb.VersionHistoryItem{
-		{EventId: 3, Version: 0},
-		{EventId: 6, Version: 4},
+		historyspb.VersionHistoryItem_builder{EventId: 3, Version: 0}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 6, Version: 4}.Build(),
 	}
 	history := NewVersionHistory(BranchToken, Items)
 
@@ -193,8 +193,8 @@ func (s *versionHistorySuite) TestAddOrUpdateItem_Failed_SameVersion_EventIDNotI
 func (s *versionHistorySuite) TestAddOrUpdateItem_Failed_VersionNoIncreasing() {
 	BranchToken := []byte("some random branch token")
 	Items := []*historyspb.VersionHistoryItem{
-		{EventId: 3, Version: 0},
-		{EventId: 6, Version: 4},
+		historyspb.VersionHistoryItem_builder{EventId: 3, Version: 0}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 6, Version: 4}.Build(),
 	}
 	history := NewVersionHistory(BranchToken, Items)
 
@@ -211,8 +211,8 @@ func (s *versionHistorySuite) TestAddOrUpdateItem_Failed_VersionNoIncreasing() {
 func (s *versionHistoriesSuite) TestContainsItem_True() {
 	BranchToken := []byte("some random branch token")
 	Items := []*historyspb.VersionHistoryItem{
-		{EventId: 3, Version: 0},
-		{EventId: 6, Version: 4},
+		historyspb.VersionHistoryItem_builder{EventId: 3, Version: 0}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 6, Version: 4}.Build(),
 	}
 	history := NewVersionHistory(BranchToken, Items)
 
@@ -228,8 +228,8 @@ func (s *versionHistoriesSuite) TestContainsItem_True() {
 func (s *versionHistoriesSuite) TestContainsItem_False() {
 	BranchToken := []byte("some random branch token")
 	Items := []*historyspb.VersionHistoryItem{
-		{EventId: 3, Version: 0},
-		{EventId: 6, Version: 4},
+		historyspb.VersionHistoryItem_builder{EventId: 3, Version: 0}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 6, Version: 4}.Build(),
 	}
 	history := NewVersionHistory(BranchToken, Items)
 
@@ -243,8 +243,8 @@ func (s *versionHistoriesSuite) TestContainsItem_False() {
 func (s *versionHistorySuite) TestIsLCAAppendable_True() {
 	BranchToken := []byte("some random branch token")
 	Items := []*historyspb.VersionHistoryItem{
-		{EventId: 3, Version: 0},
-		{EventId: 6, Version: 4},
+		historyspb.VersionHistoryItem_builder{EventId: 3, Version: 0}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 6, Version: 4}.Build(),
 	}
 	history := NewVersionHistory(BranchToken, Items)
 
@@ -255,8 +255,8 @@ func (s *versionHistorySuite) TestIsLCAAppendable_True() {
 func (s *versionHistorySuite) TestIsLCAAppendable_False_VersionNotMatch() {
 	BranchToken := []byte("some random branch token")
 	Items := []*historyspb.VersionHistoryItem{
-		{EventId: 3, Version: 0},
-		{EventId: 6, Version: 4},
+		historyspb.VersionHistoryItem_builder{EventId: 3, Version: 0}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 6, Version: 4}.Build(),
 	}
 	history := NewVersionHistory(BranchToken, Items)
 
@@ -267,8 +267,8 @@ func (s *versionHistorySuite) TestIsLCAAppendable_False_VersionNotMatch() {
 func (s *versionHistorySuite) TestIsLCAAppendable_False_EventIDNotMatch() {
 	BranchToken := []byte("some random branch token")
 	Items := []*historyspb.VersionHistoryItem{
-		{EventId: 3, Version: 0},
-		{EventId: 6, Version: 4},
+		historyspb.VersionHistoryItem_builder{EventId: 3, Version: 0}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 6, Version: 4}.Build(),
 	}
 	history := NewVersionHistory(BranchToken, Items)
 
@@ -279,17 +279,17 @@ func (s *versionHistorySuite) TestIsLCAAppendable_False_EventIDNotMatch() {
 func (s *versionHistorySuite) TestFindLCAItem_ReturnLocal() {
 	localBranchToken := []byte("local branch token")
 	localItems := []*historyspb.VersionHistoryItem{
-		{EventId: 3, Version: 0},
-		{EventId: 5, Version: 4},
-		{EventId: 7, Version: 6},
-		{EventId: 9, Version: 10},
+		historyspb.VersionHistoryItem_builder{EventId: 3, Version: 0}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 5, Version: 4}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 7, Version: 6}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 9, Version: 10}.Build(),
 	}
 	remoteBranchToken := []byte("remote branch token")
 	remoteItems := []*historyspb.VersionHistoryItem{
-		{EventId: 3, Version: 0},
-		{EventId: 7, Version: 4},
-		{EventId: 8, Version: 8},
-		{EventId: 11, Version: 12},
+		historyspb.VersionHistoryItem_builder{EventId: 3, Version: 0}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 7, Version: 4}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 8, Version: 8}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 11, Version: 12}.Build(),
 	}
 	localVersionHistory := NewVersionHistory(localBranchToken, localItems)
 	remoteVersionHistory := NewVersionHistory(remoteBranchToken, remoteItems)
@@ -302,17 +302,17 @@ func (s *versionHistorySuite) TestFindLCAItem_ReturnLocal() {
 func (s *versionHistorySuite) TestFindLCAItem_ReturnRemote() {
 	localBranchToken := []byte("local branch token")
 	localItems := []*historyspb.VersionHistoryItem{
-		{EventId: 3, Version: 0},
-		{EventId: 5, Version: 4},
-		{EventId: 7, Version: 6},
-		{EventId: 9, Version: 10},
+		historyspb.VersionHistoryItem_builder{EventId: 3, Version: 0}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 5, Version: 4}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 7, Version: 6}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 9, Version: 10}.Build(),
 	}
 	remoteBranchToken := []byte("remote branch token")
 	remoteItems := []*historyspb.VersionHistoryItem{
-		{EventId: 3, Version: 0},
-		{EventId: 5, Version: 4},
-		{EventId: 6, Version: 6},
-		{EventId: 11, Version: 12},
+		historyspb.VersionHistoryItem_builder{EventId: 3, Version: 0}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 5, Version: 4}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 6, Version: 6}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 11, Version: 12}.Build(),
 	}
 	localVersionHistory := NewVersionHistory(localBranchToken, localItems)
 	remoteVersionHistory := NewVersionHistory(remoteBranchToken, remoteItems)
@@ -325,16 +325,16 @@ func (s *versionHistorySuite) TestFindLCAItem_ReturnRemote() {
 func (s *versionHistorySuite) TestFindLCAItem_Error_NoLCA() {
 	localBranchToken := []byte("local branch token")
 	localItems := []*historyspb.VersionHistoryItem{
-		{EventId: 3, Version: 0},
-		{EventId: 5, Version: 4},
-		{EventId: 7, Version: 6},
-		{EventId: 9, Version: 10},
+		historyspb.VersionHistoryItem_builder{EventId: 3, Version: 0}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 5, Version: 4}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 7, Version: 6}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 9, Version: 10}.Build(),
 	}
 	remoteBranchToken := []byte("remote branch token")
 	remoteItems := []*historyspb.VersionHistoryItem{
-		{EventId: 3, Version: 1},
-		{EventId: 7, Version: 2},
-		{EventId: 8, Version: 3},
+		historyspb.VersionHistoryItem_builder{EventId: 3, Version: 1}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 7, Version: 2}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 8, Version: 3}.Build(),
 	}
 	localVersionHistory := NewVersionHistory(localBranchToken, localItems)
 	remoteVersionHistory := NewVersionHistory(remoteBranchToken, remoteItems)
@@ -462,16 +462,16 @@ func (s *versionHistoriesSuite) TestGetVersion_Failure() {
 func (s *versionHistorySuite) TestEquals() {
 	localBranchToken := []byte("local branch token")
 	localItems := []*historyspb.VersionHistoryItem{
-		{EventId: 3, Version: 0},
-		{EventId: 5, Version: 4},
-		{EventId: 7, Version: 6},
-		{EventId: 9, Version: 10},
+		historyspb.VersionHistoryItem_builder{EventId: 3, Version: 0}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 5, Version: 4}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 7, Version: 6}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 9, Version: 10}.Build(),
 	}
 	remoteBranchToken := []byte("remote branch token")
 	remoteItems := []*historyspb.VersionHistoryItem{
-		{EventId: 3, Version: 1},
-		{EventId: 7, Version: 2},
-		{EventId: 8, Version: 3},
+		historyspb.VersionHistoryItem_builder{EventId: 3, Version: 1}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 7, Version: 2}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 8, Version: 3}.Build(),
 	}
 	localVersionHistory := NewVersionHistory(localBranchToken, localItems)
 	remoteVersionHistory := NewVersionHistory(remoteBranchToken, remoteItems)
@@ -483,26 +483,26 @@ func (s *versionHistorySuite) TestEquals() {
 
 func (s *versionHistoriesSuite) TestAddGetVersionHistory() {
 	versionHistory1 := NewVersionHistory([]byte("branch token 1"), []*historyspb.VersionHistoryItem{
-		{EventId: 3, Version: 0},
-		{EventId: 5, Version: 4},
-		{EventId: 7, Version: 6},
-		{EventId: 9, Version: 10},
+		historyspb.VersionHistoryItem_builder{EventId: 3, Version: 0}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 5, Version: 4}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 7, Version: 6}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 9, Version: 10}.Build(),
 	})
 	versionHistory2 := NewVersionHistory([]byte("branch token 2"), []*historyspb.VersionHistoryItem{
-		{EventId: 3, Version: 0},
-		{EventId: 5, Version: 4},
-		{EventId: 6, Version: 6},
-		{EventId: 11, Version: 12},
+		historyspb.VersionHistoryItem_builder{EventId: 3, Version: 0}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 5, Version: 4}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 6, Version: 6}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 11, Version: 12}.Build(),
 	})
 
 	histories := NewVersionHistories(versionHistory1)
-	s.Equal(int32(0), histories.CurrentVersionHistoryIndex)
+	s.Equal(int32(0), histories.GetCurrentVersionHistoryIndex())
 
 	currentBranchChanged, newVersionHistoryIndex, err := AddAndSwitchVersionHistory(histories, versionHistory2)
 	s.Nil(err)
 	s.True(currentBranchChanged)
 	s.Equal(int32(1), newVersionHistoryIndex)
-	s.Equal(int32(1), histories.CurrentVersionHistoryIndex)
+	s.Equal(int32(1), histories.GetCurrentVersionHistoryIndex())
 
 	resultVersionHistory1, err := GetVersionHistory(histories, 0)
 	s.Nil(err)
@@ -515,16 +515,16 @@ func (s *versionHistoriesSuite) TestAddGetVersionHistory() {
 
 func (s *versionHistoriesSuite) TestFindLCAVersionHistoryIndexAndItem_LargerEventIDWins() {
 	versionHistory1 := NewVersionHistory([]byte("branch token 1"), []*historyspb.VersionHistoryItem{
-		{EventId: 3, Version: 0},
-		{EventId: 5, Version: 4},
-		{EventId: 7, Version: 6},
-		{EventId: 9, Version: 10},
+		historyspb.VersionHistoryItem_builder{EventId: 3, Version: 0}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 5, Version: 4}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 7, Version: 6}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 9, Version: 10}.Build(),
 	})
 	versionHistory2 := NewVersionHistory([]byte("branch token 2"), []*historyspb.VersionHistoryItem{
-		{EventId: 3, Version: 0},
-		{EventId: 5, Version: 4},
-		{EventId: 6, Version: 6},
-		{EventId: 11, Version: 12},
+		historyspb.VersionHistoryItem_builder{EventId: 3, Version: 0}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 5, Version: 4}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 6, Version: 6}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 11, Version: 12}.Build(),
 	})
 
 	histories := NewVersionHistories(versionHistory1)
@@ -532,10 +532,10 @@ func (s *versionHistoriesSuite) TestFindLCAVersionHistoryIndexAndItem_LargerEven
 	s.Nil(err)
 
 	versionHistoryIncoming := NewVersionHistory([]byte("branch token incoming"), []*historyspb.VersionHistoryItem{
-		{EventId: 3, Version: 0},
-		{EventId: 5, Version: 4},
-		{EventId: 8, Version: 6},
-		{EventId: 11, Version: 100},
+		historyspb.VersionHistoryItem_builder{EventId: 3, Version: 0}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 5, Version: 4}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 8, Version: 6}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 11, Version: 100}.Build(),
 	})
 
 	item, index, err := FindLCAVersionHistoryItemAndIndex(histories, versionHistoryIncoming)
@@ -546,15 +546,15 @@ func (s *versionHistoriesSuite) TestFindLCAVersionHistoryIndexAndItem_LargerEven
 
 func (s *versionHistoriesSuite) TestFindLCAVersionHistoryIndexAndItem_SameEventIDShorterLengthWins() {
 	versionHistory1 := NewVersionHistory([]byte("branch token 1"), []*historyspb.VersionHistoryItem{
-		{EventId: 3, Version: 0},
-		{EventId: 5, Version: 4},
-		{EventId: 7, Version: 6},
-		{EventId: 9, Version: 10},
+		historyspb.VersionHistoryItem_builder{EventId: 3, Version: 0}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 5, Version: 4}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 7, Version: 6}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 9, Version: 10}.Build(),
 	})
 	versionHistory2 := NewVersionHistory([]byte("branch token 2"), []*historyspb.VersionHistoryItem{
-		{EventId: 3, Version: 0},
-		{EventId: 5, Version: 4},
-		{EventId: 7, Version: 6},
+		historyspb.VersionHistoryItem_builder{EventId: 3, Version: 0}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 5, Version: 4}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 7, Version: 6}.Build(),
 	})
 
 	histories := NewVersionHistories(versionHistory1)
@@ -562,10 +562,10 @@ func (s *versionHistoriesSuite) TestFindLCAVersionHistoryIndexAndItem_SameEventI
 	s.Nil(err)
 
 	versionHistoryIncoming := NewVersionHistory([]byte("branch token incoming"), []*historyspb.VersionHistoryItem{
-		{EventId: 3, Version: 0},
-		{EventId: 5, Version: 4},
-		{EventId: 8, Version: 6},
-		{EventId: 11, Version: 100},
+		historyspb.VersionHistoryItem_builder{EventId: 3, Version: 0}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 5, Version: 4}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 8, Version: 6}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 11, Version: 100}.Build(),
 	})
 
 	item, index, err := FindLCAVersionHistoryItemAndIndex(histories, versionHistoryIncoming)
@@ -576,15 +576,15 @@ func (s *versionHistoriesSuite) TestFindLCAVersionHistoryIndexAndItem_SameEventI
 
 func (s *versionHistoriesSuite) TestFindFirstVersionHistoryIndexByItem() {
 	versionHistory1 := NewVersionHistory([]byte("branch token 1"), []*historyspb.VersionHistoryItem{
-		{EventId: 3, Version: 0},
-		{EventId: 5, Version: 4},
-		{EventId: 7, Version: 6},
+		historyspb.VersionHistoryItem_builder{EventId: 3, Version: 0}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 5, Version: 4}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 7, Version: 6}.Build(),
 	})
 	versionHistory2 := NewVersionHistory([]byte("branch token 2"), []*historyspb.VersionHistoryItem{
-		{EventId: 3, Version: 0},
-		{EventId: 5, Version: 4},
-		{EventId: 7, Version: 6},
-		{EventId: 9, Version: 10},
+		historyspb.VersionHistoryItem_builder{EventId: 3, Version: 0}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 5, Version: 4}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 7, Version: 6}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 9, Version: 10}.Build(),
 	})
 
 	histories := NewVersionHistories(versionHistory1)
@@ -605,16 +605,16 @@ func (s *versionHistoriesSuite) TestFindFirstVersionHistoryIndexByItem() {
 
 func (s *versionHistoriesSuite) TestIsVersionHistoryItemsInSameBranch_Same_VersionItems_Return_True() {
 	versionHistoryItemsA := []*historyspb.VersionHistoryItem{
-		{EventId: 3, Version: 0},
-		{EventId: 5, Version: 4},
-		{EventId: 7, Version: 6},
-		{EventId: 9, Version: 10},
+		historyspb.VersionHistoryItem_builder{EventId: 3, Version: 0}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 5, Version: 4}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 7, Version: 6}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 9, Version: 10}.Build(),
 	}
 	versionHistoryItemsB := []*historyspb.VersionHistoryItem{
-		{EventId: 3, Version: 0},
-		{EventId: 5, Version: 4},
-		{EventId: 7, Version: 6},
-		{EventId: 9, Version: 10},
+		historyspb.VersionHistoryItem_builder{EventId: 3, Version: 0}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 5, Version: 4}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 7, Version: 6}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 9, Version: 10}.Build(),
 	}
 	s.True(IsVersionHistoryItemsInSameBranch(versionHistoryItemsA, versionHistoryItemsB))
 	s.True(IsVersionHistoryItemsInSameBranch(versionHistoryItemsB, versionHistoryItemsA))
@@ -622,15 +622,15 @@ func (s *versionHistoriesSuite) TestIsVersionHistoryItemsInSameBranch_Same_Versi
 
 func (s *versionHistoriesSuite) TestIsVersionHistoryItemsInSameBranch_SameBranch1_Return_True() {
 	versionHistoryItemsA := []*historyspb.VersionHistoryItem{
-		{EventId: 3, Version: 0},
-		{EventId: 5, Version: 4},
-		{EventId: 7, Version: 6},
+		historyspb.VersionHistoryItem_builder{EventId: 3, Version: 0}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 5, Version: 4}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 7, Version: 6}.Build(),
 	}
 	versionHistoryItemsB := []*historyspb.VersionHistoryItem{
-		{EventId: 3, Version: 0},
-		{EventId: 5, Version: 4},
-		{EventId: 7, Version: 6},
-		{EventId: 9, Version: 10},
+		historyspb.VersionHistoryItem_builder{EventId: 3, Version: 0}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 5, Version: 4}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 7, Version: 6}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 9, Version: 10}.Build(),
 	}
 	s.True(IsVersionHistoryItemsInSameBranch(versionHistoryItemsA, versionHistoryItemsB))
 	s.True(IsVersionHistoryItemsInSameBranch(versionHistoryItemsB, versionHistoryItemsA))
@@ -638,15 +638,15 @@ func (s *versionHistoriesSuite) TestIsVersionHistoryItemsInSameBranch_SameBranch
 
 func (s *versionHistoriesSuite) TestIsVersionHistoryItemsInSameBranch_SameBranch2_Return_True() {
 	versionHistoryItemsA := []*historyspb.VersionHistoryItem{
-		{EventId: 3, Version: 0},
-		{EventId: 5, Version: 4},
-		{EventId: 6, Version: 6},
+		historyspb.VersionHistoryItem_builder{EventId: 3, Version: 0}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 5, Version: 4}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 6, Version: 6}.Build(),
 	}
 	versionHistoryItemsB := []*historyspb.VersionHistoryItem{
-		{EventId: 3, Version: 0},
-		{EventId: 5, Version: 4},
-		{EventId: 7, Version: 6},
-		{EventId: 9, Version: 10},
+		historyspb.VersionHistoryItem_builder{EventId: 3, Version: 0}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 5, Version: 4}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 7, Version: 6}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 9, Version: 10}.Build(),
 	}
 	s.True(IsVersionHistoryItemsInSameBranch(versionHistoryItemsA, versionHistoryItemsB))
 	s.True(IsVersionHistoryItemsInSameBranch(versionHistoryItemsB, versionHistoryItemsA))
@@ -654,14 +654,14 @@ func (s *versionHistoriesSuite) TestIsVersionHistoryItemsInSameBranch_SameBranch
 
 func (s *versionHistoriesSuite) TestIsVersionHistoryItemsInSameBranch_DifferentBranch1_Return_False() {
 	versionHistoryItemsA := []*historyspb.VersionHistoryItem{
-		{EventId: 1, Version: 1},
-		{EventId: 2, Version: 2},
-		{EventId: 3, Version: 3},
+		historyspb.VersionHistoryItem_builder{EventId: 1, Version: 1}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 2, Version: 2}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 3, Version: 3}.Build(),
 	}
 	versionHistoryItemsB := []*historyspb.VersionHistoryItem{
-		{EventId: 1, Version: 1},
-		{EventId: 2, Version: 2},
-		{EventId: 3, Version: 4},
+		historyspb.VersionHistoryItem_builder{EventId: 1, Version: 1}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 2, Version: 2}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 3, Version: 4}.Build(),
 	}
 	s.False(IsVersionHistoryItemsInSameBranch(versionHistoryItemsA, versionHistoryItemsB))
 	s.False(IsVersionHistoryItemsInSameBranch(versionHistoryItemsB, versionHistoryItemsA))
@@ -669,15 +669,15 @@ func (s *versionHistoriesSuite) TestIsVersionHistoryItemsInSameBranch_DifferentB
 
 func (s *versionHistoriesSuite) TestIsVersionHistoryItemsInSameBranch_DifferentBranch2_Return_False() {
 	versionHistoryItemsA := []*historyspb.VersionHistoryItem{
-		{EventId: 1, Version: 1},
-		{EventId: 2, Version: 2},
-		{EventId: 7, Version: 3},
+		historyspb.VersionHistoryItem_builder{EventId: 1, Version: 1}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 2, Version: 2}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 7, Version: 3}.Build(),
 	}
 	versionHistoryItemsB := []*historyspb.VersionHistoryItem{
-		{EventId: 1, Version: 1},
-		{EventId: 2, Version: 2},
-		{EventId: 6, Version: 3},
-		{EventId: 7, Version: 4},
+		historyspb.VersionHistoryItem_builder{EventId: 1, Version: 1}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 2, Version: 2}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 6, Version: 3}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 7, Version: 4}.Build(),
 	}
 	s.False(IsVersionHistoryItemsInSameBranch(versionHistoryItemsA, versionHistoryItemsB))
 	s.False(IsVersionHistoryItemsInSameBranch(versionHistoryItemsB, versionHistoryItemsA))
@@ -685,10 +685,10 @@ func (s *versionHistoriesSuite) TestIsVersionHistoryItemsInSameBranch_DifferentB
 
 func (s *versionHistoriesSuite) TestSplitVersionHistoryToLocalGeneratedAndRemoteGenerated_RemoteOnly() {
 	versionHistoryItems := []*historyspb.VersionHistoryItem{
-		{EventId: 5, Version: 2},
-		{EventId: 10, Version: 3},
-		{EventId: 13, Version: 4},
-		{EventId: 15, Version: 5},
+		historyspb.VersionHistoryItem_builder{EventId: 5, Version: 2}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 10, Version: 3}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 13, Version: 4}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 15, Version: 5}.Build(),
 	}
 
 	local, remote := SplitVersionHistoryByLastLocalGeneratedItem(versionHistoryItems, 1, 1000)
@@ -698,10 +698,10 @@ func (s *versionHistoriesSuite) TestSplitVersionHistoryToLocalGeneratedAndRemote
 
 func (s *versionHistoriesSuite) TestSplitVersionHistoryToLocalGeneratedAndRemoteGenerated_LocalOnly() {
 	versionHistoryItems := []*historyspb.VersionHistoryItem{
-		{EventId: 5, Version: 1},
-		{EventId: 10, Version: 2},
-		{EventId: 13, Version: 3},
-		{EventId: 15, Version: 1001},
+		historyspb.VersionHistoryItem_builder{EventId: 5, Version: 1}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 10, Version: 2}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 13, Version: 3}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 15, Version: 1001}.Build(),
 	}
 
 	local, remote := SplitVersionHistoryByLastLocalGeneratedItem(versionHistoryItems, 1, 1000)
@@ -711,14 +711,14 @@ func (s *versionHistoriesSuite) TestSplitVersionHistoryToLocalGeneratedAndRemote
 
 func (s *versionHistoriesSuite) TestSplitVersionHistoryToLocalGeneratedAndRemoteGenerated_LocalAndRemote() {
 	localItems := []*historyspb.VersionHistoryItem{
-		{EventId: 5, Version: 1},
-		{EventId: 10, Version: 2},
-		{EventId: 13, Version: 3},
-		{EventId: 15, Version: 1001},
+		historyspb.VersionHistoryItem_builder{EventId: 5, Version: 1}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 10, Version: 2}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 13, Version: 3}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 15, Version: 1001}.Build(),
 	}
 	remoteItems := []*historyspb.VersionHistoryItem{
-		{EventId: 20, Version: 1004},
-		{EventId: 25, Version: 1005},
+		historyspb.VersionHistoryItem_builder{EventId: 20, Version: 1004}.Build(),
+		historyspb.VersionHistoryItem_builder{EventId: 25, Version: 1005}.Build(),
 	}
 
 	past, future := SplitVersionHistoryByLastLocalGeneratedItem(append(localItems, remoteItems...), 1, 1000)
@@ -741,9 +741,9 @@ func (s *versionHistoriesSuite) TestFindLCAVersionHistoryItemFromItems() {
 			},
 		},
 		[]*historyspb.VersionHistoryItem{
-			{EventId: 4, Version: 1},
+			historyspb.VersionHistoryItem_builder{EventId: 4, Version: 1}.Build(),
 		},
-		&historyspb.VersionHistoryItem{EventId: 3, Version: 1},
+		historyspb.VersionHistoryItem_builder{EventId: 3, Version: 1}.Build(),
 		0,
 		nil,
 	)
@@ -761,11 +761,11 @@ func (s *versionHistoriesSuite) TestFindLCAVersionHistoryItemFromItems() {
 			},
 		},
 		[]*historyspb.VersionHistoryItem{
-			{EventId: 3, Version: 1},
-			{EventId: 5, Version: 2},
-			{EventId: 6, Version: 4},
+			historyspb.VersionHistoryItem_builder{EventId: 3, Version: 1}.Build(),
+			historyspb.VersionHistoryItem_builder{EventId: 5, Version: 2}.Build(),
+			historyspb.VersionHistoryItem_builder{EventId: 6, Version: 4}.Build(),
 		},
-		&historyspb.VersionHistoryItem{EventId: 6, Version: 4},
+		historyspb.VersionHistoryItem_builder{EventId: 6, Version: 4}.Build(),
 		1,
 		nil,
 	)
@@ -783,24 +783,24 @@ func (s *versionHistoriesSuite) TestFindLCAVersionHistoryItemFromItems() {
 			},
 		},
 		[]*historyspb.VersionHistoryItem{
-			{EventId: 1, Version: 1},
-			{EventId: 5, Version: 5},
-			{EventId: 6, Version: 6},
+			historyspb.VersionHistoryItem_builder{EventId: 1, Version: 1}.Build(),
+			historyspb.VersionHistoryItem_builder{EventId: 5, Version: 5}.Build(),
+			historyspb.VersionHistoryItem_builder{EventId: 6, Version: 6}.Build(),
 		},
-		&historyspb.VersionHistoryItem{EventId: 1, Version: 1},
+		historyspb.VersionHistoryItem_builder{EventId: 1, Version: 1}.Build(),
 		0,
 		nil,
 	)
 }
 
 func (s *versionHistoriesSuite) TestAddEmptyVersionHistory() {
-	versionHistories := NewVersionHistories(&historyspb.VersionHistory{
+	versionHistories := NewVersionHistories(historyspb.VersionHistory_builder{
 		BranchToken: []byte("random branch token"),
 		Items: []*historyspb.VersionHistoryItem{
-			{EventId: 1, Version: 1},
-			{EventId: 2, Version: 2},
+			historyspb.VersionHistoryItem_builder{EventId: 1, Version: 1}.Build(),
+			historyspb.VersionHistoryItem_builder{EventId: 2, Version: 2}.Build(),
 		},
-	})
+	}.Build())
 
 	idx := AddEmptyVersionHistory(versionHistories)
 	actualVersionHistory, err := GetVersionHistory(versionHistories, idx)

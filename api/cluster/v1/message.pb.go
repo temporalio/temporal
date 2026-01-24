@@ -8,7 +8,6 @@ package cluster
 
 import (
 	reflect "reflect"
-	sync "sync"
 	unsafe "unsafe"
 
 	v1 "go.temporal.io/server/api/enums/v1"
@@ -25,10 +24,10 @@ const (
 )
 
 type HostInfo struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Identity      string                 `protobuf:"bytes,1,opt,name=identity,proto3" json:"identity,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state               protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Identity string                 `protobuf:"bytes,1,opt,name=identity,proto3"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *HostInfo) Reset() {
@@ -56,25 +55,38 @@ func (x *HostInfo) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use HostInfo.ProtoReflect.Descriptor instead.
-func (*HostInfo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_cluster_v1_message_proto_rawDescGZIP(), []int{0}
-}
-
 func (x *HostInfo) GetIdentity() string {
 	if x != nil {
-		return x.Identity
+		return x.xxx_hidden_Identity
 	}
 	return ""
 }
 
+func (x *HostInfo) SetIdentity(v string) {
+	x.xxx_hidden_Identity = v
+}
+
+type HostInfo_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Identity string
+}
+
+func (b0 HostInfo_builder) Build() *HostInfo {
+	m0 := &HostInfo{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Identity = b.Identity
+	return m0
+}
+
 type RingInfo struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Role          string                 `protobuf:"bytes,1,opt,name=role,proto3" json:"role,omitempty"`
-	MemberCount   int32                  `protobuf:"varint,2,opt,name=member_count,json=memberCount,proto3" json:"member_count,omitempty"`
-	Members       []*HostInfo            `protobuf:"bytes,3,rep,name=members,proto3" json:"members,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                  protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Role        string                 `protobuf:"bytes,1,opt,name=role,proto3"`
+	xxx_hidden_MemberCount int32                  `protobuf:"varint,2,opt,name=member_count,json=memberCount,proto3"`
+	xxx_hidden_Members     *[]*HostInfo           `protobuf:"bytes,3,rep,name=members,proto3"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *RingInfo) Reset() {
@@ -102,39 +114,66 @@ func (x *RingInfo) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RingInfo.ProtoReflect.Descriptor instead.
-func (*RingInfo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_cluster_v1_message_proto_rawDescGZIP(), []int{1}
-}
-
 func (x *RingInfo) GetRole() string {
 	if x != nil {
-		return x.Role
+		return x.xxx_hidden_Role
 	}
 	return ""
 }
 
 func (x *RingInfo) GetMemberCount() int32 {
 	if x != nil {
-		return x.MemberCount
+		return x.xxx_hidden_MemberCount
 	}
 	return 0
 }
 
 func (x *RingInfo) GetMembers() []*HostInfo {
 	if x != nil {
-		return x.Members
+		if x.xxx_hidden_Members != nil {
+			return *x.xxx_hidden_Members
+		}
 	}
 	return nil
 }
 
+func (x *RingInfo) SetRole(v string) {
+	x.xxx_hidden_Role = v
+}
+
+func (x *RingInfo) SetMemberCount(v int32) {
+	x.xxx_hidden_MemberCount = v
+}
+
+func (x *RingInfo) SetMembers(v []*HostInfo) {
+	x.xxx_hidden_Members = &v
+}
+
+type RingInfo_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Role        string
+	MemberCount int32
+	Members     []*HostInfo
+}
+
+func (b0 RingInfo_builder) Build() *RingInfo {
+	m0 := &RingInfo{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Role = b.Role
+	x.xxx_hidden_MemberCount = b.MemberCount
+	x.xxx_hidden_Members = &b.Members
+	return m0
+}
+
 type MembershipInfo struct {
-	state            protoimpl.MessageState `protogen:"open.v1"`
-	CurrentHost      *HostInfo              `protobuf:"bytes,1,opt,name=current_host,json=currentHost,proto3" json:"current_host,omitempty"`
-	ReachableMembers []string               `protobuf:"bytes,2,rep,name=reachable_members,json=reachableMembers,proto3" json:"reachable_members,omitempty"`
-	Rings            []*RingInfo            `protobuf:"bytes,3,rep,name=rings,proto3" json:"rings,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	state                       protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_CurrentHost      *HostInfo              `protobuf:"bytes,1,opt,name=current_host,json=currentHost,proto3"`
+	xxx_hidden_ReachableMembers []string               `protobuf:"bytes,2,rep,name=reachable_members,json=reachableMembers,proto3"`
+	xxx_hidden_Rings            *[]*RingInfo           `protobuf:"bytes,3,rep,name=rings,proto3"`
+	unknownFields               protoimpl.UnknownFields
+	sizeCache                   protoimpl.SizeCache
 }
 
 func (x *MembershipInfo) Reset() {
@@ -162,43 +201,81 @@ func (x *MembershipInfo) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use MembershipInfo.ProtoReflect.Descriptor instead.
-func (*MembershipInfo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_cluster_v1_message_proto_rawDescGZIP(), []int{2}
-}
-
 func (x *MembershipInfo) GetCurrentHost() *HostInfo {
 	if x != nil {
-		return x.CurrentHost
+		return x.xxx_hidden_CurrentHost
 	}
 	return nil
 }
 
 func (x *MembershipInfo) GetReachableMembers() []string {
 	if x != nil {
-		return x.ReachableMembers
+		return x.xxx_hidden_ReachableMembers
 	}
 	return nil
 }
 
 func (x *MembershipInfo) GetRings() []*RingInfo {
 	if x != nil {
-		return x.Rings
+		if x.xxx_hidden_Rings != nil {
+			return *x.xxx_hidden_Rings
+		}
 	}
 	return nil
 }
 
+func (x *MembershipInfo) SetCurrentHost(v *HostInfo) {
+	x.xxx_hidden_CurrentHost = v
+}
+
+func (x *MembershipInfo) SetReachableMembers(v []string) {
+	x.xxx_hidden_ReachableMembers = v
+}
+
+func (x *MembershipInfo) SetRings(v []*RingInfo) {
+	x.xxx_hidden_Rings = &v
+}
+
+func (x *MembershipInfo) HasCurrentHost() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_CurrentHost != nil
+}
+
+func (x *MembershipInfo) ClearCurrentHost() {
+	x.xxx_hidden_CurrentHost = nil
+}
+
+type MembershipInfo_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	CurrentHost      *HostInfo
+	ReachableMembers []string
+	Rings            []*RingInfo
+}
+
+func (b0 MembershipInfo_builder) Build() *MembershipInfo {
+	m0 := &MembershipInfo{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_CurrentHost = b.CurrentHost
+	x.xxx_hidden_ReachableMembers = b.ReachableMembers
+	x.xxx_hidden_Rings = &b.Rings
+	return m0
+}
+
 type ClusterMember struct {
-	state            protoimpl.MessageState `protogen:"open.v1"`
-	Role             v1.ClusterMemberRole   `protobuf:"varint,1,opt,name=role,proto3,enum=temporal.server.api.enums.v1.ClusterMemberRole" json:"role,omitempty"`
-	HostId           string                 `protobuf:"bytes,2,opt,name=host_id,json=hostId,proto3" json:"host_id,omitempty"`
-	RpcAddress       string                 `protobuf:"bytes,3,opt,name=rpc_address,json=rpcAddress,proto3" json:"rpc_address,omitempty"`
-	RpcPort          int32                  `protobuf:"varint,4,opt,name=rpc_port,json=rpcPort,proto3" json:"rpc_port,omitempty"`
-	SessionStartTime *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=session_start_time,json=sessionStartTime,proto3" json:"session_start_time,omitempty"`
-	LastHeartbitTime *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=last_heartbit_time,json=lastHeartbitTime,proto3" json:"last_heartbit_time,omitempty"`
-	RecordExpiryTime *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=record_expiry_time,json=recordExpiryTime,proto3" json:"record_expiry_time,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	state                       protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Role             v1.ClusterMemberRole   `protobuf:"varint,1,opt,name=role,proto3,enum=temporal.server.api.enums.v1.ClusterMemberRole"`
+	xxx_hidden_HostId           string                 `protobuf:"bytes,2,opt,name=host_id,json=hostId,proto3"`
+	xxx_hidden_RpcAddress       string                 `protobuf:"bytes,3,opt,name=rpc_address,json=rpcAddress,proto3"`
+	xxx_hidden_RpcPort          int32                  `protobuf:"varint,4,opt,name=rpc_port,json=rpcPort,proto3"`
+	xxx_hidden_SessionStartTime *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=session_start_time,json=sessionStartTime,proto3"`
+	xxx_hidden_LastHeartbitTime *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=last_heartbit_time,json=lastHeartbitTime,proto3"`
+	xxx_hidden_RecordExpiryTime *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=record_expiry_time,json=recordExpiryTime,proto3"`
+	unknownFields               protoimpl.UnknownFields
+	sizeCache                   protoimpl.SizeCache
 }
 
 func (x *ClusterMember) Reset() {
@@ -226,58 +303,140 @@ func (x *ClusterMember) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ClusterMember.ProtoReflect.Descriptor instead.
-func (*ClusterMember) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_cluster_v1_message_proto_rawDescGZIP(), []int{3}
-}
-
 func (x *ClusterMember) GetRole() v1.ClusterMemberRole {
 	if x != nil {
-		return x.Role
+		return x.xxx_hidden_Role
 	}
 	return v1.ClusterMemberRole(0)
 }
 
 func (x *ClusterMember) GetHostId() string {
 	if x != nil {
-		return x.HostId
+		return x.xxx_hidden_HostId
 	}
 	return ""
 }
 
 func (x *ClusterMember) GetRpcAddress() string {
 	if x != nil {
-		return x.RpcAddress
+		return x.xxx_hidden_RpcAddress
 	}
 	return ""
 }
 
 func (x *ClusterMember) GetRpcPort() int32 {
 	if x != nil {
-		return x.RpcPort
+		return x.xxx_hidden_RpcPort
 	}
 	return 0
 }
 
 func (x *ClusterMember) GetSessionStartTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.SessionStartTime
+		return x.xxx_hidden_SessionStartTime
 	}
 	return nil
 }
 
 func (x *ClusterMember) GetLastHeartbitTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.LastHeartbitTime
+		return x.xxx_hidden_LastHeartbitTime
 	}
 	return nil
 }
 
 func (x *ClusterMember) GetRecordExpiryTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.RecordExpiryTime
+		return x.xxx_hidden_RecordExpiryTime
 	}
 	return nil
+}
+
+func (x *ClusterMember) SetRole(v v1.ClusterMemberRole) {
+	x.xxx_hidden_Role = v
+}
+
+func (x *ClusterMember) SetHostId(v string) {
+	x.xxx_hidden_HostId = v
+}
+
+func (x *ClusterMember) SetRpcAddress(v string) {
+	x.xxx_hidden_RpcAddress = v
+}
+
+func (x *ClusterMember) SetRpcPort(v int32) {
+	x.xxx_hidden_RpcPort = v
+}
+
+func (x *ClusterMember) SetSessionStartTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_SessionStartTime = v
+}
+
+func (x *ClusterMember) SetLastHeartbitTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_LastHeartbitTime = v
+}
+
+func (x *ClusterMember) SetRecordExpiryTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_RecordExpiryTime = v
+}
+
+func (x *ClusterMember) HasSessionStartTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_SessionStartTime != nil
+}
+
+func (x *ClusterMember) HasLastHeartbitTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_LastHeartbitTime != nil
+}
+
+func (x *ClusterMember) HasRecordExpiryTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_RecordExpiryTime != nil
+}
+
+func (x *ClusterMember) ClearSessionStartTime() {
+	x.xxx_hidden_SessionStartTime = nil
+}
+
+func (x *ClusterMember) ClearLastHeartbitTime() {
+	x.xxx_hidden_LastHeartbitTime = nil
+}
+
+func (x *ClusterMember) ClearRecordExpiryTime() {
+	x.xxx_hidden_RecordExpiryTime = nil
+}
+
+type ClusterMember_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Role             v1.ClusterMemberRole
+	HostId           string
+	RpcAddress       string
+	RpcPort          int32
+	SessionStartTime *timestamppb.Timestamp
+	LastHeartbitTime *timestamppb.Timestamp
+	RecordExpiryTime *timestamppb.Timestamp
+}
+
+func (b0 ClusterMember_builder) Build() *ClusterMember {
+	m0 := &ClusterMember{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Role = b.Role
+	x.xxx_hidden_HostId = b.HostId
+	x.xxx_hidden_RpcAddress = b.RpcAddress
+	x.xxx_hidden_RpcPort = b.RpcPort
+	x.xxx_hidden_SessionStartTime = b.SessionStartTime
+	x.xxx_hidden_LastHeartbitTime = b.LastHeartbitTime
+	x.xxx_hidden_RecordExpiryTime = b.RecordExpiryTime
+	return m0
 }
 
 var File_temporal_server_api_cluster_v1_message_proto protoreflect.FileDescriptor
@@ -304,18 +463,6 @@ const file_temporal_server_api_cluster_v1_message_proto_rawDesc = "" +
 	"\x12session_start_time\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\x10sessionStartTime\x12H\n" +
 	"\x12last_heartbit_time\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\x10lastHeartbitTime\x12H\n" +
 	"\x12record_expiry_time\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\x10recordExpiryTimeB.Z,go.temporal.io/server/api/cluster/v1;clusterb\x06proto3"
-
-var (
-	file_temporal_server_api_cluster_v1_message_proto_rawDescOnce sync.Once
-	file_temporal_server_api_cluster_v1_message_proto_rawDescData []byte
-)
-
-func file_temporal_server_api_cluster_v1_message_proto_rawDescGZIP() []byte {
-	file_temporal_server_api_cluster_v1_message_proto_rawDescOnce.Do(func() {
-		file_temporal_server_api_cluster_v1_message_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_api_cluster_v1_message_proto_rawDesc), len(file_temporal_server_api_cluster_v1_message_proto_rawDesc)))
-	})
-	return file_temporal_server_api_cluster_v1_message_proto_rawDescData
-}
 
 var file_temporal_server_api_cluster_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_temporal_server_api_cluster_v1_message_proto_goTypes = []any{

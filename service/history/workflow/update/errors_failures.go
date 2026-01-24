@@ -15,21 +15,21 @@ var (
 )
 
 var (
-	unprocessedUpdateFailure = &failurepb.Failure{
+	unprocessedUpdateFailure = failurepb.Failure_builder{
 		Message: "Workflow Update is rejected because it wasn't processed by worker. Probably, Workflow Update is not supported by the worker.",
 		Source:  "Server",
-		FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+		ApplicationFailureInfo: failurepb.ApplicationFailureInfo_builder{
 			Type:         "UnprocessedUpdate",
 			NonRetryable: true,
-		}},
-	}
+		}.Build(),
+	}.Build()
 
-	acceptedUpdateCompletedWorkflowFailure = &failurepb.Failure{
+	acceptedUpdateCompletedWorkflowFailure = failurepb.Failure_builder{
 		Message: "Workflow Update failed because the Workflow completed before the Update completed.",
 		Source:  "Server",
-		FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+		ApplicationFailureInfo: failurepb.ApplicationFailureInfo_builder{
 			Type:         "AcceptedUpdateCompletedWorkflow",
 			NonRetryable: true,
-		}},
-	}
+		}.Build(),
+	}.Build()
 )

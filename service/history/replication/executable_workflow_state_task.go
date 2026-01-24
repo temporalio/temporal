@@ -44,9 +44,9 @@ func NewExecutableWorkflowStateTask(
 	sourceShardKey ClusterShardKey,
 	replicationTask *replicationspb.ReplicationTask,
 ) *ExecutableWorkflowStateTask {
-	namespaceID := task.GetWorkflowState().ExecutionInfo.NamespaceId
-	workflowID := task.GetWorkflowState().ExecutionInfo.WorkflowId
-	runID := task.GetWorkflowState().ExecutionState.RunId
+	namespaceID := task.GetWorkflowState().GetExecutionInfo().GetNamespaceId()
+	workflowID := task.GetWorkflowState().GetExecutionInfo().GetWorkflowId()
+	runID := task.GetWorkflowState().GetExecutionState().GetRunId()
 	return &ExecutableWorkflowStateTask{
 		ProcessToolBox: processToolBox,
 
@@ -61,13 +61,13 @@ func NewExecutableWorkflowStateTask(
 			sourceShardKey,
 			replicationTask,
 		),
-		req: &historyservice.ReplicateWorkflowStateRequest{
+		req: historyservice.ReplicateWorkflowStateRequest_builder{
 			NamespaceId:              namespaceID,
 			WorkflowState:            task.GetWorkflowState(),
 			RemoteCluster:            sourceClusterName,
 			IsForceReplication:       task.GetIsForceReplication(),
 			IsCloseTransferTaskAcked: task.GetIsCloseTransferTaskAcked(),
-		},
+		}.Build(),
 	}
 }
 
@@ -197,13 +197,13 @@ func (e *ExecutableWorkflowStateTask) HandleErr(err error) error {
 
 func (e *ExecutableWorkflowStateTask) MarkPoisonPill() error {
 	if e.ReplicationTask().GetRawTaskInfo() == nil {
-		e.ReplicationTask().RawTaskInfo = &persistencespb.ReplicationTaskInfo{
+		e.ReplicationTask().SetRawTaskInfo(persistencespb.ReplicationTaskInfo_builder{
 			NamespaceId: e.NamespaceID,
 			WorkflowId:  e.WorkflowID,
 			RunId:       e.RunID,
 			TaskId:      e.ExecutableTask.TaskID(),
 			TaskType:    enumsspb.TASK_TYPE_REPLICATION_SYNC_WORKFLOW_STATE,
-		}
+		}.Build())
 	}
 
 	return e.ExecutableTask.MarkPoisonPill()

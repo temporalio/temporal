@@ -78,11 +78,11 @@ func (s *ForceReplicationWorkflowTestSuite) TestForceReplicationWorkflow() {
 	t := s.T()
 
 	env.OnActivity(a.ListWorkflows, mock.Anything, mock.Anything).Return(func(ctx context.Context, request *workflowservice.ListWorkflowExecutionsRequest) (*listWorkflowsResponse, error) {
-		assert.Equal(t, "test-ns", request.Namespace)
+		assert.Equal(t, "test-ns", request.GetNamespace())
 		currentPageCount++
 		if currentPageCount < totalPageCount {
 			return &listWorkflowsResponse{
-				Executions:    []*replicationspb.MigrationExecutionInfo{{BusinessId: "wf-1"}},
+				Executions:    []*replicationspb.MigrationExecutionInfo{replicationspb.MigrationExecutionInfo_builder{BusinessId: "wf-1"}.Build()},
 				NextPageToken: []byte("fake-page-token"),
 				LastStartTime: startTime,
 				LastCloseTime: closeTime,
@@ -140,7 +140,7 @@ func (s *ForceReplicationWorkflowTestSuite) TestContinueAsNew() {
 	closeTime, _ := time.Parse(layout, "2020-02-01 00:00Z")
 
 	mockListWorkflows := func(ctx context.Context, request *workflowservice.ListWorkflowExecutionsRequest) (*listWorkflowsResponse, error) {
-		s.Equal("test-ns", request.Namespace)
+		s.Equal("test-ns", request.GetNamespace())
 		currentPageCount++
 		if currentPageCount < totalPageCount {
 			return &listWorkflowsResponse{
@@ -357,7 +357,7 @@ func (s *ForceReplicationWorkflowTestSuite) TestGenerateReplicationTaskRetryable
 	currentPageCount := 0
 	t := s.T()
 	env.OnActivity(a.ListWorkflows, mock.Anything, mock.Anything).Return(func(ctx context.Context, request *workflowservice.ListWorkflowExecutionsRequest) (*listWorkflowsResponse, error) {
-		assert.Equal(t, "test-ns", request.Namespace)
+		assert.Equal(t, "test-ns", request.GetNamespace())
 		currentPageCount++
 		if currentPageCount < totalPageCount {
 			return &listWorkflowsResponse{
@@ -406,7 +406,7 @@ func (s *ForceReplicationWorkflowTestSuite) TestGenerateReplicationTaskNonRetrya
 	currentPageCount := 0
 	t := s.T()
 	env.OnActivity(a.ListWorkflows, mock.Anything, mock.Anything).Return(func(ctx context.Context, request *workflowservice.ListWorkflowExecutionsRequest) (*listWorkflowsResponse, error) {
-		assert.Equal(t, "test-ns", request.Namespace)
+		assert.Equal(t, "test-ns", request.GetNamespace())
 		currentPageCount++
 		if currentPageCount < totalPageCount {
 			return &listWorkflowsResponse{
@@ -462,7 +462,7 @@ func (s *ForceReplicationWorkflowTestSuite) TestVerifyReplicationTaskNonRetryabl
 	currentPageCount := 0
 	t := s.T()
 	env.OnActivity(a.ListWorkflows, mock.Anything, mock.Anything).Return(func(ctx context.Context, request *workflowservice.ListWorkflowExecutionsRequest) (*listWorkflowsResponse, error) {
-		assert.Equal(t, "test-ns", request.Namespace)
+		assert.Equal(t, "test-ns", request.GetNamespace())
 		currentPageCount++
 		if currentPageCount < totalPageCount {
 			return &listWorkflowsResponse{
@@ -648,7 +648,7 @@ func TestSeedReplicationQueueWithUserDataEntries_Heartbeats(t *testing.T) {
 	}
 
 	// Once per attempt
-	mockFrontendClient.EXPECT().DescribeNamespace(gomock.Any(), gomock.Any()).Times(2).Return(&workflowservice.DescribeNamespaceResponse{NamespaceInfo: &namespacepb.NamespaceInfo{Id: namespaceID}}, nil)
+	mockFrontendClient.EXPECT().DescribeNamespace(gomock.Any(), gomock.Any()).Times(2).Return(workflowservice.DescribeNamespaceResponse_builder{NamespaceInfo: namespacepb.NamespaceInfo_builder{Id: namespaceID}.Build()}.Build(), nil)
 	// Twice for the first page due to expected failure of the first activity attempt, once for the second page
 	mockTaskManager.EXPECT().ListTaskQueueUserDataEntries(gomock.Any(), gomock.Any()).Times(3).DoAndReturn(
 		func(ctx context.Context, request *persistence.ListTaskQueueUserDataEntriesRequest) (*persistence.ListTaskQueueUserDataEntriesResponse, error) {
@@ -667,13 +667,13 @@ func TestSeedReplicationQueueWithUserDataEntries_Heartbeats(t *testing.T) {
 
 	numCalls := 0
 	mockNamespaceReplicationQueue.EXPECT().Publish(gomock.Any(), gomock.Any()).Times(3).DoAndReturn(func(ctx context.Context, task *replicationspb.ReplicationTask) error {
-		assert.Equal(t, namespaceID, task.GetTaskQueueUserDataAttributes().NamespaceId)
+		assert.Equal(t, namespaceID, task.GetTaskQueueUserDataAttributes().GetNamespaceId())
 		numCalls++
 		if numCalls == 1 {
-			assert.Equal(t, "a", task.GetTaskQueueUserDataAttributes().TaskQueueName)
+			assert.Equal(t, "a", task.GetTaskQueueUserDataAttributes().GetTaskQueueName())
 		} else {
 			// b is published twice
-			assert.Equal(t, "b", task.GetTaskQueueUserDataAttributes().TaskQueueName)
+			assert.Equal(t, "b", task.GetTaskQueueUserDataAttributes().GetTaskQueueName())
 		}
 		if numCalls == 2 {
 			return errors.New("some random error")

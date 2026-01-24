@@ -106,7 +106,7 @@ func (s *WFTFailureReportedProblemsTestSuite) TestWFTFailureReportedProblems_Set
 
 		execution, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
-		require.GreaterOrEqual(t, execution.PendingWorkflowTask.Attempt, int32(2))
+		require.GreaterOrEqual(t, execution.GetPendingWorkflowTask().GetAttempt(), int32(2))
 	}, 20*time.Second, 500*time.Millisecond)
 
 	// Unblock the workflow
@@ -255,7 +255,7 @@ func (s *WFTFailureReportedProblemsTestSuite) TestWFTFailureReportedProblems_Dyn
 
 		exec, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
-		require.GreaterOrEqual(t, exec.PendingWorkflowTask.Attempt, int32(2))
+		require.GreaterOrEqual(t, exec.GetPendingWorkflowTask().GetAttempt(), int32(2))
 	}, 10*time.Second, 500*time.Millisecond)
 
 	cleanup2 := s.OverrideDynamicConfig(dynamicconfig.NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute, 2)

@@ -115,11 +115,11 @@ Loop:
 			taskQueue = p.StickyTaskQueue
 		}
 
-		response, err1 := p.Client.PollWorkflowTaskQueue(NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
+		response, err1 := p.Client.PollWorkflowTaskQueue(NewContext(), workflowservice.PollWorkflowTaskQueueRequest_builder{
 			Namespace: p.Namespace,
 			TaskQueue: taskQueue,
 			Identity:  p.Identity,
-		})
+		}.Build())
 
 		if !common.IsServiceTransientError(err1) {
 			return PollAndProcessWorkflowTaskResponse{}, err1
@@ -134,48 +134,48 @@ Loop:
 			return PollAndProcessWorkflowTaskResponse{}, err1
 		}
 
-		if response == nil || len(response.TaskToken) == 0 {
+		if response == nil || len(response.GetTaskToken()) == 0 {
 			p.Logger.Info("Empty Workflow task: Polling again")
 			continue Loop
 		}
 
 		var events []*historypb.HistoryEvent
-		if response.Query == nil || !opts.PollSticky {
+		if !response.HasQuery() || !opts.PollSticky {
 			// if not query task, should have some history events
 			// for non sticky query, there should be events returned
-			history := response.History
+			history := response.GetHistory()
 			if history == nil {
 				p.Logger.Fatal("History is nil")
 				return PollAndProcessWorkflowTaskResponse{}, errors.New("history is nil")
 			}
 
-			events = history.Events
+			events = history.GetEvents()
 			if len(events) == 0 {
 				p.Logger.Fatal("History Events are empty")
 				return PollAndProcessWorkflowTaskResponse{}, errors.New("history events are empty")
 			}
 
-			nextPageToken := response.NextPageToken
+			nextPageToken := response.GetNextPageToken()
 			for nextPageToken != nil {
-				resp, err2 := p.Client.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+				resp, err2 := p.Client.GetWorkflowExecutionHistory(NewContext(), workflowservice.GetWorkflowExecutionHistoryRequest_builder{
 					Namespace:     p.Namespace,
-					Execution:     response.WorkflowExecution,
+					Execution:     response.GetWorkflowExecution(),
 					NextPageToken: nextPageToken,
-				})
+				}.Build())
 
 				if err2 != nil {
 					return PollAndProcessWorkflowTaskResponse{}, err2
 				}
 
-				events = append(events, resp.History.Events...)
-				nextPageToken = resp.NextPageToken
+				events = append(events, resp.GetHistory().GetEvents()...)
+				nextPageToken = resp.GetNextPageToken()
 			}
 		} else {
 			// for sticky query, there should be NO events returned
 			// since worker side already has the state machine and we do not intend to update that.
-			history := response.History
-			nextPageToken := response.NextPageToken
-			if !(history == nil || (len(history.Events) == 0 && nextPageToken == nil)) {
+			history := response.GetHistory()
+			nextPageToken := response.GetNextPageToken()
+			if !(history == nil || (len(history.GetEvents()) == 0 && nextPageToken == nil)) {
 				// if history is not nil, and contains events or next token
 				p.Logger.Fatal("History is not empty for sticky query")
 			}
@@ -187,25 +187,25 @@ Loop:
 		}
 
 		if opts.DumpHistory {
-			common.PrettyPrint(response.History.Events)
+			common.PrettyPrint(response.GetHistory().GetEvents())
 		}
 
 		// handle query task response
-		if response.Query != nil {
+		if response.HasQuery() {
 			blob, err := p.QueryHandler(response)
 
-			completeRequest := &workflowservice.RespondQueryTaskCompletedRequest{
+			completeRequest := workflowservice.RespondQueryTaskCompletedRequest_builder{
 				Namespace: p.Namespace,
-				TaskToken: response.TaskToken,
-			}
+				TaskToken: response.GetTaskToken(),
+			}.Build()
 			if err != nil {
 				completeType := enumspb.QUERY_RESULT_TYPE_FAILED
-				completeRequest.CompletedType = completeType
-				completeRequest.ErrorMessage = err.Error()
+				completeRequest.SetCompletedType(completeType)
+				completeRequest.SetErrorMessage(err.Error())
 			} else {
 				completeType := enumspb.QUERY_RESULT_TYPE_ANSWERED
-				completeRequest.CompletedType = completeType
-				completeRequest.QueryResult = blob
+				completeRequest.SetCompletedType(completeType)
+				completeRequest.SetQueryResult(blob)
 			}
 
 			_, err = p.Client.RespondQueryTaskCompleted(NewContext(), completeRequest)
@@ -218,13 +218,13 @@ Loop:
 			workerToServerMessages, err = p.MessageHandler(response)
 			if err != nil {
 				p.Logger.Error("Failing workflow task. Workflow messages handler failed with error", tag.Error(err))
-				_, err = p.Client.RespondWorkflowTaskFailed(NewContext(), &workflowservice.RespondWorkflowTaskFailedRequest{
+				_, err = p.Client.RespondWorkflowTaskFailed(NewContext(), workflowservice.RespondWorkflowTaskFailedRequest_builder{
 					Namespace: p.Namespace,
-					TaskToken: response.TaskToken,
+					TaskToken: response.GetTaskToken(),
 					Cause:     enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE,
 					Failure:   newApplicationFailure(err, false, nil),
 					Identity:  p.Identity,
-				})
+				}.Build())
 				return PollAndProcessWorkflowTaskResponse{}, err
 			}
 		}
@@ -243,13 +243,13 @@ Loop:
 		commands, err := p.WorkflowTaskHandler(response)
 		if err != nil {
 			p.Logger.Error("Failing workflow task. Workflow task handler failed with error", tag.Error(err))
-			_, err = p.Client.RespondWorkflowTaskFailed(NewContext(), &workflowservice.RespondWorkflowTaskFailedRequest{
+			_, err = p.Client.RespondWorkflowTaskFailed(NewContext(), workflowservice.RespondWorkflowTaskFailedRequest_builder{
 				Namespace: p.Namespace,
-				TaskToken: response.TaskToken,
+				TaskToken: response.GetTaskToken(),
 				Cause:     enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE,
 				Failure:   newApplicationFailure(err, false, nil),
 				Identity:  p.Identity,
-			})
+			}.Build())
 			return PollAndProcessWorkflowTaskResponse{}, err
 		}
 		if opts.DumpCommands {
@@ -263,34 +263,34 @@ Loop:
 
 		if !opts.RespondSticky {
 			// non sticky taskqueue
-			newTask, err := p.Client.RespondWorkflowTaskCompleted(NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+			newTask, err := p.Client.RespondWorkflowTaskCompleted(NewContext(), workflowservice.RespondWorkflowTaskCompletedRequest_builder{
 				Namespace:                  p.Namespace,
-				TaskToken:                  response.TaskToken,
+				TaskToken:                  response.GetTaskToken(),
 				Identity:                   p.Identity,
 				Commands:                   commands,
 				Messages:                   workerToServerMessages,
 				ReturnNewWorkflowTask:      true,
 				ForceCreateNewWorkflowTask: opts.ForceNewWorkflowTask,
 				QueryResults:               getQueryResults(response.GetQueries(), opts.QueryResult),
-			})
+			}.Build())
 			return PollAndProcessWorkflowTaskResponse{NewTask: newTask}, err
 		}
 		// sticky taskqueue
 		newTask, err := p.Client.RespondWorkflowTaskCompleted(
 			NewContext(),
-			&workflowservice.RespondWorkflowTaskCompletedRequest{
+			workflowservice.RespondWorkflowTaskCompletedRequest_builder{
 				Namespace: p.Namespace,
-				TaskToken: response.TaskToken,
+				TaskToken: response.GetTaskToken(),
 				Identity:  p.Identity,
 				Commands:  commands,
-				StickyAttributes: &taskqueuepb.StickyExecutionAttributes{
+				StickyAttributes: taskqueuepb.StickyExecutionAttributes_builder{
 					WorkerTaskQueue:        p.StickyTaskQueue,
 					ScheduleToStartTimeout: durationpb.New(p.StickyScheduleToStartTimeout),
-				},
+				}.Build(),
 				ReturnNewWorkflowTask:      true,
 				ForceCreateNewWorkflowTask: opts.ForceNewWorkflowTask,
 				QueryResults:               getQueryResults(response.GetQueries(), opts.QueryResult),
-			},
+			}.Build(),
 		)
 
 		return PollAndProcessWorkflowTaskResponse{NewTask: newTask}, err
@@ -301,19 +301,19 @@ Loop:
 
 // HandlePartialWorkflowTask for workflow task
 func (p *TaskPoller) HandlePartialWorkflowTask(response *workflowservice.PollWorkflowTaskQueueResponse, forceCreateNewWorkflowTask bool) (*workflowservice.RespondWorkflowTaskCompletedResponse, error) {
-	if response == nil || len(response.TaskToken) == 0 {
+	if response == nil || len(response.GetTaskToken()) == 0 {
 		p.Logger.Info("Empty Workflow task: Polling again")
 		return nil, nil
 	}
 
 	var events []*historypb.HistoryEvent
-	history := response.History
+	history := response.GetHistory()
 	if history == nil {
 		p.Logger.Fatal("History is nil")
 		return nil, errors.New("history is nil")
 	}
 
-	events = history.Events
+	events = history.GetEvents()
 	if len(events) == 0 {
 		p.Logger.Fatal("History Events are empty")
 		return nil, errors.New("history events are empty")
@@ -326,13 +326,13 @@ func (p *TaskPoller) HandlePartialWorkflowTask(response *workflowservice.PollWor
 		workerToServerMessages, err = p.MessageHandler(response)
 		if err != nil {
 			p.Logger.Error("Failing workflow task. Workflow messages handler failed with error", tag.Error(err))
-			_, err = p.Client.RespondWorkflowTaskFailed(NewContext(), &workflowservice.RespondWorkflowTaskFailedRequest{
+			_, err = p.Client.RespondWorkflowTaskFailed(NewContext(), workflowservice.RespondWorkflowTaskFailedRequest_builder{
 				Namespace: p.Namespace,
-				TaskToken: response.TaskToken,
+				TaskToken: response.GetTaskToken(),
 				Cause:     enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE,
 				Failure:   newApplicationFailure(err, false, nil),
 				Identity:  p.Identity,
-			})
+			}.Build())
 			return nil, err
 		}
 	}
@@ -340,13 +340,13 @@ func (p *TaskPoller) HandlePartialWorkflowTask(response *workflowservice.PollWor
 	commands, err := p.WorkflowTaskHandler(response)
 	if err != nil {
 		p.Logger.Error("Failing workflow task. Workflow task handler failed with error", tag.Error(err))
-		_, err = p.Client.RespondWorkflowTaskFailed(NewContext(), &workflowservice.RespondWorkflowTaskFailedRequest{
+		_, err = p.Client.RespondWorkflowTaskFailed(NewContext(), workflowservice.RespondWorkflowTaskFailedRequest_builder{
 			Namespace: p.Namespace,
-			TaskToken: response.TaskToken,
+			TaskToken: response.GetTaskToken(),
 			Cause:     enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE,
 			Failure:   newApplicationFailure(err, false, nil),
 			Identity:  p.Identity,
-		})
+		}.Build())
 		return nil, err
 	}
 	if len(commands) > 0 {
@@ -359,19 +359,19 @@ func (p *TaskPoller) HandlePartialWorkflowTask(response *workflowservice.PollWor
 	// sticky taskqueue
 	newTask, err := p.Client.RespondWorkflowTaskCompleted(
 		NewContext(),
-		&workflowservice.RespondWorkflowTaskCompletedRequest{
+		workflowservice.RespondWorkflowTaskCompletedRequest_builder{
 			Namespace: p.Namespace,
-			TaskToken: response.TaskToken,
+			TaskToken: response.GetTaskToken(),
 			Identity:  p.Identity,
 			Commands:  commands,
 			Messages:  workerToServerMessages,
-			StickyAttributes: &taskqueuepb.StickyExecutionAttributes{
+			StickyAttributes: taskqueuepb.StickyExecutionAttributes_builder{
 				WorkerTaskQueue:        p.StickyTaskQueue,
 				ScheduleToStartTimeout: durationpb.New(p.StickyScheduleToStartTimeout),
-			},
+			}.Build(),
 			ReturnNewWorkflowTask:      true,
 			ForceCreateNewWorkflowTask: forceCreateNewWorkflowTask,
-		},
+		}.Build(),
 	)
 
 	return newTask, err
@@ -381,11 +381,11 @@ func (p *TaskPoller) HandlePartialWorkflowTask(response *workflowservice.PollWor
 func (p *TaskPoller) PollAndProcessActivityTask(dropTask bool) error {
 retry:
 	for attempt := 1; attempt <= 5; attempt++ {
-		response, err := p.Client.PollActivityTaskQueue(NewContext(), &workflowservice.PollActivityTaskQueueRequest{
+		response, err := p.Client.PollActivityTaskQueue(NewContext(), workflowservice.PollActivityTaskQueueRequest_builder{
 			Namespace: p.Namespace,
 			TaskQueue: p.TaskQueue,
 			Identity:  p.Identity,
-		})
+		}.Build())
 
 		if err == consts.ErrDuplicate {
 			p.Logger.Info("Duplicate Activity task: Polling again")
@@ -396,7 +396,7 @@ retry:
 			return err
 		}
 
-		if response == nil || len(response.TaskToken) == 0 {
+		if response == nil || len(response.GetTaskToken()) == 0 {
 			p.Logger.Info("Empty Activity task: Polling again")
 			continue retry
 		}
@@ -410,31 +410,31 @@ retry:
 		result, cancel, err2 := p.ActivityTaskHandler(response)
 		if cancel {
 			p.Logger.Info("Executing RespondActivityTaskCanceled")
-			_, err := p.Client.RespondActivityTaskCanceled(NewContext(), &workflowservice.RespondActivityTaskCanceledRequest{
+			_, err := p.Client.RespondActivityTaskCanceled(NewContext(), workflowservice.RespondActivityTaskCanceledRequest_builder{
 				Namespace: p.Namespace,
-				TaskToken: response.TaskToken,
+				TaskToken: response.GetTaskToken(),
 				Details:   payloads.EncodeString("details"),
 				Identity:  p.Identity,
-			})
+			}.Build())
 			return err
 		}
 
 		if err2 != nil {
-			_, err := p.Client.RespondActivityTaskFailed(NewContext(), &workflowservice.RespondActivityTaskFailedRequest{
+			_, err := p.Client.RespondActivityTaskFailed(NewContext(), workflowservice.RespondActivityTaskFailedRequest_builder{
 				Namespace: p.Namespace,
-				TaskToken: response.TaskToken,
+				TaskToken: response.GetTaskToken(),
 				Failure:   newApplicationFailure(err2, false, nil),
 				Identity:  p.Identity,
-			})
+			}.Build())
 			return err
 		}
 
-		_, err = p.Client.RespondActivityTaskCompleted(NewContext(), &workflowservice.RespondActivityTaskCompletedRequest{
+		_, err = p.Client.RespondActivityTaskCompleted(NewContext(), workflowservice.RespondActivityTaskCompletedRequest_builder{
 			Namespace: p.Namespace,
-			TaskToken: response.TaskToken,
+			TaskToken: response.GetTaskToken(),
 			Identity:  p.Identity,
 			Result:    result,
-		})
+		}.Build())
 		return err
 	}
 
@@ -445,11 +445,11 @@ retry:
 func (p *TaskPoller) PollAndProcessActivityTaskWithID(dropTask bool) error {
 retry:
 	for attempt := 1; attempt <= 5; attempt++ {
-		response, err1 := p.Client.PollActivityTaskQueue(NewContext(), &workflowservice.PollActivityTaskQueueRequest{
+		response, err1 := p.Client.PollActivityTaskQueue(NewContext(), workflowservice.PollActivityTaskQueueRequest_builder{
 			Namespace: p.Namespace,
 			TaskQueue: p.TaskQueue,
 			Identity:  p.Identity,
-		})
+		}.Build())
 
 		if err1 == consts.ErrDuplicate {
 			p.Logger.Info("Duplicate Activity task: Polling again")
@@ -460,7 +460,7 @@ retry:
 			return err1
 		}
 
-		if response == nil || len(response.TaskToken) == 0 {
+		if response == nil || len(response.GetTaskToken()) == 0 {
 			p.Logger.Info("Empty Activity task: Polling again")
 			return nil
 		}
@@ -479,37 +479,37 @@ retry:
 		result, cancel, err2 := p.ActivityTaskHandler(response)
 		if cancel {
 			p.Logger.Info("Executing RespondActivityTaskCanceled")
-			_, err := p.Client.RespondActivityTaskCanceledById(NewContext(), &workflowservice.RespondActivityTaskCanceledByIdRequest{
+			_, err := p.Client.RespondActivityTaskCanceledById(NewContext(), workflowservice.RespondActivityTaskCanceledByIdRequest_builder{
 				Namespace:  p.Namespace,
-				WorkflowId: response.WorkflowExecution.GetWorkflowId(),
-				RunId:      response.WorkflowExecution.GetRunId(),
+				WorkflowId: response.GetWorkflowExecution().GetWorkflowId(),
+				RunId:      response.GetWorkflowExecution().GetRunId(),
 				ActivityId: response.GetActivityId(),
 				Details:    payloads.EncodeString("details"),
 				Identity:   p.Identity,
-			})
+			}.Build())
 			return err
 		}
 
 		if err2 != nil {
-			_, err := p.Client.RespondActivityTaskFailedById(NewContext(), &workflowservice.RespondActivityTaskFailedByIdRequest{
+			_, err := p.Client.RespondActivityTaskFailedById(NewContext(), workflowservice.RespondActivityTaskFailedByIdRequest_builder{
 				Namespace:  p.Namespace,
-				WorkflowId: response.WorkflowExecution.GetWorkflowId(),
-				RunId:      response.WorkflowExecution.GetRunId(),
+				WorkflowId: response.GetWorkflowExecution().GetWorkflowId(),
+				RunId:      response.GetWorkflowExecution().GetRunId(),
 				ActivityId: response.GetActivityId(),
 				Failure:    newApplicationFailure(err2, false, nil),
 				Identity:   p.Identity,
-			})
+			}.Build())
 			return err
 		}
 
-		_, err := p.Client.RespondActivityTaskCompletedById(NewContext(), &workflowservice.RespondActivityTaskCompletedByIdRequest{
+		_, err := p.Client.RespondActivityTaskCompletedById(NewContext(), workflowservice.RespondActivityTaskCompletedByIdRequest_builder{
 			Namespace:  p.Namespace,
-			WorkflowId: response.WorkflowExecution.GetWorkflowId(),
-			RunId:      response.WorkflowExecution.GetRunId(),
+			WorkflowId: response.GetWorkflowExecution().GetWorkflowId(),
+			RunId:      response.GetWorkflowExecution().GetRunId(),
 			ActivityId: response.GetActivityId(),
 			Identity:   p.Identity,
 			Result:     result,
-		})
+		}.Build())
 		return err
 	}
 
@@ -530,15 +530,15 @@ func newApplicationFailure(err error, nonRetryable bool, details *commonpb.Paylo
 		nonRetryable = applicationErr.NonRetryable()
 	}
 
-	f := &failurepb.Failure{
+	f := failurepb.Failure_builder{
 		Message: err.Error(),
 		Source:  "Functional Tests",
-		FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+		ApplicationFailureInfo: failurepb.ApplicationFailureInfo_builder{
 			Type:         getErrorType(err),
 			NonRetryable: nonRetryable,
 			Details:      details,
-		}},
-	}
+		}.Build(),
+	}.Build()
 
 	return f
 }

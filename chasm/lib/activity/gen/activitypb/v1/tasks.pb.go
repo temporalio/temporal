@@ -8,7 +8,6 @@ package activitypb
 
 import (
 	reflect "reflect"
-	sync "sync"
 	unsafe "unsafe"
 
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -23,11 +22,10 @@ const (
 )
 
 type ActivityDispatchTask struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// The current stamp for this activity execution. Used for task validation. See also [ActivityAttemptState].
-	Stamp         int32 `protobuf:"varint,1,opt,name=stamp,proto3" json:"stamp,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state            protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Stamp int32                  `protobuf:"varint,1,opt,name=stamp,proto3"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *ActivityDispatchTask) Reset() {
@@ -55,24 +53,37 @@ func (x *ActivityDispatchTask) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ActivityDispatchTask.ProtoReflect.Descriptor instead.
-func (*ActivityDispatchTask) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_rawDescGZIP(), []int{0}
-}
-
 func (x *ActivityDispatchTask) GetStamp() int32 {
 	if x != nil {
-		return x.Stamp
+		return x.xxx_hidden_Stamp
 	}
 	return 0
 }
 
-type ScheduleToStartTimeoutTask struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
+func (x *ActivityDispatchTask) SetStamp(v int32) {
+	x.xxx_hidden_Stamp = v
+}
+
+type ActivityDispatchTask_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
 	// The current stamp for this activity execution. Used for task validation. See also [ActivityAttemptState].
-	Stamp         int32 `protobuf:"varint,1,opt,name=stamp,proto3" json:"stamp,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Stamp int32
+}
+
+func (b0 ActivityDispatchTask_builder) Build() *ActivityDispatchTask {
+	m0 := &ActivityDispatchTask{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Stamp = b.Stamp
+	return m0
+}
+
+type ScheduleToStartTimeoutTask struct {
+	state            protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Stamp int32                  `protobuf:"varint,1,opt,name=stamp,proto3"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *ScheduleToStartTimeoutTask) Reset() {
@@ -100,20 +111,34 @@ func (x *ScheduleToStartTimeoutTask) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ScheduleToStartTimeoutTask.ProtoReflect.Descriptor instead.
-func (*ScheduleToStartTimeoutTask) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_rawDescGZIP(), []int{1}
-}
-
 func (x *ScheduleToStartTimeoutTask) GetStamp() int32 {
 	if x != nil {
-		return x.Stamp
+		return x.xxx_hidden_Stamp
 	}
 	return 0
 }
 
+func (x *ScheduleToStartTimeoutTask) SetStamp(v int32) {
+	x.xxx_hidden_Stamp = v
+}
+
+type ScheduleToStartTimeoutTask_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// The current stamp for this activity execution. Used for task validation. See also [ActivityAttemptState].
+	Stamp int32
+}
+
+func (b0 ScheduleToStartTimeoutTask_builder) Build() *ScheduleToStartTimeoutTask {
+	m0 := &ScheduleToStartTimeoutTask{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Stamp = b.Stamp
+	return m0
+}
+
 type ScheduleToCloseTimeoutTask struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -143,17 +168,23 @@ func (x *ScheduleToCloseTimeoutTask) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ScheduleToCloseTimeoutTask.ProtoReflect.Descriptor instead.
-func (*ScheduleToCloseTimeoutTask) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_rawDescGZIP(), []int{2}
+type ScheduleToCloseTimeoutTask_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+}
+
+func (b0 ScheduleToCloseTimeoutTask_builder) Build() *ScheduleToCloseTimeoutTask {
+	m0 := &ScheduleToCloseTimeoutTask{}
+	b, x := &b0, m0
+	_, _ = b, x
+	return m0
 }
 
 type StartToCloseTimeoutTask struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// The current stamp for this activity execution. Used for task validation. See also [ActivityAttemptState].
-	Stamp         int32 `protobuf:"varint,1,opt,name=stamp,proto3" json:"stamp,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state            protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Stamp int32                  `protobuf:"varint,1,opt,name=stamp,proto3"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *StartToCloseTimeoutTask) Reset() {
@@ -181,25 +212,38 @@ func (x *StartToCloseTimeoutTask) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use StartToCloseTimeoutTask.ProtoReflect.Descriptor instead.
-func (*StartToCloseTimeoutTask) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_rawDescGZIP(), []int{3}
-}
-
 func (x *StartToCloseTimeoutTask) GetStamp() int32 {
 	if x != nil {
-		return x.Stamp
+		return x.xxx_hidden_Stamp
 	}
 	return 0
 }
 
+func (x *StartToCloseTimeoutTask) SetStamp(v int32) {
+	x.xxx_hidden_Stamp = v
+}
+
+type StartToCloseTimeoutTask_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// The current stamp for this activity execution. Used for task validation. See also [ActivityAttemptState].
+	Stamp int32
+}
+
+func (b0 StartToCloseTimeoutTask_builder) Build() *StartToCloseTimeoutTask {
+	m0 := &StartToCloseTimeoutTask{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Stamp = b.Stamp
+	return m0
+}
+
 // HeartbeatTimeoutTask is a pure task that enforces heartbeat timeouts.
 type HeartbeatTimeoutTask struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// The current stamp for this activity execution. Used for task validation. See also [ActivityAttemptState].
-	Stamp         int32 `protobuf:"varint,1,opt,name=stamp,proto3" json:"stamp,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state            protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Stamp int32                  `protobuf:"varint,1,opt,name=stamp,proto3"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *HeartbeatTimeoutTask) Reset() {
@@ -227,16 +271,30 @@ func (x *HeartbeatTimeoutTask) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use HeartbeatTimeoutTask.ProtoReflect.Descriptor instead.
-func (*HeartbeatTimeoutTask) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_rawDescGZIP(), []int{4}
-}
-
 func (x *HeartbeatTimeoutTask) GetStamp() int32 {
 	if x != nil {
-		return x.Stamp
+		return x.xxx_hidden_Stamp
 	}
 	return 0
+}
+
+func (x *HeartbeatTimeoutTask) SetStamp(v int32) {
+	x.xxx_hidden_Stamp = v
+}
+
+type HeartbeatTimeoutTask_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// The current stamp for this activity execution. Used for task validation. See also [ActivityAttemptState].
+	Stamp int32
+}
+
+func (b0 HeartbeatTimeoutTask_builder) Build() *HeartbeatTimeoutTask {
+	m0 := &HeartbeatTimeoutTask{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Stamp = b.Stamp
+	return m0
 }
 
 var File_temporal_server_chasm_lib_activity_proto_v1_tasks_proto protoreflect.FileDescriptor
@@ -253,18 +311,6 @@ const file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_rawDesc = "" 
 	"\x05stamp\x18\x01 \x01(\x05R\x05stamp\",\n" +
 	"\x14HeartbeatTimeoutTask\x12\x14\n" +
 	"\x05stamp\x18\x01 \x01(\x05R\x05stampBDZBgo.temporal.io/server/chasm/lib/activity/gen/activitypb;activitypbb\x06proto3"
-
-var (
-	file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_rawDescOnce sync.Once
-	file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_rawDescData []byte
-)
-
-func file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_rawDescGZIP() []byte {
-	file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_rawDescOnce.Do(func() {
-		file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_rawDesc), len(file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_rawDesc)))
-	})
-	return file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_rawDescData
-}
 
 var file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_goTypes = []any{

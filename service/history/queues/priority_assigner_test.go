@@ -52,7 +52,7 @@ func (s *priorityAssignerSuite) TestAssign_SelectedTaskTypes() {
 
 	// Create a local namespace that is active in "current" cluster
 	ns := namespace.NewLocalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Id: "test-namespace-id"},
+		persistencespb.NamespaceInfo_builder{Id: "test-namespace-id"}.Build(),
 		nil,
 		"current",
 	)
@@ -68,7 +68,7 @@ func (s *priorityAssignerSuite) TestAssign_UnknownTaskTypes() {
 
 	// Create a local namespace that is active in "current" cluster
 	ns := namespace.NewLocalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Id: "test-namespace-id"},
+		persistencespb.NamespaceInfo_builder{Id: "test-namespace-id"}.Build(),
 		nil,
 		"current",
 	)
@@ -91,7 +91,7 @@ func (s *priorityAssignerSuite) TestAssign_HighPriorityTaskTypes() {
 
 		// Create a local namespace that is active in "current" cluster
 		ns := namespace.NewLocalNamespaceForTest(
-			&persistencespb.NamespaceInfo{Id: "test-namespace-id"},
+			persistencespb.NamespaceInfo_builder{Id: "test-namespace-id"}.Build(),
 			nil,
 			"current",
 		)
@@ -115,7 +115,7 @@ func (s *priorityAssignerSuite) TestAssign_BackgroundPriorityTaskTypes() {
 
 		// Create a local namespace that is active in "current" cluster
 		ns := namespace.NewLocalNamespaceForTest(
-			&persistencespb.NamespaceInfo{Id: "test-namespace-id"},
+			persistencespb.NamespaceInfo_builder{Id: "test-namespace-id"}.Build(),
 			nil,
 			"current",
 		)
@@ -138,7 +138,7 @@ func (s *priorityAssignerSuite) TestAssign_LowPriorityTaskTypes() {
 
 		// Create a local namespace that is active in "current" cluster
 		ns := namespace.NewLocalNamespaceForTest(
-			&persistencespb.NamespaceInfo{Id: "test-namespace-id"},
+			persistencespb.NamespaceInfo_builder{Id: "test-namespace-id"}.Build(),
 			nil,
 			"current",
 		)
@@ -154,12 +154,12 @@ func (s *priorityAssignerSuite) TestAssign_StandbyNamespace() {
 
 	// Create a global namespace with active cluster as "other", not "current"
 	ns := namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Id: "test-namespace-id"},
+		persistencespb.NamespaceInfo_builder{Id: "test-namespace-id"}.Build(),
 		nil,
-		&persistencespb.NamespaceReplicationConfig{
+		persistencespb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: "other",
 			Clusters:          []string{"current", "other"},
-		},
+		}.Build(),
 		1,
 	)
 	s.nsRegistry.EXPECT().GetNamespaceByID(namespace.ID("test-namespace-id")).Return(ns, nil).Times(1)
@@ -184,12 +184,12 @@ func (s *priorityAssignerSuite) TestAssign_ActiveNamespaceHighPriority() {
 
 	// Create a global namespace with active cluster as "current"
 	ns := namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Id: "test-namespace-id"},
+		persistencespb.NamespaceInfo_builder{Id: "test-namespace-id"}.Build(),
 		nil,
-		&persistencespb.NamespaceReplicationConfig{
+		persistencespb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: "current",
 			Clusters:          []string{"current", "other"},
-		},
+		}.Build(),
 		1,
 	)
 	s.nsRegistry.EXPECT().GetNamespaceByID(namespace.ID("test-namespace-id")).Return(ns, nil).Times(1)

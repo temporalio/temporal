@@ -111,10 +111,10 @@ func (s *TaskQueueSuite) taskQueueRateLimitTest(nPartitions, nWorkers int, timeT
 	var wfList []*workflowpb.WorkflowExecutionInfo
 	s.Eventually(
 		func() bool {
-			listResp, err := s.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+			listResp, err := s.FrontendClient().ListWorkflowExecutions(ctx, workflowservice.ListWorkflowExecutionsRequest_builder{
 				Namespace: s.Namespace().String(),
 				Query:     fmt.Sprintf("TaskQueue = '%s'", tv.TaskQueue().GetName()),
-			})
+			}.Build())
 			s.NoError(err)
 			wfList = listResp.GetExecutions()
 			return len(wfList) == maxBacklog
@@ -124,12 +124,12 @@ func (s *TaskQueueSuite) taskQueueRateLimitTest(nPartitions, nWorkers int, timeT
 	)
 
 	for _, exec := range wfList {
-		_, err := s.FrontendClient().TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
+		_, err := s.FrontendClient().TerminateWorkflowExecution(ctx, workflowservice.TerminateWorkflowExecutionRequest_builder{
 			Namespace:         s.Namespace().String(),
-			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: exec.GetExecution().GetWorkflowId(), RunId: exec.GetExecution().GetRunId()},
+			WorkflowExecution: commonpb.WorkflowExecution_builder{WorkflowId: exec.GetExecution().GetWorkflowId(), RunId: exec.GetExecution().GetRunId()}.Build(),
 			Reason:            "test",
 			Identity:          tv.ClientIdentity(),
-		})
+		}.Build())
 		s.NoError(err)
 	}
 
@@ -155,12 +155,12 @@ func (s *TaskQueueSuite) taskQueueRateLimitTest(nPartitions, nWorkers int, timeT
 }
 
 func (s *TaskQueueSuite) getBacklogCount(ctx context.Context, tv *testvars.TestVars) int64 {
-	resp, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+	resp, err := s.FrontendClient().DescribeTaskQueue(ctx, workflowservice.DescribeTaskQueueRequest_builder{
 		Namespace:   s.Namespace().String(),
 		TaskQueue:   tv.TaskQueue(),
 		ApiMode:     enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED,
 		ReportStats: true,
-	})
+	}.Build())
 	s.NoError(err)
 	return resp.GetVersionsInfo()[""].GetTypesInfo()[sdkclient.TaskQueueTypeWorkflow].GetStats().GetApproximateBacklogCount()
 }
@@ -193,16 +193,16 @@ func (s *TaskQueueSuite) configureRateLimitAndLaunchWorkflows(
 ) (ctx context.Context, cancel context.CancelFunc, activityWorker worker.Worker, wfWorker worker.Worker) {
 	tv := testvars.New(s.T())
 	// Apply API rate limit on `activityTaskQueue`
-	_, err := s.FrontendClient().UpdateTaskQueueConfig(context.Background(), &workflowservice.UpdateTaskQueueConfigRequest{
+	_, err := s.FrontendClient().UpdateTaskQueueConfig(context.Background(), workflowservice.UpdateTaskQueueConfigRequest_builder{
 		Namespace:     s.Namespace().String(),
 		Identity:      tv.ClientIdentity(),
 		TaskQueue:     activityTaskQueue,
 		TaskQueueType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
-		UpdateQueueRateLimit: &workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate{
-			RateLimit: &taskqueuepb.RateLimit{RequestsPerSecond: float32(apiRPS)},
+		UpdateQueueRateLimit: workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate_builder{
+			RateLimit: taskqueuepb.RateLimit_builder{RequestsPerSecond: float32(apiRPS)}.Build(),
 			Reason:    "Test API override",
-		},
-	})
+		}.Build(),
+	}.Build())
 	s.NoError(err)
 
 	wg.Add(taskCount)
@@ -440,25 +440,25 @@ func (s *TaskQueueSuite) TestTaskQueueRateLimit_UpdateFromWorkerConfigAndAPI() {
 	wg.Add(taskCount)
 
 	//  Apply API rate limit override workerSetRPS to set the effective RPS to apiSetRPS
-	_, err := s.FrontendClient().UpdateTaskQueueConfig(context.Background(), &workflowservice.UpdateTaskQueueConfigRequest{
+	_, err := s.FrontendClient().UpdateTaskQueueConfig(context.Background(), workflowservice.UpdateTaskQueueConfigRequest_builder{
 		Namespace:     s.Namespace().String(),
 		Identity:      tv.ClientIdentity(),
 		TaskQueue:     activityTaskQueue,
 		TaskQueueType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
-		UpdateQueueRateLimit: &workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate{
-			RateLimit: &taskqueuepb.RateLimit{RequestsPerSecond: float32(apiSetRPS)},
+		UpdateQueueRateLimit: workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate_builder{
+			RateLimit: taskqueuepb.RateLimit_builder{RequestsPerSecond: float32(apiSetRPS)}.Build(),
 			Reason:    "test api override",
-		},
-	})
+		}.Build(),
+	}.Build())
 	s.NoError(err)
 
 	require.Eventually(s.T(), func() bool {
-		describeResp, err := s.FrontendClient().DescribeTaskQueue(context.Background(), &workflowservice.DescribeTaskQueueRequest{
+		describeResp, err := s.FrontendClient().DescribeTaskQueue(context.Background(), workflowservice.DescribeTaskQueueRequest_builder{
 			Namespace:     s.Namespace().String(),
-			TaskQueue:     &taskqueuepb.TaskQueue{Name: activityTaskQueue},
+			TaskQueue:     taskqueuepb.TaskQueue_builder{Name: activityTaskQueue}.Build(),
 			TaskQueueType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
 			ReportConfig:  true,
-		})
+		}.Build())
 		if err != nil {
 			return false
 		}
@@ -513,20 +513,20 @@ func (s *TaskQueueSuite) TestWholeQueueLimit_TighterThanPerKeyDefault_IsEnforced
 	defer cancel()
 
 	// configure task queue
-	_, err := s.FrontendClient().UpdateTaskQueueConfig(ctx, &workflowservice.UpdateTaskQueueConfigRequest{
+	_, err := s.FrontendClient().UpdateTaskQueueConfig(ctx, workflowservice.UpdateTaskQueueConfigRequest_builder{
 		Namespace:     s.Namespace().String(),
 		Identity:      tv.ClientIdentity(),
 		TaskQueue:     tv.TaskQueue().GetName(),
 		TaskQueueType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
-		UpdateQueueRateLimit: &workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate{
-			RateLimit: &taskqueuepb.RateLimit{RequestsPerSecond: float32(wholeQueueRPS)},
+		UpdateQueueRateLimit: workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate_builder{
+			RateLimit: taskqueuepb.RateLimit_builder{RequestsPerSecond: float32(wholeQueueRPS)}.Build(),
 			Reason:    "test: whole-queue limit",
-		},
-		UpdateFairnessKeyRateLimitDefault: &workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate{
-			RateLimit: &taskqueuepb.RateLimit{RequestsPerSecond: float32(perKeyRPS)},
+		}.Build(),
+		UpdateFairnessKeyRateLimitDefault: workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate_builder{
+			RateLimit: taskqueuepb.RateLimit_builder{RequestsPerSecond: float32(perKeyRPS)}.Build(),
 			Reason:    "test: per-key default",
-		},
-	})
+		}.Build(),
+	}.Build())
 	s.NoError(err)
 
 	_, allTimes := s.runActivitiesWithPriorities(ctx, tv, fairnessKeysWithWeight, tasksPerKey)
@@ -562,20 +562,20 @@ func (s *TaskQueueSuite) TestPerKeyRateLimit_Default_IsEnforcedAcrossThreeKeys()
 	defer cancel()
 
 	// configure task queue
-	_, err := s.FrontendClient().UpdateTaskQueueConfig(ctx, &workflowservice.UpdateTaskQueueConfigRequest{
+	_, err := s.FrontendClient().UpdateTaskQueueConfig(ctx, workflowservice.UpdateTaskQueueConfigRequest_builder{
 		Namespace:     s.Namespace().String(),
 		Identity:      tv.ClientIdentity(),
 		TaskQueue:     tv.TaskQueue().GetName(),
 		TaskQueueType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
-		UpdateQueueRateLimit: &workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate{
-			RateLimit: &taskqueuepb.RateLimit{RequestsPerSecond: float32(wholeQueueRPS)},
+		UpdateQueueRateLimit: workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate_builder{
+			RateLimit: taskqueuepb.RateLimit_builder{RequestsPerSecond: float32(wholeQueueRPS)}.Build(),
 			Reason:    "test: whole-queue limit",
-		},
-		UpdateFairnessKeyRateLimitDefault: &workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate{
-			RateLimit: &taskqueuepb.RateLimit{RequestsPerSecond: float32(perKeyRPS)},
+		}.Build(),
+		UpdateFairnessKeyRateLimitDefault: workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate_builder{
+			RateLimit: taskqueuepb.RateLimit_builder{RequestsPerSecond: float32(perKeyRPS)}.Build(),
 			Reason:    "test: per-key default",
-		},
-	})
+		}.Build(),
+	}.Build())
 	s.NoError(err)
 
 	perKeyTimes, _ := s.runActivitiesWithPriorities(ctx, tv, fairnessKeysWithWeight, tasksPerKey)
@@ -619,21 +619,21 @@ func (s *TaskQueueSuite) TestPerKeyRateLimit_WeightOverride_IsEnforcedAcrossThre
 	defer cancel()
 
 	// configure task queue
-	_, err := s.FrontendClient().UpdateTaskQueueConfig(ctx, &workflowservice.UpdateTaskQueueConfigRequest{
+	_, err := s.FrontendClient().UpdateTaskQueueConfig(ctx, workflowservice.UpdateTaskQueueConfigRequest_builder{
 		Namespace:     s.Namespace().String(),
 		Identity:      tv.ClientIdentity(),
 		TaskQueue:     tv.TaskQueue().GetName(),
 		TaskQueueType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
-		UpdateQueueRateLimit: &workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate{
-			RateLimit: &taskqueuepb.RateLimit{RequestsPerSecond: float32(wholeQueueRPS)},
+		UpdateQueueRateLimit: workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate_builder{
+			RateLimit: taskqueuepb.RateLimit_builder{RequestsPerSecond: float32(wholeQueueRPS)}.Build(),
 			Reason:    "test: whole-queue limit",
-		},
-		UpdateFairnessKeyRateLimitDefault: &workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate{
-			RateLimit: &taskqueuepb.RateLimit{RequestsPerSecond: float32(perKeyRPS)},
+		}.Build(),
+		UpdateFairnessKeyRateLimitDefault: workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate_builder{
+			RateLimit: taskqueuepb.RateLimit_builder{RequestsPerSecond: float32(perKeyRPS)}.Build(),
 			Reason:    "test: per-key default",
-		},
+		}.Build(),
 		SetFairnessWeightOverrides: fairnessWeightOverrides,
-	})
+	}.Build())
 	s.NoError(err)
 
 	perKeyTimes, _ := s.runActivitiesWithPriorities(ctx, tv, fairnessKeysWithWeight, tasksPerKey)
@@ -669,72 +669,72 @@ func (s *TaskQueueSuite) TestUpdateAndDescribeTaskQueueConfig() {
 
 	// Send update.
 	tv := testvars.New(s.T())
-	taskQueueName := tv.TaskQueue().Name
+	taskQueueName := tv.TaskQueue().GetName()
 	namespace := s.Namespace().String()
 	taskQueueType := enumspb.TASK_QUEUE_TYPE_ACTIVITY
 	updateRPS := float32(42)
 	updateReason := "frontend-update-test"
 	updateIdentity := "test-identity"
 	fairnessOverrides := map[string]float32{"k1": 1.0, "k2": 1.5, "k3": 2.0, "k4": 0.5, "k5": 3.0}
-	updateReq := &workflowservice.UpdateTaskQueueConfigRequest{
+	updateReq := workflowservice.UpdateTaskQueueConfigRequest_builder{
 		Namespace:     namespace,
 		Identity:      updateIdentity,
 		TaskQueue:     taskQueueName,
 		TaskQueueType: taskQueueType,
-		UpdateQueueRateLimit: &workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate{
-			RateLimit: &taskqueuepb.RateLimit{
+		UpdateQueueRateLimit: workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate_builder{
+			RateLimit: taskqueuepb.RateLimit_builder{
 				RequestsPerSecond: updateRPS,
-			},
+			}.Build(),
 			Reason: updateReason,
-		},
-		UpdateFairnessKeyRateLimitDefault: &workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate{
-			RateLimit: &taskqueuepb.RateLimit{
+		}.Build(),
+		UpdateFairnessKeyRateLimitDefault: workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate_builder{
+			RateLimit: taskqueuepb.RateLimit_builder{
 				RequestsPerSecond: updateRPS,
-			},
+			}.Build(),
 			Reason: updateReason,
-		},
+		}.Build(),
 		SetFairnessWeightOverrides: fairnessOverrides,
-	}
+	}.Build()
 	updateResp, err := s.FrontendClient().UpdateTaskQueueConfig(testcore.NewContext(), updateReq)
 	s.NoError(err)
 	s.NotNil(updateResp)
-	s.NotNil(updateResp.Config)
-	s.Equal(updateRPS, updateResp.Config.QueueRateLimit.RateLimit.RequestsPerSecond)
-	s.Equal(updateReason, updateResp.Config.QueueRateLimit.Metadata.Reason)
-	s.Equal(updateIdentity, updateResp.Config.QueueRateLimit.Metadata.UpdateIdentity)
-	s.Equal(updateRPS, updateResp.Config.FairnessKeysRateLimitDefault.RateLimit.RequestsPerSecond)
-	s.Equal(updateReason, updateResp.Config.FairnessKeysRateLimitDefault.Metadata.Reason)
-	s.Equal(updateIdentity, updateResp.Config.FairnessKeysRateLimitDefault.Metadata.UpdateIdentity)
-	s.Equal(fairnessOverrides, updateResp.Config.FairnessWeightOverrides)
+	s.NotNil(updateResp.GetConfig())
+	s.Equal(updateRPS, updateResp.GetConfig().GetQueueRateLimit().GetRateLimit().GetRequestsPerSecond())
+	s.Equal(updateReason, updateResp.GetConfig().GetQueueRateLimit().GetMetadata().GetReason())
+	s.Equal(updateIdentity, updateResp.GetConfig().GetQueueRateLimit().GetMetadata().GetUpdateIdentity())
+	s.Equal(updateRPS, updateResp.GetConfig().GetFairnessKeysRateLimitDefault().GetRateLimit().GetRequestsPerSecond())
+	s.Equal(updateReason, updateResp.GetConfig().GetFairnessKeysRateLimitDefault().GetMetadata().GetReason())
+	s.Equal(updateIdentity, updateResp.GetConfig().GetFairnessKeysRateLimitDefault().GetMetadata().GetUpdateIdentity())
+	s.Equal(fairnessOverrides, updateResp.GetConfig().GetFairnessWeightOverrides())
 
 	// Request describe.
-	describeReq := &workflowservice.DescribeTaskQueueRequest{
+	describeReq := workflowservice.DescribeTaskQueueRequest_builder{
 		Namespace:     namespace,
-		TaskQueue:     &taskqueuepb.TaskQueue{Name: taskQueueName},
+		TaskQueue:     taskqueuepb.TaskQueue_builder{Name: taskQueueName}.Build(),
 		TaskQueueType: taskQueueType,
 		ReportConfig:  true,
-	}
+	}.Build()
 	describeResp, err := s.FrontendClient().DescribeTaskQueue(testcore.NewContext(), describeReq)
 	s.NoError(err)
 	s.NotNil(describeResp)
-	s.NotNil(describeResp.Config)
-	s.NotNil(describeResp.Config.QueueRateLimit)
-	s.Equal(updateRPS, describeResp.Config.QueueRateLimit.RateLimit.RequestsPerSecond)
-	s.Equal(updateReason, describeResp.Config.QueueRateLimit.Metadata.Reason)
-	s.Equal(updateIdentity, updateResp.Config.QueueRateLimit.Metadata.UpdateIdentity)
-	s.Equal(updateRPS, describeResp.Config.FairnessKeysRateLimitDefault.RateLimit.RequestsPerSecond)
-	s.Equal(updateReason, describeResp.Config.FairnessKeysRateLimitDefault.Metadata.Reason)
-	s.Equal(updateIdentity, updateResp.Config.FairnessKeysRateLimitDefault.Metadata.UpdateIdentity)
-	s.Equal(fairnessOverrides, describeResp.Config.FairnessWeightOverrides)
+	s.NotNil(describeResp.GetConfig())
+	s.NotNil(describeResp.GetConfig().GetQueueRateLimit())
+	s.Equal(updateRPS, describeResp.GetConfig().GetQueueRateLimit().GetRateLimit().GetRequestsPerSecond())
+	s.Equal(updateReason, describeResp.GetConfig().GetQueueRateLimit().GetMetadata().GetReason())
+	s.Equal(updateIdentity, updateResp.GetConfig().GetQueueRateLimit().GetMetadata().GetUpdateIdentity())
+	s.Equal(updateRPS, describeResp.GetConfig().GetFairnessKeysRateLimitDefault().GetRateLimit().GetRequestsPerSecond())
+	s.Equal(updateReason, describeResp.GetConfig().GetFairnessKeysRateLimitDefault().GetMetadata().GetReason())
+	s.Equal(updateIdentity, updateResp.GetConfig().GetFairnessKeysRateLimitDefault().GetMetadata().GetUpdateIdentity())
+	s.Equal(fairnessOverrides, describeResp.GetConfig().GetFairnessWeightOverrides())
 
 	// Attempt to exceed the maximum allowed fairness weight overrides.
-	exceedReq := &workflowservice.UpdateTaskQueueConfigRequest{
+	exceedReq := workflowservice.UpdateTaskQueueConfigRequest_builder{
 		Namespace:                  namespace,
 		Identity:                   updateIdentity,
 		TaskQueue:                  taskQueueName,
 		TaskQueueType:              taskQueueType,
 		SetFairnessWeightOverrides: map[string]float32{"k6": 1.0}, // Exceeds the limit of 5
-	}
+	}.Build()
 	_, err = s.FrontendClient().UpdateTaskQueueConfig(testcore.NewContext(), exceedReq)
 	s.Error(err)
 	s.ErrorContains(err, "fairness weight overrides update rejected")
@@ -742,12 +742,12 @@ func (s *TaskQueueSuite) TestUpdateAndDescribeTaskQueueConfig() {
 	// Verify no change after rejected update.
 	describeResp, err = s.FrontendClient().DescribeTaskQueue(testcore.NewContext(), describeReq)
 	s.NoError(err)
-	s.Equal(fairnessOverrides, describeResp.Config.FairnessWeightOverrides)
+	s.Equal(fairnessOverrides, describeResp.GetConfig().GetFairnessWeightOverrides())
 }
 
 func (s *TaskQueueSuite) TestUpdateUnsetAndDescribeTaskQueueConfig() {
 	tv := testvars.New(s.T())
-	taskQueueName := tv.TaskQueue().Name
+	taskQueueName := tv.TaskQueue().GetName()
 	namespace := s.Namespace().String()
 	taskQueueType := enumspb.TASK_QUEUE_TYPE_ACTIVITY
 	updateRPS := float32(42)
@@ -756,78 +756,78 @@ func (s *TaskQueueSuite) TestUpdateUnsetAndDescribeTaskQueueConfig() {
 	unsetReasonFairness := "unset fairness key rate limit"
 	updateIdentity := "test-identity"
 	// Set rate limit via UpdateTaskQueueConfig api.
-	updateReq := &workflowservice.UpdateTaskQueueConfigRequest{
+	updateReq := workflowservice.UpdateTaskQueueConfigRequest_builder{
 		Namespace:     namespace,
 		Identity:      updateIdentity,
 		TaskQueue:     taskQueueName,
 		TaskQueueType: taskQueueType,
-		UpdateQueueRateLimit: &workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate{
-			RateLimit: &taskqueuepb.RateLimit{
+		UpdateQueueRateLimit: workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate_builder{
+			RateLimit: taskqueuepb.RateLimit_builder{
 				RequestsPerSecond: updateRPS,
-			},
+			}.Build(),
 			Reason: updateReason,
-		},
-		UpdateFairnessKeyRateLimitDefault: &workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate{
-			RateLimit: &taskqueuepb.RateLimit{
+		}.Build(),
+		UpdateFairnessKeyRateLimitDefault: workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate_builder{
+			RateLimit: taskqueuepb.RateLimit_builder{
 				RequestsPerSecond: updateRPS,
-			},
+			}.Build(),
 			Reason: updateReason,
-		},
-	}
+		}.Build(),
+	}.Build()
 	updateResp, err := s.FrontendClient().UpdateTaskQueueConfig(testcore.NewContext(), updateReq)
 	s.NoError(err)
 	s.NotNil(updateResp)
-	s.NotNil(updateResp.Config)
-	s.Equal(updateRPS, updateResp.Config.QueueRateLimit.RateLimit.RequestsPerSecond)
-	s.Equal(updateReason, updateResp.Config.QueueRateLimit.Metadata.Reason)
-	s.Equal(updateIdentity, updateResp.Config.QueueRateLimit.Metadata.UpdateIdentity)
-	s.Equal(updateRPS, updateResp.Config.FairnessKeysRateLimitDefault.RateLimit.RequestsPerSecond)
-	s.Equal(updateReason, updateResp.Config.FairnessKeysRateLimitDefault.Metadata.Reason)
-	s.Equal(updateIdentity, updateResp.Config.FairnessKeysRateLimitDefault.Metadata.UpdateIdentity)
+	s.NotNil(updateResp.GetConfig())
+	s.Equal(updateRPS, updateResp.GetConfig().GetQueueRateLimit().GetRateLimit().GetRequestsPerSecond())
+	s.Equal(updateReason, updateResp.GetConfig().GetQueueRateLimit().GetMetadata().GetReason())
+	s.Equal(updateIdentity, updateResp.GetConfig().GetQueueRateLimit().GetMetadata().GetUpdateIdentity())
+	s.Equal(updateRPS, updateResp.GetConfig().GetFairnessKeysRateLimitDefault().GetRateLimit().GetRequestsPerSecond())
+	s.Equal(updateReason, updateResp.GetConfig().GetFairnessKeysRateLimitDefault().GetMetadata().GetReason())
+	s.Equal(updateIdentity, updateResp.GetConfig().GetFairnessKeysRateLimitDefault().GetMetadata().GetUpdateIdentity())
 
 	// Unset rate limit via UpdateTaskQueueConfig api.
-	unsetReq := &workflowservice.UpdateTaskQueueConfigRequest{
+	unsetReq := workflowservice.UpdateTaskQueueConfigRequest_builder{
 		Namespace:     namespace,
 		Identity:      updateIdentity,
 		TaskQueue:     taskQueueName,
 		TaskQueueType: taskQueueType,
-		UpdateQueueRateLimit: &workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate{
+		UpdateQueueRateLimit: workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate_builder{
 			RateLimit: nil,
 			Reason:    unsetReasonQueue,
-		},
-		UpdateFairnessKeyRateLimitDefault: &workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate{
+		}.Build(),
+		UpdateFairnessKeyRateLimitDefault: workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate_builder{
 			RateLimit: nil,
 			Reason:    unsetReasonFairness,
-		},
-	}
+		}.Build(),
+	}.Build()
 	unsetResp, err := s.FrontendClient().UpdateTaskQueueConfig(testcore.NewContext(), unsetReq)
 	s.NoError(err)
 	s.NotNil(unsetResp)
-	s.NotNil(unsetResp.Config)
-	s.Nil(unsetResp.Config.QueueRateLimit.RateLimit)
-	s.Equal(unsetReasonQueue, unsetResp.Config.QueueRateLimit.Metadata.Reason)
-	s.Equal(updateIdentity, updateResp.Config.QueueRateLimit.Metadata.UpdateIdentity)
-	s.Nil(unsetResp.Config.FairnessKeysRateLimitDefault.RateLimit)
-	s.Equal(unsetReasonFairness, unsetResp.Config.FairnessKeysRateLimitDefault.Metadata.Reason)
-	s.Equal(updateIdentity, updateResp.Config.FairnessKeysRateLimitDefault.Metadata.UpdateIdentity)
+	s.NotNil(unsetResp.GetConfig())
+	s.Nil(unsetResp.GetConfig().GetQueueRateLimit().GetRateLimit())
+	s.Equal(unsetReasonQueue, unsetResp.GetConfig().GetQueueRateLimit().GetMetadata().GetReason())
+	s.Equal(updateIdentity, updateResp.GetConfig().GetQueueRateLimit().GetMetadata().GetUpdateIdentity())
+	s.Nil(unsetResp.GetConfig().GetFairnessKeysRateLimitDefault().GetRateLimit())
+	s.Equal(unsetReasonFairness, unsetResp.GetConfig().GetFairnessKeysRateLimitDefault().GetMetadata().GetReason())
+	s.Equal(updateIdentity, updateResp.GetConfig().GetFairnessKeysRateLimitDefault().GetMetadata().GetUpdateIdentity())
 
 	// Describe the task queue to verify the unset configuration.
-	describeReq := &workflowservice.DescribeTaskQueueRequest{
+	describeReq := workflowservice.DescribeTaskQueueRequest_builder{
 		Namespace:     namespace,
-		TaskQueue:     &taskqueuepb.TaskQueue{Name: taskQueueName},
+		TaskQueue:     taskqueuepb.TaskQueue_builder{Name: taskQueueName}.Build(),
 		TaskQueueType: taskQueueType,
 		ReportConfig:  true,
-	}
+	}.Build()
 	describeResp, err := s.FrontendClient().DescribeTaskQueue(testcore.NewContext(), describeReq)
 	s.NoError(err)
 	s.NotNil(describeResp)
-	s.NotNil(describeResp.Config)
-	s.Nil(describeResp.Config.QueueRateLimit.RateLimit)
-	s.Equal(unsetReasonQueue, describeResp.Config.QueueRateLimit.Metadata.Reason)
-	s.Equal(updateIdentity, updateResp.Config.QueueRateLimit.Metadata.UpdateIdentity)
-	s.Nil(describeResp.Config.FairnessKeysRateLimitDefault.RateLimit)
-	s.Equal(unsetReasonFairness, describeResp.Config.FairnessKeysRateLimitDefault.Metadata.Reason)
-	s.Equal(updateIdentity, updateResp.Config.FairnessKeysRateLimitDefault.Metadata.UpdateIdentity)
+	s.NotNil(describeResp.GetConfig())
+	s.Nil(describeResp.GetConfig().GetQueueRateLimit().GetRateLimit())
+	s.Equal(unsetReasonQueue, describeResp.GetConfig().GetQueueRateLimit().GetMetadata().GetReason())
+	s.Equal(updateIdentity, updateResp.GetConfig().GetQueueRateLimit().GetMetadata().GetUpdateIdentity())
+	s.Nil(describeResp.GetConfig().GetFairnessKeysRateLimitDefault().GetRateLimit())
+	s.Equal(unsetReasonFairness, describeResp.GetConfig().GetFairnessKeysRateLimitDefault().GetMetadata().GetReason())
+	s.Equal(updateIdentity, updateResp.GetConfig().GetFairnessKeysRateLimitDefault().GetMetadata().GetUpdateIdentity())
 }
 
 func (s *TaskQueueSuite) runActivitiesWithPriorities(
@@ -855,12 +855,12 @@ func (s *TaskQueueSuite) runActivitiesWithPriorities(
 	// Start workflows (each will schedule one activity tagged with a fairness key).
 	for i := range total {
 		wfID := fmt.Sprintf("perkey-wf-%s-%d", base, i)
-		_, err := s.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		_, err := s.FrontendClient().StartWorkflowExecution(ctx, workflowservice.StartWorkflowExecutionRequest_builder{
 			Namespace:    s.Namespace().String(),
 			WorkflowId:   wfID,
 			WorkflowType: tv.WorkflowType(),
 			TaskQueue:    tv.TaskQueue(),
-		})
+		}.Build())
 		s.NoError(err)
 	}
 
@@ -873,10 +873,10 @@ func (s *TaskQueueSuite) runActivitiesWithPriorities(
 		_, err := s.TaskPoller().PollAndHandleWorkflowTask(
 			tv,
 			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-				s.Len(task.History.Events, 3)
+				s.Len(task.GetHistory().GetEvents(), 3)
 
 				var idx int
-				_, scanErr := fmt.Sscanf(task.WorkflowExecution.WorkflowId, parsePattern, &idx)
+				_, scanErr := fmt.Sscanf(task.GetWorkflowExecution().GetWorkflowId(), parsePattern, &idx)
 				s.NoError(scanErr)
 
 				key := fairnessKeys[idx%len(fairnessKeys)]
@@ -884,20 +884,18 @@ func (s *TaskQueueSuite) runActivitiesWithPriorities(
 				input, encErr := payloads.Encode(key)
 				s.NoError(encErr)
 
-				cmd := &commandpb.Command{
+				cmd := commandpb.Command_builder{
 					CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-					Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{
-						ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-							ActivityId:             fmt.Sprintf("act-%d", idx),
-							ActivityType:           tv.ActivityType(),
-							TaskQueue:              tv.TaskQueue(),
-							ScheduleToCloseTimeout: durationpb.New(30 * time.Second),
-							Priority:               &commonpb.Priority{FairnessKey: key, FairnessWeight: weight},
-							Input:                  input,
-						},
-					},
-				}
-				return &workflowservice.RespondWorkflowTaskCompletedRequest{Commands: []*commandpb.Command{cmd}}, nil
+					ScheduleActivityTaskCommandAttributes: commandpb.ScheduleActivityTaskCommandAttributes_builder{
+						ActivityId:             fmt.Sprintf("act-%d", idx),
+						ActivityType:           tv.ActivityType(),
+						TaskQueue:              tv.TaskQueue(),
+						ScheduleToCloseTimeout: durationpb.New(30 * time.Second),
+						Priority:               commonpb.Priority_builder{FairnessKey: key, FairnessWeight: weight}.Build(),
+						Input:                  input,
+					}.Build(),
+				}.Build()
+				return workflowservice.RespondWorkflowTaskCompletedRequest_builder{Commands: []*commandpb.Command{cmd}}.Build(), nil
 			},
 			taskpoller.WithContext(ctx),
 		)
@@ -923,13 +921,13 @@ func (s *TaskQueueSuite) runActivitiesWithPriorities(
 			tv,
 			func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
 				var key string
-				s.NoError(payloads.Decode(task.Input, &key))
+				s.NoError(payloads.Decode(task.GetInput(), &key))
 				now := time.Now()
 				perKeyTimes[key] = append(perKeyTimes[key], now)
 				allTimes = append(allTimes, now)
 				nothing, encErr := payloads.Encode()
 				s.NoError(encErr)
-				return &workflowservice.RespondActivityTaskCompletedRequest{Result: nothing}, nil
+				return workflowservice.RespondActivityTaskCompletedRequest_builder{Result: nothing}.Build(), nil
 			},
 			taskpoller.WithContext(ctx),
 		)

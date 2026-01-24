@@ -63,10 +63,10 @@ func TestActivityInfoMatchEvaluator_LogicalOperations(t *testing.T) {
 		},
 	}
 
-	hb := &workerpb.WorkerHeartbeat{
+	hb := workerpb.WorkerHeartbeat_builder{
 		TaskQueue: "task_queue",
 		Status:    enumspb.WORKER_STATUS_RUNNING,
-	}
+	}.Build()
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -172,21 +172,21 @@ func TestActivityInfoMatchEvaluator_SupportedFields(t *testing.T) {
 		},
 	}
 
-	hb := &workerpb.WorkerHeartbeat{
+	hb := workerpb.WorkerHeartbeat_builder{
 		TaskQueue:         "task_queue",
 		Status:            enumspb.WORKER_STATUS_RUNNING,
 		WorkerIdentity:    "worker_identity",
 		WorkerInstanceKey: "worker_key",
-		HostInfo: &workerpb.WorkerHostInfo{
+		HostInfo: workerpb.WorkerHostInfo_builder{
 			HostName: "host_name",
-		},
-		DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
+		}.Build(),
+		DeploymentVersion: deploymentpb.WorkerDeploymentVersion_builder{
 			DeploymentName: "deployment_name",
 			BuildId:        "build_id",
-		},
+		}.Build(),
 		SdkName:    "sdk_name",
 		SdkVersion: "sdk_version",
-	}
+	}.Build()
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -309,11 +309,11 @@ func TestActivityInfoMatchEvaluator_SupportedTimeFields(t *testing.T) {
 	startTime, err := sqlquery.ConvertToTime(fmt.Sprintf("'%s'", startTimeStr))
 	assert.NoError(t, err)
 
-	hb := &workerpb.WorkerHeartbeat{
+	hb := workerpb.WorkerHeartbeat_builder{
 		StartTime:     timestamppb.New(startTime),
 		HeartbeatTime: timestamppb.New(startTime),
 		TaskQueue:     "task_queue",
-	}
+	}.Build()
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

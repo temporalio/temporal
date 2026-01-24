@@ -9,7 +9,6 @@ package enums
 import (
 	reflect "reflect"
 	"strconv"
-	sync "sync"
 	unsafe "unsafe"
 
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -98,8 +97,6 @@ func (x ReplicationTaskType) String() string {
 	case REPLICATION_TASK_TYPE_HISTORY_V2_TASK:
 		return "HistoryV2Task"
 	case REPLICATION_TASK_TYPE_SYNC_WORKFLOW_STATE_TASK:
-
-		// Deprecated: Use ReplicationTaskType.Descriptor instead.
 		return "SyncWorkflowStateTask"
 	case REPLICATION_TASK_TYPE_TASK_QUEUE_USER_DATA:
 		return "TaskQueueUserData"
@@ -107,15 +104,14 @@ func (x ReplicationTaskType) String() string {
 		return "SyncHsmTask"
 	case REPLICATION_TASK_TYPE_BACKFILL_HISTORY_TASK:
 		return "BackfillHistoryTask"
+
+		// Enum value maps for NamespaceOperation.
 	case REPLICATION_TASK_TYPE_VERIFY_VERSIONED_TRANSITION_TASK:
 		return "VerifyVersionedTransitionTask"
 	case REPLICATION_TASK_TYPE_SYNC_VERSIONED_TRANSITION_TASK:
 		return "SyncVersionedTransitionTask"
 	default:
-		return strconv.
-
-			// Enum value maps for NamespaceOperation.
-			Itoa(int(x))
+		return strconv.Itoa(int(x))
 	}
 
 }
@@ -130,10 +126,6 @@ func (ReplicationTaskType) Type() protoreflect.EnumType {
 
 func (x ReplicationTaskType) Number() protoreflect.EnumNumber {
 	return protoreflect.EnumNumber(x)
-}
-
-func (ReplicationTaskType) EnumDescriptor() ([]byte, []int) {
-	return file_temporal_server_api_enums_v1_replication_proto_rawDescGZIP(), []int{0}
 }
 
 type NamespaceOperation int32
@@ -187,11 +179,6 @@ func (NamespaceOperation) Type() protoreflect.EnumType {
 
 func (x NamespaceOperation) Number() protoreflect.EnumNumber {
 	return protoreflect.EnumNumber(x)
-}
-
-// Deprecated: Use NamespaceOperation.Descriptor instead.
-func (NamespaceOperation) EnumDescriptor() ([]byte, []int) {
-	return file_temporal_server_api_enums_v1_replication_proto_rawDescGZIP(), []int{1}
 }
 
 type ReplicationFlowControlCommand int32
@@ -248,11 +235,6 @@ func (x ReplicationFlowControlCommand) Number() protoreflect.EnumNumber {
 	return protoreflect.EnumNumber(x)
 }
 
-// Deprecated: Use ReplicationFlowControlCommand.Descriptor instead.
-func (ReplicationFlowControlCommand) EnumDescriptor() ([]byte, []int) {
-	return file_temporal_server_api_enums_v1_replication_proto_rawDescGZIP(), []int{2}
-}
-
 var File_temporal_server_api_enums_v1_replication_proto protoreflect.FileDescriptor
 
 const file_temporal_server_api_enums_v1_replication_proto_rawDesc = "" +
@@ -281,18 +263,6 @@ const file_temporal_server_api_enums_v1_replication_proto_rawDesc = "" +
 	",REPLICATION_FLOW_CONTROL_COMMAND_UNSPECIFIED\x10\x00\x12+\n" +
 	"'REPLICATION_FLOW_CONTROL_COMMAND_RESUME\x10\x01\x12*\n" +
 	"&REPLICATION_FLOW_CONTROL_COMMAND_PAUSE\x10\x02B*Z(go.temporal.io/server/api/enums/v1;enumsb\x06proto3"
-
-var (
-	file_temporal_server_api_enums_v1_replication_proto_rawDescOnce sync.Once
-	file_temporal_server_api_enums_v1_replication_proto_rawDescData []byte
-)
-
-func file_temporal_server_api_enums_v1_replication_proto_rawDescGZIP() []byte {
-	file_temporal_server_api_enums_v1_replication_proto_rawDescOnce.Do(func() {
-		file_temporal_server_api_enums_v1_replication_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_api_enums_v1_replication_proto_rawDesc), len(file_temporal_server_api_enums_v1_replication_proto_rawDesc)))
-	})
-	return file_temporal_server_api_enums_v1_replication_proto_rawDescData
-}
 
 var file_temporal_server_api_enums_v1_replication_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
 var file_temporal_server_api_enums_v1_replication_proto_goTypes = []any{

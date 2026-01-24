@@ -63,10 +63,10 @@ func (s *outboundQueueActiveTaskExecutorSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockShard = shard.NewTestContext(
 		s.controller,
-		&persistencespb.ShardInfo{
+		persistencespb.ShardInfo_builder{
 			ShardId: 1,
 			RangeId: 1,
-		},
+		}.Build(),
 		tests.NewDynamicConfig(),
 	)
 	s.mockWorkflowCache = cache.NewMockCache(s.controller)
@@ -81,10 +81,10 @@ func (s *outboundQueueActiveTaskExecutorSuite) SetupTest() {
 	s.logger = s.mockShard.GetLogger()
 	s.metricsHandler = s.mockShard.GetMetricsHandler()
 
-	ns := namespace.NewLocalNamespaceForTest(&persistencespb.NamespaceInfo{
+	ns := namespace.NewLocalNamespaceForTest(persistencespb.NamespaceInfo_builder{
 		Name: s.namespaceEntry.Name().String(),
 		Id:   string(s.namespaceID),
-	}, nil, "")
+	}.Build(), nil, "")
 	s.mockNamespaceRegistry.EXPECT().GetNamespaceByID(gomock.Any()).Return(ns, nil).AnyTimes()
 	s.mockNamespaceRegistry.EXPECT().GetNamespaceName(gomock.Any()).Return(ns.Name(), nil).AnyTimes()
 
@@ -186,10 +186,10 @@ func (s *outboundQueueActiveTaskExecutorSuite) TestExecute_ChasmTask() {
 				TaskID:      s.mustGenerateTaskID(),
 				Category:    tasks.CategoryOutbound,
 				Destination: tv.Any().String(),
-				Info: &persistencespb.ChasmTaskInfo{
+				Info: persistencespb.ChasmTaskInfo_builder{
 					TypeId:      tv.Any().UInt32(),
 					ArchetypeId: tests.ArchetypeID,
-				},
+				}.Build(),
 			}
 
 			tc.setupMocks(task)

@@ -57,7 +57,7 @@ func (v *historyEventIDValidator) Validate(
 	_, err = v.executionManager.ReadRawHistoryBranch(ctx, &persistence.ReadHistoryBranchRequest{
 		MinEventID:    common.FirstEventID,
 		MaxEventID:    common.FirstEventID + 1,
-		BranchToken:   currentVersionHistory.BranchToken,
+		BranchToken:   currentVersionHistory.GetBranchToken(),
 		ShardID:       v.shardID,
 		PageSize:      1,
 		NextPageToken: nil,
@@ -70,9 +70,9 @@ func (v *historyEventIDValidator) Validate(
 		// additionally validate mutable state is still present in DB
 		_, err = v.executionManager.GetWorkflowExecution(ctx, &persistence.GetWorkflowExecutionRequest{
 			ShardID:     v.shardID,
-			NamespaceID: mutableState.GetExecutionInfo().NamespaceId,
-			WorkflowID:  mutableState.GetExecutionInfo().WorkflowId,
-			RunID:       mutableState.GetExecutionState().RunId,
+			NamespaceID: mutableState.GetExecutionInfo().GetNamespaceId(),
+			WorkflowID:  mutableState.GetExecutionInfo().GetWorkflowId(),
+			RunID:       mutableState.GetExecutionState().GetRunId(),
 			// TODO: for now only workflow has events and non-empty event version history
 			// Later when supporting events for non-workflow component, we need to get ArchetypeID from MutableState.
 			ArchetypeID: chasm.WorkflowArchetypeID,

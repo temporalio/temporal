@@ -9,7 +9,6 @@ package persistence
 import (
 	reflect "reflect"
 	"strconv"
-	sync "sync"
 	unsafe "unsafe"
 
 	v13 "go.temporal.io/api/deployment/v1"
@@ -82,28 +81,15 @@ func (x BuildId_State) Number() protoreflect.EnumNumber {
 	return protoreflect.EnumNumber(x)
 }
 
-// Deprecated: Use BuildId_State.Descriptor instead.
-func (BuildId_State) EnumDescriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_task_queues_proto_rawDescGZIP(), []int{0, 0}
-}
-
 // BuildId is an identifier with a timestamped status used to identify workers for task queue versioning purposes.
 type BuildId struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	State BuildId_State          `protobuf:"varint,2,opt,name=state,proto3,enum=temporal.server.api.persistence.v1.BuildId_State" json:"state,omitempty"`
-	// HLC timestamp representing when the state was updated or the when build ID was originally inserted.
-	// (-- api-linter: core::0142::time-field-type=disabled
-	//
-	//	aip.dev/not-precedent: Using HLC instead of wall clock. --)
-	StateUpdateTimestamp *v1.HybridLogicalClock `protobuf:"bytes,3,opt,name=state_update_timestamp,json=stateUpdateTimestamp,proto3" json:"state_update_timestamp,omitempty"`
-	// HLC timestamp representing when this build ID was last made default in its version set.
-	// (-- api-linter: core::0142::time-field-type=disabled
-	//
-	//	aip.dev/not-precedent: Using HLC instead of wall clock. --)
-	BecameDefaultTimestamp *v1.HybridLogicalClock `protobuf:"bytes,4,opt,name=became_default_timestamp,json=becameDefaultTimestamp,proto3" json:"became_default_timestamp,omitempty"`
-	unknownFields          protoimpl.UnknownFields
-	sizeCache              protoimpl.SizeCache
+	state                             protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Id                     string                 `protobuf:"bytes,1,opt,name=id,proto3"`
+	xxx_hidden_State                  BuildId_State          `protobuf:"varint,2,opt,name=state,proto3,enum=temporal.server.api.persistence.v1.BuildId_State"`
+	xxx_hidden_StateUpdateTimestamp   *v1.HybridLogicalClock `protobuf:"bytes,3,opt,name=state_update_timestamp,json=stateUpdateTimestamp,proto3"`
+	xxx_hidden_BecameDefaultTimestamp *v1.HybridLogicalClock `protobuf:"bytes,4,opt,name=became_default_timestamp,json=becameDefaultTimestamp,proto3"`
+	unknownFields                     protoimpl.UnknownFields
+	sizeCache                         protoimpl.SizeCache
 }
 
 func (x *BuildId) Reset() {
@@ -131,66 +117,108 @@ func (x *BuildId) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use BuildId.ProtoReflect.Descriptor instead.
-func (*BuildId) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_task_queues_proto_rawDescGZIP(), []int{0}
-}
-
 func (x *BuildId) GetId() string {
 	if x != nil {
-		return x.Id
+		return x.xxx_hidden_Id
 	}
 	return ""
 }
 
 func (x *BuildId) GetState() BuildId_State {
 	if x != nil {
-		return x.State
+		return x.xxx_hidden_State
 	}
 	return STATE_UNSPECIFIED
 }
 
 func (x *BuildId) GetStateUpdateTimestamp() *v1.HybridLogicalClock {
 	if x != nil {
-		return x.StateUpdateTimestamp
+		return x.xxx_hidden_StateUpdateTimestamp
 	}
 	return nil
 }
 
 func (x *BuildId) GetBecameDefaultTimestamp() *v1.HybridLogicalClock {
 	if x != nil {
-		return x.BecameDefaultTimestamp
+		return x.xxx_hidden_BecameDefaultTimestamp
 	}
 	return nil
 }
 
-// An internal representation of temporal.api.taskqueue.v1.CompatibleVersionSet
-type CompatibleVersionSet struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Set IDs are used internally by matching.
-	// A set typically has one set ID and extra care is taken to enforce this.
-	// In some situations, including:
-	//   - Replication race between task queue user data and history events
-	//   - Replication split-brain + later merge
-	//   - Delayed user data propagation between partitions
-	//   - Cross-task-queue activities/child workflows/CAN where the user has not set up parallel
-	//     versioning data
-	//
-	// we have to guess the set id for a build ID. If that happens, and then the build ID is
-	// discovered to be in a different set, then the sets will be merged and both (or more)
-	// build ids will be preserved, so that we don't lose tasks.
-	// The first set id is considered the "primary", and the others are "demoted". Once a build
-	// id is demoted, it cannot be made the primary again.
-	SetIds []string `protobuf:"bytes,1,rep,name=set_ids,json=setIds,proto3" json:"set_ids,omitempty"`
-	// All the compatible versions, unordered except for the last element, which is considered the set "default".
-	BuildIds []*BuildId `protobuf:"bytes,2,rep,name=build_ids,json=buildIds,proto3" json:"build_ids,omitempty"`
-	// HLC timestamp representing when this set was last made the default for the queue.
+func (x *BuildId) SetId(v string) {
+	x.xxx_hidden_Id = v
+}
+
+func (x *BuildId) SetState(v BuildId_State) {
+	x.xxx_hidden_State = v
+}
+
+func (x *BuildId) SetStateUpdateTimestamp(v *v1.HybridLogicalClock) {
+	x.xxx_hidden_StateUpdateTimestamp = v
+}
+
+func (x *BuildId) SetBecameDefaultTimestamp(v *v1.HybridLogicalClock) {
+	x.xxx_hidden_BecameDefaultTimestamp = v
+}
+
+func (x *BuildId) HasStateUpdateTimestamp() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_StateUpdateTimestamp != nil
+}
+
+func (x *BuildId) HasBecameDefaultTimestamp() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_BecameDefaultTimestamp != nil
+}
+
+func (x *BuildId) ClearStateUpdateTimestamp() {
+	x.xxx_hidden_StateUpdateTimestamp = nil
+}
+
+func (x *BuildId) ClearBecameDefaultTimestamp() {
+	x.xxx_hidden_BecameDefaultTimestamp = nil
+}
+
+type BuildId_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Id    string
+	State BuildId_State
+	// HLC timestamp representing when the state was updated or the when build ID was originally inserted.
 	// (-- api-linter: core::0142::time-field-type=disabled
 	//
 	//	aip.dev/not-precedent: Using HLC instead of wall clock. --)
-	BecameDefaultTimestamp *v1.HybridLogicalClock `protobuf:"bytes,4,opt,name=became_default_timestamp,json=becameDefaultTimestamp,proto3" json:"became_default_timestamp,omitempty"`
-	unknownFields          protoimpl.UnknownFields
-	sizeCache              protoimpl.SizeCache
+	StateUpdateTimestamp *v1.HybridLogicalClock
+	// HLC timestamp representing when this build ID was last made default in its version set.
+	// (-- api-linter: core::0142::time-field-type=disabled
+	//
+	//	aip.dev/not-precedent: Using HLC instead of wall clock. --)
+	BecameDefaultTimestamp *v1.HybridLogicalClock
+}
+
+func (b0 BuildId_builder) Build() *BuildId {
+	m0 := &BuildId{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Id = b.Id
+	x.xxx_hidden_State = b.State
+	x.xxx_hidden_StateUpdateTimestamp = b.StateUpdateTimestamp
+	x.xxx_hidden_BecameDefaultTimestamp = b.BecameDefaultTimestamp
+	return m0
+}
+
+// An internal representation of temporal.api.taskqueue.v1.CompatibleVersionSet
+type CompatibleVersionSet struct {
+	state                             protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_SetIds                 []string               `protobuf:"bytes,1,rep,name=set_ids,json=setIds,proto3"`
+	xxx_hidden_BuildIds               *[]*BuildId            `protobuf:"bytes,2,rep,name=build_ids,json=buildIds,proto3"`
+	xxx_hidden_BecameDefaultTimestamp *v1.HybridLogicalClock `protobuf:"bytes,4,opt,name=became_default_timestamp,json=becameDefaultTimestamp,proto3"`
+	unknownFields                     protoimpl.UnknownFields
+	sizeCache                         protoimpl.SizeCache
 }
 
 func (x *CompatibleVersionSet) Reset() {
@@ -218,47 +246,96 @@ func (x *CompatibleVersionSet) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CompatibleVersionSet.ProtoReflect.Descriptor instead.
-func (*CompatibleVersionSet) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_task_queues_proto_rawDescGZIP(), []int{1}
-}
-
 func (x *CompatibleVersionSet) GetSetIds() []string {
 	if x != nil {
-		return x.SetIds
+		return x.xxx_hidden_SetIds
 	}
 	return nil
 }
 
 func (x *CompatibleVersionSet) GetBuildIds() []*BuildId {
 	if x != nil {
-		return x.BuildIds
+		if x.xxx_hidden_BuildIds != nil {
+			return *x.xxx_hidden_BuildIds
+		}
 	}
 	return nil
 }
 
 func (x *CompatibleVersionSet) GetBecameDefaultTimestamp() *v1.HybridLogicalClock {
 	if x != nil {
-		return x.BecameDefaultTimestamp
+		return x.xxx_hidden_BecameDefaultTimestamp
 	}
 	return nil
 }
 
+func (x *CompatibleVersionSet) SetSetIds(v []string) {
+	x.xxx_hidden_SetIds = v
+}
+
+func (x *CompatibleVersionSet) SetBuildIds(v []*BuildId) {
+	x.xxx_hidden_BuildIds = &v
+}
+
+func (x *CompatibleVersionSet) SetBecameDefaultTimestamp(v *v1.HybridLogicalClock) {
+	x.xxx_hidden_BecameDefaultTimestamp = v
+}
+
+func (x *CompatibleVersionSet) HasBecameDefaultTimestamp() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_BecameDefaultTimestamp != nil
+}
+
+func (x *CompatibleVersionSet) ClearBecameDefaultTimestamp() {
+	x.xxx_hidden_BecameDefaultTimestamp = nil
+}
+
+type CompatibleVersionSet_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Set IDs are used internally by matching.
+	// A set typically has one set ID and extra care is taken to enforce this.
+	// In some situations, including:
+	//   - Replication race between task queue user data and history events
+	//   - Replication split-brain + later merge
+	//   - Delayed user data propagation between partitions
+	//   - Cross-task-queue activities/child workflows/CAN where the user has not set up parallel
+	//     versioning data
+	//
+	// we have to guess the set id for a build ID. If that happens, and then the build ID is
+	// discovered to be in a different set, then the sets will be merged and both (or more)
+	// build ids will be preserved, so that we don't lose tasks.
+	// The first set id is considered the "primary", and the others are "demoted". Once a build
+	// id is demoted, it cannot be made the primary again.
+	SetIds []string
+	// All the compatible versions, unordered except for the last element, which is considered the set "default".
+	BuildIds []*BuildId
+	// HLC timestamp representing when this set was last made the default for the queue.
+	// (-- api-linter: core::0142::time-field-type=disabled
+	//
+	//	aip.dev/not-precedent: Using HLC instead of wall clock. --)
+	BecameDefaultTimestamp *v1.HybridLogicalClock
+}
+
+func (b0 CompatibleVersionSet_builder) Build() *CompatibleVersionSet {
+	m0 := &CompatibleVersionSet{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_SetIds = b.SetIds
+	x.xxx_hidden_BuildIds = &b.BuildIds
+	x.xxx_hidden_BecameDefaultTimestamp = b.BecameDefaultTimestamp
+	return m0
+}
+
 type AssignmentRule struct {
-	state protoimpl.MessageState     `protogen:"open.v1"`
-	Rule  *v11.BuildIdAssignmentRule `protobuf:"bytes,1,opt,name=rule,proto3" json:"rule,omitempty"`
-	// (-- api-linter: core::0142::time-field-type=disabled
-	//
-	//	aip.dev/not-precedent: Using HLC instead of wall clock. --)
-	CreateTimestamp *v1.HybridLogicalClock `protobuf:"bytes,2,opt,name=create_timestamp,json=createTimestamp,proto3" json:"create_timestamp,omitempty"`
-	//	when delete_timestamp is present the rule should be treated as deleted
-	//
-	// (-- api-linter: core::0142::time-field-type=disabled
-	//
-	//	aip.dev/not-precedent: Using HLC instead of wall clock. --)
-	DeleteTimestamp *v1.HybridLogicalClock `protobuf:"bytes,3,opt,name=delete_timestamp,json=deleteTimestamp,proto3" json:"delete_timestamp,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state                      protoimpl.MessageState     `protogen:"opaque.v1"`
+	xxx_hidden_Rule            *v11.BuildIdAssignmentRule `protobuf:"bytes,1,opt,name=rule,proto3"`
+	xxx_hidden_CreateTimestamp *v1.HybridLogicalClock     `protobuf:"bytes,2,opt,name=create_timestamp,json=createTimestamp,proto3"`
+	xxx_hidden_DeleteTimestamp *v1.HybridLogicalClock     `protobuf:"bytes,3,opt,name=delete_timestamp,json=deleteTimestamp,proto3"`
+	unknownFields              protoimpl.UnknownFields
+	sizeCache                  protoimpl.SizeCache
 }
 
 func (x *AssignmentRule) Reset() {
@@ -286,47 +363,105 @@ func (x *AssignmentRule) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use AssignmentRule.ProtoReflect.Descriptor instead.
-func (*AssignmentRule) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_task_queues_proto_rawDescGZIP(), []int{2}
-}
-
 func (x *AssignmentRule) GetRule() *v11.BuildIdAssignmentRule {
 	if x != nil {
-		return x.Rule
+		return x.xxx_hidden_Rule
 	}
 	return nil
 }
 
 func (x *AssignmentRule) GetCreateTimestamp() *v1.HybridLogicalClock {
 	if x != nil {
-		return x.CreateTimestamp
+		return x.xxx_hidden_CreateTimestamp
 	}
 	return nil
 }
 
 func (x *AssignmentRule) GetDeleteTimestamp() *v1.HybridLogicalClock {
 	if x != nil {
-		return x.DeleteTimestamp
+		return x.xxx_hidden_DeleteTimestamp
 	}
 	return nil
 }
 
-type RedirectRule struct {
-	state protoimpl.MessageState             `protogen:"open.v1"`
-	Rule  *v11.CompatibleBuildIdRedirectRule `protobuf:"bytes,1,opt,name=rule,proto3" json:"rule,omitempty"`
+func (x *AssignmentRule) SetRule(v *v11.BuildIdAssignmentRule) {
+	x.xxx_hidden_Rule = v
+}
+
+func (x *AssignmentRule) SetCreateTimestamp(v *v1.HybridLogicalClock) {
+	x.xxx_hidden_CreateTimestamp = v
+}
+
+func (x *AssignmentRule) SetDeleteTimestamp(v *v1.HybridLogicalClock) {
+	x.xxx_hidden_DeleteTimestamp = v
+}
+
+func (x *AssignmentRule) HasRule() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Rule != nil
+}
+
+func (x *AssignmentRule) HasCreateTimestamp() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_CreateTimestamp != nil
+}
+
+func (x *AssignmentRule) HasDeleteTimestamp() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_DeleteTimestamp != nil
+}
+
+func (x *AssignmentRule) ClearRule() {
+	x.xxx_hidden_Rule = nil
+}
+
+func (x *AssignmentRule) ClearCreateTimestamp() {
+	x.xxx_hidden_CreateTimestamp = nil
+}
+
+func (x *AssignmentRule) ClearDeleteTimestamp() {
+	x.xxx_hidden_DeleteTimestamp = nil
+}
+
+type AssignmentRule_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Rule *v11.BuildIdAssignmentRule
 	// (-- api-linter: core::0142::time-field-type=disabled
 	//
 	//	aip.dev/not-precedent: Using HLC instead of wall clock. --)
-	CreateTimestamp *v1.HybridLogicalClock `protobuf:"bytes,2,opt,name=create_timestamp,json=createTimestamp,proto3" json:"create_timestamp,omitempty"`
+	CreateTimestamp *v1.HybridLogicalClock
 	//	when delete_timestamp is present the rule should be treated as deleted
 	//
 	// (-- api-linter: core::0142::time-field-type=disabled
 	//
 	//	aip.dev/not-precedent: Using HLC instead of wall clock. --)
-	DeleteTimestamp *v1.HybridLogicalClock `protobuf:"bytes,3,opt,name=delete_timestamp,json=deleteTimestamp,proto3" json:"delete_timestamp,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	DeleteTimestamp *v1.HybridLogicalClock
+}
+
+func (b0 AssignmentRule_builder) Build() *AssignmentRule {
+	m0 := &AssignmentRule{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Rule = b.Rule
+	x.xxx_hidden_CreateTimestamp = b.CreateTimestamp
+	x.xxx_hidden_DeleteTimestamp = b.DeleteTimestamp
+	return m0
+}
+
+type RedirectRule struct {
+	state                      protoimpl.MessageState             `protogen:"opaque.v1"`
+	xxx_hidden_Rule            *v11.CompatibleBuildIdRedirectRule `protobuf:"bytes,1,opt,name=rule,proto3"`
+	xxx_hidden_CreateTimestamp *v1.HybridLogicalClock             `protobuf:"bytes,2,opt,name=create_timestamp,json=createTimestamp,proto3"`
+	xxx_hidden_DeleteTimestamp *v1.HybridLogicalClock             `protobuf:"bytes,3,opt,name=delete_timestamp,json=deleteTimestamp,proto3"`
+	unknownFields              protoimpl.UnknownFields
+	sizeCache                  protoimpl.SizeCache
 }
 
 func (x *RedirectRule) Reset() {
@@ -354,44 +489,107 @@ func (x *RedirectRule) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RedirectRule.ProtoReflect.Descriptor instead.
-func (*RedirectRule) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_task_queues_proto_rawDescGZIP(), []int{3}
-}
-
 func (x *RedirectRule) GetRule() *v11.CompatibleBuildIdRedirectRule {
 	if x != nil {
-		return x.Rule
+		return x.xxx_hidden_Rule
 	}
 	return nil
 }
 
 func (x *RedirectRule) GetCreateTimestamp() *v1.HybridLogicalClock {
 	if x != nil {
-		return x.CreateTimestamp
+		return x.xxx_hidden_CreateTimestamp
 	}
 	return nil
 }
 
 func (x *RedirectRule) GetDeleteTimestamp() *v1.HybridLogicalClock {
 	if x != nil {
-		return x.DeleteTimestamp
+		return x.xxx_hidden_DeleteTimestamp
 	}
 	return nil
+}
+
+func (x *RedirectRule) SetRule(v *v11.CompatibleBuildIdRedirectRule) {
+	x.xxx_hidden_Rule = v
+}
+
+func (x *RedirectRule) SetCreateTimestamp(v *v1.HybridLogicalClock) {
+	x.xxx_hidden_CreateTimestamp = v
+}
+
+func (x *RedirectRule) SetDeleteTimestamp(v *v1.HybridLogicalClock) {
+	x.xxx_hidden_DeleteTimestamp = v
+}
+
+func (x *RedirectRule) HasRule() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Rule != nil
+}
+
+func (x *RedirectRule) HasCreateTimestamp() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_CreateTimestamp != nil
+}
+
+func (x *RedirectRule) HasDeleteTimestamp() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_DeleteTimestamp != nil
+}
+
+func (x *RedirectRule) ClearRule() {
+	x.xxx_hidden_Rule = nil
+}
+
+func (x *RedirectRule) ClearCreateTimestamp() {
+	x.xxx_hidden_CreateTimestamp = nil
+}
+
+func (x *RedirectRule) ClearDeleteTimestamp() {
+	x.xxx_hidden_DeleteTimestamp = nil
+}
+
+type RedirectRule_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Rule *v11.CompatibleBuildIdRedirectRule
+	// (-- api-linter: core::0142::time-field-type=disabled
+	//
+	//	aip.dev/not-precedent: Using HLC instead of wall clock. --)
+	CreateTimestamp *v1.HybridLogicalClock
+	//	when delete_timestamp is present the rule should be treated as deleted
+	//
+	// (-- api-linter: core::0142::time-field-type=disabled
+	//
+	//	aip.dev/not-precedent: Using HLC instead of wall clock. --)
+	DeleteTimestamp *v1.HybridLogicalClock
+}
+
+func (b0 RedirectRule_builder) Build() *RedirectRule {
+	m0 := &RedirectRule{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Rule = b.Rule
+	x.xxx_hidden_CreateTimestamp = b.CreateTimestamp
+	x.xxx_hidden_DeleteTimestamp = b.DeleteTimestamp
+	return m0
 }
 
 // Holds all the data related to worker versioning for a task queue.
 // Backwards-incompatible changes cannot be made, as this would make existing stored data unreadable.
 type VersioningData struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// All the incompatible version sets, unordered except for the last element, which is considered the set "default".
-	VersionSets []*CompatibleVersionSet `protobuf:"bytes,1,rep,name=version_sets,json=versionSets,proto3" json:"version_sets,omitempty"`
-	// Ordered list of assignment rules. Also contains recently-deleted rules.
-	AssignmentRules []*AssignmentRule `protobuf:"bytes,2,rep,name=assignment_rules,json=assignmentRules,proto3" json:"assignment_rules,omitempty"`
-	// Unordered list of redirect rules. Also contains recently-deleted rules.
-	RedirectRules []*RedirectRule `protobuf:"bytes,3,rep,name=redirect_rules,json=redirectRules,proto3" json:"redirect_rules,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                      protoimpl.MessageState   `protogen:"opaque.v1"`
+	xxx_hidden_VersionSets     *[]*CompatibleVersionSet `protobuf:"bytes,1,rep,name=version_sets,json=versionSets,proto3"`
+	xxx_hidden_AssignmentRules *[]*AssignmentRule       `protobuf:"bytes,2,rep,name=assignment_rules,json=assignmentRules,proto3"`
+	xxx_hidden_RedirectRules   *[]*RedirectRule         `protobuf:"bytes,3,rep,name=redirect_rules,json=redirectRules,proto3"`
+	unknownFields              protoimpl.UnknownFields
+	sizeCache                  protoimpl.SizeCache
 }
 
 func (x *VersioningData) Reset() {
@@ -419,57 +617,73 @@ func (x *VersioningData) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use VersioningData.ProtoReflect.Descriptor instead.
-func (*VersioningData) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_task_queues_proto_rawDescGZIP(), []int{4}
-}
-
 func (x *VersioningData) GetVersionSets() []*CompatibleVersionSet {
 	if x != nil {
-		return x.VersionSets
+		if x.xxx_hidden_VersionSets != nil {
+			return *x.xxx_hidden_VersionSets
+		}
 	}
 	return nil
 }
 
 func (x *VersioningData) GetAssignmentRules() []*AssignmentRule {
 	if x != nil {
-		return x.AssignmentRules
+		if x.xxx_hidden_AssignmentRules != nil {
+			return *x.xxx_hidden_AssignmentRules
+		}
 	}
 	return nil
 }
 
 func (x *VersioningData) GetRedirectRules() []*RedirectRule {
 	if x != nil {
-		return x.RedirectRules
+		if x.xxx_hidden_RedirectRules != nil {
+			return *x.xxx_hidden_RedirectRules
+		}
 	}
 	return nil
 }
 
+func (x *VersioningData) SetVersionSets(v []*CompatibleVersionSet) {
+	x.xxx_hidden_VersionSets = &v
+}
+
+func (x *VersioningData) SetAssignmentRules(v []*AssignmentRule) {
+	x.xxx_hidden_AssignmentRules = &v
+}
+
+func (x *VersioningData) SetRedirectRules(v []*RedirectRule) {
+	x.xxx_hidden_RedirectRules = &v
+}
+
+type VersioningData_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// All the incompatible version sets, unordered except for the last element, which is considered the set "default".
+	VersionSets []*CompatibleVersionSet
+	// Ordered list of assignment rules. Also contains recently-deleted rules.
+	AssignmentRules []*AssignmentRule
+	// Unordered list of redirect rules. Also contains recently-deleted rules.
+	RedirectRules []*RedirectRule
+}
+
+func (b0 VersioningData_builder) Build() *VersioningData {
+	m0 := &VersioningData{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_VersionSets = &b.VersionSets
+	x.xxx_hidden_AssignmentRules = &b.AssignmentRules
+	x.xxx_hidden_RedirectRules = &b.RedirectRules
+	return m0
+}
+
 type DeploymentData struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Set of worker deployment versions that this task queue belongs to.
-	// Current Version is defined implicitly as the version with `current_since_time!=nil` and the most
-	// recent `routing_update_time`.
-	// Ramping Version is defined implicitly as the version with `ramping_since_time!=nil` and the most
-	// recent `routing_update_time`.
-	// The Ramping Version receives a share of unversioned/unpinned tasks according to its
-	// `ramp_percentage`. If there is no Ramping Version, all the unversioned/unpinned tasks are
-	// routed to the Current Version. If there is no Current Version, any poller with UNVERSIONED
-	// (or unspecified) WorkflowVersioningMode will receive the tasks.
-	// Remove after `AsyncSetCurrentAndRamping` workflow version is irreversibly enabled.
-	//
-	// Deprecated: Marked as deprecated in temporal/server/api/persistence/v1/task_queues.proto.
-	Versions []*v12.DeploymentVersionData `protobuf:"bytes,2,rep,name=versions,proto3" json:"versions,omitempty"`
-	// Present if the task queue's ramping version is unversioned.
-	// Remove after `AsyncSetCurrentAndRamping` workflow version is irreversibly enabled.
-	//
-	// Deprecated: Marked as deprecated in temporal/server/api/persistence/v1/task_queues.proto.
-	UnversionedRampData *v12.DeploymentVersionData `protobuf:"bytes,3,opt,name=unversioned_ramp_data,json=unversionedRampData,proto3" json:"unversioned_ramp_data,omitempty"`
-	// Routing and version membership data for all worker deployments that this task queue belongs to.
-	// Key is the deployment name.
-	DeploymentsData map[string]*WorkerDeploymentData `protobuf:"bytes,4,rep,name=deployments_data,json=deploymentsData,proto3" json:"deployments_data,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state                          protoimpl.MessageState           `protogen:"opaque.v1"`
+	xxx_hidden_Versions            *[]*v12.DeploymentVersionData    `protobuf:"bytes,2,rep,name=versions,proto3"`
+	xxx_hidden_UnversionedRampData *v12.DeploymentVersionData       `protobuf:"bytes,3,opt,name=unversioned_ramp_data,json=unversionedRampData,proto3"`
+	xxx_hidden_DeploymentsData     map[string]*WorkerDeploymentData `protobuf:"bytes,4,rep,name=deployments_data,json=deploymentsData,proto3" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields                  protoimpl.UnknownFields
+	sizeCache                      protoimpl.SizeCache
 }
 
 func (x *DeploymentData) Reset() {
@@ -497,15 +711,12 @@ func (x *DeploymentData) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DeploymentData.ProtoReflect.Descriptor instead.
-func (*DeploymentData) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_task_queues_proto_rawDescGZIP(), []int{5}
-}
-
 // Deprecated: Marked as deprecated in temporal/server/api/persistence/v1/task_queues.proto.
 func (x *DeploymentData) GetVersions() []*v12.DeploymentVersionData {
 	if x != nil {
-		return x.Versions
+		if x.xxx_hidden_Versions != nil {
+			return *x.xxx_hidden_Versions
+		}
 	}
 	return nil
 }
@@ -513,28 +724,88 @@ func (x *DeploymentData) GetVersions() []*v12.DeploymentVersionData {
 // Deprecated: Marked as deprecated in temporal/server/api/persistence/v1/task_queues.proto.
 func (x *DeploymentData) GetUnversionedRampData() *v12.DeploymentVersionData {
 	if x != nil {
-		return x.UnversionedRampData
+		return x.xxx_hidden_UnversionedRampData
 	}
 	return nil
 }
 
 func (x *DeploymentData) GetDeploymentsData() map[string]*WorkerDeploymentData {
 	if x != nil {
-		return x.DeploymentsData
+		return x.xxx_hidden_DeploymentsData
 	}
 	return nil
 }
 
+// Deprecated: Marked as deprecated in temporal/server/api/persistence/v1/task_queues.proto.
+func (x *DeploymentData) SetVersions(v []*v12.DeploymentVersionData) {
+	x.xxx_hidden_Versions = &v
+}
+
+// Deprecated: Marked as deprecated in temporal/server/api/persistence/v1/task_queues.proto.
+func (x *DeploymentData) SetUnversionedRampData(v *v12.DeploymentVersionData) {
+	x.xxx_hidden_UnversionedRampData = v
+}
+
+func (x *DeploymentData) SetDeploymentsData(v map[string]*WorkerDeploymentData) {
+	x.xxx_hidden_DeploymentsData = v
+}
+
+// Deprecated: Marked as deprecated in temporal/server/api/persistence/v1/task_queues.proto.
+func (x *DeploymentData) HasUnversionedRampData() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_UnversionedRampData != nil
+}
+
+// Deprecated: Marked as deprecated in temporal/server/api/persistence/v1/task_queues.proto.
+func (x *DeploymentData) ClearUnversionedRampData() {
+	x.xxx_hidden_UnversionedRampData = nil
+}
+
+type DeploymentData_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Set of worker deployment versions that this task queue belongs to.
+	// Current Version is defined implicitly as the version with `current_since_time!=nil` and the most
+	// recent `routing_update_time`.
+	// Ramping Version is defined implicitly as the version with `ramping_since_time!=nil` and the most
+	// recent `routing_update_time`.
+	// The Ramping Version receives a share of unversioned/unpinned tasks according to its
+	// `ramp_percentage`. If there is no Ramping Version, all the unversioned/unpinned tasks are
+	// routed to the Current Version. If there is no Current Version, any poller with UNVERSIONED
+	// (or unspecified) WorkflowVersioningMode will receive the tasks.
+	// Remove after `AsyncSetCurrentAndRamping` workflow version is irreversibly enabled.
+	//
+	// Deprecated: Marked as deprecated in temporal/server/api/persistence/v1/task_queues.proto.
+	Versions []*v12.DeploymentVersionData
+	// Present if the task queue's ramping version is unversioned.
+	// Remove after `AsyncSetCurrentAndRamping` workflow version is irreversibly enabled.
+	//
+	// Deprecated: Marked as deprecated in temporal/server/api/persistence/v1/task_queues.proto.
+	UnversionedRampData *v12.DeploymentVersionData
+	// Routing and version membership data for all worker deployments that this task queue belongs to.
+	// Key is the deployment name.
+	DeploymentsData map[string]*WorkerDeploymentData
+}
+
+func (b0 DeploymentData_builder) Build() *DeploymentData {
+	m0 := &DeploymentData{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Versions = &b.Versions
+	x.xxx_hidden_UnversionedRampData = b.UnversionedRampData
+	x.xxx_hidden_DeploymentsData = b.DeploymentsData
+	return m0
+}
+
 // Routing config and version membership data for a given worker deployment that a TQ should know.
 type WorkerDeploymentData struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	RoutingConfig *v13.RoutingConfig     `protobuf:"bytes,1,opt,name=routing_config,json=routingConfig,proto3" json:"routing_config,omitempty"`
-	// This map tracks the membership of the task queue in the deployment versions. A version is
-	// present here iff the task queue has ever been polled from the version.
-	// Key is the build id.
-	Versions      map[string]*v12.WorkerDeploymentVersionData `protobuf:"bytes,2,rep,name=versions,proto3" json:"versions,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                    protoimpl.MessageState                      `protogen:"opaque.v1"`
+	xxx_hidden_RoutingConfig *v13.RoutingConfig                          `protobuf:"bytes,1,opt,name=routing_config,json=routingConfig,proto3"`
+	xxx_hidden_Versions      map[string]*v12.WorkerDeploymentVersionData `protobuf:"bytes,2,rep,name=versions,proto3" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *WorkerDeploymentData) Reset() {
@@ -562,33 +833,66 @@ func (x *WorkerDeploymentData) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use WorkerDeploymentData.ProtoReflect.Descriptor instead.
-func (*WorkerDeploymentData) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_task_queues_proto_rawDescGZIP(), []int{6}
-}
-
 func (x *WorkerDeploymentData) GetRoutingConfig() *v13.RoutingConfig {
 	if x != nil {
-		return x.RoutingConfig
+		return x.xxx_hidden_RoutingConfig
 	}
 	return nil
 }
 
 func (x *WorkerDeploymentData) GetVersions() map[string]*v12.WorkerDeploymentVersionData {
 	if x != nil {
-		return x.Versions
+		return x.xxx_hidden_Versions
 	}
 	return nil
 }
 
+func (x *WorkerDeploymentData) SetRoutingConfig(v *v13.RoutingConfig) {
+	x.xxx_hidden_RoutingConfig = v
+}
+
+func (x *WorkerDeploymentData) SetVersions(v map[string]*v12.WorkerDeploymentVersionData) {
+	x.xxx_hidden_Versions = v
+}
+
+func (x *WorkerDeploymentData) HasRoutingConfig() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_RoutingConfig != nil
+}
+
+func (x *WorkerDeploymentData) ClearRoutingConfig() {
+	x.xxx_hidden_RoutingConfig = nil
+}
+
+type WorkerDeploymentData_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	RoutingConfig *v13.RoutingConfig
+	// This map tracks the membership of the task queue in the deployment versions. A version is
+	// present here iff the task queue has ever been polled from the version.
+	// Key is the build id.
+	Versions map[string]*v12.WorkerDeploymentVersionData
+}
+
+func (b0 WorkerDeploymentData_builder) Build() *WorkerDeploymentData {
+	m0 := &WorkerDeploymentData{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_RoutingConfig = b.RoutingConfig
+	x.xxx_hidden_Versions = b.Versions
+	return m0
+}
+
 // Container for all persistent user data that varies per task queue type within a family.
 type TaskQueueTypeUserData struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	DeploymentData *DeploymentData        `protobuf:"bytes,1,opt,name=deployment_data,json=deploymentData,proto3" json:"deployment_data,omitempty"`
-	Config         *v11.TaskQueueConfig   `protobuf:"bytes,2,opt,name=config,proto3" json:"config,omitempty"`
-	FairnessState  v14.FairnessState      `protobuf:"varint,3,opt,name=fairness_state,json=fairnessState,proto3,enum=temporal.server.api.enums.v1.FairnessState" json:"fairness_state,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state                     protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_DeploymentData *DeploymentData        `protobuf:"bytes,1,opt,name=deployment_data,json=deploymentData,proto3"`
+	xxx_hidden_Config         *v11.TaskQueueConfig   `protobuf:"bytes,2,opt,name=config,proto3"`
+	xxx_hidden_FairnessState  v14.FairnessState      `protobuf:"varint,3,opt,name=fairness_state,json=fairnessState,proto3,enum=temporal.server.api.enums.v1.FairnessState"`
+	unknownFields             protoimpl.UnknownFields
+	sizeCache                 protoimpl.SizeCache
 }
 
 func (x *TaskQueueTypeUserData) Reset() {
@@ -616,30 +920,77 @@ func (x *TaskQueueTypeUserData) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use TaskQueueTypeUserData.ProtoReflect.Descriptor instead.
-func (*TaskQueueTypeUserData) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_task_queues_proto_rawDescGZIP(), []int{7}
-}
-
 func (x *TaskQueueTypeUserData) GetDeploymentData() *DeploymentData {
 	if x != nil {
-		return x.DeploymentData
+		return x.xxx_hidden_DeploymentData
 	}
 	return nil
 }
 
 func (x *TaskQueueTypeUserData) GetConfig() *v11.TaskQueueConfig {
 	if x != nil {
-		return x.Config
+		return x.xxx_hidden_Config
 	}
 	return nil
 }
 
 func (x *TaskQueueTypeUserData) GetFairnessState() v14.FairnessState {
 	if x != nil {
-		return x.FairnessState
+		return x.xxx_hidden_FairnessState
 	}
 	return v14.FairnessState(0)
+}
+
+func (x *TaskQueueTypeUserData) SetDeploymentData(v *DeploymentData) {
+	x.xxx_hidden_DeploymentData = v
+}
+
+func (x *TaskQueueTypeUserData) SetConfig(v *v11.TaskQueueConfig) {
+	x.xxx_hidden_Config = v
+}
+
+func (x *TaskQueueTypeUserData) SetFairnessState(v v14.FairnessState) {
+	x.xxx_hidden_FairnessState = v
+}
+
+func (x *TaskQueueTypeUserData) HasDeploymentData() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_DeploymentData != nil
+}
+
+func (x *TaskQueueTypeUserData) HasConfig() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Config != nil
+}
+
+func (x *TaskQueueTypeUserData) ClearDeploymentData() {
+	x.xxx_hidden_DeploymentData = nil
+}
+
+func (x *TaskQueueTypeUserData) ClearConfig() {
+	x.xxx_hidden_Config = nil
+}
+
+type TaskQueueTypeUserData_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	DeploymentData *DeploymentData
+	Config         *v11.TaskQueueConfig
+	FairnessState  v14.FairnessState
+}
+
+func (b0 TaskQueueTypeUserData_builder) Build() *TaskQueueTypeUserData {
+	m0 := &TaskQueueTypeUserData{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_DeploymentData = b.DeploymentData
+	x.xxx_hidden_Config = b.Config
+	x.xxx_hidden_FairnessState = b.FairnessState
+	return m0
 }
 
 // Container for all persistent user provided data for a task queue family.
@@ -648,17 +999,12 @@ func (x *TaskQueueTypeUserData) GetFairnessState() v14.FairnessState {
 // This data must all fit in a single DB column and is kept cached in-memory, take extra care to ensure data added here
 // has reasonable size limits imposed on it.
 type TaskQueueUserData struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// The last recorded cluster-local Hybrid Logical Clock timestamp for _this_ task queue family.
-	// Updated whenever user data is directly updated due to a user action but not when applying replication events.
-	// The clock is referenced when new timestamps are generated to ensure it produces monotonically increasing
-	// timestamps.
-	Clock          *v1.HybridLogicalClock `protobuf:"bytes,1,opt,name=clock,proto3" json:"clock,omitempty"`
-	VersioningData *VersioningData        `protobuf:"bytes,2,opt,name=versioning_data,json=versioningData,proto3" json:"versioning_data,omitempty"`
-	// Map from task queue type (workflow, activity, nexus) to per-type data.
-	PerType       map[int32]*TaskQueueTypeUserData `protobuf:"bytes,3,rep,name=per_type,json=perType,proto3" json:"per_type,omitempty" protobuf_key:"varint,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                     protoimpl.MessageState           `protogen:"opaque.v1"`
+	xxx_hidden_Clock          *v1.HybridLogicalClock           `protobuf:"bytes,1,opt,name=clock,proto3"`
+	xxx_hidden_VersioningData *VersioningData                  `protobuf:"bytes,2,opt,name=versioning_data,json=versioningData,proto3"`
+	xxx_hidden_PerType        map[int32]*TaskQueueTypeUserData `protobuf:"bytes,3,rep,name=per_type,json=perType,proto3" protobuf_key:"varint,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields             protoimpl.UnknownFields
+	sizeCache                 protoimpl.SizeCache
 }
 
 func (x *TaskQueueUserData) Reset() {
@@ -686,39 +1032,91 @@ func (x *TaskQueueUserData) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use TaskQueueUserData.ProtoReflect.Descriptor instead.
-func (*TaskQueueUserData) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_task_queues_proto_rawDescGZIP(), []int{8}
-}
-
 func (x *TaskQueueUserData) GetClock() *v1.HybridLogicalClock {
 	if x != nil {
-		return x.Clock
+		return x.xxx_hidden_Clock
 	}
 	return nil
 }
 
 func (x *TaskQueueUserData) GetVersioningData() *VersioningData {
 	if x != nil {
-		return x.VersioningData
+		return x.xxx_hidden_VersioningData
 	}
 	return nil
 }
 
 func (x *TaskQueueUserData) GetPerType() map[int32]*TaskQueueTypeUserData {
 	if x != nil {
-		return x.PerType
+		return x.xxx_hidden_PerType
 	}
 	return nil
 }
 
+func (x *TaskQueueUserData) SetClock(v *v1.HybridLogicalClock) {
+	x.xxx_hidden_Clock = v
+}
+
+func (x *TaskQueueUserData) SetVersioningData(v *VersioningData) {
+	x.xxx_hidden_VersioningData = v
+}
+
+func (x *TaskQueueUserData) SetPerType(v map[int32]*TaskQueueTypeUserData) {
+	x.xxx_hidden_PerType = v
+}
+
+func (x *TaskQueueUserData) HasClock() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Clock != nil
+}
+
+func (x *TaskQueueUserData) HasVersioningData() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_VersioningData != nil
+}
+
+func (x *TaskQueueUserData) ClearClock() {
+	x.xxx_hidden_Clock = nil
+}
+
+func (x *TaskQueueUserData) ClearVersioningData() {
+	x.xxx_hidden_VersioningData = nil
+}
+
+type TaskQueueUserData_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// The last recorded cluster-local Hybrid Logical Clock timestamp for _this_ task queue family.
+	// Updated whenever user data is directly updated due to a user action but not when applying replication events.
+	// The clock is referenced when new timestamps are generated to ensure it produces monotonically increasing
+	// timestamps.
+	Clock          *v1.HybridLogicalClock
+	VersioningData *VersioningData
+	// Map from task queue type (workflow, activity, nexus) to per-type data.
+	PerType map[int32]*TaskQueueTypeUserData
+}
+
+func (b0 TaskQueueUserData_builder) Build() *TaskQueueUserData {
+	m0 := &TaskQueueUserData{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Clock = b.Clock
+	x.xxx_hidden_VersioningData = b.VersioningData
+	x.xxx_hidden_PerType = b.PerType
+	return m0
+}
+
 // Simple wrapper that includes a TaskQueueUserData and its storage version.
 type VersionedTaskQueueUserData struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Data          *TaskQueueUserData     `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
-	Version       int64                  `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state              protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Data    *TaskQueueUserData     `protobuf:"bytes,1,opt,name=data,proto3"`
+	xxx_hidden_Version int64                  `protobuf:"varint,2,opt,name=version,proto3"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *VersionedTaskQueueUserData) Reset() {
@@ -746,23 +1144,53 @@ func (x *VersionedTaskQueueUserData) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use VersionedTaskQueueUserData.ProtoReflect.Descriptor instead.
-func (*VersionedTaskQueueUserData) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_task_queues_proto_rawDescGZIP(), []int{9}
-}
-
 func (x *VersionedTaskQueueUserData) GetData() *TaskQueueUserData {
 	if x != nil {
-		return x.Data
+		return x.xxx_hidden_Data
 	}
 	return nil
 }
 
 func (x *VersionedTaskQueueUserData) GetVersion() int64 {
 	if x != nil {
-		return x.Version
+		return x.xxx_hidden_Version
 	}
 	return 0
+}
+
+func (x *VersionedTaskQueueUserData) SetData(v *TaskQueueUserData) {
+	x.xxx_hidden_Data = v
+}
+
+func (x *VersionedTaskQueueUserData) SetVersion(v int64) {
+	x.xxx_hidden_Version = v
+}
+
+func (x *VersionedTaskQueueUserData) HasData() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Data != nil
+}
+
+func (x *VersionedTaskQueueUserData) ClearData() {
+	x.xxx_hidden_Data = nil
+}
+
+type VersionedTaskQueueUserData_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Data    *TaskQueueUserData
+	Version int64
+}
+
+func (b0 VersionedTaskQueueUserData_builder) Build() *VersionedTaskQueueUserData {
+	m0 := &VersionedTaskQueueUserData{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Data = b.Data
+	x.xxx_hidden_Version = b.Version
+	return m0
 }
 
 var File_temporal_server_api_persistence_v1_task_queues_proto protoreflect.FileDescriptor
@@ -822,18 +1250,6 @@ const file_temporal_server_api_persistence_v1_task_queues_proto_rawDesc = "" +
 	"\x1aVersionedTaskQueueUserData\x12I\n" +
 	"\x04data\x18\x01 \x01(\v25.temporal.server.api.persistence.v1.TaskQueueUserDataR\x04data\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\x03R\aversionB6Z4go.temporal.io/server/api/persistence/v1;persistenceb\x06proto3"
-
-var (
-	file_temporal_server_api_persistence_v1_task_queues_proto_rawDescOnce sync.Once
-	file_temporal_server_api_persistence_v1_task_queues_proto_rawDescData []byte
-)
-
-func file_temporal_server_api_persistence_v1_task_queues_proto_rawDescGZIP() []byte {
-	file_temporal_server_api_persistence_v1_task_queues_proto_rawDescOnce.Do(func() {
-		file_temporal_server_api_persistence_v1_task_queues_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_api_persistence_v1_task_queues_proto_rawDesc), len(file_temporal_server_api_persistence_v1_task_queues_proto_rawDesc)))
-	})
-	return file_temporal_server_api_persistence_v1_task_queues_proto_rawDescData
-}
 
 var file_temporal_server_api_persistence_v1_task_queues_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
 var file_temporal_server_api_persistence_v1_task_queues_proto_msgTypes = make([]protoimpl.MessageInfo, 13)

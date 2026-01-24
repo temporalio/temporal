@@ -66,17 +66,17 @@ func TestMaskInternalErrorDetailsInterceptor(t *testing.T) {
 		dynamicconfig.FrontendMaskInternalErrorDetails.Get(dc), mockRegistry, mockLogger)
 
 	test_namespace := "test-namespace"
-	req := &workflowservice.StartWorkflowExecutionRequest{Namespace: test_namespace}
+	req := workflowservice.StartWorkflowExecutionRequest_builder{Namespace: test_namespace}.Build()
 	mockRegistry.EXPECT().GetNamespace(namespace.Name(test_namespace)).Return(&namespace.Namespace{}, nil).AnyTimes()
 	assert.True(t, errorMask.shouldMaskErrors(req))
 
 	namespace_not_found := "namespace-not-found"
-	req = &workflowservice.StartWorkflowExecutionRequest{Namespace: namespace_not_found}
+	req = workflowservice.StartWorkflowExecutionRequest_builder{Namespace: namespace_not_found}.Build()
 	mockRegistry.EXPECT().GetNamespace(namespace.Name(namespace_not_found)).Return(nil, serviceerror.NewNamespaceNotFound("missing-namespace"))
 	assert.False(t, errorMask.shouldMaskErrors(req))
 
 	empty_namespace := ""
-	req = &workflowservice.StartWorkflowExecutionRequest{Namespace: empty_namespace}
+	req = workflowservice.StartWorkflowExecutionRequest_builder{Namespace: empty_namespace}.Build()
 	mockRegistry.EXPECT().GetNamespace(namespace.Name(empty_namespace)).Return(nil, serviceerror.NewNamespaceNotFound("missing-namespace"))
 	assert.False(t, errorMask.shouldMaskErrors(req))
 

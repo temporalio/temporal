@@ -161,20 +161,20 @@ func (t *transferQueueStandbyTaskExecutor) processActivityTask(
 			return nil, nil
 		}
 
-		if activityInfo.Paused {
+		if activityInfo.GetPaused() {
 			return nil, nil
 		}
 
-		if activityInfo.Stamp != transferTask.Stamp {
+		if activityInfo.GetStamp() != transferTask.Stamp {
 			return nil, consts.ErrStaleReference
 		}
 
-		err := CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), activityInfo.Version, transferTask.Version, transferTask)
+		err := CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), activityInfo.GetVersion(), transferTask.Version, transferTask)
 		if err != nil {
 			return nil, err
 		}
 
-		if activityInfo.StartedEventId == common.EmptyEventID {
+		if activityInfo.GetStartedEventId() == common.EmptyEventID {
 			return newActivityTaskPostActionInfo(mutableState, activityInfo)
 		}
 
@@ -214,10 +214,10 @@ func (t *transferQueueStandbyTaskExecutor) processWorkflowTask(
 		// NOTE: scheduleToStart timeout is respected. If workflow was sticky before namespace become standby,
 		// transferTask.TaskQueue is sticky, and there is timer already created for this timeout.
 		// Use this sticky timeout as TTL.
-		taskQueue := &taskqueuepb.TaskQueue{
-			Name: mutableState.GetExecutionInfo().TaskQueue,
+		taskQueue := taskqueuepb.TaskQueue_builder{
+			Name: mutableState.GetExecutionInfo().GetTaskQueue(),
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-		}
+		}.Build()
 
 		err := CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), wtInfo.Version, transferTask.Version, transferTask)
 		if err != nil {
@@ -272,7 +272,7 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 		}
 
 		// verify if parent got the completion event
-		verifyCompletionRecorded := mutableState.HasParentExecution() && executionInfo.NewExecutionRunId == ""
+		verifyCompletionRecorded := mutableState.HasParentExecution() && executionInfo.GetNewExecutionRunId() == ""
 		if verifyCompletionRecorded {
 			// load close event only if needed.
 			completionEvent, err := mutableState.GetCompletionEvent(ctx)
@@ -291,31 +291,31 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 			resendParent := now.After(localVerificationTime) && mutableState.IsTransitionHistoryEnabled() && mutableState.CurrentVersionedTransition() != nil
 
 			// Copy needed values from executionInfo before releasing mutable state
-			parentNamespaceID := executionInfo.ParentNamespaceId
-			parentWorkflowID := executionInfo.ParentWorkflowId
-			parentRunID := executionInfo.ParentRunId
-			parentInitiatedID := executionInfo.ParentInitiatedId
-			parentInitiatedVersion := executionInfo.ParentInitiatedVersion
-			parentClock := executionInfo.ParentClock
+			parentNamespaceID := executionInfo.GetParentNamespaceId()
+			parentWorkflowID := executionInfo.GetParentWorkflowId()
+			parentRunID := executionInfo.GetParentRunId()
+			parentInitiatedID := executionInfo.GetParentInitiatedId()
+			parentInitiatedVersion := executionInfo.GetParentInitiatedVersion()
+			parentClock := executionInfo.GetParentClock()
 
 			// no need for mutable state anymore, release workflow lock
 			release(nil)
 
-			_, err := t.historyRawClient.VerifyChildExecutionCompletionRecorded(ctx, &historyservice.VerifyChildExecutionCompletionRecordedRequest{
+			_, err := t.historyRawClient.VerifyChildExecutionCompletionRecorded(ctx, historyservice.VerifyChildExecutionCompletionRecordedRequest_builder{
 				NamespaceId: parentNamespaceID,
-				ParentExecution: &commonpb.WorkflowExecution{
+				ParentExecution: commonpb.WorkflowExecution_builder{
 					WorkflowId: parentWorkflowID,
 					RunId:      parentRunID,
-				},
-				ChildExecution: &commonpb.WorkflowExecution{
+				}.Build(),
+				ChildExecution: commonpb.WorkflowExecution_builder{
 					WorkflowId: transferTask.WorkflowID,
 					RunId:      transferTask.RunID,
-				},
+				}.Build(),
 				ParentInitiatedId:      parentInitiatedID,
 				ParentInitiatedVersion: parentInitiatedVersion,
 				Clock:                  parentClock,
 				ResendParent:           resendParent,
-			})
+			}.Build())
 			switch err.(type) {
 			case nil, *serviceerror.NamespaceNotFound, *serviceerror.Unimplemented:
 				// Case 1: Target workflow is in the desired state.
@@ -368,7 +368,7 @@ func (t *transferQueueStandbyTaskExecutor) processCancelExecution(
 			return nil, nil
 		}
 
-		err := CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), requestCancelInfo.Version, transferTask.Version, transferTask)
+		err := CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), requestCancelInfo.GetVersion(), transferTask.Version, transferTask)
 		if err != nil {
 			return nil, err
 		}
@@ -401,7 +401,7 @@ func (t *transferQueueStandbyTaskExecutor) processSignalExecution(
 			return nil, nil
 		}
 
-		err := CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), signalInfo.Version, transferTask.Version, transferTask)
+		err := CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), signalInfo.GetVersion(), transferTask.Version, transferTask)
 		if err != nil {
 			return nil, err
 		}
@@ -434,21 +434,21 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 			return nil, nil
 		}
 
-		err := CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), childWorkflowInfo.Version, transferTask.Version, transferTask)
+		err := CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), childWorkflowInfo.GetVersion(), transferTask.Version, transferTask)
 		if err != nil {
 			return nil, err
 		}
 
 		workflowClosed := !mutableState.IsWorkflowExecutionRunning()
-		childStarted := childWorkflowInfo.StartedEventId != common.EmptyEventID
-		childAbandon := childWorkflowInfo.ParentClosePolicy == enumspb.PARENT_CLOSE_POLICY_ABANDON
+		childStarted := childWorkflowInfo.GetStartedEventId() != common.EmptyEventID
+		childAbandon := childWorkflowInfo.GetParentClosePolicy() == enumspb.PARENT_CLOSE_POLICY_ABANDON
 
 		// Copy needed values from childWorkflowInfo before releasing mutable state
-		childTargetNamespaceID := childWorkflowInfo.NamespaceId
-		childTargetNamespaceName := namespace.Name(childWorkflowInfo.Namespace)
-		childStartedWorkflowID := childWorkflowInfo.StartedWorkflowId
-		childStartedRunID := childWorkflowInfo.StartedRunId
-		childClock := childWorkflowInfo.Clock
+		childTargetNamespaceID := childWorkflowInfo.GetNamespaceId()
+		childTargetNamespaceName := namespace.Name(childWorkflowInfo.GetNamespace())
+		childStartedWorkflowID := childWorkflowInfo.GetStartedWorkflowId()
+		childStartedRunID := childWorkflowInfo.GetStartedRunId()
+		childClock := childWorkflowInfo.GetClock()
 
 		// no need for mutable state anymore, release workflow lock
 		release(nil)
@@ -477,14 +477,14 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 			childTargetNamespaceID = targetNamespaceEntry.ID().String()
 		}
 
-		_, err = t.historyRawClient.VerifyFirstWorkflowTaskScheduled(ctx, &historyservice.VerifyFirstWorkflowTaskScheduledRequest{
+		_, err = t.historyRawClient.VerifyFirstWorkflowTaskScheduled(ctx, historyservice.VerifyFirstWorkflowTaskScheduledRequest_builder{
 			NamespaceId: childTargetNamespaceID,
-			WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowExecution: commonpb.WorkflowExecution_builder{
 				WorkflowId: childStartedWorkflowID,
 				RunId:      childStartedRunID,
-			},
+			}.Build(),
 			Clock: childClock,
-		})
+		}.Build())
 		switch err.(type) {
 		case nil, *serviceerror.NamespaceNotFound, *serviceerror.Unimplemented:
 			// Case 1: Target workflow is in the desired state.

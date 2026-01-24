@@ -62,10 +62,10 @@ func (s *workflowCacheSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockShard = shard.NewTestContext(
 		s.controller,
-		&persistencespb.ShardInfo{
+		persistencespb.ShardInfo_builder{
 			ShardId: 0,
 			RangeId: 1,
-		},
+		}.Build(),
 		tests.NewDynamicConfig(),
 	)
 
@@ -81,17 +81,17 @@ func (s *workflowCacheSuite) TestHistoryCacheBasic() {
 	s.cache = NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler)
 
 	namespaceID := namespace.ID("test_namespace_id")
-	execution1 := commonpb.WorkflowExecution{
+	execution1 := commonpb.WorkflowExecution_builder{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.NewString(),
-	}
+	}.Build()
 	mockMS1 := historyi.NewMockMutableState(s.controller)
 	mockMS1.EXPECT().IsDirty().Return(false).AnyTimes()
 	ctx, release, err := s.cache.GetOrCreateWorkflowExecution(
 		context.Background(),
 		s.mockShard,
 		namespaceID,
-		&execution1,
+		execution1,
 		locks.PriorityHigh,
 	)
 	s.NoError(err)
@@ -101,22 +101,22 @@ func (s *workflowCacheSuite) TestHistoryCacheBasic() {
 		context.Background(),
 		s.mockShard,
 		namespaceID,
-		&execution1,
+		execution1,
 		locks.PriorityHigh,
 	)
 	s.NoError(err)
 	s.Equal(mockMS1, ctx.(*workflow.ContextImpl).MutableState)
 	release(nil)
 
-	execution2 := commonpb.WorkflowExecution{
+	execution2 := commonpb.WorkflowExecution_builder{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.NewString(),
-	}
+	}.Build()
 	ctx, release, err = s.cache.GetOrCreateWorkflowExecution(
 		context.Background(),
 		s.mockShard,
 		namespaceID,
-		&execution2,
+		execution2,
 		locks.PriorityHigh,
 	)
 	s.NoError(err)
@@ -128,10 +128,10 @@ func (s *workflowCacheSuite) TestHistoryCachePanic() {
 	s.cache = NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler)
 
 	namespaceID := namespace.ID("test_namespace_id")
-	execution1 := commonpb.WorkflowExecution{
+	execution1 := commonpb.WorkflowExecution_builder{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.NewString(),
-	}
+	}.Build()
 	mockMS1 := historyi.NewMockMutableState(s.controller)
 	mockMS1.EXPECT().IsDirty().Return(true).AnyTimes()
 	mockMS1.EXPECT().GetQueryRegistry().Return(workflow.NewQueryRegistry()).AnyTimes()
@@ -140,7 +140,7 @@ func (s *workflowCacheSuite) TestHistoryCachePanic() {
 		context.Background(),
 		s.mockShard,
 		namespaceID,
-		&execution1,
+		execution1,
 		locks.PriorityHigh,
 	)
 	s.NoError(err)
@@ -152,7 +152,7 @@ func (s *workflowCacheSuite) TestHistoryCachePanic() {
 				context.Background(),
 				s.mockShard,
 				namespaceID,
-				&execution1,
+				execution1,
 				locks.PriorityHigh,
 			)
 			s.NoError(err)
@@ -169,31 +169,31 @@ func (s *workflowCacheSuite) TestHistoryCachePinning() {
 	s.mockShard.GetConfig().HistoryHostLevelCacheMaxSize = dynamicconfig.GetIntPropertyFn(1)
 	namespaceID := namespace.ID("test_namespace_id")
 	s.cache = NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler)
-	we := commonpb.WorkflowExecution{
+	we := commonpb.WorkflowExecution_builder{
 		WorkflowId: "wf-cache-test-pinning",
 		RunId:      uuid.NewString(),
-	}
+	}.Build()
 
 	ctx, release, err := s.cache.GetOrCreateWorkflowExecution(
 		context.Background(),
 		s.mockShard,
 		namespaceID,
-		&we,
+		we,
 		locks.PriorityHigh,
 	)
 	s.NoError(err)
 
-	we2 := commonpb.WorkflowExecution{
+	we2 := commonpb.WorkflowExecution_builder{
 		WorkflowId: "wf-cache-test-pinning",
 		RunId:      uuid.NewString(),
-	}
+	}.Build()
 
 	// Cache is full because context is pinned, should get an error now
 	_, _, err2 := s.cache.GetOrCreateWorkflowExecution(
 		context.Background(),
 		s.mockShard,
 		namespaceID,
-		&we2,
+		we2,
 		locks.PriorityHigh,
 	)
 	s.Error(err2)
@@ -205,7 +205,7 @@ func (s *workflowCacheSuite) TestHistoryCachePinning() {
 		context.Background(),
 		s.mockShard,
 		namespaceID,
-		&we2,
+		we2,
 		locks.PriorityHigh,
 	)
 	s.NoError(err3)
@@ -216,7 +216,7 @@ func (s *workflowCacheSuite) TestHistoryCachePinning() {
 		context.Background(),
 		s.mockShard,
 		namespaceID,
-		&we,
+		we,
 		locks.PriorityHigh,
 	)
 	s.NoError(err4)
@@ -228,16 +228,16 @@ func (s *workflowCacheSuite) TestHistoryCacheClear() {
 	s.mockShard.GetConfig().HistoryHostLevelCacheMaxSize = dynamicconfig.GetIntPropertyFn(20)
 	namespaceID := namespace.ID("test_namespace_id")
 	s.cache = NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler)
-	we := commonpb.WorkflowExecution{
+	we := commonpb.WorkflowExecution_builder{
 		WorkflowId: "wf-cache-test-clear",
 		RunId:      uuid.NewString(),
-	}
+	}.Build()
 
 	ctx, release, err := s.cache.GetOrCreateWorkflowExecution(
 		context.Background(),
 		s.mockShard,
 		namespaceID,
-		&we,
+		we,
 		locks.PriorityHigh,
 	)
 	s.NoError(err)
@@ -256,7 +256,7 @@ func (s *workflowCacheSuite) TestHistoryCacheClear() {
 		context.Background(),
 		s.mockShard,
 		namespaceID,
-		&we,
+		we,
 		locks.PriorityHigh,
 	)
 	s.NoError(err)
@@ -271,7 +271,7 @@ func (s *workflowCacheSuite) TestHistoryCacheClear() {
 		context.Background(),
 		s.mockShard,
 		namespaceID,
-		&we,
+		we,
 		locks.PriorityHigh,
 	)
 	s.NoError(err)
@@ -304,10 +304,10 @@ func (s *workflowCacheSuite) TestHistoryCacheConcurrentAccess_Release() {
 			context.Background(),
 			s.mockShard,
 			namespaceID,
-			&commonpb.WorkflowExecution{
+			commonpb.WorkflowExecution_builder{
 				WorkflowId: workflowId,
 				RunId:      runID,
-			},
+			}.Build(),
 			locks.PriorityHigh,
 		)
 		s.NoError(err)
@@ -331,10 +331,10 @@ func (s *workflowCacheSuite) TestHistoryCacheConcurrentAccess_Release() {
 		context.Background(),
 		s.mockShard,
 		namespaceID,
-		&commonpb.WorkflowExecution{
+		commonpb.WorkflowExecution_builder{
 			WorkflowId: workflowId,
 			RunId:      runID,
-		},
+		}.Build(),
 		locks.PriorityHigh,
 	)
 	s.NoError(err)
@@ -431,10 +431,10 @@ func (s *workflowCacheSuite) TestHistoryCache_CacheLatencyMetricContext() {
 		ctx,
 		s.mockShard,
 		tests.NamespaceID,
-		&commonpb.WorkflowExecution{
+		commonpb.WorkflowExecution_builder{
 			WorkflowId: tests.WorkflowID,
 			RunId:      tests.RunID,
-		},
+		}.Build(),
 		locks.PriorityHigh,
 	)
 	s.NoError(err)
@@ -533,10 +533,10 @@ func (s *workflowCacheSuite) TestCacheImpl_lockWorkflowExecution() {
 			c := NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler)
 
 			namespaceID := namespace.ID("test_namespace_id")
-			execution := commonpb.WorkflowExecution{
+			execution := commonpb.WorkflowExecution_builder{
 				WorkflowId: "some random workflow id",
 				RunId:      uuid.NewString(),
-			}
+			}.Build()
 			cacheKey := Key{
 				WorkflowKey: definition.NewWorkflowKey(namespaceID.String(), execution.GetWorkflowId(), execution.GetRunId()),
 				ArchetypeID: chasm.WorkflowArchetypeID,
@@ -573,26 +573,26 @@ func (s *workflowCacheSuite) TestCacheImpl_RejectsRequestWhenAtLimitSimple() {
 	config.HistoryHostLevelCacheMaxSizeBytes = dynamicconfig.GetIntPropertyFn(1000)
 	mockShard := shard.NewTestContext(
 		s.controller,
-		&persistencespb.ShardInfo{
+		persistencespb.ShardInfo_builder{
 			ShardId: 0,
 			RangeId: 1,
-		},
+		}.Build(),
 		config,
 	)
 	s.cache = NewHostLevelCache(config, s.mockShard.GetLogger(), metrics.NoopMetricsHandler)
 
 	namespaceID := namespace.ID("test_namespace_id")
-	execution1 := commonpb.WorkflowExecution{
+	execution1 := commonpb.WorkflowExecution_builder{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.NewString(),
-	}
+	}.Build()
 	mockMS1 := historyi.NewMockMutableState(s.controller)
 	mockMS1.EXPECT().IsDirty().Return(false).AnyTimes()
 	ctx, release1, err := s.cache.GetOrCreateWorkflowExecution(
 		context.Background(),
 		mockShard,
 		namespaceID,
-		&execution1,
+		execution1,
 		locks.PriorityHigh,
 	)
 	s.NoError(err)
@@ -606,22 +606,22 @@ func (s *workflowCacheSuite) TestCacheImpl_RejectsRequestWhenAtLimitSimple() {
 		context.Background(),
 		mockShard,
 		namespaceID,
-		&execution1,
+		execution1,
 		locks.PriorityHigh,
 	)
 	s.NoError(err)
 	s.Equal(mockMS1, ctx.(*workflow.ContextImpl).MutableState)
 
 	// Try to insert another entry before releasing previous.
-	execution2 := commonpb.WorkflowExecution{
+	execution2 := commonpb.WorkflowExecution_builder{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.NewString(),
-	}
+	}.Build()
 	_, _, err = s.cache.GetOrCreateWorkflowExecution(
 		context.Background(),
 		mockShard,
 		namespaceID,
-		&execution2,
+		execution2,
 		locks.PriorityHigh,
 	)
 	s.Error(err)
@@ -639,18 +639,18 @@ func (s *workflowCacheSuite) TestCacheImpl_RejectsRequestWhenAtLimitMultiple() {
 	config.HistoryHostLevelCacheMaxSizeBytes = dynamicconfig.GetIntPropertyFn(1000)
 	mockShard := shard.NewTestContext(
 		s.controller,
-		&persistencespb.ShardInfo{
+		persistencespb.ShardInfo_builder{
 			ShardId: 0,
 			RangeId: 1,
-		},
+		}.Build(),
 		config,
 	)
 	s.cache = NewHostLevelCache(config, s.mockShard.GetLogger(), metrics.NoopMetricsHandler)
 	namespaceID := namespace.ID("test_namespace_id")
-	execution1 := commonpb.WorkflowExecution{
+	execution1 := commonpb.WorkflowExecution_builder{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.NewString(),
-	}
+	}.Build()
 	mockMS1 := historyi.NewMockMutableState(s.controller)
 	mockMS1.EXPECT().IsDirty().Return(false).AnyTimes()
 
@@ -658,7 +658,7 @@ func (s *workflowCacheSuite) TestCacheImpl_RejectsRequestWhenAtLimitMultiple() {
 		context.Background(),
 		mockShard,
 		namespaceID,
-		&execution1,
+		execution1,
 		locks.PriorityHigh,
 	)
 	s.NoError(err)
@@ -671,24 +671,24 @@ func (s *workflowCacheSuite) TestCacheImpl_RejectsRequestWhenAtLimitMultiple() {
 		context.Background(),
 		mockShard,
 		namespaceID,
-		&execution1,
+		execution1,
 		locks.PriorityHigh,
 	)
 	s.NoError(err)
 	s.Equal(mockMS1, ctx.(*workflow.ContextImpl).MutableState)
 
 	// Insert another 400byte entry.
-	execution2 := commonpb.WorkflowExecution{
+	execution2 := commonpb.WorkflowExecution_builder{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.NewString(),
-	}
+	}.Build()
 	mockMS2 := historyi.NewMockMutableState(s.controller)
 	mockMS2.EXPECT().IsDirty().Return(false).AnyTimes()
 	ctx, release2, err := s.cache.GetOrCreateWorkflowExecution(
 		context.Background(),
 		mockShard,
 		namespaceID,
-		&execution2,
+		execution2,
 		locks.PriorityHigh,
 	)
 	s.NoError(err)
@@ -699,24 +699,24 @@ func (s *workflowCacheSuite) TestCacheImpl_RejectsRequestWhenAtLimitMultiple() {
 		context.Background(),
 		mockShard,
 		namespaceID,
-		&execution2,
+		execution2,
 		locks.PriorityHigh,
 	)
 	s.NoError(err)
 	s.Equal(mockMS2, ctx.(*workflow.ContextImpl).MutableState)
 
 	// Insert another entry. This should fail as cache has ~800bytes pinned.
-	execution3 := commonpb.WorkflowExecution{
+	execution3 := commonpb.WorkflowExecution_builder{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.NewString(),
-	}
+	}.Build()
 	mockMS3 := historyi.NewMockMutableState(s.controller)
 	mockMS3.EXPECT().IsDirty().Return(false).AnyTimes()
 	_, _, err = s.cache.GetOrCreateWorkflowExecution(
 		context.Background(),
 		mockShard,
 		namespaceID,
-		&execution3,
+		execution3,
 		locks.PriorityHigh,
 	)
 	s.Error(err)
@@ -731,7 +731,7 @@ func (s *workflowCacheSuite) TestCacheImpl_RejectsRequestWhenAtLimitMultiple() {
 		context.Background(),
 		mockShard,
 		namespaceID,
-		&execution1,
+		execution1,
 		locks.PriorityHigh,
 	)
 	s.NoError(err)
@@ -744,7 +744,7 @@ func (s *workflowCacheSuite) TestCacheImpl_RejectsRequestWhenAtLimitMultiple() {
 		context.Background(),
 		mockShard,
 		namespaceID,
-		&execution3,
+		execution3,
 		locks.PriorityHigh,
 	)
 	s.NoError(err)
@@ -756,7 +756,7 @@ func (s *workflowCacheSuite) TestCacheImpl_RejectsRequestWhenAtLimitMultiple() {
 		context.Background(),
 		mockShard,
 		namespaceID,
-		&execution3,
+		execution3,
 		locks.PriorityHigh,
 	)
 	s.NoError(err)
@@ -776,26 +776,26 @@ func (s *workflowCacheSuite) TestCacheImpl_CheckCacheLimitSizeBasedFlag() {
 	config.HistoryHostLevelCacheMaxSize = dynamicconfig.GetIntPropertyFn(1)
 	mockShard := shard.NewTestContext(
 		s.controller,
-		&persistencespb.ShardInfo{
+		persistencespb.ShardInfo_builder{
 			ShardId: 0,
 			RangeId: 1,
-		},
+		}.Build(),
 		config,
 	)
 	s.cache = NewHostLevelCache(config, s.mockShard.GetLogger(), metrics.NoopMetricsHandler)
 
 	namespaceID := namespace.ID("test_namespace_id")
-	execution1 := commonpb.WorkflowExecution{
+	execution1 := commonpb.WorkflowExecution_builder{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.NewString(),
-	}
+	}.Build()
 	mockMS1 := historyi.NewMockMutableState(s.controller)
 	mockMS1.EXPECT().IsDirty().Return(false).AnyTimes()
 	ctx, release1, err := s.cache.GetOrCreateWorkflowExecution(
 		context.Background(),
 		mockShard,
 		namespaceID,
-		&execution1,
+		execution1,
 		locks.PriorityHigh,
 	)
 	s.NoError(err)
@@ -807,7 +807,7 @@ func (s *workflowCacheSuite) TestCacheImpl_CheckCacheLimitSizeBasedFlag() {
 		context.Background(),
 		mockShard,
 		namespaceID,
-		&execution1,
+		execution1,
 		locks.PriorityHigh,
 	)
 	s.NoError(err)
@@ -819,10 +819,10 @@ func (s *workflowCacheSuite) TestCacheImpl_GetCurrentRunID_CurrentRunExists() {
 	s.cache = NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler)
 
 	namespaceID := namespace.ID("test_namespace_id")
-	execution := commonpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution_builder{
 		WorkflowId: "some random workflow ID",
 		RunId:      "",
-	}
+	}.Build()
 
 	currentRunID := uuid.NewString()
 
@@ -843,7 +843,7 @@ func (s *workflowCacheSuite) TestCacheImpl_GetCurrentRunID_CurrentRunExists() {
 		context.Background(),
 		s.mockShard,
 		namespaceID,
-		&execution,
+		execution,
 		locks.PriorityHigh,
 	)
 	s.NoError(err)
@@ -856,10 +856,10 @@ func (s *workflowCacheSuite) TestCacheImpl_GetCurrentRunID_NoCurrentRun() {
 	s.cache = NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler)
 
 	namespaceID := namespace.ID("test_namespace_id")
-	execution := commonpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution_builder{
 		WorkflowId: "some random workflow ID",
 		RunId:      "",
-	}
+	}.Build()
 
 	mockExecutionManager := s.mockShard.Resource.ExecutionMgr
 	mockExecutionManager.EXPECT().GetCurrentExecution(gomock.Any(), &persistence.GetCurrentExecutionRequest{
@@ -873,7 +873,7 @@ func (s *workflowCacheSuite) TestCacheImpl_GetCurrentRunID_NoCurrentRun() {
 		context.Background(),
 		s.mockShard,
 		namespaceID,
-		&execution,
+		execution,
 		locks.PriorityHigh,
 	)
 	var notFound *serviceerror.NotFound

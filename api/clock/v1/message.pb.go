@@ -8,7 +8,6 @@ package clock
 
 import (
 	reflect "reflect"
-	sync "sync"
 	unsafe "unsafe"
 
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -23,12 +22,12 @@ const (
 )
 
 type VectorClock struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ShardId       int32                  `protobuf:"varint,1,opt,name=shard_id,json=shardId,proto3" json:"shard_id,omitempty"`
-	Clock         int64                  `protobuf:"varint,2,opt,name=clock,proto3" json:"clock,omitempty"`
-	ClusterId     int64                  `protobuf:"varint,3,opt,name=cluster_id,json=clusterId,proto3" json:"cluster_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_ShardId   int32                  `protobuf:"varint,1,opt,name=shard_id,json=shardId,proto3"`
+	xxx_hidden_Clock     int64                  `protobuf:"varint,2,opt,name=clock,proto3"`
+	xxx_hidden_ClusterId int64                  `protobuf:"varint,3,opt,name=cluster_id,json=clusterId,proto3"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *VectorClock) Reset() {
@@ -56,47 +55,66 @@ func (x *VectorClock) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use VectorClock.ProtoReflect.Descriptor instead.
-func (*VectorClock) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_clock_v1_message_proto_rawDescGZIP(), []int{0}
-}
-
 func (x *VectorClock) GetShardId() int32 {
 	if x != nil {
-		return x.ShardId
+		return x.xxx_hidden_ShardId
 	}
 	return 0
 }
 
 func (x *VectorClock) GetClock() int64 {
 	if x != nil {
-		return x.Clock
+		return x.xxx_hidden_Clock
 	}
 	return 0
 }
 
 func (x *VectorClock) GetClusterId() int64 {
 	if x != nil {
-		return x.ClusterId
+		return x.xxx_hidden_ClusterId
 	}
 	return 0
+}
+
+func (x *VectorClock) SetShardId(v int32) {
+	x.xxx_hidden_ShardId = v
+}
+
+func (x *VectorClock) SetClock(v int64) {
+	x.xxx_hidden_Clock = v
+}
+
+func (x *VectorClock) SetClusterId(v int64) {
+	x.xxx_hidden_ClusterId = v
+}
+
+type VectorClock_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	ShardId   int32
+	Clock     int64
+	ClusterId int64
+}
+
+func (b0 VectorClock_builder) Build() *VectorClock {
+	m0 := &VectorClock{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_ShardId = b.ShardId
+	x.xxx_hidden_Clock = b.Clock
+	x.xxx_hidden_ClusterId = b.ClusterId
+	return m0
 }
 
 // A Hybrid Logical Clock timestamp.
 // Guarantees strict total ordering for conflict resolution purposes.
 type HybridLogicalClock struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Wall clock - A single time source MUST guarantee that 2 consecutive timestamps are monotonically non-decreasing.
-	// e.g. by storing the last wall clock and returning max(gettimeofday(), lastWallClock).
-	WallClock int64 `protobuf:"varint,1,opt,name=wall_clock,json=wallClock,proto3" json:"wall_clock,omitempty"`
-	// Incremental sequence that is reset every time the system's wallclock moves forward.
-	// Ensures the clock generates monotonically increasing timestamps.
-	Version int32 `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
-	// The cluster version ID as described in the XDC docs - used as a tie breaker.
-	// See: https://github.com/uber/cadence/blob/master/docs/design/2290-cadence-ndc.md
-	ClusterId     int64 `protobuf:"varint,3,opt,name=cluster_id,json=clusterId,proto3" json:"cluster_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_WallClock int64                  `protobuf:"varint,1,opt,name=wall_clock,json=wallClock,proto3"`
+	xxx_hidden_Version   int32                  `protobuf:"varint,2,opt,name=version,proto3"`
+	xxx_hidden_ClusterId int64                  `protobuf:"varint,3,opt,name=cluster_id,json=clusterId,proto3"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *HybridLogicalClock) Reset() {
@@ -124,30 +142,61 @@ func (x *HybridLogicalClock) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use HybridLogicalClock.ProtoReflect.Descriptor instead.
-func (*HybridLogicalClock) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_clock_v1_message_proto_rawDescGZIP(), []int{1}
-}
-
 func (x *HybridLogicalClock) GetWallClock() int64 {
 	if x != nil {
-		return x.WallClock
+		return x.xxx_hidden_WallClock
 	}
 	return 0
 }
 
 func (x *HybridLogicalClock) GetVersion() int32 {
 	if x != nil {
-		return x.Version
+		return x.xxx_hidden_Version
 	}
 	return 0
 }
 
 func (x *HybridLogicalClock) GetClusterId() int64 {
 	if x != nil {
-		return x.ClusterId
+		return x.xxx_hidden_ClusterId
 	}
 	return 0
+}
+
+func (x *HybridLogicalClock) SetWallClock(v int64) {
+	x.xxx_hidden_WallClock = v
+}
+
+func (x *HybridLogicalClock) SetVersion(v int32) {
+	x.xxx_hidden_Version = v
+}
+
+func (x *HybridLogicalClock) SetClusterId(v int64) {
+	x.xxx_hidden_ClusterId = v
+}
+
+type HybridLogicalClock_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Wall clock - A single time source MUST guarantee that 2 consecutive timestamps are monotonically non-decreasing.
+	// e.g. by storing the last wall clock and returning max(gettimeofday(), lastWallClock).
+	WallClock int64
+	// Incremental sequence that is reset every time the system's wallclock moves forward.
+	// Ensures the clock generates monotonically increasing timestamps.
+	Version int32
+	// The cluster version ID as described in the XDC docs - used as a tie breaker.
+	// See: https://github.com/uber/cadence/blob/master/docs/design/2290-cadence-ndc.md
+	ClusterId int64
+}
+
+func (b0 HybridLogicalClock_builder) Build() *HybridLogicalClock {
+	m0 := &HybridLogicalClock{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_WallClock = b.WallClock
+	x.xxx_hidden_Version = b.Version
+	x.xxx_hidden_ClusterId = b.ClusterId
+	return m0
 }
 
 var File_temporal_server_api_clock_v1_message_proto protoreflect.FileDescriptor
@@ -166,18 +215,6 @@ const file_temporal_server_api_clock_v1_message_proto_rawDesc = "" +
 	"\aversion\x18\x02 \x01(\x05R\aversion\x12\x1d\n" +
 	"\n" +
 	"cluster_id\x18\x03 \x01(\x03R\tclusterIdB*Z(go.temporal.io/server/api/clock/v1;clockb\x06proto3"
-
-var (
-	file_temporal_server_api_clock_v1_message_proto_rawDescOnce sync.Once
-	file_temporal_server_api_clock_v1_message_proto_rawDescData []byte
-)
-
-func file_temporal_server_api_clock_v1_message_proto_rawDescGZIP() []byte {
-	file_temporal_server_api_clock_v1_message_proto_rawDescOnce.Do(func() {
-		file_temporal_server_api_clock_v1_message_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_api_clock_v1_message_proto_rawDesc), len(file_temporal_server_api_clock_v1_message_proto_rawDesc)))
-	})
-	return file_temporal_server_api_clock_v1_message_proto_rawDescData
-}
 
 var file_temporal_server_api_clock_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
 var file_temporal_server_api_clock_v1_message_proto_goTypes = []any{

@@ -59,8 +59,8 @@ func (m *metadataManagerImpl) CreateNamespace(
 	}
 
 	return m.persistence.CreateNamespace(ctx, &InternalCreateNamespaceRequest{
-		ID:        request.Namespace.Info.Id,
-		Name:      request.Namespace.Info.Name,
+		ID:        request.Namespace.GetInfo().GetId(),
+		Name:      request.Namespace.GetInfo().GetName(),
 		IsGlobal:  request.IsGlobalNamespace,
 		Namespace: datablob,
 	})
@@ -87,8 +87,8 @@ func (m *metadataManagerImpl) UpdateNamespace(
 	}
 
 	return m.persistence.UpdateNamespace(ctx, &InternalUpdateNamespaceRequest{
-		Id:                  request.Namespace.Info.Id,
-		Name:                request.Namespace.Info.Name,
+		Id:                  request.Namespace.GetInfo().GetId(),
+		Name:                request.Namespace.GetInfo().GetName(),
 		Namespace:           datablob,
 		NotificationVersion: request.NotificationVersion,
 		IsGlobal:            request.IsGlobalNamespace,
@@ -111,8 +111,8 @@ func (m *metadataManagerImpl) RenameNamespace(
 		return err
 	}
 
-	previousName := ns.Namespace.Info.Name
-	ns.Namespace.Info.Name = request.NewName
+	previousName := ns.Namespace.GetInfo().GetName()
+	ns.Namespace.GetInfo().SetName(request.NewName)
 
 	nsDataBlob, err := m.serializer.NamespaceDetailToBlob(ns.Namespace)
 	if err != nil {
@@ -121,8 +121,8 @@ func (m *metadataManagerImpl) RenameNamespace(
 
 	renameRequest := &InternalRenameNamespaceRequest{
 		InternalUpdateNamespaceRequest: &InternalUpdateNamespaceRequest{
-			Id:                  ns.Namespace.Info.Id,
-			Name:                ns.Namespace.Info.Name,
+			Id:                  ns.Namespace.GetInfo().GetId(),
+			Name:                ns.Namespace.GetInfo().GetName(),
 			Namespace:           nsDataBlob,
 			NotificationVersion: metadata.NotificationVersion,
 			IsGlobal:            ns.IsGlobalNamespace,
@@ -153,16 +153,16 @@ func ConvertInternalGetNamespaceResponse(serializer serialization.Serializer, cu
 		return nil, err
 	}
 
-	if ns.Info.Data == nil {
-		ns.Info.Data = map[string]string{}
+	if ns.GetInfo().GetData() == nil {
+		ns.GetInfo().SetData(map[string]string{})
 	}
 
-	if ns.Config.BadBinaries == nil || ns.Config.BadBinaries.Binaries == nil {
-		ns.Config.BadBinaries = &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}}
+	if !ns.GetConfig().HasBadBinaries() || ns.GetConfig().GetBadBinaries().GetBinaries() == nil {
+		ns.GetConfig().SetBadBinaries(namespacepb.BadBinaries_builder{Binaries: map[string]*namespacepb.BadBinaryInfo{}}.Build())
 	}
 
-	ns.ReplicationConfig.ActiveClusterName = GetOrUseDefaultActiveCluster(currentClusterName, ns.ReplicationConfig.ActiveClusterName)
-	ns.ReplicationConfig.Clusters = GetOrUseDefaultClusters(currentClusterName, ns.ReplicationConfig.Clusters)
+	ns.GetReplicationConfig().SetActiveClusterName(GetOrUseDefaultActiveCluster(currentClusterName, ns.GetReplicationConfig().GetActiveClusterName()))
+	ns.GetReplicationConfig().SetClusters(GetOrUseDefaultClusters(currentClusterName, ns.GetReplicationConfig().GetClusters()))
 	return &GetNamespaceResponse{
 		Namespace:           ns,
 		IsGlobalNamespace:   d.IsGlobal,
@@ -192,7 +192,7 @@ func (m *metadataManagerImpl) ListNamespaces(
 			if err != nil {
 				return nil, err
 			}
-			if ret.Namespace.Info.State == enumspb.NAMESPACE_STATE_DELETED && !request.IncludeDeleted {
+			if ret.Namespace.GetInfo().GetState() == enumspb.NAMESPACE_STATE_DELETED && !request.IncludeDeleted {
 				deletedNamespacesCount++
 				continue
 			}
@@ -221,26 +221,26 @@ func (m *metadataManagerImpl) InitializeSystemNamespaces(
 	currentClusterName string,
 ) error {
 	_, err := m.CreateNamespace(ctx, &CreateNamespaceRequest{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
+		Namespace: persistencespb.NamespaceDetail_builder{
+			Info: persistencespb.NamespaceInfo_builder{
 				Id:          primitives.SystemNamespaceID,
 				Name:        primitives.SystemLocalNamespace,
 				State:       enumspb.NAMESPACE_STATE_REGISTERED,
 				Description: "Temporal internal system namespace",
 				Owner:       "temporal-core@temporal.io",
-			},
-			Config: &persistencespb.NamespaceConfig{
+			}.Build(),
+			Config: persistencespb.NamespaceConfig_builder{
 				Retention:               durationpb.New(primitives.SystemNamespaceRetention),
 				HistoryArchivalState:    enumspb.ARCHIVAL_STATE_DISABLED,
 				VisibilityArchivalState: enumspb.ARCHIVAL_STATE_DISABLED,
-			},
-			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+			}.Build(),
+			ReplicationConfig: persistencespb.NamespaceReplicationConfig_builder{
 				ActiveClusterName: currentClusterName,
 				Clusters:          []string{currentClusterName},
-			},
+			}.Build(),
 			FailoverVersion:             common.EmptyVersion,
 			FailoverNotificationVersion: -1,
-		},
+		}.Build(),
 		IsGlobalNamespace: false,
 	})
 

@@ -125,7 +125,7 @@ func TestMergeMapOfPayload(t *testing.T) {
 	s.Equal(0, len(resultMap))
 
 	newValue, _ = Encode([]int{})
-	newValue.Metadata["key"] = []byte("foo")
+	newValue.GetMetadata()["key"] = []byte("foo")
 	newMap = map[string]*commonpb.Payload{"number": newValue}
 	resultMap = MergeMapOfPayload(currentMap, newMap)
 	s.Equal(0, len(resultMap))
@@ -142,8 +142,8 @@ func TestIsEqual(t *testing.T) {
 	b, _ = Encode([]string{})
 	s.True(isEqual(a, b))
 
-	a.Metadata["key"] = []byte("foo")
-	b.Metadata["key"] = []byte("bar")
+	a.GetMetadata()["key"] = []byte("foo")
+	b.GetMetadata()["key"] = []byte("bar")
 	s.True(isEqual(a, b))
 
 	a, _ = Encode(nil)

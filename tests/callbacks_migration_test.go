@@ -102,33 +102,31 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_CHASM_Enabled_Mid_WF() {
 	defer w.Stop()
 
 	// Start workflow with callback (CHASM is disabled at this point)
-	callback := &commonpb.Callback{
-		Variant: &commonpb.Callback_Nexus_{
-			Nexus: &commonpb.Callback_Nexus{
-				Url: callbackAddress + "/callback",
-			},
-		},
-	}
+	callback := commonpb.Callback_builder{
+		Nexus: commonpb.Callback_Nexus_builder{
+			Url: callbackAddress + "/callback",
+		}.Build(),
+	}.Build()
 
-	request := &workflowservice.StartWorkflowExecutionRequest{
+	request := workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          workflowID,
-		WorkflowType:        &commonpb.WorkflowType{Name: workflowType},
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		WorkflowType:        commonpb.WorkflowType_builder{Name: workflowType}.Build(),
+		TaskQueue:           taskqueuepb.TaskQueue_builder{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 		Input:               nil,
 		WorkflowRunTimeout:  durationpb.New(30 * time.Second),
 		Identity:            s.T().Name(),
 		CompletionCallbacks: []*commonpb.Callback{callback},
-	}
+	}.Build()
 
 	response, err := s.FrontendClient().StartWorkflowExecution(ctx, request)
 	s.NoError(err)
 
-	workflowExecution := &commonpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution_builder{
 		WorkflowId: workflowID,
-		RunId:      response.RunId,
-	}
+		RunId:      response.GetRunId(),
+	}.Build()
 
 	// Wait for workflow to start and reach the blocking point
 	s.WaitForHistoryEvents(`
@@ -147,11 +145,11 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_CHASM_Enabled_Mid_WF() {
 	// Unblock the workflow by sending the continue signal
 	_, err = s.FrontendClient().SignalWorkflowExecution(
 		ctx,
-		&workflowservice.SignalWorkflowExecutionRequest{
+		workflowservice.SignalWorkflowExecutionRequest_builder{
 			Namespace:         s.Namespace().String(),
 			WorkflowExecution: workflowExecution,
 			SignalName:        "continue",
-		},
+		}.Build(),
 	)
 	s.NoError(err)
 
@@ -239,33 +237,31 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_CHASM_Disabled_Mid_WF() 
 	defer w.Stop()
 
 	// Start workflow with callback (CHASM is enabled at this point)
-	callback := &commonpb.Callback{
-		Variant: &commonpb.Callback_Nexus_{
-			Nexus: &commonpb.Callback_Nexus{
-				Url: callbackAddress + "/callback",
-			},
-		},
-	}
+	callback := commonpb.Callback_builder{
+		Nexus: commonpb.Callback_Nexus_builder{
+			Url: callbackAddress + "/callback",
+		}.Build(),
+	}.Build()
 
-	request := &workflowservice.StartWorkflowExecutionRequest{
+	request := workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          workflowID,
-		WorkflowType:        &commonpb.WorkflowType{Name: workflowType},
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		WorkflowType:        commonpb.WorkflowType_builder{Name: workflowType}.Build(),
+		TaskQueue:           taskqueuepb.TaskQueue_builder{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 		Input:               nil,
 		WorkflowRunTimeout:  durationpb.New(30 * time.Second),
 		Identity:            s.T().Name(),
 		CompletionCallbacks: []*commonpb.Callback{callback},
-	}
+	}.Build()
 
 	response, err := s.FrontendClient().StartWorkflowExecution(ctx, request)
 	s.NoError(err)
 
-	workflowExecution := &commonpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution_builder{
 		WorkflowId: workflowID,
-		RunId:      response.RunId,
-	}
+		RunId:      response.GetRunId(),
+	}.Build()
 
 	// Wait for workflow to start and reach the blocking point
 	s.WaitForHistoryEvents(`
@@ -282,11 +278,11 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_CHASM_Disabled_Mid_WF() 
 	// Unblock the workflow by sending the continue signal
 	_, err = s.FrontendClient().SignalWorkflowExecution(
 		ctx,
-		&workflowservice.SignalWorkflowExecutionRequest{
+		workflowservice.SignalWorkflowExecutionRequest_builder{
 			Namespace:         s.Namespace().String(),
 			WorkflowExecution: workflowExecution,
 			SignalName:        "continue",
-		},
+		}.Build(),
 	)
 	s.NoError(err)
 
@@ -384,33 +380,31 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_MixedCallbacks() {
 	defer w.Stop()
 
 	// Start workflow with first callback (CHASM is disabled, so this creates an HSM callback)
-	callback1 := &commonpb.Callback{
-		Variant: &commonpb.Callback_Nexus_{
-			Nexus: &commonpb.Callback_Nexus{
-				Url: callbackAddress1 + "/callback1",
-			},
-		},
-	}
+	callback1 := commonpb.Callback_builder{
+		Nexus: commonpb.Callback_Nexus_builder{
+			Url: callbackAddress1 + "/callback1",
+		}.Build(),
+	}.Build()
 
-	request := &workflowservice.StartWorkflowExecutionRequest{
+	request := workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          workflowID,
-		WorkflowType:        &commonpb.WorkflowType{Name: workflowType},
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		WorkflowType:        commonpb.WorkflowType_builder{Name: workflowType}.Build(),
+		TaskQueue:           taskqueuepb.TaskQueue_builder{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 		Input:               nil,
 		WorkflowRunTimeout:  durationpb.New(30 * time.Second),
 		Identity:            s.T().Name(),
 		CompletionCallbacks: []*commonpb.Callback{callback1},
-	}
+	}.Build()
 
 	response, err := s.FrontendClient().StartWorkflowExecution(ctx, request)
 	s.NoError(err)
 
-	workflowExecution := &commonpb.WorkflowExecution{
+	workflowExecution := commonpb.WorkflowExecution_builder{
 		WorkflowId: workflowID,
-		RunId:      response.RunId,
-	}
+		RunId:      response.GetRunId(),
+	}.Build()
 
 	// Wait for workflow to start and reach the blocking point
 	s.WaitForHistoryEvents(`
@@ -428,58 +422,56 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_MixedCallbacks() {
 
 	// Add a second callback using the USE_EXISTING conflict policy
 	// This should create a CHASM callback since CHASM is now enabled
-	callback2 := &commonpb.Callback{
-		Variant: &commonpb.Callback_Nexus_{
-			Nexus: &commonpb.Callback_Nexus{
-				Url: callbackAddress2 + "/callback2",
-			},
-		},
-	}
+	callback2 := commonpb.Callback_builder{
+		Nexus: commonpb.Callback_Nexus_builder{
+			Url: callbackAddress2 + "/callback2",
+		}.Build(),
+	}.Build()
 
-	request2 := &workflowservice.StartWorkflowExecutionRequest{
+	request2 := workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:                uuid.NewString(),
 		Namespace:                s.Namespace().String(),
 		WorkflowId:               workflowID,
-		WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
-		TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		WorkflowType:             commonpb.WorkflowType_builder{Name: workflowType}.Build(),
+		TaskQueue:                taskqueuepb.TaskQueue_builder{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 		Input:                    nil,
 		WorkflowRunTimeout:       durationpb.New(30 * time.Second),
 		Identity:                 s.T().Name(),
 		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
 		CompletionCallbacks:      []*commonpb.Callback{callback2},
-		OnConflictOptions: &workflowpb.OnConflictOptions{
+		OnConflictOptions: workflowpb.OnConflictOptions_builder{
 			AttachRequestId:           true,
 			AttachCompletionCallbacks: true,
-		},
-	}
+		}.Build(),
+	}.Build()
 
 	response2, err := s.FrontendClient().StartWorkflowExecution(ctx, request2)
 	s.NoError(err)
-	s.False(response2.Started)
-	s.Equal(workflowExecution.RunId, response2.RunId)
+	s.False(response2.GetStarted())
+	s.Equal(workflowExecution.GetRunId(), response2.GetRunId())
 
 	// Verify DescribeWorkflow shows both callbacks (1 HSM + 1 CHASM)
 	description, err := sdkClient.DescribeWorkflowExecution(ctx, workflowID, "")
 	s.NoError(err)
-	s.Len(description.Callbacks, 2, "should have 2 callbacks: 1 HSM + 1 CHASM")
+	s.Len(description.GetCallbacks(), 2, "should have 2 callbacks: 1 HSM + 1 CHASM")
 
 	// Verify both callbacks are in STANDBY state (not yet triggered)
-	for _, callbackInfo := range description.Callbacks {
-		s.Equal(enumspb.CALLBACK_STATE_STANDBY, callbackInfo.State)
-		s.Equal(int32(0), callbackInfo.Attempt)
+	for _, callbackInfo := range description.GetCallbacks() {
+		s.Equal(enumspb.CALLBACK_STATE_STANDBY, callbackInfo.GetState())
+		s.Equal(int32(0), callbackInfo.GetAttempt())
 		// Verify trigger type is WorkflowClosed
-		s.NotNil(callbackInfo.Trigger)
-		s.NotNil(callbackInfo.Trigger.GetWorkflowClosed())
+		s.NotNil(callbackInfo.GetTrigger())
+		s.NotNil(callbackInfo.GetTrigger().GetWorkflowClosed())
 	}
 
 	// Unblock the workflow by sending the continue signal
 	_, err = s.FrontendClient().SignalWorkflowExecution(
 		ctx,
-		&workflowservice.SignalWorkflowExecutionRequest{
+		workflowservice.SignalWorkflowExecutionRequest_builder{
 			Namespace:         s.Namespace().String(),
 			WorkflowExecution: workflowExecution,
 			SignalName:        "continue",
-		},
+		}.Build(),
 	)
 	s.NoError(err)
 
@@ -518,14 +510,14 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_MixedCallbacks() {
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := sdkClient.DescribeWorkflowExecution(ctx, workflowID, "")
 		require.NoError(t, err)
-		require.Len(t, description.Callbacks, 2, "should still have 2 callbacks")
+		require.Len(t, description.GetCallbacks(), 2, "should still have 2 callbacks")
 
 		// Both callbacks should now be in SUCCEEDED state
-		for _, callbackInfo := range description.Callbacks {
-			require.Equal(t, enumspb.CALLBACK_STATE_SUCCEEDED, callbackInfo.State)
-			require.Equal(t, int32(1), callbackInfo.Attempt)
-			require.Nil(t, callbackInfo.LastAttemptFailure)
-			require.NotNil(t, callbackInfo.LastAttemptCompleteTime)
+		for _, callbackInfo := range description.GetCallbacks() {
+			require.Equal(t, enumspb.CALLBACK_STATE_SUCCEEDED, callbackInfo.GetState())
+			require.Equal(t, int32(1), callbackInfo.GetAttempt())
+			require.Nil(t, callbackInfo.GetLastAttemptFailure())
+			require.NotNil(t, callbackInfo.GetLastAttemptCompleteTime())
 		}
 	}, 2*time.Second, 100*time.Millisecond)
 }

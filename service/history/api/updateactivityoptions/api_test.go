@@ -32,29 +32,30 @@ import (
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
 
 func TestApplyActivityOptionsAcceptance(t *testing.T) {
-	updateOptions := &activitypb.ActivityOptions{
-		TaskQueue:              &taskqueuepb.TaskQueue{Name: "task_queue_name"},
+	updateOptions := activitypb.ActivityOptions_builder{
+		TaskQueue:              taskqueuepb.TaskQueue_builder{Name: "task_queue_name"}.Build(),
 		ScheduleToCloseTimeout: durationpb.New(time.Second),
 		StartToCloseTimeout:    durationpb.New(time.Second),
 		ScheduleToStartTimeout: durationpb.New(time.Second),
 		HeartbeatTimeout:       durationpb.New(time.Second),
-		Priority: &commonpb.Priority{
+		Priority: commonpb.Priority_builder{
 			PriorityKey:    42,
 			FairnessKey:    "test_key",
 			FairnessWeight: 5.0,
-		},
-		RetryPolicy: &commonpb.RetryPolicy{
+		}.Build(),
+		RetryPolicy: commonpb.RetryPolicy_builder{
 			MaximumInterval:    durationpb.New(time.Second),
 			MaximumAttempts:    5,
 			BackoffCoefficient: 1.0,
 			InitialInterval:    durationpb.New(time.Second),
-		},
-	}
+		}.Build(),
+	}.Build()
 
 	testCases := []struct {
 		name      string
@@ -99,40 +100,40 @@ func TestApplyActivityOptionsAcceptance(t *testing.T) {
 		},
 		{
 			name: "Sub-fields",
-			mergeFrom: &activitypb.ActivityOptions{
-				Priority: &commonpb.Priority{
+			mergeFrom: activitypb.ActivityOptions_builder{
+				Priority: commonpb.Priority_builder{
 					PriorityKey:    99,
 					FairnessKey:    "newKey",
 					FairnessWeight: 7.5,
-				},
-				RetryPolicy: &commonpb.RetryPolicy{
+				}.Build(),
+				RetryPolicy: commonpb.RetryPolicy_builder{
 					MaximumInterval:    durationpb.New(time.Second),
 					MaximumAttempts:    5,
 					BackoffCoefficient: 1.0,
 					InitialInterval:    durationpb.New(time.Second),
-				},
-			},
-			mergeInto: &activitypb.ActivityOptions{
-				Priority: &commonpb.Priority{
+				}.Build(),
+			}.Build(),
+			mergeInto: activitypb.ActivityOptions_builder{
+				Priority: commonpb.Priority_builder{
 					PriorityKey:    10,
 					FairnessKey:    "oldKey",
 					FairnessWeight: 1.0,
-				},
+				}.Build(),
 				RetryPolicy: &commonpb.RetryPolicy{},
-			},
-			expected: &activitypb.ActivityOptions{
-				Priority: &commonpb.Priority{
+			}.Build(),
+			expected: activitypb.ActivityOptions_builder{
+				Priority: commonpb.Priority_builder{
 					PriorityKey:    99,
 					FairnessKey:    "newKey",
 					FairnessWeight: 7.5,
-				},
-				RetryPolicy: &commonpb.RetryPolicy{
+				}.Build(),
+				RetryPolicy: commonpb.RetryPolicy_builder{
 					MaximumInterval:    durationpb.New(time.Second),
 					MaximumAttempts:    5,
 					BackoffCoefficient: 1.0,
 					InitialInterval:    durationpb.New(time.Second),
-				},
-			},
+				}.Build(),
+			}.Build(),
 			mask: &fieldmaskpb.FieldMask{
 				Paths: []string{
 					"priority.priority_key",
@@ -152,18 +153,18 @@ func TestApplyActivityOptionsAcceptance(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {})
 		err := mergeActivityOptions(tc.mergeInto, tc.mergeFrom, updateFields)
 		assert.NoError(t, err)
-		assert.Equal(t, tc.mergeInto.RetryPolicy.InitialInterval, tc.expected.RetryPolicy.InitialInterval, "RetryInitialInterval")
-		assert.Equal(t, tc.mergeInto.RetryPolicy.MaximumInterval, tc.expected.RetryPolicy.MaximumInterval, "RetryMaximumInterval")
-		assert.Equal(t, tc.mergeInto.RetryPolicy.BackoffCoefficient, tc.expected.RetryPolicy.BackoffCoefficient, "RetryBackoffCoefficient")
-		assert.Equal(t, tc.mergeInto.RetryPolicy.MaximumAttempts, tc.expected.RetryPolicy.MaximumAttempts, "RetryMaximumAttempts")
+		assert.Equal(t, tc.mergeInto.GetRetryPolicy().GetInitialInterval(), tc.expected.GetRetryPolicy().GetInitialInterval(), "RetryInitialInterval")
+		assert.Equal(t, tc.mergeInto.GetRetryPolicy().GetMaximumInterval(), tc.expected.GetRetryPolicy().GetMaximumInterval(), "RetryMaximumInterval")
+		assert.Equal(t, tc.mergeInto.GetRetryPolicy().GetBackoffCoefficient(), tc.expected.GetRetryPolicy().GetBackoffCoefficient(), "RetryBackoffCoefficient")
+		assert.Equal(t, tc.mergeInto.GetRetryPolicy().GetMaximumAttempts(), tc.expected.GetRetryPolicy().GetMaximumAttempts(), "RetryMaximumAttempts")
 
-		assert.Equal(t, tc.mergeInto.TaskQueue, tc.expected.TaskQueue, "TaskQueue")
+		assert.Equal(t, tc.mergeInto.GetTaskQueue(), tc.expected.GetTaskQueue(), "TaskQueue")
 
-		assert.Equal(t, tc.mergeInto.ScheduleToCloseTimeout, tc.expected.ScheduleToCloseTimeout, "ScheduleToCloseTimeout")
-		assert.Equal(t, tc.mergeInto.ScheduleToStartTimeout, tc.expected.ScheduleToStartTimeout, "ScheduleToStartTimeout")
-		assert.Equal(t, tc.mergeInto.StartToCloseTimeout, tc.expected.StartToCloseTimeout, "StartToCloseTimeout")
-		assert.Equal(t, tc.mergeInto.HeartbeatTimeout, tc.expected.HeartbeatTimeout, "HeartbeatTimeout")
-		assert.Equal(t, tc.mergeInto.Priority, tc.expected.Priority, "Priority")
+		assert.Equal(t, tc.mergeInto.GetScheduleToCloseTimeout(), tc.expected.GetScheduleToCloseTimeout(), "ScheduleToCloseTimeout")
+		assert.Equal(t, tc.mergeInto.GetScheduleToStartTimeout(), tc.expected.GetScheduleToStartTimeout(), "ScheduleToStartTimeout")
+		assert.Equal(t, tc.mergeInto.GetStartToCloseTimeout(), tc.expected.GetStartToCloseTimeout(), "StartToCloseTimeout")
+		assert.Equal(t, tc.mergeInto.GetHeartbeatTimeout(), tc.expected.GetHeartbeatTimeout(), "HeartbeatTimeout")
+		assert.Equal(t, tc.mergeInto.GetPriority(), tc.expected.GetPriority(), "Priority")
 	}
 }
 
@@ -204,24 +205,24 @@ func TestApplyActivityOptionsErrors(t *testing.T) {
 }
 
 func TestApplyActivityOptionsReset(t *testing.T) {
-	options := &activitypb.ActivityOptions{
-		TaskQueue:              &taskqueuepb.TaskQueue{Name: "task_queue_name"},
+	options := activitypb.ActivityOptions_builder{
+		TaskQueue:              taskqueuepb.TaskQueue_builder{Name: "task_queue_name"}.Build(),
 		ScheduleToCloseTimeout: durationpb.New(time.Second),
 		ScheduleToStartTimeout: durationpb.New(time.Second),
 		StartToCloseTimeout:    durationpb.New(time.Second),
 		HeartbeatTimeout:       durationpb.New(time.Second),
-		Priority: &commonpb.Priority{
+		Priority: commonpb.Priority_builder{
 			PriorityKey:    42,
 			FairnessKey:    "test_key",
 			FairnessWeight: 5.0,
-		},
-		RetryPolicy: &commonpb.RetryPolicy{
+		}.Build(),
+		RetryPolicy: commonpb.RetryPolicy_builder{
 			MaximumInterval:    durationpb.New(time.Second),
 			MaximumAttempts:    5,
 			BackoffCoefficient: 1.0,
 			InitialInterval:    durationpb.New(time.Second),
-		},
-	}
+		}.Build(),
+	}.Build()
 
 	fullMask := &fieldmaskpb.FieldMask{
 		Paths: []string{
@@ -242,29 +243,29 @@ func TestApplyActivityOptionsReset(t *testing.T) {
 	updateFields := util.ParseFieldMask(fullMask)
 
 	err := mergeActivityOptions(options,
-		&activitypb.ActivityOptions{
-			Priority: &commonpb.Priority{
+		activitypb.ActivityOptions_builder{
+			Priority: commonpb.Priority_builder{
 				PriorityKey: 10,
-			},
-			RetryPolicy: &commonpb.RetryPolicy{
+			}.Build(),
+			RetryPolicy: commonpb.RetryPolicy_builder{
 				MaximumAttempts:    5,
 				BackoffCoefficient: 1.0,
-			},
-		},
+			}.Build(),
+		}.Build(),
 		updateFields)
 	assert.NoError(t, err)
 
-	assert.Nil(t, options.ScheduleToCloseTimeout)
-	assert.Nil(t, options.ScheduleToStartTimeout)
-	assert.Nil(t, options.StartToCloseTimeout)
-	assert.Nil(t, options.HeartbeatTimeout)
+	assert.Nil(t, options.GetScheduleToCloseTimeout())
+	assert.Nil(t, options.GetScheduleToStartTimeout())
+	assert.Nil(t, options.GetStartToCloseTimeout())
+	assert.Nil(t, options.GetHeartbeatTimeout())
 
-	assert.Equal(t, int32(10), options.Priority.PriorityKey)
-	assert.Empty(t, options.Priority.FairnessKey)
-	assert.Zero(t, options.Priority.FairnessWeight)
+	assert.Equal(t, int32(10), options.GetPriority().GetPriorityKey())
+	assert.Empty(t, options.GetPriority().GetFairnessKey())
+	assert.Zero(t, options.GetPriority().GetFairnessWeight())
 
-	assert.Nil(t, options.RetryPolicy.InitialInterval)
-	assert.Nil(t, options.RetryPolicy.MaximumInterval)
+	assert.Nil(t, options.GetRetryPolicy().GetInitialInterval())
+	assert.Nil(t, options.GetRetryPolicy().GetMaximumInterval())
 }
 
 type (
@@ -310,10 +311,10 @@ func (s *activityOptionsSuite) SetupTest() {
 
 	s.mockShard = shard.NewTestContext(
 		s.controller,
-		&persistencespb.ShardInfo{
+		persistencespb.ShardInfo_builder{
 			ShardId: 0,
 			RangeId: 1,
-		},
+		}.Build(),
 		tests.NewDynamicConfig(),
 	)
 
@@ -326,11 +327,11 @@ func (s *activityOptionsSuite) SetupTest() {
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
 
 	s.logger = s.mockShard.GetLogger()
-	s.executionInfo = &persistencespb.WorkflowExecutionInfo{
+	s.executionInfo = persistencespb.WorkflowExecutionInfo_builder{
 		VersionHistories:                 versionhistory.NewVersionHistories(&historyspb.VersionHistory{}),
 		FirstExecutionRunId:              uuid.NewString(),
 		WorkflowExecutionTimerTaskStatus: workflow.TimerTaskStatusCreated,
-	}
+	}.Build()
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(s.executionInfo).AnyTimes()
 	s.mockMutableState.EXPECT().GetCurrentVersion().Return(int64(1)).AnyTimes()
 
@@ -363,19 +364,19 @@ func (s *activityOptionsSuite) Test_updateActivityOptionsWfNotRunning() {
 }
 
 func (s *activityOptionsSuite) Test_updateActivityOptionsWfNoActivity() {
-	request := &historyservice.UpdateActivityOptionsRequest{
-		UpdateRequest: &workflowservice.UpdateActivityOptionsRequest{
-			ActivityOptions: &activitypb.ActivityOptions{
-				TaskQueue: &taskqueuepb.TaskQueue{Name: "task_queue_name"},
-			},
+	request := historyservice.UpdateActivityOptionsRequest_builder{
+		UpdateRequest: workflowservice.UpdateActivityOptionsRequest_builder{
+			ActivityOptions: activitypb.ActivityOptions_builder{
+				TaskQueue: taskqueuepb.TaskQueue_builder{Name: "task_queue_name"}.Build(),
+			}.Build(),
 			UpdateMask: &fieldmaskpb.FieldMask{
 				Paths: []string{
 					"TaskQueue.Name",
 				},
 			},
-			Activity: &workflowservice.UpdateActivityOptionsRequest_Id{Id: "activity_id"},
-		},
-	}
+			Id: proto.String("activity_id"),
+		}.Build(),
+	}.Build()
 
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true)
 	s.mockMutableState.EXPECT().GetActivityByActivityID(gomock.Any()).Return(nil, false)
@@ -385,7 +386,7 @@ func (s *activityOptionsSuite) Test_updateActivityOptionsWfNoActivity() {
 }
 
 func (s *activityOptionsSuite) Test_updateActivityOptionsAcceptance() {
-	fullActivityInfo := &persistencespb.ActivityInfo{
+	fullActivityInfo := persistencespb.ActivityInfo_builder{
 		TaskQueue:               "task_queue_name",
 		ScheduleToCloseTimeout:  durationpb.New(time.Second),
 		ScheduleToStartTimeout:  durationpb.New(time.Second),
@@ -396,10 +397,10 @@ func (s *activityOptionsSuite) Test_updateActivityOptionsAcceptance() {
 		RetryMaximumInterval:    durationpb.New(time.Second),
 		RetryMaximumAttempts:    5,
 		ActivityId:              "activity_id",
-		ActivityType: &commonpb.ActivityType{
+		ActivityType: commonpb.ActivityType_builder{
 			Name: "activity_type",
-		},
-	}
+		}.Build(),
+	}.Build()
 
 	updateMask := &fieldmaskpb.FieldMask{
 		Paths: []string{
@@ -415,32 +416,32 @@ func (s *activityOptionsSuite) Test_updateActivityOptionsAcceptance() {
 		},
 	}
 
-	options := &activitypb.ActivityOptions{
-		TaskQueue:              &taskqueuepb.TaskQueue{Name: "task_queue_name"},
+	options := activitypb.ActivityOptions_builder{
+		TaskQueue:              taskqueuepb.TaskQueue_builder{Name: "task_queue_name"}.Build(),
 		ScheduleToCloseTimeout: durationpb.New(2 * time.Second),
 		StartToCloseTimeout:    durationpb.New(2 * time.Second),
 		ScheduleToStartTimeout: durationpb.New(2 * time.Second),
 		HeartbeatTimeout:       durationpb.New(2 * time.Second),
-		RetryPolicy: &commonpb.RetryPolicy{
+		RetryPolicy: commonpb.RetryPolicy_builder{
 			MaximumInterval:    durationpb.New(2 * time.Second),
 			MaximumAttempts:    5,
 			BackoffCoefficient: 1.0,
 			InitialInterval:    durationpb.New(2 * time.Second),
-		},
-	}
+		}.Build(),
+	}.Build()
 
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true)
 	s.mockMutableState.EXPECT().GetActivityByActivityID(gomock.Any()).Return(fullActivityInfo, true)
 	s.mockMutableState.EXPECT().RegenerateActivityRetryTask(gomock.Any(), gomock.Any()).Return(nil)
 	s.mockMutableState.EXPECT().UpdateActivity(gomock.Any(), gomock.Any()).Return(nil)
 
-	request := &historyservice.UpdateActivityOptionsRequest{
-		UpdateRequest: &workflowservice.UpdateActivityOptionsRequest{
+	request := historyservice.UpdateActivityOptionsRequest_builder{
+		UpdateRequest: workflowservice.UpdateActivityOptionsRequest_builder{
 			ActivityOptions: options,
 			UpdateMask:      updateMask,
-			Activity:        &workflowservice.UpdateActivityOptionsRequest_Id{Id: "activity_id"},
-		},
-	}
+			Id:              proto.String("activity_id"),
+		}.Build(),
+	}.Build()
 
 	response, err := processActivityOptionsRequest(
 		s.validator, s.mockMutableState, request.GetUpdateRequest(), request.GetNamespaceId())
@@ -464,28 +465,28 @@ func (s *activityOptionsSuite) Test_updateActivityOptions_RestoreDefaultFail() {
 		},
 	}
 
-	options := &activitypb.ActivityOptions{
-		TaskQueue:              &taskqueuepb.TaskQueue{Name: "task_queue_name"},
+	options := activitypb.ActivityOptions_builder{
+		TaskQueue:              taskqueuepb.TaskQueue_builder{Name: "task_queue_name"}.Build(),
 		ScheduleToCloseTimeout: durationpb.New(2 * time.Second),
 		StartToCloseTimeout:    durationpb.New(2 * time.Second),
 		ScheduleToStartTimeout: durationpb.New(2 * time.Second),
 		HeartbeatTimeout:       durationpb.New(2 * time.Second),
-		RetryPolicy: &commonpb.RetryPolicy{
+		RetryPolicy: commonpb.RetryPolicy_builder{
 			MaximumInterval:    durationpb.New(2 * time.Second),
 			MaximumAttempts:    5,
 			BackoffCoefficient: 1.0,
 			InitialInterval:    durationpb.New(2 * time.Second),
-		},
-	}
+		}.Build(),
+	}.Build()
 
-	request := &historyservice.UpdateActivityOptionsRequest{
-		UpdateRequest: &workflowservice.UpdateActivityOptionsRequest{
+	request := historyservice.UpdateActivityOptionsRequest_builder{
+		UpdateRequest: workflowservice.UpdateActivityOptionsRequest_builder{
 			ActivityOptions: options,
 			UpdateMask:      updateMask,
-			Activity:        &workflowservice.UpdateActivityOptionsRequest_Id{Id: "activity_id"},
+			Id:              proto.String("activity_id"),
 			RestoreOriginal: true,
-		},
-	}
+		}.Build(),
+	}.Build()
 	ctx := context.Background()
 
 	// both restore flag and update mask are set
@@ -493,30 +494,30 @@ func (s *activityOptionsSuite) Test_updateActivityOptions_RestoreDefaultFail() {
 	s.Error(err)
 
 	// not pending activity with such type
-	request.UpdateRequest.ActivityOptions = nil
-	request.UpdateRequest.UpdateMask = nil
-	request.UpdateRequest.Activity = &workflowservice.UpdateActivityOptionsRequest_Type{Type: "activity_type"}
+	request.GetUpdateRequest().ClearActivityOptions()
+	request.GetUpdateRequest().ClearUpdateMask()
+	request.GetUpdateRequest().SetType("activity_type")
 	activityInfos := map[int64]*persistencespb.ActivityInfo{}
 	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(activityInfos)
 	_, err = restoreOriginalOptions(ctx, s.mockMutableState, request.GetUpdateRequest())
 	s.Error(err)
 
 	// not pending activity with such id
-	request.UpdateRequest.ActivityOptions = nil
-	request.UpdateRequest.UpdateMask = nil
-	request.UpdateRequest.Activity = &workflowservice.UpdateActivityOptionsRequest_Id{Id: "activity_id"}
+	request.GetUpdateRequest().ClearActivityOptions()
+	request.GetUpdateRequest().ClearUpdateMask()
+	request.GetUpdateRequest().SetId("activity_id")
 	s.mockMutableState.EXPECT().GetActivityByActivityID(gomock.Any()).Return(nil, false)
 	_, err = restoreOriginalOptions(ctx, s.mockMutableState, request.GetUpdateRequest())
 	s.Error(err)
 
-	ai := &persistencespb.ActivityInfo{
+	ai := persistencespb.ActivityInfo_builder{
 		ActivityId: "activity_id",
-		ActivityType: &commonpb.ActivityType{
+		ActivityType: commonpb.ActivityType_builder{
 			Name: "activity_type",
-		},
+		}.Build(),
 		TaskQueue:        "task_queue_name",
 		ScheduledEventId: 1,
-	}
+	}.Build()
 
 	// event not found
 	err = errors.New("some error")
@@ -527,49 +528,47 @@ func (s *activityOptionsSuite) Test_updateActivityOptions_RestoreDefaultFail() {
 }
 
 func (s *activityOptionsSuite) Test_updateActivityOptions_RestoreDefaultSuccess() {
-	request := &historyservice.UpdateActivityOptionsRequest{
-		UpdateRequest: &workflowservice.UpdateActivityOptionsRequest{
-			Activity:        &workflowservice.UpdateActivityOptionsRequest_Id{Id: "activity_id"},
+	request := historyservice.UpdateActivityOptionsRequest_builder{
+		UpdateRequest: workflowservice.UpdateActivityOptionsRequest_builder{
+			Id:              proto.String("activity_id"),
 			RestoreOriginal: true,
-		},
-	}
+		}.Build(),
+	}.Build()
 	ctx := context.Background()
 
-	ai := &persistencespb.ActivityInfo{
+	ai := persistencespb.ActivityInfo_builder{
 		ActivityId: "activity_id",
-		ActivityType: &commonpb.ActivityType{
+		ActivityType: commonpb.ActivityType_builder{
 			Name: "activity_type",
-		},
+		}.Build(),
 		TaskQueue:        "task_queue_name",
 		ScheduledEventId: 1,
 		StartedEventId:   2,
-	}
+	}.Build()
 
-	he := &historypb.HistoryEvent{
+	he := historypb.HistoryEvent_builder{
 		EventId: -123,
 		Version: 123,
-		Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{
-			ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{
-				ActivityId: "activity_id",
-				ActivityType: &commonpb.ActivityType{
-					Name: "activity_type",
-				},
-				TaskQueue: &taskqueuepb.TaskQueue{
-					Name: "task_queue_name",
-				},
-				ScheduleToCloseTimeout: durationpb.New(2 * time.Second),
-				StartToCloseTimeout:    durationpb.New(2 * time.Second),
-				ScheduleToStartTimeout: durationpb.New(2 * time.Second),
-				HeartbeatTimeout:       durationpb.New(2 * time.Second),
-				RetryPolicy: &commonpb.RetryPolicy{
-					MaximumInterval:    durationpb.New(2 * time.Second),
-					MaximumAttempts:    5,
-					BackoffCoefficient: 1.0,
-					InitialInterval:    durationpb.New(2 * time.Second),
-				},
-			},
-		},
-	}
+		ActivityTaskScheduledEventAttributes: historypb.ActivityTaskScheduledEventAttributes_builder{
+			ActivityId: "activity_id",
+			ActivityType: commonpb.ActivityType_builder{
+				Name: "activity_type",
+			}.Build(),
+			TaskQueue: taskqueuepb.TaskQueue_builder{
+				Name: "task_queue_name",
+			}.Build(),
+			ScheduleToCloseTimeout: durationpb.New(2 * time.Second),
+			StartToCloseTimeout:    durationpb.New(2 * time.Second),
+			ScheduleToStartTimeout: durationpb.New(2 * time.Second),
+			HeartbeatTimeout:       durationpb.New(2 * time.Second),
+			RetryPolicy: commonpb.RetryPolicy_builder{
+				MaximumInterval:    durationpb.New(2 * time.Second),
+				MaximumAttempts:    5,
+				BackoffCoefficient: 1.0,
+				InitialInterval:    durationpb.New(2 * time.Second),
+			}.Build(),
+		}.Build(),
+	}.Build()
 
 	// event not found
 	s.mockMutableState.EXPECT().GetActivityScheduledEvent(gomock.Any(), gomock.Any()).Return(he, nil)

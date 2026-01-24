@@ -15,10 +15,10 @@ func CalculateExternalPayloadSize(events []*historypb.HistoryEvent, metricsHandl
 	var totalCount int64
 	visitor := func(vpc *proxy.VisitPayloadsContext, payloads []*commonpb.Payload) ([]*commonpb.Payload, error) {
 		for _, p := range payloads {
-			totalCount += int64(len(p.ExternalPayloads))
-			for _, extPayload := range p.ExternalPayloads {
-				totalSize += extPayload.SizeBytes
-				metricsHandler.Histogram(metrics.ExternalPayloadUploadSize.Name(), metrics.Bytes).Record(int64(extPayload.SizeBytes))
+			totalCount += int64(len(p.GetExternalPayloads()))
+			for _, extPayload := range p.GetExternalPayloads() {
+				totalSize += extPayload.GetSizeBytes()
+				metricsHandler.Histogram(metrics.ExternalPayloadUploadSize.Name(), metrics.Bytes).Record(int64(extPayload.GetSizeBytes()))
 			}
 		}
 		return payloads, nil

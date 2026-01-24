@@ -41,7 +41,7 @@ func Invoke(
 	persistenceVisibilityMgr manager.VisibilityManager,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (*historyservice.RecordWorkflowTaskStartedResponseWithRawHistory, error) {
-	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(req.GetNamespaceId()), req.WorkflowExecution.WorkflowId)
+	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(req.GetNamespaceId()), req.GetWorkflowExecution().GetWorkflowId())
 	if err != nil {
 		return nil, err
 	}
@@ -54,11 +54,11 @@ func Invoke(
 
 	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
-		req.Clock,
+		req.GetClock(),
 		definition.NewWorkflowKey(
-			req.NamespaceId,
-			req.WorkflowExecution.WorkflowId,
-			req.WorkflowExecution.RunId,
+			req.GetNamespaceId(),
+			req.GetWorkflowExecution().GetWorkflowId(),
+			req.GetWorkflowExecution().GetRunId(),
 		),
 		func(workflowLease api.WorkflowLease) (res *api.UpdateWorkflowAction, retErr error) {
 			mutableState := workflowLease.GetMutableState()
@@ -98,7 +98,7 @@ func Invoke(
 			if workflowTask.StartedEventID != common.EmptyEventID {
 				// If workflow task is started as part of the current request scope then return a positive response
 				if workflowTask.RequestID == requestID {
-					resp, err = CreateRecordWorkflowTaskStartedResponseWithRawHistory(ctx, mutableState, updateRegistry, workflowTask, req.PollRequest.GetIdentity(), false)
+					resp, err = CreateRecordWorkflowTaskStartedResponseWithRawHistory(ctx, mutableState, updateRegistry, workflowTask, req.GetPollRequest().GetIdentity(), false)
 					if err != nil {
 						return nil, err
 					}
@@ -119,15 +119,15 @@ func Invoke(
 			// The stickiness info is used by frontend to decide if it should send down partial history or full history.
 			// Sending down partial history will cost the worker an extra fetch to server for the full history.
 			currentTaskQueue := mutableState.CurrentTaskQueue()
-			pollerTaskQueue := req.PollRequest.TaskQueue
-			if currentTaskQueue.Kind == enumspb.TASK_QUEUE_KIND_STICKY &&
+			pollerTaskQueue := req.GetPollRequest().GetTaskQueue()
+			if currentTaskQueue.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY &&
 				currentTaskQueue.GetName() != pollerTaskQueue.GetName() {
 				// For versioned workflows we additionally check for the poller queue to not be a sticky queue itself.
 				// Although it's ideal to check this for unversioned workflows as well, we can't rely on older clients
 				// setting the poller TQ kind.
 				if (mutableState.GetAssignedBuildId() != "" ||
 					mutableState.GetEffectiveVersioningBehavior() != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED) &&
-					pollerTaskQueue.Kind == enumspb.TASK_QUEUE_KIND_STICKY {
+					pollerTaskQueue.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY {
 					return nil, serviceerrors.NewObsoleteDispatchBuildId("wrong sticky queue")
 				}
 				// req.PollRequest.TaskQueue.GetName() may include partition, but we only check when sticky is enabled,
@@ -135,8 +135,8 @@ func Invoke(
 				mutableState.ClearStickyTaskQueue()
 			}
 
-			if currentTaskQueue.Kind == enumspb.TASK_QUEUE_KIND_NORMAL &&
-				pollerTaskQueue.Kind == enumspb.TASK_QUEUE_KIND_STICKY {
+			if currentTaskQueue.GetKind() == enumspb.TASK_QUEUE_KIND_NORMAL &&
+				pollerTaskQueue.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY {
 				// A poll from a sticky queue while the workflow's task queue is not yet sticky
 				// should be rejected. This means the task was a stale task on the matching queue.
 				// Matching can drop the task, newer one should be scheduled already.
@@ -151,11 +151,11 @@ func Invoke(
 			wfBehavior := mutableState.GetEffectiveVersioningBehavior()
 			wfDeployment := mutableState.GetEffectiveDeployment()
 			//nolint:staticcheck // SA1019 deprecated WorkerVersionCapabilities will clean up later
-			pollerDeployment, err := worker_versioning.DeploymentFromCapabilities(req.PollRequest.WorkerVersionCapabilities, req.PollRequest.DeploymentOptions)
+			pollerDeployment, err := worker_versioning.DeploymentFromCapabilities(req.GetPollRequest().GetWorkerVersionCapabilities(), req.GetPollRequest().GetDeploymentOptions())
 			if err != nil {
 				return nil, err
 			}
-			err = worker_versioning.ValidateTaskVersionDirective(req.GetVersionDirective(), wfBehavior, wfDeployment, req.ScheduledDeployment)
+			err = worker_versioning.ValidateTaskVersionDirective(req.GetVersionDirective(), wfBehavior, wfDeployment, req.GetScheduledDeployment())
 			if err != nil {
 				return nil, err
 			}
@@ -164,12 +164,12 @@ func Invoke(
 				scheduledEventID,
 				requestID,
 				pollerTaskQueue,
-				req.PollRequest.Identity,
-				worker_versioning.StampFromCapabilities(req.PollRequest.WorkerVersionCapabilities),
+				req.GetPollRequest().GetIdentity(),
+				worker_versioning.StampFromCapabilities(req.GetPollRequest().GetWorkerVersionCapabilities()),
 				req.GetBuildIdRedirectInfo(),
 				workflowLease.GetContext().UpdateRegistry(ctx),
 				false,
-				req.TargetDeploymentVersion,
+				req.GetTargetDeploymentVersion(),
 			)
 			if err != nil {
 				// Unable to add WorkflowTaskStarted event to history
@@ -191,7 +191,7 @@ func Invoke(
 					// Dispatching to a different deployment. Try starting a transition. Starting the
 					// transition AFTER applying the start event because we don't want this pending
 					// wft to be rescheduled by StartDeploymentTransition.
-					if err := mutableState.StartDeploymentTransition(pollerDeployment, req.TaskDispatchRevisionNumber); err != nil {
+					if err := mutableState.StartDeploymentTransition(pollerDeployment, req.GetTaskDispatchRevisionNumber()); err != nil {
 						if errors.Is(err, workflow.ErrPinnedWorkflowCannotTransition) {
 							// This must be a task from a time that the workflow was unpinned, but it's
 							// now pinned so can't transition. Matching can drop the task safely.
@@ -221,7 +221,7 @@ func Invoke(
 				mutableState,
 				updateRegistry,
 				workflowTask,
-				req.PollRequest.GetIdentity(),
+				req.GetPollRequest().GetIdentity(),
 				false,
 			)
 			if err != nil {
@@ -305,7 +305,7 @@ func setHistoryForRecordWfTaskStartedResp(
 			shardContext,
 			namespaceName,
 			namespace.ID(workflowKey.GetNamespaceID()),
-			&commonpb.WorkflowExecution{WorkflowId: workflowKey.GetWorkflowID(), RunId: workflowKey.GetRunID()},
+			commonpb.WorkflowExecution_builder{WorkflowId: workflowKey.GetWorkflowID(), RunId: workflowKey.GetRunID()}.Build(),
 			firstEventID,
 			nextEventID,
 			maximumPageSize,
@@ -319,7 +319,7 @@ func setHistoryForRecordWfTaskStartedResp(
 			shardContext,
 			namespaceName,
 			namespace.ID(workflowKey.GetNamespaceID()),
-			&commonpb.WorkflowExecution{WorkflowId: workflowKey.GetWorkflowID(), RunId: workflowKey.GetRunID()},
+			commonpb.WorkflowExecution_builder{WorkflowId: workflowKey.GetWorkflowID(), RunId: workflowKey.GetRunID()}.Build(),
 			firstEventID,
 			nextEventID,
 			maximumPageSize,
@@ -335,14 +335,14 @@ func setHistoryForRecordWfTaskStartedResp(
 
 	var continuation []byte
 	if len(persistenceToken) != 0 {
-		continuation, err = api.SerializeHistoryToken(&tokenspb.HistoryContinuation{
+		continuation, err = api.SerializeHistoryToken(tokenspb.HistoryContinuation_builder{
 			RunId:                 workflowKey.GetRunID(),
 			FirstEventId:          firstEventID,
 			NextEventId:           nextEventID,
 			PersistenceToken:      persistenceToken,
 			TransientWorkflowTask: response.GetTransientWorkflowTask(),
 			BranchToken:           response.GetBranchToken(),
-		})
+		}.Build())
 		if err != nil {
 			return err
 		}
@@ -350,13 +350,13 @@ func setHistoryForRecordWfTaskStartedResp(
 	if isInternalRawHistoryEnabled {
 		historyBlobs := make([][]byte, len(rawHistory))
 		for i, blob := range rawHistory {
-			historyBlobs[i] = blob.Data
+			historyBlobs[i] = blob.GetData()
 		}
-		response.RawHistory = historyBlobs
+		response.SetRawHistory(historyBlobs)
 	} else {
-		response.History = history
+		response.SetHistory(history)
 	}
-	response.NextPageToken = continuation
+	response.SetNextPageToken(continuation)
 	return nil
 }
 
@@ -372,25 +372,25 @@ func CreateRecordWorkflowTaskStartedResponse(
 	if err != nil {
 		return nil, err
 	}
-	resp := &historyservice.RecordWorkflowTaskStartedResponse{
-		WorkflowType:               rawResp.WorkflowType,
-		PreviousStartedEventId:     rawResp.PreviousStartedEventId,
-		ScheduledEventId:           rawResp.ScheduledEventId,
-		StartedEventId:             rawResp.StartedEventId,
-		NextEventId:                rawResp.NextEventId,
-		Attempt:                    rawResp.Attempt,
-		StickyExecutionEnabled:     rawResp.StickyExecutionEnabled,
-		TransientWorkflowTask:      rawResp.TransientWorkflowTask,
-		WorkflowExecutionTaskQueue: rawResp.WorkflowExecutionTaskQueue,
-		BranchToken:                rawResp.BranchToken,
-		ScheduledTime:              rawResp.ScheduledTime,
-		StartedTime:                rawResp.StartedTime,
-		Queries:                    rawResp.Queries,
-		Clock:                      rawResp.Clock,
-		Messages:                   rawResp.Messages,
-		Version:                    rawResp.Version,
-		NextPageToken:              rawResp.NextPageToken,
-	}
+	resp := historyservice.RecordWorkflowTaskStartedResponse_builder{
+		WorkflowType:               rawResp.GetWorkflowType(),
+		PreviousStartedEventId:     rawResp.GetPreviousStartedEventId(),
+		ScheduledEventId:           rawResp.GetScheduledEventId(),
+		StartedEventId:             rawResp.GetStartedEventId(),
+		NextEventId:                rawResp.GetNextEventId(),
+		Attempt:                    rawResp.GetAttempt(),
+		StickyExecutionEnabled:     rawResp.GetStickyExecutionEnabled(),
+		TransientWorkflowTask:      rawResp.GetTransientWorkflowTask(),
+		WorkflowExecutionTaskQueue: rawResp.GetWorkflowExecutionTaskQueue(),
+		BranchToken:                rawResp.GetBranchToken(),
+		ScheduledTime:              rawResp.GetScheduledTime(),
+		StartedTime:                rawResp.GetStartedTime(),
+		Queries:                    rawResp.GetQueries(),
+		Clock:                      rawResp.GetClock(),
+		Messages:                   rawResp.GetMessages(),
+		Version:                    rawResp.GetVersion(),
+		NextPageToken:              rawResp.GetNextPageToken(),
+	}.Build()
 	return resp, nil
 }
 
@@ -403,46 +403,46 @@ func CreateRecordWorkflowTaskStartedResponseWithRawHistory(
 	wtHeartbeat bool,
 ) (*historyservice.RecordWorkflowTaskStartedResponseWithRawHistory, error) {
 	response := &historyservice.RecordWorkflowTaskStartedResponseWithRawHistory{}
-	response.WorkflowType = ms.GetWorkflowType()
+	response.SetWorkflowType(ms.GetWorkflowType())
 	executionInfo := ms.GetExecutionInfo()
-	if executionInfo.LastCompletedWorkflowTaskStartedEventId != common.EmptyEventID {
-		response.PreviousStartedEventId = executionInfo.LastCompletedWorkflowTaskStartedEventId
+	if executionInfo.GetLastCompletedWorkflowTaskStartedEventId() != common.EmptyEventID {
+		response.SetPreviousStartedEventId(executionInfo.GetLastCompletedWorkflowTaskStartedEventId())
 	}
 
 	// Starting workflowTask could result in different scheduledEventID if workflowTask was transient and new events came in
 	// before it was started.
-	response.ScheduledEventId = workflowTask.ScheduledEventID
-	response.StartedEventId = workflowTask.StartedEventID
-	response.StickyExecutionEnabled = ms.IsStickyTaskQueueSet()
-	response.NextEventId = ms.GetNextEventID()
-	response.Attempt = workflowTask.Attempt
-	response.WorkflowExecutionTaskQueue = &taskqueuepb.TaskQueue{
-		Name: executionInfo.TaskQueue,
+	response.SetScheduledEventId(workflowTask.ScheduledEventID)
+	response.SetStartedEventId(workflowTask.StartedEventID)
+	response.SetStickyExecutionEnabled(ms.IsStickyTaskQueueSet())
+	response.SetNextEventId(ms.GetNextEventID())
+	response.SetAttempt(workflowTask.Attempt)
+	response.SetWorkflowExecutionTaskQueue(taskqueuepb.TaskQueue_builder{
+		Name: executionInfo.GetTaskQueue(),
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-	}
-	response.ScheduledTime = timestamppb.New(workflowTask.ScheduledTime)
-	response.StartedTime = timestamppb.New(workflowTask.StartedTime)
-	response.Version = workflowTask.Version
+	}.Build())
+	response.SetScheduledTime(timestamppb.New(workflowTask.ScheduledTime))
+	response.SetStartedTime(timestamppb.New(workflowTask.StartedTime))
+	response.SetVersion(workflowTask.Version)
 
 	// TODO (alex-update): Transient needs to be renamed to "TransientOrSpeculative"
-	response.TransientWorkflowTask = ms.GetTransientWorkflowTaskInfo(workflowTask, identity)
+	response.SetTransientWorkflowTask(ms.GetTransientWorkflowTaskInfo(workflowTask, identity))
 
 	currentBranchToken, err := ms.GetCurrentBranchToken()
 	if err != nil {
 		return nil, err
 	}
-	response.BranchToken = currentBranchToken
+	response.SetBranchToken(currentBranchToken)
 
 	qr := ms.GetQueryRegistry()
 	bufferedQueryIDs := qr.GetBufferedIDs()
 	if len(bufferedQueryIDs) > 0 {
-		response.Queries = make(map[string]*querypb.WorkflowQuery, len(bufferedQueryIDs))
+		response.SetQueries(make(map[string]*querypb.WorkflowQuery, len(bufferedQueryIDs)))
 		for _, bufferedQueryID := range bufferedQueryIDs {
 			input, err := qr.GetQueryInput(bufferedQueryID)
 			if err != nil {
 				continue
 			}
-			response.Queries[bufferedQueryID] = input
+			response.GetQueries()[bufferedQueryID] = input
 		}
 	}
 
@@ -451,7 +451,7 @@ func CreateRecordWorkflowTaskStartedResponseWithRawHistory(
 	// deliver those updates failed, got timed out, or got lost.
 	// Resend these updates if this is not a heartbeat WT (includeAlreadySent = !wtHeartbeat).
 	// Heartbeat WT delivers only new updates that come while this WT was running (similar to queries and buffered events).
-	response.Messages = updateRegistry.Send(ctx, !wtHeartbeat, workflowTask.StartedEventID)
+	response.SetMessages(updateRegistry.Send(ctx, !wtHeartbeat, workflowTask.StartedEventID))
 
 	if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE && len(response.GetMessages()) == 0 {
 		return nil, serviceerror.NewNotFound("No messages for speculative workflow task.")

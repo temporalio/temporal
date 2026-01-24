@@ -85,7 +85,7 @@ func (m *executionManagerImpl) CreateWorkflowExecution(
 		return nil, err
 	}
 
-	newSnapshot.ExecutionInfo.ExecutionStats.HistorySize += int64(newHistoryDiff.SizeDiff)
+	newSnapshot.ExecutionInfo.GetExecutionStats().SetHistorySize(newSnapshot.ExecutionInfo.GetExecutionStats().GetHistorySize() + int64(newHistoryDiff.SizeDiff))
 
 	if err := ValidateCreateWorkflowModeState(
 		request.Mode,
@@ -94,8 +94,8 @@ func (m *executionManagerImpl) CreateWorkflowExecution(
 		return nil, err
 	}
 	if err := ValidateCreateWorkflowStateStatus(
-		newSnapshot.ExecutionState.State,
-		newSnapshot.ExecutionState.Status,
+		newSnapshot.ExecutionState.GetState(),
+		newSnapshot.ExecutionState.GetStatus(),
 	); err != nil {
 		return nil, err
 	}
@@ -146,7 +146,7 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 	if err != nil {
 		return nil, err
 	}
-	updateMutation.ExecutionInfo.ExecutionStats.HistorySize += int64(updateWorkflowHistoryDiff.SizeDiff)
+	updateMutation.ExecutionInfo.GetExecutionStats().SetHistorySize(updateMutation.ExecutionInfo.GetExecutionStats().GetHistorySize() + int64(updateWorkflowHistoryDiff.SizeDiff))
 
 	var newWorkflowXDCKVs map[XDCCacheKey]XDCCacheValue
 	var newWorkflowNewEvents []*InternalAppendHistoryNodesRequest
@@ -161,7 +161,7 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 		if err != nil {
 			return nil, err
 		}
-		newSnapshot.ExecutionInfo.ExecutionStats.HistorySize += int64(newWorkflowHistoryDiff.SizeDiff)
+		newSnapshot.ExecutionInfo.GetExecutionStats().SetHistorySize(newSnapshot.ExecutionInfo.GetExecutionStats().GetHistorySize() + int64(newWorkflowHistoryDiff.SizeDiff))
 	}
 
 	if err := ValidateUpdateWorkflowModeState(
@@ -172,8 +172,8 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 		return nil, err
 	}
 	if err := ValidateUpdateWorkflowStateStatus(
-		updateMutation.ExecutionState.State,
-		updateMutation.ExecutionState.Status,
+		updateMutation.ExecutionState.GetState(),
+		updateMutation.ExecutionState.GetStatus(),
 	); err != nil {
 		return nil, err
 	}
@@ -208,7 +208,7 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 	err = m.persistence.UpdateWorkflowExecution(ctx, newRequest)
 	switch err.(type) {
 	case nil:
-		m.deleteHistoryTasks(ctx, request.ShardID, updateMutation.BestEffortDeleteTasks, updateMutation.ExecutionInfo.WorkflowId)
+		m.deleteHistoryTasks(ctx, request.ShardID, updateMutation.BestEffortDeleteTasks, updateMutation.ExecutionInfo.GetWorkflowId())
 		m.addXDCCacheKV(updateWorkflowXDCKVs)
 		m.addXDCCacheKV(newWorkflowXDCKVs)
 		return &UpdateWorkflowExecutionResponse{
@@ -227,9 +227,9 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 		m.trimHistoryNode(
 			ctx,
 			request.ShardID,
-			updateMutation.ExecutionInfo.NamespaceId,
-			updateMutation.ExecutionInfo.WorkflowId,
-			updateMutation.ExecutionState.RunId,
+			updateMutation.ExecutionInfo.GetNamespaceId(),
+			updateMutation.ExecutionInfo.GetWorkflowId(),
+			updateMutation.ExecutionState.GetRunId(),
 			archetypeID,
 		)
 		return nil, err
@@ -288,7 +288,7 @@ func (m *executionManagerImpl) ConflictResolveWorkflowExecution(
 	if err != nil {
 		return nil, err
 	}
-	resetSnapshot.ExecutionInfo.ExecutionStats.HistorySize += int64(resetWorkflowHistoryDiff.SizeDiff)
+	resetSnapshot.ExecutionInfo.GetExecutionStats().SetHistorySize(resetSnapshot.ExecutionInfo.GetExecutionStats().GetHistorySize() + int64(resetWorkflowHistoryDiff.SizeDiff))
 
 	var newWorkflowXDCKVs map[XDCCacheKey]XDCCacheValue
 	var newWorkflowEvents []*InternalAppendHistoryNodesRequest
@@ -303,7 +303,7 @@ func (m *executionManagerImpl) ConflictResolveWorkflowExecution(
 		if err != nil {
 			return nil, err
 		}
-		newSnapshot.ExecutionInfo.ExecutionStats.HistorySize += int64(newWorkflowHistoryDiff.SizeDiff)
+		newSnapshot.ExecutionInfo.GetExecutionStats().SetHistorySize(newSnapshot.ExecutionInfo.GetExecutionStats().GetHistorySize() + int64(newWorkflowHistoryDiff.SizeDiff))
 	}
 
 	var currentWorkflowXDCKVs map[XDCCacheKey]XDCCacheValue
@@ -319,7 +319,7 @@ func (m *executionManagerImpl) ConflictResolveWorkflowExecution(
 		if err != nil {
 			return nil, err
 		}
-		currentMutation.ExecutionInfo.ExecutionStats.HistorySize += int64(currentWorkflowHistoryDiff.SizeDiff)
+		currentMutation.ExecutionInfo.GetExecutionStats().SetHistorySize(currentMutation.ExecutionInfo.GetExecutionStats().GetHistorySize() + int64(currentWorkflowHistoryDiff.SizeDiff))
 	}
 
 	if err := ValidateConflictResolveWorkflowModeState(
@@ -395,18 +395,18 @@ func (m *executionManagerImpl) ConflictResolveWorkflowExecution(
 		m.trimHistoryNode(
 			ctx,
 			request.ShardID,
-			resetSnapshot.ExecutionInfo.NamespaceId,
-			resetSnapshot.ExecutionInfo.WorkflowId,
-			resetSnapshot.ExecutionState.RunId,
+			resetSnapshot.ExecutionInfo.GetNamespaceId(),
+			resetSnapshot.ExecutionInfo.GetWorkflowId(),
+			resetSnapshot.ExecutionState.GetRunId(),
 			archetypeID,
 		)
 		if currentMutation != nil {
 			m.trimHistoryNode(
 				ctx,
 				request.ShardID,
-				currentMutation.ExecutionInfo.NamespaceId,
-				currentMutation.ExecutionInfo.WorkflowId,
-				currentMutation.ExecutionState.RunId,
+				currentMutation.ExecutionInfo.GetNamespaceId(),
+				currentMutation.ExecutionInfo.GetWorkflowId(),
+				currentMutation.ExecutionState.GetRunId(),
 				archetypeID,
 			)
 		}
@@ -445,10 +445,10 @@ func (m *executionManagerImpl) GetWorkflowExecution(
 	if err != nil {
 		return nil, err
 	}
-	if state.ExecutionInfo.ExecutionStats == nil {
-		state.ExecutionInfo.ExecutionStats = &persistencespb.ExecutionStats{
+	if !state.GetExecutionInfo().HasExecutionStats() {
+		state.GetExecutionInfo().SetExecutionStats(persistencespb.ExecutionStats_builder{
 			HistorySize: 0,
-		}
+		}.Build())
 	}
 
 	newResponse := &GetWorkflowExecutionResponse{
@@ -505,25 +505,25 @@ func (m *executionManagerImpl) serializeWorkflowEventBatches(
 		}
 		versionHistoryItems, _, baseWorkflowInfo, err := GetXDCCacheValue(
 			executionInfo,
-			workflowEvents.Events[0].EventId,
-			workflowEvents.Events[0].Version,
+			workflowEvents.Events[0].GetEventId(),
+			workflowEvents.Events[0].GetVersion(),
 		)
 		if err != nil {
 			return nil, nil, nil, err
 		}
 		xdcKVs[NewXDCCacheKey(
 			definition.NewWorkflowKey(workflowEvents.NamespaceID, workflowEvents.WorkflowID, workflowEvents.RunID),
-			workflowEvents.Events[0].EventId,
-			workflowEvents.Events[0].Version,
+			workflowEvents.Events[0].GetEventId(),
+			workflowEvents.Events[0].GetVersion(),
 		)] = NewXDCCacheValue(
 			baseWorkflowInfo,
 			versionHistoryItems,
 			[]*commonpb.DataBlob{newEvents.Node.Events},
-			workflowEvents.Events[len(workflowEvents.Events)-1].EventId+1,
+			workflowEvents.Events[len(workflowEvents.Events)-1].GetEventId()+1,
 		)
 		newEvents.ShardID = shardID
 		workflowNewEvents = append(workflowNewEvents, newEvents)
-		historyStatistics.SizeDiff += len(newEvents.Node.Events.Data)
+		historyStatistics.SizeDiff += len(newEvents.Node.Events.GetData())
 		historyStatistics.CountDiff += len(workflowEvents.Events)
 	}
 	return xdcKVs, workflowNewEvents, &historyStatistics, nil
@@ -577,7 +577,7 @@ func (m *executionManagerImpl) serializeWorkflowEvents(
 		TransactionID:     workflowEvents.TxnID,
 	}
 
-	if workflowEvents.Events[0].EventId == common.FirstEventID {
+	if workflowEvents.Events[0].GetEventId() == common.FirstEventID {
 		request.IsNewBranch = true
 		request.Info = BuildHistoryGarbageCleanupInfo(workflowEvents.NamespaceID, workflowEvents.WorkflowID, workflowEvents.RunID)
 	}
@@ -695,7 +695,7 @@ func (m *executionManagerImpl) SerializeWorkflowMutation( // unexport
 		}
 	}
 
-	result.LastWriteVersion, err = getCurrentBranchLastWriteVersion(input.ExecutionInfo.VersionHistories, input.ExecutionInfo.TransitionHistory)
+	result.LastWriteVersion, err = getCurrentBranchLastWriteVersion(input.ExecutionInfo.GetVersionHistories(), input.ExecutionInfo.GetTransitionHistory())
 	if err != nil {
 		return nil, err
 	}
@@ -746,7 +746,7 @@ func (m *executionManagerImpl) SerializeWorkflowSnapshot( // unexport
 	if err != nil {
 		return nil, err
 	}
-	result.LastWriteVersion, err = getCurrentBranchLastWriteVersion(input.ExecutionInfo.VersionHistories, input.ExecutionInfo.TransitionHistory)
+	result.LastWriteVersion, err = getCurrentBranchLastWriteVersion(input.ExecutionInfo.GetVersionHistories(), input.ExecutionInfo.GetTransitionHistory())
 	if err != nil {
 		return nil, err
 	}
@@ -864,9 +864,9 @@ func (m *executionManagerImpl) GetCurrentExecution(
 
 	return &GetCurrentExecutionResponse{
 		RunID:          response.RunID,
-		StartRequestID: response.ExecutionState.CreateRequestId,
-		State:          response.ExecutionState.State,
-		Status:         response.ExecutionState.Status,
+		StartRequestID: response.ExecutionState.GetCreateRequestId(),
+		State:          response.ExecutionState.GetState(),
+		Status:         response.ExecutionState.GetStatus(),
 	}, respErr
 }
 
@@ -1063,13 +1063,13 @@ func (m *executionManagerImpl) trimHistoryNode(
 		return // best effort trim
 	}
 
-	executionInfo := response.State.ExecutionInfo
-	branchToken, err := getCurrentBranchToken(executionInfo.VersionHistories)
+	executionInfo := response.State.GetExecutionInfo()
+	branchToken, err := getCurrentBranchToken(executionInfo.GetVersionHistories())
 	if err != nil {
 		return
 	}
-	mutableStateLastNodeID := executionInfo.LastFirstEventId
-	mutableStateLastNodeTransactionID := executionInfo.LastFirstEventTxnId
+	mutableStateLastNodeID := executionInfo.GetLastFirstEventId()
+	mutableStateLastNodeTransactionID := executionInfo.GetLastFirstEventTxnId()
 	if _, err := m.TrimHistoryBranch(ctx, &TrimHistoryBranchRequest{
 		ShardID:       shardID,
 		BranchToken:   branchToken,
@@ -1088,7 +1088,7 @@ func (m *executionManagerImpl) trimHistoryNode(
 }
 
 func (m *executionManagerImpl) toWorkflowMutableState(internState *InternalWorkflowMutableState) (*persistencespb.WorkflowMutableState, error) {
-	state := &persistencespb.WorkflowMutableState{
+	state := persistencespb.WorkflowMutableState_builder{
 		ActivityInfos:       make(map[int64]*persistencespb.ActivityInfo),
 		TimerInfos:          make(map[string]*persistencespb.TimerInfo),
 		ChildExecutionInfos: make(map[int64]*persistencespb.ChildExecutionInfo),
@@ -1098,41 +1098,41 @@ func (m *executionManagerImpl) toWorkflowMutableState(internState *InternalWorkf
 		SignalRequestedIds:  internState.SignalRequestedIDs,
 		NextEventId:         internState.NextEventID,
 		BufferedEvents:      make([]*historypb.HistoryEvent, len(internState.BufferedEvents)),
-	}
+	}.Build()
 	for key, blob := range internState.ActivityInfos {
 		info, err := m.serializer.ActivityInfoFromBlob(blob)
 		if err != nil {
 			return nil, err
 		}
-		state.ActivityInfos[key] = info
+		state.GetActivityInfos()[key] = info
 	}
 	for key, blob := range internState.TimerInfos {
 		info, err := m.serializer.TimerInfoFromBlob(blob)
 		if err != nil {
 			return nil, err
 		}
-		state.TimerInfos[key] = info
+		state.GetTimerInfos()[key] = info
 	}
 	for key, blob := range internState.ChildExecutionInfos {
 		info, err := m.serializer.ChildExecutionInfoFromBlob(blob)
 		if err != nil {
 			return nil, err
 		}
-		state.ChildExecutionInfos[key] = info
+		state.GetChildExecutionInfos()[key] = info
 	}
 	for key, blob := range internState.RequestCancelInfos {
 		info, err := m.serializer.RequestCancelInfoFromBlob(blob)
 		if err != nil {
 			return nil, err
 		}
-		state.RequestCancelInfos[key] = info
+		state.GetRequestCancelInfos()[key] = info
 	}
 	for key, blob := range internState.SignalInfos {
 		info, err := m.serializer.SignalInfoFromBlob(blob)
 		if err != nil {
 			return nil, err
 		}
-		state.SignalInfos[key] = info
+		state.GetSignalInfos()[key] = info
 	}
 	for key, internal := range internState.ChasmNodes {
 		var node *persistencespb.ChasmNode
@@ -1147,30 +1147,34 @@ func (m *executionManagerImpl) toWorkflowMutableState(internState *InternalWorkf
 			return nil, err
 		}
 
-		state.ChasmNodes[key] = node
+		state.GetChasmNodes()[key] = node
 	}
 	var err error
-	state.ExecutionInfo, err = m.serializer.WorkflowExecutionInfoFromBlob(internState.ExecutionInfo)
+	execInfo, err := m.serializer.WorkflowExecutionInfoFromBlob(internState.ExecutionInfo)
 	if err != nil {
 		return nil, err
 	}
-	if state.ExecutionInfo.AutoResetPoints == nil {
+	state.SetExecutionInfo(execInfo)
+	if !state.GetExecutionInfo().HasAutoResetPoints() {
 		// TODO: check if we need this?
-		state.ExecutionInfo.AutoResetPoints = &workflowpb.ResetPoints{}
+		state.GetExecutionInfo().SetAutoResetPoints(&workflowpb.ResetPoints{})
 	}
-	state.ExecutionState, err = m.serializer.WorkflowExecutionStateFromBlob(internState.ExecutionState)
+	execState, err := m.serializer.WorkflowExecutionStateFromBlob(internState.ExecutionState)
 	if err != nil {
 		return nil, err
 	}
-	state.BufferedEvents, err = m.DeserializeBufferedEvents(internState.BufferedEvents)
+	state.SetExecutionState(execState)
+	bufferedEvents, err := m.DeserializeBufferedEvents(internState.BufferedEvents)
 	if err != nil {
 		return nil, err
 	}
+	state.SetBufferedEvents(bufferedEvents)
 	if internState.Checksum != nil {
-		state.Checksum, err = m.serializer.ChecksumFromBlob(internState.Checksum)
-	}
-	if err != nil {
-		return nil, err
+		checksum, err := m.serializer.ChecksumFromBlob(internState.Checksum)
+		if err != nil {
+			return nil, err
+		}
+		state.SetChecksum(checksum)
 	}
 
 	return state, nil
@@ -1203,7 +1207,7 @@ func getCurrentBranchToken(
 	if err != nil {
 		return nil, err
 	}
-	return versionHistory.BranchToken, nil
+	return versionHistory.GetBranchToken(), nil
 }
 
 func getCurrentBranchLastWriteVersion(
@@ -1242,7 +1246,7 @@ func getCurrentBranchLastWriteVersion(
 	//
 	// Using transition history also suits the function name LastWriteVersion better.
 	if len(transitions) != 0 {
-		return transitionhistory.LastVersionedTransition(transitions).NamespaceFailoverVersion, nil
+		return transitionhistory.LastVersionedTransition(transitions).GetNamespaceFailoverVersion(), nil
 	}
 	return common.EmptyVersion, serviceerror.NewInternal("both version history and transition history are empty")
 }

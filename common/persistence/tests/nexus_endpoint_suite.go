@@ -44,10 +44,10 @@ func testNexusEndpointsStoreSteadyState(t *testing.T, store persistence.NexusEnd
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
-		data := &commonpb.DataBlob{
+		data := commonpb.DataBlob_builder{
 			Data:         []byte("dummy endpoint data"),
 			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
-		}
+		}.Build()
 
 		// Get endpoint by ID when table is empty
 		endpoint, err := store.GetNexusEndpoint(ctx, &persistence.GetNexusEndpointRequest{ID: uuid.NewString()})
@@ -181,10 +181,10 @@ func testCreateOrUpdateNexusEndpointExpectedErrors(t *testing.T, store persisten
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
-		data := &commonpb.DataBlob{
+		data := commonpb.DataBlob_builder{
 			Data:         []byte("dummy endpoint data"),
 			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
-		}
+		}.Build()
 
 		// Valid create
 		endpointID := uuid.New().String()
@@ -238,10 +238,10 @@ func testListNexusEndpointsExpectedErrors(t *testing.T, store persistence.NexusE
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
-		data := &commonpb.DataBlob{
+		data := commonpb.DataBlob_builder{
 			Data:         []byte("dummy endpoint data"),
 			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
-		}
+		}.Build()
 
 		// Create two endpoints
 		firstEndpoint := persistence.InternalNexusEndpoint{ID: uuid.NewString(), Version: 0, Data: data}
@@ -280,10 +280,10 @@ func testDeleteNexusEndpointExpectedErrors(t *testing.T, store persistence.Nexus
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
-		data := &commonpb.DataBlob{
+		data := commonpb.DataBlob_builder{
 			Data:         []byte("dummy endpoint data"),
 			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
-		}
+		}.Build()
 
 		// Create an endpoint
 		id := uuid.New().String()

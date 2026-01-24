@@ -35,28 +35,28 @@ func Test_Recordchildworkflowcompleted_WithForwards(t *testing.T) {
 	newParentRunID := uuid.NewString()
 	oldParentWFKey := definition.NewWorkflowKey(testNamespaceID.String(), paretntWFID, oldParentRunID)
 	newParentWFKey := definition.NewWorkflowKey(testNamespaceID.String(), paretntWFID, newParentRunID)
-	oldParentExecutionInfo := &persistencespb.WorkflowExecutionInfo{
+	oldParentExecutionInfo := persistencespb.WorkflowExecutionInfo_builder{
 		ResetRunId: newParentRunID, // link the old parent to the new parent.
-	}
+	}.Build()
 
 	// The request will be sent to the old parent.
-	request := &historyservice.RecordChildExecutionCompletedRequest{
+	request := historyservice.RecordChildExecutionCompletedRequest_builder{
 		NamespaceId: testNamespaceID.String(),
-		ParentExecution: &commonpb.WorkflowExecution{
+		ParentExecution: commonpb.WorkflowExecution_builder{
 			RunId:      oldParentRunID,
 			WorkflowId: paretntWFID,
-		},
-		ChildExecution: &commonpb.WorkflowExecution{WorkflowId: childWFID},
-		CompletionEvent: &historypb.HistoryEvent{
+		}.Build(),
+		ChildExecution: commonpb.WorkflowExecution_builder{WorkflowId: childWFID}.Build(),
+		CompletionEvent: historypb.HistoryEvent_builder{
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
-		},
-	}
+		}.Build(),
+	}.Build()
 	mockRegistery := namespace.NewMockRegistry(ctrl)
 	factory := namespace.NewDefaultReplicationResolverFactory()
-	detail := &persistencespb.NamespaceDetail{
-		Info:   &persistencespb.NamespaceInfo{Id: testNamespaceID.String()},
+	detail := persistencespb.NamespaceDetail_builder{
+		Info:   persistencespb.NamespaceInfo_builder{Id: testNamespaceID.String()}.Build(),
 		Config: &persistencespb.NamespaceConfig{},
-	}
+	}.Build()
 	testNamespace, err := namespace.FromPersistentState(detail, factory(detail))
 	require.NoError(t, err)
 	mockRegistery.EXPECT().GetNamespaceByID(testNamespaceID).Return(testNamespace, nil)
@@ -75,10 +75,10 @@ func Test_Recordchildworkflowcompleted_WithForwards(t *testing.T) {
 	newParentMutableState.EXPECT().IsWorkflowExecutionStatusPaused().Return(false)
 	newParentMutableState.EXPECT().GetNextEventID().Return(int64(10))
 	newParentMutableState.EXPECT().AddChildWorkflowExecutionCompletedEvent(anyArg, anyArg, anyArg).Return(nil, nil)
-	childExecutionInfo := &persistencespb.ChildExecutionInfo{
+	childExecutionInfo := persistencespb.ChildExecutionInfo_builder{
 		StartedEventId:    int64(10), // indicate that the started event is already recorded.
 		StartedWorkflowId: childWFID,
-	}
+	}.Build()
 	newParentMutableState.EXPECT().GetChildExecutionInfo(anyArg).Return(childExecutionInfo, true)
 	newParentMutableState.EXPECT().HasPendingWorkflowTask().Return(false)
 	newParentMutableState.EXPECT().AddWorkflowTaskScheduledEvent(anyArg, anyArg).Return(nil, nil)
@@ -101,7 +101,7 @@ func Test_Recordchildworkflowcompleted_WithForwards(t *testing.T) {
 	resp, err := Invoke(ctx, request, shardContext, consistencyChecker)
 	require.NoError(t, err)
 	require.NotNil(t, resp)
-	require.Equal(t, newParentRunID, request.ParentExecution.RunId) // the request should be modified to point to the new parent.
+	require.Equal(t, newParentRunID, request.GetParentExecution().GetRunId()) // the request should be modified to point to the new parent.
 }
 
 // tests that we break out of the loop after max redirect attempts.
@@ -115,27 +115,27 @@ func Test_Recordchildworkflowcompleted_WithInfiniteForwards(t *testing.T) {
 	paretntWFID := uuid.NewString()
 	oldParentRunID := uuid.NewString()
 	oldParentWFKey := definition.NewWorkflowKey(testNamespaceID.String(), paretntWFID, oldParentRunID)
-	oldParentExecutionInfo := &persistencespb.WorkflowExecutionInfo{
+	oldParentExecutionInfo := persistencespb.WorkflowExecutionInfo_builder{
 		ResetRunId: oldParentRunID, // link to self causing an infinite loop.
-	}
+	}.Build()
 
-	request := &historyservice.RecordChildExecutionCompletedRequest{
+	request := historyservice.RecordChildExecutionCompletedRequest_builder{
 		NamespaceId: testNamespaceID.String(),
-		ParentExecution: &commonpb.WorkflowExecution{
+		ParentExecution: commonpb.WorkflowExecution_builder{
 			RunId:      oldParentRunID,
 			WorkflowId: paretntWFID,
-		},
-		ChildExecution: &commonpb.WorkflowExecution{WorkflowId: childWFID},
-		CompletionEvent: &historypb.HistoryEvent{
+		}.Build(),
+		ChildExecution: commonpb.WorkflowExecution_builder{WorkflowId: childWFID}.Build(),
+		CompletionEvent: historypb.HistoryEvent_builder{
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
-		},
-	}
+		}.Build(),
+	}.Build()
 	mockRegistery := namespace.NewMockRegistry(ctrl)
 	factory := namespace.NewDefaultReplicationResolverFactory()
-	detail := &persistencespb.NamespaceDetail{
-		Info:   &persistencespb.NamespaceInfo{Id: testNamespaceID.String()},
+	detail := persistencespb.NamespaceDetail_builder{
+		Info:   persistencespb.NamespaceInfo_builder{Id: testNamespaceID.String()}.Build(),
 		Config: &persistencespb.NamespaceConfig{},
-	}
+	}.Build()
 	testNamespace, err := namespace.FromPersistentState(detail, factory(detail))
 	require.NoError(t, err)
 	mockRegistery.EXPECT().GetNamespaceByID(testNamespaceID).Return(testNamespace, nil)

@@ -181,14 +181,14 @@ func (t *serializerImpl) DeserializeTask(
 }
 
 func (t *serializerImpl) SerializeEvents(events []*historypb.HistoryEvent) (*commonpb.DataBlob, error) {
-	return t.serialize(&historypb.History{Events: events})
+	return t.serialize(historypb.History_builder{Events: events}.Build())
 }
 
 func (t *serializerImpl) DeserializeEvents(data *commonpb.DataBlob) ([]*historypb.HistoryEvent, error) {
 	if data == nil {
 		return nil, nil
 	}
-	if len(data.Data) == 0 {
+	if len(data.GetData()) == 0 {
 		return nil, nil
 	}
 
@@ -197,38 +197,38 @@ func (t *serializerImpl) DeserializeEvents(data *commonpb.DataBlob) ([]*historyp
 	if err != nil {
 		return nil, err
 	}
-	return events.Events, nil
+	return events.GetEvents(), nil
 }
 
 func (t *serializerImpl) DeserializeStrippedEvents(data *commonpb.DataBlob) ([]*historyspb.StrippedHistoryEvent, error) {
 	if data == nil {
 		return nil, nil
 	}
-	if len(data.Data) == 0 {
+	if len(data.GetData()) == 0 {
 		return nil, nil
 	}
 
 	events := &historyspb.StrippedHistoryEvents{}
 	var err error
-	switch data.EncodingType {
+	switch data.GetEncodingType() {
 	case enumspb.ENCODING_TYPE_PROTO3:
 		// Discard unknown fields to improve performance. StrippedHistoryEvents is usually deserialized from HistoryEvent
 		// which has extra fields that are not needed for this message.
 		err = proto.UnmarshalOptions{
 			DiscardUnknown: true,
-		}.Unmarshal(data.Data, events)
+		}.Unmarshal(data.GetData(), events)
 	case enumspb.ENCODING_TYPE_JSON:
 		err = temporalproto.CustomJSONUnmarshalOptions{
 			DiscardUnknown: true,
-		}.Unmarshal(data.Data, events)
+		}.Unmarshal(data.GetData(), events)
 	default:
-		return nil, NewUnknownEncodingTypeError(data.EncodingType.String(),
+		return nil, NewUnknownEncodingTypeError(data.GetEncodingType().String(),
 			enumspb.ENCODING_TYPE_PROTO3, enumspb.ENCODING_TYPE_JSON)
 	}
 	if err != nil {
-		return nil, NewDeserializationError(data.EncodingType, err)
+		return nil, NewDeserializationError(data.GetEncodingType(), err)
 	}
-	return events.Events, nil
+	return events.GetEvents(), nil
 }
 
 func (t *serializerImpl) SerializeEvent(event *historypb.HistoryEvent) (*commonpb.DataBlob, error) {
@@ -242,7 +242,7 @@ func (t *serializerImpl) DeserializeEvent(data *commonpb.DataBlob) (*historypb.H
 	if data == nil {
 		return nil, nil
 	}
-	if len(data.Data) == 0 {
+	if len(data.GetData()) == 0 {
 		return nil, nil
 	}
 
@@ -265,7 +265,7 @@ func (t *serializerImpl) DeserializeClusterMetadata(data *commonpb.DataBlob) (*p
 	if data == nil {
 		return nil, nil
 	}
-	if len(data.Data) == 0 {
+	if len(data.GetData()) == 0 {
 		return nil, nil
 	}
 
@@ -374,19 +374,19 @@ func (t *serializerImpl) ShardInfoFromBlob(data *commonpb.DataBlob) (*persistenc
 	}
 
 	if shardInfo.GetReplicationDlqAckLevel() == nil {
-		shardInfo.ReplicationDlqAckLevel = make(map[string]int64)
+		shardInfo.SetReplicationDlqAckLevel(make(map[string]int64))
 	}
 
 	if shardInfo.GetQueueStates() == nil {
-		shardInfo.QueueStates = make(map[int32]*persistencespb.QueueState)
+		shardInfo.SetQueueStates(make(map[int32]*persistencespb.QueueState))
 	}
-	for _, queueState := range shardInfo.QueueStates {
-		if queueState.ReaderStates == nil {
-			queueState.ReaderStates = make(map[int64]*persistencespb.QueueReaderState)
+	for _, queueState := range shardInfo.GetQueueStates() {
+		if queueState.GetReaderStates() == nil {
+			queueState.SetReaderStates(make(map[int64]*persistencespb.QueueReaderState))
 		}
-		for _, readerState := range queueState.ReaderStates {
-			if readerState.Scopes == nil {
-				readerState.Scopes = make([]*persistencespb.QueueSliceScope, 0)
+		for _, readerState := range queueState.GetReaderStates() {
+			if readerState.GetScopes() == nil {
+				readerState.SetScopes(make([]*persistencespb.QueueSliceScope, 0))
 			}
 		}
 	}
@@ -419,7 +419,7 @@ func (t *serializerImpl) HistoryBranchToBlob(info *persistencespb.HistoryBranch)
 // NOTE: HistoryBranch does not have an encoding type; so we use the serializer's encoding type.
 func (t *serializerImpl) HistoryBranchFromBlob(data []byte) (*persistencespb.HistoryBranch, error) {
 	result := &persistencespb.HistoryBranch{}
-	return result, Decode(&commonpb.DataBlob{Data: data, EncodingType: t.encodingType}, result)
+	return result, Decode(commonpb.DataBlob_builder{Data: data, EncodingType: t.encodingType}.Build(), result)
 }
 
 func (t *serializerImpl) WorkflowExecutionInfoToBlob(info *persistencespb.WorkflowExecutionInfo) (*commonpb.DataBlob, error) {
@@ -433,8 +433,8 @@ func (t *serializerImpl) WorkflowExecutionInfoFromBlob(data *commonpb.DataBlob) 
 		return nil, err
 	}
 	// Proto serialization replaces empty maps with nils, ensure this map is never nil.
-	if result.SubStateMachinesByType == nil {
-		result.SubStateMachinesByType = make(map[string]*persistencespb.StateMachineMap)
+	if result.GetSubStateMachinesByType() == nil {
+		result.SetSubStateMachinesByType(make(map[string]*persistencespb.StateMachineMap))
 	}
 	return result, nil
 }
@@ -449,14 +449,14 @@ func (t *serializerImpl) WorkflowExecutionStateFromBlob(data *commonpb.DataBlob)
 		return nil, err
 	}
 	// Initialize the WorkflowExecutionStateDetails for old records.
-	if result.RequestIds == nil {
-		result.RequestIds = make(map[string]*persistencespb.RequestIDInfo, 1)
+	if result.GetRequestIds() == nil {
+		result.SetRequestIds(make(map[string]*persistencespb.RequestIDInfo, 1))
 	}
-	if result.CreateRequestId != "" && result.RequestIds[result.CreateRequestId] == nil {
-		result.RequestIds[result.CreateRequestId] = &persistencespb.RequestIDInfo{
+	if result.GetCreateRequestId() != "" && result.GetRequestIds()[result.GetCreateRequestId()] == nil {
+		result.GetRequestIds()[result.GetCreateRequestId()] = persistencespb.RequestIDInfo_builder{
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 			EventId:   common.FirstEventID,
-		}
+		}.Build()
 	}
 	return result, nil
 }
@@ -580,19 +580,19 @@ func (t *serializerImpl) NexusEndpointFromBlob(data *commonpb.DataBlob) (*persis
 }
 
 func (t *serializerImpl) ChasmNodeToBlobs(node *persistencespb.ChasmNode) (metadata *commonpb.DataBlob, nodedata *commonpb.DataBlob, retErr error) {
-	metadata, retErr = encodeBlob(node.Metadata, t.encodingType)
+	metadata, retErr = encodeBlob(node.GetMetadata(), t.encodingType)
 	if retErr != nil {
 		return nil, nil, retErr
 	}
-	return metadata, node.Data, nil
+	return metadata, node.GetData(), nil
 }
 
 func (t *serializerImpl) ChasmNodeFromBlobs(metadata *commonpb.DataBlob, data *commonpb.DataBlob) (*persistencespb.ChasmNode, error) {
-	result := &persistencespb.ChasmNode{
+	result := persistencespb.ChasmNode_builder{
 		Metadata: &persistencespb.ChasmNodeMetadata{},
 		Data:     data,
-	}
-	return result, Decode(metadata, result.Metadata)
+	}.Build()
+	return result, Decode(metadata, result.GetMetadata())
 }
 
 func (t *serializerImpl) ChasmNodeToBlob(node *persistencespb.ChasmNode) (*commonpb.DataBlob, error) {

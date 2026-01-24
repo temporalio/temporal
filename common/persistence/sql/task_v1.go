@@ -72,8 +72,8 @@ func (m *sqlTaskManagerV1) CreateTasks(
 			RangeHash:    tqHash,
 			TaskQueueID:  tqId,
 			TaskID:       v.TaskId,
-			Data:         v.Task.Data,
-			DataEncoding: v.Task.EncodingType.String(),
+			Data:         v.Task.GetData(),
+			DataEncoding: v.Task.GetEncodingType().String(),
 		}
 	}
 	var resp *persistence.CreateTasksResponse

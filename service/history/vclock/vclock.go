@@ -10,11 +10,11 @@ func NewVectorClock(
 	shardID int32,
 	clock int64,
 ) *clockspb.VectorClock {
-	return &clockspb.VectorClock{
+	return clockspb.VectorClock_builder{
 		ClusterId: clusterID,
 		ShardId:   shardID,
 		Clock:     clock,
-	}
+	}.Build()
 }
 
 func Comparable(

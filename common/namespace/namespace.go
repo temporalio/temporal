@@ -84,12 +84,12 @@ func FromPersistentState(
 		return nil, serviceerror.NewInvalidArgument("replicationResolver must be provided")
 	}
 	ns := &Namespace{
-		info:          detail.Info,
-		config:        detail.Config,
-		configVersion: detail.ConfigVersion,
+		info:          detail.GetInfo(),
+		config:        detail.GetConfig(),
+		configVersion: detail.GetConfigVersion(),
 		customSearchAttributesMapper: CustomSearchAttributesMapper{
-			fieldToAlias: detail.Config.CustomSearchAttributeAliases,
-			aliasToField: util.InverseMap(detail.Config.CustomSearchAttributeAliases),
+			fieldToAlias: detail.GetConfig().GetCustomSearchAttributeAliases(),
+			aliasToField: util.InverseMap(detail.GetConfig().GetCustomSearchAttributeAliases()),
 		},
 		replicationResolver: resolver,
 	}
@@ -128,8 +128,8 @@ func (ns *Namespace) Clone(mutations ...Mutation) *Namespace {
 // and URI) for this namespace.
 func (ns *Namespace) VisibilityArchivalState() ArchivalConfigState {
 	return ArchivalConfigState{
-		State: ns.config.VisibilityArchivalState,
-		URI:   ns.config.VisibilityArchivalUri,
+		State: ns.config.GetVisibilityArchivalState(),
+		URI:   ns.config.GetVisibilityArchivalUri(),
 	}
 }
 
@@ -137,8 +137,8 @@ func (ns *Namespace) VisibilityArchivalState() ArchivalConfigState {
 // URI) for this namespace.
 func (ns *Namespace) HistoryArchivalState() ArchivalConfigState {
 	return ArchivalConfigState{
-		State: ns.config.HistoryArchivalState,
-		URI:   ns.config.HistoryArchivalUri,
+		State: ns.config.GetHistoryArchivalState(),
+		URI:   ns.config.GetHistoryArchivalUri(),
 	}
 }
 
@@ -161,7 +161,7 @@ func (ns *Namespace) ID() ID {
 	if ns.info == nil {
 		return ID("")
 	}
-	return ID(ns.info.Id)
+	return ID(ns.info.GetId())
 }
 
 // Name observes this namespace's configured name.
@@ -169,14 +169,14 @@ func (ns *Namespace) Name() Name {
 	if ns.info == nil {
 		return Name("")
 	}
-	return Name(ns.info.Name)
+	return Name(ns.info.GetName())
 }
 
 func (ns *Namespace) State() enumspb.NamespaceState {
 	if ns.info == nil {
 		return enumspb.NAMESPACE_STATE_UNSPECIFIED
 	}
-	return ns.info.State
+	return ns.info.GetState()
 }
 
 func (ns *Namespace) ReplicationState() enumspb.ReplicationState {
@@ -261,19 +261,19 @@ func (ns *Namespace) GetReplicationResolver() ReplicationResolver {
 }
 
 func (ns *Namespace) GetCustomData(key string) string {
-	if ns.info.Data == nil {
+	if ns.info.GetData() == nil {
 		return ""
 	}
-	return ns.info.Data[key]
+	return ns.info.GetData()[key]
 }
 
 // Retention returns retention duration for this namespace.
 func (ns *Namespace) Retention() time.Duration {
-	if ns.config.Retention == nil {
+	if !ns.config.HasRetention() {
 		return 0
 	}
 
-	return ns.config.Retention.AsDuration()
+	return ns.config.GetRetention().AsDuration()
 }
 
 // CustomSearchAttributesMapper is a part of temporary solution. Do not use this method.
@@ -282,38 +282,38 @@ func (ns *Namespace) CustomSearchAttributesMapper() CustomSearchAttributesMapper
 }
 
 func (ns *Namespace) GetWorkflowRules() []*rulespb.WorkflowRule {
-	if ns.config.WorkflowRules == nil {
+	if ns.config.GetWorkflowRules() == nil {
 		return nil
 	}
-	return expmaps.Values(ns.config.WorkflowRules)
+	return expmaps.Values(ns.config.GetWorkflowRules())
 }
 
 func (ns *Namespace) GetWorkflowRule(ruleID string) (*rulespb.WorkflowRule, bool) {
-	if ns.config.WorkflowRules == nil {
+	if ns.config.GetWorkflowRules() == nil {
 		return nil, false
 	}
-	result, ok := ns.config.WorkflowRules[ruleID]
+	result, ok := ns.config.GetWorkflowRules()[ruleID]
 	return result, ok
 }
 
 // Error returns the reason associated with this bad binary.
 func (e BadBinaryError) Error() string {
-	return e.info.Reason
+	return e.info.GetReason()
 }
 
 // Reason returns the reason associated with this bad binary.
 func (e BadBinaryError) Reason() string {
-	return e.info.Reason
+	return e.info.GetReason()
 }
 
 // Operator returns the operator associated with this bad binary.
 func (e BadBinaryError) Operator() string {
-	return e.info.Operator
+	return e.info.GetOperator()
 }
 
 // Created returns the time at which this bad binary was declared to be bad.
 func (e BadBinaryError) Created() time.Time {
-	return e.info.CreateTime.AsTime()
+	return e.info.GetCreateTime().AsTime()
 }
 
 // Checksum observes the binary checksum that caused this error.

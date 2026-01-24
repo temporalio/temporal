@@ -255,15 +255,15 @@ func (s *redirectionInterceptorSuite) TestHandleGlobalAPIInvocation_Local() {
 	}
 	namespaceName := namespace.Name("(╯°Д°)╯ ┻━┻")
 	namespaceEntry := namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Id: uuid.NewString(), Name: namespaceName.String()},
-		&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
-		&persistencespb.NamespaceReplicationConfig{
+		persistencespb.NamespaceInfo_builder{Id: uuid.NewString(), Name: namespaceName.String()}.Build(),
+		persistencespb.NamespaceConfig_builder{Retention: timestamp.DurationFromDays(1)}.Build(),
+		persistencespb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []string{
 				cluster.TestCurrentClusterName,
 				cluster.TestAlternativeClusterName,
 			},
-		},
+		}.Build(),
 		1,
 	)
 	s.namespaceCache.EXPECT().GetNamespace(namespaceName).Return(namespaceEntry, nil).AnyTimes()
@@ -291,15 +291,15 @@ func (s *redirectionInterceptorSuite) TestHandleGlobalAPIInvocation_Redirect() {
 	}
 	namespaceName := namespace.Name("(╯°Д°)╯ ┻━┻")
 	namespaceEntry := namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Id: uuid.NewString(), Name: namespaceName.String()},
-		&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
-		&persistencespb.NamespaceReplicationConfig{
+		persistencespb.NamespaceInfo_builder{Id: uuid.NewString(), Name: namespaceName.String()}.Build(),
+		persistencespb.NamespaceConfig_builder{Retention: timestamp.DurationFromDays(1)}.Build(),
+		persistencespb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
 			Clusters: []string{
 				cluster.TestCurrentClusterName,
 				cluster.TestAlternativeClusterName,
 			},
-		},
+		}.Build(),
 		1,
 	)
 	s.namespaceCache.EXPECT().GetNamespace(namespaceName).Return(namespaceEntry, nil).AnyTimes()

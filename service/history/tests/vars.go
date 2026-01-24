@@ -39,103 +39,103 @@ var (
 	ArchetypeID                              = chasm.ArchetypeID(1234)
 
 	LocalNamespaceEntry = namespace.NewLocalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Id: NamespaceID.String(), Name: Namespace.String()},
-		&persistencespb.NamespaceConfig{
+		persistencespb.NamespaceInfo_builder{Id: NamespaceID.String(), Name: Namespace.String()}.Build(),
+		persistencespb.NamespaceConfig_builder{
 			Retention: timestamp.DurationFromDays(1),
-			BadBinaries: &namespacepb.BadBinaries{
+			BadBinaries: namespacepb.BadBinaries_builder{
 				Binaries: map[string]*namespacepb.BadBinaryInfo{
 					"lololol": nil},
-			},
-		},
+			}.Build(),
+		}.Build(),
 		cluster.TestCurrentClusterName,
 	)
 
 	GlobalNamespaceEntry = namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Id: NamespaceID.String(), Name: Namespace.String()},
-		&persistencespb.NamespaceConfig{
+		persistencespb.NamespaceInfo_builder{Id: NamespaceID.String(), Name: Namespace.String()}.Build(),
+		persistencespb.NamespaceConfig_builder{
 			Retention:               timestamp.DurationFromDays(1),
 			VisibilityArchivalState: enumspb.ARCHIVAL_STATE_ENABLED,
 			VisibilityArchivalUri:   "test:///visibility/archival",
-		},
-		&persistencespb.NamespaceReplicationConfig{
+		}.Build(),
+		persistencespb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []string{
 				cluster.TestCurrentClusterName,
 				cluster.TestAlternativeClusterName,
 			},
-		},
+		}.Build(),
 		Version,
 	)
 
 	GlobalParentNamespaceEntry = namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Id: ParentNamespaceID.String(), Name: ParentNamespace.String()},
-		&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
-		&persistencespb.NamespaceReplicationConfig{
+		persistencespb.NamespaceInfo_builder{Id: ParentNamespaceID.String(), Name: ParentNamespace.String()}.Build(),
+		persistencespb.NamespaceConfig_builder{Retention: timestamp.DurationFromDays(1)}.Build(),
+		persistencespb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []string{
 				cluster.TestCurrentClusterName,
 				cluster.TestAlternativeClusterName,
 			},
-		},
+		}.Build(),
 		Version,
 	)
 
 	GlobalTargetNamespaceEntry = namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Id: TargetNamespaceID.String(), Name: TargetNamespace.String()},
-		&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
-		&persistencespb.NamespaceReplicationConfig{
+		persistencespb.NamespaceInfo_builder{Id: TargetNamespaceID.String(), Name: TargetNamespace.String()}.Build(),
+		persistencespb.NamespaceConfig_builder{Retention: timestamp.DurationFromDays(1)}.Build(),
+		persistencespb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []string{
 				cluster.TestCurrentClusterName,
 				cluster.TestAlternativeClusterName,
 			},
-		},
+		}.Build(),
 		Version,
 	)
 
 	GlobalStandbyNamespaceEntry = namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Id: StandbyNamespaceID.String(), Name: StandbyNamespace.String()},
-		&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
-		&persistencespb.NamespaceReplicationConfig{
+		persistencespb.NamespaceInfo_builder{Id: StandbyNamespaceID.String(), Name: StandbyNamespace.String()}.Build(),
+		persistencespb.NamespaceConfig_builder{Retention: timestamp.DurationFromDays(1)}.Build(),
+		persistencespb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
 			Clusters: []string{
 				cluster.TestCurrentClusterName,
 				cluster.TestAlternativeClusterName,
 			},
-		},
+		}.Build(),
 		Version,
 	)
 
 	GlobalStandbyWithVisibilityArchivalNamespaceEntry = namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{
+		persistencespb.NamespaceInfo_builder{
 			Id:   StandbyWithVisibilityArchivalNamespaceID.String(),
 			Name: StandbyWithVisibilityArchivalNamespace.String(),
-		},
-		&persistencespb.NamespaceConfig{
+		}.Build(),
+		persistencespb.NamespaceConfig_builder{
 			Retention:               timestamp.DurationFromDays(1),
 			VisibilityArchivalState: enumspb.ARCHIVAL_STATE_ENABLED,
 			VisibilityArchivalUri:   "test:///visibility/archival",
-		},
-		&persistencespb.NamespaceReplicationConfig{
+		}.Build(),
+		persistencespb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
 			Clusters: []string{
 				cluster.TestCurrentClusterName,
 				cluster.TestAlternativeClusterName,
 			},
-		},
+		}.Build(),
 		Version,
 	)
 
 	GlobalChildNamespaceEntry = namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Id: ChildNamespaceID.String(), Name: ChildNamespace.String()},
-		&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
-		&persistencespb.NamespaceReplicationConfig{
+		persistencespb.NamespaceInfo_builder{Id: ChildNamespaceID.String(), Name: ChildNamespace.String()}.Build(),
+		persistencespb.NamespaceConfig_builder{Retention: timestamp.DurationFromDays(1)}.Build(),
+		persistencespb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []string{
 				cluster.TestCurrentClusterName,
 				cluster.TestAlternativeClusterName,
 			},
-		},
+		}.Build(),
 		Version,
 	)
 

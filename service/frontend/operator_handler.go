@@ -266,7 +266,7 @@ func (h *OperatorHandlerImpl) addSearchAttributesSQL(
 	}
 	resp, err := client.DescribeNamespace(
 		ctx,
-		&workflowservice.DescribeNamespaceRequest{Namespace: nsName},
+		workflowservice.DescribeNamespaceRequest_builder{Namespace: nsName}.Build(),
 	)
 	if err != nil {
 		return serviceerror.NewUnavailablef(errUnableToGetNamespaceInfoMessage, nsName, err)
@@ -274,7 +274,7 @@ func (h *OperatorHandlerImpl) addSearchAttributesSQL(
 
 	cmCustomSearchAttributes := currentSearchAttributes.Custom()
 	upsertFieldToAliasMap := make(map[string]string)
-	fieldToAliasMap := resp.Config.CustomSearchAttributeAliases
+	fieldToAliasMap := resp.GetConfig().GetCustomSearchAttributeAliases()
 	aliasToFieldMap := util.InverseMap(fieldToAliasMap)
 	for saName, saType := range request.GetSearchAttributes() {
 		// check if alias is already in use
@@ -313,12 +313,12 @@ func (h *OperatorHandlerImpl) addSearchAttributesSQL(
 		return nil
 	}
 
-	_, err = client.UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
+	_, err = client.UpdateNamespace(ctx, workflowservice.UpdateNamespaceRequest_builder{
 		Namespace: nsName,
-		Config: &namespacepb.NamespaceConfig{
+		Config: namespacepb.NamespaceConfig_builder{
 			CustomSearchAttributeAliases: upsertFieldToAliasMap,
-		},
-	})
+		}.Build(),
+	}.Build())
 	if err != nil {
 		if err.Error() == errCustomSearchAttributeFieldAlreadyAllocated.Error() {
 			return errRaceConditionAddingSearchAttributes
@@ -436,14 +436,14 @@ func (h *OperatorHandlerImpl) removeSearchAttributesSQL(
 	}
 	resp, err := client.DescribeNamespace(
 		ctx,
-		&workflowservice.DescribeNamespaceRequest{Namespace: nsName},
+		workflowservice.DescribeNamespaceRequest_builder{Namespace: nsName}.Build(),
 	)
 	if err != nil {
 		return serviceerror.NewUnavailablef(errUnableToGetNamespaceInfoMessage, nsName, err)
 	}
 
 	upsertFieldToAliasMap := make(map[string]string)
-	aliasToFieldMap := util.InverseMap(resp.Config.CustomSearchAttributeAliases)
+	aliasToFieldMap := util.InverseMap(resp.GetConfig().GetCustomSearchAttributeAliases())
 	for _, saName := range request.GetSearchAttributes() {
 		if fieldName, ok := aliasToFieldMap[saName]; ok {
 			upsertFieldToAliasMap[fieldName] = ""
@@ -460,12 +460,12 @@ func (h *OperatorHandlerImpl) removeSearchAttributesSQL(
 		return nil
 	}
 
-	_, err = client.UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
+	_, err = client.UpdateNamespace(ctx, workflowservice.UpdateNamespaceRequest_builder{
 		Namespace: nsName,
-		Config: &namespacepb.NamespaceConfig{
+		Config: namespacepb.NamespaceConfig_builder{
 			CustomSearchAttributeAliases: upsertFieldToAliasMap,
-		},
-	})
+		}.Build(),
+	}.Build())
 	return err
 }
 
@@ -498,10 +498,10 @@ func (h *OperatorHandlerImpl) listSearchAttributesElasticsearch(
 	indexName string,
 	searchAttributes searchattribute.NameTypeMap,
 ) (*operatorservice.ListSearchAttributesResponse, error) {
-	return &operatorservice.ListSearchAttributesResponse{
+	return operatorservice.ListSearchAttributesResponse_builder{
 		CustomAttributes: searchAttributes.Custom(),
 		SystemAttributes: searchAttributes.System(),
-	}, nil
+	}.Build(), nil
 }
 
 func (h *OperatorHandlerImpl) listSearchAttributesSQL(
@@ -523,7 +523,7 @@ func (h *OperatorHandlerImpl) listSearchAttributesSQL(
 	}
 	resp, err := client.DescribeNamespace(
 		ctx,
-		&workflowservice.DescribeNamespaceRequest{Namespace: nsName},
+		workflowservice.DescribeNamespaceRequest_builder{Namespace: nsName}.Build(),
 	)
 	if err != nil {
 		return nil, serviceerror.NewUnavailablef(
@@ -531,18 +531,18 @@ func (h *OperatorHandlerImpl) listSearchAttributesSQL(
 		)
 	}
 
-	fieldToAliasMap := resp.Config.CustomSearchAttributeAliases
+	fieldToAliasMap := resp.GetConfig().GetCustomSearchAttributeAliases()
 	customSearchAttributes := make(map[string]enumspb.IndexedValueType)
 	for field, tp := range searchAttributes.Custom() {
 		if alias, ok := fieldToAliasMap[field]; ok {
 			customSearchAttributes[alias] = tp
 		}
 	}
-	return &operatorservice.ListSearchAttributesResponse{
+	return operatorservice.ListSearchAttributesResponse_builder{
 		CustomAttributes: customSearchAttributes,
 		SystemAttributes: searchAttributes.System(),
 		StorageSchema:    nil,
-	}, nil
+	}.Build(), nil
 }
 
 func (h *OperatorHandlerImpl) DeleteNamespace(
@@ -557,10 +557,10 @@ func (h *OperatorHandlerImpl) DeleteNamespace(
 
 	// If NamespaceDeleteDelay is not provided, the default delay configured in the cluster should be used.
 	var namespaceDeleteDelay time.Duration
-	if request.NamespaceDeleteDelay == nil {
+	if !request.HasNamespaceDeleteDelay() {
 		namespaceDeleteDelay = h.config.DeleteNamespaceNamespaceDeleteDelay()
 	} else {
-		namespaceDeleteDelay = request.NamespaceDeleteDelay.AsDuration()
+		namespaceDeleteDelay = request.GetNamespaceDeleteDelay().AsDuration()
 	}
 
 	// Execute workflow.
@@ -597,9 +597,9 @@ func (h *OperatorHandlerImpl) DeleteNamespace(
 		return nil, delnserrors.ToServiceError(err, run.GetID(), run.GetRunID())
 	}
 
-	return &operatorservice.DeleteNamespaceResponse{
+	return operatorservice.DeleteNamespaceResponse_builder{
 		DeletedNamespace: wfResult.DeletedNamespace.String(),
-	}, nil
+	}.Build(), nil
 }
 
 // AddOrUpdateRemoteCluster adds or updates the connection config to a remote cluster.
@@ -645,7 +645,7 @@ func (h *OperatorHandlerImpl) AddOrUpdateRemoteCluster(
 	}
 
 	applied, err := h.clusterMetadataManager.SaveClusterMetadata(ctx, &persistence.SaveClusterMetadataRequest{
-		ClusterMetadata: &persistencespb.ClusterMetadata{
+		ClusterMetadata: persistencespb.ClusterMetadata_builder{
 			ClusterName:              resp.GetClusterName(),
 			HistoryShardCount:        resp.GetHistoryShardCount(),
 			ClusterId:                resp.GetClusterId(),
@@ -657,7 +657,7 @@ func (h *OperatorHandlerImpl) AddOrUpdateRemoteCluster(
 			IsConnectionEnabled:      request.GetEnableRemoteClusterConnection(),
 			IsReplicationEnabled:     request.GetEnableReplication(),
 			Tags:                     resp.GetTags(),
-		},
+		}.Build(),
 		Version: updateRequestVersion,
 	})
 	if err != nil {
@@ -704,7 +704,7 @@ func (h *OperatorHandlerImpl) ListClusters(
 		return nil, errRequestNotSet
 	}
 	if request.GetPageSize() <= 0 {
-		request.PageSize = listClustersPageSize
+		request.SetPageSize(listClustersPageSize)
 	}
 
 	resp, err := h.clusterMetadataManager.ListClusterMetadata(ctx, &persistence.ListClusterMetadataRequest{
@@ -717,7 +717,7 @@ func (h *OperatorHandlerImpl) ListClusters(
 
 	var clusterMetadataList []*operatorservice.ClusterMetadata
 	for _, clusterResp := range resp.ClusterMetadata {
-		clusterMetadataList = append(clusterMetadataList, &operatorservice.ClusterMetadata{
+		clusterMetadataList = append(clusterMetadataList, operatorservice.ClusterMetadata_builder{
 			ClusterName:            clusterResp.GetClusterName(),
 			ClusterId:              clusterResp.GetClusterId(),
 			Address:                clusterResp.GetClusterAddress(),
@@ -726,12 +726,12 @@ func (h *OperatorHandlerImpl) ListClusters(
 			HistoryShardCount:      clusterResp.GetHistoryShardCount(),
 			IsConnectionEnabled:    clusterResp.GetIsConnectionEnabled(),
 			IsReplicationEnabled:   clusterResp.GetIsReplicationEnabled(),
-		})
+		}.Build())
 	}
-	return &operatorservice.ListClustersResponse{
+	return operatorservice.ListClustersResponse_builder{
 		Clusters:      clusterMetadataList,
 		NextPageToken: resp.NextPageToken,
-	}, nil
+	}.Build(), nil
 }
 
 func (h *OperatorHandlerImpl) validateRemoteClusterMetadata(metadata *adminservice.DescribeClusterResponse) error {
@@ -756,12 +756,12 @@ func (h *OperatorHandlerImpl) validateRemoteClusterMetadata(metadata *adminservi
 			return serviceerror.NewInvalidArgument("Remote cluster shard number and local cluster shard number are not multiples.")
 		}
 	}
-	if !metadata.IsGlobalNamespaceEnabled {
+	if !metadata.GetIsGlobalNamespaceEnabled() {
 		// remote cluster doesn't support global namespace
 		return serviceerror.NewInvalidArgument("Cannot add remote cluster as global namespace is not supported")
 	}
 	for clusterName, cluster := range currentClusterInfo.GetAllClusterInfo() {
-		if clusterName != metadata.ClusterName && cluster.InitialFailoverVersion == metadata.GetInitialFailoverVersion() {
+		if clusterName != metadata.GetClusterName() && cluster.InitialFailoverVersion == metadata.GetInitialFailoverVersion() {
 			// initial failover version conflict
 			// best effort: race condition if a concurrent write to db with the same version.
 			return serviceerror.NewInvalidArgument("Cannot add remote cluster due to initial failover version conflict")

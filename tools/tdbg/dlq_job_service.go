@@ -35,9 +35,9 @@ func (ac *DLQJobService) DescribeJob(c *cli.Context) error {
 	}
 	ctx, cancel := newContext(c)
 	defer cancel()
-	response, err := adminClient.DescribeDLQJob(ctx, &adminservice.DescribeDLQJobRequest{
+	response, err := adminClient.DescribeDLQJob(ctx, adminservice.DescribeDLQJobRequest_builder{
 		JobToken: jobTokenBytes,
-	})
+	}.Build())
 	if err != nil {
 		return fmt.Errorf("call to DescribeDLQJob failed: %w", err)
 	}
@@ -58,10 +58,10 @@ func (ac *DLQJobService) CancelJob(c *cli.Context) error {
 	reason := c.String(FlagReason)
 	ctx, cancel := newContext(c)
 	defer cancel()
-	response, err := adminClient.CancelDLQJob(ctx, &adminservice.CancelDLQJobRequest{
+	response, err := adminClient.CancelDLQJob(ctx, adminservice.CancelDLQJobRequest_builder{
 		JobToken: jobTokenBytes,
 		Reason:   reason,
-	})
+	}.Build())
 	if err != nil {
 		return fmt.Errorf("call to CancelDLQJob failed: %w", err)
 	}

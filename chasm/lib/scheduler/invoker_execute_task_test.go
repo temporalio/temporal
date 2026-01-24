@@ -69,7 +69,7 @@ type executeTestCase struct {
 func (s *invokerExecuteTaskSuite) TestExecuteTask_Basic() {
 	startTime := timestamppb.New(s.timeSource.Now())
 	bufferedStarts := []*schedulespb.BufferedStart{
-		{
+		schedulespb.BufferedStart_builder{
 			NominalTime:   startTime,
 			ActualTime:    startTime,
 			DesiredTime:   startTime,
@@ -77,8 +77,8 @@ func (s *invokerExecuteTaskSuite) TestExecuteTask_Basic() {
 			RequestId:     "req1",
 			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
 			Attempt:       1,
-		},
-		{
+		}.Build(),
+		schedulespb.BufferedStart_builder{
 			NominalTime:   startTime,
 			ActualTime:    startTime,
 			DesiredTime:   startTime,
@@ -86,16 +86,16 @@ func (s *invokerExecuteTaskSuite) TestExecuteTask_Basic() {
 			RequestId:     "req2",
 			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
 			Attempt:       1,
-		},
+		}.Build(),
 	}
 
 	// Expect both buffered starts to result in workflow executions.
 	s.mockFrontendClient.EXPECT().
 		StartWorkflowExecution(gomock.Any(), gomock.Any()).
 		Times(2).
-		Return(&workflowservice.StartWorkflowExecutionResponse{
+		Return(workflowservice.StartWorkflowExecutionResponse_builder{
 			RunId: "run-id",
-		}, nil)
+		}.Build(), nil)
 
 	// After execution, both BufferedStarts are kept (with RunId set).
 	// They become "running" workflows.
@@ -120,7 +120,7 @@ func (s *invokerExecuteTaskSuite) TestExecuteTask_RetryableFailure() {
 	// one will fail.
 	startTime := timestamppb.New(s.timeSource.Now())
 	bufferedStarts := []*schedulespb.BufferedStart{
-		{
+		schedulespb.BufferedStart_builder{
 			NominalTime:   startTime,
 			ActualTime:    startTime,
 			DesiredTime:   startTime,
@@ -128,8 +128,8 @@ func (s *invokerExecuteTaskSuite) TestExecuteTask_RetryableFailure() {
 			RequestId:     "fail",
 			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
 			Attempt:       1,
-		},
-		{
+		}.Build(),
+		schedulespb.BufferedStart_builder{
 			NominalTime:   startTime,
 			ActualTime:    startTime,
 			DesiredTime:   startTime,
@@ -137,7 +137,7 @@ func (s *invokerExecuteTaskSuite) TestExecuteTask_RetryableFailure() {
 			RequestId:     "pass",
 			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
 			Attempt:       1,
-		},
+		}.Build(),
 	}
 
 	// Fail the first start, and succeed the second.
@@ -148,9 +148,9 @@ func (s *invokerExecuteTaskSuite) TestExecuteTask_RetryableFailure() {
 	s.mockFrontendClient.EXPECT().
 		StartWorkflowExecution(gomock.Any(), startWorkflowExecutionRequestIDMatches("pass")).
 		Times(1).
-		Return(&workflowservice.StartWorkflowExecutionResponse{
+		Return(workflowservice.StartWorkflowExecutionResponse_builder{
 			RunId: "run-id",
-		}, nil)
+		}.Build(), nil)
 
 	// After execution:
 	// - Failed start stays in buffer with backoff (pending)
@@ -164,9 +164,9 @@ func (s *invokerExecuteTaskSuite) TestExecuteTask_RetryableFailure() {
 			// Find the failed start (no RunId, has backoff)
 			for _, start := range invoker.BufferedStarts {
 				if start.GetRunId() == "" {
-					backoffTime := start.BackoffTime.AsTime()
+					backoffTime := start.GetBackoffTime().AsTime()
 					s.True(backoffTime.After(s.timeSource.Now()))
-					s.Equal(int64(2), start.Attempt)
+					s.Equal(int64(2), start.GetAttempt())
 					return
 				}
 			}
@@ -179,7 +179,7 @@ func (s *invokerExecuteTaskSuite) TestExecuteTask_RetryableFailure() {
 func (s *invokerExecuteTaskSuite) TestExecuteTask_AlreadyStarted() {
 	startTime := timestamppb.New(s.timeSource.Now())
 	bufferedStarts := []*schedulespb.BufferedStart{
-		{
+		schedulespb.BufferedStart_builder{
 			NominalTime:   startTime,
 			ActualTime:    startTime,
 			DesiredTime:   startTime,
@@ -187,7 +187,7 @@ func (s *invokerExecuteTaskSuite) TestExecuteTask_AlreadyStarted() {
 			RequestId:     "req",
 			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
 			Attempt:       1,
-		},
+		}.Build(),
 	}
 
 	// Fail with WorkflowExecutionAlreadyStarted.
@@ -208,7 +208,7 @@ func (s *invokerExecuteTaskSuite) TestExecuteTask_AlreadyStarted() {
 func (s *invokerExecuteTaskSuite) TestExecuteTask_ExceedsMaxAttempts() {
 	startTime := timestamppb.New(s.timeSource.Now())
 	bufferedStarts := []*schedulespb.BufferedStart{
-		{
+		schedulespb.BufferedStart_builder{
 			NominalTime:   startTime,
 			ActualTime:    startTime,
 			DesiredTime:   startTime,
@@ -216,7 +216,7 @@ func (s *invokerExecuteTaskSuite) TestExecuteTask_ExceedsMaxAttempts() {
 			RequestId:     "req",
 			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
 			Attempt:       scheduler.InvokerMaxStartAttempts,
-		},
+		}.Build(),
 	}
 
 	s.runExecuteTestCase(&executeTestCase{
@@ -230,16 +230,16 @@ func (s *invokerExecuteTaskSuite) TestExecuteTask_ExceedsMaxAttempts() {
 // An execute task runs with cancels/terminations queued, which fail to execute.
 func (s *invokerExecuteTaskSuite) TestExecuteTask_CancelTerminateFailure() {
 	cancelWorkflows := []*commonpb.WorkflowExecution{
-		{
+		commonpb.WorkflowExecution_builder{
 			WorkflowId: "wf",
 			RunId:      "run1",
-		},
+		}.Build(),
 	}
 	terminateWorkflows := []*commonpb.WorkflowExecution{
-		{
+		commonpb.WorkflowExecution_builder{
 			WorkflowId: "wf",
 			RunId:      "run2",
-		},
+		}.Build(),
 	}
 
 	// Fail both service calls.
@@ -265,16 +265,16 @@ func (s *invokerExecuteTaskSuite) TestExecuteTask_CancelTerminateFailure() {
 // An Execute task runs with cancels/terminations queued, resulting in success.
 func (s *invokerExecuteTaskSuite) TestExecuteTask_CancelTerminateSucceed() {
 	cancelWorkflows := []*commonpb.WorkflowExecution{
-		{
+		commonpb.WorkflowExecution_builder{
 			WorkflowId: "wf",
 			RunId:      "run1",
-		},
+		}.Build(),
 	}
 	terminateWorkflows := []*commonpb.WorkflowExecution{
-		{
+		commonpb.WorkflowExecution_builder{
 			WorkflowId: "wf",
 			RunId:      "run2",
-		},
+		}.Build(),
 	}
 
 	// Succeed both service calls.
@@ -303,7 +303,7 @@ func (s *invokerExecuteTaskSuite) TestExecuteTask_ExceedsMaxActionsPerExecution(
 	maxStarts := scheduler.DefaultTweakables.MaxActionsPerExecution
 	for i := range maxStarts * 2 {
 		bufferedStarts = append(bufferedStarts,
-			&schedulespb.BufferedStart{
+			schedulespb.BufferedStart_builder{
 				NominalTime:   startTime,
 				ActualTime:    startTime,
 				DesiredTime:   startTime,
@@ -311,7 +311,7 @@ func (s *invokerExecuteTaskSuite) TestExecuteTask_ExceedsMaxActionsPerExecution(
 				RequestId:     fmt.Sprintf("req-%d", i),
 				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
 				Attempt:       1,
-			})
+			}.Build())
 	}
 
 	// Expect up to the maximum buffered start limit to result in workflow
@@ -319,9 +319,9 @@ func (s *invokerExecuteTaskSuite) TestExecuteTask_ExceedsMaxActionsPerExecution(
 	s.mockFrontendClient.EXPECT().
 		StartWorkflowExecution(gomock.Any(), gomock.Any()).
 		Times(maxStarts).
-		Return(&workflowservice.StartWorkflowExecutionResponse{
+		Return(workflowservice.StartWorkflowExecutionResponse_builder{
 			RunId: "run-id",
-		}, nil)
+		}.Build(), nil)
 
 	// All BufferedStarts are kept: maxStarts get RunId set (running), the rest stay pending.
 	s.runExecuteTestCase(&executeTestCase{
@@ -344,12 +344,12 @@ func (s *invokerExecuteTaskSuite) runExecuteTestCase(c *executeTestCase) {
 
 	// Add initial running workflows as BufferedStarts with RunId set
 	for _, wf := range c.InitialRunningWorkflows {
-		invoker.BufferedStarts = append(invoker.BufferedStarts, &schedulespb.BufferedStart{
-			RequestId:  wf.WorkflowId + "-req",
-			WorkflowId: wf.WorkflowId,
-			RunId:      wf.RunId,
+		invoker.BufferedStarts = append(invoker.BufferedStarts, schedulespb.BufferedStart_builder{
+			RequestId:  wf.GetWorkflowId() + "-req",
+			WorkflowId: wf.GetWorkflowId(),
+			RunId:      wf.GetRunId(),
 			Attempt:    1,
-		})
+		}.Build())
 	}
 
 	// Set LastProcessedTime to current time to ensure time checks pass
@@ -382,9 +382,9 @@ func (s *invokerExecuteTaskSuite) runExecuteTestCase(c *executeTestCase) {
 
 	s.Equal(c.ExpectedTerminateWorkflows, len(invoker.TerminateWorkflows))
 	s.Equal(c.ExpectedCancelWorkflows, len(invoker.CancelWorkflows))
-	s.Equal(c.ExpectedActionCount, s.scheduler.Info.ActionCount)
-	s.Equal(c.ExpectedOverlapSkipped, s.scheduler.Info.OverlapSkipped)
-	s.Equal(c.ExpectedMissedCatchupWindow, s.scheduler.Info.MissedCatchupWindow)
+	s.Equal(c.ExpectedActionCount, s.scheduler.Info.GetActionCount())
+	s.Equal(c.ExpectedOverlapSkipped, s.scheduler.Info.GetOverlapSkipped())
+	s.Equal(c.ExpectedMissedCatchupWindow, s.scheduler.Info.GetMissedCatchupWindow())
 
 	// Callbacks.
 	if c.ValidateInvoker != nil {
@@ -408,5 +408,5 @@ func (s *startWorkflowExecutionRequestIDMatcher) String() string {
 
 func (s *startWorkflowExecutionRequestIDMatcher) Matches(x any) bool {
 	req, ok := x.(*workflowservice.StartWorkflowExecutionRequest)
-	return ok && req.RequestId == s.RequestID
+	return ok && req.GetRequestId() == s.RequestID
 }

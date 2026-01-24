@@ -88,11 +88,11 @@ func (s *TaskQueueUserDataSuite) TestSetInitialAndIncrement() {
 		TaskQueue:   tq1,
 	})
 	s.NoError(err)
-	s.Equal(version, res.UserData.Version)
-	s.True(hlc.Equal(d1.Data.Clock, res.UserData.Data.Clock))
+	s.Equal(version, res.UserData.GetVersion())
+	s.True(hlc.Equal(d1.GetData().GetClock(), res.UserData.GetData().GetClock()))
 
 	// increment it
-	d2 := s.makeData(d1.Data.Clock, version)
+	d2 := s.makeData(d1.GetData().GetClock(), version)
 	err = s.taskManager.UpdateTaskQueueUserData(s.ctx, &p.UpdateTaskQueueUserDataRequest{
 		NamespaceID: s.namespaceID,
 		Updates: map[string]*p.SingleTaskQueueUserDataUpdate{
@@ -110,8 +110,8 @@ func (s *TaskQueueUserDataSuite) TestSetInitialAndIncrement() {
 		TaskQueue:   tq1,
 	})
 	s.NoError(err)
-	s.Equal(version, res.UserData.Version)
-	s.True(hlc.Equal(d2.Data.Clock, res.UserData.Data.Clock))
+	s.Equal(version, res.UserData.GetVersion())
+	s.True(hlc.Equal(d2.GetData().GetClock(), res.UserData.GetData().GetClock()))
 }
 
 func (s *TaskQueueUserDataSuite) TestUpdateConflict() {
@@ -131,7 +131,7 @@ func (s *TaskQueueUserDataSuite) TestUpdateConflict() {
 			},
 		})
 		s.NoError(err)
-		data.Version++
+		data.SetVersion(data.GetVersion() + 1)
 	}
 	s.True(applied1)
 	s.True(applied2)
@@ -147,12 +147,12 @@ func (s *TaskQueueUserDataSuite) TestUpdateConflict() {
 			TaskQueue:   tq,
 		})
 		s.NoError(err)
-		s.Equal(int64(3), res.UserData.Version)
-		s.True(hlc.Equal(data.Data.Clock, res.UserData.Data.Clock))
+		s.Equal(int64(3), res.UserData.GetVersion())
+		s.True(hlc.Equal(data.GetData().GetClock(), res.UserData.GetData().GetClock()))
 	}
 
 	// do update where one conflicts
-	d4 := s.makeData(data.Data.Clock, 4)
+	d4 := s.makeData(data.GetData().GetClock(), 4)
 	err := s.taskManager.UpdateTaskQueueUserData(s.ctx, &p.UpdateTaskQueueUserDataRequest{
 		NamespaceID: s.namespaceID,
 		Updates: map[string]*p.SingleTaskQueueUserDataUpdate{
@@ -177,16 +177,16 @@ func (s *TaskQueueUserDataSuite) TestUpdateConflict() {
 			TaskQueue:   tq,
 		})
 		s.NoError(err)
-		s.Equal(int64(3), res.UserData.Version)
-		s.True(hlc.Equal(data.Data.Clock, res.UserData.Data.Clock))
+		s.Equal(int64(3), res.UserData.GetVersion())
+		s.True(hlc.Equal(data.GetData().GetClock(), res.UserData.GetData().GetClock()))
 	}
 }
 
 func (s *TaskQueueUserDataSuite) makeData(prev *hlc.Clock, ver int64) *persistencespb.VersionedTaskQueueUserData {
-	return &persistencespb.VersionedTaskQueueUserData{
-		Data: &persistencespb.TaskQueueUserData{
+	return persistencespb.VersionedTaskQueueUserData_builder{
+		Data: persistencespb.TaskQueueUserData_builder{
 			Clock: hlc.Next(prev, clock.NewRealTimeSource()),
-		},
+		}.Build(),
 		Version: ver,
-	}
+	}.Build()
 }

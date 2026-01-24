@@ -8,7 +8,6 @@ package persistence
 
 import (
 	reflect "reflect"
-	sync "sync"
 	unsafe "unsafe"
 
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -23,10 +22,10 @@ const (
 )
 
 type ChasmVisibilityData struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	TransitionCount int64                  `protobuf:"varint,1,opt,name=transition_count,json=transitionCount,proto3" json:"transition_count,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state                      protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_TransitionCount int64                  `protobuf:"varint,1,opt,name=transition_count,json=transitionCount,proto3"`
+	unknownFields              protoimpl.UnknownFields
+	sizeCache                  protoimpl.SizeCache
 }
 
 func (x *ChasmVisibilityData) Reset() {
@@ -54,23 +53,36 @@ func (x *ChasmVisibilityData) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ChasmVisibilityData.ProtoReflect.Descriptor instead.
-func (*ChasmVisibilityData) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_chasm_visibility_proto_rawDescGZIP(), []int{0}
-}
-
 func (x *ChasmVisibilityData) GetTransitionCount() int64 {
 	if x != nil {
-		return x.TransitionCount
+		return x.xxx_hidden_TransitionCount
 	}
 	return 0
 }
 
+func (x *ChasmVisibilityData) SetTransitionCount(v int64) {
+	x.xxx_hidden_TransitionCount = v
+}
+
+type ChasmVisibilityData_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	TransitionCount int64
+}
+
+func (b0 ChasmVisibilityData_builder) Build() *ChasmVisibilityData {
+	m0 := &ChasmVisibilityData{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_TransitionCount = b.TransitionCount
+	return m0
+}
+
 type ChasmVisibilityTaskData struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	TransitionCount int64                  `protobuf:"varint,1,opt,name=transition_count,json=transitionCount,proto3" json:"transition_count,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state                      protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_TransitionCount int64                  `protobuf:"varint,1,opt,name=transition_count,json=transitionCount,proto3"`
+	unknownFields              protoimpl.UnknownFields
+	sizeCache                  protoimpl.SizeCache
 }
 
 func (x *ChasmVisibilityTaskData) Reset() {
@@ -98,16 +110,29 @@ func (x *ChasmVisibilityTaskData) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ChasmVisibilityTaskData.ProtoReflect.Descriptor instead.
-func (*ChasmVisibilityTaskData) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_chasm_visibility_proto_rawDescGZIP(), []int{1}
-}
-
 func (x *ChasmVisibilityTaskData) GetTransitionCount() int64 {
 	if x != nil {
-		return x.TransitionCount
+		return x.xxx_hidden_TransitionCount
 	}
 	return 0
+}
+
+func (x *ChasmVisibilityTaskData) SetTransitionCount(v int64) {
+	x.xxx_hidden_TransitionCount = v
+}
+
+type ChasmVisibilityTaskData_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	TransitionCount int64
+}
+
+func (b0 ChasmVisibilityTaskData_builder) Build() *ChasmVisibilityTaskData {
+	m0 := &ChasmVisibilityTaskData{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_TransitionCount = b.TransitionCount
+	return m0
 }
 
 var File_temporal_server_api_persistence_v1_chasm_visibility_proto protoreflect.FileDescriptor
@@ -119,18 +144,6 @@ const file_temporal_server_api_persistence_v1_chasm_visibility_proto_rawDesc = "
 	"\x10transition_count\x18\x01 \x01(\x03R\x0ftransitionCount\"D\n" +
 	"\x17ChasmVisibilityTaskData\x12)\n" +
 	"\x10transition_count\x18\x01 \x01(\x03R\x0ftransitionCountB6Z4go.temporal.io/server/api/persistence/v1;persistenceb\x06proto3"
-
-var (
-	file_temporal_server_api_persistence_v1_chasm_visibility_proto_rawDescOnce sync.Once
-	file_temporal_server_api_persistence_v1_chasm_visibility_proto_rawDescData []byte
-)
-
-func file_temporal_server_api_persistence_v1_chasm_visibility_proto_rawDescGZIP() []byte {
-	file_temporal_server_api_persistence_v1_chasm_visibility_proto_rawDescOnce.Do(func() {
-		file_temporal_server_api_persistence_v1_chasm_visibility_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_api_persistence_v1_chasm_visibility_proto_rawDesc), len(file_temporal_server_api_persistence_v1_chasm_visibility_proto_rawDesc)))
-	})
-	return file_temporal_server_api_persistence_v1_chasm_visibility_proto_rawDescData
-}
 
 var file_temporal_server_api_persistence_v1_chasm_visibility_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
 var file_temporal_server_api_persistence_v1_chasm_visibility_proto_goTypes = []any{

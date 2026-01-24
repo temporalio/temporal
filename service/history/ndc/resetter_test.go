@@ -68,10 +68,10 @@ func (s *resetterSuite) SetupTest() {
 
 	s.mockShard = shard.NewTestContext(
 		s.controller,
-		&persistencespb.ShardInfo{
+		persistencespb.ShardInfo_builder{
 			ShardId: 10,
 			RangeId: 1,
-		},
+		}.Build(),
 		tests.NewDynamicConfig(),
 	)
 
@@ -133,7 +133,7 @@ func (s *resetterSuite) TestResetWorkflow_NoError() {
 	}
 	newBranchToken := []byte("other random branch token")
 
-	s.mockBaseMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{VersionHistories: versionHistories}).AnyTimes()
+	s.mockBaseMutableState.EXPECT().GetExecutionInfo().Return(persistencespb.WorkflowExecutionInfo_builder{VersionHistories: versionHistories}.Build()).AnyTimes()
 
 	mockBaseWorkflowReleaseFnCalled := false
 	mockBaseWorkflowReleaseFn := func(err error) {
@@ -216,7 +216,7 @@ func (s *resetterSuite) TestResetWorkflow_Error() {
 	incomingFirstEventID := baseEventID + 12
 	incomingFirstEventVersion := baseVersion + 3
 
-	s.mockBaseMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{VersionHistories: versionHistories}).AnyTimes()
+	s.mockBaseMutableState.EXPECT().GetExecutionInfo().Return(persistencespb.WorkflowExecutionInfo_builder{VersionHistories: versionHistories}.Build()).AnyTimes()
 
 	mockBaseWorkflowReleaseFn := func(err error) {
 	}

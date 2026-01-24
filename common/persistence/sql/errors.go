@@ -30,7 +30,7 @@ func (m *sqlExecutionStore) extractCurrentWorkflowConflictError(
 
 	return &p.CurrentWorkflowConditionFailedError{
 		Msg:              message,
-		RequestIDs:       executionState.RequestIds,
+		RequestIDs:       executionState.GetRequestIds(),
 		RunID:            currentRow.RunID.String(),
 		State:            currentRow.State,
 		Status:           currentRow.Status,

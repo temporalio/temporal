@@ -54,7 +54,7 @@ func (c *metricClient) AddActivityTask(
 	c.emitForwardedSourceStats(
 		scope,
 		request.GetForwardInfo().GetSourcePartition(),
-		request.TaskQueue,
+		request.GetTaskQueue(),
 	)
 
 	return c.client.AddActivityTask(ctx, request, opts...)
@@ -74,7 +74,7 @@ func (c *metricClient) AddWorkflowTask(
 	c.emitForwardedSourceStats(
 		scope,
 		request.GetForwardInfo().GetSourcePartition(),
-		request.TaskQueue,
+		request.GetTaskQueue(),
 	)
 
 	return c.client.AddWorkflowTask(ctx, request, opts...)
@@ -91,11 +91,11 @@ func (c *metricClient) PollActivityTaskQueue(
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
 
-	if request.PollRequest != nil {
+	if request.HasPollRequest() {
 		c.emitForwardedSourceStats(
 			scope,
 			request.GetForwardedSource(),
-			request.PollRequest.TaskQueue,
+			request.GetPollRequest().GetTaskQueue(),
 		)
 	}
 
@@ -113,11 +113,11 @@ func (c *metricClient) PollWorkflowTaskQueue(
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
 
-	if request.PollRequest != nil {
+	if request.HasPollRequest() {
 		c.emitForwardedSourceStats(
 			scope,
 			request.GetForwardedSource(),
-			request.PollRequest.TaskQueue,
+			request.GetPollRequest().GetTaskQueue(),
 		)
 	}
 
@@ -138,7 +138,7 @@ func (c *metricClient) QueryWorkflow(
 	c.emitForwardedSourceStats(
 		scope,
 		request.GetForwardInfo().GetSourcePartition(),
-		request.TaskQueue,
+		request.GetTaskQueue(),
 	)
 
 	return c.client.QueryWorkflow(ctx, request, opts...)

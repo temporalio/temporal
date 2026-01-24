@@ -55,8 +55,8 @@ type TaskSerializer interface {
 // ValidateNotTransitioned returns a [consts.ErrStaleReference] if the machine has transitioned since the task was
 // generated.
 func ValidateNotTransitioned(ref *persistencespb.StateMachineRef, node *Node) error {
-	if ref.MachineTransitionCount != node.InternalRepr().TransitionCount {
-		return fmt.Errorf("%w: state machine transitions (%d) != ref transitions (%d)", consts.ErrStaleReference, node.InternalRepr().TransitionCount, ref.MachineTransitionCount)
+	if ref.GetMachineTransitionCount() != node.InternalRepr().GetTransitionCount() {
+		return fmt.Errorf("%w: state machine transitions (%d) != ref transitions (%d)", consts.ErrStaleReference, node.InternalRepr().GetTransitionCount(), ref.GetMachineTransitionCount())
 	}
 	return nil
 }

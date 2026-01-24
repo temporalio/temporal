@@ -67,10 +67,10 @@ func newStateMachineEnvTestContext(t *testing.T, enableTransitionHistory bool) *
 
 	s.mockShard = shard.NewTestContextWithTimeSource(
 		s.controller,
-		&persistencespb.ShardInfo{
+		persistencespb.ShardInfo_builder{
 			ShardId: 1,
 			RangeId: 1,
-		},
+		}.Build(),
 		config,
 		s.timeSource,
 	)
@@ -145,11 +145,11 @@ func TestValidateStateMachineRef(t *testing.T) {
 			name:                    "WithTransitionHistory/StalenessCheckFailure",
 			enableTransitionHistory: true,
 			mutateRef: func(ref *hsm.Ref) {
-				mutableStateVersonedTransition := ref.StateMachineRef.MutableStateVersionedTransition
-				ref.StateMachineRef.MutableStateVersionedTransition = &persistencespb.VersionedTransition{
-					NamespaceFailoverVersion: mutableStateVersonedTransition.NamespaceFailoverVersion + 1,
-					TransitionCount:          mutableStateVersonedTransition.TransitionCount,
-				}
+				mutableStateVersonedTransition := ref.StateMachineRef.GetMutableStateVersionedTransition()
+				ref.StateMachineRef.SetMutableStateVersionedTransition(persistencespb.VersionedTransition_builder{
+					NamespaceFailoverVersion: mutableStateVersonedTransition.GetNamespaceFailoverVersion() + 1,
+					TransitionCount:          mutableStateVersonedTransition.GetTransitionCount(),
+				}.Build())
 			},
 			mutateNode: func(node *hsm.Node) {},
 			assertOutcome: func(t *testing.T, err error) {
@@ -160,11 +160,11 @@ func TestValidateStateMachineRef(t *testing.T) {
 			name:                    "WithoutTransitionHistory/CanBeStale/MachineStalenessCheckFailure",
 			enableTransitionHistory: false,
 			mutateRef: func(ref *hsm.Ref) {
-				machineInitialVersonedTransition := ref.StateMachineRef.MachineInitialVersionedTransition
-				ref.StateMachineRef.MachineInitialVersionedTransition = &persistencespb.VersionedTransition{
-					NamespaceFailoverVersion: machineInitialVersonedTransition.NamespaceFailoverVersion + 1,
-					TransitionCount:          machineInitialVersonedTransition.TransitionCount,
-				}
+				machineInitialVersonedTransition := ref.StateMachineRef.GetMachineInitialVersionedTransition()
+				ref.StateMachineRef.SetMachineInitialVersionedTransition(persistencespb.VersionedTransition_builder{
+					NamespaceFailoverVersion: machineInitialVersonedTransition.GetNamespaceFailoverVersion() + 1,
+					TransitionCount:          machineInitialVersonedTransition.GetTransitionCount(),
+				}.Build())
 			},
 			mutateNode: func(node *hsm.Node) {},
 			assertOutcome: func(t *testing.T, err error) {
@@ -175,11 +175,11 @@ func TestValidateStateMachineRef(t *testing.T) {
 			name:                    "WithoutTransitionHistory/CannotBeStale/MachineStalenessCheckFailure",
 			enableTransitionHistory: false,
 			mutateRef: func(ref *hsm.Ref) {
-				machineInitialVersonedTransition := ref.StateMachineRef.MachineInitialVersionedTransition
-				ref.StateMachineRef.MachineInitialVersionedTransition = &persistencespb.VersionedTransition{
-					NamespaceFailoverVersion: machineInitialVersonedTransition.NamespaceFailoverVersion + 1,
-					TransitionCount:          machineInitialVersonedTransition.TransitionCount,
-				}
+				machineInitialVersonedTransition := ref.StateMachineRef.GetMachineInitialVersionedTransition()
+				ref.StateMachineRef.SetMachineInitialVersionedTransition(persistencespb.VersionedTransition_builder{
+					NamespaceFailoverVersion: machineInitialVersonedTransition.GetNamespaceFailoverVersion() + 1,
+					TransitionCount:          machineInitialVersonedTransition.GetTransitionCount(),
+				}.Build())
 				ref.TaskID = tasks.MaximumKey.TaskID
 			},
 			mutateNode: func(node *hsm.Node) {},
@@ -191,7 +191,7 @@ func TestValidateStateMachineRef(t *testing.T) {
 			name:                    "WithTransitionHistory/NodeNotFound",
 			enableTransitionHistory: true,
 			mutateRef: func(ref *hsm.Ref) {
-				ref.StateMachineRef.Path[0].Id = "not-found"
+				ref.StateMachineRef.GetPath()[0].SetId("not-found")
 			},
 			mutateNode: func(node *hsm.Node) {},
 			assertOutcome: func(t *testing.T, err error) {
@@ -202,7 +202,7 @@ func TestValidateStateMachineRef(t *testing.T) {
 			name:                    "WithoutTransitionHistory/CanBeStale/NodeNotFound",
 			enableTransitionHistory: false,
 			mutateRef: func(ref *hsm.Ref) {
-				ref.StateMachineRef.Path[0].Id = "not-found"
+				ref.StateMachineRef.GetPath()[0].SetId("not-found")
 			},
 			mutateNode: func(node *hsm.Node) {},
 			assertOutcome: func(t *testing.T, err error) {
@@ -213,7 +213,7 @@ func TestValidateStateMachineRef(t *testing.T) {
 			name:                    "WithoutTransitionHistory/CannotBeStale/NodeNotFound",
 			enableTransitionHistory: false,
 			mutateRef: func(ref *hsm.Ref) {
-				ref.StateMachineRef.Path[0].Id = "not-found"
+				ref.StateMachineRef.GetPath()[0].SetId("not-found")
 				ref.TaskID = tasks.MaximumKey.TaskID
 			},
 			mutateNode: func(node *hsm.Node) {},
@@ -278,7 +278,7 @@ func TestValidateStateMachineRef(t *testing.T) {
 
 			workflowContext := workflow.NewContext(s.mockShard.GetConfig(), mutableState.GetWorkflowKey(), chasm.WorkflowArchetypeID, log.NewTestLogger(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 			if tc.clearTransitionHistory {
-				mutableState.GetExecutionInfo().TransitionHistory = nil
+				mutableState.GetExecutionInfo().SetTransitionHistory(nil)
 			}
 			err = exec.validateStateMachineRef(context.Background(), workflowContext, mutableState, ref, true)
 			tc.assertOutcome(t, err)
@@ -373,7 +373,7 @@ func TestAccess(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			s := newStateMachineEnvTestContext(t, true)
 			mutableState := s.prepareMutableStateWithTriggeredNexusCompletionCallback()
-			mutableState.GetExecutionState().State = tc.workflowState
+			mutableState.GetExecutionState().SetState(tc.workflowState)
 			snapshot, _, err := mutableState.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
 			require.NoError(t, err)
 			persistenceMutableState := workflow.TestCloneToProto(context.Background(), mutableState)
@@ -400,35 +400,33 @@ func TestAccess(t *testing.T) {
 func (s *taskExecutorTestContext) prepareMutableStateWithReadyNexusCompletionCallback() *workflow.MutableStateImpl {
 	s.mockShard.Resource.NamespaceCache.EXPECT().GetNamespaceByID(s.namespaceID).Return(s.namespaceEntry, nil).AnyTimes()
 
-	execution := &commonpb.WorkflowExecution{
+	execution := commonpb.WorkflowExecution_builder{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.NewString(),
-	}
+	}.Build()
 	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.mockShard.GetLogger(), s.namespaceEntry.FailoverVersion(execution.GetWorkflowId()), execution.GetWorkflowId(), execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
-		&historyservice.StartWorkflowExecutionRequest{
+		historyservice.StartWorkflowExecutionRequest_builder{
 			Attempt:     1,
 			NamespaceId: s.namespaceID.String(),
-			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType: &commonpb.WorkflowType{Name: "irrelevant"},
-				TaskQueue: &taskqueuepb.TaskQueue{
+			StartRequest: workflowservice.StartWorkflowExecutionRequest_builder{
+				WorkflowType: commonpb.WorkflowType_builder{Name: "irrelevant"}.Build(),
+				TaskQueue: taskqueuepb.TaskQueue_builder{
 					Name: "irrelevant",
 					Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-				},
+				}.Build(),
 				WorkflowExecutionTimeout: durationpb.New(2 * time.Second),
 				WorkflowTaskTimeout:      durationpb.New(1 * time.Second),
 				CompletionCallbacks: []*commonpb.Callback{
-					{
-						Variant: &commonpb.Callback_Nexus_{
-							Nexus: &commonpb.Callback_Nexus{
-								Url: "http://destination/path",
-							},
-						},
-					},
+					commonpb.Callback_builder{
+						Nexus: commonpb.Callback_Nexus_builder{
+							Url: "http://destination/path",
+						}.Build(),
+					}.Build(),
 				},
-			},
-		},
+			}.Build(),
+		}.Build(),
 	)
 	require.NoError(s.t, err)
 	return mutableState
@@ -440,9 +438,9 @@ func (s *taskExecutorTestContext) prepareMutableStateWithTriggeredNexusCompletio
 	taskQueueName := "irrelevant"
 	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.NewString())
 	wt.StartedEventID = event.GetEventId()
-	_, err := mutableState.AddWorkflowTaskCompletedEvent(wt, &workflowservice.RespondWorkflowTaskCompletedRequest{
+	_, err := mutableState.AddWorkflowTaskCompletedEvent(wt, workflowservice.RespondWorkflowTaskCompletedRequest_builder{
 		Identity: "some random identity",
-	}, defaultWorkflowTaskCompletionLimits)
+	}.Build(), defaultWorkflowTaskCompletionLimits)
 	require.NoError(s.t, err)
 	_, err = mutableState.AddCompletedWorkflowEvent(mutableState.GetNextEventID(), &commandpb.CompleteWorkflowExecutionCommandAttributes{}, "")
 	require.NoError(s.t, err)
@@ -484,10 +482,10 @@ func TestGetCurrentWorkflowExecutionContext(t *testing.T) {
 
 			mockShard := shard.NewTestContext(
 				controller,
-				&persistencespb.ShardInfo{
+				persistencespb.ShardInfo_builder{
 					ShardId: 1,
 					RangeId: 1,
-				},
+				}.Build(),
 				tests.NewDynamicConfig(),
 			)
 
@@ -511,10 +509,10 @@ func TestGetCurrentWorkflowExecutionContext(t *testing.T) {
 				gomock.Any(),
 				mockShard,
 				namespaceID,
-				&commonpb.WorkflowExecution{
+				commonpb.WorkflowExecution_builder{
 					WorkflowId: workflowID,
 					RunId:      currentRunID,
-				},
+				}.Build(),
 				chasm.WorkflowArchetypeID,
 				locks.PriorityLow,
 			).Return(mockWorkflowContext, cache.NoopReleaseFn, nil).Times(1)

@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/worker_versioning"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -38,9 +39,9 @@ func (a *VersionActivities) StartWorkerDeploymentWorkflow(
 	input *deploymentspb.StartWorkerDeploymentRequest,
 ) error {
 	logger := activity.GetLogger(ctx)
-	logger.Info("starting worker-deployment workflow", "deploymentName", input.DeploymentName)
+	logger.Info("starting worker-deployment workflow", "deploymentName", input.GetDeploymentName())
 	identity := "deployment-version workflow " + activity.GetInfo(ctx).WorkflowExecution.ID
-	err := a.WorkerDeploymentClient.StartWorkerDeployment(ctx, a.namespace, input.DeploymentName, identity, input.RequestId)
+	err := a.WorkerDeploymentClient.StartWorkerDeployment(ctx, a.namespace, input.GetDeploymentName(), identity, input.GetRequestId())
 	var precond *serviceerror.FailedPrecondition
 	if errors.As(err, &precond) {
 		return temporal.NewNonRetryableApplicationError("failed to create deployment", errTooManyDeployments, err)
@@ -60,45 +61,41 @@ func (a *VersionActivities) SyncDeploymentVersionUserData(
 	var lock sync.Mutex
 	maxVersionByName := make(map[string]int64)
 
-	for _, e := range input.Sync {
+	for _, e := range input.GetSync() {
 		go func(syncData *deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData) {
-			logger.Info("syncing task queue userdata for deployment version", "taskQueue", syncData.Name, "types", syncData.Types)
+			logger.Info("syncing task queue userdata for deployment version", "taskQueue", syncData.GetName(), "types", syncData.GetTypes())
 
 			var res *matchingservice.SyncDeploymentUserDataResponse
 			var err error
 
-			req := &matchingservice.SyncDeploymentUserDataRequest{
+			req := matchingservice.SyncDeploymentUserDataRequest_builder{
 				NamespaceId:         a.namespace.ID().String(),
 				DeploymentName:      input.GetVersion().GetDeploymentName(),
-				TaskQueue:           syncData.Name,
-				TaskQueueTypes:      syncData.Types,
+				TaskQueue:           syncData.GetName(),
+				TaskQueueTypes:      syncData.GetTypes(),
 				UpdateRoutingConfig: input.GetUpdateRoutingConfig(),
-			}
+			}.Build()
 
-			if input.ForgetVersion {
+			if input.GetForgetVersion() {
 				// TODO: Remove the old format once async apis are fully enabled
-				req.Operation = &matchingservice.SyncDeploymentUserDataRequest_ForgetVersion{
-					ForgetVersion: input.Version,
-				}
-				req.ForgetVersions = []string{input.GetVersion().GetBuildId()}
-			} else if syncData.Data != nil {
-				req.Operation = &matchingservice.SyncDeploymentUserDataRequest_UpdateVersionData{
-					UpdateVersionData: syncData.Data,
-				}
+				req.SetForgetVersion(proto.ValueOrDefault(input.GetVersion()))
+				req.SetForgetVersions([]string{input.GetVersion().GetBuildId()})
+			} else if syncData.HasData() {
+				req.SetUpdateVersionData(proto.ValueOrDefault(syncData.GetData()))
 			}
 
 			if vd := input.GetUpsertVersionData(); vd != nil {
-				req.UpsertVersionsData = make(map[string]*deploymentspb.WorkerDeploymentVersionData, 1)
-				req.UpsertVersionsData[input.GetVersion().GetBuildId()] = vd
+				req.SetUpsertVersionsData(make(map[string]*deploymentspb.WorkerDeploymentVersionData, 1))
+				req.GetUpsertVersionsData()[input.GetVersion().GetBuildId()] = vd
 			}
 
 			res, err = a.MatchingClient.SyncDeploymentUserData(ctx, req)
 
 			if err != nil {
-				logger.Error("syncing task queue userdata", "taskQueue", syncData.Name, "types", syncData.Types, "error", err)
+				logger.Error("syncing task queue userdata", "taskQueue", syncData.GetName(), "types", syncData.GetTypes(), "error", err)
 			} else {
 				lock.Lock()
-				maxVersionByName[syncData.Name] = max(maxVersionByName[syncData.Name], res.Version)
+				maxVersionByName[syncData.GetName()] = max(maxVersionByName[syncData.GetName()], res.GetVersion())
 				lock.Unlock()
 			}
 			errs <- err
@@ -106,13 +103,13 @@ func (a *VersionActivities) SyncDeploymentVersionUserData(
 	}
 
 	var err error
-	for range input.Sync {
+	for range input.GetSync() {
 		err = cmp.Or(err, <-errs)
 	}
 	if err != nil {
 		return nil, err
 	}
-	return &deploymentspb.SyncDeploymentVersionUserDataResponse{TaskQueueMaxVersions: maxVersionByName}, nil
+	return deploymentspb.SyncDeploymentVersionUserDataResponse_builder{TaskQueueMaxVersions: maxVersionByName}.Build(), nil
 }
 
 func (a *VersionActivities) checkSlowPropagation(ctx context.Context, logger log.Logger) {
@@ -129,14 +126,14 @@ func (a *VersionActivities) CheckWorkerDeploymentUserDataPropagation(ctx context
 
 	errs := make(chan error)
 
-	for n, v := range input.TaskQueueMaxVersions {
+	for n, v := range input.GetTaskQueueMaxVersions() {
 		go func(name string, version int64) {
 			logger.Info("waiting for userdata propagation", "taskQueue", name, "version", version)
-			_, err := a.MatchingClient.CheckTaskQueueUserDataPropagation(ctx, &matchingservice.CheckTaskQueueUserDataPropagationRequest{
+			_, err := a.MatchingClient.CheckTaskQueueUserDataPropagation(ctx, matchingservice.CheckTaskQueueUserDataPropagationRequest_builder{
 				NamespaceId: a.namespace.ID().String(),
 				TaskQueue:   name,
 				Version:     version,
-			})
+			}.Build())
 			if err != nil {
 				logger.Error("waiting for userdata", "taskQueue", name, "type", version, "error", err)
 			}
@@ -145,7 +142,7 @@ func (a *VersionActivities) CheckWorkerDeploymentUserDataPropagation(ctx context
 	}
 
 	var err error
-	for range input.TaskQueueMaxVersions {
+	for range input.GetTaskQueueMaxVersions() {
 		err = cmp.Or(err, <-errs)
 	}
 	return err
@@ -153,20 +150,20 @@ func (a *VersionActivities) CheckWorkerDeploymentUserDataPropagation(ctx context
 
 // CheckIfTaskQueuesHavePollers returns true if any of the given task queues has any pollers
 func (a *VersionActivities) CheckIfTaskQueuesHavePollers(ctx context.Context, args *deploymentspb.CheckTaskQueuesHavePollersActivityArgs) (bool, error) {
-	versionStr := worker_versioning.ExternalWorkerDeploymentVersionToString(worker_versioning.ExternalWorkerDeploymentVersionFromVersion(args.WorkerDeploymentVersion))
-	for tqName, tqTypes := range args.TaskQueuesAndTypes {
-		res, err := a.MatchingClient.DescribeTaskQueue(ctx, &matchingservice.DescribeTaskQueueRequest{
+	versionStr := worker_versioning.ExternalWorkerDeploymentVersionToString(worker_versioning.ExternalWorkerDeploymentVersionFromVersion(args.GetWorkerDeploymentVersion()))
+	for tqName, tqTypes := range args.GetTaskQueuesAndTypes() {
+		res, err := a.MatchingClient.DescribeTaskQueue(ctx, matchingservice.DescribeTaskQueueRequest_builder{
 			NamespaceId: a.namespace.ID().String(),
-			DescRequest: &workflowservice.DescribeTaskQueueRequest{
+			DescRequest: workflowservice.DescribeTaskQueueRequest_builder{
 				Namespace:      a.namespace.Name().String(),
-				TaskQueue:      &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				TaskQueue:      taskqueuepb.TaskQueue_builder{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build(),
 				ApiMode:        enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED,
-				Versions:       &taskqueuepb.TaskQueueVersionSelection{BuildIds: []string{versionStr}},
+				Versions:       taskqueuepb.TaskQueueVersionSelection_builder{BuildIds: []string{versionStr}}.Build(),
 				ReportPollers:  true,
 				TaskQueueType:  enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-				TaskQueueTypes: tqTypes.Types,
-			},
-		})
+				TaskQueueTypes: tqTypes.GetTypes(),
+			}.Build(),
+		}.Build())
 		if err != nil {
 			return false, fmt.Errorf("error describing task queue with name %s: %s", tqName, err)
 		}
@@ -191,9 +188,9 @@ func (a *VersionActivities) GetVersionDrainageStatus(ctx context.Context, versio
 		logger.Error("error counting workflows for drainage status", "error", err)
 		return nil, err
 	}
-	return &deploymentpb.VersionDrainageInfo{
+	return deploymentpb.VersionDrainageInfo_builder{
 		Status:          response,
 		LastChangedTime: nil, // ignored; whether Status changed will be evaluated by the receiver
 		LastCheckedTime: timestamppb.Now(),
-	}, nil
+	}.Build(), nil
 }

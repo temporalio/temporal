@@ -43,13 +43,13 @@ func NewExecutableSyncVersionedTransitionTask(
 	replicationTask *replicationspb.ReplicationTask,
 ) *ExecutableSyncVersionedTransitionTask {
 	task := replicationTask.GetSyncVersionedTransitionTaskAttributes()
-	if task.ArchetypeId == chasm.UnspecifiedArchetypeID {
-		task.ArchetypeId = chasm.WorkflowArchetypeID
+	if task.GetArchetypeId() == chasm.UnspecifiedArchetypeID {
+		task.SetArchetypeId(chasm.WorkflowArchetypeID)
 	}
 	return &ExecutableSyncVersionedTransitionTask{
 		ProcessToolBox: processToolBox,
 
-		WorkflowKey: definition.NewWorkflowKey(task.NamespaceId, task.WorkflowId, task.RunId),
+		WorkflowKey: definition.NewWorkflowKey(task.GetNamespaceId(), task.GetWorkflowId(), task.GetRunId()),
 		ExecutableTask: NewExecutableTask(
 			processToolBox,
 			taskID,
@@ -112,7 +112,7 @@ func (e *ExecutableSyncVersionedTransitionTask) Execute() error {
 	return engine.ReplicateVersionedTransition(
 		ctx,
 		e.taskAttr.GetArchetypeId(),
-		e.taskAttr.VersionedTransitionArtifact,
+		e.taskAttr.GetVersionedTransitionArtifact(),
 		e.SourceClusterName(),
 	)
 }
@@ -178,19 +178,19 @@ func (e *ExecutableSyncVersionedTransitionTask) HandleErr(err error) error {
 		defer cancel()
 		var mutation *replicationspb.SyncWorkflowStateMutationAttributes
 		var snapshot *replicationspb.SyncWorkflowStateSnapshotAttributes
-		switch artifactType := e.taskAttr.VersionedTransitionArtifact.StateAttributes.(type) {
-		case *replicationspb.VersionedTransitionArtifact_SyncWorkflowStateSnapshotAttributes:
-			snapshot = e.taskAttr.VersionedTransitionArtifact.GetSyncWorkflowStateSnapshotAttributes()
-		case *replicationspb.VersionedTransitionArtifact_SyncWorkflowStateMutationAttributes:
-			mutation = e.taskAttr.VersionedTransitionArtifact.GetSyncWorkflowStateMutationAttributes()
+		switch artifactType := e.taskAttr.GetVersionedTransitionArtifact().WhichStateAttributes(); artifactType {
+		case replicationspb.VersionedTransitionArtifact_SyncWorkflowStateSnapshotAttributes_case:
+			snapshot = e.taskAttr.GetVersionedTransitionArtifact().GetSyncWorkflowStateSnapshotAttributes()
+		case replicationspb.VersionedTransitionArtifact_SyncWorkflowStateMutationAttributes_case:
+			mutation = e.taskAttr.GetVersionedTransitionArtifact().GetSyncWorkflowStateMutationAttributes()
 		default:
-			return serviceerror.NewInvalidArgumentf("unknown artifact type %T", artifactType)
+			return serviceerror.NewInvalidArgumentf("unknown artifact type %v", artifactType)
 		}
 		versionHistories := func() *historyspb.VersionHistories {
 			if snapshot != nil {
-				return snapshot.State.ExecutionInfo.VersionHistories
+				return snapshot.GetState().GetExecutionInfo().GetVersionHistories()
 			}
-			return mutation.StateMutation.ExecutionInfo.VersionHistories
+			return mutation.GetStateMutation().GetExecutionInfo().GetVersionHistories()
 		}()
 		history, err := versionhistory.GetCurrentVersionHistory(versionHistories)
 		if err != nil {

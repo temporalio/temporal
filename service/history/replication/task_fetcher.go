@@ -395,10 +395,10 @@ func (f *replicationTaskFetcherWorker) getMessages() error {
 	defer cancel()
 	ctx = headers.SetCallerInfo(ctx, headers.SystemPreemptableCallerInfo)
 
-	request := &adminservice.GetReplicationMessagesRequest{
+	request := adminservice.GetReplicationMessagesRequest_builder{
 		Tokens:      tokens,
 		ClusterName: f.currentCluster,
-	}
+	}.Build()
 	remoteClient, err := f.clientBean.GetRemoteAdminClient(f.sourceCluster)
 	if err != nil {
 		return err

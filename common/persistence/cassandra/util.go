@@ -375,8 +375,8 @@ func createExecution(
 ) error {
 	// validate workflow state & close status
 	if err := p.ValidateCreateWorkflowStateStatus(
-		snapshot.ExecutionState.State,
-		snapshot.ExecutionState.Status); err != nil {
+		snapshot.ExecutionState.GetState(),
+		snapshot.ExecutionState.GetStatus()); err != nil {
 		return err
 	}
 
@@ -387,16 +387,16 @@ func createExecution(
 		snapshot.WorkflowID,
 		snapshot.RunID,
 		rowTypeExecution,
-		snapshot.ExecutionInfoBlob.Data,
-		snapshot.ExecutionInfoBlob.EncodingType.String(),
-		snapshot.ExecutionStateBlob.Data,
-		snapshot.ExecutionStateBlob.EncodingType.String(),
+		snapshot.ExecutionInfoBlob.GetData(),
+		snapshot.ExecutionInfoBlob.GetEncodingType().String(),
+		snapshot.ExecutionStateBlob.GetData(),
+		snapshot.ExecutionStateBlob.GetEncodingType().String(),
 		snapshot.NextEventID,
 		snapshot.DBRecordVersion,
 		defaultVisibilityTimestamp,
 		rowTypeExecutionTaskID,
-		snapshot.Checksum.Data,
-		snapshot.Checksum.EncodingType.String(),
+		snapshot.Checksum.GetData(),
+		snapshot.Checksum.GetEncodingType().String(),
 	)
 
 	return nil
@@ -419,21 +419,21 @@ func updateExecution(
 
 	// validate workflow state & close status
 	if err := p.ValidateUpdateWorkflowStateStatus(
-		executionState.State,
-		executionState.Status); err != nil {
+		executionState.GetState(),
+		executionState.GetStatus()); err != nil {
 		return err
 	}
 
 	if dbRecordVersion == 0 {
 		batch.Query(templateUpdateWorkflowExecutionQueryDeprecated,
-			executionInfoBlob.Data,
-			executionInfoBlob.EncodingType.String(),
-			executionStateBlob.Data,
-			executionStateBlob.EncodingType.String(),
+			executionInfoBlob.GetData(),
+			executionInfoBlob.GetEncodingType().String(),
+			executionStateBlob.GetData(),
+			executionStateBlob.GetEncodingType().String(),
 			nextEventID,
 			dbRecordVersion,
-			checksumBlob.Data,
-			checksumBlob.EncodingType.String(),
+			checksumBlob.GetData(),
+			checksumBlob.GetEncodingType().String(),
 			shardID,
 			rowTypeExecution,
 			namespaceID,
@@ -445,14 +445,14 @@ func updateExecution(
 		)
 	} else {
 		batch.Query(templateUpdateWorkflowExecutionQuery,
-			executionInfoBlob.Data,
-			executionInfoBlob.EncodingType.String(),
-			executionStateBlob.Data,
-			executionStateBlob.EncodingType.String(),
+			executionInfoBlob.GetData(),
+			executionInfoBlob.GetEncodingType().String(),
+			executionStateBlob.GetData(),
+			executionStateBlob.GetEncodingType().String(),
 			nextEventID,
 			dbRecordVersion,
-			checksumBlob.Data,
-			checksumBlob.EncodingType.String(),
+			checksumBlob.GetData(),
+			checksumBlob.GetEncodingType().String(),
 			shardID,
 			rowTypeExecution,
 			namespaceID,
@@ -508,8 +508,8 @@ func createTransferTasks(
 			rowTypeTransferNamespaceID,
 			rowTypeTransferWorkflowID,
 			rowTypeTransferRunID,
-			task.Blob.Data,
-			task.Blob.EncodingType.String(),
+			task.Blob.GetData(),
+			task.Blob.GetEncodingType().String(),
 			defaultVisibilityTimestamp,
 			task.Key.TaskID,
 		)
@@ -529,8 +529,8 @@ func createTimerTasks(
 			rowTypeTimerNamespaceID,
 			rowTypeTimerWorkflowID,
 			rowTypeTimerRunID,
-			task.Blob.Data,
-			task.Blob.EncodingType.String(),
+			task.Blob.GetData(),
+			task.Blob.GetEncodingType().String(),
 			p.UnixMilliseconds(task.Key.FireTime),
 			task.Key.TaskID,
 		)
@@ -550,8 +550,8 @@ func createReplicationTasks(
 			rowTypeReplicationNamespaceID,
 			rowTypeReplicationWorkflowID,
 			rowTypeReplicationRunID,
-			task.Blob.Data,
-			task.Blob.EncodingType.String(),
+			task.Blob.GetData(),
+			task.Blob.GetEncodingType().String(),
 			defaultVisibilityTimestamp,
 			task.Key.TaskID,
 		)
@@ -571,8 +571,8 @@ func createVisibilityTasks(
 			rowTypeVisibilityTaskNamespaceID,
 			rowTypeVisibilityTaskWorkflowID,
 			rowTypeVisibilityTaskRunID,
-			task.Blob.Data,
-			task.Blob.EncodingType.String(),
+			task.Blob.GetData(),
+			task.Blob.GetEncodingType().String(),
 			defaultVisibilityTimestamp,
 			task.Key.TaskID,
 		)
@@ -598,8 +598,8 @@ func createHistoryTasks(
 			rowTypeHistoryTaskNamespaceID,
 			rowTypeHistoryTaskWorkflowID,
 			rowTypeHistoryTaskRunID,
-			task.Blob.Data,
-			task.Blob.EncodingType.String(),
+			task.Blob.GetData(),
+			task.Blob.GetEncodingType().String(),
 			visibilityTimestamp,
 			task.Key.TaskID,
 		)
@@ -620,8 +620,8 @@ func updateActivityInfos(
 	for scheduledEventID, blob := range activityInfos {
 		batch.Query(templateUpdateActivityInfoQuery,
 			scheduledEventID,
-			blob.Data,
-			blob.EncodingType.String(),
+			blob.GetData(),
+			blob.GetEncodingType().String(),
 			shardID,
 			rowTypeExecution,
 			namespaceID,
@@ -702,8 +702,8 @@ func updateTimerInfos(
 	for timerID, blob := range timerInfos {
 		batch.Query(templateUpdateTimerInfoQuery,
 			timerID,
-			blob.Data,
-			blob.EncodingType.String(),
+			blob.GetData(),
+			blob.GetEncodingType().String(),
 			shardID,
 			rowTypeExecution,
 			namespaceID,
@@ -768,8 +768,8 @@ func updateChildExecutionInfos(
 	for initiatedId, blob := range childExecutionInfos {
 		batch.Query(templateUpdateChildExecutionInfoQuery,
 			initiatedId,
-			blob.Data,
-			blob.EncodingType.String(),
+			blob.GetData(),
+			blob.GetEncodingType().String(),
 			shardID,
 			rowTypeExecution,
 			namespaceID,
@@ -833,8 +833,8 @@ func updateRequestCancelInfos(
 	for initiatedId, blob := range requestCancelInfos {
 		batch.Query(templateUpdateRequestCancelInfoQuery,
 			initiatedId,
-			blob.Data,
-			blob.EncodingType.String(),
+			blob.GetData(),
+			blob.GetEncodingType().String(),
 			shardID,
 			rowTypeExecution,
 			namespaceID,
@@ -898,8 +898,8 @@ func updateSignalInfos(
 	for initiatedId, blob := range signalInfos {
 		batch.Query(templateUpdateSignalInfoQuery,
 			initiatedId,
-			blob.Data,
-			blob.EncodingType.String(),
+			blob.GetData(),
+			blob.GetEncodingType().String(),
 			shardID,
 			rowTypeExecution,
 			namespaceID,
@@ -961,8 +961,8 @@ func resetChasmNodes(
 	blobMap := make(map[string][]byte, len(nodes))
 	var encoding enumspb.EncodingType
 	for path, node := range nodes {
-		blobMap[path] = node.CassandraBlob.Data
-		encoding = node.CassandraBlob.EncodingType // TODO - we only support a single encoding
+		blobMap[path] = node.CassandraBlob.GetData()
+		encoding = node.CassandraBlob.GetEncodingType() // TODO - we only support a single encoding
 	}
 
 	batch.Query(templateResetChasmNodeQuery,
@@ -1003,8 +1003,8 @@ func updateChasmNodes(
 	for upsertPath, node := range upsertNodes {
 		batch.Query(templateUpdateChasmNodeQuery,
 			upsertPath,
-			node.CassandraBlob.Data,
-			node.CassandraBlob.EncodingType.String(),
+			node.CassandraBlob.GetData(),
+			node.CassandraBlob.GetEncodingType().String(),
 			shardID,
 			rowTypeExecution,
 			namespaceID,
@@ -1093,9 +1093,9 @@ func updateBufferedEvents(
 			rowTypeExecutionTaskID)
 	} else if newBufferedEvents != nil {
 		values := make(map[string]interface{})
-		values["encoding_type"] = newBufferedEvents.EncodingType.String()
+		values["encoding_type"] = newBufferedEvents.GetEncodingType().String()
 		values["version"] = int64(0)
-		values["data"] = newBufferedEvents.Data
+		values["data"] = newBufferedEvents.GetData()
 		newEventValues := []map[string]interface{}{values}
 		batch.Query(templateAppendBufferedEventsQuery,
 			newEventValues,
@@ -1116,8 +1116,8 @@ func convertBlobMapToByteMap[T comparable](
 
 	var encoding enumspb.EncodingType
 	for key, blob := range input {
-		encoding = blob.EncodingType
-		sMap[key] = blob.Data
+		encoding = blob.GetEncodingType()
+		sMap[key] = blob.GetData()
 	}
 
 	return sMap, encoding, nil
@@ -1126,16 +1126,16 @@ func convertBlobMapToByteMap[T comparable](
 func createHistoryEventBatchBlob(
 	result map[string]interface{},
 ) *commonpb.DataBlob {
-	eventBatch := &commonpb.DataBlob{EncodingType: enumspb.ENCODING_TYPE_UNSPECIFIED}
+	eventBatch := commonpb.DataBlob_builder{EncodingType: enumspb.ENCODING_TYPE_UNSPECIFIED}.Build()
 	for k, v := range result {
 		switch k {
 		case "encoding_type":
 			encodingStr := v.(string)
 			if encoding, err := enumspb.EncodingTypeFromString(encodingStr); err == nil {
-				eventBatch.EncodingType = enumspb.EncodingType(encoding)
+				eventBatch.SetEncodingType(enumspb.EncodingType(encoding))
 			}
 		case "data":
-			eventBatch.Data = v.([]byte)
+			eventBatch.SetData(v.([]byte))
 		}
 	}
 

@@ -30,8 +30,9 @@ type (
 	}
 
 	fieldWithPath struct {
-		field *reflect.StructField
-		path  string
+		field      *reflect.StructField
+		path       string
+		returnType reflect.Type // Return type of the getter method (for opaque API)
 	}
 )
 
@@ -137,43 +138,64 @@ func writeTemplatedCode(w io.Writer, service service, tmpl string) {
 func verifyFieldExists(t reflect.Type, path string) {
 	pathPrefix := t.String()
 	parts := strings.Split(path, ".")
+	// Use pointer type for method lookup since getters are defined on pointer receivers
+	pt := reflect.PointerTo(t)
 	for i, part := range parts {
-		if t.Kind() != reflect.Struct {
-			codegen.Fatalf("%s is not a struct", pathPrefix)
-		}
 		fieldName := codegen.SnakeCaseToPascalCase(part)
-		f, ok := t.FieldByName(fieldName)
+		getterName := "Get" + fieldName
+
+		// Check for getter method (opaque API)
+		method, ok := pt.MethodByName(getterName)
 		if !ok {
-			codegen.Fatalf("%s has no field named %s", pathPrefix, fieldName)
+			codegen.Fatalf("%s has no getter method %s", pathPrefix, getterName)
 		}
 		if i == len(parts)-1 {
 			return
 		}
-		ft := f.Type
-		if ft.Kind() != reflect.Pointer {
-			codegen.Fatalf("%s.%s is not a struct pointer", pathPrefix, fieldName)
+		// Get the return type of the getter for the next iteration
+		mt := method.Type
+		if mt.NumOut() < 1 {
+			codegen.Fatalf("%s.%s returns no values", pathPrefix, getterName)
 		}
-		t = ft.Elem()
-		pathPrefix += "." + fieldName
+		rt := mt.Out(0)
+		if rt.Kind() == reflect.Pointer {
+			t = rt.Elem()
+			pt = rt
+		} else {
+			t = rt
+			pt = reflect.PointerTo(rt)
+		}
+		pathPrefix += "." + getterName + "()"
 	}
 }
 
 func findNestedField(t reflect.Type, name string, path string, maxDepth int) []fieldWithPath {
-	if t.Kind() != reflect.Struct || maxDepth <= 0 {
+	if maxDepth <= 0 {
 		return nil
 	}
 	var out []fieldWithPath
-	for i := 0; i < t.NumField(); i++ {
-		f := t.Field(i)
-		if ignoreField[t.Name()+"."+f.Name] {
+	// Use pointer type for method lookup since getters are defined on pointer receivers
+	pt := reflect.PointerTo(t)
+	for i := 0; i < pt.NumMethod(); i++ {
+		m := pt.Method(i)
+		if !strings.HasPrefix(m.Name, "Get") {
 			continue
 		}
-		if f.Name == name {
-			out = append(out, fieldWithPath{field: &f, path: path + ".Get" + name + "()"})
+		fieldName := strings.TrimPrefix(m.Name, "Get")
+		if ignoreField[t.Name()+"."+fieldName] {
+			continue
 		}
-		ft := f.Type
-		if ft.Kind() == reflect.Pointer {
-			out = append(out, findNestedField(ft.Elem(), name, path+".Get"+f.Name+"()", maxDepth-1)...)
+		// Check if this getter returns a pointer to a struct for recursive search
+		mt := m.Type
+		var rt reflect.Type
+		if mt.NumOut() >= 1 {
+			rt = mt.Out(0)
+		}
+		if fieldName == name {
+			out = append(out, fieldWithPath{field: nil, path: path + ".Get" + name + "()", returnType: rt})
+		}
+		if rt != nil && rt.Kind() == reflect.Pointer && rt.Elem().Kind() == reflect.Struct {
+			out = append(out, findNestedField(rt.Elem(), name, path+".Get"+fieldName+"()", maxDepth-1)...)
 		}
 	}
 	return out
@@ -183,20 +205,30 @@ func findOneNestedField(t reflect.Type, name string, path string, maxDepth int) 
 	fields := findNestedField(t, name, path, maxDepth)
 	if len(fields) == 0 {
 		codegen.Fatalf("couldn't find %s in %s", name, t)
-	} else if len(fields) > 1 {
-		codegen.Fatalf("found more than one %s in %s (%v)", name, t, fields)
 	}
-	return fields[0]
+	// When multiple matches found, prefer the shortest path (direct match over nested)
+	shortest := fields[0]
+	for _, f := range fields[1:] {
+		if len(f.path) < len(shortest.path) {
+			shortest = f
+		}
+	}
+	return shortest
 }
 
 func tryFindOneNestedField(t reflect.Type, name string, path string, maxDepth int) fieldWithPath {
 	fields := findNestedField(t, name, path, maxDepth)
 	if len(fields) == 0 {
 		return fieldWithPath{}
-	} else if len(fields) > 1 {
-		codegen.Fatalf("found more than one %s in %s (%v)", name, t, fields)
 	}
-	return fields[0]
+	// When multiple matches found, prefer the shortest path (direct match over nested)
+	shortest := fields[0]
+	for _, f := range fields[1:] {
+		if len(f.path) < len(shortest.path) {
+			shortest = f
+		}
+	}
+	return shortest
 }
 
 func historyRoutingOptions(reqType reflect.Type) *historyservice.RoutingOptions {
@@ -233,33 +265,33 @@ func toGetter(snake string) string {
 func makeGetHistoryClient(reqType reflect.Type, routingOptions *historyservice.RoutingOptions) string {
 	t := reqType.Elem() // we know it's a pointer
 
-	if routingOptions.AnyHost && routingOptions.ShardId != "" && routingOptions.WorkflowId != "" && routingOptions.TaskToken != "" && routingOptions.TaskInfos != "" && routingOptions.ChasmComponentRef != "" {
+	if routingOptions.GetAnyHost() && routingOptions.GetShardId() != "" && routingOptions.GetWorkflowId() != "" && routingOptions.GetTaskToken() != "" && routingOptions.GetTaskInfos() != "" && routingOptions.GetChasmComponentRef() != "" {
 		log.Fatalf("Found more than one routing directive in %s", t)
 	}
-	if routingOptions.AnyHost {
+	if routingOptions.GetAnyHost() {
 		return "shardID := c.getRandomShard()"
 	}
-	if routingOptions.ShardId != "" {
-		verifyFieldExists(t, routingOptions.ShardId)
-		return "shardID := " + toGetter(routingOptions.ShardId)
+	if routingOptions.GetShardId() != "" {
+		verifyFieldExists(t, routingOptions.GetShardId())
+		return "shardID := " + toGetter(routingOptions.GetShardId())
 	}
-	if routingOptions.WorkflowId != "" {
-		namespaceIdField := routingOptions.NamespaceId
+	if routingOptions.GetWorkflowId() != "" {
+		namespaceIdField := routingOptions.GetNamespaceId()
 		if namespaceIdField == "" {
 			namespaceIdField = "namespace_id"
 		}
 		verifyFieldExists(t, namespaceIdField)
-		verifyFieldExists(t, routingOptions.WorkflowId)
-		return fmt.Sprintf("shardID := c.shardIDFromWorkflowID(%s, %s)", toGetter(namespaceIdField), toGetter(routingOptions.WorkflowId))
+		verifyFieldExists(t, routingOptions.GetWorkflowId())
+		return fmt.Sprintf("shardID := c.shardIDFromWorkflowID(%s, %s)", toGetter(namespaceIdField), toGetter(routingOptions.GetWorkflowId()))
 	}
-	if routingOptions.TaskToken != "" {
-		namespaceIdField := routingOptions.NamespaceId
+	if routingOptions.GetTaskToken() != "" {
+		namespaceIdField := routingOptions.GetNamespaceId()
 		if namespaceIdField == "" {
 			namespaceIdField = "namespace_id"
 		}
 
 		verifyFieldExists(t, namespaceIdField)
-		verifyFieldExists(t, routingOptions.TaskToken)
+		verifyFieldExists(t, routingOptions.GetTaskToken())
 		return fmt.Sprintf(`taskToken, err := c.tokenSerializer.Deserialize(%s)
 	if err != nil {
 		return nil, serviceerror.NewInvalidArgument("error deserializing task token")
@@ -278,26 +310,26 @@ func makeGetHistoryClient(reqType reflect.Type, routingOptions *historyservice.R
 		businessID = taskToken.GetWorkflowId()
 	}
 	shardID := c.shardIDFromWorkflowID(namespaceID, businessID)
-	`, toGetter(routingOptions.TaskToken), toGetter(namespaceIdField))
+	`, toGetter(routingOptions.GetTaskToken()), toGetter(namespaceIdField))
 	}
-	if routingOptions.ChasmComponentRef != "" {
-		verifyFieldExists(t, routingOptions.ChasmComponentRef)
+	if routingOptions.GetChasmComponentRef() != "" {
+		verifyFieldExists(t, routingOptions.GetChasmComponentRef())
 		return fmt.Sprintf(`ref, err := c.tokenSerializer.DeserializeChasmComponentRef(%s)
 	if err != nil {
 		return nil, serviceerror.NewInvalidArgument("error deserializing component ref")
 	}
 	shardID := c.shardIDFromWorkflowID(ref.GetNamespaceId(), ref.GetBusinessId())
-	`, toGetter(routingOptions.ChasmComponentRef))
+	`, toGetter(routingOptions.GetChasmComponentRef()))
 	}
-	if routingOptions.TaskInfos != "" {
-		verifyFieldExists(t, routingOptions.TaskInfos)
-		p := toGetter(routingOptions.TaskInfos)
+	if routingOptions.GetTaskInfos() != "" {
+		verifyFieldExists(t, routingOptions.GetTaskInfos())
+		p := toGetter(routingOptions.GetTaskInfos())
 		// slice needs a tiny bit of extra handling for namespace
 		return fmt.Sprintf(`// All workflow IDs are in the same shard per request
 	if len(%s) == 0 {
 		return nil, serviceerror.NewInvalidArgument("missing TaskInfos")
 	}
-	shardID := c.shardIDFromWorkflowID(%s[0].NamespaceId, %s[0].WorkflowId)`, p, p, p)
+	shardID := c.shardIDFromWorkflowID(%s[0].GetNamespaceId(), %s[0].GetWorkflowId())`, p, p, p)
 	}
 
 	log.Fatalf("No routing directive specified on %s", t)
@@ -375,7 +407,7 @@ func makeGetMatchingClient(reqType reflect.Type) string {
 	if tq.found() && tqt.found() {
 		partitionMaker := fmt.Sprintf("tqid.PartitionFromProto(%s, %s, %s)", tq.path, nsID.path, tqt.path)
 		// Some task queue fields are full messages, some are just strings
-		isTaskQueueMessage := tq.field != nil && tq.field.Type == reflect.TypeOf((*taskqueuepb.TaskQueue)(nil))
+		isTaskQueueMessage := tq.returnType == reflect.TypeOf((*taskqueuepb.TaskQueue)(nil))
 		if !isTaskQueueMessage {
 			partitionMaker = fmt.Sprintf("tqid.NormalPartitionFromRpcName(%s, %s, %s)", tq.path, nsID.path, tqt.path)
 		}
@@ -427,7 +459,7 @@ func writeTemplatedMethod(w io.Writer, service service, impl string, m reflect.M
 	if impl == "client" {
 		if service.name == "history" {
 			routingOptions := historyRoutingOptions(reqType)
-			if routingOptions.Custom {
+			if routingOptions.GetCustom() {
 				return
 			}
 			fields["GetClient"] = makeGetHistoryClient(reqType, routingOptions)

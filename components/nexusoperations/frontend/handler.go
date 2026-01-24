@@ -38,6 +38,7 @@ import (
 	"go.uber.org/fx"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -104,13 +105,13 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexusrpc.C
 		h.Logger.Error("failed to decode completion from token", tag.Error(err))
 		return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid callback token")
 	}
-	ns, err := h.NamespaceRegistry.GetNamespaceByID(namespace.ID(completion.NamespaceId))
+	ns, err := h.NamespaceRegistry.GetNamespaceByID(namespace.ID(completion.GetNamespaceId()))
 	if err != nil {
-		h.Logger.Error("failed to get namespace for nexus completion request", tag.WorkflowNamespaceID(completion.NamespaceId), tag.Error(err))
+		h.Logger.Error("failed to get namespace for nexus completion request", tag.WorkflowNamespaceID(completion.GetNamespaceId()), tag.Error(err))
 		h.preProcessErrorsCounter.Record(1)
 		var nfe *serviceerror.NamespaceNotFound
 		if errors.As(err, &nfe) {
-			return nexus.HandlerErrorf(nexus.HandlerErrorTypeNotFound, "namespace %q not found", completion.NamespaceId)
+			return nexus.HandlerErrorf(nexus.HandlerErrorTypeNotFound, "namespace %q not found", completion.GetNamespaceId())
 		}
 		return commonnexus.ConvertGRPCError(err, false)
 	}
@@ -182,23 +183,21 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexusrpc.C
 				)
 				continue
 			}
-			links = append(links, &commonpb.Link{
-				Variant: &commonpb.Link_WorkflowEvent_{
-					WorkflowEvent: link,
-				},
-			})
+			links = append(links, commonpb.Link_builder{
+				WorkflowEvent: proto.ValueOrDefault(link),
+			}.Build())
 		default:
 			// If the link data type is unsupported, just ignore it for now.
 			h.Logger.Warn(fmt.Sprintf("invalid link data type: %q", nexusLink.Type))
 		}
 	}
-	hr := &historyservice.CompleteNexusOperationRequest{
+	hr := historyservice.CompleteNexusOperationRequest_builder{
 		Completion:     completion,
 		State:          string(r.State),
 		OperationToken: r.OperationToken,
 		StartTime:      timestamppb.New(r.StartTime),
 		Links:          links,
-	}
+	}.Build()
 	switch r.State { // nolint:exhaustive
 	case nexus.OperationStateFailed, nexus.OperationStateCanceled:
 		failureErr, ok := r.Error.(*nexus.FailureError)
@@ -208,9 +207,7 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexusrpc.C
 			logger.Error("result error is not a FailureError", tag.Error(err))
 			return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal server error")
 		}
-		hr.Outcome = &historyservice.CompleteNexusOperationRequest_Failure{
-			Failure: commonnexus.NexusFailureToProtoFailure(failureErr.Failure),
-		}
+		hr.SetFailure(proto.ValueOrDefault(commonnexus.NexusFailureToProtoFailure(failureErr.Failure)))
 	case nexus.OperationStateSucceeded:
 		var result *commonpb.Payload
 		if err := r.Result.Consume(&result); err != nil {
@@ -221,9 +218,7 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexusrpc.C
 			logger.Error("payload size exceeds error limit for Nexus CompleteOperation request", tag.WorkflowNamespace(ns.Name().String()))
 			return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "result exceeds size limit")
 		}
-		hr.Outcome = &historyservice.CompleteNexusOperationRequest_Success{
-			Success: result,
-		}
+		hr.SetSuccess(proto.ValueOrDefault(result))
 	default:
 		// The Nexus SDK ensures this never happens but just in case...
 		logger.Error("invalid operation state in completion request", tag.NewStringTag("state", string(r.State)), tag.Error(err))

@@ -121,20 +121,20 @@ func genAssignShard(m *protogen.Method) (string, error) {
 	if opts == nil {
 		return "", fmt.Errorf("no routing directive specified on %s", m.Desc.FullName())
 	}
-	if opts.Random && (opts.NamespaceId != "" || opts.BusinessId != "") {
+	if opts.GetRandom() && (opts.GetNamespaceId() != "" || opts.GetBusinessId() != "") {
 		return "", fmt.Errorf("random directive cannot be combined with namespace_id or business_id on %s", m.Desc.FullName())
 	}
-	if opts.Random {
+	if opts.GetRandom() {
 		return "shardID := int32(rand.Intn(int(c.numShards)) + 1)", nil
 	}
-	if opts.BusinessId == "" {
+	if opts.GetBusinessId() == "" {
 		return "", fmt.Errorf("business_id directive empty on %s", m.Desc.FullName())
 	}
-	if opts.Random {
+	if opts.GetRandom() {
 		return "", fmt.Errorf("random directive cannot be combined with namespace_id or business_id on %s", m.Desc.FullName())
 	}
 
-	namespaceIDField := opts.NamespaceId
+	namespaceIDField := opts.GetNamespaceId()
 	if namespaceIDField == "" {
 		namespaceIDField = "namespace_id"
 	}
@@ -143,9 +143,9 @@ func genAssignShard(m *protogen.Method) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("unable to resolve namespace_id field path %q: %w", namespaceIDField, err)
 	}
-	businessIDFieldGetter, err := goFieldPath(m, opts.BusinessId)
+	businessIDFieldGetter, err := goFieldPath(m, opts.GetBusinessId())
 	if err != nil {
-		return "", fmt.Errorf("unable to resolve business_id field path %q: %w", opts.BusinessId, err)
+		return "", fmt.Errorf("unable to resolve business_id field path %q: %w", opts.GetBusinessId(), err)
 	}
 
 	return fmt.Sprintf("shardID := common.WorkflowIDToHistoryShard(request%s, request%s, c.numShards)", namespaceIDFieldGetter, businessIDFieldGetter), nil

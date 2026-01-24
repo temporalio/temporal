@@ -19,14 +19,14 @@ func TestCRC32OverProto(t *testing.T) {
 	// iteration order is not guaranteed in Go and
 	// so, each call to thrift encode will result in
 	// different set of serialized bytes
-	obj := &workflowpb.WorkflowExecutionInfo{
-		Execution: &commonpb.WorkflowExecution{
+	obj := workflowpb.WorkflowExecutionInfo_builder{
+		Execution: commonpb.WorkflowExecution_builder{
 			WorkflowId: uuid.NewString(),
 			RunId:      uuid.NewString(),
-		},
+		}.Build(),
 		StartTime:     timestamppb.New(time.Now().UTC()),
 		HistoryLength: 550,
-	}
+	}.Build()
 
 	parallism := 10
 	loopCount := 100

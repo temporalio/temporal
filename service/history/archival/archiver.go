@@ -230,7 +230,7 @@ func (a *archiver) archiveVisibility(ctx context.Context, request *Request, logg
 		historyArchivalUri = request.HistoryURI.String()
 	}
 
-	return visibilityArchiver.Archive(ctx, request.VisibilityURI, &archiverspb.VisibilityRecord{
+	return visibilityArchiver.Archive(ctx, request.VisibilityURI, archiverspb.VisibilityRecord_builder{
 		NamespaceId:        request.NamespaceID,
 		Namespace:          request.Namespace,
 		WorkflowId:         request.WorkflowID,
@@ -245,7 +245,7 @@ func (a *archiver) archiveVisibility(ctx context.Context, request *Request, logg
 		Memo:               request.Memo,
 		SearchAttributes:   searchAttributes,
 		HistoryArchivalUri: historyArchivalUri,
-	})
+	}.Build())
 }
 
 // recordArchiveTargetResult takes an error pointer as an argument so that it isn't passed-by-value when used in a defer

@@ -87,15 +87,15 @@ func (s *resendHandlerSuite) SetupTest() {
 	s.config = tests.NewDynamicConfig()
 	s.historyFetcher = NewMockHistoryPaginatedFetcher(s.controller)
 	namespaceEntry := namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Id: s.namespaceID.String(), Name: s.namespace.String()},
-		&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
-		&persistencespb.NamespaceReplicationConfig{
+		persistencespb.NamespaceInfo_builder{Id: s.namespaceID.String(), Name: s.namespace.String()}.Build(),
+		persistencespb.NamespaceConfig_builder{Retention: timestamp.DurationFromDays(1)}.Build(),
+		persistencespb.NamespaceReplicationConfig_builder{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []string{
 				cluster.TestCurrentClusterName,
 				cluster.TestAlternativeClusterName,
 			},
-		},
+		}.Build(),
 		1234,
 	)
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.namespaceID).Return(namespaceEntry, nil).AnyTimes()
@@ -139,7 +139,7 @@ func (m *historyEventMatrixMatcher) Matches(x interface{}) bool {
 			return false
 		}
 		for j := range m.expected[i] {
-			if m.expected[i][j].EventId != actual[i][j].EventId || m.expected[i][j].Version != actual[i][j].Version {
+			if m.expected[i][j].GetEventId() != actual[i][j].GetEventId() || m.expected[i][j].GetVersion() != actual[i][j].GetVersion() {
 				return false
 			}
 		}
@@ -166,14 +166,14 @@ func (s *resendHandlerSuite) TestResendHistoryEvents_NoRemoteEvents() {
 	s.mockClusterMetadata.EXPECT().GetClusterID().Return(int64(123))
 	s.mockClusterMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(1000))
 	eventBatch := []*historypb.HistoryEvent{
-		{EventId: 1, Version: 123},
-		{EventId: 2, Version: 123},
+		historypb.HistoryEvent_builder{EventId: 1, Version: 123}.Build(),
+		historypb.HistoryEvent_builder{EventId: 2, Version: 123}.Build(),
 	}
-	versionHistory := &historyspb.VersionHistory{
+	versionHistory := historyspb.VersionHistory_builder{
 		Items: []*historyspb.VersionHistoryItem{
-			{EventId: 10, Version: 123},
+			historyspb.VersionHistoryItem_builder{EventId: 10, Version: 123}.Build(),
 		},
-	}
+	}.Build()
 	fetcher := collection.NewPagingIterator(func(paginationToken []byte) ([]*HistoryBatch, []byte, error) {
 		return []*HistoryBatch{
 			{RawEventBatch: s.serializeEvents(eventBatch), VersionHistory: versionHistory},
@@ -212,39 +212,39 @@ func (s *resendHandlerSuite) TestSendSingleWorkflowHistory_AllRemoteEvents() {
 	s.config.ReplicationResendMaxBatchCount = dynamicconfig.GetIntPropertyFn(2)
 
 	eventBatch0 := []*historypb.HistoryEvent{
-		{EventId: 1, Version: 123},
-		{EventId: 2, Version: 123},
+		historypb.HistoryEvent_builder{EventId: 1, Version: 123}.Build(),
+		historypb.HistoryEvent_builder{EventId: 2, Version: 123}.Build(),
 	}
 	eventBatch1 := []*historypb.HistoryEvent{
-		{EventId: 3, Version: 123},
-		{EventId: 4, Version: 123},
+		historypb.HistoryEvent_builder{EventId: 3, Version: 123}.Build(),
+		historypb.HistoryEvent_builder{EventId: 4, Version: 123}.Build(),
 	}
 	eventBatch2 := []*historypb.HistoryEvent{
-		{EventId: 5, Version: 123},
-		{EventId: 6, Version: 123},
+		historypb.HistoryEvent_builder{EventId: 5, Version: 123}.Build(),
+		historypb.HistoryEvent_builder{EventId: 6, Version: 123}.Build(),
 	}
 	eventBatch3 := []*historypb.HistoryEvent{
-		{EventId: 7, Version: 123},
-		{EventId: 8, Version: 123},
+		historypb.HistoryEvent_builder{EventId: 7, Version: 123}.Build(),
+		historypb.HistoryEvent_builder{EventId: 8, Version: 123}.Build(),
 	}
 	eventBatch4 := []*historypb.HistoryEvent{
-		{EventId: 9, Version: 123},
-		{EventId: 10, Version: 123},
+		historypb.HistoryEvent_builder{EventId: 9, Version: 123}.Build(),
+		historypb.HistoryEvent_builder{EventId: 10, Version: 123}.Build(),
 	}
 	eventBatch5 := []*historypb.HistoryEvent{
-		{EventId: 11, Version: 123},
-		{EventId: 12, Version: 123},
+		historypb.HistoryEvent_builder{EventId: 11, Version: 123}.Build(),
+		historypb.HistoryEvent_builder{EventId: 12, Version: 123}.Build(),
 	}
-	versionHistory0 := &historyspb.VersionHistory{
+	versionHistory0 := historyspb.VersionHistory_builder{
 		Items: []*historyspb.VersionHistoryItem{
-			{EventId: 10, Version: 123},
+			historyspb.VersionHistoryItem_builder{EventId: 10, Version: 123}.Build(),
 		},
-	}
-	versionHistory1 := &historyspb.VersionHistory{
+	}.Build()
+	versionHistory1 := historyspb.VersionHistory_builder{
 		Items: []*historyspb.VersionHistoryItem{
-			{EventId: 15, Version: 123},
+			historyspb.VersionHistoryItem_builder{EventId: 15, Version: 123}.Build(),
 		},
-	}
+	}.Build()
 	s.mockClusterMetadata.EXPECT().GetClusterID().Return(int64(1))
 	s.mockClusterMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(1000))
 
@@ -282,7 +282,7 @@ func (s *resendHandlerSuite) TestSendSingleWorkflowHistory_AllRemoteEvents() {
 			gomock.Any(),
 			workflowKey,
 			nil,
-			versionHistory0.Items,
+			versionHistory0.GetItems(),
 			NewHistoryEventMatrixMatcher([][]*historypb.HistoryEvent{eventBatch0, eventBatch1}),
 			nil,
 			"",
@@ -291,7 +291,7 @@ func (s *resendHandlerSuite) TestSendSingleWorkflowHistory_AllRemoteEvents() {
 			gomock.Any(),
 			workflowKey,
 			nil,
-			versionHistory0.Items,
+			versionHistory0.GetItems(),
 			NewHistoryEventMatrixMatcher([][]*historypb.HistoryEvent{eventBatch2}),
 			nil,
 			"",
@@ -300,7 +300,7 @@ func (s *resendHandlerSuite) TestSendSingleWorkflowHistory_AllRemoteEvents() {
 			gomock.Any(),
 			workflowKey,
 			nil,
-			versionHistory1.Items,
+			versionHistory1.GetItems(),
 			NewHistoryEventMatrixMatcher([][]*historypb.HistoryEvent{eventBatch3, eventBatch4}),
 			nil,
 			"",
@@ -309,7 +309,7 @@ func (s *resendHandlerSuite) TestSendSingleWorkflowHistory_AllRemoteEvents() {
 			gomock.Any(),
 			workflowKey,
 			nil,
-			versionHistory1.Items,
+			versionHistory1.GetItems(),
 			NewHistoryEventMatrixMatcher([][]*historypb.HistoryEvent{eventBatch5}),
 			nil,
 			"",
@@ -338,27 +338,27 @@ func (s *resendHandlerSuite) TestSendSingleWorkflowHistory_LocalAndRemoteEvents(
 	s.config.ReplicationResendMaxBatchCount = dynamicconfig.GetIntPropertyFn(2)
 
 	eventBatch0 := []*historypb.HistoryEvent{
-		{EventId: 1, Version: 123},
-		{EventId: 2, Version: 123},
+		historypb.HistoryEvent_builder{EventId: 1, Version: 123}.Build(),
+		historypb.HistoryEvent_builder{EventId: 2, Version: 123}.Build(),
 	}
 	eventBatch1 := []*historypb.HistoryEvent{
-		{EventId: 3, Version: 123},
-		{EventId: 4, Version: 123},
+		historypb.HistoryEvent_builder{EventId: 3, Version: 123}.Build(),
+		historypb.HistoryEvent_builder{EventId: 4, Version: 123}.Build(),
 	}
 	eventBatch2 := []*historypb.HistoryEvent{
-		{EventId: 5, Version: 123},
-		{EventId: 6, Version: 123},
+		historypb.HistoryEvent_builder{EventId: 5, Version: 123}.Build(),
+		historypb.HistoryEvent_builder{EventId: 6, Version: 123}.Build(),
 	}
 	eventBatch3 := []*historypb.HistoryEvent{
-		{EventId: 7, Version: 124},
-		{EventId: 8, Version: 124},
+		historypb.HistoryEvent_builder{EventId: 7, Version: 124}.Build(),
+		historypb.HistoryEvent_builder{EventId: 8, Version: 124}.Build(),
 	}
-	versionHistory := &historyspb.VersionHistory{
+	versionHistory := historyspb.VersionHistory_builder{
 		Items: []*historyspb.VersionHistoryItem{
-			{EventId: 6, Version: 123},
-			{EventId: 10, Version: 124},
+			historyspb.VersionHistoryItem_builder{EventId: 6, Version: 123}.Build(),
+			historyspb.VersionHistoryItem_builder{EventId: 10, Version: 124}.Build(),
 		},
-	}
+	}.Build()
 	s.mockClusterMetadata.EXPECT().GetClusterID().Return(int64(123))
 	s.mockClusterMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(1000))
 
@@ -418,7 +418,7 @@ func (s *resendHandlerSuite) TestSendSingleWorkflowHistory_LocalAndRemoteEvents(
 		gomock.Any(),
 		workflowKey,
 		nil,
-		versionHistory.Items,
+		versionHistory.GetItems(),
 		NewHistoryEventMatrixMatcher([][]*historypb.HistoryEvent{eventBatch3}),
 		nil,
 		"",
@@ -446,15 +446,15 @@ func (s *resendHandlerSuite) TestSendSingleWorkflowHistory_MixedVersionHistory_R
 	s.config.ReplicationResendMaxBatchCount = dynamicconfig.GetIntPropertyFn(2)
 
 	eventBatch3 := []*historypb.HistoryEvent{
-		{EventId: 7, Version: 124},
-		{EventId: 8, Version: 124},
+		historypb.HistoryEvent_builder{EventId: 7, Version: 124}.Build(),
+		historypb.HistoryEvent_builder{EventId: 8, Version: 124}.Build(),
 	}
-	versionHistory := &historyspb.VersionHistory{
+	versionHistory := historyspb.VersionHistory_builder{
 		Items: []*historyspb.VersionHistoryItem{
-			{EventId: 6, Version: 123},
-			{EventId: 10, Version: 124},
+			historyspb.VersionHistoryItem_builder{EventId: 6, Version: 123}.Build(),
+			historyspb.VersionHistoryItem_builder{EventId: 10, Version: 124}.Build(),
 		},
-	}
+	}.Build()
 	s.mockClusterMetadata.EXPECT().GetClusterID().Return(int64(123))
 	s.mockClusterMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(1000))
 
@@ -486,7 +486,7 @@ func (s *resendHandlerSuite) TestSendSingleWorkflowHistory_MixedVersionHistory_R
 		gomock.Any(),
 		workflowKey,
 		nil,
-		versionHistory.Items,
+		versionHistory.GetItems(),
 		NewHistoryEventMatrixMatcher([][]*historypb.HistoryEvent{eventBatch3}),
 		nil,
 		"",
@@ -514,37 +514,37 @@ func (s *resendHandlerSuite) TestSendSingleWorkflowHistory_AllRemoteEvents_Batch
 	s.config.ReplicationResendMaxBatchCount = dynamicconfig.GetIntPropertyFn(10)
 
 	eventBatch0 := []*historypb.HistoryEvent{
-		{EventId: 1},
-		{EventId: 2},
+		historypb.HistoryEvent_builder{EventId: 1}.Build(),
+		historypb.HistoryEvent_builder{EventId: 2}.Build(),
 	}
 	eventBatch1 := []*historypb.HistoryEvent{
-		{EventId: 3, Version: 123},
-		{EventId: 4, Version: 123},
+		historypb.HistoryEvent_builder{EventId: 3, Version: 123}.Build(),
+		historypb.HistoryEvent_builder{EventId: 4, Version: 123}.Build(),
 	}
 	eventBatch2 := []*historypb.HistoryEvent{
-		{EventId: 5, Version: 123},
-		{EventId: 6, Version: 123},
+		historypb.HistoryEvent_builder{EventId: 5, Version: 123}.Build(),
+		historypb.HistoryEvent_builder{EventId: 6, Version: 123}.Build(),
 	}
 	eventBatch3 := []*historypb.HistoryEvent{
-		{EventId: 7, Version: 124},
-		{EventId: 8, Version: 124},
+		historypb.HistoryEvent_builder{EventId: 7, Version: 124}.Build(),
+		historypb.HistoryEvent_builder{EventId: 8, Version: 124}.Build(),
 	}
 	eventBatch4 := []*historypb.HistoryEvent{
-		{EventId: 9, Version: 124},
-		{EventId: 10, Version: 124},
+		historypb.HistoryEvent_builder{EventId: 9, Version: 124}.Build(),
+		historypb.HistoryEvent_builder{EventId: 10, Version: 124}.Build(),
 	}
 	eventBatch5 := []*historypb.HistoryEvent{
-		{EventId: 11, Version: 127},
-		{EventId: 12, Version: 127},
+		historypb.HistoryEvent_builder{EventId: 11, Version: 127}.Build(),
+		historypb.HistoryEvent_builder{EventId: 12, Version: 127}.Build(),
 	}
-	versionHistory := &historyspb.VersionHistory{
+	versionHistory := historyspb.VersionHistory_builder{
 		Items: []*historyspb.VersionHistoryItem{
-			{EventId: 2},
-			{EventId: 6, Version: 123},
-			{EventId: 10, Version: 124},
-			{EventId: 12, Version: 127},
+			historyspb.VersionHistoryItem_builder{EventId: 2}.Build(),
+			historyspb.VersionHistoryItem_builder{EventId: 6, Version: 123}.Build(),
+			historyspb.VersionHistoryItem_builder{EventId: 10, Version: 124}.Build(),
+			historyspb.VersionHistoryItem_builder{EventId: 12, Version: 127}.Build(),
 		},
-	}
+	}.Build()
 	s.mockClusterMetadata.EXPECT().GetClusterID().Return(int64(1))
 	s.mockClusterMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(1000))
 
@@ -582,7 +582,7 @@ func (s *resendHandlerSuite) TestSendSingleWorkflowHistory_AllRemoteEvents_Batch
 			gomock.Any(),
 			workflowKey,
 			nil,
-			versionHistory.Items,
+			versionHistory.GetItems(),
 			NewHistoryEventMatrixMatcher([][]*historypb.HistoryEvent{eventBatch0}),
 			nil,
 			"",
@@ -591,7 +591,7 @@ func (s *resendHandlerSuite) TestSendSingleWorkflowHistory_AllRemoteEvents_Batch
 			gomock.Any(),
 			workflowKey,
 			nil,
-			versionHistory.Items,
+			versionHistory.GetItems(),
 			NewHistoryEventMatrixMatcher([][]*historypb.HistoryEvent{eventBatch1, eventBatch2}),
 			nil,
 			"",
@@ -600,7 +600,7 @@ func (s *resendHandlerSuite) TestSendSingleWorkflowHistory_AllRemoteEvents_Batch
 			gomock.Any(),
 			workflowKey,
 			nil,
-			versionHistory.Items,
+			versionHistory.GetItems(),
 			NewHistoryEventMatrixMatcher([][]*historypb.HistoryEvent{eventBatch3, eventBatch4}),
 			nil,
 			"",
@@ -609,7 +609,7 @@ func (s *resendHandlerSuite) TestSendSingleWorkflowHistory_AllRemoteEvents_Batch
 			gomock.Any(),
 			workflowKey,
 			nil,
-			versionHistory.Items,
+			versionHistory.GetItems(),
 			NewHistoryEventMatrixMatcher([][]*historypb.HistoryEvent{eventBatch5}),
 			nil,
 			"",
@@ -633,8 +633,8 @@ func (s *resendHandlerSuite) TestSendSingleWorkflowHistory_AllRemoteEvents_Batch
 func (s *resendHandlerSuite) serializeEvents(events []*historypb.HistoryEvent) *commonpb.DataBlob {
 	blob, err := s.serializer.SerializeEvents(events)
 	s.Nil(err)
-	return &commonpb.DataBlob{
+	return commonpb.DataBlob_builder{
 		EncodingType: enumspb.ENCODING_TYPE_PROTO3,
-		Data:         blob.Data,
-	}
+		Data:         blob.GetData(),
+	}.Build()
 }

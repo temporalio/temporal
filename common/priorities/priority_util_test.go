@@ -39,38 +39,38 @@ func TestMerge(t *testing.T) {
 		{
 			name:     "priority key is overriden",
 			base:     defaultPriority,
-			override: &commonpb.Priority{PriorityKey: 5},
-			expected: &commonpb.Priority{PriorityKey: 5},
+			override: commonpb.Priority_builder{PriorityKey: 5}.Build(),
+			expected: commonpb.Priority_builder{PriorityKey: 5}.Build(),
 		},
 		{
 			name:     "priority key is not overriden by default value",
-			base:     &commonpb.Priority{PriorityKey: 1},
+			base:     commonpb.Priority_builder{PriorityKey: 1}.Build(),
 			override: defaultPriority,
-			expected: &commonpb.Priority{PriorityKey: 1},
+			expected: commonpb.Priority_builder{PriorityKey: 1}.Build(),
 		},
 		{
 			name:     "fairness key is overriden",
 			base:     defaultPriority,
-			override: &commonpb.Priority{FairnessKey: "one"},
-			expected: &commonpb.Priority{FairnessKey: "one"},
+			override: commonpb.Priority_builder{FairnessKey: "one"}.Build(),
+			expected: commonpb.Priority_builder{FairnessKey: "one"}.Build(),
 		},
 		{
 			name:     "fairness key is not overriden by default value",
-			base:     &commonpb.Priority{FairnessKey: "two"},
+			base:     commonpb.Priority_builder{FairnessKey: "two"}.Build(),
 			override: defaultPriority,
-			expected: &commonpb.Priority{FairnessKey: "two"},
+			expected: commonpb.Priority_builder{FairnessKey: "two"}.Build(),
 		},
 		{
 			name:     "fairness weight is overriden",
 			base:     defaultPriority,
-			override: &commonpb.Priority{FairnessWeight: 3.0},
-			expected: &commonpb.Priority{FairnessWeight: 3.0},
+			override: commonpb.Priority_builder{FairnessWeight: 3.0}.Build(),
+			expected: commonpb.Priority_builder{FairnessWeight: 3.0}.Build(),
 		},
 		{
 			name:     "fairness weight is not overriden by default value",
-			base:     &commonpb.Priority{FairnessWeight: 3.0},
+			base:     commonpb.Priority_builder{FairnessWeight: 3.0}.Build(),
 			override: defaultPriority,
-			expected: &commonpb.Priority{FairnessWeight: 3.0},
+			expected: commonpb.Priority_builder{FairnessWeight: 3.0}.Build(),
 		},
 	}
 
@@ -88,13 +88,13 @@ func TestValidate(t *testing.T) {
 		err bool
 	}{
 		{p: &commonpb.Priority{}},
-		{p: &commonpb.Priority{PriorityKey: 5}},
-		{p: &commonpb.Priority{PriorityKey: -5}, err: true},
-		{p: &commonpb.Priority{FairnessKey: "abcdefg"}},
-		{p: &commonpb.Priority{FairnessKey: strings.Repeat("abcdefg", 10)}, err: true},
-		{p: &commonpb.Priority{FairnessWeight: 0.1}},
-		{p: &commonpb.Priority{FairnessWeight: 1e10}},
-		{p: &commonpb.Priority{FairnessWeight: -3}, err: true},
+		{p: commonpb.Priority_builder{PriorityKey: 5}.Build()},
+		{p: commonpb.Priority_builder{PriorityKey: -5}.Build(), err: true},
+		{p: commonpb.Priority_builder{FairnessKey: "abcdefg"}.Build()},
+		{p: commonpb.Priority_builder{FairnessKey: strings.Repeat("abcdefg", 10)}.Build(), err: true},
+		{p: commonpb.Priority_builder{FairnessWeight: 0.1}.Build()},
+		{p: commonpb.Priority_builder{FairnessWeight: 1e10}.Build()},
+		{p: commonpb.Priority_builder{FairnessWeight: -3}.Build(), err: true},
 	}
 
 	for _, tc := range testcases {

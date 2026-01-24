@@ -8,7 +8,7 @@ package schedule
 
 import (
 	reflect "reflect"
-	sync "sync"
+	"strconv"
 	unsafe "unsafe"
 
 	v12 "go.temporal.io/api/common/v1"
@@ -29,45 +29,21 @@ const (
 )
 
 type BufferedStart struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Nominal (pre-jitter) and Actual (post-jitter) time of action
-	NominalTime *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=nominal_time,json=nominalTime,proto3" json:"nominal_time,omitempty"`
-	ActualTime  *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=actual_time,json=actualTime,proto3" json:"actual_time,omitempty"`
-	// Desired time is usually nil, which should be interpreted as == actual time, but for starts
-	// that are blocked behind another action, it is set to the close time of the previous action
-	// for more meaningful metrics.
-	DesiredTime *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=desired_time,json=desiredTime,proto3" json:"desired_time,omitempty"`
-	// Overridden overlap policy
-	OverlapPolicy v1.ScheduleOverlapPolicy `protobuf:"varint,3,opt,name=overlap_policy,json=overlapPolicy,proto3,enum=temporal.api.enums.v1.ScheduleOverlapPolicy" json:"overlap_policy,omitempty"`
-	// Trigger-immediately or backfill
-	Manual bool `protobuf:"varint,4,opt,name=manual,proto3" json:"manual,omitempty"`
-	// An ID generated when the action is buffered for deduplication during
-	// execution. Only used by the CHASM scheduler (otherwise left empty).
-	RequestId string `protobuf:"bytes,6,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
-	// Initially 0. Once a BufferedStart is ready to execute (overlap policies
-	// are resolved), its attempt count is set to 1. If a BufferedStart fails
-	// execution, its attempt count here is incremented. Only used by the CHASM
-	// scheduler (otherwise left empty).
-	Attempt int64 `protobuf:"varint,7,opt,name=attempt,proto3" json:"attempt,omitempty"`
-	// If a BufferedStart is rate limited or needs to backoff while retrying,
-	// this time will be set, and the start will be held in the buffer until
-	// the backoff time has passed. Only used by the CHASM scheduler (otherwise
-	// ignored).
-	BackoffTime *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=backoff_time,json=backoffTime,proto3" json:"backoff_time,omitempty"`
-	// The precomputed workflow ID that should be used (as-is) when executing
-	// this start. Only used by the CHASM scheduler (otherwise ignored).
-	WorkflowId string `protobuf:"bytes,9,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
-	// The run ID of the started workflow. Populated when the workflow is
-	// successfully started. Only used by the CHASM scheduler.
-	RunId string `protobuf:"bytes,10,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	// The actual time the workflow was started. Populated when the workflow is
-	// successfully started. Only used by the CHASM scheduler.
-	StartTime *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
-	// Populated when the workflow execution completes. Presence indicates the
-	// action is complete and retained for history. Only used by the CHASM scheduler.
-	Completed     *CompletedResult `protobuf:"bytes,12,opt,name=completed,proto3" json:"completed,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                    protoimpl.MessageState   `protogen:"opaque.v1"`
+	xxx_hidden_NominalTime   *timestamppb.Timestamp   `protobuf:"bytes,1,opt,name=nominal_time,json=nominalTime,proto3"`
+	xxx_hidden_ActualTime    *timestamppb.Timestamp   `protobuf:"bytes,2,opt,name=actual_time,json=actualTime,proto3"`
+	xxx_hidden_DesiredTime   *timestamppb.Timestamp   `protobuf:"bytes,5,opt,name=desired_time,json=desiredTime,proto3"`
+	xxx_hidden_OverlapPolicy v1.ScheduleOverlapPolicy `protobuf:"varint,3,opt,name=overlap_policy,json=overlapPolicy,proto3,enum=temporal.api.enums.v1.ScheduleOverlapPolicy"`
+	xxx_hidden_Manual        bool                     `protobuf:"varint,4,opt,name=manual,proto3"`
+	xxx_hidden_RequestId     string                   `protobuf:"bytes,6,opt,name=request_id,json=requestId,proto3"`
+	xxx_hidden_Attempt       int64                    `protobuf:"varint,7,opt,name=attempt,proto3"`
+	xxx_hidden_BackoffTime   *timestamppb.Timestamp   `protobuf:"bytes,8,opt,name=backoff_time,json=backoffTime,proto3"`
+	xxx_hidden_WorkflowId    string                   `protobuf:"bytes,9,opt,name=workflow_id,json=workflowId,proto3"`
+	xxx_hidden_RunId         string                   `protobuf:"bytes,10,opt,name=run_id,json=runId,proto3"`
+	xxx_hidden_StartTime     *timestamppb.Timestamp   `protobuf:"bytes,11,opt,name=start_time,json=startTime,proto3"`
+	xxx_hidden_Completed     *CompletedResult         `protobuf:"bytes,12,opt,name=completed,proto3"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *BufferedStart) Reset() {
@@ -95,105 +71,272 @@ func (x *BufferedStart) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use BufferedStart.ProtoReflect.Descriptor instead.
-func (*BufferedStart) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_schedule_v1_message_proto_rawDescGZIP(), []int{0}
-}
-
 func (x *BufferedStart) GetNominalTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.NominalTime
+		return x.xxx_hidden_NominalTime
 	}
 	return nil
 }
 
 func (x *BufferedStart) GetActualTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.ActualTime
+		return x.xxx_hidden_ActualTime
 	}
 	return nil
 }
 
 func (x *BufferedStart) GetDesiredTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.DesiredTime
+		return x.xxx_hidden_DesiredTime
 	}
 	return nil
 }
 
 func (x *BufferedStart) GetOverlapPolicy() v1.ScheduleOverlapPolicy {
 	if x != nil {
-		return x.OverlapPolicy
+		return x.xxx_hidden_OverlapPolicy
 	}
 	return v1.ScheduleOverlapPolicy(0)
 }
 
 func (x *BufferedStart) GetManual() bool {
 	if x != nil {
-		return x.Manual
+		return x.xxx_hidden_Manual
 	}
 	return false
 }
 
 func (x *BufferedStart) GetRequestId() string {
 	if x != nil {
-		return x.RequestId
+		return x.xxx_hidden_RequestId
 	}
 	return ""
 }
 
 func (x *BufferedStart) GetAttempt() int64 {
 	if x != nil {
-		return x.Attempt
+		return x.xxx_hidden_Attempt
 	}
 	return 0
 }
 
 func (x *BufferedStart) GetBackoffTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.BackoffTime
+		return x.xxx_hidden_BackoffTime
 	}
 	return nil
 }
 
 func (x *BufferedStart) GetWorkflowId() string {
 	if x != nil {
-		return x.WorkflowId
+		return x.xxx_hidden_WorkflowId
 	}
 	return ""
 }
 
 func (x *BufferedStart) GetRunId() string {
 	if x != nil {
-		return x.RunId
+		return x.xxx_hidden_RunId
 	}
 	return ""
 }
 
 func (x *BufferedStart) GetStartTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.StartTime
+		return x.xxx_hidden_StartTime
 	}
 	return nil
 }
 
 func (x *BufferedStart) GetCompleted() *CompletedResult {
 	if x != nil {
-		return x.Completed
+		return x.xxx_hidden_Completed
 	}
 	return nil
+}
+
+func (x *BufferedStart) SetNominalTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_NominalTime = v
+}
+
+func (x *BufferedStart) SetActualTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_ActualTime = v
+}
+
+func (x *BufferedStart) SetDesiredTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_DesiredTime = v
+}
+
+func (x *BufferedStart) SetOverlapPolicy(v v1.ScheduleOverlapPolicy) {
+	x.xxx_hidden_OverlapPolicy = v
+}
+
+func (x *BufferedStart) SetManual(v bool) {
+	x.xxx_hidden_Manual = v
+}
+
+func (x *BufferedStart) SetRequestId(v string) {
+	x.xxx_hidden_RequestId = v
+}
+
+func (x *BufferedStart) SetAttempt(v int64) {
+	x.xxx_hidden_Attempt = v
+}
+
+func (x *BufferedStart) SetBackoffTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_BackoffTime = v
+}
+
+func (x *BufferedStart) SetWorkflowId(v string) {
+	x.xxx_hidden_WorkflowId = v
+}
+
+func (x *BufferedStart) SetRunId(v string) {
+	x.xxx_hidden_RunId = v
+}
+
+func (x *BufferedStart) SetStartTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_StartTime = v
+}
+
+func (x *BufferedStart) SetCompleted(v *CompletedResult) {
+	x.xxx_hidden_Completed = v
+}
+
+func (x *BufferedStart) HasNominalTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_NominalTime != nil
+}
+
+func (x *BufferedStart) HasActualTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_ActualTime != nil
+}
+
+func (x *BufferedStart) HasDesiredTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_DesiredTime != nil
+}
+
+func (x *BufferedStart) HasBackoffTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_BackoffTime != nil
+}
+
+func (x *BufferedStart) HasStartTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_StartTime != nil
+}
+
+func (x *BufferedStart) HasCompleted() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Completed != nil
+}
+
+func (x *BufferedStart) ClearNominalTime() {
+	x.xxx_hidden_NominalTime = nil
+}
+
+func (x *BufferedStart) ClearActualTime() {
+	x.xxx_hidden_ActualTime = nil
+}
+
+func (x *BufferedStart) ClearDesiredTime() {
+	x.xxx_hidden_DesiredTime = nil
+}
+
+func (x *BufferedStart) ClearBackoffTime() {
+	x.xxx_hidden_BackoffTime = nil
+}
+
+func (x *BufferedStart) ClearStartTime() {
+	x.xxx_hidden_StartTime = nil
+}
+
+func (x *BufferedStart) ClearCompleted() {
+	x.xxx_hidden_Completed = nil
+}
+
+type BufferedStart_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Nominal (pre-jitter) and Actual (post-jitter) time of action
+	NominalTime *timestamppb.Timestamp
+	ActualTime  *timestamppb.Timestamp
+	// Desired time is usually nil, which should be interpreted as == actual time, but for starts
+	// that are blocked behind another action, it is set to the close time of the previous action
+	// for more meaningful metrics.
+	DesiredTime *timestamppb.Timestamp
+	// Overridden overlap policy
+	OverlapPolicy v1.ScheduleOverlapPolicy
+	// Trigger-immediately or backfill
+	Manual bool
+	// An ID generated when the action is buffered for deduplication during
+	// execution. Only used by the CHASM scheduler (otherwise left empty).
+	RequestId string
+	// Initially 0. Once a BufferedStart is ready to execute (overlap policies
+	// are resolved), its attempt count is set to 1. If a BufferedStart fails
+	// execution, its attempt count here is incremented. Only used by the CHASM
+	// scheduler (otherwise left empty).
+	Attempt int64
+	// If a BufferedStart is rate limited or needs to backoff while retrying,
+	// this time will be set, and the start will be held in the buffer until
+	// the backoff time has passed. Only used by the CHASM scheduler (otherwise
+	// ignored).
+	BackoffTime *timestamppb.Timestamp
+	// The precomputed workflow ID that should be used (as-is) when executing
+	// this start. Only used by the CHASM scheduler (otherwise ignored).
+	WorkflowId string
+	// The run ID of the started workflow. Populated when the workflow is
+	// successfully started. Only used by the CHASM scheduler.
+	RunId string
+	// The actual time the workflow was started. Populated when the workflow is
+	// successfully started. Only used by the CHASM scheduler.
+	StartTime *timestamppb.Timestamp
+	// Populated when the workflow execution completes. Presence indicates the
+	// action is complete and retained for history. Only used by the CHASM scheduler.
+	Completed *CompletedResult
+}
+
+func (b0 BufferedStart_builder) Build() *BufferedStart {
+	m0 := &BufferedStart{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NominalTime = b.NominalTime
+	x.xxx_hidden_ActualTime = b.ActualTime
+	x.xxx_hidden_DesiredTime = b.DesiredTime
+	x.xxx_hidden_OverlapPolicy = b.OverlapPolicy
+	x.xxx_hidden_Manual = b.Manual
+	x.xxx_hidden_RequestId = b.RequestId
+	x.xxx_hidden_Attempt = b.Attempt
+	x.xxx_hidden_BackoffTime = b.BackoffTime
+	x.xxx_hidden_WorkflowId = b.WorkflowId
+	x.xxx_hidden_RunId = b.RunId
+	x.xxx_hidden_StartTime = b.StartTime
+	x.xxx_hidden_Completed = b.Completed
+	return m0
 }
 
 // Result when a workflow execution has completed.
 // Only used by the CHASM scheduler.
 type CompletedResult struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// The final status of the workflow execution.
-	Status v1.WorkflowExecutionStatus `protobuf:"varint,1,opt,name=status,proto3,enum=temporal.api.enums.v1.WorkflowExecutionStatus" json:"status,omitempty"`
-	// The time the workflow closed.
-	CloseTime     *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=close_time,json=closeTime,proto3" json:"close_time,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                protoimpl.MessageState     `protogen:"opaque.v1"`
+	xxx_hidden_Status    v1.WorkflowExecutionStatus `protobuf:"varint,1,opt,name=status,proto3,enum=temporal.api.enums.v1.WorkflowExecutionStatus"`
+	xxx_hidden_CloseTime *timestamppb.Timestamp     `protobuf:"bytes,2,opt,name=close_time,json=closeTime,proto3"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *CompletedResult) Reset() {
@@ -221,41 +364,71 @@ func (x *CompletedResult) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CompletedResult.ProtoReflect.Descriptor instead.
-func (*CompletedResult) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_schedule_v1_message_proto_rawDescGZIP(), []int{1}
-}
-
 func (x *CompletedResult) GetStatus() v1.WorkflowExecutionStatus {
 	if x != nil {
-		return x.Status
+		return x.xxx_hidden_Status
 	}
 	return v1.WorkflowExecutionStatus(0)
 }
 
 func (x *CompletedResult) GetCloseTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.CloseTime
+		return x.xxx_hidden_CloseTime
 	}
 	return nil
 }
 
+func (x *CompletedResult) SetStatus(v v1.WorkflowExecutionStatus) {
+	x.xxx_hidden_Status = v
+}
+
+func (x *CompletedResult) SetCloseTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_CloseTime = v
+}
+
+func (x *CompletedResult) HasCloseTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_CloseTime != nil
+}
+
+func (x *CompletedResult) ClearCloseTime() {
+	x.xxx_hidden_CloseTime = nil
+}
+
+type CompletedResult_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// The final status of the workflow execution.
+	Status v1.WorkflowExecutionStatus
+	// The time the workflow closed.
+	CloseTime *timestamppb.Timestamp
+}
+
+func (b0 CompletedResult_builder) Build() *CompletedResult {
+	m0 := &CompletedResult{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Status = b.Status
+	x.xxx_hidden_CloseTime = b.CloseTime
+	return m0
+}
+
 type InternalState struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	Namespace         string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
-	NamespaceId       string                 `protobuf:"bytes,2,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	ScheduleId        string                 `protobuf:"bytes,8,opt,name=schedule_id,json=scheduleId,proto3" json:"schedule_id,omitempty"`
-	LastProcessedTime *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=last_processed_time,json=lastProcessedTime,proto3" json:"last_processed_time,omitempty"`
-	BufferedStarts    []*BufferedStart       `protobuf:"bytes,4,rep,name=buffered_starts,json=bufferedStarts,proto3" json:"buffered_starts,omitempty"`
-	OngoingBackfills  []*v11.BackfillRequest `protobuf:"bytes,10,rep,name=ongoing_backfills,json=ongoingBackfills,proto3" json:"ongoing_backfills,omitempty"`
-	// last completion/failure
-	LastCompletionResult *v12.Payloads `protobuf:"bytes,5,opt,name=last_completion_result,json=lastCompletionResult,proto3" json:"last_completion_result,omitempty"`
-	ContinuedFailure     *v13.Failure  `protobuf:"bytes,6,opt,name=continued_failure,json=continuedFailure,proto3" json:"continued_failure,omitempty"`
-	// conflict token is implemented as simple sequence number
-	ConflictToken int64 `protobuf:"varint,7,opt,name=conflict_token,json=conflictToken,proto3" json:"conflict_token,omitempty"`
-	NeedRefresh   bool  `protobuf:"varint,9,opt,name=need_refresh,json=needRefresh,proto3" json:"need_refresh,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                           protoimpl.MessageState  `protogen:"opaque.v1"`
+	xxx_hidden_Namespace            string                  `protobuf:"bytes,1,opt,name=namespace,proto3"`
+	xxx_hidden_NamespaceId          string                  `protobuf:"bytes,2,opt,name=namespace_id,json=namespaceId,proto3"`
+	xxx_hidden_ScheduleId           string                  `protobuf:"bytes,8,opt,name=schedule_id,json=scheduleId,proto3"`
+	xxx_hidden_LastProcessedTime    *timestamppb.Timestamp  `protobuf:"bytes,3,opt,name=last_processed_time,json=lastProcessedTime,proto3"`
+	xxx_hidden_BufferedStarts       *[]*BufferedStart       `protobuf:"bytes,4,rep,name=buffered_starts,json=bufferedStarts,proto3"`
+	xxx_hidden_OngoingBackfills     *[]*v11.BackfillRequest `protobuf:"bytes,10,rep,name=ongoing_backfills,json=ongoingBackfills,proto3"`
+	xxx_hidden_LastCompletionResult *v12.Payloads           `protobuf:"bytes,5,opt,name=last_completion_result,json=lastCompletionResult,proto3"`
+	xxx_hidden_ContinuedFailure     *v13.Failure            `protobuf:"bytes,6,opt,name=continued_failure,json=continuedFailure,proto3"`
+	xxx_hidden_ConflictToken        int64                   `protobuf:"varint,7,opt,name=conflict_token,json=conflictToken,proto3"`
+	xxx_hidden_NeedRefresh          bool                    `protobuf:"varint,9,opt,name=need_refresh,json=needRefresh,proto3"`
+	unknownFields                   protoimpl.UnknownFields
+	sizeCache                       protoimpl.SizeCache
 }
 
 func (x *InternalState) Reset() {
@@ -283,89 +456,195 @@ func (x *InternalState) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use InternalState.ProtoReflect.Descriptor instead.
-func (*InternalState) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_schedule_v1_message_proto_rawDescGZIP(), []int{2}
-}
-
 func (x *InternalState) GetNamespace() string {
 	if x != nil {
-		return x.Namespace
+		return x.xxx_hidden_Namespace
 	}
 	return ""
 }
 
 func (x *InternalState) GetNamespaceId() string {
 	if x != nil {
-		return x.NamespaceId
+		return x.xxx_hidden_NamespaceId
 	}
 	return ""
 }
 
 func (x *InternalState) GetScheduleId() string {
 	if x != nil {
-		return x.ScheduleId
+		return x.xxx_hidden_ScheduleId
 	}
 	return ""
 }
 
 func (x *InternalState) GetLastProcessedTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.LastProcessedTime
+		return x.xxx_hidden_LastProcessedTime
 	}
 	return nil
 }
 
 func (x *InternalState) GetBufferedStarts() []*BufferedStart {
 	if x != nil {
-		return x.BufferedStarts
+		if x.xxx_hidden_BufferedStarts != nil {
+			return *x.xxx_hidden_BufferedStarts
+		}
 	}
 	return nil
 }
 
 func (x *InternalState) GetOngoingBackfills() []*v11.BackfillRequest {
 	if x != nil {
-		return x.OngoingBackfills
+		if x.xxx_hidden_OngoingBackfills != nil {
+			return *x.xxx_hidden_OngoingBackfills
+		}
 	}
 	return nil
 }
 
 func (x *InternalState) GetLastCompletionResult() *v12.Payloads {
 	if x != nil {
-		return x.LastCompletionResult
+		return x.xxx_hidden_LastCompletionResult
 	}
 	return nil
 }
 
 func (x *InternalState) GetContinuedFailure() *v13.Failure {
 	if x != nil {
-		return x.ContinuedFailure
+		return x.xxx_hidden_ContinuedFailure
 	}
 	return nil
 }
 
 func (x *InternalState) GetConflictToken() int64 {
 	if x != nil {
-		return x.ConflictToken
+		return x.xxx_hidden_ConflictToken
 	}
 	return 0
 }
 
 func (x *InternalState) GetNeedRefresh() bool {
 	if x != nil {
-		return x.NeedRefresh
+		return x.xxx_hidden_NeedRefresh
 	}
 	return false
 }
 
+func (x *InternalState) SetNamespace(v string) {
+	x.xxx_hidden_Namespace = v
+}
+
+func (x *InternalState) SetNamespaceId(v string) {
+	x.xxx_hidden_NamespaceId = v
+}
+
+func (x *InternalState) SetScheduleId(v string) {
+	x.xxx_hidden_ScheduleId = v
+}
+
+func (x *InternalState) SetLastProcessedTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_LastProcessedTime = v
+}
+
+func (x *InternalState) SetBufferedStarts(v []*BufferedStart) {
+	x.xxx_hidden_BufferedStarts = &v
+}
+
+func (x *InternalState) SetOngoingBackfills(v []*v11.BackfillRequest) {
+	x.xxx_hidden_OngoingBackfills = &v
+}
+
+func (x *InternalState) SetLastCompletionResult(v *v12.Payloads) {
+	x.xxx_hidden_LastCompletionResult = v
+}
+
+func (x *InternalState) SetContinuedFailure(v *v13.Failure) {
+	x.xxx_hidden_ContinuedFailure = v
+}
+
+func (x *InternalState) SetConflictToken(v int64) {
+	x.xxx_hidden_ConflictToken = v
+}
+
+func (x *InternalState) SetNeedRefresh(v bool) {
+	x.xxx_hidden_NeedRefresh = v
+}
+
+func (x *InternalState) HasLastProcessedTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_LastProcessedTime != nil
+}
+
+func (x *InternalState) HasLastCompletionResult() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_LastCompletionResult != nil
+}
+
+func (x *InternalState) HasContinuedFailure() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_ContinuedFailure != nil
+}
+
+func (x *InternalState) ClearLastProcessedTime() {
+	x.xxx_hidden_LastProcessedTime = nil
+}
+
+func (x *InternalState) ClearLastCompletionResult() {
+	x.xxx_hidden_LastCompletionResult = nil
+}
+
+func (x *InternalState) ClearContinuedFailure() {
+	x.xxx_hidden_ContinuedFailure = nil
+}
+
+type InternalState_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Namespace         string
+	NamespaceId       string
+	ScheduleId        string
+	LastProcessedTime *timestamppb.Timestamp
+	BufferedStarts    []*BufferedStart
+	OngoingBackfills  []*v11.BackfillRequest
+	// last completion/failure
+	LastCompletionResult *v12.Payloads
+	ContinuedFailure     *v13.Failure
+	// conflict token is implemented as simple sequence number
+	ConflictToken int64
+	NeedRefresh   bool
+}
+
+func (b0 InternalState_builder) Build() *InternalState {
+	m0 := &InternalState{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Namespace = b.Namespace
+	x.xxx_hidden_NamespaceId = b.NamespaceId
+	x.xxx_hidden_ScheduleId = b.ScheduleId
+	x.xxx_hidden_LastProcessedTime = b.LastProcessedTime
+	x.xxx_hidden_BufferedStarts = &b.BufferedStarts
+	x.xxx_hidden_OngoingBackfills = &b.OngoingBackfills
+	x.xxx_hidden_LastCompletionResult = b.LastCompletionResult
+	x.xxx_hidden_ContinuedFailure = b.ContinuedFailure
+	x.xxx_hidden_ConflictToken = b.ConflictToken
+	x.xxx_hidden_NeedRefresh = b.NeedRefresh
+	return m0
+}
+
 type StartScheduleArgs struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Schedule      *v11.Schedule          `protobuf:"bytes,1,opt,name=schedule,proto3" json:"schedule,omitempty"`
-	Info          *v11.ScheduleInfo      `protobuf:"bytes,2,opt,name=info,proto3" json:"info,omitempty"`
-	InitialPatch  *v11.SchedulePatch     `protobuf:"bytes,3,opt,name=initial_patch,json=initialPatch,proto3" json:"initial_patch,omitempty"`
-	State         *InternalState         `protobuf:"bytes,4,opt,name=state,proto3" json:"state,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                   protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Schedule     *v11.Schedule          `protobuf:"bytes,1,opt,name=schedule,proto3"`
+	xxx_hidden_Info         *v11.ScheduleInfo      `protobuf:"bytes,2,opt,name=info,proto3"`
+	xxx_hidden_InitialPatch *v11.SchedulePatch     `protobuf:"bytes,3,opt,name=initial_patch,json=initialPatch,proto3"`
+	xxx_hidden_State        *InternalState         `protobuf:"bytes,4,opt,name=state,proto3"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
 }
 
 func (x *StartScheduleArgs) Reset() {
@@ -393,46 +672,121 @@ func (x *StartScheduleArgs) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use StartScheduleArgs.ProtoReflect.Descriptor instead.
-func (*StartScheduleArgs) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_schedule_v1_message_proto_rawDescGZIP(), []int{3}
-}
-
 func (x *StartScheduleArgs) GetSchedule() *v11.Schedule {
 	if x != nil {
-		return x.Schedule
+		return x.xxx_hidden_Schedule
 	}
 	return nil
 }
 
 func (x *StartScheduleArgs) GetInfo() *v11.ScheduleInfo {
 	if x != nil {
-		return x.Info
+		return x.xxx_hidden_Info
 	}
 	return nil
 }
 
 func (x *StartScheduleArgs) GetInitialPatch() *v11.SchedulePatch {
 	if x != nil {
-		return x.InitialPatch
+		return x.xxx_hidden_InitialPatch
 	}
 	return nil
 }
 
 func (x *StartScheduleArgs) GetState() *InternalState {
 	if x != nil {
-		return x.State
+		return x.xxx_hidden_State
 	}
 	return nil
 }
 
+func (x *StartScheduleArgs) SetSchedule(v *v11.Schedule) {
+	x.xxx_hidden_Schedule = v
+}
+
+func (x *StartScheduleArgs) SetInfo(v *v11.ScheduleInfo) {
+	x.xxx_hidden_Info = v
+}
+
+func (x *StartScheduleArgs) SetInitialPatch(v *v11.SchedulePatch) {
+	x.xxx_hidden_InitialPatch = v
+}
+
+func (x *StartScheduleArgs) SetState(v *InternalState) {
+	x.xxx_hidden_State = v
+}
+
+func (x *StartScheduleArgs) HasSchedule() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Schedule != nil
+}
+
+func (x *StartScheduleArgs) HasInfo() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Info != nil
+}
+
+func (x *StartScheduleArgs) HasInitialPatch() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_InitialPatch != nil
+}
+
+func (x *StartScheduleArgs) HasState() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_State != nil
+}
+
+func (x *StartScheduleArgs) ClearSchedule() {
+	x.xxx_hidden_Schedule = nil
+}
+
+func (x *StartScheduleArgs) ClearInfo() {
+	x.xxx_hidden_Info = nil
+}
+
+func (x *StartScheduleArgs) ClearInitialPatch() {
+	x.xxx_hidden_InitialPatch = nil
+}
+
+func (x *StartScheduleArgs) ClearState() {
+	x.xxx_hidden_State = nil
+}
+
+type StartScheduleArgs_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Schedule     *v11.Schedule
+	Info         *v11.ScheduleInfo
+	InitialPatch *v11.SchedulePatch
+	State        *InternalState
+}
+
+func (b0 StartScheduleArgs_builder) Build() *StartScheduleArgs {
+	m0 := &StartScheduleArgs{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Schedule = b.Schedule
+	x.xxx_hidden_Info = b.Info
+	x.xxx_hidden_InitialPatch = b.InitialPatch
+	x.xxx_hidden_State = b.State
+	return m0
+}
+
 type FullUpdateRequest struct {
-	state            protoimpl.MessageState `protogen:"open.v1"`
-	Schedule         *v11.Schedule          `protobuf:"bytes,1,opt,name=schedule,proto3" json:"schedule,omitempty"`
-	ConflictToken    int64                  `protobuf:"varint,2,opt,name=conflict_token,json=conflictToken,proto3" json:"conflict_token,omitempty"`
-	SearchAttributes *v12.SearchAttributes  `protobuf:"bytes,3,opt,name=search_attributes,json=searchAttributes,proto3" json:"search_attributes,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	state                       protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Schedule         *v11.Schedule          `protobuf:"bytes,1,opt,name=schedule,proto3"`
+	xxx_hidden_ConflictToken    int64                  `protobuf:"varint,2,opt,name=conflict_token,json=conflictToken,proto3"`
+	xxx_hidden_SearchAttributes *v12.SearchAttributes  `protobuf:"bytes,3,opt,name=search_attributes,json=searchAttributes,proto3"`
+	unknownFields               protoimpl.UnknownFields
+	sizeCache                   protoimpl.SizeCache
 }
 
 func (x *FullUpdateRequest) Reset() {
@@ -460,39 +814,86 @@ func (x *FullUpdateRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use FullUpdateRequest.ProtoReflect.Descriptor instead.
-func (*FullUpdateRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_schedule_v1_message_proto_rawDescGZIP(), []int{4}
-}
-
 func (x *FullUpdateRequest) GetSchedule() *v11.Schedule {
 	if x != nil {
-		return x.Schedule
+		return x.xxx_hidden_Schedule
 	}
 	return nil
 }
 
 func (x *FullUpdateRequest) GetConflictToken() int64 {
 	if x != nil {
-		return x.ConflictToken
+		return x.xxx_hidden_ConflictToken
 	}
 	return 0
 }
 
 func (x *FullUpdateRequest) GetSearchAttributes() *v12.SearchAttributes {
 	if x != nil {
-		return x.SearchAttributes
+		return x.xxx_hidden_SearchAttributes
 	}
 	return nil
 }
 
+func (x *FullUpdateRequest) SetSchedule(v *v11.Schedule) {
+	x.xxx_hidden_Schedule = v
+}
+
+func (x *FullUpdateRequest) SetConflictToken(v int64) {
+	x.xxx_hidden_ConflictToken = v
+}
+
+func (x *FullUpdateRequest) SetSearchAttributes(v *v12.SearchAttributes) {
+	x.xxx_hidden_SearchAttributes = v
+}
+
+func (x *FullUpdateRequest) HasSchedule() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Schedule != nil
+}
+
+func (x *FullUpdateRequest) HasSearchAttributes() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_SearchAttributes != nil
+}
+
+func (x *FullUpdateRequest) ClearSchedule() {
+	x.xxx_hidden_Schedule = nil
+}
+
+func (x *FullUpdateRequest) ClearSearchAttributes() {
+	x.xxx_hidden_SearchAttributes = nil
+}
+
+type FullUpdateRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Schedule         *v11.Schedule
+	ConflictToken    int64
+	SearchAttributes *v12.SearchAttributes
+}
+
+func (b0 FullUpdateRequest_builder) Build() *FullUpdateRequest {
+	m0 := &FullUpdateRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Schedule = b.Schedule
+	x.xxx_hidden_ConflictToken = b.ConflictToken
+	x.xxx_hidden_SearchAttributes = b.SearchAttributes
+	return m0
+}
+
 type DescribeResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Schedule      *v11.Schedule          `protobuf:"bytes,1,opt,name=schedule,proto3" json:"schedule,omitempty"`
-	Info          *v11.ScheduleInfo      `protobuf:"bytes,2,opt,name=info,proto3" json:"info,omitempty"`
-	ConflictToken int64                  `protobuf:"varint,3,opt,name=conflict_token,json=conflictToken,proto3" json:"conflict_token,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                    protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Schedule      *v11.Schedule          `protobuf:"bytes,1,opt,name=schedule,proto3"`
+	xxx_hidden_Info          *v11.ScheduleInfo      `protobuf:"bytes,2,opt,name=info,proto3"`
+	xxx_hidden_ConflictToken int64                  `protobuf:"varint,3,opt,name=conflict_token,json=conflictToken,proto3"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *DescribeResponse) Reset() {
@@ -520,41 +921,86 @@ func (x *DescribeResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DescribeResponse.ProtoReflect.Descriptor instead.
-func (*DescribeResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_schedule_v1_message_proto_rawDescGZIP(), []int{5}
-}
-
 func (x *DescribeResponse) GetSchedule() *v11.Schedule {
 	if x != nil {
-		return x.Schedule
+		return x.xxx_hidden_Schedule
 	}
 	return nil
 }
 
 func (x *DescribeResponse) GetInfo() *v11.ScheduleInfo {
 	if x != nil {
-		return x.Info
+		return x.xxx_hidden_Info
 	}
 	return nil
 }
 
 func (x *DescribeResponse) GetConflictToken() int64 {
 	if x != nil {
-		return x.ConflictToken
+		return x.xxx_hidden_ConflictToken
 	}
 	return 0
 }
 
+func (x *DescribeResponse) SetSchedule(v *v11.Schedule) {
+	x.xxx_hidden_Schedule = v
+}
+
+func (x *DescribeResponse) SetInfo(v *v11.ScheduleInfo) {
+	x.xxx_hidden_Info = v
+}
+
+func (x *DescribeResponse) SetConflictToken(v int64) {
+	x.xxx_hidden_ConflictToken = v
+}
+
+func (x *DescribeResponse) HasSchedule() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Schedule != nil
+}
+
+func (x *DescribeResponse) HasInfo() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Info != nil
+}
+
+func (x *DescribeResponse) ClearSchedule() {
+	x.xxx_hidden_Schedule = nil
+}
+
+func (x *DescribeResponse) ClearInfo() {
+	x.xxx_hidden_Info = nil
+}
+
+type DescribeResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Schedule      *v11.Schedule
+	Info          *v11.ScheduleInfo
+	ConflictToken int64
+}
+
+func (b0 DescribeResponse_builder) Build() *DescribeResponse {
+	m0 := &DescribeResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Schedule = b.Schedule
+	x.xxx_hidden_Info = b.Info
+	x.xxx_hidden_ConflictToken = b.ConflictToken
+	return m0
+}
+
 type WatchWorkflowRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Note: this will be sent to the activity with empty execution.run_id, and
-	// the run id that we started in first_execution_run_id.
-	Execution           *v12.WorkflowExecution `protobuf:"bytes,3,opt,name=execution,proto3" json:"execution,omitempty"`
-	FirstExecutionRunId string                 `protobuf:"bytes,4,opt,name=first_execution_run_id,json=firstExecutionRunId,proto3" json:"first_execution_run_id,omitempty"`
-	LongPoll            bool                   `protobuf:"varint,5,opt,name=long_poll,json=longPoll,proto3" json:"long_poll,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	state                          protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Execution           *v12.WorkflowExecution `protobuf:"bytes,3,opt,name=execution,proto3"`
+	xxx_hidden_FirstExecutionRunId string                 `protobuf:"bytes,4,opt,name=first_execution_run_id,json=firstExecutionRunId,proto3"`
+	xxx_hidden_LongPoll            bool                   `protobuf:"varint,5,opt,name=long_poll,json=longPoll,proto3"`
+	unknownFields                  protoimpl.UnknownFields
+	sizeCache                      protoimpl.SizeCache
 }
 
 func (x *WatchWorkflowRequest) Reset() {
@@ -582,44 +1028,77 @@ func (x *WatchWorkflowRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use WatchWorkflowRequest.ProtoReflect.Descriptor instead.
-func (*WatchWorkflowRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_schedule_v1_message_proto_rawDescGZIP(), []int{6}
-}
-
 func (x *WatchWorkflowRequest) GetExecution() *v12.WorkflowExecution {
 	if x != nil {
-		return x.Execution
+		return x.xxx_hidden_Execution
 	}
 	return nil
 }
 
 func (x *WatchWorkflowRequest) GetFirstExecutionRunId() string {
 	if x != nil {
-		return x.FirstExecutionRunId
+		return x.xxx_hidden_FirstExecutionRunId
 	}
 	return ""
 }
 
 func (x *WatchWorkflowRequest) GetLongPoll() bool {
 	if x != nil {
-		return x.LongPoll
+		return x.xxx_hidden_LongPoll
 	}
 	return false
 }
 
+func (x *WatchWorkflowRequest) SetExecution(v *v12.WorkflowExecution) {
+	x.xxx_hidden_Execution = v
+}
+
+func (x *WatchWorkflowRequest) SetFirstExecutionRunId(v string) {
+	x.xxx_hidden_FirstExecutionRunId = v
+}
+
+func (x *WatchWorkflowRequest) SetLongPoll(v bool) {
+	x.xxx_hidden_LongPoll = v
+}
+
+func (x *WatchWorkflowRequest) HasExecution() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Execution != nil
+}
+
+func (x *WatchWorkflowRequest) ClearExecution() {
+	x.xxx_hidden_Execution = nil
+}
+
+type WatchWorkflowRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Note: this will be sent to the activity with empty execution.run_id, and
+	// the run id that we started in first_execution_run_id.
+	Execution           *v12.WorkflowExecution
+	FirstExecutionRunId string
+	LongPoll            bool
+}
+
+func (b0 WatchWorkflowRequest_builder) Build() *WatchWorkflowRequest {
+	m0 := &WatchWorkflowRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Execution = b.Execution
+	x.xxx_hidden_FirstExecutionRunId = b.FirstExecutionRunId
+	x.xxx_hidden_LongPoll = b.LongPoll
+	return m0
+}
+
 type WatchWorkflowResponse struct {
-	state  protoimpl.MessageState     `protogen:"open.v1"`
-	Status v1.WorkflowExecutionStatus `protobuf:"varint,1,opt,name=status,proto3,enum=temporal.api.enums.v1.WorkflowExecutionStatus" json:"status,omitempty"`
-	// Types that are valid to be assigned to ResultFailure:
-	//
-	//	*WatchWorkflowResponse_Result
-	//	*WatchWorkflowResponse_Failure
-	ResultFailure isWatchWorkflowResponse_ResultFailure `protobuf_oneof:"result_failure"`
-	// Timestamp of close event
-	CloseTime     *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=close_time,json=closeTime,proto3" json:"close_time,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                    protoimpl.MessageState                `protogen:"opaque.v1"`
+	xxx_hidden_Status        v1.WorkflowExecutionStatus            `protobuf:"varint,1,opt,name=status,proto3,enum=temporal.api.enums.v1.WorkflowExecutionStatus"`
+	xxx_hidden_ResultFailure isWatchWorkflowResponse_ResultFailure `protobuf_oneof:"result_failure"`
+	xxx_hidden_CloseTime     *timestamppb.Timestamp                `protobuf:"bytes,4,opt,name=close_time,json=closeTime,proto3"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *WatchWorkflowResponse) Reset() {
@@ -647,28 +1126,16 @@ func (x *WatchWorkflowResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use WatchWorkflowResponse.ProtoReflect.Descriptor instead.
-func (*WatchWorkflowResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_schedule_v1_message_proto_rawDescGZIP(), []int{7}
-}
-
 func (x *WatchWorkflowResponse) GetStatus() v1.WorkflowExecutionStatus {
 	if x != nil {
-		return x.Status
+		return x.xxx_hidden_Status
 	}
 	return v1.WorkflowExecutionStatus(0)
 }
 
-func (x *WatchWorkflowResponse) GetResultFailure() isWatchWorkflowResponse_ResultFailure {
-	if x != nil {
-		return x.ResultFailure
-	}
-	return nil
-}
-
 func (x *WatchWorkflowResponse) GetResult() *v12.Payloads {
 	if x != nil {
-		if x, ok := x.ResultFailure.(*WatchWorkflowResponse_Result); ok {
+		if x, ok := x.xxx_hidden_ResultFailure.(*watchWorkflowResponse_Result); ok {
 			return x.Result
 		}
 	}
@@ -677,7 +1144,7 @@ func (x *WatchWorkflowResponse) GetResult() *v12.Payloads {
 
 func (x *WatchWorkflowResponse) GetFailure() *v13.Failure {
 	if x != nil {
-		if x, ok := x.ResultFailure.(*WatchWorkflowResponse_Failure); ok {
+		if x, ok := x.xxx_hidden_ResultFailure.(*watchWorkflowResponse_Failure); ok {
 			return x.Failure
 		}
 	}
@@ -686,33 +1153,168 @@ func (x *WatchWorkflowResponse) GetFailure() *v13.Failure {
 
 func (x *WatchWorkflowResponse) GetCloseTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.CloseTime
+		return x.xxx_hidden_CloseTime
 	}
 	return nil
+}
+
+func (x *WatchWorkflowResponse) SetStatus(v v1.WorkflowExecutionStatus) {
+	x.xxx_hidden_Status = v
+}
+
+func (x *WatchWorkflowResponse) SetResult(v *v12.Payloads) {
+	if v == nil {
+		x.xxx_hidden_ResultFailure = nil
+		return
+	}
+	x.xxx_hidden_ResultFailure = &watchWorkflowResponse_Result{v}
+}
+
+func (x *WatchWorkflowResponse) SetFailure(v *v13.Failure) {
+	if v == nil {
+		x.xxx_hidden_ResultFailure = nil
+		return
+	}
+	x.xxx_hidden_ResultFailure = &watchWorkflowResponse_Failure{v}
+}
+
+func (x *WatchWorkflowResponse) SetCloseTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_CloseTime = v
+}
+
+func (x *WatchWorkflowResponse) HasResultFailure() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_ResultFailure != nil
+}
+
+func (x *WatchWorkflowResponse) HasResult() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_ResultFailure.(*watchWorkflowResponse_Result)
+	return ok
+}
+
+func (x *WatchWorkflowResponse) HasFailure() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_ResultFailure.(*watchWorkflowResponse_Failure)
+	return ok
+}
+
+func (x *WatchWorkflowResponse) HasCloseTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_CloseTime != nil
+}
+
+func (x *WatchWorkflowResponse) ClearResultFailure() {
+	x.xxx_hidden_ResultFailure = nil
+}
+
+func (x *WatchWorkflowResponse) ClearResult() {
+	if _, ok := x.xxx_hidden_ResultFailure.(*watchWorkflowResponse_Result); ok {
+		x.xxx_hidden_ResultFailure = nil
+	}
+}
+
+func (x *WatchWorkflowResponse) ClearFailure() {
+	if _, ok := x.xxx_hidden_ResultFailure.(*watchWorkflowResponse_Failure); ok {
+		x.xxx_hidden_ResultFailure = nil
+	}
+}
+
+func (x *WatchWorkflowResponse) ClearCloseTime() {
+	x.xxx_hidden_CloseTime = nil
+}
+
+const WatchWorkflowResponse_ResultFailure_not_set_case case_WatchWorkflowResponse_ResultFailure = 0
+const WatchWorkflowResponse_Result_case case_WatchWorkflowResponse_ResultFailure = 2
+const WatchWorkflowResponse_Failure_case case_WatchWorkflowResponse_ResultFailure = 3
+
+func (x *WatchWorkflowResponse) WhichResultFailure() case_WatchWorkflowResponse_ResultFailure {
+	if x == nil {
+		return WatchWorkflowResponse_ResultFailure_not_set_case
+	}
+	switch x.xxx_hidden_ResultFailure.(type) {
+	case *watchWorkflowResponse_Result:
+		return WatchWorkflowResponse_Result_case
+	case *watchWorkflowResponse_Failure:
+		return WatchWorkflowResponse_Failure_case
+	default:
+		return WatchWorkflowResponse_ResultFailure_not_set_case
+	}
+}
+
+type WatchWorkflowResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Status v1.WorkflowExecutionStatus
+	// Fields of oneof xxx_hidden_ResultFailure:
+	Result  *v12.Payloads
+	Failure *v13.Failure
+	// -- end of xxx_hidden_ResultFailure
+	// Timestamp of close event
+	CloseTime *timestamppb.Timestamp
+}
+
+func (b0 WatchWorkflowResponse_builder) Build() *WatchWorkflowResponse {
+	m0 := &WatchWorkflowResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Status = b.Status
+	if b.Result != nil {
+		x.xxx_hidden_ResultFailure = &watchWorkflowResponse_Result{b.Result}
+	}
+	if b.Failure != nil {
+		x.xxx_hidden_ResultFailure = &watchWorkflowResponse_Failure{b.Failure}
+	}
+	x.xxx_hidden_CloseTime = b.CloseTime
+	return m0
+}
+
+type case_WatchWorkflowResponse_ResultFailure protoreflect.FieldNumber
+
+func (x case_WatchWorkflowResponse_ResultFailure) String() string {
+	switch x {
+	case WatchWorkflowResponse_ResultFailure_not_set_case:
+		return "WatchWorkflowResponseResultFailureNotSetCase"
+	case WatchWorkflowResponse_Result_case:
+		return "WatchWorkflowResponseResultCase"
+	case WatchWorkflowResponse_Failure_case:
+		return "WatchWorkflowResponseFailureCase"
+	default:
+		return strconv.Itoa(int(x))
+	}
+
 }
 
 type isWatchWorkflowResponse_ResultFailure interface {
 	isWatchWorkflowResponse_ResultFailure()
 }
 
-type WatchWorkflowResponse_Result struct {
+type watchWorkflowResponse_Result struct {
 	Result *v12.Payloads `protobuf:"bytes,2,opt,name=result,proto3,oneof"`
 }
 
-type WatchWorkflowResponse_Failure struct {
+type watchWorkflowResponse_Failure struct {
 	Failure *v13.Failure `protobuf:"bytes,3,opt,name=failure,proto3,oneof"`
 }
 
-func (*WatchWorkflowResponse_Result) isWatchWorkflowResponse_ResultFailure() {}
+func (*watchWorkflowResponse_Result) isWatchWorkflowResponse_ResultFailure() {}
 
-func (*WatchWorkflowResponse_Failure) isWatchWorkflowResponse_ResultFailure() {}
+func (*watchWorkflowResponse_Failure) isWatchWorkflowResponse_ResultFailure() {}
 
 type StartWorkflowRequest struct {
-	state                   protoimpl.MessageState             `protogen:"open.v1"`
-	Request                 *v14.StartWorkflowExecutionRequest `protobuf:"bytes,2,opt,name=request,proto3" json:"request,omitempty"`
-	CompletedRateLimitSleep bool                               `protobuf:"varint,6,opt,name=completed_rate_limit_sleep,json=completedRateLimitSleep,proto3" json:"completed_rate_limit_sleep,omitempty"`
-	unknownFields           protoimpl.UnknownFields
-	sizeCache               protoimpl.SizeCache
+	state                              protoimpl.MessageState             `protogen:"opaque.v1"`
+	xxx_hidden_Request                 *v14.StartWorkflowExecutionRequest `protobuf:"bytes,2,opt,name=request,proto3"`
+	xxx_hidden_CompletedRateLimitSleep bool                               `protobuf:"varint,6,opt,name=completed_rate_limit_sleep,json=completedRateLimitSleep,proto3"`
+	unknownFields                      protoimpl.UnknownFields
+	sizeCache                          protoimpl.SizeCache
 }
 
 func (x *StartWorkflowRequest) Reset() {
@@ -740,31 +1342,61 @@ func (x *StartWorkflowRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use StartWorkflowRequest.ProtoReflect.Descriptor instead.
-func (*StartWorkflowRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_schedule_v1_message_proto_rawDescGZIP(), []int{8}
-}
-
 func (x *StartWorkflowRequest) GetRequest() *v14.StartWorkflowExecutionRequest {
 	if x != nil {
-		return x.Request
+		return x.xxx_hidden_Request
 	}
 	return nil
 }
 
 func (x *StartWorkflowRequest) GetCompletedRateLimitSleep() bool {
 	if x != nil {
-		return x.CompletedRateLimitSleep
+		return x.xxx_hidden_CompletedRateLimitSleep
 	}
 	return false
 }
 
+func (x *StartWorkflowRequest) SetRequest(v *v14.StartWorkflowExecutionRequest) {
+	x.xxx_hidden_Request = v
+}
+
+func (x *StartWorkflowRequest) SetCompletedRateLimitSleep(v bool) {
+	x.xxx_hidden_CompletedRateLimitSleep = v
+}
+
+func (x *StartWorkflowRequest) HasRequest() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Request != nil
+}
+
+func (x *StartWorkflowRequest) ClearRequest() {
+	x.xxx_hidden_Request = nil
+}
+
+type StartWorkflowRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Request                 *v14.StartWorkflowExecutionRequest
+	CompletedRateLimitSleep bool
+}
+
+func (b0 StartWorkflowRequest_builder) Build() *StartWorkflowRequest {
+	m0 := &StartWorkflowRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Request = b.Request
+	x.xxx_hidden_CompletedRateLimitSleep = b.CompletedRateLimitSleep
+	return m0
+}
+
 type StartWorkflowResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	RunId         string                 `protobuf:"bytes,1,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	RealStartTime *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=real_start_time,json=realStartTime,proto3" json:"real_start_time,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                    protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_RunId         string                 `protobuf:"bytes,1,opt,name=run_id,json=runId,proto3"`
+	xxx_hidden_RealStartTime *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=real_start_time,json=realStartTime,proto3"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *StartWorkflowResponse) Reset() {
@@ -792,34 +1424,63 @@ func (x *StartWorkflowResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use StartWorkflowResponse.ProtoReflect.Descriptor instead.
-func (*StartWorkflowResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_schedule_v1_message_proto_rawDescGZIP(), []int{9}
-}
-
 func (x *StartWorkflowResponse) GetRunId() string {
 	if x != nil {
-		return x.RunId
+		return x.xxx_hidden_RunId
 	}
 	return ""
 }
 
 func (x *StartWorkflowResponse) GetRealStartTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.RealStartTime
+		return x.xxx_hidden_RealStartTime
 	}
 	return nil
 }
 
+func (x *StartWorkflowResponse) SetRunId(v string) {
+	x.xxx_hidden_RunId = v
+}
+
+func (x *StartWorkflowResponse) SetRealStartTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_RealStartTime = v
+}
+
+func (x *StartWorkflowResponse) HasRealStartTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_RealStartTime != nil
+}
+
+func (x *StartWorkflowResponse) ClearRealStartTime() {
+	x.xxx_hidden_RealStartTime = nil
+}
+
+type StartWorkflowResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	RunId         string
+	RealStartTime *timestamppb.Timestamp
+}
+
+func (b0 StartWorkflowResponse_builder) Build() *StartWorkflowResponse {
+	m0 := &StartWorkflowResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_RunId = b.RunId
+	x.xxx_hidden_RealStartTime = b.RealStartTime
+	return m0
+}
+
 type CancelWorkflowRequest struct {
-	state     protoimpl.MessageState `protogen:"open.v1"`
-	RequestId string                 `protobuf:"bytes,3,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
-	Identity  string                 `protobuf:"bytes,4,opt,name=identity,proto3" json:"identity,omitempty"`
-	// Note: run id in execution is first execution run id
-	Execution     *v12.WorkflowExecution `protobuf:"bytes,5,opt,name=execution,proto3" json:"execution,omitempty"`
-	Reason        string                 `protobuf:"bytes,6,opt,name=reason,proto3" json:"reason,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_RequestId string                 `protobuf:"bytes,3,opt,name=request_id,json=requestId,proto3"`
+	xxx_hidden_Identity  string                 `protobuf:"bytes,4,opt,name=identity,proto3"`
+	xxx_hidden_Execution *v12.WorkflowExecution `protobuf:"bytes,5,opt,name=execution,proto3"`
+	xxx_hidden_Reason    string                 `protobuf:"bytes,6,opt,name=reason,proto3"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *CancelWorkflowRequest) Reset() {
@@ -847,48 +1508,90 @@ func (x *CancelWorkflowRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CancelWorkflowRequest.ProtoReflect.Descriptor instead.
-func (*CancelWorkflowRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_schedule_v1_message_proto_rawDescGZIP(), []int{10}
-}
-
 func (x *CancelWorkflowRequest) GetRequestId() string {
 	if x != nil {
-		return x.RequestId
+		return x.xxx_hidden_RequestId
 	}
 	return ""
 }
 
 func (x *CancelWorkflowRequest) GetIdentity() string {
 	if x != nil {
-		return x.Identity
+		return x.xxx_hidden_Identity
 	}
 	return ""
 }
 
 func (x *CancelWorkflowRequest) GetExecution() *v12.WorkflowExecution {
 	if x != nil {
-		return x.Execution
+		return x.xxx_hidden_Execution
 	}
 	return nil
 }
 
 func (x *CancelWorkflowRequest) GetReason() string {
 	if x != nil {
-		return x.Reason
+		return x.xxx_hidden_Reason
 	}
 	return ""
 }
 
-type TerminateWorkflowRequest struct {
-	state     protoimpl.MessageState `protogen:"open.v1"`
-	RequestId string                 `protobuf:"bytes,3,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
-	Identity  string                 `protobuf:"bytes,4,opt,name=identity,proto3" json:"identity,omitempty"`
+func (x *CancelWorkflowRequest) SetRequestId(v string) {
+	x.xxx_hidden_RequestId = v
+}
+
+func (x *CancelWorkflowRequest) SetIdentity(v string) {
+	x.xxx_hidden_Identity = v
+}
+
+func (x *CancelWorkflowRequest) SetExecution(v *v12.WorkflowExecution) {
+	x.xxx_hidden_Execution = v
+}
+
+func (x *CancelWorkflowRequest) SetReason(v string) {
+	x.xxx_hidden_Reason = v
+}
+
+func (x *CancelWorkflowRequest) HasExecution() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Execution != nil
+}
+
+func (x *CancelWorkflowRequest) ClearExecution() {
+	x.xxx_hidden_Execution = nil
+}
+
+type CancelWorkflowRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	RequestId string
+	Identity  string
 	// Note: run id in execution is first execution run id
-	Execution     *v12.WorkflowExecution `protobuf:"bytes,5,opt,name=execution,proto3" json:"execution,omitempty"`
-	Reason        string                 `protobuf:"bytes,6,opt,name=reason,proto3" json:"reason,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Execution *v12.WorkflowExecution
+	Reason    string
+}
+
+func (b0 CancelWorkflowRequest_builder) Build() *CancelWorkflowRequest {
+	m0 := &CancelWorkflowRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_RequestId = b.RequestId
+	x.xxx_hidden_Identity = b.Identity
+	x.xxx_hidden_Execution = b.Execution
+	x.xxx_hidden_Reason = b.Reason
+	return m0
+}
+
+type TerminateWorkflowRequest struct {
+	state                protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_RequestId string                 `protobuf:"bytes,3,opt,name=request_id,json=requestId,proto3"`
+	xxx_hidden_Identity  string                 `protobuf:"bytes,4,opt,name=identity,proto3"`
+	xxx_hidden_Execution *v12.WorkflowExecution `protobuf:"bytes,5,opt,name=execution,proto3"`
+	xxx_hidden_Reason    string                 `protobuf:"bytes,6,opt,name=reason,proto3"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *TerminateWorkflowRequest) Reset() {
@@ -916,54 +1619,91 @@ func (x *TerminateWorkflowRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use TerminateWorkflowRequest.ProtoReflect.Descriptor instead.
-func (*TerminateWorkflowRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_schedule_v1_message_proto_rawDescGZIP(), []int{11}
-}
-
 func (x *TerminateWorkflowRequest) GetRequestId() string {
 	if x != nil {
-		return x.RequestId
+		return x.xxx_hidden_RequestId
 	}
 	return ""
 }
 
 func (x *TerminateWorkflowRequest) GetIdentity() string {
 	if x != nil {
-		return x.Identity
+		return x.xxx_hidden_Identity
 	}
 	return ""
 }
 
 func (x *TerminateWorkflowRequest) GetExecution() *v12.WorkflowExecution {
 	if x != nil {
-		return x.Execution
+		return x.xxx_hidden_Execution
 	}
 	return nil
 }
 
 func (x *TerminateWorkflowRequest) GetReason() string {
 	if x != nil {
-		return x.Reason
+		return x.xxx_hidden_Reason
 	}
 	return ""
 }
 
+func (x *TerminateWorkflowRequest) SetRequestId(v string) {
+	x.xxx_hidden_RequestId = v
+}
+
+func (x *TerminateWorkflowRequest) SetIdentity(v string) {
+	x.xxx_hidden_Identity = v
+}
+
+func (x *TerminateWorkflowRequest) SetExecution(v *v12.WorkflowExecution) {
+	x.xxx_hidden_Execution = v
+}
+
+func (x *TerminateWorkflowRequest) SetReason(v string) {
+	x.xxx_hidden_Reason = v
+}
+
+func (x *TerminateWorkflowRequest) HasExecution() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Execution != nil
+}
+
+func (x *TerminateWorkflowRequest) ClearExecution() {
+	x.xxx_hidden_Execution = nil
+}
+
+type TerminateWorkflowRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	RequestId string
+	Identity  string
+	// Note: run id in execution is first execution run id
+	Execution *v12.WorkflowExecution
+	Reason    string
+}
+
+func (b0 TerminateWorkflowRequest_builder) Build() *TerminateWorkflowRequest {
+	m0 := &TerminateWorkflowRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_RequestId = b.RequestId
+	x.xxx_hidden_Identity = b.Identity
+	x.xxx_hidden_Execution = b.Execution
+	x.xxx_hidden_Reason = b.Reason
+	return m0
+}
+
 type NextTimeCache struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// workflow logic version (invalidate when changed)
-	Version int64 `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
-	// start time that the results were calculated from
-	StartTime *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
-	// next_times and nominal_times are a series of timestamp pairs, encoded as a nanosecond
-	// offset from start_time. next_times has one value for each time in the cache.
-	// nominal_times may have up to the same number of values, but it may also be shorter (or
-	// empty), if the corresponding nominal time is equal to the next time.
-	NextTimes     []int64 `protobuf:"varint,3,rep,packed,name=next_times,json=nextTimes,proto3" json:"next_times,omitempty"`
-	NominalTimes  []int64 `protobuf:"varint,4,rep,packed,name=nominal_times,json=nominalTimes,proto3" json:"nominal_times,omitempty"`
-	Completed     bool    `protobuf:"varint,5,opt,name=completed,proto3" json:"completed,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                   protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Version      int64                  `protobuf:"varint,1,opt,name=version,proto3"`
+	xxx_hidden_StartTime    *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=start_time,json=startTime,proto3"`
+	xxx_hidden_NextTimes    []int64                `protobuf:"varint,3,rep,packed,name=next_times,json=nextTimes,proto3"`
+	xxx_hidden_NominalTimes []int64                `protobuf:"varint,4,rep,packed,name=nominal_times,json=nominalTimes,proto3"`
+	xxx_hidden_Completed    bool                   `protobuf:"varint,5,opt,name=completed,proto3"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
 }
 
 func (x *NextTimeCache) Reset() {
@@ -991,44 +1731,98 @@ func (x *NextTimeCache) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use NextTimeCache.ProtoReflect.Descriptor instead.
-func (*NextTimeCache) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_schedule_v1_message_proto_rawDescGZIP(), []int{12}
-}
-
 func (x *NextTimeCache) GetVersion() int64 {
 	if x != nil {
-		return x.Version
+		return x.xxx_hidden_Version
 	}
 	return 0
 }
 
 func (x *NextTimeCache) GetStartTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.StartTime
+		return x.xxx_hidden_StartTime
 	}
 	return nil
 }
 
 func (x *NextTimeCache) GetNextTimes() []int64 {
 	if x != nil {
-		return x.NextTimes
+		return x.xxx_hidden_NextTimes
 	}
 	return nil
 }
 
 func (x *NextTimeCache) GetNominalTimes() []int64 {
 	if x != nil {
-		return x.NominalTimes
+		return x.xxx_hidden_NominalTimes
 	}
 	return nil
 }
 
 func (x *NextTimeCache) GetCompleted() bool {
 	if x != nil {
-		return x.Completed
+		return x.xxx_hidden_Completed
 	}
 	return false
+}
+
+func (x *NextTimeCache) SetVersion(v int64) {
+	x.xxx_hidden_Version = v
+}
+
+func (x *NextTimeCache) SetStartTime(v *timestamppb.Timestamp) {
+	x.xxx_hidden_StartTime = v
+}
+
+func (x *NextTimeCache) SetNextTimes(v []int64) {
+	x.xxx_hidden_NextTimes = v
+}
+
+func (x *NextTimeCache) SetNominalTimes(v []int64) {
+	x.xxx_hidden_NominalTimes = v
+}
+
+func (x *NextTimeCache) SetCompleted(v bool) {
+	x.xxx_hidden_Completed = v
+}
+
+func (x *NextTimeCache) HasStartTime() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_StartTime != nil
+}
+
+func (x *NextTimeCache) ClearStartTime() {
+	x.xxx_hidden_StartTime = nil
+}
+
+type NextTimeCache_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// workflow logic version (invalidate when changed)
+	Version int64
+	// start time that the results were calculated from
+	StartTime *timestamppb.Timestamp
+	// next_times and nominal_times are a series of timestamp pairs, encoded as a nanosecond
+	// offset from start_time. next_times has one value for each time in the cache.
+	// nominal_times may have up to the same number of values, but it may also be shorter (or
+	// empty), if the corresponding nominal time is equal to the next time.
+	NextTimes    []int64
+	NominalTimes []int64
+	Completed    bool
+}
+
+func (b0 NextTimeCache_builder) Build() *NextTimeCache {
+	m0 := &NextTimeCache{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Version = b.Version
+	x.xxx_hidden_StartTime = b.StartTime
+	x.xxx_hidden_NextTimes = b.NextTimes
+	x.xxx_hidden_NominalTimes = b.NominalTimes
+	x.xxx_hidden_Completed = b.Completed
+	return m0
 }
 
 var File_temporal_server_api_schedule_v1_message_proto protoreflect.FileDescriptor
@@ -1122,18 +1916,6 @@ const file_temporal_server_api_schedule_v1_message_proto_rawDesc = "" +
 	"\rnominal_times\x18\x04 \x03(\x03R\fnominalTimes\x12\x1c\n" +
 	"\tcompleted\x18\x05 \x01(\bR\tcompletedB0Z.go.temporal.io/server/api/schedule/v1;scheduleb\x06proto3"
 
-var (
-	file_temporal_server_api_schedule_v1_message_proto_rawDescOnce sync.Once
-	file_temporal_server_api_schedule_v1_message_proto_rawDescData []byte
-)
-
-func file_temporal_server_api_schedule_v1_message_proto_rawDescGZIP() []byte {
-	file_temporal_server_api_schedule_v1_message_proto_rawDescOnce.Do(func() {
-		file_temporal_server_api_schedule_v1_message_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_api_schedule_v1_message_proto_rawDesc), len(file_temporal_server_api_schedule_v1_message_proto_rawDesc)))
-	})
-	return file_temporal_server_api_schedule_v1_message_proto_rawDescData
-}
-
 var file_temporal_server_api_schedule_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
 var file_temporal_server_api_schedule_v1_message_proto_goTypes = []any{
 	(*BufferedStart)(nil),                     // 0: temporal.server.api.schedule.v1.BufferedStart
@@ -1208,8 +1990,8 @@ func file_temporal_server_api_schedule_v1_message_proto_init() {
 		return
 	}
 	file_temporal_server_api_schedule_v1_message_proto_msgTypes[7].OneofWrappers = []any{
-		(*WatchWorkflowResponse_Result)(nil),
-		(*WatchWorkflowResponse_Failure)(nil),
+		(*watchWorkflowResponse_Result)(nil),
+		(*watchWorkflowResponse_Failure)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{

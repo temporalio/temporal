@@ -32,12 +32,12 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTaskHeartbeatingWithEmptyResult() {
 	tl := id
 	identity := "worker1"
 
-	workflowType := &commonpb.WorkflowType{Name: wt}
+	workflowType := commonpb.WorkflowType_builder{Name: wt}.Build()
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
-	stickyTaskQueue := &taskqueuepb.TaskQueue{Name: "test-sticky-taskqueue", Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: tl}
+	taskQueue := taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build()
+	stickyTaskQueue := taskqueuepb.TaskQueue_builder{Name: "test-sticky-taskqueue", Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: tl}.Build()
 
-	request := &workflowservice.StartWorkflowExecutionRequest{
+	request := workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
@@ -47,26 +47,26 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTaskHeartbeatingWithEmptyResult() {
 		WorkflowRunTimeout:  durationpb.New(20 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(3 * time.Second),
 		Identity:            identity,
-	}
+	}.Build()
 
 	resp0, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
 
-	we := &commonpb.WorkflowExecution{
+	we := commonpb.WorkflowExecution_builder{
 		WorkflowId: id,
-		RunId:      resp0.RunId,
-	}
+		RunId:      resp0.GetRunId(),
+	}.Build()
 
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled`, s.GetHistory(s.Namespace().String(), we))
 
 	// start workflow task
-	resp1, err1 := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
+	resp1, err1 := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), workflowservice.PollWorkflowTaskQueueRequest_builder{
 		Namespace: s.Namespace().String(),
 		TaskQueue: taskQueue,
 		Identity:  identity,
-	})
+	}.Build())
 	s.NoError(err1)
 
 	s.Equal(int32(1), resp1.GetAttempt())
@@ -78,57 +78,56 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTaskHeartbeatingWithEmptyResult() {
 	taskToken := resp1.GetTaskToken()
 	hbTimeout := 0
 	for i := 0; i < 12; i++ {
-		resp2, err2 := s.FrontendClient().RespondWorkflowTaskCompleted(testcore.NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+		resp2, err2 := s.FrontendClient().RespondWorkflowTaskCompleted(testcore.NewContext(), workflowservice.RespondWorkflowTaskCompletedRequest_builder{
 			Namespace: s.Namespace().String(),
 			TaskToken: taskToken,
 			Commands:  []*commandpb.Command{},
-			StickyAttributes: &taskqueuepb.StickyExecutionAttributes{
+			StickyAttributes: taskqueuepb.StickyExecutionAttributes_builder{
 				WorkerTaskQueue:        stickyTaskQueue,
 				ScheduleToStartTimeout: durationpb.New(5 * time.Second),
-			},
+			}.Build(),
 			ReturnNewWorkflowTask:      true,
 			ForceCreateNewWorkflowTask: true,
-		})
+		}.Build())
 		if _, isNotFound := err2.(*serviceerror.NotFound); isNotFound {
 			hbTimeout++
 			s.IsType(&workflowservice.RespondWorkflowTaskCompletedResponse{}, resp2)
 
-			resp, err := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
+			resp, err := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), workflowservice.PollWorkflowTaskQueueRequest_builder{
 				Namespace: s.Namespace().String(),
 				TaskQueue: taskQueue,
 				Identity:  identity,
-			})
+			}.Build())
 			s.NoError(err)
 			taskToken = resp.GetTaskToken()
 		} else {
 			s.NoError(err2)
-			taskToken = resp2.WorkflowTask.GetTaskToken()
+			taskToken = resp2.GetWorkflowTask().GetTaskToken()
 		}
 		time.Sleep(time.Second) //nolint:forbidigo
 	}
 
 	s.Equal(2, hbTimeout)
 
-	resp5, err5 := s.FrontendClient().RespondWorkflowTaskCompleted(testcore.NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+	resp5, err5 := s.FrontendClient().RespondWorkflowTaskCompleted(testcore.NewContext(), workflowservice.RespondWorkflowTaskCompletedRequest_builder{
 		Namespace: s.Namespace().String(),
 		TaskToken: taskToken,
 		Commands: []*commandpb.Command{
-			{
+			commandpb.Command_builder{
 				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+				CompleteWorkflowExecutionCommandAttributes: commandpb.CompleteWorkflowExecutionCommandAttributes_builder{
 					Result: payloads.EncodeString("efg"),
-				},
-				},
-			}},
-		StickyAttributes: &taskqueuepb.StickyExecutionAttributes{
+				}.Build(),
+			}.Build()},
+		StickyAttributes: taskqueuepb.StickyExecutionAttributes_builder{
 			WorkerTaskQueue:        stickyTaskQueue,
 			ScheduleToStartTimeout: durationpb.New(5 * time.Second),
-		},
+		}.Build(),
 		ReturnNewWorkflowTask:      true,
 		ForceCreateNewWorkflowTask: false,
-	})
+	}.Build())
 	s.NoError(err5)
-	s.Nil(resp5.WorkflowTask)
+	s.Nil(resp5.GetWorkflowTask())
 
 	s.EqualHistoryEvents(`
  1 WorkflowExecutionStarted
@@ -186,12 +185,12 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTaskHeartbeatingWithLocalActivitiesR
 	tl := id
 	identity := "worker1"
 
-	workflowType := &commonpb.WorkflowType{Name: wt}
+	workflowType := commonpb.WorkflowType_builder{Name: wt}.Build()
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
-	stickyTaskQueue := &taskqueuepb.TaskQueue{Name: "test-sticky-taskqueue", Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: tl}
+	taskQueue := taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build()
+	stickyTaskQueue := taskqueuepb.TaskQueue_builder{Name: "test-sticky-taskqueue", Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: tl}.Build()
 
-	request := &workflowservice.StartWorkflowExecutionRequest{
+	request := workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
@@ -201,26 +200,26 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTaskHeartbeatingWithLocalActivitiesR
 		WorkflowRunTimeout:  durationpb.New(20 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(5 * time.Second),
 		Identity:            identity,
-	}
+	}.Build()
 
 	resp0, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
 
-	we := &commonpb.WorkflowExecution{
+	we := commonpb.WorkflowExecution_builder{
 		WorkflowId: id,
-		RunId:      resp0.RunId,
-	}
+		RunId:      resp0.GetRunId(),
+	}.Build()
 
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled`, s.GetHistory(s.Namespace().String(), we))
 
 	// start workflow task
-	resp1, err1 := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
+	resp1, err1 := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), workflowservice.PollWorkflowTaskQueueRequest_builder{
 		Namespace: s.Namespace().String(),
 		TaskQueue: taskQueue,
 		Identity:  identity,
-	})
+	}.Build())
 	s.NoError(err1)
 
 	s.Equal(int32(1), resp1.GetAttempt())
@@ -229,83 +228,82 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTaskHeartbeatingWithLocalActivitiesR
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted`, s.GetHistory(s.Namespace().String(), we))
 
-	resp2, err2 := s.FrontendClient().RespondWorkflowTaskCompleted(testcore.NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+	resp2, err2 := s.FrontendClient().RespondWorkflowTaskCompleted(testcore.NewContext(), workflowservice.RespondWorkflowTaskCompletedRequest_builder{
 		Namespace: s.Namespace().String(),
 		TaskToken: resp1.GetTaskToken(),
 		Commands:  []*commandpb.Command{},
-		StickyAttributes: &taskqueuepb.StickyExecutionAttributes{
+		StickyAttributes: taskqueuepb.StickyExecutionAttributes_builder{
 			WorkerTaskQueue:        stickyTaskQueue,
 			ScheduleToStartTimeout: durationpb.New(5 * time.Second),
-		},
+		}.Build(),
 		ReturnNewWorkflowTask:      true,
 		ForceCreateNewWorkflowTask: true,
-	})
+	}.Build())
 	s.NoError(err2)
 
-	resp3, err3 := s.FrontendClient().RespondWorkflowTaskCompleted(testcore.NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+	resp3, err3 := s.FrontendClient().RespondWorkflowTaskCompleted(testcore.NewContext(), workflowservice.RespondWorkflowTaskCompletedRequest_builder{
 		Namespace: s.Namespace().String(),
-		TaskToken: resp2.WorkflowTask.GetTaskToken(),
+		TaskToken: resp2.GetWorkflowTask().GetTaskToken(),
 		Commands: []*commandpb.Command{
-			{
+			commandpb.Command_builder{
 				CommandType: enumspb.COMMAND_TYPE_RECORD_MARKER,
-				Attributes: &commandpb.Command_RecordMarkerCommandAttributes{RecordMarkerCommandAttributes: &commandpb.RecordMarkerCommandAttributes{
+				RecordMarkerCommandAttributes: commandpb.RecordMarkerCommandAttributes_builder{
 					MarkerName: "localActivity1",
 					Details: map[string]*commonpb.Payloads{
 						"data":   payloads.EncodeString("local activity marker"),
 						"result": payloads.EncodeString("local activity result"),
-					}}},
-			}},
-		StickyAttributes: &taskqueuepb.StickyExecutionAttributes{
+					}}.Build(),
+			}.Build()},
+		StickyAttributes: taskqueuepb.StickyExecutionAttributes_builder{
 			WorkerTaskQueue:        stickyTaskQueue,
 			ScheduleToStartTimeout: durationpb.New(5 * time.Second),
-		},
+		}.Build(),
 		ReturnNewWorkflowTask:      true,
 		ForceCreateNewWorkflowTask: true,
-	})
+	}.Build())
 	s.NoError(err3)
 
-	resp4, err4 := s.FrontendClient().RespondWorkflowTaskCompleted(testcore.NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+	resp4, err4 := s.FrontendClient().RespondWorkflowTaskCompleted(testcore.NewContext(), workflowservice.RespondWorkflowTaskCompletedRequest_builder{
 		Namespace: s.Namespace().String(),
-		TaskToken: resp3.WorkflowTask.GetTaskToken(),
+		TaskToken: resp3.GetWorkflowTask().GetTaskToken(),
 		Commands: []*commandpb.Command{
-			{
+			commandpb.Command_builder{
 				CommandType: enumspb.COMMAND_TYPE_RECORD_MARKER,
-				Attributes: &commandpb.Command_RecordMarkerCommandAttributes{RecordMarkerCommandAttributes: &commandpb.RecordMarkerCommandAttributes{
+				RecordMarkerCommandAttributes: commandpb.RecordMarkerCommandAttributes_builder{
 					MarkerName: "localActivity2",
 					Details: map[string]*commonpb.Payloads{
 						"data":   payloads.EncodeString("local activity marker"),
 						"result": payloads.EncodeString("local activity result"),
-					}}},
-			}},
-		StickyAttributes: &taskqueuepb.StickyExecutionAttributes{
+					}}.Build(),
+			}.Build()},
+		StickyAttributes: taskqueuepb.StickyExecutionAttributes_builder{
 			WorkerTaskQueue:        stickyTaskQueue,
 			ScheduleToStartTimeout: durationpb.New(5 * time.Second),
-		},
+		}.Build(),
 		ReturnNewWorkflowTask:      true,
 		ForceCreateNewWorkflowTask: true,
-	})
+	}.Build())
 	s.NoError(err4)
 
-	resp5, err5 := s.FrontendClient().RespondWorkflowTaskCompleted(testcore.NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+	resp5, err5 := s.FrontendClient().RespondWorkflowTaskCompleted(testcore.NewContext(), workflowservice.RespondWorkflowTaskCompletedRequest_builder{
 		Namespace: s.Namespace().String(),
-		TaskToken: resp4.WorkflowTask.GetTaskToken(),
+		TaskToken: resp4.GetWorkflowTask().GetTaskToken(),
 		Commands: []*commandpb.Command{
-			{
+			commandpb.Command_builder{
 				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+				CompleteWorkflowExecutionCommandAttributes: commandpb.CompleteWorkflowExecutionCommandAttributes_builder{
 					Result: payloads.EncodeString("efg"),
-				},
-				},
-			}},
-		StickyAttributes: &taskqueuepb.StickyExecutionAttributes{
+				}.Build(),
+			}.Build()},
+		StickyAttributes: taskqueuepb.StickyExecutionAttributes_builder{
 			WorkerTaskQueue:        stickyTaskQueue,
 			ScheduleToStartTimeout: durationpb.New(5 * time.Second),
-		},
+		}.Build(),
 		ReturnNewWorkflowTask:      true,
 		ForceCreateNewWorkflowTask: false,
-	})
+	}.Build())
 	s.NoError(err5)
-	s.Nil(resp5.WorkflowTask)
+	s.Nil(resp5.GetWorkflowTask())
 
 	historyEvents := s.GetHistory(s.Namespace().String(), we)
 	s.EqualHistoryEvents(`
@@ -333,11 +331,11 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalBeforeRegularWorkfl
 	tl := id
 	identity := "worker1"
 
-	workflowType := &commonpb.WorkflowType{Name: wt}
+	workflowType := commonpb.WorkflowType_builder{Name: wt}.Build()
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	taskQueue := taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build()
 
-	request := &workflowservice.StartWorkflowExecutionRequest{
+	request := workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
@@ -347,28 +345,28 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalBeforeRegularWorkfl
 		WorkflowRunTimeout:  durationpb.New(3 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
 		Identity:            identity,
-	}
+	}.Build()
 
 	resp0, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
 
-	we := &commonpb.WorkflowExecution{
+	we := commonpb.WorkflowExecution_builder{
 		WorkflowId: id,
-		RunId:      resp0.RunId,
-	}
+		RunId:      resp0.GetRunId(),
+	}.Build()
 
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled`, s.GetHistory(s.Namespace().String(), we))
 
-	_, err0 = s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+	_, err0 = s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), workflowservice.SignalWorkflowExecutionRequest_builder{
 		Namespace:         s.Namespace().String(),
 		WorkflowExecution: we,
 		SignalName:        "sig-for-integ-test",
 		Input:             payloads.EncodeString(""),
 		Identity:          "integ test",
 		RequestId:         uuid.NewString(),
-	})
+	}.Build())
 	s.NoError(err0)
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
@@ -376,11 +374,11 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalBeforeRegularWorkfl
   3 WorkflowExecutionSignaled`, s.GetHistory(s.Namespace().String(), we))
 
 	// start this transient workflow task, the attempt should be cleared and it becomes again a regular workflow task
-	resp1, err1 := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
+	resp1, err1 := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), workflowservice.PollWorkflowTaskQueueRequest_builder{
 		Namespace: s.Namespace().String(),
 		TaskQueue: taskQueue,
 		Identity:  identity,
-	})
+	}.Build())
 	s.NoError(err1)
 
 	s.Equal(int32(1), resp1.GetAttempt())
@@ -391,11 +389,11 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalBeforeRegularWorkfl
   4 WorkflowTaskStarted`, s.GetHistory(s.Namespace().String(), we))
 
 	// then terminate the workflow
-	_, err := s.FrontendClient().TerminateWorkflowExecution(testcore.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
+	_, err := s.FrontendClient().TerminateWorkflowExecution(testcore.NewContext(), workflowservice.TerminateWorkflowExecutionRequest_builder{
 		Namespace:         s.Namespace().String(),
 		WorkflowExecution: we,
 		Reason:            "test-reason",
-	})
+	}.Build())
 	s.NoError(err)
 
 	s.EqualHistoryEvents(`
@@ -413,11 +411,11 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterRegularWorkflo
 	tl := id
 	identity := "worker1"
 
-	workflowType := &commonpb.WorkflowType{Name: wt}
+	workflowType := commonpb.WorkflowType_builder{Name: wt}.Build()
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	taskQueue := taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build()
 
-	request := &workflowservice.StartWorkflowExecutionRequest{
+	request := workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
@@ -427,26 +425,26 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterRegularWorkflo
 		WorkflowRunTimeout:  durationpb.New(3 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
 		Identity:            identity,
-	}
+	}.Build()
 
 	resp0, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
 
-	we := &commonpb.WorkflowExecution{
+	we := commonpb.WorkflowExecution_builder{
 		WorkflowId: id,
-		RunId:      resp0.RunId,
-	}
+		RunId:      resp0.GetRunId(),
+	}.Build()
 
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled`, s.GetHistory(s.Namespace().String(), we))
 
 	// start workflow task to make signals into bufferedEvents
-	_, err1 := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
+	_, err1 := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), workflowservice.PollWorkflowTaskQueueRequest_builder{
 		Namespace: s.Namespace().String(),
 		TaskQueue: taskQueue,
 		Identity:  identity,
-	})
+	}.Build())
 	s.NoError(err1)
 
 	s.EqualHistoryEvents(`
@@ -455,14 +453,14 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterRegularWorkflo
   3 WorkflowTaskStarted`, s.GetHistory(s.Namespace().String(), we))
 
 	// this signal should be buffered
-	_, err0 = s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+	_, err0 = s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), workflowservice.SignalWorkflowExecutionRequest_builder{
 		Namespace:         s.Namespace().String(),
 		WorkflowExecution: we,
 		SignalName:        "sig-for-integ-test",
 		Input:             payloads.EncodeString(""),
 		Identity:          "integ test",
 		RequestId:         uuid.NewString(),
-	})
+	}.Build())
 	s.NoError(err0)
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
@@ -470,11 +468,11 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterRegularWorkflo
   3 WorkflowTaskStarted`, s.GetHistory(s.Namespace().String(), we))
 
 	// then terminate the workflow
-	_, err := s.FrontendClient().TerminateWorkflowExecution(testcore.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
+	_, err := s.FrontendClient().TerminateWorkflowExecution(testcore.NewContext(), workflowservice.TerminateWorkflowExecutionRequest_builder{
 		Namespace:         s.Namespace().String(),
 		WorkflowExecution: we,
 		Reason:            "test-reason",
-	})
+	}.Build())
 	s.NoError(err)
 
 	historyEvents := s.GetHistory(s.Namespace().String(), we)
@@ -493,11 +491,11 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterRegularWorkflo
 	tl := id
 	identity := "worker1"
 
-	workflowType := &commonpb.WorkflowType{Name: wt}
+	workflowType := commonpb.WorkflowType_builder{Name: wt}.Build()
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	taskQueue := taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build()
 
-	request := &workflowservice.StartWorkflowExecutionRequest{
+	request := workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
@@ -507,15 +505,15 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterRegularWorkflo
 		WorkflowRunTimeout:  durationpb.New(3 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
 		Identity:            identity,
-	}
+	}.Build()
 
 	resp0, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
 
-	we := &commonpb.WorkflowExecution{
+	we := commonpb.WorkflowExecution_builder{
 		WorkflowId: id,
-		RunId:      resp0.RunId,
-	}
+		RunId:      resp0.GetRunId(),
+	}.Build()
 
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
@@ -524,11 +522,11 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterRegularWorkflo
 	cause := enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE
 
 	// start workflow task to make signals into bufferedEvents
-	resp1, err1 := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
+	resp1, err1 := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), workflowservice.PollWorkflowTaskQueueRequest_builder{
 		Namespace: s.Namespace().String(),
 		TaskQueue: taskQueue,
 		Identity:  identity,
-	})
+	}.Build())
 	s.NoError(err1)
 
 	s.EqualHistoryEvents(`
@@ -537,14 +535,14 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterRegularWorkflo
   3 WorkflowTaskStarted`, s.GetHistory(s.Namespace().String(), we))
 
 	// this signal should be buffered
-	_, err0 = s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+	_, err0 = s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), workflowservice.SignalWorkflowExecutionRequest_builder{
 		Namespace:         s.Namespace().String(),
 		WorkflowExecution: we,
 		SignalName:        "sig-for-integ-test",
 		Input:             payloads.EncodeString(""),
 		Identity:          "integ test",
 		RequestId:         uuid.NewString(),
-	})
+	}.Build())
 	s.NoError(err0)
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
@@ -552,12 +550,12 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterRegularWorkflo
   3 WorkflowTaskStarted`, s.GetHistory(s.Namespace().String(), we))
 
 	// fail this workflow task to flush buffer, and then another workflow task will be scheduled
-	_, err2 := s.FrontendClient().RespondWorkflowTaskFailed(testcore.NewContext(), &workflowservice.RespondWorkflowTaskFailedRequest{
+	_, err2 := s.FrontendClient().RespondWorkflowTaskFailed(testcore.NewContext(), workflowservice.RespondWorkflowTaskFailedRequest_builder{
 		Namespace: s.Namespace().String(),
 		TaskToken: resp1.GetTaskToken(),
 		Cause:     cause,
 		Identity:  "integ test",
-	})
+	}.Build())
 	s.NoError(err2)
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
@@ -568,11 +566,11 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterRegularWorkflo
   6 WorkflowTaskScheduled`, s.GetHistory(s.Namespace().String(), we))
 
 	// then terminate the workflow
-	_, err := s.FrontendClient().TerminateWorkflowExecution(testcore.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
+	_, err := s.FrontendClient().TerminateWorkflowExecution(testcore.NewContext(), workflowservice.TerminateWorkflowExecutionRequest_builder{
 		Namespace:         s.Namespace().String(),
 		WorkflowExecution: we,
 		Reason:            "test-reason",
-	})
+	}.Build())
 	s.NoError(err)
 
 	s.EqualHistoryEvents(`
@@ -591,11 +589,11 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalBeforeTransientWork
 	tl := id
 	identity := "worker1"
 
-	workflowType := &commonpb.WorkflowType{Name: wt}
+	workflowType := commonpb.WorkflowType_builder{Name: wt}.Build()
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	taskQueue := taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build()
 
-	request := &workflowservice.StartWorkflowExecutionRequest{
+	request := workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
@@ -605,15 +603,15 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalBeforeTransientWork
 		WorkflowRunTimeout:  durationpb.New(3 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
 		Identity:            identity,
-	}
+	}.Build()
 
 	resp0, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
 
-	we := &commonpb.WorkflowExecution{
+	we := commonpb.WorkflowExecution_builder{
 		WorkflowId: id,
-		RunId:      resp0.RunId,
-	}
+		RunId:      resp0.GetRunId(),
+	}.Build()
 
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
@@ -621,11 +619,11 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalBeforeTransientWork
 
 	cause := enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE
 	for i := 0; i < 10; i++ {
-		resp1, err1 := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
+		resp1, err1 := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), workflowservice.PollWorkflowTaskQueueRequest_builder{
 			Namespace: s.Namespace().String(),
 			TaskQueue: taskQueue,
 			Identity:  identity,
-		})
+		}.Build())
 		s.NoError(err1)
 		s.Equal(int32(i+1), resp1.GetAttempt())
 		if i == 0 {
@@ -636,12 +634,12 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalBeforeTransientWork
 			s.Equal(int64(6), resp1.GetStartedEventId())
 		}
 
-		_, err2 := s.FrontendClient().RespondWorkflowTaskFailed(testcore.NewContext(), &workflowservice.RespondWorkflowTaskFailedRequest{
+		_, err2 := s.FrontendClient().RespondWorkflowTaskFailed(testcore.NewContext(), workflowservice.RespondWorkflowTaskFailedRequest_builder{
 			Namespace: s.Namespace().String(),
 			TaskToken: resp1.GetTaskToken(),
 			Cause:     cause,
 			Identity:  "integ test",
-		})
+		}.Build())
 		s.NoError(err2)
 	}
 
@@ -651,14 +649,14 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalBeforeTransientWork
   3 WorkflowTaskStarted
   4 WorkflowTaskFailed`, s.GetHistory(s.Namespace().String(), we))
 
-	_, err0 = s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+	_, err0 = s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), workflowservice.SignalWorkflowExecutionRequest_builder{
 		Namespace:         s.Namespace().String(),
 		WorkflowExecution: we,
 		SignalName:        "sig-for-integ-test",
 		Input:             payloads.EncodeString(""),
 		Identity:          "integ test",
 		RequestId:         uuid.NewString(),
-	})
+	}.Build())
 	s.NoError(err0)
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
@@ -668,11 +666,11 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalBeforeTransientWork
   5 WorkflowExecutionSignaled`, s.GetHistory(s.Namespace().String(), we))
 
 	// start this transient workflow task, the attempt should be cleared and it becomes again a regular workflow task
-	resp1, err1 := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
+	resp1, err1 := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), workflowservice.PollWorkflowTaskQueueRequest_builder{
 		Namespace: s.Namespace().String(),
 		TaskQueue: taskQueue,
 		Identity:  identity,
-	})
+	}.Build())
 	s.NoError(err1)
 
 	s.Equal(int32(1), resp1.GetAttempt())
@@ -686,11 +684,11 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalBeforeTransientWork
   7 WorkflowTaskStarted`, s.GetHistory(s.Namespace().String(), we))
 
 	// then terminate the workflow
-	_, err := s.FrontendClient().TerminateWorkflowExecution(testcore.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
+	_, err := s.FrontendClient().TerminateWorkflowExecution(testcore.NewContext(), workflowservice.TerminateWorkflowExecutionRequest_builder{
 		Namespace:         s.Namespace().String(),
 		WorkflowExecution: we,
 		Reason:            "test-reason",
-	})
+	}.Build())
 	s.NoError(err)
 
 	s.EqualHistoryEvents(`
@@ -711,11 +709,11 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterTransientWorkf
 	tl := id
 	identity := "worker1"
 
-	workflowType := &commonpb.WorkflowType{Name: wt}
+	workflowType := commonpb.WorkflowType_builder{Name: wt}.Build()
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	taskQueue := taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build()
 
-	request := &workflowservice.StartWorkflowExecutionRequest{
+	request := workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
@@ -725,15 +723,15 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterTransientWorkf
 		WorkflowRunTimeout:  durationpb.New(3 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
 		Identity:            identity,
-	}
+	}.Build()
 
 	resp0, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
 
-	we := &commonpb.WorkflowExecution{
+	we := commonpb.WorkflowExecution_builder{
 		WorkflowId: id,
-		RunId:      resp0.RunId,
-	}
+		RunId:      resp0.GetRunId(),
+	}.Build()
 
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
@@ -741,11 +739,11 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterTransientWorkf
 
 	cause := enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE
 	for i := 0; i < 10; i++ {
-		resp1, err1 := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
+		resp1, err1 := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), workflowservice.PollWorkflowTaskQueueRequest_builder{
 			Namespace: s.Namespace().String(),
 			TaskQueue: taskQueue,
 			Identity:  identity,
-		})
+		}.Build())
 		s.NoError(err1)
 		s.Equal(int32(i+1), resp1.GetAttempt())
 		if i == 0 {
@@ -756,12 +754,12 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterTransientWorkf
 			s.Equal(int64(6), resp1.GetStartedEventId())
 		}
 
-		_, err2 := s.FrontendClient().RespondWorkflowTaskFailed(testcore.NewContext(), &workflowservice.RespondWorkflowTaskFailedRequest{
+		_, err2 := s.FrontendClient().RespondWorkflowTaskFailed(testcore.NewContext(), workflowservice.RespondWorkflowTaskFailedRequest_builder{
 			Namespace: s.Namespace().String(),
 			TaskToken: resp1.GetTaskToken(),
 			Cause:     cause,
 			Identity:  "integ test",
-		})
+		}.Build())
 		s.NoError(err2)
 	}
 
@@ -772,11 +770,11 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterTransientWorkf
   4 WorkflowTaskFailed`, s.GetHistory(s.Namespace().String(), we))
 
 	// start workflow task to make signals into bufferedEvents
-	_, err1 := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
+	_, err1 := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), workflowservice.PollWorkflowTaskQueueRequest_builder{
 		Namespace: s.Namespace().String(),
 		TaskQueue: taskQueue,
 		Identity:  identity,
-	})
+	}.Build())
 	s.NoError(err1)
 
 	s.EqualHistoryEvents(`
@@ -786,14 +784,14 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterTransientWorkf
   4 WorkflowTaskFailed`, s.GetHistory(s.Namespace().String(), we))
 
 	// this signal should be buffered
-	_, err0 = s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+	_, err0 = s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), workflowservice.SignalWorkflowExecutionRequest_builder{
 		Namespace:         s.Namespace().String(),
 		WorkflowExecution: we,
 		SignalName:        "sig-for-integ-test",
 		Input:             payloads.EncodeString(""),
 		Identity:          "integ test",
 		RequestId:         uuid.NewString(),
-	})
+	}.Build())
 	s.NoError(err0)
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
@@ -802,11 +800,11 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterTransientWorkf
   4 WorkflowTaskFailed`, s.GetHistory(s.Namespace().String(), we))
 
 	// then terminate the workflow
-	_, err := s.FrontendClient().TerminateWorkflowExecution(testcore.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
+	_, err := s.FrontendClient().TerminateWorkflowExecution(testcore.NewContext(), workflowservice.TerminateWorkflowExecutionRequest_builder{
 		Namespace:         s.Namespace().String(),
 		WorkflowExecution: we,
 		Reason:            "test-reason",
-	})
+	}.Build())
 	s.NoError(err)
 
 	s.EqualHistoryEvents(`
@@ -824,11 +822,11 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterTransientWorkf
 	tl := id
 	identity := "worker1"
 
-	workflowType := &commonpb.WorkflowType{Name: wt}
+	workflowType := commonpb.WorkflowType_builder{Name: wt}.Build()
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	taskQueue := taskqueuepb.TaskQueue_builder{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}.Build()
 
-	request := &workflowservice.StartWorkflowExecutionRequest{
+	request := workflowservice.StartWorkflowExecutionRequest_builder{
 		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
@@ -838,15 +836,15 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterTransientWorkf
 		WorkflowRunTimeout:  durationpb.New(3 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
 		Identity:            identity,
-	}
+	}.Build()
 
 	resp0, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
 
-	we := &commonpb.WorkflowExecution{
+	we := commonpb.WorkflowExecution_builder{
 		WorkflowId: id,
-		RunId:      resp0.RunId,
-	}
+		RunId:      resp0.GetRunId(),
+	}.Build()
 
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
@@ -854,11 +852,11 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterTransientWorkf
 
 	cause := enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE
 	for i := 0; i < 10; i++ {
-		resp1, err1 := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
+		resp1, err1 := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), workflowservice.PollWorkflowTaskQueueRequest_builder{
 			Namespace: s.Namespace().String(),
 			TaskQueue: taskQueue,
 			Identity:  identity,
-		})
+		}.Build())
 		s.NoError(err1)
 		s.Equal(int32(i+1), resp1.GetAttempt())
 		if i == 0 {
@@ -869,12 +867,12 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterTransientWorkf
 			s.Equal(int64(6), resp1.GetStartedEventId())
 		}
 
-		_, err2 := s.FrontendClient().RespondWorkflowTaskFailed(testcore.NewContext(), &workflowservice.RespondWorkflowTaskFailedRequest{
+		_, err2 := s.FrontendClient().RespondWorkflowTaskFailed(testcore.NewContext(), workflowservice.RespondWorkflowTaskFailedRequest_builder{
 			Namespace: s.Namespace().String(),
 			TaskToken: resp1.GetTaskToken(),
 			Cause:     cause,
 			Identity:  "integ test",
-		})
+		}.Build())
 		s.NoError(err2)
 	}
 
@@ -885,11 +883,11 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterTransientWorkf
   4 WorkflowTaskFailed`, s.GetHistory(s.Namespace().String(), we))
 
 	// start workflow task to make signals into bufferedEvents
-	resp1, err1 := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
+	resp1, err1 := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), workflowservice.PollWorkflowTaskQueueRequest_builder{
 		Namespace: s.Namespace().String(),
 		TaskQueue: taskQueue,
 		Identity:  identity,
-	})
+	}.Build())
 	s.NoError(err1)
 
 	s.EqualHistoryEvents(`
@@ -899,14 +897,14 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterTransientWorkf
   4 WorkflowTaskFailed`, s.GetHistory(s.Namespace().String(), we))
 
 	// this signal should be buffered
-	_, err0 = s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+	_, err0 = s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), workflowservice.SignalWorkflowExecutionRequest_builder{
 		Namespace:         s.Namespace().String(),
 		WorkflowExecution: we,
 		SignalName:        "sig-for-integ-test",
 		Input:             payloads.EncodeString(""),
 		Identity:          "integ test",
 		RequestId:         uuid.NewString(),
-	})
+	}.Build())
 	s.NoError(err0)
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
@@ -915,12 +913,12 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterTransientWorkf
   4 WorkflowTaskFailed`, s.GetHistory(s.Namespace().String(), we))
 
 	// fail this workflow task to flush buffer
-	_, err2 := s.FrontendClient().RespondWorkflowTaskFailed(testcore.NewContext(), &workflowservice.RespondWorkflowTaskFailedRequest{
+	_, err2 := s.FrontendClient().RespondWorkflowTaskFailed(testcore.NewContext(), workflowservice.RespondWorkflowTaskFailedRequest_builder{
 		Namespace: s.Namespace().String(),
 		TaskToken: resp1.GetTaskToken(),
 		Cause:     cause,
 		Identity:  "integ test",
-	})
+	}.Build())
 	s.NoError(err2)
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
@@ -931,11 +929,11 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterTransientWorkf
   6 WorkflowTaskScheduled`, s.GetHistory(s.Namespace().String(), we))
 
 	// then terminate the workflow
-	_, err := s.FrontendClient().TerminateWorkflowExecution(testcore.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
+	_, err := s.FrontendClient().TerminateWorkflowExecution(testcore.NewContext(), workflowservice.TerminateWorkflowExecutionRequest_builder{
 		Namespace:         s.Namespace().String(),
 		WorkflowExecution: we,
 		Reason:            "test-reason",
-	})
+	}.Build())
 	s.NoError(err)
 
 	s.EqualHistoryEvents(`

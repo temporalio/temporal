@@ -72,10 +72,10 @@ func (s *chasmEngineSuite) SetupTest() {
 
 	s.mockShard = shard.NewTestContext(
 		s.controller,
-		&persistencespb.ShardInfo{
+		persistencespb.ShardInfo_builder{
 			ShardId: 1,
 			RangeId: 1,
-		},
+		}.Build(),
 		s.config,
 	)
 	s.executionCache = wcache.NewHostLevelCache(
@@ -153,7 +153,7 @@ func (s *chasmEngineSuite) TestNewExecution_BrandNew() {
 			request *persistence.CreateWorkflowExecutionRequest,
 		) (*persistence.CreateWorkflowExecutionResponse, error) {
 			s.validateCreateRequest(request, s.archetypeID, newActivityID, "", 0)
-			runID = request.NewWorkflowSnapshot.ExecutionState.RunId
+			runID = request.NewWorkflowSnapshot.ExecutionState.GetRunId()
 			return tests.CreateWorkflowExecutionResponse, nil
 		},
 	).Times(1)
@@ -248,7 +248,7 @@ func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_AllowDuplicate() {
 			request *persistence.CreateWorkflowExecutionRequest,
 		) (*persistence.CreateWorkflowExecutionResponse, error) {
 			s.validateCreateRequest(request, s.archetypeID, newActivityID, tv.RunID(), currentRunConditionFailedErr.LastWriteVersion)
-			runID = request.NewWorkflowSnapshot.ExecutionState.RunId
+			runID = request.NewWorkflowSnapshot.ExecutionState.GetRunId()
 			return tests.CreateWorkflowExecutionResponse, nil
 		},
 	).Times(1)
@@ -304,7 +304,7 @@ func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_FailedOnly_Success() {
 			request *persistence.CreateWorkflowExecutionRequest,
 		) (*persistence.CreateWorkflowExecutionResponse, error) {
 			s.validateCreateRequest(request, s.archetypeID, newActivityID, tv.RunID(), currentRunConditionFailedErr.LastWriteVersion)
-			runID = request.NewWorkflowSnapshot.ExecutionState.RunId
+			runID = request.NewWorkflowSnapshot.ExecutionState.GetRunId()
 			return tests.CreateWorkflowExecutionResponse, nil
 		},
 	).Times(1)
@@ -488,9 +488,9 @@ func (s *chasmEngineSuite) newTestExecutionFn(
 ) func(ctx chasm.MutableContext) (chasm.Component, error) {
 	return func(ctx chasm.MutableContext) (chasm.Component, error) {
 		return &testComponent{
-			ActivityInfo: &persistencespb.ActivityInfo{
+			ActivityInfo: persistencespb.ActivityInfo_builder{
 				ActivityId: activityID,
-			},
+			}.Build(),
 		}, nil
 	}
 }
@@ -517,9 +517,9 @@ func (s *chasmEngineSuite) validateCreateRequest(
 	s.True(ok)
 
 	activityInfo := &persistencespb.ActivityInfo{}
-	err := serialization.Decode(updatedNode.Data, activityInfo)
+	err := serialization.Decode(updatedNode.GetData(), activityInfo)
 	s.NoError(err)
-	s.Equal(expectedActivityID, activityInfo.ActivityId)
+	s.Equal(expectedActivityID, activityInfo.GetActivityId())
 }
 
 func (s *chasmEngineSuite) validateNewExecutionResponseRef(
@@ -544,10 +544,10 @@ func (s *chasmEngineSuite) currentRunConditionFailedErr(
 ) *persistence.CurrentWorkflowConditionFailedError {
 	return &persistence.CurrentWorkflowConditionFailedError{
 		RequestIDs: map[string]*persistencespb.RequestIDInfo{
-			tv.RequestID(): {
+			tv.RequestID(): persistencespb.RequestIDInfo_builder{
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 				EventId:   0,
-			},
+			}.Build(),
 		},
 		RunID:            tv.RunID(),
 		State:            state,
@@ -571,9 +571,9 @@ func (s *chasmEngineSuite) TestUpdateComponent_Success() {
 
 	s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
 		Return(&persistence.GetWorkflowExecutionResponse{
-			State: s.buildPersistenceMutableState(ref.ExecutionKey, &persistencespb.ActivityInfo{
+			State: s.buildPersistenceMutableState(ref.ExecutionKey, persistencespb.ActivityInfo_builder{
 				ActivityId: "",
-			}, enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, nil),
+			}.Build(), enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, nil),
 		}, nil).Times(1)
 	s.mockExecutionManager.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(
@@ -585,9 +585,9 @@ func (s *chasmEngineSuite) TestUpdateComponent_Success() {
 			s.True(ok)
 
 			activityInfo := &persistencespb.ActivityInfo{}
-			err := serialization.Decode(updatedNode.Data, activityInfo)
+			err := serialization.Decode(updatedNode.GetData(), activityInfo)
 			s.NoError(err)
-			s.Equal(newActivityID, activityInfo.ActivityId)
+			s.Equal(newActivityID, activityInfo.GetActivityId())
 			return tests.UpdateWorkflowExecutionResponse, nil
 		},
 	).Times(1)
@@ -603,7 +603,7 @@ func (s *chasmEngineSuite) TestUpdateComponent_Success() {
 		) error {
 			tc, ok := component.(*testComponent)
 			s.True(ok)
-			tc.ActivityInfo.ActivityId = newActivityID
+			tc.ActivityInfo.SetActivityId(newActivityID)
 			return nil
 		},
 	)
@@ -625,9 +625,9 @@ func (s *chasmEngineSuite) TestReadComponent_Success() {
 
 	s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
 		Return(&persistence.GetWorkflowExecutionResponse{
-			State: s.buildPersistenceMutableState(ref.ExecutionKey, &persistencespb.ActivityInfo{
+			State: s.buildPersistenceMutableState(ref.ExecutionKey, persistencespb.ActivityInfo_builder{
 				ActivityId: expectedActivityID,
-			}, enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, nil),
+			}.Build(), enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, nil),
 		}, nil).Times(1)
 
 	err := s.engine.ReadComponent(
@@ -639,7 +639,7 @@ func (s *chasmEngineSuite) TestReadComponent_Success() {
 		) error {
 			tc, ok := component.(*testComponent)
 			s.True(ok)
-			s.Equal(expectedActivityID, tc.ActivityInfo.ActivityId)
+			s.Equal(expectedActivityID, tc.ActivityInfo.GetActivityId())
 
 			closeTime := ctx.ExecutionCloseTime()
 			s.True(closeTime.IsZero(), "CloseTime should be zero when component is still running")
@@ -666,9 +666,9 @@ func (s *chasmEngineSuite) TestPollComponent_Success_NoWait() {
 
 	s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
 		Return(&persistence.GetWorkflowExecutionResponse{
-			State: s.buildPersistenceMutableState(ref.ExecutionKey, &persistencespb.ActivityInfo{
+			State: s.buildPersistenceMutableState(ref.ExecutionKey, persistencespb.ActivityInfo_builder{
 				ActivityId: expectedActivityID,
-			}, enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, nil),
+			}.Build(), enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, nil),
 		}, nil).Times(1)
 
 	newSerializedRef, err := s.engine.PollComponent(
@@ -775,7 +775,7 @@ func (s *chasmEngineSuite) testPollComponentWait(useEmptyRunID bool) {
 			func(ctx chasm.Context, component chasm.Component) (bool, error) {
 				tc, ok := component.(*testComponent)
 				s.True(ok)
-				satisfied := tc.ActivityInfo.ActivityId == activityID
+				satisfied := tc.ActivityInfo.GetActivityId() == activityID
 				return satisfied, nil
 			},
 		)
@@ -790,7 +790,7 @@ func (s *chasmEngineSuite) testPollComponentWait(useEmptyRunID bool) {
 				tc, ok := component.(*testComponent)
 				s.True(ok)
 				if satisfyPredicate {
-					tc.ActivityInfo.ActivityId = activityID
+					tc.ActivityInfo.SetActivityId(activityID)
 				}
 				return nil
 			},
@@ -836,7 +836,7 @@ func (s *chasmEngineSuite) testPollComponentWait(useEmptyRunID bool) {
 		) error {
 			tc, ok := component.(*testComponent)
 			s.True(ok)
-			newActivityID <- tc.ActivityInfo.ActivityId
+			newActivityID <- tc.ActivityInfo.GetActivityId()
 			return nil
 		},
 	)
@@ -870,16 +870,16 @@ func (s *chasmEngineSuite) TestPollComponent_StaleState() {
 				nil),
 		}, nil).AnyTimes()
 
-	pRef := &persistencespb.ChasmComponentRef{
+	pRef := persistencespb.ChasmComponentRef_builder{
 		NamespaceId: executionKey.NamespaceID,
 		BusinessId:  executionKey.BusinessID,
 		RunId:       executionKey.RunID,
 		ArchetypeId: uint32(testComponentTypeID),
-		ExecutionVersionedTransition: &persistencespb.VersionedTransition{
+		ExecutionVersionedTransition: persistencespb.VersionedTransition_builder{
 			NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(executionKey.BusinessID) + 1, // ahead of persisted state
 			TransitionCount:          testTransitionCount,
-		},
-	}
+		}.Build(),
+	}.Build()
 	staleToken, err := pRef.Marshal()
 	s.NoError(err)
 	staleRef, err := chasm.DeserializeComponentRef(staleToken)
@@ -917,9 +917,9 @@ func (s *chasmEngineSuite) TestCloseTime_ReturnsNonZeroWhenCompleted() {
 		Return(&persistence.GetWorkflowExecutionResponse{
 			State: s.buildPersistenceMutableState(
 				ref.ExecutionKey,
-				&persistencespb.ActivityInfo{
+				persistencespb.ActivityInfo_builder{
 					ActivityId: tv.ActivityID(),
-				},
+				}.Build(),
 				enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 				enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 				timestamppb.New(expectedCloseTime),
@@ -958,12 +958,12 @@ func (s *chasmEngineSuite) TestStateTransitionCount() {
 	initialCount := int64(5)
 	state := s.buildPersistenceMutableState(
 		ref.ExecutionKey,
-		&persistencespb.ActivityInfo{ActivityId: ""},
+		persistencespb.ActivityInfo_builder{ActivityId: ""}.Build(),
 		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		nil,
 	)
-	state.ExecutionInfo.StateTransitionCount = initialCount
+	state.GetExecutionInfo().SetStateTransitionCount(initialCount)
 
 	s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
 		Return(&persistence.GetWorkflowExecutionResponse{State: state}, nil).Times(1)
@@ -977,7 +977,7 @@ func (s *chasmEngineSuite) TestStateTransitionCount() {
 		func(ctx chasm.MutableContext, component chasm.Component) error {
 			tc, ok := component.(*testComponent)
 			s.True(ok)
-			tc.ActivityInfo.ActivityId = tv.ActivityID()
+			tc.ActivityInfo.SetActivityId(tv.ActivityID())
 			return nil
 		},
 	)
@@ -1004,52 +1004,50 @@ func (s *chasmEngineSuite) buildPersistenceMutableState(
 	testComponentTypeID, ok := s.mockShard.ChasmRegistry().ComponentIDFor(&testComponent{})
 	s.True(ok)
 
-	return &persistencespb.WorkflowMutableState{
-		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+	return persistencespb.WorkflowMutableState_builder{
+		ExecutionInfo: persistencespb.WorkflowExecutionInfo_builder{
 			NamespaceId: key.NamespaceID,
 			WorkflowId:  key.BusinessID,
-			VersionHistories: &historyspb.VersionHistories{
+			VersionHistories: historyspb.VersionHistories_builder{
 				CurrentVersionHistoryIndex: 0,
 				Histories: []*historyspb.VersionHistory{
 					{},
 				},
-			},
+			}.Build(),
 			TransitionHistory: []*persistencespb.VersionedTransition{
-				{
+				persistencespb.VersionedTransition_builder{
 					NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(key.BusinessID),
 					TransitionCount:          testTransitionCount,
-				},
+				}.Build(),
 			},
 			ExecutionStats: &persistencespb.ExecutionStats{},
 			CloseTime:      closeTime,
-		},
-		ExecutionState: &persistencespb.WorkflowExecutionState{
+		}.Build(),
+		ExecutionState: persistencespb.WorkflowExecutionState_builder{
 			RunId:     key.RunID,
 			State:     state,
 			Status:    status,
 			StartTime: timestamppb.New(s.mockShard.GetTimeSource().Now().Add(-1 * time.Minute)),
-		},
+		}.Build(),
 		ChasmNodes: map[string]*persistencespb.ChasmNode{
-			"": {
-				Metadata: &persistencespb.ChasmNodeMetadata{
-					InitialVersionedTransition: &persistencespb.VersionedTransition{
+			"": persistencespb.ChasmNode_builder{
+				Metadata: persistencespb.ChasmNodeMetadata_builder{
+					InitialVersionedTransition: persistencespb.VersionedTransition_builder{
 						NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(key.BusinessID),
 						TransitionCount:          1,
-					},
-					LastUpdateVersionedTransition: &persistencespb.VersionedTransition{
+					}.Build(),
+					LastUpdateVersionedTransition: persistencespb.VersionedTransition_builder{
 						NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(key.BusinessID),
 						TransitionCount:          testTransitionCount,
-					},
-					Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
-						ComponentAttributes: &persistencespb.ChasmComponentAttributes{
-							TypeId: testComponentTypeID,
-						},
-					},
-				},
+					}.Build(),
+					ComponentAttributes: persistencespb.ChasmComponentAttributes_builder{
+						TypeId: testComponentTypeID,
+					}.Build(),
+				}.Build(),
 				Data: s.serializeComponentState(componentState),
-			},
+			}.Build(),
 		},
-	}
+	}.Build()
 }
 
 func (s *chasmEngineSuite) serializeComponentState(
@@ -1084,22 +1082,22 @@ func (l *testComponent) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 
 func (l *testComponent) SearchAttributes(_ chasm.Context) []chasm.SearchAttributeKeyValue {
 	return []chasm.SearchAttributeKeyValue{
-		testComponentPausedSearchAttribute.Value(l.ActivityInfo.Paused),
+		testComponentPausedSearchAttribute.Value(l.ActivityInfo.GetPaused()),
 	}
 }
 
 func (l *testComponent) Memo(_ chasm.Context) proto.Message {
-	return &persistencespb.WorkflowExecutionState{
-		RunId: l.ActivityInfo.ActivityId,
-	}
+	return persistencespb.WorkflowExecutionState_builder{
+		RunId: l.ActivityInfo.GetActivityId(),
+	}.Build()
 }
 
 func newTestComponentStateBlob(info *persistencespb.ActivityInfo) *commonpb.DataBlob {
 	data, _ := info.Marshal()
-	return &commonpb.DataBlob{
+	return commonpb.DataBlob_builder{
 		EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 		Data:         data,
-	}
+	}.Build()
 }
 
 type testChasmLibrary struct {

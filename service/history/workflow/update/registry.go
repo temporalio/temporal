@@ -198,7 +198,7 @@ func NewRegistry(
 		} else if acc := updInfo.GetAcceptance(); acc != nil {
 			u := newAccepted(
 				updID,
-				acc.EventId,
+				acc.GetEventId(),
 				r.remover(updID),
 				withInstrumentation(&r.instrumentation),
 			)
@@ -229,7 +229,7 @@ func (r *registry) FindOrCreate(ctx context.Context, id string) (*Update, bool, 
 }
 
 func (r *registry) TryResurrect(_ context.Context, acptOrRejMsg *protocolpb.Message) (*Update, error) {
-	if acptOrRejMsg == nil || acptOrRejMsg.Body == nil {
+	if acptOrRejMsg == nil || !acptOrRejMsg.HasBody() {
 		return nil, nil
 	}
 
@@ -239,7 +239,7 @@ func (r *registry) TryResurrect(_ context.Context, acptOrRejMsg *protocolpb.Mess
 		return nil, err
 	}
 
-	body, err := acptOrRejMsg.Body.UnmarshalNew()
+	body, err := acptOrRejMsg.GetBody().UnmarshalNew()
 	if err != nil {
 		return nil, serviceerror.NewInvalidArgumentf("unable to unmarshal request: %v", err)
 	}
@@ -261,7 +261,7 @@ func (r *registry) TryResurrect(_ context.Context, acptOrRejMsg *protocolpb.Mess
 		return nil, serviceerror.NewInvalidArgumentf("unable to marshal request: %v", err)
 	}
 
-	updateID := acptOrRejMsg.ProtocolInstanceId
+	updateID := acptOrRejMsg.GetProtocolInstanceId()
 	upd := newAdmitted(
 		updateID,
 		reqAny,
@@ -331,7 +331,7 @@ func (r *registry) Send(
 	//  (specifically, signal) after which the update should be processed.
 	//  Currently, it is not possible due to buffered events reordering on server
 	//  and events reordering in some SDKs.
-	sequencingEventID := &protocolpb.Message_EventId{EventId: workflowTaskStartedEventID - 1}
+	sequencingEventID := workflowTaskStartedEventID - 1
 
 	// Sort Updates by the time they were admitted to send them in deterministic order.
 	var sortedUpdates []*Update

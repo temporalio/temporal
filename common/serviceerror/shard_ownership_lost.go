@@ -39,10 +39,10 @@ func (e *ShardOwnershipLost) Status() *status.Status {
 
 	st := status.New(codes.Aborted, e.Message)
 	st, _ = st.WithDetails(
-		&errordetailsspb.ShardOwnershipLostFailure{
+		errordetailsspb.ShardOwnershipLostFailure_builder{
 			OwnerHost:   e.OwnerHost,
 			CurrentHost: e.CurrentHost,
-		},
+		}.Build(),
 	)
 	return st
 }

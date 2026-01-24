@@ -116,16 +116,16 @@ func (s *ChasmVisibilityManagerSuite) TestListExecutions_Success() {
 	s.NoError(err)
 
 	// Create test memo
-	memoData := &commonpb.Memo{
+	memoData := commonpb.Memo_builder{
 		Fields: map[string]*commonpb.Payload{
 			"test-memo-key": chasmSA1Payload,
 		},
-	}
+	}.Build()
 
 	// Create chasm memo
-	chasmMemoData := &persistencespb.WorkflowExecutionState{
+	chasmMemoData := persistencespb.WorkflowExecutionState_builder{
 		RunId: testRunID,
-	}
+	}.Build()
 	chasmMemoBytes, err := proto.Marshal(chasmMemoData)
 	s.NoError(err)
 	chasmMemoPayload, err := payload.Encode(chasmMemoBytes)
