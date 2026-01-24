@@ -14,10 +14,10 @@ type RPCFactory interface {
 	GetFrontendGRPCServerOptions() ([]grpc.ServerOption, error)
 	GetInternodeGRPCServerOptions() ([]grpc.ServerOption, error)
 	GetGRPCListener() net.Listener
-	CreateRemoteFrontendGRPCConnection(rpcAddress string) *grpc.ClientConn
-	CreateLocalFrontendGRPCConnection() *grpc.ClientConn
-	CreateHistoryGRPCConnection(rpcAddress string) *grpc.ClientConn
-	CreateMatchingGRPCConnection(rpcAddress string) *grpc.ClientConn
+	CreateRemoteFrontendGRPCConnection(rpcAddress string) grpc.ClientConnInterface
+	CreateLocalFrontendGRPCConnection() grpc.ClientConnInterface
+	CreateHistoryGRPCConnection(rpcAddress string) grpc.ClientConnInterface
+	CreateMatchingGRPCConnection(rpcAddress string) grpc.ClientConnInterface
 	CreateLocalFrontendHTTPClient() (*FrontendHTTPClient, error)
 }
 

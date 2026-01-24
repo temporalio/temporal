@@ -38,11 +38,11 @@ func (f *RPCFactory) GetGRPCListener() net.Listener {
 	return f.listener
 }
 
-func (f *RPCFactory) CreateRemoteFrontendGRPCConnection(rpcAddress string) *grpc.ClientConn {
+func (f *RPCFactory) CreateRemoteFrontendGRPCConnection(rpcAddress string) grpc.ClientConnInterface {
 	return f.dial(rpcAddress)
 }
 
-func (f *RPCFactory) CreateLocalFrontendGRPCConnection() *grpc.ClientConn {
+func (f *RPCFactory) CreateLocalFrontendGRPCConnection() grpc.ClientConnInterface {
 	return f.dial(f.listener.Addr().String())
 }
 
@@ -50,11 +50,11 @@ func (f *RPCFactory) CreateLocalFrontendHTTPClient() (*common.FrontendHTTPClient
 	panic("unimplemented in the nettest package")
 }
 
-func (f *RPCFactory) CreateHistoryGRPCConnection(rpcAddress string) *grpc.ClientConn {
+func (f *RPCFactory) CreateHistoryGRPCConnection(rpcAddress string) grpc.ClientConnInterface {
 	return f.dial(rpcAddress)
 }
 
-func (f *RPCFactory) CreateMatchingGRPCConnection(rpcAddress string) *grpc.ClientConn {
+func (f *RPCFactory) CreateMatchingGRPCConnection(rpcAddress string) grpc.ClientConnInterface {
 	return f.dial(rpcAddress)
 }
 
