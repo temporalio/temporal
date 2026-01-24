@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -2789,17 +2791,24 @@ func (s *UpdateWorkflowSuite) TestSpeculativeWorkflowTask_ScheduleToStartTimeout
 	_, err := poller.PollAndProcessWorkflowTask(testcore.WithoutRetries)
 	s.NoError(err)
 
-	// Now send an update. It will create a speculative WT on normal task queue,
-	// which will time out in 5 seconds and create new normal WT.
+	// Block first AddWorkflowTask from being added to matching. This simulates matching
+	// being unavailable. The speculative WT will time out and a normal WT will be scheduled.
+	var faultInjected atomic.Bool
+	namespaceID := s.NamespaceID().String()
+	testcore.InjectRPCFault(s.T(), s.GetTestCluster(),
+		func(req, resp any, _ error) error {
+			r, ok := req.(*matchingservice.AddWorkflowTaskRequest)
+			if ok && resp == nil && r.GetNamespaceId() == namespaceID && faultInjected.CompareAndSwap(false, true) {
+				return serviceerror.NewNotFound("matching unavailable")
+			}
+			return nil
+		})
+
+	// Send an update. The speculative WT will fail to be added to matching, time out,
+	// and a normal WT will be scheduled.
 	updateResultCh := sendUpdateNoError(s, tv)
 
-	// TODO: it would be nice to shutdown matching before sending an update to emulate case which is actually being tested here.
-	//  But test infrastructure doesn't support it. 5 seconds sleep will cause same observable effect.
-	s.Logger.Info("Sleep 5+ seconds to make sure tasks.SpeculativeWorkflowTaskScheduleToStartTimeout time has passed.")
-	time.Sleep(5*time.Second + 100*time.Millisecond) //nolint:forbidigo
-	s.Logger.Info("Sleep 5+ seconds is done.")
-
-	// Process update in workflow.
+	// Process update in workflow (blocks until normal WT is available after timeout).
 	res, err := poller.PollAndProcessWorkflowTask(testcore.WithoutRetries)
 	s.NoError(err)
 	s.NotNil(res)

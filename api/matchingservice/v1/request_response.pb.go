@@ -606,7 +606,9 @@ type AddWorkflowTaskRequest struct {
 	//
 	//	aip.dev/not-precedent: "to" is used to indicate interval. --)
 	ScheduleToStartTimeout *durationpb.Duration `protobuf:"bytes,5,opt,name=schedule_to_start_timeout,json=scheduleToStartTimeout,proto3" json:"schedule_to_start_timeout,omitempty"`
-	Clock                  *v17.VectorClock     `protobuf:"bytes,9,opt,name=clock,proto3" json:"clock,omitempty"`
+	// True if this is a speculative workflow task.
+	Speculative bool             `protobuf:"varint,6,opt,name=speculative,proto3" json:"speculative,omitempty"`
+	Clock       *v17.VectorClock `protobuf:"bytes,9,opt,name=clock,proto3" json:"clock,omitempty"`
 	// How this task should be directed by matching. (Missing means the default
 	// for TaskVersionDirective, which is unversioned.)
 	VersionDirective *v18.TaskVersionDirective `protobuf:"bytes,10,opt,name=version_directive,json=versionDirective,proto3" json:"version_directive,omitempty"`
@@ -681,6 +683,13 @@ func (x *AddWorkflowTaskRequest) GetScheduleToStartTimeout() *durationpb.Duratio
 		return x.ScheduleToStartTimeout
 	}
 	return nil
+}
+
+func (x *AddWorkflowTaskRequest) GetSpeculative() bool {
+	if x != nil {
+		return x.Speculative
+	}
+	return false
 }
 
 func (x *AddWorkflowTaskRequest) GetClock() *v17.VectorClock {
@@ -5407,14 +5416,15 @@ const file_temporal_server_api_matchingservice_v1_request_response_proto_rawDesc
 	"\x17poller_scaling_decision\x18\x11 \x01(\v20.temporal.api.taskqueue.v1.PollerScalingDecisionR\x15pollerScalingDecision\x12<\n" +
 	"\bpriority\x18\x12 \x01(\v2 .temporal.api.common.v1.PriorityR\bpriority\x12F\n" +
 	"\fretry_policy\x18\x13 \x01(\v2#.temporal.api.common.v1.RetryPolicyR\vretryPolicy\x12&\n" +
-	"\x0factivity_run_id\x18\x14 \x01(\tR\ractivityRunId\"\x9d\x05\n" +
+	"\x0factivity_run_id\x18\x14 \x01(\tR\ractivityRunId\"\xbf\x05\n" +
 	"\x16AddWorkflowTaskRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12G\n" +
 	"\texecution\x18\x02 \x01(\v2).temporal.api.common.v1.WorkflowExecutionR\texecution\x12C\n" +
 	"\n" +
 	"task_queue\x18\x03 \x01(\v2$.temporal.api.taskqueue.v1.TaskQueueR\ttaskQueue\x12,\n" +
 	"\x12scheduled_event_id\x18\x04 \x01(\x03R\x10scheduledEventId\x12T\n" +
-	"\x19schedule_to_start_timeout\x18\x05 \x01(\v2\x19.google.protobuf.DurationR\x16scheduleToStartTimeout\x12?\n" +
+	"\x19schedule_to_start_timeout\x18\x05 \x01(\v2\x19.google.protobuf.DurationR\x16scheduleToStartTimeout\x12 \n" +
+	"\vspeculative\x18\x06 \x01(\bR\vspeculative\x12?\n" +
 	"\x05clock\x18\t \x01(\v2).temporal.server.api.clock.v1.VectorClockR\x05clock\x12c\n" +
 	"\x11version_directive\x18\n" +
 	" \x01(\v26.temporal.server.api.taskqueue.v1.TaskVersionDirectiveR\x10versionDirective\x12T\n" +

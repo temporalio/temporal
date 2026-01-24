@@ -107,6 +107,8 @@ message AddWorkflowTaskRequest {
     // (-- api-linter: core::0140::prepositions=disabled
     //     aip.dev/not-precedent: "to" is used to indicate interval. --)
     google.protobuf.Duration schedule_to_start_timeout = 5;
+    // True if this is a speculative workflow task.
+    bool speculative = 6;
     temporal.server.api.clock.v1.VectorClock clock = 9;
     // How this task should be directed by matching. (Missing means the default
     // for TaskVersionDirective, which is unversioned.)
@@ -560,7 +562,7 @@ message UpdateNexusEndpointRequest {
     string id = 1;
     // Version of the endpoint, used for optimistic concurrency. Must match current version in persistence or the
     // request will fail a FAILED_PRECONDITION error.
-    int64 version = 2; 
+    int64 version = 2;
     temporal.server.api.persistence.v1.NexusEndpointSpec spec = 3;
 }
 
