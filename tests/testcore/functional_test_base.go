@@ -209,6 +209,10 @@ func (s *FunctionalTestBase) FrontendGRPCAddress() string {
 	return s.GetTestCluster().Host().FrontendGRPCAddress()
 }
 
+func (s *FunctionalTestBase) WorkerGRPCAddress() string {
+	return s.GetTestCluster().WorkerGRPCAddress()
+}
+
 func (s *FunctionalTestBase) Worker() sdkworker.Worker {
 	return s.worker
 }

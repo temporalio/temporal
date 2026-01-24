@@ -574,6 +574,10 @@ func (tc *TestCluster) Host() *TemporalImpl {
 	return tc.host
 }
 
+func (tc *TestCluster) WorkerGRPCAddress() string {
+	return tc.host.WorkerGRPCAddress()
+}
+
 func (tc *TestCluster) ClusterName() string {
 	return tc.host.clusterMetadataConfig.CurrentClusterName
 }
