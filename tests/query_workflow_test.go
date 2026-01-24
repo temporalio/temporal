@@ -374,7 +374,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_WithRawHistoryBytesToMatchingServ
 	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
 	s.NoError(err)
 	s.NotNil(workflowRun)
-	s.True(workflowRun.GetRunID() != "")
+	s.NotEqual("", workflowRun.GetRunID())
 
 	// Stop the worker to clear sticky cache
 	queryWorker.Stop()

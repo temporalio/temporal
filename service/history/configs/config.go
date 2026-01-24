@@ -382,9 +382,9 @@ type Config struct {
 	EnableUpdateWithStartRetryOnClosedWorkflowAbort               dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableUpdateWithStartRetryableErrorOnClosedWorkflowAbort      dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
-	SendRawHistoryBetweenInternalServices    dynamicconfig.BoolPropertyFn
-	SendRawHistoryBytesToMatchingService     dynamicconfig.BoolPropertyFn
-	SendRawWorkflowHistory                   dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	SendRawHistoryBetweenInternalServices dynamicconfig.BoolPropertyFn
+	SendRawHistoryBytesToMatchingService  dynamicconfig.BoolPropertyFn
+	SendRawWorkflowHistory                dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	WorkflowIdReuseMinimalInterval           dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	EnableWorkflowIdReuseStartTimeValidation dynamicconfig.BoolPropertyFnWithNamespaceFilter

@@ -355,7 +355,7 @@ func setHistoryForRecordWfTaskStartedResp(
 		if shardContext.GetConfig().SendRawHistoryBytesToMatchingService() {
 			response.RawHistoryBytes = historyBlobs
 		} else {
-			response.RawHistory = historyBlobs
+			response.RawHistory = historyBlobs //nolint:staticcheck // SA1019: Using deprecated field for backwards compatibility during rollout
 		}
 	} else {
 		response.History = history
@@ -393,6 +393,7 @@ func CreateRecordWorkflowTaskStartedResponse(
 		Clock:                      rawResp.Clock,
 		Messages:                   rawResp.Messages,
 		Version:                    rawResp.Version,
+		NextPageToken:              rawResp.NextPageToken,
 	}, nil
 }
 
