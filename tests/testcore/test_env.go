@@ -14,6 +14,8 @@ import (
 	"go.temporal.io/server/common/testing/taskpoller"
 )
 
+var _ Env = (*testEnv)(nil)
+
 type Env interface {
 	T() *testing.T
 	Namespace() namespace.Name
