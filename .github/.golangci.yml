@@ -38,6 +38,12 @@ linters:
           msg: "Please avoid using panic in application code"
         - pattern: time\.Now
           msg: "Using time.Now is not allowed in chasm/lib package (non-test files), use ctx.Now(component) instead"
+        - pattern: '^Unix$'
+          msg: "Do not use .Unix() for Cassandra timestamps (returns seconds). Use p.UnixMilliseconds() which returns milliseconds."
+        - pattern: '^UnixMilli$'
+          msg: "Do not use .UnixMilli() for Cassandra timestamps. Use p.UnixMilliseconds() for consistency and proper zero-time handling."
+        - pattern: '^UnixNano$'
+          msg: "Do not use .UnixNano() for Cassandra timestamps. Use p.UnixMilliseconds() which returns milliseconds."
     depguard:
       rules:
         main:
@@ -163,6 +169,16 @@ linters:
           - forbidigo
       - path: chasm/lib/.*_test\.go$
         text: "time.Now"
+        linters:
+          - forbidigo
+      # Cassandra timestamp rules only apply to cassandra persistence package
+      - path-except: common/persistence/cassandra/.*\.go$
+        text: "Unix|UnixMilli|UnixNano"
+        linters:
+          - forbidigo
+      # Allow in tests
+      - path: _test\.go$
+        text: "Unix|UnixMilli|UnixNano"
         linters:
           - forbidigo
       - path: _test\.go|tests/.+\.go|common/testing/
