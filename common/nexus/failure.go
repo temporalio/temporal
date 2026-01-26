@@ -310,30 +310,6 @@ func NexusFailureToTemporalFailure(f nexus.Failure) (*failurepb.Failure, error) 
 	return apiFailure, nil
 }
 
-func OperationErrorToTemporalFailureCause(opErr *nexus.OperationError) (*failurepb.Failure, error) {
-	if opErr == nil || opErr.OriginalFailure == nil {
-		return nil, nil
-	}
-	nexusFailure := opErr.OriginalFailure
-	temporalFailure, err := NexusFailureToTemporalFailure(*nexusFailure)
-	if err != nil {
-		return nil, serviceerror.NewInvalidArgument("Malformed failure")
-	}
-	if opErr.State == nexus.OperationStateCanceled {
-		return &failurepb.Failure{
-			FailureInfo: &failurepb.Failure_CanceledFailureInfo{
-				CanceledFailureInfo: &failurepb.CanceledFailureInfo{},
-			},
-			// Preserve the original cause.
-			Cause: temporalFailure,
-		}, nil
-	}
-	if temporalFailure.GetApplicationFailureInfo() != nil {
-		temporalFailure.GetApplicationFailureInfo().NonRetryable = true
-	}
-	return temporalFailure, nil
-}
-
 // ConvertGRPCError converts either a serviceerror or a gRPC status error into a Nexus HandlerError if possible.
 // If exposeDetails is true, the error message from the given error is exposed in the converted HandlerError, otherwise,
 // a default message with minimal information is attached to the returned error.

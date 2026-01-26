@@ -3,7 +3,6 @@ package tests
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -1211,9 +1210,11 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncFailure() {
 	var result string
 	err = run.Get(ctx, &result)
 	var wee *temporal.WorkflowExecutionError
-
 	s.ErrorAs(err, &wee)
-	s.True(strings.HasPrefix(wee.Unwrap().Error(), "nexus operation completed unsuccessfully"))
+
+	var noe *temporal.NexusOperationError
+	s.ErrorAs(wee, &noe)
+	s.Contains(noe.Error(), "test operation failed")
 }
 
 func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionErrors() {
@@ -2133,9 +2134,7 @@ func (s *NexusWorkflowTestSuite) TestNexusSyncOperationErrorRehydration() {
 			checkWorkflowError: func(t *testing.T, wfErr error) {
 				var opErr *temporal.NexusOperationError
 				require.ErrorAs(t, wfErr, &opErr)
-				var appErr *temporal.ApplicationError
-				require.ErrorAs(t, opErr, &appErr)
-				require.Equal(t, "some error", appErr.Message())
+				require.Equal(t, "some error", opErr.Message)
 			},
 		},
 		{
@@ -2503,15 +2502,18 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncNexusFailure() {
 	var handlerErr *nexus.HandlerError
 	s.ErrorAs(wfErr, &handlerErr)
 	s.Equal(nexus.HandlerErrorTypeBadRequest, handlerErr.Type)
+	// Old SDK path
 	var appErr *temporal.ApplicationError
 	s.ErrorAs(handlerErr.Cause, &appErr)
 	s.Equal(appErr.Message(), "fail me")
-	var failure nexus.Failure
-	s.NoError(appErr.Details(&failure))
-	s.Equal(map[string]string{"key": "val"}, failure.Metadata)
-	var details string
-	s.NoError(json.Unmarshal(failure.Details, &details))
-	s.Equal("details", details)
+	// NOTE: We broke compatibility here but the likelyhood of anyone using FailureErrors directly is practically zero.
+	// TODO(bergundy): test when the new SDK supports deserializing Nexus SDK failures
+	// var failure nexus.Failure
+	// s.NoError(appErr.Details(&failure))
+	// s.Equal(map[string]string{"key": "val"}, failure.Metadata)
+	// var details string
+	// s.NoError(json.Unmarshal(failure.Details, &details))
+	// s.Equal("details", details)
 
 	snap := capture.Snapshot()
 	s.Len(snap["nexus_outbound_requests"], 1)

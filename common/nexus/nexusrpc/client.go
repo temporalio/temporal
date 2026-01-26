@@ -286,24 +286,31 @@ func (c *HTTPClient) StartOperation(
 			return nil, err
 		}
 
-		opErr, err := c.options.FailureConverter.FailureToError(failure)
+		wireErr, err := c.options.FailureConverter.FailureToError(failure)
 		if err != nil {
 			return nil, err
 		}
 
 		// For compatibility with older servers.
-		if _, ok := opErr.(*nexus.OperationError); !ok {
+		if _, ok := wireErr.(*nexus.OperationError); !ok {
 			state, err := getUnsuccessfulStateFromHeader(response, body)
 			if err != nil {
 				return nil, err
 			}
-			opErr = &nexus.OperationError{
-				State: state,
-				Cause: opErr,
+			opErr := &nexus.OperationError{
+				State:   state,
+				Message: "operation failed",
+				Cause:   wireErr,
 			}
+			originalFailure, err := c.options.FailureConverter.ErrorToFailure(wireErr)
+			if err != nil {
+				return nil, err
+			}
+			opErr.OriginalFailure = &originalFailure
+			wireErr = opErr
 		}
 
-		return nil, opErr
+		return nil, wireErr
 	default:
 		return nil, c.bestEffortHandlerErrorFromResponse(response, body)
 	}
@@ -369,13 +376,19 @@ func (c *HTTPClient) defaultErrorFromResponse(response *http.Response, body []by
 		// TODO: use the provided cause, it's already a deserialized failure.
 		return newUnexpectedResponseError(err.Error(), response, body)
 	}
-	return &nexus.HandlerError{
+	handlerErr := &nexus.HandlerError{
 		Type:    errorType,
 		Message: response.Status,
 		// For compatibility with older servers.
 		RetryBehavior: retryBehaviorFromHeader(response.Header),
 		Cause:         cause,
 	}
+	originalFailure, err := c.options.FailureConverter.ErrorToFailure(handlerErr)
+	if err != nil {
+		return newUnexpectedResponseError("failed to construct handler error from response: "+err.Error(), response, body)
+	}
+	handlerErr.OriginalFailure = &originalFailure
+	return handlerErr
 }
 
 func (c *HTTPClient) bestEffortHandlerErrorFromResponse(response *http.Response, body []byte) error {
