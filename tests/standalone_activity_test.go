@@ -2120,20 +2120,17 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_WaitAnyState
 func (s *standaloneActivityTestSuite) TestPollActivityExecution() {
 	testCases := []struct {
 		name                   string
-		expectedStatus         enumspb.ActivityExecutionStatus
-		taskCompletionFn       func(context.Context, []byte) error
+		taskCompletionFn       func(ctx context.Context, taskToken []byte, activityID, runID string) error
 		completionValidationFn func(*testing.T, *workflowservice.PollActivityExecutionResponse)
 	}{
 		{
-			name:           "successful completion",
-			expectedStatus: enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
-			taskCompletionFn: func(ctx context.Context, taskToken []byte) error {
+			name: "successful completion",
+			taskCompletionFn: func(ctx context.Context, taskToken []byte, _, _ string) error {
 				_, err := s.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
 					Namespace: s.Namespace().String(),
 					TaskToken: taskToken,
 					Result:    defaultResult,
 				})
-
 				return err
 			},
 			completionValidationFn: func(t *testing.T, response *workflowservice.PollActivityExecutionResponse) {
@@ -2141,19 +2138,33 @@ func (s *standaloneActivityTestSuite) TestPollActivityExecution() {
 			},
 		},
 		{
-			name:           "failure completion",
-			expectedStatus: enumspb.ACTIVITY_EXECUTION_STATUS_FAILED,
-			taskCompletionFn: func(ctx context.Context, taskToken []byte) error {
+			name: "failure completion",
+			taskCompletionFn: func(ctx context.Context, taskToken []byte, _, _ string) error {
 				_, err := s.FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
 					Namespace: s.Namespace().String(),
 					TaskToken: taskToken,
 					Failure:   defaultFailure,
 				})
-
 				return err
 			},
 			completionValidationFn: func(t *testing.T, response *workflowservice.PollActivityExecutionResponse) {
 				protorequire.ProtoEqual(t, defaultFailure, response.GetOutcome().GetFailure())
+			},
+		},
+		{
+			name: "termination",
+			taskCompletionFn: func(ctx context.Context, _ []byte, activityID, runID string) error {
+				_, err := s.FrontendClient().TerminateActivityExecution(ctx, &workflowservice.TerminateActivityExecutionRequest{
+					Namespace:  s.Namespace().String(),
+					ActivityId: activityID,
+					RunId:      runID,
+					Reason:     "test termination",
+				})
+				return err
+			},
+			completionValidationFn: func(t *testing.T, response *workflowservice.PollActivityExecutionResponse) {
+				require.NotNil(t, response.GetOutcome().GetFailure())
+				require.NotNil(t, response.GetOutcome().GetFailure().GetTerminatedFailureInfo())
 			},
 		},
 	}
@@ -2170,7 +2181,7 @@ func (s *standaloneActivityTestSuite) TestPollActivityExecution() {
 			require.NoError(t, err)
 			pollTaskResp, err := s.pollActivityTaskQueue(ctx, taskQueue)
 			require.NoError(t, err)
-			err = tc.taskCompletionFn(ctx, pollTaskResp.TaskToken)
+			err = tc.taskCompletionFn(ctx, pollTaskResp.TaskToken, activityID, startResp.RunId)
 			require.NoError(t, err)
 			pollActivityResp, err := s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
 				Namespace:  s.Namespace().String(),
@@ -2179,6 +2190,7 @@ func (s *standaloneActivityTestSuite) TestPollActivityExecution() {
 			})
 			require.NoError(t, err)
 			require.NotNil(t, pollActivityResp)
+			require.Equal(t, startResp.RunId, pollActivityResp.GetRunId())
 			tc.completionValidationFn(t, pollActivityResp)
 		})
 	}
