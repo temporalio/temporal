@@ -1164,6 +1164,8 @@ func (s *chasmEngineSuite) TestUpdateWithStartExecution_ExistingClosed() {
 	}
 	newActivityID := tv.Any().String()
 
+	// getCurrentWorkflowLease calls GetCurrentExecution twice for a closed execution:
+	// once to get the run ID, and once to verify it hasn't changed (race check).
 	s.mockExecutionManager.EXPECT().GetCurrentExecution(gomock.Any(), gomock.Any()).
 		Return(&persistence.GetCurrentExecutionResponse{
 			RunID: tv.RunID(),
@@ -1187,7 +1189,8 @@ func (s *chasmEngineSuite) TestUpdateWithStartExecution_ExistingClosed() {
 			),
 		}, nil).Times(1)
 
-	// Mock CreateWorkflowExecution for new execution.
+	// Mock CreateWorkflowExecution for new execution with UpdateCurrent mode
+	// (since we already have a lease on the closed execution).
 	var createdRunID string
 	s.mockExecutionManager.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(
@@ -1195,6 +1198,8 @@ func (s *chasmEngineSuite) TestUpdateWithStartExecution_ExistingClosed() {
 			request *persistence.CreateWorkflowExecutionRequest,
 		) (*persistence.CreateWorkflowExecutionResponse, error) {
 			s.NotNil(request.NewWorkflowSnapshot)
+			s.Equal(persistence.CreateWorkflowModeUpdateCurrent, request.Mode)
+			s.Equal(tv.RunID(), request.PreviousRunID)
 			createdRunID = request.NewWorkflowSnapshot.ExecutionState.RunId
 			s.NotEmpty(createdRunID)
 			s.NotEqual(tv.RunID(), createdRunID) // New run should have different RunID.
