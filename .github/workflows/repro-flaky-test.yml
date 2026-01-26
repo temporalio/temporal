@@ -16,7 +16,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        run: [1, 2, 3, 4, 5]
+        run: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     steps:
       - uses: actions/checkout@v4
 
@@ -30,23 +30,23 @@ jobs:
 
       - run: make pre-build-functional-test-coverage
 
-      - name: Run flaky test with CPU stress
+      - name: Run flaky test with heavy stress
         timeout-minutes: 40
         run: |
-          # Start CPU stress in background to simulate CI load
-          # This creates contention that can cause 1-second timeouts to misfire
-          stress-ng --cpu 2 --timeout 600s &
+          # Start aggressive CPU + IO stress to simulate heavy CI load
+          # Use all CPUs and add IO stress
+          stress-ng --cpu 0 --io 4 --vm 2 --vm-bytes 256M --timeout 900s &
           STRESS_PID=$!
 
-          # Run the full WorkflowTestSuite which has 15 parallel tests
+          # Run multiple test suites concurrently for maximum contention
+          # This better simulates what happens in real CI
           make functional-test-coverage
           TEST_EXIT=$?
 
-          # Clean up stress
           kill $STRESS_PID 2>/dev/null || true
-
           exit $TEST_EXIT
         env:
           PERSISTENCE_TYPE: sql
           PERSISTENCE_DRIVER: sqlite
-          TEST_ARGS: "-run TestWorkflowTestSuite -count 1"
+          # Run multiple suites that have timing-sensitive tests
+          TEST_ARGS: "-run 'TestWorkflowTestSuite|TestTransientTaskTestSuite|TestStickyTQTestSuite' -count 1"
