@@ -359,7 +359,9 @@ func (e *executableImpl) Execute() (retErr error) {
 	if resp.ExecutedAsActive != e.lastActiveness {
 		// namespace did a failover,
 		// reset task attempt since the execution logic used will change
+		// reset task priority since it changes between active/standby
 		e.attempt = 1
+		e.priority = e.priorityAssigner.Assign(e)
 	}
 	e.lastActiveness = resp.ExecutedAsActive
 

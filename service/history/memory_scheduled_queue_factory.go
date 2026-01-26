@@ -68,8 +68,11 @@ func NewMemoryScheduledQueueFactory(
 	)
 
 	return &memoryScheduledQueueFactory{
-		scheduler:         hostScheduler,
-		priorityAssigner:  queues.NewPriorityAssigner(),
+		scheduler: hostScheduler,
+		priorityAssigner: queues.NewPriorityAssigner(
+			params.NamespaceRegistry,
+			params.ClusterMetadata.GetCurrentClusterName(),
+		),
 		namespaceRegistry: params.NamespaceRegistry,
 		clusterMetadata:   params.ClusterMetadata,
 		workflowCache:     params.WorkflowCache,

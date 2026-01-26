@@ -111,6 +111,14 @@ const (
 	// successfully, the search attribute is removed. Format of a single problem:
 	// "category=<category> cause=<cause>".
 	TemporalReportedProblems = "TemporalReportedProblems"
+
+	// TemporalExternalPayloadCount is the count of external payloads referenced in the
+	// entire history tree of the execution.
+	TemporalExternalPayloadCount = "TemporalExternalPayloadCount"
+
+	// TemporalExternalPayloadSizeBytes is the total size in bytes of all external payloads
+	// referenced in the entire history tree of the execution.
+	TemporalExternalPayloadSizeBytes = "TemporalExternalPayloadSizeBytes"
 )
 
 var (
@@ -177,6 +185,8 @@ var (
 		TemporalWorkflowVersioningBehavior:   enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		TemporalWorkerDeployment:             enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		TemporalUsedWorkerDeploymentVersions: enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		TemporalExternalPayloadCount:         enumspb.INDEXED_VALUE_TYPE_INT,
+		TemporalExternalPayloadSizeBytes:     enumspb.INDEXED_VALUE_TYPE_INT,
 	}
 
 	// reserved are internal field names that can't be used as search attribute names.
@@ -186,6 +196,20 @@ var (
 		Memo:         {},
 		// Used in the Elasticsearch bulk processor, not needed in SQL databases.
 		VisibilityTaskKey: {},
+	}
+
+	// chasmSystemSearchAttributes are system search attributes used by CHASM internally
+	// and cannot be used as CHASM search attribute aliases. These correspond to fields
+	// in chasm.ExecutionInfo.
+	chasmSystemSearchAttributes = map[string]struct{}{
+		WorkflowID:           {},
+		RunID:                {},
+		StartTime:            {},
+		ExecutionTime:        {},
+		CloseTime:            {},
+		HistoryLength:        {},
+		HistorySizeBytes:     {},
+		StateTransitionCount: {},
 	}
 
 	sqlDbSystemNameToColName = map[string]string{
@@ -279,6 +303,12 @@ func IsMappable(name string) bool {
 		return false
 	}
 	return true
+}
+
+// IsChasmSystem returns true if name is a system search attribute used by CHASM
+func IsChasmSystem(name string) bool {
+	_, ok := chasmSystemSearchAttributes[name]
+	return ok
 }
 
 // GetSqlDbColName maps system and reserved search attributes to column names for SQL tables.

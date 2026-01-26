@@ -31,7 +31,10 @@ type (
 		EnableSniff                  bool                      `yaml:"enableSniff"`
 		EnableHealthcheck            bool                      `yaml:"enableHealthcheck"`
 		TLS                          *auth.TLS                 `yaml:"tls"`
-		// httpClient is the awsHttpClient to be used for creating esClient
+		// DisableGzip disables gzip compression for Elasticsearch requests.
+		// Useful in test/development environments where ES runs locally.
+		DisableGzip bool `yaml:"disableGzip"`
+		// httpClient is the awsHttpClient to be used for creating esClient.
 		httpClient *http.Client
 	}
 

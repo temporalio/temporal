@@ -75,8 +75,12 @@ func Invoke(
 		executionInfo := resp.State.GetExecutionInfo()
 		histories := executionInfo.GetVersionHistories().GetHistories()
 		branchTokens = make([][]byte, 0, len(histories))
-		for _, historyItem := range histories {
-			branchTokens = append(branchTokens, historyItem.GetBranchToken())
+		for _, versionHistory := range histories {
+			branchToken := versionHistory.GetBranchToken()
+			if len(branchToken) != 0 {
+				// non-workflow executions have empty version history and empty branch token
+				branchTokens = append(branchTokens, branchToken)
+			}
 		}
 	}
 

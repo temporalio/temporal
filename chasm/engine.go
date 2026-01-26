@@ -4,6 +4,8 @@ package chasm
 
 import (
 	"context"
+
+	"go.temporal.io/server/common/log"
 )
 
 // NoValue is a sentinel type representing no value.
@@ -12,13 +14,13 @@ import (
 type NoValue = *struct{}
 
 type Engine interface {
-	NewExecution(
+	StartExecution(
 		context.Context,
 		ComponentRef,
 		func(MutableContext) (Component, error),
 		...TransitionOption,
-	) (EngineNewExecutionResult, error)
-	UpdateWithNewExecution(
+	) (EngineStartExecutionResult, error)
+	UpdateWithStartExecution(
 		context.Context,
 		ComponentRef,
 		func(MutableContext) (Component, error),
@@ -75,8 +77,8 @@ type TransitionOptions struct {
 
 type TransitionOption func(*TransitionOptions)
 
-// NewExecutionResult contains the outcome of creating a new execution via [NewExecution]
-// or [UpdateWithNewExecution].
+// StartExecutionResult contains the outcome of creating a new execution via [StartExecution]
+// or [UpdateWithStartExecution].
 //
 // This struct provides information about whether a new execution was actually created,
 // along with identifiers needed to reference the execution in subsequent operations.
@@ -84,7 +86,7 @@ type TransitionOption func(*TransitionOptions)
 // Fields:
 //   - ExecutionKey: The unique identifier for the execution. This key can be used to
 //     look up or reference the execution in future operations.
-//   - NewExecutionRef: A serialized reference to the newly created root component.
+//   - ExecutionRef: A serialized reference to the newly created root component.
 //     This can be passed to [UpdateComponent], [ReadComponent], or [PollComponent]
 //     to interact with the component. Use [DeserializeComponentRef] to convert this
 //     back to a [ComponentRef] if needed.
@@ -93,16 +95,16 @@ type TransitionOption func(*TransitionOptions)
 //     [BusinessIDConflictPolicy] configured via [WithBusinessIDPolicy]), and the
 //     existing execution was returned instead.
 //   - Output: The output value returned by the factory function.
-type NewExecutionResult[O any] struct {
-	ExecutionKey    ExecutionKey
-	NewExecutionRef []byte
-	Created         bool
-	Output          O
+type StartExecutionResult[O any] struct {
+	ExecutionKey ExecutionKey
+	ExecutionRef []byte
+	Created      bool
+	Output       O
 }
 
-// EngineNewExecutionResult is a type alias for the result type returned by the Engine implementation.
+// EngineStartExecutionResult is a type alias for the result type returned by the Engine implementation.
 // This avoids repeating [struct{}] everywhere in the engine implementation.
-type EngineNewExecutionResult = NewExecutionResult[struct{}]
+type EngineStartExecutionResult = StartExecutionResult[struct{}]
 
 // (only) this transition will not be persisted
 // The next non-speculative transition will persist this transition as well.
@@ -119,7 +121,7 @@ func WithSpeculative() TransitionOption {
 
 // WithBusinessIDPolicy sets the businessID reuse and conflict policy
 // used in the transition when creating a new execution.
-// This option only applies to NewExecution() and UpdateWithNewExecution().
+// This option only applies to StartExecution() and UpdateWithStartExecution().
 func WithBusinessIDPolicy(
 	reusePolicy BusinessIDReusePolicy,
 	conflictPolicy BusinessIDConflictPolicy,
@@ -131,7 +133,7 @@ func WithBusinessIDPolicy(
 }
 
 // WithRequestID sets the requestID used when creating a new execution.
-// This option only applies to NewExecution() and UpdateWithNewExecution().
+// This option only applies to StartExecution() and UpdateWithStartExecution().
 func WithRequestID(
 	requestID string,
 ) TransitionOption {
@@ -147,7 +149,7 @@ func WithRequestID(
 // 	panic("not implemented")
 // }
 
-// NewExecution creates a new execution with a component initialized by the provided factory function.
+// StartExecution creates a new execution with a component initialized by the provided factory function.
 //
 // This is the primary entry point for starting a new execution in the CHASM engine. It handles
 // the lifecycle of creating and persisting a new component within an execution context.
@@ -160,71 +162,77 @@ func WithRequestID(
 // Parameters:
 //   - ctx: Context containing the CHASM engine (must be created via [NewEngineContext])
 //   - key: Unique identifier for the execution, used for deduplication and lookup
-//   - newFn: Factory function that creates the component and produces output.
+//   - startFn: Factory function that creates the component and produces output.
 //     Receives a [MutableContext] for accessing engine capabilities and the input value.
-//   - input: Application-specific data passed to newFn
+//   - input: Application-specific data passed to startFn
 //   - opts: Optional [TransitionOption] functions to configure creation behavior:
 //   - [WithBusinessIDPolicy]: Controls duplicate handling and conflict resolution
 //   - [WithRequestID]: Sets a request ID for idempotency
 //   - [WithSpeculative]: Defers persistence until the next non-speculative transition
 //
 // Returns:
-//   - O: The output value produced by newFn
+//   - O: The output value produced by startFn
 //   - [NewExecutionResult]: Contains the execution key, serialized ref, and whether a new execution was created
 //   - error: Non-nil if creation failed or policy constraints were violated
-func NewExecution[C Component, I any, O any](
+func StartExecution[C Component, I any, O any](
 	ctx context.Context,
 	key ExecutionKey,
-	newFn func(MutableContext, I) (C, O, error),
+	startFn func(MutableContext, I) (C, O, error),
 	input I,
 	opts ...TransitionOption,
-) (NewExecutionResult[O], error) {
+) (StartExecutionResult[O], error) {
 	var output O
-	result, err := engineFromContext(ctx).NewExecution(
+	result, err := engineFromContext(ctx).StartExecution(
 		ctx,
 		NewComponentRef[C](key),
-		func(ctx MutableContext) (Component, error) {
+		func(ctx MutableContext) (_ Component, retErr error) {
+			defer log.CapturePanic(ctx.Logger(), &retErr)
+
 			var c C
 			var err error
-			c, output, err = newFn(ctx, input)
+			c, output, err = startFn(ctx, input)
 			return c, err
 		},
 		opts...,
 	)
 	if err != nil {
-		return NewExecutionResult[O]{
+		return StartExecutionResult[O]{
 			Output: output,
 		}, err
 	}
 
-	return NewExecutionResult[O]{
-		ExecutionKey:    result.ExecutionKey,
-		NewExecutionRef: result.NewExecutionRef,
-		Created:         result.Created,
-		Output:          output,
+	return StartExecutionResult[O]{
+		ExecutionKey: result.ExecutionKey,
+		ExecutionRef: result.ExecutionRef,
+		Created:      result.Created,
+		Output:       output,
 	}, nil
 }
 
-func UpdateWithNewExecution[C Component, I any, O1 any, O2 any](
+func UpdateWithStartExecution[C Component, I any, O1 any, O2 any](
 	ctx context.Context,
 	key ExecutionKey,
-	newFn func(MutableContext, I) (C, O1, error),
+	startFn func(MutableContext, I) (C, O1, error),
 	updateFn func(C, MutableContext, I) (O2, error),
 	input I,
 	opts ...TransitionOption,
 ) (O1, O2, ExecutionKey, []byte, error) {
 	var output1 O1
 	var output2 O2
-	executionKey, serializedRef, err := engineFromContext(ctx).UpdateWithNewExecution(
+	executionKey, serializedRef, err := engineFromContext(ctx).UpdateWithStartExecution(
 		ctx,
 		NewComponentRef[C](key),
-		func(ctx MutableContext) (Component, error) {
+		func(ctx MutableContext) (_ Component, retErr error) {
+			defer log.CapturePanic(ctx.Logger(), &retErr)
+
 			var c C
 			var err error
-			c, output1, err = newFn(ctx, input)
+			c, output1, err = startFn(ctx, input)
 			return c, err
 		},
-		func(ctx MutableContext, c Component) error {
+		func(ctx MutableContext, c Component) (retErr error) {
+			defer log.CapturePanic(ctx.Logger(), &retErr)
+
 			var err error
 			output2, err = updateFn(c.(C), ctx, input)
 			return err
@@ -262,7 +270,9 @@ func UpdateComponent[C any, R []byte | ComponentRef, I any, O any](
 	newSerializedRef, err := engineFromContext(ctx).UpdateComponent(
 		ctx,
 		ref,
-		func(ctx MutableContext, c Component) error {
+		func(ctx MutableContext, c Component) (retErr error) {
+			defer log.CapturePanic(ctx.Logger(), &retErr)
+
 			var err error
 			output, err = updateFn(c.(C), ctx, input)
 			return err
@@ -295,7 +305,9 @@ func ReadComponent[C any, R []byte | ComponentRef, I any, O any](
 	err = engineFromContext(ctx).ReadComponent(
 		ctx,
 		ref,
-		func(ctx Context, c Component) error {
+		func(ctx Context, c Component) (retErr error) {
+			defer log.CapturePanic(ctx.Logger(), &retErr)
+
 			var err error
 			output, err = readFn(c.(C), ctx, input)
 			return err
@@ -330,7 +342,9 @@ func PollComponent[C any, R []byte | ComponentRef, I any, O any](
 	newSerializedRef, err := engineFromContext(ctx).PollComponent(
 		ctx,
 		ref,
-		func(ctx Context, c Component) (bool, error) {
+		func(ctx Context, c Component) (_ bool, retErr error) {
+			defer log.CapturePanic(ctx.Logger(), &retErr)
+
 			out, satisfied, err := monotonicPredicate(c.(C), ctx, input)
 			if satisfied {
 				output = out

@@ -15,6 +15,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/server/api/adminservice/v1"
 	batchspb "go.temporal.io/server/api/batch/v1"
@@ -119,6 +120,12 @@ func (s *activitiesSuite) TestGetLastWorkflowTaskEventID() {
 			gotWorkflowTaskEventID, err := getLastWorkflowTaskEventID(ctx, namespaceStr, workflowExecution, s.mockFrontendClient, log.NewTestLogger())
 			s.Equal(tt.wantErr, err != nil)
 			s.Equal(tt.wantWorkflowTaskEventID, gotWorkflowTaskEventID)
+			if tt.wantErr {
+				var appErr *temporal.ApplicationError
+				s.Require().ErrorAs(err, &appErr, "error should be an ApplicationError")
+				s.True(appErr.NonRetryable(), "error should be non-retryable")
+				s.Equal("NoWorkflowTaskFound", appErr.Type(), "error type should be NoWorkflowTaskFound")
+			}
 		})
 	}
 }
@@ -171,6 +178,12 @@ func (s *activitiesSuite) TestGetFirstWorkflowTaskEventID() {
 			gotWorkflowTaskEventID, err := getFirstWorkflowTaskEventID(ctx, namespaceStr, &workflowExecution, s.mockFrontendClient, log.NewTestLogger())
 			s.Equal(tt.wantErr, err != nil)
 			s.Equal(tt.wantWorkflowTaskEventID, gotWorkflowTaskEventID)
+			if tt.wantErr {
+				var appErr *temporal.ApplicationError
+				s.Require().ErrorAs(err, &appErr, "error should be an ApplicationError")
+				s.True(appErr.NonRetryable(), "error should be non-retryable")
+				s.Equal("NoWorkflowTaskFound", appErr.Type(), "error type should be NoWorkflowTaskFound")
+			}
 		})
 	}
 }
@@ -491,6 +504,65 @@ func (s *activitiesSuite) TestProcessAdminTask_RefreshWorkflowTasks_Error() {
 	err := a.processAdminTask(ctx, batchOperation, testTask, limiter)
 	s.Require().Error(err)
 	s.Equal(expectedErr, err)
+}
+
+func (s *activitiesSuite) TestIsNonRetryableError() {
+	tests := []struct {
+		name      string
+		err       error
+		batchType enumspb.BatchOperationType
+		want      bool
+	}{
+		{
+			name:      "nil error returns false",
+			err:       nil,
+			batchType: enumspb.BATCH_OPERATION_TYPE_UPDATE_EXECUTION_OPTIONS,
+			want:      false,
+		},
+		{
+			name:      "pinned version error for UPDATE_EXECUTION_OPTIONS returns true",
+			err:       errors.New("Pinned version 'deployment-foo:build-123' is not present in task queue 'my-queue' of type 'Workflow'"),
+			batchType: enumspb.BATCH_OPERATION_TYPE_UPDATE_EXECUTION_OPTIONS,
+			want:      true,
+		},
+		{
+			name:      "pinned version error with different format for UPDATE_EXECUTION_OPTIONS returns true",
+			err:       errors.New("Pinned version 'prod:v2.0.1' is not present in task queue 'activity-queue' of type 'Activity'"),
+			batchType: enumspb.BATCH_OPERATION_TYPE_UPDATE_EXECUTION_OPTIONS,
+			want:      true,
+		},
+		{
+			name:      "error containing substring for UPDATE_EXECUTION_OPTIONS returns true",
+			err:       fmt.Errorf("Some prefix: %s suffix", "is not present in task queue"),
+			batchType: enumspb.BATCH_OPERATION_TYPE_UPDATE_EXECUTION_OPTIONS,
+			want:      true,
+		},
+		{
+			name:      "unrelated error for UPDATE_EXECUTION_OPTIONS returns false",
+			err:       errors.New("some other error that doesn't match"),
+			batchType: enumspb.BATCH_OPERATION_TYPE_UPDATE_EXECUTION_OPTIONS,
+			want:      false,
+		},
+		{
+			name:      "pinned version error for different operation type returns false",
+			err:       errors.New("Pinned version 'deployment-foo:build-123' is not present in task queue 'my-queue' of type 'Workflow'"),
+			batchType: enumspb.BATCH_OPERATION_TYPE_TERMINATE,
+			want:      false,
+		},
+		{
+			name:      "pinned version error for SIGNAL operation returns false",
+			err:       errors.New("Pinned version 'deployment-foo:build-123' is not present in task queue 'my-queue' of type 'Workflow'"),
+			batchType: enumspb.BATCH_OPERATION_TYPE_SIGNAL,
+			want:      false,
+		},
+	}
+
+	for _, tt := range tests {
+		s.Run(tt.name, func() {
+			got := isNonRetryableError(tt.err, tt.batchType)
+			s.Equal(tt.want, got)
+		})
+	}
 }
 
 func (s *activitiesSuite) TestProcessAdminTask_UnknownOperation() {

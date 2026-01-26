@@ -4,6 +4,9 @@ import (
 	"context"
 	"sync"
 	"time"
+
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 )
 
 // MockContext is a mock implementation of [Context].
@@ -56,6 +59,15 @@ func (c *MockContext) StateTransitionCount() int64 {
 		return c.HandleStateTransitionCount()
 	}
 	return 0
+}
+
+func (c *MockContext) Logger() log.Logger {
+	executionKey := c.ExecutionKey()
+	return log.NewTestLogger().With(
+		tag.WorkflowNamespaceID(executionKey.NamespaceID),
+		tag.WorkflowID(executionKey.BusinessID),
+		tag.WorkflowRunID(executionKey.RunID),
+	)
 }
 
 // MockMutableContext is a mock implementation of [MutableContext] that records added tasks for inspection in

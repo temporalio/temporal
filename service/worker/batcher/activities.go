@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -17,6 +18,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/activity"
 	sdkclient "go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/server/api/adminservice/v1"
 	batchspb "go.temporal.io/server/api/batch/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -28,6 +30,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/sdk"
+	"go.temporal.io/server/common/worker_versioning"
 	workercommon "go.temporal.io/server/service/worker/common"
 	"golang.org/x/time/rate"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
@@ -596,6 +599,24 @@ func (a *activities) startTaskProcessor(
 	}
 }
 
+// isNonRetryableError determines if an error should not be retried based on the operation type
+func isNonRetryableError(err error, batchType enumspb.BatchOperationType) bool {
+	if err == nil {
+		return false
+	}
+
+	errMsg := err.Error()
+
+	// Operation-specific non-retryable errors
+	switch batchType {
+	case enumspb.BATCH_OPERATION_TYPE_UPDATE_EXECUTION_OPTIONS:
+		// Pinned version that is not present in a task queue error is non-retryable for workflow options updates
+		return strings.Contains(errMsg, worker_versioning.ErrPinnedVersionNotInTaskQueueSubstring)
+	default:
+		return false
+	}
+}
+
 func (a *activities) handleTaskResult(
 	batchOperation *batchspb.BatchOperationInput,
 	task task,
@@ -608,7 +629,16 @@ func (a *activities) handleTaskResult(
 	if err != nil {
 		metrics.BatcherProcessorFailures.With(metricsHandler).Record(1)
 		logger.Error("Failed to process batch operation task", tag.Error(err))
-		nonRetryable := slices.Contains(batchOperation.NonRetryableErrors, err.Error())
+
+		// Check if error is non-retryable:
+		// 1. ApplicationError marked as NonRetryable
+		// 2. Operation-specific non-retryable errors
+		// 3. List of non-retryable errors from frontend
+		var appErr *temporal.ApplicationError
+		nonRetryable := (errors.As(err, &appErr) && appErr.NonRetryable()) ||
+			isNonRetryableError(err, batchOperation.BatchType) ||
+			slices.Contains(batchOperation.NonRetryableErrors, err.Error())
+
 		if nonRetryable || task.attempts > int(batchOperation.AttemptsOnRetryableError) {
 			respCh <- taskResponse{err: err, page: task.page}
 		} else {
@@ -761,7 +791,7 @@ func getLastWorkflowTaskEventID(
 		req.NextPageToken = resp.NextPageToken
 	}
 	if workflowTaskEventID == 0 {
-		return 0, errors.New("unable to find any scheduled or completed task")
+		return 0, temporal.NewNonRetryableApplicationError("unable to find any scheduled or completed task", "NoWorkflowTaskFound", nil)
 	}
 	return
 }
@@ -802,7 +832,7 @@ func getFirstWorkflowTaskEventID(
 		req.NextPageToken = resp.NextPageToken
 	}
 	if workflowTaskEventID == 0 {
-		return 0, errors.New("unable to find any scheduled or completed task")
+		return 0, temporal.NewNonRetryableApplicationError("unable to find any scheduled or completed task", "NoWorkflowTaskFound", nil)
 	}
 	return
 }

@@ -989,6 +989,7 @@ var (
 	ReplicationStreamError                = NewCounterDef("replication_stream_error")
 	ReplicationServiceError               = NewCounterDef("replication_service_error")
 	ReplicationStreamStuck                = NewCounterDef("replication_stream_stuck")
+	ReplicationStreamChannelFull          = NewCounterDef("replication_stream_channel_full")
 	ReplicationTasksSend                  = NewCounterDef("replication_tasks_send")
 	ReplicationTaskSendAttempt            = NewDimensionlessHistogramDef("replication_task_send_attempt")
 	ReplicationTaskSendError              = NewCounterDef("replication_task_send_error")
@@ -1010,8 +1011,11 @@ var (
 	// ReplicationTasksFetched records the number of tasks fetched by the poller.
 	ReplicationTasksFetched                        = NewDimensionlessHistogramDef("replication_tasks_fetched")
 	ReplicationLatency                             = NewTimerDef("replication_latency")
+	ReplicationTaskQueueLatency                    = NewTimerDef("replication_task_queue_latency")
 	ReplicationTaskProcessingLatency               = NewTimerDef("replication_task_processing_latency")
 	ReplicationTaskTransmissionLatency             = NewTimerDef("replication_task_transmission_latency")
+	ReplicationTasksAttempt                        = NewDimensionlessHistogramDef("replication_tasks_attempt")
+	ReplicationTasksErrorByType                    = NewCounterDef("replication_tasks_error_by_type")
 	ReplicationDLQFailed                           = NewCounterDef("replication_dlq_enqueue_failed")
 	ReplicationDLQMaxLevelGauge                    = NewGaugeDef("replication_dlq_max_level")
 	ReplicationDLQAckLevelGauge                    = NewGaugeDef("replication_dlq_ack_level")
@@ -1172,6 +1176,18 @@ var (
 	WorkerRegistryCapacityUtilizationMetric = NewGaugeDef(
 		"worker_registry_capacity_utilization",
 		WithDescription("Tracks the ratio of total entries to maxItems."),
+	)
+	WorkerRegistryWorkersAdded = NewCounterDef(
+		"worker_registry_workers_added",
+		WithDescription("Count of new workers registered in the worker registry."),
+	)
+	WorkerRegistryWorkersRemoved = NewCounterDef(
+		"worker_registry_workers_removed",
+		WithDescription("Count of workers removed from the worker registry."),
+	)
+	WorkerRegistryActivitySlotsUsed = NewDimensionlessHistogramDef(
+		"worker_registry_activity_slots_used",
+		WithDescription("Number of activity slots in use per worker."),
 	)
 	// ----------------------------------------------------------------------------------------------------------------
 	// Matching service: Metrics to understand plugin adoption.
