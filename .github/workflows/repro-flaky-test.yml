@@ -7,7 +7,6 @@ on:
       - fix-flaky-task-timeouts-test
 
 env:
-  DOCKER_COMPOSE_FILE: ./develop/github/docker-compose.yml
   TEMPORAL_VERSION_CHECK_DISABLED: 1
 
 jobs:
@@ -27,9 +26,6 @@ jobs:
           cache: true
 
       - run: make pre-build-functional-test-coverage
-
-      - name: Start dependencies
-        run: docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} up -d
 
       - name: Run flaky test
         timeout-minutes: 40
