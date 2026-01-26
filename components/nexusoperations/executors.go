@@ -491,8 +491,7 @@ func handleNonRetryableStartOperationError(node *hsm.Node, operation Operation, 
 			operation,
 			eventID,
 			&failurepb.Failure{
-				Message: "failed to start Nexus operation",
-				Cause:   failure,
+				Cause: failure,
 			},
 		),
 		ScheduledEventId: eventID,
@@ -789,7 +788,7 @@ func (e taskExecutor) lookupEndpoint(ctx context.Context, namespaceID namespace.
 // Copy over message and stack trace if present since to preserve as much as possible from the original operation
 // error.
 func convertToNexusOperationFailure(operation Operation, scheduledEventID int64, originalFailure *failurepb.Failure) *failurepb.Failure {
-	return &failurepb.Failure{
+	f := &failurepb.Failure{
 		Message:           originalFailure.GetMessage(),
 		StackTrace:        originalFailure.GetStackTrace(),
 		EncodedAttributes: originalFailure.GetEncodedAttributes(),
@@ -806,6 +805,10 @@ func convertToNexusOperationFailure(operation Operation, scheduledEventID int64,
 		},
 		Cause: originalFailure.GetCause(),
 	}
+	if originalFailure.GetMessage() == "" {
+		f.Message = "nexus operation completed unsuccessfully"
+	}
+	return f
 }
 
 func startCallOutcomeTag(callCtx context.Context, result *nexusrpc.ClientStartOperationResponse[*nexus.LazyValue], callErr error) string {

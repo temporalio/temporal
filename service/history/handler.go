@@ -2454,7 +2454,7 @@ func (h *Handler) CompleteNexusOperation(ctx context.Context, request *historyse
 			opErr = &nexus.OperationError{
 				State: nexus.OperationState(request.GetState()),
 				// Setting a message here will bypass the Nexus SDK's failure converter backward compatibility logic.
-				Message: "operation completed as " + request.GetState(),
+				Message: "nexus operation completed unsuccessfully",
 				Cause:   recvdErr,
 			}
 			origFailure, err := nexus.DefaultFailureConverter().ErrorToFailure(opErr)
