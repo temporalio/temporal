@@ -38,6 +38,7 @@ type (
 		ensureCloseBeforeDelete       dynamicconfig.BoolPropertyFn
 		enableCloseWorkflowCleanup    dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		relocateAttributesMinBlobSize dynamicconfig.IntPropertyFnWithNamespaceFilter
+		externalPayloadsEnabled       dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	}
 )
 
@@ -52,6 +53,7 @@ func newVisibilityQueueTaskExecutor(
 	ensureCloseBeforeDelete dynamicconfig.BoolPropertyFn,
 	enableCloseWorkflowCleanup dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	relocateAttributesMinBlobSize dynamicconfig.IntPropertyFnWithNamespaceFilter,
+	externalPayloadsEnabled dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 ) queues.Executor {
 	return &visibilityQueueTaskExecutor{
 		shardContext:   shardContext,
@@ -63,6 +65,7 @@ func newVisibilityQueueTaskExecutor(
 		ensureCloseBeforeDelete:       ensureCloseBeforeDelete,
 		enableCloseWorkflowCleanup:    enableCloseWorkflowCleanup,
 		relocateAttributesMinBlobSize: relocateAttributesMinBlobSize,
+		externalPayloadsEnabled:       externalPayloadsEnabled,
 	}
 }
 
@@ -270,7 +273,7 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 		mutableState.GetExecutionInfo().Memo,
 		mutableState.GetExecutionInfo().SearchAttributes,
 	)
-	closedRequest, err := t.getClosedVisibilityRequest(ctx, requestBase, mutableState)
+	closedRequest, err := t.getClosedVisibilityRequest(ctx, requestBase, mutableState, namespaceEntry)
 	if err != nil {
 		return err
 	}
@@ -421,8 +424,16 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 	if err != nil {
 		return err
 	}
+
+	var chasmTaskQueue string
 	if chasmSAProvider, ok := rootComponent.(chasm.VisibilitySearchAttributesProvider); ok {
 		for _, chasmSA := range chasmSAProvider.SearchAttributes(visTaskContext) {
+			if chasmSA.Field == sadefs.TaskQueue {
+				if strVal, ok := chasmSA.Value.Value().(string); ok {
+					chasmTaskQueue = strVal
+				}
+				continue
+			}
 			searchattributes[chasmSA.Field] = chasmSA.Value.MustEncode()
 		}
 	}
@@ -459,6 +470,11 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 	// We reuse the TemporalNamespaceDivision column to store the string representation of ArchetypeID.
 	requestBase.SearchAttributes.IndexedFields[sadefs.TemporalNamespaceDivision] = payload.EncodeString(strconv.FormatUint(uint64(tree.ArchetypeID()), 10))
 
+	// Override TaskQueue if provided by CHASM search attributes.
+	if chasmTaskQueue != "" {
+		requestBase.TaskQueue = chasmTaskQueue
+	}
+
 	if mutableState.IsWorkflowExecutionRunning() {
 		release(nil)
 		return t.visibilityMgr.UpsertWorkflowExecution(
@@ -469,7 +485,7 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 		)
 	}
 
-	closedRequest, err := t.getClosedVisibilityRequest(ctx, requestBase, mutableState)
+	closedRequest, err := t.getClosedVisibilityRequest(ctx, requestBase, mutableState, namespaceEntry)
 	if err != nil {
 		return err
 	}
@@ -532,6 +548,7 @@ func (t *visibilityQueueTaskExecutor) getClosedVisibilityRequest(
 	ctx context.Context,
 	base *manager.VisibilityRequestBase,
 	mutableState historyi.MutableState,
+	namespaceEntry *namespace.Namespace,
 ) (*manager.RecordWorkflowExecutionClosedRequest, error) {
 	wfCloseTime, err := mutableState.GetWorkflowCloseTime(ctx)
 	if err != nil {
@@ -545,6 +562,24 @@ func (t *visibilityQueueTaskExecutor) getClosedVisibilityRequest(
 	executionInfo := mutableState.GetExecutionInfo()
 	stateTransitionCount := executionInfo.GetStateTransitionCount()
 	historySizeBytes := executionInfo.GetExecutionStats().GetHistorySize()
+
+	if base.SearchAttributes == nil {
+		base.SearchAttributes = &commonpb.SearchAttributes{
+			IndexedFields: make(map[string]*commonpb.Payload),
+		}
+	} else if base.SearchAttributes.IndexedFields == nil {
+		base.SearchAttributes.IndexedFields = make(map[string]*commonpb.Payload)
+	}
+
+	if t.externalPayloadsEnabled(namespaceEntry.Name().String()) {
+		externalPayloadCount := executionInfo.GetExecutionStats().GetExternalPayloadCount()
+		externalPayloadSizeBytes := executionInfo.GetExecutionStats().GetExternalPayloadSize()
+		externalPayloadCountPayload, _ := payload.Encode(externalPayloadCount)
+		externalPayloadSizeBytesPayload, _ := payload.Encode(externalPayloadSizeBytes)
+		base.SearchAttributes.IndexedFields[sadefs.TemporalExternalPayloadCount] = externalPayloadCountPayload
+		base.SearchAttributes.IndexedFields[sadefs.TemporalExternalPayloadSizeBytes] = externalPayloadSizeBytesPayload
+	}
+
 	return &manager.RecordWorkflowExecutionClosedRequest{
 		VisibilityRequestBase: base,
 		CloseTime:             wfCloseTime,

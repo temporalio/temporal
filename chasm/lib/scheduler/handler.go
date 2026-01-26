@@ -2,7 +2,9 @@ package scheduler
 
 import (
 	"context"
+	"errors"
 
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/log"
@@ -26,7 +28,7 @@ func newHandler(logger log.Logger, specBuilder *legacyscheduler.SpecBuilder) *ha
 func (h *handler) CreateSchedule(ctx context.Context, req *schedulerpb.CreateScheduleRequest) (resp *schedulerpb.CreateScheduleResponse, err error) {
 	defer log.CapturePanic(h.logger, &err)
 
-	result, err := chasm.NewExecution(
+	result, err := chasm.StartExecution(
 		ctx,
 		chasm.ExecutionKey{
 			NamespaceID: req.NamespaceId,
@@ -36,7 +38,13 @@ func (h *handler) CreateSchedule(ctx context.Context, req *schedulerpb.CreateSch
 		req,
 		chasm.WithRequestID(req.FrontendRequest.RequestId),
 	)
-	return result.Output, err
+
+	var alreadyStartedErr *chasm.ExecutionAlreadyStartedError
+	if errors.As(err, &alreadyStartedErr) {
+		return nil, serviceerror.NewAlreadyExistsf("schedule %q is already registered", req.FrontendRequest.ScheduleId)
+	}
+
+	return result.Output, nil
 }
 
 func (h *handler) UpdateSchedule(ctx context.Context, req *schedulerpb.UpdateScheduleRequest) (resp *schedulerpb.UpdateScheduleResponse, err error) {
@@ -93,7 +101,7 @@ func (h *handler) DeleteSchedule(ctx context.Context, req *schedulerpb.DeleteSch
 func (h *handler) DescribeSchedule(ctx context.Context, req *schedulerpb.DescribeScheduleRequest) (resp *schedulerpb.DescribeScheduleResponse, err error) {
 	defer log.CapturePanic(h.logger, &err)
 
-	return chasm.ReadComponent(
+	resp, err = chasm.ReadComponent(
 		ctx,
 		chasm.NewComponentRef[*Scheduler](
 			chasm.ExecutionKey{
@@ -101,15 +109,18 @@ func (h *handler) DescribeSchedule(ctx context.Context, req *schedulerpb.Describ
 				BusinessID:  req.FrontendRequest.ScheduleId,
 			},
 		),
-		(*Scheduler).Describe,
+		func(s *Scheduler, ctx chasm.Context, req *schedulerpb.DescribeScheduleRequest) (*schedulerpb.DescribeScheduleResponse, error) {
+			return s.Describe(ctx, req, h.specBuilder)
+		},
 		req,
 	)
+	return resp, err
 }
 
 func (h *handler) ListScheduleMatchingTimes(ctx context.Context, req *schedulerpb.ListScheduleMatchingTimesRequest) (resp *schedulerpb.ListScheduleMatchingTimesResponse, err error) {
 	defer log.CapturePanic(h.logger, &err)
 
-	return chasm.ReadComponent(
+	resp, err = chasm.ReadComponent(
 		ctx,
 		chasm.NewComponentRef[*Scheduler](
 			chasm.ExecutionKey{
@@ -122,4 +133,5 @@ func (h *handler) ListScheduleMatchingTimes(ctx context.Context, req *schedulerp
 		},
 		req,
 	)
+	return resp, err
 }

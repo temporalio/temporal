@@ -10,8 +10,11 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/activity"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/log"
@@ -273,6 +276,11 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 // This method returns an error when the GetNamespaceByID call fails with anything other than
 // serviceerror.NamespaceNotFound.
 func (r *TaskGeneratorImpl) getRetention() (time.Duration, error) {
+	// For standalone activities, use 1 day retention
+	if r.mutableState.ChasmTree().ArchetypeID() == activity.ArchetypeID {
+		return 24 * time.Hour, nil
+	}
+
 	retention := defaultWorkflowRetention
 	executionInfo := r.mutableState.GetExecutionInfo()
 	namespaceEntry, err := r.namespaceRegistry.GetNamespaceByID(namespace.ID(executionInfo.NamespaceId))
@@ -751,15 +759,27 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks(targetClusters []string) ([]t
 	if err != nil {
 		return nil, 0, err
 	}
-	lastItem, err := versionhistory.GetLastVersionHistoryItem(versionHistory)
-	if err != nil {
-		return nil, 0, err
+
+	archetypeID := r.mutableState.ChasmTree().ArchetypeID()
+	isWorkflow := archetypeID == chasm.WorkflowArchetypeID
+
+	lastItem := &historyspb.VersionHistoryItem{
+		EventId: common.EmptyEventID,
+		Version: common.EmptyVersion,
 	}
+	nextEventID := common.EmptyEventID
+	if isWorkflow {
+		// version history is empty for non-workflow
+		lastItem, err = versionhistory.GetLastVersionHistoryItem(versionHistory)
+		if err != nil {
+			return nil, 0, err
+		}
+		nextEventID = lastItem.GetEventId() + 1
+	}
+
 	now := time.Now().UTC()
 	workflowKey := r.mutableState.GetWorkflowKey()
 	var taskEquivalents []tasks.Task
-	archetypeID := r.mutableState.ChasmTree().ArchetypeID()
-	isWorkflow := archetypeID == chasm.WorkflowArchetypeID
 
 	if r.mutableState.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		if isWorkflow {
@@ -785,7 +805,7 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks(targetClusters []string) ([]t
 				VersionedTransition: transitionhistory.LastVersionedTransition(transitionHistory),
 				FirstEventID:        executionInfo.LastFirstEventId,
 				FirstEventVersion:   lastItem.Version,
-				NextEventID:         lastItem.GetEventId() + 1,
+				NextEventID:         nextEventID,
 				TaskEquivalents:     taskEquivalents,
 				TargetClusters:      targetClusters,
 				IsForceReplication:  true,
@@ -807,7 +827,7 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks(targetClusters []string) ([]t
 			// TaskID, VisibilityTimestamp is set by shard
 			WorkflowKey:    workflowKey,
 			FirstEventID:   executionInfo.LastFirstEventId,
-			NextEventID:    lastItem.GetEventId() + 1,
+			NextEventID:    nextEventID,
 			Version:        lastItem.GetVersion(),
 			TargetClusters: targetClusters,
 		})
@@ -844,7 +864,7 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks(targetClusters []string) ([]t
 			VersionedTransition: transitionhistory.LastVersionedTransition(transitionHistory),
 			FirstEventID:        executionInfo.LastFirstEventId,
 			FirstEventVersion:   lastItem.GetVersion(),
-			NextEventID:         lastItem.GetEventId() + 1,
+			NextEventID:         nextEventID,
 			TaskEquivalents:     taskEquivalents,
 			TargetClusters:      targetClusters,
 			IsForceReplication:  true,

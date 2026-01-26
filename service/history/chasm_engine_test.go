@@ -157,8 +157,9 @@ func (s *chasmEngineSuite) TestNewExecution_BrandNew() {
 			return tests.CreateWorkflowExecutionResponse, nil
 		},
 	).Times(1)
+	s.mockEngine.EXPECT().NotifyChasmExecution(gomock.Any(), gomock.Any()).Return().Times(1)
 
-	result, err := s.engine.NewExecution(
+	result, err := s.engine.StartExecution(
 		context.Background(),
 		ref,
 		s.newTestExecutionFn(newActivityID),
@@ -174,7 +175,7 @@ func (s *chasmEngineSuite) TestNewExecution_BrandNew() {
 		RunID:       runID,
 	}
 	s.Equal(expectedExecutionKey, result.ExecutionKey)
-	s.validateNewExecutionResponseRef(result.NewExecutionRef, expectedExecutionKey)
+	s.validateNewExecutionResponseRef(result.ExecutionRef, expectedExecutionKey)
 	s.True(result.Created)
 }
 
@@ -200,7 +201,7 @@ func (s *chasmEngineSuite) TestNewExecution_RequestIDDedup() {
 		),
 	).Times(1)
 
-	result, err := s.engine.NewExecution(
+	result, err := s.engine.StartExecution(
 		context.Background(),
 		ref,
 		s.newTestExecutionFn(newActivityID),
@@ -214,7 +215,7 @@ func (s *chasmEngineSuite) TestNewExecution_RequestIDDedup() {
 		RunID:       tv.RunID(),
 	}
 	s.Equal(expectedExecutionKey, result.ExecutionKey)
-	s.validateNewExecutionResponseRef(result.NewExecutionRef, expectedExecutionKey)
+	s.validateNewExecutionResponseRef(result.ExecutionRef, expectedExecutionKey)
 	s.False(result.Created)
 }
 
@@ -251,8 +252,9 @@ func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_AllowDuplicate() {
 			return tests.CreateWorkflowExecutionResponse, nil
 		},
 	).Times(1)
+	s.mockEngine.EXPECT().NotifyChasmExecution(gomock.Any(), gomock.Any()).Return().Times(1)
 
-	result, err := s.engine.NewExecution(
+	result, err := s.engine.StartExecution(
 		context.Background(),
 		ref,
 		s.newTestExecutionFn(newActivityID),
@@ -269,7 +271,7 @@ func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_AllowDuplicate() {
 		RunID:       runID,
 	}
 	s.Equal(expectedExecutionKey, result.ExecutionKey)
-	s.validateNewExecutionResponseRef(result.NewExecutionRef, expectedExecutionKey)
+	s.validateNewExecutionResponseRef(result.ExecutionRef, expectedExecutionKey)
 	s.True(result.Created)
 }
 
@@ -306,8 +308,9 @@ func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_FailedOnly_Success() {
 			return tests.CreateWorkflowExecutionResponse, nil
 		},
 	).Times(1)
+	s.mockEngine.EXPECT().NotifyChasmExecution(gomock.Any(), gomock.Any()).Return().Times(1)
 
-	result, err := s.engine.NewExecution(
+	result, err := s.engine.StartExecution(
 		context.Background(),
 		ref,
 		s.newTestExecutionFn(newActivityID),
@@ -324,7 +327,7 @@ func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_FailedOnly_Success() {
 		RunID:       runID,
 	}
 	s.Equal(expectedExecutionKey, result.ExecutionKey)
-	s.validateNewExecutionResponseRef(result.NewExecutionRef, expectedExecutionKey)
+	s.validateNewExecutionResponseRef(result.ExecutionRef, expectedExecutionKey)
 	s.True(result.Created)
 }
 
@@ -350,7 +353,7 @@ func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_FailedOnly_Fail() {
 		),
 	).Times(1)
 
-	result, err := s.engine.NewExecution(
+	result, err := s.engine.StartExecution(
 		context.Background(),
 		ref,
 		s.newTestExecutionFn(newActivityID),
@@ -385,7 +388,7 @@ func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_RejectDuplicate() {
 		),
 	).Times(1)
 
-	result, err := s.engine.NewExecution(
+	result, err := s.engine.StartExecution(
 		context.Background(),
 		ref,
 		s.newTestExecutionFn(newActivityID),
@@ -422,7 +425,7 @@ func (s *chasmEngineSuite) TestNewExecution_ConflictPolicy_UseExisting() {
 		currentRunConditionFailedErr,
 	).Times(1)
 
-	result, err := s.engine.NewExecution(
+	result, err := s.engine.StartExecution(
 		context.Background(),
 		ref,
 		s.newTestExecutionFn(newActivityID),
@@ -439,7 +442,7 @@ func (s *chasmEngineSuite) TestNewExecution_ConflictPolicy_UseExisting() {
 		RunID:       tv.RunID(),
 	}
 	s.Equal(expectedExecutionKey, result.ExecutionKey)
-	s.validateNewExecutionResponseRef(result.NewExecutionRef, expectedExecutionKey)
+	s.validateNewExecutionResponseRef(result.ExecutionRef, expectedExecutionKey)
 	s.False(result.Created)
 }
 
@@ -467,7 +470,7 @@ func (s *chasmEngineSuite) TestNewExecution_ConflictPolicy_TerminateExisting() {
 		currentRunConditionFailedErr,
 	).Times(1)
 
-	result, err := s.engine.NewExecution(
+	result, err := s.engine.StartExecution(
 		context.Background(),
 		ref,
 		s.newTestExecutionFn(newActivityID),
@@ -549,7 +552,7 @@ func (s *chasmEngineSuite) currentRunConditionFailedErr(
 		RunID:            tv.RunID(),
 		State:            state,
 		Status:           status,
-		LastWriteVersion: s.namespaceEntry.FailoverVersion() - 1,
+		LastWriteVersion: s.namespaceEntry.FailoverVersion(tv.WorkflowID()) - 1,
 	}
 }
 
@@ -873,7 +876,7 @@ func (s *chasmEngineSuite) TestPollComponent_StaleState() {
 		RunId:       executionKey.RunID,
 		ArchetypeId: uint32(testComponentTypeID),
 		ExecutionVersionedTransition: &persistencespb.VersionedTransition{
-			NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion() + 1, // ahead of persisted state
+			NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(executionKey.BusinessID) + 1, // ahead of persisted state
 			TransitionCount:          testTransitionCount,
 		},
 	}
@@ -940,6 +943,57 @@ func (s *chasmEngineSuite) TestCloseTime_ReturnsNonZeroWhenCompleted() {
 	s.NoError(err)
 }
 
+func (s *chasmEngineSuite) TestStateTransitionCount() {
+	tv := testvars.New(s.T())
+	tv = tv.WithRunID(tv.Any().RunID())
+
+	ref := chasm.NewComponentRef[*testComponent](
+		chasm.ExecutionKey{
+			NamespaceID: string(tests.NamespaceID),
+			BusinessID:  tv.WorkflowID(),
+			RunID:       tv.RunID(),
+		},
+	)
+
+	initialCount := int64(5)
+	state := s.buildPersistenceMutableState(
+		ref.ExecutionKey,
+		&persistencespb.ActivityInfo{ActivityId: ""},
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		nil,
+	)
+	state.ExecutionInfo.StateTransitionCount = initialCount
+
+	s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(&persistence.GetWorkflowExecutionResponse{State: state}, nil).Times(1)
+	s.mockExecutionManager.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(tests.UpdateWorkflowExecutionResponse, nil).Times(1)
+	s.mockEngine.EXPECT().NotifyChasmExecution(ref.ExecutionKey, gomock.Any()).Return().Times(1)
+
+	_, err := s.engine.UpdateComponent(
+		context.Background(),
+		ref,
+		func(ctx chasm.MutableContext, component chasm.Component) error {
+			tc, ok := component.(*testComponent)
+			s.True(ok)
+			tc.ActivityInfo.ActivityId = tv.ActivityID()
+			return nil
+		},
+	)
+	s.NoError(err)
+
+	err = s.engine.ReadComponent(
+		context.Background(),
+		ref,
+		func(ctx chasm.Context, component chasm.Component) error {
+			s.Equal(initialCount+1, ctx.StateTransitionCount())
+			return nil
+		},
+	)
+	s.NoError(err)
+}
+
 func (s *chasmEngineSuite) buildPersistenceMutableState(
 	key chasm.ExecutionKey,
 	componentState proto.Message,
@@ -962,7 +1016,7 @@ func (s *chasmEngineSuite) buildPersistenceMutableState(
 			},
 			TransitionHistory: []*persistencespb.VersionedTransition{
 				{
-					NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(),
+					NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(key.BusinessID),
 					TransitionCount:          testTransitionCount,
 				},
 			},
@@ -979,11 +1033,11 @@ func (s *chasmEngineSuite) buildPersistenceMutableState(
 			"": {
 				Metadata: &persistencespb.ChasmNodeMetadata{
 					InitialVersionedTransition: &persistencespb.VersionedTransition{
-						NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(),
+						NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(key.BusinessID),
 						TransitionCount:          1,
 					},
 					LastUpdateVersionedTransition: &persistencespb.VersionedTransition{
-						NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(),
+						NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(key.BusinessID),
 						TransitionCount:          testTransitionCount,
 					},
 					Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{

@@ -1,7 +1,6 @@
 package scheduler
 
 import (
-	"fmt"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -52,6 +51,10 @@ type (
 		NextWakeupTime time.Time
 		LastActionTime time.Time
 		BufferedStarts []*schedulespb.BufferedStart
+		// DroppedCount is the number of actions that would have been buffered but
+		// were dropped due to the limit being reached. Only populated when a limit
+		// is provided.
+		DroppedCount int64
 	}
 )
 
@@ -79,6 +82,7 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 	limit *int,
 ) (*ProcessedTimeRange, error) {
 	tweakables := s.config.Tweakables(scheduler.Namespace)
+	metricsHandler := newTaggedMetricsHandler(s.metricsHandler, scheduler)
 	overlapPolicy = scheduler.resolveOverlapPolicy(overlapPolicy)
 
 	s.logger.Debug("ProcessTimeRange",
@@ -117,12 +121,16 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 	var next legacyscheduler.GetNextTimeResult
 	var err error
 	var bufferedStarts []*schedulespb.BufferedStart
+	var droppedCount int64
+	limitReached := false
 	for next, err = s.NextTime(scheduler, start); err == nil && (!next.Next.IsZero() && !next.Next.After(end)); next, err = s.NextTime(scheduler, next.Next) {
 		lastAction = next.Next
 
-		if scheduler.Info.UpdateTime.AsTime().After(next.Next) {
+		if scheduler.Info.UpdateTime.AsTime().After(next.Next) && !manual {
 			// If we've received an update that took effect after the LastProcessedTime high
 			// water mark, discard actions that were scheduled to kick off before the update.
+			// Skip this check for manual (backfill) actions since they explicitly request
+			// past times.
 			s.logger.Warn("ProcessBuffer skipped an action due to update time",
 				tag.NewTimeTag("updateTime", scheduler.Info.UpdateTime.AsTime()),
 				tag.NewTimeTag("droppedActionTime", next.Next))
@@ -133,25 +141,33 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 			s.logger.Warn("Schedule missed catchup window",
 				tag.NewTimeTag("now", end),
 				tag.NewTimeTag("time", next.Next))
-			s.metricsHandler.Counter(metrics.ScheduleMissedCatchupWindow.Name()).Record(1)
+			metricsHandler.Counter(metrics.ScheduleMissedCatchupWindow.Name()).Record(1)
 
 			scheduler.Info.MissedCatchupWindow++
 			continue
 		}
 
-		nominalTimeSec := next.Nominal.Truncate(time.Second)
+		if limitReached {
+			droppedCount++
+			continue
+		}
 		bufferedStarts = append(bufferedStarts, &schedulespb.BufferedStart{
 			NominalTime:   timestamppb.New(next.Nominal),
 			ActualTime:    timestamppb.New(next.Next),
 			OverlapPolicy: overlapPolicy,
 			Manual:        manual,
 			RequestId:     generateRequestID(scheduler, backfillID, next.Nominal, next.Next),
-			WorkflowId:    fmt.Sprintf("%s-%s", workflowID, nominalTimeSec.Format(time.RFC3339)),
+			WorkflowId:    generateWorkflowID(workflowID, next.Nominal),
 		})
 
 		if limit != nil {
 			if (*limit)--; *limit <= 0 {
-				break
+				// For manual (backfill) actions, break immediately so the caller
+				// can retry later. For automated actions, continue to count dropped.
+				if manual {
+					break
+				}
+				limitReached = true
 			}
 		}
 	}
