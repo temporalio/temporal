@@ -47,10 +47,8 @@ type (
 	WorkflowAwareSchedulerOptions struct {
 		// EnableWorkflowQueueScheduler controls whether the WorkflowQueueScheduler is enabled.
 		EnableWorkflowQueueScheduler dynamicconfig.BoolPropertyFn
-		// WorkflowQueueSchedulerQueueSize is the buffer size for the WorkflowQueueScheduler's dispatch channel.
+		// WorkflowQueueSchedulerQueueSize is the buffer size for each workflow queue's task channel.
 		WorkflowQueueSchedulerQueueSize dynamicconfig.IntPropertyFn
-		// WorkflowQueueSchedulerWorkerCount is the number of workers for the WorkflowQueueScheduler.
-		WorkflowQueueSchedulerWorkerCount dynamicconfig.TypedSubscribable[int]
 	}
 
 	// WorkflowAwareScheduler is a scheduler that wraps a base FIFO scheduler and adds
@@ -83,10 +81,9 @@ func NewWorkflowAwareScheduler(
 	metricsHandler metrics.Handler,
 	timeSource clock.TimeSource,
 ) *WorkflowAwareScheduler {
-	workflowQueueScheduler := tasks.NewWorkflowQueueScheduler[Executable](
+	workflowQueueScheduler := tasks.NewWorkflowQueueScheduler(
 		&tasks.WorkflowQueueSchedulerOptions{
-			QueueSize:   options.WorkflowQueueSchedulerQueueSize(),
-			WorkerCount: options.WorkflowQueueSchedulerWorkerCount,
+			QueueSize: options.WorkflowQueueSchedulerQueueSize(),
 		},
 		executableQueueKeyFn,
 		logger,

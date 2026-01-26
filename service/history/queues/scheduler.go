@@ -141,6 +141,7 @@ func NewScheduler(
 	fifoScheduler := tasks.NewFIFOScheduler[Executable](
 		fifoSchedulerOptions,
 		logger,
+		metricsHandler,
 	)
 
 	// Wrap the FIFO scheduler with WorkflowAwareScheduler for sequential per-workflow processing

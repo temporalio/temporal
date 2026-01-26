@@ -384,7 +384,7 @@ func (s *WorkflowQueueSchedulerDisabledTestSuite) SetupSuite() {
 		// DISABLE WorkflowQueueScheduler for comparison
 		dynamicconfig.TaskSchedulerEnableWorkflowQueueScheduler.Key(): false,
 		// Use same settings as enabled contention test for fair comparison
-		dynamicconfig.NumPendingActivitiesLimitError.Key():            1200,
+		dynamicconfig.NumPendingActivitiesLimitError.Key():            5000,
 		dynamicconfig.TransferProcessorSchedulerWorkerCount.Key():     50,
 		dynamicconfig.HistoryCacheNonUserContextLockTimeout.Key():     5 * time.Millisecond,
 	}
@@ -455,10 +455,10 @@ func (s *WorkflowQueueSchedulerDisabledTestSuite) TestSignalBurstWithFeatureDisa
 	s.Equal(int64(0), tasksSubmitted, "No tasks should be submitted to WorkflowQueueScheduler when disabled")
 }
 
-// TestActivityWorkflowWithFeatureDisabled runs the same 500-activity workload as the enabled test
+// TestActivityWorkflowWithFeatureDisabled runs the same 2000-activity workload as the enabled test
 // but with WQS disabled, for direct performance comparison.
 func (s *WorkflowQueueSchedulerDisabledTestSuite) TestActivityWorkflowWithFeatureDisabled() {
-	const activityCount = 500
+	const activityCount = 2000
 
 	// Simple activity that returns immediately
 	noopActivity := func(ctx context.Context, input int) (int, error) {
@@ -523,12 +523,18 @@ func (s *WorkflowQueueSchedulerDisabledTestSuite) TestActivityWorkflowWithFeatur
 	wqsTasksAborted := sumMetricValues(snapshot, metrics.WorkflowQueueSchedulerTasksAborted.Name())
 	wqsSubmitRejected := sumMetricValues(snapshot, metrics.WorkflowQueueSchedulerSubmitRejected.Name())
 
+	// Get FIFO scheduler metrics
+	fifoTasksCompleted := sumMetricValues(snapshot, metrics.FIFOSchedulerTasksCompleted.Name())
+	fifoTasksFailed := sumMetricValues(snapshot, metrics.FIFOSchedulerTasksFailed.Name())
+
 	s.Logger.Info("Activity workflow metrics with WorkflowQueueScheduler DISABLED",
 		tag.NewInt64("wqs_tasks_submitted", wqsTasksSubmitted),
 		tag.NewInt64("wqs_tasks_completed", wqsTasksCompleted),
 		tag.NewInt64("wqs_tasks_failed", wqsTasksFailed),
 		tag.NewInt64("wqs_tasks_aborted", wqsTasksAborted),
-		tag.NewInt64("wqs_submit_rejected", wqsSubmitRejected))
+		tag.NewInt64("wqs_submit_rejected", wqsSubmitRejected),
+		tag.NewInt64("fifo_tasks_completed", fifoTasksCompleted),
+		tag.NewInt64("fifo_tasks_failed", fifoTasksFailed))
 
 	// Get latency metrics
 	taskQueueLatencyCount, taskQueueLatencyAvg, taskQueueLatencyMin, taskQueueLatencyMax, taskQueueLatencyP50, taskQueueLatencyP90, taskQueueLatencyP99 := getTimerStats(snapshot, metrics.TaskQueueLatency.Name())
@@ -582,9 +588,9 @@ func (s *WorkflowQueueSchedulerContentionTestSuite) SetupSuite() {
 		// Enable WorkflowQueueScheduler
 		dynamicconfig.TaskSchedulerEnableWorkflowQueueScheduler.Key():      true,
 		dynamicconfig.TaskSchedulerWorkflowQueueSchedulerWorkerCount.Key(): 50,
-		dynamicconfig.TaskSchedulerWorkflowQueueSchedulerQueueSize.Key():   2000,
+		dynamicconfig.TaskSchedulerWorkflowQueueSchedulerQueueSize.Key():   500,
 		// Increase pending activities limit to allow more parallel activities
-		dynamicconfig.NumPendingActivitiesLimitError.Key(): 1200,
+		dynamicconfig.NumPendingActivitiesLimitError.Key(): 5000,
 		// Set FIFO worker count to 50 to increase contention
 		dynamicconfig.TransferProcessorSchedulerWorkerCount.Key(): 50,
 		// Use very short lock timeout to trigger contention - tasks waiting for the lock
@@ -602,7 +608,7 @@ func (s *WorkflowQueueSchedulerContentionTestSuite) SetupSuite() {
 // are hard to reliably trigger in functional tests. The unit tests in
 // workflow_aware_scheduler_test.go verify the routing logic directly.
 func (s *WorkflowQueueSchedulerContentionTestSuite) TestActivityWorkflowWithMetricsObservability() {
-	const activityCount = 500
+	const activityCount = 2000
 
 	// Simple activity that returns immediately
 	noopActivity := func(ctx context.Context, input int) (int, error) {
@@ -667,12 +673,18 @@ func (s *WorkflowQueueSchedulerContentionTestSuite) TestActivityWorkflowWithMetr
 	wqsTasksAborted := sumMetricValues(snapshot, metrics.WorkflowQueueSchedulerTasksAborted.Name())
 	wqsSubmitRejected := sumMetricValues(snapshot, metrics.WorkflowQueueSchedulerSubmitRejected.Name())
 
+	// Get FIFO scheduler metrics
+	fifoTasksCompleted := sumMetricValues(snapshot, metrics.FIFOSchedulerTasksCompleted.Name())
+	fifoTasksFailed := sumMetricValues(snapshot, metrics.FIFOSchedulerTasksFailed.Name())
+
 	s.Logger.Info("Activity workflow metrics with WorkflowQueueScheduler enabled",
 		tag.NewInt64("wqs_tasks_submitted", wqsTasksSubmitted),
 		tag.NewInt64("wqs_tasks_completed", wqsTasksCompleted),
 		tag.NewInt64("wqs_tasks_failed", wqsTasksFailed),
 		tag.NewInt64("wqs_tasks_aborted", wqsTasksAborted),
-		tag.NewInt64("wqs_submit_rejected", wqsSubmitRejected))
+		tag.NewInt64("wqs_submit_rejected", wqsSubmitRejected),
+		tag.NewInt64("fifo_tasks_completed", fifoTasksCompleted),
+		tag.NewInt64("fifo_tasks_failed", fifoTasksFailed))
 
 	// Get latency metrics
 	// TaskQueueLatency: End-to-end latency from task generation to completion

@@ -1078,6 +1078,10 @@ var (
 	WorkflowQueueSchedulerTaskLatency       = NewTimerDef("workflow_queue_scheduler_task_latency")
 	WorkflowQueueSchedulerQueueWaitTime     = NewTimerDef("workflow_queue_scheduler_queue_wait_time")
 
+	// FIFOScheduler metrics
+	FIFOSchedulerTasksCompleted = NewCounterDef("fifo_scheduler_tasks_completed")
+	FIFOSchedulerTasksFailed    = NewCounterDef("fifo_scheduler_tasks_failed")
+
 	PausedActivitiesCounter                 = NewCounterDef("paused_activities")
 	ExternalPayloadUploadSize               = NewBytesHistogramDef("external_payload_upload_size", WithDescription("The histogram of sizes in bytes of uploaded external payloads."))
 

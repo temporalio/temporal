@@ -86,8 +86,7 @@ func (s *scheduledQueueSuite) SetupTest() {
 			WorkflowAwareSchedulerOptions: WorkflowAwareSchedulerOptions{
 				EnableWorkflowQueueScheduler:      func() bool { return false },
 				WorkflowQueueSchedulerQueueSize:   func() int { return 100 },
-				WorkflowQueueSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 1, func() {} },
-			},
+							},
 		},
 		s.mockShard.GetNamespaceRegistry(),
 		logger,

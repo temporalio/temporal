@@ -47,8 +47,7 @@ func NewVisibilityQueueFactory(
 					WorkflowAwareSchedulerOptions: queues.WorkflowAwareSchedulerOptions{
 						EnableWorkflowQueueScheduler:      params.Config.TaskSchedulerEnableWorkflowQueueScheduler,
 						WorkflowQueueSchedulerQueueSize:   params.Config.TaskSchedulerWorkflowQueueSchedulerQueueSize,
-						WorkflowQueueSchedulerWorkerCount: params.Config.TaskSchedulerWorkflowQueueSchedulerWorkerCount,
-					},
+											},
 				},
 				params.NamespaceRegistry,
 				params.Logger,

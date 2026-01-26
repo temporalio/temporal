@@ -78,8 +78,7 @@ func (s *workflowAwareSchedulerSuite) TestNewWorkflowAwareScheduler_DefaultQueue
 		WorkflowAwareSchedulerOptions{
 			EnableWorkflowQueueScheduler:      func() bool { return false },
 			WorkflowQueueSchedulerQueueSize:   func() int { return 1000 }, // default queue size
-			WorkflowQueueSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 1, func() {} },
-		},
+					},
 		s.logger,
 		metrics.NoopMetricsHandler,
 		clock.NewRealTimeSource(),
@@ -96,8 +95,7 @@ func (s *workflowAwareSchedulerSuite) TestNewWorkflowAwareScheduler_CustomQueueS
 		WorkflowAwareSchedulerOptions{
 			EnableWorkflowQueueScheduler:      func() bool { return true },
 			WorkflowQueueSchedulerQueueSize:   func() int { return 500 },
-			WorkflowQueueSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 2, func() {} },
-		},
+					},
 		s.logger,
 		metrics.NoopMetricsHandler,
 		clock.NewRealTimeSource(),
@@ -165,8 +163,7 @@ func (s *workflowAwareSchedulerSuite) TestSubmit_RoutesToWorkflowQueueSchedulerW
 		WorkflowAwareSchedulerOptions{
 			EnableWorkflowQueueScheduler:      func() bool { return true },
 			WorkflowQueueSchedulerQueueSize:   func() int { return 100 },
-			WorkflowQueueSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 1, func() {} },
-		},
+					},
 		s.logger,
 		metrics.NoopMetricsHandler,
 		clock.NewRealTimeSource(),
@@ -238,8 +235,7 @@ func (s *workflowAwareSchedulerSuite) TestTrySubmit_DelegatesToBaseWhenWorkflowQ
 		WorkflowAwareSchedulerOptions{
 			EnableWorkflowQueueScheduler:      func() bool { return false },
 			WorkflowQueueSchedulerQueueSize:   func() int { return 100 },
-			WorkflowQueueSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 1, func() {} },
-		},
+					},
 		s.logger,
 		metrics.NoopMetricsHandler,
 		clock.NewRealTimeSource(),
@@ -263,8 +259,7 @@ func (s *workflowAwareSchedulerSuite) TestTrySubmit_RoutesToBaseWhenNoActiveQueu
 		WorkflowAwareSchedulerOptions{
 			EnableWorkflowQueueScheduler:      func() bool { return true },
 			WorkflowQueueSchedulerQueueSize:   func() int { return 100 },
-			WorkflowQueueSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 1, func() {} },
-		},
+					},
 		s.logger,
 		metrics.NoopMetricsHandler,
 		clock.NewRealTimeSource(),
@@ -287,8 +282,7 @@ func (s *workflowAwareSchedulerSuite) TestTrySubmit_AddsToExistingQueueSuccessfu
 		WorkflowAwareSchedulerOptions{
 			EnableWorkflowQueueScheduler:      func() bool { return true },
 			WorkflowQueueSchedulerQueueSize:   func() int { return 100 },
-			WorkflowQueueSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 1, func() {} },
-		},
+					},
 		s.logger,
 		metrics.NoopMetricsHandler,
 		clock.NewRealTimeSource(),
@@ -346,8 +340,7 @@ func (s *workflowAwareSchedulerSuite) TestHandleBusyWorkflow_ReturnsFalseWhenDis
 		WorkflowAwareSchedulerOptions{
 			EnableWorkflowQueueScheduler:      func() bool { return false },
 			WorkflowQueueSchedulerQueueSize:   func() int { return 100 },
-			WorkflowQueueSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 1, func() {} },
-		},
+					},
 		s.logger,
 		metrics.NoopMetricsHandler,
 		clock.NewRealTimeSource(),
@@ -365,8 +358,7 @@ func (s *workflowAwareSchedulerSuite) TestHandleBusyWorkflow_SubmitsToWorkflowQu
 		WorkflowAwareSchedulerOptions{
 			EnableWorkflowQueueScheduler:      func() bool { return true },
 			WorkflowQueueSchedulerQueueSize:   func() int { return 100 },
-			WorkflowQueueSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 1, func() {} },
-		},
+					},
 		s.logger,
 		metrics.NoopMetricsHandler,
 		clock.NewRealTimeSource(),
@@ -392,9 +384,8 @@ func (s *workflowAwareSchedulerSuite) TestHandleBusyWorkflow_FallsBackToBaseSche
 	scheduler := NewWorkflowAwareScheduler(
 		mockBaseScheduler,
 		WorkflowAwareSchedulerOptions{
-			EnableWorkflowQueueScheduler:      func() bool { return true },
-			WorkflowQueueSchedulerQueueSize:   func() int { return 1 },
-			WorkflowQueueSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 0, func() {} }, // 0 workers
+			EnableWorkflowQueueScheduler:    func() bool { return true },
+			WorkflowQueueSchedulerQueueSize: func() int { return 1 }, // Small buffer
 		},
 		s.logger,
 		metrics.NoopMetricsHandler,
@@ -403,16 +394,37 @@ func (s *workflowAwareSchedulerSuite) TestHandleBusyWorkflow_FallsBackToBaseSche
 	scheduler.Start()
 	defer scheduler.Stop()
 
-	// Fill the queue
+	// First task blocks execution so queue stays occupied
+	blockCh := make(chan struct{})
 	mockExec1 := s.createMockExecutable("ns1", "wf1", "run1")
 	mockExec1.EXPECT().RetryPolicy().Return(backoff.NewExponentialRetryPolicy(time.Millisecond)).AnyTimes()
+	mockExec1.EXPECT().Execute().DoAndReturn(func() error {
+		<-blockCh
+		return nil
+	}).MaxTimes(1)
+	mockExec1.EXPECT().Ack().MaxTimes(1)
 	mockExec1.EXPECT().Abort().MaxTimes(1)
 	s.True(scheduler.HandleBusyWorkflow(mockExec1))
 
-	// Second task should fall back to base scheduler
-	mockExec2 := s.createMockExecutable("ns1", "wf2", "run2")
-	mockBaseScheduler.EXPECT().TrySubmit(mockExec2).Return(true).Times(1)
+	// Wait for goroutine to pick up first task
+	time.Sleep(10 * time.Millisecond)
+
+	// Second task fills the buffer (same workflow)
+	mockExec2 := s.createMockExecutable("ns1", "wf1", "run1")
+	mockExec2.EXPECT().RetryPolicy().Return(backoff.NewExponentialRetryPolicy(time.Millisecond)).AnyTimes()
+	mockExec2.EXPECT().Execute().Return(nil).MaxTimes(1)
+	mockExec2.EXPECT().Ack().MaxTimes(1)
+	mockExec2.EXPECT().Abort().MaxTimes(1)
 	s.True(scheduler.HandleBusyWorkflow(mockExec2))
+
+	// Third task to same workflow should fall back to base scheduler (queue full)
+	mockExec3 := s.createMockExecutable("ns1", "wf1", "run1")
+	mockBaseScheduler.EXPECT().TrySubmit(mockExec3).Return(true).Times(1)
+	s.True(scheduler.HandleBusyWorkflow(mockExec3))
+
+	// Cleanup
+	close(blockCh)
+	time.Sleep(50 * time.Millisecond)
 }
 
 // =============================================================================
@@ -428,8 +440,7 @@ func (s *workflowAwareSchedulerSuite) TestHasWorkflowQueue_ReturnsFalseWhenDisab
 		WorkflowAwareSchedulerOptions{
 			EnableWorkflowQueueScheduler:      func() bool { return false },
 			WorkflowQueueSchedulerQueueSize:   func() int { return 100 },
-			WorkflowQueueSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 1, func() {} },
-		},
+					},
 		s.logger,
 		metrics.NoopMetricsHandler,
 		clock.NewRealTimeSource(),
@@ -447,8 +458,7 @@ func (s *workflowAwareSchedulerSuite) TestHasWorkflowQueue_ReturnsFalseWhenNoQue
 		WorkflowAwareSchedulerOptions{
 			EnableWorkflowQueueScheduler:      func() bool { return true },
 			WorkflowQueueSchedulerQueueSize:   func() int { return 100 },
-			WorkflowQueueSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 1, func() {} },
-		},
+					},
 		s.logger,
 		metrics.NoopMetricsHandler,
 		clock.NewRealTimeSource(),
@@ -470,8 +480,7 @@ func (s *workflowAwareSchedulerSuite) TestHasWorkflowQueue_ReturnsTrueWhenQueueE
 		WorkflowAwareSchedulerOptions{
 			EnableWorkflowQueueScheduler:      func() bool { return true },
 			WorkflowQueueSchedulerQueueSize:   func() int { return 100 },
-			WorkflowQueueSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 1, func() {} },
-		},
+					},
 		s.logger,
 		metrics.NoopMetricsHandler,
 		clock.NewRealTimeSource(),
@@ -554,8 +563,7 @@ func (s *workflowAwareSchedulerSuite) TestConcurrentSubmit() {
 		WorkflowAwareSchedulerOptions{
 			EnableWorkflowQueueScheduler:      func() bool { return true },
 			WorkflowQueueSchedulerQueueSize:   func() int { return 1000 },
-			WorkflowQueueSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 4, func() {} },
-		},
+					},
 		s.logger,
 		metrics.NoopMetricsHandler,
 		clock.NewRealTimeSource(),
@@ -592,8 +600,7 @@ func (s *workflowAwareSchedulerSuite) TestConcurrentHandleBusyWorkflow() {
 		WorkflowAwareSchedulerOptions{
 			EnableWorkflowQueueScheduler:      func() bool { return true },
 			WorkflowQueueSchedulerQueueSize:   func() int { return 1000 },
-			WorkflowQueueSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 4, func() {} },
-		},
+					},
 		s.logger,
 		metrics.NoopMetricsHandler,
 		clock.NewRealTimeSource(),
@@ -638,8 +645,7 @@ func (s *workflowAwareSchedulerSuite) defaultSchedulerOptions(enabled bool) Work
 	return WorkflowAwareSchedulerOptions{
 		EnableWorkflowQueueScheduler:      func() bool { return enabled },
 		WorkflowQueueSchedulerQueueSize:   func() int { return 100 },
-		WorkflowQueueSchedulerWorkerCount: func(_ func(int)) (int, func()) { return 1, func() {} },
-	}
+			}
 }
 
 // createSchedulerWithMock creates a WorkflowAwareScheduler with a mock base scheduler
