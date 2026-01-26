@@ -9,7 +9,7 @@ Convert remaining test files in `tests/` from testify suite pattern to `testcore
 |---|------|-------|--------|
 | 1 | `admin_test.go` | 155 | Completed |
 | 2 | `workflow_visibility_test.go` | 177 | Completed |
-| 3 | `links_test.go` | 196 | Pending |
+| 3 | `links_test.go` | 196 | Completed |
 | 4 | `purge_dlq_tasks_api_test.go` | 214 | Pending |
 | 5 | `workflow_alias_search_attribute_test.go` | 228 | Pending |
 | 6 | `activity_api_batch_unpause_test.go` | 230 | Pending |
