@@ -16,7 +16,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        run: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+        run: [1, 2, 3, 4, 5]
     steps:
       - uses: actions/checkout@v4
 
@@ -25,13 +25,28 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - name: Install stress-ng
+        run: sudo apt-get update && sudo apt-get install -y stress-ng
+
       - run: make pre-build-functional-test-coverage
 
-      - name: Run flaky test
+      - name: Run flaky test with CPU stress
         timeout-minutes: 40
         run: |
+          # Start CPU stress in background to simulate CI load
+          # This creates contention that can cause 1-second timeouts to misfire
+          stress-ng --cpu 2 --timeout 600s &
+          STRESS_PID=$!
+
+          # Run the full WorkflowTestSuite which has 15 parallel tests
           make functional-test-coverage
+          TEST_EXIT=$?
+
+          # Clean up stress
+          kill $STRESS_PID 2>/dev/null || true
+
+          exit $TEST_EXIT
         env:
           PERSISTENCE_TYPE: sql
           PERSISTENCE_DRIVER: sqlite
-          TEST_ARGS: "-run TestWorkflowTestSuite/TestWorkflowTaskAndActivityTaskTimeoutsWorkflow -count 1"
+          TEST_ARGS: "-run TestWorkflowTestSuite -count 1"
