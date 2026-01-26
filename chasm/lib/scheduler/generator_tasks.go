@@ -53,6 +53,7 @@ func (g *GeneratorTaskExecutor) Execute(
 ) error {
 	scheduler := generator.Scheduler.Get(ctx)
 	logger := newTaggedLogger(g.baseLogger, scheduler)
+	metricsHandler := newTaggedMetricsHandler(g.metricsHandler, scheduler)
 	invoker := scheduler.Invoker.Get(ctx)
 
 	// If we have no last processed time, this is a new schedule.
@@ -99,7 +100,7 @@ func (g *GeneratorTaskExecutor) Execute(
 	if result.DroppedCount > 0 {
 		logger.Warn("Buffer overrun, dropping actions",
 			tag.NewInt64("dropped-count", result.DroppedCount))
-		g.metricsHandler.Counter(metrics.ScheduleBufferOverruns.Name()).Record(result.DroppedCount)
+		metricsHandler.Counter(metrics.ScheduleBufferOverruns.Name()).Record(result.DroppedCount)
 		scheduler.Info.BufferDropped += result.DroppedCount
 	}
 

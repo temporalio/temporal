@@ -82,6 +82,7 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 	limit *int,
 ) (*ProcessedTimeRange, error) {
 	tweakables := s.config.Tweakables(scheduler.Namespace)
+	metricsHandler := newTaggedMetricsHandler(s.metricsHandler, scheduler)
 	overlapPolicy = scheduler.resolveOverlapPolicy(overlapPolicy)
 
 	s.logger.Debug("ProcessTimeRange",
@@ -140,7 +141,7 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 			s.logger.Warn("Schedule missed catchup window",
 				tag.NewTimeTag("now", end),
 				tag.NewTimeTag("time", next.Next))
-			s.metricsHandler.Counter(metrics.ScheduleMissedCatchupWindow.Name()).Record(1)
+			metricsHandler.Counter(metrics.ScheduleMissedCatchupWindow.Name()).Record(1)
 
 			scheduler.Info.MissedCatchupWindow++
 			continue
