@@ -220,6 +220,38 @@ func (s *commandAttrValidatorSuite) TestValidateUpsertWorkflowSearchAttributes()
 	}
 }
 
+func (s *commandAttrValidatorSuite) TestValidateContinueAsNewWorkflowExecutionAttributes_InternalPerNsTaskQueue() {
+	attributes := &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: primitives.PerNSWorkerTaskQueue,
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+	}
+
+	executionInfo := &persistencespb.WorkflowExecutionInfo{
+		TaskQueue: "regular-task-queue",
+	}
+
+	fc, err := s.validator.ValidateContinueAsNewWorkflowExecutionAttributes(
+		tests.Namespace,
+		attributes,
+		executionInfo,
+	)
+	s.Error(err)
+	s.Contains(err.Error(), "cannot use internal per namespace task queue")
+	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_CONTINUE_AS_NEW_ATTRIBUTES, fc)
+
+	executionInfo.TaskQueue = primitives.PerNSWorkerTaskQueue
+
+	fc, err = s.validator.ValidateContinueAsNewWorkflowExecutionAttributes(
+		tests.Namespace,
+		attributes,
+		executionInfo,
+	)
+	s.NoError(err)
+	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, fc)
+}
+
 func (s *commandAttrValidatorSuite) TestValidateContinueAsNewWorkflowExecutionAttributes() {
 	executionTimeout := time.Hour
 	workflowTypeName := "workflowType"

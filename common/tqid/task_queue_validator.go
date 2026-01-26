@@ -60,17 +60,28 @@ func NormalizeAndValidate(
 	return normalizeAndValidate(taskQueue, defaultName, maxIDLengthLimit, true)
 }
 
-// NormalizeAndValidateUserDefined is especially used for user-defined task queues,
-// so that users cannot start any internal workflows.
+// NormalizeAndValidateUserDefined is like NormalizeAndValidate, but specifically for external
+// user-defined task queues, disallowing use of internal per-namespace task queues.
+// Prioritise using this over NormalizeAndValidate() when possible.
+//
+// Parameters:
+//   - taskQueue: The TaskQueue to validate and normalize. If nil, returns an error.
+//   - defaultName: Default name to use if taskQueue name is empty.
+//   - parentTaskQueue: The TaskQueue of the parent component, if any. Can be nil.
+//   - maxIDLengthLimit: Maximum allowed length for the TaskQueue name.
+//
+// Returns an error if validation fails, nil otherwise.
 func NormalizeAndValidateUserDefined(
 	taskQueue *taskqueuepb.TaskQueue,
 	defaultName string,
+	parentTaskQueue string,
 	maxIDLengthLimit int,
 ) error {
 	if err := normalizeAndValidate(taskQueue, defaultName, maxIDLengthLimit, false); err != nil {
 		return err
 	}
-	return primitives.CheckNotInternalPerNsTaskQueue(taskQueue.GetName())
+	// reminder: if this check goes first, taskQueue.GetName() is not ready to use directly
+	return primitives.CheckInternalPerNsTaskQueueAllowed(taskQueue.GetName(), parentTaskQueue)
 }
 
 func normalizeAndValidate(

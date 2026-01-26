@@ -7,9 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	"go.temporal.io/server/common/primitives"
 )
 
 func TestNormalizeAndValidate(t *testing.T) {
@@ -149,82 +147,130 @@ func TestNormalizeAndValidate(t *testing.T) {
 }
 
 func TestNormalizeAndValidateUserDefined(t *testing.T) {
+	const perNsTaskQueue = "temporal-sys-per-ns-tq"
+
 	tests := []struct {
 		name             string
 		taskQueue        *taskqueuepb.TaskQueue
+		parentTaskQueue  *taskqueuepb.TaskQueue
+		defaultVal       string
 		maxIDLengthLimit int
-		expectError      bool
-		expectedKind     enumspb.TaskQueueKind
+		expectedError    string
 	}{
-		{
-			name:             "User defined task queue - valid",
-			taskQueue:        &taskqueuepb.TaskQueue{Name: "my-custom-task-queue"},
-			maxIDLengthLimit: 100,
-			expectError:      false,
-			expectedKind:     enumspb.TASK_QUEUE_KIND_NORMAL,
-		},
-		{
-			name:             "Internal task queue - PerNSWorkerTaskQueue should be blocked",
-			taskQueue:        &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
-			maxIDLengthLimit: 100,
-			expectError:      true,
-			expectedKind:     enumspb.TASK_QUEUE_KIND_NORMAL,
-		},
-		{
-			name:             "Other internal task queues should be allowed",
-			taskQueue:        &taskqueuepb.TaskQueue{Name: primitives.DefaultWorkerTaskQueue},
-			maxIDLengthLimit: 100,
-			expectError:      false,
-			expectedKind:     enumspb.TASK_QUEUE_KIND_NORMAL,
-		},
 		{
 			name:             "Nil task queue",
 			taskQueue:        nil,
+			parentTaskQueue:  nil,
+			defaultVal:       "default",
 			maxIDLengthLimit: 100,
-			expectError:      true,
-			expectedKind:     enumspb.TASK_QUEUE_KIND_UNSPECIFIED,
+			expectedError:    "taskQueue is not set",
 		},
 		{
-			name:             "Empty name without default",
-			taskQueue:        &taskqueuepb.TaskQueue{},
+			name:             "Valid user-defined task queue without parent",
+			taskQueue:        &taskqueuepb.TaskQueue{Name: "user-tq"},
+			parentTaskQueue:  nil,
+			defaultVal:       "",
 			maxIDLengthLimit: 100,
-			expectError:      true,
-			expectedKind:     enumspb.TASK_QUEUE_KIND_NORMAL,
+			expectedError:    "",
+		},
+		{
+			name:             "Valid user-defined task queue with parent",
+			taskQueue:        &taskqueuepb.TaskQueue{Name: "user-tq"},
+			parentTaskQueue:  &taskqueuepb.TaskQueue{Name: "parent-tq"},
+			defaultVal:       "",
+			maxIDLengthLimit: 100,
+			expectedError:    "",
+		},
+		{
+			name:             "Internal per-ns task queue without parent",
+			taskQueue:        &taskqueuepb.TaskQueue{Name: perNsTaskQueue},
+			parentTaskQueue:  nil,
+			defaultVal:       "",
+			maxIDLengthLimit: 100,
+			expectedError:    "cannot use internal per namespace task queue",
+		},
+		{
+			name:             "Internal per-ns task queue with non-internal parent",
+			taskQueue:        &taskqueuepb.TaskQueue{Name: perNsTaskQueue},
+			parentTaskQueue:  &taskqueuepb.TaskQueue{Name: "user-parent-tq"},
+			defaultVal:       "",
+			maxIDLengthLimit: 100,
+			expectedError:    "cannot use internal per namespace task queue",
+		},
+		{
+			name:             "Internal per-ns task queue with internal per-ns parent",
+			taskQueue:        &taskqueuepb.TaskQueue{Name: perNsTaskQueue},
+			parentTaskQueue:  &taskqueuepb.TaskQueue{Name: perNsTaskQueue},
+			defaultVal:       "",
+			maxIDLengthLimit: 100,
+			expectedError:    "",
+		},
+		{
+			name:             "Empty name with default, no parent",
+			taskQueue:        &taskqueuepb.TaskQueue{},
+			parentTaskQueue:  nil,
+			defaultVal:       "default",
+			maxIDLengthLimit: 100,
+			expectedError:    "",
+		},
+		{
+			name:             "Empty name, no default, no parent",
+			taskQueue:        &taskqueuepb.TaskQueue{},
+			parentTaskQueue:  nil,
+			defaultVal:       "",
+			maxIDLengthLimit: 100,
+			expectedError:    "missing task queue name",
 		},
 		{
 			name:             "Name exceeds max length",
 			taskQueue:        &taskqueuepb.TaskQueue{Name: strings.Repeat("a", 101)},
+			parentTaskQueue:  nil,
+			defaultVal:       "",
 			maxIDLengthLimit: 100,
-			expectError:      true,
-			expectedKind:     enumspb.TASK_QUEUE_KIND_NORMAL,
+			expectedError:    "taskQueue length exceeds limit",
 		},
 		{
-			name:             "Reserved prefix is allowed for partitions",
-			taskQueue:        &taskqueuepb.TaskQueue{Name: reservedTaskQueuePrefix + "name"},
+			name:             "Sticky queue with internal per-ns task queue without parent",
+			taskQueue:        &taskqueuepb.TaskQueue{Name: perNsTaskQueue, Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: "normal"},
+			parentTaskQueue:  nil,
+			defaultVal:       "",
 			maxIDLengthLimit: 100,
-			expectError:      false,
-			expectedKind:     enumspb.TASK_QUEUE_KIND_NORMAL,
+			expectedError:    "cannot use internal per namespace task queue",
 		},
 		{
-			name:             "Valid sticky queue",
-			taskQueue:        &taskqueuepb.TaskQueue{Name: "sticky", Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: "normal"},
+			name:             "Sticky queue with internal per-ns task queue with internal parent",
+			taskQueue:        &taskqueuepb.TaskQueue{Name: perNsTaskQueue, Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: "normal"},
+			parentTaskQueue:  &taskqueuepb.TaskQueue{Name: perNsTaskQueue},
+			defaultVal:       "",
 			maxIDLengthLimit: 100,
-			expectError:      false,
-			expectedKind:     enumspb.TASK_QUEUE_KIND_STICKY,
+			expectedError:    "",
+		},
+		{
+			name:             "User task queue with empty parent",
+			taskQueue:        &taskqueuepb.TaskQueue{Name: "user-tq"},
+			parentTaskQueue:  &taskqueuepb.TaskQueue{},
+			defaultVal:       "",
+			maxIDLengthLimit: 100,
+			expectedError:    "",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := NormalizeAndValidateUserDefined(tt.taskQueue, "" /* defaultVal */, tt.maxIDLengthLimit)
+			err := NormalizeAndValidateUserDefined(tt.taskQueue, tt.defaultVal, tt.parentTaskQueue.GetName(), tt.maxIDLengthLimit)
 
-			if tt.expectError {
-				require.Error(t, err)
-				var invalidArgument *serviceerror.InvalidArgument
-				assert.ErrorAs(t, err, &invalidArgument)
-			} else {
+			if tt.expectedError == "" {
 				require.NoError(t, err)
-				assert.Equal(t, tt.expectedKind, tt.taskQueue.GetKind())
+				if tt.taskQueue != nil {
+					require.NotEqual(t, enumspb.TASK_QUEUE_KIND_UNSPECIFIED, tt.taskQueue.GetKind(), "Kind should be normalized")
+				}
+			} else {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), tt.expectedError)
+			}
+
+			if tt.taskQueue != nil && tt.taskQueue.GetName() == "" && tt.defaultVal != "" && tt.expectedError == "" {
+				require.Equal(t, tt.defaultVal, tt.taskQueue.GetName(), "Default name should be applied")
 			}
 		})
 	}

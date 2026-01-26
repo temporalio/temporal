@@ -1028,7 +1028,7 @@ func (s *ChildWorkflowSuite) TestStartChildWorkflowWithInternalTaskQueue_Blocked
 			foundTaskFailed = true
 			attrs := event.GetWorkflowTaskFailedEventAttributes()
 			s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_START_CHILD_EXECUTION_ATTRIBUTES, attrs.GetCause())
-			s.Contains(attrs.GetFailure().GetMessage(), "per-ns-tq")
+			s.Contains(attrs.GetFailure().GetMessage(), "internal per namespace task queue")
 			break
 		}
 	}

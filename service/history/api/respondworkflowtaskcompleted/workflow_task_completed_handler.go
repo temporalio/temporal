@@ -452,9 +452,6 @@ func (handler *workflowTaskCompletedHandler) handleCommandScheduleActivity(
 			)
 		},
 	); err != nil || handler.stopProcessing {
-		if err != nil {
-			handler.logger.Info("Invalid activity schedule attributes", tag.Error(err))
-		}
 		return nil, nil, err
 	}
 
@@ -1449,13 +1446,13 @@ func (handler *workflowTaskCompletedHandler) failWorkflowTaskOnInvalidArgument(
 	wtFailedCause enumspb.WorkflowTaskFailedCause,
 	err error,
 ) error {
-
-	switch err.(type) {
-	case *serviceerror.InvalidArgument:
+	var invalidArgument *serviceerror.InvalidArgument
+	// usecases like ValidateContinueAsNewWorkflowExecutionAttributes use fmt.Errorf to
+	// wrap the invalid argument so we need to check the real error type
+	if errors.As(err, &invalidArgument) {
 		return handler.failWorkflowTask(wtFailedCause, err)
-	default:
-		return err
 	}
+	return err
 }
 
 func (handler *workflowTaskCompletedHandler) failWorkflowTask(
