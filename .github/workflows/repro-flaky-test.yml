@@ -1,0 +1,40 @@
+name: Reproduce Flaky Test
+
+on:
+  pull_request:
+  push:
+    branches:
+      - fix-flaky-task-timeouts-test
+
+env:
+  DOCKER_COMPOSE_FILE: ./develop/github/docker-compose.yml
+  TEMPORAL_VERSION_CHECK_DISABLED: 1
+
+jobs:
+  repro-flaky-test:
+    name: Repro flaky test (run ${{ matrix.run }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        run: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - run: make pre-build-functional-test-coverage
+
+      - name: Start dependencies
+        run: docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} up -d
+
+      - name: Run flaky test
+        timeout-minutes: 40
+        run: |
+          make functional-test-coverage
+        env:
+          PERSISTENCE_DRIVER: sqlite
+          TEST_ARGS: "-run TestWorkflowTestSuite/TestWorkflowTaskAndActivityTaskTimeoutsWorkflow -count 1"
