@@ -223,5 +223,7 @@ func (s *sequentialSchedulerSuite) newTestProcessor() *SequentialScheduler[*Mock
 		hashFn,
 		factory,
 		log.NewNoopLogger(),
+		nil,
+		nil,
 	)
 }

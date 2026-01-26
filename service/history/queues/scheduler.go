@@ -80,6 +80,7 @@ func NewScheduler(
 	options SchedulerOptions,
 	namespaceRegistry namespace.Registry,
 	logger log.Logger,
+	metricsHandler metrics.Handler,
 ) Scheduler {
 	var scheduler tasks.Scheduler[Executable]
 
@@ -140,6 +141,7 @@ func NewScheduler(
 			logger,
 		)),
 		logger,
+		metricsHandler,
 	)
 
 	return &schedulerImpl{

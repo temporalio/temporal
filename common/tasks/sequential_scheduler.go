@@ -7,10 +7,12 @@ import (
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 )
 
 var _ Scheduler[Task] = (*SequentialScheduler[Task])(nil)
@@ -37,6 +39,12 @@ type (
 		queueChan    chan SequentialTaskQueue[T]
 
 		logger log.Logger
+
+		// Metrics fields
+		metricsHandler      metrics.Handler
+		metricTagsFn        MetricTagsFn[T]
+		timeSource          clock.TimeSource
+		assignedWorkerCount int64
 	}
 )
 
@@ -45,6 +53,8 @@ func NewSequentialScheduler[T Task](
 	taskQueueHashFn collection.HashFunc,
 	taskQueueFactory SequentialTaskQueueFactory[T],
 	logger log.Logger,
+	metricsHandler metrics.Handler,
+	metricTagsFn MetricTagsFn[T],
 ) *SequentialScheduler[T] {
 	return &SequentialScheduler[T]{
 		status:       common.DaemonStatusInitialized,
@@ -56,6 +66,10 @@ func NewSequentialScheduler[T Task](
 		queueFactory: taskQueueFactory,
 		queueChan:    make(chan SequentialTaskQueue[T], options.QueueSize),
 		queues:       collection.NewShardedConcurrentTxMap(1024, taskQueueHashFn),
+
+		metricsHandler: metricsHandler,
+		metricTagsFn:   metricTagsFn,
+		timeSource:     clock.NewRealTimeSource(),
 	}
 }
 
@@ -71,6 +85,11 @@ func (s *SequentialScheduler[T]) Start() {
 	initialWorkerCount, workerCountSubscriptionCancelFn := s.options.WorkerCount(s.updateWorkerCount)
 	s.workerCountSubscriptionCancelFn = workerCountSubscriptionCancelFn
 	s.updateWorkerCount(initialWorkerCount)
+
+	if s.metricsHandler != nil {
+		s.shutdownWG.Add(1)
+		go s.exportMetricsLoop()
+	}
 
 	s.logger.Info("sequential scheduler started")
 }
@@ -99,6 +118,9 @@ func (s *SequentialScheduler[T]) Stop() {
 }
 
 func (s *SequentialScheduler[T]) Submit(task T) {
+	s.setEnqueueTime(task)
+	s.recordTaskSubmitted(task)
+
 	queue := s.queueFactory(task)
 	queue.Add(task)
 
@@ -135,6 +157,8 @@ func (s *SequentialScheduler[T]) Submit(task T) {
 }
 
 func (s *SequentialScheduler[T]) TrySubmit(task T) bool {
+	s.setEnqueueTime(task)
+
 	queue := s.queueFactory(task)
 	queue.Add(task)
 
@@ -150,6 +174,7 @@ func (s *SequentialScheduler[T]) TrySubmit(task T) bool {
 		panic("Error is not expected as the evaluation function returns nil")
 	}
 	if fnEvaluated {
+		s.recordTaskSubmitted(task)
 		if s.isStopped() {
 			s.drainTasks()
 		}
@@ -158,6 +183,7 @@ func (s *SequentialScheduler[T]) TrySubmit(task T) bool {
 
 	select {
 	case s.queueChan <- queue:
+		s.recordTaskSubmitted(task)
 		if s.isStopped() {
 			s.drainTasks()
 		}
@@ -240,6 +266,9 @@ func (s *SequentialScheduler[T]) processTaskQueue(
 	queue SequentialTaskQueue[T],
 	workerShutdownCh <-chan struct{},
 ) {
+	atomic.AddInt64(&s.assignedWorkerCount, 1)
+	defer atomic.AddInt64(&s.assignedWorkerCount, -1)
+
 	for {
 		select {
 		case <-s.shutdownChan:
@@ -282,6 +311,8 @@ func (s *SequentialScheduler[T]) executeTask(queue SequentialTaskQueue[T]) {
 	shouldRetry := true
 	task := queue.Remove()
 
+	s.recordQueueLatency(task)
+
 	operation := func() (retErr error) {
 		var executePanic error
 		defer func() {
@@ -307,10 +338,12 @@ func (s *SequentialScheduler[T]) executeTask(queue SequentialTaskQueue[T]) {
 		}
 
 		task.Nack(err)
+		s.recordTaskCompleted(task)
 		return
 	}
 
 	task.Ack()
+	s.recordTaskCompleted(task)
 }
 
 func (s *SequentialScheduler[T]) drainTasks() {
@@ -338,4 +371,75 @@ LoopDrainQueues:
 
 func (s *SequentialScheduler[T]) isStopped() bool {
 	return atomic.LoadInt32(&s.status) == common.DaemonStatusStopped
+}
+
+func (s *SequentialScheduler[T]) exportMetricsLoop() {
+	defer s.shutdownWG.Done()
+
+	ticker := time.NewTicker(metricsExportInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-s.shutdownChan:
+			return
+		case <-ticker.C:
+			s.emitGaugeMetrics()
+		}
+	}
+}
+
+func (s *SequentialScheduler[T]) emitGaugeMetrics() {
+	s.workerLock.Lock()
+	activeWorkers := len(s.workerShutdownCh)
+	s.workerLock.Unlock()
+
+	assignedWorkers := atomic.LoadInt64(&s.assignedWorkerCount)
+	queueDepth := len(s.queueChan)
+	activeQueues := s.queues.Len()
+
+	metrics.SchedulerActiveWorkers.With(s.metricsHandler).Record(float64(activeWorkers))
+	metrics.SchedulerAssignedWorkers.With(s.metricsHandler).Record(float64(assignedWorkers))
+	metrics.SchedulerQueueDepth.With(s.metricsHandler).Record(float64(queueDepth))
+	metrics.SchedulerActiveQueues.With(s.metricsHandler).Record(float64(activeQueues))
+}
+
+func (s *SequentialScheduler[T]) setEnqueueTime(task T) {
+	if timestamped, ok := any(task).(SchedulerTimestampedTask); ok {
+		timestamped.SetSchedulerEnqueueTime(s.timeSource.Now())
+	}
+}
+
+func (s *SequentialScheduler[T]) recordQueueLatency(task T) {
+	if s.metricsHandler == nil {
+		return
+	}
+	if timestamped, ok := any(task).(SchedulerTimestampedTask); ok {
+		enqueueTime := timestamped.GetSchedulerEnqueueTime()
+		if !enqueueTime.IsZero() {
+			latency := s.timeSource.Now().Sub(enqueueTime)
+			metrics.SchedulerQueueLatency.With(s.metricsHandler).Record(latency, s.getMetricTags(task)...)
+		}
+	}
+}
+
+func (s *SequentialScheduler[T]) recordTaskSubmitted(task T) {
+	if s.metricsHandler == nil {
+		return
+	}
+	metrics.SchedulerTasksSubmitted.With(s.metricsHandler).Record(1, s.getMetricTags(task)...)
+}
+
+func (s *SequentialScheduler[T]) recordTaskCompleted(task T) {
+	if s.metricsHandler == nil {
+		return
+	}
+	metrics.SchedulerTasksCompleted.With(s.metricsHandler).Record(1, s.getMetricTags(task)...)
+}
+
+func (s *SequentialScheduler[T]) getMetricTags(task T) []metrics.Tag {
+	if s.metricTagsFn != nil {
+		return s.metricTagsFn(task)
+	}
+	return nil
 }

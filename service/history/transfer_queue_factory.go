@@ -54,6 +54,7 @@ func NewTransferQueueFactory(
 				},
 				params.NamespaceRegistry,
 				params.Logger,
+				nil, // metrics disabled for transfer queue
 			),
 			HostPriorityAssigner: queues.NewPriorityAssigner(
 				params.NamespaceRegistry,

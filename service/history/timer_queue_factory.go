@@ -51,6 +51,7 @@ func NewTimerQueueFactory(
 				},
 				params.NamespaceRegistry,
 				params.Logger,
+				nil, // metrics disabled for timer queue
 			),
 			HostPriorityAssigner: queues.NewPriorityAssigner(
 				params.NamespaceRegistry,

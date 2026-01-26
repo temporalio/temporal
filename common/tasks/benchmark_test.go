@@ -40,6 +40,7 @@ func BenchmarkInterleavedWeightedRoundRobinScheduler_Sequential(b *testing.B) {
 		},
 		Scheduler[*noopTask](&noopScheduler{}),
 		logger,
+		nil,
 	)
 	scheduler.Start()
 	defer scheduler.Stop()
@@ -66,6 +67,7 @@ func BenchmarkInterleavedWeightedRoundRobinScheduler_Parallel(b *testing.B) {
 		},
 		Scheduler[*noopTask](&noopScheduler{}),
 		logger,
+		nil,
 	)
 	scheduler.Start()
 	defer scheduler.Stop()

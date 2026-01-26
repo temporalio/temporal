@@ -155,6 +155,20 @@ func (mr *MockExecutableTaskMockRecorder) GetPriority() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPriority", reflect.TypeOf((*MockExecutableTask)(nil).GetPriority))
 }
 
+// GetSchedulerEnqueueTime mocks base method.
+func (m *MockExecutableTask) GetSchedulerEnqueueTime() time.Time {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetSchedulerEnqueueTime")
+	ret0, _ := ret[0].(time.Time)
+	return ret0
+}
+
+// GetSchedulerEnqueueTime indicates an expected call of GetSchedulerEnqueueTime.
+func (mr *MockExecutableTaskMockRecorder) GetSchedulerEnqueueTime() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSchedulerEnqueueTime", reflect.TypeOf((*MockExecutableTask)(nil).GetSchedulerEnqueueTime))
+}
+
 // IsRetryableError mocks base method.
 func (m *MockExecutableTask) IsRetryableError(err error) bool {
 	m.ctrl.T.Helper()
@@ -286,6 +300,18 @@ func (m *MockExecutableTask) RetryPolicy() backoff.RetryPolicy {
 func (mr *MockExecutableTaskMockRecorder) RetryPolicy() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RetryPolicy", reflect.TypeOf((*MockExecutableTask)(nil).RetryPolicy))
+}
+
+// SetSchedulerEnqueueTime mocks base method.
+func (m *MockExecutableTask) SetSchedulerEnqueueTime(arg0 time.Time) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetSchedulerEnqueueTime", arg0)
+}
+
+// SetSchedulerEnqueueTime indicates an expected call of SetSchedulerEnqueueTime.
+func (mr *MockExecutableTaskMockRecorder) SetSchedulerEnqueueTime(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetSchedulerEnqueueTime", reflect.TypeOf((*MockExecutableTask)(nil).SetSchedulerEnqueueTime), arg0)
 }
 
 // SourceClusterName mocks base method.

@@ -15,6 +15,7 @@ import (
 const (
 	defaultMonitorTickerDuration = time.Minute
 	defaultMonitorTickerJitter   = 0.15
+	metricsExportInterval        = 5 * time.Second
 )
 
 var _ Scheduler[Task] = (*FIFOScheduler[Task])(nil)

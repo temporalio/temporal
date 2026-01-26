@@ -47,6 +47,7 @@ func NewVisibilityQueueFactory(
 				},
 				params.NamespaceRegistry,
 				params.Logger,
+				nil, // metrics disabled for visibility queue
 			),
 			HostPriorityAssigner: queues.NewPriorityAssigner(
 				params.NamespaceRegistry,

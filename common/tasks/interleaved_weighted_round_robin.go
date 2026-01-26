@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 )
 
 const (
@@ -30,6 +31,8 @@ type (
 		ChannelWeightUpdateCh chan struct{}
 		// Optional, if specified, delete inactive channels after this duration
 		InactiveChannelDeletionDelay dynamicconfig.DurationPropertyFn
+		// Optional, if specified, used to convert channel key to string for metrics tagging
+		ChannelKeyToStringFn func(K) string
 	}
 
 	// TaskChannelKeyFn is the function for mapping a task to its task channel (key)
@@ -67,6 +70,9 @@ type (
 		//  3 -> 1
 		// then iwrrChannels will contain chan [0, 0, 0, 1, 0, 1, 2, 0, 1, 2, 3] (ID-ed by channel key)
 		iwrrChannels atomic.Value // []*WeightedChannel
+
+		// Metrics fields
+		metricsHandler metrics.Handler
 	}
 )
 
@@ -74,6 +80,7 @@ func NewInterleavedWeightedRoundRobinScheduler[T Task, K comparable](
 	options InterleavedWeightedRoundRobinSchedulerOptions[T, K],
 	fifoScheduler Scheduler[T],
 	logger log.Logger,
+	metricsHandler metrics.Handler,
 ) *InterleavedWeightedRoundRobinScheduler[T, K] {
 	iwrrChannels := atomic.Value{}
 	iwrrChannels.Store(WeightedChannels[T]{})
@@ -93,6 +100,8 @@ func NewInterleavedWeightedRoundRobinScheduler[T Task, K comparable](
 		numInflightTask:  0,
 		weightedChannels: make(map[K]*WeightedChannel[T]),
 		iwrrChannels:     iwrrChannels,
+
+		metricsHandler: metricsHandler,
 	}
 }
 
@@ -112,6 +121,11 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) Start() {
 
 	s.shutdownWG.Add(1)
 	go s.cleanupLoop()
+
+	if s.metricsHandler != nil {
+		s.shutdownWG.Add(1)
+		go s.exportMetricsLoop()
+	}
 
 	s.logger.Info("interleaved weighted round robin task scheduler started")
 }
@@ -151,6 +165,7 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) Submit(
 	// or exceeding rate limit
 	channel, releaseFn := s.getOrCreateTaskChannel(s.options.TaskChannelKeyFn(task))
 	defer releaseFn()
+	s.setEnqueueTime(task)
 	channel.Chan() <- task
 	s.notifyDispatcher()
 }
@@ -166,6 +181,7 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) TrySubmit(
 	// there are tasks pending dispatching, need to respect round roubin weight
 	channel, releaseFn := s.getOrCreateTaskChannel(s.options.TaskChannelKeyFn(task))
 	defer releaseFn()
+	s.setEnqueueTime(task)
 	select {
 	case channel.Chan() <- task:
 		s.notifyDispatcher()
@@ -349,6 +365,7 @@ LoopDispatch:
 		select {
 		case task := <-channel.Chan():
 			channel.UpdateLastActiveTime(now)
+			s.recordQueueLatency(task)
 			s.fifoScheduler.Submit(task)
 			numTasks++
 		default:
@@ -402,4 +419,60 @@ DrainLoop:
 
 func (s *InterleavedWeightedRoundRobinScheduler[T, K]) isStopped() bool {
 	return atomic.LoadInt32(&s.status) == common.DaemonStatusStopped
+}
+
+func (s *InterleavedWeightedRoundRobinScheduler[T, K]) exportMetricsLoop() {
+	defer s.shutdownWG.Done()
+
+	ticker := time.NewTicker(metricsExportInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-s.shutdownChan:
+			return
+		case <-ticker.C:
+			s.emitGaugeMetrics()
+		}
+	}
+}
+
+func (s *InterleavedWeightedRoundRobinScheduler[T, K]) emitGaugeMetrics() {
+	s.RLock()
+	defer s.RUnlock()
+
+	for key, channel := range s.weightedChannels {
+		depth := channel.Len()
+		var tags []metrics.Tag
+		if s.options.ChannelKeyToStringFn != nil {
+			tags = []metrics.Tag{metrics.StringTag("channel_key", s.options.ChannelKeyToStringFn(key))}
+		}
+		metrics.SchedulerQueueDepth.With(s.metricsHandler).Record(float64(depth), tags...)
+	}
+
+	metrics.SchedulerActiveQueues.With(s.metricsHandler).Record(float64(len(s.weightedChannels)))
+}
+
+func (s *InterleavedWeightedRoundRobinScheduler[T, K]) setEnqueueTime(task T) {
+	if timestamped, ok := any(task).(SchedulerTimestampedTask); ok {
+		timestamped.SetSchedulerEnqueueTime(s.ts.Now())
+	}
+}
+
+func (s *InterleavedWeightedRoundRobinScheduler[T, K]) recordQueueLatency(task T) {
+	if s.metricsHandler == nil {
+		return
+	}
+	if timestamped, ok := any(task).(SchedulerTimestampedTask); ok {
+		enqueueTime := timestamped.GetSchedulerEnqueueTime()
+		if !enqueueTime.IsZero() {
+			latency := s.ts.Now().Sub(enqueueTime)
+			var tags []metrics.Tag
+			if s.options.ChannelKeyToStringFn != nil {
+				key := s.options.TaskChannelKeyFn(task)
+				tags = []metrics.Tag{metrics.StringTag("channel_key", s.options.ChannelKeyToStringFn(key))}
+			}
+			metrics.SchedulerQueueLatency.With(s.metricsHandler).Record(latency, tags...)
+		}
+	}
 }

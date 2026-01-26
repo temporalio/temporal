@@ -130,9 +130,20 @@ func replicationTaskExecutorProvider() TaskExecutorProvider {
 func replicationStreamHighPrioritySchedulerProvider(
 	config *configs.Config,
 	logger log.Logger,
+	metricsHandler metrics.Handler,
 	queueFactory ctasks.SequentialTaskQueueFactory[TrackableExecutableTask],
 	lc fx.Lifecycle,
 ) ctasks.Scheduler[TrackableExecutableTask] {
+	iwrrMetricsHandler := metricsHandler.WithTags(
+		metrics.StringTag("queue_type", "replication"),
+		metrics.StringTag("scheduler_type", "iwrr"),
+		metrics.StringTag("priority", "high"),
+	)
+	seqMetricsHandler := metricsHandler.WithTags(
+		metrics.StringTag("queue_type", "replication"),
+		metrics.StringTag("scheduler_type", "sequential_scheduler"),
+		metrics.StringTag("priority", "high"),
+	)
 	// SequentialScheduler has panic wrapper when executing task,
 	// if changing the executor, please make sure other executor has panic wrapper
 	scheduler := ctasks.NewSequentialScheduler[TrackableExecutableTask](
@@ -143,6 +154,8 @@ func replicationStreamHighPrioritySchedulerProvider(
 		WorkflowKeyHashFn,
 		queueFactory,
 		logger,
+		seqMetricsHandler,
+		nil,
 	)
 	taskChannelKeyFn := func(e TrackableExecutableTask) ClusterChannelKey {
 		return ClusterChannelKey{
@@ -156,11 +169,13 @@ func replicationStreamHighPrioritySchedulerProvider(
 	// They share the same weight so it just does a round-robin on all clusters' tasks.
 	rrScheduler := ctasks.NewInterleavedWeightedRoundRobinScheduler(
 		ctasks.InterleavedWeightedRoundRobinSchedulerOptions[TrackableExecutableTask, ClusterChannelKey]{
-			TaskChannelKeyFn: taskChannelKeyFn,
-			ChannelWeightFn:  channelWeightFn,
+			TaskChannelKeyFn:     taskChannelKeyFn,
+			ChannelWeightFn:      channelWeightFn,
+			ChannelKeyToStringFn: func(key ClusterChannelKey) string { return key.ClusterName },
 		},
 		scheduler,
 		logger,
+		iwrrMetricsHandler,
 	)
 	lc.Append(fx.StartStopHook(rrScheduler.Start, rrScheduler.Stop))
 	return rrScheduler
@@ -175,6 +190,16 @@ func replicationStreamLowPrioritySchedulerProvider(
 	metricsHandler metrics.Handler,
 	lc fx.Lifecycle,
 ) ctasks.Scheduler[TrackableExecutableTask] {
+	iwrrMetricsHandler := metricsHandler.WithTags(
+		metrics.StringTag("queue_type", "replication"),
+		metrics.StringTag("scheduler_type", "iwrr"),
+		metrics.StringTag("priority", "low"),
+	)
+	seqMetricsHandler := metricsHandler.WithTags(
+		metrics.StringTag("queue_type", "replication"),
+		metrics.StringTag("scheduler_type", "sequential_scheduler"),
+		metrics.StringTag("priority", "low"),
+	)
 	queueFactory := func(task TrackableExecutableTask) ctasks.SequentialTaskQueue[TrackableExecutableTask] {
 		item := task.QueueID()
 		workflowKey, ok := item.(definition.WorkflowKey)
@@ -202,6 +227,8 @@ func replicationStreamLowPrioritySchedulerProvider(
 		taskQueueHashFunc,
 		queueFactory,
 		logger,
+		seqMetricsHandler,
+		nil,
 	)
 	taskChannelKeyFn := func(e TrackableExecutableTask) ClusterChannelKey {
 		return ClusterChannelKey{
@@ -260,11 +287,13 @@ func replicationStreamLowPrioritySchedulerProvider(
 	// They share the same weight so it just does a round-robin on all clusters' tasks.
 	rrScheduler := ctasks.NewInterleavedWeightedRoundRobinScheduler(
 		ctasks.InterleavedWeightedRoundRobinSchedulerOptions[TrackableExecutableTask, ClusterChannelKey]{
-			TaskChannelKeyFn: taskChannelKeyFn,
-			ChannelWeightFn:  channelWeightFn,
+			TaskChannelKeyFn:     taskChannelKeyFn,
+			ChannelWeightFn:      channelWeightFn,
+			ChannelKeyToStringFn: func(key ClusterChannelKey) string { return key.ClusterName },
 		},
 		scheduler,
 		logger,
+		iwrrMetricsHandler,
 	)
 	ts := ctasks.NewRateLimitedScheduler[TrackableExecutableTask](
 		rrScheduler,
