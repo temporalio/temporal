@@ -177,6 +177,15 @@ func Invoke(
 	); err != nil {
 		return nil, err
 	}
+
+	// Notify version workflow if we're pinning to a potentially drained version via post-reset operations
+	for _, operation := range request.GetPostResetOperations() {
+		if updateOpts, ok := operation.GetVariant().(*workflowpb.PostResetOperation_UpdateWorkflowOptions_); ok {
+			api.ReactivateVersionWorkflowIfPinned(ctx, shardContext, namespaceID,
+				updateOpts.UpdateWorkflowOptions.GetWorkflowExecutionOptions().GetVersioningOverride())
+		}
+	}
+
 	return &historyservice.ResetWorkflowExecutionResponse{
 		RunId: resetRunID,
 	}, nil

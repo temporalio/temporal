@@ -1179,6 +1179,31 @@ func (s *DeploymentVersionSuite) checkVersionDrainageAndVersionStatus(
 	return changedTime, checkedTime
 }
 
+func (s *DeploymentVersionSuite) checkVersionStatusInDeployment(
+	ctx context.Context,
+	tv *testvars.TestVars,
+	expectedStatus enumspb.WorkerDeploymentVersionStatus,
+) {
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+		resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+			Namespace:      s.Namespace().String(),
+			DeploymentName: tv.DeploymentSeries(),
+		})
+		a.NoError(err)
+		found := false
+		for _, versionSummary := range resp.GetWorkerDeploymentInfo().GetVersionSummaries() {
+			if versionSummary.GetVersion() == tv.DeploymentVersionString() {
+				a.Equal(expectedStatus, versionSummary.GetStatus(),
+					"DescribeWorkerDeployment should show version %s as %s", tv.DeploymentVersionString(), expectedStatus)
+				found = true
+				break
+			}
+		}
+		a.True(found, "Version %s should be found in DescribeWorkerDeployment response", tv.DeploymentVersionString())
+	}, 10*time.Second, 500*time.Millisecond)
+}
+
 func (s *DeploymentVersionSuite) checkDescribeWorkflowAfterOverride(
 	ctx context.Context,
 	wf *commonpb.WorkflowExecution,
@@ -1782,6 +1807,9 @@ func (s *DeploymentVersionSuite) TestUpdateWorkflowExecutionOptions_ReactivateVe
 		enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING,
 		true, true) // wait for grace period and refresh interval
 
+	// Verify via DescribeWorkerDeployment that the version status is updated
+	s.checkVersionStatusInDeployment(ctx, tv1, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING)
+
 	// Signal workflow to complete
 	s.NoError(s.SdkClient().SignalWorkflow(ctx,
 		wfTV.WorkflowID(), run.GetRunID(), "complete", nil))
@@ -1790,6 +1818,404 @@ func (s *DeploymentVersionSuite) TestUpdateWorkflowExecutionOptions_ReactivateVe
 	var result string
 	s.NoError(run.Get(ctx, &result))
 	s.Equal("done from v1", result, "Workflow should have completed on version 1")
+}
+
+func (s *DeploymentVersionSuite) TestStartWorkflowExecution_ReactivateVersionOnPinned() {
+	s.OverrideDynamicConfig(dynamicconfig.VersionDrainageStatusVisibilityGracePeriod, 10*time.Second)
+	s.OverrideDynamicConfig(dynamicconfig.VersionDrainageStatusRefreshInterval, 10*time.Second)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+
+	// Use shorter, explicit deployment series names to avoid truncation issues
+	// Include workflow version in deployment name to avoid conflicts in parallel tests
+	deploymentName := fmt.Sprintf("test-start-reactivate-wfv%d", s.workflowVersion)
+	tv1 := testvars.New(s).WithDeploymentSeries(deploymentName).WithBuildID(deploymentName + "-v1").WithTaskQueue("test-start-task-queue") // First version (will become DRAINED)
+	tv2 := testvars.New(s).WithDeploymentSeries(deploymentName).WithBuildID(deploymentName + "-v2").WithTaskQueue("test-start-task-queue") // Second version (will become CURRENT)
+
+	// set version 1 as current
+	s.startVersionWorkflow(ctx, tv1)
+	err := s.setCurrent(tv1, true)
+	s.NoError(err)
+
+	// set version 2 as current which shall cause version 1 to be in 'Draining' state
+	s.startVersionWorkflow(ctx, tv2)
+	err = s.setCurrent(tv2, true)
+	s.NoError(err)
+
+	// Wait for version 1 to become DRAINED
+	s.checkVersionDrainageAndVersionStatus(ctx, tv1,
+		&deploymentpb.VersionDrainageInfo{
+			Status: enumspb.VERSION_DRAINAGE_STATUS_DRAINED,
+		},
+		enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED,
+		true, true) // wait for grace period and refresh interval
+
+	wf := func(version string) func(ctx workflow.Context) (string, error) {
+		return func(ctx workflow.Context) (string, error) {
+			workflow.GetSignalChannel(ctx, "complete").Receive(ctx, nil)
+			return "done from " + version, nil
+		}
+	}
+
+	// Register a worker for version 1 (DRAINED) so it can accept workflows when
+	// StartWorkflowExecution is called with a pinned override to version 1.
+	w1 := worker.New(s.SdkClient(), tv1.TaskQueue().String(), worker.Options{
+		DeploymentOptions: worker.DeploymentOptions{
+			Version:       tv1.SDKDeploymentVersion(),
+			UseVersioning: true,
+		},
+	})
+	w1.RegisterWorkflowWithOptions(wf("v1"), workflow.RegisterOptions{
+		Name:               "waitingWorkflow",
+		VersioningBehavior: workflow.VersioningBehaviorAutoUpgrade,
+	})
+	s.NoError(w1.Start())
+	defer w1.Stop()
+
+	// Start a new workflow with the pinned override pointing to version 1 (DRAINED).
+	wfTV := testvars.New(s)
+	var run sdkclient.WorkflowRun
+	s.Eventually(func() bool {
+		var startErr error
+		run, startErr = s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+			TaskQueue: tv1.TaskQueue().String(),
+			ID:        wfTV.WorkflowID(),
+			VersioningOverride: &sdkclient.PinnedVersioningOverride{
+				Version: tv1.SDKDeploymentVersion(),
+			},
+		}, "waitingWorkflow")
+		return startErr == nil
+	}, 10*time.Second, 500*time.Millisecond)
+
+	// Verify workflow has the pinned override
+	s.checkDescribeWorkflowAfterOverride(ctx,
+		&commonpb.WorkflowExecution{
+			WorkflowId: wfTV.WorkflowID(),
+			RunId:      run.GetRunID(),
+		},
+		&workflowpb.VersioningOverride{
+			Override: &workflowpb.VersioningOverride_Pinned{
+				Pinned: &workflowpb.VersioningOverride_PinnedOverride{
+					Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
+					Version:  tv1.ExternalDeploymentVersion(),
+				},
+			},
+		})
+
+	// Wait for version 1 to show up as DRAINING (reactivated from DRAINED)
+	s.checkVersionDrainageAndVersionStatus(ctx, tv1,
+		&deploymentpb.VersionDrainageInfo{
+			Status: enumspb.VERSION_DRAINAGE_STATUS_DRAINING,
+		},
+		enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING,
+		true, true) // wait for grace period and refresh interval
+
+	// Verify via DescribeWorkerDeployment that the version status is updated
+	s.checkVersionStatusInDeployment(ctx, tv1, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING)
+
+	// Signal workflow to complete
+	s.NoError(s.SdkClient().SignalWorkflow(ctx,
+		wfTV.WorkflowID(), run.GetRunID(), "complete", nil))
+
+	// Wait for workflow to complete and verify it ran on version 1
+	var result string
+	s.NoError(run.Get(ctx, &result))
+	s.Equal("done from v1", result, "Workflow should have completed on version 1")
+}
+
+func (s *DeploymentVersionSuite) TestSignalWithStartWorkflowExecution_ReactivateVersionOnPinned() {
+	s.OverrideDynamicConfig(dynamicconfig.VersionDrainageStatusVisibilityGracePeriod, 10*time.Second)
+	s.OverrideDynamicConfig(dynamicconfig.VersionDrainageStatusRefreshInterval, 10*time.Second)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+
+	// Use shorter, explicit deployment series names to avoid truncation issues
+	// Include workflow version in deployment name to avoid conflicts in parallel tests
+	deploymentName := fmt.Sprintf("test-sws-reactivate-wfv%d", s.workflowVersion)
+	tv1 := testvars.New(s).WithDeploymentSeries(deploymentName).WithBuildID(deploymentName + "-v1").WithTaskQueue("test-sws-task-queue") // First version (will become DRAINED)
+	tv2 := testvars.New(s).WithDeploymentSeries(deploymentName).WithBuildID(deploymentName + "-v2").WithTaskQueue("test-sws-task-queue") // Second version (will become CURRENT)
+
+	// set version 1 as current
+	s.startVersionWorkflow(ctx, tv1)
+	err := s.setCurrent(tv1, true)
+	s.NoError(err)
+
+	// set version 2 as current which shall cause version 1 to be in 'Draining' state
+	s.startVersionWorkflow(ctx, tv2)
+	err = s.setCurrent(tv2, true)
+	s.NoError(err)
+
+	// Wait for version 1 to become DRAINED
+	s.checkVersionDrainageAndVersionStatus(ctx, tv1,
+		&deploymentpb.VersionDrainageInfo{
+			Status: enumspb.VERSION_DRAINAGE_STATUS_DRAINED,
+		},
+		enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED,
+		true, true) // wait for grace period and refresh interval
+
+	wf := func(version string) func(ctx workflow.Context) (string, error) {
+		return func(ctx workflow.Context) (string, error) {
+			workflow.GetSignalChannel(ctx, "complete").Receive(ctx, nil)
+			return "done from " + version, nil
+		}
+	}
+
+	// Register a worker for version 1 (DRAINED) so it can accept workflows when
+	// SignalWithStartWorkflowExecution is called with a pinned override to version 1.
+	w1 := worker.New(s.SdkClient(), tv1.TaskQueue().String(), worker.Options{
+		DeploymentOptions: worker.DeploymentOptions{
+			Version:       tv1.SDKDeploymentVersion(),
+			UseVersioning: true,
+		},
+	})
+	w1.RegisterWorkflowWithOptions(wf("v1"), workflow.RegisterOptions{
+		Name:               "waitingWorkflow",
+		VersioningBehavior: workflow.VersioningBehaviorAutoUpgrade,
+	})
+	s.NoError(w1.Start())
+	defer w1.Stop()
+
+	// Use SignalWithStart with the pinned override pointing to version 1 (DRAINED).
+	// This should START a new workflow (not signal an existing one) since no workflow exists yet.
+	wfTV := testvars.New(s)
+	var run sdkclient.WorkflowRun
+	s.Eventually(func() bool {
+		var startErr error
+		run, startErr = s.SdkClient().SignalWithStartWorkflow(ctx,
+			wfTV.WorkflowID(),
+			"start-signal", // signal name
+			nil,            // signal arg
+			sdkclient.StartWorkflowOptions{
+				TaskQueue: tv1.TaskQueue().String(),
+				VersioningOverride: &sdkclient.PinnedVersioningOverride{
+					Version: tv1.SDKDeploymentVersion(),
+				},
+			},
+			"waitingWorkflow",
+		)
+		return startErr == nil
+	}, 10*time.Second, 500*time.Millisecond)
+
+	// Verify workflow has the pinned override
+	s.checkDescribeWorkflowAfterOverride(ctx,
+		&commonpb.WorkflowExecution{
+			WorkflowId: wfTV.WorkflowID(),
+			RunId:      run.GetRunID(),
+		},
+		&workflowpb.VersioningOverride{
+			Override: &workflowpb.VersioningOverride_Pinned{
+				Pinned: &workflowpb.VersioningOverride_PinnedOverride{
+					Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
+					Version:  tv1.ExternalDeploymentVersion(),
+				},
+			},
+		})
+
+	// Wait for version 1 to show up as DRAINING (reactivated from DRAINED)
+	s.checkVersionDrainageAndVersionStatus(ctx, tv1,
+		&deploymentpb.VersionDrainageInfo{
+			Status: enumspb.VERSION_DRAINAGE_STATUS_DRAINING,
+		},
+		enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING,
+		true, true) // wait for grace period and refresh interval
+
+	// Verify via DescribeWorkerDeployment that the version status is updated
+	s.checkVersionStatusInDeployment(ctx, tv1, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING)
+
+	// Signal workflow to complete
+	s.NoError(s.SdkClient().SignalWorkflow(ctx,
+		wfTV.WorkflowID(), run.GetRunID(), "complete", nil))
+
+	// Wait for workflow to complete and verify it ran on version 1
+	var result string
+	s.NoError(run.Get(ctx, &result))
+	s.Equal("done from v1", result, "Workflow should have completed on version 1")
+}
+
+func (s *DeploymentVersionSuite) TestResetWorkflowExecution_ReactivateVersionOnPinned() {
+	s.OverrideDynamicConfig(dynamicconfig.VersionDrainageStatusVisibilityGracePeriod, 10*time.Second)
+	s.OverrideDynamicConfig(dynamicconfig.VersionDrainageStatusRefreshInterval, 10*time.Second)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+
+	// Use shorter, explicit deployment series names to avoid truncation issues
+	// Include workflow version in deployment name to avoid conflicts in parallel tests
+	deploymentName := fmt.Sprintf("test-reset-reactivate-wfv%d", s.workflowVersion)
+	tv1 := testvars.New(s).WithDeploymentSeries(deploymentName).WithBuildID(deploymentName + "-v1").WithTaskQueue("test-reset-task-queue") // First version (will become DRAINED)
+	tv2 := testvars.New(s).WithDeploymentSeries(deploymentName).WithBuildID(deploymentName + "-v2").WithTaskQueue("test-reset-task-queue") // Second version (will become CURRENT)
+
+	// set version 1 as current
+	s.startVersionWorkflow(ctx, tv1)
+	err := s.setCurrent(tv1, true)
+	s.NoError(err)
+
+	// set version 2 as current which shall cause version 1 to be in 'Draining' state
+	s.startVersionWorkflow(ctx, tv2)
+	err = s.setCurrent(tv2, true)
+	s.NoError(err)
+
+	// Wait for version 1 to become DRAINED
+	s.checkVersionDrainageAndVersionStatus(ctx, tv1,
+		&deploymentpb.VersionDrainageInfo{
+			Status: enumspb.VERSION_DRAINAGE_STATUS_DRAINED,
+		},
+		enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED,
+		true, true) // wait for grace period and refresh interval
+
+	// Workflow that waits for a signal, used for both versions.
+	// Returns a string indicating which version completed it.
+	wf := func(version string) func(ctx workflow.Context) (string, error) {
+		return func(ctx workflow.Context) (string, error) {
+			workflow.GetSignalChannel(ctx, "complete").Receive(ctx, nil)
+			return "done from " + version, nil
+		}
+	}
+
+	// Register a worker for version 1 (DRAINED) so it can accept workflows when
+	// ResetWorkflowExecution is called with a pinned override to version 1.
+	w1 := worker.New(s.SdkClient(), tv1.TaskQueue().String(), worker.Options{
+		DeploymentOptions: worker.DeploymentOptions{
+			Version:       tv1.SDKDeploymentVersion(),
+			UseVersioning: true,
+		},
+	})
+	w1.RegisterWorkflowWithOptions(wf("v1"), workflow.RegisterOptions{
+		Name:               "waitingWorkflow",
+		VersioningBehavior: workflow.VersioningBehaviorAutoUpgrade,
+	})
+	s.NoError(w1.Start())
+	defer w1.Stop()
+
+	// Register and start worker for version 2 on THE SAME task queue as version 1
+	w2 := worker.New(s.SdkClient(), tv1.TaskQueue().String(), worker.Options{
+		DeploymentOptions: worker.DeploymentOptions{
+			Version:       tv2.SDKDeploymentVersion(),
+			UseVersioning: true,
+		},
+	})
+	w2.RegisterWorkflowWithOptions(wf("v2"), workflow.RegisterOptions{
+		Name:               "waitingWorkflow",
+		VersioningBehavior: workflow.VersioningBehaviorAutoUpgrade,
+	})
+	s.NoError(w2.Start())
+	defer w2.Stop()
+
+	s.waitForPollers(ctx, tv1, tv2)
+
+	// Start a workflow on the current version (v2)
+	wfTV := testvars.New(s)
+	run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+		TaskQueue: tv1.TaskQueue().String(),
+		ID:        wfTV.WorkflowID(),
+	}, "waitingWorkflow")
+	s.NoError(err)
+
+	// Wait for the workflow to start and complete its first workflow task (creates a reset point)
+	s.Eventually(func() bool {
+		hist := s.SdkClient().GetWorkflowHistory(ctx, wfTV.WorkflowID(), run.GetRunID(), false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+		for hist.HasNext() {
+			event, err := hist.Next()
+			if err != nil {
+				return false
+			}
+			if event.EventType == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {
+				return true
+			}
+		}
+		return false
+	}, 10*time.Second, 200*time.Millisecond, "Workflow should have completed its first workflow task")
+
+	// Find the first workflow task complete event ID for the reset point
+	var resetEventID int64
+	hist := s.SdkClient().GetWorkflowHistory(ctx, wfTV.WorkflowID(), run.GetRunID(), false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+	for hist.HasNext() {
+		event, err := hist.Next()
+		s.NoError(err)
+		if event.EventType == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {
+			resetEventID = event.EventId
+			break
+		}
+	}
+	s.Greater(resetEventID, int64(0), "Should have found a workflow task complete event")
+
+	// Reset the workflow with PostResetOperations containing a versioning override pinned to v1 (which is currently DRAINED)
+	var resetResp *workflowservice.ResetWorkflowExecutionResponse
+	s.Eventually(func() bool {
+		var resetErr error
+		resetResp, resetErr = s.FrontendClient().ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
+			Namespace: s.Namespace().String(),
+			WorkflowExecution: &commonpb.WorkflowExecution{
+				WorkflowId: wfTV.WorkflowID(),
+				RunId:      run.GetRunID(),
+			},
+			Reason:                    "testing-reset-reactivation",
+			RequestId:                 uuid.NewString(),
+			WorkflowTaskFinishEventId: resetEventID,
+			PostResetOperations: []*workflowpb.PostResetOperation{
+				{
+					Variant: &workflowpb.PostResetOperation_UpdateWorkflowOptions_{
+						UpdateWorkflowOptions: &workflowpb.PostResetOperation_UpdateWorkflowOptions{
+							WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{
+								VersioningOverride: &workflowpb.VersioningOverride{
+									Override: &workflowpb.VersioningOverride_Pinned{
+										Pinned: &workflowpb.VersioningOverride_PinnedOverride{
+											Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
+											Version:  tv1.ExternalDeploymentVersion(),
+										},
+									},
+								},
+							},
+							UpdateMask: &fieldmaskpb.FieldMask{
+								Paths: []string{"versioning_override"},
+							},
+						},
+					},
+				},
+			},
+		})
+		return resetErr == nil
+	}, 10*time.Second, 500*time.Millisecond)
+
+	newRunID := resetResp.RunId
+
+	// Verify the reset workflow has the pinned override
+	s.checkDescribeWorkflowAfterOverride(ctx,
+		&commonpb.WorkflowExecution{
+			WorkflowId: wfTV.WorkflowID(),
+			RunId:      newRunID,
+		},
+		&workflowpb.VersioningOverride{
+			Override: &workflowpb.VersioningOverride_Pinned{
+				Pinned: &workflowpb.VersioningOverride_PinnedOverride{
+					Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
+					Version:  tv1.ExternalDeploymentVersion(),
+				},
+			},
+		})
+
+	// Wait for version 1 to show up as DRAINING (reactivated from DRAINED)
+	s.checkVersionDrainageAndVersionStatus(ctx, tv1,
+		&deploymentpb.VersionDrainageInfo{
+			Status: enumspb.VERSION_DRAINAGE_STATUS_DRAINING,
+		},
+		enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING,
+		true, true) // wait for grace period and refresh interval
+
+	// Verify via DescribeWorkerDeployment that the version status is DRAINING
+	s.checkVersionStatusInDeployment(ctx, tv1, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING)
+
+	// Signal the reset workflow to complete
+	s.NoError(s.SdkClient().SignalWorkflow(ctx,
+		wfTV.WorkflowID(), newRunID, "complete", nil))
+
+	// Wait for the reset workflow to complete and verify it ran on version 1
+	resetRun := s.SdkClient().GetWorkflow(ctx, wfTV.WorkflowID(), newRunID)
+	var result string
+	s.NoError(resetRun.Get(ctx, &result))
+	s.Equal("done from v1", result, "Reset workflow should have completed on version 1")
 }
 
 // The following tests test the VersioningOverride functionality when passed via the BatchUpdateWorkflowExecutionOptions API.

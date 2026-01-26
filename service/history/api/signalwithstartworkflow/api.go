@@ -91,6 +91,12 @@ func Invoke(
 	if err != nil {
 		return nil, err
 	}
+
+	// Notify version workflow if we're starting a new workflow pinned to a potentially drained version
+	if started {
+		api.ReactivateVersionWorkflowIfPinned(ctx, shard, namespaceID, request.GetVersioningOverride())
+	}
+
 	return &historyservice.SignalWithStartWorkflowExecutionResponse{
 		RunId:   runID,
 		Started: started,

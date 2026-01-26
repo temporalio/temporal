@@ -217,6 +217,9 @@ func (s *Starter) Invoke(
 		return nil, StartErr, err
 	}
 
+	// Notify version workflow if we're pinning to a potentially drained version
+	api.ReactivateVersionWorkflowIfPinned(ctx, s.shardContext, s.namespace.ID(), s.request.StartRequest.GetVersioningOverride())
+
 	resp, err = s.generateResponse(
 		creationParams.runID,
 		creationParams.workflowTaskInfo,
