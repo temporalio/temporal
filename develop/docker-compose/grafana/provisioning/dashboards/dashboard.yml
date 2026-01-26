@@ -1,11 +1,11 @@
 apiVersion: 1
 
 providers:
-- name: "Temporal"
-  orgId: 1
-  folder: ''
-  type: file
-  disableDeletion: false
-  editable: true
-  options:
-    path: /etc/grafana/provisioning/temporalio-dashboards
+  - name: "Temporal"
+    orgId: 1
+    folder: ''
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /etc/grafana/provisioning/temporalio-dashboards
