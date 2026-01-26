@@ -237,7 +237,14 @@ Loop:
 			}
 		}
 		if lastWorkflowTaskScheduleEvent != nil && opts.ExpectedAttemptCount > 1 {
-			require.Equal(p.T, opts.ExpectedAttemptCount, int(lastWorkflowTaskScheduleEvent.GetWorkflowTaskScheduledEventAttributes().GetAttempt()))
+			actualAttempt := int(lastWorkflowTaskScheduleEvent.GetWorkflowTaskScheduledEventAttributes().GetAttempt())
+			p.Logger.Info("Checking workflow task attempt count",
+				tag.NewInt("expected_attempt", opts.ExpectedAttemptCount),
+				tag.NewInt("actual_attempt", actualAttempt),
+				tag.NewInt64("scheduled_event_id", lastWorkflowTaskScheduleEvent.GetEventId()))
+			require.Equal(p.T, opts.ExpectedAttemptCount, actualAttempt,
+				"workflow task attempt count mismatch: expected %d, got %d (scheduled event id: %d)",
+				opts.ExpectedAttemptCount, actualAttempt, lastWorkflowTaskScheduleEvent.GetEventId())
 		}
 
 		commands, err := p.WorkflowTaskHandler(response)
