@@ -533,7 +533,6 @@ func (e taskExecutor) recordOperationTimeout(node *hsm.Node) error {
 						op,
 						eventID,
 						&failurepb.Failure{
-							Message: "operation timed out",
 							Cause: &failurepb.Failure{
 								Message: "operation timed out",
 								FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
@@ -881,6 +880,7 @@ func callErrToFailure(callErr error, retryable bool) (*failurepb.Failure, error)
 			nf = *handlerErr.OriginalFailure
 		} else {
 			var err error
+			// Ensure the error message is set to ensure the failure converter does not unwrap the cause.
 			if handlerErr.Message == "" {
 				handlerErr.Message = "handler error"
 			}

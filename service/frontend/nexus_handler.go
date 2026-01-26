@@ -466,7 +466,7 @@ func (h *nexusHandler) StartOperation(
 	case *matchingservice.DispatchNexusTaskResponse_HandlerError:
 		// Deprecated case. Replaced with DispatchNexusTaskResponse_Failure
 		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error:" + t.HandlerError.GetErrorType()))
-		oc.nexusContext.setFailureSource(commonnexus.FailureSourceWorker)
+		oc.setFailureSource(commonnexus.FailureSourceWorker)
 		err := convertOutcomeToNexusHandlerError(t)
 		return nil, err
 
@@ -499,7 +499,7 @@ func (h *nexusHandler) StartOperation(
 
 		case *nexuspb.StartOperationResponse_OperationError:
 			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("operation_error"))
-			oc.nexusContext.setFailureSource(commonnexus.FailureSourceWorker)
+			oc.setFailureSource(commonnexus.FailureSourceWorker)
 			err := &nexus.OperationError{
 				State: nexus.OperationState(t.OperationError.GetOperationState()),
 				Cause: &nexus.FailureError{
@@ -510,7 +510,7 @@ func (h *nexusHandler) StartOperation(
 
 		case *nexuspb.StartOperationResponse_Failure:
 			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("failure"))
-			oc.nexusContext.setFailureSource(commonnexus.FailureSourceWorker)
+			oc.setFailureSource(commonnexus.FailureSourceWorker)
 			nf, err := commonnexus.TemporalFailureToNexusFailure(t.Failure)
 			if err != nil {
 				oc.logger.Error("error converting Temporal failure to Nexus failure", tag.Error(err), tag.Operation(operation), tag.WorkflowNamespace(oc.namespaceName))
@@ -526,7 +526,7 @@ func (h *nexusHandler) StartOperation(
 	}
 	// This is the worker's fault.
 	oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error:EMPTY_OUTCOME"))
-	oc.nexusContext.setFailureSource(commonnexus.FailureSourceWorker)
+	oc.setFailureSource(commonnexus.FailureSourceWorker)
 
 	return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "empty outcome")
 }
@@ -780,8 +780,10 @@ func convertOutcomeToNexusHandlerError(resp *matchingservice.DispatchNexusTaskRe
 	case enumspb.NEXUS_HANDLER_ERROR_RETRY_BEHAVIOR_NON_RETRYABLE:
 		retryBehavior = nexus.HandlerErrorRetryBehaviorNonRetryable
 	}
+	// nolint:staticcheck // Deprecated function still in use for backward compatibility.
 	originalFailure := commonnexus.ProtoFailureToNexusFailure(resp.HandlerError.GetFailure())
 	return &nexus.HandlerError{
+		// nolint:staticcheck // Deprecated function still in use for backward compatibility.
 		Type:            nexus.HandlerErrorType(resp.HandlerError.GetErrorType()),
 		RetryBehavior:   retryBehavior,
 		OriginalFailure: &originalFailure,

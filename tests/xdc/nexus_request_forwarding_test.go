@@ -191,7 +191,7 @@ func (s *NexusRequestForwardingSuite) TestStartOperationForwardedFromStandbyToAc
 				var handlerErr *nexus.HandlerError
 				require.ErrorAs(t, retErr, &handlerErr)
 				require.Equal(t, nexus.HandlerErrorTypeInternal, handlerErr.Type)
-				require.Equal(t, "500 Internal Server Error", handlerErr.Message)
+				require.Equal(t, "Internal Server Error", handlerErr.Message)
 				require.Error(t, handlerErr.Cause)
 				require.Equal(t, "deliberate internal failure", handlerErr.Cause.Error())
 				requireExpectedMetricsCaptured(t, activeSnap, ns, "StartNexusOperation", "handler_error:INTERNAL")
@@ -317,7 +317,7 @@ func (s *NexusRequestForwardingSuite) TestCancelOperationForwardedFromStandbyToA
 				var handlerErr *nexus.HandlerError
 				require.ErrorAs(t, retErr, &handlerErr)
 				require.Equal(t, nexus.HandlerErrorTypeInternal, handlerErr.Type)
-				require.Equal(t, "500 Internal Server Error", handlerErr.Message)
+				require.Equal(t, "Internal Server Error", handlerErr.Message)
 				require.Error(t, handlerErr.Cause)
 				require.Equal(t, "deliberate internal failure", handlerErr.Cause.Error())
 				requireExpectedMetricsCaptured(t, activeSnap, ns, "CancelNexusOperation", "handler_error:INTERNAL")

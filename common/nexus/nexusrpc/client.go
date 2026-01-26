@@ -373,12 +373,13 @@ func (c *HTTPClient) failureFromResponse(response *http.Response, body []byte) (
 func (c *HTTPClient) defaultErrorFromResponse(response *http.Response, body []byte, cause error) error {
 	errorType, err := httpStatusCodeToHandlerErrorType(response)
 	if err != nil {
-		// TODO: use the provided cause, it's already a deserialized failure.
+		// TODO(bergundy): optimization - use the provided cause, it's already a deserialized failure.
 		return newUnexpectedResponseError(err.Error(), response, body)
 	}
+	statusText := strings.TrimPrefix(response.Status, fmt.Sprintf("%d ", response.StatusCode))
 	handlerErr := &nexus.HandlerError{
 		Type:    errorType,
-		Message: response.Status,
+		Message: statusText,
 		// For compatibility with older servers.
 		RetryBehavior: retryBehaviorFromHeader(response.Header),
 		Cause:         cause,

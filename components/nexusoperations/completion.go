@@ -51,12 +51,24 @@ func handleOperationError(
 		return err
 	}
 	var originalFailure *failurepb.Failure
-	if opErr.OriginalFailure != nil {
-		nexusFailure := opErr.OriginalFailure
-		originalFailure, err = commonnexus.NexusFailureToTemporalFailure(*nexusFailure)
+
+	// This should never be nil, but better be defensive here than to panic.
+	if opErr.OriginalFailure == nil {
+		if opErr.Message == "" {
+			// Add a generic message to ensure the failure converter does not unwrap the failure for compatibility.
+			opErr.Message = "nexus operation completed unsuccessfully"
+		}
+		originalNexusFailure, err := nexus.DefaultFailureConverter().ErrorToFailure(opErr)
 		if err != nil {
 			return serviceerror.NewInvalidArgumentf("Malformed failure: %v", err)
 		}
+		opErr.OriginalFailure = &originalNexusFailure
+	}
+
+	nexusFailure := opErr.OriginalFailure
+	originalFailure, err = commonnexus.NexusFailureToTemporalFailure(*nexusFailure)
+	if err != nil {
+		return serviceerror.NewInvalidArgumentf("Malformed failure: %v", err)
 	}
 
 	switch opErr.State { // nolint:exhaustive
@@ -77,15 +89,14 @@ func handleOperationError(
 		return FailedEventDefinition{}.Apply(node.Parent, event)
 	case nexus.OperationStateCanceled:
 		var originalCause *failurepb.Failure
-		if originalFailure.GetCause().GetCanceledFailureInfo() != nil {
-			originalCause = originalFailure.GetCause()
-		} else {
+		if originalFailure.GetCause().GetCanceledFailureInfo() == nil {
 			// Wrap the original failure in a CanceledFailureInfo to indicate cancellation. All workflow commands expected a
 			// nested CanceledFailure.
 			originalFailure.Cause = &failurepb.Failure{
 				FailureInfo: &failurepb.Failure_CanceledFailureInfo{
 					CanceledFailureInfo: &failurepb.CanceledFailureInfo{},
 				},
+				// TODO(bergundy): This might be confusing.
 				// Preserve the original cause.
 				Cause: originalCause,
 			}

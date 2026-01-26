@@ -283,7 +283,6 @@ func TestRoundTrip_OnlyStackTrace(t *testing.T) {
 	protorequire.ProtoEqual(t, original, converted)
 }
 
-
 func TestRoundTrip_OnlyDetails(t *testing.T) {
 	original := &failurepb.Failure{
 		FailureInfo: &failurepb.Failure_NexusSdkFailureErrorInfo{
