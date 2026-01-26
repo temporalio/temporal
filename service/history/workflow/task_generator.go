@@ -278,7 +278,7 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 func (r *TaskGeneratorImpl) getRetention() (time.Duration, error) {
 	// For standalone activities, use 1 day retention
 	if r.mutableState.ChasmTree().ArchetypeID() == activity.ArchetypeID {
-		return 24 * time.Hour, nil
+		return 3 * time.Minute, nil
 	}
 
 	retention := defaultWorkflowRetention
@@ -354,8 +354,8 @@ func (r *TaskGeneratorImpl) GenerateDeleteHistoryEventTask(closeTime time.Time) 
 		return err
 	}
 
-	retentionJitterDuration := backoff.FullJitter(r.config.RetentionTimerJitterDuration())
-	deleteTime := closeTime.Add(retention).Add(retentionJitterDuration)
+	//retentionJitterDuration := backoff.FullJitter(r.config.RetentionTimerJitterDuration())
+	deleteTime := closeTime.Add(retention)
 	r.mutableState.AddTasks(&tasks.DeleteHistoryEventTask{
 		// TaskID is set by shard
 		WorkflowKey:         r.mutableState.GetWorkflowKey(),
