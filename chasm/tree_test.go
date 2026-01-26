@@ -1564,7 +1564,7 @@ func (s *nodeSuite) TestValidateAccess() {
 			}
 
 			// Validation begins on the target node, checking ancestors only.
-			err = node.validateParentAccess(ctx)
+			err = node.validateAccess(ctx)
 			if tc.valid {
 				s.NoError(err)
 			} else {

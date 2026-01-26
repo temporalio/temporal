@@ -414,7 +414,7 @@ func (n *Node) Component(
 			fmt.Errorf("%s", reflect.TypeOf(node.value).String()))
 	}
 
-	if err := node.validateParentAccess(validationContext); err != nil {
+	if err := node.validateAccess(validationContext); err != nil {
 		return nil, err
 	}
 
@@ -435,9 +435,9 @@ func (n *Node) Component(
 //
 // When the context's intent is OperationIntentProgress, This check validates that
 // all of a node's ancestors are still in a running state, and can accept writes. In
-// the case of a newly-created node, a detached node, or an OperationIntentObserve
+// the case of a newly created node, a detached node, or an OperationIntentObserve
 // intent, the check is skipped.
-func (n *Node) validateParentAccess(ctx Context) error {
+func (n *Node) validateAccess(ctx Context) error {
 	intent := operationIntentFromContext(ctx.getContext())
 	if intent != OperationIntentProgress {
 		// Read-only operations are always allowed.
@@ -449,15 +449,16 @@ func (n *Node) validateParentAccess(ctx Context) error {
 		return nil
 	}
 
-	return n.parent.validateAccess(ctx)
+	return n.parent.validateAccessHelper(ctx)
 }
 
-// validateAccessRecursive is an internal method that validates both the current
-// node's lifecycle state AND its ancestors.
-func (n *Node) validateAccess(ctx Context) error {
+// validateAccessHelper is a helper method that validates both the current
+// node's lifecycle state AND its ancestors recursively.
+// Do not call this method directly, call validateAccess instead.
+func (n *Node) validateAccessHelper(ctx Context) error {
 	// Check ancestors first (if not detached).
 	if !n.isDetached() && n.parent != nil {
-		if err := n.parent.validateAccess(ctx); err != nil {
+		if err := n.parent.validateAccessHelper(ctx); err != nil {
 			return err
 		}
 	}
@@ -746,8 +747,7 @@ func (n *Node) serializeComponentNode() error {
 		}
 
 		n.serializedNode.Data = blob
-		componentAttr := n.serializedNode.GetMetadata().GetComponentAttributes()
-		componentAttr.TypeId = rc.componentID
+		n.serializedNode.GetMetadata().GetComponentAttributes().TypeId = rc.componentID
 		n.updateLastUpdateVersionedTransition()
 		n.setValueState(valueStateSynced)
 
@@ -1790,7 +1790,7 @@ func (n *Node) validateTask(
 			fmt.Errorf("%s", reflect.TypeOf(taskInstance).Name()))
 	}
 
-	if err := n.validateParentAccess(validateContext); err != nil {
+	if err := n.validateAccess(validateContext); err != nil {
 		if errors.Is(err, errAccessCheckFailed) {
 			return false, nil
 		}
