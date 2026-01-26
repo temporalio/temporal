@@ -1095,7 +1095,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 	}
 
 	// Stage 4. Delete history branch.
-	if branchToken != nil && !stage.IsProcessed(tasks.DeleteWorkflowExecutionStageHistory) {
+	if len(branchToken) != 0 && !stage.IsProcessed(tasks.DeleteWorkflowExecutionStageHistory) {
 		delHistoryRequest := &persistence.DeleteHistoryBranchRequest{
 			BranchToken: branchToken,
 			ShardID:     s.shardID,

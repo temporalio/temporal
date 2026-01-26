@@ -111,6 +111,14 @@ const (
 	// successfully, the search attribute is removed. Format of a single problem:
 	// "category=<category> cause=<cause>".
 	TemporalReportedProblems = "TemporalReportedProblems"
+
+	// TemporalExternalPayloadCount is the count of external payloads referenced in the
+	// entire history tree of the execution.
+	TemporalExternalPayloadCount = "TemporalExternalPayloadCount"
+
+	// TemporalExternalPayloadSizeBytes is the total size in bytes of all external payloads
+	// referenced in the entire history tree of the execution.
+	TemporalExternalPayloadSizeBytes = "TemporalExternalPayloadSizeBytes"
 )
 
 var (
@@ -177,6 +185,8 @@ var (
 		TemporalWorkflowVersioningBehavior:   enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		TemporalWorkerDeployment:             enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		TemporalUsedWorkerDeploymentVersions: enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		TemporalExternalPayloadCount:         enumspb.INDEXED_VALUE_TYPE_INT,
+		TemporalExternalPayloadSizeBytes:     enumspb.INDEXED_VALUE_TYPE_INT,
 	}
 
 	// reserved are internal field names that can't be used as search attribute names.

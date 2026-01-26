@@ -7,6 +7,8 @@ services:
       CASSANDRA_LISTEN_ADDRESS: 127.0.0.1
       MAX_HEAP_SIZE: "2G"
       HEAP_NEWSIZE: "200M"
+      # Increase native transport threads for handling more concurrent connections
+      JVM_EXTRA_OPTS: "-Dcassandra.native_transport_max_threads=512"
 
   mysql:
     image: mysql:8.0.29-oracle
@@ -14,6 +16,7 @@ services:
       - "3306:3306"
     environment:
       MYSQL_ROOT_PASSWORD: root
+    command: --max-connections=500
     volumes:
       - ./mysql-init:/docker-entrypoint-initdb.d
 
@@ -24,6 +27,7 @@ services:
     environment:
       POSTGRES_USER: temporal
       POSTGRES_PASSWORD: temporal
+    command: postgres -c max_connections=500
     volumes:
       - ./postgresql-init:/docker-entrypoint-initdb.d
 
