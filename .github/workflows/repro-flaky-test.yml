@@ -32,5 +32,6 @@ jobs:
         run: |
           make functional-test-coverage
         env:
+          PERSISTENCE_TYPE: sql
           PERSISTENCE_DRIVER: sqlite
           TEST_ARGS: "-run TestWorkflowTestSuite/TestWorkflowTaskAndActivityTaskTimeoutsWorkflow -count 1"
