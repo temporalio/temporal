@@ -2117,6 +2117,148 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_WaitAnyState
 	require.NoError(t, err)
 }
 
+func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_Completed() {
+	testCases := []struct {
+		name             string
+		expectedStatus   enumspb.ActivityExecutionStatus
+		taskCompletionFn func(ctx context.Context, taskToken []byte, activityID, runID string) error
+		outcomeValidator func(*testing.T, *workflowservice.DescribeActivityExecutionResponse)
+	}{
+		{
+			name:           "successful completion",
+			expectedStatus: enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
+			taskCompletionFn: func(ctx context.Context, taskToken []byte, _, _ string) error {
+				_, err := s.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+					Namespace: s.Namespace().String(),
+					TaskToken: taskToken,
+					Result:    defaultResult,
+					Identity:  defaultIdentity,
+				})
+				return err
+			},
+			outcomeValidator: func(t *testing.T, response *workflowservice.DescribeActivityExecutionResponse) {
+				protorequire.ProtoEqual(t, defaultResult, response.GetOutcome().GetResult())
+				require.Nil(t, response.GetOutcome().GetFailure())
+			},
+		},
+		{
+			name:           "failure completion",
+			expectedStatus: enumspb.ACTIVITY_EXECUTION_STATUS_FAILED,
+			taskCompletionFn: func(ctx context.Context, taskToken []byte, _, _ string) error {
+				_, err := s.FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
+					Namespace: s.Namespace().String(),
+					TaskToken: taskToken,
+					Failure:   defaultFailure,
+					Identity:  defaultIdentity,
+				})
+				return err
+			},
+			outcomeValidator: func(t *testing.T, response *workflowservice.DescribeActivityExecutionResponse) {
+				protorequire.ProtoEqual(t, defaultFailure, response.GetOutcome().GetFailure())
+				require.Nil(t, response.GetOutcome().GetResult())
+			},
+		},
+		{
+			name:           "termination",
+			expectedStatus: enumspb.ACTIVITY_EXECUTION_STATUS_TERMINATED,
+			taskCompletionFn: func(ctx context.Context, _ []byte, activityID, runID string) error {
+				_, err := s.FrontendClient().TerminateActivityExecution(ctx, &workflowservice.TerminateActivityExecutionRequest{
+					Namespace:  s.Namespace().String(),
+					ActivityId: activityID,
+					RunId:      runID,
+					Reason:     "test termination",
+				})
+				return err
+			},
+			outcomeValidator: func(t *testing.T, response *workflowservice.DescribeActivityExecutionResponse) {
+				require.NotNil(t, response.GetOutcome().GetFailure())
+				require.NotNil(t, response.GetOutcome().GetFailure().GetTerminatedFailureInfo())
+				require.Nil(t, response.GetOutcome().GetResult())
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			t := s.T()
+			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+			t.Cleanup(cancel)
+			activityID := s.tv.Any().String()
+			taskQueue := s.tv.TaskQueue()
+
+			startResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+				Namespace:           s.Namespace().String(),
+				ActivityId:          activityID,
+				ActivityType:        s.tv.ActivityType(),
+				Header:              defaultHeader,
+				HeartbeatTimeout:    durationpb.New(45 * time.Second),
+				Identity:            s.tv.WorkerIdentity(),
+				Input:               defaultInput,
+				StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
+				RequestId:           s.tv.RequestID(),
+				RetryPolicy:         defaultRetryPolicy,
+				Priority:            &commonpb.Priority{FairnessKey: "test-key"},
+				SearchAttributes:    defaultSearchAttributes,
+				TaskQueue:           taskQueue,
+				UserMetadata:        defaultUserMetadata,
+			})
+			require.NoError(t, err)
+
+			pollTaskResp, err := s.pollActivityTaskQueue(ctx, taskQueue.Name)
+			require.NoError(t, err)
+			err = tc.taskCompletionFn(ctx, pollTaskResp.TaskToken, activityID, startResp.RunId)
+			require.NoError(t, err)
+
+			describeResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+				Namespace:      s.Namespace().String(),
+				ActivityId:     activityID,
+				RunId:          startResp.RunId,
+				IncludeInput:   true,
+				IncludeOutcome: true,
+			})
+			require.NoError(t, err)
+			require.NotNil(t, describeResp)
+
+			// Verify top-level response fields
+			require.Equal(t, startResp.RunId, describeResp.GetRunId())
+			protorequire.ProtoEqual(t, defaultInput, describeResp.GetInput())
+
+			// Verify Info fields for completed activity
+			info := describeResp.GetInfo()
+			require.NotNil(t, info)
+			require.Equal(t, activityID, info.GetActivityId())
+			require.Equal(t, startResp.RunId, info.GetRunId())
+			protorequire.ProtoEqual(t, s.tv.ActivityType(), info.GetActivityType())
+			require.Equal(t, tc.expectedStatus, info.GetStatus())
+			require.Equal(t, taskQueue.Name, info.GetTaskQueue())
+			require.Equal(t, int32(1), info.GetAttempt())
+			protorequire.ProtoEqual(t, defaultRetryPolicy, info.GetRetryPolicy())
+			protorequire.ProtoEqual(t, defaultHeader, info.GetHeader())
+			protorequire.ProtoEqual(t, &commonpb.Priority{FairnessKey: "test-key"}, info.GetPriority())
+			protorequire.ProtoEqual(t, defaultSearchAttributes, info.GetSearchAttributes())
+			protorequire.ProtoEqual(t, defaultUserMetadata, info.GetUserMetadata())
+			require.Equal(t, 45*time.Second, info.GetHeartbeatTimeout().AsDuration())
+			require.Equal(t, defaultStartToCloseTimeout, info.GetStartToCloseTimeout().AsDuration())
+
+			// Verify time-based fields for completed activity
+			require.NotNil(t, info.GetScheduleTime())
+			require.Positive(t, info.GetScheduleTime().AsTime().Unix())
+			require.NotNil(t, info.GetLastStartedTime())
+			require.Positive(t, info.GetLastStartedTime().AsTime().Unix())
+			require.NotNil(t, info.GetCloseTime())
+			require.Positive(t, info.GetCloseTime().AsTime().Unix())
+			require.GreaterOrEqual(t, info.GetCloseTime().AsTime().UnixNano(), info.GetLastStartedTime().AsTime().UnixNano())
+			require.Positive(t, info.GetStateTransitionCount())
+
+			// Worker identity should be set since activity was started
+			require.Equal(t, defaultIdentity, info.GetLastWorkerIdentity())
+
+			// Verify Outcome
+			tc.outcomeValidator(t, describeResp)
+		})
+	}
+}
+
 func (s *standaloneActivityTestSuite) TestPollActivityExecution() {
 	testCases := []struct {
 		name                   string
