@@ -35,9 +35,6 @@ import (
 	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
 	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/pprof"
 	"go.temporal.io/server/common/primitives"
@@ -144,37 +141,15 @@ type PersistenceTestBaseFactory interface {
 
 type defaultPersistenceTestBaseFactory struct{}
 
+// GetPersistenceTestDefaults returns the default persistence options based on CLI flags.
+// Use this when creating TestClusterConfig to ensure proper database configuration.
+func GetPersistenceTestDefaults() persistencetests.TestBaseOptions {
+	return *persistencetests.GetTestClusterOption(cliFlags.persistenceType, cliFlags.persistenceDriver)
+}
+
 func (f *defaultPersistenceTestBaseFactory) NewTestBase(options *persistencetests.TestBaseOptions) *persistencetests.TestBase {
-	options.StoreType = cliFlags.persistenceType
-	switch cliFlags.persistenceType {
-	case config.StoreTypeSQL:
-		var ops *persistencetests.TestBaseOptions
-		switch cliFlags.persistenceDriver {
-		case mysql.PluginName:
-			ops = persistencetests.GetMySQLTestClusterOption()
-		case postgresql.PluginName:
-			ops = persistencetests.GetPostgreSQLTestClusterOption()
-		case postgresql.PluginNamePGX:
-			ops = persistencetests.GetPostgreSQLPGXTestClusterOption()
-		case sqlite.PluginName:
-			ops = persistencetests.GetSQLiteMemoryTestClusterOption()
-		default:
-			//nolint:forbidigo // test code
-			panic(fmt.Sprintf("unknown sql store driver: %v", cliFlags.persistenceDriver))
-		}
-		options.SQLDBPluginName = cliFlags.persistenceDriver
-		options.DBUsername = ops.DBUsername
-		options.DBPassword = ops.DBPassword
-		options.DBHost = ops.DBHost
-		options.DBPort = ops.DBPort
-		options.SchemaDir = ops.SchemaDir
-		options.ConnectAttributes = ops.ConnectAttributes
-	case config.StoreTypeNoSQL:
-		// noop for now
-	default:
-		//nolint:forbidigo // test code
-		panic(fmt.Sprintf("unknown store type: %v", options.StoreType))
-	}
+	defaults := GetPersistenceTestDefaults()
+	options.ApplyDefaults(&defaults)
 
 	if cliFlags.enableFaultInjection != "" && options.FaultInjection == nil {
 		// If -enableFaultInjection is passed to the test runner, then default fault injection config is added to the persistence options.
@@ -597,6 +572,10 @@ func (tc *TestCluster) ExecutionManager() persistence.ExecutionManager {
 // TODO (alex): expose only needed objects from TemporalImpl.
 func (tc *TestCluster) Host() *TemporalImpl {
 	return tc.host
+}
+
+func (tc *TestCluster) WorkerGRPCAddress() string {
+	return tc.host.WorkerGRPCAddress()
 }
 
 func (tc *TestCluster) ClusterName() string {
