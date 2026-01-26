@@ -94,12 +94,14 @@ func NewWorkflowAwareScheduler(
 		timeSource,
 	)
 
-	return &WorkflowAwareScheduler{
+	s := &WorkflowAwareScheduler{
 		baseScheduler:          baseScheduler,
 		workflowQueueScheduler: workflowQueueScheduler,
 		options:                options,
 		logger:                 logger,
 	}
+
+	return s
 }
 
 func (s *WorkflowAwareScheduler) Start() {

@@ -296,3 +296,13 @@ func (s *rateLimitedSchedulerImpl) Stop() {
 func (s *rateLimitedSchedulerImpl) TaskChannelKeyFn() TaskChannelKeyFn {
 	return s.baseScheduler.TaskChannelKeyFn()
 }
+
+// HandleBusyWorkflow implements BusyWorkflowHandler by delegating to the
+// underlying baseScheduler. This is called when a task encounters a busy
+// workflow error and needs to be routed to the sequential scheduler.
+func (s *rateLimitedSchedulerImpl) HandleBusyWorkflow(executable Executable) bool {
+	if handler, ok := s.baseScheduler.(BusyWorkflowHandler); ok {
+		return handler.HandleBusyWorkflow(executable)
+	}
+	return false
+}

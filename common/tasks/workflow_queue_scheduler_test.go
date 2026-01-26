@@ -538,18 +538,20 @@ func (s *workflowQueueSchedulerSuite) TestHasQueue() {
 	// Wait until task is actually executing
 	<-executingCh
 
-	// Note: Queue may or may not exist at this point because popTask
-	// removes the queue if it becomes empty. Since we only submitted one task,
-	// the queue is removed when the task is popped.
-	// This is expected behavior - the queue exists only while tasks are waiting.
+	// Note: The queue exists in the map but may or may not have tasks.
+	// Since we only submitted one task and it's now executing (popped from queue),
+	// the queue is marked as empty but kept around for TTL (defaultEmptyQueueTTL).
+	// This allows retried tasks to find the queue and be routed back here.
 
 	// Complete task
 	close(blockCh)
 	testWG.Wait()
 
-	// Queue should definitely be removed after task completes
+	// Queue still exists after task completes (within TTL for retry routing)
+	// It will be cleaned up by the periodic cleanup goroutine after defaultEmptyQueueTTL.
+	// This is expected behavior - the TTL allows retried tasks to find the queue.
 	time.Sleep(10 * time.Millisecond)
-	s.False(scheduler.HasQueue(1))
+	s.True(scheduler.HasQueue(1), "Empty queue should exist within TTL")
 }
 
 func (s *workflowQueueSchedulerSuite) TestHasQueue_MultipleTasksInQueue() {
@@ -595,9 +597,11 @@ func (s *workflowQueueSchedulerSuite) TestHasQueue_MultipleTasksInQueue() {
 	close(blockCh)
 	testWG.Wait()
 
-	// Give time for queue cleanup
+	// Queue still exists after tasks complete (within TTL for retry routing)
+	// It will be cleaned up by the periodic cleanup goroutine after defaultEmptyQueueTTL.
+	// This is expected behavior - the TTL allows retried tasks to find the queue.
 	time.Sleep(10 * time.Millisecond)
-	s.False(scheduler.HasQueue(1))
+	s.True(scheduler.HasQueue(1), "Empty queue should exist within TTL")
 }
 
 // =============================================================================
