@@ -15,7 +15,7 @@ Convert remaining test files in `tests/` from testify suite pattern to `testcore
 | 6 | `activity_api_batch_unpause_test.go` | 230 | Completed |
 | 7 | `workflow_memo_test.go` | 233 | Completed |
 | 8 | `add_tasks_test.go` | 237 | Completed |
-| 9 | `max_buffered_event_test.go` | 237 | Pending |
+| 9 | `max_buffered_event_test.go` | 237 | Completed |
 | 10 | `activity_api_batch_update_options_test.go` | 242 | Pending |
 | 11 | `acquire_shard_test.go` | 252 | Pending |
 | 12 | `client_data_converter_test.go` | 257 | Pending |
