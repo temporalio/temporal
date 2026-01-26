@@ -88,7 +88,6 @@ func handleOperationError(
 
 		return FailedEventDefinition{}.Apply(node.Parent, event)
 	case nexus.OperationStateCanceled:
-		var originalCause *failurepb.Failure
 		if originalFailure.GetCause().GetCanceledFailureInfo() == nil {
 			// Wrap the original failure in a CanceledFailureInfo to indicate cancellation. All workflow commands expected a
 			// nested CanceledFailure.
@@ -98,7 +97,7 @@ func handleOperationError(
 				},
 				// TODO(bergundy): This might be confusing.
 				// Preserve the original cause.
-				Cause: originalCause,
+				Cause: originalFailure.GetCause(),
 			}
 		}
 		event := node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED, func(e *historypb.HistoryEvent) {

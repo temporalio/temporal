@@ -160,6 +160,8 @@ func TemporalFailureToNexusFailure(failure *failurepb.Failure) (nexus.Failure, e
 			retryableOverride = &val
 		case enumspb.NEXUS_HANDLER_ERROR_RETRY_BEHAVIOR_UNSPECIFIED:
 			// noop
+		default:
+			// noop
 		}
 
 		handlerError := serializedHandlerError{

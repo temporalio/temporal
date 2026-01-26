@@ -726,7 +726,7 @@ func (s *NexusApiTestSuite) TestNexusCancelOperation_Outcomes() {
 				require.ErrorAs(t, err, &handlerErr)
 				require.Equal(t, nexus.HandlerErrorTypeInternal, handlerErr.Type)
 				require.Equal(t, "worker", headers.Get("Temporal-Nexus-Failure-Source"))
-				require.Equal(t, "500 Internal Server Error", handlerErr.Message)
+				require.Equal(t, "Internal Server Error", handlerErr.Message)
 				require.Error(t, handlerErr.Cause)
 				require.Equal(t, "deliberate internal failure", handlerErr.Cause.Error())
 			},

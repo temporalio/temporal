@@ -187,9 +187,10 @@ func TestProcessInvocationTask(t *testing.T) {
 			destinationDown: false,
 			onStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
 				return nil, &nexus.OperationError{
-					State: nexus.OperationStateFailed,
+					State:   nexus.OperationStateFailed,
+					Message: "operation failed from handler",
 					Cause: &nexus.FailureError{
-						Failure: nexus.Failure{Message: "operation failed from handler", Metadata: map[string]string{"encoding": "json/plain"}, Details: json.RawMessage("\"details\"")},
+						Failure: nexus.Failure{Message: "cause", Metadata: map[string]string{"encoding": "json/plain"}, Details: json.RawMessage("\"details\"")},
 					},
 				}
 			},
@@ -202,7 +203,7 @@ func TestProcessInvocationTask(t *testing.T) {
 					ScheduledEventId: 1,
 					RequestId:        op.RequestId,
 					Failure: &failurepb.Failure{
-						Message: "nexus operation completed unsuccessfully",
+						Message: "operation failed from handler",
 						FailureInfo: &failurepb.Failure_NexusOperationExecutionFailureInfo{
 							NexusOperationExecutionFailureInfo: &failurepb.NexusOperationFailureInfo{
 								ScheduledEventId: 1,
@@ -212,16 +213,11 @@ func TestProcessInvocationTask(t *testing.T) {
 							},
 						},
 						Cause: &failurepb.Failure{
-							Message: "operation failed from handler",
-							FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
-								ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
-									Type: "NexusFailure",
-									Details: &commonpb.Payloads{
-										Payloads: []*commonpb.Payload{
-											mustToPayload(t, nexus.Failure{Metadata: map[string]string{"encoding": "json/plain"}, Details: []byte(`"details"`)}),
-										},
-									},
-									NonRetryable: true,
+							Message: "cause",
+							FailureInfo: &failurepb.Failure_NexusSdkFailureErrorInfo{
+								NexusSdkFailureErrorInfo: &failurepb.NexusSDKFailureErrorFailureInfo{
+									Metadata: map[string]string{"encoding": "json/plain"},
+									Details:  []byte(`"details"`),
 								},
 							},
 						},
@@ -236,9 +232,10 @@ func TestProcessInvocationTask(t *testing.T) {
 			destinationDown: false,
 			onStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
 				return nil, &nexus.OperationError{
-					State: nexus.OperationStateCanceled,
+					State:   nexus.OperationStateCanceled,
+					Message: "operation canceled from handler",
 					Cause: &nexus.FailureError{
-						Failure: nexus.Failure{Message: "operation canceled from handler", Metadata: map[string]string{"encoding": "json/plain"}, Details: json.RawMessage("\"details\"")},
+						Failure: nexus.Failure{Message: "cause", Metadata: map[string]string{"encoding": "json/plain"}, Details: json.RawMessage("\"details\"")},
 					},
 				}
 			},
@@ -251,7 +248,7 @@ func TestProcessInvocationTask(t *testing.T) {
 					ScheduledEventId: 1,
 					RequestId:        op.RequestId,
 					Failure: &failurepb.Failure{
-						Message: "nexus operation completed unsuccessfully",
+						Message: "operation canceled from handler",
 						FailureInfo: &failurepb.Failure_NexusOperationExecutionFailureInfo{
 							NexusOperationExecutionFailureInfo: &failurepb.NexusOperationFailureInfo{
 								ScheduledEventId: 1,
@@ -261,13 +258,15 @@ func TestProcessInvocationTask(t *testing.T) {
 							},
 						},
 						Cause: &failurepb.Failure{
-							Message: "operation canceled from handler",
 							FailureInfo: &failurepb.Failure_CanceledFailureInfo{
-								CanceledFailureInfo: &failurepb.CanceledFailureInfo{
-									Details: &commonpb.Payloads{
-										Payloads: []*commonpb.Payload{
-											mustToPayload(t, nexus.Failure{Metadata: map[string]string{"encoding": "json/plain"}, Details: []byte(`"details"`)}),
-										},
+								CanceledFailureInfo: &failurepb.CanceledFailureInfo{},
+							},
+							Cause: &failurepb.Failure{
+								Message: "cause",
+								FailureInfo: &failurepb.Failure_NexusSdkFailureErrorInfo{
+									NexusSdkFailureErrorInfo: &failurepb.NexusSDKFailureErrorFailureInfo{
+										Metadata: map[string]string{"encoding": "json/plain"},
+										Details:  []byte(`"details"`),
 									},
 								},
 							},
@@ -287,7 +286,7 @@ func TestProcessInvocationTask(t *testing.T) {
 			expectedMetricOutcome: "handler-error:INTERNAL",
 			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
 				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF, op.State())
-				require.NotNil(t, op.LastAttemptFailure.GetNexusHandlerFailureInfo())
+				require.Equal(t, string(nexus.HandlerErrorTypeInternal), op.LastAttemptFailure.GetNexusHandlerFailureInfo().GetType())
 				require.Equal(t, "internal server error", op.LastAttemptFailure.Message)
 				require.Equal(t, 0, len(events))
 			},
@@ -351,7 +350,7 @@ func TestProcessInvocationTask(t *testing.T) {
 				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_FAILED, op.State())
 				require.Equal(t, 1, len(events))
 				failure := events[0].GetNexusOperationFailedEventAttributes().Failure.Cause
-				require.NotNil(t, failure.GetNexusHandlerFailureInfo())
+				require.Equal(t, string(nexus.HandlerErrorTypeNotFound), failure.GetNexusHandlerFailureInfo().GetType())
 				require.Equal(t, "endpoint not registered", failure.Message)
 			},
 		},
@@ -365,7 +364,7 @@ func TestProcessInvocationTask(t *testing.T) {
 				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_FAILED, op.State())
 				require.Equal(t, 1, len(events))
 				failure := events[0].GetNexusOperationFailedEventAttributes().Failure.Cause
-				require.NotNil(t, failure.GetNexusHandlerFailureInfo())
+				require.Equal(t, string(nexus.HandlerErrorTypeNotFound), failure.GetNexusHandlerFailureInfo().GetType())
 				require.Equal(t, "endpoint not registered", failure.Message)
 			},
 		},
@@ -651,8 +650,8 @@ func TestProcessCancelationTask(t *testing.T) {
 			expectedMetricOutcome: "handler-error:INTERNAL",
 			checkOutcome: func(t *testing.T, c nexusoperations.Cancelation) {
 				require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_FAILED, c.State())
-				require.NotNil(t, c.LastAttemptFailure.GetNexusHandlerFailureInfo())
-				require.Equal(t, "500 Internal Server Error", c.LastAttemptFailure.Message)
+				require.Equal(t, string(nexus.HandlerErrorTypeInternal), c.LastAttemptFailure.GetNexusHandlerFailureInfo().GetType())
+				require.Equal(t, "Internal Server Error", c.LastAttemptFailure.Message)
 				require.NotNil(t, c.LastAttemptFailure.Cause)
 				require.Equal(t, "operation not found", c.LastAttemptFailure.Cause.Message)
 			},
@@ -737,7 +736,7 @@ func TestProcessCancelationTask(t *testing.T) {
 			onCancelOperation: nil, // This should not be called if the endpoint is not found.
 			checkOutcome: func(t *testing.T, c nexusoperations.Cancelation) {
 				require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_FAILED, c.State())
-				require.NotNil(t, c.LastAttemptFailure.GetNexusHandlerFailureInfo())
+				require.Equal(t, string(nexus.HandlerErrorTypeNotFound), c.LastAttemptFailure.GetNexusHandlerFailureInfo().GetType())
 				require.Equal(t, "endpoint not registered", c.LastAttemptFailure.Message)
 			},
 		},
