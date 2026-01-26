@@ -29,6 +29,19 @@ import (
 	historyi "go.temporal.io/server/service/history/interfaces"
 )
 
+// equalEventIDSlices compares two slices of event IDs for equality
+func equalEventIDSlices(a, b []int64) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
 func Invoke(
 	ctx context.Context,
 	shardContext historyi.ShardContext,
@@ -207,6 +220,63 @@ func Invoke(
 	config := shardContext.GetConfig()
 	sendRawHistoryBetweenInternalServices := config.SendRawHistoryBetweenInternalServices()
 	sendRawWorkflowHistoryForNamespace := config.SendRawWorkflowHistory(request.Request.GetNamespace())
+
+	// Query transient/speculative events at START of request for comparison
+	var initialTransientEventIDs []int64
+	if isWorkflowRunning && request.Request.NextPageToken == nil {
+		msResp, err := api.GetOrPollWorkflowMutableState(
+			ctx,
+			shardContext,
+			&historyservice.GetMutableStateRequest{
+				NamespaceId: namespaceID.String(),
+				Execution:   execution,
+			},
+			workflowConsistencyChecker,
+			eventNotifier,
+		)
+		if err == nil && msResp.GetTransientOrSpeculativeEvents() != nil {
+			for _, event := range msResp.GetTransientOrSpeculativeEvents().GetHistorySuffix() {
+				initialTransientEventIDs = append(initialTransientEventIDs, event.GetEventId())
+			}
+		}
+	}
+
+	// Query fresh transient/speculative events on last page
+	var transientWorkflowTask *historyspb.TransientWorkflowTaskInfo
+	if isWorkflowRunning && len(continuationToken.PersistenceToken) == 0 {
+		// Last page - query mutable state for fresh transient/speculative events
+		msResp, err := api.GetOrPollWorkflowMutableState(
+			ctx,
+			shardContext,
+			&historyservice.GetMutableStateRequest{
+				NamespaceId: namespaceID.String(),
+				Execution:   execution,
+			},
+			workflowConsistencyChecker,
+			eventNotifier,
+		)
+		if err == nil {
+			transientWorkflowTask = msResp.GetTransientOrSpeculativeEvents()
+
+			// Compare with initial snapshot to detect changes during pagination
+			if len(initialTransientEventIDs) > 0 {
+				var currentTransientEventIDs []int64
+				if transientWorkflowTask != nil {
+					for _, event := range transientWorkflowTask.GetHistorySuffix() {
+						currentTransientEventIDs = append(currentTransientEventIDs, event.GetEventId())
+					}
+				}
+
+				// If transient events changed (discarded, added, or modified), return retryable error
+				if !equalEventIDSlices(initialTransientEventIDs, currentTransientEventIDs) {
+					return nil, serviceerror.NewUnavailable(
+						"workflow state changed during history retrieval, please retry")
+				}
+			}
+		}
+		// Ignore errors - if we can't get transient events, continue without them
+	}
+
 	if isCloseEventOnly {
 		if !isWorkflowRunning {
 			if sendRawWorkflowHistoryForNamespace || sendRawHistoryBetweenInternalServices {
@@ -220,8 +290,9 @@ func Invoke(
 					nextEventID,
 					request.Request.GetMaximumPageSize(),
 					nil,
-					continuationToken.TransientWorkflowTask,
+					transientWorkflowTask,
 					continuationToken.BranchToken,
+					continuationToken.IsWorkflowRunning,
 				)
 				if err != nil {
 					return nil, err
@@ -239,9 +310,10 @@ func Invoke(
 					nextEventID,
 					request.Request.GetMaximumPageSize(),
 					nil,
-					continuationToken.TransientWorkflowTask,
+					transientWorkflowTask,
 					continuationToken.BranchToken,
 					persistenceVisibilityMgr,
+					continuationToken.IsWorkflowRunning,
 				)
 				if err != nil {
 					return nil, err
@@ -299,8 +371,9 @@ func Invoke(
 					continuationToken.NextEventId,
 					request.Request.GetMaximumPageSize(),
 					continuationToken.PersistenceToken,
-					continuationToken.TransientWorkflowTask,
+					transientWorkflowTask,
 					continuationToken.BranchToken,
+					continuationToken.IsWorkflowRunning,
 				)
 			} else {
 				history, continuationToken.PersistenceToken, err = api.GetHistory(
@@ -313,9 +386,10 @@ func Invoke(
 					continuationToken.NextEventId,
 					request.Request.GetMaximumPageSize(),
 					continuationToken.PersistenceToken,
-					continuationToken.TransientWorkflowTask,
+					transientWorkflowTask,
 					continuationToken.BranchToken,
 					persistenceVisibilityMgr,
+					continuationToken.IsWorkflowRunning,
 				)
 			}
 

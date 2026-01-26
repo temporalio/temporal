@@ -40,6 +40,7 @@ func GetRawHistory(
 	token []byte,
 	transientWorkflowTaskInfo *historyspb.TransientWorkflowTaskInfo,
 	branchToken []byte,
+	isWorkflowRunning bool,
 ) (_ []*commonpb.DataBlob, _ []byte, retError error) {
 	defer func() {
 		var dataLossErr *serviceerror.DataLoss
@@ -115,24 +116,30 @@ func GetRawHistory(
 	metrics.HistorySize.With(metricsHandler).Record(int64(size))
 
 	if len(nextToken) == 0 && transientWorkflowTaskInfo != nil {
-		if err := validateTransientWorkflowTaskEvents(nextEventID, transientWorkflowTaskInfo); err != nil {
-			logger := shardContext.GetLogger()
-			metricsHandler := interceptor.GetMetricsHandlerFromContext(ctx, logger).WithTags(metrics.OperationTag(metrics.HistoryGetRawHistoryScope))
-			metrics.ServiceErrIncompleteHistoryCounter.With(metricsHandler).Record(1)
-			logger.Error("getHistory error",
-				tag.WorkflowNamespaceID(namespaceID.String()),
-				tag.WorkflowID(execution.GetWorkflowId()),
-				tag.WorkflowRunID(execution.GetRunId()),
-				tag.Error(err))
-			return nil, nil, err
-		}
-
-		if len(transientWorkflowTaskInfo.HistorySuffix) > 0 {
-			blob, err := shardContext.GetPayloadSerializer().SerializeEvents(transientWorkflowTaskInfo.HistorySuffix)
-			if err != nil {
-				return nil, nil, err
+		// Check if we should include transient/speculative events
+		if shouldIncludeTransientOrSpeculativeEvents(ctx, transientWorkflowTaskInfo, true, isWorkflowRunning) {
+			// Validate before appending
+			if err := validateTransientWorkflowTaskEvents(nextEventID, transientWorkflowTaskInfo); err != nil {
+				// GRACEFUL DEGRADATION: Log warning but continue
+				logger := shardContext.GetLogger()
+				metricsHandler := interceptor.GetMetricsHandlerFromContext(ctx, logger).WithTags(metrics.OperationTag(metrics.HistoryGetRawHistoryScope))
+				metrics.ServiceErrIncompleteHistoryCounter.With(metricsHandler).Record(1)
+				logger.Warn("Transient event validation failed, skipping events",
+					tag.WorkflowNamespaceID(namespaceID.String()),
+					tag.WorkflowID(execution.GetWorkflowId()),
+					tag.WorkflowRunID(execution.GetRunId()),
+					tag.Error(err))
+				// Don't append events, but don't fail request
+			} else {
+				// Validation passed, append events
+				if len(transientWorkflowTaskInfo.HistorySuffix) > 0 {
+					blob, err := shardContext.GetPayloadSerializer().SerializeEvents(transientWorkflowTaskInfo.HistorySuffix)
+					if err != nil {
+						return nil, nil, err
+					}
+					rawHistory = append(rawHistory, blob)
+				}
 			}
-			rawHistory = append(rawHistory, blob)
 		}
 	}
 	return rawHistory, nextToken, nil
@@ -151,6 +158,7 @@ func GetHistory(
 	transientWorkflowTaskInfo *historyspb.TransientWorkflowTaskInfo,
 	branchToken []byte,
 	persistenceVisibilityMgr manager.VisibilityManager,
+	isWorkflowRunning bool,
 ) (history *historypb.History, token []byte, retError error) {
 	defer func() {
 		var dataLossErr *serviceerror.DataLoss
@@ -227,16 +235,24 @@ func GetHistory(
 			tag.Error(err))
 	}
 	if len(nextPageToken) == 0 && transientWorkflowTaskInfo != nil {
-		if err := validateTransientWorkflowTaskEvents(nextEventID, transientWorkflowTaskInfo); err != nil {
-			metrics.ServiceErrIncompleteHistoryCounter.With(metricsHandler).Record(1)
-			logger.Error("getHistory error",
-				tag.WorkflowNamespaceID(namespaceID.String()),
-				tag.WorkflowID(execution.GetWorkflowId()),
-				tag.WorkflowRunID(execution.GetRunId()),
-				tag.Error(err))
+		// Check if we should include transient/speculative events
+		if shouldIncludeTransientOrSpeculativeEvents(ctx, transientWorkflowTaskInfo, true, isWorkflowRunning) {
+			// Validate before appending
+			if err := validateTransientWorkflowTaskEvents(nextEventID, transientWorkflowTaskInfo); err != nil {
+				// GRACEFUL DEGRADATION: Log warning but continue
+				metrics.ServiceErrIncompleteHistoryCounter.With(metricsHandler).Record(1)
+				logger.Warn("Transient event validation failed, skipping events",
+					tag.WorkflowNamespaceID(namespaceID.String()),
+					tag.WorkflowID(execution.GetWorkflowId()),
+					tag.WorkflowRunID(execution.GetRunId()),
+					tag.Error(err))
+				// Don't append events, but don't fail request
+			} else {
+				// Validation passed, append events
+				// Append the transient workflow task events once we are done enumerating everything from the events table
+				historyEvents = append(historyEvents, transientWorkflowTaskInfo.HistorySuffix...)
+			}
 		}
-		// Append the transient workflow task events once we are done enumerating everything from the events table
-		historyEvents = append(historyEvents, transientWorkflowTaskInfo.HistorySuffix...)
 	}
 
 	if err := ProcessOutgoingSearchAttributes(
@@ -376,6 +392,82 @@ func ProcessOutgoingSearchAttributes(
 	}
 
 	return nil
+}
+
+// shouldIncludeTransientOrSpeculativeEvents determines if transient/speculative events should be included
+func shouldIncludeTransientOrSpeculativeEvents(
+	ctx context.Context,
+	tranOrSpecEvents *historyspb.TransientWorkflowTaskInfo,
+	isLastPage bool,
+	isWorkflowRunning bool,
+) bool {
+	// Must be last page
+	if !isLastPage {
+		return false
+	}
+
+	// Must have events
+	if len(tranOrSpecEvents.GetHistorySuffix()) == 0 {
+		return false
+	}
+
+	// Client must support (not UI/CLI)
+	if !clientSupportsTranOrSpecEvents(ctx) {
+		return false
+	}
+
+	// Workflow must be running
+	if !isWorkflowRunning {
+		return false
+	}
+
+	// Events must be valid WFT events
+	if !areValidTransientOrSpecEvents(tranOrSpecEvents) {
+		return false
+	}
+
+	return true
+}
+
+// areValidTransientOrSpecEvents validates transient events are properly formed
+func areValidTransientOrSpecEvents(
+	tranOrSpecEvents *historyspb.TransientWorkflowTaskInfo,
+) bool {
+	events := tranOrSpecEvents.GetHistorySuffix()
+	if len(events) == 0 || len(events) > 2 {
+		return false
+	}
+
+	// First must be WFT_SCHEDULED
+	if events[0].GetEventType() != enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED {
+		return false
+	}
+
+	// If 2 events, second must be WFT_STARTED immediately after
+	if len(events) == 2 {
+		if events[1].GetEventType() != enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED {
+			return false
+		}
+		if events[1].GetEventId() != events[0].GetEventId()+1 {
+			return false
+		}
+	}
+
+	return true
+}
+
+// clientSupportsTranOrSpecEvents detects if client supports transient events
+func clientSupportsTranOrSpecEvents(ctx context.Context) bool {
+	clientName, _ := headers.GetClientNameAndVersion(ctx)
+
+	// UI/CLI don't support transient events
+	switch clientName {
+	case headers.ClientNameCLI, headers.ClientNameUI:
+		return false
+	default:
+		// SDKs and unknown clients: optimistic (better than error)
+		return true
+	}
 }
 
 func validateTransientWorkflowTaskEvents(
