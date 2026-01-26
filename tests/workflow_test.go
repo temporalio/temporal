@@ -1289,12 +1289,16 @@ func (s *WorkflowTestSuite) TestWorkflowTaskAndActivityTaskTimeoutsWorkflow() {
 		T:                   s.T(),
 	}
 
+	// This test is flaky: it has been seen to cause the 35m test timeout to be exceeded
+	// occasionally. It currently has atypically detailed info-level logging with the aim of
+	// diagnosing the reason for the timeout.
+	const testTag = "[TestWorkflowTaskAndActivityTaskTimeoutsWorkflow] "
 	testStart := time.Now()
 	var lastDropTime time.Time
 	for i := 0; i < 8; i++ {
 		iterStart := time.Now()
 		dropWorkflowTask := (i%2 == 0)
-		s.Logger.Info("Workflow task iteration starting",
+		s.Logger.Info(testTag+"iteration starting",
 			tag.Counter(i),
 			tag.NewBoolTag("drop_task", dropWorkflowTask),
 			tag.NewDurationTag("time_since_test_start", time.Since(testStart)),
@@ -1303,12 +1307,12 @@ func (s *WorkflowTestSuite) TestWorkflowTaskAndActivityTaskTimeoutsWorkflow() {
 		if dropWorkflowTask {
 			_, err = poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory, testcore.WithDropTask)
 			lastDropTime = time.Now()
-			s.Logger.Info("Dropped workflow task",
+			s.Logger.Info(testTag+"dropped workflow task",
 				tag.Counter(i),
 				tag.NewDurationTag("poll_duration", time.Since(iterStart)))
 		} else {
 			_, err = poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory, testcore.WithExpectedAttemptCount(2))
-			s.Logger.Info("Processed workflow task (expected attempt=2)",
+			s.Logger.Info(testTag+"processed workflow task (expected attempt=2)",
 				tag.Counter(i),
 				tag.NewDurationTag("poll_duration", time.Since(iterStart)),
 				tag.NewDurationTag("time_since_last_drop", time.Since(lastDropTime)),
@@ -1323,9 +1327,9 @@ func (s *WorkflowTestSuite) TestWorkflowTaskAndActivityTaskTimeoutsWorkflow() {
 		s.True(err == nil || errors.Is(err, testcore.ErrNoTasks))
 		if !dropWorkflowTask {
 			activityStart := time.Now()
-			s.Logger.Info("Calling PollAndProcessActivityTask", tag.Counter(i))
+			s.Logger.Info(testTag+"polling activity task", tag.Counter(i))
 			err = poller.PollAndProcessActivityTask(i%4 == 0)
-			s.Logger.Info("Activity task poll completed",
+			s.Logger.Info(testTag+"activity task poll completed",
 				tag.Counter(i),
 				tag.NewDurationTag("activity_poll_duration", time.Since(activityStart)),
 				tag.Error(err))
@@ -1333,7 +1337,7 @@ func (s *WorkflowTestSuite) TestWorkflowTaskAndActivityTaskTimeoutsWorkflow() {
 		}
 	}
 
-	s.Logger.Info("Waiting for workflow to complete", tag.WorkflowRunID(we.RunId))
+	s.Logger.Info(testTag+"waiting for workflow to complete", tag.WorkflowRunID(we.RunId))
 
 	s.False(workflowComplete)
 	_, err := poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory)
