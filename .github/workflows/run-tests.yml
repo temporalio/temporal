@@ -263,8 +263,7 @@ jobs:
 
       - name: Generate crash report
         if: failure()
-        run:
-          | # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
+        run: | # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
           [ "$(find .testoutput -maxdepth 1 -name 'junit.*.xml' | wc -l)" -lt "$MAX_TEST_ATTEMPTS" ] &&
             CRASH_REPORT_NAME="$GITHUB_JOB" make report-test-crash
 
@@ -360,8 +359,7 @@ jobs:
 
       - name: Generate crash report
         if: failure()
-        run:
-          | # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
+        run: | # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
           [ "$(find .testoutput -maxdepth 1 -name 'junit.*.xml' | wc -l)" -lt "$MAX_TEST_ATTEMPTS" ] &&
             CRASH_REPORT_NAME="$GITHUB_JOB" make report-test-crash
 
@@ -540,8 +538,7 @@ jobs:
 
       - name: Generate crash report
         if: failure()
-        run:
-          | # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
+        run: | # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
           [ "$(find .testoutput -maxdepth 1 -name 'junit.*.xml' | wc -l)" -lt "$MAX_TEST_ATTEMPTS" ] &&
             CRASH_REPORT_NAME="$GITHUB_JOB" make report-test-crash
 
@@ -698,8 +695,7 @@ jobs:
 
       - name: Generate crash report
         if: failure()
-        run:
-          | # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
+        run: | # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
           [ "$(find .testoutput -maxdepth 1 -name 'junit.*.xml' | wc -l)" -lt "$MAX_TEST_ATTEMPTS" ] &&
             CRASH_REPORT_NAME="$GITHUB_JOB" make report-test-crash
 
@@ -853,8 +849,7 @@ jobs:
 
       - name: Generate crash report
         if: failure()
-        run:
-          | # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
+        run: | # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
           [ "$(find .testoutput -maxdepth 1 -name 'junit.*.xml' | wc -l)" -lt "$MAX_TEST_ATTEMPTS" ] &&
             CRASH_REPORT_NAME="$GITHUB_JOB" make report-test-crash
 
