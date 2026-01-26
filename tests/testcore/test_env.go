@@ -45,6 +45,7 @@ type TestOption func(*testOptions)
 type testOptions struct {
 	dedicatedCluster      bool
 	dynamicConfigSettings []dynamicConfigOverride
+	clusterOptions        []TestClusterOption
 }
 
 type dynamicConfigOverride struct {
@@ -75,6 +76,15 @@ func WithDynamicConfig(setting dynamicconfig.GenericSetting, value any) TestOpti
 	}
 }
 
+// WithClusterOptions passes TestClusterOption parameters to the cluster creation.
+// This implies `WithDedicatedCluster` as cluster options require a fresh cluster.
+func WithClusterOptions(clusterOpts ...TestClusterOption) TestOption {
+	return func(o *testOptions) {
+		o.dedicatedCluster = true
+		o.clusterOptions = append(o.clusterOptions, clusterOpts...)
+	}
+}
+
 // NewEnv creates a new test environment with access to a Temporal cluster.
 // The test is automatically marked as parallel.
 func NewEnv(t *testing.T, opts ...TestOption) *testEnv {
@@ -94,7 +104,7 @@ func NewEnv(t *testing.T, opts ...TestOption) *testEnv {
 		}
 	}
 
-	base := testClusterPool.get(t, options.dedicatedCluster, startupConfig)
+	base := testClusterPool.get(t, options.dedicatedCluster, startupConfig, options.clusterOptions)
 	cluster := base.GetTestCluster()
 
 	// Create a dedicated namespace for the test to help with test isolation.
