@@ -16,7 +16,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        run: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+        run: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
     steps:
       - uses: actions/checkout@v4
 
@@ -30,17 +30,16 @@ jobs:
 
       - run: make pre-build-functional-test-coverage
 
-      - name: Run flaky test with heavy stress
+      - name: Run flaky test with constrained resources
         timeout-minutes: 40
         run: |
-          # Start aggressive CPU + IO stress to simulate heavy CI load
-          # Use all CPUs and add IO stress
+          # Start aggressive stress
           stress-ng --cpu 0 --io 4 --vm 2 --vm-bytes 256M --timeout 900s &
           STRESS_PID=$!
 
-          # Run multiple test suites concurrently for maximum contention
-          # This better simulates what happens in real CI
-          make functional-test-coverage
+          # Run with GOMAXPROCS=1 to force serialization - this can expose
+          # timing bugs that only appear when goroutines don't get scheduled promptly
+          GOMAXPROCS=1 make functional-test-coverage
           TEST_EXIT=$?
 
           kill $STRESS_PID 2>/dev/null || true
@@ -48,5 +47,5 @@ jobs:
         env:
           PERSISTENCE_TYPE: sql
           PERSISTENCE_DRIVER: sqlite
-          # Run multiple suites that have timing-sensitive tests
-          TEST_ARGS: "-run 'TestWorkflowTestSuite|TestTransientTaskTestSuite|TestStickyTQTestSuite' -count 1"
+          # Run just the target test 3 times per job with constrained parallelism
+          TEST_ARGS: "-run TestWorkflowTestSuite/TestWorkflowTaskAndActivityTaskTimeoutsWorkflow -count 3 -parallel 1"
