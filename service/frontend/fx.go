@@ -98,7 +98,7 @@ var Module = fx.Options(
 	fx.Provide(FEReplicatorNamespaceReplicationQueueProvider),
 	fx.Provide(AuthorizationInterceptorProvider),
 	fx.Provide(NamespaceCheckerProvider),
-	fx.Provide(func(so GrpcServerOptions) *grpc.Server { return grpc.NewServer(so.Options...) }),
+	fx.Provide(func(so GrpcServerOptions) rpc.Server { return grpc.NewServer(so.Options...) }),
 	fx.Provide(HandlerProvider),
 	fx.Provide(AdminHandlerProvider),
 	fx.Provide(OperatorHandlerProvider),
@@ -121,7 +121,7 @@ var Module = fx.Options(
 
 func NewServiceProvider(
 	serviceConfig *Config,
-	server *grpc.Server,
+	server rpc.Server,
 	healthServer *health.Server,
 	httpAPIServer *HTTPAPIServer,
 	handler Handler,

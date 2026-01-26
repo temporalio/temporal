@@ -22,11 +22,11 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/service/worker/parentclosepolicy"
 	"go.temporal.io/server/service/worker/replicator"
 	"go.temporal.io/server/service/worker/scanner"
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
@@ -67,7 +67,7 @@ type (
 		matchingClient                   matchingservice.MatchingServiceClient
 		namespaceReplicationTaskExecutor nsreplication.TaskExecutor
 
-		server       *grpc.Server
+		server       rpc.Server
 		grpcListener net.Listener
 		healthServer *health.Server
 	}
@@ -126,7 +126,7 @@ func NewService(
 	matchingClient resource.MatchingClient,
 	namespaceReplicationTaskExecutor nsreplication.TaskExecutor,
 	serializer serialization.Serializer,
-	server *grpc.Server,
+	server rpc.Server,
 	grpcListener net.Listener,
 	healthServer *health.Server,
 ) (*Service, error) {

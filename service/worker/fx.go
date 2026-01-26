@@ -24,6 +24,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/worker/batcher"
@@ -178,7 +179,7 @@ func ServiceLifetimeHooks(lc fx.Lifecycle, svc *Service) {
 	lc.Append(fx.StartStopHook(svc.Start, svc.Stop))
 }
 
-func ServerProvider(rpcFactory common.RPCFactory, logger log.Logger) *grpc.Server {
+func ServerProvider(rpcFactory common.RPCFactory, logger log.Logger) rpc.Server {
 	opts, err := rpcFactory.GetInternodeGRPCServerOptions()
 	if err != nil {
 		logger.Fatal("Failed to get gRPC server options", tag.Error(err))

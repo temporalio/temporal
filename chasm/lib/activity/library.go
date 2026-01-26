@@ -71,7 +71,7 @@ func newLibrary(
 	}
 }
 
-func (l *library) RegisterServices(server *grpc.Server) {
+func (l *library) RegisterServices(server grpc.ServiceRegistrar) {
 	server.RegisterService(&activitypb.ActivityService_ServiceDesc, l.handler)
 }
 

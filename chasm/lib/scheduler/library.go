@@ -85,6 +85,6 @@ func (l *Library) Tasks() []*chasm.RegistrableTask {
 	}
 }
 
-func (l *Library) RegisterServices(server *grpc.Server) {
+func (l *Library) RegisterServices(server grpc.ServiceRegistrar) {
 	server.RegisterService(&schedulerpb.SchedulerService_ServiceDesc, l.handler)
 }

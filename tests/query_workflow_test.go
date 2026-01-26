@@ -388,7 +388,9 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_FailurePropagated() {
 		Commands: []*commandpb.Command{
 			{
 				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-				Attributes:  &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{},
+				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
+					CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{},
+				},
 			},
 		},
 	})

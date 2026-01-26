@@ -10,8 +10,8 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/util"
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
@@ -22,7 +22,7 @@ type Service struct {
 	handler *Handler
 	config  *Config
 
-	server                 *grpc.Server
+	server                 rpc.Server
 	logger                 log.SnTaggedLogger
 	membershipMonitor      membership.Monitor
 	grpcListener           net.Listener
@@ -33,7 +33,7 @@ type Service struct {
 }
 
 func NewService(
-	server *grpc.Server,
+	server rpc.Server,
 	serviceConfig *Config,
 	logger log.SnTaggedLogger,
 	membershipMonitor membership.Monitor,

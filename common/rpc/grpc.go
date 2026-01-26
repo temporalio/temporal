@@ -6,6 +6,7 @@ import (
 	"net"
 	"time"
 
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -15,8 +16,20 @@ import (
 	"google.golang.org/grpc/backoff"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/status"
 )
+
+// Server is an interface for gRPC servers that supports both service registration
+// and lifecycle management. It is implemented by both *grpc.Server and
+// *inline.Server, allowing services to use inline RPC transparently.
+type Server interface {
+	grpc.ServiceRegistrar
+	Serve(net.Listener) error
+	Stop()
+	GracefulStop()
+	// GetServiceInfo returns a map of service names to ServiceInfo for registered services.
+	// Required for reflection.Register() support.
+	GetServiceInfo() map[string]grpc.ServiceInfo
+}
 
 const (
 	// DefaultServiceConfig is a default gRPC connection service config which enables DNS round robin between IPs.
@@ -94,11 +107,7 @@ func Dial(
 		grpcSecureOpt,
 		grpc.WithContextDialer(contextDialer),
 		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(maxInternodeRecvPayloadSize)),
-		grpc.WithChainUnaryInterceptor(
-			headersInterceptor,
-			metrics.NewClientMetricsTrailerPropagatorInterceptor(logger),
-			errorInterceptor,
-		),
+		grpc.WithChainUnaryInterceptor(ClientInterceptors(logger)...),
 		grpc.WithChainStreamInterceptor(
 			interceptor.StreamErrorInterceptor,
 		),
@@ -120,7 +129,7 @@ func errorInterceptor(
 	opts ...grpc.CallOption,
 ) error {
 	err := invoker(ctx, method, req, reply, cc, opts...)
-	err = serviceerrors.FromStatus(status.Convert(err))
+	err = serviceerrors.FromStatus(serviceerror.ToStatus(err))
 	return err
 }
 
@@ -134,4 +143,13 @@ func headersInterceptor(
 ) error {
 	ctx = headers.Propagate(ctx)
 	return invoker(ctx, method, req, reply, cc, opts...)
+}
+
+// ClientInterceptors returns the standard client interceptors used for RPC calls.
+func ClientInterceptors(logger log.Logger) []grpc.UnaryClientInterceptor {
+	return []grpc.UnaryClientInterceptor{
+		headersInterceptor,
+		metrics.NewClientMetricsTrailerPropagatorInterceptor(logger),
+		errorInterceptor,
+	}
 }

@@ -67,7 +67,7 @@ func (r *Registry) Register(lib Library) error {
 }
 
 // RegisterServices registers all gRPC services from all registered libraries.
-func (r *Registry) RegisterServices(server *grpc.Server) {
+func (r *Registry) RegisterServices(server grpc.ServiceRegistrar) {
 	for _, lib := range r.libraries {
 		lib.RegisterServices(server)
 	}

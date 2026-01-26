@@ -39,7 +39,7 @@ func NewServiceLibrary() *ServiceLibrary {
 	return &ServiceLibrary{}
 }
 
-func (l *ServiceLibrary) RegisterServices(server *grpc.Server) {
+func (l *ServiceLibrary) RegisterServices(server grpc.ServiceRegistrar) {
 	testspb.RegisterTestServiceServer(server, ServiceHandler{})
 }
 

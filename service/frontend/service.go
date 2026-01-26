@@ -20,9 +20,9 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/retrypolicy"
+	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/components/nexusoperations"
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
@@ -404,7 +404,7 @@ type Service struct {
 	operatorHandler   *OperatorHandlerImpl
 	versionChecker    *VersionChecker
 	visibilityManager manager.VisibilityManager
-	server            *grpc.Server
+	server            rpc.Server
 	httpAPIServer     *HTTPAPIServer
 
 	logger            log.Logger
@@ -415,7 +415,7 @@ type Service struct {
 
 func NewService(
 	serviceConfig *Config,
-	server *grpc.Server,
+	server rpc.Server,
 	healthServer *health.Server,
 	httpAPIServer *HTTPAPIServer,
 	handler Handler,

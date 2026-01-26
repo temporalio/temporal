@@ -48,6 +48,13 @@ type (
 		AdditionalInterceptors       []grpc.UnaryServerInterceptor  `optional:"true"`
 		AdditionalStreamInterceptors []grpc.StreamServerInterceptor `optional:"true"`
 	}
+
+	// GrpcServerOptions contains gRPC server options along with the interceptors
+	// that were used to build them. This allows inline RPC to use the same interceptors.
+	GrpcServerOptions struct {
+		Options           []grpc.ServerOption
+		UnaryInterceptors []grpc.UnaryServerInterceptor
+	}
 )
 
 var PersistenceLazyLoadedServiceResolverModule = fx.Options(
@@ -120,7 +127,7 @@ func NewPersistenceRateLimitingParams(
 
 func GrpcServerOptionsProvider(
 	params GrpcServerOptionsParams,
-) []grpc.ServerOption {
+) GrpcServerOptions {
 
 	grpcServerOptions, err := params.RPCFactory.GetInternodeGRPCServerOptions()
 	if err != nil {
@@ -146,11 +153,16 @@ func GrpcServerOptionsProvider(
 		streamInterceptors = append(streamInterceptors, params.AdditionalStreamInterceptors...)
 	}
 
-	return append(
-		grpcServerOptions,
-		grpc.ChainUnaryInterceptor(getUnaryInterceptors(params)...),
-		grpc.ChainStreamInterceptor(streamInterceptors...),
-	)
+	unaryInterceptors := getUnaryInterceptors(params)
+
+	return GrpcServerOptions{
+		Options: append(
+			grpcServerOptions,
+			grpc.ChainUnaryInterceptor(unaryInterceptors...),
+			grpc.ChainStreamInterceptor(streamInterceptors...),
+		),
+		UnaryInterceptors: unaryInterceptors,
+	}
 }
 
 func getUnaryInterceptors(params GrpcServerOptionsParams) []grpc.UnaryServerInterceptor {

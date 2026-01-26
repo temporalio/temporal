@@ -47,11 +47,13 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/encryption"
+	"go.temporal.io/server/common/rpc/rpcinline"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/testing/grpcinject"
 	"go.temporal.io/server/common/testing/testhooks"
+	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/frontend"
 	"go.temporal.io/server/service/history"
 	"go.temporal.io/server/service/history/replication"
@@ -75,7 +77,8 @@ type (
 		chasmEngine               chasm.Engine
 		chasmVisibilityMgr        chasm.VisibilityManager
 
-		// These are routing/load balancing clients but do not do retries:
+		// These are routing/load balancing clients but do not do retries.
+		// They use inline RPC for in-process calls without protobuf serialization.
 		adminClient    adminservice.AdminServiceClient
 		frontendClient workflowservice.WorkflowServiceClient
 		operatorClient operatorservice.OperatorServiceClient
@@ -119,6 +122,7 @@ type (
 		replicationStreamRecorder *ReplicationStreamRecorder
 		taskQueueRecorder         *TaskQueueRecorder
 		spanExporters             map[telemetry.SpanExporterType]sdktrace.SpanExporter
+		rpcinlineFactory          *rpcinline.Factory
 	}
 
 	// FrontendConfig is the config for the frontend service
@@ -245,6 +249,14 @@ func (c *TemporalImpl) Start() error {
 	if err := c.createSystemNamespace(); err != nil {
 		return err
 	}
+
+	// Using inline factory for in-process RPC to reduce CPU and memory usage.
+	// Disabled when mTLS is enabled because TLS connection info is only
+	// available on real network connections.
+	if c.tlsConfigProvider == nil {
+		c.rpcinlineFactory = rpcinline.NewFactory()
+	}
+
 	c.startMatching()
 	c.startHistory()
 	c.startFrontend()
@@ -347,7 +359,6 @@ func (c *TemporalImpl) copyPersistenceConfig() config.Persistence {
 func (c *TemporalImpl) startFrontend() {
 	serviceName := primitives.FrontendService
 
-	// steal these references from one frontend, it doesn't matter which
 	var rpcFactory common.RPCFactory
 	var historyRawClient resource.HistoryRawClient
 	var matchingRawClient resource.MatchingRawClient
@@ -398,8 +409,6 @@ func (c *TemporalImpl) startFrontend() {
 			fx.Provide(func() authorization.JWTAudienceMapper { return nil }),
 			fx.Provide(c.newClientFactoryProvider),
 			fx.Provide(func() searchattribute.Mapper { return nil }),
-			// Comment the line above and uncomment the line below to test with search attributes mapper.
-			// fx.Provide(func() searchattribute.Mapper { return NewSearchAttributeTestMapper() }),
 			fx.Provide(func() resolver.ServiceResolver { return resolver.NewNoopResolver() }),
 			fx.Provide(persistenceClient.FactoryProvider),
 			fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return c.abstractDataStoreFactory }),
@@ -413,35 +422,39 @@ func (c *TemporalImpl) startFrontend() {
 			temporal.TraceExportModule,
 			temporal.ServiceTracingModule,
 			frontend.Module,
+			fx.Decorate(func(grpcServer rpc.Server, addr listenHostPort, grpcOpts frontend.GrpcServerOptions, logger log.Logger) rpc.Server {
+				if c.rpcinlineFactory == nil {
+					return grpcServer
+				}
+				inlineSrv := rpcinline.WrapServer(grpcServer, string(addr), grpcOpts.UnaryInterceptors, rpc.ClientInterceptors(logger))
+				c.rpcinlineFactory.AddServer(inlineSrv)
+				return inlineSrv
+			}),
 			fx.Populate(&namespaceRegistry, &rpcFactory, &historyRawClient, &matchingRawClient, &grpcResolver),
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.FrontendService),
 			chasmFxOptions,
 		)
-		err := app.Err()
-		if err != nil {
+		if err := app.Err(); err != nil {
 			logger.Fatal("unable to construct frontend service", tag.Error(err))
 		}
-
 		c.fxApps = append(c.fxApps, app)
 		c.namespaceRegistries = append(c.namespaceRegistries, namespaceRegistry)
-
 		if err := app.Start(context.Background()); err != nil {
 			logger.Fatal("unable to start frontend service", tag.Error(err))
 		}
 	}
 
-	// This connection/clients uses membership to find frontends and load-balance among them.
+	// Frontend connections use network (not inline) for client compatibility
 	connection := rpcFactory.CreateLocalFrontendGRPCConnection()
 	c.frontendClient = workflowservice.NewWorkflowServiceClient(connection)
 	c.adminClient = adminservice.NewAdminServiceClient(connection)
 	c.operatorClient = operatorservice.NewOperatorServiceClient(connection)
 
-	// We also set the history and matching clients here, stealing them from one of the frontends.
+	// History/matching clients use inline RPC
 	c.historyClient = historyRawClient
 	c.matchingClient = matchingRawClient
 
-	// Address for SDKs
 	c.frontendMembershipAddress = grpcResolver.MakeURL(serviceName)
 }
 
@@ -467,8 +480,6 @@ func (c *TemporalImpl) startHistory() {
 			fx.Provide(c.newRPCFactory),
 			fx.Provide(c.GetGrpcClientInterceptor),
 			fx.Decorate(func(base persistence.ExecutionManager, logger log.Logger) persistence.ExecutionManager {
-				// Wrap ExecutionManager with recorder to capture task writes
-				// This wraps the FINAL ExecutionManager after all FX processing (metrics, retries, etc.)
 				c.taskQueueRecorder = NewTaskQueueRecorder(base, logger)
 				return c.taskQueueRecorder
 			}),
@@ -493,8 +504,6 @@ func (c *TemporalImpl) startHistory() {
 			fx.Provide(sdkClientFactoryProvider),
 			fx.Provide(c.newClientFactoryProvider),
 			fx.Provide(func() searchattribute.Mapper { return nil }),
-			// Comment the line above and uncomment the line below to test with search attributes mapper.
-			// fx.Provide(func() searchattribute.Mapper { return NewSearchAttributeTestMapper() }),
 			fx.Provide(func() resolver.ServiceResolver { return resolver.NewNoopResolver() }),
 			fx.Provide(persistenceClient.FactoryProvider),
 			fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return c.abstractDataStoreFactory }),
@@ -510,6 +519,14 @@ func (c *TemporalImpl) startHistory() {
 			history.QueueModule,
 			history.Module,
 			replication.Module,
+			fx.Decorate(func(base rpc.Server, addr listenHostPort, grpcOpts service.GrpcServerOptions, logger log.Logger) rpc.Server {
+				if c.rpcinlineFactory == nil {
+					return base
+				}
+				srv := rpcinline.WrapServer(base, string(addr), grpcOpts.UnaryInterceptors, rpc.ClientInterceptors(logger))
+				c.rpcinlineFactory.AddServer(srv)
+				return srv
+			}),
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.HistoryService),
 			chasmFxOptions,
@@ -518,13 +535,11 @@ func (c *TemporalImpl) startHistory() {
 			fx.Populate(&c.chasmVisibilityMgr),
 			fx.Populate(&c.chasmRegistry),
 		)
-		err := app.Err()
-		if err != nil {
+		if err := app.Err(); err != nil {
 			logger.Fatal("unable to construct history service", tag.Error(err))
 		}
 		c.fxApps = append(c.fxApps, app)
 		c.namespaceRegistries = append(c.namespaceRegistries, namespaceRegistry)
-
 		if err := app.Start(context.Background()); err != nil {
 			logger.Fatal("unable to start history service", tag.Error(err))
 		}
@@ -570,14 +585,21 @@ func (c *TemporalImpl) startMatching() {
 			temporal.TraceExportModule,
 			temporal.ServiceTracingModule,
 			matching.Module,
+			fx.Decorate(func(base rpc.Server, addr listenHostPort, grpcOpts service.GrpcServerOptions, logger log.Logger) rpc.Server {
+				if c.rpcinlineFactory == nil {
+					return base
+				}
+				srv := rpcinline.WrapServer(base, string(addr), grpcOpts.UnaryInterceptors, rpc.ClientInterceptors(logger))
+				c.rpcinlineFactory.AddServer(srv)
+				return srv
+			}),
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.MatchingService),
 			chasmFxOptions,
 			fx.Populate(&namespaceRegistry),
 		)
-		err := app.Err()
-		if err != nil {
-			logger.Fatal("unable to start matching service", tag.Error(err))
+		if err := app.Err(); err != nil {
+			logger.Fatal("unable to construct matching service", tag.Error(err))
 		}
 		c.fxApps = append(c.fxApps, app)
 		c.namespaceRegistries = append(c.namespaceRegistries, namespaceRegistry)
@@ -802,7 +824,7 @@ func (c *TemporalImpl) newRPCFactory(
 			},
 		},
 	}
-	return rpc.NewFactory(
+	factory := rpc.NewFactory(
 		cfg,
 		sn,
 		logger,
@@ -815,7 +837,13 @@ func (c *TemporalImpl) newRPCFactory(
 		options,
 		map[primitives.ServiceName][]grpc.DialOption{},
 		monitor,
-	), nil
+	)
+	// Wrap with inline-aware factory for service-to-service calls.
+	// When useRealNetworkStack is true, rpcFactory is nil and we use the base factory directly.
+	if c.rpcinlineFactory == nil {
+		return factory, nil
+	}
+	return c.rpcinlineFactory.WrapFactory(factory), nil
 }
 
 func (c *TemporalImpl) newClientFactoryProvider(

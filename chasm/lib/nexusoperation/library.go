@@ -42,5 +42,5 @@ func (l *Library) Tasks() []*chasm.RegistrableTask {
 	}
 }
 
-func (l *Library) RegisterServices(_ *grpc.Server) {
+func (l *Library) RegisterServices(_ grpc.ServiceRegistrar) {
 }

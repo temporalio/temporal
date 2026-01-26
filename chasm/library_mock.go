@@ -69,7 +69,7 @@ func (mr *MockLibraryMockRecorder) Name() *gomock.Call {
 }
 
 // RegisterServices mocks base method.
-func (m *MockLibrary) RegisterServices(server *grpc.Server) {
+func (m *MockLibrary) RegisterServices(server grpc.ServiceRegistrar) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "RegisterServices", server)
 }

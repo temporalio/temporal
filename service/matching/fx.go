@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service"
@@ -50,8 +51,8 @@ var Module = fx.Options(
 	fx.Invoke(ServiceLifetimeHooks),
 )
 
-func ServerProvider(grpcServerOptions []grpc.ServerOption) *grpc.Server {
-	return grpc.NewServer(grpcServerOptions...)
+func ServerProvider(grpcServerOptions service.GrpcServerOptions) rpc.Server {
+	return grpc.NewServer(grpcServerOptions.Options...)
 }
 
 func ConfigProvider(

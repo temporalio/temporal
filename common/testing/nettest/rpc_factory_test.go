@@ -31,7 +31,7 @@ func TestRPCFactory_CreateHistoryGRPCConnection(t *testing.T) {
 	t.Parallel()
 
 	testDialer(t, "localhost", func(rpcFactory *nettest.RPCFactory) *grpc.ClientConn {
-		return rpcFactory.CreateHistoryGRPCConnection("localhost")
+		return rpcFactory.CreateHistoryGRPCConnection("localhost").(*grpc.ClientConn)
 	})
 }
 
@@ -39,7 +39,7 @@ func TestRPCFactory_CreateMatchingGRPCConnection(t *testing.T) {
 	t.Parallel()
 
 	testDialer(t, "localhost", func(rpcFactory *nettest.RPCFactory) *grpc.ClientConn {
-		return rpcFactory.CreateMatchingGRPCConnection("localhost")
+		return rpcFactory.CreateMatchingGRPCConnection("localhost").(*grpc.ClientConn)
 	})
 }
 
@@ -47,7 +47,7 @@ func TestRPCFactory_CreateLocalFrontendGRPCConnection(t *testing.T) {
 	t.Parallel()
 
 	testDialer(t, ":0", func(rpcFactory *nettest.RPCFactory) *grpc.ClientConn {
-		return rpcFactory.CreateLocalFrontendGRPCConnection()
+		return rpcFactory.CreateLocalFrontendGRPCConnection().(*grpc.ClientConn)
 	})
 }
 
@@ -55,7 +55,7 @@ func TestRPCFactory_CreateRemoteFrontendGRPCConnection(t *testing.T) {
 	t.Parallel()
 
 	testDialer(t, "localhost", func(rpcFactory *nettest.RPCFactory) *grpc.ClientConn {
-		return rpcFactory.CreateRemoteFrontendGRPCConnection("localhost")
+		return rpcFactory.CreateRemoteFrontendGRPCConnection("localhost").(*grpc.ClientConn)
 	})
 }
 

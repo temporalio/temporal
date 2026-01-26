@@ -11,7 +11,7 @@ type (
 		Name() string
 		Components() []*RegistrableComponent
 		Tasks() []*RegistrableTask
-		RegisterServices(server *grpc.Server)
+		RegisterServices(server grpc.ServiceRegistrar)
 
 		mustEmbedUnimplementedLibrary()
 	}
@@ -32,7 +32,7 @@ func (UnimplementedLibrary) Tasks() []*RegistrableTask {
 }
 
 // RegisterServices Registers the gRPC calls to the handlers of the library.
-func (UnimplementedLibrary) RegisterServices(_ *grpc.Server) {
+func (UnimplementedLibrary) RegisterServices(_ grpc.ServiceRegistrar) {
 }
 
 // FullyQualifiedName creates a fully qualified name (FQN) by combining a library name
