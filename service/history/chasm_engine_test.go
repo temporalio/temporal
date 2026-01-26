@@ -1028,7 +1028,7 @@ func (s *chasmEngineSuite) TestUpdateWithStartExecution_ExistingRunning() {
 			),
 		}, nil).Times(1)
 
-	// Mock UpdateWorkflowExecution - only existing execution is updated, no new execution.
+	// Only existing execution is updated, no new execution.
 	s.mockExecutionManager.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(
 			_ context.Context,
@@ -1045,7 +1045,6 @@ func (s *chasmEngineSuite) TestUpdateWithStartExecution_ExistingRunning() {
 			s.NoError(err)
 			s.Equal("updated-"+existingActivityID, activityInfo.ActivityId)
 
-			// Verify NO new execution was created (signal-with-start semantics).
 			s.Nil(request.NewWorkflowSnapshot)
 
 			return tests.UpdateWorkflowExecutionResponse, nil
@@ -1133,7 +1132,6 @@ func (s *chasmEngineSuite) TestUpdateWithStartExecution_NotFound() {
 		},
 		func(ctx chasm.MutableContext, component chasm.Component) error {
 			updateFnCalled = true
-			// Apply the "update" to the newly created component
 			tc, ok := component.(*testComponent)
 			s.True(ok)
 			tc.ActivityInfo.ActivityId = "updated-" + tc.ActivityInfo.ActivityId

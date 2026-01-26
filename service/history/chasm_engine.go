@@ -193,7 +193,6 @@ func (e *ChasmEngine) UpdateWithStartExecution(
 		return chasm.ExecutionKey{}, nil, err
 	}
 
-	// Use empty RunID to get the current execution (if any).
 	refWithEmptyRunID := executionRef
 	refWithEmptyRunID.RunID = ""
 
@@ -209,7 +208,6 @@ func (e *ChasmEngine) UpdateWithStartExecution(
 			return e.updateExecution(ctx, shardContext, executionLease, executionRef, updateFn)
 		}
 
-		// Existing execution is closed
 		return e.startNewForClosedExecution(
 			ctx,
 			shardContext,
@@ -628,7 +626,9 @@ func (e *ChasmEngine) createNewExecution(
 	if err != nil {
 		return newExecutionParams{}, err
 	}
-	chasmTree.SetRootComponent(rootComponent)
+	if err := chasmTree.SetRootComponent(rootComponent); err != nil {
+		return newExecutionParams{}, err
+	}
 
 	snapshot, events, err := mutableState.CloseTransactionAsSnapshot(ctx, historyi.TransactionPolicyActive)
 	if err != nil {
@@ -700,12 +700,13 @@ func (e *ChasmEngine) createNewExecutionWithUpdate(
 
 	chasmContext := chasm.NewMutableContext(ctx, chasmTree)
 
-	// Create the root component using newFn
 	rootComponent, err := newFn(chasmContext)
 	if err != nil {
 		return newExecutionParams{}, err
 	}
-	chasmTree.SetRootComponent(rootComponent)
+	if err := chasmTree.SetRootComponent(rootComponent); err != nil {
+		return newExecutionParams{}, err
+	}
 
 	if err := updateFn(chasmContext, rootComponent); err != nil {
 		return newExecutionParams{}, err
