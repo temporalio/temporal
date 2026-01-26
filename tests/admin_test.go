@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	sdkworker "go.temporal.io/sdk/worker"
@@ -30,7 +31,7 @@ func TestAdminRebuildMutableState(t *testing.T) {
 			Namespace: s.Namespace().String(),
 			Logger:    log.NewSdkLogger(s.Logger),
 		})
-		s.NoError(err)
+		require.NoError(t, err)
 		defer sdkClient.Close()
 
 		taskQueue := s.Tv().TaskQueue().Name
@@ -51,7 +52,7 @@ func TestAdminRebuildMutableState(t *testing.T) {
 		}
 
 		worker.RegisterWorkflow(workflowFn)
-		s.NoError(worker.Start())
+		require.NoError(t, worker.Start())
 		defer worker.Stop()
 
 		workflowID := s.Tv().Any().String()
@@ -64,7 +65,7 @@ func TestAdminRebuildMutableState(t *testing.T) {
 		defer cancel()
 
 		workflowRun, err := sdkClient.ExecuteWorkflow(context.Background(), workflowOptions, workflowFn)
-		s.NoError(err)
+		require.NoError(t, err)
 		runID := workflowRun.GetRunID()
 
 		// there are total 6 events, 3 state transitions
@@ -87,12 +88,12 @@ func TestAdminRebuildMutableState(t *testing.T) {
 				},
 				Archetype: chasm.WorkflowArchetype,
 			})
-			s.NoError(err)
+			require.NoError(t, err)
 			if response1.DatabaseMutableState.ExecutionInfo.StateTransitionCount == 3 {
 				// Note: ChasmNodes may be empty even with CHASM enabled, so we only check if the rebuild can be performed,
 				// and not checking whether it is rebuildable because ChasmNodes are present.
 				if !testWithChasm {
-					s.Empty(response1.DatabaseMutableState.ChasmNodes, "CHASM-disabled workflows should not have ChasmNodes")
+					require.Empty(t, response1.DatabaseMutableState.ChasmNodes, "CHASM-disabled workflows should not have ChasmNodes")
 				}
 				break
 			}
@@ -106,7 +107,7 @@ func TestAdminRebuildMutableState(t *testing.T) {
 				RunId:      runID,
 			},
 		})
-		s.NoError(err)
+		require.NoError(t, err)
 
 		response2, err := s.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
 			Namespace: s.Namespace().String(),
@@ -116,29 +117,29 @@ func TestAdminRebuildMutableState(t *testing.T) {
 			},
 			Archetype: chasm.WorkflowArchetype,
 		})
-		s.NoError(err)
-		s.Equal(response1.DatabaseMutableState.ExecutionInfo.VersionHistories, response2.DatabaseMutableState.ExecutionInfo.VersionHistories)
-		s.Equal(response1.DatabaseMutableState.ExecutionInfo.StateTransitionCount, response2.DatabaseMutableState.ExecutionInfo.StateTransitionCount)
+		require.NoError(t, err)
+		require.Equal(t, response1.DatabaseMutableState.ExecutionInfo.VersionHistories, response2.DatabaseMutableState.ExecutionInfo.VersionHistories)
+		require.Equal(t, response1.DatabaseMutableState.ExecutionInfo.StateTransitionCount, response2.DatabaseMutableState.ExecutionInfo.StateTransitionCount)
 
-		s.Equal(response1.DatabaseMutableState.ExecutionState.CreateRequestId, response2.DatabaseMutableState.ExecutionState.CreateRequestId)
-		s.Equal(response1.DatabaseMutableState.ExecutionState.RunId, response2.DatabaseMutableState.ExecutionState.RunId)
-		s.Equal(response1.DatabaseMutableState.ExecutionState.State, response2.DatabaseMutableState.ExecutionState.State)
-		s.Equal(response1.DatabaseMutableState.ExecutionState.Status, response2.DatabaseMutableState.ExecutionState.Status)
+		require.Equal(t, response1.DatabaseMutableState.ExecutionState.CreateRequestId, response2.DatabaseMutableState.ExecutionState.CreateRequestId)
+		require.Equal(t, response1.DatabaseMutableState.ExecutionState.RunId, response2.DatabaseMutableState.ExecutionState.RunId)
+		require.Equal(t, response1.DatabaseMutableState.ExecutionState.State, response2.DatabaseMutableState.ExecutionState.State)
+		require.Equal(t, response1.DatabaseMutableState.ExecutionState.Status, response2.DatabaseMutableState.ExecutionState.Status)
 
 		// From transition history perspective, Rebuild is considered as an update to the workflow and updates
 		// all sub state machines in the workflow, which includes the workflow ExecutionState.
-		s.Equal(&persistencespb.VersionedTransition{
+		require.Equal(t, &persistencespb.VersionedTransition{
 			NamespaceFailoverVersion: response1.DatabaseMutableState.ExecutionState.LastUpdateVersionedTransition.NamespaceFailoverVersion,
 			TransitionCount:          response1.DatabaseMutableState.ExecutionInfo.StateTransitionCount + 1,
 		}, response2.DatabaseMutableState.ExecutionState.LastUpdateVersionedTransition)
 
 		// Rebuild explicitly sets start time, thus start time will change after rebuild.
-		s.NotNil(response1.DatabaseMutableState.ExecutionState.StartTime)
-		s.NotNil(response2.DatabaseMutableState.ExecutionState.StartTime)
+		require.NotNil(t, response1.DatabaseMutableState.ExecutionState.StartTime)
+		require.NotNil(t, response2.DatabaseMutableState.ExecutionState.StartTime)
 
 		timeBefore := timestamp.TimeValue(response1.DatabaseMutableState.ExecutionState.StartTime)
 		timeAfter := timestamp.TimeValue(response2.DatabaseMutableState.ExecutionState.StartTime)
-		s.False(timeAfter.Before(timeBefore))
+		require.False(t, timeAfter.Before(timeBefore))
 	})
 
 	t.Run("ChasmEnabled", func(t *testing.T) {
@@ -146,9 +147,9 @@ func TestAdminRebuildMutableState(t *testing.T) {
 		testWithChasm := true
 
 		configValues := s.GetTestCluster().Host().DcClient().GetValue(dynamicconfig.EnableChasm.Key())
-		s.NotEmpty(configValues, "EnableChasm config should be set")
+		require.NotEmpty(t, configValues, "EnableChasm config should be set")
 		configValue, _ := configValues[0].Value.(bool)
-		s.True(configValue, "EnableChasm config should be true")
+		require.True(t, configValue, "EnableChasm config should be true")
 
 		// Set up SDK client and worker for the test-specific namespace
 		sdkClient, err := sdkclient.Dial(sdkclient.Options{
@@ -156,7 +157,7 @@ func TestAdminRebuildMutableState(t *testing.T) {
 			Namespace: s.Namespace().String(),
 			Logger:    log.NewSdkLogger(s.Logger),
 		})
-		s.NoError(err)
+		require.NoError(t, err)
 		defer sdkClient.Close()
 
 		taskQueue := s.Tv().TaskQueue().Name
@@ -177,7 +178,7 @@ func TestAdminRebuildMutableState(t *testing.T) {
 		}
 
 		worker.RegisterWorkflow(workflowFn)
-		s.NoError(worker.Start())
+		require.NoError(t, worker.Start())
 		defer worker.Stop()
 
 		workflowID := s.Tv().Any().String()
@@ -190,7 +191,7 @@ func TestAdminRebuildMutableState(t *testing.T) {
 		defer cancel()
 
 		workflowRun, err := sdkClient.ExecuteWorkflow(context.Background(), workflowOptions, workflowFn)
-		s.NoError(err)
+		require.NoError(t, err)
 		runID := workflowRun.GetRunID()
 
 		// there are total 6 events, 3 state transitions
@@ -213,12 +214,12 @@ func TestAdminRebuildMutableState(t *testing.T) {
 				},
 				Archetype: chasm.WorkflowArchetype,
 			})
-			s.NoError(err)
+			require.NoError(t, err)
 			if response1.DatabaseMutableState.ExecutionInfo.StateTransitionCount == 3 {
 				// Note: ChasmNodes may be empty even with CHASM enabled, so we only check if the rebuild can be performed,
 				// and not checking whether it is rebuildable because ChasmNodes are present.
 				if !testWithChasm {
-					s.Empty(response1.DatabaseMutableState.ChasmNodes, "CHASM-disabled workflows should not have ChasmNodes")
+					require.Empty(t, response1.DatabaseMutableState.ChasmNodes, "CHASM-disabled workflows should not have ChasmNodes")
 				}
 				break
 			}
@@ -232,7 +233,7 @@ func TestAdminRebuildMutableState(t *testing.T) {
 				RunId:      runID,
 			},
 		})
-		s.NoError(err)
+		require.NoError(t, err)
 
 		response2, err := s.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
 			Namespace: s.Namespace().String(),
@@ -242,28 +243,28 @@ func TestAdminRebuildMutableState(t *testing.T) {
 			},
 			Archetype: chasm.WorkflowArchetype,
 		})
-		s.NoError(err)
-		s.Equal(response1.DatabaseMutableState.ExecutionInfo.VersionHistories, response2.DatabaseMutableState.ExecutionInfo.VersionHistories)
-		s.Equal(response1.DatabaseMutableState.ExecutionInfo.StateTransitionCount, response2.DatabaseMutableState.ExecutionInfo.StateTransitionCount)
+		require.NoError(t, err)
+		require.Equal(t, response1.DatabaseMutableState.ExecutionInfo.VersionHistories, response2.DatabaseMutableState.ExecutionInfo.VersionHistories)
+		require.Equal(t, response1.DatabaseMutableState.ExecutionInfo.StateTransitionCount, response2.DatabaseMutableState.ExecutionInfo.StateTransitionCount)
 
-		s.Equal(response1.DatabaseMutableState.ExecutionState.CreateRequestId, response2.DatabaseMutableState.ExecutionState.CreateRequestId)
-		s.Equal(response1.DatabaseMutableState.ExecutionState.RunId, response2.DatabaseMutableState.ExecutionState.RunId)
-		s.Equal(response1.DatabaseMutableState.ExecutionState.State, response2.DatabaseMutableState.ExecutionState.State)
-		s.Equal(response1.DatabaseMutableState.ExecutionState.Status, response2.DatabaseMutableState.ExecutionState.Status)
+		require.Equal(t, response1.DatabaseMutableState.ExecutionState.CreateRequestId, response2.DatabaseMutableState.ExecutionState.CreateRequestId)
+		require.Equal(t, response1.DatabaseMutableState.ExecutionState.RunId, response2.DatabaseMutableState.ExecutionState.RunId)
+		require.Equal(t, response1.DatabaseMutableState.ExecutionState.State, response2.DatabaseMutableState.ExecutionState.State)
+		require.Equal(t, response1.DatabaseMutableState.ExecutionState.Status, response2.DatabaseMutableState.ExecutionState.Status)
 
 		// From transition history perspective, Rebuild is considered as an update to the workflow and updates
 		// all sub state machines in the workflow, which includes the workflow ExecutionState.
-		s.Equal(&persistencespb.VersionedTransition{
+		require.Equal(t, &persistencespb.VersionedTransition{
 			NamespaceFailoverVersion: response1.DatabaseMutableState.ExecutionState.LastUpdateVersionedTransition.NamespaceFailoverVersion,
 			TransitionCount:          response1.DatabaseMutableState.ExecutionInfo.StateTransitionCount + 1,
 		}, response2.DatabaseMutableState.ExecutionState.LastUpdateVersionedTransition)
 
 		// Rebuild explicitly sets start time, thus start time will change after rebuild.
-		s.NotNil(response1.DatabaseMutableState.ExecutionState.StartTime)
-		s.NotNil(response2.DatabaseMutableState.ExecutionState.StartTime)
+		require.NotNil(t, response1.DatabaseMutableState.ExecutionState.StartTime)
+		require.NotNil(t, response2.DatabaseMutableState.ExecutionState.StartTime)
 
 		timeBefore := timestamp.TimeValue(response1.DatabaseMutableState.ExecutionState.StartTime)
 		timeAfter := timestamp.TimeValue(response2.DatabaseMutableState.ExecutionState.StartTime)
-		s.False(timeAfter.Before(timeBefore))
+		require.False(t, timeAfter.Before(timeBefore))
 	})
 }
